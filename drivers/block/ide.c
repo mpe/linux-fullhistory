@@ -2963,6 +2963,7 @@ EXPORT_SYMBOL(ide_spin_wait_hwgroup);
 /*
  * Probe module
  */
+EXPORT_SYMBOL(drive_is_flashcard);
 EXPORT_SYMBOL(ide_timer_expiry);
 EXPORT_SYMBOL(ide_intr);
 EXPORT_SYMBOL(ide_geninit);

@@ -2,7 +2,8 @@
  * fs/dcache.c
  *
  * Complete reimplementation
- * (C) 1997 Thomas Schoebel-Theuer
+ * (C) 1997 Thomas Schoebel-Theuer,
+ * with heavy changes by Linus Torvalds
  */
 
 /*

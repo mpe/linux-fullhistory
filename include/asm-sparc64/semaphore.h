@@ -18,57 +18,135 @@ struct semaphore {
 
 extern void __down(struct semaphore * sem);
 extern int  __down_interruptible(struct semaphore * sem);
+extern int  __down_trylock(struct semaphore * sem);
 extern void __up(struct semaphore * sem);
 
 #define sema_init(sem, val)	atomic_set(&((sem)->count), val)
 
-#define wake_one_more(sem)      atomic_inc(&sem->waking);
-
-static __inline__ int waking_non_zero(struct semaphore *sem, struct task_struct *tsk)
-{
-	int ret;
-
-	__asm__ __volatile__("
-1:	ldsw		[%1], %%g5
-	brlez,pt	%%g5, 2f
-	 mov		0, %0
-	sub		%%g5, 1, %%g7
-	cas		[%1], %%g5, %%g7
-	cmp		%%g5, %%g7
-	bne,pn		%%icc, 1b
-	 mov		1, %0
-2:"	: "=r" (ret)
-	: "r" (&((sem)->waking))
-	: "g5", "g7", "cc", "memory");
-	return ret;
-}
-
 extern __inline__ void down(struct semaphore * sem)
 {
-	int result;
-
-	result = atomic_dec_return(&sem->count);
-	membar("#StoreLoad | #StoreStore");
-	if (result < 0)
-		__down(sem);
+        __asm__ __volatile__("
+	1:	lduw	[%0], %%g5
+		sub	%%g5, 1, %%g7
+		cas	[%0], %%g5, %%g7
+		cmp	%%g5, %%g7
+		bne,pn	%%icc, 1b
+		 cmp	%%g7, 1
+		bl,pn	%%icc, 3f
+		 membar	#StoreStore
+	2:
+		.subsection 2
+	3:	mov	%0, %%g5
+		save	%%sp, -160, %%sp
+		mov	%%g1, %%l1
+		mov	%%g2, %%l2
+		mov	%%g3, %%l3
+		call	%1
+		 mov	%%g5, %%o0
+		mov	%%l1, %%g1
+		mov	%%l2, %%g2
+		ba,pt	%%xcc, 2b
+		 restore %%l3, %%g0, %%g3
+		.previous\n"
+	: : "r" (__atomic_fool_gcc(sem)), "i" (__down)
+	: "g5", "g7", "memory", "cc");
 }
 
 extern __inline__ int down_interruptible(struct semaphore *sem)
 {
-	int result, ret = 0;
+	int ret = 0;
+	
+        __asm__ __volatile__("
+	1:	lduw	[%2], %%g5
+		sub	%%g5, 1, %%g7
+		cas	[%2], %%g5, %%g7
+		cmp	%%g5, %%g7
+		bne,pn	%%icc, 1b
+		 cmp	%%g7, 1
+		bl,pn	%%icc, 3f
+		 membar	#StoreStore
+	2:
+		.subsection 2
+	3:	mov	%2, %%g5
+		save	%%sp, -160, %%sp
+		mov	%%g1, %%l1
+		mov	%%g2, %%l2
+		mov	%%g3, %%l3
+		call	%3
+		 mov	%%g5, %%o0
+		mov	%%l1, %%g1
+		mov	%%l2, %%g2
+		mov	%%l3, %%g3
+		ba,pt	%%xcc, 2b
+		 restore %%o0, %%g0, %0
+		.previous\n"
+	: "=r" (ret)
+	: "0" (ret), "r" (__atomic_fool_gcc(sem)), "i" (__down_interruptible)
+	: "g5", "g7", "memory", "cc");
+	return ret;
+}
 
-	result = atomic_dec_return(&sem->count);
-	membar("#StoreLoad | #StoreStore");
-	if (result < 0)
-		ret = __down_interruptible(sem);
+extern inline int down_trylock(struct semaphore *sem)
+{
+	int ret = 0;
+        __asm__ __volatile__("
+	1:	lduw	[%2], %%g5
+		sub	%%g5, 1, %%g7
+		cas	[%2], %%g5, %%g7
+		cmp	%%g5, %%g7
+		bne,pn	%%icc, 1b
+		 cmp	%%g7, 1
+		bl,pn	%%icc, 3f
+		 membar	#StoreStore
+	2:
+		.subsection 2
+	3:	mov	%2, %%g5
+		save	%%sp, -160, %%sp
+		mov	%%g1, %%l1
+		mov	%%g2, %%l2
+		mov	%%g3, %%l3
+		call	%3
+		 mov	%%g5, %%o0
+		mov	%%l1, %%g1
+		mov	%%l2, %%g2
+		mov	%%l3, %%g3
+		ba,pt	%%xcc, 2b
+		 restore %%o0, %%g0, %0
+		.previous\n"
+	: "=r" (ret)
+	: "0" (ret), "r" (__atomic_fool_gcc(sem)), "i" (__down_trylock)
+	: "g5", "g7", "memory", "cc");
 	return ret;
 }
 
 extern __inline__ void up(struct semaphore * sem)
 {
-	membar("#StoreStore | #LoadStore");
-	if (atomic_inc_return(&sem->count) <= 0)
-		__up(sem);
+	__asm__ __volatile__("
+		membar	#StoreLoad | #LoadLoad
+	1:	lduw	[%0], %%g5
+		add	%%g5, 1, %%g7
+		cas	[%0], %%g5, %%g7
+		cmp	%%g5, %%g7
+		bne,pn	%%icc, 1b
+		 addcc	%%g7, 1, %%g0
+		ble,pn	%%icc, 3f
+		 nop
+	2:
+		.subsection 2
+	3:	mov	%0, %%g5
+		save	%%sp, -160, %%sp
+		mov	%%g1, %%l1
+		mov	%%g2, %%l2
+		mov	%%g3, %%l3
+		call	%1
+		 mov	%%g5, %%o0
+		mov	%%l1, %%g1
+		mov	%%l2, %%g2
+		ba,pt	%%xcc, 2b
+		 restore %%l3, %%g0, %%g3
+		.previous\n"
+	: : "r" (__atomic_fool_gcc(sem)), "i" (__up)
+	: "g5", "g7", "memory", "cc");
 }	
 
 #endif /* __KERNEL__ */

@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.73 1998/11/06 13:49:54 jj Exp $
+/* $Id: sparc_ksyms.c,v 1.76 1999/01/29 02:06:54 davem Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -91,6 +91,7 @@ __attribute__((section("__ksymtab"))) =				\
 /* used by various drivers */
 EXPORT_SYMBOL(sparc_cpu_model);
 EXPORT_SYMBOL_PRIVATE(_spinlock_waitfor);
+EXPORT_SYMBOL(kernel_thread);
 #ifdef SPIN_LOCK_DEBUG
 EXPORT_SYMBOL(_do_spin_lock);
 EXPORT_SYMBOL(_do_spin_unlock);
@@ -118,6 +119,7 @@ EXPORT_SYMBOL_PRIVATE(_global_cli);
 #endif
 
 EXPORT_SYMBOL(page_offset);
+EXPORT_SYMBOL(sparc_valid_addr_bitmap);
 
 #ifndef CONFIG_SUN4
 EXPORT_SYMBOL(stack_top);
@@ -211,6 +213,7 @@ EXPORT_SYMBOL(saved_command_line);
 EXPORT_SYMBOL(prom_apply_obio_ranges);
 EXPORT_SYMBOL(prom_getname);
 EXPORT_SYMBOL(prom_feval);
+EXPORT_SYMBOL(prom_getbool);
 EXPORT_SYMBOL(prom_getstring);
 EXPORT_SYMBOL(prom_apply_sbus_ranges);
 EXPORT_SYMBOL(prom_getint);

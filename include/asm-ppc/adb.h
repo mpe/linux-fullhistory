@@ -60,6 +60,9 @@ int adb_register(int default_id,int handler_id,struct adb_ids *ids,
 		 void (*handler)(unsigned char *, int, struct pt_regs *, int));
 void adb_input(unsigned char *, int, struct pt_regs *, int);
 
+int adb_try_handler_change(int address, int new_id);
+int adb_get_infos(int address, int *original_address, int *handler_id);
+
 #endif /* __KERNEL__ */
 
 #endif /* __PPC_ADB_H */

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.77 1998/08/04 20:51:19 davem Exp $ */
+/* $Id: pgtable.h,v 1.78 1999/01/07 14:14:05 jj Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -574,8 +574,10 @@ __get_iospace (unsigned long addr)
 
 #define module_map      vmalloc
 #define module_unmap    vfree
+extern unsigned long *sparc_valid_addr_bitmap;
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
 #define PageSkip(page)		(test_bit(PG_skip, &(page)->flags))
+#define kern_addr_valid(addr)	(test_bit(__pa((unsigned long)(addr))>>20, sparc_valid_addr_bitmap))
 
 #endif /* !(_SPARC_PGTABLE_H) */

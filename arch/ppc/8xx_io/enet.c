@@ -1,5 +1,4 @@
 /*
- * $Id: enet.c,v 1.8 1998/11/15 19:58:07 cort Exp $
  * Ethernet driver for Motorola MPC8xx.
  * Copyright (c) 1997 Dan Malek (dmalek@jlc.net)
  *
@@ -39,7 +38,7 @@
 
 #include <asm/8xx_immap.h>
 #include <asm/pgtable.h>
-#include <asm/mbx.h>
+#include <asm/fads.h>
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
 #include "commproc.h"
@@ -49,7 +48,7 @@
  *
  * The MPC8xx CPM performs the Ethernet processing on SCC1.  It can use
  * an aribtrary number of buffers on byte boundaries, but must have at
- * least two receive buffers to prevent constand overrun conditions.
+ * least two receive buffers to prevent constant overrun conditions.
  *
  * The buffer descriptors are allocated from the CPM dual port memory
  * with the data buffers allocated from host memory, just like all other
@@ -94,6 +93,17 @@
  *	Port C, 15 - SCC1 Ethernet Tx Enable
  *	Port C, 11 - SCC1 Ethernet Collision
  *	Port C, 10 - SCC1 Ethernet Rx Enable
+ *
+ * The RPX-Lite (that I had :-), was the MPC850SAR.  It has a control
+ * register to enable Ethernet functions in the 68160, and the Ethernet
+ * was controlled by SCC2.  So, the pin I/O was like this:
+ *	Port A, 13 - SCC2 Ethernet Rx
+ *	Port A, 12 - SCC2 Ethernet Tx
+ *	Port A,  6 (CLK2) - Ethernet Tx Clk
+ *	Port A,  4 (CLK4) - Ethernet Rx Clk
+ *	Port B, 18 (RTS2) - Ethernet Tx Enable
+ *	Port C,  8 (CD2) - Ethernet Rx Enable
+ *	Port C,  9 (CTS2) - SCC Ethernet Collision
  */
 
 /* The number of Tx and Rx buffers.  These are allocated from the page
@@ -149,9 +159,25 @@ static int cpm_enet_close(struct device *dev);
 static struct net_device_stats *cpm_enet_get_stats(struct device *dev);
 static void set_multicast_list(struct device *dev);
 
-/* GET THIS FROM THE VPD!!!!
+/* Get this from various configuration locations (depends on board).
 */
 /*static	ushort	my_enet_addr[] = { 0x0800, 0x3e26, 0x1559 };*/
+
+/* Right now, only the boards with an 860 use SCC1 for the Ethernet.
+ * All others use SCC2.  We may need to make this board specific someday.
+ */
+#ifndef CONFIG_MPC860
+/*static	ushort	my_enet_addr[] = { 0x2700, 0x00ec, 0x1000 };*/
+#define CPM_CR_ENET	CPM_CR_CH_SCC2
+#define PROFF_ENET	PROFF_SCC2
+#define SCC_ENET	1		/* Index, not number! */
+#define CPMVEC_ENET	CPMVEC_SCC2
+#else
+#define CPM_CR_ENET CPM_CR_CH_SCC1
+#define PROFF_ENET	PROFF_SCC1
+#define SCC_ENET	0
+#define CPMVEC_ENET	CPMVEC_SCC1
+#endif
 
 static int
 cpm_enet_open(struct device *dev)
@@ -178,7 +204,7 @@ cpm_enet_start_xmit(struct sk_buff *skb, struct device *dev)
 	/* Transmitter timeout, serious problems. */
 	if (dev->tbusy) {
 		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 20)
+		if (tickssofar < 200)
 			return 1;
 		printk("%s: transmit timed out.\n", dev->name);
 		cep->stats.tx_errors++;
@@ -186,17 +212,17 @@ cpm_enet_start_xmit(struct sk_buff *skb, struct device *dev)
 		{
 			int	i;
 			cbd_t	*bdp;
-			printk(" Ring data dump: cur_tx %x%s cur_rx %x.\n",
+			printk(" Ring data dump: cur_tx %p%s cur_rx %p.\n",
 				   cep->cur_tx, cep->tx_full ? " (full)" : "",
 				   cep->cur_rx);
 			bdp = cep->tx_bd_base;
-			for (i = 0 ; i < TX_RING_SIZE; i++)
+			for (i = 0 ; i < TX_RING_SIZE; i++, bdp++)
 				printk("%04x %04x %08x\n",
 					bdp->cbd_sc,
 					bdp->cbd_datlen,
 					bdp->cbd_bufaddr);
 			bdp = cep->rx_bd_base;
-			for (i = 0 ; i < RX_RING_SIZE; i++)
+			for (i = 0 ; i < RX_RING_SIZE; i++, bdp++)
 				printk("%04x %04x %08x\n",
 					bdp->cbd_sc,
 					bdp->cbd_datlen,
@@ -263,7 +289,7 @@ cpm_enet_start_xmit(struct sk_buff *skb, struct device *dev)
 	/* Push the data cache so the CPM does not get stale memory
 	 * data.
 	 */
-	/*flush_dcache_range(skb->data, skb->data + skb->len);*/
+	flush_dcache_range(skb->data, skb->data + skb->len);
 
 	/* Send it on its way.  Tell CPM its ready, interrupt when done,
 	 * its the last BD of the frame, and to put the CRC on the end.
@@ -300,7 +326,7 @@ static void
 cpm_enet_interrupt(void *dev_id)
 {
 	struct	device *dev = dev_id;
-	struct	cpm_enet_private *cep;
+	volatile struct	cpm_enet_private *cep;
 	volatile cbd_t	*bdp;
 	ushort	int_events;
 	int	must_restart;
@@ -314,6 +340,7 @@ cpm_enet_interrupt(void *dev_id)
 	/* Get the interrupt events that caused us to be here.
 	*/
 	int_events = cep->sccp->scc_scce;
+	cep->sccp->scc_scce = int_events;
 	must_restart = 0;
 
 	/* Handle receive event in its own function.
@@ -329,6 +356,7 @@ cpm_enet_interrupt(void *dev_id)
 	 * I don't know if "normally" implies TXB is set when the buffer
 	 * descriptor is closed.....trial and error :-).
 	 */
+#if 0
 	if (int_events & SCCE_ENET_TXE) {
 
 		/* Transmission errors.
@@ -359,15 +387,45 @@ cpm_enet_interrupt(void *dev_id)
 		    (BD_ENET_TX_LC | BD_ENET_TX_RL | BD_ENET_TX_UN))
 			must_restart = 1;
 	}
+#endif
 
 	/* Transmit OK, or non-fatal error.  Update the buffer descriptors.
 	*/
 	if (int_events & (SCCE_ENET_TXE | SCCE_ENET_TXB)) {
+#if 1
+	    bdp = cep->dirty_tx;
+	    while ((bdp->cbd_sc&BD_ENET_TX_READY)==0) {
+		if ((bdp==cep->cur_tx) && (cep->tx_full == 0))
+		    break;
+
+		if (bdp->cbd_sc & BD_ENET_TX_HB)	/* No heartbeat */
+			cep->stats.tx_heartbeat_errors++;
+		if (bdp->cbd_sc & BD_ENET_TX_LC)	/* Late collision */
+			cep->stats.tx_window_errors++;
+		if (bdp->cbd_sc & BD_ENET_TX_RL)	/* Retrans limit */
+			cep->stats.tx_aborted_errors++;
+		if (bdp->cbd_sc & BD_ENET_TX_UN)	/* Underrun */
+			cep->stats.tx_fifo_errors++;
+		if (bdp->cbd_sc & BD_ENET_TX_CSL)	/* Carrier lost */
+			cep->stats.tx_carrier_errors++;
+
+
+		/* No heartbeat or Lost carrier are not really bad errors.
+		 * The others require a restart transmit command.
+		 */
+		if (bdp->cbd_sc &
+		    (BD_ENET_TX_LC | BD_ENET_TX_RL | BD_ENET_TX_UN)) {
+			must_restart = 1;
+			cep->stats.tx_errors++;
+		}
+
 		cep->stats.tx_packets++;
+#else
 		bdp = cep->dirty_tx;
-#ifndef final_version
+#if 1
 		if (bdp->cbd_sc & BD_ENET_TX_READY)
 			printk("HEY! Enet xmit interrupt and TX_READY.\n");
+#endif
 #endif
 		/* Deferred means some collisions occurred during transmit,
 		 * but we eventually sent the packet OK.
@@ -406,9 +464,9 @@ cpm_enet_interrupt(void *dev_id)
 		}
 
 		cep->dirty_tx = (cbd_t *)bdp;
-	}
+	    }
 
-	if (must_restart) {
+	    if (must_restart) {
 		volatile cpm8xx_t *cp;
 
 		/* Some transmit errors cause the transmitter to shut
@@ -419,8 +477,9 @@ cpm_enet_interrupt(void *dev_id)
 		 */
 		cp = cpmp;
 		cp->cp_cpcr =
-		    mk_cr_cmd(CPM_CR_CH_SCC1, CPM_CR_RESTART_TX) | CPM_CR_FLG;
+		    mk_cr_cmd(CPM_CR_ENET, CPM_CR_RESTART_TX) | CPM_CR_FLG;
 		while (cp->cp_cpcr & CPM_CR_FLG);
+	    }
 	}
 
 	/* Check for receive busy, i.e. packets coming but no place to
@@ -431,11 +490,6 @@ cpm_enet_interrupt(void *dev_id)
 		cep->stats.rx_dropped++;
 		printk("CPM ENET: BSY can't happen.\n");
 	}
-
-	/* Write the SCC event register with the events we have handled
-	 * to clear them.  Maybe we should do this sooner?
-	 */
-	cep->sccp->scc_scce = int_events;
 
 	dev->interrupt = 0;
 
@@ -576,7 +630,7 @@ static void set_multicast_list(struct device *dev)
 	int	i, j;
 	cep = (struct cpm_enet_private *)dev->priv;
 
-	/* Get pointer to SCC1 area in parameter RAM.
+	/* Get pointer to SCC area in parameter RAM.
 	*/
 	ep = (scc_enet_t *)dev->base_addr;
 
@@ -627,7 +681,7 @@ static void set_multicast_list(struct device *dev)
 				/* Ask CPM to run CRC and set bit in
 				 * filter mask.
 				 */
-				cpmp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SCC1, CPM_CR_SET_GADDR) | CPM_CR_FLG;
+				cpmp->cp_cpcr = mk_cr_cmd(CPM_CR_ENET, CPM_CR_SET_GADDR) | CPM_CR_FLG;
 				/* this delay is necessary here -- Cort */
 				udelay(10);
 				while (cpmp->cp_cpcr & CPM_CR_FLG);
@@ -636,13 +690,15 @@ static void set_multicast_list(struct device *dev)
 	}
 }
 
-/* Initialize the CPM Ethernet on SCC1.  If EPPC-Bug loaded us, or performed
+/* Initialize the CPM Ethernet on SCC.  If EPPC-Bug loaded us, or performed
  * some other network I/O, a whole bunch of this has already been set up.
  * It is no big deal if we do it again, we just have to disable the
  * transmit and receive to make sure we don't catch the CPM with some
  * inconsistent control information.
  */
-__initfunc(int cpm_enet_init(void))
+/* until this gets cleared up -- Cort */
+int __init cpm_enet_init() { m8xx_enet_init(); }
+int __init m8xx_enet_init(void)
 {
 	struct device *dev;
 	struct cpm_enet_private *cep;
@@ -650,6 +706,7 @@ __initfunc(int cpm_enet_init(void))
 	unsigned char	*eap;
 	unsigned long	mem_addr;
 	pte_t		*pte;
+	bd_t		*bd;
 	volatile	cbd_t		*bdp;
 	volatile	cpm8xx_t	*cp;
 	volatile	scc_t		*sccp;
@@ -659,6 +716,8 @@ __initfunc(int cpm_enet_init(void))
 	cp = cpmp;	/* Get pointer to Communication Processor */
 
 	immap = (immap_t *)IMAP_ADDR;	/* and to internal registers */
+
+	bd = (bd_t *)res;
 
 	/* Allocate some private information.
 	*/
@@ -670,13 +729,13 @@ __initfunc(int cpm_enet_init(void))
 	*/
 	dev = init_etherdev(0, 0);
 
-	/* Get pointer to SCC1 area in parameter RAM.
+	/* Get pointer to SCC area in parameter RAM.
 	*/
-	ep = (scc_enet_t *)(&cp->cp_dparam[PROFF_SCC1]);
+	ep = (scc_enet_t *)(&cp->cp_dparam[PROFF_ENET]);
 
 	/* And another to the SCC register area.
 	*/
-	sccp = (volatile scc_t *)(&cp->cp_scc[0]);
+	sccp = (volatile scc_t *)(&cp->cp_scc[SCC_ENET]);
 	cep->sccp = (scc_t *)sccp;		/* Keep the pointer handy */
 
 	/* Disable receive and transmit in case EPPC-Bug started it.
@@ -686,6 +745,9 @@ __initfunc(int cpm_enet_init(void))
 	/* Cookbook style from the MPC860 manual.....
 	 * Not all of this is necessary if EPPC-Bug has initialized
 	 * the network.
+	 * So far we are lucky, all board configurations use the same
+	 * pins, or at least the same I/O Port for these functions.....
+	 * It can't last though......
 	 */
 
 	/* Configure port A pins for Txd and Rxd.
@@ -706,7 +768,7 @@ __initfunc(int cpm_enet_init(void))
 	immap->im_ioport.iop_padir &= ~(PA_ENET_TCLK | PA_ENET_RCLK);
 
 	/* Configure Serial Interface clock routing.
-	 * First, clear all SCC1 bits to zero, then set the ones we want.
+	 * First, clear all SCC bits to zero, then set the ones we want.
 	 */
 	cp->cp_sicr &= ~SICR_ENET_MASK;
 	cp->cp_sicr |= SICR_ENET_CLKRT;
@@ -731,13 +793,13 @@ __initfunc(int cpm_enet_init(void))
 	cep->dirty_tx = cep->cur_tx = cep->tx_bd_base;
 	cep->cur_rx = cep->rx_bd_base;
 
-	/* Issue init Rx BD command for SCC1.
+	/* Issue init Rx BD command for SCC.
 	 * Manual says to perform an Init Rx parameters here.  We have
 	 * to perform both Rx and Tx because the SCC may have been
 	 * already running.
 	 * In addition, we have to do it later because we don't yet have
 	 * all of the BD control/status set properly.
-	cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SCC1, CPM_CR_INIT_RX) | CPM_CR_FLG;
+	cp->cp_cpcr = mk_cr_cmd(CPM_CR_ENET, CPM_CR_INIT_RX) | CPM_CR_FLG;
 	while (cp->cp_cpcr & CPM_CR_FLG);
 	 */
 
@@ -781,20 +843,17 @@ __initfunc(int cpm_enet_init(void))
 	ep->sen_iaddr3 = 0;
 	ep->sen_iaddr4 = 0;
 
-	/* Set Ethernet station address.  This must come from the
-	 * Vital Product Data (VPD) EEPROM.....as soon as I get the
-	 * I2C interface working.....
+	/* Set Ethernet station address.
 	 *
-	 * Since we performed a diskless boot, the Ethernet controller
+	 * If we performed a MBX diskless boot, the Ethernet controller
 	 * has been initialized and we copy the address out into our
 	 * own structure.
 	 */
-#ifdef notdef
-	ep->sen_paddrh = my_enet_addr[0];
-	ep->sen_paddrm = my_enet_addr[1];
-	ep->sen_paddrl = my_enet_addr[2];
-#else
 	eap = (unsigned char *)&(ep->sen_paddrh);
+#ifndef CONFIG_MBX
+	for (i=5; i>=0; i--)
+		*eap++ = dev->dev_addr[i] = bd->bi_enetaddr[i];
+#else
 	for (i=5; i>=0; i--)
 		dev->dev_addr[i] = *eap++;
 #endif
@@ -854,7 +913,7 @@ __initfunc(int cpm_enet_init(void))
 	 * than the manual describes because we have just now finished
 	 * the BD initialization.
 	 */
-	cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SCC1, CPM_CR_INIT_TRX) | CPM_CR_FLG;
+	cp->cp_cpcr = mk_cr_cmd(CPM_CR_ENET, CPM_CR_INIT_TRX) | CPM_CR_FLG;
 	while (cp->cp_cpcr & CPM_CR_FLG);
 
 	cep->skb_cur = cep->skb_dirty = 0;
@@ -869,7 +928,7 @@ __initfunc(int cpm_enet_init(void))
 
 	/* Install our interrupt handler.
 	*/
-	cpm_install_handler(CPMVEC_SCC1, cpm_enet_interrupt, dev);
+	cpm_install_handler(CPMVEC_ENET, cpm_enet_interrupt, dev);
 
 	/* Set GSMR_H to enable all normal operating modes.
 	 * Set GSMR_L to enable Ethernet to MC68160.
@@ -884,12 +943,42 @@ __initfunc(int cpm_enet_init(void))
 	/* Set processing mode.  Use Ethernet CRC, catch broadcast, and
 	 * start frame search 22 bit times after RENA.
 	 */
-	sccp->scc_pmsr = (SCC_PMSR_ENCRC | SCC_PMSR_BRO | SCC_PMSR_NIB22);
+	sccp->scc_pmsr = (SCC_PMSR_ENCRC | SCC_PMSR_NIB22);
 
 	/* It is now OK to enable the Ethernet transmitter.
-	*/
+	 * Unfortunately, there are board implementation differences here.
+	 */
+#ifdef CONFIG_MBX
 	immap->im_ioport.iop_pcpar |= PC_ENET_TENA;
 	immap->im_ioport.iop_pcdir &= ~PC_ENET_TENA;
+#endif
+
+#if defined(CONFIG_RPXLITE) || defined(CONFIG_RPXCLASSIC)
+	cp->cp_pbpar |= PB_ENET_TENA;
+	cp->cp_pbdir |= PB_ENET_TENA;
+
+	/* And while we are here, set the configuration to enable ethernet.
+	*/
+	*((volatile uint *)RPX_CSR_ADDR) &= ~BCSR0_ETHLPBK;
+	*((volatile uint *)RPX_CSR_ADDR) |=
+			(BCSR0_ETHEN | BCSR0_COLTESTDIS | BCSR0_FULLDPLXDIS);
+#endif
+
+#ifdef CONFIG_BSEIP
+	cp->cp_pbpar |= PB_ENET_TENA;
+	cp->cp_pbdir |= PB_ENET_TENA;
+
+	/* BSE uses port B and C for PHY control.
+	*/
+	cp->cp_pbpar &= ~(PB_BSE_POWERUP | PB_BSE_FDXDIS);
+	cp->cp_pbdir |= (PB_BSE_POWERUP | PB_BSE_FDXDIS);
+	cp->cp_pbdat |= (PB_BSE_POWERUP | PB_BSE_FDXDIS);
+
+	immap->im_ioport.iop_pcpar &= ~PC_BSE_LOOPBACK;
+	immap->im_ioport.iop_pcdir |= PC_BSE_LOOPBACK;
+	immap->im_ioport.iop_pcso &= ~PC_BSE_LOOPBACK;
+	immap->im_ioport.iop_pcdat &= ~PC_BSE_LOOPBACK;
+#endif
 
 	dev->base_addr = (unsigned long)ep;
 	dev->priv = cep;
@@ -913,3 +1002,4 @@ __initfunc(int cpm_enet_init(void))
 
 	return 0;
 }
+

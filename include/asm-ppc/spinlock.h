@@ -102,6 +102,8 @@ extern int spin_trylock(spinlock_t *lock);
 #define spin_unlock_irqrestore(lock, flags) \
 	do { spin_unlock(lock); __restore_flags(flags); } while (0)
 
+extern unsigned long __spin_trylock(volatile unsigned long *lock);
+
 /*
  * Read-write spinlocks, allowing multiple readers
  * but only one writer.

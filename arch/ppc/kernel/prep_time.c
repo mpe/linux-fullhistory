@@ -54,6 +54,41 @@ unsigned int clock_transl[] __prepdata = { MOTO_RTC_SECONDS,0 /* alarm */,
 		       MOTO_RTC_CONTROLA, MOTO_RTC_CONTROLB /* 10,11 */
 };
 
+/*
+ * The following struture is used to access the MK48T18
+ */
+typedef volatile struct _MK48T18 {
+	unsigned char	ucNvRAM[0x3ff8]; /* NvRAM locations */
+	unsigned char	ucControl;
+	unsigned char	ucSecond;	/* 0-59 */
+	unsigned char	ucMinute;	/* 0-59 */
+	unsigned char	ucHour;		/* 0-23 */
+	unsigned char	ucDay;		/* 1-7 */
+	unsigned char	ucDate;		/* 1-31 */
+	unsigned char	ucMonth;	/* 1-12 */
+	unsigned char	ucYear;		/* 0-99 */
+} MK48T18, *PMK48T18;
+
+/*
+ * The control register contains a 5 bit calibration value plus sign
+ * and read/write enable bits
+ */
+#define MK48T18_CTRL_CAL_MASK	0x1f
+#define MK48T18_CTRL_CAL_SIGN	0x20
+#define MK48T18_CTRL_READ	0x40
+#define MK48T18_CTRL_WRITE	0x80
+/*
+ * The STOP bit is the most significant bit of the seconds location
+ */
+#define MK48T18_SEC_MASK	0x7f
+#define MK48T18_SEC_STOP	0x80
+/*
+ * The day location also contains the frequency test bit which should
+ * be zero for normal operation
+ */
+#define MK48T18_DAY_MASK	0x07
+#define MK48T18_DAY_FT		0x40
+
 __prep
 int prep_cmos_clock_read(int addr)
 {
@@ -65,6 +100,8 @@ int prep_cmos_clock_read(int addr)
 		outb(clock_transl[addr], NVRAM_AS0);
 		return (inb(NVRAM_DATA));
 	}
+        else if ( _prep_type == _PREP_Radstone )
+                return CMOS_READ(addr);
 
 	printk("Unknown machine in prep_cmos_clock_read()!\n");
 	return -1;
@@ -85,6 +122,12 @@ void prep_cmos_clock_write(unsigned long val, int addr)
 		outb(val,NVRAM_DATA);
 		return;
 	}
+        else if ( _prep_type == _PREP_Radstone )
+        {
+                CMOS_WRITE(val,addr);
+                return;
+        }
+
 	printk("Unknown machine in prep_cmos_clock_write()!\n");
 }
 
@@ -113,6 +156,7 @@ int prep_set_rtc_time(unsigned long nowtime)
 		BIN_TO_BCD(tm.tm_min);
 		BIN_TO_BCD(tm.tm_hour);
 		BIN_TO_BCD(tm.tm_mon);
+		BIN_TO_BCD(tm.tm_wday);
 		BIN_TO_BCD(tm.tm_mday);
 		BIN_TO_BCD(tm.tm_year);
 	}
@@ -120,9 +164,10 @@ int prep_set_rtc_time(unsigned long nowtime)
 	prep_cmos_clock_write(tm.tm_min,RTC_MINUTES);
 	prep_cmos_clock_write(tm.tm_hour,RTC_HOURS);
 	prep_cmos_clock_write(tm.tm_mon,RTC_MONTH);
+	prep_cmos_clock_write(tm.tm_wday+1,RTC_DAY_OF_WEEK);
 	prep_cmos_clock_write(tm.tm_mday,RTC_DAY_OF_MONTH);
 	prep_cmos_clock_write(tm.tm_year,RTC_YEAR);
-	
+
 	/* The following flags have to be released exactly in this order,
 	 * otherwise the DS12887 (popular MC146818A clone with integrated
 	 * battery and quartz) will not reset the oscillator and will not
@@ -132,6 +177,42 @@ int prep_set_rtc_time(unsigned long nowtime)
 	 */
 	prep_cmos_clock_write(save_control, RTC_CONTROL);
 	prep_cmos_clock_write(save_freq_select, RTC_FREQ_SELECT);
+
+	/*
+	 * Radstone Technology PPC1a boards use an MK48T18 device
+	 * as the "master" RTC but also have a DS1287 equivalent incorporated
+	 * into the PCI-ISA bridge device. The DS1287 is initialised by the boot
+	 * firmware to reflect the value held in the MK48T18 and thus the
+	 * time may be read from this device both here and in the rtc driver.
+	 * Whenever we set the time, however, if it is to be preserved across
+	 * boots we must also update the "master" RTC.
+	 */
+	if((_prep_type==_PREP_Radstone) && (ucSystemType==RS_SYS_TYPE_PPC1a))
+	{
+		PMK48T18 pMk48t18=(PMK48T18)(_ISA_MEM_BASE+0x00800000);
+
+		/*
+		 * Set the write enable bit
+		 */
+		pMk48t18->ucControl|=MK48T18_CTRL_WRITE;
+		eieio();
+		/*
+		 * Update the clock
+		 */
+		pMk48t18->ucSecond=tm.tm_sec;
+		pMk48t18->ucMinute=tm.tm_min;
+		pMk48t18->ucHour=tm.tm_hour;
+		pMk48t18->ucMonth=tm.tm_mon;
+		pMk48t18->ucDay=tm.tm_wday+1;
+		pMk48t18->ucDate=tm.tm_mday;
+		pMk48t18->ucYear=tm.tm_year;
+
+		eieio();
+		/*
+		 * Clear the write enable bit
+		 */
+		pMk48t18->ucControl&=~MK48T18_CTRL_WRITE;
+	}
 
 	if ( (time_state == TIME_ERROR) || (time_state == TIME_BAD) )
 		time_state = TIME_OK;

@@ -1,4 +1,4 @@
-/* $Id: memory.c,v 1.3 1997/03/04 16:27:10 jj Exp $
+/* $Id: memory.c,v 1.4 1998/11/25 10:04:06 jj Exp $
  * memory.c: Prom routine for acquiring various bits of information
  *           about RAM on the machine, both virtual and physical.
  *
@@ -41,8 +41,8 @@ __initfunc(static void
 prom_sortmemlist(struct linux_mlist_p1275 *thislist))
 {
 	int swapi = 0;
-	int i, mitr, tmpsize;
-	unsigned long tmpaddr;
+	int i, mitr;
+	unsigned long tmpaddr, tmpsize;
 	unsigned long lowest;
 
 	for(i=0; thislist[i].theres_more != 0; i++) {
@@ -79,7 +79,7 @@ __initfunc(void prom_meminit(void))
 		prom_phys_avail[iter].start_adr =
 			prom_reg_memlist[iter].phys_addr;
 		prom_phys_avail[iter].num_bytes =
-			(unsigned long) prom_reg_memlist[iter].reg_size;
+			prom_reg_memlist[iter].reg_size;
 		prom_phys_avail[iter].theres_more =
 			&prom_phys_avail[iter+1];
 	}
@@ -93,7 +93,7 @@ __initfunc(void prom_meminit(void))
 		prom_phys_total[iter].start_adr =
 			prom_reg_memlist[iter].phys_addr;
 		prom_phys_total[iter].num_bytes =
-			(unsigned long) prom_reg_memlist[iter].reg_size;
+			prom_reg_memlist[iter].reg_size;
 		prom_phys_total[iter].theres_more =
 			&prom_phys_total[iter+1];
 	}
@@ -112,7 +112,7 @@ __initfunc(void prom_meminit(void))
 		prom_prom_taken[iter].start_adr =
 			prom_reg_memlist[iter].phys_addr;
 		prom_prom_taken[iter].num_bytes =
-			(unsigned long) prom_reg_memlist[iter].reg_size;
+			prom_reg_memlist[iter].reg_size;
 		prom_prom_taken[iter].theres_more =
 			&prom_phys_total[iter+1];
 	}
@@ -130,7 +130,7 @@ __initfunc(void prom_meminit(void))
 			prom_prom_taken[iter].start_adr;
 	}
 	prom_prom_taken[iter-1].num_bytes =
-		((unsigned long)-1) - (unsigned long) prom_prom_taken[iter-1].start_adr;
+		-1UL - prom_prom_taken[iter-1].start_adr;
 
 	/* Sort the other two lists. */
 	prom_sortmemlist(prom_phys_total);

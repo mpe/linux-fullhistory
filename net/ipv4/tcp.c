@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.136 1999/03/07 13:26:01 davem Exp $
+ * Version:	$Id: tcp.c,v 1.139 1999/03/17 19:30:34 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -735,18 +735,25 @@ static void wait_for_tcp_memory(struct sock * sk)
  *	Note: must be called with the socket locked.
  */
 
-int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
+int tcp_do_sendmsg(struct sock *sk, struct msghdr *msg)
 {
-	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	int mss_now;
-	int err = 0;
-	int copied  = 0;
+	struct iovec *iov;
+	struct tcp_opt *tp;
 	struct sk_buff *skb;
+	int iovlen, flags;
+	int mss_now;
+	int err, copied;
+
+	lock_sock(sk);
+
+	err = 0;
+	tp = &(sk->tp_pinfo.af_tcp);
 
 	/* Wait for a connection to finish. */
+	flags = msg->msg_flags;
 	if ((1 << sk->state) & ~(TCPF_ESTABLISHED | TCPF_CLOSE_WAIT))
 		if((err = wait_for_tcp_connect(sk, flags)) != 0)
-			return err;
+			goto out;
 
 	/* This should be in poll */
 	sk->socket->flags &= ~SO_NOSPACE; /* clear SIGIO XXX */
@@ -754,6 +761,10 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 	mss_now = tcp_current_mss(sk);
 
 	/* Ok commence sending. */
+	iovlen = msg->msg_iovlen;
+	iov = msg->msg_iov;
+	copied = 0;
+	
 	while(--iovlen >= 0) {
 		int seglen=iov->iov_len;
 		unsigned char * from=iov->iov_base;
@@ -844,7 +855,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 			 * for later rather than sent.
 			 */
 			copy = tp->snd_wnd - (tp->snd_nxt - tp->snd_una);
-			if(copy >= (tp->max_window >> 1))
+			if(copy > (tp->max_window >> 1))
 				copy = min(copy, mss_now);
 			else
 				copy = mss_now;
@@ -926,26 +937,36 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 		}
 	}
 	sk->err = 0;
-	return copied;
+	err = copied;
+	goto out;
 
 do_sock_err:
 	if(copied)
-		return copied;
-	return sock_error(sk);
+		err = copied;
+	else
+		err = sock_error(sk);
+	goto out;
 do_shutdown:
 	if(copied)
-		return copied;
-	if (!(flags&MSG_NOSIGNAL))
-		send_sig(SIGPIPE, current, 0);
-	return -EPIPE;
+		err = copied;
+	else {
+		if (!(flags&MSG_NOSIGNAL))
+			send_sig(SIGPIPE, current, 0);
+		err = -EPIPE;
+	}
+	goto out;
 do_interrupted:
 	if(copied)
-		return copied;
-	return err;
+		err = copied;
+	goto out;
 do_fault:
 	kfree_skb(skb);
 do_fault2:
-	return -EFAULT;
+	err = -EFAULT;
+out:
+	tcp_push_pending_frames(sk, tp);
+	release_sock(sk);
+	return err;
 }
 
 #undef PSH_NEEDED
@@ -1681,13 +1702,9 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval,
 		} else {
 			sk->nonagle = 0;
 
-			if (tp->send_head) {
-				lock_sock(sk);
-				if (tp->send_head &&
-				    tcp_snd_test (sk, tp->send_head))
-					tcp_write_xmit(sk);
-				release_sock(sk);
-			}
+			lock_sock(sk);
+			tcp_push_pending_frames(sk, tp);
+			release_sock(sk);
 		}
 		return 0;
 

@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.91 1998/10/07 01:27:08 davem Exp $
+/* $Id: entry.S,v 1.101 1999/01/19 07:54:38 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -29,8 +29,17 @@
 	.text
 	.align		32
 
+	.globl		sparc64_vpte_patchme1
+	.globl		sparc64_vpte_patchme2
+sparc64_vpte_nucleus:
+sparc64_vpte_patchme1:
+	sethi		%hi(0), %g5			! This has to be patched
+sparc64_vpte_patchme2:
+	or		%g5, %lo(0), %g5		! This is patched too
+	ba,pt		%xcc, sparc64_kpte_continue	! Part of dtlb_backend
+	 add		%g1, %g1, %g1			! Finish PMD offset adjustment
+
 	/* This is trivial with the new code... */
-	.align		32
 	.globl		do_fpdis
 do_fpdis:
 	ldub		[%g6 + AOFF_task_tss + AOFF_thread_fpsaved], %g5	! Load	Group
@@ -164,69 +173,57 @@ fpdis_exit2:
 	 *
 	 * With this method we can do most of the cross-call tlb/cache
 	 * flushing very quickly.
+	 *
+	 * Current CPU's IRQ worklist table is locked into %g1,
+	 * don't touch.
 	 */
-	.data
-	.align  8
-	.globl	ivec_spurious_cookie
-ivec_spurious_cookie:	.xword	0
-
 	.text
-	.align	32
-	.globl	do_ivec
+	.align		32
+	.globl		do_ivec
 do_ivec:
-	ldxa		[%g0] ASI_INTR_RECEIVE, %g5
-	andcc		%g5, 0x20, %g0
-	be,pn		%xcc, do_ivec_return
-	 mov		0x40, %g2
-
-	/* Load up Interrupt Vector Data 0 register. */
+	wr		%g0, ASI_UDB_INTR_R, %asi
+	ldxa		[%g0 + 0x40] %asi, %g3
 	sethi		%hi(KERNBASE), %g4
-	ldxa		[%g2] ASI_UDB_INTR_R, %g3
 	cmp		%g3, %g4
 	bgeu,pn		%xcc, do_ivec_xcall
-	 nop
-	and		%g3, 0x7ff, %g3
-	sllx		%g3, 3, %g3
-	ldx		[%g1 + %g3], %g2
-	brz,pn		%g2, do_ivec_spurious
-	 sethi		%hi(0x80000000), %g5
-
-	or		%g2, %g5, %g2
-	stx		%g2, [%g1 + %g3]
-
-	/* No branches, worse case we don't know about this interrupt
-	 * yet, so we would just write a zero into the softint register
-	 * which is completely harmless.
-	 */
-	wr		%g2, 0x0, %set_softint
-do_ivec_return:
+	 srlx		%g3, 32, %g5
 	stxa		%g0, [%g0] ASI_INTR_RECEIVE
 	membar		#Sync
+
+	sethi		%hi(ivector_table), %g2
+	sllx		%g3, 5, %g3
+	or		%g2, %lo(ivector_table), %g2
+	add		%g2, %g3, %g3
+	ldx		[%g3 + 0x08], %g2	/* irq_info */
+	ldub		[%g3 + 0x04], %g4	/* pil */
+	brz,pn		%g2, do_ivec_spurious
+	 mov		1, %g2
+
+	sllx		%g2, %g4, %g2
+	sllx		%g4, 2, %g4
+	lduw		[%g1 + %g4], %g5	/* g5 = irq_work(cpu, pil) */
+	stw		%g5, [%g3 + 0x00]	/* bucket->irq_chain = g5 */
+	stw		%g3, [%g1 + %g4]	/* irq_work(cpu, pil) = bucket */
+	wr		%g2, 0x0, %set_softint
 	retry
 do_ivec_xcall:
-	srlx		%g3, 32, %g5
-	add		%g2, 0x10, %g2
+	ldxa		[%g0 + 0x50] %asi, %g6
+
 	srl		%g3, 0, %g3
-	ldxa		[%g2] ASI_UDB_INTR_R, %g6
-	add		%g2, 0x10, %g2
-	ldxa		[%g2] ASI_UDB_INTR_R, %g7
+	ldxa		[%g0 + 0x60] %asi, %g7
 	stxa		%g0, [%g0] ASI_INTR_RECEIVE
 	membar		#Sync
 	jmpl		%g3, %g0
 	 nop
-
 do_ivec_spurious:
-	srl		%g3, 3, %g3
-	sethi		%hi(ivec_spurious_cookie), %g2
-	stx		%g3, [%g2 + %lo(ivec_spurious_cookie)]
-	stxa		%g0, [%g0] ASI_INTR_RECEIVE
-	membar		#Sync
+	stw		%g3, [%g1 + 0x00]	/* irq_work(cpu, 0) = bucket */
 	rdpr		%pstate, %g5
+
 	wrpr		%g5, PSTATE_IG | PSTATE_AG, %pstate
 	sethi		%hi(109f), %g7
 	ba,pt		%xcc, etrap
 109:	 or		%g7, %lo(109b), %g7
-	call		report_spurious_ivec
+	call		catch_disabled_ivec
 	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 	ba,pt		%xcc, rtrap
 	 clr		%l6
@@ -337,7 +334,7 @@ floppy_fifo_emptied:
 	or		%g1, %lo(irq_action), %g1
 	ldx		[%g1 + (11 << 3)], %g3		! irqaction[floppy_irq]
 	ldx		[%g3 + 0x10], %g4		! action->mask == ino_bucket ptr
-	ldx		[%g4 + 0x18], %g4		! bucket->iclr
+	ldx		[%g4 + 0x10], %g4		! bucket->iclr
 	stw		%g0, [%g4]			! SYSIO_ICLR_IDLE
 	membar		#Sync				! probably not needed...
 	retry
@@ -588,12 +585,20 @@ sunos_getgid:
 	/* SunOS's execv() call only specifies the argv argument, the
 	 * environment settings are the same as the calling processes.
 	 */
-	.globl	sunos_execv
+	.globl	sunos_execv, sys_execve, sys32_execve
+sys_execve:
+	sethi		%hi(sparc_execve), %g1
+	ba,pt		%xcc, execve_merge
+	 or		%g1, %lo(sparc_execve), %g1
 sunos_execv:
-	sethi	%hi(sparc32_execve), %g1
-	stx	%g0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I2]
-	jmpl	%g1 + %lo(sparc32_execve), %g0
-	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0
+	stx		%g0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I2]
+sys32_execve:
+	sethi		%hi(sparc32_execve), %g1
+	or		%g1, %lo(sparc32_execve), %g1
+execve_merge:
+	flushw
+	jmpl		%g1, %g0
+	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 
 	.globl	sys_pipe, sys_execve, sys_sigpause, sys_nis_syscall
 	.globl	sys_sigsuspend, sys_rt_sigsuspend, sys32_rt_sigsuspend
@@ -612,14 +617,6 @@ sys_nis_syscall:sethi		%hi(c_sys_nis_syscall), %g1
 		jmpl		%g1 + %lo(c_sys_nis_syscall), %g0
 		 nop
 
-sys_execve:	sethi		%hi(sparc_execve), %g1
-		add		%sp, STACK_BIAS + REGWIN_SZ, %o0
-		jmpl		%g1 + %lo(sparc_execve), %g0
-		 nop
-sys32_execve:	sethi		%hi(sparc32_execve), %g1
-		add		%sp, STACK_BIAS + REGWIN_SZ, %o0
-		jmpl		%g1 + %lo(sparc32_execve), %g0
-		 nop
 sys_memory_ordering:
 		sethi		%hi(sparc_memory_ordering), %g1
 		add		%sp, STACK_BIAS + REGWIN_SZ, %o1
@@ -719,27 +716,30 @@ sys_ptrace:	add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 	.globl	sys_fork, sys_vfork, sys_clone, sparc_exit
 	.globl	ret_from_syscall
 	.align	32
-sys_fork:
-sys_vfork:	mov		SIGCHLD, %o0
-		clr		%o1
+sys_vfork:	/* Under Linux, vfork and fork are just special cases of clone. */
+		sethi		%hi(0x4000 | 0x0100 | SIGCHLD), %o0
+		or		%o0, %lo(0x4000 | 0x0100 | SIGCHLD), %o0
+		ba,pt		%xcc, sys_clone
+sys_fork:	 clr		%o1
+		mov		SIGCHLD, %o0
 sys_clone:	flushw
-		mov		%o7, %l5
-		add		%sp, STACK_BIAS + REGWIN_SZ, %o2
 		movrz		%o1, %fp, %o1
-		call		do_fork
-		 mov		%l5, %o7
+		nop
+		ba,pt		%xcc, do_fork
+		 add		%sp, STACK_BIAS + REGWIN_SZ, %o2
 ret_from_syscall:
 		/* Clear SPARC_FLAG_NEWCHILD, switch_to leaves tss.flags in
 		 * %o7 for us.  Check performance counter stuff too.
 		 */
-		andn		%o7, 0x100, %o7
-		sth		%o7, [%g6 + AOFF_task_tss + AOFF_thread_flags]
 #ifdef __SMP__
-		sethi		%hi(scheduler_lock), %o4
-		membar		#StoreStore | #LoadStore
-		stb		%g0, [%o4 + %lo(scheduler_lock)]
+		andn		%o7, 0x100, %l0
+		call		schedule_tail
+		 sth		%l0, [%g6 + AOFF_task_tss + AOFF_thread_flags]
+#else
+		andn		%o7, 0x100, %l0
+		sth		%l0, [%g6 + AOFF_task_tss + AOFF_thread_flags]
 #endif
-		andcc		%o7, 0x200, %g0
+		andcc		%l0, 0x200, %g0
 		be,pt		%icc, 1f
 		 nop
 		ldx		[%g6 + AOFF_task_tss + AOFF_thread_pcr_reg], %o7

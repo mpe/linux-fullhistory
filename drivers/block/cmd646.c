@@ -1,4 +1,4 @@
-/* $Id: cmd646.c,v 1.10 1998/08/03 15:28:42 davem Exp $
+/* $Id: cmd646.c,v 1.11 1998/12/13 08:36:54 davem Exp $
  * cmd646.c: Enable interrupts at initialization time on Ultra/PCI machines.
  *           Note, this driver is not used at all on other systems because
  *           there the "BIOS" has done all of the following already.
@@ -219,8 +219,11 @@ __initfunc(void ide_init_cmd646 (ide_hwif_t *hwif))
 
 	hwif->chipset = ide_cmd646;
 
-	/* Set a good latency timer value. */
-	(void) pci_write_config_byte(dev, PCI_LATENCY_TIMER, 240);
+	/* Set a good latency timer and cache line size value. */
+	(void) pci_write_config_byte(dev, PCI_LATENCY_TIMER, 64);
+#ifdef __sparc_v9__
+	(void) pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, 0x10);
+#endif
 
 	/* Setup interrupts. */
 	(void) pci_read_config_byte(dev, 0x71, &mrdmode);

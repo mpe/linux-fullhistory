@@ -11,6 +11,5 @@ int FSMULD(void *rd, void *rs2, void *rs1)
 	__FP_UNPACK_S(IN, rs2);
 	FP_CONV(D,S,1,1,B,IN);
 	FP_MUL_D(R, A, B);
-	__FP_PACK_D(rd, R);
-	return 1;
+	return __FP_PACK_D(rd, R);
 }

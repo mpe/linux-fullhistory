@@ -507,6 +507,8 @@ enum happy_timer_state {
 	asleep   = 3,  /* Time inactive.                                     */
 };
 
+struct quattro;
+
 /* Happy happy, joy joy! */
 struct happy_meal {
 	struct hmeal_gregs       *gregs;          /* Happy meal global registers       */
@@ -559,6 +561,8 @@ struct happy_meal {
 	struct pci_dev		 *happy_pci_dev;
 #endif
 	struct device            *dev;            /* Backpointer                       */
+	struct quattro		 *qfe_parent;	  /* For Quattro cards                 */
+	int			  qfe_ent;	  /* Which instance on quattro         */
 	struct happy_meal        *next_module;
 };
 
@@ -575,9 +579,27 @@ struct happy_meal {
 #define HFLAG_INIT                0x00000200      /* Init called at least once         */
 #define HFLAG_LINKUP              0x00000400      /* 1 = Link is up                    */
 #define HFLAG_PCI                 0x00000800      /* PCI based Happy Meal              */
+#define HFLAG_QUATTRO		  0x00001000      /* On QFE/Quattro card	       */
 
 #define HFLAG_20_21  (HFLAG_POLLENABLE | HFLAG_FENABLE)
 #define HFLAG_NOT_A0 (HFLAG_POLLENABLE | HFLAG_FENABLE | HFLAG_LANCE | HFLAG_RXCV)
+
+/* Support for QFE/Quattro cards. */
+struct quattro {
+	volatile u32		 *irq_status[4];
+	struct device		 *happy_meals[4];
+	void (*handler)(int, void *, struct pt_regs *);
+
+	struct linux_sbus_device *quattro_sbus_dev;
+#ifdef CONFIG_PCI
+	struct pci_dev		 *quattro_pci_dev;
+#endif
+	struct quattro		 *next;
+
+	/* PROM ranges, if any. */
+	struct linux_prom_ranges  ranges[8];
+	int			  nranges;
+};
 
 /* We use this to acquire receive skb's that we can DMA directly into. */
 #define ALIGNED_RX_SKB_ADDR(addr) \
@@ -606,7 +628,16 @@ extern inline u32 kva_to_hva(struct happy_meal *hp, char *addr)
 		return (u32) virt_to_bus((volatile void *)addr);
 	else
 #endif
-		return (u32) ((unsigned long)addr);
+	{
+#ifdef __sparc_v9__
+		if (((unsigned long) addr) >= MAX_DMA_ADDRESS) {
+			printk("sunhme: Bogus DMA buffer address "
+			       "[%016lx]\n", ((unsigned long) addr));
+			panic("DMA address too large, tell DaveM");
+		}
+#endif
+		return sbus_dvma_addr(addr);
+	}
 }
 
 extern inline unsigned int hme_read32(struct happy_meal *hp,

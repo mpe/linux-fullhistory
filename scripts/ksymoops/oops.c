@@ -5,6 +5,10 @@
 
 	Copyright Keith Owens <kaos@ocs.com.au>.
 	Released under the GNU Public Licence, Version 2.
+	
+	Sun Jan  7 12:56:12 CET 1999
+	Added SPARC64 support and some SPARC hacks by "Jakub Jelinek"
+	<jj@ultra.linux.cz>
 
 	Mon Jan  4 08:47:55 EST 1999
 	Version 0.6d
@@ -43,6 +47,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+enum oops_arch {
+	OOPS_NOARCH,
+	OOPS_I386,
+	OOPS_SPARC,
+	OOPS_SPARC64,
+	OOPS_ARM,
+	OOPS_ALPHA,
+	OOPS_MIPS,
+	OOPS_PPC,
+	OOPS_M68K
+} oops_arch;
+
+char *eip_names[] = { "IP", "EIP", "PC", "PC", "PC", "PC", "PC", "NIP", "PC" };
 
 /* Error detected by bfd */
 static void Oops_bfd_perror(const char *msg)
@@ -187,11 +205,13 @@ static FILE *Oops_objdump(const char *file)
 	static char const options[] = "-dhf ";
 	static char const procname[] = "Oops_objdump";
 
-	cmd = malloc(strlen(path_objdump)+1+strlen(options)+strlen(file)+1);
+	cmd = malloc(strlen(path_objdump)+1+13+strlen(options)+strlen(file)+1);
 	if (!cmd)
 		malloc_error(procname);
 	strcpy(cmd, path_objdump);
 	strcat(cmd, " ");
+	if (oops_arch == OOPS_SPARC64)
+		strcat(cmd, "-m sparc:v9a ");
 	strcat(cmd, options);
 	strcat(cmd, file);
 	if (debug > 1)
@@ -205,9 +225,9 @@ static FILE *Oops_objdump(const char *file)
 static void Oops_decode_one(SYMBOL_SET *ss, const char *line, elf_addr_t eip,
 			    int adjust)
 {
-	int i;
+	int i, j;
 	elf_addr_t address, eip_relative;
-	char *line2, *map, **string = NULL;
+	char *line2, *map, **string = NULL, *p;
 	static regex_t     re_Oops_objdump;
 	static regmatch_t *re_Oops_objdump_pmatch;
 	static char const procname[] = "Oops_decode_one";
@@ -233,7 +253,9 @@ static void Oops_decode_one(SYMBOL_SET *ss, const char *line, elf_addr_t eip,
 			"( <_EIP[^>]*>)?"				/* 2 */
 			":"
 			"("						/* 3 */
-			".* +<_EIP\\+0?x?([0-9a-fA-F]+)>[ \t]*$"	/* 4 */
+			".* +"
+			"(0?x?[0-9a-fA-F]+ +)"				/* 4 */
+			"<_EIP\\+0?x?([0-9a-fA-F]+)>[ \t]*$"		/* 5 */
 			")?"
 			".*"
 			,
@@ -261,34 +283,58 @@ static void Oops_decode_one(SYMBOL_SET *ss, const char *line, elf_addr_t eip,
 		address = 0;
 	}
 	address += eip + adjust;
-	if (string[4]) {
+	if (string[5]) {
 		/* EIP relative data to be adjusted */
 		errno = 0;
-		eip_relative = strtoul(string[4], NULL, 16);
+		eip_relative = strtoul(string[5], NULL, 16);
 		if (errno) {
-			fprintf(stderr,
-				"%s Invalid hex value in objdump line, "
-				"treated as zero - '%s'\n"
-				"  objdump line '%s'\n",
-				procname, string[4], line);
-			perror(" ");
-			++errors;
-			eip_relative = 0;
+			/* Try strtoull also, e.g. sparc binutils print <_PC+0xfffffffffffffd58> */
+			errno = 0;
+			eip_relative = strtoull(string[5], NULL, 16);
+			if (errno) {
+				fprintf(stderr,
+					"%s Invalid hex value in objdump line, "
+					"treated as zero - '%s'\n"
+					"  objdump line '%s'\n",
+					procname, string[5], line);
+				perror(" ");
+				++errors;
+				eip_relative = 0;
+			}
 		}
 		eip_relative += eip + adjust;
 		map = map_address(&ss_merged, eip_relative);
 		/* new text is original line, eip_relative in hex, map text */
-		i = strlen(line)+1+2*sizeof(eip_relative)+1+strlen(map)+1;
-		line2 = malloc(i);
+		j = strlen(line);
+		if (string[4])
+			j = re_Oops_objdump_pmatch[4].rm_so;
+		i = j+1+2*sizeof(eip_relative)+1+strlen(map)+1;
+		line2 = malloc(i + 5);
 		if (!line2)
 			malloc_error(procname);
-		snprintf(line2, i, "%s %s %s",
-			line, format_address(eip_relative), map);
-		add_symbol_n(ss, address, 'C', 1, line2);
-		free(line2);
+		snprintf(line2, i, "%.*s %s %s",
+			j, line, format_address(eip_relative), map);
+	} else {
+		line2 = malloc(strlen(line) + 6);
+		if (!line2)
+			malloc_error(procname);
+		strcpy(line2, line);
 	}
-	else
-		add_symbol_n(ss, address, 'C', 1, line);	/* as is */
+	if (oops_arch != OOPS_I386) {
+		p = line2;
+		while ((p = strstr(p, "_EIP"))) {
+			int l = strlen(eip_names[oops_arch]);
+			memcpy(p + 1, eip_names[oops_arch], l);
+			if (l < 3)
+				strcpy(p + 1 + l, p + 4);
+			p += 1 + l;
+		}
+	}
+	if (address == eip)
+		strcat(line2, " <===");			/* This makes it easier to locate visually the
+							   offending instruction */
+	add_symbol_n(ss, address, 'C', 1, line2);	/* as is */
+	free(line2);
 	re_strings_free(&re_Oops_objdump, &string);
 }
 
@@ -435,6 +481,8 @@ static char *Oops_eip(const char *line, char ***string, int string_max)
 	int i;
 	static regex_t     re_Oops_eip_sparc;
 	static regmatch_t *re_Oops_eip_sparc_pmatch;
+	static regex_t     re_Oops_eip_sparc64;
+	static regmatch_t *re_Oops_eip_sparc64_pmatch;
 	static regex_t     re_Oops_eip_ppc;
 	static regmatch_t *re_Oops_eip_ppc_pmatch;
 	static regex_t     re_Oops_eip_mips;
@@ -442,7 +490,7 @@ static char *Oops_eip(const char *line, char ***string, int string_max)
 	static regex_t     re_Oops_eip_other;
 	static regmatch_t *re_Oops_eip_other_pmatch;
 	static const char procname[] = "Oops_eip";
-
+	
 	/* Oops 'EIP:' line for sparc, actually PSR followed by PC */
 	re_compile(&re_Oops_eip_sparc,
 			"^PSR: [0-9a-fA-F]+ PC: " UNBRACKETED_ADDRESS,
@@ -458,7 +506,26 @@ static char *Oops_eip(const char *line, char ***string, int string_max)
 			procname);
 		re_strings(&re_Oops_eip_sparc, line, re_Oops_eip_sparc_pmatch,
 			string);
+		oops_arch = OOPS_SPARC;
 		return((*string)[re_Oops_eip_sparc.re_nsub]);
+	}
+
+	/* Oops 'EIP:' line for sparc64, actually TSTATE followed by TPC */
+	re_compile(&re_Oops_eip_sparc64,
+			"^TSTATE: [0-9a-fA-F]{16} TPC: " UNBRACKETED_ADDRESS,
+		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
+		&re_Oops_eip_sparc64_pmatch);
+
+	re_string_check(re_Oops_eip_sparc64.re_nsub+1, string_max, procname);
+	i = regexec(&re_Oops_eip_sparc64, line, re_Oops_eip_sparc64.re_nsub+1,
+		re_Oops_eip_sparc64_pmatch, 0);
+	if (debug > 3)
+		fprintf(stderr, "DEBUG: %s regexec sparc64 %d\n", procname, i);
+	if (i == 0) {
+		re_strings(&re_Oops_eip_sparc64, line, re_Oops_eip_sparc64_pmatch,
+			string);
+		oops_arch = OOPS_SPARC64;
+		return((*string)[re_Oops_eip_sparc64.re_nsub]);
 	}
 
 	/* Oops 'EIP:' line for PPC, all over the place */
@@ -482,6 +549,7 @@ static char *Oops_eip(const char *line, char ***string, int string_max)
 			procname);
 		re_strings(&re_Oops_eip_ppc, line, re_Oops_eip_ppc_pmatch,
 			string);
+		oops_arch = OOPS_PPC;
 		return((*string)[re_Oops_eip_ppc.re_nsub]);
 	}
 
@@ -503,6 +571,7 @@ static char *Oops_eip(const char *line, char ***string, int string_max)
 			procname);
 		re_strings(&re_Oops_eip_mips, line, re_Oops_eip_mips_pmatch,
 			string);
+		oops_arch = OOPS_MIPS;
 		return((*string)[re_Oops_eip_mips.re_nsub]);
 	}
 
@@ -527,6 +596,7 @@ static char *Oops_eip(const char *line, char ***string, int string_max)
 			procname);
 		re_strings(&re_Oops_eip_other, line, re_Oops_eip_other_pmatch,
 			string);
+		oops_arch = OOPS_I386;
 		return((*string)[re_Oops_eip_other.re_nsub]);
 	}
 	return(NULL);
@@ -536,6 +606,7 @@ static char *Oops_eip(const char *line, char ***string, int string_max)
 static void Oops_set_eip(const char *value, elf_addr_t *eip, SYMBOL_SET *ss)
 {
 	static const char procname[] = "Oops_set_eip";
+	char buf[10];
 	errno = 0;
 	*eip = strtoul(value, NULL, 16);
 	if (errno) {
@@ -546,7 +617,8 @@ static void Oops_set_eip(const char *value, elf_addr_t *eip, SYMBOL_SET *ss)
 		++errors;
 		*eip = 0;
 	}
-	add_symbol_n(ss, *eip, 'E', 1, ">>EIP:");
+	sprintf(buf, ">>%s:", eip_names[oops_arch]);
+	add_symbol_n(ss, *eip, 'E', 1, buf);
 }
 
 /* Look for the MIPS ra line, returns start of the relevant hex value */
@@ -597,6 +669,80 @@ static void Oops_set_ra(const char *value, SYMBOL_SET *ss)
 	add_symbol_n(ss, ra, 'R', 1, ">>RA :");
 }
 
+/* Look for the SPARC o7/i7 registers line, returns start of the relevant hex value */
+static char *Oops_oi7(const char *line, char ***string, int string_max)
+{
+	int i;
+	static regex_t     re_Oops_oi7;
+	static regmatch_t *re_Oops_oi7_pmatch;
+	static const char procname[] = "Oops_oi7";
+
+	re_compile(&re_Oops_oi7,
+			"^[io][04]: [0-9a-fA-F iosp:]+ ([io]7|ret_pc): "
+			UNBRACKETED_ADDRESS,
+		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
+		&re_Oops_oi7_pmatch);
+
+	re_string_check(re_Oops_oi7.re_nsub+1, string_max, procname);
+	i = regexec(&re_Oops_oi7, line, re_Oops_oi7.re_nsub+1,
+		re_Oops_oi7_pmatch, 0);
+	if (debug > 3)
+		fprintf(stderr, "DEBUG: %s regexec %d\n", procname, i);
+	if (i == 0) {
+		re_strings(&re_Oops_oi7, line, re_Oops_oi7_pmatch,
+			string);
+		return((*string)[re_Oops_oi7.re_nsub]);
+	}
+	return(NULL);
+}
+
+/* Set the SPARC o7/i7 from the oi7 line */
+static void Oops_set_oi7(const char *value, char ***string, SYMBOL_SET *ss)
+{
+	static const char procname[] = "Oops_set_oi7";
+	elf_addr_t oi7;
+	int o7 = 1;
+	errno = 0;
+	oi7 = strtoul(value, NULL, 16);
+	if ((*string)[1] && !strcmp((*string)[1], "i7"))
+		o7 = 0;
+	if (errno) {
+		fprintf(stderr,
+			"%s Invalid hex value in oi7 line, ignored - '%s'\n",
+			procname, value);
+		perror(" ");
+		++errors;
+		oi7 = 0;
+	}
+	add_symbol_n(ss, oi7, 'O', 1, o7 ? ">>O7:" : ">>I7:");
+}
+
+/* Look for the SPARC register dump lines end */
+static int Oops_sparc_regdump(const char *line)
+{
+	int i;
+	static regex_t     re_Oops_sparc_regdump;
+	static regmatch_t *re_Oops_sparc_regdump_pmatch;
+	static const char procname[] = "Oops_sparc_regdump";
+
+	re_compile(&re_Oops_sparc_regdump,
+		       "^(i[04]: "
+			"|Instruction DUMP: "
+			"|Caller\\["
+			")",
+		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
+		&re_Oops_sparc_regdump_pmatch);
+
+	i = regexec(&re_Oops_sparc_regdump, line, re_Oops_sparc_regdump.re_nsub+1,
+		re_Oops_sparc_regdump_pmatch, 0);
+	if (debug > 3)
+		fprintf(stderr, "DEBUG: %s regexec %d\n", procname, i);
+	if (i == 0)
+		return 1;
+	return 0;
+}
+
+
 /* Look for the Trace multilines :(.  Returns start of addresses. */
 static const char *Oops_trace(const char *line, char ***string, int string_max)
 {
@@ -619,6 +765,8 @@ static const char *Oops_trace(const char *line, char ***string, int string_max)
 	/* ppc */	"|(Call backtrace:)"			/*  6 */
 	/* ppc */	"|(" UNBRACKETED_ADDRESS ")"		/* 7,8*/
 	/* ARM */	"|(Function entered at (" BRACKETED_ADDRESS "))"	/* 9,10,11 */
+	/* sparc */
+	/* sparc64 */	"|(Caller\\[" UNBRACKETED_ADDRESS "\\])"/*12,13*/
 			")",
 		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
 		&re_Oops_trace_pmatch);
@@ -645,8 +793,11 @@ static const char *Oops_trace(const char *line, char ***string, int string_max)
 		else if (MATCHED(10)){
 			trace_line = 1;		/* ARM */
 			start = line + re_Oops_trace_pmatch[10].rm_so;
-		}
-		else
+		} else if (MATCHED(12)) {
+			trace_line = 0;		/* sparc, sparc64 */
+			start = line + re_Oops_trace_pmatch[13].rm_so;
+			return start;
+		} else
 			trace_line = 0;
 	}
 	else
@@ -819,20 +970,24 @@ static int Oops_print(const char *line, const char **text, char ***string,
 	/* m68k */	"|(baddr=)"
 	/* any other m68K lines to print? */
 
-	/* sparc */	"|(Bad unaligned kernel)"
-	/* sparc */	"|(Forwarding unaligned exception)"
-	/* sparc */	"|(: unhandled unaligned exception)"
-	/* sparc */	"|(<sc)"
-	/* sparc */	"|(pc *=)"
-	/* sparc */	"|(r[0-9]+ *=)"
-	/* sparc */	"|(gp *=)"
-	/* any other sparc lines to print? */
-
-	/* alpha */	"|(tsk->)"
-	/* alpha */	"|(PSR: )"
-	/* alpha */	"|([goli]0: )"
-	/* alpha */	"|(Instruction DUMP: )"
+	/* alpha */	"|(Bad unaligned kernel)"
+	/* alpha */	"|(Forwarding unaligned exception)"
+	/* alpha */	"|(: unhandled unaligned exception)"
+	/* alpha */	"|(<sc)"
+	/* alpha */	"|(pc *=)"
+	/* alpha */	"|(r[0-9]+ *=)"
+	/* alpha */	"|(gp *=)"
 	/* any other alpha lines to print? */
+
+	/* sparc */	"|(tsk->)"
+	/* sparc */	"|(PSR: )"
+	/* sparc */	"|([goli][04]: )"
+	/* sparc */	"|(Instruction DUMP: )"
+	/* sparc */	"|(Caller\\[)"
+	/* any other sparc lines to print? */
+	
+	/* sparc64 */	"|(TSTATE: )"
+	/* any other sparc64 lines to print? */
 
 	/* ppc */	"|(MSR: )"
 	/* ppc */	"|(TASK = )"
@@ -908,13 +1063,13 @@ static int Oops_print(const char *line, const char **text, char ***string,
 	/* various */	"|(Aiee)"      /* anywhere in text is a bad sign (TM) */
 	/* various */	"|(die_if_kernel)"	/* ditto */
 
-	/* sparc */	"|(\\([0-9]\\): Oops )"
-	/* sparc */	"|(: memory violation)"
-	/* sparc */	"|(: Exception at)"
-	/* sparc */	"|(: Arithmetic fault)"
-	/* sparc */	"|(: Instruction fault)"
-	/* sparc */	"|(: arithmetic trap)"
-	/* sparc */	"|(: unaligned trap)"
+	/* alpha */	"|(\\([0-9]\\): Oops )"
+	/* alpha */	"|(: memory violation)"
+	/* alpha */	"|(: Exception at)"
+	/* alpha */	"|(: Arithmetic fault)"
+	/* alpha */	"|(: Instruction fault)"
+	/* alpha */	"|(: arithmetic trap)"
+	/* alpha */	"|(: unaligned trap)"
 
 	/* sparc      die_if_kernel has no fixed text, identify by (pid): text.
 	 *            Somebody has been playful with the texts.
@@ -1114,8 +1269,9 @@ int Oops_read(int filecount, char * const *filename, int code_bytes,
 {
 	char *line = NULL, **string = NULL;
 	const char *start, *text;
-	int i, size = 0, lineno = 0, lastprint = 0;
+	int i, size = 0, lineno = 0, lastprint = 0, print = 0;
 	elf_addr_t eip = 0;
+	int sparc_regdump = 0;
 	FILE *f;
 	SYMBOL_SET ss_format;
 	static const char procname[] = "Oops_read";
@@ -1138,7 +1294,19 @@ int Oops_read(int filecount, char * const *filename, int code_bytes,
 				fprintf(stderr,
 					"DEBUG: %s - %s\n", procname, line);
 			++lineno;
-			if (Oops_print(line, &text, &string, MAX_STRINGS)) {
+			print = Oops_print(line, &text, &string, MAX_STRINGS);
+			if (Oops_sparc_regdump (text)) {
+				sparc_regdump = 1;
+			} else {
+				if ((oops_arch == OOPS_SPARC || 
+				     oops_arch == OOPS_SPARC64) &&
+				    sparc_regdump && ss_format.used) {
+					Oops_format(&ss_format);
+					ss_free(&ss_format);
+				}
+				sparc_regdump = 0;
+			}
+			if (print) {
 				puts(line);
 				lastprint = lineno;
 				if ((start = Oops_eip(text,
@@ -1147,6 +1315,10 @@ int Oops_read(int filecount, char * const *filename, int code_bytes,
 				if ((start = Oops_ra(text,
 					&string, MAX_STRINGS)))
 					Oops_set_ra(start, &ss_format);
+				if ((start = Oops_oi7(text,
+					&string, MAX_STRINGS)))
+					Oops_set_oi7(start, &string, 
+						&ss_format);
 				if ((start = Oops_trace(text,
 					&string, MAX_STRINGS)))
 					Oops_trace_line(text, start,
@@ -1178,10 +1350,13 @@ int Oops_read(int filecount, char * const *filename, int code_bytes,
 			}
 		}
 		if (ss_format.used) {
-			fprintf(stderr,
-				"Warning, Code line not seen, dumping "
-				"what data is available\n");
-			++warnings;
+			if ((oops_arch != OOPS_SPARC &&
+			     oops_arch != OOPS_SPARC64) || !sparc_regdump) {
+				fprintf(stderr,
+					"Warning, Code line not seen, dumping "
+					"what data is available\n");
+				++warnings;
+			}
 			Oops_format(&ss_format);
 			ss_free(&ss_format);
 			if (one_shot)

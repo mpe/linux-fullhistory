@@ -6,7 +6,10 @@
 /*
  * linux/include/linux/dcache.h
  *
- * Directory cache data structures
+ * Dirent cache data structures
+ *
+ * (C) Copyright 1997 Thomas Schoebel-Theuer,
+ * with heavy changes by Linus Torvalds
  */
 
 #define D_MAXLEN 1024

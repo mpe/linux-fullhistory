@@ -124,6 +124,7 @@
 #include <linux/mm.h>
 #include <asm/uaccess.h>
 
+#include "soft-fp.h"
 
 #define FLOATFUNC(x) extern int x(void *,void *,void *)
 
@@ -188,6 +189,13 @@ FLOATFUNC(FMOVS);                                 /* v6 */
 FLOATFUNC(FNEGS);                                 /* v6 */
 FLOATFUNC(FITOS);                                 /* v6 */
 FLOATFUNC(FITOD);                                 /* v6 */
+
+#define FSR_TEM_SHIFT	23UL
+#define FSR_TEM_MASK	(0x1fUL << FSR_TEM_SHIFT)
+#define FSR_AEXC_SHIFT	5UL
+#define FSR_AEXC_MASK	(0x1fUL << FSR_AEXC_SHIFT)
+#define FSR_CEXC_SHIFT	0UL
+#define FSR_CEXC_MASK	(0x1fUL << FSR_CEXC_SHIFT)
 
 static int do_one_mathemu(u32 insn, unsigned long *fsr, unsigned long *fregs);   
 
@@ -254,10 +262,83 @@ int do_mathemu(struct pt_regs *regs, struct task_struct *fpt)
          break;
    }
    /* Now empty the queue and clear the queue_not_empty flag */
-   fpt->tss.fsr &= ~0x3000;
+   if(retcode)
+	   fpt->tss.fsr &= ~(0x3000 | FSR_CEXC_MASK);
+   else
+	   fpt->tss.fsr &= ~0x3000;
    fpt->tss.fpqdepth = 0;
    
    return retcode;
+}
+
+/* All routines returning an exception to raise should detect
+ * such exceptions _before_ rounding to be consistant with
+ * the behavior of the hardware in the implemented cases
+ * (and thus with the recommendations in the V9 architecture
+ * manual).
+ *
+ * We return 0 if a SIGFPE should be sent, 1 otherwise.
+ */
+static int record_exception(unsigned long *pfsr, int eflag)
+{
+	unsigned long fsr = *pfsr;
+	int would_trap;
+
+	/* Determine if this exception would have generated a trap. */
+	would_trap = (fsr & ((long)eflag << FSR_TEM_SHIFT)) != 0UL;
+
+	/* If trapping, we only want to signal one bit. */
+	if(would_trap != 0) {
+		eflag &= ((fsr & FSR_TEM_MASK) >> FSR_TEM_SHIFT);
+		if((eflag & (eflag - 1)) != 0) {
+			if(eflag & EFLAG_INVALID)
+				eflag = EFLAG_INVALID;
+			else if(eflag & EFLAG_DIVZERO)
+				eflag = EFLAG_DIVZERO;
+			else if(eflag & EFLAG_INEXACT)
+				eflag = EFLAG_INEXACT;
+		}
+	}
+
+	/* Set CEXC, here are the rules:
+	 *
+	 * 1) In general all FPU ops will set one and only one
+	 *    bit in the CEXC field, this is always the case
+	 *    when the IEEE exception trap is enabled in TEM.
+	 *
+	 * 2) As a special case, if an overflow or underflow
+	 *    is being signalled, AND the trap is not enabled
+	 *    in TEM, then the inexact field shall also be set.
+	 */
+	fsr &= ~(FSR_CEXC_MASK);
+	if(would_trap ||
+	   (eflag & (EFLAG_OVERFLOW | EFLAG_UNDERFLOW)) == 0) {
+		fsr |= ((long)eflag << FSR_CEXC_SHIFT);
+	} else {
+		fsr |= (((long)eflag << FSR_CEXC_SHIFT) |
+			(EFLAG_INEXACT << FSR_CEXC_SHIFT));
+	}
+
+	/* Set the AEXC field, rules are:
+	 *
+	 * 1) If a trap would not be generated, the
+	 *    CEXC just generated is OR'd into the
+	 *    existing value of AEXC.
+	 *
+	 * 2) When a trap is generated, AEXC is cleared.
+	 */
+	if(would_trap == 0)
+		fsr |= ((long)eflag << FSR_AEXC_SHIFT);
+	else
+		fsr &= ~(FSR_AEXC_MASK);
+
+	/* If trapping, indicate fault trap type IEEE. */
+	if(would_trap != 0)
+		fsr |= (1UL << 14);
+
+	*pfsr = fsr;
+
+	return (would_trap ? 0 : 1);
 }
 
 static int do_one_mathemu(u32 insn, unsigned long *fsr, unsigned long *fregs)
@@ -270,7 +351,7 @@ static int do_one_mathemu(u32 insn, unsigned long *fsr, unsigned long *fregs)
     * (this field not used on sparc32 code, as we can't 
     * extract trap type info for ops on the FP queue) 
     */
-   int freg;
+   int freg, eflag;
    int (*func)(void *,void *,void *) = NULL;
    void *rs1 = NULL, *rs2 = NULL, *rd = NULL;   
 
@@ -411,6 +492,8 @@ static int do_one_mathemu(u32 insn, unsigned long *fsr, unsigned long *fregs)
 #ifdef DEBUG_MATHEMU   
    printk("executing insn...\n");
 #endif   
-   func(rd, rs2, rs1);                            /* do the Right Thing */
-   return 1;                                      /* success! */
+   eflag = func(rd, rs2, rs1);                   /* do the Right Thing */
+   if(eflag == 0)
+	   return 1;                             /* success! */
+   return record_exception(fsr, eflag);
 }

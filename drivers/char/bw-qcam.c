@@ -5,6 +5,28 @@
  *
  *	Video4Linux conversion work by Alan Cox.
  *	Parport compatibility by Phil Blundell.
+ *	Busy loop avoidance by Mark Cooke.
+ *
+ *    Module parameters:
+ *
+ *	maxpoll=<1 - 5000>
+ *
+ *	  When polling the QuickCam for a response, busy-wait for a
+ *	  maximum of this many loops. The default of 250 gives little
+ *	  impact on interactive response.
+ *
+ *	  NOTE: If this parameter is set too high, the processor
+ *		will busy wait until this loop times out, and then
+ *		slowly poll for a further 5 seconds before failing
+ *		the transaction. You have been warned.
+ *
+ *	yieldlines=<1 - 250>
+ *
+ *	  When acquiring a frame from the camera, the data gathering
+ *	  loop will yield back to the scheduler after completing
+ *	  this many lines. The default of 4 provides a trade-off
+ *	  between increased frame acquisition time and impact on
+ *	  interactive response.
  */
 
 /* qcam-lib.c -- Library for programming with the Connectix QuickCam.
@@ -57,6 +79,14 @@ OTHER DEALINGS IN THE SOFTWARE.
 #include <asm/uaccess.h>
 
 #include "bw-qcam.h"
+
+#if LINUX_VERSION_CODE >= 0x020117
+MODULE_PARM(maxpoll,"i");
+MODULE_PARM(yieldlines,"i");   
+#endif
+
+static unsigned int maxpoll=250;   /* Maximum busy-loop count for qcam I/O */
+static unsigned int yieldlines=4;  /* Yield after this many during capture */
 
 extern __inline__ int read_lpstatus(struct qcam_device *q)
 {
@@ -154,6 +184,7 @@ static struct qcam_device *qcam_init(struct parport *port)
 	q->top = 1;
 	q->left = 14;
 	q->mode = -1;
+	q->status = QC_PARAM_CHANGE;
 	return q;
 }
 
@@ -209,14 +240,17 @@ static int qc_waithand(struct qcam_device *q, int val)
 		{
 			/* 1000 is enough spins on the I/O for all normal
 			   cases, at that point we start to poll slowly 
-			   until the camera wakes up */
+			   until the camera wakes up. However, we are
+			   busy blocked until the camera responds, so
+			   setting it lower is much better for interactive
+			   response. */
 			   
-			if(runs++>1000)
+			if(runs++>maxpoll)
 			{
 				current->state=TASK_INTERRUPTIBLE;
-				schedule_timeout(HZ/10);
+				schedule_timeout(HZ/200);
 			}
-			if(runs>1050)
+			if(runs>(maxpoll+1000)) /* 5 seconds */
 				return -1;
 		}
 	}
@@ -226,14 +260,17 @@ static int qc_waithand(struct qcam_device *q, int val)
 		{
 			/* 1000 is enough spins on the I/O for all normal
 			   cases, at that point we start to poll slowly 
-			   until the camera wakes up */
+			   until the camera wakes up. However, we are
+			   busy blocked until the camera responds, so
+			   setting it lower is much better for interactive
+			   response. */
 			   
-			if(runs++>1000)
+			if(runs++>maxpoll)
 			{
 				current->state=TASK_INTERRUPTIBLE;
-				schedule_timeout(HZ/10);
+				schedule_timeout(HZ/200);
 			}
-			if(runs++>1050)	/* 5 seconds */
+			if(runs++>(maxpoll+1000)) /* 5 seconds */
 				return -1;
 		}
 	}
@@ -256,14 +293,17 @@ static unsigned int qc_waithand2(struct qcam_device *q, int val)
 		status = read_lpdata(q);
 		/* 1000 is enough spins on the I/O for all normal
 		   cases, at that point we start to poll slowly 
-		   until the camera wakes up */
+		   until the camera wakes up. However, we are
+		   busy blocked until the camera responds, so
+		   setting it lower is much better for interactive
+		   response. */
 		   
-		if(runs++>1000)
+		if(runs++>maxpoll)
 		{
 			current->state=TASK_INTERRUPTIBLE;
-			schedule_timeout(HZ/10);
+			schedule_timeout(HZ/200);
 		}
-		if(runs++>1050)	/* 5 seconds */
+		if(runs++>(maxpoll+1000)) /* 5 seconds */
 			return 0;
 	}
 	while ((status & 1) != val);
@@ -287,7 +327,7 @@ static int qc_detect(struct qcam_device *q)
 
 	lastreg = reg = read_lpstatus(q) & 0xf0;
 
-	for (i = 0; i < 300; i++) 
+	for (i = 0; i < 500; i++) 
 	{
 		reg = read_lpstatus(q) & 0xf0;
 		if (reg != lastreg)
@@ -296,9 +336,20 @@ static int qc_detect(struct qcam_device *q)
 		mdelay(2);
 	}
 
-	/* Be liberal in what you accept...  */
 
-	if (count > 30 && count < 200)
+#if 0
+	/* Force camera detection during testing. Sometimes the camera
+	   won't be flashing these bits. Possibly unloading the module
+	   in the middle of a grab? Or some timeout condition?
+	   I've seen this parameter as low as 19 on my 450Mhz box - mpc */
+	printk("Debugging: QCam detection counter <30-200 counts as detected>: %d\n", count);
+	return 1;
+#endif
+
+	/* Be (even more) liberal in what you accept...  */
+
+/*	if (count > 30 && count < 200) */
+	if (count > 20 && count < 300)
 		return 1;	/* found */
 	else
 		return 0;	/* not found */
@@ -352,6 +403,8 @@ static void qc_reset(struct qcam_device *q)
 
 static int qc_setscanmode(struct qcam_device *q)
 {
+	int old_mode = q->mode;
+	
 	switch (q->transfer_scale) 
 	{
 		case 1:
@@ -383,6 +436,10 @@ static int qc_setscanmode(struct qcam_device *q)
 		case QC_UNIDIR:
 			break;
 	}
+	
+	if (q->mode != old_mode)
+		q->status |= QC_PARAM_CHANGE;
+	
 	return 0;
 }
 
@@ -434,8 +491,11 @@ void qc_set(struct qcam_device *q)
 	qc_command(q, q->contrast);
 	qc_command(q, 0x1f);
 	qc_command(q, q->whitebal);
-}
 
+	/* Clear flag that we must update the grabbing parameters on the camera
+	   before we grab the next frame */
+	q->status &= (~QC_PARAM_CHANGE);
+}
 
 /* Qc_readbytes reads some bytes from the QC and puts them in
    the supplied buffer.  It returns the number of bytes read,
@@ -539,7 +599,7 @@ extern __inline__ int qc_readbytes(struct qcam_device *q, char buffer[])
 
 long qc_capture(struct qcam_device * q, char *buf, unsigned long len)
 {
-	int i, j, k;
+	int i, j, k, yield;
 	int bytes;
 	int linestotrans, transperline;
 	int divisor;
@@ -575,7 +635,7 @@ long qc_capture(struct qcam_device * q, char *buf, unsigned long len)
 	    q->transfer_scale;
 	transperline = (transperline + divisor - 1) / divisor;
 
-	for (i = 0; i < linestotrans; i++) 
+	for (i = 0, yield = yieldlines; i < linestotrans; i++) 
 	{
 		for (pixels_read = j = 0; j < transperline; j++) 
 		{
@@ -599,6 +659,18 @@ long qc_capture(struct qcam_device * q, char *buf, unsigned long len)
 			pixels_read += bytes;
 		}
 		(void) qc_readbytes(q, 0);	/* reset state machine */
+		
+		/* Grabbing an entire frame from the quickcam is a lengthy
+		   process. We don't (usually) want to busy-block the
+		   processor for the entire frame. yieldlines is a module
+		   parameter. If we yield every line, the minimum frame
+		   time will be 240 / 200 = 1.2 seconds. The compile-time
+		   default is to yield every 4 lines. */
+		if (i >= yield) {
+			current->state=TASK_INTERRUPTIBLE;
+			schedule_timeout(HZ/200);
+			yield = i + yieldlines;
+		}
 	}
 
 	if ((q->port_mode & QC_MODE_MASK) == QC_BIDIR) 
@@ -745,9 +817,12 @@ static int qcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			qcam->bpp = p.depth;
 			
 			qc_setscanmode(qcam);
-			parport_claim_or_block(qcam->pdev);
+			qcam->status |= QC_PARAM_CHANGE;
+
+/*			parport_claim_or_block(qcam->pdev);
 			qc_set(qcam);
 			parport_release(qcam->pdev);
+*/
 			return 0;
 		}
 		case VIDIOCSWIN:
@@ -779,6 +854,11 @@ static int qcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				qcam->transfer_scale = 1;
 			}
 			qc_setscanmode(qcam);
+			
+			/* We must update the camera before we grab. We could
+			   just have changed the grab size */
+			qcam->status |= QC_PARAM_CHANGE;
+			
 			/* Ok we figured out what to use from our wide choice */
 			return 0;
 		}
@@ -824,11 +904,15 @@ static long qcam_read(struct video_device *v, char *buf, unsigned long count,  i
 	parport_claim_or_block(qcam->pdev);
 	/* Probably should have a semaphore against multiple users */
 	qc_reset(qcam);
+
+	/* Update the camera parameters if we need to */
+	if (qcam->status & QC_PARAM_CHANGE)
+		qc_set(qcam);
+
 	len=qc_capture(qcam, buf,count);
 	parport_release(qcam->pdev);
 	return len;
 }
-
  
 static struct video_device qcam_template=
 {
@@ -909,6 +993,17 @@ int init_module(void)
 
 	for (port = parport_enumerate(); port; port=port->next)
 		init_bwqcam(port);
+
+	/* Do some sanity checks on the module parameters. */
+	if (maxpoll > 5000) {
+		printk("Connectix Quickcam max-poll was above 5000. Using 5000.\n");
+		maxpoll = 5000;
+	}
+	
+	if (yieldlines < 1) {
+		printk("Connectix Quickcam yieldlines was less than 1. Using 1.\n");
+		yieldlines = 1;
+	}
 
 	return (num_cams)?0:-ENODEV;
 }

@@ -359,47 +359,46 @@ extern inline pte_t * pte_offset(pmd_t * dir, unsigned long address)
 	return (pte_t *) pmd_page(*dir) + ((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1));
 }
 
-
 /*
  * This is handled very differently on the PPC since out page tables
  * are all 0's and I want to be able to use these zero'd pages elsewhere
  * as well - it gives us quite a speedup.
  *
- * Note that the SMP/UP versions are the same since we don't need a
- * per cpu list of zero pages since we do the zero-ing with the cache
+ * Note that the SMP/UP versions are the same but we don't need a
+ * per cpu list of zero pages because we do the zero-ing with the cache
  * off and the access routines are lock-free but the pgt cache stuff
- * _IS_ per-cpu since it isn't done with any lock-free access routines
+ * is per-cpu since it isn't done with any lock-free access routines
  * (although I think we need arch-specific routines so I can do lock-free).
  *
  * I need to generalize this so we can use it for other arch's as well.
  * -- Cort
  */
+#ifdef __SMP__
+#define quicklists	cpu_data[smp_processor_id()]
+#else
 extern struct pgtable_cache_struct {
 	unsigned long *pgd_cache;
 	unsigned long *pte_cache;
 	unsigned long pgtable_cache_sz;
-	unsigned long *zero_cache;    /* head linked list of pre-zero'd pages */
-  	unsigned long zero_sz;	      /* # currently pre-zero'd pages */
-	unsigned long zeropage_hits;  /* # zero'd pages request that we've done */
-	unsigned long zeropage_calls; /* # zero'd pages request that've been made */
-  	unsigned long zerototal;      /* # pages zero'd over time */
 } quicklists;
+#endif
 
-#ifdef __SMP__
-/*#warning Tell Cort to do the pgt cache for SMP*/
-#define pgd_quicklist (quicklists.pgd_cache)
-#define pmd_quicklist ((unsigned long *)0)
-#define pte_quicklist (quicklists.pte_cache)
-#define pgtable_cache_size (quicklists.pgtable_cache_sz)
-#else /* __SMP__ */
-#define pgd_quicklist (quicklists.pgd_cache)
-#define pmd_quicklist ((unsigned long *)0)
-#define pte_quicklist (quicklists.pte_cache)
-#define pgtable_cache_size (quicklists.pgtable_cache_sz)
-#endif /* __SMP__ */
+#define pgd_quicklist 		(quicklists.pgd_cache)
+#define pmd_quicklist 		((unsigned long *)0)
+#define pte_quicklist 		(quicklists.pte_cache)
+#define pgtable_cache_size 	(quicklists.pgtable_cache_sz)
 
-#define zero_quicklist (quicklists.zero_cache)
-#define zero_cache_sz  (quicklists.zero_sz)
+extern unsigned long *zero_cache;    /* head linked list of pre-zero'd pages */
+extern unsigned long zero_sz;	     /* # currently pre-zero'd pages */
+extern unsigned long zeropage_hits;  /* # zero'd pages request that we've done */
+extern unsigned long zeropage_calls; /* # zero'd pages request that've been made */
+extern unsigned long zerototal;      /* # pages zero'd over time */
+
+#define zero_quicklist     	(zero_cache)
+#define zero_cache_sz  	 	(zero_sz)
+#define zero_cache_calls 	(zeropage_calls)
+#define zero_cache_hits  	(zeropage_hits)
+#define zero_cache_total 	(zerototal)
 
 /* return a pre-zero'd page from the list, return NULL if none available -- Cort */
 extern unsigned long get_zero_page_fast(void);
@@ -410,8 +409,8 @@ extern __inline__ pgd_t *get_pgd_slow(void)
 
 	if ( (ret = (pgd_t *)get_zero_page_fast()) == NULL )
 	{
-		ret = (pgd_t *)__get_free_page(GFP_KERNEL);
-		memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
+		if ( (ret = (pgd_t *)__get_free_page(GFP_KERNEL)) != NULL )
+			memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
 	}
 	if (ret) {
 		init = pgd_offset(&init_mm, 0);
@@ -553,7 +552,7 @@ extern inline void set_pgdir(unsigned long address, pgd_t entry)
 	/* To pgd_alloc/pgd_free, one holds master kernel lock and so does our callee, so we can
 	   modify pgd caches of other CPUs as well. -jj */
 	for (i = 0; i < NR_CPUS; i++)
-		for (pgd = (pgd_t *)cpu_data[i].pgd_quick; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
+		for (pgd = (pgd_t *)cpu_data[i].pgd_cache; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
 			pgd[address >> PGDIR_SHIFT] = entry;
 #endif
 }

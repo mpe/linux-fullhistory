@@ -24,8 +24,9 @@
 
  -- Change the CDROMREADMODE1, CDROMREADMODE2, CDROMREADAUDIO, and 
  CDROMREADRAW ioctls so they go through the Uniform CD-ROM driver.
-
-
+ 
+ -- Sync options and capability flags.
+ 
 
 
  Revision History
@@ -97,17 +98,29 @@
   cdi->options in various ioctl.
   -- Added version to proc entry.
   
-  2.52 Jan 16, 1998 - Jens Axboe <axboe@image.dk>
+  2.52 Jan 16, 1999 - Jens Axboe <axboe@image.dk>
   -- Fixed an error in open_for_data where we would sometimes not return
   the correct error value. Thanks Huba Gaspar <huba@softcell.hu>.
   -- Fixed module usage count - usage was based on /proc/sys/dev
   instead of /proc/sys/dev/cdrom. This could lead to an oops when other
-  modules had entries in dev.
+  modules had entries in dev. Feb 02 - real bug was in sysctl.c where
+  dev would be removed even though it was used. cdrom.c just illuminated
+  that bug.
+  
+  2.53 Feb 22, 1999 - Jens Axboe <axboe@image.dk>
+  -- Fixup of several ioctl calls, in particular CDROM_SET_OPTIONS has
+  been "rewritten" because capabilities and options aren't in sync. They
+  should be...
+  -- Added CDROM_LOCKDOOR ioctl. Locks the door and keeps it that way.
+  -- Added CDROM_RESET ioctl.
+  -- Added CDROM_DEBUG ioctl. Enable debug messages on-the-fly.
+  -- Added CDROM_GET_CAPABILITY ioctl. This relieves userspace programs
+  from parsing /proc/sys/dev/cdrom/info.
 
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 2.52"
-#define VERSION "Id: cdrom.c 2.52 1999/01/16"
+#define REVISION "Revision: 2.53"
+#define VERSION "Id: cdrom.c 2.53 1999/02/22"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -144,6 +157,8 @@
 
 /* used to tell the module to turn on full debugging messages */
 static int debug = 0;
+/* used to keep tray locked at all times */
+static int keeplocked = 0;
 /* default compatibility mode */
 static int autoclose=1;
 static int autoeject=0;
@@ -164,13 +179,11 @@ MODULE_PARM(check_media_type, "i");
 #endif
 
 /* These are used to simplify getting data in from and back to user land */
-#define IOCTL_IN(arg, type, in) { \
-            if ( copy_from_user(&in, (type *) arg, sizeof in) ) \
-            	return -EFAULT; }
+#define IOCTL_IN(arg, type, in)	\
+	copy_from_user_ret(&in, (type *) arg, sizeof in, -EFAULT)
 
-#define IOCTL_OUT(arg, type, out) { \
-            if ( copy_to_user((type *) arg, &out, sizeof out) ) \
-            	return -EFAULT; }
+#define IOCTL_OUT(arg, type, out) \
+	copy_to_user_ret((type *) arg, &out, sizeof out, -EFAULT)
 
 
 #define FM_WRITE	0x2                 /* file mode write bit */
@@ -328,7 +341,7 @@ int cdrom_open(struct inode *ip, struct file *fp)
 	if (fp->f_mode & FM_WRITE)
 		return -EROFS;
 	purpose = purpose || !(cdi->options & CDO_USE_FFLAGS);
-	if (cdi->use_count || purpose)
+	if (purpose)
 		ret = cdi->ops->open(cdi, purpose);
 	else
 		ret = open_for_data(cdi);
@@ -517,10 +530,10 @@ int cdrom_release(struct inode *ip, struct file *fp)
 	if (cdi->use_count == 0)
 		cdinfo(CD_CLOSE, "Use count for \"/dev/%s\" now zero\n", cdi->name);
 	if (cdi->use_count == 0 &&      /* last process that closes dev*/
-	    cdo->capability & CDC_LOCK) {
+	    cdo->capability & CDC_LOCK && !keeplocked) {
 		cdinfo(CD_CLOSE, "Unlocking door!\n");
 		cdo->lock_door(cdi, 0);
-		}
+	}
 	opened_for_data = !(cdi->options & CDO_USE_FFLAGS) ||
 		!(fp && fp->f_flags & O_NONBLOCK);
 	cdo->release(cdi);
@@ -716,18 +729,18 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		cdinfo(CD_DO_IOCTL, "entering CDROMEJECT\n"); 
 		if (!(cdo->capability & ~cdi->mask & CDC_OPEN_TRAY))
 			return -ENOSYS;
-		if (cdi->use_count != 1) 
+		if (cdi->use_count != 1)
 			return -EBUSY;
-		if (cdo->capability & ~cdi->mask & CDC_LOCK) {
+		if (cdo->capability & ~cdi->mask & CDC_LOCK)
 			if ((ret=cdo->lock_door(cdi, 0)))
 				return ret;
-			}
+
 		return cdo->tray_move(cdi, 1);
 		}
 
 	case CDROMCLOSETRAY:
 		cdinfo(CD_DO_IOCTL, "entering CDROMCLOSETRAY\n"); 
-		if (!(cdo->capability & ~cdi->mask & CDC_OPEN_TRAY))
+		if (!(cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY))
 			return -ENOSYS;
 		return cdo->tray_move(cdi, 0);
 
@@ -755,8 +768,21 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 
 	case CDROM_SET_OPTIONS:
 		cdinfo(CD_DO_IOCTL, "entering CDROM_SET_OPTIONS\n"); 
-		if (cdo->capability & arg & ~cdi->mask)
-			return -ENOSYS;
+		/* options need to be in sync with capability. too late for
+		   that, so we have to check each one separately... */
+		switch (arg) {
+		case CDO_USE_FFLAGS:
+		case CDO_CHECK_TYPE:
+			break;
+		case CDO_LOCK:
+			if (!(cdo->capability & ~cdi->mask & CDC_LOCK))
+				return -ENOSYS;
+			break;
+		/* default is basically CDO_[AUTO_CLOSE|AUTO_EJECT] */
+		default:
+			if (!(cdo->capability & ~cdi->mask & arg))
+				return -ENOSYS;
+		}
 		cdi->options |= (int) arg;
 		return cdi->options;
 
@@ -782,6 +808,37 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 			return -EDRIVE_CANT_DO_THIS;
 		return cdo->select_disc(cdi, arg);
 		}
+
+	case CDROMRESET: {
+		cdinfo(CD_DO_IOCTL, "entering CDROM_RESET\n");
+		if (!(cdo->capability & ~cdi->mask & CDC_RESET))
+			return -ENOSYS;
+		return cdo->reset(cdi);
+	}
+
+	case CDROM_LOCKDOOR: {
+		cdinfo(CD_DO_IOCTL, "%socking door.\n",arg?"L":"Unl");
+		if (cdo->capability & ~cdi->mask & CDC_LOCK) {
+			keeplocked = arg ? 1 : 0;
+			return cdo->lock_door(cdi, arg);
+		} else
+			return -EDRIVE_CANT_DO_THIS;
+	}
+
+	case CDROM_DEBUG: {
+		if (!capable(CAP_SYS_ADMIN))
+			return -EACCES;
+		cdinfo(CD_DO_IOCTL, "%sabling debug.\n",arg?"En":"Dis");
+		debug = arg ? 1 : 0;
+		return 0;
+	}
+
+	case CDROM_GET_CAPABILITY: {
+		cdinfo(CD_DO_IOCTL, "entering CDROM_GET_CAPABILITY\n");
+		return cdo->capability;
+	}
+
+
 
 /* The following function is implemented, although very few audio
  * discs give Universal Product Code information, which should just be
@@ -1123,7 +1180,7 @@ static void cdrom_sysctl_register(void)
 		return;
 
 	cdrom_sysctl_header = register_sysctl_table(cdrom_root_table, 1);
-	cdrom_root_table->de->fill_inode = &cdrom_procfs_modcount;
+	cdrom_root_table->child->de->fill_inode = &cdrom_procfs_modcount;
 
 	initialized = 1;
 }

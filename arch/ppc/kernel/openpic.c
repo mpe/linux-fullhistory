@@ -107,7 +107,7 @@ static inline void out_le32(volatile u_int *addr, u_int val)
 }
 #endif
 
-static inline u_int openpic_read(volatile u_int *addr)
+u_int openpic_read(volatile u_int *addr)
 {
     u_int val;
 
@@ -176,8 +176,8 @@ static void openpic_safe_writefield(volatile u_int *addr, u_int mask,
 __initfunc(void openpic_init(int main_pic))
 {
     u_int t, i;
-    u_int vendorid, devid, stepping, timerfreq;
-    const char *version, *vendor, *device;
+    u_int timerfreq;
+    const char *version;
 
     if (!OpenPIC)
 	panic("No OpenPIC found");
@@ -200,32 +200,6 @@ __initfunc(void openpic_init(int main_pic))
 		  OPENPIC_FEATURE_LAST_SOURCE_SHIFT) + 1;
     printk("OpenPIC Version %s (%d CPUs and %d IRQ sources) at %p\n", version,
 	   NumProcessors, NumSources, OpenPIC);
-
-    t = openpic_read(&OpenPIC->Global.Vendor_Identification);
-    vendorid = t & OPENPIC_VENDOR_ID_VENDOR_ID_MASK;
-    devid = (t & OPENPIC_VENDOR_ID_DEVICE_ID_MASK) >>
-	    OPENPIC_VENDOR_ID_DEVICE_ID_SHIFT;
-    stepping = (t & OPENPIC_VENDOR_ID_STEPPING_MASK) >>
-	       OPENPIC_VENDOR_ID_STEPPING_SHIFT;
-    switch (vendorid) {
-	case OPENPIC_VENDOR_ID_APPLE:
-	    vendor = "Apple";
-	    break;
-	default:
-	    vendor = "Unknown";
-	    break;
-    }
-    switch (devid) {
-	case OPENPIC_DEVICE_ID_APPLE_HYDRA:
-	    device = "Hydra";
-	    break;
-	default:
-	    device = "Unknown";
-	    break;
-    }
-    printk("OpenPIC Vendor %d (%s), Device %d (%s), Stepping %d\n", vendorid,
-	   vendor, devid, device, stepping);
-
     timerfreq = openpic_read(&OpenPIC->Global.Timer_Frequency);
     printk("OpenPIC timer frequency is ");
     if (timerfreq)

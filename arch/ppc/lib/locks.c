@@ -1,5 +1,5 @@
 /*
- * $Id: locks.c,v 1.21 1998/12/28 10:28:53 paulus Exp $
+ * $Id: locks.c,v 1.23 1999/02/12 07:06:32 cort Exp $
  *
  * Locks for smp ppc 
  * 
@@ -26,24 +26,18 @@ void _spin_lock(spinlock_t *lock)
 #ifdef DEBUG_LOCKS
 	unsigned int stuck = INIT_STUCK;
 #endif /* DEBUG_LOCKS */
-	/* try expensive atomic load/store to get lock */
-	while((unsigned long )xchg_u32((void *)&lock->lock,0xffffffff)) {
-		/* try cheap load until it's free */
-		while(lock->lock) {
+	while (__spin_trylock(&lock->lock)) {
 #ifdef DEBUG_LOCKS
-			if(!--stuck)
-			{
-				printk("_spin_lock(%p) CPU#%d NIP %p"
-				       " holder: cpu %ld pc %08lX\n",
-				       lock, cpu, __builtin_return_address(0),
-				       lock->owner_cpu,lock->owner_pc);
-				stuck = INIT_STUCK;
-				/* steal the lock */
-				/*xchg_u32((void *)&lock->lock,0);*/
-			}
-#endif /* DEBUG_LOCKS */
-			barrier();
+		if(!--stuck) {
+			printk("_spin_lock(%p) CPU#%d NIP %p"
+			       " holder: cpu %ld pc %08lX\n",
+			       lock, cpu, __builtin_return_address(0),
+			       lock->owner_cpu,lock->owner_pc);
+			stuck = INIT_STUCK;
+			/* steal the lock */
+			/*xchg_u32((void *)&lock->lock,0);*/
 		}
+#endif /* DEBUG_LOCKS */
 	}
 	lock->owner_pc = (unsigned long)__builtin_return_address(0);
 	lock->owner_cpu = cpu;
@@ -51,15 +45,11 @@ void _spin_lock(spinlock_t *lock)
 
 int spin_trylock(spinlock_t *lock)
 {
-	unsigned long result;
-
-	result = (unsigned long )xchg_u32((void *)&lock->lock,0xffffffff);
-	if ( !result ) 
-	{ 
-		lock->owner_cpu = smp_processor_id(); 
-		lock->owner_pc = (unsigned long)__builtin_return_address(0);
-	} 
-	return (result == 0);
+	if (__spin_trylock(&lock->lock))
+		return 0;
+	lock->owner_cpu = smp_processor_id(); 
+	lock->owner_pc = (unsigned long)__builtin_return_address(0);
+	return 1;
 }
 
 
@@ -76,11 +66,11 @@ void _spin_unlock(spinlock_t *lp)
 		      lp->owner_pc,lp->lock);
 #endif /* DEBUG_LOCKS */
 	lp->owner_pc = lp->owner_cpu = 0;
-	eieio();	/* actually I believe eieio only orders */
-	lp->lock = 0;	/* non-cacheable accesses (on 604 at least) */
-	eieio();	/*  - paulus. */
+	wmb();
+	lp->lock = 0;
+	wmb();
 }
-		
+
 /*
  * Just like x86, implement read-write locks as a 32-bit counter
  * with the high bit (sign) being the "write" bit.
@@ -95,6 +85,7 @@ void _read_lock(rwlock_t *rw)
 
 again:	
 	/* get our read lock in there */
+	wmb();
 	atomic_inc((atomic_t *) &(rw)->lock);
 	if ( (signed long)((rw)->lock) < 0) /* someone has a write lock */
 	{
@@ -114,6 +105,7 @@ again:
 		/* try to get the read lock again */
 		goto again;
 	}
+	wmb();
 }
 
 void _read_unlock(rwlock_t *rw)
@@ -124,7 +116,9 @@ void _read_unlock(rwlock_t *rw)
 		       current->comm,current->pid,current->tss.regs->nip,
 		      rw->lock);
 #endif /* DEBUG_LOCKS */
+	wmb();
 	atomic_dec((atomic_t *) &(rw)->lock);
+	wmb();
 }
 
 void _write_lock(rwlock_t *rw)
@@ -134,7 +128,8 @@ void _write_lock(rwlock_t *rw)
 	int cpu = smp_processor_id();
 #endif /* DEBUG_LOCKS */		  
 
-again:	
+again:
+	wmb();
 	if ( test_and_set_bit(31,&(rw)->lock) ) /* someone has a write lock */
 	{
 		while ( (rw)->lock & (1<<31) ) /* wait for write lock */
@@ -170,6 +165,7 @@ again:
 		}
 		goto again;
 	}
+	wmb();
 }
 
 void _write_unlock(rwlock_t *rw)
@@ -180,7 +176,9 @@ void _write_unlock(rwlock_t *rw)
 		      current->comm,current->pid,current->tss.regs->nip,
 		      rw->lock);
 #endif /* DEBUG_LOCKS */
+	wmb();
 	clear_bit(31,&(rw)->lock);
+	wmb();
 }
 
 void __lock_kernel(struct task_struct *task)
@@ -196,24 +194,18 @@ void __lock_kernel(struct task_struct *task)
 	}
 #endif /* DEBUG_LOCKS */
 
-	if ( atomic_inc_return((atomic_t *) &task->lock_depth) != 1 )
+	if (atomic_inc_return((atomic_t *) &task->lock_depth) != 1)
 		return;
 	/* mine! */
-	while ( xchg_u32( (void *)&klock_info.kernel_flag, KLOCK_HELD) )
-	{
-		/* try cheap load until it's free */
-		while(klock_info.kernel_flag) {
+	while (__spin_trylock(&klock_info.kernel_flag)) {
 #ifdef DEBUG_LOCKS
-			if(!--stuck)
-			{
-				printk("_lock_kernel() CPU#%d NIP %p\n",
-				       smp_processor_id(),
-				       __builtin_return_address(0));
-				stuck = INIT_STUCK;
-			}
-#endif /* DEBUG_LOCKS */
-			barrier();
+		if(!--stuck) {
+			printk("_lock_kernel() CPU#%d NIP %p\n",
+			       smp_processor_id(),
+			       __builtin_return_address(0));
+			stuck = INIT_STUCK;
 		}
+#endif /* DEBUG_LOCKS */
 	}
 	
 	klock_info.akp = smp_processor_id();
@@ -223,7 +215,7 @@ void __lock_kernel(struct task_struct *task)
 void __unlock_kernel(struct task_struct *task)
 {
 #ifdef DEBUG_LOCKS
- 	if ( (task->lock_depth == 0) || (klock_info.kernel_flag != KLOCK_HELD) )
+ 	if ((task->lock_depth == 0) || (klock_info.kernel_flag != KLOCK_HELD))
 	{
 		printk("__unlock_kernel(): %s/%d (nip %08lX) "
 		       "lock depth %x flags %lx\n",
@@ -234,10 +226,13 @@ void __unlock_kernel(struct task_struct *task)
 		return;
 	}
 #endif /* DEBUG_LOCKS */
-	if ( atomic_dec_and_test((atomic_t *) &task->lock_depth) )
+	if (atomic_dec_and_test((atomic_t *) &task->lock_depth))
 	{
+		wmb();
 		klock_info.akp = NO_PROC_ID;
+		wmb();
 		klock_info.kernel_flag = KLOCK_CLEAR;
+		wmb();
 	}
 }	
 
@@ -249,5 +244,5 @@ void reacquire_kernel_lock(struct task_struct *task, int cpu,int depth)
 		__lock_kernel(task);
 		task->lock_depth = depth;
 		__sti();
-       }
+	}
 }

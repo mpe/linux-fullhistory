@@ -8,6 +8,5 @@ int FQTOD(void *rd, void *rs2)
 
 	__FP_UNPACK_Q(A, rs2);
 	FP_CONV(D,Q,1,2,R,A);
-	__FP_PACK_D(rd, R);
-	return 1;
+	return __FP_PACK_D(rd, R);
 }

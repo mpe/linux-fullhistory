@@ -51,12 +51,16 @@ ___atomic_add:
 1:	ldstub	[%g1 + 3], %g7		! Spin on the byte lock for SMP.
 	orcc	%g7, 0x0, %g0		! Did we get it?
 	bne	1b			! Nope...
-#endif
 	 ld	[%g1], %g7		! Load locked atomic_t
 	sra	%g7, 8, %g7		! Get signed 24-bit integer
 	add	%g7, %g2, %g2		! Add in argument
 	sll	%g2, 8, %g7		! Transpose back to atomic_t
 	st	%g7, [%g1]		! Clever: This releases the lock as well.
+#else
+	ld	[%g1], %g7		! Load locked atomic_t
+	add	%g7, %g2, %g2		! Add in argument
+	st	%g2, [%g1]		! Store it back
+#endif
 	wr	%g3, 0x0, %psr		! Restore original PSR_PIL
 	nop; nop; nop;			! Let the bits set
 	jmpl	%o7, %g0		! NOTE: not + 8, see callers in atomic.h
@@ -72,12 +76,16 @@ ___atomic_sub:
 1:	ldstub	[%g1 + 3], %g7		! Spin on the byte lock for SMP.
 	orcc	%g7, 0x0, %g0		! Did we get it?
 	bne	1b			! Nope...
-#endif
 	 ld	[%g1], %g7		! Load locked atomic_t
 	sra	%g7, 8, %g7		! Get signed 24-bit integer
 	sub	%g7, %g2, %g2		! Subtract argument
 	sll	%g2, 8, %g7		! Transpose back to atomic_t
 	st	%g7, [%g1]		! Clever: This releases the lock as well
+#else
+	ld	[%g1], %g7		! Load locked atomic_t
+	sub	%g7, %g2, %g2		! Subtract argument
+	st	%g2, [%g1]		! Store it back
+#endif
 	wr	%g3, 0x0, %psr		! Restore original PSR_PIL
 	nop; nop; nop;			! Let the bits set
 	jmpl	%o7, %g0		! NOTE: not + 8, see callers in atomic.h

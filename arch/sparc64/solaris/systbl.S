@@ -1,4 +1,4 @@
-/* $Id: systbl.S,v 1.7 1998/10/28 08:11:49 jj Exp $
+/* $Id: systbl.S,v 1.8 1999/02/11 18:34:02 davem Exp $
  * systbl.S: System call entry point table for Solaris compatibility.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -72,7 +72,7 @@ solaris_sys_table:
 	.word CHAIN(dup)		/* dup		d	41	*/
 	.word CHAIN(pipe)		/* pipe			42	*/
 	.word CHAIN(times)		/* times	p	43	*/
-	.word CHAIN(profil)		/* prof		xxxx	44	*/
+	.word 44 /*CHAIN(profil)*/	/* prof		xxxx	44	*/
 	.word solaris_unimplemented	/* lock/plock		45	*/
 	.word CHAIN(setgid)		/* setgid	d	46	*/
 	.word solaris_getgid		/* getgid		47	*/

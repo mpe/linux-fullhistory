@@ -1,5 +1,5 @@
 /*
- * $Id: pci.c,v 1.43 1998/12/29 18:55:11 cort Exp $
+ * $Id: pci.c,v 1.53 1999/03/12 23:38:02 cort Exp $
  * Common pmac/prep/chrp pci routines. -- Cort
  */
 
@@ -24,9 +24,10 @@
 unsigned long isa_io_base;
 unsigned long isa_mem_base;
 unsigned long pci_dram_offset;
-
 unsigned int * pci_config_address;
 unsigned char * pci_config_data;
+
+static void fix_intr(struct device_node *node, struct pci_dev *dev);
 
 /*
  * It would be nice if we could create a include/asm/pci.h and have just
@@ -73,12 +74,14 @@ extern int name##_pcibios_write_config_dword(unsigned char bus, \
 	ptr_pcibios_write_config_word = name##_pcibios_write_config_word; \
 	ptr_pcibios_write_config_dword = name##_pcibios_write_config_dword
 
+decl_config_access_method(mech1);
 decl_config_access_method(pmac);
 decl_config_access_method(grackle);
 decl_config_access_method(gg2);
 decl_config_access_method(raven);
 decl_config_access_method(prep);
 decl_config_access_method(mbx);
+decl_config_access_method(python);
 
 int pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 			     unsigned char offset, unsigned char *val)
@@ -116,17 +119,24 @@ int pcibios_present(void)
 	return 1;
 }
 
-__initfunc(void pcibios_init(void))
+void __init pcibios_init(void)
 {
 }
 
-__initfunc(void
-	   setup_pci_ptrs(void))
+void __init setup_pci_ptrs(void)
 {
-#ifndef CONFIG_MBX  
+#ifndef CONFIG_MBX
 	PPC_DEVICE *hostbridge;
 	switch (_machine) {
 	case _MACH_prep:
+                printk("PReP architecture\n");
+                if ( _prep_type == _PREP_Radstone )
+                {
+                        printk("Setting PCI access method to mech1\n");
+                        set_config_access_method(mech1);
+                        break;
+                }
+
 	  	hostbridge=residual_find_device(PROCESSORDEVICE, NULL,
 						BridgeController, PCIBridge,
 						-1, 0);
@@ -163,13 +173,30 @@ __initfunc(void
 		if ( !strncmp("MOT",
 			      get_property(find_path_device("/"), "model", NULL),3) )
 		{
+			pci_dram_offset = 0;
+			isa_mem_base = 0xf7000000;
 			isa_io_base = 0xfe000000;
 			set_config_access_method(grackle);
 		}
 		else
 		{
-			isa_io_base = GG2_ISA_IO_BASE;
-			set_config_access_method(gg2);
+			if ( !strncmp("F5",
+			      get_property(find_path_device("/"),
+					   "ibm,model-class", NULL),2) )
+		
+			{
+				pci_dram_offset = 0x80000000;
+				isa_mem_base = 0xa0000000;
+				isa_io_base = 0x88000000;
+				set_config_access_method(python);
+			}
+			else
+			{
+				pci_dram_offset = 0;
+				isa_mem_base = 0xf7000000;
+				isa_io_base = 0xf8000000;
+				set_config_access_method(gg2);
+			}
 		}
 		break;
 	default:
@@ -181,7 +208,7 @@ __initfunc(void
 #undef set_config_access_method
 }
 
-__initfunc(void pcibios_fixup(void))
+void __init pcibios_fixup(void)
 {
 	extern unsigned long route_pci_interrupts(void);
 	struct pci_dev *dev;
@@ -193,6 +220,12 @@ __initfunc(void pcibios_fixup(void))
 	switch (_machine )
 	{
 	case _MACH_prep:
+                if ( _prep_type == _PREP_Radstone )
+                {
+                        printk("Radstone boards require no PCI fixups\n");
+                        break;
+                }
+
 		route_pci_interrupts();
 		for(dev=pci_devices; dev; dev=dev->next)
 		{
@@ -207,7 +240,7 @@ __initfunc(void pcibios_fixup(void))
 			{
 				if ( dev->base_address[i] > 0x10000000 )
 				{
-					printk("Relocating PCI address %x -> %x\n",
+					printk("Relocating PCI address %lx -> %lx\n",
 					       dev->base_address[i],
 					       (dev->base_address[i] & 0x00FFFFFF)
 				               | 0x01000000);
@@ -245,23 +278,12 @@ __initfunc(void pcibios_fixup(void))
 			 * AAPL,interrupts property.
 			 */
 			struct bridge_data *bp = bridges[dev->bus->number];
-			struct device_node *node;
-			unsigned int *reg;
 			unsigned char pin;
-			
+
 			if (pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin) ||
-			    !pin)
+			    !pin) 
 				continue;	/* No interrupt generated -> no fixup */
-			for (node = bp->node->child; node != 0;
-			     node = node->sibling) {
-				reg = (unsigned int *) get_property(node, "reg", 0);
-				if (reg == 0 || ((reg[0] >> 8) & 0xff) != dev->devfn)
-					continue;
-				/* this is the node, see if it has interrupts */
-				if (node->n_intrs > 0)
-					dev->irq = node->intrs[0].line;
-				break;
-			}
+			fix_intr(bp->node->child, dev);
 		}
 		break;
 	}
@@ -272,11 +294,36 @@ __initfunc(void pcibios_fixup(void))
 #endif /* CONFIG_MBX */
 }
 
-__initfunc(void pcibios_fixup_bus(struct pci_bus *bus))
+void __init pcibios_fixup_bus(struct pci_bus *bus)
 {
 }
 
-__initfunc(char *pcibios_setup(char *str))
+char __init *pcibios_setup(char *str)
 {
 	return str;
 }
+
+#ifndef CONFIG_MBX
+/* Recursively searches any node that is of type PCI-PCI bridge. Without
+ * this, the old code would miss children of P2P bridges and hence not
+ * fix IRQ's for cards located behind P2P bridges.
+ * - Ranjit Deshpande, 01/20/99
+ */
+static void __init fix_intr(struct device_node *node, struct pci_dev *dev)
+{
+	unsigned int *reg, *class_code;
+
+	for (; node != 0;node = node->sibling) {
+		class_code = (unsigned int *) get_property(node, "class-code", 0);
+		if((*class_code >> 8) == PCI_CLASS_BRIDGE_PCI)
+			fix_intr(node->child, dev);
+		reg = (unsigned int *) get_property(node, "reg", 0);
+		if (reg == 0 || ((reg[0] >> 8) & 0xff) != dev->devfn)
+			continue;
+		/* this is the node, see if it has interrupts */
+		if (node->n_intrs > 0) 
+			dev->irq = node->intrs[0].line;
+		break;
+	}
+}
+#endif

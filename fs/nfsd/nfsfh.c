@@ -13,6 +13,7 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/dcache.h>
+#include <asm/pgtable.h>
 
 #include <linux/sunrpc/svc.h>
 #include <linux/nfsd/nfsd.h>
@@ -235,7 +236,7 @@ retry:
 /*
  * Search for a path entry for the specified (dev, inode).
  */
-struct nfsd_path *get_path_entry(kdev_t dev, ino_t ino)
+static struct nfsd_path *get_path_entry(kdev_t dev, ino_t ino)
 {
 	struct nfsd_path *pe;
 	struct list_head *tmp;
@@ -713,7 +714,6 @@ printk("find_dentry_by_ino: getting root dentry for %s\n", kdevname(dev));
 		dentry = dget(fhe->dentry);
 		goto out;
 	}
-
 	/*
 	 * Search the path cache ...
 	 */
@@ -859,6 +859,34 @@ static struct dentry *nfsd_cached_lookup(struct knfs_fh *fh)
 	return NULL;
 }
 
+void
+expire_all(void)
+{
+ 	if (time_after_eq(jiffies, nfsd_next_expire)) {
+ 		expire_old(NFSD_FILE_CACHE,  5*HZ);
+ 		expire_old(NFSD_DIR_CACHE , 60*HZ);
+ 		nfsd_next_expire = jiffies + 5*HZ;
+ 	}
+}
+
+/* 
+ * Free cache after unlink/rmdir.
+ */
+void
+expire_by_dentry(struct dentry *dentry)
+{
+	struct fh_entry *fhe;
+
+	fhe = find_fhe(dentry, NFSD_FILE_CACHE, NULL);
+	if (fhe) {
+		expire_fhe(fhe, NFSD_FILE_CACHE);
+	}
+	fhe = find_fhe(dentry, NFSD_DIR_CACHE, NULL);
+	if (fhe) {
+		expire_fhe(fhe, NFSD_DIR_CACHE);
+	}
+}
+
 /*
  * The is the basic lookup mechanism for turning an NFS file handle 
  * into a dentry. There are several levels to the search:
@@ -997,15 +1025,8 @@ out:
 		add_to_lookup_cache(dentry, fh);
 	}
 
-	/*
-	 * Perform any needed housekeeping ...
-	 * N.B. move this into one of the daemons ...
-	 */
-	if (time_after_eq(jiffies, nfsd_next_expire)) {
-		expire_old(NFSD_FILE_CACHE,  5*HZ);
-		expire_old(NFSD_DIR_CACHE , 60*HZ);
-		nfsd_next_expire = jiffies + 5*HZ;
-	}
+	expire_all();
+
 	return dentry;
 }
 
@@ -1133,7 +1154,7 @@ dprintk("fh_verify: no root_squashed access.\n");
 #ifdef NFSD_PARANOIA
 if (error)
 printk("fh_verify: %s/%s permission failure, acc=%x, error=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, access, error);
+dentry->d_parent->d_name.name, dentry->d_name.name, access, (error >> 24));
 #endif
 out:
 	return error;
@@ -1260,11 +1281,8 @@ static int nfsd_d_validate(struct dentry *dentry)
 		goto bad_addr;
 	if ((dent_addr & ~align_mask) != dent_addr)
 		goto bad_align;
-	/* XXX: Should test here, whether the address doesn't belong to
-	        a physical memory hole on sparc32/sparc64. Then it is not
-	        safe to dereference it. On the other side, the previous
-	        use of num_physpages instead of max_mapnr caused the same
-	        to happen, plus some valid addresses could get rejected. -jj */
+	if (!kern_addr_valid(dent_addr))
+		goto bad_addr;
 	/*
 	 * Looks safe enough to dereference ...
 	 */

@@ -9,32 +9,33 @@
  * Memory barrier.
  * The sync instruction guarantees that all memory accesses initiated
  * by this processor have been performed (with respect to all other
- * mechanisms that access memory).
+ * mechanisms that access memory).  The eieio instruction is a barrier
+ * providing an ordering (separately) for (a) cacheable stores and (b)
+ * loads and stores to non-cacheable memory (e.g. I/O devices).
+ *
+ * mb() prevents loads and stores being reordered across this point.
+ * rmb() prevents loads being reordered across this point.
+ * wmb() prevents stores being reordered across this point.
+ *
+ * We can use the eieio instruction for wmb, but since it doesn't
+ * give any ordering guarantees about loads, we have to use the
+ * stronger but slower sync instruction for mb and rmb.
  */
 #define mb()  __asm__ __volatile__ ("sync" : : : "memory")
 #define rmb()  __asm__ __volatile__ ("sync" : : : "memory")
-#define wmb()  __asm__ __volatile__ ("sync" : : : "memory")
+#define wmb()  __asm__ __volatile__ ("eieio" : : : "memory")
 
 #define __save_flags(flags)	({\
 	__asm__ __volatile__ ("mfmsr %0" : "=r" ((flags)) : : "memory"); })
 #define __save_and_cli(flags)	({__save_flags(flags);__cli();})
 
+/* Data cache block flush - write out the cache line containing the
+   specified address and then invalidate it in the cache. */
 extern __inline__ void dcbf(void *line)
 {
-	asm("dcbf %0,%1\n\t"
-	    "sync \n\t"
-	    "isync \n\t"
-	    :: "r" (line), "r" (0));
+	asm("dcbf %0,%1; sync" : : "r" (line), "r" (0));
 }
 
-extern __inline__ void dcbi(void *line)
-{
-	asm("dcbi %0,%1\n\t"
-	    "sync \n\t"
-	    "isync \n\t"
-	    :: "r" (line), "r" (0));
-}
-     
 extern __inline__ void __restore_flags(unsigned long flags)
 {
         extern atomic_t n_lost_interrupts;
@@ -54,6 +55,7 @@ extern void __cli(void);
 extern int _disable_interrupts(void);
 extern void _enable_interrupts(int);
 
+extern void instruction_dump(unsigned long *);
 extern void print_backtrace(unsigned long *);
 extern void show_regs(struct pt_regs * regs);
 extern void flush_instruction_cache(void);
@@ -107,8 +109,8 @@ extern void __global_restore_flags(unsigned long);
 
 #define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
 
-extern void *xchg_u64(void *ptr, unsigned long val);
-extern void *xchg_u32(void *m, unsigned long val);
+extern unsigned long xchg_u64(void *ptr, unsigned long val);
+extern unsigned long xchg_u32(void *ptr, unsigned long val);
 
 /*
  * This function doesn't exist, so you'll get a linker error
@@ -126,10 +128,10 @@ extern void __xchg_called_with_bad_pointer(void);
 static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
 {
 	switch (size) {
-		case 4:
-			return (unsigned long )xchg_u32(ptr, x);
-		case 8:
-			return (unsigned long )xchg_u64(ptr, x);
+	case 4:
+		return (unsigned long )xchg_u32(ptr, x);
+	case 8:
+		return (unsigned long )xchg_u64(ptr, x);
 	}
 	__xchg_called_with_bad_pointer();
 	return x;

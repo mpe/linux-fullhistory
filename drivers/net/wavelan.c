@@ -290,24 +290,26 @@ psa_write(u_long	ioaddr,
   wv_16_on(ioaddr, hacr);
 } /* psa_write */
 
-#ifdef PSA_CRC
+#ifdef SET_PSA_CRC
 /*------------------------------------------------------------------*/
 /*
- * Calculate the PSA CRC (not tested yet)
- * As the WaveLAN drivers don't use the CRC, I won't use it either.
- * Thanks to Nico Valster <NVALSTER@wcnd.nl.lucent.com> for the code
+ * Calculate the PSA CRC
+ * Thanks to Valster, Nico <NVALSTER@wcnd.nl.lucent.com> for the code
  * NOTE: By specifying a length including the CRC position the
- * returned value should be zero. (i.e. a correct checksum in the PSA).
+ * returned value should be zero. (i.e. a correct checksum in the PSA)
+ *
+ * The Windows drivers don't use the CRC, but the AP and the PtP tool
+ * depend on it.
  */
-static u_short
-psa_crc(u_short *	psa,	/* The PSA */
+static inline u_short
+psa_crc(u_char *	psa,	/* The PSA */
 	int		size)	/* Number of short for CRC */
 {
   int		byte_cnt;	/* Loop on the PSA */
   u_short	crc_bytes = 0;	/* Data in the PSA */
   int		bit_cnt;	/* Loop on the bits of the short */
 
-  for(byte_cnt = 0; byte_cnt <= size; byte_cnt++ )
+  for(byte_cnt = 0; byte_cnt < size; byte_cnt++ )
     {
       crc_bytes ^= psa[byte_cnt];	/* Its an xor */
 
@@ -322,7 +324,47 @@ psa_crc(u_short *	psa,	/* The PSA */
 
   return crc_bytes;
 } /* psa_crc */
-#endif	/* PSA_CRC */
+
+/*------------------------------------------------------------------*/
+/*
+ * update the checksum field in the Wavelan's PSA
+ */
+static void
+update_psa_checksum(device *	dev,
+		    u_long	ioaddr,
+		    u_short	hacr)
+{
+  psa_t		psa;
+  u_short	crc;
+
+  /* read the parameter storage area */
+  psa_read(ioaddr, hacr, 0, (unsigned char *) &psa, sizeof(psa));
+
+  /* update the checksum */
+  crc = psa_crc((unsigned char *) &psa,
+		sizeof(psa) - sizeof(psa.psa_crc[0]) - sizeof(psa.psa_crc[1])
+		- sizeof(psa.psa_crc_status));
+
+  psa.psa_crc[0] = crc & 0xFF;
+  psa.psa_crc[1] = (crc & 0xFF00) >> 8;
+
+  /* Write it ! */
+  psa_write(ioaddr, hacr, (char *)&psa.psa_crc - (char *)&psa,
+	    (unsigned char *)&psa.psa_crc, 2);
+
+#ifdef DEBUG_IOCTL_INFO
+  printk (KERN_DEBUG "%s: update_psa_checksum(): crc = 0x%02x%02x\n",
+          dev->name, psa.psa_crc[0], psa.psa_crc[1]);
+
+  /* Check again (luxury !) */
+  crc = psa_crc ((unsigned char *) &psa,
+		 sizeof(psa) - sizeof(psa.psa_crc_status));
+
+  if(crc != 0)
+    printk(KERN_WARNING "%s: update_psa_checksum(): CRC does not agree with PSA data (even after recalculating)\n", dev->name);
+#endif /* DEBUG_IOCTL_INFO */
+} /* update_psa_checksum */
+#endif	/* SET_PSA_CRC */
 
 /*------------------------------------------------------------------*/
 /*
@@ -706,21 +748,21 @@ wv_config_complete(device *	dev,
       unsigned short	ias_addr;
 
       /* Check mc_config command */
-      if(status & AC_SFLD_OK != 0)
+      if((status & AC_SFLD_OK) != 0)
 	printk(KERN_INFO "wv_config_complete(): set_multicast_address failed; status = 0x%x\n",
 	       dev->name, str, status);
 
       /* check ia-config command */
       ias_addr = mcs_addr - sizeof(ac_ias_t);
       obram_read(ioaddr, acoff(ias_addr, ac_status), (unsigned char *)&status, sizeof(status));
-      if(status & AC_SFLD_OK != 0)
+      if((status & AC_SFLD_OK) != 0)
 	printk(KERN_INFO "wv_config_complete(): set_MAC_address; status = 0x%x\n",
 	       dev->name, str, status);
 
       /* Check config command. */
       cfg_addr = ias_addr - sizeof(ac_cfg_t);
       obram_read(ioaddr, acoff(cfg_addr, ac_status), (unsigned char *)&status, sizeof(status));
-      if(status & AC_SFLD_OK != 0)
+      if((status & AC_SFLD_OK) != 0)
 	printk(KERN_INFO "wv_config_complete(): configure; status = 0x%x\n",
 	       dev->name, str, status);
 #endif	/* DEBUG_CONFIG_ERROR */
@@ -1890,6 +1932,10 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
 	  /* Disable NWID in the mmc (no filtering). */
 	  mmc_out(ioaddr, mmwoff(0, mmw_loopt_sel), MMW_LOOPT_SEL_DIS_NWID);
 	}
+#ifdef SET_PSA_CRC
+      /* update the Wavelan checksum */
+      update_psa_checksum(dev, ioaddr, lp->hacr);
+#endif
       break;
 
     case SIOCGIWNWID:
@@ -1946,6 +1992,10 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
       psa.psa_thr_pre_set = wrq->u.sensitivity & 0x3F;
       psa_write(ioaddr, lp->hacr, (char *)&psa.psa_thr_pre_set - (char *)&psa,
 	       (unsigned char *) &psa.psa_thr_pre_set, 1);
+#ifdef SET_PSA_CRC
+      /* update the Wavelan checksum */
+      update_psa_checksum(dev, ioaddr, lp->hacr);
+#endif
       mmc_out(ioaddr, mmwoff(0, mmw_thr_pre_set), psa.psa_thr_pre_set);
       break;
 
@@ -1993,6 +2043,10 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
 
 	   mmc_out(ioaddr, mmwoff(0, mmw_encr_enable), 0);
 	 }
+#ifdef SET_PSA_CRC
+       /* update the Wavelan checksum */
+       update_psa_checksum(dev, ioaddr, lp->hacr);
+#endif
        break;
 
      case SIOCGIWENCODE:
@@ -2206,6 +2260,10 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
       psa.psa_quality_thr = *(wrq->u.name) & 0x0F;
       psa_write(ioaddr, lp->hacr, (char *)&psa.psa_quality_thr - (char *)&psa,
 	       (unsigned char *)&psa.psa_quality_thr, 1);
+#ifdef SET_PSA_CRC
+      /* update the Wavelan checksum */
+      update_psa_checksum(dev, ioaddr, lp->hacr);
+#endif
       mmc_out(ioaddr, mmwoff(0, mmw_quality_thr), psa.psa_quality_thr);
       break;
 
@@ -2316,7 +2374,7 @@ wavelan_get_wireless_stats(device *	dev)
   mmc_out(ioaddr, mmwoff(0, mmw_freeze), 0);
 
   /* Copy data to wireless stuff. */
-  wstats->status = m.mmr_dce_status;
+  wstats->status = m.mmr_dce_status & MMR_DCE_STATUS;
   wstats->qual.qual = m.mmr_sgnl_qual & MMR_SGNL_QUAL;
   wstats->qual.level = m.mmr_signal_lvl & MMR_SIGNAL_LVL;
   wstats->qual.noise = m.mmr_silence_lvl & MMR_SILENCE_LVL;
@@ -2892,6 +2950,10 @@ wv_mmc_init(device *	dev)
 		(unsigned char *)&psa.psa_quality_thr, 1);
       psa_write(ioaddr, lp->hacr, (char *)&psa.psa_conf_status - (char *)&psa,
 		(unsigned char *)&psa.psa_conf_status, 1);
+#ifdef SET_PSA_CRC
+      /* update the Wavelan checksum */
+      update_psa_checksum(dev, ioaddr, lp->hacr);
+#endif
 #endif
     }
 
@@ -2918,21 +2980,18 @@ wv_mmc_init(device *	dev)
   m.mmw_thr_pre_set = psa.psa_thr_pre_set & 0x3F;
   m.mmw_quality_thr = psa.psa_quality_thr & 0x0F;
 
-  /* Encryption stuff is missing. */
-
   /*
    * Set default modem control parameters.
    * See NCR document 407-0024326 Rev. A.
    */
   m.mmw_jabber_enable = 0x01;
+  m.mmw_freeze = 0;
   m.mmw_anten_sel = MMW_ANTEN_SEL_ALG_EN;
   m.mmw_ifs = 0x20;
   m.mmw_mod_delay = 0x04;
   m.mmw_jam_time = 0x38;
 
-  m.mmw_encr_enable = 0;
   m.mmw_des_io_invert = 0;
-  m.mmw_freeze = 0;
   m.mmw_decay_prm = 0;
   m.mmw_decay_updat_prm = 0;
 
@@ -3398,39 +3457,29 @@ wv_82586_config(device *	dev)
   /* Create a configure action. */
   memset(&cfg, 0x00, sizeof(cfg));
 
-#if	0
-  /*
-   * The default board configuration
-   */
-  cfg.fifolim_bytecnt 	= 0x080c;
-  cfg.addrlen_mode  	= 0x2600;
-  cfg.linprio_interframe	= 0x7820;	/* IFS=120, ACS=2 */
-  cfg.slot_time      	= 0xf00c;	/* slottime=12    */
-  cfg.hardware	     	= 0x0008;	/* tx even without CD */
-  cfg.min_frame_len   	= 0x0040;
-#endif	/* 0 */
-
   /*
    * For Linux we invert AC_CFG_ALOC() so as to conform
    * to the way that net packets reach us from above.
    * (See also ac_tx_t.)
+   *
+   * Updated from Wavelan Manual WCIN085B
    */
   cfg.cfg_byte_cnt = AC_CFG_BYTE_CNT(sizeof(ac_cfg_t) - sizeof(ach_t));
-  cfg.cfg_fifolim = AC_CFG_FIFOLIM(8);
-  cfg.cfg_byte8 = AC_CFG_SAV_BF(0) |
+  cfg.cfg_fifolim = AC_CFG_FIFOLIM(4);
+  cfg.cfg_byte8 = AC_CFG_SAV_BF(1) |
 		  AC_CFG_SRDY(0);
   cfg.cfg_byte9 = AC_CFG_ELPBCK(0) |
 		  AC_CFG_ILPBCK(0) |
 		  AC_CFG_PRELEN(AC_CFG_PLEN_2) |
 		  AC_CFG_ALOC(1) |
 		  AC_CFG_ADDRLEN(WAVELAN_ADDR_SIZE);
-  cfg.cfg_byte10 = AC_CFG_BOFMET(0) |
-		   AC_CFG_ACR(0) |
+  cfg.cfg_byte10 = AC_CFG_BOFMET(1) |
+		   AC_CFG_ACR(6) |
 		   AC_CFG_LINPRIO(0);
-  cfg.cfg_ifs = 32;
-  cfg.cfg_slotl = 0;
+  cfg.cfg_ifs = 0x20;
+  cfg.cfg_slotl = 0x0C;
   cfg.cfg_byte13 = AC_CFG_RETRYNUM(15) |
-		   AC_CFG_SLTTMHI(2);
+		   AC_CFG_SLTTMHI(0);
   cfg.cfg_byte14 = AC_CFG_FLGPAD(0) |
 		   AC_CFG_BTSTF(0) |
 		   AC_CFG_CRC16(0) |
@@ -4016,6 +4065,10 @@ wavelan_config(device *	dev))
 #endif
 	  psa_write(ioaddr, HACR_DEFAULT,
 		    psaoff(0, psa_int_req_no), &irq_mask, 1);
+#ifdef SET_PSA_CRC
+	  /* update the Wavelan checksum */
+	  update_psa_checksum(dev, ioaddr, HACR_DEFAULT);
+#endif
 	  wv_hacr_reset(ioaddr);
 	}
     }
@@ -4196,7 +4249,7 @@ int
 init_module(void)
 {
   mac_addr	mac;		/* MAC address (check WaveLAN existence) */
-  int		ret = 0;
+  int		ret = -EIO;	/* Return error if no cards found */
   int		i;
 
 #ifdef DEBUG_MODULE_TRACE
@@ -4241,7 +4294,11 @@ init_module(void)
 	      /* Deallocate everything. */
 	      /* Note: if dev->priv is mallocated, there is no way to fail. */
 	      kfree_s(dev, sizeof(struct device));
-	      ret = -EIO;
+	    }
+	  else
+	    {
+              /* If at least one device OK, we do not fail */
+              ret = 0;
 	    }
 	}	/* if there is something at the address */
     }		/* Loop on all addresses. */

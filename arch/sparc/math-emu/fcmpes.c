@@ -14,5 +14,5 @@ int FCMPES(void *rd, void *rs2, void *rs1)
 		ret = 2;
 
 	*fsr = (*fsr & ~0xc00) | (ret << 10); 
-	return 1;
+	return 0;
 }

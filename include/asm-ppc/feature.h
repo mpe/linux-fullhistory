@@ -35,7 +35,6 @@ enum system_feature {
 	FEATURE_Mediabay_floppy_enable,
 	FEATURE_BMac_reset,
 	FEATURE_BMac_IO_enable,
-	FEATURE_Modem_PowerOn,
 	FEATURE_Modem_Reset,
 	FEATURE_last,
 };

@@ -66,7 +66,6 @@
 #include <linux/sched.h>
 #include <linux/ptrace.h>
 #include <linux/fcntl.h>
-#include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/string.h>

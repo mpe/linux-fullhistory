@@ -123,9 +123,30 @@ struct Sparc_ESP {
   unchar seqreg;                          /* The ESP sequence register */
   unchar sreg2;                           /* Copy of HME status2 register */
 
+  /* To save register writes to the ESP, which can be expensive, we
+   * keep track of the previous value that various registers had for
+   * the last target we connected to.  If they are the same for the
+   * current target, we skip the register writes as they are not needed.
+   */
+  unchar prev_soff, prev_stp, prev_cfg3, __cache_pad;
+
+  /* We also keep a cache of the previous FAS/HME DMA CSR register value.  */
+  unsigned int prev_hme_dmacsr;
+
   /* The HME is the biggest piece of shit I have ever seen. */
   unchar hme_fifo_workaround_buffer[16 * 2]; /* 16-bit/entry fifo for wide scsi */
   unchar hme_fifo_workaround_count;
+
+  /* For each target we keep track of save/restore data
+   * pointer information.  This needs to be updated majorly
+   * when we add support for tagged queueing.  -DaveM
+   */
+  struct esp_pointers {
+	  char *saved_ptr;
+	  struct scatterlist *saved_buffer;
+	  int saved_this_residual;
+	  int saved_buffers_residual;
+  } data_pointers[16] /*XXX [MAX_TAGS_PER_TARGET]*/;
 
   /* Clock periods, frequencies, synchronization, etc. */
   unsigned int cfreq;                    /* Clock frequency in HZ */
@@ -217,7 +238,7 @@ struct Sparc_ESP {
 #define ESP_CONFIG3_IDMSG     0x10             /* ID message checking  (esp100a/hme) */
 #define ESP_CONFIG3_FSCSI     0x10             /* Enable FAST SCSI     (esp/fas236)  */
 #define ESP_CONFIG3_GTM       0x20             /* group2 SCSI2 support (esp/fas236)  */
-#define ESP_CONFIG3_BIGID     0x20             /* SCSI-ID's are 4bits  (hme)         */
+#define ESP_CONFIG3_IDBIT3    0x20             /* Bit 3 of HME SCSI-ID (hme)         */
 #define ESP_CONFIG3_TBMS      0x40             /* Three-byte msg's ok  (esp/fas236)  */
 #define ESP_CONFIG3_EWIDE     0x40             /* Enable Wide-SCSI     (hme)         */
 #define ESP_CONFIG3_IMS       0x80             /* ID msg chk'ng        (esp/fas236)  */

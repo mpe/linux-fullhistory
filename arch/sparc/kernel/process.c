@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.126 1998/09/21 05:05:18 jj Exp $
+/*  $Id: process.c,v 1.131 1999/01/19 07:54:33 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -62,7 +62,7 @@ asmlinkage int sys_idle(void)
 
 	/* endless idle loop with no priority at all */
 	current->priority = 0;
-	current->counter = 0;
+	current->counter = -100;
 	for (;;) {
 		if (ARCH_SUN4C_SUN4) {
 			static int count = HZ;
@@ -108,13 +108,15 @@ out:
 /* This is being executed in task 0 'user space'. */
 int cpu_idle(void *unused)
 {
+	/* endless idle loop with no priority at all */
 	current->priority = 0;
+	current->counter = -100;
 	while(1) {
-		check_pgt_cache();
- 		run_task_queue(&tq_scheduler);
- 		/* endless idle loop with no priority at all */
-		current->counter = 0;
-		schedule();
+		if(current->need_resched) {
+			schedule();
+			check_pgt_cache();
+		}
+		barrier(); /* or else gcc optimizes... */
 	}
 }
 
@@ -657,4 +659,38 @@ asmlinkage int sparc_execve(struct pt_regs *regs)
 out:
 	unlock_kernel();
 	return error;
+}
+
+/*
+ * This is the mechanism for creating a new kernel thread.
+ *
+ * NOTE! Only a kernel-only process(ie the swapper or direct descendants
+ * who haven't done an "execve()") should use this: it will work within
+ * a system call from a "real" process, but the process memory space will
+ * not be free'd until both the parent and the child have exited.
+ */
+pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
+{
+	long retval;
+
+	__asm__ __volatile("mov %4, %%g2\n\t"    /* Set aside fn ptr... */
+			   "mov %5, %%g3\n\t"    /* and arg. */
+			   "mov %1, %%g1\n\t"
+			   "mov %2, %%o0\n\t"    /* Clone flags. */
+			   "mov 0, %%o1\n\t"     /* usp arg == 0 */
+			   "t 0x10\n\t"          /* Linux/Sparc clone(). */
+			   "cmp %%o1, 0\n\t"
+			   "be 1f\n\t"           /* The parent, just return. */
+			   " nop\n\t"            /* Delay slot. */
+			   "jmpl %%g2, %%o7\n\t" /* Call the function. */
+			   " mov %%g3, %%o0\n\t" /* Get back the arg in delay. */
+			   "mov %3, %%g1\n\t"
+			   "t 0x10\n\t"          /* Linux/Sparc exit(). */
+			   /* Notreached by child. */
+			   "1: mov %%o0, %0\n\t" :
+			   "=r" (retval) :
+			   "i" (__NR_clone), "r" (flags | CLONE_VM),
+			   "i" (__NR_exit),  "r" (fn), "r" (arg) :
+			   "g1", "g2", "g3", "o0", "o1", "memory", "cc");
+	return retval;
 }

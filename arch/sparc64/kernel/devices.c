@@ -13,8 +13,8 @@
 #include <asm/system.h>
 #include <asm/smp.h>
 
-struct prom_cpuinfo linux_cpus[NR_CPUS] __initdata = { { 0 } };
-unsigned prom_cpu_nodes[NR_CPUS];
+struct prom_cpuinfo linux_cpus[64] __initdata = { { 0 } };
+unsigned prom_cpu_nodes[64];
 int linux_num_cpus = 0;
 
 extern void cpu_probe(void);
@@ -25,11 +25,12 @@ device_scan(unsigned long mem_start))
 {
 	char node_str[128];
 	int nd, prom_node_cpu, thismid;
-	int cpu_nds[NR_CPUS];  /* One node for each cpu */
+	int cpu_nds[64];  /* One node for each cpu */
 	int cpu_ctr = 0;
 
 	prom_getstring(prom_root_node, "device_type", node_str, sizeof(node_str));
 
+	prom_printf("Booting Linux...\n");
 	if(strcmp(node_str, "cpu") == 0) {
 		cpu_nds[0] = prom_root_node;
 		linux_cpus[0].prom_node = prom_root_node;
@@ -38,7 +39,7 @@ device_scan(unsigned long mem_start))
 	} else {
 		int scan;
 		scan = prom_getchild(prom_root_node);
-		prom_printf("root child is %08x\n", (unsigned) scan);
+		/* prom_printf("root child is %08x\n", (unsigned) scan); */
 		nd = 0;
 		while((scan = prom_getsibling(scan)) != 0) {
 			prom_getstring(scan, "device_type", node_str, sizeof(node_str));
@@ -49,11 +50,11 @@ device_scan(unsigned long mem_start))
 						 (char *) &thismid, sizeof(thismid));
 				linux_cpus[cpu_ctr].mid = thismid;
 #ifdef __SMP__				
-				prom_printf("Found CPU %d (node=%08x,mid=%d)\n",
-					    cpu_ctr, (unsigned) scan,
-					    thismid);
-				printk("Found CPU %d (node=%08x,mid=%d)\n",
-				       cpu_ctr, (unsigned) scan, thismid);
+				/* Don't pollute PROM screen with these messages. If the kernel is screwed enough
+				   that console does not start up, then we don't care how many CPUs have been found,
+				   if it starts up, the user can use console=prom to see it. */
+				/* prom_printf("Found CPU %d (node=%08x,mid=%d)\n", cpu_ctr, (unsigned) scan, thismid); */
+				printk("Found CPU %d (node=%08x,mid=%d)\n", cpu_ctr, (unsigned) scan, thismid);
 #endif				       
 				cpu_ctr++;
 			}

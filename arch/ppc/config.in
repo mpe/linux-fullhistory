@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.80 1998/11/11 03:54:56 paulus Exp $
+# $Id: config.in,v 1.84 1999/02/23 08:08:38 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -172,7 +172,7 @@ mainmenu_option next_comment
 comment 'Sound'
 tristate 'Sound card support' CONFIG_SOUND
 if [ "$CONFIG_SOUND" != "n" ]; then
-  tristate 'Amiga or PowerMac DMA sound support' CONFIG_DMASOUND
+  dep_tristate 'Amiga or PowerMac DMA sound support' CONFIG_DMASOUND $CONFIG_SOUND
   source drivers/sound/Config.in
 fi
 

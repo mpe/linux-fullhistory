@@ -1,4 +1,4 @@
-/* $Id: parport_ax.c,v 1.14 1998/11/16 04:48:02 davem Exp $
+/* $Id: parport_ax.c,v 1.17 1999/01/20 06:18:54 davem Exp $
  * Parallel-port routines for Sun Ultra/AX architecture
  * 
  * Author: Eddie C. Dost <ecd@skynet.be>
@@ -220,13 +220,13 @@ parport_ax_claim_resources(struct parport *p)
 	/* FIXME check that resources are free */
 	int err;
 
-	if (p->irq != PARPORT_IRQ_NONE)
+	if (p->irq != PARPORT_IRQ_NONE) {
 		if ((err = request_irq(p->irq, parport_ax_interrupt,
 				       0, p->name, p)) != 0)
 			return err;
 		else
 			parport_ax_enable_irq(p);
-
+	}
 	request_region(p->base, p->size, p->name);
 	if (p->modes & PARPORT_MODE_PCECR)
 		request_region(p->base+0x400, 3, p->name);

@@ -36,7 +36,6 @@ static char *version =
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 #include <asm/auxio.h>
-#include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/irq.h>
 
@@ -145,7 +144,7 @@ static void qe_init_rings(struct sunqe *qep, int from_irq)
 	for(i = 0; i < RX_RING_SIZE; i++) {
 		struct sk_buff *skb;
 
-		skb = qe_alloc_skb(RX_BUF_ALLOC_SIZE, gfp_flags);
+		skb = qe_alloc_skb(RX_BUF_ALLOC_SIZE, gfp_flags | GFP_DMA);
 		if(!skb)
 			continue;
 
@@ -155,8 +154,7 @@ static void qe_init_rings(struct sunqe *qep, int from_irq)
 		skb_put(skb, ETH_FRAME_LEN);
 		skb_reserve(skb, 34);
 
-		qb->qe_rxd[i].rx_addr =
-			(u32) ((unsigned long)skb->data);
+		qb->qe_rxd[i].rx_addr = sbus_dvma_addr(skb->data);
 		qb->qe_rxd[i].rx_flags =
 			(RXD_OWN | ((RX_BUF_ALLOC_SIZE - 34) & RXD_LENGTH));
 	}
@@ -447,10 +445,6 @@ static inline void qe_tx(struct sunqe *qep)
 		skb = qep->tx_skbs[elem];
 		qep->tx_skbs[elem] = NULL;
 		qep->net_stats.tx_bytes+=skb->len;
-#ifdef NEED_DMA_SYNCHRONIZATION
-		mmu_sync_dma(((u32)((unsigned long)skb->data)),
-			     skb->len, qep->qe_sbusdev->my_bus);
-#endif
 		dev_kfree_skb(skb);
 
 		qep->net_stats.tx_packets++;
@@ -498,22 +492,28 @@ static inline void qe_rx(struct sunqe *qep)
 	drop_it:
 			/* Return it to the QE. */
 			qep->net_stats.rx_dropped++;
-			this->rx_addr =
-				(u32) ((unsigned long)qep->rx_skbs[elem]->data);
+			this->rx_addr = sbus_dvma_addr(qep->rx_skbs[elem]->data);
 			this->rx_flags =
 				(RXD_OWN | (RX_BUF_ALLOC_SIZE & RXD_LENGTH));
 			goto next;
 		}
 		skb = qep->rx_skbs[elem];
 #ifdef NEED_DMA_SYNCHRONIZATION
-		mmu_sync_dma(((u32)((unsigned long)skb->data)),
+#ifdef __sparc_v9__
+		if ((unsigned long) (skb->data + skb->len) >= MAX_DMA_ADDRESS) {
+			printk("sunqe: Bogus DMA buffer address "
+			       "[%016lx]\n", ((unsigned long) skb->data));
+			panic("DMA address too large, tell DaveM");
+		}
+#endif
+		mmu_sync_dma(sbus_dvma_addr(skb->data),
 			     skb->len, qep->qe_sbusdev->my_bus);
 #endif
 		if(len > RX_COPY_THRESHOLD) {
 			struct sk_buff *new_skb;
 
 			/* Now refill the entry, if we can. */
-			new_skb = qe_alloc_skb(RX_BUF_ALLOC_SIZE, GFP_ATOMIC);
+			new_skb = qe_alloc_skb(RX_BUF_ALLOC_SIZE, (GFP_DMA|GFP_ATOMIC));
 			if(!new_skb) {
 				drops++;
 				goto drop_it;
@@ -524,8 +524,7 @@ static inline void qe_rx(struct sunqe *qep)
 			skb_put(new_skb, ETH_FRAME_LEN);
 			skb_reserve(new_skb, 34);
 
-			rxbase[elem].rx_addr =
-				(u32) ((unsigned long)new_skb->data);
+			rxbase[elem].rx_addr = sbus_dvma_addr(new_skb->data);
 			rxbase[elem].rx_flags =
 				(RXD_OWN | ((RX_BUF_ALLOC_SIZE - 34) & RXD_LENGTH));
 
@@ -545,8 +544,7 @@ static inline void qe_rx(struct sunqe *qep)
 			eth_copy_and_sum(copy_skb, (unsigned char *)skb->data, len, 0);
 
 			/* Reuse original ring buffer. */
-			rxbase[elem].rx_addr =
-				(u32) ((unsigned long)skb->data);
+			rxbase[elem].rx_addr = sbus_dvma_addr(skb->data);
 			rxbase[elem].rx_flags =
 				(RXD_OWN | ((RX_BUF_ALLOC_SIZE - 34) & RXD_LENGTH));
 
@@ -741,6 +739,19 @@ static int qe_start_xmit(struct sk_buff *skb, struct device *dev)
 	if(!TX_BUFFS_AVAIL(qep))
 		return 1;
 
+#ifdef NEED_DMA_SYNCHRONIZATION
+#ifdef __sparc_v9__
+	if ((unsigned long) (skb->data + skb->len) >= MAX_DMA_ADDRESS) {
+		struct sk_buff *new_skb = skb_copy(skb, GFP_DMA | GFP_ATOMIC);
+		if(!new_skb)
+			return 1;
+		dev_kfree_skb(skb);
+		skb = new_skb;
+	}
+#endif
+	mmu_sync_dma(sbus_dvma_addr(skb->data),
+		     skb->len, qep->qe_sbusdev->my_bus);
+#endif
 	len = skb->len;
 	entry = qep->tx_new;
 
@@ -749,7 +760,7 @@ static int qe_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	qep->tx_skbs[entry] = skb;
 
-	qep->qe_block->qe_txd[entry].tx_addr = (u32) ((unsigned long) skb->data);
+	qep->qe_block->qe_txd[entry].tx_addr = sbus_dvma_addr(skb->data);
 	qep->qe_block->qe_txd[entry].tx_flags =
 		(TXD_OWN | TXD_SOP | TXD_EOP | (len & TXD_LENGTH));
 	qep->tx_new = NEXT_TX(entry);

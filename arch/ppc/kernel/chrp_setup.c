@@ -31,6 +31,7 @@
 #include <linux/ioport.h>
 #include <linux/console.h>
 #include <linux/pci.h>
+#include <linux/openpic.h>
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
@@ -42,7 +43,6 @@
 #include <asm/pci-bridge.h>
 
 extern void hydra_init(void);
-extern void w83c553f_init(void);
 
 /* for the mac fs */
 kdev_t boot_dev;
@@ -53,7 +53,6 @@ extern int probingmem;
 extern unsigned long loops_per_sec;
 
 unsigned long empty_zero_page[1024];
-extern unsigned char aux_device_present;
 
 #ifdef CONFIG_BLK_DEV_RAM
 extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
@@ -88,46 +87,53 @@ chrp_get_cpuinfo(char *buffer)
 	    model = get_property(root, "model", NULL);
 	len = sprintf(buffer,"machine\t\t: CHRP %s\n", model);
 
-	/* VLSI VAS96011/12 `Golden Gate 2' */
-	/* Memory banks */
-	sdramen = (in_le32((unsigned *)(GG2_PCI_CONFIG_BASE+GG2_PCI_DRAM_CTRL))
-		   >>31) & 1;
-	for (i = 0; i < (sdramen ? 4 : 6); i++) {
-	    t = in_le32((unsigned *)(GG2_PCI_CONFIG_BASE+GG2_PCI_DRAM_BANK0+
-				     i*4));
-	    if (!(t & 1))
-		continue;
-	    switch ((t>>8) & 0x1f) {
-		case 0x1f:
-		    model = "4 MB";
-		    break;
-		case 0x1e:
-		    model = "8 MB";
-		    break;
-		case 0x1c:
-		    model = "16 MB";
-		    break;
-		case 0x18:
-		    model = "32 MB";
-		    break;
-		case 0x10:
-		    model = "64 MB";
-		    break;
-		case 0x00:
-		    model = "128 MB";
-		    break;
-		default:
-		    model = "Reserved";
-		    break;
-	    }
-	    len += sprintf(buffer+len, "memory bank %d\t: %s %s\n", i, model,
-			   gg2_memtypes[sdramen ? 1 : ((t>>1) & 3)]);
+	/* longtrail (goldengate) stuff */
+	if ( !strncmp( model, "IBM,LongTrail", 9 ) )
+	{
+		/* VLSI VAS96011/12 `Golden Gate 2' */
+		/* Memory banks */
+		sdramen = (in_le32((unsigned *)(GG2_PCI_CONFIG_BASE+
+						GG2_PCI_DRAM_CTRL))
+			   >>31) & 1;
+		for (i = 0; i < (sdramen ? 4 : 6); i++) {
+			t = in_le32((unsigned *)(GG2_PCI_CONFIG_BASE+
+						 GG2_PCI_DRAM_BANK0+
+						 i*4));
+			if (!(t & 1))
+				continue;
+			switch ((t>>8) & 0x1f) {
+			case 0x1f:
+				model = "4 MB";
+				break;
+			case 0x1e:
+				model = "8 MB";
+				break;
+			case 0x1c:
+				model = "16 MB";
+				break;
+			case 0x18:
+				model = "32 MB";
+				break;
+			case 0x10:
+				model = "64 MB";
+				break;
+			case 0x00:
+				model = "128 MB";
+				break;
+			default:
+				model = "Reserved";
+				break;
+			}
+			len += sprintf(buffer+len, "memory bank %d\t: %s %s\n", i, model,
+				       gg2_memtypes[sdramen ? 1 : ((t>>1) & 3)]);
+		}
+		/* L2 cache */
+		t = in_le32((unsigned *)(GG2_PCI_CONFIG_BASE+GG2_PCI_CC_CTRL));
+		len += sprintf(buffer+len, "board l2\t: %s %s (%s)\n",
+			       gg2_cachesizes[(t>>7) & 3],
+			       gg2_cachetypes[(t>>2) & 3],
+			       gg2_cachemodes[t & 3]);
 	}
-	/* L2 cache */
-	t = in_le32((unsigned *)(GG2_PCI_CONFIG_BASE+GG2_PCI_CC_CTRL));
-	len += sprintf(buffer+len, "board l2\t: %s %s (%s)\n",
-		       gg2_cachesizes[(t>>7) & 3], gg2_cachetypes[(t>>2) & 3],
-		       gg2_cachemodes[t & 3]);
 	return len;
 }
 
@@ -190,8 +196,6 @@ chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 	/* init to some ~sane value until calibrate_delay() runs */
 	loops_per_sec = 50000000;
 	
-	aux_device_present = 0xaa;
-
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* this is fine for chrp */
 	initrd_below_start_ok = 1;
@@ -219,8 +223,15 @@ chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 	 *  -- Geert
 	 */
 	hydra_init();		/* Mac I/O */
-	w83c553f_init();	/* PCI-ISA bridge and IDE */
 
+	/* Some IBM machines don't have the hydra -- Cort */
+	if ( !OpenPIC )
+	{
+		OpenPIC = (struct OpenPIC *)*(unsigned long *)get_property(
+			find_path_device("/"), "platform-open-pic", NULL);
+		OpenPIC = ioremap((unsigned long)OpenPIC, sizeof(struct OpenPIC));
+	}
+	
 	/*
 	 *  Fix the Super I/O configuration
 	 */

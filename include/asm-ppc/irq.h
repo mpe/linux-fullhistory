@@ -5,6 +5,9 @@
 
 #include <asm/processor.h>		/* for is_prep() */
 
+extern void disable_irq(unsigned int);
+extern void enable_irq(unsigned int);
+
 #ifndef CONFIG_8xx
 
 #ifdef CONFIG_APUS
@@ -31,9 +34,6 @@
 #define irq_to_openpic(n)	((n)-NUM_8259_INTERRUPTS)
 #define IRQ_8259_CASCADE	NUM_8259_INTERRUPTS
 
-extern void disable_irq(unsigned int);
-extern void enable_irq(unsigned int);
-
 #ifndef CONFIG_APUS
 /*
  * This gets called from serial.c, which is now used on
@@ -54,28 +54,26 @@ static __inline__ int irq_cannonicalize(int irq)
  * There are eight external interrupts (IRQs) that can be configured
  * as either level or edge sensitive. 
  * On the MBX implementation, there is also the possibility of an 8259
- * through the PCI and PCI-ISA bridges.  All 8259 interrupts appear
- * on the 8xx as IRQ3, but I may eventually add some of the 8259 code
- * back into this port to handle that controller.
+ * through the PCI and PCI-ISA bridges.
  */
-#define NR_IRQS	16
+#define NR_IRQS	(16+16) /* 8259 has 16, too -- Cort */
 
-#define	SIU_IRQ0	0	/* Highest priority */
-#define	SIU_LEVEL0	1
-#define	SIU_IRQ1	2
-#define	SIU_LEVEL1	3
-#define	SIU_IRQ2	4
-#define	SIU_LEVEL2	5
-#define	SIU_IRQ3	6
-#define	SIU_LEVEL3	7
-#define	SIU_IRQ4	8
-#define	SIU_LEVEL4	9
-#define	SIU_IRQ5	10
-#define	SIU_LEVEL5	11
-#define	SIU_IRQ6	12
-#define	SIU_LEVEL6	13
-#define	SIU_IRQ7	14
-#define	SIU_LEVEL7	15
+#define	SIU_IRQ0	(0+16)	/* Highest priority */
+#define	SIU_LEVEL0	(1+16)
+#define	SIU_IRQ1	(2+16)
+#define	SIU_LEVEL1	(3+16)
+#define	SIU_IRQ2	(4+16)
+#define	SIU_LEVEL2	(5+16)
+#define	SIU_IRQ3	(6+16)
+#define	SIU_LEVEL3	(7+16)
+#define	SIU_IRQ4	(8+16)
+#define	SIU_LEVEL4	(9+16)
+#define	SIU_IRQ5	(10+16)
+#define	SIU_LEVEL5	(11+16)
+#define	SIU_IRQ6	(12+16)
+#define	SIU_LEVEL6	(13+16)
+#define	SIU_IRQ7	(14+16)
+#define	SIU_LEVEL7	(15+16)
 
 /* The internal interrupts we can configure as we see fit.
  * My personal preference is CPM at level 2, which puts it above the

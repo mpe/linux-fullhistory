@@ -69,5 +69,6 @@ int parport_ieee1284_nibble_mode_ok(struct parport *port, unsigned char mode)
 		& ~1) & ~2);
 	udelay(1);
 	/* Data available? */
-	return (parport_wait_peripheral(port, 0x20, 0))?1:2;
+	parport_wait_peripheral (port, PARPORT_STATUS_ACK, PARPORT_STATUS_ACK);
+	return (parport_read_status(port) & PARPORT_STATUS_ERROR)?1:2;
 }

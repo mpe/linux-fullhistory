@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-probe.c	Version 1.03  Dec  5, 1997
+ *  linux/drivers/block/ide-probe.c	Version 1.04  March 10, 1999
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
@@ -17,6 +17,7 @@
  * Version 1.02		increase WAIT_PIDENTIFY to avoid CD-ROM locking at boot
  *			 by Andrea Arcangeli
  * Version 1.03		fix for (hwif->chipset == ide_4drives)
+ * Version 1.04		fixed buggy treatments of known flash memory cards
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
@@ -41,6 +42,33 @@
 #include <asm/io.h>
 
 #include "ide.h"
+
+/*
+ * CompactFlash cards and their brethern pretend to be removable hard disks, except:
+ *	(1) they never have a slave unit, and
+ *	(2) they don't have doorlock mechanisms.
+ * This test catches them, and is invoked elsewhere when setting appropriate config bits.
+ *
+ * FIXME: This treatment is probably applicable for *all* PCMCIA (PC CARD) devices,
+ * so in linux 2.3.x we should change this to just treat all PCMCIA drives this way,
+ * and get rid of the model-name tests below (too big of an interface change for 2.2.x).
+ * At that time, we might also consider parameterizing the timeouts and retries,
+ * since these are MUCH faster than mechanical drives.	-M.Lord
+ */
+int drive_is_flashcard (ide_drive_t *drive)
+{
+	struct hd_driveid *id = drive->id;
+
+	if (drive->removable && id != NULL) {
+		if (!strncmp(id->model, "KODAK ATA_FLASH", 15)	/* Kodak */
+		 || !strncmp(id->model, "Hitachi CV", 10)		/* Hitachi */
+		 || !strncmp(id->model, "SunDisk SDCFB", 13))	/* SunDisk */
+		{
+			return 1;	/* yes, it is a flash memory card */
+		}
+	}
+	return 0;	/* no, it is not a flash memory card */
+}
 
 static inline void do_identify (ide_drive_t *drive, byte cmd)
 {
@@ -82,16 +110,6 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	id->model[sizeof(id->model)-1] = '\0';	/* we depend on this a lot! */
 	printk("%s: %s, ", drive->name, id->model);
 	drive->present = 1;
-
-	/*
-	 * Prevent long system lockup probing later for non-existant
-	 * slave drive if the hwif is actually a Kodak CompactFlash card.
-	 */
-	if (!strcmp(id->model, "KODAK ATA_FLASH")) {
-		ide_drive_t *mate = &HWIF(drive)->drives[1^drive->select.b.unit];
-		mate->present = 0;
-		mate->noprobe = 1;
-	}
 
 	/*
 	 * Check for an ATAPI device
@@ -137,6 +155,20 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		return;
 	}
 
+	/*
+	 * Not an ATAPI device: looks like a "regular" hard disk
+	 */
+	if (id->config & (1<<7))
+		drive->removable = 1;
+	/*
+	 * Prevent long system lockup probing later for non-existant
+	 * slave drive if the hwif is actually a flash memory card of some variety:
+	 */
+	if (drive_is_flashcard(drive)) {
+		ide_drive_t *mate = &HWIF(drive)->drives[1^drive->select.b.unit];
+		mate->present = 0;
+		mate->noprobe = 1;
+	}
 	drive->media = ide_disk;
 	printk("ATA DISK drive\n");
 	return;

@@ -87,6 +87,7 @@ extern int smc_init( struct device * );
 extern int sparc_lance_probe(struct device *);
 extern int happy_meal_probe(struct device *);
 extern int qec_probe(struct device *);
+extern int bigmac_probe(struct device *);
 extern int myri_sbus_probe(struct device *);
 extern int sgiseeq_probe(struct device *);
 extern int atarilance_probe(struct device *);
@@ -246,6 +247,9 @@ struct devprobe sparc_probes[] __initdata = {
 #endif
 #ifdef CONFIG_SUNQE
 	{qec_probe, 0},
+#endif
+#ifdef CONFIG_SUNBMAC
+	{bigmac_probe, 0},
 #endif
 #ifdef CONFIG_MYRI_SBUS
 	{myri_sbus_probe, 0},

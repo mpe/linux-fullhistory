@@ -1,4 +1,4 @@
-/* $Id: dtlb_prot.S,v 1.17 1998/05/25 16:59:11 davem Exp $
+/* $Id: dtlb_prot.S,v 1.18 1999/03/02 15:42:14 jj Exp $
  * dtlb_prot.S: DTLB protection trap strategy.
  *              This is included directly into the trap table.
  *
@@ -45,13 +45,13 @@
 	mov		TLB_TAG_ACCESS, %g4		! Prepare reload of vaddr
 	bgu,pn		%xcc, winfix_trampoline		! Yes, perform winfixup
 	 ldxa		[%g4] ASI_DMMU, %g5		! Put tagaccess in %g5
-	sethi		%hi(1f), %g7			! Nope, normal fault
+	ba,pt		%xcc, sparc64_realfault_common	! Nope, normal fault
 
 /* PROT ** ICACHE line 4: More real fault processing */
-	ba,pt		%xcc, etrap			! Save state
-1:	 or		%g7, %lo(1b), %g7		! ...
-	ba,pt		%xcc, sparc64_realfault_continue! Now call the fault handler
-	 mov		1, %o2				! Indicate this was a write
+	 mov		1, %g4				! Indicate this was a write
+	nop
+	nop
+	nop
 	nop
 	nop
 	nop

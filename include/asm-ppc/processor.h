@@ -60,21 +60,36 @@
 #define FPSCR_FEX       (1<<30)
 
 #define _MACH_prep     1
-#define _MACH_Pmac     2 /* pmac or pmac clone (non-chrp) */
-#define _MACH_chrp     4 /* chrp machine */
-#define _MACH_mbx      8 /* Motorola MBX board */
-#define _MACH_apus    16 /* amiga with phase5 powerup */
-#define _MACH_fads    32 /* Motorola FADS board */
+#define _MACH_Pmac     2  /* pmac or pmac clone (non-chrp) */
+#define _MACH_chrp     4  /* chrp machine */
+#define _MACH_mbx      8  /* Motorola MBX board */
+#define _MACH_apus    16  /* amiga with phase5 powerup */
+#define _MACH_fads    32  /* Motorola FADS board */
+#define _MACH_rpxlite 64  /* RPCG RPX-Lite 8xx board */
+#define _MACH_bseip   128 /* Bright Star Engineering ip-Engine */
+#define _MACH_yk      256 /* Motorola Yellowknife */
 
 /* see residual.h for these */
 #define _PREP_Motorola 0x01  /* motorola prep */
 #define _PREP_Firm     0x02  /* firmworks prep */
 #define _PREP_IBM      0x00  /* ibm prep */
 #define _PREP_Bull     0x03  /* bull prep */
+#define _PREP_Radstone 0x04  /* Radstone Technology PLC prep */
+
+/*
+ * Radstone board types
+ */
+#define RS_SYS_TYPE_PPC1   0
+#define RS_SYS_TYPE_PPC2   1
+#define RS_SYS_TYPE_PPC1a  2
+#define RS_SYS_TYPE_PPC2a  3
+#define RS_SYS_TYPE_PPC4   4
+#define RS_SYS_TYPE_PPC4a  5
+#define RS_SYS_TYPE_PPC2ep 6
 
 /* these are arbitrary */
 #define _CHRP_Motorola 0x04  /* motorola chrp, the cobra */
-#define _CHRP_IBM     0x05   /* IBM chrp, the longtrail and longtrail 2 */
+#define _CHRP_IBM      0x05  /* IBM chrp, the longtrail and longtrail 2 */
 
 #define _GLOBAL(n)\
 	.globl n;\
@@ -224,6 +239,13 @@ extern unsigned long have_of;
 
 /* what kind of prep workstation we are */
 extern int _prep_type;
+/*
+ * This is used to identify the board type from a given PReP board
+ * vendor. Board revision is also made available.
+ */
+extern unsigned char ucSystemType;
+extern unsigned char ucBoardRev;
+extern unsigned char ucBoardRevMaj, ucBoardRevMin;
 
 struct task_struct;
 void start_thread(struct pt_regs *regs, unsigned long nip, unsigned long sp);

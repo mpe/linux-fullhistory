@@ -1,4 +1,4 @@
-/* $Id: debuglocks.c,v 1.5 1998/10/14 09:19:04 jj Exp $
+/* $Id: debuglocks.c,v 1.6 1999/02/23 13:23:55 jj Exp $
  * debuglocks.c: Debugging versions of SMP locking primitives.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -28,9 +28,11 @@
 static inline void show(char *str, spinlock_t *lock, unsigned long caller)
 {
 	int cpu = smp_processor_id();
+	extern spinlock_t console_lock;
 
-	printk("%s(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n",str,
-		lock, cpu, caller, lock->owner_pc & ~3, lock->owner_pc & 3);
+	if (lock != &console_lock)
+		printk("%s(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n",str,
+			lock, cpu, caller, lock->owner_pc & ~3, lock->owner_pc & 3);
 }
 
 static inline void show_read(char *str, rwlock_t *lock, unsigned long caller)

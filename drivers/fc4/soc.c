@@ -1,6 +1,6 @@
 /* soc.c: Sparc SUNW,soc (Serial Optical Channel) Fibre Channel Sbus adapter support.
  *
- * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,1997,1999 Jakub Jelinek (jj@ultra.linux.cz)
  * Copyright (C) 1997,1998 Jirka Hanika (geo@ff.cuni.cz)
  *
  * Sources:
@@ -9,8 +9,6 @@
  *
  * Supported hardware:
  *      Tested on SOC sbus card bought with SS1000 in Linux running on SS5 and Ultra1. 
- *      Should run on on-board SOC/SOC+ cards of Ex000 servers as well, but it is not
- *      tested (let us know if you succeed).
  *      For SOC sbus cards, you have to make sure your FCode is 1.52 or later.
  *      If you have older FCode, you should try to upgrade or get SOC microcode from Sun
  *      (the microcode is present in Solaris soc driver as well). In that case you need
@@ -20,7 +18,7 @@
  */
 
 static char *version =
-        "soc.c:v1.2 27/Feb/98 Jakub Jelinek (jj@sunsite.mff.cuni.cz), Jirka Hanika (geo@ff.cuni.cz)\n";
+        "soc.c:v1.3 9/Feb/99 Jakub Jelinek (jj@ultra.linux.cz), Jirka Hanika (geo@ff.cuni.cz)\n";
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -34,7 +32,6 @@ static char *version =
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/init.h>
-#include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -51,10 +48,10 @@ static char *version =
 /* #define SOCDEBUG */
 /* #define HAVE_SOC_UCODE */
 
-#include "fcp_scsi.h"
+#include "fcp_impl.h"
 #include "soc.h"
 #ifdef HAVE_SOC_UCODE
-#include "soc_asm.c"
+#include "soc_asm.h"
 #endif
 
 #define soc_printk printk ("soc%d: ", s->soc_no); printk 
@@ -397,6 +394,10 @@ static int soc_hw_enque (fc_channel *fc, fcp_cmnd *fcmd)
 		FILL_FCHDR_OXRX(fch, 0xffff, 0xffff);
 		request->shdr.flags = port->flags;
 		break;
+		
+	case PROTO_REPORT_AL_MAP:
+		/* SOC only supports Point-to-Point topology, no FC-AL, sorry... */
+		return -ENOSYS;
 
 	default: 
 		request->shdr.token = TOKEN(fcmd->proto, port->mask, fcmd->token);

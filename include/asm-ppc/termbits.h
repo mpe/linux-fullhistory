@@ -121,7 +121,7 @@ struct termios {
 #define  B38400	0000017
 #define EXTA B19200
 #define EXTB B38400
-#define CBAUDEX 0000020
+#define CBAUDEX 0000000
 #define  B57600   00020
 #define  B115200  00021
 #define  B230400  00022

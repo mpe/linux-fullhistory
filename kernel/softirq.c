@@ -64,6 +64,7 @@ asmlinkage void do_bottom_half(void)
 			run_bottom_halves();
 			hardirq_endlock(cpu);
 		}
+		__cli();
 		softirq_endlock(cpu);
 	}
 }

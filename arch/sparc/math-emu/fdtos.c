@@ -8,6 +8,5 @@ int FDTOS(void *rd, void *rs2)
 
 	__FP_UNPACK_D(A, rs2);
 	FP_CONV(S,D,1,2,R,A);
-	__FP_PACK_S(rd, R);
-	return 1;
+	return __FP_PACK_S(rd, R);
 }

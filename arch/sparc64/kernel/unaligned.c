@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.13 1998/10/07 22:43:13 davem Exp $
+/* $Id: unaligned.c,v 1.14 1999/03/02 15:42:16 jj Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -470,7 +470,7 @@ extern void do_fpother(struct pt_regs *regs);
 extern void do_privact(struct pt_regs *regs);
 extern void data_access_exception(struct pt_regs *regs);
 
-int handle_ldq_stq(u32 insn, struct pt_regs *regs)
+int handle_ldf_stq(u32 insn, struct pt_regs *regs)
 {
 	unsigned long addr = compute_effective_address(regs, insn, 0);
 	int freg = ((insn >> 25) & 0x1e) | ((insn >> 20) & 0x20);
@@ -522,8 +522,10 @@ int handle_ldq_stq(u32 insn, struct pt_regs *regs)
 		    	return 1;
 		}
 	} else {
-		/* LDQ */
-		u32 first, second, third, fourth;
+		/* LDF, LDDF, LDQF */
+		u32 data[4] __attribute__ ((aligned(8)));
+		int size, i;
+		int err;
 
 		if (asi < 0x80) {
 			do_privact(regs);
@@ -532,25 +534,35 @@ int handle_ldq_stq(u32 insn, struct pt_regs *regs)
 			data_access_exception(regs);
 			return 1;
 		}
-		if (get_user (first, (u32 *)addr) ||
-		    __get_user (second, (u32 *)(addr + 4)) ||
-		    __get_user (third, (u32 *)(addr + 8)) ||
-		    __get_user (fourth, (u32 *)(addr + 12))) {
-			if (asi & 0x2) /* NF */ {
-				first = 0; second = 0; third = 0; fourth = 0;
-			} else {
-		    		data_access_exception(regs);
-		    		return 1;
-		    	}
+		switch (insn & 0x180000) {
+		case 0x000000: size = 1; break;
+		case 0x100000: size = 4; break;
+		default: size = 2; break;
+		}
+		for (i = 0; i < size; i++)
+			data[i] = 0;
+		
+		err = get_user (data[0], (u32 *)addr);
+		if (!err) {
+			for (i = 1; i < size; i++)
+				err |= __get_user (data[i], (u32 *)(addr + 4*i));
+		}
+		if (err && !(asi & 0x2 /* NF */)) {
+			data_access_exception(regs);
+			return 1;
 		}
 		if (asi & 0x8) /* Little */ {
-			u32 tmp = le32_to_cpup(&first);
-			
-			first = le32_to_cpup(&fourth);
-			fourth = tmp;
-			tmp = le32_to_cpup(&second);
-			second = le32_to_cpup(&third);
-			third = tmp;
+			u64 tmp;
+
+			switch (size) {
+			case 1: data[0] = le32_to_cpup(data + 0); break;
+			default:*(u64 *)(data + 0) = le64_to_cpup((u64 *)(data + 0));
+				break;
+			case 4: tmp = le64_to_cpup((u64 *)(data + 0));
+				*(u64 *)(data + 0) = le64_to_cpup((u64 *)(data + 2));
+				*(u64 *)(data + 2) = tmp;
+				break;
+			}
 		}
 		if (!(current->tss.fpsaved[0] & FPRS_FEF)) {
 			current->tss.fpsaved[0] = FPRS_FEF;
@@ -562,14 +574,25 @@ int handle_ldq_stq(u32 insn, struct pt_regs *regs)
 			else
 				memset(f->regs+32, 0, 32*sizeof(u32));
 		}
-		f->regs[freg] = first;
-		f->regs[freg+1] = second;
-		f->regs[freg+2] = third;
-		f->regs[freg+3] = fourth;
+		memcpy(f->regs + freg, data, size * 4);
 		current->tss.fpsaved[0] |= flag;
 	}
 	advance(regs);
 	return 1;
+}
+
+void handle_ld_nf(u32 insn, struct pt_regs *regs)
+{
+	int rd = ((insn >> 25) & 0x1f);
+	int from_kernel = (regs->tstate & TSTATE_PRIV) != 0;
+	unsigned long *reg;
+	                        
+	maybe_flush_windows(0, 0, rd, from_kernel);
+	reg = fetch_reg_addr(rd, regs);
+	if ((insn & 0x780000) == 0x180000)
+		reg[1] = 0;
+	reg[0] = 0;
+	advance(regs);
 }
 
 void handle_lddfmna(struct pt_regs *regs, unsigned long sfar, unsigned long sfsr)

@@ -44,8 +44,6 @@ static int      db16 = 0;	/* Has a Gus16 AD1848 on it */
 
 void attach_gus_card(struct address_info *hw_config)
 {
-	if(request_irq(hw_config->irq, gusintr, 0,  "Gravis Ultrasound", hw_config)<0)
-		printk(KERN_ERR "gus_card.c: Unable to allocate IRQ %d\n", hw_config->irq);
 
 	gus_wave_init(hw_config);
 
@@ -60,6 +58,9 @@ void attach_gus_card(struct address_info *hw_config)
 #ifdef CONFIG_MIDI
 	gus_midi_init(hw_config);
 #endif
+	if(request_irq(hw_config->irq, gusintr, 0,  "Gravis Ultrasound", hw_config)<0)
+		printk(KERN_ERR "gus_card.c: Unable to allocate IRQ %d\n", hw_config->irq);
+
 }
 
 int probe_gus(struct address_info *hw_config)

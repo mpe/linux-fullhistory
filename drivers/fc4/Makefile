@@ -33,6 +33,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_FC4_SOCAL),y)
+L_OBJS += socal.o
+else
+  ifeq ($(CONFIG_FC4_SOCAL),m)
+  M_OBJS += socal.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 fc4.o: $(MIX_OBJS) fc.o

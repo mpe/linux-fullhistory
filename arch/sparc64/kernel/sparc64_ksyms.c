@@ -1,8 +1,9 @@
-/* $Id: sparc64_ksyms.c,v 1.49 1998/10/28 08:11:28 jj Exp $
+/* $Id: sparc64_ksyms.c,v 1.57 1999/03/14 20:51:28 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost (ecd@skynet.be)
+ * Copyright (C) 1999 Jakub Jelinek (jj@ultra.linux.cz)
  */
 
 /* Tell string.h we don't want memcpy etc. as cpp defines */
@@ -52,8 +53,9 @@ struct poll {
 	short revents;
 };
 
-extern unsigned prom_cpu_nodes[NR_CPUS];
+extern unsigned prom_cpu_nodes[64];
 extern void die_if_kernel(char *str, struct pt_regs *regs);
+extern pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
 extern unsigned long sunos_mmap(unsigned long, unsigned long, unsigned long,
 				unsigned long, unsigned long, unsigned long);
 void _sigpause_common (unsigned int set, struct pt_regs *);
@@ -101,6 +103,8 @@ extern void _do_write_lock(rwlock_t *rw, char *str);
 extern void _do_write_unlock(rwlock_t *rw);
 #endif
 #endif
+
+extern unsigned long phys_base;
 
 /* One thing to note is that the way the symbols of the mul/div
  * support routines are named is a mess, they all start with
@@ -155,6 +159,8 @@ EXPORT_SYMBOL(_do_write_unlock);
 EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(local_bh_count);
 #endif
+
+EXPORT_SYMBOL(ivector_table);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 
@@ -171,6 +177,7 @@ EXPORT_SYMBOL(sparc_dvma_malloc);
 EXPORT_SYMBOL(mmu_release_scsi_one);
 EXPORT_SYMBOL(mmu_release_scsi_sgl);
 #if CONFIG_SBUS
+EXPORT_SYMBOL(mmu_set_sbus64);
 EXPORT_SYMBOL(SBus_chain);
 EXPORT_SYMBOL(dma_chain);
 #endif
@@ -199,6 +206,9 @@ EXPORT_SYMBOL(dump_thread);
 /* math-emu wants this */
 EXPORT_SYMBOL(die_if_kernel);
 
+/* Kernel thread creation. */
+EXPORT_SYMBOL(kernel_thread);
+
 /* prom symbols */
 EXPORT_SYMBOL(idprom);
 EXPORT_SYMBOL(prom_root_node);
@@ -214,6 +224,7 @@ EXPORT_SYMBOL(prom_setprop);
 EXPORT_SYMBOL(saved_command_line);
 EXPORT_SYMBOL(prom_getname);
 EXPORT_SYMBOL(prom_feval);
+EXPORT_SYMBOL(prom_getbool);
 EXPORT_SYMBOL(prom_getstring);
 EXPORT_SYMBOL(prom_apply_sbus_ranges);
 EXPORT_SYMBOL(prom_getint);
@@ -257,7 +268,6 @@ EXPORT_SYMBOL(svr4_setcontext);
 EXPORT_SYMBOL(prom_cpu_nodes);
 EXPORT_SYMBOL(sys_ioctl);
 EXPORT_SYMBOL(sys32_ioctl);
-EXPORT_SYMBOL(get_unmapped_area);
 EXPORT_SYMBOL(move_addr_to_kernel);
 EXPORT_SYMBOL(move_addr_to_user);
 #endif
@@ -280,6 +290,10 @@ EXPORT_SYMBOL(__copy_to_user);
 EXPORT_SYMBOL(__copy_from_user);
 EXPORT_SYMBOL(__strncpy_from_user);
 EXPORT_SYMBOL(__bzero_noasi);
+
+/* Various address conversion macros use this. */
+EXPORT_SYMBOL(phys_base);
+EXPORT_SYMBOL(sparc64_valid_addr_bitmap);
 
 /* No version information on this, heavily used in inline asm,
  * and will always be 'void __ret_efault(void)'.

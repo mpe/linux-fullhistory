@@ -505,6 +505,7 @@ ntfs_create(struct inode* dir,struct dentry *d,int mode)
 #endif
 	r->i_mode &= ~vol->umask;
 
+	insert_inode_hash(r);
 	d_instantiate(d,r);
 	return 0;
  fail:
@@ -567,6 +568,7 @@ _linux_ntfs_mkdir(struct inode *dir, struct dentry* d, int mode)
 #endif
 	r->i_mode &= ~vol->umask;	
 	
+	insert_inode_hash(r);
 	d_instantiate(d, r);
 	error = 0;
  out:

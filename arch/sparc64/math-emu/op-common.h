@@ -53,14 +53,14 @@ do {									\
  */
 
 #define _FP_PACK_CANONICAL(fs, wc, X)				\
-do {								\
+({int __ret = 0;						\
   switch (X##_c)						\
   {								\
   case FP_CLS_NORMAL:						\
     X##_e += _FP_EXPBIAS_##fs;					\
     if (X##_e > 0)						\
       {								\
-	_FP_ROUND(wc, X);					\
+	__ret |= _FP_ROUND(wc, X);				\
 	if (_FP_FRAC_OVERP_##wc(fs, X))				\
 	  {							\
 	    _FP_FRAC_SRL_##wc(X, (_FP_WORKBITS+1));		\
@@ -73,6 +73,7 @@ do {								\
 	    /* overflow to infinity */				\
 	    X##_e = _FP_EXPMAX_##fs;				\
 	    _FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);		\
+            __ret |= EFLAG_OVERFLOW;				\
 	  }							\
       }								\
     else							\
@@ -82,7 +83,7 @@ do {								\
 	if (X##_e <= _FP_WFRACBITS_##fs)			\
 	  {							\
 	    _FP_FRAC_SRS_##wc(X, X##_e, _FP_WFRACBITS_##fs);	\
-	    _FP_ROUND(wc, X);					\
+	    __ret |= _FP_ROUND(wc, X);				\
 	    _FP_FRAC_SLL_##wc(X, 1);				\
 	    if (_FP_FRAC_OVERP_##wc(fs, X))			\
 	      {							\
@@ -93,6 +94,7 @@ do {								\
 	      {							\
 		X##_e = 0;					\
 		_FP_FRAC_SRL_##wc(X, _FP_WORKBITS+1);		\
+                __ret |= EFLAG_UNDERFLOW;			\
 	      }							\
 	  }							\
 	else							\
@@ -100,6 +102,7 @@ do {								\
 	    /* underflow to zero */				\
 	    X##_e = 0;						\
 	    _FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);		\
+            __ret |= EFLAG_UNDERFLOW;				\
 	  }							\
       }								\
     break;							\
@@ -125,7 +128,8 @@ do {								\
       _FP_FRAC_HIGH_##wc(X) |= _FP_QNANBIT_##fs;		\
     break;							\
   }								\
-} while (0)
+  __ret;							\
+})
 
 
 /*
@@ -424,11 +428,19 @@ do {							\
       }									\
     else								\
       {									\
-	/* Force -0 -> +0 */						\
-	if (!X##_e && _FP_FRAC_ZEROP_##wc(X)) X##_s = 0;		\
-	if (!Y##_e && _FP_FRAC_ZEROP_##wc(Y)) X##_s = 0;		\
+	int __is_zero_x;						\
+	int __is_zero_y;						\
 									\
-	if (X##_s != Y##_s)						\
+	__is_zero_x = (!X##_e && _FP_FRAC_ZEROP_##wc(X)) ? 1 : 0;	\
+	__is_zero_y = (!Y##_e && _FP_FRAC_ZEROP_##wc(Y)) ? 1 : 0;	\
+									\
+	if (__is_zero_x && __is_zero_y)					\
+		ret = 0;						\
+	else if (__is_zero_x)						\
+		ret = Y##_s ? 1 : -1;					\
+	else if (__is_zero_y)						\
+		ret = X##_s ? -1 : 1;					\
+	else if (X##_s != Y##_s)					\
 	  ret = X##_s ? -1 : 1;						\
 	else if (X##_e > Y##_e)						\
 	  ret = X##_s ? -1 : 1;						\

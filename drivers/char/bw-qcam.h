@@ -48,6 +48,9 @@ OTHER DEALINGS IN THE SOFTWARE.
 #define MAX_HEIGHT 243
 #define MAX_WIDTH 336
 
+/* Bit fields for status flags */
+#define QC_PARAM_CHANGE	0x01 /* Camera status change has occurred */
+
 struct qcam_device {
 	struct video_device vdev;
 	struct pardevice *pdev;
@@ -59,6 +62,6 @@ struct qcam_device {
 	int port_mode;
 	int transfer_scale;
 	int top, left;
+	int status;
 	unsigned int saved_bits;
 };
-

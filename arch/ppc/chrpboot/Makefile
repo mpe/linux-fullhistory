@@ -28,6 +28,12 @@ ifeq ($(CONFIG_ALL_PPC),y)
 CONFIG_CHRP = y
 endif
 
+ifeq ($(CONFIG_SMP),y)
+TFTPIMAGE=/tftpboot/zImage.chrp.smp
+else
+TFTPIMAGE=/tftpboot/zImage.chrp
+endif
+
 all:	$(TOPDIR)/zImage
 
 #
@@ -36,10 +42,10 @@ all:	$(TOPDIR)/zImage
 #
 ifeq ($(CONFIG_CHRP),y)
 znetboot: zImage
-	cp zImage /tftpboot/zImage.chrp
+	cp zImage $(TFTPIMAGE)
 
 znetboot.initrd: zImage.initrd
-	cp zImage.initrd /tftpboot/zImage.chrp
+	cp zImage.initrd $(TFTPIMAGE)
 
 floppy: zImage
 	mcopy zImage a:zImage

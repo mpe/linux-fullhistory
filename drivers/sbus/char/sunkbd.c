@@ -514,8 +514,13 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 	mark_bh(CONSOLE_BH);
 	add_keyboard_randomness(keycode);
 
+	tty = ttytab? ttytab[fg_console]: NULL;
+	if (tty && (!tty->driver_data)) {
+		/* This is to workaround ugly bug in tty_io.c, which
+                   does not do locking when it should */
+		tty = NULL;
+	}
 	kbd = kbd_table + fg_console;
-	tty = ttytab[fg_console];
 	if((raw_mode = (kbd->kbdmode == VC_RAW))) {
 		if (kbd_redirected == fg_console+1)
 			push_kbd (keycode);

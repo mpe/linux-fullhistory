@@ -8,6 +8,5 @@ int FMULQ(void *rd, void *rs2, void *rs1)
 	__FP_UNPACK_Q(A, rs1);
 	__FP_UNPACK_Q(B, rs2);
 	FP_MUL_Q(R, A, B);
-	__FP_PACK_Q(rd, R);
-	return 1;
+	return __FP_PACK_Q(rd, R);
 }

@@ -88,25 +88,6 @@ typedef struct _P601_BAT {
 	P601_BATL batl;		/* Lower register */
 } P601_BAT;
 
-/* Block size masks */
-#define BL_128K	0x000
-#define BL_256K 0x001
-#define BL_512K 0x003
-#define BL_1M   0x007
-#define BL_2M   0x00F
-#define BL_4M   0x01F
-#define BL_8M   0x03F
-#define BL_16M  0x07F
-#define BL_32M  0x0FF
-#define BL_64M  0x1FF
-#define BL_128M 0x3FF
-#define BL_256M 0x7FF
-
-/* BAT Access Protection */
-#define BPP_XX	0x00		/* No access */
-#define BPP_RX	0x01		/* Read only */
-#define BPP_RW	0x02		/* Read/write */
-
 /*
  * Simulated two-level MMU.  This structure is used by the kernel
  * to keep track of MMU mappings and is used to update/maintain
@@ -135,6 +116,35 @@ typedef struct _MMU_context {
 	pte	**pmap;		/* Two-level page-map structure */
 } MMU_context;
 
+/* invalidate a TLB entry */
+extern inline void _tlbie(unsigned long va)
+{
+	asm volatile ("tlbie %0" : : "r"(va));
+}
+
+extern void _tlbia(void);		/* invalidate all TLB entries */
+
+#endif /* __ASSEMBLY__ */
+
+/* Block size masks */
+#define BL_128K	0x000
+#define BL_256K 0x001
+#define BL_512K 0x003
+#define BL_1M   0x007
+#define BL_2M   0x00F
+#define BL_4M   0x01F
+#define BL_8M   0x03F
+#define BL_16M  0x07F
+#define BL_32M  0x0FF
+#define BL_64M  0x1FF
+#define BL_128M 0x3FF
+#define BL_256M 0x7FF
+
+/* BAT Access Protection */
+#define BPP_XX	0x00		/* No access */
+#define BPP_RX	0x01		/* Read only */
+#define BPP_RW	0x02		/* Read/write */
+
 /* Used to set up SDR1 register */
 #define HASH_TABLE_SIZE_64K	0x00010000
 #define HASH_TABLE_SIZE_128K	0x00020000
@@ -150,15 +160,6 @@ typedef struct _MMU_context {
 #define HASH_TABLE_MASK_1M	0x00F   
 #define HASH_TABLE_MASK_2M	0x01F   
 #define HASH_TABLE_MASK_4M	0x03F   
-
-/* invalidate a TLB entry */
-extern inline void _tlbie(unsigned long va)
-{
-	asm volatile ("tlbie %0" : : "r"(va));
-}
-
-extern void _tlbia(void);		/* invalidate all TLB entries */
-#endif /* __ASSEMBLY__ */
 
 /* Control/status registers for the MPC8xx.
  * A write operation to these registers causes serialized access.

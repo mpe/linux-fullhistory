@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.63 1998/09/21 05:05:56 jj Exp $
+# $Id: config.in,v 1.68 1999/03/14 03:12:42 anton Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -25,7 +25,7 @@ define_bool CONFIG_VT y
 define_bool CONFIG_VT_CONSOLE y
 
 bool 'Support for AP1000 multicomputer' CONFIG_AP1000
-bool 'Symmetric multi-processing support' CONFIG_SMP
+bool 'Symmetric multi-processing support (does not work on sun4/sun4c)' CONFIG_SMP
 
 if [ "$CONFIG_AP1000" = "y" ]; then
 	define_bool CONFIG_NO_KEYBOARD y
@@ -165,6 +165,9 @@ if [ "$CONFIG_NET" = "y" ]; then
 		fi
 		tristate 'Sun LANCE support' CONFIG_SUNLANCE
 		tristate 'Sun Happy Meal 10/100baseT support' CONFIG_HAPPYMEAL
+		if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+		  tristate 'Sun BigMAC 10/100baseT support' CONFIG_SUNBMAC
+		fi
 		tristate 'Sun QuadEthernet support' CONFIG_SUNQE
 		tristate 'MyriCOM Gigabit Ethernet support' CONFIG_MYRI_SBUS
 #		bool 'FDDI driver support' CONFIG_FDDI
@@ -173,6 +176,15 @@ if [ "$CONFIG_NET" = "y" ]; then
 	fi
 	endmenu
 fi
+
+# This one must be before the filesystem configs. -DaveM
+mainmenu_option next_comment
+comment 'Unix98 PTY support'
+bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
+if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
+	int 'Maximum number of Unix98 PTYs in use (0-2048)' CONFIG_UNIX98_PTY_COUNT 256
+fi
+endmenu
 
 source fs/Config.in
 

@@ -23,6 +23,12 @@ ifeq ($(CONFIG_ALL_PPC),y)
 CONFIG_PMAC = y
 endif
 
+ifeq ($(CONFIG_SMP),y)
+TFTPIMAGE=/tftpboot/zImage.pmac.smp
+else
+TFTPIMAGE=/tftpboot/zImage.pmac
+endif
+
 ifeq ($(CONFIG_PMAC),y)
 hack-coff: hack-coff.c
 	$(HOSTCC) $(HOSTCFLAGS) -o hack-coff hack-coff.c
@@ -33,10 +39,10 @@ floppy: zImage
 #	umount /mnt
 
 znetboot: vmlinux.coff
-	cp vmlinux.coff /tftpboot/zImage.pmac
+	cp vmlinux.coff $(TFTPIMAGE)
 
 znetboot.initrd: vmlinux.coff.initrd
-	cp vmlinux.coff.initrd /tftpboot/zImage.pmac
+	cp vmlinux.coff.initrd $(TFTPIMAGE)
 
 coffboot: $(OBJS) ld.script
 	$(LD) -o coffboot $(LD_ARGS) $(OBJS) $(LIBS)

@@ -96,7 +96,6 @@ asmlinkage int sys_stime(int * tptr)
 	xtime.tv_usec = 0;
 	time_adjust = 0;	/* stop active adjtime() */
 	time_status |= STA_UNSYNC;
-	time_state = TIME_ERROR;	/* p. 24, (a) */
 	time_maxerror = NTP_PHASE_LIMIT;
 	time_esterror = NTP_PHASE_LIMIT;
 	sti();
@@ -221,7 +220,7 @@ void (*hardpps_ptr)(struct timeval *) = (void (*)(struct timeval *))0;
 int do_adjtimex(struct timex *txc)
 {
         long ltemp, mtemp, save_adjust;
-	int error = 0;
+	int result = time_state;	/* mostly `TIME_OK' */
 
 	/* In order to modify anything, you gotta be super-user! */
 	if (txc->modes && !capable(CAP_SYS_TIME))
@@ -250,16 +249,13 @@ int do_adjtimex(struct timex *txc)
 	/* If there are input parameters, then process them */
 	if (txc->modes)
 	{
-	    if (time_state == TIME_ERROR)
-		time_state = TIME_OK;		/* reset error -- why? */
-
 	    if (txc->modes & ADJ_STATUS)	/* only set allowed bits */
 		time_status =  (txc->status & ~STA_RONLY) |
 			      (time_status & STA_RONLY);
 
 	    if (txc->modes & ADJ_FREQUENCY) {	/* p. 22 */
 		if (txc->freq > MAXFREQ || txc->freq < -MAXFREQ) {
-		    error = -EINVAL;
+		    result = -EINVAL;
 		    goto leave;
 		}
 		time_freq = txc->freq - pps_freq;
@@ -267,7 +263,7 @@ int do_adjtimex(struct timex *txc)
 
 	    if (txc->modes & ADJ_MAXERROR) {
 		if (txc->maxerror < 0 || txc->maxerror >= NTP_PHASE_LIMIT) {
-		    error = -EINVAL;
+		    result = -EINVAL;
 		    goto leave;
 		}
 		time_maxerror = txc->maxerror;
@@ -275,7 +271,7 @@ int do_adjtimex(struct timex *txc)
 
 	    if (txc->modes & ADJ_ESTERROR) {
 		if (txc->esterror < 0 || txc->esterror >= NTP_PHASE_LIMIT) {
-		    error = -EINVAL;
+		    result = -EINVAL;
 		    goto leave;
 		}
 		time_esterror = txc->esterror;
@@ -283,7 +279,7 @@ int do_adjtimex(struct timex *txc)
 
 	    if (txc->modes & ADJ_TIMECONST) {	/* p. 24 */
 		if (txc->constant < 0) {	/* NTP v4 uses values > 6 */
-		    error = -EINVAL;
+		    result = -EINVAL;
 		    goto leave;
 		}
 		time_constant = txc->constant;
@@ -329,7 +325,7 @@ int do_adjtimex(struct timex *txc)
 			    else
 			        time_freq += ltemp >> SHIFT_KH;
 			} else /* calibration interval too short (p. 12) */
-				time_state = TIME_ERROR;
+				result = TIME_ERROR;
 		    } else {	/* PLL mode */
 		        if (mtemp < MAXSEC) {
 			    ltemp *= mtemp;
@@ -342,7 +338,7 @@ int do_adjtimex(struct timex *txc)
 						       time_constant +
 						       SHIFT_KF - SHIFT_USEC);
 			} else /* calibration interval too long (p. 12) */
-				time_state = TIME_ERROR;
+				result = TIME_ERROR;
 		    }
 		    if (time_freq > time_tolerance)
 		        time_freq = time_tolerance;
@@ -354,7 +350,7 @@ int do_adjtimex(struct timex *txc)
 		/* if the quartz is off by more than 10% something is
 		   VERY wrong ! */
 		if (txc->tick < 900000/HZ || txc->tick > 1100000/HZ) {
-		    error = -EINVAL;
+		    result = -EINVAL;
 		    goto leave;
 		}
 		tick = txc->tick;
@@ -370,7 +366,7 @@ leave:	if ((time_status & (STA_UNSYNC|STA_CLOCKERR)) != 0
 	    || ((time_status & STA_PPSFREQ) != 0
 		&& (time_status & (STA_PPSWANDER|STA_PPSERROR)) != 0))
 	    /* p. 24, (d) */
-		time_state = TIME_ERROR;
+		result = TIME_ERROR;
 	
 	if ((txc->modes & ADJ_OFFSET_SINGLESHOT) == ADJ_OFFSET_SINGLESHOT)
 	    txc->offset	   = save_adjust;
@@ -399,7 +395,7 @@ leave:	if ((time_status & (STA_UNSYNC|STA_CLOCKERR)) != 0
 	txc->stbcnt	   = pps_stbcnt;
 
 	sti();
-	return(error < 0 ? error : time_state);
+	return(result);
 }
 
 asmlinkage int sys_adjtimex(struct timex *txc_p)

@@ -455,15 +455,23 @@ struct qlogicpti {
 	/* These are the hot elements in the cache, so they come first. */
 	struct qlogicpti         *next;                 /* Next active adapter        */
 	struct qlogicpti_regs    *qregs;                /* Adapter registers          */
+	struct pti_queue_entry   *res_cpu;              /* Ptr to RESPONSE bufs (CPU) */
+	struct pti_queue_entry   *req_cpu;              /* Ptr to REQUEST bufs (CPU)  */
+
+	__u32                     res_dvma;             /* Ptr to RESPONSE bufs (DVMA)*/
+	__u32                     req_dvma;             /* Ptr to REQUEST bufs (DVMA) */
 	u_int	                  req_in_ptr;		/* index of next request slot */
 	u_int	                  res_out_ptr;		/* index of next result slot  */
-	struct pti_queue_entry   *res_cpu;              /* Ptr to RESPONSE bufs (CPU) */
-	__u32                     res_dvma;             /* Ptr to RESPONSE bufs (DVMA)*/
-	struct pti_queue_entry   *req_cpu;              /* Ptr to REQUEST bufs (CPU)  */
-	__u32                     req_dvma;             /* Ptr to REQUEST bufs (DVMA) */
+
 	int                       cmd_count[MAX_TARGETS];
 	unsigned long             tag_ages[MAX_TARGETS];
 	long	                  send_marker;		/* must we send a marker?     */
+
+	/* The cmd->handler is only 32-bits, so that things work even on monster
+	 * Ex000 sparc64 machines with >4GB of ram we just keep track of the
+	 * scsi command pointers here.  This is essentially what Matt Jacob does. -DaveM
+	 */
+	Scsi_Cmnd                *cmd_slots[QLOGICISP_REQ_QUEUE_LEN + 1];
 
 	/* The rest of the elements are unimportant for performance. */
 	u_char	                  fware_majrev, fware_minrev;
@@ -487,11 +495,7 @@ struct qlogicpti {
 #define SREG_IMASK                0x0c   /* Interrupt level            */
 #define SREG_SPMASK               0x03   /* Mask for switch pack       */
 	unsigned char             swsreg;
-
-#if 0
-	char	res[RES_QUEUE_LEN+1][QUEUE_ENTRY_LEN];
-	char	req[QLOGICISP_REQ_QUEUE_LEN+1][QUEUE_ENTRY_LEN];
-#endif
+	unsigned char             is_pti; /* Non-zero if this is a PTI board. */
 };
 
 /* How to twiddle them bits... */

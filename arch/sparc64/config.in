@@ -1,8 +1,8 @@
-# $Id: config.in,v 1.58 1998/11/16 04:47:30 davem Exp $
+# $Id: config.in,v 1.65 1999/03/14 03:12:48 anton Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
-mainmenu_name "Linux/SPARC Kernel Configuration"
+mainmenu_name "Linux/UltraSPARC Kernel Configuration"
 
 mainmenu_option next_comment
 comment 'Code maturity level options'
@@ -24,7 +24,6 @@ comment 'General setup'
 define_bool CONFIG_VT y
 define_bool CONFIG_VT_CONSOLE y
 
-bool 'Support for AP1000 multicomputer' CONFIG_AP1000
 bool 'Symmetric multi-processing support' CONFIG_SMP
 
 mainmenu_option next_comment
@@ -34,28 +33,20 @@ bool 'Support Frame buffer devices' CONFIG_FB
 source drivers/video/Config.in
 endmenu
 
-if [ "$CONFIG_AP1000" = "y" ]; then
-	define_bool CONFIG_NO_KEYBOARD y
-	define_bool CONFIG_APFDDI y
-	define_bool CONFIG_APBLOCK y
-	define_bool CONFIG_APBIF y
-	tristate 'OPIU DDV Driver' CONFIG_DDV
-else
-	# Global things across all Sun machines.
-	define_bool CONFIG_SBUS y
-	define_bool CONFIG_SBUSCHAR y
-	define_bool CONFIG_SUN_MOUSE y
-	define_bool CONFIG_SERIAL y
-	define_bool CONFIG_SUN_SERIAL y
-	define_bool CONFIG_SERIAL_CONSOLE y
-	define_bool CONFIG_SUN_KEYBOARD y
-	define_bool CONFIG_SUN_CONSOLE y
-	define_bool CONFIG_SUN_AUXIO y
-	define_bool CONFIG_SUN_IO y
-	bool 'PCI support' CONFIG_PCI
-	source drivers/sbus/char/Config.in
-	source drivers/sbus/audio/Config.in
-fi
+# Global things across all Sun machines.
+define_bool CONFIG_SBUS y
+define_bool CONFIG_SBUSCHAR y
+define_bool CONFIG_SUN_MOUSE y
+define_bool CONFIG_SERIAL y
+define_bool CONFIG_SUN_SERIAL y
+define_bool CONFIG_SERIAL_CONSOLE y
+define_bool CONFIG_SUN_KEYBOARD y
+define_bool CONFIG_SUN_CONSOLE y
+define_bool CONFIG_SUN_AUXIO y
+define_bool CONFIG_SUN_IO y
+bool 'PCI support' CONFIG_PCI
+source drivers/sbus/char/Config.in
+source drivers/sbus/audio/Config.in
 
 tristate 'Openprom tree appears in /proc/openprom (EXPERIMENTAL)' CONFIG_SUN_OPENPROMFS
 if [ "$CONFIG_PCI" = "y" ]; then
@@ -221,14 +212,14 @@ if [ "$CONFIG_NET" = "y" ]; then
 		fi
 		bool 'Sun LANCE support' CONFIG_SUNLANCE
 		tristate 'Sun Happy Meal 10/100baseT support' CONFIG_HAPPYMEAL
+		if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+		  tristate 'Sun BigMAC 10/100baseT support' CONFIG_SUNBMAC
+		fi
 		tristate 'Sun QuadEthernet support' CONFIG_SUNQE
 		tristate 'MyriCOM Gigabit Ethernet support' CONFIG_MYRI_SBUS
 		if [ "$CONFIG_PCI" = "y" ]; then
 			tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
-# Turned off until updated 3c59x.c driver
-# gets approved by Linus...  --DAVEM
-#
-#			tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
+			tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
 		fi
 #		bool 'FDDI driver support' CONFIG_FDDI
 #		if [ "$CONFIG_FDDI" = "y" ]; then
@@ -236,6 +227,15 @@ if [ "$CONFIG_NET" = "y" ]; then
 	fi
 	endmenu
 fi
+
+# This one must be before the filesystem configs. -DaveM
+mainmenu_option next_comment
+comment 'Unix 98 PTY support'
+bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
+if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
+	int 'Maximum number of Unix98 PTYs in use (0-2048)' CONFIG_UNIX98_PTY_COUNT 256
+fi
+endmenu
 
 source fs/Config.in
 

@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.122 1998/12/31 20:51:19 cort Exp $
+ * $Id: setup.c,v 1.130 1999/03/11 01:45:15 cort Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -27,6 +27,7 @@
 #include <asm/smp.h>
 #ifdef CONFIG_MBX
 #include <asm/mbx.h>
+#include <asm/8xx_immap.h>
 #endif
 #include <asm/bootx.h>
 
@@ -42,6 +43,7 @@ unsigned long pci_dram_offset;
 #endif
 /* END APUS defs */
 
+extern boot_infos_t *boot_infos;
 extern char cmd_line[512];
 char saved_command_line[256];
 unsigned char aux_device_present;
@@ -55,12 +57,22 @@ unsigned long have_of;
 #endif /* ! CONFIG_MACH_SPECIFIC */
 
 /* copy of the residual data */
+#ifndef CONFIG_MBX
 unsigned char __res[sizeof(RESIDUAL)] __prepdata = {0,};
+#else
+unsigned char __res[sizeof(bd_t)] = {0,};
+#endif
+
 RESIDUAL *res = (RESIDUAL *)&__res;
 
 int _prep_type;
-
-extern boot_infos_t *boot_infos;
+/*
+ * This is used to identify the board type from a given PReP board
+ * vendor. Board revision is also made available.
+ */
+unsigned char ucSystemType;
+unsigned char ucBoardRev;
+unsigned char ucBoardRevMaj, ucBoardRevMin;
 
 /*
  * Perhaps we can put the pmac screen_info[] here
@@ -114,12 +126,8 @@ struct screen_info screen_info = {
 void machine_restart(char *cmd)
 {
 #ifndef CONFIG_MBX
-	struct adb_request req;
 	unsigned long flags;
-	unsigned long i = 10000;
-#if 0
-	int err;
-#endif	
+	struct adb_request req;
 
 	switch(_machine)
 	{
@@ -142,31 +150,32 @@ void machine_restart(char *cmd)
 #if 0		/* RTAS doesn't seem to work on Longtrail.
 		   For now, do it the same way as the PReP. */
 	        /*err = call_rtas("system-reboot", 0, 1, NULL);
-		printk("RTAS system-reboot returned %d\n", err);
-		for (;;);*/
+		  printk("RTAS system-reboot returned %d\n", err);
+		  for (;;);*/
 		
 		{
 			extern unsigned int rtas_entry, rtas_data, rtas_size;
 			unsigned long status, value;
-			printk("rtas_entry: %08x rtas_data: %08x rtas_size: %08x\n",
+			printk("rtas_ent`ry: %08x rtas_data: %08x rtas_size: %08x\n",
 			       rtas_entry,rtas_data,rtas_size);
-	}
+		}
 #endif
 	case _MACH_prep:
 		_disable_interrupts();
-		
-		/* set exception prefix high - to the prom */
-		save_flags( flags );
-		restore_flags( flags|MSR_IP );
-		
-		/* make sure bit 0 (reset) is a 0 */
-		outb( inb(0x92) & ~1L , 0x92 );
-		/* signal a reset to system control port A - soft reset */
-		outb( inb(0x92) | 1 , 0x92 );
-		
-		while ( i != 0 ) i++;
-		panic("restart failed\n");
-		break;
+                /* set exception prefix high - to the prom */
+                save_flags( flags );
+                restore_flags( flags|MSR_IP );
+                
+                /* make sure bit 0 (reset) is a 0 */
+                outb( inb(0x92) & ~1L , 0x92 );
+                /* signal a reset to system control port A - soft reset */
+                outb( inb(0x92) | 1 , 0x92 );
+                
+                while ( 1 ) ;
+                break;
+		/*
+		 * Not reached
+		 */
 	case _MACH_apus:
 		cli();
 
@@ -182,8 +191,16 @@ void machine_restart(char *cmd)
 		break;
 	}
 #else /* CONFIG_MBX */
-	extern void MBX_gorom(void);
-	MBX_gorom();
+        extern void __clear_msr_me(void);
+        __volatile__ unsigned char dummy;
+	
+        cli();
+        ((immap_t *)IMAP_ADDR)->im_clkrst.car_plprcr |= 0x00000080;
+        __clear_msr_me();
+        dummy = ((immap_t *)IMAP_ADDR)->im_clkrst.res[0];
+ 
+	printk("Restart failed\n");
+	while(1);
 #endif /* CONFIG_MBX */
 }
 
@@ -226,7 +243,7 @@ void machine_power_off(void)
 	}
 	for (;;);
 #else /* CONFIG_MBX */
-	machine_restart(NULL);
+	machine_halt();
 #endif /* CONFIG_MBX */
 }
 
@@ -238,7 +255,6 @@ void machine_halt(void)
 	}
 	else /* prep, chrp or apus */
 		machine_restart(NULL);
-
 }
 
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
@@ -432,14 +448,14 @@ int get_cpuinfo(char *buffer)
 	{
 		len += sprintf(buffer+len,"zero pages\t: total %lu (%luKb) "
 			       "current: %lu (%luKb) hits: %lu/%lu (%lu%%)\n",
-			       quicklists.zerototal,
-			       (quicklists.zerototal*PAGE_SIZE)>>10,
-			       quicklists.zero_sz,
-			       (quicklists.zero_sz*PAGE_SIZE)>>10,
-			       quicklists.zeropage_hits,quicklists.zeropage_calls,
+			       zero_cache_total,
+			       (zero_cache_total*PAGE_SIZE)>>10,
+			       zero_cache_sz,
+			       (zero_cache_sz*PAGE_SIZE)>>10,
+			       zero_cache_hits,zero_cache_calls,
 			       /* : 1 below is so we don't div by zero */
-			       (quicklists.zeropage_hits*100) /
-			            ((quicklists.zeropage_calls)?quicklists.zeropage_calls:1));
+			       (zero_cache_hits*100) /
+			            ((zero_cache_calls)?zero_cache_calls:1));
 	}
 
 #ifndef CONFIG_MBX
@@ -590,7 +606,6 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		if ( r3 )
 			memcpy((void *)res,(void *)(r3+KERNELBASE),
 			       sizeof(RESIDUAL));
-		setup_pci_ptrs();
 		isa_io_base = PREP_ISA_IO_BASE;
 		isa_mem_base = PREP_ISA_MEM_BASE;
 		pci_dram_offset = PREP_PCI_DRAM_OFFSET;
@@ -604,11 +619,21 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		{
 			if ( !strncmp(res->VitalProductData.PrintableModel,"IBM",3) )
 				_prep_type = _PREP_IBM;
+			else if (!strncmp(res->VitalProductData.PrintableModel,
+					  "Radstone",8))
+			{
+				extern char *Motherboard_map_name;
+
+				_prep_type = _PREP_Radstone;
+				Motherboard_map_name=
+					res->VitalProductData.PrintableModel;
+			}
 			else
 				_prep_type = _PREP_Motorola;
 		}
 		else /* assume motorola if no residual (netboot?) */
 			_prep_type = _PREP_Motorola;
+		setup_pci_ptrs();
 #ifdef CONFIG_BLK_DEV_INITRD
 		/* take care of initrd if we have one */
 		if ( r4 )
@@ -634,9 +659,7 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 			initrd_end = r3 + r4 + KERNELBASE;
 		}
 #endif /* CONFIG_BLK_DEV_INITRD */
-		/* isa_io_base set by setup_pci_ptrs() */
-		isa_mem_base = CHRP_ISA_MEM_BASE;
-		pci_dram_offset = CHRP_PCI_DRAM_OFFSET;
+		/* pci_dram_offset/isa_io_base/isa_mem_base set by setup_pci_ptrs() */
 #if !defined(CONFIG_MACH_SPECIFIC)
 		ISA_DMA_THRESHOLD = ~0L;
 		DMA_MODE_READ = 0x44;
@@ -737,7 +760,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	if (strstr(cmd_line, "xmon"))
 		xmon(0);
 #endif /* CONFIG_XMON */
-
+ 
 	/* reboot on panic */	
 	panic_timeout = 180;
 	

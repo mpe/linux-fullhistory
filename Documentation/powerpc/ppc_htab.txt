@@ -114,10 +114,5 @@ about the PTE hash table.
 
 3. Bugs
 
-  Doing a 'less' or 'more' on ppc_htab results in a segmentation violation.
-  I'm not sure of the cause but in the mean time 'cat' works adequately for
-  reading the file.
-
   The PMC1 and PMC2 counters can overflow and give no indication of that
   in /proc/ppc_htab.
-

@@ -991,22 +991,26 @@ static struct device dev_cs89x0 = {
         0, 0,
         0, 0, 0, NULL, NULL };
 
-int io=0;
-int irq=0;
-#endif
-#ifdef MODULE
-int debug=1;
-char *media="auto";
-char *duplex="f";
+static int io=0;
+static int irq=0;
+static int debug=0;
+static char media[8];
+static int duplex=-1;
+
+MODULE_PARM(io, "i");
+MODULE_PARM(irq, "i");
+MODULE_PARM(debug, "i");
+MODULE_PARM(media, "s");
+MODULE_PARM(duplex, "i");
+
+EXPORT_NO_SYMBOLS;
 
 /*
 * media=t             - specify media type
    or media=2
    or media=aui
    or medai=auto
-* duplex=f            - specify forced half/full/autonegotiate duplex
-   or duplex=h
-   or duplex=auto
+* duplex=0            - specify forced half/full/autonegotiate duplex
 * debug=#             - debug level
 
 
@@ -1044,12 +1048,14 @@ init_module(void)
         /* boy, they'd better get these right */
         if (!strcmp(media, "rj45"))
 		lp->adapter_cnf = A_CNF_MEDIA_10B_T | A_CNF_10B_T;
-	if (!strcmp(media, "aui"))
+	else if (!strcmp(media, "aui"))
 		lp->adapter_cnf = A_CNF_MEDIA_AUI   | A_CNF_AUI;
-	if (!strcmp(media, "bnc"))
+	else if (!strcmp(media, "bnc"))
 		lp->adapter_cnf = A_CNF_MEDIA_10B_2 | A_CNF_10B_2;
+	else
+		lp->adapter_cnf = A_CNF_MEDIA_10B_T | A_CNF_10B_T;
 
-        if (!strcmp(duplex, "auto"))
+        if (duplex==-1)
 		lp->auto_neg_cnf = AUTO_NEG_ENABLE;
 
         if (io == 0)  {

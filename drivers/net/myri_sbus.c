@@ -278,7 +278,7 @@ static void myri_init_rings(struct myri_eth *mp, int from_irq)
 		mp->rx_skbs[i] = skb;
 		skb->dev = dev;
 		skb_put(skb, RX_ALLOC_SIZE);
-		rxd[i].myri_scatters[0].addr = (u32) ((unsigned long)skb->data);
+		rxd[i].myri_scatters[0].addr = sbus_dvma_addr(skb->data);
 		rxd[i].myri_scatters[0].len = RX_ALLOC_SIZE;
 		rxd[i].ctx = i;
 		rxd[i].num_sg = 1;
@@ -340,12 +340,6 @@ static inline void myri_tx(struct myri_eth *mp, struct device *dev)
 		dev_kfree_skb(skb);
 		mp->tx_skbs[entry] = NULL;
 		mp->enet_stats.tx_packets++;
-
-#ifdef NEED_DMA_SYNCHRONIZATION
-		mmu_sync_dma(((u32)((unsigned long)skb->data)),
-			     skb->len, mp->myri_sbus_dev->my_bus);
-#endif
-
 		entry = NEXT_TX(entry);
 	}
 	mp->tx_old = entry;
@@ -437,8 +431,7 @@ static inline void myri_rx(struct myri_eth *mp, struct device *dev)
 			drops++;
 			DRX(("DROP "));
 			mp->enet_stats.rx_dropped++;
-			rxd->myri_scatters[0].addr =
-				(u32) ((unsigned long)skb->data);
+			rxd->myri_scatters[0].addr = sbus_dvma_addr(skb->data);
 			rxd->myri_scatters[0].len = RX_ALLOC_SIZE;
 			rxd->ctx = index;
 			rxd->num_sg = 1;
@@ -447,7 +440,7 @@ static inline void myri_rx(struct myri_eth *mp, struct device *dev)
 		}
 
 #ifdef NEED_DMA_SYNCHRONIZATION
-		mmu_sync_dma(((u32)((unsigned long)skb->data)),
+		mmu_sync_dma(sbus_dvma_addr(skb->data),
 			     skb->len, mp->myri_sbus_dev->my_bus);
 #endif
 
@@ -464,8 +457,7 @@ static inline void myri_rx(struct myri_eth *mp, struct device *dev)
 			mp->rx_skbs[index] = new_skb;
 			new_skb->dev = dev;
 			skb_put(new_skb, RX_ALLOC_SIZE);
-			rxd->myri_scatters[0].addr =
-				(u32) ((unsigned long)new_skb->data);
+			rxd->myri_scatters[0].addr = sbus_dvma_addr(new_skb->data);
 			rxd->myri_scatters[0].len = RX_ALLOC_SIZE;
 			rxd->ctx = index;
 			rxd->num_sg = 1;
@@ -489,8 +481,7 @@ static inline void myri_rx(struct myri_eth *mp, struct device *dev)
 
 			/* Reuse original ring buffer. */
 			DRX(("reuse "));
-			rxd->myri_scatters[0].addr =
-				(u32) ((unsigned long)skb->data);
+			rxd->myri_scatters[0].addr = sbus_dvma_addr(skb->data);
 			rxd->myri_scatters[0].len = RX_ALLOC_SIZE;
 			rxd->ctx = index;
 			rxd->num_sg = 1;
@@ -600,6 +591,12 @@ static int myri_start_xmit(struct sk_buff *skb, struct device *dev)
 		return 1;
 	}
 
+
+#ifdef NEED_DMA_SYNCHRONIZATION
+	mmu_sync_dma(sbus_dvma_addr(skb->data),
+		     skb->len, mp->myri_sbus_dev->my_bus);
+#endif
+
 	/* This is just to prevent multiple PIO reads for TX_BUFFS_AVAIL. */
 	head = sq->head;
 	tail = sq->tail;
@@ -628,8 +625,7 @@ static int myri_start_xmit(struct sk_buff *skb, struct device *dev)
 	txd = &sq->myri_txd[entry];
 	mp->tx_skbs[entry] = skb;
 
-	txd->myri_gathers[0].addr =
-		(unsigned int) ((unsigned long)skb->data);
+	txd->myri_gathers[0].addr = sbus_dvma_addr(skb->data);
 	txd->myri_gathers[0].len = len;
 	txd->num_sg = 1;
 	txd->chan = KERNEL_CHANNEL;

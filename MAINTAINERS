@@ -685,7 +685,7 @@ S:	Supported
 
 SPARC:
 P:	David S. Miller
-M:	davem@dm.cobaltmicro.com
+M:	davem@redhat.com
 P:	Eddie C. Dost
 M:	ecd@skynet.be
 P:	Jakub Jelinek

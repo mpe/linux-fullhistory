@@ -83,7 +83,6 @@
 #include <linux/string.h>
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
-#include <linux/major.h>
 #include <linux/ioport.h>
 
 #ifdef MODULE
@@ -117,7 +116,7 @@ char kernel_version[]=UTS_RELEASE;
 
 /* ---------------------- Begin defines ------------------------ */
 
-#define VERSION            "1.1.0"     
+#define VERSION            "1.3.0-K"     
 
 /* This major needs to be submitted to Linux to join the majors list */
 
@@ -1814,9 +1813,10 @@ int pc_init(void)
 	pc_callout.subtype = SERIAL_TYPE_CALLOUT;
 
 	pc_info = pc_driver;
-	pc_info.name = "digiCtl";
+	pc_info.name = "digi_ctl";
 	pc_info.major = DIGIINFOMAJOR;
 	pc_info.minor_start = 0;
+	pc_info.num = 1;
 	pc_info.init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL;
 	pc_info.subtype = SERIAL_TYPE_INFO;
 
@@ -2398,7 +2398,7 @@ static void doevent(int crd)
 			assertgwinon(ch);
 
 		} /* End DATA_IND */
-		else
+		/* else *//* Fix for DCD transition missed bug */
 		if (event & MODEMCHG_IND) 
 		{ /* Begin MODEMCHG_IND */
 

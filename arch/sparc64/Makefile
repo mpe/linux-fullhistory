@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.33 1998/10/19 07:04:02 jj Exp $
+# $Id: Makefile,v 1.35 1999/01/02 16:45:50 davem Exp $
 # sparc64/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -46,6 +46,7 @@ ifneq ($(IS_EGCS),y)
 else
   CFLAGS := $(CFLAGS) -m64 -pipe -mno-fpu -mcpu=ultrasparc -mcmodel=medlow \
 	    -ffixed-g4 -fcall-used-g5 -fcall-used-g7 -Wno-sign-compare
+  AFLAGS += -m64 -mcpu=ultrasparc
 endif
 
 # Uncomment this to get spinlock/rwlock debugging on SMP.

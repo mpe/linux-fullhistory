@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.37 1998/10/14 15:49:09 ecd Exp $
+/*  $Id: setup.c,v 1.41 1999/01/04 20:12:25 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -277,6 +277,22 @@ static int console_fb __initdata = 0;
 #endif
 static unsigned long memory_size = 0;
 
+#ifdef PROM_DEBUG_CONSOLE
+static struct console prom_debug_console = {
+	"debug",
+	prom_console_write,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	CON_PRINTBUFFER,
+	-1,
+	0,
+	NULL
+};
+#endif
+
 /* XXX Implement this at some point... */
 void kernel_enter_debugger(void)
 {
@@ -430,6 +446,10 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*cmdline_p = prom_getbootargs();
 	strcpy(saved_command_line, *cmdline_p);
 
+#ifdef PROM_DEBUG_CONSOLE
+	register_console(&prom_debug_console);
+#endif
+
 	printk("ARCH: SUN4U\n");
 
 #ifdef CONFIG_DUMMY_CONSOLE
@@ -531,7 +551,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 			ic_servaddr = sv;
 			if (gw)
 				ic_gateway = gw;
-			ic_bootp_flag = ic_rarp_flag = 0;
+			ic_proto_enabled = 0;
 		}
 	}
 #endif

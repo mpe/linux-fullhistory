@@ -1,4 +1,4 @@
-/* $Id: su.c,v 1.16 1998/11/14 23:02:54 ecd Exp $
+/* $Id: su.c,v 1.18 1999/01/02 16:47:37 davem Exp $
  * su.c: Small serial driver for keyboard/mouse interface on sparc32/PCI
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -157,7 +157,7 @@ static int serial_refcount;
 #define WAKEUP_CHARS 256
 
 static void autoconfig(struct su_struct *info);
-static void change_speed(struct su_struct *info);
+static void change_speed(struct su_struct *info, struct termios *old);
 static void su_wait_until_sent(struct tty_struct *tty, int timeout);
 
 /*
@@ -845,7 +845,7 @@ startup(struct su_struct *info)
 	/*
 	 * and set the speed of the serial port
 	 */
-	change_speed(info);
+	change_speed(info, 0);
 
 	info->flags |= ASYNC_INITIALIZED;
 	restore_flags(flags);
@@ -948,7 +948,8 @@ su_get_baud_rate(struct su_struct *info)
  * the specified baud rate for a serial port.
  */
 static void
-change_speed(struct su_struct *info)
+change_speed(struct su_struct *info,
+	     struct termios *old_termios)
 {
 	int		quot = 0, baud;
 	unsigned int	cval, fcr = 0;
@@ -999,7 +1000,25 @@ change_speed(struct su_struct *info)
 		else if (baud)
 			quot = info->baud_base / baud;
 	}
-	/* If the quotient is ever zero, default to 9600 bps */
+	/* If the quotient is zero refuse the change */
+	if (!quot && old_termios) {
+		info->tty->termios->c_cflag &= ~CBAUD;
+		info->tty->termios->c_cflag |= (old_termios->c_cflag & CBAUD);
+		baud = tty_get_baud_rate(info->tty);
+		if (!baud)
+			baud = 9600;
+		if (baud == 38400 &&
+		    ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST))
+			quot = info->custom_divisor;
+		else {
+			if (baud == 134)
+				/* Special case since 134 is really 134.5 */
+				quot = (2*info->baud_base / 269);
+			else if (baud)
+				quot = info->baud_base / baud;
+		}
+	}
+	/* As a last resort, if the quotient is zero, default to 9600 bps */
 	if (!quot)
 		quot = info->baud_base / 9600;
 	info->timeout = ((info->xmit_fifo_size*HZ*bits*quot) / info->baud_base);
@@ -1157,7 +1176,7 @@ su_change_mouse_baud(int baud)
 			info->cflag |= 1200;
 			break;
 	}
-	change_speed(info);
+	change_speed(info, 0);
 }
 
 static void
@@ -1301,6 +1320,9 @@ su_send_xchar(struct tty_struct *tty, char ch)
 	struct su_struct *info = (struct su_struct *)tty->driver_data;
 
 	if (serial_paranoia_check(info, tty->device, "su_send_char"))
+		return;
+
+	if (!(info->flags & ASYNC_INITIALIZED))
 		return;
 
 	info->x_char = ch;
@@ -1618,7 +1640,7 @@ su_set_termios(struct tty_struct *tty, struct termios *old_termios)
 		== RELEVANT_IFLAG(old_termios->c_iflag)))
 	  return;
 
-	change_speed(info);
+	change_speed(info, old_termios);
 
 	/* Handle transition to B0 status */
 	if ((old_termios->c_cflag & CBAUD) &&
@@ -2067,13 +2089,13 @@ su_open(struct tty_struct *tty, struct file * filp)
 			*tty->termios = info->normal_termios;
 		else 
 			*tty->termios = info->callout_termios;
-		change_speed(info);
+		change_speed(info, 0);
 	}
 #ifdef CONFIG_SERIAL_CONSOLE
 	if (sercons.cflag && sercons.index == line) {
 		tty->termios->c_cflag = sercons.cflag;
 		sercons.cflag = 0;
-		change_speed(info);
+		change_speed(info, 0);
 	}
 #endif
 	info->session = current->session;
@@ -2193,7 +2215,7 @@ done:
  */
 __initfunc(static __inline__ void show_su_version(void))
 {
-	char *revision = "$Revision: 1.16 $";
+	char *revision = "$Revision: 1.18 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2207,8 +2229,8 @@ __initfunc(static __inline__ void show_su_version(void))
  * This routine is called by su_init() to initialize a specific serial
  * port.  It determines what type of UART chip this serial port is
  * using: 8250, 16450, 16550, 16550A.  The important question is
- * whether or not this UART is a 16550A or not, since this will
- * determine whether or not we can use its FIFO features or not.
+ * whether or not this UART is a 16550A, since this will determine
+ * whether or not we can use its FIFO features.
  */
 static void
 autoconfig(struct su_struct *info)

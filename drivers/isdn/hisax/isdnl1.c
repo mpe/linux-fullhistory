@@ -144,8 +144,8 @@ extern int setup_netjet(struct IsdnCard *card);
 extern int setup_t163c(struct IsdnCard *card);
 #endif
 
-#if CARD_AMD7930
-extern int setup_amd7930(struct IsdnCard *card);
+#if CARD_AMD7930 || CARD_DBRI
+extern int setup_foreign(struct IsdnCard *card);
 #endif
 
 #if CARD_NICCY
@@ -163,7 +163,7 @@ const char *CardType[] =
  "Elsa PCMCIA", "Eicon.Diehl Diva", "ISDNLink", "TeleInt", "Teles 16.3c", 
  "Sedlbauer Speed Card", "USR Sportster", "ith mic Linux", "Elsa PCI",
  "Compaq ISA", "NETjet", "Teles PCI", "Sedlbauer Speed Star (PCMCIA)",
- "AMD 7930", "NICCY"
+ "AMD 7930", "NICCY", "DBRI"
 };
 
 extern struct IsdnCard cards[];
@@ -366,7 +366,7 @@ ll_unload(struct IsdnCardState *csta)
 void
 debugl1(struct IsdnCardState *cs, char *msg)
 {
-	char tmp[256], tm[32];
+	char tmp[1024], tm[32];
 
 	jiftime(tm, jiffies);
 	sprintf(tmp, "%s Card %d %s\n", tm, cs->cardnr + 1, msg);
@@ -842,9 +842,10 @@ checkcard(int cardnr, char *id, int *busy_flag))
 			ret = setup_niccy(card);
 			break;
 #endif
-#if CARD_AMD7930
+#if CARD_AMD7930 || CARD_DBRI
 		case ISDN_CTYPE_AMD7930:
-			ret = setup_amd7930(card);
+		case ISDN_CTYPE_DBRI:
+			ret = setup_foreign(card);
 			break;
 #endif
 		default:

@@ -1,4 +1,4 @@
-/* $Id: floppy.h,v 1.16 1998/10/06 20:32:15 ecd Exp $
+/* $Id: floppy.h,v 1.17 1998/12/02 12:42:23 davem Exp $
  * asm-sparc64/floppy.h: Sparc specific parts of the Floppy driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -702,7 +702,7 @@ __initfunc(static unsigned long sun_floppy_init(void))
         sun_fdops.fd_inb = sun_82077_fd_inb;
         sun_fdops.fd_outb = sun_82077_fd_outb;
 
-	use_virtual_dma = 1;
+	can_use_virtual_dma = use_virtual_dma = 1;
 	sun_fdops.fd_enable_dma = sun_fd_enable_dma;
 	sun_fdops.fd_disable_dma = sun_fd_disable_dma;
 	sun_fdops.fd_set_dma_mode = sun_fd_set_dma_mode;

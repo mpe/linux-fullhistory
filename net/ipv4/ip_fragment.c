@@ -17,6 +17,7 @@
  *		xxxx		:	Overlapfrag bug.
  *		Ultima          :       ip_expire() kernel panic.
  *		Bill Hawes	:	Frag accounting and evictor fixes.
+ *		John McDonald	:	0 length frag bug.
  */
 
 #include <linux/types.h>
@@ -357,7 +358,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	fp = qp->fragments;
 	count = qp->ihlen;
 	while(fp) {
-		if ((fp->len < 0) || ((count + fp->len) > skb->len))
+		if ((fp->len <= 0) || ((count + fp->len) > skb->len))
 			goto out_invalid;
 		memcpy((ptr + fp->offset), fp->ptr, fp->len);
 		if (count == qp->ihlen) {

@@ -33,6 +33,7 @@
  *   boot
  * -Integrate DVD-ROM support in driver. Thanks to Merete Gotsæd-Petersen
  *   of Pioneer Denmark for providing me with a drive for testing.
+ * -Implement Features and Profiles.
  *
  *
  * ----------------------------------
@@ -230,9 +231,23 @@
  * 4.52  Jan 19, 1999  -- Jens Axboe <axboe@image.dk>
  *                      - Detect DVD-ROM/RAM drives
  *
+ * 4.53  Feb 22, 1999   - Include other model Samsung and one Goldstar
+ *                         drive in transfer size limit.
+ *                      - Fix the I/O error when doing eject without a medium
+ *                         loaded on some drives.
+ *                      - CDROMREADMODE2 is now implemented through
+ *                         CDROMREADRAW, since many drives don't support
+ *                         MODE2 (even though ATAPI 2.6 says they must).
+ *                      - Added ignore parameter to ide-cd (as a module), eg
+ *                         	insmod ide-cd ignore='hda hdb'
+ *                         Useful when using ide-cd in conjunction with
+ *                         ide-scsi. TODO: non-modular way of doing the
+ *                         same.
+ *                         
+ *
  *************************************************************************/
 
-#define IDECD_VERSION "4.52"
+#define IDECD_VERSION "4.53"
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -251,7 +266,6 @@
 
 #include "ide.h"
 #include "ide-cd.h"
-
 
 /****************************************************************************
  * Generic packet command support and error handling routines.
@@ -1527,6 +1541,10 @@ cdrom_lockdoor (ide_drive_t *drive, int lockflag,
 		CDROM_CONFIG_FLAGS (drive)->no_doorlock = 1;
 		stat = 0;
 	}
+	
+	/* no medium, that's alright. */
+	if (stat != 0 && reqbuf->sense_key == NOT_READY && reqbuf->asc == 0x3a)
+		stat = 0;
 
 	if (stat == 0)
 		CDROM_STATE_FLAGS (drive)->door_locked = lockflag;
@@ -1805,7 +1823,6 @@ cdrom_mode_select (ide_drive_t *drive, int pageno, char *buf, int buflen,
 	pc.c[8] = (buflen & 0xff);
 	return cdrom_queue_packet_command (drive, &pc);
 }
-
 
 /* ATAPI cdrom drives are free to select the speed you request or any slower
    rate :-( Requesting too fast a speed will _not_ produce an error. */
@@ -2092,22 +2109,17 @@ int ide_cdrom_dev_ioctl (struct cdrom_device_info *cdi,
 		if (cmd == CDROMREADMODE1) {
 			blocksize = CD_FRAMESIZE;
 			format = 2;
-		} else if (cmd == CDROMREADMODE2) {
-			blocksize = CD_FRAMESIZE_RAW0;
-			format = 3;
-		} else {
+		} else {	/* for RAW and MODE2. */
 			blocksize = CD_FRAMESIZE_RAW;
 			format = 0;
 		}
-		stat = verify_area (VERIFY_WRITE, (char *)arg, blocksize);
-		if (stat) return stat;
+		
+		copy_from_user_ret(&msf, (void *)arg, sizeof (msf), -EFAULT); 
 
-		copy_from_user (&msf, (void *)arg, sizeof (msf));
+		lba = msf_to_lba(msf.cdmsf_min0, 
+				 msf.cdmsf_sec0, 
+				 msf.cdmsf_frame0);
 
-		lba = msf_to_lba (msf.cdmsf_min0,
-				  msf.cdmsf_sec0,
-				  msf.cdmsf_frame0);
-	
 		/* Make sure the TOC is up to date. */
 		stat = cdrom_read_toc (drive, NULL);
 		if (stat) return stat;
@@ -2117,14 +2129,21 @@ int ide_cdrom_dev_ioctl (struct cdrom_device_info *cdi,
 		if (lba < 0 || lba >= toc->capacity)
 			return -EINVAL;
 
-		buf = (char *) kmalloc (CD_FRAMESIZE_RAW, GFP_KERNEL);
+		buf = (char *) kmalloc (blocksize, GFP_KERNEL);
 		if (buf == NULL)
 			return -ENOMEM;
 
 		stat = cdrom_read_block (drive, format, lba, 1, buf, blocksize,
 					 NULL);
-		if (stat == 0)
-			copy_to_user ((char *)arg, buf, blocksize);
+
+		if (stat == 0) {
+			if (cmd == CDROMREADMODE2) {
+				/* For Mode2, skip the Sync, Header, and Subheader */
+				copy_to_user_ret((char *)arg, buf+16, CD_FRAMESIZE_RAW0, -EFAULT);
+			} else {
+				copy_to_user_ret((char *)arg, buf, blocksize, -EFAULT);
+			}
+		}
 
 		kfree (buf);
 		return stat;
@@ -2486,14 +2505,12 @@ int ide_cdrom_audio_ioctl (struct cdrom_device_info *cdi,
 static
 int ide_cdrom_reset (struct cdrom_device_info *cdi)
 {
-
 	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
 	struct request req;
 
 	ide_init_drive_cmd (&req);
 	req.cmd = RESET_DRIVE_COMMAND;
 	return ide_do_drive_cmd (drive, &req, ide_wait);
-
 }
 
 
@@ -2501,9 +2518,10 @@ static
 int ide_cdrom_tray_move (struct cdrom_device_info *cdi, int position)
 {
 	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
+	struct atapi_request_sense rq;
 
 	if (position) {
-		int stat = cdrom_lockdoor (drive, 0, NULL);
+		int stat = cdrom_lockdoor (drive, 0, &rq);
 		if (stat) return stat;
 	}
 
@@ -2980,12 +2998,17 @@ int ide_cdrom_setup (ide_drive_t *drive)
 	CDROM_CONFIG_FLAGS (drive)->no_eject = 1;
 	CDROM_CONFIG_FLAGS (drive)->supp_disc_present = 0;
 	
-	/* limit transfer size per interrupt. currently only one Samsung
-	   drive needs this. */
+	/* limit transfer size per interrupt. */
 	CDROM_CONFIG_FLAGS (drive)->limit_nframes = 0;
-	if (drive->id != NULL)
-		if (strcmp (drive->id->model, "SAMSUNG CD-ROM SCR-2432") == 0)
+	if (drive->id != NULL) {
+		if (!strcmp(drive->id->model, "SAMSUNG CD-ROM SCR-2430"))
 			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;
+		else if (!strcmp(drive->id->model, "SAMSUNG CD-ROM SCR-2432"))
+			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;
+		else if (!strcmp (drive->id->model, "GCD-R580B"))
+			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;
+				/* 124/SECTORS_PER_FRAME; ? */
+	}
 
 #if ! STANDARD_ATAPI
 	/* by default Sanyo 3 CD changer support is turned off and
@@ -3155,7 +3178,13 @@ static ide_module_t ide_cdrom_module = {
 	NULL
 };
 
+/* options */
+char *ignore = NULL;
+
 #ifdef MODULE
+MODULE_PARM(ignore, "s");
+MODULE_DESCRIPTION("ATAPI CD-ROM Driver");
+
 int init_module (void)
 {
 	return ide_cdrom_init();
@@ -3183,6 +3212,12 @@ int ide_cdrom_init (void)
 
 	MOD_INC_USE_COUNT;
 	while ((drive = ide_scan_devices (ide_cdrom, ide_cdrom_driver.name, NULL, failed++)) != NULL) {
+		/* skip drives that we were told to ignore */
+		if (ignore != NULL)
+			if (strstr(ignore, drive->name)) {
+				printk("ide-cd: ignoring drive %s\n", drive->name);
+				continue;
+			}
 		info = (struct cdrom_info *) kmalloc (sizeof (struct cdrom_info), GFP_KERNEL);
 		if (info == NULL) {
 			printk ("%s: Can't allocate a cdrom structure\n", drive->name);

@@ -627,7 +627,6 @@ asmlinkage int irix_stime(int value)
 	cli();
 	xtime.tv_sec = value;
 	xtime.tv_usec = 0;
-	time_state = TIME_ERROR;
 	time_maxerror = MAXPHASE;
 	time_esterror = MAXPHASE;
 	sti();

@@ -34,6 +34,8 @@
 #include <asm/segment.h>
 #include <asm/bitops.h>
 #include <asm/feature.h>
+#include <asm/adb.h>
+#include <asm/pmu.h>
 #ifdef CONFIG_KGDB
 #include <asm/kgdb.h>
 #endif
@@ -61,6 +63,8 @@ int zs_channels_found;
 struct mac_serial *zs_chain;	/* list of all channels */
 
 struct tty_struct zs_ttys[NUM_CHANNELS];
+
+static int is_powerbook;
 
 #ifdef CONFIG_SERIAL_CONSOLE
 static struct console sercons;
@@ -99,6 +103,10 @@ static int serial_refcount;
 #undef SERIAL_DEBUG_INTR
 #undef SERIAL_DEBUG_OPEN
 #undef SERIAL_DEBUG_FLOW
+#undef SERIAL_DEBUG_POWER
+#undef SERIAL_DEBUG_THROTTLE
+#undef SERIAL_DEBUG_STOP
+#undef SERIAL_DEBUG_BAUDS
 
 #define RS_STROBE_TIME 10
 #define RS_ISR_PASS_LIMIT 256
@@ -106,8 +114,10 @@ static int serial_refcount;
 #define _INLINE_ inline
 
 static void probe_sccs(void);
-static void change_speed(struct mac_serial *info);
+static void change_speed(struct mac_serial *info, struct termios *old);
 static void rs_wait_until_sent(struct tty_struct *tty, int timeout);
+static void set_scc_power(struct mac_serial * info, int state);
+static int setup_scc(struct mac_serial * info);
 
 static struct tty_struct *serial_table[NUM_CHANNELS];
 static struct termios *serial_termios[NUM_CHANNELS];
@@ -151,13 +161,6 @@ static inline int serial_paranoia_check(struct mac_serial *info,
 #endif
 	return 0;
 }
-
-/*
- * This is used to figure out the divisor speeds and the timeouts
- */
-static int baud_table[] = {
-	0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800,
-	9600, 19200, 38400, 57600, 115200, 230400, 0 };
 
 /* 
  * Reading and writing Z8530 registers.
@@ -320,12 +323,14 @@ static _INLINE_ void receive_chars(struct mac_serial *info,
 #endif
 		if (!tty)
 			continue;
-		tty_flip_buffer_push(tty);
-
+		if (tty->flip.count >= TTY_FLIPBUF_SIZE)
+			tty_flip_buffer_push(tty);
+			
 		if (tty->flip.count >= TTY_FLIPBUF_SIZE) {
 			static int flip_buf_ovf;
 			++flip_buf_ovf;
-			continue;
+			printk("FB. overflow: %d\n", flip_buf_ovf);
+			break;
 		}
 		tty->flip.count++;
 		{
@@ -347,6 +352,8 @@ static _INLINE_ void receive_chars(struct mac_serial *info,
 		*tty->flip.flag_buf_ptr++ = flag;
 		*tty->flip.char_buf_ptr++ = ch;
 	}
+	if (tty)
+		tty_flip_buffer_push(tty);
 }
 
 static void transmit_chars(struct mac_serial *info)
@@ -407,11 +414,17 @@ static _INLINE_ void status_handle(struct mac_serial *info)
 		 */
 		if ((status & CTS) == 0) {
 			if (info->tx_stopped) {
+#ifdef SERIAL_DEBUG_FLOW
+				printk("CTS up\n");
+#endif			
 				info->tx_stopped = 0;
 				if (!info->tx_active)
 					transmit_chars(info);
 			}
 		} else {
+#ifdef SERIAL_DEBUG_FLOW
+			printk("CTS down\n");
+#endif			
 			info->tx_stopped = 1;
 		}
 	}
@@ -446,11 +459,16 @@ static void rs_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	for (;;) {
 		zs_intreg = read_zsreg(info->zs_chan_a, 3) >> shift;
 #ifdef SERIAL_DEBUG_INTR
-//		printk("rs_interrupt: irq %d, zs_intreg 0x%x\n", irq, (int)zs_intreg);
+		printk("rs_interrupt: irq %d, zs_intreg 0x%x\n", irq, (int)zs_intreg);
 #endif	
 
 		if ((zs_intreg & CHAN_IRQMASK) == 0)
 			break;
+
+		if (!(info->flags & ZILOG_INITIALIZED)) {
+			printk("rs_interrupt: irq %d, port not initialized\n", irq);
+			break;
+		}
 
 		if (zs_intreg & CHBRxIP)
 			receive_chars(info, regs);
@@ -478,6 +496,11 @@ static void rs_stop(struct tty_struct *tty)
 {
 	struct mac_serial *info = (struct mac_serial *)tty->driver_data;
 
+#ifdef SERIAL_DEBUG_STOP
+	printk("rs_stop %ld....\n",
+	       tty->ldisc.chars_in_buffer(tty));
+#endif
+
 	if (serial_paranoia_check(info, tty->device, "rs_stop"))
 		return;
 	
@@ -497,6 +520,11 @@ static void rs_start(struct tty_struct *tty)
 	struct mac_serial *info = (struct mac_serial *)tty->driver_data;
 	unsigned long flags;
 	
+#ifdef SERIAL_DEBUG_STOP
+	printk("rs_start %ld....\n", 
+	       tty->ldisc.chars_in_buffer(tty));
+#endif
+
 	if (serial_paranoia_check(info, tty->device, "rs_start"))
 		return;
 	
@@ -552,10 +580,16 @@ static void rs_timer(void)
 
 static int startup(struct mac_serial * info)
 {
-	unsigned long flags;
-
-	if (info->flags & ZILOG_INITIALIZED)
-		return 0;
+#ifdef SERIAL_DEBUG_OPEN
+	printk("startup() (ttyS%d, irq %d)\n", info->line, info->irq);
+#endif
+ 
+	if (info->flags & ZILOG_INITIALIZED) {
+#ifdef SERIAL_DEBUG_OPEN
+		printk(" -> already inited\n");
+#endif
+ 		return 0;
+	}
 
 	if (!info->xmit_buf) {
 		info->xmit_buf = (unsigned char *) get_free_page(GFP_KERNEL);
@@ -563,11 +597,41 @@ static int startup(struct mac_serial * info)
 			return -ENOMEM;
 	}
 
-	save_flags(flags); cli();
+#ifdef SERIAL_DEBUG_OPEN
+	printk("starting up ttyS%d (irq %d)...\n", info->line, info->irq);
+#endif
+
+	set_scc_power(info, 1);
+	
+	setup_scc(info);
 
 #ifdef SERIAL_DEBUG_OPEN
-	printk("starting up ttyS%d (irq %d)...", info->line, info->irq);
+	printk("enabling IRQ on ttyS%d (irq %d)...\n", info->line, info->irq);
 #endif
+
+	info->flags |= ZILOG_INITIALIZED;
+	enable_irq(info->irq);
+
+	return 0;
+}
+
+static int setup_scc(struct mac_serial * info)
+{
+	unsigned long flags;
+	
+#ifdef SERIAL_DEBUG_OPEN
+	printk("setting up ttys%d SCC...\n", info->line);
+#endif
+
+	save_flags(flags); cli(); /* Disable interrupts */	
+
+	/*
+	 * Reset the chip.
+	 */
+	write_zsreg(info->zs_channel, 9,
+		    (info->zs_channel == info->zs_chan_a? CHRA: CHRB));
+	udelay(10);
+	write_zsreg(info->zs_channel, 9, 0);
 
 	/*
 	 * Clear the receive FIFO.
@@ -608,13 +672,13 @@ static int startup(struct mac_serial * info)
 	/*
 	 * Set the speed of the serial port
 	 */
-	change_speed(info);
+	change_speed(info, 0);
 
 	/* Save the current value of RR0 */
 	info->read_reg_zero = read_zsreg(info->zs_channel, 0);
 
-	info->flags |= ZILOG_INITIALIZED;
 	restore_flags(flags);
+
 	return 0;
 }
 
@@ -624,22 +688,20 @@ static int startup(struct mac_serial * info)
  */
 static void shutdown(struct mac_serial * info)
 {
-	unsigned long	flags;
-
-	if (!(info->flags & ZILOG_INITIALIZED))
-		return;
-
 #ifdef SERIAL_DEBUG_OPEN
-	printk("Shutting down serial port %d (irq %d)....", info->line,
+	printk("Shutting down serial port %d (irq %d)....\n", info->line,
 	       info->irq);
 #endif
 	
-	save_flags(flags); cli(); /* Disable interrupts */
+	if (!(info->flags & ZILOG_INITIALIZED)) {
+#ifdef SERIAL_DEBUG_OPEN
+		printk("(already shutdown)\n");
+#endif
 	
-	if (info->xmit_buf) {
-		free_page((unsigned long) info->xmit_buf);
-		info->xmit_buf = 0;
+		return;
 	}
+	
+	disable_irq(info->irq);
 
 	info->pendregs[1] = info->curregs[1] = 0;
 	write_zsreg(info->zs_channel, 1, 0);	/* no interrupts */
@@ -657,34 +719,156 @@ static void shutdown(struct mac_serial * info)
 	if (info->tty)
 		set_bit(TTY_IO_ERROR, &info->tty->flags);
 
+	set_scc_power(info, 0);
+
+	if (info->xmit_buf) {
+		free_page((unsigned long) info->xmit_buf);
+		info->xmit_buf = 0;
+	}
+
+	memset(info->curregs, 0, sizeof(info->curregs));
+	memset(info->curregs, 0, sizeof(info->pendregs));
+
 	info->flags &= ~ZILOG_INITIALIZED;
-	restore_flags(flags);
 }
+
+static void set_scc_power(struct mac_serial * info, int state)
+{
+	if (feature_test(info->dev_node, FEATURE_Serial_enable) < 0)
+		return;		/* don't have serial power control */
+
+	/* The timings looks strange but that's the ones MacOS seems
+	   to use for the internal modem. I think we can use a lot faster
+	   ones, at least whe not using the modem, this should be tested.
+	 */				
+	if (state) {
+#ifdef SERIAL_DEBUG_POWER
+		printk(KERN_INFO "ttyS%02d: powering up hardware\n", info->line);
+#endif
+		if (feature_test(info->dev_node, FEATURE_Serial_enable) == 0) {
+			feature_clear(info->dev_node, FEATURE_Serial_reset);
+			mdelay(5);
+			feature_set(info->dev_node, FEATURE_Serial_enable);
+		}
+		if (info->zs_chan_a == info->zs_channel)
+			feature_set(info->dev_node, FEATURE_Serial_IO_A);
+		else
+			feature_set(info->dev_node, FEATURE_Serial_IO_B);
+		mdelay(1);
+		
+		if (info->is_cobalt_modem){
+			feature_set(info->dev_node, FEATURE_Modem_Reset);
+	   		mdelay(15);
+			feature_clear(info->dev_node, FEATURE_Modem_Reset);
+			/* XXX Note the big 250ms, we should probably replace this 
+			   by something better since we have irqs disabled here
+			 */
+			mdelay(250);
+		}
+		if (info->is_pwbk_ir)
+			pmu_enable_irled(1);
+	} else {
+#ifdef SERIAL_DEBUG_POWER
+		printk(KERN_INFO "ttyS%02d: shutting down hardware\n", info->line);
+#endif
+#ifdef CONFIG_KGDB
+		if (info->kgdb_channel) {
+#ifdef SERIAL_DEBUG_POWER
+			printk(KERN_INFO "        (canceled by KGDB)\n");
+#endif
+			return;
+		}
+#endif
+#ifdef CONFIG_XMON
+		if (!info->is_cobalt_modem) {
+#ifdef SERIAL_DEBUG_POWER
+			printk(KERN_INFO "        (canceled by XMON)\n");
+#endif
+			return;
+		}
+#endif
+		if (info->is_cobalt_modem) {
+#ifdef SERIAL_DEBUG_POWER
+			printk(KERN_INFO "ttyS%02d: shutting down modem\n", info->line);
+#endif
+			feature_set(info->dev_node, FEATURE_Modem_Reset);
+			mdelay(15);
+			feature_clear(info->dev_node, FEATURE_Modem_Reset);
+			mdelay(25);
+		}
+		if (info->is_pwbk_ir)
+			pmu_enable_irled(0);
+			
+		if (info->zs_chan_a == info->zs_channel) {
+#ifdef SERIAL_DEBUG_POWER
+			printk(KERN_INFO "ttyS%02d: shutting down SCC channel A\n", info->line);
+#endif
+			feature_clear(info->dev_node, FEATURE_Serial_IO_A);
+		} else {
+#ifdef SERIAL_DEBUG_POWER
+			printk(KERN_INFO "ttyS%02d: shutting down SCC channel B\n", info->line);
+#endif
+			feature_clear(info->dev_node, FEATURE_Serial_IO_B);
+		}
+		/* XXX for now, shut down SCC core only on powerbooks */
+		if (is_powerbook
+		    && !(feature_test(info->dev_node, FEATURE_Serial_IO_A) ||
+			 feature_test(info->dev_node, FEATURE_Serial_IO_B))) {
+#ifdef SERIAL_DEBUG_POWER
+			printk(KERN_INFO "ttyS%02d: shutting down SCC core\n", info->line);
+#endif
+			feature_set(info->dev_node, FEATURE_Serial_reset);
+			mdelay(10);
+			feature_clear(info->dev_node, FEATURE_Serial_enable);
+			mdelay(5);
+		}
+	}
+}
+
 
 /*
  * This routine is called to set the UART divisor registers to match
  * the specified baud rate for a serial port.
  */
-static void change_speed(struct mac_serial *info)
+static void change_speed(struct mac_serial *info, struct termios *old_termios)
 {
 	unsigned short port;
 	unsigned cflag;
-	int	i;
-	int	brg;
+	int	bits;
+	int	brg, baud;
 	unsigned long flags;
 
 	if (!info->tty || !info->tty->termios)
 		return;
-	cflag = info->tty->termios->c_cflag;
 	if (!(port = info->port))
 		return;
-	i = cflag & CBAUD;
+
+	cflag = info->tty->termios->c_cflag;
+	baud = tty_get_baud_rate(info->tty);
+	if (baud == 0) {
+		if (old_termios) {
+			info->tty->termios->c_cflag &= ~CBAUD;
+			info->tty->termios->c_cflag |= (old_termios->c_cflag & CBAUD);
+			cflag = info->tty->termios->c_cflag;
+			baud = tty_get_baud_rate(info->tty);
+		}
+		else
+			baud = info->zs_baud;
+	}
+	if (baud > 230400)
+		baud = 230400;
+	else if (baud == 0)
+		baud = 38400;
 
 	save_flags(flags); cli();
-	info->zs_baud = baud_table[i];
+	info->zs_baud = baud;
 	info->clk_divisor = 16;
 
-	switch (info->zs_baud) {
+#ifdef SERIAL_DEBUG_BAUDS
+	printk("set speed to %d bds, ", baud);
+#endif
+
+	switch (baud) {
 	case ZS_CLOCK/16:	/* 230400 */
 		info->curregs[4] = X16CLK;
 		info->curregs[11] = 0;
@@ -696,7 +880,7 @@ static void change_speed(struct mac_serial *info)
 	default:
 		info->curregs[4] = X16CLK;
 		info->curregs[11] = TCBR | RCBR;
-		brg = BPS_TO_BRG(info->zs_baud, ZS_CLOCK/info->clk_divisor);
+		brg = BPS_TO_BRG(baud, ZS_CLOCK/info->clk_divisor);
 		info->curregs[12] = (brg & 255);
 		info->curregs[13] = ((brg >> 8) & 255);
 		info->curregs[14] = BRENABL;
@@ -709,19 +893,35 @@ static void change_speed(struct mac_serial *info)
 	case CS5:
 		info->curregs[3] |= Rx5;
 		info->curregs[5] |= Tx5;
+#ifdef SERIAL_DEBUG_BAUDS
+		printk("5 bits, ");
+#endif
+		bits = 7;
 		break;
 	case CS6:
 		info->curregs[3] |= Rx6;
 		info->curregs[5] |= Tx6;
+#ifdef SERIAL_DEBUG_BAUDS
+		printk("6 bits, ");
+#endif
+		bits = 8;
 		break;
 	case CS7:
 		info->curregs[3] |= Rx7;
 		info->curregs[5] |= Tx7;
+#ifdef SERIAL_DEBUG_BAUDS
+		printk("7 bits, ");
+#endif
+		bits = 9;
 		break;
 	case CS8:
 	default: /* defaults to 8 bits */
 		info->curregs[3] |= Rx8;
 		info->curregs[5] |= Tx8;
+#ifdef SERIAL_DEBUG_BAUDS
+		printk("8 bits, ");
+#endif
+		bits = 10;
 		break;
 	}
 	info->pendregs[3] = info->curregs[3];
@@ -730,11 +930,22 @@ static void change_speed(struct mac_serial *info)
 	info->curregs[4] &= ~(SB_MASK | PAR_ENA | PAR_EVEN);
 	if (cflag & CSTOPB) {
 		info->curregs[4] |= SB2;
+		bits++;
+#ifdef SERIAL_DEBUG_BAUDS
+		printk("2 stop, ");
+#endif
 	} else {
 		info->curregs[4] |= SB1;
+#ifdef SERIAL_DEBUG_BAUDS
+		printk("1 stop, ");
+#endif
 	}
 	if (cflag & PARENB) {
-		info->curregs[4] |= PAR_ENA;
+		bits++;
+ 		info->curregs[4] |= PAR_ENA;
+#ifdef SERIAL_DEBUG_BAUDS
+		printk("parity, ");
+#endif
 	}
 	if (!(cflag & PARODD)) {
 		info->curregs[4] |= PAR_EVEN;
@@ -756,6 +967,17 @@ static void change_speed(struct mac_serial *info)
 		info->tx_stopped = 0;
 	}
 	info->pendregs[15] = info->curregs[15];
+
+	/* Calc timeout value. This is pretty broken with high baud rates with HZ=100.
+	   This code would love a larger HZ and a >1 fifo size, but this is not
+	   a priority. The resulting value must be >HZ/2
+	 */
+	info->timeout = ((info->xmit_fifo_size*HZ*bits) / baud);
+	info->timeout += HZ/50+1;	/* Add .02 seconds of slop */
+
+#ifdef SERIAL_DEBUG_BAUDS
+	printk("timeout=%d/%ds, base:%d\n", (int)info->timeout, (int)HZ, (int)info->baud_base);
+#endif
 
 	/* Load up the new values */
 	load_zsregs(info->zs_channel, info->curregs);
@@ -877,8 +1099,7 @@ static void rs_throttle(struct tty_struct * tty)
 #ifdef SERIAL_DEBUG_THROTTLE
 	char	buf[64];
 	
-	printk("throttle %s: %d....\n", _tty_name(tty, buf),
-	       tty->ldisc.chars_in_buffer(tty));
+	printk("throttle %ld....\n",tty->ldisc.chars_in_buffer(tty));
 #endif
 
 	if (serial_paranoia_check(info, tty->device, "rs_throttle"))
@@ -915,8 +1136,7 @@ static void rs_unthrottle(struct tty_struct * tty)
 #ifdef SERIAL_DEBUG_THROTTLE
 	char	buf[64];
 	
-	printk("unthrottle %s: %d....\n", _tty_name(tty, buf),
-	       tty->ldisc.chars_in_buffer(tty));
+	printk("unthrottle %s: %d....\n",tty->ldisc.chars_in_buffer(tty));
 #endif
 
 	if (serial_paranoia_check(info, tty->device, "rs_unthrottle"))
@@ -1011,7 +1231,8 @@ static int set_serial_info(struct mac_serial * info,
 	info->closing_wait = new_serial.closing_wait;
 
 check_and_exit:
-	retval = startup(info);
+	if (info->flags & ZILOG_INITIALIZED)
+		retval = setup_scc(info);
 	return retval;
 }
 
@@ -1180,10 +1401,12 @@ static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 		return;
 	was_stopped = info->tx_stopped;
 
-	change_speed(info);
+	change_speed(info, old_termios);
 
-	if (was_stopped && !info->tx_stopped)
+	if (was_stopped && !info->tx_stopped) {
+		tty->hw_stopped = 0;
 		rs_start(tty);
+	}
 }
 
 /*
@@ -1246,6 +1469,9 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	 * Now we wait for the transmit buffer to clear; and we notify 
 	 * the line discipline to only process XON/XOFF characters.
 	 */
+#ifdef SERIAL_DEBUG_OPEN
+	printk("waiting end of Tx... (timeout:%d)\n", info->closing_wait);
+#endif
 	tty->closing = 1;
 	if (info->closing_wait != ZILOG_CLOSING_WAIT_NONE)
 		tty_wait_until_sent(tty, info->closing_wait);
@@ -1265,10 +1491,17 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		 * Before we drop DTR, make sure the SCC transmitter
 		 * has completely drained.
 		 */
+#ifdef SERIAL_DEBUG_OPEN
+		printk("waiting end of Rx...\n");
+#endif
 		rs_wait_until_sent(tty, info->timeout);
 	}
 
 	shutdown(info);
+	/* restore flags now since shutdown() will have disabled this port's
+	   specific irqs */
+	restore_flags(flags);
+
 	if (tty->driver.flush_buffer)
 		tty->driver.flush_buffer(tty);
 	if (tty->ldisc.flush_buffer)
@@ -1276,14 +1509,6 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	tty->closing = 0;
 	info->event = 0;
 	info->tty = 0;
-
-	if (info->is_cobalt_modem) {
-		/* Power down modem */
-		feature_set(info->dev_node, FEATURE_Modem_Reset);
-		mdelay(15);
-		feature_clear(info->dev_node, FEATURE_Modem_PowerOn);
-		mdelay(15);
-	}
 
 	if (info->blocked_open) {
 		if (info->close_delay) {
@@ -1295,8 +1520,6 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	info->flags &= ~(ZILOG_NORMAL_ACTIVE|ZILOG_CALLOUT_ACTIVE|
 			 ZILOG_CLOSING);
 	wake_up_interruptible(&info->close_wait);
-	
-	restore_flags(flags);
 }
 
 /*
@@ -1310,15 +1533,26 @@ static void rs_wait_until_sent(struct tty_struct *tty, int timeout)
 	if (serial_paranoia_check(info, tty->device, "rs_wait_until_sent"))
 		return;
 
+/*	printk("rs_wait_until_sent, timeout:%d, tty_stopped:%d, tx_stopped:%d\n",
+			timeout, tty->stopped, info->tx_stopped);
+*/
 	orig_jiffies = jiffies;
 	/*
 	 * Set the check interval to be 1/5 of the estimated time to
 	 * send a single character, and make it at least 1.  The check
 	 * interval should also be less than the timeout.
 	 */
+	if (info->timeout <= HZ/50) {
+		printk("macserial: invalid info->timeout=%d\n", info->timeout);
+		info->timeout = HZ/50+1;
+	}
+
 	char_time = (info->timeout - HZ/50) / info->xmit_fifo_size;
 	char_time = char_time / 5;
-	if (char_time == 0)
+	if (char_time > HZ) {
+		printk("macserial: char_time %ld >HZ !!!\n", char_time);
+		char_time = 1;
+	} else if (char_time == 0)
 		char_time = 1;
 	if (timeout)
 		char_time = MIN(char_time, timeout);
@@ -1534,38 +1768,16 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	 * Start up serial port
 	 */
 
-	if (info->is_cobalt_modem) {
-		/* Power up modem */
-		feature_set(info->dev_node, FEATURE_Modem_PowerOn);
-		mdelay(250);
-		feature_clear(info->dev_node, FEATURE_Modem_Reset);
-		mdelay(10);
-	}
 	retval = startup(info);
-	if (retval) {
-		if (info->is_cobalt_modem) {
-			/* Power down modem */
-			feature_set(info->dev_node, FEATURE_Modem_Reset);
-			mdelay(15);
-			feature_clear(info->dev_node, FEATURE_Modem_PowerOn);
-			mdelay(15);
-		}
+	if (retval)
 		return retval;
-	}
 
 	retval = block_til_ready(tty, filp, info);
 	if (retval) {
 #ifdef SERIAL_DEBUG_OPEN
 		printk("rs_open returning after block_til_ready with %d\n",
-		       retval);
+			retval);
 #endif
-		if (info->is_cobalt_modem) {
-			/* Power down modem */
-			feature_set(info->dev_node, FEATURE_Modem_Reset);
-			mdelay(15);
-			feature_clear(info->dev_node, FEATURE_Modem_PowerOn);
-			mdelay(15);
-		}
 		return retval;
 	}
 
@@ -1574,13 +1786,13 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 			*tty->termios = info->normal_termios;
 		else 
 			*tty->termios = info->callout_termios;
-		change_speed(info);
+		change_speed(info, 0);
 	}
 #ifdef CONFIG_SERIAL_CONSOLE
 	if (sercons.cflag && sercons.index == line) {
 		tty->termios->c_cflag = sercons.cflag;
 		sercons.cflag = 0;
-		change_speed(info);
+		change_speed(info, 0);
 	}
 #endif
 
@@ -1588,7 +1800,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	info->pgrp = current->pgrp;
 
 #ifdef SERIAL_DEBUG_OPEN
-	printk("rs_open ttys%d successful...", info->line);
+	printk("rs_open ttys%d successful...\n", info->line);
 #endif
 	return 0;
 }
@@ -1597,7 +1809,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	printk("PowerMac Z8530 serial driver version 1.00\n");
+	printk("PowerMac Z8530 serial driver version 1.01\n");
 }
 
 /* Ask the PROM how many Z8530s we have and initialize their zs_channels */
@@ -1606,7 +1818,7 @@ probe_sccs()
 {
 	struct device_node *dev, *ch;
 	struct mac_serial **pp;
-	int n;
+	int n, lenp;
 
 	n = 0;
 	pp = &zs_chain;
@@ -1616,12 +1828,6 @@ probe_sccs()
 			       dev->full_name);
 			continue;
 		}
-		feature_clear(dev, FEATURE_Serial_reset);
-		mdelay(5);
-		feature_set(dev, FEATURE_Serial_enable);
-		feature_set(dev, FEATURE_Serial_IO_A);
-		feature_set(dev, FEATURE_Serial_IO_B);
-		mdelay(5);
 		for (ch = dev->child; ch != 0; ch = ch->sibling) {
 			if (ch->n_addrs < 1 || (ch ->n_intrs < 1)) {
 				printk("Can't use %s: %d addrs %d intrs\n",
@@ -1630,21 +1836,17 @@ probe_sccs()
 			}
 			zs_channels[n].control = (volatile unsigned char *)
 				ioremap(ch->addrs[0].address, 0x1000);
-			zs_channels[n].data = zs_channels[n].control
-				+ ch->addrs[0].size / 2;
+			zs_channels[n].data = zs_channels[n].control + 0x10;
 			spin_lock_init(&zs_channels[n].lock);
 			zs_soft[n].zs_channel = &zs_channels[n];
 			zs_soft[n].dev_node = ch;
 			zs_soft[n].irq = ch->intrs[0].line;
+			zs_soft[n].zs_channel->parent = &zs_soft[n];
 			zs_soft[n].is_cobalt_modem = device_is_compatible(ch, "cobalt");
-			if (zs_soft[n].is_cobalt_modem)
-			{
-				/* Just in case the modem is up, shut it down */
-				feature_set(ch, FEATURE_Modem_Reset);
-				mdelay(15);
-				feature_clear(ch, FEATURE_Modem_PowerOn);
-				mdelay(15);
-			}
+
+			/* XXX tested only with wallstreet PowerBook, should do no harm anyway */	
+			zs_soft[n].is_pwbk_ir = (strcmp(get_property(ch, "AAPL,connector",
+				&lenp), "infrared") == 0);
 
 			/* XXX this assumes the prom puts chan A before B */
 			if (n & 1)
@@ -1677,13 +1879,19 @@ int macserial_init(void)
 	if (zs_chain == 0)
 		probe_sccs();
 
+	/* XXX assume it's a powerbook if we have a via-pmu */
+	is_powerbook = find_devices("via-pmu") != 0;
+
 	/* Register the interrupt handler for each one */
+	save_flags(flags); cli();
 	for (i = 0; i < zs_channels_found; ++i) {
 		if (request_irq(zs_soft[i].irq, rs_interrupt, 0,
 				"SCC", &zs_soft[i]))
 			printk(KERN_ERR "macserial: can't get irq %d\n",
 			       zs_soft[i].irq);
+		disable_irq(zs_soft[i].irq);
 	}
+	restore_flags(flags);
 
 	show_serial_version();
 
@@ -1739,8 +1947,6 @@ int macserial_init(void)
 	if (tty_register_driver(&callout_driver))
 		panic("Couldn't register callout driver\n");
 
-	save_flags(flags); cli();
-
 	for (channel = 0; channel < zs_channels_found; ++channel) {
 #ifdef CONFIG_KGDB
 		if (zs_soft[channel].kgdb_channel) {
@@ -1749,10 +1955,15 @@ int macserial_init(void)
 		}
 #endif
 		zs_soft[channel].clk_divisor = 16;
-		zs_soft[channel].zs_baud = get_zsbaud(&zs_soft[channel]);
+/* -- we are not sure the SCC is powered ON at this point
+ 		zs_soft[channel].zs_baud = get_zsbaud(&zs_soft[channel]);
+*/		
+		zs_soft[channel].zs_baud = 38400;
 
 		/* If console serial line, then enable interrupts. */
 		if (zs_soft[channel].is_cons) {
+			printk("macserial: console line, enabling interrupt %d\n", zs_soft[channel].irq);
+			panic("macserial: console not supported yet !");
 			write_zsreg(zs_soft[channel].zs_channel, R1,
 				    (EXT_INT_ENAB | INT_ALL_Rx | TxINT_ENAB));
 			write_zsreg(zs_soft[channel].zs_channel, R9,
@@ -1787,6 +1998,7 @@ int macserial_init(void)
 		info->normal_termios = serial_driver.init_termios;
 		info->open_wait = 0;
 		info->close_wait = 0;
+		info->timeout = HZ;
 		printk("tty%02d at 0x%08x (irq = %d)", info->line, 
 			info->port, info->irq);
 		printk(" is a Z8530 ESCC");
@@ -1795,10 +2007,21 @@ int macserial_init(void)
 			printk(", port = %s", connector);
 		if (info->is_cobalt_modem)
 			printk(" (cobalt modem)");
+		if (info->is_pwbk_ir)
+			printk(" (powerbook IR)");
 		printk("\n");
-	}
 
-	restore_flags(flags);
+#ifdef CONFIG_KGDB
+		if (info->kgdb_channel)
+			continue;
+#endif			
+#ifdef CONFIG_XMON
+		if (!info->is_cobalt_modem)
+			continue;
+#endif			
+		/* By default, disable the port */
+		set_scc_power(info, 0);
+ 	}
 
 	return 0;
 }
@@ -2022,6 +2245,8 @@ __initfunc(void zs_kgdb_hook(int tty_num))
 	if (zs_chain == 0)
 		probe_sccs();
 
+	set_scc_power(&zs_soft[n], 1);
+	
 	zs_kgdbchan = zs_soft[tty_num].zs_channel;
 	zs_soft[tty_num].change_needed = 0;
 	zs_soft[tty_num].clk_divisor = 16;

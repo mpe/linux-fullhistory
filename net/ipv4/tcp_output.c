@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.104 1999/03/07 13:26:04 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.106 1999/03/12 03:43:51 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -233,8 +233,9 @@ static int tcp_fragment(struct sock *sk, struct sk_buff *skb, u32 len)
 	buff->csum = csum_partial_copy(skb->data + len, skb_put(buff, nsize),
 				       nsize, 0);
 
-	TCP_SKB_CB(skb)->end_seq -= nsize;
-	skb_trim(skb, skb->len - nsize);
+	/* This takes care of the FIN sequence number too. */
+	TCP_SKB_CB(skb)->end_seq = TCP_SKB_CB(buff)->seq;
+	skb_trim(skb, len);
 
 	/* Rechecksum original buffer. */
 	skb->csum = csum_partial(skb->data, skb->len, 0);
@@ -993,7 +994,7 @@ void tcp_send_delayed_ack(struct tcp_opt *tp, int max_timeout)
 		tp->delack_timer.expires = timeout;
 		add_timer(&tp->delack_timer);
         } else {
-		if (timeout < tp->delack_timer.expires)
+		if (time_before(timeout, tp->delack_timer.expires))
 			mod_timer(&tp->delack_timer, timeout);
 	}
 }

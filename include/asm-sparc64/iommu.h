@@ -38,22 +38,17 @@
 #define IOPTE_VALID         0x8000000000000000 /* IOPTE is valid                   */
 #define IOPTE_64K           0x2000000000000000 /* IOPTE is for 64k page            */
 #define IOPTE_STBUF         0x1000000000000000 /* DVMA can use streaming buffer    */
-#define IOPTE_INTRA         0x0800000000000000 /* XXX what does this thing do?     */
+#define IOPTE_INTRA         0x0800000000000000 /* SBUS slot-->slot direct transfer */
 #define IOPTE_PAGE          0x000001ffffffe000 /* Physical page number (PA[40:13]) */
 #define IOPTE_CACHE         0x0000000000000010 /* Cached (in UPA E-cache)          */
 #define IOPTE_WRITE         0x0000000000000002 /* Writeable                        */
 
 struct iommu_struct {
 	struct sysio_regs	*sysio_regs;
-	unsigned int		*sbuf_flushflag_va;
-	unsigned long		sbuf_flushflag_pa;
-	spinlock_t		iommu_lock;
-
 	iopte_t			*page_table;
-
-	/* For convenience */
-	unsigned long start; /* First managed virtual address */
-	unsigned long end;   /* Last managed virtual address */
+	volatile unsigned int	flushflag;
+	unsigned int		strbuf_enabled;
+	spinlock_t		iommu_lock;
 };
 
 #endif /* !(_SPARC_IOMMU_H) */

@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.50 1998/10/07 01:27:27 davem Exp $
+/* $Id: systbls.S,v 1.51 1999/03/12 13:30:24 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -156,7 +156,7 @@ sunos_sys_table:
 	.word sunos_nosys, sys_symlink, sys_readlink
 	.word sys32_execve, sys_umask, sys_chroot
 	.word sys32_newfstat, sunos_nosys, sys_getpagesize
-	.word sys_msync, sys_vfork, sunos_nosys
+	.word sys_msync, sys_fork, sunos_nosys
 	.word sunos_nosys, sunos_sbrk, sunos_sstk
 	.word sunos_mmap, sunos_vadvise, sys_munmap
 	.word sys_mprotect, sunos_madvise, sys_vhangup

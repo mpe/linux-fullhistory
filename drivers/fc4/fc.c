@@ -1,11 +1,24 @@
 /* fc.c: Generic Fibre Channel and FC4 SCSI driver.
  *
- * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998,1999 Jakub Jelinek (jj@ultra.linux.cz)
  * Copyright (C) 1997,1998 Jirka Hanika (geo@ff.cuni.cz)
+ *
+ * There are two kinds of Fibre Channel adapters used in Linux. Either
+ * the adapter is "smart" and does all FC bookkeeping by itself and
+ * just presents a standard SCSI interface to the operating system
+ * (that's e.g. the case with Qlogic FC cards), or leaves most of the FC
+ * bookkeeping to the OS (e.g. soc, socal). Drivers for the former adapters
+ * will look like normal SCSI drivers (with the exception of max_id will be
+ * usually 127), the latter on the other side allows SCSI, IP over FC and other
+ * protocols. This driver tree is for the latter adapters.
+ *
+ * This file should support both Point-to-Point and Arbitrated Loop topologies.
  *
  * Sources:
  *	Fibre Channel Physical & Signaling Interface (FC-PH), dpANS, 1994
  *	dpANS Fibre Channel Protocol for SCSI (X3.269-199X), Rev. 012, 1995
+ *	Fibre Channel Arbitrated Loop (FC-AL), Rev. 4.5, 1995
+ *	Fibre Channel Private Loop SCSI Direct Attach (FC-PLDA), Rev. 2.1, 1997
  */
 
 #include <linux/module.h>
@@ -25,7 +38,7 @@
 #include <asm/pgtable.h>
 #include <asm/irq.h>
 #include <asm/semaphore.h>
-#include "fcp_scsi.h"
+#include "fcp_impl.h"
 #include "../scsi/hosts.h"
 
 /* #define FCDEBUG */
@@ -43,7 +56,7 @@
 #ifdef __sparc__
 static inline void *fc_dma_alloc(long size, char *name, dma_handle *dma)
 {
-	return (void *) sparc_dvma_malloc (size, "FCP SCSI cmd & rsp queues", dma);
+	return (void *) sparc_dvma_malloc (size, name, dma);
 }
 
 static inline dma_handle fc_sync_dma_entry(void *buf, int len, fc_channel *fc)
@@ -73,6 +86,9 @@ static inline void fc_sync_dma_exit_sg(struct scatterlist *list, int count, fc_c
 #define FC_SCMND(SCpnt) ((fc_channel *)(SCpnt->host->hostdata[0]))
 #define SC_FCMND(fcmnd) ((Scsi_Cmnd *)((long)fcmnd - (long)&(((Scsi_Cmnd *)0)->SCp)))
 
+static int fcp_scsi_queue_it(fc_channel *, Scsi_Cmnd *, fcp_cmnd *, int);
+void fcp_queue_empty(fc_channel *);
+
 static void fcp_scsi_insert_queue (fc_channel *fc, fcp_cmnd *fcmd)
 {
 	if (!fc->scsi_que) {
@@ -101,7 +117,7 @@ static void fcp_scsi_remove_queue (fc_channel *fc, fcp_cmnd *fcmd)
 
 fc_channel *fc_channels = NULL;
 
-#define LSMAGIC	0x2a3b4d2a
+#define LSMAGIC	620829043
 typedef struct {
 	/* Must be first */
 	struct semaphore sem;
@@ -111,10 +127,10 @@ typedef struct {
 	fcp_cmnd *fcmds;
 	atomic_t todo;
 	struct timer_list timer;
-	int grace[1];
+	unsigned char grace[0];
 } ls;
 
-#define LSOMAGIC 0x2a3c4e3c
+#define LSOMAGIC 654907799
 typedef struct {
 	/* Must be first */
 	struct semaphore sem;
@@ -124,6 +140,15 @@ typedef struct {
 	atomic_t todo;
 	struct timer_list timer;
 } lso;
+
+#define LSEMAGIC 84482456
+typedef struct {
+	/* Must be first */
+	struct semaphore sem;
+	int magic;
+	int status;
+	struct timer_list timer;
+} lse;
 
 static void fcp_login_timeout(unsigned long data)
 {
@@ -225,6 +250,97 @@ static void fcp_login_done(fc_channel *fc, int i, int status)
 	}
 }
 
+static void fcp_report_map_done(fc_channel *fc, int i, int status)
+{
+	fcp_cmnd *fcmd;
+	fc_hdr *fch;
+	unsigned char j;
+	ls *l = (ls *)fc->ls;
+	fc_al_posmap *p;
+	
+	FCD(("Report map done %d %d\n", i, status))
+	switch (status) {
+	case FC_STATUS_OK: /* Ok, let's have a fun on a loop */
+		fc_sync_dma_exit (l->fcmds[i].cmd, 3 * sizeof(logi), fc);
+		p = (fc_al_posmap *)(l->logi + 3 * i);
+#ifdef FCDEBUG
+		{
+		u32 *u = (u32 *)p;
+		FCD(("%08x\n", u[0]))
+		u ++;
+		FCD(("%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x\n", u[0],u[1],u[2],u[3],u[4],u[5],u[6],u[7]))
+		}
+#endif		
+		if ((p->magic & 0xffff0000) != FC_AL_LILP || !p->len) {
+			printk ("FC: Bad magic from REPORT_AL_MAP on %s - %08x\n", fc->name, p->magic);
+			fc->state = FC_STATE_OFFLINE;
+		} else {
+			fc->posmap = (fcp_posmap *)kmalloc(sizeof(fcp_posmap)+p->len, GFP_KERNEL);
+			if (!fc->posmap) {
+				printk("FC: Not enough memory, offlining channel\n");
+				fc->state = FC_STATE_OFFLINE;
+			} else {
+				int k;
+				memset(fc->posmap, 0, sizeof(fcp_posmap)+p->len);
+				/* FIXME: This is where SOCAL transfers our AL-PA.
+				   Keep it here till we found out what other cards do... */
+				fc->sid = (p->magic & 0xff);
+				for (i = 0; i < p->len; i++)
+					if (p->alpa[i] == fc->sid)
+						break;
+				k = p->len;
+				if (i == p->len)
+					i = 0;
+				else {
+					p->len--;
+					i++;
+				}
+				fc->posmap->len = p->len;
+				for (j = 0; j < p->len; j++) {
+					if (i == k) i = 0;
+					fc->posmap->list[j] = p->alpa[i++];
+				}
+				fc->state = FC_STATE_ONLINE;
+			}
+		}
+		printk ("%s: ONLINE\n", fc->name);
+		if (atomic_dec_and_test (&l->todo))
+			up(&l->sem);
+		break;
+	case FC_STATUS_POINTTOPOINT: /* We're Point-to-Point, no AL... */
+		FCD(("SID %d DID %d\n", fc->sid, fc->did))
+		fcmd = l->fcmds + i;
+		fc_sync_dma_exit(fcmd->cmd, 3 * sizeof(logi), fc);
+		fch = &fcmd->fch;
+		memset(l->logi + 3 * i, 0, 3 * sizeof(logi));
+		FILL_FCHDR_RCTL_DID(fch, R_CTL_ELS_REQ, FS_FABRIC_F_PORT);
+		FILL_FCHDR_SID(fch, 0);
+		FILL_FCHDR_TYPE_FCTL(fch, TYPE_EXTENDED_LS, F_CTL_FIRST_SEQ | F_CTL_SEQ_INITIATIVE);
+		FILL_FCHDR_SEQ_DF_SEQ(fch, 0, 0, 0);
+		FILL_FCHDR_OXRX(fch, 0xffff, 0xffff);
+		fch->param = 0;
+		l->logi [3 * i].code = LS_FLOGI;
+		fcmd->cmd = fc_sync_dma_entry (l->logi + 3 * i, 3 * sizeof(logi), fc);
+		fcmd->rsp = fcmd->cmd + sizeof(logi);
+		fcmd->cmdlen = sizeof(logi);
+		fcmd->rsplen = sizeof(logi);
+		fcmd->data = (dma_handle)NULL;
+		fcmd->class = FC_CLASS_SIMPLE;
+		fcmd->proto = TYPE_EXTENDED_LS;
+		if (fc->hw_enque (fc, fcmd))
+			printk ("FC: Cannot enque FLOGI packet on %s\n", fc->name);
+		break;
+	case FC_STATUS_ERR_OFFLINE:
+		fc->state = FC_STATE_MAYBEOFFLINE;
+		FCD (("FC is offline %d\n", l->grace[i]))
+		break;
+	default:
+		printk ("FLOGI failed for %s with status %d\n", fc->name, status);
+		/* Do some sort of error recovery here */
+		break;
+	}
+}
+
 void fcp_register(fc_channel *fc, u8 type, int unregister)
 {
 	int size, i;
@@ -247,12 +363,13 @@ void fcp_register(fc_channel *fc, u8 type, int unregister)
 			for (i = fc->can_queue; i < fc->scsi_bitmap_end; i++)
 				set_bit (i, fc->scsi_bitmap);
 			fc->scsi_free = fc->can_queue;
-			fc->token_tab = (fcp_cmnd **)kmalloc(slots * sizeof(fcp_cmnd*), GFP_KERNEL);
+			fc->cmd_slots = (fcp_cmnd **)kmalloc(slots * sizeof(fcp_cmnd*), GFP_KERNEL);
+			memset(fc->cmd_slots, 0, slots * sizeof(fcp_cmnd*));
 			fc->abort_count = 0;
 		} else {
 			fc->scsi_name[0] = 0;
 			kfree (fc->scsi_bitmap);
-			kfree (fc->token_tab);
+			kfree (fc->cmd_slots);
 			FCND(("Unregistering\n"));
 			if (fc->rst_pkt) {
 				if (fc->rst_pkt->eh_state == SCSI_STATE_UNUSED)
@@ -279,7 +396,7 @@ static inline void fcp_scsi_receive(fc_channel *fc, int token, int status, fc_hd
 	int sense_len;
 	int rsp_status;
 
-	fcmd = fc->token_tab[token];
+	fcmd = fc->cmd_slots[token];
 	if (!fcmd) return;
 	rsp = (fcp_rsp *) (fc->scsi_rsp_pool + fc->rsp_size * token);
 	SCpnt = SC_FCMND(fcmd);
@@ -343,25 +460,45 @@ static inline void fcp_scsi_receive(fc_channel *fc, int token, int status, fc_hd
 	fcmd->done=NULL;
 	clear_bit(token, fc->scsi_bitmap);
 	fc->scsi_free++;
-	FCD(("Calling scsi_done with %08lx\n", SCpnt->result))
+	FCD(("Calling scsi_done with %08x\n", SCpnt->result))
 	SCpnt->scsi_done(SCpnt);
 }
 
 void fcp_receive_solicited(fc_channel *fc, int proto, int token, int status, fc_hdr *fch)
 {
+	int magic;
 	FCD(("receive_solicited %d %d %d\n", proto, token, status))
 	switch (proto) {
 	case TYPE_SCSI_FCP:
 		fcp_scsi_receive(fc, token, status, fch); break;
 	case TYPE_EXTENDED_LS:
-		if (fc->ls && ((ls *)(fc->ls))->magic == LSMAGIC) {
+	case PROTO_REPORT_AL_MAP:
+		magic = 0;
+		if (fc->ls)
+			magic = ((ls *)(fc->ls))->magic;
+		if (magic == LSMAGIC) {
 			ls *l = (ls *)fc->ls;
 			int i = (token >= l->count) ? token - l->count : token;
 
 			/* Let's be sure */
 			if ((unsigned)i < l->count && l->fcmds[i].fc == fc) {
-				fcp_login_done(fc, token, status);
+				if (proto == TYPE_EXTENDED_LS)
+					fcp_login_done(fc, token, status);
+				else
+					fcp_report_map_done(fc, token, status);
 				break;
+			}
+		}
+		FCD(("fc %p fc->ls %p fc->cmd_slots %p\n", fc, fc->ls, fc->cmd_slots))
+		if (proto == TYPE_EXTENDED_LS && !fc->ls && fc->cmd_slots) {
+			fcp_cmnd *fcmd;
+			
+			fcmd = fc->cmd_slots[token];
+			if (fcmd && fcmd->ls && ((ls *)(fcmd->ls))->magic == LSEMAGIC) {
+				lse *l = (lse *)fcmd->ls;
+				
+				l->status = status;
+				up (&l->sem);
 			}
 		}
 		break;
@@ -405,12 +542,12 @@ int fcp_initialize(fc_channel *fcchain, int count)
 	FCND(("fcp_inititialize %08lx\n", (long)fcp_init))
 	FCND(("fc_channels %08lx\n", (long)fc_channels))
 	FCND((" SID %d DID %d\n", fcchain->sid, fcchain->did))
-	l = kmalloc(sizeof (ls) + count * sizeof(int), GFP_KERNEL);
+	l = kmalloc(sizeof (ls) + count, GFP_KERNEL);
 	if (!l) {
 		printk ("FC: Cannot allocate memory for initialization\n");
 		return -ENOMEM;
 	}
-	memset (l, 0, sizeof(ls) + count * sizeof(int));
+	memset (l, 0, sizeof(ls) + count);
 	l->magic = LSMAGIC;
 	l->count = count;
 	FCND(("FCP Init for %d channels\n", count))
@@ -429,36 +566,25 @@ int fcp_initialize(fc_channel *fcchain, int count)
 	}
 	memset (l->logi, 0, count * 3 * sizeof(logi));
 	memset (l->fcmds, 0, count * sizeof(fcp_cmnd));
-	FCND(("Initializing FLOGI packets\n"))
 	for (fc = fcchain, i = 0; fc && i < count; fc = fc->next, i++) {
-		fc_hdr *fch;
-
-		FCD(("SID %d DID %d\n", fc->sid, fc->did))
 		fc->state = FC_STATE_UNINITED;
+		fc->rst_pkt = NULL;	/* kmalloc when first used */
+	}
+	/* First try if we are in a AL topology */
+	FCND(("Initializing REPORT_MAP packets\n"))
+	for (fc = fcchain, i = 0; fc && i < count; fc = fc->next, i++) {
 		fcmd = l->fcmds + i;
 		fc->login = fcmd;
 		fc->ls = (void *)l;
-		fc->rst_pkt = NULL;	/* kmalloc when first used */
-		fch = &fcmd->fch;
-		FILL_FCHDR_RCTL_DID(fch, R_CTL_ELS_REQ, FS_FABRIC_F_PORT);
-		FILL_FCHDR_SID(fch, 0);
-		FILL_FCHDR_TYPE_FCTL(fch, TYPE_EXTENDED_LS, F_CTL_FIRST_SEQ | F_CTL_SEQ_INITIATIVE);
-		FILL_FCHDR_SEQ_DF_SEQ(fch, 0, 0, 0);
-		FILL_FCHDR_OXRX(fch, 0xffff, 0xffff);
-		fch->param = 0;
-		l->logi [3 * i].code = LS_FLOGI;
+		/* Assumes sizeof(fc_al_posmap) < 3 * sizeof(logi), which is true */
 		fcmd->cmd = fc_sync_dma_entry (l->logi + 3 * i, 3 * sizeof(logi), fc);
-		fcmd->rsp = fcmd->cmd + sizeof(logi);
-		fcmd->cmdlen = sizeof(logi);
-		fcmd->rsplen = sizeof(logi);
-		fcmd->data = (dma_handle)NULL;
-		fcmd->class = FC_CLASS_SIMPLE;
-		fcmd->proto = TYPE_EXTENDED_LS;
+		fcmd->proto = PROTO_REPORT_AL_MAP;
 		fcmd->token = i;
 		fcmd->fc = fc;
 	}
 	for (retry = 0; retry < 8; retry++) {
-		FCND(("Sending FLOGI/PLOGI packets\n"))
+		int nqueued = 0;
+		FCND(("Sending REPORT_MAP/FLOGI/PLOGI packets\n"))
 		for (fc = fcchain, i = 0; fc && i < count; fc = fc->next, i++) {
 			if (fc->state == FC_STATE_ONLINE || fc->state == FC_STATE_OFFLINE)
 				continue;
@@ -477,27 +603,56 @@ int fcp_initialize(fc_channel *fcchain, int count)
 			}
 			ret = fc->hw_enque (fc, fc->login);
 			enable_irq(fc->irq);
-			if (ret) printk ("FC: Cannot enque FLOGI packet on %s\n", fc->name);
+			if (!ret) {
+				nqueued++;
+				continue;
+			}
+			if (ret == -ENOSYS && fc->login->proto == PROTO_REPORT_AL_MAP) {
+				/* Oh yes, this card handles Point-to-Point only, so let's try that. */
+				fc_hdr *fch;
+
+				FCD(("SID %d DID %d\n", fc->sid, fc->did))
+				fcmd = l->fcmds + i;
+				fc_sync_dma_exit(fcmd->cmd, 3 * sizeof(logi), fc);
+				fch = &fcmd->fch;
+				FILL_FCHDR_RCTL_DID(fch, R_CTL_ELS_REQ, FS_FABRIC_F_PORT);
+				FILL_FCHDR_SID(fch, 0);
+				FILL_FCHDR_TYPE_FCTL(fch, TYPE_EXTENDED_LS, F_CTL_FIRST_SEQ | F_CTL_SEQ_INITIATIVE);
+				FILL_FCHDR_SEQ_DF_SEQ(fch, 0, 0, 0);
+				FILL_FCHDR_OXRX(fch, 0xffff, 0xffff);
+				fch->param = 0;
+				l->logi [3 * i].code = LS_FLOGI;
+				fcmd->cmd = fc_sync_dma_entry (l->logi + 3 * i, 3 * sizeof(logi), fc);
+				fcmd->rsp = fcmd->cmd + sizeof(logi);
+				fcmd->cmdlen = sizeof(logi);
+				fcmd->rsplen = sizeof(logi);
+				fcmd->data = (dma_handle)NULL;
+				fcmd->class = FC_CLASS_SIMPLE;
+				fcmd->proto = TYPE_EXTENDED_LS;
+			} else
+				printk ("FC: Cannot enque FLOGI/REPORT_MAP packet on %s\n", fc->name);
 		}
 		
-		l->timer.expires = jiffies + 5 * HZ;
-		add_timer(&l->timer);
+		if (nqueued) {
+			l->timer.expires = jiffies + 5 * HZ;
+			add_timer(&l->timer);
 
-		down(&l->sem);
-		if (!atomic_read(&l->todo)) {
-			FCND(("All channels answered in time\n"))
-			break; /* All fc channels have answered us */
+			down(&l->sem);
+			if (!atomic_read(&l->todo)) {
+				FCND(("All channels answered in time\n"))
+				break; /* All fc channels have answered us */
+			}
 		}
 	}
 all_done:
-	for (fc = fcchain, i = 0; fc && i < count; fc = fc->next, i += 3) {
+	for (fc = fcchain, i = 0; fc && i < count; fc = fc->next, i++) {
+		fc->ls = NULL;
 		switch (fc->state) {
 		case FC_STATE_ONLINE: break;
 		case FC_STATE_OFFLINE: break;
 		default: fc_sync_dma_exit (l->fcmds[i].cmd, 3 * sizeof(logi), fc);
 			break;
 		}
-		fc->ls = NULL;
 	}
 	del_timer(&l->timer);
 	kfree (l->logi);
@@ -534,6 +689,7 @@ int fcp_forceoffline(fc_channel *fcchain, int count)
 		fcmd = l.fcmds + i;
 		fc->login = fcmd;
 		fc->ls = (void *)&l;
+		fcmd->did = fc->did;
 		fcmd->class = FC_CLASS_OFFLINE;
 		fcmd->proto = PROTO_OFFLINE;
 		fcmd->token = i;
@@ -549,6 +705,8 @@ int fcp_forceoffline(fc_channel *fcchain, int count)
 	down(&l.sem);
 	del_timer(&l.timer);
 	
+	for (fc = fcchain, i = 0; fc && i < count; fc = fc->next, i++)
+		fc->ls = NULL;
 	kfree (l.fcmds);
 	return 0;
 }
@@ -565,14 +723,14 @@ int fcp_init(fc_channel *fcchain)
 	}
 
 	ret = fcp_initialize (fcchain, count);
-
-	if (!ret) {	
-		if (!fc_channels)
-			fc_channels = fcchain;
-		else {
-			for (fc = fc_channels; fc->next; fc = fc->next);
-			fc->next = fcchain;
-		}
+	if (ret)
+		return ret;
+		
+	if (!fc_channels)
+		fc_channels = fcchain;
+	else {
+		for (fc = fc_channels; fc->next; fc = fc->next);
+		fc->next = fcchain;
 	}
 	return ret;
 }
@@ -622,7 +780,7 @@ static int fcp_scsi_queue_it(fc_channel *fc, Scsi_Cmnd *SCpnt, fcp_cmnd *fcmd, i
 		fcmd->token = i;
 		cmd = fc->scsi_cmd_pool + i;
 
-		if (fc->encode_addr (SCpnt, cmd->fcp_addr)) {
+		if (fc->encode_addr (SCpnt, cmd->fcp_addr, fc, fcmd)) {
 			/* Invalid channel/id/lun and couldn't map it into fcp_addr */
 			clear_bit (i, fc->scsi_bitmap);
 			SCpnt->result = (DID_BAD_TARGET << 16);
@@ -630,7 +788,7 @@ static int fcp_scsi_queue_it(fc_channel *fc, Scsi_Cmnd *SCpnt, fcp_cmnd *fcmd, i
 			return 0;
 		}
 		fc->scsi_free--;
-		fc->token_tab[fcmd->token] = fcmd;
+		fc->cmd_slots[fcmd->token] = fcmd;
 
 		if (SCpnt->device->tagged_supported) {
 			if (jiffies - fc->ages[SCpnt->channel * fc->targets + SCpnt->target] > (5 * 60 * HZ)) {
@@ -670,14 +828,14 @@ static int fcp_scsi_queue_it(fc_channel *fc, Scsi_Cmnd *SCpnt, fcp_cmnd *fcmd, i
 		memset (cmd->fcp_cdb+SCpnt->cmd_len, 0, sizeof(cmd->fcp_cdb)-SCpnt->cmd_len);
 		FCD(("XXX: %04x.%04x.%04x.%04x - %08x%08x%08x\n", cmd->fcp_addr[0], cmd->fcp_addr[1], cmd->fcp_addr[2], cmd->fcp_addr[3], *(u32 *)SCpnt->cmnd, *(u32 *)(SCpnt->cmnd+4), *(u32 *)(SCpnt->cmnd+8)))
 	}
-	FCD(("Trying to enque %08x\n", (int)fcmd))
+	FCD(("Trying to enque %p\n", fcmd))
 	if (!fc->scsi_que) {
 		if (!fc->hw_enque (fc, fcmd)) {
-			FCD(("hw_enque succeeded for %08x\n", (int)fcmd))
+			FCD(("hw_enque succeeded for %p\n", fcmd))
 			return 0;
 		}
 	}
-	FCD(("Putting into que1 %08x\n", (int)fcmd))
+	FCD(("Putting into que1 %p\n", fcmd))
 	fcp_scsi_insert_queue (fc, fcmd);
 	return 0;
 }
@@ -687,7 +845,7 @@ int fcp_scsi_queuecommand(Scsi_Cmnd *SCpnt, void (* done)(Scsi_Cmnd *))
 	fcp_cmnd *fcmd = FCP_CMND(SCpnt);
 	fc_channel *fc = FC_SCMND(SCpnt);
 	
-	FCD(("Entering SCSI queuecommand %08x\n", (int)fcmd))
+	FCD(("Entering SCSI queuecommand %p\n", fcmd))
 	if (SCpnt->done != fcp_scsi_done) {
 		fcmd->done = SCpnt->done;
 		SCpnt->done = fcp_scsi_done;
@@ -708,11 +866,12 @@ int fcp_scsi_queuecommand(Scsi_Cmnd *SCpnt, void (* done)(Scsi_Cmnd *))
 void fcp_queue_empty(fc_channel *fc)
 {
 	fcp_cmnd *fcmd;
+	
 	FCD(("Queue empty\n"))
 	while ((fcmd = fc->scsi_que)) {
 		/* The hw told us we can try again queue some packet */
 		if (fc->hw_enque (fc, fcmd))
-			return;
+			break;
 		fcp_scsi_remove_queue (fc, fcmd);
 	}
 }
@@ -725,7 +884,7 @@ int fcp_old_abort(Scsi_Cmnd *SCpnt)
 
 int fcp_scsi_abort(Scsi_Cmnd *SCpnt)
 {
-	/* Internal bookkeeping only. Lose 1 token_tab slot. */
+	/* Internal bookkeeping only. Lose 1 cmd_slots slot. */
 	fcp_cmnd *fcmd = FCP_CMND(SCpnt);
 	fc_channel *fc = FC_SCMND(SCpnt);
 	
@@ -733,14 +892,14 @@ int fcp_scsi_abort(Scsi_Cmnd *SCpnt)
 	 * We react to abort requests by simply forgetting
 	 * about the command and pretending everything's sweet.
 	 * This may or may not be silly. We can't, however,
-	 * immediately reuse the command's token_tab slot,
+	 * immediately reuse the command's cmd_slots slot,
 	 * as its result may arrive later and we cannot
 	 * check whether it is the aborted one, can't we?
 	 *
 	 * Therefore, after the first few aborts are done,
 	 * we tell the scsi error handler to do something clever.
 	 * It will eventually call host reset, refreshing
-	 * token_tab for us.
+	 * cmd_slots for us.
 	 *
 	 * There is a theoretical chance that we sometimes allow
 	 * more than can_queue packets to the jungle this way,
@@ -786,13 +945,13 @@ int fcp_scsi_dev_reset(Scsi_Cmnd *SCpnt)
 		fcmd->token = 0;
 		cmd = fc->scsi_cmd_pool + 0;
 		FCD(("Preparing rst packet\n"))
-		if (fc->encode_addr (SCpnt, /*?*/cmd->fcp_addr))
+		fc->encode_addr (SCpnt, cmd->fcp_addr, fc, fcmd);
 		fc->rst_pkt->channel = SCpnt->channel;
 		fc->rst_pkt->target = SCpnt->target;
 		fc->rst_pkt->lun = 0;
 		fc->rst_pkt->cmd_len = 0;
 		
-		fc->token_tab[0] = fcmd;
+		fc->cmd_slots[0] = fcmd;
 
 		cmd->fcp_cntl = FCP_CNTL_QTYPE_ORDERED | FCP_CNTL_RESET;
 		fcmd->data = (dma_handle)NULL;
@@ -859,16 +1018,137 @@ int fcp_scsi_host_reset(Scsi_Cmnd *SCpnt)
 	printk ("FC: host reset\n");
 
 	for (i=0; i < fc->can_queue; i++) {
-		if (fc->token_tab[i] && SCpnt->result != DID_ABORT) {
+		if (fc->cmd_slots[i] && SCpnt->result != DID_ABORT) {
 			SCpnt->result = DID_RESET;
 			fcmd->done(SCpnt);
-			fc->token_tab[i] = NULL;
+			fc->cmd_slots[i] = NULL;
 		}
 	}
 	fc->reset(fc);
 	fc->abort_count = 0;
 	if (fcp_initialize(fc, 1)) return SUCCESS;
 	else return FAILED;
+}
+
+static int fcp_els_queue_it(fc_channel *fc, fcp_cmnd *fcmd)
+{
+	long i;
+
+	i = find_first_zero_bit (fc->scsi_bitmap, fc->scsi_bitmap_end);
+	set_bit (i, fc->scsi_bitmap);
+	fcmd->token = i;
+	fc->scsi_free--;
+	fc->cmd_slots[fcmd->token] = fcmd;
+	return fcp_scsi_queue_it(fc, NULL, fcmd, 0);
+}
+
+static int fc_do_els(fc_channel *fc, unsigned int alpa, void *data, int len)
+{
+	fcp_cmnd _fcmd, *fcmd;
+	fc_hdr *fch;
+	lse l;
+	int i;
+
+	fcmd = &_fcmd;
+	memset(fcmd, 0, sizeof(fcmd));
+	FCD(("PLOGI SID %d DID %d\n", fc->sid, alpa))
+	fch = &fcmd->fch;
+	FILL_FCHDR_RCTL_DID(fch, R_CTL_ELS_REQ, alpa);
+	FILL_FCHDR_SID(fch, fc->sid);
+	FILL_FCHDR_TYPE_FCTL(fch, TYPE_EXTENDED_LS, F_CTL_FIRST_SEQ | F_CTL_SEQ_INITIATIVE);
+	FILL_FCHDR_SEQ_DF_SEQ(fch, 0, 0, 0);
+	FILL_FCHDR_OXRX(fch, 0xffff, 0xffff);
+	fch->param = 0;
+	fcmd->cmd = fc_sync_dma_entry (data, 2 * len, fc);
+	fcmd->rsp = fcmd->cmd + len;
+	fcmd->cmdlen = len;
+	fcmd->rsplen = len;
+	fcmd->data = (dma_handle)NULL;
+	fcmd->fc = fc;
+	fcmd->class = FC_CLASS_SIMPLE;
+	fcmd->proto = TYPE_EXTENDED_LS;
+	
+	memset (&l, 0, sizeof(lse));
+	l.magic = LSEMAGIC;
+	l.sem = MUTEX_LOCKED;
+	l.timer.function = fcp_login_timeout;
+	l.timer.data = (unsigned long)&l;
+	l.status = FC_STATUS_TIMED_OUT;
+	fcmd->ls = (void *)&l;
+
+	disable_irq(fc->irq);	
+	fcp_els_queue_it(fc, fcmd);
+	enable_irq(fc->irq);
+
+	for (i = 0;;) {
+		l.timer.expires = jiffies + 5 * HZ;
+		add_timer(&l.timer);
+		down(&l.sem);
+		del_timer(&l.timer);
+		if (l.status != FC_STATUS_TIMED_OUT) break;
+		if (++i == 3) break;
+		disable_irq(fc->irq);
+		fcp_scsi_queue_it(fc, NULL, fcmd, 0);
+		enable_irq(fc->irq);
+	}
+	
+	clear_bit(fcmd->token, fc->scsi_bitmap);
+	fc->scsi_free++;
+	fc_sync_dma_exit (fcmd->cmd, 2 * len, fc);
+	return l.status;
+}
+
+int fc_do_plogi(fc_channel *fc, unsigned char alpa, fc_wwn *node, fc_wwn *nport)
+{
+	logi *l;
+	int status;
+
+	l = (logi *)kmalloc(2 * sizeof(logi), GFP_DMA);
+	if (!l) return -ENOMEM;
+	memset(l, 0, 2 * sizeof(logi));
+	l->code = LS_PLOGI;
+	memcpy (&l->nport_wwn, &fc->wwn_nport, sizeof(fc_wwn));
+	memcpy (&l->node_wwn, &fc->wwn_node, sizeof(fc_wwn));
+	memcpy (&l->common, fc->common_svc, sizeof(common_svc_parm));
+	memcpy (&l->class1, fc->class_svcs, 3*sizeof(svc_parm));
+	status = fc_do_els(fc, alpa, l, sizeof(logi));
+	if (status == FC_STATUS_OK) {
+		if (l[1].code == LS_ACC) {
+#ifdef FCDEBUG
+			u32 *u = (u32 *)&l[1].nport_wwn;
+			FCD(("AL-PA %02x: Port WWN %08x%08x Node WWN %08x%08x\n", alpa, 
+				u[0], u[1], u[2], u[3]))
+#endif
+			memcpy(nport, &l[1].nport_wwn, sizeof(fc_wwn));
+			memcpy(node, &l[1].node_wwn, sizeof(fc_wwn));
+		} else
+			status = FC_STATUS_BAD_RSP;
+	}
+	kfree(l);
+	return status;
+}
+
+typedef struct {
+	unsigned int code;
+	unsigned params[4];
+} prli;
+
+int fc_do_prli(fc_channel *fc, unsigned char alpa)
+{
+	prli *p;
+	int status;
+
+	p = (prli *)kmalloc(2 * sizeof(prli), GFP_DMA);
+	if (!p) return -ENOMEM;
+	memset(p, 0, 2 * sizeof(prli));
+	p->code = LS_PRLI;
+	p->params[0] = 0x08002000;
+	p->params[3] = 0x00000022;
+	status = fc_do_els(fc, alpa, p, sizeof(prli));
+	if (status == FC_STATUS_OK && p[1].code != LS_PRLI_ACC && p[1].code != LS_ACC)
+		status = FC_STATUS_BAD_RSP;
+	kfree(p);
+	return status;
 }
 
 #ifdef MODULE

@@ -1,5 +1,5 @@
 /*
- * $Id: time.c,v 1.39 1998/12/28 10:28:51 paulus Exp $
+ * $Id: time.c,v 1.45 1999/03/03 15:09:59 cort Exp $
  * Common time routines among all ppc machines.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) to merge
@@ -18,8 +18,8 @@
  * Since it is not possible to get a nice 100 Hz clock out of this, without
  * creating a software PLL, I have set HZ to 128.  -- Dan
  *
- * 1997-09-10	Updated NTP code according to technical memorandum Jan '96
- *		"A Kernel Model for Precision Timekeeping" by Dave Mills
+ * 1997-09-10  Updated NTP code according to technical memorandum Jan '96
+ *             "A Kernel Model for Precision Timekeeping" by Dave Mills
  */
 
 #include <linux/config.h>
@@ -76,9 +76,6 @@ void timer_interrupt(struct pt_regs * regs)
 {
 	int dval, d;
 	unsigned long cpu = smp_processor_id();
-	/* save the HID0 in case dcache was off - see idle.c
-	 * this hack should leave for a better solution -- Cort */
-	unsigned dcache_locked = unlock_dcache();
 	
 	hardirq_enter(cpu);
 #ifdef __SMP__
@@ -136,9 +133,6 @@ void timer_interrupt(struct pt_regs * regs)
 	}
 #endif
 	hardirq_exit(cpu);
-	/* restore the HID0 in case dcache was off - see idle.c
-	 * this hack should leave for a better solution -- Cort */
-	lock_dcache(dcache_locked);
 }
 
 #ifdef CONFIG_MBX
@@ -198,9 +192,9 @@ void do_settimeofday(struct timeval *tv)
 	xtime.tv_sec = tv->tv_sec;
 	xtime.tv_usec = tv->tv_usec - frac_tick;
 	set_dec(frac_tick * count_period_den / count_period_num);
-	time_adjust = 0;		/* stop active adjtime() */
+	time_adjust = 0;                /* stop active adjtime() */
 	time_status |= STA_UNSYNC;
-	time_state = TIME_ERROR;	/* p. 24, (a) */
+	time_state = TIME_ERROR;        /* p. 24, (a) */
 	time_maxerror = NTP_PHASE_LIMIT;
 	time_esterror = NTP_PHASE_LIMIT;
 	restore_flags(flags);
@@ -303,6 +297,7 @@ volatile int *done_ptr = &calibrate_done;
 __initfunc(void prep_calibrate_decr(void))
 {
 	unsigned long flags;
+	unsigned long freq, divisor;
 
 	/* the Powerstack II's have trouble with the timer so
 	 * we use a default value -- Cort
@@ -310,7 +305,6 @@ __initfunc(void prep_calibrate_decr(void))
 	if ( (_prep_type == _PREP_Motorola) &&
 	     ((inb(0x800) & 0xF0) & 0x40) )
 	{
-		unsigned long freq, divisor;
 		static unsigned long t2 = 0;
 		
 		t2 = 998700000/60;
@@ -323,7 +317,16 @@ __initfunc(void prep_calibrate_decr(void))
 		count_period_den = freq / 1000000;
 		return;
 	}
-	
+	if ( _prep_type == _PREP_Radstone )
+	{
+		freq = res->VitalProductData.ProcessorBusHz;
+		divisor = 4;
+		printk("time_init: decrementer frequency = %d/%d\n", freq, divisor);
+		decrementer_count = freq / HZ / divisor;
+		count_period_num = divisor;
+		count_period_den = freq / 1000000;
+		return;
+	}
 	
 	save_flags(flags);
 
@@ -439,6 +442,49 @@ static int month_days[12] = {
 	31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
 };
 
+/*
+ * This only works for the Gregorian calendar - i.e. after 1752 (in the UK)
+ */
+void GregorianDay(struct rtc_time * tm)
+{
+	int leapsToDate;
+	int lastYear;
+	int day;
+	int MonthOffset[] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 };
+
+	lastYear=tm->tm_year-1;
+
+	/*
+	 * Number of leap corrections to apply up to end of last year
+	 */
+	leapsToDate = lastYear/4 - lastYear/100 + lastYear/400;
+
+	/*
+	 * This year is a leap year if it is divisible by 4 except when it is
+	 * divisible by 100 unless it is divisible by 400
+	 *
+	 * e.g. 1904 was a leap year, 1900 was not, 1996 is, and 2000 will be
+	 */
+	if((tm->tm_year%4==0) &&
+	   ((tm->tm_year%100!=0) || (tm->tm_year%400==0)) &&
+	   (tm->tm_mon>2))
+	{
+		/*
+		 * We are past Feb. 29 in a leap year
+		 */
+		day=1;
+	}
+	else
+	{
+		day=0;
+	}
+
+	day += lastYear*365 + leapsToDate + MonthOffset[tm->tm_mon-1] +
+		   tm->tm_mday;
+
+	tm->tm_wday=day%7;
+}
+
 void to_tm(int tim, struct rtc_time * tm)
 {
 	register int    i;
@@ -467,6 +513,11 @@ void to_tm(int tim, struct rtc_time * tm)
 
 	/* Days are what is left over (+1) from all that. */
 	tm->tm_mday = day + 1;
+
+	/*
+	 * Determine the day of week
+	 */
+	GregorianDay(tm);
 }
 
 

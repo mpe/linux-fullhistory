@@ -85,6 +85,9 @@
 #define MECHANISM_STATUS        0xbd
 #define READ_CD                 0xbe
 
+/* DVD Opcodes */
+#define DVD_GET_PERFORMANCE	0xac
+
 
 /* Page codes for mode sense/set */
 
@@ -562,7 +565,7 @@ struct cdrom_info {
 
 	/* Sector buffer.  If a read request wants only the first part
 	   of a cdrom block, we cache the rest of the block here,
-	   in the expectation that that data is going to be wanted soon.
+	   in the expectation that the data is going to be wanted soon.
 	   SECTOR_BUFFERED is the number of the first buffered sector,
 	   and NSECTORS_BUFFERED is the number of sectors in the buffer.
 	   Before the buffer is allocated, we should have
@@ -656,6 +659,7 @@ const struct {
 	{ PLAY_CD, "Play CD" },
 	{ MECHANISM_STATUS, "Mechanism Status" },
 	{ READ_CD, "Read CD" },
+	{ DVD_GET_PERFORMANCE, "Get Performance" },
 };
 
 
@@ -776,7 +780,8 @@ const struct {
 
 	{ 0x6400, "Illegal mode for this track or incompatible medium" },
 
-	{ 0xb900, "Play operation oborted (sic)" },
+	/* Following error is misspelled in ATAPI 2.6 */
+	{ 0xb900, "Play operation oborted [sic]" },
 
 	{ 0xbf00, "Loss of streaming" },
 };

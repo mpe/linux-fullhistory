@@ -65,7 +65,6 @@ static const char *version =
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
-#include <linux/ioport.h>
 #include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>

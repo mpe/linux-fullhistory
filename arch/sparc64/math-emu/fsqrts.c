@@ -7,6 +7,5 @@ int FSQRTS(void *rd, void *rs2)
         
 	__FP_UNPACK_S(A, rs2);
 	FP_SQRT_S(R, A);
-	__FP_PACK_S(rd, R);
-	return 1;
+	return __FP_PACK_S(rd, R);
 }

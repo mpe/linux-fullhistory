@@ -39,7 +39,7 @@
 # define FALSE 0
 #endif
 
-#define MAX_SCSI_DEVICE_CODE 10
+#define MAX_SCSI_DEVICE_CODE 14
 extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 
 #ifdef DEBUG

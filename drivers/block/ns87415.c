@@ -95,6 +95,12 @@ __initfunc(void ide_init_ns87415 (ide_hwif_t *hwif))
 	byte stat;
 #endif
 
+	/* Set a good latency timer and cache line size value. */
+	(void) pci_write_config_byte(dev, PCI_LATENCY_TIMER, 64);
+#ifdef __sparc_v9__
+	(void) pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, 0x10);
+#endif
+
 	/*
 	 * We cannot probe for IRQ: both ports share common IRQ on INTA.
 	 * Also, leave IRQ masked during drive probing, to prevent infinite

@@ -1,5 +1,5 @@
 /*
- * $Id: prep_pci.c,v 1.24 1998/12/10 02:39:51 cort Exp $
+ * $Id: prep_pci.c,v 1.25 1999/03/03 15:09:45 cort Exp $
  * PReP pci functions.
  * Originally by Gary Thomas
  * rewritten and updated by Cort Dougan (cort@cs.nmt.edu)
@@ -312,6 +312,106 @@ static char Nobis_pci_IRQ_routes[] __prepdata = {
 #define CAROLINA_IRQ_EDGE_MASK_LO   0x00  /* IRQ's 0-7  */
 #define CAROLINA_IRQ_EDGE_MASK_HI   0xA4  /* IRQ's 8-15 [10,13,15] */
 
+/*
+ * 8259 edge/level control definitions
+ */
+#define ISA8259_M_ELCR 0x4d0
+#define ISA8259_S_ELCR 0x4d1
+
+#define ELCRS_INT15_LVL         0x80
+#define ELCRS_INT14_LVL         0x40
+#define ELCRS_INT12_LVL         0x10
+#define ELCRS_INT11_LVL         0x08
+#define ELCRS_INT10_LVL         0x04
+#define ELCRS_INT9_LVL          0x02
+#define ELCRS_INT8_LVL          0x01
+#define ELCRM_INT7_LVL          0x80
+#define ELCRM_INT5_LVL          0x20
+
+/*
+ * Mechanism 1 configuration space access as defined in the PCI spec.
+ */
+#define CFG_ADDR (volatile u_int *)0x80000cf8
+#define CFG_DATA 0x80000cfc
+
+#define CFG_DEV_ADDR(b, d, o)	(0x80000000 |	\
+				 ((b) << 16) |	\
+				 ((d) << 8) |	\
+				 ((o) & ~3))
+
+unsigned char max_bus=255;
+
+int mech1_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
+				     unsigned char offset, unsigned char *val)
+{
+	*val = 0xff;
+	if (bus > max_bus)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	out_le32(CFG_ADDR, CFG_DEV_ADDR(bus, dev_fn, offset));
+	*val = in_8((unsigned char *)CFG_DATA + (offset & 3));
+	return PCIBIOS_SUCCESSFUL;
+}
+
+int mech1_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
+				     unsigned char offset, unsigned short *val)
+{
+	*val = 0xffff;
+	if (bus > max_bus)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	if ((offset & 1) != 0)
+		return PCIBIOS_BAD_REGISTER_NUMBER;
+	out_le32(CFG_ADDR, CFG_DEV_ADDR(bus, dev_fn, offset));
+	*val = in_le16((volatile unsigned short *)(CFG_DATA + (offset&3)));
+	return PCIBIOS_SUCCESSFUL;
+}
+
+int mech1_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
+				      unsigned char offset, unsigned int *val)
+{
+	*val = 0xffffffff;
+	if (bus > max_bus)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	if ((offset & 3) != 0)
+		return PCIBIOS_BAD_REGISTER_NUMBER;
+	out_le32(CFG_ADDR, CFG_DEV_ADDR(bus, dev_fn, offset));
+	*val = in_le32((volatile unsigned int *)CFG_DATA);
+	return PCIBIOS_SUCCESSFUL;
+}
+
+int mech1_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
+				      unsigned char offset, unsigned char val)
+{
+	if (bus > max_bus)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	out_le32(CFG_ADDR, CFG_DEV_ADDR(bus, dev_fn, offset));
+	out_8((unsigned char *)CFG_DATA + (offset & 3), val);
+	return PCIBIOS_SUCCESSFUL;
+}
+
+int mech1_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
+				      unsigned char offset, unsigned short val)
+{
+	if (bus > max_bus)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	if ((offset & 1) != 0)
+		return PCIBIOS_BAD_REGISTER_NUMBER;
+	out_le32(CFG_ADDR, CFG_DEV_ADDR(bus, dev_fn, offset));
+	out_le16((volatile unsigned short *)(CFG_DATA + (offset&3)), val);
+	return PCIBIOS_SUCCESSFUL;
+}
+
+int mech1_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
+				    unsigned char offset, unsigned int val)
+{
+	if (bus > max_bus)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	if ((offset & 1) != 0)
+		return PCIBIOS_BAD_REGISTER_NUMBER;
+	out_le32(CFG_ADDR, CFG_DEV_ADDR(bus, dev_fn, offset));
+	out_le32((volatile unsigned int *)CFG_DATA, val);
+	return PCIBIOS_SUCCESSFUL;
+}
+
 __prep
 int
 prep_pcibios_read_config_dword (unsigned char bus,
@@ -526,6 +626,71 @@ __initfunc(unsigned long route_pci_interrupts(void))
 		outb(pl_id|CAROLINA_IRQ_EDGE_MASK_HI, 0x04d1);
 		pl_id=inb(0x04d1);
 		/*printk("Hi mask now %#0x\n", pl_id);*/
+	} else if ( _prep_type == _PREP_Radstone )
+	{
+		unsigned char ucElcrM, ucElcrS;
+
+		/*
+		 * Set up edge/level
+		 */
+		switch(ucSystemType)
+		{
+			case RS_SYS_TYPE_PPC1:
+			{
+				if(ucBoardRevMaj<5)
+				{
+					ucElcrS=ELCRS_INT15_LVL;
+				}
+				else
+				{
+					ucElcrS=ELCRS_INT9_LVL |
+					        ELCRS_INT11_LVL |
+					        ELCRS_INT14_LVL |
+					        ELCRS_INT15_LVL;
+				}
+				ucElcrM=ELCRM_INT5_LVL | ELCRM_INT7_LVL;
+				break;
+			}
+
+			case RS_SYS_TYPE_PPC1a:
+			{
+				ucElcrS=ELCRS_INT9_LVL |
+				        ELCRS_INT11_LVL |
+				        ELCRS_INT14_LVL |
+				        ELCRS_INT15_LVL;
+				ucElcrM=ELCRM_INT5_LVL;
+				break;
+			}
+
+			case RS_SYS_TYPE_PPC2:
+			case RS_SYS_TYPE_PPC2a:
+			case RS_SYS_TYPE_PPC2ep:
+			case RS_SYS_TYPE_PPC4:
+			case RS_SYS_TYPE_PPC4a:
+			default:
+			{
+				ucElcrS=ELCRS_INT9_LVL |
+				        ELCRS_INT10_LVL |
+				        ELCRS_INT11_LVL |
+				        ELCRS_INT14_LVL |
+				        ELCRS_INT15_LVL;
+				ucElcrM=ELCRM_INT5_LVL |
+				        ELCRM_INT7_LVL;
+				break;
+			}
+		}
+
+		/*
+		 * Write edge/level selection
+		 */
+		outb(ucElcrS, ISA8259_S_ELCR);
+		outb(ucElcrM, ISA8259_M_ELCR);
+
+		/*
+		 * Radstone boards have PCI interrupts all set up
+		 * so leave well alone
+		 */
+		return 0;
 	} else
 	{
 		printk("No known machine pci routing!\n");

@@ -1,4 +1,4 @@
-/* $Id: pcic.c,v 1.3 1998/10/07 11:34:56 jj Exp $
+/* $Id: pcic.c,v 1.5 1999/03/16 00:15:20 davem Exp $
  * pcic.c: Sparc/PCI controller support
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko
@@ -498,9 +498,10 @@ static void pci_do_settimeofday(struct timeval *tv)
 		tv->tv_sec--;
 	}
 	xtime = *tv;
-	time_state = TIME_BAD;
-	time_maxerror = 0x70000000;
-	time_esterror = 0x70000000;
+	time_adjust = 0;		/* stop active adjtime() */
+	time_status |= STA_UNSYNC;
+	time_maxerror = NTP_PHASE_LIMIT;
+	time_esterror = NTP_PHASE_LIMIT;
 	sti();
 }
 

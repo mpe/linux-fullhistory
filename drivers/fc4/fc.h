@@ -1,6 +1,6 @@
 /* fc.h: Definitions for Fibre Channel Physical and Signaling Interface.
  *
- * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996-1997,1999 Jakub Jelinek (jj@ultra.linux.cz)
  *
  * Sources:
  *	Fibre Channel Physical & Signaling Interface (FC-PH), dpANS, 1994
@@ -11,13 +11,16 @@
 #define __FC_H
 
 /* World Wide Name */
-#define NAAID_IEEE	1
-#define NAAID_IEEE_EXT	2
-#define NAAID_LOCAL	3
-#define NAAID_IP	4
-#define NAAID_CCITT	12
-#define NAAID_CCITT_GRP	14
+#define NAAID_IEEE		1
+#define NAAID_IEEE_EXT		2
+#define NAAID_LOCAL		3
+#define NAAID_IP		4
+#define NAAID_IEEE_REG		5
+#define NAAID_IEEE_REG_EXT	6
+#define NAAID_CCITT		12
+#define NAAID_CCITT_GRP		14
 
+/* This is NAAID_IEEE_EXT scheme */
 typedef struct {
 	u32	naaid:4;
 	u32	nportid:12;
@@ -165,6 +168,7 @@ typedef struct {
 /* Extended SVC commands */
 #define LS_RJT			0x01000000
 #define LS_ACC			0x02000000
+#define LS_PRLI_ACC		0x02100014
 #define LS_PLOGI		0x03000000
 #define LS_FLOGI		0x04000000
 #define LS_LOGO			0x05000000
@@ -182,7 +186,11 @@ typedef struct {
 #define LS_TEST			0x11000000
 #define LS_RRQ			0x12000000
 #define LS_IDENT		0x20000000
+#define LS_PRLI			0x20100014
 #define LS_DISPLAY		0x21000000
+#define LS_PRLO			0x21100014
+#define LS_PDISC		0x50000000
+#define LS_ADISC		0x52000000
 
 typedef struct {
 	u8	fcph_hi, fcph_lo;

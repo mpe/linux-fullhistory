@@ -108,8 +108,10 @@ ifeq ($(CONFIG_HISAX_TELES3C),y)
 	 HFC_2BDS0 := hfc_2bds0.o
 endif
 ifeq ($(CONFIG_HISAX_AMD7930),y)
-	 O_OBJS += amd7930.o
-	 RAWHDLC_OBJ := rawhdlc.o
+	 RAWHDLC_OBJ := foreign.o rawhdlc.o
+endif
+ifeq ($(CONFIG_HISAX_DBRI),y)
+	 RAWHDLC_OBJ := foreign.o rawhdlc.o
 endif
 
 ifeq ($(CONFIG_HISAX_NICCY),y)

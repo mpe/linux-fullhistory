@@ -591,6 +591,8 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 
 	if (((current->personality & PER_BSD) && (request == PTRACE_SUNATTACH))
 	    || (!(current->personality & PER_BSD) && (request == PTRACE_ATTACH))) {
+		unsigned long flags;
+
 		if(child == current) {
 			/* Try this under SunOS/Solaris, bwa haha
 			 * You'll never be able to kill the process. ;-)
@@ -602,8 +604,9 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		    (current->uid != child->euid) ||
 		    (current->uid != child->uid) ||
 		    (current->gid != child->egid) ||
-		    (current->gid != child->gid)) && 
-		   !capable(CAP_SYS_PTRACE)) {
+		    (current->gid != child->sgid) ||
+		    (cap_issubset(child->cap_permitted, current->cap_permitted)) ||
+		    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE)) {
 			pt_error_return(regs, EPERM);
 			goto out;
 		}
@@ -613,15 +616,13 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			goto out;
 		}
 		child->flags |= PF_PTRACED;
+		write_lock_irqsave(&tasklist_lock, flags);
 		if(child->p_pptr != current) {
-			unsigned long flags;
-
-			write_lock_irqsave(&tasklist_lock, flags);
 			REMOVE_LINKS(child);
 			child->p_pptr = current;
 			SET_LINKS(child);
-			write_unlock_irqrestore(&tasklist_lock, flags);
 		}
+		write_unlock_irqrestore(&tasklist_lock, flags);
 		send_sig(SIGSTOP, child, 1);
 		pt_succ_return(regs, 0);
 		goto out;
@@ -670,14 +671,18 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 				pt_error_return(regs, EINVAL);
 				goto out;
 			}
+			down(&child->mm->mmap_sem);
 			res = read_int(child, addr, &x);
+			up(&child->mm->mmap_sem);
 			tmp = x;
 		} else {
 			if(addr & (sizeof(unsigned long) - 1)) {
 				pt_error_return(regs, EINVAL);
 				goto out;
 			}
+			down(&child->mm->mmap_sem);
 			res = read_long(child, addr, &tmp);
+			up(&child->mm->mmap_sem);
 		}
 		if (res < 0) {
 			pt_error_return(regs, -res);
@@ -709,13 +714,17 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 				pt_error_return(regs, EINVAL);
 				goto out;
 			}
+			down(&child->mm->mmap_sem);
 			res = write_int(child, addr, data);
+			up(&child->mm->mmap_sem);
 		} else {
 			if(addr & (sizeof(unsigned long) - 1)) {
 				pt_error_return(regs, EINVAL);
 				goto out;
 			}
+			down(&child->mm->mmap_sem);
 			res = write_long(child, addr, data);
+			up(&child->mm->mmap_sem);
 		}
 		if(res < 0)
 			pt_error_return(regs, -res);
@@ -944,12 +953,15 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		unsigned long page;
 
 		while(len) {
+			down(&child->mm->mmap_sem);
 			vma = find_extend_vma(child, src);
 			if (!vma) {
+				up(&child->mm->mmap_sem);
 				pt_error_return(regs, EIO);
 				goto flush_and_out;
 			}
 			pgtable = get_page (child, vma, src, 0);
+			up(&child->mm->mmap_sem);
 			if (src & ~PAGE_MASK) {
 				curlen = PAGE_SIZE - (src & ~PAGE_MASK);
 				if (curlen > len) curlen = len;
@@ -988,12 +1000,15 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		unsigned long page;
 
 		while(len) {
+			down(&child->mm->mmap_sem);
 			vma = find_extend_vma(child, dest);
 			if (!vma) {
+				up(&child->mm->mmap_sem);
 				pt_error_return(regs, EIO);
 				goto flush_and_out;
 			}
 			pgtable = get_page (child, vma, dest, 1);
+			up(&child->mm->mmap_sem);
 			if (dest & ~PAGE_MASK) {
 				curlen = PAGE_SIZE - (dest & ~PAGE_MASK);
 				if (curlen > len) curlen = len;

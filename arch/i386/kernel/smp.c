@@ -474,7 +474,7 @@ static int __init smp_scan_config(unsigned long base, unsigned long length)
 					 */
 			
 					cfg=pg0[0];
-					pg0[0] = (mp_lapic_addr | 7);
+					pg0[0] = (mp_lapic_addr | _PAGE_RW | _PAGE_PRESENT);
 					local_flush_tlb();
 
 					boot_cpu_id = GET_APIC_ID(*((volatile unsigned long *) APIC_ID));
@@ -1329,7 +1329,7 @@ void __init smp_boot_cpus(void)
 		 *	Install writable page 0 entry.
 		 */
 		cfg = pg0[0];
-		pg0[0] = 3;	/* writeable, present, addr 0 */
+		pg0[0] = _PAGE_RW | _PAGE_PRESENT;	/* writeable, present, addr 0 */
 		local_flush_tlb();
 	
 		/*

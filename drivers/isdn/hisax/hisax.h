@@ -397,7 +397,8 @@ struct tiger_hw {
 	u_char s_state;
 };
 
-struct amd7930_hw {
+struct foreign_hw {
+	int doHDLCprocessing;
 	u_char *tx_buff;
 	u_char *rv_buff;
 	int rv_buff_in;
@@ -437,7 +438,7 @@ struct BCState {
 		struct hscx_hw hscx;
 		struct hfcB_hw hfc;
 		struct tiger_hw tiger;
-		struct amd7930_hw  amd7930;
+		struct foreign_hw foreign;
 	} hw;
 };
 
@@ -640,6 +641,7 @@ struct IsdnCardState {
 		struct njet_hw njet;
 		struct hfcD_hw hfcD;
 		struct ix1_hw niccy;
+                struct foreign_interface *foreign;
 	} hw;
 	int myid;
 	isdn_if iif;
@@ -710,8 +712,9 @@ struct IsdnCardState {
 #define  ISDN_CTYPE_SEDLBAUER_PCMCIA	22
 #define  ISDN_CTYPE_AMD7930	23
 #define  ISDN_CTYPE_NICCY	24
+#define  ISDN_CTYPE_DBRI	25
 
-#define  ISDN_CTYPE_COUNT	24
+#define  ISDN_CTYPE_COUNT	25
 
 #ifdef ISDN_CHIP_ISAC
 #undef ISDN_CHIP_ISAC
@@ -856,12 +859,18 @@ struct IsdnCardState {
 #define CARD_NICCY 0
 #endif
 
+#ifdef  CONFIG_HISAX_DBRI
+#define CARD_DBRI (1 << ISDN_CTYPE_DBRI)
+#else
+#define CARD_DBRI 0
+#endif
+
 
 #define  SUPORTED_CARDS  (CARD_TELES0 | CARD_TELES3 | CARD_AVM_A1 | CARD_ELSA \
 			 | CARD_IX1MICROR2 | CARD_DIEHLDIVA | CARD_ASUSCOM \
 			 | CARD_TELEINT | CARD_SEDLBAUER | CARD_SPORTSTER \
 			 | CARD_MIC | CARD_NETJET | CARD_TELES3C | CARD_AMD7930 \
-			 | CARD_NICCY)
+			 | CARD_NICCY | CARD_DBRI)
 
 #define TEI_PER_CARD 0
 

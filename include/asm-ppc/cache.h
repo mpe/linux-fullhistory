@@ -13,7 +13,11 @@
 #define        L1_CACHE_ALIGN(x)       (((x)+(L1_CACHE_BYTES-1))&~(L1_CACHE_BYTES-1))
 #define L1_CACHE_PAGES		8
 
+#define        SMP_CACHE_BYTES L1_CACHE_BYTES
+
 #if defined(__KERNEL__) && !defined(__ASSEMBLY__)
+extern void flush_dcache_range(unsigned long start, unsigned long stop);
+
 static inline unsigned long unlock_dcache(void)
 {
 #ifndef CONFIG_8xx	

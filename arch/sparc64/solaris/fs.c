@@ -1,4 +1,4 @@
-/* $Id: fs.c,v 1.11 1998/10/28 08:12:04 jj Exp $
+/* $Id: fs.c,v 1.12 1999/01/02 16:46:06 davem Exp $
  * fs.c: fs related syscall emulation for Solaris
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -7,6 +7,7 @@
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
+#include <linux/mm.h>
 #include <linux/file.h>
 #include <linux/stat.h>
 #include <linux/smp_lock.h>
@@ -21,7 +22,6 @@
 #include "conv.h"
 
 extern char * getname32(u32 filename);
-#define putname32 putname
  
 #define R4_DEV(DEV) ((DEV & 0xff) | ((DEV & 0xff00) << 10))
 #define R4_MAJOR(DEV) (((DEV) >> 18) & 0x3fff)
@@ -138,7 +138,7 @@ asmlinkage int solaris_stat(u32 filename, u32 statbuf)
 		set_fs (KERNEL_DS);
 		ret = sys_newstat(filenam, &s);
 		set_fs (old_fs);
-		putname32 (filenam);
+		putname (filenam);
 		if (putstat ((struct sol_stat *)A(statbuf), &s))
 			return -EFAULT;
 	}
@@ -166,7 +166,7 @@ asmlinkage int solaris_stat64(u32 filename, u32 statbuf)
 		set_fs (KERNEL_DS);
 		ret = sys_newstat(filenam, &s);
 		set_fs (old_fs);
-		putname32 (filenam);
+		putname (filenam);
 		if (putstat64 ((struct sol_stat64 *)A(statbuf), &s))
 			return -EFAULT;
 	}
@@ -188,7 +188,7 @@ asmlinkage int solaris_lstat(u32 filename, u32 statbuf)
 		set_fs (KERNEL_DS);
 		ret = sys_newlstat(filenam, &s);
 		set_fs (old_fs);
-		putname32 (filenam);
+		putname (filenam);
 		if (putstat ((struct sol_stat *)A(statbuf), &s))
 			return -EFAULT;
 	}
@@ -215,7 +215,7 @@ asmlinkage int solaris_lstat64(u32 filename, u32 statbuf)
 		set_fs (KERNEL_DS);
 		ret = sys_newlstat(filenam, &s);
 		set_fs (old_fs);
-		putname32 (filenam);
+		putname (filenam);
 		if (putstat64 ((struct sol_stat64 *)A(statbuf), &s))
 			return -EFAULT;
 	}

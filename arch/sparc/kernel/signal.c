@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.90 1998/10/18 03:31:05 davem Exp $
+/*  $Id: signal.c,v 1.91 1999/01/26 11:00:44 jj Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -38,6 +38,8 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs,
 
 /* This turned off for production... */
 /* #define DEBUG_SIGNALS 1 */
+/* #define DEBUG_SIGNALS_TRACE 1 */
+/* #define DEBUG_SIGNALS_MAPS 1 */
 
 /* Signal frames: the original one (compatible with SunOS):
  *
@@ -1004,6 +1006,59 @@ static inline void syscall_restart(unsigned long orig_i0, struct pt_regs *regs,
 	}
 }
 
+#ifdef DEBUG_SIGNALS_MAPS
+
+#define MAPS_LINE_FORMAT	  "%08lx-%08lx %s %08lx %s %lu "
+
+static inline void read_maps (void)
+{
+	struct vm_area_struct * map, * next;
+	char * buffer;
+	ssize_t i;
+
+	buffer = (char*)__get_free_page(GFP_KERNEL);
+	if (!buffer)
+		return;
+
+	for (map = current->mm->mmap ; map ; map = next ) {
+		/* produce the next line */
+		char *line;
+		char str[5], *cp = str;
+		int flags;
+		kdev_t dev;
+		unsigned long ino;
+
+		/*
+		 * Get the next vma now (but it won't be used if we sleep).
+		 */
+		next = map->vm_next;
+		flags = map->vm_flags;
+
+		*cp++ = flags & VM_READ ? 'r' : '-';
+		*cp++ = flags & VM_WRITE ? 'w' : '-';
+		*cp++ = flags & VM_EXEC ? 'x' : '-';
+		*cp++ = flags & VM_MAYSHARE ? 's' : 'p';
+		*cp++ = 0;
+
+		dev = 0;
+		ino = 0;
+		if (map->vm_file != NULL) {
+			dev = map->vm_file->f_dentry->d_inode->i_dev;
+			ino = map->vm_file->f_dentry->d_inode->i_ino;
+			line = d_path(map->vm_file->f_dentry, buffer, PAGE_SIZE);
+		}
+		printk(MAPS_LINE_FORMAT, map->vm_start, map->vm_end, str, map->vm_offset,
+			      kdevname(dev), ino);
+		if (map->vm_file != NULL)
+			printk("%s\n", line);
+		else
+			printk("\n");
+	}
+	free_page((unsigned long)buffer);
+	return;
+}
+#endif
+
 /* Note that 'init' is a special process: it doesn't get signals it doesn't
  * want to handle. Thus you cannot kill init even with a SIGKILL even by
  * mistake.
@@ -1115,8 +1170,25 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs,
 				}
 #ifdef DEBUG_SIGNALS
 				/* Very useful to debug dynamic linker problems */
-				printk ("Sig ILL going...\n");
+				printk ("Sig %ld going for %s[%d]...\n", signr, current->comm, current->pid);
 				show_regs (regs);
+#ifdef DEBUG_SIGNALS_TRACE
+				{
+					struct reg_window *rw = (struct reg_window *)regs->u_regs[UREG_FP];
+					unsigned int ins[8];
+
+					while(rw &&
+					      !(((unsigned long) rw) & 0x3)) {
+						copy_from_user(ins, &rw->ins[0], sizeof(ins));
+						printk("Caller[%08x](%08x,%08x,%08x,%08x,%08x,%08x)\n", ins[7], ins[0], ins[1], ins[2], ins[3], ins[4], ins[5]);
+						rw = (struct reg_window *)(unsigned long)ins[6];
+					}
+				}
+#endif
+#ifdef DEBUG_SIGNALS_MAPS
+				printk("Maps:\n");
+				read_maps();
+#endif
 #endif
 				/* fall through */
 			default:

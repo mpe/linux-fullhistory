@@ -52,6 +52,7 @@ unsigned char boot_cpu_id4 = 0; /* boot_cpu_id << 2 */
 int smp_activated = 0;
 volatile int cpu_number_map[NR_CPUS];
 volatile int __cpu_logical_map[NR_CPUS];
+cycles_t cacheflush_time = 0; /* XXX */
 
 /* The only guaranteed locking primitive available on all Sparc
  * processors is 'ldstub [%reg + immediate], %dest_reg' which atomically

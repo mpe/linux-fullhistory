@@ -154,7 +154,8 @@ unsigned long chrp_get_rtc_time(void)
 __initfunc(void chrp_calibrate_decr(void))
 {
 	struct device_node *cpu;
-	int freq, *fp, divisor;
+	int *fp, divisor;
+	unsigned long freq;
 
 	if (via_calibrate_decr())
 		return;
@@ -170,10 +171,9 @@ __initfunc(void chrp_calibrate_decr(void))
 		if (fp != 0)
 			freq = *fp;
 	}
-
 	freq *= 60;	/* try to make freq/1e6 an integer */
         divisor = 60;
-        printk("time_init: decrementer frequency = %d/%d\n", freq, divisor);
+        printk("time_init: decrementer frequency = %lu/%d\n", freq, divisor);
         decrementer_count = freq / HZ / divisor;
         count_period_num = divisor;
         count_period_den = freq / 1000000;

@@ -378,34 +378,35 @@ static int parport_SPP_supported(struct parport *pb)
  */
 static int parport_ECR_present(struct parport *pb)
 {
-	unsigned char r, octr = parport_pc_read_control(pb);
-	unsigned char oecr = parport_pc_read_econtrol(pb);
-	unsigned char tmp;
+	unsigned char r;
 
+	parport_pc_write_control (pb, 0xc);
 	r = parport_pc_read_control(pb);	
 	if ((parport_pc_read_econtrol(pb) & 0x3) == (r & 0x3)) {
 		parport_pc_write_control(pb, r ^ 0x2 ); /* Toggle bit 1 */
 
 		r = parport_pc_read_control(pb);	
-		if ((parport_pc_read_econtrol(pb) & 0x2) == (r & 0x2)) {
-			parport_pc_write_control(pb, octr);
-			return 0; /* Sure that no ECR register exists */
-		}
+		if ((parport_pc_read_econtrol(pb) & 0x2) == (r & 0x2))
+			goto no_reg; /* Sure that no ECR register exists */
 	}
 	
 	if ((parport_pc_read_econtrol(pb) & 0x3 ) != 0x1)
-		return 0;
+		goto no_reg;
 
 	parport_pc_write_econtrol(pb, 0x34);
-	tmp = parport_pc_read_econtrol(pb);
+	if (parport_pc_read_econtrol(pb) != 0x35)
+		goto no_reg;
 
-	parport_pc_write_econtrol(pb, oecr);
-	parport_pc_write_control(pb, octr);
+	parport_pc_write_control(pb, 0xc);
+
+	/* Go to mode 000; SPP, reset FIFO */
+	parport_pc_frob_econtrol (pb, 0xe0, 0x00);
 	
-	if (tmp != 0x35)
-		return 0;
-
 	return PARPORT_MODE_PCECR;
+
+ no_reg:
+	parport_pc_write_control (pb, 0xc);
+	return 0;
 }
 
 static int parport_ECP_supported(struct parport *pb)
@@ -706,14 +707,11 @@ out:
 
 static int probe_one_port(unsigned long int base, int irq, int dma)
 {
-	struct parport tmpport, *p;
+	struct parport *p;
 	int probedirq = PARPORT_IRQ_NONE;
 	if (check_region(base, 3)) return 0;
-	tmpport.base = base;
-	tmpport.ops = &parport_pc_ops;
-	if (!(parport_SPP_supported(&tmpport))) return 0;
-       	if (!(p = parport_register_port(base, irq, dma, &parport_pc_ops))) return 0;
-	p->modes = PARPORT_MODE_PCSPP | parport_PS2_supported(p);
+	if (!(p = parport_register_port(base, irq, dma, &parport_pc_ops)))
+		return 0;
 	if (p->base != 0x3bc) {
 		if (!check_region(base+0x400,3)) {
 			p->modes |= parport_ECR_present(p);	
@@ -725,6 +723,12 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 			p->modes |= parport_ECPEPP_supported(p);
 		}
 	}
+	if (!parport_SPP_supported(p)) {
+		/* No port. */
+		parport_unregister_port (p);
+		return 0;
+	}
+	p->modes |= PARPORT_MODE_PCSPP | parport_PS2_supported(p);
 	p->size = (p->modes & (PARPORT_MODE_PCEPP 
 			       | PARPORT_MODE_PCECPEPP))?8:3;
 	printk(KERN_INFO "%s: PC-style at 0x%lx", p->name, p->base);

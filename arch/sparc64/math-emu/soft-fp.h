@@ -14,45 +14,56 @@
 # define FP_RND_ZERO		1
 # define FP_RND_PINF		2
 # define FP_RND_MINF		3
+#ifndef FP_ROUNDMODE
 # define FP_ROUNDMODE		FP_RND_NEAREST
+#endif
 #endif
 
 #define _FP_ROUND_NEAREST(wc, X)			\
-  do { 							\
+({  int __ret = EFLAG_INEXACT;				\
     if ((_FP_FRAC_LOW_##wc(X) & 15) != _FP_WORK_ROUND)	\
       _FP_FRAC_ADDI_##wc(X, _FP_WORK_ROUND);		\
-  } while(0)
+    else __ret = 0;					\
+    __ret;						\
+})
 
-#define _FP_ROUND_ZERO(wc, X)
+#define _FP_ROUND_ZERO(wc, X)		0 /* XXX */
 
 #define _FP_ROUND_PINF(wc, X)				\
-  do {							\
+({  int __ret = EFLAG_INEXACT;				\
     if (!X##_s && (_FP_FRAC_LOW_##wc(X) & 7))		\
       _FP_FRAC_ADDI_##wc(X, _FP_WORK_LSB);		\
-  } while (0)
+    else __ret = 0;					\
+    __ret;						\
+})
 
 #define _FP_ROUND_MINF(wc, X)				\
-  do {							\
+({  int __ret = EFLAG_INEXACT;				\
     if (X##_s && (_FP_FRAC_LOW_##wc(X) & 7))		\
       _FP_FRAC_ADDI_##wc(X, _FP_WORK_LSB);		\
-  } while (0)
+    else __ret = 0;					\
+    __ret;						\
+})
 
 #define _FP_ROUND(wc, X)			\
+({	int __ret = 0;				\
 	switch (FP_ROUNDMODE)			\
 	{					\
 	  case FP_RND_NEAREST:			\
-	    _FP_ROUND_NEAREST(wc,X);		\
+	    __ret |= _FP_ROUND_NEAREST(wc,X);	\
 	    break;				\
 	  case FP_RND_ZERO:			\
-	    _FP_ROUND_ZERO(wc,X);		\
+	    __ret |= _FP_ROUND_ZERO(wc,X);	\
 	    break;				\
 	  case FP_RND_PINF:			\
-	    _FP_ROUND_PINF(wc,X);		\
+	    __ret |= _FP_ROUND_PINF(wc,X);	\
 	    break;				\
 	  case FP_RND_MINF:			\
-	    _FP_ROUND_MINF(wc,X);		\
+	    __ret |= _FP_ROUND_MINF(wc,X);	\
 	    break;				\
-	}
+	};					\
+	__ret;					\
+})
 
 #define FP_CLS_NORMAL		0
 #define FP_CLS_ZERO		1

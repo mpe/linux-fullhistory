@@ -4,6 +4,8 @@
  *
  * Copyright (C) 1996 Paul Mackerras.
  */
+
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -184,8 +186,13 @@ adb_request(struct adb_request *req, void (*done)(struct adb_request *),
 	return adb_send_request(req, flags & ADBREQ_SYNC);
 }
 
-/* Ultimately this should return the number of devices with
-   the given default id. */
+ /* Ultimately this should return the number of devices with
+    the given default id.
+    And it does it now ! Note: changed behaviour: This function
+    will now register if default_id _and_ handler_id both match
+    but handler_id can be left to 0 to match with default_id only.
+    When handler_id is set, this function will try to adjust
+    the handler_id id it doesn't match. */
 int
 adb_register(int default_id, int handler_id, struct adb_ids *ids,
 	     void (*handler)(unsigned char *, int, struct pt_regs *, int))
@@ -194,18 +201,20 @@ adb_register(int default_id, int handler_id, struct adb_ids *ids,
 
 	ids->nids = 0;
 	for (i = 1; i < 16; i++) {
-		if (adb_handler[i].original_address == default_id) {
+		if ((adb_handler[i].original_address == default_id) &&
+		    (!handler_id || (handler_id == adb_handler[i].handler_id) || 
+		    adb_try_handler_change(i, handler_id))) {
 			if (adb_handler[i].handler != 0) {
 				printk(KERN_ERR
 				       "Two handlers for ADB device %d\n",
 				       default_id);
-				return 0;
+				continue;
 			}
 			adb_handler[i].handler = handler;
 			ids->id[ids->nids++] = i;
 		}
 	}
-	return 1;
+	return ids->nids;
 }
 
 void
@@ -225,6 +234,41 @@ adb_input(unsigned char *buf, int nb, struct pt_regs *regs, int autopoll)
 		(*adb_handler[id].handler)(buf, nb, regs, autopoll);
 	}
 }
+
+/* Try to change handler to new_id. Will return 1 if successful */
+int
+adb_try_handler_change(int address, int new_id)
+{
+	struct adb_request req;
+
+	if (adb_handler[address].handler_id == new_id)
+	    return 1;
+	adb_request(&req, NULL, ADBREQ_SYNC | ADBREQ_REPLY, 1,
+    	    ADB_READREG(address,3));
+	if (req.reply_len < 2)
+	    return 0;
+	adb_request(&req, NULL, ADBREQ_SYNC, 3,
+	    ADB_WRITEREG(address, 3), req.reply[1], new_id);	
+	adb_request(&req, NULL, ADBREQ_SYNC | ADBREQ_REPLY, 1,
+	    ADB_READREG(address, 3));
+	if (req.reply_len < 2)
+	    return 0;
+	if (req.reply[2] != new_id)
+	    return 0;
+	adb_handler[address].handler_id = req.reply[2];
+
+	return 1;
+}
+
+int
+adb_get_infos(int address, int *original_address, int *handler_id)
+{
+	*original_address = adb_handler[address].original_address;
+	*handler_id = adb_handler[address].handler_id;
+	
+	return (*original_address != 0);
+}
+
 
 /*
  * /dev/adb device driver.

@@ -22,8 +22,8 @@
 #define OH_SCC_ENABLE		0x200
 #define OH_MESH_ENABLE		0x400
 #define OH_FLOPPY_ENABLE	0x800
-#define OH_SCCA_IO		0x2000
-#define OH_SCCB_IO		0x4000
+#define OH_SCCA_IO		0x4000
+#define OH_SCCB_IO		0x8000
 #define OH_VIA_ENABLE		0x10000
 #define OH_IDECD_POWER		0x800000
 

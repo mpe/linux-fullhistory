@@ -528,6 +528,8 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 
 	if (((current->personality & PER_BSD) && (request == PTRACE_SUNATTACH))
 	    || (!(current->personality & PER_BSD) && (request == PTRACE_ATTACH))) {
+		unsigned long flags;
+
 		if(child == current) {
 			/* Try this under SunOS/Solaris, bwa haha
 			 * You'll never be able to kill the process. ;-)
@@ -539,8 +541,9 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		    (current->uid != child->euid) ||
 		    (current->uid != child->uid) ||
 		    (current->gid != child->egid) ||
-		    (current->gid != child->gid)) && 
-		   !capable(CAP_SYS_PTRACE)) {
+		    (current->gid != child->sgid) || 
+	 	    (cap_issubset(child->cap_permitted, current->cap_permitted)) ||
+		    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE)) {
 			pt_error_return(regs, EPERM);
 			goto out;
 		}
@@ -550,14 +553,13 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			goto out;
 		}
 		child->flags |= PF_PTRACED;
+		write_lock_irqsave(&tasklist_lock, flags);
 		if(child->p_pptr != current) {
-			unsigned long flags;
-			write_lock_irqsave(&tasklist_lock, flags);
 			REMOVE_LINKS(child);
 			child->p_pptr = current;
 			SET_LINKS(child);
-			write_unlock_irqrestore(&tasklist_lock, flags);
 		}
+		write_unlock_irqrestore(&tasklist_lock, flags);
 		send_sig(SIGSTOP, child, 1);
 		pt_succ_return(regs, 0);
 		goto out;

@@ -4,6 +4,12 @@
  *
  * Copyright (C) 1996 Paul Mackerras.
  */
+
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -15,6 +21,10 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include "mace.h"
+
+#ifdef MODULE
+static struct device *mace_devs = NULL;
+#endif
 
 #define N_RX_RING	8
 #define N_TX_RING	6
@@ -71,6 +81,9 @@ static void mace_txdma_intr(int irq, void *dev_id, struct pt_regs *regs);
 static void mace_rxdma_intr(int irq, void *dev_id, struct pt_regs *regs);
 static void mace_set_timeout(struct device *dev);
 static void mace_tx_timeout(unsigned long data);
+static inline void dbdma_reset(volatile struct dbdma_regs *dma);
+static inline void mace_clean_rings(struct mace_data *mp);
+static void __mace_set_address(struct device *dev, void *addr);
 
 /*
  * If we can't get a skbuff when we need it, we use this area for DMA.
@@ -78,7 +91,7 @@ static void mace_tx_timeout(unsigned long data);
 static unsigned char dummy_buf[RX_BUFLEN+2];
 
 /* Bit-reverse one byte of an ethernet hardware address. */
-static int
+static inline int
 bitrev(int b)
 {
     int d = 0, i;
@@ -144,7 +157,8 @@ mace_probe(struct device *dev)
 		dev->dev_addr[j] = rev? bitrev(addr[j]): addr[j];
 		printk("%c%.2x", (j? ':': ' '), dev->dev_addr[j]);
 	}
-	printk("\n");
+	printk(", chip revision %d.%d\n",
+		in_8(&mp->mace->chipid_hi), in_8(&mp->mace->chipid_lo));
 
 	mp = (struct mace_data *) dev->priv;
 	mp->maccc = ENXMT | ENRCV;
@@ -193,6 +207,21 @@ mace_probe(struct device *dev)
 	return 0;
 }
 
+static void dbdma_reset(volatile struct dbdma_regs *dma)
+{
+    int i;
+
+    out_le32(&dma->control, (WAKE|FLUSH|PAUSE|RUN) << 16);
+
+    /*
+     * Yes this looks peculiar, but apparently it needs to be this
+     * way on some machines.
+     */
+    for (i = 200; i > 0; --i)
+	if (ld_le32(&dma->control) & RUN)
+	    udelay(1);
+}
+
 static void mace_reset(struct device *dev)
 {
     struct mace_data *mp = (struct mace_data *) dev->priv;
@@ -203,14 +232,14 @@ static void mace_reset(struct device *dev)
     i = 200;
     while (--i) {
 	out_8(&mb->biucc, SWRST);
-	if (mb->biucc & SWRST) {
-	    udelay(20);
+	if (in_8(&mb->biucc) & SWRST) {
+	    udelay(10);
 	    continue;
 	}
 	break;
     }
     if (!i) {
-	printk("mace: cannot reset chip!\n");
+	printk(KERN_ERR "mace: cannot reset chip!\n");
 	return;
     }
 
@@ -218,19 +247,14 @@ static void mace_reset(struct device *dev)
     i = in_8(&mb->ir);
     out_8(&mb->maccc, 0);	/* turn off tx, rx */
 
-    mb->biucc = XMTSP_64;
-    mb->utr = RTRD;
-    mb->fifocc = RCVFW_32 | XMTFW_16 | XMTFWU | RCVFWU | XMTBRST;
-    mb->xmtfc = AUTO_PAD_XMIT;	/* auto-pad short frames */
-    mb->rcvfc = 0;
+    out_8(&mb->biucc, XMTSP_64);
+    out_8(&mb->utr, RTRD);
+    out_8(&mb->fifocc, RCVFW_32 | XMTFW_16 | XMTFWU | RCVFWU | XMTBRST);
+    out_8(&mb->xmtfc, AUTO_PAD_XMIT); /* auto-pad short frames */
+    out_8(&mb->rcvfc, 0);
 
     /* load up the hardware address */
-    out_8(&mb->iac, ADDRCHG | PHYADDR);
-    while ((in_8(&mb->iac) & ADDRCHG) != 0)
-	;
-    for (i = 0; i < 6; ++i) {
-	out_8(&mb->padr, dev->dev_addr[i]);
-    }
+    __mace_set_address(dev, dev->dev_addr);
 
     /* clear the multicast filter */
     out_8(&mb->iac, ADDRCHG | LOGADDR);
@@ -245,23 +269,30 @@ static void mace_reset(struct device *dev)
     out_8(&mb->plscc, PORTSEL_GPSI + ENPLSIO);
 }
 
-static int mace_set_address(struct device *dev, void *addr)
+static void __mace_set_address(struct device *dev, void *addr)
 {
+    volatile struct mace *mb = ((struct mace_data *) dev->priv)->mace;
     unsigned char *p = addr;
-    struct mace_data *mp = (struct mace_data *) dev->priv;
-    volatile struct mace *mb = mp->mace;
     int i;
-    unsigned long flags;
-
-    save_flags(flags); cli();
 
     /* load up the hardware address */
     out_8(&mb->iac, ADDRCHG | PHYADDR);
     while ((in_8(&mb->iac) & ADDRCHG) != 0)
 	;
-    for (i = 0; i < 6; ++i) {
+    for (i = 0; i < 6; ++i)
 	out_8(&mb->padr, dev->dev_addr[i] = p[i]);
-    }
+}
+
+static int mace_set_address(struct device *dev, void *addr)
+{
+    struct mace_data *mp = (struct mace_data *) dev->priv;
+    volatile struct mace *mb = mp->mace;
+    unsigned long flags;
+
+    save_flags(flags); cli();
+
+    __mace_set_address(dev, addr);
+
     out_8(&mb->iac, 0);
     /* note: setting ADDRCHG clears ENRCV */
     out_8(&mb->maccc, mp->maccc);
@@ -285,6 +316,7 @@ static int mace_open(struct device *dev)
     mace_reset(dev);
 
     /* initialize list of sk_buffs for receiving and set up recv dma */
+    mace_clean_rings(mp);
     memset((char *)mp->rx_cmds, 0, N_RX_RING * sizeof(struct dbdma_cmd));
     cp = mp->rx_cmds;
     for (i = 0; i < N_RX_RING - 1; ++i) {
@@ -335,24 +367,16 @@ static int mace_open(struct device *dev)
     out_8(&mb->maccc, mp->maccc);
     /* enable all interrupts except receive interrupts */
     out_8(&mb->imr, RCVINT);
+
+#ifdef MOD_INC_USE_COUNT
+    MOD_INC_USE_COUNT;
+#endif
     return 0;
 }
 
-static int mace_close(struct device *dev)
+static inline void mace_clean_rings(struct mace_data *mp)
 {
-    struct mace_data *mp = (struct mace_data *) dev->priv;
-    volatile struct mace *mb = mp->mace;
-    volatile struct dbdma_regs *rd = mp->rx_dma;
-    volatile struct dbdma_regs *td = mp->tx_dma;
     int i;
-
-    /* disable rx and tx */
-    mb->maccc = 0;
-    mb->imr = 0xff;		/* disable all intrs */
-
-    /* disable rx and tx dma */
-    st_le32(&rd->control, (RUN|PAUSE|FLUSH|WAKE) << 16);	/* clear run bit */
-    st_le32(&td->control, (RUN|PAUSE|FLUSH|WAKE) << 16);	/* clear run bit */
 
     /* free some skb's */
     for (i = 0; i < N_RX_RING; ++i) {
@@ -366,6 +390,28 @@ static int mace_close(struct device *dev)
 	if (++i >= N_TX_RING)
 	    i = 0;
     }
+}
+
+static int mace_close(struct device *dev)
+{
+    struct mace_data *mp = (struct mace_data *) dev->priv;
+    volatile struct mace *mb = mp->mace;
+    volatile struct dbdma_regs *rd = mp->rx_dma;
+    volatile struct dbdma_regs *td = mp->tx_dma;
+
+    /* disable rx and tx */
+    out_8(&mb->maccc, 0);
+    out_8(&mb->imr, 0xff);		/* disable all intrs */
+
+    /* disable rx and tx dma */
+    st_le32(&rd->control, (RUN|PAUSE|FLUSH|WAKE) << 16); /* clear run bit */
+    st_le32(&td->control, (RUN|PAUSE|FLUSH|WAKE) << 16); /* clear run bit */
+
+    mace_clean_rings(mp);
+
+#ifdef MOD_DEC_USE_COUNT
+    MOD_DEC_USE_COUNT;
+#endif
 
     return 0;
 }
@@ -517,10 +563,10 @@ static void mace_handle_misc_intrs(struct mace_data *mp, int intr)
 
     if (intr & MPCO)
 	mp->stats.rx_missed_errors += 256;
-    mp->stats.rx_missed_errors += mb->mpc;	/* reading clears it */
+    mp->stats.rx_missed_errors += in_8(&mb->mpc);   /* reading clears it */
     if (intr & RNTPCO)
 	mp->stats.rx_length_errors += 256;
-    mp->stats.rx_length_errors += mb->rntpc;	/* reading clears it */
+    mp->stats.rx_length_errors += in_8(&mb->rntpc); /* reading clears it */
     if (intr & CERR)
 	++mp->stats.tx_heartbeat_errors;
     if (intr & BABBLE)
@@ -547,7 +593,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     mace_handle_misc_intrs(mp, intr);
 
     i = mp->tx_empty;
-    while (mb->pr & XMTSV) {
+    while (in_8(&mb->pr) & XMTSV) {
 	del_timer(&mp->tx_timeout);
 	mp->timeout_active = 0;
 	/*
@@ -555,13 +601,13 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 * word.  This appears to unlatch any error indication from
 	 * the DMA controller.
 	 */
-	intr = mb->ir;
+	intr = in_8(&mb->ir);
 	if (intr != 0)
 	    mace_handle_misc_intrs(mp, intr);
 	if (mp->tx_bad_runt) {
 	    fs = in_8(&mb->xmtfs);
 	    mp->tx_bad_runt = 0;
-	    mb->xmtfc = AUTO_PAD_XMIT; 
+	    out_8(&mb->xmtfc, AUTO_PAD_XMIT);
 	    continue;
 	}
 	dstat = ld_le32(&td->status);
@@ -571,7 +617,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 * xcount is the number of complete frames which have been
 	 * written to the fifo but for which status has not been read.
 	 */
-	xcount = (mb->fifofc >> XMTFC_SH) & XMTFC_MASK;
+	xcount = (in_8(&mb->fifofc) >> XMTFC_SH) & XMTFC_MASK;
 	if (xcount == 0 || (dstat & DEAD)) {
 	    /*
 	     * If a packet was aborted before the DMA controller has
@@ -586,11 +632,15 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	     */
 	    out_8(&mb->xmtfc, DXMTFCS);
 	}
-	fs = mb->xmtfs;
+	fs = in_8(&mb->xmtfs);
 	if ((fs & XMTSV) == 0) {
 	    printk(KERN_ERR "mace: xmtfs not valid! (fs=%x xc=%d ds=%x)\n",
 		   fs, xcount, dstat);
-	    return;
+	    mace_reset(dev);
+		/*
+		 * XXX mace likes to hang the machine after a xmtfs error.
+		 * This is hard to reproduce, reseting *may* help
+		 */
 	}
 	cp = mp->tx_cmds + NCMDS_TX * i;
 	stat = ld_le16(&cp->xfer_status);
@@ -600,7 +650,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	     * the transmit FIFO.
 	     */
 	    udelay(1);
-	    x = (mb->fifofc >> XMTFC_SH) & XMTFC_MASK;
+	    x = (in_8(&mb->fifofc) >> XMTFC_SH) & XMTFC_MASK;
 	    if (x != 0) {
 		/* there were two bytes with an end-of-packet indication */
 		mp->tx_bad_runt = 1;
@@ -612,10 +662,10 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		 * We flush the transmit FIFO just in case (by setting the
 		 * XMTFWU bit with the transmitter disabled).
 		 */
-		out_8(&mb->maccc, mb->maccc & ~ENXMT);
-		out_8(&mb->fifocc, mb->fifocc | XMTFWU);
+		out_8(&mb->maccc, in_8(&mb->maccc) & ~ENXMT);
+		out_8(&mb->fifocc, in_8(&mb->fifocc) | XMTFWU);
 		udelay(1);
-		out_8(&mb->maccc, mb->maccc | ENXMT);
+		out_8(&mb->maccc, in_8(&mb->maccc) | ENXMT);
 		out_8(&mb->xmtfc, AUTO_PAD_XMIT);
 	    }
 	}
@@ -632,7 +682,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		++mp->stats.tx_carrier_errors;
 	    if (fs & (UFLO|LCOL|RTRY))
 		++mp->stats.tx_aborted_errors;
-	} else 
+	} else
 	    ++mp->stats.tx_packets;
 	dev_kfree_skb(mp->tx_bufs[i]);
 	--mp->tx_active;
@@ -686,19 +736,19 @@ static void mace_tx_timeout(unsigned long data)
 	goto out;
 
     /* update various counters */
-    mace_handle_misc_intrs(mp, mb->ir);
+    mace_handle_misc_intrs(mp, in_8(&mb->ir));
 
     cp = mp->tx_cmds + NCMDS_TX * mp->tx_empty;
 
     /* turn off both tx and rx and reset the chip */
     out_8(&mb->maccc, 0);
-    out_le32(&td->control, (RUN|PAUSE|FLUSH|WAKE) << 16);
     printk(KERN_ERR "mace: transmit timeout - resetting\n");
+    dbdma_reset(td);
     mace_reset(dev);
 
     /* restart rx dma */
     cp = bus_to_virt(ld_le32(&rd->cmdptr));
-    out_le32(&rd->control, (RUN|PAUSE|FLUSH|WAKE) << 16);
+    dbdma_reset(rd);
     out_le16(&cp->xfer_status, 0);
     out_le32(&rd->cmdptr, virt_to_bus(cp));
     out_le32(&rd->control, (RUN << 16) | RUN);
@@ -786,8 +836,8 @@ static void mace_rxdma_intr(int irq, void *dev_id, struct pt_regs *regs)
 		    ++mp->stats.rx_crc_errors;
 	    } else {
 		/* Mace feature AUTO_STRIP_RCV is on by default, dropping the
-		 * FCS on frames with 802.3 headers. This means that Ethernet 
-		 * frames have 8 extra octets at the end, while 802.3 frames 
+		 * FCS on frames with 802.3 headers. This means that Ethernet
+		 * frames have 8 extra octets at the end, while 802.3 frames
 		 * have only 4. We need to correctly account for this. */
 		if (*(unsigned short *)(data+12) < 1536) /* 802.3 header */
 		    nb -= 4;
@@ -846,3 +896,35 @@ static void mace_rxdma_intr(int irq, void *dev_id, struct pt_regs *regs)
 	mp->rx_fill = i;
     }
 }
+
+#ifdef MODULE
+
+#if LINUX_VERSION_CODE > 0x20118
+MODULE_AUTHOR("Paul Mackerras");
+MODULE_DESCRIPTION("PowerMac MACE driver.");
+#endif
+
+int init_module(void)
+{
+    int res;
+
+    if(mace_devs != NULL)
+	return -EBUSY;
+    res = mace_probe(NULL);
+    return res;
+}
+
+void cleanup_module(void)
+{
+    struct mace_data *mp = (struct mace_data *) mace_devs->priv;
+    unregister_netdev(mace_devs);
+
+    free_irq(mace_devs->irq, mace_interrupt);
+    free_irq(mp->tx_dma_intr, mace_txdma_intr);
+    free_irq(mp->rx_dma_intr, mace_rxdma_intr);
+
+    kfree(mace_devs);
+    mace_devs = NULL;
+}
+
+#endif

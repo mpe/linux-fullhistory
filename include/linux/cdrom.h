@@ -112,6 +112,9 @@
 #define CDROM_DRIVE_STATUS	0x5326  /* Get tray position, etc. */
 #define CDROM_DISC_STATUS	0x5327  /* Get disc type, etc. */
 #define CDROM_CHANGER_NSLOTS    0x5328  /* Get number of slots */
+#define CDROM_LOCKDOOR		0x5329  /* lock or unlock door */
+#define CDROM_DEBUG		0x5330	/* Turn debug messages on/off */
+#define CDROM_GET_CAPABILITY	0x5331	/* get capabilities */
 
 /* This ioctl is only used by sbpcd at the moment */
 #define CDROMAUDIOBUFSIZ        0x5382	/* set the audio buffer size */

@@ -1,4 +1,4 @@
-/* $Id: sbus.h,v 1.7 1998/05/22 14:33:40 jj Exp $
+/* $Id: sbus.h,v 1.10 1998/12/16 04:33:58 davem Exp $
  * sbus.h:  Defines for the Sun SBus.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -74,6 +74,8 @@ struct linux_sbus {
 	int clock_freq;
 	struct linux_prom_ranges sbus_ranges[PROMREG_MAX];
 	int num_sbus_ranges;
+	int upaid;
+	void *starfire_cookie;
 };
 
 extern struct linux_sbus *SBus_chain;
@@ -87,6 +89,16 @@ extern struct linux_sbus *SBus_chain;
         
 #define for_all_sbusdev(device, bus) \
 	for((bus) = SBus_chain, ((device) = (bus) ? (bus)->devices : 0); (bus); (device)=((device)->next ? (device)->next : ((bus) = (bus)->next, (bus) ? (bus)->devices : 0)))
+
+extern void mmu_set_sbus64(struct linux_sbus_device *, int);
+
+/* If you did not get the buffer from mmu_get_*() or sparc_alloc_dvma()
+ * then you must use this to get the 32-bit SBUS dvma address.
+ * And in this case it is your responsibility to make sure the buffer
+ * is GFP_DMA, ie. that it is not greater than MAX_DMA_ADDRESS.
+ */
+extern unsigned long phys_base;
+#define sbus_dvma_addr(__addr)	((__u32)(__pa(__addr) - phys_base))
 
 /* Apply promlib probed SBUS ranges to registers. */
 extern void prom_apply_sbus_ranges(struct linux_sbus *sbus, 

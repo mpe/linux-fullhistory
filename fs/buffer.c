@@ -76,6 +76,7 @@ static int nr_buffers = 0;
 static int nr_buffers_type[NR_LIST] = {0,};
 static int nr_buffer_heads = 0;
 static int nr_unused_buffer_heads = 0;
+static int nr_hashed_buffers = 0;
 
 /* This is used by some architectures to estimate available memory. */
 int buffermem = 0;
@@ -434,6 +435,7 @@ static inline void remove_from_hash_queue(struct buffer_head * bh)
 		*pprev = next;
 		bh->b_pprev = NULL;
 	}
+	nr_hashed_buffers--;
 }
 
 static inline void remove_from_lru_list(struct buffer_head * bh)
@@ -568,6 +570,7 @@ static void insert_into_queues(struct buffer_head * bh)
 			*bhp = bh;
 			bh->b_pprev = bhp;
 		}
+		nr_hashed_buffers++;
 	}
 }
 
@@ -839,21 +842,19 @@ void __brelse(struct buffer_head * buf)
 }
 
 /*
- * bforget() is like brelse(), except it removes the buffer
- * from the hash-queues (so that it won't be re-used if it's
- * shared).
+ * bforget() is like brelse(), except it puts the buffer on the
+ * free list if it can.. We can NOT free the buffer if:
+ *  - there are other users of it
+ *  - it is locked and thus can have active IO
  */
 void __bforget(struct buffer_head * buf)
 {
-	mark_buffer_clean(buf);
-	clear_bit(BH_Protected, &buf->b_state);
-	remove_from_hash_queue(buf);
-	buf->b_dev = NODEV;
-	refile_buffer(buf);
-	if (!--buf->b_count)
+	if (buf->b_count != 1 || buffer_locked(buf)) {
+		__brelse(buf);
 		return;
-	printk("VFS: forgot an in-use buffer! (count=%d)\n",
-		buf->b_count);
+	}
+	remove_from_queues(buf);
+	put_last_free(buf);
 }
 
 /*
@@ -862,20 +863,17 @@ void __bforget(struct buffer_head * buf)
  */
 struct buffer_head * bread(kdev_t dev, int block, int size)
 {
-	struct buffer_head * bh = getblk(dev, block, size);
+	struct buffer_head * bh;
 
-	if (bh) {
-		touch_buffer(bh);
-		if (buffer_uptodate(bh))
-			return bh;
-		ll_rw_block(READ, 1, &bh);
-		wait_on_buffer(bh);
-		if (buffer_uptodate(bh))
-			return bh;
-		brelse(bh);
-		return NULL;
-	}
-	printk("VFS: bread: impossible error\n");
+	bh = getblk(dev, block, size);
+	touch_buffer(bh);
+	if (buffer_uptodate(bh))
+		return bh;
+	ll_rw_block(READ, 1, &bh);
+	wait_on_buffer(bh);
+	if (buffer_uptodate(bh))
+		return bh;
+	brelse(bh);
 	return NULL;
 }
 
@@ -899,9 +897,10 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 	if (pos >= filesize)
 		return NULL;
 
-	if (block < 0 || !(bh = getblk(dev,block,bufsize)))
+	if (block < 0)
 		return NULL;
 
+	bh = getblk(dev, block, bufsize);
 	index = BUFSIZE_INDEX(bh->b_size);
 
 	touch_buffer(bh);
@@ -1010,9 +1009,9 @@ static struct buffer_head * get_unused_buffer_head(int async)
 
 	/* This is critical.  We can't swap out pages to get
 	 * more buffer heads, because the swap-out may need
-	 * more buffer-heads itself.  Thus SLAB_ATOMIC.
+	 * more buffer-heads itself.  Thus SLAB_BUFFER.
 	 */
-	if((bh = kmem_cache_alloc(bh_cachep, SLAB_ATOMIC)) != NULL) {
+	if((bh = kmem_cache_alloc(bh_cachep, SLAB_BUFFER)) != NULL) {
 		memset(bh, 0, sizeof(*bh));
 		nr_buffer_heads++;
 		return bh;
@@ -1491,6 +1490,7 @@ void show_buffers(void)
 	printk("Buffer memory:   %6dkB\n",buffermem>>10);
 	printk("Buffer heads:    %6d\n",nr_buffer_heads);
 	printk("Buffer blocks:   %6d\n",nr_buffers);
+	printk("Buffer hashed:   %6d\n",nr_hashed_buffers);
 
 	for(nlist = 0; nlist < NR_LIST; nlist++) {
 	  found = locked = dirty = used = lastused = protected = 0;

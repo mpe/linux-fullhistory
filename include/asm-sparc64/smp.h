@@ -20,7 +20,7 @@ struct prom_cpuinfo {
 };
 
 extern int linux_num_cpus;	/* number of CPUs probed  */
-extern struct prom_cpuinfo linux_cpus[NR_CPUS];
+extern struct prom_cpuinfo linux_cpus[64];
 
 #endif /* !(__ASSEMBLY__) */
 
@@ -40,10 +40,15 @@ struct cpuinfo_sparc {
 	unsigned long	udelay_val;
 
 	/* Dcache line 2 */
-	unsigned long	pgcache_size;
+	unsigned int	pgcache_size;
+	unsigned int	pgdcache_size;
 	unsigned long	*pte_cache;
-	unsigned long	pgdcache_size;
 	unsigned long	*pgd_cache;
+	unsigned int	idle_volume;
+	unsigned int	__pad;
+
+	/* Dcache lines 3 and 4 */
+	unsigned int	irq_worklists[16];
 };
 
 extern struct cpuinfo_sparc cpu_data[NR_CPUS];
@@ -73,21 +78,33 @@ extern __inline__ int cpu_logical_map(int cpu)
 
 extern __inline__ int hard_smp_processor_id(void)
 {
-	unsigned long upaconfig;
+	extern int this_is_starfire;
 
-	__asm__ __volatile__("ldxa	[%%g0] %1, %0"
-			     : "=r" (upaconfig)
-			     : "i" (ASI_UPA_CONFIG));
-	return ((upaconfig >> 17) & 0x1f);
+	if(this_is_starfire != 0) {
+		extern int starfire_hard_smp_processor_id(void);
+
+		return starfire_hard_smp_processor_id();
+	} else {
+		unsigned long upaconfig;
+		__asm__ __volatile__("ldxa	[%%g0] %1, %0"
+				     : "=r" (upaconfig)
+				     : "i" (ASI_UPA_CONFIG));
+		return ((upaconfig >> 17) & 0x1f);
+	}
 }
 
 #define smp_processor_id() (current->processor)
 
-extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
+/* This needn't do anything as we do not sleep the cpu
+ * inside of the idler task, so an interrupt is not needed
+ * to get a clean fast response.
+ */
+extern __inline__ void smp_send_reschedule(int cpu) { }
 
-/* As idle task checks need_resched in a tight loop, it is not necessary to
-   wake it up. -jj */
-#define smp_send_reschedule(cpu) do {} while (0)
+/* This is a nop as well because we capture all other cpus
+ * anyways when making the PROM active.
+ */
+extern __inline__ void smp_send_stop(void) { }
 
 #endif /* !(__ASSEMBLY__) */
 

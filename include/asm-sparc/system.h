@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.71 1998/10/13 03:51:06 jj Exp $ */
+/* $Id: system.h,v 1.72 1999/01/02 16:50:21 davem Exp $ */
 #include <linux/config.h>
 
 #ifndef __SPARC_SYSTEM_H
@@ -294,7 +294,9 @@ do {	register unsigned long bits asm("g7");				\
 #endif
 
 /* XXX Change this if we ever use a PSO mode kernel. */
-#define mb()  __asm__ __volatile__ ("" : : : "memory")
+#define mb()	__asm__ __volatile__ ("" : : : "memory")
+#define rmb()	mb()
+#define wmb()	mb()
 
 #define nop() __asm__ __volatile__ ("nop");
 

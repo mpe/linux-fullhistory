@@ -62,7 +62,7 @@
  * The _DEFINITIVE_ memory mapping/unmapping functions.
  * This is due to the fact that they're changing soooo often...
  */
-#define MMAP(a,b)	ioremap((u32 )(a), b)
+#define MMAP(a,b)	ioremap((unsigned long )(a), b)
 #define UNMAP(a,b)	iounmap(a)
 
 /*

@@ -262,6 +262,7 @@ CONFIG_PPP=y
 # CONFIG_SHAPER is not set
 # CONFIG_HOSTESS_SV11 is not set
 # CONFIG_COSA is not set
+# CONFIG_RCPCI is not set
 
 #
 # Amateur Radio support

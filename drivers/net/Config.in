@@ -32,8 +32,8 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     fi
   fi
   if [ "$CONFIG_PPC" = "y" ]; then
-    bool 'MACE (Power Mac ethernet) support' CONFIG_MACE
-    bool 'BMAC (G3 ethernet) support' CONFIG_BMAC
+    tristate 'MACE (Power Mac ethernet) support' CONFIG_MACE
+    tristate 'BMAC (G3 ethernet) support' CONFIG_BMAC
   fi
   if [ "$CONFIG_ZORRO" = "y" ]; then
     tristate 'Ariadne support' CONFIG_ARIADNE

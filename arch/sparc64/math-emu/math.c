@@ -1,7 +1,8 @@
-/* $Id: math.c,v 1.5 1998/06/12 14:54:27 jj Exp $
+/* $Id: math.c,v 1.7 1999/02/10 14:16:26 davem Exp $
  * arch/sparc64/math-emu/math.c
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1999 David S. Miller (davem@redhat.com)
  *
  * Emulation routines originate from soft-fp package, which is part
  * of glibc and has appropriate copyrights in it.
@@ -13,6 +14,8 @@
 #include <asm/fpumacro.h>
 #include <asm/ptrace.h>
 #include <asm/uaccess.h>
+
+#include "soft-fp.h"
 
 #define FLOATFUNC(x) extern int x(void *,void *,void *);
 
@@ -53,6 +56,91 @@ FLOATFUNC(FDTOS)
 FLOATFUNC(FSTOD)
 FLOATFUNC(FSTOI)
 FLOATFUNC(FDTOI)
+
+#define FSR_TEM_SHIFT	23UL
+#define FSR_TEM_MASK	(0x1fUL << FSR_TEM_SHIFT)
+#define FSR_AEXC_SHIFT	5UL
+#define FSR_AEXC_MASK	(0x1fUL << FSR_AEXC_SHIFT)
+#define FSR_CEXC_SHIFT	0UL
+#define FSR_CEXC_MASK	(0x1fUL << FSR_CEXC_SHIFT)
+
+/* All routines returning an exception to raise should detect
+ * such exceptions _before_ rounding to be consistant with
+ * the behavior of the hardware in the implemented cases
+ * (and thus with the recommendations in the V9 architecture
+ * manual).
+ *
+ * We return 0 if a SIGFPE should be sent, 1 otherwise.
+ */
+static int record_exception(struct pt_regs *regs, int eflag)
+{
+	u64 fsr = current->tss.xfsr[0];
+	int would_trap;
+
+	/* Determine if this exception would have generated a trap. */
+	would_trap = (fsr & ((long)eflag << FSR_TEM_SHIFT)) != 0UL;
+
+	/* If trapping, we only want to signal one bit. */
+	if(would_trap != 0) {
+		eflag &= ((fsr & FSR_TEM_MASK) >> FSR_TEM_SHIFT);
+		if((eflag & (eflag - 1)) != 0) {
+			if(eflag & EFLAG_INVALID)
+				eflag = EFLAG_INVALID;
+			else if(eflag & EFLAG_DIVZERO)
+				eflag = EFLAG_DIVZERO;
+			else if(eflag & EFLAG_INEXACT)
+				eflag = EFLAG_INEXACT;
+		}
+	}
+
+	/* Set CEXC, here are the rules:
+	 *
+	 * 1) In general all FPU ops will set one and only one
+	 *    bit in the CEXC field, this is always the case
+	 *    when the IEEE exception trap is enabled in TEM.
+	 *
+	 * 2) As a special case, if an overflow or underflow
+	 *    is being signalled, AND the trap is not enabled
+	 *    in TEM, then the inexact field shall also be set.
+	 */
+	fsr &= ~(FSR_CEXC_MASK);
+	if(would_trap ||
+	   (eflag & (EFLAG_OVERFLOW | EFLAG_UNDERFLOW)) == 0) {
+		fsr |= ((long)eflag << FSR_CEXC_SHIFT);
+	} else {
+		fsr |= (((long)eflag << FSR_CEXC_SHIFT) |
+			(EFLAG_INEXACT << FSR_CEXC_SHIFT));
+	}
+
+	/* Set the AEXC field, rules are:
+	 *
+	 * 1) If a trap would not be generated, the
+	 *    CEXC just generated is OR'd into the
+	 *    existing value of AEXC.
+	 *
+	 * 2) When a trap is generated, AEXC is cleared.
+	 */
+	if(would_trap == 0)
+		fsr |= ((long)eflag << FSR_AEXC_SHIFT);
+	else
+		fsr &= ~(FSR_AEXC_MASK);
+
+	/* If trapping, indicate fault trap type IEEE. */
+	if(would_trap != 0)
+		fsr |= (1UL << 14);
+
+	current->tss.xfsr[0] = fsr;
+
+	/* If we will not trap, advance the program counter over
+	 * the instruction being handled.
+	 */
+	if(would_trap == 0) {
+		regs->tpc = regs->tnpc;
+		regs->tnpc += 4;
+	}
+
+	return (would_trap ? 0 : 1);
+}
 
 int do_mathemu(struct pt_regs *regs, struct fpustate *f)
 {
@@ -175,7 +263,12 @@ int do_mathemu(struct pt_regs *regs, struct fpustate *f)
 			current->tss.fpsaved[0] |= flags;
 			break;
 		}
-		func(rd, rs2, rs1);
+		flags = func(rd, rs2, rs1);
+		if(flags != 0)
+			return record_exception(regs, flags);
+
+		/* Success and no exceptions detected. */
+		current->tss.xfsr[0] &= ~(FSR_CEXC_MASK);
 		regs->tpc = regs->tnpc;
 		regs->tnpc += 4;
 		return 1;

@@ -20,13 +20,19 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 #include <asm/prom.h>
 #include <asm/io.h>
 #include <asm/dbdma.h>
 #include <asm/ide.h>
 #include <asm/mediabay.h>
 #include <asm/feature.h>
+#ifdef CONFIG_PMAC_PBOOK
+#include <asm/adb.h>
+#include <asm/pmu.h>
+#endif
 #include "ide.h"
+#include "ide_modes.h"
 
 ide_ioreg_t pmac_ide_regbase[MAX_HWIFS];
 int pmac_ide_irq[MAX_HWIFS];
@@ -40,6 +46,13 @@ static void pmac_ide_setup_dma(struct device_node *np, ide_hwif_t *hwif);
 static int pmac_ide_dmaproc(ide_dma_action_t func, ide_drive_t *drive);
 static int pmac_ide_build_dmatable(ide_drive_t *drive, int wr);
 #endif /* CONFIG_BLK_DEV_IDEDMA_PMAC */
+
+#ifdef CONFIG_PMAC_PBOOK
+static int idepmac_notify(struct notifier_block *, unsigned long, void *);
+struct notifier_block idepmac_sleep_notifier = {
+	idepmac_notify
+};
+#endif /* CONFIG_PMAC_PBOOK */
 
 /*
  * N.B. this can't be an initfunc, because the media-bay task can
@@ -71,6 +84,23 @@ pmac_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 				break;
 			}
 		}
+	}
+}
+
+void pmac_ide_tuneproc(ide_drive_t *drive, byte pio)
+{
+	ide_pio_data_t d;
+
+	if (_machine != _MACH_Pmac)
+		return;
+	pio = ide_get_best_pio_mode(drive, pio, 4, &d);
+	switch (pio) {
+	case 4:
+		out_le32((unsigned *)(IDE_DATA_REG + 0x200), 0x211025);
+		break;
+	default:
+		out_le32((unsigned *)(IDE_DATA_REG + 0x200), 0x2f8526);
+		break;
 	}
 }
 
@@ -145,9 +175,10 @@ pmac_ide_probe(void))
 		pmac_ide_init_hwif_ports(hwif->io_ports, base, &hwif->irq);
 		hwif->chipset = ide_generic;
 		hwif->noprobe = !hwif->io_ports[IDE_DATA_OFFSET];
+		hwif->tuneproc = pmac_ide_tuneproc;
 
 #ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
-		if (np->n_addrs >= 2 && np->n_intrs >= 2) {
+		if (np->n_addrs >= 2) {
 			/* has a DBDMA controller channel */
 			pmac_ide_setup_dma(np, hwif);
 		}
@@ -156,6 +187,10 @@ pmac_ide_probe(void))
 		++i;
 	}
 	pmac_ide_count = i;
+
+#ifdef CONFIG_PMAC_PBOOK
+	notifier_chain_register(&sleep_notifier_list, &idepmac_sleep_notifier);
+#endif /* CONFIG_PMAC_PBOOK */
 }
 
 #ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
@@ -311,5 +346,32 @@ int pmac_ide_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 	}
 	return 0;
 }
-
 #endif /* CONFIG_BLK_DEV_IDEDMA_PMAC */
+
+#ifdef CONFIG_PMAC_PBOOK
+static int idepmac_notify(struct notifier_block *this,
+			  unsigned long code, void *p)
+{
+	int i, timeout;
+
+	switch (code) {
+	case PBOOK_SLEEP:
+		/* do anything here?? */
+		break;
+	case PBOOK_WAKE:
+		/* wait for the controller(s) to become ready */
+		timeout = 5000;
+		for (i = 0; i < pmac_ide_count; ++i) {
+			unsigned long base = pmac_ide_regbase[i];
+			if (check_media_bay_by_base(base, MB_CD) == -EINVAL)
+				continue;
+			while ((inb(base + 0x70) & BUSY_STAT) && timeout) {
+				mdelay(1);
+				--timeout;
+			}
+		}
+		break;
+	}
+	return NOTIFY_DONE;
+}
+#endif /* CONFIG_PMAC_PBOOK */

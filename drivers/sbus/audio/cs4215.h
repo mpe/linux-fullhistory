@@ -13,8 +13,9 @@ struct cs4215 {
 	__u8	ctrl[4];	/* Ctrl mode: Time slots 1-4 */
 	__volatile__ struct dbri_mem td;
 	__volatile__ struct dbri_mem rd;
-	__u8	version;
 	__u8	onboard;
+	__u32	status;
+        __u32	version;
 };
 
 

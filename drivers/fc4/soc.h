@@ -8,7 +8,7 @@
 
 #include "fc.h"
 #include "fcp.h"
-#include "fcp_scsi.h"
+#include "fcp_impl.h"
 
 /* Hardware structures and constants first {{{ */
 

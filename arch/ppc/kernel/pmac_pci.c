@@ -84,7 +84,12 @@ int pmac_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 			 (1UL << (dev_fn >> 3)) + ((dev_fn & 7) << 8)
 			 + (offset & ~3));
 	} else {
-		out_le32(bp->cfg_addr, (dev_fn << 8) + (offset & ~3) + 1);
+		/* Bus number once again taken into consideration.
+		 * Change applied from 2.1.24. This makes devices located
+		 * behind PCI-PCI bridges visible.
+		 * -Ranjit Deshpande, 01/20/99
+		 */
+		out_le32(bp->cfg_addr, (bus << 16) + (dev_fn << 8) + (offset & ~3) + 1);
 	}
 	udelay(2);
 	*val = in_8(bp->cfg_data + (offset & 3));
@@ -109,7 +114,8 @@ int pmac_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
 			 (1UL << (dev_fn >> 3)) + ((dev_fn & 7) << 8)
 			 + (offset & ~3));
 	} else {
-		out_le32(bp->cfg_addr, (dev_fn << 8) + (offset & ~3) + 1);
+		/* See pci_read_config_byte */
+		out_le32(bp->cfg_addr, (bus << 16) + (dev_fn << 8) + (offset & ~3) + 1);
 	}
 	udelay(2);
 	*val = in_le16((volatile unsigned short *)(bp->cfg_data + (offset & 3)));
@@ -134,7 +140,8 @@ int pmac_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
 			 (1UL << (dev_fn >> 3)) + ((dev_fn & 7) << 8)
 			 + offset);
 	} else {
-		out_le32(bp->cfg_addr, (dev_fn << 8) + offset + 1);
+		/* See pci_read_config_byte */
+		out_le32(bp->cfg_addr, (bus << 16) + (dev_fn << 8) + offset + 1);
 	}
 	udelay(2);
 	*val = in_le32((volatile unsigned int *)bp->cfg_data);
@@ -156,7 +163,8 @@ int pmac_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
 			 (1UL << (dev_fn >> 3)) + ((dev_fn & 7) << 8)
 			 + (offset & ~3));
 	} else {
-		out_le32(bp->cfg_addr, (dev_fn << 8) + (offset & ~3) + 1);
+		/* See pci_read_config_byte */
+		out_le32(bp->cfg_addr, (bus << 16) + (dev_fn << 8) + (offset & ~3) + 1);
 	}
 	udelay(2);
 	out_8(bp->cfg_data + (offset & 3), val);
@@ -180,7 +188,8 @@ int pmac_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 			 (1UL << (dev_fn >> 3)) + ((dev_fn & 7) << 8)
 			 + (offset & ~3));
 	} else {
-		out_le32(bp->cfg_addr, (dev_fn << 8) + (offset & ~3) + 1);
+		/* See pci_read_config_byte */
+		out_le32(bp->cfg_addr, (bus << 16) + (dev_fn << 8) + (offset & ~3) + 1);
 	}
 	udelay(2);
 	out_le16((volatile unsigned short *)(bp->cfg_data + (offset & 3)), val);
@@ -204,7 +213,8 @@ int pmac_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 			 (1UL << (dev_fn >> 3)) + ((dev_fn & 7) << 8)
 			 + offset);
 	} else {
-		out_le32(bp->cfg_addr, (dev_fn << 8) + offset + 1);
+		/* See pci_read_config_byte */
+		out_le32(bp->cfg_addr, (bus << 16) + (dev_fn << 8) + (offset & ~3) + 1);
 	}
 	udelay(2);
 	out_le32((volatile unsigned int *)bp->cfg_data, val);

@@ -19,6 +19,7 @@
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
 #include <asm/head.h>       /* for KERNBASE */
 #include <asm/btfixup.h>
 

@@ -30,7 +30,6 @@
 #include <asm/io.h>
 
 #include <linux/inet.h>
-#include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>

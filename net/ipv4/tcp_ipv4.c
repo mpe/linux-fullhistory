@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.166 1999/02/23 08:12:41 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.169 1999/03/11 00:04:22 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -657,7 +657,6 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 static int tcp_v4_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 {
-	struct tcp_opt *tp;
 	int retval = -EINVAL;
 
 	/* Do sanity checking for sendmsg/sendto/send. */
@@ -679,15 +678,7 @@ static int tcp_v4_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		if (addr->sin_addr.s_addr != sk->daddr)
 			goto out;
 	}
-
-	lock_sock(sk);
-	retval = tcp_do_sendmsg(sk, msg->msg_iovlen, msg->msg_iov,
-				msg->msg_flags);
-	/* Push out partial tail frames if needed. */
-	tp = &(sk->tp_pinfo.af_tcp);
-	if(tp->send_head && tcp_snd_test(sk, tp->send_head))
-		tcp_write_xmit(sk);
-	release_sock(sk);
+	retval = tcp_do_sendmsg(sk, msg);
 
 out:
 	return retval;

@@ -560,6 +560,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_FCAL),y)
+L_OBJS += fcal.o
+else
+  ifeq ($(CONFIG_SCSI_FCAL),m)
+  M_OBJS += fcal.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_EATA),y)
 L_OBJS += eata.o
 else

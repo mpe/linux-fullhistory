@@ -110,8 +110,8 @@
   * Prints all relevant lines for a complete Oops report.
   * Tries to provide output no matter how bad the input is.  The level of
      progress and error reporting is aimed at beginners.
-  * Handles i386, alpha, sparc, m68k.  It is a lot easier to extend to
-    other architectures (patches and/or sample data gratefully accepted).
+  * Handles i386, alpha, sparc, sparc64, m68k.  It is a lot easier to extend
+    to other architectures (patches and/or sample data gratefully accepted).
   * Handles all Oops in the input file(s).
 
 
@@ -193,6 +193,7 @@
           m68k code derived from ksymoops.cc and reading traps.c, untested.
 	  MIPS tested.
 	  Sparc tested.
+	  Sparc64 tested.
 	  Alpha tested.
 	  ARM tested.
 
@@ -337,6 +338,9 @@
 
   * The sparc PC line starts with PSR and PC is the second hex value, not
     bracketed.
+
+  * The sparc64 TPC line starts with TSTATE and TPC is the second hex value,
+    not bracketed.
 
   * A call trace line is identified by 'Call Trace:' followed by at least
     one white space.  Or it is a line starting with a bracketed address,

@@ -5,6 +5,8 @@
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/mm.h>
+#include <linux/pagemap.h>
 #include <linux/tasks.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
@@ -34,23 +36,22 @@ extern int linux_num_cpus;
 extern void calibrate_delay(void);
 extern unsigned prom_cpu_nodes[];
 
+struct cpuinfo_sparc cpu_data[NR_CPUS]  __attribute__ ((aligned (64)));
+
+volatile int cpu_number_map[NR_CPUS]    __attribute__ ((aligned (64)));
+volatile int __cpu_logical_map[NR_CPUS] __attribute__ ((aligned (64)));
+
+/* Please don't make this stuff initdata!!!  --DaveM */
+static unsigned char boot_cpu_id = 0;
+static int smp_activated = 0;
+
+/* Kernel spinlock */
+spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
+
 volatile int smp_processors_ready = 0;
 unsigned long cpu_present_map = 0;
 int smp_num_cpus = 1;
 int smp_threads_ready = 0;
-
-struct cpuinfo_sparc cpu_data[NR_CPUS] __attribute__ ((aligned (64)));
-
-/* Please don't make this initdata!!!  --DaveM */
-static unsigned char boot_cpu_id = 0;
-
-static int smp_activated = 0;
-
-volatile int cpu_number_map[NR_CPUS];
-volatile int __cpu_logical_map[NR_CPUS];
-
-/* Kernel spinlock */
-spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
 __initfunc(void smp_setup(char *str, int *ints))
 {
@@ -84,6 +85,8 @@ int smp_bogo(char *buf)
 
 __initfunc(void smp_store_cpu_info(int id))
 {
+	int i;
+
 	cpu_data[id].irq_count			= 0;
 	cpu_data[id].bh_count			= 0;
 	/* multiplier and counter set by
@@ -94,16 +97,18 @@ __initfunc(void smp_store_cpu_info(int id))
 	cpu_data[id].pte_cache			= NULL;
 	cpu_data[id].pgdcache_size		= 0;
 	cpu_data[id].pgd_cache			= NULL;
-}
+	cpu_data[id].idle_volume		= 0;
 
-extern void distribute_irqs(void);
+	for(i = 0; i < 16; i++)
+		cpu_data[id].irq_worklists[i] = 0;
+}
 
 __initfunc(void smp_commence(void))
 {
-	distribute_irqs();
 }
 
 static void smp_setup_percpu_timer(void);
+static void smp_tune_scheduling(void);
 
 static volatile unsigned long callin_flag = 0;
 
@@ -173,9 +178,15 @@ void cpu_panic(void)
 	panic("SMP bolixed\n");
 }
 
-extern struct prom_cpuinfo linux_cpus[NR_CPUS];
+extern struct prom_cpuinfo linux_cpus[64];
 
 extern unsigned long smp_trampoline;
+
+/* The OBP cpu startup callback truncates the 3rd arg cookie to
+ * 32-bits (I think) so to be safe we have it read the pointer
+ * contained here so we work on >4GB machines. -DaveM
+ */
+static struct task_struct *cpu_new_task = NULL;
 
 __initfunc(void smp_boot_cpus(void))
 {
@@ -184,6 +195,7 @@ __initfunc(void smp_boot_cpus(void))
 	printk("Entering UltraSMPenguin Mode...\n");
 	__sti();
 	smp_store_cpu_info(boot_cpu_id);
+	smp_tune_scheduling();
 
 	if(linux_num_cpus == 1)
 		return;
@@ -194,12 +206,14 @@ __initfunc(void smp_boot_cpus(void))
 
 		if(cpu_present_map & (1UL << i)) {
 			unsigned long entry = (unsigned long)(&smp_trampoline);
+			unsigned long cookie = (unsigned long)(&cpu_new_task);
 			struct task_struct *p;
 			int timeout;
 			int no;
 			extern unsigned long phys_base;
 
 			entry += phys_base - KERNBASE;
+			cookie += phys_base - KERNBASE;
 			kernel_thread(start_secondary, NULL, CLONE_PID);
 			p = task[++cpucount];
 			p->processor = i;
@@ -207,8 +221,9 @@ __initfunc(void smp_boot_cpus(void))
 			for (no = 0; no < linux_num_cpus; no++)
 				if (linux_cpus[no].mid == i)
 					break;
+			cpu_new_task = p;
 			prom_startcpu(linux_cpus[no].prom_node,
-				      entry, ((unsigned long)p));
+				      entry, cookie);
 			for(timeout = 0; timeout < 5000000; timeout++) {
 				if(callin_flag)
 					break;
@@ -216,8 +231,8 @@ __initfunc(void smp_boot_cpus(void))
 			}
 			if(callin_flag) {
 				cpu_number_map[i] = cpucount;
-				prom_cpu_nodes[i] = linux_cpus[no].prom_node;
 				__cpu_logical_map[cpucount] = i;
+				prom_cpu_nodes[i] = linux_cpus[no].prom_node;
 			} else {
 				cpucount--;
 				printk("Processor %d is stuck.\n", i);
@@ -228,6 +243,7 @@ __initfunc(void smp_boot_cpus(void))
 			cpu_number_map[i] = -1;
 		}
 	}
+	cpu_new_task = NULL;
 	if(cpucount == 0) {
 		printk("Error: only one processor found.\n");
 		cpu_present_map = (1UL << smp_processor_id());
@@ -247,17 +263,6 @@ __initfunc(void smp_boot_cpus(void))
 	}
 	smp_processors_ready = 1;
 	membar("#StoreStore | #StoreLoad");
-}
-
-/* We don't even need to do anything, the only generic message pass done
- * anymore is to stop all cpus during a panic().  When the user drops to
- * the PROM prompt, the firmware will send the other cpu's it's MONDO
- * vector anyways, so doing anything special here is pointless.
- *
- * This whole thing should go away anyways...
- */
-void smp_message_pass(int target, int msg, unsigned long data, int wait)
-{
 }
 
 /* #define XCALL_DEBUG */
@@ -642,6 +647,100 @@ __initfunc(void smp_tick_init(void))
 	__cpu_logical_map[0] = boot_cpu_id;
 	current->processor = boot_cpu_id;
 	prof_counter(boot_cpu_id) = prof_multiplier(boot_cpu_id) = 1;
+}
+
+static inline unsigned long find_flush_base(unsigned long size)
+{
+	struct page *p = mem_map;
+	unsigned long found, base;
+
+	size = PAGE_ALIGN(size);
+	found = size;
+	base = page_address(p);
+	while(found != 0) {
+		/* Failure. */
+		if(p >= (mem_map + max_mapnr))
+			return 0UL;
+		if(PageSkip(p)) {
+			p = p->next_hash;
+			base = page_address(p);
+			found = size;
+		} else {
+			found -= PAGE_SIZE;
+			p++;
+		}
+	}
+	return base;
+}
+
+cycles_t cacheflush_time;
+
+__initfunc(static void smp_tune_scheduling (void))
+{
+	unsigned long flush_base, flags, *p;
+	unsigned int ecache_size;
+	cycles_t tick1, tick2, raw;
+
+	/* Approximate heuristic for SMP scheduling.  It is an
+	 * estimation of the time it takes to flush the L2 cache
+	 * on the local processor.
+	 *
+	 * The ia32 chooses to use the L1 cache flush time instead,
+	 * and I consider this complete nonsense.  The Ultra can service
+	 * a miss to the L1 with a hit to the L2 in 7 or 8 cycles, and
+	 * L2 misses are what create extra bus traffic (ie. the "cost"
+	 * of moving a process from one cpu to another).
+	 */
+	printk("SMP: Calibrating ecache flush... ");
+	ecache_size = prom_getintdefault(linux_cpus[0].prom_node,
+					 "ecache-size", (512 *1024));
+	flush_base = find_flush_base(ecache_size << 1);
+
+	if(flush_base != 0UL) {
+		__save_and_cli(flags);
+
+		/* Scan twice the size once just to get the TLB entries
+		 * loaded and make sure the second scan measures pure misses.
+		 */
+		for(p = (unsigned long *)flush_base;
+		    ((unsigned long)p) < (flush_base + (ecache_size<<1));
+		    p += (64 / sizeof(unsigned long)))
+			*((volatile unsigned long *)p);
+
+		/* Now the real measurement. */
+		__asm__ __volatile__("
+		b,pt	%%xcc, 1f
+		 rd	%%tick, %0
+
+		.align	64
+1:		ldx	[%2 + 0x000], %%g1
+		ldx	[%2 + 0x040], %%g2
+		ldx	[%2 + 0x080], %%g3
+		ldx	[%2 + 0x0c0], %%g5
+		add	%2, 0x100, %2
+		cmp	%2, %4
+		bne,pt	%%xcc, 1b
+		 nop
+	
+		rd	%%tick, %1"
+		: "=&r" (tick1), "=&r" (tick2), "=&r" (flush_base)
+		: "2" (flush_base), "r" (flush_base + ecache_size)
+		: "g1", "g2", "g3", "g5");
+
+		__restore_flags(flags);
+
+		raw = (tick2 - tick1);
+
+		/* Dampen it a little, considering two processes
+		 * sharing the cache and fitting.
+		 */
+		cacheflush_time = (raw - (raw >> 2));
+	} else
+		cacheflush_time = ((ecache_size << 2) +
+				   (ecache_size << 1));
+
+	printk("Using heuristic of %d cycles.\n",
+	       (int) cacheflush_time);
 }
 
 int __init setup_profiling_timer(unsigned int multiplier)

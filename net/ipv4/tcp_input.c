@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.157 1999/03/05 09:35:06 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.159 1999/03/17 19:30:39 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -345,6 +345,7 @@ void tcp_parse_options(struct sock *sk, struct tcphdr *th, struct tcp_opt *tp, i
 {
 	unsigned char *ptr;
 	int length=(th->doff*4)-sizeof(struct tcphdr);
+	int saw_mss = 0;
 
 	ptr = (unsigned char *)(th + 1);
 	tp->saw_tstamp = 0;
@@ -373,6 +374,7 @@ void tcp_parse_options(struct sock *sk, struct tcphdr *th, struct tcp_opt *tp, i
 							in_mss = 536;
 						if (tp->mss_clamp > in_mss)
 							tp->mss_clamp = in_mss;
+						saw_mss = 1;
 					}
 					break;
 				case TCPOPT_WINDOW:
@@ -426,6 +428,8 @@ void tcp_parse_options(struct sock *sk, struct tcphdr *th, struct tcp_opt *tp, i
 	  			length-=opsize;
 	  	};
 	}
+	if(th->syn && saw_mss == 0)
+		tp->mss_clamp = 536;
 }
 
 /* Fast parse options. This hopes to only see timestamps.
@@ -662,7 +666,7 @@ static void tcp_ack_probe(struct sock *sk, __u32 ack)
 	tp->probes_out = 0;
 	
 	/* Was it a usable window open? */
-	
+
 	/* should always be non-null */
 	if (tp->send_head != NULL &&
 	    !before (ack + tp->snd_wnd, TCP_SKB_CB(tp->send_head)->end_seq)) {
@@ -949,7 +953,9 @@ int tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
 		tcp_tw_deschedule(tw);
 		tcp_timewait_kill(tw);
 		sk = af_specific->get_sock(skb, th);
-		if(sk == NULL || !ipsec_sk_policy(sk,skb))
+		if(sk == NULL ||
+		   !ipsec_sk_policy(sk,skb) ||
+		   atomic_read(&sk->sock_readers) != 0)
 			return 0;
 		skb_set_owner_r(skb, sk);
 		af_specific = sk->tp_pinfo.af_tcp.af_specific;

@@ -1,5 +1,5 @@
 /*
- * $Id: process.c,v 1.70 1999/01/07 16:28:59 cort Exp $
+ * $Id: process.c,v 1.75 1999/02/12 07:06:29 cort Exp $
  *
  *  linux/arch/ppc/kernel/process.c
  *
@@ -49,6 +49,15 @@ extern unsigned long _get_SP(void);
 extern spinlock_t scheduler_lock;
 
 struct task_struct *last_task_used_math = NULL;
+static struct vm_area_struct init_mmap = INIT_MMAP;
+static struct fs_struct init_fs = INIT_FS;
+static struct file * init_fd_array[NR_OPEN] = { NULL, };
+static struct files_struct init_files = INIT_FILES;
+static struct signal_struct init_signals = INIT_SIGNALS;
+struct mm_struct init_mm = INIT_MM;
+union task_union init_task_union = { INIT_TASK };
+/* only used to get secondary processor up */
+struct task_struct *current_set[NR_CPUS] = {&init_task, };
 
 #undef SHOW_TASK_SWITCHES 1
 #undef CHECK_STACK 1
@@ -64,18 +73,6 @@ task_top(struct task_struct *tsk)
 {
 	return ((unsigned long)tsk) + sizeof(struct task_struct);
 }
-
-static struct vm_area_struct init_mmap = INIT_MMAP;
-static struct fs_struct init_fs = INIT_FS;
-static struct file * init_fd_array[NR_OPEN] = { NULL, };
-static struct files_struct init_files = INIT_FILES;
-static struct signal_struct init_signals = INIT_SIGNALS;
-
-struct mm_struct init_mm = INIT_MM;
-union task_union init_task_union = { INIT_TASK };
-
-/* only used to get secondary processor up */
-struct task_struct *current_set[NR_CPUS] = {&init_task, };
 
 int
 dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpregs)
@@ -397,7 +394,6 @@ asmlinkage int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6,
 
 	int res;
 	
-	lock_kernel();
 	res = do_fork(SIGCHLD, regs->gpr[1], regs);
 	/* only parent returns here */
 #ifdef __SMP__
@@ -408,8 +404,13 @@ asmlinkage int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6,
 	if ((current->pid == 0) && (current == &init_task))
 		res = 1;
 #endif /* __SMP__ */
-	unlock_kernel();
 	return res;
+}
+
+asmlinkage int sys_vfork(int p1, int p2, int p3, int p4, int p5, int p6,
+			 struct pt_regs *regs)
+{
+	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs->gpr[1], regs);
 }
 
 asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,

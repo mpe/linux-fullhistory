@@ -68,7 +68,6 @@
 #include <linux/serial.h>
 #include <linux/tty_driver.h>
 #include <linux/malloc.h>
-#include <linux/string.h>
 #include <linux/init.h>
 #include <linux/version.h>
 

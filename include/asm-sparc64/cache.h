@@ -9,4 +9,6 @@
 
 #define        L1_CACHE_ALIGN(x)       (((x)+(L1_CACHE_BYTES-1))&~(L1_CACHE_BYTES-1))
 
+#define        SMP_CACHE_BYTES		64 /* L2 cache line size. */
+
 #endif

@@ -1,4 +1,4 @@
-/* $Id: generic.c,v 1.3 1998/10/27 23:28:07 davem Exp $
+/* $Id: generic.c,v 1.8 1999/03/12 06:51:50 davem Exp $
  * generic.c: Generic Sparc mm routines that are not dependent upon
  *            MMU type but are Sparc specific.
  *
@@ -56,6 +56,10 @@ static inline void forget_pte(pte_t page)
  *
  * They use a pgprot that sets PAGE_IO and does not check the
  * mem_map table as this is independent of normal memory.
+ *
+ * As a special hack if the lowest bit of offset is set the
+ * side-effect bit will be turned off.  This is used as a
+ * performance improvement on FFB/AFB. -DaveM
  */
 static inline void io_remap_pte_range(pte_t * pte, unsigned long address, unsigned long size,
 	unsigned long offset, pgprot_t prot, int space)
@@ -71,23 +75,32 @@ static inline void io_remap_pte_range(pte_t * pte, unsigned long address, unsign
 		pte_t entry;
 		unsigned long curend = address + PAGE_SIZE;
 		
-		entry = mk_pte_io(offset, prot, space);
-		offset += PAGE_SIZE;
+		entry = mk_pte_io((offset & ~(0x1UL)), prot, space);
 		if (!(address & 0xffff)) {
-			if (!(address & 0x3fffff) && !(offset & 0x3fffff) && end >= address + 0x400000) {
-				entry = mk_pte_io(offset, __pgprot(pgprot_val (prot) | _PAGE_SZ4MB), space);
+			if (!(address & 0x3fffff) && !(offset & 0x3ffffe) && end >= address + 0x400000) {
+				entry = mk_pte_io((offset & ~(0x1UL)),
+						  __pgprot(pgprot_val (prot) | _PAGE_SZ4MB),
+						  space);
 				curend = address + 0x400000;
-				offset += 0x400000 - PAGE_SIZE;
-			} else if (!(address & 0x7ffff) && !(offset & 0x7ffff) && end >= address + 0x80000) {
-				entry = mk_pte_io(offset, __pgprot(pgprot_val (prot) | _PAGE_SZ512K), space);
+				offset += 0x400000;
+			} else if (!(address & 0x7ffff) && !(offset & 0x7fffe) && end >= address + 0x80000) {
+				entry = mk_pte_io((offset & ~(0x1UL)),
+						  __pgprot(pgprot_val (prot) | _PAGE_SZ512K),
+						  space);
 				curend = address + 0x80000;
-				offset += 0x80000 - PAGE_SIZE;
-			} else if (!(offset & 0xffff) && end >= address + 0x10000) {
-				entry = mk_pte_io(offset, __pgprot(pgprot_val (prot) | _PAGE_SZ64K), space);
+				offset += 0x80000;
+			} else if (!(offset & 0xfffe) && end >= address + 0x10000) {
+				entry = mk_pte_io((offset & ~(0x1UL)),
+						  __pgprot(pgprot_val (prot) | _PAGE_SZ64K),
+						  space);
 				curend = address + 0x10000;
-				offset += 0x10000 - PAGE_SIZE;
+				offset += 0x10000;
 			}
-		}
+		} else
+			offset += PAGE_SIZE;
+
+		if (offset & 0x1UL)
+			pte_val(entry) &= ~(_PAGE_E);
 		do {
 			oldpage = *pte;
 			pte_clear(pte);

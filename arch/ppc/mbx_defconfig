@@ -14,8 +14,8 @@ CONFIG_8xx=y
 # CONFIG_ALL_PPC is not set
 # CONFIG_APUS is not set
 CONFIG_MBX=y
-CONFIG_SMP=n
 CONFIG_MACH_SPECIFIC=y
+# CONFIG_SMP is not set
 CONFIG_SERIAL_CONSOLE=y
 
 #
@@ -58,8 +58,26 @@ CONFIG_KERNEL_ELF=y
 # Block devices
 #
 # CONFIG_BLK_DEV_FD is not set
-# CONFIG_BLK_DEV_IDE is not set
-# CONFIG_BLK_DEV_HD_ONLY is not set
+CONFIG_BLK_DEV_IDE=y
+# CONFIG_BLK_DEV_HD_IDE is not set
+CONFIG_BLK_DEV_IDEDISK=y
+# CONFIG_BLK_DEV_IDECD is not set
+# CONFIG_BLK_DEV_IDETAPE is not set
+# CONFIG_BLK_DEV_IDEFLOPPY is not set
+# CONFIG_BLK_DEV_IDESCSI is not set
+# CONFIG_BLK_DEV_CMD640 is not set
+# CONFIG_BLK_DEV_RZ1000 is not set
+CONFIG_BLK_DEV_IDEPCI=y
+CONFIG_BLK_DEV_IDEDMA=y
+# CONFIG_BLK_DEV_OFFBOARD is not set
+CONFIG_IDEDMA_AUTO=y
+# CONFIG_BLK_DEV_OPTI621 is not set
+# CONFIG_BLK_DEV_TRM290 is not set
+# CONFIG_BLK_DEV_NS87415 is not set
+# CONFIG_BLK_DEV_VIA82C586 is not set
+# CONFIG_BLK_DEV_CMD646 is not set
+CONFIG_BLK_DEV_SL82C105=y
+# CONFIG_IDE_CHIPSETS is not set
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
 # CONFIG_BLK_DEV_MD is not set
@@ -90,7 +108,7 @@ CONFIG_IP_PNP_BOOTP=y
 # CONFIG_SYN_COOKIES is not set
 # CONFIG_INET_RARP is not set
 CONFIG_IP_NOSR=y
-# CONFIG_SKB_LARGE is not set
+CONFIG_SKB_LARGE=y
 # CONFIG_IPV6 is not set
 # CONFIG_IPX is not set
 # CONFIG_ATALK is not set
@@ -102,7 +120,11 @@ CONFIG_IP_NOSR=y
 # CONFIG_WAN_ROUTER is not set
 # CONFIG_NET_FASTROUTE is not set
 # CONFIG_NET_HW_FLOWCONTROL is not set
-# CONFIG_CPU_IS_SLOW is not set
+CONFIG_CPU_IS_SLOW=y
+
+#
+# QoS and/or fair queueing
+#
 # CONFIG_NET_SCHED is not set
 
 #
@@ -126,6 +148,7 @@ CONFIG_NET_ETHERNET=y
 # CONFIG_NET_VENDOR_RACAL is not set
 # CONFIG_RTL8139 is not set
 # CONFIG_YELLOWFIN is not set
+# CONFIG_ACENIC is not set
 # CONFIG_NET_ISA is not set
 # CONFIG_NET_EISA is not set
 # CONFIG_NET_POCKET is not set
@@ -138,6 +161,8 @@ CONFIG_NET_ETHERNET=y
 # CONFIG_TR is not set
 # CONFIG_SHAPER is not set
 # CONFIG_HOSTESS_SV11 is not set
+# CONFIG_COSA is not set
+# CONFIG_RCPCI is not set
 
 #
 # Amateur Radio support
@@ -161,7 +186,8 @@ CONFIG_NET_ETHERNET=y
 #
 # Character devices
 #
-# CONFIG_VT is not set
+CONFIG_VT=y
+# CONFIG_VT_CONSOLE is not set
 CONFIG_SERIAL=y
 CONFIG_SERIAL_CONSOLE=y
 # CONFIG_SERIAL_EXTENDED is not set
@@ -170,9 +196,17 @@ CONFIG_SERIAL_CONSOLE=y
 # CONFIG_MOUSE is not set
 # CONFIG_QIC02_TAPE is not set
 # CONFIG_WATCHDOG is not set
-# CONFIG_RTC is not set
-# CONFIG_VIDEO_DEV is not set
 # CONFIG_NVRAM is not set
+# CONFIG_RTC is not set
+
+#
+# Video For Linux
+#
+# CONFIG_VIDEO_DEV is not set
+
+#
+# Joystick support
+#
 # CONFIG_JOYSTICK is not set
 
 #
@@ -184,35 +218,46 @@ CONFIG_SERIAL_CONSOLE=y
 # Filesystems
 #
 # CONFIG_QUOTA is not set
-# CONFIG_MINIX_FS is not set
-# CONFIG_EXT2_FS is not set
-# CONFIG_ISO9660_FS is not set
+# CONFIG_AUTOFS_FS is not set
+# CONFIG_ADFS_FS is not set
+# CONFIG_AFFS_FS is not set
+# CONFIG_HFS_FS is not set
 # CONFIG_FAT_FS is not set
 # CONFIG_MSDOS_FS is not set
 # CONFIG_UMSDOS_FS is not set
 # CONFIG_VFAT_FS is not set
+# CONFIG_ISO9660_FS is not set
+# CONFIG_JOLIET is not set
+# CONFIG_MINIX_FS is not set
+# CONFIG_NTFS_FS is not set
+# CONFIG_HPFS_FS is not set
 CONFIG_PROC_FS=y
+# CONFIG_QNX4FS_FS is not set
+# CONFIG_ROMFS_FS is not set
+CONFIG_EXT2_FS=y
+# CONFIG_SYSV_FS is not set
+# CONFIG_UFS_FS is not set
+
+#
+# Network File Systems
+#
+# CONFIG_CODA_FS is not set
 CONFIG_NFS_FS=y
 CONFIG_ROOT_NFS=y
 # CONFIG_NFSD is not set
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
-# CONFIG_CODA_FS is not set
 # CONFIG_SMB_FS is not set
-# CONFIG_HPFS_FS is not set
-# CONFIG_NTFS_FS is not set
-# CONFIG_SYSV_FS is not set
-# CONFIG_AFFS_FS is not set
-# CONFIG_HFS_FS is not set
-# CONFIG_ROMFS_FS is not set
-# CONFIG_AUTOFS_FS is not set
-# CONFIG_UFS_FS is not set
+# CONFIG_NCP_FS is not set
+
+#
+# Partition Types
+#
 # CONFIG_BSD_DISKLABEL is not set
+# CONFIG_MAC_PARTITION is not set
 # CONFIG_SMD_DISKLABEL is not set
 # CONFIG_SOLARIS_X86_PARTITION is not set
-# CONFIG_ADFS_FS is not set
-# CONFIG_QNX4FS_FS is not set
-# CONFIG_MAC_PARTITION is not set
+# CONFIG_UNIXWARE_DISKLABEL is not set
 # CONFIG_NLS is not set
 
 #

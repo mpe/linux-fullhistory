@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.61 1999/01/12 14:34:43 davem Exp $
+ * Version:	$Id: route.c,v 1.62 1999/03/15 22:16:51 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1717,7 +1717,7 @@ int ipv4_sysctl_rtcache_flush(ctl_table *ctl, int write, struct file * filp,
 
 ctl_table ipv4_route_table[] = {
         {NET_IPV4_ROUTE_FLUSH, "flush",
-         &flush_delay, sizeof(int), 0644, NULL,
+         &flush_delay, sizeof(int), 0200, NULL,
          &ipv4_sysctl_rtcache_flush},
 	{NET_IPV4_ROUTE_MIN_DELAY, "min_delay",
          &ip_rt_min_delay, sizeof(int), 0644, NULL,

@@ -6,7 +6,7 @@
 #ifndef _PLUTO_H
 #define _PLUTO_H
 
-#include "../fc4/fcp_scsi.h"
+#include "../fc4/fcp_impl.h"
 
 struct pluto {
 	/* This must be first */

@@ -12,60 +12,22 @@
 #define __ASMPPC_IDE_H
 
 #include <linux/config.h>
+/*
+ * On APUS, nearly everything comes from the m68k file
+ * -- Cort
+ */
 #ifdef CONFIG_APUS
 #include <linux/hdreg.h>
-
 #define ide_init_hwif_ports m68k_ide_init_hwif_ports 
 #include <asm-m68k/ide.h>
 #undef ide_init_hwif_ports
-#undef insw
-
-void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
-void ide_insw(ide_ioreg_t port, void *buf, int ns);
-void ide_outsw(ide_ioreg_t port, void *buf, int ns);
-#define insw(port, buf, ns) 	do {			\
-	if ( _machine != _MACH_Pmac && _machine != _MACH_apus )	\
-		/* this must be the same as insw in io.h!! */	\
-		_insw((unsigned short *)((port)+_IO_BASE), (buf), (ns)); \
-	else						\
-		ide_insw((port), (buf), (ns));		\
-} while (0)
-#undef outsw
-#define outsw(port, buf, ns) 	do {			\
-	if ( _machine != _MACH_Pmac && _machine != _MACH_apus )	\
-		/* this must be the same as outsw in io.h!! */	\
-		_outsw((unsigned short *)((port)+_IO_BASE), (buf), (ns)); \
-	else						\
-		ide_outsw((port), (buf), (ns));		\
-} while (0)
-#else /* CONFIG_APUS */
-
-#ifdef __KERNEL__
-
-#include <linux/hdreg.h>
-#include <linux/ioport.h>
-#include <asm/io.h>		/* so we can redefine insw/outsw */
+#endif /* CONFIG_APUS */
 
 #ifndef MAX_HWIFS
 #define MAX_HWIFS	4
 #endif
 
-#undef	SUPPORT_SLOW_DATA_PORTS
-#define	SUPPORT_SLOW_DATA_PORTS	0
-#undef	SUPPORT_VLB_SYNC
-#define SUPPORT_VLB_SYNC	0
-
-
-#define ide__sti()	__sti()
-
 typedef unsigned int ide_ioreg_t;
-void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
-void prep_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
-void mbx_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
-void pmac_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
-void chrp_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
-void ide_insw(ide_ioreg_t port, void *buf, int ns);
-void ide_outsw(ide_ioreg_t port, void *buf, int ns);
 
 extern int pmac_ide_ports_known;
 extern ide_ioreg_t pmac_ide_regbase[MAX_HWIFS];
@@ -78,13 +40,57 @@ extern ide_ioreg_t chrp_idedma_regbase; /* one for both channels */
 extern unsigned int chrp_ide_irq;
 extern void chrp_ide_probe(void);
 
+void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
+void prep_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
+void mbx_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
+void pmac_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
+void chrp_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
+void ide_insw(ide_ioreg_t port, void *buf, int ns);
+void ide_outsw(ide_ioreg_t port, void *buf, int ns);
+
+#undef insw
+#define insw(port, buf, ns) 	do {				\
+	if ( _machine & (_MACH_chrp|_MACH_mbx) )		\
+		 ide_insw((port)+_IO_BASE, (buf), (ns));  	\
+	else if ( _machine & (_MACH_Pmac|_MACH_apus) )		\
+		 ide_insw((port), (buf), (ns));  		\
+	else							\
+		/* this must be the same as insw in io.h!! */	\
+		_insw((unsigned short *)((port)+_IO_BASE), (buf), (ns)); \
+} while (0)
+     
+#undef outsw
+#define outsw(port, buf, ns) 	do {				\
+	if ( _machine & (_MACH_chrp|_MACH_mbx) ) 		\
+		ide_outsw((port)+_IO_BASE, (buf), (ns)); 	\
+	else if ( _machine & (_MACH_Pmac|_MACH_apus) )		\
+		ide_outsw((port), (buf), (ns)); 		\
+	else							\
+		/* this must be the same as outsw in io.h!! */	\
+		_outsw((unsigned short *)((port)+_IO_BASE), (buf), (ns)); \
+} while (0)
+
+#ifndef CONFIG_APUS
+#ifdef __KERNEL__
+
+#include <linux/hdreg.h>
+#include <linux/ioport.h>
+#include <asm/io.h>
+
+#undef	SUPPORT_SLOW_DATA_PORTS
+#define	SUPPORT_SLOW_DATA_PORTS	0
+#undef	SUPPORT_VLB_SYNC
+#define SUPPORT_VLB_SYNC	0
+
+#define ide__sti()	__sti()
+
 static __inline__ int ide_default_irq(ide_ioreg_t base)
 {
 	if ( _machine == _MACH_Pmac )
 		return 0;
 	else if ( _machine == _MACH_mbx )
-		/* hardcode IRQ 14 on the MBX */
-		return 14+16;		     
+		/* IRQ 14 when in legacy mode on MBX */
+		return 14;
         else if ( _machine == _MACH_chrp) {
                 if (chrp_ide_ports_known == 0) 
 			chrp_ide_probe();
@@ -149,7 +155,7 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
    (Despite what it says in drivers/block/ide.h, they come up as little endian...)
    Changes to linux/hdreg.h may require changes here. */
 static __inline__ void ide_fix_driveid (struct hd_driveid *id) {
-	if (( _machine == _MACH_Pmac ) || (_machine == _MACH_chrp)|| (_machine == _MACH_mbx) ) {
+  if ( _machine & (_MACH_chrp|_MACH_mbx|_MACH_Pmac) ) { 	\
 		int i;
 		unsigned short *stringcast;
 		id->config         = __le16_to_cpu(id->config);
@@ -255,45 +261,17 @@ static __inline__ void ide_fix_driveid (struct hd_driveid *id) {
 	}
 }
 
-#undef insw
-#define insw(port, buf, ns) 	do {			\
-	if ( _machine == _MACH_chrp)  {\
-		 ide_insw((port)+_IO_BASE, (buf), (ns));  \
-	}\
-	else if ( (_machine == _MACH_Pmac) || (_machine == _MACH_mbx) )			\
-		ide_insw((port)+((_machine==_MACH_mbx)? 0x80000000: 0), \
-			 (buf), (ns));		\
-	else						\
-		/* this must be the same as insw in io.h!! */	\
-		_insw((unsigned short *)((port)+_IO_BASE), (buf), (ns)); \
-} while (0)
-#undef outsw
-/*	printk("port: %x buf: %p ns: %d\n",port,buf,ns); \ */
-#define outsw(port, buf, ns) 	do {			\
-	if ( _machine == _MACH_chrp) {\
-		ide_outsw((port)+_IO_BASE, (buf), (ns)); \
-	}\
-	else if ( (_machine == _MACH_Pmac) || (_machine == _MACH_mbx) )	 \
-		ide_outsw((port)+((_machine==_MACH_mbx)? 0x80000000: 0), \
-			   (buf), (ns));		\
-	else						\
-		/* this must be the same as outsw in io.h!! */	\
-		_outsw((unsigned short *)((port)+_IO_BASE), (buf), (ns)); \
-} while (0)
-
 #undef inb
 #define inb(port)	\
 	in_8((unsigned char *)((port) + \
-			       ((_machine==_MACH_Pmac)? 0: _IO_BASE) + \
-			       ((_machine==_MACH_mbx)? 0x80000000: 0)) )
+			       ((_machine==_MACH_Pmac)? 0: _IO_BASE) ) )
 #undef inb_p
 #define inb_p(port)	inb(port)
 
 #undef outb
 #define outb(val, port)	\
 	out_8((unsigned char *)((port) + \
-				((_machine==_MACH_Pmac)? 0: _IO_BASE) + \
-				((_machine==_MACH_mbx)? 0x80000000: 0)), (val) )
+				((_machine==_MACH_Pmac)? 0: _IO_BASE) ), (val) )
 #undef outb_p
 #define outb_p(val, port)	outb(val, port)
 

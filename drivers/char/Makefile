@@ -44,12 +44,17 @@ ifndef CONFIG_SUN_KEYBOARD
 ifdef CONFIG_VT
 L_OBJS += keyboard.o
 endif
-ifneq ($(ARCH),m68k)
-L_OBJS += pc_keyb.o defkeymap.o
+ ifneq ($(ARCH),m68k)
+   L_OBJS += pc_keyb.o defkeymap.o
+ endif
+else
+ifdef CONFIG_PCI
+L_OBJS += defkeymap.o keyboard.o
 endif
+endif
+
 ifdef CONFIG_MAGIC_SYSRQ
-L_OBJS += sysrq.o
-endif
+LX_OBJS += sysrq.o
 endif
 
 ifeq ($(CONFIG_ATARI_DSP56K),y)

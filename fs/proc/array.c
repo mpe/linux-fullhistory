@@ -550,7 +550,23 @@ static unsigned long get_wchan(struct task_struct *p)
 	    } while (count++ < 16);
 	}
 #elif defined(__powerpc__)
-	return (p->tss.wchan);
+	{
+		unsigned long ip, sp;
+		unsigned long stack_page = (unsigned long) p;
+		int count = 0;
+
+		sp = p->tss.ksp;
+		do {
+			sp = *(unsigned long *)sp;
+			if (sp < stack_page || sp >= stack_page + 8188)
+				return 0;
+			if (count > 0) {
+				ip = *(unsigned long *)(sp + 4);
+				if (ip < first_sched || ip >= last_sched)
+					return ip;
+			}
+		} while (count++ < 16);
+	}
 #elif defined (CONFIG_ARM)
 	{
 		unsigned long fp, lr;

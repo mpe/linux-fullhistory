@@ -91,12 +91,17 @@ extern void g364fb_init(void);
 extern void fm2fb_init(void);
 extern void fm2fb_setup(char *options, int *ints);
 extern void q40fb_init(void);
+extern void sgivwfb_init(void);
+extern void sgivwfb_setup(char* options, int *ints);
 
 static struct {
 	const char *name;
 	void (*init)(void);
 	void (*setup)(char *options, int *ints);
 } fb_drivers[] __initdata = {
+#ifdef CONFIG_FB_SGIVW
+	{ "sgivw", sgivwfb_init, sgivwfb_setup },
+#endif
 #ifdef CONFIG_FB_RETINAZ3
 	{ "retz3", retz3fb_init, retz3fb_setup },
 #endif

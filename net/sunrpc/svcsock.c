@@ -611,7 +611,7 @@ svc_tcp_recvfrom(struct svc_rqst *rqstp)
 		unsigned long	want = 4 - svsk->sk_tcplen;
 		struct iovec	iov;
 
-		iov.iov_base = ((u32 *) &svsk->sk_reclen) + svsk->sk_tcplen;
+		iov.iov_base = ((char *) &svsk->sk_reclen) + svsk->sk_tcplen;
 		iov.iov_len  = want;
 		if ((len = svc_recvfrom(rqstp, &iov, 1, want)) < 0)
 			goto error;
@@ -621,11 +621,11 @@ svc_tcp_recvfrom(struct svc_rqst *rqstp)
 		if (!(svsk->sk_reclen & 0x80000000)) {
 			/* FIXME: shutdown socket */
 			printk(KERN_NOTICE "RPC: bad TCP reclen %08lx",
-					(unsigned long) svsk->sk_reclen);
+			       (unsigned long) svsk->sk_reclen);
 			return -EIO;
 		}
 		svsk->sk_reclen &= 0x7fffffff;
-		dprintk("svc: TCP record, %ld bytes\n", svsk->sk_reclen);
+		dprintk("svc: TCP record, %d bytes\n", svsk->sk_reclen);
 	}
 
 	/* Check whether enough data is available */
@@ -634,8 +634,8 @@ svc_tcp_recvfrom(struct svc_rqst *rqstp)
 		goto error;
 
 	if (len < svsk->sk_reclen) {
-		dprintk("svc: incomplete TCP record (%d of %ld)\n",
-				len, svsk->sk_reclen);
+		dprintk("svc: incomplete TCP record (%d of %d)\n",
+			len, svsk->sk_reclen);
 		svc_sock_received(svsk, ready);
 		len = -EAGAIN;	/* record not complete */
 	}

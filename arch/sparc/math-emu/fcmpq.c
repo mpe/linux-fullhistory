@@ -14,5 +14,5 @@ int FCMPQ(void *rd, void *rs2, void *rs1)
 	fsr = *(unsigned long *)rd;
 	fsr &= ~0xc00; fsr |= (ret << 10);
 	*(unsigned long *)rd = fsr;
-	return 1;
+	return 0;
 }

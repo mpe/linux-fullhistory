@@ -27,7 +27,7 @@
 #define segment_eq(a,b)	((a).seg == (b).seg)
 
 #define __kernel_ok (segment_eq(get_fs(), KERNEL_DS))
-#define __user_ok(addr,size) (((size) <= 0x80000000)&&((addr) <= 0x80000000-(size)))
+#define __user_ok(addr,size) (((size) <= TASK_SIZE)&&((addr) <= TASK_SIZE-(size)))
 #define __access_ok(addr,size) (__kernel_ok || __user_ok((addr),(size)))
 #define access_ok(type,addr,size) __access_ok((unsigned long)(addr),(size))
 
@@ -223,6 +223,10 @@ copy_to_user(void *to, const void *from, unsigned long n)
 		return __copy_tofrom_user(to, from, n);
 	return n;
 }
+
+#define copy_to_user_ret(to,from,n,retval) ({ if (copy_to_user(to,from,n)) return retval; })
+
+#define copy_from_user_ret(to,from,n,retval) ({ if (copy_from_user(to,from,n)) return retval; })
 
 #define __copy_from_user(to, from, size) \
 	__copy_tofrom_user((to), (from), (size))

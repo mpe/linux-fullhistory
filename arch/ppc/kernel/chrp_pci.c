@@ -170,6 +170,79 @@ int raven_pcibios_write_config_dword(unsigned char bus,
         return PCIBIOS_SUCCESSFUL;
 }
 
+#define python_config_address(bus) (unsigned *)((0xfef00000+0xf8000)-(bus*0x100000))
+#define python_config_data(bus) ((0xfef00000+0xf8010)-(bus*0x100000))
+#define PYTHON_CFA(b, d, o)	(0x80 | ((b) << 8) | ((d) << 16) \
+				 | (((o) & ~3) << 24))
+     
+int python_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
+				    unsigned char offset, unsigned char *val)
+{
+	if (bus > 2) {
+		*val = 0xff;
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	}
+	out_be32( python_config_address( bus ), PYTHON_CFA(bus,dev_fn,offset) );
+	*val = in_8((unsigned char *)python_config_data(bus) + (offset&3));
+	return PCIBIOS_SUCCESSFUL;
+}
+
+int python_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
+				    unsigned char offset, unsigned short *val)
+{
+	if (bus > 2) {
+		*val = 0xffff;
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	}
+	out_be32( python_config_address( bus ), PYTHON_CFA(bus,dev_fn,offset) );
+	*val = in_le16((unsigned short *)(python_config_data(bus) + (offset&3)));
+	return PCIBIOS_SUCCESSFUL;
+}
+
+
+int python_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
+				     unsigned char offset, unsigned int *val)
+{
+	if (bus > 2) {
+		*val = 0xffffffff;
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	}
+	out_be32( python_config_address( bus ), PYTHON_CFA(bus,dev_fn,offset) );
+	*val = in_le32((unsigned *)python_config_data(bus));
+	return PCIBIOS_SUCCESSFUL;
+}
+
+int python_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
+				     unsigned char offset, unsigned char val)
+{
+	if (bus > 2)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	out_be32( python_config_address( bus ), PYTHON_CFA(bus,dev_fn,offset) );
+	out_8((volatile unsigned char *)python_config_data(bus) + (offset&3), val);
+	return PCIBIOS_SUCCESSFUL;
+}
+
+int python_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
+				     unsigned char offset, unsigned short val)
+{
+	if (bus > 2)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	out_be32( python_config_address( bus ), PYTHON_CFA(bus,dev_fn,offset) );
+	out_le16((volatile unsigned short *)python_config_data(bus) + (offset&3),
+		 val);
+	return PCIBIOS_SUCCESSFUL;
+}
+
+int python_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
+				      unsigned char offset, unsigned int val)
+{
+	if (bus > 2)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	out_be32( python_config_address( bus ), PYTHON_CFA(bus,dev_fn,offset) );
+	out_le32((unsigned *)python_config_data(bus) + (offset&3), val);
+	return PCIBIOS_SUCCESSFUL;
+}
+
     /*
      *  Temporary fixes for PCI devices. These should be replaced by OF query
      *  code -- Geert
@@ -214,77 +287,4 @@ __initfunc(int hydra_init(void))
 	OpenPIC_InitSenses = hydra_openpic_initsenses;
 	OpenPIC_NumInitSenses = sizeof(hydra_openpic_initsenses);
 	return 1;
-}
-
-
-extern int chrp_ide_irq;
-
-__initfunc(int w83c553f_init(void))
-{
-    u_char bus, dev;
-#if 0    
-    unsigned char t8;
-    unsigned short t16;
-#endif    
-    unsigned int t32;
-    struct pci_dev *pdev;
-    if ((pdev = pci_find_device(PCI_VENDOR_ID_WINBOND,
-				PCI_DEVICE_ID_WINBOND_83C553, NULL))) {
-	bus = pdev->bus->number;
-	dev = pdev->devfn + 1;
-	pcibios_read_config_dword(bus, dev, PCI_VENDOR_ID, &t32);
-	if (t32 == (PCI_DEVICE_ID_WINBOND_82C105<<16) + PCI_VENDOR_ID_WINBOND) {
-#if 0
-	    printk("Enabling SL82C105 IDE on W83C553F\n");
-	    /*
-	     *  FIXME: this doesn't help :-(
-	     */
-
-	    /* I/O mapping */
-	    pcibios_read_config_word(bus, dev, PCI_COMMAND, &t16);
-	    t16 |= PCI_COMMAND_IO;
-	    pcibios_write_config_word(bus, dev, PCI_COMMAND, t16);
-
-	    /* Standard IDE registers */
-	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_0,
-					    0xffffffff);
-	    pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_0, &t32);
-	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_0,
-					    0x000001f0 | 1);
-	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_1,
-					    0xffffffff);
-	    pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_1, &t32);
-	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_1,
-					    0x000003f4 | 1);
-	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_2,
-					    0xffffffff);
-	    pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_2, &t32);
-	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_2,
-					    0x00000170 | 1);
-	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_3,
-					    0xffffffff);
-	    pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_3, &t32);
-	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_3,
-					    0x00000374 | 1);
-
-	    /* IDE Bus Master Control */
-	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_4,
-					    0xffffffff);
-	    pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_4, &t32);
-	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_4,
-					    0x1000 | 1);
-	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_5,
-					    0xffffffff);
-	    pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_5, &t32);
-	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_5,
-					    0x1010 | 1);
-
-	    /* IDE Interrupt */
-	    pcibios_read_config_byte(bus, dev, PCI_INTERRUPT_LINE, &t8);
-	    chrp_ide_irq = t8;
-#endif
-	    return 1;
-	}
-    }
-    return 0;
 }

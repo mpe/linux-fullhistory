@@ -487,9 +487,7 @@ extern void			tcp_shutdown (struct sock *sk, int how);
 extern int			tcp_v4_rcv(struct sk_buff *skb,
 					   unsigned short len);
 
-extern int			tcp_do_sendmsg(struct sock *sk, 
-					       int iovlen, struct iovec *iov,
-					       int flags);
+extern int			tcp_do_sendmsg(struct sock *sk, struct msghdr *msg);
 
 extern int			tcp_ioctl(struct sock *sk, 
 					  int cmd, 
@@ -808,6 +806,23 @@ static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
 		(tcp_packets_in_flight(tp) < tp->snd_cwnd) &&
 		!after(TCP_SKB_CB(skb)->end_seq, tp->snd_una + tp->snd_wnd) &&
 		tp->retransmits == 0);
+}
+
+/* Push out any pending frames which were held back due to
+ * TCP_CORK or attempt at coalescing tiny packets.
+ * The socket must be locked by the caller.
+ */
+static __inline__ void tcp_push_pending_frames(struct sock *sk, struct tcp_opt *tp)
+{
+	if(tp->send_head) {
+		if(tcp_snd_test(sk, tp->send_head))
+			tcp_write_xmit(sk);
+		else if(tp->packets_out == 0 && !tp->pending) {
+			/* We held off on this in tcp_send_skb() */
+			tp->pending = TIME_PROBE0;
+			tcp_reset_xmit_timer(sk, TIME_PROBE0, tp->rto);
+		}
+	}
 }
 
 /* This tells the input processing path that an ACK should go out

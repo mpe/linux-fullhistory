@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.24 1998/11/08 11:15:24 davem Exp $
+/* $Id: pcikbd.c,v 1.25 1999/02/08 07:01:48 ecd Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -985,9 +985,11 @@ found:
 	}
 
 	queue = (struct aux_queue *) kmalloc(sizeof(*queue), GFP_KERNEL);
+	if (!queue) {
+		printk("pcimouse_init: kmalloc(aux_queue) failed.\n");
+		return -ENOMEM;
+	}
 	memset(queue, 0, sizeof(*queue));
-	queue->head = queue->tail = 0;
-	queue->proc_list = NULL;
 
 	if (request_irq(pcimouse_irq, &pcimouse_interrupt,
 		        SA_SHIRQ, "mouse", (void *)pcimouse_iobase)) {

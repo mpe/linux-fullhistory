@@ -281,7 +281,7 @@ static int autofs_root_symlink(struct inode *dir, struct dentry *dentry, const c
 	autofs_say(dentry->d_name.name,dentry->d_name.len);
 
 	if ( !autofs_oz_mode(sbi) )
-		return -EPERM;
+		return -EACCES;
 
 	if ( dentry->d_name.len > NAME_MAX )
 		return -ENAMETOOLONG;
@@ -349,17 +349,20 @@ static int autofs_root_unlink(struct inode *dir, struct dentry *dentry)
 	struct autofs_dir_ent *ent;
 	unsigned int n;
 
-	if ( !autofs_oz_mode(sbi) )
-		return -EPERM;
+	/* This allows root to remove symlinks */
+	if ( !autofs_oz_mode(sbi) && !capable(CAP_SYS_ADMIN) )
+		return -EACCES;
 
 	ent = autofs_hash_lookup(dh, &dentry->d_name);
 	if ( !ent )
 		return -ENOENT;
 
 	n = ent->ino - AUTOFS_FIRST_SYMLINK;
-	if ( n >= AUTOFS_MAX_SYMLINKS || !test_bit(n,sbi->symlink_bitmap) )
-		return -EINVAL;	/* Not a symlink inode, can't unlink */
-       
+	if ( n >= AUTOFS_MAX_SYMLINKS )
+		return -EISDIR;	/* It's a directory, dummy */
+	if ( !test_bit(n,sbi->symlink_bitmap) )
+		return -EINVAL;	/* Nonexistent symlink?  Shouldn't happen */
+	
 	dentry->d_time = (unsigned long)(struct autofs_dirhash *)NULL;
 	autofs_hash_delete(ent);
 	clear_bit(n,sbi->symlink_bitmap);
@@ -376,7 +379,7 @@ static int autofs_root_rmdir(struct inode *dir, struct dentry *dentry)
 	struct autofs_dir_ent *ent;
 
 	if ( !autofs_oz_mode(sbi) )
-		return -EPERM;
+		return -EACCES;
 
 	ent = autofs_hash_lookup(dh, &dentry->d_name);
 	if ( !ent )
@@ -405,7 +408,7 @@ static int autofs_root_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	ino_t ino;
 
 	if ( !autofs_oz_mode(sbi) )
-		return -EPERM;
+		return -EACCES;
 
 	if ( dentry->d_name.len > NAME_MAX )
 		return -ENAMETOOLONG;

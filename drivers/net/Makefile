@@ -430,6 +430,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SUNBMAC),y)
+L_OBJS += sunbmac.o
+else
+  ifeq ($(CONFIG_SUNBMAC),m)
+  M_OBJS += sunbmac.o
+  endif
+endif
+
 ifeq ($(CONFIG_MYRI_SBUS),y)
 L_OBJS += myri_sbus.o
 else
@@ -989,10 +997,18 @@ endif
 
 ifeq ($(CONFIG_MACE),y)
 L_OBJS += mace.o
+else
+  ifeq ($(CONFIG_MACE),m)
+  M_OBJS += mace.o
+  endif
 endif
 
 ifeq ($(CONFIG_BMAC),y)
 L_OBJS += bmac.o
+else
+  ifeq ($(CONFIG_BMAC),m)
+  M_OBJS += bmac.o
+  endif
 endif
 
 ifeq ($(CONFIG_VENDOR_SANGOMA),y)

@@ -510,6 +510,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	down(&current->mm->mmap_sem);
 	lock_kernel();
 
+	retval = -EAGAIN;
 	if (p->user) {
 		if (atomic_read(&p->user->count) >= p->rlim[RLIMIT_NPROC].rlim_cur)
 			goto bad_fork_free;
@@ -518,7 +519,6 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	{
 		struct task_struct **tslot;
 		tslot = find_empty_process();
-		retval = -EAGAIN;
 		if (!tslot)
 			goto bad_fork_free;
 		p->tarray_ptr = tslot;

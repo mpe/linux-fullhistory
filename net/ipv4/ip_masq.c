@@ -4,7 +4,7 @@
  *
  * 	Copyright (c) 1994 Pauline Middelink
  *
- *	$Id: ip_masq.c,v 1.33 1999/01/15 06:45:17 davem Exp $
+ *	$Id: ip_masq.c,v 1.34 1999/03/17 01:53:51 davem Exp $
  *
  *
  *	See ip_fw.c for original log
@@ -1294,7 +1294,79 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 	return 0;
  }
 
+/*
+ *	Restore original addresses and ports in the original IP
+ *	datagram if the failing packet has been [de]masqueraded.
+ *	This is ugly in the extreme.  We no longer have the original
+ *	packet so we have to reconstruct it from the failing packet
+ *	plus data in the masq tables.  The resulting "original data"
+ *	should be good enough to tell the sender which session to
+ *	throttle.  Relies on far too much knowledge of masq internals,
+ *	there ought to be a better way - KAO 990303.
+ *
+ *	Moved here from icmp.c - JJC.
+ *	Already known: type == ICMP_DEST_UNREACH, IPSKB_MASQUERADED
+ *	skb->nh.iph points to original header.
+ *
+ *	Must try both OUT and IN tables; we could add a flag
+ *	ala IPSKB_MASQUERADED to avoid 2nd tables lookup, but this is VERY
+ *	unlike because routing makes mtu decision before reaching 
+ *	ip_fw_masquerade().
+ *	
+ */
+int ip_fw_unmasq_icmp(struct sk_buff *skb) {
+	struct ip_masq *ms;
+	struct iphdr *iph = skb->nh.iph;
+	__u16 *portp = (__u16 *)&(((char *)iph)[iph->ihl*4]);
 
+	/* 
+	 *	Always called from _bh context: use read_[un]lock()
+	 */
+
+	/*
+	 * 	Peek "out" table, this packet has bounced:
+	 *	out->in(frag_needed!)->OUT[icmp]
+	 *
+	 *	iph->daddr is IN host
+	 *	iph->saddr is OUT host
+	 */
+	read_lock(&__ip_masq_lock);
+	ms = __ip_masq_out_get(iph->protocol,
+			iph->daddr, portp[1],
+			iph->saddr, portp[0]);
+	read_unlock(&__ip_masq_lock);
+	if (ms) {
+		IP_MASQ_DEBUG(1, "Incoming frag_need rewrited from %d.%d.%d.%d to %d.%d.%d.%d\n",
+			NIPQUAD(iph->daddr), NIPQUAD(ms->maddr));
+		iph->daddr = ms->maddr;
+		portp[1] = ms->mport;
+		__ip_masq_put(ms);
+		return 1;
+	}
+	/*
+	 * 	Peek "in" table
+	 *	in->out(frag_needed!)->IN[icmp]
+	 *
+	 *	iph->daddr is OUT host
+	 *	iph->saddr is MASQ host
+	 *
+	 */
+	read_lock(&__ip_masq_lock);
+	ms = __ip_masq_in_get(iph->protocol,
+			iph->daddr, portp[1],
+			iph->saddr, portp[0]);
+	read_unlock(&__ip_masq_lock);
+	if (ms) {
+		IP_MASQ_DEBUG(1, "Outgoing frag_need rewrited from %d.%d.%d.%d to %d.%d.%d.%d\n",
+			NIPQUAD(iph->saddr), NIPQUAD(ms->saddr));
+		iph->saddr = ms->saddr;
+		portp[0] = ms->sport;
+		__ip_masq_put(ms);
+		return 1;
+	}
+	return 0;
+
+}
 /*
  *	Handle ICMP messages in forward direction.
  *	Find any that might be relevant, check against existing connections,

@@ -49,11 +49,11 @@ struct cpu_iu_info linux_sparc_chips[] = {
 #define NSPARCCHIPS  (sizeof(linux_sparc_chips)/sizeof(struct cpu_iu_info))
 
 #ifdef __SMP__
-char *sparc_cpu_type[NR_CPUS] = { "cpu-oops", "cpu-oops1", "cpu-oops2", "cpu-oops3" };
-char *sparc_fpu_type[NR_CPUS] = { "fpu-oops", "fpu-oops1", "fpu-oops2", "fpu-oops3" };
+char *sparc_cpu_type[64] = { "cpu-oops", "cpu-oops1", "cpu-oops2", "cpu-oops3" };
+char *sparc_fpu_type[64] = { "fpu-oops", "fpu-oops1", "fpu-oops2", "fpu-oops3" };
 #else
-char *sparc_cpu_type[NR_CPUS] = { "cpu-oops", };
-char *sparc_fpu_type[NR_CPUS] = { "fpu-oops", };
+char *sparc_cpu_type[64] = { "cpu-oops", };
+char *sparc_fpu_type[64] = { "fpu-oops", };
 #endif
 
 unsigned int fsr_storage;

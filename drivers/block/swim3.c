@@ -10,6 +10,12 @@
  * 2 of the License, or (at your option) any later version.
  */
 
+/*
+ * TODO:
+ * handle 2 drives
+ * handle GCR disks
+ */
+
 #include <linux/stddef.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -52,18 +58,18 @@ enum swim_state {
  */
 struct swim3 {
 	REG(data);
-	REG(usecs);		/* counts down at 1MHz */
+	REG(timer);		/* counts down at 1MHz */
 	REG(error);
 	REG(mode);
 	REG(select);		/* controls CA0, CA1, CA2 and LSTRB signals */
-	REG(reg5);
+	REG(setup);
 	REG(control);		/* writing bits clears them */
 	REG(status);		/* writing bits sets them in control */
 	REG(intr);
 	REG(nseek);		/* # tracks to seek */
 	REG(ctrack);		/* current track number */
 	REG(csect);		/* current sector number */
-	REG(ssize);		/* sector size code?? */
+	REG(gap3);		/* size of gap 3 in track format */
 	REG(sector);		/* sector # to read or write */
 	REG(nsect);		/* # sectors to read or write */
 	REG(intr_enable);
@@ -78,21 +84,46 @@ struct swim3 {
 
 /* Bits in control register */
 #define DO_SEEK		0x80
+#define FORMAT		0x40
 #define SELECT		0x20
 #define WRITE_SECTORS	0x10
-#define SCAN_TRACK	0x08
+#define DO_ACTION	0x08
+#define DRIVE2_ENABLE	0x04
 #define DRIVE_ENABLE	0x02
 #define INTR_ENABLE	0x01
 
 /* Bits in status register */
+#define FIFO_1BYTE	0x80
+#define FIFO_2BYTE	0x40
+#define ERROR		0x20
 #define DATA		0x08
+#define RDDATA		0x04
+#define INTR_PENDING	0x02
+#define MARK_BYTE	0x01
 
 /* Bits in intr and intr_enable registers */
-#define ERROR		0x20
+#define ERROR_INTR	0x20
 #define DATA_CHANGED	0x10
 #define TRANSFER_DONE	0x08
 #define SEEN_SECTOR	0x04
 #define SEEK_DONE	0x02
+#define TIMER_DONE	0x01
+
+/* Bits in error register */
+#define ERR_DATA_CRC	0x80
+#define ERR_ADDR_CRC	0x40
+#define ERR_OVERRUN	0x04
+#define ERR_UNDERRUN	0x01
+
+/* Bits in setup register */
+#define S_SW_RESET	0x80
+#define S_GCR_WRITE	0x40
+#define S_IBM_DRIVE	0x20
+#define S_TEST_MODE	0x10
+#define S_FCLK_DIV2	0x08
+#define S_GCR		0x04
+#define S_COPY_PROT	0x02
+#define S_INV_WDATA	0x01
 
 /* Select values for swim3_action */
 #define SEEK_POSITIVE	0
@@ -100,14 +131,18 @@ struct swim3 {
 #define STEP		1
 #define MOTOR_ON	2
 #define MOTOR_OFF	6
+#define INDEX		3
 #define EJECT		7
+#define SETMFM		9
+#define SETGCR		13
 
 /* Select values for swim3_select and swim3_readbit */
 #define STEP_DIR	0
 #define STEPPING	1
 #define MOTOR_ON	2
-#define RELAX		3
+#define RELAX		3	/* also eject in progress */
 #define READ_DATA_0	4
+#define TWOMEG_DRIVE	5
 #define SINGLE_SIDED	6
 #define DRIVE_PRESENT	7
 #define DISK_IN		8
@@ -115,7 +150,25 @@ struct swim3 {
 #define TRACK_ZERO	10
 #define TACHO		11
 #define READ_DATA_1	12
+#define MFM_MODE	13
 #define SEEK_COMPLETE	14
+#define ONEMEG_MEDIA	15
+
+/* Definitions of values used in writing and formatting */
+#define DATA_ESCAPE	0x99
+#define GCR_SYNC_EXC	0x3f
+#define GCR_SYNC_CONV	0x80
+#define GCR_FIRST_MARK	0xd5
+#define GCR_SECOND_MARK	0xaa
+#define GCR_ADDR_MARK	"\xd5\xaa\x00"
+#define GCR_DATA_MARK	"\xd5\xaa\x0b"
+#define GCR_SLIP_BYTE	"\x27\xaa"
+#define GCR_SELF_SYNC	"\x3f\xbf\x1e\x34\x3c\x3f"
+
+#define DATA_99		"\x99\x99"
+#define MFM_ADDR_MARK	"\x99\xa1\x99\xa1\x99\xa1\x99\xfe"
+#define MFM_INDEX_MARK	"\x99\xc2\x99\xc2\x99\xc2\x99\xfc"
+#define MFM_GAP_LEN	12
 
 struct floppy_state {
 	enum swim_state	state;
@@ -153,7 +206,7 @@ static unsigned short write_preamble[] = {
 	0x4e4e, 0x4e4e, 0x4e4e, 0x4e4e, 0x4e4e,	/* gap field */
 	0, 0, 0, 0, 0, 0,			/* sync field */
 	0x99a1, 0x99a1, 0x99a1, 0x99fb,		/* data address mark */
-	0x990f					/* init CRC generator */
+	0x990f					/* no escape for 512 bytes */
 };
 
 static unsigned short write_postamble[] = {
@@ -217,11 +270,11 @@ static void swim3_action(struct floppy_state *fs, int action)
 	volatile struct swim3 *sw = fs->swim3;
 
 	swim3_select(fs, action);
-	udelay(10);
-	sw->select |= LSTRB; eieio();
-	udelay(20);
-	sw->select &= ~LSTRB; eieio();
-	udelay(10);
+	udelay(1);
+	out_8(&sw->select, sw->select | LSTRB);
+	udelay(2);
+	out_8(&sw->select, sw->select & ~LSTRB);
+	udelay(1);
 	out_8(&sw->select, RELAX);
 }
 
@@ -328,9 +381,9 @@ static inline void scan_track(struct floppy_state *fs)
 
 	swim3_select(fs, READ_DATA_0);
 	xx = sw->intr;		/* clear SEEN_SECTOR bit */
-	out_8(&sw->control_bis, SCAN_TRACK);
+	out_8(&sw->control_bis, DO_ACTION);
 	/* enable intr when track found */
-	out_8(&sw->intr_enable, ERROR | SEEN_SECTOR);
+	out_8(&sw->intr_enable, ERROR_INTR | SEEN_SECTOR);
 	set_timeout(fs, HZ, scan_timeout);	/* enable timeout */
 }
 
@@ -349,7 +402,7 @@ static inline void seek_track(struct floppy_state *fs, int n)
 	swim3_select(fs, STEP);
 	out_8(&sw->control_bis, DO_SEEK);
 	/* enable intr when seek finished */
-	out_8(&sw->intr_enable, ERROR | SEEK_DONE);
+	out_8(&sw->intr_enable, ERROR_INTR | SEEK_DONE);
 	set_timeout(fs, HZ/2, seek_timeout);	/* enable timeout */
 }
 
@@ -384,7 +437,7 @@ static inline void setup_transfer(struct floppy_state *fs)
 	swim3_select(fs, fs->head? READ_DATA_1: READ_DATA_0);
 	out_8(&sw->sector, fs->req_sector);
 	out_8(&sw->nsect, n);
-	out_8(&sw->ssize, 0);
+	out_8(&sw->gap3, 0);
 	st_le32(&dr->cmdptr, virt_to_bus(cp));
 	if (CURRENT->cmd == WRITE) {
 		/* Set up 3 dma commands: write preamble, data, postamble */
@@ -400,9 +453,9 @@ static inline void setup_transfer(struct floppy_state *fs)
 	out_le16(&cp->command, DBDMA_STOP);
 	out_le32(&dr->control, (RUN << 16) | RUN);
 	out_8(&sw->control_bis,
-	      (CURRENT->cmd == WRITE? WRITE_SECTORS: 0) | SCAN_TRACK);
+	      (CURRENT->cmd == WRITE? WRITE_SECTORS: 0) | DO_ACTION);
 	/* enable intr when transfer complete */
-	out_8(&sw->intr_enable, ERROR | TRANSFER_DONE);
+	out_8(&sw->intr_enable, ERROR_INTR | TRANSFER_DONE);
 	set_timeout(fs, 2*HZ, xfer_timeout);	/* enable timeout */
 }
 
@@ -445,7 +498,7 @@ static void act(struct floppy_state *fs)
 			/* wait for SEEK_COMPLETE to become true */
 			swim3_select(fs, SEEK_COMPLETE);
 			udelay(10);
-			out_8(&sw->intr_enable, ERROR | DATA_CHANGED);
+			out_8(&sw->intr_enable, ERROR_INTR | DATA_CHANGED);
 			in_8(&sw->intr);	/* clear DATA_CHANGED */
 			if (in_8(&sw->status) & DATA) {
 				/* seek_complete is not yet true */
@@ -487,7 +540,7 @@ static void scan_timeout(unsigned long data)
 	volatile struct swim3 *sw = fs->swim3;
 
 	fs->timeout_pending = 0;
-	out_8(&sw->control_bic, SCAN_TRACK);
+	out_8(&sw->control_bic, DO_ACTION);
 	out_8(&sw->select, RELAX);
 	out_8(&sw->intr_enable, 0);
 	fs->cur_cyl = -1;
@@ -537,7 +590,7 @@ static void xfer_timeout(unsigned long data)
 	fs->timeout_pending = 0;
 	st_le32(&dr->control, RUN << 16);
 	out_8(&sw->intr_enable, 0);
-	out_8(&sw->control_bic, WRITE_SECTORS | SCAN_TRACK);
+	out_8(&sw->control_bic, WRITE_SECTORS | DO_ACTION);
 	out_8(&sw->select, RELAX);
 	if (CURRENT->cmd == WRITE)
 		++cp;
@@ -568,13 +621,13 @@ static void swim3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #if 0
 	printk("swim3 intr state=%d intr=%x err=%x\n", fs->state, intr, err);
 #endif
-	if ((intr & ERROR) && fs->state != do_transfer)
+	if ((intr & ERROR_INTR) && fs->state != do_transfer)
 		printk(KERN_ERR "swim3_interrupt, state=%d, cmd=%x, intr=%x, err=%x\n",
 		       fs->state, CURRENT->cmd, intr, err);
 	switch (fs->state) {
 	case locating:
 		if (intr & SEEN_SECTOR) {
-			out_8(&sw->control_bic, SCAN_TRACK);
+			out_8(&sw->control_bic, DO_ACTION);
 			out_8(&sw->select, RELAX);
 			out_8(&sw->intr_enable, 0);
 			del_timer(&fs->timeout);
@@ -622,13 +675,13 @@ static void swim3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		act(fs);
 		break;
 	case do_transfer:
-		if ((intr & (ERROR | TRANSFER_DONE)) == 0)
+		if ((intr & (ERROR_INTR | TRANSFER_DONE)) == 0)
 			break;
 		dr = fs->dma;
 		cp = fs->dma_cmd;
 		st_le32(&dr->control, RUN << 16);
 		out_8(&sw->intr_enable, 0);
-		out_8(&sw->control_bic, WRITE_SECTORS | SCAN_TRACK);
+		out_8(&sw->control_bic, WRITE_SECTORS | DO_ACTION);
 		out_8(&sw->select, RELAX);
 		del_timer(&fs->timeout);
 		fs->timeout_pending = 0;
@@ -636,7 +689,7 @@ static void swim3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			++cp;
 		stat = ld_le16(&cp->xfer_status);
 		resid = ld_le16(&cp->res_count);
-		if (intr & ERROR) {
+		if (intr & ERROR_INTR) {
 			n = fs->scount - 1 - resid / 512;
 			if (n > 0) {
 				CURRENT->sector += n;
@@ -800,6 +853,8 @@ static int floppy_open(struct inode *inode, struct file *filp)
 
 	if (devnum >= floppy_count)
 		return -ENODEV;
+	if (filp == 0)
+		return -EIO;
 		
 	fs = &floppy_states[devnum];
 	sw = fs->swim3;
@@ -809,7 +864,7 @@ static int floppy_open(struct inode *inode, struct file *filp)
 			return -ENXIO;
 		out_8(&sw->mode, 0x95);
 		out_8(&sw->control_bic, 0xff);
-		out_8(&sw->reg5, 0x28);
+		out_8(&sw->setup, S_IBM_DRIVE | S_FCLK_DIV2);
 		udelay(10);
 		out_8(&sw->intr_enable, 0);
 		out_8(&sw->control_bis, DRIVE_ENABLE | INTR_ENABLE);
@@ -834,14 +889,14 @@ static int floppy_open(struct inode *inode, struct file *filp)
 	} else if (fs->ref_count == -1 || filp->f_flags & O_EXCL)
 		return -EBUSY;
 
-	if (err == 0 && filp && (filp->f_flags & O_NDELAY) == 0
+	if (err == 0 && (filp->f_flags & O_NDELAY) == 0
 	    && (filp->f_mode & 3)) {
 		check_disk_change(inode->i_rdev);
 		if (fs->ejected)
 			err = -ENXIO;
 	}
 
-	if (err == 0 && filp && (filp->f_flags & (O_WRONLY | O_RDWR))) {
+	if (err == 0 && (filp->f_mode & 2)) {
 		if (fs->write_prot < 0)
 			fs->write_prot = swim3_readbit(fs, WRITE_PROT);
 		if (fs->write_prot)
@@ -977,10 +1032,14 @@ static ssize_t floppy_write(struct file * filp, const char * buf,
 
 	if (devnum >= floppy_count)
 		return -ENODEV;
-
+	check_disk_change(inode->i_rdev);
 	fs = &floppy_states[devnum];
 	if (fs->ejected)
 		return -ENXIO;
+	if (fs->write_prot < 0)
+		fs->write_prot = swim3_readbit(fs, WRITE_PROT);
+	if (fs->write_prot)
+		return -EROFS;
 	return block_write(filp, buf, count, ppos);
 }
 

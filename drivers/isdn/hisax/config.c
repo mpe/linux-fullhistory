@@ -193,6 +193,13 @@ EXPORT_SYMBOL(sedl_init_pcmcia);
 #define DEFAULT_CFG {12,0x3e0,0,0}
 #endif
 
+#ifdef CONFIG_HISAX_DBRI
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_DBRI
+#define DEFAULT_CFG {0,0x0,0,0}
+#endif
+
 #ifdef CONFIG_HISAX_NICCY
 #undef DEFAULT_CARD
 #undef DEFAULT_CFG
@@ -486,6 +493,7 @@ HiSax_init(void))
 			case ISDN_CTYPE_ELSA_PCI:
 			case ISDN_CTYPE_NETJET:
 			case ISDN_CTYPE_AMD7930:
+			case ISDN_CTYPE_DBRI:
 				break;
 		}
 	}

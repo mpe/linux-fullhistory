@@ -46,7 +46,7 @@ extern void pckbd_init_hw(void);
 
 static inline int kbd_setkeycode(unsigned int scancode, unsigned int keycode)
 {
-	if ( is_prep )
+	if ( is_prep || (_machine == _MACH_mbx) )
 		return pckbd_setkeycode(scancode,keycode);
 	else if ( is_chrp )
 #ifndef CONFIG_MAC_KEYBOARD
@@ -69,7 +69,7 @@ static inline int kbd_setkeycode(unsigned int scancode, unsigned int keycode)
 
 static inline int kbd_getkeycode(unsigned int x)
 {
-	if ( is_prep )
+	if ( is_prep || (_machine == _MACH_mbx) )
 		return pckbd_getkeycode(x);
 	else if ( is_chrp )
 #ifndef CONFIG_MAC_KEYBOARD
@@ -86,7 +86,7 @@ static inline int kbd_getkeycode(unsigned int x)
 
 static inline int kbd_pretranslate(unsigned char x,char y)
 {
-	if ( is_prep )
+	if ( is_prep || (_machine == _MACH_mbx) )
 		return pckbd_pretranslate(x,y);
 	else if ( is_chrp )
 #ifndef CONFIG_MAC_KEYBOARD
@@ -104,7 +104,7 @@ static inline int kbd_pretranslate(unsigned char x,char y)
 static inline int kbd_translate(unsigned char keycode, unsigned char *keycodep,
 		     char raw_mode)
 {
-	if ( is_prep )
+	if ( is_prep || (_machine == _MACH_mbx) )
 		return pckbd_translate(keycode,keycodep,raw_mode);
 	else if ( is_chrp )
 #ifndef CONFIG_MAC_KEYBOARD
@@ -122,7 +122,7 @@ static inline int kbd_translate(unsigned char keycode, unsigned char *keycodep,
 
 static inline int kbd_unexpected_up(unsigned char keycode)
 {
-	if ( is_prep )
+	if ( is_prep || (_machine == _MACH_mbx) )
 		return pckbd_unexpected_up(keycode);
 	else if ( is_chrp )
 #ifndef CONFIG_MAC_KEYBOARD
@@ -140,7 +140,7 @@ static inline int kbd_unexpected_up(unsigned char keycode)
 
 static inline void kbd_leds(unsigned char leds)
 {
-	if ( is_prep )
+	if ( is_prep || (_machine == _MACH_mbx) )
 		pckbd_leds(leds);
 	else if ( is_chrp )
 #ifndef CONFIG_MAC_KEYBOARD
@@ -157,7 +157,7 @@ static inline void kbd_leds(unsigned char leds)
 
 static inline void kbd_init_hw(void)
 {
-	if ( is_prep )
+	if ( is_prep || (_machine == _MACH_mbx) )
 		pckbd_init_hw();
 	else if ( is_chrp )
 #ifndef CONFIG_MAC_KEYBOARD

@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.9 1998/10/06 20:56:05 ecd Exp $
+/* $Id: oplib.h,v 1.10 1998/12/18 10:02:03 davem Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -175,20 +175,52 @@ enum prom_output_device {
 extern enum prom_output_device prom_query_output_device(void);
 
 /* Multiprocessor operations... */
-
+#ifdef __SMP__
 /* Start the CPU with the given device tree node, context table, and context
  * at the passed program counter.
  */
 extern void prom_startcpu(int cpunode, unsigned long pc, unsigned long o0);
 
-/* Stop the CPU with the passed device tree node. */
-extern int prom_stopcpu(int cpunode);
+/* Stop the current CPU. */
+extern void prom_stopself(void);
 
-/* Idle the CPU with the passed device tree node. */
-extern int prom_idlecpu(int cpunode);
+/* Idle the current CPU. */
+extern void prom_idleself(void);
 
-/* Re-Start the CPU with the passed device tree node. */
-extern int prom_restartcpu(int cpunode);
+/* Resume the CPU with the passed device tree node. */
+extern void prom_resumecpu(int cpunode);
+#endif
+
+/* Power management interfaces. */
+
+/* Put the current CPU to sleep. */
+extern void prom_sleepself(void);
+
+/* Put the entire system to sleep. */
+extern int prom_sleepsystem(void);
+
+/* Initiate a wakeup event. */
+extern int prom_wakeupsystem(void);
+
+/* MMU and memory related OBP interfaces. */
+
+/* Get unique string identifying SIMM at given physical address. */
+extern int prom_getunumber(unsigned long phys_lo, unsigned long phys_hi,
+			   char *buf, int buflen);
+
+/* Retain physical memory to the caller across soft resets. */
+extern unsigned long prom_retain(char *name,
+				 unsigned long pa_low, unsigned long pa_high,
+				 long size, long align);
+
+/* Load explicit I/D TLB entries into the calling processor. */
+extern long prom_itlb_load(unsigned long index,
+			   unsigned long tte_data,
+			   unsigned long vaddr);
+
+extern long prom_dtlb_load(unsigned long index,
+			   unsigned long tte_data,
+			   unsigned long vaddr);
 
 /* PROM device tree traversal functions... */
 

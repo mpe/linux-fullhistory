@@ -38,27 +38,27 @@ struct serial_struct {
 /*
  * Definitions for ZILOG_struct (and serial_struct) flags field
  */
-#define ZILOG_HUP_NOTIFY 0x0001 /* Notify getty on hangups and closes 
-				   on the callout port */
-#define ZILOG_FOURPORT  0x0002	/* Set OU1, OUT2 per AST Fourport settings */
-#define ZILOG_SAK	0x0004	/* Secure Attention Key (Orange book) */
-#define ZILOG_SPLIT_TERMIOS 0x0008 /* Separate termios for dialin/callout */
+#define ZILOG_HUP_NOTIFY	0x0001	/* Notify getty on hangups and closes 
+				   	 * on the callout port */
+#define ZILOG_FOURPORT 		0x0002	/* Set OU1, OUT2 per AST Fourport settings */
+#define ZILOG_SAK		0x0004	/* Secure Attention Key (Orange book) */
+#define ZILOG_SPLIT_TERMIOS	0x0008	/* Separate termios for dialin/callout */
 
-#define ZILOG_SPD_MASK	0x0030
-#define ZILOG_SPD_HI	0x0010	/* Use 56000 instead of 38400 bps */
+#define ZILOG_SPD_MASK		0x0030
+#define ZILOG_SPD_HI		0x0010	/* Use 56000 instead of 38400 bps */
 
-#define ZILOG_SPD_VHI	0x0020  /* Use 115200 instead of 38400 bps */
-#define ZILOG_SPD_CUST	0x0030  /* Use user-specified divisor */
+#define ZILOG_SPD_VHI		0x0020  /* Use 115200 instead of 38400 bps */
+#define ZILOG_SPD_CUST		0x0030  /* Use user-specified divisor */
 
-#define ZILOG_SKIP_TEST	0x0040 /* Skip UART test during autoconfiguration */
-#define ZILOG_AUTO_IRQ  0x0080 /* Do automatic IRQ during autoconfiguration */
-#define ZILOG_SESSION_LOCKOUT 0x0100 /* Lock out cua opens based on session */
-#define ZILOG_PGRP_LOCKOUT    0x0200 /* Lock out cua opens based on pgrp */
-#define ZILOG_CALLOUT_NOHUP   0x0400 /* Don't do hangups for cua device */
+#define ZILOG_SKIP_TEST		0x0040	/* Skip UART test during autoconfiguration */
+#define ZILOG_AUTO_IRQ 		0x0080	/* Do automatic IRQ during autoconfiguration */
+#define ZILOG_SESSION_LOCKOUT	0x0100	/* Lock out cua opens based on session */
+#define ZILOG_PGRP_LOCKOUT	0x0200	/* Lock out cua opens based on pgrp */
+#define ZILOG_CALLOUT_NOHUP	0x0400	/* Don't do hangups for cua device */
 
-#define ZILOG_FLAGS	0x0FFF	/* Possible legal ZILOG flags */
-#define ZILOG_USR_MASK 0x0430	/* Legal flags that non-privileged
-				 * users can set or reset */
+#define ZILOG_FLAGS		0x0FFF	/* Possible legal ZILOG flags */
+#define ZILOG_USR_MASK		0x0430	/* Legal flags that non-privileged
+					 * users can set or reset */
 
 /* Internal flags used only by kernel/chr_drv/serial.c */
 #define ZILOG_INITIALIZED	0x80000000 /* Serial port was initialized */
@@ -81,10 +81,14 @@ struct serial_struct {
  * For definitions of the flags field, see tty.h
  */
 
+struct mac_serial;
+
 struct mac_zschannel {
-	volatile unsigned char *control;
-	volatile unsigned char *data;
-	spinlock_t	lock;
+	volatile unsigned char*	control;
+	volatile unsigned char*	data;
+	spinlock_t		lock;
+	/* Used for debugging */
+	struct mac_serial*	parent;
 };
 
 struct mac_serial {
@@ -99,6 +103,7 @@ struct mac_serial {
 	char kgdb_channel;  /* Kgdb is running on this channel */
 	char is_cons;       /* Is this our console. */
 	char is_cobalt_modem;	/* is a gatwick-based cobalt modem */
+	char is_pwbk_ir;	/* is connected to an IR led on powerbooks */
 	unsigned char tx_active; /* character is being xmitted */
 	unsigned char tx_stopped; /* output is suspended */
 

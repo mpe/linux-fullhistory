@@ -56,6 +56,9 @@
 
 unsigned char drive_info;
 
+int ppc_override_l2cr = 0;
+int ppc_override_l2cr_value;
+
 extern char saved_command_line[];
 
 #define DEFAULT_ROOT_DEVICE 0x0801	/* sda1 - slightly silly choice */
@@ -132,6 +135,16 @@ pmac_get_cpuinfo(char *buffer)
 		}
 	}
 
+	/* Checks "l2cr-value" property in the registry */
+	np = find_devices("cpus");		
+	if (np != 0) {
+		unsigned int *l2cr = (unsigned int *)
+			get_property(np, "l2cr-value", NULL);
+		if (l2cr != 0) {
+			len += sprintf(buffer+len, "l2cr override\t: 0x%x\n", *l2cr);
+		}
+	}
+	
 	return len;
 }
 
@@ -209,6 +222,26 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 	ohare_init();
 
 	*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
+
+	/* Checks "l2cr-value" property in the registry */
+	if ( (_get_PVR() >> 16) == 8) {
+		struct device_node *np = find_devices("cpus");		
+		if (np != 0) {
+			unsigned int *l2cr = (unsigned int *)
+				get_property(np, "l2cr-value", NULL);
+			if (l2cr != 0) {
+				ppc_override_l2cr = 1;
+				ppc_override_l2cr_value = *l2cr;
+				_set_L2CR(0);
+				_set_L2CR(ppc_override_l2cr_value);
+			}
+		}
+	}
+
+	if (ppc_override_l2cr)
+		printk(KERN_INFO "L2CR overriden (0x%x), backside cache is %s\n",
+			ppc_override_l2cr_value, (ppc_override_l2cr_value & 0x80000000)
+				? "enabled" : "disabled");
 
 	feature_init();
 

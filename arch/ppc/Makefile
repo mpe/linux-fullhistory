@@ -45,6 +45,7 @@ endif
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 MAKECOFFBOOT = $(MAKE) -C arch/$(ARCH)/coffboot
 MAKECHRPBOOT = $(MAKE) -C arch/$(ARCH)/chrpboot
+MAKEMBXBOOT = $(MAKE) -C arch/$(ARCH)/mbxboot
 
 ifdef CONFIG_8xx
 SUBDIRS += arch/ppc/8xx_io
@@ -63,10 +64,16 @@ checks:
 BOOT_TARGETS = netboot znetboot zImage floppy install \
 	vmlinux.coff znetboot.initrd zImage.initrd vmlinux.coff.initrd
 
+ifdef CONFIG_MBX
+$(BOOT_TARGETS): $(CHECKS) vmlinux
+	@$(MAKECOFFBOOT) $@
+	@$(MAKEMBXBOOT) $@
+else
 $(BOOT_TARGETS): $(CHECKS) vmlinux
 	@$(MAKECOFFBOOT) $@
 	@$(MAKEBOOT) $@
 	@$(MAKECHRPBOOT) $@
+endif
 
 pmac_config:
 	rm -f .config arch/ppc/defconfig
@@ -100,10 +107,10 @@ archclean:
 	@$(MAKECOFFBOOT) clean
 	@$(MAKEBOOT) clean
 	@$(MAKECHRPBOOT) clean
+	@$(MAKEMBXBOOT) clean
 
 archmrproper:
 
 archdep:
 	$(MAKEBOOT) fastdep
 	$(MAKECHRPBOOT) fastdep
-

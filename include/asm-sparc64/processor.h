@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.51 1998/10/21 03:21:19 davem Exp $
+/* $Id: processor.h,v 1.53 1999/01/19 07:57:51 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -82,7 +82,7 @@ struct thread_struct {
 #define SPARC_FLAG_PERFCTR	0x200    /* task has performance counters active */
 
 #define INIT_MMAP { &init_mm, 0xfffff80000000000, 0xfffff80001000000, \
-		    PAGE_SHARED , VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
+		    NULL, PAGE_SHARED , VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
 
 #define INIT_TSS  {						\
 /* ksp, wstate, cwp, flags,              ctx, */ 		\
@@ -200,7 +200,8 @@ do { \
 	: \
 	: "r" (regs), "r" (sp - REGWIN32_SZ), \
 	  "i" ((const unsigned long)(&((struct pt_regs *)0)->u_regs[0])), \
-	  "r" (current->mm->pgd[0]), "r" (TSB_REG), "i" (ASI_DMMU)); \
+	  "r" (((unsigned long)current->mm->pgd[0])<<11UL), \
+	  "r" (TSB_REG), "i" (ASI_DMMU)); \
 } while(0)
 
 /* Free all resources held by a thread. */

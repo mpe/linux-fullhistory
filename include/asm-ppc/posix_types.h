@@ -43,7 +43,7 @@ typedef struct {
 
 #else /* __GNUC__ */
 
-#if defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2)
+#if defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ <= 2)
 /* With GNU C, use inline functions instead so args are evaluated only once: */
 
 #undef __FD_SET

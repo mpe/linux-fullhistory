@@ -217,6 +217,7 @@ struct tok_info {
 	unsigned char ring_speed;
 	__u32 func_addr;
 	unsigned int retry_count;
+	spinlock_t lock;		/* SMP protection */
 };
 
 /* token ring adapter commands */

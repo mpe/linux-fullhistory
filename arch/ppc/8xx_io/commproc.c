@@ -111,7 +111,12 @@ m8xx_cpm_reset(uint host_page_addr)
 	*/
 	((immap_t *)IMAP_ADDR)->im_cpic.cpic_cicr =
 	    (CICR_SCD_SCC4 | CICR_SCC_SCC3 | CICR_SCB_SCC2 | CICR_SCA_SCC1) |
-		((CPM_INTERRUPT/2) << 13) | CICR_HP_MASK;
+		(((5)/2) << 13) | CICR_HP_MASK;
+	/* I hard coded the CPM interrupt to 5 above
+	 * since the CPM_INTERRUPT define is relative to
+	 * the linux irq structure not what the hardware
+	 * belives. -- Cort
+	 */
 	((immap_t *)IMAP_ADDR)->im_cpic.cpic_cimr = 0;
 	/* Set our interrupt handler with the core CPU.
 	*/

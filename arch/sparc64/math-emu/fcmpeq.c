@@ -21,5 +21,5 @@ int FCMPEQ(void *rd, void *rs2, void *rs1)
 	case 3: fsr &= ~0x3000000000UL; fsr |= (ret << 36); break;
 	}
 	*(unsigned long *)rd = fsr;
-	return 1;
+	return 0;
 }

@@ -27,14 +27,18 @@
 #define IOUNIT_DVMA_SIZE    0x00100000 /* 1M */
 
 /* The format of an iopte in the external page tables */
-#define IOUPTE_PAGE          0xffffff00 /* Physical page number (PA[35:12]) */
-#define IOUPTE_CACHE         0x00000080 /* Cached (in Viking/MXCC) */
-#define IOUPTE_STREAM        0x00000040
-#define IOUPTE_INTRA	     0x00000008 /* Not regular memory - probably direct sbus<->sbus dma 
-					   FIXME: Play with this and find out how we can make use of this */
-#define IOUPTE_WRITE         0x00000004 /* Writeable */
-#define IOUPTE_VALID         0x00000002 /* IOPTE is valid */
-#define IOUPTE_PARITY        0x00000001
+#define IOUPTE_PAGE          0xffffff00 /* Physical page number (PA[35:12])	*/
+#define IOUPTE_CACHE         0x00000080 /* Cached (in Viking/MXCC)		*/
+/* XXX Jakub, find out how to program SBUS streaming cache on XDBUS/sun4d.
+ * XXX Actually, all you should need to do is find out where the registers
+ * XXX are and copy over the sparc64 implementation I wrote.  There may be
+ * XXX some horrible hwbugs though, so be careful.  -DaveM
+ */
+#define IOUPTE_STREAM        0x00000040 /* Translation can use streaming cache	*/
+#define IOUPTE_INTRA	     0x00000008 /* SBUS direct slot->slot transfer	*/
+#define IOUPTE_WRITE         0x00000004 /* Writeable				*/
+#define IOUPTE_VALID         0x00000002 /* IOPTE is valid			*/
+#define IOUPTE_PARITY        0x00000001 /* Parity is checked during DVMA	*/
 
 struct iounit_struct {
 	unsigned int		bmap[(IOUNIT_DMA_SIZE >> (PAGE_SHIFT + 3)) / sizeof(unsigned int)];

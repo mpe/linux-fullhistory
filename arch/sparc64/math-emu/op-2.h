@@ -190,14 +190,14 @@
 									\
     __FP_FRAC_ADD_4(_FP_FRAC_WORD_4(_z,3),_FP_FRAC_WORD_4(_z,2),	\
 		    _FP_FRAC_WORD_4(_z,1),_FP_FRAC_WORD_4(_z,0),	\
+		    0, _b_f1, _b_f0, 0,					\
 		    _FP_FRAC_WORD_4(_z,3),_FP_FRAC_WORD_4(_z,2),	\
-		    _FP_FRAC_WORD_4(_z,1),_FP_FRAC_WORD_4(_z,0),	\
-		    0, _b_f1, _b_f0, 0);				\
+		    _FP_FRAC_WORD_4(_z,1),_FP_FRAC_WORD_4(_z,0));	\
     __FP_FRAC_ADD_4(_FP_FRAC_WORD_4(_z,3),_FP_FRAC_WORD_4(_z,2),	\
 		    _FP_FRAC_WORD_4(_z,1),_FP_FRAC_WORD_4(_z,0),	\
+		    0, _c_f1, _c_f0, 0,					\
 		    _FP_FRAC_WORD_4(_z,3),_FP_FRAC_WORD_4(_z,2),	\
-		    _FP_FRAC_WORD_4(_z,1),_FP_FRAC_WORD_4(_z,0),	\
-		    0, _c_f1, _c_f0, 0);				\
+		    _FP_FRAC_WORD_4(_z,1),_FP_FRAC_WORD_4(_z,0));	\
 									\
     /* Normalize since we know where the msb of the multiplicands	\
        were (bit B), we know that the msb of the of the product is	\

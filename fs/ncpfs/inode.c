@@ -472,7 +472,7 @@ int ncp_notify_change(struct dentry *dentry, struct iattr *attr)
 		goto out;
 
 	if (((attr->ia_valid & ATTR_GID) &&
-	     (attr->ia_uid != NCP_SERVER(inode)->m.gid)))
+	     (attr->ia_gid != NCP_SERVER(inode)->m.gid)))
 		goto out;
 
 	if (((attr->ia_valid & ATTR_MODE) &&

@@ -54,7 +54,6 @@ extern PTE *Hash, *Hash_end;
 extern unsigned long Hash_size, Hash_mask;
 extern int probingmem;
 extern unsigned long loops_per_sec;
-extern unsigned char aux_device_present;
 
 #ifdef CONFIG_BLK_DEV_RAM
 extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
@@ -136,6 +135,8 @@ prep_get_cpuinfo(char *buffer)
 			break;
 		}
 		break;
+	default:
+		break;
 	}
 	
 	
@@ -163,11 +164,12 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	extern char cmd_line[];
 	unsigned char reg;
+	unsigned char ucMothMemType;
+	unsigned char ucEquipPres1;
 
 	/* init to some ~sane value until calibrate_delay() runs */
 	loops_per_sec = 50000000;
 	
-	aux_device_present = 0xaa;
 	/* Set up floppy in PS/2 mode */
 	outb(0x09, SIO_CONFIG_RA);
 	reg = inb(SIO_CONFIG_RD);
@@ -179,16 +181,38 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 	switch ( _prep_type )
 	{
 	case _PREP_IBM:
+		/* Enable L2.  Assume we don't need to flush -- Cort*/
+		*(unsigned char *)(0x8000081c) |= 3;
 		ROOT_DEV = to_kdev_t(0x0301); /* hda1 */
 		break;
 	case _PREP_Motorola:
+		/* Enable L2.  Assume we don't need to flush -- Cort*/
+		*(unsigned char *)(0x8000081c) |= 3;
 		ROOT_DEV = to_kdev_t(0x0801); /* sda1 */
+		break;
+	case _PREP_Radstone:
+		ROOT_DEV = to_kdev_t(0x0801); /* sda1 */
+
+		/*
+		 * Determine system type
+		 */
+		ucMothMemType=inb(0x866);
+		ucEquipPres1=inb(0x80c);
+
+		ucSystemType=((ucMothMemType&0x03)<<1) |
+			     ((ucEquipPres1&0x80)>>7);
+		ucSystemType^=7;
+
+		/*
+		 * Determine board revision for use by
+		 * rev. specific code
+		 */
+		ucBoardRev=inb(0x854);
+		ucBoardRevMaj=ucBoardRev>>5;
+		ucBoardRevMin=ucBoardRev&0x1f;
 		break;
 	}
 
-	/* Enable L2.  Assume we don't need to flush -- Cort*/
-	*(unsigned char *)(0x8000081c) = *(unsigned char *)(0x8000081c)|3;
-	
 	printk("Boot arguments: %s\n", cmd_line);
 	
 #ifdef CONFIG_SOUND_CS4232

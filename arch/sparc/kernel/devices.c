@@ -29,24 +29,25 @@ device_scan(unsigned long mem_start))
 
 	prom_getstring(prom_root_node, "device_type", node_str, sizeof(node_str));
 
+	prom_printf("Booting Linux...\n");
 	if(strcmp(node_str, "cpu") == 0) {
 		linux_num_cpus++;
 	} else {
 		int scan;
 		scan = prom_getchild(prom_root_node);
-		prom_printf("root child is %08lx\n", (unsigned long) scan);
+		/* One can look it up in PROM instead */
+		/* prom_printf("root child is %08lx\n", (unsigned long) scan); */
 		while((scan = prom_getsibling(scan)) != 0) {
 			prom_getstring(scan, "device_type", node_str, sizeof(node_str));
 			if(strcmp(node_str, "cpu") == 0) {
 				linux_cpus[linux_num_cpus].prom_node = scan;
 				prom_getproperty(scan, "mid", (char *) &thismid, sizeof(thismid));
 				linux_cpus[linux_num_cpus].mid = thismid;
-				prom_printf("Found CPU %d <node=%08lx,mid=%d>\n",
-					    linux_num_cpus, (unsigned long) scan,
-					    thismid);
+				/* prom_printf("Found CPU %d <node=%08lx,mid=%d>\n", linux_num_cpus, (unsigned long) scan, thismid); */
+				printk("Found CPU %d <node=%08lx,mid=%d>\n", linux_num_cpus, (unsigned long) scan, thismid);
 				linux_num_cpus++;
 			}
-		};
+		}
 		if(linux_num_cpus == 0) {
 			if (sparc_cpu_model == sun4d) {
 				scan = prom_getchild(prom_root_node);
@@ -59,9 +60,10 @@ device_scan(unsigned long mem_start))
 						prom_getproperty(node, "cpu-id", (char *) &thismid, sizeof(thismid));
 						linux_cpus[linux_num_cpus].prom_node = node;
 						linux_cpus[linux_num_cpus].mid = thismid;
-						prom_printf("Found CPU %d <node=%08lx,mid=%d>\n",
-							    linux_num_cpus, (unsigned long) node,
-							    thismid);
+						/* prom_printf("Found CPU %d <node=%08lx,mid=%d>\n", 
+							       linux_num_cpus, (unsigned long) node, thismid); */
+						printk("Found CPU %d <node=%08lx,mid=%d>\n", 
+						       linux_num_cpus, (unsigned long) node, thismid);
 						linux_num_cpus++;
 					}
 				}

@@ -313,15 +313,6 @@ extern u_char *OpenPIC_InitSenses;
 #define Vector_Priority			_Vector_Priority.Reg
 #define Destination			_Destination.Reg
 
-
-    /*
-     *  Vendor and Device IDs
-     */
-
-#define OPENPIC_VENDOR_ID_APPLE		0x14
-#define OPENPIC_DEVICE_ID_APPLE_HYDRA	0x46
-
-
     /*
      *  OpenPIC Operations
      */

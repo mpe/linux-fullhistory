@@ -12,4 +12,13 @@
 	(1000000/CLOCK_TICK_FACTOR) / (CLOCK_TICK_RATE/CLOCK_TICK_FACTOR)) \
 		<< (SHIFT_SCALE-SHIFT_HZ)) / HZ)
 
+/* Getting on the cycle counter on sparc64. */
+typedef unsigned long cycles_t;
+extern cycles_t cacheflush_time;
+#define get_cycles() \
+({	cycles_t ret; \
+	__asm__("rd	%%tick, %0" : "=r" (ret)); \
+	ret; \
+})
+
 #endif

@@ -41,7 +41,7 @@ extern inline void init_bh(int nr, void (*routine)(void))
 	unsigned long flags;
 	spin_lock_irqsave(&sparc_bh_lock, flags);
 	bh_base[nr] = routine;
-	bh_mask_count[nr] = 0;
+	atomic_set(&bh_mask_count[nr], 0);
 	bh_mask |= 1 << nr;
 	spin_unlock_irqrestore(&sparc_bh_lock, flags);
 }
@@ -50,8 +50,8 @@ extern inline void remove_bh(int nr)
 {
 	unsigned long flags;
 	spin_lock_irqsave(&sparc_bh_lock, flags);
-	bh_base[nr] = NULL;
 	bh_mask &= ~(1 << nr);
+	bh_base[nr] = NULL;
 	spin_unlock_irqrestore(&sparc_bh_lock, flags);
 }
 
@@ -72,7 +72,7 @@ extern inline void disable_bh(int nr)
 	unsigned long flags;
 	spin_lock_irqsave(&sparc_bh_lock, flags);
 	bh_mask &= ~(1 << nr);
-	bh_mask_count[nr]++;
+	atomic_inc(&bh_mask_count[nr]);
 	spin_unlock_irqrestore(&sparc_bh_lock, flags);
 	synchronize_bh();
 }
@@ -81,7 +81,7 @@ extern inline void enable_bh(int nr)
 {
 	unsigned long flags;
 	spin_lock_irqsave(&sparc_bh_lock, flags);
-	if (!--bh_mask_count[nr])
+	if (atomic_dec_and_test(&bh_mask_count[nr]))
 		bh_mask |= 1 << nr;
 	spin_unlock_irqrestore(&sparc_bh_lock, flags);
 }
@@ -133,27 +133,27 @@ static inline void softirq_endlock(int cpu)
 extern inline void disable_bh(int nr)
 {
 	bh_mask &= ~(1 << nr);
-	bh_mask_count[nr]++;
+	atomic_inc(&bh_mask_count[nr]);
 	synchronize_bh();
 }
 
 extern inline void enable_bh(int nr)
 {
-	if (!--bh_mask_count[nr])
+	if (atomic_dec_and_test(&bh_mask_count[nr]))
 		bh_mask |= 1 << nr;
 }
 
 extern inline void init_bh(int nr, void (*routine)(void))
 {
 	bh_base[nr] = routine;
-	bh_mask_count[nr] = 0;
+	atomic_set(&bh_mask_count[nr], 0);
 	bh_mask |= 1 << nr;
 }
 
 extern inline void remove_bh(int nr)
 {
-	bh_base[nr] = NULL;
 	bh_mask &= ~(1 << nr);
+	bh_base[nr] = NULL;
 }
 
 extern inline void start_bh_atomic(void)

@@ -651,5 +651,6 @@ extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
 #define PageSkip(page)		(0)
+#define kern_addr_valid(addr)	(1)
 
 #endif /* _ALPHA_PGTABLE_H */

@@ -1,8 +1,9 @@
-/* $Id: viking.S,v 1.11 1998/02/20 18:07:50 jj Exp $
+/* $Id: viking.S,v 1.12 1999/02/23 13:23:50 jj Exp $
  * viking.S: High speed Viking cache/mmu operations
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
- * Copyright (C) 1997,1998  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998,1999  Jakub Jelinek  (jj@ultra.linux.cz)
+ * Copyright (C) 1999  Pavel Semerad  (semerad@ss1000.ms.mff.cuni.cz)
  */
 
 #include <asm/ptrace.h>
@@ -15,16 +16,12 @@
 #include <asm/cprefix.h>
 #include <asm/btfixup.h>
 
-#define WINDOW_FLUSH(tmp1, tmp2)					\
-	mov	0, tmp1;						\
-98:	ld	[%g6 + AOFF_task_tss + AOFF_thread_uwinmask], tmp2;	\
-	orcc	%g0, tmp2, %g0;						\
-	add	tmp1, 1, tmp1;						\
-	bne	98b;							\
-	 save	%sp, -64, %sp;						\
-99:	subcc	tmp1, 1, tmp1;						\
-	bne	99b;							\
-	 restore %g0, %g0, %g0;
+#ifdef __SMP__
+	.data
+	.align	4
+sun4dsmp_flush_tlb_spin:
+	.word	0
+#endif
 
 	.text
 	.align	4
@@ -176,8 +173,10 @@ viking_flush_tlb_mm:
 	sta	%g0, [%g2] ASI_M_FLUSH_PROBE
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS
+#ifndef __SMP__
 1:	retl
 	 nop
+#endif
 
 viking_flush_tlb_range:
 	mov	SRMMU_CTX_REG, %g1
@@ -198,8 +197,10 @@ viking_flush_tlb_range:
 	 sta	%g0, [%o1] ASI_M_FLUSH_PROBE
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS
+#ifndef __SMP__
 2:	retl
 	 nop
+#endif
 
 viking_flush_tlb_page:
 	ld	[%o0 + 0x00], %o0	/* XXX vma->vm_mm GROSS XXX */
@@ -215,11 +216,96 @@ viking_flush_tlb_page:
 	sta	%g0, [%o1] ASI_M_FLUSH_PROBE
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS
+#ifndef __SMP__
 1:	retl
 	 nop
+#endif
 
 viking_flush_page_to_ram:
 viking_flush_page_for_dma:
 viking_flush_sig_insns:
 	retl
 	 nop
+
+#ifdef __SMP__
+	.globl	sun4dsmp_flush_tlb_all, sun4dsmp_flush_tlb_mm
+	.globl	sun4dsmp_flush_tlb_range, sun4dsmp_flush_tlb_page
+sun4dsmp_flush_tlb_all:
+	sethi	%hi(sun4dsmp_flush_tlb_spin), %g3
+1:	ldstub	[%g3 + %lo(sun4dsmp_flush_tlb_spin)], %g5
+	tst	%g5
+	bne	2f
+	 mov	0x400, %g1
+	sta	%g0, [%g1] ASI_M_FLUSH_PROBE
+	retl
+	 stb	%g0, [%g3 + %lo(sun4dsmp_flush_tlb_spin)]
+2:	tst	%g5
+	bne,a	2b
+	 ldub	[%g3 + %lo(sun4dsmp_flush_tlb_spin)], %g5
+	b,a	1b
+
+sun4dsmp_flush_tlb_mm:
+	sethi	%hi(sun4dsmp_flush_tlb_spin), %g3
+1:	ldstub	[%g3 + %lo(sun4dsmp_flush_tlb_spin)], %g5
+	tst	%g5
+	bne	2f
+	 mov	SRMMU_CTX_REG, %g1
+	ld	[%o0 + AOFF_mm_context], %o1
+	lda	[%g1] ASI_M_MMUREGS, %g5
+	mov	0x300, %g2
+	sta	%o1, [%g1] ASI_M_MMUREGS
+	sta	%g0, [%g2] ASI_M_FLUSH_PROBE
+	sta	%g5, [%g1] ASI_M_MMUREGS
+	retl
+	 stb	%g0, [%g3 + %lo(sun4dsmp_flush_tlb_spin)]
+2:	tst	%g5
+	bne,a	2b
+	 ldub	[%g3 + %lo(sun4dsmp_flush_tlb_spin)], %g5
+	b,a	1b
+
+sun4dsmp_flush_tlb_range:
+	sethi	%hi(sun4dsmp_flush_tlb_spin), %g3
+1:	ldstub	[%g3 + %lo(sun4dsmp_flush_tlb_spin)], %g5
+	tst	%g5
+	bne	3f
+	 mov	SRMMU_CTX_REG, %g1
+	ld	[%o0 + AOFF_mm_context], %o3
+	lda	[%g1] ASI_M_MMUREGS, %g5
+	sethi	%hi(~((1 << SRMMU_PGDIR_SHIFT) - 1)), %o4
+	sta	%o3, [%g1] ASI_M_MMUREGS
+	and	%o1, %o4, %o1
+	add	%o1, 0x200, %o1
+	sta	%g0, [%o1] ASI_M_FLUSH_PROBE
+2:	sub	%o1, %o4, %o1
+	cmp	%o1, %o2
+	blu,a	2b
+	 sta	%g0, [%o1] ASI_M_FLUSH_PROBE
+	sta	%g5, [%g1] ASI_M_MMUREGS
+	retl
+	 stb	%g0, [%g3 + %lo(sun4dsmp_flush_tlb_spin)]
+3:	tst	%g5
+	bne,a	3b
+	 ldub	[%g3 + %lo(sun4dsmp_flush_tlb_spin)], %g5
+	b,a	1b
+
+sun4dsmp_flush_tlb_page:
+	sethi	%hi(sun4dsmp_flush_tlb_spin), %g3
+1:	ldstub	[%g3 + %lo(sun4dsmp_flush_tlb_spin)], %g5
+	tst	%g5
+	bne	2f
+	 mov	SRMMU_CTX_REG, %g1
+	ld	[%o0 + 0x00], %o0	/* XXX vma->vm_mm GROSS XXX */
+	ld	[%o0 + AOFF_mm_context], %o3
+	lda	[%g1] ASI_M_MMUREGS, %g5
+	and	%o1, PAGE_MASK, %o1
+	sta	%o3, [%g1] ASI_M_MMUREGS
+	sta	%g0, [%o1] ASI_M_FLUSH_PROBE
+	sta	%g5, [%g1] ASI_M_MMUREGS
+	retl
+	 stb	%g0, [%g3 + %lo(sun4dsmp_flush_tlb_spin)]
+2:	tst	%g5
+	bne,a	2b
+	 ldub	[%g3 + %lo(sun4dsmp_flush_tlb_spin)], %g5
+	b,a	1b
+	 nop
+#endif

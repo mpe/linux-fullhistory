@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.92 1998/06/10 07:21:55 davem Exp $
+/* $Id: head.S,v 1.93 1999/01/10 06:03:14 jj Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1108,6 +1108,9 @@ sun4c_continue_boot:
 		st	%g4, [%g5 + 0x18]
 		st	%g4, [%g5 + 0x1c]
 		set	flush_patch_three, %g5
+		st	%g4, [%g5 + 0x18]
+		st	%g4, [%g5 + 0x1c]
+		set	flush_patch_four, %g5
 		st	%g4, [%g5 + 0x18]
 		st	%g4, [%g5 + 0x1c]
 		set	flush_patch_exception, %g5

@@ -11,7 +11,7 @@
  * So if you notice code paths that apparently fail to dput() the
  * dentry, don't worry--they have been taken care of.
  *
- * Copyright (C) 1995, 1996, 1997 Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1995-1999 Olaf Kirch <okir@monad.swb.de>
  */
 
 #include <linux/config.h>
@@ -1139,8 +1139,11 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 		goto out;
 	}
 
+	expire_by_dentry(rdentry);
+
 	if (type != S_IFDIR) {
 		/* It's UNLINK */
+
 		err = fh_lock_parent(fhp, rdentry);
 		if (err)
 			goto out;
@@ -1155,6 +1158,7 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	} else {
 		/* It's RMDIR */
 		/* See comments in fs/namei.c:do_rmdir */
+
 		rdentry->d_count++;
 		nfsd_double_down(&dirp->i_sem, &rdentry->d_inode->i_sem);
 		if (!fhp->fh_pre_mtime)

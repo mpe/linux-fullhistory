@@ -10,6 +10,5 @@ int FSUBD(void *rd, void *rs2, void *rs1)
 	if (B_c != FP_CLS_NAN)
 		B_s ^= 1;
 	FP_ADD_D(R, A, B);
-	__FP_PACK_D(rd, R);
-	return 1;
+	return __FP_PACK_D(rd, R);
 }

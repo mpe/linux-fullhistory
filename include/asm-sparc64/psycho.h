@@ -1,4 +1,4 @@
-/* $Id: psycho.h,v 1.3 1998/03/15 13:24:28 ecd Exp $
+/* $Id: psycho.h,v 1.4 1998/12/23 10:08:16 davem Exp $
  * psycho.h: UltraSparc AX specific PCI definitions.
  *
  * Copyright (C) 1997 Eddie C. Dost (ecd@skynet.be)
@@ -263,14 +263,43 @@ struct psycho_regs {
 #define PSYCHO_CEAFSR_BLK	0x0000000000800000 /* Trans was block operation    */
 #define PSYCHO_CEAFSR_RESV2	0x00000000007fffff /* Reserved                     */
 
-/* DMA Scoreboard Diagnostic Register(s) */
-#define PSYCHO_DSCORE_VALID	0x8000000000000000 /* Entry is valid               */
-#define PSYCHO_DSCORE_C		0x4000000000000000 /* Transaction cacheable        */
-#define PSYCHO_DSCORE_READ	0x2000000000000000 /* Transaction was a read       */
-#define PSYCHO_DSCORE_TAG	0x1f00000000000000 /* Transaction ID               */
-#define PSYCHO_DSCORE_ADDR	0x00fffffffff80000 /* Transaction PADDR            */
-#define PSYCHO_DSCORE_BMSK	0x000000000007fff8 /* Bytemask of pending transfer */
-#define PSYCHO_DSCORE_SRC	0x0000000000000007 /* Transaction source           */
+/* PSYCHO Performance Monitor Register, the counter holds 2 32-bit event counters. */
+#define PSYCHO_PMCTRL_RESV3	0xffffffffffff0000 /* Reserved                     */
+#define PSYCHO_PMCTRL_CLR1	0x0000000000008000 /* Clear SEL1 counter           */
+#define PSYCHO_PMCTRL_RESV2	0x0000000000006000 /* Reserved                     */
+#define PSYCHO_PMCTRL_SEL1	0x0000000000001f00 /* Event source 1               */
+#define PSYCHO_PMCTRL_CLR0	0x0000000000000080 /* Clear SEL0 counter           */
+#define PSYCHO_PMCTRL_RESV1	0x0000000000000060 /* Reserved                     */
+#define PSYCHO_PMCTRL_SEL0	0x000000000000001f /* Event source 0               */
+
+/* SEL0/SEL1 each can take any one of the following values. */
+#define PMCTRL_SEL_NSDRA	0x00  /* # of streaming dvma reads for PCI A       */
+#define PMCTRL_SEL_NSDWA	0x01  /* # of streaming dvma writes for PCI A      */
+#define PMCTRL_SEL_NCDRA	0x02  /* # of consistent dvma reads for PCI A      */
+#define PMCTRL_SEL_NCDWA	0x03  /* # of consistent dvma writes for PCI A     */
+#define PMCTRL_SEL_SBMA		0x04  /* # of streaming buffer misses on PCI A     */
+#define PMCTRL_SEL_DCGA		0x05  /* # of DVMA granted cycles on PCI A         */
+#define PMCTRL_SEL_DWTA		0x06  /* # of DVMA words transferred on PCI A      */
+#define PMCTRL_SEL_CPIOA	0x07  /* # of PIO cycles used by PSYCHO on PCI A   */
+#define PMCTRL_SEL_NSDRB	0x08  /* # of streaming dvma reads for PCI B       */
+#define PMCTRL_SEL_NSDWB	0x09  /* # of streaming dvma writes for PCI B      */
+#define PMCTRL_SEL_NCDRB	0x0a  /* # of consistent dvma reads for PCI B      */
+#define PMCTRL_SEL_NCDWB	0x0b  /* # of consistent dvma writes for PCI B     */
+#define PMCTRL_SEL_SBMB		0x0c  /* # of streaming buffer misses on PCI B     */
+#define PMCTRL_SEL_DCGB		0x0d  /* # of DVMA granted cycles on PCI B         */
+#define PMCTRL_SEL_DWTB		0x0e  /* # of DVMA words transferred on PCI B      */
+#define PMCTRL_SEL_CPIOB	0x0f  /* # of PIO cycles used by PSYCHO on PCI B   */
+#define PMCTRL_SEL_TMISS	0x10  /* # of IOMMU TLB misses                     */
+#define PMCTRL_SEL_IRQ		0x11  /* # of interrupts                           */
+#define PMCTRL_SEL_INACK	0x12  /* # of interrupt NACKs on UPA               */
+#define PMCTRL_SEL_PRD		0x13  /* # of PIO reads                            */
+#define PMCTRL_SEL_PWR		0x14  /* # of PIO writes                           */
+#define PMCTRL_SEL_MBT		0x15  /* # of Merge Buffer transactions            */
+#define PMCTRL_SEL_PDRTA	0x16  /* # of PCI A DVMA tablewalk induced retries */
+#define PMCTRL_SEL_PDRSA	0x17  /* # of PCI A DVMA str buf induced retries   */
+#define PMCTRL_SEL_PDRTB	0x18  /* # of PCI B DVMA tablewalk induced retries */
+#define PMCTRL_SEL_PDRSB	0x19  /* # of PCI B DVMA str buf induced retries   */
+/* Values 0x1a --> 0x1f are reserved. */
 
 /* PSYCHO PCI Control Register */
 #define PSYCHO_PCICTRL_RESV1	0xfffffff000000000 /* Reserved                     */
@@ -302,6 +331,16 @@ struct psycho_regs {
 #define PSYCHO_PCIAFSR_MID	0x000000003e000000 /* MID causing the error        */
 #define PSYCHO_PCIAFSR_RESV3	0x0000000001ffffff /* Reserved                     */
 
+/* PSYCHO Diagnostic Register. */
+#define PSYCHO_PSYDIAG_RESV	0xffffffffffffff80 /* Reserved                     */
+#define PSYCHO_PCIDIAG_DRETRY	0x0000000000000040 /* Disable retry limit          */
+#define PSYCHO_PCIDIAG_DISYNC	0x0000000000000020 /* Disable DMA wr / irq sync    */
+#define PSYCHO_PCIDIAG_DDWSYNC	0x0000000000000010 /* Disable DMA wr / PIO rd sync */
+#define PSYCHO_PCIDIAG_IDDPAR	0x0000000000000008 /* Invert DMA data parity       */
+#define PSYCHO_PCIDIAG_IPDPAR	0x0000000000000004 /* Invert PIO data parity       */
+#define PSYCHO_PCIDIAG_IPAPAR	0x0000000000000002 /* Invert PIO address parity    */
+#define PSYCHO_PCIDIAG_LPBACK	0x0000000000000001 /* Enable loopback mode         */
+
 /* IOMMU things defined fully in asm-sparc64/iommu.h */
 
 /* Streaming Buffer Control Register */
@@ -319,6 +358,15 @@ struct psycho_regs {
 /* Streaming Buffer Flush Synchronization Register */
 #define PSYCHO_SBUFSYNC_ADDR	0x000001ffffffffc0 /* Physical address to update   */
 #define PSYCHO_SBUFSYNC_RESV	0x000000000000003f /* Ignored bits                 */
+
+/* DMA Scoreboard Diagnostic Register(s) */
+#define PSYCHO_DSCORE_VALID	0x8000000000000000 /* Entry is valid               */
+#define PSYCHO_DSCORE_C		0x4000000000000000 /* Transaction cacheable        */
+#define PSYCHO_DSCORE_READ	0x2000000000000000 /* Transaction was a read       */
+#define PSYCHO_DSCORE_TAG	0x1f00000000000000 /* Transaction ID               */
+#define PSYCHO_DSCORE_ADDR	0x00fffffffff80000 /* Transaction PADDR            */
+#define PSYCHO_DSCORE_BMSK	0x000000000007fff8 /* Bytemask of pending transfer */
+#define PSYCHO_DSCORE_SRC	0x0000000000000007 /* Transaction source           */
 
 /* PSYCHO Interrupt mapping register(s). */
 #define PSYCHO_IMAP_RESV1	0xffffffff00000000 /* Reserved                     */

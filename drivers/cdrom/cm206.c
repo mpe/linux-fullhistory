@@ -186,7 +186,6 @@ History:
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
-#include <linux/interrupt.h>
 
 /* #include <linux/ucdrom.h> */
 

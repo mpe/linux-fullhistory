@@ -136,7 +136,7 @@ int register_sparcaudio_driver(struct sparcaudio_driver *drv, int duplex)
 
 	drv->output_buffer = kmalloc((drv->output_buffer_size * 
 					       drv->num_output_buffers),
-					      GFP_KERNEL);
+					      (GFP_DMA | GFP_KERNEL));
 	if (!drv->output_buffer) goto kmalloc_failed2;
 
         /* Allocate the pages for each output buffer. */
@@ -167,7 +167,7 @@ int register_sparcaudio_driver(struct sparcaudio_driver *drv, int duplex)
 	if (duplex == 1) {
 	  drv->input_buffer = kmalloc((drv->input_buffer_size * 
 						drv->num_input_buffers), 
-					       GFP_KERNEL);
+					       (GFP_DMA | GFP_KERNEL));
 	  if (!drv->input_buffer) goto kmalloc_failed4;
 
 	  for (i = 0; i < drv->num_input_buffers; i++) {
@@ -634,7 +634,7 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
 					   SPARCAUDIO_DEVICE_SHIFT)];
   unsigned long i = 0, j = 0, k = 0;
 
-  k = (unsigned long) &arg;
+  k = arg;
 
   switch (cmd) {
   case SOUND_MIXER_WRITE_RECLEV:
@@ -1022,12 +1022,14 @@ static int sparcaudio_ioctl(struct inode * inode, struct file * file,
 		  break;
 		}
 	      } else if (k == 16) {
+		switch (j) {
 		case AUDIO_ENCODING_LINEAR:
 		  i = AFMT_S16_BE;
 		  break;
 		case AUDIO_ENCODING_LINEARLE:
 		  i = AFMT_S16_LE;
 		  break;
+                }
 	      } 
 	      COPY_OUT(arg, i);
 	      break;
@@ -1872,6 +1874,11 @@ static int sparcaudio_open(struct inode * inode, struct file * file)
 	/* A low-level audio driver must exist. */
 	if (!drv)
 		return -ENODEV;
+
+#ifdef S_ZERO_WR
+        /* This is how 2.0 ended up dealing with 0 len writes */
+        inode->i_flags |= S_ZERO_WR;
+#endif
 
 	switch (minor & 0xf) {
 	case SPARCAUDIO_AUDIOCTL_MINOR:

@@ -115,16 +115,6 @@
     X##_s = _flo->bits.sign;					\
   } while (0)
 
-#define __FP_PACK_RAW_1(fs, val, X)				\
-  do {								\
-    union _FP_UNION_##fs *_flo =				\
-    	(union _FP_UNION_##fs *)val;				\
-								\
-    _flo->bits.frac = X##_f;					\
-    _flo->bits.exp  = X##_e;					\
-    _flo->bits.sign = X##_s;					\
-  } while (0)
-  
 #define __FP_UNPACK_RAW_2(fs, X, val)			\
   do {							\
     union _FP_UNION_##fs *_flo =			\
@@ -134,17 +124,6 @@
     X##_f1 = _flo->bits.frac1;				\
     X##_e  = _flo->bits.exp;				\
     X##_s  = _flo->bits.sign;				\
-  } while (0)
-
-#define __FP_PACK_RAW_2(fs, val, X)			\
-  do {							\
-    union _FP_UNION_##fs *_flo =			\
-    	(union _FP_UNION_##fs *)val;			\
-							\
-    _flo->bits.frac0 = X##_f0;				\
-    _flo->bits.frac1 = X##_f1;				\
-    _flo->bits.exp   = X##_e;				\
-    _flo->bits.sign  = X##_s;				\
   } while (0)
 
 #define __FP_UNPACK_RAW_4(fs, X, val)			\
@@ -160,6 +139,45 @@
     X##_s  = _flo->bits.sign;				\
   } while (0)
 
+#define __FP_UNPACK_S(X,val)		\
+  do {					\
+    __FP_UNPACK_RAW_1(S,X,val);		\
+    _FP_UNPACK_CANONICAL(S,1,X);	\
+  } while (0)
+
+#define __FP_UNPACK_D(X,val)		\
+  do {					\
+    __FP_UNPACK_RAW_2(D,X,val);		\
+    _FP_UNPACK_CANONICAL(D,2,X);	\
+  } while (0)
+
+#define __FP_UNPACK_Q(X,val)		\
+  do {					\
+    __FP_UNPACK_RAW_4(Q,X,val);		\
+    _FP_UNPACK_CANONICAL(Q,4,X);	\
+  } while (0)
+
+#define __FP_PACK_RAW_1(fs, val, X)				\
+  do {								\
+    union _FP_UNION_##fs *_flo =				\
+    	(union _FP_UNION_##fs *)val;				\
+								\
+    _flo->bits.frac = X##_f;					\
+    _flo->bits.exp  = X##_e;					\
+    _flo->bits.sign = X##_s;					\
+  } while (0)
+  
+#define __FP_PACK_RAW_2(fs, val, X)			\
+  do {							\
+    union _FP_UNION_##fs *_flo =			\
+    	(union _FP_UNION_##fs *)val;			\
+							\
+    _flo->bits.frac0 = X##_f0;				\
+    _flo->bits.frac1 = X##_f1;				\
+    _flo->bits.exp   = X##_e;				\
+    _flo->bits.sign  = X##_s;				\
+  } while (0)
+
 #define __FP_PACK_RAW_4(fs, val, X)			\
   do {							\
     union _FP_UNION_##fs *_flo =			\
@@ -173,41 +191,50 @@
     _flo->bits.sign  = X##_s;				\
   } while (0)
 
-#define __FP_UNPACK_S(X,val)		\
-  do {					\
-    __FP_UNPACK_RAW_1(S,X,val);		\
-    _FP_UNPACK_CANONICAL(S,1,X);	\
-  } while (0)
+#include <linux/kernel.h>
+#include <linux/sched.h>
 
-#define __FP_PACK_S(val,X)		\
-  do {					\
-    _FP_PACK_CANONICAL(S,1,X);		\
-    __FP_PACK_RAW_1(S,val,X);		\
-  } while (0)
+/* We only actually write to the destination register
+ * if exceptions signalled (if any) will not trap.
+ */
+#ifdef __SMP__
+#define __FPU_TEM \
+	(((current->tss.fsr)>>23)&0x1f)
+#else
+extern struct task_struct *last_task_used_math;
+#define __FPU_TEM \
+	(((last_task_used_math->tss.fsr)>>23)&0x1f)
+#endif
+#define __FPU_TRAP_P(bits) \
+	((__FPU_TEM & (bits)) != 0)
 
-#define __FP_UNPACK_D(X,val)		\
-  do {					\
-    __FP_UNPACK_RAW_2(D,X,val);		\
-    _FP_UNPACK_CANONICAL(D,2,X);	\
-  } while (0)
+#define __FP_PACK_S(val,X)			\
+({  int __exc = _FP_PACK_CANONICAL(S,1,X);	\
+    if(!__exc || !__FPU_TRAP_P(__exc))		\
+        __FP_PACK_RAW_1(S,val,X);		\
+    __exc;					\
+})
 
-#define __FP_PACK_D(val,X)		\
-  do {					\
-    _FP_PACK_CANONICAL(D,2,X);		\
-    __FP_PACK_RAW_2(D,val,X);		\
-  } while (0)
+#define __FP_PACK_D(val,X)			\
+({  int __exc = _FP_PACK_CANONICAL(D,2,X);	\
+    if(!__exc || !__FPU_TRAP_P(__exc))		\
+        __FP_PACK_RAW_2(D,val,X);		\
+    __exc;					\
+})
 
-#define __FP_UNPACK_Q(X,val)		\
-  do {					\
-    __FP_UNPACK_RAW_4(Q,X,val);		\
-    _FP_UNPACK_CANONICAL(Q,4,X);	\
-  } while (0)
+#define __FP_PACK_Q(val,X)			\
+({  int __exc = _FP_PACK_CANONICAL(Q,4,X);	\
+    if(!__exc || !__FPU_TRAP_P(__exc))		\
+        __FP_PACK_RAW_4(Q,val,X);		\
+    __exc;					\
+})
 
-#define __FP_PACK_Q(val,X)		\
-  do {					\
-    _FP_PACK_CANONICAL(Q,4,X);		\
-    __FP_PACK_RAW_4(Q,val,X);		\
-  } while (0)
+/* Obtain the current rounding mode. */
+#ifdef __SMP__
+#define FP_ROUNDMODE	((current->tss.fsr >> 30) & 0x3)
+#else
+#define FP_ROUNDMODE	((last_task_used_math->tss.fsr >> 30) & 0x3)
+#endif
 
 /* the asm fragments go here: all these are taken from glibc-2.0.5's stdlib/longlong.h */
 
@@ -361,3 +388,9 @@
 #define __BYTE_ORDER __LITTLE_ENDIAN
 #endif
 
+/* Exception flags. */
+#define EFLAG_INVALID		(1 << 4)
+#define EFLAG_OVERFLOW		(1 << 3)
+#define EFLAG_UNDERFLOW		(1 << 2)
+#define EFLAG_DIVZERO		(1 << 1)
+#define EFLAG_INEXACT		(1 << 0)

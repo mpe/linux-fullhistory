@@ -404,13 +404,20 @@ void free_inode_memory(int goal)
 	spin_unlock(&inode_lock);
 }
 
-#define INODES_PER_PAGE PAGE_SIZE/sizeof(struct inode)
+
 /*
  * This is called with the spinlock held, but releases
  * the lock when freeing or allocating inodes.
  * Look out! This returns with the inode lock held if
  * it got an inode..
+ *
+ * We do inode allocations two pages at a time to reduce
+ * fragmentation.
  */
+#define INODE_PAGE_ORDER	1
+#define INODE_ALLOCATION_SIZE	(PAGE_SIZE << INODE_PAGE_ORDER)
+#define INODES_PER_ALLOCATION	(INODE_ALLOCATION_SIZE/sizeof(struct inode))
+
 static struct inode * grow_inodes(void)
 {
 	struct inode * inode;
@@ -431,14 +438,14 @@ static struct inode * grow_inodes(void)
 	}
 		
 	spin_unlock(&inode_lock);
-	inode = (struct inode *)__get_free_page(GFP_KERNEL);
+	inode = (struct inode *)__get_free_pages(GFP_KERNEL,INODE_PAGE_ORDER);
 	if (inode) {
 		int size;
 		struct inode * tmp;
 
-		spin_lock(&inode_lock);
-		size = PAGE_SIZE - 2*sizeof(struct inode);
+		size = INODE_ALLOCATION_SIZE - 2*sizeof(struct inode);
 		tmp = inode;
+		spin_lock(&inode_lock);
 		do {
 			tmp++;
 			init_once(tmp);
@@ -449,8 +456,8 @@ static struct inode * grow_inodes(void)
 		/*
 		 * Update the inode statistics
 		 */
-		inodes_stat.nr_inodes += INODES_PER_PAGE;
-		inodes_stat.nr_free_inodes += INODES_PER_PAGE - 1;
+		inodes_stat.nr_inodes += INODES_PER_ALLOCATION;
+		inodes_stat.nr_free_inodes += INODES_PER_ALLOCATION - 1;
 		return inode;
 	}
 

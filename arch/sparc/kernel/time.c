@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.39 1998/09/29 09:46:15 davem Exp $
+/* $Id: time.c,v 1.43 1999/03/15 22:13:31 davem Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -38,6 +38,8 @@
 #include <asm/machines.h>
 #include <asm/sun4paddr.h>
 #include <asm/page.h>
+
+extern rwlock_t xtime_lock;
 
 enum sparc_clock_type sp_clock_typ;
 struct mostek48t02 *mstk48t02_regs = 0;
@@ -80,7 +82,7 @@ void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 #ifdef CONFIG_SUN4
 	if((idprom->id_machtype == (SM_SUN4 | SM_4_260)) ||
-   (idprom->id_machtype == (SM_SUN4 | SM_4_110))) {
+	   (idprom->id_machtype == (SM_SUN4 | SM_4_110))) {
 		int temp;
         	intersil_read_intr(intersil_clock, temp);
 		/* re-enable the irq */
@@ -88,6 +90,8 @@ void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	}
 #endif
 	clear_clock_irq();
+
+	write_lock(&xtime_lock);
 
 	do_timer(regs);
 
@@ -101,6 +105,7 @@ void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	  else
 	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
 	}
+	write_unlock(&xtime_lock);
 }
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
@@ -436,6 +441,9 @@ extern __inline__ unsigned long do_gettimeoffset(void)
 	return offset + count;
 }
 
+/* This need not obtain the xtime_lock as it is coded in
+ * an implicitly SMP safe way already.
+ */
 void do_gettimeofday(struct timeval *tv)
 {
 #if CONFIG_AP1000
@@ -485,12 +493,13 @@ void do_gettimeofday(struct timeval *tv)
 
 void do_settimeofday(struct timeval *tv)
 {
+	write_lock_irq(&xtime_lock);
 	bus_do_settimeofday(tv);
+	write_unlock_irq(&xtime_lock);
 }
 
 static void sbus_do_settimeofday(struct timeval *tv)
 {
-	cli();
 #if !CONFIG_AP1000
 	tv->tv_usec -= do_gettimeoffset();
 	if(tv->tv_usec < 0) {
@@ -501,10 +510,8 @@ static void sbus_do_settimeofday(struct timeval *tv)
 	xtime = *tv;
 	time_adjust = 0;		/* stop active adjtime() */
 	time_status |= STA_UNSYNC;
-	time_state = TIME_ERROR;	/* p. 24, (a) */
 	time_maxerror = NTP_PHASE_LIMIT;
 	time_esterror = NTP_PHASE_LIMIT;
-	sti();
 }
 
 /*
@@ -544,7 +551,7 @@ static int set_rtc_mmss(unsigned long nowtime)
 			} else {
 				printk(KERN_WARNING
 			       "set_rtc_mmss: can't update from %d to %d\n",
-				       cmos_minutes, real_minutes);
+				       mostek_minutes, real_minutes);
 				return -1;
 			}
 			

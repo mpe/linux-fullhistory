@@ -6,12 +6,21 @@
 #ifndef _PPC_SMP_H
 #define _PPC_SMP_H
 
-#include <linux/kernel.h> /* for panic */
-#include <linux/tasks.h> /* for NR_CPUS */
+#include <linux/kernel.h>
+#include <linux/tasks.h>
 
 #ifdef __SMP__
 
 #ifndef __ASSEMBLY__
+
+struct cpuinfo_PPC {
+	unsigned long loops_per_sec;
+	unsigned long pvr;
+	unsigned long *pgd_cache;
+	unsigned long *pte_cache;
+	unsigned long pgtable_cache_sz;
+};
+extern struct cpuinfo_PPC cpu_data[NR_CPUS];
 
 extern int first_cpu_booted;
 extern unsigned long smp_proc_in_lock[NR_CPUS];
@@ -20,7 +29,7 @@ extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
 extern void smp_store_cpu_info(int id);
 
 #define NO_PROC_ID		0xFF            /* No processor magic marker */
-#define PROC_CHANGE_PENALTY	2000
+#define PROC_CHANGE_PENALTY	20
 
 /* 1 to 1 mapping on PPC -- Cort */
 #define cpu_logical_map(cpu) (cpu)
@@ -29,17 +38,6 @@ extern volatile unsigned long cpu_callin_map[NR_CPUS];
 
 #define hard_smp_processor_id() (0)
 #define smp_processor_id() (current->processor)
-
-/* per processor PPC parameters we need. */
-struct cpuinfo_PPC {
-	unsigned long loops_per_sec;
-	unsigned long pvr;
-	unsigned long *pgd_quick;
-	unsigned long *pte_quick;
-	unsigned long pgtable_cache_sz;
-};
-
-extern struct cpuinfo_PPC cpu_data[NR_CPUS];
 
 struct klock_info_struct {
 	unsigned long kernel_flag;

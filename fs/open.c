@@ -751,12 +751,7 @@ out_error:
  */
 asmlinkage int sys_creat(const char * pathname, int mode)
 {
-	int ret;
-
-	lock_kernel();
-	ret = sys_open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
-	unlock_kernel();
-	return ret;
+	return sys_open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
 
 #endif

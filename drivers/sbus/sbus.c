@@ -1,4 +1,4 @@
-/* $Id: sbus.c,v 1.73 1998/10/07 11:35:50 jj Exp $
+/* $Id: sbus.c,v 1.76 1998/12/17 11:11:26 davem Exp $
  * sbus.c:  SBus support routines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -71,7 +71,7 @@ fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev))
 	base = (unsigned long) sbus_dev->reg_addrs[0].phys_addr;
 	if(base>=SUN_SBUS_BVADDR ||
 	   (sparc_cpu_model != sun4c &&
-	   sparc_cpu_model != sun4)) {
+	    sparc_cpu_model != sun4)) {
 		/* Ahh, we can determine the slot and offset */
 		if(sparc_cpu_model == sun4u) {
 			/* A bit tricky on the SYSIO. */
@@ -261,6 +261,11 @@ __initfunc(void sbus_init(void))
 			if (!pcibios_present()) {	
 				prom_printf("Neither SBUS nor PCI found.\n");
 				prom_halt();
+			} else {
+#ifdef __sparc_v9__
+				extern void firetruck_init(void);
+				firetruck_init();
+#endif
 			}
 			return;
 #else
@@ -296,6 +301,7 @@ __initfunc(void sbus_init(void))
 	 */
 	sbus = SBus_chain = kmalloc(sizeof(struct linux_sbus), GFP_ATOMIC);
 	sbus->next = 0;
+	sbus->prom_node = nd;
 	this_sbus=nd;
 
 	if(iommund && sparc_cpu_model != sun4u && sparc_cpu_model != sun4d)
@@ -319,7 +325,6 @@ __initfunc(void sbus_init(void))
 
 		prom_getstring(this_sbus, "name", lbuf, sizeof(lbuf));
 		lbuf[sizeof(sbus->prom_name) - 1] = 0;
-		sbus->prom_node = this_sbus;
 		strcpy(sbus->prom_name, lbuf);
 		sbus->clock_freq = sbus_clock;
 #ifndef __sparc_v9__		
@@ -406,6 +411,7 @@ __initfunc(void sbus_init(void))
 			sbus->next = kmalloc(sizeof(struct linux_sbus), GFP_ATOMIC);
 			sbus = sbus->next;
 			sbus->next = 0;
+			sbus->prom_node = this_sbus;
 		} else {
 			break;
 		}
@@ -415,6 +421,13 @@ __initfunc(void sbus_init(void))
 		sun4d_init_sbi_irq();
 	}
 	
+#ifdef __sparc_v9__
+	if (sparc_cpu_model == sun4u) {
+		extern void firetruck_init(void);
+
+		firetruck_init();
+	}
+#endif
 #ifdef CONFIG_SUN_OPENPROMIO
 	openprom_init();
 #endif

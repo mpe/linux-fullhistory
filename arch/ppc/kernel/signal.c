@@ -1,7 +1,7 @@
 /*
  *  linux/arch/ppc/kernel/signal.c
  *
- *  $Id: signal.c,v 1.21 1998/10/22 19:37:49 paulus Exp $
+ *  $Id: signal.c,v 1.23 1999/03/01 16:51:53 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -374,7 +374,7 @@ int do_signal(sigset_t *oldset, struct pt_regs *regs)
 	if (!oldset)
 		oldset = &current->blocked;
 
-	newsp = frame = regs->gpr[1] - sizeof(struct sigregs);
+	newsp = frame = 0;
 
 	for (;;) {
 		unsigned long signr;
@@ -470,6 +470,13 @@ int do_signal(sigset_t *oldset, struct pt_regs *regs)
 				/* NOTREACHED */
 			}
 		}
+
+		if ( (ka->sa.sa_flags & SA_ONSTACK)
+		     && (! on_sig_stack(regs->gpr[1])))
+			newsp = (current->sas_ss_sp + current->sas_ss_size);
+		else
+			newsp = regs->gpr[1];
+		newsp = frame = newsp - sizeof(struct sigregs);
 
 		/* Whee!  Actually deliver the signal.  */
 		handle_signal(signr, ka, &info, oldset, regs, &newsp, frame);

@@ -70,6 +70,9 @@
  *      Changes by Joel Sloan (jjs@c-me.com) :
  *      + disable verbose debug messages by default - to enable verbose
  *	  debugging, edit the IBMTR_DEBUG_MESSAGES define below 
+ *
+ *	Changes by Tim Hockin (thockin@isunix.it.ilstu.edu) :
+ *	+ added spinlocks for SMP sanity (10 March 1999)
  */
 
 /* change the define of IBMTR_DEBUG_MESSAGES to a nonzero value 
@@ -144,6 +147,7 @@ static char mcchannelid[] = {
 #include <net/checksum.h>
 
 #include <asm/io.h>
+#include <asm/spinlock.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 
@@ -754,6 +758,9 @@ static int tok_open(struct device *dev)
 {
 	struct tok_info *ti=(struct tok_info *)dev->priv;
 
+	/* init the spinlock */
+	ti->lock = (spinlock_t) SPIN_LOCK_UNLOCKED;
+
 	if (ti->open_status==CLOSED) tok_init_card(dev);
 
 	if (ti->open_status==IN_PROGRESS) sleep_on(&ti->wait_for_reset);
@@ -806,6 +813,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 	DPRINTK("Int from tok_driver, dev : %p\n",dev);
 #endif
 	ti  = (struct tok_info *) dev->priv;
+	spin_lock(&(ti->lock));
 
       	/* Disable interrupts till processing is finished */
 	dev->interrupt=1;
@@ -832,6 +840,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
     		if (status == 0xFF)
        		{
 		          DPRINTK("PCMCIA card removed.\n");
+			  spin_unlock(&(ti->lock));
         		  dev->interrupt = 0;
           		  return;
        		}
@@ -840,6 +849,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
       	        if ( readb (ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN) == 0xFF)
     	        {
          		 DPRINTK("PCMCIA card removed.\n");
+			 spin_unlock(&(ti->lock));
          		 dev->interrupt = 0;
          		 return;
       		 }
@@ -1167,6 +1177,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 		DPRINTK("Unexpected interrupt from tr adapter\n");
 
 	}
+	spin_unlock(&(ti->lock));
 }
 
 static void initial_tok_int(struct device *dev)
@@ -1598,12 +1609,19 @@ static int tok_send_packet(struct sk_buff *skb, struct device *dev)
 	if (test_and_set_bit(0,(void *)&dev->tbusy)!=0)
 		DPRINTK("Transmitter access conflict\n");
 	else {
+		int flags;
+
+		/* lock against other CPUs */
+		spin_lock_irqsave(&(ti->lock), flags);
+
 		/* Save skb; we'll need it when the adapter asks for the data */
 		ti->current_skb=skb;
 		writeb(XMIT_UI_FRAME, ti->srb + offsetof(struct srb_xmit, command));
 		writew(ti->exsap_station_id, ti->srb
 		       +offsetof(struct srb_xmit, station_id));
 		writeb(CMD_IN_SRB, (ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD));
+		spin_unlock_irqrestore(&(ti->lock), flags);
+
 		dev->trans_start=jiffies;
 	}
 

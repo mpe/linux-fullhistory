@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.25 1998/07/26 03:05:51 davem Exp $
+/* $Id: bitops.h,v 1.26 1999/01/07 14:14:15 jj Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -14,8 +14,8 @@
  * primitives used are not privileged.
  */
 
-/* Set bit 'nr' in 32-bit quantity at address 'addr' where bit '0'
- * is in the highest of the four bytes and bit '31' is the high bit
+/* Set bit 'nr' in 64-bit quantity at address 'addr' where bit '0'
+ * is in the highest of the eight bytes and bit '63' is the high bit
  * within the first byte. Sparc is BIG-Endian. Unless noted otherwise
  * all bit-ops return 0 if bit was previously clear and != 0 otherwise.
  */

@@ -2,11 +2,11 @@
  *           auto carrier detecting ethernet driver.  Also known as the
  *           "Happy Meal Ethernet" found on SunSwift SBUS cards.
  *
- * Copyright (C) 1996 David S. Miller (davem@caipfs.rutgers.edu)
+ * Copyright (C) 1996, 1998 David S. Miller (davem@caipfs.rutgers.edu)
  */
 
 static char *version =
-        "sunhme.c:v1.2 10/Oct/96 David S. Miller (davem@caipfs.rutgers.edu)\n";
+        "sunhme.c:v1.10 27/Jan/99 David S. Miller (davem@caipfs.rutgers.edu)\n";
 
 #include <linux/module.h>
 
@@ -35,12 +35,13 @@ static char *version =
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 #include <asm/auxio.h>
-#include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/irq.h>
 #ifndef __sparc_v9__
 #include <asm/io-unit.h>
 #endif
+#include <asm/ethtool.h>
+#include <asm/uaccess.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -55,6 +56,11 @@ static char *version =
 
 #ifdef MODULE
 static struct happy_meal *root_happy_dev = NULL;
+#endif
+
+static struct quattro *qfe_sbus_list = NULL;
+#ifdef CONFIG_PCI
+static struct quattro *qfe_pci_list = NULL;
 #endif
 
 #undef HMEDEBUG
@@ -362,6 +368,15 @@ static inline void happy_meal_tcvr_write(struct happy_meal *hp,
 static int try_next_permutation(struct happy_meal *hp, struct hmeal_tcvregs *tregs)
 {
 	hp->sw_bmcr = happy_meal_tcvr_read(hp, tregs, DP83840_BMCR);
+
+	/* Downgrade from full to half duplex.  Only possible
+	 * via ethtool.
+	 */
+	if(hp->sw_bmcr & BMCR_FULLDPLX) {
+		hp->sw_bmcr &= ~(BMCR_FULLDPLX);
+		happy_meal_tcvr_write(hp, tregs, DP83840_BMCR, hp->sw_bmcr);
+		return 0;
+	}
 
 	/* Downgrade from 100 to 10. */
 	if(hp->sw_bmcr & BMCR_SPEED100) {
@@ -1049,7 +1064,7 @@ static void happy_meal_init_rings(struct happy_meal *hp, int from_irq)
 	for(i = 0; i < RX_RING_SIZE; i++) {
 		struct sk_buff *skb;
 
-		skb = happy_meal_alloc_skb(RX_BUF_ALLOC_SIZE, gfp_flags);
+		skb = happy_meal_alloc_skb(RX_BUF_ALLOC_SIZE, gfp_flags | GFP_DMA);
 		if(!skb)
 			continue;
 		hp->rx_skbs[i] = skb;
@@ -1077,7 +1092,7 @@ static void happy_meal_init_rings(struct happy_meal *hp, int from_irq)
 		} else
 #endif
 		{
-			hb->happy_meal_rxd[i].rx_addr = (u32)((unsigned long) skb->data);
+			hb->happy_meal_rxd[i].rx_addr = sbus_dvma_addr(skb->data);
 			hb->happy_meal_rxd[i].rx_flags =
 				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
 		}
@@ -1115,7 +1130,8 @@ static void sun4c_happy_meal_init_rings(struct happy_meal *hp)
 #endif
 
 static void happy_meal_begin_auto_negotiation(struct happy_meal *hp,
-					      struct hmeal_tcvregs *tregs)
+					      struct hmeal_tcvregs *tregs,
+					      struct ethtool_cmd *ep)
 {
 	int timeout;
 
@@ -1124,93 +1140,108 @@ static void happy_meal_begin_auto_negotiation(struct happy_meal *hp,
 	hp->sw_bmcr      = happy_meal_tcvr_read(hp, tregs, DP83840_BMCR);
 	hp->sw_physid1   = happy_meal_tcvr_read(hp, tregs, DP83840_PHYSID1);
 	hp->sw_physid2   = happy_meal_tcvr_read(hp, tregs, DP83840_PHYSID2);
-	hp->sw_advertise = happy_meal_tcvr_read(hp, tregs, DP83840_ADVERTISE);
 
 	/* XXX Check BMSR_ANEGCAPABLE, should not be necessary though. */
 
-	/* Advertise everything we can support. */
-	if(hp->sw_bmsr & BMSR_10HALF)
-		hp->sw_advertise |= (ADVERTISE_10HALF);
-	else
-		hp->sw_advertise &= ~(ADVERTISE_10HALF);
+	hp->sw_advertise = happy_meal_tcvr_read(hp, tregs, DP83840_ADVERTISE);
+	if(ep == NULL || ep->autoneg == AUTONEG_ENABLE) {
+		/* Advertise everything we can support. */
+		if(hp->sw_bmsr & BMSR_10HALF)
+			hp->sw_advertise |= (ADVERTISE_10HALF);
+		else
+			hp->sw_advertise &= ~(ADVERTISE_10HALF);
 
-	if(hp->sw_bmsr & BMSR_10FULL)
-		hp->sw_advertise |= (ADVERTISE_10FULL);
-	else
-		hp->sw_advertise &= ~(ADVERTISE_10FULL);
-	if(hp->sw_bmsr & BMSR_100HALF)
-		hp->sw_advertise |= (ADVERTISE_100HALF);
-	else
-		hp->sw_advertise &= ~(ADVERTISE_100HALF);
-	if(hp->sw_bmsr & BMSR_100FULL)
-		hp->sw_advertise |= (ADVERTISE_100FULL);
-	else
-		hp->sw_advertise &= ~(ADVERTISE_100FULL);
+		if(hp->sw_bmsr & BMSR_10FULL)
+			hp->sw_advertise |= (ADVERTISE_10FULL);
+		else
+			hp->sw_advertise &= ~(ADVERTISE_10FULL);
+		if(hp->sw_bmsr & BMSR_100HALF)
+			hp->sw_advertise |= (ADVERTISE_100HALF);
+		else
+			hp->sw_advertise &= ~(ADVERTISE_100HALF);
+		if(hp->sw_bmsr & BMSR_100FULL)
+			hp->sw_advertise |= (ADVERTISE_100FULL);
+		else
+			hp->sw_advertise &= ~(ADVERTISE_100FULL);
+		happy_meal_tcvr_write(hp, tregs, DP83840_ADVERTISE, hp->sw_advertise);
 
-	/* XXX Currently no Happy Meal cards I know off support 100BaseT4,
-	 * XXX and this is because the DP83840 does not support it, changes
-	 * XXX would need to be made to the tx/rx logic in the driver as well
-	 * XXX so I completely skip checking for it in the BMSR for now.
-	 */
+		/* XXX Currently no Happy Meal cards I know off support 100BaseT4,
+		 * XXX and this is because the DP83840 does not support it, changes
+		 * XXX would need to be made to the tx/rx logic in the driver as well
+		 * XXX so I completely skip checking for it in the BMSR for now.
+		 */
 
 #ifdef AUTO_SWITCH_DEBUG
-	ASD(("%s: Advertising [ ", hp->dev->name));
-	if(hp->sw_advertise & ADVERTISE_10HALF)
-		ASD(("10H "));
-	if(hp->sw_advertise & ADVERTISE_10FULL)
-		ASD(("10F "));
-	if(hp->sw_advertise & ADVERTISE_100HALF)
-		ASD(("100H "));
-	if(hp->sw_advertise & ADVERTISE_100FULL)
-		ASD(("100F "));
+		ASD(("%s: Advertising [ ", hp->dev->name));
+		if(hp->sw_advertise & ADVERTISE_10HALF)
+			ASD(("10H "));
+		if(hp->sw_advertise & ADVERTISE_10FULL)
+			ASD(("10F "));
+		if(hp->sw_advertise & ADVERTISE_100HALF)
+			ASD(("100H "));
+		if(hp->sw_advertise & ADVERTISE_100FULL)
+			ASD(("100F "));
 #endif
 
-	happy_meal_tcvr_write(hp, tregs, DP83840_ADVERTISE, hp->sw_advertise);
+		/* Enable Auto-Negotiation, this is usually on already... */
+		hp->sw_bmcr |= BMCR_ANENABLE;
+		happy_meal_tcvr_write(hp, tregs, DP83840_BMCR, hp->sw_bmcr);
 
-	/* Enable Auto-Negotiation, this is usually on already... */
-	hp->sw_bmcr |= BMCR_ANENABLE;
-	happy_meal_tcvr_write(hp, tregs, DP83840_BMCR, hp->sw_bmcr);
+		/* Restart it to make sure it is going. */
+		hp->sw_bmcr |= BMCR_ANRESTART;
+		happy_meal_tcvr_write(hp, tregs, DP83840_BMCR, hp->sw_bmcr);
 
-	/* Restart it to make sure it is going. */
-	hp->sw_bmcr |= BMCR_ANRESTART;
-	happy_meal_tcvr_write(hp, tregs, DP83840_BMCR, hp->sw_bmcr);
+		/* BMCR_ANRESTART self clears when the process has begun. */
 
-	/* BMCR_ANRESTART self clears when the process has begun. */
-
-	timeout = 64;  /* More than enough. */
-	while(--timeout) {
-		hp->sw_bmcr = happy_meal_tcvr_read(hp, tregs, DP83840_BMCR);
-		if(!(hp->sw_bmcr & BMCR_ANRESTART))
-			break; /* got it. */
-		udelay(10);
-	}
-	if(!timeout) {
-		printk("%s: Happy Meal would not start auto negotiation BMCR=0x%04x\n",
-		       hp->dev->name, hp->sw_bmcr);
-		printk("%s: Performing force link detection.\n", hp->dev->name);
-
-		/* Disable auto-negotiation in BMCR, enable FULL duplex and 100mb/s,
-		 * setup the timer state machine, and fire it off.
-		 *
-		 * XXX Should probably reset the DP83840 first
-		 * XXX as this is a gross fatal error...
+		timeout = 64;  /* More than enough. */
+		while(--timeout) {
+			hp->sw_bmcr = happy_meal_tcvr_read(hp, tregs, DP83840_BMCR);
+			if(!(hp->sw_bmcr & BMCR_ANRESTART))
+				break; /* got it. */
+			udelay(10);
+		}
+		if(!timeout) {
+			printk("%s: Happy Meal would not start auto negotiation "
+			       "BMCR=0x%04x\n", hp->dev->name, hp->sw_bmcr);
+			printk("%s: Performing force link detection.\n",
+			       hp->dev->name);
+			goto force_link;
+		} else {
+			hp->timer_state = arbwait;
+		}
+	} else {
+force_link:
+		/* Force the link up, trying first a particular mode.
+		 * Either we are here at the request of ethtool or
+		 * because the Happy Meal would not start to autoneg.
 		 */
-		hp->sw_bmcr = BMCR_SPEED100;
+
+		/* Disable auto-negotiation in BMCR, enable the duplex and
+		 * speed setting, init the timer state machine, and fire it off.
+		 */
+		if(ep == NULL || ep->autoneg == AUTONEG_ENABLE) {
+			hp->sw_bmcr = BMCR_SPEED100;
+		} else {
+			if(ep->speed == SPEED_100)
+				hp->sw_bmcr = BMCR_SPEED100;
+			else
+				hp->sw_bmcr = 0;
+			if(ep->duplex == DUPLEX_FULL)
+				hp->sw_bmcr |= BMCR_FULLDPLX;
+		}
 		happy_meal_tcvr_write(hp, tregs, DP83840_BMCR, hp->sw_bmcr);
 
 		/* OK, seems we need do disable the transceiver for the first
 		 * tick to make sure we get an accurate link state at the
 		 * second tick.
 		 */
-		hp->sw_csconfig = happy_meal_tcvr_read(hp, tregs, DP83840_CSCONFIG);
-		printk("%s: CSCONFIG [%04x], disabling transceiver\n", hp->dev->name,
-		       hp->sw_csconfig);
+		hp->sw_csconfig = happy_meal_tcvr_read(hp, tregs,
+						       DP83840_CSCONFIG);
 		hp->sw_csconfig &= ~(CSCONFIG_TCVDISAB);
-		happy_meal_tcvr_write(hp, tregs, DP83840_CSCONFIG, hp->sw_csconfig);
+		happy_meal_tcvr_write(hp, tregs, DP83840_CSCONFIG,
+				      hp->sw_csconfig);
 
 		hp->timer_state = ltrywait;
-	} else {
-		hp->timer_state = arbwait;
 	}
 
 	hp->timer_ticks = 0;
@@ -1220,6 +1251,9 @@ static void happy_meal_begin_auto_negotiation(struct happy_meal *hp,
 	add_timer(&hp->happy_timer);
 }
 
+#define CRC_POLYNOMIAL_BE 0x04c11db7UL  /* Ethernet CRC, big endian */
+#define CRC_POLYNOMIAL_LE 0xedb88320UL  /* Ethernet CRC, little endian */
+
 static int happy_meal_init(struct happy_meal *hp, int from_irq)
 {
 	struct hmeal_gregs   *gregs        = hp->gregs;
@@ -1227,8 +1261,11 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 	struct hmeal_erxregs *erxregs      = hp->erxregs;
 	struct hmeal_bigmacregs *bregs     = hp->bigmacregs;
 	struct hmeal_tcvregs *tregs        = hp->tcvregs;
-	unsigned long regtmp;
+	unsigned long regtmp, rxcfg;
 	unsigned char *e = &hp->dev->dev_addr[0];
+
+	/* If auto-negotiation timer is running, kill it. */
+	del_timer(&hp->happy_timer);
 
 	HMD(("happy_meal_init: happy_flags[%08x] ",
 	     hp->happy_flags));
@@ -1322,12 +1359,54 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 	hme_write32(hp, &bregs->mac_addr1, ((e[2] << 8) | e[3]));
 	hme_write32(hp, &bregs->mac_addr0, ((e[0] << 8) | e[1]));
 
-	/* Ick, figure out how to properly program the hash table later... */
 	HMD(("htable, "));
-	hme_write32(hp, &bregs->htable3, 0);
-	hme_write32(hp, &bregs->htable2, 0);
-	hme_write32(hp, &bregs->htable1, 0);
-	hme_write32(hp, &bregs->htable0, 0);
+	if((hp->dev->flags & IFF_ALLMULTI) ||
+	   (hp->dev->mc_count > 64)) {
+		hme_write32(hp, &bregs->htable0, 0xffff);
+		hme_write32(hp, &bregs->htable1, 0xffff);
+		hme_write32(hp, &bregs->htable2, 0xffff);
+		hme_write32(hp, &bregs->htable3, 0xffff);
+	} else if((hp->dev->flags & IFF_PROMISC) == 0) {
+		u16 hash_table[4];
+		struct dev_mc_list *dmi = hp->dev->mc_list;
+		char *addrs;
+		int i, j, bit, byte;
+		u32 crc, poly = CRC_POLYNOMIAL_LE;
+
+		for(i = 0; i < 4; i++)
+			hash_table[i] = 0;
+
+		for(i = 0; i < hp->dev->mc_count; i++) {
+			addrs = dmi->dmi_addr;
+			dmi = dmi->next;
+
+			if(!(*addrs & 1))
+				continue;
+
+			crc = 0xffffffffU;
+			for(byte = 0; byte < 6; byte++) {
+				for(bit = *addrs++, j = 0; j < 8; j++, bit >>= 1) {
+					int test;
+
+					test = ((bit ^ crc) & 0x01);
+					crc >>= 1;
+					if(test)
+						crc = crc ^ poly;
+				}
+			}
+			crc >>= 26;
+			hash_table[crc >> 4] |= 1 << (crc & 0xf);
+		}
+		hme_write32(hp, &bregs->htable0, hash_table[0]);
+		hme_write32(hp, &bregs->htable1, hash_table[1]);
+		hme_write32(hp, &bregs->htable2, hash_table[2]);
+		hme_write32(hp, &bregs->htable3, hash_table[3]);
+	} else {
+		hme_write32(hp, &bregs->htable3, 0);
+		hme_write32(hp, &bregs->htable2, 0);
+		hme_write32(hp, &bregs->htable1, 0);
+		hme_write32(hp, &bregs->htable0, 0);
+	}
 
 	/* Set the RX and TX ring ptrs. */
 	HMD(("ring ptrs rxr[%08x] txr[%08x]\n",
@@ -1343,9 +1422,22 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 	     hme_read32(hp, &gregs->cfg)));
 
 #ifdef __sparc_v9__
+	/* XXX Can sun4d do these too? */
 	if(hp->happy_bursts & DMA_BURST64) {
+		u32 gcfg = GREG_CFG_BURST64;
+
+		/* I have no idea if I should set the extended
+		 * transfer mode bit for Cheerio, so for now I
+		 * do not.  -DaveM
+		 */
+		if((hp->happy_flags & HFLAG_PCI) == 0) {
+			mmu_set_sbus64(hp->happy_sbus_dev,
+				       hp->happy_bursts);
+			gcfg |= GREG_CFG_64BIT;
+		}
+
 		HMD(("64>"));
-		hme_write32(hp, &gregs->cfg, GREG_CFG_BURST64);
+		hme_write32(hp, &gregs->cfg, gcfg);
 	} else
 #endif
 	if(hp->happy_bursts & DMA_BURST32) {
@@ -1396,7 +1488,10 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 	/* Enable Big Mac hash table filter. */
 	HMD(("happy_meal_init: enable hash rx_cfg_old[%08x], ",
 	     hme_read32(hp, &bregs->rx_cfg)));
-	hme_write32(hp, &bregs->rx_cfg, BIGMAC_RXCFG_HENABLE);
+	rxcfg = BIGMAC_RXCFG_HENABLE;
+	if(hp->dev->flags & IFF_PROMISC)
+		rxcfg |= BIGMAC_RXCFG_PMISC;
+	hme_write32(hp, &bregs->rx_cfg, rxcfg);
 
 	/* Let the bits settle in the chip. */
 	udelay(10);
@@ -1433,7 +1528,7 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 		    hme_read32(hp, &bregs->rx_cfg) | BIGMAC_RXCFG_ENABLE);
 
 	/* Get the autonegotiation started, and the watch timer ticking. */
-	happy_meal_begin_auto_negotiation(hp, tregs);
+	happy_meal_begin_auto_negotiation(hp, tregs, NULL);
 
 	/* Success. */
 	return 0;
@@ -1505,7 +1600,7 @@ static int happy_meal_is_not_so_happy(struct happy_meal *hp,
 
 	/* Only print messages for non-counter related interrupts. */
 	if(status & (GREG_STAT_RFIFOVF | GREG_STAT_STSTERR | GREG_STAT_TFIFO_UND |
-		     GREG_STAT_MAXPKTERR | GREG_STAT_NORXD | GREG_STAT_RXERR |
+		     GREG_STAT_MAXPKTERR | GREG_STAT_RXERR |
 		     GREG_STAT_RXPERR | GREG_STAT_RXTERR | GREG_STAT_EOPERR |
 		     GREG_STAT_MIFIRQ | GREG_STAT_TXEACK | GREG_STAT_TXLERR |
 		     GREG_STAT_TXPERR | GREG_STAT_TXTERR | GREG_STAT_SLVERR |
@@ -1541,13 +1636,14 @@ static int happy_meal_is_not_so_happy(struct happy_meal *hp,
 	}
 
 	if(status & GREG_STAT_NORXD) {
-		/* AIEEE, out of receive descriptors.  Check out our drop
-		 * processing in happy_meal_rx to see how we try very hard
-		 * to avoid this situation.
+		/* This is harmless, it just means the system is
+		 * quite loaded and the incomming packet rate was
+		 * faster than the interrupt handler could keep up
+		 * with.
 		 */
-		printk("%s: Happy Meal out of receive descriptors, aieee!\n",
+		printk(KERN_INFO "%s: Happy Meal out of receive "
+		       "descriptors, packet dropped.\n",
 		       hp->dev->name);
-		reset = 1;
 	}
 
 	if(status & (GREG_STAT_RXERR|GREG_STAT_RXPERR|GREG_STAT_RXTERR)) {
@@ -1662,13 +1758,6 @@ static inline void happy_meal_tx(struct happy_meal *hp)
 		hp->tx_skbs[elem] = NULL;
 		hp->net_stats.tx_bytes+=skb->len;
 		
-#ifdef NEED_DMA_SYNCHRONIZATION
-#ifdef CONFIG_PCI
-		if(!(hp->happy_flags & HFLAG_PCI))
-#endif
-			mmu_sync_dma(kva_to_hva(hp, skb->data),
-				     skb->len, hp->happy_sbus_dev->my_bus);
-#endif
 		dev_kfree_skb(skb);
 
 		hp->net_stats.tx_packets++;
@@ -1797,7 +1886,8 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 			struct sk_buff *new_skb;
 
 			/* Now refill the entry, if we can. */
-			new_skb = happy_meal_alloc_skb(RX_BUF_ALLOC_SIZE, GFP_ATOMIC);
+			new_skb = happy_meal_alloc_skb(RX_BUF_ALLOC_SIZE,
+						       (GFP_DMA|GFP_ATOMIC));
 			if(!new_skb) {
 				drops++;
 				goto drop_it;
@@ -1814,7 +1904,7 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 			/* Trim the original skb for the netif. */
 			skb_trim(skb, len);
 		} else {
-			struct sk_buff *copy_skb = dev_alloc_skb(len+2);
+			struct sk_buff *copy_skb = dev_alloc_skb(len + 2);
 
 			if(!copy_skb) {
 				drops++;
@@ -1908,7 +1998,8 @@ static inline void pci_happy_meal_rx(struct happy_meal *hp, struct device *dev,
 			struct sk_buff *new_skb;
 
 			/* Now refill the entry, if we can. */
-			new_skb = happy_meal_alloc_skb(RX_BUF_ALLOC_SIZE, GFP_ATOMIC);
+			new_skb = happy_meal_alloc_skb(RX_BUF_ALLOC_SIZE,
+						       (GFP_DMA|GFP_ATOMIC));
 			if(!new_skb) {
 				drops++;
 				goto drop_it;
@@ -1925,7 +2016,7 @@ static inline void pci_happy_meal_rx(struct happy_meal *hp, struct device *dev,
 			/* Trim the original skb for the netif. */
 			skb_trim(skb, len);
 		} else {
-			struct sk_buff *copy_skb = dev_alloc_skb(len+2);
+			struct sk_buff *copy_skb = dev_alloc_skb(len + 2);
 
 			if(!copy_skb) {
 				drops++;
@@ -2083,7 +2174,8 @@ static inline void sun4d_happy_meal_rx(struct happy_meal *hp, struct device *dev
 			struct sk_buff *new_skb;
 
 			/* Now refill the entry, if we can. */
-			new_skb = happy_meal_alloc_skb(RX_BUF_ALLOC_SIZE, GFP_ATOMIC);
+			new_skb = happy_meal_alloc_skb(RX_BUF_ALLOC_SIZE,
+						       (GFP_DMA | GFP_ATOMIC));
 			if(!new_skb) {
 				drops++;
 				goto drop_it;
@@ -2103,7 +2195,7 @@ static inline void sun4d_happy_meal_rx(struct happy_meal *hp, struct device *dev
 			/* Trim the original skb for the netif. */
 			skb_trim(skb, len);
 		} else {
-			struct sk_buff *copy_skb = dev_alloc_skb(len+2);
+			struct sk_buff *copy_skb = dev_alloc_skb(len + 2);
 
 			if(!copy_skb) {
 				drops++;
@@ -2328,12 +2420,39 @@ static void sun4d_happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *re
 }
 #endif
 
+static void quattro_sbus_interrupt(int irq, void *cookie, struct pt_regs *ptregs)
+{
+	struct quattro *qp = (struct quattro *)cookie;
+	int i;
+
+	for(i = 0; i < 4; i++) {
+		struct device *hdev = qp->happy_meals[i];
+		struct happy_meal *hp = (struct happy_meal *) hdev->priv;
+		volatile u32 *sreg = qp->irq_status[i];
+
+		if(sreg &&
+		   (hme_read32(hp, sreg) & (GREG_STAT_ERRORS |
+					    GREG_STAT_MIFIRQ |
+					    GREG_STAT_TXALL  |
+					    GREG_STAT_RXTOHOST)) != 0)
+			qp->handler(irq, hdev, ptregs);
+	}
+}
+
 static int happy_meal_open(struct device *dev)
 {
 	struct happy_meal *hp = (struct happy_meal *) dev->priv;
 	int res;
 
 	HMD(("happy_meal_open: "));
+
+	/* On SBUS Quattro QFE cards, all hme interrupts are concentrated
+	 * into a single source which we register handling at probe time.
+	 */
+	if((hp->happy_flags & (HFLAG_QUATTRO|HFLAG_PCI)) == HFLAG_QUATTRO) {
+		hp->qfe_parent->irq_status[hp->qfe_ent] = &hp->gregs->stat;
+		goto after_request_irq;
+	}
 #ifndef __sparc_v9__
 	if(sparc_cpu_model == sun4c) {
 		if(request_irq(dev->irq, &sun4c_happy_meal_interrupt,
@@ -2370,8 +2489,8 @@ static int happy_meal_open(struct device *dev)
 		       __irq_itoa(dev->irq));
 		return -EAGAIN;
 	}
-	HMD(("Init happy timer\n"));
-	init_timer(&hp->happy_timer);
+
+after_request_irq:
 	HMD(("to happy_meal_init\n"));
 	res = happy_meal_init(hp, 0);
 	if(!res) {
@@ -2390,7 +2509,17 @@ static int happy_meal_close(struct device *dev)
 	/* If auto-negotiation timer is running, kill it. */
 	del_timer(&hp->happy_timer);
 
-	free_irq(dev->irq, (void *)dev);
+	/* On Quattro QFE cards, all hme interrupts are concentrated
+	 * into a single source which we register handling at probe
+	 * time and never unregister.
+	 */
+	if((hp->happy_flags & (HFLAG_QUATTRO|HFLAG_PCI)) != HFLAG_QUATTRO) {
+		free_irq(dev->irq, (void *)dev);
+	} else {
+		/* Zap the status register pointer. */
+		hp->qfe_parent->irq_status[hp->qfe_ent] = NULL;
+	}
+
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -2429,10 +2558,23 @@ static int happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 		tx_add_log(hp, TXLOG_ACTION_TXMIT|TXLOG_ACTION_NBUFS, 0);
 		return 1;
 	}
+#ifdef __sparc_v9__
+	if ((unsigned long)(skb->data + skb->len) >= MAX_DMA_ADDRESS) {
+		struct sk_buff *new_skb = skb_copy(skb, GFP_DMA | GFP_ATOMIC);
+		if (!new_skb)
+			return 1;
+		dev_kfree_skb(skb);
+		skb = new_skb;
+	}
+#endif
 	len = skb->len;
 	entry = hp->tx_new;
 
 	SXD(("SX<l[%d]e[%d]>", len, entry));
+#ifdef NEED_DMA_SYNCHRONIZATION
+	mmu_sync_dma(kva_to_hva(hp, skb->data),
+		     skb->len, hp->happy_sbus_dev->my_bus);
+#endif
 	hp->tx_skbs[entry] = skb;
 	hp->happy_block->happy_meal_txd[entry].tx_addr = kva_to_hva(hp, skb->data);
 	hp->happy_block->happy_meal_txd[entry].tx_flags =
@@ -2622,9 +2764,6 @@ static struct net_device_stats *happy_meal_get_stats(struct device *dev)
 	return &hp->net_stats;
 }
 
-#define CRC_POLYNOMIAL_BE 0x04c11db7UL  /* Ethernet CRC, big endian */
-#define CRC_POLYNOMIAL_LE 0xedb88320UL  /* Ethernet CRC, little endian */
-
 static void happy_meal_set_multicast(struct device *dev)
 {
 	struct happy_meal *hp = (struct happy_meal *) dev->priv;
@@ -2633,10 +2772,6 @@ static void happy_meal_set_multicast(struct device *dev)
 	char *addrs;
 	int i, j, bit, byte;
 	u32 crc, poly = CRC_POLYNOMIAL_LE;
-
-	/* Let the transmits drain. */
-	while(dev->tbusy)
-		schedule();
 
 	/* Lock out others. */
 	set_bit(0, (void *) &dev->tbusy);
@@ -2686,13 +2821,262 @@ static void happy_meal_set_multicast(struct device *dev)
 	dev->tbusy = 0;
 }
 
+/* Ethtool support... */
+static int happy_meal_ioctl(struct device *dev,
+			    struct ifreq *rq, int cmd)
+{
+	struct happy_meal *hp = (struct happy_meal *) dev->priv;
+	struct ethtool_cmd *ep_user = (struct ethtool_cmd *) rq->ifr_data;
+	struct ethtool_cmd ecmd;
+
+	if(cmd != SIOCETHTOOL)
+		return -EOPNOTSUPP;
+	if(copy_from_user(&ecmd, ep_user, sizeof(ecmd)))
+		return -EFAULT;
+
+	if(ecmd.cmd == SPARC_ETH_GSET) {
+		ecmd.supported =
+			(SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full |
+			 SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full |
+			 SUPPORTED_Autoneg | SUPPORTED_TP | SUPPORTED_MII);
+
+		/* XXX hardcoded stuff for now */
+		ecmd.port = PORT_TP; /* XXX no MII support */
+		ecmd.transceiver = XCVR_INTERNAL; /* XXX no external xcvr support */
+		ecmd.phy_address = 0; /* XXX fixed PHYAD */
+
+		/* Record PHY settings. */
+		hp->sw_bmcr = happy_meal_tcvr_read(hp, hp->tcvregs, DP83840_BMCR);
+		hp->sw_lpa = happy_meal_tcvr_read(hp, hp->tcvregs, DP83840_LPA);
+		if(hp->sw_bmcr & BMCR_ANENABLE) {
+			ecmd.autoneg = AUTONEG_ENABLE;
+			ecmd.speed =
+				(hp->sw_lpa & (LPA_100HALF | LPA_100FULL)) ?
+				SPEED_100 : SPEED_10;
+			if(ecmd.speed == SPEED_100)
+				ecmd.duplex =
+					(hp->sw_lpa & (LPA_100FULL)) ?
+					DUPLEX_FULL : DUPLEX_HALF;
+			else
+				ecmd.duplex =
+					(hp->sw_lpa & (LPA_10FULL)) ?
+					DUPLEX_FULL : DUPLEX_HALF;
+		} else {
+			ecmd.autoneg = AUTONEG_DISABLE;
+			ecmd.speed =
+				(hp->sw_bmcr & BMCR_SPEED100) ?
+				SPEED_100 : SPEED_10;
+			ecmd.duplex =
+				(hp->sw_bmcr & BMCR_FULLDPLX) ?
+				DUPLEX_FULL : DUPLEX_HALF;
+		}
+		if(copy_to_user(ep_user, &ecmd, sizeof(ecmd)))
+			return -EFAULT;
+		return 0;
+	} else if(ecmd.cmd == SPARC_ETH_SSET) {
+		if(!capable(CAP_NET_ADMIN))
+			return -EPERM;
+
+		/* Verify the settings we care about. */
+		if(ecmd.autoneg != AUTONEG_ENABLE &&
+		   ecmd.autoneg != AUTONEG_DISABLE)
+			return -EINVAL;
+		if(ecmd.autoneg == AUTONEG_DISABLE &&
+		   ((ecmd.speed != SPEED_100 &&
+		     ecmd.speed != SPEED_10) ||
+		    (ecmd.duplex != DUPLEX_HALF &&
+		     ecmd.duplex != DUPLEX_FULL)))
+			return -EINVAL;
+
+		/* Ok, do it to it. */
+		del_timer(&hp->happy_timer);
+		happy_meal_begin_auto_negotiation(hp,
+						  hp->tcvregs,
+						  &ecmd);
+
+		return 0;
+	} else
+		return -EOPNOTSUPP;
+}
+
+void __init quattro_get_ranges(struct quattro *qp)
+{
+	int err;
+
+	err = prom_getproperty(qp->quattro_sbus_dev->prom_node,
+			       "ranges",
+			       (char *)&qp->ranges[0],
+			       sizeof(qp->ranges));
+	if(err == 0 || err == -1) {
+		qp->nranges = 0;
+		return;
+	}
+	qp->nranges = (err / sizeof(struct linux_prom_ranges));
+}
+
+static void __init quattro_apply_ranges(struct quattro *qp, struct happy_meal *hp)
+{
+	struct linux_sbus_device *sdev = hp->happy_sbus_dev;
+	int rng;
+
+	for(rng = 0; rng < qp->nranges; rng++) {
+		struct linux_prom_ranges *rngp = &qp->ranges[rng];
+		int reg;
+
+		for(reg = 0; reg < 5; reg++) {
+			if(sdev->reg_addrs[reg].which_io ==
+			   rngp->ot_child_space)
+				break;
+		}
+		if(reg == 5)
+			continue;
+
+		sdev->reg_addrs[reg].which_io = rngp->ot_parent_space;
+		sdev->reg_addrs[reg].phys_addr += rngp->ot_parent_base;
+	}
+}
+
+/* Given a happy meal sbus device, find it's quattro parent.
+ * If none exist, allocate and return a new one.
+ *
+ * Return NULL on failure.
+ */
+static struct quattro * __init quattro_sbus_find(struct linux_sbus_device *goal_sdev)
+{
+	struct linux_sbus *sbus;
+	struct linux_sbus_device *sdev;
+	struct quattro *qp;
+
+	for(qp = qfe_sbus_list; qp != NULL; qp = qp->next) {
+		for(sdev = qp->quattro_sbus_dev->child;
+		    sdev != NULL;
+		    sdev = sdev->next) {
+			if(sdev == goal_sdev)
+				return qp;
+		}
+	}
+	for_each_sbus(sbus) {
+		for_each_sbusdev(sdev, sbus) {
+			if(sdev->child != NULL) {
+				struct linux_sbus_device *p;
+
+				for(p = sdev->child; p != NULL; p = p->next)
+					if(p == goal_sdev)
+						goto found;
+			}
+		}
+	}
+
+	/* Cannot find quattro parent, fail. */
+	return NULL;
+
+found:
+	qp = kmalloc(sizeof(struct quattro), GFP_KERNEL);
+	if(qp != NULL) {
+		int i;
+
+		for(i = 0; i < 4; i++) {
+			qp->irq_status[i] = NULL;
+			qp->happy_meals[i] = NULL;
+		}
+		qp->handler = NULL;
+		qp->quattro_sbus_dev = sdev;
+#ifdef CONFIG_PCI
+		qp->quattro_pci_dev = NULL;
+#endif
+		qp->next = qfe_sbus_list;
+		qfe_sbus_list = qp;
+		quattro_get_ranges(qp);
+	}
+	return qp;
+}
+
+#ifdef CONFIG_PCI
+static struct quattro * __init quattro_pci_find(struct pci_dev *pdev)
+{
+	struct pci_dev *bdev = pdev->bus->self;
+	struct quattro *qp;
+
+	if (!bdev) return NULL;
+	for(qp = qfe_pci_list; qp != NULL; qp = qp->next) {
+		if(qp->quattro_pci_dev == bdev)
+			return qp;
+	}
+	qp = kmalloc(sizeof(struct quattro), GFP_KERNEL);
+	if(qp != NULL) {
+		int i;
+
+		for(i = 0; i < 4; i++) {
+			qp->irq_status[i] = NULL;
+			qp->happy_meals[i] = NULL;
+		}
+		qp->handler = NULL;
+		qp->quattro_sbus_dev = NULL;
+		qp->quattro_pci_dev = bdev;
+		qp->next = qfe_pci_list;
+		qfe_pci_list = qp;
+
+		/* No range tricks necessary on PCI. */
+		qp->nranges = 0;
+	}
+	return qp;
+}
+#endif
+
+/* After all quattro cards have been probed, we call these functions
+ * to register the IRQ handlers.
+ */
+static void __init quattro_sbus_register_irqs(void)
+{
+	struct quattro *qp;
+
+	for(qp = qfe_sbus_list; qp != NULL; qp = qp->next) {
+		int err;
+
+		/* Set the handler. */
+#ifndef __sparc_v9__
+		if(sparc_cpu_model == sun4c)
+			qp->handler = sun4c_happy_meal_interrupt;
+		else if(sparc_cpu_model == sun4c)
+			qp->handler = sun4d_happy_meal_interrupt;
+		else
+#endif
+#ifdef CONFIG_PCI
+		if(qp->quattro_pci_dev != NULL)
+			panic("QFE: PCI qfe in sbus_register_irqs!");
+		else
+#endif
+			qp->handler = happy_meal_interrupt;
+
+		err = request_irq(qp->quattro_sbus_dev->irqs[0],
+				  quattro_sbus_interrupt,
+				  SA_SHIRQ, "Quattro",
+				  qp);
+		if(err != 0) {
+			printk("Quattro: Fatal IRQ registery error %d.\n", err);
+			panic("QFE request irq");
+		}
+	}
+}
+
 static unsigned hme_version_printed = 0;
 
-static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_device *sdev)
+static int __init happy_meal_ether_init(struct device *dev, struct linux_sbus_device *sdev, int is_qfe)
 {
+	struct quattro *qp = NULL;
 	struct happy_meal *hp;
-	int i;
+	int i, qfe_slot = -1;
 
+	if(is_qfe) {
+		qp = quattro_sbus_find(sdev);
+		if(qp == NULL)
+			return ENODEV;
+		for(qfe_slot = 0; qfe_slot < 4; qfe_slot++)
+			if(qp->happy_meals[qfe_slot] == NULL)
+				break;
+		if(qfe_slot == 4)
+			return ENODEV;
+	}
 	if(dev == NULL) {
 		dev = init_etherdev(0, sizeof(struct happy_meal));
 	} else {
@@ -2703,9 +3087,16 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 	if(hme_version_printed++ == 0)
 		printk(version);
 
-	printk("%s: HAPPY MEAL (SBUS) 10/100baseT Ethernet ", dev->name);
+	if(qfe_slot != -1)
+		printk("%s: Quattro HME slot %d (SBUS) 10/100baseT Ethernet",
+		       dev->name, qfe_slot);
+	else
+		printk("%s: HAPPY MEAL (SBUS) 10/100baseT Ethernet ",
+		       dev->name);
 
 	dev->base_addr = (long) sdev;
+
+	/* XXX Check for local-mac-address property on Quattro... -DaveM */
 	for(i = 0; i < 6; i++)
 		printk("%2.2x%c",
 		       dev->dev_addr[i] = idprom->id_ethaddr[i],
@@ -2725,6 +3116,13 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 		       sdev->num_registers);
 		printk("happymeal: Would you like that for here or to go?\n");
 		return ENODEV;
+	}
+
+	if(qp != NULL) {
+		hp->qfe_parent = qp;
+		hp->qfe_ent = qfe_slot;
+		qp->happy_meals[qfe_slot] = dev;
+		quattro_apply_ranges(qp, hp);
 	}
 
 	prom_apply_sbus_ranges(sdev->my_bus, &sdev->reg_addrs[0],
@@ -2784,6 +3182,9 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 	else if(hp->hm_revision != 0xa0)
 		hp->happy_flags = HFLAG_NOT_A0;
 
+	if(qp != NULL)
+		hp->happy_flags |= HFLAG_QUATTRO;
+
 	/* Get the supported DVMA burst sizes from our Happy SBUS. */
 	hp->happy_bursts = prom_getintdefault(hp->happy_sbus_dev->my_bus->prom_node,
 					      "burst-sizes", 0x00);
@@ -2817,6 +3218,8 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 	 */
 	happy_meal_set_initial_advertisement(hp);
 
+	init_timer(&hp->happy_timer);
+
 	hp->dev = dev;
 	dev->open = &happy_meal_open;
 	dev->stop = &happy_meal_close;
@@ -2830,6 +3233,7 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 		dev->hard_start_xmit = &happy_meal_start_xmit;
 	dev->get_stats = &happy_meal_get_stats;
 	dev->set_multicast_list = &happy_meal_set_multicast;
+	dev->do_ioctl = &happy_meal_ioctl;
 
 	dev->irq = sdev->irqs[0];
 	dev->dma = 0;
@@ -2846,14 +3250,35 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 }
 
 #ifdef CONFIG_PCI
-__initfunc(int happy_meal_pci_init(struct device *dev, struct pci_dev *pdev))
+static int __init happy_meal_pci_init(struct device *dev, struct pci_dev *pdev)
 {
+	struct quattro *qp = NULL;
 	struct pcidev_cookie *pcp;
 	struct happy_meal *hp;
 	unsigned long hpreg_base;
 	unsigned short pci_command;
-	int i, node;
+	int i, node, qfe_slot = -1;
+	char prom_name[64];
 
+	/* Now make sure pci_dev cookie is there. */
+	pcp = pdev->sysdata;
+	if(pcp == NULL || pcp->prom_node == -1) {
+		printk("happymeal(PCI): Some PCI device info missing\n");
+		return ENODEV;
+	}
+	node = pcp->prom_node;
+	
+	prom_getstring(node, "name", prom_name, sizeof(prom_name));
+	if (!strcmp(prom_name, "SUNW,qfe") || !strcmp(prom_name, "qfe")) {
+		qp = quattro_pci_find(pdev);
+		if(qp == NULL)
+			return ENODEV;
+		for(qfe_slot = 0; qfe_slot < 4; qfe_slot++)
+			if(qp->happy_meals[qfe_slot] == NULL)
+				break;
+		if(qfe_slot == 4)
+			return ENODEV;
+	}
 	if(dev == NULL) {
 		dev = init_etherdev(0, sizeof(struct happy_meal));
 	} else {
@@ -2864,21 +3289,40 @@ __initfunc(int happy_meal_pci_init(struct device *dev, struct pci_dev *pdev))
 	if(hme_version_printed++ == 0)
 		printk(version);
 
-	printk("%s: HAPPY MEAL (PCI/CheerIO) 10/100BaseT Ethernet ", dev->name);
+	if (!qfe_slot) {
+		prom_name[0] = 0;
+		if (!strncmp(dev->name, "eth", 3)) {
+			int i = simple_strtoul(dev->name + 3, NULL, 10);
+			sprintf(prom_name, "-%d", i + 3);
+		}
+		printk("%s%s: Quattro HME (PCI/CheerIO) 10/100baseT Ethernet ", dev->name, prom_name);
+		if (qp->quattro_pci_dev->vendor == PCI_VENDOR_ID_DEC &&
+		    qp->quattro_pci_dev->device == PCI_DEVICE_ID_DEC_21153)
+			printk("DEC 21153 PCI Bridge\n");
+		else
+			printk("unknown bridge %04x.%04x\n", 
+				qp->quattro_pci_dev->vendor, qp->quattro_pci_dev->device);
+	}
+	if(qfe_slot != -1)
+		printk("%s: Quattro HME slot %d (PCI/CheerIO) 10/100baseT Ethernet ",
+		       dev->name, qfe_slot);
+	else
+		printk("%s: HAPPY MEAL (PCI/CheerIO) 10/100BaseT Ethernet ",
+		       dev->name);
 
 	dev->base_addr = (long) pdev;
-	for(i = 0; i < 6; i++)
-		printk("%2.2x%c",
-		       dev->dev_addr[i] = idprom->id_ethaddr[i],
-		       i == 5 ? ' ' : ':');
-
-	printk("\n");
 
 	hp = (struct happy_meal *)dev->priv;
 	memset(hp, 0, sizeof(*hp));
 
 	hp->happy_sbus_dev = NULL;
 	hp->happy_pci_dev = pdev;
+
+	if(qp != NULL) {
+		hp->qfe_parent = qp;
+		hp->qfe_ent = qfe_slot;
+		qp->happy_meals[qfe_slot] = dev;
+	}		
 
 	hpreg_base = pdev->base_address[0];
 	if((hpreg_base & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_MEMORY) {
@@ -2887,13 +3331,14 @@ __initfunc(int happy_meal_pci_init(struct device *dev, struct pci_dev *pdev))
 	}
 	hpreg_base &= PCI_BASE_ADDRESS_MEM_MASK;
 
-	/* Now make sure pci_dev cookie is there. */
-	pcp = pdev->sysdata;
-	if(pcp == NULL || pcp->prom_node == -1) {
-		printk("happymeal(PCI): Some PCI device info missing\n");
-		return ENODEV;
-	}
-	node = pcp->prom_node;
+	if (qfe_slot != -1 && prom_getproplen(node, "local-mac-address") == 6)
+		prom_getproperty(node, "local-mac-address", dev->dev_addr, 6);
+	else
+		memcpy(dev->dev_addr, idprom->id_ethaddr, 6);
+	for(i = 0; i < 6; i++)
+		printk("%2.2x%c", dev->dev_addr[i], i == 5 ? ' ' : ':');
+
+	printk("\n");
 
 	/* Layout registers. */
 	hp->gregs      = (struct hmeal_gregs *)		(hpreg_base + 0x0000);
@@ -2911,6 +3356,9 @@ __initfunc(int happy_meal_pci_init(struct device *dev, struct pci_dev *pdev))
 		hp->happy_flags = HFLAG_20_21;
 	else if(hp->hm_revision != 0xa0)
 		hp->happy_flags = HFLAG_NOT_A0;
+
+	if(qp != NULL)
+		hp->happy_flags |= HFLAG_QUATTRO;
 
 	/* And of course, indicate this is PCI. */
 	hp->happy_flags |= HFLAG_PCI;
@@ -2937,29 +3385,32 @@ __initfunc(int happy_meal_pci_init(struct device *dev, struct pci_dev *pdev))
 	hp->timer_ticks = 0;
 	happy_meal_set_initial_advertisement(hp);
 
+	init_timer(&hp->happy_timer);
+
 	hp->dev = dev;
 	dev->open = &happy_meal_open;
 	dev->stop = &happy_meal_close;
 	dev->hard_start_xmit = &pci_happy_meal_start_xmit;
 	dev->get_stats = &happy_meal_get_stats;
 	dev->set_multicast_list = &happy_meal_set_multicast;
+	dev->do_ioctl = &happy_meal_ioctl;
 	dev->irq = pdev->irq;
 	dev->dma = 0;
 	ether_setup(dev);
 
 	/* If we don't do this, nothing works. */
-	pcibios_read_config_word(pdev->bus->number,
-				 pdev->devfn,
-				 PCI_COMMAND, &pci_command);
+	pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
 	pci_command |= PCI_COMMAND_MASTER;
-	pcibios_write_config_word(pdev->bus->number,
-				  pdev->devfn,
-				  PCI_COMMAND, pci_command);
+	pci_write_config_word(pdev, PCI_COMMAND, pci_command);
 
-	/* Set the latency timer as well, PROM leaves it at zero. */
-	pcibios_write_config_byte(pdev->bus->number,
-				  pdev->devfn,
-				  PCI_LATENCY_TIMER, 240);
+	/* Set the latency timer and cache line size as well,
+	 * PROM leaves it at zero.
+	 */
+	pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 128);
+#ifdef __sparc_v9__
+	/* NOTE: Cache line size is in 32-bit word units. */
+	pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, 0x10);
+#endif
 
 #ifdef MODULE
 	/* We are home free at this point, link us in to the happy
@@ -2973,7 +3424,7 @@ __initfunc(int happy_meal_pci_init(struct device *dev, struct pci_dev *pdev))
 }
 #endif
 
-__initfunc(int happy_meal_probe(struct device *dev))
+int __init happy_meal_probe(struct device *dev)
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;
@@ -2990,11 +3441,18 @@ __initfunc(int happy_meal_probe(struct device *dev))
 				dev = NULL;
 			if(!strcmp(sdev->prom_name, "SUNW,hme")) {
 				cards++;
-				if((v = happy_meal_ether_init(dev, sdev)))
+				if((v = happy_meal_ether_init(dev, sdev, 0)))
+					return v;
+			} else if(!strcmp(sdev->prom_name, "qfe") ||
+				  !strcmp(sdev->prom_name, "SUNW,qfe")) {
+				cards++;
+				if((v = happy_meal_ether_init(dev, sdev, 1)))
 					return v;
 			}
 		}
 	}
+	if(cards != 0)
+		quattro_sbus_register_irqs();
 #ifdef CONFIG_PCI
 	if(pci_present()) {
 		struct pci_dev *pdev;

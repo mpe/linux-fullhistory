@@ -1,4 +1,4 @@
-/* $Id: promcon.c,v 1.13 1999/01/19 09:56:46 jj Exp $
+/* $Id: promcon.c,v 1.14 1999/03/09 14:02:42 davem Exp $
  * Console driver utilizing PROM sun terminal emulation
  *
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)

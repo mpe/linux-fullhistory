@@ -73,7 +73,10 @@ waking_non_zero_interruptible(struct semaphore *sem, struct task_struct *tsk)
 	           ret = 1;
 	       }
 	       else if (pending) {
-	           tmp += 1;
+		   // Since -1 + 1 carries into the high word, we have
+		   // to be more careful adding 1 here.
+		   tmp = (tmp & 0xffffffff00000000)
+			 | ((tmp + 1) & 0x00000000ffffffff;
 	           ret = -EINTR;
 	       }
 	       else {
@@ -89,11 +92,13 @@ waking_non_zero_interruptible(struct semaphore *sem, struct task_struct *tsk)
 	__asm__ __volatile__(
 		"1:	ldq_l	%1,%4\n"
 		"	lda	%0,0\n"
-		"	addq	%1,1,%2\n"
-		"	ldah	%3,0x8000(%1)\n"
 		"	cmovne	%5,%6,%0\n"
-		"	ldah	%3,0x8000(%3)\n"
+		"	addq	%1,1,%2\n"
+		"	and	%1,%7,%3\n"
+		"	andnot	%2,%7,%2\n"
 		"	cmovge	%1,1,%0\n"
+		"	or	%3,%2,%2\n"
+		"	addq	%1,%7,%3\n"
 		"	cmovne	%5,%2,%1\n"
 		"	cmovge	%2,%3,%1\n"
 		"	stq_c	%1,%4\n"
@@ -103,7 +108,8 @@ waking_non_zero_interruptible(struct semaphore *sem, struct task_struct *tsk)
 		"3:	br	1b\n"
 		".previous"
 		: "=&r"(ret), "=&r"(tmp), "=&r"(tmp2), "=&r"(tmp3), "=m"(*sem)
-		: "r"(signal_pending(tsk)), "r"(-EINTR));
+		: "r"(signal_pending(tsk)), "r"(-EINTR),
+		  "r"(0xffffffff00000000));
 
 	return ret;
 }

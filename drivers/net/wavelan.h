@@ -28,6 +28,8 @@ const char	MAC_ADDRESSES[][3] =
 {
   { 0x08, 0x00, 0x0E },		/* AT&T WaveLAN (standard) & DEC RoamAbout */
   { 0x08, 0x00, 0x6A },		/* AT&T WaveLAN (alternate) */
+  { 0x00, 0x00, 0xE1 },		/* Hitachi Wavelan */
+  { 0x00, 0x60, 0x1D }		/* Lucent Wavelan (another one) */
   /* Add your card here and send me the patch! */
 };
 
@@ -293,6 +295,7 @@ struct mmr_t
 #define	MMR_DCE_STATUS_LOOPT_IND	0x02	/* loop test indicated */
 #define	MMR_DCE_STATUS_TX_BUSY		0x04	/* transmitter on */
 #define	MMR_DCE_STATUS_JBR_EXPIRED	0x08	/* jabber timer expired */
+#define MMR_DCE_STATUS			0x0F	/* mask to get the bits */
   unsigned char	mmr_dsp_id;		/* DSP ID (AA = Daedalus rev A) */
   unsigned char	mmr_unused2[2];		/* unused */
   unsigned char	mmr_correct_nwid_l;	/* # of correct NWIDs rxd (low) */

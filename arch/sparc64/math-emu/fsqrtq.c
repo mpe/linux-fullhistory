@@ -7,6 +7,5 @@ int FSQRTQ(void *rd, void *rs2)
         
 	__FP_UNPACK_Q(A, rs2);
 	FP_SQRT_Q(R, A);
-	__FP_PACK_Q(rd, R);
-	return 1;
+	return __FP_PACK_Q(rd, R);
 }

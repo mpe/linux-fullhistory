@@ -223,8 +223,14 @@ static int qlogicpti_reset_hardware(struct Scsi_Host *host)
 	struct qlogicpti *qpti = (struct qlogicpti *) host->hostdata;
 	struct qlogicpti_regs *qregs = qpti->qregs;
 	u_short param[6];
+	unsigned short risc_code_addr;
 	int loop_count, i;
 	unsigned long flags;
+
+	if(qpti->is_pti != 0)
+		risc_code_addr = pti_risc_code_addr01;
+	else
+		risc_code_addr = sbus_risc_code_addr01;
 
 	save_flags(flags); cli();
 
@@ -264,7 +270,7 @@ static int qlogicpti_reset_hardware(struct Scsi_Host *host)
 
 	/* Get RISC to start executing the firmware code. */
 	param[0] = MBOX_EXEC_FIRMWARE;
-	param[1] = risc_code_addr01;
+	param[1] = risc_code_addr;
 	if(qlogicpti_mbox_command(qpti, param, 1)) {
 		printk(KERN_EMERG "qlogicpti%d: Cannot execute ISP firmware.\n",
 		       qpti->qpti_id);
@@ -352,21 +358,32 @@ __initfunc(static int qlogicpti_load_firmware(struct qlogicpti *qpti))
 	struct qlogicpti_regs *qregs = qpti->qregs;
 	unsigned short csum = 0;
 	unsigned short param[6];
+	unsigned short *risc_code, risc_code_addr, risc_code_length;
 	unsigned long flags;
 #if !defined(MODULE) && !defined(__sparc_v9__)
 	unsigned long dvma_addr;
 #endif
 	int i, timeout;
 
+	if(qpti->is_pti != 0) {
+		risc_code = &pti_risc_code01[0];
+		risc_code_addr = pti_risc_code_addr01;
+		risc_code_length = pti_risc_code_length01;
+	} else {
+		risc_code = &sbus_risc_code01[0];
+		risc_code_addr = sbus_risc_code_addr01;
+		risc_code_length = sbus_risc_code_length01;
+	}
+
 	save_flags(flags); cli();
 
 	/* Verify the checksum twice, one before loading it, and once
 	 * afterwards via the mailbox commands.
 	 */
-	for(i = 0; i < risc_code_length01; i++)
-		csum += risc_code01[i];
+	for(i = 0; i < risc_code_length; i++)
+		csum += risc_code[i];
 	if(csum) {
-		printk(KERN_EMERG "qlogicpti%d: AIeee, firmware checksum failed!",
+		printk(KERN_EMERG "qlogicpti%d: Aieee, firmware checksum failed!",
 		       qpti->qpti_id);
 		return 1;
 	}		
@@ -406,11 +423,6 @@ __initfunc(static int qlogicpti_load_firmware(struct qlogicpti *qpti))
 		qpti->differential = 0;
 	qregs->hcctrl = HCCTRL_REL;
 
-	/* XXX Talk to PTI engineer about the following, ISP always
-	 * XXX returns 0x4001 return status for stop firmware command,
-	 * XXX documentation claims this means the cmd is unsupported
-	 * XXX on this ISP.  I think something fishy is going on.
-	 */
 	param[0] = MBOX_STOP_FIRMWARE;
 	param[1] = param[2] = param[3] = param[4] = param[5] = 0;
 	if(qlogicpti_mbox_command(qpti, param, 1)) {
@@ -423,13 +435,13 @@ __initfunc(static int qlogicpti_load_firmware(struct qlogicpti *qpti))
 	/* Load the firmware. */
 #if !defined(MODULE) && !defined(__sparc_v9__)
 	if (sparc_cpu_model != sun4d) {
-		dvma_addr = (unsigned long) mmu_lockarea((char *)&risc_code01[0],
-							 (sizeof(u_short) * risc_code_length01));
+		dvma_addr = (unsigned long) mmu_lockarea((char *)&risc_code[0],
+							 (sizeof(u_short) * risc_code_length));
 		param[0] = MBOX_LOAD_RAM;
-		param[1] = risc_code_addr01;
+		param[1] = risc_code_addr;
 		param[2] = (dvma_addr >> 16);
 		param[3] = (dvma_addr & 0xffff);
-		param[4] = (sizeof(u_short) * risc_code_length01);
+		param[4] = (sizeof(u_short) * risc_code_length);
 		if(qlogicpti_mbox_command(qpti, param, 1) ||
 		   (param[0] != MBOX_COMMAND_COMPLETE)) {
 			printk(KERN_EMERG "qlogicpti%d: Firmware dload failed, I'm bolixed!\n",
@@ -437,14 +449,14 @@ __initfunc(static int qlogicpti_load_firmware(struct qlogicpti *qpti))
 			restore_flags(flags);
 			return 1;
 		}
-		mmu_unlockarea((char *)dvma_addr, (sizeof(u_short) * risc_code_length01));
+		mmu_unlockarea((char *)dvma_addr, (sizeof(u_short) * risc_code_length));
 	} else
 #endif
 	/* We need to do it this slow way always on Ultra, SS[12]000. */
-		for(i = 0; i < risc_code_length01; i++) {
+		for(i = 0; i < risc_code_length; i++) {
 			param[0] = MBOX_WRITE_RAM_WORD;
-			param[1] = risc_code_addr01 + i;
-			param[2] = risc_code01[i];
+			param[1] = risc_code_addr + i;
+			param[2] = risc_code[i];
 			if(qlogicpti_mbox_command(qpti, param, 1) ||
 			   param[0] != MBOX_COMMAND_COMPLETE) {
 				printk("qlogicpti%d: Firmware dload failed, I'm bolixed!\n",
@@ -464,7 +476,7 @@ __initfunc(static int qlogicpti_load_firmware(struct qlogicpti *qpti))
 
 	/* Ask ISP to verify the checksum of the new code. */
 	param[0] = MBOX_VERIFY_CHECKSUM;
-	param[1] = risc_code_addr01;
+	param[1] = risc_code_addr;
 	if(qlogicpti_mbox_command(qpti, param, 1) ||
 	   (param[0] != MBOX_COMMAND_COMPLETE)) {
 		printk(KERN_EMERG "qlogicpti%d: New firmware csum failure!\n",
@@ -475,7 +487,7 @@ __initfunc(static int qlogicpti_load_firmware(struct qlogicpti *qpti))
 
 	/* Start using newly downloaded firmware. */
 	param[0] = MBOX_EXEC_FIRMWARE;
-	param[1] = risc_code_addr01;
+	param[1] = risc_code_addr;
 	qlogicpti_mbox_command(qpti, param, 1);
 
 	param[0] = MBOX_ABOUT_FIRMWARE;
@@ -491,16 +503,18 @@ __initfunc(static int qlogicpti_load_firmware(struct qlogicpti *qpti))
 	qpti->fware_majrev = param[1];
 	qpti->fware_minrev = param[2];
 
-	/* Load scsi initiator ID and interrupt level into sbus static ram. */
-	param[0] = MBOX_WRITE_RAM_WORD;
-	param[1] = 0xff80;
-	param[2] = (unsigned short) qpti->scsi_id;
-	qlogicpti_mbox_command(qpti, param, 1);
+	if(qpti->is_pti != 0) {
+		/* Load scsi initiator ID and interrupt level into sbus static ram. */
+		param[0] = MBOX_WRITE_RAM_WORD;
+		param[1] = 0xff80;
+		param[2] = (unsigned short) qpti->scsi_id;
+		qlogicpti_mbox_command(qpti, param, 1);
 
-	param[0] = MBOX_WRITE_RAM_WORD;
-	param[1] = 0xff00;
-	param[2] = (unsigned short) 3;
-	qlogicpti_mbox_command(qpti, param, 1);
+		param[0] = MBOX_WRITE_RAM_WORD;
+		param[1] = 0xff00;
+		param[2] = (unsigned short) 3;
+		qlogicpti_mbox_command(qpti, param, 1);
+	}
 
 	restore_flags(flags);
 	return 0;
@@ -617,6 +631,10 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 			/* We are wide capable, 16 targets. */
 			qpti_host->max_id = MAX_TARGETS;
 
+#ifdef __sparc_v9__
+			qpti_host->unchecked_isa_dma = 1;
+#endif
+
 			/* Setup back pointers and misc. state. */
 			qpti->qhost = qpti_host;
 			qpti->qdev = qpti_dev;
@@ -638,7 +656,8 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 				       sizeof(qpti->prom_name));
 			qpti->prom_node = qpti_node;
 			
-			is_pti = strcmp (qpti->prom_name, "QLGC,isp");
+			qpti->is_pti = is_pti =
+				(strcmp (qpti->prom_name, "QLGC,isp") != 0);
 
 			/* Setup the reg property for this device. */
 			prom_apply_sbus_ranges(qpti->qdev->my_bus,
@@ -728,6 +747,9 @@ qpti_irq_acquired:
 				bsizes = (DMA_BURST32 - 1);
 			qpti->bursts = bsizes;
 
+			/* Clear out Scsi_Cmnd array. */
+			memset(qpti->cmd_slots, 0, sizeof(qpti->cmd_slots));
+
 			/* The request and response queues must each be aligned
 			 * on a page boundry.
 			 */
@@ -747,11 +769,13 @@ qpti_irq_acquired:
 			/* Set adapter and per-device default values. */
 			qlogicpti_set_hostdev_defaults(qpti);
 			
-			if (is_pti) {
-				/* Load the firmware. */
-				if(qlogicpti_load_firmware(qpti))
-					panic("PTI Qlogic/ISP firmware load failed");
+			/* Load the firmware. */
+			/* XXX Find out where is it possible to download
+			   our sbus_risc_code on non-PTI ISP1000. */
+			if(is_pti && qlogicpti_load_firmware(qpti))
+				panic("SBUS Qlogic/ISP firmware load failed");
 
+			if (is_pti) {
 				/* Check the PTI status reg. */
 				if(qlogicpti_verify_tmon(qpti))
 					panic("PTI Qlogic/ISP tmon verification failed");
@@ -768,7 +792,10 @@ qpti_irq_acquired:
 				char buffer[60];
 				
 				prom_getstring (qpti_node, "isp-fcode", buffer, 60);
-				printk("(Firmware %s)", buffer);
+				if (buffer[0])
+					printk("(Firmware %s)", buffer);
+				if (prom_getbool(qpti_node, "differential"))
+					qpti->differential = 1;
 			}
 			
 			printk (" [%s Wide, using %s interface]\n",
@@ -831,11 +858,6 @@ static inline void cmd_frob(struct Command_Entry *cmd, Scsi_Cmnd *Cmnd,
 	memset(cmd, 0, sizeof(struct Command_Entry));
 	cmd->hdr.entry_cnt = 1;
 	cmd->hdr.entry_type = ENTRY_COMMAND;
-#ifdef __sparc_v9__
-	cmd->handle = (u_int) (((unsigned long)Cmnd) - PAGE_OFFSET); /* magic mushroom */
-#else
-	cmd->handle = (u_int) ((unsigned long)Cmnd);                 /* magic mushroom */
-#endif
 	cmd->target_id = Cmnd->target;
 	cmd->target_lun = Cmnd->lun;
 	cmd->cdb_length = Cmnd->cmd_len;
@@ -924,9 +946,15 @@ static inline u_int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
 		cmd->dataseg[0].d_count = Cmnd->request_bufflen;
 		cmd->segment_cnt = 1;
 	}
+
+	/* Committed, record Scsi_Cmd so we can find it later. */
+	cmd->handle = in_ptr;
+	qpti->cmd_slots[in_ptr] = Cmnd;
+
 	qpti->cmd_count[Cmnd->target]++;
 	qregs->mbox4 = in_ptr;
 	qpti->req_in_ptr = in_ptr;
+
 	return in_ptr;
 }
 
@@ -1099,9 +1127,18 @@ static __inline__ int qlogicpti_intr_handler(struct qlogicpti *qpti)
 	/* This looks like a network driver! */
 	out_ptr = qpti->res_out_ptr;
 	while(out_ptr != in_ptr) {
+		u_int cmd_slot;
+
 		sts = (struct Status_Entry *) &qpti->res_cpu[out_ptr];
 		out_ptr = NEXT_RES_PTR(out_ptr);
-		Cmnd = (Scsi_Cmnd *) (((unsigned long)sts->handle)+PAGE_OFFSET);
+
+		/* We store an index in the handle, not the pointer in
+		 * some form.  This avoids problems due to the fact
+		 * that the handle provided is only 32-bits. -DaveM
+		 */
+		cmd_slot = sts->handle;
+		Cmnd = qpti->cmd_slots[cmd_slot];
+		qpti->cmd_slots[cmd_slot] = NULL;
 
 		if(sts->completion_status == CS_RESET_OCCURRED ||
 		   sts->completion_status == CS_ABORTED ||
@@ -1144,8 +1181,8 @@ static void do_qlogicpti_intr_handler_sun4m(int irq, void *dev_id, struct pt_reg
 	int again;
 
 	spin_lock_irqsave(&io_request_lock, flags);
-	again = 0;
 	do {
+		again = 0;
 		for_each_qlogicpti(qpti)
 			again |= qlogicpti_intr_handler(qpti);
 	} while (again);

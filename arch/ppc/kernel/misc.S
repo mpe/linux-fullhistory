@@ -109,7 +109,13 @@ do_lost_interrupts:
  * Flush MMU TLB
  */
 _GLOBAL(_tlbia)
+	sync
 	tlbia
+	sync
+#ifdef __SMP__
+	tlbsync
+	sync
+#endif
 	blr	
 
 /*
@@ -117,11 +123,17 @@ _GLOBAL(_tlbia)
  */
 _GLOBAL(_tlbie)
 	tlbie	r3
+	sync
+#ifdef __SMP__
+	tlbsync
+	sync
+#endif
 	blr
+
 /*
  * Atomic [test&set] exchange
  *
- *	void *xchg_u32(void *ptr, unsigned long val)
+ *	unsigned long xchg_u32(void *ptr, unsigned long val)
  * Changes the memory location '*ptr' to be val and returns
  * the previous value stored there.
  */
@@ -130,6 +142,27 @@ _GLOBAL(xchg_u32)
 10:	lwarx	r3,0,r5		/* Fetch old value & reserve */
 	stwcx.	r4,0,r5		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
+	blr
+
+/*
+ * Try to acquire a spinlock.
+ * Only does the stwcx. if the load returned 0 - the Programming
+ * Environments Manual suggests not doing unnecessary stcwx.'s
+ * since they may inhibit forward progress by other CPUs in getting
+ * a lock.
+ */
+_GLOBAL(__spin_trylock)
+	mr	r4,r3
+	eieio			/* prevent reordering of stores */
+	li	r5,-1
+	lwarx	r3,0,r4		/* fetch old value, establish reservation */
+	cmpwi	0,r3,0		/* is it 0? */
+	bnelr-			/* return failure if not */
+	stwcx.	r5,0,r4		/* try to update with new value */
+	bne-	1f		/* if we failed */
+	eieio			/* prevent reordering of stores */
+	blr
+1:	li	r3,1		/* return non-zero for failure */
 	blr
 
 /*
@@ -580,6 +613,16 @@ cvt_fd:
 	stfd	0,-4(r5)
 	blr
 
+        .globl  __clear_msr_me
+__clear_msr_me:
+        mfmsr   r0                      /* Get current interrupt state */
+        lis     r3,0
+        ori     r3,r3,MSR_ME
+        andc    r0,r0,r3                /* Clears bit in (r4) */
+        sync                            /* Some chip revs have problems here */
+        mtmsr   r0                      /* Update machine state */
+        blr
+
 _GLOBAL(cvt_df)
 cvt_df:
 	lfd	0,-4(r5)	/* load up fpscr value */
@@ -836,4 +879,5 @@ sys_call_table:
 	.long sys_sendfile
 	.long sys_ni_syscall		/* streams1 */
 	.long sys_ni_syscall		/* streams2 */
+	.long sys_vfork
 	.space (NR_syscalls-183)*4

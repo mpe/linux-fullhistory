@@ -229,7 +229,12 @@ static int sbusfb_mmap(struct fb_info *info, struct file *file,
 		for (i = 0; fb->mmap_map[i].size; i++)
 			if (fb->mmap_map[i].voff == vma->vm_offset+page) {
 				map_size = sbusfb_mmapsize(fb,fb->mmap_map[i].size);
-				map_offset = (fb->physbase + fb->mmap_map[i].poff) & PAGE_MASK;
+#ifdef __sparc_v9__
+#define POFF_MASK	(PAGE_MASK|0x1UL)
+#else
+#define POFF_MASK	(PAGE_MASK)
+#endif				
+				map_offset = (fb->physbase + fb->mmap_map[i].poff) & POFF_MASK;
 				break;
 			}
 		if (!map_size){

@@ -8,6 +8,5 @@ int FADDS(void *rd, void *rs2, void *rs1)
 	__FP_UNPACK_S(A, rs1);
 	__FP_UNPACK_S(B, rs2);
 	FP_ADD_S(R, A, B);
-	__FP_PACK_S(rd, R);
-	return 1;
+	return __FP_PACK_S(rd, R);
 }

@@ -22,53 +22,77 @@ struct dbri_regs {
 #define DBRI_NO_CMDS	64
 #define DBRI_NO_INTS	2
 #define DBRI_INT_BLK	64
+#define DBRI_NO_DESCS	64
 
 #define DBRI_MM_ONB	1
 #define DBRI_MM_SB	2
 
 struct dbri_mem {
-	__u32	flags;
+	__u32	word1;
 	__u32	ba;			/* Transmit/Receive Buffer Address */
 	__u32	nda;			/* Next Descriptor Address */
-	__u32	status;
+	__u32	word4;
 };
 
-struct dbri_channel {
-        struct dbri_mem td;
-        struct dbri_mem rd;
-        unsigned int recvSDP;
-        unsigned int xmitSDP;
+#include "cs4215.h"
+
+/* This structure is in a DMA region where it can accessed by both
+ * the CPU and the DBRI
+ */
+
+struct dbri_dma {
+  int cmd[DBRI_NO_CMDS];			/* Place for commands */
+  int intr[DBRI_NO_INTS * DBRI_INT_BLK];	/* Interrupt field */
+  struct dbri_mem desc[DBRI_NO_DESCS];		/* Xmit/receive descriptors */
+};
+
+struct dbri_pipe {
+        u32 sdp;				/* SDP command word */
+        int nextpipe;				/* Next pipe in linked list */
+        int cycle;				/* Offset of timeslot (bits) */
+        int length;				/* Length of timeslot (bits) */
+        int desc;				/* Index of active descriptor*/
+        __u32 *recv_fixed_ptr;			/* Ptr to receive fixed data */
+};
+
+struct dbri_desc {
+        int inuse;				/* Boolean flag */
+        int next;				/* Index of next desc, or -1 */
+        void *buffer;
+        unsigned int len;
         void (*output_callback)(void *, int);
         void *output_callback_arg;
         void (*input_callback)(void *, int, unsigned int);
         void *input_callback_arg;
 };
 
-#include "cs4215.h"
-
 /* This structure holds the information for both chips (DBRI & CS4215) */
+
 struct dbri {
   int regs_size, irq;				/* Needed for unload */
+  struct linux_sbus_device *sdev;
+
+  volatile struct dbri_dma *dma;		/* Pointer to our DMA block */
+  struct dbri_dma *dma_dvma;			/* DBRI visible DMA address */
 
   struct dbri_regs *regs;			/* dbri HW regs */
   int dbri_version;				/* 'e' and up is OK */
   int dbri_irqp;				/* intr queue pointer */
-  __volatile__ int cmd[DBRI_NO_CMDS];		/* Place for commands */
-  __volatile__ int intr[DBRI_NO_INTS * DBRI_INT_BLK];	/* Interrupt field */
-  
+
+  struct dbri_pipe pipes[32];			/* DBRI's 32 data pipes */
+  struct dbri_desc descs[DBRI_NO_DESCS];
+
   struct cs4215 mm;				/* mmcodec special info */
- 
+
+#if 0
   struct wait_queue *wait, *int_wait;		/* Where to sleep if busy */
+#endif
   struct audio_info perchip_info;
 
   /* Track ISDN LIU and notify changes */
   int liu_state;
   void (*liu_callback)(void *);
   void *liu_callback_arg;
-
-  /* Callback routines and descriptors for ISDN channels */
-  struct dbri_channel D;
-  struct dbri_channel B[2];
 };
 
 
@@ -145,6 +169,7 @@ struct dbri {
 #define D_SDP_HDLC_D	(3<<13)	/* D Channel (prio control)*/
 #define D_SDP_SER	(4<<13)	/* Serial to serial */
 #define D_SDP_FIXED	(6<<13)	/* Short only */
+#define D_SDP_MODE(v)	((v)&(7<<13))
 
 #define D_SDP_TO_SER	(1<<12)	/* Direction */
 #define D_SDP_FROM_SER	(0<<12)	/* Direction */
@@ -163,8 +188,8 @@ struct dbri {
 #define D_DTS_PRVOUT(v)        ((v)<<5)  /* Previous Out Pipe */
 
 /* Time Slot defines */
-#define D_TS_LEN(v)	(v<<24)	/* Number of bits in this time slot */
-#define D_TS_CYCLE(v)	(v<<14)	/* Bit Count at start of TS */
+#define D_TS_LEN(v)	((v)<<24)	/* Number of bits in this time slot */
+#define D_TS_CYCLE(v)	((v)<<14)	/* Bit Count at start of TS */
 #define D_TS_DI(v)	(1<<13)	/* Data Invert */
 #define D_TS_1CHANNEL	(0<<10)	/* Single Channel / Normal mode */
 #define D_TS_MONITOR	(2<<10)	/* Monitor pipe */
@@ -174,13 +199,13 @@ struct dbri {
 #define D_TS_NEXT(v)   ((v)<<0)        /* Pipe Nr: 0-15 long, 16-21 short */
 
 /* Concentration Highway Interface Modes */
-#define D_CHI_CHICM(v)	(v<<16)	/* Clock mode */
+#define D_CHI_CHICM(v)	((v)<<16)	/* Clock mode */
 #define D_CHI_IR	(1<<15) /* Immediate Interrupt Report */
 #define D_CHI_EN	(1<<14) /* CHIL Interrupt enabled */
 #define D_CHI_OD	(1<<13) /* Open Drain Enable */
 #define D_CHI_FE	(1<<12) /* Sample CHIFS on Rising Frame Edge */
 #define D_CHI_FD	(1<<11) /* Frame Drive */
-#define D_CHI_BPF(v)	(v<<0)	/* Bits per Frame */
+#define D_CHI_BPF(v)	((v)<<0)	/* Bits per Frame */
 
 /* NT: These are here for completeness */
 #define D_NT_FBIT	(1<<17)	/* Frame Bit */
@@ -199,13 +224,13 @@ struct dbri {
 #define D_NT_ABV	(1<<0)	/* Activate Bipolar Violation */
 
 /* Codec Setup */
-#define D_CDEC_CK(v)	(v<<24)	/* Clock Select */
-#define D_CDEC_FED(v)	(v<<12)	/* FSCOD Falling Edge Delay */
-#define D_CDEC_RED(v)	(v<<0)	/* FSCOD Rising Edge Delay */
+#define D_CDEC_CK(v)	((v)<<24)	/* Clock Select */
+#define D_CDEC_FED(v)	((v)<<12)	/* FSCOD Falling Edge Delay */
+#define D_CDEC_RED(v)	((v)<<0)	/* FSCOD Rising Edge Delay */
 
 /* Test */
-#define D_TEST_RAM(v)	(v<<16)	/* RAM Pointer */
-#define D_TEST_SIZE(v)	(v<<11)	/* */
+#define D_TEST_RAM(v)	((v)<<16)	/* RAM Pointer */
+#define D_TEST_SIZE(v)	((v)<<11)	/* */
 #define D_TEST_ROMONOFF	0x5	/* Toggle ROM opcode monitor on/off */
 #define D_TEST_PROC	0x6	/* MicroProcessor test */
 #define D_TEST_SER	0x7	/* Serial-Controller test */
@@ -245,11 +270,11 @@ struct dbri {
 #define D_INTR_CHI	36
 #define D_INTR_CMD	38
 
-#define D_INTR_GETCHAN(v)	((v>>24) & 0x3f)
-#define D_INTR_GETCODE(v)	((v>>20) & 0xf)
-#define D_INTR_GETCMD(v)	((v>>16) & 0xf)
-#define D_INTR_GETVAL(v)	(v & 0xffff)
-#define D_INTR_GETRVAL(v)	(v & 0xfffff)
+#define D_INTR_GETCHAN(v)	(((v)>>24) & 0x3f)
+#define D_INTR_GETCODE(v)	(((v)>>20) & 0xf)
+#define D_INTR_GETCMD(v)	(((v)>>16) & 0xf)
+#define D_INTR_GETVAL(v)	((v) & 0xffff)
+#define D_INTR_GETRVAL(v)	((v) & 0xfffff)
 
 #define D_P_0		0	/* TE receive anchor */
 #define D_P_1		1	/* TE transmit anchor */
@@ -288,11 +313,11 @@ struct dbri {
 /* Transmit descriptor defines */
 #define DBRI_TD_F	(1<<31)	/* End of Frame */
 #define DBRI_TD_D	(1<<30)	/* Do not append CRC */
-#define DBRI_TD_CNT(v)	(v<<16)	/* Number of valid bytes in the buffer */
+#define DBRI_TD_CNT(v)	((v)<<16)	/* Number of valid bytes in the buffer */
 #define DBRI_TD_B	(1<<15)	/* Final interrupt */
 #define DBRI_TD_M	(1<<14)	/* Marker interrupt */
 #define DBRI_TD_I	(1<<13)	/* Transmit Idle Characters */
-#define DBRI_TD_FCNT(v)	v	/* Flag Count */
+#define DBRI_TD_FCNT(v)	(v)	/* Flag Count */
 #define DBRI_TD_UNR	(1<<3)	/* Underrun: transmitter is out of data */
 #define DBRI_TD_ABT	(1<<2)	/* Abort: frame aborted */
 #define DBRI_TD_TBC	(1<<0)	/* Transmit buffer Complete */
@@ -303,12 +328,12 @@ struct dbri {
 #define DBRI_RD_C	(1<<30)	/* Completed buffer */
 #define DBRI_RD_B	(1<<15)	/* Final interrupt */
 #define DBRI_RD_M	(1<<14)	/* Marker interrupt */
-#define DBRI_RD_BCNT(v)	v	/* Buffer size */
+#define DBRI_RD_BCNT(v)	(v)	/* Buffer size */
 #define DBRI_RD_CRC	(1<<7)	/* 0: CRC is correct */
 #define DBRI_RD_BBC	(1<<6)	/* 1: Bad Byte received */
 #define DBRI_RD_ABT	(1<<5)	/* Abort: frame aborted */
 #define DBRI_RD_OVRN	(1<<3)	/* Overrun: data lost */
 #define DBRI_RD_STATUS(v)      ((v)&0xff)      /* Receive status */
-#define DBRI_RD_CNT(v) ((v>>16)&0x1fff)        /* Number of valid bytes in the buffer */
+#define DBRI_RD_CNT(v) (((v)>>16)&0x1fff)        /* Number of valid bytes in the buffer */
 
 #endif /* _DBRI_H_ */

@@ -670,10 +670,15 @@ static void idedisk_setup (ide_drive_t *drive)
 	if (id == NULL)
 		return;
 
-	/* check for removable disks (eg. SYQUEST), ignore 'WD' drives */
-	if (id->config & (1<<7)) {	/* removable disk ? */
+	/*
+	 * CompactFlash cards and their brethern look just like hard drives
+	 * to us, but they are removable and don't have a doorlock mechanism.
+	 */
+	if (drive->removable && !drive_is_flashcard(drive)) {
+		/*
+		 * Removable disks (eg. SYQUEST); ignore 'WD' drives 
+		 */
 		if (id->model[0] != 'W' || id->model[1] != 'D') {
-			drive->removable = 1;
 			drive->doorlocking = 1;
 		}
 	}
@@ -804,12 +809,6 @@ int idedisk_init (void)
 	
 	MOD_INC_USE_COUNT;
 	while ((drive = ide_scan_devices (ide_disk, idedisk_driver.name, NULL, failed++)) != NULL) {
-
-		/* SunDisk drives: ignore "second" drive;   can mess up non-Sun systems!  FIXME */
-		struct hd_driveid *id = drive->id;
-		if (id && id->model[0] == 'S' && id->model[1] == 'u' && drive->select.b.unit)
-			continue;
-
 		if (ide_register_subdriver (drive, &idedisk_driver, IDE_SUBDRIVER_VERSION)) {
 			printk (KERN_ERR "ide-disk: %s: Failed to register the driver with ide.c\n", drive->name);
 			continue;

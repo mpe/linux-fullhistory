@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.57 1999/01/20 07:20:21 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.58 1999/03/14 19:48:30 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -445,7 +445,6 @@ void tcp_retransmit_timer(unsigned long data)
 		tcp_reset_xmit_timer(sk, TIME_RETRANS, HZ/20);
 		return;
 	}
-	lock_sock(sk);
 
 	/* Clear delay ack timer. */
 	tcp_clear_xmit_timer(sk, TIME_DACK);
@@ -510,8 +509,6 @@ void tcp_retransmit_timer(unsigned long data)
 	tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 
 	tcp_write_timeout(sk);
-
-	release_sock(sk);
 }
 
 /*

@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.81 1998/08/10 09:08:23 jj Exp $
+/* $Id: sunlance.c,v 1.84 1999/03/11 12:30:22 anton Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -56,12 +56,16 @@
  *
  * 1.11:
  *	12/27/97: Added sun4d support. (jj@sunsite.mff.cuni.cz)
+ *
+ * 1.12:
+ * 	 11/3/99: Fixed SMP race in lance_start_xmit found by davem.
+ * 	          Anton Blanchard (anton@progsoc.uts.edu.au)
  */
 
 #undef DEBUG_DRIVER
 
 static char *version =
-	"sunlance.c:v1.11 27/Dec/97 Miguel de Icaza (miguel@nuclecu.unam.mx)\n";
+	"sunlance.c:v1.12 11/Mar/99 Miguel de Icaza (miguel@nuclecu.unam.mx)\n";
 
 static char *lancestr = "LANCE";
 static char *lancedma = "LANCE DMA";
@@ -252,6 +256,7 @@ struct lance_private {
 	struct device		 *dev;		  /* Backpointer	*/
 	struct lance_private	 *next_module;
 	struct linux_sbus        *sbus;
+	struct timer_list         multicast_timer;
 };
 
 #define TX_BUFFS_AVAIL ((lp->tx_old<=lp->tx_new)?\
@@ -791,27 +796,19 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	volatile unsigned long flush;
 	unsigned long flags;
 	int entry, skblen, len;
-	int status = 0;
-	static int outs;
 
-	/* Transmitter timeout, serious problems */
-	if (dev->tbusy) {
-		int tickssofar = jiffies - dev->trans_start;
-	    
-		if (tickssofar < 100) {
-			status = -1;
-		} else {
-			printk ("%s: transmit timed out, status %04x, reset\n",
-				dev->name, ll->rdp);
-			lance_reset (dev);
-		}
-		return status;
-	}
-
-	/* Block a timer-based transmit from overlapping. */
 	if (test_and_set_bit (0, (void *) &dev->tbusy) != 0) {
-		printk ("Transmitter access conflict.\n");
-		return -1;
+		int tickssofar = jiffies - dev->trans_start;
+
+		if (tickssofar < 100)
+			return 1;
+
+		printk ("%s: transmit timed out, status %04x, reset\n",
+			dev->name, ll->rdp);
+		lp->stats.tx_errors++;
+		lance_reset (dev);
+
+		return 1;
 	}
 
 	skblen = skb->len;
@@ -820,13 +817,13 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 
 	if (!TX_BUFFS_AVAIL) {
 		restore_flags(flags);
-		return -1;
+		return 1;
 	}
 
 	len = (skblen <= ETH_ZLEN) ? ETH_ZLEN : skblen;
-	
+
 	lp->stats.tx_bytes += len;
-	
+
 	entry = lp->tx_new & TX_RING_MOD_MASK;
 	ib->btx_ring [entry].length = (-len) | 0xf000;
 	ib->btx_ring [entry].misc = 0;
@@ -842,7 +839,6 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	ib->btx_ring [entry].tmd1_bits = (LE_T1_POK|LE_T1_OWN);
 	lp->tx_new = (lp->tx_new+1) & TX_RING_MOD_MASK;
 
-	outs++;
 	/* Kick the lance: transmit now */
 	ll->rdp = LE_C0_INEA | LE_C0_TDMD;
 	dev->trans_start = jiffies;
@@ -857,7 +853,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 		flush = ll->rdp;
 
 	restore_flags(flags);
-	return status;
+	return 0;
 }
 
 static struct net_device_stats *lance_get_stats (struct device *dev)
@@ -879,7 +875,7 @@ static void lance_load_multicast (struct device *dev)
 	u32 crc, poly = CRC_POLYNOMIAL_LE;
 	
 	/* set all multicast bits */
-	if (dev->flags & IFF_ALLMULTI){ 
+	if (dev->flags & IFF_ALLMULTI) {
 		ib->filter [0] = 0xffffffff;
 		ib->filter [1] = 0xffffffff;
 		return;
@@ -889,31 +885,29 @@ static void lance_load_multicast (struct device *dev)
 	ib->filter [1] = 0;
 
 	/* Add addresses */
-	for (i = 0; i < dev->mc_count; i++){
+	for (i = 0; i < dev->mc_count; i++) {
 		addrs = dmi->dmi_addr;
 		dmi   = dmi->next;
 
 		/* multicast address? */
 		if (!(*addrs & 1))
 			continue;
-		
+
 		crc = 0xffffffff;
-		for (byte = 0; byte < 6; byte++)
+		for (byte = 0; byte < 6; byte++) {
 			for (bit = *addrs++, j = 0; j < 8; j++, bit >>= 1) {
 				int test;
 
 				test = ((bit ^ crc) & 0x01);
 				crc >>= 1;
 
-				if (test) {
+				if (test)
 					crc = crc ^ poly;
-				}
 			}
-		
+		}
 		crc = crc >> 26;
 		mcast_table [crc >> 4] |= 1 << (crc & 0xf);
 	}
-	return;
 }
 
 static void lance_set_multicast (struct device *dev)
@@ -922,12 +916,16 @@ static void lance_set_multicast (struct device *dev)
 	volatile struct lance_init_block *ib = lp->init_block;
 	volatile struct lance_regs *ll = lp->ll;
 
-	while (dev->tbusy)
-		schedule();
+	if (dev->tbusy) {
+		mod_timer(&lp->multicast_timer, jiffies + 2);
+		return;
+	}
 	set_bit (0, (void *) &dev->tbusy);
 
-	while (lp->tx_old != lp->tx_new)
-		schedule();
+	if (lp->tx_old != lp->tx_new) {
+		mod_timer(&lp->multicast_timer, jiffies + 4);
+		return;
+	}
 
 	ll->rap = LE_CSR0;
 	ll->rdp = LE_C0_STOP;
@@ -1100,6 +1098,16 @@ no_link_test:
 
 	dev->dma = 0;
 	ether_setup (dev);
+
+	/* We cannot sleep if the chip is busy during a
+	 * multicast list update event, because such events
+	 * can occur from interrupts (ex. IPv6).  So we
+	 * use a timer to try again later when necessary. -DaveM
+	 */
+	init_timer(&lp->multicast_timer);
+	lp->multicast_timer.data = (unsigned long) dev;
+	lp->multicast_timer.function =
+		(void (*)(unsigned long)) &lance_set_multicast;
 
 #ifdef MODULE
 	dev->ifindex = dev_new_index();

@@ -39,7 +39,7 @@ struct svc_sock {
 	void			(*sk_odata)(struct sock *, int bytes);
 
 	/* private TCP part */
-	unsigned long		sk_reclen;	/* length of record */
+	int			sk_reclen;	/* length of record */
 	int			sk_tcplen;	/* current read length */
 
 	/* Debugging */

@@ -3,7 +3,6 @@
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
- *  1996-04-21	Modified by Ulrich Windl to make NTP work
  *  1996-12-23  Modified by Dave Grothe to fix bugs in semaphores and
  *              make semaphores SMP safe
  *  1997-01-28  Modified by Finn Arne Gangstad to make timers scale better.
@@ -15,6 +14,7 @@
  *		serialize accesses to xtime/lost_ticks).
  *				Copyright (C) 1998  Andrea Arcangeli
  *  1998-12-28  Implemented better SMP scheduling by Ingo Molnar
+ *  1999-03-10	Improved NTP compatibility by Ulrich Windl
  */
 
 /*
@@ -62,7 +62,7 @@ DECLARE_TASK_QUEUE(tq_scheduler);
  * phase-lock loop variables
  */
 /* TIME_ERROR prevents overwriting the CMOS clock */
-int time_state = TIME_ERROR;	/* clock synchronization status */
+int time_state = TIME_OK;	/* clock synchronization status */
 int time_status = STA_UNSYNC;	/* clock status bits */
 long time_offset = 0;		/* time adjustment (us) */
 long time_constant = 2;		/* pll time constant */
@@ -585,7 +585,7 @@ static union {
 		long prevstate;
 		cycles_t last_schedule;
 	} schedule_data;
-	char __pad [L1_CACHE_BYTES];
+	char __pad [SMP_CACHE_BYTES];
 } aligned_data [NR_CPUS] __cacheline_aligned = { {{&init_task,0}}};
 
 
@@ -1138,7 +1138,6 @@ static void second_overflow(void)
     time_maxerror += time_tolerance >> SHIFT_USEC;
     if ( time_maxerror > NTP_PHASE_LIMIT ) {
         time_maxerror = NTP_PHASE_LIMIT;
-	time_state = TIME_ERROR;	/* p. 17, sect. 4.3, (b) */
 	time_status |= STA_UNSYNC;
     }
 

@@ -1,6 +1,6 @@
 /* pluto.c: SparcSTORAGE Array SCSI host adapter driver.
  *
- * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998,1999 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  *
  */
 
@@ -22,7 +22,7 @@
 
 #include "scsi.h"
 #include "hosts.h"
-#include "../fc4/fcp_scsi.h"
+#include "../fc4/fcp_impl.h"
 #include "pluto.h"
 
 #include <linux/module.h>
@@ -56,7 +56,7 @@ static atomic_t fcss __initdata = ATOMIC_INIT(0);
 static struct timer_list fc_timer __initdata = { 0 };
 struct semaphore fc_sem __initdata = MUTEX_LOCKED;
 
-static int pluto_encode_addr(Scsi_Cmnd *SCpnt, u16 *addr);
+static int pluto_encode_addr(Scsi_Cmnd *SCpnt, u16 *addr, fc_channel *fc, fcp_cmnd *fcmd);
 
 __initfunc(static void pluto_detect_timeout(unsigned long data))
 {
@@ -100,15 +100,19 @@ __initfunc(int pluto_detect(Scsi_Host_Template *tpnt))
 
 	tpnt->proc_dir = &proc_scsi_pluto;
 	fcscount = 0;
-	for_each_online_fc_channel(fc)
-		fcscount++;
+	for_each_online_fc_channel(fc) {
+		if (!fc->posmap)
+			fcscount++;
+	}
 	PLND(("%d channels online\n", fcscount))
 	if (!fcscount) {
 #if defined(MODULE) && defined(CONFIG_FC4_SOC_MODULE) && defined(CONFIG_KMOD)
 		request_module("soc");
 		
-		for_each_online_fc_channel(fc)
-			fcscount++;
+		for_each_online_fc_channel(fc) {
+			if (!fc->posmap)
+				fcscount++;
+		}
 		if (!fcscount)
 #endif
 			return 0;
@@ -129,8 +133,9 @@ __initfunc(int pluto_detect(Scsi_Host_Template *tpnt))
 		Scsi_Cmnd *SCpnt;
 		struct Scsi_Host *host;
 		struct pluto *pluto;
-		
+
 		if (i == fcscount) break;
+		if (fc->posmap) continue;
 		
 		PLD(("trying to find SSA\n"))
 
@@ -233,9 +238,13 @@ __initfunc(int pluto_detect(Scsi_Host_Template *tpnt))
 				host->max_id = inq->targets;
 				host->max_channel = inq->channels;
 				host->irq = fc->irq;
-				
+
+#ifdef __sparc_v9__
+				host->unchecked_isa_dma = 1;
+#endif
+
 				host->select_queue_depths = pluto_select_queue_depths;
-				
+
 				fc->channels = inq->channels + 1;
 				fc->targets = inq->targets;
 				fc->ages = ages;
@@ -304,7 +313,7 @@ const char *pluto_info(struct Scsi_Host *host)
    channel 0 id 0 lun 0 for CONTROLLER
    and channels 1 .. max_channel are normal single disks.
  */
-static int pluto_encode_addr(Scsi_Cmnd *SCpnt, u16 *addr)
+static int pluto_encode_addr(Scsi_Cmnd *SCpnt, u16 *addr, fc_channel *fc, fcp_cmnd *fcmd)
 {
 	PLND(("encode addr %d %d %d\n", SCpnt->channel, SCpnt->target, SCpnt->cmnd[1] & 0xe0))
 	/* We don't support LUNs - neither does SSA :) */
@@ -318,6 +327,8 @@ static int pluto_encode_addr(Scsi_Cmnd *SCpnt, u16 *addr)
 		addr[2] = SCpnt->target;
 		addr[3] = 0;
 	}
+	/* We're Point-to-Point, so target it to the default DID */
+	fcmd->did = fc->did;
 	PLND(("trying %04x%04x%04x%04x\n", addr[0], addr[1], addr[2], addr[3]))
 	return 0;
 }

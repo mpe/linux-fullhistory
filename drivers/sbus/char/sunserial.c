@@ -1,4 +1,4 @@
-/* $Id: sunserial.c,v 1.67 1998/10/25 03:22:46 jj Exp $
+/* $Id: sunserial.c,v 1.68 1998/12/09 18:53:51 davem Exp $
  * serial.c: Serial port driver infrastructure for the Sparc.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -401,10 +401,10 @@ sun_serial_setup(unsigned long memory_start))
 		return memory_start;
 		
 #ifdef __sparc_v9__
-	ret = prom_finddevice("/ssp-serial");
-	if (ret && ret != -1) {
+	{	extern int this_is_starfire;
 		/* Hello, Starfire. Pleased to meet you :) */
-		return memory_start;
+		if(this_is_starfire != 0)
+			return memory_start;
 	}
 #endif
 

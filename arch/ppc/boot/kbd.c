@@ -1,7 +1,6 @@
-
 #include <linux/keyboard.h>
 
-#include <../drivers/char/defkeymap.c>	/* yeah I know it's bad */
+#include <../drivers/char/defkeymap.c>	/* yeah I know it's bad -- Cort */
 
 
 unsigned char shfts, ctls, alts, caps;
@@ -119,7 +118,7 @@ enter:		    /* Wait for key up */
 		}
 		break;
 	}
-	if (brk) return (0);  /* Ignore initial 'key up' codes */
+	if (brk) return (-1);  /* Ignore initial 'key up' codes */
 	goto loop;
 }
 
@@ -144,22 +143,63 @@ static void kbdreset(void)
 	while (inb(KBSTATP) & KBOUTRDY) ;
 	outb(KBDATAP,0x45);
 	for (i = 0;  i < 10000;  i++) udelay(1);
+	
+	while (inb(KBSTATP) & KBOUTRDY) ;
+	outb(KBSTATP,0x20);
+	while ((inb(KBSTATP) & KBINRDY) == 0) ; /* wait input ready */
+	if (! (inb(KBDATAP) & 0x40)) {
+		/*
+		 * Quote from PS/2 System Reference Manual:
+		 *
+		 * "Address hex 0060 and address hex 0064 should be
+		 * written only when the input-buffer-full bit and
+		 * output-buffer-full bit in the Controller Status
+		 * register are set 0." (KBINRDY and KBOUTRDY)
+		 */
+		
+		while (inb(KBSTATP) & (KBINRDY | KBOUTRDY)) ;
+		outb(KBDATAP,0xF0);
+		while (inb(KBSTATP) & (KBINRDY | KBOUTRDY)) ;
+		outb(KBDATAP,0x01);
+	}
+	
 	while (inb(KBSTATP) & KBOUTRDY) ;
 	outb(KBSTATP,0xAE);
 }
 
+/* We have to actually read the keyboard when CRT_tstc is called,
+ * since the pending data might be a key release code, and therefore
+ * not valid data.  In this case, kbd() will return -1, even though there's
+ * data to be read.  Of course, we might actually read a valid key press,
+ * in which case it gets queued into key_pending for use by CRT_getc.
+ */
+
 static int kbd_reset = 0;
+
+static int key_pending = -1;
 
 int CRT_getc(void)
 {
 	int c;
 	if (!kbd_reset) {kbdreset(); kbd_reset++; }
+
+        if (key_pending != -1) {
+                c = key_pending;
+                key_pending = -1;
+                return c;
+        } else {
 	while ((c = kbd(0)) == 0) ;
-	return(c);
+                return c;
+        }
 }
 
 int CRT_tstc(void)
 {
 	if (!kbd_reset) {kbdreset(); kbd_reset++; }
-	return ((inb(KBSTATP) & KBINRDY) != 0);
+
+        while (key_pending == -1 && ((inb(KBSTATP) & KBINRDY) != 0)) {
+                key_pending = kbd(1);
+        }
+
+        return (key_pending != -1);
 }

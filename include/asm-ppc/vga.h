@@ -8,17 +8,38 @@
 #define _LINUX_ASM_VGA_H_
 
 #include <asm/io.h>
+#include <asm/processor.h>
+
+#include <linux/config.h>
+#include <linux/console.h>
 
 #define VT_BUF_HAVE_RW
 
 extern inline void scr_writew(u16 val, u16 *addr)
 {
-	st_le16(addr, val);
+	/* If using vgacon (not fbcon) byteswap the writes.
+	 * If non-vgacon assume fbcon and don't byteswap
+	 * just like include/linux/vt_buffer.h.
+	 * XXX: this is a performance loss so get rid of it
+	 *      as soon as fbcon works on prep.
+	 * -- Cort
+	 */
+#ifdef CONFIG_FB
+	if ( conswitchp != &vga_con )
+		(*(addr) = (val));
+	else
+#endif /* CONFIG_FB */
+		st_le16(addr, val);
 }
 
 extern inline u16 scr_readw(const u16 *addr)
 {
-	return ld_le16(addr);
+#ifdef CONFIG_FB
+	if ( conswitchp != &vga_con )
+		return (*(addr));
+	else
+#endif /* CONFIG_FB */
+		return ld_le16((unsigned short *)addr);
 }
 
 #define VT_BUF_HAVE_MEMCPYF

@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.10 1998/10/27 23:28:50 davem Exp $
+/* $Id: dma.h,v 1.13 1998/12/16 04:33:55 davem Exp $
  * include/asm-sparc64/dma.h
  *
  * Copyright 1996 (C) David S. Miller (davem@caip.rutgers.edu)
@@ -30,9 +30,12 @@ extern spinlock_t  dma_spin_lock;
  * things can compile.
  */
 #define MAX_DMA_CHANNELS 8
-#define MAX_DMA_ADDRESS  ((0xf0000000) + PAGE_OFFSET)
 #define DMA_MODE_READ    1
 #define DMA_MODE_WRITE   2
+
+/* This is actually used. */
+extern unsigned long phys_base;
+#define MAX_DMA_ADDRESS  (phys_base + (0xfe000000UL) + PAGE_OFFSET)
 
 /* Useful constants */
 #define SIZE_16MB      (16*1024*1024)
@@ -115,13 +118,14 @@ extern void dvma_init(struct linux_sbus *);
 #define DMA_DSBL_RD_DRN  0x00001000        /* No EC drain on slave reads */
 #define DMA_BCNT_ENAB    0x00002000        /* If on, use the byte counter */
 #define DMA_TERM_CNTR    0x00004000        /* Terminal counter */
+#define DMA_SCSI_SBUS64  0x00008000        /* HME: Enable 64-bit SBUS mode. */
 #define DMA_CSR_DISAB    0x00010000        /* No FIFO drains during csr */
 #define DMA_SCSI_DISAB   0x00020000        /* No FIFO drains during reg */
 #define DMA_DSBL_WR_INV  0x00020000        /* No EC inval. on slave writes */
 #define DMA_ADD_ENABLE   0x00040000        /* Special ESC DVMA optimization */
 #define DMA_E_BURST8	 0x00040000	   /* ENET: SBUS r/w burst size */
 #define DMA_BRST_SZ      0x000c0000        /* SCSI: SBUS r/w burst size */
-#define DMA_BRST64       0x00080000        /* SCSI: 64byte bursts (HME on UltraSparc only) */
+#define DMA_BRST64       0x000c0000        /* SCSI: 64byte bursts (HME on UltraSparc only) */
 #define DMA_BRST32       0x00040000        /* SCSI: 32byte bursts */
 #define DMA_BRST16       0x00000000        /* SCSI: 16byte bursts */
 #define DMA_BRST0        0x00080000        /* SCSI: no bursts (non-HME gate arrays) */
@@ -135,6 +139,7 @@ extern void dvma_init(struct linux_sbus *);
 #define DMA_PARITY_OFF   0x02000000        /* HME: disable parity checking */
 #define DMA_LOADED_ADDR  0x04000000        /* Address has been loaded */
 #define DMA_LOADED_NADDR 0x08000000        /* Next address has been loaded */
+#define DMA_RESET_FAS366 0x08000000        /* HME: Assert RESET to FAS366 */
 
 /* Values describing the burst-size property from the PROM */
 #define DMA_BURST1       0x01

@@ -126,6 +126,7 @@ extern int ip_masq_init(void);
  */
 extern int ip_fw_masquerade(struct sk_buff **, __u32 maddr);
 extern int ip_fw_masq_icmp(struct sk_buff **, __u32 maddr);
+extern int ip_fw_unmasq_icmp(struct sk_buff *);
 extern int ip_fw_demasquerade(struct sk_buff **);
 
 /*

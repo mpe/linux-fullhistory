@@ -1,4 +1,4 @@
-/* $Id: flash.c,v 1.10 1998/08/26 10:29:41 davem Exp $
+/* $Id: flash.c,v 1.11 1999/03/09 14:06:45 davem Exp $
  * flash.c: Allow mmap access to the OBP Flash, for OBP updates.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)

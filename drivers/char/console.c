@@ -85,7 +85,6 @@
 #include <linux/selection.h>
 #include <linux/console_struct.h>
 #include <linux/kbd_kern.h>
-#include <linux/vt_kern.h>
 #include <linux/consolemap.h>
 #include <linux/timer.h>
 #include <linux/interrupt.h>

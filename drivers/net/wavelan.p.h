@@ -18,13 +18,7 @@
  * This driver provides a Linux interface to the WaveLAN ISA hardware.
  * The WaveLAN is a product of Lucent (http://www.wavelan.com/).
  * This division was formerly part of NCR and then AT&T.
- * WaveLANs are also distributed by DEC (RoamAbout), Digital Ocean and
- * Aironet (Arlan).  If you have one of those products, you will need to
- * make some changes below.
- *
- * This driver is still beta software.  A lot of bugs have been corrected,
- * a lot of functionality is implemented, and the whole appears stable,
- * but there is still room for improvement (encryption, performance).
+ * WaveLANs are also distributed by DEC (RoamAbout DS) and Digital Ocean.
  *
  * To learn how to use this driver, read the NET3 HOWTO.
  * If you want to exploit the many other functionalities, read the comments
@@ -35,11 +29,21 @@
 
 /* ------------------------ SPECIFIC NOTES ------------------------ */
 /*
+ * Web page
+ * --------
+ *	I try to maintain a web page with the Wireless LAN Howto at :
+ *		http://www-uk.hpl.hp.com/people/jt/Linux/Wavelan.html
+ *
  * wavelan.o is too darned big
  * ---------------------------
  *	That's true!  There is a very simple way to reduce the driver
  *	object by 33%!  Comment out the following line:
  *		#include <linux/wireless.h>
+ *
+ * Debugging and options
+ * ---------------------
+ *	You will find below a set of '#define" allowing a very fine control
+ *	on the driver behaviour and the debug messages printed.
  *
  * MAC address and hardware detection:
  * -----------------------------------
@@ -60,23 +64,6 @@
  *	3) Compile and verify
  *	4) Send me the MAC code.  I will include it in the next version.
  *
- * "CU Inactive" message at boot up:
- * -----------------------------------
- *	It seems that there is some weird timing problem with the
- *	Intel microcontroller.  In fact, this message is triggered by a
- *	bad reading of the onboard RAM the first time we read the
- *	control block.  If you ignore this message, all is OK (but in
- *	fact, currently, it resets the WaveLAN hardware).
- *
- *	There are two ways to get rid of that problem.  The first
- *	is to add a dummy read of the scb at the end of
- *	wv_82586_config.  The second is to add the timers
- *	wv_synchronous_cmd and wv_ack (the udelay just after the
- *	waiting loops--it seems that the controller is not totally ready
- *	when it says it is).
- *
- *	In the current code, I use the second solution (to be
- *	consistent with the original solution of Bruce Janson).
  */
 
 /* --------------------- WIRELESS EXTENSIONS --------------------- */
@@ -273,6 +260,22 @@
  *	- encryption setting from Brent Elphick (thanks a lot!)
  *	- 'ioaddr' to 'u_long' for the Alpha (thanks to Stanislav Sinyagin)
  *
+ * Other changes (not by me) :
+ * -------------------------
+ *	- Spelling and gramar "rectification".
+ *
+ * Changes made for release in 2.0.37 & 2.2.2 :
+ * ------------------------------------------
+ *	- Correct status in /proc/net/wireless
+ *	- Set PSA CRC to make PtP diagnostic tool happy (Bob Gray)
+ *	- Module init code don't fail if we found at least one card in
+ *	  the address list (Karlis Peisenieks)
+ *	- Missing parenthesis (Christopher Peterson)
+ *	- Correct i82586 configuration parameters
+ *	- Encryption initialisation bug (Robert McCormack)
+ *	- New mac addresses detected in the probe
+ *	- Increase watchdog for busy envirnoments
+ *
  * Wishes & dreams:
  * ----------------
  *	- roaming
@@ -342,9 +345,9 @@
 
 /* Options */
 #define USE_PSA_CONFIG		/* Use info from the PSA. */
+#define SET_PSA_CRC		/* Calculate and set the CRC on PSA */
 #define IGNORE_NORMAL_XMIT_ERRS	/* Don't bother with normal conditions. */
 #undef STRUCT_CHECK		/* Verify padding of structures. */
-#undef PSA_CRC			/* Check CRC in PSA. */
 #undef OLDIES			/* old code (to redo) */
 #undef RECORD_SNR		/* to redo */
 #undef EEPROM_IS_PROTECTED	/* doesn't seem to be necessary */
@@ -359,11 +362,11 @@
 /************************ CONSTANTS & MACROS ************************/
 
 #ifdef DEBUG_VERSION_SHOW
-static const char	*version	= "wavelan.c : v16 (wireless extensions) 17/4/97\n";
+static const char	*version	= "wavelan.c : v18 (wireless extensions) 18/2/99\n";
 #endif
 
 /* Watchdog temporisation */
-#define	WATCHDOG_JIFFIES	32	/* TODO:  express in HZ. */
+#define	WATCHDOG_JIFFIES	256	/* TODO:  express in HZ. */
 
 /* Macro to get the number of elements in an array */
 #define	NELS(a)				(sizeof(a) / sizeof(a[0]))

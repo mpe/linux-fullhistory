@@ -193,6 +193,7 @@
 #define __NR_sendfile		186
 #define __NR_getpmsg		187	/* some people actually want streams */
 #define __NR_putpmsg		188	/* some people actually want streams */
+#define __NR_vfork		189
 
 #define __NR(n)	#n
 

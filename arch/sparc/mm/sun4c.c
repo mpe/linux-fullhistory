@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.171 1998/09/21 05:05:41 jj Exp $
+/* $Id: sun4c.c,v 1.173 1999/01/17 02:20:37 davem Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -2688,6 +2688,10 @@ static void sun4c_vac_alias_fixup(struct vm_area_struct *vma, unsigned long addr
 			unsigned long vaddr = vmaring->vm_start + offset;
 			unsigned long start;
 
+			/* Do not mistake ourselves as another mapping. */
+			if(vmaring == vma)
+				continue;
+
 			if (S4CVAC_BADALIAS(vaddr, address)) {
 				alias_found++;
 				start = vmaring->vm_start;
@@ -2699,8 +2703,8 @@ static void sun4c_vac_alias_fixup(struct vm_area_struct *vma, unsigned long addr
 
 					if(pte_val(*ptep) & _SUN4C_PAGE_PRESENT) {
 						flush_cache_page(vmaring, start);
-						pte_val(*ptep) = (pte_val(*ptep) |
-								  _SUN4C_PAGE_NOCACHE);
+						*ptep = __pte(pte_val(*ptep) |
+							      _SUN4C_PAGE_NOCACHE);
 						flush_tlb_page(vmaring, start);
 					}
 				next:
@@ -2712,7 +2716,7 @@ static void sun4c_vac_alias_fixup(struct vm_area_struct *vma, unsigned long addr
 		if(alias_found && !(pte_val(pte) & _SUN4C_PAGE_NOCACHE)) {
 			pgdp = sun4c_pgd_offset(vma->vm_mm, address);
 			ptep = sun4c_pte_offset((pmd_t *) pgdp, address);
-			pte_val(*ptep) = (pte_val(*ptep) | _SUN4C_PAGE_NOCACHE);
+			*ptep = __pte(pte_val(*ptep) | _SUN4C_PAGE_NOCACHE);
 			pte = pte_val(*ptep);
 		}
 	}

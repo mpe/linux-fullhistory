@@ -697,7 +697,7 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 		if (buffer_req(bh) && !buffer_uptodate(bh)) {
 			printk ("IO error syncing ext2 inode ["
 				"%s:%08lx]\n",
-				kdevname(inode->i_dev), inode->i_ino);
+				bdevname(inode->i_dev), inode->i_ino);
 			err = -EIO;
 		}
 	}

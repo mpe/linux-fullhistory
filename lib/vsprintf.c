@@ -261,6 +261,10 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 			}
 			continue;
 
+		case '%':
+			*str++ = '%';
+			continue;
+
 		/* integer number formats - set up the flags and "break" */
 		case 'o':
 			base = 8;
@@ -279,8 +283,7 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 			break;
 
 		default:
-			if (*fmt != '%')
-				*str++ = '%';
+			*str++ = '%';
 			if (*fmt)
 				*str++ = *fmt;
 			else
@@ -313,4 +316,3 @@ int sprintf(char * buf, const char *fmt, ...)
 	va_end(args);
 	return i;
 }
-

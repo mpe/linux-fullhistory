@@ -59,13 +59,13 @@ static void set_brk(unsigned long start, unsigned long end)
  * macros to write out all the necessary info.
  */
 #define DUMP_WRITE(addr,nr) \
-while (file.f_op->write(&file,(char *)(addr),(nr),&file.f_pos) != (nr)) goto close_coredump
+while (file->f_op->write(file,(char *)(addr),(nr),&file->f_pos) != (nr)) goto close_coredump
 
 #define DUMP_SEEK(offset) \
-if (file.f_op->llseek) { \
-	if (file.f_op->llseek(&file,(offset),0) != (offset)) \
+if (file->f_op->llseek) { \
+	if (file->f_op->llseek(file,(offset),0) != (offset)) \
  		goto close_coredump; \
-} else file.f_pos = (offset)
+} else file->f_pos = (offset)
 
 /*
  * Routine writes a core dump image in the current directory.
@@ -82,7 +82,7 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 {
 	struct dentry * dentry = NULL;
 	struct inode * inode = NULL;
-	struct file file;
+	struct file * file;
 	mm_segment_t fs;
 	int has_dumped = 0;
 	char corefile[6+sizeof(current->comm)];
@@ -116,21 +116,16 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 #else
 	corefile[4] = '\0';
 #endif
-	dentry = open_namei(corefile,O_CREAT | 2 | O_TRUNC | O_NOFOLLOW, 0600);
-	if (IS_ERR(dentry)) {
-		dentry = NULL;
+	file = filp_open(corefile,O_CREAT | 2 | O_TRUNC | O_NOFOLLOW, 0600);
+	if (IS_ERR(file))
 		goto end_coredump;
-	}
+	dentry = file->f_dentry;
 	inode = dentry->d_inode;
 	if (!S_ISREG(inode->i_mode))
-		goto end_coredump;
+		goto close_coredump;
 	if (!inode->i_op || !inode->i_op->default_file_ops)
-		goto end_coredump;
-	if (get_write_access(inode))
-		goto end_coredump;
-	if (init_private_file(&file, dentry, 3))
-		goto end_coredump_write;
-	if (!file.f_op->write)
+		goto close_coredump;
+	if (!file->f_op->write)
 		goto close_coredump;
 	has_dumped = 1;
 	current->flags |= PF_DUMPCORE;
@@ -211,13 +206,9 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 	set_fs(KERNEL_DS);
 	DUMP_WRITE(current,sizeof(*current));
 close_coredump:
-	if (file.f_op->release)
-		file.f_op->release(inode,&file);
-end_coredump_write:
-	put_write_access(inode);
+	close_fp(file, NULL);
 end_coredump:
 	set_fs(fs);
-	dput(dentry);
 	return has_dumped;
 }
 

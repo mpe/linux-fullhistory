@@ -38,6 +38,7 @@
 #define LFDU	51
 #define STFD	54
 #define STFDU	55
+#define FMR	63
 
 /*
  * We return 0 on success, 1 on unimplemented instruction, and EFAULT
@@ -49,6 +50,7 @@ Soft_emulate_8xx(struct pt_regs *regs)
 	uint	inst, instword;
 	uint	flreg, idxreg, disp;
 	uint	retval;
+	signed short sdisp;
 	uint	*ea, *ip;
 
 	retval = 0;
@@ -66,6 +68,11 @@ Soft_emulate_8xx(struct pt_regs *regs)
 	switch ( inst )
 	{
 	case LFD:
+		/* this is a 16 bit quantity that is sign extended
+		 * so use a signed short here -- Cort
+		 */
+		sdisp = (instword & 0xffff);
+		ea = (uint *)(regs->gpr[idxreg] + sdisp);
 		if (copy_from_user(ip, ea, sizeof(double)))
 			retval = EFAULT;
 		break;
@@ -77,6 +84,11 @@ Soft_emulate_8xx(struct pt_regs *regs)
 			regs->gpr[idxreg] = (uint)ea;
 		break;
 	case STFD:
+		/* this is a 16 bit quantity that is sign extended
+		 * so use a signed short here -- Cort
+		 */
+		sdisp = (instword & 0xffff);
+		ea = (uint *)(regs->gpr[idxreg] + sdisp);
 		if (copy_to_user(ea, ip, sizeof(double)))
 			retval = EFAULT;
 		break;
@@ -86,6 +98,11 @@ Soft_emulate_8xx(struct pt_regs *regs)
 			retval = EFAULT;
 		else
 			regs->gpr[idxreg] = (uint)ea;
+		break;
+	case FMR:
+		/* assume this is a fp move -- Cort */
+		memcpy( ip, &current->tss.fpr[(instword>>11)&0x1f],
+			sizeof(double) );
 		break;
 	default:
 		retval = 1;
@@ -98,7 +115,7 @@ Soft_emulate_8xx(struct pt_regs *regs)
 		       (instword>>16)&0x1f,
 		       (instword>>11)&0x1f,
 		       (instword>>6)&0x1f,
-		       (instword>>1)&0x1f,
+		       (instword>>1)&0x3ff,
 		       instword&1);
 		{
 			int pa;

@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.32 1998/10/13 14:03:52 davem Exp $ */
+/* $Id: mmu_context.h,v 1.34 1999/01/11 13:45:44 davem Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -89,7 +89,7 @@ extern __inline__ void __get_mmu_context(struct task_struct *tsk)
 	paddr = __pa(mm->pgd);
 	if((tsk->tss.flags & (SPARC_FLAG_32BIT|SPARC_FLAG_KTHREAD)) ==
 	   (SPARC_FLAG_32BIT))
-		pgd_cache = (unsigned long) mm->pgd[0];
+		pgd_cache = ((unsigned long) mm->pgd[0]) << 11UL;
 	else
 		pgd_cache = 0;
 	__asm__ __volatile__("
@@ -115,13 +115,21 @@ extern __inline__ void __get_mmu_context(struct task_struct *tsk)
 
 /*
  * After we have set current->mm to a new value, this activates
- * the context for the new mm so we see the new mappings.
+ * the context for the new mm so we see the new mappings.  Currently,
+ * this is always called for 'current', if that changes put appropriate
+ * checks here.
+ *
+ * We set the cpu_vm_mask first to zero to enforce a tlb flush for
+ * the new context above, then we set it to the current cpu so the
+ * smp tlb flush routines do not get confused.
  */
 #define activate_context(__tsk)		\
 do {	flushw_user();			\
+	(__tsk)->mm->cpu_vm_mask = 0;	\
 	spin_lock(&scheduler_lock);	\
 	__get_mmu_context(__tsk);	\
 	spin_unlock(&scheduler_lock);	\
+	(__tsk)->mm->cpu_vm_mask = (1UL<<smp_processor_id()); \
 } while(0)
 
 #endif /* !(__ASSEMBLY__) */

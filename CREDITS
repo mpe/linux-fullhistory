@@ -779,6 +779,15 @@ S: 50 E. Middlefield #10
 S: Mountain View, California 94043
 S: USA
 
+N: Benjamin Herrenschmidt
+E: bh40@calva.net
+E: benh@mipsys.com
+D: PowerMac booter (BootX)
+D: Additional PowerBook support
+S: 22, rue des Marguettes
+S: 75012 Paris
+S: France
+
 N: Sebastian Hetze
 E: she@lunetix.de
 D: German Linux Documentation,

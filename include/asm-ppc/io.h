@@ -7,16 +7,8 @@
 
 #define KERNELBASE	0xc0000000
 
-/* from the Carolina Technical Spec -- Cort */
-#define IBM_ACORN 0x82A
 #define SIO_CONFIG_RA	0x398
 #define SIO_CONFIG_RD	0x399
-
-#define IBM_HDD_LED       0x808
-#define IBM_EQUIP_PRESENT 0x80c	
-#define IBM_L2_STATUS     0x80d
-#define IBM_L2_INVALIDATE 0x814
-#define IBM_SYS_CTL       0x81c
 
 #define SLOW_DOWN_IO
 
@@ -27,11 +19,10 @@
 #define CHRP_PCI_DRAM_OFFSET 	0
 #define PREP_ISA_IO_BASE 	0x80000000
 #define PREP_ISA_MEM_BASE 	0xd0000000
-/*#define PREP_ISA_MEM_BASE 	0xc0000000*/
 #define PREP_PCI_DRAM_OFFSET 	0x80000000
 
 #ifdef CONFIG_MBX
-#define _IO_BASE        0
+#define _IO_BASE        0x80000000
 #define _ISA_MEM_BASE   0
 #define PCI_DRAM_OFFSET 0x80000000
 #else /* CONFIG_MBX8xx */

@@ -1,5 +1,5 @@
 /*
- * $Id: prom.c,v 1.46 1998/11/11 03:55:09 paulus Exp $
+ * $Id: prom.c,v 1.50 1999/03/16 10:40:34 cort Exp $
  *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
@@ -99,10 +99,12 @@ unsigned int old_rtas = 0;
 static struct device_node *allnodes = 0;
 
 static void clearscreen(void);
+static void flushscreen(void);
 
 #ifdef CONFIG_BOOTX_TEXT
 
 static void drawchar(char c);
+static void drawhex(unsigned long v);
 static void drawstring(const char *c);
 static void scrollscreen(void);
 
@@ -166,6 +168,11 @@ boot_infos_t *boot_infos = 0;	/* init it so it's in data segment not bss */
 #define RELOC(x)	(*PTRRELOC(&(x)))
 
 #define ALIGN(x) (((x) + sizeof(unsigned long)-1) & -sizeof(unsigned long))
+
+/* Is boot-info compatible ? */
+#define BOOT_INFO_IS_COMPATIBLE(bi)		((bi)->compatible_version <= BOOT_INFO_VERSION)
+#define BOOT_INFO_IS_V2_COMPATIBLE(bi)	((bi)->version >= 2)
+#define BOOT_INFO_IS_V4_COMPATIBLE(bi)	((bi)->version >= 4)
 
 __init
 static void
@@ -256,6 +263,9 @@ __init
 void
 prom_init(int r3, int r4, prom_entry pp)
 {
+	int cpu = 0, i;
+	phandle node;
+	char type[16], *path;
 	unsigned long mem;
 	ihandle prom_rtas;
 	unsigned long offset = reloc_offset();
@@ -273,6 +283,9 @@ prom_init(int r3, int r4, prom_entry pp)
 		unsigned long space;
 		unsigned long ptr, x;
 		char *model;
+#ifdef CONFIG_BOOTX_TEXT
+		unsigned long flags;
+#endif		
 
 		RELOC(boot_infos) = PTRUNRELOC(bi);
 
@@ -283,32 +296,72 @@ prom_init(int r3, int r4, prom_entry pp)
 		RELOC(g_loc_Y) = 0;
 		RELOC(g_max_loc_X) = (bi->dispDeviceRect[2] - bi->dispDeviceRect[0]) / 8;
 		RELOC(g_max_loc_Y) = (bi->dispDeviceRect[3] - bi->dispDeviceRect[1]) / 16;
-		prom_print(RELOC("Welcome to Linux, kernel " UTS_RELEASE " booting...\n"));
+		
+		/* Test if boot-info is compatible. Done only in config CONFIG_BOOTX_TEXT since
+		   there is nothing much we can do with an incompatible version, except display
+		   a message and eventually hang the processor...
+		   
+		   I'll try to keep enough of boot-info compatible in the future to always allow
+		   display of this message;
+		*/
+		if (!BOOT_INFO_IS_COMPATIBLE(bi))
+			prom_print(RELOC(" !!! WARNING - Incompatible version of BootX !!!\n\n\n"));
+		
+		prom_print(RELOC("Welcome to Linux, kernel " UTS_RELEASE "\n"));
+		prom_print(RELOC("\nstarted at       : 0x"));
+		drawhex(reloc_offset() + KERNELBASE);
+		prom_print(RELOC("\nlinked at        : 0x"));
+		drawhex(KERNELBASE);
+		prom_print(RELOC("\nframe buffer at  : 0x"));
+		drawhex((unsigned long)bi->dispDeviceBase);
+		prom_print(RELOC(" (phys), 0x"));
+		drawhex((unsigned long)bi->logicalDisplayBase);
+		prom_print(RELOC(" (log)"));
+		prom_print(RELOC("\nMSR              : 0x"));
+		__asm__ __volatile__ ("mfmsr %0" : "=r" ((flags)) : : "memory");
+		drawhex(flags);
+		prom_print(RELOC("\n\n"));
 #endif
-
-		/*
-		 * XXX If this is an iMac, turn off the USB controller.
+		/* Out of the #if/#endif since it flushes the clearscreen too */
+		flushscreen();
+		
+		/* New BootX enters kernel with MMU off, i/os are not allowed
+		   here. This hack will have been done by the boostrap anyway.
 		 */
-		model = (char *) early_get_property
-			(r4 + bi->deviceTreeOffset, 4, RELOC("model"));
-		if (model && strcmp(model, RELOC("iMac,1")) == 0) {
-			out_le32((unsigned *)0x80880008, 1);	/* XXX */
+		if (bi->version < 4) {
+			/*
+			 * XXX If this is an iMac, turn off the USB controller.
+			 */
+			model = (char *) early_get_property
+				(r4 + bi->deviceTreeOffset, 4, RELOC("model"));
+			if (model && strcmp(model, RELOC("iMac,1")) == 0) {
+				out_le32((unsigned *)0x80880008, 1);	/* XXX */
+			}
 		}
-
+		
 		space = bi->deviceTreeOffset + bi->deviceTreeSize;
 		if (bi->ramDisk)
 			space = bi->ramDisk + bi->ramDiskSize;
 		RELOC(klimit) = PTRUNRELOC((char *) bi + space);
 
-		/*
-		 * Touch each page to make sure the PTEs for them
-		 * are in the hash table - the aim is to try to avoid
-		 * getting DSI exceptions while copying the kernel image.
+		/* New BootX will have flushed all TLBs and enters kernel with
+		   MMU switched OFF, so this should not be useful anymore.
 		 */
-		for (ptr = (KERNELBASE + offset) & PAGE_MASK;
-		     ptr < (unsigned long)bi + space; ptr += PAGE_SIZE)
-			x = *(volatile unsigned long *)ptr;
-
+		if (bi->version < 4) {
+			/*
+			 * Touch each page to make sure the PTEs for them
+			 * are in the hash table - the aim is to try to avoid
+			 * getting DSI exceptions while copying the kernel image.
+			 */
+			for (ptr = (KERNELBASE + offset) & PAGE_MASK;
+			     ptr < (unsigned long)bi + space; ptr += PAGE_SIZE)
+				x = *(volatile unsigned long *)ptr;
+		}
+		
+#ifdef CONFIG_BOOTX_TEXT
+		prom_print(RELOC("booting...\n"));
+		flushscreen();
+#endif
 		return;
 	}
 
@@ -379,7 +432,7 @@ prom_init(int r3, int r4, prom_entry pp)
 			prom_args.nret = 2;
 			prom_args.args[0] = RELOC("instantiate-rtas");
 			prom_args.args[1] = prom_rtas;
-			prom_args.args[2] = ((void *)RELOC(rtas_data)-KERNELBASE-offset);
+			prom_args.args[2] = ((void *)(RELOC(rtas_data)-KERNELBASE));
 			RELOC(prom)(&prom_args);
 			if (prom_args.args[nargs] != 0)
 				i = 0;
@@ -393,6 +446,81 @@ prom_init(int r3, int r4, prom_entry pp)
 			prom_print(RELOC(" done\n"));
 	}
 	RELOC(klimit) = (char *) (mem - offset);
+#ifdef CONFIG_SMP
+	/*
+	 * With CHRP SMP we need to use the OF to start the other
+	 * processors so we can't wait until smp_boot_cpus (the OF is
+	 * trashed by then) so we have to put the processors into
+	 * a holding pattern controlled by the kernel (not OF) before
+	 * we destroy the OF.
+	 *
+	 * This used a chunk of high memory, puts some holding pattern
+	 * code there and sends the other processors off to there until
+	 * smp_boot_cpus tells them to do something.  We do that by using
+	 * physical address 0x0.  The holding pattern checks that address
+	 * until its cpu # is there, when it is that cpu jumps to
+	 * __secondary_start().  smp_boot_cpus() takes care of setting those
+	 * values.
+	 *
+	 * We also use physical address 0x4 here to tell when a cpu
+	 * is in its holding pattern code.
+	 *
+	 * -- Cort
+	 */
+	{
+		extern void __secondary_hold(void);
+		unsigned long i;
+		char type[16];
+		
+
+		/*
+		 * XXX: hack to make sure we're chrp, assume that if we're
+		 *      chrp we have a device_type property -- Cort
+		 */
+		node = call_prom(RELOC("finddevice"), 1, 1, RELOC("/"));
+		if ( (int)call_prom(RELOC("getprop"), 4, 1, node,
+			    RELOC("device_type"),type, sizeof(type)) <= 0)
+			return;
+		
+		/* copy the holding pattern code to someplace safe (8M) */
+		memcpy( (void *)(8<<20), RELOC(__secondary_hold), 0x10000 );
+		for (i = 8<<20; i < ((8<<20)+0x10000); i += 32)
+		{
+			asm volatile("dcbf 0,%0" : : "r" (i) : "memory");
+			asm volatile("icbi 0,%0" : : "r" (i) : "memory");
+		}
+	}
+
+	/* look for cpus */
+	for (node = 0; prom_next_node(&node);)
+	{
+		type[0] = 0;
+		call_prom(RELOC("getprop"), 4, 1, node, RELOC("device_type"),
+			  type, sizeof(type));
+		if (strcmp(type, RELOC("cpu")) != 0)
+			continue;
+		path = (char *) mem;
+		memset(path, 0, 256);
+		if ((int) call_prom(RELOC("package-to-path"), 3, 1,
+				    node, path, 255) < 0)
+			continue;
+		/* XXX: hack - don't start cpu 0, this cpu -- Cort */
+		if ( cpu++ == 0 )
+			continue;
+		prom_print(RELOC("starting cpu "));
+		prom_print(path);
+		*(unsigned long *)(0x4) = 0;
+		asm volatile("dcbf 0,%0": : "r" (0x4) : "memory");
+		call_prom(RELOC("start-cpu"), 3, 0, node, 8<<20, cpu-1);
+		for ( i = 0 ; (i < 10000) &&
+			      (*(ulong *)(0x4) == (ulong)0); i++ )
+			;
+		if (*(ulong *)(0x4) == (ulong)cpu-1 )
+			prom_print(RELOC("...ok\n"));
+		else
+			prom_print(RELOC("...failed\n"));
+	}
+#endif	
 }
 
 /*
@@ -630,6 +758,12 @@ finish_node(struct device_node *np, unsigned long mem_start,
 	if (ifunc != NULL) {
 		mem_start = ifunc(np, mem_start);
 	}
+
+	/* the f50 sets the name to 'display' and 'compatible' to what we
+	 * expect for the name -- Cort
+	 */
+	if (!strcmp(np->name, "display"))
+		np->name = get_property(np, "compatible", 0);
 
 	if (!strcmp(np->name, "device-tree"))
 		ifunc = interpret_root_props;
@@ -1191,8 +1325,11 @@ abort()
 	prom_exit();
 }
 
-#define CALC_BASE(y)	(bi->dispDeviceBase + bi->dispDeviceRect[0] * \
-			(bi->dispDeviceDepth >> 3) + bi->dispDeviceRowBytes * (y))
+/* Calc the base address of a given point (x,y) */
+#define CALC_BASE(x,y)	((BOOT_INFO_IS_V2_COMPATIBLE(bi) ? bi->logicalDisplayBase :	\
+			bi->dispDeviceBase) + (bi->dispDeviceRect[0] + (x)) *		\
+			(bi->dispDeviceDepth >> 3) + bi->dispDeviceRowBytes *		\
+			((y) + bi->dispDeviceRect[1]))
 
 __init
 static void
@@ -1200,7 +1337,7 @@ clearscreen(void)
 {
 	unsigned long offset	= reloc_offset();
 	boot_infos_t* bi	= PTRRELOC(RELOC(boot_infos));
-	unsigned long *base	= (unsigned long *)CALC_BASE(0);
+	unsigned long *base	= (unsigned long *)CALC_BASE(0,0);
 	unsigned long width 	= ((bi->dispDeviceRect[2] - bi->dispDeviceRect[0]) *
 					(bi->dispDeviceDepth >> 3)) >> 2;
 	int i,j;
@@ -1214,6 +1351,33 @@ clearscreen(void)
 	}
 }
 
+__inline__ void dcbst(const void* addr)
+{
+	__asm__ __volatile__ ("dcbst 0,%0" :: "r" (addr));
+}
+
+__init
+static void
+flushscreen(void)
+{
+	unsigned long offset	= reloc_offset();
+	boot_infos_t* bi	= PTRRELOC(RELOC(boot_infos));
+	unsigned long *base	= (unsigned long *)CALC_BASE(0,0);
+	unsigned long width 	= ((bi->dispDeviceRect[2] - bi->dispDeviceRect[0]) *
+					(bi->dispDeviceDepth >> 3)) >> 2;
+	int i,j;
+	
+	for (i=0; i<(bi->dispDeviceRect[3] - bi->dispDeviceRect[1]); i++)
+	{
+		unsigned long *ptr = base;
+		for(j=width; j>0; j-=8) {
+			dcbst(ptr);
+			ptr += 8;
+		}
+		base += (bi->dispDeviceRowBytes >> 2);
+	}
+}
+
 #ifdef CONFIG_BOOTX_TEXT
 
 __init
@@ -1222,8 +1386,8 @@ scrollscreen(void)
 {
 	unsigned long offset		= reloc_offset();
 	boot_infos_t* bi		= PTRRELOC(RELOC(boot_infos));
-	unsigned long *src		= (unsigned long *)CALC_BASE(16);
-	unsigned long *dst		= (unsigned long *)CALC_BASE(0);
+	unsigned long *src		= (unsigned long *)CALC_BASE(0,16);
+	unsigned long *dst		= (unsigned long *)CALC_BASE(0,0);
 	unsigned long width		= ((bi->dispDeviceRect[2] - bi->dispDeviceRect[0]) *
 						(bi->dispDeviceDepth >> 3)) >> 2;
 	int i,j;
@@ -1252,20 +1416,17 @@ drawchar(char c)
 {
 	unsigned long offset = reloc_offset();
 
-	switch(c)
-	{
-		case '\r':	RELOC(g_loc_X) = 0;				break;
-		case '\n':	RELOC(g_loc_X) = 0; RELOC(g_loc_Y)++;		break;
+	switch(c) {
+		case '\r': RELOC(g_loc_X) = 0;			break;
+		case '\n': RELOC(g_loc_X) = 0; RELOC(g_loc_Y)++;	break;
 		default:
 			draw_byte(c, RELOC(g_loc_X)++, RELOC(g_loc_Y));
-			if (RELOC(g_loc_X) >= RELOC(g_max_loc_X))
-			{
+			if (RELOC(g_loc_X) >= RELOC(g_max_loc_X)) {
 				RELOC(g_loc_X) = 0;
 				RELOC(g_loc_Y)++;
 			}
 	}
-	while (RELOC(g_loc_Y) >= RELOC(g_max_loc_Y))
-	{
+	while (RELOC(g_loc_Y) >= RELOC(g_max_loc_Y)) {
 		scrollscreen();
 		RELOC(g_loc_Y)--;
 	}
@@ -1281,17 +1442,32 @@ drawstring(const char *c)
 
 __init
 static void
+drawhex(unsigned long v)
+{
+	static char hex_table[] = "0123456789abcdef";
+	unsigned long offset	= reloc_offset();
+	
+	drawchar(RELOC(hex_table)[(v >> 28) & 0x0000000FUL]);
+	drawchar(RELOC(hex_table)[(v >> 24) & 0x0000000FUL]);
+	drawchar(RELOC(hex_table)[(v >> 20) & 0x0000000FUL]);
+	drawchar(RELOC(hex_table)[(v >> 16) & 0x0000000FUL]);
+	drawchar(RELOC(hex_table)[(v >> 12) & 0x0000000FUL]);
+	drawchar(RELOC(hex_table)[(v >>  8) & 0x0000000FUL]);
+	drawchar(RELOC(hex_table)[(v >>  4) & 0x0000000FUL]);
+	drawchar(RELOC(hex_table)[(v >>  0) & 0x0000000FUL]);
+}
+
+
+__init
+static void
 draw_byte(unsigned char c, long locX, long locY)
 {
 	unsigned long offset	= reloc_offset();
-	boot_infos_t* bi		= PTRRELOC(RELOC(boot_infos));
-	unsigned char *base	=	bi->dispDeviceBase
-							 + (bi->dispDeviceRowBytes * ((locY * 16) +  bi->dispDeviceRect[1]))
-							 + (bi->dispDeviceDepth >> 3) * ((locX * 8) + bi->dispDeviceRect[0]);
-	unsigned char *font	=	&RELOC(vga_font)[((unsigned long)c) * 16];
+	boot_infos_t* bi	= PTRRELOC(RELOC(boot_infos));
+	unsigned char *base	= CALC_BASE(locX << 3, locY << 4);
+	unsigned char *font	= &RELOC(vga_font)[((unsigned long)c) * 16];
 	
-	switch(bi->dispDeviceDepth)
-	{
+	switch(bi->dispDeviceDepth) {
 		case 32:
 			draw_byte_32(font, (unsigned long *)base);
 			break;

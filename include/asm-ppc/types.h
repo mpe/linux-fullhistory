@@ -6,6 +6,8 @@
  * header files exported to user space
  */
 
+typedef unsigned short umode_t;
+
 typedef __signed__ char __s8;
 typedef unsigned char __u8;
 
@@ -24,8 +26,6 @@ typedef unsigned long long __u64;
  * These aren't exported outside the kernel to avoid name space clashes
  */
 #ifdef __KERNEL__
-
-typedef unsigned short umode_t;
 
 typedef signed char s8;
 typedef unsigned char u8;

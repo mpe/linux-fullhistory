@@ -8,11 +8,12 @@
 #include <linux/vt_kern.h>
 #include <linux/nvram.h>
 
+#include <asm/page.h>
 #include <asm/semaphore.h>
 #include <asm/processor.h>
 #include <asm/uaccess.h>
-#include <asm/ide.h>
 #include <asm/io.h>
+#include <asm/ide.h>
 #include <asm/atomic.h>
 #include <asm/bitops.h>
 #include <asm/checksum.h>
@@ -46,6 +47,7 @@ extern int do_signal(sigset_t *, struct pt_regs *);
 asmlinkage long long __ashrdi3(long long, int);
 asmlinkage int abs(int);
 
+EXPORT_SYMBOL(clear_page);
 EXPORT_SYMBOL(do_signal);
 EXPORT_SYMBOL(syscall_trace);
 EXPORT_SYMBOL(transfer_to_handler);

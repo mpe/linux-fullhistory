@@ -674,6 +674,13 @@ void ide_stall_queue (ide_drive_t *drive, unsigned long timeout);
  */
 struct request **ide_get_queue (kdev_t dev);
 
+/*
+ * CompactFlash cards and their brethern pretend to be removable hard disks,
+ * but they never have a slave unit, and they don't have doorlock mechanisms.
+ * This test catches them, and is invoked elsewhere when setting appropriate config bits.
+ */
+int drive_is_flashcard (ide_drive_t *drive);
+
 int  ide_spin_wait_hwgroup(ide_drive_t *drive, unsigned long *flags);
 void ide_timer_expiry (unsigned long data);
 void ide_intr (int irq, void *dev_id, struct pt_regs *regs);

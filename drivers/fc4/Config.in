@@ -7,12 +7,21 @@ comment 'Fibre Channel support'
 tristate 'Fibre Channel and FC4 SCSI support' CONFIG_FC4
 if [ ! "$CONFIG_FC4" = "n" ]; then
   comment 'FC4 drivers'
-  tristate 'Sun SOC/Sbus' CONFIG_FC4_SOC
+  if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
+    tristate 'Sun SOC/Sbus' CONFIG_FC4_SOC
+    tristate 'Sun SOC+ (aka SOCAL)' CONFIG_FC4_SOCAL
+  fi
   comment 'FC4 targets'
   dep_tristate 'SparcSTORAGE Array 100 and 200 series' CONFIG_SCSI_PLUTO $CONFIG_SCSI
+  if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
+    dep_tristate 'Sun Enterprise Network Array (A5000 and EX500)' CONFIG_SCSI_FCAL $CONFIG_SCSI
+  else
+    dep_tristate 'Generic FC-AL disk driver' CONFIG_SCSI_FCAL $CONFIG_SCSI
+  fi
 else
   define_bool CONFIG_FC4_SOC n
+  define_bool CONFIG_FC4_SOCAL n
   define_bool CONFIG_SCSI_PLUTO n
+  define_bool CONFIG_SCSI_FCAL n
 fi
 endmenu
-

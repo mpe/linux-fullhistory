@@ -173,8 +173,10 @@ static volatile struct awacs_regs *awacs;
 static volatile struct dbdma_regs *awacs_txdma, *awacs_rxdma;
 static int awacs_rate_index;
 static int awacs_subframe;
-static int awacs_revision;
 static int awacs_spkr_vol;
+
+static int awacs_revision;
+#define AWACS_BURGUNDY	100		/* fake revision # for burgundy */
 
 /*
  * Space for the DBDMA command blocks.
@@ -184,6 +186,7 @@ static volatile struct dbdma_cmd *awacs_tx_cmds;
 
 /*
  * Cached values of AWACS registers (we can't read them).
+ * Except on the burgundy. XXX
  */
 int awacs_reg[5];
 
@@ -239,6 +242,14 @@ static int beep_playing = 0;
 static short *beep_buf;
 static volatile struct dbdma_cmd *beep_dbdma_cmd;
 static void (*orig_mksound)(unsigned int, unsigned int);
+
+/* Burgundy functions */
+static void awacs_burgundy_wcw(unsigned addr,unsigned newval);
+static unsigned awacs_burgundy_rcw(unsigned addr);
+static void awacs_burgundy_write_volume(unsigned address, int volume);
+static int awacs_burgundy_read_volume(unsigned address);
+static void awacs_burgundy_write_mvolume(unsigned address, int volume);
+static int awacs_burgundy_read_mvolume(unsigned address);
 
 #ifdef CONFIG_PMAC_PBOOK
 /*
@@ -3007,6 +3018,9 @@ static void PMacIrqCleanup(void)
 	if (beep_buf)
 		kfree(beep_buf);
 	kd_mksound = orig_mksound;
+#ifdef CONFIG_PMAC_PBOOK
+	notifier_chain_unregister(&sleep_notifier_list, &awacs_sleep_notifier);
+#endif
 }
 #endif /* MODULE */
 
@@ -3040,8 +3054,9 @@ static void PMacInit(void)
 	 * If we have a sample rate which is within catchRadius percent
 	 * of the requested value, we don't have to expand the samples.
 	 * Otherwise choose the next higher rate.
+	 * N.B.: burgundy awacs (iMac and later) only works at 44100 Hz.
 	 */
-	i = 8;
+	i = (awacs_revision >= AWACS_BURGUNDY)? 1: 8;
 	do {
 		tolerance = catchRadius * awacs_freqs[--i] / 100;
 	} while (sound.soft.speed > awacs_freqs[i] + tolerance && i > 0);
@@ -3053,7 +3068,9 @@ static void PMacInit(void)
 	awacs_rate_index = i;
 
 	PMacSilence();
-	out_le32(&awacs->control, MASK_IEPC | MASK_IEE | (i << 8) | 0x11);
+	/* XXX disable error interrupt on burgundy for now */
+	out_le32(&awacs->control, MASK_IEPC | (i << 8) | 0x11
+		 | (awacs_revision < AWACS_BURGUNDY? MASK_IEE: 0));
 	awacs_reg[1] = (awacs_reg[1] & ~MASK_SAMPLERATE) | (i << 3);
 	awacs_write(awacs_reg[1] | MASK_ADDR1);
 	out_le32(&awacs->byteswap, sound.hard.format != AFMT_S16_BE);
@@ -3213,8 +3230,9 @@ pmac_awacs_intr(int irq, void *devid, struct pt_regs *regs)
 		/* do something when headphone is plugged/unplugged? */
 	}
 	if (ctrl & MASK_CNTLERR) {
-		printk(KERN_ERR "AWACS: error, status = %x\n",
-		       in_le32(&awacs->codec_stat));
+		int err = (in_le32(&awacs->codec_stat) & MASK_ERRCODE) >> 16;
+		if (err != 0 && awacs_revision < AWACS_BURGUNDY)
+			printk(KERN_ERR "AWACS: error %x\n", err);
 	}
 	/* Writing 1s to the CNTLERR and PORTCHG bits clears them... */
 	out_le32(&awacs->control, ctrl);
@@ -3223,6 +3241,8 @@ pmac_awacs_intr(int irq, void *devid, struct pt_regs *regs)
 static void
 awacs_write(int val)
 {
+	if (awacs_revision >= AWACS_BURGUNDY)
+		return;
 	while (in_le32(&awacs->codec_ctrl) & MASK_NEWECMD)
 		;	/* XXX should have timeout */
 	out_le32(&awacs->codec_ctrl, val | (awacs_subframe << 22));
@@ -3247,7 +3267,8 @@ static struct timer_list beep_timer = {
 static void awacs_mksound(unsigned int hz, unsigned int ticks)
 {
 	unsigned long flags;
-	int srate = awacs_freqs[BEEP_SPEED];
+	int beep_speed = (awacs_revision < AWACS_BURGUNDY)? BEEP_SPEED: 0;
+	int srate = awacs_freqs[beep_speed];
 	int period, ncycles, nsamples;
 	int i, j, f;
 	short *p;
@@ -3308,7 +3329,7 @@ static void awacs_mksound(unsigned int hz, unsigned int ticks)
 		out_le32(&awacs_txdma->control, (RUN|WAKE|FLUSH|PAUSE) << 16);
 		out_le32(&awacs->control,
 			 (in_le32(&awacs->control) & ~0x1f00)
-			 | (BEEP_SPEED << 8));
+			 | (beep_speed << 8));
 		out_le32(&awacs->byteswap, 0);
 		out_le32(&awacs_txdma->cmdptr, virt_to_bus(beep_dbdma_cmd));
 		out_le32(&awacs_txdma->control, RUN | (RUN << 16));
@@ -3330,8 +3351,9 @@ static int awacs_sleep_notify(struct notifier_block *this,
 		PMacSilence();
 		break;
 	case PBOOK_WAKE:
-		out_le32(&awacs->control, MASK_IEPC | MASK_IEE |
-			 (awacs_rate_index << 8) | 0x11);
+		out_le32(&awacs->control, MASK_IEPC
+			 | (awacs_rate_index << 8) | 0x11
+			 | (awacs_revision < AWACS_BURGUNDY? MASK_IEE: 0));
 		awacs_write(awacs_reg[0] | MASK_ADDR0);
 		awacs_write(awacs_reg[1] | MASK_ADDR1);
 		awacs_write(awacs_reg[2] | MASK_ADDR2);
@@ -3341,6 +3363,220 @@ static int awacs_sleep_notify(struct notifier_block *this,
 	return NOTIFY_DONE;
 }
 #endif /* CONFIG_PMAC_PBOOK */
+
+
+/* All the burgundy functions: */
+
+/* Waits for busy flag to clear */
+inline static void
+awacs_burgundy_busy_wait(void)
+{
+	while (in_le32(&awacs->codec_ctrl) & MASK_NEWECMD)
+		;
+}
+
+inline static void
+awacs_burgundy_extend_wait(void)
+{
+	while (!(in_le32(&awacs->codec_stat) & MASK_EXTEND))
+		;
+	while (in_le32(&awacs->codec_stat) & MASK_EXTEND)
+		;
+}
+
+static void
+awacs_burgundy_wcw(unsigned addr, unsigned val)
+{
+	out_le32(&awacs->codec_ctrl, addr + 0x200c00 + (val & 0xff));
+	awacs_burgundy_busy_wait();
+	out_le32(&awacs->codec_ctrl, addr + 0x200d00 +((val>>8) & 0xff));
+	awacs_burgundy_busy_wait();	     	 
+	out_le32(&awacs->codec_ctrl, addr + 0x200e00 +((val>>16) & 0xff));
+	awacs_burgundy_busy_wait();	     	 
+	out_le32(&awacs->codec_ctrl, addr + 0x200f00 +((val>>24) & 0xff));
+	awacs_burgundy_busy_wait();
+}
+
+static unsigned
+awacs_burgundy_rcw(unsigned addr)
+{
+	unsigned val = 0;
+	int flags;
+
+	/* should have timeouts here */
+	save_flags(flags); cli();
+
+	out_le32(&awacs->codec_ctrl, addr + 0x100000);
+	awacs_burgundy_busy_wait();
+	awacs_burgundy_extend_wait();
+	val += (in_le32(&awacs->codec_stat) >> 4) & 0xff;
+
+	out_le32(&awacs->codec_ctrl, addr + 0x100100);
+	awacs_burgundy_busy_wait();	     	 
+	awacs_burgundy_extend_wait();
+	val += ((in_le32(&awacs->codec_stat)>>4) & 0xff) <<8;
+
+	out_le32(&awacs->codec_ctrl, addr + 0x100200);
+	awacs_burgundy_busy_wait();	     	 
+	awacs_burgundy_extend_wait();
+	val += ((in_le32(&awacs->codec_stat)>>4) & 0xff) <<16;
+
+	out_le32(&awacs->codec_ctrl, addr + 0x100300);
+	awacs_burgundy_busy_wait();
+	awacs_burgundy_extend_wait();
+	val += ((in_le32(&awacs->codec_stat)>>4) & 0xff) <<24;
+
+	restore_flags(flags);
+
+	return val;
+}
+
+
+static void
+awacs_burgundy_wcb(unsigned addr, unsigned val)
+{
+	out_le32(&awacs->codec_ctrl, addr + 0x300000 + (val & 0xff));
+	awacs_burgundy_busy_wait();
+}
+
+static unsigned
+awacs_burgundy_rcb(unsigned addr)
+{
+	unsigned val = 0;
+	int flags;
+
+	/* should have timeouts here */
+	save_flags(flags); cli();
+
+	out_le32(&awacs->codec_ctrl, addr + 0x100000);
+	awacs_burgundy_busy_wait();
+	awacs_burgundy_extend_wait();
+	val += (in_le32(&awacs->codec_stat) >> 4) & 0xff;
+
+	restore_flags(flags);
+
+	return val;
+}
+
+static int
+awacs_burgundy_check(void)
+{
+	/* Checks to see the chip is alive and kicking */
+	int error = in_le32(&awacs->codec_ctrl) & MASK_ERRCODE;
+  
+	return error == 0xf0000;
+}
+
+static int
+awacs_burgundy_init(void)
+{
+	if (awacs_burgundy_check()) {
+		printk(KERN_WARNING "AWACS: disabled by MacOS :-(\n");
+		return 1;
+	}
+
+	awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_OUTPUTENABLES,
+			   DEF_BURGUNDY_OUTPUTENABLES);
+	awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_MORE_OUTPUTENABLES,
+			   DEF_BURGUNDY_MORE_OUTPUTENABLES);
+	awacs_burgundy_wcw(MASK_ADDR_BURGUNDY_OUTPUTSELECTS,
+			   DEF_BURGUNDY_OUTPUTSELECTS);
+	
+	awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_INPSEL21,
+			   DEF_BURGUNDY_INPSEL21);
+	awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_INPSEL3,
+			   DEF_BURGUNDY_INPSEL3);
+	awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_GAINCD,
+			   DEF_BURGUNDY_GAINCD);
+	awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_GAINLINE,
+			   DEF_BURGUNDY_GAINLINE);
+	awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_GAINMIC,
+			   DEF_BURGUNDY_GAINMIC);
+	awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_GAINMODEM,
+			   DEF_BURGUNDY_GAINMODEM);
+	
+	awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_ATTENSPEAKER,
+			   DEF_BURGUNDY_ATTENSPEAKER);
+	awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_ATTENLINEOUT,
+			   DEF_BURGUNDY_ATTENLINEOUT);
+	awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_ATTENHP,
+			   DEF_BURGUNDY_ATTENHP);
+	
+	awacs_burgundy_wcw(MASK_ADDR_BURGUNDY_MASTER_VOLUME,
+			   DEF_BURGUNDY_MASTER_VOLUME);
+	awacs_burgundy_wcw(MASK_ADDR_BURGUNDY_VOLCD,
+			   DEF_BURGUNDY_VOLCD);
+	awacs_burgundy_wcw(MASK_ADDR_BURGUNDY_VOLLINE,
+			   DEF_BURGUNDY_VOLLINE);
+	awacs_burgundy_wcw(MASK_ADDR_BURGUNDY_VOLMIC,
+			   DEF_BURGUNDY_VOLMIC);
+	return 0;
+}
+
+static void
+awacs_burgundy_write_volume(unsigned address, int volume)
+{
+	int hardvolume,lvolume,rvolume;
+
+	lvolume = (volume & 0xff) ? (volume & 0xff) + 155 : 0;
+	rvolume = ((volume >>8)&0xff) ? ((volume >> 8)&0xff ) + 155 : 0;
+
+	hardvolume = lvolume + (rvolume << 16);
+
+	awacs_burgundy_wcw(address, hardvolume);
+}
+
+static int
+awacs_burgundy_read_volume(unsigned address)
+{
+	int softvolume,wvolume;
+
+	wvolume = awacs_burgundy_rcw(address);
+
+	softvolume = (wvolume & 0xff) - 155;
+	softvolume += (((wvolume >> 16) & 0xff) - 155)<<8;
+
+	return softvolume > 0 ? softvolume : 0;
+}
+
+
+
+
+static int
+awacs_burgundy_read_mvolume(unsigned address)
+{
+	int lvolume,rvolume,wvolume;
+
+	wvolume = awacs_burgundy_rcw(address);
+
+	wvolume &= 0xffff;
+	
+	rvolume = (wvolume & 0xff) - 155;
+	lvolume = ((wvolume & 0xff00)>>8) - 155;
+
+	return lvolume + (rvolume << 8);
+}
+
+
+static void
+awacs_burgundy_write_mvolume(unsigned address, int volume)
+{
+	int lvolume,rvolume,hardvolume;
+
+	lvolume = (volume &0xff) ? (volume & 0xff) + 155 :0;
+	rvolume = ((volume >>8) & 0xff) ? (volume >> 8) + 155 :0;
+
+	hardvolume = lvolume + (rvolume << 8);
+	hardvolume += (hardvolume << 16);
+
+	awacs_burgundy_wcw(address, hardvolume);
+}
+
+/* End burgundy functions */
+
+
+
+
 
 /* Turn on sound output, needed on G3 desktop powermacs */
 static void
@@ -3715,117 +3951,244 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 
 #ifdef CONFIG_PPC
 	case DMASND_AWACS:
-		switch (cmd) {
-		case SOUND_MIXER_READ_DEVMASK:
-			data = SOUND_MASK_VOLUME | SOUND_MASK_SPEAKER
-				| SOUND_MASK_LINE | SOUND_MASK_MIC
-				| SOUND_MASK_CD | SOUND_MASK_RECLEV
-				| SOUND_MASK_ALTPCM;
-			return IOCTL_OUT(arg, data);
-		case SOUND_MIXER_READ_RECMASK:
-			data = SOUND_MASK_LINE | SOUND_MASK_MIC
-				| SOUND_MASK_CD;
-			return IOCTL_OUT(arg, data);
-		case SOUND_MIXER_READ_RECSRC:
-			data = 0;
-			if (awacs_reg[0] & MASK_MUX_AUDIN)
-				data |= SOUND_MASK_LINE;
-			if (awacs_reg[0] & MASK_MUX_MIC)
-				data |= SOUND_MASK_MIC;
-			if (awacs_reg[0] & MASK_MUX_CD)
-				data |= SOUND_MASK_CD;
-			return IOCTL_OUT(arg, data);
-		case SOUND_MIXER_WRITE_RECSRC:
-			IOCTL_IN(arg, data);
-			data &= (SOUND_MASK_LINE
-				 | SOUND_MASK_MIC | SOUND_MASK_CD);
-			awacs_reg[0] &= ~(MASK_MUX_CD | MASK_MUX_MIC
-					| MASK_MUX_AUDIN);
-			if (data & SOUND_MASK_LINE)
-				awacs_reg[0] |= MASK_MUX_AUDIN;
-			if (data & SOUND_MASK_MIC)
-				awacs_reg[0] |= MASK_MUX_MIC;
-			if (data & SOUND_MASK_CD)
-				awacs_reg[0] |= MASK_MUX_CD;
-			awacs_write(awacs_reg[0] | MASK_ADDR0);
-			return IOCTL_OUT(arg, data);
-		case SOUND_MIXER_READ_STEREODEVS:
-			data = SOUND_MASK_VOLUME | SOUND_MASK_SPEAKER
-				| SOUND_MASK_RECLEV;
-			return IOCTL_OUT(arg, data);
-		case SOUND_MIXER_READ_CAPS:
-			return IOCTL_OUT(arg, 0);
-		case SOUND_MIXER_READ_VOLUME:
-			data = (awacs_reg[1] & MASK_AMUTE)? 0:
-				awacs_get_volume(awacs_reg[2], 6);
-			return IOCTL_OUT(arg, data);
-		case SOUND_MIXER_WRITE_VOLUME:
-			IOCTL_IN(arg, data);
-			return IOCTL_OUT(arg, sound_set_volume(data));
-		case SOUND_MIXER_READ_SPEAKER:
-			if (awacs_revision >= 3 && adb_hardware == ADB_VIACUDA)
-				data = awacs_spkr_vol;
-			else
-				data = (awacs_reg[1] & MASK_CMUTE)? 0:
-					awacs_get_volume(awacs_reg[4], 6);
-			return IOCTL_OUT(arg, data);
-		case SOUND_MIXER_WRITE_SPEAKER:
-			IOCTL_IN(arg, data);
-			if (awacs_revision >= 3 && adb_hardware == ADB_VIACUDA)
-				awacs_enable_amp(data);
-			else
-				data = awacs_volume_setter(data, 4, MASK_CMUTE, 6);
-			return IOCTL_OUT(arg, data);
-		case SOUND_MIXER_WRITE_ALTPCM:	/* really bell volume */
-			IOCTL_IN(arg, data);
-			beep_volume = data & 0xff;
-			/* fall through */
-		case SOUND_MIXER_READ_ALTPCM:
-			return IOCTL_OUT(arg, beep_volume);
-		case SOUND_MIXER_WRITE_LINE:
-			IOCTL_IN(arg, data);
-			awacs_reg[0] &= ~MASK_MUX_AUDIN;
-			if ((data & 0xff) >= 50)
-				awacs_reg[0] |= MASK_MUX_AUDIN;
-			awacs_write(MASK_ADDR0 | awacs_reg[0]);
-			/* fall through */
-		case SOUND_MIXER_READ_LINE:
-			data = (awacs_reg[0] & MASK_MUX_AUDIN)? 100: 0;
-			return IOCTL_OUT(arg, data);
-		case SOUND_MIXER_WRITE_MIC:
-			IOCTL_IN(arg, data);
-			data &= 0xff;
-			awacs_reg[0] &= ~(MASK_MUX_MIC | MASK_GAINLINE);
-			if (data >= 25) {
-				awacs_reg[0] |= MASK_MUX_MIC;
-				if (data >= 75)
-					awacs_reg[0] |= MASK_GAINLINE;
+		if (awacs_revision<AWACS_BURGUNDY) { /* Different IOCTLS for burgundy*/
+			switch (cmd) {
+			case SOUND_MIXER_READ_DEVMASK:
+				data = SOUND_MASK_VOLUME | SOUND_MASK_SPEAKER
+					| SOUND_MASK_LINE | SOUND_MASK_MIC
+					| SOUND_MASK_CD | SOUND_MASK_RECLEV
+					| SOUND_MASK_ALTPCM;
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_READ_RECMASK:
+				data = SOUND_MASK_LINE | SOUND_MASK_MIC
+					| SOUND_MASK_CD;
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_READ_RECSRC:
+				data = 0;
+				if (awacs_reg[0] & MASK_MUX_AUDIN)
+					data |= SOUND_MASK_LINE;
+				if (awacs_reg[0] & MASK_MUX_MIC)
+					data |= SOUND_MASK_MIC;
+				if (awacs_reg[0] & MASK_MUX_CD)
+					data |= SOUND_MASK_CD;
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_WRITE_RECSRC:
+				IOCTL_IN(arg, data);
+				data &= (SOUND_MASK_LINE
+					 | SOUND_MASK_MIC | SOUND_MASK_CD);
+				awacs_reg[0] &= ~(MASK_MUX_CD | MASK_MUX_MIC
+						  | MASK_MUX_AUDIN);
+				if (data & SOUND_MASK_LINE)
+					awacs_reg[0] |= MASK_MUX_AUDIN;
+				if (data & SOUND_MASK_MIC)
+					awacs_reg[0] |= MASK_MUX_MIC;
+				if (data & SOUND_MASK_CD)
+					awacs_reg[0] |= MASK_MUX_CD;
+				awacs_write(awacs_reg[0] | MASK_ADDR0);
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_READ_STEREODEVS:
+				data = SOUND_MASK_VOLUME | SOUND_MASK_SPEAKER
+					| SOUND_MASK_RECLEV;
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_READ_CAPS:
+				return IOCTL_OUT(arg, 0);
+			case SOUND_MIXER_READ_VOLUME:
+				data = (awacs_reg[1] & MASK_AMUTE)? 0:
+					awacs_get_volume(awacs_reg[2], 6);
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_WRITE_VOLUME:
+				IOCTL_IN(arg, data);
+				return IOCTL_OUT(arg, sound_set_volume(data));
+			case SOUND_MIXER_READ_SPEAKER:
+				if (awacs_revision == 3 && adb_hardware == ADB_VIACUDA)
+					data = awacs_spkr_vol;
+				else
+					data = (awacs_reg[1] & MASK_CMUTE)? 0:
+						awacs_get_volume(awacs_reg[4], 6);
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_WRITE_SPEAKER:
+				IOCTL_IN(arg, data);
+				if (awacs_revision == 3 && adb_hardware == ADB_VIACUDA)
+					awacs_enable_amp(data);
+				else
+					data = awacs_volume_setter(data, 4, MASK_CMUTE, 6);
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_WRITE_ALTPCM:	/* really bell volume */
+				IOCTL_IN(arg, data);
+				beep_volume = data & 0xff;
+				/* fall through */
+			case SOUND_MIXER_READ_ALTPCM:
+				return IOCTL_OUT(arg, beep_volume);
+			case SOUND_MIXER_WRITE_LINE:
+				IOCTL_IN(arg, data);
+				awacs_reg[0] &= ~MASK_MUX_AUDIN;
+				if ((data & 0xff) >= 50)
+					awacs_reg[0] |= MASK_MUX_AUDIN;
+				awacs_write(MASK_ADDR0 | awacs_reg[0]);
+				/* fall through */
+			case SOUND_MIXER_READ_LINE:
+				data = (awacs_reg[0] & MASK_MUX_AUDIN)? 100: 0;
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_WRITE_MIC:
+				IOCTL_IN(arg, data);
+				data &= 0xff;
+				awacs_reg[0] &= ~(MASK_MUX_MIC | MASK_GAINLINE);
+				if (data >= 25) {
+					awacs_reg[0] |= MASK_MUX_MIC;
+					if (data >= 75)
+						awacs_reg[0] |= MASK_GAINLINE;
+				}
+				awacs_write(MASK_ADDR0 | awacs_reg[0]);
+				/* fall through */
+			case SOUND_MIXER_READ_MIC:
+				data = (awacs_reg[0] & MASK_MUX_MIC)?
+					(awacs_reg[0] & MASK_GAINLINE? 100: 50): 0;
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_WRITE_CD:
+				IOCTL_IN(arg, data);
+				awacs_reg[0] &= ~MASK_MUX_CD;
+				if ((data & 0xff) >= 50)
+					awacs_reg[0] |= MASK_MUX_CD;
+				awacs_write(MASK_ADDR0 | awacs_reg[0]);
+				/* fall through */
+			case SOUND_MIXER_READ_CD:
+				data = (awacs_reg[0] & MASK_MUX_CD)? 100: 0;
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_WRITE_RECLEV:
+				IOCTL_IN(arg, data);
+				data = awacs_volume_setter(data, 0, 0, 4);
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_READ_RECLEV:
+				data = awacs_get_volume(awacs_reg[0], 4);
+				return IOCTL_OUT(arg, data);
 			}
-			awacs_write(MASK_ADDR0 | awacs_reg[0]);
-			/* fall through */
-		case SOUND_MIXER_READ_MIC:
-			data = (awacs_reg[0] & MASK_MUX_MIC)?
-				(awacs_reg[0] & MASK_GAINLINE? 100: 50): 0;
-			return IOCTL_OUT(arg, data);
-		case SOUND_MIXER_WRITE_CD:
-			IOCTL_IN(arg, data);
-			awacs_reg[0] &= ~MASK_MUX_CD;
-			if ((data & 0xff) >= 50)
-				awacs_reg[0] |= MASK_MUX_CD;
-			awacs_write(MASK_ADDR0 | awacs_reg[0]);
-			/* fall through */
-		case SOUND_MIXER_READ_CD:
-			data = (awacs_reg[0] & MASK_MUX_CD)? 100: 0;
-			return IOCTL_OUT(arg, data);
-		case SOUND_MIXER_WRITE_RECLEV:
-			IOCTL_IN(arg, data);
-			data = awacs_volume_setter(data, 0, 0, 4);
-			return IOCTL_OUT(arg, data);
-		case SOUND_MIXER_READ_RECLEV:
-			data = awacs_get_volume(awacs_reg[0], 4);
-			return IOCTL_OUT(arg, data);
+			break;
+		} else {
+			/* We are, we are, we are... Burgundy or better */
+			switch(cmd) {
+			case SOUND_MIXER_READ_DEVMASK:
+				data = SOUND_MASK_VOLUME | SOUND_MASK_CD |
+					SOUND_MASK_LINE | SOUND_MASK_MIC |
+					SOUND_MASK_SPEAKER | SOUND_MASK_ALTPCM;
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_READ_RECMASK:
+				data = SOUND_MASK_LINE | SOUND_MASK_MIC
+					| SOUND_MASK_CD;
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_READ_RECSRC:
+				data = 0;
+				if (awacs_reg[0] & MASK_MUX_AUDIN)
+					data |= SOUND_MASK_LINE;
+				if (awacs_reg[0] & MASK_MUX_MIC)
+					data |= SOUND_MASK_MIC;
+				if (awacs_reg[0] & MASK_MUX_CD)
+					data |= SOUND_MASK_CD;
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_WRITE_RECSRC:
+				IOCTL_IN(arg, data);
+				data &= (SOUND_MASK_LINE
+					 | SOUND_MASK_MIC | SOUND_MASK_CD);
+				awacs_reg[0] &= ~(MASK_MUX_CD | MASK_MUX_MIC
+						  | MASK_MUX_AUDIN);
+				if (data & SOUND_MASK_LINE)
+					awacs_reg[0] |= MASK_MUX_AUDIN;
+				if (data & SOUND_MASK_MIC)
+					awacs_reg[0] |= MASK_MUX_MIC;
+				if (data & SOUND_MASK_CD)
+					awacs_reg[0] |= MASK_MUX_CD;
+				awacs_write(awacs_reg[0] | MASK_ADDR0);
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_READ_STEREODEVS:
+				data = SOUND_MASK_VOLUME | SOUND_MASK_SPEAKER
+					| SOUND_MASK_RECLEV | SOUND_MASK_CD
+					| SOUND_MASK_LINE;
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_READ_CAPS:
+				return IOCTL_OUT(arg, 0);
+			case SOUND_MIXER_WRITE_VOLUME:
+				IOCTL_IN(arg, data);
+				awacs_burgundy_write_mvolume(MASK_ADDR_BURGUNDY_MASTER_VOLUME, data);
+				/* Fall through */
+			case SOUND_MIXER_READ_VOLUME:
+				return IOCTL_OUT(arg, awacs_burgundy_read_mvolume(MASK_ADDR_BURGUNDY_MASTER_VOLUME));
+			case SOUND_MIXER_WRITE_SPEAKER:
+				IOCTL_IN(arg, data);
+
+				if (!(data & 0xff)) {
+				  /* Mute the left speaker */
+				  awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_MORE_OUTPUTENABLES,
+						     awacs_burgundy_rcb(MASK_ADDR_BURGUNDY_MORE_OUTPUTENABLES) & ~0x2);
+				} else {
+				  /* Unmute the left speaker */
+				  awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_MORE_OUTPUTENABLES,
+						     awacs_burgundy_rcb(MASK_ADDR_BURGUNDY_MORE_OUTPUTENABLES) | 0x2);
+				}
+				if (!(data & 0xff00)) {
+				  /* Mute the right speaker */
+				  awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_MORE_OUTPUTENABLES,
+						     awacs_burgundy_rcb(MASK_ADDR_BURGUNDY_MORE_OUTPUTENABLES) & ~0x4);
+				} else {
+				  /* Unmute the right speaker */
+				  awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_MORE_OUTPUTENABLES,
+						     awacs_burgundy_rcb(MASK_ADDR_BURGUNDY_MORE_OUTPUTENABLES) | 0x4);
+				}
+
+				data = (((data&0xff)*16)/100 > 0xf ? 0xf :
+					(((data&0xff)*16)/100)) + 
+					 ((((data>>8)*16)/100 > 0xf ? 0xf :
+					((((data>>8)*16)/100)))<<4);
+
+				awacs_burgundy_wcb(MASK_ADDR_BURGUNDY_ATTENSPEAKER, ~data);
+				/* Fall through */
+			case SOUND_MIXER_READ_SPEAKER:
+				data = awacs_burgundy_rcb(MASK_ADDR_BURGUNDY_ATTENSPEAKER);
+				data = (((data & 0xf)*100)/16) + ((((data>>4)*100)/16)<<8);
+				return IOCTL_OUT(arg, ~data);
+			case SOUND_MIXER_WRITE_ALTPCM:	/* really bell volume */
+				IOCTL_IN(arg, data);
+				beep_volume = data & 0xff;
+				/* fall through */
+			case SOUND_MIXER_READ_ALTPCM:
+				return IOCTL_OUT(arg, beep_volume);
+			case SOUND_MIXER_WRITE_LINE:
+				IOCTL_IN(arg, data);
+				awacs_burgundy_write_volume(MASK_ADDR_BURGUNDY_VOLLINE, data);
+
+				/* fall through */
+			case SOUND_MIXER_READ_LINE:
+				data = awacs_burgundy_read_volume(MASK_ADDR_BURGUNDY_VOLLINE);				
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_WRITE_MIC:
+				IOCTL_IN(arg, data);
+				/* Mic is mono device */
+				data = (data << 8) + (data << 24);
+				awacs_burgundy_write_volume(MASK_ADDR_BURGUNDY_VOLMIC, data);
+				/* fall through */
+			case SOUND_MIXER_READ_MIC:
+				data = awacs_burgundy_read_volume(MASK_ADDR_BURGUNDY_VOLMIC);				
+				data <<= 24;
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_WRITE_CD:
+				IOCTL_IN(arg, data);
+				awacs_burgundy_write_volume(MASK_ADDR_BURGUNDY_VOLCD, data);
+				/* fall through */
+			case SOUND_MIXER_READ_CD:
+				data = awacs_burgundy_read_volume(MASK_ADDR_BURGUNDY_VOLCD);
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_WRITE_RECLEV:
+				IOCTL_IN(arg, data);
+				data = awacs_volume_setter(data, 0, 0, 4);
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_READ_RECLEV:
+				data = awacs_get_volume(awacs_reg[0], 4);
+				return IOCTL_OUT(arg, data);
+			case SOUND_MIXER_OUTMASK:
+				break;
+			case SOUND_MIXER_OUTSRC:
+				break;
+			}
+			break;
 		}
-		break;
 #endif
 	}
 
@@ -3946,9 +4309,7 @@ static void sq_setup(int numBufs, int bufSize, char **buffers)
 
 	sq.front = sq.count = 0;
 	sq.rear = -1;
-	sq.write_queue = sq.open_queue = sq.sync_queue = 0;
 	sq.syncing = 0;
-
 	sq.playing = 0;
 
 #ifdef CONFIG_ATARI
@@ -4129,21 +4490,21 @@ static int sq_fsync(struct file *filp, struct dentry *dentry)
 static int sq_release(struct inode *inode, struct file *file)
 {
 	int rc = 0;
-	if (sq.busy) {
+
+	if (sq.busy)
 		rc = sq_fsync(file, file->f_dentry);
-		sq.busy = 0;
-		WAKE_UP(sq.open_queue);
-		/* Wake up a process waiting for the queue being released.
-		 * Note: There may be several processes waiting for a call
-		 * to open() returning. */
-	}
 	sound.soft = sound.dsp;
 	sound.hard = sound.dsp;
 	sound_silence();
-	if (rc == 0) {
-		sq_release_buffers();
-		MOD_DEC_USE_COUNT;
-	}
+	sq_release_buffers();
+	MOD_DEC_USE_COUNT;
+
+	sq.busy = 0;
+	WAKE_UP(sq.open_queue);
+	/* Wake up a process waiting for the queue being released.
+	 * Note: There may be several processes waiting for a call
+	 * to open() returning. */
+
 	return rc;
 }
 
@@ -4262,6 +4623,9 @@ static void __init sq_init(void)
 	if (sq_unit < 0)
 		return;
 
+	sq.write_queue = sq.open_queue = sq.sync_queue = 0;
+	sq.busy = 0;
+
 	/* whatever you like as startup mode for /dev/dsp,
 	 * (/dev/audio hasn't got a startup mode). note that
 	 * once changed a new open() will *not* restore these!
@@ -4332,7 +4696,7 @@ static int state_open(struct inode *inode, struct file *file)
 #endif /* CONFIG_AMIGA */
 #ifdef CONFIG_PPC
 	case DMASND_AWACS:
-		mach = "PowerMac ";
+		sprintf(mach, "PowerMac (AWACS rev %d) ", awacs_revision);
 		break;
 #endif /* CONFIG_PPC */
 	}
@@ -4510,6 +4874,7 @@ void __init dmasound_init(void)
 
 #ifdef CONFIG_PPC
 	awacs_subframe = 0;
+	awacs_revision = 0;
 	np = find_devices("awacs");
 	if (np == 0) {
 		/*
@@ -4524,6 +4889,8 @@ void __init dmasound_init(void)
 			sfprop = (int *) get_property(sound, "sub-frame", 0);
 			if (sfprop != 0 && *sfprop >= 0 && *sfprop < 16)
 				awacs_subframe = *sfprop;
+			if (device_is_compatible(sound, "burgundy"))
+				awacs_revision = AWACS_BURGUNDY;
 		}
 	}
 	if (np != NULL && np->n_addrs >= 3 && np->n_intrs >= 3) {
@@ -4542,7 +4909,7 @@ void __init dmasound_init(void)
 		awacs_tx_cmd_space = kmalloc((numBufs + 4) * sizeof(struct dbdma_cmd),
 					     GFP_KERNEL);
 		if (awacs_tx_cmd_space == NULL) {
-			printk("DMA sound driver: Not enough buffer memory, driver disabled!\n");
+			printk(KERN_ERR "DMA sound driver: Not enough buffer memory, driver disabled!\n");
 			return;
 		}
 		awacs_tx_cmds = (volatile struct dbdma_cmd *)
@@ -4560,17 +4927,22 @@ void __init dmasound_init(void)
 		awacs_write(awacs_reg[4] + MASK_ADDR4);
 
 		/* Initialize recent versions of the awacs */
-		awacs_revision = (in_le32(&awacs->codec_stat) >> 12) & 0xf;
-		if (awacs_revision >= 3) {
-			awacs_write(0x6000);
-			awacs_enable_amp(100 * 0x101);
+		if (awacs_revision == 0) {
+			awacs_revision =
+				(in_le32(&awacs->codec_stat) >> 12) & 0xf;
+			if (awacs_revision == 3) {
+				awacs_write(0x6000);
+				awacs_enable_amp(100 * 0x101);
+			}
 		}
+		if (awacs_revision >= AWACS_BURGUNDY)
+			awacs_burgundy_init();
 
 		/* Initialize beep stuff */
 		beep_dbdma_cmd = awacs_tx_cmds + (numBufs + 1);
 		orig_mksound = kd_mksound;
 		kd_mksound = awacs_mksound;
-		beep_buf = (short *) kmalloc(BEEP_BUFLEN * 2, GFP_KERNEL);
+		beep_buf = (short *) kmalloc(BEEP_BUFLEN * 4, GFP_KERNEL);
 		if (beep_buf == NULL)
 			printk(KERN_WARNING "dmasound: no memory for "
 			       "beep buffer\n");
@@ -4596,15 +4968,15 @@ void __init dmasound_init(void)
 	mixer_init();
 
 	if (!sound.mach.irqinit()) {
-		printk("DMA sound driver: Interrupt initialization failed\n");
+		printk(KERN_ERR "DMA sound driver: Interrupt initialization failed\n");
 		return;
 	}
 #ifdef MODULE
 	irq_installed = 1;
 #endif
 
-	printk("DMA sound driver installed, using %d buffers of %dk.\n", numBufs,
-	       bufSize);
+	printk(KERN_INFO "DMA sound driver installed, using %d buffers of %dk.\n",
+	       numBufs, bufSize);
 
 	return;
 }

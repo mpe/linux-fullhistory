@@ -1399,6 +1399,10 @@ CONFIG_VISWS
   PC boards and vice versa.
   See Documentation/sgi-visws.txt for more.
 
+SGI Visual Workstation framebuffer support
+CONFIG_FB_SGIVW
+  SGI Visual Workstation support for framebuffer graphics.
+
 System V IPC
 CONFIG_SYSVIPC
   Inter Process Communication is a suite of library functions and

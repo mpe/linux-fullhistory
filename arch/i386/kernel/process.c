@@ -316,7 +316,7 @@ void machine_restart(char * __unused)
 	/* Make sure the first page is mapped to the start of physical memory.
 	   It is normally not mapped, to trap kernel NULL pointer dereferences. */
 
-	pg0[0] = 7;
+	pg0[0] = _PAGE_RW | _PAGE_PRESENT;
 
 	/*
 	 * Use `swapper_pg_dir' as our page directory.  We bother with

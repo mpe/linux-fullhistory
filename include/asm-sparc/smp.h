@@ -96,10 +96,6 @@ extern __volatile__ int cpu_number_map[NR_CPUS];
 extern __volatile__ int __cpu_logical_map[NR_CPUS];
 extern unsigned long smp_proc_in_lock[NR_CPUS];
 
-/* As idle task checks need_resched in a tight loop, it is not necessary to
-   wake it up. -jj */
-#define smp_send_reschedule(cpu) do {} while (0)
-
 extern __inline__ int cpu_logical_map(int cpu)
 {
 	return __cpu_logical_map[cpu];
@@ -161,6 +157,8 @@ extern __inline__ int hard_smp_processor_id(void)
 #endif
 
 #define smp_processor_id() hard_smp_processor_id()
+extern __inline__ void smp_send_reschedule(int cpu) { }
+extern __inline__ void smp_send_stop(void) { }
 
 #endif /* !(__ASSEMBLY__) */
 
@@ -178,10 +176,8 @@ extern __inline__ int hard_smp_processor_id(void)
 #define MBOX_IDLECPU2         0xFD
 #define MBOX_STOPCPU2         0xFE
 
-#define PROC_CHANGE_PENALTY     20
+#define PROC_CHANGE_PENALTY     15
 
-#define SMP_FROM_INT		1
-#define SMP_FROM_SYSCALL	2
 #endif /* !(__SMP__) */
 
 #define NO_PROC_ID            0xFF

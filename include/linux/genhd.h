@@ -10,6 +10,7 @@
  */
 
 #include <linux/config.h>
+#include <linux/types.h>
 
 #define CONFIG_MSDOS_PARTITION 1
 

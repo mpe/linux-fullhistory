@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.96 1998/11/08 11:13:56 davem Exp $
+/* $Id: fault.c,v 1.101 1999/01/04 06:24:52 jj Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -13,11 +13,13 @@
 #include <linux/ptrace.h>
 #include <linux/mman.h>
 #include <linux/tasks.h>
+#include <linux/kernel.h>
 #include <linux/smp.h>
 #include <linux/signal.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/interrupt.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -149,9 +151,7 @@ static void unhandled_fault(unsigned long address, struct task_struct *tsk,
 	       (unsigned long) tsk->mm->context);
 	printk(KERN_ALERT "tsk->mm->pgd = %08lx\n",
 	       (unsigned long) tsk->mm->pgd);
-	lock_kernel();
 	die_if_kernel("Oops", regs);
-	unlock_kernel();
 }
 
 asmlinkage int lookup_fault(unsigned long pc, unsigned long ret_pc, 
@@ -201,6 +201,13 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 
 	if(text_fault)
 		address = regs->pc;
+
+	/*
+	 * If we're in an interrupt or have no user
+	 * context, we must not take the fault..
+	 */
+        if (in_interrupt() || mm == &init_mm)
+                goto do_kernel_fault;
 
 	down(&mm->mmap_sem);
 	/* The kernel referencing a bad kernel pointer can lock up

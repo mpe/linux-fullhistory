@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.28 1998/10/26 20:03:09 davem Exp $
+/* $Id: dma.h,v 1.29 1998/11/29 15:49:44 davem Exp $
  * include/asm-sparc/dma.h
  *
  * Copyright 1995 (C) David S. Miller (davem@caip.rutgers.edu)
@@ -127,6 +127,7 @@ extern void dvma_init(struct linux_sbus *);
 #define DMA_DSBL_RD_DRN  0x00001000        /* No EC drain on slave reads */
 #define DMA_BCNT_ENAB    0x00002000        /* If on, use the byte counter */
 #define DMA_TERM_CNTR    0x00004000        /* Terminal counter */
+#define DMA_SCSI_SBUS64  0x00008000        /* HME: Enable 64-bit SBUS mode. */
 #define DMA_CSR_DISAB    0x00010000        /* No FIFO drains during csr */
 #define DMA_SCSI_DISAB   0x00020000        /* No FIFO drains during reg */
 #define DMA_DSBL_WR_INV  0x00020000        /* No EC inval. on slave writes */
@@ -147,6 +148,7 @@ extern void dvma_init(struct linux_sbus *);
 #define DMA_PARITY_OFF   0x02000000        /* HME: disable parity checking */
 #define DMA_LOADED_ADDR  0x04000000        /* Address has been loaded */
 #define DMA_LOADED_NADDR 0x08000000        /* Next address has been loaded */
+#define DMA_RESET_FAS366 0x08000000        /* HME: Assert RESET to FAS366 */
 
 /* Values describing the burst-size property from the PROM */
 #define DMA_BURST1       0x01

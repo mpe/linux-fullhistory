@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@cymru.net>
  *
- *	Version: $Id: icmp.c,v 1.49 1999/02/23 08:12:37 davem Exp $
+ *	Version: $Id: icmp.c,v 1.50 1999/03/17 01:53:55 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -278,6 +278,10 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <net/checksum.h>
+
+#ifdef CONFIG_IP_MASQUERADE
+#include <net/ip_masq.h>
+#endif
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
@@ -568,6 +572,11 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	if (rt->rt_flags&RTCF_NAT && IPCB(skb_in)->flags&IPSKB_TRANSLATED) {
 		iph->daddr = rt->key.dst;
 		iph->saddr = rt->key.src;
+	}
+#endif
+#ifdef CONFIG_IP_MASQUERADE
+	if (type==ICMP_DEST_UNREACH && IPCB(skb_in)->flags&IPSKB_MASQUERADED) {
+			ip_fw_unmasq_icmp(skb_in);
 	}
 #endif
 

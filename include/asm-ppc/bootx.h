@@ -18,7 +18,14 @@
 #pragma options align=power
 #endif
 
-#define BOOT_INFO_VERSION		1
+/* On boostrap entry:
+ *
+ * r3 = 0x426f6f58	('BooX')
+ * r4 = pointer to boot_infos
+ * r5 = NULL
+ */
+
+#define BOOT_INFO_VERSION		2
 #define BOOT_INFO_COMPATIBLE_VERSION	1
 
 /* Here are the boot informations that are passed to the bootstrap
@@ -31,8 +38,12 @@ typedef struct boot_infos
 	/* backward compatible down to version: */
 	unsigned long	compatible_version;
 	
+	/* NEW (vers. 2) this holds the current _logical_ base addr of
+	   the frame buffer (for use by early boot message) */
+	unsigned char*	logicalDisplayBase;
+
 	/* Set to 0 by current BootX */
-	unsigned long	unused[3];
+	unsigned long	unused[2];
 	
 	/* The device tree (internal addresses relative to the beginning of the tree,
 	 * device tree offset relative to the beginning of this structure). */
@@ -55,17 +66,18 @@ typedef struct boot_infos
 	
 	/* Kernel command line arguments (offset from this structure) */
 	unsigned long	kernelParamsOffset;
-	
+		
 } boot_infos_t;
 
 /* (*) The format of the colormap is 256 * 3 * 2 bytes. Each color index is represented
  * by 3 short words containing a 16 bits (unsigned) color component.
  * Later versions may contain the gamma table for direct-color devices here.
  */
-#define BOOTX_COLORTABLE_SIZE	(256UL*3UL*2UL);
+#define BOOTX_COLORTABLE_SIZE	(256UL*3UL*2UL)
 
 #ifdef macintosh
 #pragma options align=reset
 #endif
 
 #endif
+

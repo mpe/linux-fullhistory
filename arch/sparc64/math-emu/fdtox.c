@@ -9,5 +9,5 @@ int FDTOX(unsigned long *rd, void *rs2)
 	__FP_UNPACK_D(A, rs2);
 	FP_TO_INT_D(r, A, 64, 1);
 	*rd = r;
-	return 1;
+	return 0;
 }

@@ -41,7 +41,6 @@ static u32 feature_bits_pbook[] = {
 	OH_BAY_FLOPPY_ENABLE,	/* FEATURE_Mediabay_floppy_enable */
 	0,			/* FEATURE_BMac_reset */
 	0,			/* FEATURE_BMac_IO_enable */
-	0,			/* FEATURE_Modem_PowerOn -> guess...*/
 	0			/* FEATURE_Modem_Reset -> guess...*/
 };
 
@@ -64,8 +63,7 @@ static u32 feature_bits_heathrow[] = {
 	OH_BAY_FLOPPY_ENABLE,	/* FEATURE_Mediabay_floppy_enable */
 	0x80000000,		/* FEATURE_BMac_reset */
 	0x60000000,		/* FEATURE_BMac_IO_enable */
-	0x02000000,		/* FEATURE_Modem_PowerOn -> guess...*/
-	0x07000000		/* FEATURE_Modem_Reset -> guess...*/
+	0x02000000		/* FEATURE_Modem_Reset -> guess...*/
 };
 
 /* definition of a feature controller object */

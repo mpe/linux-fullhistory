@@ -1,7 +1,7 @@
 /*
  * This file define a set of standard wireless extensions
  *
- * Version :	4	12.2.97
+ * Version :	6	18.2.99
  *
  * Authors :	Jean Tourrilhes - HPLB - <jt@hplb.hpl.hp.com>
  */
@@ -63,7 +63,7 @@
  * (there is some stuff that will be added in the future...)
  * I just plan to increment with each new version.
  */
-#define WIRELESS_EXT	5
+#define WIRELESS_EXT	6
 
 /*
  * Changes :
@@ -82,6 +82,10 @@
  * --------
  *	- Missing encoding definitions in range
  *	- Access points stuff
+ *
+ * V5 to V6
+ * --------
+ *	- 802.11 support
  */
 
 /* -------------------------- IOCTL LIST -------------------------- */
@@ -113,11 +117,19 @@
 #define SIOCGIWAP	0x8B15		/* get access point hardware addresses */
 #define SIOCGIWAPLIST	0x8B17		/* get list of access point in range */
 
+/* 802.11 specific support */
+#define SIOCSIWESSID	0x8B1A		/* set ESSID (network name) */
+#define SIOCGIWESSID	0x8B1B		/* get ESSID */
+/* As the ESSID is a string up to 32 bytes long, it doesn't fit within the
+ * 'iwreq' structure, so we need to use the 'data' member to point to a
+ * string in user space, like it is done for RANGE...
+ */
+
 /* ------------------------- IOCTL STUFF ------------------------- */
 
 /* The first and the last (range) */
 #define SIOCIWFIRST	0x8B00
-#define SIOCIWLAST	0x8B17
+#define SIOCIWLAST	0x8B1B
 
 /* Even : get (world access), odd : set (root access) */
 #define IW_IS_SET(cmd)	(!((cmd) & 0x1))

@@ -111,7 +111,7 @@
 
 #include <asm/uaccess.h>
 
-#define OFFSET_MAX	((off_t)0x7fffffff)	/* FIXME: move elsewhere? */
+#define OFFSET_MAX	((off_t)LONG_MAX)	/* FIXME: move elsewhere? */
 
 static int flock_make_lock(struct file *filp, struct file_lock *fl,
 			       unsigned int cmd);
@@ -1170,7 +1170,7 @@ static void locks_delete_lock(struct file_lock **thisfl_p, unsigned int wait)
 
 static char *lock_get_status(struct file_lock *fl, int id, char *pfx)
 {
-	static char temp[129];
+	static char temp[155];
 	char *p = temp;
 	struct inode *inode;
 

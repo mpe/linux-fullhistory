@@ -1,6 +1,6 @@
-/* fcp_scsi.h: Generic SCSI on top of FC4 - interface defines.
+/* fcp_impl.h: Generic SCSI on top of FC4 - our interface defines.
  *
- * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997-1999 Jakub Jelinek (jj@ultra.linux.cz)
  * Copyright (C) 1998 Jirka Hanika (geo@ff.cuni.cz)
  */
 
@@ -13,6 +13,7 @@
 
 #include "fc.h"
 #include "fcp.h"
+#include "fc-al.h"
 
 #ifdef __sparc__
 
@@ -35,6 +36,8 @@ typedef u32	dma_handle;
 #define FC_CLASS_OFFLINE	0x08
 
 #define PROTO_OFFLINE		0x02
+#define PROTO_REPORT_AL_MAP	0x03
+#define PROTO_FORCE_LIP		0x06
 
 struct _fc_channel; 
 
@@ -42,8 +45,9 @@ typedef struct fcp_cmnd {
 	struct fcp_cmnd		*next;
 	struct fcp_cmnd		*prev;
 	void			(*done)(Scsi_Cmnd *);
-	int			proto;
-	int		 	token;
+	unsigned short		proto;
+	unsigned short		token;
+	unsigned int		did;
 	/* FCP SCSI stuff */
 	dma_handle		data;
 	/* From now on this cannot be touched for proto == TYPE_SCSI_FCP */
@@ -56,7 +60,13 @@ typedef struct fcp_cmnd {
 	int			datalen;
 	/* This is just used as a verification during login */
 	struct _fc_channel	*fc;
+	void			*ls;
 } fcp_cmnd;
+
+typedef struct {
+	unsigned int		len;
+	unsigned char		list[0];
+} fcp_posmap;
 
 typedef struct _fc_channel {
 	struct _fc_channel	*next;
@@ -87,14 +97,15 @@ typedef struct _fc_channel {
 	long			*scsi_bitmap;
 	long			scsi_bitmap_end;
 	int			scsi_free;
-	int			(*encode_addr)(Scsi_Cmnd *cmnd, u16 *addr);
+	int			(*encode_addr)(Scsi_Cmnd *, u16 *, struct _fc_channel *, fcp_cmnd *);
 	fcp_cmnd		*scsi_que;
 	char			scsi_name[4];
-	fcp_cmnd		**token_tab;
+	fcp_cmnd		**cmd_slots;
 	int			channels;
 	int			targets;
 	long			*ages;
 	Scsi_Cmnd		*rst_pkt;
+	fcp_posmap		*posmap;
 	/* LOGIN stuff */
 	fcp_cmnd		*login;
 	void			*ls;
@@ -117,6 +128,8 @@ extern fc_channel *fc_channels;
 #define FC_STATUS_ERR_OFFLINE		0x11
 #define FC_STATUS_TIMEOUT		0x12
 #define FC_STATUS_ERR_OVERRUN		0x13
+#define FC_STATUS_POINTTOPOINT		0x15
+#define FC_STATUS_AL			0x16
 #define FC_STATUS_UNKNOWN_CQ_TYPE	0x20
 #define FC_STATUS_BAD_SEG_CNT		0x21
 #define FC_STATUS_MAX_XCHG_EXCEEDED	0x22
@@ -127,12 +140,16 @@ extern fc_channel *fc_channels;
 #define FC_STATUS_ALLOC_FAIL		0x27
 #define FC_STATUS_BAD_SID		0x28
 #define FC_STATUS_NO_SEQ_INIT		0x29
+#define FC_STATUS_TIMED_OUT		-1
+#define FC_STATUS_BAD_RSP		-2
 
 void fcp_queue_empty(fc_channel *);
 int fcp_init(fc_channel *);
 void fcp_release(fc_channel *fc_chain, int count);
 void fcp_receive_solicited(fc_channel *, int, int, int, fc_hdr *);
 void fcp_state_change(fc_channel *, int);
+int fc_do_plogi(fc_channel *, unsigned char, fc_wwn *, fc_wwn *);
+int fc_do_prli(fc_channel *, unsigned char);
 
 #define for_each_fc_channel(fc)				\
 	for (fc = fc_channels; fc; fc = fc->next)

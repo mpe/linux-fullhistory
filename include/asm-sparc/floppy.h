@@ -337,6 +337,7 @@ static int sun_floppy_init(void)
 	}
 
 	/* Success... */
+	allowed_drive_mask = 0x01;
 	return (int) sun_fdc;
 
 no_sun_fdc:

@@ -1,5 +1,5 @@
-/*
- *  $Id: init.c,v 1.139 1998/12/29 19:53:49 cort Exp $
+ /*
+ *  $Id: init.c,v 1.150 1999/03/10 08:16:33 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -34,6 +34,7 @@
 #include <linux/vmalloc.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/openpic.h>
 #ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>		/* for initrd_* */
 #endif
@@ -70,10 +71,12 @@ struct device_node *memory_node;
 unsigned long ioremap_base;
 unsigned long ioremap_bot;
 unsigned long avail_start;
-struct pgtable_cache_struct quicklists;
 extern int num_memory;
 extern struct mem_info memory[NUM_MEMINFO];
 extern boot_infos_t *boot_infos;
+#ifndef __SMP__
+struct pgtable_cache_struct quicklists;
+#endif
 
 void MMU_init(void);
 static void *MMU_get_page(void);
@@ -883,7 +886,8 @@ __initfunc(static void mapin_ram(void))
 	}	    
 }
 
-__initfunc(static void *MMU_get_page(void))
+/* This can get called from ioremap, so don't make it an initfunc, OK? */
+static void *MMU_get_page(void)
 {
 	void *p;
 
@@ -926,14 +930,16 @@ __initfunc(void free_initmem(void))
 		break;
 	case _MACH_prep:
 		FREESEC(__pmac_begin,__pmac_end,num_pmac_pages);
-		FREESEC(__openfirmware_begin,__openfirmware_end,num_openfirmware_pages);
 		break;
 	case _MACH_mbx:
 		FREESEC(__pmac_begin,__pmac_end,num_pmac_pages);
-		FREESEC(__openfirmware_begin,__openfirmware_end,num_openfirmware_pages);
 		FREESEC(__prep_begin,__prep_end,num_prep_pages);
 		break;
 	}
+
+	if ( !have_of )
+		FREESEC( __openfirmware_begin, __openfirmware_end,
+			 num_openfirmware_pages );
 	
 	printk ("Freeing unused kernel memory: %ldk init",
 		(num_freed_pages * PAGE_SIZE) >> 10);
@@ -955,7 +961,6 @@ __initfunc(void free_initmem(void))
  */
 __initfunc(void MMU_init(void))
 {
-
 #ifdef __SMP__
 	if ( first_cpu_booted ) return;
 #endif /* __SMP__ */
@@ -989,6 +994,7 @@ __initfunc(void MMU_init(void))
 		break;
 	case _MACH_chrp:
 		setbat(0, 0xf8000000, 0xf8000000, 0x08000000, IO_PAGE);
+		setbat(1, 0x80000000, 0x80000000, 0x10000000, IO_PAGE);
 		break;
 	case _MACH_Pmac:
 		{
@@ -1029,6 +1035,7 @@ __initfunc(void MMU_init(void))
         ioremap(PCI_CSR_ADDR, PCI_CSR_SIZE);
 	/* ide needs to be able to get at PCI space -- Cort */
         ioremap(0x80000000, 0x4000);
+        ioremap(0x81000000, 0x4000);
 #endif /* CONFIG_8xx */
 }
 
@@ -1236,6 +1243,9 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
 	unsigned long a, total;
 	unsigned long kstart, ksize;
 	int i;
+	
+	/* max amount of RAM we allow -- Cort */
+#define RAM_LIMIT (768<<20)	
 
 	memory_node = find_devices("memory");
 	if (memory_node == NULL) {
@@ -1260,7 +1270,18 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
 	a = phys_mem.regions[0].address;
 	if (a != 0)
 		panic("RAM doesn't start at physical address 0");
+	/*
+	 * XXX:
+	 * Make sure ram mappings don't stomp on IO space
+	 * This is a temporary hack to keep this from happening
+	 * until we move the KERNELBASE and can allocate RAM up
+	 * to our nearest IO area.
+	 * -- Cort
+	 */
+	if ( phys_mem.regions[0].size >= RAM_LIMIT )
+		phys_mem.regions[0].size = RAM_LIMIT;
 	total = phys_mem.regions[0].size;
+	
 	if (phys_mem.n_regions > 1) {
 		printk("RAM starting at 0x%x is not contiguous\n",
 		       phys_mem.regions[1].address);
@@ -1277,8 +1298,15 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
 	}
 	prom_mem = phys_mem;
 	for (i = 0; i < phys_avail.n_regions; ++i)
+	{
+		if ( phys_avail.regions[i].address >= RAM_LIMIT )
+			continue;
+		if ( (phys_avail.regions[i].address+phys_avail.regions[i].size)
+		     >= RAM_LIMIT )
+			phys_avail.regions[i].size = RAM_LIMIT - phys_avail.regions[i].address;
 		remove_mem_piece(&prom_mem, phys_avail.regions[i].address,
 				 phys_avail.regions[i].size, 1);
+	}
 
 	/*
 	 * phys_avail records memory we can use now.
@@ -1292,7 +1320,7 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
 	remove_mem_piece(&prom_mem, kstart, ksize, 0);
 	remove_mem_piece(&phys_avail, 0, 0x4000, 0);
 	remove_mem_piece(&prom_mem, 0, 0x4000, 0);
-
+#undef RAM_LIMIT
 	return __va(total);
 }
 

@@ -1,4 +1,4 @@
-/* $Id: creatorfb.c,v 1.19 1999/02/22 16:20:25 jj Exp $
+/* $Id: creatorfb.c,v 1.26 1999/03/11 00:29:54 davem Exp $
  * creatorfb.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997,1998,1999 Jakub Jelinek (jj@ultra.linux.cz)
@@ -132,18 +132,10 @@
 
 struct ffb_fbc {
 	/* Next vertex registers */
-	u32		xxx1[3];
-	volatile u32	alpha;
-	volatile u32	red;
-	volatile u32	green;
-	volatile u32	blue;
-	volatile u32	depth;
-	volatile u32	y;
-	volatile u32	x;
-	u32		xxx2[2];
-	volatile u32	ryf;
-	volatile u32	rxf;
-	u32		xxx3[2];
+	u32		xxx1[3]; volatile u32 alpha; volatile u32 red;
+	volatile u32 green; volatile u32 blue; volatile u32 depth; volatile
+	u32 y; volatile u32 x; u32 xxx2[2]; volatile u32 ryf; volatile u32
+	rxf; u32 xxx3[2];
 	
 	volatile u32	dmyf;
 	volatile u32	dmxf;
@@ -283,8 +275,7 @@ static __inline__ void FFBFifo(struct fb_info_sbusfb *fb, int n)
 
 	if (cache - n < 0) {
 		fbc = fb->s.ffb.fbc;
-		do {
-			cache = (fbc->ucsr & FFB_UCSR_FIFO_MASK) - 4;
+		do {	cache = (fbc->ucsr & FFB_UCSR_FIFO_MASK) - 8;
 		} while (cache - n < 0);
 	}
 	fb->s.ffb.fifo_cache = cache - n;

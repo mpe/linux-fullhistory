@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.25 1998/10/21 03:21:15 davem Exp $
+/* $Id: sys_sparc.c,v 1.26 1999/01/07 19:07:01 jj Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -26,6 +26,8 @@
 #include <asm/ipc.h>
 #include <asm/utrap.h>
 #include <asm/perfctr.h>
+
+/* #define DEBUG_UNIMP_SYSCALL */
 
 /* XXX Make this per-binary type, this way we can detect the type of
  * XXX a binary.  Every Sparc executable calls this very early on.
@@ -200,11 +202,14 @@ asmlinkage unsigned long
 c_sys_nis_syscall (struct pt_regs *regs)
 {
 	static int count=0;
+	
+	/* Don't make the system unusable, if someone goes stuck */
+	if (count++ > 5) return -ENOSYS;
 	lock_kernel();
-	if (++count <= 20) { /* Don't make the system unusable, if someone goes stuck */
-		printk ("Unimplemented SPARC system call %ld\n",regs->u_regs[1]);
-		show_regs (regs);
-	}
+	printk ("Unimplemented SPARC system call %ld\n",regs->u_regs[1]);
+#ifdef DEBUG_UNIMP_SYSCALL	
+	show_regs (regs);
+#endif
 	unlock_kernel();
 	return -ENOSYS;
 }

@@ -1,4 +1,4 @@
-/* $Id: firehose.h,v 1.3 1998/06/10 07:28:43 davem Exp $
+/* $Id: firehose.h,v 1.4 1998/12/02 10:16:47 davem Exp $
  * firehose.h: Defines for the Fire Hose Controller (FHC) found
  *             on Sunfire/Starfire/Wildfire systems.
  *
@@ -9,8 +9,6 @@
 #define _SPARC64_FIREHOSE_H
 
 #include <linux/types.h>
-
-/* XXX I have not fully verified the register sizes in this file yet... -DaveM */
 
 /* Fire Hose Controller Internal Registers */
 struct fhc_internal_regs {
@@ -33,31 +31,31 @@ struct fhc_internal_regs {
  * for the FHC, thus we have the following few structs...
  */
 struct fhc_ign_reg {
-/*0x2000*/	u64	fhc_ign;		/* FHC Interrupt Group Number	*/
+/*0x2000*/	u32	fhc_ign;		/* FHC Interrupt Group Number	*/
 };
 
 struct fhc_fanfail_regs {
-/*0x4000*/	u32	_pad0, fhc_ff_imap;	/* FHC FanFail Interrupt Map	*/
-		u64	_pad1;
-/*0x4010*/	u32	_pad2, fhc_ff_iclr;	/* FHC FanFail Interrupt Clear	*/
+/*0x4000*/	u32	fhc_ff_imap;		/* FHC FanFail Interrupt Map	*/
+		u32	_pad[3];
+/*0x4010*/	u32	fhc_ff_iclr;		/* FHC FanFail Interrupt Clear	*/
 };
 
 struct fhc_system_regs {
-/*0x6000*/	u32	_pad0, fhc_sys_imap;	/* FHC System Interrupt Map	*/
-		u64	_pad1;
-/*0x6010*/	u32	_pad2, fhc_sys_iclr;	/* FHC System Interrupt Clear	*/
+/*0x6000*/	u32	fhc_sys_imap;		/* FHC System Interrupt Map	*/
+		u32	_pad[3];
+/*0x6010*/	u32	fhc_sys_iclr;		/* FHC System Interrupt Clear	*/
 };
 
 struct fhc_uart_regs {
-/*0x8000*/	u32	_pad0, fhc_uart_imap;	/* FHC UART Interrupt Map	*/
-		u64	_pad1;
-/*0x8010*/	u32	_pad2, fhc_uart_iclr;	/* FHC UART Interrupt Clear	*/
+/*0x8000*/	u32	fhc_uart_imap;		/* FHC UART Interrupt Map	*/
+		u32	_pad[3];
+/*0x8010*/	u32	fhc_uart_iclr;		/* FHC UART Interrupt Clear	*/
 };
 
 struct fhc_tod_regs {
-/*0xa000*/	u32	_pad0, fhc_tod_imap;	/* FHC TOD Interrupt Map	*/
-		u64	_pad1;
-/*0xa010*/	u32	_pad2, fhc_tod_iclr;	/* FHC TOD Interrupt Clear	*/
+/*0xa000*/	u32	fhc_tod_imap;		/* FHC TOD Interrupt Map	*/
+		u32	_pad1[3];
+/*0xa010*/	u32	fhc_tod_iclr;		/* FHC TOD Interrupt Clear	*/
 };
 
 /* All of the above. */
@@ -105,15 +103,19 @@ struct fhc_regs {
 #define FHC_RCS_FENAB		0x01000000 /* Fatal errors elicit system reset	*/
 
 /* FHC Board Status Register */
-#define FHC_BSD_DA64		0x00040000 /* Port A: 0=128bit 1=64bit data path */
-#define FHC_BSD_DB64		0x00020000 /* Port B: 0=128bit 1=64bit data path */
-#define FHC_BSD_BID		0x0001e000 /* Board ID                           */
-#define FHC_BSD_SA		0x00001c00 /* Port A UPA Speed (from the pins)   */
-#define FHC_BSD_SB		0x00000380 /* Port B UPA Speed (from the pins)   */
-#define FHC_BSD_NDIAG		0x00000040 /* Not in Diag Mode                   */
-#define FHC_BSD_NTBED		0x00000020 /* Not in TestBED Mode                */
-#define FHC_BSD_NIA		0x0000001c /* Jumper, bit 18 in PROM space       */
-#define FHC_BSD_SI		0x00000001 /* Spare input pin value              */
+#define FHC_BSR_DA64		0x00040000 /* Port A: 0=128bit 1=64bit data path */
+#define FHC_BSR_DB64		0x00020000 /* Port B: 0=128bit 1=64bit data path */
+#define FHC_BSR_BID		0x0001e000 /* Board ID                           */
+#define FHC_BSR_SA		0x00001c00 /* Port A UPA Speed (from the pins)   */
+#define FHC_BSR_SB		0x00000380 /* Port B UPA Speed (from the pins)   */
+#define FHC_BSR_NDIAG		0x00000040 /* Not in Diag Mode                   */
+#define FHC_BSR_NTBED		0x00000020 /* Not in TestBED Mode                */
+#define FHC_BSR_NIA		0x0000001c /* Jumper, bit 18 in PROM space       */
+#define FHC_BSR_SI		0x00000001 /* Spare input pin value              */
+
+/* FHC JTAG Control Register */
+#define FHC_JTAG_CTRL_MENAB	0x80000000 /* Indicates this is JTAG Master	 */
+#define FHC_JTAG_CTRL_MNONE	0x40000000 /* Indicates no JTAG Master present	 */
 
 /* FHC then has an Interrupt Group Number register, essentially this is a 32-bit
  * register with the low 5 bits specifying the IGN of this FHC for interrupt

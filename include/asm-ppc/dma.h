@@ -223,15 +223,47 @@ static __inline__ void release_dma_lock(unsigned long flags)
 /* enable/disable a specific DMA channel */
 static __inline__ void enable_dma(unsigned int dmanr)
 {
+	/*
+	 * The Radstone PPC2 and PPC2a boards have inverted DREQ
+	 * lines (active low) so each command needs to be logically
+	 * ORed with 0x40
+	 */
+	unsigned char ucDmaCmd=0x00;
+
+	if(_prep_type==_PREP_Radstone)
+	{
+		switch(ucSystemType)
+		{
+			case RS_SYS_TYPE_PPC2:
+			case RS_SYS_TYPE_PPC2a:
+			case RS_SYS_TYPE_PPC2ep:
+			{
+				/*
+				 * DREQ lines are active low
+				 */
+				ucDmaCmd=0x40;
+				break;
+			}
+
+			default:
+			{
+				/*
+				 * DREQ lines are active high
+				 */
+				break;
+			}
+		}
+	}
+
 	if (dmanr != 4)
 	{
 		dma_outb(0, DMA2_MASK_REG);  /* This may not be enabled */
-		dma_outb(0, DMA2_CMD_REG);  /* Enable group */
+		dma_outb(ucDmaCmd, DMA2_CMD_REG);  /* Enable group */
 	}
 	if (dmanr<=3)
 	{
 		dma_outb(dmanr,  DMA1_MASK_REG);
-		dma_outb(0, DMA1_CMD_REG);  /* Enable group */
+		dma_outb(ucDmaCmd, DMA1_CMD_REG);  /* Enable group */
 	} else
 	{
 		dma_outb(dmanr & 3,  DMA2_MASK_REG);

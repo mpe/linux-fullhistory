@@ -1,5 +1,5 @@
 /*
- * $Id: idle.c,v 1.57 1998/12/28 10:28:46 paulus Exp $
+ * $Id: idle.c,v 1.60 1999/02/12 07:06:26 cort Exp $
  *
  * Idle daemon for PowerPC.  Idle daemon will handle any action
  * that needs to be taken when the system becomes idle.
@@ -38,6 +38,12 @@ void inline htab_reclaim(void);
 unsigned long htab_reclaim_on = 0;
 unsigned long zero_paged_on = 0;
 unsigned long powersave_nap = 0;
+
+unsigned long *zero_cache;    /* head linked list of pre-zero'd pages */
+unsigned long zero_sz;	      /* # currently pre-zero'd pages */
+unsigned long zeropage_hits;  /* # zero'd pages request that we've done */
+unsigned long zeropage_calls; /* # zero'd pages request that've been made */
+unsigned long zerototal;      /* # pages zero'd over time */
 
 int idled(void *unused)
 {
@@ -108,8 +114,6 @@ void inline htab_reclaim(void)
 	/* if we don't have a htab */
 	if ( Hash_size == 0 )
 		return;
-	lock_dcache(1);
-
 #if 0	
 	/* find a random place in the htab to start each time */
 	start = &Hash[jiffies%(Hash_size/sizeof(PTE))];
@@ -147,7 +151,6 @@ void inline htab_reclaim(void)
 	}
 out:
 	if ( current->need_resched ) printk("need_resched: %lx\n", current->need_resched);
-	unlock_dcache();
 #endif /* CONFIG_8xx */
 }
 
@@ -159,7 +162,7 @@ unsigned long get_zero_page_fast(void)
 {
 	unsigned long page = 0;
 
-	atomic_inc((atomic_t *)&quicklists.zeropage_calls);
+	atomic_inc((atomic_t *)&zero_cache_calls);
 	if ( zero_quicklist )
 	{
 		/* atomically remove this page from the list */
@@ -177,10 +180,10 @@ unsigned long get_zero_page_fast(void)
 #endif /* __SMP__ */		
 		/* we can update zerocount after the fact since it is not
 		 * used for anything but control of a loop which doesn't
-		 * matter since it won't affect anything if it zero's one
+		 * matter since it won't affect anything if it zeros one
 		 * less page -- Cort
 		 */
-		atomic_inc((atomic_t *)&quicklists.zeropage_hits);
+		atomic_inc((atomic_t *)&zero_cache_hits);
 		atomic_dec((atomic_t *)&zero_cache_sz);
 		
 		/* zero out the pointer to next in the page */
@@ -222,7 +225,6 @@ void zero_paged(void)
 		
 		/*
 		 * Make the page no cache so we don't blow our cache with 0's
-		 * We should just turn off the cache instead. -- Cort
 		 */
 		pte = find_pte(init_task.mm, pageptr);
 		if ( !pte )
@@ -254,8 +256,8 @@ void zero_paged(void)
 		 * So we update the list atomically without locking it.
 		 * -- Cort
 		 */
+		
 		/* turn cache on for this page */
-
 		pte_cache(*pte);
 		flush_tlb_page(find_vma(init_task.mm,pageptr),pageptr);
 		/* atomically add this page to the list */
@@ -280,7 +282,7 @@ void zero_paged(void)
 		 * reads it.  -- Cort
 		 */
 		atomic_inc((atomic_t *)&zero_cache_sz);
-		atomic_inc((atomic_t *)&quicklists.zerototal);
+		atomic_inc((atomic_t *)&zero_cache_total);
 	}
 }
 
@@ -307,5 +309,4 @@ void power_save(void)
 	default:
 		return;
 	}
-	
 }

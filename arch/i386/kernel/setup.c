@@ -381,7 +381,17 @@ __initfunc(void setup_arch(char **cmdline_p,
 
 }
 
-__initfunc(static int amd_model(struct cpuinfo_x86 *c))
+#define rdmsr(msr,val1,val2) \
+       __asm__ __volatile__("rdmsr" \
+			    : "=a" (val1), "=d" (val2) \
+			    : "c" (msr))
+
+#define wrmsr(msr,val1,val2) \
+     __asm__ __volatile__("wrmsr" \
+			  : /* no outputs */ \
+			  : "c" (msr), "a" (val1), "d" (val2))
+
+__initfunc(static int get_model_name(struct cpuinfo_x86 *c))
 {
 	unsigned int n, dummy, *v;
 
@@ -400,6 +410,77 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 	c->x86_model_id[48] = 0;
 	return 1;
 }
+
+__initfunc(static int amd_model(struct cpuinfo_x86 *c))
+{
+	u32 l, h;
+	unsigned long flags;
+	int mbytes = max_mapnr >> (20-PAGE_SHIFT);
+	
+	int r=get_model_name(c);
+	
+	/*
+	 *	Now do the cache operations. 
+	 */
+	 
+	switch(c->x86)
+	{
+		case 5:
+			if( c->x86_model < 6 )
+			{
+				/* Anyone with a K5 want to fill this in */				
+				break;
+			}
+			
+			/* K6 with old style WHCR */
+			if( c->x86_model < 8 ||
+				(c->x86_model== 8 && c->x86_mask < 8))
+			{
+				/* We can only write allocate on the low 508Mb */
+				if(mbytes>508)
+					mbytes=508;
+					
+				rdmsr(0xC0000082, l, h);
+				if((l&0x0000FFFF)==0)
+				{		
+					l=(1<<0)|(mbytes/4);
+					save_flags(flags);
+					__cli();
+					__asm__ __volatile__ ("wbinvd": : :"memory");
+					wrmsr(0xC0000082, l, h);
+					restore_flags(flags);
+					printk(KERN_INFO "Enabling old style K6 write allocation for %d Mb\n",
+						mbytes);
+					
+				}
+				break;
+			}
+			if (c->x86_model == 8 || c->x86_model == 9)
+			{
+				/* The more serious chips .. */
+				
+				if(mbytes>4092)
+					mbytes=4092;
+				rdmsr(0xC0000082, l, h);
+				if((l&0xFFFF0000)==0)
+				{
+					mbytes>>=2;
+					l=(mbytes<<22)|(1<<16);
+					save_flags(flags);
+					__cli();
+					__asm__ __volatile__ ("wbinvd": : :"memory");
+					wrmsr(0xC0000082, l, h);
+					restore_flags(flags);
+					printk(KERN_INFO "Enabling new style K6 write allocation for %d Mb\n",
+						mbytes);
+				}
+				break;
+			}
+			break;
+	}
+	return r;
+}
+			
 
 /*
  * Read Cyrix DEVID registers (DIR) to get more detailed info. about the CPU
@@ -517,7 +598,7 @@ __initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
 		
 		/* GXm supports extended cpuid levels 'ala' AMD */
 		if (c->cpuid_level == 2) {
-			amd_model(c);  /* get CPU marketing name */
+			get_model_name(c);  /* get CPU marketing name */
 			c->x86_capability&=~X86_FEATURE_TSC;
 			return;
 		}
@@ -642,6 +723,20 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 
 	if (c->x86_vendor == X86_VENDOR_AMD && amd_model(c))
 		return;
+		
+	if (c->cpuid_level > 0 && c->x86_vendor == X86_VENDOR_INTEL)
+	{
+		if(c->x86_capability&(1<<18))
+		{
+			/* Disable processor serial number on Intel Pentium III 
+			   from code by Phil Karn */
+			unsigned long lo,hi;
+			rdmsr(0x119,lo,hi);
+			lo |= 0x200000;
+			wrmsr(0x119,lo,hi);
+			printk(KERN_INFO "Pentium-III serial number disabled.\n");
+		}
+	}
 
 	for (i = 0; i < sizeof(cpu_models)/sizeof(struct cpu_model_info); i++) {
 		if (c->cpuid_level > 1) {
@@ -726,15 +821,6 @@ __initfunc(void dodgy_tsc(void))
 }
 	
 	
-#define rdmsr(msr,val1,val2) \
-       __asm__ __volatile__("rdmsr" \
-			    : "=a" (val1), "=d" (val2) \
-			    : "c" (msr))
-
-#define wrmsr(msr,val1,val2) \
-     __asm__ __volatile__("wrmsr" \
-			  : /* no outputs */ \
-			  : "c" (msr), "a" (val1), "d" (val2))
 
 static char *cpu_vendor_names[] __initdata = {
 	"Intel", "Cyrix", "AMD", "UMC", "NexGen", "Centaur" };
@@ -785,8 +871,8 @@ int get_cpuinfo(char * buffer)
 	static char *x86_cap_flags[] = {
 	        "fpu", "vme", "de", "pse", "tsc", "msr", "6", "mce",
 	        "cx8", "9", "10", "sep", "12", "pge", "14", "cmov",
-	        "16", "17", "18", "19", "20", "21", "22", "mmx",
-	        "24", "25", "26", "27", "28", "29", "30", "31"
+	        "16", "17", "psn", "19", "20", "21", "22", "mmx",
+	        "24", "kni", "26", "27", "28", "29", "30", "31"
 	};
 	struct cpuinfo_x86 *c = cpu_data;
 	int i, n;
@@ -836,6 +922,7 @@ int get_cpuinfo(char * buffer)
 			x86_cap_flags[14] = "mca";
 			x86_cap_flags[16] = "pat";
 			x86_cap_flags[17] = "pse36";
+			x86_cap_flags[18] = "psn";
 			x86_cap_flags[24] = "osfxsr";
 		}
 

@@ -162,7 +162,11 @@ const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE] =
     "Scanner          ",
     "Optical Device   ",
     "Medium Changer   ",
-    "Communications   "
+    "Communications   ",
+    "Unknown          ",
+    "Unknown          ",
+    "Unknown          ",
+    "Enclosure        ",
 };
 
 /* 
@@ -241,6 +245,7 @@ static struct dev_info device_list[] =
 {"SONY","CD-ROM CDU-541","4.3d", BLIST_NOLUN},
 {"SONY","CD-ROM CDU-55S","1.0i", BLIST_NOLUN},
 {"SONY","CD-ROM CDU-561","1.7x", BLIST_NOLUN},
+{"SONY","CD-ROM CDU-8012","*", BLIST_NOLUN},
 {"TANDBERG","TDC 3600","U07", BLIST_NOLUN},     /* Locks up if polled for lun != 0 */
 {"TEAC","CD-R55S","1.0H", BLIST_NOLUN},		/* Locks up if polled for lun != 0 */
 {"TEAC","CD-ROM","1.06", BLIST_NOLUN},          /* causes failed REQUEST SENSE on lun 1
@@ -276,12 +281,11 @@ static struct dev_info device_list[] =
 {"EMULEX","MD21/S2     ESDI","*", BLIST_SINGLELUN},
 {"CANON","IPUBJD","*", BLIST_SPARSELUN},
 {"nCipher","Fastness Crypto","*", BLIST_FORCELUN},
+{"NEC","PD-1 ODX654P","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"MATSHITA","PD","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"YAMAHA","CDR100","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"YAMAHA","CDR102","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"iomega","jaz 1GB","J.86", BLIST_NOTQ | BLIST_NOLUN},
-{"IBM","DPES-","*", BLIST_NOTQ | BLIST_NOLUN},
-{"WDIGTL","WDE","*", BLIST_NOTQ | BLIST_NOLUN},
 /*
  * Must be at end of list...
  */
@@ -759,6 +763,7 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
   case TYPE_PROCESSOR:
   case TYPE_SCANNER:
   case TYPE_MEDIUM_CHANGER:
+  case TYPE_ENCLOSURE:
     SDpnt->writeable = 1;
     break;
   case TYPE_WORM:
@@ -2471,7 +2476,8 @@ static void resize_dma_pool(void)
             }
             else if (SDpnt->type == TYPE_SCANNER ||
                      SDpnt->type == TYPE_PROCESSOR ||
-                     SDpnt->type == TYPE_MEDIUM_CHANGER) {
+                     SDpnt->type == TYPE_MEDIUM_CHANGER ||
+                     SDpnt->type == TYPE_ENCLOSURE) {
                 new_dma_sectors += (4096 >> 9) * SDpnt->queue_depth;
             }
             else {
@@ -3293,7 +3299,7 @@ int init_module(void)
 
     /* One bit per sector to indicate free/busy */
     size = (dma_sectors / SECTORS_PER_PAGE)*sizeof(FreeSectorBitmap);
-    dma_malloc_freelist = (unsigned char *) scsi_init_malloc(size, GFP_ATOMIC);
+    dma_malloc_freelist = (FreeSectorBitmap *) scsi_init_malloc(size, GFP_ATOMIC);
     memset(dma_malloc_freelist, 0, size);
 
     /* One pointer per page for the page list */

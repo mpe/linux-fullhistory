@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.57 1998/09/17 11:04:51 jj Exp $
+/* $Id: traps.c,v 1.59 1999/03/06 12:07:31 anton Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -82,8 +82,13 @@ void instruction_dump (unsigned long *pc)
 	printk("\n");
 }
 
+#define __SAVE __asm__ __volatile__("save %sp, -0x40, %sp\n\t")
+#define __RESTORE __asm__ __volatile__("restore %g0, %g0, %g0\n\t")
+
 void die_if_kernel(char *str, struct pt_regs *regs)
 {
+	int count = 0;
+
 	/* Amuse the user. */
 	printk(
 "              \\|/ ____ \\|/\n"
@@ -93,6 +98,27 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 
 	printk("%s(%d): %s\n", current->comm, current->pid, str);
 	show_regs(regs);
+
+	__SAVE; __SAVE; __SAVE; __SAVE;
+	__SAVE; __SAVE; __SAVE; __SAVE;
+	__RESTORE; __RESTORE; __RESTORE; __RESTORE;
+	__RESTORE; __RESTORE; __RESTORE; __RESTORE;
+
+	{
+		struct reg_window *rw = (struct reg_window *)regs->u_regs[UREG_FP];
+
+		/* Stop the back trace when we hit userland or we
+		 * find some badly aligned kernel stack. Set an upper
+		 * bound in case our stack is trashed and we loop.
+		 */
+		while(rw					&&
+		      count++ < 30				&&
+                      (((unsigned long) rw) >= PAGE_OFFSET)	&&
+		      !(((unsigned long) rw) & 0x7)) {
+			printk("Caller[%08lx]\n", rw->ins[7]);
+			rw = (struct reg_window *)rw->ins[6];
+		}
+	}
 	printk("Instruction DUMP:");
 	instruction_dump ((unsigned long *) regs->pc);
 	if(regs->psr & PSR_PS)

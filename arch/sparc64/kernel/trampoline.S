@@ -1,4 +1,4 @@
-/* $Id: trampoline.S,v 1.6 1998/10/11 06:58:23 davem Exp $
+/* $Id: trampoline.S,v 1.8 1998/12/09 21:01:15 davem Exp $
  * trampoline.S: Jump start slave processors on sparc64.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -34,8 +34,8 @@ sparc64_cpu_startup:
 	sllx	%g4, 32, %g4
 
 	/* XXX Buggy PROM... */
-	srl	%o0, 0, %g6
-	add	%g6, %g4, %g6
+	srl	%o0, 0, %o0
+	ldx	[%o0], %g6
 
 	sethi	%uhi(_PAGE_VALID | _PAGE_SZ4MB), %g5
 	sllx	%g5, 32, %g5
@@ -197,10 +197,18 @@ bounce:
 #undef KERN_LOWBITS
 #undef VPTE_BASE
 
+	/* Setup interrupt globals, we are always SMP. */
 	wrpr	%o1, (PSTATE_IG | PSTATE_IE), %pstate
-	sethi	%hi(ivector_to_mask), %g5
-	or	%g5, %lo(ivector_to_mask), %g1
-	mov	0x40, %g2
+
+	/* Get our UPA MID. */
+	lduw	[%o2 + AOFF_task_processor], %g1
+	sethi	%hi(cpu_data), %g5
+	or	%g5, %lo(cpu_data), %g5
+
+	/* In theory this is: &(cpu_data[this_upamid].irq_worklists[0]) */
+	sllx	%g1, 7, %g1
+	add	%g5, %g1, %g1
+	add	%g1, 64, %g1
 
 	wrpr	%g0, 0, %wstate
 	or	%o1, PSTATE_IE, %o1

@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.55 1998/11/17 07:43:17 davem Exp $
+/* $Id: ioctl32.c,v 1.59 1999/03/12 13:30:21 jj Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -52,6 +52,7 @@
 #include <asm/openpromio.h>
 #include <asm/envctrl.h>
 #include <asm/audioio.h>
+#include <asm/ethtool.h>
 
 #include <linux/soundcard.h>
 
@@ -253,11 +254,23 @@ static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, unsigned long ar
 	case SIOCGPPPSTATS:
 	case SIOCGPPPCSTATS:
 	case SIOCGPPPVER:
+	case SIOCETHTOOL:
 		if (copy_from_user(&ifr, (struct ifreq32 *)arg, sizeof(struct ifreq32)))
 			return -EFAULT;
 		ifr.ifr_data = (__kernel_caddr_t)get_free_page(GFP_KERNEL);
 		if (!ifr.ifr_data)
 			return -EAGAIN;
+		if(cmd == SIOCETHTOOL) {
+			u32 data;
+
+			__get_user(data, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_data));
+			if(copy_from_user(ifr.ifr_data,
+					  (char *)A(data),
+					  sizeof(struct ethtool_cmd))) {
+				free_page((unsigned long)ifr.ifr_data);
+				return -EFAULT;
+			}
+		}
 		break;
 	default:
 		if (copy_from_user(&ifr, (struct ifreq32 *)arg, sizeof(struct ifreq32)))
@@ -280,17 +293,21 @@ static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, unsigned long ar
 		case SIOCGIFBRDADDR:
 		case SIOCGIFDSTADDR:
 		case SIOCGIFNETMASK:
+		case SIOCGIFTXQLEN:
 			if (copy_to_user((struct ifreq32 *)arg, &ifr, sizeof(struct ifreq32)))
 				return -EFAULT;
 			break;
 		case SIOCGPPPSTATS:
 		case SIOCGPPPCSTATS:
 		case SIOCGPPPVER:
+		case SIOCETHTOOL:
 		{
 			u32 data;
 			int len;
 
 			__get_user(data, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_data));
+			if(cmd == SIOCETHTOOL)
+				len = sizeof(struct ethtool_cmd);
 			if(cmd == SIOCGPPPVER)
 				len = strlen(PPP_VERSION) + 1;
 			else if(cmd == SIOCGPPPCSTATS)
@@ -298,7 +315,9 @@ static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, unsigned long ar
 			else
 				len = sizeof(struct ppp_stats);
 
-			if (copy_to_user((char *)A(data), ifr.ifr_data, len))
+			len = copy_to_user((char *)A(data), ifr.ifr_data, len);
+			free_page((unsigned long)ifr.ifr_data);
+			if(len)
 				return -EFAULT;
 			break;
 		}
@@ -1458,6 +1477,9 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case SIOCGPPPSTATS:
 	case SIOCGPPPCSTATS:
 	case SIOCGPPPVER:
+	case SIOCGIFTXQLEN:
+	case SIOCSIFTXQLEN:
+	case SIOCETHTOOL:
 		error = dev_ifsioc(fd, cmd, arg);
 		goto out;
 		
@@ -1583,7 +1605,7 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	 * compatable types passed or none at all...
 	 */
 
-	/* Bit T */
+	/* Big T */
 	case TCGETA:
 	case TCSETA:
 	case TCSETAW:
@@ -1618,6 +1640,8 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case TIOCSPGRP:
 	case TIOCGPGRP:
 	case TIOCSCTTY:
+	case TIOCGPTN:
+	case TIOCSPTLCK:
 	
 	/* Big F */
 	case FBIOGTYPE:

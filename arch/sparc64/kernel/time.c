@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.16 1998/09/05 17:25:28 jj Exp $
+/* $Id: time.c,v 1.20 1999/03/15 22:13:40 davem Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -30,6 +30,8 @@
 #include <asm/fhc.h>
 #include <asm/pbm.h>
 #include <asm/ebus.h>
+
+extern rwlock_t xtime_lock;
 
 struct mostek48t02 *mstk48t02_regs = 0;
 static struct mostek48t08 *mstk48t08_regs = 0;
@@ -69,6 +71,8 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	unsigned long ticks;
 
+	write_lock(&xtime_lock);
+
 	do {
 		do_timer(regs);
 
@@ -82,11 +86,15 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	} while (ticks >= timer_tick_compare);
 
 	timer_check_rtc();
+
+	write_unlock(&xtime_lock);
 }
 
 #ifdef __SMP__
 void timer_tick_interrupt(struct pt_regs *regs)
 {
+	write_lock(&xtime_lock);
+
 	do_timer(regs);
 
 	/*
@@ -99,6 +107,8 @@ void timer_tick_interrupt(struct pt_regs *regs)
 		: "r" (timer_tick_offset));
 
 	timer_check_rtc();
+
+	write_unlock(&xtime_lock);
 }
 #endif
 
@@ -256,13 +266,17 @@ void __init clock_probe(void)
 	node = prom_getchild(busnd);
 
 	while(1) {
-		prom_getstring(node, "model", model, sizeof(model));
+		if (!node)
+			model[0] = 0;
+		else
+			prom_getstring(node, "model", model, sizeof(model));
 		if(strcmp(model, "mk48t02") &&
 		   strcmp(model, "mk48t08") &&
 		   strcmp(model, "mk48t59")) {
-			node = prom_getsibling(node);
+		   	if (node)
+				node = prom_getsibling(node);
 #ifdef CONFIG_PCI
-			if ((node == 0) && ebus) {
+			while ((node == 0) && ebus) {
 				ebus = ebus->next;
 				if (ebus) {
 					busnd = ebus->prom_node;
@@ -397,6 +411,9 @@ static __inline__ unsigned long do_gettimeoffset(void)
 	return ticks / timer_ticks_per_usec;
 }
 
+/* This need not obtain the xtime_lock as it is coded in
+ * an implicitly SMP safe way already.
+ */
 void do_gettimeofday(struct timeval *tv)
 {
 	/* Load doubles must be used on xtime so that what we get
@@ -450,7 +467,7 @@ void do_gettimeofday(struct timeval *tv)
 
 void do_settimeofday(struct timeval *tv)
 {
-	cli();
+	write_lock_irq(&xtime_lock);
 
 	tv->tv_usec -= do_gettimeoffset();
 	if(tv->tv_usec < 0) {
@@ -461,10 +478,10 @@ void do_settimeofday(struct timeval *tv)
 	xtime = *tv;
 	time_adjust = 0;		/* stop active adjtime() */
 	time_status |= STA_UNSYNC;
-	time_state = TIME_ERROR;	/* p. 24, (a) */
 	time_maxerror = NTP_PHASE_LIMIT;
 	time_esterror = NTP_PHASE_LIMIT;
-	sti();
+
+	write_unlock_irq(&xtime_lock);
 }
 
 static int set_rtc_mmss(unsigned long nowtime)

@@ -8,6 +8,5 @@ int FSTOQ(void *rd, void *rs2)
 
 	__FP_UNPACK_S(A, rs2);
 	FP_CONV(Q,S,4,1,R,A);
-	__FP_PACK_Q(rd, R);
-	return 1;
+	return __FP_PACK_Q(rd, R);
 }
