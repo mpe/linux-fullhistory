@@ -24,7 +24,7 @@
  * on a boundary that is a multiple of the window size):
  *
  *    0xff800000-0xffffffff      - Boot window
- *    0xf8400000-0xf85fffff      - Internal SRAM
+ *    0xf8400000-0xf843ffff      - Internal SRAM
  *    0xf8200000-0xf83fffff      - CPLD
  *    0xf8100000-0xf810ffff      - MV64360 Registers (CONFIG_MV64X60_NEW_BASE)
  *    0xf8000000-0xf80fffff      - Socketed FLASH
