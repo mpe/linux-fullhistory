@@ -62,18 +62,6 @@ pte_t __bad_page(void)
 	return pte_mkdirty(mk_pte((unsigned long) empty_bad_page, PAGE_SHARED));
 }
 
-unsigned long __zero_page(void)
-{
-	extern char empty_zero_page[PAGE_SIZE];
-
-	__asm__ __volatile__("cld ; rep ; stosl":
-		:"a" (0),
-		 "D" ((long) empty_zero_page),
-		 "c" (PAGE_SIZE/4)
-		:"di","cx");
-	return (unsigned long) empty_zero_page;
-}
-
 void show_mem(void)
 {
 	int i,free = 0,total = 0,reserved = 0;
@@ -165,6 +153,9 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 
 	end_mem &= PAGE_MASK;
 	high_memory = end_mem;
+
+	/* clear the zero-page */
+	memset(empty_zero_page, 0, PAGE_SIZE);
 
 	/* mark usable pages in the mem_map[] */
 	start_low_mem = PAGE_ALIGN(start_low_mem);

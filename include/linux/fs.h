@@ -10,7 +10,6 @@
 #include <linux/limits.h>
 #include <linux/wait.h>
 #include <linux/types.h>
-#include <linux/dirent.h>
 #include <linux/vfs.h>
 #include <linux/net.h>
 
@@ -269,10 +268,12 @@ struct file_lock {
 	struct file_lock *fl_next;	/* singly linked list for this inode  */
 	struct file_lock *fl_nextlink;	/* doubly linked list of all locks */
 	struct file_lock *fl_prevlink;	/* used to simplify lock removal */
+	struct file_lock *fl_block;
 	struct task_struct *fl_owner;
 	struct wait_queue *fl_wait;
+	struct file *fl_file;
+	char fl_flags;
 	char fl_type;
-	char fl_whence;
 	off_t fl_start;
 	off_t fl_end;
 };
@@ -324,11 +325,19 @@ struct super_block {
 	} u;
 };
 
+/*
+ * This is the "filldir" function type, used by readdir() to let
+ * the kernel specify what kind of dirent layout it wants to have.
+ * This allows the kernel to read directories into kernel space or
+ * to have different dirent layouts depending on the binary type.
+ */
+typedef int (*filldir_t)(void *, char *, int, off_t, ino_t);
+	
 struct file_operations {
 	int (*lseek) (struct inode *, struct file *, off_t, int);
 	int (*read) (struct inode *, struct file *, char *, int);
 	int (*write) (struct inode *, struct file *, char *, int);
-	int (*readdir) (struct inode *, struct file *, struct dirent *, int);
+	int (*readdir) (struct inode *, struct file *, void *, filldir_t);
 	int (*select) (struct inode *, struct file *, int, select_table *);
 	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
 	int (*mmap) (struct inode *, struct file *, struct vm_area_struct *);
@@ -366,7 +375,7 @@ struct super_operations {
 	void (*put_inode) (struct inode *);
 	void (*put_super) (struct super_block *);
 	void (*write_super) (struct super_block *);
-	void (*statfs) (struct super_block *, struct statfs *);
+	void (*statfs) (struct super_block *, struct statfs *, int);
 	int (*remount_fs) (struct super_block *, int *, char *);
 };
 
@@ -474,6 +483,7 @@ extern void put_write_access(struct inode * inode);
 extern int open_namei(const char * pathname, int flag, int mode,
 	struct inode ** res_inode, struct inode * base);
 extern int do_mknod(const char * filename, int mode, dev_t dev);
+extern int do_pipe(int *);
 extern void iput(struct inode * inode);
 extern struct inode * __iget(struct super_block * sb,int nr,int crsmnt);
 extern struct inode * get_empty_inode(void);
@@ -484,7 +494,7 @@ extern struct file * get_empty_filp(void);
 extern struct buffer_head * get_hash_table(dev_t dev, int block, int size);
 extern struct buffer_head * getblk(dev_t dev, int block, int size);
 extern void ll_rw_block(int rw, int nr, struct buffer_head * bh[]);
-extern void ll_rw_page(int rw, int dev, int nr, char * buffer);
+extern void ll_rw_page(int rw, int dev, unsigned long nr, char * buffer);
 extern void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buffer);
 extern int is_read_only(int dev);
 extern void brelse(struct buffer_head * buf);

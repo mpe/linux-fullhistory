@@ -27,7 +27,7 @@ __start:
 	halt
 	.end __start
 
-	.align 5
+	.align 3
 	.globl	wrent
 	.ent	wrent
 wrent:
@@ -35,7 +35,7 @@ wrent:
 	ret ($26)
 	.end wrent
 
-	.align 5
+	.align 3
 	.globl	wrkgp
 	.ent	wrkgp
 wrkgp:
@@ -43,7 +43,7 @@ wrkgp:
 	ret ($26)
 	.end wrkgp
 
-	.align 5
+	.align 3
 	.globl	wrusp
 	.ent	wrusp
 wrusp:
@@ -51,13 +51,45 @@ wrusp:
 	ret ($26)
 	.end wrusp
 
-	.align 5
+	.align 3
 	.globl	rdusp
 	.ent	rdusp
 rdusp:
 	.long PAL_rdusp
 	ret ($26)
 	.end rdusp
+
+	.align 3
+	.globl	tbi
+	.ent	tbi
+tbi:
+	.long PAL_tbi
+	ret ($26)
+	.end tbi
+
+	.align 3
+	.globl	imb
+	.ent	imb
+imb:
+	.long PAL_imb
+	ret ($26)
+	.end imb
+
+	.align 3
+	.globl	rdmces
+	.ent	rdmces
+rdmces:
+	call_pal PAL_rdmces
+	ret ($26)
+	.end rdmces
+
+	.align 3
+	.globl	wrmces
+	.ent	wrmces
+wrmces:
+	call_pal PAL_wrmces
+	ret ($26)
+	.end wrmces
 
 .align 9
 .globl floppy_track_buffer

@@ -571,18 +571,9 @@ static void znet_rx(struct device *dev)
 						   packet[1], packet[2], packet[3]);
 				}
 		  }
-
-#ifdef HAVE_NETIF_RX
-			netif_rx(skb);
-#else
-			skb->lock = 0;
-			if (dev_rint((unsigned char*)skb, pkt_len, IN_SKBUFF, dev) != 0) {
-				kfree(skb);
-				lp->stats.rx_dropped++;
-				break;
-			}
-#endif
-			lp->stats.rx_packets++;
+		  skb->protocol=eth_type_trans(skb,dev);
+		  netif_rx(skb);
+		  lp->stats.rx_packets++;
 		}
 		zn.rx_cur = this_rfp_ptr;
 		if (zn.rx_cur >= zn.rx_end)

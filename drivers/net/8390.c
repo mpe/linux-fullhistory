@@ -477,6 +477,7 @@ static void ei_receive(struct device *dev)
 				
 				ei_block_input(dev, pkt_len, (char *) skb->data,
 							   current_offset + sizeof(rx_frame));
+				skb->protocol=eth_type_trans(skb,dev);
 				netif_rx(skb);
 				ei_local->stat.rx_packets++;
 			}

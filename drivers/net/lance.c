@@ -1003,6 +1003,7 @@ lance_rx(struct device *dev)
 			memcpy(skb->data,
 				   (unsigned char *)(lp->rx_ring[entry].base & 0x00ffffff),
 				   pkt_len);
+			skb->protocol=eth_type_trans(skb,dev);
 			netif_rx(skb);
 			lp->stats.rx_packets++;
 		}

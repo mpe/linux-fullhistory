@@ -847,6 +847,7 @@ el16_rx(struct device *dev)
 			/* 'skb->data' points to the start of sk_buff data area. */
 			memcpy(skb->data, data_frame + 5, pkt_len);
 		
+			skb->protocol=eth_type_trans(skb,dev);
 			netif_rx(skb);
 			lp->stats.rx_packets++;
 		}

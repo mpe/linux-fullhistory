@@ -18,7 +18,7 @@
 #define _LINUX_TCP_H
 
 
-#define HEADER_SIZE	64		/* maximum header size		*/
+#define HEADER_SIZE	128		/* maximum header size		*/
 
 
 struct tcphdr {

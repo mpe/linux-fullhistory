@@ -21,6 +21,10 @@
 #include <asm/pgtable.h>
 
 extern void die_if_kernel(char *,struct pt_regs *,long);
+extern void tbi(unsigned long type, unsigned long arg);
+#define tbisi(x) tbi(1,(x))
+#define tbisd(x) tbi(2,(x))
+#define tbis(x)  tbi(3,(x))
 
 /*
  * This routine handles page faults.  It determines the address,
@@ -64,13 +68,14 @@ good_area:
 		if (!(vma->vm_flags & VM_EXEC))
 			goto bad_area;
 	} else if (!cause) {
-		if (!(vma->vm_flags & VM_READ))
+		/* Allow reads even for write-only mappings */
+		if (!(vma->vm_flags & (VM_READ | VM_WRITE)))
 			goto bad_area;
 	} else {
 		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
 	}
-
+	tbis(address);
 	handle_mm_fault(vma, address, cause > 0);
 	return;
 
@@ -80,6 +85,8 @@ good_area:
  */
 bad_area:
 	if (user_mode(&regs)) {
+		printk("memory violation at pc=%08lx (%08lx)\n", regs.pc, address);
+		die_if_kernel("oops", &regs, cause);
 		send_sig(SIGSEGV, current, 1);
 		return;
 	}

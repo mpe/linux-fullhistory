@@ -27,7 +27,7 @@ struct sg_header
 #define SG_SET_TIMEOUT 0x2201  /* set timeout *(int *)arg==timeout */
 #define SG_GET_TIMEOUT 0x2202  /* get timeout return timeout */
 
-#define SG_DEFAULT_TIMEOUT 6000 /* 1 minute timeout */
+#define SG_DEFAULT_TIMEOUT (60*HZ) /* 1 minute timeout */
 #define SG_DEFAULT_RETRIES 1
 
 #define SG_MAX_QUEUE 4 /* maximum outstanding request, arbitrary, may be

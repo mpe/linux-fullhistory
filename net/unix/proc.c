@@ -32,7 +32,7 @@
 #include <linux/net.h>
 #include <linux/un.h>
 #include <linux/param.h>
-#include "unix.h"
+#include <net/unix.h>
 
 
 /* Called from PROCfs. */

@@ -6,15 +6,7 @@
  */
 
 /*
- * NOTE! Currently it never uses the HAE register, so these work only
- * for the low 25 bits of EISA addressing.  That covers all of the IO
- * address space (16 bits), and most of the "normal" EISA memory space.
- * I'll fix it eventually, but I'll need to come up with a clean way
- * to handle races with interrupt services wanting to change HAE...
- */
-
-/*
- * NOTE 2! The memory operations do not set any memory barriers, as it's
+ * NOTE! The memory operations do not set any memory barriers, as it's
  * not needed for cases like a frame buffer that is essentially memory-like.
  * You need to do them by hand if the operations depend on ordering.
  *
@@ -32,11 +24,6 @@
  * is another fun race area.  Don't do it (because if you do, I'll have to
  * do *everything* with interrupts disabled, ugh).
  */
-
-/*
- * Virtual -> physical identity mapping starts at this offset
- */
-#define IDENT_ADDR	(0xfffffc0000000000UL)
 
 /*
  * EISA Interrupt Acknowledge address
@@ -80,6 +67,35 @@
 #define EISA_IO			(IDENT_ADDR + 0x300000000UL)
 
 /*
+ * Change virtual addresses to bus addresses and vv.
+ *
+ * NOTE! On the Jensen, the physical address is the same
+ * as the bus address, but this is not necessarily true on
+ * other alpha hardware.
+ */
+#define virt_to_bus virt_to_phys
+#define bus_to_virt phys_to_virt
+
+#define HAE_ADDRESS	EISA_HAE
+
+/*
+ * Handle the "host address register". This needs to be set
+ * to the high 7 bits of the EISA address.  This is also needed
+ * for EISA IO addresses, which are only 16 bits wide (the
+ * hae needs to be set to 0).
+ *
+ * HAE isn't needed for the local IO operations, though.
+ */
+#define __HAE_MASK 0x1ffffff
+extern inline void __set_hae(unsigned long addr)
+{
+	/* hae on the Jensen is bits 31:25 shifted right */
+	addr >>= 25;
+	if (addr != hae.cache)
+		set_hae(addr);
+}
+
+/*
  * IO functions
  *
  * The "local" functions are those that don't go out to the EISA bus,
@@ -102,125 +118,160 @@ extern inline void __local_outb(unsigned char b, unsigned long addr)
 	mb();
 }
 
-extern inline unsigned int __inb(unsigned long addr)
+extern unsigned int __bus_inb(unsigned long addr);
+extern inline unsigned int ___bus_inb(unsigned long addr)
 {
-	long result = *(volatile int *) ((addr << 7) + EISA_IO + 0x00);
+	long result;
+
+	__set_hae(0);
+	result = *(volatile int *) ((addr << 7) + EISA_IO + 0x00);
 	result >>= (addr & 3) * 8;
 	return 0xffUL & result;
 }
 
-extern inline void __outb(unsigned char b, unsigned long addr)
+extern void __bus_outb(unsigned char b, unsigned long addr);
+extern inline void ___bus_outb(unsigned char b, unsigned long addr)
 {
+	__set_hae(0);
 	*(volatile unsigned int *) ((addr << 7) + EISA_IO + 0x00) = b * 0x01010101;
 	mb();
 }
 
 /*
- * This is a stupid one: I'll make it a bitmap soon, promise..
- *
- * On the other hand: this allows gcc to optimize. Hmm. I'll
- * have to use the __constant_p() stuff here.
+ * It seems gcc is not very good at optimizing away logical
+ * operations that result in operations across inline functions.
+ * Which is why this is a macro.
  */
-extern inline int __is_local(unsigned long addr)
-{
-	/* keyboard */
-	if (addr == 0x60 || addr == 0x64)
-		return 1;
+#define __is_local(addr) ( \
+/* keyboard */	(addr == 0x60 || addr == 0x64) || \
+/* RTC */	(addr == 0x170 || addr == 0x171) || \
+/* mb COM2 */	(addr >= 0x2f8 && addr <= 0x2ff) || \
+/* mb LPT1 */	(addr >= 0x3bc && addr <= 0x3be) || \
+/* mb COM2 */	(addr >= 0x3f8 && addr <= 0x3ff))
 
-	/* RTC */
-	if (addr == 0x170 || addr == 0x171)
-		return 1;
-
-	/* motherboard COM2 */
-	if (addr >= 0x2f8 && addr <= 0x2ff)
-		return 1;
-
-	/* motherboard LPT1 */
-	if (addr >= 0x3bc && addr <= 0x3be)
-		return 1;
-
-	/* motherboard COM2 */
-	if (addr >= 0x3f8 && addr <= 0x3ff)
-		return 1;
-
-	return 0;
-}
-
-extern inline unsigned int inb(unsigned long addr)
+extern inline unsigned int __inb(unsigned long addr)
 {
 	if (__is_local(addr))
 		return __local_inb(addr);
-	return __inb(addr);
+	return __bus_inb(addr);
 }
 
-extern inline void outb(unsigned char b, unsigned long addr)
+extern inline void __outb(unsigned char b, unsigned long addr)
 {
 	if (__is_local(addr))
 		__local_outb(b, addr);
 	else
-		__outb(b, addr);
+		__bus_outb(b, addr);
 }
 
-extern inline unsigned int inw(unsigned long addr)
+extern inline unsigned int __inw(unsigned long addr)
 {
-	long result = *(volatile int *) ((addr << 7) + EISA_IO + 0x20);
+	long result;
+
+	__set_hae(0);
+	result = *(volatile int *) ((addr << 7) + EISA_IO + 0x20);
 	result >>= (addr & 3) * 8;
 	return 0xffffUL & result;
 }
 
-extern inline unsigned int inl(unsigned long addr)
+extern inline unsigned int __inl(unsigned long addr)
 {
+	__set_hae(0);
 	return *(volatile unsigned int *) ((addr << 7) + EISA_IO + 0x60);
 }
 
-extern inline void outw(unsigned short b, unsigned long addr)
+extern inline void __outw(unsigned short b, unsigned long addr)
 {
+	__set_hae(0);
 	*(volatile unsigned int *) ((addr << 7) + EISA_IO + 0x20) = b * 0x00010001;
 	mb();
 }
 
-extern inline void outl(unsigned int b, unsigned long addr)
+extern inline void __outl(unsigned int b, unsigned long addr)
 {
+	__set_hae(0);
 	*(volatile unsigned int *) ((addr << 7) + EISA_IO + 0x60) = b;
 	mb();
 }
 
 /*
- * Memory functions
+ * Memory functions.
  */
-extern inline unsigned long readb(unsigned long addr)
+extern inline unsigned long __readb(unsigned long addr)
 {
-	long result = *(volatile int *) ((addr << 7) + EISA_MEM + 0x00);
+	long result;
+
+	__set_hae(addr);
+	addr &= __HAE_MASK;
+	result = *(volatile int *) ((addr << 7) + EISA_MEM + 0x00);
 	result >>= (addr & 3) * 8;
 	return 0xffUL & result;
 }
 
-extern inline unsigned long readw(unsigned long addr)
+extern inline unsigned long __readw(unsigned long addr)
 {
-	long result = *(volatile int *) ((addr << 7) + EISA_MEM + 0x20);
+	long result;
+
+	__set_hae(addr);
+	addr &= __HAE_MASK;
+	result = *(volatile int *) ((addr << 7) + EISA_MEM + 0x20);
 	result >>= (addr & 3) * 8;
 	return 0xffffUL & result;
 }
 
-extern inline unsigned long readl(unsigned long addr)
+extern inline unsigned long __readl(unsigned long addr)
 {
+	__set_hae(addr);
+	addr &= __HAE_MASK;
 	return *(volatile unsigned int *) ((addr << 7) + EISA_MEM + 0x60);
 }
 
-extern inline void writeb(unsigned short b, unsigned long addr)
+extern inline void __writeb(unsigned short b, unsigned long addr)
 {
+	__set_hae(addr);
+	addr &= __HAE_MASK;
 	*(volatile unsigned int *) ((addr << 7) + EISA_MEM + 0x00) = b * 0x01010101;
 }
 
-extern inline void writew(unsigned short b, unsigned long addr)
+extern inline void __writew(unsigned short b, unsigned long addr)
 {
+	__set_hae(addr);
+	addr &= __HAE_MASK;
 	*(volatile unsigned int *) ((addr << 7) + EISA_MEM + 0x20) = b * 0x00010001;
 }
 
-extern inline void writel(unsigned int b, unsigned long addr)
+extern inline void __writel(unsigned int b, unsigned long addr)
 {
+	__set_hae(addr);
+	addr &= __HAE_MASK;
 	*(volatile unsigned int *) ((addr << 7) + EISA_MEM + 0x60) = b;
 }
+
+/*
+ * The above have so much overhead that it probably doesn't make
+ * sense to have them inlined (better icache behaviour).
+ */
+extern unsigned int inb(unsigned long addr);
+extern unsigned int inw(unsigned long addr);
+extern unsigned int inl(unsigned long addr);
+
+extern void outb(unsigned char b, unsigned long addr);
+extern void outw(unsigned short b, unsigned long addr);
+extern void outl(unsigned int b, unsigned long addr);
+
+extern unsigned long readb(unsigned long addr);
+extern unsigned long readw(unsigned long addr);
+extern unsigned long readl(unsigned long addr);
+
+extern void writeb(unsigned short b, unsigned long addr);
+extern void writew(unsigned short b, unsigned long addr);
+extern void writel(unsigned int b, unsigned long addr);
+
+#define inb(port) \
+(__builtin_constant_p((port))?__inb(port):(inb)(port))
+
+#define outb(x, port) \
+(__builtin_constant_p((port))?__outb((x),(port)):(outb)((x),(port)))
 
 #define inb_p inb
 #define outb_p outb

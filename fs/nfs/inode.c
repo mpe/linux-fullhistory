@@ -34,7 +34,7 @@ extern int close_fp(struct file *filp);
 static int nfs_notify_change(struct inode *, struct iattr *);
 static void nfs_put_inode(struct inode *);
 static void nfs_put_super(struct super_block *);
-static void nfs_statfs(struct super_block *, struct statfs *);
+static void nfs_statfs(struct super_block *, struct statfs *, int bufsiz);
 
 static struct super_operations nfs_sops = { 
 	NULL,			/* read inode */
@@ -142,27 +142,27 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 	return sb;
 }
 
-void nfs_statfs(struct super_block *sb, struct statfs *buf)
+void nfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
 	int error;
 	struct nfs_fsinfo res;
+	struct statfs tmp;
 
-	put_fs_long(NFS_SUPER_MAGIC, &buf->f_type);
 	error = nfs_proc_statfs(&sb->u.nfs_sb.s_server, &sb->u.nfs_sb.s_root,
 		&res);
 	if (error) {
 		printk("nfs_statfs: statfs error = %d\n", -error);
 		res.bsize = res.blocks = res.bfree = res.bavail = 0;
 	}
-	put_fs_long(res.bsize, &buf->f_bsize);
-	put_fs_long(res.blocks, &buf->f_blocks);
-	put_fs_long(res.bfree, &buf->f_bfree);
-	put_fs_long(res.bavail, &buf->f_bavail);
-	put_fs_long(0, &buf->f_files);
-	put_fs_long(0, &buf->f_ffree);
-	/* We should really try to interrogate the remote server to find
-	   its maximum name length here */
-	put_fs_long(NAME_MAX, &buf->f_namelen);
+	tmp.f_type = NFS_SUPER_MAGIC;
+	tmp.f_bsize = res.bsize;
+	tmp.f_blocks = res.blocks;
+	tmp.f_bfree = res.bfree;
+	tmp.f_bavail = res.bavail;
+	tmp.f_files = 0;
+	tmp.f_ffree = 0;
+	tmp.f_namelen = NAME_MAX;
+	memcpy_tofs(buf, &tmp, bufsiz);
 }
 
 /*

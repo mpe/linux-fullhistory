@@ -1076,6 +1076,7 @@ de4x5_rx(struct device *dev)
 	  ** Notify the upper protocol layers that there is another 
 	  ** packet to handle
 	  */
+	  skb->protocol=eth_type_trans(skb,dev);
 	  netif_rx(skb);
 
 	  /*

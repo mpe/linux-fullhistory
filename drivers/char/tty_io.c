@@ -58,6 +58,8 @@
 #include <asm/system.h>
 #include <asm/bitops.h>
 
+#include <linux/scc.h>
+
 #include "kbd_kern.h"
 #include "vt_kern.h"
 #include "selection.h"
@@ -1748,6 +1750,9 @@ long tty_init(long kmem_start)
 
 	kmem_start = kbd_init(kmem_start);
 	kmem_start = rs_init(kmem_start);
+#ifdef CONFIG_SCC
+	kmem_start = scc_init(kmem_start);
+#endif
 #ifdef CONFIG_CYCLADES
 	kmem_start = cy_init(kmem_start);
 #endif

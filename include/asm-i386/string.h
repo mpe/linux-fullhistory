@@ -341,18 +341,16 @@ extern inline void * __memcpy(void * to, const void * from, size_t n)
 {
 __asm__ __volatile__(
 	"cld\n\t"
-	"movl %%edx, %%ecx\n\t"
-	"shrl $2,%%ecx\n\t"
 	"rep ; movsl\n\t"
-	"testb $1,%%dl\n\t"
+	"testb $2,%%dl\n\t"
 	"je 1f\n\t"
-	"movsb\n"
-	"1:\ttestb $2,%%dl\n\t"
-	"je 2f\n\t"
 	"movsw\n"
-	"2:\n"
+	"1:\ttestb $1,%%dl\n\t"
+	"je 2f\n\t"
+	"movsb\n"
+	"2:"
 	: /* no output */
-	:"d" (n),"D" ((long) to),"S" ((long) from)
+	:"c" (n/4), "d" (n),"D" ((long) to),"S" ((long) from)
 	: "cx","di","si","memory");
 return (to);
 }
@@ -472,8 +470,31 @@ return s;
 }
 
 /* we might want to write optimized versions of these later */
-#define __constant_c_memset(s,c,count) __memset_generic((s),(unsigned char)(c),(count))
 #define __constant_count_memset(s,c,count) __memset_generic((s),(c),(count))
+
+/*
+ * memset(x,0,y) is a reasonably common thing to do, so we want to fill
+ * things 32 bits at a time even when we don't know the size of the
+ * area at compile-time..
+ */
+extern inline void * __constant_c_memset(void * s, unsigned long c, size_t count)
+{
+__asm__ __volatile__(
+	"cld\n\t"
+	"rep ; stosl\n\t"
+	"testb $2,%%dl\n\t"
+	"je 1f\n\t"
+	"stosw\n"
+	"1:\ttestb $1,%%dl\n\t"
+	"je 2f\n\t"
+	"stosb\n"
+	"2:"
+	: /* no output */
+	:"a" (c), "d" (count), "c" (count/4), "D" ((long) s)
+	:"cx","di","memory");
+return (s);	
+}
+
 
 /*
  * This looks horribly ugly, but the compiler can optimize it totally,

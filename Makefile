@@ -1,6 +1,6 @@
 VERSION = 1
-PATCHLEVEL = 2
-SUBLEVEL = 10
+PATCHLEVEL = 3
+SUBLEVEL = 0
 
 ARCH = i386
 
@@ -98,6 +98,10 @@ endif
 
 ifdef CONFIG_SOUND
 DRIVERS := $(DRIVERS) drivers/sound/sound.a
+endif
+
+ifdef CONFIG_PCI
+DRIVERS := $(DRIVERS) drivers/pci/pci.a
 endif
 
 include arch/$(ARCH)/Makefile
@@ -224,7 +228,7 @@ modules_install:
 clean:	archclean
 	rm -f kernel/ksyms.lst
 	rm -f core `find . -name '*.[oas]' -print`
-	rm -f core `find . -name 'core' -print`
+	rm -f core `find . -type f -name 'core' -print`
 	rm -f vmlinux System.map
 	rm -f .tmp* drivers/sound/configure
 	rm -fr modules/*

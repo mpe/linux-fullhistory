@@ -3,30 +3,9 @@
 
 #include <asm/types.h>
 
-#ifndef _TIME_T
-#define _TIME_T
-typedef long time_t;
-#endif
-
-#ifndef _CLOCK_T
-#define _CLOCK_T
-typedef long clock_t;
-#endif
-
 #ifndef NULL
 #define NULL ((void *) 0)
 #endif
-
-typedef int pid_t;
-typedef unsigned short uid_t;
-typedef unsigned short gid_t;
-typedef unsigned short dev_t;
-typedef unsigned long ino_t;
-typedef unsigned short mode_t;
-typedef unsigned short umode_t;
-typedef unsigned short nlink_t;
-typedef int daddr_t;
-typedef long off_t;
 
 #if defined(__GNUC__) && !defined(__STRICT_ANSI__)
 #define _LOFF_T
@@ -49,7 +28,7 @@ typedef char *caddr_t;
 
 typedef unsigned char cc_t;
 typedef unsigned int speed_t;
-typedef unsigned long tcflag_t;
+typedef unsigned int tcflag_t;
 
 /*
  * This allows for 256 file descriptors: if NR_OPEN is ever grown beyond that

@@ -58,10 +58,12 @@
 #define func(x) __div##x
 #define modulus $2
 #define quotient $27
+#define GETSIGN(x) xor $24,$25,x
 #else
 #define func(x) __rem##x
 #define modulus $27
 #define quotient $2
+#define GETSIGN(x) bis $24,$24,x
 #endif
 
 /*
@@ -122,9 +124,14 @@ ufunction:
 	.end	ufunction
 
 /*
- * The "signed" version just does a halt if either of the value is
- * signed: the kernel shouldn't mess with signed divides anyway (who
- * knows what way they'll round..)
+ * Uhh.. Ugly signed division. I'd rather not have it at all, but
+ * it's needed in some circumstances. There are different ways to
+ * handle this, really. This does:
+ * 	-a / b = a / -b = -(a / b)
+ *	-a % b = -(a % b)
+ *	a % -b = a % b
+ * which is probably not the best solution, but at least should
+ * have the property that (x/y)*y + (x%y) = x.
  */
 .globl	sfunction
 .ent	sfunction
@@ -132,5 +139,22 @@ sfunction:
 	bis	$24,$25,$28
 	SLONGIFY($28)
 	bge	$28,ufunction
-	halt
+	subq	$30,32,$30
+	stq	$23,0($30)
+	stq	$24,8($30)
+	stq	$25,16($30)
+	subq	$31,$24,$28
+	cmovlt	$24,$28,$24	/* abs($24) */
+	subq	$31,$25,$28
+	cmovlt	$25,$28,$25	/* abs($25) */
+	bsr	$23,ufunction
+	ldq	$23,0($30)
+	ldq	$24,8($30)
+	ldq	$25,16($30)
+	addq	$30,32,$30
+	GETSIGN($28)
+	SLONGIFY($28)
+	bge	$28,1f
+	subq	$31,$27,$27
+1:	ret	$31,($23),1
 	.end	sfunction

@@ -3,6 +3,39 @@
 
 #define INIT_HWRPB ((struct hwrpb_struct *) 0x10000000)
 
+/*
+ * DEC processor types for Alpha systems.  Found in HWRPB.
+ * These values are architected.
+ */
+
+#define EV3_CPU                 1       /* EV3                  */
+#define EV4_CPU                 2       /* EV4 (21064)          */
+#define LCA4_CPU                4       /* LCA4 (21066/21068)   */
+#define EV5_CPU                 5       /* EV5 (21164)          */
+#define EV45_CPU                6       /* EV4.5 (21064/xxx)    */
+
+/*
+ * DEC system types for Alpha systems.  Found in HWRPB.
+ * These values are architected.
+ */
+
+#define ST_ADU                  1       /* Alpha ADU systype    */
+#define ST_DEC_4000             2       /* Cobra systype        */
+#define ST_DEC_7000             3       /* Ruby systype         */
+#define ST_DEC_3000_500         4       /* Flamingo systype     */
+#define ST_DEC_2000_300         6       /* Jensen systype       */
+#define ST_DEC_3000_300         7       /* Pelican systype      */
+#define ST_DEC_2100_A500        9       /* Sable systype        */
+#define ST_DEC_AXPVME_64       10       /* AXPvme system type   */
+#define ST_DEC_AXPPCI_33       11       /* NoName system type   */
+#define ST_DEC_TLASER          12       /* Turbolaser systype	*/
+#define ST_DEC_2100_A50        13       /* Avanti systype       */
+#define ST_DEC_MUSTANG         14       /* Mustang systype      */
+#define ST_DEC_ALCOR           15       /* Alcor systype	*/
+#define ST_DEC_1000            17       /* Mikasa systype       */
+#define ST_DEC_EB66            19       /* EB66 systype		*/
+#define ST_DEC_EB64P           20       /* EB64+ systype        */
+
 struct pcb_struct {
 	unsigned long ksp;
 	unsigned long usp;

@@ -741,11 +741,11 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 	return 0;
 }
 
-void ext2_statfs (struct super_block * sb, struct statfs * buf)
+void ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
 {
-	long tmp;
 	unsigned long overhead;
 	unsigned long overhead_per_group;
+	struct statfs tmp;
 
 	if (test_opt (sb, MINIX_DF))
 		overhead = 0;
@@ -762,19 +762,15 @@ void ext2_statfs (struct super_block * sb, struct statfs * buf)
 			   sb->u.ext2_sb.s_groups_count * overhead_per_group;
 	}
 
-	put_fs_long (EXT2_SUPER_MAGIC, &buf->f_type);
-	put_fs_long (sb->s_blocksize, &buf->f_bsize);
-	put_fs_long (sb->u.ext2_sb.s_es->s_blocks_count - overhead,
-		     &buf->f_blocks);
-	tmp = ext2_count_free_blocks (sb);
-	put_fs_long (tmp, &buf->f_bfree);
-	if (tmp >= sb->u.ext2_sb.s_es->s_r_blocks_count)
-		put_fs_long (tmp - sb->u.ext2_sb.s_es->s_r_blocks_count,
-			     &buf->f_bavail);
-	else
-		put_fs_long (0, &buf->f_bavail);
-	put_fs_long (sb->u.ext2_sb.s_es->s_inodes_count, &buf->f_files);
-	put_fs_long (ext2_count_free_inodes (sb), &buf->f_ffree);
-	put_fs_long (EXT2_NAME_LEN, &buf->f_namelen);
-	/* Don't know what value to put in buf->f_fsid */
+	tmp.f_type = EXT2_SUPER_MAGIC;
+	tmp.f_bsize = sb->s_blocksize;
+	tmp.f_blocks = sb->u.ext2_sb.s_es->s_blocks_count - overhead;
+	tmp.f_bfree = ext2_count_free_blocks (sb);
+	tmp.f_bavail = tmp.f_bfree - sb->u.ext2_sb.s_es->s_r_blocks_count;
+	if (tmp.f_bfree < sb->u.ext2_sb.s_es->s_r_blocks_count)
+		tmp.f_bavail = 0;
+	tmp.f_files = sb->u.ext2_sb.s_es->s_inodes_count;
+	tmp.f_ffree = ext2_count_free_inodes (sb);
+	tmp.f_namelen = EXT2_NAME_LEN;
+	memcpy_tofs(buf, &tmp, bufsiz);
 }

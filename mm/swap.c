@@ -29,10 +29,6 @@
 #define SWP_USED	1
 #define SWP_WRITEOK	3
 
-#define SWP_TYPE(entry) (((entry) >> 1) & 0x7f)
-#define SWP_OFFSET(entry) ((entry) >> 12)
-#define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << 12))
-
 int min_free_pages = 20;
 
 static int nr_swapfiles = 0;
@@ -137,7 +133,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 		ll_rw_page(rw,p->swap_device,offset,buf);
 	} else if (p->swap_file) {
 		struct inode *swapf = p->swap_file;
-		unsigned int zones[8];
+		unsigned int zones[PAGE_SIZE/512];
 		int i;
 		if (swapf->i_op->bmap == NULL
 			&& swapf->i_op->smap != NULL){
@@ -165,7 +161,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 		}else{
 			int j;
 			unsigned int block = offset
-				<< (12 - swapf->i_sb->s_blocksize_bits);
+				<< (PAGE_SHIFT - swapf->i_sb->s_blocksize_bits);
 
 			for (i=0, j=0; j< PAGE_SIZE ; i++, j +=swapf->i_sb->s_blocksize)
 				if (!(zones[i] = bmap(swapf,block++))) {
@@ -181,10 +177,10 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 	wake_up(&lock_queue);
 }
 
-unsigned int get_swap_page(void)
+unsigned long get_swap_page(void)
 {
 	struct swap_info_struct * p;
-	unsigned int offset, type;
+	unsigned long offset, type;
 
 	p = swap_info;
 	for (type = 0 ; type < nr_swapfiles ; type++,p++) {
@@ -308,7 +304,7 @@ void swap_in(struct vm_area_struct * vma, pte_t * page_table,
 }
 
 /*
- * The swap-out functions return 1 of they successfully
+ * The swap-out functions return 1 if they successfully
  * threw something out, and we got a free page. It returns
  * zero if it couldn't do anything, and any other value
  * indicates it decreased rss, but the page was shared.
@@ -1113,7 +1109,7 @@ asmlinkage int sys_swapon(const char * specialfile)
 		goto bad_swap;
 	}
 	read_swap_page(SWP_ENTRY(type,0), (char *) p->swap_lockmap);
-	if (memcmp("SWAP-SPACE",p->swap_lockmap+4086,10)) {
+	if (memcmp("SWAP-SPACE",p->swap_lockmap+PAGE_SIZE-10,10)) {
 		printk("Unable to find swap-space signature\n");
 		error = -EINVAL;
 		goto bad_swap;
@@ -1152,7 +1148,7 @@ asmlinkage int sys_swapon(const char * specialfile)
 	p->flags = SWP_WRITEOK;
 	p->pages = j;
 	nr_swap_pages += j;
-	printk("Adding Swap: %dk swap-space\n",j<<2);
+	printk("Adding Swap: %dk swap-space\n",j<<(PAGE_SHIFT-10));
 	return 0;
 bad_swap:
 	if(filp.f_op && filp.f_op->release)

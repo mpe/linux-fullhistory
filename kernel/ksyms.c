@@ -39,15 +39,16 @@
 #include <linux/netdevice.h>
 #ifdef CONFIG_INET
 #include <linux/ip.h>
-#include <linux/tcp.h>
-#include "../net/inet/protocol.h"
-#include "../net/inet/arp.h"
+#include <net/protocol.h>
+#include <net/arp.h>
+#include <net/tcp.h>
 #if defined(CONFIG_PPP) || defined(CONFIG_SLIP)
 #include "../drivers/net/slhc.h"
 #endif
 #endif
 #endif
 #ifdef CONFIG_PCI
+#include <linux/bios32.h>
 #include <linux/pci.h>
 #endif
 #if defined(CONFIG_MSDOS_FS) && !defined(CONFIG_UMSDOS_FS)

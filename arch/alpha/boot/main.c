@@ -179,6 +179,8 @@ void start_kernel(void)
 {
 	long i;
 	long dev;
+	int nbytes;
+	char envval[256];
 
 	printk("Linux/AXP bootloader for Linux " UTS_RELEASE "\n");
 	if (hwrpb.pagesize != 8192) {
@@ -199,6 +201,14 @@ void start_kernel(void)
 		printk("Failed (%lx)\n", i);
 		return;
 	}
+
+	nbytes = dispatch(CCB_GET_ENV, ENV_BOOTED_OSFLAGS,
+			  envval, sizeof(envval));
+	if (nbytes > 0) {
+		envval[nbytes] = '\0';
+		strcpy((char*)ZERO_PGE, envval);
+	}
+
 	printk(" Ok\nNow booting the kernel\n");
 	runkernel();
 	for (i = 0 ; i < 0x100000000 ; i++)

@@ -200,7 +200,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 				continue;
 
 			case SIGQUIT: case SIGILL: case SIGTRAP:
-			case SIGIOT: case SIGFPE: case SIGSEGV:
+			case SIGABRT: case SIGFPE: case SIGSEGV:
 				if (current->binfmt && current->binfmt->core_dump) {
 					if (current->binfmt->core_dump(signr, regs))
 						signr |= 0x80;

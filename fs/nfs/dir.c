@@ -22,12 +22,9 @@
 
 #include <asm/segment.h>	/* for fs functions */
 
-#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
-#define ROUND_UP(x) (((x)+3) & ~3)
-
 static int nfs_dir_read(struct inode *, struct file *filp, char *buf,
 			int count);
-static int nfs_readdir(struct inode *, struct file *, struct dirent *, int);
+static int nfs_readdir(struct inode *, struct file *, void *, filldir_t);
 static int nfs_lookup(struct inode *dir, const char *name, int len,
 		      struct inode **result);
 static int nfs_create(struct inode *dir, const char *name, int len, int mode,
@@ -91,7 +88,7 @@ static int nfs_dir_read(struct inode *inode, struct file *filp, char *buf,
  */
 
 static int nfs_readdir(struct inode *inode, struct file *filp,
-		       struct dirent *dirent, int count)
+		       void *dirent, filldir_t filldir)
 {
 	static int c_dev = 0;
 	static int c_ino;
@@ -99,7 +96,7 @@ static int nfs_readdir(struct inode *inode, struct file *filp,
 	static struct nfs_entry *c_entry = NULL;
 
 	int result;
-	int i;
+	int i, index = 0;
 	struct nfs_entry *entry;
 
 	if (!inode || !S_ISDIR(inode->i_mode)) {
@@ -129,7 +126,7 @@ static int nfs_readdir(struct inode *inode, struct file *filp,
 						return 0;
 				}
 				else
-					entry = c_entry + i + 1;
+					entry = c_entry + (index = i + 1);
 				break;
 			}
 		}
@@ -148,19 +145,27 @@ static int nfs_readdir(struct inode *inode, struct file *filp,
 			c_dev = inode->i_dev;
 			c_ino = inode->i_ino;
 			c_size = result;
-			entry = c_entry + 0;
+			entry = c_entry + (index = 0);
 		}
 	}
 
 	/* if we found it in the cache or from an nfs call, return results */
-
-	if (entry) {
-		i = strlen(entry->name);
-		memcpy_tofs(dirent->d_name, entry->name, i + 1);
-		put_fs_long(entry->fileid, &dirent->d_ino);
-		put_fs_word(i, &dirent->d_reclen);
-		filp->f_pos = entry->cookie;
-		return ROUND_UP(NAME_OFFSET(dirent)+i+1);
+	if (!entry)
+		return 0;
+	while (index < c_size) {
+		int nextpos = entry->cookie;
+		if (filldir(dirent, entry->name, strlen(entry->name), filp->f_pos, entry->fileid) < 0)
+			break;
+		filp->f_pos = nextpos;
+		/* revalidate the cache if we slept in filldir() */
+		if (inode->i_dev != c_dev)
+			break;
+		if (inode->i_ino != c_ino)
+			break;
+		if (nextpos != entry->cookie)
+			break;
+		index++;
+		entry++;
 	}
 	return 0;
 }

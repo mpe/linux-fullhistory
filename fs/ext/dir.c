@@ -20,15 +20,12 @@
 #include <linux/ext_fs.h>
 #include <linux/stat.h>
 
-#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
-#define ROUND_UP(x) (((x)+3) & ~3)
-
 static int ext_dir_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	return -EISDIR;
 }
 
-static int ext_readdir(struct inode *, struct file *, struct dirent *, int);
+static int ext_readdir(struct inode *, struct file *, void *, filldir_t);
 
 static struct file_operations ext_dir_operations = {
 	NULL,			/* lseek - default */
@@ -65,12 +62,11 @@ struct inode_operations ext_dir_inode_operations = {
 };
 
 static int ext_readdir(struct inode * inode, struct file * filp,
-	struct dirent * dirent, int count)
+	void * dirent, filldir_t filldir)
 {
+	int error;
 	unsigned int i;
-	unsigned int ret;
 	off_t offset;
-	char c;
 	struct buffer_head * bh;
 	struct ext_dir_entry * de;
 
@@ -78,8 +74,8 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 		return -EBADF;
 	if ((filp->f_pos & 7) != 0)
 		return -EBADF;
-	ret = 0;
-	while (!ret && filp->f_pos < inode->i_size) {
+	error = 0;
+	while (!error && filp->f_pos < inode->i_size) {
 		offset = filp->f_pos & 1023;
 		bh = ext_bread(inode,(filp->f_pos)>>BLOCK_SIZE_BITS,0);
 		if (!bh) {
@@ -94,7 +90,7 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 		}
 		offset = i;
 		de = (struct ext_dir_entry *) (offset + bh->b_data);
-		while (!ret && offset < 1024 && filp->f_pos < inode->i_size) {
+		while (offset < 1024 && filp->f_pos < inode->i_size) {
 			if (de->rec_len < 8 || de->rec_len % 8 != 0 ||
 			    de->rec_len < de->name_len + 8 ||
 			    (de->rec_len + (off_t) filp->f_pos - 1) / 1024 > ((off_t) filp->f_pos / 1024)) {
@@ -106,26 +102,16 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 					filp->f_pos = inode->i_size;
 				continue;
 			}
+			if (de->inode) {
+				error = filldir(dirent, de->name, de->name_len, filp->f_pos, de->inode);
+				if (error)
+					break;
+			}
 			offset += de->rec_len;
 			filp->f_pos += de->rec_len;
-			if (de->inode) {
-				for (i = 0; i < de->name_len; i++)
-					if ((c = de->name[i]) != 0)
-						put_fs_byte(c,i+dirent->d_name);
-					else
-						break;
-				if (i) {
-					put_fs_long(de->inode,&dirent->d_ino);
-					put_fs_byte(0,i+dirent->d_name);
-					put_fs_word(i,&dirent->d_reclen);
-					ret = ROUND_UP(NAME_OFFSET(dirent)+i+1);
-					break;
-				}
-			}
-			de = (struct ext_dir_entry *) ((char *) de 
-				+ de->rec_len);
+			((char *) de) += de->rec_len;
 		}
 		brelse(bh);
 	}
-	return ret;
+	return 0;
 }

@@ -74,6 +74,12 @@ ifdef M
 OBJS := $(OBJS) mouse.o
 SRCS := $(SRCS) mouse.c
 endif
+  
+ifdef CONFIG_SCC
+OBJS := $(OBJS) scc.o
+SRCS := $(SRCS) scc.c
+endif
+ 
 
 all: char.a
 

@@ -120,7 +120,7 @@ sense[0],sense[1],sense[2],sense[3]);
 	    }
 	    else if ( status[0]&0x60 )
 	    {
-		retval = DID_ERROR; /* Didn't found a better error */
+		retval = DID_ERROR; /* Didn't find a better error */
 	    }
 	    /* In any other case return DID_OK so for example
                CONDITION_CHECKS make it through to the appropriate
@@ -178,6 +178,7 @@ void aha1740_intr_handle(int irq, struct pt_regs * regs)
     {
 	DEB(printk("aha1740_intr top of loop.\n"));
 	adapstat = inb(G2INTST);
+	ecbptr = (struct ecb *) bus_to_virt(inl(MBOXIN0));
 	outb(G2CNTRL_IRST,G2CNTRL); /* interrupt reset */
       
         switch ( adapstat & G2INTST_MASK )
@@ -185,10 +186,6 @@ void aha1740_intr_handle(int irq, struct pt_regs * regs)
 	case	G2INTST_CCBRETRY:
 	case	G2INTST_CCBERROR:
 	case	G2INTST_CCBGOOD:
-	    ecbptr = (struct ecb *) (	((ulong) inb(MBOXIN0)) +
-					((ulong) inb(MBOXIN1) <<8) +
-					((ulong) inb(MBOXIN2) <<16) +
-					((ulong) inb(MBOXIN3) <<24) );
 	    outb(G2CNTRL_HRDY,G2CNTRL); /* Host Ready -> Mailbox in complete */
 	    if (!ecbptr)
 	    {
@@ -239,7 +236,7 @@ void aha1740_intr_handle(int irq, struct pt_regs * regs)
 	    break;
 	}
       number_serviced++;
-    };
+    }
 }
 
 int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
@@ -374,7 +371,6 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	  thing else is in the driver was broken, like _makecode(), or
 	  when a scsi device hung the scsi bus.  Even under these conditions,
 	  The loop actually only cycled < 3 times (we instrumented it). */
-        ulong adrs;
 
 	DEB(printk("aha1740[%d] critical section\n",ecbno));
 	save_flags(flags);
@@ -384,12 +380,9 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	    printk("aha1740[%d]_mbxout wait!\n",ecbno);
 	    cli(); /* printk may have done a sti()! */
 	}
+	mb();
 	while ( ! (inb(G2STAT) & G2STAT_MBXOUT) );	/* Oh Well. */
-	adrs = (ulong) &(ecb[ecbno]);			/* Spit the command */
-	outb((char) (adrs&0xff), MBOXOUT0);		/* out, note this set */
-	outb((char) ((adrs>>8)&0xff), MBOXOUT1);	/* of outb's must be */
-	outb((char) ((adrs>>16)&0xff), MBOXOUT2);	/* atomic */
-	outb((char) ((adrs>>24)&0xff), MBOXOUT3);
+	outl(virt_to_bus(ecb+ecbno), MBOXOUT0);
 	if ( inb(G2STAT) & G2STAT_BUSY )
 	{
 	    printk("aha1740[%d]_attn wait!\n",ecbno);
@@ -432,6 +425,7 @@ void aha1740_getconfig(void)
   static int intab[] = { 9,10,11,12,0,14,15,0 };
 
   irq_level = intab [ inb(INTDEF)&0x7 ];
+  outb(inb(INTDEF) | 0x10, INTDEF);
 }
 
 int aha1740_detect(Scsi_Host_Template * tpnt)

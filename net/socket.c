@@ -71,8 +71,7 @@ static int sock_read(struct inode *inode, struct file *file, char *buf,
 		     int size);
 static int sock_write(struct inode *inode, struct file *file, char *buf,
 		      int size);
-static int sock_readdir(struct inode *inode, struct file *file,
-			struct dirent *dirent, int count);
+
 static void sock_close(struct inode *inode, struct file *file);
 static int sock_select(struct inode *inode, struct file *file, int which, select_table *seltable);
 static int sock_ioctl(struct inode *inode, struct file *file,
@@ -90,7 +89,7 @@ static struct file_operations socket_file_ops = {
 	sock_lseek,
 	sock_read,
 	sock_write,
-	sock_readdir,
+	NULL,			/* readdir */
 	sock_select,
 	sock_ioctl,
 	NULL,			/* mmap */
@@ -320,17 +319,13 @@ static int sock_read(struct inode *inode, struct file *file, char *ubuf, int siz
 	struct socket *sock;
 	int err;
   
-	if (!(sock = socki_lookup(inode))) 
-	{
-		printk("NET: sock_read: can't find socket for inode!\n");
-		return(-EBADF);
-	}
+	sock = socki_lookup(inode); 
 	if (sock->flags & SO_ACCEPTCON) 
 		return(-EINVAL);
 
 	if(size<0)
 		return -EINVAL;
-	if(size==0)
+	if(size==0)		/* Match SYS5 behaviour */
 		return 0;
 	if ((err=verify_area(VERIFY_WRITE,ubuf,size))<0)
 	  	return err;
@@ -347,33 +342,19 @@ static int sock_write(struct inode *inode, struct file *file, char *ubuf, int si
 	struct socket *sock;
 	int err;
 	
-	if (!(sock = socki_lookup(inode))) 
-	{
-		printk("NET: sock_write: can't find socket for inode!\n");
-		return(-EBADF);
-	}
+	sock = socki_lookup(inode); 
 
 	if (sock->flags & SO_ACCEPTCON) 
 		return(-EINVAL);
 	
 	if(size<0)
 		return -EINVAL;
-	if(size==0)
+	if(size==0)		/* Match SYS5 behaviour */
 		return 0;
 		
 	if ((err=verify_area(VERIFY_READ,ubuf,size))<0)
 	  	return err;
 	return(sock->ops->write(sock, ubuf, size,(file->f_flags & O_NONBLOCK)));
-}
-
-/*
- *	You can't read directories from a socket!
- */
- 
-static int sock_readdir(struct inode *inode, struct file *file, struct dirent *dirent,
-	     int count)
-{
-	return(-EBADF);
 }
 
 /*
@@ -385,12 +366,7 @@ int sock_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	   unsigned long arg)
 {
 	struct socket *sock;
-
-	if (!(sock = socki_lookup(inode))) 
-	{
-		printk("NET: sock_ioctl: can't find socket for inode!\n");
-		return(-EBADF);
-	}
+	sock = socki_lookup(inode); 
   	return(sock->ops->ioctl(sock, cmd, arg));
 }
 
@@ -399,17 +375,13 @@ static int sock_select(struct inode *inode, struct file *file, int sel_type, sel
 {
 	struct socket *sock;
 
-	if (!(sock = socki_lookup(inode))) 
-	{
-		printk("NET: sock_select: can't find socket for inode!\n");
-		return(0);
-	}
+	sock = socki_lookup(inode);
 
 	/*
 	 *	We can't return errors to select, so it's either yes or no. 
 	 */
 
-	if (sock->ops && sock->ops->select)
+	if (sock->ops->select)
 		return(sock->ops->select(sock, sel_type, wait));
 	return(0);
 }
@@ -417,22 +389,14 @@ static int sock_select(struct inode *inode, struct file *file, int sel_type, sel
 
 void sock_close(struct inode *inode, struct file *filp)
 {
-	struct socket *sock;
-
 	/*
 	 *	It's possible the inode is NULL if we're closing an unfinished socket. 
 	 */
 
 	if (!inode) 
 		return;
-
-	if (!(sock = socki_lookup(inode))) 
-	{
-		printk("NET: sock_close: can't find socket for inode!\n");
-		return;
-	}
 	sock_fasync(inode, filp, 0);
-	sock_release(sock);
+	sock_release(socki_lookup(inode));
 }
 
 /*
@@ -1102,7 +1066,7 @@ static int sock_getsockopt(int fd, int level, int optname, char *optval, int *op
 	if (!(sock = sockfd_lookup(fd, NULL)))
 		return(-ENOTSOCK);
 	    
-	if (!sock->ops || !sock->ops->getsockopt) 
+	if (!sock->ops->getsockopt) 
 		return(0);
 	return(sock->ops->getsockopt(sock, level, optname, optval, optlen));
 }
@@ -1149,132 +1113,93 @@ int sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
  *	I'm now expanding this up to a higher level to separate the assorted
  *	kernel/user space manipulations and global assumptions from the protocol
  *	layers proper - AC.
+ *
+ *	Argument checking cleaned up. Saved 20% in size.
  */
 
 asmlinkage int sys_socketcall(int call, unsigned long *args)
 {
 	int er;
+	unsigned char nargs[16]={0,3,3,3,2,3,3,3,
+				 4,4,4,6,6,2,5,5};
+
+	unsigned long a0,a1;
+				 
+	if(call<1||call>SYS_GETSOCKOPT)
+		return -EINVAL;
+		
+	er=verify_area(VERIFY_READ, args, nargs[call] * sizeof(unsigned long));
+	if(er)
+		return er;
+		
+	a0=get_fs_long(args);
+	a1=get_fs_long(args+1);
+	
+		
 	switch(call) 
 	{
 		case SYS_SOCKET:
-			er=verify_area(VERIFY_READ, args, 3 * sizeof(long));
-			if(er)
-				return er;
-			return(sock_socket(get_fs_long(args+0),
-				get_fs_long(args+1),
-				get_fs_long(args+2)));
+			return(sock_socket(a0,a1,get_fs_long(args+2)));
 		case SYS_BIND:
-			er=verify_area(VERIFY_READ, args, 3 * sizeof(long));
-			if(er)
-				return er;
-			return(sock_bind(get_fs_long(args+0),
-				(struct sockaddr *)get_fs_long(args+1),
+			return(sock_bind(a0,(struct sockaddr *)a1,
 				get_fs_long(args+2)));
 		case SYS_CONNECT:
-			er=verify_area(VERIFY_READ, args, 3 * sizeof(long));
-			if(er)
-				return er;
-			return(sock_connect(get_fs_long(args+0),
-				(struct sockaddr *)get_fs_long(args+1),
+			return(sock_connect(a0, (struct sockaddr *)a1,
 				get_fs_long(args+2)));
 		case SYS_LISTEN:
-			er=verify_area(VERIFY_READ, args, 2 * sizeof(long));
-			if(er)
-				return er;
-			return(sock_listen(get_fs_long(args+0),
-				get_fs_long(args+1)));
+			return(sock_listen(a0,a1));
 		case SYS_ACCEPT:
-			er=verify_area(VERIFY_READ, args, 3 * sizeof(long));
-			if(er)
-				return er;
-			return(sock_accept(get_fs_long(args+0),
-				(struct sockaddr *)get_fs_long(args+1),
+			return(sock_accept(a0,(struct sockaddr *)a1,
 				(int *)get_fs_long(args+2)));
 		case SYS_GETSOCKNAME:
-			er=verify_area(VERIFY_READ, args, 3 * sizeof(long));
-			if(er)
-				return er;
-			return(sock_getsockname(get_fs_long(args+0),
-				(struct sockaddr *)get_fs_long(args+1),
+			return(sock_getsockname(a0,(struct sockaddr *)a1,
 				(int *)get_fs_long(args+2)));
 		case SYS_GETPEERNAME:
-			er=verify_area(VERIFY_READ, args, 3 * sizeof(long));
-			if(er)
-				return er;
-			return(sock_getpeername(get_fs_long(args+0),
-				(struct sockaddr *)get_fs_long(args+1),
+			return(sock_getpeername(a0, (struct sockaddr *)a1,
 				(int *)get_fs_long(args+2)));
 		case SYS_SOCKETPAIR:
-			er=verify_area(VERIFY_READ, args, 4 * sizeof(long));
-			if(er)
-				return er;
-			return(sock_socketpair(get_fs_long(args+0),
-				get_fs_long(args+1),
+			return(sock_socketpair(a0,a1,
 				get_fs_long(args+2),
 				(unsigned long *)get_fs_long(args+3)));
 		case SYS_SEND:
-			er=verify_area(VERIFY_READ, args, 4 * sizeof(unsigned long));
-			if(er)
-				return er;
-			return(sock_send(get_fs_long(args+0),
-				(void *)get_fs_long(args+1),
+			return(sock_send(a0,
+				(void *)a1,
 				get_fs_long(args+2),
 				get_fs_long(args+3)));
 		case SYS_SENDTO:
-			er=verify_area(VERIFY_READ, args, 6 * sizeof(unsigned long));
-			if(er)
-				return er;
-			return(sock_sendto(get_fs_long(args+0),
-				(void *)get_fs_long(args+1),
+			return(sock_sendto(a0,(void *)a1,
 				get_fs_long(args+2),
 				get_fs_long(args+3),
 				(struct sockaddr *)get_fs_long(args+4),
 				get_fs_long(args+5)));
 		case SYS_RECV:
-			er=verify_area(VERIFY_READ, args, 4 * sizeof(unsigned long));
-			if(er)
-				return er;
-			return(sock_recv(get_fs_long(args+0),
-				(void *)get_fs_long(args+1),
+			return(sock_recv(a0,
+				(void *)a1,
 				get_fs_long(args+2),
 				get_fs_long(args+3)));
 		case SYS_RECVFROM:
-			er=verify_area(VERIFY_READ, args, 6 * sizeof(unsigned long));
-			if(er)
-				return er;
-			return(sock_recvfrom(get_fs_long(args+0),
-				(void *)get_fs_long(args+1),
+			return(sock_recvfrom(a0,
+				(void *)a1,
 				get_fs_long(args+2),
 				get_fs_long(args+3),
 				(struct sockaddr *)get_fs_long(args+4),
 				(int *)get_fs_long(args+5)));
 		case SYS_SHUTDOWN:
-			er=verify_area(VERIFY_READ, args, 2* sizeof(unsigned long));
-			if(er)
-				return er;
-			return(sock_shutdown(get_fs_long(args+0),
-				get_fs_long(args+1)));
+			return(sock_shutdown(a0,a1));
 		case SYS_SETSOCKOPT:
-			er=verify_area(VERIFY_READ, args, 5*sizeof(unsigned long));
-			if(er)
-				return er;
-			return(sock_setsockopt(get_fs_long(args+0),
-				get_fs_long(args+1),
+			return(sock_setsockopt(a0,
+				a1,
 				get_fs_long(args+2),
 				(char *)get_fs_long(args+3),
 				get_fs_long(args+4)));
 		case SYS_GETSOCKOPT:
-			er=verify_area(VERIFY_READ, args, 5*sizeof(unsigned long));
-			if(er)
-				return er;
-			return(sock_getsockopt(get_fs_long(args+0),
-				get_fs_long(args+1),
+			return(sock_getsockopt(a0,
+				a1,
 				get_fs_long(args+2),
 				(char *)get_fs_long(args+3),
 				(int *)get_fs_long(args+4)));
-		default:
-			return(-EINVAL);
 	}
+	return -EINVAL; /* to keep gcc happy */
 }
 
 /*
@@ -1347,7 +1272,7 @@ void sock_init(void)
 {
 	int i;
 
-	printk("Swansea University Computer Society NET3.019\n");
+	printk("Swansea University Computer Society NET3.029 Snap #6 for Linux 1.3.0\n");
 
 	/*
 	 *	Initialize all address (protocol) families. 

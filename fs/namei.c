@@ -166,7 +166,6 @@ int lookup(struct inode * dir,const char * name, int len,
 			*result = dir;
 			return 0;
 		} else if ((sb = dir->i_sb) && (dir == sb->s_mounted)) {
-			sb = dir->i_sb;
 			iput(dir);
 			dir = sb->s_covered;
 			if (!dir)

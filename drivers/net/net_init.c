@@ -27,6 +27,7 @@
 #include <linux/string.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/trdevice.h>
 
 /* The network devices currently exist only in the socket namespace, so these
    entries are unused.  The only ones that make sense are
@@ -181,7 +182,6 @@ void ether_setup(struct device *dev)
 
 	dev->hard_header	= eth_header;
 	dev->rebuild_header = eth_rebuild_header;
-	dev->type_trans = eth_type_trans;
 
 	dev->type		= ARPHRD_ETHER;
 	dev->hard_header_len = ETH_HLEN;
@@ -199,6 +199,38 @@ void ether_setup(struct device *dev)
 	dev->pa_mask	= 0;
 	dev->pa_alen	= sizeof(unsigned long);
 }
+
+#ifdef CONFIG_TR
+
+void tr_setup(struct device *dev)
+{
+	int i;
+	/* Fill in the fields of the device structure with ethernet-generic values.
+	   This should be in a common file instead of per-driver.  */
+	for (i = 0; i < DEV_NUMBUFFS; i++)
+		skb_queue_head_init(&dev->buffs[i]);
+
+	dev->hard_header	= tr_header;
+	dev->rebuild_header = tr_rebuild_header;
+
+	dev->type		= ARPHRD_IEEE802;
+	dev->hard_header_len = TR_HLEN;
+	dev->mtu		= 2000; /* bug in fragmenter...*/
+	dev->addr_len	= TR_ALEN;
+	for (i = 0; i < TR_ALEN; i++) {
+		dev->broadcast[i]=0xff;
+	}
+
+	/* New-style flags. */
+	dev->flags		= IFF_BROADCAST;
+	dev->family		= AF_INET;
+	dev->pa_addr	= 0;
+	dev->pa_brdaddr = 0;
+	dev->pa_mask	= 0;
+	dev->pa_alen	= sizeof(unsigned long);
+}
+
+#endif
 
 int ether_config(struct device *dev, struct ifmap *map)
 {

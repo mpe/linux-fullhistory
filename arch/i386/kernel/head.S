@@ -9,7 +9,7 @@
  */
 
 .text
-.globl _idt,_gdt,
+.globl _idt,_gdt,_stext,__stext
 .globl _swapper_pg_dir,_pg0
 .globl _empty_bad_page
 .globl _empty_bad_page_table
@@ -30,6 +30,8 @@
  * swapper_pg_dir is the main page directory, address 0x00001000 (or at
  * address 0x00101000 for a compressed boot).
  */
+_stext:
+__stext:
 startup_32:
 	cld
 	movl $(KERNEL_DS),%eax

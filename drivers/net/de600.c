@@ -115,7 +115,7 @@ unsigned int de600_debug = DE600_DEBUG;
 
 #ifdef FAKE_SMALL_MAX
 static unsigned long de600_rspace(struct sock *sk);
-#include "../../net/inet/sock.h"
+#include <net/sock.h>
 #endif
 
 #define netstats enet_statistics
@@ -629,6 +629,7 @@ de600_rx_intr(struct device *dev)
 	
 	((struct netstats *)(dev->priv))->rx_packets++; /* count all receives */
 
+	skb->protocol=eth_type_trans(skb,dev);
 	if (dev_rint((unsigned char *)skb, size, IN_SKBUFF, dev))
 		printk("%s: receive buffers full.\n", dev->name);
 	/*

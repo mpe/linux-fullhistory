@@ -166,6 +166,7 @@ extern inline void * xchg_ptr(void * m, void * val)
 	return (void *) xchg_u32(m, (unsigned long) val);
 }
 
+#define mb()  __asm__ __volatile__ (""   : : :"memory")
 #define sti() __asm__ __volatile__ ("sti": : :"memory")
 #define cli() __asm__ __volatile__ ("cli": : :"memory")
 

@@ -18,6 +18,10 @@
 
 SUBDIRS	= block char net #streams
 
+ifdef CONFIG_PCI
+SUBDIRS := $(SUBDIRS) pci
+endif
+
 ifdef CONFIG_SCSI
 SUBDIRS := $(SUBDIRS) scsi
 endif

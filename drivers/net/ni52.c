@@ -809,6 +809,7 @@ static void ni52_rcv_int(struct device *dev)
             skb->len = totlen;
             skb->dev = dev;
             memcpy( (char *) skb->data,(char *) p->base+(unsigned long) rbd->buffer, totlen);
+            skb->protocol=eth_type_trans(skb,dev);
             netif_rx(skb);
             p->stats.rx_packets++;
           }

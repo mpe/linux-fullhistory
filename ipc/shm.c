@@ -17,7 +17,7 @@
 #include <asm/pgtable.h>
 
 extern int ipcperms (struct ipc_perm *ipcp, short shmflg);
-extern unsigned int get_swap_page (void);
+extern unsigned long get_swap_page (void);
 static int findkey (key_t key);
 static int newseg (key_t key, int shmflg, int size);
 static int shm_map (struct vm_area_struct *shmd);
@@ -470,7 +470,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	if (!(addr = (ulong) shmaddr)) {
 		if (shmflg & SHM_REMAP)
 			return -EINVAL;
-		if (!(addr = get_unmapped_area(shp->shm_segsz)))
+		if (!(addr = get_unmapped_area(0, shp->shm_segsz)))
 			return -ENOMEM;
 	} else if (addr & (SHMLBA-1)) {
 		if (shmflg & SHM_RND)
@@ -670,7 +670,7 @@ int shm_swap (int prio)
 	pte_t page;
 	struct shmid_ds *shp;
 	struct vm_area_struct *shmd;
-	unsigned int swap_nr;
+	unsigned long swap_nr;
 	unsigned long id, idx;
 	int loop = 0, invalid = 0;
 	int counter;

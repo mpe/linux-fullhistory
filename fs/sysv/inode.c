@@ -536,20 +536,19 @@ void sysv_put_super(struct super_block *sb)
 	MOD_DEC_USE_COUNT;
 }
 
-void sysv_statfs(struct super_block *sb, struct statfs *buf)
+void sysv_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
-	long tmp;
+	struct statfs tmp;
 
-	put_fs_long(sb->s_magic, &buf->f_type);		/* type of filesystem */
-	put_fs_long(sb->sv_block_size, &buf->f_bsize);	/* block size */
-	put_fs_long(sb->sv_ndatazones, &buf->f_blocks);	/* total data blocks in file system */
-	tmp = sysv_count_free_blocks(sb);
-	put_fs_long(tmp, &buf->f_bfree);		/* free blocks in fs */
-	put_fs_long(tmp, &buf->f_bavail);		/* free blocks available to non-superuser */
-	put_fs_long(sb->sv_ninodes, &buf->f_files);	/* total file nodes in file system */
-	put_fs_long(sysv_count_free_inodes(sb), &buf->f_ffree);	/* free file nodes in fs */
-	put_fs_long(SYSV_NAMELEN, &buf->f_namelen);
-	/* Don't know what value to put in buf->f_fsid */	/* file system id */
+	tmp.f_type = sb->s_magic;
+	tmp.f_bsize = sb->sv_block_size;
+	tmp.f_blocks = sb->sv_ndatazones;
+	tmp.f_bfree = sysv_count_free_blocks(sb);
+	tmp.f_bavail = tmp.f_bfree;
+	tmp.f_files = sb->sv_ninodes;
+	tmp.f_ffree = sysv_count_free_inodes(sb);
+	tmp.f_namelen = SYSV_NAMELEN;
+	memcpy_tofs(buf, &tmp, bufsiz);
 }
 
 

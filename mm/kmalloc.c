@@ -99,7 +99,7 @@ struct size_descriptor {
  * For now it is unsafe to allocate bucket sizes between n & n=16 where n is
  * 4096 * any power of two
  */
-
+#if PAGE_SIZE == 4096
 struct size_descriptor sizes[] = { 
 	{ NULL, NULL,  32,127, 0,0,0,0, 0},
 	{ NULL, NULL,  64, 63, 0,0,0,0, 0 },
@@ -116,7 +116,26 @@ struct size_descriptor sizes[] = {
 	{ NULL, NULL,131072-16,  1, 0,0,0,0, 5 },
 	{ NULL, NULL,   0,  0, 0,0,0,0, 0 }
 };
-
+#elif PAGE_SIZE == 8192
+struct size_descriptor sizes[] = { 
+	{ NULL, NULL,  64,127, 0,0,0,0, 0},
+	{ NULL, NULL, 128, 63, 0,0,0,0, 0 },
+	{ NULL, NULL, 248, 31, 0,0,0,0, 0 },
+	{ NULL, NULL, 504, 16, 0,0,0,0, 0 },
+	{ NULL, NULL,1016,  8, 0,0,0,0, 0 },
+	{ NULL, NULL,2040,  4, 0,0,0,0, 0 },
+	{ NULL, NULL,4080,  2, 0,0,0,0, 0 },
+	{ NULL, NULL,8192-32,  1, 0,0,0,0, 0 },
+	{ NULL, NULL,16384-32,  1, 0,0,0,0, 1 },
+	{ NULL, NULL,32768-32,  1, 0,0,0,0, 2 },
+	{ NULL, NULL,65536-32,  1, 0,0,0,0, 3 },
+	{ NULL, NULL,131072-32,  1, 0,0,0,0, 4 },
+	{ NULL, NULL,262144-32,  1, 0,0,0,0, 5 },
+	{ NULL, NULL,   0,  0, 0,0,0,0, 0 }
+};
+#else
+#error you need to make a version for your pagesize
+#endif
 
 #define NBLOCKS(order)          (sizes[order].nblocks)
 #define BLOCKSIZE(order)        (sizes[order].size)
@@ -154,7 +173,7 @@ int get_order (int size)
 	int order;
 
 	/* Add the size of the header */
-	size += sizeof (struct block_header); 
+	size += sizeof (struct block_header);
 	for (order = 0;BLOCKSIZE(order);order++)
 		if (size <= BLOCKSIZE (order))
 			return order; 

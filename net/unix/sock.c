@@ -48,7 +48,7 @@
 
 #include <stdarg.h>
 
-#include "unix.h"
+#include <net/unix.h>
 
 /*
  *	Because these have the address in them they casually waste an extra 8K of kernel data
@@ -421,7 +421,7 @@ static int unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 	i = do_mknod(fname, S_IFSOCK | S_IRWXUGO, 0);
 
 	if (i == 0) 
-		i = open_namei(fname, 0, S_IFSOCK, &upd->inode, NULL);
+		i = open_namei(fname, 2, S_IFSOCK, &upd->inode, NULL);
 	set_fs(old_fs);
 	if (i < 0) 
 	{

@@ -93,17 +93,19 @@ struct super_block *proc_read_super(struct super_block *s,void *data,
 	return s;
 }
 
-void proc_statfs(struct super_block *sb, struct statfs *buf)
+void proc_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
-	put_fs_long(PROC_SUPER_MAGIC, &buf->f_type);
-	put_fs_long(PAGE_SIZE/sizeof(long), &buf->f_bsize);
-	put_fs_long(0, &buf->f_blocks);
-	put_fs_long(0, &buf->f_bfree);
-	put_fs_long(0, &buf->f_bavail);
-	put_fs_long(0, &buf->f_files);
-	put_fs_long(0, &buf->f_ffree);
-	put_fs_long(NAME_MAX, &buf->f_namelen);
-	/* Don't know what value to put in buf->f_fsid */
+	struct statfs tmp;
+
+	tmp.f_type = PROC_SUPER_MAGIC;
+	tmp.f_bsize = PAGE_SIZE/sizeof(long);
+	tmp.f_blocks = 0;
+	tmp.f_bfree = 0;
+	tmp.f_bavail = 0;
+	tmp.f_files = 0;
+	tmp.f_ffree = 0;
+	tmp.f_namelen = NAME_MAX;
+	memcpy_tofs(buf, &tmp, bufsiz);
 }
 
 void proc_read_inode(struct inode * inode)

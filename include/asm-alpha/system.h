@@ -25,7 +25,7 @@
 #define ZERO_PGE	0xfffffc000030A000
 
 #define START_ADDR	0xfffffc0000310000
-#define START_SIZE	(1024*1024)
+#define START_SIZE	(2*1024*1024)
 
 /*
  * Common PAL-code
@@ -53,7 +53,8 @@
 /*
  * OSF specific PAL-code
  */
-#define PAL_mtpr_mces	17
+#define PAL_rdmces	16
+#define PAL_wrmces	17
 #define PAL_wrfen	43
 #define PAL_wrvptptr	45
 #define PAL_jtopal	46
@@ -88,25 +89,43 @@ extern void alpha_switch_to(unsigned long pctxp);
 	alpha_switch_to((unsigned long) &(p)->tss - 0xfffffc0000000000); \
 } while (0)
 
-#ifndef mb
-#define mb() __asm__ __volatile__("mb": : :"memory")
-#endif
+#define mb() \
+__asm__ __volatile__("mb": : :"memory")
+
+#define draina() \
+__asm__ __volatile__ ("call_pal %0" : : "i" (PAL_draina) : "memory")
+
+#define getipl() \
+({ unsigned long __old_ipl; \
+__asm__ __volatile__( \
+	"call_pal 54\n\t" \
+	"bis $0,$0,%0" \
+	: "=r" (__old_ipl) \
+	: : "$0", "$1", "$16", "$22", "$23", "$24", "$25"); \
+__old_ipl; })
+
+#define setipl(__new_ipl) \
+__asm__ __volatile__( \
+	"bis %0,%0,$16\n\t" \
+	"call_pal 53" \
+	: : "r" (__new_ipl) \
+	: "$0", "$1", "$16", "$22", "$23", "$24", "$25")
 
 #define swpipl(__new_ipl) \
 ({ unsigned long __old_ipl; \
 __asm__ __volatile__( \
 	"bis %1,%1,$16\n\t" \
-	".long 53\n\t" \
+	"call_pal 53\n\t" \
 	"bis $0,$0,%0" \
 	: "=r" (__old_ipl) \
 	: "r" (__new_ipl) \
 	: "$0", "$1", "$16", "$22", "$23", "$24", "$25"); \
 __old_ipl; })
 
-#define cli()			swpipl(7)
-#define sti()			swpipl(0)
-#define save_flags(flags)	do { flags = swpipl(7); } while (0)
-#define restore_flags(flags)	swpipl(flags)
+#define cli()			setipl(7)
+#define sti()			setipl(0)
+#define save_flags(flags)	do { flags = getipl(); } while (0)
+#define restore_flags(flags)	setipl(flags)
 
 extern inline unsigned long xchg_u32(int * m, unsigned long val)
 {

@@ -61,9 +61,9 @@ void UMSDOS_put_super(struct super_block *sb)
 }
 
 
-void UMSDOS_statfs(struct super_block *sb,struct statfs *buf)
+void UMSDOS_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
 {
-	msdos_statfs(sb,buf);
+	msdos_statfs(sb,buf,bufsiz);
 }
 
 

@@ -559,6 +559,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 
 	case PLIP_PK_DONE:
 		/* Inform the upper layer for the arrival of a packet. */
+		rcv->skb->protocol=eth_type_trans(rcv->skb, dev);
 		netif_rx(rcv->skb);
 		nl->enet_stats.rx_packets++;
 		rcv->skb = NULL;

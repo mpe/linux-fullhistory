@@ -1359,7 +1359,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 
 	disable_bh(KEYBOARD_BH);
 	while (!tty->stopped &&	count) {
-		c = from_user ? get_fs_byte(buf) : *buf;
+		c = from_user ? get_user(buf) : *buf;
 		buf++; n++; count--;
 
 		if (utf) {
@@ -2234,10 +2234,10 @@ static int set_get_font(char * arg, int set)
 
 	if (set)
 		for (i=0; i<cmapsz ; i++)
-			*(charmap+i) = get_fs_byte(arg+i);
+			scr_writeb(get_user(arg + i), charmap + i);
 	else
 		for (i=0; i<cmapsz ; i++)
-			put_fs_byte(*(charmap+i), arg+i);
+			put_user(scr_readb(charmap + i), arg + i);
 
 	cli();
 	outb_p( 0x00, seq_port_reg );   /* First, the sequencer */

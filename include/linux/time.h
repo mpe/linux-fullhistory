@@ -2,8 +2,8 @@
 #define _LINUX_TIME_H
 
 struct timeval {
-	long	tv_sec;		/* seconds */
-	long	tv_usec;	/* microseconds */
+	int	tv_sec;		/* seconds */
+	int	tv_usec;	/* microseconds */
 };
 
 struct timezone {

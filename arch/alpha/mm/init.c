@@ -62,10 +62,10 @@ void show_mem(void)
 	int i,free = 0,total = 0,reserved = 0;
 	int shared = 0;
 
-	printk("Mem-info:\n");
+	printk("\nMem-info:\n");
 	show_free_areas();
 	printk("Free swap:       %6dkB\n",nr_swap_pages<<(PAGE_SHIFT-10));
-	i = high_memory >> PAGE_SHIFT;
+	i = MAP_NR(high_memory);
 	while (i-- > 0) {
 		total++;
 		if (mem_map[i] & MAP_PAGE_RESERVED)
@@ -92,7 +92,7 @@ static void load_PCB(struct thread_struct * pcb)
 	__asm__ __volatile__(
 		"stq $30,0(%0)\n\t"
 		"bis %0,%0,$16\n\t"
-		".long %1"
+		"call_pal %1"
 		: /* no outputs */
 		: "r" (pcb), "i" (PAL_swpctx)
 		: "$0", "$1", "$16", "$22", "$23", "$24", "$25");
@@ -137,6 +137,8 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	newptbr = ((unsigned long) swapper_pg_dir - PAGE_OFFSET) >> PAGE_SHIFT;
 	pgd_val(swapper_pg_dir[1023]) = (newptbr << 32) | pgprot_val(PAGE_KERNEL);
 	init_task.tss.ptbr = newptbr;
+	init_task.tss.flags = 1;
+	init_task.kernel_stack_page = INIT_STACK;
 	load_PCB(&init_task.tss);
 
 	invalidate_all();
@@ -183,7 +185,7 @@ void si_meminfo(struct sysinfo *val)
 {
 	int i;
 
-	i = high_memory >> PAGE_SHIFT;
+	i = MAP_NR(high_memory);
 	val->totalram = 0;
 	val->sharedram = 0;
 	val->freeram = nr_free_pages << PAGE_SHIFT;

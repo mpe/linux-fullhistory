@@ -376,7 +376,7 @@ asmlinkage int sys_times(struct tms * tbuf)
 	return jiffies;
 }
 
-asmlinkage int sys_brk(unsigned long brk)
+asmlinkage unsigned long sys_brk(unsigned long brk)
 {
 	int freepages;
 	unsigned long rlim;
@@ -403,13 +403,12 @@ asmlinkage int sys_brk(unsigned long brk)
 	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
 	if (rlim >= RLIM_INFINITY)
 		rlim = ~0;
-	if (brk - current->mm->end_code > rlim ||
-	    brk >= current->mm->start_stack - 16384)
+	if (brk - current->mm->end_code > rlim)
 		return current->mm->brk;
 	/*
 	 * Check against existing mmap mappings.
 	 */
-	if (find_vma_intersection(current, oldbrk, newbrk))
+	if (find_vma_intersection(current, oldbrk, newbrk+PAGE_SIZE))
 		return current->mm->brk;
 	/*
 	 * stupid algorithm to decide if we have enough memory: while
@@ -527,18 +526,20 @@ asmlinkage int sys_setsid(void)
 asmlinkage int sys_getgroups(int gidsetsize, gid_t *grouplist)
 {
 	int i;
+	int * groups;
 
 	if (gidsetsize) {
 		i = verify_area(VERIFY_WRITE, grouplist, sizeof(gid_t) * gidsetsize);
 		if (i)
 			return i;
 	}
-	for (i = 0 ; (i < NGROUPS) && (current->groups[i] != NOGROUP) ; i++) {
+	groups = current->groups;
+	for (i = 0 ; (i < NGROUPS) && (*groups != NOGROUP) ; i++, groups++) {
 		if (!gidsetsize)
 			continue;
 		if (i >= gidsetsize)
 			break;
-		put_fs_word(current->groups[i], (short *) grouplist);
+		put_user(*groups, grouplist);
 		grouplist++;
 	}
 	return(i);
@@ -630,22 +631,35 @@ asmlinkage int sys_olduname(struct oldold_utsname * name)
 	return 0;
 }
 
-/*
- * Only sethostname; gethostname can be implemented by calling uname()
- */
 asmlinkage int sys_sethostname(char *name, int len)
 {
-	int	i;
-	
+	int error;
+
 	if (!suser())
 		return -EPERM;
-	if (len > __NEW_UTS_LEN)
+	if (len < 0 || len > __NEW_UTS_LEN)
 		return -EINVAL;
-	for (i=0; i < len; i++) {
-		if ((system_utsname.nodename[i] = get_fs_byte(name+i)) == 0)
-			return 0;
-	}
-	system_utsname.nodename[i] = 0;
+	error = verify_area(VERIFY_READ, name, len);
+	if (error)
+		return error;
+	memcpy_fromfs(system_utsname.nodename, name, len);
+	system_utsname.nodename[len] = 0;
+	return 0;
+}
+
+asmlinkage int sys_gethostname(char *name, int len)
+{
+	int i;
+
+	if (len < 0)
+		return -EINVAL;
+	i = verify_area(VERIFY_WRITE, name, len);
+	if (i)
+		return i;
+	i = 1+strlen(system_utsname.nodename);
+	if (i > len)
+		i = len;
+	memcpy_tofs(name, system_utsname.nodename, i);
 	return 0;
 }
 
@@ -678,10 +692,7 @@ asmlinkage int sys_getrlimit(unsigned int resource, struct rlimit *rlim)
 	error = verify_area(VERIFY_WRITE,rlim,sizeof *rlim);
 	if (error)
 		return error;
-	put_fs_long(current->rlim[resource].rlim_cur, 
-		    (unsigned long *) rlim);
-	put_fs_long(current->rlim[resource].rlim_max, 
-		    ((unsigned long *) rlim)+1);
+	memcpy_tofs(rlim, current->rlim + resource, sizeof(*rlim));
 	return 0;	
 }
 

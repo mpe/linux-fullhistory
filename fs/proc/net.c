@@ -40,7 +40,7 @@
 static int proc_readnet(struct inode * inode, struct file * file,
 			 char * buf, int count);
 static int proc_readnetdir(struct inode *, struct file *,
-			   struct dirent *, int);
+			   void *, filldir_t filldir);
 static int proc_lookupnet(struct inode *,const char *,int,struct inode **);
 
 /* the get_*_info() functions are in the net code, and are configured
@@ -207,27 +207,19 @@ static int proc_lookupnet(struct inode * dir,const char * name, int len,
 }
 
 static int proc_readnetdir(struct inode * inode, struct file * filp,
-	struct dirent * dirent, int count)
+	void * dirent, filldir_t filldir)
 {
 	struct proc_dir_entry * de;
 	unsigned int ino;
-	int i,j;
 
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
 	ino = inode->i_ino;
-	if (((unsigned) filp->f_pos) < NR_NET_DIRENTRY) {
+	while (((unsigned) filp->f_pos) < NR_NET_DIRENTRY) {
 		de = net_dir + filp->f_pos;
+		if (filldir(dirent, de->name, de->namelen, filp->f_pos, de->low_ino) < 0)
+			break;
 		filp->f_pos++;
-		i = de->namelen;
-		ino = de->low_ino;
-		put_fs_long(ino, &dirent->d_ino);
-		put_fs_word(i,&dirent->d_reclen);
-		put_fs_byte(0,i+dirent->d_name);
-		j = i;
-		while (i--)
-			put_fs_byte(de->name[i], i+dirent->d_name);
-		return j;
 	}
 	return 0;
 }

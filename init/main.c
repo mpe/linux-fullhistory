@@ -31,7 +31,7 @@
 
 extern unsigned long * prof_buffer;
 extern unsigned long prof_len;
-extern char etext, end;
+extern char _stext, _etext;
 extern char *linux_banner;
 
 static char printbuf[1024];
@@ -48,7 +48,7 @@ extern long chr_dev_init(long,long);
 extern void sock_init(void);
 extern long rd_init(long mem_start, int length);
 unsigned long net_dev_init(unsigned long, unsigned long);
-extern long bios32_init(long, long);
+extern long pci_init(long, long);
 
 extern void bmouse_setup(char *str, int *ints);
 extern void eth_setup(char *str, int *ints);
@@ -356,12 +356,14 @@ asmlinkage void start_kernel(void)
 #ifdef CONFIG_PROFILE
 	prof_buffer = (unsigned long *) memory_start;
 	/* only text is profiled */
-	prof_len = (unsigned long) &etext;
+	prof_len = (unsigned long) &_etext - (unsigned long) &_stext;
 	prof_len >>= CONFIG_PROFILE_SHIFT;
 	memory_start += prof_len * sizeof(unsigned long);
 #endif
 	memory_start = console_init(memory_start,memory_end);
-	memory_start = bios32_init(memory_start,memory_end);
+#ifdef CONFIG_PCI
+	memory_start = pci_init(memory_start,memory_end);
+#endif
 	memory_start = kmalloc_init(memory_start,memory_end);
 	sti();
 	calibrate_delay();

@@ -543,6 +543,7 @@ static void recv_intr(struct device *dev)
         skb1->len = len;
         skb1->dev = dev;
         p->stats.rx_packets++;
+        skb1->protocol=eth_type_trans(skb1,dev);
         netif_rx(skb1);
       }
       else

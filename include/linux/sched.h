@@ -152,6 +152,7 @@ struct task_struct {
 /* various fields */
 	struct linux_binfmt *binfmt;
 	struct task_struct *next_task, *prev_task;
+	struct task_struct *next_run,  *prev_run;
 	struct sigaction sigaction[32];
 	unsigned long saved_kernel_stack;
 	unsigned long kernel_stack_page;
@@ -222,7 +223,7 @@ struct task_struct {
 /* debugregs */ { 0, },            \
 /* exec domain */&default_exec_domain, \
 /* binfmt */	NULL, \
-/* schedlink */	&init_task,&init_task, \
+/* schedlink */	&init_task,&init_task, &init_task, &init_task, \
 /* signals */	{{ 0, },}, \
 /* stack */	0,(unsigned long) &init_kernel_stack, \
 /* ec,brk... */	0,0,0,0,0, \

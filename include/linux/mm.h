@@ -215,7 +215,7 @@ extern void remove_shared_vm_struct(struct vm_area_struct *);
 extern void build_mmap_avl(struct task_struct *);
 extern void exit_mmap(struct task_struct *);
 extern int do_munmap(unsigned long, size_t);
-extern unsigned long get_unmapped_area(unsigned long);
+extern unsigned long get_unmapped_area(unsigned long, unsigned long);
 
 #define read_swap_page(nr,buf) \
 	rw_swap_page(READ,(nr),(buf))

@@ -108,7 +108,7 @@ size_t strnlen(const char * s, size_t count)
 {
 	const char *sc;
 
-	for (sc = s; *sc != '\0' && count--; ++sc)
+	for (sc = s; count-- && *sc != '\0'; ++sc)
 		/* nothing */;
 	return sc - s;
 }
@@ -240,4 +240,21 @@ void * memscan(void * addr, unsigned char c, size_t size)
 		size--;
 	}
   	return (void *) p;
+}
+
+char * strstr(const char * s1,const char * s2)
+{
+	int l1, l2;
+
+	l2 = strlen(s2);
+	if (!l2)
+		return (char *) s1;
+	l1 = strlen(s1);
+	while (l1 >= l2) {
+		l1--;
+		if (!memcmp(s1,s2,l2))
+			return (char *) s1;
+		s1++;
+	}
+	return NULL;
 }

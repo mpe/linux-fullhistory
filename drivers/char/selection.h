@@ -36,6 +36,21 @@ extern void putconsxy(int currcons, char *p);
 
 #include <asm/io.h> 
 
+static inline void scr_writeb(unsigned char val, unsigned char * addr)
+{
+	if ((long) addr < 0)
+		*addr = val;
+	else
+		writeb(val, (unsigned long) addr);
+}
+
+static inline unsigned char scr_readb(unsigned char * addr)
+{
+	if ((long) addr < 0)
+		return *addr;
+	return readb((unsigned long) addr);
+}
+
 static inline void scr_writew(unsigned short val, unsigned short * addr)
 {
 	if ((long) addr < 0)
@@ -52,6 +67,16 @@ static inline unsigned short scr_readw(unsigned short * addr)
 }
 
 #else
+
+static inline void scr_writeb(unsigned char val, unsigned char * addr)
+{
+	*addr = val;
+}
+
+static inline unsigned char scr_readb(unsigned char * addr)
+{
+	return *addr;
+}
 
 static inline void scr_writew(unsigned short val, unsigned short * addr)
 {

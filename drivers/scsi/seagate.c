@@ -409,7 +409,7 @@ static int current_bufflen;
 #ifdef LINKED
 
 /* 
- * linked_connected indicates weather or not we are currently connected to 
+ * linked_connected indicates whether or not we are currently connected to 
  * linked_target, linked_lun and in an INFORMATION TRANSFER phase,
  * using linked commands.
  */

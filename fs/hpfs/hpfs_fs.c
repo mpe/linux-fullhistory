@@ -118,9 +118,6 @@
 
 /* notation */
 
-#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
-#define ROUND_UP(x) (((x)+3) & ~3)
-
 #define little_ushort(x) (*(unsigned short *) &(x))
 typedef void nonconst;
 
@@ -128,7 +125,7 @@ typedef void nonconst;
 
 static void hpfs_read_inode(struct inode *);
 static void hpfs_put_super(struct super_block *);
-static void hpfs_statfs(struct super_block *, struct statfs *);
+static void hpfs_statfs(struct super_block *, struct statfs *, int);
 static int hpfs_remount_fs(struct super_block *, int *, char *);
 
 static const struct super_operations hpfs_sops =
@@ -187,7 +184,7 @@ static const struct inode_operations hpfs_file_iops =
 static int hpfs_dir_read(struct inode *inode, struct file *filp,
 			 char *buf, int count);
 static int hpfs_readdir(struct inode *inode, struct file *filp,
-			struct dirent *dirent, int count);
+			void *dirent, filldir_t filldir);
 static int hpfs_lookup(struct inode *, const char *, int, struct inode **);
 
 static const struct file_operations hpfs_dir_ops =
@@ -248,8 +245,6 @@ static struct hpfs_dirent *map_dirent(struct inode *inode, dnode_secno dno,
 				      struct quad_buffer_head *qbh);
 static struct hpfs_dirent *map_pos_dirent(struct inode *inode, loff_t *posp,
 					  struct quad_buffer_head *qbh);
-static void write_one_dirent(struct dirent *dirent, const unsigned char *name,
-			     unsigned namelen, ino_t ino, int lowercase);
 static dnode_secno dir_subdno(struct inode *inode, unsigned pos);
 static struct hpfs_dirent *map_nth_dirent(dev_t dev, dnode_secno dno,
 					  int n,
@@ -727,12 +722,13 @@ static void hpfs_put_super(struct super_block *s)
  * directory band -- not exactly right but pretty analogous.
  */
 
-static void hpfs_statfs(struct super_block *s, struct statfs *buf)
+static void hpfs_statfs(struct super_block *s, struct statfs *buf, int bufsiz)
 {
+	struct statfs tmp;
+
 	/*
 	 * count the bits in the bitmaps, unless we already have
 	 */
-
 	if (s->s_hpfs_n_free == -1) {
 		s->s_hpfs_n_free = count_bitmap(s);
 		s->s_hpfs_n_free_dnodes =
@@ -742,15 +738,15 @@ static void hpfs_statfs(struct super_block *s, struct statfs *buf)
 	/*
 	 * fill in the user statfs struct
 	 */
-
-	put_fs_long(s->s_magic, &buf->f_type);
-	put_fs_long(512, &buf->f_bsize);
-	put_fs_long(s->s_hpfs_fs_size, &buf->f_blocks);
-	put_fs_long(s->s_hpfs_n_free, &buf->f_bfree);
-	put_fs_long(s->s_hpfs_n_free, &buf->f_bavail);
-	put_fs_long(s->s_hpfs_dirband_size, &buf->f_files);
-	put_fs_long(s->s_hpfs_n_free_dnodes, &buf->f_ffree);
-	put_fs_long(254, &buf->f_namelen);
+	tmp.f_type = s->s_magic;
+	tmp.f_bsize = 512;
+	tmp.f_blocks = s->s_hpfs_fs_size;
+	tmp.f_bfree = s->s_hpfs_n_free;
+	tmp.f_bavail = s->s_hpfs_n_free;
+	tmp.f_files = s->s_hpfs_dirband_size;
+	tmp.f_ffree = s->s_hpfs_n_free_dnodes;
+	tmp.f_namelen = 254;
+	memcpy_tofs(buf, &tmp, bufsiz);
 }
 
 /*
@@ -1307,6 +1303,11 @@ static struct hpfs_dirent *map_dirent(struct inode *inode, dnode_secno dno,
  * fixed, throw this out and just walk the tree and write records into
  * the user buffer.)
  *
+ * [ we now can handle multiple dirents, although the current libc doesn't
+ *   use that. The way hpfs does this is pretty strange, as we need to do
+ *   the name translation etc before calling "filldir()". This is untested,
+ *   as I don't have any hpfs partitions to test against.   Linus ]
+ *
  * We keep track of our position in the dnode tree with a sort of
  * dewey-decimal record of subtree locations.  Like so:
  *
@@ -1326,81 +1327,84 @@ static struct hpfs_dirent *map_dirent(struct inode *inode, dnode_secno dno,
  * we won't have to repeatedly scan the top levels of the tree. 
  */
 
-static int hpfs_readdir(struct inode *inode, struct file *filp,
-			struct dirent *dirent, int likely_story)
+/*
+ * Translate the given name: Blam it to lowercase if the mount option said to.
+ */
+
+static void translate_hpfs_name(const unsigned char * from, int len, char * to, int lowercase)
+{
+	while (len > 0) {
+		unsigned t = *from;
+		len--;
+		if (lowercase)
+			t = hpfs_char_to_lower_linux (t);
+		else
+			t = hpfs_char_to_linux (t);
+		*to = t;
+		from++;
+		to++;
+	}
+}
+
+static int hpfs_readdir(struct inode *inode, struct file *filp, void * dirent,
+	filldir_t filldir)
 {
 	struct quad_buffer_head qbh;
 	struct hpfs_dirent *de;
 	int namelen, lc;
 	ino_t ino;
+	char * tempname;
+	long old_pos;
 
 	if (inode == 0
 	    || inode->i_sb == 0
 	    || !S_ISDIR(inode->i_mode))
 		return -EBADF;
 
-	lc = inode->i_sb->s_hpfs_lowercase;
+	tempname = (char *) __get_free_page(GFP_KERNEL);
+	if (!tempname)
+		return -ENOMEM;
 
-	switch ((off_t) filp->f_pos) {
+	lc = inode->i_sb->s_hpfs_lowercase;
+	switch ((long) filp->f_pos) {
+	case -2:
+		break;
+
 	case 0:
-		write_one_dirent(dirent, ".", 1, inode->i_ino, lc);
+		if (filldir(dirent, ".", 1, filp->f_pos, inode->i_ino) < 0)
+			break;
 		filp->f_pos = -1;
-		return ROUND_UP(NAME_OFFSET(dirent) + 2);
+		/* fall through */
 
 	case -1:
-		write_one_dirent(dirent, "..", 2,
-				 inode->i_hpfs_parent_dir, lc);
+		if (filldir(dirent, "..", 2, filp->f_pos, inode->i_hpfs_parent_dir) < 0)
+			break;
 		filp->f_pos = 1;
-		return ROUND_UP(NAME_OFFSET(dirent) + 3);
-
-	case -2:
-		return 0;
+		/* fall through */
 
 	default:
-		de = map_pos_dirent(inode, &filp->f_pos, &qbh);
-		if (!de) {
-			filp->f_pos = -2;
-			return 0;
+		for (;;) {
+			old_pos = filp->f_pos;
+			de = map_pos_dirent(inode, &filp->f_pos, &qbh);
+			if (!de) {
+				filp->f_pos = -2;
+				break;
+			}
+			namelen = de->namelen;
+			translate_hpfs_name(de->name, namelen, tempname, lc);
+			if (de->directory)
+				ino = dir_ino(de->fnode);
+			else
+				ino = file_ino(de->fnode);
+			brelse4(&qbh);
+			if (filldir(dirent, tempname, namelen, old_pos, ino) < 0) {
+				filp->f_pos = old_pos;
+				break;
+			}
 		}
-
-		namelen = de->namelen;
-		if (de->directory)
-			ino = dir_ino(de->fnode);
-		else
-			ino = file_ino(de->fnode);
-		write_one_dirent(dirent, de->name, namelen, ino, lc);
-		brelse4(&qbh);
-
-		return ROUND_UP(NAME_OFFSET(dirent) + namelen + 1);
 	}
-}
-
-/*
- * Send the given name and ino off to the user dirent struct at *dirent.
- * Blam it to lowercase if the mount option said to.
- *
- * Note that Linux d_reclen is the length of the file name, and has nothing
- * to do with the length of the dirent record.
- */
-
-static void write_one_dirent(struct dirent *dirent, const unsigned char *name,
-			     unsigned namelen, ino_t ino, int lowercase)
-{
-	unsigned n;
-
-	put_fs_long(ino, &dirent->d_ino);
-	put_fs_word(namelen, &dirent->d_reclen);
-
-	for (n = namelen; n != 0;) {
-		unsigned t = name[--n];
-		if (lowercase)
-			t = hpfs_char_to_lower_linux (t);
-		else
-			t = hpfs_char_to_linux (t);
-		put_fs_byte(t, &dirent->d_name[n]);
-	}
-
-	put_fs_byte(0, &dirent->d_name[namelen]);
+	free_page((unsigned long) tempname);
+	return 0;
 }
 
 /*

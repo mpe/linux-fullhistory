@@ -159,7 +159,7 @@ extern void msdos_put_inode(struct inode *inode);
 extern void msdos_put_super(struct super_block *sb);
 extern struct super_block *msdos_read_super(struct super_block *s,
 					    void *data,int);
-extern void msdos_statfs(struct super_block *sb,struct statfs *buf);
+extern void msdos_statfs(struct super_block *sb,struct statfs *buf, int);
 extern int msdos_bmap(struct inode *inode,int block);
 extern void msdos_read_inode(struct inode *inode);
 extern void msdos_write_inode(struct inode *inode);
@@ -169,7 +169,7 @@ extern int msdos_notify_change(struct inode *,struct iattr *);
 
 extern struct inode_operations msdos_dir_inode_operations;
 extern int msdos_readdir (struct inode *inode, struct file *filp,
-	struct dirent *dirent, int count);
+	void *dirent, filldir_t);
 /* file.c */
 
 extern struct inode_operations msdos_file_inode_operations;

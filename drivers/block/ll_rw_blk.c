@@ -406,14 +406,15 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	add_request(major+blk_dev,req);
 }
 
-void ll_rw_page(int rw, int dev, int page, char * buffer)
+void ll_rw_page(int rw, int dev, unsigned long page, char * buffer)
 {
 	struct request * req;
 	unsigned int major = MAJOR(dev);
+	unsigned long sector = page * (PAGE_SIZE / 512);
 	struct semaphore sem = MUTEX_LOCKED;
 
 	if (major >= MAX_BLKDEV || !(blk_dev[major].request_fn)) {
-		printk("Trying to read nonexistent block-device %04x (%d)\n",dev,page*8);
+		printk("Trying to read nonexistent block-device %04x (%ld)\n",dev,sector);
 		return;
 	}
 	if (rw!=READ && rw!=WRITE)
@@ -426,9 +427,9 @@ void ll_rw_page(int rw, int dev, int page, char * buffer)
 /* fill up the request-info, and add it to the queue */
 	req->cmd = rw;
 	req->errors = 0;
-	req->sector = page<<3;
-	req->nr_sectors = 8;
-	req->current_nr_sectors = 8;
+	req->sector = sector;
+	req->nr_sectors = PAGE_SIZE / 512;
+	req->current_nr_sectors = PAGE_SIZE / 512;
 	req->buffer = buffer;
 	req->sem = &sem;
 	req->bh = NULL;

@@ -691,6 +691,7 @@ de620_rx_intr(struct device *dev)
 			/* copy the packet into the buffer */
 			de620_read_block(buffer, size);
 			PRINTK(("Read %d bytes\n", size));
+			skb->protocol=eth_type_trans(skb,dev);
 			netif_rx(skb); /* deliver it "upstairs" */
 			/* count all receives */
 			((struct netstats *)(dev->priv))->rx_packets++;

@@ -1611,6 +1611,7 @@ static void SK_rxintr(struct device *dev)
 	     * netif_rx() always succeeds. see /net/inet/dev.c for more.
 	     */
 
+	    skb->protocol=eth_type_trans(skb,dev);
 	    netif_rx(skb);                 /* queue packet and mark it for processing */
 	   
 	    /* 

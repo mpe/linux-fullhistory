@@ -87,7 +87,7 @@ static union bdflush_param{
 				   trim back the buffers */
 	} b_un;
 	unsigned int data[N_PARAM];
-} bdf_prm = {{25, 500, 64, 256, 15, 3000, 500, 1884, 2}};
+} bdf_prm = {{25, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
 
 /* The lav constant is set for 1 minute, as long as the update process runs
    every 5 seconds.  If you change the frequency of update, the time
@@ -1153,7 +1153,8 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
 			if (bh[i]->b_uptodate)
 				memcpy((void *) where, bh[i]->b_data, size);
 			brelse(bh[i]);
-		}
+		} else
+			memset((void *) where, 0, size);
 	}
 	return address;
 }
@@ -1778,7 +1779,7 @@ asmlinkage int sys_bdflush(int func, long data)
 			error = verify_area(VERIFY_WRITE, (void *) data, sizeof(int));
 			if (error)
 				return error;
-			put_fs_long(bdf_prm.data[i], data);
+			put_user(bdf_prm.data[i], (int*)data);
 			return 0;
 		};
 		if (data < bdflush_min[i] || data > bdflush_max[i])

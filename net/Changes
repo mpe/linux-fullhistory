@@ -1,0 +1,206 @@
+
+Ongoing things.
+
+0.0
+---
+Initial patches to catch up with things we want to add.
+
+o	Merged in the Jorge Cwik fast checksum.		[TESTED]
+o	Added Arnt Gulbrandsen's fast UDP build.	[TESTED]
+o	Pauline Middelinks masquerade patch		[IN/COMPILES]
+
+
+0.1
+---
+
+o	Remove excess transmit request calls.		[TESTED]
+o	Set type before calling netif_rx()		[TESTED]
+o	Inline sock_rcv_skb				[TESTED]
+o	Cache last socket for UDP			[TESTED]
+o	Cache last socket for TCP			[TESTED]
+o	Routing cache (only in ip_build_header so far)	[TESTED]
+------->>>>>  ALPHA 001  <<<<<----------
+o	eql load balancing driver.			[TESTED]
+o	Token ring drivers.				[COMPILE - CANT TEST]
+o	IPIP and tunnels				[TESTED]
+o	Fix ethernet/token ring promisc broadcast error [QUICK TEST]
+	(pkt_type set to OTHERHOST in error).
+o	Fixed bug in the routing caches			[TESTED]
+o	Protocol header cache support			[TESTED]
+o	Fixed ip_build_xmit loopback bugs		[TESTED]
+o	Fixes for SIOCGSTAMP on SOCK_PACKET		[TESTED]
+o	Perfect hash on net_bh().			[TESTED]
+o	Sonix ISDN driver.				[NOT INCLUDED YET]
+o	Use ip_build_xmit for raw sockets		[TESTED]
+o	3c501 fixed for speed				[TESTED]
+------->>>>>  ALPHA 002  <<<<<--------
+o	PLIP, PPP and de bugs fixed			[TESTED]
+o	Merged in G4KLX AX.25 state machine, with KA9Q
+	donated headers to get BSD free AX.25 done.	[TESTED]
+o	Massive loopback device bug fixed		[TESTED]
+------->>>>> ALPHA 003 <<<<<----------
+o	Revised code layout				[TESTED]
+o	More bug fixes (tracroute etc)			[TESTED]
+------->>>>> ALPHA 004 <<<<<----------
+o	IP build xmit fragment fixes			[TESTED]
+o	TCP SWS probe fix				[TESTED]
+o	Appletalk DDP					[TESTED]
+o	IP firewall bug fixed				[TESTED]
+o	IP masquerade ftp port spoof			[IN]
+o	gcc 2.6.3 -O3 fix for checksum assembler	[TESTED]
+o	/proc support shows both timers			[TESTED]
+o	TCP irtt support				[TESTED]
+o	RTF_REJECT routing support			[TESTED]
+o	Fixed 0 length fragment bug			[TESTED]
+o	Fixed overlapping reasm bug			[TESTED]
+o	Newest AX.25 code from John Naylor		[IN]
+o	NetROM from John Naylor				[IN]
+o	Routerless DDP fixes from Wesley		[TESTED]
+
+------->>>>> ALPHA 005 <<<<<----------
+
+o	Several compile and bugfixes from Jakko		[IN]
+o	Connect fix from Matt Day (+ fix to fix)	[TESTED]
+o	RTT, memory leak and other netrom/ax.25 cures	
+			-- John Naylor			[IN]
+o	IP source route via broadcast now illegal	[IN]
+
+------->>>>> ALPHA 006 <<<<<----------
+
+o	Yet more NetROM/AX.25 improvements		[IN]
+		-- John Naylor
+o	Fixed a _stupid_ appletalk bug			[TESTED]
+o	Missing include					[IN]
+		-- Lots of people
+o	Can drop all source routes			[IN]
+o	Printing fixes for ip_fw			[IN]
+o	UDP checksum fix (Gerhard)			[IN]
+o	Newer 3c505 driver from Juha Laiho		[IN]
+o	Security fix to axassociate			[IN]
+o	Loopback driver debugged (fixes named)		[TESTED]
+o	SCC driver from Joerg Reuter			[IN]
+o	IP Firewall accounting zero bug			[IN]
+
+////////////////////////////1.3.0/////////////////////////// ??
+
+o	Finish merging the bridge code
+o	Device locking
+o	Faster ip_csum
+o	SIOCSLEEPRT patch
+o	Options support in ip_build_xmit		[PENDING]
+o	Fast checksum/copy on outgoing TCP
+o	New buffers. Used totally non-optimally
+o	Long word align ethernet IP headers (64byte align for pentium)
+o	Explode/implode headers for alpha,mips etc.
+o	Fast dev_grab_next() transmit reload function
+	and dev_push_failed() ??
+o	Faster ip_forward
+o	Faster loopback frame forwarding.
+o	Forwarding queue control (+ fairness algorithms ??)
+o	Merge loadable firewall code.
+o	IP forward flow control.
+o	Infinite PPP/SLIP devices.
+
+0.2
+---
+o	New UNIX sockets include Pedro Roque's shutdown.
+o	New icmp.c.
+o	Better TCP window handling [Pedro Roque]
+o	IP option support.
+o	Add tty support to sonix driver.
+o	PPP for Sonix ISDN.
+o	Loadable firewall extensions.
+o	Screend loadable firewall module
+o	LZ SLIP
+
+0.3
+---
+o	Merge the layered protocol support.
+o	IP firewalling performance - caching and radix trees.
+o	Zebedee
+o	802.2 Class 2 services (eg netbios).
+o	Multidrop KISS
+o	Multicast routing
+o	IPX/Atalk/Netrom firewalling
+
+Possible projects for victim^H^H^H^H^Holunteers
+
+
+1.	Verifying the correctness of implementation against RFC1122 and
+making a list of violations (BSD is sufficiently screwed up you can't
+implement all of RFC1122 and talk to it usefully).
+
+2.	Verifying all the error returns match the BSD ones (grotty job I
+wouldn't wish on anyone).
+
+3.	'Fast Retransmit'. This is a TCP algorithm extension BSD uses. If
+you see about 3 acks in a row that are for the same 'old' value. You resend
+the frame following the ack. (The assumption being that the acks are
+because a single frame in the data stream has been lost). Given a 
+mathematician with some queue theory you can show this allows you to 
+lose one frame per window full of data without measurable speed loss.
+
+4.	RFC1323 and RFC1191. These are the extensions for very fast nets
+and for 'path MTU discovery' - a way of finding the best packetsize to use.
+RFC1323 will be useful for Linux talking to systems over 100Mb/sec
+ethernet and over ATM as it allows large windows and protects from some
+potential high speed TCP problems.
+
+5.	Fixing the IP fragment handling so that the total space allocated to
+fragments is limited and old fragments are deleted to make room for new ones
+when space is exhausted. Fixing the fragment handling to work at a decent
+speed wouldn't be bad either.
+
+6.	Delayed ack. This is mostly supported but not actually set up and
+used yet. Basically ack frames are held back 1/10th of a second in the hope
+that two acks can be merged into one or for interactive use the ack can
+piggyback on the next character typed (great improvement on 2400 baud
+modems). Johannes Stille did some work on this about 0.99.13 but it never
+got merged in.
+
+7.	One on my tempting project list. Add an extra (unofficial - but so
+is SLIP6) SLIP mode that does packet data compression [maybe use the code
+from term].
+
+8.	Making SLIP/PPP dynamically allocate devices so you never run out
+of channels.	[Taken/Done pending inclusion]
+
+9.	Implementing streams. Not as a blind slow SYS5.4 style copy but actually
+working out how to do it so it runs like greased lightning. Quite a big
+problem.
+
+10.	Frame Relay/WAN/ISDN drivers [I'm working on the sonix EuroISDN board
+driver but thats for an internal project and its general release is still
+a maybe (so is finishing it ;))].
+
+11.	IP over SCSI.
+
+12.	Debugging and making the appletalk alpha test code useful.
+	[Done and in]
+
+13.	Mrouted Multicast routing. Or possibly MOSPF and others
+	as they become available
+	[Some interest: see/join linux-multicast@www.linux.org.uk
+         if you wish to join in]
+
+14.	Bidirectional PLIP. Also PLIP for the newer style parallel ports.
+
+15.	802.2LLC and thus Netbeui sockets. Becoming less important since the
+rumour is microsoft are phasing out netbeui for netbios/IP.
+
+16.	X.25. This is one for a real head case with far too much time on 
+their hands. [Provisionally taken]
+
+17.	PPP multilink. Another nasty job.
+
+18.	Implement swIPe under Linux.
+[In progress]
+
+BTW: Don't let the magic words 'kernel programming' worry you. Its like DOS
+- you make a mistake you have to reboot. You do at least get dumps and a
+kernel logger that is reliable. There is now a loadable module allowing
+use of gdb on the kernel (no breakpoints though!). No magic involved.
+
+Alan
+
+

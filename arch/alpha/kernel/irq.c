@@ -250,9 +250,9 @@ static void local_device_interrupt(unsigned long vector, struct pt_regs * regs)
 			handle_irq(1, regs);
 			return;
 
-		/* mouse: map to irq 12 */
+		/* mouse: map to irq 9 */
 		case 0x990:
-			handle_irq(12, regs);
+			handle_irq(9, regs);
 			return;
 		default:
 			printk("Unknown local interrupt %lx\n", vector);

@@ -18,6 +18,10 @@
  *	IGMP protocol structures
  */
 
+/*
+ *	Header in on cable format
+ */
+ 
 struct igmphdr
 {
 	unsigned char type;
@@ -25,6 +29,19 @@ struct igmphdr
 	unsigned short csum;
 	unsigned long group;
 };
+
+/*
+ *	Header in host convenient format
+ */
+
+struct igmp_header
+{
+	unsigned char type;
+	unsigned char unused;
+	unsigned short csum;
+	unsigned long group;
+};
+
 
 #define IGMP_HOST_MEMBERSHIP_QUERY	0x11	/* From RFC1112 */
 #define IGMP_HOST_MEMBERSHIP_REPORT	0x12	/* Ditto */

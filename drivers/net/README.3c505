@@ -1,35 +1,36 @@
 The address and IRQ used by the 3c505 driver can be configured at boot
 time by typing 'ether=eth0,15,0x300' (replace IRQ and base address with
-ones that tell how your adapter is jumpered).
+ones that tell how your adapter is jumpered). The driver does not yet
+use DMA.
 
 If no base address is given at the boot time, the driver will look for
 a 3c505 adapter at addresses 0x300, 0x280 and 0x310 in this order,
 possibly messing up any other hardware residing in these addresses.
 If a base address is given, it will be verified.
 
-There's two #defines one may need to change in the 3c505 driver:
-ELP_KERNEL_TYPE
- this exists just to adapt the driver with pretty wide range of kernels.
- See 3c505.c for exact information.
-
+The driver has two compile-time settings in the CONFIG file:
 ELP_NEED_HARD_RESET
- some DOS drivers seem to get the adapter to some irrecoverable state
+ Some DOS drivers seem to get the adapter to some irrecoverable state
  if the machine is "warm booted" from DOS to Linux. If you experience
  problems when warm booting, but "cold boot" works, #defining this
- to 1 may help.
-
+ to 1 may help. As of 3c505.c v0.8 the driver should be able to find
+ out whether of not this is needed, but I'm not completely sure.
+ELP_DEBUG
+ The driver debug level. 1 is ok for most everything, 0 will provide
+ less verbose bootup messages, and 2 and 3 are usually too verbose
+ for anything.
 
 Known problems:
- when 'ifconfig up' is run for the first time after bootup, the driver
- complains:
-elp_interrupt(): irq 15 for unknown device.
-                     ^^
- There should be the IRQ the ELPlus adapter is using. IF the IRQ doesn't
- match, something is seriously wrong.
+ During startup the driver shows the following two messages:
+ *** timeout at 3c505.c:elp_set_mc_list (line 1158) ***
+ *** timeout at 3c505.c:elp_set_mc_list (line 1183) ***
+ These are because upper parts of the networking code attempt
+ to load multicast address lists to the adapter before the
+ adapter is properly up and running.
 
 Authors:
- The driver is mainly written by Craig Southeren, email c/o
- <geoffw@extro.ucc.su.OZ.AU>.
+ The driver is mainly written by Craig Southeren, email
+ <craigs@ineluki.apana.org.au>.
  Parts of the driver (adapting the driver to 1.1.4+ kernels,
- IRQ/address detection, minor changes) and this (lousy) 'readme'
- by Juha Laiho <jlaiho@ichaos.nullnet.fi>.
+ IRQ/address detection, some changes) and this README by
+ Juha Laiho <jlaiho@ichaos.nullnet.fi>.

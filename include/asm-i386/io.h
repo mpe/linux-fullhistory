@@ -38,6 +38,28 @@
 #endif
 
 /*
+ * Change virtual addresses to physical addresses and vv.
+ * These are trivial on the 1:1 Linux/i386 mapping (but if we ever
+ * make the kernel segment mapped at 0, we need to do translation
+ * on the i386 as well)
+ */
+extern inline unsigned long virt_to_phys(void * address)
+{
+	return (unsigned long) address;
+}
+
+extern inline void * phys_to_virt(unsigned long address)
+{
+	return (void *) address;
+}
+
+/*
+ * IO bus memory addresses are also 1:1 with the physical address
+ */
+#define virt_to_bus virt_to_phys
+#define bus_to_virt phys_to_virt
+
+/*
  * Talk about misusing macros..
  */
 

@@ -711,7 +711,7 @@ are any multiple of 512 bytes long.  */
 		if (count+1 != SCpnt->use_sg) panic("Bad sr request list");
 		break;
 	      };
-	      if (((int) sgpnt[count].address) + sgpnt[count].length > 
+	      if (((long) sgpnt[count].address) + sgpnt[count].length > 
 		  ISA_DMA_THRESHOLD & (SCpnt->host->unchecked_isa_dma)) {
 		sgpnt[count].alt_address = sgpnt[count].address;
 		/* We try and avoid exhausting the DMA pool, since it is easier
@@ -775,7 +775,7 @@ are any multiple of 512 bytes long.  */
 	    {
 	      this_count -= this_count % 4;
 	      buffer = (unsigned char *) SCpnt->request.buffer;
-	      if (((int) buffer) + (this_count << 9) > ISA_DMA_THRESHOLD & 
+	      if (((long) buffer) + (this_count << 9) > ISA_DMA_THRESHOLD & 
 		  (SCpnt->host->unchecked_isa_dma))
 		buffer = (unsigned char *) scsi_malloc(this_count << 9);
 	    }

@@ -144,21 +144,19 @@ void ext_write_super (struct super_block *sb)
 	sb->s_dirt = 0;
 }
 
-void ext_statfs (struct super_block *sb, struct statfs *buf)
+void ext_statfs (struct super_block *sb, struct statfs *buf, int bufsiz)
 {
-	long tmp;
+	struct statfs tmp;
 
-	put_fs_long(EXT_SUPER_MAGIC, &buf->f_type);
-	put_fs_long(1024, &buf->f_bsize);
-	put_fs_long(sb->u.ext_sb.s_nzones << sb->u.ext_sb.s_log_zone_size,
-		&buf->f_blocks);
-	tmp = ext_count_free_blocks(sb);
-	put_fs_long(tmp, &buf->f_bfree);
-	put_fs_long(tmp, &buf->f_bavail);
-	put_fs_long(sb->u.ext_sb.s_ninodes, &buf->f_files);
-	put_fs_long(ext_count_free_inodes(sb), &buf->f_ffree);
-	put_fs_long(EXT_NAME_LEN, &buf->f_namelen);
-	/* Don't know what value to put in buf->f_fsid */
+	tmp.f_type = EXT_SUPER_MAGIC;
+	tmp.f_bsize = 1024;
+	tmp.f_blocks = sb->u.ext_sb.s_nzones << sb->u.ext_sb.s_log_zone_size;
+	tmp.f_bfree = ext_count_free_blocks(sb);
+	tmp.f_bavail = tmp.f_bfree;
+	tmp.f_files = sb->u.ext_sb.s_ninodes;
+	tmp.f_ffree = ext_count_free_inodes(sb);
+	tmp.f_namelen = EXT_NAME_LEN;
+	memcpy_tofs(buf, &tmp, bufsiz);
 }
 
 #define inode_bmap(inode,nr) ((inode)->u.ext_i.i_data[(nr)])

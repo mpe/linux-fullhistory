@@ -9,53 +9,118 @@
 
 #ifndef __ASSEMBLY__
 
+/*
+ * Uh, these should become the main single-value transfer routines..
+ * They automatically use the right size if we just have the right
+ * pointer type..
+ */
+#define put_user(x,ptr) __put_user((unsigned long)(x),(ptr),sizeof(*(ptr)))
+#define get_user(ptr) __get_user((ptr),sizeof(*(ptr)))
+
+/*
+ * This is a silly but good way to make sure that
+ * the __put_user function is indeed always optimized,
+ * and that we use the correct sizes..
+ */
+extern int bad_user_access_length(void);
+
+/*
+ * dummy pointer type structure.. gcc won't try to do something strange
+ * this way..
+ */
+struct __segment_dummy { unsigned long a[100]; };
+#define __sd(x) ((struct __segment_dummy *) (x))
+
+static inline void __put_user(unsigned long x, void * y, int size)
+{
+	switch (size) {
+		case 1:
+			__asm__ ("movb %b1,%%fs:%0"
+				:"=m" (*__sd(y))
+				:"iq" ((unsigned char) x), "m" (*__sd(y)));
+			break;
+		case 2:
+			__asm__ ("movw %w1,%%fs:%0"
+				:"=m" (*__sd(y))
+				:"iq" ((unsigned short) x), "m" (*__sd(y)));
+			break;
+		case 4:
+			__asm__ ("movl %1,%%fs:%0"
+				:"=m" (*__sd(y))
+				:"ir" (x), "m" (*__sd(y)));
+			break;
+		default:
+			bad_user_access_length();
+	}
+}
+
+static inline unsigned long __get_user(const void * y, int size)
+{
+	unsigned long result;
+
+	switch (size) {
+		case 1:
+			__asm__ ("movb %%fs:%1,%b0"
+				:"=q" (result)
+				:"m" (*__sd(y)));
+			return (unsigned char) result;
+		case 2:
+			__asm__ ("movw %%fs:%1,%w0"
+				:"=q" (result)
+				:"m" (*__sd(y)));
+			return (unsigned short) result;
+		case 4:
+			__asm__ ("movl %%fs:%1,%0"
+				:"=r" (result)
+				:"m" (*__sd(y)));
+			return result;
+		default:
+			return bad_user_access_length();
+	}
+}
+
+/*
+ * These are depracated..
+ */
+
 static inline unsigned char get_user_byte(const char * addr)
 {
-	register unsigned char _v;
-
-	__asm__ ("movb %%fs:%1,%0":"=q" (_v):"m" (*addr));
-	return _v;
+	return __get_user(addr,1);
 }
 
 #define get_fs_byte(addr) get_user_byte((char *)(addr))
 
 static inline unsigned short get_user_word(const short *addr)
 {
-	unsigned short _v;
-
-	__asm__ ("movw %%fs:%1,%0":"=r" (_v):"m" (*addr));
-	return _v;
+	return __get_user(addr, 2);
 }
 
 #define get_fs_word(addr) get_user_word((short *)(addr))
 
 static inline unsigned long get_user_long(const int *addr)
 {
-	unsigned long _v;
-
-	__asm__ ("movl %%fs:%1,%0":"=r" (_v):"m" (*addr)); \
-	return _v;
+	return __get_user(addr, 4);
 }
 
 #define get_fs_long(addr) get_user_long((int *)(addr))
 
 static inline void put_user_byte(char val,char *addr)
 {
-__asm__ ("movb %0,%%fs:%1": /* no outputs */ :"iq" (val),"m" (*addr));
+	__put_user(val, addr, 1);
 }
 
 #define put_fs_byte(x,addr) put_user_byte((x),(char *)(addr))
 
 static inline void put_user_word(short val,short * addr)
 {
-__asm__ ("movw %0,%%fs:%1": /* no outputs */ :"ir" (val),"m" (*addr));
+	__put_user(val, addr, 2);
 }
 
 #define put_fs_word(x,addr) put_user_word((x),(short *)(addr))
 
 static inline void put_user_long(unsigned long val,int * addr)
 {
-__asm__ ("movl %0,%%fs:%1": /* no outputs */ :"ir" (val),"m" (*addr));
+	__put_user(val, addr, 4);
 }
 
 #define put_fs_long(x,addr) put_user_long((x),(int *)(addr))

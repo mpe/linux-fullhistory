@@ -7,56 +7,56 @@
 /*
  * I/O register offsets
  */
-#define	PORT_COMMAND	0x00	/* read/write */
-#define	PORT_STATUS	0x02	/* read only */
-#define	PORT_AUXDMA	0x02	/* write only */
-#define	PORT_DATA	0x04	/* read/write */
-#define	PORT_CONTROL	0x06	/* read/write */
+#define	PORT_COMMAND	0x00	/* read/write, 8-bit */
+#define	PORT_STATUS	0x02	/* read only, 8-bit */
+#define	PORT_AUXDMA	0x02	/* write only, 8-bit */
+#define	PORT_DATA	0x04	/* read/write, 16-bit */
+#define	PORT_CONTROL	0x06	/* read/write, 8-bit */
 
 /*
  * host control registers bits
  */
-#define	CONTROL_ATTN	0x80	/* attention */
-#define	CONTROL_FLSH	0x40	/* flush data register */
-#define CONTROL_DMAE	0x20	/* DMA enable */
-#define CONTROL_DIR	0x10	/* direction */
-#define	CONTROL_TCEN	0x08	/* terminal count interrupt enable */
-#define	CONTROL_CMDE	0x04	/* command register interrupt enable */
-#define	CONTROL_HSF2	0x02	/* host status flag 2 */
-#define	CONTROL_HSF1	0x01	/* host status flag 1 */
+#define	ATTN	0x80	/* attention */
+#define	FLSH	0x40	/* flush data register */
+#define DMAE	0x20	/* DMA enable */
+#define DIR	0x10	/* direction */
+#define	TCEN	0x08	/* terminal count interrupt enable */
+#define	CMDE	0x04	/* command register interrupt enable */
+#define	HSF2	0x02	/* host status flag 2 */
+#define	HSF1	0x01	/* host status flag 1 */
 
 /*
  * combinations of HSF flags used for PCB transmission
  */
-#define	HSF_PCB_ACK	(CONTROL_HSF1)
-#define	HSF_PCB_NAK	(CONTROL_HSF2)
-#define	HSF_PCB_END	(CONTROL_HSF2|CONTROL_HSF1)
-#define	HSF_PCB_MASK	(CONTROL_HSF2|CONTROL_HSF1)
+#define	HSF_PCB_ACK	HSF1
+#define	HSF_PCB_NAK	HSF2
+#define	HSF_PCB_END	(HSF2|HSF1)
+#define	HSF_PCB_MASK	(HSF2|HSF1)
 
 /*
  * host status register bits
  */
-#define	STATUS_HRDY	0x80	/* data register ready */
-#define	STATUS_HCRE	0x40	/* command register empty */
-#define	STATUS_ACRF	0x20	/* adapter command register full */
-#define	STATUS_DIR 	0x10	/* direction */
-#define	STATUS_DONE	0x08	/* DMA done */
-#define	STATUS_ASF3	0x04	/* adapter status flag 3 */
-#define	STATUS_ASF2	0x02	/* adapter status flag 2 */
-#define	STATUS_ASF1	0x01	/* adapter status flag 1 */
+#define	HRDY	0x80	/* data register ready */
+#define	HCRE	0x40	/* command register empty */
+#define	ACRF	0x20	/* adapter command register full */
+/* #define DIR 	0x10	direction - same as in control register */
+#define	DONE	0x08	/* DMA done */
+#define	ASF3	0x04	/* adapter status flag 3 */
+#define	ASF2	0x02	/* adapter status flag 2 */
+#define	ASF1	0x01	/* adapter status flag 1 */
 
 /*
  * combinations of ASF flags used for PCB reception
  */
-#define	ASF_PCB_ACK	(STATUS_ASF1)
-#define	ASF_PCB_NAK	(STATUS_ASF2)
-#define	ASF_PCB_END	(STATUS_ASF2|STATUS_ASF1)
-#define	ASF_PCB_MASK	(STATUS_ASF2|STATUS_ASF1)
+#define	ASF_PCB_ACK	ASF1
+#define	ASF_PCB_NAK	ASF2
+#define	ASF_PCB_END	(ASF2|ASF1)
+#define	ASF_PCB_MASK	(ASF2|ASF1)
 
 /*
  * host aux DMA register bits
  */
-#define	AUXDMA_BRST	0x01	/* DMA burst */
+#define	DMA_BRST	0x01	/* DMA burst */
 
 /*
  * maximum amount of data data allowed in a PCB
@@ -123,3 +123,121 @@ enum {
   CMD_ADAPTER_INFO_RESPONSE		= 0x41
 };
 
+/* Definitions for the PCB data structure */
+
+/* Data units */
+typedef unsigned char         byte;
+typedef unsigned short int    word;
+typedef unsigned long int     dword;
+
+/* Data structures */
+struct Memconf {
+	word	cmd_q,
+		rcv_q,
+		mcast,
+		frame,
+		rcv_b,
+		progs;
+};
+
+struct Rcv_pkt {
+	word	buf_ofs,
+		buf_seg,
+		buf_len,
+		timeout;
+};
+
+struct Xmit_pkt {
+	word	buf_ofs,
+		buf_seg,
+		pkt_len;
+};
+
+struct Rcv_resp {
+	word	buf_ofs,
+		buf_seg,
+		buf_len,
+		pkt_len,
+		timeout,
+		status;
+	dword	timetag;
+};
+
+struct Xmit_resp {
+	word	buf_ofs,
+		buf_seg,
+		c_stat,
+		status;
+};
+
+
+struct Netstat {
+	dword	tot_recv,
+		tot_xmit;
+	word	err_CRC,
+		err_align,
+		err_res,
+		err_ovrrun;
+};
+
+
+struct Selftest {
+	word	error;
+	union {
+		word ROM_cksum;
+		struct {
+			word ofs, seg;
+		} RAM;
+		word i82586;
+	} failure;
+};
+
+struct Info {
+	byte	minor_vers,
+		major_vers;
+	word	ROM_cksum,
+		RAM_sz,
+		free_ofs,
+		free_seg;
+};
+
+struct Memdump {
+       word size,
+            off,
+            seg;
+};
+
+/*
+Primary Command Block. The most important data structure. All communication
+between the host and the adapter is done with these. (Except for the actual
+ethernet data, which has different packaging.)
+*/
+typedef struct {
+	byte	command;
+	byte	length;
+	union	{
+		struct Memconf		memconf;
+		word			configure;
+		struct Rcv_pkt		rcv_pkt;
+		struct Xmit_pkt		xmit_pkt;
+		byte			multicast[10][6];
+		byte			eth_addr[6];
+		byte			failed;
+		struct Rcv_resp		rcv_resp;
+		struct Xmit_resp	xmit_resp;
+		struct Netstat		netstat;
+		struct Selftest		selftest;
+		struct Info		info;
+		struct Memdump    	memdump;
+		byte			raw[62];
+	} data;
+} pcb_struct;
+
+/* These defines for 'configure' */
+#define RECV_STATION	0x00
+#define RECV_BROAD	0x01
+#define RECV_MULTI	0x02
+#define RECV_PROMISC	0x04
+#define NO_LOOPBACK	0x00
+#define INT_LOOPBACK	0x08
+#define EXT_LOOPBACK	0x10

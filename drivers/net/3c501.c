@@ -18,6 +18,18 @@
     Fixed (again!) the missing interrupt locking on TX/RX shifting.
     		Alan Cox <Alan.Cox@linux.org>
     		
+    Removed calls to init_etherdev since they are no longer needed, and
+    cleaned up modularization just a bit. The driver still allows only
+    the default address for cards when loaded as a module, but that's
+    really less braindead than anyone using a 3c501 board. :)
+		    19950208 (invid@msen.com)
+
+    Added traps for interrupts hitting the window as we clear and TX load
+    the board. Now getting 150K/second FTP with a 3c501 card. Still playing
+    with a TX-TX optimisation to see if we can touch 180-200K/second as seems
+    theoretically maximum.
+    		19950402 Alan Cox <Alan.Cox@linux.org>
+    		
     Some notes on this thing if you have to hack it.  [Alan]
     
     1]	Some documentation is available from 3Com. Due to the boards age
@@ -61,12 +73,6 @@
     in group 224.0.0.1 and you will therefore be listening to all multicasts.
     One nv conference running over that ethernet and you can give up.
     
-    2/8/95 (invid@msen.com)
-
-    Removed calls to init_etherdev since they are no longer needed, and
-    cleaned up modularization just a bit. The driver still allows only
-    the default address for cards when loaded as a module, but that's
-    really less braindead than anyone using a 3c501 board. :)
 */
 
 static char *version =
@@ -134,6 +140,7 @@ struct net_local {
     struct enet_statistics stats;
     int tx_pkt_start;		/* The length of the current Tx packet. */
     int collisions;		/* Tx collisions this packet */
+    int loading;		/* Spot buffer load collisions */
 };
 
 
@@ -367,6 +374,7 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 	int gp_start = 0x800 - (ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN);
 	unsigned char *buf = skb->data;
 
+load_it_again_sam:
 	lp->tx_pkt_start = gp_start;
     	lp->collisions = 0;
 
@@ -377,6 +385,9 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 	outb(AX_SYS, AX_CMD);
 	inb(RX_STATUS);
 	inb(TX_STATUS);
+	
+	lp->loading=1;
+	
 	/* 
 	 *	Turn interrupts back on while we spend a pleasant afternoon
 	 *	loading bytes into the board 
@@ -386,6 +397,12 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 	outw(gp_start, GP_LOW);		/* aim - packet will be loaded into buffer start */
 	outsb(DATAPORT,buf,skb->len);	/* load buffer (usual thing each byte increments the pointer) */
 	outw(gp_start, GP_LOW);		/* the board reuses the same register */
+	if(lp->loading==2)		/* A receive upset our load, despite our best efforts */
+	{
+		if(el_debug>2)
+			printk("%s: burped during tx load.\n", dev->name);
+		goto load_it_again_sam;	/* Sigh... */
+	}
 	outb(AX_XMIT, AX_CMD);		/* fire ... Trigger xmit.  */
 	dev->trans_start = jiffies;
     }
@@ -421,6 +438,8 @@ el_interrupt(int irq, struct pt_regs *regs)
     if (dev->interrupt)
 	printk("%s: Reentering the interrupt driver!\n", dev->name);
     dev->interrupt = 1;
+    
+    lp->loading=2;		/* So we can spot loading interruptions */
 
     if (dev->tbusy) {
     
@@ -573,7 +592,7 @@ el_receive(struct device *dev)
 	 */
 	 
 	insb(DATAPORT, skb->data, pkt_len);
-
+	skb->protocol=eth_type_trans(skb,dev);
 	netif_rx(skb);
 	lp->stats.rx_packets++;
     }

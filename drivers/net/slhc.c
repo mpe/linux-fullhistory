@@ -67,17 +67,18 @@
 #include <linux/fcntl.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
-#include "ip.h"
-#include "protocol.h"
-#include "icmp.h"
-#include "tcp.h"
+#include <net/ip.h>
+#include <net/protocol.h>
+#include <net/icmp.h>
+#include <net/tcp.h>
 #include <linux/skbuff.h>
-#include "sock.h"
+#include <net/sock.h>
 #include <linux/errno.h>
 #include <linux/timer.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <linux/mm.h>
+#include <net/checksum.h>
 #include "slhc.h"
 
 int last_retran;

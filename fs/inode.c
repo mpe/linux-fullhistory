@@ -417,6 +417,7 @@ repeat:
 
 struct inode * get_empty_inode(void)
 {
+	static int ino = 0;
 	struct inode * inode, * best;
 	int i;
 
@@ -461,6 +462,8 @@ repeat:
 	inode->i_nlink = 1;
 	inode->i_version = ++event;
 	inode->i_sem.count = 1;
+	inode->i_ino = ++ino;
+	inode->i_dev = -1;
 	nr_free_inodes--;
 	if (nr_free_inodes < 0) {
 		printk ("VFS: get_empty_inode: bad free inode count.\n");

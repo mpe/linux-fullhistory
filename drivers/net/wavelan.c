@@ -1600,6 +1600,7 @@ wavelan_receive(device *dev)
 					printk("\"\n\n");
 				}
 			
+				skb->protocol=eth_type_trans(skb,dev);
 				netif_rx(skb);
 
 				lp->stats.rx_packets++;

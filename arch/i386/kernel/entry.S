@@ -482,14 +482,14 @@ _sys_call_table:
 	.long _sys_settimeofday
 	.long _sys_getgroups		/* 80 */
 	.long _sys_setgroups
-	.long _sys_select
+	.long _old_select
 	.long _sys_symlink
 	.long _sys_lstat
 	.long _sys_readlink		/* 85 */
 	.long _sys_uselib
 	.long _sys_swapon
 	.long _sys_reboot
-	.long _sys_readdir
+	.long _old_readdir
 	.long _sys_mmap			/* 90 */
 	.long _sys_munmap
 	.long _sys_truncate
@@ -541,4 +541,7 @@ _sys_call_table:
 	.long _sys_setfsuid
 	.long _sys_setfsgid
 	.long _sys_llseek		/* 140 */
+	.long _sys_getdents
+	.long _sys_select
+	.long _sys_flock
 	.space (NR_syscalls-140)*4

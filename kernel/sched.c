@@ -620,7 +620,8 @@ static void do_timer(int irq, struct pt_regs * regs)
 			kstat.cpu_system++;
 #ifdef CONFIG_PROFILE
 		if (prof_buffer && current != task[0]) {
-			unsigned long eip = regs->eip;
+			extern int _stext;
+			unsigned long eip = regs->eip - (unsigned long) &_stext;
 			eip >>= CONFIG_PROFILE_SHIFT;
 			if (eip < prof_len)
 				prof_buffer[eip]++;

@@ -13,7 +13,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 
-static int proc_readbase(struct inode *, struct file *, struct dirent *, int);
+static int proc_readbase(struct inode *, struct file *, void *, filldir_t);
 static int proc_lookupbase(struct inode *,const char *,int,struct inode **);
 
 static struct file_operations proc_base_operations = {
@@ -121,11 +121,11 @@ static int proc_lookupbase(struct inode * dir,const char * name, int len,
 }
 
 static int proc_readbase(struct inode * inode, struct file * filp,
-	struct dirent * dirent, int count)
+	void * dirent, filldir_t filldir)
 {
 	struct proc_dir_entry * de;
 	unsigned int pid, ino;
-	int i,j;
+	int i;
 
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
@@ -136,20 +136,14 @@ static int proc_readbase(struct inode * inode, struct file * filp,
 			break;
 	if (!pid || i >= NR_TASKS)
 		return 0;
-	if (((unsigned) filp->f_pos) < NR_BASE_DIRENTRY) {
+	while (((unsigned) filp->f_pos) < NR_BASE_DIRENTRY) {
 		de = base_dir + filp->f_pos;
-		filp->f_pos++;
-		i = de->namelen;
 		ino = de->low_ino;
 		if (ino != 1)
 			ino |= (pid << 16);
-		put_fs_long(ino, &dirent->d_ino);
-		put_fs_word(i,&dirent->d_reclen);
-		put_fs_byte(0,i+dirent->d_name);
-		j = i;
-		while (i--)
-			put_fs_byte(de->name[i], i+dirent->d_name);
-		return j;
+		if (filldir(dirent, de->name, de->namelen, filp->f_pos, ino) < 0)
+			break;
+		filp->f_pos++;
 	}
 	return 0;
 }

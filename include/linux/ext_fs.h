@@ -94,7 +94,7 @@ extern struct super_block *ext_read_super(struct super_block *,void *,int);
 extern void ext_read_inode(struct inode *);
 extern void ext_write_inode(struct inode *);
 extern void ext_put_inode(struct inode *);
-extern void ext_statfs(struct super_block *, struct statfs *);
+extern void ext_statfs(struct super_block *, struct statfs *, int);
 extern int ext_sync_inode(struct inode *);
 extern int ext_sync_file(struct inode *, struct file *);
 

@@ -850,11 +850,11 @@ static void free_all_interrupts(int irq_lines)
 static void figure_IRQ_timeout(int irq)
 {
 	struct	async_struct	*info;
-	int	timeout = 6000;	/* 60 seconds === a long time :-) */
+	int	timeout = 60*HZ;	/* 60 seconds === a long time :-) */
 
 	info = IRQ_ports[irq];
 	if (!info) {
-		IRQ_timeout[irq] = 6000;
+		IRQ_timeout[irq] = 60*HZ;
 		return;
 	}
 	while (info) {
@@ -971,7 +971,7 @@ static int startup(struct async_struct * info)
 		info->MCR = UART_MCR_DTR | UART_MCR_RTS | UART_MCR_OUT2;
 		info->MCR_noint = UART_MCR_DTR | UART_MCR_RTS;
 	}
-#ifdef __alpha__
+#if defined(__alpha__) && !defined(CONFIG_PCI)
 	info->MCR |= UART_MCR_OUT1 | UART_MCR_OUT2;
 	info->MCR_noint |= UART_MCR_OUT1 | UART_MCR_OUT2;
 #endif
@@ -1166,8 +1166,16 @@ static void change_speed(struct async_struct *info)
 		return;
 	}
 	/* byte size and parity */
-	cval = cflag & (CSIZE | CSTOPB);
-	cval >>= 4;
+	switch (cflag & CSIZE) {
+	      case CS5: cval = 0x00; break;
+	      case CS6: cval = 0x01; break;
+	      case CS7: cval = 0x02; break;
+	      case CS8: cval = 0x03; break;
+	      default:  cval = 0x00; break;	/* too keep GCC shut... */
+	}
+	if (cflag & CSTOPB) {
+		cval |= 0x04;
+	}
 	if (cflag & PARENB)
 		cval |= UART_LCR_PARITY;
 	if (!(cflag & PARODD))
@@ -2530,7 +2538,7 @@ static void autoconfig(struct async_struct * info)
 	/*
 	 * Reset the UART.
 	 */
-#ifdef __alpha__
+#if defined(__alpha__) && !defined(CONFIG_PCI)
 	/*
 	 * I wonder what DEC did to the OUT1 and OUT2 lines?
 	 * clearing them results in endless interrupts.

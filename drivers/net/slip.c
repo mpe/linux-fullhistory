@@ -65,7 +65,8 @@
 #include <linux/errno.h>
 #include <linux/netdevice.h>
 #ifdef CONFIG_AX25
-#include "ax25.h"
+#include <linux/timer.h>
+#include <net/ax25.h>
 #endif
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
@@ -321,6 +322,10 @@ sl_bump(struct slip *sl)
 	skb->len = count;
 	skb->dev = sl->dev;
 	memcpy(skb->data, sl->rbuff, count);
+	if(sl->mode&(SL_MODE_AX25|SL_MODE_AX25VC))
+		skb->protocol=htons(ETH_P_AX25);
+	else
+		skb->protocol=htons(ETH_P_IP);
 	netif_rx(skb);
 	sl->rx_packets++;
 }
@@ -448,6 +453,32 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
 #endif
 	}
 
+#ifdef CONFIG_AX25
+#ifdef CONFIG_INET
+	/*
+	 * This code is not very intelligent. Fix me.
+	 */
+	if (skb->data[15] == LAPB_UI && skb->data[16] == AX25_P_IP) {
+		struct sk_buff *skbn;
+		char mode;
+		
+		mode = ax25_ip_mode_get((ax25_address *)(skb->data + 1), dev);
+
+		if (mode == 'V' || mode == 'v' || (mode == ' ' && sl->mode & SL_MODE_AX25VC)) {
+			if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
+				sl->tx_errors++;
+				return 1;
+			}
+
+			ax25_send_frame(skbn, (ax25_address *)dev->dev_addr, (ax25_address *)(skbn->data + 1), dev);
+			dev_kfree_skb(skb, FREE_WRITE);
+			mark_bh(NET_BH);
+			return 0;
+		}
+	}
+#endif
+#endif
+
 	/* We were not busy, so we are now... :-) */
 	if (skb != NULL) {
 		sl_lock(sl);
@@ -459,19 +490,6 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
 
 
 /* Return the frame type ID.  This is normally IP but maybe be AX.25. */
-static unsigned short
-sl_type_trans (struct sk_buff *skb, struct device *dev)
-{
-#ifdef CONFIG_AX25
-	struct slip *sl = &sl_ctrl[dev->base_addr];
-
-	if (sl->mode & SL_MODE_AX25)  {
-		return htons(ETH_P_AX25);
-	}
-#endif
-	return htons(ETH_P_IP);
-}
-
 
 /* Fill in the MAC-level header. Not used by SLIP. */
 static int
@@ -482,7 +500,7 @@ sl_header(unsigned char *buff, struct device *dev, unsigned short type,
 #ifdef CONFIG_INET
 	struct slip *sl = &sl_ctrl[dev->base_addr];
 
-	if ((sl->mode & SL_MODE_AX25) && type != htons(ETH_P_AX25))  {
+	if (((sl->mode & SL_MODE_AX25) || (sl->mode & SL_MODE_AX25VC)) && type != htons(ETH_P_AX25))  {
 		return ax25_encapsulate(buff, dev, type, daddr, saddr, len, skb);
 	}
 #endif
@@ -500,7 +518,7 @@ sl_rebuild_header(void *buff, struct device *dev, unsigned long raddr,
 #ifdef CONFIG_INET
 	struct slip *sl = &sl_ctrl[dev->base_addr];
 
-	if (sl->mode & SL_MODE_AX25)  {
+	if ((sl->mode & SL_MODE_AX25) || (sl->mode & SL_MODE_AX25VC)) {
 		return ax25_rebuild_header(buff, dev, raddr, skb);
 	}
 #endif
@@ -697,7 +715,7 @@ slip_open(struct tty_struct *tty)
 	sl->mode      = SL_MODE_DEFAULT;
 	sl->dev->type = ARPHRD_SLIP + sl->mode;
 #ifdef CONFIG_AX25	
-	if (sl->dev->type == 260) {	/* KISS */
+	if (sl->dev->type == 260 || sl->dev->type == 272) {	/* KISS */
 		sl->dev->type = ARPHRD_AX25;
 	}
 #endif	
@@ -1008,11 +1026,11 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		}
 #endif
 #ifndef CONFIG_AX25
-		if (tmp & SL_MODE_AX25)  {
+		if ((tmp & SL_MODE_AX25) || (tmp & SL_MODE_AX25VC)) {
 			return -EINVAL;
 		}
 #else
-		if (tmp & SL_MODE_AX25)	{
+		if ((tmp & SL_MODE_AX25) || (tmp & SL_MODE_AX25VC)) {
 			sl->dev->addr_len=7;	/* sizeof an AX.25 addr */
 			sl->dev->hard_header_len=17;	/* We don't do digipeaters */
 		} else	{
@@ -1023,7 +1041,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		sl->mode = tmp;
 		sl->dev->type = ARPHRD_SLIP+sl->mode;
 #ifdef CONFIG_AX25		
-		if (sl->dev->type == 260)  {
+		if (sl->dev->type == 260 || sl->dev->type == 272)  {
 			sl->dev->type = ARPHRD_AX25;
 		}
 #endif		
@@ -1113,7 +1131,6 @@ slip_init(struct device *dev)
 	dev->open		= sl_open_dev;
 	dev->stop		= sl_close;
 	dev->hard_header	= sl_header;
-	dev->type_trans	        = sl_type_trans;
 	dev->get_stats	        = sl_get_stats;
 #ifdef HAVE_SET_MAC_ADDR
 #ifdef CONFIG_AX25
@@ -1124,7 +1141,7 @@ slip_init(struct device *dev)
 	dev->addr_len		= 0;
 	dev->type		= ARPHRD_SLIP + SL_MODE_DEFAULT;
 #ifdef CONFIG_AX25
-	if (sl->dev->type == 260)  {
+	if (sl->dev->type == 260 || sl->dev->type == 272)  {
 		sl->dev->type = ARPHRD_AX25;
 	}
 	memcpy(dev->broadcast, ax25_bcast, 7); /* Only activated in AX.25 mode */

@@ -1188,7 +1188,7 @@ unsigned long kbd_init(unsigned long kmem_start)
 	kb_wait();
 	outb(0x60,0x64);	/* write PS/2 Mode Register */
 	kb_wait();
-	outb(0x41,0x60);	/* KCC | EKI */
+	outb(0x65,0x60);	/* KCC | DMS | SYS | EKI */
 	kb_wait();
 	if (!send_data(0xf0) || !send_data(0x02))
 		printk("Scanmode 2 change failed\n");

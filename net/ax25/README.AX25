@@ -1,0 +1,20 @@
+This is a working version of the new state machine code for AX25 under
+Linux. It is closely based on the SDL diagrams published in the ARRL 7th
+Computer Networking Conference papers, and they should be referred to when
+reading the code, notably the stuff in ax25_in.c. The next stage is to
+separate the ax25 control block from the socket and then add NET/ROM and
+connected mode IP. I would also like to add the extended AX25 designed by a
+Dutch station which allows for window sizes up to 127.
+
+This code will work the same as the old code, although the display in
+/proc/net/ax25 is a little different, but should be understandable. Please
+give this code a work out and report any bugs to me either at
+jsn@cs.nott.ac.uk or at GB7DAD.GBR.EU.
+
+This code has taught me a lot about the internals of the networking side of
+Linux especially skbuff handling and I now feel happy about implementing the
+higher level protocols.
+
+73's
+
+Jonathan

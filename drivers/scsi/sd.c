@@ -851,7 +851,7 @@ static int sd_init_onedisk(int i)
 {
   unsigned char cmd[10];
   unsigned char *buffer;
-  char spintime;
+  unsigned long spintime;
   int the_result, retries;
   Scsi_Cmnd * SCpnt;
 
@@ -915,7 +915,7 @@ static int sd_init_onedisk(int i)
 	while(jiffies < time1 + HZ); /* Wait 1 second for next try */
 	printk( "." );
       };
-    } while(the_result && spintime && spintime+5000 > jiffies);
+    } while(the_result && spintime && spintime+50*HZ > jiffies);
     if (spintime) {
        if (the_result)
            printk( "not responding...\n" );

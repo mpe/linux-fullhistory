@@ -391,17 +391,19 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	return NULL;
 }
 
-void isofs_statfs (struct super_block *sb, struct statfs *buf)
+void isofs_statfs (struct super_block *sb, struct statfs *buf, int bufsiz)
 {
-	put_fs_long(ISOFS_SUPER_MAGIC, &buf->f_type);
-	put_fs_long(1 << ISOFS_BLOCK_BITS, &buf->f_bsize);
-	put_fs_long(sb->u.isofs_sb.s_nzones, &buf->f_blocks);
-	put_fs_long(0, &buf->f_bfree);
-	put_fs_long(0, &buf->f_bavail);
-	put_fs_long(sb->u.isofs_sb.s_ninodes, &buf->f_files);
-	put_fs_long(0, &buf->f_ffree);
-	put_fs_long(NAME_MAX, &buf->f_namelen);
-	/* Don't know what value to put in buf->f_fsid */
+	struct statfs tmp;
+
+	tmp.f_type = ISOFS_SUPER_MAGIC;
+	tmp.f_bsize = 1 << ISOFS_BLOCK_BITS;
+	tmp.f_blocks = sb->u.isofs_sb.s_nzones;
+	tmp.f_bfree = 0;
+	tmp.f_bavail = 0;
+	tmp.f_files = sb->u.isofs_sb.s_ninodes;
+	tmp.f_ffree = 0;
+	tmp.f_namelen = NAME_MAX;
+	memcpy_tofs(buf, &tmp, bufsiz);
 }
 
 int isofs_bmap(struct inode * inode,int block)

@@ -61,7 +61,7 @@ int umsdos_findentry (struct inode *dir,
 /* inode.c 25/02/95 09.21.46 */
 void UMSDOS_put_inode (struct inode *inode);
 void UMSDOS_put_super (struct super_block *sb);
-void UMSDOS_statfs (struct super_block *sb, struct statfs *buf);
+void UMSDOS_statfs (struct super_block *sb, struct statfs *buf, int);
 int umsdos_real_lookup (struct inode *dir,
 	 const char *name,
 	 int len,

@@ -1038,7 +1038,7 @@ void do_no_page(struct vm_area_struct * vma, unsigned long address,
 		get_empty_page(vma, page_table);
 		return;
 	}
-	page = get_free_page(GFP_KERNEL);
+	page = __get_free_page(GFP_KERNEL);
 	if (share_page(vma, address, write_access, page)) {
 		++vma->vm_task->mm->min_flt;
 		++vma->vm_task->mm->rss;

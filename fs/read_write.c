@@ -13,37 +13,6 @@
 
 #include <asm/segment.h>
 
-/*
- * Count is now a supported feature, but currently only the ext2fs
- * uses it.  A count value of 1 is supported for compatibility with
- * earlier libraries, but larger values are supported: count should
- * indicate the total buffer space available for filling with dirents.
- * The d_off entry in the dirents will then indicate the offset from
- * each dirent to the next, and the return value will indicate the
- * number of bytes written.  All dirents will be written at
- * word-aligned addresses.  [sct Oct 1994]
- */
-asmlinkage int sys_readdir(unsigned int fd, struct dirent * dirent, unsigned int count)
-{
-	int error;
-	struct file * file;
-	struct inode * inode;
-
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) ||
-	    !(inode = file->f_inode))
-		return -EBADF;
-	error = -ENOTDIR;
-	if (file->f_op && file->f_op->readdir) {
-		int size = count;
-		if (count == 1)
-			size = sizeof(*dirent);
-		error = verify_area(VERIFY_WRITE, dirent, size);
-		if (!error)
-			error = file->f_op->readdir(inode,file,dirent,count);
-	}
-	return error;
-}
-
 asmlinkage int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 {
 	struct file * file;

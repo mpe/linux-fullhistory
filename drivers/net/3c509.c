@@ -603,6 +603,7 @@ el3_rx(struct device *dev)
 				insl(ioaddr+RX_FIFO, skb->data,
 							(pkt_len + 3) >> 2);
 
+				skb->protocol=eth_type_trans(skb,dev);
 				netif_rx(skb);
 				outw(RxDiscard, ioaddr + EL3_CMD); /* Pop top Rx packet. */
 				lp->stats.rx_packets++;

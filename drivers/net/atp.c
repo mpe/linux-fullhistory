@@ -690,6 +690,7 @@ static void net_rx(struct device *dev)
 				   data[12], data[13]);
 		}
 		
+		skb->protocol=eth_type_trans(skb,dev);
 		netif_rx(skb);
 		lp->stats.rx_packets++;
 	}

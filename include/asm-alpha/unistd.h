@@ -51,56 +51,41 @@ type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5) \
 extern unsigned long kernel_fork(void);
 static inline unsigned long fork(void)
 {
-	printk("[%d]fork()\n",current->pid);
 	return kernel_fork();
 }
 
 extern void sys_idle(void);
 static inline void idle(void)
 {
-	printk("[%d]idle()\n",current->pid);
 	sys_idle();
-	for(;;);
 }
 
 extern int sys_setup(void);
 static inline int setup(void)
 {
-	int retval;
-
-	printk("[%d]setup()\n",current->pid);
-	retval = sys_setup();
-	printk("[%d]setup() returned %d\n",current->pid, retval);
+	return sys_setup();
 }
 
 extern int sys_open(const char *, int, int);
 static inline int open(const char * name, int mode, int flags)
 {
-	int fd;
-	printk("[%d]open(%s,%d,%d)\n",current->pid, name, mode, flags);
-	fd = sys_open(name, mode, flags);
-	printk("[%d]open(%s,%d,%d)=%d\n",current->pid, name, mode, flags, fd);
-	return fd;
+	return sys_open(name, mode, flags);
 }
 
 extern int sys_dup(int);
 static inline int dup(int fd)
 {
-	int newfd = sys_dup(fd);
-	printk("[%d]dup(%d)=%d\n",current->pid, fd, newfd);
-	return newfd;
+	return sys_dup(fd);
 }
 
 static inline int close(int fd)
 {
-	printk("[%d]close(%d)\n",current->pid,fd);
 	return sys_close(fd);
 }
 
 extern int sys_exit(int);
 static inline int _exit(int value)
 {
-	printk("[%d]_exit(%d)\n", current->pid, value);
 	return sys_exit(value);
 }
 
@@ -115,25 +100,48 @@ static inline int write(int fd, const char * buf, int nr)
 extern int sys_read(int, char *, int);
 static inline int read(int fd, char * buf, int nr)
 {
-	int res = sys_read(fd, buf, nr);
-	printk("[%d]read(%d,%s,%d)=%d\n",current->pid, fd, buf, nr, res);
-	return res;
+	return sys_read(fd, buf, nr);
 }
 
-#define execve(x,y,z)	({ printk("[%d]execve(%s,%p,%p)\n",current->pid, x, y, z); -1; })
-#define waitpid(x,y,z)	sys_waitpid(x,y,z)
-#define setsid()	({ printk("[%d]setsid()\n",current->pid); -1; })
-#define sync()		({ printk("[%d]sync()\n",current->pid); -1; })
+extern int do_execve(char *, char **, char **, struct pt_regs *);
+extern void ret_from_sys_call(void);
+static inline int execve(char * file, char ** argvp, char ** envp)
+{
+	int i;
+	struct pt_regs regs;
+
+	memset(&regs, 0, sizeof(regs));
+	i = do_execve(file, argvp, envp, &regs);
+	if (!i) {
+		__asm__ __volatile__("bis %0,%0,$30\n\t"
+				"bis %1,%1,$26\n\t"
+				"ret $31,($26),1\n\t"
+				: :"r" (&regs), "r" (ret_from_sys_call));
+	}
+	return -1;
+}
+
+extern int sys_setsid(void);
+static inline int setsid(void)
+{
+	return sys_setsid();
+}
+
+extern int sys_sync(void);
+static inline int sync(void)
+{
+	return sys_sync();
+}
 
 extern int sys_waitpid(int, int *, int);
+static inline pid_t waitpid(int pid, int * wait_stat, int flags)
+{
+	return sys_waitpid(pid,wait_stat,flags);
+}
+
 static inline pid_t wait(int * wait_stat)
 {
-	long retval, i;
-	printk("[%d]wait(%p)\n", current->pid, wait_stat);
-	retval = waitpid(-1,wait_stat,0);
-	printk("[%d]wait(%p) returned %ld\n", current->pid, wait_stat, retval);
-	for (i = 0; i < 1000000000; i++);
-	return retval;
+	return waitpid(-1,wait_stat,0);
 }
 
 #endif

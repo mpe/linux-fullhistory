@@ -121,11 +121,6 @@ static int pipe_lseek(struct inode * inode, struct file * file, off_t offset, in
 	return -ESPIPE;
 }
 
-static int pipe_readdir(struct inode * inode, struct file * file, struct dirent * de, int count)
-{
-	return -ENOTDIR;
-}
-
 static int bad_pipe_rw(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	return -EBADF;
@@ -138,9 +133,9 @@ static int pipe_ioctl(struct inode *pino, struct file * filp,
 
 	switch (cmd) {
 		case FIONREAD:
-			error = verify_area(VERIFY_WRITE, (void *) arg,4);
+			error = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
 			if (!error)
-				put_fs_long(PIPE_SIZE(*pino),(unsigned long *) arg);
+				put_fs_long(PIPE_SIZE(*pino),(int *) arg);
 			return error;
 		default:
 			return -EINVAL;
@@ -271,7 +266,7 @@ struct file_operations connecting_fifo_fops = {
 	pipe_lseek,
 	connect_read,
 	bad_pipe_rw,
-	pipe_readdir,
+	NULL,		/* no readdir */
 	connect_select,
 	pipe_ioctl,
 	NULL,		/* no mmap on pipes.. surprise */
@@ -284,7 +279,7 @@ struct file_operations read_fifo_fops = {
 	pipe_lseek,
 	pipe_read,
 	bad_pipe_rw,
-	pipe_readdir,
+	NULL,		/* no readdir */
 	fifo_select,
 	pipe_ioctl,
 	NULL,		/* no mmap on pipes.. surprise */
@@ -297,7 +292,7 @@ struct file_operations write_fifo_fops = {
 	pipe_lseek,
 	bad_pipe_rw,
 	pipe_write,
-	pipe_readdir,
+	NULL,		/* no readdir */
 	fifo_select,
 	pipe_ioctl,
 	NULL,		/* mmap */
@@ -310,7 +305,7 @@ struct file_operations rdwr_fifo_fops = {
 	pipe_lseek,
 	pipe_read,
 	pipe_write,
-	pipe_readdir,
+	NULL,		/* no readdir */
 	fifo_select,
 	pipe_ioctl,
 	NULL,		/* mmap */
@@ -323,7 +318,7 @@ struct file_operations read_pipe_fops = {
 	pipe_lseek,
 	pipe_read,
 	bad_pipe_rw,
-	pipe_readdir,
+	NULL,		/* no readdir */
 	pipe_select,
 	pipe_ioctl,
 	NULL,		/* no mmap on pipes.. surprise */
@@ -336,7 +331,7 @@ struct file_operations write_pipe_fops = {
 	pipe_lseek,
 	bad_pipe_rw,
 	pipe_write,
-	pipe_readdir,
+	NULL,		/* no readdir */
 	pipe_select,
 	pipe_ioctl,
 	NULL,		/* mmap */
@@ -349,7 +344,7 @@ struct file_operations rdwr_pipe_fops = {
 	pipe_lseek,
 	pipe_read,
 	pipe_write,
-	pipe_readdir,
+	NULL,		/* no readdir */
 	pipe_select,
 	pipe_ioctl,
 	NULL,		/* mmap */
@@ -376,42 +371,38 @@ struct inode_operations pipe_inode_operations = {
 	NULL			/* permission */
 };
 
-asmlinkage int sys_pipe(unsigned long * fildes)
+int do_pipe(int *fd)
 {
 	struct inode * inode;
-	struct file * f[2];
-	int fd[2];
+	struct file *f[2];
 	int i,j;
 
-	j = verify_area(VERIFY_WRITE,fildes,8);
-	if (j)
-		return j;
+	inode = get_pipe_inode();
+	if (!inode)
+		return -ENFILE;
+
 	for(j=0 ; j<2 ; j++)
 		if (!(f[j] = get_empty_filp()))
 			break;
-	if (j==1)
-		f[0]->f_count--;
-	if (j<2)
+	if (j < 2) {
+		iput(inode);
+		if (j)
+			f[0]->f_count--;
 		return -ENFILE;
+	}
 	j=0;
 	for(i=0;j<2 && i<NR_OPEN && i<current->rlim[RLIMIT_NOFILE].rlim_cur;i++)
 		if (!current->files->fd[i]) {
 			current->files->fd[ fd[j]=i ] = f[j];
 			j++;
 		}
-	if (j==1)
-		current->files->fd[fd[0]]=NULL;
 	if (j<2) {
+		iput(inode);
 		f[0]->f_count--;
 		f[1]->f_count--;
+		if (j)
+			current->files->fd[fd[0]] = NULL;
 		return -EMFILE;
-	}
-	if (!(inode=get_pipe_inode())) {
-		current->files->fd[fd[0]] = NULL;
-		current->files->fd[fd[1]] = NULL;
-		f[0]->f_count--;
-		f[1]->f_count--;
-		return -ENFILE;
 	}
 	f[0]->f_inode = f[1]->f_inode = inode;
 	f[0]->f_pos = f[1]->f_pos = 0;
@@ -421,7 +412,5 @@ asmlinkage int sys_pipe(unsigned long * fildes)
 	f[1]->f_flags = O_WRONLY;
 	f[1]->f_op = &write_pipe_fops;
 	f[1]->f_mode = 2;		/* write */
-	put_fs_long(fd[0],0+fildes);
-	put_fs_long(fd[1],1+fildes);
 	return 0;
 }

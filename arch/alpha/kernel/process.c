@@ -19,10 +19,23 @@
 #include <linux/ldt.h>
 #include <linux/user.h>
 #include <linux/a.out.h>
+#include <linux/utsname.h>
+#include <linux/time.h>
+#include <linux/major.h>
+#include <linux/stat.h>
+#include <linux/mman.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/io.h>
+
+asmlinkage int sys_sethae(unsigned long hae, unsigned long a1, unsigned long a2,
+	unsigned long a3, unsigned long a4, unsigned long a5,
+	struct pt_regs regs)
+{
+	(&regs)->hae = hae;
+	return 0;
+}
 
 asmlinkage int sys_idle(void)
 {
@@ -44,7 +57,19 @@ void hard_reset_now(void)
 void show_regs(struct pt_regs * regs)
 {
 	printk("\nps: %04lx pc: %016lx\n", regs->ps, regs->pc);
-	printk("rp: %04lx sp: %p\n", regs->r26, regs+1);
+	printk("rp: %016lx sp: %p\n", regs->r26, regs+1);
+	printk(" r0: %016lx  r1: %016lx  r2: %016lx  r3: %016lx\n",
+	       regs->r0, regs->r1, regs->r2, regs->r3);
+	printk(" r4: %016lx  r5: %016lx  r6: %016lx  r7: %016lx\n",
+	       regs->r4, regs->r5, regs->r6, regs->r7);
+	printk(" r8: %016lx r16: %016lx r17: %016lx r18: %016lx\n",
+	       regs->r8, regs->r16, regs->r17, regs->r18);
+	printk("r19: %016lx r20: %016lx r21: %016lx r22: %016lx\n",
+	       regs->r19, regs->r20, regs->r21, regs->r22);
+	printk("r23: %016lx r24: %016lx r25: %016lx r26: %016lx\n",
+	       regs->r23, regs->r24, regs->r25, regs->r26);
+	printk("r27: %016lx r28: %016lx r29: %016lx hae: %016lx\n",
+	       regs->r27, regs->r28, regs->gp, regs->hae);
 }
 
 /*
@@ -58,82 +83,55 @@ void flush_thread(void)
 {
 }
 
-struct alpha_switch_stack {
-	unsigned long r9;
-	unsigned long r10;
-	unsigned long r11;
-	unsigned long r12;
-	unsigned long r13;
-	unsigned long r14;
-	unsigned long r15;
-	unsigned long r26;
-};
-
-/*
- * "alpha_switch_to()".. Done completely in assembly, due to the
- * fact that we obviously don't returns to the caller directly.
- * Also, we have to save the regs that the C compiler expects to be
- * saved across a function call.. (9-15)
- *
- * NOTE! The stack switches from under us when we do the swpctx call:
- * this *looks* like it restores the same registers that it just saved,
- * but it actually restores the new context regs and return address.
- */
-__asm__(".align 3\n\t"
-	".globl alpha_switch_to\n\t"
-	".ent alpha_switch_to\n"
-	"alpha_switch_to:\n\t"
-	"subq $30,64,$30\n\t"
-	"stq  $9,0($30)\n\t"
-	"stq $10,8($30)\n\t"
-	"stq $11,16($30)\n\t"
-	"stq $12,24($30)\n\t"
-	"stq $13,32($30)\n\t"
-	"stq $14,40($30)\n\t"
-	"stq $15,48($30)\n\t"
-	"stq $26,56($30)\n\t"
-	"call_pal 48\n\t"
-	"ldq  $9,0($30)\n\t"
-	"ldq $10,8($30)\n\t"
-	"ldq $11,16($30)\n\t"
-	"ldq $12,24($30)\n\t"
-	"ldq $13,32($30)\n\t"
-	"ldq $14,40($30)\n\t"
-	"ldq $15,48($30)\n\t"
-	"ldq $26,56($30)\n\t"
-	"addq $30,64,$30\n\t"
-	"ret $31,($26),1\n\t"
-	".end alpha_switch_to");
-
 /*
  * "alpha_fork()".. By the time we get here, the
  * non-volatile registers have also been saved on the
  * stack. We do some ugly pointer stuff here.. (see
  * also copy_thread)
  */
-int alpha_fork(struct alpha_switch_stack * swstack)
+int alpha_fork(struct switch_stack * swstack)
 {
-	return do_fork(COPYVM | SIGCHLD, 0, (struct pt_regs *) (swstack+1));
+	return do_fork(COPYVM | SIGCHLD,
+		rdusp(),
+		(struct pt_regs *) (swstack+1));
 }
 
+extern void ret_from_sys_call(void);
 /*
  * Copy an alpha thread..
+ *
+ * Note the "stack_offset" stuff: when returning to kernel mode, we need
+ * to have some extra stack-space for the kernel stack that still exists
+ * after the "ret_from_sys_call". When returning to user mode, we only
+ * want the space needed by the syscall stack frame (ie "struct pt_regs").
+ * Use the passed "regs" pointer to determine how much space we need
+ * for a kernel fork().
  */
 void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	struct task_struct * p, struct pt_regs * regs)
 {
 	struct pt_regs * childregs;
-	struct alpha_switch_stack * childstack, *stack;
+	struct switch_stack * childstack, *stack;
+	unsigned long stack_offset;
 
-	childregs = ((struct pt_regs *) (p->kernel_stack_page + PAGE_SIZE)) - 1;
+	stack_offset = PAGE_SIZE - sizeof(struct pt_regs);
+	if (!(regs->ps & 8))
+		stack_offset = (PAGE_SIZE-1) & (unsigned long) regs;
+	childregs = (struct pt_regs *) (p->kernel_stack_page + stack_offset);
+		
 	*childregs = *regs;
 	childregs->r0 = 0;
+	childregs->r19 = 0;
+	childregs->r20 = 1;	/* OSF/1 has some strange fork() semantics.. */
 	regs->r0 = p->pid;
-	stack = ((struct alpha_switch_stack *) regs) - 1;
-	childstack = ((struct alpha_switch_stack *) childregs) - 1;
+	regs->r20 = 0;
+	stack = ((struct switch_stack *) regs) - 1;
+	childstack = ((struct switch_stack *) childregs) - 1;
 	*childstack = *stack;
+	childstack->r26 = (unsigned long) ret_from_sys_call;
 	p->tss.usp = usp;
 	p->tss.ksp = (unsigned long) childstack;
+	p->tss.flags = 1;
 }
 
 /*

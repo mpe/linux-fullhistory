@@ -10,22 +10,20 @@
 #include <linux/module.h>
 #endif
 
-#include <asm/segment.h>
-
+#include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/minix_fs.h>
 #include <linux/stat.h>
 
-#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
-#define ROUND_UP(x) (((x)+3) & ~3)
+#include <asm/segment.h>
 
 static int minix_dir_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	return -EISDIR;
 }
 
-static int minix_readdir(struct inode *, struct file *, struct dirent *, int);
+static int minix_readdir(struct inode *, struct file *, void *, filldir_t);
 
 static struct file_operations minix_dir_operations = {
 	NULL,			/* lseek - default */
@@ -62,11 +60,9 @@ struct inode_operations minix_dir_inode_operations = {
 };
 
 static int minix_readdir(struct inode * inode, struct file * filp,
-	struct dirent * dirent, int count)
+	void * dirent, filldir_t filldir)
 {
-	unsigned int offset,i,ret;
-	int version;
-	char c;
+	unsigned int offset;
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
 	struct minix_sb_info * info;
@@ -76,37 +72,26 @@ static int minix_readdir(struct inode * inode, struct file * filp,
 	info = &inode->i_sb->u.minix_sb;
 	if (filp->f_pos & (info->s_dirsize - 1))
 		return -EBADF;
-	ret = 0;
-	while (!ret && filp->f_pos < inode->i_size) {
+	while (filp->f_pos < inode->i_size) {
 		offset = filp->f_pos & 1023;
 		bh = minix_bread(inode,(filp->f_pos)>>BLOCK_SIZE_BITS,0);
 		if (!bh) {
 			filp->f_pos += 1024-offset;
 			continue;
 		}
-		while (!ret && offset < 1024 && filp->f_pos < inode->i_size) {
+		do {
 			de = (struct minix_dir_entry *) (offset + bh->b_data);
-			offset += info->s_dirsize;
-			filp->f_pos += info->s_dirsize;
-retry:
 			if (de->inode) {
-				version = inode->i_version;
-				for (i = 0; i < info->s_namelen; i++)
-					if ((c = de->name[i]) != 0)
-						put_fs_byte(c,i+dirent->d_name);
-					else
-						break;
-				if (i) {
-					put_fs_long(de->inode,&dirent->d_ino);
-					put_fs_byte(0,i+dirent->d_name);
-					put_fs_word(i,&dirent->d_reclen);
-					if (version != inode->i_version)
-						goto retry;
-					ret = ROUND_UP(NAME_OFFSET(dirent)+i+1);
+				int size = strnlen(de->name, info->s_namelen);
+				if (filldir(dirent, de->name, size, filp->f_pos, de->inode) < 0) {
+					brelse(bh);
+					return 0;
 				}
 			}
-		}
+			offset += info->s_dirsize;
+			filp->f_pos += info->s_dirsize;
+		} while (offset < 1024 && filp->f_pos < inode->i_size);
 		brelse(bh);
 	}
-	return ret;
+	return 0;
 }

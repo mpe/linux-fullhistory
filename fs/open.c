@@ -20,7 +20,7 @@
 
 #include <asm/segment.h>
 
-extern void fcntl_remove_locks(struct task_struct *, struct file *);
+extern void locks_remove_locks(struct task_struct *, struct file *);
 
 asmlinkage int sys_ustat(int dev, struct ustat * ubuf)
 {
@@ -42,7 +42,7 @@ asmlinkage int sys_statfs(const char * path, struct statfs * buf)
 		iput(inode);
 		return -ENOSYS;
 	}
-	inode->i_sb->s_op->statfs(inode->i_sb, buf);
+	inode->i_sb->s_op->statfs(inode->i_sb, buf, sizeof(struct statfs));
 	iput(inode);
 	return 0;
 }
@@ -62,7 +62,7 @@ asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 		return -ENOENT;
 	if (!inode->i_sb->s_op->statfs)
 		return -ENOSYS;
-	inode->i_sb->s_op->statfs(inode->i_sb, buf);
+	inode->i_sb->s_op->statfs(inode->i_sb, buf, sizeof(struct statfs));
 	return 0;
 }
 
@@ -159,6 +159,54 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 		}
 		actime = get_fs_long((unsigned long *) &times->actime);
 		modtime = get_fs_long((unsigned long *) &times->modtime);
+		newattrs.ia_ctime = CURRENT_TIME;
+		flags = ATTR_ATIME_SET | ATTR_MTIME_SET;
+	} else {
+		if ((error = permission(inode,MAY_WRITE)) != 0) {
+			iput(inode);
+			return error;
+		}
+		actime = modtime = newattrs.ia_ctime = CURRENT_TIME;
+	}
+	newattrs.ia_atime = actime;
+	newattrs.ia_mtime = modtime;
+	newattrs.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_ATIME | flags;
+	inode->i_dirt = 1;
+	error = notify_change(inode, &newattrs);
+	iput(inode);
+	return error;
+}
+
+/* If times==NULL, set access and modification to current time,
+ * must be owner or have write permission.
+ * Else, update from *times, must be owner or super user.
+ */
+asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
+{
+	struct inode * inode;
+	long actime,modtime;
+	int error;
+	unsigned int flags = 0;
+	struct iattr newattrs;
+
+	error = namei(filename,&inode);
+	if (error)
+		return error;
+	if (IS_RDONLY(inode)) {
+		iput(inode);
+		return -EROFS;
+	}
+	/* Don't worry, the checks are done in inode_change_ok() */
+	if (utimes) {
+		struct timeval times[2];
+		error = verify_area(VERIFY_READ, utimes, sizeof(times));
+		if (error) {
+			iput(inode);
+			return error;
+		}
+		memcpy_fromfs(&times, utimes, sizeof(times));
+		actime = times[0].tv_sec;
+		modtime = times[1].tv_sec;
 		newattrs.ia_ctime = CURRENT_TIME;
 		flags = ATTR_ATIME_SET | ATTR_MTIME_SET;
 	} else {
@@ -499,7 +547,7 @@ int close_fp(struct file *filp)
 	}
 	inode = filp->f_inode;
 	if (inode)
-		fcntl_remove_locks(current, filp);
+		locks_remove_locks(current, filp);
 	if (filp->f_count > 1) {
 		filp->f_count--;
 		return 0;

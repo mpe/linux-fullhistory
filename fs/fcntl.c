@@ -63,7 +63,7 @@ asmlinkage int sys_dup(unsigned int fildes)
 	return dupfd(fildes,0);
 }
 
-asmlinkage int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
+asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
 	struct task_struct *p;

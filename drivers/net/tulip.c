@@ -619,6 +619,7 @@ tulip_rx(struct device *dev)
 			skb->len = pkt_len;
 			skb->dev = dev;
 			memcpy(skb->data, lp->rx_ring[entry].buffer1, pkt_len);
+			skb->protocol=eth_type_trans(skb,dev);
 			netif_rx(skb);
 			lp->stats.rx_packets++;
 		}

@@ -541,6 +541,7 @@ net_rx(struct device *dev)
 			skb->dev = dev;
 
 			insw(ioaddr + DATAPORT, skb->data, (pkt_len + 1) >> 1);
+			skb->protocol=eth_type_trans(skb, dev);
 			netif_rx(skb);
 			lp->stats.rx_packets++;
 		}

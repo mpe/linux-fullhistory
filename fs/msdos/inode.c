@@ -309,13 +309,11 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 }
 
 
-void msdos_statfs(struct super_block *sb,struct statfs *buf)
+void msdos_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
 {
 	int free,nr;
+	struct statfs tmp;
 
-	put_fs_long(sb->s_magic,&buf->f_type);
-	put_fs_long(MSDOS_SB(sb)->cluster_size*SECTOR_SIZE,&buf->f_bsize);
-	put_fs_long(MSDOS_SB(sb)->clusters,&buf->f_blocks);
 	lock_fat(sb);
 	if (MSDOS_SB(sb)->free_clusters != -1)
 		free = MSDOS_SB(sb)->free_clusters;
@@ -326,11 +324,15 @@ void msdos_statfs(struct super_block *sb,struct statfs *buf)
 		MSDOS_SB(sb)->free_clusters = free;
 	}
 	unlock_fat(sb);
-	put_fs_long(free,&buf->f_bfree);
-	put_fs_long(free,&buf->f_bavail);
-	put_fs_long(0,&buf->f_files);
-	put_fs_long(0,&buf->f_ffree);
-	put_fs_long(12,&buf->f_namelen);
+	tmp.f_type = sb->s_magic;
+	tmp.f_bsize = MSDOS_SB(sb)->cluster_size*SECTOR_SIZE;
+	tmp.f_blocks = MSDOS_SB(sb)->clusters;
+	tmp.f_bfree = free;
+	tmp.f_bavail = free;
+	tmp.f_files = 0;
+	tmp.f_ffree = 0;
+	tmp.f_namelen = 12;
+	memcpy_tofs(buf, &tmp, bufsiz);
 }
 
 

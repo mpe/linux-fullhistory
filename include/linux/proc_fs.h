@@ -74,6 +74,9 @@ enum net_directory_inos {
 #ifdef CONFIG_IP_ACCT
 	PROC_NET_IPACCT,
 #endif
+#ifdef CONFIG_IP_MASQUERADE
+	PROC_NET_IPMSQHST,
+#endif
 #if	defined(CONFIG_WAVELAN)
 	PROC_NET_WAVELAN,
 #endif	/* defined(CONFIG_WAVELAN) */
@@ -112,7 +115,7 @@ struct proc_dir_entry {
 extern struct super_block *proc_read_super(struct super_block *,void *,int);
 extern void proc_put_inode(struct inode *);
 extern void proc_put_super(struct super_block *);
-extern void proc_statfs(struct super_block *, struct statfs *);
+extern void proc_statfs(struct super_block *, struct statfs *, int);
 extern void proc_read_inode(struct inode *);
 extern void proc_write_inode(struct inode *);
 extern int proc_match(int, const char *, struct proc_dir_entry *);

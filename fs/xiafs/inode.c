@@ -171,20 +171,19 @@ xiafs_read_super_fail:
     return NULL;
 }
 
-void xiafs_statfs(struct super_block *sb, struct statfs *buf)
+void xiafs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
-    long tmp;
+	struct statfs tmp;
 
-    put_fs_long(_XIAFS_SUPER_MAGIC, &buf->f_type);
-    put_fs_long(XIAFS_ZSIZE(sb), &buf->f_bsize);
-    put_fs_long(sb->u.xiafs_sb.s_ndatazones, &buf->f_blocks);
-    tmp = xiafs_count_free_zones(sb);
-    put_fs_long(tmp, &buf->f_bfree);
-    put_fs_long(tmp, &buf->f_bavail);
-    put_fs_long(sb->u.xiafs_sb.s_ninodes, &buf->f_files);
-    put_fs_long(xiafs_count_free_inodes(sb), &buf->f_ffree);
-    put_fs_long(_XIAFS_NAME_LEN, &buf->f_namelen);
-    /* don't know what should be put in buf->f_fsid */
+	tmp.f_type = _XIAFS_SUPER_MAGIC;
+	tmp.f_bsize = XIAFS_ZSIZE(sb);
+	tmp.f_blocks = sb->u.xiafs_sb.s_ndatazones;
+	tmp.f_bfree = xiafs_count_free_zones(sb);
+	tmp.f_bavail = tmp.f_bfree;
+	tmp.f_files = sb->u.xiafs_sb.s_ninodes;
+	tmp.f_ffree = xiafs_count_free_inodes(sb);
+	tmp.f_namelen = _XIAFS_NAME_LEN;
+	memcpy_tofs(buf, &tmp, bufsiz);
 }
 
 static int zone_bmap(struct buffer_head * bh, int nr)

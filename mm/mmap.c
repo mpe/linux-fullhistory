@@ -93,7 +93,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		if (len > TASK_SIZE || addr > TASK_SIZE - len)
 			return -EINVAL;
 	} else {
-		addr = get_unmapped_area(len);
+		addr = get_unmapped_area(addr, len);
 		if (!addr)
 			return -ENOMEM;
 	}
@@ -164,23 +164,28 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
  * For mmap() without MAP_FIXED and shmat() with addr=0.
  * Return value 0 means ENOMEM.
  */
-unsigned long get_unmapped_area(unsigned long len)
+unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
 {
 	struct vm_area_struct * vmm;
-	unsigned long gap_start = 0, gap_end;
+
+	if (len > TASK_SIZE)
+		return 0;
+	if (!addr)
+		addr = TASK_SIZE / 3;
+	addr = PAGE_ALIGN(addr);
 
 	for (vmm = current->mm->mmap; ; vmm = vmm->vm_next) {
-		if (gap_start < SHM_RANGE_START)
-			gap_start = SHM_RANGE_START;
-		if (!vmm || ((gap_end = vmm->vm_start) > SHM_RANGE_END))
-			gap_end = SHM_RANGE_END;
-		gap_start = PAGE_ALIGN(gap_start);
-		gap_end &= PAGE_MASK;
-		if ((gap_start <= gap_end) && (gap_end - gap_start >= len))
-			return gap_start;
-		if (!vmm)
+		if (TASK_SIZE - len < addr)
 			return 0;
-		gap_start = vmm->vm_end;
+		if (!vmm)
+			return addr;
+		if (addr > vmm->vm_end)
+			continue;
+		if (addr + len > vmm->vm_start) {
+			addr = vmm->vm_end;
+			continue;
+		}
+		return addr;
 	}
 }
 

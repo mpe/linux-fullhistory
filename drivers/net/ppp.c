@@ -67,7 +67,7 @@
 #include <linux/inet.h>
 #endif
 
-#include <linux/ppp.h>
+#include <linux/if_ppp.h>
 
 #include <linux/ip.h>
 #include <linux/tcp.h>
@@ -276,7 +276,6 @@ ppp_init(struct device *dev)
   dev->stop            = ppp_dev_close;
   dev->get_stats       = ppp_get_stats;
   dev->hard_header     = ppp_header;
-  dev->type_trans      = ppp_type_trans;
   dev->rebuild_header  = ppp_rebuild_header;
   dev->hard_header_len = 0;
   dev->addr_len        = 0;
@@ -1084,6 +1083,7 @@ ppp_do_ip (struct ppp *ppp, unsigned short proto, unsigned char *c,
 	  int count)
 {
   int flags, done;
+  struct sk_buff *skb;
 
   PRINTKN (4,(KERN_DEBUG "ppp_do_ip: proto %x len %d first byte %x\n",
 	      (int) proto, count, c[0]));
@@ -1151,7 +1151,16 @@ ppp_do_ip (struct ppp *ppp, unsigned short proto, unsigned char *c,
   }
 
   /* receive the frame through the network software */
-  (void) dev_rint (c, count, 0, ppp->dev);
+  
+  skb=alloc_skb(count, GFP_ATOMIC);
+  if(skb)
+  {
+  	memcpy(skb->data, c,count);
+  	skb->protocol=htons(ETH_P_IP);
+  	skb->dev=ppp->dev;
+  	skb->len=count;
+  	netif_rx(skb);
+  }
   return 1;
 }
 
@@ -1736,12 +1745,14 @@ ppp_xmit(struct sk_buff *skb, struct device *dev)
     goto done;
   }
 
+#ifdef CURED_AGES_AGO
   /* get length from IP header as per Alan Cox bugfix for slip.c */
   if (len < sizeof(struct iphdr)) {
     PRINTKN(0,(KERN_ERR "ppp_xmit: given runt packet, ignoring\n"));
     goto done;
   }
   len = ntohs( ((struct iphdr *)(skb->data)) -> tot_len );
+#endif  
 
   /* If doing demand dial then divert the first frame to pppd. */
   if (ppp->flags & SC_IP_DOWN) {
@@ -1833,12 +1844,6 @@ ppp_xmit(struct sk_buff *skb, struct device *dev)
   return 0;
 }
   
-static unsigned short
-ppp_type_trans (struct sk_buff *skb, struct device *dev)
-{
-  return(htons(ETH_P_IP));
-}
-
 #ifdef NET02D
 static int
 ppp_header(unsigned char *buff, struct device *dev, unsigned short type,

@@ -213,17 +213,17 @@ struct ext2_group_desc
  * Structure of an inode on the disk
  */
 struct ext2_inode {
-	__u16 i_mode;		/* File mode */
-	__u16 i_uid;		/* Owner Uid */
-	__u32  i_size;		/* Size in bytes */
-	__u32  i_atime;		/* Access time */
-	__u32  i_ctime;		/* Creation time */
-	__u32  i_mtime;		/* Modification time */
-	__u32  i_dtime;		/* Deletion Time */
-	__u16 i_gid;		/* Group Id */
-	__u16 i_links_count;	/* Links count */
-	__u32  i_blocks;	/* Blocks count */
-	__u32  i_flags;		/* File flags */
+	__u16	i_mode;		/* File mode */
+	__u16	i_uid;		/* Owner Uid */
+	__u32	i_size;		/* Size in bytes */
+	__u32	i_atime;	/* Access time */
+	__u32	i_ctime;	/* Creation time */
+	__u32	i_mtime;	/* Modification time */
+	__u32	i_dtime;	/* Deletion Time */
+	__u16	i_gid;		/* Group Id */
+	__u16	i_links_count;	/* Links count */
+	__u32	i_blocks;	/* Blocks count */
+	__u32	i_flags;	/* File flags */
 	union {
 		struct {
 			__u32  l_i_reserved1;
@@ -239,7 +239,7 @@ struct ext2_inode {
 	__u32	i_version;	/* File version (for NFS) */
 	__u32	i_file_acl;	/* File ACL */
 	__u32	i_dir_acl;	/* Directory ACL */
-	__u32	i_faddr;		/* Fragment address */
+	__u32	i_faddr;	/* Fragment address */
 	union {
 		struct {
 			__u8	l_i_frag;	/* Fragment number */
@@ -482,7 +482,7 @@ extern void ext2_put_super (struct super_block *);
 extern void ext2_write_super (struct super_block *);
 extern int ext2_remount (struct super_block *, int *, char *);
 extern struct super_block * ext2_read_super (struct super_block *,void *,int);
-extern void ext2_statfs (struct super_block *, struct statfs *);
+extern void ext2_statfs (struct super_block *, struct statfs *, int);
 
 /* truncate.c */
 extern void ext2_truncate (struct inode *);

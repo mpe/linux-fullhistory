@@ -23,16 +23,13 @@
 #include <linux/sched.h>
 #include <linux/stat.h>
 
-#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
-#define ROUND_UP(x) (((x)+3) & ~3)
-
 static int ext2_dir_read (struct inode * inode, struct file * filp,
 			    char * buf, int count)
 {
 	return -EISDIR;
 }
 
-static int ext2_readdir (struct inode *, struct file *, struct dirent *, int);
+static int ext2_readdir (struct inode *, struct file *, void *, filldir_t);
 
 static struct file_operations ext2_dir_operations = {
 	NULL,			/* lseek - default */
@@ -99,10 +96,11 @@ int ext2_check_dir_entry (char * function, struct inode * dir,
 }
 
 static int ext2_readdir (struct inode * inode, struct file * filp,
-			 struct dirent * dirent, int count)
+			 void * dirent, filldir_t filldir)
 {
+	int error = 0;
 	unsigned long offset, blk;
-	int i, num, stored, dlen;
+	int i, num, stored;
 	struct buffer_head * bh, * tmp, * bha[16];
 	struct ext2_dir_entry * de;
 	struct super_block * sb;
@@ -116,7 +114,7 @@ static int ext2_readdir (struct inode * inode, struct file * filp,
 	bh = NULL;
 	offset = filp->f_pos & (sb->s_blocksize - 1);
 
-	while (count > 0 && !stored && filp->f_pos < inode->i_size) {
+	while (!error && !stored && filp->f_pos < inode->i_size) {
 		blk = (filp->f_pos) >> EXT2_BLOCK_SIZE_BITS(sb);
 		bh = ext2_bread (inode, blk, 0, &err);
 		if (!bh) {
@@ -168,7 +166,7 @@ revalidate:
 			filp->f_version = inode->i_version;
 		}
 		
-		while (count > 0 && filp->f_pos < inode->i_size 
+		while (!error && filp->f_pos < inode->i_size 
 		       && offset < sb->s_blocksize) {
 			de = (struct ext2_dir_entry *) (bh->b_data + offset);
 			if (!ext2_check_dir_entry ("ext2_readdir", inode, de,
@@ -180,18 +178,8 @@ revalidate:
 				brelse (bh);
 				return stored;
 			}
+			offset += de->rec_len;
 			if (de->inode) {
-				dlen = ROUND_UP(NAME_OFFSET(dirent) 
-						+ de->name_len + 1);
-				/* Old libc libraries always use a
-                                   count of 1. */
-				if (count == 1 && !stored)
-					count = dlen;
-				if (count < dlen) {
-					count = 0;
-					break;
-				}
-
 				/* We might block in the next section
 				 * if the data destination is
 				 * currently swapped out.  So, use a
@@ -199,22 +187,13 @@ revalidate:
 				 * not the directory has been modified
 				 * during the copy operation. */
 				version = inode->i_version;
-				i = de->name_len;
-				memcpy_tofs (dirent->d_name, de->name, i);
-				put_fs_long (de->inode, &dirent->d_ino);
-				put_fs_byte (0, dirent->d_name + i);
-				put_fs_word (i, &dirent->d_reclen);
-				put_fs_long (dlen, &dirent->d_off);
+				error = filldir(dirent, de->name, de->name_len, filp->f_pos, de->inode);
+				if (error)
+					break;
 				if (version != inode->i_version)
 					goto revalidate;
-				dcache_add(inode, de->name, de->name_len,
-						 de->inode);
-
-				stored += dlen;
-				count -= dlen;
-				((char *) dirent) += dlen;
+				stored ++;
 			}
-			offset += de->rec_len;
 			filp->f_pos += de->rec_len;
 		}
 		offset = 0;
@@ -224,5 +203,5 @@ revalidate:
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}
-	return stored;
+	return 0;
 }

@@ -37,17 +37,17 @@ struct sk_buff_head {
 
 
 struct sk_buff {
-  struct sk_buff		* volatile next;
-  struct sk_buff		* volatile prev;
+  struct sk_buff		* volatile next;	/* Next buffer in list */
+  struct sk_buff		* volatile prev;	/* Previous buffer in list */
 #if CONFIG_SKB_CHECK
   int				magic_debug_cookie;
 #endif
-  struct sk_buff		* volatile link3;
-  struct sock			*sk;
-  volatile unsigned long	when;	/* used to compute rtt's	*/
-  struct timeval		stamp;
-  struct device			*dev;
-  struct sk_buff		*mem_addr;
+  struct sk_buff		* volatile link3;	/* Link for IP protocol level buffer chains 	*/
+  struct sock			*sk;			/* Socket we are owned by 			*/
+  volatile unsigned long	when;			/* used to compute rtt's			*/
+  struct timeval		stamp;			/* Time we arrived				*/
+  struct device			*dev;			/* Device we arrived on/are leaving by		*/
+  struct sk_buff		*mem_addr;		/* Self reference (obsolete)			*/
   union {
 	struct tcphdr	*th;
 	struct ethhdr	*eth;
@@ -56,31 +56,34 @@ struct sk_buff {
 	unsigned char	*raw;
 	unsigned long	seq;
   } h;
-  struct iphdr		*ip_hdr;		/* For IPPROTO_RAW */
-  unsigned long			mem_len;
-  unsigned long 		len;
-  unsigned long			fraglen;
-  struct sk_buff		*fraglist;	/* Fragment list */
-  unsigned long			truesize;
-  unsigned long 		saddr;
-  unsigned long 		daddr;
-  unsigned long			raddr;		/* next hop addr */
-  volatile char 		acked,
-				used,
-				free,
-				arp;
-  unsigned char			tries,lock,localroute,pkt_type;
-#define PACKET_HOST		0		/* To us */
-#define PACKET_BROADCAST	1
-#define PACKET_MULTICAST	2
-#define PACKET_OTHERHOST	3		/* Unmatched promiscuous */
-  unsigned short		users;		/* User count - see datagram.c (and soon seqpacket.c/stream.c) */
-  unsigned short		pkt_class;	/* For drivers that need to cache the packet type with the skbuff (new PPP) */
+  struct iphdr			*ip_hdr;		/* For IPPROTO_RAW 				*/
+  unsigned long			mem_len;		/* Length of allocated memory			*/
+  unsigned long 		len;			/* Length of actual data			*/
+  unsigned long			fraglen;		/* Unused (yet)					*/
+  struct sk_buff		*fraglist;		/* Fragment list 				*/
+  unsigned long			truesize;		/* True buffer size (obsolete)			*/
+  unsigned long 		saddr;			/* IP source address				*/
+  unsigned long 		daddr;			/* IP target address				*/
+  unsigned long			raddr;			/* IP next hop address				*/
+  volatile char 		acked,			/* Are we acked ?				*/
+				used,			/* Are we in use ?				*/
+				free,			/* How to free this buffer			*/
+				arp;			/* Has IP/ARP resolution finished		*/
+  unsigned char			tries,			/* Times tried					*/
+  				lock,			/* Are we locked ?				*/
+  				localroute,		/* Local routing asserted for this frame	*/
+  				pkt_type;		/* Packet class					*/
+#define PACKET_HOST		0			/* To us					*/
+#define PACKET_BROADCAST	1			/* To all					*/
+#define PACKET_MULTICAST	2			/* To group					*/
+#define PACKET_OTHERHOST	3			/* To someone else 				*/
+  unsigned short		users;			/* User count - see datagram.c,tcp.c 		*/
+  unsigned short		protocol;		/* Packet protocol from driver. 		*/
 #ifdef CONFIG_SLAVE_BALANCING
   unsigned short		in_dev_queue;
 #endif  
-  unsigned long			padding[0];
-  unsigned char			data[0];
+  unsigned long			padding[0];		/* Force long word alignment			*/
+  unsigned char			data[0];		/* Data follows					*/
 };
 
 #define SK_WMEM_MAX	32767
@@ -186,6 +189,8 @@ extern __inline__ void skb_queue_tail(struct sk_buff_head *list_, struct sk_buff
 /*
  *	Remove an sk_buff from a list. This routine is also interrupt safe
  *	so you can grab read and free buffers as another process adds them.
+ *
+ * 	Note we now do the ful list 
  */
 
 extern __inline__ struct sk_buff *skb_dequeue(struct sk_buff_head *list_)
@@ -198,20 +203,23 @@ extern __inline__ struct sk_buff *skb_dequeue(struct sk_buff_head *list_)
 	cli();
 
 	result = list->next;
-	if (result == list) {
+	if (result == list) 
+	{
 		restore_flags(flags);
 		return NULL;
 	}
+	else
+	{
+		result->next->prev = list;
+		list->next = result->next;
 
-	result->next->prev = list;
-	list->next = result->next;
+		result->next = NULL;
+		result->prev = NULL;
 
-	result->next = NULL;
-	result->prev = NULL;
+		restore_flags(flags);
 
-	restore_flags(flags);
-
-	return result;
+		return result;
+	}
 }
 
 /*

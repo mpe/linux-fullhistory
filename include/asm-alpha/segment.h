@@ -3,6 +3,59 @@
 
 #include <linux/string.h>
 
+/*
+ * Uh, these should become the main single-value transfer routines..
+ * They automatically use the right size if we just have the right
+ * pointer type..
+ */
+#define put_user(x,ptr) __put_user((unsigned long)(x),(ptr),sizeof(*(ptr)))
+#define get_user(ptr) __get_user((ptr),sizeof(*(ptr)))
+
+/*
+ * This is a silly but good way to make sure that
+ * the __put_user function is indeed always optimized,
+ * and that we use the correct sizes..
+ */
+extern int bad_user_access_length(void);
+
+/* I should make this use unaligned transfers etc.. */
+static inline void __put_user(unsigned long x, void * y, int size)
+{
+	switch (size) {
+		case 1:
+			*(char *) y = x;
+			break;
+		case 2:
+			*(short *) y = x;
+			break;
+		case 4:
+			*(int *) y = x;
+			break;
+		case 8:
+			*(long *) y = x;
+			break;
+		default:
+			bad_user_access_length();
+	}
+}
+
+/* I should make this use unaligned transfers etc.. */
+static inline unsigned long __get_user(void * y, int size)
+{
+	switch (size) {
+		case 1:
+			return *(unsigned char *) y;
+		case 2:
+			return *(unsigned short *) y;
+		case 4:
+			return *(unsigned int *) y;
+		case 8:
+			return *(unsigned long *) y;
+		default:
+			return bad_user_access_length();
+	}
+}
+
 static inline unsigned char get_user_byte(const char * addr)
 {
 	return *addr;
@@ -75,7 +128,7 @@ static inline void put_user_quad(unsigned long val,long * addr)
 
 static inline unsigned long get_fs(void)
 {
-	return 0;
+	return 1;
 }
 
 static inline unsigned long get_ds(void)

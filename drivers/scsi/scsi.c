@@ -115,9 +115,9 @@ static void scsi_dump_status(void);
 
 
 #ifdef DEBUG
-	#define SCSI_TIMEOUT 500
+	#define SCSI_TIMEOUT (5*HZ)
 #else
-	#define SCSI_TIMEOUT 100
+	#define SCSI_TIMEOUT (1*HZ)
 #endif
 
 #ifdef DEBUG
@@ -125,15 +125,15 @@ static void scsi_dump_status(void);
 	#define ABORT_TIMEOUT SCSI_TIMEOUT
 	#define RESET_TIMEOUT SCSI_TIMEOUT
 #else
-	#define SENSE_TIMEOUT 50
-	#define RESET_TIMEOUT 50
-	#define ABORT_TIMEOUT 50
+	#define SENSE_TIMEOUT (5*HZ/10)
+	#define RESET_TIMEOUT (5*HZ/10)
+	#define ABORT_TIMEOUT (5*HZ/10)
 #endif
 
-#define MIN_RESET_DELAY 100
+#define MIN_RESET_DELAY (1*HZ)
 
 /* Do not call reset on error if we just did a reset within 10 sec. */
-#define MIN_RESET_PERIOD 1000
+#define MIN_RESET_PERIOD (10*HZ)
 
 /* The following devices are known not to tolerate a lun != 0 scan for
    one reason or another.  Some will respond to all luns, others will
@@ -271,7 +271,7 @@ static void scan_scsis_done (Scsi_Cmnd * SCpnt)
 	{
 
 #ifdef DEBUG
-	printk ("scan_scsis_done(%d, %06x)\n", SCpnt->host, SCpnt->result);
+	printk ("scan_scsis_done(%p, %06x)\n", SCpnt->host, SCpnt->result);
 #endif
 	SCpnt->request.dev = 0xfffe;
 
@@ -363,7 +363,7 @@ void scan_scsis (struct Scsi_Host * shpnt)
 	  SCpnt->request.dev = 0xffff; /* Mark not busy */
 
 	  scsi_do_cmd (SCpnt, (void *)  scsi_cmd, (void *) scsi_result,
-		       256,  scan_scsis_done, SCSI_TIMEOUT + 400, 5);
+		       256,  scan_scsis_done, SCSI_TIMEOUT + 4 * HZ, 5);
 
 	  /* Wait for command to finish. Use simple wait if we are booting, else
 	     do it right and use a mutex */
@@ -898,14 +898,14 @@ update_timeout(SCpnt, SCpnt->timeout_per_command);
 	queuing and calling of completion function ourselves.
 */
 #ifdef DEBUG
-	printk("internal_cmnd (host = %d, target = %d, command = %08x, buffer =  %08x, \n"
-		"bufflen = %d, done = %08x)\n", SCpnt->host->host_no, SCpnt->target, SCpnt->cmnd, SCpnt->buffer, SCpnt->bufflen, SCpnt->done);
+	printk("internal_cmnd (host = %d, target = %d, command = %p, buffer = %p, \n"
+		"bufflen = %d, done = %p)\n", SCpnt->host->host_no, SCpnt->target, SCpnt->cmnd, SCpnt->buffer, SCpnt->bufflen, SCpnt->done);
 #endif
 
 	if (host->can_queue)
 		{
 #ifdef DEBUG
-	printk("queuecommand : routine at %08x\n",
+	printk("queuecommand : routine at %p\n",
 		host->hostt->queuecommand);
 #endif
 		  /* This locking tries to prevent all sorts of races between
@@ -928,12 +928,12 @@ update_timeout(SCpnt, SCpnt->timeout_per_command);
 		{
 
 #ifdef DEBUG
-	printk("command() :  routine at %08x\n", host->hostt->command);
+	printk("command() :  routine at %p\n", host->hostt->command);
 #endif
 		temp=host->hostt->command (SCpnt);
 		SCpnt->result = temp;
 #ifdef DEBUG_DELAY
-	clock = jiffies + 400;
+	clock = jiffies + 4*HZ;
 	while (jiffies < clock);
 	printk("done(host = %d, result = %04x) : routine at %08x\n", host->host_no, temp);
 #endif
@@ -989,8 +989,8 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 	{
 	int i;
 	int target = SCpnt->target;
-	printk ("scsi_do_cmd (host = %d, target = %d, buffer =%08x, "
-		"bufflen = %d, done = %08x, timeout = %d, retries = %d)\n"
+	printk ("scsi_do_cmd (host = %d, target = %d, buffer =%p, "
+		"bufflen = %d, done = %p, timeout = %d, retries = %d)\n"
 		"command : " , host->host_no, target, buffer, bufflen, done, timeout, retries);
 	for (i = 0; i < 10; ++i)
 		printk ("%02x  ", ((unsigned char *) cmnd)[i]);
@@ -1481,7 +1481,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 
 	if (status == FINISHED) {
 #ifdef DEBUG
-	   printk("Calling done function - at address %08x\n", SCpnt->done);
+	   printk("Calling done function - at address %p\n", SCpnt->done);
 #endif
 	   host->host_busy--; /* Indicate that we are free */
 
@@ -1863,7 +1863,7 @@ void *scsi_malloc(unsigned int len)
 	restore_flags(flags);
 	dma_free_sectors -= nbits;
 #ifdef DEBUG
-	printk("SMalloc: %d %x ",len, dma_malloc_pages[i] + (j << 9));
+	printk("SMalloc: %d %p ",len, dma_malloc_pages[i] + (j << 9));
 #endif
 	return (void *) ((unsigned long) dma_malloc_pages[i] + (j << 9));
       }
@@ -1879,7 +1879,7 @@ int scsi_free(void *obj, unsigned int len)
   unsigned long flags;
 
 #ifdef DEBUG
-  printk("Sfree %x %d\n",obj, len);
+  printk("Sfree %p %d\n",obj, len);
 #endif
 
    offset = -1;

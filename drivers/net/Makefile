@@ -11,8 +11,6 @@ include CONFIG
 MODULES :=
 
 NETDRV_OBJS := Space.o auto_irq.o net_init.o loopback.o
-override CFLAGS := $(CFLAGS) -I../../net/inet
-override CPP := $(CPP) -I../../net/inet
 
 .c.o:
 	$(CC) $(CFLAGS) -c $<
@@ -26,8 +24,16 @@ Space.o: Space.c ../../include/linux/autoconf.h
 
 net_init.o: ../../include/linux/autoconf.h
 
+ifdef CONFIG_IBMTR
+NETDRV_OBJS := $(NETDRV_OBJS) ibmtr.o
+endif
+
 ifdef CONFIG_SK_G16
 NETDRV_OBJS := $(NETDRV_OBJS) sk_g16.o
+endif
+
+ifdef CONFIG_NET_IPIP
+NETDRV_OBJS := $(NETDRV_OBJS) tunnel.o
 endif
 
 ifdef CONFIG_WD80x3
@@ -213,6 +219,8 @@ endif
 ifdef CONFIG_ELPLUS
 NETDRV_OBJS := $(NETDRV_OBJS) 3c505.o
 endif
+3c505.o: 3c505.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(ELP_OPTS) -c $<
 
 ifdef CONFIG_AC3200
 NETDRV_OBJS := $(NETDRV_OBJS) ac3200.o
@@ -252,6 +260,10 @@ ifdef CONFIG_8390
 NETDRV_OBJS := $(NETDRV_OBJS) 8390.o
 else
 MODULES := 8390.o $(MODULES)
+endif
+
+ifdef CONFIG_EQUALIZER
+NETDRV_OBJS := $(NETDRV_OBJS) eql.o
 endif
 
 net.a: $(NETDRV_OBJS)

@@ -226,7 +226,7 @@ struct tty_struct {
 	unsigned short minimum_to_wake;
 	unsigned overrun_time;
 	int num_overrun;
-	int process_char_map[256/32];
+	unsigned long process_char_map[256/(8*sizeof(unsigned long))];
 	char *read_buf;
 	int read_head;
 	int read_tail;

@@ -84,23 +84,34 @@
 
 #define _PAGE_NORMAL(x) __pgprot(_PAGE_VALID | __ACCESS_BITS | (x))
 
-#define __P000	_PAGE_NORMAL(_PAGE_COW | _PAGE_FOR | _PAGE_FOW | _PAGE_FOE)
-#define __P001	_PAGE_NORMAL(_PAGE_COW | _PAGE_FOW | _PAGE_FOE)
-#define __P010	_PAGE_NORMAL(_PAGE_COW | _PAGE_FOR | _PAGE_FOE)
-#define __P011	_PAGE_NORMAL(_PAGE_COW | _PAGE_FOE)
-#define __P100	_PAGE_NORMAL(_PAGE_COW | _PAGE_FOR | _PAGE_FOW)
-#define __P101	_PAGE_NORMAL(_PAGE_COW | _PAGE_FOW)
-#define __P110	_PAGE_NORMAL(_PAGE_COW | _PAGE_FOR)
-#define __P111	_PAGE_NORMAL(_PAGE_COW)
+#define _PAGE_P(x) _PAGE_NORMAL((x) | (((x) & _PAGE_FOW)?0:(_PAGE_FOW | _PAGE_COW)))
+#define _PAGE_S(x) _PAGE_NORMAL(x)
 
-#define __S000	_PAGE_NORMAL(_PAGE_FOR | _PAGE_FOW | _PAGE_FOE)
-#define __S001	_PAGE_NORMAL(_PAGE_FOW | _PAGE_FOE)
-#define __S010	_PAGE_NORMAL(_PAGE_FOR | _PAGE_FOE)
-#define __S011	_PAGE_NORMAL(_PAGE_FOE)
-#define __S100	_PAGE_NORMAL(_PAGE_FOR | _PAGE_FOW)
-#define __S101	_PAGE_NORMAL(_PAGE_FOW)
-#define __S110	_PAGE_NORMAL(_PAGE_FOR)
-#define __S111	_PAGE_NORMAL(0)
+/*
+ * The hardware can handle write-only mappings, but as the alpha
+ * architecture does byte-wide writes with a read-modify-write
+ * sequence, it's not practical to have write-without-read privs.
+ * Thus the "-w- -> rw-" and "-wx -> rwx" mapping here (and in
+ * arch/alpha/mm/fault.c)
+ */
+	/* xwr */
+#define __P000	_PAGE_P(_PAGE_FOE | _PAGE_FOW | _PAGE_FOR)
+#define __P001	_PAGE_P(_PAGE_FOE | _PAGE_FOW)
+#define __P010	_PAGE_P(_PAGE_FOE)
+#define __P011	_PAGE_P(_PAGE_FOE)
+#define __P100	_PAGE_P(_PAGE_FOW | _PAGE_FOR)
+#define __P101	_PAGE_P(_PAGE_FOW)
+#define __P110	_PAGE_P(0)
+#define __P111	_PAGE_P(0)
+
+#define __S000	_PAGE_S(_PAGE_FOE | _PAGE_FOW | _PAGE_FOR)
+#define __S001	_PAGE_S(_PAGE_FOE | _PAGE_FOW)
+#define __S010	_PAGE_S(_PAGE_FOE)
+#define __S011	_PAGE_S(_PAGE_FOE)
+#define __S100	_PAGE_S(_PAGE_FOW | _PAGE_FOR)
+#define __S101	_PAGE_S(_PAGE_FOW)
+#define __S110	_PAGE_S(0)
+#define __S111	_PAGE_S(0)
 
 /*
  * BAD_PAGETABLE is used when we need a bogus page-table, while
@@ -207,20 +218,32 @@ extern inline pte_t pte_exprotect(pte_t pte)	{ pte_val(pte) |= _PAGE_FOE; return
 extern inline pte_t pte_mkclean(pte_t pte)	{ pte_val(pte) &= ~(__DIRTY_BITS); return pte; }
 extern inline pte_t pte_mkold(pte_t pte)	{ pte_val(pte) &= ~(__ACCESS_BITS); return pte; }
 extern inline pte_t pte_uncow(pte_t pte)	{ pte_val(pte) &= ~_PAGE_COW; return pte; }
-extern inline pte_t pte_mkwrite(pte_t pte)	{ pte_val(pte) &= _PAGE_FOW; return pte; }
-extern inline pte_t pte_mkread(pte_t pte)	{ pte_val(pte) &= _PAGE_FOR; return pte; }
-extern inline pte_t pte_mkexec(pte_t pte)	{ pte_val(pte) &= _PAGE_FOE; return pte; }
+extern inline pte_t pte_mkwrite(pte_t pte)	{ pte_val(pte) &= ~_PAGE_FOW; return pte; }
+extern inline pte_t pte_mkread(pte_t pte)	{ pte_val(pte) &= ~_PAGE_FOR; return pte; }
+extern inline pte_t pte_mkexec(pte_t pte)	{ pte_val(pte) &= ~_PAGE_FOE; return pte; }
 extern inline pte_t pte_mkdirty(pte_t pte)	{ pte_val(pte) |= __DIRTY_BITS; return pte; }
 extern inline pte_t pte_mkyoung(pte_t pte)	{ pte_val(pte) |= __ACCESS_BITS; return pte; }
 extern inline pte_t pte_mkcow(pte_t pte)	{ pte_val(pte) |= _PAGE_COW; return pte; }
 
-/* to set the page-dir. Note the self-mapping in the last entry */
+/* 
+ * To set the page-dir. Note the self-mapping in the last entry
+ *
+ * Also note that if we update the current process ptbr, we need to
+ * update the PAL-cached ptbr value as well.. There doesn't seem to
+ * be any "wrptbr" PAL-insn, but we can do a dummy swpctx to ourself
+ * instead.
+ */
 extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
 {
 	pgd_val(pgdir[PTRS_PER_PGD]) = pte_val(mk_pte((unsigned long) pgdir, PAGE_KERNEL));
 	tsk->tss.ptbr = ((unsigned long) pgdir - PAGE_OFFSET) >> PAGE_SHIFT;
 	if (tsk == current)
-		invalidate();
+		__asm__ __volatile__(
+			"bis %0,%0,$16\n\t"
+			"call_pal %1"
+			: /* no outputs */
+			: "r" (&tsk->tss), "i" (PAL_swpctx)
+			: "$0", "$1", "$16", "$22", "$23", "$24", "$25");
 }
 
 #define PAGE_DIR_OFFSET(tsk,address) pgd_offset((tsk),(address))
@@ -244,7 +267,7 @@ extern inline pte_t * pte_offset(pmd_t * dir, unsigned long address)
 	return (pte_t *) pmd_page(*dir) + ((address >> PAGE_SHIFT) & (PTRS_PER_PAGE - 1));
 }
 
-/*              
+/*      
  * Allocate and free page tables. The xxx_kernel() versions are
  * used to allocate a kernel page table - this turns on ASN bits
  * if any, and marks the page tables reserved.
@@ -385,5 +408,16 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 	unsigned long address, pte_t pte)
 {
 }
+
+/*
+ * Non-present pages: high 24 bits are offset, next 8 bits type,
+ * low 32 bits zero..
+ */
+extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
+{ pte_t pte; pte_val(pte) = (type << 32) | (offset << 40); return pte; }
+
+#define SWP_TYPE(entry) (((entry) >> 32) & 0xff)
+#define SWP_OFFSET(entry) ((entry) >> 40)
+#define SWP_ENTRY(type,offset) pte_val(mk_swap_pte((type),(offset)))
 
 #endif /* _ALPHA_PGTABLE_H */

@@ -22,31 +22,39 @@
 #ifndef BIOS32_H
 #define BIOS32_H
 
-extern int pcibios_present (void);
-unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end);
-
+/*
+ * Error values that may be returned by the PCI bios.  Use
+ * pci_strbioserr() to convert to a printable string.
+ */
 #define PCIBIOS_SUCCESSFUL		0x00
 #define PCIBIOS_FUNC_NOT_SUPPORTED	0x81
 #define PCIBIOS_BAD_VENDOR_ID		0x83
 #define PCIBIOS_DEVICE_NOT_FOUND	0x86
 #define PCIBIOS_BAD_REGISTER_NUMBER	0x87
+#define PCIBIOS_SET_FAILED		0x88
+#define PCIBIOS_BUFFER_TOO_SMALL	0x89
 
-extern int pcibios_find_class (unsigned long class_code, unsigned short index, 
-    unsigned char *bus, unsigned char *device_fn);
-extern int pcibios_find_device (unsigned short vendor, unsigned short device_id, 
-    unsigned short index, unsigned char *bus, unsigned char *device_fn);
-extern int pcibios_read_config_byte (unsigned char bus,
-    unsigned char device_fn, unsigned char where, unsigned char *value);
-extern int pcibios_read_config_word (unsigned char bus,
-    unsigned char device_fn, unsigned char where, unsigned short *value);
-extern int pcibios_read_config_dword (unsigned char bus,
-    unsigned char device_fn, unsigned char where, unsigned long *value);
 extern int pcibios_present (void);
-extern int pcibios_write_config_byte (unsigned char bus,
-    unsigned char device_fn, unsigned char where, unsigned char value);
-extern int pcibios_write_config_word (unsigned char bus,
-    unsigned char device_fn, unsigned char where, unsigned short value);
-extern pcibios_write_config_dword (unsigned char bus,
-    unsigned char device_fn, unsigned char where, unsigned long value);
+extern unsigned long pcibios_init (unsigned long memory_start,
+				   unsigned long memory_end);
+extern unsigned long pcibios_fixup (unsigned long memory_start,
+				    unsigned long memory_end);
+extern int pcibios_find_class (unsigned int class_code, unsigned short index, 
+			       unsigned char *bus, unsigned char *dev_fn);
+extern int pcibios_find_device (unsigned short vendor, unsigned short dev_id,
+				unsigned short index, unsigned char *bus,
+				unsigned char *dev_fn);
+extern int pcibios_read_config_byte (unsigned char bus, unsigned char dev_fn,
+				     unsigned char where, unsigned char *val);
+extern int pcibios_read_config_word (unsigned char bus, unsigned char dev_fn,
+				     unsigned char where, unsigned short *val);
+extern int pcibios_read_config_dword (unsigned char bus, unsigned char dev_fn,
+				      unsigned char where, unsigned int *val);
+extern int pcibios_write_config_byte (unsigned char bus, unsigned char dev_fn,
+				      unsigned char where, unsigned char val);
+extern int pcibios_write_config_word (unsigned char bus, unsigned char dev_fn,
+				      unsigned char where, unsigned short val);
+extern pcibios_write_config_dword (unsigned char bus, unsigned char dev_fn,
+				   unsigned char where, unsigned int val);
 extern char *pcibios_strerror (int error);
-#endif /* ndef BIOS32_H */
+#endif /* BIOS32_H */

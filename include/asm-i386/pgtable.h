@@ -88,6 +88,8 @@
 
 /* page table for 0-4MB for everybody */
 extern unsigned long pg0[1024];
+/* zero page used for unitialized stuff */
+extern unsigned long empty_zero_page[1024];
 
 /*
  * BAD_PAGETABLE is used when we need a bogus page-table, while
@@ -99,11 +101,9 @@ extern unsigned long pg0[1024];
 extern pte_t __bad_page(void);
 extern pte_t * __bad_pagetable(void);
 
-extern unsigned long __zero_page(void);
-
 #define BAD_PAGETABLE __bad_pagetable()
 #define BAD_PAGE __bad_page()
-#define ZERO_PAGE __zero_page()
+#define ZERO_PAGE ((unsigned long) empty_zero_page)
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR			(8*sizeof(unsigned long))
@@ -329,5 +329,9 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 	unsigned long address, pte_t pte)
 {
 }
+
+#define SWP_TYPE(entry) (((entry) >> 1) & 0x7f)
+#define SWP_OFFSET(entry) ((entry) >> 8)
+#define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << 8))
 
 #endif /* _I386_PAGE_H */

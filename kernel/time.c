@@ -235,15 +235,13 @@ asmlinkage int sys_gettimeofday(struct timeval *tv, struct timezone *tz)
 		if (error)
 			return error;
 		do_gettimeofday(&ktv);
-		put_fs_long(ktv.tv_sec, (unsigned long *) &tv->tv_sec);
-		put_fs_long(ktv.tv_usec, (unsigned long *) &tv->tv_usec);
+		memcpy_tofs(tv, &ktv, sizeof(ktv));
 	}
 	if (tz) {
 		error = verify_area(VERIFY_WRITE, tz, sizeof *tz);
 		if (error)
 			return error;
-		put_fs_long(sys_tz.tz_minuteswest, (unsigned long *) tz);
-		put_fs_long(sys_tz.tz_dsttime, ((unsigned long *) tz)+1);
+		memcpy_tofs(tz, &sys_tz, sizeof(sys_tz));
 	}
 	return 0;
 }

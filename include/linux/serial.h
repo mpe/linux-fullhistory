@@ -128,7 +128,7 @@ struct async_struct {
 	int			IER; 	/* Interrupt Enable Register */
 	int			MCR; 	/* Modem control register */
 	int			MCR_noint; /* MCR with interrupts off */
-	int			event;
+	unsigned long		event;
 	unsigned long		last_active;
 	int			line;
 	int			count;	    /* # of fd on device */

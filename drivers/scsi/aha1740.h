@@ -81,8 +81,8 @@
 
 /* This is used with scatter-gather */
 struct aha1740_chain {
-  ulong  dataptr;		/* Location of data */
-  ulong  datalen;		/* Size of this part of chain */
+  u32  dataptr;		/* Location of data */
+  u32  datalen;		/* Size of this part of chain */
 };
 
 /* These belong in scsi.h */
@@ -107,16 +107,16 @@ struct aha1740_chain {
 #define MAX_STATUS 32
 
 struct ecb {			/* Enhanced Control Block 6.1 */
-  ushort cmdw;			/* Command Word */
-  			/* Flag Word 1 */
-  ushort	cne:1,		/* Control Block Chaining */
+  u16	cmdw;			/* Command Word */
+  /* Flag Word 1 */
+  u16		cne:1,		/* Control Block Chaining */
 	:6,	di:1,		/* Disable Interrupt */
 	:2,	ses:1,		/* Suppress Underrun error */
 	:1,	sg:1,		/* Scatter/Gather */
 	:1,	dsb:1,		/* Disable Status Block */
 		ars:1;		/* Automatic Request Sense */
-  			/* Flag Word 2 */
-  ushort	lun:3,		/* Logical Unit */
+  /* Flag Word 2 */
+  u16		lun:3,		/* Logical Unit */
 		tag:1,		/* Tagged Queuing */
 		tt:2,		/* Tag Type */
 		nd:1,		/* No Disconnect */
@@ -125,20 +125,20 @@ struct ecb {			/* Enhanced Control Block 6.1 */
 		st:1,		/* Suppress Transfer */
 		chk:1,		/* Calculate Checksum */
 	:2,	rec:1,	:1;	/* Error Recovery */
-  ushort nil0;			/* nothing */
-  ulong  dataptr;		/* Data or Scatter List ptr */
-  ulong	 datalen;		/* Data or Scatter List len */
-  ulong  statusptr;		/* Status Block ptr */
-  ulong  linkptr;		/* Chain Address */
-  ulong  nil1;			/* nothing */
-  ulong  senseptr;		/* Sense Info Pointer */
-  unchar senselen;		/* Sense Length */
-  unchar cdblen;		/* CDB Length */
-  ushort datacheck;		/* Data checksum */
-  unchar cdb[MAX_CDB];		/* CDB area */
-  /* Hardware defined portion ends here, rest is driver defined */
-  unchar sense[MAX_SENSE];	/* Sense area */ 
-  unchar status[MAX_STATUS];	/* Status area */
+  u16	nil0;			/* nothing */
+  u32	dataptr;		/* Data or Scatter List ptr */
+  u32	datalen;		/* Data or Scatter List len */
+  u32	statusptr;		/* Status Block ptr */
+  u32	linkptr;		/* Chain Address */
+  u32	nil1;			/* nothing */
+  u32	senseptr;		/* Sense Info Pointer */
+  u8	senselen;		/* Sense Length */
+  u8	cdblen;			/* CDB Length */
+  u16	datacheck;		/* Data checksum */
+  u8	cdb[MAX_CDB];		/* CDB area */
+/* Hardware defined portion ends here, rest is driver defined */
+  u8	sense[MAX_SENSE];	/* Sense area */ 
+  u8	status[MAX_STATUS];	/* Status area */
   Scsi_Cmnd *SCpnt;		/* Link to the SCSI Command Block */
   void (*done)(Scsi_Cmnd *);	/* Completion Function */
 };
