@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.51 2000/02/27 19:51:51 davem Exp $
+ *	$Id: udp.c,v 1.52 2000/04/25 04:13:34 davem Exp $
  *
  *	Fixes:
  *	Hideaki YOSHIFUJI	:	sin6_scope_id support

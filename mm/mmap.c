@@ -110,7 +110,7 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 
 	/* Always allow shrinking brk. */
 	if (brk <= mm->brk) {
-		if (!do_munmap(newbrk, oldbrk-newbrk))
+		if (!do_munmap(mm, newbrk, oldbrk-newbrk))
 			goto set_brk;
 		goto out;
 	}
@@ -281,7 +281,7 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 
 	/* Clear old maps */
 	error = -ENOMEM;
-	if (do_munmap(addr, len))
+	if (do_munmap(mm, addr, len))
 		goto free_vma;
 
 	/* Check against address space limit. */
@@ -319,7 +319,7 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 		if (error)
 			goto unmap_and_free_vma;
 	} else if (flags & MAP_SHARED) {
-		error = map_zero_setup (vma);
+		error = map_zero_setup(vma);
 	}
 
 	/*
@@ -517,8 +517,9 @@ struct vm_area_struct * find_extend_vma(struct mm_struct * mm, unsigned long add
  * allocate a new one, and the return indicates whether the old
  * area was reused.
  */
-static struct vm_area_struct * unmap_fixup(struct vm_area_struct *area,
-	unsigned long addr, size_t len, struct vm_area_struct *extra)
+static struct vm_area_struct * unmap_fixup(struct mm_struct *mm, 
+	struct vm_area_struct *area, unsigned long addr, size_t len, 
+	struct vm_area_struct *extra)
 {
 	struct vm_area_struct *mpnt;
 	unsigned long end = addr + len;
@@ -540,11 +541,11 @@ static struct vm_area_struct * unmap_fixup(struct vm_area_struct *area,
 	/* Work out to one of the ends. */
 	if (end == area->vm_end) {
 		area->vm_end = addr;
-		vmlist_modify_lock(current->mm);
+		vmlist_modify_lock(mm);
 	} else if (addr == area->vm_start) {
 		area->vm_pgoff += (end - area->vm_start) >> PAGE_SHIFT;
 		area->vm_start = end;
-		vmlist_modify_lock(current->mm);
+		vmlist_modify_lock(mm);
 	} else {
 	/* Unmapping a hole: area->vm_start < addr <= end < area->vm_end */
 		/* Add end mapping -- leave beginning for below */
@@ -566,12 +567,12 @@ static struct vm_area_struct * unmap_fixup(struct vm_area_struct *area,
 		if (mpnt->vm_ops && mpnt->vm_ops->open)
 			mpnt->vm_ops->open(mpnt);
 		area->vm_end = addr;	/* Truncate area */
-		vmlist_modify_lock(current->mm);
-		insert_vm_struct(current->mm, mpnt);
+		vmlist_modify_lock(mm);
+		insert_vm_struct(mm, mpnt);
 	}
 
-	insert_vm_struct(current->mm, area);
-	vmlist_modify_unlock(current->mm);
+	insert_vm_struct(mm, area);
+	vmlist_modify_unlock(mm);
 	return extra;
 }
 
@@ -638,9 +639,8 @@ no_mmaps:
  * work.  This now handles partial unmappings.
  * Jeremy Fitzhardine <jeremy@sw.oz.au>
  */
-int do_munmap(unsigned long addr, size_t len)
+int do_munmap(struct mm_struct *mm, unsigned long addr, size_t len)
 {
-	struct mm_struct * mm;
 	struct vm_area_struct *mpnt, *prev, **npp, *free, *extra;
 
 	if ((addr & ~PAGE_MASK) || addr > TASK_SIZE || len > TASK_SIZE-addr)
@@ -654,7 +654,6 @@ int do_munmap(unsigned long addr, size_t len)
 	 * every area affected in some way (by any overlap) is put
 	 * on the list.  If nothing is put on, nothing is affected.
 	 */
-	mm = current->mm;
 	mpnt = find_vma_prev(mm, addr, &prev);
 	if (!mpnt)
 		return 0;
@@ -717,7 +716,7 @@ int do_munmap(unsigned long addr, size_t len)
 		/*
 		 * Fix the mapping, and free the old area if it wasn't reused.
 		 */
-		extra = unmap_fixup(mpnt, st, size, extra);
+		extra = unmap_fixup(mm, mpnt, st, size, extra);
 	}
 
 	/* Release the extra vma struct if it wasn't used */
@@ -732,10 +731,11 @@ int do_munmap(unsigned long addr, size_t len)
 asmlinkage long sys_munmap(unsigned long addr, size_t len)
 {
 	int ret;
+	struct mm_struct *mm = current->mm;
 
-	down(&current->mm->mmap_sem);
-	ret = do_munmap(addr, len);
-	up(&current->mm->mmap_sem);
+	down(&mm->mmap_sem);
+	ret = do_munmap(mm, addr, len);
+	up(&mm->mmap_sem);
 	return ret;
 }
 
@@ -767,7 +767,7 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	/*
 	 * Clear old maps.  this also does some error checking for us
 	 */
-	retval = do_munmap(addr, len);
+	retval = do_munmap(mm, addr, len);
 	if (retval != 0)
 		return retval;
 

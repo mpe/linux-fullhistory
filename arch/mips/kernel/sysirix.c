@@ -533,7 +533,7 @@ asmlinkage int irix_brk(unsigned long brk)
 	int ret;
 
 	lock_kernel();
-	if (brk < current->mm->end_code) {
+	if (brk < mm->end_code) {
 		ret = -ENOMEM;
 		goto out;
 	}
@@ -549,9 +549,9 @@ asmlinkage int irix_brk(unsigned long brk)
 	/*
 	 * Always allow shrinking brk
 	 */
-	if (brk <= current->mm->brk) {
+	if (brk <= mm->brk) {
 		mm->brk = brk;
-		do_munmap(newbrk, oldbrk-newbrk);
+		do_munmap(mm, newbrk, oldbrk-newbrk);
 		ret = 0;
 		goto out;
 	}

@@ -99,6 +99,12 @@ struct sk_buff {
 
 	struct  dst_entry *dst;
 
+	/* 
+	 * This is the control buffer. It is free to use for every
+	 * layer. Please put your private variables there. If you
+	 * want to keep them across layers you have to do a skb_clone()
+	 * first. This is owned by whoever has the skb queued ATM.
+	 */ 
 	char		cb[48];	 
 
 	unsigned int 	len;			/* Length of actual data			*/
@@ -130,13 +136,6 @@ struct sk_buff {
         unsigned int nf_debug;
 #endif
 #endif /*CONFIG_NETFILTER*/
-#if defined(CONFIG_SHAPER) || defined(CONFIG_SHAPER_MODULE)
-	__u32		shapelatency;		/* Latency on frame */
-	__u32		shapeclock;		/* Time it should go out */
-	__u32		shapelen;		/* Frame length in clocks */
-	__u32		shapestamp;		/* Stamp for shaper    */
-	__u16		shapepend;		/* Pending */
-#endif
 
 #if defined(CONFIG_HIPPI)
 	union{

@@ -94,7 +94,7 @@ static ssize_t usb_driver_read(struct file *file, char *buf, size_t nbytes, loff
 	return ret;
 }
 
-static long long usb_driver_lseek(struct file * file, long long offset, int orig)
+static loff_t usb_driver_lseek(struct file * file, loff_t offset, int orig)
 {
 	switch (orig) {
 	case 0:

@@ -15,6 +15,7 @@ extern unsigned long max_mapnr;
 extern unsigned long num_physpages;
 extern void * high_memory;
 extern int page_cluster;
+extern struct list_head lru_cache;
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -445,7 +446,8 @@ out:
 	return ret;
 }
 
-extern int do_munmap(unsigned long, size_t);
+extern int do_munmap(struct mm_struct *, unsigned long, size_t);
+
 extern unsigned long do_brk(unsigned long, unsigned long);
 
 struct zone_t;

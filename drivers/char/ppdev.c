@@ -575,10 +575,10 @@ static unsigned int pp_poll (struct file * file, poll_table * wait)
 	struct pp_struct *pp = file->private_data;
 	unsigned int mask = 0;
 
+	poll_wait (file, &pp->irq_wait, wait);
 	if (atomic_read (&pp->irqc))
 		mask |= POLLIN | POLLRDNORM;
 
-	poll_wait (file, &pp->irq_wait, wait);
 	return mask;
 }
 

@@ -141,7 +141,7 @@ asmlinkage int sunos_brk(u32 baddr)
 	/* Always allow shrinking brk. */
 	if (brk <= current->mm->brk) {
 		current->mm->brk = brk;
-		do_munmap(newbrk, oldbrk-newbrk);
+		do_munmap(current->mm, newbrk, oldbrk-newbrk);
 		goto out;
 	}
 	/* Check against rlimit and stack.. */

@@ -162,7 +162,7 @@ static int my_usb_bulk_msg(struct usb_device *dev, unsigned int pipe,
 	return ret;
 }
 
-static long long usbdev_lseek(struct file *file, long long offset, int orig)
+static loff_t usbdev_lseek(struct file *file, loff_t offset, int orig)
 {
 	switch (orig) {
 	case 0:

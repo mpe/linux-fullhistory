@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.150 2000/04/12 08:10:22 davem Exp $
+/*  $Id: init.c,v 1.151 2000/04/26 17:09:32 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -822,9 +822,12 @@ unsigned long __init bootmem_init(unsigned long *pages_avail)
 				end_of_phys_memory -= slack;
 
 				sp_banks[i].num_bytes -= slack;
-				if (sp_banks[i].num_bytes == 0)
+				if (sp_banks[i].num_bytes == 0) {
 					sp_banks[i].base_addr = 0xdeadbeef;
-
+				} else {
+					sp_banks[i+1].num_bytes = 0;
+					sp_banks[i+1].base_addr = 0xdeadbeef;
+				}
 				break;
 			}
 		}

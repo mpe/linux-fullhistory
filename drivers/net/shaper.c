@@ -64,6 +64,9 @@
  *              Device statistics (tx_pakets, tx_bytes,
  *              tx_drops: queue_over_time and collisions: max_queue_exceded)
  *                               1999/06/18 Jordi Murgo <savage@apostols.org>
+ *
+ *		Use skb->cb for private data.
+ *				 2000/03 Andi Kleen
  */
  
 #include <linux/config.h>
@@ -84,6 +87,15 @@
 #include <net/dst.h>
 #include <net/arp.h>
 #include <linux/if_shaper.h>
+
+struct shaper_cb { 
+	__u32		shapelatency;		/* Latency on frame */
+	__u32		shapeclock;		/* Time it should go out */
+	__u32		shapelen;		/* Frame length in clocks */
+	__u32		shapestamp;		/* Stamp for shaper    */
+	__u16		shapepend;		/* Pending */
+}; 
+#define SHAPERCB(skb) ((struct shaper_cb *) ((skb)->cb))
 
 int sh_debug;		/* Debug flag */
 
@@ -149,7 +161,7 @@ static void shaper_setspeed(struct shaper *shaper, int bitspersec)
 static int shaper_qframe(struct shaper *shaper, struct sk_buff *skb)
 {
  	struct sk_buff *ptr;
- 	
+   
  	/*
  	 *	Get ready to work on this shaper. Lock may fail if its
  	 *	an interrupt and locked.
@@ -163,25 +175,25 @@ static int shaper_qframe(struct shaper *shaper, struct sk_buff *skb)
  	 *	Set up our packet details
  	 */
  	 
- 	skb->shapelatency=0;
- 	skb->shapeclock=shaper->recovery;
- 	if(time_before(skb->shapeclock, jiffies))
- 		skb->shapeclock=jiffies;
+ 	SHAPERCB(skb)->shapelatency=0;
+ 	SHAPERCB(skb)->shapeclock=shaper->recovery;
+ 	if(time_before(SHAPERCB(skb)->shapeclock, jiffies))
+ 		SHAPERCB(skb)->shapeclock=jiffies;
  	skb->priority=0;	/* short term bug fix */
- 	skb->shapestamp=jiffies;
+ 	SHAPERCB(skb)->shapestamp=jiffies;
  	
  	/*
  	 *	Time slots for this packet.
  	 */
  	 
- 	skb->shapelen= shaper_clocks(shaper,skb);
+ 	SHAPERCB(skb)->shapelen= shaper_clocks(shaper,skb);
  	
 #ifdef SHAPER_COMPLEX /* and broken.. */
 
  	while(ptr && ptr!=(struct sk_buff *)&shaper->sendq)
  	{
  		if(ptr->pri<skb->pri 
- 			&& jiffies - ptr->shapeclock < SHAPER_MAXSLIP)
+ 			&& jiffies - SHAPERCB(ptr)->shapeclock < SHAPER_MAXSLIP)
  		{
  			struct sk_buff *tmp=ptr->prev;
 
@@ -190,14 +202,14 @@ static int shaper_qframe(struct shaper *shaper, struct sk_buff *skb)
  			 *	of the new frame.
  			 */
 
- 			ptr->shapeclock+=skb->shapelen;
- 			ptr->shapelatency+=skb->shapelen;
+ 			SHAPERCB(ptr)->shapeclock+=SHAPERCB(skb)->shapelen;
+ 			SHAPERCB(ptr)->shapelatency+=SHAPERCB(skb)->shapelen;
 
  			/*
  			 *	The packet may have slipped so far back it
  			 *	fell off.
  			 */
- 			if(ptr->shapelatency > SHAPER_LATENCY)
+ 			if(SHAPERCB(ptr)->shapelatency > SHAPER_LATENCY)
  			{
  				skb_unlink(ptr);
  				dev_kfree_skb(ptr);
@@ -218,7 +230,7 @@ static int shaper_qframe(struct shaper *shaper, struct sk_buff *skb)
  		 *	this loop.
  		 */
  		for(tmp=skb_peek(&shaper->sendq); tmp!=NULL && tmp!=ptr; tmp=tmp->next)
- 			skb->shapeclock+=tmp->shapelen;
+ 			SHAPERCB(skb)->shapeclock+=tmp->shapelen;
  		skb_append(ptr,skb);
  	}
 #else
@@ -230,11 +242,11 @@ static int shaper_qframe(struct shaper *shaper, struct sk_buff *skb)
 		 */
 		for(tmp=skb_peek(&shaper->sendq); tmp!=NULL && 
 			tmp!=(struct sk_buff *)&shaper->sendq; tmp=tmp->next)
-			skb->shapeclock+=tmp->shapelen;
+			SHAPERCB(skb)->shapeclock+=SHAPERCB(tmp)->shapelen;
 		/*
 		 *	Queue over time. Spill packet.
 		 */
-		if(skb->shapeclock-jiffies > SHAPER_LATENCY) {
+		if(SHAPERCB(skb)->shapeclock-jiffies > SHAPER_LATENCY) {
 			dev_kfree_skb(skb);
 			shaper->stats.tx_dropped++;
 		} else
@@ -325,22 +337,23 @@ static void shaper_kick(struct shaper *shaper)
 		 */
 		 
 		if(sh_debug)
-			printk("Clock = %d, jiffies = %ld\n", skb->shapeclock, jiffies);
-		if(time_before_eq(skb->shapeclock - jiffies, SHAPER_BURST))
+			printk("Clock = %d, jiffies = %ld\n", SHAPERCB(skb)->shapeclock, jiffies);
+		if(time_before_eq(SHAPERCB(skb)->shapeclock - jiffies, SHAPER_BURST))
 		{
 			/*
 			 *	Pull the frame and get interrupts back on.
 			 */
 			 
 			skb_unlink(skb);
-			if (shaper->recovery < skb->shapeclock + skb->shapelen)
-				shaper->recovery = skb->shapeclock + skb->shapelen;
+			if (shaper->recovery < 
+			    SHAPERCB(skb)->shapeclock + SHAPERCB(skb)->shapelen)
+				shaper->recovery = SHAPERCB(skb)->shapeclock + SHAPERCB(skb)->shapelen;
 			/*
 			 *	Pass on to the physical target device via
 			 *	our low level packet thrower.
 			 */
 			
-			skb->shapepend=0;
+			SHAPERCB(skb)->shapepend=0;
 			shaper_queue_xmit(shaper, skb);	/* Fire */
 		}
 		else
@@ -352,7 +365,7 @@ static void shaper_kick(struct shaper *shaper)
 	 */
 	 
 	if(skb!=NULL)
-		mod_timer(&shaper->timer, skb->shapeclock);
+		mod_timer(&shaper->timer, SHAPERCB(skb)->shapeclock);
 
 	clear_bit(0, &shaper->locked);
 }

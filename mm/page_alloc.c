@@ -25,7 +25,7 @@
 #endif
 
 int nr_swap_pages = 0;
-int nr_lru_pages;
+int nr_lru_pages = 0;
 pg_data_t *pgdat_list = (pg_data_t *)0;
 
 static char *zone_names[MAX_NR_ZONES] = { "DMA", "Normal", "HighMem" };
@@ -273,6 +273,8 @@ static int zone_balance_memory(zonelist_t *zonelist)
 struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 {
 	zone_t **zone = zonelist->zones;
+	int gfp_mask = zonelist->gfp_mask;
+	static int low_on_memory;
 
 	/*
 	 * If this is a recursive call, we'd better
@@ -281,6 +283,11 @@ struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 	 */
 	if (current->flags & PF_MEMALLOC)
 		goto allocate_ok;
+
+	/* If we're a memory hog, unmap some pages */
+	if (current->hog && low_on_memory &&
+			(gfp_mask & __GFP_WAIT))
+		swap_out(4, gfp_mask);
 
 	/*
 	 * (If anyone calls gfp from interrupts nonatomically then it
@@ -299,11 +306,13 @@ struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 		/* Are we supposed to free memory? Don't make it worse.. */
 		if (!z->zone_wake_kswapd && z->free_pages > z->pages_low) {
 			struct page *page = rmqueue(z, order);
+			low_on_memory = 0;
 			if (page)
 				return page;
 		}
 	}
 
+	low_on_memory = 1;
 	/*
 	 * Ok, no obvious zones were available, start
 	 * balancing things a bit..
@@ -530,6 +539,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 	freepages.min += i;
 	freepages.low += i * 2;
 	freepages.high += i * 3;
+	memlist_init(&lru_cache);
 
 	/*
 	 * Some architectures (with lots of mem and discontinous memory
@@ -609,7 +619,6 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 			unsigned long bitmap_size;
 
 			memlist_init(&zone->free_area[i].free_list);
-			memlist_init(&zone->lru_cache);
 			mask += mask;
 			size = (size + ~mask) & mask;
 			bitmap_size = size >> i;

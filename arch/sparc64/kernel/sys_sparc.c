@@ -260,7 +260,7 @@ asmlinkage long sys64_munmap(unsigned long addr, size_t len)
 	    (addr < PAGE_OFFSET && addr + len > -PAGE_OFFSET))
 		return -EINVAL;
 	down(&current->mm->mmap_sem);
-	ret = do_munmap(addr, len);
+	ret = do_munmap(current->mm, addr, len);
 	up(&current->mm->mmap_sem);
 	return ret;
 }

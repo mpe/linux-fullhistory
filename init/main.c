@@ -250,6 +250,7 @@ static struct dev_name_struct {
 	{ "pf",		0x2f00 },
 	{ "apblock", APBLOCK_MAJOR << 8},
 	{ "ddv", DDV_MAJOR << 8},
+	{ "jsfd",    JSFD_MAJOR << 8},
 #ifdef CONFIG_MDISK
         { "mnda", (MDISK_MAJOR << MINORBITS)},
         { "mndb", (MDISK_MAJOR << MINORBITS) + 1},

@@ -170,7 +170,7 @@ asmlinkage int sunos_brk(unsigned long brk)
 	 */
 	if (brk <= current->mm->brk) {
 		current->mm->brk = brk;
-		do_munmap(newbrk, oldbrk-newbrk);
+		do_munmap(current->mm, newbrk, oldbrk-newbrk);
 		goto out;
 	}
 	/*

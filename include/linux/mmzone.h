@@ -31,7 +31,6 @@ typedef struct zone_struct {
 	char			low_on_memory;
 	char			zone_wake_kswapd;
 	unsigned long		pages_min, pages_low, pages_high;
-	struct list_head	lru_cache;
 
 	/*
 	 * free areas of different sizes

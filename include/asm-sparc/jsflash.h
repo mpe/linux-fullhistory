@@ -36,4 +36,4 @@ struct jsflash_program_arg {
 	__u32 size;
 };
 
-#endif /* _SPARC_IDE_H */
+#endif /* _SPARC_JSFLASH_H */

@@ -315,15 +315,18 @@ out:
 
 void remove_vfsmnt(kdev_t dev)
 {
-	struct list_head *p;
-	for (p = vfsmntlist.next; p!=&vfsmntlist; p = p->next) {
+	struct list_head *p, *next;
+
+	for (p = vfsmntlist.next; p != &vfsmntlist; p = next) {
 		struct vfsmount *mnt = list_entry(p, struct vfsmount, mnt_list);
+
+		next = p->next;
 		if (mnt->mnt_dev != dev)
 			continue;
 		list_del(&mnt->mnt_list);
 		kfree(mnt->mnt_devname);
 		kfree(mnt->mnt_dirname);
-		kfree_s(mnt, sizeof(struct vfsmount));
+		kfree(mnt);
 	}
 }
 

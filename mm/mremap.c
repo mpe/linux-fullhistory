@@ -145,7 +145,7 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 			insert_vm_struct(current->mm, new_vma);
 			merge_segments(current->mm, new_vma->vm_start, new_vma->vm_end);
 			vmlist_modify_unlock(vma->vm_mm);
-			do_munmap(addr, old_len);
+			do_munmap(current->mm, addr, old_len);
 			current->mm->total_vm += new_len >> PAGE_SHIFT;
 			if (new_vma->vm_flags & VM_LOCKED) {
 				current->mm->locked_vm += new_len >> PAGE_SHIFT;
@@ -201,7 +201,7 @@ unsigned long do_mremap(unsigned long addr,
 		if ((addr <= new_addr) && (addr+old_len) > new_addr)
 			goto out;
 
-		do_munmap(new_addr, new_len);
+		do_munmap(current->mm, new_addr, new_len);
 	}
 
 	/*
@@ -210,7 +210,7 @@ unsigned long do_mremap(unsigned long addr,
 	 */
 	ret = addr;
 	if (old_len >= new_len) {
-		do_munmap(addr+new_len, old_len - new_len);
+		do_munmap(current->mm, addr+new_len, old_len - new_len);
 		if (!(flags & MREMAP_FIXED) || (new_addr == addr))
 			goto out;
 	}

@@ -119,7 +119,7 @@ enum
 enum
 {
 	VM_SWAPCTL=1,		/* struct: Set vm swapping control */
-	VM_SWAPOUT=2,		/* int: Background pageout interval */
+	VM_SWAPOUT=2,		/* int: Linear or sqrt() swapout for hogs */
 	VM_FREEPG=3,		/* struct: Set free page thresholds */
 	VM_BDFLUSH=4,		/* struct: Control buffer cache flushing */
 	VM_OVERCOMMIT_MEMORY=5,	/* Turn off the virtual memory safety limit */

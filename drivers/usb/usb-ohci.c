@@ -1555,7 +1555,7 @@ static int rh_submit_urb (urb_t * urb)
 					data_buf = root_hub_config_des; OK(len);
 				case (0x03): /* string descriptors */
 					len = usb_root_hub_string (wValue & 0xff,
-						(int) ohci->regs, "OHCI",
+						(int)(long) ohci->regs, "OHCI",
 						data, wLength);
 					if (len > 0) {
 						data_buf = data;

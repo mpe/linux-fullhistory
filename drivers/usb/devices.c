@@ -498,7 +498,7 @@ static int usb_device_release(struct inode *inode, struct file *file)
         return 0;
 }
 
-static long long usb_device_lseek(struct file * file, long long offset, int orig)
+static loff_t usb_device_lseek(struct file * file, loff_t offset, int orig)
 {
 	switch (orig) {
 	case 0:

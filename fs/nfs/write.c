@@ -573,9 +573,11 @@ nfs_release_request(struct nfs_page *req)
 		printk(KERN_ERR "NFS: Request released while still locked!\n");
 
 	rpcauth_releasecred(NFS_CLIENT(inode)->cl_auth, req->wb_cred);
+	lock_kernel();
 	if (req->wb_file)
 		fput(req->wb_file);
 	dput(req->wb_dentry);
+	unlock_kernel();
 	page_cache_release(page);
 	nfs_page_free(req);
 	/* wake up anyone waiting to allocate a request */

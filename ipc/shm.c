@@ -1320,16 +1320,17 @@ static void shm_close (struct vm_area_struct *shmd)
  */
 asmlinkage long sys_shmdt (char *shmaddr)
 {
+	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *shmd, *shmdnext;
 
-	down(&current->mm->mmap_sem);
-	for (shmd = current->mm->mmap; shmd; shmd = shmdnext) {
+	down(&mm->mmap_sem);
+	for (shmd = mm->mmap; shmd; shmd = shmdnext) {
 		shmdnext = shmd->vm_next;
 		if (shmd->vm_ops == &shm_vm_ops
 		    && shmd->vm_start - (shmd->vm_pgoff << PAGE_SHIFT) == (ulong) shmaddr)
-			do_munmap(shmd->vm_start, shmd->vm_end - shmd->vm_start);
+			do_munmap(mm, shmd->vm_start, shmd->vm_end - shmd->vm_start);
 	}
-	up(&current->mm->mmap_sem);
+	up(&mm->mmap_sem);
 	return 0;
 }
 

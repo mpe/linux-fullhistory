@@ -44,6 +44,7 @@
 atomic_t page_cache_size = ATOMIC_INIT(0);
 unsigned int page_hash_bits;
 struct page **page_hash_table;
+struct list_head lru_cache;
 
 spinlock_t pagecache_lock = SPIN_LOCK_UNLOCKED;
 /*
@@ -161,10 +162,15 @@ repeat:
 
 		/* page wholly truncated - free it */
 		if (offset >= start) {
+			if (TryLockPage(page)) {
+				spin_unlock(&pagecache_lock);
+				get_page(page);
+				wait_on_page(page);
+				put_page(page);
+				goto repeat;
+			}
 			get_page(page);
 			spin_unlock(&pagecache_lock);
-
-			lock_page(page);
 
 			if (!page->buffers || block_flushpage(page, 0))
 				lru_cache_del(page);
@@ -203,10 +209,12 @@ repeat:
 			continue;
 
 		/* partial truncate, clear end of page */
+		if (TryLockPage(page)) {
+			spin_unlock(&pagecache_lock);
+			goto repeat;
+		}
 		get_page(page);
 		spin_unlock(&pagecache_lock);
-
-		lock_page(page);
 
 		memclear_highpage_flush(page, partial, PAGE_CACHE_SIZE-partial);
 		if (page->buffers)
@@ -220,6 +228,9 @@ repeat:
 		 */
 		UnlockPage(page);
 		page_cache_release(page);
+		get_page(page);
+		wait_on_page(page);
+		put_page(page);
 		goto repeat;
 	}
 	spin_unlock(&pagecache_lock);
@@ -227,46 +238,55 @@ repeat:
 
 int shrink_mmap(int priority, int gfp_mask, zone_t *zone)
 {
-	int ret = 0, count;
+	int ret = 0, loop = 0, count;
 	LIST_HEAD(young);
 	LIST_HEAD(old);
 	LIST_HEAD(forget);
 	struct list_head * page_lru, * dispose;
-	struct page * page;
-
+	struct page * page = NULL;
+	struct zone_struct * p_zone;
+	int maxloop = 256 >> priority;
+	
 	if (!zone)
 		BUG();
 
-	count = nr_lru_pages / (priority+1);
+	count = nr_lru_pages >> priority;
+	if (!count)
+		return ret;
 
 	spin_lock(&pagemap_lru_lock);
-
-	while (count > 0 && (page_lru = zone->lru_cache.prev) != &zone->lru_cache) {
+again:
+	/* we need pagemap_lru_lock for list_del() ... subtle code below */
+	while (count > 0 && (page_lru = lru_cache.prev) != &lru_cache) {
 		page = list_entry(page_lru, struct page, lru);
 		list_del(page_lru);
+		p_zone = page->zone;
 
-		dispose = &zone->lru_cache;
-		if (test_and_clear_bit(PG_referenced, &page->flags))
-			/* Roll the page at the top of the lru list,
-			 * we could also be more aggressive putting
-			 * the page in the young-dispose-list, so
-			 * avoiding to free young pages in each pass.
-			 */
+		/*
+		 * These two tests are there to make sure we don't free too
+		 * many pages from the "wrong" zone. We free some anyway,
+		 * they are the least recently used pages in the system.
+		 * When we don't free them, leave them in &old.
+		 */
+		dispose = &old;
+		if (p_zone != zone && (loop > (maxloop / 4) ||
+				p_zone->free_pages > p_zone->pages_high))
 			goto dispose_continue;
 
-		dispose = &old;
-		/* don't account passes over not DMA pages */
-		if (zone && (!memclass(page->zone, zone)))
+		/* The page is in use, or was used very recently, put it in
+		 * &young to make sure that we won't try to free it the next
+		 * time */
+		dispose = &young;
+
+		if (test_and_clear_bit(PG_referenced, &page->flags))
 			goto dispose_continue;
 
 		count--;
-
-		dispose = &young;
-
-		/* avoid unscalable SMP locking */
 		if (!page->buffers && page_count(page) > 1)
 			goto dispose_continue;
 
+		/* Page not used -> free it; if that fails -> &old */
+		dispose = &old;
 		if (TryLockPage(page))
 			goto dispose_continue;
 
@@ -339,6 +359,7 @@ unlock_continue:
 		list_add(page_lru, dispose);
 		continue;
 
+		/* we're holding pagemap_lru_lock, so we can just loop again */
 dispose_continue:
 		list_add(page_lru, dispose);
 	}
@@ -354,9 +375,14 @@ made_buffer_progress:
 	/* nr_lru_pages needs the spinlock */
 	nr_lru_pages--;
 
+	loop++;
+	/* wrong zone?  not looped too often?    roll again... */
+	if (page->zone != zone && loop < maxloop)
+		goto again;
+
 out:
-	list_splice(&young, &zone->lru_cache);
-	list_splice(&old, zone->lru_cache.prev);
+	list_splice(&young, &lru_cache);
+	list_splice(&old, lru_cache.prev);
 
 	spin_unlock(&pagemap_lru_lock);
 

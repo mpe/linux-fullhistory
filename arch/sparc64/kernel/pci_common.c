@@ -1,4 +1,4 @@
-/* $Id: pci_common.c,v 1.10 2000/04/15 13:19:13 davem Exp $
+/* $Id: pci_common.c,v 1.11 2000/04/26 10:48:02 davem Exp $
  * pci_common.c: PCI controller common support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -64,6 +64,27 @@ static void pci_device_delete(struct pci_dev *pdev)
 
 	/* Ok, all references are gone, free it up. */
 	kfree(pdev);
+}
+
+/* Older versions of OBP on PCI systems encode 64-bit MEM
+ * space assignments incorrectly, this fixes them up.
+ */
+static void __init fixup_obp_assignments(struct pcidev_cookie *pcp)
+{
+	int i;
+
+	for (i = 0; i < pcp->num_prom_assignments; i++) {
+		struct linux_prom_pci_registers *ap;
+		int space;
+
+		ap = &pcp->prom_assignments[i];
+		space = ap->phys_hi >> 24;
+		if ((space & 0x3) == 2 &&
+		    (space & 0x4) != 0) {
+			ap->phys_hi &= ~(0x7 << 24);
+			ap->phys_hi |= 0x3 << 24;
+		}
+	}
 }
 
 /* Fill in the PCI device cookie sysdata for the given
@@ -146,6 +167,8 @@ static void __init pdev_cookie_fillin(struct pci_pbm_info *pbm,
 			pcp->num_prom_assignments =
 				(err / sizeof(pcp->prom_assignments[0]));
 	}
+
+	fixup_obp_assignments(pcp);
 
 	pdev->sysdata = pcp;
 }

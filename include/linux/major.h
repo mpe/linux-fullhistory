@@ -119,6 +119,8 @@
 
 #define AURORA_MAJOR 79
 
+#define JSFD_MAJOR	99
+
 #define PHONE_MAJOR	100
 
 #define LVM_CHAR_MAJOR	109	/* Logical Volume Manager */

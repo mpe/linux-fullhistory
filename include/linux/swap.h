@@ -87,6 +87,7 @@ extern void swap_setup (void);
 
 /* linux/mm/vmscan.c */
 extern int try_to_free_pages(unsigned int gfp_mask, zone_t *zone);
+extern int swap_out(unsigned int gfp_mask, int priority);
 
 /* linux/mm/page_io.c */
 extern void rw_swap_page(int, struct page *, int);
@@ -167,7 +168,7 @@ extern spinlock_t pagemap_lru_lock;
 #define	lru_cache_add(page)			\
 do {						\
 	spin_lock(&pagemap_lru_lock);		\
-	list_add(&(page)->lru, &page->zone->lru_cache);	\
+	list_add(&(page)->lru, &lru_cache);	\
 	nr_lru_pages++;				\
 	spin_unlock(&pagemap_lru_lock);		\
 } while (0)

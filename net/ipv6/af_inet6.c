@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.55 2000/02/27 19:51:47 davem Exp $
+ *	$Id: af_inet6.c,v 1.56 2000/04/25 04:13:34 davem Exp $
  *
  * 	Fixes:
  * 	Hideaki YOSHIFUJI	:	sin6_scope_id support
