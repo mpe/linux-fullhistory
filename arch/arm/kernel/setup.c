@@ -274,7 +274,7 @@ static void __init setup_bootmem(void)
 	/*
 	 * Initialise the boot-time allocator
 	 */
-	bootmem_end += init_bootmem(bootmem_end >> PAGE_SHIFT, end_pfn);
+	bootmem_end += init_bootmem(bootmem_end >> PAGE_SHIFT, end_pfn, PHYS_OFFSET);
 
 	/*
 	 * Register all available RAM with the bootmem allocator.

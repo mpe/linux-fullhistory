@@ -304,7 +304,7 @@ toshoboe_hard_xmit (struct sk_buff *skb, struct net_device *dev)
 
   /* Check if we need to change the speed */
   if ((speed = irda_get_speed(skb)) != self->io.speed)
-	   toshoboe_setbaud (self, speed);
+	  self->new_speed = speed;
 
   if (self->stopped) {
 	  dev_kfree_skb(skb);
@@ -405,10 +405,14 @@ toshoboe_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
       self->stats.tx_packets++;
 
-      /* idev->media_busy = FALSE; */
-      self->netdev->tbusy = 0;
-
-      mark_bh (NET_BH);
+      if (self->new_speed) {
+	      toshoboe_setbaud(self, self->new_speed);
+	      self->new_speed = 0;
+      }
+      self->netdev->tbusy = 0; /* Unlock */
+      
+      /* Tell network layer that we want more frames */
+      mark_bh(NET_BH);
     }
 
   if (irqstat & OBOE_ISR_RXDONE)

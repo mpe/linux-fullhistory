@@ -315,7 +315,7 @@ struct pci_ops cia_pci_ops =
 };
 
 void __init
-cia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
+cia_init_arch(void)
 {
 	struct pci_controler *hose;
 	struct resource *hae_mem;
@@ -424,8 +424,8 @@ cia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	 * Create our single hose.
 	 */
 
-	hose = alloc_pci_controler(mem_start);
-	hae_mem = alloc_resource(mem_start);
+	hose = alloc_pci_controler();
+	hae_mem = alloc_resource();
 
 	hose->io_space = &ioport_resource;
 	hose->mem_space = hae_mem;

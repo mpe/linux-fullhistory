@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Paul VanderSpek
  * Created at:    Thu Nov 19 13:55:34 1998
- * Modified at:   Fri Oct 15 16:06:46 1999
+ * Modified at:   Mon Nov  8 10:00:40 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -181,6 +181,7 @@ struct w83977af_ir {
 	struct qos_info qos;       /* QoS capabilities for this device */
 	
 	__u32 flags;               /* Interface flags */
+	__u32 new_speed;
 };
 
 static inline void switch_bank( int iobase, int set)

@@ -69,9 +69,9 @@ extern void __bug(const char *file, int line, void *data);
 
 #include <asm/arch/memory.h>
 
-#define __pa(x)			((unsigned long)(x) - PAGE_OFFSET)
-#define __va(x)			((void *)((unsigned long)(x) + PAGE_OFFSET))
-#define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
+#define __pa(x)			((unsigned long)(x) - PAGE_OFFSET + PHYS_OFFSET)
+#define __va(x)			((void *)((unsigned long)(x) + PAGE_OFFSET - PHYS_OFFSET))
+#define MAP_NR(addr)		(((unsigned long)(addr) - PAGE_OFFSET) >> PAGE_SHIFT)
 
 #endif
 

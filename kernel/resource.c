@@ -126,7 +126,7 @@ int release_resource(struct resource *old)
 static int find_resource(struct resource *root, struct resource *new,
 			 unsigned long size,
 			 unsigned long min, unsigned long max,
-			 unsigned long align)
+			 unsigned long align, struct pci_dev * dev)
 {
 	struct resource *this = root->child;
 	unsigned long start, end;
@@ -142,6 +142,7 @@ static int find_resource(struct resource *root, struct resource *new,
 		if (end > max)
 			end = max;
 		start = (start + align - 1) & ~(align - 1);
+		start = resource_fixup (dev, new, start, size);
 		if (start < end && end - start + 1 >= size) {
 			new->start = start;
 			new->end = start + size - 1;
@@ -161,12 +162,12 @@ static int find_resource(struct resource *root, struct resource *new,
 int allocate_resource(struct resource *root, struct resource *new,
 		      unsigned long size,
 		      unsigned long min, unsigned long max,
-		      unsigned long align)
+		      unsigned long align, struct pci_dev * dev)
 {
 	int err;
 
 	write_lock(&resource_lock);
-	err = find_resource(root, new, size, min, max, align);
+	err = find_resource(root, new, size, min, max, align, dev);
 	if (err >= 0 && __request_resource(root, new))
 		err = -EBUSY;
 	write_unlock(&resource_lock);

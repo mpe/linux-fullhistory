@@ -1167,7 +1167,7 @@ static int output_byte(char byte)
 /* gets the response from the fdc */
 static int result(void)
 {
-	int i, status;
+	int i, status=0;
 
 	for(i=0; i < MAX_REPLIES; i++) {
 		if ((status = wait_til_ready()) < 0)

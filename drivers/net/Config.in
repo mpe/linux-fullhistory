@@ -95,8 +95,6 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     tristate '    NI6510 support' CONFIG_NI65
   fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      # tristate '  Packet Engines Hamachi GNIC-II support (EXPERIMENTAL)' CONFIG_HAMACHI
-      tristate '  Packet Engines Yellowfin Gigabit-NIC support (EXPERIMENTAL)' CONFIG_YELLOWFIN
       tristate '  RealTek 8129/8139 (not 8019/8029!) support (EXPERIMENTAL)' CONFIG_RTL8139
       tristate '  DM9102 PCI Fast Ethernet Adapter support (EXPERIMENTAL)' CONFIG_DM9102
    fi
@@ -133,10 +131,6 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	 tristate '    Adaptec Starfire support (EXPERIMENTAL)' CONFIG_ADAPTEC_STARFIRE
       fi
-      tristate '    Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support' CONFIG_ACENIC
-      if [ "$CONFIG_ACENIC" != "n" ]; then
-	 bool '      Omit support for old Tigon I based AceNICs' CONFIG_ACENIC_OMIT_TIGON_I
-      fi
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	 tristate '    Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
       fi
@@ -170,6 +164,24 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
    fi
 fi
 
+endmenu
+
+#
+#	Gigabit Ethernet
+#
+
+mainmenu_option next_comment
+comment 'Ethernet (1000 Mbit)'
+
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      # tristate 'Packet Engines Hamachi GNIC-II support (EXPERIMENTAL)' CONFIG_HAMACHI
+      tristate 'Packet Engines Yellowfin Gigabit-NIC support (EXPERIMENTAL)' CONFIG_YELLOWFIN
+    fi
+    tristate 'Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support' CONFIG_ACENIC
+    if [ "$CONFIG_ACENIC" != "n" ]; then
+      bool '  Omit support for old Tigon I based AceNICs' CONFIG_ACENIC_OMIT_TIGON_I
+    fi
+    tristate 'SysKonnect SK-98xx support' CONFIG_SK98LIN
 endmenu
 
 bool 'FDDI driver support' CONFIG_FDDI

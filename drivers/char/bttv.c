@@ -554,6 +554,8 @@ static struct tvcard tvcards[] =
         { 3, 1, 0, 2, 0xc00, { 2, 3, 1, 1},{0, 1, 0x800, 0x400, 0xc00, 0}},
 	/* Modular Technology MM205 PCTV, bt878 */
 	{ 2, 1, 0, -1, 7, { 2, 3 }, { 0, 0, 0, 0, 0 }},
+        /* Magic TView CPH061 (bt878) */
+	{ 3, 1, 0, 2, 0xe00, { 2, 0, 1, 1}, {0x400, 0, 0, 0, 0}},
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(tvcard))
 
@@ -2760,6 +2762,7 @@ static void idcard(int i)
 		case BTTV_PIXVIEWPLAYTV:
 		case BTTV_AVERMEDIA98:
 		case BTTV_MODTEC_205:
+		case BTTV_MAGICTVIEW061:
 			btv->pll.pll_ifreq=28636363;
 			btv->pll.pll_crystal=BT848_IFORM_XT0;
 			break;

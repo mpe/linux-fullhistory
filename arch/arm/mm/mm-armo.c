@@ -11,6 +11,7 @@
 #include <linux/bootmem.h>
 
 #include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/page.h>
 #include <asm/arch/memory.h>
 
@@ -134,6 +135,20 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 }
 
 /*
+ * Calculate the size of the DMA, normal and highmem zones.
+ * On 26-bit ARMs, we don't have any real DMA or highmem,
+ * so we allocate the whole memory as being DMA-capable.
+ */
+void __init zonesize_init(unsigned int *zone_size)
+{
+	int i;
+
+	zone_size[0] = max_low_pfn;
+	zone_size[1] = 0;
+	zone_size[2] = 0;
+}
+
+/*
  * This contains the code to setup the memory map on an ARM2/ARM250/ARM3
  * machine. This is both processor & architecture specific, and requires
  * some more work to get it to fit into our separate processor and
@@ -147,7 +162,6 @@ void __init pagetable_init(void)
 	page_nr = max_low_pfn;
 
 	pte = alloc_bootmem_low_pages(PTRS_PER_PTE * sizeof(pte_t));
-	memzero(pte, PTRS_PER_PTE * sizeof(pte_t));
 	pte[0] = mk_pte_phys(PAGE_OFFSET + 491520, PAGE_READONLY);
 	set_pmd(pmd_offset(swapper_pg_dir, 0), mk_kernel_pmd(pte));
 

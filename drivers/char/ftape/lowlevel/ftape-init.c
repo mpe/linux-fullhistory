@@ -114,8 +114,7 @@ KERN_INFO "Compiled for Linux version %s"
 	ft_failure   = 1;         /* inhibit any operation but open */
 	ftape_udelay_calibrate(); /* must be before fdc_wait_calibrate ! */
 	fdc_wait_calibrate();
-#if (LINUX_VERSION_CODE >= KERNEL_VER(1,2,0) && \
-     LINUX_VERSION_CODE < KERNEL_VER(2,1,18))
+#if LINUX_VERSION_CODE < KERNEL_VER(2,1,18)
 	register_symtab(&ftape_symbol_table); /* add global ftape symbols */
 #endif
 #if defined(CONFIG_PROC_FS) && defined(CONFIG_FT_PROC_FS)
@@ -154,10 +153,6 @@ MODULE_AUTHOR(
 	"(c) 1996, 1997 Claus-Justus Heine (claus@momo.math.rwth-aachen.de)");
 MODULE_DESCRIPTION(
 	"QIC-117 driver for QIC-40/80/3010/3020 floppy tape drives.");
-#endif
-
-#if LINUX_VERSION_CODE <= KERNEL_VER(1,2,13)
-char kernel_version[] = UTS_RELEASE;
 #endif
 
 /*  Called by modules package when installing the driver

@@ -285,7 +285,7 @@ struct pci_ops pyxis_pci_ops =
 };
 
 void __init
-pyxis_init_arch(unsigned long *mem_start, unsigned long *mem_end)
+pyxis_init_arch(void)
 {
 	struct pci_controler *hose;
 	unsigned int temp;
@@ -379,7 +379,7 @@ pyxis_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	 * Create our single hose.
 	 */
 
-	hose = alloc_pci_controler(mem_start);
+	hose = alloc_pci_controler();
 	hose->io_space = &ioport_resource;
 	hose->mem_space = &iomem_resource;
 	hose->config_space = PYXIS_CONF;

@@ -51,6 +51,7 @@ pipe_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 
 	/* Seeks are not allowed on pipes.  */
 	ret = -ESPIPE;
+	read = 0;
 	if (ppos != &filp->f_pos)
 		goto out_nolock;
 
@@ -65,6 +66,7 @@ pipe_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 		goto out_nolock;
 
 	if (PIPE_EMPTY(*inode)) {
+do_more_read:
 		ret = 0;
 		if (!PIPE_WRITERS(*inode))
 			goto out;
@@ -74,7 +76,9 @@ pipe_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 			goto out;
 
 		for (;;) {
+			PIPE_WAITING_READERS(*inode)++;
 			pipe_wait(inode);
+			PIPE_WAITING_READERS(*inode)--;
 			ret = -ERESTARTSYS;
 			if (signal_pending(current))
 				goto out_nolock;
@@ -90,7 +94,6 @@ pipe_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 
 	/* Read what data is available.  */
 	ret = -EFAULT;
-	read = 0;
 	while (count > 0 && (size = PIPE_LEN(*inode))) {
 		char *pipebuf = PIPE_BASE(*inode) + PIPE_START(*inode);
 		ssize_t chars = PIPE_MAX_RCHUNK(*inode);
@@ -115,16 +118,26 @@ pipe_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 	if (!PIPE_LEN(*inode))
 		PIPE_START(*inode) = 0;
 
-	/* Signal writers there is more room.  */
+	if (count && PIPE_WAITING_WRITERS(*inode) && !(filp->f_flags & O_NONBLOCK)) {
+		/*
+		 * We know that we are going to sleep: signal
+		 * writers synchronously that there is more
+		 * room.
+		 */
+		wake_up_interruptible_sync(PIPE_WAIT(*inode));
+		if (!PIPE_EMPTY(*inode))
+			BUG();
+		goto do_more_read;
+	}
+	/* Signal writers asynchronously that there is more room.  */
 	wake_up_interruptible(PIPE_WAIT(*inode));
 
-	if (read)
-		UPDATE_ATIME(inode);
 	ret = read;
-
 out:
 	up(PIPE_SEM(*inode));
 out_nolock:
+	if (read)
+		ret = read;
 	return ret;
 }
 
@@ -136,6 +149,7 @@ pipe_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 
 	/* Seeks are not allowed on pipes.  */
 	ret = -ESPIPE;
+	written = 0;
 	if (ppos != &filp->f_pos)
 		goto out_nolock;
 
@@ -148,13 +162,13 @@ pipe_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 	if (down_interruptible(PIPE_SEM(*inode)))
 		goto out_nolock;
 
+do_more_write:
 	/* No readers yields SIGPIPE.  */
 	if (!PIPE_READERS(*inode))
 		goto sigpipe;
 
 	/* If count <= PIPE_BUF, we have to make it atomic.  */
 	free = (count <= PIPE_BUF ? count : 1);
-	written = 0;
 
 	/* Wait, or check for, available space.  */
 	if (filp->f_flags & O_NONBLOCK) {
@@ -163,7 +177,9 @@ pipe_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 			goto out;
 	} else {
 		while (PIPE_FREE(*inode) < free) {
+			PIPE_WAITING_WRITERS(*inode)++;
 			pipe_wait(inode);
+			PIPE_WAITING_WRITERS(*inode)--;
 			ret = -ERESTARTSYS;
 			if (signal_pending(current))
 				goto out_nolock;
@@ -204,9 +220,15 @@ pipe_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 			break;
 
 		do {
-			/* This should be a synchronous wake-up: don't do idle reschedules! */
-			wake_up_interruptible(PIPE_WAIT(*inode));
+			/*
+			 * Synchronous wake-up: it knows that this process
+			 * is going to give up this CPU, so it doesnt have
+			 * to do idle reschedules.
+			 */
+			wake_up_interruptible_sync(PIPE_WAIT(*inode));
+			PIPE_WAITING_WRITERS(*inode)++;
 			pipe_wait(inode);
+			PIPE_WAITING_WRITERS(*inode)--;
 			if (signal_pending(current))
 				goto out_nolock;
 			if (down_interruptible(PIPE_SEM(*inode)))
@@ -217,19 +239,27 @@ pipe_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 		ret = -EFAULT;
 	}
 
-	/* Signal readers there is more data.  */
+	if (count && PIPE_WAITING_READERS(*inode) &&
+			!(filp->f_flags & O_NONBLOCK)) {
+		wake_up_interruptible_sync(PIPE_WAIT(*inode));
+		goto do_more_write;
+	}
+	/* Signal readers asynchronously that there is more data.  */
 	wake_up_interruptible(PIPE_WAIT(*inode));
 
-	ret = (written ? written : -EAGAIN);
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(inode);
 
 out:
 	up(PIPE_SEM(*inode));
 out_nolock:
+	if (written)
+		ret = written;
 	return ret;
 
 sigpipe:
+	if (written)
+		goto out;
 	up(PIPE_SEM(*inode));
 	send_sig(SIGPIPE, current, 0);
 	return -EPIPE;
@@ -552,6 +582,7 @@ static struct inode * get_pipe_inode(void)
 	PIPE_BASE(*inode) = (char *) page;
 	PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
 	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
+	PIPE_WAITING_READERS(*inode) = PIPE_WAITING_WRITERS(*inode) = 0;
 
 	/*
 	 * Mark the inode dirty from the very beginning,

@@ -463,11 +463,7 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
         /* controller information */
         size = sprintf(buffer+len,"\nDisk Array Controller Information:\n");
         len += size;  pos = begin + len;
-#if LINUX_VERSION_CODE >= 0x020000
         strcpy(hrec, ha->binfo.type_string);
-#else
-        sprintf(hrec, "%s (Bus %d)", ha->binfo.type_string, busnum);
-#endif
         size = sprintf(buffer+len,
                        " Number:       \t%d         \tName:          \t%s\n",
                        hanum, hrec);
@@ -1002,13 +998,8 @@ static void gdth_wait_completion(int hanum, int busnum, int id)
 
     for (i = 0; i < GDTH_MAXCMDS; ++i) {
         scp = ha->cmd_tab[i].cmnd;
-#if LINUX_VERSION_CODE >= 0x020000
         if (!SPECIAL_SCP(scp) && scp->target == (unchar)id &&
             scp->channel == (unchar)busnum)
-#else
-        if (!SPECIAL_SCP(scp) && scp->target == (unchar)id &&
-            NUMDATA(scp->host)->busnum == (unchar)busnum)
-#endif
         {
             scp->SCp.have_data_in = 0;
             GDTH_UNLOCK_HA(ha, flags);
@@ -1033,13 +1024,8 @@ static void gdth_stop_timeout(int hanum, int busnum, int id)
     GDTH_LOCK_HA(ha, flags);
 
     for (scp = ha->req_first; scp; scp = (Scsi_Cmnd *)scp->SCp.ptr) {
-#if LINUX_VERSION_CODE >= 0x020000
         if (scp->target == (unchar)id &&
             scp->channel == (unchar)busnum)
-#else
-        if (scp->target == (unchar)id &&
-            NUMDATA(scp->host)->busnum == (unchar)busnum)
-#endif
         {
             TRACE2(("gdth_stop_timeout(): update_timeout()\n"));
             scp->SCp.buffers_residual = gdth_update_timeout(hanum, scp, 0);
@@ -1058,13 +1044,8 @@ static void gdth_start_timeout(int hanum, int busnum, int id)
     GDTH_LOCK_HA(ha, flags);
 
     for (scp = ha->req_first; scp; scp = (Scsi_Cmnd *)scp->SCp.ptr) {
-#if LINUX_VERSION_CODE >= 0x020000
         if (scp->target == (unchar)id &&
             scp->channel == (unchar)busnum)
-#else
-        if (scp->target == (unchar)id &&
-            NUMDATA(scp->host)->busnum == (unchar)busnum)
-#endif
         {
             TRACE2(("gdth_start_timeout(): update_timeout()\n"));
             gdth_update_timeout(hanum, scp, scp->SCp.buffers_residual);

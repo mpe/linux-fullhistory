@@ -340,11 +340,6 @@ int wd33c93_abort (Scsi_Cmnd *cmd);
 int wd33c93_queuecommand (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *));
 void wd33c93_intr (struct Scsi_Host *instance);
 int wd33c93_proc_info(char *, char **, off_t, int, int, int);
-
-#if LINUX_VERSION_CODE >= 0x010300
 int wd33c93_reset (Scsi_Cmnd *, unsigned int);
-#else
-int wd33c93_reset (Scsi_Cmnd *);
-#endif
 
 #endif /* WD33C93_H */

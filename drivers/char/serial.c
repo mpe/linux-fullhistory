@@ -89,7 +89,7 @@ static char *serial_revdate = "1999-11-17";
 #define CONFIG_HUB6
 #endif
 
-#if (defined(CONFIG_PCI) && (LINUX_VERSION_CODE >= 131072))
+#ifdef CONFIG_PCI
 #define ENABLE_SERIAL_PCI
 #ifndef CONFIG_SERIAL_SHARE_IRQ
 #define CONFIG_SERIAL_SHARE_IRQ
@@ -143,11 +143,9 @@ static char *serial_revdate = "1999-11-17";
  * End of serial driver configuration section.
  */
 
-#if (LINUX_VERSION_CODE > 66304)
 #define NEW_MODULES
 #ifdef LOCAL_HEADERS		/* We're building standalone */
 #define MODULE
-#endif
 #endif
 
 #ifdef NEW_MODULES

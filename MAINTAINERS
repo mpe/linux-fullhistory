@@ -110,7 +110,7 @@ S:	Maintained
 
 ADVANSYS SCSI DRIVER
 P:	Bob Frey
-M:	Bob Frey <bobf@advansys.com>
+M:	linux@advansys.com
 W:	http://www.advansys.com/linux.html
 L:	linux-scsi@vger.rutgers.edu
 S:	Maintained

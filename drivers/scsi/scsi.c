@@ -112,14 +112,19 @@ typedef unsigned int FreeSectorBitmap;
  * lock up.
  */
 
-#define BLIST_NOLUN     0x01
-#define BLIST_FORCELUN  0x02
-#define BLIST_BORKEN    0x04
-#define BLIST_KEY       0x08
-#define BLIST_SINGLELUN 0x10
-#define BLIST_NOTQ	0x20
-#define BLIST_SPARSELUN 0x40
-#define BLIST_MAX5LUN	0x80
+#define BLIST_NOLUN     	0x001
+#define BLIST_FORCELUN  	0x002
+#define BLIST_BORKEN    	0x004
+#define BLIST_KEY       	0x008
+#define BLIST_SINGLELUN 	0x010
+#define BLIST_NOTQ		0x020
+#define BLIST_SPARSELUN 	0x040
+#define BLIST_MAX5LUN		0x080
+#define BLIST_ISDISK    	0x100
+#define BLIST_ISROM     	0x200
+#define BLIST_GHOST     	0x400   
+
+
 
 /*
  * Data declarations.
@@ -187,11 +192,11 @@ static int scsi_unregister_device(struct Scsi_Device_Template *tpnt);
 extern void scsi_old_done(Scsi_Cmnd * SCpnt);
 extern void scsi_old_times_out(Scsi_Cmnd * SCpnt);
 
-#define SCSI_BLOCK(DEVICE, HOST)                                                \
-                ((HOST->block && host_active && HOST != host_active)            \
-		  || ((HOST)->can_queue && HOST->host_busy >= HOST->can_queue)    \
-                  || ((HOST)->host_blocked)                                       \
-                  || ((DEVICE) != NULL && (DEVICE)->device_blocked) )
+#define SCSI_BLOCK(DEVICE, HOST)                                         \
+	        ((HOST->block && host_active && HOST != host_active)          \
+  		|| ((HOST)->can_queue && HOST->host_busy >= HOST->can_queue)  \
+	        || ((HOST)->host_blocked)                                     \
+	        || ((DEVICE) != NULL && (DEVICE)->device_blocked) )
 
 
 
@@ -280,8 +285,12 @@ static struct dev_info device_list[] =
 	{"CANON", "IPUBJD", "*", BLIST_SPARSELUN},
 	{"nCipher", "Fastness Crypto", "*", BLIST_FORCELUN},
 	{"NEC", "PD-1 ODX654P", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
-	{"MATSHITA", "PD", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
+	{"MATSHITA", "PD-1", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
 	{"iomega", "jaz 1GB", "J.86", BLIST_NOTQ | BLIST_NOLUN},
+ 	{"CREATIVE","DVD-RAM RAM","*", BLIST_GHOST},
+ 	{"MATSHITA","PD-2 LF-D100","*", BLIST_GHOST},
+ 	{"HITACHI", "GF-1050","*", BLIST_GHOST},  /* Hitachi SCSI DVD-RAM */
+ 	{"TOSHIBA","CDROM","*", BLIST_ISROM},
 
 	/*
 	 * Must be at end of list...
@@ -472,7 +481,7 @@ void scsi_wait_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 	SCpnt->request.rq_status = RQ_SCSI_BUSY;
 	spin_lock_irqsave(&io_request_lock, flags);
 	scsi_do_cmd (SCpnt, (void *) cmnd,
-        	buffer, bufflen, done, timeout, retries);
+		buffer, bufflen, done, timeout, retries);
 	spin_unlock_irqrestore(&io_request_lock, flags);
 	down (&sem);
 	SCpnt->request.sem = NULL;
@@ -691,12 +700,22 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	struct Scsi_Device_Template *sdtpnt;
 	Scsi_Device *SDtail, *SDpnt = *SDpnt2;
 	int bflags, type = -1;
+	static int ghost_channel=-1, ghost_dev=-1;
+	int org_lun = lun;
 
 	SDpnt->host = shpnt;
 	SDpnt->id = dev;
 	SDpnt->lun = lun;
 	SDpnt->channel = channel;
 	SDpnt->online = TRUE;
+
+ 
+	if ((channel == ghost_channel) && (dev == ghost_dev) && (lun == 1)) {
+		SDpnt->lun = 0;
+	} else {
+		ghost_channel = ghost_dev = -1;
+	}
+	     
 
 	/* Some low level driver could use device->type (DB) */
 	SDpnt->type = -1;
@@ -720,8 +739,8 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	SCpnt->channel = SDpnt->channel;
 
 	scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
-                  (void *) NULL,
-                  0, scan_scsis_done, SCSI_TIMEOUT + 4 * HZ, 5);
+	          (void *) NULL,
+	          0, scan_scsis_done, SCSI_TIMEOUT + 4 * HZ, 5);
 
 	SCSI_LOG_SCAN_BUS(3, printk("scsi: scan_scsis_single id %d lun %d. Return code 0x%08x\n",
 				    dev, lun, SCpnt->result));
@@ -753,8 +772,8 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	SCpnt->cmd_len = 0;
 
 	scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
-                  (void *) scsi_result,
-                  256, scan_scsis_done, SCSI_TIMEOUT, 3);
+	          (void *) scsi_result,
+	          256, scan_scsis_done, SCSI_TIMEOUT, 3);
 
 	SCSI_LOG_SCAN_BUS(3, printk("scsi: INQUIRY %s with code 0x%x\n",
 		SCpnt->result ? "failed" : "successful", SCpnt->result));
@@ -769,15 +788,41 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	if ((scsi_result[0] >> 5) == 3) {
 		return 0;	/* assume no peripheral if any sort of error */
 	}
+
 	/*
-	 * It would seem some TOSHIBA CDROM gets things wrong
+	 * Get any flags for this device.  
 	 */
-	if (!strncmp(scsi_result + 8, "TOSHIBA", 7) &&
-	    !strncmp(scsi_result + 16, "CD-ROM", 6) &&
-	    scsi_result[0] == TYPE_DISK) {
-		scsi_result[0] = TYPE_ROM;
-		scsi_result[1] |= 0x80;		/* removable */
+	bflags = get_device_flags (scsi_result);
+
+
+	 /*   The Toshiba ROM was "gender-changed" here as an inline hack.
+	      This is now much more generic.
+	      This is a mess: What we really want is to leave the scsi_result
+	      alone, and just change the SDpnt structure. And the SDpnt is what
+	      we want print_inquiry to print.  -- REW
+	 */
+	if (bflags & BLIST_ISDISK) {
+		scsi_result[0] = TYPE_DISK;                                                
+		scsi_result[1] |= 0x80;     /* removable */
 	}
+
+	if (bflags & BLIST_ISROM) {
+		scsi_result[0] = TYPE_ROM;
+		scsi_result[1] |= 0x80;     /* removable */
+	}
+    
+  	if (bflags & BLIST_GHOST) {
+		if ((ghost_channel == channel) && (ghost_dev == dev) && (org_lun == 1)) {
+			lun=1;
+		} else {
+			ghost_channel = channel;
+			ghost_dev = dev;
+			scsi_result[0] = TYPE_MOD;
+			scsi_result[1] |= 0x80;     /* removable */
+		}
+	}
+       
+
 	memcpy(SDpnt->vendor, scsi_result + 8, 8);
 	memcpy(SDpnt->model, scsi_result + 16, 16);
 	memcpy(SDpnt->rev, scsi_result + 32, 4);
@@ -840,10 +885,6 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	 */
 	SDpnt->disconnect = 0;
 
-	/*
-	 * Get any flags for this device.
-	 */
-	bflags = get_device_flags(scsi_result);
 
 	/*
 	 * Set the tagged_queue flag for SCSI-II devices that purport to support
@@ -886,8 +927,8 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 		scsi_cmd[5] = 0;
 		SCpnt->cmd_len = 0;
 		scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
-                	(void *) scsi_result, 0x2a,
-                	scan_scsis_done, SCSI_TIMEOUT, 3);
+	        	(void *) scsi_result, 0x2a,
+	        	scan_scsis_done, SCSI_TIMEOUT, 3);
 	}
 	/*
 	 * Detach the command from the device. It was just a temporary to be used while
@@ -962,6 +1003,17 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 		*max_dev_lun = 5;
 		return 1;
 	}
+
+	/*
+	 * If this device is Ghosted, scan upto two luns. (It physically only
+	 * has one). -- REW
+	 */
+	if (bflags & BLIST_GHOST) {
+	        *max_dev_lun = 2;
+	        return 1;
+	}  
+
+
 	/*
 	 * We assume the device can't handle lun!=0 if: - it reports scsi-0 (ANSI
 	 * SCSI Revision 0) (old drives like MAXTOR XT-3280) or - it reports scsi-1

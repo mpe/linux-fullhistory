@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Sun Oct 10 11:14:22 1999
+ * Modified at:   Tue Nov 16 12:33:41 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>,
@@ -343,8 +343,9 @@ static int irlap_state_ndm(struct irlap_cb *self, IRLAP_EVENT event,
 			
 			irlap_connect_indication(self, skb);
 		} else {
-			IRDA_DEBUG(0, __FUNCTION__ "(), SNRM frame does not contain"
-			      " and I field!\n");
+			IRDA_DEBUG(0, __FUNCTION__ 
+				   "(), SNRM frame does not contain"
+				   " and I field!\n");
 			dev_kfree_skb(skb);
 		}
 		break;
@@ -601,15 +602,27 @@ static int irlap_state_conn(struct irlap_cb *self, IRLAP_EVENT event,
 
 		irlap_qos_negotiate(self, skb);
 
-		irlap_initiate_connection_state( self);
+		irlap_initiate_connection_state(self);
 
-		/*
-		 * We are allowed to send two frames!
+#if 0
+		/* 
+		 * We are allowed to send two frames, but this may increase
+		 * the connect latency, so lets not do it for now.
 		 */
 		irlap_send_ua_response_frame(self, &self->qos_rx);
-		irlap_send_ua_response_frame(self, &self->qos_rx);
-		
+#endif
+
+		/* 
+		 * Applying the parameters now will make sure we change speed
+		 * after we have sent the next frame
+		 */
 		irlap_apply_connection_parameters(self, &self->qos_tx);
+
+		/* 
+		 * Sending this frame will force a speed change after it has
+		 * been sent
+		 */
+		irlap_send_ua_response_frame(self, &self->qos_rx);
 
 		/*
 		 *  The WD-timer could be set to the duration of the P-timer 
@@ -617,20 +630,20 @@ static int irlap_state_conn(struct irlap_cb *self, IRLAP_EVENT event,
 		 *  value (note 3 IrLAP p. 60). 
 		 */
 		irlap_start_wd_timer(self, self->wd_timeout);
-		irlap_next_state( self, LAP_NRM_S);
+		irlap_next_state(self, LAP_NRM_S);
 		break;
 	case RECV_DISCOVERY_XID_CMD:
-		IRDA_DEBUG( 3, __FUNCTION__ "(), event RECV_DISCOVER_XID_CMD!\n");
-		irlap_next_state( self, LAP_NDM);
+		IRDA_DEBUG(3, __FUNCTION__ "(), event RECV_DISCOVER_XID_CMD!\n");
+		irlap_next_state(self, LAP_NDM);
 		break;		
 	case DISCONNECT_REQUEST:
-		irlap_send_dm_frame( self);
+		irlap_send_dm_frame(self);
 		irlap_next_state( self, LAP_CONN);
 		break;
 	default:
-		IRDA_DEBUG(1, __FUNCTION__ "(), Unknown event %d, %s\n", event, 
-		      irlap_event[event]);
-
+		IRDA_DEBUG(1, __FUNCTION__ "(), Unknown event %d, %s\n", event,
+			   irlap_event[event]);
+		
 		if (skb)
 			dev_kfree_skb(skb);
 
@@ -739,8 +752,8 @@ static int irlap_state_setup(struct irlap_cb *self, IRLAP_EVENT event,
 		irlap_apply_connection_parameters(self, &self->qos_tx); 
 		self->retry_count = 0;
 		
-		/* This frame will just be sent at the old speed */
-		/* irlap_send_rr_frame( self, CMD_FRAME); */
+		/* This frame will actually force the speed change */
+		irlap_send_rr_frame(self, CMD_FRAME);
 
 		irlap_start_final_timer(self, self->final_timeout/2);
 		irlap_next_state(self, LAP_NRM_P);

@@ -163,6 +163,7 @@ struct toshoboe_cb
     struct qos_info qos;       /* QoS capabilities for this device */
 
     __u32 flags;               /* Interface flags */
+    __u32 new_speed;
 
     struct pci_dev *pdev;       /*PCI device */
     int base;                   /*IO base */

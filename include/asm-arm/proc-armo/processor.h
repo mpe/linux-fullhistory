@@ -67,14 +67,15 @@ extern uaccess_t uaccess_user, uaccess_kernel;
 	regs->ARM_r0 = stack[0];	/* r0 (argc) */			\
 })
 
+#define KSTK_EIP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1022])
+#define KSTK_ESP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1020])
+
 /* Allocation and freeing of basic task resources. */
 /*
  * NOTE! The task struct and the stack go together
  */
 extern unsigned long get_page_8k(int priority);
 extern void free_page_8k(unsigned long page);
-
-#define THREAD_SIZE	(8192)
 
 #define ll_alloc_task_struct()	((struct task_struct *)get_page_8k(GFP_KERNEL))
 #define ll_free_task_struct(p)  free_page_8k((unsigned long)(p))

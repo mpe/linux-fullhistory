@@ -316,7 +316,7 @@ static void i2o_block_reply(struct i2o_handler *h, struct i2o_controller *c, str
 	}
 	else
 	{
-		if(m[2]&0x80000000)
+		if(m[2]&0x40000000)
 		{
 			int * ptr = (int *)m[3];
 			if(m[4]>>24)
@@ -700,7 +700,7 @@ static int i2ob_release(struct inode *inode, struct file *file)
 		int *query_done = &dev->done_flag;
 		msg[0] = FIVE_WORD_MSG_SIZE|SGL_OFFSET_0;
 		msg[1] = I2O_CMD_BLOCK_CFLUSH<<24|HOST_TID<<12|dev->tid;
-		msg[2] = i2ob_context|0x80000000;
+		msg[2] = i2ob_context|0x40000000;
 		msg[3] = (u32)query_done;
 		msg[4] = 60<<16;
 		i2o_post_wait(dev->controller, msg, 20, 2);
@@ -709,7 +709,7 @@ static int i2ob_release(struct inode *inode, struct file *file)
 		 */
 		msg[0] = FIVE_WORD_MSG_SIZE|SGL_OFFSET_0;
 		msg[1] = I2O_CMD_BLOCK_MUNLOCK<<24|HOST_TID<<12|dev->tid;
-		msg[2] = i2ob_context|0x80000000;
+		msg[2] = i2ob_context|0x40000000;
 		msg[3] = (u32)query_done;
 		msg[4] = -1;
 		i2o_post_wait(dev->controller, msg, 20, 2);
@@ -762,7 +762,7 @@ static int i2ob_open(struct inode *inode, struct file *file)
 		 */
 		msg[0] = FIVE_WORD_MSG_SIZE|SGL_OFFSET_0;		
 		msg[1] = I2O_CMD_BLOCK_MMOUNT<<24|HOST_TID<<12|dev->tid;
-		msg[2] = i2ob_context|0x80000000;
+		msg[2] = i2ob_context|0x40000000;
 		msg[3] = (u32)query_done;
 		msg[4] = -1;
 		msg[5] = 0;
@@ -772,7 +772,7 @@ static int i2ob_open(struct inode *inode, struct file *file)
 		 */
 		msg[0] = FIVE_WORD_MSG_SIZE|SGL_OFFSET_0;
 		msg[1] = I2O_CMD_BLOCK_MLOCK<<24|HOST_TID<<12|dev->tid;
-		msg[2] = i2ob_context|0x80000000;
+		msg[2] = i2ob_context|0x40000000;
 		msg[3] = (u32)query_done;
 		msg[4] = -1;
 		i2o_post_wait(dev->controller, msg, 20, 2);
@@ -982,7 +982,7 @@ static int i2ob_reboot_event(struct notifier_block *n, unsigned long code, void 
 			int *query_done = &dev->done_flag;
 			msg[0] = FIVE_WORD_MSG_SIZE|SGL_OFFSET_0;
 			msg[1] = I2O_CMD_BLOCK_CFLUSH<<24|HOST_TID<<12|dev->tid;
-			msg[2] = i2ob_context|0x80000000;
+			msg[2] = i2ob_context|0x40000000;
 			msg[3] = (u32)query_done;
 			msg[4] = 60<<16;
 			i2o_post_wait(dev->controller, msg, 20, 2);
@@ -991,7 +991,7 @@ static int i2ob_reboot_event(struct notifier_block *n, unsigned long code, void 
 			 */
 			msg[0] = FIVE_WORD_MSG_SIZE|SGL_OFFSET_0;
 			msg[1] = I2O_CMD_BLOCK_MUNLOCK<<24|HOST_TID<<12|dev->tid;
-			msg[2] = i2ob_context|0x80000000;
+			msg[2] = i2ob_context|0x40000000;
 			msg[3] = (u32)query_done;
 			msg[4] = -1;
 			i2o_post_wait(dev->controller, msg, 20, 2);

@@ -89,21 +89,12 @@ static int rx_copybreak = 100;
    This is only in the support-all-kernels source code. */
 #include <linux/version.h>		/* Evil, but neccessary */
 
-#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE < 0x10300
-#define RUN_AT(x) (x)			/* What to put in timer->expires.  */
-#define DEV_ALLOC_SKB(len) alloc_skb(len, GFP_ATOMIC)
-#define virt_to_bus(addr)  ((unsigned long)addr)
-#define bus_to_virt(addr) ((void*)addr)
-
-#else  /* 1.3.0 and later */
 #define RUN_AT(x) (jiffies + (x))
 #define DEV_ALLOC_SKB(len) dev_alloc_skb(len + 2)
-#endif
 
-#if (LINUX_VERSION_CODE >= 0x10344)
 #define NEW_MULTICAST
 #include <linux/delay.h>
-#endif
+
 #ifdef SA_SHIRQ
 #define IRQ(irq, dev_id, pt_regs) (irq, dev_id, pt_regs)
 #else
@@ -2076,11 +2067,7 @@ tulip_init_ring(struct net_device *dev)
 			if (skb == NULL)
 				break;			/* Bad news!  */
 			skb->dev = dev;			/* Mark as being used by this device. */
-#if LINUX_VERSION_CODE > 0x10300
 			tp->rx_ring[i].buffer1 = virt_to_bus(skb->tail);
-#else
-			tp->rx_ring[i].buffer1 = virt_to_bus(skb->data);
-#endif
 		}
 		tp->rx_ring[i].buffer2 = virt_to_bus(&tp->rx_ring[i+1]);
 	}
@@ -2381,9 +2368,7 @@ tulip_rx(struct net_device *dev)
 				&& (skb = DEV_ALLOC_SKB(pkt_len+2)) != NULL) {
 				skb->dev = dev;
 				skb_reserve(skb, 2);	/* 16 byte align the IP header */
-#if LINUX_VERSION_CODE < 0x10300
-				memcpy(skb->data, tp->rx_ring[entry].buffer1, pkt_len);
-#elif LINUX_VERSION_CODE < 0x20200  || defined(__alpha__)
+#if LINUX_VERSION_CODE < 0x20200  || defined(__alpha__)
 				memcpy(skb_put(skb, pkt_len),
 					   bus_to_virt(tp->rx_ring[entry].buffer1), pkt_len);
 #else
@@ -2409,11 +2394,7 @@ tulip_rx(struct net_device *dev)
 				skb_put(skb, pkt_len);
 #endif
 			}
-#if LINUX_VERSION_CODE > 0x10300
 			skb->protocol = eth_type_trans(skb, dev);
-#else
-			skb->len = pkt_len;
-#endif
 			netif_rx(skb);
 			dev->last_rx = jiffies;
 			tp->stats.rx_packets++;
@@ -2433,11 +2414,7 @@ tulip_rx(struct net_device *dev)
 			if (skb == NULL)
 				break;
 			skb->dev = dev;			/* Mark as being used by this device. */
-#if LINUX_VERSION_CODE > 0x10300
 			tp->rx_ring[entry].buffer1 = virt_to_bus(skb->tail);
-#else
-			tp->rx_ring[entry].buffer1 = virt_to_bus(skb->data);
-#endif
 			work_done++;
 		}
 		tp->rx_ring[entry].status = 0x80000000;

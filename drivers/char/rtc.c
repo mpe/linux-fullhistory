@@ -33,10 +33,11 @@
  *		DEC Alpha as the CMOS clock is also used for other things.
  *	1.09	Nikita Schmidt: epoch support and some Alpha cleanup.
  *	1.09a	Pete Zaitcev: Sun SPARC
+ *	1.09b	Jeff Garzik: Modularize, init cleanup
  *
  */
 
-#define RTC_VERSION		"1.09a"
+#define RTC_VERSION		"1.09b"
 
 #define RTC_IRQ 	8	/* Can't see this changing soon.	*/
 #define RTC_IO_EXTENT	0x10	/* Only really two ports, but...	*/
@@ -49,15 +50,16 @@
  *	this driver.)
  */
 
+#include <linux/module.h>
+#include <linux/kernel.h>
 #include <linux/types.h>
-#include <linux/errno.h>
 #include <linux/miscdevice.h>
-#include <linux/malloc.h>
 #include <linux/ioport.h>
 #include <linux/fcntl.h>
 #include <linux/mc146818rtc.h>
 #include <linux/init.h>
 #include <linux/poll.h>
+#include <linux/proc_fs.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -67,6 +69,7 @@
 #include <asm/ebus.h>
 
 static unsigned long rtc_port;
+static int rtc_irq;
 #endif
 
 /*
@@ -99,6 +102,9 @@ static void mask_rtc_irq_bit(unsigned char bit);
 
 static inline unsigned char rtc_is_updating(void);
 
+static int rtc_read_proc(char *page, char **start, off_t off,
+                                 int count, int *eof, void *data);
+
 /*
  *	Bits in rtc_status. (6 bits of room for future expansion)
  */
@@ -106,9 +112,9 @@ static inline unsigned char rtc_is_updating(void);
 #define RTC_IS_OPEN		0x01	/* means /dev/rtc is in use	*/
 #define RTC_TIMER_ON		0x02	/* missed irq timer active	*/
 
-unsigned char rtc_status = 0;		/* bitmapped status byte.	*/
-unsigned long rtc_freq = 0;		/* Current periodic IRQ rate	*/
-unsigned long rtc_irq_data = 0;		/* our output to the world	*/
+static unsigned char rtc_status = 0;	/* bitmapped status byte.	*/
+static unsigned long rtc_freq = 0;	/* Current periodic IRQ rate	*/
+static unsigned long rtc_irq_data = 0;	/* our output to the world	*/
 
 /*
  *	If this driver ever becomes modularised, it will be really nice
@@ -117,7 +123,7 @@ unsigned long rtc_irq_data = 0;		/* our output to the world	*/
 
 static unsigned long epoch = 1900;	/* year corresponding to 0x00	*/
 
-unsigned char days_in_mo[] = 
+static const unsigned char days_in_mo[] = 
 {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
 /*
@@ -457,6 +463,8 @@ static int rtc_open(struct inode *inode, struct file *file)
 	if(rtc_status & RTC_IS_OPEN)
 		return -EBUSY;
 
+	MOD_INC_USE_COUNT;
+
 	rtc_status |= RTC_IS_OPEN;
 	rtc_irq_data = 0;
 	return 0;
@@ -486,6 +494,8 @@ static int rtc_release(struct inode *inode, struct file *file)
 		rtc_status &= ~RTC_TIMER_ON;
 		del_timer(&rtc_irq_timer);
 	}
+
+	MOD_DEC_USE_COUNT;
 
 	rtc_irq_data = 0;
 	rtc_status &= ~RTC_IS_OPEN;
@@ -524,7 +534,7 @@ static struct miscdevice rtc_dev=
 	&rtc_fops
 };
 
-int __init rtc_init(void)
+static int __init rtc_init(void)
 {
 	unsigned long flags;
 #ifdef __alpha__
@@ -535,7 +545,6 @@ int __init rtc_init(void)
 #ifdef __sparc__
 	struct linux_ebus *ebus;
 	struct linux_ebus_device *edev;
-	int rtc_irq;
 #endif
 
 	printk(KERN_INFO "Real Time Clock Driver v%s\n", RTC_VERSION);
@@ -575,6 +584,8 @@ found:
 		return -EIO;
 	}
 	misc_register(&rtc_dev);
+	create_proc_read_entry ("rtc", 0, NULL, rtc_read_proc, NULL);
+
 	/* Check region? Naaah! Just snarf it up. */
 	request_region(RTC_PORT(0), RTC_IO_EXTENT, "rtc");
 #endif /* __sparc__ vs. others */
@@ -619,6 +630,25 @@ found:
 	return 0;
 }
 
+static void __exit rtc_exit (void)
+{
+	/* interrupts and timer disabled at this point by rtc_release */
+
+	remove_proc_entry ("rtc", NULL);
+	misc_deregister(&rtc_dev);
+
+#ifdef __sparc__
+	free_irq (rtc_irq, &rtc_port);
+#else
+	release_region (RTC_PORT (0), RTC_IO_EXTENT);
+	free_irq (RTC_IRQ, NULL);
+#endif /* __sparc__ */
+}
+
+module_init(rtc_init);
+module_exit(rtc_exit);
+EXPORT_NO_SYMBOLS;
+
 /*
  * 	At IRQ rates >= 4096Hz, an interrupt may get lost altogether.
  *	(usually during an IDE disk interrupt, with IRQ unmasking off)
@@ -650,7 +680,7 @@ static void rtc_dropped_irq(unsigned long data)
  *	Info exported via "/proc/rtc".
  */
 
-int get_rtc_status(char *buf)
+static int rtc_get_status(char *buf)
 {
 	char *p;
 	struct rtc_time tm;
@@ -722,6 +752,18 @@ int get_rtc_status(char *buf)
 		     batt ? "okay" : "dead");
 
 	return  p - buf;
+}
+
+static int rtc_read_proc(char *page, char **start, off_t off,
+                                 int count, int *eof, void *data)
+{
+        int len = rtc_get_status(page);
+        if (len <= off+count) *eof = 1;
+        *start = page + off;
+        len -= off;
+        if (len>count) len = count;
+        if (len<0) len = 0;
+        return len;
 }
 
 /*

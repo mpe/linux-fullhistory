@@ -6575,6 +6575,27 @@ CONFIG_ACENIC_OMIT_TIGON_I
 
   The safe and default value for this is N.
 
+SysKonnect SK-98xx support
+CONFIG_SK98LIN
+  Say Y here if you have a SysKonnect SK-98xx Gigabit Ethernet Server
+  Adapter. The following adapters are supported by this driver:
+  - SK-9841 (single link 1000Base-LX)
+  - SK-9842 (dual link   1000Base-LX)
+  - SK-9843 (single link 1000Base-SX)
+  - SK-9844 (dual link   1000Base-SX)
+  - SK-9821 (single link 1000Base-T)
+  - SK-9822 (dual link   1000Base-T)
+  The dual link adapters support a link-failover feature.
+  Read Documentation/networking/sk98lin.txt for information about
+  optional driver parameters.
+  Questions concerning this driver may be addresse to:
+    linux@syskonnect.de
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. This is recommended.
+  The module will be called sk98lin.o.
+
 AMD LANCE and PCnet (AT1500 and NE2100) support
 CONFIG_LANCE
   If you have a network (Ethernet) card of this type, say Y and read

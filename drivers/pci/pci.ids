@@ -1563,7 +1563,13 @@
 		1148 5843  FDDI SK-5843 (SK-NET FDDI-LP64)
 		1148 5844  FDDI SK-5844 (SK-NET FDDI-LP64 DAS)
 	4200  Token ring adaptor
-	4300  GE
+	4300  Gigabit Ethernet
+		1148 9821  SK-9821 (1000Base-T single link)
+		1148 9822  SK-9822 (1000Base-T dual link)
+		1148 9841  SK-9841 (1000Base-LX single link)
+		1148 9842  SK-9842 (1000Base-LX dual link)
+		1148 9843  SK-9843 (1000Base-SX single link)
+		1148 9844  SK-9844 (1000Base-SX dual link)
 1149  Win System Corporation
 114a  VMIC
 	7587  VMIVME-7587

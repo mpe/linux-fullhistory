@@ -14,7 +14,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/dma.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/proc-fns.h>
 #include <asm/semaphore.h>
 #include <asm/system.h>

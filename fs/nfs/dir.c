@@ -686,6 +686,7 @@ struct dentry_operations nfs_dentry_operations = {
 	NULL			/* d_iput */
 };
 
+#if 0 /* dead code */
 #ifdef NFS_PARANOIA
 /*
  * Display all dentries holding the specified inode.
@@ -707,7 +708,8 @@ static void show_dentry(struct list_head * dlist)
 			unhashed);
 	}
 }
-#endif
+#endif /* NFS_PARANOIA */
+#endif /* 0 */
 
 static struct dentry *nfs_lookup(struct inode *dir, struct dentry * dentry)
 {

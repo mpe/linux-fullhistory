@@ -17,7 +17,7 @@ obj-            :=
 SUB_DIRS     := 
 MOD_SUB_DIRS :=
 MOD_IN_SUB_DIRS :=
-ALL_SUB_DIRS := $(SUB_DIRS) fc hamradio irda pcmcia tokenring wan
+ALL_SUB_DIRS := $(SUB_DIRS) fc hamradio irda pcmcia tokenring wan sk98lin
 
 O_TARGET := net.o
 O_OBJS   :=
@@ -45,6 +45,16 @@ MOD_IN_SUB_DIRS += irda
 else
   ifeq ($(CONFIG_IRDA),m)
   MOD_IN_SUB_DIRS += irda
+  endif
+endif
+
+ifeq ($(CONFIG_SK98LIN),y)
+SUB_DIRS += sk98lin
+MOD_IN_SUB_DIRS += sk98lin
+L_OBJS += sk98lin/sk98lin.o
+else
+  ifeq ($(CONFIG_SK98LIN),m)
+  MOD_IN_SUB_DIRS += sk98lin
   endif
 endif
 
@@ -263,8 +273,6 @@ OX_OBJS         := $(filter     $(export-objs), $(obj-y))
 M_OBJS          := $(sort $(filter-out $(export-objs), $(obj-m)))
 MX_OBJS         := $(sort $(filter     $(export-objs), $(obj-m)))
 
-O_OBJS += $(O_OBJS)
-O_OBJS += $(OX_OBJS)
 O_OBJS += auto_irq.o
 
 include $(TOPDIR)/Rules.make

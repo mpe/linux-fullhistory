@@ -57,11 +57,13 @@ struct context_save_struct {
 	regs->ARM_r0 = stack[0];	/* r0 (argc) */			\
 })
 
+#define KSTK_EIP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1021])
+#define KSTK_ESP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1019])
+
 /* Allocation and freeing of basic task resources. */
 /*
  * NOTE! The task struct and the stack go together
  */
-#define THREAD_SIZE	(PAGE_SIZE * 2)
 #define ll_alloc_task_struct() ((struct task_struct *) __get_free_pages(GFP_KERNEL,1))
 #define ll_free_task_struct(p) free_pages((unsigned long)(p),1)
 

@@ -937,7 +937,7 @@ static int tgafb_blank(int blank, struct fb_info_gen *info)
 static void tgafb_set_disp(const void *fb_par, struct display *disp,
 	struct fb_info_gen *info)
 {
-    disp->screen_base = ioremap(fb_info.tga_fb_base);
+    disp->screen_base = ioremap(fb_info.tga_fb_base, 0);
     switch (fb_info.tga_type) {
 #ifdef FBCON_HAS_CFB8
 	case 0: /* 8-plane */

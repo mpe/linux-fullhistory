@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Thomas Davis (tadavis@jps.net)
  * Created at:    
- * Modified at:   Sat Oct 30 14:18:23 1999
+ * Modified at:   Fri Nov 12 21:08:09 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Thomas Davis, All Rights Reserved.
@@ -421,7 +421,7 @@ static void ircc_change_speed(struct ircc_cb *self, __u32 speed)
 		serial_out(iobase, UART_MASTER, UART_MASTER_RESET);
 		serial_out(iobase, UART_MASTER, UART_MASTER_INT_EN);
 		irport_start(&self->irport, self->io.iobase2);
-		irport_change_speed(&self->irport, speed);
+		__irport_change_speed(&self->irport, speed);
 		return;
 		break;
 

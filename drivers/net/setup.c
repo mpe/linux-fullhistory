@@ -44,6 +44,7 @@ extern int rr_hippi_probe(void);
 extern int rtl8139_probe(void); 
 extern int sdla_setup(void); 
 extern int sis900_probe(void); 
+extern int skge_probe(void); 
 extern int sparc_lance_probe(void); 
 extern int starfire_probe(void); 
 extern int tc59x_probe(void); 
@@ -202,6 +203,9 @@ struct net_probe pci_probes[] __initdata = {
 #endif
 #ifdef CONFIG_ACENIC
 	{acenic_probe, 0},
+#endif
+#ifdef CONFIG_SK98LIN
+	{skge_probe, 0},
 #endif
 #ifdef CONFIG_VIA_RHINE
 	{via_rhine_probe, 0},

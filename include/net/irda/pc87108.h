@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Nov 13 14:37:40 1998
- * Modified at:   Mon Oct 18 15:08:53 1999
+ * Modified at:   Mon Nov  8 10:00:27 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -194,6 +194,7 @@ struct pc87108 {
 	struct qos_info qos;       /* QoS capabilities for this device */
 	
 	__u32 flags;               /* Interface flags */
+	__u32 new_speed;
 };
 
 static inline void switch_bank(int iobase, int bank)

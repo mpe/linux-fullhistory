@@ -7,8 +7,6 @@ keep the descriptions small enough to fit on one line.
 
 00-INDEX
 	- this file.
-ARM-README
-	- information for using Linux on the ARM architecture.
 BUG-HUNTING
 	- brute force method of doing binary search of patches to find bug.
 Changes
@@ -21,16 +19,22 @@ IO-APIC.txt
 	- info on using the enhanced interrupt hardware on SMP boards.
 IO-mapping.txt
 	- how to access I/O mapped memory from within device drivers.
-SMP.txt
-	- notes, and "To Fix" list for multi-processor Linux. (see smp.tex)
+README.DAC960
+	- info on Mylex DAC960/DAC1100 PCI RAID Controller Driver for Linux
 VGA-softcursor.txt
 	- how to change your VGA cursor from a blinking underscore.
+acpi.txt
+	- info on ACPI Driver Interface
 arm/
 	- directory with info about Linux on the ARM architecture.
+atm.txt
+	- info on Linux ATM support
 binfmt_misc.txt
 	- info on the kernel support for extra binary formats.
 cdrom/
 	- directory with information on the CD-ROM drivers that Linux has.
+computone.txt
+	- info on Computone Intelliport II/Plus Multiport Serial Driver
 cpqarray.txt
 	- info on using Compaq's SMART2 Intelligent Disk Array Controllers.
 devices.tex
@@ -59,6 +63,8 @@ initrd.txt
 	- how to use the RAM disk as an initial/temporary root filesystem.
 ioctl-number.txt
 	- how to implement and register device/driver ioctl calls.
+isapnp.txt
+	- info on Linux ISA Plug & Play support
 isdn/
 	- directory with info on the Linux ISDN support, and supported cards.
 java.txt
@@ -107,6 +113,8 @@ networking/
 	- directory with info on various aspects of networking with Linux.
 nfsroot.txt
 	- short guide on setting up a diskless box with NFS root filesystem
+nmi_watchdog.txt
+	- info on NMI watchdog for SMP systems
 oops-tracing.txt
 	- how to decode those nasty internal kernel error dump messages.
 paride.txt
@@ -121,6 +129,8 @@ powerpc/
 	- directory with info on using Linux with the PowerPC.
 proc.txt
 	- detailed info on Linux's /proc filesystem.
+proc_usb_info.txt
+	- info on /proc/bus/usb direcory generated for USB devices
 ramdisk.txt
 	- short guide on how to set up and use the RAM disk.
 riscom8.txt
@@ -157,12 +167,12 @@ sysctl/
 	- directory with info on the /proc/sys/* files
 sysrq.txt
 	- info on the magic SysRq key
-transname.txt
-	- how to use name translation to ease use of diskless systems.
 unicode.txt
 	- info on the Unicode character/font mapping used in Linux.
 video4linux/
 	- directory with info regarding video/TV/radio cards and linux.
+vm/
+	- directory with info on the Linux vm code.
 watchdog.txt
 	- how to auto-reboot Linux if it has "fallen and can't get up". ;-)
 xterm-linux.xpm

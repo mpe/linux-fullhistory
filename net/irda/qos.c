@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Sep  9 00:00:26 1997
- * Modified at:   Tue Oct  5 11:50:41 1999
+ * Modified at:   Tue Nov 16 09:50:19 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -289,7 +289,7 @@ static int irlap_param_baud_rate(void *instance, param_t *param, int get)
 
 		IRDA_DEBUG(2, "Final BAUD_RATE: 0x%04x\n", final);
 		self->qos_tx.baud_rate.bits = final;
-		self->qos_rx.baud_rate.bits = final;	       
+		self->qos_rx.baud_rate.bits = final;
 	}
 
 	return 0;

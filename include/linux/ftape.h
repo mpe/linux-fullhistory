@@ -40,9 +40,6 @@
 #include <linux/types.h>
 #include <linux/version.h>
 #include <linux/config.h>
-#if LINUX_VERSION_CODE <= KERNEL_VER(1,2,13) 
-typedef daddr_t __kernel_daddr_t; /* needed for mtio.h */
-#endif
 #include <linux/mtio.h>
 
 #define FT_SECTOR(x)		(x+1)	/* sector offset into real sector */

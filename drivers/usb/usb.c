@@ -383,7 +383,7 @@ static int usb_find_interface_driver(struct usb_device *dev, unsigned ifnum)
 		return -1;
 	}
 
-	interface = &dev->actconfig->interface[ifnum];
+	interface = dev->actconfig->interface + ifnum;
 
         if (usb_interface_claimed(interface))
                 return -1;
@@ -416,7 +416,7 @@ static void usb_find_drivers(struct usb_device *dev)
 
 	for (ifnum = 0; ifnum < dev->actconfig->bNumInterfaces; ifnum++) {
 		/* if this interface hasn't already been claimed */
-		if (!usb_interface_claimed(dev->actconfig->interface)) {
+		if (!usb_interface_claimed(dev->actconfig->interface + ifnum)) {
 			if (usb_find_interface_driver(dev, ifnum))
 				rejected++;
 		}

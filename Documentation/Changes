@@ -385,9 +385,21 @@ PPP
 ===
 
    Due to changes in the PPP driver and routing code, those of you
-using PPP networking will need to upgrade your pppd.
+using PPP networking will need to upgrade your pppd to at least
+version 2.3.9. See ftp://cs.anu.edu.au/pub/software/ppp/ for newest
+versions.
 
-See ftp://cs.anu.edu.au/pub/software/ppp/ for newest versions.
+   You must make sure that the special device file /dev/ppp exists.
+It can be made by executing this command as root:
+
+	mknod /dev/ppp c 108 0
+
+   If you have built ppp support as modules, you should put the lines
+below in your /etc/modules.conf file. I assume you want asynchronous
+ppp; replace ppp_async by ppp_synctty if you want synchronous ppp.
+
+	alias char-major-108 ppp_generic
+	alias tty-ldisc-3 ppp_async
 
 iBCS
 ====

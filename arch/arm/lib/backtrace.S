@@ -83,28 +83,34 @@ ENTRY(c_backtrace)
 #define reg   r5
 #define stack r6
 
-.Ldumpstm:	stmfd	sp!, {instr, reg, stack, lr}
+.Ldumpstm:	stmfd	sp!, {instr, reg, stack, r7, lr}
 		mov	stack, r0
 		mov	instr, r1
 		mov	reg, #9
-
+		mov	r7, #0
 1:		mov	r3, #1
 		tst	instr, r3, lsl reg
 		beq	2f
+		add	r7, r7, #1
+		teq	r7, #4
+		moveq	r7, #0
+		moveq	r3, #'\n'
+		movne	r3, #' '
 		ldr	r2, [stack], #-4
 		mov	r1, reg
 		adr	r0, .Lfp
 		bl	SYMBOL_NAME(printk)
 2:		subs	reg, reg, #1
 		bpl	1b
-
+		teq	r7, #0
+		adrne	r0, .Lcr
+		blne	SYMBOL_NAME(printk)
 		mov	r0, stack
-		LOADREGS(fd, sp!, {instr, reg, stack, pc})
+		LOADREGS(fd, sp!, {instr, reg, stack, r7, pc})
 
-.Lfe:		.ascii	"Function entered at [<%p>] from [<%p>]\n"
-		.byte 0
-.Lfp:		.ascii	"  r%d = %p\n"
-		.byte 0
+.Lfe:		.asciz	"Function entered at [<%p>] from [<%p>]\n"
+.Lfp:		.asciz	" r%d = %08X%c"
+.Lcr:		.asciz	"\n"
 		.align
 .Ldsi:		.word	0x00e92dd8 >> 2
 		.word	0x00e92d00 >> 2

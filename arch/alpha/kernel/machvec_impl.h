@@ -7,6 +7,7 @@
  */
 
 #include <linux/config.h>
+#include <asm/pgalloc.h>
 
 /* Whee.  Both TSUNAMI and POLARIS don't have an HAE.  Fix things up for
    the GENERIC kernel by defining the HAE address to be that of the cache.

@@ -189,6 +189,7 @@ __create_page_tables:
 		str	r3, [r0], #4
 		add	r3, r3, #1 << 20
 		str	r3, [r0], #4
+1:
 #endif
 #endif
 #ifdef CONFIG_ARCH_RPC

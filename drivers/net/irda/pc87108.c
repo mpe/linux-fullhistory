@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Sat Oct 30 16:24:17 1999
+ * Modified at:   Sat Nov 13 23:54:59 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -754,6 +754,7 @@ static int pc87108_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct pc87108 *self;
 	int iobase;
+	__u32 speed;
 	__u8 bank;
 	int mtt;
 	
@@ -763,11 +764,16 @@ static int pc87108_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	iobase = self->io.iobase;
 
-	IRDA_DEBUG(4, __FUNCTION__ "(%ld), skb->len=%d\n", jiffies, (int) skb->len);
+	IRDA_DEBUG(4, __FUNCTION__ "(%ld), skb->len=%d\n", jiffies, 
+		   (int) skb->len);
 	
 	/* Lock transmit buffer */
 	if (irda_lock((void *) &dev->tbusy) == FALSE)
 		return -EBUSY;
+
+	/* Check if we need to change the speed */
+	if ((speed = irda_get_speed(skb)) != self->io.speed)
+		self->new_speed = speed;
 
 	/* Save current bank */
 	bank = inb(iobase+BSR);
@@ -937,6 +943,11 @@ static void pc87108_dma_xmit_complete(struct pc87108 *self)
 		self->stats.tx_bytes +=  self->tx_buff.len;
 	}
 	
+	if (self->new_speed) {
+		pc87108_change_speed(self, self->new_speed);
+		self->new_speed = 0;
+	}
+
 	/* Unlock tx_buff and request another frame */
 	self->netdev->tbusy = 0; /* Unlock */
 	

@@ -54,7 +54,7 @@
 #define DECLARE_WAIT_QUEUE_HEAD(x) struct wait_queue * x = NULL
 #endif
 
-static int acpi_idle_thread(void *context);
+static int acpi_control_thread(void *context);
 static int acpi_do_ulong(ctl_table *ctl,
 			 int write,
 			 struct file *file,
@@ -70,11 +70,13 @@ static int acpi_do_event(ctl_table *ctl,
 			 struct file *file,
 			 void *buffer,
 			 size_t *len);
+#if 0
 static int acpi_do_sleep_wake(ctl_table *ctl,
 			      int write,
 			      struct file *file,
 			      void *buffer,
 			      size_t *len);
+#endif
 
 DECLARE_WAIT_QUEUE_HEAD(acpi_idle_wait);
 
@@ -95,13 +97,14 @@ static DECLARE_WAIT_QUEUE_HEAD(acpi_event_wait);
 static spinlock_t acpi_devs_lock = SPIN_LOCK_UNLOCKED;
 static LIST_HEAD(acpi_devs);
 
-/* Make it impossible to enter L2/L3 until after we've initialized */
-static unsigned long acpi_p_lvl2_lat = ~0UL;
-static unsigned long acpi_p_lvl3_lat = ~0UL;
+/* Make it impossible to enter C2/C3 until after we've initialized */
+static unsigned long acpi_p_lvl2_lat = ACPI_INFINITE_LAT;
+static unsigned long acpi_p_lvl3_lat = ACPI_INFINITE_LAT;
 
-/* Initialize to guaranteed harmless port read */
-static unsigned long acpi_p_lvl2 = ACPI_P_LVL_DISABLED;
-static unsigned long acpi_p_lvl3 = ACPI_P_LVL_DISABLED;
+static unsigned long acpi_p_blk = 0;
+
+static int acpi_p_lvl2_tested = 0;
+static int acpi_p_lvl3_tested = 0;
 
 // bits 8-15 are SLP_TYPa, bits 0-7 are SLP_TYPb
 static unsigned long acpi_slp_typ[] = 
@@ -138,12 +141,8 @@ static struct ctl_table acpi_table[] =
 
 	{ACPI_EVENT, "event", NULL, 0, 0400, NULL, &acpi_do_event},
 
-	{ACPI_P_LVL2, "p_lvl2",
-	 &acpi_p_lvl2, sizeof(acpi_p_lvl2),
-	 0600, NULL, &acpi_do_ulong},
-
-	{ACPI_P_LVL3, "p_lvl3",
-	 &acpi_p_lvl3, sizeof(acpi_p_lvl3),
+	{ACPI_P_BLK, "p_blk",
+	 &acpi_p_blk, sizeof(acpi_p_blk),
 	 0600, NULL, &acpi_do_ulong},
 
 	{ACPI_P_LVL2_LAT, "p_lvl2_lat",
@@ -184,6 +183,17 @@ static u32 acpi_read_pm1_control(struct acpi_facp *facp)
 	if (facp->pm1b_cnt)
 		value |= inw(facp->pm1b_cnt);
 	return value;
+}
+
+/*
+ * Set the value of the PM1 control register (BM_RLD, ...)
+ */
+static void acpi_write_pm1_control(struct acpi_facp *facp, u32 value)
+{
+	if (facp->pm1a_cnt)
+		outw(value, facp->pm1a_cnt);
+	if (facp->pm1b_cnt)
+		outw(value, facp->pm1b_cnt);
 }
 
 /*
@@ -522,14 +532,13 @@ static int __init acpi_find_piix4(void)
 	acpi_facp->pm2_cnt_len = ACPI_PIIX4_PM2_CNT_LEN;
 	acpi_facp->pm_tm_len = ACPI_PIIX4_PM_TM_LEN;
 	acpi_facp->gpe0_len = ACPI_PIIX4_GPE0_LEN;
-	acpi_facp->p_lvl2_lat = ~0;
-	acpi_facp->p_lvl3_lat = ~0;
+	acpi_facp->p_lvl2_lat = (__u16) ACPI_INFINITE_LAT;
+	acpi_facp->p_lvl3_lat = (__u16) ACPI_INFINITE_LAT;
 
 	acpi_facp_addr = virt_to_phys(acpi_facp);
 	acpi_dsdt_addr = 0;
 
-	acpi_p_lvl2 = base + ACPI_PIIX4_P_LVL2;
-	acpi_p_lvl3 = base + ACPI_PIIX4_P_LVL3;
+	acpi_p_blk = base + ACPI_PIIX4_P_BLK;
 
 	return 0;
 }
@@ -602,19 +611,39 @@ static int acpi_disable(struct acpi_facp *facp)
 	acpi_write_pm1_enable(facp, 0);
 	acpi_write_pm1_status(facp, acpi_read_pm1_status(facp));
 
-	if (facp->smi_cmd)
-		outb(facp->acpi_disable, facp->smi_cmd);
-	return (acpi_is_enabled(facp) ? -1:0);
+	/* writing acpi_disable to smi_cmd would be appropriate
+	 * here but this causes a nasty crash on many systems
+	 */
+
+	return 0;
 }
 
 /*
- * Idle loop
+ * Idle loop (uniprocessor only)
  */
 static void acpi_idle_handler(void)
 {
 	static int sleep_level = 1;
-	u32 timer, pm2_cnt;
-	unsigned long time;
+	u32 pm1_cnt, timer, pm2_cnt, bm_active;
+	unsigned long time, usec;
+
+	// return to C0 on bus master request (necessary for C3 only)
+	pm1_cnt = acpi_read_pm1_control(acpi_facp);
+	if (sleep_level == 3) {
+		if (!(pm1_cnt & ACPI_BM_RLD)) {
+			pm1_cnt |= ACPI_BM_RLD;
+			acpi_write_pm1_control(acpi_facp, pm1_cnt);
+		}
+	}
+	else {
+		if (pm1_cnt & ACPI_BM_RLD) {
+			pm1_cnt &= ~ACPI_BM_RLD;
+			acpi_write_pm1_control(acpi_facp, pm1_cnt);
+		}
+	}
+
+	// clear bus master activity flag
+	acpi_write_pm1_status(acpi_facp, ACPI_BM);
 
 	// get current time (fallback to CPU cycles if no PM timer)
 	timer = acpi_facp->pm_tmr;
@@ -629,19 +658,19 @@ static void acpi_idle_handler(void)
 		__asm__ __volatile__("sti ; hlt": : :"memory");
 		break;
 	case 2:
-		inb(acpi_p_lvl2);
+		inb(acpi_p_blk + ACPI_P_LVL2);
 		break;
 	case 3:
 		pm2_cnt = acpi_facp->pm2_cnt;
 		if (pm2_cnt) {
-				/* Disable PCI arbitration while sleeping,
-				   to avoid DMA corruption? */
+			/* Disable PCI arbitration while sleeping,
+			   to avoid DMA corruption? */
 			outb(inb(pm2_cnt) | ACPI_ARB_DIS, pm2_cnt);
-			inb(acpi_p_lvl3);
+			inb(acpi_p_blk + ACPI_P_LVL3);
 			outb(inb(pm2_cnt) & ~ACPI_ARB_DIS, pm2_cnt);
 		}
 		else {
-			inb(acpi_p_lvl3);
+			inb(acpi_p_blk + ACPI_P_LVL3);
 		}
 		break;
 	}
@@ -652,12 +681,29 @@ static void acpi_idle_handler(void)
 	else
 		time = ACPI_CPU_TO_TMR_TICKS(get_cycles() - time);
 
-	if (time > acpi_p_lvl3_lat)
-		sleep_level = 3;
-	else if (time > acpi_p_lvl2_lat)
-		sleep_level = 2;
-	else
-		sleep_level = 1;
+	// check for bus master activity
+	bm_active = (acpi_read_pm1_status(acpi_facp) & ACPI_BM);
+
+	// record working C2/C3
+	if (sleep_level == 2 && !acpi_p_lvl2_tested) {
+		acpi_p_lvl2_tested = 1;
+		printk(KERN_INFO "ACPI: C2 works\n");
+	}
+	else if (sleep_level == 3 && !acpi_p_lvl3_tested) {
+		acpi_p_lvl3_tested = 1;
+		printk(KERN_INFO "ACPI: C3 works\n");
+	}
+
+	// pick next C-state based on time spent sleeping,
+	// C-state latencies, and bus master activity
+	sleep_level = 1;
+	if (acpi_p_blk) {
+		usec = ACPI_TMR_TICKS_TO_uS(time);
+		if (usec > acpi_p_lvl3_lat && !bm_active)
+			sleep_level = 3;
+		else if (usec > acpi_p_lvl2_lat)
+			sleep_level = 2;
+	}
 }
 
 /*
@@ -691,9 +737,9 @@ static int acpi_enter_dx(acpi_dstate_t state)
 /*
  * Enter system sleep state
  */
-static void acpi_enter_sx(int state)
+static void acpi_enter_sx(acpi_sstate_t state)
 {
-	unsigned long slp_typ = acpi_slp_typ[state];
+	unsigned long slp_typ = acpi_slp_typ[(int) state];
 	if (slp_typ != ACPI_SLP_TYP_DISABLED) {
 		u16 typa, typb, value;
 
@@ -704,6 +750,10 @@ static void acpi_enter_sx(int state)
 		typa = ((typa << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK);
 		typb = ((typb << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK);
 
+		if (state != ACPI_S0) {
+			acpi_enter_dx(ACPI_D3);
+		}
+
 		// set SLP_TYPa/b and SLP_EN
 		if (acpi_facp->pm1a_cnt) {
 			value = inw(acpi_facp->pm1a_cnt) & ~ACPI_SLP_TYP_MASK;
@@ -713,6 +763,10 @@ static void acpi_enter_sx(int state)
 			value = inw(acpi_facp->pm1b_cnt) & ~ACPI_SLP_TYP_MASK;
 			outw(value | typb | ACPI_SLP_EN, acpi_facp->pm1b_cnt);
 		}
+
+		if (state == ACPI_S0) {
+			acpi_enter_dx(ACPI_D0);
+		}
 	}
 }
 
@@ -721,7 +775,7 @@ static void acpi_enter_sx(int state)
  */
 static void acpi_power_off_handler(void)
 {
-	acpi_enter_sx(5);
+	acpi_enter_sx(ACPI_S5);
 }
 
 /*
@@ -967,6 +1021,7 @@ static int acpi_do_event(ctl_table *ctl,
 	return 0;
 }
 
+#if 0
 /*
  * Sleep or wake system
  */
@@ -995,6 +1050,7 @@ static int acpi_do_sleep_wake(ctl_table *ctl,
 	file->f_pos += *len;
 	return 0;
 }
+#endif
 
 /*
  * Initialize and enable ACPI
@@ -1006,6 +1062,15 @@ static int __init acpi_init(void)
 	if (acpi_find_tables() && acpi_find_piix4()) {
 		// no ACPI tables and not PIIX4
 		return -ENODEV;
+	}
+
+	if (acpi_facp->p_lvl2_lat
+	    && acpi_facp->p_lvl2_lat <= ACPI_MAX_P_LVL2_LAT) {
+		acpi_p_lvl2_lat = acpi_facp->p_lvl2_lat;
+	}
+	if (acpi_facp->p_lvl3_lat
+	    && acpi_facp->p_lvl3_lat <= ACPI_MAX_P_LVL3_LAT) {
+		acpi_p_lvl3_lat = acpi_facp->p_lvl3_lat;
 	}
 
 	if (acpi_facp->sci_int
@@ -1023,9 +1088,11 @@ static int __init acpi_init(void)
 	acpi_claim_ioports(acpi_facp);
 	acpi_sysctl = register_sysctl_table(acpi_dir_table, 1);
 
-	pid = kernel_thread(acpi_idle_thread,
+	pid = kernel_thread(acpi_control_thread,
 			    NULL,
 			    CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+
+	acpi_power_off = acpi_power_off_handler;
 
 	/*
 	 * Set up the ACPI idle function. Note that we can't really
@@ -1037,7 +1104,6 @@ static int __init acpi_init(void)
 		return 0;
 #endif
 
-	acpi_power_off = acpi_power_off_handler;
 	acpi_idle = acpi_idle_handler;
 
 	return 0;
@@ -1111,7 +1177,7 @@ void acpi_wakeup(struct acpi_dev *dev)
 /*
  * Manage idle devices
  */
-static int acpi_idle_thread(void *context)
+static int acpi_control_thread(void *context)
 {
 	exit_mm(current);
 	exit_files(current);

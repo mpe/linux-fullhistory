@@ -1194,19 +1194,12 @@ vortex_rx(struct net_device *dev)
 					   pkt_len, rx_status);
 			if (skb != NULL) {
 				skb->dev = dev;
-#if LINUX_VERSION_CODE >= 0x10300
 				skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
 				/* 'skb_put()' points to the start of sk_buff data area. */
 				insl(ioaddr + RX_FIFO, skb_put(skb, pkt_len),
 					 (pkt_len + 3) >> 2);
 				outw(RxDiscard, ioaddr + EL3_CMD); /* Pop top Rx packet. */
 				skb->protocol = eth_type_trans(skb, dev);
-#else
-				skb->len = pkt_len;
-				/* 'skb->data' points to the start of sk_buff data area. */
-				insl(ioaddr + RX_FIFO, skb->data, (pkt_len + 3) >> 2);
-				outw(RxDiscard, ioaddr + EL3_CMD); /* Pop top Rx packet. */
-#endif  /* KERNEL_1_3_0 */
 				netif_rx(skb);
 				dev->last_rx = jiffies;
 				vp->stats.rx_packets++;
@@ -1288,11 +1281,7 @@ boomerang_rx(struct net_device *dev)
 						   skb->head, temp);
 				rx_nocopy++;
 			}
-#if LINUX_VERSION_CODE > 0x10300
 			skb->protocol = eth_type_trans(skb, dev);
-#else
-			skb->len = pkt_len;
-#endif
 			netif_rx(skb);
 			dev->last_rx = jiffies;
 			vp->stats.rx_packets++;
@@ -1308,12 +1297,8 @@ boomerang_rx(struct net_device *dev)
 			if (skb == NULL)
 				break;			/* Bad news!  */
 			skb->dev = dev;			/* Mark as being used by this device. */
-#if LINUX_VERSION_CODE > 0x10300
 			skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
 			vp->rx_ring[entry].addr = virt_to_bus(skb->tail);
-#else
-			vp->rx_ring[entry].addr = virt_to_bus(skb->data);
-#endif
 			vp->rx_skbuff[entry] = skb;
 		}
 		vp->rx_ring[entry].status = 0;	/* Clear complete bit. */

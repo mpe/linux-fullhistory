@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Jun  7 10:25:11 1999
- * Modified at:   Tue Oct  5 11:52:54 1999
+ * Modified at:   Fri Nov  5 08:20:38 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -468,9 +468,6 @@ int irda_param_insert(void *self, __u8 pi, __u8 *buf, int len,
 	/* Find expected data type for this parameter identifier (pi)*/
 	type = pi_minor_info->type;
 
-	IRDA_DEBUG(3, __FUNCTION__ "(), pi=[%d,%d], type=%d\n",
-	      pi_major, pi_minor, type);
-		
 	/*  Check if handler has been implemented */
 	if (!pi_minor_info->func) {
 		MESSAGE(__FUNCTION__"(), no handler for pi=%#x\n", pi);

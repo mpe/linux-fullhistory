@@ -25,7 +25,7 @@
 
 #include <asm/system.h>
 #include <asm/segment.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/dma.h>
 #include <asm/hardware.h>
 #include <asm/setup.h>
@@ -168,6 +168,7 @@ void show_mem(void)
 void __init paging_init(void)
 {
 	void *zero_page, *bad_page, *bad_table;
+	unsigned int zone_size[3];
 
 #ifdef CONFIG_CPU_32
 #define TABLE_OFFSET	(PTRS_PER_PTE)
@@ -189,7 +190,11 @@ void __init paging_init(void)
 	pagetable_init();
 	flush_tlb_all();
 
-	free_area_init(max_low_pfn);
+	/*
+	 * Initialise the zones and mem_map
+	 */
+	zonesize_init(zone_size);
+	free_area_init(zone_size);
 
 	/*
 	 * finish off the bad pages once
@@ -235,22 +240,19 @@ static inline void free_unused_mem_map(void)
  */
 void __init mem_init(void)
 {
-	int codepages = 0;
-	int reservedpages = 0;
-	int datapages = 0;
-	int initpages = 0, i, min_nr;
+	extern char __init_begin, __init_end, _text, _etext, _end;
+	unsigned int codepages, datapages, initpages;
+	int i;
 
-	max_mapnr     = max_low_pfn;
-	high_memory   = (void *)__va(max_low_pfn * PAGE_SIZE);
+	max_mapnr   = max_low_pfn;
+	high_memory = (void *)__va(max_low_pfn * PAGE_SIZE);
 
-#ifdef CONFIG_CPU_32
 	/*
 	 * We may have non-contiguous memory.  Setup the PageSkip stuff,
 	 * and mark the areas of mem_map which can be freed
 	 */
 	if (meminfo.nr_banks != 1)
 		create_memmap_holes();
-#endif
 
 	/* this will put all unused low memory onto the freelists */
 	totalram_pages += free_all_bootmem();
@@ -263,29 +265,16 @@ void __init mem_init(void)
 	for (i = 0; i < meminfo.nr_banks; i++)
 		num_physpages += meminfo.bank[i].size >> PAGE_SHIFT;
 
-	printk ("Memory: %luk/%luM available (%dk code, %dk reserved, %dk data, %dk init)\n",
-		 (unsigned long) nr_free_pages << (PAGE_SHIFT-10),
-		 num_physpages >> (20 - PAGE_SHIFT),
-		 codepages     << (PAGE_SHIFT-10),
-		 reservedpages << (PAGE_SHIFT-10),
-		 datapages     << (PAGE_SHIFT-10),
-		 initpages     << (PAGE_SHIFT-10));
+	codepages = (int)&_etext - &_text;
+	datapages = (int)&_end - &_etext;
+	initpages = (int)&__init_end - &__init_start;
 
-	/*
-	 * Correct freepages watermarks
-	 */
-	i = nr_free_pages >> 7;
-	if (PAGE_SIZE < 32768)
-		min_nr = 10;
-	else
-		min_nr = 2;
-	if (i < min_nr)
-		i = min_nr;
-	if (i > 256)
-		i = 256;
-	freepages.min = i;
-	freepages.low = i * 2;
-	freepages.high = i * 3;
+	printk("Memory: %luk/%luM available (%dK code, %dK data, %dK init)\n",
+		(unsigned long) nr_free_pages() << (PAGE_SHIFT-10),
+		num_physpages >> (20 - PAGE_SHIFT),
+		codepages << (PAGE_SHIFT-10),
+		datapages << (PAGE_SHIFT-10),
+		initpages << (PAGE_SHIFT-10));
 
 #ifdef CONFIG_CPU_26
 	if (max_mapnr <= 128) {
@@ -348,7 +337,7 @@ void si_meminfo(struct sysinfo *val)
 {
 	val->totalram  = totalram_pages;
 	val->sharedram = 0;
-	val->freeram   = nr_free_pages;
+	val->freeram   = nr_free_pages();
 	val->bufferram = atomic_read(&buffermem_pages);
 	val->totalhigh = 0;
 	val->freehigh  = 0;

@@ -84,7 +84,7 @@ static int
 mk_conf_addr(struct pci_dev *dev, int where, unsigned long *pci_addr,
 	     unsigned char *type1)
 {
-	struct pci_controler *hose = dev->sysdata ? : probing_hose;
+	struct pci_controler *hose = dev->sysdata;
 	unsigned long addr;
 	u8 bus = dev->bus->number;
 	u8 device_fn = dev->devfn;
@@ -154,6 +154,7 @@ tsunami_write_config_byte(struct pci_dev *dev, int where, u8 value)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	__kernel_stb(value, *(vucp)addr);
+	mb();
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -167,6 +168,7 @@ tsunami_write_config_word(struct pci_dev *dev, int where, u16 value)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	__kernel_stw(value, *(vusp)addr);
+	mb();
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -180,6 +182,7 @@ tsunami_write_config_dword(struct pci_dev *dev, int where, u32 value)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	*(vuip)addr = value;
+	mb();
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -243,31 +246,37 @@ tsunami_probe_write(volatile unsigned long *vaddr)
 #define FN __FUNCTION__
 
 static void __init
-tsunami_init_one_pchip(tsunami_pchip *pchip, int index,
-		       unsigned long *mem_start)
+tsunami_init_one_pchip(tsunami_pchip *pchip, int index)
 {
 	struct pci_controler *hose;
 
 	if (tsunami_probe_read(&pchip->pctl.csr) == 0)
 		return;
 
-	hose = alloc_pci_controler(mem_start);
-	hose->io_space = alloc_resource(mem_start);
-	hose->mem_space = alloc_resource(mem_start);
+	hose = alloc_pci_controler();
+	hose->io_space = alloc_resource();
+	hose->mem_space = alloc_resource();
 
 	hose->config_space = TSUNAMI_CONF(index);
 	hose->index = index;
 
 	hose->io_space->start = TSUNAMI_IO(index) - TSUNAMI_IO_BIAS;
-	hose->io_space->end = hose->io_space->start + 0xffff;
+	hose->io_space->end = hose->io_space->start + TSUNAMI_IO_SPACE;
 	hose->io_space->name = pci_io_names[index];
+	hose->io_space->flags = IORESOURCE_IO;
 
 	hose->mem_space->start = TSUNAMI_MEM(index) - TSUNAMI_MEM_BIAS;
+	/* the IOMEM address space is larger than 32bit but most pci
+	   cars doesn't support 64bit address space so we stick with
+	   32bit here (see the TSUNAMI_MEM_SPACE define). */
 	hose->mem_space->end = hose->mem_space->start + 0xffffffff;
 	hose->mem_space->name = pci_mem_names[index];
+	hose->mem_space->flags = IORESOURCE_MEM;
 
-	request_resource(&ioport_resource, hose->io_space);
-	request_resource(&iomem_resource, hose->mem_space);
+	if (request_resource(&ioport_resource, hose->io_space) < 0)
+		printk(KERN_ERR "failed to request IO on hose %d", index);
+	if (request_resource(&iomem_resource, hose->mem_space) < 0)
+		printk(KERN_ERR "failed to request IOMEM on hose %d", index);
 
 	/*
 	 * Set up the PCI->physical memory translation windows.
@@ -294,7 +303,7 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index,
 }
 
 void __init
-tsunami_init_arch(unsigned long *mem_start, unsigned long *mem_end)
+tsunami_init_arch(void)
 {
 #ifdef NXM_MACHINE_CHECKS_ON_TSUNAMI
 	extern asmlinkage void entInt(void);
@@ -338,9 +347,9 @@ tsunami_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	/* Find how many hoses we have, and initialize them.  TSUNAMI
 	   and TYPHOON can have 2, but might only have 1 (DS10).  */
 
-	tsunami_init_one_pchip(TSUNAMI_pchip0, 0, mem_start);
+	tsunami_init_one_pchip(TSUNAMI_pchip0, 0);
 	if (TSUNAMI_cchip->csc.csr & 1L<<14)
-		tsunami_init_one_pchip(TSUNAMI_pchip1, 1, mem_start);
+		tsunami_init_one_pchip(TSUNAMI_pchip1, 1);
 }
 
 static inline void

@@ -218,17 +218,10 @@ static void print_bad_sector_map(void)
 		}
 		/*  Display old ftape's end-of-file marks
 		 */
-#if LINUX_VERSION_CODE >= KERNEL_VER(2,0,0)
 		while ((sector = get_unaligned(((__u16*)ptr)++)) != 0) {
 			TRACE(ft_t_noise, "Old ftape eof mark: %4d/%2d",
 			      sector, get_unaligned(((__u16*)ptr)++));
 		}
-#else
-		while ((sector = *((__u16*)ptr)++) != 0) {
-			TRACE(ft_t_noise, "Old ftape eof mark: %4d/%2d",
-			      sector, *((__u16*)ptr)++);
-		}
-#endif			
 	} else { /* fixed size format */
 		for (i = ft_first_data_segment;
 		     i < (int)(ft_segments_per_track * ft_tracks_per_tape); ++i) {

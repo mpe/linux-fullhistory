@@ -19,7 +19,7 @@
  * results in clearer kernel profiles as we see _who_ is
  * doing page clearing or copying.
  */
-static inline void clear_page(unsigned long page)
+static inline void clear_page(void * page)
 {
 	unsigned long count = PAGE_SIZE/64;
 	unsigned long *ptr = (unsigned long *)page;
@@ -38,7 +38,7 @@ static inline void clear_page(unsigned long page)
 	} while (count);
 }
 
-static inline void copy_page(unsigned long _to, unsigned long _from)
+static inline void copy_page(void * _to, void * _from)
 {
 	unsigned long count = PAGE_SIZE/64;
 	unsigned long *to = (unsigned long *)_to;
@@ -106,7 +106,16 @@ typedef unsigned long pgprot_t;
 
 #endif /* STRICT_MM_TYPECHECKS */
 
+#if 0
 #define BUG()		__asm__ __volatile__("call_pal 129 # bugchk")
+#else
+/* hack to see the BUG() information in the early boot stage */
+#define BUG()								\
+do {									\
+	SRM_printf("kernel BUG at %s:%d!\n", __FILE__, __LINE__);	\
+	halt();								\
+} while(0)
+#endif
 #define PAGE_BUG(page)	BUG()
 
 #endif /* !ASSEMBLY */

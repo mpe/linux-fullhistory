@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 10:27:26 1997
- * Modified at:   Sat Oct  9 09:42:11 1999
+ * Modified at:   Fri Nov  5 09:45:58 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -60,7 +60,7 @@ static inline void irlap_insert_info(struct irlap_cb *self,
 	 */
 	cb->magic = LAP_MAGIC;
 	cb->mtt = self->mtt_required;
-	cb->speed = self->qos_tx.baud_rate.value;
+	cb->speed = self->speed;
 
 	/* Reset */
 	self->mtt_required = 0;

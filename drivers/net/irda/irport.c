@@ -6,7 +6,7 @@
  * Status:	  Experimental.
  * Author:	  Dag Brattli <dagb@cs.uit.no>
  * Created at:	  Sun Aug  3 13:49:59 1997
- * Modified at:   Sat Oct 30 20:03:42 1999
+ * Modified at:   Sat Nov 13 23:25:56 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:	  serial.c by Linus Torvalds 
  * 
@@ -89,6 +89,9 @@ static int  irport_is_receiving(struct irport_cb *self);
 static int  irport_set_dtr_rts(struct net_device *dev, int dtr, int rts);
 static int  irport_raw_write(struct net_device *dev, __u8 *buf, int len);
 static struct net_device_stats *irport_net_get_stats(struct net_device *dev);
+static int irport_change_speed_complete(struct irda_task *task);
+
+EXPORT_SYMBOL(irport_change_speed);
 
 int __init irport_init(void)
 {
@@ -379,7 +382,7 @@ void __irport_change_speed(struct irport_cb *self, __u32 speed)
  *    State machine for changing speed of the device. We do it this way since
  *    we cannot use schedule_timeout() when we are in interrupt context
  */
-static int irport_change_speed(struct irda_task *task)
+int irport_change_speed(struct irda_task *task)
 {
 	struct irport_cb *self;
 	__u32 speed = (__u32) task->param;
@@ -463,40 +466,53 @@ static void irport_write_wakeup(struct irport_cb *self)
 
 	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
+	iobase = self->io.iobase2;
+
 	/* Finished with frame?  */
 	if (self->tx_buff.len > 0)  {
 		/* Write data left in transmit buffer */
-		actual = irport_write(self->io.iobase2, self->io.fifo_size, 
+		actual = irport_write(iobase, self->io.fifo_size, 
 				      self->tx_buff.data, self->tx_buff.len);
 		self->tx_buff.data += actual;
 		self->tx_buff.len  -= actual;
 	} else {
-		iobase = self->io.iobase2;
+		
 		/* 
 		 *  Now serial buffer is almost free & we can start 
-		 *  transmission of another packet 
+		 *  transmission of another packet. But first we must check
+		 *  if we need to change the speed of the hardware
 		 */
-		self->netdev->tbusy = 0; /* Unlock */
+		if (self->new_speed) {
+			IRDA_DEBUG(5, __FUNCTION__ "(), Changing speed!\n");
+			irda_task_execute(self, irport_change_speed, 
+					  irport_change_speed_complete, 
+					  NULL, (void *) self->new_speed);
+			self->new_speed = 0;
+		} else {
+			self->netdev->tbusy = 0; /* Unlock */
+		
+			/* Tell network layer that we want more frames */
+			mark_bh(NET_BH);
+		}
 		self->stats.tx_packets++;
 
 		/* Schedule network layer, so we can get some more frames */
 		mark_bh(NET_BH);
 
+		/* 
+		 * Reset Rx FIFO to make sure that all reflected transmit data
+		 * is discarded. This is needed for half duplex operation
+		 */
 		fcr = UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RCVR;
-
 		if (self->io.speed < 38400)
 			fcr |= UART_FCR_TRIGGER_1;
 		else 
 			fcr |= UART_FCR_TRIGGER_14;
 
-		/* 
-		 * Reset Rx FIFO to make sure that all reflected transmit data
-		 * will be discarded
-		 */
 		outb(fcr, iobase+UART_FCR);
 
 		/* Turn on receive interrupts */
-		outb(/* UART_IER_RLSI| */UART_IER_RDI, iobase+UART_IER);
+		outb(UART_IER_RDI, iobase+UART_IER);
 	}
 }
 
@@ -589,16 +605,9 @@ int irport_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	/* Check if we need to change the speed */
-	if ((speed = irda_get_speed(skb)) != self->io.speed) {
-		if (irda_task_execute(self, irport_change_speed, 
-				      irport_change_speed_complete, NULL,
-				      (void *) speed))	
-			/* 
-			 * Task not finished yet, so make the netdevice 
-			 * layer requeue the frame 
-			 */
-			return -EBUSY;
-	}
+	if ((speed = irda_get_speed(skb)) != self->io.speed)
+		self->new_speed = speed;
+
 	spin_lock_irqsave(&self->lock, flags);
 
 	/* Init tx buffer */

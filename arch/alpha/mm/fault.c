@@ -11,7 +11,7 @@
 
 #define __EXTERN_INLINE inline
 #include <asm/mmu_context.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #undef  __EXTERN_INLINE
 
 #include <linux/signal.h>

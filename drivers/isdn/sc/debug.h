@@ -26,10 +26,5 @@
  *     +1 (416) 297-6433 Facsimile
  */
 
-#if LINUX_VERSION_CODE < 131072
-	#error You cant use this driver on kernels older than 2.0
-#else
-	#define REQUEST_IRQ(a,b,c,d,e) request_irq(a,b,c,d,e)
-	#define FREE_IRQ(a,b) free_irq(a,b)
-#endif
-
+#define REQUEST_IRQ(a,b,c,d,e) request_irq(a,b,c,d,e)
+#define FREE_IRQ(a,b) free_irq(a,b)

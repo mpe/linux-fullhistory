@@ -35,6 +35,7 @@ typedef unsigned long mm_segment_t;		/* domain register	*/
 
 #define NR_DEBUGS	5
 
+#include <asm/atomic.h>
 #include <asm/ptrace.h>
 #include <asm/arch/memory.h>
 #include <asm/arch/processor.h>
@@ -49,6 +50,7 @@ struct debug_info {
 };
 
 struct thread_struct {
+	atomic_t			refcount;
 							/* fault info	  */
 	unsigned long			address;
 	unsigned long			trap_no;
@@ -66,6 +68,7 @@ struct thread_struct {
 { &init_mm, 0, 0, NULL, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
 
 #define INIT_THREAD  {				\
+	ATOMIC_INIT(1),				\
 	0,					\
 	0,					\
 	0,					\
@@ -110,16 +113,17 @@ extern void release_thread(struct task_struct *);
 
 unsigned long get_wchan(struct task_struct *p);
 
-#ifdef CONFIG_CPU_26
-# define KSTK_EIP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1022])
-# define KSTK_ESP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1020])
-#else
-# define KSTK_EIP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1021])
-# define KSTK_ESP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1019])
-#endif
+#define THREAD_SIZE	(8192)
 
 extern struct task_struct *alloc_task_struct(void);
-extern void free_task_struct(struct task_struct *);
+extern void __free_task_struct(struct task_struct *);
+#define get_task_struct(p)	atomic_inc(&(p)->thread.refcount)
+#define put_task_struct(p)	free_task_struct(p)
+#define free_task_struct(p)					\
+ do {								\
+	if (atomic_dec_and_test(&(p)->thread.refcount))		\
+		__free_task_struct((p));			\
+ } while (0)
 
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)

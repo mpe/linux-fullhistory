@@ -494,6 +494,8 @@ int semctl_main(int semid, int semnum, int cmd, union semun arg)
 	if(sma==NULL)
 		return -EINVAL;
 
+	nsems = sma->sem_nsems;
+
 	err=-EIDRM;
 	if (sem_checkid(sma,semid))
 		goto out_unlock;
@@ -502,7 +504,6 @@ int semctl_main(int semid, int semnum, int cmd, union semun arg)
 	if (ipcperms (&sma->sem_perm, (cmd==SETVAL||cmd==SETALL)?S_IWUGO:S_IRUGO))
 		goto out_unlock;
 
-	nsems = sma->sem_nsems;
 	switch (cmd) {
 	case GETALL:
 	{

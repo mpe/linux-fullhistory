@@ -9,6 +9,8 @@
  * Support routines for initializing a PCI subsystem.
  */
 
+/* fixed for multiple pci buses, 1999 Andrea Arcangeli <andrea@suse.de> */
+
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
@@ -33,15 +35,8 @@ pci_claim_resource(struct pci_dev *dev, int resource)
 	int err;
 
 	err = -EINVAL;
-	if (root != NULL) {
-		/* If `dev' is on a secondary pci bus, `root' may not be
-		   at the origin.  In that case, adjust the resource into
-		   range.  */
-		res->start += root->start;
-		res->end += root->start;
-
+	if (root != NULL)
 		err = request_resource(root, res);
-	}
 	if (err) {
 		printk(KERN_ERR "PCI: Address space collision on region %d "
 		       "of device %s\n", resource, dev->name);
@@ -89,7 +84,7 @@ pdev_assign_unassigned_resources(struct pci_dev *dev, u32 min_io, u32 min_mem)
 		DBGC(("  for root[%lx:%lx] min[%lx] size[%lx]\n",
 		      root->start, root->end, min, size));
 
-		if (allocate_resource(root, res, size, min, -1, size) < 0) {
+		if (allocate_resource(root, res, size, min, -1, size, dev) < 0) {
 			printk(KERN_ERR
 			       "PCI: Failed to allocate resource %d for %s\n",
 			       i, dev->name);
@@ -148,13 +143,6 @@ pci_assign_unassigned_resources(u32 min_io, u32 min_mem)
 		pdev_assign_unassigned_resources(dev, min_io, min_mem);
 }
 
-struct pbus_set_ranges_data
-{
-	int found_vga;
-	unsigned int io_start, io_end;
-	unsigned int mem_start, mem_end;
-};
-
 #define ROUND_UP(x, a)		(((x) + (a) - 1) & ~((a) - 1))
 #define ROUND_DOWN(x, a)	((x) & ~((a) - 1))
 
@@ -166,7 +154,7 @@ pbus_set_ranges(struct pci_bus *bus, struct pbus_set_ranges_data *outer)
 	struct pci_dev *dev;
 
 	inner.found_vga = 0;
-	inner.mem_start = inner.io_start = ~0;
+	inner.mem_start = inner.io_start = ~0UL;
 	inner.mem_end = inner.io_end = 0;
 
 	/* Collect information about how our direct children are layed out. */
@@ -200,6 +188,8 @@ pbus_set_ranges(struct pci_bus *bus, struct pbus_set_ranges_data *outer)
 
 	inner.mem_start = ROUND_DOWN(inner.mem_start, 1*1024*1024);
 	inner.mem_end = ROUND_UP(inner.mem_end, 1*1024*1024);
+
+	pcibios_fixup_pbus_ranges(bus, &inner);
 
 	/* Configure the bridge, if possible.  */
 	if (bus->self) {

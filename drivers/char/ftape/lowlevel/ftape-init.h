@@ -42,9 +42,7 @@
 
 /*      ftape-init.c defined global variables.
  */
-#if defined(MODULE) && LINUX_VERSION_CODE <= KERNEL_VER(1,2,13)
-extern char kernel_version[];
-#endif
+
 
 /*      ftape-init.c defined global functions not defined in ftape.h
  */

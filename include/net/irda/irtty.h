@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Mon Oct 18 23:24:31 1999
+ * Modified at:   Fri Nov  5 10:46:51 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *  
  *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
@@ -60,6 +60,8 @@ struct irtty_cb {
 
 	struct qos_info qos;       /* QoS capabilities for this device */
 	dongle_t *dongle;          /* Dongle driver */
+
+	__u32 new_speed;
 
  	__u32 flags;               /* Interface flags */
 

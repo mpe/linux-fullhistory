@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Paul VanderSpek
  * Created at:    Wed Nov  4 11:46:16 1998
- * Modified at:   Sat Oct 30 16:24:32 1999
+ * Modified at:   Mon Nov  8 10:05:48 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -508,7 +508,7 @@ int w83977af_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	/* Check if we need to change the speed */
 	if ((speed = irda_get_speed(skb)) != self->io.speed)
-		w83977af_change_speed(self, speed);
+		self->new_speed = speed;
 
 	/* Save current set */
 	set = inb(iobase+SSR);
@@ -697,6 +697,12 @@ void w83977af_dma_xmit_complete(struct w83977af_ir *self)
 		outb(AUDR_UNDR, iobase+AUDR);
 	} else
 		self->stats.tx_packets++;
+
+	
+	if (self->new_speed) {
+		w83977af_change_speed(self, self->new_speed);
+		self->new_speed = 0;
+	}
 
 	/* Unlock tx_buff and request another frame */
 	self->netdev->tbusy = 0; /* Unlock */

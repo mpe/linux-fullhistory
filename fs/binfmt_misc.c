@@ -15,7 +15,6 @@
  *  1997-08-09 removed extension stripping, locking cleanup
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>
@@ -515,5 +514,5 @@ static void __exit exit_misc_binfmt(void)
 
 EXPORT_NO_SYMBOLS;
 
-module_init(init_misc_binfmt)
-module_exit(exit_misc_binfmt)
+module_init(init_misc_binfmt);
+module_exit(exit_misc_binfmt);

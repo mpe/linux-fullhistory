@@ -241,5 +241,3 @@ victor_config:
 empeg_config:
 	$(RM) arch/arm/defconfig
 	cp arch/arm/def-configs/empeg arch/arm/defconfig
-
-

@@ -24,6 +24,7 @@
 		bcs	1b
 		movs	r4, r5
 		mov	r5, #0
+		mov	r1, #5		@ only here to fix NeTTroms which dont set r1
 		movne	pc, r0
 
 		mov	r0, #0

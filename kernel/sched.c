@@ -223,49 +223,87 @@ static inline int preemption_goodness(struct task_struct * prev, struct task_str
 	return goodness(p, cpu, prev->mm) - goodness(prev, cpu, prev->mm);
 }
 
-static void reschedule_idle(struct task_struct * p)
+/*
+ * This is ugly, but reschedule_idle() is very timing-critical.
+ * We enter with the runqueue spinlock held, but we might end
+ * up unlocking it early, so the caller must not unlock the
+ * runqueue, it's always done by reschedule_idle().
+ */
+static inline void reschedule_idle(struct task_struct * p, unsigned long flags)
 {
 #ifdef __SMP__
 	int this_cpu = smp_processor_id(), target_cpu;
-	struct task_struct *tsk, *target_tsk;
+	struct task_struct *tsk;
 	int cpu, best_cpu, i;
-	unsigned long flags;
-
-	spin_lock_irqsave(&runqueue_lock, flags);
 
 	/*
 	 * shortcut if the woken up task's last CPU is
 	 * idle now.
 	 */
 	best_cpu = p->processor;
-	target_tsk = idle_task(best_cpu);
-	if (cpu_curr(best_cpu) == target_tsk)
+	tsk = idle_task(best_cpu);
+	if (cpu_curr(best_cpu) == tsk)
 		goto send_now;
 
-	target_tsk = NULL;
+	/*
+	 * The only heuristics - we use the tsk->avg_slice value
+	 * to detect 'frequent reschedulers'.
+	 *
+	 * If both the woken-up process and the preferred CPU is
+	 * is a frequent rescheduler, then skip the asynchronous
+	 * wakeup, the frequent rescheduler will likely chose this
+	 * task during it's next schedule():
+	 */
+	tsk = cpu_curr(best_cpu);
+ 	if ((p->avg_slice < cacheflush_time) &&
+			(tsk->avg_slice < cacheflush_time))
+		goto out_no_target;
+
+	/*
+	 * We know that the preferred CPU has a cache-affine current
+	 * process, lets try to find a new idle CPU for the woken-up
+	 * process:
+	 */
 	for (i = 0; i < smp_num_cpus; i++) {
 		cpu = cpu_logical_map(i);
 		tsk = cpu_curr(cpu);
+		/*
+		 * We use the first available idle CPU. This creates
+		 * a priority list between idle CPUs, but this is not
+		 * a problem.
+		 */
 		if (tsk == idle_task(cpu))
-			target_tsk = tsk;
+			goto send_now;
 	}
 
-	if (target_tsk && p->avg_slice > cacheflush_time)
-		goto send_now;
-
+	/*
+	 * No CPU is idle, but maybe this process has enough priority
+	 * to preempt it's preferred CPU. (this is a shortcut):
+	 */
 	tsk = cpu_curr(best_cpu);
 	if (preemption_goodness(tsk, p, best_cpu) > 0)
-		target_tsk = tsk;
+		goto send_now;
 
 	/*
-	 * found any suitable CPU?
+	 * We should get here rarely - or in the high CPU contention
+	 * case. No CPU is idle and this process is either lowprio or
+	 * the preferred CPU is highprio. Maybe some other CPU can/must
+	 * be preempted:
 	 */
-	if (!target_tsk)
-		goto out_no_target;
+	for (i = 0; i < smp_num_cpus; i++) {
+		cpu = cpu_logical_map(i);
+		tsk = cpu_curr(cpu);
+		if (preemption_goodness(tsk, p, cpu) > 0)
+			goto send_now;
+	}
+
+out_no_target:
+	spin_unlock_irqrestore(&runqueue_lock, flags);
+	return;
 		
 send_now:
-	target_cpu = target_tsk->processor;
-	target_tsk->need_resched = 1;
+	target_cpu = tsk->processor;
+	tsk->need_resched = 1;
 	spin_unlock_irqrestore(&runqueue_lock, flags);
 	/*
 	 * the APIC stuff can go outside of the lock because
@@ -273,9 +311,6 @@ send_now:
 	 */
 	if (target_cpu != this_cpu)
 		smp_send_reschedule(target_cpu);
-	return;
-out_no_target:
-	spin_unlock_irqrestore(&runqueue_lock, flags);
 	return;
 #else /* UP */
 	int this_cpu = smp_processor_id();
@@ -320,7 +355,7 @@ static inline void move_first_runqueue(struct task_struct * p)
  * "current->state = TASK_RUNNING" to mark yourself runnable
  * without the overhead of this.
  */
-void wake_up_process(struct task_struct * p)
+inline void wake_up_process(struct task_struct * p)
 {
 	unsigned long flags;
 
@@ -332,10 +367,25 @@ void wake_up_process(struct task_struct * p)
 	if (task_on_runqueue(p))
 		goto out;
 	add_to_runqueue(p);
-	spin_unlock_irqrestore(&runqueue_lock, flags);
+	reschedule_idle(p, flags); // spin_unlocks runqueue
 
-	reschedule_idle(p);
 	return;
+out:
+	spin_unlock_irqrestore(&runqueue_lock, flags);
+}
+
+static inline void wake_up_process_synchronous(struct task_struct * p)
+{
+	unsigned long flags;
+
+	/*
+	 * We want the common case fall through straight, thus the goto.
+	 */
+	spin_lock_irqsave(&runqueue_lock, flags);
+	p->state = TASK_RUNNING;
+	if (task_on_runqueue(p))
+		goto out;
+	add_to_runqueue(p);
 out:
 	spin_unlock_irqrestore(&runqueue_lock, flags);
 }
@@ -541,8 +591,12 @@ static inline void __schedule_tail(struct task_struct *prev)
 {
 #ifdef __SMP__
 	if ((prev->state == TASK_RUNNING) &&
-			(prev != idle_task(smp_processor_id())))
-		reschedule_idle(prev);
+			(prev != idle_task(smp_processor_id()))) {
+		unsigned long flags;
+
+		spin_lock_irqsave(&runqueue_lock, flags);
+		reschedule_idle(prev, flags); // spin_unlocks runqueue
+	}
 	wmb();
 	prev->has_cpu = 0;
 #endif /* __SMP__ */
@@ -765,7 +819,7 @@ scheduling_in_interrupt:
 	return;
 }
 
-void __wake_up(wait_queue_head_t *q, unsigned int mode)
+static inline void __wake_up_common(wait_queue_head_t *q, unsigned int mode, const int sync)
 {
 	struct list_head *tmp, *head;
 	struct task_struct *p;
@@ -801,7 +855,10 @@ void __wake_up(wait_queue_head_t *q, unsigned int mode)
 #if WAITQUEUE_DEBUG
 			curr->__waker = (long)__builtin_return_address(0);
 #endif
-			wake_up_process(p);
+			if (sync)
+				wake_up_process_synchronous(p);
+			else
+				wake_up_process(p);
 			if (state & TASK_EXCLUSIVE)
 				break;
 		}
@@ -809,6 +866,16 @@ void __wake_up(wait_queue_head_t *q, unsigned int mode)
 	wq_write_unlock_irqrestore(&q->lock, flags);
 out:
 	return;
+}
+
+void __wake_up(wait_queue_head_t *q, unsigned int mode)
+{
+	__wake_up_common(q, mode, 0);
+}
+
+void __wake_up_sync(wait_queue_head_t *q, unsigned int mode)
+{
+	__wake_up_common(q, mode, 1);
 }
 
 #define	SLEEP_ON_VAR				\

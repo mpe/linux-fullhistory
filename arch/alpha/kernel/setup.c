@@ -4,6 +4,8 @@
  *  Copyright (C) 1995  Linus Torvalds
  */
 
+/* 2.3.x bootmem, 1999 Andrea Arcangeli <andrea@suse.de> */
+
 /*
  * Bootup setup stuff.
  */
@@ -26,6 +28,7 @@
 #include <linux/init.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
+#include <linux/bootmem.h>
 
 #ifdef CONFIG_RTC
 #include <linux/timex.h>
@@ -40,6 +43,8 @@
 #include <asm/hwrpb.h>
 #include <asm/dma.h>
 #include <asm/io.h>
+#include <asm/pci.h>
+#include <asm/mmu_context.h>
 
 #include "proto.h"
 #include "pci_impl.h"
@@ -57,7 +62,6 @@ unsigned char aux_device_present = 0xaa;
 
 #define N(a) (sizeof(a)/sizeof(a[0]))
 
-static unsigned long find_end_memory(void);
 static struct alpha_machine_vector *get_sysvec(long, long, long);
 static struct alpha_machine_vector *get_sysvec_byname(const char *);
 static void get_sysnames(long, long, char **, char **);
@@ -68,7 +72,7 @@ static void get_sysnames(long, long, char **, char **);
  * initialized, we need to copy things out into a more permanent
  * place.
  */
-#define PARAM			ZERO_PAGE(0)
+#define PARAM			ZERO_PGE
 #define COMMAND_LINE		((char*)(PARAM + 0x0000))
 #define COMMAND_LINE_SIZE	256
 #define INITRD_START		(*(unsigned long *) (PARAM+0x100))
@@ -181,12 +185,105 @@ reserve_std_resources(void)
 		request_resource(io, standard_io_resources+i);
 }
 
-void __init
-setup_arch(char **cmdline_p, unsigned long * memory_start_p,
-	   unsigned long * memory_end_p)
+#define PFN_UP(x)	(((x) + PAGE_SIZE-1) >> PAGE_SHIFT)
+#define PFN_DOWN(x)	((x) >> PAGE_SHIFT)
+#define PFN_PHYS(x)	((x) << PAGE_SHIFT)
+#define PFN_MAX		PFN_DOWN(0x80000000)
+static void __init setup_memory(void)
 {
+	struct memclust_struct * cluster;
+	struct memdesc_struct * memdesc;
+	unsigned long start_pfn, bootmap_size;
 	extern char _end[];
+	int i;
 
+	/* alloc the bootmem after the kernel */
+	start_pfn = PFN_UP(virt_to_phys(_end));
+	SRM_printf("_end %p\n", _end);
+
+	/* find free clusters, and init and free the bootmem accordingly */
+	memdesc = (struct memdesc_struct *) (hwrpb->mddt_offset + (unsigned long) hwrpb);
+
+	for (cluster = memdesc->cluster, i = memdesc->numclusters;
+	     i > 0; i--, cluster++)
+	{
+		unsigned long end;
+
+		printk("memcluster %d, usage %02lx, start %8lu, end %8lu\n",
+		       i, cluster->usage, cluster->start_pfn,
+		       cluster->numpages);
+
+		/* Bit 0 is console/PALcode reserved.  Bit 1 is
+		   non-volatile memory -- we might want to mark
+		   this for later */
+		if (cluster->usage & 3)
+			continue;
+
+		end = cluster->start_pfn + cluster->numpages;
+		if (end > max_low_pfn)
+			max_low_pfn = end;
+	}
+	/* Enforce maximum of 2GB even if there is more.  Blah.  */
+	if (max_low_pfn > PFN_MAX)
+		max_low_pfn = PFN_MAX;
+	SRM_printf("max_low_pfn %d\n", max_low_pfn);
+
+	/* allocate the bootmem array after the kernel and mark
+	   the whole MM as reserved */
+	bootmap_size = init_bootmem(start_pfn, max_low_pfn);
+
+	for (cluster = memdesc->cluster, i = memdesc->numclusters;
+	     i > 0; i--, cluster++)
+	{
+		unsigned long end, start;
+
+		/* Bit 0 is console/PALcode reserved.  Bit 1 is
+		   non-volatile memory -- we might want to mark
+		   this for later */
+		if (cluster->usage & 3)
+			continue;
+
+		start = PFN_PHYS(cluster->start_pfn);
+		if (start < PFN_PHYS(start_pfn) + bootmap_size)
+			start = PFN_PHYS(start_pfn) + bootmap_size;
+		if (PFN_DOWN(start) >= PFN_MAX)
+			continue;
+
+		end = PFN_PHYS(cluster->start_pfn + cluster->numpages);
+		if (PFN_DOWN(end) > PFN_MAX)
+			end = PFN_PHYS(PFN_MAX);
+
+		if (start >= end)
+			continue;
+		free_bootmem(start, end-start);
+	}
+
+#ifdef CONFIG_BLK_DEV_INITRD
+	initrd_start = INITRD_START;
+	if (initrd_start) {
+		initrd_end = initrd_start+INITRD_SIZE;
+		printk("Initial ramdisk at: 0x%p (%lu bytes)\n",
+		       (void *) initrd_start, INITRD_SIZE);
+
+		if (initrd_end > phys_to_virt(PFN_PHYS(max_low_pfn))) {
+			printk("initrd extends beyond end of memory "
+			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
+			       initrd_end, phys_to_virt(PFN_PHYS(max_low_pfn)));
+			initrd_start = initrd_end = 0;
+		}
+		else
+			reserve_bootmem(virt_to_phys(initrd_start), INITRD_SIZE);
+	}
+#endif /* CONFIG_BLK_DEV_INITRD */
+}
+#undef PFN_UP
+#undef PFN_DOWN
+#undef PFN_PHYS
+#undef PFN_MAX
+
+void __init
+setup_arch(char **cmdline_p)
+{
 	struct alpha_machine_vector *vec = NULL;
 	struct percpu_struct *cpu;
 	char *type_name, *var_name, *p;
@@ -258,6 +355,10 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	alpha_using_srm = strncmp((const char *)hwrpb->ssn, "MILO", 4) != 0;
 #endif
 
+	SRM_printf("Booting on %s%s%s using machine vector %s\n",
+	       type_name, (*var_name ? " variation " : ""),
+	       var_name, alpha_mv.vector_name);
+
 	printk("Booting "
 #ifdef CONFIG_ALPHA_GENERIC
 	       "GENERIC "
@@ -281,29 +382,12 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	wrmces(0x7);
 
 	/* Find our memory.  */
-	*memory_end_p = find_end_memory();
-	*memory_start_p = (unsigned long) _end;
-
-#ifdef CONFIG_BLK_DEV_INITRD
-	initrd_start = INITRD_START;
-	if (initrd_start) {
-		initrd_end = initrd_start+INITRD_SIZE;
-		printk("Initial ramdisk at: 0x%p (%lu bytes)\n",
-		       (void *) initrd_start, INITRD_SIZE);
-
-		if (initrd_end > *memory_end_p) {
-			printk("initrd extends beyond end of memory "
-			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-			       initrd_end, (unsigned long) memory_end_p);
-			initrd_start = initrd_end = 0;
-		}
-	}
-#endif
+	setup_memory();
 
 	/* Initialize the machine.  Usually has to do with setting up
 	   DMA windows and the like.  */
 	if (alpha_mv.init_arch)
-		alpha_mv.init_arch(memory_start_p, memory_end_p);
+		alpha_mv.init_arch();
 
 	/* Reserve standard resources.  */
 	reserve_std_resources();
@@ -352,35 +436,6 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	setup_smp();
 #endif
 }
-
-static unsigned long __init
-find_end_memory(void)
-{
-	int i;
-	unsigned long high = 0;
-	struct memclust_struct * cluster;
-	struct memdesc_struct * memdesc;
-
-	memdesc = (struct memdesc_struct *)
-		(INIT_HWRPB->mddt_offset + (unsigned long) INIT_HWRPB);
-	cluster = memdesc->cluster;
-
-	for (i = memdesc->numclusters ; i > 0; i--, cluster++) {
-		unsigned long tmp;
-		tmp = (cluster->start_pfn + cluster->numpages) << PAGE_SHIFT;
-		if (tmp > high)
-			high = tmp;
-	}
-
-	/* Round it up to an even number of pages. */
-	high = (high + PAGE_SIZE) & (PAGE_MASK*2);
-
-	/* Enforce maximum of 2GB even if there is more.  Blah.  */
-	if (high > 0x80000000UL)
-		high = 0x80000000UL;
-	return PAGE_OFFSET + high;
-}
-
 
 static char sys_unknown[] = "Unknown";
 static char systype_names[][16] = {

@@ -363,6 +363,7 @@ modules_install:
 	if [ -f VIDEO_MODULES ]; then inst_mod VIDEO_MODULES video; fi; \
 	if [ -f FC4_MODULES   ]; then inst_mod FC4_MODULES   fc4;   fi; \
 	if [ -f IRDA_MODULES  ]; then inst_mod IRDA_MODULES  net;   fi; \
+	if [ -f SK98LIN_MODULES ]; then inst_mod SK98LIN_MODULES  net;   fi; \
 	if [ -f USB_MODULES   ]; then inst_mod USB_MODULES   usb;   fi; \
 	if [ -f PCMCIA_MODULES ]; then inst_mod PCMCIA_MODULES pcmcia; fi; \
 	if [ -f PCMCIA_NET_MODULES ]; then inst_mod PCMCIA_NET_MODULES pcmcia; fi; \

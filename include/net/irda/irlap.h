@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Thu Oct  7 23:06:36 1999
+ * Modified at:   Tue Nov 16 10:00:36 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -162,6 +162,8 @@ struct irlap_cb {
 	hashbin_t   *discovery_log;
  	discovery_t *discovery_cmd;
 
+	__u32 speed; 
+
 	struct qos_info  qos_tx;   /* QoS requested by peer */
 	struct qos_info  qos_rx;   /* QoS requested by self */
 	struct qos_info *qos_dev;  /* QoS supported by device */
@@ -220,7 +222,7 @@ int irlap_validate_ns_received(struct irlap_cb *, int ns);
 int  irlap_generate_rand_time_slot(int S, int s);
 void irlap_initiate_connection_state(struct irlap_cb *);
 void irlap_flush_all_queues(struct irlap_cb *);
-void irlap_change_speed(struct irlap_cb *self, __u32 speed);
+void irlap_change_speed(struct irlap_cb *self, __u32 speed, int now);
 void irlap_wait_min_turn_around(struct irlap_cb *, struct qos_info *);
 
 void irlap_init_qos_capabilities(struct irlap_cb *, struct qos_info *);

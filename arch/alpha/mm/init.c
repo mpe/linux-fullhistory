@@ -4,6 +4,8 @@
  *  Copyright (C) 1995  Linus Torvalds
  */
 
+/* 2.3.x zone allocator, 1999 Andrea Arcangeli <andrea@suse.de> */
+
 #include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -15,6 +17,7 @@
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
+#include <linux/bootmem.h> /* max_low_pfn */
 #ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>
 #endif
@@ -22,10 +25,12 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/hwrpb.h>
 #include <asm/dma.h>
+#include <asm/mmu_context.h>
 
-#define DEBUG_POISON 0
+static unsigned long totalram_pages;
 
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
@@ -58,7 +63,7 @@ get_pmd_slow(pgd_t *pgd, unsigned long offset)
 	pmd = (pmd_t *) __get_free_page(GFP_KERNEL);
 	if (pgd_none(*pgd)) {
 		if (pmd) {
-			clear_page((unsigned long)pmd);
+			clear_page((void *)pmd);
 			pgd_set(pgd, pmd);
 			return pmd + offset;
 		}
@@ -81,7 +86,7 @@ get_pte_slow(pmd_t *pmd, unsigned long offset)
 	pte = (pte_t *) __get_free_page(GFP_KERNEL);
 	if (pmd_none(*pmd)) {
 		if (pte) {
-			clear_page((unsigned long)pte);
+			clear_page((void *)pte);
 			pmd_set(pmd, pte);
 			return pte + offset;
 		}
@@ -136,7 +141,7 @@ pte_t
 __bad_page(void)
 {
 	memset((void *) EMPTY_PGE, 0, PAGE_SIZE);
-	return pte_mkdirty(mk_pte((unsigned long) EMPTY_PGE, PAGE_SHARED));
+	return pte_mkdirty(mk_pte(mem_map + MAP_NR(EMPTY_PGE), PAGE_SHARED));
 }
 
 void
@@ -172,8 +177,6 @@ show_mem(void)
 #endif
 }
 
-extern unsigned long free_area_init(unsigned long, unsigned long);
-
 static inline unsigned long
 load_PCB(struct thread_struct * pcb)
 {
@@ -186,40 +189,39 @@ load_PCB(struct thread_struct * pcb)
  * paging_init() sets up the page tables: in the alpha version this actually
  * unmaps the bootup page table (as we're now in KSEG, so we don't need it).
  */
-unsigned long
-paging_init(unsigned long start_mem, unsigned long end_mem)
+void paging_init(void)
 {
-	int i;
 	unsigned long newptbr;
-	struct memclust_struct * cluster;
-	struct memdesc_struct * memdesc;
 	unsigned long original_pcb_ptr;
+	unsigned int zones_size[MAX_NR_ZONES] = {0, 0, 0};
+	unsigned long dma_pfn, high_pfn;
+
+	dma_pfn = virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT;
+	high_pfn = max_low_pfn;
+
+#define ORDER_MASK (~((1 << (MAX_ORDER-1))-1))
+#define ORDER_ALIGN(n)	(((n) +  ~ORDER_MASK) & ORDER_MASK)
+
+	dma_pfn = ORDER_ALIGN(dma_pfn);
+	high_pfn = ORDER_ALIGN(high_pfn);
+
+#undef ORDER_MASK
+#undef ORDER_ALIGN
+
+	if (dma_pfn > high_pfn)
+		zones_size[ZONE_DMA] = high_pfn;
+	else
+	{
+		zones_size[0] = dma_pfn;
+		zones_size[ZONE_NORMAL] = high_pfn - dma_pfn;
+	}
 
 	/* initialize mem_map[] */
-	start_mem = free_area_init(start_mem, end_mem);
-
-	/* find free clusters, update mem_map[] accordingly */
-	memdesc = (struct memdesc_struct *)
-		(hwrpb->mddt_offset + (unsigned long) hwrpb);
-	cluster = memdesc->cluster;
-	for (i = memdesc->numclusters ; i > 0; i--, cluster++) {
-		unsigned long pfn, nr;
-
-		/* Bit 0 is console/PALcode reserved.  Bit 1 is
-		   non-volatile memory -- we might want to mark
-		   this for later */
-		if (cluster->usage & 3)
-			continue;
-		pfn = cluster->start_pfn;
-		nr = cluster->numpages;
-
-		while (nr--)
-			clear_bit(PG_reserved, &mem_map[pfn++].flags);
-	}
+	free_area_init(zones_size);
 
 	/* Initialize the kernel's page tables.  Linux puts the vptb in
 	   the last slot of the L1 page table.  */
-	memset((void *) ZERO_PAGE(0), 0, PAGE_SIZE);
+	memset((void *)ZERO_PGE, 0, PAGE_SIZE);
 	memset(swapper_pg_dir, 0, PAGE_SIZE);
 	newptbr = ((unsigned long) swapper_pg_dir - PAGE_OFFSET) >> PAGE_SHIFT;
 	pgd_val(swapper_pg_dir[1023]) =
@@ -252,8 +254,6 @@ paging_init(unsigned long start_mem, unsigned long end_mem)
 			phys_to_virt(original_pcb_ptr);
 	}
 	original_pcb = *(struct thread_struct *) original_pcb_ptr;
-
-	return start_mem;
 }
 
 #if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM)
@@ -273,64 +273,12 @@ srm_paging_stop (void)
 }
 #endif
 
-#if DEBUG_POISON
-static void
-kill_page(unsigned long pg)
-{
-	unsigned long *p = (unsigned long *)pg;
-	unsigned long i = PAGE_SIZE, v = 0xdeadbeefdeadbeef;
-	do {
-		p[0] = v;
-		p[1] = v;
-		p[2] = v;
-		p[3] = v;
-		p[4] = v;
-		p[5] = v;
-		p[6] = v;
-		p[7] = v;
-		i -= 64;
-		p += 8;
-	} while (i != 0);
-}
-#else
-#define kill_page(pg)
-#endif
-
 void
-mem_init(unsigned long start_mem, unsigned long end_mem)
+mem_init(void)
 {
-	unsigned long tmp;
-
-	end_mem &= PAGE_MASK;
-	max_mapnr = num_physpages = MAP_NR(end_mem);
-	high_memory = (void *) end_mem;
-	start_mem = PAGE_ALIGN(start_mem);
-
-	/*
-	 * Mark the pages used by the kernel as reserved.
-	 */
-	tmp = KERNEL_START;
-	while (tmp < start_mem) {
-		set_bit(PG_reserved, &mem_map[MAP_NR(tmp)].flags);
-		tmp += PAGE_SIZE;
-	}
-
-	for (tmp = PAGE_OFFSET ; tmp < end_mem ; tmp += PAGE_SIZE) {
-		if (tmp >= MAX_DMA_ADDRESS)
-			clear_bit(PG_DMA, &mem_map[MAP_NR(tmp)].flags);
-		if (PageReserved(mem_map+MAP_NR(tmp)))
-			continue;
-		atomic_set(&mem_map[MAP_NR(tmp)].count, 1);
-#ifdef CONFIG_BLK_DEV_INITRD
-		if (initrd_start && tmp >= initrd_start && tmp < initrd_end)
-			continue;
-#endif
-		kill_page(tmp);
-		free_page(tmp);
-	}
-	tmp = nr_free_pages << PAGE_SHIFT;
-	printk("Memory: %luk available\n", tmp >> 10);
-	return;
+	max_mapnr = num_physpages = max_low_pfn;
+	totalram_pages += free_all_bootmem();
+	printk("Memory: %luk available\n", totalram_pages >> 10);
 }
 
 void
@@ -341,34 +289,36 @@ free_initmem (void)
 
 	addr = (unsigned long)(&__init_begin);
 	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
-		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
-		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
-		kill_page(addr);
+		ClearPageReserved(mem_map + MAP_NR(addr));
+		set_page_count(mem_map+MAP_NR(addr), 1);
 		free_page(addr);
+		totalram_pages++;
 	}
 	printk ("Freeing unused kernel memory: %ldk freed\n",
 		(&__init_end - &__init_begin) >> 10);
 }
 
+#ifdef CONFIG_BLK_DEV_INITRD
+void free_initrd_mem(unsigned long start, unsigned long end)
+{
+	for (; start < end; start += PAGE_SIZE) {
+		ClearPageReserved(mem_map + MAP_NR(start));
+		set_page_count(mem_map+MAP_NR(start), 1);
+		free_page(start);
+		totalram_pages++;
+	}
+	printk ("Freeing initrd memory: %ldk freed\n", (end - start) >> 10);
+}
+#endif
+
 void
 si_meminfo(struct sysinfo *val)
 {
-	int i;
-
-	i = max_mapnr;
-	val->totalram = 0;
+	val->totalram = totalram_pages;
 	val->sharedram = 0;
-	val->freeram = nr_free_pages << PAGE_SHIFT;
-	val->bufferram = atomic_read(&buffermem);
-	while (i-- > 0)  {
-		if (PageReserved(mem_map+i))
-			continue;
-		val->totalram++;
-		if (!atomic_read(&mem_map[i].count))
-			continue;
-		val->sharedram += atomic_read(&mem_map[i].count) - 1;
-	}
-	val->totalram <<= PAGE_SHIFT;
-	val->sharedram <<= PAGE_SHIFT;
-	return;
+	val->freeram = nr_free_pages();
+	val->bufferram = atomic_read(&buffermem_pages);
+	val->totalhigh = 0;
+	val->freehigh = 0;
+	val->mem_unit = PAGE_SIZE;
 }

@@ -20,6 +20,10 @@
 
 #include "../lib/constants.h"
 
+#ifndef MODE_SVC
+#define MODE_SVC 0x13
+#endif
+
 		.text
 
 #define PF_TRACESYS	0x20
@@ -342,10 +346,8 @@ irq_prio_ebsa110:
 		.endm
 
 		.macro	restore_user_regs
-		mrs	r1, cpsr			@ disable IRQs
-		orr	r1, r1, #I_BIT
 		ldr	r0, [sp, #S_PSR]		@ Get calling cpsr
-		msr	cpsr, r1
+		msr	cpsr_c, #I_BIT | MODE_SVC	@ disable IRQs
 		msr	spsr, r0			@ save in spsr_svc
 		ldmia	sp, {r0 - lr}^			@ Get calling r0 - lr
 		mov	r0, r0
@@ -360,16 +362,13 @@ irq_prio_ebsa110:
 		/* If we're optimising for StrongARM the resulting code won't 
 		   run on an ARM7 and we can save a couple of instructions.  
 									--pb */
-#ifdef __ARM_ARCH_4__
 		.macro	arm700_bug_check, instr, temp
-		.endm
-#else
-		.macro	arm700_bug_check, instr, temp
+#ifndef __ARM_ARCH_4__
 		and	\temp, \instr, #0x0f000000	@ check for SWI
 		teq	\temp, #0x0f000000
 		bne	.Larm700bug
-		.endm
 #endif
+		.endm
 
 		.macro	enable_irqs, temp
 		mrs	\temp, cpsr
@@ -387,6 +386,13 @@ irq_prio_ebsa110:
 		 */
 		.macro	adrsvc, cond, reg, label
 		adr\cond	\reg, \label
+		.endm
+
+		.macro	alignment_trap, rbase, rtemp, sym
+#ifdef CONFIG_ALIGNMENT_TRAP
+		ldr	\rtemp, [\rbase, #OFF_CR_ALIGNMENT(\sym)]
+		mcr	p15, 0, \rtemp, c1, c0
+#endif
 		.endm
 
 /*
@@ -473,11 +479,9 @@ __dabt_svc:	sub	sp, sp, #S_FRAME_SIZE
 		add	r5, sp, #S_SP
 		mov	r1, lr
 		stmia	r5, {r0 - r4}			@ save sp_SVC, lr_SVC, pc, cpsr, old_ro
-
 		mrs	r9, cpsr			@ Enable interrupts if they were
 		tst	r3, #I_BIT
 		biceq	r9, r9, #I_BIT			@ previously
-
 		mov	r0, r2
 /*
  * This routine must not corrupt r9
@@ -489,9 +493,10 @@ __dabt_svc:	sub	sp, sp, #S_FRAME_SIZE
 #else
 		bl	cpu_data_abort
 #endif
-		msr	cpsr, r9
+		msr	cpsr_c, r9
 		mov	r3, sp
 		bl	SYMBOL_NAME(do_DataAbort)
+		msr	cpsr_c, #I_BIT | MODE_SVC
 		ldr	r0, [sp, #S_PSR]
 		msr	spsr, r0
 		ldmia	sp, {r0 - pc}^			@ load r0 - pc, cpsr
@@ -512,7 +517,7 @@ __irq_svc:	sub	sp, sp, #S_FRAME_SIZE
 		@
 		adrsvc	ne, lr, 1b
 		bne	do_IRQ
-		ldr	r0, [sp, #S_PSR]
+		ldr	r0, [sp, #S_PSR]		@ irqs are already disabled
 		msr	spsr, r0
 		ldmia	sp, {r0 - pc}^			@ load r0 - pc, cpsr
 
@@ -533,7 +538,8 @@ __und_svc:	sub	sp, sp, #S_FRAME_SIZE
 		mov	r1, sp				@ struct pt_regs *regs
 		bl	SYMBOL_NAME(do_undefinstr)
 
-1:		ldr	lr, [sp, #S_PSR]		@ Get SVC cpsr
+1:		msr	cpsr_c, #I_BIT | MODE_SVC
+		ldr	lr, [sp, #S_PSR]		@ Get SVC cpsr
 		msr	spsr, lr
 		ldmia	sp, {r0 - pc}^			@ Restore SVC registers
 
@@ -554,10 +560,6 @@ __und_svc:	sub	sp, sp, #S_FRAME_SIZE
 /*
  * User mode handlers
  */
-#ifdef DEBUG_UNDEF
-t:		.ascii "Prefetch -> undefined instruction\n\0"
-		.align
-#endif
 		.align	5
 __dabt_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		stmia	sp, {r0 - r12}			@ save r0 - r12
@@ -566,12 +568,7 @@ __dabt_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		ldmia	r4, {r0 - r2}			@ Get USR pc, cpsr
 		stmia	r3, {r0 - r2}			@ Save USR pc, cpsr, old_r0
 		stmdb	r3, {sp, lr}^
-
-#ifdef CONFIG_ALIGNMENT_TRAP
-		ldr	r7, [r4, #OFF_CR_ALIGNMENT(__temp_abt)]
-		mcr	p15, 0, r7, c1, c0
-#endif
-
+		alignment_trap r4, r7, __temp_abt
 		mov	fp, #0
 #ifdef MULTI_CPU
 		ldr	r2, .LCprocfns
@@ -580,10 +577,7 @@ __dabt_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 #else
 		bl	cpu_data_abort
 #endif
-		mrs	r3, cpsr			@ Enable interrupts if they were
-		bic	r3, r3, #I_BIT			@ previously
-		msr	cpsr, r3
-
+		msr	cpsr_c, #MODE_SVC		@ Enable interrupts
 		mov	r3, sp
 		adrsvc	al, lr, ret_from_sys_call
 		b	SYMBOL_NAME(do_DataAbort)
@@ -596,12 +590,7 @@ __irq_usr:	sub	sp, sp, #S_FRAME_SIZE
 		ldmia	r4, {r5 - r7}			@ get saved PC, SPSR
 		stmia	r8, {r5 - r7}			@ save pc, psr, old_r0
 		stmdb	r8, {sp, lr}^
-
-#ifdef CONFIG_ALIGNMENT_TRAP
-		ldr	r7, [r4, #OFF_CR_ALIGNMENT(__temp_irq)]
-		mcr	p15, 0, r7, c1, c0
-#endif
-
+		alignment_trap r4, r7, __temp_irq
 		mov	fp, #0
 1:		get_irqnr_and_base r0, r6, r5
 		movne	r1, sp
@@ -621,12 +610,7 @@ __und_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		ldmia	r4, {r5 - r7}
 		stmia	r8, {r5 - r7}			@ Save USR pc, cpsr, old_r0
 		stmdb	r8, {sp, lr}^			@ Save user r0 - r12
-
-#ifdef CONFIG_ALIGNMENT_TRAP
-		ldr	r7, [r4, #OFF_CR_ALIGNMENT(__temp_und)]
-		mcr	p15, 0, r7, c1, c0
-#endif
-
+		alignment_trap r4, r7, __temp_und
 		mov	fp, #0
 		adrsvc	al, r9, ret_from_sys_call	@ r9  = normal FP return
 		adrsvc	al, lr, fpundefinstr		@ lr  = undefined instr return
@@ -640,9 +624,7 @@ call_fpe:	get_current_task r10
 
 fpundefinstr:	mov	r0, lr
 		mov	r1, sp
-		mrs	r4, cpsr			@ Enable interrupts
-		bic	r4, r4, #I_BIT
-		msr	cpsr, r4
+		msr	cpsr_c, #MODE_SVC		@ Enable interrupts
 		adrsvc	al, lr, ret_from_sys_call
 		b	SYMBOL_NAME(do_undefinstr)
 
@@ -654,16 +636,9 @@ __pabt_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		ldmia	r4, {r5 - r7}			@ Get USR pc, cpsr
 		stmia	r8, {r5 - r7}			@ Save USR pc, cpsr, old_r0
 		stmdb	r8, {sp, lr}^			@ Save sp_usr lr_usr
-
-#ifdef CONFIG_ALIGNMENT_TRAP
-		ldr	r7, [r4, #OFF_CR_ALIGNMENT(__temp_abt)]
-		mcr	p15, 0, r7, c1, c0
-#endif
-
+		alignment_trap r4, r7, __temp_abt
 		mov	fp, #0
-		mrs	r7, cpsr			@ Enable interrupts if they were
-		bic	r7, r7, #I_BIT			@ previously
-		msr	cpsr, r7
+		msr	cpsr_c, #MODE_SVC		@ Enable interrupts
 		mov	r0, r5				@ address (pc)
 		mov	r1, sp				@ regs
 		bl	SYMBOL_NAME(do_PrefetchAbort)	@ call abort handler
@@ -680,6 +655,11 @@ __pabt_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		ldr	lr, [sp, #S_PSR]		@ Get USR cpsr
 		msr	spsr, lr
 		ldmia	sp, {r0 - pc}^			@ Restore USR registers
+
+#ifdef DEBUG_UNDEF
+t:		.ascii "Prefetch -> undefined instruction\n\0"
+		.align
+#endif
 
 #include "entry-common.S"
 
@@ -738,14 +718,31 @@ vector_IRQ:	@
 		@
 		@ now branch to the relevent MODE handling routine
 		@
-		bic	r13, lr, #63
-		orr	r13, r13, #0x93
-		msr	spsr, r13			@ switch to SVC_32 mode
+		msr	spsr_c, #I_BIT | MODE_SVC	@ switch to SVC_32 mode
 
 		and	lr, lr, #15
-		adr	r13, .LCtab_irq
-		ldr	lr, [r13, lr, lsl #2]
+		ldr	lr, [pc, lr, lsl #2]
 		movs	pc, lr				@ Changes mode and branches
+
+.LCtab_irq:	.word	__irq_usr			@  0  (USR_26 / USR_32)
+		.word	__irq_invalid			@  1  (FIQ_26 / FIQ_32)
+		.word	__irq_invalid			@  2  (IRQ_26 / IRQ_32)
+		.word	__irq_svc			@  3  (SVC_26 / SVC_32)
+		.word	__irq_invalid			@  4
+		.word	__irq_invalid			@  5
+		.word	__irq_invalid			@  6
+		.word	__irq_invalid			@  7
+		.word	__irq_invalid			@  8
+		.word	__irq_invalid			@  9
+		.word	__irq_invalid			@  a
+		.word	__irq_invalid			@  b
+		.word	__irq_invalid			@  c
+		.word	__irq_invalid			@  d
+		.word	__irq_invalid			@  e
+		.word	__irq_invalid			@  f
+
+		.align	5
+
 /*
  * Data abort dispatcher - dispatches it to the correct handler for the processor mode
  * Enter in ABT mode, spsr = USR CPSR, lr = USR PC
@@ -761,14 +758,30 @@ vector_data:	@
 		@
 		@ now branch to the relevent MODE handling routine
 		@
-		bic	r13, lr, #63
-		orr	r13, r13, #0x93
-		msr	spsr, r13			@ switch to SVC_32 mode
+		msr	spsr_c, #I_BIT | MODE_SVC	@ switch to SVC_32 mode
 
 		and	lr, lr, #15
-		adr	r13, .LCtab_dabt
-		ldr	lr, [r13, lr, lsl #2]
+		ldr	lr, [pc, lr, lsl #2]
 		movs	pc, lr				@ Changes mode and branches
+
+.LCtab_dabt:	.word	__dabt_usr			@  0  (USR_26 / USR_32)
+		.word	__dabt_invalid			@  1  (FIQ_26 / FIQ_32)
+		.word	__dabt_invalid			@  2  (IRQ_26 / IRQ_32)
+		.word	__dabt_svc			@  3  (SVC_26 / SVC_32)
+		.word	__dabt_invalid			@  4
+		.word	__dabt_invalid			@  5
+		.word	__dabt_invalid			@  6
+		.word	__dabt_invalid			@  7
+		.word	__dabt_invalid			@  8
+		.word	__dabt_invalid			@  9
+		.word	__dabt_invalid			@  a
+		.word	__dabt_invalid			@  b
+		.word	__dabt_invalid			@  c
+		.word	__dabt_invalid			@  d
+		.word	__dabt_invalid			@  e
+		.word	__dabt_invalid			@  f
+
+		.align	5
 
 /*
  * Prefetch abort dispatcher - dispatches it to the correct handler for the processor mode
@@ -786,14 +799,17 @@ vector_prefetch:
 		@
 		@ now branch to the relevent MODE handling routine
 		@
-		bic	r13, lr, #63
-		orr	r13, r13, #0x93
-		msr	spsr, r13			@ switch to SVC_32 mode
+		msr	spsr_c, #I_BIT | MODE_SVC	@ switch to SVC_32 mode
 
 		ands	lr, lr, #15
 		ldreq	lr, .LCtab_pabt
 		ldrne	lr, .LCtab_pabt + 4
 		movs	pc, lr
+
+.LCtab_pabt:	.word	__pabt_usr
+		.word	__pabt_invalid
+
+		.align	5
 
 /*
  * Undef instr entry dispatcher - dispatches it to the correct handler for the processor mode
@@ -810,14 +826,30 @@ vector_undefinstr:
 		@
 		@ now branch to the relevent MODE handling routine
 		@
-		bic	r13, lr, #63
-		orr	r13, r13, #0x93
-		msr	spsr, r13			@ switch to SVC_32 mode
+		msr	spsr_c, #I_BIT | MODE_SVC	@ switch to SVC_32 mode
 
 		and	lr, lr, #15
-		adr	r13, .LCtab_und
-		ldr	lr, [r13, lr, lsl #2]
+		ldr	lr, [pc, lr, lsl #2]
 		movs	pc, lr				@ Changes mode and branches
+
+.LCtab_und:	.word	__und_usr			@  0 (USR_26 / USR_32)
+		.word	__und_invalid			@  1 (FIQ_26 / FIQ_32)
+		.word	__und_invalid			@  2 (IRQ_26 / IRQ_32)
+		.word	__und_svc			@  3 (SVC_26 / SVC_32)
+		.word	__und_invalid			@  4
+		.word	__und_invalid			@  5
+		.word	__und_invalid			@  6
+		.word	__und_invalid			@  7
+		.word	__und_invalid			@  8
+		.word	__und_invalid			@  9
+		.word	__und_invalid			@  a
+		.word	__und_invalid			@  b
+		.word	__und_invalid			@  c
+		.word	__und_invalid			@  d
+		.word	__und_invalid			@  e
+		.word	__und_invalid			@  f
+
+		.align	5
 
 /*=============================================================================
  * Undefined FIQs
@@ -847,60 +879,6 @@ vector_addrexcptn:
  * for CPUs with separate I & D caches.
  */
 		.align	5
-
-.LCtab_irq:	.word	__irq_usr			@  0  (USR_26 / USR_32)
-		.word	__irq_invalid			@  1  (FIQ_26 / FIQ_32)
-		.word	__irq_invalid			@  2  (IRQ_26 / IRQ_32)
-		.word	__irq_svc			@  3  (SVC_26 / SVC_32)
-		.word	__irq_invalid			@  4
-		.word	__irq_invalid			@  5
-		.word	__irq_invalid			@  6
-		.word	__irq_invalid			@  7
-		.word	__irq_invalid			@  8
-		.word	__irq_invalid			@  9
-		.word	__irq_invalid			@  a
-		.word	__irq_invalid			@  b
-		.word	__irq_invalid			@  c
-		.word	__irq_invalid			@  d
-		.word	__irq_invalid			@  e
-		.word	__irq_invalid			@  f
-
-.LCtab_und:	.word	__und_usr			@  0 (USR_26 / USR_32)
-		.word	__und_invalid			@  1 (FIQ_26 / FIQ_32)
-		.word	__und_invalid			@  2 (IRQ_26 / IRQ_32)
-		.word	__und_svc			@  3 (SVC_26 / SVC_32)
-		.word	__und_invalid			@  4
-		.word	__und_invalid			@  5
-		.word	__und_invalid			@  6
-		.word	__und_invalid			@  7
-		.word	__und_invalid			@  8
-		.word	__und_invalid			@  9
-		.word	__und_invalid			@  a
-		.word	__und_invalid			@  b
-		.word	__und_invalid			@  c
-		.word	__und_invalid			@  d
-		.word	__und_invalid			@  e
-		.word	__und_invalid			@  f
-
-.LCtab_dabt:	.word	__dabt_usr			@  0  (USR_26 / USR_32)
-		.word	__dabt_invalid			@  1  (FIQ_26 / FIQ_32)
-		.word	__dabt_invalid			@  2  (IRQ_26 / IRQ_32)
-		.word	__dabt_svc			@  3  (SVC_26 / SVC_32)
-		.word	__dabt_invalid			@  4
-		.word	__dabt_invalid			@  5
-		.word	__dabt_invalid			@  6
-		.word	__dabt_invalid			@  7
-		.word	__dabt_invalid			@  8
-		.word	__dabt_invalid			@  9
-		.word	__dabt_invalid			@  a
-		.word	__dabt_invalid			@  b
-		.word	__dabt_invalid			@  c
-		.word	__dabt_invalid			@  d
-		.word	__dabt_invalid			@  e
-		.word	__dabt_invalid			@  f
-
-.LCtab_pabt:	.word	__pabt_usr
-		.word	__pabt_invalid
 
 .LCvswi:	.word	vector_swi
 

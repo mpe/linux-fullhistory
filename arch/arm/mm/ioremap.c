@@ -32,7 +32,7 @@
 #include <linux/vmalloc.h>
 
 #include <asm/page.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/io.h>
 
 static inline void remap_area_pte(pte_t * pte, unsigned long address, unsigned long size,

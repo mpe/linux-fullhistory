@@ -91,8 +91,8 @@ void machine_restart(char * __unused)
 
 	arch_reset(reboot_mode);
 
+	mdelay(1000);
 	printk("Reboot failed -- System halted\n");
-
 	while (1);
 }
 
@@ -179,62 +179,51 @@ void show_fpregs(struct user_fp *regs)
 
 /*
  * Task structure and kernel stack allocation.
- *
- * Taken from the i386 version.
  */
+static struct task_struct *task_struct_head;
+static unsigned int nr_task_struct;
+
 #ifdef CONFIG_CPU_32
-#define EXTRA_TASK_STRUCT	8
-static struct task_struct *task_struct_stack[EXTRA_TASK_STRUCT];
-static int task_struct_stack_ptr = -1;
+#define EXTRA_TASK_STRUCT	4
+#else
+#define EXTRA_TASK_STRUCT	0
 #endif
 
 struct task_struct *alloc_task_struct(void)
 {
 	struct task_struct *tsk;
 
-#ifndef EXTRA_TASK_STRUCT
-	tsk = ll_alloc_task_struct();
-#else
-	int index;
+	if (EXTRA_TASK_STRUCT)
+		tsk = task_struct_head;
+	else
+		tsk = NULL;
 
-	index = task_struct_stack_ptr;
-	if (index >= EXTRA_TASK_STRUCT/2)
-		goto use_cache;
+	if (tsk) {
+		task_struct_head = tsk->next_task;
+		nr_task_struct -= 1;
+	} else
+		tsk = ll_alloc_task_struct();
 
-	tsk = ll_alloc_task_struct();
-
-	if (!tsk) {
-		index = task_struct_stack_ptr;
-
-		if (index >= 0) {
-use_cache:		tsk = task_struct_stack[index];
-			task_struct_stack_ptr = index - 1;
-		}
-	}
-#endif
 #ifdef CONFIG_SYSRQ
-	/* You need this if you want SYSRQ-T to give sensible stack
-	 * usage information
+	/*
+	 * The stack must be cleared if you want SYSRQ-T to
+	 * give sensible stack usage information
 	 */
 	if (tsk) {
 		char *p = (char *)tsk;
 		memzero(p+KERNEL_STACK_SIZE, KERNEL_STACK_SIZE);
 	}
 #endif
-
 	return tsk;
 }
 
-void free_task_struct(struct task_struct *p)
+void __free_task_struct(struct task_struct *p)
 {
-#ifdef EXTRA_TASK_STRUCT
-	int index = task_struct_stack_ptr + 1;
-
-	if (index < EXTRA_TASK_STRUCT) {
-		task_struct_stack[index] = p;
-		task_struct_stack_ptr = index;
+	if (EXTRA_TASK_STRUCT && nr_task_struct < EXTRA_TASK_STRUCT) {
+		p->next_task = task_struct_head;
+		task_struct_head = p;
+		nr_task_struct += 1;
 	} else
-#endif
 		ll_free_task_struct(p);
 }
 
@@ -262,6 +251,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 {
 	struct pt_regs * childregs;
 	struct context_save_struct * save;
+
+	atomic_set(&p->thread.refcount, 1);
 
 	childregs = ((struct pt_regs *)((unsigned long)p + 8192)) - 1;
 	*childregs = *regs;

@@ -1114,12 +1114,8 @@ vortex_open(struct net_device *dev)
 			if (skb == NULL)
 				break;			/* Bad news!  */
 			skb->dev = dev;			/* Mark as being used by this device. */
-#if LINUX_VERSION_CODE >= 0x10300
 			skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
 			vp->rx_ring[i].addr = cpu_to_le32(virt_to_bus(skb->tail));
-#else
-			vp->rx_ring[i].addr = virt_to_bus(skb->data);
-#endif
 		}
 		/* Wrap the ring. */
 		vp->rx_ring[i-1].next = cpu_to_le32(virt_to_bus(&vp->rx_ring[0]));
@@ -1294,7 +1290,7 @@ static void vortex_tx_timeout(struct net_device *dev)
 		if ( ! (inw(ioaddr + EL3_STATUS) & CmdInProgress))
 			break;
 
-#if ! defined(final_version) && LINUX_VERSION_CODE >= 0x10300
+#if ! defined(final_version)
 	if (vp->full_bus_master_tx) {
 		int i;
 		printk(KERN_DEBUG "  Flags; bus-master %d, full %d; dirty %d "

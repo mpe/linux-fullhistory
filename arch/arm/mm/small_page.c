@@ -66,9 +66,9 @@ static struct order orders[] = {
 #endif
 };
 
-#define USED_MAP(pg)			((pg)->offset)
-#define TEST_AND_CLEAR_USED(pg,off)	(test_and_clear_bit(off, &(pg)->offset))
-#define SET_USED(pg,off)		(set_bit(off, &(pg)->offset))
+#define USED_MAP(pg)			((pg)->index)
+#define TEST_AND_CLEAR_USED(pg,off)	(test_and_clear_bit(off, &USED_MAP(pg)))
+#define SET_USED(pg,off)		(set_bit(off, &USED_MAP(pg)))
 
 static void add_page_to_queue(struct page *page, struct page **p)
 {
@@ -116,7 +116,7 @@ again:
 		remove_page_from_queue(page);
 	restore_flags(flags);
 
-	return page_address(page) + (offset << order->shift);
+	return __page_address(page) + (offset << order->shift);
 
 need_new_page:
 	page = alloc_page(priority);

@@ -1,6 +1,7 @@
 #ifndef _LINUX_FB_H
 #define _LINUX_FB_H
 
+#include <linux/tty.h>
 #include <asm/types.h>
 
 /* Definitions of frame buffers						*/

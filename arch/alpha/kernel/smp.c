@@ -23,8 +23,10 @@
 #include <asm/irq.h>
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
+#include <asm/mmu_context.h>
 
 #define __KERNEL_SYSCALLS__
 #include <asm/unistd.h>

@@ -27,7 +27,7 @@
 #include <asm/fpu.h>
 #include <asm/irq.h>
 #include <asm/machvec.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/semaphore.h>
 
 #define __KERNEL_SYSCALLS__

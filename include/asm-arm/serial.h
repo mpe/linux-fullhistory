@@ -12,4 +12,8 @@
 
 #include <asm/arch/serial.h>
 
+#define SERIAL_PORT_DFNS		\
+	STD_SERIAL_PORT_DEFNS		\
+	EXTRA_SERIAL_PORT_DEFNS
+
 #endif

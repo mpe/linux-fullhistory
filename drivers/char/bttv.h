@@ -218,6 +218,7 @@ struct bttv
 #define BTTV_CONFERENCETV  0x15
 #define BTTV_PHOEBE_TVMAS  0x16
 #define BTTV_MODTEC_205    0x17
+#define BTTV_MAGICTVIEW061 0x18
 
 #define AUDIO_TUNER        0x00
 #define AUDIO_RADIO        0x01

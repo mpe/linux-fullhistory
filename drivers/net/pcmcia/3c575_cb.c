@@ -1328,7 +1328,7 @@ static void vortex_tx_timeout(struct net_device *dev)
 		vortex_interrupt(dev->irq, dev, 0);
 	}
 
-#if ! defined(final_version) && LINUX_VERSION_CODE >= 0x10300
+#if ! defined(final_version)
 	if (vp->full_bus_master_tx) {
 		int i;
 		printk(KERN_DEBUG "  Flags; bus-master %d, full %d; dirty %d "

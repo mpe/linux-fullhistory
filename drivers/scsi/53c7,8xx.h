@@ -38,14 +38,7 @@
 
 #ifndef NCR53c7x0_H
 #define NCR53c7x0_H
-#if !defined(LINUX_1_2) && !defined(LINUX_1_3)
 #include <linux/version.h>
-#if LINUX_VERSION_CODE > 65536 + 3 * 256
-#define LINUX_1_3
-#else
-#define LINUX_1_2
-#endif
-#endif
 
 /* 
  * Prevent name space pollution in hosts.c, and only provide the 

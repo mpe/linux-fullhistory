@@ -1323,11 +1323,7 @@ static int fdc_config(void)
 	TRACE_EXIT 0;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VER(1,3,70)
 static void ftape_interrupt(int irq, void *dev_id, struct pt_regs *regs)
-#else
-static void ftape_interrupt(int irq, struct pt_regs *regs)
-#endif
 {
 	void (*handler) (void) = *fdc.hook;
 	TRACE_FUN(ft_t_any);
@@ -1355,11 +1351,7 @@ int fdc_grab_irq_and_dma(void)
 				    fdc.irq);
 		}
 		if (request_dma(fdc.dma, ftape_id)) {
-#if LINUX_VERSION_CODE >= KERNEL_VER(1,3,70)
 			free_irq(fdc.irq, ftape_id);
-#else
-			free_irq(fdc.irq);
-#endif
 			TRACE_ABORT(-EIO, ft_t_bug,
 			      "Unable to grab DMA%d for ftape driver",
 			      fdc.dma);

@@ -237,6 +237,9 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	if (nfserr)
 		goto done;
 	inode = newfhp->fh_dentry->d_inode;
+	if (inode && newfhp->fh_handle.fh_ino == 0)
+		 /* inode might have been instantiated while we slept */
+		 fh_update(newfhp);
 
 	/* Unfudge the mode bits */
 	if (attr->ia_valid & ATTR_MODE) { 

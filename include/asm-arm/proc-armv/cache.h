@@ -56,8 +56,7 @@
  */
 static __inline__ void flush_page_to_ram(struct page *page)
 {
-	unsigned long virt = page_address(page);
-	cpu_flush_ram_page(virt);
+	cpu_flush_ram_page(page_address(page));
 }
 
 /*

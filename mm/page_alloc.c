@@ -501,13 +501,10 @@ void __init free_area_init(unsigned int *zones_size)
 	totalpages = 0;
 	for (i = 0; i < MAX_NR_ZONES; i++) {
 		unsigned long size = zones_size[i];
-		if (size & ((1 << MAX_ORDER)-1))
-			BUG();
 		totalpages += size;
 	}
 	printk("totalpages: %08x\n", totalpages);
 
-	i = totalpages >> 7;
 	/*
 	 * Select nr of pages we try to keep free for important stuff
 	 * with a minimum of 10 pages and a maximum of 256 pages, so
@@ -587,8 +584,6 @@ void __init free_area_init(unsigned int *zones_size)
 			zone->free_area[i].map = 
 				(unsigned int *) alloc_bootmem(bitmap_size);
 		}
-		if (zone->size != size)
-			BUG();
 	}
 	build_zonelists();
 }

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr 14 12:41:42 1998
- * Modified at:   Tue Oct 19 20:00:03 1999
+ * Modified at:   Tue Nov 16 12:54:01 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -164,6 +164,7 @@ int  irda_device_is_receiving(struct net_device *dev);
 int  irda_device_txqueue_empty(struct net_device *dev);
 int  irda_device_set_raw_mode(struct net_device* self, int status);
 int  irda_device_set_dtr_rts(struct net_device *dev, int dtr, int rts);
+int  irda_device_change_speed(struct net_device *dev, __u32 speed);
 int  irda_device_setup(struct net_device *dev);
 
 /* Dongle interface */

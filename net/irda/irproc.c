@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Thomas Davis, <ratbert@radiks.net>
  * Created at:    Sat Feb 21 21:33:24 1998
- * Modified at:   Fri Oct  8 09:26:46 1999
+ * Modified at:   Sun Nov 14 08:54:54 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *
  *     Copyright (c) 1998-1999, Dag Brattli <dagb@cs.uit.no>

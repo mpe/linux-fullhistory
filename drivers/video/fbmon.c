@@ -39,6 +39,7 @@
  *   support up to 1024x768.
  *
  */
+#include <linux/tty.h>
 #include <linux/fb.h>
 
 int fbmon_valid_timings(u_int pixclock, u_int htotal, u_int vtotal,
@@ -69,5 +70,5 @@ int fbmon_valid_timings(u_int pixclock, u_int htotal, u_int vtotal,
 
 int fbmon_dpms(const struct fb_info *fb_info)
 {
-  return fb_info->monspecs->dpms;
+  return fb_info->monspecs.dpms;
 }

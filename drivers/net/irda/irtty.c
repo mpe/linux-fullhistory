@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:18:38 1997
- * Modified at:   Sun Oct 31 22:24:03 1999
+ * Modified at:   Tue Nov 16 02:50:37 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
@@ -409,16 +409,23 @@ static int irtty_change_speed(struct irda_task *task)
 
 	switch (task->state) {
 	case IRDA_TASK_INIT:
-	case IRDA_TASK_WAIT:
-		/* Are we ready to change speed yet? */
+		/* 
+		 * Make sure all data is sent before changing the speed of the
+		 * serial port.
+		 */
 		if (self->tty->driver.chars_in_buffer(self->tty)) {
-			task->state = IRDA_TASK_WAIT;
-
-			/* Try again later */
-			ret = MSECS_TO_JIFFIES(20);
+			/* Keep state, and try again later */
+			ret = MSECS_TO_JIFFIES(10);
 			break;
+		} else {
+			/* Transmit buffer is now empty, but it may still
+			 * take over 13 ms for the FIFO to become empty, so
+			 * wait some more to be sure all data is sent
+			 */
+			irda_task_next_state(task, IRDA_TASK_WAIT);
+			ret = MSECS_TO_JIFFIES(13);
 		}
-
+	case IRDA_TASK_WAIT:
 		if (self->dongle)
 			irda_task_next_state(task, IRDA_TASK_CHILD_INIT);
 		else
@@ -622,16 +629,8 @@ static int irtty_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 		return -EBUSY;
 
 	/* Check if we need to change the speed */
-	if ((speed = irda_get_speed(skb)) != self->io.speed) {
-		if (irda_task_execute(self, irtty_change_speed, 
-				      irtty_change_speed_complete, NULL,
-				      (void *) speed))	
-			/* 
-			 * Task not finished yet, so make the netdevice 
-			 * layer requeue the frame 
-			 */
-			return -EBUSY;
-	}
+	if ((speed = irda_get_speed(skb)) != self->io.speed)
+		self->new_speed = speed;
 	
 	/* Init tx buffer*/
 	self->tx_buff.data = self->tx_buff.head;
@@ -648,24 +647,13 @@ static int irtty_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 		actual = self->tty->driver.write(self->tty, 0, 
 						 self->tx_buff.data, 
 						 self->tx_buff.len);
-
 	/* Hide the part we just transmitted */
 	self->tx_buff.data += actual;
 	self->tx_buff.len -= actual;
 
 	self->stats.tx_packets++;
 	self->stats.tx_bytes += self->tx_buff.len;
-#if 0
-	/* 
-	 *  Did we transmit the whole frame? Commented out for now since
-	 *  I must check if this optimalization really works. DB.
-	 */
- 	if ((self->tx_buff.len) == 0) {
- 		IRDA_DEBUG( 4, "irtty_xmit_buf: finished with frame!\n");
- 		self->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
- 		irda_unlock( &self->tbusy);
- 	}
-#endif
+
 	dev_kfree_skb(skb);
 
 	return 0;
@@ -718,10 +706,18 @@ static void irtty_write_wakeup(struct tty_struct *tty)
 		
 		tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 
-		self->netdev->tbusy = 0; /* Unlock */
-			
-		/* Tell network layer that we want more frames */
-		mark_bh(NET_BH);
+		if (self->new_speed) {
+			IRDA_DEBUG(5, __FUNCTION__ "(), Changing speed!\n");
+			irda_task_execute(self, irtty_change_speed, 
+					  irtty_change_speed_complete, 
+					  NULL, (void *) self->new_speed);
+			self->new_speed = 0;
+		} else {
+			self->netdev->tbusy = 0; /* Unlock */
+		
+			/* Tell network layer that we want more frames */
+			mark_bh(NET_BH);
+		}
 	}
 }
 

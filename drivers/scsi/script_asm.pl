@@ -896,6 +896,7 @@ foreach $label (@label) {
 open (OUTPUT, ">$output") || die "$0 : can't open $output for writing\n";
 open (OUTPUTU, ">$outputu") || die "$0 : can't open $outputu for writing\n";
 
+print OUTPUT "/* DO NOT EDIT - Generated automatically by ".$0." */\n";
 print OUTPUT "static u32 ".$prefix."SCRIPT[] = {\n";
 $instructions = 0;
 for ($i = 0; $i < $#code; ) {

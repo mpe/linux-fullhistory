@@ -137,15 +137,6 @@ typedef struct {
 /*  history record */
 #define ft_history             ftape_status.fti_history
 
-/*  compatibility with old kernel versions
- */
-#if LINUX_VERSION_CODE <= KERNEL_VER(1,2,13)
-#define _IOC_SIZE(cmd) (((cmd) & IOCSIZE_MASK) >> IOCSIZE_SHIFT)
-#define _IOC_DIR(cmd)  (cmd)
-#define _IOC_WRITE IOC_IN
-#define _IOC_READ  IOC_OUT
-#endif
-
 /*
  *      ftape-ctl.c defined global vars.
  */

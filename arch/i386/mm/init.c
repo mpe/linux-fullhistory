@@ -451,11 +451,10 @@ void __init paging_init(void)
 	{
 		unsigned int zones_size[MAX_NR_ZONES] = {0, 0, 0};
 		unsigned int max_dma, high, low;
-		unsigned int align = (1 << (MAX_ORDER-1))-1;
 
 		max_dma = virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT;
-		low = (max_low_pfn + align) & ~align;
-		high = (highend_pfn + align) & ~align;
+		low = max_low_pfn;
+		high = highend_pfn;
 
 		if (low < max_dma)
 			zones_size[ZONE_DMA] = low;
@@ -635,6 +634,19 @@ void free_initmem(void)
 	}
 	printk ("Freeing unused kernel memory: %dk freed\n", (&__init_end - &__init_begin) >> 10);
 }
+
+#ifdef CONFIG_BLK_DEV_INITRD
+void free_initrd_mem(unsigned long start, unsigned long end)
+{
+	for (; start < end; start += PAGE_SIZE) {
+		ClearPageReserved(mem_map + MAP_NR(start));
+		set_page_count(mem_map+MAP_NR(start), 1);
+		free_page(start);
+		totalram_pages++;
+	}
+	printk ("Freeing initrd memory: %ldk freed\n", (end - start) >> 10);
+}
+#endif
 
 void si_meminfo(struct sysinfo *val)
 {

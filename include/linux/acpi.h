@@ -84,6 +84,21 @@ enum
 
 typedef int acpi_dstate_t;
 
+/*
+ * System sleep states
+ */
+enum
+{
+	ACPI_S0, /* working */
+	ACPI_S1, /* sleep */
+	ACPI_S2, /* sleep */
+	ACPI_S3, /* sleep */
+	ACPI_S4, /* non-volatile sleep */
+	ACPI_S5, /* soft-off */
+};
+
+typedef int acpi_sstate_t;
+
 struct acpi_dev;
 
 /*
@@ -217,6 +232,8 @@ extern void (*acpi_power_off)(void);
 /* strangess to avoid integer overflow */
 #define ACPI_uS_TO_TMR_TICKS(val) \
   (((val) * (ACPI_TMR_HZ / 10000)) / 100)
+#define ACPI_TMR_TICKS_TO_uS(ticks) \
+  (((ticks) * 100) / (ACPI_TMR_HZ / 10000))
 
 /* CPU cycles -> PM timer cycles, looks somewhat heuristic but
    (ticks = 3/11 * CPU_MHz + 2) comes pretty close for my systems
@@ -241,6 +258,16 @@ extern void (*acpi_power_off)(void);
 
 /* FACS flags */
 #define ACPI_S4BIOS	  0x00000001
+
+/* processor block offsets */
+#define ACPI_P_CNT	  0x00000000
+#define ACPI_P_LVL2	  0x00000004
+#define ACPI_P_LVL3	  0x00000005
+
+/* C-state latencies (microseconds) */
+#define ACPI_MAX_P_LVL2_LAT 100
+#define ACPI_MAX_P_LVL3_LAT 1000
+#define ACPI_INFINITE_LAT   (~0UL)
 
 struct acpi_rsdp {
 	__u32 signature[2];
@@ -331,14 +358,12 @@ enum
 	ACPI_GPE_ENABLE,
 	ACPI_GPE_LEVEL,
 	ACPI_EVENT,
-	ACPI_P_LVL2,
-	ACPI_P_LVL3,
+	ACPI_P_BLK,
 	ACPI_P_LVL2_LAT,
 	ACPI_P_LVL3_LAT,
 	ACPI_S5_SLP_TYP,
 };
 
-#define ACPI_P_LVL_DISABLED	0x80
 #define ACPI_SLP_TYP_DISABLED	(~0UL)
 
 /*
@@ -363,9 +388,7 @@ enum
 #define	  ACPI_PIIX4_S5_MASK	(0x0000 << 10)
 #define ACPI_PIIX4_PM_TMR	0x0008
 #define ACPI_PIIX4_GPE0		0x000c
-#define ACPI_PIIX4_P_CNT	0x0010
-#define ACPI_PIIX4_P_LVL2	0x0014
-#define ACPI_PIIX4_P_LVL3	0x0015
+#define ACPI_PIIX4_P_BLK	0x0010
 
 #define ACPI_PIIX4_PM1_EVT_LEN	0x04
 #define ACPI_PIIX4_PM1_CNT_LEN	0x02

@@ -60,7 +60,6 @@ extern int get_filesystem_info(char *);
 extern int get_exec_domain_list(char *);
 extern int get_irq_list(char *);
 extern int get_dma_list(char *);
-extern int get_rtc_status (char *);
 extern int get_locks_status (char *, char **, off_t, int);
 extern int get_swaparea_info (char *);
 #ifdef CONFIG_SGI_DS1286
@@ -452,20 +451,6 @@ static int cmdline_read_proc(char *page, char **start, off_t off,
 	return len;
 }
 
-#ifdef CONFIG_RTC
-static int rtc_read_proc(char *page, char **start, off_t off,
-				 int count, int *eof, void *data)
-{
-	int len = get_rtc_status(page);
-	if (len <= off+count) *eof = 1;
-	*start = page + off;
-	len -= off;
-	if (len>count) len = count;
-	if (len<0) len = 0;
-	return len;
-}
-#endif
-
 #ifdef CONFIG_SGI_DS1286
 static int ds1286_read_proc(char *page, char **start, off_t off,
 				 int count, int *eof, void *data)
@@ -664,9 +649,6 @@ void proc_misc_init(void)
 		{"dma",		dma_read_proc},
 		{"ioports",	ioports_read_proc},
 		{"cmdline",	cmdline_read_proc},
-#ifdef CONFIG_RTC
-		{"rtc",		rtc_read_proc},
-#endif
 #ifdef CONFIG_SGI_DS1286
 		{"rtc",		ds1286_read_proc},
 #endif

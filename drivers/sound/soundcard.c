@@ -382,6 +382,7 @@ static ssize_t sound_read(struct file *file, char *buf, size_t count, loff_t *pp
 	switch (dev & 0x0f) {
 	case SND_DEV_STATUS:
 		ret = sndstat_file_read(file, buf, count, ppos);
+		break;
 
 #ifdef CONFIG_AUDIO
 	case SND_DEV_DSP:

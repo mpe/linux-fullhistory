@@ -115,13 +115,8 @@ static long zft_write(struct inode *ino, struct file *fp, const char *buff,
 #else
 static int  zft_read (struct inode *ino, struct file *fp, char *buff,
 		      int req_len); 
-#if LINUX_VERSION_CODE >= KERNEL_VER(1,3,0)
 static int  zft_write(struct inode *ino, struct file *fp, const char *buff,
 		      int req_len);
-#else
-static int  zft_write(struct inode *ino, struct file *fp, char *buff,
-		      int req_len);
-#endif
 #endif
 
 static struct file_operations zft_cdev =
@@ -326,11 +321,8 @@ static ssize_t zft_write(struct file *fp, const char *buff,
 #elif LINUX_VERSION_CODE >= KERNEL_VER(2,1,0)
 static long zft_write(struct inode *ino, struct file *fp, const char *buff,
 		      unsigned long req_len)
-#elif LINUX_VERSION_CODE >= KERNEL_VER(1,3,0)
-static int  zft_write(struct inode *ino, struct file *fp, const char *buff,
-		      int req_len)
 #else
-static int  zft_write(struct inode *ino, struct file *fp, char *buff,
+static int  zft_write(struct inode *ino, struct file *fp, const char *buff,
 		      int req_len)
 #endif
 {
@@ -445,10 +437,8 @@ KERN_INFO
 	TRACE(ft_t_info,
 	      "installing zftape VFS interface for ftape driver ...");
 	TRACE_CATCH(register_chrdev(QIC117_TAPE_MAJOR, "zft", &zft_cdev),);
-#if LINUX_VERSION_CODE >= KERNEL_VER(1,2,0) 
-# if LINUX_VERSION_CODE < KERNEL_VER(2,1,18)
+#if LINUX_VERSION_CODE < KERNEL_VER(2,1,18)
 	register_symtab(&zft_symbol_table); /* add global zftape symbols */
-# endif
 #endif
 #ifdef CONFIG_ZFT_COMPRESSOR
 	(void)zft_compressor_init();
@@ -461,9 +451,6 @@ KERN_INFO
 
 
 #ifdef MODULE
-#if LINUX_VERSION_CODE <= KERNEL_VER(1,2,13) && defined(MODULE)
-char kernel_version[] = UTS_RELEASE;
-#endif
 #if LINUX_VERSION_CODE >= KERNEL_VER(2,1,18)
 /* Called by modules package before trying to unload the module
  */

@@ -213,24 +213,7 @@
  * without warnings.
  */
 
-#if !defined(LINUX_1_2) && !defined(LINUX_1_3)
 #include <linux/version.h>
-#if LINUX_VERSION_CODE > 65536 + 3 * 256
-#define LINUX_1_3
-#else
-#define LINUX_1_2
-#endif
-#endif
-
-#ifdef LINUX_1_2
-#define u32 bogus_u32
-#define s32 bogus_s32
-#include <asm/types.h>
-#undef u32
-#undef s32
-typedef __signed__ int s32;
-typedef unsigned int  u32;
-#endif /* def LINUX_1_2 */
 
 #ifdef MODULE
 #include <linux/module.h>
@@ -716,13 +699,11 @@ request_synchronous (int host, int target) {
 	printk (KERN_ALERT "target %d is host ID\n", target);
 	return -1;
     } 
-#ifndef LINUX_1_2
     else if (target > h->max_id) {
 	printk (KERN_ALERT "target %d exceeds maximum of %d\n", target,
 	    h->max_id);
 	return -1;
     }
-#endif
     hostdata = (struct NCR53c7x0_hostdata *)h->hostdata;
 
     save_flags(flags);
@@ -1408,12 +1389,7 @@ static int  __init
 ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip, 
     unsigned char bus, unsigned char device_fn, long long options){
     unsigned short command;
-#ifdef LINUX_1_2
-    unsigned long
-#else
-    unsigned int 
-#endif
-	base, io_port; 
+    unsigned int base, io_port; 
     unsigned char revision;
     int error, expected_chip;
     int expected_id = -1, max_revision = -1, min_revision = -1;
@@ -3480,11 +3456,7 @@ allocate_cmd (Scsi_Cmnd *cmd) {
  * 1.2.x), do so now.
  */
     if (!(hostdata->cmd_allocated[cmd->target] & (1 << cmd->lun)) &&
-#ifdef LINUX_1_2
-				!in_scan_scsis
-#else
 				cmd->device && cmd->device->has_cmdblocks
-#endif
 	) {
 	if ((hostdata->extra_allocate + hostdata->num_cmds) < host->can_queue) 
 	    hostdata->extra_allocate += host->cmd_per_lun;
@@ -3507,11 +3479,7 @@ allocate_cmd (Scsi_Cmnd *cmd) {
 	tmp = ROUNDUP(real, void *);
 	tmp->real = real;
 	tmp->size = size;			
-#ifdef LINUX_1_2
-	tmp->free = ((void (*)(void *, int)) kfree_s);
-#else
 	tmp->free = ((void (*)(void *, int)) kfree);
-#endif
 	save_flags (flags);
 	cli();
 	tmp->next = hostdata->free;
@@ -3931,11 +3899,7 @@ NCR53c7xx_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *)) {
     if ((hostdata->options & (OPTION_DEBUG_INIT_ONLY|OPTION_DEBUG_PROBE_ONLY)) 
 	|| ((hostdata->options & OPTION_DEBUG_TARGET_LIMIT) &&
 	    !(hostdata->debug_lun_limit[cmd->target] & (1 << cmd->lun))) 
-#ifdef LINUX_1_2
-	|| cmd->target > 7
-#else
 	|| cmd->target > host->max_id
-#endif
 	|| cmd->target == host->this_id
 	|| hostdata->state == STATE_DISABLED) {
 	printk("scsi%d : disabled or bad target %d lun %d\n", host->host_no,

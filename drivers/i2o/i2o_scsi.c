@@ -297,12 +297,12 @@ static int i2o_find_lun(struct i2o_controller *c, struct i2o_device *d, int *tar
 {
 	u8 reply[8];
 	
-	if(i2o_query_scalar(c, d->lct_data->tid, 0, 3, reply, 4))
+	if(i2o_query_scalar(c, d->lct_data->tid, 0, 3, reply, 4)<0)
 		return -1;
 		
 	*target=reply[0];
 	
-	if(i2o_query_scalar(c, d->lct_data->tid, 0, 4, reply, 8))
+	if(i2o_query_scalar(c, d->lct_data->tid, 0, 4, reply, 8)<0)
 		return -1;
 
 	*lun=reply[1];
@@ -328,7 +328,7 @@ void i2o_scsi_init(struct i2o_controller *c, struct i2o_device *d, struct Scsi_H
 	for(unit=c->devices;unit!=NULL;unit=unit->next)
 	{
 		dprintk(("Class %03X, parent %d, want %d.\n",
-			unit->lct_data->class_id, unit->lct_data->parent, d->lct_data->tid));
+			unit->lct_data->class_id, unit->lct_data->parent_tid, d->lct_data->tid));
 			
 		/* Only look at scsi and fc devices */
 		if (    (unit->lct_data->class_id != I2O_CLASS_SCSI_PERIPHERAL)
@@ -337,7 +337,7 @@ void i2o_scsi_init(struct i2o_controller *c, struct i2o_device *d, struct Scsi_H
 			continue;
 
 		/* On our bus ? */
-		dprintk(("Found a disk.\n"));
+		dprintk(("Found a disk (%d).\n", unit->lct_data->tid));
 		if ((unit->lct_data->parent_tid == d->lct_data->tid)
 		     || (unit->lct_data->parent_tid == d->lct_data->parent_tid)
 		   )
@@ -346,7 +346,7 @@ void i2o_scsi_init(struct i2o_controller *c, struct i2o_device *d, struct Scsi_H
 			dprintk(("Its ours.\n"));
 			if(i2o_find_lun(c, unit, &target, &lun)==-1)
 			{
-				printk(KERN_ERR "i2o_scsi: Unable to get lun for tid %d.\n", d->lct_data->tid);
+				printk(KERN_ERR "i2o_scsi: Unable to get lun for tid %d.\n", unit->lct_data->tid);
 				continue;
 			}
 			dprintk(("Found disk %d %d.\n", target, lun));
@@ -429,7 +429,7 @@ int i2o_scsi_detect(Scsi_Host_Template * tpnt)
 			 *	bus_adapter, SCSI (obsolete), or FibreChannel busses only
 			 */
 			if(    (d->lct_data->class_id!=I2O_CLASS_BUS_ADAPTER_PORT)	// bus_adapter
-			    && (d->lct_data->class_id!=I2O_CLASS_FIBRE_CHANNEL_PORT)	// FC_PORT
+//			    && (d->lct_data->class_id!=I2O_CLASS_FIBRE_CHANNEL_PORT)	// FC_PORT
 			  )
 				continue;
 		

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Sun Oct 31 22:10:45 1999
+ * Modified at:   Fri Nov  5 20:25:42 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -100,7 +100,7 @@ int __init iriap_init(void)
 	 *  Register some default services for IrLMP 
 	 */
 	hints  = irlmp_service_to_hint(S_COMPUTER);
-	hints |= irlmp_service_to_hint(S_PNP);
+	/*hints |= irlmp_service_to_hint(S_PNP);*/
 	service_handle = irlmp_register_service(hints);
 
 	/* 
@@ -267,19 +267,16 @@ static void iriap_disconnect_indication(void *instance, void *sap,
 	if (self->mode == IAS_CLIENT) {
 		IRDA_DEBUG(4, __FUNCTION__ "(), disconnect as client\n");
 
+
+		iriap_do_client_event(self, IAP_LM_DISCONNECT_INDICATION, 
+				      NULL);
 		/* 
 		 * Inform service user that the request failed by sending 
-		 * it a NULL value.
+		 * it a NULL value. Warning, the client might close us, so
+		 * remember no to use self anymore after calling confirm
 		 */
 		if (self->confirm)
  			self->confirm(IAS_DISCONNECT, 0, NULL, self->priv);
-		
-		
-		iriap_do_client_event(self, IAP_LM_DISCONNECT_INDICATION, 
-				      NULL);
-		/* Close instance only if client */
-		/* iriap_close(self); */
-		
 	} else {
 		IRDA_DEBUG(4, __FUNCTION__ "(), disconnect as server\n");
 		iriap_do_server_event(self, IAP_LM_DISCONNECT_INDICATION, 
@@ -497,6 +494,9 @@ void iriap_getvaluebyclass_confirm(struct iriap_cb *self, struct sk_buff *skb)
 	/* Finished, close connection! */
 	iriap_disconnect_request(self);
 
+	/* Warning, the client might close us, so remember no to use self
+	 * anymore after calling confirm 
+	 */
 	if (self->confirm)
 		self->confirm(IAS_SUCCESS, obj_id, value, self->priv);
 }
@@ -794,7 +794,11 @@ static int iriap_data_indication(void *instance, void *sap,
 			WARNING(__FUNCTION__ "(), No such class!\n");
 			/* Finished, close connection! */
 			iriap_disconnect_request(self);
-			
+
+			/* 
+			 * Warning, the client might close us, so remember
+			 * no to use self anymore after calling confirm 
+			 */
 			if (self->confirm)
 				self->confirm(IAS_CLASS_UNKNOWN, 0, NULL, 
 					      self->priv);
@@ -804,13 +808,15 @@ static int iriap_data_indication(void *instance, void *sap,
 		       	/* Finished, close connection! */
 			iriap_disconnect_request(self);
 
+			/* 
+			 * Warning, the client might close us, so remember
+			 * no to use self anymore after calling confirm 
+			 */
 			if (self->confirm)
 				self->confirm(IAS_CLASS_UNKNOWN, 0, NULL, 
 					      self->priv);
 			break;
-		}
-		
-	/* 	iriap_close(self); */
+		}		
 		break;
 	default:
 		IRDA_DEBUG(0, __FUNCTION__ "(), Unknown op-code: %02x\n", 

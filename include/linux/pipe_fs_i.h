@@ -7,6 +7,8 @@ struct pipe_inode_info {
 	unsigned int start;
 	unsigned int readers;
 	unsigned int writers;
+	unsigned int waiting_readers;
+	unsigned int waiting_writers;
 };
 
 /* Differs from PIPE_BUF in that PIPE_SIZE is the length of the actual
@@ -20,6 +22,8 @@ struct pipe_inode_info {
 #define PIPE_LEN(inode)		((inode).i_size)
 #define PIPE_READERS(inode)	((inode).i_pipe->readers)
 #define PIPE_WRITERS(inode)	((inode).i_pipe->writers)
+#define PIPE_WAITING_READERS(inode)	((inode).i_pipe->waiting_readers)
+#define PIPE_WAITING_WRITERS(inode)	((inode).i_pipe->waiting_writers)
 
 #define PIPE_EMPTY(inode)	(PIPE_LEN(inode) == 0)
 #define PIPE_FULL(inode)	(PIPE_LEN(inode) == PIPE_SIZE)

@@ -11,6 +11,7 @@
 #include <linux/bootmem.h>
 
 #include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/page.h>
 #include <asm/io.h>
 #include <asm/setup.h>
@@ -178,7 +179,6 @@ alloc_init_page(unsigned long virt, unsigned long phys, int domain, int prot)
 		pte_t *ptep = alloc_bootmem_low_pages(2 * PTRS_PER_PTE *
 						      sizeof(pte_t));
 
-		memzero(ptep, 2 * PTRS_PER_PTE * sizeof(pte_t));
 		ptep += PTRS_PER_PTE;
 
 		set_pmd(pmdp, __mk_pmd(ptep, PMD_TYPE_TABLE | PMD_DOMAIN(domain)));
@@ -265,6 +265,32 @@ static struct map_desc init_map[] __initdata = {
 };
 
 #define NR_INIT_MAPS (sizeof(init_map) / sizeof(init_map[0]))
+
+/*
+ * Calculate the size of the DMA, normal and highmem zones.
+ * On ARM, we don't have any problems with DMA, so all memory
+ * is allocated to the DMA zone.  We also don't have any
+ * highmem either.
+ */
+void __init zonesize_init(unsigned int *zone_size)
+{
+	int i;
+
+	zone_size[0] = 0;
+	zone_size[1] = 0;
+	zone_size[2] = 0;
+
+	for (i = 0; i < meminfo.nr_banks; i++) {
+		if (meminfo.bank[i].size) {
+			unsigned int end;
+
+			end = (meminfo.bank[i].start +
+				meminfo.bank[i].size) >> PAGE_SHIFT;
+			if (end > zone_size[0])
+				zone_size[0] = end;
+		}
+	}
+}
 
 void __init pagetable_init(void)
 {
@@ -364,27 +390,4 @@ void __init create_memmap_holes(void)
 		set_bit(PG_skip, &pg->flags);
 		pg->next_hash = NULL;
 	}
-
-#if 0
-	/*
-	 * setup address validity map
-	 *  - don't think this is used anymore?
-	 */
-	sz = meminfo.end >> (PAGE_SHIFT + 8); /* in MB */
-	sz = (sz + 31) >> 3;
-
-	valid_addr_bitmap = alloc_bootmem(sz);
-	memzero(valid_addr_bitmap, sz);
-
-	for (i = 0; i < meminfo.nr_banks; i++) {
-		int idx, end;
-
-		idx = meminfo.bank[i].start >> 20;
-		end = (meminfo.bank[i].start +
-		       meminfo.bank[i].size) >> 20;
-		do
-			set_bit(idx, valid_addr_bitmap);
-		while (++idx < end);
-	}
-#endif
 }

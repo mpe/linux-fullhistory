@@ -6,7 +6,7 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Fri Oct  8 23:17:36 1999
+ * Modified at:   Tue Nov 16 10:01:06 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -849,16 +849,18 @@ void irlap_flush_all_queues(struct irlap_cb *self)
  *    Change the speed of the IrDA port
  *
  */
-void irlap_change_speed(struct irlap_cb *self, __u32 speed)
+void irlap_change_speed(struct irlap_cb *self, __u32 speed, int now)
 {
-	IRDA_DEBUG(4, __FUNCTION__ "(), setting speed to %d\n", speed);
+	IRDA_DEBUG(0, __FUNCTION__ "(), setting speed to %d\n", speed);
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
 
-	/* Must use the same speed in both directions */
-	self->qos_rx.baud_rate.value = speed;
-	self->qos_tx.baud_rate.value = speed;
+	self->speed = speed;
+
+	/* Change speed now, or just piggyback speed on frames */
+	if (now)
+		irda_device_change_speed(self->netdev, speed);
 }
 
 #ifdef CONFIG_IRDA_COMPRESSION
@@ -878,16 +880,16 @@ void irlap_init_comp_qos_capabilities(struct irlap_cb *self)
 	 *  you get when you do a little bit flicking :-)
 	 */
 	IRDA_DEBUG(4, __FUNCTION__ "(), comp bits 0x%02x\n", 
-	       self->qos_rx.compression.bits); 
+		   self->qos_rx.compression.bits); 
 	mask = 0x80; /* Start with testing MSB */
 	for (i=0;i<8;i++) {
 		IRDA_DEBUG(4, __FUNCTION__ "(), testing bit %d\n", 8-i);
 		if (self->qos_rx.compression.bits & mask) {
-			IRDA_DEBUG(4, __FUNCTION__ "(), bit %d is set by defalt\n",
-			       8-i);
+			IRDA_DEBUG(4, __FUNCTION__ 
+				   "(), bit %d is set by defalt\n", 8-i);
 			comp = hashbin_find(irlap_compressors, 
-					     compression[ msb_index(mask)], 
-					     NULL);
+					    compression[msb_index(mask)], 
+					    NULL);
 			if (!comp) {
 				/* Protocol not supported, so clear the bit */
 				IRDA_DEBUG(4, __FUNCTION__ "(), Compression "
@@ -984,7 +986,7 @@ void irlap_apply_default_connection_parameters(struct irlap_cb *self)
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
 
-	irlap_change_speed(self, 9600);
+	irlap_change_speed(self, 9600, TRUE);
 
 	/* Default value in NDM */
 	self->bofs_count = 11;
@@ -1017,7 +1019,7 @@ void irlap_apply_connection_parameters(struct irlap_cb *self,
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
 
-	irlap_change_speed(self, qos->baud_rate.value);
+	irlap_change_speed(self, qos->baud_rate.value, FALSE);
 
 	self->window_size = qos->window_size.value;
 	self->window      = qos->window_size.value;

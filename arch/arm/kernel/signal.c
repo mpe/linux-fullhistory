@@ -21,7 +21,7 @@
 
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 
 #define _BLOCKABLE (~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
 

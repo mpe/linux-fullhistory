@@ -205,7 +205,7 @@ mk_conf_addr(struct pci_dev *dev, int where, struct pci_controler *hose,
 static int
 mcpcia_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 {
-	struct pci_controler *hose = dev->sysdata ? : probing_hose;
+	struct pci_controler *hose = dev->sysdata;
 	unsigned long addr, w;
 	unsigned char type1;
 
@@ -221,7 +221,7 @@ mcpcia_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 static int
 mcpcia_read_config_word(struct pci_dev *dev, int where, u16 *value)
 {
-	struct pci_controler *hose = dev->sysdata ? : probing_hose;
+	struct pci_controler *hose = dev->sysdata;
 	unsigned long addr, w;
 	unsigned char type1;
 
@@ -237,7 +237,7 @@ mcpcia_read_config_word(struct pci_dev *dev, int where, u16 *value)
 static int
 mcpcia_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 {
-	struct pci_controler *hose = dev->sysdata ? : probing_hose;
+	struct pci_controler *hose = dev->sysdata;
 	unsigned long addr;
 	unsigned char type1;
 
@@ -252,7 +252,7 @@ mcpcia_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 static int
 mcpcia_write_config(struct pci_dev *dev, int where, u32 value, long mask)
 {
-	struct pci_controler *hose = dev->sysdata ? : probing_hose;
+	struct pci_controler *hose = dev->sysdata;
 	unsigned long addr;
 	unsigned char type1;
 
@@ -327,16 +327,16 @@ mcpcia_probe_hose(int h)
 }
 
 static void __init
-mcpcia_new_hose(unsigned long *mem_start, int h)
+mcpcia_new_hose(int h)
 {
 	struct pci_controler *hose;
 	struct resource *io, *mem, *hae_mem;
 	int mid = hose2mid(h);
 
-	hose = alloc_pci_controler(mem_start);
-	io = alloc_resource(mem_start);
-	mem = alloc_resource(mem_start);
-	hae_mem = alloc_resource(mem_start);
+	hose = alloc_pci_controler();
+	io = alloc_resource();
+	mem = alloc_resource();
+	hae_mem = alloc_resource();
 			
 	hose->io_space = io;
 	hose->mem_space = hae_mem;
@@ -420,7 +420,7 @@ mcpcia_startup_hose(struct pci_controler *hose)
 }
 
 void __init
-mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
+mcpcia_init_arch(void)
 {
 	extern asmlinkage void entInt(void);
 	struct pci_controler *hose;
@@ -437,7 +437,7 @@ mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	/* First, find how many hoses we have.  */
 	for (h = 0; h < MCPCIA_MAX_HOSES; ++h) {
 		if (mcpcia_probe_hose(h)) {
-			mcpcia_new_hose(mem_start, h);
+			mcpcia_new_hose(h);
 			hose_count++;
 		}
 	}

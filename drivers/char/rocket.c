@@ -42,15 +42,13 @@
 #include <linux/config.h>
 #include <linux/version.h>
 
-#if (defined(CONFIG_PCI) && (LINUX_VERSION_CODE >= 131072))
+#ifdef CONFIG_PCI
 #define ENABLE_PCI
 #endif
 
-#if (LINUX_VERSION_CODE > 66304)
 #define NEW_MODULES
 #ifdef LOCAL_ROCKET_H		/* We're building standalone */
 #define MODULE
-#endif
 #endif
 
 #ifdef NEW_MODULES
@@ -198,13 +196,6 @@ MODULE_PARM(controller, "i");
 MODULE_PARM_DESC(controller, "I/O port for (ISA) rocketport controller");
 MODULE_PARM(support_low_speed, "i");
 MODULE_PARM_DESC(support_low_speed, "0 means support 50 baud, 1 means support 460400 baud");	
-#endif
-
-/*
- * Provide backwards compatibility for kernels prior to 2.1.8.
- */
-#if (LINUX_VERSION_CODE < 0x20000)
-typedef dev_t kdev_t;
 #endif
 
 #if (LINUX_VERSION_CODE < 131336)
@@ -1757,13 +1748,8 @@ static void rp_put_char(struct tty_struct *tty, unsigned char ch)
 	}
 }
 
-#if (LINUX_VERSION_CODE > 66304)
 static int rp_write(struct tty_struct * tty, int from_user,
 		    const unsigned char *buf, int count)
-#else
-static int rp_write(struct tty_struct * tty, int from_user,
-		    unsigned char *buf, int count)
-#endif	
 {
 	struct r_port * info = (struct r_port *)tty->driver_data;
 	CHANNEL_t	*cp;

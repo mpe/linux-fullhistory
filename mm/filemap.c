@@ -1791,18 +1791,21 @@ generic_file_write(struct file *file, const char *buf,
 	struct dentry	*dentry = file->f_dentry; 
 	struct inode	*inode = dentry->d_inode; 
 	unsigned long	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
-	loff_t		pos = *ppos;
+	loff_t		pos;
 	struct page	*page, **hash, *cached_page;
 	unsigned long	written;
 	long		status;
 	int		err;
 
-	if (pos < 0)
-		return -EINVAL;
-
 	cached_page = NULL;
 
 	down(&inode->i_sem);
+
+	pos = *ppos;
+	err = -EINVAL;
+	if (pos < 0)
+		goto out;
+
 	err = file->f_error;
 	if (err) {
 		file->f_error = 0;

@@ -77,12 +77,7 @@
 #include <linux/version.h>
 #include <linux/init.h>
 #include <asm/irq.h>
-
-#if LINUX_VERSION_CODE >= 0x010300
 #include <linux/blk.h>
-#else
-#include "../block/blk.h"
-#endif
 
 #include "scsi.h"
 #include "hosts.h"
@@ -1404,11 +1399,7 @@ uchar sr;
 
 
 
-#if LINUX_VERSION_CODE >= 0x010300
 int wd33c93_reset(Scsi_Cmnd *SCpnt, unsigned int reset_flags)
-#else
-int wd33c93_reset(Scsi_Cmnd *SCpnt)
-#endif
 {
 struct Scsi_Host *instance;
 struct WD33C93_hostdata *hostdata;

@@ -125,7 +125,6 @@ ramdisk_image:	.long	0		# address of loaded ramdisk image
 
 ramdisk_size:	.long	0		# its size in bytes
 
-.global bootsect_kludge			# so that we can see it in bootsect.S
 bootsect_kludge:
 		.word  bootsect_helper, SETUPSEG
 
@@ -456,7 +455,7 @@ no_psmouse:
 	xorw	%bx, %bx
 	int	$0x15				# ignore return code
 	movw	$0x05303, %ax			# 32 bit connect
-	xorw	%ebx, %ebx
+	xorw	%bx, %bx
 	int	$0x15
 	jc	no_32_apm_bios			# Ack, error. 
 

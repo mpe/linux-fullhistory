@@ -276,9 +276,11 @@ static ssize_t initrd_read(struct file *file, char *buf,
 
 static int initrd_release(struct inode *inode,struct file *file)
 {
+	extern void free_initrd_mem(unsigned long, unsigned long);
+
+	if (--initrd_users) return 0;
+	free_initrd_mem(initrd_start, initrd_end);
 	initrd_start = 0;
-	/* No need to actually release the pages, because that is
-	   done later by free_all_bootmem. */
 	return 0;
 }
 
@@ -339,11 +341,8 @@ static struct file_operations fd_fops = {
 	block_fsync	/* fsync */ 
 };
 
-#ifdef MODULE
-#define rd_init init_module
-
 /* Before freeing the module, invalidate all of the protected buffers! */
-void cleanup_module(void)
+static void __exit rd_cleanup (void)
 {
 	int i;
 
@@ -354,11 +353,8 @@ void cleanup_module(void)
 	blk_dev[MAJOR_NR].request_fn = 0;
 }
 
-#endif  /* MODULE */
-
-
 /* This is the registration and initialization section of the RAM disk driver */
-int __init rd_init(void)
+int __init rd_init (void)
 {
 	int		i;
 
@@ -396,8 +392,12 @@ int __init rd_init(void)
 	return 0;
 }
 
-/* loadable module support */
+#ifdef MODULE
+module_init(rd_init);
+#endif
+module_exit(rd_cleanup);
 
+/* loadable module support */
 MODULE_PARM     (rd_size, "1i");
 MODULE_PARM_DESC(rd_size, "Size of each RAM disk in kbytes.");
 MODULE_PARM     (rd_blocksize, "i");

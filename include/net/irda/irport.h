@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug  3 13:49:59 1997
- * Modified at:   Sat Oct 30 19:54:07 1999
+ * Modified at:   Sat Nov 13 23:48:55 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -64,6 +64,7 @@ struct irport_cb {
 	dongle_t *dongle;          /* Dongle driver */
 
  	__u32 flags;               /* Interface flags */
+	__u32 new_speed;
 
 	spinlock_t lock;           /* For serializing operations */
 
@@ -74,6 +75,7 @@ void irport_start(struct irport_cb *self, int iobase);
 void irport_stop(struct irport_cb *self, int iobase);
 int  irport_probe(int iobase);
 
+int irport_change_speed(struct irda_task *task);
 void __irport_change_speed(struct irport_cb *self, __u32 speed);
 void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 int  irport_hard_xmit(struct sk_buff *skb, struct net_device *dev);

@@ -404,8 +404,16 @@ struct pci_ops {
 	int (*write_dword)(struct pci_dev *, int where, u32 val);
 };
 
+struct pbus_set_ranges_data
+{
+	int found_vga;
+	unsigned long io_start, io_end;
+	unsigned long mem_start, mem_end;
+};
+
 void pcibios_init(void);
 void pcibios_fixup_bus(struct pci_bus *);
+void pcibios_fixup_pbus_ranges(struct pci_bus *, struct pbus_set_ranges_data *);
 int pcibios_enable_device(struct pci_dev *);
 char *pcibios_setup (char *str);
 

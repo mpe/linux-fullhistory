@@ -114,6 +114,11 @@ EXPORT_SYMBOL(vmtruncate);
 EXPORT_SYMBOL(find_vma);
 EXPORT_SYMBOL(get_unmapped_area);
 EXPORT_SYMBOL(init_mm);
+#ifdef CONFIG_HIGHMEM
+EXPORT_SYMBOL(kmap_high);
+EXPORT_SYMBOL(kunmap_high);
+EXPORT_SYMBOL(highmem_start_page);
+#endif
 
 /* filesystem internal functions */
 EXPORT_SYMBOL(in_group_p);
@@ -173,6 +178,7 @@ EXPORT_SYMBOL(__brelse);
 EXPORT_SYMBOL(__bforget);
 EXPORT_SYMBOL(ll_rw_block);
 EXPORT_SYMBOL(__wait_on_buffer);
+EXPORT_SYMBOL(___wait_on_page);
 EXPORT_SYMBOL(add_blkdev_randomness);
 EXPORT_SYMBOL(block_read_full_page);
 EXPORT_SYMBOL(block_write_full_page);

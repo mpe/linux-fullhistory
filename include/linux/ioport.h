@@ -80,10 +80,11 @@ extern int get_resource_list(struct resource *, char *buf, int size);
 
 extern int request_resource(struct resource *root, struct resource *new);
 extern int release_resource(struct resource *new);
+struct pci_dev;
 extern int allocate_resource(struct resource *root, struct resource *new,
 			     unsigned long size,
 			     unsigned long min, unsigned long max,
-			     unsigned long align);
+			     unsigned long align, struct pci_dev *);
 
 /* Convenience shorthand with allocation */
 #define request_region(start,n,name)	__request_region(&ioport_resource, (start), (n), (name))
@@ -106,5 +107,8 @@ extern void __release_region(struct resource *, unsigned long, unsigned long);
 #define HAVE_AUTOIRQ
 extern void autoirq_setup(int waittime);
 extern int autoirq_report(int waittime);
+
+extern unsigned long resource_fixup(struct pci_dev *, struct resource *,
+				    unsigned long, unsigned long);
 
 #endif	/* _LINUX_IOPORT_H */

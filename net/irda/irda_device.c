@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Oct  9 09:22:27 1999
- * Modified at:   Mon Oct 18 22:40:10 1999
+ * Modified at:   Tue Nov 16 12:54:13 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -200,6 +200,26 @@ int irda_device_set_dtr_rts(struct net_device *dev, int dtr, int rts)
 	req.ifr_rts = rts;
 
 	ret = dev->do_ioctl(dev, (struct ifreq *) &req, SIOCSDTRRTS);
+
+	return ret;
+}
+
+int irda_device_change_speed(struct net_device *dev, __u32 speed)
+{	
+	struct if_irda_req req;
+	int ret;
+
+	IRDA_DEBUG(0, __FUNCTION__ "()\n");
+
+	if (!dev->do_ioctl) {
+		ERROR(__FUNCTION__ "(), do_ioctl not impl. by "
+		      "device driver\n");
+		return -1;
+	}
+
+	req.ifr_baudrate = speed;
+
+	ret = dev->do_ioctl(dev, (struct ifreq *) &req, SIOCSBANDWIDTH);
 
 	return ret;
 }

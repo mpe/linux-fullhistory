@@ -12,43 +12,43 @@ struct pci_dev;
 
 /* core_apecs.c */
 extern struct pci_ops apecs_pci_ops;
-extern void apecs_init_arch(unsigned long *, unsigned long *);
+extern void apecs_init_arch(void);
 extern void apecs_pci_clr_err(void);
 extern void apecs_machine_check(u64, u64, struct pt_regs *);
 
 /* core_cia.c */
 extern struct pci_ops cia_pci_ops;
-extern void cia_init_arch(unsigned long *, unsigned long *);
+extern void cia_init_arch(void);
 extern void cia_machine_check(u64, u64, struct pt_regs *);
 
 /* core_lca.c */
 extern struct pci_ops lca_pci_ops;
-extern void lca_init_arch(unsigned long *, unsigned long *);
+extern void lca_init_arch(void);
 extern void lca_machine_check(u64, u64, struct pt_regs *);
 
 /* core_mcpcia.c */
 extern struct pci_ops mcpcia_pci_ops;
-extern void mcpcia_init_arch(unsigned long *, unsigned long *);
+extern void mcpcia_init_arch(void);
 extern void mcpcia_machine_check(u64, u64, struct pt_regs *);
 
 /* core_polaris.c */
 extern struct pci_ops polaris_pci_ops;
-extern void polaris_init_arch(unsigned long *, unsigned long *);
+extern void polaris_init_arch(void);
 extern void polaris_machine_check(u64, u64, struct pt_regs *);
 
 /* core_pyxis.c */
 extern struct pci_ops pyxis_pci_ops;
-extern void pyxis_init_arch(unsigned long *, unsigned long *);
+extern void pyxis_init_arch(void);
 extern void pyxis_machine_check(u64, u64, struct pt_regs *);
 
 /* core_t2.c */
 extern struct pci_ops t2_pci_ops;
-extern void t2_init_arch(unsigned long *, unsigned long *);
+extern void t2_init_arch(void);
 extern void t2_machine_check(u64, u64, struct pt_regs *);
 
 /* core_tsunami.c */
 extern struct pci_ops tsunami_pci_ops;
-extern void tsunami_init_arch(unsigned long *, unsigned long *);
+extern void tsunami_init_arch(void);
 extern void tsunami_machine_check(u64, u64, struct pt_regs *);
 
 /* setup.c */
