@@ -154,7 +154,6 @@ EXPORT_SYMBOL(__namei);
 EXPORT_SYMBOL(lookup_dentry);
 EXPORT_SYMBOL(open_namei);
 EXPORT_SYMBOL(sys_close);
-EXPORT_SYMBOL(close_fp);
 EXPORT_SYMBOL(d_alloc_root);
 EXPORT_SYMBOL(d_delete);
 EXPORT_SYMBOL(d_validate);

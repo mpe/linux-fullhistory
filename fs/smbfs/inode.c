@@ -18,6 +18,7 @@
 #include <linux/locks.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
+#include <linux/file.h>
 #include <linux/dcache.h>
 
 #include <linux/smb_fs.h>
@@ -326,7 +327,7 @@ smb_put_super(struct super_block *sb)
 	if (server->sock_file) {
 		smb_proc_disconnect(server);
 		smb_dont_catch_keepalive(server);
-		close_fp(server->sock_file);
+		fput(server->sock_file);
 	}
 
 	if (server->conn_pid)

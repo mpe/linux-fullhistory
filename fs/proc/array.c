@@ -610,30 +610,42 @@ static inline char * task_name(struct task_struct *p, char * buf)
 	return buf+1;
 }
 
+static const char *task_state_array[] = {
+	". Huh?",
+	"R (running)",
+	"S (sleeping)",
+	"D (disk sleep)",
+	"Z (zombie)",
+	"T (stopped)",
+	"W (paging)"
+};
+
+static inline const char * get_task_state(struct task_struct *tsk)
+{
+	unsigned int state = tsk->state & (TASK_RUNNING |
+					   TASK_INTERRUPTIBLE |
+					   TASK_UNINTERRUPTIBLE |
+					   TASK_ZOMBIE |
+					   TASK_STOPPED |
+					   TASK_SWAPPING);
+	const char **p = &task_state_array[0];
+
+	while (state) {
+		p++;
+		state >>= 1;
+	}
+	return *p;
+}
+
 static inline char * task_state(struct task_struct *p, char *buffer)
 {
-#define NR_STATES (sizeof(states)/sizeof(const char *))
-	unsigned int n = p->state;
-	static const char * states[] = {
-		"R (running)",
-		"S (sleeping)",
-		"D (disk sleep)",
-		"Z (zombie)",
-		"T (stopped)",
-		"W (paging)",
-		". Huh?"
-	};
-
-	if (n >= NR_STATES)
-		n = NR_STATES-1;
-
 	buffer += sprintf(buffer,
 		"State:\t%s\n"
 		"Pid:\t%d\n"
 		"PPid:\t%d\n"
 		"Uid:\t%d\t%d\t%d\t%d\n"
 		"Gid:\t%d\t%d\t%d\t%d\n",
-		states[n],
+		get_task_state(p),
 		p->pid, p->p_pptr->pid,
 		p->uid, p->euid, p->suid, p->fsuid,
 		p->gid, p->egid, p->sgid, p->fsgid);
@@ -769,10 +781,7 @@ static int get_stat(int pid, char * buffer)
 
 	if (!tsk)
 		return 0;
-	if (tsk->state < 0 || tsk->state > 5)
-		state = '.';
-	else
-		state = "RSDZTW"[tsk->state];
+	state = *get_task_state(tsk);
 	vsize = eip = esp = 0;
 	if (tsk->mm && tsk->mm != &init_mm) {
 		struct vm_area_struct *vma = tsk->mm->mmap;

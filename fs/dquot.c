@@ -938,7 +938,7 @@ int quota_off(kdev_t dev, short type)
 		vfsmnt->mnt_sb->dq_op = (struct dquot_operations *)NULL;
 		reset_dquot_ptrs(dev, cnt);
 		invalidate_dquots(dev, cnt);
-		close_fp(vfsmnt->mnt_quotas[cnt]);
+		fput(vfsmnt->mnt_quotas[cnt]);
 		vfsmnt->mnt_quotas[cnt] = (struct file *)NULL;
 		vfsmnt->mnt_iexp[cnt] = vfsmnt->mnt_bexp[cnt] = (time_t)NULL;
 	}

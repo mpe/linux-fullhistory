@@ -910,6 +910,7 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 {
 	int retval;
 	unsigned long size;
+	loff_t loff = offset;
 	mm_segment_t old_fs;
 
 	size = offset + PAGE_SIZE;
@@ -925,8 +926,7 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 	retval = -EIO;
-	if (size == file->f_op->write(file, (const char *) page,
-				      size, &file->f_pos))
+	if (size == file->f_op->write(file, (const char *) page, size, &loff))
 		retval = 0;
 	set_fs(old_fs);
 	return retval;

@@ -36,6 +36,7 @@
 #include <linux/major.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/file.h>
 
 #include <asm/uaccess.h>
 
@@ -52,8 +53,6 @@
 /*
  * External references and all of the globals.
  */
-extern int close_fp(struct file *);
-
 void acct_timeout(unsigned long);
 
 static volatile int acct_active = 0;
@@ -129,7 +128,7 @@ asmlinkage int sys_acct(const char *name)
 		        del_timer(&acct_timer);
 			acct_active = 0;
 			acct_needcheck = 0;
-			close_fp(acct_file);
+			fput(acct_file);
 		}
 		error = 0;
 		goto out;

@@ -422,6 +422,8 @@ extern int init_private_file(struct file *, struct dentry *, int);
  * The POSIX file lock owner is determined by
  * the "struct files_struct" in the thread group
  * (or NULL for no owner - BSD locks).
+ *
+ * Lockd stuffs a "host" pointer into this.
  */
 typedef struct files_struct *fl_owner_t;
 

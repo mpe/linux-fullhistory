@@ -294,12 +294,12 @@ struct ufs_inode {
 		} ui_addr;
 		__u8	ui_symlink[4*(UFS_NDADDR+UFS_NINDIR)];/* 0x28 fast symlink */
 	} ui_u2;
-	__u32	ui_flags;		/* 0x64 unused -- "status flags (chflags)" ??? */
+	__u32	ui_flags;		/* 0x64 immutable, append-only... */
 	__u32	ui_blocks;		/* 0x68 blocks in use */
-	__u32	ui_gen;			/* 0x6c generation number XXX - what is this? */
+	__u32	ui_gen;			/* 0x6c like ext2 i_version, for NFS support */
 	union {
 		struct {
-			__u32	ui_shadow;/* 0x70 shadow inode XXX - what is this?*/
+			__u32	ui_shadow;/* 0x70 shadow inode with security data */
 			__u32	ui_uid;	/* 0x74 long EFT version of uid */
 			__u32	ui_gid;	/* 0x78 long EFT version of gid */
 			__u32	ui_oeftflag;/* 0x7c reserved */
@@ -318,6 +318,22 @@ struct ufs_inode {
 		} ui_hurd;
 	} ui_u3;
 };
+
+/* FreeBSD has these in sys/stat.h */
+/* ui_flags that can be set by a file owner */
+#define UFS_UF_SETTABLE   0x0000ffff
+#define UFS_UF_NODUMP     0x00000001  /* do not dump */
+#define UFS_UF_IMMUTABLE  0x00000002  /* immutable (can't "change") */
+#define UFS_UF_APPEND     0x00000004  /* append-only */
+#define UFS_UF_OPAQUE     0x00000008  /* directory is opaque (unionfs) */
+#define UFS_UF_NOUNLINK   0x00000010  /* can't be removed or renamed */
+/* ui_flags that only root can set */
+#define UFS_SF_SETTABLE   0xffff0000
+#define UFS_SF_ARCHIVED   0x00010000  /* archived */
+#define UFS_SF_IMMUTABLE  0x00020000  /* immutable (can't "change") */
+#define UFS_SF_APPEND     0x00040000  /* append-only */
+#define UFS_SF_NOUNLINK   0x00100000  /* can't be removed or renamed */
+    
  
 #ifdef __KERNEL__
 /*

@@ -119,8 +119,9 @@ int fat_mmap(struct file * file, struct vm_area_struct * vma)
 }
 
 
-int fat_readpage(struct dentry * dentry, struct page * page)
+int fat_readpage(struct file *file, struct page * page)
 {
+	struct dentry * dentry = file->f_dentry;
 	struct inode * inode = dentry->d_inode;
 	if (MSDOS_SB(inode->i_sb)->cvf_format &&
 	    MSDOS_SB(inode->i_sb)->cvf_format->cvf_readpage)

@@ -32,8 +32,6 @@
 #include <linux/ncp_fs.h>
 #include "ncplib_kernel.h"
 
-extern int close_fp(struct file *filp);
-
 static void ncp_read_inode(struct inode *);
 static void ncp_put_inode(struct inode *);
 static void ncp_delete_inode(struct inode *);
@@ -353,7 +351,7 @@ static void ncp_put_super(struct super_block *sb)
 	ncp_disconnect(server);
 	ncp_unlock_server(server);
 
-	close_fp(server->ncp_filp);
+	fput(server->ncp_filp);
 	kill_proc(server->m.wdog_pid, SIGTERM, 1);
 
 	ncp_kfree_s(server->packet, server->packet_size);

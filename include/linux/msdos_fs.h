@@ -255,7 +255,7 @@ extern void fat_truncate(struct inode *inode);
 
 /* mmap.c */
 extern int fat_mmap(struct file *, struct vm_area_struct *);
-extern int fat_readpage(struct dentry *, struct page *);
+extern int fat_readpage(struct file *, struct page *);
 
 
 /* vfat.c */

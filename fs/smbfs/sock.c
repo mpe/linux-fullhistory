@@ -10,6 +10,7 @@
 #include <linux/errno.h>
 #include <linux/socket.h>
 #include <linux/fcntl.h>
+#include <linux/file.h>
 #include <linux/in.h>
 #include <linux/net.h>
 #include <linux/mm.h>
@@ -259,7 +260,7 @@ if (server_sock(server)->sk->data_ready == smb_data_callback)
 printk("smb_close_socket: still catching keepalives!\n");
 #endif
 		server->sock_file = NULL;
-		close_fp(file);
+		fput(file);
 	}
 }
 

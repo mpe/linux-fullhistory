@@ -807,6 +807,7 @@ do_load_elf_library(int fd)
 	unsigned long elf_bss = 0, bss, len, k;
 	int retval, error, i, j;
 	struct elfhdr elf_ex;
+	loff_t offset = 0;
 
 	error = -EACCES;
 	file = fget(fd);
@@ -817,17 +818,10 @@ do_load_elf_library(int fd)
 
 	/* seek to the beginning of the file */
 	error = -ENOEXEC;
-	if (file->f_op->llseek) {
-		retval = file->f_op->llseek(file, 0, 0);
-		if (retval != 0)
-			goto out_putf;
-	} else
-		file->f_pos = 0;
 
 	/* N.B. save current DS?? */
 	set_fs(KERNEL_DS);
-	retval = file->f_op->read(file, (char *) &elf_ex,
-				 sizeof(elf_ex), &file->f_pos);
+	retval = file->f_op->read(file, (char *) &elf_ex, sizeof(elf_ex), &offset);
 	set_fs(USER_DS);
 	if (retval != sizeof(elf_ex))
 		goto out_putf;

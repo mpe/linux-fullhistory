@@ -390,8 +390,9 @@ out:
  */
 
 static int
-romfs_readpage(struct dentry * dentry, struct page * page)
+romfs_readpage(struct file * file, struct page * page)
 {
+	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	unsigned long buf;
 	unsigned long offset, avail, readlen;
