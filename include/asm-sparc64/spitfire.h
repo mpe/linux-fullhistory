@@ -34,6 +34,9 @@
 #define PHYS_WATCHPOINT		0x0000000000000040
 
 #define SPITFIRE_HIGHEST_LOCKED_TLBENT	(64 - 1)
+#define CHEETAH_HIGHEST_LOCKED_TLBENT	(16 - 1)
+
+#define L1DCACHE_SIZE		0x4000
 
 #ifndef __ASSEMBLY__
 
@@ -44,10 +47,6 @@ enum ultra_tlb_layout {
 };
 
 extern enum ultra_tlb_layout tlb_type;
-
-#define CHEETAH_HIGHEST_LOCKED_TLBENT	(16 - 1)
-
-#define L1DCACHE_SIZE		0x4000
 
 #define sparc64_highest_locked_tlbent()	\
 	(tlb_type == spitfire ? \
