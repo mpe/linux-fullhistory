@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      wrapper.h
- * Version:       
+ * Version:       1.0
  * Description:   IrDA Wrapper layer
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Thu Nov 19 13:17:56 1998
+ * Modified at:   Fri Jan 29 10:15:46 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -28,7 +28,7 @@
 #include <linux/types.h>
 #include <linux/skbuff.h>
 
-#include "irda_device.h"
+#include <net/irda/irda_device.h>
 
 #define BOF  0xc0 /* Beginning of frame */
 #define XBOF 0xff
@@ -39,9 +39,6 @@
 #define STO EOF  /* End flag */
 
 #define IR_TRANS 0x20    /* Asynchronous transparency modifier */       
-
-#define SOP BOF  /* Start of */
-#define EOP EOF  /* End of */
 
 enum {
 	OUTSIDE_FRAME = 1, 

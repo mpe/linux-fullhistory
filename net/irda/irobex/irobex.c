@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irobex.c
- * Version:       0.3
+ * Version:       0.4
  * Description:   Kernel side of the IrOBEX layer
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Jun 25 21:21:07 1998
- * Modified at:   Sat Jan 16 22:18:03 1999
+ * Modified at:   Mon Feb  8 09:05:01 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -46,6 +46,8 @@
  */
 struct irobex_cb *irobex;
 
+extern char *lmp_reasons[];
+
 char *irobex_state[] = {
 	"OBEX_IDLE",
 	"OBEX_DISCOVER",
@@ -54,10 +56,29 @@ char *irobex_state[] = {
 	"OBEX_DATA",
 };
 
-static int irobex_dev_open( struct inode * inode, struct file *file);
+static void   irobex_cleanup(void);
+/* static struct irobex_cb *irobex_open(void); */
+/* static void   irobex_close( struct irobex_cb *self); */
+
+static void irobex_data_indication( void *instance, void *sap, 
+				    struct sk_buff *skb);
+static void irobex_disconnect_indication( void *instance, void *sap, 
+					  LM_REASON reason, 
+					  struct sk_buff *skb);
+static void irobex_disconnect_request( struct irobex_cb *self);
+static int irobex_connect_request(struct irobex_cb *self);
+static void irobex_connect_confirm( void *instance, void *sap, 
+				    struct qos_info *qos,
+				    int max_sdu_size, struct sk_buff *skb);
+static void irobex_discovery_indication( DISCOVERY *discovery);
+static void irobex_flow_indication( void *instance, void *sap, 
+				    LOCAL_FLOW flow);
+static void irobex_get_value_confirm(__u16 obj_id, struct ias_value *value, 
+				     void *priv);
+static void irobex_register_server( struct irobex_cb *self);
 static int irobex_ioctl( struct inode *inode, struct file *filp, 
 			 unsigned int cmd, unsigned long arg);
-
+static int irobex_dev_open( struct inode * inode, struct file *file);
 static int irobex_dev_close( struct inode *inode, struct file *file);
 static ssize_t irobex_read( struct file *file, char *buffer, size_t count, 
 			    loff_t *noidea);
@@ -105,6 +126,7 @@ struct proc_dir_entry proc_irobex = {
  */
 __initfunc(int irobex_init(void))
 {
+	struct irmanager_event mgr_event;
 	struct irobex_cb *self;
 
 	self = kmalloc(sizeof(struct irobex_cb), GFP_ATOMIC);
@@ -134,6 +156,10 @@ __initfunc(int irobex_init(void))
 		
 	irlmp_register_layer( S_OBEX, CLIENT | SERVER, TRUE, 
 			      irobex_discovery_indication);
+
+/* 	mgr_event.event = EVENT_IROBEX_INIT; */
+/* 	sprintf( mgr_event.devname, "%s", self->devname); */
+/* 	irmanager_notify( &mgr_event); */
 	
 	return 0;
 }
@@ -145,7 +171,7 @@ __initfunc(int irobex_init(void))
  *
  */
 #ifdef MODULE
-void irobex_cleanup(void)
+static void irobex_cleanup(void)
 {
 	struct sk_buff *skb;
 	struct irobex_cb *self;
@@ -163,6 +189,7 @@ void irobex_cleanup(void)
 	irlmp_unregister_layer( S_OBEX, CLIENT | SERVER);
 
 	if ( self->tsap) {
+		irttp_disconnect_request(self->tsap, NULL, P_NORMAL);
 		irttp_close_tsap( self->tsap);
 		self->tsap = NULL;
 	}
@@ -207,8 +234,7 @@ static ssize_t irobex_read( struct file *file, char *buffer, size_t count,
   
 	DEBUG( 4, __FUNCTION__ ": count=%d, skb_len=%d, state=%s, eof=%d\n", 
 	       count, skb_queue_len( &self->rx_queue), 
-	       irobex_state[self->state], 
-	       self->eof);
+	       irobex_state[self->state], self->eof);
 
 	if ( self->state != OBEX_DATA) {
 		DEBUG( 0, __FUNCTION__ "(), link not connected yet!\n");
@@ -446,8 +472,8 @@ static int irobex_ioctl( struct inode *inode, struct file *filp,
 
 	self = irobex;
 	
-	ASSERT( self != NULL, return -ENOTTY;);
-	ASSERT( self->magic = IROBEX_MAGIC, return -ENOTTY;);
+	ASSERT(self != NULL, return -ENOTTY;);
+	ASSERT(self->magic == IROBEX_MAGIC, return -ENOTTY;);
 	
 	if ( _IOC_TYPE(cmd) != IROBEX_IOC_MAGIC) 
 		return -EINVAL;
@@ -464,107 +490,11 @@ static int irobex_ioctl( struct inode *inode, struct file *filp,
 	switch ( cmd) {
 	case IROBEX_IOCSCONNECT:
 		DEBUG( 4, __FUNCTION__ "(): IROBEX_IOCSCONNECT!\n");
-		
-		/* Already connected? */
-		if ( self->state == OBEX_DATA) {
-			DEBUG( 0, __FUNCTION__ "(), already connected!\n");
-			return 0;
-		}
-		
-		/* Timeout after 15 secs. */
-		irobex_start_watchdog_timer( self, 1000);
-
-		/*
-		 * If we have discovered a remote device we
-		 * check if the discovery is still fresh. If not, we don't
-		 * trust the address.
-		 */
-		if ( self->daddr && ((jiffies - self->time_discovered) > 500))
-			self->daddr = 0;
-
-		/* 
-		 * Try to discover remote remote device if it has not been 
-		 * discovered yet. 
-		 */
-		if ( !self->daddr) {
-			self->state = OBEX_DISCOVER;
-			
-			irlmp_discovery_request( 8);
-			
-			/* Wait for discovery to complete */
-			interruptible_sleep_on( &self->write_wait);
-			del_timer( &self->watchdog_timer);
-		}
-		
-		/* Give up if we are unable to discover any remote devices */
-		if ( !self->daddr) {
-			DEBUG( 0, __FUNCTION__ 
-			       "(), Unable to discover any devices!\n");
-			return -ENOTTY;
-		}
-		
-		/* Need to find remote destination TSAP selector? */
-		if ( !self->dtsap_sel) {
-			DEBUG( 0, __FUNCTION__ "() : Quering remote IAS!\n");
-			
-			self->state = OBEX_QUERY;
-			
-			/* Timeout after 5 secs. */
-			irobex_start_watchdog_timer( self, 500);
-			iriap_getvaluebyclass_request( 
-				self->daddr,
-				"OBEX", 
-				"IrDA:TinyTP:LsapSel",
-				irobex_get_value_confirm,
-				self);
-			
-			interruptible_sleep_on( &self->write_wait);
-			del_timer( &self->watchdog_timer);
-		}	
-		
-		if ( !self->dtsap_sel) {
-			DEBUG( 0, __FUNCTION__ 
-			       "(), Unable to query remote LM-IAS!\n");
-			return -ENOTTY;
-		}
-
-		self->state = OBEX_CONN;
-		
-		/* Timeout after 5 secs. */
-		irobex_start_watchdog_timer( self, 500);
-
-		irttp_connect_request( self->tsap, self->dtsap_sel, 
-				       self->daddr, NULL, SAR_DISABLE, 
-				       NULL);
-		
-		/* Go to sleep and wait for connection!  */
-		interruptible_sleep_on( &self->write_wait);
-		del_timer( &self->watchdog_timer);
-		
-		if ( self->state != OBEX_DATA) {
-			DEBUG( 0, __FUNCTION__ 
-			       "(), Unable to connect to remote device!\n");
-			return -ENOTTY;
-		}
-		
+		return irobex_connect_request( self);		
 		break;
 	case IROBEX_IOCSDISCONNECT:
 		DEBUG( 4, __FUNCTION__ "(): IROBEX_IOCSDISCONNECT!\n");
-
-		if ( self->state != OBEX_DATA)
-			return 0;
-
-		irttp_disconnect_request( self->tsap, NULL, P_NORMAL);
-
-		/* Reset values for this instance */
-		self->state = OBEX_IDLE;
-		self->eof = LM_USER_REQUEST;
-		self->daddr = 0;
-		self->dtsap_sel = 0;
-		self->rx_flow = FLOW_START;
-		self->tx_flow = FLOW_START;
-		
-		wake_up_interruptible( &self->read_wait);
+		irobex_disconnect_request( self);
 		break;
 	default:
 		return -EINVAL;
@@ -631,6 +561,7 @@ static int irobex_dev_close( struct inode *inode, struct file *file)
 
 	/* Close TSAP is its still there */
 	if ( self->tsap) {
+		irttp_disconnect_request(self->tsap, NULL, P_NORMAL);
 		irttp_close_tsap( self->tsap);
 		self->tsap = NULL;
 	}
@@ -658,11 +589,11 @@ static int irobex_dev_close( struct inode *inode, struct file *file)
  *    device it is, and which services it has.
  *
  */
-void irobex_discovery_indication( DISCOVERY *discovery) 
+static void irobex_discovery_indication( DISCOVERY *discovery)
 {
  	struct irobex_cb *self;
 	
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG( 0, __FUNCTION__ "()\n");
 	
 	self = irobex;
 
@@ -671,11 +602,30 @@ void irobex_discovery_indication( DISCOVERY *discovery)
 
 	/* Remember address and time if was discovered */
 	self->daddr = discovery->daddr;
+	self->saddr = discovery->saddr;
 	self->time_discovered = jiffies;
 	
 	/* Wake up process if its waiting for device to be discovered */
 	if ( self->state == OBEX_DISCOVER)
 		wake_up_interruptible( &self->write_wait);
+}
+
+static void irobex_disconnect_request( struct irobex_cb *self)
+{
+	if ( self->state != OBEX_DATA)
+		return;
+	
+	irttp_disconnect_request( self->tsap, NULL, P_NORMAL);
+	
+	/* Reset values for this instance */
+	self->state = OBEX_IDLE;
+	self->eof = LM_USER_REQUEST;
+	self->daddr = 0;
+	self->dtsap_sel = 0;
+	self->rx_flow = FLOW_START;
+	self->tx_flow = FLOW_START;
+		
+	wake_up_interruptible( &self->read_wait);
 }
 
 /*
@@ -684,12 +634,13 @@ void irobex_discovery_indication( DISCOVERY *discovery)
  *    Link has been disconnected
  *
  */
-void irobex_disconnect_indication( void *instance, void *sap, 
-				   LM_REASON reason, struct sk_buff *userdata)
+static void irobex_disconnect_indication( void *instance, void *sap, 
+					  LM_REASON reason, 
+					  struct sk_buff *userdata)
 {
 	struct irobex_cb *self;
 	
-	DEBUG( 4, __FUNCTION__ "(), reason=%d\n", reason);
+	DEBUG( 0, __FUNCTION__ "(), reason=%s\n", lmp_reasons[reason]);
 	
 	self = ( struct irobex_cb *) instance;
 	
@@ -712,14 +663,105 @@ void irobex_disconnect_indication( void *instance, void *sap,
 	        dev_kfree_skb( userdata);
 }
 
+int irobex_connect_request(struct irobex_cb *self)
+{
+	int count = 0;
+
+	/* Already connected? */
+	if ( self->state == OBEX_DATA) {
+		DEBUG( 0, __FUNCTION__ "(), already connected!\n");
+		return 0;
+	}
+	
+	/* Timeout after 15 secs. */
+	irobex_start_watchdog_timer( self, 1000);
+	
+	/*
+	 * If we have discovered a remote device we
+	 * check if the discovery is still fresh. If not, we don't
+	 * trust the address.
+	 */
+	if ( self->daddr && ((jiffies - self->time_discovered) > 1000)) {
+		DEBUG( 0, __FUNCTION__ "(), daddr is old <%d>!\n",
+		       jiffies - self->time_discovered);
+		self->daddr = 0;
+	}
+	
+	/* 
+	 * Try to discover remote remote device if it has not been 
+	 * discovered yet. 
+	 */
+	if ( !self->daddr) {
+		self->state = OBEX_DISCOVER;
+		
+		irlmp_discovery_request( 8);
+		
+		/* Wait for discovery to complete */
+		interruptible_sleep_on( &self->write_wait);
+		del_timer( &self->watchdog_timer);
+	}
+	
+	/* Give up if we are unable to discover any remote devices */
+	if ( !self->daddr) {
+		DEBUG( 0, __FUNCTION__ 
+		       "(), Unable to discover any devices!\n");
+		return -EHOSTUNREACH;
+	}
+	
+	/* Need to find remote destination TSAP selector? */
+	while ( !self->dtsap_sel) {
+		DEBUG( 0, __FUNCTION__ "() : Quering remote IAS!\n");
+		
+		self->state = OBEX_QUERY;
+		
+		/* Timeout after 5 secs. */
+		irobex_start_watchdog_timer( self, 500);
+		iriap_getvaluebyclass_request( 
+			"OBEX", "IrDA:TinyTP:LsapSel",
+			self->saddr, self->daddr,
+			irobex_get_value_confirm,
+			self);
+		
+		interruptible_sleep_on( &self->write_wait);
+		del_timer( &self->watchdog_timer);
+		
+		/* Give up after a few tries */
+		if (( count++ > 2) && !self->dtsap_sel) {
+			DEBUG( 0, __FUNCTION__ 
+			       "(), Unable to query remote LM-IAS!\n");
+			return -ETIMEDOUT;
+		}
+	}
+	self->state = OBEX_CONN;
+	
+	/* Timeout after 5 secs. */
+	irobex_start_watchdog_timer( self, 500);
+	
+	irttp_connect_request( self->tsap, self->dtsap_sel, 
+			       self->saddr, self->daddr, NULL, SAR_DISABLE, 
+			       NULL);
+	
+	/* Go to sleep and wait for connection!  */
+	interruptible_sleep_on( &self->write_wait);
+	del_timer( &self->watchdog_timer);
+	
+	if ( self->state != OBEX_DATA) {
+		DEBUG( 0, __FUNCTION__ 
+		       "(), Unable to connect to remote device!\n");
+		return -ETIMEDOUT;
+	}
+	return 0;
+}
+
 /*
  * Function irobex_connect_confirm (instance, sap, qos, userdata)
  *
  *    Connection to peer IrOBEX layer established
  *
  */
-void irobex_connect_confirm( void *instance, void *sap, struct qos_info *qos,
-			     int max_sdu_size, struct sk_buff *userdata)
+static void irobex_connect_confirm( void *instance, void *sap, 
+				    struct qos_info *qos,
+				    int max_sdu_size, struct sk_buff *userdata)
 {
 	struct irobex_cb *self;
 	
@@ -834,7 +876,8 @@ void irobex_connect_indication( void *instance, void *sap,
  *    This function gets the data that is received on the data channel
  *
  */
-void irobex_data_indication( void *instance, void *sap, struct sk_buff *skb) 
+static void irobex_data_indication( void *instance, void *sap, 
+				    struct sk_buff *skb) 
 {
 
 	struct irobex_cb *self;
@@ -876,7 +919,8 @@ void irobex_data_indication( void *instance, void *sap, struct sk_buff *skb)
  *    
  *
  */
-void irobex_flow_indication( void *instance, void *sap, LOCAL_FLOW flow) 
+static void irobex_flow_indication( void *instance, void *sap, 
+				    LOCAL_FLOW flow) 
 {
 	struct irobex_cb *self;
 
@@ -908,8 +952,8 @@ void irobex_flow_indication( void *instance, void *sap, LOCAL_FLOW flow)
  *    Got results from previous GetValueByClass request
  *
  */
-void irobex_get_value_confirm( __u16 obj_id, struct ias_value *value, 
-			       void *priv)
+static void irobex_get_value_confirm( __u16 obj_id, struct ias_value *value, 
+				      void *priv)
 {
 	struct irobex_cb *self;
 	
@@ -919,7 +963,14 @@ void irobex_get_value_confirm( __u16 obj_id, struct ias_value *value,
 	self = ( struct irobex_cb *) priv;
 	
 	if ( !self || self->magic != IROBEX_MAGIC) {
-		DEBUG( 0, "irobex_get_value_confirm: bad magic!\n");
+		DEBUG( 0, __FUNCTION__ "(), bad magic!\n");
+		return;
+	}
+
+	/* Check if request succeeded */
+	if ( !value) {
+		DEBUG( 0, __FUNCTION__ "(), got NULL value!\n");
+
 		return;
 	}
 
@@ -996,7 +1047,7 @@ void irobex_provider_confirm( struct irobex_cb *self, __u8 dlsap)
  *    must register both a TSAP for control and data
  * 
  */
-void irobex_register_server( struct irobex_cb *self)
+static void irobex_register_server( struct irobex_cb *self)
 {
 	struct notify_t notify;
 	struct ias_object *obj;

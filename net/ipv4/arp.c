@@ -557,6 +557,19 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		if (htons(dev_type) != arp->ar_hrd)
 			goto out;
 		break;
+#ifdef CONFIG_NET_ETHERNET
+	case ARPHRD_ETHER:
+		/*
+		 * ETHERNET devices will accept ARP hardware types of either
+		 * 1 (Ethernet) or 6 (IEEE 802.2).
+		 */
+		if (arp->ar_hrd != __constant_htons(ARPHRD_ETHER) &&
+		    arp->ar_hrd != __constant_htons(ARPHRD_IEEE802))
+			goto out;
+		if (arp->ar_pro != __constant_htons(ETH_P_IP))
+			goto out;
+		break;
+#endif
 #ifdef CONFIG_FDDI
 	case ARPHRD_FDDI:
 		/*

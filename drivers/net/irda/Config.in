@@ -9,6 +9,7 @@ if [ "$CONFIG_IRTTY_SIR" != "n" ]; then
     dep_tristate '   ESI JetEye PC dongle' CONFIG_ESI_DONGLE $CONFIG_IRTTY_SIR
     dep_tristate '   ACTiSYS IR-220L and IR220L+ dongle' CONFIG_ACTISYS_DONGLE $CONFIG_IRTTY_SIR
     dep_tristate '   Tekram IrMate 210B dongle' CONFIG_TEKRAM_DONGLE $CONFIG_IRTTY_SIR
+    dep_tristate '   Greenwich GIrBIL dongle' CONFIG_GIRBIL_DONGLE $CONFIG_IRTTY_SIR
   fi
 fi
 dep_tristate '  NSC PC87108' CONFIG_NSC_FIR  $CONFIG_IRDA

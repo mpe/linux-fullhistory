@@ -68,6 +68,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_GIRBIL_DONGLE),y)
+L_OBJS += girbil.o
+else
+  ifeq ($(CONFIG_GIRBIL_DONGLE),m)
+  M_OBJS += girbil.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 clean:

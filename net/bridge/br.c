@@ -6,7 +6,7 @@
  *	More hacks to be able to switch protocols on and off by Christoph Lameter
  *	<clameter@debian.org>
  *	Software and more Documentation for the bridge is available from ftp.debian.org
- *	in the bridge package or at ftp.fuller.edu/Linux/bridge
+ *	in the bridgex package
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -63,7 +63,6 @@
 #include <linux/net.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
-#include <linux/string.h>
 #include <linux/skbuff.h>
 #include <linux/if_arp.h>
 #include <linux/ip.h>
@@ -1239,11 +1238,12 @@ static int send_config_bpdu(int port_no, Config_bpdu *config_bpdu)
 	struct sk_buff *skb;
 	
 	/*
-	 *	Keep silent when disabled
+	 *	Keep silent when disabled or when STP disabled
 	 */
 	 
-	if(!(br_stats.flags & BR_UP))
+	if(!(br_stats.flags & BR_UP) || (br_stats.flags & BR_STP_DISABLED))
 		return -1;
+
 	/*
 	 *	Create and send the message
 	 */
@@ -1278,10 +1278,10 @@ static int send_tcn_bpdu(int port_no, Tcn_bpdu *bpdu)
 	struct sk_buff *skb;
 	
 	/*
-	 *	Keep silent when disabled
+	 *	Keep silent when disabled or when STP disabled
 	 */
 	 
-	if(!(br_stats.flags & BR_UP))
+	if(!(br_stats.flags & BR_UP) || (br_stats.flags & BR_STP_DISABLED))
 		return -1;
 	
  	
@@ -1350,11 +1350,23 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 							enable_port(i);
 						set_path_cost(i, br_port_cost(dev));
 						set_port_priority(i); 
-						make_forwarding(i);
+						if (br_stats.flags & BR_STP_DISABLED)
+							port_info[i].state = Forwarding;
+						else
+							make_forwarding(i);
 					}
 					return NOTIFY_DONE;
 					break;
 				}
+			}
+			break;
+		case NETDEV_UNREGISTER:
+			if (br_stats.flags & BR_DEBUG)
+				printk(KERN_DEBUG "br_device_event: NETDEV_UNREGISTER...\n");
+                        i = find_port(dev);
+                        if (i > 0) {
+				br_avl_delete_by_port(i);
+				port_info[i].dev = NULL;
 			}
 			break;
 	}
@@ -1847,6 +1859,8 @@ static int find_port(struct device *dev)
  
 static int br_port_cost(struct device *dev)	/* 4.10.2 */
 {
+	if (strncmp(dev->name, "lec", 3) == 0)	/* ATM Lan Emulation (LANE) */
+		return(7);                      /* 155 Mbs */
 	if (strncmp(dev->name, "eth", 3) == 0)	/* ethernet */
 		return(100);
 	if (strncmp(dev->name, "plip",4) == 0) /* plip */
@@ -1864,7 +1878,8 @@ static void br_bpdu(struct sk_buff *skb, int port) /* consumes skb */
 	Tcn_bpdu *bpdu = (Tcn_bpdu *) (bufp + BRIDGE_LLC1_HS);
 	Config_bpdu rcv_bpdu;
 
-	if((*bufp++ == BRIDGE_LLC1_DSAP) && (*bufp++ == BRIDGE_LLC1_SSAP) &&
+	if(!(br_stats.flags & BR_STP_DISABLED) &&
+	        (*bufp++ == BRIDGE_LLC1_DSAP) && (*bufp++ == BRIDGE_LLC1_SSAP) &&
 		(*bufp++ == BRIDGE_LLC1_CTRL) &&
 		(bpdu->protocol_id == BRIDGE_BPDU_8021_PROTOCOL_ID) &&
 		(bpdu->protocol_version_id == BRIDGE_BPDU_8021_PROTOCOL_VERSION_ID)) 
@@ -1984,6 +1999,10 @@ int br_ioctl(unsigned int cmd, void *arg)
 						}
 					}
 					port_state_selection();	  /* (4.8.1.5)	 */
+					if (br_stats.flags & BR_STP_DISABLED)
+						for(i=One;i<=No_of_ports; i++)
+							if((user_port_state[i] != Disabled) && port_info[i].dev)
+								port_info[i].state = Forwarding;
 					config_bpdu_generation();  /* (4.8.1.6)	 */
 					/* initialize system timer */
 					tl.expires = jiffies+HZ;	/* 1 second */
@@ -2000,6 +2019,20 @@ int br_ioctl(unsigned int cmd, void *arg)
 					for (i = One; i <= No_of_ports; i++)
 						if (port_info[i].state != Disabled)
 							disable_port(i);
+					break;
+				case BRCMD_TOGGLE_STP:
+					printk(KERN_DEBUG "br: %s spanning tree protcol\n",
+					       (br_stats.flags & BR_STP_DISABLED) ? "enabling" : "disabling");
+					if (br_stats.flags & BR_STP_DISABLED) { /* enable STP */
+						for(i=One;i<=No_of_ports; i++)
+							if((user_port_state[i] != Disabled) && port_info[i].dev)
+								enable_port(i);
+					} else { /* STP was enabled, now disable it */
+						for (i = One; i <= No_of_ports; i++)
+							if (port_info[i].state != Disabled && port_info[i].dev)
+								port_info[i].state = Forwarding;
+					}
+					br_stats.flags ^= BR_STP_DISABLED;
 					break;
 				case BRCMD_PORT_ENABLE:
 					if (port_info[bcf.arg1].dev == 0)

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:58:52 1997
- * Modified at:   Tue Jan 12 14:56:11 1999
+ * Modified at:   Thu Feb 11 15:14:30 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -45,6 +45,7 @@ typedef enum {
 	EVENT_IRLAN_STOP,
 	EVENT_IRLPT_START,
 	EVENT_IRLPT_STOP,
+/* 	EVENT_IROBEX_INIT, */
 	EVENT_IROBEX_START,
 	EVENT_IROBEX_STOP,
 	EVENT_IRDA_STOP,
@@ -190,7 +191,13 @@ typedef enum {
 	LM_CONNECT_FAILURE,   /* Failed to establish IrLAP connection */
 	LM_LAP_RESET,         /* IrLAP reset */
 	LM_INIT_DISCONNECT,   /* Link Management initiated disconnect */
-} LM_REASON; /* FIXME: Just for now */
+	LM_LSAP_NOTCONN,      /* Data delivered on unconnected LSAP */
+	LM_NON_RESP_CLIENT,   /* Non responsive LM-MUX client */
+	LM_NO_AVAIL_CLIENT,   /* No available LM-MUX client */
+	LM_CONN_HALF_OPEN,    /* Connection is half open */
+	LM_BAD_SOURCE_ADDR,   /* Illegal source address (i.e 0x00) */
+} LM_REASON;
+#define LM_UNKNOWN 0xff       /* Unspecified disconnect reason */
 
 /*
  *  IrLMP character code values
@@ -214,16 +221,17 @@ typedef enum {
 struct discovery_t {
 	QUEUE queue;              /* Must be first! */
 
-	__u32       saddr;        /* Which link the device was discovered */
-	__u32       daddr;        /* Remote device address */
-	LAP_REASON  condition;    /* More info about the discovery */
+	__u32      saddr;        /* Which link the device was discovered */
+	__u32      daddr;        /* Remote device address */
+	LAP_REASON condition;    /* More info about the discovery */
 
-	__u8        hint[2];      /* Discovery hint bits */
-	__u8        charset;
-	char        info[32];     /* Usually the name of the device */
-	__u8        info_len;     /* Length of device info field */
+	__u8       hint[2];      /* Discovery hint bits */
+	__u8       charset;
+	char       info[32];     /* Usually the name of the device */
+	__u8       info_len;     /* Length of device info field */
 
-	int         gen_addr_bit; /* Need to generate a new device address? */
+	int        gen_addr_bit; /* Need to generate a new device address? */
+	int        nslots;       /* Number of slots to use when discovering */
 };
 
 typedef enum { FLOW_STOP, FLOW_START } LOCAL_FLOW;
@@ -254,12 +262,14 @@ struct notify_t {
 int irmod_init_module(void);
 void irmod_cleanup_module(void);
 
-inline int irda_lock( int *lock);
-inline int irda_unlock( int *lock);
+inline int irda_lock(int *lock);
+inline int irda_unlock(int *lock);
 
-void irda_notify_init( struct notify_t *notify);
+void irda_notify_init(struct notify_t *notify);
 
-void irda_execute_as_process( void *self, TODO_CALLBACK callback, __u32 param);
-void irmanager_notify( struct irmanager_event *event);
+void irda_execute_as_process(void *self, TODO_CALLBACK callback, __u32 param);
+void irmanager_notify(struct irmanager_event *event);
+
+extern void irda_proc_modcount(struct inode *, int);
 
 #endif

@@ -1,0 +1,86 @@
+How to enable CMI 8330 soundchip on Linux
+------------------------------------------
+Stefan Laudat <Stefan.Laudat@asit.ro>
+
+Hello folks, 
+	
+	The CMI8330 soundchip is a very small chip found on many recent 
+	motherboards. In order to use it you just have to use a proper 
+        isapnp.conf and a little bit of patience. 
+	
+	Of course you will have to compile kernel sound support as module, 
+        as shown below:
+
+CONFIG_SOUND=m
+CONFIG_SOUND_OSS=m
+CONFIG_SOUND_SB=m
+CONFIG_SOUND_ADLIB=m
+CONFIG_SOUND_MPU401=m
+# Just for fun :)
+CONFIG_SOUND_MSS=m
+
+	The /etc/isapnp.conf file will be:
+
+<snip below>
+
+(READPORT 0x0203)
+(ISOLATE PRESERVE)
+(IDENTIFY *)
+(VERBOSITY 2)
+(CONFLICT (IO FATAL)(IRQ FATAL)(DMA FATAL)(MEM FATAL)) # or WARNING
+(VERIFYLD N)
+# WSS 
+
+(CONFIGURE CMI0001/16777472 (LD 0
+(IO 0 (SIZE 8) (BASE 0x0530))
+(IO 1 (SIZE 8) (BASE 0x0388))
+(INT 0 (IRQ 5 (MODE +E)))
+(DMA 0 (CHANNEL 0))
+(NAME "CMI0001/16777472[0]{CMI8330/C3D Audio Adapter}")
+(ACT Y)
+))
+
+# Control device ? 
+
+(CONFIGURE CMI0001/16777472 (LD 1
+(IO 0 (SIZE 2) (BASE 0x0330))
+(INT 0 (IRQ 11 (MODE +E)))
+(NAME "CMI0001/16777472[1]{CMI8330/C3D Audio Adapter}")
+(ACT Y)
+))
+
+# Joystick
+
+(CONFIGURE CMI0001/16777472 (LD 2
+(IO 0 (SIZE 8) (BASE 0x0200))
+(NAME "CMI0001/16777472[2]{CMI8330/C3D Audio Adapter}")
+(ACT Y)
+))
+
+#  SB... 
+(CONFIGURE CMI0001/16777472 (LD 3
+(IO 0 (SIZE 16) (BASE 0x0220))
+(INT 0 (IRQ 7 (MODE +E)))
+(DMA 0 (CHANNEL 1))
+(DMA 1 (CHANNEL 5))
+(NAME "CMI0001/16777472[3]{CMI8330/C3D Audio Adapter}")
+(ACT Y)
+))
+
+
+(WAITFORKEY)
+
+<end of snip>
+
+	The module sequence is trivial:
+
+/sbin/modprobe sound
+# You need to load the ad1848 module first. That matters, otherwise the 
+# chip falls into soundblaster compatibility and you won't get it back out
+/sbin/insmod ad1848 io=0x530 dma=0 irq=5 soundpro=1
+/sbin/insmod uart401
+/sbin/insmod sb io=0x220 irq=5 dma=1 dma16=-1
+/sbin/insmod mpu401 io=0x330
+/sbin/insmod opl3 io=0x388
+
+	The soundchip is now fully initialized. Enjoy it.

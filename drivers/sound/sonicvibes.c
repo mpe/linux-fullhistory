@@ -1431,8 +1431,6 @@ static int sv_mmap(struct file *file, struct vm_area_struct *vma)
 	if (remap_page_range(vma->vm_start, virt_to_phys(db->rawbuf), size, vma->vm_page_prot))
 		return -EAGAIN;
 	db->mapped = 1;
-	vma->vm_file = file;
-	file->f_count++;
 	return 0;
 }
 

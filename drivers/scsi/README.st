@@ -2,7 +2,7 @@ This file contains brief information about the SCSI tape driver.
 The driver is currently maintained by Kai M{kisara (email
 Kai.Makisara@metla.fi)
 
-Last modified: Sun Sep  6 10:03:47 1998 by makisara@home
+Last modified: Sun Jan 17 10:57:41 1999 by makisara@home
 
 
 BASICS
@@ -60,10 +60,19 @@ scans its database, and sets up the modes using the ioctls. Another
 alternative is to make a small script that uses mt to set the defaults
 tailored to the system.
 
-
 The driver supports fixed and variable block size (within buffer
 limits). Both the auto-rewind (minor equals device number) and
 non-rewind devices (minor is 128 + device number) are implemented.
+
+In variable block mode, the byte count in write() determines the size
+of the physical block on tape. When reading, the drive reads the next
+tape block and returns to the user the data if the read() byte count
+is at least the block size. Otherwise the data is truncated.
+
+In fixed block mode, the data transfer between the drive and the
+driver is in multiples of the block size. The write() byte count must
+be a multiple of the block size. This is not required when reading but
+may be advisable for portability.
 
 Support is provided for changing the tape partition and partitioning
 of the tape with one or two partitions. By default support for

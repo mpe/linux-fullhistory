@@ -236,7 +236,9 @@ void ircomm_cleanup(void)
  * ---------------------------------------------------------------------- 
  */
 
-void ircomm_accept_data_indication(void *instance, void *sap, struct sk_buff *skb){
+void ircomm_accept_data_indication(void *instance, void *sap, 
+				   struct sk_buff *skb)
+{
 	
 	struct ircomm_cb *self = (struct ircomm_cb *)instance;
 
@@ -250,7 +252,8 @@ void ircomm_accept_data_indication(void *instance, void *sap, struct sk_buff *sk
 
 void ircomm_accept_connect_confirm(void *instance, void *sap,
 				   struct qos_info *qos, 
-				   int maxsdusize, struct sk_buff *skb){
+				   int maxsdusize, struct sk_buff *skb)
+{
 
 	struct ircomm_cb *self = (struct ircomm_cb *)instance;
 
@@ -277,8 +280,8 @@ void ircomm_accept_connect_confirm(void *instance, void *sap,
 void ircomm_accept_connect_indication(void *instance, void *sap,
 				      struct qos_info *qos,
 				      int maxsdusize,
-				      struct sk_buff *skb ){
-
+				      struct sk_buff *skb )
+{
 	struct ircomm_cb *self = (struct ircomm_cb *)instance;
 
 	ASSERT( self != NULL, return;);
@@ -297,8 +300,10 @@ void ircomm_accept_connect_indication(void *instance, void *sap,
 	ircomm_do_event( self, TTP_CONNECT_INDICATION, skb);
 }
 
-void ircomm_accept_disconnect_indication(void *instance, void *sap, LM_REASON reason,
-					 struct sk_buff *skb){
+void ircomm_accept_disconnect_indication(void *instance, void *sap, 
+					 LM_REASON reason,
+					 struct sk_buff *skb)
+{
 	struct ircomm_cb *self = (struct ircomm_cb *)instance;
 
 	ASSERT( self != NULL, return;);
@@ -309,7 +314,8 @@ void ircomm_accept_disconnect_indication(void *instance, void *sap, LM_REASON re
 	ircomm_do_event( self, TTP_DISCONNECT_INDICATION, skb);
 }
 
-void ircomm_accept_flow_indication( void *instance, void *sap, LOCAL_FLOW cmd){
+void ircomm_accept_flow_indication( void *instance, void *sap, LOCAL_FLOW cmd)
+{
 	
 	struct ircomm_cb *self = (struct ircomm_cb *)instance;
 
@@ -349,10 +355,9 @@ void ircomm_accept_flow_indication( void *instance, void *sap, LOCAL_FLOW cmd){
  * ----------------------------------------------------------------------
  */
 
-
 static void issue_connect_request(struct ircomm_cb *self,
-				  struct sk_buff *userdata ){
-
+				  struct sk_buff *userdata )
+{
 	/* TODO: we have to send/build userdata field which contains 
 	   InitialControlParameters */
 	/* but userdata field is not implemeted in irttp.c.. */
@@ -365,7 +370,8 @@ static void issue_connect_request(struct ircomm_cb *self,
 		break;
 
 	case DEFAULT: 
-		irttp_connect_request(self->tsap, self->dlsap, self->daddr,
+		irttp_connect_request(self->tsap, self->dlsap, 
+				      self->saddr, self->daddr,
 				      NULL, self->maxsdusize, NULL);  
  		break; 
 		
@@ -373,7 +379,8 @@ static void issue_connect_request(struct ircomm_cb *self,
 	case NINE_WIRE:
 	case CENTRONICS:
 
-		irttp_connect_request(self->tsap, self->dlsap, self->daddr, 
+		irttp_connect_request(self->tsap, self->dlsap, 
+				      self->saddr, self->daddr, 
 				      NULL, self->maxsdusize, NULL); 
 		break;
 
@@ -383,8 +390,8 @@ static void issue_connect_request(struct ircomm_cb *self,
 	}
 }	
 
-
-static void disconnect_indication(struct ircomm_cb *self, struct sk_buff *skb){
+static void disconnect_indication(struct ircomm_cb *self, struct sk_buff *skb)
+{
 
 	/*
 	 * Not implemented parameter"Reason".That is optional.
@@ -399,7 +406,8 @@ static void disconnect_indication(struct ircomm_cb *self, struct sk_buff *skb){
 }
 
 static void connect_indication(struct ircomm_cb *self, struct qos_info *qos, 
-			       struct sk_buff *skb){
+			       struct sk_buff *skb)
+{
 
 /* If controlparameters don't exist, we use the servicetype"DEFAULT".*/
 /* 	if( !ircomm_parse_controlchannel( self, data)) */
@@ -412,13 +420,15 @@ static void connect_indication(struct ircomm_cb *self, struct qos_info *qos,
     
 #if 0
 /*   it's for THREE_WIRE_RAW.*/
-static void connect_indication_three_wire_raw(void){ 
+static void connect_indication_three_wire_raw(void)
+{ 
 	DEBUG(0,"ircomm:connect_indication_threewire():not implemented!");
 }    
 #endif 
 
 
-static void connect_confirmation(struct ircomm_cb *self, struct sk_buff *skb){
+static void connect_confirmation(struct ircomm_cb *self, struct sk_buff *skb)
+{
 
 	/* give a connect_confirm to the client */
 	if( self->notify.connect_confirm )
@@ -427,7 +437,8 @@ static void connect_confirmation(struct ircomm_cb *self, struct sk_buff *skb){
 }
 
 static void issue_connect_response(struct ircomm_cb *self,
-				   struct sk_buff *skb ){
+				   struct sk_buff *skb)
+{
 
 	DEBUG(0,"ircomm:issue_connect_response:\n");
 	
@@ -441,7 +452,8 @@ static void issue_connect_response(struct ircomm_cb *self,
 }
 
 static void issue_disconnect_request(struct ircomm_cb *self,
-				struct sk_buff *userdata ){
+				     struct sk_buff *userdata)
+{
 	if(self->servicetype == THREE_WIRE_RAW){
 		DEBUG(0,"ircomm:issue_disconnect_request():3wireraw is not implemented!");
 	}
@@ -450,7 +462,8 @@ static void issue_disconnect_request(struct ircomm_cb *self,
 }
     
 static void issue_data_request(struct ircomm_cb *self,
-			       struct sk_buff *userdata ){
+			       struct sk_buff *userdata )
+{
 	int err;
 
 	if(self->servicetype == THREE_WIRE_RAW){
@@ -469,7 +482,8 @@ static void issue_data_request(struct ircomm_cb *self,
 }
 
 static void issue_control_request(struct ircomm_cb *self,
-				  struct sk_buff *userdata ){
+				  struct sk_buff *userdata )
+{
 	if(self->servicetype == THREE_WIRE_RAW){
 		DEBUG(0,"THREE_WIRE_RAW is not implemented\n");
 		
@@ -478,8 +492,8 @@ static void issue_control_request(struct ircomm_cb *self,
 	}
 }
 
-
-static void process_data(struct ircomm_cb *self, struct sk_buff *skb ){
+static void process_data(struct ircomm_cb *self, struct sk_buff *skb )
+{
 	
 	DEBUG(4,"ircomm:process_data:skb_len is(%d),clen_is(%d)\n",
 	      (int)skb->len ,(int)skb->data[0]);
@@ -496,7 +510,8 @@ static void process_data(struct ircomm_cb *self, struct sk_buff *skb ){
 					     skb);
 }
 
-void ircomm_data_indication(struct ircomm_cb *self, struct sk_buff *skb){
+void ircomm_data_indication(struct ircomm_cb *self, struct sk_buff *skb)
+{
 	/* Not implemented yet:THREE_WIRE_RAW service uses this function.  */
 	DEBUG(0,"ircomm_data_indication:not implemented yet!\n");
 }
@@ -510,14 +525,16 @@ void ircomm_data_indication(struct ircomm_cb *self, struct sk_buff *skb){
  */
 
 static void ircomm_do_event( struct ircomm_cb *self, IRCOMM_EVENT event,
-			     struct sk_buff *skb) {
+			     struct sk_buff *skb) 
+{
 	
 	DEBUG( 4, "ircomm_do_event: STATE = %s, EVENT = %s\n",
 	       ircommstate[self->state], ircommevent[event]);
 	(*state[ self->state ]) ( self, event, skb);
 }
 
-void ircomm_next_state( struct ircomm_cb *self, IRCOMM_STATE state) {
+void ircomm_next_state( struct ircomm_cb *self, IRCOMM_STATE state) 
+{
 	self->state = state;
 	DEBUG( 0, "ircomm_next_state: NEXT STATE = %d(%s), sv(%d)\n", 
 	       (int)state, ircommstate[self->state],self->servicetype);
@@ -530,7 +547,8 @@ void ircomm_next_state( struct ircomm_cb *self, IRCOMM_STATE state) {
  */
 
 static void ircomm_state_discovery( struct ircomm_cb *self,
-				    IRCOMM_EVENT event, struct sk_buff *skb ){
+				    IRCOMM_EVENT event, struct sk_buff *skb )
+{
 	DEBUG(0,"ircomm_state_discovery: "
 	      "why call me? \n");
 	if(skb)
@@ -543,7 +561,8 @@ static void ircomm_state_discovery( struct ircomm_cb *self,
  */
 
 static void ircomm_state_idle( struct ircomm_cb *self, IRCOMM_EVENT event, 
-			       struct sk_buff *skb ){
+			       struct sk_buff *skb )
+{
 	switch(event){
 	case IRCOMM_CONNECT_REQUEST:
 
@@ -577,7 +596,8 @@ static void ircomm_state_idle( struct ircomm_cb *self, IRCOMM_EVENT event,
  */
 
 static void ircomm_state_waiti(struct ircomm_cb *self, IRCOMM_EVENT event, 
-			  struct sk_buff *skb ){
+			  struct sk_buff *skb )
+{
 	switch(event){
 	case TTP_CONNECT_CONFIRM:
 		ircomm_next_state(self, COMM_CONN);
@@ -607,7 +627,8 @@ static void ircomm_state_waiti(struct ircomm_cb *self, IRCOMM_EVENT event,
  * ircomm_state_waitr
  */
 static void ircomm_state_waitr(struct ircomm_cb *self, IRCOMM_EVENT event, 
-			  struct sk_buff *skb ) {
+			  struct sk_buff *skb ) 
+{
 	
 	switch(event){
 	case IRCOMM_CONNECT_RESPONSE:
@@ -651,7 +672,8 @@ static void ircomm_state_waitr(struct ircomm_cb *self, IRCOMM_EVENT event,
  */
 
 static void ircomm_state_conn(struct ircomm_cb *self, IRCOMM_EVENT event, 
-			  struct sk_buff *skb ){
+			      struct sk_buff *skb )
+{
 	switch(event){
 	case TTP_DATA_INDICATION:
 		process_data(self, skb);
@@ -696,7 +718,8 @@ static void ircomm_state_conn(struct ircomm_cb *self, IRCOMM_EVENT event,
  */
 
 
-void ircomm_connect_request(struct ircomm_cb *self, int maxsdusize){
+void ircomm_connect_request(struct ircomm_cb *self, int maxsdusize)
+{
 
 	/*
 	 * TODO:build a packet which contains "initial control parameters"
@@ -713,7 +736,8 @@ void ircomm_connect_request(struct ircomm_cb *self, int maxsdusize){
 }
 
 void ircomm_connect_response(struct ircomm_cb *self, struct sk_buff *userdata,
-			     int maxsdusize){
+			     int maxsdusize)
+{
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IRCOMM_MAGIC, return;);
@@ -746,7 +770,9 @@ void ircomm_connect_response(struct ircomm_cb *self, struct sk_buff *userdata,
 	ircomm_do_event(self, IRCOMM_CONNECT_RESPONSE, userdata);
 }	
 
-void ircomm_disconnect_request(struct ircomm_cb *self, struct sk_buff *userdata){
+void ircomm_disconnect_request(struct ircomm_cb *self, 
+			       struct sk_buff *userdata)
+{
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IRCOMM_MAGIC, return;);
@@ -756,7 +782,8 @@ void ircomm_disconnect_request(struct ircomm_cb *self, struct sk_buff *userdata)
 }	
 
 
-void ircomm_data_request(struct ircomm_cb *self, struct sk_buff *userdata){
+void ircomm_data_request(struct ircomm_cb *self, struct sk_buff *userdata)
+{
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IRCOMM_MAGIC, return;);
@@ -780,7 +807,8 @@ void ircomm_data_request(struct ircomm_cb *self, struct sk_buff *userdata){
  *  ----------------------------------------------------------------------
  */
 
-static void ircomm_tx_ctrlbuffer(struct ircomm_cb *self ){
+static void ircomm_tx_ctrlbuffer(struct ircomm_cb *self )
+{
 
 	__u8 clen;
 	struct sk_buff *skb = self->ctrl_skb;
@@ -817,7 +845,8 @@ static void ircomm_tx_ctrlbuffer(struct ircomm_cb *self ){
 }
 
 
-void ircomm_control_request(struct ircomm_cb *self){
+void ircomm_control_request(struct ircomm_cb *self)
+{
 	
 	struct sk_buff *skb;
 
@@ -839,8 +868,9 @@ void ircomm_control_request(struct ircomm_cb *self){
 }
 
 
-static void append_tuple(struct ircomm_cb *self,
-			 __u8 instruction, __u8 pl , __u8 *value){
+static void append_tuple(struct ircomm_cb *self, __u8 instruction, __u8 pl , 
+			 __u8 *value)
+{
 
 	__u8 *frame;
 	struct sk_buff *skb;
@@ -886,7 +916,8 @@ static void append_tuple(struct ircomm_cb *self,
  * to peer device
  */
 
-void ircomm_append_ctrl(struct ircomm_cb *self,  __u8 instruction){
+void ircomm_append_ctrl(struct ircomm_cb *self,  __u8 instruction)
+{
 
 	__u8  pv[70];
 	__u8  *value = &pv[0];
@@ -1028,7 +1059,8 @@ void ircomm_append_ctrl(struct ircomm_cb *self,  __u8 instruction){
 
 static void ircomm_parse_control(struct ircomm_cb *self,
 				 struct sk_buff *skb,
-				 int type){
+				 int type)
+{
 
 	__u8 *data;
 	__u8 pi,pl,pv[64];
@@ -1210,7 +1242,8 @@ static void ircomm_parse_control(struct ircomm_cb *self,
 
 #ifdef MODULE
 
-int init_module(void) {
+int init_module(void) 
+{
 	ircomm_init();
 
 	DEBUG( 4, "ircomm:init_module:done\n");
@@ -1238,7 +1271,8 @@ void cleanup_module(void)
  *
  */
 int ircomm_proc_read(char *buf, char **start, off_t offset,
-		     int len, int unused){
+		     int len, int unused)
+{
 	int i, index;
 
 	len = 0;
@@ -1284,7 +1318,6 @@ int ircomm_proc_read(char *buf, char **start, off_t offset,
 	}
 	return len;
 }
-
 
 #endif /* CONFIG_PROC_FS */
 

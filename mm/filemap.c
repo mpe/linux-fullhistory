@@ -1334,8 +1334,6 @@ int generic_file_mmap(struct file * file, struct vm_area_struct * vma)
 	if (!inode->i_op || !inode->i_op->readpage)
 		return -ENOEXEC;
 	UPDATE_ATIME(inode);
-	vma->vm_file = file;
-	file->f_count++;
 	vma->vm_ops = ops;
 	return 0;
 }

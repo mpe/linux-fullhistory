@@ -166,6 +166,8 @@ if [ "$CONFIG_JOYSTICK" != "n" ]; then
 fi
 endmenu
 
+tristate 'Double Talk PC internal speech card support' CONFIG_DTLK
+
 mainmenu_option next_comment
 comment 'Ftape, the floppy tape device driver'
 tristate 'Ftape (QIC-80/Travan) support' CONFIG_FTAPE

@@ -39,7 +39,6 @@
 #include <linux/malloc.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
-#include <linux/malloc.h>
 #include <linux/fs.h>
 #include <linux/sound.h>
 #include <linux/major.h>

@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irtty.h
- * Version:       0.1
+ * Version:       1.0
  * Description:   
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Mon Dec 14 11:22:37 1998
+ * Modified at:   Sun Feb  7 01:57:33 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *  
  *     Copyright (c) 1997 Dag Brattli, All Rights Reserved.
@@ -64,5 +64,7 @@ struct irtty_cb {
  
 int irtty_register_dongle( struct dongle *dongle);
 void irtty_unregister_dongle( struct dongle *dongle);
+
+void irtty_set_dtr_rts(struct tty_struct *tty, int dtr, int rts);
 
 #endif

@@ -96,7 +96,7 @@ __initfunc(int irport_init(void))
 #ifdef MODULE
 static void irport_cleanup(void)
 {
-	int i;
+/* 	int i; */
 
         DEBUG( 4, __FUNCTION__ "()\n");
 
@@ -303,7 +303,6 @@ static int irport_write( int iobase, int fifo_size, __u8 *buf, int len)
 int irport_hard_xmit( struct sk_buff *skb, struct device *dev)
 {
 	struct irda_device *idev;
-	int xbofs;
 	int actual;
 
 	DEBUG( 4, __FUNCTION__ "()\n");

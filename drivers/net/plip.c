@@ -1217,7 +1217,7 @@ static int inline
 plip_searchfor(int list[], int a)
 {
 	int i;
-	for (i = 0; i < 3 && list[i] != -1; i++) {
+	for (i = 0; i < PLIP_MAX && list[i] != -1; i++) {
 		if (list[i] == a) return 1;
 	}
 	return 0;
@@ -1240,7 +1240,7 @@ plip_init(void))
 	/* If the user feeds parameters, use them */
 	while (pb) {
 		if ((parport[0] == -1 && (!timid || !pb->devices)) || 
-		    plip_searchfor(parport, i)) {
+		    plip_searchfor(parport, pb->number)) {
 			if (i == PLIP_MAX) {
 				printk(KERN_ERR "plip: too many devices\n");
 				break;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Nov 13 14:37:40 1998
- * Modified at:   Thu Dec 10 19:58:20 1998
+ * Modified at:   Mon Jan 25 23:10:25 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>
@@ -148,8 +148,8 @@
 #define FRM_ST_MAX_LEN  0x10 /* Max frame len exceeded */
 #define FRM_ST_PHY_ERR  0x08 /* Physical layer error */
 #define FRM_ST_BAD_CRC  0x04 
-#define FRM_ST_OVR2     0x02 /* Receive overrun */
-#define FRM_ST_OVR1     0x01 /* Frame status FIFO overrun */
+#define FRM_ST_OVR1     0x02 /* Receive overrun */
+#define FRM_ST_OVR2     0x01 /* Frame status FIFO overrun */
 
 #define RFLFL           0x06
 #define RFLFH           0x07

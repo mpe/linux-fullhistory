@@ -2,9 +2,9 @@
  * sound/awe_wave.c
  *
  * The low level driver for the AWE32/SB32/AWE64 wave table synth.
- *   version 0.4.3; Nov. 1, 1998
+ *   version 0.4.3; Feb. 1, 1999
  *
- * Copyright (C) 1996-1998 Takashi Iwai
+ * Copyright (C) 1996-1999 Takashi Iwai
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -204,16 +204,20 @@ static awe_chan_info channels[AWE_MAX_CHANNELS];
 #if defined(AWE_MODULE_SUPPORT) && defined(MODULE)
 /* replace awe_port variable with exported variable */
 #define awe_port	io
-#define BASEVAR_DECL	/**/
+#define awe_mem_size	memsize
+int io = AWE_DEFAULT_BASE_ADDR; /* Emu8000 base address */
+int memsize = AWE_DEFAULT_MEM_SIZE; /* memory size in Kbytes */
+#ifdef MODULE_PARM
+MODULE_PARM(io, "i");
+MODULE_PARM_DESC(io, "base i/o port of Emu8000");
+MODULE_PARM(memsize, "i");
+MODULE_PARM_DESC(memsize, "onboard DRAM size in Kbytes");
+#endif
 #else
-#define BASEVAR_DECL	static
+static int awe_port = AWE_DEFAULT_BASE_ADDR;
+static int awe_mem_size = AWE_DEFAULT_MEM_SIZE;
 #endif /* module */
 
-/* awe32 base address (overwritten at initialization) */
-BASEVAR_DECL int awe_port = AWE_DEFAULT_BASE_ADDR;
-/* memory byte size */
-BASEVAR_DECL int memsize = AWE_DEFAULT_MEM_SIZE; /* for module option */
-static int awe_mem_size = -1;
 /* DRAM start offset */
 static int awe_mem_start = AWE_DRAM_OFFSET;
 
@@ -669,7 +673,7 @@ static void _unload_awe(void)
 
 #include <linux/pnp.h>
 
-BASEVAR_DECL int pnp = 1;	/* use PnP as default */
+static int pnp = 1;	/* use PnP as default */
 
 #define AWE_NUM_CHIPS	3
 static unsigned int pnp_ids[AWE_NUM_CHIPS] = {
@@ -812,6 +816,7 @@ void cleanup_module(void)
 }
 
 #ifdef MODULE_PARM
+EXPORT_NO_SYMBOLS;
 MODULE_AUTHOR("Takashi Iwai <iwai@ww.uni-erlangen.de>");
 MODULE_DESCRIPTION("SB AWE32/64 WaveTable driver");
 MODULE_SUPPORTED_DEVICE("sound");
@@ -975,23 +980,9 @@ awe_wait(unsigned short delay)
 #else
 
 static struct wait_queue *awe_sleeper = NULL;
-static void awe_wakeup(unsigned long dummy)
-{
-	wake_up(&awe_sleeper);
-}
-
-static struct timer_list awe_timer =
-{NULL, NULL, 0, 0, awe_wakeup};
-
 static void awe_wait(unsigned short delay)
 {
-	unsigned long   flags;
-	awe_timer.expires = jiffies + (HZ * (unsigned long)delay + 44099) / 44100;
-	add_timer(&awe_timer);
-	save_flags (flags);
-	cli();
-	sleep_on(&awe_sleeper);
-	restore_flags(flags);
+	interruptible_sleep_on_timeout(&awe_sleeper, (HZ * (unsigned long)delay + 44099) / 44100);
 }
 #endif /* wait by loop */
 
@@ -1553,7 +1544,7 @@ awe_note_on(int voice)
 			  vp->parm.moddcysus));
 
 	if (parm->volatk >= 0x80 && parm->voldelay >= 0x8000) {
-		awe_poke(AWE_ENVVAL(voice), 0xBFFF);
+		awe_poke(AWE_ENVVOL(voice), 0xBFFF);
 		vtarget = voltarget[voices[voice].avol%0x10]>>(voices[voice].avol>>4);
 	} else {
 		awe_poke(AWE_ENVVOL(voice),
@@ -3268,7 +3259,7 @@ static int info_duplicated(awe_voice_list *rec)
 	sf_list *sf;
 
 	/* search for all sharing lists */
-	for (sf_id = rec->v.sf_id; sf_id > 0; sf_id = sf->shared) {
+	for (sf_id = rec->v.sf_id; sf_id > 0 && sf_id <= current_sf_id; sf_id = sf->shared) {
 		sf = &sflists[sf_id - 1];
 		for (j = sf->infos; j >= 0; j = infos[j].next) {
 			awe_voice_list *p = &infos[j];
@@ -4201,7 +4192,7 @@ static int is_identical_id(int id1, int id2)
 		if (id1 < id2) { /* make sure id1 > id2 */
 			int tmp; tmp = id1; id1 = id2; id2 = tmp;
 		}
-		for (i = sflists[id1-1].shared; i > 0; i = sflists[i-1].shared) {
+		for (i = sflists[id1-1].shared; i > 0 && i <= current_sf_id; i = sflists[i-1].shared) {
 			if (i == id2)
 				return TRUE;
 		}
@@ -4223,10 +4214,10 @@ static int search_sample_index(int sf, int sample, int level)
 			return i;
 	}
 #ifdef AWE_ALLOW_SAMPLE_SHARING
-	if (sflists[sf-1].shared) { /* search recursively */
+	if ((i = sflists[sf-1].shared) > 0 && i <= current_sf_id) { /* search recursively */
 		if (level > current_sf_id)
 			return -1; /* strange sharing loop.. quit */
-		return search_sample_index(sflists[sf-1].shared, sample, level + 1);
+		return search_sample_index(i, sample, level + 1);
 	}
 #endif
 	return -1;
@@ -4272,10 +4263,12 @@ awe_search_multi_voices(int rec, int note, int velocity, awe_voice_info **vlist)
 		    note <= infos[rec].v.high &&
 		    velocity >= infos[rec].v.vellow &&
 		    velocity <= infos[rec].v.velhigh) {
-			vlist[nvoices] = &infos[rec].v;
-			if (infos[rec].type == V_ST_MAPPED) /* mapper */
+			if (infos[rec].type == V_ST_MAPPED) {
+				/* mapper */
+				vlist[0] = &infos[rec].v;
 				return -1;
-			nvoices++;
+			}
+			vlist[nvoices++] = &infos[rec].v;
 			if (nvoices >= AWE_MAX_VOICES)
 				break;
 		}
@@ -5009,8 +5002,6 @@ awe_detect(void)
 		DEBUG(0,printk("AWE32 not found\n"));
 		return 0;
 	}
-	if (memsize >= 0) /* given by config file or module option */
-		awe_mem_size = memsize * 1024; /* convert to Kbytes */
 
 	return 1;
 }
@@ -5028,8 +5019,13 @@ awe_detect(void)
 static void
 awe_check_dram(void)
 {
-	if (awe_mem_size >= 0) /* already initialized */
+	if (awe_present) /* already initialized */
 		return;
+
+	if (awe_mem_size >= 0) { /* given by config file or module option */
+		awe_mem_size *= 1024; /* convert to Kbytes */
+		return;
+	}
 
 	awe_open_dram_for_check();
 

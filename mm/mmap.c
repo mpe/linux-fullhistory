@@ -319,6 +319,8 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 			file->f_dentry->d_inode->i_writecount++;
 		if (error)
 			goto unmap_and_free_vma;
+		vma->vm_file = file;
+		file->f_count++;
 	}
 
 	/*

@@ -47,11 +47,13 @@
 #define MDL_AZTECH	13	/* Aztech Sound Galaxy family */
 #define MDL_ES1868MIDI	14	/* MIDI port of ESS1868 */
 #define MDL_AEDSP	15	/* Audio Excel DSP 16 */
+#define MDL_ESSPCI	16	/* ESS PCI card */
 
 #define SUBMDL_ALS007	42	/* ALS-007 differs from SB16 only in mixer */
 				/* register assignment */
 #define SUBMDL_ALS100	43	/* ALS-100 allows sampling rates of up */
 				/* to 48kHz */
+				
 /*
  * Config flags
  */
@@ -60,6 +62,7 @@
 #define SB_NO_AUDIO	0x00000004
 #define SB_NO_RECORDING	0x00000008 /* No audio recording */
 #define SB_MIDI_ONLY	(SB_NO_AUDIO|SB_NO_MIXER)
+#define SB_PCI_IRQ	0x00000010 /* PCI shared IRQ */
 
 struct mixer_def {
 	unsigned int regno: 8;
@@ -86,6 +89,8 @@ typedef struct sb_devc {
 	   int base;
 	   int irq;
 	   int dma8, dma16;
+	   
+	   int pcibase;		/* For ESS Maestro etc */
 
 	/* State variables */
  	   int opened;
@@ -128,13 +133,24 @@ typedef struct sb_devc {
 	   void (*midi_input_intr) (int dev, unsigned char data);
 	   void *midi_irq_cookie;	/* IRQ cookie for the midi */
 	} sb_devc;
+	
+/*
+ *	PCI card types
+ */
 
+#define	SB_PCI_ESSMAESTRO	1	/* ESS Maestro Legacy */
+#define	SB_PCI_YAMAHA		2	/* Yamaha Legacy */
+
+/* 
+ *	Functions
+ */
+ 
 int sb_dsp_command (sb_devc *devc, unsigned char val);
 int sb_dsp_get_byte(sb_devc * devc);
 int sb_dsp_reset (sb_devc *devc);
 void sb_setmixer (sb_devc *devc, unsigned int port, unsigned int value);
 unsigned int sb_getmixer (sb_devc *devc, unsigned int port);
-int sb_dsp_detect (struct address_info *hw_config);
+int sb_dsp_detect (struct address_info *hw_config, int pci, int pciio);
 int sb_dsp_init (struct address_info *hw_config);
 void sb_dsp_unload(struct address_info *hw_config, int sbmpu);
 int sb_mixer_init(sb_devc *devc);

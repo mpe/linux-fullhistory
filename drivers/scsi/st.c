@@ -8,10 +8,10 @@
   order) Klaus Ehrenfried, Wolfgang Denk, Steve Hirsch, Andreas Koppenh"ofer,
   Michael Leodolter, Eyal Lebedinsky, J"org Weule, and Eric Youngdale.
 
-  Copyright 1992 - 1998 Kai Makisara
+  Copyright 1992 - 1999 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Thu Dec  3 20:27:46 1998 by makisara@home
+  Last modified: Sun Mar  7 09:03:17 1999 by makisara@home
   Some small formal changes - aeb, 950809
 */
 
@@ -1094,8 +1094,11 @@ st_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
 #endif
 
     /* Write must be integral number of blocks */
-    if (STp->block_size != 0 && (count % STp->block_size) != 0)
+    if (STp->block_size != 0 && (count % STp->block_size) != 0) {
+	printk(KERN_WARNING "st%d: Write not multiple of tape block size.\n",
+	       dev);
 	return (-EIO);
+    }
 
     if (STp->can_partitions &&
 	(retval = update_partition(inode)) < 0)

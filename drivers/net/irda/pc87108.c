@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Mon Dec 28 08:46:16 1998
+ * Modified at:   Tue Feb  9 13:29:40 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>
@@ -50,7 +50,6 @@
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/malloc.h>
-#include <linux/delay.h>
 #include <linux/init.h>
 
 #include <asm/io.h>
@@ -100,7 +99,9 @@ static char *dongle_types[] = {
 /* Some prototypes */
 static int  pc87108_open( int i, unsigned int iobase, unsigned int board_addr, 
 			  unsigned int irq, unsigned int dma);
+#ifdef MODULE
 static int  pc87108_close( struct irda_device *idev);
+#endif /* MODULE */
 static int  pc87108_probe( int iobase, int board_addr, int irq, int dma);
 static void pc87108_pio_receive( struct irda_device *idev);
 static int  pc87108_dma_receive( struct irda_device *idev); 
@@ -221,6 +222,8 @@ static int pc87108_open( int i, unsigned int iobase, unsigned int board_addr,
 	idev->qos.min_turn_time.bits = 0x07;
 	irda_qos_bits_to_value( &idev->qos);
 	
+	idev->flags = IFF_FIR|IFF_MIR|IFF_SIR|IFF_DMA|IFF_PIO|IFF_DONGLE;
+
 	/* Specify which buffer allocation policy we need */
 	idev->rx_buff.flags = GFP_KERNEL | GFP_DMA;
 	idev->tx_buff.flags = GFP_KERNEL | GFP_DMA;
@@ -250,6 +253,7 @@ static int pc87108_open( int i, unsigned int iobase, unsigned int board_addr,
 	return 0;
 }
 
+#ifdef MODULE
 /*
  * Function pc87108_close (idev)
  *
@@ -276,6 +280,7 @@ static int pc87108_close( struct irda_device *idev)
 
 	return 0;
 }
+#endif /* MODULE */
 
 /*
  * Function pc87108_probe (iobase, board_addr, irq, dma)
@@ -720,12 +725,6 @@ static int pc87108_hard_xmit( struct sk_buff *skb, struct device *dev)
 	iobase = idev->io.iobase;
 
 	DEBUG(4, __FUNCTION__ "(%ld), skb->len=%d\n", jiffies, (int) skb->len);
-
-	if ( dev->tbusy) {
-		DEBUG( 4, __FUNCTION__ "(), tbusy==TRUE\n");
-			
-		return -EBUSY;
-	}
 	
 	/* Lock transmit buffer */
 	if ( irda_lock( (void *) &dev->tbusy) == FALSE)

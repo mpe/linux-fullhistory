@@ -304,8 +304,6 @@ static int igafb_mmap(struct fb_info *info, struct file *file,
 	if (!map_size)
 		return -EINVAL;
 
-	vma->vm_file = file;
-	file->f_count++;
 	vma->vm_flags |= VM_IO;
 
 	if (!fb->mmaped) {

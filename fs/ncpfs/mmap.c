@@ -137,8 +137,6 @@ int ncp_mmap(struct file *file, struct vm_area_struct *vma)
 		inode->i_atime = CURRENT_TIME;
 	}
 
-	vma->vm_file = file;
-	file->f_count++;
 	vma->vm_ops = &ncp_file_mmap;
 	return 0;
 }

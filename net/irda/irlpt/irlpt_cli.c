@@ -1,6 +1,6 @@
 /*********************************************************************
  *
- * Filename:      irlpt.c
+ * Filename:      irlpt_cli.c
  * Version:       
  * Description:   
  * Status:        Experimental.
@@ -49,18 +49,21 @@ static void irlpt_client_close(struct irlpt_cb *self);
 
 static void irlpt_client_discovery_indication( DISCOVERY *);
 
-static void irlpt_client_connect_confirm( void *instance, void *sap, 
+static void irlpt_client_connect_confirm( void *instance, 
+					  void *sap, 
 					  struct qos_info *qos, 
 					  int max_seg_size, 
 					  struct sk_buff *skb);
-static void irlpt_client_disconnect_indication( void *instance, void *sap, 
+static void irlpt_client_disconnect_indication( void *instance, 
+						void *sap, 
 						LM_REASON reason,
 						struct sk_buff *userdata);
+static void irlpt_client_expired(unsigned long data);
 
 #if 0
 static char *rcsid = "$Id: irlpt_client.c,v 1.10 1998/11/10 22:50:57 dagb Exp $";
 #endif
-static char *version = "IrLPT, $Revision: 1.10 $/$Date: 1998/11/10 22:50:57 $ (Thomas Davis)";
+static char *version = "IrLPT client, v2 (Thomas Davis)";
 
 struct file_operations client_fops = {
 	irlpt_seek,    /* seek */
@@ -102,6 +105,9 @@ static int irlpt_client_proc_read( char *buf, char **start, off_t offset,
 	while( self) {
 	        ASSERT( self != NULL, return len;);
           	ASSERT( self->magic == IRLPT_MAGIC, return len;);
+		if (self->in_use == FALSE) {
+		        break;
+		}
 
 		len += sprintf(buf+len, "ifname: %s\n", self->ifname);
 		len += sprintf(buf+len, "minor: %d\n", self->ir_dev.minor);
@@ -130,19 +136,20 @@ static int irlpt_client_proc_read( char *buf, char **start, off_t offset,
 			break;
 		}
 		
-		len += sprintf(buf+len, "service_type: %s\n", 
-			       irlpt_service_type[index]);
-		len += sprintf(buf+len, "port_type: %s\n", 
+		len += sprintf(buf+len, "service_type: %s, port type: %s\n", 
+			       irlpt_service_type[index],
 			       irlpt_port_type[ self->porttype]);
-		len += sprintf(buf+len, "daddr: 0x%08x\n", self->daddr);
-		len += sprintf(buf+len, "fsm_state: %s\n", 
-			       irlpt_client_fsm_state[self->state]);
-		len += sprintf(buf+len, "retries: %d\n", self->open_retries);
-		len += sprintf(buf+len, "dlsap: %d\n", self->dlsap_sel);
 
-		len += sprintf(buf+len, "count: %d\n", self->count);
-		len += sprintf(buf+len, "rx_queue: %d\n", 
-			       skb_queue_len(&self->rx_queue));
+		len += sprintf(buf+len, "saddr: 0x%08x, daddr: 0x%08x\n", 
+			       self->saddr, self->daddr);
+		len += sprintf(buf+len, 
+			       "retries: %d, count: %d, queued packets: %d\n", 
+			       self->open_retries,
+			       self->count, self->pkt_count);
+		len += sprintf(buf+len, "slsap: %d, dlsap: %d\n", 
+			       self->slsap_sel, self->dlsap_sel);
+		len += sprintf(buf+len, "fsm state: %s\n", 
+			       irlpt_client_fsm_state[self->state]);
 		len += sprintf(buf+len, "\n\n");
 		
 		self = (struct irlpt_cb *) hashbin_get_next( irlpt_clients);
@@ -163,7 +170,7 @@ extern struct proc_dir_entry proc_irda;
 #endif /* CONFIG_PROC_FS */
 
 /*
- * Function irlpt_init (dev)
+ * Function irlpt_client_init (dev)
  *
  *   Initializes the irlpt control structure
  *
@@ -176,7 +183,8 @@ __initfunc(int irlpt_client_init(void))
 
 	irlpt_clients = hashbin_new( HB_LOCAL); 
 	if ( irlpt_clients == NULL) {
-		printk( KERN_WARNING "IrLPT: Can't allocate hashbin!\n");
+		printk( KERN_WARNING 
+			"IrLPT client: Can't allocate hashbin!\n");
 		return -ENOMEM;
 	}
 
@@ -195,9 +203,7 @@ __initfunc(int irlpt_client_init(void))
 
 #ifdef MODULE
 /*
- * Function irlpt_cleanup (void)
- *
- *
+ * Function irlpt_client_cleanup (void)
  *
  */
 static void irlpt_client_cleanup(void)
@@ -207,7 +213,7 @@ static void irlpt_client_cleanup(void)
 	irlmp_unregister_layer( S_PRINTER, CLIENT);
 
 	/*
-	 *  Delete hashbin and close all irlan client instances in it
+	 *  Delete hashbin and close all irlpt client instances in it
 	 */
 	hashbin_delete( irlpt_clients, (FREE_FUNC) irlpt_client_close);
 
@@ -221,9 +227,7 @@ static void irlpt_client_cleanup(void)
 
 
 /*
- * Function irlpt_open (void)
- *
- *    This is the entry-point which starts all the fun! Currently this
+ * Function irlpt_client_open (void)
  *
  */
 static struct irlpt_cb *irlpt_client_open( __u32 daddr)
@@ -232,15 +236,24 @@ static struct irlpt_cb *irlpt_client_open( __u32 daddr)
 
 	DEBUG( irlpt_client_debug, "--> "__FUNCTION__ "\n");
 
-	self = kmalloc(sizeof(struct irlpt_cb), GFP_ATOMIC);
-	if (self == NULL)
-		return NULL;
+	self = (struct irlpt_cb *) hashbin_find(irlpt_clients, daddr, NULL);
 
-	memset(self, 0, sizeof(struct irlpt_cb));
+	if (self == NULL) {
+	        self = kmalloc(sizeof(struct irlpt_cb), GFP_ATOMIC);
+		if (self == NULL)
+		        return NULL;
 
-	ASSERT( self != NULL, return NULL;);
+		memset(self, 0, sizeof(struct irlpt_cb));
 
- 	sprintf(self->ifname, "irlpt%d", hashbin_get_size(irlpt_clients));
+		ASSERT( self != NULL, return NULL;);
+
+		sprintf(self->ifname, "irlpt%d", 
+			hashbin_get_size(irlpt_clients));
+
+		hashbin_insert( irlpt_clients, (QUEUE *) self, daddr, NULL);
+
+	}
+
 	self->ir_dev.minor = MISC_DYNAMIC_MINOR;
 	self->ir_dev.name = self->ifname;
 	self->ir_dev.fops = &client_fops;
@@ -251,14 +264,13 @@ static struct irlpt_cb *irlpt_client_open( __u32 daddr)
 	self->in_use = TRUE;
 	self->servicetype = IRLPT_THREE_WIRE_RAW;
 	self->porttype = IRLPT_SERIAL;
+	self->do_event = irlpt_client_do_event;
 
 	skb_queue_head_init(&self->rx_queue);
 
 	irlpt_client_next_state( self, IRLPT_CLIENT_IDLE);
 
-	hashbin_insert( irlpt_clients, (QUEUE *) self, daddr, NULL);
-
-	/*	MOD_INC_USE_COUNT; */
+	MOD_INC_USE_COUNT;
 
 	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");
 
@@ -280,17 +292,15 @@ static void irlpt_client_close( struct irlpt_cb *self)
 	ASSERT( self->magic == IRLPT_MAGIC, return;);
 
 	while (( skb = skb_dequeue(&self->rx_queue)) != NULL) {
-		DEBUG(3, "irlpt_client_close: freeing SKB\n");
+		DEBUG(irlpt_client_debug, 
+		      __FUNCTION__ ": freeing SKB\n");
                 dev_kfree_skb( skb);
 	}
 
 	misc_deregister(&self->ir_dev);
+	self->in_use = FALSE;
 
-	self->magic = ~IRLPT_MAGIC;
-
-	kfree( self);
-
-	/* MOD_DEC_USE_COUNT; */
+	MOD_DEC_USE_COUNT;
 
 	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");
 }
@@ -306,49 +316,51 @@ static void irlpt_client_discovery_indication( DISCOVERY *discovery)
 {
 	struct irlpt_info info;
 	struct irlpt_cb *self;
-	__u32 daddr;
+	__u32 daddr; /* address of remote printer */
+	__u32 saddr; /* address of local link where it was discovered */
 
 	DEBUG( irlpt_client_debug, "--> " __FUNCTION__ "\n");
 
 	ASSERT( irlpt_clients != NULL, return;);
 	ASSERT( discovery != NULL, return;);
 
-	daddr = discovery->daddr;
+	daddr = info.daddr = discovery->daddr;
+	saddr = info.saddr = discovery->saddr;
 
 	/*
 	 *  Check if an instance is already dealing with this device
 	 *  (daddr)
 	 */
 	self = (struct irlpt_cb *) hashbin_find( irlpt_clients, daddr, NULL);
-      	if ( self != NULL) {
-		ASSERT( self->magic == IRLPT_MAGIC, return;);
-		if ( self->state == IRLPT_CLIENT_IDLE) {
-			irlpt_client_do_event( self, 
-					       IRLPT_DISCOVERY_INDICATION, 
-					       NULL, &info);
+      	if (self == NULL || self->in_use == FALSE) {
+	        DEBUG( irlpt_client_debug, __FUNCTION__ 
+		       ": daddr 0x%08x not found or was closed\n", daddr);
+	        /*
+		 * We have no instance for daddr, so time to start a new 
+		 * instance. First we must find a free entry in master array
+		 */
+		if (( self = irlpt_client_open( daddr)) == NULL) {
+			DEBUG(irlpt_client_debug, __FUNCTION__ 
+			      ": failed!\n");
+			return;
 		}
-		return;
-	}
-    
-
-	/*
-	 * We have no instance for daddr, so time to start a new instance.
-	 * First we must find a free entry in master array
-	 */
-	if (( self = irlpt_client_open( daddr)) == NULL) {
-		DEBUG(irlpt_client_debug, __FUNCTION__ 
-		      ":irlpt_client_open failed!\n");
 	}
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRLPT_MAGIC, return;);
 
-	self->daddr = info.daddr = daddr;
+	self->daddr = daddr;
+	self->saddr = saddr;
+	self->timeout = irlpt_client_expired;
+
+	irda_start_timer( &self->lpt_timer, 5000, (unsigned long) self, 
+			  self->timeout);
 	
-	if (self->state == IRLPT_CLIENT_IDLE) {
-		irlpt_client_do_event( self, IRLPT_DISCOVERY_INDICATION, 
-				       NULL, &info);
-	}
+#if 0
+	/* changed to wake up when we get connected; that way,
+	   if the connection drops, we can easily kill the link. */
+	wake_up_interruptible( &self->write_wait);
+#endif
 
 	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");
 }
@@ -357,7 +369,8 @@ static void irlpt_client_discovery_indication( DISCOVERY *discovery)
  * Function irlpt_disconnect_indication (handle)
  *
  */
-static void irlpt_client_disconnect_indication( void *instance, void *sap, 
+static void irlpt_client_disconnect_indication( void *instance,
+						void *sap, 
 						LM_REASON reason,
 						struct sk_buff *skb)
 {
@@ -373,8 +386,8 @@ static void irlpt_client_disconnect_indication( void *instance, void *sap,
 
 	info.daddr = self->daddr;
 
-        DEBUG( irlpt_client_debug, __FUNCTION__ 
-	       ": reason=%d (%s), peersap=%d\n",
+        DEBUG( irlpt_client_debug, 
+	       __FUNCTION__ ": reason=%d (%s), peersap=%d\n",
 	       reason, irlpt_reasons[reason], self->dlsap_sel);
 
 	self->connected = IRLPT_DISCONNECTED;
@@ -413,6 +426,7 @@ static void irlpt_client_connect_confirm( void *instance, void *sap,
 
 	info.daddr = self->daddr;
 
+#if 0
 	/*
 	 *  Check if we have got some QoS parameters back! This should be the
 	 *  negotiated QoS for the link.
@@ -421,6 +435,7 @@ static void irlpt_client_connect_confirm( void *instance, void *sap,
 		DEBUG( irlpt_client_debug, __FUNCTION__ ": Frame Size: %d\n",
 		       qos->data_size.value);
 	}
+#endif
 
 	self->irlap_data_size = (qos->data_size.value - IRLPT_MAX_HEADER);
 	self->connected = TRUE;
@@ -489,7 +504,6 @@ static void irlpt_client_data_indication( void *instance, void *sap,
  *    Fixed to match changes in iriap.h, DB.
  *
  */
-
 void irlpt_client_get_value_confirm(__u16 obj_id, struct ias_value *value, 
 				    void *priv)
 {
@@ -505,10 +519,13 @@ void irlpt_client_get_value_confirm(__u16 obj_id, struct ias_value *value,
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IRLPT_MAGIC, return;);
 
-	/* can't stop here..  if we get a bad obj, must tell the state
-	   machine that!
-	ASSERT( type == IAS_INTEGER, return;);
-	*/
+	/* Check if request succeeded */
+	if ( !value) {
+		DEBUG( 0, __FUNCTION__ "(), got NULL value!\n");
+		irlpt_client_do_event( self, IAS_PROVIDER_NOT_AVAIL, NULL, 
+				       &info);
+		return;
+	}
 
 	if ( value->type == IAS_INTEGER && value->t.integer != -1) {
 	        info.dlsap_sel = value->t.integer;
@@ -518,11 +535,10 @@ void irlpt_client_get_value_confirm(__u16 obj_id, struct ias_value *value,
 		       ": obj_id = %d, value = %d\n", 
 		       obj_id, value->t.integer);
 
-		irlpt_client_do_event( self, IAS_PROVIDER_AVAIL, 
-				       NULL, &info);
+		irlpt_client_do_event( self, IAS_PROVIDER_AVAIL, NULL, &info);
 	} else
-		irlpt_client_do_event( self, IAS_PROVIDER_NOT_AVAIL, 
-				       NULL, &info);
+		irlpt_client_do_event( self, IAS_PROVIDER_NOT_AVAIL, NULL, 
+				       &info);
 
 	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");
 }
@@ -536,9 +552,12 @@ void irlpt_client_connect_request( struct irlpt_cb *self)
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IRLPT_MAGIC, return;);
 
+	irda_notify_init( &lpt_notify);
+
 	lpt_notify.connect_confirm = irlpt_client_connect_confirm;
 	lpt_notify.disconnect_indication = irlpt_client_disconnect_indication;
 	lpt_notify.data_indication = irlpt_client_data_indication;
+	strcpy( lpt_notify.name, "IrLPT client");
 	lpt_notify.instance = self;
 
 	self->lsap = irlmp_open_lsap( LSAP_ANY, &lpt_notify);
@@ -549,17 +568,51 @@ void irlpt_client_connect_request( struct irlpt_cb *self)
 	        DEBUG( irlpt_client_debug, __FUNCTION__ 
 		       ": issue THREE_WIRE_RAW connect\n");
 		irlmp_connect_request( self->lsap, self->dlsap_sel, 
-				       self->daddr, NULL, NULL);
+				       self->saddr, self->daddr, NULL, NULL);
 	}
 
 	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");
 }
 
+static void irlpt_client_expired(unsigned long data)
+{
+	struct irlpt_cb *self = (struct irlpt_cb *) data;
+	struct sk_buff *skb;
+
+	DEBUG( irlpt_client_debug, "--> " __FUNCTION__ "\n");
+
+	DEBUG( irlpt_client_debug, __FUNCTION__
+	       ": removing irlpt_cb!\n");
+
+	ASSERT(self != NULL, return; );
+	ASSERT(self->magic == IRLPT_MAGIC, return;);
+
+	if (self->state == IRLPT_CLIENT_CONN) {
+		skb = dev_alloc_skb(64);
+		if (skb == NULL) {
+			DEBUG( 0, __FUNCTION__ "(: Could not allocate an "
+			       "sk_buff of length %d\n", 64);
+			return;
+		}
+
+		skb_reserve( skb, LMP_CONTROL_HEADER+LAP_HEADER);
+		irlmp_disconnect_request(self->lsap, skb);
+		DEBUG(irlpt_client_debug, __FUNCTION__
+		      ": irlmp_close_slap(self->lsap)\n");
+		irlmp_close_lsap(self->lsap);
+	}
+
+	irlpt_client_close(self);
+
+	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");
+}
 
 #ifdef MODULE
 
 MODULE_AUTHOR("Thomas Davis <ratbert@radiks.net>");
-MODULE_DESCRIPTION("The Linux IrDA/IrLPT protocol");
+MODULE_DESCRIPTION("The Linux IrDA/IrLPT client protocol");
+MODULE_PARM(irlpt_client_debug,"1i");
+MODULE_PARM(irlpt_client_fsm_debug,"1i");
 
 /*
  * Function init_module (void)
@@ -570,11 +623,11 @@ MODULE_DESCRIPTION("The Linux IrDA/IrLPT protocol");
 int init_module(void)
 {
 
-        DEBUG( irlpt_client_debug, "--> irlpt client: init_module\n");
+        DEBUG( irlpt_client_debug, "--> IrLPT client: init_module\n");
 
         irlpt_client_init();
 
-        DEBUG( irlpt_client_debug, "irlpt client: init_module -->\n");
+        DEBUG( irlpt_client_debug, "IrLPT client: init_module -->\n");
 
         return 0;
 }
@@ -587,13 +640,13 @@ int init_module(void)
  */
 void cleanup_module(void)
 {
-        DEBUG( irlpt_client_debug, "--> irlpt client: cleanup_module\n");
+        DEBUG( irlpt_client_debug, "--> IrLPT client: cleanup_module\n");
         /* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 
         /* Free some memory */
         irlpt_client_cleanup();
 
-        DEBUG( irlpt_client_debug, "irlpt client: cleanup_module -->\n");
+        DEBUG( irlpt_client_debug, "IrLPT client: cleanup_module -->\n");
 }
 
 #endif /* MODULE */

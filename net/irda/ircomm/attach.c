@@ -44,7 +44,8 @@ struct ircomm_cb *discovering_instance;
 
 static void got_lsapsel(struct ircomm_cb * info);
 static void query_lsapsel(struct ircomm_cb * self);
-void ircomm_getvalue_confirm( __u16 obj_id, struct ias_value *value, void *priv );
+void ircomm_getvalue_confirm( __u16 obj_id, struct ias_value *value, 
+			      void *priv);
 
 #if 0
 static char *rcsid = "$Id: attach.c,v 1.11 1998/10/22 12:02:20 dagb Exp $";
@@ -55,13 +56,19 @@ static char *rcsid = "$Id: attach.c,v 1.11 1998/10/22 12:02:20 dagb Exp $";
  * handler for iriap_getvaluebyclass_request() 
  *
  */
-
-void ircomm_getvalue_confirm( __u16 obj_id, struct ias_value *value, void *priv ){
-
+void ircomm_getvalue_confirm( __u16 obj_id, struct ias_value *value,void *priv)
+{
 	struct ircomm_cb *self = (struct ircomm_cb *) priv;
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IRCOMM_MAGIC, return;);
+
+	/* Check if request succeeded */
+	if ( !value) {
+		DEBUG( 0, __FUNCTION__ "(), got NULL value!\n");
+
+		return;
+	}
 
 	DEBUG(0, __FUNCTION__"type(%d)\n", value->type);
 
@@ -100,9 +107,8 @@ void ircomm_getvalue_confirm( __u16 obj_id, struct ias_value *value, void *priv 
 		break;
 
 	case IAS_STRING:
-		DEBUG( 0, __FUNCTION__":STRING is not implemented\n");
-		DEBUG( 0, __FUNCTION__":received string:%s\n",
-		       value->t.string);
+		DEBUG(0, __FUNCTION__":STRING is not implemented\n");
+		DEBUG(0, __FUNCTION__":received string:%s\n", value->t.string);
 		query_lsapsel(self);  /* experiment */
 		break;
 
@@ -116,9 +122,8 @@ void ircomm_getvalue_confirm( __u16 obj_id, struct ias_value *value, void *priv 
 	}
 }
 
-
-static void got_lsapsel(struct ircomm_cb * self){
-
+static void got_lsapsel(struct ircomm_cb * self)
+{
 	struct notify_t notify;
 
 	DEBUG(0, "ircomm:got_lsapsel: got peersap!(%d)\n", self->dlsap );
@@ -136,10 +141,9 @@ static void got_lsapsel(struct ircomm_cb * self){
 	strncpy( notify.name, "IrCOMM cli", NOTIFY_MAX_NAME);
 	notify.instance = self;
 	
-	self->tsap = irttp_open_tsap(LSAP_ANY, DEFAULT_INITIAL_CREDIT,
-				     &notify );
+	self->tsap = irttp_open_tsap(LSAP_ANY, DEFAULT_INITIAL_CREDIT, 
+				     &notify);
 	ASSERT(self->tsap != NULL, return;);
-
 
 	/*
 	 * invoke state machine  
@@ -150,26 +154,22 @@ static void got_lsapsel(struct ircomm_cb * self){
   	if(self->d_handler)
  		self->d_handler(self);
 }
-
-
-
-
 		
-static void query_lsapsel(struct ircomm_cb * self){
-
+static void query_lsapsel(struct ircomm_cb * self)
+{
 	DEBUG(0, "ircomm:query_lsapsel..\n");
 
 	/*  
 	 *  since we've got Parameters field of IAS, we are to get peersap.
 	 */
 	
-	if(!(self->servicetype & THREE_WIRE_RAW)){
-		iriap_getvaluebyclass_request
-			(self->daddr, "IrDA:IrCOMM", "IrDA:TinyTP:LsapSel",
-			 ircomm_getvalue_confirm, self );
+	if (!(self->servicetype & THREE_WIRE_RAW)) {
+		iriap_getvaluebyclass_request( 
+			"IrDA:IrCOMM", "IrDA:TinyTP:LsapSel",
+			self->saddr, self->daddr,
+			ircomm_getvalue_confirm, self );
 	} else {
-		DEBUG(0,"ircomm:query_lsap:"
-		      "THREE_WIRE_RAW is not implemented!\n");
+		DEBUG(0, __FUNCTION__ "THREE_WIRE_RAW is not implemented!\n");
 	}
 }
 
@@ -183,7 +183,6 @@ static void query_lsapsel(struct ircomm_cb * self){
 
 void ircomm_discovery_indication( DISCOVERY *discovery)
 {
-
 	struct ircomm_cb *self;
 
  	DEBUG( 0, "ircomm_discovery_indication\n");
@@ -193,6 +192,7 @@ void ircomm_discovery_indication( DISCOVERY *discovery)
 	ASSERT(self->magic == IRCOMM_MAGIC, return;);
 
 	self->daddr = discovery->daddr;
+	self->saddr = discovery->saddr;
 
 	DEBUG( 0, "ircomm_discovery_indication:daddr=%08x\n", self->daddr);
 
@@ -201,7 +201,6 @@ void ircomm_discovery_indication( DISCOVERY *discovery)
 	DEBUG(0, "ircomm:querying parameters..\n");
 #if 0
 	iriap_getvaluebyclass_request(self->daddr, "IrDA:IrCOMM",
-
 				      "Parameters",
 				      ircomm_getvalue_confirm,
 				      self);
@@ -214,8 +213,8 @@ void ircomm_discovery_indication( DISCOVERY *discovery)
 
 struct ircomm_cb * ircomm_attach_cable( __u8 servicetype,
 					struct notify_t notify, 
-					void *handler ){
-
+					void *handler )
+{
 	int i;
 	struct ircomm_cb *self = NULL;
 	struct notify_t server_notify;
@@ -317,14 +316,10 @@ struct ircomm_cb * ircomm_attach_cable( __u8 servicetype,
 	return (self);
 }
 
-
-
-
-int ircomm_detach_cable(struct ircomm_cb *self){
-
+int ircomm_detach_cable(struct ircomm_cb *self)
+{
 	ASSERT( self != NULL, return -EIO;);
 	ASSERT( self->magic == IRCOMM_MAGIC, return -EIO;);
-
 
 	DEBUG(0,"ircomm_detach_cable:\n");
 
@@ -360,5 +355,6 @@ int ircomm_detach_cable(struct ircomm_cb *self){
 
 	self->tsap = NULL;
 	self->in_use = 0;
+
 	return 0;
 }

@@ -483,7 +483,10 @@ got_it:
 	if (dquot->dq_flags & (DQ_LOCKED | DQ_MOD)) {
 		wait_on_dquot(dquot);
 		if (dquot->dq_flags & DQ_MOD)
-			write_dquot(dquot);
+		{
+			if(dquot->dq_mnt != (struct vfsmount *)NULL)
+				write_dquot(dquot);
+		}
 		/*
 		 * The dquot may be back in use now, so we
 		 * must recheck the free list.

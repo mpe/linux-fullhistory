@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Dec 26 10:59:03 1998
- * Modified at:   Tue Jan 19 23:54:04 1999
+ * Modified at:   Tue Feb  9 13:30:41 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -196,6 +196,8 @@ static int uircc_open( int i, unsigned int iobase, unsigned int iobase2,
 
 	idev->qos.min_turn_time.bits = 0x07;
 	irda_qos_bits_to_value( &idev->qos);
+
+	idev->flags = IFF_FIR|IFF_SIR|IFF_DMA|IFF_PIO;
 	
 	/* Specify which buffer allocation policy we need */
 	idev->rx_buff.flags = GFP_KERNEL | GFP_DMA;
@@ -271,9 +273,11 @@ static int uircc_close( struct irda_device *idev)
 static int uircc_probe( int iobase, int iobase2, int irq, int dma) 
 {
 	int version;
+#if 0
 	int probe_irq=0;
 	unsigned long mask;
 	int i;
+#endif
 	
 	DEBUG( 0, __FUNCTION__ "()\n");
 
@@ -442,20 +446,12 @@ static int uircc_hard_xmit( struct sk_buff *skb, struct device *dev)
 	DEBUG(0, __FUNCTION__ "(%ld), skb->len=%d\n", jiffies, (int) skb->len);
 
 	/* Use irport for SIR speeds */
-	if ( idev->io.baudrate <= 115200) {
-		return irport_hard_xmit( skb, dev);
-	}
-
-	if ( dev->tbusy) {
-		__u8 sr3;
-
-		DEBUG( 4, __FUNCTION__ "(), tbusy==TRUE\n");
-			
-		return -EBUSY;
+	if (idev->io.baudrate <= 115200) {
+		return irport_hard_xmit(skb, dev);
 	}
 	
 	/* Lock transmit buffer */
-	if ( irda_lock( (void *) &dev->tbusy) == FALSE)
+	if (irda_lock((void *) &dev->tbusy) == FALSE)
 		return -EBUSY;
 
 	memcpy( idev->tx_buff.data, skb->data, skb->len);

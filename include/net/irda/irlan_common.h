@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
- * Filename:      irlan.h
- * Version:       0.1
+ * Filename:      irlan_common.h
+ * Version:       0.8
  * Description:   IrDA LAN access layer
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Thu Oct 29 13:23:11 1998
+ * Modified at:   Wed Feb 17 23:28:53 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -30,10 +30,11 @@
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 
-#include "irqueue.h"
-#include "irttp.h"
+#include <net/irda/irqueue.h>
+#include <net/irda/irttp.h>
 
-#define IRLAN_MTU 1518
+#define IRLAN_MTU        1518
+#define IRLAN_TIMEOUT    1000
 
 /* Command packet types */
 #define CMD_GET_PROVIDER_INFO   0
@@ -61,23 +62,23 @@
 #define MEDIA_802_5 2
 
 /* Filter parameters */
-#define DATA_CHAN 1
+#define DATA_CHAN   1
 #define FILTER_TYPE 2
 #define FILTER_MODE 3
 
 /* Filter types */
-#define IR_DIRECTED   1
-#define IR_FUNCTIONAL 2
-#define IR_GROUP      3
-#define IR_MAC_FRAME  4
-#define IR_MULTICAST  5
-#define IR_BROADCAST  6
-#define IR_IPX_SOCKET 7
+#define IRLAN_DIRECTED   0x01
+#define IRLAN_FUNCTIONAL 0x02
+#define IRLAN_GROUP      0x04
+#define IRLAN_MAC_FRAME  0x08
+#define IRLAN_MULTICAST  0x10
+#define IRLAN_BROADCAST  0x20
+#define IRLAN_IPX_SOCKET 0x40
 
 /* Filter modes */
-#define ALL    1
-#define FILTER 2
-#define NONE   3
+#define ALL     1
+#define FILTER  2
+#define NONE    3
 
 /* Filter operations */
 #define GET     1
@@ -87,36 +88,51 @@
 #define DYNAMIC 5
 
 /* Access types */
-#define DIRECT 1
-#define PEER   2
-#define HOSTED 3
+#define ACCESS_DIRECT  1
+#define ACCESS_PEER    2
+#define ACCESS_HOSTED  3
+
+#define IRLAN_BYTE   0
+#define IRLAN_SHORT  1
+#define IRLAN_ARRAY  2
 
 #define IRLAN_MAX_HEADER (TTP_HEADER+LMP_HEADER+LAP_HEADER)
 
 /*
- *  IrLAN client subclass
+ *  IrLAN client
  */
 struct irlan_client_cb {
-	/*
-	 *  Client fields
-	 */
+	int state;
+
 	int open_retries;
+
+	struct tsap_cb *tsap_ctrl;
 	
 	__u8 reconnect_key[255];
 	__u8 key_len;
 	
+	__u16 recv_arb_val;
+	__u16 max_frame;
+	int filter_type;
+
 	int unicast_open;
 	int broadcast_open;
+
+	struct timer_list kick_timer;
+	int start_new_provider;
 };
 
 /*
- * IrLAN servers subclass
+ * IrLAN provider
  */
-struct irlan_server_cb {
+struct irlan_provider_cb {
+	int state;
 	
+	struct tsap_cb *tsap_ctrl;
+
 	/*
-	 *  Store some values here which are used by the irlan_server to parse
-	 *  FILTER_OPERATIONs
+	 *  Store some values here which are used by the provider to parse
+	 *  the filter operations
 	 */
 	int data_chan;
 	int filter_type;
@@ -124,11 +140,13 @@ struct irlan_server_cb {
 	int filter_operation;
 	int filter_entry;
 
+	__u16 send_arb_val;
+
 	__u8 mac_address[6]; /* Generated MAC address for peer device */
 };
 
 /*
- *  IrLAN super class
+ *  IrLAN
  */
 struct irlan_cb {
 	QUEUE queue; /* Must be first */
@@ -140,57 +158,52 @@ struct irlan_cb {
 
 	__u32 saddr;        /* Source devcie address */
 	__u32 daddr;        /* Destination device address */
-	int   connected;    /* TTP layer ready to exchange ether frames */
+	int   netdev_registered;
+	int   notify_irmanager;
 	
-	int state;  /* Current state of IrLAN layer */
-
-	int media;	
+	int media;          /* Media type */
+	int access_type;    /* Currently used access type */
+	__u8 version[2];    /* IrLAN version */
 	
-	struct tsap_cb *tsap_ctrl;
 	struct tsap_cb *tsap_data;
 
 	int  use_udata;  /* Use Unit Data transfers */
 
-	__u8 dtsap_sel_data; /* Destination data TSAP selector */
 	__u8 stsap_sel_data; /* Source data TSAP selector */
+	__u8 dtsap_sel_data; /* Destination data TSAP selector */
 	__u8 dtsap_sel_ctrl; /* Destination ctrl TSAP selector */
 
-	int client; /* Client or server */
-	union {
-		struct irlan_client_cb client;
-		struct irlan_server_cb server;
-	} t;
-
-	/* void (*irlan_dev_init)(struct irlan_cb *); */
-
-	/* 
-         *  Used by extract_params, placed here for now to avoid placing 
-         *  them on the stack. FIXME: remove these!
-         */
-        char name[255];
-        char value[1016];
+	struct irlan_client_cb client;     /* Client specific fields */
+	struct irlan_provider_cb provider; /* Provider specific fields */
+	
+	struct timer_list watchdog_timer;
 };
 
-struct irlan_cb *irlan_open(void);
+struct irlan_cb *irlan_open(__u32 saddr, __u32 daddr, int netdev);
+void irlan_close(struct irlan_cb *self);
+int  irlan_register_netdev(struct irlan_cb *self);
+void irlan_ias_register(struct irlan_cb *self, __u8 tsap_sel);
+void irlan_start_watchdog_timer(struct irlan_cb *self, int timeout);
 
-void irlan_get_provider_info( struct irlan_cb *self);
-void irlan_get_unicast_addr( struct irlan_cb *self);
-void irlan_get_media_char( struct irlan_cb *self);
-void irlan_open_data_channel( struct irlan_cb *self);
-void irlan_set_multicast_filter( struct irlan_cb *self, int status);
-void irlan_set_broadcast_filter( struct irlan_cb *self, int status);
-void irlan_open_unicast_addr( struct irlan_cb *self);
+void irlan_open_data_tsap(struct irlan_cb *self);
 
-int insert_byte_param( struct sk_buff *skb, char *param, __u8 value);
-int insert_string_param( struct sk_buff *skb, char *param, char *value);
-int insert_array_param( struct sk_buff *skb, char *name, __u8 *value, 
-			__u16 value_len);
+void irlan_get_provider_info(struct irlan_cb *self);
+void irlan_get_unicast_addr(struct irlan_cb *self);
+void irlan_get_media_char(struct irlan_cb *self);
+void irlan_open_data_channel(struct irlan_cb *self);
+void irlan_close_data_channel(struct irlan_cb *self);
+void irlan_set_multicast_filter(struct irlan_cb *self, int status);
+void irlan_set_broadcast_filter(struct irlan_cb *self, int status);
+void irlan_open_unicast_addr(struct irlan_cb *self);
 
-int insert_param( struct sk_buff *skb, char *param, int type, char *value_char,
-		  __u8 value_byte, __u16 value_short);
+int irlan_insert_byte_param(struct sk_buff *skb, char *param, __u8 value);
+int irlan_insert_short_param(struct sk_buff *skb, char *param, __u16 value);
+int irlan_insert_string_param(struct sk_buff *skb, char *param, char *value);
+int irlan_insert_array_param(struct sk_buff *skb, char *name, __u8 *value, 
+			     __u16 value_len);
 
-int irlan_get_response_param( __u8 *buf, char *name, char *value, int *len);
-void print_ret_code( __u8 code);
+int irlan_get_param(__u8 *buf, char *name, char *value, __u16 *len);
+void print_ret_code(__u8 code);
 
 extern hashbin_t *irlan;
 

@@ -27,7 +27,6 @@
 #include <asm/uaccess.h>
 
 #include <linux/inet.h>
-#include <linux/netdevice.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/rarp.h>

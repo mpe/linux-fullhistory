@@ -733,7 +733,7 @@ __initfunc(int SK_probe(struct device *dev, short ioaddr))
     SK_print_pos(dev, "POS registers after ROM, RAM config");
 #endif
 
-    board = (SK_RAM *) rom_addr; 
+    board = (SK_RAM *) bus_to_virt(rom_addr);
 
     /* Read in station address */
     for (i = 0, j = 0; i < ETH_ALEN; i++, j+=2)

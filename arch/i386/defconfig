@@ -120,7 +120,6 @@ CONFIG_INET=y
 # (it is safe to leave these untouched)
 #
 # CONFIG_INET_RARP is not set
-CONFIG_IP_NOSR=y
 CONFIG_SKB_LARGE=y
 
 #
@@ -283,6 +282,7 @@ CONFIG_82C710_MOUSE=y
 # Joystick support
 #
 # CONFIG_JOYSTICK is not set
+# CONFIG_DTLK is not set
 
 #
 # Ftape, the floppy tape device driver

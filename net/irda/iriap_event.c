@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Wed Dec  9 02:20:02 1998
+ * Modified at:   Tue Jan 26 12:29:36 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -184,6 +184,8 @@ void iriap_do_r_connect_event( struct iriap_cb *self, IRIAP_EVENT event,
 static void state_s_disconnect( struct iriap_cb *self, IRIAP_EVENT event, 
 				struct sk_buff *skb) 
 {
+	int ret;
+
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IAS_MAGIC, return;);
 
@@ -191,13 +193,14 @@ static void state_s_disconnect( struct iriap_cb *self, IRIAP_EVENT event,
 	case IAP_CALL_REQUEST_GVBC:
 		iriap_next_client_state( self, S_CONNECTING);
 		self->skb = skb;
-		irlmp_connect_request( self->lsap, LSAP_IAS, self->daddr, 
-				       NULL, NULL);
+		ret = irlmp_connect_request( self->lsap, LSAP_IAS, 
+					     self->saddr, self->daddr, 
+					     NULL, NULL);
 		break;
 	case IAP_LM_DISCONNECT_INDICATION:
 		break;
 	default:
-		DEBUG( 0, "state_s_disconnect: Unknown event %d\n", event);
+		DEBUG( 0, __FUNCTION__"(), Unknown event %d\n", event);
 		break;
 	}
 }

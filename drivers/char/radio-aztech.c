@@ -1,9 +1,7 @@
-/* aztech.c - Aztech radio card driver for Linux 2.1 by Russell Kroll
+/* radio-aztech.c - Aztech radio card driver for Linux 2.2 
  *
- * Heavily modified to support the new 2.1 radio card interfaces by
- * Russell Kroll (rkroll@exploits.org)
- *
- * Based on code by
+ * Adapted to support the Video for Linux API by 
+ * Russell Kroll <rkroll@exploits.org>.  Based on original tuner code by:
  *
  * Quay Ly
  * Donald Song
@@ -13,6 +11,11 @@
  *
  * The basis for this code may be found at http://bigbang.vtc.vsc.edu/fmradio/
  * along with more information on the card itself.
+ *
+ * History:
+ * 1999-02-24	Russell Kroll <rkroll@exploits.org>
+ *		Fine tuning/VIDEO_TUNER_LOW
+ * 		Range expanded to 87-108 MHz (from 87.9-107.8)
  *
  * Notable changes from the original source:
  * - includes stripped down to the essentials
@@ -113,11 +116,8 @@ static int az_setfreq(struct az_device *dev, unsigned long frequency)
 {
 	int  i;
 
-	/*  6.25 *  */
-	frequency = frequency*6 + frequency/4;	/* massage data a bit */
-  
-	frequency += 1070;		/* tuning needs 24 data bits  */
-	frequency /= 5;
+	frequency += 171200;		/* Add 10.7 MHz IF		*/
+	frequency /= 800;		/* Convert to 50 kHz units	*/
 					
 	send_0_byte (dev);		/*  0: LSB of frequency       */
 
@@ -179,9 +179,9 @@ static int az_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EFAULT;
 			if(v.tuner)	/* Only 1 tuner */ 
 				return -EINVAL;
-			v.rangelow=(879*16)/10;
-			v.rangehigh=(1078*16)/10;
-			v.flags=0;
+			v.rangelow=(87*16000);
+			v.rangehigh=(108*16000);
+			v.flags=VIDEO_TUNER_LOW;
 			v.mode=VIDEO_MODE_AUTO;
 			v.signal=0xFFFF*az_getsigstr(az);
 			if(az_getstereo(az))
@@ -292,7 +292,7 @@ __initfunc(int aztech_init(struct video_init *v))
 		return -EINVAL;
 		
 	request_region(io, 2, "aztech");
-	printk(KERN_INFO "Aztech radio card driver v0.40/19980422 rkroll@exploits.org\n");
+	printk(KERN_INFO "Aztech radio card driver v1.00/19990224 rkroll@exploits.org\n");
 	/* mute card - prevents noisy bootups */
 	outb (0, io);
 	return 0;

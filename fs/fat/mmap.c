@@ -113,8 +113,6 @@ int fat_mmap(struct file * file, struct vm_area_struct * vma)
 		mark_inode_dirty(inode);
 	}
 
-	vma->vm_file = file;
-	file->f_count++;
 	vma->vm_ops = &fat_file_mmap;
 	return 0;
 }

@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      iriap.h
- * Version:       
+ * Version:       0.5
  * Description:   Information Access Protocol (IAP)
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Sat Dec  5 13:45:37 1998
+ * Modified at:   Tue Jan 26 11:50:33 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -55,23 +55,13 @@
 typedef void (*CONFIRM_CALLBACK)( __u16 obj_id, struct ias_value *value,
 				  void *priv);
 
-struct iap_value {
-	char *full;
-        char *name;
-        char *attr;
-        __u16   obj_id;
-        __u8    ret_code;
-        __u8    type;
-        int     len;
-        int value_int;
-        char *value_char;
-};
-
 struct iriap_cb {
 	QUEUE queue; /* Must be first */
 	
 	int          magic;  /* Magic cookie */
 	int          mode;   /* Client or server */
+
+	__u32        saddr;
 	__u32        daddr;
 	__u8         operation;
 
@@ -95,10 +85,10 @@ struct iriap_cb {
 
 int  iriap_init(void);
 void iriap_cleanup(void);
-void iriap_getvaluebyclass_request( __u32 addr, char *name, char *attr, 
+void iriap_getvaluebyclass_request( char *name, char *attr, 
+				    __u32 saddr, __u32 daddr,
 				    CONFIRM_CALLBACK callback, void *priv);
-void iriap_getvaluebyclass_confirm( struct iriap_cb *self, 
-				    struct sk_buff *skb);
+void iriap_getvaluebyclass_confirm(struct iriap_cb *self, struct sk_buff *skb);
 
 void iriap_send_ack( struct iriap_cb *self);
 void iriap_data_indication( void *instance, void *sap, struct sk_buff *skb);
@@ -121,3 +111,5 @@ static inline void iriap_start_watchdog_timer( struct iriap_cb *self,
 }
 
 #endif
+
+

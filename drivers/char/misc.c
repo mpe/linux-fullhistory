@@ -231,6 +231,9 @@ int __init misc_init(void)
 #ifdef CONFIG_SOFT_WATCHDOG
 	watchdog_init();
 #endif
+#ifdef CONFIG_DTLK
+	dtlk_init();
+#endif
 #ifdef CONFIG_APM
 	apm_bios_init();
 #endif

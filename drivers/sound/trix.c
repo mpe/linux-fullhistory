@@ -323,7 +323,7 @@ int probe_trix_sb(struct address_info *hw_config)
 
 	hw_config->name = "AudioTrix SB";
 #ifdef CONFIG_SBDSP
-	return sb_dsp_detect(hw_config);
+	return sb_dsp_detect(hw_config, 0, 0);
 #else
 	return 0;
 #endif

@@ -67,7 +67,11 @@ caddr_t         sound_mem_blocks[1024];
 int             sound_nblocks = 0;
 
 /* Persistent DMA buffers */
-int		sound_dmap_flag = 0;	/* Off by default */
+#ifdef CONFIG_SOUND_DMAP
+int		sound_dmap_flag = 1;
+#else
+int		sound_dmap_flag = 0;
+#endif
 
 static int      soundcard_configured = 0;
 
@@ -751,9 +755,6 @@ static int sound_mmap(struct file *file, struct vm_area_struct *vma)
 		vma->vm_page_prot))
 		return -EAGAIN;
 
-	vma->vm_file = file;
-	file->f_count++;
-
 	dmap->mapping_flags |= DMA_MAP_MAPPED;
 
 	if( audio_devs[dev]->d->mmap)
@@ -802,13 +803,6 @@ bad1:
 	return -1;
 }
 
-static void destroy_special_devices(void)
-{
-	unregister_sound_special(6);
-	unregister_sound_special(1);
-	unregister_sound_special(8);
-}
-
 #ifdef MODULE
 static void
 #else
@@ -849,11 +843,18 @@ soundcard_init(void)
 #endif		
 }
 
+#ifdef MODULE
+
+static void destroy_special_devices(void)
+{
+	unregister_sound_special(6);
+	unregister_sound_special(1);
+	unregister_sound_special(8);
+}
+
 static int      sound[20] = {
 	0
 };
-
-#ifdef MODULE
 
 int traceinit = 0;
 static int dmabuf = 0;

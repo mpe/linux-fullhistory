@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 24 22:12:06 1998
- * Modified at:   Thu Jan  7 10:35:02 1999
+ * Modified at:   Mon Jan 25 13:55:54 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli, All Rights Reserved.
@@ -31,9 +31,11 @@
 #include <net/irda/irda.h>
 
 #define NET_IRDA 412 /* Random number */
-enum { DISCOVERY=1, DEVNAME, COMPRESSION, DEBUG };
+enum { DISCOVERY=1, DEVNAME, COMPRESSION, DEBUG, SLOTS, SLOT_TIMEOUT };
 
 extern int sysctl_discovery;
+extern int sysctl_discovery_slots;
+extern int sysctl_slot_timeout;
 int sysctl_compression = 0;
 extern char sysctl_devname[];
 
@@ -53,6 +55,10 @@ static ctl_table irda_table[] = {
 	{ DEBUG, "debug", &irda_debug,
 	  sizeof(int), 0644, NULL, &proc_dointvec },
 #endif
+	{ SLOTS, "discovery_slots", &sysctl_discovery_slots,
+	  sizeof(int), 0644, NULL, &proc_dointvec },
+	{ SLOT_TIMEOUT, "slot_timeout", &sysctl_slot_timeout,
+	  sizeof(int), 0644, NULL, &proc_dointvec },
 	{ 0 }
 };
 

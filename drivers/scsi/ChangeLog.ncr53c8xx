@@ -1,4 +1,26 @@
-Sat Jan 16  17:30 1998 Gerard Roudier (groudier@club-internet.fr)
+Sat Mar 6  11:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.1h
+	- Fix some oooold bug that hangs the bus if a device rejects a 
+	  negotiation. Btw, the corresponding stuff also needed some cleanup 
+	  and thus the change is a bit larger than it could have been.
+	- Still some typo that made compilation fail for 64 bit (trivial fix).
+
+Sun Feb  14:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.1g
+	- Deal correctly with 64 bit PCI address registers on Linux 2.2.
+	  Pointed out by Leonard Zubkoff.
+	- Allow to tune request_irq() flags from the boot command line using 
+	  ncr53c8xx=irqm:??, as follows:
+	  a) If bit 0x10 is set in irqm, SA_SHIRQ flag is not used.
+	  b) If bit 0x20 is set in irqm, SA_INTERRUPT flag is not used.
+	  By default the driver uses both SA_SHIRQ and SA_INTERRUPT.
+	  Option 'ncr53c8xx=irqm:0x20' may be used when an IRQ is shared by 
+	  a 53C8XX adapter and a network board.
+	- Tiny mispelling fixed (ABORT instead of ABRT). Was fortunately 
+	  harmless.
+	- Negotiate SYNC data transfers with CCS devices.
+
+Sat Jan 16  17:30 1999 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.1f
 	- Some PCI fix-ups not needed any more for PPC (from Cort).
 	- Cache line size set to 16 DWORDS for Sparc   (from DSM).

@@ -3,9 +3,9 @@
  *
  * Voice information definitions for the low level driver for the 
  * AWE32/SB32/AWE64 wave table synth.
- *   version 0.4.3; Mar. 1, 1998
+ *   version 0.4.3; Feb. 1, 1999
  *
- * Copyright (C) 1996-1998 Takashi Iwai
+ * Copyright (C) 1996-1999 Takashi Iwai
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -133,7 +133,7 @@ typedef struct _awe_voice_parm_block {
 	unsigned short moddelay;	/* modulation delay (0x8000) */
 	unsigned char modatk, modhld;
 	unsigned char moddcy, modsus;
-	unsigned short modrel, moddummy;
+	unsigned char modrel, moddummy;
 	short modkeyhold, modkeydecay;	/* envelope change per key (not used) */
 	unsigned short voldelay;	/* volume delay (0x8000) */
 	unsigned char volatk, volhld;

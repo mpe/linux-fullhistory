@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 17 20:54:32 1997
- * Modified at:   Mon Dec  7 21:11:32 1998
+ * Modified at:   Thu Feb  4 11:06:24 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -28,16 +28,18 @@
 #include <linux/config.h>
 #include <linux/types.h>
 
-#include "irmod.h"
-#include "qos.h"
-#include "irlap.h"
-#include "irlmp_event.h"
-#include "irqueue.h"
+#include <net/irda/irmod.h>
+#include <net/irda/qos.h>
+#include <net/irda/irlap.h>
+#include <net/irda/irlmp_event.h>
+#include <net/irda/irqueue.h>
 
 /* LSAP-SEL's */
 #define LSAP_MASK     0x7f
 #define LSAP_IAS      0x00
 #define LSAP_ANY      0xff
+
+#define DEV_ADDR_ANY  0xffffffff
 
 /* Predefined LSAPs used by the various servers */
 #define TSAP_IRLAN    0x05
@@ -68,6 +70,8 @@
 #define HINT_MESSAGE     0x08
 #define HINT_HTTP        0x10
 #define HINT_OBEX        0x20
+
+#define LM_IDLE_TIMEOUT  200 /* 2 seconds for now */
 
 typedef enum {
 	S_PNP,
@@ -150,6 +154,7 @@ struct lap_cb {
 	hashbin_t *cachelog;    /* Discovered devices for this link */
 
 	struct qos_info *qos;  /* LAP QoS for this session */
+	struct timer_list idle_timer;
 };
 
 /*
@@ -171,10 +176,8 @@ struct irlmp_cb {
 
 	__u8 conflict_flag;
 	
-	/* int discovery; */
-
-	DISCOVERY  discovery_rsp; /* Discovery response to use by IrLAP */
 	DISCOVERY  discovery_cmd; /* Discovery command to use by IrLAP */
+	DISCOVERY  discovery_rsp; /* Discovery response to use by IrLAP */
 
 	int free_lsap_sel;
 
@@ -205,7 +208,8 @@ void irlmp_register_irlap( struct irlap_cb *self, __u32 saddr,
 			   struct notify_t *);
 void irlmp_unregister_irlap( __u32 saddr);
 
-void irlmp_connect_request( struct lsap_cb *, __u8 dlsap_sel, __u32 daddr, 
+int  irlmp_connect_request( struct lsap_cb *, __u8 dlsap_sel, 
+			    __u32 saddr, __u32 daddr,
 			    struct qos_info *, struct sk_buff *);
 void irlmp_connect_indication( struct lsap_cb *self, struct sk_buff *skb);
 void irlmp_connect_response( struct lsap_cb *, struct sk_buff *);
@@ -231,9 +235,14 @@ void irlmp_status_indication( LINK_STATUS link, LOCK_STATUS lock);
 
 int  irlmp_slsap_inuse( __u8 slsap);
 __u8 irlmp_find_free_slsap(void);
-
 LM_REASON irlmp_convert_lap_reason( LAP_REASON);
 
+__u32 irlmp_get_saddr(struct lsap_cb *self);
+__u32 irlmp_get_daddr(struct lsap_cb *self);
+
+
+extern char *lmp_reasons[];
+extern int sysctl_discovery_slots;
 extern struct irlmp_cb *irlmp;
 
 #endif

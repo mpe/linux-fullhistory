@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      esi.c
- * Version:       1.1
- * Description:   Driver for the Extended Systems JetEye PC
+ * Version:       1.2
+ * Description:   Driver for the Extended Systems JetEye PC dongle
  * Status:        Experimental.
  * Author:        Thomas Davis, <ratbert@radiks.net>
  * Created at:    Sat Feb 21 18:54:38 1998
- * Modified at:   Mon Jan 18 11:30:32 1999
+ * Modified at:   Tue Feb  9 15:36:47 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:	  esi.c
  *
@@ -71,6 +71,7 @@ static void esi_open( struct irda_device *idev, int type)
 	strcat( idev->description, " <-> esi");
 
 	idev->io.dongle_id = type;
+	idev->flags |= IFF_DONGLE;
 
 	MOD_INC_USE_COUNT;
 }
@@ -90,10 +91,9 @@ static void esi_change_speed( struct irda_device *idev, int baud)
 {
 	struct irtty_cb *self;
 	struct tty_struct *tty;
-	int arg = TIOCM_OUT2;
+	int dtr, rts;
         struct termios old_termios;
 	int cflag;
-	mm_segment_t fs;
 	
 	ASSERT( idev != NULL, return;);
 	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -116,37 +116,25 @@ static void esi_change_speed( struct irda_device *idev, int baud)
 	switch (baud) {
 	case 19200:
 		cflag |= B19200;
-		arg |= TIOCM_DTR;
+		dtr = TRUE;
+		rts = FALSE;
 		break;
 	case 115200:
 		cflag |= B115200;
-		arg |= TIOCM_RTS | TIOCM_DTR;
+		dtr = rts = TRUE;
 		break;
 	case 9600:
 	default:
 		cflag |= B9600;
-		arg |= TIOCM_RTS;
+		dtr = FALSE;
+		rts = TRUE;
 		break;
 	}
-		
+	/* Change speed of serial driver */
 	tty->termios->c_cflag = cflag;
 	tty->driver.set_termios( tty, &old_termios);
 
-	/*
-	 *  The ioctl function, or actually set_modem_info in serial.c
-	 *  expects a pointer to the argument in user space. To hack us
-	 *  around this we use the set_fs function to fool the routines 
-	 *  that check if they are called from user space. We also need 
-	 *  to send a pointer to the argument so get_user() gets happy. 
-	 *  DB.
-	 */
-	fs = get_fs();
-	set_fs( get_ds());
-
-	if ( tty->driver.ioctl( tty, NULL, TIOCMSET, (unsigned long) &arg)) { 
-		DEBUG( 0, __FUNCTION__ "(), error setting ESI speed!\n");
-	}
-	set_fs(fs);
+	irtty_set_dtr_rts(tty, dtr, rts);
 }
 
 static void esi_reset( struct irda_device *idev, int unused)

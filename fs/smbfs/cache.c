@@ -12,7 +12,6 @@
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
-#include <linux/errno.h>
 #include <linux/dirent.h>
 #include <linux/smb_fs.h>
 
@@ -142,7 +141,7 @@ smb_add_to_cache(struct cache_head * cachep, struct cache_dirent *entry,
 
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_add_to_cache: cache inode %p, status %d, adding %s at %ld\n",
-inode, cachep->status, entry->d_name, fpos);
+inode, cachep->status, entry->name, fpos);
 #endif
 	/*
 	 * Don't do anything if we've had an error ...
@@ -171,7 +170,7 @@ inode, cachep->status, entry->d_name, fpos);
 		cachep->entries++;
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_add_to_cache: added entry %s, len=%d, pos=%ld, entries=%d\n",
-entry->d_name, len, fpos, cachep->entries);
+entry->name, len, fpos, cachep->entries);
 #endif
 		return;
 	}

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Mon Nov  2 14:31:55 1998
+ * Modified at:   Thu Feb  4 11:05:24 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -26,11 +26,11 @@
 #ifndef TIMER_H
 #define TIMER_H
 
-#include "irda.h"
-#include "irmod.h"
-#include "irlap.h"
-#include "irlmp.h"
-#include "irda_device.h"
+#include <net/irda/irda.h>
+#include <net/irda/irmod.h>
+#include <net/irda/irlap.h>
+#include <net/irda/irlmp.h>
+#include <net/irda/irda_device.h>
 
 /* 
  *  Timeout definitions, some defined in IrLAP p. 92
@@ -53,7 +53,6 @@
 #define QUERY_TIMEOUT          100
 
 #define WATCHDOG_TIMEOUT      2000                /* 20 sec */
-#define RETRY_TIMEOUT           51
 
 typedef void (*TIMER_CALLBACK)( unsigned long);
 
@@ -69,8 +68,10 @@ inline void irlap_start_backoff_timer( struct irlap_cb *self, int timeout);
 inline void irda_device_start_mbusy_timer( struct irda_device *self);
 
 struct lsap_cb;
+struct lap_cb;
 inline void irlmp_start_watchdog_timer( struct lsap_cb *, int timeout);
-inline void irlmp_start_discovery_timer( struct irlmp_cb *, int timeout); 
+inline void irlmp_start_discovery_timer( struct irlmp_cb *, int timeout);
+inline void irlmp_start_idle_timer(struct lap_cb *, int timeout);
 
 struct irobex_cb;
 inline void irobex_start_watchdog_timer( struct irobex_cb *, int timeout);

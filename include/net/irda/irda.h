@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Sat Jan 16 01:23:15 1999
+ * Modified at:   Wed Jan 27 14:15:50 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -44,7 +44,7 @@
 
 extern __u32 irda_debug;
 
-#define IRDA_DEBUG 3
+#define IRDA_DEBUG 0
 
 #define DEBUG(n, args...) if (irda_debug >= (n)) printk( KERN_DEBUG args)
 #define ASSERT(expr, func) \

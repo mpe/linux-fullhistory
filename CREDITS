@@ -1061,6 +1061,14 @@ S: Markham, Ontario
 S: L3R 8B2
 S: Canada
 
+N: Russell Kroll
+E: rkroll@exploits.org
+W: http://www.exploits.org/
+D: V4L Aztech radio card driver, mods to Aimslab driver
+S: Post Office Box 49458
+S: Colorado Springs, Colorado 80949-9458
+S: USA
+
 N: Gero Kuhlmann
 E: gero@gkminix.han.de
 D: mounting root via NFS
@@ -2003,6 +2011,14 @@ D: Small contributions to ncpfs
 S: Chudenicka 8
 S: 10200 Prague 10, Hostivar
 S: Czech Republic
+
+N: James R. Van Zandt
+E: jrv@vanzandt.mv.com
+P: 1024/E298966D F0 37 4F FD E5 7E C5 E6  F1 A0 1E 22 6F 46 DA 0C
+D: Author and maintainer of the Double Talk speech synthesizer driver
+S: 27 Spencer Drive
+S: Nashua, New Hampshire 03062
+S: USA
 
 N: Andrew Veliath
 E: andrewtv@usa.net

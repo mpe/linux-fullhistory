@@ -16,7 +16,7 @@
 #define RTC_MINOR 135
 #define SUN_OPENPROM_MINOR 139
 #define NVRAM_MINOR 144
-#define RADIO_MINOR 152
+#define I2O_MINOR 166
 #define MISC_DYNAMIC_MINOR 255
 
 extern int misc_init(void);

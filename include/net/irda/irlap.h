@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irlap.h
- * Version:       0.3
+ * Version:       0.8
  * Description:   An IrDA LAP driver for Linux
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Sat Dec 12 12:25:33 1998
+ * Modified at:   Mon Jan 25 13:58:59 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -105,6 +105,7 @@ struct irlap_cb {
 	struct timer_list backoff_timer;
 
 	/* Timeouts which will be different with different turn time */
+	int slot_timeout;
 	int poll_timeout;
 	int final_timeout;
 	int wd_timeout;
@@ -118,14 +119,15 @@ struct irlap_cb {
 	int     retry_count;  /* Times tried to establish connection */
 	int     add_wait;     /* True if we are waiting for frame */
 
+	__u8    connect_pending;
+	__u8    disconnect_pending;
+
+	/*  To send a faster RR if tx queue empty */
 #ifdef CONFIG_IRDA_FAST_RR
-	/* 
-	 *  To send a faster RR if tx queue empty 
-	 */
 	int     fast_RR_timeout;
 	int     fast_RR;      
 #endif
-
+	
 	int N1; /* N1 * F-timer = Negitiated link disconnect warning threshold */
 	int N2; /* N2 * F-timer = Negitiated link disconnect time */
 	int N3; /* Connection retry count */

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.95 1999/02/08 11:20:03 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.96 1999/03/05 13:23:13 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -1238,7 +1238,6 @@ static int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 			goto reset;
 		if (users)
 			goto ipv6_pktoptions;
-		release_sock(sk);
 		return 0;
 	}
 

@@ -45,7 +45,7 @@
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 3.1f"
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 3.1h"
 
 /*
 **	Check supported Linux versions
@@ -69,7 +69,6 @@
 **	These options are not tunable from 'make config'
 */
 #define	SCSI_NCR_PROC_INFO_SUPPORT
-#define SCSI_NCR_SHARE_IRQ
 
 /*
 **	If you want a driver as small as possible, donnot define the 

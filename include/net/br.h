@@ -258,6 +258,7 @@ struct br_stat {
 #define BR_UP		0x0001	/* bridging enabled */
 #define BR_DEBUG	0x0002	/* debugging enabled */
 #define BR_PROT_STATS	0x0004	/* protocol statistics enabled */
+#define BR_STP_DISABLED	0x0008	/* Spanning tree protocol disabled */
 
 struct br_cf {
 	unsigned int cmd;
@@ -281,6 +282,7 @@ struct br_cf {
 #define BRCMD_ENABLE_PROT_STATS	13
 #define BRCMD_DISABLE_PROT_STATS 14
 #define BRCMD_ZERO_PROT_STATS	15
+#define BRCMD_TOGGLE_STP	16
 
 /* prototypes of exported bridging functions... */
 
@@ -295,7 +297,7 @@ struct fdb *br_avl_find_addr(unsigned char addr[6]);
 struct fdb *br_avl_insert (struct fdb * new_node);
 void sprintf_avl (char **pbuffer, struct fdb * tree, off_t *pos,int* len, off_t offset, int length);
 int br_tree_get_info(char *buffer, char **start, off_t offset, int length, int dummy);
-
+void br_avl_delete_by_port(int port);
 /* externs */
 
 extern struct br_stat br_stats;

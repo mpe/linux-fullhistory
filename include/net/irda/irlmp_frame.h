@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 02:09:59 1997
- * Modified at:   Sun Oct 25 00:30:31 1998
+ * Modified at:   Tue Feb  2 11:07:45 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -42,8 +42,8 @@ void irlmp_send_lcf_pdu( struct lap_cb *self, __u8 dlsap, __u8 slsap,
 			 __u8 opcode, struct sk_buff *skb);
 void irlmp_link_data_indication( struct lap_cb *, int reliable, 
 				 struct sk_buff *);
-void irlmp_link_connect_indication( struct lap_cb *, struct qos_info *qos, 
-				    struct sk_buff *skb);
+void irlmp_link_connect_indication( struct lap_cb *, __u32 saddr, __u32 daddr,
+				    struct qos_info *qos, struct sk_buff *skb);
 void irlmp_link_connect_request( __u32 daddr);
 void irlmp_link_connect_confirm( struct lap_cb *self, struct qos_info *qos, 
 				 struct sk_buff *skb);

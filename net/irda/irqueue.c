@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Jun  9 13:29:31 1998
- * Modified at:   Wed Jan 13 21:21:22 1999
+ * Modified at:   Mon Feb  8 09:05:51 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (C) 1998, Aage Kvalnes <aage@cs.uit.no>
@@ -55,6 +55,8 @@ hashbin_t *hashbin_new( int type)
 	 * Allocate new hashbin
 	 */
 	hashbin = kmalloc( sizeof(hashbin_t), GFP_ATOMIC);
+	if (!hashbin)
+		return NULL;
 
 	/*
 	 * Initialize structure
@@ -205,13 +207,12 @@ void hashbin_unlock( hashbin_t* hashbin, __u32 hashv, char* name,
  *    Insert an entry into the hashbin
  *
  */
-void hashbin_insert( hashbin_t* hashbin, QUEUE* entry, __u32 hashv, 
-		     char* name)
+void hashbin_insert( hashbin_t* hashbin, QUEUE* entry, __u32 hashv, char* name)
 {
 	unsigned long flags = 0;
 	int bin;
 
-	DEBUG( 4, "hashbin_insert()\n");
+	DEBUG( 4, __FUNCTION__"()\n");
 
 	ASSERT( hashbin != NULL, return;);
 	ASSERT( hashbin->magic == HB_MAGIC, return;);
@@ -583,7 +584,7 @@ inline void enqueue_last( QUEUE **queue, QUEUE* element)
 void enqueue_first(QUEUE **queue, QUEUE* element)
 {
 	
-	DEBUG( 4, "enqueue_first()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	/*
 	 * Check if queue is empty.

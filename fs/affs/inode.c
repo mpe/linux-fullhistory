@@ -21,7 +21,6 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/locks.h>
-#include <linux/errno.h>
 #include <linux/genhd.h>
 #include <linux/amigaffs.h>
 #include <linux/major.h>

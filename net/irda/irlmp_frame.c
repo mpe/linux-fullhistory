@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 02:09:59 1997
- * Modified at:   Sat Jan 16 22:14:04 1999
+ * Modified at:   Thu Feb 18 08:48:28 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>
@@ -196,15 +196,15 @@ void irlmp_link_data_indication( struct lap_cb *self, int reliable,
  *    IrLAP has disconnected 
  *
  */
-void irlmp_link_disconnect_indication( struct lap_cb *lap, 
-				       struct irlap_cb *irlap, 
-				       LAP_REASON reason, 
-				       struct sk_buff *userdata)
+void irlmp_link_disconnect_indication(struct lap_cb *lap, 
+				      struct irlap_cb *irlap, 
+				      LAP_REASON reason, 
+				      struct sk_buff *userdata)
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(2, __FUNCTION__ "()\n");
 
-	ASSERT( lap != NULL, return;);
-	ASSERT( lap->magic == LMP_LAP_MAGIC, return;);
+	ASSERT(lap != NULL, return;);
+	ASSERT(lap->magic == LMP_LAP_MAGIC, return;);
 
 	lap->reason = reason;
 
@@ -213,7 +213,7 @@ void irlmp_link_disconnect_indication( struct lap_cb *lap,
 	/*
 	 *  Inform station state machine
 	 */
-	irlmp_do_lap_event( lap, LM_LAP_DISCONNECT_INDICATION, NULL);
+	irlmp_do_lap_event(lap, LM_LAP_DISCONNECT_INDICATION, NULL);
 }
 
 /*
@@ -222,13 +222,18 @@ void irlmp_link_disconnect_indication( struct lap_cb *lap,
  *    Incoming LAP connection!
  *
  */
-void irlmp_link_connect_indication( struct lap_cb *self, struct qos_info *qos,
+void irlmp_link_connect_indication( struct lap_cb *self, __u32 saddr, 
+				    __u32 daddr, struct qos_info *qos,
 				    struct sk_buff *skb) 
 {
 	DEBUG( 4, __FUNCTION__ "()\n");
 
 	/* Copy QoS settings for this session */
 	self->qos = qos;
+
+	/* Update destination device address */
+	self->daddr = daddr;
+	ASSERT(self->saddr == saddr, return;);
 
 	irlmp_do_lap_event( self, LM_LAP_CONNECT_INDICATION, skb);
 }

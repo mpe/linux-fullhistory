@@ -176,6 +176,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_DTLK),y)
+L_OBJS += dtlk.o
+else
+  ifeq ($(CONFIG_DTLK),m)
+  M_OBJS += dtlk.o
+  endif
+endif
+
 ifeq ($(CONFIG_MS_BUSMOUSE),y)
 L_OBJS += msbusmouse.o
 else

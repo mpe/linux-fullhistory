@@ -1,6 +1,6 @@
 /*********************************************************************
  *
- * Filename:      irlpt.c
+ * Filename:      irlpt_common.h
  * Version:       
  * Description:   
  * Status:        Experimental.
@@ -67,7 +67,6 @@ typedef enum {
 	IRLPT_CLIENT_QUERY,
 	IRLPT_CLIENT_READY,
 	IRLPT_CLIENT_WAITI,
-	IRLPT_CLIENT_WAITR,
 	IRLPT_CLIENT_CONN,
 } IRLPT_CLIENT_STATE;
 
@@ -87,10 +86,6 @@ typedef enum {
 	LMP_DISCONNECT,
 	LMP_CONNECT_INDICATION,
 	LMP_DISCONNECT_INDICATION,
-#if 0
-	TTP_CONNECT_INDICATION,
-	TTP_DISCONNECT_INDICATION,
-#endif
         IRLPT_DISCOVERY_INDICATION,
 	IRLPT_CONNECT_REQUEST,
 	IRLPT_DISCONNECT_REQUEST,
@@ -101,6 +96,7 @@ struct irlpt_info {
 	struct lsap_cb *lsap;
 	__u8 dlsap_sel;
 	__u32 daddr;
+	__u32 saddr;
 };
 
 /* Command packet types */
@@ -142,7 +138,8 @@ struct irlpt_cb {
 
 	int magic;		/* magic used to detect corruption of 
 				   the struct */
-	__u32 daddr;		/* my local address. */
+	__u32 daddr;		/* address of remote printer */
+	__u32 saddr;            /* my local address. */
 
 	struct timer_list retry_timer;
 	
@@ -167,6 +164,14 @@ struct irlpt_cb {
 	struct wait_queue *read_wait;	/* wait queues */
 	struct wait_queue *write_wait;
 	struct wait_queue *ex_wait;
+
+	/* this is used to remove the printer when it's gone */
+	struct timer_list lpt_timer;
+	void (*timeout) (unsigned long data);
+
+	void (*do_event) (struct irlpt_cb *self, IRLPT_EVENT event, 
+			  struct sk_buff *skb,
+			  struct irlpt_info *info);
 
 	/* this is used by the server side of the system */
 

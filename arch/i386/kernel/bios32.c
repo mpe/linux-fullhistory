@@ -14,7 +14,7 @@
  *	Hannover, Germany
  *	hm@ix.de
  *
- * Copyright 1997, 1998 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
+ * Copyright 1997--1999 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  *
  * For more information, please consult the following manuals (look at
  * http://www.pcisig.com/ for how to get them):
@@ -71,6 +71,10 @@
  *	a large gallery of common hardware bug workarounds (watch the comments)
  *	-- the PCI specs themselves are sane, but most implementors should be
  *	hit hard with \hammer scaled \magstep5. [mj]
+ *
+ * Jan 23, 1999 : More improvements to peer host bridge logic. i450NX fixup. [mj]
+ *
+ * Feb 8,  1999 : Added UM8886BF I/O address fixup. [mj]
  */
 
 #include <linux/config.h>
@@ -171,6 +175,7 @@ PCI_STUB(write, dword, u32)
 #define PCI_NO_SORT 0x100
 #define PCI_BIOS_SORT 0x200
 #define PCI_NO_CHECKS 0x400
+#define PCI_NO_PEER_FIXUP 0x800
 
 static unsigned int pci_probe = PCI_PROBE_BIOS | PCI_PROBE_CONF1 | PCI_PROBE_CONF2;
 
@@ -521,6 +526,8 @@ static struct {
 	unsigned short segment;
 } pci_indirect = { 0, __KERNEL_CS };
 
+static int pci_bios_present;
+
 __initfunc(static int check_pcibios(void))
 {
 	u32 signature, eax, ebx, ecx;
@@ -803,7 +810,7 @@ __initfunc(static struct pci_access *pci_find_bios(void))
  * which used BIOS ordering, we are bound to do this...
  */
 
-__initfunc(void pcibios_sort(void))
+static void __init pcibios_sort(void)
 {
 	struct pci_dev *dev = pci_devices;
 	struct pci_dev **last = &pci_devices;
@@ -856,7 +863,7 @@ __initfunc(void pcibios_sort(void))
 
 static int pci_last_io_addr __initdata = 0x5800;
 
-__initfunc(void pcibios_fixup_io_addr(struct pci_dev *dev, int idx))
+static void __init pcibios_fixup_io_addr(struct pci_dev *dev, int idx)
 {
 	unsigned short cmd;
 	unsigned int reg = PCI_BASE_ADDRESS_0 + 4*idx;
@@ -868,13 +875,16 @@ __initfunc(void pcibios_fixup_io_addr(struct pci_dev *dev, int idx))
 		printk("PCI: Unassigned I/O space for %02x:%02x\n", bus, devfn);
 		return;
 	}
-	if ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && idx < 4) {
+	if ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && idx < 4 ||
+	    (dev->class >> 8) == PCI_CLASS_DISPLAY_VGA) {
 		/*
 		 * In case the BIOS didn't assign an address 0--3 to an IDE
 		 * controller, we don't try to fix it as it means "use default
 		 * addresses" at least with several broken chips and the IDE
 		 * driver needs the original settings to recognize which devices
 		 * correspond to the primary controller.
+		 *
+		 * We don't assign VGA I/O ranges as well.
 		 */
 		return;
 	}
@@ -914,7 +924,7 @@ __initfunc(void pcibios_fixup_io_addr(struct pci_dev *dev, int idx))
  * expected to be unique) and remove the ghost devices.
  */
 
-__initfunc(void pcibios_fixup_ghosts(struct pci_bus *b))
+static void __init pcibios_fixup_ghosts(struct pci_bus *b)
 {
 	struct pci_dev *d, *e, **z;
 	int mirror = PCI_DEVFN(16,0);
@@ -954,11 +964,16 @@ __initfunc(void pcibios_fixup_ghosts(struct pci_bus *b))
  * the reality doesn't pass this test and the bus number is usually
  * set by BIOS to the first free value.
  */
-__initfunc(void pcibios_fixup_peer_bridges(void))
+static void __init pcibios_fixup_peer_bridges(void)
 {
 	struct pci_bus *b = &pci_root;
 	int i, n, cnt=-1;
 	struct pci_dev *d;
+
+#ifdef CONFIG_VISWS
+	pci_scan_peer_bridge(1);
+	return;
+#endif
 
 #ifdef CONFIG_PCI_DIRECT
 	/*
@@ -969,6 +984,7 @@ __initfunc(void pcibios_fixup_peer_bridges(void))
 	if (access_pci == &pci_direct_conf2)
 		return;
 #endif
+
 	for(d=b->devices; d; d=d->sibling)
 		if ((d->class >> 8) == PCI_CLASS_BRIDGE_HOST)
 			cnt++;
@@ -979,6 +995,20 @@ __initfunc(void pcibios_fixup_peer_bridges(void))
 		for(i=0; i<256; i += 8)
 			if (!pcibios_read_config_word(n, i, PCI_VENDOR_ID, &l) &&
 			    l != 0x0000 && l != 0xffff) {
+#ifdef CONFIG_PCI_BIOS
+				if (pci_bios_present) {
+					int succ, idx = 0;
+					u8 bios_bus, bios_dfn;
+					u16 d;
+					pcibios_read_config_word(n, i, PCI_DEVICE_ID, &d);
+					DBG("BIOS test for %02x:%02x (%04x:%04x)\n", n, i, l, d);
+					while ((succ = pci_bios_find_device(l, d, idx, &bios_bus, &bios_dfn)) &&
+					       (bios_bus != n || bios_dfn != i))
+						idx++;
+					if (!succ)
+						break;
+				}
+#endif
 				DBG("Found device at %02x:%02x\n", n, i);
 				found++;
 				if (!pcibios_read_config_word(n, i, PCI_CLASS_DEVICE, &l) &&
@@ -989,13 +1019,7 @@ __initfunc(void pcibios_fixup_peer_bridges(void))
 			break;
 		if (found) {
 			printk("PCI: Discovered primary peer bus %02x\n", n);
-			b = kmalloc(sizeof(*b), GFP_KERNEL);
-			memset(b, 0, sizeof(*b));
-			b->next = pci_root.next;
-			pci_root.next = b;
-			b->number = b->secondary = n;
-			b->subordinate = 0xff;
-			b->subordinate = pci_scan_bus(b);
+			b = pci_scan_peer_bridge(n);
 			n = b->subordinate;
 		}
 		n++;
@@ -1003,11 +1027,75 @@ __initfunc(void pcibios_fixup_peer_bridges(void))
 }
 
 /*
+ * Exceptions for specific devices. Usually work-arounds for fatal design flaws.
+ */
+
+static void __init pci_fixup_i450nx(struct pci_dev *d)
+{
+	/*
+	 * i450NX -- Find and scan all secondary buses on all PXB's.
+	 */
+	int pxb, reg;
+	u8 busno, suba, subb;
+	reg = 0xd0;
+	for(pxb=0; pxb<2; pxb++) {
+		pci_read_config_byte(d, reg++, &busno);
+		pci_read_config_byte(d, reg++, &suba);
+		pci_read_config_byte(d, reg++, &subb);
+		DBG("i450NX PXB %d: %02x/%02x/%02x\n", pxb, busno, suba, subb);
+		if (busno)
+			pci_scan_peer_bridge(busno);	/* Bus A */
+		if (suba < subb)
+			pci_scan_peer_bridge(suba+1);	/* Bus B */
+	}
+	pci_probe |= PCI_NO_PEER_FIXUP;
+}
+
+static void __init pci_fixup_umc_ide(struct pci_dev *d)
+{
+	/*
+	 * UM8886BF IDE controller sets region type bits incorrectly,
+	 * therefore they look like memory despite of them being I/O.
+	 */
+	int i;
+
+	for(i=0; i<4; i++)
+		d->base_address[i] |= PCI_BASE_ADDRESS_SPACE_IO;
+}
+
+struct dev_ex {
+	u16 vendor, device;
+	void (*handler)(struct pci_dev *);
+	char *comment;
+};
+
+static struct dev_ex __initdata dev_ex_table[] = {
+ { PCI_VENDOR_ID_INTEL,		PCI_DEVICE_ID_INTEL_82451NX,	pci_fixup_i450nx, 	"Scanning peer host bridges" },
+ { PCI_VENDOR_ID_UMC,		PCI_DEVICE_ID_UMC_UM8886BF,	pci_fixup_umc_ide,	"Working around UM8886BF bugs" }
+};
+
+static void __init pcibios_scan_buglist(struct pci_bus *b)
+{
+	struct pci_dev *d;
+	int i;
+
+	for(d=b->devices; d; d=d->sibling)
+		for(i=0; i<sizeof(dev_ex_table)/sizeof(dev_ex_table[0]); i++) {
+			struct dev_ex *e = &dev_ex_table[i];
+			if (e->vendor == d->vendor && e->device == d->device) {
+				printk("PCI: %02x:%02x [%04x/%04x]: %s\n",
+					b->number, d->devfn, d->vendor, d->device, e->comment);
+				e->handler(d);
+			}
+		}
+}
+
+/*
  * Fix base addresses, I/O and memory enables and IRQ's (mostly work-arounds
  * for buggy PCI BIOS'es :-[).
  */
 
-__initfunc(void pcibios_fixup_devices(void))
+static void __init pcibios_fixup_devices(void)
 {
 	struct pci_dev *dev;
 	int i, has_io, has_mem;
@@ -1099,7 +1187,8 @@ __initfunc(void pcibios_fixup_devices(void))
 
 __initfunc(void pcibios_fixup(void))
 {
-	pcibios_fixup_peer_bridges();
+	if (!(pci_probe & PCI_NO_PEER_FIXUP))
+		pcibios_fixup_peer_bridges();
 	pcibios_fixup_devices();
 
 #ifdef CONFIG_PCI_BIOS
@@ -1111,6 +1200,7 @@ __initfunc(void pcibios_fixup(void))
 __initfunc(void pcibios_fixup_bus(struct pci_bus *b))
 {
 	pcibios_fixup_ghosts(b);
+	pcibios_scan_buglist(b);
 }
 
 /*
@@ -1126,8 +1216,10 @@ __initfunc(void pcibios_init(void))
 	struct pci_access *dir = NULL;
 
 #ifdef CONFIG_PCI_BIOS
-	if ((pci_probe & PCI_PROBE_BIOS) && ((bios = pci_find_bios())))
+	if ((pci_probe & PCI_PROBE_BIOS) && ((bios = pci_find_bios()))) {
 		pci_probe |= PCI_BIOS_SORT;
+		pci_bios_present = 1;
+	}
 #endif
 #ifdef CONFIG_PCI_DIRECT
 	if (pci_probe & (PCI_PROBE_CONF1 | PCI_PROBE_CONF2))
@@ -1138,10 +1230,6 @@ __initfunc(void pcibios_init(void))
 	else if (bios)
 		access_pci = bios;
 }
-
-#if !defined(CONFIG_PCI_BIOS) && !defined(CONFIG_PCI_DIRECT)
-#error PCI configured with neither PCI BIOS or PCI direct access support.
-#endif
 
 __initfunc(char *pcibios_setup(char *str))
 {
@@ -1178,5 +1266,9 @@ __initfunc(char *pcibios_setup(char *str))
 		return NULL;
 	}
 #endif
+	else if (!strcmp(str, "nopeer")) {
+		pci_probe |= PCI_NO_PEER_FIXUP;
+		return NULL;
+	}
 	return str;
 }

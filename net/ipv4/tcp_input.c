@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.156 1999/02/22 13:54:13 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.157 1999/03/05 09:35:06 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -241,8 +241,8 @@ extern __inline__ void tcp_replace_ts_recent(struct sock *sk, struct tcp_opt *tp
 extern __inline__ int tcp_paws_discard(struct tcp_opt *tp, struct tcphdr *th, unsigned len)
 {
 	/* ts_recent must be younger than 24 days */
-	return (((jiffies - tp->ts_recent_stamp) >= PAWS_24DAYS) ||
-		(((s32)(tp->rcv_tsval-tp->ts_recent) < 0) &&
+	return (((s32)(jiffies - tp->ts_recent_stamp) >= PAWS_24DAYS) ||
+		(((s32)(tp->rcv_tsval - tp->ts_recent) < 0) &&
 		 /* Sorry, PAWS as specified is broken wrt. pure-ACKs -DaveM */
 		 (len != (th->doff * 4))));
 }

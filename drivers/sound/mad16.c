@@ -800,7 +800,7 @@ int probe_mad16_mpu(struct address_info *hw_config)
 
 		mad_write(MC3_PORT, tmp | 0x04);
 		hw_config->driver_use_1 = SB_MIDI_ONLY;
-		return sb_dsp_detect(hw_config);
+		return sb_dsp_detect(hw_config, 0, 0);
 #else
 		return 0;
 #endif

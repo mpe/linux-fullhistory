@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:55:39 1997
- * Modified at:   Tue Jan 19 23:34:18 1999
+ * Modified at:   Thu Feb 18 08:51:50 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli, All Rights Reserved.
@@ -24,14 +24,28 @@
 
 #include <linux/config.h>
 #include <linux/module.h> 
+
 #include <linux/init.h>
-#include <asm/segment.h>
 #include <linux/poll.h>
+#include <asm/segment.h>
+
+#include <linux/proc_fs.h>
 
 #include <net/irda/irda.h>
+#include <net/irda/irmod.h>
+#include <net/irda/irlap.h>
+#ifdef CONFIG_IRDA_COMPRESSION
+#include <net/irda/irlap_comp.h>
+#endif /* CONFIG_IRDA_COMPRESSION */
 #include <net/irda/irlmp.h>
 #include <net/irda/iriap.h>
+#include <net/irda/irias_object.h>
 #include <net/irda/irttp.h>
+#include <net/irda/irda_device.h>
+#include <net/irda/wrapper.h>
+#include <net/irda/timer.h>
+
+extern struct proc_dir_entry proc_irda;
 
 struct irda_cb irda; /* One global instance */
 
@@ -57,15 +71,15 @@ extern int irvtd_init(void);
 extern int irlpt_client_init(void);
 extern int irlpt_server_init(void);
 
-static int irda_open( struct inode * inode, struct file *file);
-static int irda_ioctl( struct inode *inode, struct file *filp, 
-			 unsigned int cmd, unsigned long arg);
-static int irda_close( struct inode *inode, struct file *file);
-static ssize_t irda_read( struct file *file, char *buffer, size_t count, 
-			    loff_t *noidea);
-static ssize_t irda_write( struct file *file, const char *buffer,
-			     size_t count, loff_t *noidea);
-static u_int irda_poll( struct file *file, poll_table *wait);
+static int irda_open(struct inode * inode, struct file *file);
+static int irda_ioctl(struct inode *inode, struct file *filp, 
+		      unsigned int cmd, unsigned long arg);
+static int irda_close(struct inode *inode, struct file *file);
+static ssize_t irda_read(struct file *file, char *buffer, size_t count, 
+			 loff_t *noidea);
+static ssize_t irda_write(struct file *file, const char *buffer,
+			  size_t count, loff_t *noidea);
+static u_int irda_poll(struct file *file, poll_table *wait);
 
 static struct file_operations irda_fops = {
 	NULL,	       /* seek */
@@ -82,13 +96,95 @@ static struct file_operations irda_fops = {
 	NULL,          /* fasync */
 };
 
+/* IrTTP */
+EXPORT_SYMBOL(irttp_open_tsap);
+EXPORT_SYMBOL(irttp_close_tsap);
+EXPORT_SYMBOL(irttp_connect_response);
+EXPORT_SYMBOL(irttp_data_request);
+EXPORT_SYMBOL(irttp_disconnect_request);
+EXPORT_SYMBOL(irttp_flow_request);
+EXPORT_SYMBOL(irttp_connect_request);
+EXPORT_SYMBOL(irttp_udata_request);
+
+/* Main IrDA module */
+#ifdef CONFIG_IRDA_DEBUG
+EXPORT_SYMBOL(irda_debug);
+#endif
+EXPORT_SYMBOL(irda_notify_init);
+EXPORT_SYMBOL(irmanager_notify);
+EXPORT_SYMBOL(irda_lock);
+EXPORT_SYMBOL(proc_irda);
+
+/* IrIAP/IrIAS */
+EXPORT_SYMBOL(iriap_getvaluebyclass_request);
+EXPORT_SYMBOL(irias_object_change_attribute);
+EXPORT_SYMBOL(irias_add_integer_attrib);
+EXPORT_SYMBOL(irias_add_octseq_attrib);
+EXPORT_SYMBOL(irias_add_string_attrib);
+EXPORT_SYMBOL(irias_insert_object);
+EXPORT_SYMBOL(irias_new_object);
+EXPORT_SYMBOL(irias_delete_object);
+EXPORT_SYMBOL(irias_find_object);
+EXPORT_SYMBOL(irias_find_attrib);
+EXPORT_SYMBOL(irias_new_integer_value);
+EXPORT_SYMBOL(irias_new_string_value);
+EXPORT_SYMBOL(irias_new_octseq_value);
+
+/* IrLMP */
+EXPORT_SYMBOL(irlmp_discovery_request);
+EXPORT_SYMBOL(irlmp_register_layer);
+EXPORT_SYMBOL(irlmp_unregister_layer);
+EXPORT_SYMBOL(irlmp_data_request);
+EXPORT_SYMBOL(irlmp_open_lsap);
+EXPORT_SYMBOL(irlmp_close_lsap);
+EXPORT_SYMBOL(irlmp_connect_request);
+EXPORT_SYMBOL(irlmp_connect_response);
+EXPORT_SYMBOL(irlmp_disconnect_request);
+EXPORT_SYMBOL(irlmp_get_daddr);
+EXPORT_SYMBOL(irlmp_get_saddr);
+EXPORT_SYMBOL(lmp_reasons);
+
+/* Queue */
+EXPORT_SYMBOL(hashbin_find);
+EXPORT_SYMBOL(hashbin_new);
+EXPORT_SYMBOL(hashbin_insert);
+EXPORT_SYMBOL(hashbin_delete);
+EXPORT_SYMBOL(hashbin_remove);
+EXPORT_SYMBOL(hashbin_get_next);
+EXPORT_SYMBOL(hashbin_get_first);
+
+/* IrLAP */
+#ifdef CONFIG_IRDA_COMPRESSION
+EXPORT_SYMBOL(irda_unregister_compressor);
+EXPORT_SYMBOL(irda_register_compressor);
+#endif /* CONFIG_IRDA_COMPRESSION */
+EXPORT_SYMBOL(irda_init_max_qos_capabilies);
+EXPORT_SYMBOL(irda_qos_bits_to_value);
+EXPORT_SYMBOL(irda_device_open);
+EXPORT_SYMBOL(irda_device_close);
+EXPORT_SYMBOL(irda_device_setup);
+EXPORT_SYMBOL(irda_device_set_media_busy);
+EXPORT_SYMBOL(irda_device_txqueue_empty);
+EXPORT_SYMBOL(async_wrap_skb);
+EXPORT_SYMBOL(async_unwrap_char);
+EXPORT_SYMBOL(irda_start_timer);
+EXPORT_SYMBOL(irda_get_mtt);
+EXPORT_SYMBOL(setup_dma);
+
+#ifdef CONFIG_IRTTY
+EXPORT_SYMBOL(irtty_set_dtr_rts);
+EXPORT_SYMBOL(irtty_register_dongle);
+EXPORT_SYMBOL(irtty_unregister_dongle);
+#endif
+
 __initfunc(int irda_init(void))
 {
-        printk( KERN_INFO "Linux Support for the IrDA (tm) protocols (Dag Brattli)\n");
+        printk(KERN_INFO "Linux-2.2 Support for the IrDA (tm) Protocols (Dag Brattli)\n");
 
-	irda_device_init();
-	irlap_init();
  	irlmp_init();
+	irlap_init();
+	irda_device_init();
+
 	iriap_init();
  	irttp_init();
 	
@@ -113,12 +209,6 @@ __initfunc(int irda_init(void))
 #ifdef CONFIG_IRLAN
 	irlan_init();
 #endif
-#ifdef CONFIG_IRLAN_CLIENT
-	irlan_client_init();
-#endif
-#ifdef CONFIG_IRLAN_SERVER
-	irlan_server_init();
-#endif
 #ifdef CONFIG_IROBEX
 	irobex_init();
 #endif
@@ -135,9 +225,21 @@ __initfunc(int irda_init(void))
 	irlpt_server_init();
 #endif
 
+#ifdef CONFIG_IRDA_COMPRESSION
+#ifdef CONFIG_IRDA_DEFLATE
+	irda_deflate_init();
+#endif /* CONFIG_IRDA_DEFLATE */
+#endif /* CONFIG_IRDA_COMPRESSION */
+
 	return 0;
 }
 
+/* 
+ * FIXME:
+ * This function should have been wrapped with #ifdef MODULE, but then
+ * irda_proto_cleanup() must be moved from af_irda.c to this file since
+ * that function must also be wrapped if this one is.
+ */
 void irda_cleanup(void)
 {
 	misc_deregister( &irda.dev);
@@ -168,10 +270,12 @@ void irda_cleanup(void)
  *    Lock variable. Returns false if the lock is already set.
  *    
  */
-inline int irda_lock( int *lock) {
-	if ( test_and_set_bit( 0, (void *) lock))  {
-             printk("Trying to lock, already locked variable!\n");
-	     return FALSE;
+inline int irda_lock(int *lock) 
+{
+	if (test_and_set_bit( 0, (void *) lock))  {
+		DEBUG(3, __FUNCTION__ 
+		      "(), Trying to lock, already locked variable!\n");
+		return FALSE;
         }  
 	return TRUE;
 }
@@ -182,8 +286,9 @@ inline int irda_lock( int *lock) {
  *    Unlock variable. Returns false if lock is already unlocked
  *
  */
-inline int irda_unlock( int *lock) {
-	if ( !test_and_clear_bit( 0, (void *) lock))  {
+inline int irda_unlock(int *lock) 
+{
+	if (!test_and_clear_bit(0, (void *) lock))  {
 		printk("Trying to unlock already unlocked variable!\n");
 		return FALSE;
         }
@@ -198,7 +303,6 @@ inline int irda_unlock( int *lock) {
  */
 void irda_notify_init( struct notify_t *notify)
 {
-
 	notify->data_indication = NULL;
 	notify->udata_indication = NULL;
 	notify->connect_confirm = NULL;
@@ -402,9 +506,19 @@ static u_int irda_poll( struct file *file, poll_table *wait)
 }
 
 #ifdef MODULE
+#ifdef CONFIG_PROC_FS
+void irda_proc_modcount(struct inode *inode, int fill)
+{
+	if (fill)
+		MOD_INC_USE_COUNT;
+	else
+		MOD_DEC_USE_COUNT;
+}
+#endif /* CONFIG_PROC_FS */
 
 MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
 MODULE_DESCRIPTION("The Linux IrDA protocol subsystem"); 
+MODULE_PARM(irda_debug, "1l");
 
 /*
  * Function init_module (void)

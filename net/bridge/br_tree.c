@@ -474,3 +474,27 @@ void sprintf_avl (char **pbuffer, struct fdb * tree, off_t *pos,
 
 	return;
 }
+
+/*
+ * Delete all nodes learnt by the port
+ */
+void br_avl_delete_by_port(int port)
+{
+        struct fdb *fdb, *next;
+
+	if (!fdb_inited)
+		fdb_init();
+
+        for(fdb = port_info[port].fdb; fdb != NULL; fdb = next) {
+                next = fdb->fdb_next;
+                br_avl_remove(fdb);
+        }
+        port_info[port].fdb = NULL;
+
+        /* remove the local mac too */
+        next = br_avl_find_addr(port_info[port].dev->dev_addr);
+        if (next != NULL)
+                br_avl_remove(next);
+
+        return;
+}

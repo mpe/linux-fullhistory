@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Tue Oct 20 09:59:31 1998
+ * Modified at:   Tue Feb  2 09:45:17 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -44,7 +44,6 @@ typedef enum {
 	IRLAN_SYNC
 } IRLAN_STATE;
 
-/* IrLAN Client Events */
 typedef enum {
 	IRLAN_DISCOVERY_INDICATION,
 	IRLAN_IAS_PROVIDER_AVAIL,
@@ -61,26 +60,22 @@ typedef enum {
 	IRLAN_GET_MEDIA_CMD,
 	IRLAN_OPEN_DATA_CMD,
 	IRLAN_FILTER_CONFIG_CMD,
-} IRLAN_EVENT;
 
-struct irlan_info {
-	__u8   dlsap_sel;
-	__u32  daddr;
-	struct tsap_cb *tsap;
-};
+	IRLAN_CHECK_CON_ARB,
+	IRLAN_PROVIDER_SIGNAL,
+
+	IRLAN_WATCHDOG_TIMEOUT,
+} IRLAN_EVENT;
 
 extern char *irlan_state[];
 
-void irlan_do_client_event( struct irlan_cb *self, 
-			    IRLAN_EVENT event, 
-			    struct sk_buff *skb);
+void irlan_do_client_event(struct irlan_cb *self, IRLAN_EVENT event, 
+			   struct sk_buff *skb);
 
-void irlan_do_server_event( struct irlan_cb *self, 
-			    IRLAN_EVENT event, 
-			    struct sk_buff *skb, 
-			    struct irlan_info *info);
+void irlan_do_provider_event(struct irlan_cb *self, IRLAN_EVENT event, 
+			     struct sk_buff *skb);
 
-void irlan_next_state( struct irlan_cb *self, 
-		       IRLAN_STATE state);
+void irlan_next_client_state(struct irlan_cb *self, IRLAN_STATE state);
+void irlan_next_provider_state(struct irlan_cb *self, IRLAN_STATE state);
 
 #endif

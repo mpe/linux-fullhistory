@@ -54,7 +54,7 @@
 #include "../soundvers.h"
 #endif
 
-#if SOUND_INTERNAL_VERSION >= 0x30803
+#if defined(SOUND_INTERNAL_VERSION) && SOUND_INTERNAL_VERSION >= 0x30803
 /* OSS/Free-3.8 */
 #define AWE_NO_PATCHMGR
 #define AWE_OSS38
@@ -151,18 +151,9 @@ static int _mem_start;  /* memory pointer for permanent buffers */
 #define my_malloc_memptr()	_mem_start
 #define my_free(ptr)	/* do nothing */
 
-static void *my_malloc(int size)
-{
-	char *ptr;
-	PERMANENT_MALLOC(ptr, char*, size, _mem_start);
-	return (void*)ptr;
-}
-#define my_kmalloc(size) my_malloc(size)
-#define kfree(ptr)	/* do nothing */
-
 /* allocate buffer only once */
 #define INIT_TABLE(buffer,index,nums,type) {\
-buffer = my_malloc(sizeof(type) * (nums)); index = (nums);\
+PERMANENT_MALLOC(buffer, char*, size, _mem_start); index = (nums);\
 }
 
 #else
@@ -173,8 +164,6 @@ buffer = my_malloc(sizeof(type) * (nums)); index = (nums);\
 #define my_malloc_memptr()	0
 #define my_malloc(size)		vmalloc(size)
 #define my_free(ptr)		if (ptr) {vfree(ptr);}
-#define my_kmalloc(size)	kmalloc(size,GFP_KERNEL)
-#define my_kfree(ptr)		kfree(ptr)
 
 /* do not allocate buffer at beginning */
 #define INIT_TABLE(buffer,index,nums,type) {buffer=NULL; index=0;}
@@ -254,6 +243,14 @@ buffer = my_malloc(sizeof(type) * (nums)); index = (nums);\
 #define sound_unload_mididev(dev)	/**/
 
 #endif /* AWE_MODULE_SUPPORT */
+
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,0)
+inline static void interruptible_sleep_on_timeout(struct wait_queue **q, unsigned long timeout)
+{
+	current->timeout = jiffies + timeout;
+	interruptible_sleep_on(q);
+}
+#endif
 
 #endif /* CONFIG_AWE32_SYNTH */
 

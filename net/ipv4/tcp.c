@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.135 1999/02/22 13:54:21 davem Exp $
+ * Version:	$Id: tcp.c,v 1.136 1999/03/07 13:26:01 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1070,6 +1070,7 @@ static void cleanup_rbuf(struct sock *sk, int copied)
 	if(copied > 0) {
 		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 		__u32 rcv_window_now = tcp_receive_window(tp);
+		__u32 new_window = __tcp_select_window(sk);
 
 		/* We won't be raising the window any further than
 		 * the window-clamp allows.  Our window selection
@@ -1077,7 +1078,7 @@ static void cleanup_rbuf(struct sock *sk, int copied)
 		 * checks are necessary to prevent spurious ACKs
 		 * which don't advertize a larger window.
 		 */
-		if((copied >= rcv_window_now) &&
+		if((new_window && (new_window >= rcv_window_now * 2)) &&
 		   ((rcv_window_now + tp->mss_cache) <= tp->window_clamp))
 			tcp_read_wakeup(sk);
 	}

@@ -3,6 +3,11 @@
  * Coverted to new API by Alan Cox <Alan.Cox@linux.org>
  * Various bugfixes and enhancements by Russell Kroll <rkroll@exploits.org>
  *
+ * History:
+ * 1999-02-24	Russell Kroll <rkroll@exploits.org>
+ * 		Fine tuning/VIDEO_TUNER_LOW
+ *		Frequency range expanded to start at 87 MHz
+ *
  * TODO: Allow for more than one of these foolish entities :-)
  *
  * Notes on the hardware (reverse engineered from other peoples'
@@ -156,14 +161,11 @@ static int rt_setfreq(struct rt_device *dev, unsigned long freq)
 
 	/* adapted from radio-aztech.c */
 
-	/* We want to compute x * 100 / 16 without overflow 
-	 * So we compute x*6 + (x/100)*25 to give x*6.25
-	 */
-	 
-	freq = freq * 6 + freq/4;	/* massage the data a little	*/
-	freq += 1070;			/* IF = 10.7 MHz 		*/
-	freq /= 5;			/* ref = 25 kHz			*/
+	/* now uses VIDEO_TUNER_LOW for fine tuning */
 
+	freq += 171200;			/* Add 10.7 MHz IF 		*/
+	freq /= 800;			/* Convert to 50 kHz units	*/
+	 
 	send_0_byte (io, dev);		/*  0: LSB of frequency		*/
 
 	for (i = 0; i < 13; i++)	/*   : frequency bits (1-13)	*/
@@ -200,16 +202,6 @@ int rt_getsigstr(struct rt_device *dev)
 	return 1;		/* signal present		*/
 }
 
-int rt_chkstereo(struct rt_device *dev)
-{
-	outb(0xd8, io);
-	sleep_delay(100000);
-	if (inb(io) & 0x0fd)
-		return VIDEO_SOUND_STEREO;	/* stereo detected */
-	else 
-		return VIDEO_SOUND_MONO;	/* mono */
-}
-
 static int rt_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 {
 	struct rt_device *rt=dev->priv;
@@ -239,9 +231,9 @@ static int rt_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EFAULT;
 			if(v.tuner)	/* Only 1 tuner */ 
 				return -EINVAL;
-			v.rangelow=(88*16);
-			v.rangehigh=(108*16);
-			v.flags=0;
+			v.rangelow=(87*16000);
+			v.rangehigh=(108*16000);
+			v.flags=VIDEO_TUNER_LOW;
 			v.mode=VIDEO_MODE_AUTO;
 			v.signal=0xFFFF*rt_getsigstr(rt);
 			if(copy_to_user(arg,&v, sizeof(v)))
@@ -273,7 +265,6 @@ static int rt_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			memset(&v,0, sizeof(v));
 			v.flags|=VIDEO_AUDIO_MUTABLE|VIDEO_AUDIO_VOLUME;
 			v.volume=rt->curvol * 6554;
-			v.mode=rt_chkstereo(rt);
 			v.step=6554;
 			strcpy(v.name, "Radio");
 			if(copy_to_user(arg,&v, sizeof(v)))

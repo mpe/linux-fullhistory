@@ -3,7 +3,7 @@
  *
  *	PCI defines and function prototypes
  *	Copyright 1994, Drew Eckhardt
- *	Copyright 1997, 1998 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
+ *	Copyright 1997--1999 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  *
  *	For more information, please consult the following manuals (look at
  *	http://www.pcisig.com/ for how to get them):
@@ -36,9 +36,9 @@
 #define  PCI_COMMAND_FAST_BACK	0x200	/* Enable back-to-back writes */
 
 #define PCI_STATUS		0x06	/* 16 bits */
+#define  PCI_STATUS_CAP_LIST	0x10	/* Support Capability List */
 #define  PCI_STATUS_66MHZ	0x20	/* Support 66 Mhz PCI 2.1 bus */
 #define  PCI_STATUS_UDF		0x40	/* Support User Definable Features */
-
 #define  PCI_STATUS_FAST_BACK	0x80	/* Accept fast-back to back */
 #define  PCI_STATUS_PARITY	0x100	/* Detected parity error */
 #define  PCI_STATUS_DEVSEL_MASK	0x600	/* DEVSEL timing */
@@ -101,7 +101,9 @@
 #define  PCI_ROM_ADDRESS_ENABLE	0x01
 #define PCI_ROM_ADDRESS_MASK	(~0x7ffUL)
 
-/* 0x34-0x3b are reserved */
+#define PCI_CAPABILITY_LIST	0x34	/* Offset of first capability list entry */
+
+/* 0x35-0x3b are reserved */
 #define PCI_INTERRUPT_LINE	0x3c	/* 8 bits */
 #define PCI_INTERRUPT_PIN	0x3d	/* 8 bits */
 #define PCI_MIN_GNT		0x3e	/* 8 bits */
@@ -181,6 +183,12 @@
 #define PCI_CB_SUBSYSTEM_ID	0x42
 #define PCI_CB_LEGACY_MODE_BASE	0x44	/* 16-bit PC Card legacy mode base address (ExCa) */
 /* 0x48-0x7f reserved */
+
+/* Capability lists */
+#define PCI_CAP_LIST_ID		0	/* Capability ID */
+#define  PCI_CAP_ID_PM		0x01	/* Power Management */
+#define  PCI_CAP_ID_AGP		0x02	/* Accelerated Graphics Port */
+#define PCI_CAP_LIST_NEXT	1	/* Next capability in the list */
 
 /* Device classes and subclasses */
 
@@ -356,6 +364,7 @@
 #define PCI_DEVICE_ID_DEC_21052		0x0021
 #define PCI_DEVICE_ID_DEC_21150		0x0022
 #define PCI_DEVICE_ID_DEC_21152		0x0024
+#define PCI_DEVICE_ID_DEC_21153		0x0025
 
 #define PCI_VENDOR_ID_CIRRUS		0x1013
 #define PCI_DEVICE_ID_CIRRUS_7548	0x0038
@@ -949,6 +958,9 @@
 #define PCI_VENDOR_ID_CBOARDS		0x1307
 #define PCI_DEVICE_ID_CBOARDS_DAS1602_16 0x0001
 
+#define PCI_VENDOR_ID_NETGEAR		0x1385
+#define PCI_DEVICE_ID_NETGEAR_GA620	0x620a
+
 #define PCI_VENDOR_ID_SYMPHONY		0x1c1c
 #define PCI_DEVICE_ID_SYMPHONY_101	0x0001
 
@@ -1031,6 +1043,7 @@
 #define PCI_DEVICE_ID_INTEL_82443BX_2	0x7192
 #define PCI_DEVICE_ID_INTEL_P6		0x84c4
 #define PCI_DEVICE_ID_INTEL_82450GX	0x84c5
+#define PCI_DEVICE_ID_INTEL_82451NX	0x84ca
 
 #define PCI_VENDOR_ID_KTI		0x8e2e
 #define PCI_DEVICE_ID_KTI_ET32P2	0x3000
@@ -1197,6 +1210,7 @@ void pci_init(void);
 void pci_setup(char *str, int *ints);
 void pci_quirks_init(void);
 unsigned int pci_scan_bus(struct pci_bus *bus);
+struct pci_bus *pci_scan_peer_bridge(int bus);
 void pci_proc_init(void);
 void proc_old_pci_init(void);
 int get_pci_list(char *buf);

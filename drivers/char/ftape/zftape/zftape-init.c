@@ -280,8 +280,6 @@ static int zft_mmap(struct inode *ino,
 		static struct vm_operations_struct dummy = { NULL, };
 		vma->vm_ops = &dummy;
 #endif
-		vma->vm_file = filep;
-		filep->f_count++;
 	}
 	current->blocked = old_sigmask; /* restore mask */
 	TRACE_EXIT result;

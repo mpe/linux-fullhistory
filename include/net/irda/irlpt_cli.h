@@ -1,6 +1,6 @@
 /*********************************************************************
  *                
- * Filename:      irlpt_client.h
+ * Filename:      irlpt_cli.h
  * Version:       0.1
  * Description:   
  * Status:        Experimental.
@@ -35,8 +35,10 @@
  */
 
 void irlpt_client_get_value_confirm(__u16 obj_id, 
-				    struct ias_value *value, void *priv);
-void irlpt_client_connect_indication( void *instance, void *sap, 
+				    struct ias_value *value, 
+				    void *priv);
+void irlpt_client_connect_indication( void *instance, 
+				      void *sap, 
 				      struct qos_info *qos, 
 				      int max_seg_size,
 				      struct sk_buff *skb);

@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      qos.c
- * Version:       0.1
+ * Version:       0.8
  * Description:   IrLAP QoS negotiation
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Sep  9 00:00:26 1997
- * Modified at:   Sat Dec 12 12:21:42 1998
+ * Modified at:   Mon Feb  1 09:56:21 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -109,8 +109,8 @@ void irda_init_max_qos_capabilies( struct qos_info *qos)
  *    We just set the QoS capabilities for the peer station
  *
  */
-void irda_qos_negotiate( struct qos_info *qos_rx, struct qos_info *qos_tx, 
-			 struct sk_buff *skb) 
+void irda_qos_negotiate(struct qos_info *qos_rx, struct qos_info *qos_tx, 
+			struct sk_buff *skb) 
 {
 	int n=0;
 #ifdef CONFIG_IRDA_COMPRESSION
@@ -162,7 +162,7 @@ void irda_qos_negotiate( struct qos_info *qos_rx, struct qos_info *qos_tx,
 			break;
 		}
 
-		switch( code) {
+		switch(code) {
 		case PI_BAUD_RATE:
 			/* 
 			 *  Stations must agree on baud rate, so calculate
@@ -178,7 +178,8 @@ void irda_qos_negotiate( struct qos_info *qos_rx, struct qos_info *qos_tx,
 			/*
 			 *  Negotiated independently for each station
 			 */
-			DEBUG( 4, "MAX_TURN_TIME: %02x\n", byte);
+			DEBUG(4, __FUNCTION__ "(), MAX_TURN_TIME: %02x\n", 
+			      byte);
 			qos_tx->max_turn_time.bits = byte;
 			break;
 		case PI_DATA_SIZE:
@@ -268,7 +269,7 @@ void irda_qos_negotiate( struct qos_info *qos_rx, struct qos_info *qos_tx,
  *    Insert QoS negotiaion pararameters into frame
  *
  */
-int irda_insert_qos_negotiation_params( struct qos_info *qos, __u8 *frame)
+int irda_insert_qos_negotiation_params(struct qos_info *qos, __u8 *frame)
 {
 	int n;
 	__u16_host_order word;

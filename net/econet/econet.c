@@ -44,7 +44,6 @@
 #include <net/udp.h>
 #include <net/ip.h>
 #include <asm/spinlock.h>
-#include <linux/inetdevice.h>
 
 static struct proto_ops econet_ops;
 static struct sock *econet_sklist;

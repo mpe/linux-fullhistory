@@ -1,12 +1,12 @@
 /*
- *	$Id: pci.c,v 1.90 1998/09/05 12:39:39 mj Exp $
+ *	$Id: pci.c,v 1.91 1999/01/21 13:34:01 davem Exp $
  *
  *	PCI Bus Services, see include/linux/pci.h for further explanation.
  *
  *	Copyright 1993 -- 1997 Drew Eckhardt, Frederic Potter,
  *	David Mosberger-Tang
  *
- *	Copyright 1997 -- 1998 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
+ *	Copyright 1997 -- 1999 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  */
 
 #include <linux/config.h>
@@ -28,9 +28,6 @@
 #endif
 
 struct pci_bus pci_root;
-#ifdef CONFIG_VISWS
-struct pci_bus pci_other;
-#endif
 struct pci_dev *pci_devices = NULL;
 static struct pci_dev **pci_last_dev_p = &pci_devices;
 static int pci_reverse __initdata = 0;
@@ -371,6 +368,18 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 	return max;
 }
 
+struct pci_bus * __init pci_scan_peer_bridge(int bus)
+{
+	struct pci_bus *b;
+
+	b = kmalloc(sizeof(*b), GFP_KERNEL);
+	memset(b, 0, sizeof(*b));
+	b->next = pci_root.next;
+	pci_root.next = b;
+	b->number = b->secondary = bus;
+	b->subordinate = pci_scan_bus(b);
+	return b;
+}
 
 __initfunc(void pci_init(void))
 {
@@ -385,11 +394,6 @@ __initfunc(void pci_init(void))
 
 	memset(&pci_root, 0, sizeof(pci_root));
 	pci_root.subordinate = pci_scan_bus(&pci_root);
-#ifdef CONFIG_VISWS
-	pci_other.number = 1; /* XXX unless bridge(s) on pci_root */
-	pci_other.subordinate = pci_scan_bus(&pci_other);
-	pci_root.next = &pci_other;
-#endif
 
 	/* give BIOS a chance to apply platform specific fixes: */
 	pcibios_fixup();
@@ -402,7 +406,6 @@ __initfunc(void pci_init(void))
 	pci_proc_init();
 #endif
 }
-
 
 __initfunc(void pci_setup (char *str, int *ints))
 {

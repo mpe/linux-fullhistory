@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Oct  9 09:18:07 1998
- * Modified at:   Mon Dec 14 11:55:27 1998
+ * Modified at:   Mon Feb  8 01:23:52 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       ppp.c, isdn_ppp.c
  * 
@@ -81,8 +81,7 @@ void irda_unregister_compressor ( struct compressor *cp)
 	if ( !node) {
 		DEBUG( 0, __FUNCTION__ "(), compressor not found!\n");
 		return;
-	}
-	
+	}	
 	kfree( node);
 }
 
@@ -99,7 +98,7 @@ int irda_set_compression( struct irlap_cb *self, int proto)
 
 	__u8 options[CILEN_DEFLATE];
 
-	DEBUG( 0, __FUNCTION__ "()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( self != NULL, return -ENODEV;);
 	ASSERT( self->magic == LAP_MAGIC, return -EBADR;);
@@ -180,7 +179,7 @@ void irlap_compressor_init( struct irlap_cb *self, int compress)
 	int debug = TRUE;
 	__u8 options[CILEN_DEFLATE];
 
-	DEBUG( 0, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LAP_MAGIC, return;);
@@ -240,8 +239,8 @@ struct sk_buff *irlap_compress_frame( struct irlap_cb *self,
 	
 	ASSERT( skb != NULL, return NULL;);
 	
-	DEBUG( 0, __FUNCTION__ "() skb->len=%d, jiffies=%ld\n", (int) skb->len,
-	       jiffies);
+	DEBUG(4, __FUNCTION__ "() skb->len=%d, jiffies=%ld\n", (int) skb->len,
+	      jiffies);
 
 	ASSERT( self != NULL, return NULL;);
 	ASSERT( self->magic == LAP_MAGIC, return NULL;);
@@ -267,7 +266,7 @@ struct sk_buff *irlap_compress_frame( struct irlap_cb *self,
 						 skb->data, new_skb->data, 
 						 skb->len, new_skb->len);
 	if( count <= 0) {
-		DEBUG( 0, __FUNCTION__ "(), Unable to compress frame!\n");
+		DEBUG(4, __FUNCTION__ "(), Unable to compress frame!\n");
 		dev_kfree_skb( new_skb);
 
 		/* Tell peer that this frame is not compressed */
@@ -284,8 +283,8 @@ struct sk_buff *irlap_compress_frame( struct irlap_cb *self,
 
 	dev_kfree_skb( skb);
 	
-	DEBUG( 0, __FUNCTION__ "() new_skb->len=%d\n, jiffies=%ld", 
-	       (int) new_skb->len, jiffies);
+	DEBUG(4, __FUNCTION__ "() new_skb->len=%d\n, jiffies=%ld", 
+	      (int) new_skb->len, jiffies);
 	
 	return new_skb;
 }
@@ -336,7 +335,7 @@ struct sk_buff *irlap_decompress_frame( struct irlap_cb *self,
 	count = irda_decompress( self->decompressor.state, skb->data, 
 				 skb->len, new_skb->data, new_skb->len);
 	if ( count <= 0) {
-		DEBUG( 0, __FUNCTION__ "(), Unable to decompress frame!\n");
+		DEBUG( 4, __FUNCTION__ "(), Unable to decompress frame!\n");
 		
 		dev_kfree_skb( new_skb);
 		return skb;
@@ -344,7 +343,7 @@ struct sk_buff *irlap_decompress_frame( struct irlap_cb *self,
 
 	skb_trim( new_skb, count);
 	
-	DEBUG( 0, __FUNCTION__ "() new_skb->len=%d\n", (int) new_skb->len);
+	DEBUG( 4, __FUNCTION__ "() new_skb->len=%d\n", (int) new_skb->len);
 
 	return new_skb;
 }

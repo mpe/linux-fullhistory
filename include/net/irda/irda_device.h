@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Haris Zukanovic <haris@stud.cs.uit.no>
  * Created at:    Tue Apr 14 12:41:42 1998
- * Modified at:   Mon Jan 18 10:52:10 1999
+ * Modified at:   Tue Feb  9 14:01:50 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Haris Zukanovic, <haris@stud.cs.uit.no>
@@ -35,11 +35,13 @@
 #include <net/irda/qos.h>
 #include <net/irda/irqueue.h>
 
-#define SIR_MODE 	0x01
-#define MIR_MODE 	0x02
-#define FIR_MODE 	0x04
-#define IO_PIO   	0x08
-#define IO_DMA		0x10
+/* Some non-standard interface flags (should not conflict with any in if.h */
+#define IFF_SIR 	0x01 /* Supports SIR speeds */
+#define IFF_MIR 	0x02 /* Supports MIR speeds */
+#define IFF_FIR 	0x04 /* Supports FIR speeds */
+#define IFF_PIO   	0x08 /* Supports PIO transfer of data */
+#define IFF_DMA		0x10 /* Supports DMA transfer of data */
+#define IFF_DONGLE      0x20 /* Interface has a dongle attached */
 
 #define IO_XMIT 0x01
 #define IO_RECV 0x02
@@ -93,7 +95,7 @@ struct irda_device {
 	struct device netdev;   /* Yes! we are some kind of netdevice */
 	struct enet_statistics stats;
 
-/* 	int flags; */
+ 	int flags;            /* Interface flags (see defs above) */
 
  	void *priv;           /* Pointer to low level implementation */
 
@@ -103,6 +105,7 @@ struct irda_device {
 	struct iobuff_t tx_buff;
 	struct iobuff_t rx_buff;
 
+	int xbofs;
 	int media_busy;
 	
 	/* Media busy stuff */

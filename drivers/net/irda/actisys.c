@@ -1,13 +1,13 @@
 /*********************************************************************
  *                
  * Filename:      actisys.c
- * Version:       0.4
+ * Version:       0.5
  * Description:   Implementation for the ACTiSYS IR-220L and IR-220L+ 
  *                dongles
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 20:02:35 1998
- * Modified at:   Mon Jan 18 11:30:25 1999
+ * Modified at:   Tue Feb  9 15:38:16 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -70,9 +70,10 @@ void actisys_cleanup(void)
 
 static void actisys_open( struct irda_device *idev, int type)
 {
-	strcat( idev->name, " <-> actisys");
+	strcat(idev->description, " <-> actisys");
 
         idev->io.dongle_id = type;
+	idev->flags |= IFF_DONGLE;
 
 	MOD_INC_USE_COUNT;
 }
@@ -85,24 +86,20 @@ static void actisys_close( struct irda_device *dev)
 /*
  * Function actisys_change_speed (tty, baud)
  *
- *    Change speed of the ACTiSYS IR-220L and IR-220L+ type IrDA dongles.  
- *    To cycle through the available baud rates, pulse RTS low for a few ms.
- *    To be compatible with the new IR-220L+, we have to reset the dongle 
- *    first since its not possible cycle around anymore and still be 
- *    compatible with both dongles :-(
+ *    Change speed of the ACTiSYS IR-220L and IR-220L+ type IrDA dongles.
+ *    To cycle through the available baud rates, pulse RTS low for a few
+ *    ms.  
  */
 static void actisys_change_speed( struct irda_device *idev, int baudrate)
 {
         struct irtty_cb *self;
         struct tty_struct *tty;
-        int arg;
         struct termios old_termios;
 	int cflag;
         int current_baudrate;
         int index = 0;
-	mm_segment_t fs;
 	
-	DEBUG( 0, __FUNCTION__ "()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( idev != NULL, return;);
 	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -115,10 +112,10 @@ static void actisys_change_speed( struct irda_device *idev, int baudrate)
 	current_baudrate = idev->qos.baud_rate.value;
 
 	/* Find the correct baudrate index for the currently used baudrate */
-	while ( current_baudrate != baud_rates[index])
+	while (current_baudrate != baud_rates[index])
 		index++;
 
-        DEBUG( 0, __FUNCTION__ "(), index=%d\n", index);
+        DEBUG( 4, __FUNCTION__ "(), index=%d\n", index);
 
 	if ( !self->tty)
 		return;
@@ -127,38 +124,18 @@ static void actisys_change_speed( struct irda_device *idev, int baudrate)
 
 	/* Cycle through avaiable baudrates until we reach the correct one */
         while ( current_baudrate != baudrate) {	
-                DEBUG( 0, __FUNCTION__ "(), current baudrate = %d\n",
+                DEBUG( 4, __FUNCTION__ "(), current baudrate = %d\n",
                        baud_rates[index]);
-		DEBUG( 0, __FUNCTION__ "(), Clearing RTS\n");
 		
 		/* Set DTR, clear RTS */
-		arg = TIOCM_DTR|TIOCM_OUT2;
-		
-		fs = get_fs();
-		set_fs( get_ds());
-		
-		if ( tty->driver.ioctl( tty, NULL, TIOCMSET, 
-					(unsigned long) &arg)) { 
-			DEBUG( 0, __FUNCTION__ 
-			       "Error clearing RTS!\n");
-		}
-		set_fs(fs);
+		irtty_set_dtr_rts(tty, TRUE, FALSE);
 		
 		/* Wait at a few ms */
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(2);
 
 		/* Set DTR, Set RTS */
-                arg = TIOCM_DTR | TIOCM_RTS |TIOCM_OUT2;
-
-		fs = get_fs();
-		set_fs( get_ds());
-		
-		if ( tty->driver.ioctl( tty, NULL, TIOCMSET, 
-					(unsigned long) &arg)) { 
-			DEBUG( 0, __FUNCTION__  "Error setting RTS!\n");
-		}
-		set_fs(fs);
+		irtty_set_dtr_rts(tty, TRUE, TRUE);
 		
 		/* Wait at a few ms again */
 		current->state = TASK_INTERRUPTIBLE;
@@ -172,8 +149,8 @@ static void actisys_change_speed( struct irda_device *idev, int baudrate)
 
                 current_baudrate = baud_rates[index];
         }
-	DEBUG( 0, __FUNCTION__ "(), current baudrate = %d\n", 
-                  baud_rates[index]);
+	DEBUG(4, __FUNCTION__ "(), current baudrate = %d\n", 
+	      baud_rates[index]);
 
 	/* Now change the speed of the serial port */
 	old_termios = *(tty->termios);
@@ -200,9 +177,8 @@ static void actisys_change_speed( struct irda_device *idev, int baudrate)
 		break;
 	}
 
+	/* Change speed of serial port */
 	tty->termios->c_cflag = cflag;
-
-	DEBUG( 0, __FUNCTION__ "(), Setting the speed of the serial port\n");
 	tty->driver.set_termios( tty, &old_termios);
 }
 
@@ -219,10 +195,6 @@ static void actisys_reset( struct irda_device *idev, int unused)
 {
 	struct irtty_cb *self;
         struct tty_struct *tty;
-        int arg = 0;
-	mm_segment_t fs;
-
-	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( idev != NULL, return;);
 	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -236,36 +208,16 @@ static void actisys_reset( struct irda_device *idev, int unused)
 	if ( !tty)
 		return;
 
-	DEBUG( 0, __FUNCTION__ "(), Clearing DTR\n");
-	arg = TIOCM_RTS | TIOCM_OUT2;
-
-	fs = get_fs();
-	set_fs( get_ds());
-	
-	if ( tty->driver.ioctl( tty, NULL, TIOCMSET, 
-				(unsigned long) &arg)) 
-	{ 
-		DEBUG( 0, __FUNCTION__"(), ioctl error!\n");
-	}
-	set_fs(fs);
+	/* Clear DTR */
+	irtty_set_dtr_rts(tty, FALSE, TRUE);
 
 	/* Sleep 10-20 ms*/
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(2);
 	
-	DEBUG( 0, __FUNCTION__ "(), Setting DTR\n");
-	arg = TIOCM_RTS | TIOCM_DTR | TIOCM_OUT2;
+	/* Go back to normal mode */
+	irtty_set_dtr_rts(tty, TRUE, TRUE);
 	
-	fs = get_fs();
-	set_fs( get_ds());
-	
-	if ( tty->driver.ioctl( tty, NULL, TIOCMSET, 
-				(unsigned long) &arg)) 
-	{ 
-		DEBUG( 0, __FUNCTION__"(), ioctl error!\n");
-	}
-	set_fs(fs);
-
 	idev->qos.baud_rate.value = 9600;
 }
 
@@ -287,6 +239,9 @@ static void actisys_init_qos( struct irda_device *idev, struct qos_info *qos)
 }
 
 #ifdef MODULE
+
+MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
+MODULE_DESCRIPTION("ACTiSYS IR-220L and IR-220L+ dongle driver");	
 		
 /*
  * Function init_module (void)

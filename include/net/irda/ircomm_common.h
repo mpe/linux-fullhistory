@@ -149,6 +149,7 @@ struct ircomm_cb{
 	int max_txbuff_size;          
 	int maxsdusize;
  	__u32 daddr;        /* Device address of the peer device */ 
+	__u32 saddr;
 
 	void (*d_handler)(struct ircomm_cb *self);
 	struct notify_t notify;     /* container of callbacks */

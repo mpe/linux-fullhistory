@@ -103,7 +103,7 @@ iobase=0x%x irq=%d lo_dma=%d hi_dma=%d\n",
 		printk(KERN_ERR "sb_card: I/O port %x is already in use\n\n", hw_config->io_base);
 		return 0;
 	}
-	return sb_dsp_detect(hw_config);
+	return sb_dsp_detect(hw_config, 0, 0);
 }
 
 void unload_sb(struct address_info *hw_config)
@@ -135,6 +135,7 @@ int type = 0;		/* Can set this to a specific card type */
 int mad16 = 0;		/* Set mad16=1 to load this as support for mad16 */
 int trix = 0;		/* Set trix=1 to load this as support for trix */
 int pas2 = 0;		/* Set pas2=1 to load this as support for pas2 */
+int support = 0;	/* Set support to load this as a support module */
 int sm_games = 0;	/* Mixer - see sb_mixer.c */
 int acer = 0;		/* Do acer notebook init */
 
@@ -145,6 +146,7 @@ MODULE_PARM(dma16, "i");
 MODULE_PARM(mpu_io, "i");
 MODULE_PARM(type, "i");
 MODULE_PARM(mad16, "i");
+MODULE_PARM(support, "i");
 MODULE_PARM(trix, "i");
 MODULE_PARM(pas2, "i");
 MODULE_PARM(sm_games, "i");
@@ -156,7 +158,7 @@ int init_module(void)
 {
 	printk(KERN_INFO "Soundblaster audio driver Copyright (C) by Hannu Savolainen 1993-1996\n");
 
-	if (mad16 == 0 && trix == 0 && pas2 == 0)
+	if (mad16 == 0 && trix == 0 && pas2 == 0 && support == 0)
 	{
 		if (io == -1 || dma == -1 || irq == -1)
 		{
@@ -191,7 +193,7 @@ void cleanup_module(void)
 {
 	if (smw_free)
 		vfree(smw_free);
-	if (!mad16 && !trix && !pas2)
+	if (!mad16 && !trix && !pas2 && !support)
 		unload_sb(&config);
 	if (sbmpu)
 		unload_sbmpu(&config_mpu);

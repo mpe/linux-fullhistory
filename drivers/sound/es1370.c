@@ -1228,8 +1228,6 @@ static int es1370_mmap(struct file *file, struct vm_area_struct *vma)
 	if (remap_page_range(vma->vm_start, virt_to_phys(db->rawbuf), size, vma->vm_page_prot))
 		return -EAGAIN;
 	db->mapped = 1;
-	vma->vm_file = file;
-	file->f_count++;
 	return 0;
 }
 
@@ -1597,6 +1595,7 @@ static int es1370_release(struct inode *inode, struct file *file)
 	down(&s->open_sem);
 	if (file->f_mode & FMODE_WRITE) {
 		stop_dac2(s);
+		synchronize_irq();
 		dealloc_dmabuf(&s->dma_dac2);
 	}
 	if (file->f_mode & FMODE_READ) {
@@ -1725,8 +1724,6 @@ static int es1370_mmap_dac(struct file *file, struct vm_area_struct *vma)
 	if (remap_page_range(vma->vm_start, virt_to_phys(s->dma_dac1.rawbuf), size, vma->vm_page_prot))
 		return -EAGAIN;
 	s->dma_dac1.mapped = 1;
-	vma->vm_file = file;
-	file->f_count++;
 	return 0;
 }
 

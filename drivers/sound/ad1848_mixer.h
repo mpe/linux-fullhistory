@@ -24,7 +24,10 @@
  * solution).
  */
 #define MODE1_REC_DEVICES		(SOUND_MASK_LINE3 | SOUND_MASK_MIC | \
-					 SOUND_MASK_LINE1|SOUND_MASK_IMIX)
+					 SOUND_MASK_LINE1 | SOUND_MASK_IMIX)
+
+#define SPRO_REC_DEVICES		(SOUND_MASK_LINE | SOUND_MASK_MIC | \
+					 SOUND_MASK_CD | SOUND_MASK_LINE1)
 
 #define MODE1_MIXER_DEVICES		(SOUND_MASK_LINE1 | SOUND_MASK_MIC | \
 					 SOUND_MASK_LINE2 | \
@@ -47,16 +50,27 @@
 				 SOUND_MASK_LINE3 | \
 				 SOUND_MASK_IGAIN | SOUND_MASK_PCM)
 
+#define SPRO_MIXER_DEVICES	(SOUND_MASK_VOLUME | SOUND_MASK_PCM | \
+				 SOUND_MASK_LINE | SOUND_MASK_SYNTH | \
+				 SOUND_MASK_CD | SOUND_MASK_MIC | \
+				 SOUND_MASK_SPEAKER | SOUND_MASK_LINE1 | \
+				 SOUND_MASK_OGAIN)
+
 struct mixer_def {
-	unsigned int regno: 5;
-	unsigned int polarity:1;	/* 0=normal, 1=reversed */
-	unsigned int bitpos:3;
-	unsigned int nbits:3;
-	unsigned int mutepos:4;
+	unsigned int regno:5;		/* register number for volume */
+	unsigned int polarity:1;	/* volume polarity: 0=normal, 1=reversed */
+	unsigned int bitpos:3;		/* position of bits in register for volume */
+	unsigned int nbits:3;		/* number of bits in register for volume */
+	unsigned int mutereg:5;		/* register number for mute bit */
+	unsigned int mutepol:1;		/* mute polarity: 0=normal, 1=reversed */
+	unsigned int mutepos:4;		/* position of mute bit in register */
+	unsigned int recreg:5;		/* register number for recording bit */
+	unsigned int recpol:1;		/* recording polarity: 0=normal, 1=reversed */
+	unsigned int recpos:4;		/* position of recording bit in register */
 };
 
 static char mix_cvt[101] = {
-	0, 0,3,7,10,13,16,19,21,23,26,28,30,32,34,35,37,39,40,42,
+	 0, 0, 3, 7,10,13,16,19,21,23,26,28,30,32,34,35,37,39,40,42,
 	43,45,46,47,49,50,51,52,53,55,56,57,58,59,60,61,62,63,64,65,
 	65,66,67,68,69,70,70,71,72,73,73,74,75,75,76,77,77,78,79,79,
 	80,81,81,82,82,83,84,84,85,85,86,86,87,87,88,88,89,89,90,90,
@@ -77,7 +91,17 @@ typedef mixer_ent mixer_ents[2];
  */
 
 #define MIX_ENT(name, reg_l, pola_l, pos_l, len_l, reg_r, pola_r, pos_r, len_r, mute_bit)	\
-	{{reg_l, pola_l, pos_l, len_l, mute_bit}, {reg_r, pola_r, pos_r, len_r, mute_bit}}
+	[name] = {{reg_l, pola_l, pos_l, len_l, reg_l, 0, mute_bit, 0, 0, 8},			\
+		  {reg_r, pola_r, pos_r, len_r, reg_r, 0, mute_bit, 0, 0, 8}}
+
+#define MIX_ENT2(name, reg_l, pola_l, pos_l, len_l, mute_reg_l, mute_pola_l, mute_pos_l, \
+		    rec_reg_l, rec_pola_l, rec_pos_l,					 \
+		 reg_r, pola_r, pos_r, len_r, mute_reg_r, mute_pola_r, mute_pos_r,	 \
+		    rec_reg_r, rec_pola_r, rec_pos_r)					 \
+	[name] = {{reg_l, pola_l, pos_l, len_l, mute_reg_l, mute_pola_l, mute_pos_l,	 \
+		    rec_reg_l, rec_pola_l, rec_pos_l},					 \
+		  {reg_r, pola_r, pos_r, len_r, mute_reg_r, mute_pola_r, mute_pos_r,	 \
+		    rec_reg_r, rec_pola_r, rec_pos_r}}
 
 static mixer_ents ad1848_mix_devices[32] = {
 MIX_ENT(SOUND_MIXER_VOLUME,	27, 1, 0, 4,	29, 1, 0, 4,  8),
@@ -142,6 +166,30 @@ MIX_ENT(SOUND_MIXER_OGAIN,	 0, 0, 0, 0,	 0, 0, 0, 0,  8),
 MIX_ENT(SOUND_MIXER_LINE1,	 2, 1, 1, 4,	 3, 1, 1, 4,  7),
 MIX_ENT(SOUND_MIXER_LINE2,	 4, 1, 1, 4,	 5, 1, 1, 4,  7),
 MIX_ENT(SOUND_MIXER_LINE3,	18, 1, 1, 4,	19, 1, 1, 4,  7)
+};
+
+static mixer_ents spro_mix_devices[32] = {
+MIX_ENT (SOUND_MIXER_VOLUME,	19, 0, 4, 4,			 19, 0, 0, 4,  8),
+MIX_ENT (SOUND_MIXER_BASS,	 0, 0, 0, 0,			  0, 0, 0, 0,  8),
+MIX_ENT (SOUND_MIXER_TREBLE,	 0, 0, 0, 0,			  0, 0, 0, 0,  8),
+MIX_ENT2(SOUND_MIXER_SYNTH,	 4, 1, 1, 4, 23, 0, 3,  0, 0, 8,
+	 			 5, 1, 1, 4, 23, 0, 3, 0, 0, 8),
+MIX_ENT (SOUND_MIXER_PCM,	 6, 1, 1, 4,			  7, 1, 1, 4,  8),
+MIX_ENT (SOUND_MIXER_SPEAKER,	18, 0, 3, 2,			  0, 0, 0, 0,  8),
+MIX_ENT2(SOUND_MIXER_LINE,	20, 0, 4, 4, 17, 1, 4, 16, 0, 2,
+	 			20, 0, 0, 4, 17, 1, 3, 16, 0, 1),
+MIX_ENT2(SOUND_MIXER_MIC,	18, 0, 0, 3, 17, 1, 0, 16, 0, 0,
+	 			 0, 0, 0, 0,  0, 0, 0,  0, 0, 0),
+MIX_ENT2(SOUND_MIXER_CD,	21, 0, 4, 4, 17, 1, 2, 16, 0, 4,
+				21, 0, 0, 4, 17, 1, 1, 16, 0, 3),
+MIX_ENT (SOUND_MIXER_IMIX,	 0, 0, 0, 0,			  0, 0, 0, 0,  8),
+MIX_ENT (SOUND_MIXER_ALTPCM,	 0, 0, 0, 0,			  0, 0, 0, 0,  8),
+MIX_ENT (SOUND_MIXER_RECLEV,	 0, 0, 0, 0,			  0, 0, 0, 0,  8),
+MIX_ENT (SOUND_MIXER_IGAIN,	 0, 0, 0, 0,			  0, 0, 0, 0,  8),
+MIX_ENT (SOUND_MIXER_OGAIN,	17, 1, 6, 1,			  0, 0, 0, 0,  8),
+/* This is external wavetable */
+MIX_ENT2(SOUND_MIXER_LINE1,	22, 0, 4, 4, 23, 1, 1, 23, 0, 4,
+	 			22, 0, 0, 4, 23, 1, 0, 23, 0, 5),
 };
 
 static int default_mixer_levels[32] =

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.102 1999/02/22 13:54:26 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.104 1999/03/07 13:26:04 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -580,6 +580,18 @@ int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb)
 	if(tp->af_specific->rebuild_header(sk))
 		return 1; /* Routing failure or similar. */
 
+	/* Some Solaris stacks overoptimize and ignore the FIN on a
+	 * retransmit when old data is attached.  So strip it off
+	 * since it is cheap to do so and saves bytes on the network.
+	 */
+	if(skb->len > 0 &&
+	   (TCP_SKB_CB(skb)->flags & TCPCB_FLAG_FIN) &&
+	   tp->snd_una == (TCP_SKB_CB(skb)->end_seq - 1)) {
+		TCP_SKB_CB(skb)->seq = TCP_SKB_CB(skb)->end_seq - 1;
+		skb_trim(skb, 0);
+		skb->csum = 0;
+	}
+
 	/* Ok, we're gonna send it out, update state. */
 	TCP_SKB_CB(skb)->sacked |= TCPCB_SACKED_RETRANS;
 	tp->retrans_out++;
@@ -592,6 +604,7 @@ int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb)
 		skb = skb_copy(skb, GFP_ATOMIC);
 	else
 		skb = skb_clone(skb, GFP_ATOMIC);
+
 	tcp_transmit_skb(sk, skb);
 
 	/* Update global TCP statistics and return success. */

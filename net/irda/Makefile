@@ -10,13 +10,19 @@
 ALL_SUB_DIRS := irlan ircomm irlpt compressors
 SUB_DIRS :=
 MOD_SUB_DIRS :=
+OX_OBJS :=
 
 O_TARGET := irda.o
-O_OBJS	 := irmod.o iriap.o iriap_event.o irlmp.o irlmp_event.o irlmp_frame.o \
+O_OBJS	 := iriap.o iriap_event.o irlmp.o irlmp_event.o irlmp_frame.o \
             irlap.o irlap_event.o irlap_frame.o timer.o qos.o irqueue.o \
             irttp.o irda_device.o irias_object.o crc.o wrapper.o af_irda.o
+OX_OBJS := irmod.o
+
 MOD_LIST_NAME := IRDA_MODULES
+
+ifeq ($(CONFIG_IRDA),m)
 M_OBJS   := $(O_TARGET)
+endif
 
 ifeq ($(CONFIG_IRDA_COMPRESSION),y)
 O_OBJS += irlap_comp.o

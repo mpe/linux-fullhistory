@@ -179,13 +179,25 @@ static void sb_intr (sb_devc *devc)
 		status = inb(DSP_DATA_AVL16);
 }
 
+static void pci_intr(sb_devc *devc)
+{
+	int src = inb(devc->pcibase+0x1A);
+	src&=3;
+	if(src)
+		sb_intr(devc);
+}
+
 static void sbintr(int irq, void *dev_id, struct pt_regs *dummy)
 {
-    sb_devc *devc = dev_id;
+	sb_devc *devc = dev_id;
 
 	devc->irq_ok = 1;
 
 	switch (devc->model) {
+	case MDL_ESSPCI:
+		pci_intr (devc);
+		break;
+		
 	case MDL_ESS:
 		ess_intr (devc);
 		break;
@@ -478,7 +490,7 @@ static void relocate_ess1688(sb_devc * devc)
 #endif
 }
 
-int sb_dsp_detect(struct address_info *hw_config)
+int sb_dsp_detect(struct address_info *hw_config, int pci, int pciio)
 {
 	sb_devc sb_info;
 	sb_devc *devc = &sb_info;
@@ -508,7 +520,22 @@ int sb_dsp_detect(struct address_info *hw_config)
 	devc->dma8 = hw_config->dma;
 
 	devc->dma16 = -1;
-
+	devc->pcibase = pciio;
+	
+	if(pci == SB_PCI_ESSMAESTRO)
+	{
+		devc->model = MDL_ESSPCI;
+		devc->caps |= SB_PCI_IRQ;
+		hw_config->driver_use_1 |= SB_PCI_IRQ;
+		hw_config->card_subtype	= MDL_ESSPCI;
+	}
+	
+	if(pci == SB_PCI_YAMAHA)
+	{
+		devc->caps |= SB_PCI_IRQ;
+		hw_config->driver_use_1 |= SB_PCI_IRQ;
+	}
+	
 	if (acer)
 	{
 		cli();
@@ -569,6 +596,10 @@ int sb_dsp_detect(struct address_info *hw_config)
 				}
 		}
 	}
+	
+	if(devc->type == MDL_ESSPCI)
+		devc->model = MDL_ESSPCI;
+		
 	/*
 	 * Save device information for sb_dsp_init()
 	 */
@@ -619,7 +650,15 @@ int sb_dsp_init(struct address_info *hw_config)
 
 	if (!(devc->caps & SB_NO_AUDIO && devc->caps & SB_NO_MIDI) && hw_config->irq > 0)
 	{			/* IRQ setup */
-		if (request_irq(hw_config->irq, sbintr, 0, "soundblaster", devc) < 0)
+		
+		/*
+		 *	ESS PCI cards do shared PCI IRQ stuff. Since they
+		 *	will get shared PCI irq lines we must cope.
+		 */
+		 
+		int i=(devc->caps&SB_PCI_IRQ)?SA_SHIRQ:0;
+		
+		if (request_irq(hw_config->irq, sbintr, i, "soundblaster", devc) < 0)
 		{
 			printk(KERN_ERR "SB: Can't allocate IRQ%d\n", hw_config->irq);
 			return 0;

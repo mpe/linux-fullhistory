@@ -1,4 +1,4 @@
-/* $Id: cosa.c,v 1.11 1998/12/24 23:44:23 kas Exp $ */
+/* $Id: cosa.c,v 1.21 1999/02/06 19:49:18 kas Exp $ */
 
 /*
  *  Copyright (C) 1995-1997  Jan "Yenya" Kasprzak <kas@fi.muni.cz>
@@ -27,7 +27,7 @@
  * Masaryk University (http://www.ics.muni.cz/). The hardware is
  * developed by Jiri Novotny <novotny@ics.muni.cz>. More information
  * and the photo of both cards is available at
- * http://www.kozakmartin.cz/cosa.html. The card documentation, firmwares
+ * http://www.pavoucek.cz/cosa.html. The card documentation, firmwares
  * and other goods can be downloaded from ftp://ftp.ics.muni.cz/pub/cosa/.
  * For Linux-specific utilities, see below in the "Software info" section.
  * If you want to order the card, contact Jiri Novotny.
@@ -141,11 +141,13 @@ struct cosa_data {
 	unsigned int datareg, statusreg;	/* I/O ports */
 	unsigned short irq, dma;	/* IRQ and DMA number */
 	unsigned short startaddr;	/* Firmware start address */
+	unsigned short busmaster;	/* Use busmastering? */
 	int nchannels;			/* # of channels on this card */
 	int driver_status;		/* For communicating with firware */
 	int firmware_status;		/* Downloaded, reseted, etc. */
 	int rxbitmap, txbitmap;		/* Bitmap of channels who are willing to send/receive data */
 	int rxtx;			/* RX or TX in progress? */
+	int enabled;
 	int usage;				/* usage count */
 	int txchan, txsize, rxsize;
 	struct channel_data *rxchan;
@@ -331,9 +333,8 @@ static int cosa_reset_and_read_id(struct cosa_data *cosa, char *id);
 static int get_wait_data(struct cosa_data *cosa);
 static int put_wait_data(struct cosa_data *cosa, int data);
 static int puthexnumber(struct cosa_data *cosa, int number);
-static void put_driver_status_common(struct cosa_data *cosa, int nolock);
-#define put_driver_status(x) put_driver_status_common((x), 0)
-#define put_driver_status_nolock(x) put_driver_status_common((x), 1)
+static void put_driver_status(struct cosa_data *cosa);
+static void put_driver_status_nolock(struct cosa_data *cosa);
 
 /* Interrupt handling */
 static void cosa_interrupt(int irq, void *cosa, struct pt_regs *regs);
@@ -357,7 +358,7 @@ __initfunc(static int cosa_init(void))
 #endif
 {
 	int i;
-	printk(KERN_INFO "cosa v1.03 (c) 1997-8 Jan Kasprzak <kas@fi.muni.cz>\n");
+	printk(KERN_INFO "cosa v1.04 (c) 1997-8 Jan Kasprzak <kas@fi.muni.cz>\n");
 #ifdef __SMP__
 	printk(KERN_INFO "cosa: SMP found. Please mail any success/failure reports to the author.\n");
 #endif
@@ -630,9 +631,14 @@ static int cosa_sppp_tx(struct sk_buff *skb, struct device *dev)
 	if (dev->tbusy) { 
 		if (time_before(jiffies, dev->trans_start+2*HZ))
 			return 1;	/* Two seconds timeout */
+		if (test_bit(RXBIT, &chan->cosa->rxtx)) {
+			chan->stats.rx_errors++;
+			chan->stats.rx_missed_errors++;
+		} else {
+			chan->stats.tx_errors++;
+			chan->stats.tx_aborted_errors++;
+		}
 		cosa_kick(chan->cosa);
-		chan->stats.tx_errors++;
-		chan->stats.tx_aborted_errors++;
 		if (chan->tx_skb) {
 			dev_kfree_skb(chan->tx_skb);
 			chan->tx_skb = 0;
@@ -659,6 +665,14 @@ static int cosa_sppp_close(struct device *d)
 	d->tbusy = 1;
 	cosa_disable_rx(chan);
 	spin_lock_irqsave(&chan->cosa->lock, flags);
+	if (chan->rx_skb) {
+		kfree_skb(chan->rx_skb);
+		chan->rx_skb = 0;
+	}
+	if (chan->tx_skb) {
+		kfree_skb(chan->tx_skb);
+		chan->tx_skb = 0;
+	}
 	chan->usage=0;
 	chan->cosa->usage--;
 	MOD_DEC_USE_COUNT;
@@ -1128,6 +1142,17 @@ static int cosa_ioctl_common(struct cosa_data *cosa,
 		return nr_cards;
 	case COSAIONRCHANS:
 		return cosa->nchannels;
+	case COSAIOBMSET:
+		if (!suser())
+			return -EACCES;
+		if (is_8bit(cosa))
+			return -EINVAL;
+		if (arg != COSA_BM_OFF && arg != COSA_BM_ON)
+			return -EINVAL;
+		cosa->busmaster = arg;
+		return 0;
+	case COSAIOBMGET:
+		return cosa->busmaster;
 	}
 	return -ENOIOCTLCMD;
 }
@@ -1208,37 +1233,67 @@ static int cosa_start_tx(struct channel_data *chan, char *buf, int len)
 	return 0;
 }
 
-static void put_driver_status_common(struct cosa_data *cosa, int nolock)
+static void put_driver_status(struct cosa_data *cosa)
 {
 	unsigned flags=0;
 	int status;
 
-	if (!nolock)
-		spin_lock_irqsave(&cosa->lock, flags);
+	spin_lock_irqsave(&cosa->lock, flags);
 
 	status = (cosa->rxbitmap ? DRIVER_RX_READY : 0)
 		| (cosa->txbitmap ? DRIVER_TX_READY : 0)
 		| (cosa->txbitmap? ~(cosa->txbitmap<<DRIVER_TXMAP_SHIFT)
 			&DRIVER_TXMAP_MASK : 0);
-	if (!cosa->rxtx || nolock) {
-#ifdef DEBUG_IO
-		debug_data_cmd(cosa, status);
-#endif
-		cosa_putdata8(cosa, status);
+	if (!cosa->rxtx) {
 		if (cosa->rxbitmap|cosa->txbitmap) {
-			cosa_putstatus(cosa, SR_RX_INT_ENA);
+			if (!cosa->enabled) {
+				cosa_putstatus(cosa, SR_RX_INT_ENA);
 #ifdef DEBUG_IO
-			debug_status_out(cosa, SR_RX_INT_ENA);
+				debug_status_out(cosa, SR_RX_INT_ENA);
 #endif
-		} else {
+				cosa->enabled = 1;
+			}
+		} else if (cosa->enabled) {
+			cosa->enabled = 0;
 			cosa_putstatus(cosa, 0);
 #ifdef DEBUG_IO
 			debug_status_out(cosa, 0);
 #endif
 		}
+		cosa_putdata8(cosa, status);
+#ifdef DEBUG_IO
+		debug_data_cmd(cosa, status);
+#endif
 	}
-	if (!nolock)
-		spin_unlock_irqrestore(&cosa->lock, flags);
+	spin_unlock_irqrestore(&cosa->lock, flags);
+}
+
+static void put_driver_status_nolock(struct cosa_data *cosa)
+{
+	int status;
+
+	status = (cosa->rxbitmap ? DRIVER_RX_READY : 0)
+		| (cosa->txbitmap ? DRIVER_TX_READY : 0)
+		| (cosa->txbitmap? ~(cosa->txbitmap<<DRIVER_TXMAP_SHIFT)
+			&DRIVER_TXMAP_MASK : 0);
+
+	if (cosa->rxbitmap|cosa->txbitmap) {
+		cosa_putstatus(cosa, SR_RX_INT_ENA);
+#ifdef DEBUG_IO
+		debug_status_out(cosa, SR_RX_INT_ENA);
+#endif
+		cosa->enabled = 1;
+	} else {
+		cosa_putstatus(cosa, 0);
+#ifdef DEBUG_IO
+		debug_status_out(cosa, 0);
+#endif
+		cosa->enabled = 0;
+	}
+	cosa_putdata8(cosa, status);
+#ifdef DEBUG_IO
+	debug_data_cmd(cosa, status);
+#endif
 }
 
 /*
@@ -1249,9 +1304,14 @@ static void put_driver_status_common(struct cosa_data *cosa, int nolock)
 static void cosa_kick(struct cosa_data *cosa)
 {
 	unsigned flags, flags1;
+	char *s = "Unknown";
 
-	printk(KERN_INFO "%s: DMA timeout - restarting.\n", cosa->name);
+	if (test_bit(RXBIT, &cosa->rxtx))
+		s = "RX";
+	if (test_bit(TXBIT, &cosa->rxtx))
+		s = "TX";
 
+	printk(KERN_INFO "%s: %s DMA timeout - restarting.\n", cosa->name, s); 
 	spin_lock_irqsave(&cosa->lock, flags);
 	cosa->rxtx = 0;
 
@@ -1261,6 +1321,13 @@ static void cosa_kick(struct cosa_data *cosa)
 	release_dma_lock(flags1);
 
 	/* FIXME: Anything else? */
+	udelay(100);
+	cosa_putstatus(cosa, 0);
+	udelay(100);
+	(void) cosa_getdata8(cosa);
+	udelay(100);
+	cosa_putdata8(cosa, 0);
+	udelay(100);
 	put_driver_status_nolock(cosa);
 	spin_unlock_irqrestore(&cosa->lock, flags);
 }
@@ -1556,6 +1623,10 @@ static int puthexnumber(struct cosa_data *cosa, int number)
  * COSA status byte. I have moved the rx/tx/eot interrupt handling into
  * separate functions to make it more readable. These functions are inline,
  * so there should be no overhead of function call.
+ * 
+ * In the COSA bus-master mode, we need to tell the card the address of a
+ * buffer. Unfortunately, COSA may be too slow for us, so we must busy-wait.
+ * It's time to use the bottom half :-(
  */
 
 /*
@@ -1606,13 +1677,13 @@ static inline void tx_interrupt(struct cosa_data *cosa, int status)
 
 	if (is_8bit(cosa)) {
 		if (!test_bit(IRQBIT, &cosa->rxtx)) {
+			cosa_putstatus(cosa, SR_TX_INT_ENA);
 			cosa_putdata8(cosa, ((cosa->txchan << 5) & 0xe0)|
 				((cosa->txsize >> 8) & 0x1f));
-			cosa_putstatus(cosa, SR_TX_INT_ENA);
 #ifdef DEBUG_IO
+			debug_status_out(cosa, SR_TX_INT_ENA);
 			debug_data_out(cosa, ((cosa->txchan << 5) & 0xe0)|
                                 ((cosa->txsize >> 8) & 0x1f));
-			debug_status_out(cosa, SR_TX_INT_ENA);
 			debug_data_in(cosa, cosa_getdata8(cosa));
 #else
 			cosa_getdata8(cosa);
@@ -1630,27 +1701,57 @@ static inline void tx_interrupt(struct cosa_data *cosa, int status)
 #endif
 		}
 	} else {
+		cosa_putstatus(cosa, SR_TX_INT_ENA);
 		cosa_putdata16(cosa, ((cosa->txchan<<13) & 0xe000)
 			| (cosa->txsize & 0x1fff));
-		cosa_getdata16(cosa);
 #ifdef DEBUG_IO
-		debug_status_out(cosa, ((cosa->txchan<<13) & 0xe000)
+		debug_status_out(cosa, SR_TX_INT_ENA);
+		debug_data_out(cosa, ((cosa->txchan<<13) & 0xe000)
                         | (cosa->txsize & 0x1fff));
-		debug_data_in(cosa, cosa_getdata16(cosa));
+		debug_data_in(cosa, cosa_getdata8(cosa));
+		debug_status_out(cosa, 0);
 #else
-		cosa_getdata16(cosa);
+		cosa_getdata8(cosa);
 #endif
+		cosa_putstatus(cosa, 0);
 	}
 
-	/* start the DMA */
-	flags1 = claim_dma_lock();
-	disable_dma(cosa->dma);
-	clear_dma_ff(cosa->dma);
-	set_dma_mode(cosa->dma, DMA_MODE_WRITE);
-	set_dma_addr(cosa->dma, virt_to_bus(cosa->txbuf));
-	set_dma_count(cosa->dma, cosa->txsize);
-	enable_dma(cosa->dma);
-	release_dma_lock(flags1);
+	if (cosa->busmaster) {
+		unsigned long addr = virt_to_bus(cosa->txbuf);
+		int count=0;
+		printk(KERN_INFO "busmaster IRQ\n");
+		while (!(cosa_getstatus(cosa)&SR_TX_RDY)) {
+			count++;
+			udelay(10);
+			if (count > 1000) break;
+		}
+		printk(KERN_INFO "status %x\n", cosa_getstatus(cosa));
+		printk(KERN_INFO "ready after %d loops\n", count);
+		cosa_putdata16(cosa, (addr >> 16)&0xffff);
+
+		count = 0;
+		while (!(cosa_getstatus(cosa)&SR_TX_RDY)) {
+			count++;
+			if (count > 1000) break;
+			udelay(10);
+		}
+		printk(KERN_INFO "ready after %d loops\n", count);
+		cosa_putdata16(cosa, addr &0xffff);
+		flags1 = claim_dma_lock();
+		set_dma_mode(cosa->dma, DMA_MODE_CASCADE);
+		enable_dma(cosa->dma);
+		release_dma_lock(flags1);
+	} else {
+		/* start the DMA */
+		flags1 = claim_dma_lock();
+		disable_dma(cosa->dma);
+		clear_dma_ff(cosa->dma);
+		set_dma_mode(cosa->dma, DMA_MODE_WRITE);
+		set_dma_addr(cosa->dma, virt_to_bus(cosa->txbuf));
+		set_dma_count(cosa->dma, cosa->txsize);
+		enable_dma(cosa->dma);
+		release_dma_lock(flags1);
+	}
 	cosa_putstatus(cosa, SR_TX_DMA_ENA|SR_USR_INT_ENA);
 #ifdef DEBUG_IO
 	debug_status_out(cosa, SR_TX_DMA_ENA|SR_USR_INT_ENA);
@@ -1671,21 +1772,16 @@ static inline void rx_interrupt(struct cosa_data *cosa, int status)
 	if (is_8bit(cosa)) {
 		if (!test_bit(IRQBIT, &cosa->rxtx)) {
 			set_bit(IRQBIT, &cosa->rxtx);
-			cosa_putstatus(cosa, 0);
 			cosa->rxsize = cosa_getdata8(cosa) <<8;
 #ifdef DEBUG_IO
-			debug_status_out(cosa, 0);
 			debug_data_in(cosa, cosa->rxsize >> 8);
 #endif
-			put_driver_status_nolock(cosa);
 			spin_unlock_irqrestore(&cosa->lock, flags);
 			return;
 		} else {
 			clear_bit(IRQBIT, &cosa->rxtx);
-			cosa_putstatus(cosa, 0);
 			cosa->rxsize |= cosa_getdata8(cosa) & 0xff;
 #ifdef DEBUG_IO
-			debug_status_out(cosa, 0);
 			debug_data_in(cosa, cosa->rxsize & 0xff);
 #endif
 #if 0
@@ -1695,12 +1791,8 @@ static inline void rx_interrupt(struct cosa_data *cosa, int status)
 		}
 	} else {
 		cosa->rxsize = cosa_getdata16(cosa);
-		cosa_putstatus(cosa, 0);
-		cosa_putdata8(cosa, DRIVER_RX_READY);
 #ifdef DEBUG_IO
 		debug_data_in(cosa, cosa->rxsize);
-		debug_status_out(cosa, 0);
-		debug_cmd_out(cosa, DRIVER_RX_READY);
 #endif
 #if 0
 		printk(KERN_INFO "cosa%d: receive rxsize = (0x%04x).\n",
@@ -1725,10 +1817,7 @@ static inline void rx_interrupt(struct cosa_data *cosa, int status)
 reject:		/* Reject the packet */
 		printk(KERN_INFO "cosa%d: rejecting packet on channel %d\n",
 			cosa->num, cosa->rxchan->num);
-		/* FIXME: This works for COSA only (not SRP) */
-		cosa->rxtx = 0;
-		put_driver_status(cosa);
-		return;
+		cosa->rxbuf = cosa->bouncebuf;
 	}
 
 	/* start the DMA */
@@ -1746,8 +1835,12 @@ reject:		/* Reject the packet */
 	release_dma_lock(flags);
 	spin_lock_irqsave(&cosa->lock, flags);
 	cosa_putstatus(cosa, SR_RX_DMA_ENA|SR_USR_INT_ENA);
+	if (!is_8bit(cosa) && (status & SR_TX_RDY))
+		cosa_putdata8(cosa, DRIVER_RX_READY);
 #ifdef DEBUG_IO
 	debug_status_out(cosa, SR_RX_DMA_ENA|SR_USR_INT_ENA);
+	if (!is_8bit(cosa) && (status & SR_TX_RDY))
+		debug_data_cmd(cosa, DRIVER_RX_READY);
 #endif
 	spin_unlock_irqrestore(&cosa->lock, flags);
 }
@@ -1756,11 +1849,12 @@ static void inline eot_interrupt(struct cosa_data *cosa, int status)
 {
 	unsigned long flags, flags1;
 	spin_lock_irqsave(&cosa->lock, flags);
+	flags1 = claim_dma_lock();
+	disable_dma(cosa->dma);
+	clear_dma_ff(cosa->dma);
+	release_dma_lock(flags1);
 	if (test_bit(TXBIT, &cosa->rxtx)) {
 		struct channel_data *chan = cosa->chan+cosa->txchan;
-#ifdef DEBUG_IRQS
-		printk(KERN_INFO "cosa%d: end of transfer.\n", cosa->num);
-#endif
 		if (chan->tx_done)
 			if (chan->tx_done(chan, cosa->txsize))
 				clear_bit(chan->num, &cosa->txbitmap);
@@ -1775,6 +1869,9 @@ static void inline eot_interrupt(struct cosa_data *cosa, int status)
 		printk("\n");
 	}
 #endif
+		/* Packet for unknown channel? */
+		if (cosa->rxbuf == cosa->bouncebuf)
+			goto out;
 		if (!cosa_dma_able(cosa->rxchan, cosa->rxbuf, cosa->rxsize))
 			memcpy(cosa->rxbuf, cosa->bouncebuf, cosa->rxsize);
 		if (cosa->rxchan->rx_done)
@@ -1786,12 +1883,11 @@ static void inline eot_interrupt(struct cosa_data *cosa, int status)
 	}
 	/*
 	 * Clear the RXBIT, TXBIT and IRQBIT (the latest should be
-	 * cleared anyway).
+	 * cleared anyway). We should do it as soon as possible
+	 * so that we can tell the COSA we are done and to give it a time
+	 * for recovery.
 	 */
-	flags1 = claim_dma_lock();
-	disable_dma(cosa->dma);
-	clear_dma_ff(cosa->dma);
-	release_dma_lock(flags1);
+out:
 	cosa->rxtx = 0;
 	put_driver_status_nolock(cosa);
 	spin_unlock_irqrestore(&cosa->lock, flags);
@@ -1799,7 +1895,7 @@ static void inline eot_interrupt(struct cosa_data *cosa, int status)
 
 static void cosa_interrupt(int irq, void *cosa_, struct pt_regs *regs)
 {
-	int status;
+	unsigned status;
 	int count = 0;
 	struct cosa_data *cosa = cosa_;
 again:

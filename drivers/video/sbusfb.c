@@ -244,8 +244,6 @@ static int sbusfb_mmap(struct fb_info *info, struct file *file,
 		page += map_size;
 	}
 	
-	vma->vm_file = file;
-	file->f_count++;
 	vma->vm_flags |= VM_IO;
 	if (!fb->mmaped) {
 		int lastconsole = 0;

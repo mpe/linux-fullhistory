@@ -8466,6 +8466,15 @@ CONFIG_SUN_ZS
   This driver does not exist at this point, so you might as well 
   say N.
 
+Double Talk PC internal speech card support
+CONFIG_DTLK
+  This driver is for the DoubleTalk PC, a speech synthesizer
+  manufactured by RC Systems (http://www.rcsys.com/).  It is also
+  called the `internal DoubleTalk'.  If you want to compile this as a
+  module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt. The module will be called dtlk.o.
+
 Advanced Power Management
 CONFIG_APM
   APM is a BIOS specification for saving power using several different

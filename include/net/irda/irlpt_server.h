@@ -1,6 +1,6 @@
 /*********************************************************************
  *                
- * Filename:      server.h
+ * Filename:      irlpt_server.h
  * Version:       0.1
  * Description:   
  * Status:        Experimental.

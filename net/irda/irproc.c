@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Thomas Davis, <ratbert@radiks.net>
  * Created at:    Sat Feb 21 21:33:24 1998
- * Modified at:   Tue Dec 15 09:21:50 1998
+ * Modified at:   Thu Feb 11 15:23:23 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998, Thomas Davis, <ratbert@radiks.net>, 
@@ -31,27 +31,24 @@
 #include <net/irda/irlap.h>
 #include <net/irda/irlmp.h>
 
-static int proc_irda_21x_lookup(struct inode * dir, struct dentry *dentry);
+static int proc_irda_lookup(struct inode * dir, struct dentry *dentry);
 
 static int proc_irda_readdir(struct file *filp, void *dirent, 
  			     filldir_t filldir);
 
-extern int irda_device_proc_read( char *buf, char **start, off_t offset, 
-				  int len, int unused);
-extern int irlap_proc_read( char *buf, char **start, off_t offset, int len, 
-			    int unused);
-extern int irlmp_proc_read( char *buf, char **start, off_t offset, int len, 
-			    int unused);
-extern int irttp_proc_read( char *buf, char **start, off_t offset, int len, 
-			    int unused);
-extern int irias_proc_read( char *buf, char **start, off_t offset, int len,
- 			    int unused);
+extern int irda_device_proc_read(char *buf, char **start, off_t offset, 
+				 int len, int unused);
+extern int irlap_proc_read(char *buf, char **start, off_t offset, int len, 
+			   int unused);
+extern int irlmp_proc_read(char *buf, char **start, off_t offset, int len, 
+			   int unused);
+extern int irttp_proc_read(char *buf, char **start, off_t offset, int len, 
+			   int unused);
+extern int irias_proc_read(char *buf, char **start, off_t offset, int len,
+			   int unused);
 
-static int proc_discovery_read( char *buf, char **start, off_t offset, int len,
-				int unused);
-
-/* int proc_irda_readdir(struct inode *inode, struct file *filp, void *dirent,  */
-/* 		      filldir_t filldir); */
+static int proc_discovery_read(char *buf, char **start, off_t offset, int len,
+			       int unused);
 
 enum irda_directory_inos {
 	PROC_IRDA_LAP = 1,
@@ -82,7 +79,7 @@ static struct file_operations proc_irda_dir_operations = {
 struct inode_operations proc_irda_dir_inode_operations = {
         &proc_irda_dir_operations,   /* default net directory file-ops */
         NULL,                   /* create */
-	proc_irda_21x_lookup, 
+	proc_irda_lookup, 
         NULL,                   /* link */
         NULL,                   /* unlink */
         NULL,                   /* symlink */
@@ -186,13 +183,14 @@ static struct dentry_operations proc_dentry_operations =
  *
  */
 void irda_proc_register(void) {
-	proc_net_register( &proc_irda);
-	proc_register( &proc_irda, &proc_lap);
-	proc_register( &proc_irda, &proc_lmp);
-	proc_register( &proc_irda, &proc_ttp);
-	proc_register( &proc_irda, &proc_ias);
- 	proc_register( &proc_irda, &proc_irda_device); 
-	proc_register( &proc_irda, &proc_discovery);
+	proc_net_register(&proc_irda);
+	proc_irda.fill_inode = &irda_proc_modcount;
+	proc_register(&proc_irda, &proc_lap);
+	proc_register(&proc_irda, &proc_lmp);
+	proc_register(&proc_irda, &proc_ttp);
+	proc_register(&proc_irda, &proc_ias);
+ 	proc_register(&proc_irda, &proc_irda_device); 
+	proc_register(&proc_irda, &proc_discovery);
 }
 
 /*
@@ -202,22 +200,22 @@ void irda_proc_register(void) {
  *
  */
 void irda_proc_unregister(void) {
-	proc_unregister( &proc_irda, proc_discovery.low_ino);
+	proc_unregister(&proc_irda, proc_discovery.low_ino);
  	proc_unregister(&proc_irda, proc_irda_device.low_ino);
-	proc_unregister( &proc_irda, proc_ias.low_ino);
-	proc_unregister( &proc_irda, proc_ttp.low_ino);
-	proc_unregister( &proc_irda, proc_lmp.low_ino);
-	proc_unregister( &proc_irda, proc_lap.low_ino);
-	proc_unregister( proc_net, proc_irda.low_ino);
+	proc_unregister(&proc_irda, proc_ias.low_ino);
+	proc_unregister(&proc_irda, proc_ttp.low_ino);
+	proc_unregister(&proc_irda, proc_lmp.low_ino);
+	proc_unregister(&proc_irda, proc_lap.low_ino);
+	proc_unregister(proc_net, proc_irda.low_ino);
 }
 
 /*
- * Function proc_irda_21x_lookup (dir, dentry)
+ * Function proc_irda_lookup (dir, dentry)
  *
- *    This is a copy of proc_lookup from the linux-2.1.x 
+ *    This is a copy of proc_lookup from the linux-2.2.x kernel
  *
  */
-int proc_irda_21x_lookup(struct inode * dir, struct dentry *dentry)
+int proc_irda_lookup(struct inode * dir, struct dentry *dentry)
 {
 	struct inode *inode;
 	struct proc_dir_entry * de;
@@ -261,8 +259,8 @@ out:
  *    to the irda module
  * 
  */
-static int proc_irda_readdir( struct file *filp, void *dirent, 
-			      filldir_t filldir)
+static int proc_irda_readdir(struct file *filp, void *dirent, 
+			     filldir_t filldir)
 {
 	struct proc_dir_entry * de;
 	unsigned int ino;
@@ -319,8 +317,8 @@ static int proc_irda_readdir( struct file *filp, void *dirent,
  *    Print discovery information in /proc file system
  *
  */
-int proc_discovery_read( char *buf, char **start, off_t offset, int len, 
-			 int unused)
+int proc_discovery_read(char *buf, char **start, off_t offset, int len, 
+			int unused)
 {
 	DISCOVERY *discovery;
 	struct lap_cb *lap;

@@ -1046,6 +1046,7 @@ endif
 
 ifeq ($(CONFIG_IRDA),y)
 SUB_DIRS += irda
+MOD_IN_SUB_DIRS += irda
 else
   ifeq ($(CONFIG_IRDA),m)
   MOD_SUB_DIRS += irda

@@ -556,7 +556,7 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		for (i = 0 ; i < nr_swapfiles ; i++) {
 			if (i == type)
 				continue;
-			if (p->swap_file == swap_info[i].swap_file)
+			if (swap_dentry->d_inode == swap_info[i].swap_file->d_inode)
 				goto bad_swap;
 		}
 	} else
@@ -701,6 +701,8 @@ bad_swap_2:
 	p->swap_map = NULL;
 	p->swap_lockmap = NULL;
 	p->flags = 0;
+	if (!(swap_flags & SWAP_FLAG_PREFER))
+		++least_priority;
 out:
 	if (swap_header)
 		free_page((long) swap_header);

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 22:47:12 1998
- * Modified at:   Mon Dec 14 11:47:25 1998
+ * Modified at:   Sat Feb  6 07:37:49 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -34,6 +34,7 @@ typedef enum {
 	ESI_DONGLE,
 	ACTISYS_DONGLE,
 	ACTISYS_PLUS_DONGLE,
+	GIRBIL_DONGLE,
 } DONGLE_T;
 
 struct dongle {

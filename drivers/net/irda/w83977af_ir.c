@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Paul VanderSpek
  * Created at:    Wed Nov  4 11:46:16 1998
- * Modified at:   Mon Dec 14 21:51:53 1998
+ * Modified at:   Tue Feb  9 13:30:35 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Corel Computer Corp.
@@ -204,6 +204,8 @@ int w83977af_open( int i, unsigned int iobase, unsigned int irq,
 	/* The HP HDLS-1100 needs 1 ms according to the specs */
 	idev->qos.min_turn_time.bits = 0x03; /* 1ms and more */
 	irda_qos_bits_to_value( &idev->qos);
+	
+	idev->flags = IFF_FIR|IFF_MIR|IFF_SIR|IFF_DMA|IFF_PIO;
 
 	/* Specify which buffer allocation policy we need */
 	idev->rx_buff.flags = GFP_KERNEL | GFP_DMA;
@@ -468,12 +470,6 @@ int w83977af_hard_xmit( struct sk_buff *skb, struct device *dev)
 	iobase = idev->io.iobase;
 
 	DEBUG(4, __FUNCTION__ "(%ld), skb->len=%d\n", jiffies, (int) skb->len);
-
-	if ( dev->tbusy) {
-		DEBUG( 4, __FUNCTION__ "(), tbusy==TRUE\n");
-
-		return -EBUSY;
-	}
 	
 	/* Lock transmit buffer */
 	if ( irda_lock( (void *) &dev->tbusy) == FALSE)

@@ -4,8 +4,10 @@
  * Version:       0.1
  * Sources:       irlan_event.c
  * 
- *     Copyright (c) 1997, Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
- *     Copyright (c) 1998, Thomas Davis, <ratbert@radiks.net>, All Rights Reserved.
+ *     Copyright (c) 1997, Dag Brattli <dagb@cs.uit.no>, 
+ *		All Rights Reserved.
+ *     Copyright (c) 1998, Thomas Davis, <ratbert@radiks.net>, 
+ *		All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -38,9 +40,10 @@ static int irlpt_server_state_conn  ( struct irlpt_cb *self,
 static char *rcsid = "$Id: irlpt_server_fsm.c,v 1.4 1998/10/05 05:46:45 ratbert Exp $";
 #endif
 
-int irlpt_server_fsm_debug = 3;
+int irlpt_server_fsm_debug = 4; /* don't change this! */
 
-static int (*irlpt_server_state[])( struct irlpt_cb *self, IRLPT_EVENT event, 
+static int (*irlpt_server_state[])( struct irlpt_cb *self, 
+				    IRLPT_EVENT event, 
 				    struct sk_buff *skb,
 				    struct irlpt_info *info) = 
 { 
@@ -48,10 +51,13 @@ static int (*irlpt_server_state[])( struct irlpt_cb *self, IRLPT_EVENT event,
 	irlpt_server_state_conn,
 };
 
-void irlpt_server_do_event( struct irlpt_cb *self, IRLPT_EVENT event, 
-			    struct sk_buff *skb, struct irlpt_info *info) 
+void irlpt_server_do_event( struct irlpt_cb *self, 
+			    IRLPT_EVENT event, 
+			    struct sk_buff *skb, 
+			    struct irlpt_info *info) 
 {
-	DEBUG( irlpt_server_fsm_debug, __FUNCTION__ ": STATE = %s, EVENT = %s\n", 
+	DEBUG( irlpt_server_fsm_debug, 
+	       __FUNCTION__ ": STATE = %s, EVENT = %s\n", 
 	       irlpt_server_fsm_state[self->state], irlpt_fsm_event[event]);
 
 	ASSERT( self != NULL, return;);
@@ -62,7 +68,8 @@ void irlpt_server_do_event( struct irlpt_cb *self, IRLPT_EVENT event,
 	DEBUG( irlpt_server_fsm_debug, __FUNCTION__ " -->\n");
 }
 
-void irlpt_server_next_state( struct irlpt_cb *self, IRLPT_CLIENT_STATE state) 
+void irlpt_server_next_state( struct irlpt_cb *self, 
+			      IRLPT_CLIENT_STATE state) 
 {
 
 	DEBUG( irlpt_server_fsm_debug, __FUNCTION__ ": NEXT STATE = %s\n", 
@@ -82,7 +89,8 @@ void irlpt_server_next_state( struct irlpt_cb *self, IRLPT_CLIENT_STATE state)
  *    IDLE, We are waiting for an indication that there is a provider
  *    available.
  */
-static int irlpt_server_state_idle( struct irlpt_cb *self, IRLPT_EVENT event, 
+static int irlpt_server_state_idle( struct irlpt_cb *self, 
+				    IRLPT_EVENT event, 
 				    struct sk_buff *skb, 
 				    struct irlpt_info *info) 
 {
@@ -96,10 +104,12 @@ static int irlpt_server_state_idle( struct irlpt_cb *self, IRLPT_EVENT event,
 	switch( event) {
 	case LMP_CONNECT:
 		DEBUG( irlpt_server_fsm_debug, __FUNCTION__ 
-		       ": LM_CONNECT, remote lsap=%d\n", 
-		       info->dlsap_sel);
+		       ": LM_CONNECT, remote lsap: 0x%08x\n",
+		       info->lsap->dlsap_sel);
 
-		self->dlsap_sel = info->dlsap_sel;
+		self->dlsap_sel = info->lsap->dlsap_sel;
+		self->daddr = info->daddr;
+		self->saddr = info->saddr;
 
 		r_skb = dev_alloc_skb(64);
 		if (r_skb == NULL) { 
@@ -107,12 +117,9 @@ static int irlpt_server_state_idle( struct irlpt_cb *self, IRLPT_EVENT event,
 				": can't allocate sk_buff of length 64\n");
 			return 0;
 		}
-		ALLOC_SKB_MAGIC(r_skb);
 		skb_reserve( r_skb, LMP_MAX_HEADER);
-		skb->len = 0;
 		irlmp_connect_response( self->lsap, r_skb);
 		irlpt_server_next_state( self, IRLPT_SERVER_CONN);
-
 		break;
 
 	default:

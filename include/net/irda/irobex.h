@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irobex.h
- * Version:       
+ * Version:       0.8
  * Description:   
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Jul  4 22:43:57 1998
- * Modified at:   Wed Jan 13 15:55:28 1999
+ * Modified at:   Tue Jan 26 11:49:55 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -28,7 +28,6 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/skbuff.h>
-/* #include <linux/netdevice.h> */
 #include <linux/miscdevice.h>
 
 #include <net/irda/timer.h>
@@ -97,30 +96,7 @@ struct irobex_cb {
 	LOCAL_FLOW rx_flow;
 };
 
-int    irobex_init(void);
-void   irobex_cleanup(void);
-struct irobex_cb *irobex_open(void);
-void   irobex_close( struct irobex_cb *self);
-
-void irobex_discovery_indication( DISCOVERY *);
-
-void irobex_data_request( int handle, struct sk_buff *skb);
-void irobex_data_indication( void *instance, void *sap, struct sk_buff *skb);
-void irobex_control_data_indication( void *instance, void *sap, 
-				     struct sk_buff *skb);
-
-void irobex_connect_request( struct irobex_cb *self);
-void irobex_connect(struct irobex_cb *self, struct sk_buff *skb);
-void irobex_connect_confirm( void *instance, void *sap, struct qos_info *qos,
-			     int max_sdu_size, struct sk_buff *skb);
-void irobex_disconnect_indication( void *instance, void *sap, LM_REASON reason,
-				   struct sk_buff *skb);
-void irobex_flow_indication( void *instance, void *sap, LOCAL_FLOW flow);
-
-void irobex_extract_params( struct sk_buff *skb);
-void irobex_get_value_confirm(__u16 obj_id, struct ias_value *value, 
-			      void *priv);
-void irobex_register_server( struct irobex_cb *self);
+int irobex_init(void);
 
 void irobex_watchdog_timer_expired( unsigned long data);
 

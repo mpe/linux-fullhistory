@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irda_device.c
- * Version:       0.3
+ * Version:       0.4
  * Description:   Abstract device driver layer and helper functions
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Sep  2 20:22:08 1998
- * Modified at:   Mon Jan 18 11:05:59 1999
+ * Modified at:   Tue Feb 16 17:36:04 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -30,9 +30,14 @@
 #include <linux/if_arp.h>
 #include <linux/netdevice.h>
 #include <linux/init.h>
+#include <linux/tty.h>
+
+#include <asm/ioctls.h>
+#include <asm/segment.h>
+#include <asm/uaccess.h>
+#include <asm/dma.h>
 
 #include <net/pkt_sched.h>
-#include <asm/dma.h>
 
 #include <net/irda/irda_device.h>
 #include <net/irda/irlap_frame.h>
@@ -45,10 +50,9 @@ extern int w83977af_init(void);
 extern int esi_init(void);
 extern int tekram_init(void);
 extern int actisys_init(void);
+extern int girbil_init(void);
 
 hashbin_t *irda_device = NULL;
-
-void irda_device_start_todo_timer( struct irda_device *self, int timeout);
 
 /* Netdevice functions */
 static int irda_device_net_rebuild_header(struct sk_buff *skb);
@@ -67,8 +71,6 @@ int irda_device_proc_read( char *buf, char **start, off_t offset, int len,
 
 __initfunc(int irda_device_init( void))
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
-
 	/* Allocate master array */
 	irda_device = hashbin_new( HB_LOCAL);
 	if ( irda_device == NULL) {
@@ -98,7 +100,9 @@ __initfunc(int irda_device_init( void))
 #ifdef CONFIG_ACTISYS_DONGLE
 	actisys_init();
 #endif
-
+#ifdef CONFIG_GIRBIL_DONGLE
+	girbil_init();
+#endif
 	return 0;
 }
 
@@ -178,7 +182,7 @@ int irda_device_open( struct irda_device *self, char *name, void *priv)
 	 * a name like "irda0" and the self->descriptin will get a name
 	 * like "irda0 <-> irtty0" 
 	 */
-	strncpy( self->description, self->name, 4);
+	strncpy( self->description, self->name, 5);
 	strcat( self->description, " <-> ");
 	strncat( self->description, name, 23);
 
@@ -280,16 +284,11 @@ void irda_device_set_media_busy( struct irda_device *self, int status)
  */
 static void __irda_device_change_speed( struct irda_device *self, int speed)
 {
+	DEBUG(4, __FUNCTION__ "(), <%ld>\n", jiffies);
+
 	ASSERT( self != NULL, return;);
-
-	if ( self->magic != IRDA_DEVICE_MAGIC) {
-		DEBUG( 0, __FUNCTION__ 
-		       "(), irda device is gone! Maybe you need to update "
-		       "your irmanager and/or irattach!");
-		       
-		       return;
-	}
-
+	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return;);
+	
 	/*
 	 *  Is is possible to change speed yet? Wait until the last byte 
 	 *  has been transmitted.
@@ -304,9 +303,9 @@ static void __irda_device_change_speed( struct irda_device *self, int speed)
 			self->qos.baud_rate.value = speed;
 		}
 	} else {
-		DEBUG( 0, __FUNCTION__ "(), Warning, wait_until_sent() "
-		       "is not implemented by the irda_device!\n");
-     
+		DEBUG(0, __FUNCTION__ "(), Warning, wait_until_sent() "
+		      "has not implemented by the device driver!\n");
+		
 	}
 }
 
@@ -323,9 +322,8 @@ inline void irda_device_change_speed( struct irda_device *self, int speed)
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return;);
 
-	irda_execute_as_process( self, 
-				 (TODO_CALLBACK) __irda_device_change_speed, 
-				 speed);
+	irda_execute_as_process(
+		self, (TODO_CALLBACK) __irda_device_change_speed, speed);
 }
 
 inline int irda_device_is_media_busy( struct irda_device *self)
@@ -368,28 +366,6 @@ void irda_device_todo_expired( unsigned long data)
 	__irda_device_change_speed( self, self->new_speed);
 }
 
-/*
- * Function irda_device_start_todo_timer (self, timeout)
- *
- *    Start todo timer. This function is used to delay execution of certain
- *    functions. Its implemented using timers since delaying a timer or a
- *    bottom halves function can be very difficult othervise.
- *
- */
-void irda_device_start_todo_timer( struct irda_device *self, int timeout)
-{
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return;);
-
-	del_timer( &self->todo_timer);
-	
-	self->todo_timer.data     = (unsigned long) self;
-	self->todo_timer.function = &irda_device_todo_expired;
-	self->todo_timer.expires  = jiffies + timeout;
-	
-	add_timer( &self->todo_timer);
-}
-
 static struct enet_statistics *irda_device_get_stats( struct device *dev)
 {
 	struct irda_device *priv = (struct irda_device *) dev->priv;
@@ -420,7 +396,7 @@ int irda_device_setup( struct device *dev)
 	dev->rebuild_header  = irda_device_net_rebuild_header;
 	dev->set_config      = irda_device_net_set_config;
 	dev->change_mtu      = irda_device_net_change_mtu;
-	dev->hard_header     = irda_device_net_hard_header;
+/*  	dev->hard_header     = irda_device_net_hard_header; */
         dev->hard_header_len = 0;
         dev->addr_len        = 0;
 
@@ -435,7 +411,7 @@ int irda_device_setup( struct device *dev)
 	
 	dev_init_buffers( dev);
 
-	dev->flags = 0; /* IFF_NOARP | IFF_POINTOPOINT; */
+	dev->flags = 0;
 	
 	return 0;
 }
@@ -453,16 +429,15 @@ static int irda_device_net_rebuild_header( struct sk_buff *skb)
 	return 0;
 }
 
-static int irda_device_net_hard_header (struct sk_buff *skb, 
-					struct device *dev,
-					unsigned short type, void *daddr, 
-					void *saddr, unsigned len)
+static int irda_device_net_hard_header(struct sk_buff *skb, struct device *dev,
+				       unsigned short type, void *daddr, 
+				       void *saddr, unsigned len)
 {
 	DEBUG( 0, __FUNCTION__ "()\n");
 
 	skb->mac.raw = skb->data;
         /* skb_push(skb,PPP_HARD_HDR_LEN); */
-/*         return PPP_HARD_HDR_LEN; */
+        /* return PPP_HARD_HDR_LEN; */
 	
 	return 0;
 }
@@ -535,14 +510,44 @@ void setup_dma( int channel, char *buffer, int count, int mode)
 }
 
 #ifdef CONFIG_PROC_FS
+
+int irda_device_print_flags(struct irda_device *idev, char *buf)
+{
+	int len=0;
+
+	len += sprintf( buf+len, "\t");
+
+	if (idev->netdev.flags & IFF_UP)
+		len += sprintf( buf+len, "UP ");
+	if (!idev->netdev.tbusy)
+		len += sprintf( buf+len, "RUNNING ");
+
+	if (idev->flags & IFF_SIR)
+		len += sprintf( buf+len, "SIR ");
+	if (idev->flags & IFF_MIR)
+		len += sprintf( buf+len, "MIR ");
+	if (idev->flags & IFF_FIR)
+		len += sprintf( buf+len, "FIR ");
+	if (idev->flags & IFF_PIO)
+		len += sprintf( buf+len, "PIO ");
+	if (idev->flags & IFF_DMA)
+		len += sprintf( buf+len, "DMA ");
+	if (idev->flags & IFF_DONGLE)
+		len += sprintf( buf+len, "DONGLE ");
+
+	len += sprintf( buf+len, "\n");
+
+	return len;
+}
+
 /*
- * Function irlap_proc_read (buf, start, offset, len, unused)
+ * Function irda_device_proc_read (buf, start, offset, len, unused)
  *
  *    Give some info to the /proc file system
  *
  */
-int irda_device_proc_read( char *buf, char **start, off_t offset, int len, 
-			   int unused)
+int irda_device_proc_read(char *buf, char **start, off_t offset, int len, 
+			  int unused)
 {
 	struct irda_device *self;
 	unsigned long flags;
@@ -552,32 +557,33 @@ int irda_device_proc_read( char *buf, char **start, off_t offset, int len,
 
 	len = 0;
 
-	self = (struct irda_device *) hashbin_get_first( irda_device);
+	self = (struct irda_device *) hashbin_get_first(irda_device);
 	while ( self != NULL) {
-		len += sprintf( buf+len, "device name: %s\n", self->name);
-		len += sprintf( buf+len, "description: %s\n", 
-				self->description);
-		len += sprintf( buf+len, "  tbusy=%s\n", self->netdev.tbusy ? 
-				"TRUE" : "FALSE");
-		len += sprintf( buf+len, "  bps\tmaxtt\tdsize\twinsize\taddbofs\tmintt\tldisc\n");
+		len += sprintf(buf+len, "%s,", self->name);
+		len += sprintf(buf+len, "\tbinding: %s\n", 
+			       self->description);
 		
-		len += sprintf( buf+len, "  %d\t", 
-				self->qos.baud_rate.value);
-		len += sprintf( buf+len, "%d\t", 
-				self->qos.max_turn_time.value);
-		len += sprintf( buf+len, "%d\t",
-				self->qos.data_size.value);
-		len += sprintf( buf+len, "%d\t",
-				self->qos.window_size.value);
-		len += sprintf( buf+len, "%d\t",
-				self->qos.additional_bofs.value);
-		len += sprintf( buf+len, "%d\t", 
-				self->qos.min_turn_time.value);
-		len += sprintf( buf+len, "%d", 
-				self->qos.link_disc_time.value);
-		len += sprintf( buf+len, "\n");
-	       
-		self = (struct irda_device *) hashbin_get_next( irda_device);
+		len += irda_device_print_flags(self, buf+len);
+
+		len += sprintf(buf+len, "\tbps\tmaxtt\tdsize\twinsize\taddbofs\tmintt\tldisc\n");
+		
+		len += sprintf(buf+len, "\t%d\t", 
+			       self->qos.baud_rate.value);
+		len += sprintf(buf+len, "%d\t", 
+			       self->qos.max_turn_time.value);
+		len += sprintf(buf+len, "%d\t",
+			       self->qos.data_size.value);
+		len += sprintf(buf+len, "%d\t",
+			       self->qos.window_size.value);
+		len += sprintf(buf+len, "%d\t",
+			       self->qos.additional_bofs.value);
+		len += sprintf(buf+len, "%d\t", 
+			       self->qos.min_turn_time.value);
+		len += sprintf(buf+len, "%d", 
+			       self->qos.link_disc_time.value);
+		len += sprintf(buf+len, "\n");
+		
+		self = (struct irda_device *) hashbin_get_next(irda_device);
 	}
 	restore_flags(flags);
 

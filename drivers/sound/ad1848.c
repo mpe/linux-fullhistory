@@ -100,6 +100,11 @@ ad1848_port_info;
 
 static int nr_ad1848_devs = 0;
 int deskpro_xl = 0;
+#ifdef CONFIG_SOUND_SPRO
+int soundpro = 1;
+#else
+int soundpro = 0;
+#endif
 
 static volatile char irq2dev[17] = {
 	-1, -1, -1, -1, -1, -1, -1, -1,
@@ -312,22 +317,21 @@ static int ad1848_set_recmask(ad1848_info * devc, int mask)
 		if (mask & (1 << i))
 			n++;
 
-	if (n == 0)
-		mask = SOUND_MASK_MIC;
-	else if (n != 1)	/* Too many devices selected */
-	{
-		  mask &= ~devc->recmask;	/* Filter out active settings */
-
-		n = 0;
-		for (i = 0; i < 32; i++)	/* Count selected device bits */
-			if (mask & (1 << i))
-				n++;
-
-		if (n != 1)
+	if (!soundpro) {
+		if (n == 0)
 			mask = SOUND_MASK_MIC;
-	}
-	switch (mask)
-	{
+		else if (n != 1) {	/* Too many devices selected */
+			mask &= ~devc->recmask;	/* Filter out active settings */
+
+			n = 0;
+			for (i = 0; i < 32; i++)	/* Count selected device bits */
+				if (mask & (1 << i))
+					n++;
+
+			if (n != 1)
+				mask = SOUND_MASK_MIC;
+		}
+		switch (mask) {
 		case SOUND_MASK_MIC:
 			recdev = 2;
 			break;
@@ -349,11 +353,38 @@ static int ad1848_set_recmask(ad1848_info * devc, int mask)
 		default:
 			mask = SOUND_MASK_MIC;
 			recdev = 2;
-	}
+		}
 
-	recdev <<= 6;
-	ad_write(devc, 0, (ad_read(devc, 0) & 0x3f) | recdev);
-	ad_write(devc, 1, (ad_read(devc, 1) & 0x3f) | recdev);
+		recdev <<= 6;
+		ad_write(devc, 0, (ad_read(devc, 0) & 0x3f) | recdev);
+		ad_write(devc, 1, (ad_read(devc, 1) & 0x3f) | recdev);
+	} else { /* soundpro */
+		unsigned char val;
+		int set_rec_bit;
+		int j;
+
+		for (i = 0; i < 32; i++) {	/* For each bit */
+			if ((devc->supported_rec_devices & (1 << i)) == 0)
+				continue;	/* Device not supported */
+
+			for (j = LEFT_CHN; j <= RIGHT_CHN; j++) {
+				if (devc->mix_devices[i][j].nbits == 0) /* Inexistent channel */
+					continue;
+
+				/*
+				 * This is tricky:
+				 * set_rec_bit becomes 1 if the corresponding bit in mask is set
+				 * then it gets flipped if the polarity is inverse
+				 */
+				set_rec_bit = ((mask & (1 << i)) != 0) ^ devc->mix_devices[i][j].recpol;
+
+				val = ad_read(devc, devc->mix_devices[i][j].recreg);
+				val &= ~(1 << devc->mix_devices[i][j].recpos);
+				val |= (set_rec_bit << devc->mix_devices[i][j].recpos);
+				ad_write(devc, devc->mix_devices[i][j].recreg, val);
+			}
+		}
+	}
 
 	/* Rename the mixer bits back if necessary */
 	for (i = 0; i < 32; i++)
@@ -371,7 +402,8 @@ static int ad1848_set_recmask(ad1848_info * devc, int mask)
 	return mask;
 }
 
-static void change_bits(ad1848_info * devc, unsigned char *regval, int dev, int chn, int newval)
+static void change_bits(ad1848_info * devc, unsigned char *regval,
+			unsigned char *muteval, int dev, int chn, int newval)
 {
 	unsigned char mask;
 	int shift;
@@ -379,7 +411,7 @@ static void change_bits(ad1848_info * devc, unsigned char *regval, int dev, int 
 	int mutemask;
 	int set_mute_bit;
 
-	set_mute_bit = (newval == 0);
+	set_mute_bit = (newval == 0) ^ devc->mix_devices[dev][chn].mutepol;
 
 	if (devc->mix_devices[dev][chn].polarity == 1)	/* Reverse */
 		newval = 100 - newval;
@@ -399,8 +431,11 @@ static void change_bits(ad1848_info * devc, unsigned char *regval, int dev, int 
 	}
 
 	newval = (int) ((newval * mask) + 50) / 100;	/* Scale it */
-	*regval &= (~(mask << shift)) & (mutemask);	/* Clear bits */
-	*regval |= ((newval & mask) << shift) | mute;	/* Set new value */
+	*regval &= ~(mask << shift);			/* Clear bits */
+	*regval |= (newval & mask) << shift;		/* Set new value */
+
+	*muteval &= mutemask;
+	*muteval |= mute;
 }
 
 static int ad1848_mixer_get(ad1848_info * devc, int dev)
@@ -413,14 +448,35 @@ static int ad1848_mixer_get(ad1848_info * devc, int dev)
 	return devc->levels[dev];
 }
 
+static void ad1848_mixer_set_channel(ad1848_info *devc, int dev, int value, int channel)
+{
+	int regoffs, muteregoffs;
+	unsigned char val, muteval;
+
+	regoffs = devc->mix_devices[dev][channel].regno;
+	muteregoffs = devc->mix_devices[dev][channel].mutereg;
+	val = ad_read(devc, regoffs);
+
+	if (muteregoffs != regoffs) {
+		muteval = ad_read(devc, muteregoffs);
+		change_bits(devc, &val, &muteval, dev, channel, value);
+	}
+	else
+		change_bits(devc, &val, &val, dev, channel, value);
+
+	ad_write(devc, regoffs, val);
+	devc->saved_regs[regoffs] = val;
+	if (muteregoffs != regoffs) {
+		ad_write(devc, muteregoffs, muteval);
+		devc->saved_regs[muteregoffs] = muteval;
+	}
+}
+
 static int ad1848_mixer_set(ad1848_info * devc, int dev, int value)
 {
 	int left = value & 0x000000ff;
 	int right = (value & 0x0000ff00) >> 8;
 	int retvol;
-
-	int regoffs;
-	unsigned char val;
 
 	if (dev > 31)
 		return -EINVAL;
@@ -429,6 +485,9 @@ static int ad1848_mixer_set(ad1848_info * devc, int dev, int value)
 		return -EINVAL;
 
 	dev = devc->mixer_reroute[dev];
+
+	if (devc->mix_devices[dev][LEFT_CHN].nbits == 0)
+		return -EINVAL;
 
 	if (left > 100)
 		left = 100;
@@ -444,34 +503,21 @@ static int ad1848_mixer_set(ad1848_info * devc, int dev, int value)
 	left = mix_cvt[left];
 	right = mix_cvt[right];
 
-	if (devc->mix_devices[dev][LEFT_CHN].nbits == 0)
-		return -EINVAL;
-
 	devc->levels[dev] = retvol;
 
 	/*
 	 * Set the left channel
 	 */
-
-	regoffs = devc->mix_devices[dev][LEFT_CHN].regno;
-	val = ad_read(devc, regoffs);
-	change_bits(devc, &val, dev, LEFT_CHN, left);
-	ad_write(devc, regoffs, val);
-	devc->saved_regs[regoffs] = val;
+	ad1848_mixer_set_channel(devc, dev, left, LEFT_CHN);
 
 	/*
 	 * Set the right channel
 	 */
-
 	if (devc->mix_devices[dev][RIGHT_CHN].nbits == 0)
-		return retvol;	/* Was just a mono channel */
+		goto out;
+	ad1848_mixer_set_channel(devc, dev, right, RIGHT_CHN);
 
-	regoffs = devc->mix_devices[dev][RIGHT_CHN].regno;
-	val = ad_read(devc, regoffs);
-	change_bits(devc, &val, dev, RIGHT_CHN, right);
-	ad_write(devc, regoffs, val);
-	devc->saved_regs[regoffs] = val;
-
+ out:
 	return retvol;
 }
 
@@ -486,6 +532,8 @@ static void ad1848_mixer_reset(ad1848_info * devc)
 
 	for (i = 0; i < 32; i++)
 		devc->mixer_reroute[i] = i;
+
+	devc->supported_rec_devices = MODE1_REC_DEVICES;
 
 	switch (devc->model)
 	{
@@ -509,11 +557,18 @@ static void ad1848_mixer_reset(ad1848_info * devc)
 			devc->supported_devices = MODE3_MIXER_DEVICES;
 			break;
 
+		case MD_1848:
+			if (soundpro) {
+				devc->supported_devices = SPRO_MIXER_DEVICES;
+				devc->supported_rec_devices = SPRO_REC_DEVICES;
+				devc->mix_devices = &(spro_mix_devices[0]);
+				break;
+			}
+
 		default:
 			devc->supported_devices = MODE1_MIXER_DEVICES;
 	}
 
-	devc->supported_rec_devices = MODE1_REC_DEVICES;
 	devc->orig_devices = devc->supported_devices;
 	devc->orig_rec_devices = devc->supported_rec_devices;
 
@@ -528,10 +583,20 @@ static void ad1848_mixer_reset(ad1848_info * devc)
 	ad1848_set_recmask(devc, SOUND_MASK_MIC);
 	
 	devc->mixer_output_port = devc->levels[31] | AUDIO_HEADPHONE | AUDIO_LINE_OUT;
-	if (devc->mixer_output_port & AUDIO_SPEAKER)
-		ad_write(devc, 26, ad_read(devc, 26) & ~0x40);	/* Unmute mono out */
-	else
-		ad_write(devc, 26, ad_read(devc, 26) | 0x40);	/* Mute mono out */
+
+	if (!soundpro) {
+		if (devc->mixer_output_port & AUDIO_SPEAKER)
+			ad_write(devc, 26, ad_read(devc, 26) & ~0x40);	/* Unmute mono out */
+		else
+			ad_write(devc, 26, ad_read(devc, 26) | 0x40);	/* Mute mono out */
+	} else {
+		/*
+		 * From the "wouldn't it be nice if the mixer API had (better)
+		 * support for custom stuff" category
+		 */
+		/* Enable surround mode and SB16 mixer */
+		ad_write(devc, 16, 0x60);
+	}
 }
 
 static int ad1848_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
@@ -1357,6 +1422,8 @@ static void ad1848_init_hw(ad1848_info * devc)
 	{
 		  devc->audio_flags &= ~DMA_DUPLEX;
 		  ad_write(devc, 9, ad_read(devc, 9) | 0x04);	/* Single DMA mode */
+		  if (soundpro)
+			  ad_write(devc, 12, ad_read(devc, 12) | 0x40);	/* Mode2 = enabled */
 	}
 
 	outb((0), io_Status(devc));	/* Clear pending interrupts */
@@ -1706,7 +1773,27 @@ int ad1848_detect(int io_base, int *ad_flags, int *osp)
 
 			DDB(printk("ad1848_detect() - step K\n"));
 		}
+	} else if (tmp1 == 0x0a) {
+		/*
+		 * Is it perhaps a SoundPro CMI8330?
+		 * If so, then we should be able to change indirect registers
+		 * greater than I15 after activating MODE2, even though reading
+		 * back I12 does not show it.
+		 */
+
+		/*
+		 * Let's try comparing register values
+		 */
+		for (i = 0; i < 16; i++) {
+			if ((tmp1 = ad_read(devc, i)) != (tmp2 = ad_read(devc, i + 16))) {
+				DDB(printk("ad1848 detect step H(%d/%x/%x) - SoundPro chip?\n", i, tmp1, tmp2));
+				soundpro = 1;
+				devc->chip_name = "SoundPro CMI 8330";
+				break;
+			}
+		}
 	}
+
 	DDB(printk("ad1848_detect() - step L\n"));
 	if (ad_flags)
 	{
@@ -2302,7 +2389,8 @@ int probe_ms_sound(struct address_info *hw_config)
 	    (hw_config->irq != 7)  &&
 	    (hw_config->irq != 9)  &&
 	    (hw_config->irq != 10) &&
-	    (hw_config->irq != 11))
+	    (hw_config->irq != 11) &&
+	    (hw_config->irq != 12))
 	{
 		printk(KERN_ERR "MSS: Bad IRQ %d\n", hw_config->irq);
 		return 0;
@@ -2555,6 +2643,7 @@ MODULE_PARM(dma, "i");			/* First DMA channel */
 MODULE_PARM(dma2, "i");			/* Second DMA channel */
 MODULE_PARM(type, "i");			/* Card type */
 MODULE_PARM(deskpro_xl, "i");		/* Special magic for Deskpro XL boxen */
+MODULE_PARM(soundpro, "i");		/* More special magic for SoundPro chips */
 
 int io = -1;
 int irq = -1;

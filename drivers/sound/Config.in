@@ -12,7 +12,7 @@
 dep_tristate 'Ensoniq AudioPCI (ES1370)' CONFIG_SOUND_ES1370 $CONFIG_SOUND
 if [ "$CONFIG_SOUND_ES1370" = "y" ]; then
    bool 'Joystick support at boot time' CONFIG_SOUND_ES1370_JOYPORT_BOOT
-fi  
+fi
 dep_tristate 'Creative Ensoniq AudioPCI 97 (ES1371)' CONFIG_SOUND_ES1371 $CONFIG_SOUND
 if [ "$CONFIG_SOUND_ES1371" = "y" ]; then
    bool 'Joystick support at boot time' CONFIG_SOUND_ES1371_JOYPORT_BOOT
@@ -75,6 +75,10 @@ fi
 dep_tristate 'OSS sound modules' CONFIG_SOUND_OSS $CONFIG_SOUND
 
 if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
+  if [ "$CONFIG_SOUND_OSS" = "y" ]; then
+    bool 'Persistent DMA buffers' CONFIG_SOUND_DMAP
+  fi
+
   dep_tristate 'ProAudioSpectrum 16 support' CONFIG_SOUND_PAS $CONFIG_SOUND_OSS
   if [ "$CONFIG_SOUND_PAS" = "y" ]; then
       int 'PAS16 IRQ 3, 4, 5, 7, 9, 10, 11, 12, 14 or 15' CONFIG_PAS_IRQ 10
@@ -138,6 +142,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
   
   dep_tristate 'Microsoft Sound System support' CONFIG_SOUND_MSS $CONFIG_SOUND_OSS
   if [ "$CONFIG_SOUND_MSS" = "y" ]; then
+      bool 'Enable support for the SoundPro mixer' CONFIG_SOUND_SPRO
       hex 'MSS/WSS I/O base 530, 604, E80 or F40' CONFIG_MSS_BASE 530
       int 'MSS/WSS IRQ 7, 9, 10 or 11' CONFIG_MSS_IRQ 11
       int 'MSS/WSS DMA 0, 1 or 3' CONFIG_MSS_DMA 3

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Thu Dec 17 11:58:10 1998
+ * Modified at:   Thu Feb 11 00:41:02 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -111,7 +111,7 @@ struct irlap_info {
 	DISCOVERY *discovery; /* Discovery information */
 };
 
-extern char *irlap_state[];
+extern const char *irlap_state[];
 
 void irlap_do_event( struct irlap_cb *self, IRLAP_EVENT event, 
 		     struct sk_buff *skb, struct irlap_info *info);

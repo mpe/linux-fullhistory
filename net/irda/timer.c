@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Wed Dec  9 01:34:59 1998
+ * Modified at:   Thu Feb  4 10:49:38 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -100,11 +100,16 @@ inline void irlmp_start_watchdog_timer( struct lsap_cb *self, int timeout)
 			  irlmp_watchdog_timer_expired);
 }
 
-inline void irlmp_start_discovery_timer( struct irlmp_cb *self, int timeout) 
+inline void irlmp_start_discovery_timer(struct irlmp_cb *self, int timeout) 
 {
-	irda_start_timer( &self->discovery_timer, timeout, 
-			  (unsigned long) self,
-			  irlmp_discovery_timer_expired);
+	irda_start_timer(&self->discovery_timer, timeout, (unsigned long) self,
+			 irlmp_discovery_timer_expired);
+}
+
+inline void irlmp_start_idle_timer(struct lap_cb *self, int timeout) 
+{
+	irda_start_timer(&self->idle_timer, timeout, (unsigned long) self,
+			 irlmp_idle_timer_expired);
 }
 
 /*

@@ -1,4 +1,4 @@
-/* $Id: cosa.h,v 1.5 1998/12/24 12:40:18 kas Exp $ */
+/* $Id: cosa.h,v 1.6 1999/01/06 14:02:44 kas Exp $ */
 
 /*
  *  Copyright (C) 1995-1997  Jan "Yenya" Kasprzak <kas@fi.muni.cz>
@@ -98,5 +98,14 @@ struct cosa_download {
 
 /* Get the number of channels on this card */
 #define COSAIONRCHANS	_IO('C',0xf8)
+
+/* Set the driver for the bus-master operations */
+#define COSAIOBMSET	_IOW('C', 0xf9, sizeof(unsigned short))
+
+#define COSA_BM_OFF	0	/* Bus-mastering off - use ISA DMA (default) */
+#define COSA_BM_ON	1	/* Bus-mastering on - faster but untested */
+
+/* Gets the busmaster status */
+#define COSAIOBMGET	_IO('C', 0xfa)
 
 #endif /* !COSA_H__ */

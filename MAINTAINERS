@@ -246,6 +246,12 @@ M:	mvw@planets.elm.net
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+DOUBLETALK DRIVER
+P:	James R. Van Zandt
+M:	jrv@vanzandt.mv.com
+L:	blinux-list@redhat.com
+S:	Maintained
+
 EATA-DMA SCSI DRIVER
 P:	Michael Neuffer
 M:	mike@i-Connect.Net
