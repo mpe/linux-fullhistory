@@ -87,7 +87,7 @@ static void check_free_space(void)
 	if (!acct_file || !acct_needcheck)
 		return;
 
-	sb = acct_file->f_dentry->f_inode->i_sb;
+	sb = acct_file->f_dentry->d_inode->i_sb;
 	if (!sb->s_op || !sb->s_op->statfs)
 		return;
 

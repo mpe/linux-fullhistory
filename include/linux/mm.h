@@ -254,12 +254,6 @@ extern inline unsigned long get_free_page(int gfp_mask)
 
 /* memory.c & swap.c*/
 
-/*
- * Decide if we should try to do some swapout..
- */
-extern int free_memory_available(void);
-extern struct wait_queue * kswapd_wait;
-
 #define free_page(addr) free_pages((addr),0)
 extern void FASTCALL(free_pages(unsigned long addr, unsigned long order));
 extern void FASTCALL(__free_page(struct page *));
@@ -330,6 +324,23 @@ extern void put_cached_page(unsigned long);
 
 #define GFP_DMA		__GFP_DMA
 
+/*
+ * Decide if we should try to do some swapout..
+ */
+extern int free_memory_available(void);
+extern struct task_struct * kswapd_task;
+
+extern inline void kswapd_notify(unsigned int gfp_mask)
+{
+	if (kswapd_task) {
+		wake_up_process(kswapd_task);
+		if (gfp_mask & __GFP_WAIT) {
+			current->policy |= SCHED_YIELD;
+			schedule();
+		}
+	}
+}
+
 /* vma is the first one with  address < vma->vm_end,
  * and even  address < vma->vm_start. Have to extend vma. */
 static inline int expand_stack(struct vm_area_struct * vma, unsigned long address)
@@ -378,11 +389,6 @@ static inline struct vm_area_struct * find_vma_intersection(struct mm_struct * m
 	if (vma && end_addr <= vma->vm_start)
 		vma = NULL;
 	return vma;
-}
-
-extern __inline__ void kswapd_wakeup(void)
-{
-	wake_up(&kswapd_wait);
 }
 
 #define buffer_under_min()	((buffermem >> PAGE_SHIFT) * 100 < \

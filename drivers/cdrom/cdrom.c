@@ -1,6 +1,7 @@
 /* linux/drivers/cdrom/cdrom.c. 
    Copyright (c) 1996, 1997 David A. van Leeuwen.
    Copyright (c) 1997, 1998 Erik Andersen <andersee@debian.org>
+   Copyright (c) 1998 Jens Axboe and Chris Zwilling
 
    May be copied or modified under the terms of the GNU General Public
    License.  See linux/COPYING for more information.
@@ -86,10 +87,15 @@
   Thanks to Grant R. Guenther <grant@torque.net> for spotting this bug.
   -- Made a few things more pedanticly correct.
 
+ 2.50  Oct 19, 1998 - Jens Axboe <axboe@image.dk>
+  -- New maintainers! Erik was too busy to continue the work on the driver,
+  so now Chris Zwilling <chris@cloudnet.com> and Jens Axboe <axboe@image.dk>
+  will do their best to follow in his footsteps
+
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 2.14"
-#define VERSION "Id: cdrom.c 2.14 1998/08/17 erik"
+#define REVISION "Revision: 2.50"
+#define VERSION "Id: cdrom.c 2.50 1998/10/19"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */

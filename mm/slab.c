@@ -1190,7 +1190,6 @@ kmem_cache_grow(kmem_cache_t * cachep, int flags)
 	cachep->c_dflags = SLAB_CFLGS_GROWN;
 
 	cachep->c_growing++;
-re_try:
 	spin_unlock_irqrestore(&cachep->c_spinlock, save_flags);
 
 	/* A series of memory allocations for a new slab.
@@ -1257,15 +1256,6 @@ opps1:
 	kmem_freepages(cachep, objp); 
 failed:
 	spin_lock_irq(&cachep->c_spinlock);
-	if (local_flags != SLAB_ATOMIC && cachep->c_gfporder) {
-		/* For large order (>0) slabs, we try again.
-		 * Needed because the gfp() functions are not good at giving
-		 * out contiguous pages unless pushed (but do not push too hard).
-		 */
-		if (cachep->c_failures++ < 4 && cachep->c_freep == kmem_slab_end(cachep))
-			goto re_try;
-		cachep->c_failures = 1;	/* Memory is low, don't try as hard next time. */
-	}
 	cachep->c_growing--;
 	spin_unlock_irqrestore(&cachep->c_spinlock, save_flags);
 	return 0;

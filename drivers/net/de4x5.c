@@ -972,7 +972,7 @@ static int     get_hw_addr(struct device *dev);
 static void    srom_repair(struct device *dev, int card);
 static int     test_bad_enet(struct device *dev, int status);
 static int     an_exception(struct bus_type *lp);
-#if !defined(__sparc_v9__) && !defined(__powerpc__)
+#if !defined(__sparc_v9__) && !defined(__powerpc__) && !defined(__alpha__)
 static void    eisa_probe(struct device *dev, u_long iobase);
 #endif
 static void    pci_probe(struct device *dev, u_long iobase);
@@ -1021,7 +1021,7 @@ static int loading_module = 0;
 #endif /* MODULE */
 
 static char name[DE4X5_NAME_LENGTH + 1];
-#if !defined(__sparc_v9__) && !defined(__powerpc__)
+#if !defined(__sparc_v9__) && !defined(__powerpc__) && !defined(__alpha__)
 static u_char de4x5_irq[] = EISA_ALLOWED_IRQ_LIST;
 static int lastEISA = 0;
 #else
@@ -1095,7 +1095,7 @@ de4x5_probe(struct device *dev))
 {
     u_long iobase = dev->base_addr;
 
-#if !defined(__sparc_v9__) && !defined(__powerpc__)
+#if !defined(__sparc_v9__) && !defined(__powerpc__) && !defined(__alpha__)
     eisa_probe(dev, iobase);
 #endif
     if (lastEISA == MAX_EISA_SLOTS) {
@@ -2028,7 +2028,7 @@ SetMulticastFilter(struct device *dev)
     return;
 }
 
-#if !defined(__sparc_v9__) && !defined(__powerpc__)
+#if !defined(__sparc_v9__) && !defined(__powerpc__) && !defined(__alpha__)
 /*
 ** EISA bus I/O device probe. Probe from slot 1 since slot 0 is usually
 ** the motherboard. Upto 15 EISA devices are supported.
@@ -2096,7 +2096,7 @@ eisa_probe(struct device *dev, u_long ioaddr))
 
     return;
 }
-#endif                         /* !(__sparc_v9__) && !(__powerpc__) */
+#endif          /* !(__sparc_v9__) && !(__powerpc__) && !defined(__alpha__) */
 
 /*
 ** PCI bus I/O device probe
@@ -5826,7 +5826,7 @@ count_adapters(void)
     u_int class = DE4X5_CLASS_CODE;
     u_int device;
 
-#if !defined(__sparc_v9__) && !defined(__powerpc__)
+#if !defined(__sparc_v9__) && !defined(__powerpc__) && !defined(__alpha__)
     char name[DE4X5_STRLEN];
     u_long iobase = 0x1000;
 

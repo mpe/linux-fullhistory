@@ -4,6 +4,7 @@
  *  linux/drivers/block/ide_modes.h
  *
  *  Copyright (C) 1996  Erik Andersen
+ *  Copyright (C) 1998  Jens Axboe and Chris Zwilling
  */
 
 #include <asm/byteorder.h>

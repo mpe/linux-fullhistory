@@ -5,6 +5,8 @@
  *               1994, 1995   Eberhard Moenkeberg, emoenke@gwdg.de
  *               1996         David van Leeuwen, david@tm.tno.nl
  *               1997, 1998   Erik Andersen, andersee@debian.org
+ *               1998         Jens Axboe, axboe@image.dk and
+ *                            Chris Zwilling, chris@cloudnet.com
  */
  
 #ifndef	_LINUX_CDROM_H

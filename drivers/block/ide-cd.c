@@ -3,6 +3,7 @@
  * linux/drivers/block/ide-cd.c
  * Copyright (C) 1994, 1995, 1996  scott snyder  <snyder@fnald0.fnal.gov>
  * Copyright (C) 1996-1998  Erik Andersen <andersee@debian.org>
+ * Copyright (C) 1998 Jens Axboe and Chris Zwilling
  *
  * May be copied or modified under the terms of the GNU General Public
  * License.  See linux/COPYING for more information.
@@ -221,9 +222,13 @@
  * 4.15  Aug 25, 1998  -- Updated ide-cd.h to respect mechine endianess, 
  *                         patch thanks to "Eddie C. Dost" <ecd@skynet.be>
  *
+ * 4.50  Oct 19, 1998  -- New maintainers!
+ *                         Jens Axboe <axboe@image.dk>
+ *                         Chris Zwilling <chris@cloudnet.com>
+ *
  *************************************************************************/
 
-#define IDECD_VERSION "4.15"
+#define IDECD_VERSION "4.50"
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -2632,7 +2637,7 @@ int ide_cdrom_select_disc (struct cdrom_device_info *cdi, int slot)
 		if (was_locked)
 			(void) cdrom_lockdoor (drive, 1, NULL);
 
-		return stat;
+		return slot;
 	}
 }
 

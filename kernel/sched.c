@@ -1488,7 +1488,8 @@ asmlinkage int sys_sched_yield(void)
 {
 	spin_lock(&scheduler_lock);
 	spin_lock_irq(&runqueue_lock);
-	current->policy |= SCHED_YIELD;
+	if (current->policy == SCHED_OTHER)
+		current->policy |= SCHED_YIELD;
 	current->need_resched = 1;
 	move_last_runqueue(current);
 	spin_unlock_irq(&runqueue_lock);

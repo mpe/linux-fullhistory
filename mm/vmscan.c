@@ -29,11 +29,6 @@
 #include <asm/pgtable.h>
 
 /* 
- * When are we next due for a page scan? 
- */
-static unsigned long next_swap_jiffies = 0;
-
-/* 
  * How often do we do a pageout scan during normal conditions?
  * Default is four times a second.
  */
@@ -42,7 +37,7 @@ int swapout_interval = HZ / 4;
 /* 
  * The wait queue for waking up the pageout daemon:
  */
-struct wait_queue * kswapd_wait = NULL;
+struct task_struct * kswapd_task = NULL;
 
 static void init_swap_timer(void);
 
@@ -509,8 +504,6 @@ void __init kswapd_setup(void)
  */
 int kswapd(void *unused)
 {
-	struct wait_queue wait = { current, NULL };
-
 	current->session = 1;
 	current->pgrp = 1;
 	strcpy(current->comm, "kswapd");
@@ -523,11 +516,12 @@ int kswapd(void *unused)
 	 */
 	lock_kernel();
 
-	/* Give kswapd a realtime priority. */
-	current->policy = SCHED_FIFO;
-	current->rt_priority = 32;  /* Fixme --- we need to standardise our
-				    namings for POSIX.4 realtime scheduling
-				    priorities.  */
+	/*
+	 * Set the base priority to something smaller than a
+	 * regular process. We will scale up the priority
+	 * dynamically depending on how much memory we need.
+	 */
+	current->priority = (DEF_PRIORITY * 2) / 3;
 
 	/*
 	 * Tell the memory management that we're a "memory allocator",
@@ -544,7 +538,7 @@ int kswapd(void *unused)
 	current->flags |= PF_MEMALLOC;
 
 	init_swap_timer();
-	add_wait_queue(&kswapd_wait, &wait);
+	kswapd_task = current;
 	while (1) {
 		int tries;
 
@@ -586,7 +580,7 @@ int kswapd(void *unused)
 		} while (--tries > 0);
 	}
 	/* As if we could ever get here - maybe we want to make this killable */
-	remove_wait_queue(&kswapd_wait, &wait);
+	kswapd_task = NULL;
 	unlock_kernel();
 	return 0;
 }
@@ -620,41 +614,58 @@ int try_to_free_pages(unsigned int gfp_mask, int count)
 	return retval;
 }
 
+/*
+ * Wake up kswapd according to the priority
+ *	0 - no wakeup
+ *	1 - wake up as a low-priority process
+ *	2 - wake up as a normal process
+ *	3 - wake up as an almost real-time process
+ *
+ * This plays mind-games with the "goodness()"
+ * function in kernel/sched.c.
+ */
+static inline void kswapd_wakeup(int priority)
+{
+	if (priority) {
+		struct task_struct *p = kswapd_task;
+		if (p) {
+			p->counter = p->priority << priority;
+			wake_up_process(p);
+		}
+	}
+}
+
 /* 
  * The swap_tick function gets called on every clock tick.
  */
 void swap_tick(void)
 {
-	unsigned long now, want;
-	int want_wakeup = 0;
-
-	want = next_swap_jiffies;
-	now = jiffies;
+	unsigned int pages;
+	int want_wakeup;
 
 	/*
-	 * Examine the memory queues. Mark memory low
-	 * if there is nothing available in the three
-	 * highest queues.
-	 *
 	 * Schedule for wakeup if there isn't lots
-	 * of free memory.
+	 * of free memory or if there is too much
+	 * of it used for buffers or pgcache.
+	 *
+	 * "want_wakeup" is our priority: 0 means
+	 * not to wake anything up, while 3 means
+	 * that we'd better give kswapd a realtime
+	 * priority.
 	 */
-	switch (free_memory_available()) {
-	case 0:
-		want = now;
-		/* Fall through */
-	case 1:
+	want_wakeup = 0;
+	if (buffer_over_max() || pgcache_over_max())
 		want_wakeup = 1;
-	default:
-	}
- 
-	if ((long) (now - want) >= 0) {
-		if (want_wakeup || buffer_over_max() || pgcache_over_max()) {
-			/* Set the next wake-up time */
-			next_swap_jiffies = now + swapout_interval;
-			kswapd_wakeup();
-		}
-	}
+	pages = nr_free_pages;
+	if (pages < freepages.high)
+		want_wakeup = 1;
+	if (pages < freepages.low)
+		want_wakeup = 2;
+	if (pages < freepages.min)
+		want_wakeup = 3;
+
+	kswapd_wakeup(want_wakeup);
+
 	timer_active |= (1<<SWAP_TIMER);
 }
 

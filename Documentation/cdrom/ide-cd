@@ -1,6 +1,8 @@
 IDE-CD driver documentation
 Originally by scott snyder  <snyder@fnald0.fnal.gov> (19 May 1996)
 Carrying on the torch is: Erik Andersen <andersee@debian.org>
+New maintainers (19 Oct 1998): Jens Axboe <axboe@image.dk>
+                               Chris Zwilling <chris@cloudnet.com>
 
 1. Introduction
 ---------------

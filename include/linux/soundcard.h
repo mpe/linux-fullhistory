@@ -771,6 +771,8 @@ typedef struct copr_msg {
 #define SOUND_MIXER_CAPS	0xfc
 #	define SOUND_CAP_EXCL_INPUT	0x00000001	/* Only one recording source at a time */
 #define SOUND_MIXER_STEREODEVS	0xfb	/* Mixer channels supporting stereo */
+#define SOUND_MIXER_OUTSRC	0xfa	/* Arg contains a bit for each input source to output */
+#define SOUND_MIXER_OUTMASK	0xf9	/* Arg contains a bit for each supported input source to output */
 
 /*	Device mask bits	*/
 
