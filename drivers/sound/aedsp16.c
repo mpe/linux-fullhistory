@@ -349,7 +349,7 @@ static struct orVals orDMA[] =
 };
 
 /*
- * Buffers to store audio card informations
+ * Buffers to store audio card information
  */
 static char     AudioExcelName[CARDNAMELEN + 1];
 static char     AudioExcelVersion[CARDVERLEN + 1];

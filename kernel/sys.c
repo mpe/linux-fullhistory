@@ -636,8 +636,11 @@ asmlinkage int sys_setsid(void)
 {
 	struct task_struct * p;
 
+	if (current->leader)
+		return -EPERM;
+
 	for_each_task(p) {
-		if (p->pgrp == current->pid)
+		if (p != current && p->pgrp == current->pid)
 		        return -EPERM;
 	}
 

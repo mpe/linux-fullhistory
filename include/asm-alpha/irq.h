@@ -14,7 +14,7 @@
 # define NR_IRQS	33
 #elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P) || defined(CONFIG_ALPHA_MIKASA)
 # define NR_IRQS	32
-#elif defined(CONFIG_ALPHA_ALCOR)
+#elif defined(CONFIG_ALPHA_ALCOR) || defined(CONFIG_ALPHA_XLT)
 # define NR_IRQS	48
 #else
 # define NR_IRQS	16

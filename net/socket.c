@@ -944,17 +944,22 @@ asmlinkage int sys_sendto(int fd, void * buff, int len, unsigned flags,
 	err=verify_area(VERIFY_READ,buff,len);
 	if(err)
 	  	return err;
-  	
-	if((err=move_addr_to_kernel(addr,addr_len,address))<0)
-	  	return err;
-	  	
+
 	iov.iov_base=buff;
 	iov.iov_len=len;
-	msg.msg_name=address;
-	msg.msg_namelen=addr_len;
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
 	msg.msg_iov=&iov;
 	msg.msg_iovlen=1;
 	msg.msg_control=NULL;
+	if (addr && addr_len) {
+		err=move_addr_to_kernel(addr,addr_len,address);
+		if (err < 0)
+			return err;
+		msg.msg_name=address;
+		msg.msg_namelen=addr_len;
+	}
+	  	
 	return(sock->ops->sendmsg(sock, &msg, len, (file->f_flags & O_NONBLOCK),
 		flags));
 }

@@ -341,7 +341,7 @@ void mem_error (unsigned long esr, unsigned long ear)
     printk("    %s %s error to %s occurred at address %x\n",
 	   (esr & ESR_CEE) ? "Correctable" : ((esr & ESR_UEE) ? "Uncorrectable" : "A"),
 	   (esr & ESR_WRE) ? "write" : "read",
-	   (esr & ESR_SOR) ? "b-cache" : "memory",
+	   (esr & ESR_SOR) ? "memory" : "b-cache",
 	   (unsigned) (ear & 0x1ffffff8));
     if (esr & ESR_CTE) {
 	printk("    A b-cache tag parity error was detected.\n");

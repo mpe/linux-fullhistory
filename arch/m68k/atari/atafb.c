@@ -109,7 +109,7 @@ static struct atari_fb_par {
 			short xoffset;
 			short hht, hbb, hbe, hdb, hde, hss;
 			short vft, vbb, vbe, vdb, vde, vss;
-			/* auxiliary informations */
+			/* auxiliary information */
 			short mono;
 			short ste_mode;
 			short bpp;

@@ -1442,10 +1442,12 @@ CONFIG_SCSI_NCR53C8XX
   This driver has been tested ok with linux/i386  and is currently untested
   under linux/Alpha. If you intend to use this driver under linux/Alpha, just 
   try it first with read-only or mounted read-only devices.
+  Memory mapped io are currently not supported under linux/Alpha.
 
 force normal IO
 CONFIG_SCSI_NCR53C8XX_IOMAPPED
-  This option allow to force the driver to use normal IO.
+  Under linux/Alpha only normal io are currently supported.
+  Under linux/i386, this option allow to force the driver to use normal IO.
   Memory mapped IO have less latency than normal IO.
   During initialisation phase, the driver first tries to use memory mapped io.
   If nothing seems wrong, it will use memory mapped io.
@@ -1840,7 +1842,7 @@ CONFIG_BAYCOM
   interface. The driver supports the ser12 and par96 designs. To
   configure the driver, use the setbaycom utility available from
   http://www.ife.ee.ethz.ch/~sailer/ham/ham.html#lnxbay. For
-  informations on the modems, see http://www.baycom.de and
+  information on the modems, see http://www.baycom.de and
   drivers/char/README.baycom.  If you want to compile this as a module
   ( = code which can be inserted in and removed from the running
   kernel whenever you want), say M here and read

@@ -8,10 +8,10 @@
  */
 
 #define ldq_u(x,y) \
-__asm__("ldq_u %0,%1":"=r" (x):"m" (*(unsigned long *)(y)))
+__asm__ __volatile__("ldq_u %0,%1":"=r" (x):"m" (*(unsigned long *)(y)))
 
 #define stq_u(x,y) \
-__asm__("stq_u %1,%0":"=m" (*(unsigned long *)(y)):"r" (x))
+__asm__ __volatile__("stq_u %1,%0":"=m" (*(unsigned long *)(y)):"r" (x))
 
 #define extql(x,y,z) \
 __asm__ __volatile__("extql %1,%2,%0":"=r" (z):"r" (x),"r" (y))
@@ -36,12 +36,11 @@ __asm__ __volatile__("insqh %1,%2,%0":"=r" (z):"r" (x),"r" (y))
  */
 static inline unsigned long csum_partial_copy_aligned(
 	unsigned long *src, unsigned long *dst,
-	long len, unsigned long checksum)
+	long len, unsigned long checksum,
+	unsigned long word)
 {
-	unsigned long word, carry = 0;
+	unsigned long carry = 0;
 
-	len -= 8;
-	word = *src;
 	while (len >= 0) {
 		checksum += carry;
 		src++;
@@ -73,34 +72,33 @@ static inline unsigned long csum_partial_copy_aligned(
 static inline unsigned long csum_partial_copy_dest_aligned(
 	unsigned long *src, unsigned long *dst,
 	unsigned long soff,
-	long len, unsigned long checksum)
+	long len, unsigned long checksum,
+	unsigned long first)
 {
-	unsigned long first, word, carry = 0;
+	unsigned long word, carry = 0;
 
-	len -= 8;
-	first = src[0];
 	while (len >= 0) {
 		unsigned long second;
 
-		second = src[1];
+		ldq_u(second, src+1);
 		extql(first, soff, word);
 		len -= 8;
-		extqh(second, soff, first);
 		src++;
-		word |= first;
+		extqh(second, soff, first);
 		checksum += carry;
+		word |= first;
 		first = second;
 		checksum += word;
 		*dst = word;
-		carry = checksum < word;
 		dst++;
+		carry = checksum < word;
 	}
 	len += 8;
 	checksum += carry;
 	if (len) {
 		unsigned long tmp;
 		unsigned long second;
-		second = src[1];
+		ldq_u(second, src+1);
 		tmp = *dst;
 		extql(first, soff, word);
 		extqh(second, soff, first);
@@ -121,24 +119,22 @@ static inline unsigned long csum_partial_copy_dest_aligned(
 static inline unsigned long csum_partial_copy_src_aligned(
 	unsigned long *src, unsigned long *dst,
 	unsigned long doff,
-	long len, unsigned long checksum)
+	long len, unsigned long checksum,
+	unsigned long word,
+	unsigned long partial_dest)
 {
-	unsigned long word, carry = 0;
-	unsigned long partial_dest;
+	unsigned long carry = 0;
 
-	partial_dest = *dst;
-	len -= 8;
 	mskql(partial_dest, doff, partial_dest);
-	word = *src;
 	while (len >= 0) {
 		unsigned long second_dest;
 
 		len -= 8;
+		insql(word, doff, second_dest);
 		checksum += carry;
+		stq_u(partial_dest | second_dest, dst);
 		src++;
 		checksum += word;
-		insql(word, doff, second_dest);
-		*dst = partial_dest | second_dest;
 		insqh(word, doff, partial_dest);
 		carry = checksum < word;
 		word = *src;
@@ -150,25 +146,27 @@ static inline unsigned long csum_partial_copy_src_aligned(
 		unsigned long second_dest;
 
 		mskql(word, len-doff, word);
-		len -= 8;
 		src++;
 		checksum += word;
 		insql(word, doff, second_dest);
-		*dst = partial_dest | second_dest;
-		insqh(word, doff, partial_dest);
+		stq_u(partial_dest | second_dest, dst);
 		carry = checksum < word;
-		word = *src;
-		dst++;
+		if (len) {
+			ldq_u(second_dest, dst+1);
+			insqh(word, doff, partial_dest);
+			mskqh(second_dest, len, second_dest);
+			stq_u(partial_dest | second_dest, dst+1);
+		}
 		checksum += carry;
 	} else if (len & 7) {
 		unsigned long second_dest;
-		second_dest = *dst;
+		ldq_u(second_dest, dst);
 		mskql(word, len-doff, word);
 		checksum += word;
 		mskqh(second_dest, len, second_dest);
 		carry = checksum < word;
 		insql(word, doff, word);
-		*dst = partial_dest | word | second_dest;
+		stq_u(partial_dest | word | second_dest, dst);
 		checksum += carry;
 	}
 	return checksum;
@@ -181,30 +179,27 @@ static inline unsigned long csum_partial_copy_src_aligned(
 static inline unsigned long csum_partial_copy_unaligned(
 	unsigned long * src, unsigned long * dst,
 	unsigned long soff, unsigned long doff,
-	long len, unsigned long checksum)
+	long len, unsigned long checksum,
+	unsigned long first, unsigned long partial_dest)
 {
-	unsigned long first, carry = 0;
-	unsigned long partial_dest;
+	unsigned long carry = 0;
 
-	partial_dest = dst[0];
-	len -= 8;
-	first = src[0];
 	mskql(partial_dest, doff, partial_dest);
 	while (len >= 0) {
 		unsigned long second, word;
 		unsigned long second_dest;
 
-		second = src[1];
+		ldq_u(second, src+1);
 		extql(first, soff, word);
-		len -= 8;
 		checksum += carry;
-		src++;
+		len -= 8;
 		extqh(second, soff, first);
+		src++;
 		word |= first;
 		first = second;
-		checksum += word;
 		insql(word, doff, second_dest);
-		*dst = partial_dest | second_dest;
+		checksum += word;
+		stq_u(partial_dest | second_dest, dst);
 		carry = checksum < word;
 		insqh(word, doff, partial_dest);
 		dst++;
@@ -214,35 +209,40 @@ static inline unsigned long csum_partial_copy_unaligned(
 	if (len >= 0) {
 		unsigned long second, word;
 		unsigned long second_dest;
-
-		second = src[1];
+		
+		ldq_u(second, src+1);
 		extql(first, soff, word);
-		len -= 8;
-		src++;
 		extqh(second, soff, first);
 		word |= first;
+		src++;
 		first = second;
 		mskql(word, len-doff, word);
 		checksum += word;
 		insql(word, doff, second_dest);
-		*dst = partial_dest | second_dest;
 		carry = checksum < word;
-		insqh(word, doff, partial_dest);
-		dst++;
+		stq_u(partial_dest | second_dest, dst);
+		if (len) {
+			ldq_u(second_dest, dst+1);
+			insqh(word, doff, partial_dest);
+			mskqh(second_dest, len, second_dest);
+			stq_u(partial_dest | second_dest, dst+1);
+		}
+		checksum += carry;			
 	} else if (len & 7) {
 		unsigned long second, word;
 		unsigned long second_dest;
-		second = src[1];
+
+		ldq_u(second, src+1);
 		extql(first, soff, word);
 		extqh(second, soff, first);
 		word |= first;
-		second_dest = *dst;
+		ldq_u(second_dest, dst);
 		mskql(word, len-doff, word);
 		checksum += word;
 		mskqh(second_dest, len, second_dest);
 		carry = checksum < word;
 		insql(word, doff, word);
-		*dst = partial_dest | word | second_dest;
+		stq_u(partial_dest | word | second_dest, dst);
 		checksum += carry;
 	}
 	return checksum;
@@ -254,31 +254,35 @@ unsigned int csum_partial_copy(char *src, char *dst, int len, int sum)
 	unsigned long soff = 7 & (unsigned long) src;
 	unsigned long doff = 7 & (unsigned long) dst;
 
-	src = (char *) (~7UL & (unsigned long) src);
-	dst = (char *) (~7UL & (unsigned long) dst);
 	if (len) {
-		if (!soff) {
-			if (!doff)
+		unsigned long first;
+		ldq_u(first, src);
+		if (!doff) {
+			if (!soff)
 				checksum = csum_partial_copy_aligned(
 					(unsigned long *) src,
 					(unsigned long *) dst,
-					len, checksum);
+					len-8, checksum, first);
 			else
-				checksum = csum_partial_copy_src_aligned(
-					(unsigned long *) src,
-					(unsigned long *) dst,
-					doff, len, checksum);
-		} else {
-			if (!doff)
 				checksum = csum_partial_copy_dest_aligned(
 					(unsigned long *) src,
 					(unsigned long *) dst,
-					soff, len, checksum);
+					soff, len-8, checksum, first);
+		} else {
+			unsigned long partial_dest;
+			ldq_u(partial_dest, dst);
+			if (!soff)
+				checksum = csum_partial_copy_src_aligned(
+					(unsigned long *) src,
+					(unsigned long *) dst,
+					doff, len-8, checksum,
+					first, partial_dest);
 			else
 				checksum = csum_partial_copy_unaligned(
 					(unsigned long *) src,
 					(unsigned long *) dst,
-					soff, doff, len, checksum);
+					soff, doff, len-8, checksum,
+					first, partial_dest);
 		}
 		/* 64 -> 33 bits */
 		checksum = (checksum & 0xffffffff) + (checksum >> 32);

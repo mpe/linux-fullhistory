@@ -1,4 +1,21 @@
-Mon Jul 03  23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+Sun Jul 14  15:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c, Configure.help
+	Memory mapped io donnot work under linux/Alpha for the driver.
+	For the moment it is better to not support this feature for this 
+	architecture.
+
+Tue Jul 09  20:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Garbage printed out with the following command (fixed):
+	- cat <some proc scsi device> /proc/scsi/ncr53c8xx/0
+
+Sun Jul 07  20:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Tagged command queueing cannot be disabled at run time.
+	I probably never try that because I felt the risk.
+	Shortest patch sent to Linus. I have to plan something better.
+
+Wed Jul 03  23:00 1996 Gerard Roudier (groudier@club-internet.fr)
 	Release 1.12a
 	Tested linux releases: 1.2.13, 2.0.0, 2.0.1
 
@@ -271,7 +288,7 @@ Fri Feb 23 23:00 1996 Gerard Roudier (groudier@club-internet.fr)
 	I receive a mail from Jason Duerstock.
 	A new bug in ncrBsd2Linux which is probably outside the driver code
 	and inside Linux kernel code.
-	The kernel memory is quite corrupted and we cannot get any informations
+	The kernel memory is quite corrupted and we cannot get any information
 	by looking into the messages about the crash. However Linus see a bug in
 	ncrBsd2Linux because it is a "non standard" driver.
 	I think too that ncrBsd2Linux is not a standard driver of Linux kernel,

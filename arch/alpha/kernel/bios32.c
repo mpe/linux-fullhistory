@@ -892,6 +892,62 @@ static inline void alcor_fixup(void)
 	common_fixup(7, 12, 5, irq_tab, 0);
 }
 
+/*
+ * Fixup configuration for ALPHA XLT (EV5/EV56)
+ *
+ * Summary @ GRU_INT_REQ:
+ * Bit      Meaning
+ * 0        Interrupt Line A from slot 2
+ * 1        Interrupt Line B from slot 2
+ * 2        Interrupt Line C from slot 2
+ * 3        Interrupt Line D from slot 2
+ * 4        Interrupt Line A from slot 1
+ * 5        Interrupt line B from slot 1
+ * 6        Interrupt Line C from slot 1
+ * 7        Interrupt Line D from slot 1
+ * 8        Interrupt Line A from slot 0
+ * 9        Interrupt Line B from slot 0
+ *10        Interrupt Line C from slot 0
+ *11        Interrupt Line D from slot 0
+ *12        NCR810 SCSI in slot 9
+ *13        DC-21040 (TULIP) in slot 6
+ *14-19     Reserved
+ *20-23     Jumpers (interrupt)
+ *24-27     Module revision
+ *28-30     Reserved
+ *31        EISA interrupt
+ *
+ * The device to slot mapping looks like:
+ *
+ * Slot     Device
+ *  6       TULIP
+ *  7       PCI on board slot 0
+ *  8       none
+ *  9       SCSI
+ * 10       PCI-ISA bridge
+ * 11       PCI on board slot 2
+ * 12       PCI on board slot 1
+ *   
+ *
+ * This two layered interrupt approach means that we allocate IRQ 16 and 
+ * above for PCI interrupts.  The IRQ relates to which bit the interrupt
+ * comes in on.  This makes interrupt processing much easier.
+ */
+static inline void xlt_fixup(void)
+{
+	char irq_tab[7][5] = {
+	  /*INT    INTA   INTB   INTC   INTD */
+	  {16+13, 16+13, 16+13, 16+13, 16+13},	/* IdSel 17,  TULIP  */
+	  { 16+8,  16+8,  16+9, 16+10, 16+11},	/* IdSel 18,  slot 0 */
+	  {   -1,    -1,    -1,    -1,    -1},	/* IdSel 19,  none   */
+	  {16+12, 16+12, 16+12, 16+12, 16+12},	/* IdSel 20,  SCSI   */
+	  {   -1,    -1,    -1,    -1,    -1},	/* IdSel 21,  SIO    */
+	  { 16+0,  16+0,  16+1,  16+2,  16+3},	/* IdSel 22,  slot 2 */
+	  { 16+4,  16+4,  16+5,  16+6,  16+7},	/* IdSel 23,  slot 1 */
+	};
+	common_fixup(6, 12, 5, irq_tab, 0);
+}
+
 
 /*
  * Fixup configuration for all boards that route the PCI interrupts
@@ -1077,6 +1133,8 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 	mikasa_fixup();
 #elif defined(CONFIG_ALPHA_ALCOR)
 	alcor_fixup();
+#elif defined(CONFIG_ALPHA_XLT)
+	xlt_fixup();
 #else
 #	error You must tell me what kind of platform you want.
 #endif

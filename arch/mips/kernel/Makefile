@@ -63,11 +63,11 @@ O_OBJS += r4xx0.o
 endif
 
 ifdef CONFIG_CPU_R6000
-	exit 1			# no detailed informations about CPU yet.
+	exit 1			# no detailed information about CPU yet.
 endif
 
 ifdef CONFIG_CPU_R8000
-	exit 1			# no detailed informations about CPU yet.
+	exit 1			# no detailed information about CPU yet.
 endif
 
 ifdef CONFIG_CPU_R10000

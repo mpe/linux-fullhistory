@@ -350,7 +350,7 @@ struct moveparams {
 void setup_output_buffer_if_we_run_high(struct moveparams *mv)
 {
 	high_buffer_start = (uch *)(((ulg)&end) + HEAP_SIZE);
-	if (EXT_MEM_K < (4*1024)) error("Less than 4MB of memory.\n");
+	if (EXT_MEM_K < (3*1024)) error("Less than 4MB of memory.\n");
 	mv->low_buffer_start = output_data = (char *)LOW_BUFFER_START;
 	high_loaded = 1;
 	free_mem_end_ptr = (long)high_buffer_start;

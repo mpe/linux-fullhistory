@@ -1,6 +1,7 @@
 #ifndef __ALPHA_CIA__H__
 #define __ALPHA_CIA__H__
 
+#include <linux/config.h>
 #include <linux/types.h>
 
 /*
@@ -169,6 +170,14 @@
 #define GRU_SCR				(IDENT_ADDR + 0x8780000300UL)
 #define GRU_LED				(IDENT_ADDR + 0x8780000800UL)
 #define GRU_RESET			(IDENT_ADDR + 0x8780000900UL)
+
+#if defined(CONFIG_ALPHA_ALCOR)
+#define GRU_INT_REQ_BITS		0x800fffffUL
+#elif defined(CONFIG_ALPHA_XLT)
+#define GRU_INT_REQ_BITS		0x80003fffUL
+#else
+#define GRU_INT_REQ_BITS		0xffffffffUL
+#endif
 
 /*
  * Bit definitions for I/O Controller status register 0:

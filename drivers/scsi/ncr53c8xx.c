@@ -243,7 +243,7 @@ typedef u32 u_int32;
 
 #define NCR_SNOOP_TIMEOUT (1000000)
 
-#ifdef SCSI_NCR_IOMAPPED
+#if defined(SCSI_NCR_IOMAPPED) || defined(__alpha__)
 #define NCR_IOMAPPED
 #endif
 
@@ -6546,9 +6546,14 @@ void ncr_int_sir (ncb_p np)
 		np->script->start1[0] =  SCR_INT;
 
 		/*
+		**	For the moment tagged transfers cannot be disabled.
+		*/
+#if 0
+		/*
 		**	Try to disable tagged transfers.
 		*/
 		ncr_setmaxtags (np, &np->target[target], 0);
+#endif
 
 		/*
 		** @QUEUE@

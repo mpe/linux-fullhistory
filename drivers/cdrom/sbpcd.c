@@ -4446,6 +4446,7 @@ static void sbp_transfer(struct request *req)
 /*==========================================================================*/
 /*
  *  special end_request for sbpcd to solve CURRENT==NULL bug. (GTL)
+ *  GTL = Gonzalo Tornaria <tornaria@cmat.edu.uy>
  *
  *  This is a kluge so we don't need to modify end_request
  *  We put the req we take out after INIT_REQUEST in the requests list,

@@ -48,6 +48,7 @@
 #define MAX_LOOP 8
 static struct loop_device loop_dev[MAX_LOOP];
 static int loop_sizes[MAX_LOOP];
+static int loop_blksizes[MAX_LOOP];
 
 /*
  * Transfer functions
@@ -170,6 +171,7 @@ static void figure_loop_size(struct loop_device *lo)
 		else
 			size = MAX_DISK_SIZE;
 	}
+
 	loop_sizes[lo->lo_number] = size;
 }
 
@@ -202,7 +204,7 @@ repeat:
 		offset = 0;
 	} else {
 		block = CURRENT->sector / (blksize >> 9);
-		offset = CURRENT->sector % (blksize >> 9);
+		offset = (CURRENT->sector % (blksize >> 9)) << 9;
 	}
 	block += lo->lo_offset / blksize;
 	offset += lo->lo_offset % blksize;
@@ -211,6 +213,7 @@ repeat:
 		offset -= blksize;
 	}
 	len = CURRENT->current_nr_sectors << 9;
+
 	if (CURRENT->cmd == WRITE) {
 		if (lo->lo_flags & LO_FLAGS_READ_ONLY)
 			goto error_out;
@@ -552,7 +555,9 @@ loop_init( void ) {
 		loop_dev[i].lo_number = i;
 	}
 	memset(&loop_sizes, 0, sizeof(loop_sizes));
+	memset(&loop_blksizes, 0, sizeof(loop_blksizes));
 	blk_size[MAJOR_NR] = loop_sizes;
+	blksize_size[MAJOR_NR] = loop_blksizes;
 
 	return 0;
 }

@@ -22,14 +22,14 @@ prefer a HTML-ized shopping list.
 documento, consultad la traduccion de Alfredo Sanjuan en
 http://slug.ctv.es/~alfredo/Cambios.html.
 
-Last updated: July 6, 1996.
+Last updated: July 13, 1996.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
 ****************
 
 - Kernel modules	 2.0.0
-- PPP daemon		 Stable: 2.2.0f
+- PPP daemon		 2.2.0f
 - Dynamic linker (ld.so) 1.7.14
 - GNU CC		 2.7.2
 - Binutils		 2.6.0.14
@@ -277,7 +277,7 @@ exists a possibility to match on device names and/or device addresses,
 so that only packets coming in/going out via that device (network
 interface) match with a rule.  This is especially useful to prevent
 spoofing.  You'll need to get
-ftp://ftp.xos.nl/pub/linux/ipfwadm/ipfwadm-2.1.tar.gz to use this.
+ftp://ftp.xos.nl/pub/linux/ipfwadm/ipfwadm-2.2.tar.gz to use this.
 
 IP Masquerading
 ===============
@@ -461,8 +461,9 @@ groff
 
    Those of you running Slackware may experience weirdness with man
 pages due to changes in groff.  If your man pages display <AD> for -
-when present at the end of a line, try adding a -r to your LESS
-environmental variable.
+when present at the end of a line, try setting an appropriate value
+(many have reported success with "latin1", for example) for the
+environmental variable LESSCHARSET.
 
 How to know the version of the installed programs
 *************************************************
@@ -592,6 +593,12 @@ version.  Remember, you might need to use the -force option to get the
 upgrade to install.  Almost everything you need is available in
 ftp://ftp.redhat.com/pub/current/i386/updates/2.0-kernel/ and its
 mirrors.
+
+   For others, especially those of you running Slackware 3.0, David
+Bourgin has put together a Slackware-compatible package of everything
+necessary to quickly and easily upgrade to 2.0.x.  See
+ftp://ftp.wsc.com/pub/freeware/linux/update.linux/ for more information
+and the files.
 
 Please send info about any other packages that 2.0.x "broke" or about
 any new features of 2.0.x that require extra or new packages for use to
