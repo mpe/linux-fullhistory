@@ -34,7 +34,7 @@
 
 /* Version information */
 #define DRIVER_VERSION "0.1"
-#define DRIVER_DESC "DiBcom 3000-MC DVB-T demodulator driver"
+#define DRIVER_DESC "DiBcom 3000M-C DVB-T demodulator driver"
 #define DRIVER_AUTHOR "Patrick Boettcher, patrick.boettcher@desy.de"
 
 #ifdef CONFIG_DVB_DIBCOM_DEBUG
