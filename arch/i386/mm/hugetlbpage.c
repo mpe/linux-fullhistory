@@ -209,14 +209,17 @@ void unmap_hugepage_range(struct vm_area_struct *vma,
 {
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long address;
-	pte_t pte;
+	pte_t pte, *ptep;
 	struct page *page;
 
 	BUG_ON(start & (HPAGE_SIZE - 1));
 	BUG_ON(end & (HPAGE_SIZE - 1));
 
 	for (address = start; address < end; address += HPAGE_SIZE) {
-		pte = ptep_get_and_clear(mm, address, huge_pte_offset(mm, address));
+		ptep = huge_pte_offset(mm, address);
+		if (!ptep)
+			continue;
+		pte = ptep_get_and_clear(mm, address, ptep);
 		if (pte_none(pte))
 			continue;
 		page = pte_page(pte);
