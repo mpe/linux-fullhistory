@@ -265,6 +265,20 @@ static int pirq_opti_set(struct pci_dev *router, struct pci_dev *dev, int pirq, 
 	return 1;
 }
 
+/*
+ * Cyrix: nibble offset 0x5C
+ */
+static int pirq_cyrix_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
+{
+	return read_config_nybble(router, 0x5C, pirq-1);
+}
+
+static int pirq_cyrix_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
+{
+	write_config_nybble(router, 0x5C, pirq-1, irq);
+	return 1;
+}
+
 #ifdef CONFIG_PCI_BIOS
 
 static int pirq_bios_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
@@ -289,6 +303,7 @@ static struct irq_router pirq_routers[] = {
 	{ "VIA", PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C596, pirq_via_get, pirq_via_set },
 	{ "VIA", PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C686, pirq_via_get, pirq_via_set },
 	{ "OPTI", PCI_VENDOR_ID_OPTI, PCI_DEVICE_ID_OPTI_82C700, pirq_opti_get, pirq_opti_set },
+	{ "NatSemi", PCI_VENDOR_ID_CYRIX, PCI_DEVICE_ID_CYRIX_5520, pirq_cyrix_get, pirq_cyrix_set },
 	{ "default", 0, 0, NULL, NULL }
 };
 

@@ -16,16 +16,12 @@
 #define __KERNEL_SYSCALLS__
 
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/unistd.h>
 #include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
-
-/*
-	modprobe_path is set via /proc/sys.
-*/
-char modprobe_path[256] = "/sbin/modprobe";
 
 extern int max_threads;
 
@@ -130,6 +126,13 @@ int exec_usermodehelper(char *program_path, char *argv[], char *envp[])
 	return 0;
 }
 
+#ifdef CONFIG_KMOD
+
+/*
+	modprobe_path is set via /proc/sys.
+*/
+char modprobe_path[256] = "/sbin/modprobe";
+
 static int exec_modprobe(void * module_name)
 {
 	static char * envp[] = { "HOME=/", "TERM=linux", "PATH=/sbin:/usr/sbin:/bin:/usr/bin", NULL };
@@ -226,6 +229,7 @@ int request_module(const char * module_name)
 	}
 	return 0;
 }
+#endif /* CONFIG_KMOD */
 
 
 #ifdef CONFIG_HOTPLUG
@@ -246,6 +250,10 @@ int request_module(const char * module_name)
 	necessary, and may perform additional system setup.
 */
 char hotplug_path[256] = "/sbin/hotplug";
+
+EXPORT_SYMBOL(hotplug_path);
+
+#endif /* CONFIG_HOTPLUG */
 
 
 static int exec_helper (void *arg)
@@ -286,5 +294,10 @@ int call_usermodehelper (char *path, char **argv, char **envp)
 	return retval;
 }
 
+EXPORT_SYMBOL(exec_usermodehelper);
+EXPORT_SYMBOL(call_usermodehelper);
+
+#ifdef CONFIG_KMOD
+EXPORT_SYMBOL(request_module);
 #endif
 

@@ -31,6 +31,9 @@
  *
  *  History
  *  v0.14.6 
+ *	Nov 1 2000 Ching-Ling Lee
+ *	Fix the bug of memory leak when swithing 5.1-channels to 2 channels.
+ *	Add lock protection into dynamic changing format of data.
  *	Oct 18 2000 Ching-Ling Lee
  *	5.1-channels support for ALi
  *	June 28 2000 Ching-Ling Lee
@@ -142,7 +145,7 @@
 /* minor number of /dev/swmodem (temporary, experimental) */
 #define SND_DEV_SWMODEM	7
 
-static const unsigned ali_multi_channels[] = { ALI_SURR_LEFT_CHANNEL, ALI_SURR_RIGHT_CHANNEL,ALI_CENTER_CHANNEL, ALI_LEF_CHANNEL/*, ALI_SURR_LEFT_CHANNEL, ALI_SURR_RIGHT_CHANNEL*/};
+static const unsigned ali_multi_channels_5_1[] = { ALI_SURR_LEFT_CHANNEL, ALI_SURR_RIGHT_CHANNEL,ALI_CENTER_CHANNEL, ALI_LEF_CHANNEL/*, ALI_SURR_LEFT_CHANNEL, ALI_SURR_RIGHT_CHANNEL*/};
 
 static const unsigned sample_size[] = { 1, 2, 2, 4 };
 static const unsigned sample_shift[] = { 0, 1, 1, 2 };
@@ -225,12 +228,14 @@ struct trident_state {
 		unsigned ossfragshift;
 		int ossmaxfrags;
 		unsigned subdivision;
+		
 	} dmabuf;
 
 	/* 5.1channels */	
 	struct trident_state *other_states[4];
 	int multi_channels_adjust_count;
 	unsigned chans_num;
+	unsigned fmt_flag:1;
 };
 
 /* hardware channels */
@@ -341,7 +346,6 @@ static struct trident_channel *ali_alloc_pcm_channel(struct trident_card *card);
 static int ali_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data);
 static void ali_restore_regs(struct trident_card *card);
 static void ali_save_regs(struct trident_card *card);
-static int ali_allocate_multi_channels(struct trident_state *state, int chan_nums);
 static void ali_free_pcm_channel(struct trident_card *card, unsigned int channel);
 static int ali_setup_multi_channels(struct trident_card *card, int chan_nums);
 static unsigned int ali_get_spdif_in_rate(struct trident_card *card);
@@ -349,7 +353,9 @@ static void ali_setup_spdif_in(struct trident_card *card);
 static void ali_disable_spdif_in(struct trident_card *card);
 static void ali_disable_special_channel(struct trident_card *card, int ch);
 static void ali_setup_spdif_out(struct trident_card *card, int flag);
-static unsigned int ali_write_5_1(struct trident_state *state, const char *buffer,int cnt_for_multi_channel);
+static int ali_write_5_1(struct trident_state *state, const char *buffer,int cnt_for_multi_channel, unsigned int *copy_count, unsigned int *state_cnt);
+static int ali_allocate_other_states_resources(struct trident_state *state, int chan_nums);
+static void ali_free_other_states_resources(struct trident_state *state);
 
 
 /* save registers for ALi Power Management */
@@ -359,9 +365,22 @@ static struct ali_saved_registers {
 	unsigned mixer_regs[ALI_MIXER_REGS];
 } ali_registers;
 
-#define seek_offset(dma_ptr, buffer, cnt, offset)	(dma_ptr) += (offset);	\
+#define seek_offset(dma_ptr, buffer, cnt, offset, copy_count)	(dma_ptr) += (offset);	\
 							(buffer) += (offset);	\
-							(cnt) -= (offset);
+							(cnt) -= (offset);	\
+							(copy_count) += (offset);
+
+#define lock_set_fmt(state)	{spin_lock_irqsave(&state->card->lock, flags);			\
+				if (state->fmt_flag) {						\
+					spin_unlock_irqrestore(&state->card->lock, flags);	\
+					return -EFAULT;						\
+				}								\
+				state->fmt_flag = 1;						\
+				spin_unlock_irqrestore(&state->card->lock, flags);}
+				
+#define unlock_set_fmt(state)	{spin_lock_irqsave(&state->card->lock, flags);		\
+				state->fmt_flag = 0;					\
+				spin_unlock_irqrestore(&state->card->lock, flags);}
 
 static int trident_enable_loop_interrupts(struct trident_card * card)
 {
@@ -993,18 +1012,15 @@ static int prog_dmabuf(struct trident_state *state, unsigned rec)
 	struct dmabuf *dmabuf = &state->dmabuf;
 	unsigned bytepersec;
 	struct trident_state *s = state;
-	unsigned bufsize, dma_nums, default_order;
+	unsigned bufsize, dma_nums;
 	unsigned long flags;
 	int ret, i, order;
 	struct page *page, *pend;
 	
-	default_order = DMABUF_DEFAULTORDER;
-	if (s->chans_num == 6) {
+	lock_set_fmt(state);
+	if (state->chans_num == 6)
 		dma_nums = 5;
-	}
-	else {
-		dma_nums = 1;
-	}
+	else 	dma_nums = 1;
 	
 	for (i = 0; i < dma_nums; i++) {
 		if (i > 0) {
@@ -1022,8 +1038,10 @@ static int prog_dmabuf(struct trident_state *state, unsigned rec)
 		/* allocate DMA buffer if not allocated yet */
 		if (!dmabuf->rawbuf) {
 			if (i == 0) {
-				if ((ret = alloc_dmabuf(state)))
+				if ((ret = alloc_dmabuf(state))) {
+					unlock_set_fmt(state);
 					return ret;
+				}
 			}
 			else {
 				if ((order = state->dmabuf.buforder - 1) >= DMABUF_MINORDER)
@@ -1034,6 +1052,7 @@ static int prog_dmabuf(struct trident_state *state, unsigned rec)
 					i-=2;
 					for (; i >= 0; i--)
 						free_pages((unsigned long)state->other_states[i]->dmabuf.rawbuf, state->other_states[i]->dmabuf.buforder);
+					unlock_set_fmt(state);
 					return -ENOMEM;
 				}
 				dmabuf->ready  = dmabuf->mapped = 0;
@@ -1087,6 +1106,7 @@ static int prog_dmabuf(struct trident_state *state, unsigned rec)
 	       dmabuf->fragsize, dmabuf->dmasize);
 #endif
 	}
+	unlock_set_fmt(state);
 	return 0;
 }
 
@@ -1451,6 +1471,7 @@ static ssize_t trident_write(struct file *file, const char *buffer, size_t count
 	unsigned swptr;
 	int cnt;
 	unsigned int state_cnt;
+	unsigned int copy_count;
 
 #ifdef DEBUG
 	printk("trident: trident_write called, count = %d\n", count);
@@ -1493,8 +1514,10 @@ static ssize_t trident_write(struct file *file, const char *buffer, size_t count
 			}
 			/* No matter how much data left in the buffer, we have to wait untill
 			   CSO == ESO/2 or CSO == ESO when address engine interrupts */
+			lock_set_fmt(state);
 			tmo = (dmabuf->dmasize * HZ) / (dmabuf->rate * 2);
 			tmo >>= sample_shift[dmabuf->fmt];
+			unlock_set_fmt(state);
 			/* There are two situations when sleep_on_timeout returns, one is when
 			   the interrupt is serviced correctly and the process is waked up by
 			   ISR ON TIME. Another is when timeout is expired, which means that
@@ -1518,17 +1541,34 @@ static ssize_t trident_write(struct file *file, const char *buffer, size_t count
 			}
 			continue;
 		}
-		
+		lock_set_fmt(state);
 		if (state->chans_num == 6) {
-			state_cnt = ali_write_5_1(state, buffer, cnt);
+			copy_count = 0;
+			state_cnt = 0;
+			if (ali_write_5_1(state, buffer, cnt, &copy_count, &state_cnt) == -EFAULT) {
+				if (state_cnt){
+					swptr = (swptr + state_cnt) % dmabuf->dmasize;
+					spin_lock_irqsave(&state->card->lock, flags);
+					dmabuf->swptr = swptr;
+					dmabuf->count += state_cnt;
+					dmabuf->endcleared = 0;
+					spin_unlock_irqrestore(&state->card->lock, flags);
+				}
+				ret += copy_count;
+				if (!ret) ret = -EFAULT;
+				unlock_set_fmt(state);
+				return ret;
+			}
 		}
 		else {
 			if (copy_from_user(dmabuf->rawbuf + swptr, buffer, cnt)) {
 				if (!ret) ret = -EFAULT;
+				unlock_set_fmt(state);
 				return ret;
 			}
 			state_cnt = cnt;
 		}
+		unlock_set_fmt(state);
 		
 		swptr = (swptr + state_cnt) % dmabuf->dmasize;		
 		
@@ -1684,6 +1724,7 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 	case SNDCTL_DSP_STEREO: /* set stereo or mono channel */
 		if (get_user(val, (int *)arg))
 			return -EFAULT;
+		lock_set_fmt(state);
 		if (file->f_mode & FMODE_WRITE) {
 			stop_dac(state);
 			dmabuf->ready = 0;
@@ -1700,6 +1741,7 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 			else
 				dmabuf->fmt &= ~TRIDENT_FMT_STEREO;
 		}
+		unlock_set_fmt(state);
 		return 0;
 
 	case SNDCTL_DSP_GETBLKSIZE:
@@ -1720,6 +1762,7 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 	case SNDCTL_DSP_SETFMT: /* Select sample format */
 		if (get_user(val, (int *)arg))
 			return -EFAULT;
+		lock_set_fmt(state);
 		if (val != AFMT_QUERY) {
 			if (file->f_mode & FMODE_WRITE) {
 				stop_dac(state);
@@ -1738,6 +1781,7 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 					dmabuf->fmt &= ~TRIDENT_FMT_16BIT;
 			}
 		}
+		unlock_set_fmt(state);
 		return put_user((dmabuf->fmt & TRIDENT_FMT_16BIT) ?
 				AFMT_S16_LE : AFMT_U8, (int *)arg);
 
@@ -1745,40 +1789,49 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 		if (get_user(val, (int *)arg))
 			return -EFAULT;
 		if (val != 0) {
+			lock_set_fmt(state);
 			if (file->f_mode & FMODE_WRITE) {
 				stop_dac(state);
 				dmabuf->ready = 0;
+								
+				//prevent from memory leak
+				if ((state->chans_num > 2) && (state->chans_num != val)) {
+					ali_free_other_states_resources(state);
+					state->chans_num = 1;
+				}
+				
 				if (val >= 2) {
 					dmabuf->fmt |= TRIDENT_FMT_STEREO;
-					if (val == 6) {
-						val = ali_setup_multi_channels(state->card, 6);
-						if (val < 0)
-							return val;
+					if ((val == 6) && (state->card->pci_id == PCI_DEVICE_ID_ALI_5451)) {
+						ali_setup_multi_channels(state->card, 6);
 						down(&state->card->open_sem);
-						val = ali_allocate_multi_channels(state, 6);
+						ret = ali_allocate_other_states_resources(state, 6);
 						up(&state->card->open_sem);
-						if (val < 0)
-							return val;
-						val = 6;
+						if (ret < 0) {
+							unlock_set_fmt(state);
+							return ret;
+						}
 					}
-					else val = 2;
+					else val = 2;	/*yield to 2-channels*/
 				}
 				else
 					dmabuf->fmt &= ~TRIDENT_FMT_STEREO;
+				state->chans_num = val;
 			}
 			if (file->f_mode & FMODE_READ) {
 				stop_adc(state);
 				dmabuf->ready = 0;
 				if (val >= 2) {
-					if (val!=6)
+					if (!((file->f_mode & FMODE_WRITE) && (val == 6)))
 						val = 2;
 					dmabuf->fmt |= TRIDENT_FMT_STEREO;
 				}
 				else
 					dmabuf->fmt &= ~TRIDENT_FMT_STEREO;
+				state->chans_num = val;
 			}
+			unlock_set_fmt(state);
 		}
-		state->chans_num = val;
 		return put_user(val, (int *)arg);
 
 	case SNDCTL_DSP_POST:
@@ -2059,6 +2112,7 @@ static int trident_release(struct inode *inode, struct file *file)
 	struct trident_state *state = (struct trident_state *)file->private_data;
 	struct trident_card *card;
 	struct dmabuf *dmabuf;
+	unsigned long flags;
 
 	lock_kernel();
 	card = state->card;
@@ -2075,24 +2129,10 @@ static int trident_release(struct inode *inode, struct file *file)
 
 	if (file->f_mode & FMODE_WRITE) {
 		stop_dac(state);
-		if (state->chans_num == 6) {
-			dealloc_dmabuf(state->other_states[0]);
-			dealloc_dmabuf(state->other_states[1]);
-			dealloc_dmabuf(state->other_states[2]);
-			dealloc_dmabuf(state->other_states[3]);
-			state->card->free_pcm_channel(state->card, state->other_states[0]->dmabuf.channel->num);
-			state->card->free_pcm_channel(state->card, state->other_states[1]->dmabuf.channel->num);
-			state->card->free_pcm_channel(state->card, state->other_states[2]->dmabuf.channel->num);
-			state->card->free_pcm_channel(state->card, state->other_states[3]->dmabuf.channel->num);
-			card->states[state->other_states[0]->virt] = NULL;
-			kfree(state->other_states[0]);
-			card->states[state->other_states[1]->virt] = NULL;
-			kfree(state->other_states[1]);
-			card->states[state->other_states[2]->virt] = NULL;
-			kfree(state->other_states[2]);
-			card->states[state->other_states[3]->virt] = NULL;
-			kfree(state->other_states[3]);
-		}
+		lock_set_fmt(state);
+		if (state->chans_num > 2)
+			ali_free_other_states_resources(state);
+		unlock_set_fmt(state);
 		dealloc_dmabuf(state);
 		state->card->free_pcm_channel(state->card, dmabuf->channel->num);
 	}
@@ -2495,11 +2535,10 @@ static unsigned int ali_get_spdif_in_rate(struct trident_card *card)
 static int ali_setup_multi_channels(struct trident_card *card, int chan_nums)
 {
 	unsigned long dwValue;
+	
 	if (chan_nums == 6) {
 		dwValue = inl(TRID_REG(card, ALI_SCTRL)) | 0x000f0000;
 		outl(dwValue, TRID_REG(card, ALI_SCTRL));
-		dwValue = inl(TRID_REG(card, ALI_GLOBAL_CONTROL)) | 0x07800000;
-		outl(dwValue, TRID_REG(card, ALI_GLOBAL_CONTROL));
 	}
 	return 1;
 }
@@ -2517,7 +2556,7 @@ static void ali_free_pcm_channel(struct trident_card *card, unsigned int channel
 	card->banks[bank].bitmap &= ~(1 << (channel));
 }
 
-static int ali_allocate_multi_channels(struct trident_state *state, int chan_nums)
+static int ali_allocate_other_states_resources(struct trident_state *state, int chan_nums)
 {
 	struct trident_card *card = state->card;
 	struct trident_state *s;
@@ -2530,26 +2569,26 @@ static int ali_allocate_multi_channels(struct trident_state *state, int chan_num
 	if (chan_nums == 6) {
 		for(i = 0;(i < ALI_CHANNELS) && (state_count != 4); i++) {
 			if (!card->states[i]) {
-				if (!(bank->bitmap & (1 << ali_multi_channels[state_count]))) {
-					bank->bitmap |= (1 << ali_multi_channels[state_count]);
-					channel = &bank->channels[ali_multi_channels[state_count]];
-					channel->num = ali_multi_channels[state_count];
+				if (!(bank->bitmap & (1 << ali_multi_channels_5_1[state_count]))) {
+					bank->bitmap |= (1 << ali_multi_channels_5_1[state_count]);
+					channel = &bank->channels[ali_multi_channels_5_1[state_count]];
+					channel->num = ali_multi_channels_5_1[state_count];
 				}
 				else {
 					state_count--;
 					for (; state_count >= 0; state_count--) {
 						kfree(state->other_states[state_count]);
-						ali_free_pcm_channel(card, ali_multi_channels[state_count]);
+						ali_free_pcm_channel(card, ali_multi_channels_5_1[state_count]);
 					}
 					return -EBUSY;
 				}
 				s = card->states[i] = (struct trident_state *)
 						kmalloc(sizeof(struct trident_state), GFP_KERNEL);
 				if (!s) {
-					ali_free_pcm_channel(card, ali_multi_channels[state_count]);
+					ali_free_pcm_channel(card, ali_multi_channels_5_1[state_count]);
 					state_count--;
 					for (; state_count >= 0; state_count--) {						
-						ali_free_pcm_channel(card, ali_multi_channels[state_count]);
+						ali_free_pcm_channel(card, ali_multi_channels_5_1[state_count]);
 						kfree(state->other_states[state_count]);
 					}
 					return -ENOMEM;
@@ -2562,7 +2601,7 @@ static int ali_allocate_multi_channels(struct trident_state *state, int chan_num
 				s->magic = card->magic;
 				s->card = card;
 				s->virt = i;
-				
+				ali_enable_special_channel(s);
 				state->other_states[state_count++] = s;
 			}
 		}
@@ -2571,7 +2610,7 @@ static int ali_allocate_multi_channels(struct trident_state *state, int chan_num
 			state_count--;
 			for (; state_count >= 0; state_count--) {
 				kfree(state->other_states[state_count]);
-				ali_free_pcm_channel(card, ali_multi_channels[state_count]);
+				ali_free_pcm_channel(card, ali_multi_channels_5_1[state_count]);
 			}
 			return -EBUSY;
 		}
@@ -2791,32 +2830,34 @@ protection is no harm because all DMAs of multi-channels and interrupt
 depend on a master state's DMA, and changing the counters of the master
 state DMA is protected by a spinlock.
 */
-static unsigned int ali_write_5_1(struct trident_state *state,  const char *buf, int cnt_for_multi_channel)
+static int ali_write_5_1(struct trident_state *state,  const char *buf, int cnt_for_multi_channel, unsigned int *copy_count, unsigned int *state_cnt)
 {
 	
 	struct dmabuf *dmabuf = &state->dmabuf;
 	struct dmabuf *dmabuf_temp;
 	const char *buffer = buf;
 	unsigned swptr, other_dma_nums, sample_s;
-	unsigned int i, loop, state_cnt = 0;
+	unsigned int i, loop;
 	
 	other_dma_nums = 4;
 	sample_s = sample_size[dmabuf->fmt] >> 1;
 	swptr = dmabuf->swptr;
-	
+
 	if ((i = state->multi_channels_adjust_count) > 0) {
 		if (i == 1) {
-			copy_from_user(dmabuf->rawbuf + swptr, buffer, sample_s);
-			seek_offset(swptr, buffer, cnt_for_multi_channel, sample_s);
+			if (copy_from_user(dmabuf->rawbuf + swptr, buffer, sample_s))
+				return -EFAULT;
+			seek_offset(swptr, buffer, cnt_for_multi_channel, sample_s, *copy_count);
 			i--;
-			state_cnt += sample_s;
+			(*state_cnt) += sample_s;
 			state->multi_channels_adjust_count++;
 		}
 		else	i = i - (state->chans_num - other_dma_nums);
 		for (; (i < other_dma_nums) && (cnt_for_multi_channel > 0); i++) {
 			dmabuf_temp = &state->other_states[i]->dmabuf;
-			copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
-			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s);
+			if (copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s))
+				return -EFAULT;
+			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s, *copy_count);
 		}
 		if (cnt_for_multi_channel == 0)
 			state->multi_channels_adjust_count += i;
@@ -2824,46 +2865,53 @@ static unsigned int ali_write_5_1(struct trident_state *state,  const char *buf,
 	if (cnt_for_multi_channel > 0) {
 		loop = cnt_for_multi_channel / (state->chans_num * sample_s);
 		for (i = 0; i < loop; i++) {
-			copy_from_user(dmabuf->rawbuf + swptr, buffer, sample_s * 2);
-			seek_offset(swptr, buffer, cnt_for_multi_channel, sample_s * 2);
+			if (copy_from_user(dmabuf->rawbuf + swptr, buffer, sample_s * 2))
+				return -EFAULT;
+			seek_offset(swptr, buffer, cnt_for_multi_channel, sample_s * 2, *copy_count);
+			(*state_cnt) += (sample_s * 2);
 		
 			dmabuf_temp = &state->other_states[0]->dmabuf;
-			copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
-			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s);
+			if (copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s))
+				return -EFAULT;
+			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s, *copy_count);
 		
 			dmabuf_temp = &state->other_states[1]->dmabuf;
-			copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
-			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s);
+			if (copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s))
+				return -EFAULT;
+			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s, *copy_count);
 		
 			dmabuf_temp = &state->other_states[2]->dmabuf;
-			copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
-			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s);
+			if (copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s))
+				return -EFAULT;
+			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s, *copy_count);
 				
 			dmabuf_temp = &state->other_states[3]->dmabuf;
-			copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
-			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s);
+			if (copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s))
+				return -EFAULT;
+			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s, *copy_count);
 		}
-		
-		state_cnt += (sample_s * 2 * loop);
 		
 		if (cnt_for_multi_channel > 0) {
 			state->multi_channels_adjust_count = cnt_for_multi_channel / sample_s;
 			
-			copy_from_user(dmabuf->rawbuf + swptr, buffer, sample_s);
-			seek_offset(swptr, buffer, cnt_for_multi_channel, sample_s);			
-			state_cnt += sample_s;
+			if (copy_from_user(dmabuf->rawbuf + swptr, buffer, sample_s))
+				return -EFAULT;
+			seek_offset(swptr, buffer, cnt_for_multi_channel, sample_s, *copy_count);			
+			(*state_cnt) += sample_s;
 			
 			if (cnt_for_multi_channel > 0) {
-				copy_from_user(dmabuf->rawbuf + swptr, buffer, sample_s);
-				seek_offset(swptr, buffer, cnt_for_multi_channel, sample_s);
-				state_cnt += sample_s;
+				if (copy_from_user(dmabuf->rawbuf + swptr, buffer, sample_s))
+					return -EFAULT;
+				seek_offset(swptr, buffer, cnt_for_multi_channel, sample_s, *copy_count);
+				(*state_cnt) += sample_s;
 			
 				if (cnt_for_multi_channel > 0) {
 					loop = state->multi_channels_adjust_count - (state->chans_num - other_dma_nums);
 					for (i = 0; i < loop; i++) {
 						dmabuf_temp = &state->other_states[i]->dmabuf;
-						copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
-						seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s);
+						if (copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s))
+							return -EFAULT;
+						seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s, *copy_count);
 					}
 				}
 			}
@@ -2875,7 +2923,25 @@ static unsigned int ali_write_5_1(struct trident_state *state,  const char *buf,
 		dmabuf_temp = &state->other_states[i]->dmabuf;
 		dmabuf_temp->swptr = dmabuf_temp->swptr % dmabuf_temp->dmasize;
 	}
-	return state_cnt;
+	return *state_cnt;
+}
+
+static void ali_free_other_states_resources(struct trident_state *state)
+{
+	int i;
+	struct trident_card *card = state->card;
+	struct trident_state *s;
+	unsigned other_states_count;
+	
+	other_states_count = state->chans_num - 2;	/* except PCM L/R channels*/
+	for ( i = 0; i < other_states_count; i++) {
+		s = state->other_states[i];
+		dealloc_dmabuf(s);
+		ali_disable_special_channel(s->card, s->dmabuf.channel->num);
+		state->card->free_pcm_channel(s->card, s->dmabuf.channel->num);
+		card->states[s->virt] = NULL;
+		kfree(s);
+	}
 }
 
 #ifdef CONFIG_PROC_FS

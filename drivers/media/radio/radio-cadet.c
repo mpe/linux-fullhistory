@@ -12,6 +12,10 @@
  * Scott McGrath    (smcgrath@twilight.vtc.vsc.edu)
  * William McGrath  (wmcgrath@twilight.vtc.vsc.edu)
  *
+ * History:
+ * 2000-04-29	Russell Kroll <rkroll@exploits.org>
+ *		Added ISAPnP detection for Linux 2.3/2.4
+ *
 */
 
 #include <linux/module.h>	/* Modules 			*/
@@ -40,14 +44,23 @@ static __u8 rdsin=0,rdsout=0,rdsstat=0;
 static unsigned char rdsbuf[RDS_BUFFER];
 static int cadet_lock=0;
 
+#ifndef MODULE
+static int cadet_probe(void);
+#endif
+
+#ifdef CONFIG_ISAPNP
+#include <linux/isapnp.h>
+
+struct pci_dev *dev;
+static int isapnp_cadet_probe(void);
+#endif
+
 /*
  * Signal Strength Threshold Values
  * The V4L API spec does not define any particular unit for the signal 
  * strength value.  These values are in microvolts of RF at the tuner's input.
  */
 static __u16 sigtable[2][4]={{5,10,30,150},{28,40,63,1000}};
-
-
 
 void cadet_wake(unsigned long qnum)
 {
@@ -542,7 +555,32 @@ static struct video_device cadet_radio=
 	NULL
 };
 
-#ifndef MODULE
+#ifdef CONFIG_ISAPNP
+static int isapnp_cadet_probe(void)
+{
+	dev = isapnp_find_dev (NULL, ISAPNP_VENDOR('M','S','M'),
+	                       ISAPNP_FUNCTION(0x0c24), NULL);
+
+	if (!dev)
+		return -ENODEV;
+	if (dev->prepare(dev)<0)
+		return -EAGAIN;
+	if (!(dev->resource[0].flags & IORESOURCE_IO))
+		return -ENODEV;
+	if (dev->activate(dev)<0) {
+		printk ("radio-cadet: isapnp configure failed (out of resources?)\n");
+		return -ENOMEM;
+	}
+
+	io = dev->resource[0].start;
+
+	printk ("radio-cadet: ISAPnP reports card at %#x\n", io);
+
+	return io;
+}
+#endif		/* CONFIG_ISAPNP */
+
+#ifdef MODULE
 static int cadet_probe(void)
 {
         static int iovals[8]={0x330,0x332,0x334,0x336,0x338,0x33a,0x33c,0x33e};
@@ -559,13 +597,20 @@ static int cadet_probe(void)
 	}
 	return -1;
 }
-#endif
+#endif		/* MODULE */
 
 static int __init cadet_init(void)
 {
-#ifndef MODULE        
+#ifdef CONFIG_ISAPNP
+	io = isapnp_cadet_probe();
+
+	if (io < 0)
+		return (io);
+#else
+#ifndef MODULE		/* only probe on non-ISAPnP monolithic compiles */
 	io = cadet_probe ();
-#endif
+#endif /* MODULE */
+#endif /* CONFIG_ISAPNP */
 
         if(io < 0) {
 #ifdef MODULE        
@@ -596,6 +641,11 @@ static void __exit cadet_cleanup_module(void)
 {
 	video_unregister_device(&cadet_radio);
 	release_region(io,2);
+
+#ifdef CONFIG_ISAPNP
+	if (dev)
+		dev->deactivate(dev);
+#endif
 }
 
 module_init(cadet_init);

@@ -254,9 +254,6 @@ extern void update_mmu_cache(struct vm_area_struct * vma,
 #define pte_to_swp_entry(pte)	((swp_entry_t) { pte_val(pte) })
 #define swp_entry_to_pte(x)	((pte_t) { (x).val })
 
-#define module_map      vmalloc
-#define module_unmap    vfree
-
 #include <asm-generic/pgtable.h>
 
 #endif /* !__ASSEMBLY__ */

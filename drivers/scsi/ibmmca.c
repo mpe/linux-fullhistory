@@ -1796,8 +1796,6 @@ static int device_exists (int host_index, int ldn, int *block_length,
 
 /*--------------------------------------------------------------------*/
    
-#ifdef CONFIG_SCSI_IBMMCA
-
 void internal_ibmmca_scsi_setup (char *str, int *ints)
 {
    int i, j, io_base, id_base;
@@ -1851,8 +1849,6 @@ void internal_ibmmca_scsi_setup (char *str, int *ints)
      }
    return;
 }
-
-#endif
 
 /*--------------------------------------------------------------------*/
 

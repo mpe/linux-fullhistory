@@ -464,7 +464,7 @@ void __init ide_init_amd7409 (ide_hwif_t *hwif)
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 }
 
-void ide_dmacapable_amd7409 (ide_hwif_t *hwif, unsigned long dmabase)
+void __init ide_dmacapable_amd7409 (ide_hwif_t *hwif, unsigned long dmabase)
 {
 	ide_setup_dma(hwif, dmabase, 8);
 }

@@ -28,8 +28,6 @@
 #include <video/fbcon-cfb4.h>
 #include <video/fbcon-cfb8.h>
 
-#define arraysize(x)    (sizeof(x)/sizeof(*(x)))
-
 static struct display disp;
 static struct fb_info fb_info;
 
@@ -107,7 +105,7 @@ static void hpfb_encode_var(struct fb_var_screeninfo *var,
 	var->lower_margin=0;
 	var->hsync_len=0;
 	var->vsync_len=0;
-	for(i=0;i<arraysize(var->reserved);i++)
+	for(i=0;i<ARRAY_SIZE(var->reserved);i++)
 		var->reserved[i]=0;
 }
 

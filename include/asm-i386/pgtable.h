@@ -340,9 +340,6 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 #define pte_to_swp_entry(pte)		((swp_entry_t) { (pte).pte_low })
 #define swp_entry_to_pte(x)		((pte_t) { (x).val })
 
-#define module_map      vmalloc
-#define module_unmap    vfree
-
 #endif /* !__ASSEMBLY__ */
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */

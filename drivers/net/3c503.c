@@ -324,10 +324,10 @@ el2_open(struct net_device *dev)
 	do {
 	    if (request_irq (*irqp, NULL, 0, "bogus", dev) != -EBUSY) {
 		/* Twinkle the interrupt, and check if it's seen. */
-		autoirq_setup(0);
+		unsigned long cookie = probe_irq_on();
 		outb_p(0x04 << ((*irqp == 9) ? 2 : *irqp), E33G_IDCFR);
 		outb_p(0x00, E33G_IDCFR);
-		if (*irqp == autoirq_report(0)	 /* It's a good IRQ line! */
+		if (*irqp == probe_irq_off(cookie)	 /* It's a good IRQ line! */
 		    && request_irq (dev->irq = *irqp, ei_interrupt, 0, ei_status.name, dev) == 0)
 		    break;
 	    }
@@ -625,9 +625,6 @@ init_module(void)
 {
 	int this_dev, found = 0;
 
-	if (load_8390_module("3c503.c"))
-		return -ENOSYS;
-
 	for (this_dev = 0; this_dev < MAX_EL2_CARDS; this_dev++) {
 		struct net_device *dev = &dev_el2[this_dev];
 		dev->irq = irq[this_dev];
@@ -643,7 +640,6 @@ init_module(void)
 			if (found != 0) {	/* Got at least one. */
 				return 0;
 			}
-			unload_8390_module();
 			return -ENXIO;
 		}
 		found++;
@@ -666,7 +662,6 @@ cleanup_module(void)
 			kfree(priv);
 		}
 	}
-	unload_8390_module();
 }
 #endif /* MODULE */
 

@@ -62,15 +62,13 @@ static int max_interrupt_work = 20;
 static int multicast_filter_limit = 128;
 
 #define sis900_debug debug
-static int sis900_debug = 0;
+static int sis900_debug;
 
 /* Time in jiffies before concluding the transmitter is hung. */
 #define TX_TIMEOUT  (4*HZ)
 /* SiS 900 is capable of 32 bits BM DMA */
 #define SIS900_DMA_MASK 0xffffffff
 
-static struct net_device * sis900_mac_probe (struct pci_dev * pci_dev,
-					     char *card_name);
 enum {
 	SIS_900 = 0,
 	SIS_7016
@@ -172,38 +170,8 @@ static void set_rx_mode(struct net_device *net_dev);
 static void sis900_reset(struct net_device *net_dev);
 static void sis630e_set_eq(struct net_device *net_dev);
 
-/* walk through every ethernet PCI devices to see if some of them are matched with our card list*/
-static int __init sis900_probe (struct pci_dev *pci_dev, const struct pci_device_id *pci_id)
-{
-	u32 pci_io_base;
-
-	if (!pci_dma_supported(pci_dev, SIS900_DMA_MASK)) {
-		printk(KERN_ERR "sis900.c: architecture does not support "
-		       "32bit PCI busmaster DMA\n");
-		return -ENODEV;
-	}
-
-	pci_io_base = pci_resource_start(pci_dev, 0);
-	if (check_region(pci_io_base, SIS900_TOTAL_SIZE)) {
-		printk(KERN_ERR "sis900.c: can't allocate I/O space at 0x%08x\n",
-		       pci_io_base);
-		return -ENODEV;
-	}
-
-	/* setup various bits in PCI command register */
-	if (pci_enable_device (pci_dev))
-		return -ENODEV;
-	pci_set_master(pci_dev);
-
-	/* do the real low level jobs */
-	if (sis900_mac_probe(pci_dev, card_names[pci_id->driver_data]) == NULL)
-		return -ENODEV;
-
-	return 0;
-}
-
 /* older SiS900 and friends, use EEPROM to store MAC address */
-static int sis900_get_mac_addr(struct pci_dev * pci_dev, struct net_device *net_dev)
+static int __devinit sis900_get_mac_addr(struct pci_dev * pci_dev, struct net_device *net_dev)
 {
 	long ioaddr = pci_resource_start(pci_dev, 0);
 	u16 signature;
@@ -225,7 +193,7 @@ static int sis900_get_mac_addr(struct pci_dev * pci_dev, struct net_device *net_
 }
 
 /* SiS630E model, use APC CMOS RAM to store MAC address */
-static int sis630e_get_mac_addr(struct pci_dev * pci_dev, struct net_device *net_dev)
+static int __devinit sis630e_get_mac_addr(struct pci_dev * pci_dev, struct net_device *net_dev)
 {
 	struct pci_dev *isa_bridge = NULL;
 	u8 reg;
@@ -247,17 +215,36 @@ static int sis630e_get_mac_addr(struct pci_dev * pci_dev, struct net_device *net
 	return 1;
 }
 
-static struct net_device * __init sis900_mac_probe (struct pci_dev * pci_dev, char * card_name)
+static int __devinit sis900_probe (struct pci_dev *pci_dev, const struct pci_device_id *pci_id)
 {
 	struct sis900_private *sis_priv;
 	long ioaddr = pci_resource_start(pci_dev, 0);
-	struct net_device *net_dev = NULL;
+	struct net_device *net_dev;
 	int irq = pci_dev->irq;
 	int i, ret = 0;
 	u8 revision;
+	char *card_name = card_names[pci_id->driver_data];
 
-	if ((net_dev = init_etherdev(net_dev, 0)) == NULL)
-		return NULL;
+	if (!pci_dma_supported(pci_dev, SIS900_DMA_MASK)) {
+		printk(KERN_ERR "sis900.c: architecture does not support "
+		       "32bit PCI busmaster DMA\n");
+		return -ENODEV;
+	}
+
+	/* setup various bits in PCI command register */
+	if (pci_enable_device (pci_dev))
+		return -ENODEV;
+	pci_set_master(pci_dev);
+
+	net_dev = init_etherdev(NULL, sizeof(struct sis900_private));
+	if (!net_dev)
+		return -ENOMEM;
+
+	if (!request_region(ioaddr, SIS900_TOTAL_SIZE, net_dev->name)) {
+		printk(KERN_ERR "sis900.c: can't allocate I/O space at 0x%lX\n", ioaddr);
+		ret = -EBUSY;
+		goto err_out;
+	}
 
 	pci_read_config_byte(pci_dev, PCI_CLASS_REVISION, &revision);
 	if (revision == SIS630E_REV || revision == SIS630EA1_REV)
@@ -268,8 +255,8 @@ static struct net_device * __init sis900_mac_probe (struct pci_dev * pci_dev, ch
 		ret = sis900_get_mac_addr(pci_dev, net_dev);
 
 	if (ret == 0) {
-		unregister_netdevice(net_dev);
-		return NULL;
+		ret = -ENODEV;
+		goto err_out_region;
 	}
 
 	/* print some information about our NIC */
@@ -279,16 +266,9 @@ static struct net_device * __init sis900_mac_probe (struct pci_dev * pci_dev, ch
 		printk("%2.2x:", (u8)net_dev->dev_addr[i]);
 	printk("%2.2x.\n", net_dev->dev_addr[i]);
 
-	if ((net_dev->priv = kmalloc(sizeof(struct sis900_private), GFP_KERNEL)) == NULL) {
-		unregister_netdevice(net_dev);
-		return NULL;
-	}
-	
 	sis_priv = net_dev->priv;
-	memset(sis_priv, 0, sizeof(struct sis900_private));
 
 	/* We do a request_region() to register /proc/ioports info. */
-	request_region(ioaddr, SIS900_TOTAL_SIZE, net_dev->name);
 	net_dev->base_addr = ioaddr;
 	net_dev->irq = irq;
 	sis_priv->pci_dev = pci_dev;
@@ -296,10 +276,8 @@ static struct net_device * __init sis900_mac_probe (struct pci_dev * pci_dev, ch
 	
 	/* probe for mii transciver */
 	if (sis900_mii_probe(net_dev) == 0) {
-		unregister_netdev(net_dev);
-		kfree(sis_priv);
-		release_region(ioaddr, SIS900_TOTAL_SIZE);
-		return NULL;
+		ret = -ENODEV;
+		goto err_out_region;
 	}
 
 	pci_dev->driver_data = net_dev;
@@ -315,7 +293,14 @@ static struct net_device * __init sis900_mac_probe (struct pci_dev * pci_dev, ch
 	net_dev->tx_timeout = sis900_tx_timeout;
 	net_dev->watchdog_timeo = TX_TIMEOUT;
 
-	return net_dev;
+	return 0;
+
+err_out_region:
+	release_region(ioaddr, SIS900_TOTAL_SIZE);
+err_out:
+	unregister_netdev(net_dev);
+	kfree(net_dev);
+	return ret;
 }
 
 static int __init sis900_mii_probe (struct net_device * net_dev)
@@ -1431,15 +1416,12 @@ static void sis900_reset(struct net_device *net_dev)
 	outl(PESEL, ioaddr + cfg);
 }
 
-static void __exit sis900_remove(struct pci_dev *pci_dev)
+static void __devexit sis900_remove(struct pci_dev *pci_dev)
 {
 	struct net_device *net_dev = pci_dev->driver_data;
-	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;
 		
 	unregister_netdev(net_dev);
 	release_region(net_dev->base_addr, SIS900_TOTAL_SIZE);
-
-	kfree(sis_priv);
 	kfree(net_dev);
 }
 
@@ -1454,16 +1436,9 @@ static struct pci_driver sis900_pci_driver = {
 
 static int __init sis900_init_module(void)
 {
-	if (!pci_present())   /* No PCI bus in this machine! */
-		return -ENODEV;
-
 	printk(KERN_INFO "%s", version);
 
-	if (!pci_register_driver(&sis900_pci_driver)) {
-		pci_unregister_driver(&sis900_pci_driver);
-                return -ENODEV;
-	}
-	return 0;
+	return pci_module_init(&sis900_pci_driver);
 }
 
 static void __exit sis900_cleanup_module(void)

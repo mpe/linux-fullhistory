@@ -301,9 +301,6 @@ extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 #define pte_to_swp_entry(pte)		((swp_entry_t) { pte_val(pte) })
 #define swp_entry_to_pte(x)		((pte_t) { (x).val })
 
-#define module_map	vmalloc
-#define module_unmap	vfree
-
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
 #define PageSkip(page)		(0)
 #define kern_addr_valid(addr)	(1)

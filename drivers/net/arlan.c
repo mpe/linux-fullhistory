@@ -1276,11 +1276,12 @@ static int arlan_open(struct net_device *dev)
 		return ret;
 
 	arlan = ((struct arlan_private *) dev->priv)->card;
-	if (request_irq(dev->irq, &arlan_interrupt, 0, dev->name, dev))
+	ret = request_irq(dev->irq, &arlan_interrupt, 0, dev->name, dev);
+	if (ret)
 	{
 		printk(KERN_ERR "%s: unable to get IRQ %d .\n",
 			dev->name, dev->irq);
-		return -EAGAIN;
+		return ret;
 	}
 
 

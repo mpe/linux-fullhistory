@@ -664,25 +664,10 @@ oaknet_dma_error(struct net_device *dev, const char *name)
  */
 static int __init oaknet_init_module (void)
 {
-	int status;
-
-	/*
-	 * We're dependent on the 8390 generic driver module, make
-	 * sure its symbols are loaded.
-	 */
-
-	if (load_8390_module("oaknet.c"))
-		return (-ENOSYS);
-
 	if (oaknet_devs != NULL)
 		return (-EBUSY);
 
-	status = oaknet_init()
-
-	if (status != 0)
-		unload_8390_module();
-
-	return (status);
+	return (oaknet_init());
 }
 
 /*
@@ -704,7 +689,6 @@ static void __exit oaknet_cleanup_module (void)
 
 	oaknet_devs = NULL;
 
-	unload_8390_module();
 }
 
 module_init(oaknet_init_module);

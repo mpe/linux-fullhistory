@@ -117,7 +117,6 @@ struct net_local {
 	uint tx_started:1;			/* Packets are on the Tx queue. */
 	uint tx_queue_ready:1;			/* Tx queue is ready to be sent. */
 	uint rx_started:1;			/* Packets are Rxing. */
-	uint invalid_irq:1;
 	uchar tx_queue;				/* Number of packet on the Tx queue. */
 	char mca_slot;				/* -1 means ISA */
 	ushort tx_queue_len;			/* Current length of the Tx queue. */
@@ -203,8 +202,6 @@ int at1700_probe(struct net_device *dev)
 
 	for (i = 0; at1700_probe_list[i]; i++) {
 		int ioaddr = at1700_probe_list[i];
-		if (check_region(ioaddr, AT1700_IO_EXTENT))
-			continue;
 		if (at1700_probe1(dev, ioaddr) == 0)
 			return 0;
 	}
@@ -219,15 +216,18 @@ int at1700_probe(struct net_device *dev)
    that can be done is checking a few bits and then diving right into an
    EEPROM read. */
 
-int at1700_probe1(struct net_device *dev, int ioaddr)
+static int at1700_probe1(struct net_device *dev, int ioaddr)
 {
 	char fmv_irqmap[4] = {3, 7, 10, 15};
 	char fmv_irqmap_pnp[8] = {3, 4, 5, 7, 9, 10, 11, 15};
 	char at1700_irqmap[8] = {3, 4, 5, 9, 10, 11, 14, 15};
 	unsigned int i, irq, is_fmv18x = 0, is_at1700 = 0;
-	int slot;
+	int slot, ret = -ENODEV;
 	struct net_local *lp;
 	
+	if (!request_region(ioaddr, AT1700_IO_EXTENT, dev->name))
+		return -EBUSY;
+
 		/* Resetting the chip doesn't reset the ISA interface, so don't bother.
 	   That means we have to be careful with the register values we probe for.
 	   */
@@ -306,8 +306,10 @@ int at1700_probe1(struct net_device *dev, int ioaddr)
 		&& inb(ioaddr + SAPROM + 1) == 0x00
 		&& inb(ioaddr + SAPROM + 2) == 0x0e)
 		is_fmv18x = 1;
-	else
-		return -ENODEV;
+	else {
+		ret = -ENODEV;
+		goto err_out;
+	}
 			
 #ifdef CONFIG_MCA
 found:
@@ -328,18 +330,16 @@ found:
 				if (irq == fmv_irqmap_pnp[i])
 					break;
 			}
-			if (i == 8)
-				return -ENODEV;
+			if (i == 8) {
+				goto err_out;
+				ret = -ENODEV;
+			}
 		} else {
 			if (fmv18x_probe_list[inb(ioaddr + IOCONFIG) & 0x07] != ioaddr)
 				return -ENODEV;
 			irq = fmv_irqmap[(inb(ioaddr + IOCONFIG)>>6) & 0x03];
 		}
 	}
-
-	/* Grab the region so that we can find another board if the IRQ request
-	   fails. */
-	request_region(ioaddr, AT1700_IO_EXTENT, dev->name);
 
 	printk("%s: %s found at %#3x, IRQ %d, address ", dev->name,
 		   is_at1700 ? "AT1700" : "FMV-18X", ioaddr, irq);
@@ -413,8 +413,10 @@ found:
 
 	/* Initialize the device structure. */
 	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
-	if (dev->priv == NULL)
-		return -ENOMEM;
+	if (dev->priv == NULL) {
+		ret = -ENOMEM;
+		goto err_out;
+	}
 	memset(dev->priv, 0, sizeof(struct net_local));
 
 	dev->open		= net_open;
@@ -434,14 +436,21 @@ found:
 	lp->jumpered = is_fmv18x;
 	lp->mca_slot = slot;
 	/* Snarf the interrupt vector now. */
-	if (request_irq(irq, &net_interrupt, 0, dev->name, dev)) {
+	ret = request_irq(irq, &net_interrupt, 0, dev->name, dev);
+	if (ret) {
 		printk ("  AT1700 at %#3x is unusable due to a conflict on"
 				"IRQ %d.\n", ioaddr, irq);
-		lp->invalid_irq = 1;
-		return 0;
+		goto err_out_priv;
 	}
 
 	return 0;
+
+err_out_priv:
+	kfree(dev->priv);
+	dev->priv = NULL;
+err_out:
+	release_region(ioaddr, AT1700_IO_EXTENT);
+	return ret;
 }
 
 
@@ -866,8 +875,7 @@ set_rx_mode(struct net_device *dev)
 }
 
 #ifdef MODULE
-static struct net_device dev_at1700 = { init: at1700_probe };
-
+static struct net_device dev_at1700;
 static int io = 0x260;
 static int irq;
 
@@ -881,6 +889,7 @@ int init_module(void)
 		printk("at1700: You should not use auto-probing with insmod!\n");
 	dev_at1700.base_addr = io;
 	dev_at1700.irq       = irq;
+	dev_at1700.init      = at1700_probe;
 	if (register_netdev(&dev_at1700) != 0) {
 		printk("at1700: register_netdev() returned non-zero.\n");
 		return -EIO;

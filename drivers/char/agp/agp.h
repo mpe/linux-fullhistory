@@ -144,8 +144,6 @@ struct agp_bridge_data {
 #define min(a,b)	(((a)<(b))?(a):(b))
 #endif
 
-#define arraysize(x)            (sizeof(x)/sizeof(*(x)))
-
 #define AGPGART_MODULE_NAME	"agpgart"
 #define PFX			AGPGART_MODULE_NAME ": "
 

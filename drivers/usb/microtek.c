@@ -338,6 +338,7 @@ static inline void mts_wait_abort(struct mts_desc* desc)
 
 	while( !atomic_read(&desc->lock.count) ) {
 /* Is there a function to check if the semaphore is locked? */
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout( MTS_ABORT_TIMEOUT ); 
 		MTS_DEBUG_GOT_HERE();
 		mts_urb_abort(desc);

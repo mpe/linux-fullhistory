@@ -125,7 +125,7 @@ ntfs_init_upcase(ntfs_inode *upcase)
 	io.param=(char*)upcase->vol->upcase;
 	io.size=2*UPCASE_LENGTH;
 	ntfs_read_attr(upcase,upcase->vol->at_data,0,0,&io);
-	upcase->vol->upcase_length = io.size;
+	upcase->vol->upcase_length = io.size / 2;
 }
 
 static int

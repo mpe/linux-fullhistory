@@ -698,7 +698,7 @@ void __init ide_init_hpt366 (ide_hwif_t *hwif)
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 }
 
-void ide_dmacapable_hpt366 (ide_hwif_t *hwif, unsigned long dmabase)
+void __init ide_dmacapable_hpt366 (ide_hwif_t *hwif, unsigned long dmabase)
 {
 	byte masterdma = 0, slavedma = 0;
 	byte dma_new = 0, dma_old = inb(dmabase+2);

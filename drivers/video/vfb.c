@@ -32,9 +32,6 @@
 #include <video/fbcon-cfb32.h>
 
 
-#define arraysize(x)	(sizeof(x)/sizeof(*(x)))
-
-
     /*
      *  RAM we reserve for the frame buffer. This defines the maximum screen
      *  size

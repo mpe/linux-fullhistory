@@ -107,8 +107,6 @@ static void cv64_dump(void);
 #define DPRINTK(fmt, args...)
 #endif
 
-#define arraysize(x)    (sizeof(x)/sizeof(*(x)))
-
 #define wb_64(regs,reg,dat) (*(((volatile unsigned char *)regs) + reg) = dat)
 #define rb_64(regs, reg) (*(((volatile unsigned char *)regs) + reg))
 
@@ -221,7 +219,7 @@ static struct {
 	}}
 };
 
-#define NUM_TOTAL_MODES    arraysize(cyberfb_predefined)
+#define NUM_TOTAL_MODES    ARRAY_SIZE(cyberfb_predefined)
 
 static int Cyberfb_inverse = 0;
 

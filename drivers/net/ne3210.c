@@ -44,7 +44,7 @@ static const char *version =
 #include "8390.h"
 
 int ne3210_probe(struct net_device *dev);
-int ne3210_probe1(struct net_device *dev, int ioaddr);
+static int ne3210_probe1(struct net_device *dev, int ioaddr);
 
 static int ne3210_open(struct net_device *dev);
 static int ne3210_close(struct net_device *dev);
@@ -112,23 +112,26 @@ int __init ne3210_probe(struct net_device *dev)
 	}
 
 	/* EISA spec allows for up to 16 slots, but 8 is typical. */
-	for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000) {
-		if (check_region(ioaddr , NE3210_IO_EXTENT))
-			continue;
+	for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000)
 		if (ne3210_probe1(dev, ioaddr) == 0)
 			return 0;
-	}
 
 	return -ENODEV;
 }
 
-int __init ne3210_probe1(struct net_device *dev, int ioaddr)
+static int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 {
-	int i;
+	int i, retval;
 	unsigned long eisa_id;
 	const char *ifmap[] = {"UTP", "?", "BNC", "AUI"};
 
-	if (inb_p(ioaddr + NE3210_ID_PORT) == 0xff) return -ENODEV;
+	if (!request_region(dev->base_addr, NE3210_IO_EXTENT, dev->name))
+		return -EBUSY;
+
+	if (inb_p(ioaddr + NE3210_ID_PORT) == 0xff) {
+		retval = -ENODEV;
+		goto out;
+	}
 
 #if NE3210_DEBUG & NE3210_D_PROBE
 	printk("ne3210-debug: probe at %#x, ID %#8x\n", ioaddr, inl(ioaddr + NE3210_ID_PORT));
@@ -140,7 +143,8 @@ int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 /*	Check the EISA ID of the card. */
 	eisa_id = inl(ioaddr + NE3210_ID_PORT);
 	if (eisa_id != NE3210_ID) {
-		return -ENODEV;
+		retval = -ENODEV;
+		goto out;
 	}
 
 	
@@ -153,14 +157,16 @@ int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 		for(i = 0; i < ETHER_ADDR_LEN; i++)
 			printk(" %02x", inb(ioaddr + NE3210_SA_PROM + i));
 		printk(" (invalid prefix).\n");
-		return -ENODEV;
+		retval = -ENODEV;
+		goto out;
 	}
 #endif
 
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk ("ne3210.c: unable to allocate memory for dev->priv!\n");
-		return -ENOMEM;
+		retval = -ENOMEM;
+		goto out;
 	}
 
 	printk("ne3210.c: NE3210 in EISA slot %d, media: %s, addr:",
@@ -181,11 +187,10 @@ int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 	}
 	printk(" IRQ %d,", dev->irq);
 
-	if (request_irq(dev->irq, ei_interrupt, 0, "ne3210", dev)) {
+	retval = request_irq(dev->irq, ei_interrupt, 0, dev->name, dev);
+	if (retval) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
-		kfree(dev->priv);
-		dev->priv = NULL;
-		return -EAGAIN;
+		goto out1;
 	}
 
 	if (dev->mem_start == 0) {
@@ -211,20 +216,16 @@ int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 			printk(KERN_CRIT "ne3210.c: Use EISA SCU to set card memory below 1MB,\n");
 			printk(KERN_CRIT "ne3210.c: or to an address above 0x%lx.\n", virt_to_bus(high_memory));
 			printk(KERN_CRIT "ne3210.c: Driver NOT installed.\n");
-			free_irq(dev->irq, dev);
-			kfree(dev->priv);
-			dev->priv = NULL;
-			return -EINVAL;
+			retval = -EINVAL;
+			goto out2;
 		}
 		dev->mem_start = (unsigned long)ioremap(dev->mem_start, NE3210_STOP_PG*0x100);
 		if (dev->mem_start == 0) {
 			printk(KERN_ERR "ne3210.c: Unable to remap card memory above 1MB !!\n");
 			printk(KERN_ERR "ne3210.c: Try using EISA SCU to set memory below 1MB.\n");
 			printk(KERN_ERR "ne3210.c: Driver NOT installed.\n");
-			free_irq(dev->irq, dev);
-			kfree(dev->priv);
-			dev->priv = NULL;
-			return -EAGAIN;
+			retval = -EAGAIN;
+			goto out2;
 		}
 		ei_status.reg0 = 1;	/* Use as remap flag */
 		printk("ne3210.c: remapped %dkB card memory to virtual address %#lx\n",
@@ -237,7 +238,6 @@ int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 
 	/* The 8390 offset is zero for the NE3210 */
 	dev->base_addr = ioaddr;
-	request_region(dev->base_addr, NE3210_IO_EXTENT, "ne3210");
 
 	ei_status.name = "NE3210";
 	ei_status.tx_start_page = NE3210_START_PG;
@@ -257,6 +257,14 @@ int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 	dev->stop = &ne3210_close;
 	NS8390_init(dev, 0);
 	return 0;
+out2:
+	free_irq(dev->irq, dev);	
+out1:
+	kfree(dev->priv);
+	dev->priv = NULL;
+out:
+	release_region(ioaddr, NE3210_IO_EXTENT);
+	return retval;
 }
 
 /*
@@ -367,9 +375,6 @@ int init_module(void)
 {
 	int this_dev, found = 0;
 
-	if (load_8390_module("ne3210.c"))
-		return -ENOSYS;
-
 	for (this_dev = 0; this_dev < MAX_NE3210_CARDS; this_dev++) {
 		struct net_device *dev = &dev_ne3210[this_dev];
 		dev->irq = irq[this_dev];
@@ -383,7 +388,6 @@ int init_module(void)
 			if (found != 0) {	/* Got at least one. */
 				return 0;
 			}
-			unload_8390_module();
 			return -ENXIO;
 		}
 		found++;
@@ -398,16 +402,15 @@ void cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_NE3210_CARDS; this_dev++) {
 		struct net_device *dev = &dev_ne3210[this_dev];
 		if (dev->priv != NULL) {
-			void *priv = dev->priv;
 			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, NE3210_IO_EXTENT);
 			if (ei_status.reg0)
 				iounmap((void *)dev->mem_start);
 			unregister_netdev(dev);
-			kfree(priv);
+			kfree(dev->priv);
+			dev->priv = NULL;
 		}
 	}
-	unload_8390_module();
 }
 #endif /* MODULE */
 

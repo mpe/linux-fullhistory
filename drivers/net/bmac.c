@@ -1270,7 +1270,7 @@ static int __init bmac_probe(void)
 
 static void __init bmac_probe1(struct device_node *bmac, int is_bmac_plus)
 {
-	int j, rev;
+	int j, rev, ret;
 	struct bmac_data *bp;
 	unsigned char *addr;
 	struct net_device *dev;
@@ -1291,7 +1291,6 @@ static void __init bmac_probe1(struct device_node *bmac, int is_bmac_plus)
 	}
 
 	dev = init_etherdev(NULL, PRIV_BYTES);
-
 	if (!dev) {
 		printk(KERN_ERR "init_etherdev failed, out of memory for BMAC %s\n",
 		       bmac->full_name);
@@ -1300,6 +1299,8 @@ static void __init bmac_probe1(struct device_node *bmac, int is_bmac_plus)
 
 	dev->base_addr = (unsigned long)
 		ioremap(bmac->addrs[0].address, bmac->addrs[0].size);
+	if (!dev->base_addr)
+		goto err_out;
 	dev->irq = bmac->intrs[0].line;
 
 	bmwrite(dev, INTDISABLE, DisableAll);
@@ -1322,18 +1323,19 @@ static void __init bmac_probe1(struct device_node *bmac, int is_bmac_plus)
 
 	bmac_get_station_address(dev, addr);
 	if (bmac_verify_checksum(dev) != 0)
-		return;
-
-	ether_setup(dev);
+		goto err_out_iounmap;
 
 	bp = (struct bmac_data *) dev->priv;
-	memset(bp, 0, sizeof(struct bmac_data));
 	bp->is_bmac_plus = is_bmac_plus;
 	bp->tx_dma = (volatile struct dbdma_regs *)
 		ioremap(bmac->addrs[1].address, bmac->addrs[1].size);
+	if (!bp->tx_dma)
+		goto err_out_iounmap;
 	bp->tx_dma_intr = bmac->intrs[1].line;
 	bp->rx_dma = (volatile struct dbdma_regs *)
 		ioremap(bmac->addrs[2].address, bmac->addrs[2].size);
+	if (!bp->rx_dma)
+		goto err_out_iounmap_tx;
 	bp->rx_dma_intr = bmac->intrs[2].line;
 
 	bp->tx_cmds = (volatile struct dbdma_cmd *) DBDMA_ALIGN(bp + 1);
@@ -1343,23 +1345,44 @@ static void __init bmac_probe1(struct device_node *bmac, int is_bmac_plus)
 	skb_queue_head_init(bp->queue);
 
 	bp->node = bmac;
-	memset(&bp->stats, 0, sizeof(bp->stats));
 	memset((char *) bp->tx_cmds, 0,
 	       (N_TX_RING + N_RX_RING + 2) * sizeof(struct dbdma_cmd));
 	/*     init_timer(&bp->tx_timeout); */
 	/*     bp->timeout_active = 0; */
 
-	if (request_irq(dev->irq, bmac_misc_intr, 0, "BMAC-misc", dev))
+	ret = request_irq(dev->irq, bmac_misc_intr, 0, "BMAC-misc", dev);
+	if (ret) {
 		printk(KERN_ERR "BMAC: can't get irq %d\n", dev->irq);
-	if (request_irq(bmac->intrs[1].line, bmac_txdma_intr, 0, "BMAC-txdma",
-			dev))
+		goto err_out_iounmap_rx;
+	}
+	ret = request_irq(bmac->intrs[1].line, bmac_txdma_intr, 0, "BMAC-txdma", dev);
+	if (ret) {
 		printk(KERN_ERR "BMAC: can't get irq %d\n", bmac->intrs[1].line);
-	if (request_irq(bmac->intrs[2].line, bmac_rxdma_intr, 0, "BMAC-rxdma",
-			dev))
+		goto err_out_irq0;
+	}
+	ret = request_irq(bmac->intrs[2].line, bmac_rxdma_intr, 0, "BMAC-rxdma", dev);
+	if (ret) {
 		printk(KERN_ERR "BMAC: can't get irq %d\n", bmac->intrs[2].line);
+		goto err_out_irq1;
+	}
 
 	bp->next_bmac = bmac_devs;
 	bmac_devs = dev;
+	return;
+
+err_out_irq1:
+	free_irq(bmac->intrs[1].line);
+err_out_irq0:
+	free_irq(dev->irq);
+err_out_iounmap_rx:
+	iounmap((void *)bp->rx_dma);
+err_out_iounmap_tx:
+	iounmap((void *)bp->tx_dma);
+err_out_iounmap:
+	iounmap((void *)dev->base_addr);
+err_out:
+	unregister_netdev(dev);
+	kfree(dev);
 }
 
 static int bmac_open(struct net_device *dev)

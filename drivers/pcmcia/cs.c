@@ -319,6 +319,8 @@ socket_info_t *pcmcia_register_socket (int slot,
     DEBUG(0, "cs: pcmcia_register_socket(0x%p)\n", ss_entry);
 
     s = kmalloc(sizeof(struct socket_info_t), GFP_KERNEL);
+    if (!s)
+    	return NULL;
     memset(s, 0, sizeof(socket_info_t));
 
     s->ss_entry = ss_entry;

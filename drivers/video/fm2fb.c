@@ -144,8 +144,6 @@ static void *fm2fb_mem;
 static unsigned long fm2fb_reg_phys;
 static volatile unsigned char *fm2fb_reg;
 
-#define arraysize(x)	(sizeof(x)/sizeof(*(x)))
-
 static int currcon = 0;
 static struct display disp;
 static struct fb_info fb_info;

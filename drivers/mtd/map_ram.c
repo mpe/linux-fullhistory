@@ -20,10 +20,16 @@ static int mapram_write (struct mtd_info *, loff_t, size_t, size_t *, const u_ch
 static int mapram_erase (struct mtd_info *, struct erase_info *);
 static void mapram_nop (struct mtd_info *);
 
-struct mtd_info *map_ram_probe(struct map_info *);
-EXPORT_SYMBOL(map_ram_probe);
+static const char im_name[] = "map_ram_probe";
 
-struct mtd_info *map_ram_probe(struct map_info *map)
+/* This routine is made available to other mtd code via
+ * inter_module_register.  It must only be accessed through
+ * inter_module_get which will bump the use count of this module.  The
+ * addresses passed back in mtd are valid as long as the use count of
+ * this module is non-zero, i.e. between inter_module_get and
+ * inter_module_put.  Keith Owens <kaos@ocs.com.au> 29 Oct 2000.
+ */
+static struct mtd_info *map_ram_probe(struct map_info *map)
 {
 	struct mtd_info *mtd;
 
@@ -63,9 +69,9 @@ struct mtd_info *map_ram_probe(struct map_info *map)
 	mtd->read = mapram_read;
 	mtd->write = mapram_write;
 	mtd->sync = mapram_nop;
+	mtd->im_name = im_name;
 	mtd->flags = MTD_CAP_RAM | MTD_VOLATILE;
 	
-	MOD_INC_USE_COUNT;
 	return mtd;
 }
 
@@ -108,3 +114,17 @@ static void mapram_nop(struct mtd_info *mtd)
 {
 	/* Nothing to see here */
 }
+
+static int __init map_ram_init(void)
+{
+	inter_module_register(im_name, THIS_MODULE, &map_ram_probe);
+	return 0;
+}
+
+static void __exit map_ram_exit(void)
+{
+	inter_module_unregister(im_name);
+}
+
+module_init(map_ram_init);
+module_exit(map_ram_exit);

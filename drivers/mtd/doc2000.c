@@ -392,7 +392,16 @@ static int DoC2k_is_alias(struct DiskOnChip *doc1, struct DiskOnChip *doc2)
 }
 
 
-void DoC2k_init(struct mtd_info *mtd)
+static const char im_name[] = "DoC2k_init";
+
+/* This routine is made available to other mtd code via
+ * inter_module_register.  It must only be accessed through
+ * inter_module_get which will bump the use count of this module.  The
+ * addresses passed back in mtd are valid as long as the use count of
+ * this module is non-zero, i.e. between inter_module_get and
+ * inter_module_put.  Keith Owens <kaos@ocs.com.au> 29 Oct 2000.
+ */
+static void DoC2k_init(struct mtd_info *mtd)
 {
 	struct DiskOnChip *this = (struct DiskOnChip *)mtd->priv;
 	struct DiskOnChip *old = NULL;
@@ -459,8 +468,6 @@ void DoC2k_init(struct mtd_info *mtd)
 	}
 }
 
-
-EXPORT_SYMBOL(DoC2k_init);
 
 static int doc_read (struct mtd_info *mtd, loff_t from, size_t len, size_t *retlen, u_char *buf)
 {
@@ -805,6 +812,12 @@ int doc_erase (struct mtd_info *mtd, struct erase_info *instr)
  *
  ****************************************************************************/
 
+static int __init init_doc2000(void)
+{
+	inter_module_register(im_name, THIS_MODULE, &DoC2k_init);
+	return 0;
+}
+
 #if LINUX_VERSION_CODE < 0x20300
 #ifdef MODULE
 #define cleanup_doc2000 cleanup_module
@@ -828,10 +841,12 @@ static void __exit cleanup_doc2000(void)
 		kfree(this->chips);
 		kfree(mtd);
 	}
+	inter_module_unregister(im_name);
 
 }
+
+module_init(init_doc2000);
 
 #if LINUX_VERSION_CODE > 0x20300
 module_exit(cleanup_doc2000);
 #endif
-

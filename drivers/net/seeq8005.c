@@ -279,11 +279,11 @@ static int __init seeq8005_probe1(struct net_device *dev, int ioaddr)
 	if (dev->irq == 0xff)
 		;			/* Do nothing: a user-level program will set it. */
 	else if (dev->irq < 2) {	/* "Auto-IRQ" */
-		autoirq_setup(0);
+		unsigned long cookie = probe_irq_on();
 		
 		outw( SEEQCMD_RX_INT_EN | SEEQCMD_SET_RX_ON | SEEQCMD_SET_RX_OFF, SEEQ_CMD );
 
-		dev->irq = autoirq_report(0);
+		dev->irq = probe_irq_off(cookie);
 		
 		if (net_debug >= 2)
 			printk(" autoirq is %d\n", dev->irq);

@@ -105,9 +105,6 @@ int __init stnic_probe(void)
   if (! MACH_SE)
     return -ENODEV;
 
-  if (load_8390_module ("stnic.c"))
-    return -ENOSYS;
-
   /* New style probing API */
   dev = init_etherdev (0, 0);
   stnic_dev = dev;
@@ -313,6 +310,4 @@ do_stnic_intr (int irq, void *dev_id, struct pt_regs *regs)
 }
 
 module_init(stnic_probe);
-/* No cleanup routine - if there were one, it should do a:
-   unload_8390_module()
-*/
+/* No cleanup routine. */

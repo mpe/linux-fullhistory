@@ -19,7 +19,7 @@
 
 
 int tulip_rx_copybreak;
-int tulip_max_interrupt_work;
+unsigned int tulip_max_interrupt_work;
 
 
 
@@ -177,21 +177,23 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	int maxrx = RX_RING_SIZE;
 	int maxtx = TX_RING_SIZE;
 	int maxoi = TX_RING_SIZE;
-	int work_count = tulip_max_interrupt_work;
-	
+	unsigned int work_count = tulip_max_interrupt_work;
+
+	/* Let's see whether the interrupt really is for us */
+	csr5 = inl(ioaddr + CSR5);
+
+	if ((csr5 & (NormalIntr|AbnormalIntr)) == 0)
+		return;
+
 	tp->nir++;
 
 	do {
-		csr5 = inl(ioaddr + CSR5);
 		/* Acknowledge all of the current interrupt sources ASAP. */
 		outl(csr5 & 0x0001ffff, ioaddr + CSR5);
 
 		if (tulip_debug > 4)
 			printk(KERN_DEBUG "%s: interrupt  csr5=%#8.8x new csr5=%#8.8x.\n",
 				   dev->name, csr5, inl(dev->base_addr + CSR5));
-
-		if ((csr5 & (NormalIntr|AbnormalIntr)) == 0)
-			break;
 
 		if (csr5 & (RxIntr | RxNoBuf)) {
 			rx += tulip_rx(dev);
@@ -221,7 +223,7 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 							 PCI_DMA_TODEVICE);
 					continue;
 				}
-				
+
 				if (status & 0x8000) {
 					/* There was an major error, log it. */
 #ifndef final_version
@@ -256,17 +258,14 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 
 #ifndef final_version
 			if (tp->cur_tx - dirty_tx > TX_RING_SIZE) {
-				printk(KERN_ERR "%s: Out-of-sync dirty pointer, %d vs. %d, full=%d.\n",
-					   dev->name, dirty_tx, tp->cur_tx, tp->tx_full);
+				printk(KERN_ERR "%s: Out-of-sync dirty pointer, %d vs. %d.\n",
+					   dev->name, dirty_tx, tp->cur_tx);
 				dirty_tx += TX_RING_SIZE;
 			}
 #endif
 
-			if (tp->tx_full && tp->cur_tx - dirty_tx  < TX_RING_SIZE - 2) {
-				/* The ring is no longer full, clear tbusy. */
-				tp->tx_full = 0;
+			if (tp->cur_tx - dirty_tx < TX_RING_SIZE - 2)
 				netif_wake_queue(dev);
-			}
 
 			tp->dirty_tx = dirty_tx;
 			if (csr5 & TxDied) {
@@ -330,22 +329,28 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
                        /* Acknowledge all interrupt sources. */
                         outl(0x8001ffff, ioaddr + CSR5);
                         if (tp->flags & HAS_INTR_MITIGATION) {
-                     /* Josip Loncaric at ICASE did extensive experimentation 
+                     /* Josip Loncaric at ICASE did extensive experimentation
 			to develop a good interrupt mitigation setting.*/
                                 outl(0x8b240000, ioaddr + CSR11);
                         } else {
-                          /* Mask all interrupting sources, set timer to 
+                          /* Mask all interrupting sources, set timer to
 				re-enable. */
                                 outl(((~csr5) & 0x0001ebef) | AbnormalIntr | TimerInt, ioaddr + CSR7);
                                 outl(0x0012, ioaddr + CSR11);
                         }
 			break;
 		}
-	} while (work_count-- > 0);
+
+		work_count--;
+		if (work_count == 0)
+			break;
+
+		csr5 = inl(ioaddr + CSR5);
+	} while ((csr5 & (NormalIntr|AbnormalIntr)) != 0);
 
 	tulip_refill_rx(dev);
 
-	/* check if we card is in suspend mode */
+	/* check if the card is in suspend mode */
 	entry = tp->dirty_rx % RX_RING_SIZE;
 	if (tp->rx_buffers[entry].skb == NULL) {
 		if (tulip_debug > 1)

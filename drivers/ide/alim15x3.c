@@ -691,7 +691,7 @@ void __init ide_init_ali15x3 (ide_hwif_t *hwif)
 	}
 }
 
-void ide_dmacapable_ali15x3 (ide_hwif_t *hwif, unsigned long dmabase)
+void __init ide_dmacapable_ali15x3 (ide_hwif_t *hwif, unsigned long dmabase)
 {
 	if ((dmabase) && (m5229_revision < 0x20)) {
 		return;

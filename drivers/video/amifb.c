@@ -598,8 +598,6 @@ static u_short maxfmode, chipset;
 #define highw(x)	((u_long)(x)>>16 & 0xffff)
 #define loww(x)		((u_long)(x) & 0xffff)
 
-#define arraysize(x)	(sizeof(x)/sizeof(*(x)))
-
 #define VBlankOn()	custom.intena = IF_SETCLR|IF_COPER
 #define VBlankOff()	custom.intena = IF_COPER
 
@@ -921,7 +919,7 @@ static struct fb_videomode ami_modedb[] __initdata = {
 #endif
 };
 
-#define NUM_TOTAL_MODES  arraysize(ami_modedb)
+#define NUM_TOTAL_MODES  ARRAY_SIZE(ami_modedb)
 
 static const char *mode_option __initdata = NULL;
 static int round_down_bpp = 1;	/* for mode probing */

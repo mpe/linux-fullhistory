@@ -1145,10 +1145,10 @@ static int __init ace_init(struct net_device *dev)
 		goto init_error;
 	}
 
-	if (request_irq(dev->irq, ace_interrupt, SA_SHIRQ, ap->name, dev)) {
+	ecode = request_irq(dev->irq, ace_interrupt, SA_SHIRQ, dev->name, dev);
+	if (ecode) {
 		printk(KERN_WARNING "%s: Requested IRQ %d is busy\n",
 		       dev->name, dev->irq);
-		ecode = -EAGAIN;
 		goto init_error;
 	}
 

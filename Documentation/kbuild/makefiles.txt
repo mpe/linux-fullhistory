@@ -640,6 +640,12 @@ The public interface of Rules.make consists of the following variables:
 	but then you will notice a lot of extra compiles when you edit
 	any source file.  Blame CONFIG_MODVERSIONS for this.]
 
+	Data that is passed to other objects via registration functions
+	(e.g. pci_register_driver, pm_register) does not need to be marked
+	as EXPORT_SYMBOL.  The objects that pass data via registration
+	functions do not need to be marked as OX_OBJS, unless they also have
+	exported symbols.
+
 	Rules.make compiles all the $(O_OBJS) and $(OX_OBJS) files.
 	It then calls "$(LD) -r" to merge these files into one .o file
 	with the name $(O_TARGET).  This $(O_TARGET) name also appears

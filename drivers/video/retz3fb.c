@@ -56,8 +56,6 @@
 #define PAT_MEM_SIZE 16*3
 #define PAT_MEM_OFF  (4*1024*1024 - PAT_MEM_SIZE)
 
-#define arraysize(x)    (sizeof(x)/sizeof(*(x)))
-
 struct retz3fb_par {
 	int xres;
 	int yres;
@@ -253,7 +251,7 @@ static struct {
 };
 
 
-#define NUM_TOTAL_MODES    arraysize(retz3fb_predefined)
+#define NUM_TOTAL_MODES    ARRAY_SIZE(retz3fb_predefined)
 
 static struct fb_var_screeninfo retz3fb_default;
 

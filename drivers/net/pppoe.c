@@ -292,9 +292,7 @@ static int pppoe_device_event(struct notifier_block *this,
 
 
 static struct notifier_block pppoe_notifier = {
-	pppoe_device_event,
-	NULL,
-	0
+	notifier_call: pppoe_device_event,
 };
 
 

@@ -46,9 +46,9 @@ static int max_interrupt_work = 15;
 
 #define NUM_UNITS 2
 /* The standard set of ISA module parameters. */
-static int io[NUM_UNITS] = {0, 0};
-static int irq[NUM_UNITS] = {0, 0};
-static int xcvr[NUM_UNITS] = {0, 0}; 			/* The data transfer mode. */
+static int io[NUM_UNITS];
+static int irq[NUM_UNITS];
+static int xcvr[NUM_UNITS]; 			/* The data transfer mode. */
 
 /* Operational parameters that are set at compile time. */
 
@@ -425,15 +425,17 @@ static unsigned short __init eeprom_op(long ioaddr, unsigned int cmd)
 static int net_open(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
+	int ret;
 
 	MOD_INC_USE_COUNT;
 
 	/* The interrupt line is turned off (tri-stated) when the device isn't in
 	   use.  That's especially important for "attached" interfaces where the
 	   port or interrupt may be shared. */
-	if (request_irq(dev->irq, &atp_interrupt, 0, "ATP Ethernet", dev)) {
+	ret = request_irq(dev->irq, &atp_interrupt, 0, dev->name, dev);
+	if (ret) {
 		MOD_DEC_USE_COUNT;
-		return -EAGAIN;
+		return ret;
 	}
 
 	hardware_init(dev);

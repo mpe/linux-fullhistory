@@ -434,6 +434,13 @@ no_pnp:
 	/* Free the interrupt so that some other card can use it. */
 	outw(0x0f00, ioaddr + WN0_IRQ);
  found:
+	if (dev == NULL) {
+		dev = init_etherdev(dev, sizeof(struct el3_private));
+		if (dev == NULL) {
+			release_region(ioaddr, EL3_IO_EXTENT);
+			return -ENOMEM;
+		}
+	}
 	memcpy(dev->dev_addr, phys_addr, sizeof(phys_addr));
 	dev->base_addr = ioaddr;
 	dev->irq = irq;

@@ -634,7 +634,7 @@ static int __init rtc_init(void)
 			}
 		}
 	}
-	printk("rtc_init: no PC rtc found\n");
+	printk(KERN_ERR "rtc_init: no PC rtc found\n");
 	return -EIO;
 
 found:
@@ -650,7 +650,7 @@ found:
 		 * Standard way for sparc to print irq's is to use
 		 * __irq_itoa(). I think for EBus it's ok to use %d.
 		 */
-		printk("rtc: cannot register IRQ %d\n", rtc_irq);
+		printk(KERN_ERR "rtc: cannot register IRQ %d\n", rtc_irq);
 		return -EIO;
 	}
 #else
@@ -705,7 +705,7 @@ found:
 		guess = "Digital DECstation";
 	}
 	if (guess)
-		printk("rtc: %s epoch (%lu) detected\n", guess, epoch);
+		printk(KERN_INFO "rtc: %s epoch (%lu) detected\n", guess, epoch);
 #endif
 #if RTC_IRQ
 	init_timer(&rtc_irq_timer);
@@ -772,7 +772,7 @@ static void rtc_dropped_irq(unsigned long data)
 
 	spin_unlock_irq(&rtc_lock);
 
-	printk(KERN_INFO "rtc: lost some interrupts at %ldHz.\n", freq);
+	printk(KERN_WARNING "rtc: lost some interrupts at %ldHz.\n", freq);
 
 	/* Now we have new data */
 	wake_up_interruptible(&rtc_wait);

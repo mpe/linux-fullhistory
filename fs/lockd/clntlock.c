@@ -168,7 +168,6 @@ reclaimer(void *ptr)
 	 * reclaim is in progress */
 	lock_kernel();
 	lockd_up();
-	down(&file_lock_sem);
 
 	/* First, reclaim all locks that have been granted previously. */
 restart:
@@ -181,12 +180,11 @@ restart:
 				fl->fl_u.nfs_fl.state != host->h_state &&
 				(fl->fl_u.nfs_fl.flags & NFS_LCK_GRANTED)) {
 			fl->fl_u.nfs_fl.flags &= ~ NFS_LCK_GRANTED;
-			nlmclnt_reclaim(host, fl);
+			nlmclnt_reclaim(host, fl);	/* This sleeps */
 			goto restart;
 		}
 		tmp = tmp->next;
 	}
-	up(&file_lock_sem);
 
 	host->h_reclaiming = 0;
 	wake_up(&host->h_gracewait);

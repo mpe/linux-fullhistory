@@ -71,20 +71,12 @@ __attribute__((section("__ksymtab"))) = {
 #endif
 
 
-#ifdef CONFIG_KMOD
-EXPORT_SYMBOL(request_module);
-EXPORT_SYMBOL(exec_usermodehelper);
-#ifdef CONFIG_HOTPLUG
-EXPORT_SYMBOL(hotplug_path);
-EXPORT_SYMBOL(call_usermodehelper);
-#endif
-#endif
-
-#ifdef CONFIG_MODULES
-EXPORT_SYMBOL(get_module_symbol);
-EXPORT_SYMBOL(put_module_symbol);
+EXPORT_SYMBOL(inter_module_register);
+EXPORT_SYMBOL(inter_module_unregister);
+EXPORT_SYMBOL(inter_module_get);
+EXPORT_SYMBOL(inter_module_get_request);
+EXPORT_SYMBOL(inter_module_put);
 EXPORT_SYMBOL(try_inc_mod_count);
-#endif
 
 /* process memory management */
 EXPORT_SYMBOL(do_mmap_pgoff);
@@ -215,7 +207,6 @@ EXPORT_SYMBOL(generic_buffer_fdatasync);
 EXPORT_SYMBOL(page_hash_bits);
 EXPORT_SYMBOL(page_hash_table);
 EXPORT_SYMBOL(file_lock_list);
-EXPORT_SYMBOL(file_lock_sem);
 EXPORT_SYMBOL(locks_init_lock);
 EXPORT_SYMBOL(locks_copy_lock);
 EXPORT_SYMBOL(posix_lock_file);
@@ -342,6 +333,7 @@ EXPORT_SYMBOL(register_sysctl_table);
 EXPORT_SYMBOL(unregister_sysctl_table);
 EXPORT_SYMBOL(sysctl_string);
 EXPORT_SYMBOL(sysctl_intvec);
+EXPORT_SYMBOL(sysctl_jiffies);
 EXPORT_SYMBOL(proc_dostring);
 EXPORT_SYMBOL(proc_dointvec);
 EXPORT_SYMBOL(proc_dointvec_jiffies);

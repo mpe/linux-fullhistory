@@ -9,6 +9,7 @@
 
 
 #include <linux/module.h>
+#include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/soundcard.h>
 #include <linux/mm.h>
@@ -895,7 +896,7 @@ static void TTInit(void)
 	/* search a frequency that fits into the allowed error range */
 
 	idx = -1;
-	for (i = 0; i < arraysize(freq); i++)
+	for (i = 0; i < ARRAY_SIZE(freq); i++)
 		/* this isn't as much useful for a TT than for a Falcon, but
 		 * then it doesn't hurt very much to implement it for a TT too.
 		 */
@@ -1021,7 +1022,7 @@ static void FalconInit(void)
 	/* search a frequency that fits into the allowed error range */
 
 	idx = -1;
-	for (i = 0; i < arraysize(freq); i++)
+	for (i = 0; i < ARRAY_SIZE(freq); i++)
 		/* if we will tolerate 3% error 8000Hz->8195Hz (2.38%) would
 		 * be playable without expanding, but that now a kernel runtime
 		 * option

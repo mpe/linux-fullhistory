@@ -437,8 +437,6 @@ __get_iospace (unsigned long addr)
 	}
 }
 
-#define module_map      vmalloc
-#define module_unmap    vfree
 extern unsigned long *sparc_valid_addr_bitmap;
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */

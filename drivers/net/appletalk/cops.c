@@ -100,7 +100,6 @@ static int io = 0x240;		/* Default IO for Dayna */
 static int irq = 5;		/* Default IRQ */
 #else
 static int io = 0;		/* Default IO for Dayna */
-static int irq = 0;		/* Default IRQ */
 #endif
 
 /*
@@ -1009,15 +1008,7 @@ static struct net_device_stats *cops_get_stats(struct net_device *dev)
 }
 
 #ifdef MODULE
-static struct net_device cops0_dev =
-{
-	"",	/* device name */
-        0, 0, 0, 0,
-        0x0, 0,  /* I/O address, IRQ */
-        0, 0, 0, NULL, cops_probe
-};
-
-
+static struct net_device cops0_dev = { init: cops_probe };
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
 MODULE_PARM(board_type, "i");

@@ -511,7 +511,7 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 		}
 
 		if (ifcom->bInterfaceClass != 2 || ifcom->bInterfaceSubClass != 2 ||
-		    ifcom->bInterfaceProtocol != 1 || ifcom->bNumEndpoints != 1)
+		    ifcom->bInterfaceProtocol != 1 || ifcom->bNumEndpoints < 1)
 			continue;
 
 		epctrl = ifcom->endpoint + 0;

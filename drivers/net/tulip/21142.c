@@ -115,7 +115,7 @@ void t21142_start_nway(struct net_device *dev)
 	outl(csr14, ioaddr + CSR14);
 	if (tp->chip_id == PNIC2)
 	  tp->csr6 = 0x01a80000 | (tp->to_advertise & 0x0040 ? 0x0200 : 0);
-	else 
+	else
 	  tp->csr6 = 0x82420000 | (tp->to_advertise & 0x0040 ? 0x0200 : 0);
 	tulip_outl_csr(tp, tp->csr6, CSR6);
 	if (tp->mtable  &&  tp->mtable->csr15dir) {

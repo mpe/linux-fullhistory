@@ -89,7 +89,7 @@ int __init ariadne2_probe(struct net_device *dev)
     while ((z = zorro_find_device(ZORRO_PROD_VILLAGE_TRONIC_ARIADNE2, z))) {
 	board = z->resource.start;
 	ioaddr = board+ARIADNE2_BASE*2;
-	if (!request_mem_region(ioaddr, NE_IO_EXTENT*2, "RTL8019AS"))
+	if (!request_mem_region(ioaddr, NE_IO_EXTENT*2, dev->name))
 	    continue;
 	if ((err = ariadne2_init(dev, ZTWO_VADDR(board)))) {
 	    release_mem_region(ioaddr, NE_IO_EXTENT*2);
@@ -170,9 +170,8 @@ static int __init ariadne2_init(struct net_device *dev, unsigned long board)
     dev->irq = IRQ_AMIGA_PORTS;
 
     /* Install the Interrupt handler */
-    if (request_irq(IRQ_AMIGA_PORTS, ei_interrupt, SA_SHIRQ,
-		    "AriadNE2 Ethernet", dev))
-	return -EAGAIN;
+    i = request_irq(IRQ_AMIGA_PORTS, ei_interrupt, SA_SHIRQ, dev->name, dev);
+    if (i) return i;
 
     /* Allocate dev->priv and fill in 8390 specific dev fields. */
     if (ethdev_init(dev)) {
@@ -387,13 +386,9 @@ int init_module(void)
 {
     int err;
 
-    if (load_8390_module("ariadne2.c"))
-	return -ENOSYS;
-
     if ((err = register_netdev(&ariadne2_dev))) {
 	if (err == -EIO)
 	    printk("No AriadNE2 ethernet card found.\n");
-	unload_8390_module();
 	return err;
     }
     return 0;
@@ -404,7 +399,6 @@ void cleanup_module(void)
     free_irq(IRQ_AMIGA_PORTS, &ariadne2_dev);
     release_mem_region(ZTWO_PADDR(ariadne2_dev.base_addr), NE_IO_EXTENT*2);
     unregister_netdev(&ariadne2_dev);
-    unload_8390_module();
 }
 
 #endif	/* MODULE */

@@ -130,13 +130,15 @@ void tulip_timer(unsigned long data)
 			/* Check that the specified bit has the proper value. */
 			if ((bitnum < 0) !=
 				((csr12 & (1 << ((bitnum >> 1) & 7))) != 0)) {
-				if (tulip_debug > 1)
+				if (tulip_debug > 2)
 					printk(KERN_DEBUG "%s: Link beat detected for %s.\n", dev->name,
 						   medianame[mleaf->media]);
 				if ((p[2] & 0x61) == 0x01)	/* Bogus Znyx board. */
 					goto actually_mii;
+				netif_carrier_on(dev);
 				break;
 			}
+			netif_carrier_off(dev);
 			if (tp->medialock)
 				break;
 	  select_next_media:
@@ -160,7 +162,10 @@ void tulip_timer(unsigned long data)
 		}
 		case 1:  case 3:		/* 21140, 21142 MII */
 		actually_mii:
-			tulip_check_duplex(dev);
+			if (tulip_check_duplex(dev) < 0)
+				netif_carrier_off(dev);
+			else
+				netif_carrier_on(dev);
 			next_tick = 60*HZ;
 			break;
 		case 2:					/* 21142 serial block has no link beat. */

@@ -285,10 +285,8 @@ static int __init apne_probe1(struct net_device *dev, int ioaddr)
     dev->base_addr = ioaddr;
 
     /* Install the Interrupt handler */
-    if (request_irq(IRQ_AMIGA_PORTS, apne_interrupt, SA_SHIRQ,
-		    "apne Ethernet", dev))
-        return -EAGAIN;
-
+    i = request_irq(IRQ_AMIGA_PORTS, apne_interrupt, SA_SHIRQ, dev->name, dev);
+    if (i) return i;
 
     /* Allocate dev->priv and fill in 8390 specific dev fields. */
     if (ethdev_init(dev)) {
@@ -301,8 +299,7 @@ static int __init apne_probe1(struct net_device *dev, int ioaddr)
 	dev->dev_addr[i] = SA_prom[i];
     }
 
-    printk("\n%s: %s found.\n",
-	   dev->name, name);
+    printk("\n%s: %s found.\n", dev->name, name);
 
     ei_status.name = name;
     ei_status.tx_start_page = start_page;
@@ -556,13 +553,9 @@ int init_module(void)
 {
 	int err;
 
-	if (load_8390_module("apne.c"))
-		return -ENOSYS;
-
 	if ((err = register_netdev(&apne_dev))) {
 		if (err == -EIO)
 			printk("No PCMCIA NEx000 ethernet card found.\n");
-		unload_8390_module();
 		return (err);
 	}
 	return (0);
@@ -577,8 +570,6 @@ void cleanup_module(void)
 	free_irq(IRQ_AMIGA_PORTS, &apne_dev);
 
 	pcmcia_reset();
-
-	unload_8390_module();
 
 	apne_owned = 0;
 }

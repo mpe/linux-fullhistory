@@ -163,7 +163,7 @@ static const expansioncard_ops_t icside_ops_arcin_v6 = {
  * Purpose  : identify IDE interface type
  * Notes    : checks the description string
  */
-static iftype_t icside_identifyif (struct expansion_card *ec)
+static iftype_t __init icside_identifyif (struct expansion_card *ec)
 {
 	unsigned int addr;
 	iftype_t iftype;
@@ -505,7 +505,7 @@ icside_setup(unsigned long base, struct cardinfo *info, int irq)
 	return hwif;
 }
 
-static int icside_register_v5(struct expansion_card *ec, int autodma)
+static int __init icside_register_v5(struct expansion_card *ec, int autodma)
 {
 	unsigned long slot_port;
 	ide_hwif_t *hwif;
@@ -527,7 +527,7 @@ static int icside_register_v5(struct expansion_card *ec, int autodma)
 	return hwif ? 0 : -1;
 }
 
-static int icside_register_v6(struct expansion_card *ec, int autodma)
+static int __init icside_register_v6(struct expansion_card *ec, int autodma)
 {
 	unsigned long slot_port, port;
 	ide_hwif_t *hwif, *mate;
@@ -585,7 +585,7 @@ no_dma:
 	return hwif || mate ? 0 : -1;
 }
 
-int icside_init(void)
+int __init icside_init(void)
 {
 	int autodma = 0;
 

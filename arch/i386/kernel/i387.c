@@ -442,6 +442,8 @@ int set_fpxregs( struct task_struct *tsk, struct user_fxsr_struct *buf )
 	if ( HAVE_FXSR ) {
 		__copy_from_user( &tsk->thread.i387.fxsave, (void *)buf,
 				  sizeof(struct user_fxsr_struct) );
+		/* mxcsr bit 6 and 31-16 must be zero for security reasons */
+		tsk->thread.i387.fxsave.mxcsr &= 0xffbf;
 		return 0;
 	} else {
 		return -EIO;

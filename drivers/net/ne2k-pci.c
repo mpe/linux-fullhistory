@@ -2,29 +2,48 @@
 /*
 	A Linux device driver for PCI NE2000 clones.
 
-	Authorship and other copyrights:
-	1992-1998 by Donald Becker, NE2000 core and various modifications.
+	Authors and other copyright holders:
+	1992-2000 by Donald Becker, NE2000 core and various modifications.
 	1995-1998 by Paul Gortmaker, core modifications and PCI support.
-
 	Copyright 1993 assigned to the United States Government as represented
 	by the Director, National Security Agency.
 
-	This software may be used and distributed according to the terms
-	of the GNU Public License, incorporated herein by reference.
+	This software may be used and distributed according to the terms of
+	the GNU General Public License (GPL), incorporated herein by reference.
+	Drivers based on or derived from this code fall under the GPL and must
+	retain the authorship, copyright and license notice.  This file is not
+	a complete program and may only be used when the entire operating
+	system is licensed under the GPL.
 
-	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
-	Center of Excellence in Space Data and Information Sciences
-	Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
-
-	People are making PCI ne2000 clones! Oh the horror, the horror...
+	The author may be reached as becker@scyld.com, or C/O
+	Scyld Computing Corporation
+	410 Severn Ave., Suite 210
+	Annapolis MD 21403
 
 	Issues remaining:
-	No full-duplex support.
+	People are making PCI ne2000 clones! Oh the horror, the horror...
+	Limited full-duplex support.
 */
 
-/* Our copyright info must remain in the binary. */
-static const char *version =
-"ne2k-pci.c:vpre-1.00e 5/27/99 D. Becker/P. Gortmaker http://cesdis.gsfc.nasa.gov/linux/drivers/ne2k-pci.html\n";
+/* These identify the driver base version and may not be removed. */
+static const char version1[] =
+"ne2k-pci.c:v1.02 10/19/2000 D. Becker/P. Gortmaker\n";
+static const char version2[] =
+"  http://www.scyld.com/network/ne2k-pci.html\n";
+
+/* The user-configurable values.
+   These may be modified when a driver module is loaded.*/
+
+static int debug = 1;			/* 1 normal messages, 0 quiet .. 7 verbose. */
+
+#define MAX_UNITS 8				/* More are supported, limit only on options */
+/* Used to pass the full-duplex flag, etc. */
+static int full_duplex[MAX_UNITS];
+static int options[MAX_UNITS];
+
+/* Force a non std. amount of memory.  Units are 256 byte pages. */
+/* #define PACKETBUF_MEMSIZE	0x40 */
+
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -48,8 +67,11 @@ static const char *version =
 #define outsl outsl_ns
 #endif
 
-/* Set statically or when loading the driver module. */
-static int debug = 1;
+MODULE_AUTHOR("Donald Becker / Paul Gortmaker");
+MODULE_DESCRIPTION("PCI NE2000 clone driver");
+MODULE_PARM(debug, "i");
+MODULE_PARM(options, "1-" __MODULE_STRING(MAX_UNITS) "i");
+MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
 
 /* Some defines that people can play with if so inclined. */
 
@@ -59,18 +81,15 @@ static int debug = 1;
 /* Do we implement the read before write bugfix ? */
 /* #define NE_RW_BUGFIX */
 
-/* Do we have a non std. amount of memory? (in units of 256 byte pages) */
-/* #define PACKETBUF_MEMSIZE	0x40 */
-
-#define ne2k_flags reg0			/* Rename an existing field to store flags! */
-
-/* Only the low 8 bits are usable for non-init-time flags! */
+/* Flags.  We rename an existing ei_status field to store flags! */
+/* Thus only the low 8 bits are usable for non-init-time flags. */
+#define ne2k_flags reg0
 enum {
-	HOLTEK_FDX=1, 		/* Full duplex -> set 0x80 at offset 0x20. */
-	ONLY_16BIT_IO=2, ONLY_32BIT_IO=4,	/* Chip can do only 16/32-bit xfers. */
+	ONLY_16BIT_IO=8, ONLY_32BIT_IO=4,	/* Chip can do only 16/32-bit xfers. */
+	FORCE_FDX=0x20,						/* User override. */
+	REALTEK_FDX=0x40, HOLTEK_FDX=0x80,
 	STOP_PG_0x60=0x100,
 };
-
 
 enum ne2k_pci_chipsets {
 	CH_RealTek_RTL_8029 = 0,
@@ -90,7 +109,7 @@ static struct {
 	char *name;
 	int flags;
 } pci_clone_list[] __devinitdata = {
-	{"RealTek RTL-8029", 0},
+	{"RealTek RTL-8029", REALTEK_FDX},
 	{"Winbond 89C940", 0},
 	{"Compex RL2000", 0},
 	{"KTI ET32P2", 0},
@@ -145,7 +164,8 @@ static void ne2k_pci_block_output(struct net_device *dev, const int count,
 
 
 
-/* No room in the standard 8390 structure for extra info we need. */
+/* There is no room in the standard 8390 structure for extra info we need,
+   so we build a meta/outer-wrapper structure.. */
 struct ne2k_pci_card {
 	struct net_device *dev;
 	struct pci_dev *pci_dev;
@@ -171,33 +191,35 @@ static int __devinit ne2k_pci_init_one (struct pci_dev *pdev,
 				     const struct pci_device_id *ent)
 {
 	struct net_device *dev;
-	int i, irq, reg0, start_page, stop_page;
+	int i;
 	unsigned char SA_prom[32];
-	int chip_idx = ent->driver_data;
-	static unsigned version_printed = 0;
+	int start_page, stop_page;
+	int irq, reg0, chip_idx = ent->driver_data;
+	static unsigned int fnd_cnt;
 	long ioaddr;
-	
-	if (version_printed++ == 0)
-		printk(KERN_INFO "%s", version);
+	int flags = pci_clone_list[chip_idx].flags;
+
+	if (fnd_cnt++ == 0)
+		printk(KERN_INFO "%s" KERN_INFO "%s", version1, version2);
 
 	ioaddr = pci_resource_start (pdev, 0);
 	irq = pdev->irq;
-	
+
 	if (!ioaddr || ((pci_resource_flags (pdev, 0) & IORESOURCE_IO) == 0)) {
 		printk (KERN_ERR "ne2k-pci: no I/O resource at PCI BAR #0\n");
 		return -ENODEV;
 	}
-	
+
 	i = pci_enable_device (pdev);
 	if (i)
 		return i;
-	
+
 	if (request_region (ioaddr, NE_IO_EXTENT, "ne2k-pci") == NULL) {
 		printk (KERN_ERR "ne2k-pci: I/O resource 0x%x @ 0x%lx busy\n",
 			NE_IO_EXTENT, ioaddr);
 		return -EBUSY;
 	}
-	
+
 	reg0 = inb(ioaddr);
 	if (reg0 == 0xFF)
 		goto err_out_free_res;
@@ -222,7 +244,7 @@ static int __devinit ne2k_pci_init_one (struct pci_dev *pdev,
 		printk (KERN_ERR "ne2k-pci: cannot allocate ethernet device\n");
 		goto err_out_free_res;
 	}
-	
+
 	/* Reset card. Who knows what dain-bramaged state it was left in. */
 	{
 		unsigned long reset_start_time = jiffies;
@@ -238,7 +260,7 @@ static int __devinit ne2k_pci_init_one (struct pci_dev *pdev,
 				printk("ne2k-pci: Card failure (no reset ack).\n");
 				goto err_out_free_netdev;
 			}
-		
+
 		outb(0xff, ioaddr + EN0_ISR);		/* Ack all intr. */
 	}
 
@@ -269,7 +291,7 @@ static int __devinit ne2k_pci_init_one (struct pci_dev *pdev,
 
 	/* Note: all PCI cards have at least 16 bit access, so we don't have
 	   to check for 8 bit cards.  Most cards permit 32 bit access. */
-	if (pci_clone_list[chip_idx].flags & ONLY_32BIT_IO) {
+	if (flags & ONLY_32BIT_IO) {
 		for (i = 0; i < 4 ; i++)
 			((u32 *)SA_prom)[i] = le32_to_cpu(inl(ioaddr + NE_DATAPORT));
 	} else
@@ -280,8 +302,7 @@ static int __devinit ne2k_pci_init_one (struct pci_dev *pdev,
 	outb(0x49, ioaddr + EN0_DCFG);
 	start_page = NESM_START_PG;
 
-	stop_page =
-		pci_clone_list[chip_idx].flags&STOP_PG_0x60 ? 0x60 : NESM_STOP_PG;
+	stop_page = flags & STOP_PG_0x60 ? 0x60 : NESM_STOP_PG;
 
 	/* Set up the rest of the parameters. */
 	dev->irq = irq;
@@ -305,7 +326,11 @@ static int __devinit ne2k_pci_init_one (struct pci_dev *pdev,
 	ei_status.tx_start_page = start_page;
 	ei_status.stop_page = stop_page;
 	ei_status.word16 = 1;
-	ei_status.ne2k_flags = pci_clone_list[chip_idx].flags;
+	ei_status.ne2k_flags = flags;
+	if (fnd_cnt < MAX_UNITS) {
+		if (full_duplex[fnd_cnt] > 0  ||  (options[fnd_cnt] & FORCE_FDX))
+			ei_status.ne2k_flags |= FORCE_FDX;
+	}
 
 	ei_status.rx_start_page = start_page + TX_PAGES;
 #ifdef PACKETBUF_MEMSIZE
@@ -331,20 +356,27 @@ err_out_free_res:
 
 }
 
-static int
-ne2k_pci_open(struct net_device *dev)
+static int ne2k_pci_open(struct net_device *dev)
 {
 	MOD_INC_USE_COUNT;
 	if (request_irq(dev->irq, ei_interrupt, SA_SHIRQ, dev->name, dev)) {
 		MOD_DEC_USE_COUNT;
 		return -EAGAIN;
 	}
+	/* Set full duplex for the chips that we know about. */
+	if (ei_status.ne2k_flags & FORCE_FDX) {
+		long ioaddr = dev->base_addr;
+		if (ei_status.ne2k_flags & REALTEK_FDX) {
+			outb(0xC0 + E8390_NODMA, ioaddr + NE_CMD); /* Page 3 */
+			outb(inb(ioaddr + 0x20) | 0x80, ioaddr + 0x20);
+		} else if (ei_status.ne2k_flags & HOLTEK_FDX)
+			outb(inb(ioaddr + 0x20) | 0x80, ioaddr + 0x20);
+	}
 	ei_open(dev);
 	return 0;
 }
 
-static int
-ne2k_pci_close(struct net_device *dev)
+static int ne2k_pci_close(struct net_device *dev)
 {
 	ei_close(dev);
 	free_irq(dev->irq, dev);
@@ -354,8 +386,7 @@ ne2k_pci_close(struct net_device *dev)
 
 /* Hard reset the card.  This used to pause for the same period that a
    8390 reset command required, but that shouldn't be necessary. */
-static void
-ne2k_pci_reset_8390(struct net_device *dev)
+static void ne2k_pci_reset_8390(struct net_device *dev)
 {
 	unsigned long reset_start_time = jiffies;
 
@@ -380,8 +411,7 @@ ne2k_pci_reset_8390(struct net_device *dev)
    we don't need to be concerned with ring wrap as the header will be at
    the start of a page, so we optimize accordingly. */
 
-static void
-ne2k_pci_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+static void ne2k_pci_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 
 	long nic_base = dev->base_addr;
@@ -418,8 +448,8 @@ ne2k_pci_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int rin
    The NEx000 doesn't share the on-board packet memory -- you have to put
    the packet out through the "remote DMA" dataport using outb. */
 
-static void
-ne2k_pci_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
+static void ne2k_pci_block_input(struct net_device *dev, int count,
+				 struct sk_buff *skb, int ring_offset)
 {
 	long nic_base = dev->base_addr;
 	char *buf = skb->data;
@@ -461,9 +491,8 @@ ne2k_pci_block_input(struct net_device *dev, int count, struct sk_buff *skb, int
 	ei_status.dmaing &= ~0x01;
 }
 
-static void
-ne2k_pci_block_output(struct net_device *dev, int count,
-		const unsigned char *buf, const int start_page)
+static void ne2k_pci_block_output(struct net_device *dev, int count,
+				  const unsigned char *buf, const int start_page)
 {
 	long nic_base = NE_BASE;
 	unsigned long dma_start;
@@ -520,8 +549,8 @@ ne2k_pci_block_output(struct net_device *dev, int count,
 	dma_start = jiffies;
 
 	while ((inb(nic_base + EN0_ISR) & ENISR_RDC) == 0)
-		if (jiffies - dma_start > 2) { 			/* Avoid clock roll-over. */
-			printk("%s: timeout waiting for Tx RDC.\n", dev->name);
+		if (jiffies - dma_start > 2) {			/* Avoid clock roll-over. */
+			printk(KERN_WARNING "%s: timeout waiting for Tx RDC.\n", dev->name);
 			ne2k_pci_reset_8390(dev);
 			NS8390_init(dev,1);
 			break;
@@ -536,12 +565,10 @@ ne2k_pci_block_output(struct net_device *dev, int count,
 static void __devexit ne2k_pci_remove_one (struct pci_dev *pdev)
 {
 	struct net_device *dev = pci_get_drvdata(pdev);
-	
-	if (!dev) {
-		printk (KERN_ERR "bug! ne2k_pci_remove_one called w/o net_device\n");
-		return;
-	}
-	
+
+	if (!dev)
+		BUG();
+
 	unregister_netdev(dev);
 	release_region(dev->base_addr, NE_IO_EXTENT);
 	kfree(dev);
@@ -559,43 +586,14 @@ static struct pci_driver ne2k_driver = {
 
 static int __init ne2k_pci_init(void)
 {
-	int rc;
-	
-	if (load_8390_module("ne2k-pci.c"))
-		return -ENOSYS;
-	
-	rc = pci_module_init (&ne2k_driver);
-	
-	/* XXX should this test CONFIG_HOTPLUG like pci_module_init? */
-
-	/* YYY No. If we're returning non-zero, we're being unloaded
-	 * 	   immediately. dwmw2 
-	 */
-	if (rc <= 0)
-		unload_8390_module();
-
-	return rc;
+	return pci_module_init (&ne2k_driver);
 }
 
 
 static void __exit ne2k_pci_cleanup(void)
 {
 	pci_unregister_driver (&ne2k_driver);
-	unload_8390_module();
 }
 
 module_init(ne2k_pci_init);
 module_exit(ne2k_pci_cleanup);
-
-
-/*
- * Local variables:
- *  compile-command: "gcc -DMODVERSIONS  -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer -I/usr/src/linux/drivers/net/ -c ne2k-pci.c"
- *  alt-compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer -I/usr/src/linux/drivers/net/ -c ne2k-pci.c"
- *  c-indent-level: 4
- *  c-basic-offset: 4
- *  tab-width: 4
- *  version-control: t
- *  kept-new-versions: 5
- * End:
- */

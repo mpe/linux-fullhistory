@@ -164,16 +164,23 @@ int awc4500_pci_probe(struct net_device *dev)
 static int awc_pci_init(struct net_device * dev, struct pci_dev *pdev,
  			int ioaddr, int cis_addr, int mem_addr, u8 pci_irq_line) {
 
-	int i;
+	int i, allocd_dev = 0;
 
 	if (!dev) {
-		dev = init_etherdev(dev, 0 );	
+		dev = init_etherdev(NULL, 0);	
+		if (!dev)
+			return -ENOMEM;
+		allocd_dev = 1;
 	}
 	dev->priv = kmalloc(sizeof(struct awc_private),GFP_KERNEL );
 	memset(dev->priv,0,sizeof(struct awc_private));
 	if (!dev->priv) {
 		printk(KERN_CRIT "aironet4x00: could not allocate device private, some unstability may follow\n");
-		return -1;
+		if (allocd_dev) {
+			unregister_netdev(dev);
+			kfree(dev);
+		}
+		return -ENOMEM;
 	};
 
 //	ether_setup(dev);
@@ -194,7 +201,16 @@ static int awc_pci_init(struct net_device * dev, struct pci_dev *pdev,
 	dev->watchdog_timeo = AWC_TX_TIMEOUT;
 	
 
-	request_irq(dev->irq,awc_interrupt, SA_SHIRQ | SA_INTERRUPT ,"Aironet 4X00",dev);
+	i = request_irq(dev->irq,awc_interrupt, SA_SHIRQ | SA_INTERRUPT, dev->name, dev);
+	if (i) {
+		kfree(dev->priv);
+		dev->priv = NULL;
+		if (allocd_dev) {
+			unregister_netdev(dev);
+			kfree(dev);
+		}
+		return i;
+	}
 
 	awc_private_init( dev);
 	awc_init(dev);

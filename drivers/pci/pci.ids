@@ -1472,7 +1472,8 @@
 		10b7 3590  TokenLink Velocity XL Adapter
 	4500  3c450 Cyclone/unknown
 	5055  3c555 Laptop Hurricane
-	6055  3c556 Laptop Hurricane
+	6055  3c556 Laptop Tornado
+	6056  3c556B Laptop Hurricane
 	5057  3c575 [Megahertz] 10/100 LAN CardBus
 		10b7 5a57  3C575 Megahertz 10/100 LAN Cardbus PC Card
 	5157  3CCFE575BT Cyclone CardBus

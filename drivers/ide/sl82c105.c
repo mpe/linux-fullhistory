@@ -91,7 +91,7 @@ static void tune_sl82c105(ide_drive_t *drive, byte pio)
 }
 #endif
 
-void ide_dmacapable_sl82c105(ide_hwif_t *hwif, unsigned long dmabase)
+void __init ide_dmacapable_sl82c105(ide_hwif_t *hwif, unsigned long dmabase)
 {
 	unsigned char rev;
 
@@ -107,7 +107,7 @@ void ide_dmacapable_sl82c105(ide_hwif_t *hwif, unsigned long dmabase)
 	ide_setup_dma(hwif, dmabase, 8);
 }
 
-void ide_init_sl82c105(ide_hwif_t *hwif)
+void __init ide_init_sl82c105(ide_hwif_t *hwif)
 {
 	struct pci_dev *dev = hwif->pci_dev;
 

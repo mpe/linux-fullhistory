@@ -40,6 +40,9 @@
 #endif
 #include <asm/io.h>
 
+/* ease porting between pre-2.4.x and later kernels */
+#define vma_get_pgoff(v)      ((v)->vm_pgoff)
+
 #include "../lowlevel/ftape-tracing.h"
 #include "../lowlevel/ftape-io.h"
 #include "../lowlevel/ftape-ctl.h"
@@ -701,23 +704,23 @@ int ftape_mmap(struct vm_area_struct *vma)
 	if (ft_failure) {
 		TRACE_EXIT -ENODEV;
 	}
-	if ((vma_get_flags(vma) & (VM_READ|VM_WRITE)) == 0) {
+	if (!(vma->vm_flags & (VM_READ|VM_WRITE))) {
 		TRACE_ABORT(-EINVAL, ft_t_err, "Undefined mmap() access");
 	}
 	if (vma_get_pgoff(vma) != 0) {
 		TRACE_ABORT(-EINVAL, ft_t_err, "page offset must be 0");
 	}
-	if ((vma_get_end (vma) - vma_get_start (vma)) % FT_BUFF_SIZE != 0) {
+	if ((vma->vm_end - vma->vm_start) % FT_BUFF_SIZE != 0) {
 		TRACE_ABORT(-EINVAL, ft_t_err,
 			    "size = %ld, should be a multiple of %d",
-			    vma_get_end (vma) - vma_get_start (vma),
+			    vma->vm_end - vma->vm_start,
 			    FT_BUFF_SIZE);
 	}
-	num_buffers = (vma_get_end (vma) - vma_get_start (vma)) / FT_BUFF_SIZE;
+	num_buffers = (vma->vm_end - vma->vm_start) / FT_BUFF_SIZE;
 	if (num_buffers > ft_nr_buffers) {
 		TRACE_ABORT(-EINVAL,
 			    ft_t_err, "size = %ld, should be less than %d",
-			    vma_get_end (vma) - vma_get_start (vma),
+			    vma->vm_end - vma->vm_start,
 			    ft_nr_buffers * FT_BUFF_SIZE);
 	}
 	if (ft_driver_state != idle) {
@@ -728,15 +731,15 @@ int ftape_mmap(struct vm_area_struct *vma)
 		ftape_reset_buffer();
 	}
 	for (i = 0; i < num_buffers; i++) {
-		TRACE_CATCH(remap_page_range(vma_get_start (vma) +
+		TRACE_CATCH(remap_page_range(vma->vm_start +
 					     i * FT_BUFF_SIZE,
-					virt_to_phys(ft_buffer[i]->address),
+					     virt_to_phys(ft_buffer[i]->address),
 					     FT_BUFF_SIZE,
-					     vma_get_page_prot (vma)),
+					     vma->vm_page_prot),
 			    _res = -EAGAIN);
 		TRACE(ft_t_noise, "remapped dma buffer @ %p to location @ %p",
 		      ft_buffer[i]->address,
-		      (void *)(vma_get_start(vma) + i * FT_BUFF_SIZE));
+		      (void *)(vma->vm_start + i * FT_BUFF_SIZE));
 	}
 	for (i = 0; i < num_buffers; i++) {
 		memset(ft_buffer[i]->address, 0xAA, FT_BUFF_SIZE);

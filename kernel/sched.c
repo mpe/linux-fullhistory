@@ -742,9 +742,10 @@ static inline void __wake_up_common (wait_queue_head_t *q, unsigned int mode,
 			if (irq && (state & mode & TASK_EXCLUSIVE)) {
 				if (!best_exclusive)
 					best_exclusive = p;
-				else if ((p->processor == best_cpu) &&
-					(best_exclusive->processor != best_cpu))
-						best_exclusive = p;
+				if (p->processor == best_cpu) {
+					best_exclusive = p;
+					break;
+				}
 			} else {
 				if (sync)
 					wake_up_process_synchronous(p);

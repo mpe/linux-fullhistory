@@ -1538,6 +1538,8 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 	    inode->i_uid == current->fsuid)
 		return 0;
 
+	acc &= ~ MAY_OWNER_OVERRIDE; /* This bit is no longer needed,
+                                        and gets in the way later */
 
 	err = permission(inode, acc & (MAY_READ|MAY_WRITE|MAY_EXEC));
 

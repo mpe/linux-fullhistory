@@ -132,20 +132,16 @@ static void set_multicast_list(struct net_device *dev);
 int __init fmv18x_probe(struct net_device *dev)
 {
 	int i;
-	int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev->base_addr;
 
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return fmv18x_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
 		return -ENXIO;
 
-	for (i = 0; fmv18x_probe_list[i]; i++) {
-		int ioaddr = fmv18x_probe_list[i];
- 		if (check_region(ioaddr, FMV18X_IO_EXTENT))
-			continue;
-		if (fmv18x_probe1(dev, ioaddr) == 0)
+	for (i = 0; fmv18x_probe_list[i]; i++)
+		if (fmv18x_probe1(dev, fmv18x_probe_list[i]) == 0)
 			return 0;
-	}
 
 	return -ENODEV;
 }
@@ -158,21 +154,26 @@ int __init fmv18x_probe(struct net_device *dev)
    that can be done is checking a few bits and then diving right into MAC
    address check. */
 
-int __init fmv18x_probe1(struct net_device *dev, short ioaddr)
+static int __init fmv18x_probe1(struct net_device *dev, short ioaddr)
 {
 	char irqmap[4] = {3, 7, 10, 15};
 	char irqmap_pnp[8] = {3, 4, 5, 7, 9, 10, 11, 15};
-	unsigned int i, irq;
+	unsigned int i, irq, retval;
 
 	/* Resetting the chip doesn't reset the ISA interface, so don't bother.
 	   That means we have to be careful with the register values we probe for.
 	   */
 
+	if (!request_region(ioaddr, FMV18X_IO_EXTENT, dev->name))
+		return -EBUSY;
+
 	/* Check I/O address configuration and Fujitsu vendor code */
 	if (inb(ioaddr+FJ_MACADDR  ) != 0x00
 	||  inb(ioaddr+FJ_MACADDR+1) != 0x00
-	||  inb(ioaddr+FJ_MACADDR+2) != 0x0e)
-		return -ENODEV;
+	||  inb(ioaddr+FJ_MACADDR+2) != 0x0e) {
+		retval = -ENODEV;
+		goto out;
+	}
 
 	/* Check PnP mode for FMV-183/184/183A/184A. */
 	/* This PnP routine is very poor. IO and IRQ should be known. */
@@ -182,8 +183,10 @@ int __init fmv18x_probe1(struct net_device *dev, short ioaddr)
 			if (irq == irqmap_pnp[i])
 				break;
 		}
-		if (i == 8)
-			return -ENODEV;
+		if (i == 8) {
+			retval = -ENODEV;
+			goto out;
+		}
 	} else {
 		if (fmv18x_probe_list[inb(ioaddr + FJ_CONFIG0) & 0x07] != ioaddr)
 			return -ENODEV;
@@ -191,15 +194,12 @@ int __init fmv18x_probe1(struct net_device *dev, short ioaddr)
 	}
 
 	/* Snarf the interrupt vector now. */
-	if (request_irq(irq, &net_interrupt, 0, "fmv18x", dev)) {
+	retval = request_irq(irq, &net_interrupt, 0, dev->name, dev);
+	if (retval) {
 		printk ("FMV-18x found at %#3x, but it's unusable due to a conflict on"
 				"IRQ %d.\n", ioaddr, irq);
-		return -EAGAIN;
+		goto out;
 	}
-
-	/* Grab the region so that we can find another board if the IRQ request
-	   fails. */
- 	request_region(ioaddr, FMV18X_IO_EXTENT, "fmv18x");
 
 	printk("%s: FMV-18x found at %#3x, IRQ %d, address ", dev->name,
 		   ioaddr, irq);
@@ -261,8 +261,10 @@ int __init fmv18x_probe1(struct net_device *dev, short ioaddr)
 
 	/* Initialize the device structure. */
 	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
-	if (dev->priv == NULL)
-		return -ENOMEM;
+	if (!dev->priv) {
+		retval = -ENOMEM;
+		goto out_irq;
+	}
 	memset(dev->priv, 0, sizeof(struct net_local));
 
 	dev->open		= net_open;
@@ -277,6 +279,12 @@ int __init fmv18x_probe1(struct net_device *dev, short ioaddr)
 
 	ether_setup(dev);
 	return 0;
+
+out_irq:
+	free_irq(irq, dev);
+out:
+	release_region(ioaddr, FMV18X_IO_EXTENT);
+	return retval;
 }
 
 
@@ -603,8 +611,7 @@ static void set_multicast_list(struct net_device *dev)
 }
 
 #ifdef MODULE
-static struct net_device dev_fmv18x = { init: fmv18x_probe };
-
+static struct net_device dev_fmv18x;
 static int io = 0x220;
 static int irq;
 
@@ -616,8 +623,9 @@ int init_module(void)
 {
 	if (io == 0)
 		printk("fmv18x: You should not use auto-probing with insmod!\n");
-	dev_fmv18x.base_addr = io;
-	dev_fmv18x.irq       = irq;
+	dev_fmv18x.base_addr	= io;
+	dev_fmv18x.irq		= irq;
+	dev_fmv18x.init		= fmv18x_probe;
 	if (register_netdev(&dev_fmv18x) != 0) {
 		printk("fmv18x: register_netdev() returned non-zero.\n");
 		return -EIO;

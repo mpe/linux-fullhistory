@@ -99,8 +99,6 @@
 #define assert(expr)
 #endif
 
-#define arraysize(x)    (sizeof(x)/sizeof(*(x)))
-
 #ifdef TRUE
 #undef TRUE
 #endif
@@ -450,7 +448,7 @@ static const struct {
 	}
 };
 
-#define NUM_TOTAL_MODES    arraysize(clgenfb_predefined)
+#define NUM_TOTAL_MODES    ARRAY_SIZE(clgenfb_predefined)
 static struct fb_var_screeninfo clgenfb_default;
 
 /*
@@ -2431,7 +2429,7 @@ static struct pci_dev * __init clgen_pci_dev_get (clgen_board_t *btype)
 
 	DPRINTK ("ENTER\n");
 	
-	for (i = 0; i < arraysize(clgen_pci_probe_list); i++) {
+	for (i = 0; i < ARRAY_SIZE(clgen_pci_probe_list); i++) {
 		pdev = NULL;
 		while ((pdev = pci_find_device (PCI_VENDOR_ID_CIRRUS,
 				clgen_pci_probe_list[i].device, pdev)) != NULL) {
@@ -2582,7 +2580,7 @@ static int __init clgen_zorro_find (struct zorro_dev **z_o,
 	assert (z_o != NULL);
 	assert (btype != NULL);
 
-	for (i = 0; i < arraysize(clgen_zorro_probe_list); i++)
+	for (i = 0; i < ARRAY_SIZE(clgen_zorro_probe_list); i++)
 		if ((z = zorro_find_device(clgen_zorro_probe_list[i].id, NULL)))
 			break;
 

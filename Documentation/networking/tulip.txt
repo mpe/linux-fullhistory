@@ -1,20 +1,26 @@
                 Tulip Ethernet Card Driver
 	  Maintained by Jeff Garzik <jgarzik@mandrakesoft.com>
 
-The Tulip driver is developed by Donald Becker and changed by
+The Tulip driver was developed by Donald Becker and changed by
 Takashi Manabe and a cast of thousands.
+
+For 2.4.x and later kernels, the Linux Tulip driver is available at
+http://sourceforge.net/projects/tulip/
 
 	This driver is for the Digital "Tulip" Ethernet adapter interface.
 	It should work with most DEC 21*4*-based chips/ethercards, as well as
 	with work-alike chips from Lite-On (PNIC) and Macronix (MXIC) and ASIX.
 
-	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
+	The author may be reached as becker@scyld.com, or C/O
 	Center of Excellence in Space Data and Information Sciences
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
-	Additional information available at
-	http://cesdis.gsfc.nasa.gov/linux/drivers/tulip.html
-	
+	Additional information on Donald Becker's tulip.c
+	is available at http://www.scyld.com/network/tulip.html
+
+
+
+
 				Theory of Operation
 
 Board Compatibility
@@ -24,7 +30,7 @@ This device driver is designed for the DECchip "Tulip", Digital's
 single-chip ethernet controllers for PCI.  Supported members of the family
 are the 21040, 21041, 21140, 21140A, 21142, and 21143.  Similar work-alike
 chips from Lite-On, Macronics, ASIX, Compex and other listed below are also
-supported. 
+supported.
 
 These chips are used on at least 140 unique PCI board designs.  The great
 number of chips and board designs supported is the reason for the
@@ -43,7 +49,7 @@ Some boards have EEPROMs tables with default media entry.  The factory default
 is usually "autoselect".  This should only be overridden when using
 transceiver connections without link beat e.g. 10base2 or AUI, or (rarely!)
 for forcing full-duplex when used with old link partners that do not do
-autonegotiation. 
+autonegotiation.
 
 Driver operation
 ================
@@ -142,6 +148,15 @@ tulip_core.c	- Driver core (a.k.a. where "everything else" goes)
 
 Version history
 ===============
+0.9.11 (November 3, 2000):
+* Eliminate extra bus accesses when sharing interrupts (prumpf)
+* Barrier following ownership descriptor bit flip (prumpf)
+* Endianness fixes for >14 addresses in setup frames (prumpf)
+* Report link beat to kernel/userspace via netif_carrier_*. (kuznet)
+* Better spinlocking in set_rx_mode.
+* Fix I/O resource request failure error messages (DaveM catch)
+* Handle DMA allocation failure.
+
 0.9.10 (September 6, 2000):
 * Simple interrupt mitigation (via jamal)
 * More PCI ids

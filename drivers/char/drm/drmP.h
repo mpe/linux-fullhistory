@@ -511,18 +511,6 @@ typedef struct drm_agp_head {
    	int 		   agp_mtrr;
 } drm_agp_head_t;
 
-typedef struct {
-	void       (*free_memory)(agp_memory *);
-	agp_memory *(*allocate_memory)(size_t, u32);
-	int        (*bind_memory)(agp_memory *, off_t);
-	int        (*unbind_memory)(agp_memory *);
-	void       (*enable)(u32);
-	int        (*acquire)(void);
-	void       (*release)(void);
-	void       (*copy_info)(agp_kern_info *);
-} drm_agp_func_t;
-
-extern drm_agp_func_t drm_agp;
 #endif
 
 typedef struct drm_sigdata {

@@ -284,8 +284,6 @@ __get_iospace (unsigned long addr)
 	return ((sun4u_get_pte (addr) & 0xf0000000) >> 28);
 }
 
-extern void * module_map (unsigned long size);
-extern void module_unmap (void *addr);
 extern unsigned long *sparc64_valid_addr_bitmap;
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */

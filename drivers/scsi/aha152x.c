@@ -13,9 +13,16 @@
  * General Public License for more details.
  *
  *
- * $Id: aha152x.c,v 2.1 2000/05/17 16:23:17 fischer Exp fischer $
+ * $Id: aha152x.c,v 2.3 2000/11/04 16:40:26 fischer Exp $
  *
  * $Log: aha152x.c,v $
+ * Revision 2.3  2000/11/04 16:40:26  fischer
+ * - handle data overruns
+ * - extend timeout for data phases
+ *
+ * Revision 2.2  2000/08/08 19:54:53  fischer
+ * - minor changes
+ *
  * Revision 2.1  2000/05/17 16:23:17  fischer
  * - signature update
  * - fix for data out w/o scatter gather
@@ -256,7 +263,7 @@
 
 #define DO_LOCK(flags)	\
 	do { \
-		if(QLOCK.lock) { \
+		if(spin_is_locked(&QLOCK)) { \
 			DPRINTK(debug_intr, DEBUG_LEAD "(%s:%d) already locked at %s:%d\n", CMDINFO(CURRENT_SC), __FUNCTION__, __LINE__, QLOCKER, QLOCKERL); \
 		} \
 		DPRINTK(debug_locks, DEBUG_LEAD "(%s:%d) locking\n", CMDINFO(CURRENT_SC), __FUNCTION__, __LINE__); \
@@ -293,7 +300,6 @@
 			(cmd) ? ((cmd)->lun & 0x07) : -1
 
 #define DELAY_DEFAULT 100
-#define DEBUG_DEFAULT 0
 
 /* possible irq range */
 #if defined(PCMCIA)
@@ -357,11 +363,11 @@ static int exttrans[] = {0, 0};
 #if !defined(AHA152X_DEBUG)
 MODULE_PARM(aha152x, "1-8i");
 MODULE_PARM_DESC(aha152x, "parameters for first controller");
-static int aha152x[]   = {0, 11, 7, 1, 1, 1, DELAY_DEFAULT, 0, DEBUG_DEFAULT};
+static int aha152x[] = {0, 11, 7, 1, 1, 0, DELAY_DEFAULT, 0};
 
 MODULE_PARM(aha152x1, "1-8i");
 MODULE_PARM_DESC(aha152x1, "parameters for second controller");
-static int aha152x1[]  = {0, 11, 7, 1, 1, 1, DELAY_DEFAULT, 0, DEBUG_DEFAULT};
+static int aha152x1[] = {0, 11, 7, 1, 1, 0, DELAY_DEFAULT, 0};
 #else
 MODULE_PARM(debug, "1-2i");
 MODULE_PARM_DESC(debug, "flags for driver debugging");
@@ -369,11 +375,11 @@ static int debug[] = {DEBUG_DEFAULT, DEBUG_DEFAULT};
 
 MODULE_PARM(aha152x, "1-9i");
 MODULE_PARM_DESC(aha152x, "parameters for first controller");
-static int aha152x[] = {0, 11, 7, 1, 1, 0, DELAY_DEFAULT, 0};
+static int aha152x[]   = {0, 11, 7, 1, 1, 1, DELAY_DEFAULT, 0, DEBUG_DEFAULT};
 
 MODULE_PARM(aha152x1, "1-9i");
 MODULE_PARM_DESC(aha152x1, "parameters for second controller");
-static int aha152x1[] = {0, 11, 7, 1, 1, 0, DELAY_DEFAULT, 0};
+static int aha152x1[]  = {0, 11, 7, 1, 1, 1, DELAY_DEFAULT, 0, DEBUG_DEFAULT};
 #endif /* !defined(AHA152X_DEBUG) */
 #endif /* MODULE */
 
@@ -954,7 +960,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 	if (setup_count < 2) {
 		struct aha152x_setup override = SETUP0;
 
-		if (setup_count == 0 || (override.io_port != setup[0].io_port))
+		if (setup_count == 0 || (override.io_port != setup[0].io_port)) {
 			if (!checksetup(&override)) {
 				printk(KERN_ERR "\naha152x: invalid override SETUP0={0x%x,%d,%d,%d,%d,%d,%d,%d}\n",
 				       override.io_port,
@@ -967,6 +973,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 				       override.ext_trans);
 			} else
 				setup[setup_count++] = override;
+		}
 	}
 #endif
 
@@ -974,7 +981,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 	if (setup_count < 2) {
 		struct aha152x_setup override = SETUP1;
 
-		if (setup_count == 0 || (override.io_port != setup[0].io_port))
+		if (setup_count == 0 || (override.io_port != setup[0].io_port)) {
 			if (!checksetup(&override)) {
 				printk(KERN_ERR "\naha152x: invalid override SETUP1={0x%x,%d,%d,%d,%d,%d,%d,%d}\n",
 				       override.io_port,
@@ -987,6 +994,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 				       override.ext_trans);
 			} else
 				setup[setup_count++] = override;
+		}
 	}
 #endif
 
@@ -2436,8 +2444,13 @@ static void msgo_run(struct Scsi_Host *shpnt)
 
 static void msgo_end(struct Scsi_Host *shpnt)
 {
-	if(MSGO_I<MSGOLEN)
+	if(MSGO_I<MSGOLEN) {
 		printk(ERR_LEAD "message sent incompletely (%d/%d)\n", CMDINFO(CURRENT_SC), MSGO_I, MSGOLEN);
+		if(SYNCNEG==1) {
+			printk(INFO_LEAD "Synchronous Data Transfer Request was rejected\n", CMDINFO(CURRENT_SC));
+			SYNCNEG=2;
+		}
+	}
 		
 	MSGO_I  = 0;
 	MSGOLEN = 0;
@@ -2553,7 +2566,7 @@ static void datai_run(struct Scsi_Host *shpnt)
 		 * STCNT to trigger ENSWRAP interrupt, instead of
 		 * polling for DFIFOFULL
 		 */
-		the_time=jiffies + 100;
+		the_time=jiffies + 1000;
 		while(TESTLO(DMASTAT, DFIFOFULL|INTSTAT) && time_before(jiffies,the_time))
 			barrier();
 
@@ -2579,42 +2592,50 @@ static void datai_run(struct Scsi_Host *shpnt)
 			fifodata = GETPORT(FIFOSTAT);
 		}
 
-                while(fifodata>0 && CURRENT_SC->SCp.this_residual>0) {
-                        data_count = fifodata>CURRENT_SC->SCp.this_residual ?
-					CURRENT_SC->SCp.this_residual :
-					fifodata;
-			fifodata -= data_count;
+		if(CURRENT_SC->SCp.this_residual>0) {
+			while(fifodata>0 && CURRENT_SC->SCp.this_residual>0) {
+                        	data_count = fifodata>CURRENT_SC->SCp.this_residual ?
+						CURRENT_SC->SCp.this_residual :
+						fifodata;
+				fifodata -= data_count;
 
-                        if(data_count & 1) {
-				DPRINTK(debug_datai, DEBUG_LEAD "8bit\n", CMDINFO(CURRENT_SC));
-                                SETPORT(DMACNTRL0, ENDMA|_8BIT);
-                                *CURRENT_SC->SCp.ptr++ = GETPORT(DATAPORT);
-                                CURRENT_SC->SCp.this_residual--;
-                                DATA_LEN++;
-                                SETPORT(DMACNTRL0, ENDMA);
-                        }
-
-                        if(data_count > 1) {
-				DPRINTK(debug_datai, DEBUG_LEAD "16bit(%d)\n", CMDINFO(CURRENT_SC), data_count);
-                                data_count >>= 1;
-                                insw(DATAPORT, CURRENT_SC->SCp.ptr, data_count);
-                                CURRENT_SC->SCp.ptr           += 2 * data_count;
-                                CURRENT_SC->SCp.this_residual -= 2 * data_count;
-                                DATA_LEN                      += 2 * data_count;
-                        }
-
-                        if(CURRENT_SC->SCp.this_residual==0 && CURRENT_SC->SCp.buffers_residual>0) {
-                               	/* advance to next buffer */
-                               	CURRENT_SC->SCp.buffers_residual--;
-                               	CURRENT_SC->SCp.buffer++;
-                               	CURRENT_SC->SCp.ptr           = CURRENT_SC->SCp.buffer->address;
-                               	CURRENT_SC->SCp.this_residual = CURRENT_SC->SCp.buffer->length;
-			} 
-                }
-
-		if(fifodata>0 && CURRENT_SC->SCp.this_residual==0) {
+                        	if(data_count & 1) {
+					DPRINTK(debug_datai, DEBUG_LEAD "8bit\n", CMDINFO(CURRENT_SC));
+                                	SETPORT(DMACNTRL0, ENDMA|_8BIT);
+                                	*CURRENT_SC->SCp.ptr++ = GETPORT(DATAPORT);
+                                	CURRENT_SC->SCp.this_residual--;
+                                	DATA_LEN++;
+                                	SETPORT(DMACNTRL0, ENDMA);
+                        	}
+	
+                        	if(data_count > 1) {
+					DPRINTK(debug_datai, DEBUG_LEAD "16bit(%d)\n", CMDINFO(CURRENT_SC), data_count);
+                                	data_count >>= 1;
+                                	insw(DATAPORT, CURRENT_SC->SCp.ptr, data_count);
+                                	CURRENT_SC->SCp.ptr           += 2 * data_count;
+                                	CURRENT_SC->SCp.this_residual -= 2 * data_count;
+                                	DATA_LEN                      += 2 * data_count;
+                        	}
+	
+                        	if(CURRENT_SC->SCp.this_residual==0 && CURRENT_SC->SCp.buffers_residual>0) {
+                               		/* advance to next buffer */
+                               		CURRENT_SC->SCp.buffers_residual--;
+                               		CURRENT_SC->SCp.buffer++;
+                               		CURRENT_SC->SCp.ptr           = CURRENT_SC->SCp.buffer->address;
+                               		CURRENT_SC->SCp.this_residual = CURRENT_SC->SCp.buffer->length;
+				} 
+                	}
+		} else if(fifodata>0) { 
 			printk(ERR_LEAD "no buffers left for %d(%d) bytes (data overrun!?)\n", CMDINFO(CURRENT_SC), fifodata, GETPORT(FIFOSTAT));
-			break;
+                        SETPORT(DMACNTRL0, ENDMA|_8BIT);
+			while(fifodata>0) {
+				int data;
+				data=GETPORT(DATAPORT);
+				DPRINTK(debug_datai, DEBUG_LEAD "data=%02x\n", CMDINFO(CURRENT_SC), data);
+				fifodata--;
+				DATA_LEN++;
+			}
+                        SETPORT(DMACNTRL0, ENDMA|_8BIT);
 		}
 	}
 
@@ -2714,7 +2735,7 @@ static void datao_run(struct Scsi_Host *shpnt)
 			CURRENT_SC->SCp.this_residual = CURRENT_SC->SCp.buffer->length;
 		}
 
-		the_time=jiffies+100;
+		the_time=jiffies+1000;
 		while(TESTLO(DMASTAT, DFIFOEMP|INTSTAT) && time_before(jiffies,the_time))
 			barrier();
 

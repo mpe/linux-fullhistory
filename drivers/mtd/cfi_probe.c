@@ -17,14 +17,22 @@
 #include <linux/mtd/cfi.h>
 
 
-struct mtd_info *cfi_probe(struct map_info *);
-EXPORT_SYMBOL(cfi_probe);
+static struct mtd_info *cfi_probe(struct map_info *);
 
 static void print_cfi_ident(struct cfi_ident *);
 static void check_cmd_set(struct map_info *, int, unsigned long);
 static struct cfi_private *cfi_cfi_probe(struct map_info *);
 
-struct mtd_info *cfi_probe(struct map_info *map)
+static const char im_name[] = "cfi_probe";
+
+/* This routine is made available to other mtd code via
+ * inter_module_register.  It must only be accessed through
+ * inter_module_get which will bump the use count of this module.  The
+ * addresses passed back in mtd are valid as long as the use count of
+ * this module is non-zero, i.e. between inter_module_get and
+ * inter_module_put.  Keith Owens <kaos@ocs.com.au> 29 Oct 2000.
+ */
+static struct mtd_info *cfi_probe(struct map_info *map)
 {
 	struct mtd_info *mtd = NULL;
 	struct cfi_private *cfi;
@@ -35,13 +43,14 @@ struct mtd_info *cfi_probe(struct map_info *map)
 		return NULL;
 
 	map->fldrv_priv = cfi;
+	map->im_name = im_name;
 
 	/* OK we liked it. Now find a driver for the command set it talks */
 
 	check_cmd_set(map, 1, cfi->chips[0].start); /* First the primary cmdset */
 	check_cmd_set(map, 0, cfi->chips[0].start); /* Then the secondary */
 	
-	/* check_cmd_set() will have used get_module_symbol to increase
+	/* check_cmd_set() will have used inter_module_get to increase
 	   the use count of the module which provides the command set 
 	   driver. If we're quitting, we have to decrease it again.
 	*/
@@ -51,7 +60,7 @@ struct mtd_info *cfi_probe(struct map_info *map)
 		
 		if (mtd)
 			return mtd;
-		put_module_symbol((unsigned long)cfi->cmdset_setup);
+		inter_module_put(cfi->im_name);
 	}
 	printk("No supported Vendor Command Set found\n");
 	
@@ -239,7 +248,7 @@ static int cfi_probe_new_chip(struct map_info *map, unsigned long base,
 		}
 	}	
 	default:
-		printk(KERN_WARNING "cfi_cfi_probe called with strange buswidth %d\n", map->buswidth);
+		printk(KERN_WARNING "cfi_probe called with strange buswidth %d\n", map->buswidth);
 		return 0;
 	}
 }
@@ -465,16 +474,9 @@ static void check_cmd_set(struct map_info *map, int primary, unsigned long base)
 	
 	sprintf(probename, "cfi_cmdset_%4.4X", type);
 	
-	probe_function = (void *)get_module_symbol(NULL, probename);
-	if (!probe_function) {
-		request_module(probename);
-		
-		probe_function = (void *)get_module_symbol(NULL, probename);
-	}
-	
+	probe_function = inter_module_get_request(probename, probename);
 	if (probe_function) {
 		(*probe_function)(map, primary, base);
-		put_module_symbol((unsigned long)probe_function);
 		return;
 	}
 
@@ -499,3 +501,17 @@ static void check_cmd_set(struct map_info *map, int primary, unsigned long base)
 		       map->read8(map,base+((adr+4)*map->buswidth)));
 	}
 }
+
+static int __init cfi_probe_init(void)
+{
+	inter_module_register(im_name, THIS_MODULE, &cfi_probe);
+	return 0;
+}
+
+static void __exit cfi_probe_exit(void)
+{
+	inter_module_unregister(im_name);
+}
+
+module_init(cfi_probe_init);
+module_exit(cfi_probe_exit);

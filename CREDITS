@@ -1425,9 +1425,10 @@ D: bits and pieces of USB core code.
 N: Russell Kroll
 E: rkroll@exploits.org
 W: http://www.exploits.org/
-D: V4L Aztech radio card driver, mods to Aimslab driver
-S: Post Office Box 49458
-S: Colorado Springs, Colorado 80949-9458
+D: V4L radio cards: radio-aztech (new), others (bugfixes/features)
+D: Loopback block device: dynamic sizing ("max_loop" as module)
+S: Post Office Box 691886
+S: San Antonio, Texas 78269-1886
 S: USA
 
 N: Andrzej M. Krzysztofowicz

@@ -344,11 +344,6 @@ pcibios_fixup_pbus_ranges(struct pci_bus * bus, struct pbus_set_ranges_data * ra
 	ranges->mem_end -= bus->resource[1]->start;
 }
 
-unsigned long resource_fixup(struct pci_dev * dev, struct resource * res,
-			     unsigned long start, unsigned long size)
-{
-	return start;
-}
 
 void __init pcibios_fixup_bus(struct pci_bus *bus)
 {

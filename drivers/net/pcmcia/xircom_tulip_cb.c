@@ -466,7 +466,7 @@ static void outl_CSR6 (u32 newcsr6, long ioaddr, int chip_idx)
 		restore_flags(flags);
 		return;
     }
-    newcsr6 &= 0x726cfeca; /* mask out the reserved CSR6 bits that always */
+    newcsr6 &= 0x726cfecb; /* mask out the reserved CSR6 bits that always */
 			   /* read 0 on the Xircom cards */
     newcsr6 |= 0x320c0000; /* or in the reserved bits that always read 1 */
     currcsr6 = inl(ioaddr + CSR6);
@@ -1350,7 +1350,7 @@ tulip_up(struct net_device *dev)
 		tp->tx_ring[0].length = 0x08000000 | 192;
 		/* Lie about the address of our setup frame to make the */
 		/* chip happy */
-		tp->tx_ring[0].buffer1 = (virt_to_bus(tp->setup_frame) + 4);
+		tp->tx_ring[0].buffer1 = virt_to_bus(tp->setup_frame);
 		tp->tx_ring[0].status = DescOwned;
 
 		tp->cur_tx++;

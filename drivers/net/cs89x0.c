@@ -1058,10 +1058,10 @@ net_open(struct net_device *dev)
 		writereg(dev, PP_BusCTL, ENABLE_IRQ | MEMORY_ON);
 #endif
 		write_irq(dev, lp->chip_type, dev->irq);
-		if (request_irq(dev->irq, &net_interrupt, 0, "cs89x0", dev)) {
+		ret = request_irq(dev->irq, &net_interrupt, 0, dev->name, dev);
+		if (ret) {
 			if (net_debug)
 				printk("cs89x0: request_irq(%d) failed\n", dev->irq);
-			ret = -EAGAIN;
 			goto bad_out;
 		}
 	}

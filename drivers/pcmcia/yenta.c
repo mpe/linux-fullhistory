@@ -559,7 +559,7 @@ static int yenta_socket_thread(void * data)
 	daemonize();
 	strcpy(current->comm, "CardBus Watcher");
 
-	if (request_irq(socket->cb_irq, yenta_interrupt, SA_SHIRQ, socket->dev->name, socket)) {
+	if (socket->cb_irq && request_irq(socket->cb_irq, yenta_interrupt, SA_SHIRQ, socket->dev->name, socket)) {
 		printk ("Yenta: unable to register irq %d\n", socket->cb_irq);
 		MOD_DEC_USE_COUNT;
 		return (1);

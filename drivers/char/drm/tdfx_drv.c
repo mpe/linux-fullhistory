@@ -235,7 +235,7 @@ static int tdfx_takedown(drm_device_t *dev)
 			drm_free(temp, sizeof(*temp), DRM_MEM_AGPLISTS);
 			temp = temp_next;
 		}
-		if (dev->agp->acquired) (*drm_agp.release)();
+		if (dev->agp->acquired) (*(drm_agp_p->release))();
 	}
 #endif
 				/* Clear vma list (only built for debugging) */

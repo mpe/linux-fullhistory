@@ -46,8 +46,6 @@
 #define DPRINTK(fmt, args...)
 #endif
 
-#define arraysize(x)    (sizeof(x)/sizeof(*(x)))
-
 #if 1
 #define vgawb_3d(reg,dat) \
 	if (cv3d_on_zorro2) { \
@@ -277,7 +275,7 @@ static struct {
 };
 
 
-#define NUM_TOTAL_MODES    arraysize(virgefb_predefined)
+#define NUM_TOTAL_MODES    ARRAY_SIZE(virgefb_predefined)
 
 
 static int Cyberfb_inverse = 0;

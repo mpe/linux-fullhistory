@@ -866,23 +866,6 @@ void pcibios_update_resource(struct pci_dev *pdev, struct resource *res1,
 {
 }
 
-#if 0
-void pcibios_update_irq(struct pci_dev *pdev, int irq)
-{
-}
-
-unsigned long resource_fixup(struct pci_dev *pdev, struct resource *res,
-			     unsigned long start, unsigned long size)
-{
-	return start;
-}
-
-void pcibios_fixup_pbus_ranges(struct pci_bus *pbus,
-			       struct pbus_set_ranges_data *pranges)
-{
-}
-#endif
-
 void pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 {
 }

@@ -9,6 +9,7 @@
 
 #include <linux/config.h>
 #include <linux/spinlock.h>
+#include <linux/list.h>
 
 #ifdef __GENKSYMS__
 #  define _set_ver(sym) sym
@@ -78,11 +79,17 @@ struct module
 	unsigned long gp;
 #endif
 	/* Members past this point are extensions to the basic
-	   module support and are optional.  Use mod_opt_member()
+	   module support and are optional.  Use mod_member_present()
 	   to examine them.  */
 	const struct module_persist *persist_start;
 	const struct module_persist *persist_end;
 	int (*can_unload)(void);
+	int runsize;			/* In modutils, not currently used */
+	const char *kallsyms_start;	/* All symbols for kernel debugging */
+	const char *kallsyms_end;
+	const char *archdata_start;	/* arch specific data for module */
+	const char *archdata_end;
+	const char *kernel_data;	/* Reserved for kernel internal use */
 };
 
 struct module_info
@@ -123,6 +130,10 @@ struct module_info
 	((unsigned long)(&((struct module *)0L)->member + 1)		\
 	 <= (mod)->size_of_struct)
 
+/* Check if an address p with number of entries n is within the body of module m */
+#define mod_bound(p, n, m) ((unsigned long)(p) >= ((unsigned long)(m) + ((m)->size_of_struct)) && \
+	         (unsigned long)((p)+(n)) <= (unsigned long)(m) + (m)->size)
+
 /* Backwards compatibility definition.  */
 
 #define GET_USE_COUNT(module)	(atomic_read(&(module)->uc.usecount))
@@ -142,14 +153,34 @@ struct module_info
 #define __MODULE_STRING_1(x)	#x
 #define __MODULE_STRING(x)	__MODULE_STRING_1(x)
 
-/* Find a symbol exported by the kernel or another module */
-#ifdef CONFIG_MODULES
-extern unsigned long get_module_symbol(char *, char *);
-extern void put_module_symbol(unsigned long);
-#else
-static inline unsigned long get_module_symbol(char *unused1, char *unused2) { return 0; };
-static inline void put_module_symbol(unsigned long unused) { };
-#endif
+/* Generic inter module communication.
+ *
+ * NOTE: This interface is intended for small amounts of data that are
+ *       passed between two objects and either or both of the objects
+ *       might be compiled as modules.  Do not over use this interface.
+ *
+ *       If more than two objects need to communicate then you probably
+ *       need a specific interface instead of abusing this generic
+ *       interface.  If both objects are *always* built into the kernel
+ *       then a global extern variable is good enough, you do not need
+ *       this interface.
+ *
+ * Keith Owens <kaos@ocs.com.au> 28 Oct 2000.
+ */
+
+#define HAVE_INTER_MODULE
+extern void inter_module_register(const char *, struct module *, const void *);
+extern void inter_module_unregister(const char *);
+extern const void *inter_module_get(const char *);
+extern const void *inter_module_get_request(const char *, const char *);
+extern void inter_module_put(const char *);
+
+struct inter_module_entry {
+	struct list_head list;
+	const char *im_name;
+	struct module *owner;
+	const void *userdata;
+};
 
 extern int try_inc_mod_count(struct module *mod);
 

@@ -60,8 +60,6 @@
 
 #define IO_OUT16VAL(v, r)       (((v) << 8) | (r))
 
-#define arraysize(x)	(sizeof(x)/sizeof(*(x)))
-
 static int currcon = 0;
 static struct display disp;
 static struct fb_info fb_info;

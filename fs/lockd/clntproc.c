@@ -407,19 +407,15 @@ nlmclnt_test(struct nlm_rqst *req, struct file_lock *fl)
 static
 void nlmclnt_insert_lock_callback(struct file_lock *fl)
 {
-	lock_kernel();
 	nlm_get_host(fl->fl_u.nfs_fl.host);
-	unlock_kernel();
 }
 static
 void nlmclnt_remove_lock_callback(struct file_lock *fl)
 {
-	lock_kernel();
 	if (fl->fl_u.nfs_fl.host) {
 		nlm_release_host(fl->fl_u.nfs_fl.host);
 		fl->fl_u.nfs_fl.host = NULL;
 	}
-	unlock_kernel();
 }
 
 /*

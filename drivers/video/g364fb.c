@@ -77,8 +77,6 @@
 #define MON_ID_REG 	0xe4100000 	/* unused */
 #define RESET_REG 	0xe4180000  	/* Write only */
 
-#define arraysize(x)	(sizeof(x)/sizeof(*(x)))
-
 static int currcon = 0;
 static struct display disp;
 static struct fb_info fb_info;

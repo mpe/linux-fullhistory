@@ -622,9 +622,6 @@ static int __init etherh_init(void)
 {
 	int i, ret = -ENODEV;
 
-	if (load_8390_module("etherh.c"))
-		return -ENOSYS;
-
 	ecard_startfind();
 
 	for (i = 0; i < MAX_ECARDS; i++) {
@@ -643,9 +640,6 @@ static int __init etherh_init(void)
 		e_dev[i]  = dev;
 		ret = 0;
 	}
-
-	if (ret)
-		unload_8390_module();
 
 	return ret;
 }
@@ -667,7 +661,6 @@ static void __exit etherh_exit(void)
 			e_card[i] = NULL;
 		}
 	}
-	unload_8390_module();
 }
 
 module_init(etherh_init);

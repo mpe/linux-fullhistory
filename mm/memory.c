@@ -1201,29 +1201,32 @@ static inline int handle_pte_fault(struct mm_struct *mm,
 {
 	pte_t entry;
 
+	/*
+	 * We need the page table lock to synchronize with kswapd
+	 * and the SMP-safe atomic PTE updates.
+	 */
+	spin_lock(&mm->page_table_lock);
 	entry = *pte;
 	if (!pte_present(entry)) {
+		/*
+		 * If it truly wasn't present, we know that kswapd
+		 * and the PTE updates will not touch it later. So
+		 * drop the lock.
+		 */
+		spin_unlock(&mm->page_table_lock);
 		if (pte_none(entry))
 			return do_no_page(mm, vma, address, write_access, pte);
 		return do_swap_page(mm, vma, address, pte, pte_to_swp_entry(entry), write_access);
 	}
 
-	/*
-	 * Ok, the entry was present, we need to get the page table
-	 * lock to synchronize with kswapd, and verify that the entry
-	 * didn't change from under us..
-	 */
-	spin_lock(&mm->page_table_lock);
-	if (pte_same(entry, *pte)) {
-		if (write_access) {
-			if (!pte_write(entry))
-				return do_wp_page(mm, vma, address, pte, entry);
+	if (write_access) {
+		if (!pte_write(entry))
+			return do_wp_page(mm, vma, address, pte, entry);
 
-			entry = pte_mkdirty(entry);
-		}
-		entry = pte_mkyoung(entry);
-		establish_pte(vma, address, pte, entry);
+		entry = pte_mkdirty(entry);
 	}
+	entry = pte_mkyoung(entry);
+	establish_pte(vma, address, pte, entry);
 	spin_unlock(&mm->page_table_lock);
 	return 1;
 }

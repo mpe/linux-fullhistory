@@ -451,9 +451,6 @@ extern void flush_hash_page(unsigned context, unsigned long va);
 #define pte_to_swp_entry(pte)		((swp_entry_t) { pte_val(pte) })
 #define swp_entry_to_pte(x)		((pte_t) { (x).val })
 
-#define module_map      vmalloc
-#define module_unmap    vfree
-
 /* CONFIG_APUS */
 /* For virtual address to physical address conversion */
 extern void cache_clear(__u32 addr, int length);

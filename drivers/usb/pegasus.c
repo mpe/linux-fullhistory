@@ -40,7 +40,6 @@
  */
 
 
-#include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
@@ -48,6 +47,7 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/usb.h>
+#include <linux/module.h>
 
 
 static const char *version = __FILE__ ": v0.4.13 2000/10/13 (C) 1999-2000 Petko Manolov (petkan@dce.bg)";
@@ -111,7 +111,6 @@ static const char *version = __FILE__ ": v0.4.13 2000/10/13 (C) 1999-2000 Petko 
 #define	PEGASUS_REQ_GET_REGS	0xf0
 #define	PEGASUS_REQ_SET_REGS	0xf1
 #define	PEGASUS_REQ_SET_REG	PEGASUS_REQ_SET_REGS
-#define	NUM_CTRL_URBS		0x10
 #define	ALIGN(x)		x __attribute__((aligned(L1_CACHE_BYTES)))
 
 enum pegasus_registers {
@@ -172,36 +171,58 @@ static int multicast_filter_limit = 32;
 MODULE_AUTHOR("Petko Manolov <petkan@dce.bg>");
 MODULE_DESCRIPTION("ADMtek AN986 Pegasus USB Ethernet driver");
 MODULE_PARM(loopback, "i");
-MODULE_PARM(mode, "i");
+MODULE_PARM(mii_mode, "i");
 MODULE_PARM_DESC(loopback, "Enable MAC loopback mode (bit 0)");
-MODULE_PARM_DESC(mode, "Enable HomePNA mode (bit 0) - default = MII mode = 0");
+MODULE_PARM_DESC(mii_mode, "Enable HomePNA mode (bit 0) - default = MII mode = 0");
 
 
 static struct usb_eth_dev usb_dev_id[] = {
-	{"Billionton USB-100", 0x08dd, 0x0986, DEFAULT_GPIO_RESET},
-	{"Corega FEter USB-TX", 0x7aa, 0x0004, DEFAULT_GPIO_RESET},
-	{"MELCO/BUFFALO LUA-TX", 0x0411, 0x0001, DEFAULT_GPIO_RESET},
-	{"D-Link DSB-650TX", 0x2001, 0x4001, LINKSYS_GPIO_RESET},
-	{"D-Link DSB-650TX", 0x2001, 0x4002, LINKSYS_GPIO_RESET},
+	{"Billionton USB-100", 0x08dd, 0x0986,
+		DEFAULT_GPIO_RESET},
+	{"Billionton USBLP-100", 0x08dd, 0x0987,
+		DEFAULT_GPIO_RESET | HAS_HOME_PNA},
+	{"Billionton USBEL-100", 0x08dd, 0x0988,
+		DEFAULT_GPIO_RESET},
+	{"Billionton USBE-100", 0x08dd, 0x8511,
+		DEFAULT_GPIO_RESET | PEGASUS_II},
+	{"Corega FEter USB-TX", 0x7aa, 0x0004,
+		DEFAULT_GPIO_RESET},
+	{"MELCO/BUFFALO LUA-TX", 0x0411, 0x0001,
+		DEFAULT_GPIO_RESET},
+	{"D-Link DSB-650TX", 0x2001, 0x4001,
+		LINKSYS_GPIO_RESET},
+	{"D-Link DSB-650TX", 0x2001, 0x4002,
+		LINKSYS_GPIO_RESET},
 	{"D-Link DSB-650TX(PNA)", 0x2001, 0x4003,
-		HAS_HOME_PNA | DEFAULT_GPIO_RESET},
-	{"D-Link DSB-650", 0x2001, 0xabc1, DEFAULT_GPIO_RESET},
-	{"D-Link DU-E10", 0x07b8, 0xabc1, DEFAULT_GPIO_RESET},
-	{"D-Link DU-E100", 0x07b8, 0x4002, DEFAULT_GPIO_RESET},
-	{"Linksys USB10TX", 0x066b, 0x2202, LINKSYS_GPIO_RESET},
-	{"Linksys USB100TX", 0x066b, 0x2203, LINKSYS_GPIO_RESET},
-	{"Linksys USB100TX", 0x066b, 0x2204, HAS_HOME_PNA | LINKSYS_GPIO_RESET},
-	{"Linksys USB Ethernet Adapter", 0x066b, 0x2206, LINKSYS_GPIO_RESET},
-	{"SMC 202 USB Ethernet", 0x0707, 0x0200, DEFAULT_GPIO_RESET},
-	{"ADMtek AN986 \"Pegasus\" USB Ethernet (eval board)", 0x07a6, 0x0986, 
-		HAS_HOME_PNA | DEFAULT_GPIO_RESET},
+		DEFAULT_GPIO_RESET | HAS_HOME_PNA},
+	{"D-Link DSB-650", 0x2001, 0xabc1,
+		DEFAULT_GPIO_RESET},
+	{"D-Link DU-E10", 0x07b8, 0xabc1,
+		DEFAULT_GPIO_RESET},
+	{"D-Link DU-E100", 0x07b8, 0x4002,
+		DEFAULT_GPIO_RESET},
+	{"Linksys USB10TX", 0x066b, 0x2202,
+		LINKSYS_GPIO_RESET},
+	{"Linksys USB100TX", 0x066b, 0x2203,
+		LINKSYS_GPIO_RESET},
+	{"Linksys USB100TX", 0x066b, 0x2204,
+		LINKSYS_GPIO_RESET | HAS_HOME_PNA},
+	{"Linksys USB Ethernet Adapter", 0x066b, 0x2206,
+		LINKSYS_GPIO_RESET},
+	{"SMC 202 USB Ethernet", 0x0707, 0x0200,
+		DEFAULT_GPIO_RESET},
+	{"ADMtek AN986 \"Pegasus\" USB Ethernet (eval board)", 0x07a6, 0x0986,
+		DEFAULT_GPIO_RESET | HAS_HOME_PNA},
 	{"Accton USB 10/100 Ethernet Adapter", 0x083a, 0x1046, 
 		DEFAULT_GPIO_RESET},
-	{"IO DATA USB ET/TX", 0x04bb, 0x0904, DEFAULT_GPIO_RESET},
-	{"LANEED USB Ethernet LD-USB/TX", 0x056e, 0x4002, DEFAULT_GPIO_RESET},
-	{"SOHOware NUB100 Ethernet", 0x15e8, 0x9100, DEFAULT_GPIO_RESET},
+	{"IO DATA USB ET/TX", 0x04bb, 0x0904,
+		DEFAULT_GPIO_RESET},
+	{"LANEED USB Ethernet LD-USB/TX", 0x056e, 0x4002,
+		DEFAULT_GPIO_RESET},
+	{"SOHOware NUB100 Ethernet", 0x15e8, 0x9100,
+		DEFAULT_GPIO_RESET},
 	{"ADMtek ADM8511 \"Pegasus II\" USB Ethernet", 0x07a6, 0x8511, 
-		PEGASUS_II | DEFAULT_GPIO_RESET},
+		DEFAULT_GPIO_RESET | PEGASUS_II},
 	{NULL, 0, 0, 0}
 };
 
@@ -536,7 +557,7 @@ static int enable_net_traffic( struct net_device *dev, struct usb_device *usb )
 		data[1] = 0;
 	data[2] = (loopback & 1) ? 0x09 : 0x01;
 
-	*(unsigned *)pegasus->eth_regs = *(unsigned *)data;
+	memcpy( pegasus->eth_regs, data, sizeof(data) );
 
 	set_registers( pegasus, EthCtrl0, 3, data );
 
@@ -629,6 +650,7 @@ static void write_bulk_callback( struct urb *urb )
 	if ( urb->status )
 		info("%s: TX status %d", pegasus->net->name, urb->status);
 
+	pegasus->net->trans_start = jiffies;
 	netif_wake_queue( pegasus->net );
 }
 
@@ -671,13 +693,11 @@ static void pegasus_tx_timeout( struct net_device *net )
 
 	if ( !pegasus )
 		return;
-	
-	usb_unlink_urb( &pegasus->tx_urb );
+		
 	warn("%s: Tx timed out.", net->name);
+	pegasus->tx_urb.transfer_flags |= USB_ASYNC_UNLINK;
+	usb_unlink_urb( &pegasus->tx_urb );
 	pegasus->stats.tx_errors++;
-	net->trans_start = jiffies;
-
-	netif_wake_queue( net );
 }
 
 
@@ -696,7 +716,6 @@ static int pegasus_start_xmit( struct sk_buff *skb, struct net_device *net )
 			pegasus->tx_buff, PEGASUS_MAX_MTU, 
 			write_bulk_callback, pegasus );
 	pegasus->tx_urb.transfer_buffer_length = count;
-	pegasus->tx_urb.transfer_flags |= USB_ASYNC_UNLINK;
 	if ((res = usb_submit_urb(&pegasus->tx_urb))) {
 		warn("failed tx_urb %d", res);
 		pegasus->stats.tx_errors++;
@@ -781,8 +800,9 @@ static int pegasus_close( struct net_device *net )
 	usb_unlink_urb( &pegasus->rx_urb );
 	usb_unlink_urb( &pegasus->tx_urb );
 	usb_unlink_urb( &pegasus->ctrl_urb );
+#ifdef	PEGASUS_USE_INTR
 	usb_unlink_urb( &pegasus->intr_urb );
-
+#endif
 	MOD_DEC_USE_COUNT;
 
 	return 0;
@@ -935,8 +955,10 @@ static void * pegasus_probe( struct usb_device *dev, unsigned int ifnum )
 		return NULL;
 	}
 
+	info( "%s: %s", net->name, usb_dev_id[dev_indx].name );
+
 	set_ethernet_addr( pegasus );
-	
+
 	if ( pegasus->features & PEGASUS_II ) {
 		info( "setup Pegasus II specific registers" );
 		setup_pegasus_II( pegasus );
@@ -947,8 +969,6 @@ static void * pegasus_probe( struct usb_device *dev, unsigned int ifnum )
 		warn( "can't locate MII phy, using default" );
 		pegasus->phy = 1;
 	}
-
-	info( "%s: %s", net->name, usb_dev_id[dev_indx].name );
 
 	return pegasus;
 }

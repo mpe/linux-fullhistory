@@ -91,7 +91,8 @@ static struct buffer_head *raid1_alloc_bh(raid1_conf_t *conf, int cnt)
 
 static inline void raid1_free_bh(raid1_conf_t *conf, struct buffer_head *bh)
 {
-	md_spin_lock_irq(&conf->device_lock);
+	unsigned long flags;
+	spin_lock_irqsave(&conf->device_lock, flags);
 	while (bh) {
 		struct buffer_head *t = bh;
 		bh=bh->b_next;
@@ -103,7 +104,7 @@ static inline void raid1_free_bh(raid1_conf_t *conf, struct buffer_head *bh)
 			conf->freebh_cnt++;
 		}
 	}
-	md_spin_unlock_irq(&conf->device_lock);
+	spin_unlock_irqrestore(&conf->device_lock, flags);
 	wake_up(&conf->wait_buffer);
 }
 
@@ -182,10 +183,11 @@ static inline void raid1_free_r1bh(struct raid1_bh *r1_bh)
 	r1_bh->mirror_bh_list = NULL;
 
 	if (test_bit(R1BH_PreAlloc, &r1_bh->state)) {
-		md_spin_lock_irq(&conf->device_lock);
+		unsigned long flags;
+		spin_lock_irqsave(&conf->device_lock, flags);
 		r1_bh->next_r1 = conf->freer1;
 		conf->freer1 = r1_bh;
-		md_spin_unlock_irq(&conf->device_lock);
+		spin_unlock_irqrestore(&conf->device_lock, flags);
 	} else {
 		kfree(r1_bh);
 	}
@@ -229,14 +231,15 @@ static void raid1_shrink_r1bh(raid1_conf_t *conf)
 
 static inline void raid1_free_buf(struct raid1_bh *r1_bh)
 {
+	unsigned long flags;
 	struct buffer_head *bh = r1_bh->mirror_bh_list;
 	raid1_conf_t *conf = mddev_to_conf(r1_bh->mddev);
 	r1_bh->mirror_bh_list = NULL;
 	
-	md_spin_lock_irq(&conf->device_lock);
+	spin_lock_irqsave(&conf->device_lock, flags);
 	r1_bh->next_r1 = conf->freebuf;
 	conf->freebuf = r1_bh;
-	md_spin_unlock_irq(&conf->device_lock);
+	spin_unlock_irqrestore(&conf->device_lock, flags);
 	raid1_free_bh(conf, bh);
 }
 
@@ -371,7 +374,7 @@ static void raid1_end_bh_io (struct raid1_bh *r1_bh, int uptodate)
 {
 	struct buffer_head *bh = r1_bh->master_bh;
 
-	io_request_done(bh->b_rsector, mddev_to_conf(r1_bh->mddev),
+	io_request_done(bh->b_blocknr*(bh->b_size>>9), mddev_to_conf(r1_bh->mddev),
 			test_bit(R1BH_SyncPhase, &r1_bh->state));
 
 	bh->b_end_io(bh, uptodate);
@@ -599,7 +602,7 @@ static int raid1_make_request (mddev_t *mddev, int rw,
 
 		bh_req = &r1_bh->bh_req;
 		memcpy(bh_req, bh, sizeof(*bh));
-		bh_req->b_blocknr = bh->b_rsector * sectors;
+		bh_req->b_blocknr = bh->b_rsector / sectors;
 		bh_req->b_dev = mirror->dev;
 		bh_req->b_rdev = mirror->dev;
 	/*	bh_req->b_rsector = bh->n_rsector; */
@@ -643,7 +646,7 @@ static int raid1_make_request (mddev_t *mddev, int rw,
  	/*
  	 * prepare mirrored mbh (fields ordered for max mem throughput):
  	 */
-		mbh->b_blocknr    = bh->b_rsector * sectors;
+		mbh->b_blocknr    = bh->b_rsector / sectors;
 		mbh->b_dev        = conf->mirrors[i].dev;
 		mbh->b_rdev	  = conf->mirrors[i].dev;
 		mbh->b_rsector	  = bh->b_rsector;
@@ -1181,7 +1184,7 @@ static void raid1d (void *data)
 					struct buffer_head *bh1 = mbh;
 					mbh = mbh->b_next;
 					generic_make_request(WRITE, bh1);
-					md_sync_acct(bh1->b_rdev, bh1->b_size/512);
+					md_sync_acct(bh1->b_dev, bh1->b_size/512);
 				}
 			} else {
 				dev = bh->b_dev;
@@ -1406,7 +1409,7 @@ static int raid1_sync_request (mddev_t *mddev, unsigned long block_nr)
 	init_waitqueue_head(&bh->b_wait);
 
 	generic_make_request(READ, bh);
-	md_sync_acct(bh->b_rdev, bh->b_size/512);
+	md_sync_acct(bh->b_dev, bh->b_size/512);
 
 	return (bsize >> 10);
 

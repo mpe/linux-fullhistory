@@ -723,7 +723,7 @@ static struct block_device_operations hd_fops = {
  * We enable interrupts in some of the routines after making sure it's
  * safe.
  */
-static void hd_geninit(void)
+static void __init hd_geninit(void)
 {
 	int drive;
 

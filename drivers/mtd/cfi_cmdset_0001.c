@@ -32,12 +32,20 @@ static void cfi_intelext_resume (struct mtd_info *);
 
 static void cfi_intelext_destroy(struct mtd_info *);
 
-void cfi_cmdset_0001(struct map_info *, int, unsigned long);
-EXPORT_SYMBOL(cfi_cmdset_0001);
+static void cfi_cmdset_0001(struct map_info *, int, unsigned long);
 
-struct mtd_info *cfi_intelext_setup (struct map_info *);
+static struct mtd_info *cfi_intelext_setup (struct map_info *);
 
-void cfi_cmdset_0001(struct map_info *map, int primary, unsigned long base)
+static const char im_name[] = "cfi_cmdset_0001";
+
+/* This routine is made available to other mtd code via
+ * inter_module_register.  It must only be accessed through
+ * inter_module_get which will bump the use count of this module.  The
+ * addresses passed back in cfi are valid as long as the use count of
+ * this module is non-zero, i.e. between inter_module_get and
+ * inter_module_put.  Keith Owens <kaos@ocs.com.au> 29 Oct 2000.
+ */
+static void cfi_cmdset_0001(struct map_info *map, int primary, unsigned long base)
 {
 	struct cfi_private *cfi = map->fldrv_priv;
 	int i;
@@ -144,7 +152,7 @@ void cfi_cmdset_0001(struct map_info *map, int primary, unsigned long base)
 
 	/* If there was an old setup function, decrease its use count */
 	if (cfi->cmdset_setup)
-		put_module_symbol((unsigned long)cfi->cmdset_setup);
+		inter_module_put(cfi->im_name);
 	if (cfi->cmdset_priv)
 		kfree(cfi->cmdset_priv);
 
@@ -156,14 +164,13 @@ void cfi_cmdset_0001(struct map_info *map, int primary, unsigned long base)
 		
 
 	cfi->cmdset_setup = cfi_intelext_setup;
+	cfi->im_name = im_name;
 	cfi->cmdset_priv = extp;
-	MOD_INC_USE_COUNT; /* So the setup function is still there 
-			    * by the time it's called */
 	
 	return;
 }
 
-struct mtd_info *cfi_intelext_setup(struct map_info *map)
+static struct mtd_info *cfi_intelext_setup(struct map_info *map)
 {
 	struct cfi_private *cfi = map->fldrv_priv;
 	struct mtd_info *mtd;
@@ -862,6 +869,21 @@ static void cfi_intelext_destroy(struct mtd_info *mtd)
 	struct map_info *map = mtd->priv;
 	struct cfi_private *cfi = map->fldrv_priv;
 	kfree(cfi->cmdset_priv);
+	inter_module_put(cfi->im_name);
 	kfree(cfi);
 }
 
+
+static int __init cfi_intelext_init(void)
+{
+	inter_module_register(im_name, THIS_MODULE, &cfi_cmdset_0001);
+	return 0;
+}
+
+static void __exit cfi_intelext_exit(void)
+{
+	inter_module_unregister(im_name);
+}
+
+module_init(cfi_intelext_init);
+module_exit(cfi_intelext_exit);

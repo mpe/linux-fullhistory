@@ -7,7 +7,6 @@
 
 #include <linux/types.h>
 #include <linux/mtd/mtd.h>
-#include <linux/kmod.h>
 #include <linux/malloc.h>
 
 /* The map stuff is very simple. You fill in your struct map_info with
@@ -52,6 +51,7 @@ struct map_info {
 	unsigned long map_priv_2;
 	void *fldrv_priv;
 	void (*fldrv_destroy)(struct mtd_info *);
+	const char *im_name;
 };
 
 /* 
@@ -59,20 +59,13 @@ struct map_info {
  * if anything is recognised. Doesn't register it because the calling
  * map driver needs to set the 'module' field first.
  */
-static inline struct mtd_info *do_map_probe(struct map_info *map, char *funcname, char *modname)
+static inline struct mtd_info *do_map_probe(struct map_info *map, const char *funcname, const char *modname)
 {
 	struct mtd_info *(*probe_p)(struct map_info *);
 	struct mtd_info *mtd = NULL;
 
-	probe_p = (void *)get_module_symbol(NULL, funcname);
-	if (!probe_p) {
-		request_module(modname);
-		probe_p = (void *)get_module_symbol(NULL, funcname);
-	}
-	if (probe_p) {
-		mtd = (*probe_p)(map);
-		put_module_symbol((unsigned long)probe_p);
-	}
+	if ((probe_p = inter_module_get_request(modname, funcname)))
+		mtd = (*probe_p)(map);	/* map->im_name is set by probe */
 
 	return mtd;
 }
@@ -95,7 +88,7 @@ static inline void map_destroy(struct mtd_info *mtd)
 	struct map_info *map = mtd->priv;
 
 	map->fldrv_destroy(mtd);
-	put_module_symbol((unsigned long)map->fldrv_destroy);
+	inter_module_put(map->im_name);
 	kfree(mtd);
 }
 

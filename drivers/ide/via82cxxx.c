@@ -611,7 +611,7 @@ void __init ide_init_via82cxxx(ide_hwif_t *hwif)
  * We allow the BM-DMA driver only work on enabled interfaces.
  */
 
-void ide_dmacapable_via82cxxx(ide_hwif_t *hwif, unsigned long dmabase)
+void __init ide_dmacapable_via82cxxx(ide_hwif_t *hwif, unsigned long dmabase)
 {
 	if ((via_enabled >> hwif->channel) & 1)
 		ide_setup_dma(hwif, dmabase, 8);

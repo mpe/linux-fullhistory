@@ -7,11 +7,11 @@
 
 	This software may be used and distributed according to the terms
 	of the GNU Public License, incorporated herein by reference.
-	
+
 	Please read Documentation/networking/tulip.txt for more
 	information.
 
-	For this specific driver variant please use linux-kernel for 
+	For this specific driver variant please use linux-kernel for
 	bug reports.
 
 	Additional information available at
@@ -28,13 +28,13 @@
 #include <asm/unaligned.h>
 
 static char version[] __devinitdata =
-	"Linux Tulip driver version 0.9.10 (September 6, 2000)\n";
+	"Linux Tulip driver version 0.9.11 (November 3, 2000)\n";
 
 
 /* A few user-configurable values. */
 
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
-static int max_interrupt_work = 25;
+static unsigned int max_interrupt_work = 25;
 
 #define MAX_UNITS 8
 /* Used to pass the full-duplex flag, etc. */
@@ -415,11 +415,11 @@ tulip_open(struct net_device *dev)
 	}
 
 	tulip_init_ring (dev);
-	
+
 	tulip_up (dev);
-	
+
 	netif_start_queue (dev);
-	
+
 	return 0;
 }
 
@@ -429,7 +429,7 @@ static void tulip_tx_timeout(struct net_device *dev)
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	unsigned long flags;
-	
+
 	DPRINTK("ENTER\n");
 
 	spin_lock_irqsave (&tp->lock, flags);
@@ -541,7 +541,6 @@ static void tulip_init_ring(struct net_device *dev)
 
 	DPRINTK("ENTER\n");
 
-	tp->tx_full = 0;
 	tp->cur_rx = tp->cur_tx = 0;
 	tp->dirty_rx = tp->dirty_tx = 0;
 	tp->susp_rx = 0;
@@ -597,9 +596,6 @@ tulip_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	u32 flag;
 	dma_addr_t mapping;
 
-	/* Caution: the write order is important here, set the field
-	   with the ownership bits last. */
-
 	spin_lock_irq(&tp->lock);
 
 	/* Calculate the next Tx descriptor entry. */
@@ -618,7 +614,6 @@ tulip_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	} else if (tp->cur_tx - tp->dirty_tx < TX_RING_SIZE - 2) {
 		flag = 0x60000000; /* No Tx-done intr. */
 	} else {		/* Leave room for set_rx_mode() to fill entries. */
-		tp->tx_full = 1;
 		flag = 0xe0000000; /* Tx-done intr. */
 		netif_stop_queue(dev);
 	}
@@ -626,7 +621,11 @@ tulip_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		flag = 0xe0000000 | DESC_RING_WRAP;
 
 	tp->tx_ring[entry].length = cpu_to_le32(skb->len | flag);
+	/* if we were using Transmit Automatic Polling, we would need a
+	 * wmb() here. */
 	tp->tx_ring[entry].status = cpu_to_le32(DescOwned);
+	wmb();
+
 	tp->cur_tx++;
 
 	/* Trigger an immediate transmit demand. */
@@ -670,14 +669,14 @@ static void tulip_down (struct net_device *dev)
 	if (tp->flags & HAS_ACPI)
 		pci_write_config_dword (tp->pdev, 0x40, 0x40000000);
 }
-  
-  
+
+
 static int tulip_close (struct net_device *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct tulip_private *tp = (struct tulip_private *) dev->priv;
 	int i;
-	
+
 	netif_stop_queue (dev);
 
 	tulip_down (dev);
@@ -846,18 +845,77 @@ static inline u32 ether_crc(int length, unsigned char *data)
     return crc;
 }
 
+#undef set_bit_le
+#define set_bit_le(i,p) do { ((char *)(p))[(i)/8] |= (1<<((i)%8)); } while(0)
+
+static void build_setup_frame_hash(u16 *setup_frm, struct net_device *dev)
+{
+	struct tulip_private *tp = (struct tulip_private *)dev->priv;
+	u16 hash_table[32];
+	struct dev_mc_list *mclist;
+	int i;
+	u16 *eaddrs;
+
+	memset(hash_table, 0, sizeof(hash_table));
+	set_bit_le(255, hash_table); 			/* Broadcast entry */
+	/* This should work on big-endian machines as well. */
+	for (i = 0, mclist = dev->mc_list; mclist && i < dev->mc_count;
+	     i++, mclist = mclist->next) {
+		int index = ether_crc_le(ETH_ALEN, mclist->dmi_addr) & 0x1ff;
+
+		set_bit_le(index, hash_table);
+
+		for (i = 0; i < 32; i++) {
+			*setup_frm++ = hash_table[i];
+			*setup_frm++ = hash_table[i];
+		}
+		setup_frm = &tp->setup_frame[13*6];
+	}
+
+	/* Fill the final entry with our physical address. */
+	eaddrs = (u16 *)dev->dev_addr;
+	*setup_frm++ = eaddrs[0]; *setup_frm++ = eaddrs[0];
+	*setup_frm++ = eaddrs[1]; *setup_frm++ = eaddrs[1];
+	*setup_frm++ = eaddrs[2]; *setup_frm++ = eaddrs[2];
+}
+
+static void build_setup_frame_perfect(u16 *setup_frm, struct net_device *dev)
+{
+	struct tulip_private *tp = (struct tulip_private *)dev->priv;
+	struct dev_mc_list *mclist;
+	int i;
+	u16 *eaddrs;
+
+	/* We have <= 14 addresses so we can use the wonderful
+	   16 address perfect filtering of the Tulip. */
+	for (i = 0, mclist = dev->mc_list; i < dev->mc_count;
+	     i++, mclist = mclist->next) {
+		eaddrs = (u16 *)mclist->dmi_addr;
+		*setup_frm++ = *eaddrs; *setup_frm++ = *eaddrs++;
+		*setup_frm++ = *eaddrs; *setup_frm++ = *eaddrs++;
+		*setup_frm++ = *eaddrs; *setup_frm++ = *eaddrs++;
+	}
+	/* Fill the unused entries with the broadcast address. */
+	memset(setup_frm, 0xff, (15-i)*12);
+	setup_frm = &tp->setup_frame[15*6];
+
+	/* Fill the final entry with our physical address. */
+	eaddrs = (u16 *)dev->dev_addr;
+	*setup_frm++ = eaddrs[0]; *setup_frm++ = eaddrs[0];
+	*setup_frm++ = eaddrs[1]; *setup_frm++ = eaddrs[1];
+	*setup_frm++ = eaddrs[2]; *setup_frm++ = eaddrs[2];
+}
+
+
 static void set_rx_mode(struct net_device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	long ioaddr = dev->base_addr;
-	int csr6, need_lock = 0;
-	unsigned long flags;
+	int csr6;
 
 	DPRINTK("ENTER\n");
 
-	spin_lock_irqsave(&tp->lock, flags);
 	csr6 = inl(ioaddr + CSR6) & ~0x00D5;
-	spin_unlock_irqrestore(&tp->lock, flags);
 
 	tp->csr6 &= ~0x00D5;
 	if (dev->flags & IFF_PROMISC) {			/* Set promiscuous. */
@@ -865,14 +923,10 @@ static void set_rx_mode(struct net_device *dev)
 		csr6 |= 0x00C0;
 		/* Unconditionally log net taps. */
 		printk(KERN_INFO "%s: Promiscuous mode enabled.\n", dev->name);
-		
-		need_lock = 1;
 	} else if ((dev->mc_count > 1000)  ||  (dev->flags & IFF_ALLMULTI)) {
 		/* Too many to filter well -- accept all multicasts. */
 		tp->csr6 |= 0x0080;
 		csr6 |= 0x0080;
-		
-		need_lock = 1;
 	} else	if (tp->flags & MC_HASH_ONLY) {
 		/* Some work-alikes have only a 64-entry hash filter table. */
 		/* Should verify correctness on big-endian/__powerpc__ */
@@ -882,7 +936,6 @@ static void set_rx_mode(struct net_device *dev)
 		if (dev->mc_count > 64) {		/* Arbitrary non-effective limit. */
 			tp->csr6 |= 0x0080;
 			csr6 |= 0x0080;
-			need_lock = 1;
 		} else {
 			mc_filter[1] = mc_filter[0] = 0;
 			for (i = 0, mclist = dev->mc_list; mclist && i < dev->mc_count;
@@ -890,71 +943,32 @@ static void set_rx_mode(struct net_device *dev)
 				set_bit(ether_crc(ETH_ALEN, mclist->dmi_addr)>>26, mc_filter);
 
 			if (tp->chip_id == AX88140) {
-				spin_lock_irqsave(&tp->lock, flags);
 				outl(2, ioaddr + CSR13);
 				outl(mc_filter[0], ioaddr + CSR14);
 				outl(3, ioaddr + CSR13);
 				outl(mc_filter[1], ioaddr + CSR14);
-				/* need_lock = 0; */
 			} else if (tp->chip_id == COMET) { /* Has a simple hash filter. */
-				spin_lock_irqsave(&tp->lock, flags);
 				outl(mc_filter[0], ioaddr + 0xAC);
 				outl(mc_filter[1], ioaddr + 0xB0);
-				/* need_lock = 0; */
-			} else {
-				need_lock = 1;
 			}
 		}
-		
 	} else {
-		u16 *eaddrs, *setup_frm = tp->setup_frame;
-		struct dev_mc_list *mclist;
-		u32 tx_flags = 0x08000000 | 192;
-		int i;
+		unsigned long flags;
 
 		/* Note that only the low-address shortword of setup_frame is valid!
 		   The values are doubled for big-endian architectures. */
 		if (dev->mc_count > 14) { /* Must use a multicast hash table. */
-			u16 hash_table[32];
-			tx_flags = 0x08400000 | 192;		/* Use hash filter. */
-			memset(hash_table, 0, sizeof(hash_table));
-			set_bit(255, hash_table); 			/* Broadcast entry */
-			/* This should work on big-endian machines as well. */
-			for (i = 0, mclist = dev->mc_list; mclist && i < dev->mc_count;
-				 i++, mclist = mclist->next)
-				set_bit(ether_crc_le(ETH_ALEN, mclist->dmi_addr) & 0x1ff,
-						hash_table);
-			for (i = 0; i < 32; i++) {
-				*setup_frm++ = hash_table[i];
-				*setup_frm++ = hash_table[i];
-			}
-			setup_frm = &tp->setup_frame[13*6];
+			build_setup_frame_hash(tp->setup_frame, dev);
 		} else {
-			/* We have <= 14 addresses so we can use the wonderful
-			   16 address perfect filtering of the Tulip. */
-			for (i = 0, mclist = dev->mc_list; i < dev->mc_count;
-				 i++, mclist = mclist->next) {
-				u16 *eaddrs = (u16 *)mclist->dmi_addr;
-				*setup_frm++ = eaddrs[0]; *setup_frm++ = eaddrs[0];
-				*setup_frm++ = eaddrs[1]; *setup_frm++ = eaddrs[1];
-				*setup_frm++ = eaddrs[2]; *setup_frm++ = eaddrs[2];
-			}
-			/* Fill the unused entries with the broadcast address. */
-			memset(setup_frm, 0xff, (15-i)*12);
-			setup_frm = &tp->setup_frame[15*6];
+			build_setup_frame_perfect(tp->setup_frame, dev);
 		}
-
-		/* Fill the final entry with our physical address. */
-		eaddrs = (u16 *)dev->dev_addr;
-		*setup_frm++ = eaddrs[0]; *setup_frm++ = eaddrs[0];
-		*setup_frm++ = eaddrs[1]; *setup_frm++ = eaddrs[1];
-		*setup_frm++ = eaddrs[2]; *setup_frm++ = eaddrs[2];
 
 		spin_lock_irqsave(&tp->lock, flags);
 
 		if (tp->cur_tx - tp->dirty_tx > TX_RING_SIZE - 2) {
 			/* Same setup recently queued, we need not add it. */
 		} else {
+			u32 tx_flags = 0x08000000 | 192;
 			unsigned int entry;
 			int dummy = -1;
 
@@ -988,24 +1002,18 @@ static void set_rx_mode(struct net_device *dev)
 			tp->tx_ring[entry].status = cpu_to_le32(DescOwned);
 			if (dummy >= 0)
 				tp->tx_ring[dummy].status = cpu_to_le32(DescOwned);
-			if (tp->cur_tx - tp->dirty_tx >= TX_RING_SIZE - 2) {
+			if (tp->cur_tx - tp->dirty_tx >= TX_RING_SIZE - 2)
 				netif_stop_queue(dev);
-				tp->tx_full = 1;
-			}
 
 			/* Trigger an immediate transmit demand. */
 			outl(0, ioaddr + CSR1);
-
 		}
+
+		spin_unlock_irqrestore(&tp->lock, flags);
 	}
-	
-	if (need_lock)
-		spin_lock_irqsave(&tp->lock, flags);
 
 	/* Can someone explain to me what the OR here is supposed to accomplish???? */
 	tulip_outl_csr(tp, csr6 | 0x0000, CSR6);
-
-	spin_unlock_irqrestore(&tp->lock, flags);
 }
 
 
@@ -1026,7 +1034,7 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 	long ioaddr;
 	static int board_idx = -1;
 	int chip_idx = ent->driver_data;
-	
+
 	board_idx++;
 
 	if (tulip_debug > 0  &&  did_version++ == 0)
@@ -1036,7 +1044,7 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 		printk (KERN_ERR PFX "skipping LMC card.\n");
 		return -ENODEV;
 	}
-	
+
 	ioaddr = pci_resource_start (pdev, 0);
 	irq = pdev->irq;
 
@@ -1047,25 +1055,37 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 		return -ENOMEM;
 	}
 
+	if (pci_resource_len (pdev, 0) < tulip_tbl[chip_idx].io_size) {
+		printk (KERN_ERR PFX "%s: I/O region (0x%lx@0x%lx) too small, "
+			"aborting\n", dev->name, pci_resource_len (pdev, 0),
+			pci_resource_start (pdev, 0));
+		goto err_out_free_netdev;
+	}
+
 	/* grab all resources from both PIO and MMIO regions, as we
 	 * don't want anyone else messing around with our hardware */
 	if (!request_region (pci_resource_start (pdev, 0),
 			     pci_resource_len (pdev, 0),
 			     dev->name)) {
-		printk (KERN_ERR PFX "I/O ports (0x%x@0x%lx) unavailable, "
-			"aborting\n", tulip_tbl[chip_idx].io_size, ioaddr);
+		printk (KERN_ERR PFX "%s: I/O region (0x%lx@0x%lx) unavailable, "
+			"aborting\n", dev->name, pci_resource_len (pdev, 0),
+			pci_resource_start (pdev, 0));
 		goto err_out_free_netdev;
 	}
 	if (!request_mem_region (pci_resource_start (pdev, 1),
 				 pci_resource_len (pdev, 1),
 				 dev->name)) {
-		printk (KERN_ERR PFX "MMIO resource (0x%x@0x%lx) unavailable, "
-			"aborting\n", tulip_tbl[chip_idx].io_size, ioaddr);
+		printk (KERN_ERR PFX "%s: MMIO region (0x%lx@0x%lx) unavailable, "
+			"aborting\n", dev->name, pci_resource_len (pdev, 1),
+			pci_resource_start (pdev, 1));
 		goto err_out_free_pio_res;
 	}
 
-	if (pci_enable_device(pdev))
+	if (pci_enable_device(pdev)) {
+		printk (KERN_ERR PFX "%s: Cannot enable PCI device, aborting\n",
+			dev->name);
 		goto err_out_free_mmio_res;
+	}
 
 	pci_set_master(pdev);
 
@@ -1081,6 +1101,8 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 					   sizeof(struct tulip_rx_desc) * RX_RING_SIZE +
 					   sizeof(struct tulip_tx_desc) * TX_RING_SIZE,
 					   &tp->rx_ring_dma);
+	if (!tp->rx_ring)
+		goto err_out_free_mmio_res;
 	tp->tx_ring = (struct tulip_tx_desc *)(tp->rx_ring + RX_RING_SIZE);
 	tp->tx_ring_dma = tp->rx_ring_dma + sizeof(struct tulip_rx_desc) * RX_RING_SIZE;
 
@@ -1122,7 +1144,7 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 	tulip_stop_rxtx(tp, inl(ioaddr + CSR6));
 
 	/* Clear the missed-packet counter. */
-	(volatile int)inl(ioaddr + CSR8);
+	inl(ioaddr + CSR8);
 
 	if (chip_idx == DC21041) {
 		if (inl(ioaddr + CSR9) & 0x8000) {
@@ -1240,7 +1262,7 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 		tp->to_advertise = media2advert[tp->default_port - 9];
 	} else if (tp->flags & HAS_8023X)
 		tp->to_advertise = 0x05e1;
-	else 
+	else
 		tp->to_advertise = 0x01e1;
 
 	/* This is logically part of _init_one(), but too complex to write inline. */
@@ -1455,7 +1477,7 @@ static int __init tulip_init (void)
 	/* copy module parms into globals */
 	tulip_rx_copybreak = rx_copybreak;
 	tulip_max_interrupt_work = max_interrupt_work;
-	
+
 	/* probe for and init boards */
 	return pci_module_init (&tulip_driver);
 }

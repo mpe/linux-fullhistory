@@ -1,7 +1,7 @@
 /*
  * linux/drivers/char/synclink.c
  *
- * ==FILEDATE 20000707==
+ * $Id: synclink.c,v 3.2 2000/11/06 22:34:38 paul Exp $
  *
  * Device driver for Microgate SyncLink ISA and PCI
  * high speed multiprotocol serial adapters.
@@ -82,13 +82,9 @@
 
 #include <linux/netdevice.h>
 
-#if LINUX_VERSION_CODE >= VERSION(2,1,0) 
 #include <linux/vmalloc.h>
 #include <linux/init.h>
 #include <asm/serial.h>
-#else
-#include <linux/bios32.h>
-#endif
 
 #include <linux/delay.h>
 #include <linux/ioctl.h>
@@ -102,98 +98,21 @@
 #include <linux/termios.h>
 #include <linux/tqueue.h>
 
-#if LINUX_VERSION_CODE < VERSION(2,3,0) 
-typedef struct wait_queue *wait_queue_head_t;
-#define DECLARE_WAITQUEUE(name,task) struct wait_queue (name) = {(task),NULL}
-#define init_waitqueue_head(head) *(head) = NULL
-#define DECLARE_MUTEX(name) struct semaphore (name) = MUTEX
-#define set_current_state(a) current->state = (a)
-#endif
-
 #ifdef CONFIG_SYNCLINK_SYNCPPP_MODULE
 #define CONFIG_SYNCLINK_SYNCPPP 1
 #endif
 
 #ifdef CONFIG_SYNCLINK_SYNCPPP
-#if LINUX_VERSION_CODE < VERSION(2,3,43) 
-#include "../net/syncppp.h"
-#define net_device device
-#define netif_stop_queue(a) (a)->tbusy = 1
-#define netif_start_queue(a) (a)->tbusy = 0
-#define netif_wake_queue(a) (a)->tbusy = 0; mark_bh(NET_BH)
-#define netif_queue_stopped(a) ((a)->tbusy)
-#else
 #include "../net/wan/syncppp.h"
 #endif
-#endif
 
-#if LINUX_VERSION_CODE >= VERSION(2,1,4)
 #include <asm/segment.h>
 #define GET_USER(error,value,addr) error = get_user(value,addr)
 #define COPY_FROM_USER(error,dest,src,size) error = copy_from_user(dest,src,size) ? -EFAULT : 0
 #define PUT_USER(error,value,addr) error = put_user(value,addr)
 #define COPY_TO_USER(error,dest,src,size) error = copy_to_user(dest,src,size) ? -EFAULT : 0
 
-#if LINUX_VERSION_CODE >= VERSION(2,1,5)
 #include <asm/uaccess.h>
-#endif
-
-#else  /* 2.0.x and 2.1.x before 2.1.4 */
-
-#define GET_USER(error,value,addr)					  \
-do {									  \
-	error = verify_area (VERIFY_READ, (void *) addr, sizeof (value)); \
-	if (error == 0)							  \
-		value = get_user(addr);					  \
-} while (0)
-
-#define COPY_FROM_USER(error,dest,src,size)				  \
-do {									  \
-	error = verify_area (VERIFY_READ, (void *) src, size);		  \
-	if (error == 0)							  \
-		memcpy_fromfs (dest, src, size);			  \
-} while (0)
-
-#define PUT_USER(error,value,addr)					   \
-do {									   \
-	error = verify_area (VERIFY_WRITE, (void *) addr, sizeof (value)); \
-	if (error == 0)							   \
-		put_user (value, addr);					   \
-} while (0)
-
-#define COPY_TO_USER(error,dest,src,size)				  \
-do {									  \
-	error = verify_area (VERIFY_WRITE, (void *) dest, size);		  \
-	if (error == 0)							  \
-		memcpy_tofs (dest, src, size);				  \
-} while (0)
-
-#endif
-
-#if LINUX_VERSION_CODE < VERSION(2,1,0)
-/*
- * This is used to figure out the divisor speeds and the timeouts
- */
-static int baud_table[] = {
-	0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800,
-	9600, 19200, 38400, 57600, 115200, 230400, 460800, 0 };
-
-#define __init
-#define ioremap(a,b) vremap((a),(b))
-#define iounmap(a) vfree((a))
-#define SERIAL_TYPE_NORMAL	1
-#define SERIAL_TYPE_CALLOUT	2
-typedef int spinlock_t;
-#define spin_lock_init(a)
-#define spin_lock_irqsave(a,b) {save_flags((b));cli();}
-#define spin_unlock_irqrestore(a,b) {restore_flags((b));}
-#define spin_lock(a)
-#define spin_unlock(a)
-#define schedule_timeout(a){current->timeout = jiffies + (a); schedule();}
-#define signal_pending(a) ((a)->signal & ~(a)->blocked)
-#endif
-
-
 
 #include "linux/synclink.h"
 
@@ -365,10 +284,12 @@ struct mgsl_struct {
 	u32 last_mem_alloc;
 	unsigned char* memory_base;	/* shared memory address (PCI only) */
 	u32 phys_memory_base;
+	int shared_mem_requested;
 
 	unsigned char* lcr_base;	/* local config registers (PCI only) */
 	u32 phys_lcr_base;
 	u32 lcr_offset;
+	int lcr_mem_requested;
 
 	u32 misc_ctrl_value;
 	char flag_buf[MAX_ASYNC_BUFFER_SIZE];
@@ -389,9 +310,7 @@ struct mgsl_struct {
 	char netname[10];
 	struct net_device *netdev;
 	struct net_device_stats netstats;
-#if LINUX_VERSION_CODE >= VERSION(2,2,16) 
 	struct net_device netdevice;
-#endif
 #endif
 };
 
@@ -845,7 +764,7 @@ int mgsl_claim_resources(struct mgsl_struct *info);
 void mgsl_release_resources(struct mgsl_struct *info);
 void mgsl_add_device(struct mgsl_struct *info);
 struct mgsl_struct* mgsl_allocate_device(void);
-int mgsl_enumerate_devices(void);
+int mgsl_enum_isa_devices(void);
 
 /*
  * DMA buffer manupulation functions.
@@ -952,7 +871,6 @@ static int debug_level = 0;
 static int maxframe[MAX_TOTAL_DEVICES] = {0,};
 static int dosyncppp[MAX_TOTAL_DEVICES] = {0,};
 	
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
 MODULE_PARM(break_on_load,"i");
 MODULE_PARM(ttymajor,"i");
 MODULE_PARM(cuamajor,"i");
@@ -962,10 +880,26 @@ MODULE_PARM(dma,"1-" __MODULE_STRING(MAX_ISA_DEVICES) "i");
 MODULE_PARM(debug_level,"i");
 MODULE_PARM(maxframe,"1-" __MODULE_STRING(MAX_TOTAL_DEVICES) "i");
 MODULE_PARM(dosyncppp,"1-" __MODULE_STRING(MAX_TOTAL_DEVICES) "i");
-#endif
 
 static char *driver_name = "SyncLink serial driver";
-static char *driver_version = "1.21";
+static char *driver_version = "3.2";
+
+static int __init synclink_init_one (struct pci_dev *dev,
+				     const struct pci_device_id *ent);
+static void __exit synclink_remove_one (struct pci_dev *dev);
+
+static struct pci_device_id synclink_pci_tbl[] __devinitdata = {
+	{ PCI_VENDOR_ID_MICROGATE, PCI_DEVICE_ID_MICROGATE_USC, PCI_ANY_ID, PCI_ANY_ID, },
+	{ 0, }, /* terminate list */
+};
+MODULE_DEVICE_TABLE(pci, synclink_pci_tbl);
+
+static struct pci_driver synclink_pci_driver = {
+	name:		"synclink",
+	id_table:	synclink_pci_tbl,
+	probe:		synclink_init_one,
+	remove:		synclink_remove_one,
+};
 
 static struct tty_driver serial_driver, callout_driver;
 static int serial_refcount;
@@ -977,9 +911,9 @@ static int serial_refcount;
 static void mgsl_change_params(struct mgsl_struct *info);
 static void mgsl_wait_until_sent(struct tty_struct *tty, int timeout);
 
-static struct tty_struct **serial_table = NULL;
-static struct termios **serial_termios = NULL;
-static struct termios **serial_termios_locked = NULL;
+static struct tty_struct *serial_table[MAX_TOTAL_DEVICES];
+static struct termios *serial_termios[MAX_TOTAL_DEVICES];
+static struct termios *serial_termios_locked[MAX_TOTAL_DEVICES];
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -1591,16 +1525,9 @@ void mgsl_isr_receive_data( struct mgsl_struct *info )
 			icount->parity,icount->frame,icount->overrun);
 	}
 			
-	if ( tty->flip.count ) {
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
+	if ( tty->flip.count )
 		tty_flip_buffer_push(tty);
-#else		
-		queue_task(&tty->flip.tqueue, &tq_timer); 
-#endif		
-	}
-	
-
-}	/* end of mgsl_isr_receive_data() */
+}
 
 /* mgsl_isr_misc()
  * 
@@ -1795,11 +1722,7 @@ static int startup(struct mgsl_struct * info)
 		retval = mgsl_adapter_test(info);
 		
 	if ( retval ) {
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
   		if (capable(CAP_SYS_ADMIN) && info->tty)
-#else
-  		if (suser() && info->tty)
-#endif		
 			set_bit(TTY_IO_ERROR, &info->tty->flags);
 		mgsl_release_resources(info);
   		return retval;
@@ -1974,21 +1897,8 @@ static void mgsl_change_params(struct mgsl_struct *info)
 	 * allow tty settings to override, otherwise keep the
 	 * current data rate.
 	 */
-	if (info->params.data_rate <= 460800) {
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
+	if (info->params.data_rate <= 460800)
 		info->params.data_rate = tty_get_baud_rate(info->tty);
-#else
-		int i = cflag & CBAUD;
-		if (i & CBAUDEX) {
-			i &= ~CBAUDEX;
-			if (i < 1 || i > 4) 
-				info->tty->termios->c_cflag &= ~CBAUDEX;
-			else
-				i += 15;
-		}
-		info->params.data_rate = baud_table[i];
-#endif	
-	}
 	
 	if ( info->params.data_rate ) {
 		info->timeout = (32*HZ*bits_per_char) / 
@@ -2950,7 +2860,6 @@ static int set_modem_info(struct mgsl_struct * info, unsigned int cmd,
 	
 }	/* end of set_modem_info() */
 
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
 /* mgsl_break()		Set or clear transmit break condition
  *
  * Arguments:		tty		pointer to tty instance data
@@ -2977,7 +2886,6 @@ static void mgsl_break(struct tty_struct *tty, int break_state)
 	spin_unlock_irqrestore(&info->irq_spinlock,flags);
 	
 }	/* end of mgsl_break() */
-#endif
 
 /* mgsl_ioctl()	Service an IOCTL request
  * 	
@@ -3100,7 +3008,6 @@ int mgsl_ioctl_common(struct mgsl_struct *info, unsigned int cmd, unsigned long 
 			if (error) return error;
 			PUT_USER(error,cnow.dcd, &p_cuser->dcd);
 			if (error) return error;
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
 			PUT_USER(error,cnow.rx, &p_cuser->rx);
 			if (error) return error;
 			PUT_USER(error,cnow.tx, &p_cuser->tx);
@@ -3115,7 +3022,6 @@ int mgsl_ioctl_common(struct mgsl_struct *info, unsigned int cmd, unsigned long 
 			if (error) return error;
 			PUT_USER(error,cnow.buf_overrun, &p_cuser->buf_overrun);
 			if (error) return error;
-#endif			
 			return 0;
 		default:
 			return -ENOIOCTLCMD;
@@ -3596,9 +3502,7 @@ static int mgsl_open(struct tty_struct *tty, struct file * filp)
 			tmp_buf = (unsigned char *) page;
 	}
 	
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
 	info->tty->low_latency = (info->flags & ASYNC_LOW_LATENCY) ? 1 : 0;
-#endif
 
 	spin_lock_irqsave(&info->netlock, flags);
 	if (info->netcount) {
@@ -3985,22 +3889,14 @@ int mgsl_alloc_buffer_list_memory( struct mgsl_struct *info )
 
 }	/* end of mgsl_alloc_buffer_list_memory() */
 
-/*
- * mgsl_free_buffer_list_memory()
- * 
- * 	Free the common DMA buffer allocated for use as the
- * 	receive and transmit buffer lists. The associated Memory
- * 	Descriptor List (MDL) is also freed.
- * 
+/* Free DMA buffers allocated for use as the
+ * receive and transmit buffer lists.
  * Warning:
  * 
  * 	The data transfer buffers associated with the buffer list
  * 	MUST be freed before freeing the buffer list itself because
  * 	the buffer list contains the information necessary to free
  * 	the individual buffers!
- * 
- * Arguments:		info	pointer to device extension
- * Return Value:	None
  */
 void mgsl_free_buffer_list_memory( struct mgsl_struct *info )
 {
@@ -4138,67 +4034,61 @@ int mgsl_alloc_intermediate_rxbuffer_memory(struct mgsl_struct *info)
 void mgsl_free_intermediate_rxbuffer_memory(struct mgsl_struct *info)
 {
 	if ( info->intermediate_rxbuffer )
-		kfree( info->intermediate_rxbuffer );
+		kfree(info->intermediate_rxbuffer);
 
 	info->intermediate_rxbuffer = NULL;
 
 }	/* end of mgsl_free_intermediate_rxbuffer_memory() */
 
-/* mgsl_claim_resources()
- * 
- * 	Claim all resources used by a device
- * 	
- * Arguments:		info	pointer to device instance data
- * Return Value:	0 if success, otherwise -ENODEV
- */
 int mgsl_claim_resources(struct mgsl_struct *info)
 {
-	/* claim 16C32 I/O base address */
-	
-	if ( check_region(info->io_base,info->io_addr_size) < 0 ) {
+	if (request_region(info->io_base,info->io_addr_size,"synclink") == NULL) {
 		printk( "%s(%d):I/O address conflict on device %s Addr=%08X\n",
-			__FILE__,__LINE__,info->device_name, info->io_base );
+			__FILE__,__LINE__,info->device_name, info->io_base);
 		return -ENODEV;
 	}
-	request_region(info->io_base,info->io_addr_size,"synclink.o");
 	info->io_addr_requested = 1;
-	
-	/* claim interrupt level */
 	
 	if ( request_irq(info->irq_level,mgsl_interrupt,info->irq_flags,
 		info->device_name, info ) < 0 ) {
 		printk( "%s(%d):Cant request interrupt on device %s IRQ=%d\n",
 			__FILE__,__LINE__,info->device_name, info->irq_level );
-		mgsl_release_resources( info );
-		return -ENODEV;
+		goto errout;
 	}
 	info->irq_requested = 1;
 	
 	if ( info->bus_type == MGSL_BUS_TYPE_PCI ) {
-		/* claim shared memory range */
+		if (request_mem_region(info->phys_memory_base,0x40000,"synclink") == NULL) {
+			printk( "%s(%d):mem addr conflict device %s Addr=%08X\n",
+				__FILE__,__LINE__,info->device_name, info->phys_memory_base);
+			goto errout;
+		}
+		info->shared_mem_requested = 1;
+		if (request_mem_region(info->phys_lcr_base,128,"synclink") == NULL) {
+			printk( "%s(%d):lcr mem addr conflict device %s Addr=%08X\n",
+				__FILE__,__LINE__,info->device_name, info->phys_lcr_base);
+			goto errout;
+		}
+		info->lcr_mem_requested = 1;
+
 		info->memory_base = ioremap(info->phys_memory_base,0x40000);
 		if (!info->memory_base) {
 			printk( "%s(%d):Cant map shared memory on device %s MemAddr=%08X\n",
 				__FILE__,__LINE__,info->device_name, info->phys_memory_base );
-			mgsl_release_resources( info );
-			return -ENODEV;
+			goto errout;
 		}
 		
-		/* test the shared memory range */
 		if ( !mgsl_memory_test(info) ) {
 			printk( "%s(%d):Failed shared memory test %s MemAddr=%08X\n",
 				__FILE__,__LINE__,info->device_name, info->phys_memory_base );
-			mgsl_release_resources( info );
-			return -ENODEV;
+			goto errout;
 		}
 		
-		/* claim LCR memory range */
 		info->lcr_base = ioremap(info->phys_lcr_base,PAGE_SIZE) + info->lcr_offset;
 		if (!info->lcr_base) {
 			printk( "%s(%d):Cant map LCR memory on device %s MemAddr=%08X\n",
 				__FILE__,__LINE__,info->device_name, info->phys_lcr_base );
-			mgsl_release_resources( info );
-			return -ENODEV;
+			goto errout;
 		}
 		
 	} else {
@@ -4220,21 +4110,16 @@ int mgsl_claim_resources(struct mgsl_struct *info)
 	if ( mgsl_allocate_dma_buffers(info) < 0 ) {
 		printk( "%s(%d):Cant allocate DMA buffers on device %s DMA=%d\n",
 			__FILE__,__LINE__,info->device_name, info->dma_level );
-		mgsl_release_resources( info );
-		return -ENODEV;
+		goto errout;
 	}	
 	
 	return 0;
-		
+errout:
+	mgsl_release_resources(info);
+	return ENODEV;
+
 }	/* end of mgsl_claim_resources() */
 
-/* mgsl_release_resources()
- * 
- * 	Release all resources used by a device
- * 	
- * Arguments:		info	pointer to device instance data
- * Return Value:	None
- */
 void mgsl_release_resources(struct mgsl_struct *info)
 {
 	if ( debug_level >= DEBUG_LEVEL_INFO )
@@ -4245,7 +4130,6 @@ void mgsl_release_resources(struct mgsl_struct *info)
 		free_irq(info->irq_level, info);
 		info->irq_requested = 0;
 	}
-	
 	if ( info->dma_requested ) {
 		disable_dma(info->dma_level);
 		free_dma(info->dma_level);
@@ -4258,12 +4142,18 @@ void mgsl_release_resources(struct mgsl_struct *info)
 		release_region(info->io_base,info->io_addr_size);
 		info->io_addr_requested = 0;
 	}
-		
+	if ( info->shared_mem_requested ) {
+		release_mem_region(info->phys_memory_base,0x40000);
+		info->shared_mem_requested = 0;
+	}
+	if ( info->lcr_mem_requested ) {
+		release_mem_region(info->phys_lcr_base,128);
+		info->lcr_mem_requested = 0;
+	}
 	if (info->memory_base){
 		iounmap(info->memory_base);
 		info->memory_base = 0;
 	}
-		
 	if (info->lcr_base){
 		iounmap(info->lcr_base - info->lcr_offset);
 		info->lcr_base = 0;
@@ -4367,210 +4257,23 @@ struct mgsl_struct* mgsl_allocate_device()
 
 }	/* end of mgsl_allocate_device()*/
 
-/* mgsl_enumerate_devices()
- * 
- * 	Enumerate SyncLink serial devices based on user specified
- *	options for ISA adapters and autodetected PCI adapters.
- * 	
- * Arguments:		None
- * Return Value:	0 if success, otherwise error code
+/*
+ * perform tty device initialization
  */
-int mgsl_enumerate_devices()
-{
-	struct mgsl_struct *info;
-	int i;
-		
-	/* Check for user specified ISA devices */
-	
-	for (i=0 ;(i < MAX_ISA_DEVICES) && io[i] && irq[i]; i++){
-		if ( debug_level >= DEBUG_LEVEL_INFO )
-			printk("ISA device specified io=%04X,irq=%d,dma=%d\n",
-				io[i], irq[i], dma[i] );
-		
-		info = mgsl_allocate_device();
-		if ( !info ) {
-			/* error allocating device instance data */
-			if ( debug_level >= DEBUG_LEVEL_ERROR )
-				printk( "can't allocate device instance data.\n");
-			continue;
-		}
-		
-		/* Copy user configuration info to device instance data */
-		info->io_base = (unsigned int)io[i];
-		info->irq_level = (unsigned int)irq[i];
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
-		info->irq_level = irq_cannonicalize(info->irq_level);
-#else		
-		if (info->irq_level == 2)
-			info->irq_level = 9;
-#endif			
-		info->dma_level = (unsigned int)dma[i];
-		info->bus_type = MGSL_BUS_TYPE_ISA;
-		info->io_addr_size = 16;
-		info->irq_flags = 0;
-		
-		mgsl_add_device( info );
-	}
-	
-	
-#ifdef CONFIG_PCI
-	/* Auto detect PCI adapters */
-	
-	if ( pcibios_present() ) {
-		unsigned char bus;
-		unsigned char func;
-		unsigned int  shared_mem_base;
-		unsigned int  lcr_mem_base;
-		unsigned int  io_base;
-		unsigned char irq_line;
-		
-		for(i=0;;i++){
-			if ( PCIBIOS_SUCCESSFUL == pcibios_find_device(
-				MICROGATE_VENDOR_ID, SYNCLINK_DEVICE_ID, i, &bus, &func) ) {
-				
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
-				struct pci_dev *pdev = pci_find_slot(bus,func);
-				irq_line = pdev->irq;				
-#else												
-				if (pcibios_read_config_byte(bus,func,
-					PCI_INTERRUPT_LINE,&irq_line) ) {
-					printk( "%s(%d):USC I/O addr not set.\n",
-						__FILE__,__LINE__);
-					continue;
-				}
-#endif
-
-				if (pcibios_read_config_dword(bus,func,
-					PCI_BASE_ADDRESS_3,&shared_mem_base) ) {
-					printk( "%s(%d):Shared mem addr not set.\n",
-						__FILE__,__LINE__);
-					continue;
-				}
-							
-				if (pcibios_read_config_dword(bus,func,
-					PCI_BASE_ADDRESS_0,&lcr_mem_base) ) {
-					printk( "%s(%d):LCR mem addr not set.\n",
-						__FILE__,__LINE__);
-					continue;
-				}
-				
-				if (pcibios_read_config_dword(bus,func,
-					PCI_BASE_ADDRESS_2,&io_base) ) {
-					printk( "%s(%d):USC I/O addr not set.\n",
-						__FILE__,__LINE__);
-					continue;
-				}
-				
-				info = mgsl_allocate_device();
-				if ( !info ) {
-					/* error allocating device instance data */
-					if ( debug_level >= DEBUG_LEVEL_ERROR )
-						printk( "can't allocate device instance data.\n");
-					continue;
-				}
-		
-				/* Copy user configuration info to device instance data */
-		
-				info->io_base = io_base & PCI_BASE_ADDRESS_IO_MASK;
-				info->irq_level = (unsigned int)irq_line;
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
-				info->irq_level = irq_cannonicalize(info->irq_level);
-#else		
-				if (info->irq_level == 2)
-					info->irq_level = 9;
-#endif			
-				info->phys_memory_base = shared_mem_base & PCI_BASE_ADDRESS_MEM_MASK;
-				
-				/* Because veremap only works on page boundaries we must map
-				 * a larger area than is actually implemented for the LCR
-				 * memory range. We map a full page starting at the page boundary.
-				 */
-				info->phys_lcr_base = lcr_mem_base & PCI_BASE_ADDRESS_MEM_MASK;
-				info->lcr_offset    = info->phys_lcr_base & (PAGE_SIZE-1);
-				info->phys_lcr_base &= ~(PAGE_SIZE-1);
-				
-				info->bus_type = MGSL_BUS_TYPE_PCI;
-				info->io_addr_size = 8;
-				info->irq_flags = SA_SHIRQ;
-				info->bus = bus;
-				info->function = func;
-		
-		/* Store the PCI9050 misc control register value because a flaw
-		 * in the PCI9050 prevents LCR registers from being read if 
-		 * BIOS assigns an LCR base address with bit 7 set.
-		 *  
-		 * Only the misc control register is accessed for which only 
-		 * write access is needed, so set an initial value and change 
-		 * bits to the device instance data as we write the value
-		 * to the actual misc control register.
-		 */
-				info->misc_ctrl_value = 0x087e4546;
-				
-				/* add new device to device list */
-				mgsl_add_device( info );
-			} else {
-				break;
-			}
-		}
-	}
-#endif
-
-	/*
-	 * Allocate memory to hold the following tty/termios arrays
-	 * with an element for each enumerated device.
-	 */	
-	
-	serial_table = (struct tty_struct**)kmalloc(sizeof(struct tty_struct*)*mgsl_device_count, GFP_KERNEL);
-	serial_termios = (struct termios**)kmalloc(sizeof(struct termios*)*mgsl_device_count, GFP_KERNEL);
-	serial_termios_locked = (struct termios**)kmalloc(sizeof(struct termios*)*mgsl_device_count, GFP_KERNEL);
-	
-	if (!serial_table || !serial_termios || !serial_termios_locked){
-		printk("%s(%d):Can't allocate tty/termios arrays.\n",
-			__FILE__,__LINE__);
-		return -ENOMEM;
-	}
-	
-	memset(serial_table,0,sizeof(struct tty_struct*)*mgsl_device_count);
-	memset(serial_termios,0,sizeof(struct termios*)*mgsl_device_count);
-	memset(serial_termios_locked,0,sizeof(struct termios*)*mgsl_device_count);
-
-	return 0;
-	
-}	/* end of mgsl_enumerate_devices() */
-
-/* mgsl_init()
- * 
- * 	Driver initialization entry point.
- * 	
- * Arguments:	None
- * Return Value:	0 if success, otherwise error code
- */
-int __init mgsl_init(void)
+int mgsl_init_tty(void);
+int mgsl_init_tty()
 {
 	struct mgsl_struct *info;
 
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
-	EXPORT_NO_SYMBOLS;
-#else
-	register_symtab(NULL);
-#endif		
-	
- 	printk("%s version %s\n", driver_name, driver_version);
-	
-	/* determine how many SyncLink devices are installed */
-	mgsl_enumerate_devices();
-	if ( !mgsl_device_list ) {
-		printk("%s(%d):No SyncLink devices found.\n",__FILE__,__LINE__);
-		return -ENODEV;
-	}
+	memset(serial_table,0,sizeof(struct tty_struct*)*MAX_TOTAL_DEVICES);
+	memset(serial_termios,0,sizeof(struct termios*)*MAX_TOTAL_DEVICES);
+	memset(serial_termios_locked,0,sizeof(struct termios*)*MAX_TOTAL_DEVICES);
 
 	/* Initialize the tty_driver structure */
 	
 	memset(&serial_driver, 0, sizeof(struct tty_driver));
 	serial_driver.magic = TTY_DRIVER_MAGIC;
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
 	serial_driver.driver_name = "synclink";
-#endif	
 	serial_driver.name = "ttySL";
 	serial_driver.major = ttymajor;
 	serial_driver.minor_start = 64;
@@ -4597,12 +4300,10 @@ int __init mgsl_init(void)
 	serial_driver.ioctl = mgsl_ioctl;
 	serial_driver.throttle = mgsl_throttle;
 	serial_driver.unthrottle = mgsl_unthrottle;
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
 	serial_driver.send_xchar = mgsl_send_xchar;
 	serial_driver.break_ctl = mgsl_break;
 	serial_driver.wait_until_sent = mgsl_wait_until_sent;
  	serial_driver.read_proc = mgsl_read_proc;
-#endif	
 	serial_driver.set_termios = mgsl_set_termios;
 	serial_driver.stop = mgsl_stop;
 	serial_driver.start = mgsl_start;
@@ -4616,10 +4317,8 @@ int __init mgsl_init(void)
 	callout_driver.name = "cuaSL";
 	callout_driver.major = cuamajor;
 	callout_driver.subtype = SERIAL_TYPE_CALLOUT;
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
 	callout_driver.read_proc = 0;
 	callout_driver.proc_entry = 0;
-#endif	
 
 	if (tty_register_driver(&serial_driver) < 0)
 		printk("%s(%d):Couldn't register serial driver\n",
@@ -4641,13 +4340,76 @@ int __init mgsl_init(void)
 		info->normal_termios  = serial_driver.init_termios;
 		info = info->next_device;
 	}
+
+	return 0;
+}
+
+/* enumerate user specified ISA adapters
+ */
+int mgsl_enum_isa_devices()
+{
+	struct mgsl_struct *info;
+	int i;
+		
+	/* Check for user specified ISA devices */
+	
+	for (i=0 ;(i < MAX_ISA_DEVICES) && io[i] && irq[i]; i++){
+		if ( debug_level >= DEBUG_LEVEL_INFO )
+			printk("ISA device specified io=%04X,irq=%d,dma=%d\n",
+				io[i], irq[i], dma[i] );
+		
+		info = mgsl_allocate_device();
+		if ( !info ) {
+			/* error allocating device instance data */
+			if ( debug_level >= DEBUG_LEVEL_ERROR )
+				printk( "can't allocate device instance data.\n");
+			continue;
+		}
+		
+		/* Copy user configuration info to device instance data */
+		info->io_base = (unsigned int)io[i];
+		info->irq_level = (unsigned int)irq[i];
+		info->irq_level = irq_cannonicalize(info->irq_level);
+		info->dma_level = (unsigned int)dma[i];
+		info->bus_type = MGSL_BUS_TYPE_ISA;
+		info->io_addr_size = 16;
+		info->irq_flags = 0;
+		
+		mgsl_add_device( info );
+	}
 	
 	return 0;
-	
-}	/* end of mgsl_init() */
+}
 
-#ifdef MODULE
-int init_module(void)
+/* mgsl_init()
+ * 
+ * 	Driver initialization entry point.
+ * 	
+ * Arguments:	None
+ * Return Value:	0 if success, otherwise error code
+ */
+int __init mgsl_init(void)
+{
+	int rc;
+
+	EXPORT_NO_SYMBOLS;
+	
+ 	printk("%s version %s\n", driver_name, driver_version);
+	
+	mgsl_enum_isa_devices();
+	pci_register_driver(&synclink_pci_driver);
+
+	if ( !mgsl_device_list ) {
+		printk("%s(%d):No SyncLink devices found.\n",__FILE__,__LINE__);
+		return -ENODEV;
+	}
+	if ((rc = mgsl_init_tty()))
+		return rc;
+	
+	return 0;
+}
+
+static int __init synclink_init(void)
 {
 /* Uncomment this to kernel debug module.
  * mgsl_get_text_ptr() leaves the .text address in eax
@@ -4661,7 +4423,7 @@ int init_module(void)
 	return mgsl_init();
 }
 
-void cleanup_module(void) 
+static void __exit synclink_exit(void) 
 {
 	unsigned long flags;
 	int rc;
@@ -4693,19 +4455,11 @@ void cleanup_module(void)
 		tmp_buf = NULL;
 	}
 	
-	if (serial_table)
-		kfree(serial_table);
-		
-	if (serial_termios)
-		kfree(serial_termios);
-		
-	if (serial_termios_locked)
-		kfree(serial_termios_locked);
-	
-}	/* end of cleanup_module() */
+	pci_unregister_driver(&synclink_pci_driver);
+}
 
-#endif /* MODULE */
-
+module_init(synclink_init);
+module_exit(synclink_exit);
 
 /*
  * usc_RTCmd()
@@ -6953,7 +6707,6 @@ BOOLEAN mgsl_irq_test( struct mgsl_struct *info )
 	while( EndTime-- && !info->irq_occurred ) {
 		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout(jiffies_from_ms(10));
-		set_current_state(TASK_RUNNING);
 	}
 	
 	spin_lock_irqsave(&info->irq_spinlock,flags);
@@ -7567,16 +7320,13 @@ void mgsl_sppp_init(struct mgsl_struct *info)
 
 	sprintf(info->netname,"mgsl%d",info->line);
 
-#if LINUX_VERSION_CODE < VERSION(2,2,16) 
-	info->netdev = &info->pppdev.dev;
-#else
 	info->if_ptr = &info->pppdev;
 	info->netdev = info->pppdev.dev = &info->netdevice;
-#endif
+
 	sppp_attach(&info->pppdev);
 
 	d = info->netdev;
-	strcpy(d->name, info->netname);
+	strcpy(d->name,info->netname);
 	d->base_addr = info->io_base;
 	d->irq = info->irq_level;
 	d->dma = info->dma_level;
@@ -7587,10 +7337,9 @@ void mgsl_sppp_init(struct mgsl_struct *info)
 	d->hard_start_xmit = mgsl_sppp_tx;
 	d->do_ioctl = mgsl_sppp_ioctl;
 	d->get_stats = mgsl_net_stats;
-#if LINUX_VERSION_CODE >= VERSION(2,3,43) 
 	d->tx_timeout = mgsl_sppp_tx_timeout;
 	d->watchdog_timeo = 10*HZ;
-#endif
+
 	dev_init_buffers(d);
 
 	if (register_netdev(d) == -1) {
@@ -7680,17 +7429,7 @@ int mgsl_sppp_tx(struct sk_buff *skb, struct net_device *dev)
 	if (debug_level >= DEBUG_LEVEL_INFO)
 		printk("mgsl_sppp_tx(%s)\n",info->netname);	
 
-#if LINUX_VERSION_CODE < VERSION(2,3,43) 
-	if (dev->tbusy) { 
-		if (time_before(jiffies, dev->trans_start+10*HZ))
-			return -EBUSY;	/* 10 seconds timeout */
-		mgsl_sppp_tx_timeout(dev);
-	}
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
-		return -EBUSY;
-#else
 	netif_stop_queue(dev);
-#endif
 
 	info->xmit_cnt = skb->len;
 	mgsl_load_tx_dma_buffer(info, skb->data, skb->len);
@@ -7777,3 +7516,57 @@ int mgsl_sppp_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 }
 
 #endif /* ifdef CONFIG_SYNCLINK_SYNCPPP */
+
+static int __init synclink_init_one (struct pci_dev *dev,
+				     const struct pci_device_id *ent)
+{
+	struct mgsl_struct *info;
+
+	if (pci_enable_device(dev)) {
+		printk("error enabling pci device %p\n", dev);
+		return -EIO;
+	}
+
+	if (!(info = mgsl_allocate_device())) {
+		printk("can't allocate device instance data.\n");
+		return -EIO;
+	}
+
+        /* Copy user configuration info to device instance data */
+		
+	info->io_base = pci_resource_start(dev, 2);
+	info->irq_level = dev->irq;
+	info->phys_memory_base = pci_resource_start(dev, 3);
+				
+        /* Because veremap only works on page boundaries we must map
+	 * a larger area than is actually implemented for the LCR
+	 * memory range. We map a full page starting at the page boundary.
+	 */
+	info->phys_lcr_base = pci_resource_start(dev, 0);
+	info->lcr_offset    = info->phys_lcr_base & (PAGE_SIZE-1);
+	info->phys_lcr_base &= ~(PAGE_SIZE-1);
+				
+	info->bus_type = MGSL_BUS_TYPE_PCI;
+	info->io_addr_size = 8;
+	info->irq_flags = SA_SHIRQ;
+		
+	/* Store the PCI9050 misc control register value because a flaw
+	 * in the PCI9050 prevents LCR registers from being read if 
+	 * BIOS assigns an LCR base address with bit 7 set.
+	 *  
+	 * Only the misc control register is accessed for which only 
+	 * write access is needed, so set an initial value and change 
+	 * bits to the device instance data as we write the value
+	 * to the actual misc control register.
+	 */
+	info->misc_ctrl_value = 0x087e4546;
+				
+	mgsl_add_device(info);
+
+	return 0;
+}
+
+static void __exit synclink_remove_one (struct pci_dev *dev)
+{
+}
+

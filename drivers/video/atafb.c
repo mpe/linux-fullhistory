@@ -86,8 +86,6 @@
 #define SWITCH_NONE 0x00
 
 
-#define arraysize(x)			(sizeof(x)/sizeof(*(x)))
-
 #define up(x, r) (((x) + (r) - 1) & ~((r)-1))
 
 
@@ -429,7 +427,7 @@ static struct fb_var_screeninfo atafb_predefined[] = {
 	  0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 },
 };
 
-static int num_atafb_predefined=arraysize(atafb_predefined);
+static int num_atafb_predefined=ARRAY_SIZE(atafb_predefined);
 
 
 static int

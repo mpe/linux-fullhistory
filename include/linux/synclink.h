@@ -1,9 +1,9 @@
 /*
  * SyncLink Multiprotocol Serial Adapter Driver
  *
- * ==FILEDATE 19990810==
+ * $Id: synclink.h,v 3.2 2000/11/06 22:34:38 paul Exp $
  *
- * Copyright (C) 1998 by Microgate Corporation
+ * Copyright (C) 1998-2000 by Microgate Corporation
  * 
  * Redistribution of this file is permitted under 
  * the terms of the GNU Public License (GPL)
@@ -11,6 +11,7 @@
 
 #ifndef _SYNCLINK_H_
 #define _SYNCLINK_H_
+#define SYNCLINK_H_VERSION 3.2
 
 #define BOOLEAN int
 #define TRUE 1

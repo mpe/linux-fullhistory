@@ -2182,16 +2182,16 @@ static int __init agp_lookup_host_bridge (struct pci_dev *pdev)
 {
 	int i;
 	
-	for (i = 0; i < arraysize (agp_bridge_info); i++)
+	for (i = 0; i < ARRAY_SIZE (agp_bridge_info); i++)
 		if (pdev->vendor == agp_bridge_info[i].vendor_id)
 			break;
 
-	if (i >= arraysize (agp_bridge_info)) {
+	if (i >= ARRAY_SIZE (agp_bridge_info)) {
 		printk (KERN_DEBUG PFX "unsupported bridge\n");
 		return -ENODEV;
 	}
 
-	while ((i < arraysize (agp_bridge_info)) &&
+	while ((i < ARRAY_SIZE (agp_bridge_info)) &&
 	       (agp_bridge_info[i].vendor_id == pdev->vendor)) {
 		if (pdev->device == agp_bridge_info[i].device_id) {
 			printk (KERN_INFO PFX "Detected %s %s chipset\n",
@@ -2490,6 +2490,17 @@ static void agp_backend_cleanup(void)
 extern int agp_frontend_initialize(void);
 extern void agp_frontend_cleanup(void);
 
+static const drm_agp_t drm_agp = {
+	&agp_free_memory,
+	&agp_allocate_memory,
+	&agp_bind_memory,
+	&agp_unbind_memory,
+	&agp_enable,
+	&agp_backend_acquire,
+	&agp_backend_release,
+	&agp_copy_info
+};
+
 static int __init agp_init(void)
 {
 	int ret_val;
@@ -2509,6 +2520,7 @@ static int __init agp_init(void)
 		return ret_val;
 	}
 
+	inter_module_register("drm_agp", THIS_MODULE, &drm_agp);
 	return 0;
 }
 
@@ -2516,6 +2528,7 @@ static void __exit agp_cleanup(void)
 {
 	agp_frontend_cleanup();
 	agp_backend_cleanup();
+	inter_module_unregister("drm_agp");
 }
 
 module_init(agp_init);

@@ -208,7 +208,7 @@ enum t21143_csr6_bits {
 	csr6_ho = (1<<2),    /* Hash-only filtering mode: can't be set */
 	csr6_sr = (1<<1),    /* Start(1)/Stop(0) Receive */
 	csr6_hp = (1<<0),    /* Hash/Perfect Receive Filtering Mode: can't be set */
-	
+
 	csr6_mask_capture = (csr6_sc | csr6_ca),
 	csr6_mask_defstate = (csr6_mask_capture | csr6_mbo),
 	csr6_mask_hdcap = (csr6_mask_defstate | csr6_hbd | csr6_ps),
@@ -340,7 +340,6 @@ struct tulip_private {
 	spinlock_t lock;
 	unsigned int cur_rx, cur_tx;	/* The next free ring entry */
 	unsigned int dirty_rx, dirty_tx;	/* The ring entries to be free()ed. */
-	unsigned int tx_full:1;	/* The Tx queue is full. */
 	unsigned int full_duplex:1;	/* Full-duplex operation requested. */
 	unsigned int full_duplex_lock:1;
 	unsigned int fake_addr:1;	/* Multiport board faked address. */
@@ -389,7 +388,7 @@ void tulip_parse_eeprom(struct net_device *dev);
 int tulip_read_eeprom(long ioaddr, int location, int addr_len);
 
 /* interrupt.c */
-extern int tulip_max_interrupt_work;
+extern unsigned int tulip_max_interrupt_work;
 extern int tulip_rx_copybreak;
 void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
 
@@ -435,6 +434,5 @@ static inline void tulip_restart_rxtx(struct tulip_private *tp, u32 csr6mask)
 	tulip_outl_csr(tp, csr6mask | csr6_sr, CSR6);
 	tulip_outl_csr(tp, csr6mask | csr6_st | csr6_sr, CSR6);
 }
-
 
 #endif /* __NET_TULIP_H__ */

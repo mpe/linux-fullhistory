@@ -30,7 +30,6 @@
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/kmod.h>
 #include <asm/errno.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -62,12 +61,6 @@ static unsigned long __initdata doc_locations[] = {
 #warning Unknown architecture for DiskOnChip. No default probe locations defined
 #endif
 
-#ifdef CONFIG_MTD_DOC2000
-extern void DoC2k_init(struct mtd_info *);
-#endif
-#ifdef CONFIG_MTD_DOC2001
-extern void DoCMil_init(struct mtd_info *);
-#endif
 
 /* doccheck: Probe a given memory window to see if there's a DiskOnChip present */
 
@@ -157,8 +150,9 @@ static void DoC_Probe(unsigned long physadr)
 	int ChipID;
 	char namebuf[15];
 	char *name = namebuf;
+	char *im_funcname = NULL;
+	char *im_modname = NULL;
 	void (*initroutine)(struct mtd_info *) = NULL;
-	int initroutinedynamic = 0;
 
 	docptr = (unsigned long)ioremap(physadr, 0x2000);
 	
@@ -189,42 +183,21 @@ static void DoC_Probe(unsigned long physadr)
 		switch(ChipID) {
 		case DOC_ChipID_Doc2k:
 			name="2000";
-#ifdef CONFIG_MTD_DOC2000
-			initroutine = &DoC2k_init;
-#elif CONFIG_MODULES
-			initroutinedynamic=1;
-			initroutine = (void *)get_module_symbol(NULL, "DoC2k_init");
-#ifdef CONFIG_KMOD
-			if (!initroutine) {
-				request_module("doc2000");
-				initroutine = (void *)get_module_symbol("doc2000", "DoC2k_init");
-			}
-#endif /* CONFIG_KMOD */
-#endif
+			im_funcname = "DoC2k_init";
+			im_modname = "doc2000";
 			break;
 
 		case DOC_ChipID_DocMil:
 			name="Millennium";
-#ifdef CONFIG_MTD_DOC2001
-			initroutine = &DoCMil_init;
-#elif CONFIG_MODULES
-			initroutinedynamic=1;
-			initroutine = (void *)get_module_symbol(NULL, "DoCMil_init");
-#ifdef CONFIG_KMOD
-			if (!initroutine) {
-				request_module("doc2001");
-				initroutine = (void *)get_module_symbol("doc2001", "DoCMil_init");
-			}
-#endif /* CONFIG_KMOD */
-#endif
+			im_funcname = "DoCMil_init";
+			im_modname = "doc2001";
 			break;
 		}
+		if (im_funcname)
+			initroutine = inter_module_get_request(im_funcname, im_modname);
 		if (initroutine) {
 			(*initroutine)(mtd);
-#if defined(CONFIG_MODULES) && LINUX_VERSION_CODE >= 0x20400
-			if (initroutinedynamic)
-				put_module_symbol(initroutine);
-#endif
+			inter_module_put(im_funcname);
 			return;
 		}
 		printk("Cannot find driver for DiskOnChip %s at 0x%X\n", name, physadr);

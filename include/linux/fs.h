@@ -546,7 +546,6 @@ struct file_lock {
 #endif
 
 extern struct list_head file_lock_list;
-extern struct semaphore file_lock_sem;
 
 #include <linux/fcntl.h>
 

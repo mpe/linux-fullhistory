@@ -394,9 +394,6 @@ int init_module(void)
 {
 	int this_dev, found = 0;
 
-	if (load_8390_module("lne390.c"))
-		return -ENOSYS;
-
 	for (this_dev = 0; this_dev < MAX_LNE_CARDS; this_dev++) {
 		struct net_device *dev = &dev_lne[this_dev];
 		dev->irq = irq[this_dev];
@@ -410,7 +407,6 @@ int init_module(void)
 			if (found != 0) {	/* Got at least one. */
 				return 0;
 			}
-			unload_8390_module();
 			return -ENXIO;
 		}
 		found++;
@@ -434,7 +430,6 @@ void cleanup_module(void)
 			kfree(priv);
 		}
 	}
-	unload_8390_module();
 }
 #endif /* MODULE */
 

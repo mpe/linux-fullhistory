@@ -202,12 +202,6 @@ void pcibios_update_irq(struct pci_dev *pdev, int irq)
 {
 }
 
-unsigned long resource_fixup(struct pci_dev *pdev, struct resource *res,
-			     unsigned long start, unsigned long size)
-{
-	return start;
-}
-
 void pcibios_fixup_pbus_ranges(struct pci_bus *pbus,
 			       struct pbus_set_ranges_data *pranges)
 {

@@ -33,8 +33,6 @@
 
 static struct pci_dev *host_dev = NULL;
 
-#define arraysize(x)			(sizeof(x)/sizeof(*(x)))
-
 #define SIS5513_FLAG_ATA_00		0x00000000
 #define SIS5513_FLAG_ATA_16		0x00000001
 #define SIS5513_FLAG_ATA_33		0x00000002
@@ -545,7 +543,7 @@ unsigned int __init pci_init_sis5513 (struct pci_dev *dev, const char *name)
 
 	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &latency);
 
-	for (i = 0; i < arraysize (SiSHostChipInfo) && !host_dev; i++) {
+	for (i = 0; i < ARRAY_SIZE (SiSHostChipInfo) && !host_dev; i++) {
 		host = pci_find_device (PCI_VENDOR_ID_SI,
 					SiSHostChipInfo[i].host_id,
 					NULL);

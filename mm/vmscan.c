@@ -185,6 +185,8 @@ drop_pte:
 	if (!entry.val)
 		goto out_unlock_restore; /* No swap space left */
 
+	/* Make sure to flush the TLB _before_ we start copying things.. */
+	flush_tlb_page(vma, address);
 	if (!(page = prepare_highmem_swapout(page)))
 		goto out_swap_free;
 
@@ -196,7 +198,6 @@ drop_pte:
 	/* Put the swap entry into the pte after the page is in swapcache */
 	mm->rss--;
 	set_pte(page_table, swp_entry_to_pte(entry));
-	flush_tlb_page(vma, address);
 	spin_unlock(&mm->page_table_lock);
 
 	/* OK, do a physical asynchronous write to swap.  */

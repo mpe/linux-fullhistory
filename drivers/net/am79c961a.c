@@ -285,14 +285,16 @@ static int
 am79c961_open(struct net_device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
+	int ret;
 
 	MOD_INC_USE_COUNT;
 
 	memset (&priv->stats, 0, sizeof (priv->stats));
 
-	if (request_irq(dev->irq, am79c961_interrupt, 0, "am79c961", dev)) {
+	ret = request_irq(dev->irq, am79c961_interrupt, 0, dev->name, dev);
+	if (ret) {
 		MOD_DEC_USE_COUNT;
-		return -EAGAIN;
+		return ret;
 	}
 
 	am79c961_init_for_open(dev);

@@ -452,9 +452,6 @@ extern void update_mmu_cache(struct vm_area_struct *vma,
 #define swp_entry_to_pte(x)	((pte_t) { (x).val })
 
 
-#define module_map      vmalloc
-#define module_unmap    vfree
-
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
 #define PageSkip(page)		(0)
 #define kern_addr_valid(addr)	(1)

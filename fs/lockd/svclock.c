@@ -468,7 +468,6 @@ nlmsvc_notify_blocked(struct file_lock *fl)
 
 	dprintk("lockd: VFS unblock notification for block %p\n", fl);
 	posix_unblock_lock(fl);
-	lock_kernel();
 	for (bp = &nlm_blocked; (block = *bp); bp = &block->b_next) {
 		if (nlm_compare_locks(&block->b_call.a_args.lock.fl, fl)) {
 			nlmsvc_insert_block(block, 0);
@@ -476,7 +475,6 @@ nlmsvc_notify_blocked(struct file_lock *fl)
 			return;
 		}
 	}
-	unlock_kernel();
 
 	printk(KERN_WARNING "lockd: notification for unknown block!\n");
 }

@@ -66,8 +66,6 @@ static int default_var_valid = 0;
 
 static int currcon = 0;
 
-#define arraysize(x)	(sizeof(x)/sizeof(*(x)))
-
 static struct { u_char red, green, blue, pad; } palette[256];
 #ifdef FBCON_HAS_CFB32
 static u32 fbcon_cfb32_cmap[16];
@@ -259,7 +257,7 @@ static struct {
     }}
 };
 
-#define NUM_TOTAL_MODES    arraysize(tgafb_predefined)
+#define NUM_TOTAL_MODES    ARRAY_SIZE(tgafb_predefined)
 
 
     /*

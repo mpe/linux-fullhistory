@@ -34,6 +34,7 @@ static const char *version =
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 #include <asm/io.h>
 #include <asm/system.h>
 
@@ -84,19 +85,33 @@ static int wd_close(struct net_device *dev);
 int __init wd_probe(struct net_device *dev)
 {
 	int i;
+	struct resource *r;
 	int base_addr = dev ? dev->base_addr : 0;
 
-	if (base_addr > 0x1ff)		/* Check a single specified location. */
-		return wd_probe1(dev, base_addr);
+	if (base_addr > 0x1ff) {	/* Check a user specified location. */
+		r = request_region(base_addr, WD_IO_EXTENT, "wd-probe");
+		if ( r == NULL)
+			return -EBUSY;
+		i = wd_probe1(dev, base_addr);
+		if (i != 0)  
+			release_resource(r);
+		else
+			r->name = ei_status.name;
+		return i;
+	}
 	else if (base_addr != 0)	/* Don't probe at all. */
 		return -ENXIO;
 
 	for (i = 0; wd_portlist[i]; i++) {
 		int ioaddr = wd_portlist[i];
-		if (check_region(ioaddr, WD_IO_EXTENT))
+		r = request_region(ioaddr, WD_IO_EXTENT, "wd-probe");
+		if (r == NULL)
 			continue;
-		if (wd_probe1(dev, ioaddr) == 0)
+		if (wd_probe1(dev, ioaddr) == 0) {
+			r->name = ei_status.name;
 			return 0;
+		}
+		release_resource(r);
 	}
 
 	return -ENODEV;
@@ -256,8 +271,6 @@ static int __init wd_probe1(struct net_device *dev, int ioaddr)
 	}
 
 	/* OK, were are certain this is going to work.  Setup the device. */
-	request_region(ioaddr, WD_IO_EXTENT, model_name);
-
 	ei_status.name = model_name;
 	ei_status.word16 = word16;
 	ei_status.tx_start_page = WD_START_PG;
@@ -444,9 +457,6 @@ init_module(void)
 {
 	int this_dev, found = 0;
 
-	if (load_8390_module("wd.c"))
-                return -ENOSYS;
-
 	for (this_dev = 0; this_dev < MAX_WD_CARDS; this_dev++) {
 		struct net_device *dev = &dev_wd[this_dev];
 		dev->irq = irq[this_dev];
@@ -463,7 +473,6 @@ init_module(void)
 			if (found != 0) {	/* Got at least one. */
 				return 0;
 			}
-			unload_8390_module();
 			return -ENXIO;
 		}
 		found++;
@@ -487,7 +496,6 @@ cleanup_module(void)
 			kfree(priv);
 		}
 	}
-	unload_8390_module();
 }
 #endif /* MODULE */
 
