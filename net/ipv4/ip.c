@@ -1055,6 +1055,9 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 	unsigned long raddr;	/* Router IP address */
 #ifdef CONFIG_IP_FIREWALL
 	int fw_res = 0;		/* Forwarding result */	
+#ifdef CONFIG_IP_MASQUERADE	
+	struct sk_buff *skb_in = skb;	/* So we can remember if the masquerader did some swaps */
+#endif	
 	
 	/* 
 	 *	See if we are allowed to forward this.
@@ -1295,10 +1298,22 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 	
 	/*
 	 *	Tell the caller if their buffer is free.
-	 */
+	 */	 
 	 
 	if(skb==skb2)
+		return 0;	
+
+#ifdef CONFIG_IP_MASQUERADE	
+	/*
+	 *	The original is free. Free our copy and
+	 *	tell the caller not to free.
+	 */
+	if(skb!=skb_in)
+	{
+		kfree_skb(skb_in, FREE_WRITE);
 		return 0;
+	}
+#endif	
 	return 1;
 }
 
@@ -2557,6 +2572,8 @@ int ip_build_xmit(struct sock *sk,
 			if(dev->hard_header(skb,dev,ETH_P_IP,NULL,NULL,0)>0)
 				skb->arp=1;
 		}
+		else
+			skb->arp=1;
 		skb->ip_hdr=iph=(struct iphdr *)skb_put(skb,length);
 		dev_lock_list();
 		if(!sk->ip_hdrincl)

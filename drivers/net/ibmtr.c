@@ -24,6 +24,16 @@
                  - Add comments, misc reorg for clarity
                  - Flatten interrupt handler levels
 
+   Changes by Farzad Farid (farzy@zen.via.ecp.fr)
+   and Pascal Andre (andre@chimay.via.ecp.fr) (March 9 1995) :
+        - multi ring support clean up
+        - RFC1042 compliance enhanced
+
+   Changes by Pascal Andre (andre@chimay.via.ecp.fr) (September 7 1995) :
+        - bug correction in tr_tx
+        - removed redundant information display
+        - some code reworking
+
    Warnings !!!!!!!!!!!!!!
       This driver is only partially sanitized for support of multiple
       adapters.  It will almost definately fail if more than one
@@ -42,8 +52,15 @@
 #define FALSE 0
 #define TRUE (!FALSE)
 
-static const char *version = "ibmtr.c:v1.1.48 8/7/94 Peter De Schrijver and Mark Swanson\n"
-                       "           modified 10/3/94 David W. Morris\n";
+/* changes the output format of driver initialisation */
+#define TR_NEWFORMAT	1
+
+/* some 95 OS send many non UI frame; this allow removing the warning */
+#define TR_FILTERNONUI	1
+
+/* version and credits */
+static const char *version = "ibmtr.c: v1.3.24 8/7/94 Peter De Schrijver and Mark Swanson\n"
+"   modified 10/3/94 DW Morris, 3/9/95 F Farid and P Andre, 9/7/95 P Andre\n";
 
 static char pcchannelid[]={0x05, 0x00, 0x04, 0x09,
 			 0x04, 0x03, 0x04, 0x0f,
@@ -82,6 +99,23 @@ static char mcchannelid[]={0x04, 0x0d, 0x04, 0x01,
 #define DPRINTK(format, args...) printk("%s: " format, dev->name , ## args)
 #define DPRINTD(format, args...) DummyCall("%s: " format, dev->name , ## args)
 
+#ifdef TR_NEWFORMAT
+/* this allows displaying full adapter information */
+const char *channel_def[] = { "ISA", "MCA", "ISA P&P" };
+char *adapter_def(char type)
+{
+       switch (type)
+       {
+               case 'f':
+               case 'F' : return "Adapter/A";
+               case 'e':
+               case 'E' : return "16/4 Adapter/II";
+               default :
+                       printk("Unknow adapter %c\n", type);
+                       return "adapter";
+       };
+};
+#endif
 
 #if 0
 struct tok_info tok_info1;   /*  WARNING: this area must be replicated
@@ -91,8 +125,12 @@ static struct wait_queue *wait_for_tok_int=NULL, *wait_for_reset;
 void (*do_tok_int)(struct device *dev)=NULL;
 #endif
 
+#ifndef TR_NEWFORMAT
 unsigned char ibmtr_debug_trace=1;  /*  Patch or otherwise alter to
                                          control tokenring tracing.  */
+#else
+unsigned char ibmtr_debug_trace=0;
+#endif
 #define TRC_INIT 0x01              /*  Trace initialization & PROBEs */
 #define TRC_INITV 0x02             /*  verbose init trace points     */
 
@@ -250,9 +288,11 @@ int tok_probe(struct device *dev)
 
   /*?? Now, allocate some of the pl0 buffers for this driver.. */
 
-  if (!badti)
+  if (!badti) {
     ti = (struct tok_info *)kmalloc(sizeof(struct tok_info), GFP_KERNEL);
-  else {
+    if (ti == NULL)
+          return -ENOMEM;
+  } else {
     ti = badti; badti = NULL;
   }/*?? dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL); */
 
@@ -274,7 +314,9 @@ int tok_probe(struct device *dev)
       if (intr==3) irq=7;
       ti->global_int_enable=GLOBAL_INT_ENABLE+((irq==9) ? 2 : irq);
       ti->sram=NULL;
+#ifndef TR_NEWFORMAT
       DPRINTK("ti->global_int_enable: %04X\n",ti->global_int_enable);
+#endif
       break;
     case TR_MCA:
       if (intr==0) irq=9;
@@ -306,17 +348,26 @@ int tok_probe(struct device *dev)
     printk(".\n");
   }
 
-  DPRINTK("hw address: ");
   /* Get hw address of token ring card */
+#ifndef TR_NEWFORMAT 
+  DPRINTK("hw address: ");
+#endif
   j=0;
   for (i=0; i<0x18; i=i+2) {
     temp = *(char *)((ulong)AIP + (ulong)i + ti->mmio) & 0x0f; /* Tech ref states must do this */
+#ifndef TR_NEWFORMAT
     printk("%1X",ti->hw_address[j]=temp);
+#else
+    ti->hw_address[j]=temp;
+#endif
     if(j&1)
       dev->dev_addr[(j/2)]=ti->hw_address[j]+(ti->hw_address[j-1]<<4);
     ++j;
   }
+#ifndef TR_NEWFORMAT
   printk("\n");
+#endif
+
 
   /* get Adapter type:  'F' = Adapter/A, 'E' = 16/4 Adapter II,...*/
   ti->adapter_type = *(char *)(ti->mmio + AIPADAPTYPE);
@@ -340,9 +391,11 @@ int tok_probe(struct device *dev)
   /* Available DHB 16Mb size:  F=2048, E=4096, D=8192, C=16384, B=17960 */
   ti->dhb_size16mb = *(char *)(ti->mmio + AIP16MBDHB);
 
+#ifndef TR_NEWFORMAT
   DPRINTK("atype=%x, drate=%x, trel=%x, asram=%dK, srp=%x, dhb(4mb=%x, 16mb=%x)\n",ti->adapter_type,
 	  ti->data_rate, ti->token_release, ti->avail_shared_ram/2, ti->shared_ram_paging,
 	  ti->dhb_size4mb, ti->dhb_size16mb);
+#endif
 
   /* We must figure out how much shared memory space this adapter
      will occupy so that if there are two adapters we can fit both
@@ -362,7 +415,9 @@ int tok_probe(struct device *dev)
     unsigned char pg_size;
 #endif
 
+#ifndef TR_NEWFORMAT
     DPRINTK("shared ram page size: %dK\n",ti->mapped_ram_size/2);
+#endif
 #ifdef ENABLE_PAGING
     switch(ti->shared_ram_paging) {
       case 0xf:
@@ -430,8 +485,9 @@ int tok_probe(struct device *dev)
         bail out in a rather benign fashion.    */
 
   if (badti) return ENODEV;
-
+#ifndef TR_NEWFORMAT
   DPRINTK("Using %dK shared RAM\n",ti->mapped_ram_size/2);
+#endif
 
   if (request_irq (dev->irq = irq, &tok_interrupt,0,"IBM TR") != 0) {
     DPRINTK("Could not grab irq %d.  Halting Token Ring driver.\n",irq);
@@ -443,9 +499,19 @@ int tok_probe(struct device *dev)
   /*?? Now, allocate some of the PIO PORTs for this driver.. */
   request_region(PIOaddr,TR_IO_EXTENT,"ibmtr");  /* record PIOaddr range
 						    as busy */
+#ifndef TR_NEWFORMAT
+   DPRINTK("%s",version); /* As we have passed card identification,
+                             let the world know we're here! */
+#else
+  printk("%s",version);
+  DPRINTK("%s %s found using irq %d, PIOaddr %4hx, %dK shared RAM.\n",
+       channel_def[cardpresent-1], adapter_def(ti->adapter_type), irq,
+        PIOaddr, ti->mapped_ram_size/2);
+  DPRINTK("Hardware address : %02X:%02X:%02X:%02X:%02X:%02X\n",
+       dev->dev_addr[0], dev->dev_addr[1], dev->dev_addr[2],
+        dev->dev_addr[3], dev->dev_addr[4], dev->dev_addr[5]);
+#endif
 
-  DPRINTK("%s",version); /* As we have passed card identification,
-                            let the world know we're here! */
   dev->base_addr=PIOaddr; /* set the value for device */
 
   dev->open=tok_open;
@@ -646,7 +712,11 @@ static void tok_interrupt (int irq, struct pt_regs *regs)
 						else DPRINTK("Unrecoverable error: error code = %02X\n",open_response->error_code);
 					}
 					else if(!open_response->ret_code) {
+#ifndef TR_NEWFORMAT
 						DPRINTK("board opened...\n");
+#else
+						DPRINTK("Adapter initialized and opened.\n");
+#endif
 						*(unsigned char *)(ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD)=~(SRB_RESP_INT);
 						*(unsigned char *)(ti->mmio + ACA_OFFSET + ACA_RESET + ISRA_ODD)=~(CMD_IN_SRB);
 						open_sap(EXTENDED_SAP,dev);
@@ -821,7 +891,9 @@ skip_reset:
 
 static void initial_tok_int(struct device *dev) {
 
+#ifndef TR_NEWFORMAT
   int i;
+#endif
   unsigned char *encoded_addr;
   struct tok_info *ti;
 
@@ -835,7 +907,9 @@ static void initial_tok_int(struct device *dev) {
 
 	ti->do_tok_int=NOT_FIRST;
 
+#ifndef TR_NEWFORMAT
 	DPRINTK("Initial tok int received\n");
+#endif
 
 	if(!ti->sram) {  /* we assign the address for ISA devices */
 			/* set RRR even to D000 for shared ram address */
@@ -846,27 +920,34 @@ static void initial_tok_int(struct device *dev) {
 	ti->init_srb=ti->sram+ntohs(*(unsigned short *)(ti->mmio+ ACA_OFFSET + WRBR_EVEN));
 	SET_PAGE(ntohs(*(unsigned short *)(ti->mmio+ ACA_OFFSET + WRBR_EVEN)));
 
-#if 1
+#if 0
 	DPRINTK("init_srb(%p):",ti->init_srb);
 	for(i=0;i<17;i++)
 		printk("%02X ",*(ti->init_srb+i));
 	printk("\n");
 #endif
 
-		
+#ifndef TR_NEWFORMAT		
 	DPRINTK("srb_init_response->encoded_address: %04X\n",((struct srb_init_response *)ti->init_srb)->encoded_address);
 	DPRINTK("ntohs(srb_init_response->encoded_address): %04X\n",ntohs(((struct srb_init_response *)ti->init_srb)->encoded_address));
+#endif
 	encoded_addr=(unsigned char *)(ti->sram + ntohs(((struct srb_init_response *)ti->init_srb)->encoded_address));
 
+#ifndef TR_NEWFORMAT
 	DPRINTK("encoded addr (%04X,%04X,%p): ",
 			((struct srb_init_response *)ti->init_srb)->encoded_address,
 			ntohs(((struct srb_init_response *)ti->init_srb)->encoded_address),	
 			encoded_addr);
+#else
+       DPRINTK("Initial interrupt : shared RAM located at %p.\n", encoded_addr);
+#endif
 	ti->auto_ringspeedsave=((struct srb_init_response *)ti->init_srb)->init_status_2 & 0x4 ? TRUE : FALSE;
 
+#ifndef TR_NEWFORMAT
 	for(i=0;i<TR_ALEN;i++)
 		printk("%02X%s",dev->dev_addr[i]=encoded_addr[i],(i==TR_ALEN-1) ? "" : ":" );
 	printk("\n");
+#endif
 
 	tok_open_adapter((unsigned long)dev);
 
@@ -895,11 +976,15 @@ static void tok_init_card(unsigned long dev_addr) {
 #endif
 
 	*(unsigned char *)(ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN)=~(INT_ENABLE);
+#ifndef TR_NEWFORMAT
 	DPRINTK("resetting card\n");
+#endif
 	outb(0,PIOaddr+ADAPTRESET);
 	for(i=jiffies+5;jiffies<=i;); /* wait 50ms */
 	outb(0,PIOaddr+ADAPTRESETREL);
+#ifndef TR_NEWFORMAT
 	DPRINTK("card reset\n");
+#endif
 
         ti->open_status=IN_PROGRESS;
 
@@ -962,6 +1047,7 @@ static void tr_tx(struct device *dev) {
 	struct asb_xmit_resp *xmit_resp=(struct asb_xmit_resp *)ti->asb;
 	struct arb_xmit_req *xmit_req=(struct arb_xmit_req *)ti->arb;
 	struct srb_xmit *xmit=(struct srb_xmit *)ti->srb;
+	struct trh_hdr *trhdr=(struct trh_hdr *)ti->current_skb->data;
 	unsigned int hdr_len;
 	unsigned char *dhb;
 
@@ -1011,7 +1097,7 @@ DPRINTK("transmitting...\n");
 
      /*  TR arch. identifies if RIF present by high bit of source
          address.  So here we check if RIF present */
-  if(!(((struct trh_hdr *)(&ti->current_skb->data))->saddr[0] & 0x80)) {
+  if(!(trhdr->saddr[0] & 0x80)) {
     hdr_len=sizeof(struct trh_hdr)-18;
 #if 0
 DPRINTK(("hdr_length: %d, frame length: %ld\n",hdr_len,
@@ -1019,11 +1105,11 @@ DPRINTK(("hdr_length: %d, frame length: %ld\n",hdr_len,
 #endif
   }   /*  TR packet includes RIF data ... preserve it */
   else {
-    hdr_len=((ntohs(((struct trh_hdr *)(&ti->current_skb->data))->rcf)
+    hdr_len=((ntohs(trhdr->rcf)
              & TR_RCF_LEN_MASK)>>8)+sizeof(struct trh_hdr)-18;
 #if 0
 /* rework the following if activated, hdr_len <> rif_len */
-DPRINTK("rcf: %02X rif_len: %d\n",((struct trh_hdr *)&ti->current_skb->data)->rcf,wrk_len);
+DPRINTK("rcf: %02X rif_len: %d\n", trhdr->rcf,wrk_len);
 DPRINTK("hdr_length: %d, frame length: %ld\n",sizeof(struct trh_hdr)-18+hdr_len,
       ti->current_skb->len-18+hdr_len);
 #endif
@@ -1082,8 +1168,9 @@ DPRINTK("dsap: %02X, ssap: %02X, llc: %02X, protid: %02X%02X%02X, ethertype: %04
 #endif
 
 	if(llc->llc!=UI_CMD) {
-		
+#ifndef TR_FILTERNONUI		
 		DPRINTK("non-UI frame arrived. dropped. llc= %02X\n",llc->llc);
+#endif
 		rec_resp->ret_code=DATA_LOST;
 		ti->tr_stats.rx_dropped++;
 		*(unsigned char *)(ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD)=RESP_IN_ASB;

@@ -416,8 +416,9 @@ int el16_probe1(struct device *dev, int ioaddr)
 		printk(version);
 
 	/* Initialize the device structure. */
+	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
 	if (dev->priv == NULL)
-		dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct net_local));
 
 	dev->open		= el16_open;
@@ -914,6 +915,8 @@ cleanup_module(void)
 	else
 	{
 		unregister_netdev(&dev_3c507);
+		kfree(dev_3c507.priv);
+		dev_3c507.priv = NULL;
 
 		/* If we don't do this, we can't re-insmod it later. */
 		free_irq(dev_3c507.irq);

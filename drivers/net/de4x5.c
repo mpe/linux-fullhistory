@@ -588,6 +588,8 @@ de4x5_hw_init(struct device *dev, u_long iobase)
 	*/
 	dev->priv = (void *) kmalloc(sizeof(struct de4x5_private) + ALIGN, 
 				                                   GFP_KERNEL);
+	if (dev->priv == NULL)
+		return -ENOMEM;
 	/*
 	** Align to a longword boundary
 	*/

@@ -5,72 +5,194 @@ driver configuration help.
 -----------------------------------------------------------------------------
 
 Because so many people (myself included) seem to have obtained ARCnet cards
-without manuals, this will be a quick listing of all jumper settings I can
-find.  Please e-mail apenwarr@foxnet.net with any settings for
-your particular card.
+without manuals, this file contains a quick introduction to ARCnet hardware,
+some cabling tips, and a listing of all jumper settings I can find. Please
+e-mail apenwarr@foxnet.net with any settings for your particular card, or
+any other information you have!
 
-Even if your ARCnet model isn't listed, but has the same jumpers, please
-e-mail me to say so.
 
-If your model isn't listed, and has different settings, PLEASE PLEASE tell
-me.  I had to figure mine out without the manual, and it WASN'T FUN!
+INTRODUCTION TO ARCNET
+----------------------
 
-Cards Listed in this file (in this order, mostly):
+ARCnet is a network type which works in a way similar to popular "ethernet"
+networks but which is also different in some very important ways.
 
-	Manufacturer	Model #		Bits
-	------------	-------		----
-	SMC		PC100		8
-	SMC		PC110		8
-	SMC		PC120		8
-	SMC		PC130		8
-	SMC		PC270E		8
-	SMC		PC500		16
-	SMC		PC500Longboard	16
-	SMC		PC550Longboard	16
-	SMC		PC600		16
-	SMC?		LCS-8830-T	16?
-	Puredata	PDI507		16
-	CNet Tech	CN120-Series	8
-	CNet Tech	CN160-Series	16
-	No Name		--		8/16
-	No Name		Taiwan R.O.C(?)	8
-	Tiara		Tiara Lancard(?)
+First of all, you can get ARCnet cards in two speeds: 2.5Mbps (slower than
+ethernet) and 100Mbps (faster than ethernet).  The two hardware types, as
+far as I'm aware, are not compatible and so you cannot wire a 100Mbps card
+to a 2.5Mbps card, and so on.  From what I hear, my driver does work with
+100Mbps cards, but I haven't been able to verify this myself, since I only
+have the 2.5Mbps variety.
+
+You also cannot connect an ARCnet card to any kind of ethernet card and
+expect it to work.  
+
+There are two "types" of ARCnet - STAR topology and BUS topology.  This
+refers to how the cards are meant to be wired together.  According to all
+available documentation, you can only connect STAR cards to STAR cards and
+BUS cards to BUS cards.  That makes sense, right?  Well, it's not quite
+true; see below under "Cabling."
+
+Once you get past these little stumbling blocks, ARCnet is actually quite a
+well-designed standard.  It uses something called "modified token passing"
+which makes it completely incompatible with so-called "Token Ring" cards,
+but which makes transfers much more reliable than with ethernet.  In fact,
+ARCnet will guarantee that a packet arrives safely at the destination, and
+even if it can't possibly be delivered properly (ie. because of a cable
+break) it will at least tell the sender about it.
+
+In addition, all known ARCnet cards have an (almost) identical programming
+interface.  This means that with one "arcnet" driver you can support any
+card; whereas, with ethernet, each manufacturer uses what is sometimes a
+completely different programming interface, leading to a lot of different,
+sometimes very similar, ethernet drivers.  Of course, always using the same
+programming interface also means that when high-performance hardware
+facilities like PCI busmastering DMA appear, it's hard to take advantage of
+them.
+
+One thing that makes ARCnet cards difficult to program for, however, is the
+limit on their packet sizes; standard ARCnet can only send packets that are
+up to 508 bytes in length.  This is smaller than the internet "bare minimum"
+of 576 bytes, let alone the ethernet MTU of 1500.  To compensate, an extra
+level of encapsulation is defined by RFC1201 called "packet splitting" which
+allows "virtual packets" to grow as large as 64K each, although they are
+generally kept down to the ethernet-style 1500 bytes.
+
+
+CABLING ARCNET NETWORKS
+-----------------------
+ - Information in this section is from several contributors, including:
+ 	Stephen A. Wood <saw@hallc1.cebaf.gov>
+ 	John Paul Morrison <jmorriso@bogomips.ee.ubc.ca>
+ 	Joachim Koenig <jojo@repas.de>
+ 	Vojtech Pavlik <vpav4328@Diana.troja.mff.cuni.cz>
+
+ - I, Avery Pennarun, tried to arrange it into something that makes sense
+   when all put together.  All mistakes, then, are most likely my fault.
+   Bug me about them.
+
+Ideally, according to documentation, ARCnet networks should be connected
+with 93 Ohm cables with 93 Ohm resistors as terminators.  I use TV cable and
+no resistors to connect two STAR cards.  Blah.  Your mileage may vary.
+
+Here's some more specific information about cables, sent in by Joachim
+Koenig (slight touchups by me):
+
+	The following cables are valid for ARCnet:
+		RG-62  93 Ohm  up to 610 m
+		RG-59/U 75 Ohm up to 457 m
+		RG-11/U 75 Ohm up to 533 m
+		IBM Typ 1 150 Ohm up to 200 m
+		IBM Typ 3 100 Ohm up to 100 m
+		
+So you can see that while 93 Ohms is ideal, you can still go half a
+kilometer with 75 Ohm TV cable.
+
+The above applies to all known ARCnet cards.  Specific to STAR cards,
+though, Stephen A. Wood has some information:
+
+	When I bought my two cards at a garage sale, they came with little
+	box with four BNC connectors on the outside.  The shields of the
+	four connectors are all grounded together, and the center conductors
+	were connected by the following resistor network.
+
+	              |
+	              |
+        	      R
+	              |
+	         ---R-+-R---
+	              | 
+	              R
+	              |
+	              |
+
+	Where R is 47 Ohms.  A little math shows that if you terminate three
+	of the outputs with 90 ohms (A cable or a terminator), the remaining
+	input sees 90 Ohms.  Therefore this box is impedance matched to 90
+	Ohm cable.  So this box can be used to connect 2 to 4 nodes
+	together.
+
+If you really use your imagination, you can see how the above diagram kind
+of looks like a "star."  John Paul Morrison makes a few notes about the
+above:
+
+	The "little box with four BNC connectors on the outside" is an
+	Arcnet passive hub. They're worth about $5 (just so you don't get
+	ripped off).
+
+	I don't have specs at my fingertips. Basically, don't use too many
+	passive hubs (or none at all, apparently passive hubs are A Bad
+	Thing.  On the other hand, they're a really cheap way to do things.)
+
+	Arcnet active hubs are available; they are analogous to Ethernet
+	twisted pair hubs. You can plug either a single station or a passive
+	hub into each port on the active hub. If you plug in a passive hub,
+	that lets you connect three more stations.
 	
+According to Vojtech Pavlik, there shouldn't be more than one passive hub
+between two "active ends", an active end being an active hub or an ARCnet
+card.
+	
+As for BUS cards, they're even easier (for more than two cards, anyway; you
+can't get much simpler than direct-connecting two STAR cards with a TV
+cable).  They work just like Thinnet ethernet; it looks like this:
 
-** SMC = Standard Microsystems Corp.
-** CNet Tech = CNet Technology, Inc.
+	R------+------+------+------R
+	       |      |      |
+	       NODE   NODE   NODE
 
-The model # is listed right above specifics for that card.  Don't forget to
-read "quick briefing" first, since it applies to all ARCnets.
+Where R is the terminator as usual, and '+' represents a T connector.
+
+Okay, then, what if you have a combination of BUS cards and STAR cards?  You
+probably can't do ANY combination you want, but Vojtech Pavlik explains what
+works for him (WARNING: I, Avery, haven't tried anything this weird myself):
+
+	All that I need is to terminate each end with a STAR card. I think I
+	can even connect the cards like this:
+
+	STAR------+-----+-----STAR
+	         BUS   BUS
+
+	Where "-" stands for coax, "+" for T connector, "STAR" for star-type
+	arcnet card and BUS for bus-type arcnet cards. I think there will be
+	no terminators necessary.
+
+He also explains (I paraphrase slightly here):
+
+	R-+----------STAR
+	 BUS
+ 
+	In this case, I have to terminate the end with the bus card
+	using a terminator. ("R" - terminator, "+" - T connector "-" - coax,
+	everything other is probably clear)
+	
+	[...]
+ 
+	And _MAYBE_ you can do even more complicated and insane combinations 
+	when just thinking of the STAR card as a BUS one with an inside 
+	installed terminator. (STAR cards are NOT bus ones with terminator, 
+	but I believe that they electrically act like them). 
+
+And finally, he gives a shortcut for BUS users that are low on supplies:
+
+	When you have really short cables (about four meters in total) and have lack
+	of terminators or T's you can leave one of the terminators out .... or put
+	it in the middle like this:
+ 
+	BUS-----T-----BUS
+        	R
+ 
+	It's ugly, but it works.
+	
+I don't pretend to understand what's happening there, but then again, I
+don't have BUS cards either.
 
 
-Unclassified Stuff
-------------------
-  - Please send any other information you can find.
-  
-  - And some unknowns (other info is welcome!):
-     From: root@ultraworld.xs4all.nl (Timo Hilbrink)
-     To: apenwarr@foxnet.net (Avery Pennarun)
-     Date: Wed, 26 Oct 1994 02:10:32 +0000 (GMT)
-     Reply-To: timoh@xs4all.nl
 
-     [...parts deleted...]
+SETTING THE JUMPERS
+-------------------
 
-     About the jumpers: On my PC130 there is one more jumper, located near the
-     cable-connector and it's for changing to star or bus topology; 
-     closed: star - open: bus
-     On the PC500 are some more jumper-pins, one block labled with RX,PDN,TXI
-     and another with ALE,LA17,LA18,LA19 these are undocumented..
-
-     [...more parts deleted...]
-
-     --- CUT ---
-
-
-Quick Briefing:
----------------
-
-All ARCnet cards should have a total of four different settings:
+All ARCnet cards should have a total of four or five different settings:
 
   - the I/O address:  this is the "port" your ARCnet card is on.  Probed
     values, as of v0.14, are only from 0x200 through 0x3F0. (If your card
@@ -101,12 +223,82 @@ All ARCnet cards should have a total of four different settings:
 
   - the station address:  Every ARCnet card has its own "unique" network
     address from 0 to 255.  Unlike ethernet, you can set this address
-    yourself.  Since it's only 8 bits, you can only have 254 ARCnet cards on
-    a network.  DON'T use 0 or 255, since these are reserved. (although neat
-    stuff will probably happen if you DO use them).  By the way, if you
-    haven't already guessed, don't set this the same as any other ARCnet on
-    your network!
+    yourself with a jumper.  Since it's only 8 bits, you can only have 254
+    ARCnet cards on a network.  DON'T use 0 or 255, since these are
+    reserved. (although neat stuff will probably happen if you DO use them). 
+    By the way, if you haven't already guessed, don't set this the same as
+    any other ARCnet on your network!
 	- Avery's favourite:  3 and 4.  Not that it matters.
+	
+  - There may be ETS1 and ETS2 settings.  These may or may not make a
+    difference, but are used to change the delays used when powering up
+    a computer on the network.  This is only necessary when wiring VERY
+    long range ARCnet networks, on the order of 4km or so; in any case,
+    the only real requirement here is that all cards on the network with
+    ETS1 and ETS2 jumpers have them in the same position.
+
+
+Here's the all the jumper information I could obtain for individual card
+types.  Unfortunately, there is a lot of duplicated information here. 
+Someday, I may get around to actually organizing it.  Until then... too much
+is better than too little, I say :)
+
+The model # is listed right above specifics for that card, so you should be
+able to use your text viewer's "search" function to find the entry you want. 
+
+If your model isn't listed, and has different settings, PLEASE PLEASE tell
+me.  I had to figure mine out without the manual, and it WASN'T FUN!
+
+Even if your ARCnet model isn't listed, but has the same jumpers as another
+model that is, please e-mail me to say so.
+
+Cards Listed in this file (in this order, mostly):
+
+	Manufacturer	Model #		Bits
+	------------	-------		----
+	SMC		PC100		8
+	SMC		PC110		8
+	SMC		PC120		8
+	SMC		PC130		8
+	SMC		PC270E		8
+	SMC		PC500		16
+	SMC		PC500Longboard	16
+	SMC		PC550Longboard	16
+	SMC		PC600		16
+	SMC?		LCS-8830-T	16?
+	Puredata	PDI507		16
+	CNet Tech	CN120-Series	8
+	CNet Tech	CN160-Series	16
+	No Name		--		8/16
+	No Name		Taiwan R.O.C(?)	8
+	Tiara		Tiara Lancard(?)
+	
+
+** SMC = Standard Microsystems Corp.
+** CNet Tech = CNet Technology, Inc.
+
+
+Unclassified Stuff
+------------------
+  - Please send any other information you can find.
+  
+  - And some unknowns (other info is welcome!):
+     From: root@ultraworld.xs4all.nl (Timo Hilbrink)
+     To: apenwarr@foxnet.net (Avery Pennarun)
+     Date: Wed, 26 Oct 1994 02:10:32 +0000 (GMT)
+     Reply-To: timoh@xs4all.nl
+
+     [...parts deleted...]
+
+     About the jumpers: On my PC130 there is one more jumper, located near the
+     cable-connector and it's for changing to star or bus topology; 
+     closed: star - open: bus
+     On the PC500 are some more jumper-pins, one block labled with RX,PDN,TXI
+     and another with ALE,LA17,LA18,LA19 these are undocumented..
+
+     [...more parts deleted...]
+
+     --- CUT ---
 
 
 ** Standard Microsystems Corp (SMC) **

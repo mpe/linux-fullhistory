@@ -1,8 +1,30 @@
+/*
+ * linux/include/linux/cyclades.h
+ *
+ * This file is maintained by Marcio Saito <marcio@cyclades.com> and
+ * Randolph Bentson <bentson@grieg.seaslug.org>.
+ *
+ * This file contains the general definitions for the cyclades.c driver
+ */
+
+/* PCI vendor and device ID's */
+
+#ifndef PCI_VENDOR_ID_CYCLADES
+#define	PCI_VENDOR_ID_CYCLADES	0x120e
+#endif
+
+#ifndef PCI_DEVICE_ID_CYCLOMY
+#define	PCI_DEVICE_ID_CYCLOMY	0x0100
+#endif
+
+/* Per card data structure */
+
 struct cyclades_card {
     int base_addr;
     int irq;
-    int num_chips; /* implies card type, 0 if card is absent */
-    int first_line; /* line number of first channel of first chip on card */
+    int num_chips;	/* 0 if card is absent */
+    int first_line;	/* minor number of first channel on card */
+    int bus_index;	/* address shift - 0 for ISA, 1 for PCI */
 };
 
 struct cyclades_chip {
@@ -93,6 +115,7 @@ struct cyclades_port {
 #define CyRegSize  0x0400
 #define Cy_HwReset 0x1400
 #define Cy_ClrIntr 0x1800
+#define Cy_EpldRev 0x1e00
 
 /* Global Registers */
 

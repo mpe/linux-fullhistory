@@ -1257,6 +1257,8 @@ elp_init (struct device *dev)
 	 */
 	adapter = (elp_device *)(dev->priv = kmalloc(sizeof(elp_device), GFP_KERNEL));
 	CHECK_NULL(adapter);
+	if (adapter == NULL)
+		return -ENOMEM;
 	memset(&(adapter->stats), 0, sizeof(struct enet_statistics));
 
 	/*
@@ -1492,6 +1494,8 @@ cleanup_module(void)
 	else
 	{
 		unregister_netdev(&dev_3c505);
+		kfree(dev_3c505.priv);
+		dev_3c505.priv = NULL;
 
 		/* If we don't do this, we can't re-insmod it later. */
 		release_region(dev_3c505.base_addr, ELP_IO_EXTENT);

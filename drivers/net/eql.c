@@ -219,10 +219,17 @@ eql_init(struct device *dev)
 
   /* Initialize the device structure. */
   dev->priv = kmalloc (sizeof (equalizer_t), GFP_KERNEL);
+  if (dev->priv == NULL)
+      return -ENOMEM;
   memset (dev->priv, 0, sizeof (equalizer_t));
   eql = (equalizer_t *) dev->priv;
 
   eql->stats = kmalloc (sizeof (struct enet_statistics), GFP_KERNEL);
+  if (eql->stats == NULL) {
+      kfree(dev->priv);
+      dev->priv = NULL;
+      return -ENOMEM;
+  }
   memset (eql->stats, 0, sizeof (struct enet_statistics));
 
   init_timer (&eql->timer);
@@ -761,6 +768,8 @@ eql_new_slave_queue(struct device *dev)
   slave_t *tail_slave;
 
   queue = (slave_queue_t *) kmalloc (sizeof (slave_queue_t), GFP_KERNEL);
+  if (queue == NULL)
+    return 0;
   memset (queue, 0, sizeof (slave_queue_t));
 
   head_slave = eql_new_slave ();
@@ -777,6 +786,10 @@ eql_new_slave_queue(struct device *dev)
     }
   else
     {
+      if (head_slave)
+         kfree(head_slave);
+      if (tail_slave)
+         kfree(tail_slave);
       kfree (queue);
       return 0;
     }

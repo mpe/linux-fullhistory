@@ -22,47 +22,61 @@
  * Fixes:	
  *		Alan Cox	:	Numerous verify_area() calls
  *		Alan Cox	:	Set the ACK bit on a reset
- *		Alan Cox	:	Stopped it crashing if it closed while sk->inuse=1
- *					and was trying to connect (tcp_err()).
+ *		Alan Cox	:	Stopped it crashing if it closed while
+ *					sk->inuse=1 and was trying to connect 
+ *					(tcp_err()).
  *		Alan Cox	:	All icmp error handling was broken
  *					pointers passed where wrong and the
  *					socket was looked up backwards. Nobody
  *					tested any icmp error code obviously.
- *		Alan Cox	:	tcp_err() now handled properly. It wakes people
- *					on errors. select behaves and the icmp error race
+ *		Alan Cox	:	tcp_err() now handled properly. It 
+ *					wakes people on errors. select 
+ *					behaves and the icmp error race
  *					has gone by moving it into sock.c
- *		Alan Cox	:	tcp_reset() fixed to work for everything not just
- *					packets for unknown sockets.
+ *		Alan Cox	:	tcp_reset() fixed to work for 
+ *					everything not just packets for 
+ *					unknown sockets.
  *		Alan Cox	:	tcp option processing.
- *		Alan Cox	:	Reset tweaked (still not 100%) [Had syn rule wrong]
+ *		Alan Cox	:	Reset tweaked (still not 100%) [Had 
+ *					syn rule wrong]
  *		Herp Rosmanith  :	More reset fixes
- *		Alan Cox	:	No longer acks invalid rst frames. Acking
- *					any kind of RST is right out.
- *		Alan Cox	:	Sets an ignore me flag on an rst receive
- *					otherwise odd bits of prattle escape still
- *		Alan Cox	:	Fixed another acking RST frame bug. Should stop
- *					LAN workplace lockups.
- *		Alan Cox	: 	Some tidyups using the new skb list facilities
+ *		Alan Cox	:	No longer acks invalid rst frames. 
+ *					Acking any kind of RST is right out.
+ *		Alan Cox	:	Sets an ignore me flag on an rst 
+ *					receive otherwise odd bits of prattle 
+ *					escape still
+ *		Alan Cox	:	Fixed another acking RST frame bug. 
+ *					Should stop LAN workplace lockups.
+ *		Alan Cox	: 	Some tidyups using the new skb list 
+ *					facilities
  *		Alan Cox	:	sk->keepopen now seems to work
  *		Alan Cox	:	Pulls options out correctly on accepts
  *		Alan Cox	:	Fixed assorted sk->rqueue->next errors
- *		Alan Cox	:	PSH doesn't end a TCP read. Switched a bit to skb ops.
- *		Alan Cox	:	Tidied tcp_data to avoid a potential nasty.
- *		Alan Cox	:	Added some better commenting, as the tcp is hard to follow
+ *		Alan Cox	:	PSH doesn't end a TCP read. Switched a
+ *					bit to skb ops.
+ *		Alan Cox	:	Tidied tcp_data to avoid a potential 
+ *					nasty.
+ *		Alan Cox	:	Added some better commenting, as the 
+ *					tcp is hard to follow
  *		Alan Cox	:	Removed incorrect check for 20 * psh
  *	Michael O'Reilly	:	ack < copied bug fix.
  *	Johannes Stille		:	Misc tcp fixes (not all in yet).
  *		Alan Cox	:	FIN with no memory -> CRASH
- *		Alan Cox	:	Added socket option proto entries. Also added awareness of them to accept.
+ *		Alan Cox	:	Added socket option proto entries. 
+ *					Also added awareness of them to accept.
  *		Alan Cox	:	Added TCP options (SOL_TCP)
- *		Alan Cox	:	Switched wakeup calls to callbacks, so the kernel can layer network sockets.
+ *		Alan Cox	:	Switched wakeup calls to callbacks, 
+ *					so the kernel can layer network 
+ *					sockets.
  *		Alan Cox	:	Use ip_tos/ip_ttl settings.
  *		Alan Cox	:	Handle FIN (more) properly (we hope).
- *		Alan Cox	:	RST frames sent on unsynchronised state ack error/
+ *		Alan Cox	:	RST frames sent on unsynchronised 
+ *					state ack error.
  *		Alan Cox	:	Put in missing check for SYN bit.
  *		Alan Cox	:	Added tcp_select_window() aka NET2E 
  *					window non shrink trick.
- *		Alan Cox	:	Added a couple of small NET2E timer fixes
+ *		Alan Cox	:	Added a couple of small NET2E timer 
+ *					fixes
  *		Charles Hedrick :	TCP fixes
  *		Toomas Tamm	:	TCP window fixes
  *		Alan Cox	:	Small URG fix to rlogin ^C ack fight
@@ -75,21 +89,28 @@
  *		Adam Caldwell	:	Assorted timer/timing errors
  *		Matthew Dillon	:	Fixed another RST bug
  *		Alan Cox	:	Move to kernel side addressing changes.
- *		Alan Cox	:	Beginning work on TCP fastpathing (not yet usable)
+ *		Alan Cox	:	Beginning work on TCP fastpathing 
+ *					(not yet usable)
  *		Arnt Gulbrandsen:	Turbocharged tcp_check() routine.
  *		Alan Cox	:	TCP fast path debugging
  *		Alan Cox	:	Window clamping
  *		Michael Riepe	:	Bug in tcp_check()
  *		Matt Dillon	:	More TCP improvements and RST bug fixes
- *		Matt Dillon	:	Yet more small nasties remove from the TCP code
- *					(Be very nice to this man if tcp finally works 100%) 8)
+ *		Matt Dillon	:	Yet more small nasties remove from the
+ *					TCP code (Be very nice to this man if 
+ *					tcp finally works 100%) 8)
  *		Alan Cox	:	BSD accept semantics. 
  *		Alan Cox	:	Reset on closedown bug.
  *	Peter De Schrijver	:	ENOTCONN check missing in tcp_sendto().
- *		Michael Pall	:	Handle select() after URG properly in all cases.
- *		Michael Pall	:	Undo the last fix in tcp_read_urg() (multi URG PUSH broke rlogin).
- *		Michael Pall	:	Fix the multi URG PUSH problem in tcp_readable(), select() after URG works now.
- *		Michael Pall	:	recv(...,MSG_OOB) never blocks in the BSD api.
+ *		Michael Pall	:	Handle select() after URG properly in 
+ *					all cases.
+ *		Michael Pall	:	Undo the last fix in tcp_read_urg() 
+ *					(multi URG PUSH broke rlogin).
+ *		Michael Pall	:	Fix the multi URG PUSH problem in 
+ *					tcp_readable(), select() after URG 
+ *					works now.
+ *		Michael Pall	:	recv(...,MSG_OOB) never blocks in the 
+ *					BSD api.
  *		Alan Cox	:	Changed the semantics of sk->socket to 
  *					fix a race and a signal problem with
  *					accept() and async I/O.
@@ -107,21 +128,23 @@
  *		Alan Cox	:	Reset tracing code.
  *		Alan Cox	:	Spurious resets on shutdown.
  *		Alan Cox	:	Giant 15 minute/60 second timer error
- *		Alan Cox	:	Small whoops in selecting before an accept.
- *		Alan Cox	:	Kept the state trace facility since it's
- *					handy for debugging.
+ *		Alan Cox	:	Small whoops in selecting before an 
+ *					accept.
+ *		Alan Cox	:	Kept the state trace facility since 
+ *					it's handy for debugging.
  *		Alan Cox	:	More reset handler fixes.
- *		Alan Cox	:	Started rewriting the code based on the RFC's
- *					for other useful protocol references see:  
- *					Comer, KA9Q NOS, and for a reference on the
- *					difference between specifications and how BSD
+ *		Alan Cox	:	Started rewriting the code based on 
+ *					the RFC's for other useful protocol 
+ *					references see: Comer, KA9Q NOS, and 
+ *					for a reference on the difference 
+ *					between specifications and how BSD
  *					works see the 4.4lite source.
  *		A.N.Kuznetsov	:	Don't time wait on completion of tidy 
  *					close.
  *		Linus Torvalds	:	Fin/Shutdown & copied_seq changes.
  *		Linus Torvalds	:	Fixed BSD port reuse to work first syn
- *		Alan Cox	:	Reimplemented timers as per the RFC and using multiple
- *					timers for sanity. 
+ *		Alan Cox	:	Reimplemented timers as per the RFC 
+ *					and using multiple timers for sanity. 
  *		Alan Cox	:	Small bug fixes, and a lot of new
  *					comments.
  *		Alan Cox	:	Fixed dual reader crash by locking
@@ -150,6 +173,8 @@
  *		Alan Cox	:	Look up device on a retransmit - routes may
  *					change. Doesn't yet cope with MSS shrink right
  *					but its a start!
+ *		Marc Tamsky	:	Closing in closing fixes.
+ *		Mike Shaver	:	RFC1122 verifications
  *
  *
  * To Fix:
@@ -217,6 +242,168 @@
  *		
  *	TCP_CLOSE		socket is finished
  */
+
+/*
+ * RFC1122 status:
+ * NOTE: I'm not going to be doing comments in the code for this one except
+ * for violations and the like.  tcp.c is just too big... If I say something
+ * "does?" or "doesn't?", it means I'm not sure, and will have to hash it out
+ * with Alan. -- MS 950903
+ * 
+ * Use of PSH (4.2.2.2)
+ *   MAY aggregate data sent without the PSH flag. (does)
+ *   MAY queue data recieved without the PSH flag. (does)
+ *   SHOULD collapse successive PSH flags when it packetizes data. (doesn't)
+ *   MAY implement PSH on send calls. (doesn't, thus:)
+ *     MUST NOT buffer data indefinitely (doesn't [1 second])
+ *     MUST set PSH on last segment (does)
+ *   MAY pass received PSH to application layer (doesn't)
+ *   SHOULD send maximum-sized segment whenever possible. (almost always does)
+ * 
+ * Window Size (4.2.2.3, 4.2.2.16)
+ *   MUST treat window size as an unsigned number (does)
+ *   SHOULD treat window size as a 32-bit number (does not)
+ *   MUST NOT shrink window once it is offered (does not normally)
+ *   
+ * Urgent Pointer (4.2.2.4)
+ * **MUST point urgent pointer to last byte of urgent data (not right
+ *     after). (doesn't, to be like BSD)
+ *   MUST inform application layer asynchronously of incoming urgent
+ *     data. (does)
+ *   MUST provide application with means of determining the amount of
+ *     urgent data pending. (does)
+ * **MUST support urgent data sequence of arbitrary length. (doesn't, but
+ *   it's sort of tricky to fix, as urg_ptr is a 16-bit quantity)
+ *	[Follows BSD 1 byte of urgent data]
+ * 
+ * TCP Options (4.2.2.5)
+ *   MUST be able to recieve TCP options in any segment. (does)
+ *   MUST ignore unsupported options (does)
+ *   
+ * Maximum Segment Size Option (4.2.2.6)
+ *   MUST implement both sending and receiving MSS. (does)
+ *   SHOULD send an MSS with every SYN where recieve MSS != 536 (MAY send
+ *     it always). (does, even when MSS == 536, which is legal)
+ *   MUST assume MSS == 536 if no MSS received at connection setup (does)
+ *   MUST calculate "effective send MSS" correctly:
+ *     min(physical_MTU, remote_MSS+20) - sizeof(tcphdr) - sizeof(ipopts)
+ *     (does - but allows operator override)
+ *  
+ * TCP Checksum (4.2.2.7)
+ *   MUST generate and check TCP checksum. (does)
+ * 
+ * Initial Sequence Number Selection (4.2.2.8)
+ *   MUST use the RFC 793 clock selection mechanism.  (doesn't, but it's
+ *     OK: RFC 793 specifies a 250KHz clock, while we use 1MHz, which is
+ *     necessary for 10Mbps networks - and harder than BSD to spoof!)
+ * 
+ * Simultaneous Open Attempts (4.2.2.10)
+ *   MUST support simultaneous open attempts (does)
+ * 
+ * Recovery from Old Duplicate SYN (4.2.2.11)
+ *   MUST keep track of active vs. passive open (does)
+ * 
+ * RST segment (4.2.2.12)
+ *   SHOULD allow an RST segment to contain data (does, but doesn't do
+ *     anything with it, which is standard)
+ * 
+ * Closing a Connection (4.2.2.13)
+ *   MUST inform application of whether connectin was closed by RST or
+ *     normal close. (does)
+ *   MAY allow "half-duplex" close (treat connection as closed for the
+ *     local app, even before handshake is done). (does)
+ *   MUST linger in TIME_WAIT for 2 * MSL (does)
+ * 
+ * Retransmission Timeout (4.2.2.15)
+ *   MUST implement Jacobson's slow start and congestion avoidance
+ *     stuff. (does) 
+ * 
+ * Probing Zero Windows (4.2.2.17)
+ *   MUST support probing of zero windows. (does)
+ *   MAY keep offered window closed indefinitely. (does)
+ *   MUST allow remote window to stay closed indefinitely. (does)
+ * 
+ * Passive Open Calls (4.2.2.18)
+ *   MUST NOT let new passive open affect other connections. (doesn't)
+ *   MUST support passive opens (LISTENs) concurrently. (does)
+ *   
+ * Time to Live (4.2.2.19)
+ *   MUST make TCP TTL configurable. (does - IP_TTL option)
+ * 
+ * Event Processing (4.2.2.20)
+ *   SHOULD queue out-of-order segments. (does)
+ *   MUST aggregate ACK segments whenever possible. (does but badly)
+ *   
+ * Retransmission Timeout Calculation (4.2.3.1)
+ *   MUST implement Karn's algorithm and Jacobson's algorithm for RTO
+ *     calculation. (does, or at least explains them in the comments 8*b)
+ *  SHOULD initialize RTO to 0 and RTT to 3. (does)
+ * 
+ * When to Send an ACK Segment (4.2.3.2)
+ *   SHOULD implement delayed ACK. (does not)
+ *   MUST keep ACK delay < 0.5 sec. (N/A)
+ * 
+ * When to Send a Window Update (4.2.3.3)
+ *   MUST implement receiver-side SWS. (does)
+ *   
+ * When to Send Data (4.2.3.4)
+ *   MUST implement sender-side SWS. (does - imperfectly)
+ *   SHOULD implement Nagle algorithm. (does)
+ * 
+ * TCP Connection Failures (4.2.3.5)
+ *  MUST handle excessive retransmissions "properly" (see the RFC). (does)
+ *   SHOULD inform application layer of soft errors. (doesn't)
+ *   
+ * TCP Keep-Alives (4.2.3.6)
+ *   MAY provide keep-alives. (does)
+ *   MUST make keep-alives configurable on a per-connection basis. (does)
+ *   MUST default to no keep-alives. (does)
+ * **MUST make keep-alive interval configurable. (doesn't)
+ * **MUST make default keep-alive interval > 2 hours. (doesn't)
+ *   MUST NOT interpret failure to ACK keep-alive packet as dead
+ *     connection. (doesn't)
+ *   SHOULD send keep-alive with no data. (does)
+ * 
+ * TCP Multihoming (4.2.3.7)
+ *   MUST get source address from IP layer before sending first
+ *     SYN. (does)
+ *   MUST use same local address for all segments of a connection. (does)
+ * 
+ * IP Options (4.2.3.8)
+ *   (I don't think the IP layer sees the IP options, yet.)
+ *   MUST ignore unsupported IP options. (does, I guess 8*b)
+ *   MAY support Time Stamp and Record Route. (doesn't)
+ * **MUST allow application to specify a source route. (doesn't?)
+ * **MUST allow receieved Source Route option to set route for all future
+ *     segments on this connection. (doesn't, not that I think it's a
+ *     huge problem)
+ * 
+ * ICMP messages (4.2.3.9)
+ *   MUST act on ICMP errors. (does)
+ *   MUST slow transmission upon receipt of a Source Quench. (does)
+ *   MUST NOT abort connection upon receipt of soft Destination
+ *     Unreachables (0, 1, 5), Time Exceededs and Parameter
+ *     Problems. (doesn't)
+ *   SHOULD report soft Destination Unreachables etc. to the
+ *     application. (doesn't)
+ *   SHOULD abort connection upon receipt of hard Destination Unreachable
+ *     messages (2, 3, 4). (does)
+ * 
+ * Remote Address Validation (4.2.3.10)
+ *   MUST reject as an error OPEN for invalid remote IP address. (does)
+ *   MUST ignore SYN with invalid source address. (does)
+ *   MUST silently discard incoming SYN for broadcast/multicast
+ *     address. (does) 
+ * 
+ * Asynchronous Reports (4.2.4.1)
+ * **MUST provide mechanism for reporting soft errors to application
+ *     layer. (doesn't)
+ * 
+ * Type of Service (4.2.4.2)
+ *   MUST allow application layer to set Type of Service. (does IP_TOS)
+ * 
+ * (Whew. -- MS 950903)
+ **/
 
 #include <linux/types.h>
 #include <linux/sched.h>
@@ -808,6 +995,8 @@ static void retransmit_timer(unsigned long data)
 				/*
 				 *	Retransmission
 				 */
+				sk->retransmits++;
+				sk->prot->retransmits++;
 				sk->prot->retransmit (sk, 0);
 				tcp_write_timeout(sk);
 			}

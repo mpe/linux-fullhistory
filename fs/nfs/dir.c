@@ -79,6 +79,8 @@ static int nfs_dir_read(struct inode *inode, struct file *filp, char *buf,
 	return -EISDIR;
 }
 
+static struct nfs_entry *c_entry = NULL;
+
 /*
  * We need to do caching of directory entries to prevent an
  * incredible amount of RPC traffic.  Only the most recent open
@@ -93,7 +95,6 @@ static int nfs_readdir(struct inode *inode, struct file *filp,
 	static int c_dev = 0;
 	static int c_ino;
 	static int c_size;
-	static struct nfs_entry *c_entry = NULL;
 
 	int result;
 	int i, index = 0;
@@ -109,9 +110,21 @@ static int nfs_readdir(struct inode *inode, struct file *filp,
 	if (c_entry == NULL) {
 		i = sizeof (struct nfs_entry)*NFS_READDIR_CACHE_SIZE;
 		c_entry = (struct nfs_entry *) kmalloc(i, GFP_KERNEL);
+		if (c_entry == NULL) {
+			printk("nfs_readdir: no MEMORY for cache\n");
+			return -ENOMEM;
+		}
 		for (i = 0; i < NFS_READDIR_CACHE_SIZE; i++) {
 			c_entry[i].name = (char *) kmalloc(NFS_MAXNAMLEN + 1,
 				GFP_KERNEL);
+			if (c_entry[i].name == NULL) {
+				printk("nfs_readdir: no MEMORY for cache\n");
+				while (--i>=0)
+					kfree(c_entry[i].name);
+				kfree(c_entry);
+				c_entry = NULL;
+				return -ENOMEM;
+			}
 		}
 	}
 	entry = NULL;
@@ -169,6 +182,24 @@ static int nfs_readdir(struct inode *inode, struct file *filp,
 	}
 	return 0;
 }
+
+/*
+ * free cache memory
+ * called from cleanup_module
+ */
+
+void nfs_kfree_cache(void)
+{
+        int i;
+
+	if (c_entry == NULL)
+		return;
+	for (i = 0; i < NFS_READDIR_CACHE_SIZE; i++)
+		kfree(c_entry[i].name);
+	kfree(c_entry);
+	c_entry = NULL;
+}
+ 
 
 /*
  * Lookup caching is a big win for performance but this is just

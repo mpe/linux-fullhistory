@@ -32,7 +32,11 @@
 #define DEV_NUMBUFFS	3
 #define MAX_ADDR_LEN	7
 #ifndef CONFIG_AX25
+#ifndef CONFIG_TR
 #define MAX_HEADER	32		/* We really need about 18 worst case .. so 32 is aligned */
+#else
+#define MAX_HEADER	48		/* Token Ring header needs 40 bytes ... 48 is aligned */ 
+#endif
 #else
 #define MAX_HEADER	96		/* AX.25 + NetROM */
 #endif

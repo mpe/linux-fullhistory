@@ -16,79 +16,40 @@
         modified by SRC, incorporated herein by reference.
          
 	**********************
-	
-	v1.93 ALPHA (95/08/10)
-	  - Should work with both 1.2.x and 1.3.x now. (I hope)
-	  - Renamed arc0w ("Windows" protocol) to arc0e ("Ethernet-Encap")
-	    because the protocol used isn't necessarily limited to
-	    Microsoft.
 
-	v1.92 ALPHA (95/07/11)
-	  - Fixes to make things work with kernel 1.3.x.  Completely broke
-	    1.2.x support.  Oops?  1.2.x users keep using 1.91 ALPHA until I
-	    get out a version that supports both.
+	v2.00 (95/09/06)
+	  - THIS IS ONLY A SUMMARY.  The complete changelog is available
+	    from me upon request.
 
-	v1.91 ALPHA (95/07/02)
-	  - Oops.  Exception packets hit us again!  I remembered to test
-	    them in ethernet-protocol mode, but due to the many various
-	    changes they broke in RFC1201 instead.  All fixed.
-	  - A long-standing bug with "exception" packets not setting
-	    protocol_id properly has been corrected.  This would have caused
-	    random problems talking to non-Linux servers.  I've also sent in
-	    a patch to fix this in the latest stable ARCnet (now 1.02).
-	  - ARC_P_IPX is an RFC1201 protocol too.  Thanks, Tomasz.
-	  - We're now "properly" (I think) handling the multiple 'tbusy' and
-	    'start' flags (one for each protocol device) better.
-	  - The driver should now start without a NULL-pointer dereference
-	    if you aren't connected to the network.
+	  - ARCnet RECON messages are now detected and logged.  These occur
+	    when a new computer is powered up on the network, or in a
+	    constant stream when the network cable is broken.  Thanks to
+	    Tomasz Motylewski for this.  You must have D_EXTRA enabled
+	    if you want these messages sent to syslog, otherwise they will
+	    only show up in the network statistics (/proc/net/dev).
+	  - The TX Acknowledge flag is now checked, and a log message is sent
+	    if a completed transmit is not ACK'd.  (I have yet to have this
+	    happen to me.)
+	  - Debug levels are now completely different.  See the README.
+	  - Many code cleanups, with several no-longer-necessary and some
+	    completely useless options removed.
+	  - Multiprotocol support.  You can now use the "arc0e" device to
+	    send "Ethernet-Encapsulation" packets, which are compatible with
+	    Windows for Workgroups and LAN Manager, and possibly other
+	    software.  See the README for more information.
+	  - Documentation updates and improvements.
 	  
-	v1.90 ALPHA (95/06/18)
-	  - Removal of some outdated and messy config options (no one has
-	    ever complained about the defaults since they were introduced):
-	    DANGER_PROBE, EXTRA_DELAYS, IRQ_XMIT, CAREFUL_XMIT,
-	    STRICT_MEM_DETECT, LIMIT_MTU, USE_TIMER_HANDLER.  Also took out
-	    a few "#if 0" sections which are no longer useful.
-	  - Cleaned up debug levels - now instead of levels, there are
-	    individual flags.  Watch out when changing with ifconfig.
-	  - More cleanups and beautification.  Removed more dead code and
-	    made sure every function was commented.
-	  - Fixed the DETECT_RECONFIGS option so that it actually _won't_
-	    detect reconfigs.  Previously, the RECON irq would be disabled
-	    but the recon messages would still be logged on the next normal
-	    IRQ.
-	  - Initial support for "multiprotocol" ARCnet (this involved a LOT
-	    of reorganizing!).  Added an arc0w device, which allows us to
-	    talk to ethernet-over-ARCnet TCP/IP protocol.  To use it, ifconfig
-	    arc0 and arc0w (in that order).  For now, ethernet-protocol
-	    hosts should have routes through arc0w - eventually I hope to
-	    make things more automatic.
-	v1.11 ALPHA (95/06/07)
-	  - Tomasz saves the day again with patches to fix operation if the
-	    new VERIFY_ACK option is disabled.
-	  - LOTS of little code cleanups/improvements by Tomasz.
-	  - Changed autoprobe, since the "never-changing command port"
-	    probe was causing problems for some people.  I also reset the
-	    card fewer times during the probe if DANGER_PROBE is defined,
-	    since DANGER_PROBE seems to be a more reliable method anyway.
-	  - It looks like the null-pointer problem was finally REALLY fixed
-	    by some change from Linux 1.2.8 to 1.2.9.  How handy!
-	v1.10 ALPHA (95/04/15)
-	  - Fixed (?) some null-pointer dereference bugs
-	  - Added better network error detection (from Tomasz) - in
-	    particular, we now notice when our network isn't connected,
-	    also known as a "network reconfiguration."
-	  - We now increment lp->stats.tx_dropped in several more places,
-	    on a suggestion from Tomasz.
-	  - Minor cleanups/spelling fixes.
-	  - We now monitor the TXACK bit in the status register: we don't do
-	    anything with it yet, just notice when a transmitted packet isn't
-	    acknowledged.
-	  - Minor fix with sequence numbers (sometimes they were being sent in
-	    the wrong order due to Linux's packet queuing).
+	v1.02 (95/06/21)
+          - A fix to make "exception" packets sent from Linux receivable
+	    on other systems.  (The protocol_id byte was sometimes being set
+	    incorrectly, and Linux wasn't checking it on receive so it
+	    didn't show up)
+
 	v1.01 (95/03/24)
 	  - Fixed some IPX-related bugs. (Thanks to Tomasz Motylewski
             <motyl@tichy.ch.uj.edu.pl> for the patches to make arcnet work
             with dosemu!)
+            
 	v1.00 (95/02/15)
 	  - Initial non-alpha release.
 	
@@ -96,14 +57,15 @@
 	TO DO:
 	
          - Test in systems with NON-ARCnet network cards, just to see if
-           autoprobe kills anything.  Currently, we do cause some NE2000's to
-           die.
+           autoprobe kills anything.  Currently, we do cause some NE2000's
+           to die.  Autoprobe is also way too slow and verbose, particularly
+           if there ARE no ARCnet cards.
          - What about cards with shared memory that can be "turned off?"
          - NFS mount freezes after several megabytes to SOSS for DOS. 
  	   unmount/remount fixes it.  Is this arcnet-specific?  I don't know.
          - Add support for "old" (RFC1051) protocol arcnet, such as AmiTCP
            and NetBSD.  Work in Tomasz' initial support for this.
-         - How about TCP/IP over netbios?
+         - How about TCP/IP over netbios?  Or vice versa?
          - Some newer ARCnets support promiscuous mode, supposedly. 
            If someone sends me information, I'll try to implement it.
          - Remove excess lock variables that are probably not necessary
@@ -131,7 +93,7 @@
 */
 
 static const char *version =
- "arcnet.c:v1.93 ALPHA 95/08/10 Avery Pennarun <apenwarr@foxnet.net>\n";
+ "arcnet.c:v2.00 95/09/06 Avery Pennarun <apenwarr@foxnet.net>\n";
 
 /**************************************************************************/
 
@@ -159,7 +121,8 @@ static const char *version =
 #define VERIFY_ACK
 
 /* Define this if you want to make it easier to use the "call trace" when
- * a kernel NULL pointer assignment occurs.
+ * a kernel NULL pointer assignment occurs.  Hopefully unnecessary, most of
+ * the time.
  */
 #undef static
 
@@ -204,7 +167,11 @@ static const char *version =
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
+#ifdef LINUX12
+#include "arp.h"
+#else
 #include <net/arp.h>
+#endif
 
 
 /* new debugging bitflags: each option can be enabled individually.
@@ -215,7 +182,7 @@ static const char *version =
  *		and HOSTNAME is your hostname/ip address
  * and then resetting your routes.
  */
-#define D_NORMAL	1	/* D_NORMAL  startup announcement	*/
+#define D_NORMAL	1	/* D_NORMAL  normal operational info	*/
 #define	D_INIT		2	/* D_INIT    show init/probe messages	*/
 #define D_EXTRA		4	/* D_EXTRA   extra information		*/
 /* debug levels past this point give LOTS of output! */
@@ -224,10 +191,11 @@ static const char *version =
 #define D_RX		32	/* D_RX	     show rx packets		*/
 #define D_SKB		64	/* D_SKB     dump skb's			*/
 
-#ifndef NET_DEBUG
-#define NET_DEBUG D_NORMAL|D_INIT|D_EXTRA
+#ifndef ARCNET_DEBUG
+/*#define ARCNET_DEBUG D_NORMAL|D_INIT|D_EXTRA*/
+#define ARCNET_DEBUG D_NORMAL|D_INIT
 #endif
-int arcnet_debug = NET_DEBUG;
+int arcnet_debug = ARCNET_DEBUG;
 
 #ifndef HAVE_AUTOIRQ
 /* From auto_irq.c, in ioport.h for later versions. */
@@ -342,7 +310,7 @@ extern struct device *irq2dev_map[16];
 #define ARC_P_IPX	250		/* 0xFA */
 
 	/* MS LanMan/WfWg protocol */
-#define ARC_P_MS_TCPIP	0xE8
+#define ARC_P_ETHER	0xE8
 
 	/* Unsupported/indirectly supported protocols */
 #define ARC_P_LANSOFT	251		/* 0xFB */
@@ -542,16 +510,29 @@ arcnet_probe(struct device *dev)
 	int delayval;
 	struct arcnet_local *lp;
 
+#if 0
 	BUGLVL(D_NORMAL)
 	{
 		printk(version);
 		printk("arcnet: ***\n");
-		printk("arcnet: * Read linux/drivers/net/README.arcnet for important release notes!\n");
+		printk("arcnet: * Read README.arcnet for important release notes!\n");
 		printk("arcnet: *\n");
-		printk("arcnet: * This is an ALPHA version!  (Last stable release: v1.02)  E-mail me if\n");
+		printk("arcnet: * This is an ALPHA version!  (Last stable release: v2.00)  E-mail me if\n");
 		printk("arcnet: * you have any questions, comments, or bug reports.\n");
 		printk("arcnet: ***\n");
 	}
+#else
+	BUGLVL(D_INIT)
+	{
+		printk(version);
+		printk("arcnet: ***\n");
+		printk("arcnet: * Read README.arcnet for important release notes!\n");
+		printk("arcnet: *\n");
+		printk("arcnet: * This version should be stable, but please e-mail\n");
+		printk("arcnet: * me if you have any questions or comments.\n");
+		printk("arcnet: ***\n");
+	}
+#endif
 
 	BUGLVL(D_INIT)
 		printk("arcnet: given: base %lXh, IRQ %Xh, shmem %lXh\n",
@@ -633,6 +614,8 @@ arcnet_probe(struct device *dev)
 
 	/* Initialize the device structure. */
 	dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
+	if (dev->priv == NULL)
+		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct arcnet_local));
 	lp=(struct arcnet_local *)(dev->priv);
 
@@ -985,8 +968,15 @@ arcnet_open(struct device *dev)
 	
 	/* Initialize the ethernet-encap protocol driver */
 	lp->edev=(struct device *)kmalloc(sizeof(struct device),GFP_KERNEL);
+	if (lp->edev == NULL)
+		return -ENOMEM;
 	memcpy(lp->edev,dev,sizeof(struct device));
 	lp->edev->name=(char *)kmalloc(10,GFP_KERNEL);
+	if (lp->edev->name == NULL) {
+		kfree(lp->edev);
+		lp->edev = NULL;
+		return -ENOMEM;
+	}
 	sprintf(lp->edev->name,"%se",dev->name);
 	lp->edev->init=arcnetE_init;
 	register_netdev(lp->edev);
@@ -1009,7 +999,7 @@ arcnet_close(struct device *dev)
 {
 	int ioaddr = dev->base_addr;
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-
+	
 	TBUSY=1;
 	START=0;
 	
@@ -1025,13 +1015,14 @@ arcnet_close(struct device *dev)
 	/* free the ethernet-encap protocol device */
 	lp->edev->start=0;
 	lp->edev->priv=NULL;
+	dev_close(lp->edev);
 	unregister_netdev(lp->edev);
 	kfree(lp->edev->name);
 	kfree(lp->edev);
 	lp->edev=NULL;
 
 	/* Update the statistics here. */
-	
+
 #ifdef MODULE
 	MOD_DEC_USE_COUNT;
 #endif
@@ -1530,7 +1521,7 @@ arcnetE_send_packet(struct sk_buff *skb, struct device *dev)
 				arcpacket->hardheader.offset2);
 		
 		arcsoft=&arcpacket->raw[offset];
-		arcsoft[0]=ARC_P_MS_TCPIP;
+		arcsoft[0]=ARC_P_ETHER;
 		arcsoft++;
 		
 		/* copy the packet into ARCnet shmem
@@ -1856,7 +1847,7 @@ arcnet_rx(struct device *dev,int recbuf)
 		arcnetA_rx(dev,(struct ClientData*)arcsoft,
 			length,saddr,daddr);
 		break;
-	case ARC_P_MS_TCPIP:
+	case ARC_P_ETHER:
 		arcnetE_rx(dev,arcsoft,length,saddr,daddr);
 		break;		
 	default:
@@ -2465,9 +2456,6 @@ int num=0;	/* number of device (ie for 0 for arc0, 1 for arc1...) */
 int
 init_module(void)
 {
-	if (io == 0)
-	  printk("arcnet: You should not use auto-probing with insmod!\n");
-
 	sprintf(thiscard.name,"arc%d",num);
 
 	thiscard.base_addr=io;
@@ -2502,6 +2490,8 @@ cleanup_module(void)
 		if (thiscard.base_addr) release_region(thiscard.base_addr,
 						ARCNET_TOTAL_SIZE);
 		unregister_netdev(&thiscard);
+		kfree(thiscard.priv);
+		thiscard.priv = NULL;
 	}
 }
 

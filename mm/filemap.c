@@ -178,6 +178,7 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 		if (pte_none(pte))
 			return 0;
 		pte_clear(ptep);
+		invalidate();
 		if (!pte_present(pte)) {
 			swap_free(pte_val(pte));
 			return 0;

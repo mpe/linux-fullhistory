@@ -71,6 +71,7 @@ unsigned long event = 0;
 extern int _setitimer(int, struct itimerval *, struct itimerval *);
 unsigned long * prof_buffer = NULL;
 unsigned long prof_len = 0;
+unsigned long prof_shift = 0;
 
 #define _S(nr) (1<<((nr)-1))
 
@@ -536,7 +537,7 @@ static void timer_bh(void * unused)
 	struct timer_list * timer;
 
 	cli();
-	while ((timer = timer_head.next) != &timer_head && timer->expires < jiffies) {
+	while ((timer = timer_head.next) != &timer_head && timer->expires <= jiffies) {
 		void (*fn)(unsigned long) = timer->function;
 		unsigned long data = timer->data;
 		timer->next->prev = timer->prev;
@@ -664,15 +665,13 @@ static void do_timer(int irq, struct pt_regs * regs)
 		current->stime++;
 		if(current != task[0])
 			kstat.cpu_system++;
-#ifdef CONFIG_PROFILE
 		if (prof_buffer && current != task[0]) {
 			extern int _stext;
 			unsigned long eip = regs->eip - (unsigned long) &_stext;
-			eip >>= CONFIG_PROFILE_SHIFT;
+			eip >>= prof_shift;
 			if (eip < prof_len)
 				prof_buffer[eip]++;
 		}
-#endif
 	}
 	/*
 	 * check the cpu time limit on the process.
@@ -711,7 +710,7 @@ static void do_timer(int irq, struct pt_regs * regs)
 		mark_bh(TIMER_BH);
 	}
 	cli();
-	if (timer_head.next->expires < jiffies)
+	if (timer_head.next->expires <= jiffies)
 		mark_bh(TIMER_BH);
 	if (tq_timer != &tq_last)
 		mark_bh(TQUEUE_BH);

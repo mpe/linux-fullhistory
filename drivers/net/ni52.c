@@ -360,6 +360,8 @@ static int ni52_probe1(struct device *dev,int ioaddr)
 
   dev->priv = (void *) kmalloc(sizeof(struct priv),GFP_KERNEL); 
                                   /* warning: we don't free it on errors */
+  if (dev->priv == NULL)
+     return -ENOMEM;
   memset((char *) dev->priv,0,sizeof(struct priv));
 
   /* 

@@ -228,6 +228,8 @@ int nr_init(struct device *dev)
 	dev->pa_alen		= sizeof(unsigned long);
 
 	dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
+	if (dev->priv == NULL)
+		return -ENOMEM;
 
 	memset(dev->priv, 0, sizeof(struct enet_statistics));
 

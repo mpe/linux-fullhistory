@@ -29,8 +29,6 @@
 
 #include <asm/bugs.h>
 
-extern unsigned long * prof_buffer;
-extern unsigned long prof_len;
 extern char _stext, _etext;
 extern char *linux_banner;
 
@@ -144,11 +142,24 @@ char *get_options(char *str, int *ints)
 	return(cur);
 }
 
+static void profile_setup(char *str, int *ints)
+{
+	if (ints[0] > 0)
+		prof_shift = (unsigned long) ints[1];
+	else
+#ifdef CONFIG_PROFILE_SHIFT
+		prof_shift = CONFIG_PROFILE_SHIFT;
+#else
+		prof_shift = 2;
+#endif
+}
+
 struct {
 	const char *str;
 	void (*setup_func)(char *, int *);
 } bootsetups[] = {
 	{ "reserve=", reserve_setup },
+	{ "profile=", profile_setup },
 	{ "ramdisk=", ramdisk_setup },
 #ifdef CONFIG_BUGi386
 	{ "no-hlt", no_halt },
@@ -387,12 +398,20 @@ asmlinkage void start_kernel(void)
 	parse_options(command_line);
 	init_modules();
 #ifdef CONFIG_PROFILE
-	prof_buffer = (unsigned long *) memory_start;
-	/* only text is profiled */
-	prof_len = (unsigned long) &_etext - (unsigned long) &_stext;
-	prof_len >>= CONFIG_PROFILE_SHIFT;
-	memory_start += prof_len * sizeof(unsigned long);
+	if (!prof_shift)
+#ifdef CONFIG_PROFILE_SHIFT
+		prof_shift = CONFIG_PROFILE_SHIFT;
+#else
+		prof_shift = 2;
 #endif
+#endif
+	if (prof_shift) {
+		prof_buffer = (unsigned long *) memory_start;
+		/* only text is profiled */
+		prof_len = (unsigned long) &_etext - (unsigned long) &_stext;
+		prof_len >>= prof_shift;
+		memory_start += prof_len * sizeof(unsigned long);
+	}
 	memory_start = console_init(memory_start,memory_end);
 #ifdef CONFIG_PCI
 	memory_start = pci_init(memory_start,memory_end);

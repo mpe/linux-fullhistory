@@ -788,6 +788,8 @@ int SK_probe(struct device *dev, short ioaddr)
 
     /* Allocate memory for private structure */
     p = dev->priv = (void *) kmalloc(sizeof(struct priv), GFP_KERNEL);
+    if (p == NULL)
+	   return -ENOMEM;
     memset((char *) dev->priv, 0, sizeof(struct priv)); /* clear memory */
 
     /* Assign our Device Driver functions */

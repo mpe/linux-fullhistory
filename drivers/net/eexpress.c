@@ -400,6 +400,8 @@ int eexp_probe1(struct device *dev, short ioaddr)
 
 	/* Initialize the device structure. */
 	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+	if (dev->priv == NULL)
+		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct net_local));
 
 	dev->open		= eexp_open;

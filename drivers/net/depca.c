@@ -511,6 +511,8 @@ depca_hw_init(struct device *dev, u_long ioaddr)
  
 	  /* Define the device private memory */
 	  dev->priv = (void *) kmalloc(sizeof(struct depca_private), GFP_KERNEL);
+	  if (dev->priv == NULL)
+	    return -ENOMEM;
 	  lp = (struct depca_private *)dev->priv;
 	  memset((char *)dev->priv, 0, sizeof(struct depca_private));
 	  lp->adapter = adapter;

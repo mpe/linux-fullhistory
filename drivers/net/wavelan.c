@@ -1015,6 +1015,8 @@ Leave this out until I can get it to work -- BJ.
 		printk(version);
 
 	dev->priv = kmalloc(sizeof(net_local), GFP_KERNEL);
+	if (dev->priv == NULL)
+		return -ENOMEM;
 	memset(dev->priv, 0x00, sizeof(net_local));
 	lp = (net_local *)dev->priv;
 

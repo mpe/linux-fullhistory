@@ -110,10 +110,9 @@ struct inode_operations proc_kcore_inode_operations = {
 };
 
 
-#ifdef CONFIG_PROFILE
-
 extern unsigned long prof_len;
 extern unsigned long * prof_buffer;
+extern unsigned long prof_shift;
 /*
  * This function accesses profiling information. The returned data is
  * binary: the sampling step and the actual contents of the profile
@@ -125,7 +124,7 @@ static int read_profile(struct inode *inode, struct file *file, char *buf, int c
     unsigned long p = file->f_pos;
 	int read;
 	char * pnt;
-	unsigned long sample_step = 1 << CONFIG_PROFILE_SHIFT;
+	unsigned long sample_step = 1 << prof_shift;
 
 	if (count < 0)
 	    return -EINVAL;
@@ -165,8 +164,6 @@ static struct file_operations proc_profile_operations = {
 struct inode_operations proc_profile_inode_operations = {
 	&proc_profile_operations, 
 };
-
-#endif /* CONFIG_PROFILE */
 
 
 static int get_loadavg(char * buffer)

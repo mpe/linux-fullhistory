@@ -12,6 +12,13 @@ L_OBJS   := Space.o auto_irq.o net_init.o loopback.o
 M_OBJS   :=
 MOD_LIST_NAME := NET_MODULES
 
+# Need these to keep track of whether the 8390 and SLHC modules should
+# really go in the kernel or a module.
+CONFIG_8390_BUILTIN :=
+CONFIG_8390_MODULE  :=
+CONFIG_SLHC_BUILTIN :=
+CONFIG_SLHC_MODULE  :=
+
 ifeq ($(CONFIG_SEEQ8005),y)
 L_OBJS += seeq8005.o
 endif
@@ -46,70 +53,70 @@ endif
 
 ifeq ($(CONFIG_WD80x3),y)
 L_OBJS += wd.o
-CONFIG_8390 = y
+CONFIG_8390_BUILTIN = y
 else
   ifeq ($(CONFIG_WD80x3),m)
-  CONFIG_8390 = m
+  CONFIG_8390_MODULE = y
   M_OBJS += wd.o
   endif
 endif
 
 ifeq ($(CONFIG_EL2),y)
 L_OBJS += 3c503.o
-CONFIG_8390 = y
+CONFIG_8390_BUILTIN = y
 else
   ifeq ($(CONFIG_EL2),m)
-  CONFIG_8390 = m
+  CONFIG_8390_MODULE = y
   M_OBJS += 3c503.o
   endif
 endif
 
 ifeq ($(CONFIG_NE2000),y)
 L_OBJS += ne.o
-CONFIG_8390 = y
+CONFIG_8390_BUILTIN = y
 else
   ifeq ($(CONFIG_NE2000),m)
-  CONFIG_8390 = m
+  CONFIG_8390_MODULE = y
   M_OBJS += ne.o
   endif
 endif
 
 ifeq ($(CONFIG_HPLAN),y)
 L_OBJS += hp.o
-CONFIG_8390 = y
+CONFIG_8390_BUILTIN = y
 else
   ifeq ($(CONFIG_HPLAN),m)
-  CONFIG_8390 = m
+  CONFIG_8390_MODULE = y
   M_OBJS += hp.o
   endif
 endif
 
 ifeq ($(CONFIG_HPLAN_PLUS),y)
 L_OBJS += hp-plus.o
-CONFIG_8390 = y
+CONFIG_8390_BUILTIN = y
 else
   ifeq ($(CONFIG_HPLAN_PLUS),m)
-  CONFIG_8390 = m
+  CONFIG_8390_MODULE = y
   M_OBJS += hp-plus.o
   endif
 endif
 
 ifeq ($(CONFIG_ULTRA),y)
 L_OBJS += smc-ultra.o
-CONFIG_8390 = y
+CONFIG_8390_BUILTIN = y
 else
   ifeq ($(CONFIG_ULTRA),m)
-  CONFIG_8390 = m
+  CONFIG_8390_MODULE = y
   M_OBJS += smc-ultra.o
   endif
 endif
 
 ifeq ($(CONFIG_E2100),y)
 L_OBJS += e2100.o
-CONFIG_8390 = y
+CONFIG_8390_BUILTIN = y
 else
   ifeq ($(CONFIG_E2100),m)
-  CONFIG_8390 = m
+  CONFIG_8390_MODULE = y
   M_OBJS += e2100.o
   endif
 endif
@@ -124,27 +131,27 @@ endif
 
 ifeq ($(CONFIG_PPP),y)
 L_OBJS += ppp.o
-CONFIG_SLHC = y
+CONFIG_SLHC_BUILTIN = y
 else
   ifeq ($(CONFIG_PPP),m)
-  CONFIG_SLHC = m
+  CONFIG_SLHC_MODULE = y
   M_OBJS += ppp.o
   endif
 endif
 
 ifeq ($(CONFIG_SLIP),y)
 L_OBJS += slip.o
-CONFIG_SLHC = y
+CONFIG_SLHC_BUILTIN = y
 else
   ifeq ($(CONFIG_SLIP),m)
-  CONFIG_SLHC = m
+  CONFIG_SLHC_MODULE = y
   M_OBJS += slip.o
   endif
 endif
 
 ifeq ($(CONFIG_DE650),y)
 ETDRV_OBJS := $(L_OBJS) de650.o
-CONFIG_8390 = y
+CONFIG_8390_BUILTIN = y
 endif
 
 ifeq ($(CONFIG_3C589),y)
@@ -289,10 +296,10 @@ endif
 
 ifeq ($(CONFIG_AC3200),y)
 L_OBJS += ac3200.o
-CONFIG_8390 = y
+CONFIG_8390_BUILTIN = y
 else
   ifeq ($(CONFIG_AC3200),m)
-  CONFIG_8390 = m
+  CONFIG_8390_MODULE = y
   M_OBJS += ac3200.o
   endif
 endif
@@ -326,21 +333,28 @@ L_OBJS += pi2.o
 CONFIG_PI = CONFIG_PI
 endif
 
-ifeq ($(CONFIG_SLHC),y)
+
+# If anything built-in uses slhc, then build it into the kernel also.
+# If not, but a module uses it, build as a module.
+ifdef CONFIG_SLHC_BUILTIN
 L_OBJS += slhc.o
 else
-  ifeq ($(CONFIG_SLHC),m)
+  ifdef CONFIG_SLHC_MODULE
   M_OBJS += slhc.o
   endif
 endif
 
-ifeq ($(CONFIG_8390),y)
+
+# If anything built-in uses the 8390, then build it into the kernel also.
+# If not, but a module uses it, build as a module.
+ifdef CONFIG_8390_BUILTIN
 L_OBJS += 8390.o
 else
-  ifeq ($(CONFIG_8390),m)
+  ifdef CONFIG_8390_MODULE
   M_OBJS += 8390.o
   endif
 endif
+
 
 ifeq ($(CONFIG_EQUALIZER),y)
 L_OBJS += eql.o

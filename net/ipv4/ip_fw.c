@@ -38,9 +38,8 @@
  * Fixes:
  *	Pauline Middelink	:	Added masquerading.
  *	Alan Cox		:	Fixed an error in the merge.
- *
- * TODO:
- *	Fix the PORT spoof crash.
+ *	Thomas Quinot		:	Fixed port spoofing.
+ *	Alan Cox		:	Cleaned up retransmits in spoofing.
  *
  *	All the real work was done by .....
  *
@@ -586,7 +585,8 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
 	unsigned long from;
 	unsigned short port;
 	struct ip_masq *ms;
-	char buf[20];		/* xxx.xxx.xxx.xxx\r\n */
+	char buf[24];		/* xxx.xxx.xxx.xxx,ppp,ppp\000 */
+	int diff;
 	
 	/*
 	 * Adjust seq and ack_seq with delta-offset for
@@ -600,9 +600,9 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
 
 	while (skb->len - ((unsigned char *)data - skb->h.raw) > 18)
 	{
-		if (memcmp(data,"PORT ",5)!=0 && memcmp(data,"port ",5)!=0) 
+		if (memcmp(data,"PORT ",5) && memcmp(data,"port ",5)) 
 		{
-			data += 5;
+			data ++;
 			continue;
 		}
 		p = data+5;
@@ -655,8 +655,14 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
 		/*
 		 * Calculate required delta-offset to keep TCP happy
 		 */
-		ftp->delta += strlen(buf) - (data-p);
-		if (ftp->delta==0) 
+		
+		diff = strlen(buf) - (data-p);
+		
+		/*
+		 *	No shift.
+		 */
+		 
+		if (diff==0) 
 		{
 			/*
 			 * simple case, just replace the old PORT cmd
@@ -666,6 +672,18 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
  			return skb;
  		}
  
+ 		/*
+ 		 *	If the PORT command we have fiddled is the first, or is a
+ 		 *	resend don't do the delta shift again. Doesn't work for
+ 		 *	pathological cases, but we would need a history for that.
+ 		 *	Also fails if you send 2^31 bytes of data down the link 
+ 		 *	after the first port command.
+ 		 *
+ 		 *	FIXME: use ftp->init_seq_valid - 0 is a valid sequence.
+ 		 */
+ 		 
+ 		if(!ftp->init_seq || after(ftp->init_seq,th->seq))
+ 			ftp->delta+=diff;
  		/*
  		 * Sizes differ, make a copy
  		 */
@@ -681,7 +699,9 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
  		skb2->free = skb->free;
  		skb_reserve(skb2,MAX_HEADER);
  		skb_put(skb2,skb->len + ftp->delta);
- 		skb2->h.raw = &skb2->data[skb->h.raw - skb->data];
+/* 		skb2->h.raw = &skb2->data[skb->h.raw - skb->data];*/
+		skb2->h.raw = skb2->data + (skb->h.raw - skb->data);
+		iph=skb2->h.iph;
  
  		/*
  		 *	Copy the packet data into the new buffer.
@@ -690,7 +710,7 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
  		memcpy(skb2->data, skb->data, (p - (char *)skb->data));
  		memcpy(&skb2->data[(p - (char *)skb->data)], buf, strlen(buf));
 		memcpy(&skb2->data[(p - (char *)skb->data) + strlen(buf)], data,
-			skb->len - ((char *)skb->h.raw - data));
+			skb->len - (data-(char *)skb->data));
 
 		/*
 		 * Problem, how to replace the new skb with old one,
@@ -798,6 +818,7 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  			*skb_ptr = skb;
  			iph = skb->h.iph;
  			portptr = (unsigned short *)&(((char *)iph)[iph->ihl*4]);
+ 			size = skb->len - ((unsigned char *)portptr-skb->h.raw);
  		}
  		th = (struct tcphdr *)portptr;
  

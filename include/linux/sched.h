@@ -275,6 +275,10 @@ extern unsigned long itimer_next;
 extern struct timeval xtime;
 extern int need_resched;
 
+extern unsigned long * prof_buffer;
+extern unsigned long prof_len;
+extern unsigned long prof_shift;
+
 #define CURRENT_TIME (xtime.tv_sec)
 
 extern void sleep_on(struct wait_queue ** p);

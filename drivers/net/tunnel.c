@@ -79,17 +79,23 @@ int tunnel_init(struct device *dev)
 	dev->hard_start_xmit = tunnel_xmit;
 	dev->get_stats = tunnel_get_stats;
 	dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
-	 memset(dev->priv, 0, sizeof(struct enet_statistics));
+	if (dev->priv == NULL)
+		return -ENOMEM;
+	memset(dev->priv, 0, sizeof(struct enet_statistics));
 #ifdef MODULE
 	dev->open = &tunnel_open;
 	dev->stop = &tunnel_close;
 #endif
+	/* Now stomp the bits that are different */
 	dev->type = ARPHRD_TUNNEL; /* IP tunnel hardware type (Linux 1.1.89) */
 	dev->flags |= IFF_NOARP;
 	dev->flags |= IFF_LOOPBACK; /* Why doesn't tunnel work without this? [ should do now - AC]*/
 	dev->addr_len=0;
 	dev->hard_header_len=0;
 	dev->hard_header=NULL;
+	dev->header_cache=NULL;
+	dev->rebuild_header=NULL;
+	/* End of stomp 8) */
 	return 0;
 }
 
@@ -218,6 +224,7 @@ print_ip(iph);
 	skb2->free=1;
 	skb_put(skb2,newlen);
 	iph=skb2->h.iph=(struct iphdr *)skb2->data;
+	skb2->ip_hdr=iph;
 	memcpy(skb2->h.iph, skb->data, ip_header_len );
 	memcpy(skb2->data + ip_header_len, skb->data, skb->len);
 	/* Free the old packet, we no longer need it */

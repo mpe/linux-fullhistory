@@ -261,7 +261,7 @@ plip_init(struct device *dev)
 	/* Set the private structure */
 	dev->priv = kmalloc(sizeof (struct net_local), GFP_KERNEL);
 	if (dev->priv == NULL)
-		return EAGAIN;
+		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct net_local));
 	nl = (struct net_local *) dev->priv;
 

@@ -227,6 +227,8 @@ static int atp_probe1(struct device *dev, short ioaddr)
 	/* Initialize the device structure. */
 	ether_setup(dev);
 	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+	if (dev->priv == NULL)
+		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct net_local));
 
 

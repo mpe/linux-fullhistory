@@ -37,6 +37,7 @@
  *	Richard Kooijman	:	Timestamp fixes.
  *		Alan Cox	:	Wrong field in SIOCGIFDSTADDR
  *		Alan Cox	:	Device lock protection.
+ *		Alan Cox	: 	Fixed nasty side effect of device close changes.
  *
  *	Cleaned up and recommented by Alan Cox 2nd April 1994. I hope to have
  *	the rest as well commented in the end.
@@ -1024,6 +1025,11 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 		
 				if ((old_flags & IFF_UP) && ((dev->flags & IFF_UP) == 0)) 
 				{
+					/*
+					 *	Restore IFF_UP so dev_close knows to shut
+					 *	it down. FIXME: Tidy me up sometime.
+					 */
+					dev->flags|=IFF_UP;
 					ret = dev_close(dev);
 				}
 				else

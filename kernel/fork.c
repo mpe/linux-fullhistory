@@ -188,6 +188,7 @@ static void copy_sighand(unsigned long clone_flags, struct allocation_struct * u
 int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 {
 	int nr;
+	int error = -ENOMEM;
 	unsigned long new_stack;
 	struct task_struct *p;
 	struct allocation_struct *alloc;
@@ -199,6 +200,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	new_stack = get_free_page(GFP_KERNEL);
 	if (!new_stack)
 		goto bad_fork_free;
+	error = -EAGAIN;
 	nr = find_empty_process();
 	if (nr < 0)
 		goto bad_fork_free;
@@ -234,6 +236,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	SET_LINKS(p);
 	nr_tasks++;
 
+	error = -ENOMEM;
 	/* copy all the process information */
 	copy_thread(nr, clone_flags, usp, p, regs);
 	if (copy_mm(clone_flags, alloc))
@@ -249,7 +252,12 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->counter = current->counter >> 1;
 	wake_up_process(p);			/* do this last, just in case */
 	return p->pid;
+
 bad_fork_cleanup:
+	if (p->exec_domain && p->exec_domain->use_count)
+		(*p->exec_domain->use_count)--;
+	if (p->binfmt && p->binfmt->use_count)
+		(*p->binfmt->use_count)--;
 	task[nr] = NULL;
 	REMOVE_LINKS(p);
 	nr_tasks--;
@@ -257,5 +265,5 @@ bad_fork_free:
 	free_page(new_stack);
 	free_page((long) p);
 bad_fork:
-	return -EAGAIN;
+	return error;
 }

@@ -389,6 +389,10 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	
 	elf_phdata = (struct elf_phdr *) kmalloc(elf_ex.e_phentsize * 
 						 elf_ex.e_phnum, GFP_KERNEL);
+	if (elf_phdata == NULL) {
+		MOD_DEC_USE_COUNT;
+		return -ENOMEM;
+	}
 	
 	retval = read_exec(bprm->inode, elf_ex.e_phoff, (char *) elf_phdata,
 			   elf_ex.e_phentsize * elf_ex.e_phnum, 1);
@@ -426,6 +430,11 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			
 			elf_interpreter = (char *) kmalloc(elf_ppnt->p_filesz, 
 							   GFP_KERNEL);
+			if (elf_interpreter == NULL) {
+				kfree (elf_phdata);
+				MOD_DEC_USE_COUNT;
+				return -ENOMEM;
+			}
 			
 			retval = read_exec(bprm->inode,elf_ppnt->p_offset,elf_interpreter,
 					   elf_ppnt->p_filesz, 1);
@@ -738,6 +747,10 @@ load_elf_library(int fd){
 	
 	elf_phdata =  (struct elf_phdr *) 
 		kmalloc(sizeof(struct elf_phdr) * elf_ex.e_phnum, GFP_KERNEL);
+	if (elf_phdata == NULL) {
+		MOD_DEC_USE_COUNT;
+		return -ENOMEM;
+	}
 	
 	retval = read_exec(inode, elf_ex.e_phoff, (char *) elf_phdata,
 			   sizeof(struct elf_phdr) * elf_ex.e_phnum, 1);

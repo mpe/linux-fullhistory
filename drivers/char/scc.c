@@ -1,7 +1,7 @@
 #include <linux/autoconf.h>	/* fastest method */
 #ifdef CONFIG_SCC
 
-#define RCS_ID "$Id: scc.c,v 1.25 1995/08/24 21:05:00 jreuter Exp jreuter $"
+#define RCS_ID "$Id: scc.c,v 1.26 1995/09/07 14:46:19 jreuter Exp jreuter $"
 
 #define BANNER "Z8530 SCC driver v1.9.dl1bke (beta) by dl1bke\n"
 
@@ -155,7 +155,7 @@
 #include <linux/kernel.h>
 
 #ifndef Z8530_MAJOR
-#define Z8530_MAJOR 22
+#define Z8530_MAJOR 34
 #endif
 
 long scc_init(long kmem_start);

@@ -244,6 +244,8 @@ static int ni65_probe1(struct device *dev,int ioaddr)
         request_region(ioaddr,NI65_TOTAL_SIZE,"ni65");
 
   p = dev->priv = (void *) kmalloc(sizeof(struct priv),GFP_KERNEL);
+  if (p == NULL)
+   	return -ENOMEM;
   memset((char *) dev->priv,0,sizeof(struct priv));
 
   dev->open               = ni65_open;

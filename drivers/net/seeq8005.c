@@ -323,8 +323,9 @@ static int seeq8005_probe1(struct device *dev, int ioaddr)
 	request_region(ioaddr, SEEQ8005_IO_EXTENT,"seeq8005");
 
 	/* Initialize the device structure. */
+	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
 	if (dev->priv == NULL)
-		dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct net_local));
 
 	dev->open		= seeq8005_open;

@@ -249,6 +249,8 @@ int el3_probe(struct device *dev)
 
 	/* Make up a EL3-specific-data structure. */
 	dev->priv = kmalloc(sizeof(struct el3_private), GFP_KERNEL);
+	if (dev->priv == NULL)
+		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct el3_private));
 
 	if (el3_debug > 0)

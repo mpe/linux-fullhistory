@@ -597,6 +597,8 @@ int ethdev_init(struct device *dev)
 		struct ei_device *ei_local;
 		
 		dev->priv = kmalloc(sizeof(struct ei_device), GFP_KERNEL);
+		if (dev->priv == NULL)
+			return -ENOMEM;
 		memset(dev->priv, 0, sizeof(struct ei_device));
 		ei_local = (struct ei_device *)dev->priv;
 		ei_local->pingpong = ei_pingpong;

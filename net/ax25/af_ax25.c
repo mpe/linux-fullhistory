@@ -476,6 +476,8 @@ static int ax25_uid_ioctl(int cmd, struct sockaddr_ax25 *sax)
 			if (ax25_findbyuid(sax->sax25_uid))
 				return -EEXIST;
 			a = (ax25_uid_assoc *)kmalloc(sizeof(*a), GFP_KERNEL);
+			if (a == NULL)
+				return -ENOMEM;
 			a->uid  = sax->sax25_uid;
 			a->call = sax->sax25_call;
 			a->next = ax25_uid_list;

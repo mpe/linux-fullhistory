@@ -187,7 +187,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 	fi
 	tristate 'HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS n
 	tristate 'HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN n
-	tristate 'HP 10/100VG PCLAN (ISA, EISA, PCI) support' CONFIG_HP100 y
+	tristate 'HP 10/100VG PCLAN (ISA, EISA, PCI) support' CONFIG_HP100 n
 	tristate 'NE2000/NE1000 support' CONFIG_NE2000 y
 	bool 'SK_G16 support' CONFIG_SK_G16 n
 fi
@@ -221,25 +221,28 @@ fi
 
 comment 'CD-ROM drivers (not for SCSI or IDE/ATAPI drives)'
 
-tristate 'Sony CDU31A/CDU33A CDROM support' CONFIG_CDU31A n
-tristate 'Standard Mitsumi [no XA/Multisession] CDROM support' CONFIG_MCD n
-tristate 'Experimental Mitsumi [XA/MultiSession] support' CONFIG_MCDX n
-tristate 'Matsushita/Panasonic CDROM support' CONFIG_SBPCD n
-if [ "$CONFIG_SBPCD" != "n" ]; then
-  bool 'Matsushita/Panasonic second CDROM controller support' CONFIG_SBPCD2 n
-  if [ "$CONFIG_SBPCD2" = "y" ]; then
-    bool 'Matsushita/Panasonic third CDROM controller support' CONFIG_SBPCD3 n
-    if [ "$CONFIG_SBPCD3" = "y" ]; then
-      bool 'Matsushita/Panasonic fourth CDROM controller support' CONFIG_SBPCD4 n
+bool 'Support non-SCSI/IDE/ATAPI drives' CONFIG_CD_NO_IDESCSI n
+if [ "$CONFIG_CD_NO_IDESCSI" = "y" ]; then
+  tristate 'Sony CDU31A/CDU33A CDROM support' CONFIG_CDU31A n
+  tristate 'Standard Mitsumi [no XA/Multisession] CDROM support' CONFIG_MCD n
+  tristate 'Experimental Mitsumi [XA/MultiSession] support' CONFIG_MCDX n
+  tristate 'Matsushita/Panasonic CDROM support' CONFIG_SBPCD n
+  if [ "$CONFIG_SBPCD" = "y" ]; then
+    bool 'Matsushita/Panasonic second CDROM controller support' CONFIG_SBPCD2 n
+    if [ "$CONFIG_SBPCD2" = "y" ]; then
+      bool 'Matsushita/Panasonic third CDROM controller support' CONFIG_SBPCD3 n
+      if [ "$CONFIG_SBPCD3" = "y" ]; then
+        bool 'Matsushita/Panasonic fourth CDROM controller support' CONFIG_SBPCD4 n
+      fi
     fi
   fi
+  tristate 'Aztech/Orchid/Okano/Wearnes (non IDE) CDROM support' CONFIG_AZTCD n
+  tristate 'Sony CDU535 CDROM support' CONFIG_CDU535 n
+  tristate 'Goldstar R420 CDROM support' CONFIG_GSCD n
+  tristate 'Philips/LMS CM206 CDROM support' CONFIG_CM206 n
+  tristate 'Experimental Optics Storage DOLPHIN 8000AT CDROM support' CONFIG_OPTCD n
+  bool 'Experimental Sanyo H94A CDROM support' CONFIG_SJCD n
 fi
-tristate 'Aztech/Orchid/Okano/Wearnes (non IDE) CDROM support' CONFIG_AZTCD n
-tristate 'Sony CDU535 CDROM support' CONFIG_CDU535 n
-tristate 'Goldstar R420 CDROM support' CONFIG_GSCD n
-tristate 'Philips/LMS CM206 CDROM support' CONFIG_CM206 n
-tristate 'Experimental Optics Storage DOLPHIN 8000AT CDROM support' CONFIG_OPTCD n
-bool 'Experimental Sanyo H94A CDROM support' CONFIG_SJCD n
 
 comment 'Filesystems'
 

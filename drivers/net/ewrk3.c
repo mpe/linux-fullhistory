@@ -548,6 +548,8 @@ ewrk3_hw_init(struct device *dev, short iobase)
 	      /* private area & initialise */
 	      dev->priv = (void *) kmalloc(sizeof(struct ewrk3_private), 
 					                           GFP_KERNEL);
+	      if (dev->priv == NULL)
+		  return -ENOMEM;
 	      lp = (struct ewrk3_private *)dev->priv;
 	      memset(dev->priv, 0, sizeof(struct ewrk3_private));
 	      lp->shmem_base = mem_start;
@@ -1883,6 +1885,8 @@ cleanup_module(void)
   } else {
     release_region(thisEthwrk.base_addr, EWRK3_TOTAL_SIZE);
     unregister_netdev(&thisEthwrk);
+    free(thisEthwrk.priv);
+    thisEthwrk.priv = NULL;
   }
 }
 #endif /* MODULE */

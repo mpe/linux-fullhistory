@@ -306,6 +306,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	unregister_filesystem(&nfs_fs_type);
+	nfs_kfree_cache();
 }
 
 #endif

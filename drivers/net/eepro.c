@@ -407,8 +407,9 @@ int eepro_probe1(struct device *dev, short ioaddr)
 			request_region(ioaddr, EEPRO_IO_EXTENT, "eepro");
 
 			/* Initialize the device structure */
+			dev->priv = kmalloc(sizeof(struct eepro_local), GFP_KERNEL);
 			if (dev->priv == NULL)
-				dev->priv = kmalloc(sizeof(struct eepro_local), GFP_KERNEL);
+				return -ENOMEM;
 			memset(dev->priv, 0, sizeof(struct eepro_local));
 
 			dev->open = eepro_open;

@@ -226,6 +226,13 @@ int aout_core_dump(long signr, struct pt_regs * regs)
 	    current->rlim[RLIMIT_CORE].rlim_cur)
 		dump.u_ssize = 0;
 
+/* make sure we actually have a data and stack area to dump */
+	set_fs(USER_DS);
+	if (verify_area(VERIFY_READ, (void *) (dump.u_tsize << PAGE_SHIFT), dump.u_dsize << PAGE_SHIFT))
+		dump.u_dsize = 0;
+	if (verify_area(VERIFY_READ, (void *) dump.start_stack, dump.u_ssize << PAGE_SHIFT))
+		dump.u_ssize = 0;
+
 	set_fs(KERNEL_DS);
 /* struct user */
 	DUMP_WRITE(&dump,sizeof(dump));

@@ -42,7 +42,9 @@
  *		Mike Shaver     :       RFC1122 checks.
  *		Jonathan Naylor :	Only lookup the hardware address for
  *					the correct hardware type.
- *		Germano Caronni	:	Assorted subtle races
+ *		Germano Caronni	:	Assorted subtle races.
+ *		Craig Schlenter :	Don't modify permanent entry 
+ *					during arp_rcv.
  */
 
 /* RFC1122 Status:
@@ -93,9 +95,9 @@
 
 /*
  *	This structure defines the ARP mapping cache. As long as we make changes
- *	in this structure, we keep interrupts of. But normally we can copy the
- *	hardware address and the device pointer in a local variable and then make
- *	any "long calls" to send a packet out.
+ *	in this structure, we keep interrupts off. But normally we can copy the
+ *	hardware address and the device pointer in a local variable and then 
+ *	make any "long calls" to send a packet out.
  */
 
 struct arp_table
@@ -811,11 +813,13 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	if(entry)
 	{
 /*
- *	Entry found; update it.
+ *	Entry found; update it only if it is not a permanent entry.
  */
-		memcpy(entry->ha, sha, hlen);
-		entry->hlen = hlen;
-		entry->last_used = jiffies;
+		if (!(entry->flags & ATF_PERM)) {
+			memcpy(entry->ha, sha, hlen);
+			entry->hlen = hlen;
+			entry->last_used = jiffies;
+		}
 		if (!(entry->flags & ATF_COM))
 		{
 /*

@@ -452,6 +452,3 @@ unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 #endif
 	return memory_start;
 }
-
-
-

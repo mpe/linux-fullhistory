@@ -1659,12 +1659,32 @@ init_module(void)
 #else /* MODULE */
 				sony_toc = (struct s535_sony_toc *)
 					kmalloc(sizeof *sony_toc, GFP_KERNEL);
+				if (sony_toc == NULL)
+					return -ENOMEM;
 				last_sony_subcode = (struct s535_sony_subcode *)
 					kmalloc(sizeof *last_sony_subcode, GFP_KERNEL);
+				if (last_sony_subcode == NULL) {
+					kfree(sony_toc);
+					return -ENOMEM;
+				}
 				sony_buffer = (Byte **)
 					kmalloc(4 * sony_buffer_sectors, GFP_KERNEL);
-				for (i = 0; i < sony_buffer_sectors; i++)
+				if (sony_buffer == NULL) {
+					kfree(sony_toc);
+					kfree(last_sony_subcode);
+					return -ENOMEM;
+				}
+				for (i = 0; i < sony_buffer_sectors; i++) {
 					sony_buffer[i] = (Byte *)kmalloc(2048, GFP_KERNEL);
+					if (sony_buffer[i] == NULL) {
+						while (--i>=0)
+							kfree(sony_buffer[i]);
+						kfree(sony_buffer);
+						kfree(sony_toc);
+						kfree(last_sony_subcode);
+						return -ENOMEM;
+					}
+				}
 #endif /* MODULE */
 				initialized = 1;
 			}

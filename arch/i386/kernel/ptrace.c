@@ -480,6 +480,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		case PTRACE_KILL: {
 			long tmp;
 
+			if (child->state == TASK_ZOMBIE)	/* already dead */
+				return 0;
 			wake_up_process(child);
 			child->exit_code = SIGKILL;
 	/* make sure the single step bit is not set. */

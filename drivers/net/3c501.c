@@ -289,8 +289,9 @@ el1_probe1(struct device *dev, int ioaddr)
 	printk("%s", version);
 
     /* Initialize the device structure. */
+    dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
     if (dev->priv == NULL)
-	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+	return -ENOMEM;
     memset(dev->priv, 0, sizeof(struct net_local));
 
     /* The EL1-specific entries in the device structure. */

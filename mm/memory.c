@@ -199,11 +199,11 @@ void free_page_tables(struct task_struct * tsk)
 		return;
 	}
 	SET_PAGE_DIR(tsk, swapper_pg_dir);
-	tsk->mm->pgd = swapper_pg_dir;
 	if (pgd_inuse(page_dir)) {
 		pgd_free(page_dir);
 		return;
 	}
+	tsk->mm->pgd = swapper_pg_dir;	/* or else... */
 	for (i = 0 ; i < PTRS_PER_PGD ; i++)
 		free_one_pgd(page_dir + i);
 	pgd_free(page_dir);

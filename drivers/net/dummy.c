@@ -88,6 +88,8 @@ int dummy_init(struct device *dev)
 
 #if DUMMY_STATS
 	dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
+	if (dev->priv == NULL)
+		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct enet_statistics));
 	dev->get_stats		= dummy_get_stats;
 #endif
@@ -170,6 +172,8 @@ void cleanup_module(void)
 	else
 	{
 		unregister_netdev(&dev_dummy);
+		kfree(dev_dummy.priv);
+		dev_dummy.priv = NULL;
 	}
 }
 #endif /* MODULE */

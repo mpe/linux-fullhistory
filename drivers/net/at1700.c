@@ -263,8 +263,9 @@ int at1700_probe1(struct device *dev, short ioaddr)
 		printk(version);
 
 	/* Initialize the device structure. */
+	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
 	if (dev->priv == NULL)
-		dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct net_local));
 
 	dev->open		= net_open;
@@ -660,6 +661,8 @@ cleanup_module(void)
 	else
 	{
 		unregister_netdev(&dev_at1700);
+		kfree(dev_at1700.priv);
+		dev_at1700.priv = NULL;
 
 		/* If we don't do this, we can't re-insmod it later. */
 		free_irq(dev_at1700.irq);

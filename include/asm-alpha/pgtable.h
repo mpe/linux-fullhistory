@@ -249,10 +249,9 @@ extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
 #define PAGE_DIR_OFFSET(tsk,address) pgd_offset((tsk),(address))
 
 /* to find an entry in a page-table-directory. */
-extern inline pgd_t * pgd_offset(struct task_struct * tsk, unsigned long address)
+extern inline pgd_t * pgd_offset(struct mm_struct * mm, unsigned long address)
 {
-	return (pgd_t *) ((tsk->tss.ptbr << PAGE_SHIFT) + PAGE_OFFSET) +
-		((address >> PGDIR_SHIFT) & (PTRS_PER_PAGE - 1));
+	return mm->pgd + ((address >> PGDIR_SHIFT) & (PTRS_PER_PAGE - 1));
 }
 
 /* Find an entry in the second-level page table.. */

@@ -292,12 +292,13 @@ void proc_root_init(void)
 		PROC_IOPORTS, 7, "ioports",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 	});
-#ifdef CONFIG_PROFILE
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_PROFILE, 7, "profile",
-		S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
-	});
-#endif
+
+	if (prof_shift) {
+		proc_register(&proc_root, &(struct proc_dir_entry) {
+			PROC_PROFILE, 7, "profile",
+			S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
+		});
+	}
 }
 
 

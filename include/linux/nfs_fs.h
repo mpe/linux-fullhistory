@@ -106,6 +106,7 @@ extern struct inode_operations nfs_file_inode_operations;
 /* linux/fs/nfs/dir.c */
 
 extern struct inode_operations nfs_dir_inode_operations;
+extern void nfs_kfree_cache(void);
 
 /* linux/fs/nfs/symlink.c */
 

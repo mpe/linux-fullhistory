@@ -232,16 +232,12 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->u_tsize = ((unsigned long) current->mm->end_code) >> 12;
 	dump->u_dsize = ((unsigned long) (current->mm->brk + (PAGE_SIZE-1))) >> 12;
 	dump->u_dsize -= dump->u_tsize;
-	if (verify_area(VERIFY_READ, (void *) dump->u_tsize, dump->u_dsize) < 0)
-		dump->u_dsize = 0;
 	dump->u_ssize = 0;
 	for (i = 0; i < 8; i++)
 		dump->u_debugreg[i] = current->debugreg[i];  
 
 	if (dump->start_stack < TASK_SIZE) {
 		dump->u_ssize = ((unsigned long) (TASK_SIZE - dump->start_stack)) >> 12;
-		if (verify_area(VERIFY_READ, (void *) dump->start_stack, dump->u_ssize) < 0)
-			dump->u_ssize = 0;
 	}
 
 	dump->regs = *regs;

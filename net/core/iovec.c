@@ -50,12 +50,16 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 	
 	for(ct=0;ct<m->msg_iovlen;ct++)
 	{
-		err=verify_area(mode, m->msg_iov[ct].iov_base, m->msg_iov[ct].iov_len);
+		err=verify_area(VERIFY_READ, &m->msg_iov[ct], sizeof(struct iovec));
 		if(err)
 			return err;
-		len+=m->msg_iov[ct].iov_len;
+		memcpy_fromfs(&iov[ct], &m->msg_iov[ct], sizeof(struct iovec));
+		err=verify_area(mode, iov[ct].iov_base, iov[ct].iov_len);
+		if(err)
+			return err;
+		len+=iov[ct].iov_len;
 	}
-	
+	m->msg_iov=&iov[0];
 	return len;
 }
 

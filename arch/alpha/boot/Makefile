@@ -32,8 +32,9 @@ vmlinux.gz: vmlinux
 	gzip -fv vmlinux
 
 vmlinux: tools/build $(TOPDIR)/vmlinux
-	cp $(TOPDIR)/vmlinux vmlinux
-	quickstrip vmlinux
+	tools/build -v $(TOPDIR)/vmlinux > vmlinux
+#	cp $(TOPDIR)/vmlinux vmlinux
+#	quickstrip vmlinux
 
 tools/lxboot: tools/build
 	tools/build > tools/lxboot

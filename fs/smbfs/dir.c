@@ -180,12 +180,21 @@ smb_readdir(struct inode *inode, struct file *filp,
 	{
 		i = sizeof (struct smb_dirent) * SMB_READDIR_CACHE_SIZE;
 		c_entry = (struct smb_dirent *) smb_kmalloc(i, GFP_KERNEL);
+		if (c_entry == NULL) {
+			printk("smb_readdir: no MEMORY for cache\n");
+			return -ENOMEM;
+		}
 		for (i = 0; i < SMB_READDIR_CACHE_SIZE; i++) {
 			c_entry[i].path =
                                 (char *) smb_kmalloc(SMB_MAXNAMELEN + 1,
                                                      GFP_KERNEL);
                         if (c_entry[i].path == NULL) {
                                 DPRINTK("smb_readdir: could not alloc path\n");
+				while (--i>=0)
+					kfree(c_entry[i].path);
+				kfree(c_entry);
+				c_entry = NULL;
+				return -ENOMEM;
                         }
                 }
 	}
