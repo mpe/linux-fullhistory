@@ -783,6 +783,8 @@ typedef struct {
  */
 typedef struct ide_tape_obj {
 	ide_drive_t	*drive;
+	ide_driver_t	*driver;
+	struct gendisk	*disk;
 	struct kref	kref;
 
 	/*
@@ -1013,7 +1015,8 @@ static DECLARE_MUTEX(idetape_ref_sem);
 
 #define to_ide_tape(obj) container_of(obj, struct ide_tape_obj, kref)
 
-#define ide_tape_g(disk)	((disk)->private_data)
+#define ide_tape_g(disk) \
+	container_of((disk)->private_data, struct ide_tape_obj, driver)
 
 static struct ide_tape_obj *ide_tape_get(struct gendisk *disk)
 {
@@ -1543,6 +1546,7 @@ static void idetape_active_next_stage (ide_drive_t *drive)
 	}
 #endif /* IDETAPE_DEBUG_BUGS */	
 
+	rq->rq_disk = tape->disk;
 	rq->buffer = NULL;
 	rq->special = (void *)stage->bh;
 	tape->active_data_request = rq;
@@ -1795,8 +1799,11 @@ static void idetape_init_rq(struct request *rq, u8 cmd)
  */
 static void idetape_queue_pc_head (ide_drive_t *drive, idetape_pc_t *pc,struct request *rq)
 {
+	struct ide_tape_obj *tape = drive->driver_data;
+
 	idetape_init_rq(rq, REQ_IDETAPE_PC1);
 	rq->buffer = (char *) pc;
+	rq->rq_disk = tape->disk;
 	(void) ide_do_drive_cmd(drive, rq, ide_preempt);
 }
 
@@ -2852,10 +2859,12 @@ static void idetape_create_test_unit_ready_cmd(idetape_pc_t *pc)
  */
 static int __idetape_queue_pc_tail (ide_drive_t *drive, idetape_pc_t *pc)
 {
+	struct ide_tape_obj *tape = drive->driver_data;
 	struct request rq;
 
 	idetape_init_rq(&rq, REQ_IDETAPE_PC1);
 	rq.buffer = (char *) pc;
+	rq.rq_disk = tape->disk;
 	return ide_do_drive_cmd(drive, &rq, ide_wait);
 }
 
@@ -3079,6 +3088,7 @@ static int idetape_queue_rw_tail(ide_drive_t *drive, int cmd, int blocks, struct
 #endif /* IDETAPE_DEBUG_BUGS */	
 
 	idetape_init_rq(&rq, cmd);
+	rq.rq_disk = tape->disk;
 	rq.special = (void *)bh;
 	rq.sector = tape->first_frame_position;
 	rq.nr_sectors = rq.current_nr_sectors = blocks;
@@ -4687,6 +4697,8 @@ static int idetape_cleanup (ide_drive_t *drive)
 	DRIVER(drive)->busy = 0;
 	(void) ide_unregister_subdriver(drive);
 
+	ide_unregister_region(tape->disk);
+
 	ide_tape_put(tape);
 
 	return 0;
@@ -4696,15 +4708,16 @@ static void ide_tape_release(struct kref *kref)
 {
 	struct ide_tape_obj *tape = to_ide_tape(kref);
 	ide_drive_t *drive = tape->drive;
-	struct gendisk *g = drive->disk;
+	struct gendisk *g = tape->disk;
 
+	drive->dsc_overlap = 0;
 	drive->driver_data = NULL;
 	devfs_remove("%s/mt", drive->devfs_name);
 	devfs_remove("%s/mtn", drive->devfs_name);
 	devfs_unregister_tape(g->number);
 	idetape_devs[tape->minor] = NULL;
 	g->private_data = NULL;
-	g->fops = ide_fops;
+	put_disk(g);
 	kfree(tape);
 }
 
@@ -4819,7 +4832,7 @@ static struct block_device_operations idetape_block_ops = {
 static int idetape_attach (ide_drive_t *drive)
 {
 	idetape_tape_t *tape;
-	struct gendisk *g = drive->disk;
+	struct gendisk *g;
 	int minor;
 
 	if (!strstr("ide-tape", drive->driver_req))
@@ -4845,10 +4858,16 @@ static int idetape_attach (ide_drive_t *drive)
 		printk(KERN_ERR "ide-tape: %s: Can't allocate a tape structure\n", drive->name);
 		goto failed;
 	}
+
+	g = alloc_disk(1 << PARTN_BITS);
+	if (!g)
+		goto out_free_tape;
+
+	ide_init_disk(g, drive);
+
 	if (ide_register_subdriver(drive, &idetape_driver)) {
 		printk(KERN_ERR "ide-tape: %s: Failed to register the driver with ide.c\n", drive->name);
-		kfree(tape);
-		goto failed;
+		goto out_put_disk;
 	}
 
 	memset(tape, 0, sizeof(*tape));
@@ -4856,6 +4875,10 @@ static int idetape_attach (ide_drive_t *drive)
 	kref_init(&tape->kref);
 
 	tape->drive = drive;
+	tape->driver = &idetape_driver;
+	tape->disk = g;
+
+	g->private_data = &tape->driver;
 
 	drive->driver_data = tape;
 
@@ -4876,9 +4899,13 @@ static int idetape_attach (ide_drive_t *drive)
 
 	g->number = devfs_register_tape(drive->devfs_name);
 	g->fops = &idetape_block_ops;
-	g->private_data = tape;
+	ide_register_region(g);
 
 	return 0;
+out_put_disk:
+	put_disk(g);
+out_free_tape:
+	kfree(tape);
 failed:
 	return 1;
 }
