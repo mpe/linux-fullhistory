@@ -5,22 +5,19 @@
 mainmenu_option next_comment
 comment 'PCMCIA character device support'
 
-if [ "$CONFIG_SERIAL" = "y" ]; then
-   dep_tristate 'PCMCIA serial device support' \
-      CONFIG_PCMCIA_SERIAL_CS $CONFIG_PCMCIA
-   if [ "$CONFIG_CARDBUS" = "y" ]; then
-      dep_tristate 'CardBus serial device support' \
-         CONFIG_PCMCIA_SERIAL_CB $CONFIG_PCMCIA
+if [ "$CONFIG_SERIAL" = "n" -o "$CONFIG_PCMCIA" = "n" ]; then
+   define_bool CONFIG_PCMCIA_SERIAL n
+else
+   if [ "$CONFIG_SERIAL" = "m" -o "$CONFIG_PCMCIA" = "m" ]; then
+      define_bool CONFIG_PCMCIA_SERIAL m
+   else
+      define_bool CONFIG_PCMCIA_SERIAL y
    fi
 fi
 
-if [ "$CONFIG_SERIAL" = "m" ]; then
-   dep_tristate 'PCMCIA serial device support' \
-      CONFIG_PCMCIA_SERIAL_CS m
-   if [ "$CONFIG_CARDBUS" = "y" ]; then
-      dep_tristate 'CardBus serial device support' \
-         CONFIG_PCMCIA_SERIAL_CB m
-   fi
+dep_tristate '  PCMCIA serial device support' CONFIG_PCMCIA_SERIAL_CS $CONFIG_PCMCIA_SERIAL
+if [ "$CONFIG_CARDBUS" = "y" ]; then
+   dep_tristate '  CardBus serial device support' CONFIG_PCMCIA_SERIAL_CB $CONFIG_PCMCIA_SERIAL
 fi
 
 if [ "$CONFIG_PCMCIA_SERIAL_CS" = "y" -o \

@@ -290,30 +290,6 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 
 	count = bh->b_size >> 9;
 	sector = bh->b_rsector;
-#if CONFIG_HIGHMEM
-	/*
-	 * This is a temporary hack for the time being.
-	 * In some cases, the ll_rw_blk layer is creating
-	 * bounce buffers for us - this implies that we don't
-	 * need to down here, but queue management becomes quite
-	 * difficult otherwise.  When the ll_rw_blk layer gets
-	 * cleaned up to handle bounce buffers better, then
-	 * this hack can be cleaned up.
-	 */
-	if( sector == -1 )
-	{
-		struct buffer_head * bh_new;
-		bh_new = (struct buffer_head *) bh->b_dev_id;
-		if( bh_new != NULL )
-		{
-			sector = bh_new->b_rsector;
-		}
-		if( sector == -1 )
-		{
-			panic("Unable to merge ambiguous block request");
-		}
-	}
-#endif
 
 	/*
 	 * We come in here in one of two cases.   The first is that we
