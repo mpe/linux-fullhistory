@@ -4,8 +4,6 @@
  * Copyright (C) 1998 Chris G. Davis (cdavis@cois.on.ca)
  */
 
-#include <linux/config.h>
-
 #include <asm/page.h>
 #include <asm/oplib.h>
 #include <asm/idprom.h>

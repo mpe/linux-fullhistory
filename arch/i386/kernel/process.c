@@ -159,15 +159,8 @@ int cpu_idle(void *unused)
 		 		!hlt_counter && !current->need_resched)
 			__asm("hlt");
 		check_pgt_cache();
-		/*
-		 * tq_scheduler currently assumes we're running in a process
-		 * context (ie that we hold the kernel lock..)
-		 */
-		if (tq_scheduler) {
-			lock_kernel();
-			run_task_queue(&tq_scheduler);
-			unlock_kernel();
-		}
+		run_task_queue(&tq_scheduler);
+
 		/* endless idle loop with no priority at all */
 		current->counter = 0;
 		schedule();

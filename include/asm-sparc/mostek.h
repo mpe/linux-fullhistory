@@ -9,6 +9,7 @@
 #ifndef _SPARC_MOSTEK_H
 #define _SPARC_MOSTEK_H
 
+#include <linux/config.h>
 #include <asm/idprom.h>
 
 /*       M48T02 Register Map (adapted from Sun NVRAM/Hostid FAQ)

@@ -18,7 +18,6 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/string.h>
 #include <asm/residual.h>
 #include <asm/pnp.h>

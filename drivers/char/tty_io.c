@@ -80,6 +80,7 @@
 #include <linux/proc_fs.h>
 #endif
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -371,17 +372,24 @@ static struct file_operations hung_up_tty_fops = {
 	NULL		/* hung_up_tty_fasync */
 };
 
+/*
+ * This can be called through the "tq_scheduler" 
+ * task-list. That is process synchronous, but
+ * doesn't hold any locks, so we need to make
+ * sure we have the appropriate locks for what
+ * we're doing..
+ */
 void do_tty_hangup(void *data)
 {
 	struct tty_struct *tty = (struct tty_struct *) data;
 	struct file * filp;
 	struct task_struct *p;
-	unsigned long	flags;
 
 	if (!tty)
 		return;
-	
-	save_flags(flags); cli();
+
+	/* inuse_filps is protected by the single kernel lock */
+	lock_kernel();
 	
 	check_tty_count(tty, "do_tty_hangup");
 	for (filp = inuse_filps; filp; filp = filp->f_next) {
@@ -400,13 +408,21 @@ void do_tty_hangup(void *data)
 		filp->f_op = &hung_up_tty_fops;
 	}
 	
-	if (tty->ldisc.flush_buffer)
-		tty->ldisc.flush_buffer(tty);
-	if (tty->driver.flush_buffer)
-		tty->driver.flush_buffer(tty);
-	if ((test_bit(TTY_DO_WRITE_WAKEUP, &tty->flags)) &&
-	    tty->ldisc.write_wakeup)
-		(tty->ldisc.write_wakeup)(tty);
+	/* FIXME! What are the locking issues here? This may me overdoing things.. */
+	{
+		unsigned long flags;
+
+		save_flags(flags); cli();
+		if (tty->ldisc.flush_buffer)
+			tty->ldisc.flush_buffer(tty);
+		if (tty->driver.flush_buffer)
+			tty->driver.flush_buffer(tty);
+		if ((test_bit(TTY_DO_WRITE_WAKEUP, &tty->flags)) &&
+		    tty->ldisc.write_wakeup)
+			(tty->ldisc.write_wakeup)(tty);
+		restore_flags(flags);
+	}
+
 	wake_up_interruptible(&tty->write_wait);
 	wake_up_interruptible(&tty->read_wait);
 
@@ -449,7 +465,7 @@ void do_tty_hangup(void *data)
 	tty->ctrl_status = 0;
 	if (tty->driver.hangup)
 		(tty->driver.hangup)(tty);
-	restore_flags(flags);
+	unlock_kernel();
 }
 
 void tty_hangup(struct tty_struct * tty)
@@ -459,7 +475,7 @@ void tty_hangup(struct tty_struct * tty)
 	
 	printk("%s hangup...\n", tty_name(tty, buf));
 #endif
-	queue_task(&tty->tq_hangup, &tq_timer);
+	queue_task(&tty->tq_hangup, &tq_scheduler);
 }
 
 void tty_vhangup(struct tty_struct * tty)
@@ -1158,6 +1174,7 @@ static void release_dev(struct file * filp)
 	 * Make sure that the tty's task queue isn't activated. 
 	 */
 	run_task_queue(&tq_timer);
+	run_task_queue(&tq_scheduler);
 
 	/* 
 	 * The release_mem function takes care of the details of clearing

@@ -263,5 +263,4 @@ DSP_BUFFSIZE=65536
 #
 # Kernel hacking
 #
-# CONFIG_PROFILE is not set
 CONFIG_MAGIC_SYSRQ=y

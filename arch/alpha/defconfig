@@ -297,6 +297,5 @@ CONFIG_VGA_CONSOLE=y
 #
 # Kernel hacking
 #
-# CONFIG_PROFILE is not set
 CONFIG_MATHEMU=y
 # CONFIG_MAGIC_SYSRQ is not set

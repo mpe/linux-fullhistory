@@ -6,7 +6,6 @@
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
 
-#include <linux/config.h> /* for CONFIG_PROFILE */
 #include <asm/head.h>
 
 #include <linux/kernel.h>
@@ -437,8 +436,6 @@ void smp4d_message_pass(int target, int msg, unsigned long data, int wait)
 /* Protects counters touched during level14 ticker */
 static spinlock_t ticker_lock = SPIN_LOCK_UNLOCKED;
 
-#ifdef CONFIG_PROFILE
-
 /* 32-bit Sparc specific profiling function. */
 static inline void sparc_do_profile(unsigned long pc)
 {
@@ -456,8 +453,6 @@ static inline void sparc_do_profile(unsigned long pc)
 		spin_unlock(&ticker_lock);
 	}
 }
-
-#endif
 
 extern unsigned int prof_multiplier[NR_CPUS];
 extern unsigned int prof_counter[NR_CPUS];
@@ -484,10 +479,9 @@ void smp4d_percpu_timer_interrupt(struct pt_regs *regs)
 		show_leds(cpu);
 	}
 
-#ifdef CONFIG_PROFILE
 	if(!user_mode(regs))
 		sparc_do_profile(regs->pc);
-#endif
+
 	if(!--prof_counter[cpu]) {
 		int user = user_mode(regs);
 		if(current->pid) {

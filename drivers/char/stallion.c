@@ -46,6 +46,8 @@
 #include <linux/ioport.h>
 #include <linux/config.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
+
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -2001,7 +2003,6 @@ static void stl_echpci64intr(stlbrd_t *brdp)
 /*
  *	Service an off-level request for some channel.
  */
-
 static void stl_offintr(void *private)
 {
 	stlport_t		*portp;
@@ -2016,10 +2017,12 @@ static void stl_offintr(void *private)
 
 	if (portp == (stlport_t *) NULL)
 		return;
+
 	tty = portp->tty;
 	if (tty == (struct tty_struct *) NULL)
 		return;
 
+	lock_kernel();
 	if (test_bit(ASYI_TXLOW, &portp->istate)) {
 		if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 		    tty->ldisc.write_wakeup)
@@ -2041,6 +2044,7 @@ static void stl_offintr(void *private)
 			}
 		}
 	}
+	unlock_kernel();
 }
 
 /*****************************************************************************/

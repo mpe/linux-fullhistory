@@ -72,11 +72,7 @@ asmlinkage int cpu_idle(void)
 	current->priority = 0;
 	while(1) {
 		check_pgt_cache();
-		if(tq_scheduler) {
-			lock_kernel();
-			run_task_queue(&tq_scheduler);
-			unlock_kernel();
-		}
+		run_task_queue(&tq_scheduler);
 		barrier();
 		current->counter = 0;
 		if(current->need_resched)

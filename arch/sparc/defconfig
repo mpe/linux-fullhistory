@@ -315,5 +315,4 @@ CONFIG_NLS=y
 #
 # Kernel hacking
 #
-# CONFIG_PROFILE is not set
 # CONFIG_MAGIC_SYSRQ is not set

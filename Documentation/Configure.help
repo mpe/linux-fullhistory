@@ -8301,26 +8301,6 @@ CONFIG_SOUND_SONICVIBES
   differs slightly from OSS/Free, so PLEASE READ
   Documentation/sound/sonicvibes.
 
-Kernel profiling support
-CONFIG_PROFILE
-  This is for kernel hackers who want to know how much time the kernel
-  spends in the various procedures. The information is stored in
-  /proc/profile (say Y to "/proc filesystem support"!) and in order to
-  read it, you need the readprofile package from
-  sunsite.unc.edu:/pub/Linux/kernel. Its manpage gives information
-  regarding the format of profiling data. To become a kernel hacker,
-  you can start with the Kernel Hacker's Guide at
-  http://www.redhat.com:8080/HyperNews/get/khg.html (to browse the
-  WWW, you need to have access to a machine on the Internet that has a
-  program like lynx or netscape). Mere mortals say N.
-
-Profile shift count
-CONFIG_PROFILE_SHIFT
-  This is used to adjust the granularity with which the addresses of
-  executed instructions get recorded in /proc/profile. But since you
-  said Y to "Kernel profiling support", you must be a kernel hacker and
-  hence you know what this is about :-)
-
 Magic System Request Key support
 CONFIG_MAGIC_SYSRQ
   If you say Y here, you will have some control over the system even

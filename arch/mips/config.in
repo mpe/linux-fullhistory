@@ -211,8 +211,4 @@ if [ "$CONFIG_MODULES" = "y" ]; then
   bool ' Build fp execption handler module' CONFIG_MIPS_FPE_MODULE
 fi
 bool 'Remote GDB kernel debugging' CONFIG_REMOTE_DEBUG
-bool 'Kernel profiling support' CONFIG_PROFILE
-if [ "$CONFIG_PROFILE" = "y" ]; then
-  int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
-fi
 endmenu

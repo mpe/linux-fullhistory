@@ -11,6 +11,7 @@
  * Copyright (C) 1998 Paul Mackerras and Fabio Riccardi.
  */
 #include <stdarg.h>
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>

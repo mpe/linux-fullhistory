@@ -245,10 +245,6 @@ endmenu
 mainmenu_option next_comment
 comment 'Kernel hacking'
 
-bool 'Kernel profiling support' CONFIG_PROFILE
-if [ "$CONFIG_PROFILE" = "y" ]; then
-	int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
-fi
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 bool 'ECache flush trap support at ta 0x72' CONFIG_EC_FLUSH_TRAP
 endmenu

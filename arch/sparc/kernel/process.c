@@ -113,15 +113,7 @@ int cpu_idle(void *unused)
 	current->priority = -100;
 	while(1) {
 		srmmu_check_pgt_cache();
-		/*
-		 * tq_scheduler currently assumes we're running in a process
-		 * context (ie that we hold the kernel lock..)
-		 */
-		if (tq_scheduler) {
-			lock_kernel();
-			run_task_queue(&tq_scheduler);
-			unlock_kernel();
-		}
+		run_task_queue(&tq_scheduler);
 		/* endless idle loop with no priority at all */
 		current->counter = -100;
 		if(!smp_commenced || current->need_resched)
