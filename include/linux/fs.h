@@ -23,7 +23,7 @@
 #undef NR_OPEN
 #define NR_OPEN 256
 
-#define NR_INODE 128
+#define NR_INODE 256
 #define NR_FILE 128
 #define NR_SUPER 16
 #define NR_HASH 997
@@ -66,7 +66,7 @@
 #define WRITEA 3	/* "write-ahead" - silly, but somewhat useful */
 
 extern void buffer_init(void);
-extern void inode_init(void);
+extern unsigned long inode_init(unsigned long start, unsigned long end);
 
 #define MAJOR(a) (((unsigned)(a))>>8)
 #define MINOR(a) ((a)&0xff)

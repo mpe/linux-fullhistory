@@ -143,6 +143,7 @@ void proc_read_inode(struct inode * inode)
 		case 9:
 		case 10:
 		case 11:
+		case 12:
 			inode->i_mode = S_IFREG | 0444;
 			inode->i_op = &proc_array_inode_operations;
 			return;

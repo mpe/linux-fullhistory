@@ -78,8 +78,6 @@ go:	mov	ax,cs
 
 	mov	ds,ax
 	mov	es,ax
-	push	ax
-
 	mov	ss,ax		! put stack at INITSEG:0x4000-12.
 	mov	sp,dx
 /*
@@ -121,7 +119,7 @@ go:	mov	ax,cs
 	seg fs
 	mov	2(bx),es
 
-	pop	ax
+	mov	ax,cs
 	mov	fs,ax
 	mov	gs,ax
 	

@@ -73,19 +73,16 @@ static void
 send_arp_q(void)
 {
    struct sk_buff *skb;
-   struct sk_buff *skb2;
+   struct sk_buff *next;
 
    cli();
-   if (arp_q == NULL) return;
-
-   skb = arp_q;
-   do {
+   next = arp_q;
+   arp_q = NULL;
+   sti();
+   while ((skb = next) != NULL) {
      if (skb->magic != ARP_QUEUE_MAGIC)
        {
-	 printk ("arp.c skb with bad magic - %X: squashing queue\n");
-	 cli();
-	 arp_q = NULL;
-	 sti();
+	 printk ("arp.c skb with bad magic - %X: squashing queue\n", skb->magic);
 	 return;
        }
      /* extra consistancy check. */
@@ -94,46 +91,54 @@ send_arp_q(void)
 	 || (unsigned long)(skb->next) > 16*1024*1024
 #endif
 	 )
-
        {
 	 printk ("dev.c: *** bug bad skb->next, squashing queue \n");
-	 cli();
-	 arp_q = NULL;
-	 sti();
 	 return;
        }
 
-     skb->magic = 0;
-     skb2=skb->next;
+     /* first remove skb from the queue. */
+     next = skb->next;
+     if (next == skb)
+       {
+	 next = NULL;
+       }
+     else
+       {
+	 skb->prev->next = next;
+	 next->prev = skb->prev;
+       }
 
-     sti();
+     skb->magic = 0;
+     skb->next = NULL;
+     skb->prev = NULL;
+
      if (!skb->dev->rebuild_header (skb+1, skb->dev))
        {
-	  cli();
-	   if (skb->next == skb)
-	     {
-		arp_q = NULL;
-	     }
-	   else
-	     {
-		skb->next->prev = skb->prev;
-		skb->prev->next = skb->next;
-		arp_q = skb->next;
-	     }
 	   skb->next = NULL;
 	   skb->prev = NULL;
 	   skb->arp  = 1;
-	  sti();
 	   skb->dev->queue_xmit (skb, skb->dev, 0);
-
-	  if (arp_q == NULL) break;
-
-	   cli();
 	}
-      skb=skb2;
-   } while (skb != arp_q);
-   sti();
-
+     else
+       {
+	 cli();
+	 skb->magic = ARP_QUEUE_MAGIC;      
+	 if (arp_q == NULL)
+	   {
+	     skb->next = skb;
+	     skb->prev = skb;
+	     arp_q = skb;
+	   }
+	 else
+	   {
+	     skb->next = arp_q;
+	     skb->prev = arp_q->prev;  
+	     arp_q->prev->next = skb;
+	     arp_q->prev = skb;
+	   }
+	 sti();
+       }
+   }
 }
 
 static  void

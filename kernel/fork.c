@@ -31,37 +31,11 @@ void verify_area(void * addr,int size)
 	start = (unsigned long) addr;
 	size += start & 0xfff;
 	start &= 0xfffff000;
-	start += get_base(current->ldt[2]);
 	while (size>0) {
 		size -= 4096;
 		write_verify(start);
 		start += 4096;
 	}
-}
-
-int copy_mem(int nr,struct task_struct * p)
-{
-	unsigned long old_data_base,new_data_base,data_limit;
-	unsigned long old_code_base,new_code_base,code_limit;
-
-	code_limit = get_limit(0x0f);
-	data_limit = get_limit(0x17);
-	old_code_base = get_base(current->ldt[1]);
-	old_data_base = get_base(current->ldt[2]);
-	if (old_data_base != old_code_base) {
-		printk("ldt[0]: %08x %08x\n",current->ldt[0].a,current->ldt[0].b);
-		printk("ldt[1]: %08x %08x\n",current->ldt[1].a,current->ldt[1].b);
-		printk("ldt[2]: %08x %08x\n",current->ldt[2].a,current->ldt[2].b);
-		panic("We don't support separate I&D");
-	}
-	if (data_limit < code_limit)
-		panic("Bad data_limit");
-	new_data_base = old_data_base;
-	new_code_base = old_code_base;
-	p->start_code = new_code_base;
-	set_base(p->ldt[1],new_code_base);
-	set_base(p->ldt[2],new_data_base);
-	return copy_page_tables(p);
 }
 
 static int find_empty_process(void)
@@ -163,7 +137,7 @@ int sys_fork(long ebx,long ecx,long edx,
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0 ; frstor %0"::"m" (p->tss.i387));
 	p->kernel_stack_page = get_free_page(GFP_KERNEL);
-	if (!p->kernel_stack_page || copy_mem(nr,p)) {
+	if (!p->kernel_stack_page || copy_page_tables(p)) {
 		task[nr] = NULL;
 		REMOVE_LINKS(p);
 		free_page(p->kernel_stack_page);

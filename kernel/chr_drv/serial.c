@@ -59,7 +59,7 @@
  * 
  */
 	
-#define NEW_INTERRUPT_ROUTINE
+#undef NEW_INTERRUPT_ROUTINE
 	
 #define WAKEUP_CHARS (3*TTY_BUF_SIZE/4)
 
@@ -401,9 +401,8 @@ static void modem_status_intr(struct async_struct * info)
 	unsigned char status = inb(UART_MSR + info->port);
 
 	if (!(info->tty->termios->c_cflag & CLOCAL)) {
-		if (((status & (UART_MSR_DCD|UART_MSR_DDCD)) == UART_MSR_DDCD)
-		    && info->tty->session > 0)
-			kill_sl(info->tty->session,SIGHUP,1);
+		if ((status & (UART_MSR_DCD|UART_MSR_DDCD)) == UART_MSR_DDCD)
+			tty_hangup(info->tty);
 
 		if (info->tty->termios->c_cflag & CRTSCTS)
 			info->tty->stopped = !(status & UART_MSR_CTS);
@@ -523,10 +522,8 @@ static void rs_timer(void)
 			if (!clear_bit(RS_EVENT_WRITE_WAKEUP, &info->event)) {
 				wake_up_interruptible(&info->tty->write_q.proc_list);
 			}
-			if (!clear_bit(RS_EVENT_HUP_PGRP, &info->event)) {
-				if (info->tty->session > 0)
-					kill_sl(info->tty->session,SIGHUP,1);
-			}
+			if (!clear_bit(RS_EVENT_HUP_PGRP, &info->event))
+				tty_hangup(info->tty);
 			if (!clear_bit(RS_EVENT_BREAK_INT, &info->event)) {
 				flush_input(info->tty);
 				flush_output(info->tty);

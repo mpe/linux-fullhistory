@@ -376,17 +376,18 @@ static void read_omagic(struct inode *inode, int bytes)
 	if (inode->i_sb)
 		block_size = inode->i_sb->s_blocksize;
 	while (bytes > 0) {
-		if (!(blkno = bmap(inode, blk)))
-			sys_exit(-1);
-		if (!(bh = bread(inode->i_dev, blkno, block_size)))
-			sys_exit(-1);
 		n = (blk ? block_size : block_size - sizeof(struct exec));
 		if (bytes < n)
 			n = bytes;
-
-		memcpy_tofs(dest, (blk ? bh->b_data :
+		blkno = bmap(inode, blk);
+		if (blkno) {
+			bh = bread(inode->i_dev, blkno, block_size);
+			if (!bh)
+				sys_exit(-1);
+			memcpy_tofs(dest, (blk ? bh->b_data :
 				bh->b_data + sizeof(struct exec)), n);
-		brelse(bh);
+			brelse(bh);
+		}
 		++blk;
 		dest += n;
 		bytes -= n;

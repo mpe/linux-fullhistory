@@ -216,7 +216,7 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 {
         char scsi_cmd[10];
 
-	if ((cmd != 0 && dev->id > NR_SCSI_DEVICES))
+	if ((cmd != 0 && dev->index > NR_SCSI_DEVICES))
 		return -ENODEV;
 	if ((cmd == 0 && dev->host_no > max_scsi_hosts))
 		return -ENODEV;

@@ -32,6 +32,8 @@ extern void ctrl_alt_del(void);
 extern void change_console(unsigned int new_console);
 
 unsigned long kbd_flags = 0;
+unsigned long kbd_dead_keys = 0;
+unsigned long kbd_prev_dead_keys = 0;
 
 struct kbd_struct kbd_table[NR_CONSOLES];
 static struct kbd_struct * kbd = kbd_table;
@@ -54,59 +56,54 @@ static struct pt_regs * pt_regs;
 static void keyboard_interrupt(int int_pt_regs)
 {
 	static unsigned char rep = 0xff;
-	unsigned char scancode, x;
+	unsigned char scancode;
 
 	pt_regs = (struct pt_regs *) int_pt_regs;
-	scancode=inb_p(0x60);
-	x=inb_p(0x61);
-	outb_p(x|0x80, 0x61);
-	outb_p(x&0x7f, 0x61);
-	if (scancode == 0xe0)
-		set_kbd_flag(KG_E0);
-	else if (scancode == 0xe1)
-		set_kbd_flag(KG_E1);
-	tty = TTY_TABLE(0);
-	kbd = kbd_table + fg_console;
-	if (vc_kbd_flag(kbd,VC_RAW)) {
-		kbd_flags = 0;
-		put_queue(scancode);
-		do_keyboard_interrupt();
-		return;
-	}
-	if (scancode == 0xe0 || scancode == 0xe1)
-		return;
-	/*
-	 *  The keyboard maintains its own internal caps lock and num lock
-	 *  statuses. In caps lock mode E0 AA precedes make code and E0 2A
-	 *  follows break code. In num lock mode, E0 2A precedes make
-	 *  code and E0 AA follows break code. We do our own book-keeping,
-	 *  so we will just ignore these.
-	 */
-	if (kbd_flag(KG_E0) && (scancode == 0x2a || scancode == 0xaa)) {
-		clr_kbd_flag(KG_E0);
-		clr_kbd_flag(KG_E1);
-		return;
-	}
-	/*
-	 *  Repeat a key only if the input buffers are empty or the
-	 *  characters get echoed locally. This makes key repeat usable
-	 *  with slow applications and unders heavy loads.
-	 */
-	if (scancode == rep) {
-		if (!(vc_kbd_flag(kbd,VC_REPEAT) && tty &&
-			   (L_ECHO(tty) ||
-			    (EMPTY(&tty->secondary) &&
-			     EMPTY(&tty->read_q))))) {
-			clr_kbd_flag(KG_E0);
-			clr_kbd_flag(KG_E1);
-			return;
+	while (inb_p(0x64) & 1) {
+		kbd_prev_dead_keys |= kbd_dead_keys;
+		if (!kbd_dead_keys)
+			kbd_prev_dead_keys = 0;
+		kbd_dead_keys = 0;
+		scancode = inb_p(0x60);
+		tty = TTY_TABLE(0);
+		kbd = kbd_table + fg_console;
+		if (vc_kbd_flag(kbd,VC_RAW)) {
+			kbd_flags = 0;
+			put_queue(scancode);
+			continue;
 		}
+		if (scancode == 0xe0) {
+			set_kbd_dead(KGD_E0);
+			continue;
+		} else if (scancode == 0xe1) {
+			set_kbd_dead(KGD_E1);
+			continue;
+		}
+		/*
+		 *  The keyboard maintains its own internal caps lock and num lock
+		 *  statuses. In caps lock mode E0 AA precedes make code and E0 2A
+		 *  follows break code. In num lock mode, E0 2A precedes make
+		 *  code and E0 AA follows break code. We do our own book-keeping,
+		 *  so we will just ignore these.
+		 */
+		if (kbd_dead(KGD_E0) && (scancode == 0x2a || scancode == 0xaa))
+			continue;
+		/*
+		 *  Repeat a key only if the input buffers are empty or the
+		 *  characters get echoed locally. This makes key repeat usable
+		 *  with slow applications and unders heavy loads.
+		 */
+		if (scancode == rep) {
+			if (!(vc_kbd_flag(kbd,VC_REPEAT) && tty &&
+				   (L_ECHO(tty) ||
+				    (EMPTY(&tty->secondary) &&
+				     EMPTY(&tty->read_q)))))
+				continue;
+		}
+		rep = scancode;
+		key_table[scancode](scancode);
 	}
-	rep = scancode;
-	key_table[scancode](scancode);
 	do_keyboard_interrupt();
-	clr_kbd_flag(KG_E0);
-	clr_kbd_flag(KG_E1);
 }
 
 static void put_queue(int ch)
@@ -147,7 +144,7 @@ static void puts_queue(char *cp)
 
 static void ctrl(int sc)
 {
-	if (kbd_flag(KG_E0))
+	if (kbd_dead(KGD_E0))
 		set_kbd_flag(KG_RCTRL);
 	else
 		set_kbd_flag(KG_LCTRL);
@@ -155,7 +152,7 @@ static void ctrl(int sc)
 
 static void alt(int sc)
 {
-	if (kbd_flag(KG_E0))
+	if (kbd_dead(KGD_E0))
 		set_kbd_flag(KG_ALTGR);
 	else
 		set_kbd_flag(KG_ALT);
@@ -163,7 +160,7 @@ static void alt(int sc)
 
 static void unctrl(int sc)
 {
-	if (kbd_flag(KG_E0))
+	if (kbd_dead(KGD_E0))
 		clr_kbd_flag(KG_RCTRL);
 	else
 		clr_kbd_flag(KG_LCTRL);
@@ -171,7 +168,7 @@ static void unctrl(int sc)
 
 static void unalt(int sc)
 {
-	if (kbd_flag(KG_E0))
+	if (kbd_dead(KGD_E0))
 		clr_kbd_flag(KG_ALTGR);
 	else {
 		clr_kbd_flag(KG_ALT);
@@ -218,6 +215,8 @@ static void uncaps(int sc)
 
 static void show_ptregs(void)
 {
+	if (!pt_regs)
+		return;
 	printk("\nEIP: %04x:%08x",0xffff & pt_regs->cs,pt_regs->eip);
 	if (pt_regs->cs & 3)
 		printk(" ESP: %04x:%08x",0xffff & pt_regs->cs,pt_regs->eip);
@@ -1167,7 +1166,7 @@ static void cursor(int sc)
 		ctrl_alt_del();
 		return;
 	}
-	if (kbd_flag(KG_E0)) {
+	if (kbd_dead(KGD_E0)) {
 		cur(sc);
 		return;
 	}
@@ -1226,7 +1225,7 @@ static void func(int sc)
 
 static void slash(int sc)
 {
-	if (!kbd_flag(KG_E0))
+	if (!kbd_dead(KGD_E0))
 		do_self(sc);
 	else if (vc_kbd_flag(kbd,VC_APPLIC))
 		applkey('Q');
@@ -1244,7 +1243,7 @@ static void star(int sc)
 
 static void enter(int sc)
 {
-	if (kbd_flag(KG_E0) && vc_kbd_flag(kbd,VC_APPLIC))
+	if (kbd_dead(KGD_E0) && vc_kbd_flag(kbd,VC_APPLIC))
 		applkey('M');
 	else {
 		put_queue(13);
@@ -1418,7 +1417,6 @@ static fptr key_table[] = {
 unsigned long kbd_init(unsigned long kmem_start)
 {
 	int i;
-	unsigned char a;
 	struct kbd_struct * kbd;
 
 	kbd = kbd_table + 0;
@@ -1428,8 +1426,6 @@ unsigned long kbd_init(unsigned long kmem_start)
 		kbd->kbd_flags = KBDFLAGS;
 	}
 	request_irq(KEYBOARD_IRQ,keyboard_interrupt);
-	a=inb_p(0x61);
-	outb_p(a|0x80,0x61);
-	outb_p(a,0x61);
+	keyboard_interrupt(0);
 	return kmem_start;
 }

@@ -288,6 +288,8 @@ void __math_abort(struct info * info, unsigned int signal)
 
 void math_emulate(long arg)
 {
+  printk("math-meulation not enabled and no coprocessor found.\n");
+  printk("killing %s.\n",current->comm);
   send_sig(SIGFPE,current,1);
   schedule();
 }

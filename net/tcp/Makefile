@@ -19,8 +19,8 @@
 OBJS	= sock.o tcp.o ip.o timer.o we.o arp.o udp.o eth.o Space.o loopback.o \
 	  icmp.o protocols.o raw.o pack_type.o dev.o packet.o
 
-tcpip.o: $(OBJS)
-	$(LD) -r -o tcpip.o $(OBJS)
+tcpip.a: $(OBJS)
+	$(AR) rcs tcpip.a $(OBJS)
 
 subdirs: dummy
 	for i in $(SUBDIRS); do (cd $$i; $(MAKE)); done

@@ -14,6 +14,7 @@ SUBDIRS = tcp
 
 ifdef CONFIG_TCPIP
 NET_SUBDIRS = tcp
+TCP_ARCHIVE = tcp/tcpip.a
 endif
 
 .c.o:
@@ -26,7 +27,7 @@ endif
 OBJS	=  socket.o unix.o 
 
 net.o: $(OBJS) subdirs
-	$(LD) -r -o net.o $(OBJS) tcp/tcpip.o
+	$(LD) -r -o net.o $(OBJS) $(TCP_ARCHIVE)
 
 
 subdirs: dummy
@@ -39,8 +40,6 @@ clean:
 dep:
 	$(CPP) -M *.c > .depend
 	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE) dep) || exit; done
-
-socket.o: Makefile
 
 dummy:
 

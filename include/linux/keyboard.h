@@ -23,8 +23,19 @@ extern unsigned long kbd_flags;
 #define KG_ALT		4
 #define KG_ALTGR	5
 #define KG_CAPSLOCK	6
-#define KG_E0		7
-#define KG_E1		8
+
+/*
+ * "dead" keys - prefix key values that are valid only for the next
+ * character code (sticky shift, E0/E1 special scancodes, diacriticals)
+ */
+extern unsigned long kbd_dead_keys;
+extern unsigned long kbd_prev_dead_keys;
+
+/*
+ * these are the hardcoded dead key flags
+ */
+#define KGD_E0		0
+#define KGD_E1		1
 
 /*
  * kbd->xxx contains the VC-local things (flag settings etc..)
@@ -78,6 +89,26 @@ extern inline void clr_kbd_flag(int flag)
 extern inline void chg_kbd_flag(int flag)
 {
 	kbd_flags ^= 1 << flag;
+}
+
+extern inline int kbd_dead(int flag)
+{
+	return kbd_prev_dead_keys & (1 << flag);
+}
+
+extern inline void set_kbd_dead(int flag)
+{
+	kbd_dead_keys |= 1 << flag;
+}
+
+extern inline void clr_kbd_dead(int flag)
+{
+	kbd_dead_keys &= ~(1 << flag);
+}
+
+extern inline void chg_kbd_dead(int flag)
+{
+	kbd_dead_keys ^= 1 << flag;
 }
 
 extern inline int vc_kbd_flag(struct kbd_struct * kbd, int flag)

@@ -304,6 +304,10 @@ int minix_mkdir(struct inode * dir, const char * name, int len, int mode)
 		iput(dir);
 		return -EEXIST;
 	}
+	if (dir->i_nlink > 250) {
+		iput(dir);
+		return -EMLINK;
+	}
 	inode = minix_new_inode(dir);
 	if (!inode) {
 		iput(dir);
@@ -694,6 +698,9 @@ start_up:
 		if (!dir_bh)
 			goto end_rename;
 		if (PARENT_INO(dir_bh->b_data) != old_dir->i_ino)
+			goto end_rename;
+		retval = -EMLINK;
+		if (new_dir->i_nlink > 250)
 			goto end_rename;
 	}
 	if (!new_bh)

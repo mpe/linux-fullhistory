@@ -170,7 +170,10 @@ static int console_blanked = 0;
 #define	halfcolor	(vc_cons[currcons].vc_halfcolor)
 #define kbdmode		(vc_cons[currcons].vc_kbdmode)
 #define tab_stop	(vc_cons[currcons].vc_tab_stop)
+#define vcmode		(vt_cons[currcons].vc_mode)
 #define vtmode		(vt_cons[currcons].vt_mode)
+#define vtpid		(vt_cons[currcons].vt_pid)
+#define vtnewvt		(vt_cons[currcons].vt_newvt)
 
 #define set_kbd(x) set_vc_kbd_flag(kbd_table+currcons,x)
 #define clr_kbd(x) clr_vc_kbd_flag(kbd_table+currcons,x)
@@ -285,7 +288,7 @@ static void set_origin(int currcons)
 {
 	if (video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_EGAM)
 		return;
-	if (currcons != fg_console || console_blanked || vtmode == KD_GRAPHICS)
+	if (currcons != fg_console || console_blanked || vcmode == KD_GRAPHICS)
 		return;
 	cli();
 	outb_p(12, video_port_reg);
@@ -1194,7 +1197,7 @@ void con_write(struct tty_struct * tty)
 				state = ESnormal;
 		}
 	}
-	if (vtmode == KD_GRAPHICS)
+	if (vcmode == KD_GRAPHICS)
 		return;
 	set_cursor(currcons);
 }
@@ -1203,7 +1206,7 @@ void do_keyboard_interrupt(void)
 {
 	TTY_READ_FLUSH(TTY_TABLE(0));
 	timer_active &= ~(1<<BLANK_TIMER);
-	if (vt_cons[fg_console].vt_mode == KD_GRAPHICS)
+	if (vt_cons[fg_console].vc_mode == KD_GRAPHICS)
 		return;
 	if (console_blanked) {
 		timer_table[BLANK_TIMER].expires = 0;
@@ -1311,7 +1314,14 @@ long con_init(long kmem_start)
 		pos = origin = video_mem_start = base;
 		scr_end = video_mem_end = (base += screen_size);
 		vc_scrbuf[currcons] = (unsigned short *) origin;
-		vtmode		= KD_TEXT;
+		vcmode		= KD_TEXT;
+		vtmode.mode	= VT_AUTO;
+		vtmode.waitv	= 0;
+		vtmode.relsig	= 0;
+		vtmode.acqsig	= 0;
+		vtmode.frsig	= 0;
+		vtpid		= -1;
+		vtnewvt		= -1;
 		clr_kbd(kbdraw);
 		def_color	= 0x07;   /* white */
 		ulcolor		= 0x0f;   /* bold white */
@@ -1360,6 +1370,8 @@ static void set_scrmem(int currcons)
 
 void blank_screen(void)
 {
+	if (console_blanked)
+		return;
 	timer_table[BLANK_TIMER].fn = unblank_screen;
 	get_scrmem(fg_console);
 	hide_cursor(fg_console);
@@ -1369,6 +1381,8 @@ void blank_screen(void)
 
 void unblank_screen(void)
 {
+	if (!console_blanked)
+		return;
 	timer_table[BLANK_TIMER].fn = blank_screen;
 	if (blankinterval) {
 		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
@@ -1463,7 +1477,7 @@ void console_print(const char * b)
 		pos+=2;
 	}
 	set_cursor(currcons);
-	if (vt_cons[fg_console].vt_mode == KD_GRAPHICS)
+	if (vt_cons[fg_console].vc_mode == KD_GRAPHICS)
 		return;
 	timer_active &= ~(1<<BLANK_TIMER);
 	if (console_blanked) {
@@ -1483,5 +1497,7 @@ int con_open(struct tty_struct *tty, struct file * filp)
 {
 	tty->write = con_write;
 	tty->ioctl = vt_ioctl;
+	if (tty->line > NR_CONSOLES)
+		return -ENODEV;
 	return 0;
 }

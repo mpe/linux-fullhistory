@@ -160,8 +160,9 @@ static void aux_interrupt(int cpl)
 static void release_aux(struct inode * inode, struct file * file)
 {
 	poll_status();
-	outb_p(AUX_DISABLE,AUX_COMMAND);      	/* Disable Aux device */
 	aux_write_dev(AUX_DISABLE_DEV);		/* disable aux device */
+	poll_status();
+	outb_p(AUX_DISABLE,AUX_COMMAND);      	/* Disable Aux device */
 	aux_write_cmd(AUX_INTS_OFF);		/* disable controller ints */
 	free_irq(AUX_IRQ);
 	aux_busy = 0;
@@ -288,6 +289,9 @@ unsigned long psaux_init(unsigned long kmem_start)
 	queue->head = queue->tail = 0;
 	queue->proc_list = NULL;
 	aux_present = 1;
+	poll_status();
+	outb_p(AUX_DISABLE,AUX_COMMAND);      	/* Disable Aux device */
+	aux_write_cmd(AUX_INTS_OFF);		/* disable controller ints */
 	return kmem_start;
 }
 

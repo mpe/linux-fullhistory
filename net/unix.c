@@ -184,6 +184,26 @@ unix_proto_recv(struct socket *sock, void *buff, int len, int nonblock,
 	return (unix_proto_read (sock, buff, len, nonblock));
 }
 
+/*
+ * Since unix domain sockets use filenames to communicate, two sockets are
+ * the same if their strings are the same, even if their lengths are different
+ * (due to possible null terminations). Verified under SunOS 4.1.2
+ */
+static int
+same_path(char *s1, int l1, char *s2, int l2)
+{
+	/*
+	 * Skip chars while they're equal
+	 */
+	for (; l1 && l2 && *s1 == *s2; ++s1, ++s2, --l1, --l2);
+
+	/*
+	 * Both must be exhausted, or one must be null terminated and the
+	 * other either exhausted or null terminated, for the paths to be
+	 * equivalent
+	 */
+	return ((l1 == 0 || *s1 == '\0') && (l2 == 0 || *s2 == '\0'));
+}
 
 static struct unix_proto_data *
 unix_data_lookup(struct sockaddr_un *sockun, int sockaddr_len)
@@ -193,8 +213,10 @@ unix_data_lookup(struct sockaddr_un *sockun, int sockaddr_len)
 	for (upd = unix_datas; upd <= last_unix_data; ++upd) {
 		if (upd->refcnt && upd->socket &&
 		    upd->socket->state == SS_UNCONNECTED &&
-		    upd->sockaddr_len == sockaddr_len &&
-		    memcmp(&upd->sockaddr_un, sockun, sockaddr_len) == 0)
+		    upd->sockaddr_un.sun_family == sockun->sun_family &&
+		    same_path(sockun->sun_path, sockaddr_len - UN_PATH_OFFSET,
+			      upd->sockaddr_un.sun_path,
+			      upd->sockaddr_len - UN_PATH_OFFSET))
 			return upd;
 	}
 	return NULL;

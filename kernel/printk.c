@@ -64,7 +64,7 @@ int sys_syslog(int type, char * buf, int len)
 				sti();
 			}
 			i = 0;
-			while (log_size && len) {
+			while (log_size && i < len) {
 				c = *((char *) log_page+log_start);
 				log_start++;
 				log_size--;

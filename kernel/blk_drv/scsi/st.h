@@ -27,10 +27,10 @@ typedef struct {
   Scsi_Device* device;
   unsigned dirty:1;
   unsigned rw:2;
-  unsigned eof:1;
+  unsigned eof:2;
   unsigned write_prot:1;
   unsigned in_use:1;
-  unsigned eof_hit:2;
+  unsigned eof_hit:1;
   ST_buffer * buffer;
   int block_size;
   int min_block;

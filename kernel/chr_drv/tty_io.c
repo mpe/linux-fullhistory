@@ -28,6 +28,7 @@
 #include <linux/fcntl.h>
 #include <linux/sched.h>
 #include <linux/tty.h>
+#include <linux/timer.h>
 #include <linux/ctype.h>
 #include <linux/kd.h>
 #include <linux/mm.h>
@@ -54,6 +55,11 @@ struct tty_struct * redirect = NULL;
 struct wait_queue * keypress_wait = NULL;
 
 static int initialize_tty_struct(struct tty_struct *tty, int line);
+static int tty_read(struct inode *, struct file *, char *, int);
+static int tty_write(struct inode *, struct file *, char *, int);
+static int tty_select(struct inode *, struct file *, int, select_table *);
+static int tty_open(struct inode *, struct file *);
+static void tty_release(struct inode *, struct file *);
 
 void put_tty_queue(char c, struct tty_queue * queue)
 {
@@ -105,13 +111,228 @@ void tty_read_flush(struct tty_struct * tty)
 		printk("tty_read_flush: bit already cleared\n");
 }
 
-void change_console(unsigned int new_console)
+static int hung_up_tty_read(struct inode * inode, struct file * file, char * buf, int count)
 {
-	if (vt_cons[fg_console].vt_mode == KD_GRAPHICS)
+	return 0;
+}
+
+static int hung_up_tty_write(struct inode * inode, struct file * file, char * buf, int count)
+{
+	return -EIO;
+}
+
+static int hung_up_tty_select(struct inode * inode, struct file * filp, int sel_type, select_table * wait)
+{
+	return 1;
+}
+
+static int tty_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
+{
+	return -EBADF;
+}
+
+static struct file_operations tty_fops = {
+	tty_lseek,
+	tty_read,
+	tty_write,
+	NULL,		/* tty_readdir */
+	tty_select,
+	tty_ioctl,
+	NULL,		/* tty_mmap */
+	tty_open,
+	tty_release
+};
+
+static struct file_operations hung_up_tty_fops = {
+	tty_lseek,
+	hung_up_tty_read,
+	hung_up_tty_write,
+	NULL,		/* hung_up_tty_readdir */
+	hung_up_tty_select,
+	tty_ioctl,
+	NULL,		/* hung_up_tty_mmap */
+	tty_open,
+	tty_release
+};
+
+void tty_hangup(struct tty_struct * tty)
+{
+	struct file * filp;
+	int dev;
+
+	if (!tty)
 		return;
+	dev = 0x0400 + tty->line;
+	filp = file_table + NR_FILE;
+	while (filp-- > file_table) {
+		if (!filp->f_count)
+			continue;
+		if (filp->f_rdev != dev)
+			continue;
+		if (filp->f_op != &tty_fops)
+			continue;
+		filp->f_op = &hung_up_tty_fops;
+	}
+	wake_up_interruptible(&tty->secondary.proc_list);
+	wake_up_interruptible(&tty->read_q.proc_list);
+	wake_up_interruptible(&tty->write_q.proc_list);
+	if (tty->session > 0)
+		kill_sl(tty->session,SIGHUP,1);
+}
+
+static inline int hung_up(struct file * filp)
+{
+	return filp->f_op == &hung_up_tty_fops;
+}
+
+extern int kill_proc(int pid, int sig, int priv);
+
+/*
+ * Performs the back end of a vt switch
+ */
+void complete_change_console(unsigned int new_console)
+{
+	unsigned char old_vc_mode;
+
 	if (new_console == fg_console || new_console >= NR_CONSOLES)
 		return;
+
+	/*
+	 * If we're switching, we could be going from KD_GRAPHICS to
+	 * KD_TEXT mode or vice versa, which means we need to blank or
+	 * unblank the screen later.
+	 */
+	old_vc_mode = vt_cons[fg_console].vc_mode;
 	update_screen(new_console);
+
+	/*
+	 * If this new console is under process control, send it a signal
+	 * telling it that it has acquired. Also check if it has died and
+	 * clean up (similar to logic employed in change_console())
+	 */
+	if (vt_cons[new_console].vt_mode.mode == VT_PROCESS)
+	{
+		/*
+		 * Send the signal as privileged - kill_proc() will
+		 * tell us if the process has gone or something else
+		 * is awry
+		 */
+		if (kill_proc(vt_cons[new_console].vt_pid,
+			      vt_cons[new_console].vt_mode.acqsig,
+			      1) != 0)
+		{
+		/*
+		 * The controlling process has died, so we revert back to
+		 * normal operation. In this case, we'll also change back
+		 * to KD_TEXT mode. I'm not sure if this is strictly correct
+		 * but it saves the agony when the X server dies and the screen
+		 * remains blanked due to KD_GRAPHICS! It would be nice to do
+		 * this outside of VT_PROCESS but there is no single process
+		 * to account for and tracking tty count may be undesirable.
+		 */
+			vt_cons[new_console].vc_mode = KD_TEXT;
+			clr_vc_kbd_flag(kbd_table + new_console, VC_RAW);
+ 			vt_cons[new_console].vt_mode.mode = VT_AUTO;
+ 			vt_cons[new_console].vt_mode.waitv = 0;
+ 			vt_cons[new_console].vt_mode.relsig = 0;
+			vt_cons[new_console].vt_mode.acqsig = 0;
+			vt_cons[new_console].vt_mode.frsig = 0;
+			vt_cons[new_console].vt_pid = -1;
+			vt_cons[new_console].vt_newvt = -1;
+		}
+	}
+
+	/*
+	 * We do this here because the controlling process above may have
+	 * gone, and so there is now a new vc_mode
+	 */
+	if (old_vc_mode != vt_cons[new_console].vc_mode)
+	{
+		if (vt_cons[new_console].vc_mode == KD_TEXT)
+			unblank_screen();
+		else
+		{
+			timer_active &= ~(1<<BLANK_TIMER);
+			blank_screen();
+		}
+	}
+
+	return;
+}
+
+/*
+ * Performs the front-end of a vt switch
+ */
+void change_console(unsigned int new_console)
+{
+	if (new_console == fg_console || new_console >= NR_CONSOLES)
+		return;
+
+	/*
+	 * If this vt is in process mode, then we need to handshake with
+	 * that process before switching. Essentially, we store where that
+	 * vt wants to switch to and wait for it to tell us when it's done
+	 * (via VT_RELDISP ioctl).
+	 *
+	 * We also check to see if the controlling process still exists.
+	 * If it doesn't, we reset this vt to auto mode and continue.
+	 * This is a cheap way to track process control. The worst thing
+	 * that can happen is: we send a signal to a process, it dies, and
+	 * the switch gets "lost" waiting for a response; hopefully, the
+	 * user will try again, we'll detect the process is gone (unless
+	 * the user waits just the right amount of time :-) and revert the
+	 * vt to auto control.
+	 */
+	if (vt_cons[fg_console].vt_mode.mode == VT_PROCESS)
+	{
+		/*
+		 * Send the signal as privileged - kill_proc() will
+		 * tell us if the process has gone or something else
+		 * is awry
+		 */
+		if (kill_proc(vt_cons[fg_console].vt_pid,
+			      vt_cons[fg_console].vt_mode.relsig,
+			      1) == 0)
+		{
+			/*
+			 * It worked. Mark the vt to switch to and
+			 * return. The process needs to send us a
+			 * VT_RELDISP ioctl to complete the switch.
+			 */
+			vt_cons[fg_console].vt_newvt = new_console;
+			return;
+		}
+
+		/*
+		 * The controlling process has died, so we revert back to
+		 * normal operation. In this case, we'll also change back
+		 * to KD_TEXT mode. I'm not sure if this is strictly correct
+		 * but it saves the agony when the X server dies and the screen
+		 * remains blanked due to KD_GRAPHICS! It would be nice to do
+		 * this outside of VT_PROCESS but there is no single process
+		 * to account for and tracking tty count may be undesirable.
+		 */
+		vt_cons[fg_console].vc_mode = KD_TEXT;
+		clr_vc_kbd_flag(kbd_table + fg_console, VC_RAW);
+		vt_cons[fg_console].vt_mode.mode = VT_AUTO;
+		vt_cons[fg_console].vt_mode.waitv = 0;
+		vt_cons[fg_console].vt_mode.relsig = 0;
+		vt_cons[fg_console].vt_mode.acqsig = 0;
+		vt_cons[fg_console].vt_mode.frsig = 0;
+		vt_cons[fg_console].vt_pid = -1;
+		vt_cons[fg_console].vt_newvt = -1;
+		/*
+		 * Fall through to normal (VT_AUTO) handling of the switch...
+		 */
+	}
+
+	/*
+	 * Ignore all switches in KD_GRAPHICS+VT_AUTO mode
+	 */
+	if (vt_cons[fg_console].vc_mode == KD_GRAPHICS)
+		return;
+
+	complete_change_console(new_console);
 }
 
 void wait_for_keypress(void)
@@ -272,14 +493,14 @@ int is_ignored(int sig)
 }
 
 static int available_canon_input(struct tty_struct *);
-static void __wait_for_canon_input(struct tty_struct *);
+static void __wait_for_canon_input(struct file * file, struct tty_struct *);
 
-static void wait_for_canon_input(struct tty_struct * tty)
+static void wait_for_canon_input(struct file * file, struct tty_struct * tty)
 {
 	if (!available_canon_input(tty)) {
 		if (current->signal & ~current->blocked)
 			return;
-		__wait_for_canon_input(tty);
+		__wait_for_canon_input(file, tty);
 	}
 }
 
@@ -313,7 +534,7 @@ static int read_chan(struct tty_struct * tty, struct file * file, char * buf, in
 				return -EAGAIN;
 		}
 	} else if (L_CANON(tty)) {
-		wait_for_canon_input(tty);
+		wait_for_canon_input(file, tty);
 		if (current->signal & ~current->blocked)
 			return -ERESTARTSYS;
 	}
@@ -374,6 +595,8 @@ static int read_chan(struct tty_struct * tty, struct file * file, char * buf, in
 			TTY_WRITE_FLUSH(tty->link);
 		if (!EMPTY(&tty->secondary))
 			continue;
+		if (hung_up(file))
+			break;
 		current->state = TASK_INTERRUPTIBLE;
 		if (EMPTY(&tty->secondary))
 			schedule();
@@ -402,7 +625,7 @@ static int read_chan(struct tty_struct * tty, struct file * file, char * buf, in
 	return 0;
 }
 
-static void __wait_for_canon_input(struct tty_struct * tty)
+static void __wait_for_canon_input(struct file * file, struct tty_struct * tty)
 {
 	struct wait_queue wait = { current, NULL };
 
@@ -412,6 +635,8 @@ static void __wait_for_canon_input(struct tty_struct * tty)
 		if (available_canon_input(tty))
 			break;
 		if (current->signal & ~current->blocked)
+			break;
+		if (hung_up(file))
 			break;
 		schedule();
 	}
@@ -446,6 +671,8 @@ static int write_chan(struct tty_struct * tty, struct file * file, char * buf, i
 	add_wait_queue(&tty->write_q.proc_list, &wait);
 	while (nr>0) {
 		if (current->signal & ~current->blocked)
+			break;
+		if (hung_up(file))
 			break;
 		if (tty->link && !tty->link->count) {
 			send_sig(SIGPIPE,current,0);
@@ -524,25 +751,25 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 
 static int tty_write(struct inode * inode, struct file * file, char * buf, int count)
 {
-	int dev,i;
+	int dev, i, is_console;
 	struct tty_struct * tty;
 
 	dev = file->f_rdev;
+	is_console = (inode->i_rdev == 0x0400);
 	if (MAJOR(dev) != 4) {
 		printk("tty_write: pseudo-major != 4\n");
 		return -EINVAL;
 	}
 	dev = MINOR(dev);
-	if (redirect && ((dev == 0) || (dev == fg_console+1)))
+	if (is_console && redirect)
 		tty = redirect;
 	else
 		tty = TTY_TABLE(dev);
 	if (!tty || !tty->write)
 		return -EIO;
-	if (MINOR(inode->i_rdev) &&
-	    L_TOSTOP(tty) && (tty->pgrp > 0) &&
+	if (!is_console && L_TOSTOP(tty) && (tty->pgrp > 0) &&
 	    (current->tty == dev) && (tty->pgrp != current->pgrp)) {
-		if (is_orphaned_pgrp(tty->pgrp))
+		if (is_orphaned_pgrp(current->pgrp))
 			return -EIO;
 		if (!is_ignored(SIGTTOU)) {
 			(void) kill_pg(current->pgrp, SIGTTOU, 1);
@@ -553,11 +780,6 @@ static int tty_write(struct inode * inode, struct file * file, char * buf, int c
 	if (i > 0)
 		inode->i_mtime = CURRENT_TIME;
 	return i;
-}
-
-static int tty_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
-{
-	return -EBADF;
 }
 
 /*
@@ -803,18 +1025,6 @@ static int tty_select(struct inode * inode, struct file * filp, int sel_type, se
 	return 0;
 }
 
-static struct file_operations tty_fops = {
-	tty_lseek,
-	tty_read,
-	tty_write,
-	NULL,		/* tty_readdir */
-	tty_select,
-	tty_ioctl,
-	NULL,		/* tty_mmap */
-	tty_open,
-	tty_release
-};
-
 /*
  * This implements the "Secure Attention Key" ---  the idea is to
  * prevent trojan horses by killing all processes associated with this
@@ -920,9 +1130,9 @@ long tty_init(long kmem_start)
 		tty_table[i] =  0;
 		tty_termios[i] = 0;
 	}
-	kmem_start = kbd_init(kmem_start);
 	kmem_start = con_init(kmem_start);
 	kmem_start = rs_init(kmem_start);
+	kmem_start = kbd_init(kmem_start);
 	printk("%d virtual consoles\n\r",NR_CONSOLES);
 	return kmem_start;
 }

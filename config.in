@@ -10,6 +10,8 @@ Kernel profiling support
 CONFIG_PROFILE y/n n
 Limit to memory to low 16MB
 CONFIG_MAX_16M y/n y
+Use -m486 flag for 486-specific optimizations
+CONFIG_M486 y/n y
 :
 SCSI support
 .
@@ -27,9 +29,9 @@ CONFIG_BLK_DEV_SR y/n y
 .
 SCSI low-level drivers
 .
-Adaptek AHA1542 support
+Adaptec AHA1542 support
 CONFIG_SCSI_AHA1542 y/n y
-Adaptek AHA1740 support
+Adaptec AHA1740 support
 CONFIG_SCSI_AHA1740 y/n y
 Always IN support
 CONFIG_SCSI_ALWAYS y/n y
@@ -67,7 +69,7 @@ Accent Async 4 serial support
 CONFIG_ACCENT_ASYNC y/n n
 Logitech busmouse support
 CONFIG_BUSMOUSE y/n n
-PS/2 mouse (aka 'auxilliary device') support
+PS/2 mouse (aka 'auxiliary device') support
 CONFIG_PSMOUSE y/n n
 MicroSoft busmouse support
 CONFIG_MS_BUSMOUSE y/n n

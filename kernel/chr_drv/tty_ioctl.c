@@ -386,16 +386,22 @@ int tty_ioctl(struct inode * inode, struct file * file,
 					return -EINVAL;
 			}
 		case TIOCCONS:
-			if (!IS_A_PTY(dev))
-				return -EINVAL;
+			if (IS_A_CONSOLE(dev)) {
+				if (!suser())
+					return -EPERM;
+				redirect = NULL;
+				return 0;
+			}
 			if (redirect)
 				return -EBUSY;
 			if (!suser())
 				return -EPERM;
 			if (IS_A_PTY_MASTER(dev))
 				redirect = other_tty;
-			else
+			else if (IS_A_PTY_SLAVE(dev))
 				redirect = tty;
+			else
+				return -EINVAL;
 			return 0;
 		case FIONBIO:
 			arg = get_fs_long((unsigned long *) arg);

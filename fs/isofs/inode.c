@@ -18,10 +18,6 @@
 #include <asm/segment.h>
 #include <linux/errno.h>
 
-#ifndef CONFIG_BLK_DEV_SR
-#error The iso9660 filesystem can only be used with CDROM.
-#endif
-
 extern int check_cdrom_media_change(int, int);
 
 #ifdef LEAK_CHECK

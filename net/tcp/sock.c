@@ -242,6 +242,12 @@ lock_skb (struct sk_buff *skb)
 void
 kfree_skb (struct sk_buff *skb, int rw)
 {
+  if (skb == NULL)
+    {
+      printk ("kfree_skb: skb = NULL\n");
+      return;
+    }
+
    if (skb->lock)
      {
 	skb->free = 1;
@@ -300,7 +306,7 @@ get_new_socknum(struct proto *prot, unsigned short base)
   int best=0;
   int size=32767; /* a big num. */
   volatile struct sock *sk;
-  start++;
+
   if (base == 0) base = PROT_SOCK+1+(start % 1024);
   if (base <= PROT_SOCK)
     {
@@ -309,7 +315,7 @@ get_new_socknum(struct proto *prot, unsigned short base)
 
   /* now look through the entire array and try to find an empty
      ptr. */
-  for (i = 0; i < SOCK_ARRAY_SIZE; i++)
+  for (i=0; i < SOCK_ARRAY_SIZE; i++)
     {
       j = 0;
       sk = prot->sock_array[(i+base+1) & (SOCK_ARRAY_SIZE -1)];
@@ -318,7 +324,13 @@ get_new_socknum(struct proto *prot, unsigned short base)
 	  sk = sk->next;
 	  j++;
 	}
-      if (j == 0) return (i+base+1);
+      if (j == 0)
+	{
+	  start = (i+1+start )%1024;
+          PRINTK ("get_new_socknum returning %d, start = %d\n",
+		    i+base+1,start);
+	  return (i+base+1);
+	}
       if (j < size) 
 	{
 	  best = i;
@@ -330,6 +342,7 @@ get_new_socknum(struct proto *prot, unsigned short base)
     {
       best += SOCK_ARRAY_SIZE;
     }
+  PRINTK ("get_new_socknum returning %d, start = %d\n", best+base+1,start);
   return (best+base+1);
   
 }
@@ -445,12 +458,15 @@ destroy_sock(volatile struct sock *sk)
   /* just to be safe. */
   sk->inuse = 1;
 
+  /* incase it's sleeping somewhere. */
+  if (!sk->dead) wake_up (sk->sleep);
+
   remove_sock (sk);
   /* now we can no longer get new packets. */
 
   delete_timer((struct timer *)&sk->time_wait);
 
-  if (sk->send_tmp) kfree_skb (sk->send_tmp, FREE_WRITE);
+  if (sk->send_tmp != NULL) kfree_skb (sk->send_tmp, FREE_WRITE);
 
   /* cleanup up the write buffer. */
   for (skb = sk->wfront; skb != NULL; )
@@ -617,7 +633,7 @@ destroy_sock(volatile struct sock *sk)
 
   /* now if everything is gone we can free the socket structure, 
      otherwise we need to keep it around until everything is gone. */
-  if (sk->rmem_alloc <= 0 && sk->wmem_alloc <= 0)
+  if (sk->rmem_alloc == 0 && sk->wmem_alloc == 0)
     {
        kfree_s ((void *)sk,sizeof (*sk));
     }
@@ -634,6 +650,8 @@ destroy_sock(volatile struct sock *sk)
        sk->timeout = TIME_DESTROY;
        reset_timer ((struct timer *)&sk->time_wait);
     }
+
+  PRINTK ("leaving destroy_sock\n");
   
 }
 
@@ -1004,10 +1022,9 @@ ip_proto_create (struct socket *sock, int protocol)
   /* how many packets we should send before forcing an ack. 
      if this is set to zero it is the same as sk->delay_acks = 0 */
 
-  sk->max_ack_backlog = MAX_ACK_BACKLOG;
+  sk->max_ack_backlog = 0;
   sk->inuse = 0;
-  sk->delay_acks = 1; /* default to waiting a while before sending
-			 acks.  */
+  sk->delay_acks = 0;
   sk->wback = NULL;
   sk->wfront = NULL;
   sk->rqueue = NULL;
@@ -1090,6 +1107,7 @@ ip_proto_release(struct socket *sock, struct socket *peer)
     }
   else
     {
+      PRINTK ("sk->linger set.\n");
        sk->prot->close(sk, 0);
        cli();
        while (sk->state != TCP_CLOSE)
@@ -1109,6 +1127,7 @@ ip_proto_release(struct socket *sock, struct socket *peer)
   /* this will destroy it. */
   release_sock (sk);
   sock->data = NULL;
+  PRINTK ("ip_proto_release returning\n");
   return (0);
 }
 

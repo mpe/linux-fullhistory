@@ -12,13 +12,19 @@
 
 #include <asm/system.h>
 
-static struct inode inode_table[NR_INODE];
-static struct inode * last_inode = inode_table;
-static struct wait_queue * inode_wait;
+static struct inode * inode_table;
+static struct inode * last_inode;
+static struct wait_queue * inode_wait = NULL;
 
-void inode_init(void)
+unsigned long inode_init(unsigned long start, unsigned long end)
 {
-	memset(inode_table,0,sizeof(inode_table));	
+	start += 0x0000000f;
+	start &= 0xfffffff0;
+	inode_table = (struct inode *) start;
+	last_inode = inode_table;
+	start = (unsigned long) (inode_table + NR_INODE);
+	memset(inode_table,0,NR_INODE*sizeof(struct inode));
+	return start;
 }
 
 static void __wait_on_inode(struct inode *);

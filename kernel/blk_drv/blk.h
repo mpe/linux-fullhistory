@@ -152,6 +152,8 @@ extern int ramdisk_size;
 
 #endif
 
+#if (MAJOR_NR != 9)
+
 #ifndef CURRENT
 #define CURRENT (blk_dev[MAJOR_NR].current_request)
 #endif
@@ -258,4 +260,5 @@ static void end_request(int uptodate)
 
 #endif
 
+#endif
 #endif

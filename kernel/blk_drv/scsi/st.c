@@ -30,7 +30,7 @@
 
   Kai Makisara, Nov 9, 1992  email makisara@vtinsx.ins.vtt.fi or
                                     Kai.Makisara@vtt.fi
-  Last changes Dec 6, 1992.
+  Last changes Dec 19, 1992.
 */
 
 #include <linux/fs.h>
@@ -56,9 +56,14 @@
    before command completion. */
 /* #define ST_NOWAIT */
 
+/* Uncomment the following if you want the tape to be positioned correctly
+   within file after close (the tape is positioned correctly with respect
+   to the filemarks even wihout ST_IN_FILE_POS defined */
+/* #define ST_IN_FILE_POS */
+
 /* #define DEBUG */
 
-#define ST_TIMEOUT 2000
+#define ST_TIMEOUT 6000
 #define ST_LONG_TIMEOUT 200000
 
 /* Number of ST_BLOCK_SIZE blocks in the buffers */
@@ -519,9 +524,13 @@ static void scsi_tape_close(struct inode * inode, struct file * filp)
       printk("st%d: Buffer flushed, EOF written\n", dev);
 #endif
     }
-    else if (!rewind && scsi_tapes[dev].eof && !scsi_tapes[dev].eof_hit)
-      st_int_ioctl(inode, filp, MTBSF, 1);
-               /* Back over the EOF hit inadvertently */
+    else if (!rewind) {
+      if ((scsi_tapes[dev].eof == 1) && !scsi_tapes[dev].eof_hit)
+	st_int_ioctl(inode, filp, MTBSF, 1); /* Back over the EOF hit */
+#ifdef ST_IN_FILE_POS
+      flush_buffer(inode, filp, 0);
+#endif
+    }
 
     if (rewind)
       st_int_ioctl(inode, filp, MTREW, 1);
@@ -701,12 +710,9 @@ int st_read(struct inode * inode, struct file * filp, char * buf, int count)
       printk("st%d: EOF flag up. Bytes %d\n", dev,
 	     scsi_tapes[dev].buffer->buffer_bytes);
 #endif
-    if ((scsi_tapes[dev].buffer->buffer_bytes == 0) && scsi_tapes[dev].eof) {
-      if (scsi_tapes[dev].eof == 1)
-	return 0;
-      else /* EOM or blank check */
-	return (-EIO);
-    }
+    if ((scsi_tapes[dev].buffer->buffer_bytes == 0) &&
+	scsi_tapes[dev].eof == 2)  /* EOM or Blank Check */
+      return (-EIO);
 
     scsi_tapes[dev].rw = 1;
 
@@ -714,7 +720,8 @@ int st_read(struct inode * inode, struct file * filp, char * buf, int count)
 
     for (total = 0; total < count; ) {
 
-      if (scsi_tapes[dev].buffer->buffer_bytes == 0 && scsi_tapes[dev].eof == 0) {
+      if (scsi_tapes[dev].buffer->buffer_bytes == 0 &&
+	  scsi_tapes[dev].eof == 0) {
 
 	memset(cmd, 0, 10);
 	cmd[0] = READ_6;
@@ -734,6 +741,7 @@ int st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	if (SCpnt->request.dev == dev) sleep_on( &scsi_tapes[dev].waiting );
 
 	scsi_tapes[dev].buffer->read_pointer = 0;
+	scsi_tapes[dev].eof_hit = 0;
 
 	if (SCpnt->result != 0 || SCpnt->sense_buffer[0] != 0) {
 #ifdef DEBUG
@@ -796,8 +804,10 @@ int st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	  }
 	}
 	else
-	  scsi_tapes[dev].buffer->buffer_bytes = scsi_tapes[dev].buffer->buffer_size;
-      } /* if (SCpnt->result != 0 || SCpnt->sense_buffer[0] != 0) */
+	  scsi_tapes[dev].buffer->buffer_bytes =
+	    scsi_tapes[dev].buffer->buffer_size;
+      } /* if (scsi_tapes[dev].buffer->buffer_bytes == 0 &&
+	   scsi_tapes[dev].eof == 0) */
 
       if (scsi_tapes[dev].buffer->buffer_bytes > 0) {
 #ifdef DEBUG
@@ -818,10 +828,11 @@ int st_read(struct inode * inode, struct file * filp, char * buf, int count)
       else if (scsi_tapes[dev].eof) {
 	scsi_tapes[dev].eof_hit = 1;
 	SCpnt->request.dev = -1;  /* Mark as not busy */
-	if (total)
-	  return total;
-	else
+	if (total == 0 && scsi_tapes[dev].eof == 1)
+	  scsi_tapes[dev].eof = 0;
+	if (total == 0 && scsi_tapes[dev].eof == 2)
 	  return (-EIO);
+	return total;
       }
 
     } /* for (total = 0; total < count; ) */
@@ -956,7 +967,7 @@ static int st_int_ioctl(struct inode * inode,struct file * file,
        cmd[0] = SPACE;
        cmd[1] = 3;
 #ifdef DEBUG
-       printk("st%d: Spacing to end of tape media.\n", dev);
+       printk("st%d: Spacing to end of recorded medium.\n", dev);
 #endif
        break; 
      case MTERASE:
@@ -1050,6 +1061,8 @@ static int st_int_ioctl(struct inode * inode,struct file * file,
    if (!ioctl_result) {
      if (cmd_in == MTBSFM)
        ioctl_result = st_int_ioctl(inode, file, MTFSF, 1);
+     else if (cmd_in == MTFSFM)
+       ioctl_result = st_int_ioctl(inode, file, MTBSF, 1);
      else if (cmd_in == MTSETBLK) {
        scsi_tapes[dev].block_size = arg;
        scsi_tapes[dev].buffer->buffer_blocks =

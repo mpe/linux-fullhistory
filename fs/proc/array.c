@@ -3,18 +3,32 @@
  *
  *  Copyright (C) 1992  by Linus Torvalds
  *  based on ideas by Darren Senn
+ *
+ *  stat,statm extensions by Michael K. Johnson, johnsonm@stolaf.edu
  */
 
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/tty.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
 
 #define LOAD_INT(x) ((x) >> FSHIFT)
 #define LOAD_FRAC(x) LOAD_INT(((x) & (FIXED_1-1)) * 100)
+
+#define	KSTK_EIP(stack)	(((char *)stack)[1019])
+#define	KSTK_ESP(stack)	(((char *)stack)[1022])
+
+#define	_SSIZE(stack)	(TASK_SIZE - KSTK_ESP(stack))
+#define	SSIZE(stack)	(KSTK_ESP(stack) ? _SSIZE(stack) : 0)
+
+#define	VSIZE(task,stack) ((task)->brk + 1023 + SSIZE(stack))
+#define	SIZE(task,stack)  (((task)->brk - (task)->end_code + 1023 + \
+			  SSIZE(stack)) / 1024)
+
 
 static int get_loadavg(char * buffer)
 {
@@ -129,6 +143,8 @@ static int get_arg(int pid, char * buffer)
 static int get_stat(int pid, char * buffer)
 {
 	struct task_struct ** p = get_task(pid);
+	unsigned long sigignore=0, sigcatch=0, bit=1;
+	int i;
 	char state;
 
 	if (!p || !*p)
@@ -137,14 +153,101 @@ static int get_stat(int pid, char * buffer)
 		state = '.';
 	else
 		state = "RSDZTD"[(*p)->state];
-	return sprintf(buffer,"%d (%s) %c %d %d %d %d\n",
+	for(i=0; i<32; ++i) {
+		switch((int) (*p)->sigaction[i].sa_handler) {
+		case 1: sigignore |= bit; break;
+		case 0: break;
+		default: sigcatch |= bit;
+		} bit <<= 1;
+	}
+	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %u %u \
+%u %u %u %d %d %d %d %d %d %u %u %d %u %u %u %u %u %u %u %u %d \
+%d %d %d %u\n",
 		pid,
 		(*p)->comm,
 		state,
 		(*p)->p_pptr->pid,
 		(*p)->pgrp,
 		(*p)->session,
-		(*p)->tty);
+		(*p)->tty,
+		((*p)->tty == -1) ? -1 :
+		       tty_table[(*p)->tty]->pgrp,
+		(*p)->flags,
+		(*p)->min_flt,
+		(*p)->cmin_flt,
+		(*p)->maj_flt,
+		(*p)->cmaj_flt,
+		(*p)->utime,
+		(*p)->stime,
+		(*p)->cutime,
+		(*p)->cstime,
+		(*p)->counter,  /* this is the kernel priority ---
+				   subtract 30 in your user-level program. */
+		(*p)->priority, /* this is the nice value ---
+				   subtract 15 in your user-level program. */
+		(*p)->timeout,
+		(*p)->it_real_value,
+		(*p)->start_time,
+		VSIZE((*p),(*p)->kernel_stack_page),
+		(*p)->rss, /* you might want to shift this left 3 */
+		(*p)->rlim[RLIMIT_RSS].rlim_cur,
+		(*p)->start_code,
+		(*p)->end_code,
+		(*p)->start_stack,
+		KSTK_ESP((*p)->kernel_stack_page),
+		KSTK_EIP((*p)->kernel_stack_page),
+		(*p)->signal,
+		(*p)->blocked,
+		sigignore,
+		sigcatch,
+		(*p)->tss.eip);
+}
+
+static int get_statm(int pid, char * buffer)
+{
+	struct task_struct ** p = get_task(pid);
+	int i, tpag;
+	int size=0, resident=0, share=0, trs=0, lrs=0, drs=0, dt=0;
+	unsigned long ptbl, *buf, *pte, *pagedir, map_nr;
+
+	if (!p || !*p)
+		return 0;
+	tpag = (*p)->end_code / PAGE_SIZE;
+	if ((*p)->state != TASK_ZOMBIE) {
+	  pagedir = (void *)((*p)->tss.cr3 + ((*p)->start_code >> 20));
+	  for (i = 0; i < 0x300; ++i) {
+	    if ((ptbl = pagedir[i]) == 0) {
+	      tpag -= 1024;
+	      continue;
+	    }
+	    buf = (void *)(ptbl & 0xfffff000);
+	    for (pte = buf; pte < (buf + 1024); ++pte) {
+	      if (*pte != 0) {
+		++size;
+		if (*pte & 1) {
+		  ++resident;
+		  if (tpag > 0)
+		    ++trs;
+		  else
+		    ++drs;
+		  if (i >= 15 && i < 0x2f0) {
+		    ++lrs;
+		    if (*pte & 0x40)
+		      ++dt;
+		    else
+		      --drs;
+		  }
+		  map_nr = MAP_NR(*pte);
+		  if (map_nr < (high_memory / 4096) && mem_map[map_nr] > 1)
+		    ++share;
+		}
+	      }
+	      --tpag;
+	    }
+	  }
+	}
+	return sprintf(buffer,"%d %d %d %d %d %d %d\n",
+		       size, resident, share, trs, lrs, drs, dt);
 }
 
 static int array_read(struct inode * inode, struct file * file,char * buf, int count)
@@ -180,6 +283,9 @@ static int array_read(struct inode * inode, struct file * file,char * buf, int c
 			break;
 		case 11:
 			length = get_stat(pid, page);
+			break;
+		case 12:
+			length = get_statm(pid, page);
 			break;
 		default:
 			free_page((unsigned long) page);

@@ -285,6 +285,7 @@ extern int is_ignored(int sig);
 extern int tty_signal(int sig, struct tty_struct *tty);
 extern int kill_pg(int pgrp, int sig, int priv);
 extern int kill_sl(int sess, int sig, int priv);
+extern void tty_hangup(struct tty_struct * tty);
 extern void do_SAK(struct tty_struct *tty);
 
 /* tty write functions */

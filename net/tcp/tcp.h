@@ -84,23 +84,23 @@ enum {
 #define MAX_RESET_SIZE 40 + sizeof (struct sk_buff) + MAX_HEADER
 #define MAX_WINDOW  12000
 #define MIN_WINDOW   2048
-#define MAX_ACK_BACKLOG 8
+#define MAX_ACK_BACKLOG 2
 #define MIN_WRITE_SPACE 2048
 #define TCP_WINDOW_DIFF 2048
 
-#define TCP_RETR1       7       /* this is howmany retries it does
+#define TCP_RETR1      10       /* this is howmany retries it does
 				   before it tries to figure out
 				   if the gateway is down. */
 
-#define TCP_RETR2      10	/* this should take between 3 and
-				   ten minutes ( 1024 * rtt). */
+#define TCP_RETR2      25	/* this should take at least
+				   90 minutes to time out. */
 
 
 #define TCP_TIMEOUT_LEN 720000 /* should be about 2 hrs. */
 #define TCP_TIMEWAIT_LEN 6000 /* How long to wait to sucessfully 
 				 close the socket, about 60 seconds. */
 #define TCP_ACK_TIME 35 /* time to delay before sending an ack. */
-#define TCP_DONE_TIME 2500 /* maximum time to wait before actually destroying
+#define TCP_DONE_TIME 250 /* maximum time to wait before actually destroying
 			     a socket. */
 #define TCP_WRITE_TIME 100 /* initial time to wait for an ack,
 			      after last transmit. */

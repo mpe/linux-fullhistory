@@ -134,14 +134,14 @@ sys_uname, sys_umask, sys_chroot, sys_ustat, sys_dup2, sys_getppid,
 sys_getpgrp, sys_setsid, sys_sigaction, sys_sgetmask, sys_ssetmask,
 sys_setreuid,sys_setregid, sys_sigsuspend, sys_sigpending,
 sys_sethostname, sys_setrlimit, sys_getrlimit, sys_getrusage,
-sys_gettimeofday,  sys_settimeofday, sys_getgroups, sys_setgroups,
+sys_gettimeofday, sys_settimeofday, sys_getgroups, sys_setgroups,
 sys_select, sys_symlink, sys_lstat, sys_readlink, sys_uselib,
-sys_swapon, sys_reboot, sys_readdir, sys_mmap, sys_munmap,
-sys_truncate, sys_ftruncate, sys_fchmod, sys_fchown, sys_getpriority,
-sys_setpriority, sys_profil, sys_statfs, sys_fstatfs, sys_ioperm,
-sys_socketcall, sys_syslog, sys_setitimer, sys_getitimer, sys_newstat,
-sys_newlstat, sys_newfstat, sys_newuname, sys_iopl, sys_vhangup,
-sys_idle, sys_vm86, sys_wait4, sys_swapoff, sys_sysinfo };
+sys_swapon, sys_reboot, sys_readdir, sys_mmap, sys_munmap, sys_truncate,
+sys_ftruncate, sys_fchmod, sys_fchown, sys_getpriority, sys_setpriority,
+sys_profil, sys_statfs, sys_fstatfs, sys_ioperm, sys_socketcall,
+sys_syslog, sys_setitimer, sys_getitimer, sys_newstat, sys_newlstat,
+sys_newfstat, sys_newuname, sys_iopl, sys_vhangup, sys_idle, sys_vm86,
+sys_wait4, sys_swapoff, sys_sysinfo };
 
 /* So we don't have to do any more manual updating.... */
 int NR_syscalls = sizeof(sys_call_table)/sizeof(fn_ptr);

@@ -1,4 +1,11 @@
+#
+# Make "config" the default target if there is no configuration file
+#
+ifeq (.config,$(wildcard .config))
 include .config
+else
+CONFIGURATION = config
+endif
 
 #
 # ROOT_DEV specifies the default root-device when making the image.
@@ -69,6 +76,10 @@ SOUND_SUPPORT = -DKERNEL_SOUNDCARD -DDSP_BUFFSIZE=16384 -DSBC_IRQ=7 -DPAS_IRQ=5
 
 CFLAGS = -Wall -O6 -fomit-frame-pointer
 
+ifdef CONFIG_M486
+CFLAGS := $(CFLAGS) -m486
+endif
+
 #
 # if you want the ram-disk device, define this to be the
 # size in blocks.
@@ -112,20 +123,31 @@ lilo: Image
 	/etc/lilo/install
 
 config:
+ifdef CONFIGURATION
+	@echo
+	@echo "You have no .config: running Configure"
+	@echo
+endif
 	sh Configure < config.in
+ifdef CONFIGURATION
+	@echo
+	@echo "Configure successful. Try re-making (ignore the error that follows)"
+	@echo
+	exit 1
+endif
 
 linuxsubdirs: dummy
 	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE)) || exit; done
 
-Version:
+Version: dummy
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.99.pl1-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> tools/version.h
 
-Image: boot/bootsect boot/setup tools/system tools/build
+Image: $(CONFIGURATION) boot/bootsect boot/setup tools/system tools/build
 	cp tools/system system.tmp
 	strip system.tmp
 	tools/build boot/bootsect boot/setup system.tmp $(ROOT_DEV) > Image
@@ -162,8 +184,8 @@ boot/setup: boot/setup.s
 	$(AS86) -o boot/setup.o boot/setup.s
 	$(LD86) -s -o boot/setup boot/setup.o
 
-boot/setup.s:	boot/setup.S include/linux/config.h
-	$(CPP) -traditional boot/setup.S -o boot/setup.s
+boot/setup.s:	boot/setup.S include/linux/config.h Makefile
+	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) boot/setup.S -o boot/setup.s
 
 boot/bootsect.s: boot/bootsect.S include/linux/config.h Makefile
 	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) boot/bootsect.S -o boot/bootsect.s
@@ -195,7 +217,7 @@ depend dep:
 	for i in init/*.c;do echo -n "init/";$(CPP) -M $$i;done > .depend
 	for i in $(SUBDIRS); do (cd $$i && $(MAKE) dep) || exit; done
 
-dummy:
+dummy: $(CONFIGURATION)
 
 #
 # include a dependency file if one exists
@@ -203,3 +225,4 @@ dummy:
 ifeq (.depend,$(wildcard .depend))
 include .depend
 endif
+

@@ -232,8 +232,18 @@ net_timer (void)
 	     break;
 	     
 	    case TIME_WRITE: /* try to retransmit. */
+	     /* it could be we got here because we needed
+		to send an ack.  So we need to check for that. */
 	     if (sk->send_head != NULL)
 	       {
+		 if (before (jiffies, sk->send_head->when + 2*sk->rtt))
+		   {
+		     sk->time_wait.len = 2*sk->rtt;
+		     sk->timeout = TIME_WRITE;
+		     reset_timer ((struct timer *)&sk->time_wait);
+		     release_sock (sk);
+		     break;
+		   }
 		 PRINTK ("retransmitting.\n");
 		 sk->prot->retransmit (sk, 0);
 
@@ -268,27 +278,6 @@ net_timer (void)
 		  release_sock (sk);
 		  break;
 	       }
-
-	     /* if we have stuff which hasn't been written because the
-		window is too small, fall throught to TIME_KEEPOPEN */
-	     if (sk->wfront == NULL && sk->send_tmp == NULL)
-	       {
-		  release_sock (sk);
-		  break;
-	       }
-
-	     /* this basically assumes tcp here. */
-	     /* exponential fall back. */
-	     /* The rtt should quickly get back to normal once
-		we start sending packets again. */
-
-	     sk->rtt *= 2;
-	     sk->time_wait.len = sk->rtt;
-	     sk->timeout = TIME_WRITE;
-	     if (sk->prot->write_wakeup != NULL)
-	       sk->prot->write_wakeup(sk);
-
-	     reset_timer ((struct timer *)&sk->time_wait);
 	     release_sock (sk);
 	     break;
 
@@ -298,6 +287,12 @@ net_timer (void)
 	     if (sk->prot->write_wakeup != NULL)
 	       sk->prot->write_wakeup(sk);
 	     sk->retransmits ++;
+	     if (sk->shutdown == SHUTDOWN_MASK)
+	       {
+		 sk->prot->close (sk,1);
+		 sk->state = TCP_CLOSE;
+	       }
+
 	     if (sk->retransmits > TCP_RETR1)
 	       {
 		 PRINTK ("timer.c TIME_KEEPOPEN time-out 1\n");

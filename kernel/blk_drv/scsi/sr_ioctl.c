@@ -97,6 +97,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned long cmd, unsign
 	int result, target;
 
 	target = MINOR(dev);
+	if (target >= NR_SR) return -ENODEV;
 
 	switch (cmd) 
 		{

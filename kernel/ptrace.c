@@ -229,6 +229,8 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		current->flags |= PF_PTRACED;
 		return 0;
 	}
+	if (pid == 1)		/* you may not mess with init */
+		return -EPERM;
 	if (!(child = get_task(pid)))
 		return -ESRCH;
 	if (request == PTRACE_ATTACH) {
