@@ -135,7 +135,7 @@ endif
 #
 
 menu "Ethernet (10 or 100Mbit)"
-	depends on NETDEVICES
+	depends on NETDEVICES && !UML
 
 config NET_ETHERNET
 	bool "Ethernet (10 or 100Mbit)"
@@ -1767,7 +1767,7 @@ endmenu
 #
 
 menu "Ethernet (1000 Mbit)"
-	depends on NETDEVICES
+	depends on NETDEVICES && !UML
 
 config ACENIC
 	tristate "Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support"
@@ -2077,7 +2077,7 @@ endmenu
 #
 
 menu "Ethernet (10000 Mbit)"
-	depends on NETDEVICES
+	depends on NETDEVICES && !UML
 
 config IXGB
 	tristate "Intel(R) PRO/10GbE support"
@@ -2156,11 +2156,13 @@ config 2BUFF_MODE
 
 endmenu
 
+if !UML
 source "drivers/net/tokenring/Kconfig"
 
 source "drivers/net/wireless/Kconfig"
 
 source "drivers/net/pcmcia/Kconfig"
+endif
 
 source "drivers/net/wan/Kconfig"
 
