@@ -199,17 +199,17 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
 	switch (size) {
 		case 1:
 			__asm__("xchgb %b0,%1"
-				:"=q" (x), "=m" (*__xg(ptr))
+				:"=&q" (x), "=m" (*__xg(ptr))
 				:"0" (x), "m" (*__xg(ptr)));
 			break;
 		case 2:
 			__asm__("xchgw %w0,%1"
-				:"=r" (x), "=m" (*__xg(ptr))
+				:"=&r" (x), "=m" (*__xg(ptr))
 				:"0" (x), "m" (*__xg(ptr)));
 			break;
 		case 4:
 			__asm__("xchgl %0,%1"
-				:"=r" (x), "=m" (*__xg(ptr))
+				:"=&r" (x), "=m" (*__xg(ptr))
 				:"0" (x), "m" (*__xg(ptr)));
 			break;
 	}

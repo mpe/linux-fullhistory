@@ -23,9 +23,13 @@ M_OBJS   :=
 L_OBJS   := tty_io.o n_tty.o console.o keyboard.o \
 	tty_ioctl.o pty.o vt.o mem.o vc_screen.o random.o \
 	defkeymap.o consolemap.o selection.o
-
+ 
 ifeq ($(CONFIG_SERIAL),y)
 L_OBJS += serial.o
+endif
+
+ifeq ($(CONFIG_DIGI),y)
+L_OBJS += pcxx.o
 endif
 
 ifeq ($(CONFIG_CYCLADES),y)

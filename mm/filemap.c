@@ -579,9 +579,9 @@ int filemap_swapout(struct vm_area_struct * vma,
 	unsigned long page = pte_page(*page_table);
 	unsigned long entry = SWP_ENTRY(SHM_SWP_TYPE, MAP_NR(page));
 
+	flush_cache_page(vma, (offset + vma->vm_start - vma->vm_offset));
 	set_pte(page_table, __pte(entry));
-	/* Yuck, perhaps a slightly modified swapout parameter set? */
-	invalidate_page(vma, (offset + vma->vm_start - vma->vm_offset));
+	flush_tlb_page(vma, (offset + vma->vm_start - vma->vm_offset));
 	error = filemap_write_page(vma, offset, page);
 	if (pte_val(*page_table) == entry)
 		pte_clear(page_table);
@@ -618,15 +618,17 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 			return 0;
 		if (!pte_dirty(pte))
 			return 0;
+		flush_cache_page(vma, address);
 		set_pte(ptep, pte_mkclean(pte));
-		invalidate_page(vma, address);
+		flush_tlb_page(vma, address);
 		page = pte_page(pte);
 		mem_map[MAP_NR(page)].count++;
 	} else {
 		if (pte_none(pte))
 			return 0;
+		flush_cache_page(vma, address);
 		pte_clear(ptep);
-		invalidate_page(vma, address);
+		flush_tlb_page(vma, address);
 		if (!pte_present(pte)) {
 			swap_free(pte_val(pte));
 			return 0;
@@ -710,12 +712,13 @@ static int filemap_sync(struct vm_area_struct * vma, unsigned long address,
 	int error = 0;
 
 	dir = pgd_offset(current->mm, address);
+	flush_cache_range(vma->vm_mm, end - size, end);
 	while (address < end) {
 		error |= filemap_sync_pmd_range(dir, address, end - address, vma, flags);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate_range(vma->vm_mm, end - size, end);
+	flush_tlb_range(vma->vm_mm, end - size, end);
 	return error;
 }
 

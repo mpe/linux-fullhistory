@@ -8,5 +8,6 @@ NetBIOS over TCP/IP. There you also find explanation for conceps like
 netbios name or share.
 
 To use smbfs, you need a special mount program, which can be found in
-the ksmbfs package, found on sunsite.unc.edu:/pub/Linux/ALPHA/smbfs.
+the ksmbfs package, found on
+sunsite.unc.edu:/pub/Linux/system/Filesystems/smbfs.
 

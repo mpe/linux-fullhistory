@@ -55,6 +55,8 @@
 #define HD_TIMER2	24
 #define GSCD_TIMER	25
 
+#define DIGI_TIMER	29
+
 struct timer_struct {
 	unsigned long expires;
 	void (*fn)(void);

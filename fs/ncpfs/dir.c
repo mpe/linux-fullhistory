@@ -125,10 +125,10 @@ struct inode_operations ncp_dir_inode_operations = {
 
 /* Here we encapsulate the inode number handling that depends upon the
  * mount mode: When we mount a complete server, the memory address of
- * the npc_inode_info is used as an inode. When only a single volume
- * is mounted, then the DosDirNum is used as the inode number. As this
- * is unique for the complete volume, this should enable the NFS
- * exportability of a ncpfs-mounted volume.
+ * the ncp_inode_info is used as the inode number. When only a single
+ * volume is mounted, then the DosDirNum is used as the inode
+ * number. As this is unique for the complete volume, this should
+ * enable the NFS exportability of a ncpfs-mounted volume.
  */
 
 static inline int
@@ -182,10 +182,6 @@ ncp_dir_read(struct inode *inode, struct file *filp, char *buf, int count)
 {
 	return -EISDIR;
 }
-
-/* In ncpfs, we have unique inodes across all mounted filesystems, for
-   all inodes that are in memory. That's why it's enough to index the
-   directory cache by the inode number. */
 
 static kdev_t             c_dev = 0;
 static unsigned long      c_ino = 0;
@@ -320,11 +316,6 @@ ncp_readdir(struct inode *inode, struct file *filp,
 
         while (index < c_size)
 	{
-                /* We found it.  For getwd(), we have to return the
-                   correct inode in d_ino if the inode is currently in
-                   use. Otherwise the inode number does not
-                   matter. (You can argue a lot about this..) */
-
 		ino_t ino;
 
 		if (ncp_single_volume(server))
@@ -333,6 +324,10 @@ ncp_readdir(struct inode *inode, struct file *filp,
 		}
 		else
 		{
+			/* For getwd() we have to return the correct
+			 * inode in d_ino if the inode is currently in
+			 * use. Otherwise the inode number does not
+			 * matter. (You can argue a lot about this..) */
 			struct ncp_inode_info *ino_info;
 			ino_info = ncp_find_dir_inode(inode,
 						      entry->i.entryName);

@@ -1,36 +1,37 @@
 /*
  * Linux ethernet device driver for the 3Com Etherlink Plus (3C505)
- * 	By Craig Southeren and Juha Laiho
+ *      By Craig Southeren and Juha Laiho
  *
- * 3c505.c	This module implements an interface to the 3Com
- *		Etherlink Plus (3c505) ethernet card. Linux device 
- *		driver interface reverse engineered from the Linux 3C509
- *		device drivers. Some 3C505 information gleaned from
- *		the Crynwr packet driver. Still this driver would not
- *		be here without 3C505 technical reference provided by
- *		3Com.
+ * 3c505.c      This module implements an interface to the 3Com
+ *              Etherlink Plus (3c505) ethernet card. Linux device 
+ *              driver interface reverse engineered from the Linux 3C509
+ *              device drivers. Some 3C505 information gleaned from
+ *              the Crynwr packet driver. Still this driver would not
+ *              be here without 3C505 technical reference provided by
+ *              3Com.
  *
- * Version:	@(#)3c505.c	0.8.4	17-Dec-95
+ * $Id: 3c505.c,v 0.9.1.1 1996/04/02 13:58:06 root Exp $
  *
- * Authors:	Linux 3c505 device driver by
- *			Craig Southeren, <craigs@ineluki.apana.org.au>
+ * Authors:     Linux 3c505 device driver by
+ *                      Craig Southeren, <craigs@ineluki.apana.org.au>
  *              Final debugging by
- *			Andrew Tridgell, <tridge@nimbus.anu.edu.au>
- *		Auto irq/address, tuning, cleanup and v1.1.4+ kernel mods by
- *			Juha Laiho, <jlaiho@ichaos.nullnet.fi>
+ *                      Andrew Tridgell, <tridge@nimbus.anu.edu.au>
+ *              Auto irq/address, tuning, cleanup and v1.1.4+ kernel mods by
+ *                      Juha Laiho, <jlaiho@ichaos.nullnet.fi>
  *              Linux 3C509 driver by
- *             		Donald Becker, <becker@super.org>
- *		Crynwr packet driver by
- *			Krishnan Gopalan and Gregg Stefancik,
- * 			   Clemson University Engineering Computer Operations.
- *			Portions of the code have been adapted from the 3c505
- *			   driver for NCSA Telnet by Bruce Orchard and later
- *			   modified by Warren Van Houten and krus@diku.dk.
+ *                      Donald Becker, <becker@super.org>
+ *              Crynwr packet driver by
+ *                      Krishnan Gopalan and Gregg Stefancik,
+ *                      Clemson University Engineering Computer Operations.
+ *                      Portions of the code have been adapted from the 3c505
+ *                         driver for NCSA Telnet by Bruce Orchard and later
+ *                         modified by Warren Van Houten and krus@diku.dk.
  *              3C505 technical information provided by
  *                      Terry Murphy, of 3Com Network Adapter Division
- *		Linux 1.3.0 changes by
- *			Alan Cox <Alan.Cox@linux.org>
- *                     
+ *              Linux 1.3.0 changes by
+ *                      Alan Cox <Alan.Cox@linux.org>
+ *              More debugging by Philip Blundell <pjb27@cam.ac.uk>
+ *
  */
 
 #include <linux/module.h>
@@ -60,10 +61,6 @@
  *********************************************************/
 
 static const char * filename = __FILE__;
-
-static const char * null_msg = "*** NULL at %s:%s (line %d) ***\n";
-#define CHECK_NULL(p) \
-	if (!p) printk(null_msg, filename,__FUNCTION__,__LINE__)
 
 static const char * timeout_msg = "*** timeout at %s:%s (line %d) ***\n";
 #define TIMEOUT_MSG(lineno) \
@@ -102,8 +99,6 @@ static int elp_debug = 0;
  *  2 = messages when low level commands performed
  *  3 = messages when interrupts received
  */
-
-#define	ELP_VERSION	"0.8.4"
 
 /*****************************************************************
  *
@@ -230,34 +225,6 @@ set_hsf (unsigned int base_addr, int hsf)
 	sti(); 
 }
 
-#define WAIT_HCRE(addr,toval) wait_hcre((addr),(toval),__LINE__)
-static inline int
-wait_hcre (unsigned int base_addr, int toval, int lineno)
-{
-	int timeout = jiffies + toval;
-	while (((inb_status(base_addr)&HCRE)==0) && (jiffies <= timeout))
-		;
-	if (jiffies >= timeout) {
-		TIMEOUT_MSG(lineno);
-		return FALSE;
-	}
-	return TRUE;
-}
-
-static inline int
-wait_fast_hcre (unsigned int base_addr, int toval, int lineno)
-{
-	int timeout = 0;
-	while (((inb_status(base_addr)&HCRE)==0) && (timeout++ < toval))
-		;
-	if (timeout >= toval) {
-		sti();
-		TIMEOUT_MSG(lineno);
-		return FALSE;
-	}
-	return TRUE;
-}
-
 static int start_receive (struct device *, pcb_struct *);
 static void adapter_hard_reset (struct device *);
 
@@ -303,6 +270,46 @@ adapter_reset (struct device * dev)
 		printk("%s: start receive command failed \n", dev->name);
 }
 
+/* These should be moved to the private data area */
+static int send_pcb_semaphore = 0;
+static int rx_restart_needed = 0;
+
+/* Primitive functions used by send_pcb() */
+static inline int send_pcb_slow(unsigned int base_addr, unsigned char byte)
+{
+	int timeout;
+	outb_command(byte, base_addr);
+	for (timeout = jiffies + 5; jiffies < timeout; ) {
+		if (inb_status(base_addr) & HCRE) return FALSE;
+	}
+	printk("3c505: send_pcb_slow timed out\n");
+	return TRUE;
+}
+
+static inline int send_pcb_fast(unsigned int base_addr, unsigned char byte)
+{
+	int timeout;
+	outb_command(byte, base_addr);
+	for (timeout = 0; timeout < 40000; timeout++) {
+		if (inb_status(base_addr) & HCRE) return FALSE;
+	}
+	printk("3c505: send_pcb_fast timed out\n");
+	return TRUE;
+}
+
+static int
+start_receive (struct device * dev, pcb_struct * tx_pcb);
+
+/* Check to see if the receiver needs restarting, and kick it if so */
+static inline void prime_rx(struct device *dev)
+{
+	if (rx_restart_needed) {
+		elp_device *adapter = dev->priv;
+		rx_restart_needed = 0;
+		start_receive(dev, &adapter->itx_pcb);
+	}
+}
+
 /*****************************************************************
  *
  * send_pcb
@@ -318,70 +325,78 @@ adapter_reset (struct device * dev)
  *
  *****************************************************************/
 
+/* This can be quite slow -- the adapter is allowed to take up to 40ms
+ * to respond to the initial interrupt.
+ *
+ * We run initially with interrupts turned on, but with a semaphore set
+ * so that nobody tries to re-enter this code.  Once the first byte has
+ * gone through, we turn interrupts off and then send the others (the
+ * timeout is reduced to 500us).
+ */
+
 static int
 send_pcb (struct device * dev, pcb_struct * pcb)
 {
 	int i;
 	int timeout;
-	int cont;
+
+        /* Avoid contention */
+	if (set_bit(1, &send_pcb_semaphore)) {
+		if (elp_debug >= 3) {
+			printk("%s: send_pcb entered while threaded\n", dev->name);
+		}
+		return FALSE;
+	}
 
 	/*
 	 * load each byte into the command register and
 	 * wait for the HCRE bit to indicate the adapter
 	 * had read the byte
 	 */
-	set_hsf(dev->base_addr,0); 
-	if ((cont = WAIT_HCRE(dev->base_addr,5))) {
-		cli();
-		if (pcb->command==CMD_TRANSMIT_PACKET)
-			outb_control(inb_control(dev->base_addr)&~DIR,dev->base_addr);
-		outb_command(pcb->command, dev->base_addr);
-		sti();
-		cont = WAIT_HCRE(dev->base_addr,5);
-	}
+	set_hsf(dev->base_addr,0);
 
-	if (cont) {
-		outb_command(pcb->length, dev->base_addr);
-		cont = WAIT_HCRE(dev->base_addr,5);
-	}
+	if (send_pcb_slow(dev->base_addr, pcb->command)) goto abort;
 
 	cli();
-	for (i = 0; cont && (i < pcb->length); i++) {
-		outb_command(pcb->data.raw[i], dev->base_addr);
-		cont = wait_fast_hcre(dev->base_addr,20000,__LINE__);
-	} /* if wait_fast_hcre() failed, has already done sti() */
 
-	/* set the host status bits to indicate end of PCB */
-	/* send the total packet length as well */
-	/* wait for the adapter to indicate that it has read the PCB */
-	if (cont) {
-		set_hsf(dev->base_addr,HSF_PCB_END);
-		outb_command(2+pcb->length, dev->base_addr);
-		sti();
-		timeout = jiffies + 7;
-		while (jiffies < timeout) {
-			i = GET_ASF(dev->base_addr);
-			if ((i == ASF_PCB_ACK) || (i == ASF_PCB_NAK))
-				break;
-		}
+	if (send_pcb_fast(dev->base_addr, pcb->length)) goto sti_abort;
 
-		if (i == ASF_PCB_ACK) {
-			reset_count=0;
-			return TRUE;
-		}
-		else if (i == ASF_PCB_NAK) {
-			printk("%s: PCB send was NAKed\n", dev->name);
-		} else {
-			printk("%s: timeout after sending PCB\n", dev->name);
-		}
-	} else {
-		sti();
-		printk("%s: timeout in middle of sending PCB\n", dev->name);
+	for (i = 0; i < pcb->length; i++) {
+		if (send_pcb_fast(dev->base_addr, pcb->data.raw[i])) goto sti_abort;
 	}
 
-	adapter_reset(dev);
+	outb_control(inb_control(dev->base_addr) | 3, dev->base_addr);  /* signal end of PCB */
+	outb_command(2+pcb->length, dev->base_addr);
+
+	/* now wait for the acknowledgement */
+	sti();
+
+	for (timeout = jiffies+5; jiffies < timeout; ) {
+		switch (GET_ASF(dev->base_addr)) {
+		case ASF_PCB_ACK:
+			send_pcb_semaphore = 0;
+			if (pcb->command != CMD_TRANSMIT_PACKET) {
+				prime_rx(dev);
+			}
+			return TRUE;
+			break;
+		case ASF_PCB_NAK:
+			printk(KERN_INFO "%s: send_pcb got NAK\n", dev->name);
+			goto abort;
+			break;
+		}
+	}
+
+	printk("%s: timeout waiting for PCB acknowledge (status %02x)\n", dev->name, inb_status(dev->base_addr));
+
+sti_abort:
+	sti();
+abort:
+	send_pcb_semaphore = 0;
+	prime_rx(dev);
 	return FALSE;
 }
+
 
 /*****************************************************************
  *
@@ -404,9 +419,6 @@ receive_pcb (struct device * dev, pcb_struct * pcb)
 	int stat;
 	int timeout;
 
-	CHECK_NULL(pcb);
-	CHECK_NULL(dev);
-
 	set_hsf(dev->base_addr,0);
 
 	/* get the command code */
@@ -426,6 +438,7 @@ receive_pcb (struct device * dev, pcb_struct * pcb)
 		;
 	if (jiffies >= timeout) {
 		TIMEOUT_MSG(__LINE__);
+		printk("%s: status %02x\n", dev->name, stat);
 		return FALSE;
 	}
 	pcb->length = inb_command(dev->base_addr);
@@ -475,8 +488,6 @@ adapter_hard_reset (struct device * dev)
 	int timeout;
 	long flags;
 
-	CHECK_NULL(dev);
-
 	save_flags(flags);
 	sti();
 
@@ -524,9 +535,6 @@ adapter_hard_reset (struct device * dev)
 static int
 start_receive (struct device * dev, pcb_struct * tx_pcb)
 {
-	CHECK_NULL(dev);
-	CHECK_NULL(tx_pcb);
-
 	if (elp_debug >= 3)
 		printk("%s: restarting receiver\n", dev->name);
 	tx_pcb->command = CMD_RECEIVE_PACKET;
@@ -557,7 +565,6 @@ receive_packet (struct device * dev, int len)
 	struct sk_buff *skb;
 	elp_device * adapter;
 
-	CHECK_NULL(dev);
 	adapter=dev->priv;
 
 	if (len <= 0 || ((len & ~1) != len))
@@ -581,6 +588,7 @@ receive_packet (struct device * dev, int len)
 	 * if buffer could not be allocated, swallow it
 	 */
 	if (skb == NULL) {
+		printk(KERN_INFO "%s: memory squeeze, dropping packet\n", dev->name);
 		for (i = 0; i < (rlen/2); i++) {
 			timeout = 0;
 			while ((inb_status(dev->base_addr)&HRDY) == 0 && timeout++ < 20000)
@@ -657,8 +665,6 @@ elp_interrupt (int irq, void *dev_id, struct pt_regs *reg_ptr)
 
 	adapter = (elp_device *) dev->priv;
 
-	CHECK_NULL(adapter);
-
 	if (dev->interrupt)
 		if (elp_debug >= 2)
 			printk("%s: Re-entering the interrupt handler.\n", dev->name);
@@ -687,9 +693,6 @@ elp_interrupt (int irq, void *dev_id, struct pt_regs *reg_ptr)
 					if (dev->start == 0)
 						break;
 					cli();
-					/* Set direction of adapter FIFO */
-					outb_control(inb_control(dev->base_addr)|DIR,
-					             dev->base_addr);
 					len = adapter->irx_pcb.data.rcv_resp.pkt_len;
 					dlen = adapter->irx_pcb.data.rcv_resp.buf_len;
 					if (adapter->irx_pcb.data.rcv_resp.timeout != 0) {
@@ -706,9 +709,11 @@ elp_interrupt (int irq, void *dev_id, struct pt_regs *reg_ptr)
 						if (elp_debug >= 3)
 							printk("%s: packet received\n", dev->name);
 					}
-					if (dev->start && !start_receive(dev, &adapter->itx_pcb)) 
+					if (dev->start && !start_receive(dev, &adapter->itx_pcb)) {
 						if (elp_debug >= 2)
-							printk("%s: interrupt - failed to send receive start PCB\n", dev->name);
+							printk("%s: interrupt - receiver start deferred\n", dev->name);
+						rx_restart_needed = 1;
+					}
 					if (elp_debug >= 3)
 					printk("%s: receive procedure complete\n", dev->name);
 
@@ -814,8 +819,6 @@ static int
 elp_open (struct device *dev)
 {
 	elp_device * adapter;
-
-	CHECK_NULL(dev);
 
 	adapter = dev->priv;
 
@@ -923,6 +926,12 @@ elp_open (struct device *dev)
 	 */
 	if (!start_receive(dev, &adapter->tx_pcb))
 		printk("%s: start receive command failed \n", dev->name);
+	if (!start_receive(dev, &adapter->tx_pcb))
+		printk("%s: start receive command failed \n", dev->name);
+	if (!start_receive(dev, &adapter->tx_pcb))
+		printk("%s: start receive command failed \n", dev->name);
+	if (!start_receive(dev, &adapter->tx_pcb))
+		printk("%s: start receive command failed \n", dev->name);
 	if (elp_debug >= 3)
 		printk("%s: start receive command sent\n", dev->name);
 
@@ -949,9 +958,6 @@ send_packet (struct device * dev, unsigned char * ptr, int len)
 	 * make sure the length is even and no shorter than 60 bytes
 	 */
 	unsigned int nlen = (((len < 60) ? 60 : len) + 1) & (~1);
-
-	CHECK_NULL(dev);
-	CHECK_NULL(ptr);
 
 	adapter = dev->priv;
 
@@ -991,6 +997,8 @@ send_packet (struct device * dev, unsigned char * ptr, int len)
 	}
 	sti();
 
+	prime_rx(dev);
+
 	return TRUE;
 }
 
@@ -1004,19 +1012,28 @@ send_packet (struct device * dev, unsigned char * ptr, int len)
 static int
 elp_start_xmit (struct sk_buff *skb, struct device *dev)
 {
-	CHECK_NULL(dev);
-
 	/*
-	 * not sure what this does, but the 3c509 driver does it, so...
+	 * if the transmitter is still busy, we have a transmit timeout...
 	 */
+	if (dev->tbusy) {
+		int tickssofar = jiffies - dev->trans_start;
+		int stat;
+		if (tickssofar < 40)
+			return 1;
+		stat = inb_status(dev->base_addr);
+		printk("%s: transmit timed out, %s?\n", dev->name, (stat & ACRF)?"IRQ conflict":"network cable problem");
+		if (elp_debug >= 1)
+		  printk("%s: status %#02x\n", dev->name, stat);
+		dev->trans_start = jiffies;
+		dev->tbusy = 0;
+	}
+
+	/* Some upper layer thinks we've missed a tx-done interrupt */
 	if (skb == NULL) {
 		dev_tint(dev);
 		return 0;
 	}
 
-	/*
-	 * if we ended up with a munged length, don't send it
-	 */
 	if (skb->len <= 0)
 		return 0;
 
@@ -1024,26 +1041,10 @@ elp_start_xmit (struct sk_buff *skb, struct device *dev)
 		printk("%s: request to send packet of length %d\n", dev->name, (int)skb->len);
 
 	/*
-	 * if the transmitter is still busy, we have a transmit timeout...
-	 */
-	if (dev->tbusy) {
-		int tickssofar = jiffies - dev->trans_start;
-		int stat;
-		if (tickssofar < 50) /* was 500, AJT */
-			return 1;
-		printk("%s: transmit timed out, not resetting adapter\n", dev->name);
-		if (((stat=inb_status(dev->base_addr))&ACRF) != 0) 
-			printk("%s: hmmm...seemed to have missed an interrupt!\n", dev->name);
-		printk("%s: status %#02x\n", dev->name, stat);
-		dev->trans_start = jiffies;
-		dev->tbusy = 0;
-	}
-
-	/*
 	 * send the packet at skb->data for skb->len
 	 */
 	if (!send_packet(dev, skb->data, skb->len)) {
-		printk("%s: send packet PCB failed\n", dev->name);
+		printk("%s: failed to transmit packet\n", dev->name);
 		return 1;
 	}
 
@@ -1119,9 +1120,7 @@ elp_close (struct device *dev)
 {
 	elp_device * adapter;
 
-	CHECK_NULL(dev);
 	adapter = dev->priv;
-	CHECK_NULL(adapter);
 
 	if (elp_debug >= 3)
 		printk("%s: request to close device\n", dev->name);
@@ -1242,8 +1241,6 @@ elp_init (struct device *dev)
 {
 	elp_device * adapter;
 
-	CHECK_NULL(dev);
-
 	/*
 	 * set ptrs to various functions
 	 */
@@ -1260,7 +1257,6 @@ elp_init (struct device *dev)
 	 * setup ptr to adapter specific information
 	 */
 	adapter = (elp_device *)(dev->priv = kmalloc(sizeof(elp_device), GFP_KERNEL));
-	CHECK_NULL(adapter);
 	if (adapter == NULL)
 		return;
 	memset(&(adapter->stats), 0, sizeof(struct enet_statistics));
@@ -1392,8 +1388,6 @@ elplus_probe (struct device *dev)
 	elp_device adapter;
 	int i;
 
-	CHECK_NULL(dev);
-
 	/*
 	 *  setup adapter structure
 	 */
@@ -1420,6 +1414,7 @@ elplus_probe (struct device *dev)
 	    (adapter.rx_pcb.command != CMD_ADDRESS_RESPONSE) ||
 	    (adapter.rx_pcb.length != 6)) {
 		printk("%s: not responding to first PCB\n", dev->name);
+		autoirq_report(0);
 		return -ENODEV;
 	}
 

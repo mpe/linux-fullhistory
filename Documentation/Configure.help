@@ -937,13 +937,14 @@ CONFIG_IPX
   turn your Linux box into a fully featured Netware file server and
   IPX router, say Y here and fetch either lwared from
   sunsite.unc.edu:/pub/Linux/system/Network/daemons/ or mars_nwe from
-  linux01.gwdg.de:/pub/ncpfs. For more information, read the IPX-HOWTO
-  in sunsite.unc.edu:/pub/Linux/docs/howto. The IPX driver would
-  enlarge your kernel by about 5 kB. This driver is also available as
-  a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want). If you want to compile it as a
-  module, say M here and read Documentation/modules.txt. Unless you
-  want to integrate your Linux box with a local Novell network, say N.
+  ftp.gwdg.de:/pub/linux/misc/ncpfs. For more information, read the
+  IPX-HOWTO in sunsite.unc.edu:/pub/Linux/docs/howto. The IPX driver
+  would enlarge your kernel by about 5 kB. This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
+  Unless you want to integrate your Linux box with a local Novell
+  network, say N.
 
 Full internal IPX network
 CONFIG_IPX_INTERN
@@ -958,7 +959,7 @@ CONFIG_IPX_INTERN
   packets targeted at 'special' sockets to sockets listening on the
   primary network is disabled. This might break existing applications,
   especially RIP/SAP daemons. A RIP/SAP daemon that works well with the
-  full internal net can be found on linux01.gwdg.de:/pub/ncpfs.
+  full internal net can be found on ftp.gwdg.de:/pub/linux/misc/ncpfs.
   If you don't know what you are doing, say N.
 
 Appletalk DDP

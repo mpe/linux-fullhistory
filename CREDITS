@@ -867,9 +867,8 @@ S: 55127 Mainz
 S: Germany
 
 N: David C. Niemi
-E: niemidc@clark.net
-D: FSSTND, The XFree86 Project
-D: DMA memory support, floppy driver
+E: niemi@erols.com
+D: Mtools/VFAT/floppy work, benchmarking, random kernel dilettante
 S: 2364 Old Trail Drive
 S: Reston, Virginia 22091
 S: USA

@@ -412,10 +412,8 @@ rpc_recv(struct rpc_sock *rsock, struct rpc_wait *slot)
 		while (rsock->pending != slot) {
 			if (!slot->w_gotit)
 				interruptible_sleep_on(&slot->w_wait);
-			if (slot->w_gotit) {
-				result = slot->w_result; /* quite important */
-				return result;
-			}
+			if (slot->w_gotit)
+				return slot->w_result; /* quite important */
 			if (current->signal & ~current->blocked)
 				return -ERESTARTSYS;
 			if (rsock->shutdown)
@@ -427,15 +425,15 @@ rpc_recv(struct rpc_sock *rsock, struct rpc_wait *slot)
 		/* Wait for data to arrive */
 		if ((result = rpc_select(rsock)) < 0) {
 			dprintk("RPC: select error = %d\n", result);
-			break;
+			return result;
 		}
 
 		/* Receive and dispatch */
 		if ((result = rpc_grok(rsock)) < 0)
-			break;
+			return result;
 	} while (current->timeout && !slot->w_gotit);
 
-	return slot->w_gotit? result : -ETIMEDOUT;
+	return slot->w_gotit? slot->w_result : -ETIMEDOUT;
 }
 
 /*

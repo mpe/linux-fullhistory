@@ -16,17 +16,21 @@ ELP_NEED_HARD_RESET
  to 1 may help. As of 3c505.c v0.8 the driver should be able to find
  out whether of not this is needed, but I'm not completely sure.
 ELP_DEBUG
- The driver debug level. 1 is ok for most everything, 0 will provide
- less verbose bootup messages, and 2 and 3 are usually too verbose
- for anything.
+ The driver debug level.  It's probably best to leave it at 0 most of the time.
+ If you are having trouble, setting it to 1 may give you more information.
+ Any higher setting is too verbose for most purposes.
 
 Known problems:
- During startup the driver shows the following two messages:
- *** timeout at 3c505.c:elp_set_mc_list (line 1158) ***
- *** timeout at 3c505.c:elp_set_mc_list (line 1183) ***
- These are because upper parts of the networking code attempt
- to load multicast address lists to the adapter before the
- adapter is properly up and running.
+ The 3c505 is a slow card, mostly because of the way it talks to the host.
+ Don't expect any great performance from it.
+
+ I am seeing periodic "transmit timed out" and "timeout waiting for PCB
+ acknowledge" messages under high load.  I'm not sure what's causing these -
+ it seems that the 3c505 occasionally just loses a command.  They seem not to
+ be fatal, anyway.
+
+ There may be some initialisation problems still lurking, particularly when
+ warm-booting from DOS (ELP_NEED_HARD_RESET seems not to help).
 
 Authors:
  The driver is mainly written by Craig Southeren, email
@@ -34,3 +38,4 @@ Authors:
  Parts of the driver (adapting the driver to 1.1.4+ kernels,
  IRQ/address detection, some changes) and this README by
  Juha Laiho <jlaiho@ichaos.nullnet.fi>.
+ Philip Blundell <pjb27@cam.ac.uk> made some more changes.

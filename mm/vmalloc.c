@@ -100,12 +100,13 @@ static void free_area_pages(unsigned long address, unsigned long size)
 	unsigned long end = address + size;
 
 	dir = pgd_offset(&init_mm, address);
+	flush_cache_all();
 	while (address < end) {
 		free_area_pmd(dir, address, end - address);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate_all();
+	flush_tlb_all();
 }
 
 static inline int alloc_area_pte(pte_t * pte, unsigned long address, unsigned long size)
@@ -156,6 +157,7 @@ static int alloc_area_pages(unsigned long address, unsigned long size)
 	unsigned long end = address + size;
 
 	dir = pgd_offset(&init_mm, address);
+	flush_cache_all();
 	while (address < end) {
 		pmd_t *pmd = pmd_alloc_kernel(dir, address);
 		if (!pmd)
@@ -166,7 +168,7 @@ static int alloc_area_pages(unsigned long address, unsigned long size)
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate_all();
+	flush_tlb_all();
 	return 0;
 }
 
@@ -217,6 +219,7 @@ static int remap_area_pages(unsigned long address, unsigned long offset, unsigne
 
 	offset -= address;
 	dir = pgd_offset(&init_mm, address);
+	flush_cache_all();
 	while (address < end) {
 		pmd_t *pmd = pmd_alloc_kernel(dir, address);
 		if (!pmd)
@@ -227,7 +230,7 @@ static int remap_area_pages(unsigned long address, unsigned long offset, unsigne
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate_all();
+	flush_tlb_all();
 	return 0;
 }
 

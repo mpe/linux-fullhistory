@@ -346,7 +346,7 @@ int smp_scan_config(unsigned long base, unsigned long length)
 			 
 					cfg=pg0[0];
 					pg0[0] = (apic_addr | 7);
-					local_invalidate();
+					local_flush_tlb();
 
 					boot_cpu_id = GET_APIC_ID(*((volatile unsigned long *) APIC_ID));
 
@@ -355,7 +355,7 @@ int smp_scan_config(unsigned long base, unsigned long length)
 					 */
 
 					pg0[0]= cfg;
-					local_invalidate();
+					local_flush_tlb();
 
 /*
  *
@@ -563,11 +563,11 @@ void smp_callin(void)
 	load_ldt(0);
 /*	printk("Testing faulting...\n");
 	*(long *)0=1;		 OOPS... */
-	local_invalidate();
+	local_flush_tlb();
 	while(!smp_commenced);
 	if (cpu_number_map[cpuid] == -1)
 		while(1);
-	local_invalidate();
+	local_flush_tlb();
 	SMP_PRINTK(("Commenced..\n"));
 	
 	load_TR(cpu_number_map[cpuid]);
@@ -716,7 +716,7 @@ void smp_boot_cpus(void)
 			
 			CMOS_WRITE(0xa, 0xf);
 			pg0[0]=7;
-			local_invalidate();
+			local_flush_tlb();
 			*((volatile unsigned short *) 0x469) = ((unsigned long)stack)>>4;
 			*((volatile unsigned short *) 0x467) = 0;
 			
@@ -725,7 +725,7 @@ void smp_boot_cpus(void)
 			 */
 			 
 			pg0[0]= cfg;
-			local_invalidate();
+			local_flush_tlb();
 
 			/*
 			 *	Be paranoid about clearing APIC errors.
@@ -874,7 +874,7 @@ void smp_boot_cpus(void)
 
 	cfg = pg0[0];
 	pg0[0] = 3;	/* writeable, present, addr 0 */
-	local_invalidate();
+	local_flush_tlb();
 
 	/*
 	 *	Paranoid:  Set warm reset code and vector here back
@@ -890,7 +890,7 @@ void smp_boot_cpus(void)
 	 */
 
 	pg0[0] = cfg;
-	local_invalidate();
+	local_flush_tlb();
 
 	/*
 	 *	Allow the user to impress friends.
@@ -927,7 +927,7 @@ void smp_boot_cpus(void)
  *	get stuck with irq's off waiting to send a message and thus not replying to the person
  *	spinning for a reply....
  *
- *	In the end invalidate ought to be the NMI and a very very short function (to avoid the old
+ *	In the end flush tlb ought to be the NMI and a very very short function (to avoid the old
  *	IDE disk problems), and other messages sent with IRQ's enabled in a civilised fashion. That
  *	will also boost performance.
  */
@@ -966,7 +966,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 *	Sanity check we don't re-enter this across CPU's. Only the kernel
 	 *	lock holder may send messages. For a STOP_CPU we are bringing the
 	 *	entire box to the fastest halt we can.. A reschedule carries
-	 *	no data and can occur during an invalidate.. guess what panic
+	 *	no data and can occur during a flush.. guess what panic
 	 *	I got to notice this bug...
 	 */
 	 
@@ -1081,22 +1081,22 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 }
 
 /*
- *	This is fraught with deadlocks. Linus does an invalidate at a whim
- *	even with IRQ's off. We have to avoid a pair of crossing invalidates
+ *	This is fraught with deadlocks. Linus does a flush tlb at a whim
+ *	even with IRQ's off. We have to avoid a pair of crossing flushes
  *	or we are doomed.  See the notes about smp_message_pass.
  */
  
-void smp_invalidate(void)
+void smp_flush_tlb(void)
 {
 	unsigned long flags;
 	if(smp_activated && smp_processor_id()!=active_kernel_processor)
-		panic("CPU #%d:Attempted invalidate IPI when not AKP(=%d)\n",smp_processor_id(),active_kernel_processor);
+		panic("CPU #%d:Attempted flush tlb IPI when not AKP(=%d)\n",smp_processor_id(),active_kernel_processor);
 /*	printk("SMI-");*/
 	
 	/*
 	 *	The assignment is safe because its volatile so the compiler cannot reorder it,
 	 *	because the i586 has strict memory ordering and because only the kernel lock holder
-	 *	may issue an invalidate. If you break any one of those three change this to an atomic
+	 *	may issue a tlb flush. If you break any one of those three change this to an atomic
 	 *	bus locked or.
 	 */
 	
@@ -1104,7 +1104,7 @@ void smp_invalidate(void)
 	
 	/*
 	 *	Processors spinning on the lock will see this IRQ late. The smp_invalidate_needed map will
-	 *	ensure they dont do a spurious invalidate or miss one.
+	 *	ensure they dont do a spurious flush tlb or miss one.
 	 */
 	 
 	save_flags(flags);
@@ -1115,7 +1115,7 @@ void smp_invalidate(void)
 	 *	Flush the local TLB
 	 */
 	 
-	local_invalidate();
+	local_flush_tlb();
 	
 	restore_flags(flags);
 	
@@ -1174,7 +1174,7 @@ void smp_message_irq(int cpl, void *dev_id, struct pt_regs *regs)
 		 
 		case MSG_INVALIDATE_TLB:
 			if(clear_bit(i,(unsigned long *)&smp_invalidate_needed))
-				local_invalidate();
+				local_flush_tlb();
 			set_bit(i, (unsigned long *)&cpu_callin_map[0]);
 		/*	cpu_callin_map[0]|=1<<smp_processor_id();*/
 			break;

@@ -93,7 +93,8 @@ static int move_page_tables(struct mm_struct * mm,
 {
 	unsigned long offset = len;
 
-	invalidate_range(mm, old_addr, old_addr + len);
+	flush_cache_range(mm, old_addr, old_addr + len);
+	flush_tlb_range(mm, old_addr, old_addr + len);
 
 	/*
 	 * This is not the clever way to do this, but we're taking the
@@ -115,9 +116,10 @@ static int move_page_tables(struct mm_struct * mm,
 	 * the old page tables)
 	 */
 oops_we_failed:
+	flush_cache_range(mm, new_addr, new_addr + len);
 	while ((offset += PAGE_SIZE) < len)
 		move_one_page(mm, new_addr + offset, old_addr + offset);
-	invalidate_range(mm, new_addr, new_addr + len);
+	flush_tlb_range(mm, new_addr, new_addr + len);
 	zap_page_range(mm, new_addr, new_addr + len);
 	return -1;
 }

@@ -149,7 +149,7 @@ void pal_init(void)
 	printk("Ok (rev %lx)\n", rev);
 	/* remove the old virtual page-table mapping */
 	L1[1] = 0;
-	invalidate_all();
+	flush_tlb_all();
 }
 
 extern int _end;

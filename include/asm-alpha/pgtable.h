@@ -11,27 +11,34 @@
 
 #include <asm/system.h>
 
+/* Caches aren't brain-dead on the alpha. */
+#define flush_cache_all()			do { } while (0)
+#define flush_cache_mm(mm)			do { } while (0)
+#define flush_cache_range(mm, start, end)	do { } while (0)
+#define flush_cache_page(vma, vmaddr)		do { } while (0)
+#define flush_page_to_ram(page)			do { } while (0)
+
 /*
- * Invalidate current user mapping.
+ * Flush current user mapping.
  */
-static inline void invalidate(void)
+static inline void flush_tlb(void)
 {
 	tbiap();
 }
 
 /*
- * Invalidate everything (kernel mapping may also have
+ * Flush everything (kernel mapping may also have
  * changed due to vmalloc/vfree)
  */
-static inline void invalidate_all(void)
+static inline void flush_tlb_all(void)
 {
 	tbia();
 }
 
 /*
- * Invalidate a specified user mapping
+ * Flush a specified user mapping
  */
-static inline void invalidate_mm(struct mm_struct *mm)
+static inline void flush_tlb_mm(struct mm_struct *mm)
 {
 	if (mm != current->mm)
 		mm->context = 0;
@@ -40,14 +47,14 @@ static inline void invalidate_mm(struct mm_struct *mm)
 }
 
 /*
- * Page-granular invalidate.
+ * Page-granular tlb flush.
  *
  * do a tbisd (type = 2) normally, and a tbis (type = 3)
  * if it is an executable mapping.  We want to avoid the
- * itlb invalidate, because that potentially also does a
- * icache invalidate. 
+ * itlb flush, because that potentially also does a
+ * icache flush.
  */
-static inline void invalidate_page(struct vm_area_struct *vma,
+static inline void flush_tlb_page(struct vm_area_struct *vma,
 	unsigned long addr)
 {
 	struct mm_struct * mm = vma->vm_mm;
@@ -59,10 +66,10 @@ static inline void invalidate_page(struct vm_area_struct *vma,
 }
 
 /*
- * Invalidate a specified range of user mapping: on the
- * alpha we invalidate the whole user tlb
+ * Flush a specified range of user mapping: on the
+ * alpha we flush the whole user tlb
  */
-static inline void invalidate_range(struct mm_struct *mm,
+static inline void flush_tlb_range(struct mm_struct *mm,
 	unsigned long start, unsigned long end)
 {
 	if (mm != current->mm)

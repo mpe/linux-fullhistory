@@ -125,7 +125,7 @@ static inline void add_to_runqueue(struct task_struct * p)
 		{
 			if(clear_bit(cpu,&smp_invalidate_needed))
 			{
-				local_invalidate();
+				local_flush_tlb();
 				set_bit(cpu,&cpu_callin_map[0]);
 			}
 		}

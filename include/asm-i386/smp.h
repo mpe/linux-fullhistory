@@ -184,7 +184,7 @@ extern unsigned long cpu_present_map;
 extern volatile int cpu_number_map[NR_CPUS];
 extern volatile int cpu_logical_map[NR_CPUS];
 extern volatile unsigned long smp_invalidate_needed;
-extern void smp_invalidate(void);
+extern void smp_flush_tlb(void);
 extern volatile unsigned long kernel_flag, kernel_counter;
 extern volatile unsigned long cpu_callin_map[NR_CPUS];
 extern volatile unsigned char active_kernel_processor;

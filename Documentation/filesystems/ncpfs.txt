@@ -1,11 +1,12 @@
 ncpfs is a filesystem which understands the NCP protocol, designed by the
 Novell Corporation for their NetWare(tm) product. NCP is functionally
 similar to the NFS used in the tcp/ip community.
-To mount a Netware-Filesystem, you need a special mount program, which can
-be found in ncpfs package. Homesite for ncpfs is linux01.gwdg.de/pub/ncpfs,
-but sunsite and its many mirrors will have it as well.
+To mount a Netware-Filesystem, you need a special mount program, which
+can be found in ncpfs package. Homesite for ncpfs is
+ftp.gwdg.de/pub/linux/misc/ncpfs, but sunsite and its many mirrors
+will have it as well.
 
 Related products are linware and mars_nwe, which will give Linux partial
-Netware Server functionality.
+NetWare Server functionality.
 Linware's home site is: klokan.sh.cvut.cz/pub/linux/linware,
-Mars_nwe can be found on linux01.gwdg.de/pub/ncpfs.
+Mars_nwe can be found on ftp.gwdg.de/pub/linux/misc/ncpfs.

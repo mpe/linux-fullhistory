@@ -193,7 +193,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 			address += PAGE_SIZE;
 		}
 	}
-	invalidate();
+	flush_tlb();
 	return free_area_init(start_mem, end_mem);
 }
 
@@ -267,10 +267,10 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 /* test if the WP bit is honoured in supervisor mode */
 	if (wp_works_ok < 0) {
 		pg0[0] = pte_val(mk_pte(0, PAGE_READONLY));
-		invalidate();
+		flush_tlb();
 		__asm__ __volatile__("movb 0,%%al ; movb %%al,0": : :"ax", "memory");
 		pg0[0] = 0;
-		invalidate();
+		flush_tlb();
 		if (wp_works_ok < 0)
 			wp_works_ok = 0;
 	}

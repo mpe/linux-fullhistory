@@ -1838,6 +1838,9 @@ int tty_init(void)
 #ifdef CONFIG_ISTALLION
 	stli_init();
 #endif
+#ifdef CONFIG_DIGI
+	pcxe_init();
+#endif
 	pty_init();
 	vcs_init();
 	if (register_chrdev(TTY_MAJOR,"tty",&tty_fops))

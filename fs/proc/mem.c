@@ -267,6 +267,8 @@ int mem_mmap(struct inode * inode, struct file * file,
 	stmp    = vma->vm_offset;
 	dtmp    = vma->vm_start;
 
+	flush_cache_range(vma->vm_mm, vma->vm_start, vma->vm_end);
+	flush_cache_range(src_vma->vm_mm, src_vma->vm_start, src_vma->vm_end);
 	while (dtmp < vma->vm_end) {
 		while (src_vma && stmp > src_vma->vm_end)
 			src_vma = src_vma->vm_next;
@@ -297,8 +299,8 @@ int mem_mmap(struct inode * inode, struct file * file,
 		dtmp += PAGE_SIZE;
 	}
 
-	invalidate_range(vma->vm_mm, vma->vm_start, vma->vm_end);
-	invalidate_range(src_vma->vm_mm, src_vma->vm_start, src_vma->vm_end);
+	flush_tlb_range(vma->vm_mm, vma->vm_start, vma->vm_end);
+	flush_tlb_range(src_vma->vm_mm, src_vma->vm_start, src_vma->vm_end);
 	return 0;
 }
 

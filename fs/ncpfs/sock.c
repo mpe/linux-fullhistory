@@ -1,5 +1,5 @@
 /*
- *  linux/fs/ncp/sock.c
+ *  linux/fs/ncpfs/sock.c
  *
  *  Copyright (C) 1992, 1993  Rick Sladkey
  *

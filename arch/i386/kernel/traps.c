@@ -193,7 +193,7 @@ asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
 #ifdef CONFIG_SMP_NMI_INVAL
-	smp_invalidate_rcv();
+	smp_flush_tlb_rcv();
 #else
 #ifndef CONFIG_IGNORE_NMI
 	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");

@@ -19,139 +19,146 @@
  * the i386 page table tree.
  */
 
+/* Caches aren't brain-dead on the intel. */
+#define flush_cache_all()			do { } while (0)
+#define flush_cache_mm(mm)			do { } while (0)
+#define flush_cache_range(mm, start, end)	do { } while (0)
+#define flush_cache_page(vma, vmaddr)		do { } while (0)
+#define flush_page_to_ram(page)			do { } while (0)
+
 /*
- * TLB invalidation:
+ * TLB flushing:
  *
- *  - invalidate() invalidates the current mm struct TLBs
- *  - invalidate_all() invalidates all processes TLBs
- *  - invalidate_mm(mm) invalidates the specified mm context TLB's
- *  - invalidate_page(mm, vmaddr) invalidates one page
- *  - invalidate_range(mm, start, end) invalidates a range of pages
+ *  - flush_tlb() flushes the current mm struct TLBs
+ *  - flush_tlb_all() flushes all processes TLBs
+ *  - flush_tlb_mm(mm) flushes the specified mm context TLB's
+ *  - flush_tlb_page(vma, vmaddr) flushes one page
+ *  - flush_tlb_range(mm, start, end) flushes a range of pages
  *
- * ..but the i386 has somewhat limited invalidation capabilities,
- * and page-granular invalidates are available only on i486 and up.
+ * ..but the i386 has somewhat limited tlb flushing capabilities,
+ * and page-granular flushes are available only on i486 and up.
  */
 
-#define __invalidate() \
+#define __flush_tlb() \
 __asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
 
 #ifdef CONFIG_M386
-#define __invalidate_one(addr) invalidate()
+#define __flush_tlb_one(addr) flush_tlb()
 #else
-#define __invalidate_one(addr) \
+#define __flush_tlb_one(addr) \
 __asm__ __volatile__("invlpg %0": :"m" (*(char *) addr))
 #endif
  
 #ifndef __SMP__
 
-#define invalidate() __invalidate()
-#define invalidate_all() __invalidate()
+#define flush_tlb() __flush_tlb()
+#define flush_tlb_all() __flush_tlb()
 
-static inline void invalidate_mm(struct mm_struct *mm)
+static inline void flush_tlb_mm(struct mm_struct *mm)
 {
 	if (mm == current->mm)
-		__invalidate();
+		__flush_tlb();
 }
 
-static inline void invalidate_page(struct vm_area_struct *vma,
+static inline void flush_tlb_page(struct vm_area_struct *vma,
 	unsigned long addr)
 {
 	if (vma->vm_mm == current->mm)
-		__invalidate_one(addr);
+		__flush_tlb_one(addr);
 }
 
-static inline void invalidate_range(struct mm_struct *mm,
+static inline void flush_tlb_range(struct mm_struct *mm,
 	unsigned long start, unsigned long end)
 {
 	if (mm == current->mm)
-		__invalidate();
+		__flush_tlb();
 }
 
 #else
 
 /*
  * We aren't very clever about this yet -  SMP could certainly
- * avoid some global invalidates..
+ * avoid some global flushes..
  */
 
 #include <asm/smp.h>
 
-#define local_invalidate() \
-	__invalidate()
+#define local_flush_tlb() \
+	__flush_tlb()
 
 
 #undef CLEVER_SMP_INVALIDATE
 #ifdef CLEVER_SMP_INVALIDATE
 
 /*
- *	Smarter SMP invalidation macros. 
+ *	Smarter SMP flushing macros. 
  *		c/o Linus Torvalds.
  *
  *	These mean you can really definitely utterly forget about
  *	writing to user space from interrupts. (Its not allowed anyway).
  *
- *	Doesn't currently work as Linus makes invalidate calls before
+ *	Doesn't currently work as Linus makes flush tlb calls before
  *	stuff like current/current->mm are setup properly
  */
  
-static inline void invalidate_current_task(void)
+static inline void flush_tlb_current_task(void)
 {
 	if (current->mm->count == 1)	/* just one copy of this mm */
-		local_invalidate();	/* and that's us, so.. */
+		local_flush_tlb();	/* and that's us, so.. */
 	else
-		smp_invalidate();
+		smp_flush_tlb();
 }
 
-#define invalidate() invalidate_current_task()
+#define flush_tlb() flush_tlb_current_task()
 
-#define invalidate_all() smp_invalidate()
+#define flush_tlb_all() smp_flush_tlb()
 
-static inline void invalidate_mm(struct mm_struct * mm)
+static inline void flush_tlb_mm(struct mm_struct * mm)
 {
 	if (mm == current->mm && mm->count == 1)
-		local_invalidate();
+		local_flush_tlb();
 	else
-		smp_invalidate();
+		smp_flush_tlb();
 }
 
-static inline void invalidate_page(struct vm_area_struct * vma,
+static inline void flush_tlb_page(struct vm_area_struct * vma,
 	unsigned long va)
 {
 	if (vma->vm_mm == current->mm && current->mm->count == 1)
-		__invalidate_one(va);
+		__flush_tlb_one(va);
 	else
-		smp_invalidate();
+		smp_flush_tlb();
 }
 
-static inline void invalidate_range(struct mm_struct * mm,
+static inline void flush_tlb_range(struct mm_struct * mm,
 	unsigned long start, unsigned long end)
 {
-	invalidate_mm(mm);
+	flush_tlb_mm(mm);
 }
 
 
 #else
 
-#define invalidate() \
-	smp_invalidate()
+#define flush_tlb() \
+	smp_flush_tlb()
 
-#define invalidate_all() invalidate()
+#define flush_tlb_all() flush_tlb()
 
-static inline void invalidate_mm(struct mm_struct *mm)
+static inline void flush_tlb_mm(struct mm_struct *mm)
 {
-	invalidate();
+	flush_tlb();
 }
 
-static inline void invalidate_page(struct vm_area_struct *vma,
+static inline void flush_tlb_page(struct vm_area_struct *vma,
 	unsigned long addr)
 {
-	invalidate();
+	flush_tlb();
 }
 
-static inline void invalidate_range(struct mm_struct *mm,
+static inline void flush_tlb_range(struct mm_struct *mm,
 	unsigned long start, unsigned long end)
 {
-	invalidate();
+	flush_tlb();
 }
 #endif
 #endif

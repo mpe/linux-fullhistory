@@ -135,9 +135,10 @@ void clear_page_tables(struct task_struct * tsk)
 		printk("%s trying to clear kernel page-directory: not good\n", tsk->comm);
 		return;
 	}
+	flush_cache_mm(tsk->mm);
 	for (i = 0 ; i < USER_PTRS_PER_PGD ; i++)
 		free_one_pgd(page_dir + i);
-	invalidate_mm(tsk->mm);
+	flush_tlb_mm(tsk->mm);
 }
 
 /*
@@ -156,7 +157,8 @@ void free_page_tables(struct task_struct * tsk)
 		printk("%s trying to free kernel page-directory: not good\n", tsk->comm);
 		return;
 	}
-	invalidate_mm(tsk->mm);
+	flush_cache_mm(tsk->mm);
+	flush_tlb_mm(tsk->mm);
 	SET_PAGE_DIR(tsk, swapper_pg_dir);
 	tsk->mm->pgd = swapper_pg_dir;	/* or else... */
 	for (i = 0 ; i < USER_PTRS_PER_PGD ; i++)
@@ -171,9 +173,10 @@ int new_page_tables(struct task_struct * tsk)
 	if (!(new_pg = pgd_alloc()))
 		return -ENOMEM;
 	page_dir = pgd_offset(&init_mm, 0);
+	flush_cache_mm(tsk->mm);
 	memcpy(new_pg + USER_PTRS_PER_PGD, page_dir + USER_PTRS_PER_PGD,
 	       (PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof (pgd_t));
-	invalidate_mm(tsk->mm);
+	flush_tlb_mm(tsk->mm);
 	SET_PAGE_DIR(tsk, new_pg);
 	tsk->mm->pgd = new_pg;
 	return 0;
@@ -285,6 +288,8 @@ int copy_page_range(struct mm_struct *dst, struct mm_struct *src,
 	cow = (vma->vm_flags & (VM_SHARED | VM_WRITE)) == VM_WRITE;
 	src_pgd = pgd_offset(src, address);
 	dst_pgd = pgd_offset(dst, address);
+	flush_cache_range(src, vma->vm_start, vma->vm_end);
+	flush_cache_range(dst, vma->vm_start, vma->vm_end);
 	while (address < end) {
 		error = copy_pmd_range(dst_pgd++, src_pgd++, address, end - address, cow);
 		if (error)
@@ -292,8 +297,8 @@ int copy_page_range(struct mm_struct *dst, struct mm_struct *src,
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 	}
 	/* Note that the src ptes get c-o-w treatment, so they change too. */
-	invalidate_range(src, vma->vm_start, vma->vm_end);
-	invalidate_range(dst, vma->vm_start, vma->vm_end);
+	flush_tlb_range(src, vma->vm_start, vma->vm_end);
+	flush_tlb_range(dst, vma->vm_start, vma->vm_end);
 	return error;
 }
 
@@ -373,12 +378,13 @@ int zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long si
 	unsigned long end = address + size;
 
 	dir = pgd_offset(mm, address);
+	flush_cache_range(mm, end - size, end);
 	while (address < end) {
 		zap_pmd_range(dir, address, end - address);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate_range(mm, end - size, end);
+	flush_tlb_range(mm, end - size, end);
 	return 0;
 }
 
@@ -428,6 +434,7 @@ int zeromap_page_range(unsigned long address, unsigned long size, pgprot_t prot)
 
 	zero_pte = pte_wrprotect(mk_pte(ZERO_PAGE, prot));
 	dir = pgd_offset(current->mm, address);
+	flush_cache_range(current->mm, beg, end);
 	while (address < end) {
 		pmd_t *pmd = pmd_alloc(dir, address);
 		error = -ENOMEM;
@@ -439,7 +446,7 @@ int zeromap_page_range(unsigned long address, unsigned long size, pgprot_t prot)
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate_range(current->mm, beg, end);
+	flush_tlb_range(current->mm, beg, end);
 	return error;
 }
 
@@ -499,6 +506,7 @@ int remap_page_range(unsigned long from, unsigned long offset, unsigned long siz
 
 	offset -= from;
 	dir = pgd_offset(current->mm, from);
+	flush_cache_range(current->mm, beg, from);
 	while (from < end) {
 		pmd_t *pmd = pmd_alloc(dir, from);
 		error = -ENOMEM;
@@ -510,7 +518,7 @@ int remap_page_range(unsigned long from, unsigned long offset, unsigned long siz
 		from = (from + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate_range(current->mm, beg, from);
+	flush_tlb_range(current->mm, beg, from);
 	return error;
 }
 
@@ -619,19 +627,24 @@ void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 			if (mem_map[MAP_NR(old_page)].reserved)
 				++vma->vm_mm->rss;
 			copy_page(old_page,new_page);
+			flush_page_to_ram(old_page);
+			flush_page_to_ram(new_page);
+			flush_cache_page(vma, address);
 			set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
 			free_page(old_page);
-			invalidate_page(vma, address);
+			flush_tlb_page(vma, address);
 			return;
 		}
+		flush_cache_page(vma, address);
 		set_pte(page_table, BAD_PAGE);
+		flush_tlb_page(vma, address);
 		free_page(old_page);
 		oom(tsk);
-		invalidate_page(vma, address);
 		return;
 	}
+	flush_cache_page(vma, address);
 	set_pte(page_table, pte_mkdirty(pte_mkwrite(pte)));
-	invalidate_page(vma, address);
+	flush_tlb_page(vma, address);
 	if (new_page)
 		free_page(new_page);
 	return;
@@ -901,6 +914,7 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	}
 	address &= PAGE_MASK;
 	if (!vma->vm_ops || !vma->vm_ops->nopage) {
+		flush_cache_page(vma, address);
 		get_empty_page(tsk, vma, page_table, write_access);
 		return;
 	}
@@ -914,7 +928,9 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	page = vma->vm_ops->nopage(vma, address, write_access && !(vma->vm_flags & VM_SHARED));
 	if (!page) {
 		send_sig(SIGBUS, current, 1);
+		flush_cache_page(vma, address);
 		put_page(page_table, BAD_PAGE);
+		flush_tlb_page(vma, address);
 		return;
 	}
 	/*
@@ -932,7 +948,9 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 		entry = pte_mkwrite(pte_mkdirty(entry));
 	} else if (mem_map[MAP_NR(page)].count > 1 && !(vma->vm_flags & VM_SHARED))
 		entry = pte_wrprotect(entry);
+	flush_cache_page(vma, address);
 	put_page(page_table, entry);
+	flush_tlb_page(vma, address);
 }
 
 /*

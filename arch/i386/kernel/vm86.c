@@ -96,7 +96,7 @@ static void mark_screen_rdonly(struct task_struct * tsk)
 			set_pte(pte, pte_wrprotect(*pte));
 		pte++;
 	}
-	invalidate();
+	flush_tlb();
 }
 
 asmlinkage int sys_vm86(struct vm86_struct * v86)

@@ -41,13 +41,18 @@ int register_firewall(int pf, struct firewall_ops *fw)
 		p=&((*p)->next);
 	}
 
-	fw->next=*p;
+	
 	/*
-	 *	We need to set p atomically in case someone runs down the list
-	 *	at the wrong moment. This saves locking it 
+	 * We need to use a memory barrier to make sure that this
+	 * works correctly even in SMP with weakly ordered writes.
+	 *
+	 * This is atomic wrt interrupts (and generally walking the
+	 * chain), but not wrt itself (so you can't call this from
+	 * an interrupt. Not that you'd want to).
 	 */
-	 
-	xchg(p,fw);
+	fw->next=*p;
+	mb();
+	*p = fw;
 
 	/*
 	 *	And release the sleep lock
@@ -83,7 +88,7 @@ int unregister_firewall(int pf, struct firewall_ops *fw)
 		if(*nl==fw)
 		{
 			struct firewall_ops *f=fw->next;
-			xchg(nl,f);
+			*nl = f;
 			firewall_lock=0;
 			return 0;
 		}			

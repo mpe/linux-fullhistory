@@ -116,7 +116,7 @@ bad_area:
 	if (wp_works_ok < 0 && address == TASK_SIZE && (error_code & 1)) {
 		wp_works_ok = 1;
 		pg0[0] = pte_val(mk_pte(0, PAGE_SHARED));
-		invalidate();
+		flush_tlb();
 		printk("This processor honours the WP bit even when in supervisor mode. Good.\n");
 		return;
 	}

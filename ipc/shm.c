@@ -433,6 +433,7 @@ static int shm_map (struct vm_area_struct *shmd)
 	/* map page range */
 	shm_sgn = shmd->vm_pte +
 	  SWP_ENTRY(0, (shmd->vm_offset >> PAGE_SHIFT) << SHM_IDX_SHIFT);
+	flush_cache_range(shmd->vm_mm, shmd->vm_start, shmd->vm_end);
 	for (tmp = shmd->vm_start;
 	     tmp < shmd->vm_end;
 	     tmp += PAGE_SIZE, shm_sgn += SWP_ENTRY(0, 1 << SHM_IDX_SHIFT))
@@ -446,7 +447,7 @@ static int shm_map (struct vm_area_struct *shmd)
 			return -ENOMEM;
 		set_pte(page_table, __pte(shm_sgn));
 	}
-	invalidate_range(shmd->vm_mm, shmd->vm_start, shmd->vm_end);
+	flush_tlb_range(shmd->vm_mm, shmd->vm_start, shmd->vm_end);
 	return 0;
 }
 
@@ -760,12 +761,13 @@ int shm_swap (int prio, int dma)
 		}
 		if (pte_page(pte) != pte_page(page))
 			printk("shm_swap_out: page and pte mismatch\n");
+		flush_cache_page(shmd, tmp);
 		set_pte(page_table,
 		  __pte(shmd->vm_pte + SWP_ENTRY(0, idx << SHM_IDX_SHIFT)));
 		mem_map[MAP_NR(pte_page(pte))].count--;
 		if (shmd->vm_mm->rss > 0)
 			shmd->vm_mm->rss--;
-		invalidate_page(shmd, tmp);
+		flush_tlb_page(shmd, tmp);
 	    /* continue looping through circular list */
 	    } while (0);
 	    if ((shmd = shmd->vm_next_share) == shp->attaches)

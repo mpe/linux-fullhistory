@@ -135,7 +135,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	init_task.kernel_stack_page = INIT_STACK;
 	load_PCB(&init_task.tss);
 
-	invalidate_all();
+	flush_tlb_all();
 	return start_mem;
 }
 

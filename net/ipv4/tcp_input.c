@@ -1384,35 +1384,6 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 	 
 	if (!skb->acked) 
 	{
-	
-	/*
-	 *	This is important.  If we don't have much room left,
-	 *	we need to throw out a few packets so we have a good
-	 *	window.  Note that mtu is used, not mss, because mss is really
-	 *	for the send side.  He could be sending us stuff as large as mtu.
-	 */
-		 
-		while (sock_rspace(sk) < sk->mtu) 
-		{
-			struct sk_buff * skb1 = skb_peek(&sk->receive_queue);
-			if (skb1 == NULL) 
-			{
-				printk("INET: tcp.c:tcp_data memory leak detected.\n");
-				break;
-			}
-
-			/*
-			 *	Don't throw out something that has been acked. 
-			 */
-		 
-			if (skb1->acked) 
-			{
-				break;
-			}
-		
-			skb_unlink(skb1);
-			kfree_skb(skb1, FREE_READ);
-		}
 		tcp_send_ack(sk->sent_seq, sk->acked_seq, sk, th, saddr);
 		sk->ack_backlog++;
 		tcp_reset_xmit_timer(sk, TIME_WRITE, min(sk->ato, HZ/2));
@@ -1498,6 +1469,66 @@ static inline void tcp_urg(struct sock *sk, struct tcphdr *th, unsigned long len
 				sk->data_ready(sk,0);
 		}
 	}
+}
+
+/*
+ * Throw out all unnecessary packets: we've gone over the
+ * receive queue limit. This shouldn't happen in a normal
+ * TCP connection, but we might have gotten duplicates etc.
+ */
+static inline void tcp_forget_unacked(struct sk_buff_head * list)
+{
+	for (;;) {
+		struct sk_buff * skb = list->prev;
+
+		/* gone through it all? */
+		if (skb == (struct sk_buff *) list)
+			break;
+		if (skb->acked)
+			break;
+		__skb_unlink(skb, list);
+	}
+}
+
+/*
+ * This should be a bit smarter and remove partially
+ * overlapping stuff too, but this should be good
+ * enough for any even remotely normal case (and the
+ * worst that can happen is that we have a few
+ * unnecessary packets in the receive queue).
+ */
+static inline void tcp_remove_dups(struct sk_buff_head * list)
+{
+	struct sk_buff * skb = list->next;
+
+	for (;;) {
+		struct sk_buff * next;
+
+		if (skb == (struct sk_buff *) list)
+			break;
+		next = skb->next;
+		if (next->seq == skb->seq) {
+			if (before(next->end_seq, skb->end_seq)) {
+				__skb_unlink(next, list);
+				continue;
+			}
+			__skb_unlink(skb, list);
+		}
+		skb = next;
+	}
+}
+
+static void prune_queue(struct sk_buff_head * list)
+{
+	/*
+	 * Throw out things we haven't acked.
+	 */
+	tcp_forget_unacked(list);
+
+	/*
+	 * Throw out duplicates
+	 */
+	tcp_remove_dups(list);
 }
 
 
@@ -1846,19 +1877,6 @@ rfc_step6:		/* I'll clean this up later */
 	 *	now drop it (we must process the ack first to avoid
 	 *	deadlock cases).
 	 */
-#if 0
-	/*
-	 *	Is this test really a good idea? We should
-	 *	throw away packets that aren't in order, not
-	 *	new packets.
-	 */
-	if (sk->rmem_alloc  >= sk->rcvbuf) 
-	{
-		kfree_skb(skb, FREE_READ);
-		return(0);
-	}
-#endif
-
 
 	/*
 	 *	Process urgent data
@@ -1872,6 +1890,13 @@ rfc_step6:		/* I'll clean this up later */
 	
 	if(tcp_data(skb,sk, saddr, len))
 		kfree_skb(skb, FREE_READ);
+
+	/*
+	 *	If our receive queue has grown past its limits,
+	 *	try to prune away duplicates etc..
+	 */
+	if (sk->rmem_alloc > sk->rcvbuf)
+		prune_queue(&sk->receive_queue);
 
 	/*
 	 *	And done

@@ -160,7 +160,7 @@ int cpu_idle(void *unused)
                 	 *	Oops.. This is kind of important in some cases...
                 	 */
                 	if(clear_bit(smp_processor_id(), &smp_invalidate_needed))
-                		local_invalidate();
+                		local_flush_tlb();
                 }
                 if (0==(0x7fffffff & smp_process_available)){
                         clear_bit(31,&smp_process_available);

@@ -257,7 +257,7 @@ repeat:
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
 /* this should also re-instate whatever read-only mode there was before */
 	set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
-	invalidate();
+	flush_tlb();
 }
 
 static struct vm_area_struct * find_extend_vma(struct task_struct * tsk,

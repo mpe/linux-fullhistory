@@ -110,8 +110,9 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 			if (!(entry = get_swap_page()))
 				return 0;
 			vma->vm_mm->rss--;
+			flush_cache_page(vma, address);
 			set_pte(page_table, __pte(entry));
-			invalidate_page(vma, address);
+			flush_tlb_page(vma, address);
 			tsk->nswap++;
 			rw_swap_page(WRITE, entry, (char *) page, wait);
 		}
@@ -125,14 +126,16 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 			return 0;
 		}
 		vma->vm_mm->rss--;
+		flush_cache_page(vma, address);
 		set_pte(page_table, __pte(entry));
-		invalidate_page(vma, address);
+		flush_tlb_page(vma, address);
 		free_page(page);
 		return 1;
 	} 
 	vma->vm_mm->rss--;
+	flush_cache_page(vma, address);
 	pte_clear(page_table);
-	invalidate_page(vma, address);
+	flush_tlb_page(vma, address);
 	entry = page_unuse(page);
 	free_page(page);
 	return entry;

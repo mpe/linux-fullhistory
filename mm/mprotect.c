@@ -75,12 +75,13 @@ static void change_protection(unsigned long start, unsigned long end, pgprot_t n
 	unsigned long beg = start;
 
 	dir = pgd_offset(current->mm, start);
+	flush_cache_range(current->mm, beg, end);
 	while (start < end) {
 		change_pmd_range(dir, start, end - start, newprot);
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate_range(current->mm, beg, end);
+	flush_tlb_range(current->mm, beg, end);
 	return;
 }
 

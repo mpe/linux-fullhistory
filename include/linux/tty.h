@@ -284,6 +284,7 @@ extern int rs_init(void);
 extern int lp_init(void);
 extern int pty_init(void);
 extern int tty_init(void);
+extern int pcxe_init(void);
 extern int vcs_init(void);
 extern int cy_init(void);
 extern int stl_init(void);
@@ -328,6 +329,7 @@ extern int  rs_open(struct tty_struct * tty, struct file * filp);
 /* pty.c */
 
 extern int  pty_open(struct tty_struct * tty, struct file * filp);
+extern int pcxe_open(struct tty_struct *tty, struct file *filp);
 
 /* console.c */
 

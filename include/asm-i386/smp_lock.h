@@ -32,7 +32,7 @@ extern __inline void lock_kernel(void)
 			 */
 			if (test_bit(proc, (void *)&smp_invalidate_needed))
 				if (clear_bit(proc, (void *)&smp_invalidate_needed))
-					local_invalidate();
+					local_flush_tlb();
 		}
 		while(test_bit(0, (void *)&kernel_flag));
 	}

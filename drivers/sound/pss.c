@@ -426,7 +426,7 @@ probe_pss_mpu (struct address_info *hw_config)
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   return probe_mpu401 (hw_config);
 #else
-  return 0
+  return 0;
 #endif
 }
 
@@ -775,15 +775,17 @@ static coproc_operations pss_coproc_operations =
 long
 attach_pss_mpu (long mem_start, struct address_info *hw_config)
 {
-  int             prev_devs;
   long            ret;
 
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
-  prev_devs = num_midis;
-  ret = attach_mpu401 (mem_start, hw_config);
+  {
+    int             prev_devs;
+    prev_devs = num_midis;
+    ret = attach_mpu401 (mem_start, hw_config);
 
-  if (num_midis == (prev_devs + 1))	/* The MPU driver installed itself */
-    midi_devs[prev_devs]->coproc = &pss_coproc_operations;
+    if (num_midis == (prev_devs + 1))	/* The MPU driver installed itself */
+      midi_devs[prev_devs]->coproc = &pss_coproc_operations;
+  }
 #endif
   return ret;
 }

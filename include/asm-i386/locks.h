@@ -40,7 +40,7 @@ extern __inline__ void prim_spin_lock(struct spinlock *sp)
 			 
 			if(smp_invalidate_needed&(1<<processor));
 				while(lock_clear_bit(processor,&smp_invalidate_needed))
-					local_invalidate();
+					local_flush_tlb();
 			sp->spins++;
 		}
 		/*
