@@ -433,15 +433,27 @@ static inline void __schedule_tail(struct task_struct *prev)
 	int policy;
 
 	/*
+	 * prev->policy can be written from here only before `prev'
+	 * can be scheduled (before setting prev->has_cpu to zero).
+	 * Of course it must also be read before allowing prev
+	 * to be rescheduled, but since the write depends on the read
+	 * to complete, wmb() is enough. (the spin_lock() acquired
+	 * before setting has_cpu is not enough because the spin_lock()
+	 * common code semantics allows code outside the critical section
+	 * to enter inside the critical section)
+	 */
+	policy = prev->policy;
+	prev->policy = policy & ~SCHED_YIELD;
+	wmb();
+
+	/*
 	 * fast path falls through. We have to clear has_cpu before
 	 * checking prev->state to avoid a wakeup race - thus we
 	 * also have to protect against the task exiting early.
 	 */
 	task_lock(prev);
-	policy = prev->policy;
-	prev->policy = policy & ~SCHED_YIELD;
 	prev->has_cpu = 0;
-	wmb();
+	mb();
 	if (prev->state == TASK_RUNNING)
 		goto needs_resched;
 

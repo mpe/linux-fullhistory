@@ -486,10 +486,6 @@ EXPORT_SYMBOL(remove_inode_hash);
 EXPORT_SYMBOL(make_bad_inode);
 EXPORT_SYMBOL(is_bad_inode);
 EXPORT_SYMBOL(event);
-EXPORT_SYMBOL(__down);
-EXPORT_SYMBOL(__down_interruptible);
-EXPORT_SYMBOL(__down_trylock);
-EXPORT_SYMBOL(__up);
 EXPORT_SYMBOL(brw_page);
 
 #ifdef CONFIG_UID16

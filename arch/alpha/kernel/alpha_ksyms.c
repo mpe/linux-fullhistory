@@ -160,15 +160,20 @@ EXPORT_SYMBOL_NOVERS(__do_clear_user);
 EXPORT_SYMBOL(__strncpy_from_user);
 EXPORT_SYMBOL(__strnlen_user);
 
-/*
- * The following are specially called from the semaphore assembly stubs.
- */
-EXPORT_SYMBOL_NOVERS(__down_failed);
-EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);
-EXPORT_SYMBOL_NOVERS(__up_wakeup);
-EXPORT_SYMBOL_NOVERS(__down_read_failed);
-EXPORT_SYMBOL_NOVERS(__down_write_failed);
-EXPORT_SYMBOL_NOVERS(__rwsem_wake);
+/* Semaphore helper functions.  */
+EXPORT_SYMBOL(__down_failed);
+EXPORT_SYMBOL(__down_failed_interruptible);
+EXPORT_SYMBOL(__up_wakeup);
+EXPORT_SYMBOL(down);
+EXPORT_SYMBOL(down_interruptible);
+EXPORT_SYMBOL(up);
+EXPORT_SYMBOL(__down_read_failed);
+EXPORT_SYMBOL(__down_write_failed);
+EXPORT_SYMBOL(__rwsem_wake);
+EXPORT_SYMBOL(down_read);
+EXPORT_SYMBOL(down_write);
+EXPORT_SYMBOL(up_read);
+EXPORT_SYMBOL(up_write);
 
 /* 
  * SMP-specific symbols.

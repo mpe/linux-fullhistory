@@ -2344,18 +2344,7 @@ static mdk_personality_t raid5_personality=
 
 int raid5_init (void)
 {
-	int err;
-
-	err = register_md_personality (RAID5, &raid5_personality);
-	if (err)
-		return err;
-
-	/*
-	 * pick a XOR routine, runtime.
-	 */
-	calibrate_xor_block();
-
-	return 0;
+	return register_md_personality (RAID5, &raid5_personality);
 }
 
 #ifdef MODULE

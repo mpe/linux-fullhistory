@@ -73,7 +73,7 @@ extern struct kernel_param __setup_start, __setup_end;
  * Mark functions and data as being only used at initialization
  * or exit time.
  */
-#define __init		__attribute__ ((__section__ (".text.init")))
+#define __init		/* __attribute__ ((__section__ (".text.init"))) */
 #define __exit		__attribute__ ((unused, __section__(".text.exit")))
 #define __initdata	__attribute__ ((__section__ (".data.init")))
 #define __exitdata	__attribute__ ((unused, __section__ (".data.exit")))

@@ -1,139 +1,267 @@
 /*
- *  Generic semaphore code. Buyer beware. Do your own
- * specific changes in <asm/semaphore-helper.h>
+ * Alpha semaphore implementation.
+ *
+ * (C) Copyright 1996 Linus Torvalds
+ * (C) Copyright 1999, 2000 Richard Henderson
  */
 
 #include <linux/sched.h>
-#include <asm/semaphore-helper.h>
+
 
 /*
  * Semaphores are implemented using a two-way counter:
- * The "count" variable is decremented for each process
- * that tries to sleep, while the "waking" variable is
- * incremented when the "up()" code goes to wake up waiting
- * processes.
+ * 
+ * The "count" variable is decremented for each process that tries to sleep,
+ * while the "waking" variable is incremented when the "up()" code goes to
+ * wake up waiting processes.
  *
- * Notably, the inline "up()" and "down()" functions can
- * efficiently test if they need to do any extra work (up
- * needs to do something only if count was negative before
- * the increment operation.
+ * Notably, the inline "up()" and "down()" functions can efficiently test
+ * if they need to do any extra work (up needs to do something only if count
+ * was negative before the increment operation.
  *
- * waking_non_zero() (from asm/semaphore.h) must execute
- * atomically.
+ * waking_non_zero() (from asm/semaphore.h) must execute atomically.
  *
- * When __up() is called, the count was negative before
- * incrementing it, and we need to wake up somebody.
+ * When __up() is called, the count was negative before incrementing it,
+ * and we need to wake up somebody.
  *
- * This routine adds one to the count of processes that need to
- * wake up and exit.  ALL waiting processes actually wake up but
- * only the one that gets to the "waking" field first will gate
- * through and acquire the semaphore.  The others will go back
- * to sleep.
+ * This routine adds one to the count of processes that need to wake up and
+ * exit.  ALL waiting processes actually wake up but only the one that gets
+ * to the "waking" field first will gate through and acquire the semaphore.
+ * The others will go back to sleep.
  *
- * Note that these functions are only called when there is
- * contention on the lock, and as such all this is the
- * "non-critical" part of the whole semaphore business. The
- * critical part is the inline stuff in <asm/semaphore.h>
- * where we want to avoid any extra jumps and calls.
+ * Note that these functions are only called when there is contention on the
+ * lock, and as such all this is the "non-critical" part of the whole
+ * semaphore business. The critical part is the inline stuff in
+ * <asm/semaphore.h> where we want to avoid any extra jumps and calls.
  */
-
-void
-__up(struct semaphore *sem)
-{
-	wake_one_more(sem);
-	wake_up(&sem->wait);
-}
 
 /*
  * Perform the "down" function.  Return zero for semaphore acquired,
  * return negative for signalled out of the function.
  *
- * If called from __down, the return is ignored and the wait loop is
+ * If called from down, the return is ignored and the wait loop is
  * not interruptible.  This means that a task waiting on a semaphore
  * using "down()" cannot be killed until someone does an "up()" on
  * the semaphore.
  *
- * If called from __down_interruptible, the return value gets checked
+ * If called from down_interruptible, the return value gets checked
  * upon return.  If the return value is negative then the task continues
  * with the negative value in the return register (it can be tested by
  * the caller).
  *
  * Either form may be used in conjunction with "up()".
- *
  */
 
-#define DOWN_VAR				\
-	struct task_struct *tsk = current;	\
-	wait_queue_t wait;			\
-	init_waitqueue_entry(&wait, tsk)
-
-#define DOWN_HEAD(task_state)						\
-									\
-									\
-	tsk->state = (task_state);					\
-	add_wait_queue(&sem->wait, &wait);				\
-									\
-	/*								\
-	 * Ok, we're set up.  sem->count is known to be less than zero	\
-	 * so we must wait.						\
-	 *								\
-	 * We can let go the lock for purposes of waiting.		\
-	 * We re-acquire it after awaking so as to protect		\
-	 * all semaphore operations.					\
-	 *								\
-	 * If "up()" is called before we call waking_non_zero() then	\
-	 * we will catch it right away.  If it is called later then	\
-	 * we will have to go through a wakeup cycle to catch it.	\
-	 *								\
-	 * Multiple waiters contend for the semaphore lock to see	\
-	 * who gets to gate through and who has to wait some more.	\
-	 */								\
-	for (;;) {
-
-#define DOWN_TAIL(task_state)			\
-		tsk->state = (task_state);	\
-	}					\
-	tsk->state = TASK_RUNNING;		\
-	remove_wait_queue(&sem->wait, &wait)
-
 void
-__down(struct semaphore * sem)
+__down_failed(struct semaphore *sem)
 {
-	DOWN_VAR;
-	DOWN_HEAD(TASK_UNINTERRUPTIBLE);
+	DECLARE_WAITQUEUE(wait, current);
 
-	if (waking_non_zero(sem))
-		break;
-	schedule();
+#if DEBUG_SEMAPHORE
+	printk("%s(%d): down failed(%p)\n",
+	       current->comm, current->pid, sem);
+#endif
 
-	DOWN_TAIL(TASK_UNINTERRUPTIBLE);
+	current->state = TASK_UNINTERRUPTIBLE;
+	wmb();
+	add_wait_queue_exclusive(&sem->wait, &wait);
+
+	/* At this point we know that sem->count is negative.  In order
+	   to avoid racing with __up, we must check for wakeup before
+	   going to sleep the first time.  */
+
+	while (1) {
+		long ret, tmp;
+
+		/* An atomic conditional decrement of sem->waking.  */
+		__asm__ __volatile__(
+			"1:	ldl_l	%1,%2\n"
+			"	blt	%1,2f\n"
+			"	subl	%1,1,%0\n"
+			"	stl_c	%0,%2\n"
+			"	beq	%0,3f\n"
+			"2:\n"
+			".subsection 2\n"
+			"3:	br	1b\n"
+			".previous"
+			: "=r"(ret), "=&r"(tmp), "=m"(sem->waking)
+			: "0"(0));
+
+		if (ret)
+			break;
+
+		schedule();
+		set_task_state(current, TASK_UNINTERRUPTIBLE);
+	}
+
+	remove_wait_queue(&sem->wait, &wait);
+	current->state = TASK_RUNNING;
+
+#if DEBUG_SEMAPHORE
+	printk("%s(%d): down acquired(%p)\n",
+	       current->comm, current->pid, sem);
+#endif
 }
 
 int
-__down_interruptible(struct semaphore * sem)
+__down_failed_interruptible(struct semaphore *sem)
 {
-	int ret = 0;
-	DOWN_VAR;
-	DOWN_HEAD(TASK_INTERRUPTIBLE);
+	DECLARE_WAITQUEUE(wait, current);
+	long ret;
 
-	ret = waking_non_zero_interruptible(sem, tsk);
-	if (ret)
-	{
-		if (ret == 1)
-			/* ret != 0 only if we get interrupted -arca */
-			ret = 0;
-		break;
+#if DEBUG_SEMAPHORE
+	printk("%s(%d): down failed(%p)\n",
+	       current->comm, current->pid, sem);
+#endif
+
+	current->state = TASK_INTERRUPTIBLE;
+	wmb();
+	add_wait_queue_exclusive(&sem->wait, &wait);
+
+	while (1) {
+		long tmp, tmp2, tmp3;
+
+		/* We must undo the sem->count down_interruptible decrement
+		   simultaneously and atomicly with the sem->waking
+		   adjustment, otherwise we can race with __up.  This is
+		   accomplished by doing a 64-bit ll/sc on two 32-bit words.
+		
+		   "Equivalent" C.  Note that we have to do this all without
+		   (taken) branches in order to be a valid ll/sc sequence.
+
+		   do {
+		       tmp = ldq_l;
+		       ret = 0;
+		       if (tmp >= 0) {			// waking >= 0
+		           tmp += 0xffffffff00000000;	// waking -= 1
+		           ret = 1;
+		       }
+		       else if (pending) {
+			   // count += 1, but since -1 + 1 carries into the
+			   // high word, we have to be more careful here.
+			   tmp = (tmp & 0xffffffff00000000)
+				 | ((tmp + 1) & 0x00000000ffffffff);
+		           ret = -EINTR;
+		       }
+		       tmp = stq_c = tmp;
+		   } while (tmp == 0);
+		*/
+
+		__asm__ __volatile__(
+			"1:	ldq_l	%1,%4\n"
+			"	lda	%0,0\n"
+			"	cmovne	%5,%6,%0\n"
+			"	addq	%1,1,%2\n"
+			"	and	%1,%7,%3\n"
+			"	andnot	%2,%7,%2\n"
+			"	cmovge	%1,1,%0\n"
+			"	or	%3,%2,%2\n"
+			"	addq	%1,%7,%3\n"
+			"	cmovne	%5,%2,%1\n"
+			"	cmovge	%2,%3,%1\n"
+			"	stq_c	%1,%4\n"
+			"	beq	%1,3f\n"
+			"2:\n"
+			".subsection 2\n"
+			"3:	br	1b\n"
+			".previous"
+			: "=&r"(ret), "=&r"(tmp), "=&r"(tmp2),
+			  "=&r"(tmp3), "=m"(*sem)
+			: "r"(signal_pending(current)), "r"(-EINTR),
+			  "r"(0xffffffff00000000));
+
+		/* At this point we have ret
+		  	1	got the lock
+		  	0	go to sleep
+		  	-EINTR	interrupted  */
+		if (ret != 0)
+			break;
+
+		schedule();
+		set_task_state(current, TASK_INTERRUPTIBLE);
 	}
-	schedule();
 
-	DOWN_TAIL(TASK_INTERRUPTIBLE);
+	remove_wait_queue(&sem->wait, &wait);
+	current->state = TASK_RUNNING;
+	wake_up(&sem->wait);
+
+#if DEBUG_SEMAPHORE
+	printk("%s(%d): down %s(%p)\n",
+	       current->comm, current->pid,
+	       (ret < 0 ? "interrupted" : "acquired"), sem);
+#endif
+
+	/* Convert "got the lock" to 0==success.  */
+	return (ret < 0 ? ret : 0);
+}
+
+void
+__up_wakeup(struct semaphore *sem)
+{
+	wake_up(&sem->wait);
+}
+
+void
+down(struct semaphore *sem)
+{
+#if WAITQUEUE_DEBUG
+	CHECK_MAGIC(sem->__magic);
+#endif
+#if DEBUG_SEMAPHORE
+	printk("%s(%d): down(%p) <count=%d> from %p\n",
+	       current->comm, current->pid, sem,
+	       atomic_read(&sem->count), __builtin_return_address(0));
+#endif
+	__down(sem);
+}
+
+int
+down_interruptible(struct semaphore *sem)
+{
+#if WAITQUEUE_DEBUG
+	CHECK_MAGIC(sem->__magic);
+#endif
+#if DEBUG_SEMAPHORE
+	printk("%s(%d): down(%p) <count=%d> from %p\n",
+	       current->comm, current->pid, sem,
+	       atomic_read(&sem->count), __builtin_return_address(0));
+#endif
+	return __down_interruptible(sem);
+}
+
+int
+down_trylock(struct semaphore *sem)
+{
+	int ret;
+
+#if WAITQUEUE_DEBUG
+	CHECK_MAGIC(sem->__magic);
+#endif
+
+	ret = __down_trylock(sem);
+
+#if DEBUG_SEMAPHORE
+	printk("%s(%d): down_trylock %s from %p\n",
+	       current->comm, current->pid,
+	       ret ? "failed" : "acquired",
+	       __builtin_return_address(0));
+#endif
+
 	return ret;
 }
 
-int
-__down_trylock(struct semaphore * sem)
+void
+up(struct semaphore *sem)
 {
-	return waking_non_zero_trylock(sem);
+#if WAITQUEUE_DEBUG
+	CHECK_MAGIC(sem->__magic);
+#endif
+#if DEBUG_SEMAPHORE
+	printk("%s(%d): up(%p) <count=%d> from %p\n",
+	       current->comm, current->pid, sem,
+	       atomic_read(&sem->count), __builtin_return_address(0));
+#endif
+	__up(sem);
 }
 
 
@@ -142,122 +270,106 @@ __down_trylock(struct semaphore * sem)
  */
 
 void
-__down_read(struct rw_semaphore *sem, int count)
+__down_read_failed(struct rw_semaphore *sem, int count)
 {
-	long tmp;
-	DOWN_VAR;
+	DECLARE_WAITQUEUE(wait, current);
 
  retry_down:
 	if (count < 0) {
-		/* Wait for the lock to become unbiased.  Readers
-		   are non-exclusive.  */
+		/* Waiting on multiple readers and/or writers.  */
 		
-		/* This takes care of granting the lock.  */
-		up_read(sem);
+		/* Undo the acquisition we started in down_read.  */
+		atomic_inc(&sem->count);
 
+		current->state = TASK_UNINTERRUPTIBLE;
+		wmb();
 		add_wait_queue(&sem->wait, &wait);
-		while (sem->count < 0) {
-			set_task_state(tsk, TASK_UNINTERRUPTIBLE);
-			if (sem->count >= 0)
-				break;
+		mb();
+		while (atomic_read(&sem->count) < 0) {
 			schedule();
+			set_task_state(current, TASK_UNINTERRUPTIBLE);
 		}
 
 		remove_wait_queue(&sem->wait, &wait);
-		tsk->state = TASK_RUNNING;
+		current->state = TASK_RUNNING;
 
-		__asm __volatile (
-			"	mb\n"
-			"1:	ldl_l	%0,%1\n"
-			"	subl	%0,1,%2\n"
-			"	subl	%0,1,%0\n"
-			"	stl_c	%2,%1\n"
-			"	bne	%2,2f\n"
-			".subsection 2\n"
-			"2:	br	1b\n"
-			".previous"
-			: "=r"(count), "=m"(sem->count), "=r"(tmp)
-			: : "memory");
+		mb();
+		count = atomic_dec_return(&sem->count);
 		if (count <= 0)
 			goto retry_down;
 	} else {
-		add_wait_queue(&sem->wait, &wait);
+		/* Waiting on exactly one writer.  */
 
-		while (1) {
-			if (test_and_clear_bit(0, &sem->granted))
-				break;
-			set_task_state(tsk, TASK_UNINTERRUPTIBLE);
-			if ((sem->granted & 1) == 0)
-				schedule();
+		current->state = TASK_UNINTERRUPTIBLE;
+		wmb();
+		add_wait_queue(&sem->wait, &wait);
+		mb();
+
+		while (!test_and_clear_bit(0, &sem->granted)) {
+			schedule();
+			set_task_state(current, TASK_UNINTERRUPTIBLE);
 		}
 
 		remove_wait_queue(&sem->wait, &wait);
-		tsk->state = TASK_RUNNING;
+		current->state = TASK_RUNNING;
 	}
 }
 
 void
-__down_write(struct rw_semaphore *sem, int count)
+__down_write_failed(struct rw_semaphore *sem, int count)
 {
-	long tmp;
-	DOWN_VAR;
+	DECLARE_WAITQUEUE(wait, current);
 
  retry_down:
 	if (count + RW_LOCK_BIAS < 0) {
-		up_write(sem);
+		/* Waiting on multiple readers and/or writers.  */
 
+		/* Undo the acquisition we started in down_write.  */
+		atomic_add(RW_LOCK_BIAS, &sem->count);
+
+		current->state = TASK_UNINTERRUPTIBLE;
+		wmb();
 		add_wait_queue_exclusive(&sem->wait, &wait);
+		mb();
 	
-		while (sem->count < 0) {
-			set_task_state(tsk, TASK_UNINTERRUPTIBLE);
-			if (sem->count >= RW_LOCK_BIAS)
-				break;
+		while (atomic_read(&sem->count) + RW_LOCK_BIAS < 0) {
 			schedule();
+			set_task_state(current, TASK_UNINTERRUPTIBLE);
 		}
 
 		remove_wait_queue(&sem->wait, &wait);
-		tsk->state = TASK_RUNNING;
+		current->state = TASK_RUNNING;
 
-		__asm __volatile (
-			"	mb\n"
-			"1:	ldl_l	%0,%1\n"
-			"	ldah	%2,%3(%0)\n"
-			"	ldah	%0,%3(%0)\n"
-			"	stl_c	%2,%1\n"
-			"	bne	%2,2f\n"
-			".subsection 2\n"
-			"2:	br	1b\n"
-			".previous"
-			: "=r"(count), "=m"(sem->count), "=r"(tmp)
-			: "i"(-(RW_LOCK_BIAS >> 16))
-			: "memory");
+		count = atomic_sub_return(RW_LOCK_BIAS, &sem->count);
 		if (count != 0)
 			goto retry_down;
 	} else {
-		/* Put ourselves at the end of the list.  */
-		add_wait_queue_exclusive(&sem->write_bias_wait, &wait);
+		/* Waiting on exactly one writer.  */
 
-		while (1) {
-			if (test_and_clear_bit(1, &sem->granted))
-				break;
-			set_task_state(tsk, TASK_UNINTERRUPTIBLE);
-			if ((sem->granted & 2) == 0)
-				schedule();
+		current->state = TASK_UNINTERRUPTIBLE;
+		wmb();
+		add_wait_queue_exclusive(&sem->wait, &wait);
+		mb();
+
+		while (!test_and_clear_bit(1, &sem->granted)) {
+			schedule();
+			set_task_state(current, TASK_UNINTERRUPTIBLE);
 		}
 
 		remove_wait_queue(&sem->write_bias_wait, &wait);
-		tsk->state = TASK_RUNNING;
+		current->state = TASK_RUNNING;
 
 		/* If the lock is currently unbiased, awaken the sleepers.
 		   FIXME: This wakes up the readers early in a bit of a
 		   stampede -> bad!  */
-		if (sem->count >= 0)
+		count = atomic_read(&sem->count);
+		if (__builtin_expect(count >= 0, 0))
 			wake_up(&sem->wait);
 	}
 }
 
 void
-__do_rwsem_wake(struct rw_semaphore *sem, int readers)
+__rwsem_wake(struct rw_semaphore *sem, int readers)
 {
 	if (readers) {
 		if (test_and_set_bit(0, &sem->granted))
@@ -268,4 +380,68 @@ __do_rwsem_wake(struct rw_semaphore *sem, int readers)
 			BUG();
 		wake_up(&sem->write_bias_wait);
 	}
+}
+
+void
+down_read(struct rw_semaphore *sem)
+{
+#if WAITQUEUE_DEBUG
+	CHECK_MAGIC(sem->__magic);
+#endif
+	__down_read(sem);
+#if WAITQUEUE_DEBUG
+	if (sem->granted & 2)
+		BUG();
+	if (atomic_read(&sem->writers))
+		BUG();
+	atomic_inc(&sem->readers);
+#endif
+}
+
+void
+down_write(struct rw_semaphore *sem)
+{
+#if WAITQUEUE_DEBUG
+	CHECK_MAGIC(sem->__magic);
+#endif
+	__down_write(sem);
+#if WAITQUEUE_DEBUG
+	if (sem->granted & 3)
+		BUG();
+	if (atomic_read(&sem->writers))
+		BUG();
+	if (atomic_read(&sem->readers))
+		BUG();
+	atomic_inc(&sem->writers);
+#endif
+}
+
+void
+up_read(struct rw_semaphore *sem)
+{
+#if WAITQUEUE_DEBUG
+	CHECK_MAGIC(sem->__magic);
+	if (sem->granted & 2)
+		BUG();
+	if (atomic_read(&sem->writers))
+		BUG();
+	atomic_dec(&sem->readers);
+#endif
+	__up_read(sem);
+}
+
+void
+up_write(struct rw_semaphore *sem)
+{
+#if WAITQUEUE_DEBUG
+	CHECK_MAGIC(sem->__magic);
+	if (sem->granted & 3)
+		BUG();
+	if (atomic_read(&sem->readers))
+		BUG();
+	if (atomic_read(&sem->writers) != 1)
+		BUG();
+	atomic_dec(&sem->writers);
+#endif
+	__up_write(sem);
 }

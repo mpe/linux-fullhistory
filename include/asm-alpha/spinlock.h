@@ -80,7 +80,7 @@ static inline void spin_lock(spinlock_t * lock)
 	"	blbs	%0,2b\n"
 	"	br	1b\n"
 	".previous"
-	: "=r" (tmp), "=m" (lock->lock)
+	: "=&r" (tmp), "=m" (lock->lock)
 	: "m"(lock->lock) : "memory");
 }
 

@@ -12,10 +12,14 @@
 #include <asm/system.h>
 #include <asm/atomic.h>
 
+#define DEBUG_SEMAPHORE 0
+#define DEBUG_RW_SEMAPHORE 0
+
 struct semaphore {
 	/* Careful, inline assembly knows about the position of these two.  */
-	atomic_t count;
+	atomic_t count __attribute__((aligned(8)));
 	atomic_t waking;		/* biased by -1 */
+
 	wait_queue_head_t wait;
 #if WAITQUEUE_DEBUG
 	long __magic;
@@ -42,7 +46,7 @@ struct semaphore {
 #define DECLARE_MUTEX(name) __DECLARE_SEMAPHORE_GENERIC(name,1)
 #define DECLARE_MUTEX_LOCKED(name) __DECLARE_SEMAPHORE_GENERIC(name,0)
 
-extern inline void sema_init(struct semaphore *sem, int val)
+static inline void sema_init(struct semaphore *sem, int val)
 {
 	/*
 	 * Logically, 
@@ -68,103 +72,33 @@ static inline void init_MUTEX_LOCKED (struct semaphore *sem)
 	sema_init(sem, 0);
 }
 
-
-extern void __down(struct semaphore * sem);
-extern int  __down_interruptible(struct semaphore * sem);
-extern int  __down_trylock(struct semaphore * sem);
-extern void __up(struct semaphore * sem);
-
-/* All have custom assembly linkages.  */
-extern void __down_failed(struct semaphore * sem);
-extern void __down_failed_interruptible(struct semaphore * sem);
-extern void __down_failed_trylock(struct semaphore * sem);
-extern void __up_wakeup(struct semaphore * sem);
+extern void down(struct semaphore *);
+extern void __down_failed(struct semaphore *);
+extern int  down_interruptible(struct semaphore *);
+extern int  __down_failed_interruptible(struct semaphore *);
+extern int  down_trylock(struct semaphore *);
+extern void up(struct semaphore *);
+extern void __up_wakeup(struct semaphore *);
 
 /*
- * Whee.  Hidden out of line code is fun.  The contention cases are
- * handled out of line in kernel/sched.c; arch/alpha/lib/semaphore.S
- * takes care of making sure we can call it without clobbering regs.
+ * Hidden out of line code is fun, but extremely messy.  Rely on newer
+ * compilers to do a respectable job with this.  The contention cases
+ * are handled out of line in arch/alpha/kernel/semaphore.c.
  */
 
-extern inline void down(struct semaphore * sem)
+static inline void __down(struct semaphore *sem)
 {
-	/* Given that we have to use particular hard registers to 
-	   communicate with __down_failed anyway, reuse them in 
-	   the atomic operation as well. 
-
-	   __down_failed takes the semaphore address in $24, and
-	   it's return address in $28.  The pv is loaded as usual.
-	   The gp is clobbered (in the module case) as usual.  */
-
-	/* This little bit of silliness is to get the GP loaded for
-	   a function that ordinarily wouldn't.  Otherwise we could
-	   have it done by the macro directly, which can be optimized
-	   the linker.  */
-	register void *pv __asm__("$27");
-
-#if WAITQUEUE_DEBUG
-	CHECK_MAGIC(sem->__magic);
-#endif
-	
-	pv = __down_failed;
-	__asm__ __volatile__ (
-		"/* semaphore down operation */\n"
-		"1:	ldl_l	$24,%1\n"
-		"	subl	$24,1,$28\n"
-		"	subl	$24,1,$24\n"
-		"	stl_c	$28,%1\n"
-		"	beq	$28,2f\n"
-		"	blt	$24,3f\n"
-		"4:	mb\n"
-		".subsection 2\n"
-		"2:	br	1b\n"
-		"3:	lda	$24,%1\n"
-		"	jsr	$28,($27),__down_failed\n"
-		"	ldgp	$29,0($28)\n"
-		"	br	4b\n"
-		".previous"
-		: "=r"(pv)
-		: "m"(sem->count), "r"(pv)
-		: "$24", "$28", "memory");
+	long count = atomic_dec_return(&sem->count);
+	if (__builtin_expect(count < 0, 0))
+		__down_failed(sem);
 }
 
-extern inline int down_interruptible(struct semaphore * sem)
+static inline int __down_interruptible(struct semaphore *sem)
 {
-	/* __down_failed_interruptible takes the semaphore address in $24,
-	   and it's return address in $28.  The pv is loaded as usual.
-	   The gp is clobbered (in the module case) as usual.  The return
-	   value is in $24.  */
-
-	register int ret __asm__("$24");
-	register void *pv __asm__("$27");
-
-#if WAITQUEUE_DEBUG
-	CHECK_MAGIC(sem->__magic);
-#endif
-	
-	pv = __down_failed_interruptible;
-	__asm__ __volatile__ (
-		"/* semaphore down interruptible operation */\n"
-		"1:	ldl_l	$24,%2\n"
-		"	subl	$24,1,$28\n"
-		"	subl	$24,1,$24\n"
-		"	stl_c	$28,%2\n"
-		"	beq	$28,2f\n"
-		"	blt	$24,3f\n"
-		"	mov	$31,%0\n"
-		"4:	mb\n"
-		".subsection 2\n"
-		"2:	br	1b\n"
-		"3:	lda	$24,%2\n"
-		"	jsr	$28,($27),__down_failed_interruptible\n"
-		"	ldgp	$29,0($28)\n"
-		"	br	4b\n"
-		".previous"
-		: "=r"(ret), "=r"(pv)
-		: "m"(sem->count), "r"(pv)
-		: "$28", "memory");
-
-	return ret;
+	long count = atomic_dec_return(&sem->count);
+	if (__builtin_expect(count < 0, 0))
+		return __down_failed_interruptible(sem);
+	return 0;
 }
 
 /*
@@ -174,7 +108,7 @@ extern inline int down_interruptible(struct semaphore * sem)
  * Do this by using ll/sc on the pair of 32-bit words.
  */
 
-extern inline int down_trylock(struct semaphore * sem)
+static inline int __down_trylock(struct semaphore * sem)
 {
 	long ret, tmp, tmp2, sub;
 
@@ -182,25 +116,21 @@ extern inline int down_trylock(struct semaphore * sem)
 	   (taken) branches in order to be a valid ll/sc sequence.
 
 	   do {
-	       tmp = ldq_l;
-	       sub = 0x0000000100000000;
-	       ret = ((int)tmp <= 0);		// count =< 0 ?
-	       if ((int)tmp >= 0) sub = 0;	// count >= 0 ?
-			// note that if count=0 subq overflows to the high
-			// longword (i.e waking)
-	       ret &= ((long)tmp < 0);		// waking < 0 ?
-	       sub += 1;
-	       if (ret) 
-			break;	
-	       tmp -= sub;
-	       tmp = stq_c = tmp;
+		tmp = ldq_l;
+		sub = 0x0000000100000000;	
+		ret = ((int)tmp <= 0);		// count <= 0 ?
+		// Note that if count=0, the decrement overflows into
+		// waking, so cancel the 1 loaded above.  Also cancel
+		// it if the lock was already free.
+		if ((int)tmp >= 0) sub = 0;	// count >= 0 ?
+		ret &= ((long)tmp < 0);		// waking < 0 ?
+		sub += 1;
+		if (ret) break;	
+		tmp -= sub;
+		tmp = stq_c = tmp;
 	   } while (tmp == 0);
 	*/
 
-#if WAITQUEUE_DEBUG
-	CHECK_MAGIC(sem->__magic);
-#endif
-	
 	__asm__ __volatile__(
 		"1:	ldq_l	%1,%4\n"
 		"	lda	%3,1\n"
@@ -215,7 +145,7 @@ extern inline int down_trylock(struct semaphore * sem)
 		"	subq	%1,%3,%1\n"
 		"	stq_c	%1,%4\n"
 		"	beq	%1,3f\n"
-		"2:\n"
+		"2:	mb\n"
 		".subsection 2\n"
 		"3:	br	1b\n"
 		".previous"
@@ -226,45 +156,70 @@ extern inline int down_trylock(struct semaphore * sem)
 	return ret;
 }
 
-extern inline void up(struct semaphore * sem)
+static inline void __up(struct semaphore *sem)
 {
-	/* Given that we have to use particular hard registers to 
-	   communicate with __up_wakeup anyway, reuse them in 
-	   the atomic operation as well. 
+	long ret, tmp, tmp2, tmp3;
 
-	   __up_wakeup takes the semaphore address in $24, and
-	   it's return address in $28.  The pv is loaded as usual.
-	   The gp is clobbered (in the module case) as usual.  */
+	/* We must manipulate count and waking simultaneously and atomically.
+	   Otherwise we have races between up and __down_failed_interruptible
+	   waking up on a signal.
 
-	register void *pv __asm__("$27");
+	   "Equivalent" C.  Note that we have to do this all without
+	   (taken) branches in order to be a valid ll/sc sequence.
 
-#if WAITQUEUE_DEBUG
-	CHECK_MAGIC(sem->__magic);
-#endif
-	
-	pv = __up_wakeup;
-	__asm__ __volatile__ (
-		"/* semaphore up operation */\n"
+	   do {
+		tmp = ldq_l;
+		ret = (int)tmp + 1;			// count += 1;
+		tmp2 = tmp & 0xffffffff00000000;	// extract waking
+		if (ret <= 0)				// still sleepers?
+			tmp2 += 0x0000000100000000;	// waking += 1;
+		tmp = ret & 0x00000000ffffffff;		// insert count
+		tmp |= tmp2;				// insert waking;
+	       tmp = stq_c = tmp;
+	   } while (tmp == 0);
+	*/
+
+	__asm__ __volatile__(
 		"	mb\n"
-		"1:	ldl_l	$24,%1\n"
-		"	addl	$24,1,$28\n"
-		"	addl	$24,1,$24\n"
-		"	stl_c	$28,%1\n"
-		"	beq	$28,2f\n"
-		"	ble	$24,3f\n"
-		"4:\n"
+		"1:	ldq_l	%1,%4\n"
+		"	addl	%1,1,%0\n"
+		"	zapnot	%1,0xf0,%2\n"
+		"	addq	%2,%5,%3\n"
+		"	cmovle	%0,%3,%2\n"
+		"	zapnot	%0,0x0f,%1\n"
+		"	bis	%1,%2,%1\n"
+		"	stq_c	%1,%4\n"
+		"	beq	%1,3f\n"
+		"2:\n"
 		".subsection 2\n"
-		"2:	br	1b\n"
-		"3:	lda	$24,%1\n"
-		"	jsr	$28,($27),__up_wakeup\n"
-		"	ldgp	$29,0($28)\n"
-		"	br	4b\n"
+		"3:	br	1b\n"
 		".previous"
-		: "=r"(pv)
-		: "m"(sem->count), "r"(pv)
-		: "$24", "$28", "memory");
+		: "=&r"(ret), "=&r"(tmp), "=&r"(tmp2), "=&r"(tmp3)
+		: "m"(*sem), "r"(0x0000000100000000)
+		: "memory");
+
+	if (__builtin_expect(ret <= 0, 0))
+		__up_wakeup(sem);
 }
 
+#if !WAITQUEUE_DEBUG && !DEBUG_SEMAPHORE
+extern inline void down(struct semaphore *sem)
+{
+	__down(sem);
+}
+extern inline int down_interruptible(struct semaphore *sem)
+{
+	return __down_interruptible(sem);
+}
+extern inline int down_trylock(struct semaphore *sem)
+{
+	return __down_trylock(sem);
+}
+extern inline void up(struct semaphore *sem)
+{
+	__up(sem);
+}
+#endif
 
 /* rw mutexes (should that be mutices? =) -- throw rw
  * spinlocks and semaphores together, and this is what we
@@ -297,7 +252,7 @@ extern inline void up(struct semaphore * sem)
 #define RW_LOCK_BIAS		0x01000000
 
 struct rw_semaphore {
-	int			count;
+	atomic_t		count;
 	/* bit 0 means read bias granted;
 	   bit 1 means write bias granted.  */
 	unsigned		granted;
@@ -317,7 +272,7 @@ struct rw_semaphore {
 #endif
 
 #define __RWSEM_INITIALIZER(name,count)					\
-	{ (count), 0, __WAIT_QUEUE_HEAD_INITIALIZER((name).wait),	\
+	{ ATOMIC_INIT(count), 0, __WAIT_QUEUE_HEAD_INITIALIZER((name).wait), \
 	  __WAIT_QUEUE_HEAD_INITIALIZER((name).write_bias_wait)		\
 	  __SEM_DEBUG_INIT(name) __RWSEM_DEBUG_INIT }
 
@@ -331,9 +286,9 @@ struct rw_semaphore {
 #define DECLARE_RWSEM_WRITE_LOCKED(name) \
 	__DECLARE_RWSEM_GENERIC(name, 0)
 
-extern inline void init_rwsem(struct rw_semaphore *sem)
+static inline void init_rwsem(struct rw_semaphore *sem)
 {
-	sem->count = RW_LOCK_BIAS;
+	atomic_set (&sem->count, RW_LOCK_BIAS);
 	sem->granted = 0;
 	init_waitqueue_head(&sem->wait);
 	init_waitqueue_head(&sem->write_bias_wait);
@@ -344,213 +299,73 @@ extern inline void init_rwsem(struct rw_semaphore *sem)
 #endif
 }
 
-/* All have custom assembly linkages.  */
-extern void __down_read_failed(struct rw_semaphore *sem);
-extern void __down_write_failed(struct rw_semaphore *sem);
-extern void __rwsem_wake(struct rw_semaphore *sem, unsigned long readers);
+extern void down_read(struct rw_semaphore *);
+extern void down_write(struct rw_semaphore *);
+extern void up_read(struct rw_semaphore *);
+extern void up_write(struct rw_semaphore *);
+extern void __down_read_failed(struct rw_semaphore *, int);
+extern void __down_write_failed(struct rw_semaphore *, int);
+extern void __rwsem_wake(struct rw_semaphore *, int);
 
+static inline void __down_read(struct rw_semaphore *sem)
+{
+	long count = atomic_dec_return(&sem->count);
+	if (__builtin_expect(count < 0, 0))
+		__down_read_failed(sem, count);
+}
+
+static inline void __down_write(struct rw_semaphore *sem)
+{
+	long count = atomic_sub_return(RW_LOCK_BIAS, &sem->count);
+	if (__builtin_expect(count != 0, 0))
+		__down_write_failed(sem, count);
+}
+
+/* When a reader does a release, the only significant case is when there
+   was a writer waiting, and we've bumped the count to 0, then we must
+   wake the writer up.  */
+
+static inline void __up_read(struct rw_semaphore *sem)
+{
+	long count;
+	mb();
+	count = atomic_inc_return(&sem->count);
+	if (__builtin_expect(count == 0, 0))
+		__rwsem_wake(sem, 0);
+}
+
+/* Releasing the writer is easy -- just release it and wake up
+   any sleepers.  */
+
+static inline void __up_write(struct rw_semaphore *sem)
+{
+	long count, wake;
+	mb();
+	count = atomic_add_return(RW_LOCK_BIAS, &sem->count);
+
+	/* Only do the wake if we were, but are no longer, negative.  */
+	wake = ((int)(count - RW_LOCK_BIAS) < 0) && count >= 0;
+	if (__builtin_expect(wake, 0))
+		__rwsem_wake(sem, count);
+}
+
+#if !WAITQUEUE_DEBUG && !DEBUG_RW_SEMAPHORE
 extern inline void down_read(struct rw_semaphore *sem)
 {
-	/* Given that we have to use particular hard registers to 
-	   communicate with __down_read_failed anyway, reuse them in 
-	   the atomic operation as well. 
-
-	   __down_read_failed takes the semaphore address in $24, the count
-	   we read in $25, and it's return address in $28. The pv is loaded
-	   as usual. The gp is clobbered (in the module case) as usual.  */
-
-	/* This little bit of silliness is to get the GP loaded for
-	   a function that ordinarily wouldn't.  Otherwise we could
-	   have it done by the macro directly, which can be optimized
-	   the linker.  */
-	register void *pv __asm__("$27");
-
-#if WAITQUEUE_DEBUG
-	CHECK_MAGIC(sem->__magic);
-#endif
-
-	pv = __down_read_failed;
-	__asm__ __volatile__(
-		"/* semaphore down_read operation */\n"
-		"1:	ldl_l	$24,%1\n"
-		"	subl	$24,1,$28\n"
-		"	subl	$24,1,$25\n"
-		"	stl_c	$28,%1\n"
-		"	beq	$28,2f\n"
-		"	blt	$25,3f\n"
-		"4:	mb\n"
-		".subsection 2\n"
-		"2:	br	1b\n"
-		"3:	lda	$24,%1\n"
-		"	jsr	$28,($27),__down_read_failed\n"
-		"	ldgp	$29,0($28)\n"
-		"	br	4b\n"
-		".previous"
-		: "=r"(pv)
-		: "m"(sem->count), "r"(pv)
-		: "$24", "$25", "$28", "memory");
-
-#if WAITQUEUE_DEBUG
-	if (sem->granted & 2)
-		BUG();
-	if (atomic_read(&sem->writers))
-		BUG();
-	atomic_inc(&sem->readers);
-#endif
+	__down_read(sem);
 }
-
 extern inline void down_write(struct rw_semaphore *sem)
 {
-	/* Given that we have to use particular hard registers to 
-	   communicate with __down_write_failed anyway, reuse them in 
-	   the atomic operation as well. 
-
-	   __down_write_failed takes the semaphore address in $24, the count
-	   we read in $25, and it's return address in $28. The pv is loaded
-	   as usual. The gp is clobbered (in the module case) as usual.  */
-
-	/* This little bit of silliness is to get the GP loaded for
-	   a function that ordinarily wouldn't.  Otherwise we could
-	   have it done by the macro directly, which can be optimized
-	   the linker.  */
-	register void *pv __asm__("$27");
-
-#if WAITQUEUE_DEBUG
-	CHECK_MAGIC(sem->__magic);
-#endif
-
-	pv = __down_write_failed;
-	__asm__ __volatile__(
-		"/* semaphore down_write operation */\n"
-		"1:	ldl_l	$24,%1\n"
-		"	ldah	$28,%3($24)\n"
-		"	ldah	$25,%3($24)\n"
-		"	stl_c	$28,%1\n"
-		"	beq	$28,2f\n"
-		"	bne	$25,3f\n"
-		"4:	mb\n"
-		".subsection 2\n"
-		"2:	br	1b\n"
-		"3:	lda	$24,%1\n"
-		"	jsr	$28,($27),__down_write_failed\n"
-		"	ldgp	$29,0($28)\n"
-		"	br	4b\n"
-		".previous"
-		: "=r"(pv)
-		: "m"(sem->count), "r"(pv), "i"(-(RW_LOCK_BIAS >> 16))
-		: "$24", "$25", "$28", "memory");
-
-#if WAITQUEUE_DEBUG
-	if (atomic_read(&sem->writers))
-		BUG();
-	if (atomic_read(&sem->readers))
-		BUG();
-	if (sem->granted & 3)
-		BUG();
-	atomic_inc(&sem->writers);
-#endif
+	__down_write(sem);
 }
-
-/* When a reader does a release, the only significant case is when
-  there was a writer waiting, and we've * bumped the count to 0: we must
-wake the writer up.  */
-
 extern inline void up_read(struct rw_semaphore *sem)
 {
-	/* Given that we have to use particular hard registers to 
-	   communicate with __rwsem_wake anyway, reuse them in 
-	   the atomic operation as well. 
-
-	   __rwsem_wake takes the semaphore address in $24, the
-	   number of waiting readers in $25, and it's return address
-	   in $28.  The pv is loaded as usual. The gp is clobbered
-	   (in the module case) as usual.  */
-
-	register void *pv __asm__("$27");
-
-#if WAITQUEUE_DEBUG
-	CHECK_MAGIC(sem->__magic);
-	if (sem->granted & 2)
-		BUG();
-	if (atomic_read(&sem->writers))
-		BUG();
-	atomic_dec(&sem->readers);
-#endif
-
-	pv = __rwsem_wake;
-	__asm__ __volatile__(
-		"/* semaphore up_read operation */\n"
-		"	mb\n"
-		"1:	ldl_l	$24,%1\n"
-		"	addl	$24,1,$28\n"
-		"	addl	$24,1,$24\n"
-		"	stl_c	$28,%1\n"
-		"	beq	$28,2f\n"
-		"	beq	$24,3f\n"
-		"4:\n"
-		".subsection 2\n"
-		"2:	br	1b\n"
-		"3:	lda	$24,%1\n"
-		"	mov	0,$25\n"
-		"	jsr	$28,($27),__rwsem_wake\n"
-		"	ldgp	$29,0($28)\n"
-		"	br	4b\n"
-		".previous"
-		: "=r"(pv)
-		: "m"(sem->count), "r"(pv)
-		: "$24", "$25", "$28", "memory");
+	__up_read(sem);
 }
-
-/* releasing the writer is easy -- just release it and
- * wake up any sleepers.
- */
 extern inline void up_write(struct rw_semaphore *sem)
 {
-	/* Given that we have to use particular hard registers to 
-	   communicate with __rwsem_wake anyway, reuse them in 
-	   the atomic operation as well. 
-
-	   __rwsem_wake takes the semaphore address in $24, the
-	   number of waiting readers in $25, and it's return address
-	   in $28.  The pv is loaded as usual. The gp is clobbered
-	   (in the module case) as usual.  */
-
-	register void *pv __asm__("$27");
-
-#if WAITQUEUE_DEBUG
-	CHECK_MAGIC(sem->__magic);
-	if (sem->granted & 3)
-		BUG();
-	if (atomic_read(&sem->readers))
-		BUG();
-	if (atomic_read(&sem->writers) != 1)
-		BUG();
-	atomic_dec(&sem->writers);
-#endif
-
-	pv = __rwsem_wake;
-	__asm__ __volatile__(
-		"/* semaphore up_write operation */\n"
-		"	mb\n"
-		"1:	ldl_l	$24,%1\n"
-		"	ldah	$28,%3($24)\n"
-		"	stl_c	$28,%1\n"
-		"	beq	$28,2f\n"
-		"	blt	$24,3f\n"
-		"4:\n"
-		".subsection 2\n"
-		"2:	br	1b\n"
-		"3:	ldah	$25,%3($24)\n"
-		/* Only do the wake if we're no longer negative.  */
-		"	blt	$25,4b\n"
-		"	lda	$24,%1\n"
-		"	jsr	$28,($27),__rwsem_wake\n"
-		"	ldgp	$29,0($28)\n"
-		"	br	4b\n"
-		".previous"
-		: "=r"(pv)
-		: "m"(sem->count), "r"(pv), "i"(RW_LOCK_BIAS >> 16)
-		: "$24", "$25", "$28", "memory");
+	__up_write(sem);
 }
+#endif
 
 #endif

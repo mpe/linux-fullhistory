@@ -1129,7 +1129,7 @@ static int nsc_ircc_hard_xmit_fir(struct sk_buff *skb, struct net_device *dev)
 	if ((speed = irda_get_speed(skb)) != self->io.speed) {
 		/* Check for empty frame */
 		if (!skb->len) {
-			nsc_ircc_change_speed_complete(self, speed); 
+			nsc_ircc_change_speed(self, speed); 
 			return 0;
 		} else
 			self->new_speed = speed;

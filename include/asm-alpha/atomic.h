@@ -66,8 +66,8 @@ static __inline__ long atomic_add_return(int i, atomic_t * v)
 	long temp, result;
 	__asm__ __volatile__(
 	"1:	ldl_l %0,%1\n"
+	"	addl %0,%3,%2\n"
 	"	addl %0,%3,%0\n"
-	"	mov %0,%2\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,2f\n"
 	"	mb\n"
@@ -84,8 +84,8 @@ static __inline__ long atomic_sub_return(int i, atomic_t * v)
 	long temp, result;
 	__asm__ __volatile__(
 	"1:	ldl_l %0,%1\n"
+	"	subl %0,%3,%2\n"
 	"	subl %0,%3,%0\n"
-	"	mov %0,%2\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,2f\n"
 	"	mb\n"
