@@ -592,7 +592,8 @@ static int sock_socket(int family, int type, int protocol)
   
 	if ((type != SOCK_STREAM && type != SOCK_DGRAM &&
 		type != SOCK_SEQPACKET && type != SOCK_RAW &&
-		type != SOCK_PACKET) || protocol < 0)
+		type != SOCK_PACKET && type != SOCK_NCP)
+		|| protocol < 0)
 			return(-EINVAL);
 
 /*

@@ -866,6 +866,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			if (err)
 				return err;
 			memcpy_tofs((char *)arg, (char *) hd_ident_info[dev], sizeof(struct hd_driveid));
+			return 0;
 
 		RO_IOCTLS(inode->i_rdev,arg);
 		default:

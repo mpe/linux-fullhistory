@@ -177,7 +177,8 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 	switch(sel_type)
 	{
 		case SEL_IN:
-			if (sk->type==SOCK_SEQPACKET && sk->state==TCP_CLOSE)
+			if ((sk->type==SOCK_SEQPACKET || sk->type==SOCK_NCP)
+				&& sk->state==TCP_CLOSE)
 			{
 				/* Connection closed: Wake up */
 				return(1);

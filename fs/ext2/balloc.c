@@ -316,10 +316,7 @@ repeat:
 			else
 				lmap |= 0xffffffff << (31 - (j & 31));
 			if (lmap != 0xffffffffl) {
-				__asm__ ("bsfl %1,%0"
-					 : "=r" (k)
-					 : "r" (~lmap));
-				k++;
+				k = ffz(lmap) + 1;
 				if ((j + k) < EXT2_BLOCKS_PER_GROUP(sb)) {
 					j += k;
 					goto got_block;

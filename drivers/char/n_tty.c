@@ -931,9 +931,9 @@ static int write_chan(struct tty_struct * tty, struct file * file,
 				if (opost(c, tty) < 0)
 					break;
 				b++; nr--;
-				if (tty->driver.flush_chars)
-					tty->driver.flush_chars(tty);
 			}
+			if (tty->driver.flush_chars)
+				tty->driver.flush_chars(tty);
 		} else {
 			c = tty->driver.write(tty, 1, b, nr);
 			b += c;

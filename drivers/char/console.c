@@ -1457,13 +1457,13 @@ void poke_blanked_console(void)
 	}
 }
 
-void * memsetw(void * s,unsigned short c,int count)
+void * memsetw(void * s, unsigned short c, unsigned int count)
 {
 __asm__("cld\n\t"
 	"rep\n\t"
 	"stosw"
 	: /* no output */
-	:"a" (c),"D" (s),"c" (count)
+	:"a" (c),"D" (s),"c" (count/2)
 	:"cx","di");
 return s;
 }

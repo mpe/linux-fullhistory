@@ -41,6 +41,7 @@
 #endif
 #ifdef CONFIG_IPX
 #include "ipx.h"
+#include "ncp.h"
 #endif
 
 #define SOCK_ARRAY_SIZE	64
@@ -137,6 +138,7 @@ struct sock {
 #ifdef CONFIG_IPX
   ipx_address			ipx_source_addr,ipx_dest_addr;
   unsigned short		ipx_type;
+  struct ncp_info		ncp;
 #endif
 #ifdef CONFIG_AX25
 /* Really we want to add a per protocol private area */

@@ -627,7 +627,20 @@ are any multiple of 512 bytes long.  */
 	  printk("\n");
 	};
 #endif
-	
+
+/* Some dumb host adapters can speed transfers by knowing the
+ * minimum tranfersize in advance.
+ *
+ * We shouldn't disconnect in the middle of a sector, but the cdrom
+ * sector size can be larger than the size of a buffer and the
+ * transfer may be split to the size of a buffer.  So it's safe to
+ * assume that we can at least transfer the minimum of the buffer
+ * size (1024) and the sector size between each connect / disconnect.
+ */
+
+        SCpnt->transfersize = (scsi_CDs[dev].sector_size > 1024) ?
+                        1024 : scsi_CDs[dev].sector_size;
+
 	SCpnt->this_count = this_count;
 	scsi_do_cmd (SCpnt, (void *) cmd, buffer, 
 		     realcount * scsi_CDs[dev].sector_size, 

@@ -344,15 +344,15 @@ static void keyboard_interrupt(int int_pt_regs)
 		u_char type;
 
 		/* the XOR below used to be an OR */
-		int shift_final = shift_state ^ vc_kbd_lock(kbd,VC_CAPSLOCK);
+		int shift_final = shift_state ^ kbd->lockstate;
 
 		key_code = key_map[shift_final][scancode];
 		type = KTYP(key_code);
 
 		if (type == KT_LETTER) {
 		    type = KT_LATIN;
-		    if (vc_kbd_lock(kbd,VC_CAPSLOCK))
-			key_code = key_map[shift_final][scancode];
+		    if (vc_kbd_led(kbd,VC_CAPSLOCK))
+			key_code = key_map[shift_final ^ (1<<KG_SHIFT)][scancode];
 		}
 		(*key_handler[type])(key_code & 0xff, up_flag);
 	}
@@ -404,7 +404,6 @@ static void caps_toggle(void)
 	if (rep)
 		return;
 	chg_vc_kbd_led(kbd,VC_CAPSLOCK);
-	chg_vc_kbd_lock(kbd,VC_CAPSLOCK);
 }
 
 static void caps_on(void)
@@ -412,7 +411,6 @@ static void caps_on(void)
 	if (rep)
 		return;
 	set_vc_kbd_led(kbd,VC_CAPSLOCK);
-	set_vc_kbd_lock(kbd,VC_CAPSLOCK);
 }
 
 static void show_ptregs(void)
@@ -463,10 +461,8 @@ static void num(void)
 		applkey('P', 1);
 		return;
 	}
-	if (!rep) {	/* no autorepeat for numlock, ChN */
+	if (!rep)	/* no autorepeat for numlock, ChN */
 		chg_vc_kbd_led(kbd,VC_NUMLOCK);
-		chg_vc_kbd_lock(kbd,VC_NUMLOCK);
-	}
 }
 
 static void lastcons(void)
@@ -647,7 +643,8 @@ static void do_pad(unsigned char value, char up_flag)
 		applkey(app_map[value], 1);
 		return;
 	}
-	if (!vc_kbd_lock(kbd,VC_NUMLOCK))
+
+	if (!vc_kbd_led(kbd,VC_NUMLOCK))
 		switch (value) {
 			case KVAL(K_PCOMMA):
 			case KVAL(K_PDOT):
@@ -709,10 +706,8 @@ static void do_shift(unsigned char value, char up_flag)
 	/* kludge... */
 	if (value == KVAL(K_CAPSSHIFT)) {
 		value = KVAL(K_SHIFT);
-		if (!up_flag) {
+		if (!up_flag)
 			clr_vc_kbd_led(kbd, VC_CAPSLOCK);
-			clr_vc_kbd_lock(kbd, VC_CAPSLOCK);
-		}
 	}
 
 	if (up_flag) {

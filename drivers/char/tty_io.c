@@ -1535,8 +1535,10 @@ int tty_register_driver(struct tty_driver *driver)
 		return 0;
 
 	error = register_chrdev(driver->major, driver->name, &tty_fops);
-	if (error)
+	if (error < 0)
 		return error;
+	else if(driver->major == 0)
+		driver->major = error;
 
 	if (!driver->put_char)
 		driver->put_char = tty_default_put_char;
@@ -1545,7 +1547,7 @@ int tty_register_driver(struct tty_driver *driver)
 	driver->next = tty_drivers;
 	tty_drivers->prev = driver;
 	tty_drivers = driver;
-	return 0;
+	return error;
 }
 
 /*
@@ -1589,7 +1591,7 @@ long tty_init(long kmem_start)
 		panic("size of tty structure > PAGE_SIZE!");
 	if (register_chrdev(TTY_MAJOR,"tty",&tty_fops))
 		panic("unable to get major %d for tty device", TTY_MAJOR);
-	if (register_chrdev(TTYAUX_MAJOR,"tty",&tty_fops))
+	if (register_chrdev(TTYAUX_MAJOR,"cua",&tty_fops))
 		panic("unable to get major %d for tty device", TTYAUX_MAJOR);
 
 	kmem_start = kbd_init(kmem_start);

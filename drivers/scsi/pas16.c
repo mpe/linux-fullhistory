@@ -1,5 +1,7 @@
 #define AUTOSENSE
 #define PSEUDO_DMA
+#define FOO
+#define UNSAFE  /* Not unsafe for PAS16 -- use it */
 
 /*
  * This driver adapted from Drew Eckhardt's Trantor T128 driver
@@ -40,6 +42,11 @@
  * AUTOSENSE - if defined, REQUEST SENSE will be performed automatically
  *      for commands that return with a CHECK CONDITION status. 
  *
+ * LIMIT_TRANSFERSIZE - if defined, limit the pseudo-dma transfers to 512
+ *      bytes at a time.  Since interrupts are disabled by default during
+ *      these transfers, we might need this to give reasonable interrupt
+ *      service time if the transfer size gets too large.
+ *
  * PSEUDO_DMA - enables PSEUDO-DMA hardware, should give a 3-4X performance
  * increase compared to polled I/O.
  *
@@ -47,11 +54,13 @@
  * 
  * SCSI2 - enable support for SCSI-II tagged queueing.  Untested.
  *
- *
- * UNSAFE - leave interrupts enabled during pseudo-DMA transfers.  You
- *          only really want to use this if you're having a problem with
- *          dropped characters during high speed communications, and even
- *          then, you're going to be better off twiddling with transfersize.
+ * UNSAFE - leave interrupts enabled during pseudo-DMA transfers.  This
+ *	    parameter comes from the NCR5380 code.  It is NOT unsafe with
+ *	    the PAS16 and you should use it.  If you don't you will have
+ *	    a problem with dropped characters during high speed
+ *	    communications during SCSI transfers.  If you really don't
+ *	    want to use UNSAFE you can try defining LIMIT_TRANSFERSIZE or
+ *	    twiddle with the transfer size in the high level code.
  *
  * USLEEP - enable support for devices that don't disconnect.  Untested.
  *
@@ -242,7 +251,7 @@ void	init_board( unsigned short io_port, int irq, int force_irq )
 int     pas16_hw_detect( unsigned short  board_num )
 {
     unsigned char	board_rev, tmp;
-    unsigned short	port = bases[ board_num ].io_port;
+    unsigned short	io_port = bases[ board_num ].io_port;
 
     /* See if we can find a PAS16 board at the address associated
      * with this logical board number.
@@ -251,25 +260,38 @@ int     pas16_hw_detect( unsigned short  board_num )
     /* First, attempt to take a newer model board out of reset and
      * give it a base address.  This shouldn't affect older boards.
      */
-    enable_board( board_num, port );
+    enable_board( board_num, io_port );
 
     /* Now see if it looks like a PAS16 board */
-    board_rev = inb( port + PCB_CONFIG );
+    board_rev = inb( io_port + PCB_CONFIG );
 
     if( board_rev == 0xff )
 	return 0;
 
     tmp = board_rev ^ 0xe0;
 
-    outb( tmp, port + PCB_CONFIG );
-    tmp = inb( port + PCB_CONFIG );
-    outb( board_rev, port + PCB_CONFIG );
+    outb( tmp, io_port + PCB_CONFIG );
+    tmp = inb( io_port + PCB_CONFIG );
+    outb( board_rev, io_port + PCB_CONFIG );
 
     if( board_rev != tmp ) 	/* Not a PAS-16 */
 	return 0;
 
-    if( ( inb( port + OPERATION_MODE_1 ) & 0x03 ) != 0x03 ) 
+    if( ( inb( io_port + OPERATION_MODE_1 ) & 0x03 ) != 0x03 ) 
 	return 0;  	/* return if no SCSI interface found */
+
+    /* Mediavision has some new model boards that return ID bits
+     * that indicate a SCSI interface, but they're not (LMS).  We'll
+     * put in an additional test to try and weed them out.
+     */
+
+    outb( 0x01, io_port + WAIT_STATE ); 	/* 1 Wait state */
+    NCR5380_write( MODE_REG, 0x20 );		/* Is it really SCSI? */
+    if( NCR5380_read( MODE_REG ) != 0x20 )	/* Write to a reg.    */
+	return 0;				/* and try to read    */
+    NCR5380_write( MODE_REG, 0x00 );		/* it back.	      */
+    if( NCR5380_read( MODE_REG ) != 0x00 )
+	return 0;
 
     return 1;
 }
@@ -426,7 +448,15 @@ int pas16_biosparam(Disk * disk, int dev, int * ip)
   int size = disk->capacity;
   ip[0] = 64;
   ip[1] = 32;
-  ip[2] = size >> 11;
+  ip[2] = size >> 11;		/* I think I have it as /(32*64) */
+  if( ip[2] > 1024 ) {		/* yes, >, not >= */
+        ip[0]=255;
+        ip[1]=63;
+        ip[2]=size/(63*255);
+        if( ip[2] > 1023 )	/* yes >1023... */
+                ip[2] = 1023;
+  }
+
   return 0;
 }
 

@@ -121,4 +121,16 @@ extern inline int find_next_zero_bit (unsigned long * addr, int size,
 	return (offset + set + res);
 }
 
+/*
+ * ffz = Find First Zero in word. Undefined if no zero exists,
+ * so code should check against ~0UL first..
+ */
+extern inline unsigned long ffz(unsigned long word)
+{
+	__asm__("bsfl %1,%0"
+		:"=r" (word)
+		:"r" (~word));
+	return word;
+}
+
 #endif /* _I386_BITOPS_H */

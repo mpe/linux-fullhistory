@@ -223,10 +223,6 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
-#else
-
-#error "unknown blk device"
-
 #endif
 
 #if (MAJOR_NR != SCSI_TAPE_MAJOR)

@@ -193,6 +193,11 @@
  * DIFFERENTIAL - if defined, NCR53c81 chips will use external differential
  * 	transceivers. 
  *
+ * LIMIT_TRANSFERSIZE - if defined, limit the pseudo-dma transfers to 512
+ *	bytes at a time.  Since interrupts are disabled by default during
+ *	these transfers, we might need this to give reasonable interrupt
+ *	service time if the transfer size gets too large.
+ *
  * LINKED - if defined, linked commands are supported.
  *
  * PSEUDO_DMA - if defined, PSEUDO DMA is used during the data transfer phases.
@@ -1980,10 +1985,16 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 		if (!cmd->device->borken &&
 		    (transfersize = NCR5380_dma_xfer_len(instance, cmd)) != 0) {
 #else
-		if (!cmd->device->borken && 
-		    (transfersize = cmd->transfersize) && 
-		    cmd->SCp.this_residual && !(cmd->SCp.this_residual % 
-		    transfersize)) {
+                transfersize = cmd->transfersize;
+
+#ifdef LIMIT_TRANSFERSIZE  /* If we have problems with interrupt service */
+                if( transfersize > 512 )
+                    transfersize = 512;
+#endif  /* LIMIT_TRANSFERSIZE */
+
+                if (!cmd->device->borken && transfersize && 
+                    cmd->SCp.this_residual && !(cmd->SCp.this_residual % 
+                    transfersize)) {
 #endif
 		    len = transfersize;
 		    if (NCR5380_transfer_dma(instance, &phase,
