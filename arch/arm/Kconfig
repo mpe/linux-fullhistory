@@ -319,7 +319,7 @@ config NR_CPUS
 
 config PREEMPT
 	bool "Preemptible Kernel (EXPERIMENTAL)"
-	depends on CPU_32 && EXPERIMENTAL
+	depends on EXPERIMENTAL
 	help
 	  This option reduces the latency of the kernel when reacting to
 	  real-time or interactive events by allowing a low priority process to
@@ -383,7 +383,6 @@ config LEDS_CPU
 
 config ALIGNMENT_TRAP
 	bool
-	depends on CPU_32
 	default y if !ARCH_EBSA110
 	help
 	  ARM processors can not fetch/store information which is not
@@ -565,7 +564,6 @@ source "fs/Kconfig.binfmt"
 
 config ARTHUR
 	tristate "RISC OS personality"
-	depends on CPU_32
 	help
 	  Say Y here to include the kernel code necessary if you want to run
 	  Acorn RISC OS/Arthur binaries under Linux. This code is still very
