@@ -1198,7 +1198,24 @@ int aha1542_reset(Scsi_Cmnd * SCpnt)
 	 * we do this?  Try this first, and we can add that later
 	 * if it turns out to be useful.
 	 */
-	outb(SCRST, CONTROL(SCpnt->host->io_port));
+	outb(HRST | SCRST, CONTROL(SCpnt->host->io_port));
+
+	/*
+	 * Wait for the thing to settle down a bit.  Unfortunately
+	 * this is going to basically lock up the machine while we
+	 * wait for this to complete.  To be 100% correct, we need to
+	 * check for timeout, and if we are doing something like this
+	 * we are pretty desperate anyways.
+	 */
+	WAIT(STATUS(SCpnt->host->io_port), 
+	     STATMASK, INIT|IDLE, STST|DIAGF|INVDCMD|DF|CDF);
+
+	/*
+	 * We need to do this too before the 1542 can interact with
+	 * us again.
+	 */
+	setup_mailboxes(SCpnt->host->io_port, SCpnt->host);
+
 	/*
 	 * Now try and pick up the pieces.  Restart all commands
 	 * that are currently active on the bus, and reset all of
@@ -1226,6 +1243,12 @@ int aha1542_reset(Scsi_Cmnd * SCpnt)
 	 * then report SUCCESS.
 	 */
 	return (SCSI_RESET_SUCCESS | SCSI_RESET_BUS_RESET);
+fail:
+	printk("aha1542.c: Unable to perform hard reset.\n");
+	printk("Power cycle machine to reset\n");
+	return (SCSI_RESET_ERROR | SCSI_RESET_BUS_RESET);
+
+
       }
     else
       {

@@ -31,7 +31,7 @@ struct rpc_wait {
 	int			*buf;
 	int			len;
 	char			gotit;
-	u32			xid;
+	__u32			xid;
 };
 
 struct rpc_sock {

@@ -8,10 +8,12 @@
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
+mainmenu_name 'Sparc Linux Kernel Configuration'
 
 echo "#define CONFIG_SPARCDEVS 1" >> $CONFIG_H
 echo "CONFIG_SPARCDEVS=y" >> $CONFIG
 
+mainmenu_option next_comment
 comment 'Sparc Kernel setup'
 
 bool 'Sun floppy controller support' CONFIG_BLK_DEV_SUNFD n
@@ -21,6 +23,7 @@ bool 'System V IPC' CONFIG_SYSVIPC y
 bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
 
 if [ "$CONFIG_NET" = "y" ]; then
+mainmenu_option next_comment
 comment 'Networking options'
 bool 'TCP/IP networking' CONFIG_INET y
 if [ "$CONFIG_INET" "=" "y" ]; then
@@ -38,6 +41,7 @@ bool 'The IPX protocol' CONFIG_IPX n
 #bool 'Amateur Radio AX.25 Level 2' CONFIG_AX25 n
 fi
 
+mainmenu_option next_comment
 comment 'SCSI support'
 
 bool 'SCSI support?' CONFIG_SCSI n
@@ -64,6 +68,7 @@ fi
 
 if [ "$CONFIG_NET" = "y" ]; then
 
+mainmenu_option next_comment
 comment 'Network device support'
 
 bool 'Network device support?' CONFIG_NETDEVICES y
@@ -86,6 +91,7 @@ bool 'Sun Intel Ethernet support' CONFIG_SUN_INTEL n
 fi
 fi
 
+mainmenu_option next_comment
 comment 'Filesystems'
 
 bool 'Standard (minix) fs support' CONFIG_MINIX_FS n
@@ -106,6 +112,7 @@ bool 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS n
 bool 'System V and Coherent filesystem support' CONFIG_SYSV_FS n
 
 
+mainmenu_option next_comment
 comment 'character devices'
 
 bool 'Zilog serial support' CONFIG_SUN_ZS n
@@ -114,6 +121,7 @@ comment 'Sound'
 
 bool 'Sun Audio support' CONFIG_SUN_AUDIO n
 
+mainmenu_option next_comment
 comment 'Kernel hacking'
 
 bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC n

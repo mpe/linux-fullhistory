@@ -1,5 +1,5 @@
-#define AZT_VERSION "1.70"
-/*      $Id: aztcd.c,v 1.70 1995/08/19 16:16:39 root Exp root $
+#define AZT_VERSION "1.80"
+/*      $Id: aztcd.c,v 1.80 1995/10/11 19:35:03 root Exp root $
 	linux/drivers/block/aztcd.c - AztechCD268 CDROM driver
 
 	Copyright (C) 1994,1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
@@ -130,6 +130,10 @@
                 enough testing done. If you can test it, please contact me. For
                 details please read README.aztcd.
                 Werner Zimmermann, August 19, 1995
+        V1.80   Modification to suit the new kernel boot procedure introduced
+                with kernel 1.3.33. Will definitely not work with older kernels.
+                Programming done by Linus himself.
+                Werner Zimmermann, October 11, 1995
 	NOTE: 
 	Points marked with ??? are questionable !
 */

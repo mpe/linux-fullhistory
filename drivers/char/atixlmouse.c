@@ -26,6 +26,7 @@ char kernel_version[] = UTS_RELEASE;
 #include <linux/signal.h>
 #include <linux/errno.h>
 #include <linux/mouse.h>
+#include <linux/random.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -89,6 +90,7 @@ void mouse_interrupt(int irq, struct pt_regs * regs)
 	outb(ATIXL_MSE_READ_BUTTONS, ATIXL_MSE_CONTROL_PORT); /* Select IR0 - Button Status */
 	buttons = inb( ATIXL_MSE_DATA_PORT);
 	if (dx != 0 || dy != 0 || buttons != mouse.latch_buttons) {
+		add_mouse_randomness((buttons << 16) + (dy << 8) + dx);
 		mouse.latch_buttons |= buttons;
 		mouse.dx += dx;
 		mouse.dy += dy;

@@ -3143,8 +3143,8 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
  * Validate the tty linkage
  */
 	if (ppp->flags & SC_DEBUG)
-		printk (KERN_DEBUG "ppp_dev_xmit [%s]: skb %X\n",
-			dev->name, (int) skb);
+		printk (KERN_DEBUG "ppp_dev_xmit [%s]: skb %p\n",
+			dev->name, skb);
 /*
  * Validate the tty interface
  */

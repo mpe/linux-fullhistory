@@ -214,10 +214,8 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 #endif
 
 	kstat.interrupts[irq]++;
-#ifdef CONFIG_RANDOM
 	if (action->flags & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
-#endif
 	action->handler(irq, regs);
 }
 
@@ -236,10 +234,8 @@ asmlinkage void do_fast_IRQ(int irq)
 #endif
 
 	kstat.interrupts[irq]++;
-#ifdef CONFIG_RANDOM
 	if (action->flags & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
-#endif
 	action->handler(irq, NULL);
 }
 
@@ -258,6 +254,8 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 		return -EBUSY;
 	if (!handler)
 		return -EINVAL;
+	if (irqflags & SA_SAMPLE_RANDOM)
+		rand_initialize_irq(irq);
 	save_flags(flags);
 	cli();
 	action->handler = handler;

@@ -210,13 +210,28 @@ static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
 	
 	elf_phdata =  (struct elf_phdr *) 
 		kmalloc(sizeof(struct elf_phdr) * interp_elf_ex->e_phnum, GFP_KERNEL);
-	if(!elf_phdata) return 0xffffffff;
+	if(!elf_phdata)
+	  return 0xffffffff;
 	
+	/*
+	 * If the size of this structure has changed, then punt, since
+	 * we will be doing the wrong thing.
+	 */
+	if( interp_elf_ex->e_phentsize != 32 )
+	  {
+	    kfree(elf_phdata);
+	    return 0xffffffff;
+	  }
+
 	retval = read_exec(interpreter_inode, interp_elf_ex->e_phoff, (char *) elf_phdata,
 			   sizeof(struct elf_phdr) * interp_elf_ex->e_phnum, 1);
 	
 	elf_exec_fileno = open_inode(interpreter_inode, O_RDONLY);
-	if (elf_exec_fileno < 0) return 0xffffffff;
+	if (elf_exec_fileno < 0) {
+	  kfree(elf_phdata);
+	  return 0xffffffff;
+	}
+
 	file = current->files->fd[elf_exec_fileno];
 
 	eppnt = elf_phdata;
@@ -425,8 +440,18 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	
 	for(i=0;i < elf_ex.e_phnum; i++){
 		if(elf_ppnt->p_type == PT_INTERP) {
-			/* This is the program interpreter used for shared libraries - 
-			   for now assume that this is an a.out format binary */
+		  	if( elf_interpreter != NULL )
+			{
+				kfree (elf_phdata);
+				kfree(elf_interpreter);
+				MOD_DEC_USE_COUNT;
+				return -EINVAL;
+			}
+
+			/* This is the program interpreter used for
+			 * shared libraries - for now assume that this
+			 * is an a.out format binary 
+			 */
 			
 			elf_interpreter = (char *) kmalloc(elf_ppnt->p_filesz, 
 							   GFP_KERNEL);
@@ -475,12 +500,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	/* Some simple consistency checks for the interpreter */
 	if(elf_interpreter){
 		interpreter_type = INTERPRETER_ELF | INTERPRETER_AOUT;
-		if(retval < 0) {
-			kfree(elf_interpreter);
-			kfree(elf_phdata);
-			MOD_DEC_USE_COUNT;
-			return -ELIBACC;
-		}
+
 		/* Now figure out which format our binary is */
 		if((N_MAGIC(interp_ex) != OMAGIC) && 
 		   (N_MAGIC(interp_ex) != ZMAGIC) &&
@@ -569,6 +589,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		  kfree(elf_interpreter);
 			
 		  if(elf_entry == 0xffffffff) { 
+		    set_fs(old_fs);
 		    printk("Unable to load interpreter\n");
 		    kfree(elf_phdata);
 		    send_sig(SIGSEGV, current, 0);
@@ -600,7 +621,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			if(k > start_code) start_code = k;
 			k = elf_ppnt->p_vaddr + elf_ppnt->p_filesz;
 			if(k > elf_bss) elf_bss = k;
-			if((elf_ppnt->p_flags | PROT_WRITE) && end_code <  k)
+			if((elf_ppnt->p_flags | PF_W) && end_code <  k)
 				end_code = k; 
 			if(end_data < k) end_data = k; 
 			k = elf_ppnt->p_vaddr + elf_ppnt->p_memsz;

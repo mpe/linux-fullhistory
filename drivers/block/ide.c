@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.14  Sep 14, 1995
+ *  linux/drivers/block/ide.c	Version 5.15  Oct 13, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -14,6 +14,22 @@
  * Tertiary i/f:   ide2: major=33; (hde)         minor=0; (hdf)         minor=64
  * Quaternary i/f: ide3: major=34; (hdg)         minor=0; (hdh)         minor=64
  * 
+ * It is easy to extend ide.c to handle more than four interfaces:
+ *
+ *	Change the MAX_HWIFS constant in ide.h.
+ * 
+ *	Define some new major numbers (in major.h), and insert them into
+ *	the ide_hwif_to_major table in ide.c.
+ * 
+ *	Fill in the extra values for the new interfaces into the two tables
+ *	inside ide.c:  default_io_base[]  and  default_irqs[].
+ * 
+ *	Create the new request handlers by cloning "do_ide3_request()"
+ *	for each new interface, and add them to the switch statement
+ *	in the ide_init() function in ide.c.
+ *
+ *	Recompile, create the new /dev/ entries, and it will probably work.
+ *
  *  From hd.c:
  *  |
  *  | It traverses the request-list, using interrupts to jump between functions.
@@ -145,6 +161,8 @@
  *  Version 5.14	fixes to cmd640 support.. maybe it works now(?)
  *			added & tested full EZ-DRIVE support -- don't use LILO!
  *			don't enable 2nd CMD640 PCI port during init - conflict
+ *  Version 5.15	bug fix in init_cmd640_vlb()
+ *			bug fix in interrupt sharing code
  *
  *  Driver compile-time options are in ide.h
  *
@@ -2400,6 +2418,7 @@ void init_cmd640_vlb (void)
 	if (reg == 0xff || (reg & 0x90) != 0x90) {
 #if TRY_CMD640_VLB_AT_0x78
 		port = 0x78;
+		reg = read_cmd640_vlb(port, 0x50);
 		if (reg == 0xff || (reg & 0x90) != 0x90)
 #endif
 		{
@@ -2735,17 +2754,17 @@ static int init_irq (ide_hwif_t *hwif)
 	 */
 	save_flags(flags);
 	cli();
-	if (request_irq(hwif->irq, ide_intr,
-			SA_INTERRUPT|SA_SAMPLE_RANDOM, hwif->name)) {
-		restore_flags(flags);
-		printk(" -- FAILED!");
-		return 1;
-	}
-
-	/*
-	 * Got the irq,  now set everything else up
-	 */
 	if ((hwgroup = irq_to_hwgroup[hwif->irq]) == NULL) {
+		if (request_irq(hwif->irq, ide_intr,
+				SA_INTERRUPT|SA_SAMPLE_RANDOM, hwif->name)) {
+			restore_flags(flags);
+			printk(" -- FAILED!");
+			return 1;
+		}
+
+		/*
+		 * Got the irq,  now set everything else up
+		 */
 		hwgroup = kmalloc (sizeof(ide_hwgroup_t), GFP_KERNEL);
 		irq_to_hwgroup[hwif->irq] = hwgroup;
 		hwgroup->hwif 	 = hwif->next = hwif;

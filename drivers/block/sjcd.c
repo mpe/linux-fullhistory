@@ -1,24 +1,23 @@
 /* -- sjcd.c
  *
- *   Sanyo CD-ROM device driver implementation, Version 1.3
+ *   Sanyo CD-ROM device driver implementation, Version 1.5
  *   Copyright (C) 1995  Vadim V. Model
  *
  *   model@cecmow.enet.dec.com
- *   vadim@rbrf.msk.su
+ *   vadim@rbrf.ru
  *   vadim@ipsun.ras.ru
  *
  *   ISP16 detection and configuration.
  *   Copyright (C) 1995  Eric van der Maarel (maarel@marin.nl)
+ *                   and Vadim Model (vadim@cecmow.enet.dec.com)
  *
  *
  *  This driver is based on pre-works by Eberhard Moenkeberg (emoenke@gwdg.de);
  *  it was developed under use of mcd.c from Martin Harriss, with help of
  *  Eric van der Maarel (maarel@marin.nl).
  *
- *  ISP16 detection and configuration by Eric van der Maarel (maarel@marin.nl),
- *  with some data communicated by Vadim V. Model (vadim@rbrf.msk.su)
- *  and Leo Spiekman (spiekman@et.tudelft.nl)
- *
+ *  ISP16 detection and configuration by Eric van der Maarel (maarel@marin.nl).
+ *  Sound configuration by Vadim V. Model (model@cecmow.enet.dec.com)
  *
  *  It is planned to include these routines into sbpcd.c later - to make
  *  a "mixed use" on one cable possible for all kinds of drives which use
@@ -46,11 +45,25 @@
  *      on ISP16 soundcard.
  *      Allow for command line options: sjcd=<io_base>,<irq>,<dma>
  *  1.3 Some minor changes to README.sjcd.
+ *  1.4 MSS Sound support!! Listen to a CD through the speakers.
+ *  1.5 Module support and bugfixes.
+ *      Tray locking.
  *
  */
 
+#include <linux/major.h>
+#include <linux/config.h>
+
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#define sjcd_init init_module
+#ifndef CONFIG_MODVERSIONS
+char kernel_version[]= UTS_RELEASE;
+#endif
+#endif
+
 #include <linux/errno.h>
-#include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/timer.h>
@@ -59,7 +72,6 @@
 #include <linux/cdrom.h>
 #include <linux/ioport.h>
 #include <linux/string.h>
-#include <linux/delay.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -102,26 +114,32 @@
 #define ISP16_IO_SET_MASK  0x20  /* don't change 5-bit */
 /* ...for port */
 #define ISP16_IO_SET_PORT  0xF8E
-/* enable the drive */
-#define ISP16_NO_IDE__ENABLE_CDROM_PORT  0xF90  /* ISP16 without IDE interface */
-#define ISP16_IDE__ENABLE_CDROM_PORT  0xF91  /* ISP16 with IDE interface */
+/* enable the card */
+#define ISP16_C928__ENABLE_PORT  0xF90  /* ISP16 with OPTi 82C928 chip */
+#define ISP16_C929__ENABLE_PORT  0xF91  /* ISP16 with OPTi 82C929 chip */
 #define ISP16_ENABLE_CDROM  0x80  /* seven bit */
 
 /* the magic stuff */
 #define ISP16_CTRL_PORT  0xF8F
-#define ISP16_NO_IDE__CTRL  0xE2  /* ISP16 without IDE interface */
-#define ISP16_IDE__CTRL  0xE3  /* ISP16 with IDE interface */
+#define ISP16_C928__CTRL  0xE2  /* ISP16 with OPTi 82C928 chip */
+#define ISP16_C929__CTRL  0xE3  /* ISP16 with OPTi 82C929 chip */
 
 static short isp16_detect(void);
-static short isp16_no_ide__detect(void);
-static short isp16_with_ide__detect(void);
-static short isp16_config( int base, u_char drive_type, int irq, int dma );
+static short isp16_c928__detect(void);
+static short isp16_c929__detect(void);
+static short isp16_cdi_config( int base, u_char drive_type, int irq, int dma );
+static void isp16_sound_config( void );
 static short isp16_type; /* dependent on type of interface card */
 static u_char isp16_ctrl;
-static u_short isp16_enable_cdrom_port;
-
+static u_short isp16_enable_port;
 
 static int sjcd_present = 0;
+static u_char special_mask = 0;
+
+static unsigned char defaults[ 16 ] = {
+  0xA8, 0xA8, 0x18, 0x18, 0x18, 0x18, 0x8E, 0x8E,
+  0x03, 0x00, 0x02, 0x00, 0x0A, 0x00, 0x00, 0x00
+};
 
 #define SJCD_BUF_SIZ 32 /* cdr-h94a has internal 64K buffer */
 
@@ -137,6 +155,7 @@ static volatile int sjcd_buf_in, sjcd_buf_out = -1;
  */
 static unsigned short sjcd_status_valid = 0;
 static unsigned short sjcd_door_closed;
+static unsigned short sjcd_door_was_open;
 static unsigned short sjcd_media_is_available;
 static unsigned short sjcd_media_is_changed;
 static unsigned short sjcd_toc_uptodate = 0;
@@ -151,9 +170,9 @@ static int sjcd_open_count;
 static int sjcd_audio_status;
 static struct sjcd_play_msf sjcd_playing;
 
-static short    sjcd_port = SJCD_BASE_ADDR;
-static int      sjcd_irq  = SJCD_INTR_NR;
-static int      sjcd_dma  = SJCD_DMA;
+static int sjcd_port = SJCD_BASE_ADDR;
+static int sjcd_irq  = SJCD_INTR_NR;
+static int sjcd_dma  = SJCD_DMA_NR;
 
 static struct wait_queue *sjcd_waitq = NULL;
 
@@ -174,17 +193,16 @@ enum sjcd_transfer_state {
 static enum sjcd_transfer_state sjcd_transfer_state = SJCD_S_IDLE;
 static long sjcd_transfer_timeout = 0;
 static int sjcd_read_count = 0;
-#if 0
-static unsigned short sjcd_tries;
-#endif
 static unsigned char sjcd_mode = 0;
 
 #define SJCD_READ_TIMEOUT 5000
 
+#if defined( SJCD_GATHER_STAT )
 /*
  * Statistic.
  */
 static struct sjcd_stat statistic;
+#endif
 
 /*
  * Timer.
@@ -202,8 +220,8 @@ static struct timer_list sjcd_delay_timer = { NULL, NULL, 0, 0, NULL };
  * Set up device, i.e., use command line data to set
  * base address, irq and dma.
  */
-void sjcd_setup( char *str, int *ints ){
-
+void sjcd_setup( char *str, int *ints )
+{
    if (ints[0] > 0)
       sjcd_port = ints[1];
    if (ints[0] > 1)      
@@ -243,7 +261,7 @@ static void hsg2msf( long hsg, struct msf *msf ){
  * Send a command to cdrom. Invalidate status.
  */
 static void sjcd_send_cmd( unsigned char cmd ){
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd: send_cmd( 0x%x )\n", cmd );
 #endif
   outb( cmd, SJCDPORT( 0 ) );
@@ -256,7 +274,7 @@ static void sjcd_send_cmd( unsigned char cmd ){
  * Send a command with one arg to cdrom. Invalidate status.
  */
 static void sjcd_send_1_cmd( unsigned char cmd, unsigned char a ){
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd: send_1_cmd( 0x%x, 0x%x )\n", cmd, a );
 #endif
   outb( cmd, SJCDPORT( 0 ) );
@@ -271,7 +289,7 @@ static void sjcd_send_1_cmd( unsigned char cmd, unsigned char a ){
  */
 static void sjcd_send_4_cmd( unsigned char cmd, unsigned char a,
 	    unsigned char b, unsigned char c, unsigned char d ){
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd: send_4_cmd( 0x%x )\n", cmd );
 #endif
   outb( cmd, SJCDPORT( 0 ) );
@@ -288,7 +306,7 @@ static void sjcd_send_4_cmd( unsigned char cmd, unsigned char a,
  * Send a play or read command to cdrom. Invalidate Status.
  */
 static void sjcd_send_6_cmd( unsigned char cmd, struct sjcd_play_msf *pms ){
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd: send_long_cmd( 0x%x )\n", cmd );
 #endif
   outb( cmd, SJCDPORT( 0 ) );
@@ -312,7 +330,7 @@ static int sjcd_load_response( void *buf, int len ){
 
   for( ; len; --len ){ 
     int i;
-    for( i = 200; i-- && inb( SJCDPORT( 1 ) ) !=  0x09; );
+    for( i = 200; i-- && !SJCD_STATUS_AVAILABLE( inb( SJCDPORT( 1 ) ) ); );
     if( i > 0 ) *resp++ = ( unsigned char )inb( SJCDPORT( 0 ) );
     else break;
   }
@@ -320,7 +338,8 @@ static int sjcd_load_response( void *buf, int len ){
 }
 
 /*
- * Load and parse status.
+ * Load and parse command completion status (drive info byte and maybe error).
+ * Sorry, no error classification yet.
  */
 static void sjcd_load_status( void ){
   sjcd_media_is_changed = 0;
@@ -333,7 +352,10 @@ static void sjcd_load_status( void ){
     if( sjcd_completion_status & SST_MEDIA_CHANGED )
       sjcd_media_is_available = sjcd_media_is_changed = 1;
     else if( sjcd_completion_status & 0x0F ){
-      while( ( inb( SJCDPORT( 1 ) ) & 0x0B ) != 0x09 );
+      /*
+       * OK, we seem to catch an error ...
+       */
+      while( !SJCD_STATUS_AVAILABLE( inb( SJCDPORT( 1 ) ) ) );
       sjcd_completion_error = inb( SJCDPORT( 0 ) );
       if( ( sjcd_completion_status & 0x08 ) &&
 	 ( sjcd_completion_error & 0x40 ) )
@@ -346,8 +368,12 @@ static void sjcd_load_status( void ){
    */
   sjcd_status_valid = 1, sjcd_error_reported = 0;
   sjcd_command_is_in_progress = 0;
+
+  /*
+   * If the disk is changed, the TOC is not valid.
+   */
   if( sjcd_media_is_changed ) sjcd_toc_uptodate = 0;
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd: status %02x.%02x loaded.\n",
 	 ( int )sjcd_completion_status, ( int )sjcd_completion_error );
 #endif
@@ -360,7 +386,7 @@ static int sjcd_check_status( void ){
   /*
    * Try to load the response from cdrom into buffer.
    */
-  if( ( inb( SJCDPORT( 1 ) ) & 0x0B ) == 0x09 ){
+  if( SJCD_STATUS_AVAILABLE( inb( SJCDPORT( 1 ) ) ) ){
     sjcd_load_status();
     return( 1 );
   } else {
@@ -371,31 +397,55 @@ static int sjcd_check_status( void ){
   }
 }
 
+/*
+ * This is just timout counter, and nothing more. Surprized ? :-)
+ */
 static volatile long sjcd_status_timeout;
+
+/*
+ * We need about 10 seconds to wait. The longest command takes about 5 seconds
+ * to probe the disk (usually after tray closed or drive reset). Other values
+ * should be thought of for other commands.
+ */
 #define SJCD_WAIT_FOR_STATUS_TIMEOUT 1000
 
 static void sjcd_status_timer( void ){
   if( sjcd_check_status() ){
+    /*
+     * The command completed and status is loaded, stop waiting.
+     */
     wake_up( &sjcd_waitq );
   } else if( --sjcd_status_timeout <= 0 ){
+    /*
+     * We are timed out. 
+     */
     wake_up( &sjcd_waitq );
   } else {
-    SJCD_SET_TIMER( sjcd_status_timer, HZ/100 );
+    /*
+     * We have still some time to wait. Try again.
+     */
+    SJCD_SET_TIMER( sjcd_status_timer, 1 );
   }
 }
 
+/*
+ * Wait for status for 10 sec approx. Returns non-positive when timed out.
+ * Should not be used while reading data CDs.
+ */
 static int sjcd_wait_for_status( void ){
   sjcd_status_timeout = SJCD_WAIT_FOR_STATUS_TIMEOUT;
-  SJCD_SET_TIMER( sjcd_status_timer, HZ/100 );
+  SJCD_SET_TIMER( sjcd_status_timer, 1 ); 
   sleep_on( &sjcd_waitq );    
+#if defined( SJCD_DIAGNOSTIC ) || defined ( SJCD_TRACE )
   if( sjcd_status_timeout <= 0 )
     printk( "sjcd: Error Wait For Status.\n" );
+#endif
   return( sjcd_status_timeout );
 }
 
 static int sjcd_receive_status( void ){
   int i;
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd: receive_status\n" );
 #endif
   /*
@@ -403,7 +453,7 @@ static int sjcd_receive_status( void ){
    */
   for( i = 200; i-- && ( sjcd_check_status() == 0 ); );
   if( i < 0 ){
-#if 0
+#if defined( SJCD_TRACE )
     printk( "sjcd: long wait for status\n" );
 #endif
     if( sjcd_wait_for_status() <= 0 )
@@ -414,10 +464,10 @@ static int sjcd_receive_status( void ){
 }
 
 /*
- * Load the status.
+ * Load the status. Issue get status command and wait for status available.
  */
 static void sjcd_get_status( void ){
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd: get_status\n" );
 #endif
   sjcd_send_cmd( SCMD_GET_STATUS );
@@ -425,7 +475,7 @@ static void sjcd_get_status( void ){
 }
 
 /*
- * Check the drive if the disk is changed.
+ * Check the drive if the disk is changed. Should be revised.
  */
 static int sjcd_disk_change( kdev_t full_dev ){
 #if 0
@@ -444,14 +494,14 @@ static int sjcd_disk_change( kdev_t full_dev ){
  * Read the table of contents (TOC) and TOC header if necessary.
  * We assume that the drive contains no more than 99 toc entries.
  */
-static struct sjcd_hw_disk_info sjcd_table_of_contents[ 100 ];
+static struct sjcd_hw_disk_info sjcd_table_of_contents[ SJCD_MAX_TRACKS ];
 static unsigned char sjcd_first_track_no, sjcd_last_track_no;
 #define sjcd_disk_length  sjcd_table_of_contents[0].un.track_msf
 
 static int sjcd_update_toc( void ){
   struct sjcd_hw_disk_info info;
   int i;
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd: update toc:\n" );
 #endif
   /*
@@ -485,7 +535,7 @@ static int sjcd_update_toc( void ){
     printk( "get first failed\n" );
     return( -1 );
   }
-#if 0
+#if defined( SJCD_TRACE )
   printk( "TOC start 0x%02x ", sjcd_first_track_no );
 #endif
   /*
@@ -514,7 +564,7 @@ static int sjcd_update_toc( void ){
     printk( "get last failed\n" );
     return( -1 );
   }
-#if 0
+#if defined( SJCD_TRACE )
   printk( "TOC finish 0x%02x ", sjcd_last_track_no );
 #endif
   for( i = sjcd_first_track_no; i <= sjcd_last_track_no; i++ ){
@@ -574,7 +624,7 @@ static int sjcd_update_toc( void ){
     printk( "get size failed\n" );
     return( 1 );
   }
-#if 0
+#if defined( SJCD_TRACE )
   printk( "(%02x:%02x.%02x)\n", sjcd_disk_length.min,
 	 sjcd_disk_length.sec, sjcd_disk_length.frame );
 #endif
@@ -586,7 +636,7 @@ static int sjcd_update_toc( void ){
  */
 static int sjcd_get_q_info( struct sjcd_hw_qinfo *qp ){
   int s;
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd: load sub q\n" );
 #endif
   sjcd_send_cmd( SCMD_GET_QINFO );
@@ -632,11 +682,46 @@ static int sjcd_play( struct sjcd_play_msf *mp ){
 }
 
 /*
+ * Tray control functions.
+ */
+static int sjcd_tray_close( void ){
+#if defined( SJCD_TRACE )
+  printk( "sjcd: tray_close\n" );
+#endif
+  sjcd_send_cmd( SCMD_CLOSE_TRAY );
+  return( sjcd_receive_status() );
+}
+
+static int sjcd_tray_lock( void ){
+#if defined( SJCD_TRACE )
+  printk( "sjcd: tray_lock\n" );
+#endif
+  sjcd_send_cmd( SCMD_LOCK_TRAY );
+  return( sjcd_receive_status() );
+}
+
+static int sjcd_tray_unlock( void ){
+#if defined( SJCD_TRACE )
+  printk( "sjcd: tray_unlock\n" );
+#endif
+  sjcd_send_cmd( SCMD_UNLOCK_TRAY );
+  return( sjcd_receive_status() );
+}
+
+static int sjcd_tray_open( void ){
+#if defined( SJCD_TRACE )
+  printk( "sjcd: tray_open\n" );
+#endif
+  sjcd_send_cmd( SCMD_EJECT_TRAY );
+  return( sjcd_receive_status() );
+}
+
+/*
  * Do some user commands.
  */
 static int sjcd_ioctl( struct inode *ip, struct file *fp,
 		       unsigned int cmd, unsigned long arg ){
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd:ioctl\n" );
 #endif
 
@@ -648,14 +733,14 @@ static int sjcd_ioctl( struct inode *ip, struct file *fp,
 
   switch( cmd ){
   case CDROMSTART:{
-#if 0
+#if defined( SJCD_TRACE )
     printk( "sjcd: ioctl: start\n" );
 #endif
     return( 0 );
   }
 
   case CDROMSTOP:{
-#if 0
+#if defined( SJCD_TRACE )
     printk( "sjcd: ioctl: stop\n" );
 #endif
     sjcd_send_cmd( SCMD_PAUSE );
@@ -666,7 +751,7 @@ static int sjcd_ioctl( struct inode *ip, struct file *fp,
 
   case CDROMPAUSE:{
     struct sjcd_hw_qinfo q_info;
-#if 0
+#if defined( SJCD_TRACE )
     printk( "sjcd: ioctl: pause\n" );
 #endif
     if( sjcd_audio_status == CDROM_AUDIO_PLAY ){
@@ -683,7 +768,7 @@ static int sjcd_ioctl( struct inode *ip, struct file *fp,
   }
 
   case CDROMRESUME:{
-#if 0
+#if defined( SJCD_TRACE )
     printk( "sjcd: ioctl: resume\n" );
 #endif
     if( sjcd_audio_status == CDROM_AUDIO_PAUSED ){
@@ -702,11 +787,11 @@ static int sjcd_ioctl( struct inode *ip, struct file *fp,
 
   case CDROMPLAYTRKIND:{
     struct cdrom_ti ti; int s;
-#if 0
+#if defined( SJCD_TRACE )
     printk( "sjcd: ioctl: playtrkind\n" );
 #endif
-    if( ( s = verify_area( VERIFY_READ, (void *) arg, sizeof( ti ) ) ) == 0 ){
-      memcpy_fromfs( &ti, (void *) arg, sizeof( ti ) );
+    if( ( s = verify_area( VERIFY_READ, (void *)arg, sizeof( ti ) ) ) == 0 ){
+      memcpy_fromfs( &ti, (void *)arg, sizeof( ti ) );
 
       if( ti.cdti_trk0 < sjcd_first_track_no ) return( -EINVAL );
       if( ti.cdti_trk1 > sjcd_last_track_no )
@@ -728,17 +813,17 @@ static int sjcd_ioctl( struct inode *ip, struct file *fp,
 
   case CDROMPLAYMSF:{
     struct cdrom_msf sjcd_msf; int s;
-#if 0
+#if defined( SJCD_TRACE )
     printk( "sjcd: ioctl: playmsf\n" );
 #endif
-    if( ( s = verify_area( VERIFY_READ, (void *) arg, sizeof( sjcd_msf ) ) ) == 0 ){
+    if( ( s = verify_area( VERIFY_READ, (void *)arg, sizeof( sjcd_msf ) ) ) == 0 ){
       if( sjcd_audio_status == CDROM_AUDIO_PLAY ){
 	sjcd_send_cmd( SCMD_PAUSE );
 	( void )sjcd_receive_status();
 	sjcd_audio_status = CDROM_AUDIO_NO_STATUS;
       }
 
-      memcpy_fromfs( &sjcd_msf, ( void * )arg, sizeof( sjcd_msf ) );
+      memcpy_fromfs( &sjcd_msf, (void *)arg, sizeof( sjcd_msf ) );
 
       sjcd_playing.start.min = bin2bcd( sjcd_msf.cdmsf_min0 );
       sjcd_playing.start.sec = bin2bcd( sjcd_msf.cdmsf_sec0 );
@@ -757,26 +842,26 @@ static int sjcd_ioctl( struct inode *ip, struct file *fp,
 
   case CDROMREADTOCHDR:{
     struct cdrom_tochdr toc_header; int s;
-#if 0
+#if defined (SJCD_TRACE )
     printk( "sjcd: ioctl: readtocheader\n" );
 #endif
-    if( ( s = verify_area( VERIFY_WRITE, (void *) arg, sizeof( toc_header ) ) ) == 0 ){
+    if( ( s = verify_area( VERIFY_WRITE, (void *)arg, sizeof( toc_header ) ) ) == 0 ){
       toc_header.cdth_trk0 = sjcd_first_track_no;
       toc_header.cdth_trk1 = sjcd_last_track_no;
-      memcpy_tofs( ( void * )arg, &toc_header, sizeof( toc_header ) );
+      memcpy_tofs( (void *)arg, &toc_header, sizeof( toc_header ) );
     }
     return( s );
   }
 
   case CDROMREADTOCENTRY:{
     struct cdrom_tocentry toc_entry; int s;
-#if 0
+#if defined( SJCD_TRACE )
     printk( "sjcd: ioctl: readtocentry\n" );
 #endif
-    if( ( s = verify_area( VERIFY_WRITE, (void *) arg, sizeof( toc_entry ) ) ) == 0 ){
+    if( ( s = verify_area( VERIFY_WRITE, (void *)arg, sizeof( toc_entry ) ) ) == 0 ){
       struct sjcd_hw_disk_info *tp;
 
-      memcpy_fromfs( &toc_entry, ( void * )arg, sizeof( toc_entry ) );
+      memcpy_fromfs( &toc_entry, (void *)arg, sizeof( toc_entry ) );
 
       if( toc_entry.cdte_track == CDROM_LEADOUT )
 	tp = &sjcd_table_of_contents[ 0 ];
@@ -798,20 +883,20 @@ static int sjcd_ioctl( struct inode *ip, struct file *fp,
 	break;
       default: return( -EINVAL );
       }
-      memcpy_tofs( ( void * )arg, &toc_entry, sizeof( toc_entry ) );
+      memcpy_tofs( (void *)arg, &toc_entry, sizeof( toc_entry ) );
     }
     return( s );
   }
 
   case CDROMSUBCHNL:{
     struct cdrom_subchnl subchnl; int s;
-#if 0
+#if defined( SJCD_TRACE )
     printk( "sjcd: ioctl: subchnl\n" );
 #endif
-    if( ( s = verify_area( VERIFY_WRITE, (void *) arg, sizeof( subchnl ) ) ) == 0 ){
+    if( ( s = verify_area( VERIFY_WRITE, (void *)arg, sizeof( subchnl ) ) ) == 0 ){
       struct sjcd_hw_qinfo q_info;
 
-      memcpy_fromfs( &subchnl, ( void * )arg, sizeof( subchnl ) );
+      memcpy_fromfs( &subchnl, (void *)arg, sizeof( subchnl ) );
       if( sjcd_get_q_info( &q_info ) < 0 ) return( -EIO );
 
       subchnl.cdsc_audiostatus = sjcd_audio_status;
@@ -835,20 +920,20 @@ static int sjcd_ioctl( struct inode *ip, struct file *fp,
 	break;
       default: return( -EINVAL );
       }
-      memcpy_tofs( ( void * )arg, &subchnl, sizeof( subchnl ) );
+      memcpy_tofs( (void *)arg, &subchnl, sizeof( subchnl ) );
     }
     return( s );
   }
 
   case CDROMVOLCTRL:{
     struct cdrom_volctrl vol_ctrl; int s;
-#if 0
+#if defined( SJCD_TRACE )
     printk( "sjcd: ioctl: volctrl\n" );
 #endif
-    if( ( s = verify_area( VERIFY_READ, (void *) arg, sizeof( vol_ctrl ) ) ) == 0 ){
+    if( ( s = verify_area( VERIFY_READ, (void *)arg, sizeof( vol_ctrl ) ) ) == 0 ){
       unsigned char dummy[ 4 ];
 
-      memcpy_fromfs( &vol_ctrl, ( void * )arg, sizeof( vol_ctrl ) );
+      memcpy_fromfs( &vol_ctrl, (void *)arg, sizeof( vol_ctrl ) );
       sjcd_send_4_cmd( SCMD_SET_VOLUME, vol_ctrl.channel0, 0xFF,
 		      vol_ctrl.channel1, 0xFF );
       if( sjcd_receive_status() < 0 ) return( -EIO );
@@ -858,40 +943,33 @@ static int sjcd_ioctl( struct inode *ip, struct file *fp,
   }
 
   case CDROMEJECT:{
-#if 0
+#if defined( SJCD_TRACE )
     printk( "sjcd: ioctl: eject\n" );
 #endif
     if( !sjcd_command_is_in_progress ){
+      sjcd_tray_unlock();
       sjcd_send_cmd( SCMD_EJECT_TRAY );
       ( void )sjcd_receive_status();
     }
     return( 0 );
   }
 
+#if defined( SJCD_GATHER_STAT )
   case 0xABCD:{
     int s;
-#if 0
+#if defined( SJCD_TRACE )
     printk( "sjcd: ioctl: statistic\n" );
 #endif
-    if( ( s = verify_area( VERIFY_WRITE, (void *) arg, sizeof( statistic ) ) ) == 0 )
-      memcpy_tofs( ( void * )arg, &statistic, sizeof( statistic ) );
+    if( ( s = verify_area( VERIFY_WRITE, (void *)arg, sizeof( statistic ) ) ) == 0 )
+      memcpy_tofs( (void *)arg, &statistic, sizeof( statistic ) );
     return( s );
   }
+#endif
 
   default:
     return( -EINVAL );
   }
 }
-
-#if 0
-/*
- * We only seem to get interrupts after an error.
- * Just take the interrupt and clear out the status reg.
- */
-static void sjcd_interrupt( int irq, struct pt_regs *regs ){
-  printk( "sjcd: interrupt is cought\n" );
-}
-#endif
 
 /*
  * Invalidate internal buffers of the driver.
@@ -912,7 +990,7 @@ static void sjcd_invalidate_buffers( void ){
       CURRENT->cmd == READ && CURRENT->sector != -1 )
 
 static void sjcd_transfer( void ){
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd: transfer:\n" );
 #endif
   if( CURRENT_IS_VALID ){
@@ -931,7 +1009,7 @@ static void sjcd_transfer( void ){
 	}
 	if( nr_sectors > CURRENT->nr_sectors )
 	  nr_sectors = CURRENT->nr_sectors;
-#if 0
+#if defined( SJCD_TRACE )
 	printk( "copy out\n" );
 #endif
 	memcpy( CURRENT->buffer, sjcd_buf + offs, nr_sectors * 512 );
@@ -944,35 +1022,41 @@ static void sjcd_transfer( void ){
       }
     }
   }
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd: transfer: done\n" );
 #endif
 }
 
 static void sjcd_poll( void ){
+#if defined( SJCD_GATHER_STAT )
   /*
    * Update total number of ticks.
    */
   statistic.ticks++;
   statistic.tticks[ sjcd_transfer_state ]++;
+#endif
 
  ReSwitch: switch( sjcd_transfer_state ){
       
   case SJCD_S_IDLE:{
+#if defined( SJCD_GATHER_STAT )
     statistic.idle_ticks++;
-#if 0
+#endif
+#if defined( SJCD_TRACE )
     printk( "SJCD_S_IDLE\n" );
 #endif
     return;
   }
 
   case SJCD_S_START:{
+#if defined( SJCD_GATHER_STAT )
     statistic.start_ticks++;
+#endif
     sjcd_send_cmd( SCMD_GET_STATUS );
     sjcd_transfer_state =
       sjcd_mode == SCMD_MODE_COOKED ? SJCD_S_READ : SJCD_S_MODE;
     sjcd_transfer_timeout = 500;
-#if 0
+#if defined( SJCD_TRACE )
     printk( "SJCD_S_START: goto SJCD_S_%s mode\n",
 	   sjcd_transfer_state == SJCD_S_READ ? "READ" : "MODE" );
 #endif
@@ -982,10 +1066,10 @@ static void sjcd_poll( void ){
   case SJCD_S_MODE:{
     if( sjcd_check_status() ){
       /*
-       * Previos command is completed.
+       * Previous command is completed.
        */
       if( !sjcd_status_valid || sjcd_command_failed ){
-#if 0
+#if defined( SJCD_TRACE )
 	printk( "SJCD_S_MODE: pre-cmd failed: goto to SJCD_S_STOP mode\n" );
 #endif
 	sjcd_transfer_state = SJCD_S_STOP;
@@ -995,10 +1079,13 @@ static void sjcd_poll( void ){
       sjcd_mode = 0; /* unknown mode; should not be valid when failed */
       sjcd_send_1_cmd( SCMD_SET_MODE, SCMD_MODE_COOKED );
       sjcd_transfer_state = SJCD_S_READ; sjcd_transfer_timeout = 1000;
-#if 0
+#if defined( SJCD_TRACE )
       printk( "SJCD_S_MODE: goto SJCD_S_READ mode\n" );
 #endif
-    } else statistic.mode_ticks++;
+    }
+#if defined( SJCD_GATHER_STAT )
+    else statistic.mode_ticks++;
+#endif
     break;
   }
 
@@ -1008,14 +1095,14 @@ static void sjcd_poll( void ){
        * Previos command is completed.
        */
       if( !sjcd_status_valid || sjcd_command_failed ){
-#if 0
+#if defined( SJCD_TRACE )
 	printk( "SJCD_S_READ: pre-cmd failed: goto to SJCD_S_STOP mode\n" );
 #endif
 	sjcd_transfer_state = SJCD_S_STOP;
 	goto ReSwitch;
       }
       if( !sjcd_media_is_available ){
-#if 0
+#if defined( SJCD_TRACE )
 	printk( "SJCD_S_READ: no disk: goto to SJCD_S_STOP mode\n" );
 #endif
 	sjcd_transfer_state = SJCD_S_STOP;
@@ -1026,14 +1113,14 @@ static void sjcd_poll( void ){
 	 * We seem to come from set mode. So discard one byte of result.
 	 */
 	if( sjcd_load_response( &sjcd_mode, 1 ) != 0 ){
-#if 0
+#if defined( SJCD_TRACE )
 	  printk( "SJCD_S_READ: load failed: goto to SJCD_S_STOP mode\n" );
 #endif
 	  sjcd_transfer_state = SJCD_S_STOP;
 	  goto ReSwitch;
 	}
 	if( sjcd_mode != SCMD_MODE_COOKED ){
-#if 0
+#if defined( SJCD_TRACE )
 	  printk( "SJCD_S_READ: mode failed: goto to SJCD_S_STOP mode\n" );
 #endif
 	  sjcd_transfer_state = SJCD_S_STOP;
@@ -1048,7 +1135,7 @@ static void sjcd_poll( void ){
 	hsg2msf( sjcd_next_bn, &msf.start );
 	msf.end.min = 0; msf.end.sec = 0;            
 	msf.end.frame = sjcd_read_count = SJCD_BUF_SIZ;
-#if 0
+#if defined( SJCD_TRACE )
 	printk( "---reading msf-address %x:%x:%x  %x:%x:%x\n",
 	       msf.start.min, msf.start.sec, msf.start.frame,
 	       msf.end.min,   msf.end.sec,   msf.end.frame );
@@ -1059,28 +1146,31 @@ static void sjcd_poll( void ){
 	sjcd_send_6_cmd( SCMD_DATA_READ, &msf );
 	sjcd_transfer_state = SJCD_S_DATA;
 	sjcd_transfer_timeout = 500;
-#if 0
+#if defined( SJCD_TRACE )
 	printk( "SJCD_S_READ: go to SJCD_S_DATA mode\n" );
 #endif
       } else {
-#if 0
+#if defined( SJCD_TRACE )
 	printk( "SJCD_S_READ: nothing to read: go to SJCD_S_STOP mode\n" );
 #endif
 	sjcd_transfer_state = SJCD_S_STOP;
 	goto ReSwitch;
       }
-    } else statistic.read_ticks++;
+    }
+#if defined( SJCD_GATHER_STAT )
+    else statistic.read_ticks++;
+#endif
     break;
   }
 
   case SJCD_S_DATA:{
     unsigned char stat;
 
-  sjcd_s_data: stat = inb( SJCDPORT( 1 ) ) & 0x0B;
-#if 0
+  sjcd_s_data: stat = inb( SJCDPORT( 1 ) );
+#if defined( SJCD_TRACE )
     printk( "SJCD_S_DATA: status = 0x%02x\n", stat );
 #endif
-    if( stat == 0x09 ){
+    if( SJCD_STATUS_AVAILABLE( stat ) ){
       /*
        * No data is waiting for us in the drive buffer. Status of operation
        * completion is available. Read and parse it.
@@ -1088,10 +1178,14 @@ static void sjcd_poll( void ){
       sjcd_load_status();
 
       if( !sjcd_status_valid || sjcd_command_failed ){
+#if defined( SJCD_TRACE )
 	printk( "sjcd: read block %d failed, maybe audio disk? Giving up\n",
 	       sjcd_next_bn );
+#endif
 	if( CURRENT_IS_VALID ) end_request( 0 );
+#if defined( SJCD_TRACE )
 	printk( "SJCD_S_DATA: pre-cmd failed: go to SJCD_S_STOP mode\n" );
+#endif
 	sjcd_transfer_state = SJCD_S_STOP;
 	goto ReSwitch;
       }
@@ -1102,17 +1196,19 @@ static void sjcd_poll( void ){
 	goto ReSwitch;
       }
 
-      sjcd_transfer_state = SJCD_S_START;
+      sjcd_transfer_state = SJCD_S_READ;
       goto ReSwitch;
-    } else if( stat == 0x0A ){
+    } else if( SJCD_DATA_AVAILABLE( stat ) ){
       /*
        * One frame is read into device buffer. We must copy it to our memory.
-       * Otherwise cdrom hangs up. Check to see if we have something to read
+       * Otherwise cdrom hangs up. Check to see if we have something to copy
        * to.
        */
       if( !CURRENT_IS_VALID && sjcd_buf_in == sjcd_buf_out ){
+#if defined( SJCD_TRACE )
 	printk( "SJCD_S_DATA: nothing to read: go to SJCD_S_STOP mode\n" );
 	printk( " ... all the date would be discarded\n" );
+#endif
 	sjcd_transfer_state = SJCD_S_STOP;
 	goto ReSwitch;
       }
@@ -1123,7 +1219,7 @@ static void sjcd_poll( void ){
        */
       sjcd_buf_bn[ sjcd_buf_in ] = -1; /* ??? */
       insb( SJCDPORT( 2 ), sjcd_buf + 2048 * sjcd_buf_in, 2048 );
-#if 0
+#if defined( SJCD_TRACE )
       printk( "SJCD_S_DATA: next_bn=%d, buf_in=%d, buf_out=%d, buf_bn=%d\n",
 	     sjcd_next_bn, sjcd_buf_in, sjcd_buf_out,
 	     sjcd_buf_bn[ sjcd_buf_in ] );
@@ -1153,16 +1249,21 @@ static void sjcd_poll( void ){
 	if( CURRENT_IS_VALID &&
 	   ( CURRENT->sector / 4 < sjcd_next_bn ||
 	    CURRENT->sector / 4 > sjcd_next_bn + SJCD_BUF_SIZ ) ){
-#if 0
+#if defined( SJCD_TRACE )
 	  printk( "SJCD_S_DATA: can't read: go to SJCD_S_STOP mode\n" );
 #endif
 	  sjcd_transfer_state = SJCD_S_STOP;
 	  goto ReSwitch;
 	}
       }
+      /*
+       * Now we should turn around rather than wait for while.
+       */
       goto sjcd_s_data;
-      /* sjcd_transfer_timeout = 500; */
-    } else statistic.data_ticks++;
+    }
+#if defined( SJCD_GATHER_STAT )
+    else statistic.data_ticks++;
+#endif
     break;
   }
 
@@ -1171,20 +1272,22 @@ static void sjcd_poll( void ){
     sjcd_send_cmd( SCMD_STOP );
     sjcd_transfer_state = SJCD_S_STOPPING;
     sjcd_transfer_timeout = 500;
+#if defined( SJCD_GATHER_STAT )
     statistic.stop_ticks++;
+#endif
     break;
   }
 
   case SJCD_S_STOPPING:{
     unsigned char stat;
     
-    stat = inb( SJCDPORT( 1 ) ) & 0x0B;
-#if 0
+    stat = inb( SJCDPORT( 1 ) );
+#if defined( SJCD_TRACE )
     printk( "SJCD_S_STOP: status = 0x%02x\n", stat );
 #endif      
-    if( stat == 0x0A ){
+    if( SJCD_DATA_AVAILABLE( stat ) ){
       int i;
-#if 0
+#if defined( SJCD_TRACE )
       printk( "SJCD_S_STOP: discard data\n" );
 #endif
       /*
@@ -1192,7 +1295,7 @@ static void sjcd_poll( void ){
        */
       for( i = 2048; i--; ( void )inb( SJCDPORT( 2 ) ) );
       sjcd_transfer_timeout = 500;
-    } else if( stat == 0x09 ){
+    } else if( SJCD_STATUS_AVAILABLE( stat ) ){
       sjcd_load_status();
       if( sjcd_status_valid && sjcd_media_is_changed ) {
 	sjcd_toc_uptodate = 0;
@@ -1203,7 +1306,10 @@ static void sjcd_poll( void ){
 	else sjcd_transfer_state = SJCD_S_START;
       } else sjcd_transfer_state = SJCD_S_IDLE;
       goto ReSwitch;
-    } else statistic.stopping_ticks++;
+    }
+#if defined( SJCD_GATHER_STAT )
+    else statistic.stopping_ticks++;
+#endif
     break;
   }
 
@@ -1218,16 +1324,17 @@ static void sjcd_poll( void ){
     sjcd_send_cmd( SCMD_STOP );
     sjcd_transfer_state = SJCD_S_IDLE;
     goto ReSwitch;
-  }
+    }
 
   /*
-   * Get back in some time.
+   * Get back in some time. 1 should be replaced with count variable to
+   * avoid unnecessary testings.
    */
-  SJCD_SET_TIMER( sjcd_poll, HZ/100 );
+  SJCD_SET_TIMER( sjcd_poll, 1 );
 }
 
 static void do_sjcd_request( void ){
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd: do_sjcd_request(%ld+%ld)\n",
 	 CURRENT->sector, CURRENT->nr_sectors );
 #endif
@@ -1258,7 +1365,7 @@ static void do_sjcd_request( void ){
     }
   }
   sjcd_transfer_is_active = 0;
-#if 0
+#if defined( SJCD_TRACE )
   printk( "sjcd_next_bn:%x sjcd_buf_in:%x sjcd_buf_out:%x sjcd_buf_bn:%x\n",
 	 sjcd_next_bn, sjcd_buf_in, sjcd_buf_out, sjcd_buf_bn[ sjcd_buf_in ] );
   printk( "do_sjcd_request ends\n" );
@@ -1266,7 +1373,7 @@ static void do_sjcd_request( void ){
 }
 
 /*
- * Open the device special file. Check that a disk is in.
+ * Open the device special file. Check disk is in.
  */
 int sjcd_open( struct inode *ip, struct file *fp ){
   /*
@@ -1280,44 +1387,96 @@ int sjcd_open( struct inode *ip, struct file *fp ){
   if( fp->f_mode & 2 ) return( -EROFS );
   
   if( sjcd_open_count == 0 ){
+    int s, sjcd_open_tries;
+/* We don't know that, do we? */
+/*
     sjcd_audio_status = CDROM_AUDIO_NO_STATUS;
+*/
     sjcd_mode = 0;
+    sjcd_door_was_open = 0;
     sjcd_transfer_state = SJCD_S_IDLE;
     sjcd_invalidate_buffers();
+    sjcd_status_valid = 0;
 
     /*
      * Strict status checking.
      */
-    sjcd_get_status();
-    if( !sjcd_status_valid ){
-#if 0
-      printk( "sjcd: open: timed out when check status.\n" );
+    for( sjcd_open_tries = 4; --sjcd_open_tries; ){
+      if( !sjcd_status_valid ) sjcd_get_status();
+      if( !sjcd_status_valid ){
+#if defined( SJCD_DIAGNOSTIC )
+	printk( "sjcd: open: timed out when check status.\n" );
 #endif
-      return( -EIO );
-    } else if( !sjcd_media_is_available ){
-#if 0
-      printk("sjcd: open: no disk in drive\n");
+	return( -EIO );
+      } else if( !sjcd_media_is_available ){
+#if defined( SJCD_DIAGNOSTIC )
+	printk("sjcd: open: no disk in drive\n");
+#endif
+	if( !sjcd_door_closed ){
+	  sjcd_door_was_open = 1;
+#if defined( SJCD_TRACE )
+	  printk("sjcd: open: close the tray\n");
+#endif
+	  s = sjcd_tray_close();
+	  if( s < 0 || !sjcd_status_valid || sjcd_command_failed ){
+#if defined( SJCD_DIAGNOSTIC )
+	    printk("sjcd: open: tray close attempt failed\n");
+#endif
+	    return( -EIO );
+	  }
+	  continue;
+	} else return( -EIO );
+      }
+      break;
+    }
+    s = sjcd_tray_lock();
+    if( s < 0 || !sjcd_status_valid || sjcd_command_failed ){
+#if defined( SJCD_DIAGNOSTIC )
+      printk("sjcd: open: tray lock attempt failed\n");
 #endif
       return( -EIO );
     }
-#if 0
+#if defined( SJCD_TRACE )
     printk( "sjcd: open: done\n" );
 #endif
   }
-  return( ++sjcd_open_count, 0 );
+#ifdef MODULE
+  MOD_INC_USE_COUNT;
+#endif
+  ++sjcd_open_count;
+  return( 0 );
 }
 
 /*
  * On close, we flush all sjcd blocks from the buffer cache.
  */
 static void sjcd_release( struct inode *inode, struct file *file ){
-#if 0
+  int s;
+
+#if defined( SJCD_TRACE )
   printk( "sjcd: release\n" );
+#endif
+#ifdef MODULE
+  MOD_DEC_USE_COUNT;
 #endif
   if( --sjcd_open_count == 0 ){
     sjcd_invalidate_buffers();
     sync_dev( inode->i_rdev );
     invalidate_buffers( inode->i_rdev );
+    s = sjcd_tray_unlock();
+    if( s < 0 || !sjcd_status_valid || sjcd_command_failed ){
+#if defined( SJCD_DIAGNOSTIC )
+      printk("sjcd: release: tray unlock attempt failed.\n");
+#endif
+    }
+    if( sjcd_door_was_open ){
+      s = sjcd_tray_open();
+      if( s < 0 || !sjcd_status_valid || sjcd_command_failed ){
+#if defined( SJCD_DIAGNOSTIC )
+	printk("sjcd: release: tray unload attempt failed.\n");
+#endif
+      }
+    }
   }
 }
 
@@ -1344,6 +1503,7 @@ static struct file_operations sjcd_fops = {
  * Following stuff is intended for initialization of the cdrom. It
  * first looks for presence of device. If the device is present, it
  * will be reset. Then read the version of the drive and load status.
+ * The version is two BCD-coded bytes.
  */
 static struct {
   unsigned char major, minor;
@@ -1361,20 +1521,27 @@ int sjcd_init( void ){
   else {
     u_char expected_drive;
 
-    printk( "ISP16 cdrom interface (%s optional IDE) detected.\n",
-      (isp16_type==2)?"with":"without" );
+    printk( "ISP16 cdrom interface (with OPTi 82C92%s chip) detected.\n",
+      (isp16_type==2)?"9":"8" );
+
+    printk( "ISP16 sound configuration.\n" );
+    isp16_sound_config();
 
     expected_drive = (isp16_type?ISP16_SANYO1:ISP16_SANYO0);
 
-    if ( isp16_config( sjcd_port, expected_drive, sjcd_irq, sjcd_dma ) < 0 ) {
+    if ( isp16_cdi_config( sjcd_port, expected_drive, sjcd_irq, sjcd_dma ) < 0 ) {
       printk( "ISP16 cdrom interface has not been properly configured.\n" );
-      return -1;
+      return( -EIO );
     }
   }
 
+#if defined( SJCD_TRACE )
+  printk( "sjcd=0x%x,%d: ", sjcd_port, sjcd_irq );
+#endif  
+
   if( register_blkdev( MAJOR_NR, "sjcd", &sjcd_fops ) != 0 ){
     printk( "Unable to get major %d for Sanyo CD-ROM\n", MAJOR_NR );
-    return -1;
+    return( -EIO );
   }
   
   blk_dev[ MAJOR_NR ].request_fn = DEVICE_REQUEST;
@@ -1382,53 +1549,100 @@ int sjcd_init( void ){
   
   if( check_region( sjcd_port, 4 ) ){
     printk( "Init failed, I/O port (%X) is already in use\n",
-	   sjcd_port );
-    return -1;
+      sjcd_port );
+    return( -EIO );
   }
   
-  printk( "Sanyo CDR-H94A:" );
-
   /*
-   * Check for card.
+   * Check for card. Since we are booting now, we can't use standard
+   * wait algorithm.
    */
-  for( i = 100; i > 0; --i )
-    if( !( inb( SJCDPORT( 1 ) ) & 0x04 ) ) break;
-  if( i == 0 ){
-    printk( " No device at 0x%x found.\n", sjcd_port );
-    return -1;
-  }
-  
+  printk( "Sanyo: Resetting: " );
   sjcd_send_cmd( SCMD_RESET );
-  while( !sjcd_status_valid ) ( void )sjcd_check_status();
+  for( i = 1000; i-- > 0 && !sjcd_status_valid; ){
+    unsigned long timer;
+
+    /*
+     * Wait 10ms approx.
+     */
+    for( timer = jiffies; jiffies <= timer; );
+    if ( (i % 100) == 0 ) printk( "." );
+    ( void )sjcd_check_status();
+  }
+  if( i == 0 || sjcd_command_failed ){
+    printk( " reset failed, no drive found.\n" );
+    return( -EIO );
+  } else printk( "\n" );
 
   /*
    * Get and print out cdrom version.
    */
+  printk( "Sanyo: Getting version: " );
   sjcd_send_cmd( SCMD_GET_VERSION );
-  while( !sjcd_status_valid ) ( void )sjcd_check_status();
+  for( i = 1000; i > 0 && !sjcd_status_valid; --i ){
+    unsigned long timer;
+
+    /*
+     * Wait 10ms approx.
+     */
+    for( timer = jiffies; jiffies <= timer; );
+    if ( (i % 100) == 0 ) printk( "." );
+    ( void )sjcd_check_status();
+  }
+  if( i == 0 || sjcd_command_failed ){
+    printk( " get version failed, no drive found.\n" );
+    return( -EIO );
+  }
 
   if( sjcd_load_response( &sjcd_version, sizeof( sjcd_version ) ) == 0 ){
-    printk( " Version %1x.%02x.", ( int )sjcd_version.major,
+    printk( " %1x.%02x\n", ( int )sjcd_version.major,
 	     ( int )sjcd_version.minor );
   } else {
-    printk( " Read version failed.\n" );
-    return -1;
+    printk( " read version failed, no drive found.\n" );
+    return( -EIO );
   }
 
   /*
    * Check and print out the tray state. (if it is needed?).
    */
   if( !sjcd_status_valid ){
+    printk( "Sanyo: Getting status: " );
     sjcd_send_cmd( SCMD_GET_STATUS );
-    while( !sjcd_status_valid ) ( void )sjcd_check_status();
+    for( i = 1000; i > 0 && !sjcd_status_valid; --i ){
+      unsigned long timer;
+
+      /*
+       * Wait 10ms approx.
+       */
+      for( timer = jiffies; jiffies <= timer; );
+      if ( (i % 100) == 0 ) printk( "." );
+      ( void )sjcd_check_status();
+    }
+    if( i == 0 || sjcd_command_failed ){
+      printk( " get status failed, no drive found.\n" );
+      return( -EIO );
+    } else printk( "\n" );
   }
 
-  printk( " Status: port=0x%x, irq=%d\n",
-	 sjcd_port, sjcd_irq );
+  printk( "SANYO CDR-H94A: Status: port=0x%x, irq=%d, dma=%d.\n",
+	 sjcd_port, sjcd_irq, sjcd_dma );
 
   sjcd_present++;
-  return 0;
+  return( 0 );
 }
+
+#ifdef MODULE
+void cleanup_module( void ){
+  if( MOD_IN_USE ){
+    printk( "sjcd: module: in use - can not remove.\n" );
+  } else if( ( unregister_blkdev( MAJOR_NR, "sjcd" ) == -EINVAL ) ){
+    printk( "sjcd: module: can not unregister device.\n" );
+  } else {
+    release_region( sjcd_port, 4 );
+    printk( "sjcd: module: removed.\n");
+  }
+}
+#endif
 
 /*
  * -- ISP16 detection and configuration
@@ -1439,11 +1653,12 @@ int sjcd_init( void ){
  *
  *    Detect cdrom interface on ISP16 soundcard.
  *    Configure cdrom interface.
+ *    Configure sound interface.
  *
- *    Algorithm for the card with no IDE support option taken
+ *    Algorithm for the card with OPTi 82C928 taken
  *    from the CDSETUP.SYS driver for MSDOS,
  *    by OPTi Computers, version 2.03.
- *    Algorithm for the IDE supporting ISP16 as communicated
+ *    Algorithm for the card with OPTi 82C929 as communicated
  *    to me by Vadim Model and Leo Spiekman.
  *
  *    Use, modifification or redistribution of this software is
@@ -1459,22 +1674,22 @@ static short
 isp16_detect(void)
 {
 
-  if ( !( isp16_with_ide__detect() < 0 ) )
+  if ( !( isp16_c929__detect() < 0 ) )
     return(2);
   else
-    return( isp16_no_ide__detect() );
+    return( isp16_c928__detect() );
 }
 
 static short
-isp16_no_ide__detect(void)
+isp16_c928__detect(void)
 {
   u_char ctrl;
   u_char enable_cdrom;
   u_char io;
   short i = -1;
 
-  isp16_ctrl = ISP16_NO_IDE__CTRL;
-  isp16_enable_cdrom_port = ISP16_NO_IDE__ENABLE_CDROM_PORT;
+  isp16_ctrl = ISP16_C928__CTRL;
+  isp16_enable_port = ISP16_C928__ENABLE_PORT;
 
   /* read' and write' are a special read and write, respectively */
 
@@ -1483,7 +1698,7 @@ isp16_no_ide__detect(void)
   ISP16_OUT( ISP16_CTRL_PORT, ctrl );
 
   /* read' 3,4 and 5-bit from the cdrom enable port */
-  enable_cdrom = ISP16_IN( ISP16_NO_IDE__ENABLE_CDROM_PORT ) & 0x38;
+  enable_cdrom = ISP16_IN( ISP16_C928__ENABLE_PORT ) & 0x38;
 
   if ( !(enable_cdrom & 0x20) ) {  /* 5-bit not set */
     /* read' last 2 bits of ISP16_IO_SET_PORT */
@@ -1497,7 +1712,7 @@ isp16_no_ide__detect(void)
         i = 1;
         enable_cdrom |= 0x28;
       }
-      ISP16_OUT( ISP16_NO_IDE__ENABLE_CDROM_PORT, enable_cdrom );
+      ISP16_OUT( ISP16_C928__ENABLE_PORT, enable_cdrom );
     }
     else {  /* bits are not the same */
       ISP16_OUT( ISP16_CTRL_PORT, ctrl );
@@ -1515,13 +1730,13 @@ isp16_no_ide__detect(void)
 }
 
 static short
-isp16_with_ide__detect(void)
+isp16_c929__detect(void)
 {
   u_char ctrl;
   u_char tmp;
 
-  isp16_ctrl = ISP16_IDE__CTRL;
-  isp16_enable_cdrom_port = ISP16_IDE__ENABLE_CDROM_PORT;
+  isp16_ctrl = ISP16_C929__CTRL;
+  isp16_enable_port = ISP16_C929__ENABLE_PORT;
 
   /* read' and write' are a special read and write, respectively */
 
@@ -1532,7 +1747,7 @@ isp16_with_ide__detect(void)
   ISP16_OUT( ISP16_CTRL_PORT, 0 );
   tmp = ISP16_IN( ISP16_CTRL_PORT );
 
-  if ( tmp != 2 )  /* isp16 with ide option not detected */
+  if ( tmp != 2 )  /* isp16 with 82C929 not detected */
     return(-1);
 
   /* restore ctrl port value */
@@ -1542,7 +1757,7 @@ isp16_with_ide__detect(void)
 }
 
 static short
-isp16_config( int base, u_char drive_type, int irq, int dma )
+isp16_cdi_config( int base, u_char drive_type, int irq, int dma )
 {
   u_char base_code;
   u_char irq_code;
@@ -1606,13 +1821,95 @@ isp16_config( int base, u_char drive_type, int irq, int dma )
   i = ISP16_IN(ISP16_DRIVE_SET_PORT) & ISP16_DRIVE_SET_MASK;  /* clear some bits */
   ISP16_OUT( ISP16_DRIVE_SET_PORT, i|drive_type );
 
-  /* enable cdrom on interface with ide support */
+  /* enable cdrom on interface with 82C929 chip */
   if ( isp16_type > 1 )
-    ISP16_OUT( isp16_enable_cdrom_port, ISP16_ENABLE_CDROM );
+    ISP16_OUT( isp16_enable_port, ISP16_ENABLE_CDROM );
 
   /* set base address, irq and dma */
   i = ISP16_IN(ISP16_IO_SET_PORT) & ISP16_IO_SET_MASK;  /* keep some bits */
   ISP16_OUT( ISP16_IO_SET_PORT, i|base_code|irq_code|dma_code );
 
   return(0);
+}
+
+static void isp16_sound_config( void )
+{
+  int i;
+  u_char saved;
+
+  saved = ISP16_IN( 0xF8D ) & 0x8F;
+    
+  ISP16_OUT( 0xF8D, 0x40 );
+
+  /*
+   * Now we should wait for a while...
+   */
+  for( i = 16*1024; i--; );
+  
+  ISP16_OUT( 0xF8D, saved );
+
+  ISP16_OUT( 0xF91, 0x1B );
+
+  for( i = 5*64*1024; i != 0; i-- )
+    if( !( inb( 0x534 ) & 0x80 ) ) break;
+
+  if( i > 0 ) {
+    saved = ( inb( 0x534 ) & 0xE0 ) | 0x0A;
+    outb( saved, 0x534 );
+
+    special_mask = ( inb( 0x535 ) >> 4 ) & 0x08;
+
+    saved = ( inb( 0x534 ) & 0xE0 ) | 0x0C;
+    outb( saved, 0x534 );
+
+    switch( inb( 0x535 ) ) {
+      case 0x09:
+      case 0x0A:
+        special_mask |= 0x05;
+        break;
+      case 0x8A:
+        special_mask = 0x0F;
+        break;
+      default:
+        i = 0;
+    }
+  }
+  if ( i == 0 ) {
+    printk( "Strange MediaMagic, but\n" );
+  }
+  else {
+    printk( "Conf:" );
+    saved = inb( 0x534 ) & 0xE0;
+    for( i = 0; i < 16; i++ ) {
+      outb( 0x20 | ( u_char )i, 0x534 );
+      outb( defaults[i], 0x535 );
+    }
+    for ( i = 0; i < 16; i++ ) {
+      outb( 0x20 | ( u_char )i, 0x534 );
+      saved = inb( 0x535 );
+      printk( " %02X", saved );
+    }
+    printk( "\n" );
+  }
+
+  ISP16_OUT( 0xF91, 0xA0 | special_mask );
+
+  /*
+   * The following have no explaination yet.
+   */
+  ISP16_OUT( 0xF90, 0xA2 );
+  ISP16_OUT( 0xF92, 0x03 );
+
+  /*
+   * Turn general sound on and set total volume.
+   */
+  ISP16_OUT( 0xF93, 0x0A );
+
+/*
+  outb( 0x04, 0x224 );
+  saved = inb( 0x225 );
+  outb( 0x04, 0x224 );
+  outb( saved, 0x225 );
+*/
+
 }

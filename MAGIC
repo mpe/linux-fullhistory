@@ -50,6 +50,7 @@ SLIP_MAGIC          0x5302  struct slip          drivers/net/slip.h
 Ioctl	Include File	Comments
 ========================================================
 0x00	fd.h
+0x01	random.h	subcodes starting at 0x080000
 0x03	hdreg.h
 0x06	lp.h
 0x12	fs.h

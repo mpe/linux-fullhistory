@@ -68,6 +68,13 @@ static int update_timeout (Scsi_Cmnd *, int);
 static void print_inquiry(unsigned char *data);
 static void scsi_times_out (Scsi_Cmnd * SCpnt, int pid);
 
+static unsigned char * dma_malloc_freelist = NULL;
+static int scsi_need_isa_bounce_buffers;
+static unsigned int dma_sectors = 0;
+unsigned int dma_free_sectors = 0;
+unsigned int need_isa_buffer = 0;
+static unsigned char ** dma_malloc_pages = NULL;
+
 static int time_start;
 static int time_elapsed;
 static volatile struct Scsi_Host * host_active = NULL;
@@ -102,6 +109,7 @@ Scsi_Device * scsi_devices = NULL;
 unsigned long scsi_pid = 0;
 
 static unsigned char generic_sense[6] = {REQUEST_SENSE, 0,0,0, 255, 0};
+static void resize_dma_pool(void);
 
 /* This variable is merely a hook so that we can debug the kernel with gdb. */
 Scsi_Cmnd * last_cmnd = NULL;
@@ -192,10 +200,8 @@ struct dev_info{
 
 /*
  * This is what was previously known as the blacklist.  The concept
- * has been expanded so that we can specify other 
- * The blacklist is used to determine which devices cannot tolerate a
- * lun probe because of buggy firmware.  Far too many for my liking,
- * which is why the default is now for there to be no lun scan. 
+ * has been expanded so that we can specify other types of things we
+ * need to be aware of.
  */
 static struct dev_info device_list[] =
 {
@@ -394,7 +400,7 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
     if(scsi_devices) while(SDtail->next) SDtail = SDtail->next;
     
     /* Make sure we have something that is valid for DMA purposes */
-    scsi_result = ((current->pid == 0  || !shpnt->unchecked_isa_dma)
+    scsi_result = ((!dma_malloc_freelist  || !shpnt->unchecked_isa_dma)
 		   ?  &scsi_result0[0] : scsi_malloc(512));
     
     if(scsi_result == NULL) {
@@ -455,33 +461,19 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 		    SCpnt->lun = SDpnt->lun;
 		    SCpnt->channel = SDpnt->channel;
 
-		    /* Used for mutex if loading devices after boot */
-		    SCpnt->request.sem = NULL;
-		    SCpnt->request.rq_status = RQ_SCSI_BUSY;
-		    
-		    scsi_do_cmd (SCpnt, (void *)  scsi_cmd, 
-				 (void *) scsi_result,
-				 256,  scan_scsis_done, SCSI_TIMEOUT + 4 * HZ, 5);
-		    
-		    /* 
-		     * Wait for command to finish. Use simple wait if we are 
-		     * booting, else do it right and use a mutex 
-		     */
-		    
-		    if (current->pid == 0)
-			while (SCpnt->request.rq_status != RQ_SCSI_DONE) 
-			    barrier();
-		    else if (SCpnt->request.rq_status != RQ_SCSI_DONE) {
+		    {
+			/*
+			 * Do the actual command, and wait for it to finish
+			 */
 			struct semaphore sem = MUTEX_LOCKED;
-			
 			SCpnt->request.sem = &sem;
+			SCpnt->request.rq_status = RQ_SCSI_BUSY;
+			scsi_do_cmd (SCpnt, (void *)  scsi_cmd, 
+				     (void *) scsi_result,
+				     256,  scan_scsis_done, SCSI_TIMEOUT + 4 * HZ, 5);
 			down(&sem);
-			
-			/* Hmm.. Have to ask about this one */
-			while (SCpnt->request.rq_status != RQ_SCSI_DONE)
-			    schedule();
 		    }
-		    
+
 #if defined(DEBUG) || defined(DEBUG_INIT)
 		    printk("scsi: scan SCSIS id %d lun %d\n", dev, lun);
 		    printk("scsi: return code %08x\n", SCpnt->result);
@@ -515,25 +507,16 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 		    scsi_cmd[4] = 255;
 		    scsi_cmd[5] = 0;
 		    
-		    SCpnt->request.rq_status = RQ_SCSI_BUSY;
 		    SCpnt->cmd_len = 0;
 
-		    scsi_do_cmd (SCpnt, (void *)  scsi_cmd, 
+		    {
+			struct semaphore sem = MUTEX_LOCKED;
+			SCpnt->request.sem = &sem;
+			SCpnt->request.rq_status = RQ_SCSI_BUSY;
+			scsi_do_cmd (SCpnt, (void *)  scsi_cmd, 
 				 (void *) scsi_result,
 				 256,  scan_scsis_done, SCSI_TIMEOUT, 3);
-		    
-		    if (current->pid == 0)
-			while (SCpnt->request.rq_status != RQ_SCSI_DONE) 
-			    barrier();
-		    else if (SCpnt->request.rq_status != RQ_SCSI_DONE) {
-			struct semaphore sem = MUTEX_LOCKED;
-			
-			SCpnt->request.sem = &sem;
 			down(&sem);
-			
-			/* Hmm.. Have to ask about this one */
-			while (SCpnt->request.rq_status != RQ_SCSI_DONE)
-			  schedule();
 		    }
 		    
 		    the_result = SCpnt->result;
@@ -689,24 +672,15 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 				scsi_cmd[4] = 0x2a;
 				scsi_cmd[5] = 0;
 				
-				SCpnt->request.rq_status = RQ_SCSI_BUSY;
 				SCpnt->cmd_len = 0;
-				
-				scsi_do_cmd (SCpnt, (void *)  scsi_cmd,
+				{
+				    struct semaphore sem = MUTEX_LOCKED;
+				    SCpnt->request.rq_status = RQ_SCSI_BUSY;
+				    SCpnt->request.sem = &sem;
+				    scsi_do_cmd (SCpnt, (void *)  scsi_cmd,
 					     (void *) scsi_result, 0x2a,  
 					     scan_scsis_done, SCSI_TIMEOUT, 3);
-				
-				if (current->pid == 0)
-				    while (SCpnt->request.rq_status != RQ_SCSI_DONE);
-				else if (SCpnt->request.rq_status != RQ_SCSI_DONE) {
-				    struct semaphore sem = MUTEX_LOCKED;
-				    
-				    SCpnt->request.sem = &sem;
 				    down(&sem);
-				    
-				    /* Hmm.. Have to ask about this one */
-				    while (SCpnt->request.rq_status != RQ_SCSI_DONE) 
-					schedule();
 				}
 			    }
 			    /* Add this device to the linked list at the end */
@@ -1324,38 +1298,6 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 #endif
 }
 
-
-
-/*
- * The scsi_done() function disables the timeout timer for the scsi host,
- * marks the host as not busy, and calls the user specified completion
- * function for that host's current command.
- */
-
-static void reset (Scsi_Cmnd * SCpnt)
-{
-#ifdef DEBUG
-    printk("scsi: reset(%d, channel %d)\n", SCpnt->host->host_no, 
-	   SCpnt->channel);
-#endif
-
-    SCpnt->flags |= (WAS_RESET | IS_RESETTING);
-    scsi_reset(SCpnt, FALSE);
-
-#ifdef DEBUG
-    printk("performing request sense\n");
-#endif
-
-#if 0  /* FIXME - remove this when done */
-    if(SCpnt->flags & NEEDS_JUMPSTART) {
-	SCpnt->flags &= ~NEEDS_JUMPSTART;
-	scsi_request_sense (SCpnt);
-    }
-#endif
-}
-
-
-
 static int check_sense (Scsi_Cmnd * SCpnt)
 {
     /* If there is no sense information, request it.  If we have already
@@ -1493,7 +1435,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 		       " failed, performing reset.\n",
 		       SCpnt->host->host_no, SCpnt->channel, SCpnt->target, 
 		       SCpnt->lun);
-		reset(SCpnt);
+		scsi_reset(SCpnt, FALSE);
 		return;
 	    }
 	    else
@@ -1594,7 +1536,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 	    case RESERVATION_CONFLICT:
 		printk("scsi%d, channel %d : RESERVATION CONFLICT performing"
 		       " reset.\n", SCpnt->host->host_no, SCpnt->channel);
-		reset(SCpnt);
+		scsi_reset(SCpnt, FALSE);
 		return;
 #if 0
 		exit = DRIVER_SOFT | SUGGEST_ABORT;
@@ -1709,7 +1651,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 	    {
 		printk("scsi%d channel %d : resetting for second half of retries.\n",
 		       SCpnt->host->host_no, SCpnt->channel);
-		reset(SCpnt);
+		scsi_reset(SCpnt, FALSE);
 		break;
 	    }
 	    
@@ -1928,13 +1870,16 @@ int scsi_reset (Scsi_Cmnd * SCpnt, int bus_reset_flag)
      */
     SCpnt1 = host->host_queue;
     while(SCpnt1) {
-        if( SCpnt->request.rq_status != RQ_INACTIVE
-           && (SCpnt->flags & WAS_RESET) == 0 )
+	if( SCpnt1->request.rq_status != RQ_INACTIVE
+	   && (SCpnt1->flags & (WAS_RESET | IS_RESETTING)) == 0 )
+	{
             break;
+	}
         SCpnt1 = SCpnt1->next;
  	}
-    if( SCpnt1 == NULL )
+    if( SCpnt1 == NULL ) {
         SCpnt->host->suggest_bus_reset = TRUE;
+    }
     
     
     /*
@@ -1942,8 +1887,9 @@ int scsi_reset (Scsi_Cmnd * SCpnt, int bus_reset_flag)
      * definitely request it.  This usually occurs because a
      * BUS_DEVICE_RESET times out.
      */
-    if( bus_reset_flag )
+    if( bus_reset_flag ) {
         SCpnt->host->suggest_bus_reset = TRUE;
+    }
     
     while (1) {
 	save_flags(flags);
@@ -1970,7 +1916,7 @@ int scsi_reset (Scsi_Cmnd * SCpnt, int bus_reset_flag)
 			    !(SCpnt1->internal_timeout & IN_ABORT))
 			    scsi_abort(SCpnt1, DID_RESET, SCpnt->pid);
 #endif
-			SCpnt1->flags |= IS_RESETTING;
+			SCpnt1->flags |= (WAS_RESET | IS_RESETTING);
 		    }
 		    SCpnt1 = SCpnt1->next;
 		}
@@ -1984,6 +1930,7 @@ int scsi_reset (Scsi_Cmnd * SCpnt, int bus_reset_flag)
 		if (!host->block) host->host_busy++;
 		restore_flags(flags);
 		host->last_reset = jiffies;
+	        SCpnt->flags |= (WAS_RESET | IS_RESETTING);
 		temp = host->hostt->reset(SCpnt);
 		host->last_reset = jiffies;
 		if (!host->block) host->host_busy--;
@@ -2176,13 +2123,6 @@ static int update_timeout(Scsi_Cmnd * SCset, int timeout)
     return oldto;
 }
 
-
-static unsigned char * dma_malloc_freelist = NULL;
-static int scsi_need_isa_bounce_buffers;
-static unsigned int dma_sectors = 0;
-unsigned int dma_free_sectors = 0;
-unsigned int need_isa_buffer = 0;
-static unsigned char ** dma_malloc_pages = NULL;
 #define MALLOC_PAGEBITS 12
 
 static int scsi_register_host(Scsi_Host_Template *);
@@ -2341,11 +2281,9 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
 
 int scsi_dev_init(void)
 {
-    struct Scsi_Host * host = NULL;
     Scsi_Device * SDpnt;
     struct Scsi_Host * shpnt;
     struct Scsi_Device_Template * sdtpnt;
-    int i;
 #ifdef FOO_ON_YOU
     return;
 #endif
@@ -2391,50 +2329,13 @@ int scsi_dev_init(void)
     }
     
 
-    if (scsi_devicelist)
-	dma_sectors = 16;  /* Base value we use */
-    
-    if (high_memory-1 > ISA_DMA_THRESHOLD)
-	scsi_need_isa_bounce_buffers = 1;
-    else
-	scsi_need_isa_bounce_buffers = 0;
-    
-    for (SDpnt=scsi_devices; SDpnt; SDpnt = SDpnt->next) {
-	host = SDpnt->host;
-	
-	if(SDpnt->type != TYPE_TAPE)
-	    dma_sectors += ((host->sg_tablesize *
-			     sizeof(struct scatterlist) + 511) >> 9) *
-				 host->cmd_per_lun;
-	
-	if(host->unchecked_isa_dma &&
-	   high_memory - 1 > ISA_DMA_THRESHOLD &&
-	   SDpnt->type != TYPE_TAPE) {
-	    dma_sectors += (PAGE_SIZE >> 9) * host->sg_tablesize *
-		host->cmd_per_lun;
-	    need_isa_buffer++;
-	}
-    }
-    
-    dma_sectors = (dma_sectors + 15) & 0xfff0;
-    dma_free_sectors = dma_sectors;  /* This must be a multiple of 16 */
+    /*
+     * This should build the DMA pool.
+     */
+    resize_dma_pool();
 
-    if (dma_sectors)
-    {
-	dma_malloc_freelist = (unsigned char *)
-	    scsi_init_malloc(dma_sectors >> 3, GFP_ATOMIC);
-	memset(dma_malloc_freelist, 0, dma_sectors >> 3);
-
-	dma_malloc_pages = (unsigned char **)
-	    scsi_init_malloc(dma_sectors >> 1, GFP_ATOMIC);
-	memset(dma_malloc_pages, 0, dma_sectors >> 1);
-
-	for(i=0; i< dma_sectors >> 3; i++)
-	    dma_malloc_pages[i] = (unsigned char *)
-		scsi_init_malloc(PAGE_SIZE, GFP_ATOMIC | GFP_DMA);
-    
-    }
-    /* OK, now we finish the initialization by doing spin-up, read
+    /*
+     * OK, now we finish the initialization by doing spin-up, read
      * capacity, etc, etc 
      */
     for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
@@ -2576,6 +2477,126 @@ int scsi_proc_info(char *buffer, char **start, off_t offset, int length,
 }
 #endif
 
+/*
+ * Go through the device list and recompute the most appropriate size
+ * for the dma pool.  Then grab more memory (as required).
+ */
+static void resize_dma_pool(void)
+{
+    int i;
+    struct Scsi_Host * shpnt;
+    struct Scsi_Host * host = NULL;
+    Scsi_Device * SDpnt;
+    unsigned long flags;
+    unsigned char * new_dma_malloc_freelist = NULL;
+    unsigned int new_dma_sectors = 0;
+    unsigned int new_need_isa_buffer = 0;
+    unsigned char ** new_dma_malloc_pages = NULL;
+
+    if( !scsi_devices )
+    {
+	/*
+	 * Free up the DMA pool.
+	 */
+	if( dma_free_sectors != dma_sectors )
+	    panic("SCSI DMA pool memory leak\n");
+
+	for(i=0; i < dma_sectors >> 3; i++)
+	    scsi_init_free(dma_malloc_pages[i], PAGE_SIZE);
+	if (dma_malloc_pages)
+	    scsi_init_free((char *) dma_malloc_pages, dma_sectors>>1);
+	dma_malloc_pages = NULL;
+	if (dma_malloc_freelist)
+	    scsi_init_free(dma_malloc_freelist, dma_sectors>>3);
+	dma_malloc_freelist = NULL;
+	dma_sectors = 0;
+	dma_free_sectors = 0;
+	return;
+    }
+    /* Next, check to see if we need to extend the DMA buffer pool */
+	
+    new_dma_sectors = 16;  /* Base value we use */
+
+    if (high_memory-1 > ISA_DMA_THRESHOLD)
+	scsi_need_isa_bounce_buffers = 1;
+    else
+	scsi_need_isa_bounce_buffers = 0;
+    
+    if (scsi_devicelist)
+	for(shpnt=scsi_hostlist; shpnt; shpnt = shpnt->next)
+	    new_dma_sectors += 8;  /* Increment for each host */
+    
+    for (SDpnt=scsi_devices; SDpnt; SDpnt = SDpnt->next) {
+	host = SDpnt->host;
+	
+	if(SDpnt->type != TYPE_TAPE)
+	    new_dma_sectors += ((host->sg_tablesize *
+	                         sizeof(struct scatterlist) + 511) >> 9) *
+	                             host->cmd_per_lun;
+	
+	if(host->unchecked_isa_dma &&
+	   scsi_need_isa_bounce_buffers &&
+	   SDpnt->type != TYPE_TAPE) {
+	    new_dma_sectors += (PAGE_SIZE >> 9) * host->sg_tablesize *
+	        host->cmd_per_lun;
+	    new_need_isa_buffer++;
+	}
+    }
+    
+    new_dma_sectors = (new_dma_sectors + 15) & 0xfff0;
+    
+    /*
+     * We never shrink the buffers - this leads to
+     * race conditions that I would rather not even think
+     * about right now.
+     */
+    if( new_dma_sectors < dma_sectors )
+	new_dma_sectors = dma_sectors;
+    
+    if (new_dma_sectors)
+    {
+	new_dma_malloc_freelist = (unsigned char *)
+	    scsi_init_malloc(new_dma_sectors >> 3, GFP_ATOMIC);
+	memset(new_dma_malloc_freelist, 0, new_dma_sectors >> 3);
+	
+	new_dma_malloc_pages = (unsigned char **)
+	    scsi_init_malloc(new_dma_sectors >> 1, GFP_ATOMIC);
+	memset(new_dma_malloc_pages, 0, new_dma_sectors >> 1);
+    }
+    
+    /*
+     * If we need more buffers, expand the list.
+     */
+    if( new_dma_sectors > dma_sectors ) { 
+	for(i=dma_sectors >> 3; i< new_dma_sectors >> 3; i++)
+	    new_dma_malloc_pages[i] = (unsigned char *)
+	        scsi_init_malloc(PAGE_SIZE, GFP_ATOMIC | GFP_DMA);
+    }
+    
+    /* When we dick with the actual DMA list, we need to 
+     * protect things 
+     */
+    save_flags(flags);
+    cli();
+    if (dma_malloc_freelist)
+    {
+	memcpy(new_dma_malloc_freelist, dma_malloc_freelist, dma_sectors >> 3);
+	scsi_init_free(dma_malloc_freelist, dma_sectors>>3);
+    }
+    dma_malloc_freelist = new_dma_malloc_freelist;
+    
+    if (dma_malloc_pages)
+    {
+	memcpy(new_dma_malloc_pages, dma_malloc_pages, dma_sectors >> 1);
+	scsi_init_free((char *) dma_malloc_pages, dma_sectors>>1);
+    }
+    
+    dma_free_sectors += new_dma_sectors - dma_sectors;
+    dma_malloc_pages = new_dma_malloc_pages;
+    dma_sectors = new_dma_sectors;
+    need_isa_buffer = new_need_isa_buffer;
+    restore_flags(flags);
+}
 
 /*
  * This entry point should be called by a loadable module if it is trying
@@ -2585,11 +2606,8 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 {
     int pcount;
     struct Scsi_Host * shpnt;
-    struct Scsi_Host * host = NULL;
-    unsigned long flags;
     Scsi_Device * SDpnt;
     struct Scsi_Device_Template * sdtpnt;
-    int i;
     const char * name;
     
     if (tpnt->next || !tpnt->detect) return 1;/* Must be already loaded, or
@@ -2653,90 +2671,12 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 		if(SDpnt->attached) scsi_build_commandblocks(SDpnt);
 	    }
 	
-	/* Next, check to see if we need to extend the DMA buffer pool */
-    {
-	unsigned char * new_dma_malloc_freelist = NULL;
-	unsigned int new_dma_sectors = 0;
-	unsigned int new_need_isa_buffer = 0;
-	unsigned char ** new_dma_malloc_pages = NULL;
-	
-	new_dma_sectors = 16;  /* Base value we use */
-	if (scsi_devicelist)
-	    for(shpnt=scsi_hostlist; shpnt; shpnt = shpnt->next)
-		new_dma_sectors += 8;  /* Increment for each host */
-	
-	for (SDpnt=scsi_devices; SDpnt; SDpnt = SDpnt->next) {
-	    host = SDpnt->host;
-	    
-	    if(SDpnt->type != TYPE_TAPE)
-		new_dma_sectors += ((host->sg_tablesize *
-				     sizeof(struct scatterlist) + 511) >> 9) *
-					 host->cmd_per_lun;
-	    
-	    if(host->unchecked_isa_dma &&
-	       scsi_need_isa_bounce_buffers &&
-	       SDpnt->type != TYPE_TAPE) {
-		new_dma_sectors += (PAGE_SIZE >> 9) * host->sg_tablesize *
-		    host->cmd_per_lun;
-		new_need_isa_buffer++;
-	    }
-	}
-	
-	new_dma_sectors = (new_dma_sectors + 15) & 0xfff0;
-	
 	/*
-	 * We never shrink the buffers - this leads to
-	 * race conditions that I would rather not even think
-	 * about right now.
-	 */
-	if( new_dma_sectors < dma_sectors )
-	    new_dma_sectors = dma_sectors;
+	 * Now that we have all of the devices, resize the DMA pool,
+	 * as required.  */
+	resize_dma_pool();
 
-	if (new_dma_sectors)
-	{
-	    new_dma_malloc_freelist = (unsigned char *)
-		scsi_init_malloc(new_dma_sectors >> 3, GFP_ATOMIC);
-	    memset(new_dma_malloc_freelist, 0, new_dma_sectors >> 3);
 
-	    new_dma_malloc_pages = (unsigned char **)
-		scsi_init_malloc(new_dma_sectors >> 1, GFP_ATOMIC);
-	    memset(new_dma_malloc_pages, 0, new_dma_sectors >> 1);
-	}
-
-	/*
-	 * If we need more buffers, expand the list.
-	 */
-	if( new_dma_sectors > dma_sectors ) { 
-	    for(i=dma_sectors >> 3; i< new_dma_sectors >> 3; i++)
-		new_dma_malloc_pages[i] = (unsigned char *)
-	      scsi_init_malloc(PAGE_SIZE, GFP_ATOMIC | GFP_DMA);
-	}
-	
-	/* When we dick with the actual DMA list, we need to 
-	 * protect things 
-	 */
-	save_flags(flags);
-	cli();
-	if (dma_malloc_freelist)
-	{
-	    memcpy(new_dma_malloc_freelist, dma_malloc_freelist, dma_sectors >> 3);
-	    scsi_init_free(dma_malloc_freelist, dma_sectors>>3);
-	}
-	dma_malloc_freelist = new_dma_malloc_freelist;
-	
-	if (dma_malloc_pages)
-	{
-	    memcpy(new_dma_malloc_pages, dma_malloc_pages, dma_sectors >> 1);
-	    scsi_init_free((char *) dma_malloc_pages, dma_sectors>>1);
-	}
-
-	dma_free_sectors += new_dma_sectors - dma_sectors;
-	dma_malloc_pages = new_dma_malloc_pages;
-	dma_sectors = new_dma_sectors;
-	need_isa_buffer = new_need_isa_buffer;
-	restore_flags(flags);
-    }
-	
 	/* This does any final handling that is required. */
 	for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
 	    if(sdtpnt->finish && sdtpnt->nr_dev)
@@ -2749,7 +2689,7 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 	    (scsi_init_memory_start - scsi_memory_lower_value) / 1024,
 	    (scsi_memory_upper_value - scsi_init_memory_start) / 1024);
 #endif
-    
+	
     MOD_INC_USE_COUNT;
     return 0;
 }
@@ -2869,6 +2809,14 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 	shpnt = sh1;
     }
     
+    /*
+     * If there are absolutely no more hosts left, it is safe
+     * to completely nuke the DMA pool.  The resize operation will
+     * do the right thing and free everything.
+     */
+    if( !scsi_devices )
+	resize_dma_pool();
+
     printk ("scsi : %d host%s.\n", next_scsi_host,
 	    (next_scsi_host == 1) ? "" : "s");
     
@@ -3165,13 +3113,8 @@ void cleanup_module( void)
     /*
      * Free up the DMA pool.
      */
-    for(i=0; i < dma_sectors >> 3; i++)
-	scsi_init_free(dma_malloc_pages[i], PAGE_SIZE);
-    if (dma_malloc_pages)
-	scsi_init_free((char *) dma_malloc_pages, dma_sectors>>1);
-    if (dma_malloc_freelist)
-	scsi_init_free(dma_malloc_freelist, dma_sectors>>3);
-    
+    resize_dma_pool();
+
     timer_table[SCSI_TIMER].fn = NULL;
     timer_table[SCSI_TIMER].expires = 0;
     /*

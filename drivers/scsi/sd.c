@@ -112,6 +112,22 @@ static int sd_open(struct inode * inode, struct file * filp)
     if(rscsi_disks[target].device->removable) {
 	check_disk_change(inode->i_rdev);
 	
+	/*
+	 * If the drive is empty, just let the open fail.
+	 */
+	if ( !rscsi_disks[target].ready ) {
+	    return -ENXIO;
+	}
+
+	/*
+	 * Similarily, if the device has the write protect tab set,
+	 * have the open fail if the user expects to be able to write
+	 * to the thing.
+	 */
+	if ( (rscsi_disks[target].write_prot) && (filp->f_mode & 2) ) { 
+	    return -EROFS;
+	}
+
 	if(!rscsi_disks[target].device->access_count)
 	    sd_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
     };
@@ -904,11 +920,20 @@ static int check_scsidisk_media_change(kdev_t full_dev){
 		 * and we will figure it out later once the drive is
 		 * available again.  */
 	
+	rscsi_disks[target].ready = 0;
 	rscsi_disks[target].device->changed = 1;
 	return 1; /* This will force a flush, if called from
 		   * check_disk_change */
     };
     
+    /* 
+     * for removable scsi disk ( FLOPTICAL ) we have to recognise the
+     * presence of disk in the drive. This is kept in the Scsi_Disk
+     * struct and tested at open !  Daniel Roche ( dan@lectra.fr ) 
+     */
+    
+    rscsi_disks[target].ready = 1;	/* FLOPTICAL */
+
     retval = rscsi_disks[target].device->changed;
     if(!flag) rscsi_disks[target].device->changed = 0;
     return retval;
@@ -945,7 +970,7 @@ static int sd_init_onedisk(int i)
     spintime = 0;
     
     /* Spin up drives, as required.  Only do this at boot time */
-    if (current->pid == 0){
+    if (!MODULE_FLAG){
 	do{
 	    retries = 0;
 	    while(retries < 3)
@@ -953,18 +978,22 @@ static int sd_init_onedisk(int i)
 		cmd[0] = TEST_UNIT_READY;
 		cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
 		memset ((void *) &cmd[2], 0, 8);
-		SCpnt->request.rq_status = RQ_SCSI_BUSY;  /* Mark as really busy again */
 		SCpnt->cmd_len = 0;
 		SCpnt->sense_buffer[0] = 0;
 		SCpnt->sense_buffer[2] = 0;
-		
-		scsi_do_cmd (SCpnt,
-			     (void *) cmd, (void *) buffer,
-			     512, sd_init_done,  SD_TIMEOUT,
-			     MAX_RETRIES);
-		
-		while(SCpnt->request.rq_status != RQ_SCSI_DONE) barrier();
-		
+
+		{
+		    struct semaphore sem = MUTEX_LOCKED;
+		    /* Mark as really busy again */
+		    SCpnt->request.rq_status = RQ_SCSI_BUSY;
+		    SCpnt->request.sem = &sem;
+		    scsi_do_cmd (SCpnt,
+				 (void *) cmd, (void *) buffer,
+				 512, sd_init_done,  SD_TIMEOUT,
+				 MAX_RETRIES);
+		    down(&sem);
+		}
+
 		the_result = SCpnt->result;
 		retries++;
 		if(   the_result == 0
@@ -984,22 +1013,24 @@ static int sd_init_onedisk(int i)
 		    cmd[1] |= 1;  /* Return immediately */
 		    memset ((void *) &cmd[2], 0, 8);
 		    cmd[4] = 1; /* Start spin cycle */
-		    /* Mark as really busy again */
-		    SCpnt->request.rq_status = RQ_SCSI_BUSY; 
 		    SCpnt->cmd_len = 0;
 		    SCpnt->sense_buffer[0] = 0;
 		    SCpnt->sense_buffer[2] = 0;
 		    
-		    scsi_do_cmd (SCpnt,
-				 (void *) cmd, (void *) buffer,
-				 512, sd_init_done,  SD_TIMEOUT,
-				 MAX_RETRIES);
-		    
-		    while(SCpnt->request.rq_status != RQ_SCSI_DONE)
-		      barrier();
+		    {
+		    	struct semaphore sem = MUTEX_LOCKED;
+			/* Mark as really busy again */
+			SCpnt->request.rq_status = RQ_SCSI_BUSY; 
+		    	SCpnt->request.sem = &sem;
+			scsi_do_cmd (SCpnt,
+				     (void *) cmd, (void *) buffer,
+				     512, sd_init_done,  SD_TIMEOUT,
+				     MAX_RETRIES);
+			down(&sem);
+		    }
 		    
 		    spintime = jiffies;
-		};
+		}
 		
 		time1 = jiffies;
 		while(jiffies < time1 + HZ); /* Wait 1 second for next try */
@@ -1012,7 +1043,7 @@ static int sd_init_onedisk(int i)
 	    else
 		printk( "ready\n" );
 	}
-    };  /* current->pid == 0 */
+    };  /* !MODULE_FLAG */
     
     
     retries = 3;
@@ -1021,28 +1052,20 @@ static int sd_init_onedisk(int i)
 	cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
 	memset ((void *) &cmd[2], 0, 8);
 	memset ((void *) buffer, 0, 8);
-	SCpnt->request.rq_status = RQ_SCSI_BUSY;  /* Mark as really busy again */
 	SCpnt->cmd_len = 0;
 	SCpnt->sense_buffer[0] = 0;
 	SCpnt->sense_buffer[2] = 0;
-	
-	scsi_do_cmd (SCpnt,
-		     (void *) cmd, (void *) buffer,
-		     8, sd_init_done,  SD_TIMEOUT,
-		     MAX_RETRIES);
-	
-	if (current->pid == 0) {
-	    while(SCpnt->request.rq_status != RQ_SCSI_DONE)
-	      barrier();
-	} else {
-	    if (SCpnt->request.rq_status != RQ_SCSI_DONE){
-		struct semaphore sem = MUTEX_LOCKED;
-		SCpnt->request.sem = &sem;
-		down(&sem);
-		/* Hmm.. Have to ask about this one.. */
-		while (SCpnt->request.rq_status != RQ_SCSI_DONE) 
-		  schedule();
-	    }
+
+	{
+	    struct semaphore sem = MUTEX_LOCKED;
+	    /* Mark as really busy again */
+	    SCpnt->request.rq_status = RQ_SCSI_BUSY;
+	    SCpnt->request.sem = &sem;
+	    scsi_do_cmd (SCpnt,
+			 (void *) cmd, (void *) buffer,
+			 8, sd_init_done,  SD_TIMEOUT,
+			 MAX_RETRIES);
+	    down(&sem);	/* sleep until it is ready */
 	}
 	
 	the_result = SCpnt->result;
@@ -1100,6 +1123,11 @@ static int sd_init_onedisk(int i)
     }
     else
     {
+	/*
+	 * FLOPTICAL , if read_capa is ok , drive is assumed to be ready 
+	 */
+	rscsi_disks[i].ready = 1;
+
 	rscsi_disks[i].capacity = (buffer[0] << 24) |
 	    (buffer[1] << 16) |
 		(buffer[2] << 8) |
@@ -1144,6 +1172,57 @@ static int sd_init_onedisk(int i)
 	    rscsi_disks[i].capacity >>= 1;  /* Change into 512 byte sectors */
     }
     
+
+    /*
+     * Unless otherwise specified, this is not write protected.
+     */
+    rscsi_disks[i].write_prot = 0;
+    if ( rscsi_disks[i].device->removable && rscsi_disks[i].ready ) {
+	/* FLOPTICAL */
+
+	/* 
+	 *	for removable scsi disk ( FLOPTICAL ) we have to recognise  
+	 * the Write Protect Flag. This flag is kept in the Scsi_Disk struct
+	 * and tested at open !
+	 * Daniel Roche ( dan@lectra.fr )
+	 */
+	
+	memset ((void *) &cmd[0], 0, 8);
+	cmd[0] = MODE_SENSE;
+	cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
+	cmd[2] = 1;	 /* page code 1 ?? */
+	cmd[4] = 12;
+	SCpnt->cmd_len = 0;
+	SCpnt->sense_buffer[0] = 0;
+	SCpnt->sense_buffer[2] = 0;
+
+	/* same code as READCAPA !! */
+	{
+	    struct semaphore sem = MUTEX_LOCKED;
+	    SCpnt->request.rq_status = RQ_SCSI_BUSY;  /* Mark as really busy again */
+	    SCpnt->request.sem = &sem;
+	    scsi_do_cmd (SCpnt,
+			 (void *) cmd, (void *) buffer,
+			 512, sd_init_done,  SD_TIMEOUT,
+			 MAX_RETRIES);
+	    down(&sem);
+	}
+	
+	the_result = SCpnt->result;
+	SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+	wake_up(&SCpnt->device->device_wait); 
+	
+	if ( the_result ) {
+	    printk ("sd%c: test WP failed, assume Write Protected\n",i+'a');
+	    rscsi_disks[i].write_prot = 1;
+	} else {
+	    rscsi_disks[i].write_prot = ((buffer[2] & 0x80) != 0);
+	    printk ("sd%c: Write Protect is %s\n",i+'a',
+	            rscsi_disks[i].write_prot ? "on" : "off");
+	}
+	
+    }	/* check for write protect */
+ 
     rscsi_disks[i].ten = 1;
     rscsi_disks[i].remap = 1;
     scsi_free(buffer, 512);

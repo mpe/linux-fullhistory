@@ -1,4 +1,4 @@
-// 950824: note -- I will upload the new version 1.9 to ftp.ucsd.edu
+// 950913: note -- I will upload the new version 1.9a to ftp.ucsd.edu
 //         as soon as possible... 
 //
 // ******
@@ -7,12 +7,21 @@
 //
 // please remake /dev/sc*:
 //
-// mknod /dev/sc1 c 34 0
-// mknod /dev/sc2 c 34 1
-// mknod /dev/sc3 c 34 2
-// mknod /dev/sc4 c 34 3
+// mknod /dev/scc0 c 34 0
+// mknod /dev/scc1 c 34 1
+// mknod /dev/scc2 c 34 2
+// mknod /dev/scc3 c 34 3
 //
 // (and so on...)
+//
+// If you want to use the old device naming scheme use:
+//
+// ln -f /dev/scc0 /dev/sc1
+// ln -f /dev/scc1 /dev/sc2
+// ln -f /dev/scc2 /dev/sc3
+// ln -f /dev/scc3 /dev/sc4
+//
+// (you get the idea...)
 //
 // -dl1bke-
 

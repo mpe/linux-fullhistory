@@ -17,6 +17,7 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
+#include <linux/random.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -322,10 +323,8 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 
 	kstat.interrupts[irq]++;
 	action = irq_action + irq;
-#ifdef CONFIG_RANDOM
 	if (action->flags & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
-#endif
 	/* quick interrupts get executed with no extra overhead */
 	if (action->flags & SA_INTERRUPT) {
 		action->handler(irq, regs);

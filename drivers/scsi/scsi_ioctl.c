@@ -113,18 +113,14 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
     Scsi_Cmnd * SCpnt;
     
     SCpnt = allocate_device(NULL, dev, 1);
-    scsi_do_cmd(SCpnt,  cmd, NULL,  0,
-		scsi_ioctl_done,  MAX_TIMEOUT,
-		MAX_RETRIES);
-    
-    if (SCpnt->request.rq_status != RQ_SCSI_DONE){
+    {
 	struct semaphore sem = MUTEX_LOCKED;
 	SCpnt->request.sem = &sem;
+	scsi_do_cmd(SCpnt,  cmd, NULL,  0,
+		    scsi_ioctl_done,  MAX_TIMEOUT,
+		    MAX_RETRIES);
 	down(&sem);
-	/* Hmm.. Have to ask about this one */
-	while (SCpnt->request.rq_status != RQ_SCSI_DONE)
-	    schedule();
-    };
+    }
     
     if(driver_byte(SCpnt->result) != 0)
 	switch(SCpnt->sense_buffer[2] & 0xf) {
@@ -248,19 +244,14 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 #ifndef DEBUG_NO_CMD
     
     SCpnt = allocate_device(NULL, dev, 1);
-    
-    scsi_do_cmd(SCpnt,  cmd,  buf, needed,  scsi_ioctl_done,  MAX_TIMEOUT, 
-		MAX_RETRIES);
-    
-    if (SCpnt->request.rq_status != RQ_SCSI_DONE){
+
+    {
 	struct semaphore sem = MUTEX_LOCKED;
 	SCpnt->request.sem = &sem;
+	scsi_do_cmd(SCpnt,  cmd,  buf, needed,  scsi_ioctl_done,  MAX_TIMEOUT, 
+		    MAX_RETRIES);
 	down(&sem);
-	/* Hmm.. Have to ask about this one */
-	while (SCpnt->request.rq_status != RQ_SCSI_DONE)
-	    schedule();
     }
-    
     
     /* 
      * If there was an error condition, pass the info back to the user. 

@@ -46,6 +46,7 @@
 #include <linux/timer.h>
 #include <linux/malloc.h>
 #include <linux/mouse.h>
+#include <linux/random.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -221,7 +222,7 @@ static void aux_interrupt(int cpl, struct pt_regs * regs)
 	if ((inb(AUX_STATUS) & AUX_OBUF_FULL) != AUX_OBUF_FULL)
 		return;
 
-	queue->buf[head] = inb(AUX_INPUT_PORT);
+	add_mouse_randomness(queue->buf[head] = inb(AUX_INPUT_PORT));
 	if (head != maxhead) {
 		head++;
 		head &= AUX_BUF_SIZE-1;
@@ -244,7 +245,7 @@ static void qp_interrupt(int cpl, struct pt_regs * regs)
 	int head = queue->head;
 	int maxhead = (queue->tail-1) & (AUX_BUF_SIZE-1);
 
-	queue->buf[head] = inb(qp_data);
+	add_mouse_randomness(queue->buf[head] = inb(qp_data));
 	if (head != maxhead) {
 		head++;
 		head &= AUX_BUF_SIZE-1;

@@ -1,7 +1,7 @@
 /*
  * random.c -- A strong random number generator
  *
- * Version 0.92, last modified 21-Sep-95
+ * Version 0.94, last modified 11-Oct-95
  * 
  * Copyright Theodore Ts'o, 1994, 1995.  All rights reserved.
  *
@@ -65,34 +65,33 @@
  * timings, inter-interrupt timings from some interrupts, and other
  * events which are both (a) non-deterministic and (b) hard for an
  * outside observer to measure.  Randomness from these sources are
- * added to an "entropy pool", which is periodically mixed using the
- * MD5 compression function in CBC mode.  As random bytes are mixed
- * into the entropy pool, the routines keep an *estimate* of how many
- * bits of randomness have been stored into the random number
- * generator's internal state.
+ * added to an "entropy pool", which is mixed using a CRC-like function.
+ * This is not cryptographically strong, but it is adequate assuming
+ * the randomness is not chosen maliciously, and it is fast enough that
+ * the overhead of doing it on every interrupt is very reasonable.
+ * As random bytes are mixed into the entropy pool, the routines keep
+ * an *estimate* of how many bits of randomness have been stored into
+ * the random number generator's internal state.
  * 
  * When random bytes are desired, they are obtained by taking the MD5
- * hash of a counter plus the contents of the "entropy pool".  The
- * reason for the MD5 hash is so that we can avoid exposing the
- * internal state of random number generator.  Although the MD5 hash
- * does protect the pool, as each random byte which is generated from
- * the pool reveals some information which was derived from the
- * internal state, and thus increasing the amount of information an
- * outside attacker has available to try to make some guesses about
- * the random number generator's internal state.  For this reason,
- * the routine decreases its internal estimate of how many bits of
- * "true randomness" are contained in the entropy pool as it outputs
- * random numbers.
+ * hash of the contents of the "entropy pool".  The MD5 hash avoids
+ * exposing the internal state of the entropy pool.  It is believed to
+ * be computationally infeasible to derive any useful information
+ * about the input of MD5 from its output.  Even if it is possible to
+ * analyze MD5 in some clever way, as long as the amount of data
+ * returned from the generator is less than the inherent entropy in
+ * the pool, the output data is totally unpredictable.  For this
+ * reason, the routine decreases its internal estimate of how many
+ * bits of "true randomness" are contained in the entropy pool as it
+ * outputs random numbers.
  * 
- * If this estimate goes to zero, the routine can still generate random
- * numbers; however it may now be possible for an attacker to analyze
- * the output of the random number generator, and the MD5 algorithm,
- * and thus have some success in guessing the output of the routine.
- * Phil Karn (who devised this mechanism of using MD5 plus a counter
- * to extract random numbers from an entropy pool) calls this
- * "practical randomness", since in the worse case this is equivalent
- * to hashing MD5 with a counter and an undisclosed secret.  If MD5 is
- * a strong cryptographic hash, this should be fairly resistant to attack.
+ * If this estimate goes to zero, the routine can still generate
+ * random numbers; however, an attacker may (at least in theory) be
+ * able to infer the future output of the generator from prior
+ * outputs.  This requires successful cryptanalysis of MD5, which is
+ * not believed to be feasible, but there is a remote possiblility.
+ * Nonetheless, these numbers should be useful for the vast majority
+ * of purposes.
  * 
  * Exported interfaces ---- output
  * ===============================
@@ -107,47 +106,61 @@
  * 
  * The two other interfaces are two character devices /dev/random and
  * /dev/urandom.  /dev/random is suitable for use when very high
- * quality randomness is desired (for example, for key generation.),
- * as it will only return a maximum of the number of bits of
- * randomness (as estimated by the random number generator) contained
- * in the entropy pool.
+ * quality randomness is desired (for example, for key generation or
+ * one-time pads), as it will only return a maximum of the number of
+ * bits of randomness (as estimated by the random number generator)
+ * contained in the entropy pool.
  * 
  * The /dev/urandom device does not have this limit, and will return
  * as many bytes as are requested.  As more and more random bytes are
  * requested without giving time for the entropy pool to recharge,
- * this will result in lower quality random numbers.  For many
- * applications, however, this is acceptable.
+ * this will result in random numbers that are merely cryptographically
+ * strong.  For many applications, however, this is acceptable.
  *
  * Exported interfaces ---- input
  * ==============================
- *
- * The two current exported interfaces for gathering environmental
- * noise from the devices are:
+ * 
+ * The current exported interfaces for gathering environmental noise
+ * from the devices are:
  * 
  * 	void add_keyboard_randomness(unsigned char scancode);
+ * 	void add_mouse_randomness(__u32 mouse_data);
  * 	void add_interrupt_randomness(int irq);
+ * 	void add_blkdev_randomness(int irq);
  * 
- * The first function uses the inter-keypress timing, as well as the
+ * add_keyboard_randomness() uses the inter-keypress timing, as well as the
  * scancode as random inputs into the "entropy pool".
+ * 
+ * add_mouse_randomness() uses the mouse interrupt timing, as well as
+ * the reported position of the mouse from the hardware.
  *
- * The second function uses the inter-interrupt timing as random
+ * add_interrupt_randomness() uses the inter-interrupt timing as random
  * inputs to the entropy pool.  Note that not all interrupts are good
  * sources of randomness!  For example, the timer interrupts is not a
  * good choice, because the periodicity of the interrupts is to
  * regular, and hence predictable to an attacker.  Disk interrupts are
  * a better measure, since the timing of the disk interrupts are more
- * unpredictable.  The routines try to estimate how many bits of
- * randomness a particular interrupt channel offers, by keeping track
- * of the first and second order deltas in the interrupt timings.
+ * unpredictable.
+ * 
+ * add_blkdev_randomness() times the finishing time of block requests.
+ * 
+ * All of these routines try to estimate how many bits of randomness a
+ * particular randomness source.  They do this by keeping track of the
+ * first and second order deltas of the event timings.
  *
  * Acknowledgements:
  * =================
- * 
+ *
  * Ideas for constructing this random number generator were derived
  * from the Pretty Good Privacy's random number generator, and from
- * private discussions with Phil Karn.  This design has been further
- * modified by myself, so any flaws are solely my responsibility, and
- * should not be attributed to the authors of PGP or to Phil.
+ * private discussions with Phil Karn.  Colin Plumb provided a faster
+ * random number generator, which speed up the mixing function of the
+ * entropy pool, taken from PGP 3.0 (under development).  It has since
+ * been modified by myself to provide better mixing in the case where
+ * the input values to add_entropy_word() are mostly small numbers.
+ * 
+ * Any flaws in the design are solely my responsibility, and should
+ * not be attributed to the Phil, Colin, or any of authors of PGP.
  * 
  * The code for MD5 transform was taken from Colin Plumb's
  * implementation, which has been placed in the public domain.  The
@@ -159,31 +172,50 @@
  * Eastlake, Steve Crocker, and Jeff Schiller.
  */
 
-#ifdef linux
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/string.h>
+#include <linux/fcntl.h>
+#include <linux/malloc.h>
 #include <linux/random.h>
 
 #include <asm/segment.h>
 #include <asm/irq.h>
 #include <asm/io.h>
+
+/*
+ * The pool is stirred with a primitive polynomial of degree 128
+ * over GF(2), namely x^128 + x^119 + x^72 + x^64 + x^14 + x^8 + 1.
+ * For a pool of size 64, try x^64+x^62+x^38+x^10+x^6+x+1.
+ */
+#define POOLWORDS 128    /* Power of 2 - note that this is 32-bit words */
+#define POOLBITS (POOLWORDS*32)
+#if POOLWORDS == 128
+#define TAP1    119     /* The polynomial taps */
+#define TAP2    72
+#define TAP3    64
+#define TAP4    14
+#define TAP5    8
+#elif POOLWORDS == 64
+#define TAP1    62      /* The polynomial taps */
+#define TAP2    38
+#define TAP3    10
+#define TAP4    6
+#define TAP5    1
+#else
+#error No primitive polynomial available for chosen POOLWORDS
 #endif
 
-#ifdef CONFIG_RANDOM
-
-#define RANDPOOL 512
-
+/* There is actually only one of these, globally. */
 struct random_bucket {
-	int add_ptr;
-	int entropy_count;
-	int length;
-	int bit_length;
-	int delay_mix:1;
-	__u8 *pool;
+	unsigned add_ptr;
+	unsigned entropy_count;
+	int input_rotate;
+	__u32 *pool;
 };
 
+/* There is one of these per entropy source */
 struct timer_rand_state {
 	unsigned long	last_time;
 	int 		last_delta;
@@ -191,34 +223,206 @@ struct timer_rand_state {
 };
 
 static struct random_bucket random_state;
-static __u32 rand_pool_key[16];
-static __u8 random_pool[RANDPOOL];
-static __u32 random_counter[16];
+static __u32 random_pool[POOLWORDS];
 static struct timer_rand_state keyboard_timer_state;
-static struct timer_rand_state irq_timer_state[NR_IRQS];
+static struct timer_rand_state mouse_timer_state;
+static struct timer_rand_state extract_timer_state;
+static struct timer_rand_state *irq_timer_state[NR_IRQS];
+static struct timer_rand_state *blkdev_timer_state[MAX_BLKDEV];
+static struct wait_queue *random_wait;
 
 #ifndef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 	
-static void flush_random(struct random_bucket *random_state)
-{
-	random_state->add_ptr = 0;
-	random_state->bit_length = random_state->length * 8;
-	random_state->entropy_count = 0;
-	random_state->delay_mix = 0;
-}
-
 void rand_initialize(void)
 {
-	random_state.length = RANDPOOL;
+	random_state.add_ptr = 0;
+	random_state.entropy_count = 0;
 	random_state.pool = random_pool;
-	flush_random(&random_state);
+	memset(irq_timer_state, 0, sizeof(irq_timer_state));
+	memset(blkdev_timer_state, 0, sizeof(blkdev_timer_state));
+	random_wait = NULL;}
+
+void rand_initialize_irq(int irq)
+{
+	if (irq >= NR_IRQS || irq_timer_state[irq])
+		return;
+
+	/*
+	 * If kamlloc returns null, we just won't use that entropy
+	 * source.
+	 */
+	irq_timer_state[irq] = kmalloc(sizeof(struct timer_rand_state), 
+				       GFP_KERNEL);
+}
+
+void rand_initialize_blkdev(int major)
+{
+	if (major >= MAX_BLKDEV || blkdev_timer_state[major])
+		return;
+
+	/*
+	 * If kamlloc returns null, we just won't use that entropy
+	 * source.
+	 */
+	blkdev_timer_state[major] = kmalloc(sizeof(struct timer_rand_state), 
+					    GFP_KERNEL);
+}
+
+/*
+ * This function adds a byte into the entropy "pool".  It does not
+ * update the entropy estimate.  The caller must do this if appropriate.
+ *
+ * The pool is stirred with a primitive polynomial of degree 128
+ * over GF(2), namely x^128 + x^119 + x^72 + x^64 + x^14 + x^8 + 1.
+ * For a pool of size 64, try x^64+x^62+x^38+x^10+x^6+x+1.
+ * 
+ * We rotate the input word by a changing number of bits, to help
+ * assure that all bits in the entropy get toggled.  Otherwise, if we
+ * consistently feed the entropy pool small numbers (like jiffies and
+ * scancodes, for example), the upper bits of the entropy pool don't
+ * get affected. --- TYT, 10/11/95
+ */
+static inline void add_entropy_word(struct random_bucket *r,
+				    const __u32 input)
+{
+	unsigned i;
+	__u32 w;
+
+	w = (input << r->input_rotate) | (input >> (32 - r->input_rotate));
+	i = r->add_ptr = (r->add_ptr - 1) & (POOLWORDS-1);
+	if (i)
+		r->input_rotate = (r->input_rotate + 7) & 31;
+	else
+		/*
+		 * At the beginning of the pool, add an extra 7 bits
+		 * rotation, so that successive passes spread the
+		 * input bits across the pool evenly.
+		 */
+		r->input_rotate = (r->input_rotate + 14) & 31;
+
+	/* XOR in the various taps */
+	w ^= r->pool[(i+TAP1)&(POOLWORDS-1)];
+	w ^= r->pool[(i+TAP2)&(POOLWORDS-1)];
+	w ^= r->pool[(i+TAP3)&(POOLWORDS-1)];
+	w ^= r->pool[(i+TAP4)&(POOLWORDS-1)];
+	w ^= r->pool[(i+TAP5)&(POOLWORDS-1)];
+	w ^= r->pool[i];
+	/* Rotate w left 1 bit (stolen from SHA) and store */
+	r->pool[i] = (w << 1) | (w >> 31);
+}
+
+/*
+ * This function adds entropy to the entropy "pool" by using timing
+ * delays.  It uses the timer_rand_state structure to make an estimate
+ * of how many bits of entropy this call has added to the pool.
+ *
+ * The number "num" is also added to the pool - it should somehow describe
+ * the type of event which just happened.  This is currently 0-255 for
+ * keyboard scan codes, and 256 upwards for interrupts.
+ * On the i386, this is assumed to be at most 16 bits, and the high bits
+ * are used for a high-resolution timer.
+ *
+ * TODO: Read the time stamp register on the Pentium.
+ */
+static void add_timer_randomness(struct random_bucket *r,
+				 struct timer_rand_state *state, unsigned num)
+{
+	int	delta, delta2;
+	unsigned	nbits;
+	__u32		time;
+
+#if defined (__i386__)
+	if (x86_capability & 16) {
+		unsigned long low, high;
+		__asm__(".byte 0x0f,0x31"
+			:"=a" (low), "=d" (high));
+		time = (__u32) low;
+		num ^= (__u32) high;
+	} else {
+#if 0
+		/*
+		 * On a 386, read the high resolution timer.  We assume that
+		 * this gives us 2 bits of randomness.
+		 *
+		 * This is turned off for now because of the speed hit
+		 * it entails.
+		 */ 
+		outb_p(0x00, 0x43);	/* latch the count ASAP */
+		num |= inb_p(0x40) << 16;
+		num |= inb(0x40) << 24;
+		r->entropy_count += 2;
+#endif
+		
+		time = jiffies;
+	}
+#else
+	time = jiffies;
+#endif
+
+	add_entropy_word(r, (__u32) num);
+	add_entropy_word(r, time);
+
+	/*
+	 * Calculate number of bits of randomness we probably
+	 * added.  We take into account the first and second order
+	 * deltas in order to make our estimate.
+	 */
+	delta = time - state->last_time;
+	state->last_time = time;
+
+	delta2 = delta - state->last_delta;
+	state->last_delta = delta;
+
+	if (delta < 0) delta = -delta;
+	if (delta2 < 0) delta2 = -delta2;
+	delta = MIN(delta, delta2) >> 1;
+	for (nbits = 0; delta; nbits++)
+		delta >>= 1;
+
+	r->entropy_count += nbits;
+	
+	/* Prevent overflow */
+	if (r->entropy_count > POOLBITS)
+		r->entropy_count = POOLBITS;
+	
+	wake_up_interruptible(&random_wait);	
+}
+
+void add_keyboard_randomness(unsigned char scancode)
+{
+	add_timer_randomness(&random_state, &keyboard_timer_state, scancode);
+}
+
+void add_mouse_randomness(__u32 mouse_data)
+{
+	add_timer_randomness(&random_state, &mouse_timer_state, mouse_data);
+}
+
+void add_interrupt_randomness(int irq)
+{
+	if (irq >= NR_IRQS || irq_timer_state[irq] == 0)
+		return;
+
+	add_timer_randomness(&random_state, irq_timer_state[irq], 0x100+irq);
+}
+
+void add_blkdev_randomness(int major)
+{
+	if (major >= MAX_BLKDEV || blkdev_timer_state[major] == 0)
+		return;
+
+	add_timer_randomness(&random_state, blkdev_timer_state[major],
+			     0x200+major);
 }
 
 /*
  * MD5 transform algorithm, taken from code written by Colin Plumb,
  * and put into the public domain
+ *
+ * QUESTION: Replace this with SHA, which as generally received better
+ * reviews from the cryptographic community?
  */
 
 /* The four core functions - F1 is optimized somewhat */
@@ -328,141 +532,10 @@ static void MD5Transform(__u32 buf[4],
 #undef F4
 #undef MD5STEP
 
-/*
- * The function signature should be take a struct random_bucket * as
- * input, but this makes tqueue unhappy.
- */
-static void mix_bucket(void *v)
-{
-	struct random_bucket *r = (struct random_bucket *) v;
-	int	i, num_passes;
-	__u32 *p;
-	__u32 iv[4];
 
-	r->delay_mix = 0;
-	
-	/* Start IV from last block of the random pool */
-	memcpy(iv, r->pool + r->length - sizeof(iv), sizeof(iv));
-
-	num_passes = r->length / 16;
-	for (i = 0, p = (__u32 *) r->pool; i < num_passes; i++) {
-		MD5Transform(iv, rand_pool_key);
-		iv[0] = (*p++ ^= iv[0]);
-		iv[1] = (*p++ ^= iv[1]);
-		iv[2] = (*p++ ^= iv[2]);
-		iv[3] = (*p++ ^= iv[3]);
-	}
-	memcpy(rand_pool_key, r->pool, sizeof(rand_pool_key));
-	
-	/* Wipe iv from memory */
-	memset(iv, 0, sizeof(iv));
-
-	r->add_ptr = 0;
-}
-
-/*
- * This function adds a byte into the entropy "pool".  It does not
- * update the entropy estimate.  The caller must do this if appropriate.
- */
-static inline void add_entropy_byte(struct random_bucket *r,
-				    const __u8 ch,
-				    int delay)
-{
-	if (!delay && r->delay_mix)
-		mix_bucket(r);
-	r->pool[r->add_ptr++] ^= ch;
-	if (r->add_ptr >= r->length) {
-		if (delay) {
-			r->delay_mix = 1;
-			r->add_ptr = 0;
-		} else
-			mix_bucket(r);
-	}
-}
-
-/*
- * This function adds some number of bytes into the entropy pool and
- * updates the entropy count as appropriate.
- */
-void add_entropy(struct random_bucket *r, const __u8 *ptr,
-		 int length, int entropy_level, int delay)
-{
-	while (length-- > 0)
-		add_entropy_byte(r, *ptr++, delay);
-		
-	r->entropy_count += entropy_level;
-	if (r->entropy_count > r->length*8)
-		r->entropy_count = r->length * 8;
-}
-
-/*
- * This function adds entropy to the entropy "pool" by using timing
- * delays.  It uses the timer_rand_state structure to make an estimate
- * of how many bits of entropy this call has added to the pool.
- */
-static void add_timer_randomness(struct random_bucket *r,
-				 struct timer_rand_state *state, int delay)
-{
-	int	delta, delta2;
-	int	nbits;
-
-	/*
-	 * Calculate number of bits of randomness we probably
-	 * added.  We take into account the first and second order
-	 * delta's in order to make our estimate.
-	 */
-	delta = jiffies - state->last_time;
-	delta2 = delta - state->last_delta;
-	state->last_time = jiffies;
-	state->last_delta = delta;
-	if (delta < 0) delta = -delta;
-	if (delta2 < 0) delta2 = -delta2;
-	delta = MIN(delta, delta2) >> 1;
-	for (nbits = 0; delta; nbits++)
-		delta >>= 1;
-	
-	add_entropy(r, (__u8 *) &jiffies, sizeof(jiffies),
-		    nbits, delay);
-
-#if defined (__i386__)
-	/*
-	 * On a Pentium, read the cycle counter. We assume that
-	 * this gives us 8 bits of randomness.  XXX This needs
-	 * investigation.
-	 */
-	if (x86_capability & 16) {
-		unsigned long low, high;
-		__asm__(".byte 0x0f,0x31"
-			:"=a" (low), "=d" (high));
-		add_entropy_byte(r, low, 1);
-		r->entropy_count += 8;
-		if (r->entropy_count > r->bit_length)
-			r->entropy_count = r->bit_length;
-	}
+#if POOLWORDS % 16
+#error extract_entropy() assumes that POOLWORDS is a multiple of 16 words.
 #endif
-}
-
-void add_keyboard_randomness(unsigned char scancode)
-{
-	struct random_bucket *r = &random_state;
-
-	add_timer_randomness(r, &keyboard_timer_state, 0);
-	add_entropy_byte(r, scancode, 0);
-	r->entropy_count += 6;
-	if (r->entropy_count > r->bit_length)
-		r->entropy_count = r->bit_length;
-}
-
-void add_interrupt_randomness(int irq)
-{
-	struct random_bucket *r = &random_state;
-
-	if (irq >= NR_IRQS)
-		return;
-
-	add_timer_randomness(r, &irq_timer_state[irq], 1);
-}
-
 /*
  * This function extracts randomness from the "entropy pool", and
  * returns it in a buffer.  This function computes how many remaining
@@ -472,41 +545,57 @@ void add_interrupt_randomness(int irq)
 static inline int extract_entropy(struct random_bucket *r, char * buf,
 				  int nbytes, int to_user)
 {
-	int length, ret, passes, i;
+	int ret, i;
 	__u32 tmp[4];
-	u8 *cp;
 	
-	add_entropy(r, (u8 *) &jiffies, sizeof(jiffies), 0, 0);
+	add_timer_randomness(r, &extract_timer_state, nbytes);
 	
-	if (r->entropy_count > r->bit_length) 
-		r->entropy_count = r->bit_length;
+	/* Redundant, but just in case... */
+	if (r->entropy_count > POOLBITS) 
+		r->entropy_count = POOLBITS;
+	/* Why is this here?  Left in from Ted Ts'o.  Perhaps to limit time. */
 	if (nbytes > 32768)
 		nbytes = 32768;
+
 	ret = nbytes;
-	r->entropy_count -= ret * 8;
-	if (r->entropy_count < 0)
+	if (r->entropy_count / 8 >= nbytes)
+		r->entropy_count -= nbytes*8;
+	else
 		r->entropy_count = 0;
-	passes = r->length / 64;
+
 	while (nbytes) {
-		length = MIN(nbytes, 16);
-		for (i=0; i < 16; i++) {
-			if (++random_counter[i] != 0)
-				break;
-		}
+		/* Hash the pool to get the output */
 		tmp[0] = 0x67452301;
 		tmp[1] = 0xefcdab89;
 		tmp[2] = 0x98badcfe;
 		tmp[3] = 0x10325476;
-		MD5Transform(tmp, random_counter);
-		for (i = 0, cp = r->pool; i < passes; i++, cp+=64)
-			MD5Transform(tmp, (__u32 *) cp);
+		for (i = 0; i < POOLWORDS; i += 16)
+			MD5Transform(tmp, r->pool+i);
+		/* Modify pool so next hash will produce different results */
+		add_entropy_word(r, tmp[0]);
+		add_entropy_word(r, tmp[1]);
+		add_entropy_word(r, tmp[2]);
+		add_entropy_word(r, tmp[3]);
+		/*
+		 * Run the MD5 Transform one more time, since we want
+		 * to add at least minimal obscuring of the inputs to
+		 * add_entropy_word().  --- TYT
+		 */
+		MD5Transform(tmp, r->pool);
+		
+		/* Copy data to destination buffer */
+		i = MIN(nbytes, 16);
 		if (to_user)
-			memcpy_tofs(buf, tmp, length);
+			memcpy_tofs(buf, (__u8 const *)tmp, i);
 		else
-			memcpy(buf, tmp, length);
-		nbytes -= length;
-		buf += length;
+			memcpy(buf, (__u8 const *)tmp, i);
+		nbytes -= i;
+		buf += i;
 	}
+
+	/* Wipe data from memory */
+	memset(tmp, 0, sizeof(tmp));
+	
 	return ret;
 }
 
@@ -520,20 +609,73 @@ void get_random_bytes(void *buf, int nbytes)
 	extract_entropy(&random_state, (char *) buf, nbytes, 0);
 }
 
-#ifdef linux
-int read_random(struct inode * inode,struct file * file,char * buf,int nbytes)
+int read_random(struct inode * inode, struct file * file,
+                char * buf, int nbytes)
 {
-	if ((nbytes * 8) > random_state.entropy_count)
+	if (nbytes > random_state.entropy_count / 8)
 		nbytes = random_state.entropy_count / 8;
 	
 	return extract_entropy(&random_state, buf, nbytes, 1);
 }
 
-int read_random_unlimited(struct inode * inode,struct file * file,
-			  char * buf,int nbytes)
+int read_random_unlimited(struct inode * inode, struct file * file,
+			  char * buf, int nbytes)
 {
 	return extract_entropy(&random_state, buf, nbytes, 1);
 }
-#endif
 
-#endif /* CONFIG_RANDOM */
+int write_random(struct inode * inode, struct file * file,
+		 const char * buffer, int count)
+{
+	int i;
+	__u32 word, *p;
+
+	for (i = count, p = (__u32 *)buffer;
+	     i >= sizeof(__u32);
+	     i-= sizeof(__u32), p++) {
+		memcpy_fromfs(&word, p, sizeof(__u32));
+		add_entropy_word(&random_state, word);
+	}
+	if (i) {
+		word = 0;
+		memcpy_fromfs(&word, p, i);
+		add_entropy_word(&random_state, word);
+	}
+	inode->i_mtime = CURRENT_TIME;
+	return count;
+}
+
+int random_ioctl(struct inode * inode, struct file * file,
+			unsigned int cmd, unsigned long arg)
+{
+	int *p, max_size;
+	
+	switch (cmd) {
+	case RNDGETENTCNT:
+		put_user(random_state.entropy_count, (int *) arg);
+		return 0;
+	case RNDADDTOENTCNT:
+		if (!suser())
+			return -EPERM;
+		random_state.entropy_count += get_user((int *) arg);
+		if (random_state.entropy_count > POOLBITS)
+			random_state.entropy_count = POOLBITS;
+		return 0;
+	case RNDGETPOOL:
+		if (!suser())
+			return -EPERM;
+		p = (int *) arg;
+		put_user(random_state.entropy_count, p);
+		max_size = get_user(++p);
+		put_user(POOLWORDS, p);
+		if (max_size < 0)
+			return -EINVAL;
+		if (max_size > POOLWORDS)
+			max_size = POOLWORDS;
+		memcpy_tofs(++p, random_state.pool,
+			    max_size*sizeof(__u32));
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}

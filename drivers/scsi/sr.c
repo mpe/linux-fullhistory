@@ -989,24 +989,17 @@ static void get_sectorsize(int i){
 	SCpnt->cmd_len = 0;
 	
 	memset(buffer, 0, 8);
-	
-	scsi_do_cmd (SCpnt,
-		     (void *) cmd, (void *) buffer,
-		     512, sr_init_done,  SR_TIMEOUT,
-		     MAX_RETRIES);
-	
-	if (current->pid == 0)
-	    while(SCpnt->request.rq_status != RQ_SCSI_DONE)
-		barrier();
-	else
-	    if (SCpnt->request.rq_status != RQ_SCSI_DONE){
-		struct semaphore sem = MUTEX_LOCKED;
-		SCpnt->request.sem = &sem;
-		down(&sem);
-		/* Hmm.. Have to ask about this */
-		while (SCpnt->request.rq_status != RQ_SCSI_DONE)
-		    schedule();
-	    };
+
+	/* Do the command and wait.. */
+	{
+	    struct semaphore sem = MUTEX_LOCKED;
+	    SCpnt->request.sem = &sem;
+	    scsi_do_cmd (SCpnt,
+			 (void *) cmd, (void *) buffer,
+			 512, sr_init_done,  SR_TIMEOUT,
+			 MAX_RETRIES);
+	    down(&sem);
+	}
 	
 	the_result = SCpnt->result;
 	retries--;

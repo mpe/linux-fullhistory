@@ -46,6 +46,7 @@ char kernel_version[] = UTS_RELEASE;
 #include <linux/errno.h>
 #include <linux/mm.h>
 #include <linux/mouse.h>
+#include <linux/random.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -78,6 +79,7 @@ static void mouse_interrupt(int irq, struct pt_regs *regs)
 	dy |= (buttons & 0xf) << 4;
 	buttons = ((buttons >> 5) & 0x07);
 	if (dx != 0 || dy != 0 || buttons != mouse.buttons) {
+	  add_mouse_randomness((buttons << 16) + (dy << 8) + dx);
 	  mouse.buttons = buttons;
 	  mouse.dx += dx;
 	  mouse.dy -= dy;

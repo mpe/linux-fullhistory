@@ -16,6 +16,10 @@
 #
 # 030995 (storner@osiris.ping.dk) - added support for tri-state answers,
 # for selecting modules to compile.
+#
+# 180995 Bernhard Kaindl (bkaindl@ping.at) - added dummy functions for
+# use with a config.in modified for make menuconfig.
+#
 
 #
 # Make sure we're really running bash.
@@ -29,6 +33,16 @@
 # Disable filename globbing once and for all.
 # Enable function cacheing.
 set -f -h
+
+#
+# Dummy functions for use with a config.in modified for menuconf
+#
+function mainmenu_option () {
+	:
+}
+function mainmenu_name () {
+	:
+}
 
 #
 # readln reads a line into $ans.

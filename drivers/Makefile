@@ -15,8 +15,11 @@ ifdef CONFIG_PCI
 SUB_DIRS += pci
 endif
 
+# If CONFIG_SCSI is set, the core of scsi support will be added to the kernel,
+# but some of the low-level things may also be modules.
 ifeq ($(CONFIG_SCSI),y)
 SUB_DIRS += scsi
+MOD_SUB_DIRS += scsi
 else
   ifeq ($(CONFIG_SCSI),m)
   MOD_SUB_DIRS += scsi

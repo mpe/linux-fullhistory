@@ -114,10 +114,10 @@ endif #CONFIG_OPTCD
 
 ifeq ($(CONFIG_SJCD),y)
 L_OBJS += sjcd.o
-#else
-#  ifeq ($(CONFIG_SJCD),m)
-#  M_OBJS += sjcd.o
-#  endif
+else
+  ifeq ($(CONFIG_SJCD),m)
+  M_OBJS += sjcd.o
+  endif
 endif #CONFIG_SJCD
 
 ifeq ($(CONFIG_BLK_DEV_HD),y)

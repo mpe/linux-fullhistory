@@ -406,6 +406,7 @@ void lance_probe1(int ioaddr)
 
 	/* Make certain the data structures used by the LANCE are aligned and DMAble. */
 	lp = (struct lance_private *) kmalloc(sizeof(*lp), GFP_DMA | GFP_KERNEL);
+	memset(lp, 0, sizeof(*lp));
 	dev->priv = lp;
 	lp->name = chipname;
 	lp->rx_buffs = (unsigned long) kmalloc(PKT_BUF_SZ*RX_RING_SIZE, GFP_DMA | GFP_KERNEL);

@@ -1,0 +1,71 @@
+
+pack .header -side top -padx 10 -pady 10
+pack .f0 -side top -padx 15 -pady 10
+
+#
+# Misc buttons to save/restore state and so forth.
+# 
+frame .f0r_bot
+frame .f0l_bot
+
+#
+# Read the users settings from .config.  These wil override whatever is
+# in config.in.  Don't do this if the user specified a -D to force
+# the defaults.
+#
+if { [file readable .config] == 1} then {
+	if { $argc > 0 } then {
+		if { [lindex $argv 0] != "-D" } then {
+			read_config .config
+		}
+	} else {
+		read_config .config
+	}
+}
+
+button .f0r_bot.save -text "Write Configuration" -width 25 -command {
+	writeconfig .config include/linux/autoconf.h; wrapup .wrap }
+
+button .f0r_bot.quit -text "Quit" -command { exit } -width 25 \
+	-activebackground red -activeforeground white
+
+button .f0l_bot.store -text "Store Configuration to file" -width 25 -command {
+	load_configfile .load "Store Configuration" write_config_file
+}
+
+button .f0l_bot.load -text "Load Configuration" -width 25 -command {
+	load_configfile .load "Load Configuration" read_config_file
+}
+
+pack  .f0r_bot.save .f0r_bot.quit -padx 25 -ipadx 10 -ipady 2 -anchor w
+
+pack  .f0l_bot.load .f0l_bot.store -padx 25 -ipadx 10 -ipady 2 -anchor w
+
+pack .f0r_bot .f0l_bot -side left -padx 15 -pady 10 -anchor w
+
+#
+# If we cannot write our config files, disable the write button.
+#
+if { [file exists .config] == 1 } then {
+		if { [file writable .config] == 0 } then {
+			.f0r_bot.save configure -state disabled
+		}
+	} else {
+		if { [file writable .] == 0 } then {
+			.f0r_bot.save configure -state disabled
+		}
+	}
+
+if { [file exists include/linux/autoconf.h] == 1 } then {
+		if { [file writable include/linux/autoconf.h] == 0 } then {
+			.f0r_bot.save configure -state disabled
+		}
+	} else {
+		if { [file writable include/linux/] == 0 } then {
+			.f0r_bot.save configure -state disabled
+		}
+	}
+
+if { [file writable .config] == 0 || [file writable include/linux/autoconf.h ] == 0 } then {
+	.f0r_bot.save configure -state disabled
+	}

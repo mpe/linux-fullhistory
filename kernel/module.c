@@ -529,6 +529,8 @@ int get_module_list(char *buf)
 		if (p - buf > 4096 - 100)
 			break;			/* avoid overflowing buffer */
 		q = mp->name;
+		if (*q == '\0' && mp->size == 0 && mp->ref == NULL)
+			continue; /* don't list modules for kernel syms */
 		i = 20;
 		while (*q) {
 			*p++ = *q++;

@@ -44,21 +44,16 @@ static int do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned 
 {
     Scsi_Cmnd * SCpnt;
     int result;
-    
+
     SCpnt = allocate_device(NULL, scsi_CDs[target].device, 1);
-    scsi_do_cmd(SCpnt,
-		(void *) sr_cmd, buffer, buflength, sr_ioctl_done, 
-		IOCTL_TIMEOUT, IOCTL_RETRIES);
-    
-    
-    if (SCpnt->request.rq_status != RQ_SCSI_DONE){
+    {
 	struct semaphore sem = MUTEX_LOCKED;
 	SCpnt->request.sem = &sem;
+	scsi_do_cmd(SCpnt,
+		    (void *) sr_cmd, buffer, buflength, sr_ioctl_done, 
+		    IOCTL_TIMEOUT, IOCTL_RETRIES);
 	down(&sem);
-	/* Hmm.. Have to ask about this */
-	while (SCpnt->request.rq_status != RQ_SCSI_DONE)
-	  schedule();
-    };
+    }
     
     result = SCpnt->result;
     

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/triton.c	Version 1.01  Aug 28, 1995
+ *  linux/drivers/block/triton.c	Version 1.02  Oct 13, 1995
  *
  *  Copyright (c) 1995  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -109,8 +109,13 @@ const char *good_dma_drives[] = {"Micropolis 2112A"};
  * Note that the driver reverts to PIO mode for individual requests that exceed
  * this limit (possible with 512 byte blocksizes, eg. MSDOS f/s), so handling
  * 100% of all crazy scenarios here is not necessary.
+ *
+ * As it turns out, though, we must allocate a full 4KB page for this,
+ * so the two PRD tables (ide0 & ide1) will each get half of that,
+ * allowing each to have about 256 entries (8 bytes each) from this.
  */
-#define PRD_ENTRIES	128	/* max memory area count per DMA */
+#define PRD_BYTES	8
+#define PRD_ENTRIES	(PAGE_SIZE / (2 * PRD_BYTES))
 
 /*
  * dma_intr() is the handler for disk read/write DMA interrupts
@@ -298,6 +303,7 @@ void ide_init_triton (byte bus, byte fn)
 	int rc = 0, h;
 	unsigned short bmiba, pcicmd;
 	unsigned int timings;
+	unsigned char *dmatable = NULL;
 	extern ide_hwif_t ide_hwifs[];
 
 	/*
@@ -351,13 +357,22 @@ void ide_init_triton (byte bus, byte fn)
 		if (check_region(base, 8)) {
 			printk(" -- ERROR, PORTS ALREADY IN USE");
 		} else {
-			unsigned long *table;
 			request_region(base, 8, hwif->name);
-			hwif->dma_base  = base;
-			table = (void *) __get_dma_pages(GFP_KERNEL, 0);
-			hwif->dmatable = table;
-			outl(virt_to_bus(table), base + 4);
-			hwif->dmaproc  = &triton_dmaproc;
+			hwif->dma_base = base;
+			if (dmatable == NULL) {
+				/*
+				 * Since we know we are on a PCI bus, we could
+				 * actually use __get_free_pages() here instead
+				 * of __get_dma_pages() -- no ISA limitations.
+				 */
+				dmatable = (void *) __get_dma_pages(GFP_KERNEL, 0);
+			}
+			if (dmatable != NULL) {
+				hwif->dmatable = (unsigned long *) dmatable;
+				dmatable += (PRD_ENTRIES * PRD_BYTES);
+				outl(virt_to_bus(hwif->dmatable), base + 4);
+				hwif->dmaproc  = &triton_dmaproc;
+			}
 		}
 		printk("\n    %s timing: (0x%04x) sample_CLKs=%d, recovery_CLKs=%d\n",
 		 hwif->name, time, ((~time>>12)&3)+2, ((~time>>8)&3)+1);

@@ -233,7 +233,6 @@ static int memory_lseek(struct inode * inode, struct file * file, off_t offset, 
 #define mmap_kmem	mmap_mem
 #define zero_lseek	null_lseek
 #define write_zero	write_null
-#define write_random	write_null
 
 static struct file_operations ram_fops = {
 	memory_lseek,
@@ -324,15 +323,14 @@ static struct file_operations full_fops = {
 	NULL		/* no special release code */
 };
 
-#ifdef CONFIG_RANDOM
 static struct file_operations random_fops = {
 	memory_lseek,
 	read_random,
 	write_random,
-	NULL,		/* full_readdir */
-	NULL,		/* full_select */
-	NULL,		/* full_ioctl */	
-	NULL,		/* full_mmap */
+	NULL,		/* random_readdir */
+	NULL,		/* random_select */
+	random_ioctl,
+	NULL,		/* random_mmap */
 	NULL,		/* no special open code */
 	NULL		/* no special release code */
 };
@@ -341,14 +339,13 @@ static struct file_operations urandom_fops = {
 	memory_lseek,
 	read_random_unlimited,
 	write_random,
-	NULL,		/* full_readdir */
-	NULL,		/* full_select */
-	NULL,		/* full_ioctl */	
-	NULL,		/* full_mmap */
+	NULL,		/* urandom_readdir */
+	NULL,		/* urandom_select */
+	random_ioctl,
+	NULL,		/* urandom_mmap */
 	NULL,		/* no special open code */
 	NULL		/* no special release code */
 };
-#endif
 
 static int memory_open(struct inode * inode, struct file * filp)
 {
@@ -374,14 +371,12 @@ static int memory_open(struct inode * inode, struct file * filp)
 		case 7:
 			filp->f_op = &full_fops;
 			break;
-#ifdef CONFIG_RANDOM
 		case 8:
 			filp->f_op = &random_fops;
 			break;
 		case 9:
 			filp->f_op = &urandom_fops;
 			break;
-#endif
 		default:
 			return -ENODEV;
 	}
@@ -407,9 +402,7 @@ int chr_dev_init(void)
 {
 	if (register_chrdev(MEM_MAJOR,"mem",&memory_fops))
 		printk("unable to get major %d for memory devs\n", MEM_MAJOR);
-#ifdef CONFIG_RANDOM
 	rand_initialize();
-#endif
 	tty_init();
 #ifdef CONFIG_PRINTER
 	lp_init();

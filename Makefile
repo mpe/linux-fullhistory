@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 34
+SUBLEVEL = 35
 
 ARCH = i386
 
@@ -134,6 +134,10 @@ symlinks:
 oldconfig: symlinks
 	$(CONFIG_SHELL) scripts/Configure -d arch/$(ARCH)/config.in
 
+xconfig: symlinks
+	( cd scripts ; make kconfig.tk)
+	./scripts/kconfig.tk
+
 config: symlinks
 	$(CONFIG_SHELL) scripts/Configure arch/$(ARCH)/config.in
 
@@ -243,6 +247,7 @@ mrproper: clean
 	rm -f drivers/scsi/aic7xxx_asm drivers/scsi/aic7xxx_seq.h
 	rm -f drivers/char/uni_hash.tbl drivers/char/conmakehash
 	rm -f .version .config* config.in config.old
+	rm -f scripts/tkparse scripts/kconfig.tk
 	rm -f include/asm
 	rm -f .depend `find . -name .depend -print`
 	rm -f .hdepend

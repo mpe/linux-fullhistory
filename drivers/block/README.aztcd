@@ -1,4 +1,4 @@
-$Id: README.aztcd,v 1.70 1995/08/19 16:21:05 root Exp root $
+$Id: README.aztcd,v 1.80 1995/10/11 19:37:49 root Exp root $
                        Readme-File README.aztcd
    for Aztech CD-ROM CDA268-01A, ORCHID CD-3110, OKANO/WEARNES CDD110 
                           CD-ROM  Driver 
@@ -15,6 +15,7 @@ NOTE: THIS DRIVER WILL WORK WITH THE CD-ROM DRIVES LISTED, WHICH HAVE
       THE STANDARD-KERNEL 1.2.x NOW ALSO SUPPORTS IDE-CDROM-DRIVES, SEE THE
       HARDDISK (!) SECTION OF make config, WHEN COMPILING A NEW KERNEL!!!
 ----------------------------------------------------------------------------
+
 Contents of this file:
                          1.  NOTE
                          2.  INSTALLATION

@@ -2,7 +2,9 @@
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
+mainmenu_name "Kernel configuration of Linux for Alpha machines"
 
+mainmenu_option next_comment
 comment 'General setup'
 
 if [ "`uname`" != "Linux" ]; then
@@ -63,6 +65,7 @@ comment 'Loadable module support'
 bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS n
 
 if [ "$CONFIG_NET" = "y" ]; then
+mainmenu_option next_comment
 comment 'Networking options'
 bool 'TCP/IP networking' CONFIG_INET y
 if [ "$CONFIG_INET" = "y" ]; then
@@ -94,6 +97,7 @@ if [ "$CONFIG_AX25" = "y" ]; then
 fi
 fi
 
+mainmenu_option next_comment
 comment 'SCSI support'
 
 tristate 'SCSI support' CONFIG_SCSI y
@@ -115,6 +119,7 @@ comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
 
 bool 'Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN n
 
+mainmenu_option next_comment
 comment 'SCSI low-level drivers'
 
 dep_tristate 'Adaptec AHA152X support' CONFIG_SCSI_AHA152X n $CONFIG_SCSI
@@ -144,6 +149,7 @@ fi
 
 if [ "$CONFIG_NET" = "y" ]; then
 
+mainmenu_option next_comment
 comment 'Network device support'
 
 bool 'Network device support' CONFIG_NETDEVICES y
@@ -237,6 +243,7 @@ tristate 'Arcnet support' CONFIG_ARCNET n
 fi
 fi
 
+mainmenu_option next_comment
 comment 'CD-ROM drivers (not for SCSI or IDE/ATAPI drives)'
 
 bool 'Support non-SCSI/IDE/ATAPI drives' CONFIG_CD_NO_IDESCSI n
@@ -262,6 +269,7 @@ if [ "$CONFIG_CD_NO_IDESCSI" = "y" ]; then
   bool 'Experimental Sanyo H94A CDROM support' CONFIG_SJCD n
 fi
 
+mainmenu_option next_comment
 comment 'Filesystems'
 
 tristate 'Standard (minix) fs support' CONFIG_MINIX_FS y
@@ -281,6 +289,7 @@ tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS n
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS n
 tristate 'SMB filesystem (to mount WfW shares etc..) support' CONFIG_SMB_FS n
 
+mainmenu_option next_comment
 comment 'character devices'
 
 bool 'Cyclades async mux support' CONFIG_CYCLADES n
@@ -314,10 +323,12 @@ if [ "$CONFIG_FTAPE" = "y" ]; then
   int ' number of ftape buffers' NR_FTAPE_BUFFERS 3
 fi
 
+mainmenu_option next_comment
 comment 'Sound'
 
 bool 'Sound card support' CONFIG_SOUND n
 
+mainmenu_option next_comment
 comment 'Kernel hacking'
 
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC n

@@ -39,7 +39,7 @@
  * 19 - cyclades /dev/ttyC*
  * 20 - cyclades /dev/cub*     mitsumi (mcdx) cdrom
  * 21 - scsi generic
- * 22 - Z8530 driver           ide1
+ * 22 -                        ide1
  * 23 -                        mitsumi cdrom
  * 24 -	                       sony535 cdrom
  * 25 -                        matsushita cdrom       minors 0..3
@@ -49,7 +49,7 @@
  * 29 -                        aztech/orchid/okano/wearnes cdrom
  * 32 -                        philips/lms cm206 cdrom
  * 33 -                        ide2
- * 34 -                        ide3
+ * 34 - z8530 driver           ide3
  */
 
 #define UNNAMED_MAJOR	0
@@ -79,7 +79,7 @@
 #define CYCLADESAUX_MAJOR 20
 #define MITSUMI_X_CDROM_MAJOR 20
 #define SCSI_GENERIC_MAJOR 21
-#define Z8530_MAJOR 22
+#define Z8530_MAJOR 34
 #define IDE1_MAJOR	22
 #define MITSUMI_CDROM_MAJOR 23
 #define CDU535_CDROM_MAJOR 24
