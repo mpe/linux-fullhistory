@@ -16,40 +16,40 @@
 /*
  * Macros to read and write to registers.
  */
-#define reg_w(reg,dat) (*(z3_regs + reg) = dat)
-#define reg_r(reg) (*(z3_regs + reg))
+#define reg_w(regs, reg,dat) (*(regs + reg) = dat)
+#define reg_r(regs, reg) (*(regs + reg))
 
 /*
  * Macro to access the sequencer.
  */
-#define seq_w(sreg,sdat) \
-	do{ reg_w(SEQ_IDX, sreg); reg_w(SEQ_DATA, sdat); } while(0)
+#define seq_w(regs, sreg, sdat) \
+	do{ reg_w(regs, SEQ_IDX, sreg); reg_w(regs, SEQ_DATA, sdat); } while(0)
 
 /*
  * Macro to access the CRT controller.
  */
-#define crt_w(creg,cdat) \
-	do{ reg_w(CRT_IDX, creg); reg_w(CRT_DATA, cdat); } while(0)
+#define crt_w(regs, creg, cdat) \
+	do{ reg_w(regs, CRT_IDX, creg); reg_w(regs, CRT_DATA, cdat); } while(0)
 
 /*
  * Macro to access the graphics controller.
  */
-#define gfx_w(greg,gdat) \
-	do{ reg_w(GFX_IDX, greg); reg_w(GFX_DATA, gdat); } while(0)
+#define gfx_w(regs, greg, gdat) \
+	do{ reg_w(regs, GFX_IDX, greg); reg_w(regs, GFX_DATA, gdat); } while(0)
 
 /*
  * Macro to access the attribute controller.
  */
-#define attr_w(areg,adat) \
-	do{ reg_w(ACT_IDX, areg); reg_w(ACT_DATA, adat); } while(0)
+#define attr_w(regs, areg, adat) \
+	do{ reg_w(regs, ACT_IDX, areg); reg_w(regs, ACT_DATA, adat); } while(0)
 
 /*
  * Macro to access the pll.
  */
-#define pll_w(preg,pdat) \
-	do{ reg_w(PLL_IDX, preg); \
-	    reg_w(PLL_DATA, (pdat & 0xff)); \
-	    reg_w(PLL_DATA, (pdat >> 8));\
+#define pll_w(regs, preg, pdat) \
+	do{ reg_w(regs, PLL_IDX, preg); \
+	    reg_w(regs, PLL_DATA, (pdat & 0xff)); \
+	    reg_w(regs, PLL_DATA, (pdat >> 8));\
 	} while(0)
 
 /*

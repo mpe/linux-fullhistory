@@ -58,6 +58,13 @@
 #define FB_ACCEL_SUN_CGSIX	12	/* Sun cg6			*/
 #define FB_ACCEL_SUN_LEO	13	/* Sun leo/zx			*/
 #define FB_ACCEL_IMS_TWINTURBO	14	/* IMS Twin Turbo		*/
+#define FB_ACCEL_3DLABS_PERMEDIA2 15	/* 3Dlabs Permedia 2		*/
+#define FB_ACCEL_MATROX_MGA2064W 16	/* Matrox MGA2064W (Millenium)	*/
+#define FB_ACCEL_MATROX_MGA1064SG 17	/* Matrox MGA1064SG (Mystique)	*/
+#define FB_ACCEL_MATROX_MGA2164W 18	/* Matrox MGA2164W (Millenium II) */
+#define FB_ACCEL_MATROX_MGA2164W_AGP 19	/* Matrox MGA2164W (Millenium II) */
+#define FB_ACCEL_MATROX_MGAG100	20	/* Matrox G100 (Productiva G100) */
+#define FB_ACCEL_MATROX_MGAG200	21	/* Matrox G200 (Myst, Mill, ...) */
 
 struct fb_fix_screeninfo {
 	char id[16];			/* identification string eg "TT Builtin" */
@@ -100,6 +107,7 @@ struct fb_bitfield {
 					/* values			*/
 #define FB_ACTIVATE_VBL	       16	/* activate values on next vbl  */
 #define FB_CHANGE_CMAP_VBL     32	/* change colormap on vbl	*/
+#define FB_ACTIVATE_ALL	       64	/* change all VCs on this fb	*/
 
 #define FB_ACCELF_TEXT		1	/* text mode acceleration */
 

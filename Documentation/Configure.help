@@ -1759,6 +1759,58 @@ CONFIG_FB_COMPAT_XPMAC
   which includes a server that supports the frame buffer device
   directly (XF68_FBDev).
 
+Matrox unified accelerated driver
+CONFIG_FB_MATROX
+  Say Y here if you have Matrox Millenium, Matrox Millenium II, Matrox
+  Mystique, Matrox Mystique 220 or Matrox Productiva G100 in your box.
+  At this time,  G100 support  is untested and  G200 support  does not
+  exist at all.  If you want,  you can select  M, in this  case module
+  matroxfb.o will be created.
+  You can pass parameters into driver if it is compiled into kernel by 
+  specifying "video=matrox:XXX", where meaning of XXX you can found at 
+  the end of main source file  (drivers/video/matroxfb.c) at boottime.
+  Same  parameters can  be passed  into insmod  if driver  is used  as 
+  module.
+
+Matrox Millenium support
+CONFIG_FB_MATROX_MILLENIUM
+  Say Y here if you have Matrox Millenium or Matrox Millenium II in the
+  box. If you  select "Advanced  lowlevel driver  options", you  should 
+  check 4 bpp packed pixel, 8 bpp packed pixel, 16 bpp packed pixel, 24
+  bpp  packed pixel  and 32  bpp packed  pixel. You  can also  use font 
+  widths different from 8.
+
+Matrox Mystique support
+CONFIG_FB_MATROX_MYSTIQUE
+  Say Y here if you have  Matrox Mystique or Matrox Mystique 220 in the 
+  box.  If you  select  "Advanced lowlevel driver options",  you should 
+  check  8 bpp packed pixel,  16 bpp packed pixel,  24 bpp packed pixel
+  and  32 bpp  packed pixel.  You can  also use  font widths  different 
+  from 8.
+
+Matrox G100 support
+CONFIG_FB_MATROX_G100
+  Say Y here  if you have  Matrox Productiva G100  in the box. But THIS 
+  DRIVER  IS NOT  TESTED BECAUSE  OF I  HAVE NO  G100  board  and  G100 
+  technical sheets  are top secret at this time.  But driver should not 
+  cause any damage to your computer.
+  If you select  "Advanced lowlevel  driver options",  you should check
+  8 bpp  packed pixel,  16 bpp  packed pixel,  24 bpp  packed pixel and 
+  32 bpp packed pixel. You can also use font widths different from 8.
+
+Matrox unified driver multihead support
+CONFIG_FB_MATROX_MULTIHEAD
+  Say Y  here if you  have more  than one (supported) Matrox  device in 
+  computer  and you  want to  use all  of them.  If you  have only  one 
+  device,  you should say N because of driver compiled with Y is larger 
+  and a bit slower, especially on ia32 (ix86).
+  If you compiled  driver as module,  you are VERY  interested in speed 
+  and  you can  use 40KB  of memory  per each  Matrox  device,  you can 
+  compile driver  without multihead  support and  instead of  it insmod 
+  more module instances. In this case, you MUST specify parameter dev=N 
+  to insmod, where N is sequential number of Matrox device  (0 = first, 
+  1 = second and so on).
+  
 MDA text console (dual-headed)
 CONFIG_MDA_CONSOLE
   Say Y here if you have an old MDA or monochrome Hercules graphics
@@ -3740,6 +3792,13 @@ CONFIG_SCSI_FUTURE_DOMAIN
   The module will be called fdomain.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
+Future Domain MCS-600/700 SCSI support
+CONFIG_SCSI_FD_MCS
+ This is support for Future Domain MCS 600/700 MCA SCSI adapters. Some
+ PS/2s are also equipped with IBM Fast SCSI Adapter/A which is an OEM
+ of the MCS 700. This driver also supports Reply SB16/SCSI card (the 
+ SCSI part). It supports multiple adapters in the same system.
+
 Generic NCR5380/53c400 SCSI support
 CONFIG_SCSI_GENERIC_NCR5380
   This is the generic NCR family of SCSI controllers, not to be
@@ -5013,9 +5072,9 @@ CONFIG_NET_PROFILE
 
 Comtrol Hostess SV-11 support
 CONFIG_HOSTESS_SV11
-  This is a network card for high speed synchronous serial links. It
-  is commonly used to connect to Cisco equipment over HSSI links. At
-  this point, the driver can only be compiled as a module.
+  This is a network card for low speed synchronous serial links, at
+  up to 256Kbits. It supports both PPP and Cisco HDLC
+  At this point, the driver can only be compiled as a module.
 
 WAN Drivers
 CONFIG_WAN_DRIVERS
@@ -5576,7 +5635,7 @@ CONFIG_SEEQ8005
   is for you, read the Ethernet-HOWTO, available via FTP (user:
   anonymous) from ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
-AT1700 support
+AT1700/1720 support
 CONFIG_AT1700
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available via FTP (user: anonymous) in

@@ -292,11 +292,13 @@ static int sound_proc_get_info(char *buffer, char **start, off_t offset, int len
         return len;
 }
 
+#ifdef CONFIG_PROC_FS
 static struct proc_dir_entry proc_root_sound = {
         PROC_SOUND, 5, "sound",
         S_IFREG | S_IRUGO, 1, 0, 0,
         0, NULL, sound_proc_get_info
 };
+#endif
 
 #ifndef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
@@ -842,8 +844,10 @@ soundcard_init(void)
 		audio_init_devices();
 	}
 #endif
+#ifdef CONFIG_PROC_FS
 	if (proc_register(&proc_root, &proc_root_sound))
 		printk(KERN_ERR "sound: registering /proc/sound failed\n");
+#endif		
 }
 
 static int      sound[20] = {

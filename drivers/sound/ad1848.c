@@ -1934,7 +1934,7 @@ void ad1848_unload(int io_base, int irq, int dma_playback, int dma_capture, int 
 
 		if (!share_dma)
 		{
-			if (irq > 0)
+			if (devc->irq > 0) /* There is no point in freeing irq, if it wasn't allocated */
 				free_irq(devc->irq, (void *)devc->dev_no);
 
 			sound_free_dma(audio_devs[dev]->dmap_out->dma);

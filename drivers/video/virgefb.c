@@ -152,6 +152,8 @@ static unsigned long CyberMem;
 static unsigned long CyberSize;
 static volatile char *CyberRegs;
 static volatile unsigned long CyberVGARegs; /* ++Andre: for CV64/3D, see macros at the beginning */
+static unsigned long CyberMem_phys;
+static unsigned long CyberRegs_phys;
  
 
 /*
@@ -208,6 +210,13 @@ static struct fb_videomode virgefb_predefined[] __initdata = {
 	    0, 0, -1, -1, 0, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
+    }, {
+	"1024x768-16", {         /* Cybervision 16 bpp */
+	    1024, 768, 1024, 768, 0, 0, 16, 0,
+	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+       }
     }
 };
 
@@ -371,9 +380,9 @@ static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
 {
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id, virgefb_name);
-	fix->smem_start = (char *)CyberMem;
+	fix->smem_start = (char*) CyberMem_phys;
 	fix->smem_len = CyberSize;
-	fix->mmio_start = (char *)CyberRegs;
+	fix->mmio_start = (char*) CyberRegs_phys;
 	fix->mmio_len = 0x10000; /* TODO: verify this for the CV64/3D */
 
 	fix->type = FB_TYPE_PACKED_PIXELS;
@@ -843,7 +852,7 @@ static void virgefb_set_disp(int con, struct fb_info *info)
 	virgefb_get_fix(&fix, con, info);
 	if (con == -1)
 		con = 0;
-	display->screen_base = fix.smem_start;
+	display->screen_base = (char*) CyberMem;
 	display->visual = fix.visual;
 	display->type = fix.type;
 	display->type_aux = fix.type_aux;
@@ -1033,7 +1042,8 @@ __initfunc(void virgefb_init(void))
 		 * Ok we got the board running in Z2 space.
 		 */
 
-		CyberMem = ZTWO_VADDR(board_addr);
+		CyberMem_phys = board_addr;
+		CyberMem = ZTWO_VADDR(CyberMem_phys);
 		printk("CV3D detected running in Z2 mode ... not yet supported!\n");
 		return;
 	}
@@ -1041,10 +1051,13 @@ __initfunc(void virgefb_init(void))
 	{
 		CyberVGARegs = kernel_map(board_addr +0x0c000000, 0x00010000,
 					       KERNELMAP_NOCACHE_SER, NULL);
-		CyberRegs = (char *)kernel_map(board_addr +0x05000000,
+
+		CyberRegs_phys = board_addr + 0x05000000;
+		CyberMem_phys  = board_addr + 0x04800000;
+		CyberRegs = (char *)kernel_map(CyberRegs_phys,
 					       0x00010000,
 					       KERNELMAP_NOCACHE_SER, NULL);
-		CyberMem = kernel_map(board_addr + 0x04800000, 0x00400000,
+		CyberMem = kernel_map(CyberMem_phys, 0x00400000,
 				      KERNELMAP_NOCACHE_SER, NULL);
 		printk("CV3D detected running in Z3 mode\n");
 	}

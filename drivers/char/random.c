@@ -1407,19 +1407,15 @@ random_ioctl(struct inode * inode, struct file * file,
 	
 	switch (cmd) {
 	case RNDGETENTCNT:
-		retval = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
-		if (retval)
-			return(retval);
 		ent_count = random_state.entropy_count;
-		put_user(ent_count, (int *) arg);
+		if (put_user(ent_count, (int *) arg))
+			return -EFAULT;
 		return 0;
 	case RNDADDTOENTCNT:
 		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
-		retval = verify_area(VERIFY_READ, (void *) arg, sizeof(int));
-		if (retval)
-			return(retval);
-		get_user(ent_count, (int *) arg);
+		if (get_user(ent_count, (int *) arg))
+			return -EFAULT;
 		/*
 		 * Add i to entropy_count, limiting the result to be
 		 * between 0 and POOLBITS.
@@ -1446,16 +1442,14 @@ random_ioctl(struct inode * inode, struct file * file,
 		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		p = (int *) arg;
-		retval = verify_area(VERIFY_WRITE, (void *) p, sizeof(int));
-		if (retval)
-			return(retval);
 		ent_count = random_state.entropy_count;
-		put_user(ent_count, p++);
-		retval = verify_area(VERIFY_WRITE, (void *) p, sizeof(int));
-		if (retval)
-			return(retval);
-		get_user(size, p);
-		put_user(POOLWORDS, p++);
+		if (put_user(ent_count, p++))
+			return -EFAULT;
+			
+		if (get_user(size, p))
+			return -EFAULT;
+		if (put_user(POOLWORDS, p++))
+			return -EFAULT;
 		if (size < 0)
 			return -EINVAL;
 		if (size > POOLWORDS)
@@ -1467,16 +1461,12 @@ random_ioctl(struct inode * inode, struct file * file,
 		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		p = (int *) arg;
-		retval = verify_area(VERIFY_READ, (void *) p, 2*sizeof(int));
-		if (retval)
-			return(retval);
-		get_user(ent_count, p++);
+		if (get_user(ent_count, p++))
+			return -EFAULT;
 		if (ent_count < 0)
 			return -EINVAL;
-		get_user(size, p++);
-		retval = verify_area(VERIFY_READ, (void *) p, size);
-		if (retval)
-			return retval;
+		if (get_user(size, p++))
+			return -EFAULT;
 		retval = random_write(file, (const char *) p,
 				      size, &file->f_pos);
 		if (retval < 0)

@@ -112,7 +112,8 @@ static int try_to_fill_dentry(struct dentry *dentry, struct super_block *sb, str
 	if ( !(ent = autofs_hash_lookup(&sbi->dirhash, &dentry->d_name)) ) {
 		do {
 			if ( status && dentry->d_inode ) {
-				printk("autofs warning: lookup failure on positive dentry, status = %d, name = %s\n", status, dentry->d_name.name);
+				if ( status != -ENOENT )
+					printk("autofs warning: lookup failure on positive dentry, status = %d, name = %s\n", status, dentry->d_name.name);
 				return 0; /* Try to get the kernel to invalidate this dentry */
 			}
 

@@ -59,6 +59,9 @@
 
 static int currcon = 0;
 static int switching = 0;
+static char fontname[40] __initdata = { 0 };
+static int default_vmode = VMODE_NVRAM;
+static int default_cmode = CMODE_NVRAM;
 
 struct fb_par_control {
 	int	vmode, cmode;
@@ -102,7 +105,10 @@ struct fb_info_control {
  * Exported functions
  */
 void control_init(void);
+#ifdef CONFIG_FB_OF
 void control_of_init(struct device_node *dp);
+#endif
+void controlfb_setup(char *options, int *ints);
 
 static int control_open(struct fb_info *info, int user);
 static int control_release(struct fb_info *info, int user);
@@ -989,7 +995,7 @@ static void control_init_info(struct fb_info *info, struct fb_info_control *p)
 	info->node = -1;	/* ??? danj */
 	info->fbops = &controlfb_ops;
 	info->disp = &p->disp;
-	info->fontname[0] = 0;
+	strcpy(info->fontname, fontname);
 	info->changevar = NULL;
 	info->switch_con = &controlfb_switch;
 	info->updatevar = &controlfb_updatevar;
@@ -1016,13 +1022,51 @@ static void control_par_to_all(struct fb_info_control *p, int init)
 	}
 }
 
-#if 0
+/* Parse user speficied options (`video=controlfb:') */
 __initfunc(void controlfb_setup(char *options, int *ints))
 {
-    /* Parse user speficied options (`video=controlfb:') */
-	FUNCID;
+	char *this_opt;
+
+	if (!options || !*options)
+		return;
+
+	for (this_opt = strtok(options, ","); this_opt;
+	     this_opt = strtok(NULL, ",")) {
+		if (!strncmp(this_opt, "font:", 5)) {
+			char *p;
+			int i;
+
+			p = this_opt +5;
+			for (i = 0; i < sizeof(fontname) - 1; i++)
+				if (!*p || *p == ' ' || *p == ',')
+					break;
+			memcpy(fontname, this_opt + 5, i);
+			fontname[i] = 0;
+		}
+		if (!strncmp(this_opt, "vmode:", 6)) {
+			int vmode = simple_strtoul(this_opt+6, NULL, 0);
+		if (vmode > 0 && vmode <= VMODE_MAX)
+			default_vmode = vmode;
+		} else if (!strncmp(this_opt, "cmode:", 6)) {
+			int depth = simple_strtoul(this_opt+6, NULL, 0);
+			switch (depth) {
+			 case 8:
+				default_cmode = CMODE_8;
+				break;
+			 case 15:
+			 case 16:
+				default_cmode = CMODE_16;
+				break;
+			 case 24:
+			 case 32:
+				default_cmode = CMODE_32;
+				break;
+			}
+		}
+	}
 }
 
+#if 0
 static int controlfb_pan_display(struct fb_var_screeninfo *var,
 			   struct controlfb_par *par,
 			   const struct fb_info *fb_info)
@@ -1037,5 +1081,4 @@ static int controlfb_pan_display(struct fb_var_screeninfo *var,
 
     return 0;
 }
-
 #endif

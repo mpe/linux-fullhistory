@@ -368,6 +368,30 @@ void fbcon_iplan2p2_revc(struct display *p, int xx, int yy)
     }
 }
 
+void fbcon_iplan2p2_clear_margins(struct vc_data *conp, struct display *p,
+				  int bottom_only)
+{
+    u32 offset;
+    int bytes;
+    int lines;
+    u32 cval;
+
+/* No need to handle right margin, cannot occur with fontwidth == 8 */
+
+    bytes = p->next_line;
+    if (fontheightlog(p)) {
+	lines = p->var.yres - (conp->vc_rows << fontheightlog(p));
+	offset = ((p->yscroll + conp->vc_rows) * bytes) << fontheightlog(p);
+    } else {
+	lines = p->var.yres - conp->vc_rows * fontheight(p);
+	offset = (p->yscroll + conp->vc_rows) * bytes * fontheight(p);
+    }
+    if (lines) {
+	cval = expand2l(COLOR_2P(attr_bgcol_ec(p,conp)));
+	memset_even_2p(p->screen_base+offset, lines * bytes, cval);
+    }
+}
+
 
     /*
      *  `switch' for the low level operations
@@ -376,7 +400,7 @@ void fbcon_iplan2p2_revc(struct display *p, int xx, int yy)
 struct display_switch fbcon_iplan2p2 = {
     fbcon_iplan2p2_setup, fbcon_iplan2p2_bmove, fbcon_iplan2p2_clear,
     fbcon_iplan2p2_putc, fbcon_iplan2p2_putcs, fbcon_iplan2p2_revc, NULL,
-    NULL, NULL, FONTWIDTH(8)
+    NULL, fbcon_iplan2p2_clear_margins, FONTWIDTH(8)
 };
 
 
@@ -402,3 +426,4 @@ EXPORT_SYMBOL(fbcon_iplan2p2_clear);
 EXPORT_SYMBOL(fbcon_iplan2p2_putc);
 EXPORT_SYMBOL(fbcon_iplan2p2_putcs);
 EXPORT_SYMBOL(fbcon_iplan2p2_revc);
+EXPORT_SYMBOL(fbcon_iplan2p2_clear_margins);

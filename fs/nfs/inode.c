@@ -105,7 +105,7 @@ nfs_delete_inode(struct inode * inode)
 #ifdef NFS_DEBUG_VERBOSE
 printk("nfs_delete_inode: inode %ld has pending RPC requests\n", inode->i_ino);
 #endif
-		nfs_invalidate_pages(inode);
+		nfs_inval(inode);
 		while (NFS_WRITEBACK(inode) != NULL &&
 		       time_before(jiffies, timeout)) {
 			current->state = TASK_INTERRUPTIBLE;
@@ -827,7 +827,7 @@ printk("nfs_refresh_inode: invalidating %ld pages\n", inode->i_nrpages);
 	if (!S_ISDIR(inode->i_mode)) {
 		/* This sends off all dirty pages off to the server.
 		 * Note that this function must not sleep. */
-		nfs_invalidate_pages(inode);
+		nfs_inval(inode);
 		invalidate_inode_pages(inode);
 	} else
 		nfs_invalidate_dircache(inode);

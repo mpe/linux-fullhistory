@@ -4,15 +4,11 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <linux/errno.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
+#include <linux/mm.h>
 #include <linux/locks.h>
 #include <linux/fcntl.h>
-#include <linux/mm.h>
 
 #include <asm/uaccess.h>
-#include <asm/system.h>
 
 extern int *blk_size[];
 extern int *blksize_size[];

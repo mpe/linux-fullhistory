@@ -78,8 +78,18 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	ide_fixstring (id->serial_no, sizeof(id->serial_no), bswap);
 
 	id->model[sizeof(id->model)-1] = '\0';	/* we depend on this a lot! */
-	drive->present = 1;
 	printk("%s: %s, ", drive->name, id->model);
+	drive->present = 1;
+
+	/*
+	 * Prevent long system lockup probing later for non-existant
+	 * slave drive if the hwif is actually a Kodak CompactFlash card.
+	 */
+	if (!strcmp(id->model, "KODAK ATA_FLASH")) {
+		ide_drive_t *mate = &HWIF(drive)->drives[1^drive->select.b.unit];
+		mate->present = 0;
+		mate->noprobe = 1;
+	}
 
 	/*
 	 * Check for an ATAPI device

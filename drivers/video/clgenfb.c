@@ -89,6 +89,9 @@ struct clgenfb_info
     int btype;
     int smallboard;
     unsigned char SFR; /* Shadow of special function register */
+
+    unsigned long fbmem_phys;
+    unsigned long fbregs_phys;
     
     struct clgenfb_par currentmode;
     union {
@@ -333,7 +336,7 @@ static int clgen_encode_fix(struct fb_fix_screeninfo *fix, const void *par,
     memset(fix, 0, sizeof(struct fb_fix_screeninfo));
     strcpy(fix->id, clgenfb_name);
 	
-    fix->smem_start	= (char*)_info->fbmem;
+    fix->smem_start	= (char*)_info->fbmem_phys;
     
     /* monochrome: only 1 memory plane */
     /* 8 bit and above: Use whole memory area */
@@ -346,7 +349,7 @@ static int clgen_encode_fix(struct fb_fix_screeninfo *fix, const void *par,
     fix->ypanstep	= 1;
     fix->ywrapstep	= 0;
     fix->line_length	= _par->line_length;
-    fix->mmio_start	= (char *)_info->regs;
+    fix->mmio_start	= (char *)_info->fbregs_phys;
     fix->mmio_len	= 0x10000;
     fix->accel		= FB_ACCEL_NONE;
 
@@ -410,7 +413,7 @@ static int clgen_decode_var(const struct fb_var_screeninfo *var, void *par,
     
     /* use highest possible virtual resolution */
     if (_par->var.xres_virtual == -1 &&
-	_par->var.xres_virtual == -1)
+	_par->var.yres_virtual == -1)
     {
 	printk("clgen: using maximum available virtual resolution\n");
 	for (i=0; modes[i].xres != -1; i++)
@@ -1534,8 +1537,10 @@ __initfunc(void clgenfb_init(void))
 	                                      KERNELMAP_NOCACHE_SER, NULL);
         DEBUG printk(KERN_INFO "clgen: Virtual address for board set to: $%p\n", fb_info->regs);
 	fb_info->regs += 0x600000;
+	fb_info->fbregs_phys = board_addr + 0x600000;
 
-	fb_info->fbmem = kernel_map(board_addr + 16777216, 16777216, 
+	fb_info->fbmem_phys = board_addr + 16777216;
+	fb_info->fbmem = kernel_map(fb_info->fbmem_phys, 16777216, 
 			      KERNELMAP_NOCACHE_SER, NULL);
 	DEBUG printk(KERN_INFO "clgen: (RAM start set to: $%lx)\n", fb_info->fbmem);
     }
@@ -1544,6 +1549,7 @@ __initfunc(void clgenfb_init(void))
         cd2 = zorro_get_board(key2);
         printk(" REG at $%lx\n", (unsigned long)cd2->cd_BoardAddr);
 
+	fb_info->fbmem_phys = board_addr;
         if (board_addr > 0x01000000)
 	    fb_info->fbmem = kernel_map(board_addr, board_size, 
 				  KERNELMAP_NOCACHE_SER, NULL);
@@ -1552,6 +1558,7 @@ __initfunc(void clgenfb_init(void))
 
         /* set address for REG area of board */
 	fb_info->regs = (unsigned char *)ZTWO_VADDR(cd2->cd_BoardAddr);
+	fb_info->fbregs_phys = (unsigned long) cd2->cd_BoardAddr;
 
         DEBUG printk(KERN_INFO "clgen: Virtual address for board set to: $%p\n", fb_info->regs);
 	DEBUG printk(KERN_INFO "clgen: (RAM start set to: $%lx)\n", fb_info->fbmem);

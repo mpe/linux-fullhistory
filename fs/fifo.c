@@ -4,10 +4,6 @@
  *  written by Paul H. Hargrove
  */
 
-#include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/errno.h>
-#include <linux/fcntl.h>
 #include <linux/mm.h>
 
 static int fifo_open(struct inode * inode,struct file * filp)

@@ -324,6 +324,9 @@ extern void ftape_setup(char *str, int *ints);
 #ifdef CONFIG_MDA_CONSOLE
 extern void mdacon_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_LTPC
+extern void ltpc_setup(char *str, int *ints);
+#endif
 
 #if defined(CONFIG_SYSVIPC)
 extern void ipc_init(void);
@@ -370,7 +373,7 @@ char *get_options(char *str, int *ints)
 	char *cur = str;
 	int i=1;
 
-	while (cur && isdigit(*cur) && i <= 10) {
+	while (cur && (*cur=='-' || isdigit(*cur)) && i <= 10) {
 		ints[i++] = simple_strtol(cur,NULL,0);
 		if ((cur = strchr(cur,',')) != NULL)
 			cur++;
@@ -837,6 +840,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #ifdef CONFIG_MACMOUSE
 	{ "adb_buttons=", adb_mouse_setup },
+#endif
+#ifdef CONFIG_LTPC
+	{ "ltpc=", ltpc_setup },
 #endif
 	{ 0, 0 }
 };

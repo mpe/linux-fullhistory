@@ -3,7 +3,6 @@
 
 #include <linux/sched.h>
 #include <linux/errno.h>
-#include <linux/kernel.h>
 
 #ifdef __KERNEL__
 

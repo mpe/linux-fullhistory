@@ -174,7 +174,9 @@ static int check_for_audio_disc(struct cdrom_device_info * cdi,
 			 struct cdrom_device_ops * cdo);
 static void sanitize_format(union cdrom_addr *addr, 
 		u_char * curr, u_char requested);
+#ifdef CONFIG_SYSCTL
 static void cdrom_sysctl_register(void);
+#endif /* CONFIG_SYSCTL */ 
 static struct cdrom_device_info *topCdromPtr = NULL;
 
 struct file_operations cdrom_fops =

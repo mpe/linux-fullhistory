@@ -29,7 +29,7 @@
 #include <linux/kmod.h>
 #endif
 
-#ifdef __mc68000__
+#if defined(__mc68000__) || defined(CONFIG_APUS)
 #include <asm/setup.h>
 #endif
 #ifdef __powerpc__
@@ -56,6 +56,8 @@ extern void macfb_init(void);
 extern void macfb_setup(char *options, int *ints);
 extern void cyberfb_init(void);
 extern void cyberfb_setup(char *options, int *ints);
+extern void cvppcfb_init(void);
+extern void cvppcfb_setup(char *options, int *ints);
 extern void retz3fb_init(void);
 extern void retz3fb_setup(char *options, int *ints);
 extern void clgenfb_init(void);
@@ -69,6 +71,7 @@ extern void atyfb_setup(char *options, int *ints);
 extern void igafb_init(void);
 extern void igafb_setup(char *options, int *ints);
 extern void imsttfb_init(void);
+extern void imsttfb_setup(char *options, int *ints);
 extern void dnfb_init(void);
 extern void tgafb_init(void);
 extern void virgefb_init(void);
@@ -78,6 +81,8 @@ extern void s3triofb_init(void);
 extern void s3triofb_setup(char *options, int *ints);
 extern void vesafb_init(void);
 extern void vesafb_setup(char *options, int *ints);
+extern void matroxfb_init(void);
+extern void matroxfb_setup(char* options, int *ints);
 extern void hpfb_init(void);
 extern void hpfb_setup(char *options, int *ints);
 extern void sbusfb_init(void);
@@ -109,11 +114,17 @@ static struct {
 #ifdef CONFIG_FB_CYBER
 	{ "cyber", cyberfb_init, cyberfb_setup },
 #endif
+#ifdef CONFIG_FB_CVPPC
+	{ "cvppcfb", cvppcfb_init, cvppcfb_setup },
+#endif
 #ifdef CONFIG_FB_CLGEN
 	{ "clgen", clgenfb_init, clgenfb_setup },
 #endif
 #ifdef CONFIG_FB_OF
 	{ "offb", offb_init, offb_setup },
+#endif
+#ifdef CONFIG_FB_SBUS
+	{ "sbus", sbusfb_init, sbusfb_setup },
 #endif
 #ifdef CONFIG_FB_ATY
 	{ "atyfb", atyfb_init, atyfb_setup },
@@ -122,7 +133,7 @@ static struct {
         { "igafb", igafb_init, igafb_setup },
 #endif
 #ifdef CONFIG_FB_IMSTT
-	{ "imsttfb", imsttfb_init, NULL },
+	{ "imsttfb", imsttfb_init, imsttfb_setup },
 #endif
 #ifdef CONFIG_APOLLO
 	{ "apollo", dnfb_init, NULL },
@@ -139,12 +150,12 @@ static struct {
 #ifdef CONFIG_FB_VESA
 	{ "vesa", vesafb_init, vesafb_setup },
 #endif 
+#ifdef CONFIG_FB_MATROX
+	{ "matrox", matroxfb_init, matroxfb_setup },
+#endif
 #ifdef CONFIG_FB_HP300
 	{ "hpfb", hpfb_init, hpfb_setup },
 #endif 
-#ifdef CONFIG_FB_SBUS
-	{ "sbus", sbusfb_init, sbusfb_setup },
-#endif
 #ifdef CONFIG_FB_VALKYRIE
 	{ "valkyriefb", valkyriefb_init, valkyriefb_setup },
 #endif
@@ -260,6 +271,23 @@ fb_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 }
 
 
+static int set_all_vcs(int fbidx, struct fb_ops *fb,
+		       struct fb_var_screeninfo *var, struct fb_info *info)
+{
+    int unit, err;
+
+    var->activate |= FB_ACTIVATE_TEST;
+    err = fb->fb_set_var(var, PROC_CONSOLE(), info);
+    var->activate &= ~FB_ACTIVATE_TEST;
+    if (err)
+	    return err;
+    info->disp->var = *var;
+    for (unit = 0; unit < MAX_NR_CONSOLES; unit++)
+	    if (fb_display[unit].conp && con2fb_map[unit] == fbidx)
+		    fb->fb_set_var(var, unit, info);
+    return 0;
+}
+
 static void set_con2fb_map(int unit, int newidx)
 {
     int oldidx = con2fb_map[unit];
@@ -334,7 +362,10 @@ fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	case FBIOPUT_VSCREENINFO:
 		if (copy_from_user(&var, (void *) arg, sizeof(var)))
 			return -EFAULT;
-		if ((i = fb->fb_set_var(&var, PROC_CONSOLE(), info)))
+		i = var.activate & FB_ACTIVATE_ALL
+			    ? set_all_vcs(fbidx, fb, &var, info)
+			    : fb->fb_set_var(&var, PROC_CONSOLE(), info);
+		if (i)
 			return i;
 		if (copy_to_user((void *) arg, &var, sizeof(var)))
 			return -EFAULT;

@@ -1,4 +1,4 @@
-Documentation for /proc/sys/*/*		version 0.1
+Documentation for /proc/sys/		kernel version 2.1.128
 	(c) 1998, Rik van Riel <H.H.vanRiel@phys.uu.nl>
 
 'Why', I hear you ask, 'would anyone even _want_ documentation
@@ -11,6 +11,9 @@ have the time or knowledge to read the source code.
 
 Furthermore, the programmers who built sysctl have built it to
 be actually used, not just for the fun of programming it :-)
+
+If you prefer HTML, feel free to visit the Linux-MM homepage
+<http://www.phys.uu.nl/~riel/mm-patch/>...
 
 ==============================================================
 
@@ -58,9 +61,9 @@ The subdirs are about:
 debug/		<empty>
 dev/		device specific information (eg dev/cdrom/info)
 fs/		specific filesystems
+		filehandle, inode, dentry and quota tuning
 		binfmt_misc <linux/Documentation/binfmt_misc.txt>
 kernel/		global kernel info / tuning
-		open file / inode tuning
 		miscellaneous stuff
 net/		networking stuff, for documentation look in:
 		<linux/Documentation/networking/>

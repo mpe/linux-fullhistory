@@ -686,7 +686,7 @@ void NCR5380_timer_fn(unsigned long surplus_to_requirements)
 	save_flags(flags);
 	cli();
 	for (; expires_first &&
-		((struct NCR5380_hostdata *)expires_first->hostdata)->time_expires <= jiffies; ) 
+		time_before_eq(((struct NCR5380_hostdata *)expires_first->hostdata)->time_expires, jiffies); )
 	{
 		instance = ((struct NCR5380_hostdata *) expires_first->hostdata)->next_timer;
 		((struct NCR5380_hostdata *) expires_first->hostdata)->next_timer = NULL;
@@ -776,7 +776,7 @@ __initfunc(static int NCR5380_probe_irq(struct Scsi_Host *instance, int possible
 	NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE | ICR_ASSERT_DATA |
 		      ICR_ASSERT_SEL);
 
-	while (probe_irq == IRQ_NONE && jiffies < timeout)
+	while (probe_irq == IRQ_NONE && time_before(jiffies,timeout))
 		barrier();
 
 	NCR5380_write(SELECT_ENABLE_REG, 0);
@@ -1123,7 +1123,7 @@ __initfunc(static void NCR5380_init(struct Scsi_Host *instance, int flags))
 			printk("scsi%d: SCSI bus busy, waiting up to five seconds\n",
 			       instance->host_no);
 			timeout = jiffies + 5 * HZ;
-			while (jiffies < timeout && (NCR5380_read(STATUS_REG) & SR_BSY));
+			while (time_before(jiffies,timeout) && (NCR5380_read(STATUS_REG) & SR_BSY));
 			break;
 		case 2:
 			printk("scsi%d: bus busy, attempting abort\n",
@@ -1417,7 +1417,7 @@ static void NCR5380_main(void) {
 			    && !hostdata->dmalen
 #endif
 #ifdef USLEEP
-			    && (!hostdata->time_expires || hostdata->time_expires <= jiffies)
+			    && (!hostdata->time_expires || time_before_eq(hostdata->time_expires, jiffies))
 #endif
 			    ) {
 				restore_flags(flags);
@@ -1532,10 +1532,10 @@ static void NCR5380_intr(int irq, void *dev_id, struct pt_regs *regs) {
 
 								spin_unlock_irq(&io_request_lock);
 								while (NCR5380_read(BUS_AND_STATUS_REG) & BASR_ACK
-								       && jiffies < timeout);
+								       && time_before(jiffies, timeout));
 								spin_lock_irq(&io_request_lock);
 								
-								if (jiffies >= timeout)
+								if (time_after_eq(jiffies, timeout) )
 									printk("scsi%d: timeout at NCR5380.c:%d\n",
 									       host->host_no, __LINE__);
 							}
@@ -1681,11 +1681,11 @@ static int NCR5380_select(struct Scsi_Host *instance, Scsi_Cmnd * cmd, int tag) 
 		spin_unlock_irq(&io_request_lock);
 
 		while (!(NCR5380_read(INITIATOR_COMMAND_REG) & ICR_ARBITRATION_PROGRESS)
-		       && jiffies < timeout);
+		       && time_before(jiffies,timeout));
 
 		spin_lock_irq(&io_request_lock);
 		       
-		if (jiffies >= timeout) {
+		if (time_after_eq(jiffies,timeout)) {
 			printk("scsi: arbitration timeout at %d\n", __LINE__);
 			NCR5380_write(MODE_REG, MR_BASE);
 			NCR5380_write(SELECT_ENABLE_REG, hostdata->id_mask);
@@ -1844,7 +1844,7 @@ part2:
 				waiting period */
 #else
 	spin_unlock_irq(&io_request_lock);
-	while ((jiffies < timeout) && !(NCR5380_read(STATUS_REG) &
+	while (time_before(jiffies, timeout) && !(NCR5380_read(STATUS_REG) &
 					(SR_BSY | SR_IO)));
 	spin_lock_irq(&io_request_lock);
 #endif
@@ -1915,10 +1915,10 @@ part2:
 		unsigned long timeout = jiffies + NCR_TIMEOUT;
 
 		spin_unlock_irq(&io_request_lock);
-		while (!(NCR5380_read(STATUS_REG) & SR_REQ) && jiffies < timeout);
+		while (!(NCR5380_read(STATUS_REG) & SR_REQ) && time_before(jiffies, timeout));
 		spin_lock_irq(&io_request_lock);
 		
-		if (jiffies >= timeout) {
+		if (time_after_eq(jiffies, timeout)) {
 			printk("scsi%d: timeout at NCR5380.c:%d\n", __LINE__);
 			NCR5380_write(SELECT_ENABLE_REG, hostdata->id_mask);
 			return -1;
@@ -3082,7 +3082,7 @@ static void NCR5380_information_transfer(struct Scsi_Host *instance) {
 		{
 			/* RvC: go to sleep if polling time expired
 			 */
-			if (!cmd->device->disconnect && jiffies >= poll_time) 
+			if (!cmd->device->disconnect && time_after_eq(jiffies, poll_time))
 			{
 				hostdata->time_expires = jiffies + USLEEP_SLEEP;
 #if (NDEBUG & NDEBUG_USLEEP)

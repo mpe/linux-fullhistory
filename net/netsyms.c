@@ -11,7 +11,13 @@
 #include <linux/types.h>
 #include <linux/net.h>
 #include <linux/in.h>
+#include <net/sock.h>
+#include <net/dst.h>
+#include <net/checksum.h>
+#include <net/pkt_sched.h>
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/fddidevice.h>
 #include <linux/trdevice.h>
 #include <linux/ioport.h>
 #include <net/neighbour.h>
@@ -23,8 +29,6 @@
 
 #ifdef CONFIG_INET
 #include <linux/ip.h>
-#include <linux/etherdevice.h>
-#include <linux/fddidevice.h>
 #include <net/protocol.h>
 #include <net/arp.h>
 #include <net/ip.h>
@@ -34,12 +38,18 @@
 #include <net/route.h>
 #include <net/scm.h>
 #include <net/inet_common.h>
-#include <net/pkt_sched.h>
 #include <linux/inet.h>
 #include <linux/mroute.h>
 #include <linux/igmp.h>
 
 extern struct net_proto_family inet_family_ops;
+
+#ifdef CONFIG_DLCI_MODULE
+extern int (*dlci_ioctl_hook)(unsigned int, void *);
+EXPORT_SYMBOL(dlci_ioctl_hook);
+#endif
+
+#endif
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
 #include <linux/in6.h>
@@ -52,7 +62,6 @@ extern struct net_proto_family inet_family_ops;
 extern int tcp_tw_death_row_slot;
 #endif
 
-#endif
 
 #include <linux/rtnetlink.h>
 
@@ -213,9 +222,6 @@ EXPORT_SYMBOL(ip_route_output);
 EXPORT_SYMBOL(icmp_send);
 EXPORT_SYMBOL(ip_options_compile);
 EXPORT_SYMBOL(arp_send);
-#ifdef CONFIG_SHAPER_MODULE
-EXPORT_SYMBOL(arp_broken_ops);
-#endif
 EXPORT_SYMBOL(ip_id_count);
 EXPORT_SYMBOL(ip_send_check);
 EXPORT_SYMBOL(ip_fragment);
@@ -227,6 +233,9 @@ EXPORT_SYMBOL(__ip_finish_output);
 EXPORT_SYMBOL(inet_dgram_ops);
 EXPORT_SYMBOL(ip_cmsg_recv);
 EXPORT_SYMBOL(__release_sock);
+EXPORT_SYMBOL(arp_find);
+EXPORT_SYMBOL(ip_rcv);
+EXPORT_SYMBOL(arp_rcv);
 
 /* needed for ip_gre -cw */
 EXPORT_SYMBOL(ip_statistics);
@@ -436,12 +445,9 @@ EXPORT_SYMBOL(netdev_fc_xoff);
 EXPORT_SYMBOL(dev_base);
 EXPORT_SYMBOL(dev_close);
 EXPORT_SYMBOL(dev_mc_add);
-EXPORT_SYMBOL(arp_find);
 EXPORT_SYMBOL(n_tty_ioctl);
 EXPORT_SYMBOL(tty_register_ldisc);
 EXPORT_SYMBOL(kill_fasync);
-EXPORT_SYMBOL(ip_rcv);
-EXPORT_SYMBOL(arp_rcv);
 EXPORT_SYMBOL(dev_mc_delete);
 
 EXPORT_SYMBOL(if_port_text);
@@ -451,10 +457,6 @@ EXPORT_SYMBOL(if_port_text);
 EXPORT_SYMBOL(ltalk_setup);
 #endif
 
-#ifdef CONFIG_DLCI_MODULE
-extern int (*dlci_ioctl_hook)(unsigned int, void *);
-EXPORT_SYMBOL(dlci_ioctl_hook);
-#endif
 
 /* Packet scheduler modules want these. */
 EXPORT_SYMBOL(qdisc_destroy);

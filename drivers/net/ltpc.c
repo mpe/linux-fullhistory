@@ -67,6 +67,25 @@
  * Hacked about a bit to clean things up - Alan Cox 
  * Probably broken it from the origina 1.8
  *
+
+ * 1998/11/09: David Huggins-Daines <dhd@debian.org>
+ * Cleaned up the initialization code to use the standard autoirq methods,
+   and to probe for things in the standard order of i/o, irq, dma.  This
+   removes the "reset the reset" hack, because I couldn't figure out an
+   easy way to get the card to trigger an interrupt after it.
+ * Added support for passing configuration parameters on the kernel command
+   line and through insmod
+ * Changed the device name from "ltalk0" to "lt0", both to conform with the
+   other localtalk driver, and to clear up the inconsistency between the
+   module and the non-module versions of the driver :-)
+ * Added a bunch of comments (I was going to make some enums for the state
+   codes and the register offsets, but I'm still not sure exactly what their
+   semantics are)
+ * Don't poll anymore in interrupt-driven mode
+ * It seems to work as a module now (as of 2.1.127), but I don't think
+   I'm responsible for that...
+
+ *
  * Revision 1.7  1996/12/12 03:42:33  bradford
  * DMA alloc cribbed from 3c505.c.
  *
@@ -180,6 +199,9 @@ static int debug=0;
 #define DEBUG_UPPER 2
 #define DEBUG_LOWER 4
 
+static int io=0;
+static int irq=0;
+static int dma=0;
 
 #ifdef MODULE
 #include <linux/module.h>
@@ -245,8 +267,11 @@ static unsigned long dma_mem_alloc(int size)
         return __get_dma_pages(GFP_KERNEL, order);
 }
 
+/* DMA data buffer, DMA command buffer */
 static unsigned char *ltdmabuf;
 static unsigned char *ltdmacbuf;
+
+/* private struct, holds our appletalk address */
 
 struct ltpc_private
 {
@@ -254,15 +279,21 @@ struct ltpc_private
 	struct at_addr my_addr;
 };
 
+/* transmit queue element struct */
+
 struct xmitQel {
 	struct xmitQel *next;
+	/* command buffer */
 	unsigned char *cbuf;
 	short cbuflen;
+	/* data buffer */
 	unsigned char *dbuf;
 	short dbuflen;
 	unsigned char QWrite;	/* read or write data */
 	unsigned char mailbox;
 };
+
+/* the transmit queue itself */
 
 static struct xmitQel *xmQhd=NULL,*xmQtl=NULL;
 
@@ -310,8 +341,10 @@ static struct xmitQel *deQ(void)
 	return qel;
 }
 
+/* and... the queue elements we'll be using */
 static struct xmitQel qels[16];
 
+/* and their corresponding mailboxes */
 static unsigned char mailbox[16];
 static unsigned char mboxinuse[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
@@ -331,6 +364,8 @@ static int wait_timeout(struct device *dev, int c)
 	return 1; /* timed out */
 }
 
+/* get the first free mailbox */
+
 static int getmbox(void)
 {
 	unsigned long flags;
@@ -347,6 +382,7 @@ static int getmbox(void)
 	return 0;
 }
 
+/* read a command from the card */
 static void handlefc(struct device *dev)
 {
 	/* called *only* from idle, non-reentrant */
@@ -370,6 +406,7 @@ static void handlefc(struct device *dev)
 	if ( wait_timeout(dev,0xfc) ) printk("timed out in handlefc\n");
 }
 
+/* read data from the card */
 static void handlefd(struct device *dev)
 {
 	int dma = dev->dma;
@@ -463,7 +500,8 @@ static void handlecommand(struct device *dev)
 	if ( wait_timeout(dev,0xfa) ) printk("timed out in handlecommand\n");
 } 
 
-static unsigned char rescbuf[2] = {0,0};
+/* ready made command for getting the result from the card */
+static unsigned char rescbuf[2] = {LT_GETRESULT,0};
 static unsigned char resdbuf[2];
 
 static int QInIdle=0;
@@ -482,7 +520,7 @@ static void idle(struct device *dev)
 	struct xmitQel *q=0;
 	int oops;
 	int i;
-	int statusPort = dev->base_addr+6;
+	int base = dev->base_addr;
 
 	save_flags(flags);
 	cli();
@@ -495,8 +533,8 @@ static void idle(struct device *dev)
 
 	restore_flags(flags);
 
-
-	(void) inb_p(statusPort); /* this tri-states the IRQ line */
+	/* this tri-states the IRQ line */
+	(void) inb_p(base+6);
 
 	oops = 100;
 
@@ -506,19 +544,22 @@ loop:
 		goto done;
 	}
 
-	state = inb_p(statusPort);
-	if (state != inb_p(statusPort)) goto loop;
+	state = inb_p(base+6);
+	if (state != inb_p(base+6)) goto loop;
 
 	switch(state) {
-		case 0xfc: 
+		case 0xfc:
+			/* incoming command */
 			if (debug&DEBUG_LOWER) printk("idle: fc\n");
 			handlefc(dev); 
 			break;
-		case 0xfd: 
+		case 0xfd:
+			/* incoming data */
 			if(debug&DEBUG_LOWER) printk("idle: fd\n");
 			handlefd(dev); 
 			break;
-		case 0xf9: 
+		case 0xf9:
+			/* result ready */
 			if (debug&DEBUG_LOWER) printk("idle: f9\n");
 			if(!mboxinuse[0]) {
 				mboxinuse[0] = 1;
@@ -536,6 +577,7 @@ loop:
 				printk("timed out idle f9\n");
 			break;
 		case 0xf8:
+			/* ?? */
 			if (xmQhd) {
 				inb_p(dev->base_addr+1);
 				inb_p(dev->base_addr+0);
@@ -545,7 +587,8 @@ loop:
 				goto done;
 			}
 			break;
-		case 0xfa: 
+		case 0xfa:
+			/* waiting for command */
 			if(debug&DEBUG_LOWER) printk("idle: fa\n");
 			if (xmQhd) {
 				q=deQ();
@@ -561,7 +604,7 @@ loop:
 					printk("\n");
 				}
 				handlecommand(dev);
-					if(0xfa==inb_p(statusPort)) {
+					if(0xfa==inb_p(base+6)) {
 						/* we timed out, so return */
 						goto done;
 					} 
@@ -582,13 +625,17 @@ loop:
 				}
 			} 
 			break;
-		case 0xfb:
+		case 0Xfb:
+			/* data transfer ready */
 			if(debug&DEBUG_LOWER) printk("idle: fb\n");
 			if(q->QWrite) {
 				memcpy(ltdmabuf,q->dbuf,q->dbuflen);
 				handlewrite(dev);
 			} else {
 				handleread(dev);
+				/* non-zero mailbox numbers are for
+				   commmands, 0 is for GETRESULT
+				   requests */
 				if(q->mailbox) {
 					memcpy(q->dbuf,ltdmabuf,q->dbuflen);
 				} else { 
@@ -605,13 +652,14 @@ done:
 	QInIdle=0;
 
 	/* now set the interrupts back as appropriate */
-	/* the first 7 takes it out of tri-state (but still high) */
+	/* the first read takes it out of tri-state (but still high) */
 	/* the second resets it */
-	/* note that after this point, any read of 6 will trigger an interrupt */
+	/* note that after this point, any read of base+6 will
+	   trigger an interrupt */
 
 	if (dev->irq) {
-		inb_p(dev->base_addr+7);
-		inb_p(dev->base_addr+7);
+		inb_p(base+7);
+		inb_p(base+7);
 	}
 	return;
 }
@@ -702,6 +750,8 @@ static int set_30 (struct device *dev,int x)
 	c.setflags.flags = x;
 	return do_write(dev, &c, sizeof(c.setflags),&c,0);
 }
+
+/* LLAP to DDP translation */
 
 static int sendup_buffer (struct device *dev)
 {
@@ -912,22 +962,13 @@ static void ltpc_poll(unsigned long l)
 	if (!dev)
 		return;  /* we've been downed */
 
-	if (dev->irq) 
-	{
-		/* we're set up for interrupts */
-		if (0xf8 != inb_p(dev->base_addr+7)) {
-			/* trigger an interrupt */
-			(void) inb_p(dev->base_addr+6);
-		}
-		ltpc_timer.expires = jiffies+100;
-	} else {
-		/* we're strictly polling mode */
-		idle(dev);
-		ltpc_timer.expires = jiffies+5;
-	}
-
+	idle(dev);
+	ltpc_timer.expires = jiffies+5;
+	
 	add_timer(&ltpc_timer);
 }
+
+/* DDP to LLAP translation */
 
 static int ltpc_xmit(struct sk_buff *skb, struct device *dev)
 {
@@ -975,150 +1016,18 @@ static struct net_device_stats *ltpc_get_stats(struct device *dev)
 	return stats;
 }
 
-static unsigned short irqhitmask;
-
-__initfunc(static void lt_probe_handler(int irq, void *dev_id, struct pt_regs *reg_ptr))
+/* initialization stuff */
+  
+__initfunc(int ltpc_probe_dma(int base))
 {
-	irqhitmask |= 1<<irq;
-}
-
-__initfunc(int ltpc_probe(struct device *dev))
-{
-	int err;
-	unsigned char dma=0;
-	short base=0;
-	unsigned char irq=0;
-	int x=0,y=0;
-	int timeout;
-	int probe3, probe4, probe9;
-	unsigned short straymask;
-	unsigned long flags;
-	unsigned long f;
-
-	err = ltpc_init(dev);
-	if (err) return err;
-
-	/* occasionally the card comes up with reset latched, so we need
-	 * to "reset the reset" first of all -- check the irq first also
-	 */
-
-	save_flags(flags);
-	cli();
-
-	probe3 = request_irq( 3, &lt_probe_handler, 0, "ltpc_probe",dev);
-	probe4 = request_irq( 4, &lt_probe_handler, 0, "ltpc_probe",dev);
-	probe9 = request_irq( 9, &lt_probe_handler, 0, "ltpc_probe",dev);
-
-	irqhitmask = 0;
-
-	sti();
-
-	timeout = jiffies+2;
-	while(timeout>jiffies) ;  /* wait for strays */
-
-	straymask = irqhitmask;  /* pick up any strays */
- 
-	/* if someone already owns this address, don't probe */ 
-	if (!check_region(0x220,8)) {
-		inb_p(0x227);
-		inb_p(0x227);
-		x=inb_p(0x226);
-		timeout = jiffies+2;
-		while(timeout>jiffies) ;
-		if(straymask != irqhitmask) base = 0x220;
-	}
-	if (!check_region(0x240,8)) {
-		inb_p(0x247);
-		inb_p(0x247);
-		y=inb_p(0x246);
-		timeout = jiffies+2;
-		while(timeout>jiffies) ;
-		if(straymask != irqhitmask) base = 0x240;
-	}
-
-	/* at this point, either we have an irq and the base addr, or
-	 * there isn't any irq and we don't know the base address, but
-	 * in either event the card is no longer latched in reset and
-	 * the irq request line is tri-stated.
-	 */
-
-	cli();
- 
-	if (!probe3) free_irq(3,dev);
-	if (!probe4) free_irq(4,dev);
-	if (!probe9) free_irq(9,dev);
-
-	sti();
- 
-	irqhitmask &= ~straymask;
-
-	irq = ffz(~irqhitmask);
-	if (irqhitmask != 1<<irq)
-		printk("ltpc card raised more than one interrupt!\n");
-
-	if (!base) {
-		if (!check_region(0x220,8)) {
-			x = inb_p(0x220+6);
-			if ( (x!=0xff) && (x>=0xf0) ) base = 0x220;
-		}
- 
-		if (!check_region(0x240,8)) {
-			y = inb_p(0x240+6);
-			if ( (y!=0xff) && (y>=0xf0) ) base = 0x240;
-		} 
-	}
-
-	if(base) {
-		request_region(base,8,"ltpc");
-	} else {
-		printk("LocalTalk card not found; 220 = %02x, 240 = %02x.\n",x,y);
-		restore_flags(flags);
-		return -1;
-	}
-
-	ltdmabuf = (unsigned char *) dma_mem_alloc(1000);
-
-	if (ltdmabuf) ltdmacbuf = &ltdmabuf[800];
-
-	if (!ltdmabuf) {
-		printk("ltpc: mem alloc failed\n");
-		restore_flags(flags);
-		return(-1);
-	}
-
-	if(debug&DEBUG_VERBOSE) {
-		printk("ltdmabuf pointer %08lx\n",(unsigned long) ltdmabuf);
-	}
-
-	/* reset the card */
-
-	inb_p(base+1);
-	inb_p(base+3);
-	timeout = jiffies+2;
-	while(timeout>jiffies) ; /* hold it in reset for a coupla jiffies */
-	inb_p(base+0);
-	inb_p(base+2);
-	inb_p(base+7); /* clear reset */
-	inb_p(base+4); 
-	inb_p(base+5);
-	inb_p(base+5); /* enable dma */
-	inb_p(base+6); /* tri-state interrupt line */
-
-	timeout = jiffies+100;
-	
-	while(timeout>jiffies) {
-		/* wait for the card to complete initialization */
-	}
- 
-	/* now, figure out which dma channel we're using */
-
-	/* set up both dma 1 and 3 for read call */
-
-	if (!request_dma(1,"ltpc")) {
-	
-		f=claim_dma_lock();
-		disable_dma(1);
-		clear_dma_ff(1);
+	int dma = 0;
+  	int timeout;
+  	unsigned long f;
+  
+  	if (!request_dma(1,"ltpc")) {
+  		f=claim_dma_lock();
+  		disable_dma(1);
+  		clear_dma_ff(1);
 		set_dma_mode(1,DMA_MODE_WRITE);
 		set_dma_addr(1,virt_to_bus(ltdmabuf));
 		set_dma_count(1,sizeof(struct lt_mem));
@@ -1142,26 +1051,26 @@ __initfunc(int ltpc_probe(struct device *dev))
 
 	/* FIXME -- do timings better! */
 
-	ltdmabuf[0] = 2; /* read request */
+	ltdmabuf[0] = LT_READMEM;
 	ltdmabuf[1] = 1;  /* mailbox */
 	ltdmabuf[2] = 0; ltdmabuf[3] = 0;  /* address */
 	ltdmabuf[4] = 0; ltdmabuf[5] = 1;  /* read 0x0100 bytes */
 	ltdmabuf[6] = 0; /* dunno if this is necessary */
 
-	inb_p(base+1);
-	inb_p(base+0);
+	inb_p(io+1);
+	inb_p(io+0);
 	timeout = jiffies+100;
 	while(timeout>jiffies) {
-		if ( 0xfa == inb_p(base+6) ) break;
+		if ( 0xfa == inb_p(io+6) ) break;
 	}
 
-	inb_p(base+3);
-	inb_p(base+2);
+	inb_p(io+3);
+	inb_p(io+2);
 	while(timeout>jiffies) {
-		if ( 0xfb == inb_p(base+6) ) break;
+		if ( 0xfb == inb_p(io+6) ) break;
 	}
 
-	/* release the other dma channel */
+	/* release the other dma channel (if we opened both of them) */
 
 	if ( (dma&0x2) && (get_dma_residue(3)==sizeof(struct lt_mem)) ){
 		dma&=1;
@@ -1172,31 +1081,134 @@ __initfunc(int ltpc_probe(struct device *dev))
 		dma&=0x2;
 		free_dma(1);
 	}
- 
-	if (!dma) {  /* no dma channel */
-		printk("No DMA channel found on ltpc card.\n");
-		restore_flags(flags);
-		return -1;
-	} 
-  
+
 	/* fix up dma number */
 	dma|=1;
 
-	/* set up read */
+	return dma;
+}
+
+__initfunc(int ltpc_probe(struct device *dev))
+{
+	int err;
+	int x=0,y=0;
+	int timeout;
+	int autoirq;
+	unsigned long flags;
+	unsigned long f;
+
+	save_flags(flags);
+
+	/* probe for the I/O port address */
+	if (io != 0x240 && !check_region(0x220,8)) {
+		x = inb_p(0x220+6);
+		if ( (x!=0xff) && (x>=0xf0) ) io = 0x220;
+	}
+	
+	if (io != 0x220 && !check_region(0x240,8)) {
+		y = inb_p(0x240+6);
+		if ( (y!=0xff) && (y>=0xf0) ) io = 0x240;
+	} 
+
+	if(io) {
+		/* found it, now grab it */
+		request_region(io,8,"ltpc");
+	} else {
+		/* give up in despair */
+		printk ("LocalTalk card not found; 220 = %02x, 240 = %02x.\n",
+			x,y);
+		restore_flags(flags);
+		return -1;
+	}
+
+	/* probe for the IRQ line */
+	if (irq < 2) {
+		autoirq_setup(2);
+
+		/* reset the interrupt line */
+		inb_p(io+7);
+		inb_p(io+7);
+		/* trigger an interrupt (I hope) */
+		inb_p(io+6);
+
+		autoirq = autoirq_report(1);
+
+		if (autoirq == 0) {
+			printk("ltpc: probe at %#x failed to detect IRQ line.\n",
+				io);
+		}
+		else {
+			irq = autoirq;
+		}
+	}
+
+	/* allocate a DMA buffer */
+	ltdmabuf = (unsigned char *) dma_mem_alloc(1000);
+
+	if (ltdmabuf) ltdmacbuf = &ltdmabuf[800];
+
+	if (!ltdmabuf) {
+		printk("ltpc: mem alloc failed\n");
+		restore_flags(flags);
+		return(-1);
+	}
+
+	if(debug&DEBUG_VERBOSE) {
+		printk("ltdmabuf pointer %08lx\n",(unsigned long) ltdmabuf);
+	}
+
+	/* reset the card */
+
+	inb_p(io+1);
+	inb_p(io+3);
+	timeout = jiffies+2;
+	while(timeout>jiffies) ; /* hold it in reset for a coupla jiffies */
+	inb_p(io+0);
+	inb_p(io+2);
+	inb_p(io+7); /* clear reset */
+	inb_p(io+4); 
+	inb_p(io+5);
+	inb_p(io+5); /* enable dma */
+	inb_p(io+6); /* tri-state interrupt line */
+
+	timeout = jiffies+100;
+	
+	while(timeout>jiffies) {
+		/* wait for the card to complete initialization */
+	}
+ 
+	/* now, figure out which dma channel we're using, unless it's
+	   already been specified */
+	/* well, 0 is a legal DMA channel, but the LTPC card doesn't
+	   use it... */
+	if (dma == 0) {
+		dma = ltpc_probe_dma(io);
+		if (!dma) {  /* no dma channel */
+			printk("No DMA channel found on ltpc card.\n");
+			restore_flags(flags);
+			return -1;
+		}
+	}
+
+	/* print out friendly message */
 
 	if(irq)
-		printk("LocalTalk card found at %03x, IR%d, DMA%d.\n",base,irq,dma);
+		printk("Apple/Farallon LocalTalk-PC card at %03x, IR%d, DMA%d.\n",io,irq,dma);
 	else
-		printk("LocalTalk card found at %03x, DMA%d.  Using polled mode.\n",base,dma);
-    
-	dev->base_addr = base;
+		printk("Apple/Farallon LocalTalk-PC card at %03x, DMA%d.  Using polled mode.\n",io,dma);
+
+	/* seems more logical to do this *after* probing the card... */
+	err = ltpc_init(dev);
+	if (err) return err;
+
+	dev->base_addr = io;
 	dev->irq = irq;
 	dev->dma = dma;
 
-	if(debug&DEBUG_VERBOSE) {
-		printk("finishing up transfer\n");
-	}
-	
+	/* the card will want to send a result at this point */
+	/* (I think... leaving out this part makes the kernel crash,
+           so I put it back in...) */
+
 	f=claim_dma_lock();
 	disable_dma(dma);
 	clear_dma_ff(dma);
@@ -1206,39 +1218,63 @@ __initfunc(int ltpc_probe(struct device *dev))
 	enable_dma(dma);
 	release_dma_lock(f);
 
-	(void) inb_p(base+3);
-	(void) inb_p(base+2);
+	(void) inb_p(io+3);
+	(void) inb_p(io+2);
 	timeout = jiffies+100;
 	while(timeout>jiffies) {
-		if( 0xf9 == inb_p(base+6)) break;
+		if( 0xf9 == inb_p(io+6)) break;
 	}
 
 	if(debug&DEBUG_VERBOSE) {
 		printk("setting up timer and irq\n");
 	}
 
-	init_timer(&ltpc_timer);
-	ltpc_timer.function=ltpc_poll;
-	ltpc_timer.data = (unsigned long) dev;
-
 	if (irq) {
+		/* grab it and don't let go :-) */
 		(void) request_irq( irq, &ltpc_interrupt, 0, "ltpc", dev);
-		(void) inb_p(base+7);  /* enable interrupts from board */
-		(void) inb_p(base+7);  /* and reset irq line */
-		ltpc_timer.expires = 100;
-		  /* poll it once per second just in case */
+		(void) inb_p(io+7);  /* enable interrupts from board */
+		(void) inb_p(io+7);  /* and reset irq line */
 	} else {
-		ltpc_timer.expires = 5;
-		  /* polled mode -- 20 times per second */
+		/* polled mode -- 20 times per second */
+		/* this is really, really slow... should it poll more often? */
+		init_timer(&ltpc_timer);
+		ltpc_timer.function=ltpc_poll;
+		ltpc_timer.data = (unsigned long) dev;
+
+		ltpc_timer.expires = jiffies + 5;
+		add_timer(&ltpc_timer);
+		restore_flags(flags); 
 	}
 
-	ltpc_timer.expires += jiffies;  /* 1.2 to 1.3 change... */
-
-	add_timer(&ltpc_timer);
-
-	restore_flags(flags); 
-
 	return 0;
+}
+
+/* handles "ltpc=io,irq,dma" kernel command lines */
+__initfunc(void ltpc_setup(char *str, int *ints))
+{
+	if (ints[0] == 0) {
+		if (str && !strncmp(str, "auto", 4)) {
+			/* do nothing :-) */
+		}
+		else {
+			/* usage message */
+			printk (KERN_ERR
+				"ltpc: usage: ltpc=auto|iobase[,irq[,dma]]\n");
+		}
+		return;
+	} else {
+		io = ints[1];
+		if (ints[0] > 1) {
+			irq = ints[2];
+			return;
+		}
+		if (ints[0] > 2) {
+			dma = ints[3];
+			return;
+		}
+		/* ignore any other paramters */
+	}
+	return;
 }
 
 #ifdef MODULE
@@ -1251,17 +1287,28 @@ static struct device dev_ltpc = {
 	 	0x0, 0,
 	 	0, 0, 0, NULL, ltpc_probe };
 
+MODULE_PARM(debug, "i");
+MODULE_PARM(io, "i");
+MODULE_PARM(irq, "i");
+MODULE_PARM(dma, "i");
+
 int init_module(void)
 {
+	int err, result;
+	
+        if(io == 0)
+		printk(KERN_NOTICE
+		       "ltpc: Autoprobing is not recommended for modules\n");
+
 	/* Find a name for this unit */
-	int err=dev_alloc_name(&dev_ltpc,"lt%d");
+	err=dev_alloc_name(&dev_ltpc,"lt%d");
 	
 	if(err<0)
 		return err;
 
-	if (register_netdev(&dev_ltpc) != 0) {
-		if(debug&DEBUG_VERBOSE) printk("EIO from register_netdev\n");
-		return -EIO;
+	if ((result = register_netdev(&dev_ltpc)) != 0) {
+		printk(KERN_DEBUG "could not register Localtalk-PC device\n");
+		return result;
 	} else {
 		if(debug&DEBUG_VERBOSE) printk("0 from register_netdev\n");
 		return 0;
@@ -1322,3 +1369,4 @@ void cleanup_module(void)
 	if(debug&DEBUG_VERBOSE) printk("returning from cleanup_module\n");
 }
 #endif /* MODULE */
+

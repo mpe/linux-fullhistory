@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/via82C586.c	Version 0.01	Aug 16, 1998
+ * linux/drivers/block/via82c586.c	Version 0.01	Aug 16, 1998
  *
  *  Copyright (C) 1998 Michel Aubry
  *  Copyright (C) 1998 Andre Hedrick

@@ -5,13 +5,8 @@
  *  Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
-#include <linux/kernel.h>
-#include <linux/sched.h>
-#include <linux/fs.h>
-#include <linux/file.h>
-#include <linux/string.h>
-#include <linux/mm.h>
 #include <linux/slab.h>
+#include <linux/file.h>
 #include <linux/init.h>
 
 /* SLAB cache for filp's. */

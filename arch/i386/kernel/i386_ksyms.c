@@ -98,6 +98,9 @@ EXPORT_SYMBOL(mca_get_adapter_name);
 EXPORT_SYMBOL(mca_set_adapter_procfn);
 EXPORT_SYMBOL(mca_isenabled);
 EXPORT_SYMBOL(mca_isadapter);
+EXPORT_SYMBOL(mca_mark_as_used);
+EXPORT_SYMBOL(mca_mark_as_unused);
+EXPORT_SYMBOL(mca_find_unused_adapter);
 #endif
 
 #ifdef CONFIG_VT

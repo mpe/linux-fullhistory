@@ -859,6 +859,9 @@ int sppp_do_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 	if(dev->flags&IFF_UP)
 		return -EBUSY;
 		
+	if(!capable(CAP_NET_ADMIN))
+		return -EPERM;
+	
 	switch(cmd)
 	{
 		case SPPPIOCCISCO:
@@ -872,11 +875,7 @@ int sppp_do_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		case SPPPIOCDEBUG:
 			sp->pp_flags&=~PP_DEBUG;
 			if(ifr->ifr_flags)
-			{
-				if(!capable(CAP_NET_ADMIN))
-					return -EPERM;
 				sp->pp_flags|=PP_DEBUG;
-			}
 			break;
 		default:
 			return -EINVAL;

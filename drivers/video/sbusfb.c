@@ -184,7 +184,8 @@ static int sbusfb_mmap(struct fb_info *info, struct file *file,
 #ifdef __sparc_v9__
 	/* Align it as much as desirable */
 	{
-		int j, max = -1, alignment, s = 0;
+		unsigned long j, alignment, s = 0;
+		int max = -1;
 		
 		map_offset = vma->vm_offset+size;
 		for (i = 0; fb->mmap_map[i].size; i++) {

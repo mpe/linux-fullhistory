@@ -2324,6 +2324,7 @@ extern struct datalink_proto *make_8023_client(void);
 extern void destroy_EII_client(struct datalink_proto *);
 extern void destroy_8023_client(struct datalink_proto *);
 
+#ifdef CONFIG_PROC_FS
 struct proc_dir_entry ipx_procinfo = {
 	PROC_NET_IPX, 3, "ipx", S_IFREG | S_IRUGO,
 	1, 0, 0, 0, &proc_net_inode_operations, ipx_get_info
@@ -2338,6 +2339,7 @@ struct proc_dir_entry ipx_rt_procinfo = {
 	PROC_NET_IPX_ROUTE, 9, "ipx_route", S_IFREG | S_IRUGO,
 	1, 0, 0, 0, &proc_net_inode_operations, ipx_rt_get_info
 };
+#endif
 
 static unsigned char ipx_8022_type = 0xE0;
 static unsigned char ipx_snap_id[5] = { 0x0, 0x0, 0x0, 0x81, 0x37 };

@@ -29,6 +29,8 @@
  *						driver file. (ipddp.c & ipddp.h)
  *		Jay Schulist		:	Made work as module with 
  *						AppleTalk drivers, cleaned it.
+ *		Rob Newberry		:	Added proxy AARP and AARP proc fs, 
+ *						moved probing to AARP module.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -74,6 +76,16 @@
 #include <linux/stat.h>
 #include <linux/firewall.h>
 #include <linux/init.h>
+
+
+#ifdef CONFIG_PROC_FS
+extern void aarp_register_proc_fs(void);
+extern void aarp_unregister_proc_fs(void);
+#endif
+
+extern void aarp_probe_network(struct atalk_iface *atif);
+extern int  aarp_proxy_probe_network(struct atalk_iface *atif, struct at_addr *sa);
+extern void aarp_proxy_remove(struct device *dev, struct at_addr *sa);
 
 
 #undef APPLETALK_DEBUG
@@ -301,32 +313,6 @@ static struct atalk_iface *atif_add_device(struct device *dev, struct at_addr *s
 	return (iface);
 }
 
-/*
- * Probe a Phase 1 device or a device that requires its Net:Node to
- * be set via an ioctl.
- */
-void atif_send_probe_phase1(struct atalk_iface *iface)
-{
-        struct ifreq atreq;
-        struct sockaddr_at *sa = (struct sockaddr_at *)&atreq.ifr_addr;
-
-        sa->sat_addr.s_node = iface->address.s_node;
-        sa->sat_addr.s_net  = ntohs(iface->address.s_net);
-
-         /* We pass the Net:Node to the drivers/cards by a Device ioctl. */
-        if(!(iface->dev->do_ioctl(iface->dev, &atreq, SIOCSIFADDR)))
-        {
-                (void)iface->dev->do_ioctl(iface->dev, &atreq, SIOCGIFADDR);
-                if((iface->address.s_net != htons(sa->sat_addr.s_net))
-			|| (iface->address.s_node != sa->sat_addr.s_node))
-                        iface->status |= ATIF_PROBE_FAIL;
-
-                iface->address.s_net  = htons(sa->sat_addr.s_net);
-		iface->address.s_node = sa->sat_addr.s_node;
-        }
-
-        return;
-}
 
 /*
  * Perform phase 2 AARP probing on our tentative address.
@@ -336,7 +322,7 @@ static int atif_probe_device(struct atalk_iface *atif)
 	int netrange=ntohs(atif->nets.nr_lastnet)-ntohs(atif->nets.nr_firstnet)+1;
 	int probe_net=ntohs(atif->address.s_net);
 	int probe_node=atif->address.s_node;
-	int ct, netct, nodect;
+	int netct, nodect;
 
 	/*
 	 * Offset the network we start probing with.
@@ -372,23 +358,8 @@ static int atif_probe_device(struct atalk_iface *atif)
 				/*
 				 * Probe a proposed address.
 				 */
+				aarp_probe_network(atif);
 
-				if(atif->dev->type == ARPHRD_LOCALTLK || atif->dev->type == ARPHRD_PPP)
-                                        atif_send_probe_phase1(atif);
-                                else
-                                {
-					for(ct = 0; ct < AARP_RETRANSMIT_LIMIT; ct++)
-					{
-						aarp_send_probe(atif->dev, &atif->address);
-						/*
-						 * Defer 1/10th
-						 */
-						current->state = TASK_INTERRUPTIBLE;
-						schedule_timeout(HZ/10);
-						if(atif->status & ATIF_PROBE_FAIL)
-							break;
-					}
-				}
 				if(!(atif->status & ATIF_PROBE_FAIL))
 					return (0);
 			}
@@ -401,6 +372,69 @@ static int atif_probe_device(struct atalk_iface *atif)
 
 	return (-EADDRINUSE);	/* Network is full... */
 }
+
+
+/*
+ * Perform AARP probing for a proxy address
+ */
+static int atif_proxy_probe_device(struct atalk_iface *atif, struct at_addr* proxy_addr)
+{
+	int netrange=ntohs(atif->nets.nr_lastnet)-ntohs(atif->nets.nr_firstnet)+1;
+	int probe_net=ntohs(atif->address.s_net);	// we probe the interface's network
+	int probe_node=ATADDR_ANYNODE;				// we'll take anything
+	int netct, nodect;
+
+	/*
+	 * Offset the network we start probing with.
+	 */
+
+	if(probe_net == ATADDR_ANYNET)
+	{
+		if(!netrange)
+			probe_net = ntohs(atif->nets.nr_firstnet);
+		else
+			probe_net = ntohs(atif->nets.nr_firstnet) + (jiffies%netrange);
+	}
+
+	if(probe_node == ATADDR_ANYNODE)
+		probe_node = jiffies&0xFF;
+		
+	/*
+	 * Scan the networks.
+	 */
+
+	for(netct = 0; netct <= netrange; netct++)
+	{
+		/*
+		 * Sweep the available nodes from a given start.
+		 */
+
+		proxy_addr->s_net = htons(probe_net);
+		for(nodect = 0; nodect < 256; nodect++)
+		{
+			proxy_addr->s_node = ((nodect+probe_node) & 0xFF);
+			if((proxy_addr->s_node>0) && (proxy_addr->s_node<254))
+			{
+				/*
+				 * Tell AARP to probe a proposed address.
+				 */
+				int probe_result = aarp_proxy_probe_network(atif, proxy_addr);
+
+				if (probe_result == 0)
+					return 0;
+					
+				if (probe_result != -EADDRINUSE)
+					return probe_result;
+			}
+		}
+		probe_net++;
+		if(probe_net > ntohs(atif->nets.nr_lastnet))
+			probe_net = ntohs(atif->nets.nr_firstnet);
+	}
+
+	return (-EADDRINUSE);	/* Network is full... */
+}
+
 
 struct at_addr *atalk_find_dev_addr(struct device *dev)
 {
@@ -481,19 +515,46 @@ static struct atalk_iface *atalk_find_interface(int net, int node)
  */
 static struct atalk_route *atrtr_find(struct at_addr *target)
 {
+	/*
+	 * we must search through all routes unless we find a 
+	 * host route, because some host routes might overlap
+	 * network routes
+	 */
 	struct atalk_route *r;
-
+	struct atalk_route *net_route = NULL;
+	
 	for(r=atalk_router_list; r != NULL; r=r->next)
 	{
 		if(!(r->flags & RTF_UP))
 			continue;
 		if(r->target.s_net == target->s_net)
 		{
-			if(!(r->flags&RTF_HOST) 
-				|| r->target.s_node == target->s_node)
-				return (r);
+			if (r->flags & RTF_HOST)
+			{
+				/*
+				 * if this host route is for the target,
+				 * the we're done
+				 */
+				if (r->target.s_node == target->s_node)
+					return (r);
+			}
+			else
+			{
+				/*
+				 * this route will work if there isn't a
+				 * direct host route, so cache it
+				 */
+				net_route = r;
+			}
 		}
 	}
+	
+	/* 
+	 * if we found a network route but not a direct host
+	 * route, then return it
+	 */
+	if (net_route != NULL)
+		return (net_route);
 
 	if(atrtr_default.dev)
 		return (&atrtr_default);
@@ -705,6 +766,7 @@ int atif_ioctl(int cmd, void *arg)
 	int ct;
 	int limit;
 	struct rtentry rtdef;
+	int	add_route;
 
 	if(copy_from_user(&atreq,arg,sizeof(atreq)))
 		return (-EFAULT);
@@ -730,6 +792,18 @@ int atif_ioctl(int cmd, void *arg)
 
 			nr=(struct netrange *)&sa->sat_zero[0];
 
+			add_route = 1;
+
+			/*
+			 * if this is a point-to-point iface, and we already have an 
+			 * iface for this AppleTalk address, then we should not add a route
+			 */
+			if (dev->flags & IFF_POINTOPOINT && atalk_find_interface(sa->sat_addr.s_net, sa->sat_addr.s_node))
+			{
+				printk(KERN_DEBUG "AppleTalk: point-to-point interface added with existing address\n");
+				add_route = 0;
+			}
+			
 			/*
 			 * Phase 1 is fine on LocalTalk but we don't do
 			 * EtherTalk phase 1. Anyone wanting to add it go ahead.
@@ -764,7 +838,7 @@ int atif_ioctl(int cmd, void *arg)
 			 * error and atalkd will try another.
 			 */
 
-			if(!(dev->flags & IFF_LOOPBACK) && atif_probe_device(atif) < 0)
+			if(!(dev->flags & IFF_LOOPBACK) && !(dev->flags & IFF_POINTOPOINT) && atif_probe_device(atif) < 0)
 			{
 				atif_drop_device(dev);
 				return (-EADDRINUSE);
@@ -782,7 +856,7 @@ int atif_ioctl(int cmd, void *arg)
 			rtdef.rt_flags = RTF_UP;
 			sa->sat_family = AF_APPLETALK;
 			sa->sat_addr.s_node = ATADDR_ANYNODE;
-			if(dev->flags & IFF_LOOPBACK)
+			if((dev->flags & IFF_LOOPBACK) || (dev->flags & IFF_POINTOPOINT))
 				rtdef.rt_flags |= RTF_HOST;
 
 			/*
@@ -803,11 +877,12 @@ int atif_ioctl(int cmd, void *arg)
 					printk(KERN_WARNING "Too many routes/iface.\n");
 					return (-EINVAL);
 				}
-				for(ct=ntohs(nr->nr_firstnet);ct<=limit;ct++)
-				{
-					sa->sat_addr.s_net = htons(ct);
-					atrtr_create(&rtdef, dev);
-				}
+				if (add_route)
+					for(ct=ntohs(nr->nr_firstnet);ct<=limit;ct++)
+					{
+						sa->sat_addr.s_net = htons(ct);
+						atrtr_create(&rtdef, dev);
+					}
 			}
 			dev_mc_add(dev, aarp_mcast, 6, 1);
 			return (0);
@@ -835,6 +910,68 @@ int atif_ioctl(int cmd, void *arg)
 				return (-EINVAL);
 			atalk_dev_down(dev);
 			break;			
+
+		case SIOCSARP:
+			if(!suser())
+                                return (-EPERM);
+                        if(sa->sat_family != AF_APPLETALK)
+                                return (-EINVAL);
+
+                        /*
+                         * for now, we only support proxy AARP on ELAP;
+                         * we should be able to do it for LocalTalk, too.
+                         */
+                        if(dev->type != ARPHRD_ETHER)
+                                return (-EPROTONOSUPPORT);
+
+                        /*
+                         * atif points to the current interface on this network;
+                         * we aren't concerned about its current status (at least for now),
+                         * but it has all the settings about the network we're going
+                         * to probe.  consequently, it must exist.
+                         */
+                        if (!atif)
+                                return (-EADDRNOTAVAIL);
+
+                        nr=(struct netrange *)&(atif->nets);
+                        /*
+                         * Phase 1 is fine on Localtalk but we don't do
+                         * Ethertalk phase 1. Anyone wanting to add it go ahead.
+                         */
+                        if(dev->type == ARPHRD_ETHER && nr->nr_phase != 2)
+                                return (-EPROTONOSUPPORT);
+
+                        if(sa->sat_addr.s_node == ATADDR_BCAST
+                                || sa->sat_addr.s_node == 254)
+                                return (-EINVAL);
+
+                        /*
+                         * Check if the chosen address is used. If so we
+                         * error and ATCP will try another.
+                         */
+                      	if (atif_proxy_probe_device(atif, &(sa->sat_addr)) < 0)
+                      		return (-EADDRINUSE);
+                      	
+                       /*
+                         * We now have an address on the local network, and the AARP
+                         * code will defend it for us until we take it down.
+                         * We don't set up any routes right now, because ATCP will
+                         * install them manually via SIOCADDRT.
+                         */
+                        break;
+
+                case SIOCDARP:
+                        if(!suser())
+                                return (-EPERM);
+                        if(sa->sat_family != AF_APPLETALK)
+                                return (-EINVAL);
+
+                        /*
+                         * give to aarp module to remove proxy entry
+                         */
+                        aarp_proxy_remove(atif->dev, &(sa->sat_addr));
+
+                        return (0);
 	}
 
 	if(copy_to_user(arg, &atreq, sizeof(atreq)))
@@ -849,6 +986,7 @@ int atif_ioctl(int cmd, void *arg)
 static int atrtr_ioctl(unsigned int cmd, void *arg)
 {
 	struct rtentry rt;
+	struct device *dev = NULL;
 
 	if(copy_from_user(&rt, arg, sizeof(rt)))
 		return (-EFAULT);
@@ -861,7 +999,12 @@ static int atrtr_ioctl(unsigned int cmd, void *arg)
 			return (atrtr_delete(&((struct sockaddr_at *)&rt.rt_dst)->sat_addr));
 
 		case SIOCADDRT:
-			return (atrtr_create(&rt, NULL));
+			/* FIX ME: the name of the device is still in user space, isn't it? */
+			if (rt.rt_dev != NULL)
+				if ((dev = dev_get(rt.rt_dev)) == NULL)
+					return -(ENODEV);
+			
+			return (atrtr_create(&rt, dev));
 
 		default:
 			return (-EINVAL);
@@ -1004,7 +1147,15 @@ static int atalk_create(struct socket *sock, int protocol)
 		case SOCK_DGRAM:
 			sock->ops = &atalk_dgram_ops;
 			break;
-
+			
+		case SOCK_STREAM:
+			/*
+			 * TO DO: if you want to implement ADSP, here's the place to start
+			 */
+			/*
+			sock->ops = &atalk_stream_ops;
+			break;
+			*/
 		default:
 			sk_free((void *)sk);
 			return (-ESOCKTNOSUPPORT);
@@ -1330,6 +1481,13 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		 */
 		if (skb->pkt_type != PACKET_HOST || ddp->deh_dnet == 0)
 		{
+			/*
+			 * FIX ME:
+			 * Can it ever happen that a packet is from a PPP iface and needs to be broadcast onto the default network?
+			 */
+			if (dev->type == ARPHRD_PPP)
+				printk(KERN_DEBUG "AppleTalk: didn't forward broadcast packet received from PPP iface\n");
+			
 			kfree_skb(skb);
 			return (0);
 		}
@@ -1821,6 +1979,8 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 		case SIOCGIFBRDADDR:
 		case SIOCATALKDIFADDR:
 		case SIOCDIFADDR:
+		case SIOCSARP:	/* proxy AARP */
+		case SIOCDARP:	/* proxy AARP */
 			return (atif_ioctl(cmd,(void *)arg));
 
 		/*
@@ -1966,6 +2126,8 @@ __initfunc(void atalk_proto_init(struct net_proto *pro))
 	proc_net_register(&proc_appletalk);
 	proc_net_register(&proc_atalk_route);
 	proc_net_register(&proc_atalk_iface);
+
+	aarp_register_proc_fs();
 #endif /* CONFIG_PROC_FS */
 
 #ifdef CONFIG_SYSCTL
@@ -2006,6 +2168,8 @@ void cleanup_module(void)
 	proc_net_unregister(PROC_NET_ATALK);
 	proc_net_unregister(PROC_NET_AT_ROUTE);
 	proc_net_unregister(PROC_NET_ATIF);
+
+	aarp_unregister_proc_fs();
 #endif /* CONFIG_PROC_FS */
 
 	aarp_cleanup_module();	/* General aarp clean-up. */

@@ -157,7 +157,7 @@ static int shaper_qframe(struct shaper *shaper, struct sk_buff *skb)
  	 
  	skb->shapelatency=0;
  	skb->shapeclock=shaper->recovery;
- 	if(skb->shapeclock<jiffies)
+ 	if(time_before(skb->shapeclock, jiffies))
  		skb->shapeclock=jiffies;
  	skb->priority=0;	/* short term bug fix */
  	skb->shapestamp=jiffies;
@@ -320,7 +320,7 @@ static void shaper_kick(struct shaper *shaper)
 		 
 		if(sh_debug)
 			printk("Clock = %d, jiffies = %ld\n", skb->shapeclock, jiffies);
-		if(skb->shapeclock <= jiffies + SHAPER_BURST)
+		if(skb->shapeclock - jiffies <= SHAPER_BURST)
 		{
 			/*
 			 *	Pull the frame and get interrupts back on.
@@ -385,10 +385,14 @@ static int shaper_open(struct device *dev)
 	
 	/*
 	 *	Can't open until attached.
+	 *	Also can't open until speed is set, or we'll get
+	 *	a division by zero.
 	 */
 	 
 	if(shaper->dev==NULL)
 		return -ENODEV;
+	if(shaper->bitspersec==0)
+		return -EINVAL;
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -543,6 +547,7 @@ static int shaper_attach(struct device *shdev, struct shaper *sh, struct device 
 	shdev->type=dev->type;
 	shdev->addr_len=dev->addr_len;
 	shdev->mtu=dev->mtu;
+	sh->bitspersec=0;
 	return 0;
 }
 
@@ -564,7 +569,7 @@ static int shaper_ioctl(struct device *dev,  struct ifreq *ifr, int cmd)
 		case SHAPER_GET_DEV:
 			if(sh->dev==NULL)
 				return -ENODEV;
-			memcpy(ss->ss_name, sh->dev->name, sizeof(ss->ss_name));
+			strcpy(ss->ss_name, sh->dev->name);
 			return 0;
 		case SHAPER_SET_SPEED:
 			shaper_setspeed(sh,ss->ss_speed);

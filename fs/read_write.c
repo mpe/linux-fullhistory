@@ -4,19 +4,12 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <linux/types.h>
-#include <linux/errno.h>
+#include <linux/malloc.h> 
 #include <linux/stat.h>
-#include <linux/kernel.h>
-#include <linux/sched.h>
 #include <linux/fcntl.h>
 #include <linux/file.h>
-#include <linux/mm.h>
 #include <linux/uio.h>
-#include <linux/malloc.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
-#include <linux/limits.h>
 
 #include <asm/uaccess.h>
 

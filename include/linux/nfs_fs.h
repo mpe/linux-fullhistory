@@ -215,10 +215,25 @@ extern int  nfs_writepage(struct file *, struct page *);
 extern int  nfs_find_dentry_request(struct inode *, struct dentry *);
 extern int  nfs_check_failed_request(struct inode *);
 extern int  nfs_check_error(struct inode *);
-extern int  nfs_flush_pages(struct inode *, pid_t, off_t, off_t);
-extern int  nfs_flush_dirty_pages(struct inode *, pid_t, off_t, off_t);
+
+/*
+ * Try to write back everything synchronously (but check the
+ * return value!)
+ */
+extern int  nfs_wb_all(struct inode *);
+extern int  nfs_wb_page(struct inode *, struct page *);
+extern int  nfs_wb_pid(struct inode *, pid_t);
+extern int  nfs_wb_area(struct inode *, off_t, off_t);
+
+/*
+ * Invalidate write-backs, possibly trying to write them
+ * back first..
+ */
+extern void nfs_inval(struct inode *);
+extern int  nfs_wbinval(struct inode *);
+extern int  nfs_wbinval_pid(struct inode *, pid_t);
+
 extern int  nfs_truncate_dirty_pages(struct inode *, unsigned long);
-extern void nfs_invalidate_pages(struct inode *);
 extern int  nfs_updatepage(struct file *, struct page *, unsigned long, unsigned int, int);
 
 /*

@@ -4,15 +4,8 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <linux/sched.h>
 #include <linux/mm.h>
-#include <linux/errno.h>
-#include <linux/string.h>
-#include <linux/stat.h>
-#include <linux/termios.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
-#include <linux/fcntl.h> /* for f_flags values */
 #include <linux/file.h>
 
 #include <asm/uaccess.h>

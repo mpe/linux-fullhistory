@@ -17,27 +17,15 @@
  *  Added change_root: Werner Almesberger & Hans Lermen, Feb '96
  */
 
-#include <linux/config.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/mount.h>
 #include <linux/malloc.h>
-#include <linux/major.h>
-#include <linux/stat.h>
-#include <linux/errno.h>
-#include <linux/string.h>
 #include <linux/locks.h>
-#include <linux/mm.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/fd.h>
 #include <linux/init.h>
 #include <linux/quotaops.h>
 #include <linux/acct.h>
 
-#include <asm/system.h>
 #include <asm/uaccess.h>
-#include <asm/bitops.h>
 
 #include <linux/nfs_fs.h>
 #include <linux/nfs_fs_sb.h>

@@ -488,13 +488,7 @@ static void nfs_dentry_iput(struct dentry *dentry, struct inode *inode)
 printk("nfs_dentry_iput: pending writes for %s/%s, i_count=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_count);
 #endif
-		while (nfs_find_dentry_request(inode, dentry)) {
-#ifdef NFS_PARANOIA
-printk("nfs_dentry_iput: flushing %s/%s\n",
-dentry->d_parent->d_name.name, dentry->d_name.name);
-#endif
-			nfs_flush_dirty_pages(inode, 0, 0, 0);
-		}
+		nfs_wbinval(inode);
 	}
 	iput(inode);
 }
@@ -940,7 +934,7 @@ static int nfs_safe_remove(struct dentry *dentry)
 	error = -EBUSY;
 	if (inode) {
 		if (NFS_WRITEBACK(inode)) {
-			nfs_flush_dirty_pages(inode, 0, 0, 0);
+			nfs_wbinval(inode);
 			if (NFS_WRITEBACK(inode)) {
 #ifdef NFS_PARANOIA
 printk("nfs_safe_remove: %s/%s writes pending, d_count=%d\n",
@@ -1204,7 +1198,7 @@ new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
 printk("nfs_rename: %s/%s has pending writes\n",
 old_dentry->d_parent->d_name.name, old_dentry->d_name.name);
 #endif
-			nfs_flush_dirty_pages(old_inode, 0, 0, 0);
+			nfs_wbinval(old_inode);
 			if (NFS_WRITEBACK(old_inode)) {
 #ifdef NFS_PARANOIA
 printk("nfs_rename: %s/%s has pending writes after flush\n",

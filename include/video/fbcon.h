@@ -125,7 +125,7 @@ extern void fbcon_redraw_bmove(struct display *, int, int, int, int, int, int);
 /* ================================================================= */
 
 
-#ifdef __mc68000__
+#if defined(__mc68000__)
 
 /* ====================================================================== */
 
@@ -363,31 +363,7 @@ static __inline__ void fast_memmove(char *dst, const char *src, size_t size)
        : "d0", "d1", "a0", "a1", "memory");
 }
 
-#else /* !m68k */
-
-    /*
-     *  Anyone who'd like to write asm functions for other CPUs?
-     *   (Why are these functions better than those from include/asm/string.h?)
-     */
-
-#ifndef CONFIG_SUN4
-
-static __inline__ void *mymemclear_small(void *s, size_t count)
-{
-    return(memset(s, 0, count));
-}
-
-static __inline__ void *mymemclear(void *s, size_t count)
-{
-    return(memset(s, 0, count));
-}
-
-static __inline__ void *mymemset(void *s, size_t count)
-{
-    return(memset(s, 255, count));
-}
-
-#else
+#elif defined(CONFIG_SUN4)
 
 /* You may think that I'm crazy and that I should use generic
    routines.  No, I'm not: sun4's framebuffer crashes if we std
@@ -415,9 +391,44 @@ static __inline__ void *mymemclear_small(void *s, size_t count)
 {
     return sun4_memset(s, 0, count);
 }
-#endif
 
-#ifdef __i386__
+/* To be honest, this is slow_memmove :). But sun4 is crappy, so what we can do. */
+static __inline__ void fast_memmove(void *d, const void *s, size_t count)
+{
+    int i;
+    if (d<s) {
+	for (i=0; i<count; i++)
+	    ((char *) d)[i] = ((char *) s)[i];
+    } else
+	for (i=0; i<count; i++)
+	    ((char *) d)[count-i-1] = ((char *) s)[count-i-1];
+}
+
+static __inline__ void *mymemmove(char *dst, const char *src, size_t size)
+{
+    fast_memmove(dst, src, size);
+    return dst;
+}
+
+#else
+
+static __inline__ void *mymemclear_small(void *s, size_t count)
+{
+    return(memset(s, 0, count));
+}
+
+static __inline__ void *mymemclear(void *s, size_t count)
+{
+    return(memset(s, 0, count));
+}
+
+static __inline__ void *mymemset(void *s, size_t count)
+{
+    return(memset(s, 255, count));
+}
+
+#if defined(__i386__)
+
 static __inline__ void fast_memmove(void *d, const void *s, size_t count)
 {
     if (d < s) {
@@ -466,28 +477,12 @@ static __inline__ void *mymemmove(char *dst, const char *src, size_t size)
     return dst;
 }
 
-#else
+#else /* !i386 */
 
-#ifdef CONFIG_SUN4
-/* To be honest, this is slow_memmove :). But sun4 is crappy, so what we can do. */
-static __inline__ void fast_memmove(void *d, const void *s, size_t count)
-{
-    int i;
-    if (d<s) {
-	for (i=0; i<count; i++)
-	    ((char *) d)[i] = ((char *) s)[i];
-    } else
-	for (i=0; i<count; i++)
-	    ((char *) d)[count-i-1] = ((char *) s)[count-i-1];
-}
-
-static __inline__ void *mymemmove(char *dst, const char *src, size_t size)
-{
-    fast_memmove(dst, src, size);
-    return dst;
-}
-
-#else
+    /*
+     *  Anyone who'd like to write asm functions for other CPUs?
+     *   (Why are these functions better than those from include/asm/string.h?)
+     */
 
 static __inline__ void *mymemmove(void *d, const void *s, size_t count)
 {
@@ -499,10 +494,8 @@ static __inline__ void fast_memmove(char *dst, const char *src, size_t size)
     memmove(dst, src, size);
 }
 
-#endif /* !sun4 */
-
 #endif /* !i386 */
 
-#endif /* !m68k */
+#endif
 
 #endif /* _VIDEO_FBCON_H */

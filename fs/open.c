@@ -4,21 +4,11 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <linux/vfs.h>
-#include <linux/types.h>
+#include <linux/mm.h>
 #include <linux/utime.h>
-#include <linux/errno.h>
 #include <linux/fcntl.h>
 #include <linux/stat.h>
-#include <linux/string.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/signal.h>
-#include <linux/tty.h>
-#include <linux/time.h>
-#include <linux/mm.h>
 #include <linux/file.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/quotaops.h>
 

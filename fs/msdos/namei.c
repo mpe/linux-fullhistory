@@ -5,17 +5,14 @@
  *  Hidden files 1995 by Albert Cahalan <albert@ccs.neu.edu> <adc@coe.neu.edu>
  */
 
-#include <linux/config.h>
 
 #define __NO_VERSION__
 #include <linux/module.h>
 
 #include <linux/sched.h>
 #include <linux/msdos_fs.h>
-#include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/string.h>
-#include <linux/stat.h>
 
 #include <asm/uaccess.h>
 

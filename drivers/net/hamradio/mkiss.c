@@ -894,7 +894,6 @@ static int ax_set_dev_mac_address(struct device *dev, void *addr)
 static int ax25_disp_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 {
 	struct ax_disp *ax = (struct ax_disp *)tty->disc_data;
-	int err;
 	unsigned int tmp;
 
 	/* First make sure we're connected. */

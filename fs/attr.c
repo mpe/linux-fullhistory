@@ -5,12 +5,9 @@
  *  changes by Thomas Schoebel-Theuer
  */
 
-#include <linux/stat.h>
 #include <linux/sched.h>
-#include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/string.h>
-#include <asm/system.h>
 
 /* Taken over from the old code... */
 

@@ -66,7 +66,7 @@ void fbcon_mfb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 {
     u8 *dest;
     u_int rows;
-    int inverse = conp ? attr_reverse(p,conp->vc_attr) : 0;
+    int inverse = conp ? attr_reverse(p,conp->vc_video_erase_char) : 0;
 
     dest = p->screen_base+sy*fontheight(p)*p->next_line+sx;
 
@@ -148,6 +148,28 @@ void fbcon_mfb_revc(struct display *p, int xx, int yy)
 	*dest = ~*dest;
 }
 
+void fbcon_mfb_clear_margins(struct vc_data *conp, struct display *p,
+			     int bottom_only)
+{
+    u8 *dest;
+    int height, bottom;
+    int inverse = conp ? attr_reverse(p,conp->vc_video_erase_char) : 0;
+
+    /* XXX Need to handle right margin? */
+
+    height = p->var.yres - conp->vc_rows * fontheight(p);
+    if (!height)
+	return;
+    bottom = conp->vc_rows + p->yscroll;
+    if (bottom >= p->vrows)
+	bottom -= p->vrows;
+    dest = p->screen_base + bottom * fontheight(p) * p->next_line;
+    if (inverse)
+	mymemset(dest, height * p->next_line);
+    else
+	mymemclear(dest, height * p->next_line);
+}
+
 
     /*
      *  `switch' for the low level operations
@@ -155,7 +177,8 @@ void fbcon_mfb_revc(struct display *p, int xx, int yy)
 
 struct display_switch fbcon_mfb = {
     fbcon_mfb_setup, fbcon_mfb_bmove, fbcon_mfb_clear, fbcon_mfb_putc,
-    fbcon_mfb_putcs, fbcon_mfb_revc, NULL, NULL, NULL, FONTWIDTH(8)
+    fbcon_mfb_putcs, fbcon_mfb_revc, NULL, NULL, fbcon_mfb_clear_margins,
+    FONTWIDTH(8)
 };
 
 
@@ -181,3 +204,4 @@ EXPORT_SYMBOL(fbcon_mfb_clear);
 EXPORT_SYMBOL(fbcon_mfb_putc);
 EXPORT_SYMBOL(fbcon_mfb_putcs);
 EXPORT_SYMBOL(fbcon_mfb_revc);
+EXPORT_SYMBOL(fbcon_mfb_clear_margins);

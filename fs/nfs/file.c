@@ -95,7 +95,7 @@ nfs_file_close(struct inode *inode, struct file *file)
 
 	dfprintk(VFS, "nfs: close(%x/%ld)\n", inode->i_dev, inode->i_ino);
 
-	status = nfs_flush_dirty_pages(inode, 0, 0, 0);
+	status = nfs_wbinval(inode);
 	error = nfs_write_error(inode);
 	if (!status)
 		status = error;
@@ -162,7 +162,7 @@ nfs_fsync(struct file *file, struct dentry *dentry)
 
 	dfprintk(VFS, "nfs: fsync(%x/%ld)\n", inode->i_dev, inode->i_ino);
 
-	status = nfs_flush_dirty_pages(inode, current->pid, 0, 0);
+	status = nfs_wbinval_pid(inode, current->pid);
 	error = nfs_write_error(inode);
 	if (!status)
 		status = error;
@@ -246,7 +246,7 @@ nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
 	 * been killed by a signal, that is). */
 	if (cmd == F_SETLK && fl->fl_type == F_UNLCK
 	    && !signal_pending(current)) {
-		status = nfs_flush_dirty_pages(inode, current->pid,
+		status = nfs_wb_area(inode, /* current->pid  ?*/
 			fl->fl_start, fl->fl_end == NLM_OFFSET_MAX? 0 :
 			fl->fl_end - fl->fl_start + 1);
 		if (status < 0)

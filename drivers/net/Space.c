@@ -559,7 +559,7 @@ static int hippi_probe(struct device *dev)
 #if defined(CONFIG_LTPC)
     extern int ltpc_probe(struct device *);
     static struct device dev_ltpc = {
-        "ltalk0\0   ",
+        "lt0\0   ",
                 0, 0, 0, 0,
                 0x0, 0,
                 0, 0, 0, NEXT_DEV, ltpc_probe };

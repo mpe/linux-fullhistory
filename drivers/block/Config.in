@@ -77,7 +77,7 @@ else
   fi
 fi
 if [ "$CONFIG_MCA" = "y" ]; then
-  bool 'PS/2 ESDI hard disk support' CONFIG_BLK_DEV_PS2
+  tristate 'PS/2 ESDI hard disk support' CONFIG_BLK_DEV_PS2
 fi
 if [ "$CONFIG_ZORRO" = "y" ]; then
   tristate 'Amiga Zorro II ramdisk support' CONFIG_AMIGA_Z2RAM
@@ -94,7 +94,9 @@ fi
 comment 'Additional Block Devices'
 
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
-tristate 'Network block device support' CONFIG_BLK_DEV_NBD
+if [ "$CONFIG_NET" = "y" ]; then
+  tristate 'Network block device support' CONFIG_BLK_DEV_NBD
+fi
 bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
   tristate '   Linear (append) mode' CONFIG_MD_LINEAR

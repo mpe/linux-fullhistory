@@ -60,6 +60,7 @@
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>
 #include <asm/setup.h>
+#include <asm/io.h>
 
 #include <video/fbcon.h>
 #include <video/fbcon-afb.h>
@@ -1478,7 +1479,8 @@ static int amifb_set_var(struct fb_var_screeninfo *var, int con,
 			struct fb_fix_screeninfo fix;
 
 			ami_encode_fix(&fix, &par);
-			display->screen_base = fix.smem_start;
+			display->screen_base = 
+				phys_to_virt ((unsigned long) fix.smem_start);
 			display->visual = fix.visual;
 			display->type = fix.type;
 			display->type_aux = fix.type_aux;
@@ -2124,7 +2126,7 @@ static int ami_encode_fix(struct fb_fix_screeninfo *fix,
 {
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id, amifb_name);
-	fix->smem_start = (char *)videomemory;
+	fix->smem_start = (char*) virt_to_phys((void *)videomemory);
 	fix->smem_len = videomemorysize;
 
 #ifdef FBCON_HAS_MFB

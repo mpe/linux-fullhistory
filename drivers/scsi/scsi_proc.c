@@ -110,14 +110,29 @@ extern int dispatch_scsi_info(int ino, char *buffer, char **start,
     return(-EBADF);
 }
 
+static void scsi_proc_fill_inode(struct inode *inode, int fill)
+{
+Scsi_Host_Template *shpnt;
+
+shpnt = scsi_hosts;
+while (shpnt && shpnt->proc_dir->low_ino != inode->i_ino)
+    shpnt = shpnt->next;
+if (!shpnt || !shpnt->module)
+    return;
+if (fill)
+    __MOD_INC_USE_COUNT(shpnt->module);
+else
+    __MOD_DEC_USE_COUNT(shpnt->module);
+}
+
 void build_proc_dir_entries(Scsi_Host_Template *tpnt)
 {
     struct Scsi_Host *hpnt;
-
     struct scsi_dir *scsi_hba_dir;
 
     proc_scsi_register(0, tpnt->proc_dir);
-    
+    tpnt->proc_dir->fill_inode = &scsi_proc_fill_inode;
+
     hpnt = scsi_hostlist;
     while (hpnt) {
         if (tpnt == hpnt->hostt) {

@@ -1,4 +1,4 @@
-Documentation for /proc/sys/vm/*	version 0.1
+Documentation for /proc/sys/vm/*	kernel version 2.1.128
 	(c) 1998, Rik van Riel <H.H.vanRiel@phys.uu.nl>
 
 For general info and legal blurb, please look in README.
@@ -20,8 +20,8 @@ Currently, these files are in /proc/sys/vm:
 - kswapd
 - overcommit_memory
 - pagecache
+- pagetable_cache
 - swapctl
-- swapout_interval
 
 ==============================================================
 
@@ -56,7 +56,7 @@ union bdflush_param{
 } bdf_prm = {{40, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
 --------------------------------------------------------------
 
-The first parameter governs the maximum number of of dirty
+The first parameter governs the maximum number of dirty
 buffers in the buffer cache. Dirty means that the contents
 of the buffer still have to be written to disk (as opposed
 to a clean buffer, which can just be forgotten about).
@@ -101,8 +101,9 @@ The values are:
 min_percent	-- this is the minimum percentage of memory
 		   that should be spent on buffer memory
 borrow_percent  -- when Linux is short on memory, and the
-                   buffer cache uses more memory, free pages
-                   are stolen from it
+                   buffer cache uses more memory than this,
+                   the MM subsystem will prune the buffercache
+                   more heavily than other memory
 max_percent     -- this is the maximum amount of memory that
                    can be used for buffer memory 
 
@@ -112,25 +113,17 @@ freepages:
 This file contains the values in the struct freepages. That
 struct contains three members: min, low and high.
 
-Although the goal of the Linux memory management subsystem
-is to avoid fragmentation and make large chunks of free
-memory (so that we can hand out DMA buffers and such), there
-still are some page-based limits in the system, mainly to
-make sure we don't waste too much memory trying to get large
-free area's.
-
 The meaning of the numbers is:
 
 freepages.min	When the number of free pages in the system
 		reaches this number, only the kernel can
 		allocate more memory.
-freepages.low	If memory is too fragmented, the swapout
-		daemon is started, except when the number
-		of free pages is larger than freepages.low.
-freepages.high	The swapping daemon exits when memory is
-		sufficiently defragmented, when the number
-		of free pages reaches freepages.high or when
-		it has tried the maximum number of times. 
+freepages.low	If the number of free pages gets below this
+		point, the kernel starts swapping agressively.
+freepages.high	The kernel tries to keep up to this amount of
+		memory free; if memory comes below this point,
+		the kernel gently starts swapping in the hopes
+		that it never has to do real agressive swapping.
 
 ==============================================================
 
@@ -210,11 +203,29 @@ pagecache:
 
 This file does exactly the same as buffermem, only this
 file controls the struct page_cache, and thus controls
-the amount of memory allowed for memory mapping of files.
+the amount of memory allowed for memory mapping and generic
+caching of files.
 
 You don't want the minimum level to be too low, otherwise
 your system might thrash when memory is tight or fragmentation
 is high...
+
+==============================================================
+
+pagetable_cache:
+
+The kernel keeps a number of page tables in a per-processor
+cache (this helps a lot on SMP systems). The cache size for
+each processor will be between the low and the high value.
+
+On a low-memory, single CPU system you can safely set these
+values to 0 so you don't waste the memory. On SMP systems it
+is used so that the system can do fast pagetable allocations
+without having to aquire the kernel memory lock.
+
+For large systems, the settings are probably OK. For normal
+systems they won't hurt a bit. For small systems (<16MB ram)
+it might be advantageous to set both values to 0.
 
 ==============================================================
 
@@ -274,14 +285,4 @@ process pages in order to satisfy buffer memory demands, you
 might want to either increase sc_bufferout_weight, or decrease
 the value of sc_pageout_weight.
 
-==============================================================
-
-swapout_interval:
-
-The single value in this file controls the amount of time
-between successive wakeups of kswapd when nr_free_pages is
-between free_pages_low and free_pages_high. The default value
-of HZ/4 is usually right, but when kswapd can't keep up with
-the number of allocations in your system, you might want to
-decrease this number. 
 

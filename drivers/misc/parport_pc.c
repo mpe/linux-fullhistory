@@ -755,9 +755,11 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	}
 #undef printmode
 	printk("]\n");
+#ifdef	CONFIG_PROC_FS
 	if (probedirq != PARPORT_IRQ_NONE) 
 		printk("%s: detected irq %d; use procfs to enable interrupt-driven operation.\n", p->name, probedirq);
 	parport_proc_register(p);
+#endif
 	p->flags |= PARPORT_FLAG_COMA;
 
 	/* Done probing.  Now put the port into a sensible start-up state. */
@@ -821,7 +823,9 @@ void cleanup_module(void)
 		if (p->modes & PARPORT_MODE_PCSPP) { 
 			if (!(p->flags & PARPORT_FLAG_COMA)) 
 				parport_quiesce(p);
+#ifdef	CONFIG_PROC_FS
 			parport_proc_unregister(p);
+#endif
 			parport_unregister_port(p);
 		}
 		p = tmp;

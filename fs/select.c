@@ -10,25 +10,12 @@
  *     parameter to reflect time remaining.
  */
 
-#include <linux/types.h>
-#include <linux/time.h>
-#include <linux/fs.h>
-#include <linux/kernel.h>
-#include <linux/sched.h>
-#include <linux/string.h>
-#include <linux/stat.h>
-#include <linux/signal.h>
-#include <linux/errno.h>
-#include <linux/personality.h>
-#include <linux/mm.h>
 #include <linux/malloc.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/poll.h>
 #include <linux/file.h>
 
 #include <asm/uaccess.h>
-#include <asm/system.h>
 
 #define ROUND_UP(x,y) (((x)+(y)-1)/(y))
 #define DEFAULT_POLLMASK (POLLIN | POLLOUT | POLLRDNORM | POLLWRNORM)

@@ -122,6 +122,8 @@ static unsigned char Cyber_colour_table [256][3];
 static unsigned long CyberMem;
 static unsigned long CyberSize;
 static volatile char *CyberRegs;
+static unsigned long CyberMem_phys;
+static unsigned long CyberRegs_phys;
  
 
 /*
@@ -178,6 +180,13 @@ static struct fb_videomode cyberfb_predefined[] __initdata = {
 	    0, 0, -1, -1, FB_ACCELF_TEXT, CYBER16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
+    }, {
+	"1024x768-16", {         /* Cybervision 16 bpp */
+	    1024, 768, 1024, 768, 0, 0, 16, 0,
+	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, CYBER16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+       }
     }
 };
 
@@ -372,9 +381,9 @@ static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
 {
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id, cyberfb_name);
-	fix->smem_start = (char *)CyberMem;
+	fix->smem_start = (char*) CyberMem_phys;
 	fix->smem_len = CyberSize;
-	fix->mmio_start = (char *)CyberRegs;
+	fix->mmio_start = (char*) CyberRegs_phys;
 	fix->mmio_len = 0x10000;
 
 	fix->type = FB_TYPE_PACKED_PIXELS;
@@ -846,7 +855,7 @@ static void cyberfb_set_disp(int con, struct fb_info *info)
 	cyberfb_get_fix(&fix, con, info);
 	if (con == -1)
 		con = 0;
-	display->screen_base = fix.smem_start;
+	display->screen_base = (char*) CyberMem;
 	display->visual = fix.visual;
 	display->type = fix.type;
 	display->type_aux = fix.type_aux;
@@ -1030,7 +1039,9 @@ __initfunc(void cyberfb_init(void))
 	board_addr = (unsigned long)cd->cd_BoardAddr;
 
 	/* This includes the video memory as well as the S3 register set */
-	CyberMem = kernel_map (board_addr + 0x01400000, 0x01000000,
+	CyberMem_phys = board_addr + 0x01400000;
+	CyberRegs_phys = CyberMem_phys + 0x00c00000;
+	CyberMem = kernel_map (CyberMem_phys, 0x01000000,
 			       KERNELMAP_NOCACHE_SER, NULL);
 	CyberRegs = (char*) (CyberMem + 0x00c00000);
 

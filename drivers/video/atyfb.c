@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.81 1998/10/14 16:45:38 ecd Exp $
+/*  $Id: atyfb.c,v 1.89 1998/11/12 13:07:26 geert Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -400,12 +400,15 @@ static char atyfb_name[16] = "ATY Mach64";
 static char fontname[40] __initdata = { 0 };
 static char curblink __initdata = 1;
 static char noaccel __initdata = 0;
+static u32 default_vram __initdata = 0;
+static int default_pll __initdata = 0;
+static int default_mclk __initdata = 0;
 
 static const u32 ref_clk_per = 1000000000000ULL/14318180;
 
 #if defined(CONFIG_PPC)
-static int default_vmode = VMODE_NVRAM;
-static int default_cmode = CMODE_NVRAM;
+static int default_vmode __initdata = VMODE_NVRAM;
+static int default_cmode __initdata = CMODE_NVRAM;
 #endif
 
 #ifdef CONFIG_ATARI
@@ -448,11 +451,11 @@ static struct aty_features {
 };
 
 static const char *aty_gx_ram[8] __initdata = {
-    "DRAM", "VRAM", "VRAM", "DRAM", "GDRAM", "EVRAM", "EVRAM", "RESV"
+    "DRAM", "VRAM", "VRAM", "DRAM", "DRAM", "VRAM", "VRAM", "RESV"
 };
 
 static const char *aty_ct_ram[8] __initdata = {
-    "OFF", "DRAM", "EDO", "HPDRAM", "SDRAM", "SGRAM", "WRAM", "RESV"
+    "OFF", "DRAM", "EDO", "EDO", "SDRAM", "SGRAM", "WRAM", "RESV"
 };
 
 
@@ -540,7 +543,6 @@ static void reset_engine(const struct fb_info_aty *info)
 		aty_ld_le32(GEN_TEST_CNTL, info) | GUI_ENGINE_ENABLE, info);
     /* ensure engine is not locked up by clearing any FIFO or */
     /* HOST errors */
-    aty_st_le32(0xf4,0xa955,info);
     aty_st_le32(BUS_CNTL, aty_ld_le32(BUS_CNTL, info) | BUS_HOST_ERR_ACK |
 			  BUS_FIFO_ERR_ACK, info);
 }
@@ -1346,7 +1348,7 @@ static void aty_set_pll_gx(const struct fb_info_aty *info,
 	    aty_st_514(0x03, 0x00, info);	/* Sync Control */
 	    aty_st_514(0x05, 0x00, info);	/* Power Management */
 	    aty_st_514(0x20, pll->m, info);	/* F0 / M0 */
-	    aty_st_514(0x21, pll->m, info);	/* F1 / N0 */
+	    aty_st_514(0x21, pll->n, info);	/* F1 / N0 */
 	    break;
     }
 }
@@ -1492,7 +1494,14 @@ static int aty_dsp_gt(const struct fb_info_aty *info, u8 mclk_fb_div,
 		    (vclk_fb_div*mclk_post_div*bpp);
     if (xclks_per_row < (1<<11))
 	FAIL("Dotclock to high");
-    fifo_size = 24;
+    if ((Gx == GT_CHIP_ID) || (Gx == GU_CHIP_ID) || (Gx == VT_CHIP_ID) ||
+	(Gx == VU_CHIP_ID)) {
+	fifo_size = 24;
+	dsp_loop_latency = 0;
+    } else {
+	fifo_size = 32;
+	dsp_loop_latency = 2;
+    }
     dsp_precision = 0;
     y = (xclks_per_row*fifo_size)>>11;
     while (y) {
@@ -1506,21 +1515,21 @@ static int aty_dsp_gt(const struct fb_info_aty *info, u8 mclk_fb_div,
     if (info->total_vram > 1*1024*1024) {
 	if (info->ram_type >= SDRAM) {
 	    /* >1 MB SDRAM */
-	    dsp_loop_latency = 8;
+	    dsp_loop_latency += 8;
 	    page_size = 8;
 	} else {
 	    /* >1 MB DRAM */
-	    dsp_loop_latency = 6;
+	    dsp_loop_latency += 6;
 	    page_size = 9;
 	}
     } else {
 	if (info->ram_type >= SDRAM) {
 	    /* <2 MB SDRAM */
-	    dsp_loop_latency = 9;
+	    dsp_loop_latency += 9;
 	    page_size = 10;
 	} else {
 	    /* <2 MB DRAM */
-	    dsp_loop_latency = 8;
+	    dsp_loop_latency += 8;
 	    page_size = 10;
 	}
     }
@@ -2385,7 +2394,7 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
     struct fb_var_screeninfo var;
     struct display *disp;
     const char *chipname = NULL, *ramname = NULL;
-    int pll, mclk;
+    int pll, mclk, gtb_memsize;
 #if defined(CONFIG_PPC)
     int sense;
 #endif
@@ -2463,30 +2472,14 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 	    }
 	}
     }
-    if (mclk < 44)
-	info->mem_refresh_rate = 0;	/* 000 = 10 Mhz - 43 Mhz */
-    else if (mclk < 50)
-	info->mem_refresh_rate = 1;	/* 001 = 44 Mhz - 49 Mhz */
-    else if (mclk < 55)
-	info->mem_refresh_rate = 2;	/* 010 = 50 Mhz - 54 Mhz */
-    else if (mclk < 66)
-	info->mem_refresh_rate = 3;	/* 011 = 55 Mhz - 65 Mhz */
-    else if (mclk < 75)
-	info->mem_refresh_rate = 4;	/* 100 = 66 Mhz - 74 Mhz */
-    else if (mclk < 80)
-	info->mem_refresh_rate = 5;	/* 101 = 75 Mhz - 79 Mhz */
-    else if (mclk < 100)
-	info->mem_refresh_rate = 6;	/* 110 = 80 Mhz - 100 Mhz */
-    else
-	info->mem_refresh_rate = 7;	/* 111 = 100 Mhz and above */
-    info->pll_per = 1000000/pll;
-    info->mclk_per = 1000000/mclk;
 
     i = aty_ld_le32(MEM_CNTL, info);
-    if (((Gx == GT_CHIP_ID) && (Rev & 0x03)) || (Gx == GU_CHIP_ID) ||
-	((Gx == VT_CHIP_ID) && (Rev & 0x01)) || (Gx == VU_CHIP_ID) ||
-	(Gx == LG_CHIP_ID) || (Gx == GB_CHIP_ID) || (Gx == GD_CHIP_ID) ||
-	(Gx == GI_CHIP_ID) || (Gx == GP_CHIP_ID) || (Gx == GQ_CHIP_ID))
+    gtb_memsize = (((Gx == GT_CHIP_ID) && (Rev & 0x03)) || (Gx == GU_CHIP_ID)
+		|| ((Gx == VT_CHIP_ID) && (Rev & 0x01)) || (Gx == VU_CHIP_ID)
+		|| (Gx == LG_CHIP_ID) || (Gx == GB_CHIP_ID)
+		|| (Gx == GD_CHIP_ID) || (Gx == GI_CHIP_ID)
+		|| (Gx == GP_CHIP_ID) || (Gx == GQ_CHIP_ID));
+    if (gtb_memsize)
 	switch (i & 0xF) {	/* 0xF used instead of MEM_SIZE_ALIAS */
 	    case MEM_SIZE_512K:
 		info->total_vram = 0x80000;
@@ -2538,9 +2531,50 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 	  info->total_vram += 0x400000;
     }
 
+    if (default_vram) {
+	info->total_vram = default_vram*1024;
+	i = i & ~(gtb_memsize ? 0xF : MEM_SIZE_ALIAS);
+	if (info->total_vram <= 0x80000)
+	    i |= MEM_SIZE_512K;
+	else if (info->total_vram <= 0x100000)
+	    i |= MEM_SIZE_1M;
+	else if (info->total_vram <= 0x200000)
+	    i |= gtb_memsize ? MEM_SIZE_2M_GTB : MEM_SIZE_2M;
+	else if (info->total_vram <= 0x400000)
+	    i |= gtb_memsize ? MEM_SIZE_4M_GTB : MEM_SIZE_4M;
+	else if (info->total_vram <= 0x600000)
+	    i |= gtb_memsize ? MEM_SIZE_6M_GTB : MEM_SIZE_6M;
+	else
+	    i |= gtb_memsize ? MEM_SIZE_8M_GTB : MEM_SIZE_8M;
+	aty_st_le32(MEM_CNTL, i, info);
+    }
+    if (default_pll)
+	pll = default_pll;
+    if (default_mclk)
+	mclk = default_mclk;
+
     printk("%d%c %s, %d MHz PLL, %d Mhz MCLK\n", 
     	   info->total_vram == 0x80000 ? 512 : (info->total_vram >> 20), 
     	   info->total_vram == 0x80000 ? 'K' : 'M', ramname, pll, mclk);
+
+    if (mclk < 44)
+	info->mem_refresh_rate = 0;	/* 000 = 10 Mhz - 43 Mhz */
+    else if (mclk < 50)
+	info->mem_refresh_rate = 1;	/* 001 = 44 Mhz - 49 Mhz */
+    else if (mclk < 55)
+	info->mem_refresh_rate = 2;	/* 010 = 50 Mhz - 54 Mhz */
+    else if (mclk < 66)
+	info->mem_refresh_rate = 3;	/* 011 = 55 Mhz - 65 Mhz */
+    else if (mclk < 75)
+	info->mem_refresh_rate = 4;	/* 100 = 66 Mhz - 74 Mhz */
+    else if (mclk < 80)
+	info->mem_refresh_rate = 5;	/* 101 = 75 Mhz - 79 Mhz */
+    else if (mclk < 100)
+	info->mem_refresh_rate = 6;	/* 110 = 80 Mhz - 100 Mhz */
+    else
+	info->mem_refresh_rate = 7;	/* 111 = 100 Mhz and above */
+    info->pll_per = 1000000/pll;
+    info->mclk_per = 1000000/mclk;
 
 #ifdef DEBUG
     if ((Gx != GX_CHIP_ID) && (Gx != CX_CHIP_ID)) {
@@ -2806,11 +2840,11 @@ __initfunc(void atyfb_init(void))
 	    if (node == pcp->prom_node) {
 
 		struct fb_var_screeninfo *var = &default_var;
+		unsigned int N, P, Q, M, T;
 		u32 v_total, h_total;
 		struct crtc crtc;
 		u8 pll_regs[16];
 		u8 clock_cntl;
-		unsigned int N, P, Q, M, T;
 
 		crtc.vxres = prom_getintdefault(node, "width", 1024);
 		crtc.vyres = prom_getintdefault(node, "height", 768);
@@ -2833,33 +2867,28 @@ __initfunc(void atyfb_init(void))
 		 */
     		clock_cntl = aty_ld_8(CLOCK_CNTL, info);
 		/* printk("atyfb: CLOCK_CNTL: %02x\n", clock_cntl); */
-		for (i = 0; i < 16; i++) {
+		for (i = 0; i < 16; i++)
 			pll_regs[i] = aty_ld_pll(i, info);
-			/* printk("atyfb: PLL %2d: %02x\n", i, pll_regs[i]); */
-		}
+
 		/*
 		 * PLL Reference Devider M:
 		 */
 		M = pll_regs[2];
-		/* printk("atyfb: M: %02x\n", M); */
 
 		/*
 		 * PLL Feedback Devider N (Dependant on CLOCK_CNTL):
 		 */
 		N = pll_regs[7 + (clock_cntl & 3)];
-		/* printk("atyfb: N: %02x\n", N); */
 
 		/*
 		 * PLL Post Devider P (Dependant on CLOCK_CNTL):
 		 */
 		P = 1 << (pll_regs[6] >> ((clock_cntl & 3) << 1));
-		/* printk("atyfb: P: %2d\n", P); */
 
 		/*
 		 * PLL Devider Q:
 		 */
 		Q = N / P;
-		/* printk("atyfb: Q: %d\n", Q); */
 
 		/*
 		 * Target Frequency:
@@ -2871,11 +2900,8 @@ __initfunc(void atyfb_init(void))
 		 * where R is XTALIN (= 14318 kHz).
 		 */
 		T = 2 * Q * 14318 / M;
-		/* printk("atyfb: T: %d\n", T); */
 
-		default_var.pixclock =
-			((1000000000000ULL / v_total) * 1000) / (T * h_total);
-		/* printk("atyfb: pixclock: %d\n", default_var.pixclock); */
+		default_var.pixclock = 1000000000 / T;
 	    }
 
 #else /* __sparc__ */
@@ -2984,69 +3010,65 @@ __initfunc(void atyfb_of_init(struct device_node *dp))
     struct fb_info_aty *info;
     int i;
 
-    for (; dp; dp = dp->next) {
-	switch (dp->n_addrs) {
-	    case 1:
-	    case 2:
-	    case 3:
-		addr = dp->addrs[0].address;
-		break;
-	    case 4:
-		addr = dp->addrs[1].address;
-		break;
-	    default:
-		printk("Warning: got %d adresses for ATY:\n", dp->n_addrs);
-		for (i = 0; i < dp->n_addrs; i++)
-		    printk(" %08x-%08x", dp->addrs[i].address,
-			   dp->addrs[i].address+dp->addrs[i].size-1);
-		if (dp->n_addrs)
-		    printk("\n");
-		continue;
-	}
-
-	info = kmalloc(sizeof(struct fb_info_aty), GFP_ATOMIC);
-	if (!info) {
-	    printk("atyfb_of_init: can't alloc fb_info_aty\n");
+    switch (dp->n_addrs) {
+	case 1:
+	case 2:
+	case 3:
+	    addr = dp->addrs[0].address;
+	    break;
+	case 4:
+	    addr = dp->addrs[1].address;
+	    break;
+	default:
+	    printk("Warning: got %d adresses for ATY:\n", dp->n_addrs);
+	    for (i = 0; i < dp->n_addrs; i++)
+		printk(" %08x-%08x", dp->addrs[i].address,
+		       dp->addrs[i].address+dp->addrs[i].size-1);
+	    if (dp->n_addrs)
+		printk("\n");
 	    return;
-	}
-	memset(info, 0, sizeof(struct fb_info_aty));
+    }
 
-	info->ati_regbase = (unsigned long)ioremap(0x7ff000+addr,
-						   0x1000)+0xc00;
-	info->ati_regbase_phys = 0x7ff000+addr;
-	info->ati_regbase = (unsigned long)ioremap(info->ati_regbase_phys,
+    info = kmalloc(sizeof(struct fb_info_aty), GFP_ATOMIC);
+    if (!info) {
+	printk("atyfb_of_init: can't alloc fb_info_aty\n");
+	return;
+    }
+    memset(info, 0, sizeof(struct fb_info_aty));
+
+    info->ati_regbase_phys = 0x7ff000+addr;
+    info->ati_regbase = (unsigned long)ioremap(info->ati_regbase_phys,
 						   0x1000);
-	info->ati_regbase_phys += 0xc00;
-	info->ati_regbase += 0xc00;
+    info->ati_regbase_phys += 0xc00;
+    info->ati_regbase += 0xc00;
 
-	/* enable memory-space accesses using config-space command register */
-	if (pci_device_loc(dp, &bus, &devfn) == 0) {
-	    pcibios_read_config_word(bus, devfn, PCI_COMMAND, &cmd);
-	    if (cmd != 0xffff) {
-		cmd |= PCI_COMMAND_MEMORY;
-		pcibios_write_config_word(bus, devfn, PCI_COMMAND, cmd);
-	    }
+    /* enable memory-space accesses using config-space command register */
+    if (pci_device_loc(dp, &bus, &devfn) == 0) {
+	pcibios_read_config_word(bus, devfn, PCI_COMMAND, &cmd);
+	if (cmd != 0xffff) {
+	    cmd |= PCI_COMMAND_MEMORY;
+	    pcibios_write_config_word(bus, devfn, PCI_COMMAND, cmd);
 	}
+    }
 
 #ifdef __BIG_ENDIAN
-	/* Use the big-endian aperture */
-	addr += 0x800000;
+    /* Use the big-endian aperture */
+    addr += 0x800000;
 #endif
 
-	/* Map in frame buffer */
-	info->frame_buffer_phys = addr;
-	info->frame_buffer = (unsigned long)ioremap(addr, 0x800000);
+    /* Map in frame buffer */
+    info->frame_buffer_phys = addr;
+    info->frame_buffer = (unsigned long)ioremap(addr, 0x800000);
 
-	if (!aty_init(info, dp->full_name)) {
-	    kfree(info);
-	    return;
-	}
+    if (!aty_init(info, dp->full_name)) {
+	kfree(info);
+	return;
+    }
 
 #ifdef CONFIG_FB_COMPAT_XPMAC
-	if (!console_fb_info)
-	    console_fb_info = &info->fb_info;
+    if (!console_fb_info)
+	console_fb_info = &info->fb_info;
 #endif /* CONFIG_FB_COMPAT_XPMAC */
-    }
 }
 #endif /* CONFIG_FB_OF */
 
@@ -3074,7 +3096,12 @@ __initfunc(void atyfb_setup(char *options, int *ints))
 		curblink = 0;
 	} else if (!strncmp(this_opt, "noaccel", 7)) {
 		noaccel = 1;
-	}
+	} else if (!strncmp(this_opt, "vram:", 5))
+		default_vram = simple_strtoul(this_opt+5, NULL, 0);
+	else if (!strncmp(this_opt, "pll:", 4))
+		default_pll = simple_strtoul(this_opt+4, NULL, 0);
+	else if (!strncmp(this_opt, "mclk:", 5))
+		default_mclk = simple_strtoul(this_opt+5, NULL, 0);
 #if defined(CONFIG_PPC)
 	else if (!strncmp(this_opt, "vmode:", 6)) {
 	    unsigned int vmode = simple_strtoul(this_opt+6, NULL, 0);

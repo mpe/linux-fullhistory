@@ -123,6 +123,11 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_FB_CVPPC),y)
+L_OBJS += cvppcfb.o
+CONFIG_FBGEN_BUILTIN = y
+endif
+
 ifeq ($(CONFIG_FB_MAC),y)
 L_OBJS += macfb.o
 endif
@@ -308,6 +313,14 @@ OX_OBJS += fbgen.o
 else
   ifdef CONFIG_FBGEN_MODULE
   MX_OBJS += fbgen.o
+  endif
+endif
+
+ifeq ($(CONFIG_FB_MATROX),y)
+L_OBJS += matroxfb.o
+else
+  ifeq ($(CONFIG_FB_MATROX),m)
+  M_OBJS += matroxfb.o
   endif
 endif
 

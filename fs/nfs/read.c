@@ -235,9 +235,10 @@ nfs_readpage(struct file *file, struct page *page)
 	 * Try to flush any pending writes to the file..
 	 *
 	 * NOTE! Because we own the page lock, there cannot
-	 * be any new pending writes generated at this point.
+	 * be any new pending writes generated at this point
+	 * for this page (other pages can be written to).
 	 */
-	error = nfs_flush_pages(inode, 0, 0, 0);
+	error = nfs_wb_page(inode, page);
 	if (error)
 		return error;
 

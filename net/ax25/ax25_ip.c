@@ -195,6 +195,18 @@ int ax25_rebuild_header(struct sk_buff *skb)
   	return 1;
 }
 
+#else	/* INET */
+
+int ax25_encapsulate(struct sk_buff *skb, struct device *dev, unsigned short type, void *daddr, void *saddr, unsigned len)
+{
+	return -AX25_HEADER_LEN;
+}
+
+int ax25_rebuild_header(struct sk_buff *skb)
+{
+	return 1;
+}
+
 #endif
 
 #endif

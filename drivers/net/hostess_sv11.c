@@ -160,8 +160,8 @@ static int hostess_close(struct device *d)
 
 static int hostess_ioctl(struct device *d, struct ifreq *ifr, int cmd)
 {
-	struct sv11_device *sv11=d->priv;
-	/* z8530_ioctl(d,&sv11->sync.chanA,ifr,cmd) */
+	/* struct sv11_device *sv11=d->priv;
+	   z8530_ioctl(d,&sv11->sync.chanA,ifr,cmd) */
 	return sppp_do_ioctl(d, ifr,cmd);
 }
 

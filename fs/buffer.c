@@ -24,18 +24,11 @@
  * - RMK
  */
 
-#include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/major.h>
-#include <linux/string.h>
+#include <linux/malloc.h>
 #include <linux/locks.h>
 #include <linux/errno.h>
-#include <linux/malloc.h>
-#include <linux/slab.h>
-#include <linux/pagemap.h>
 #include <linux/swap.h>
 #include <linux/swapctl.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/vmalloc.h>
 #include <linux/blkdev.h>
@@ -44,7 +37,6 @@
 #include <linux/init.h>
 #include <linux/quotaops.h>
 
-#include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/bitops.h>

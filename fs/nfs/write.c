@@ -546,65 +546,101 @@ nfs_cancel_dirty(struct inode *inode, pid_t pid)
 }
 
 /*
- * Try to flush any dirty pages, returning a success marker..
- *
- * Unlike "nfs_flush_dirty_pages()" this does not invalidate
- * the writes if it is interrupted. The caller will instead
- * look at the error code and gracefully fail to do what it
- * wanted to do. 
+ * If we're waiting on somebody else's request
+ * we need to increment the counter during the
+ * wait so that the request doesn't disappear
+ * from under us during the wait..
  */
-int
-nfs_flush_pages(struct inode *inode, pid_t pid, off_t offset, off_t len)
+static int FASTCALL(wait_on_other_req(struct nfs_wreq *));
+static int wait_on_other_req(struct nfs_wreq *req)
 {
 	int retval;
-
-	do {
-		struct nfs_wreq *req = NFS_WRITEBACK(inode);
-		struct nfs_wreq *head = req;
-
-		if (!req)
-			return 0;
-
-		/*
-		 * Iterate over all outstanding write requests,
-		 * looking for any that are ours..
-		 */
-		for (;;) {
-			if (!(req->wb_flags & NFS_WRITE_COMPLETE)) {
-				if (!pid || req->wb_pid == pid)
-					break;
-			}
-			req = WB_NEXT(req);
-			if (req == head)
-				return 0;
-		}
-
-		req->wb_count++;
-		retval = wait_on_write_request(req);
-		free_write_request(req);
-	} while (!retval);
+	req->wb_count++;
+	retval = wait_on_write_request(req);
+	free_write_request(req);
 	return retval;
-}	
+}
 
 /*
- * Flush out all dirty pages belonging to a certain user process and
- * maybe wait for the RPC calls to complete.
+ * This writes back a set of requests according to the condition.
  *
- * Another purpose of this function is sync()ing a file range before a
- * write lock is released. This is what offset and length are for, even if
- * this isn't used by the nlm module yet.
+ * If this ever gets much more convoluted, use a fn pointer for
+ * the condition..
+ */
+#define NFS_WB(inode, cond) { int retval = 0 ; \
+	do { \
+		struct nfs_wreq *req = NFS_WRITEBACK(inode); \
+		struct nfs_wreq *head = req; \
+		if (!req) break; \
+		for (;;) { \
+			if (!(req->wb_flags & NFS_WRITE_COMPLETE)) \
+				if (cond) break; \
+			req = WB_NEXT(req); \
+			if (req == head) goto out; \
+		} \
+		retval = wait_on_other_req(req); \
+	} while (!retval); \
+out:	return retval; \
+}
+
+int
+nfs_wb_all(struct inode *inode)
+{
+	NFS_WB(inode, 1);
+}
+
+/*
+ * Write back all requests on one page - we do this before reading it.
  */
 int
-nfs_flush_dirty_pages(struct inode *inode, pid_t pid, off_t offset, off_t len)
+nfs_wb_page(struct inode *inode, struct page *page)
 {
-	int retval = nfs_flush_pages(inode, pid, offset, len);
+	NFS_WB(inode, req->wb_page == page);
+}
+
+/*
+ * Write back all pending writes for one user.. 
+ */
+int
+nfs_wb_pid(struct inode *inode, pid_t pid)
+{
+	NFS_WB(inode, req->wb_pid == pid);
+}
+
+/*
+ * Write back everything in a specific area for locking purposes..
+ */
+int
+nfs_wb_area(struct inode *inode, off_t offset, off_t len)
+{
+	NFS_WB(inode, 1);
+}
+
+/*
+ * Write back and invalidate. Sometimes we can't leave the stuff
+ * hanging if we can't write it out.
+ */
+int
+nfs_wbinval(struct inode *inode)
+{
+	int retval = nfs_wb_all(inode);
+
+	if (retval)
+		nfs_cancel_dirty(inode,0);
+	return retval;
+}
+
+int nfs_wbinval_pid(struct inode *inode, pid_t pid)
+{
+	int retval = nfs_wb_pid(inode, pid);
+	
 	if (retval)
 		nfs_cancel_dirty(inode,pid);
 	return retval;
 }
 
 void
-nfs_invalidate_pages(struct inode *inode)
+nfs_inval(struct inode *inode)
 {
 	nfs_cancel_dirty(inode,0);
 }

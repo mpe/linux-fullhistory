@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 
 #include <asm/uaccess.h>
+#include <asm/io.h>
 
 
 static int currcon = 0;
@@ -243,7 +244,7 @@ void fbgen_set_disp(int con, struct fb_info_gen *info)
     memset(&fix, 0, sizeof(struct fb_fix_screeninfo));
     fbhw->encode_fix(&fix, &par, info);
 
-    display->screen_base = fix.smem_start;
+    display->screen_base = phys_to_virt((unsigned long)fix.smem_start);
     display->visual = fix.visual;
     display->type = fix.type;
     display->type_aux = fix.type_aux;

@@ -1,4 +1,4 @@
-Documentation for /proc/sys/kernel/*	version 0.1
+Documentation for /proc/sys/kernel/*	kernel version 2.1.128
 	(c) 1998, Rik van Riel <H.H.vanRiel@phys.uu.nl>
 
 For general info and legal blurb, please look in README.
@@ -14,26 +14,27 @@ kernel. Since some of the files _can_ be used to screw up your
 system, it is advisable to read both documentation and source
 before actually making adjustments.
 
-Currently, these files are in /proc/sys/kernel:
+Currently, these files might (depending on your configuration)
+show up in /proc/sys/kernel:
 - acct
 - ctrl-alt-del
 - dentry-state
 - domainname
-- file-max
-- file-nr
 - hostname
-- inode-max
-- inode-nr
-- inode-state
+- htab-reclaim                [ PPC only ]
+- java-appletviewer           [ binfmt_java, obsolete ]
+- java-interpreter            [ binfmt_java, obsolete ]
 - modprobe                    ==> Documentation/kmod.txt
 - osrelease
 - ostype
 - panic
+- powersave-nap               [ PPC only ]
 - printk
 - real-root-dev               ==> Documentation/initrd.txt
-- reboot-cmd                  ==> SPARC specific
-- securelevel
+- reboot-cmd                  [ SPARC only ]
+- sg-big-buff                 [ generic SCSI device (sg) ]
 - version
+- zero-paged                  [ PPC only ]
 
 ==============================================================
 
@@ -69,30 +70,6 @@ to decide what to do with it.
 
 ==============================================================
 
-dentry-state:
-
-From linux/fs/dentry.c:
---------------------------------------------------------------
-struct {
-        int nr_dentry;
-        int nr_unused;
-        int age_limit;         /* age in seconds */
-        int want_pages;        /* pages requested by system */
-        int dummy[2];
-} dentry_stat = {0, 0, 45, 0,};
--------------------------------------------------------------- 
-
-Dentries are dynamically allocated and deallocated, and
-nr_dentry seems to be 0 all the time. Hence it's safe to
-assume that only nr_unused, age_limit and want_pages are
-used. Nr_unused seems to be exactly what its name says.
-Age_limit is the age in seconds after which dcache entries
-can be reclaimed when memory is short and want_pages is
-nonzero when shrink_dcache_pages() has been called and the
-dcache isn't pruned yet.
-
-==============================================================
-
 domainname & hostname:
 
 These files can be controlled to set the domainname and
@@ -104,52 +81,12 @@ would suffice to set your hostname and domainname.
 
 ==============================================================
 
-file-max & file-nr:
+htab-reclaim: (PPC only)
 
-The kernel allocates file handles dynamically, but as yet it
-doesn't free them again.
-
-The value in file-max denotes the maximum number of file-
-handles that the Linux kernel will allocate. When you get lots
-of error messages about running out of file handles, you might
-want to increase this limit.
-
-The three values in file-nr denote the number of allocated
-file handles, the number of used file handles and the maximum
-number of file handles. When the allocated file handles come
-close to the maximum, but the number of actually used ones is
-far behind, you've encountered a peak in your usage of file
-handles and you don't need to increase the maximum.
-
-==============================================================
-
-inode-max, inode-nr & inode-state:
-
-As with file handles, the kernel allocates the inode structures
-dynamically, but can't free them yet.
-
-The value in inode-max denotes the maximum number of inode
-handlers. This value should be 3-4 times larger than the value
-in file-max, since stdin, stdout and network sockets also
-need an inode struct to handle them. When you regularly run
-out of inodes, you need to increase this value.
-
-The file inode-nr contains the first two items from
-inode-state, so we'll skip to that file...
-
-Inode-state contains three actual numbers and four dummies.
-The actual numbers are, in order of appearance, nr_inodes,
-nr_free_inodes and preshrink.
-
-Nr_inodes stands for the number of inodes the system has
-allocated, this can be slightly more than inode-max because
-Linux allocates them one pageful at a time.
-
-Nr_free_inodes represents the number of free inodes (?) and
-preshrink is nonzero when the nr_inodes > inode-max and the
-system needs to prune the inode list instead of allocating
-more.
-
+Setting this to a non-zero value, the PowerPC htab
+(see Documentation/powerpc/ppc_htab.txt) is pruned
+each time the system hits the idle loop.
+ 
 ==============================================================
 
 osrelease, ostype & version:
@@ -174,6 +111,13 @@ panic:
 The value in this file represents the number of seconds the
 kernel waits before rebooting on a panic. When you use the
 software watchdog, the recommended setting is 60.
+
+==============================================================
+
+powersave-nap: (PPC only)
+
+If set, Linux-PPC will use the 'nap' mode of powersaving,
+otherwise the 'doze' mode will be used.
 
 ==============================================================
 
@@ -202,27 +146,30 @@ occur when the compiler changes. (???)
 
 ==============================================================
 
-securelevel:
-
-When the value in this file is nonzero, root is prohibited
-from:
-- changing the immutable and append-only flags on files
-- changing sysctl things (limited ???)
-
-==============================================================
-
-real-root-dev: (CONFIG_INITRD only)
-
-This file is used to configure the real root device when using
-an initial ramdisk to configure the system before switching to
-the 'real' root device. See linux/Documentation/initrd.txt for
-more info.
-
-==============================================================
-
 reboot-cmd: (Sparc only)
 
 ??? This seems to be a way to give an argument to the Sparc
 ROM/Flash boot loader. Maybe to tell it what to do after
 rebooting. ???
 
+==============================================================
+
+sg-big-buff:
+
+This file shows the size of the generic SCSI (sg) buffer.
+You can't tune it just yet, but you could change it on
+compile time by editing include/scsi/sg.h and changing
+the value of SG_BIG_BUFF.
+
+There shouldn't be any reason to change this value. If
+you can come up with one, you probably know what you
+are doing anyway :)
+
+==============================================================
+
+zero-paged: (PPC only)
+
+When enabled (non-zero), Linux-PPC will pre-zero pages in
+the idle loop, possibly speeding up get_free_pages. Since
+this only affects what the idle loop is doing, you should
+enable this and see if anything changes.
