@@ -258,6 +258,184 @@ int IO_APIC_get_PCI_irq_vector (int bus, int slot, int pci_pin)
 	return -1;
 }
 
+static int irq_trigger(int idx)
+{
+	int bus = mp_irqs[idx].mpc_srcbus;
+	int trigger;
+
+	/*
+	 * Determine IRQ trigger mode (edge or level sensitive):
+	 */
+	switch ((mp_irqs[idx].mpc_irqflag>>2) & 3)
+	{
+		case 0: /* conforms, ie. bus-type dependent */
+		{
+			switch (mp_bus_id_to_type[bus])
+			{
+				case MP_BUS_ISA: /* ISA pin, edge */
+				{
+					trigger = 0;
+					break;
+				}
+				case MP_BUS_PCI: /* PCI pin, level */
+				{
+					trigger = 1;
+					break;
+				}
+				default:
+				{
+					printk("broken BIOS!!\n");
+					trigger = 1;
+					break;
+				}
+			}
+			break;
+		}
+		case 1: /* edge */
+		{
+			trigger = 0;
+			break;
+		}
+		case 2: /* reserved */
+		{
+			printk("broken BIOS!!\n");
+			trigger = 1;
+			break;
+		}
+		case 3: /* level */
+		{
+			trigger = 1;
+			break;
+		}
+		default: /* invalid */
+		{
+			printk("broken BIOS!!\n");
+			trigger = 0;
+			break;
+		}
+	}
+	return trigger;
+}
+
+__initfunc(static int irq_polarity(int idx))
+{
+	int bus = mp_irqs[idx].mpc_srcbus;
+	int polarity;
+
+	/*
+	 * Determine IRQ line polarity (high active or low active):
+	 */
+	switch (mp_irqs[idx].mpc_irqflag & 3)
+	{
+		case 0: /* conforms, ie. bus-type dependent polarity */
+		{
+			switch (mp_bus_id_to_type[bus])
+			{
+				case MP_BUS_ISA: /* ISA pin */
+				{
+					polarity = 0;
+					break;
+				}
+				case MP_BUS_PCI: /* PCI pin */
+				{
+					polarity = 1;
+					break;
+				}
+				default:
+				{
+					printk("broken BIOS!!\n");
+					polarity = 1;
+					break;
+				}
+			}
+			break;
+		}
+		case 1: /* high active */
+		{
+			polarity = 0;
+			break;
+		}
+		case 2: /* reserved */
+		{
+			printk("broken BIOS!!\n");
+			polarity = 1;
+			break;
+		}
+		case 3: /* low active */
+		{
+			polarity = 1;
+			break;
+		}
+		default: /* invalid */
+		{
+			printk("broken BIOS!!\n");
+			polarity = 1;
+			break;
+		}
+	}
+	return polarity;
+}
+
+__initfunc(static int pin_2_irq (int idx, int pin))
+{
+	int irq;
+	int bus = mp_irqs[idx].mpc_srcbus;
+
+	switch (mp_bus_id_to_type[bus])
+	{
+		case MP_BUS_ISA: /* ISA pin */
+		{
+			irq = mp_irqs[idx].mpc_srcbusirq;
+			break;
+		}
+		case MP_BUS_PCI: /* PCI pin */
+		{
+			/*
+			 * PCI IRQs are 'directly mapped'
+			 */
+			irq = pin;
+			break;
+		}
+		default:
+		{
+			printk("unknown bus type %d.\n",bus); 
+			irq = 0;
+			break;
+		}
+	}
+
+	/*
+	 * PCI IRQ command line redirection. Yes, limits are hardcoded.
+	 */
+	if ((pin>=16) && (pin<=23)) {
+		if (pirq_entries[pin-16] != -1) {
+			if (!pirq_entries[pin-16]) {
+				printk("disabling PIRQ%d\n", pin-16);
+			} else {
+				irq = pirq_entries[pin-16];
+				printk("using PIRQ%d -> IRQ %d\n",
+						pin-16, irq);
+			}
+		}
+	}
+	return irq;
+}
+
+int IO_APIC_irq_trigger (int irq)
+{
+	int idx, i;
+
+	for (i=0; i<nr_ioapic_registers; i++) {
+		idx = find_irq_entry(i,mp_INT);
+		if (irq == pin_2_irq(idx,i))
+			return irq_trigger(idx);
+	}
+	/*
+	 * nonexistant IRQs are edge default
+	 */
+	return 0;
+}
+
 __initfunc(void setup_IO_APIC_irqs (void))
 {
 	struct IO_APIC_route_entry entry;
@@ -286,138 +464,16 @@ __initfunc(void setup_IO_APIC_irqs (void))
 				printk(", %d", i);
 			continue;
 		}
-		bus = mp_irqs[idx].mpc_srcbus;
 
-		switch (mp_bus_id_to_type[bus])
-		{
-			case MP_BUS_ISA: /* ISA pin */
-			{
-				irq = mp_irqs[idx].mpc_srcbusirq;
-				break;
-			}
-			case MP_BUS_PCI: /* PCI pin */
-			{
-				/*
-				 * PCI IRQs are 'directly mapped'
-				 */
-				irq = i;
-				break;
-			}
-			default:
-			{
-				printk("unknown bus type %d.\n",bus); 
-				irq = 0;
-				break;
-			}
-		}
+		entry.trigger = irq_trigger(idx);
+		entry.polarity = irq_polarity(idx);
 
-		/*
-		 * PCI IRQ redirection. Yes, limits are hardcoded.
-		 */
-		if ((i>=16) && (i<=23)) {
-			if (pirq_entries[i-16] != -1) {
-				if (!pirq_entries[i-16]) {
-					printk("disabling PIRQ%d\n", i-16);
-				} else {
-					irq = pirq_entries[i-16];
-					printk("using PIRQ%d -> IRQ %d\n",
-							i-16, irq);
-				}
-			}
-		}
+		irq = pin_2_irq(idx,i);
 
 		if (!IO_APIC_IRQ(irq))
 			continue;
 
 		entry.vector = IO_APIC_VECTOR(irq);
-
-		/*
-		 * Determine IRQ line polarity (high active or low active):
-		 */
-		switch (mp_irqs[idx].mpc_irqflag & 3)
-		{
-			case 0: /* conforms, ie. bus-type dependent polarity */
-			{
-				switch (mp_bus_id_to_type[bus])
-				{
-					case MP_BUS_ISA: /* ISA pin */
-					{
-						entry.polarity = 0;
-						break;
-					}
-					case MP_BUS_PCI: /* PCI pin */
-					{
-						entry.polarity = 1;
-						break;
-					}
-					default:
-					{
-						printk("broken BIOS!!\n");
-						break;
-					}
-				}
-				break;
-			}
-			case 1: /* high active */
-			{
-				entry.polarity = 0;
-				break;
-			}
-			case 2: /* reserved */
-			{
-				printk("broken BIOS!!\n");
-				break;
-			}
-			case 3: /* low active */
-			{
-				entry.polarity = 1;
-				break;
-			}
-		}
-
-		/*
-		 * Determine IRQ trigger mode (edge or level sensitive):
-		 */
-		switch ((mp_irqs[idx].mpc_irqflag>>2) & 3)
-		{
-			case 0: /* conforms, ie. bus-type dependent */
-			{
-				switch (mp_bus_id_to_type[bus])
-				{
-					case MP_BUS_ISA: /* ISA pin, edge */
-					{
-						entry.trigger = 0;
-						break;
-					}
-					case MP_BUS_PCI: /* PCI pin, level */
-					{
-						entry.trigger = 1;
-						break;
-					}
-					default:
-					{
-						printk("broken BIOS!!\n");
-						break;
-					}
-				}
-				break;
-			}
-			case 1: /* edge */
-			{
-				entry.trigger = 0;
-				break;
-			}
-			case 2: /* reserved */
-			{
-				printk("broken BIOS!!\n");
-				break;
-			}
-			case 3: /* level */
-			{
-				entry.trigger = 1;
-				break;
-			}
-		}
 
 	/*
 	 * There are broken mptables which register ISA+high-active+level IRQs,
@@ -426,6 +482,8 @@ __initfunc(void setup_IO_APIC_irqs (void))
 	 * type, it represents PCI IRQs 'embedded into an ISA bus', they have
 	 * to be accepted. Yes, ugh.
 	 */
+		bus = mp_irqs[idx].mpc_srcbus;
+
 		if ( (mp_bus_id_to_type[bus] == MP_BUS_ISA) &&
 			(entry.polarity == 0) /* active-high */ &&
 			(entry.trigger == 1) /* level */ )

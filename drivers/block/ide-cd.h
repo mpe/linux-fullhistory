@@ -415,7 +415,7 @@ struct cdrom_info {
 /* From Table 124 of the ATAPI 1.2 spec.
    Unchanged in Table 140 of the ATAPI 2.6 draft standard. */
 
-char *sense_key_texts[16] = {
+const char *sense_key_texts[16] = {
 	"No sense data",
 	"Recovered error",
 	"Not ready",
@@ -438,7 +438,7 @@ char *sense_key_texts[16] = {
 /* From Table 37 of the ATAPI 2.6 draft standard. */
 struct {
 	unsigned short packet_command;
-	char *text;
+	const char *text;
 } packet_command_texts[] = {
 	{ TEST_UNIT_READY, "Test Unit Ready" },
 	{ REQUEST_SENSE, "Request Sense" },
@@ -473,7 +473,7 @@ struct {
 
 struct {
 	unsigned short asc_ascq;
-	char *text;
+	const char *text;
 } sense_data_texts[] = {
 	{ 0x0000, "No additional sense information" },
 

@@ -54,7 +54,7 @@ static ssize_t pipe_read(struct file * filp, char * buf,
 		}
 	} else while (PIPE_EMPTY(*inode) || PIPE_LOCK(*inode)) {
 		if (PIPE_EMPTY(*inode)) {
-			if (!PIPE_WRITERS(*inode))
+			if (!PIPE_WRITERS(*inode) || !count)
 				return 0;
 		}
 		if (signal_pending(current))

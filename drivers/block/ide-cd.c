@@ -201,10 +201,14 @@
  *                         now set ionly for CD-R and CD-RW drives.  I had 
  *                         removed this support because it produced errors.
  *                         It produced errors _only_ for non-writers. duh.
+ * 4.13  May 05, 1998  -- Suppress useless "in progress of becoming ready"
+ *                         messages, since this is not an error.
+ *                     -- Change error messages to be const
+ *                     -- Remove a "\t" which looks ugly in the syslogs
  *
  *************************************************************************/
 
-#define IDECD_VERSION "4.12"
+#define IDECD_VERSION "4.13"
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -264,11 +268,13 @@ void cdrom_analyze_sense_data (ide_drive_t *drive,
 			return;
 	}
 	if (reqbuf->error_code == 0x70 && reqbuf->sense_key  == 0x02
-	 && reqbuf->asc        == 0x3a && reqbuf->ascq       == 0x00)
+	 && ((reqbuf->asc        == 0x3a && reqbuf->ascq       == 0x00) ||
+	     (reqbuf->asc        == 0x04 && reqbuf->ascq       == 0x01)))
 	{
 		/*
-		 * No disc in drive ("Medium not present"),
-		 * so keep the noise level down to a dull roar.
+		 * Suppress the following errors:
+		 * "Medium not present", and "in progress of becoming ready",
+		 * to keep the noise level down to a dull roar.
 		 */
 		return;
 	}
@@ -276,7 +282,7 @@ void cdrom_analyze_sense_data (ide_drive_t *drive,
 #if VERBOSE_IDE_CD_ERRORS
 	{
 		int i;
-		char *s;
+		const char *s;
 		char buf[80];
 
 		printk ("ATAPI device %s:\n", drive->name);
@@ -346,7 +352,7 @@ void cdrom_analyze_sense_data (ide_drive_t *drive,
 					lo = mid+1;
 			}
 
-			printk ("  The failed \"%s\" packet command was: \n\t\"", s);
+			printk ("  The failed \"%s\" packet command was: \n  \"", s);
 			for (i=0; i<sizeof (failed_command->c); i++)
 				printk ("%02x ", failed_command->c[i]);
 			printk ("\"\n");
@@ -1020,7 +1026,7 @@ static void cdrom_start_read_continuation (ide_drive_t *drive)
 
 #define IDECD_SEEK_THRESHOLD	(1000)			/* 1000 blocks */
 #define IDECD_SEEK_TIMER	(2 * WAIT_MIN_SLEEP)	/* 40 ms */
-#define IDECD_SEEK_TIMEOUT	(20 * IDECD_SEEK_TIMER) /* 0.8 sec */
+#define IDECD_SEEK_TIMEOUT     WAIT_CMD                /* 10 sec */
 
 static void cdrom_seek_intr (ide_drive_t *drive)
 {

@@ -70,9 +70,8 @@ spinlock_t irq_controller_lock;
 
 /*
  * Not all IRQs can be routed through the IO-APIC, eg. on certain (older)
- * boards the timer interrupt and sometimes the keyboard interrupt is
- * not connected to any IO-APIC pin, it's fed to the CPU ExtInt IRQ line
- * directly.
+ * boards the timer interrupt is not connected to any IO-APIC pin, it's
+ * fed to the CPU IRQ line directly.
  *
  * Any '1' bit in this mask means the IRQ is routed through the IO-APIC.
  * this 'mixed mode' IRQ handling costs us one more branch in do_IRQ,
@@ -82,11 +81,8 @@ spinlock_t irq_controller_lock;
 /*
  * Default to all normal IRQ's _not_ using the IO APIC.
  *
- * To get IO-APIC interrupts you should either:
- *  - turn some of them into IO-APIC interrupts at runtime
- *    with some magic system call interface.
- *  - explicitly use irq 16-19 depending on which PCI irq
- *    line your PCI controller uses.
+ * To get IO-APIC interrupts we turn some of them into IO-APIC
+ * interrupts during boot.
  */
 unsigned int io_apic_irqs = 0;
 
@@ -109,15 +105,34 @@ static struct hw_interrupt_type i8259A_irq_type = {
 
 
 #ifdef __SMP__
-static void do_ioapic_IRQ (unsigned int irq, int cpu, struct pt_regs * regs);
-static void enable_ioapic_irq (unsigned int irq);
-static void disable_ioapic_irq (unsigned int irq);
 
-static struct hw_interrupt_type ioapic_irq_type = {
-	do_ioapic_IRQ,
-	enable_ioapic_irq,
-	disable_ioapic_irq
+/*
+ * Level and edge triggered IO-APIC interrupts need different handling,
+ * so we use two separate irq descriptors:
+ */
+
+static void do_edge_ioapic_IRQ (unsigned int irq, int cpu,
+						 struct pt_regs * regs);
+static void enable_edge_ioapic_irq (unsigned int irq);
+static void disable_edge_ioapic_irq (unsigned int irq);
+
+static struct hw_interrupt_type ioapic_edge_irq_type = {
+	do_edge_ioapic_IRQ,
+	enable_edge_ioapic_irq,
+	disable_edge_ioapic_irq
 };
+
+static void do_level_ioapic_IRQ (unsigned int irq, int cpu,
+						 struct pt_regs * regs);
+static void enable_level_ioapic_irq (unsigned int irq);
+static void disable_level_ioapic_irq (unsigned int irq);
+
+static struct hw_interrupt_type ioapic_level_irq_type = {
+	do_level_ioapic_IRQ,
+	enable_level_ioapic_irq,
+	disable_level_ioapic_irq
+};
+
 #endif
 
 /*
@@ -147,7 +162,7 @@ typedef struct {
 irq_desc_t irq_desc[NR_IRQS] = {
 	[0 ... 15] = { 0, 0, 0, &i8259A_irq_type, },	/* standard ISA IRQs */
 #ifdef __SMP__
-	[16 ... 23] = { 0, 0, 0, &ioapic_irq_type, },	/* 'high' PCI IRQs */
+	[16 ... 23] = { 0, 0, 0, &ioapic_edge_irq_type, }, /* 'high' PCI IRQs */
 #endif
 };
 
@@ -342,10 +357,14 @@ int get_irq_list(char *buf)
 				kstat.irqs[cpu_logical_map(j)][i]);
 #endif
 
-		if (IO_APIC_IRQ(i))
-			p += sprintf(p, " IO-APIC ");
-		else
-			p += sprintf(p, "  XT-PIC ");
+		if (IO_APIC_IRQ(i)) {
+			p += sprintf(p, " IO-APIC");
+			if (irq_desc[i].handler == &ioapic_level_irq_type)
+				p += sprintf(p, "-level ");
+			else
+				p += sprintf(p, "-edge  ");
+		} else
+			p += sprintf(p, "  XT-PIC       ");
 		p += sprintf(p, "  %s", action->name);
 
 		for (action=action->next; action; action = action->next) {
@@ -732,47 +751,43 @@ static void do_8259A_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
  * better to do it this way as thus we dont have to be aware of
  * 'pending' interrupts in the IRQ path, except at this point.
  */
-static void enable_ioapic_irq(unsigned int irq)
+static inline void self_IPI (unsigned int irq)
 {
 	irq_desc_t *desc = irq_desc + irq;
-#if 0
-	enable_IO_APIC_irq(irq);
-#endif
+
 	if (desc->events && !desc->ipi) {
-		ack_APIC_irq();
 		desc->ipi = 1;
 		send_IPI(APIC_DEST_SELF, IO_APIC_VECTOR(irq));
 	}
 }
 
-/*
- * We do not actually disable IO-APIC irqs in hardware ...
- */
-static void disable_ioapic_irq(unsigned int irq)
+static void enable_edge_ioapic_irq(unsigned int irq)
 {
-#if 0
-	disable_IO_APIC_irq(irq);
-#endif
+	self_IPI(irq);
 }
 
-static void do_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
+static void disable_edge_ioapic_irq(unsigned int irq)
+{
+}
+
+static void enable_level_ioapic_irq(unsigned int irq)
+{
+	enable_IO_APIC_irq(irq);
+	self_IPI(irq);
+}
+
+static void disable_level_ioapic_irq(unsigned int irq)
+{
+	disable_IO_APIC_irq(irq);
+}
+
+/*
+ * Has to be called with the irq controller locked
+ */
+static void handle_ioapic_event (unsigned int irq, int cpu,
+						struct pt_regs * regs)
 {
 	irq_desc_t *desc = irq_desc + irq;
-
-	spin_lock(&irq_controller_lock);
-
-	desc->ipi = 0;
-
-	/*
-	 * If the irq is disabled for whatever reason, just
-	 * set a flag and return
-	 */
-	if (desc->status & (IRQ_DISABLED | IRQ_INPROGRESS)) {
-		desc->events = 1;
-		ack_APIC_irq();
-		spin_unlock(&irq_controller_lock);
-		return;
-	}
 
 	desc->status = IRQ_INPROGRESS;
 	desc->events = 0;
@@ -799,7 +814,63 @@ static void do_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 	spin_unlock(&irq_controller_lock);
 
 no_handler:
+}
+
+static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
+{
+	irq_desc_t *desc = irq_desc + irq;
+
+	/*
+	 * Edge triggered IRQs can be acked immediately
+	 */
 	ack_APIC_irq();
+
+	spin_lock(&irq_controller_lock);
+	desc->ipi = 0;
+
+	/*
+	 * If the irq is disabled for whatever reason, just
+	 * set a flag and return
+	 */
+	if (desc->status & (IRQ_DISABLED | IRQ_INPROGRESS)) {
+		desc->events = 1;
+		spin_unlock(&irq_controller_lock);
+		return;
+	}
+
+	handle_ioapic_event(irq,cpu,regs);
+
+	hardirq_exit(cpu);
+	release_irqlock(cpu);
+}
+
+static void do_level_ioapic_IRQ (unsigned int irq, int cpu,
+						 struct pt_regs * regs)
+{
+	irq_desc_t *desc = irq_desc + irq;
+
+	spin_lock(&irq_controller_lock);
+	/*
+	 * in the level triggered case we first disable the IRQ
+	 * in the IO-APIC, then we 'early ACK' the IRQ, then we
+	 * handle it and enable the IRQ when finished.
+	 */
+	disable_IO_APIC_irq(irq);
+	ack_APIC_irq();
+	desc->ipi = 0;
+
+	/*
+	 * If the irq is disabled for whatever reason, just
+	 * set a flag and return
+	 */
+	if (desc->status & (IRQ_DISABLED | IRQ_INPROGRESS)) {
+		desc->events = 1;
+		spin_unlock(&irq_controller_lock);
+		return;
+	}
+
+	handle_ioapic_event(irq,cpu,regs);
+
 	hardirq_exit(cpu);
 	release_irqlock(cpu);
 }
@@ -922,7 +993,12 @@ int setup_x86_irq(unsigned int irq, struct irqaction * new)
 		spin_lock(&irq_controller_lock);
 #ifdef __SMP__
 		if (IO_APIC_IRQ(irq)) {
-			irq_desc[irq].handler = &ioapic_irq_type;
+			if (IO_APIC_VECTOR(irq) > 0xfe)
+				/*
+				 * break visibly for now, FIXME
+				 */
+				panic("ayiee, tell mingo");
+
 			/*
 			 * First disable it in the 8259A:
 			 */
@@ -1076,18 +1152,21 @@ void init_IO_APIC_traps(void)
 	 * also, we've got to be careful not to trash gate
 	 * 0x80, because int 0x80 is hm, kindof importantish ;)
 	 */
-	for (i = 0; i < NR_IRQS ; i++)
-		if (IO_APIC_VECTOR(i) <= 0xfe)  /* HACK */ {
-			if (IO_APIC_IRQ(i)) {
-				irq_desc[i].handler = &ioapic_irq_type;
-				/*
-				 * First disable it in the 8259A:
-				 */
-				cached_irq_mask |= 1 << i;
-				if (i < 16)
-					set_8259A_irq_mask(i);
-			}
+	for (i = 0; i < NR_IRQS ; i++) {
+		if ((IO_APIC_VECTOR(i) <= 0xfe)  /* HACK */ &&
+		    (IO_APIC_IRQ(i))) {
+			if (IO_APIC_irq_trigger(i))
+				irq_desc[i].handler = &ioapic_level_irq_type;
+			else
+				irq_desc[i].handler = &ioapic_edge_irq_type;
+			/*
+			 * disable it in the 8259A:
+			 */
+			cached_irq_mask |= 1 << i;
+			if (i < 16)
+				set_8259A_irq_mask(i);
 		}
+	}
 }
 #endif
 

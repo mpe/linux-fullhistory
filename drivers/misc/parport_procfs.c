@@ -70,7 +70,7 @@ static int irq_write_proc(struct file *file, const char *buffer,
 	if (oldirq == newirq)
 		goto out;
 
-	spin_lock_irqsave(&port->lock, flags);
+	spin_lock_irqsave(&pp->lock, flags);
 	if (pp->flags & PARPORT_FLAG_COMA)
 		goto out_ok;
 

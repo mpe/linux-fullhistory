@@ -76,6 +76,9 @@ endif
 
 ifeq ($(CONFIG_GUS),y)
 L_OBJS += gus.o
+  ifeq ($(CONFIG_GUSMAX),y)
+    CONFIG_MSS = y
+  endif
 else
   ifeq ($(CONFIG_GUS),m)
     M_OBJS += gus.o
