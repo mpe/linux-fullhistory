@@ -129,29 +129,56 @@ typedef struct page {
 	wait_queue_head_t wait;
 	struct page **pprev_hash;
 	struct buffer_head * buffers;
+	int owner; /* temporary debugging check */
 } mem_map_t;
+
+#define get_page(p) do { atomic_inc(&(p)->count); \
+						} while (0)
+#define put_page(p) __free_page(p)
+#define put_page_testzero(p) ({ int __ret = atomic_dec_and_test(&(p)->count);\
+				__ret; })
+#define page_count(p) atomic_read(&(p)->count)
+#define set_page_count(p,v) do { atomic_set(&(p)->count, v); \
+				} while (0)
 
 /* Page flag bit values */
 #define PG_locked		 0
 #define PG_error		 1
 #define PG_referenced		 2
-#define PG_dirty		 3
-#define PG_uptodate		 4
-#define PG_free_after		 5
-#define PG_decr_after		 6
-#define PG_swap_unlock_after	 7
-#define PG_DMA			 8
-#define PG_Slab			 9
-#define PG_swap_cache		10
-#define PG_skip			11
+#define PG_uptodate		 3
+#define PG_free_after		 4
+#define PG_decr_after		 5
+#define PG_swap_unlock_after	 6
+#define PG_DMA			 7
+#define PG_Slab			 8
+#define PG_swap_cache		 9
+#define PG_skip			10
+				/* bits 21-30 unused */
 #define PG_reserved		31
 
+
 /* Make it prettier to test the above... */
+#define Page_Uptodate(page)	(test_bit(PG_uptodate, &(page)->flags))
+#define SetPageUptodate(page)	do { set_bit(PG_uptodate, &(page)->flags); \
+					} while (0)
+#define ClearPageUptodate(page)	do { clear_bit(PG_uptodate, &(page)->flags); \
+					} while (0)
 #define PageLocked(page)	(test_bit(PG_locked, &(page)->flags))
+#define LockPage(page)		\
+	do { int _ret = test_and_set_bit(PG_locked, &(page)->flags); \
+	if (_ret) PAGE_BUG(page); \
+	page->owner = (int)current; } while (0)
+#define TryLockPage(page)	({ int _ret = test_and_set_bit(PG_locked, &(page)->flags); \
+				if (!_ret) page->owner = (int)current; _ret; })
+#define UnlockPage(page)	do { \
+					if (page->owner != (int)current) { \
+BUG(); } page->owner = 0; \
+if (!test_and_clear_bit(PG_locked, &(page)->flags)) { \
+				BUG(); } wake_up(&page->wait); } while (0)
 #define PageError(page)		(test_bit(PG_error, &(page)->flags))
+#define SetPageError(page)	({ int _ret = test_and_set_bit(PG_error, &(page)->flags); _ret; })
+#define ClearPageError(page)	do { if (!test_and_clear_bit(PG_error, &(page)->flags)) BUG(); } while (0)
 #define PageReferenced(page)	(test_bit(PG_referenced, &(page)->flags))
-#define PageDirty(page)		(test_bit(PG_dirty, &(page)->flags))
-#define PageUptodate(page)	(test_bit(PG_uptodate, &(page)->flags))
 #define PageFreeAfter(page)	(test_bit(PG_free_after, &(page)->flags))
 #define PageDecrAfter(page)	(test_bit(PG_decr_after, &(page)->flags))
 #define PageSwapUnlockAfter(page) (test_bit(PG_swap_unlock_after, &(page)->flags))
@@ -163,16 +190,12 @@ typedef struct page {
 #define PageSetSlab(page)	(set_bit(PG_Slab, &(page)->flags))
 #define PageSetSwapCache(page)	(set_bit(PG_swap_cache, &(page)->flags))
 
-#define PageTestandSetDirty(page)	\
-			(test_and_set_bit(PG_dirty, &(page)->flags))
 #define PageTestandSetSwapCache(page)	\
 			(test_and_set_bit(PG_swap_cache, &(page)->flags))
 
 #define PageClearSlab(page)	(clear_bit(PG_Slab, &(page)->flags))
 #define PageClearSwapCache(page)(clear_bit(PG_swap_cache, &(page)->flags))
 
-#define PageTestandClearDirty(page) \
-			(test_and_clear_bit(PG_dirty, &(page)->flags))
 #define PageTestandClearSwapCache(page)	\
 			(test_and_clear_bit(PG_swap_cache, &(page)->flags))
 
@@ -387,7 +410,7 @@ extern struct vm_area_struct *find_extend_vma(struct task_struct *tsk, unsigned 
 
 #define buffer_under_min()	((buffermem >> PAGE_SHIFT) * 100 < \
 				buffer_mem.min_percent * num_physpages)
-#define pgcache_under_min()	(page_cache_size * 100 < \
+#define pgcache_under_min()	(atomic_read(&page_cache_size) * 100 < \
 				page_cache.min_percent * num_physpages)
 
 #endif /* __KERNEL__ */

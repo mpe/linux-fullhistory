@@ -675,7 +675,7 @@ static unsigned long shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 
 done:	/* pte_val(pte) == shp->shm_pages[idx] */
 	current->min_flt++;
-	atomic_inc(&mem_map[MAP_NR(pte_page(pte))].count);
+	get_page(mem_map + MAP_NR(pte_page(pte)));
 	return pte_page(pte);
 }
 
@@ -730,7 +730,7 @@ int shm_swap (int prio, int gfp_mask)
 		swap_free (swap_nr);
 		return 0;
 	}
-	if (atomic_read(&mem_map[MAP_NR(pte_page(page))].count) != 1)
+	if (page_count(mem_map + MAP_NR(pte_page(page))) != 1)
 		goto check_table;
 	shp->shm_pages[idx] = swap_nr;
 	rw_swap_page_nocache (WRITE, swap_nr, (char *) pte_page(page));
@@ -751,7 +751,7 @@ static void shm_unuse_page(struct shmid_kernel *shp, unsigned long idx,
 
 	pte = pte_mkdirty(mk_pte(page, PAGE_SHARED));
 	shp->shm_pages[idx] = pte_val(pte);
-	atomic_inc(&mem_map[MAP_NR(page)].count);
+	get_page(mem_map + MAP_NR(page));
 	shm_rss++;
 
 	swap_free(entry);

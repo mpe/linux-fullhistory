@@ -221,35 +221,36 @@ static struct page *try_to_get_dirent_page(struct file *, unsigned long, int);
  */
 static int refetch_to_readdir_off(struct file *file, struct inode *inode, u32 off)
 {
+	struct page *page;
 	u32 cur_off, goal_off = off & PAGE_MASK;
 
 again:
 	cur_off = 0;
 	while (cur_off < goal_off) {
-		struct page *page;
-
-		page = find_page(inode, cur_off);
+		page = find_get_page(inode, cur_off);
 		if (page) {
-			if (PageLocked(page))
-				__wait_on_page(page);
-			if (!PageUptodate(page))
-				return -1;
+			if (!Page_Uptodate(page))
+				goto out_error;
 		} else {
 			page = try_to_get_dirent_page(file, cur_off, 0);
 			if (!page) {
 				if (!cur_off)
-					return -1;
+					goto out_error;
 
 				/* Someone touched the dir on us. */
 				goto again;
 			}
-			page_cache_release(page);
 		}
+		page_cache_release(page);
 
 		cur_off += PAGE_SIZE;
 	}
-
 	return 0;
+
+out_error:
+	if (page)
+		page_cache_release(page);
+	return -1;
 }
 
 static struct page *try_to_get_dirent_page(struct file *file, unsigned long offset, int refetch_ok)
@@ -274,20 +275,18 @@ static struct page *try_to_get_dirent_page(struct file *file, unsigned long offs
 	}
 
 	hash = page_hash(inode, offset);
-	page = __find_page(inode, offset, *hash);
+repeat:
+	page = __find_lock_page(inode, offset, *hash);
 	if (page) {
 		page_cache_free(page_cache);
-		goto out;
+		goto unlock_out;
 	}
 
 	page = page_cache_entry(page_cache);
-	atomic_inc(&page->count);
-	page->flags = ((page->flags &
-			~((1 << PG_uptodate) | (1 << PG_error))) |
-		       ((1 << PG_referenced) | (1 << PG_locked)));
-	page->offset = offset;
-	add_page_to_inode_queue(inode, page);
-	__add_page_to_hash_queue(page, hash);
+	if (add_to_page_cache_unique(page, inode, offset, hash)) {
+		page_cache_release(page);
+		goto repeat;
+	}
 
 	rd_args.fh = NFS_FH(dentry);
 	rd_res.buffer = (char *)page_cache;
@@ -308,15 +307,14 @@ static struct page *try_to_get_dirent_page(struct file *file, unsigned long offs
 	else if (create_cookie(rd_res.cookie, offset, inode))
 		goto error;
 
-	set_bit(PG_uptodate, &page->flags);
+	SetPageUptodate(page);
 unlock_out:
-	clear_bit(PG_locked, &page->flags);
-	wake_up(&page->wait);
+	UnlockPage(page);
 out:
 	return page;
 
 error:
-	set_bit(PG_error, &page->flags);
+	SetPageError(page);
 	goto unlock_out;
 }
 
@@ -371,12 +369,10 @@ static int nfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 	offset = filp->f_pos >> PAGE_CACHE_SHIFT;
 	hash = page_hash(inode, offset);
-	page = __find_page(inode, offset, *hash);
+	page = __find_get_page(inode, offset, *hash);
 	if (!page)
 		goto no_dirent_page;
-	if (PageLocked(page))
-		goto dirent_locked_wait;
-	if (!PageUptodate(page))
+	if (!Page_Uptodate(page))
 		goto dirent_read_error;
 success:
 	filp->f_pos = nfs_do_filldir((__u32 *) page_address(page),
@@ -389,9 +385,7 @@ no_dirent_page:
 	if (!page)
 		goto no_page;
 
-dirent_locked_wait:
-	wait_on_page(page);
-	if (PageUptodate(page))
+	if (Page_Uptodate(page))
 		goto success;
 dirent_read_error:
 	page_cache_release(page);

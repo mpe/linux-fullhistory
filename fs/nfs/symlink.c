@@ -65,20 +65,18 @@ static struct page *try_to_get_symlink_page(struct dentry *dentry, struct inode 
 		goto out;
 
 	hash = page_hash(inode, 0);
-	page = __find_page(inode, 0, *hash);
+repeat:
+	page = __find_lock_page(inode, 0, *hash);
 	if (page) {
 		page_cache_free(page_cache);
-		goto out;
+		goto unlock_out;
 	}
 
 	page = page_cache_entry(page_cache);
-	atomic_inc(&page->count);
-	page->flags = ((page->flags &
-			~((1 << PG_uptodate) | (1 << PG_error))) |
-		       ((1 << PG_referenced) | (1 << PG_locked)));
-	page->offset = 0;
-	add_page_to_inode_queue(inode, page);
-	__add_page_to_hash_queue(page, hash);
+	if (add_to_page_cache_unique(page, inode, 0, hash)) {
+		page_cache_release(page);
+		goto repeat;
+	}
 
 	/* We place the length at the beginning of the page,
 	 * in host byte order, followed by the string.  The
@@ -89,32 +87,28 @@ static struct page *try_to_get_symlink_page(struct dentry *dentry, struct inode 
 	if (rpc_call(NFS_CLIENT(inode), NFSPROC_READLINK,
 		     &rl_args, NULL, 0) < 0)
 		goto error;
-	set_bit(PG_uptodate, &page->flags);
+	SetPageUptodate(page);
 unlock_out:
-	clear_bit(PG_locked, &page->flags);
-	wake_up(&page->wait);
+	UnlockPage(page);
 out:
 	return page;
 
 error:
-	set_bit(PG_error, &page->flags);
+	SetPageError(page);
 	goto unlock_out;
 }
 
 static int nfs_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
 	struct inode *inode = dentry->d_inode;
-	struct page *page, **hash;
+	struct page *page;
 	u32 *p, len;
 
 	/* Caller revalidated the directory inode already. */
-	hash = page_hash(inode, 0);
-	page = __find_page(inode, 0, *hash);
+	page = find_get_page(inode, 0);
 	if (!page)
 		goto no_readlink_page;
-	if (PageLocked(page))
-		goto readlink_locked_wait;
-	if (!PageUptodate(page))
+	if (!Page_Uptodate(page))
 		goto readlink_read_error;
 success:
 	p = (u32 *) page_address(page);
@@ -129,9 +123,7 @@ no_readlink_page:
 	page = try_to_get_symlink_page(dentry, inode);
 	if (!page)
 		goto no_page;
-readlink_locked_wait:
-	wait_on_page(page);
-	if (PageUptodate(page))
+	if (Page_Uptodate(page))
 		goto success;
 readlink_read_error:
 	page_cache_release(page);
@@ -144,17 +136,14 @@ nfs_follow_link(struct dentry *dentry, struct dentry *base, unsigned int follow)
 {
 	struct dentry *result;
 	struct inode *inode = dentry->d_inode;
-	struct page *page, **hash;
+	struct page *page;
 	u32 *p;
 
 	/* Caller revalidated the directory inode already. */
-	hash = page_hash(inode, 0);
-	page = __find_page(inode, 0, *hash);
+	page = find_get_page(inode, 0);
 	if (!page)
 		goto no_followlink_page;
-	if (PageLocked(page))
-		goto followlink_locked_wait;
-	if (!PageUptodate(page))
+	if (!Page_Uptodate(page))
 		goto followlink_read_error;
 success:
 	p = (u32 *) page_address(page);
@@ -166,9 +155,7 @@ no_followlink_page:
 	page = try_to_get_symlink_page(dentry, inode);
 	if (!page)
 		goto no_page;
-followlink_locked_wait:
-	wait_on_page(page);
-	if (PageUptodate(page))
+	if (Page_Uptodate(page))
 		goto success;
 followlink_read_error:
 	page_cache_release(page);

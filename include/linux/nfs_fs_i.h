@@ -9,13 +9,6 @@
  */
 struct nfs_inode_info {
 	/*
-	 * This is a place holder so named pipes on NFS filesystems
-	 * work (more or less correctly). This must be first in the
-	 * struct because the data is really accessed via inode->u.pipe_i.
-	 */
-	struct pipe_inode_info	pipeinfo;
-
-	/*
 	 * Various flags
 	 */
 	unsigned short		flags;

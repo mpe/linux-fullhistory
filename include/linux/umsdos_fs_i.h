@@ -28,20 +28,14 @@
  * 
  * For directory, we also have a reference to the inode of its
  * own EMD file. Also, we have dir_locking_info to help synchronise
- * file creation and file lookup. This data is sharing space with
- * the pipe_inode_info not used by directory. See also msdos_fs_i.h
- * for more information about pipe_inode_info and msdos_inode_info.
+ * file creation and file lookup. See also msdos_fs_i.h for more 
+ * information about msdos_inode_info.
  * 
  * Special file and fifo do have an inode which correspond to an
  * empty MSDOS file.
  * 
  * symlink are processed mostly like regular file. The content is the
  * link.
- * 
- * fifos add there own extension to the inode. I have reserved some
- * space for fifos side by side with msdos_inode_info. This is just
- * to for the show, because msdos_inode_info already include the
- * pipe_inode_info.
  * 
  * The UMSDOS specific extension is placed after the union.
  */
@@ -60,7 +54,6 @@ struct dir_locking_info {
 struct umsdos_inode_info {
 	union {
 		struct msdos_inode_info msdos_info;
-		struct pipe_inode_info pipe_info;
 		struct dir_locking_info dir_info;
 	} u;
 	int i_patched;			/* Inode has been patched */

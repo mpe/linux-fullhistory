@@ -2,14 +2,45 @@
  *  linux/fs/fifo.c
  *
  *  written by Paul H. Hargrove
+ *
+ *  Fixes:
+ *	10-06-1999, AV: fixed OOM handling in fifo_open(), moved
+ *			initialization there, switched to external
+ *			allocation of pipe_inode_info.
  */
 
 #include <linux/mm.h>
+#include <linux/malloc.h>
 
 static int fifo_open(struct inode * inode,struct file * filp)
 {
 	int retval = 0;
-	unsigned long page;
+	unsigned long page = 0;
+	struct pipe_inode_info *info, *tmp = NULL;
+
+	if (inode->i_pipe)
+		goto got_it;
+	tmp = kmalloc(sizeof(struct pipe_inode_info),GFP_KERNEL);
+	if (inode->i_pipe)
+		goto got_it;
+	if (!tmp)
+		goto oom;
+	page = __get_free_page(GFP_KERNEL);
+	if (inode->i_pipe)
+		goto got_it;
+	if (!page)
+		goto oom;
+	inode->i_pipe = tmp;
+	PIPE_LOCK(*inode) = 0;
+	PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
+	PIPE_BASE(*inode) = (char *) page;
+	PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
+	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
+	init_waitqueue_head(&PIPE_WAIT(*inode));
+	tmp = NULL;	/* no need to free it */
+	page = 0;
+
+got_it:
 
 	switch( filp->f_mode ) {
 
@@ -94,19 +125,26 @@ static int fifo_open(struct inode * inode,struct file * filp)
 	default:
 		retval = -EINVAL;
 	}
-	if (retval || PIPE_BASE(*inode))
-		return retval;
-	page = __get_free_page(GFP_KERNEL);
-	if (PIPE_BASE(*inode)) {
+	if (retval) 
+		goto cleanup;
+out:
+	if (tmp)
+		kfree(tmp);
+	if (page)
 		free_page(page);
-		return 0;
+	return retval;
+
+cleanup:
+	if (!PIPE_READERS(*inode) && !PIPE_WRITERS(*inode)) {
+		info = inode->i_pipe;
+		inode->i_pipe = NULL;
+		free_page((unsigned long)info->base);
+		kfree(info);
 	}
-	if (!page)
-		return -ENOMEM;
-	PIPE_LOCK(*inode) = 0;
-	PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
-	PIPE_BASE(*inode) = (char *) page;
-	return 0;
+	goto out;
+oom:
+	retval = -ENOMEM;
+	goto out;
 }
 
 /*
@@ -148,13 +186,10 @@ struct inode_operations fifo_inode_operations = {
 	NULL			/* permission */
 };
 
+
+/* Goner. Filesystems do not use it anymore. */
+
 void init_fifo(struct inode * inode)
 {
 	inode->i_op = &fifo_inode_operations;
-	PIPE_LOCK(*inode) = 0;
-	PIPE_BASE(*inode) = NULL;
-	PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
-	PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
-	init_waitqueue_head(&PIPE_WAIT(*inode));
-	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
 }

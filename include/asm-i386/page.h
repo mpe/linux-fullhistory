@@ -84,6 +84,14 @@ typedef unsigned long pgprot_t;
 
 #define __PAGE_OFFSET		(PAGE_OFFSET_RAW)
 
+#ifndef __ASSEMBLY__
+
+#define BUG() do { printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); *(int *)0=0; } while (0)
+#define PAGE_BUG(page) do { \
+				BUG(); } while (0)
+
+#endif /* __ASSEMBLY__ */
+
 #define PAGE_OFFSET		((unsigned long)__PAGE_OFFSET)
 #define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))

@@ -377,7 +377,6 @@ EXPORT_SYMBOL(rtattr_parse);
 EXPORT_SYMBOL(rtnetlink_links);
 EXPORT_SYMBOL(__rta_fill);
 EXPORT_SYMBOL(rtnetlink_dump_ifinfo);
-EXPORT_SYMBOL(rtnl_wlockct);
 EXPORT_SYMBOL(rtnl);
 EXPORT_SYMBOL(neigh_delete);
 EXPORT_SYMBOL(neigh_add);

@@ -286,7 +286,7 @@ struct task_struct {
 	gid_t gid,egid,sgid,fsgid;
 	int ngroups;
 	gid_t	groups[NGROUPS];
-        kernel_cap_t   cap_effective, cap_inheritable, cap_permitted;
+	kernel_cap_t   cap_effective, cap_inheritable, cap_permitted;
 	struct user_struct *user;
 /* limits */
 	struct rlimit rlim[RLIM_NLIMITS];
@@ -601,7 +601,7 @@ extern inline int capable(int cap)
 #else
 	if (cap_is_fs_cap(cap) ? current->fsuid == 0 : current->euid == 0)
 #endif
-        {
+	{
 		current->flags |= PF_SUPERPRIV;
 		return 1;
 	}

@@ -25,7 +25,32 @@
  * ensure that any mistaken dereferences of this structure cause a
  * kernel oops.
  */
-struct inode swapper_inode;
+
+static struct inode_operations swapper_inode_operations = {
+	NULL,				/* default file operations */
+	NULL,				/* create */
+	NULL,				/* lookup */
+	NULL,				/* link */
+	NULL,				/* unlink */
+	NULL,				/* symlink */
+	NULL,				/* mkdir */
+	NULL,				/* rmdir */
+	NULL,				/* mknod */
+	NULL,				/* rename */
+	NULL,				/* readlink */
+	NULL,				/* follow_link */
+	NULL,				/* readpage */
+	NULL,				/* writepage */
+	NULL,				/* bmap */
+	NULL,				/* truncate */
+	NULL,				/* permission */
+	NULL,				/* smap */
+	NULL,				/* updatepage */
+	NULL,				/* revalidate */
+	generic_block_flushpage,	/* flushpage */
+};
+
+struct inode swapper_inode = { i_op: &swapper_inode_operations };
 
 #ifdef SWAP_CACHE_INFO
 unsigned long swap_cache_add_total = 0;
@@ -49,20 +74,20 @@ int add_to_swap_cache(struct page *page, unsigned long entry)
 #endif
 #ifdef DEBUG_SWAP
 	printk("DebugVM: add_to_swap_cache(%08lx count %d, entry %08lx)\n",
-	       page_address(page), atomic_read(&page->count), entry);
+		   page_address(page), page_count(page), entry);
 #endif
 	if (PageTestandSetSwapCache(page)) {
 		printk(KERN_ERR "swap_cache: replacing non-empty entry %08lx "
-		       "on page %08lx\n",
-		       page->offset, page_address(page));
+			   "on page %08lx\n",
+			   page->offset, page_address(page));
 		return 0;
 	}
 	if (page->inode) {
 		printk(KERN_ERR "swap_cache: replacing page-cached entry "
-		       "on page %08lx\n", page_address(page));
+			   "on page %08lx\n", page_address(page));
 		return 0;
 	}
-	atomic_inc(&page->count);
+	get_page(page);
 	page->inode = &swapper_inode;
 	page->offset = entry;
 	add_page_to_hash_queue(page, &swapper_inode, entry);
@@ -111,7 +136,7 @@ int swap_duplicate(unsigned long entry)
 	result = 1;
 #ifdef DEBUG_SWAP
 	printk("DebugVM: swap_duplicate(entry %08lx, count now %d)\n",
-	       entry, p->swap_map[offset]);
+		   entry, p->swap_map[offset]);
 #endif
 out:
 	return result;
@@ -127,7 +152,7 @@ bad_offset:
 bad_unused:
 	printk(KERN_ERR
 		"swap_duplicate at %8p: entry %08lx, unused page\n", 
-	       __builtin_return_address(0), entry);
+		   __builtin_return_address(0), entry);
 	goto out;
 }
 
@@ -153,7 +178,7 @@ int swap_count(unsigned long entry)
 	retval = p->swap_map[offset];
 #ifdef DEBUG_SWAP
 	printk("DebugVM: swap_count(entry %08lx, count %d)\n",
-	       entry, retval);
+		   entry, retval);
 #endif
 out:
 	return retval;
@@ -163,16 +188,16 @@ bad_entry:
 	goto out;
 bad_file:
 	printk(KERN_ERR
-	       "swap_count: entry %08lx, nonexistent swap file!\n", entry);
+		   "swap_count: entry %08lx, nonexistent swap file!\n", entry);
 	goto out;
 bad_offset:
 	printk(KERN_ERR
-	       "swap_count: entry %08lx, offset exceeds max!\n", entry);
+		   "swap_count: entry %08lx, offset exceeds max!\n", entry);
 	goto out;
 bad_unused:
 	printk(KERN_ERR
-	       "swap_count at %8p: entry %08lx, unused page!\n", 
-	       __builtin_return_address(0), entry);
+		   "swap_count at %8p: entry %08lx, unused page!\n", 
+		   __builtin_return_address(0), entry);
 	goto out;
 }
 
@@ -190,10 +215,11 @@ static inline void remove_from_swap_cache(struct page *page)
 
 #ifdef DEBUG_SWAP
 	printk("DebugVM: remove_from_swap_cache(%08lx count %d)\n",
-	       page_address(page), atomic_read(&page->count));
+		   page_address(page), page_count(page));
 #endif
-	PageClearSwapCache (page);
+	PageClearSwapCache(page);
 	remove_inode_page(page);
+	page_cache_release(page);
 }
 
 
@@ -205,16 +231,19 @@ void delete_from_swap_cache(struct page *page)
 {
 	long entry = page->offset;
 
+	LockPage(page);
+
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;
 #endif
 #ifdef DEBUG_SWAP
 	printk("DebugVM: delete_from_swap_cache(%08lx count %d, "
-	       "entry %08lx)\n",
-	       page_address(page), atomic_read(&page->count), entry);
+		   "entry %08lx)\n",
+		   page_address(page), page_count(page), entry);
 #endif
 	remove_from_swap_cache (page);
 	swap_free (entry);
+	UnlockPage(page);
 }
 
 /* 
@@ -238,9 +267,10 @@ void free_page_and_swap_cache(unsigned long addr)
 
 
 /*
- * Lookup a swap entry in the swap cache.  We need to be careful about
- * locked pages.  A found page will be returned with its refcount
- * incremented.
+ * Lookup a swap entry in the swap cache. A found page will be returned
+ * unlocked and with its refcount incremented - we rely on the kernel
+ * lock getting page table operations atomic even if we drop the page
+ * lock before returning.
  */
 
 struct page * lookup_swap_cache(unsigned long entry)
@@ -251,23 +281,21 @@ struct page * lookup_swap_cache(unsigned long entry)
 	swap_cache_find_total++;
 #endif
 	while (1) {
-		found = find_page(&swapper_inode, entry);
+		found = find_lock_page(&swapper_inode, entry);
 		if (!found)
 			return 0;
 		if (found->inode != &swapper_inode || !PageSwapCache(found))
 			goto out_bad;
-		if (!PageLocked(found)) {
 #ifdef SWAP_CACHE_INFO
-			swap_cache_find_success++;
+		swap_cache_find_success++;
 #endif
-			return found;
-		}
-		__free_page(found);
-		__wait_on_page(found);
+		UnlockPage(found);
+		return found;
 	}
 
 out_bad:
 	printk (KERN_ERR "VM: Found a non-swapper swap page!\n");
+	UnlockPage(found);
 	__free_page(found);
 	return 0;
 }
@@ -288,7 +316,7 @@ struct page * read_swap_cache_async(unsigned long entry, int wait)
 	
 #ifdef DEBUG_SWAP
 	printk("DebugVM: read_swap_cache_async entry %08lx%s\n",
-	       entry, wait ? ", wait" : "");
+		   entry, wait ? ", wait" : "");
 #endif
 	/*
 	 * Make sure the swap entry is still in use.
@@ -319,12 +347,12 @@ struct page * read_swap_cache_async(unsigned long entry, int wait)
 	if (!add_to_swap_cache(new_page, entry))
 		goto out_free_page;
 
-	set_bit(PG_locked, &new_page->flags);
+	LockPage(new_page);
 	rw_swap_page(READ, entry, (char *) new_page_addr, wait);
 #ifdef DEBUG_SWAP
 	printk("DebugVM: read_swap_cache_async created "
-	       "entry %08lx at %p\n",
-	       entry, (char *) page_address(new_page));
+		   "entry %08lx at %p\n",
+			entry, (char *) page_address(new_page));
 #endif
 	return new_page;
 
@@ -335,3 +363,4 @@ out_free_swap:
 out:
 	return found_page;
 }
+

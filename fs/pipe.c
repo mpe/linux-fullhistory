@@ -7,6 +7,7 @@
 #include <linux/mm.h>
 #include <linux/file.h>
 #include <linux/poll.h>
+#include <linux/malloc.h>
 
 #include <asm/uaccess.h>
 
@@ -249,8 +250,10 @@ static unsigned int connect_poll(struct file * filp, poll_table * wait)
 static int pipe_release(struct inode * inode)
 {
 	if (!PIPE_READERS(*inode) && !PIPE_WRITERS(*inode)) {
-		free_page((unsigned long) PIPE_BASE(*inode));
-		PIPE_BASE(*inode) = NULL;
+		struct pipe_inode_info *info = inode->i_pipe;
+		inode->i_pipe = NULL;
+		free_page((unsigned long) info->base);
+		kfree(info);
 	}
 	wake_up_interruptible(&PIPE_WAIT(*inode));
 	return 0;
@@ -404,36 +407,48 @@ static struct inode * get_pipe_inode(void)
 {
 	extern struct inode_operations pipe_inode_operations;
 	struct inode *inode = get_empty_inode();
+	unsigned long page;
 
-	if (inode) {
-		unsigned long page = __get_free_page(GFP_USER);
+	if (!inode)
+		goto fail_inode;
 
-		if (!page) {
-			iput(inode);
-			inode = NULL;
-		} else {
-			PIPE_BASE(*inode) = (char *) page;
-			inode->i_op = &pipe_inode_operations;
-			init_waitqueue_head(&PIPE_WAIT(*inode));
-			PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
-			PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
-			PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
-			PIPE_LOCK(*inode) = 0;
-			/*
-			 * Mark the inode dirty from the very beginning,
-			 * that way it will never be moved to the dirty
-			 * list because "mark_inode_dirty()" will think
-			 * that it already _is_ on the dirty list.
-			 */
-			inode->i_state = I_DIRTY;
-			inode->i_mode = S_IFIFO | S_IRUSR | S_IWUSR;
-			inode->i_uid = current->fsuid;
-			inode->i_gid = current->fsgid;
-			inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-			inode->i_blksize = PAGE_SIZE;
-		}
-	}
+	page = __get_free_page(GFP_USER);
+
+	if (!page)
+		goto fail_iput;
+
+	/* XXX */
+	inode->i_pipe = kmalloc(sizeof(struct pipe_inode_info), GFP_KERNEL);
+	if (!inode->i_pipe)
+		goto fail_page;
+
+	PIPE_BASE(*inode) = (char *) page;
+	inode->i_op = &pipe_inode_operations;
+	init_waitqueue_head(&PIPE_WAIT(*inode));
+	PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
+	PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
+	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
+	PIPE_LOCK(*inode) = 0;
+	/*
+	 * Mark the inode dirty from the very beginning,
+	 * that way it will never be moved to the dirty
+	 * list because "mark_inode_dirty()" will think
+	 * that it already _is_ on the dirty list.
+	 */
+	inode->i_state = I_DIRTY;
+	inode->i_mode = S_IFIFO | S_IRUSR | S_IWUSR;
+	inode->i_uid = current->fsuid;
+	inode->i_gid = current->fsgid;
+	inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+	inode->i_blksize = PAGE_SIZE;
 	return inode;
+
+fail_page:
+	free_page(page);
+fail_iput:
+	iput(inode);
+fail_inode:
+	return NULL;
 }
 
 struct inode_operations pipe_inode_operations = {
@@ -513,6 +528,8 @@ close_f12_inode_i:
 	put_unused_fd(i);
 close_f12_inode:
 	free_page((unsigned long) PIPE_BASE(*inode));
+	kfree(inode->i_pipe);
+	inode->i_pipe = NULL;
 	iput(inode);
 close_f12:
 	put_filp(f2);

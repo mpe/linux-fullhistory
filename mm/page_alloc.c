@@ -121,9 +121,9 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 
 void __free_page(struct page *page)
 {
-	if (!PageReserved(page) && atomic_dec_and_test(&page->count)) {
+	if (!PageReserved(page) && put_page_testzero(page)) {
 		if (PageSwapCache(page))
-			panic ("Freeing swap cache page");
+			PAGE_BUG(page);
 		page->flags &= ~(1 << PG_referenced);
 		free_pages_ok(page - mem_map, 0);
 		return;
@@ -138,9 +138,9 @@ void free_pages(unsigned long addr, unsigned long order)
 		mem_map_t * map = mem_map + map_nr;
 		if (PageReserved(map))
 			return;
-		if (atomic_dec_and_test(&map->count)) {
+		if (put_page_testzero(map)) {
 			if (PageSwapCache(map))
-				panic ("Freeing swap cache pages");
+				PAGE_BUG(map);
 			map->flags &= ~(1 << PG_referenced);
 			free_pages_ok(map_nr, order);
 			return;
@@ -167,7 +167,7 @@ do { struct free_area_struct * area = free_area+order; \
 				MARK_USED(map_nr, new_order, area); \
 				nr_free_pages -= 1 << order; \
 				EXPAND(ret, map_nr, order, new_order, area); \
-				spin_unlock_irqrestore(&page_alloc_lock, flags); \
+				spin_unlock_irqrestore(&page_alloc_lock,flags);\
 				return ADDRESS(map_nr); \
 			} \
 			prev = ret; \
@@ -186,7 +186,7 @@ do { unsigned long size = 1 << high; \
 		index += size; \
 		map += size; \
 	} \
-	atomic_set(&map->count, 1); \
+	set_page_count(map, 1); \
 } while (0)
 
 int low_on_memory = 0;
@@ -321,7 +321,7 @@ unsigned long __init free_area_init(unsigned long start_mem, unsigned long end_m
 	memset(mem_map, 0, start_mem - (unsigned long) mem_map);
 	do {
 		--p;
-		atomic_set(&p->count, 0);
+		set_page_count(p, 0);
 		p->flags = (1 << PG_DMA) | (1 << PG_reserved);
 		init_waitqueue_head(&p->wait);
 	} while (p > mem_map);

@@ -47,7 +47,7 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 #ifdef DEBUG_SWAP
 	printk ("DebugVM: %s_swap_page entry %08lx, page %p (count %d), %s\n",
 		(rw == READ) ? "read" : "write", 
-		entry, (char *) page_address(page), atomic_read(&page->count),
+		entry, (char *) page_address(page), page_count(page),
 		wait ? "wait" : "nowait");
 #endif
 
@@ -105,12 +105,12 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 		}
 	}
 	if (rw == READ) {
-		clear_bit(PG_uptodate, &page->flags);
+		ClearPageUptodate(page);
 		kstat.pswpin++;
 	} else
 		kstat.pswpout++;
 
-	atomic_inc(&page->count);
+	get_page(page);
 	if (p->swap_device) {
 		zones[0] = offset;
 		zones_used = 1;
@@ -167,7 +167,7 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 				printk("swap_after_unlock_page: lock already cleared\n");
 			wake_up(&lock_queue);
 		}
-		atomic_dec(&page->count);
+		put_page(page);
 		return;
 	}
  	if (!wait) {
@@ -182,23 +182,27 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 
  	/* block_size == PAGE_SIZE/zones_used */
  	brw_page(rw, page, dev, zones, block_size, 0);
+
+	if (rw == WRITE) // HACK, FIXME
+		UnlockPage(page);
  
  	/* Note! For consistency we do all of the logic,
  	 * decrementing the page count, and unlocking the page in the
  	 * swap lock map - in the IO completion handler.
  	 */
- 	if (!wait) 
+ 	if (!wait) {
  		return;
+	}
  	wait_on_page(page);
 	/* This shouldn't happen, but check to be sure. */
-	if (atomic_read(&page->count) == 0)
+	if (page_count(page) == 0)
 		printk(KERN_ERR "rw_swap_page: page unused while waiting!\n");
 
 #ifdef DEBUG_SWAP
 	printk ("DebugVM: %s_swap_page finished on page %p (count %d)\n",
 		(rw == READ) ? "read" : "write", 
-		(char *) page_adddress(page), 
-		atomic_read(&page->count));
+		(char *) page_address(page), 
+		page_count(page));
 #endif
 }
 
@@ -238,7 +242,7 @@ void rw_swap_page(int rw, unsigned long entry, char *buf, int wait)
 	struct page *page = mem_map + MAP_NR(buf);
 
 	if (page->inode && page->inode != &swapper_inode)
-		panic ("Tried to swap a non-swapper page");
+		PAGE_BUG(page);
 
 	/*
 	 * Make sure that we have a swap cache association for this
@@ -268,23 +272,27 @@ void rw_swap_page_nocache(int rw, unsigned long entry, char *buffer)
 	struct page *page;
 	
 	page = mem_map + MAP_NR((unsigned long) buffer);
-	wait_on_page(page);
-	set_bit(PG_locked, &page->flags);
-	if (test_and_set_bit(PG_swap_cache, &page->flags)) {
-		printk ("VM: read_swap_page: page already in swap cache!\n");
-		return;
-	}
-	if (page->inode) {
-		printk ("VM: read_swap_page: page already in page cache!\n");
-		return;
-	}
+
+	if (TryLockPage(page))
+		PAGE_BUG(page);
+	if (test_and_set_bit(PG_swap_cache, &page->flags))
+		PAGE_BUG(page);
+	if (page->inode)
+		PAGE_BUG(page);
+	get_page(page);		/* Protect from shrink_mmap() */
 	page->inode = &swapper_inode;
 	page->offset = entry;
-	atomic_inc(&page->count);	/* Protect from shrink_mmap() */
 	rw_swap_page(rw, entry, buffer, 1);
-	atomic_dec(&page->count);
-	page->inode = 0;
-	clear_bit(PG_swap_cache, &page->flags);
+
+	/*
+	 * and now remove it from the pagecache ...
+	 */
+	if (TryLockPage(page))
+		PAGE_BUG(page);
+	PageClearSwapCache(page);
+	remove_inode_page(page);
+	page_cache_release(page);
+	UnlockPage(page);
 }
 
 /*

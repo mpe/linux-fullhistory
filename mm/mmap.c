@@ -63,7 +63,7 @@ int vm_enough_memory(long pages)
 	    return 1;
 
 	free = buffermem >> PAGE_SHIFT;
-	free += page_cache_size;
+	free += atomic_read(&page_cache_size);
 	free += nr_free_pages;
 	free += nr_swap_pages;
 	free -= (page_cache.min_percent + buffer_mem.min_percent + 2)*num_physpages/100; 
@@ -727,6 +727,10 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	struct mm_struct * mm = current->mm;
 	struct vm_area_struct * vma;
 	unsigned long flags, retval;
+
+	len = PAGE_ALIGN(len);
+	if (!len)
+		return addr;
 
 	/*
 	 * mlock MCL_FUTURE?

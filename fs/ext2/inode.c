@@ -92,13 +92,12 @@ void ext2_discard_prealloc (struct inode * inode)
 #endif
 }
 
-static int ext2_alloc_block (struct inode * inode, unsigned long goal, int * err)
+static int ext2_alloc_block (struct inode * inode, unsigned long goal, int *err)
 {
 #ifdef EXT2FS_DEBUG
 	static unsigned long alloc_hits = 0, alloc_attempts = 0;
 #endif
 	unsigned long result;
-	struct buffer_head * bh;
 
 	wait_on_super (inode->i_sb);
 
@@ -112,19 +111,6 @@ static int ext2_alloc_block (struct inode * inode, unsigned long goal, int * err
 		ext2_debug ("preallocation hit (%lu/%lu).\n",
 			    ++alloc_hits, ++alloc_attempts);
 
-		/* It doesn't matter if we block in getblk() since
-		   we have already atomically allocated the block, and
-		   are only clearing it now. */
-		if (!(bh = getblk (inode->i_sb->s_dev, result,
-				   inode->i_sb->s_blocksize))) {
-			ext2_error (inode->i_sb, "ext2_alloc_block",
-				    "cannot get block %lu", result);
-			return 0;
-		}
-		memset(bh->b_data, 0, inode->i_sb->s_blocksize);
-		mark_buffer_uptodate(bh, 1);
-		mark_buffer_dirty(bh, 1);
-		brelse (bh);
 	} else {
 		ext2_discard_prealloc (inode);
 		ext2_debug ("preallocation miss (%lu/%lu).\n",
@@ -139,7 +125,6 @@ static int ext2_alloc_block (struct inode * inode, unsigned long goal, int * err
 #else
 	result = ext2_new_block (inode, goal, 0, 0, err);
 #endif
-
 	return result;
 }
 
@@ -200,8 +185,65 @@ int ext2_bmap (struct inode * inode, int block)
 			   block & (addr_per_block - 1));
 }
 
+int ext2_bmap_create (struct inode * inode, int block)
+{
+	int i;
+	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
+	int addr_per_block_bits = EXT2_ADDR_PER_BLOCK_BITS(inode->i_sb);
+
+	if (block < 0) {
+		ext2_warning (inode->i_sb, "ext2_bmap", "block < 0");
+		return 0;
+	}
+	if (block >= EXT2_NDIR_BLOCKS + addr_per_block +
+		(1 << (addr_per_block_bits * 2)) +
+		((1 << (addr_per_block_bits * 2)) << addr_per_block_bits)) {
+		ext2_warning (inode->i_sb, "ext2_bmap", "block > big");
+		return 0;
+	}
+	if (block < EXT2_NDIR_BLOCKS)
+		return inode_bmap (inode, block);
+	block -= EXT2_NDIR_BLOCKS;
+	if (block < addr_per_block) {
+		i = inode_bmap (inode, EXT2_IND_BLOCK);
+		if (!i)
+			return 0;
+		return block_bmap (bread (inode->i_dev, i,
+					  inode->i_sb->s_blocksize), block);
+	}
+	block -= addr_per_block;
+	if (block < (1 << (addr_per_block_bits * 2))) {
+		i = inode_bmap (inode, EXT2_DIND_BLOCK);
+		if (!i)
+			return 0;
+		i = block_bmap (bread (inode->i_dev, i,
+				       inode->i_sb->s_blocksize),
+				block >> addr_per_block_bits);
+		if (!i)
+			return 0;
+		return block_bmap (bread (inode->i_dev, i,
+					  inode->i_sb->s_blocksize),
+				   block & (addr_per_block - 1));
+	}
+	block -= (1 << (addr_per_block_bits * 2));
+	i = inode_bmap (inode, EXT2_TIND_BLOCK);
+	if (!i)
+		return 0;
+	i = block_bmap (bread (inode->i_dev, i, inode->i_sb->s_blocksize),
+			block >> (addr_per_block_bits * 2));
+	if (!i)
+		return 0;
+	i = block_bmap (bread (inode->i_dev, i, inode->i_sb->s_blocksize),
+			(block >> addr_per_block_bits) & (addr_per_block - 1));
+	if (!i)
+		return 0;
+	return block_bmap (bread (inode->i_dev, i, inode->i_sb->s_blocksize),
+			   block & (addr_per_block - 1));
+}
+
 static struct buffer_head * inode_getblk (struct inode * inode, int nr,
-					  int create, int new_block, int * err)
+	int create, int new_block, int * err, int metadata,
+	int *phys_block, int *created)
 {
 	u32 * p;
 	int tmp, goal = 0;
@@ -212,11 +254,16 @@ static struct buffer_head * inode_getblk (struct inode * inode, int nr,
 repeat:
 	tmp = *p;
 	if (tmp) {
-		struct buffer_head * result = getblk (inode->i_dev, tmp, inode->i_sb->s_blocksize);
-		if (tmp == *p)
-			return result;
-		brelse (result);
-		goto repeat;
+		if (metadata) {
+			struct buffer_head * result = getblk (inode->i_dev, tmp, inode->i_sb->s_blocksize);
+			if (tmp == *p)
+				return result;
+			brelse (result);
+			goto repeat;
+		} else {
+			*phys_block = tmp;
+			return NULL;
+		}
 	}
 	*err = -EFBIG;
 	if (!create)
@@ -259,13 +306,28 @@ dont_create:
 	tmp = ext2_alloc_block (inode, goal, err);
 	if (!tmp)
 		return NULL;
-	result = getblk (inode->i_dev, tmp, inode->i_sb->s_blocksize);
-	if (*p) {
-		ext2_free_blocks (inode, tmp, 1);
-		brelse (result);
-		goto repeat;
+	if (metadata) {
+		result = getblk (inode->i_dev, tmp, inode->i_sb->s_blocksize);
+		if (*p) {
+			ext2_free_blocks (inode, tmp, 1);
+			brelse (result);
+			goto repeat;
+		}
+		memset(result->b_data, 0, inode->i_sb->s_blocksize);
+		mark_buffer_uptodate(result, 1);
+		mark_buffer_dirty(result, 1);
+	} else {
+		if (*p) {
+			ext2_free_blocks (inode, tmp, 1);
+			goto repeat;
+		}
+		*phys_block = tmp;
+		result = NULL;
+		*err = 0;
+		*created = 1;
 	}
 	*p = tmp;
+
 	inode->u.ext2_i.i_next_alloc_block = new_block;
 	inode->u.ext2_i.i_next_alloc_goal = tmp;
 	inode->i_ctime = CURRENT_TIME;
@@ -277,10 +339,17 @@ dont_create:
 	return result;
 }
 
+/*
+ *   metadata / data
+ *   possibly create / access
+ *   can fail due to: - not present
+ *                    - out of space
+ *
+ *   NULL return in the data case is mandatory.
+ */
 static struct buffer_head * block_getblk (struct inode * inode,
-					  struct buffer_head * bh, int nr,
-					  int create, int blocksize, 
-					  int new_block, int * err)
+	  struct buffer_head * bh, int nr, int create, int blocksize, 
+	  int new_block, int * err, int metadata, int *phys_block, int *created)
 {
 	int tmp, goal = 0;
 	u32 * p;
@@ -302,13 +371,19 @@ static struct buffer_head * block_getblk (struct inode * inode,
 repeat:
 	tmp = le32_to_cpu(*p);
 	if (tmp) {
-		result = getblk (bh->b_dev, tmp, blocksize);
-		if (tmp == le32_to_cpu(*p)) {
+		if (metadata) {
+			result = getblk (bh->b_dev, tmp, blocksize);
+			if (tmp == le32_to_cpu(*p)) {
+				brelse (bh);
+				return result;
+			}
+			brelse (result);
+			goto repeat;
+		} else {
+			*phys_block = tmp;
 			brelse (bh);
-			return result;
+			return NULL;
 		}
-		brelse (result);
-		goto repeat;
 	}
 	*err = -EFBIG;
 	if (!create) {
@@ -343,7 +418,22 @@ repeat:
 		brelse (bh);
 		return NULL;
 	}
-	result = getblk (bh->b_dev, tmp, blocksize);
+	if (metadata) {
+		result = getblk (bh->b_dev, tmp, blocksize);
+		if (*p) {
+			ext2_free_blocks (inode, tmp, 1);
+			brelse (result);
+			goto repeat;
+		}
+		memset(result->b_data, 0, inode->i_sb->s_blocksize);
+		mark_buffer_uptodate(result, 1);
+		mark_buffer_dirty(result, 1);
+	} else {
+		*phys_block = tmp;
+		result = NULL;
+		*err = 0;
+		*created = 1;
+	}
 	if (le32_to_cpu(*p)) {
 		ext2_free_blocks (inode, tmp, 1);
 		brelse (result);
@@ -364,24 +454,25 @@ repeat:
 	return result;
 }
 
-struct buffer_head * ext2_getblk (struct inode * inode, long block,
-				  int create, int * err)
+int ext2_getblk_block (struct inode * inode, long block,
+				  int create, int * err, int * created)
 {
-	struct buffer_head * bh;
+	struct buffer_head * bh, *tmp;
 	unsigned long b;
 	unsigned long addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
 	int addr_per_block_bits = EXT2_ADDR_PER_BLOCK_BITS(inode->i_sb);
+	int phys_block;
 
 	*err = -EIO;
 	if (block < 0) {
 		ext2_warning (inode->i_sb, "ext2_getblk", "block < 0");
-		return NULL;
+		return 0;
 	}
 	if (block > EXT2_NDIR_BLOCKS + addr_per_block +
 		(1 << (addr_per_block_bits * 2)) +
 		((1 << (addr_per_block_bits * 2)) << addr_per_block_bits)) {
 		ext2_warning (inode->i_sb, "ext2_getblk", "block > big");
-		return NULL;
+		return 0;
 	}
 	/*
 	 * If this is a sequential block allocation, set the next_alloc_block
@@ -398,32 +489,71 @@ struct buffer_head * ext2_getblk (struct inode * inode, long block,
 		inode->u.ext2_i.i_next_alloc_goal++;
 	}
 
-	*err = -ENOSPC;
+	*err = 0; // -ENOSPC;
 	b = block;
-	if (block < EXT2_NDIR_BLOCKS)
-		return inode_getblk (inode, block, create, b, err);
+	*created = 0;
+	if (block < EXT2_NDIR_BLOCKS) {
+		/*
+		 * data page.
+		 */
+		tmp = inode_getblk (inode, block, create, b,
+					err, 0, &phys_block, created);
+		goto out;
+	}
 	block -= EXT2_NDIR_BLOCKS;
 	if (block < addr_per_block) {
-		bh = inode_getblk (inode, EXT2_IND_BLOCK, create, b, err);
-		return block_getblk (inode, bh, block, create,
-				     inode->i_sb->s_blocksize, b, err);
+		bh = inode_getblk (inode, EXT2_IND_BLOCK, create, b, err, 1, NULL, NULL);
+		tmp = block_getblk (inode, bh, block, create,
+		     inode->i_sb->s_blocksize, b, err, 0, &phys_block, created);
+		goto out;
 	}
 	block -= addr_per_block;
 	if (block < (1 << (addr_per_block_bits * 2))) {
-		bh = inode_getblk (inode, EXT2_DIND_BLOCK, create, b, err);
+		bh = inode_getblk (inode, EXT2_DIND_BLOCK, create, b, err, 1, NULL, NULL);
 		bh = block_getblk (inode, bh, block >> addr_per_block_bits,
-				   create, inode->i_sb->s_blocksize, b, err);
-		return block_getblk (inode, bh, block & (addr_per_block - 1),
-				     create, inode->i_sb->s_blocksize, b, err);
+				   create, inode->i_sb->s_blocksize, b, err, 1, NULL, NULL);
+		tmp = block_getblk (inode, bh, block & (addr_per_block - 1),
+		     create, inode->i_sb->s_blocksize, b, err, 0, &phys_block, created);
+		goto out;
 	}
 	block -= (1 << (addr_per_block_bits * 2));
-	bh = inode_getblk (inode, EXT2_TIND_BLOCK, create, b, err);
+	bh = inode_getblk (inode, EXT2_TIND_BLOCK, create, b, err, 1, NULL,NULL);
 	bh = block_getblk (inode, bh, block >> (addr_per_block_bits * 2),
-			   create, inode->i_sb->s_blocksize, b, err);
-	bh = block_getblk (inode, bh, (block >> addr_per_block_bits) & (addr_per_block - 1),
-			   create, inode->i_sb->s_blocksize, b, err);
-	return block_getblk (inode, bh, block & (addr_per_block - 1), create,
-			     inode->i_sb->s_blocksize, b, err);
+			   create, inode->i_sb->s_blocksize, b, err, 1, NULL,NULL);
+	bh = block_getblk (inode, bh, (block >> addr_per_block_bits) &
+		(addr_per_block - 1), create, inode->i_sb->s_blocksize,
+		b, err, 1, NULL,NULL);
+	tmp = block_getblk (inode, bh, block & (addr_per_block - 1), create,
+		inode->i_sb->s_blocksize, b, err, 0, &phys_block, created);
+
+out:
+	if (!phys_block) {
+		return 0;
+	}
+	if (*err) {
+		return 0;
+	}
+	return phys_block;
+}
+
+struct buffer_head * ext2_getblk (struct inode * inode, long block,
+				  int create, int * err)
+{
+	struct buffer_head *tmp = NULL;
+	int phys_block;
+	int created;
+
+	phys_block = ext2_getblk_block (inode, block, create, err, &created);
+
+	if (phys_block) {
+		tmp = getblk (inode->i_dev, phys_block, inode->i_sb->s_blocksize);
+		if (created) {
+			memset(tmp->b_data, 0, inode->i_sb->s_blocksize);
+			mark_buffer_uptodate(tmp, 1);
+			mark_buffer_dirty(tmp, 1);
+		}
+	}
+	return tmp;
 }
 
 struct buffer_head * ext2_bread (struct inode * inode, int block, 

@@ -74,11 +74,11 @@ extern int max_super_blocks, nr_super_blocks;
 
 /* public flags for file_system_type */
 #define FS_REQUIRES_DEV 1 
-#define FS_NO_DCACHE    2 /* Only dcache the necessary things. */
-#define FS_NO_PRELIM    4 /* prevent preloading of dentries, even if
+#define FS_NO_DCACHE	2 /* Only dcache the necessary things. */
+#define FS_NO_PRELIM	4 /* prevent preloading of dentries, even if
 			   * FS_NO_DCACHE is not set.
 			   */
-#define FS_IBASKET      8 /* FS does callback to free_ibasket() if space gets low. */
+#define FS_IBASKET	8 /* FS does callback to free_ibasket() if space gets low. */
 
 /*
  * These are the fs-independent mount-flags: up to 16 flags are supported
@@ -94,9 +94,9 @@ extern int max_super_blocks, nr_super_blocks;
 #define S_APPEND	256	/* Append-only file */
 #define S_IMMUTABLE	512	/* Immutable file */
 #define MS_NOATIME	1024	/* Do not update access times. */
-#define MS_NODIRATIME   2048    /* Do not update directory access times */
+#define MS_NODIRATIME	2048	/* Do not update directory access times */
 
-#define MS_ODD_RENAME   32768    /* Temporary stuff; will go away as soon
+#define MS_ODD_RENAME	32768	/* Temporary stuff; will go away as soon
 				  * as nfs_rename() will be cleaned up
 				  */
 
@@ -189,7 +189,6 @@ typedef char buffer_block[BLOCK_SIZE];
 #define BH_Lock		2	/* 1 if the buffer is locked */
 #define BH_Req		3	/* 0 if the buffer has been invalidated */
 #define BH_Protected	6	/* 1 if the buffer is protected */
-
 /*
  * Try to keep the most commonly used fields in single cache lines (16
  * bytes) to improve performance.  This ordering should be
@@ -218,7 +217,7 @@ struct buffer_head {
 	/* Non-performance-critical data follows. */
 	char * b_data;			/* pointer to data block (1024 bytes) */
 	unsigned int b_list;		/* List that this buffer appears */
-	unsigned long b_flushtime;      /* Time when this (dirty) buffer
+	unsigned long b_flushtime;	/* Time when this (dirty) buffer
 					 * should be written */
 	wait_queue_head_t b_wait;
 	struct buffer_head ** b_pprev;		/* doubly linked list of hash-queue */
@@ -365,22 +364,21 @@ struct inode {
 	struct vm_area_struct	*i_mmap;
 	struct page		*i_pages;
 	struct dquot		*i_dquot[MAXQUOTAS];
+	struct pipe_inode_info	*i_pipe;
 
 	unsigned long		i_state;
 
 	unsigned int		i_flags;
-	unsigned char		i_pipe;
 	unsigned char		i_sock;
 
 	int			i_writecount;
 	unsigned int		i_attr_flags;
 	__u32			i_generation;
 	union {
-		struct pipe_inode_info		pipe_i;
 		struct minix_inode_info		minix_i;
 		struct ext2_inode_info		ext2_i;
 		struct hpfs_inode_info		hpfs_i;
-		struct ntfs_inode_info          ntfs_i;
+		struct ntfs_inode_info		ntfs_i;
 		struct msdos_inode_info		msdos_i;
 		struct umsdos_inode_info	umsdos_i;
 		struct iso_inode_info		isofs_i;
@@ -388,13 +386,13 @@ struct inode {
 		struct sysv_inode_info		sysv_i;
 		struct affs_inode_info		affs_i;
 		struct ufs_inode_info		ufs_i;
-		struct efs_inode_info		efs_i;	   
+		struct efs_inode_info		efs_i;
 		struct romfs_inode_info		romfs_i;
 		struct coda_inode_info		coda_i;
 		struct smb_inode_info		smbfs_i;
 		struct hfs_inode_info		hfs_i;
 		struct adfs_inode_info		adfs_i;
-		struct qnx4_inode_info		qnx4_i;	   
+		struct qnx4_inode_info		qnx4_i;
 		struct socket			socket_i;
 		void				*generic_ip;
 	} u;
@@ -491,10 +489,10 @@ extern void posix_block_lock(struct file_lock *, struct file_lock *);
 extern void posix_unblock_lock(struct file_lock *);
 
 struct fasync_struct {
-	int    magic;
-	int    fa_fd;
-	struct fasync_struct	*fa_next; /* singly linked list */
-	struct file 		*fa_file;
+	int	magic;
+	int	fa_fd;
+	struct	fasync_struct	*fa_next; /* singly linked list */
+	struct	file 		*fa_file;
 };
 
 #define FASYNC_MAGIC 0x4601
@@ -547,19 +545,19 @@ struct super_block {
 		struct minix_sb_info	minix_sb;
 		struct ext2_sb_info	ext2_sb;
 		struct hpfs_sb_info	hpfs_sb;
-		struct ntfs_sb_info     ntfs_sb;
+		struct ntfs_sb_info	ntfs_sb;
 		struct msdos_sb_info	msdos_sb;
 		struct isofs_sb_info	isofs_sb;
 		struct nfs_sb_info	nfs_sb;
 		struct sysv_sb_info	sysv_sb;
 		struct affs_sb_info	affs_sb;
 		struct ufs_sb_info	ufs_sb;
-		struct efs_sb_info	efs_sb;	   
+		struct efs_sb_info	efs_sb;
 		struct romfs_sb_info	romfs_sb;
 		struct smb_sb_info	smbfs_sb;
 		struct hfs_sb_info	hfs_sb;
 		struct adfs_sb_info	adfs_sb;
-		struct qnx4_sb_info	qnx4_sb;	   
+		struct qnx4_sb_info	qnx4_sb;
 		void			*generic_sbp;
 	} u;
 	/*
@@ -624,6 +622,7 @@ struct inode_operations {
 	int (*smap) (struct inode *,int);
 	int (*updatepage) (struct file *, struct page *, unsigned long, unsigned int);
 	int (*revalidate) (struct dentry *);
+	int (*flushpage) (struct inode *, struct page *, int);
 };
 
 struct super_operations {
@@ -749,13 +748,19 @@ extern int fs_may_mount(kdev_t);
 
 extern struct file *inuse_filps;
 
-extern void refile_buffer(struct buffer_head *);
 extern void set_writetime(struct buffer_head *, int);
 extern int try_to_free_buffers(struct page *);
+extern void __refile_buffer(struct buffer_head * buf);
+extern inline void refile_buffer(struct buffer_head * buf)
+{
+	/*
+	 * Subtle, we do not want to refile not hashed buffers ...
+	 */
+	if (buf->b_pprev)
+		__refile_buffer(buf);
+}
 
-extern int nr_buffers;
 extern int buffermem;
-extern int nr_buffer_heads;
 
 #define BUF_CLEAN	0
 #define BUF_LOCKED	1	/* Buffers scheduled for write */
@@ -869,11 +874,15 @@ extern struct buffer_head * breada(kdev_t, int, int, unsigned int, unsigned int)
 extern int brw_page(int, struct page *, kdev_t, int [], int, int);
 
 typedef long (*writepage_t)(struct file *, struct page *, unsigned long, unsigned long, const char *);
+typedef int (*fs_getblock_t)(struct inode *, long, int, int *, int *);
+
 
 extern int generic_readpage(struct file *, struct page *);
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);
 extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t generic_file_write(struct file *, const char *, size_t, loff_t *, writepage_t);
+extern int generic_block_flushpage(struct inode *, struct page *, int);
+extern long block_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf, fs_getblock_t fs_get_block);
 
 extern struct super_block *get_super(kdev_t);
 extern void put_super(kdev_t);

@@ -135,9 +135,17 @@ void no_scroll(char *str, int *ints)
  */
 static inline void write_vga(unsigned char reg, unsigned int val)
 {
-#ifndef SLOW_VGA
 	unsigned int v1, v2;
+	unsigned long flags;
 
+	/*
+	 * ddprintk might set the console position from interrupt
+	 * handlers, thus the write has to be IRQ-atomic.
+	 */
+	save_flags(flags);
+	cli();
+
+#ifndef SLOW_VGA
 	v1 = reg + (val & 0xff00);
 	v2 = reg + 1 + ((val << 8) & 0xff00);
 	outw(v1, vga_video_port_reg);
@@ -148,6 +156,7 @@ static inline void write_vga(unsigned char reg, unsigned int val)
 	outb_p(reg+1, vga_video_port_reg);
 	outb_p(val & 0xff, vga_video_port_val);
 #endif
+	restore_flags(flags);
 }
 
 __initfunc(static const char *vgacon_startup(void))

@@ -556,6 +556,7 @@ extern void ext2_check_inodes_bitmap (struct super_block *);
 extern int ext2_bmap (struct inode *, int);
 
 extern struct buffer_head * ext2_getblk (struct inode *, long, int, int *);
+extern int ext2_getblk_block (struct inode *, long, int, int *, int *);
 extern struct buffer_head * ext2_bread (struct inode *, int, int, int *);
 
 extern int ext2_getcluster (struct inode * inode, long block);

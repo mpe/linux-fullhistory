@@ -160,6 +160,9 @@ out:
 	return retry;
 }
 
+#define DATA_BUFFER_USED(bh) \
+	((bh->b_count > 1) || buffer_locked(bh))
+
 static int trunc_direct (struct inode * inode)
 {
 	struct buffer_head * bh;
@@ -178,7 +181,7 @@ static int trunc_direct (struct inode * inode)
 		bh = find_buffer(inode->i_dev, tmp, inode->i_sb->s_blocksize);
 		if (bh) {
 			bh->b_count++;
-			if(bh->b_count != 1 || buffer_locked(bh)) {
+			if (DATA_BUFFER_USED(bh)) {
 				brelse(bh);
 				retry = 1;
 				continue;
@@ -255,8 +258,8 @@ static int trunc_indirect (struct inode * inode, int offset, u32 * p,
 		bh = find_buffer(inode->i_dev, tmp, inode->i_sb->s_blocksize);
 		if (bh) {
 			bh->b_count++;
-			if (bh->b_count != 1 || buffer_locked(bh)) {
-				brelse (bh);
+			if (DATA_BUFFER_USED(bh)) {
+				brelse(bh);
 				retry = 1;
 				continue;
 			}
@@ -384,8 +387,6 @@ static int trunc_tindirect (struct inode * inode)
 		
 void ext2_truncate (struct inode * inode)
 {
-	int err, offset;
-
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 	    S_ISLNK(inode->i_mode)))
 		return;
@@ -410,25 +411,6 @@ void ext2_truncate (struct inode * inode)
 		run_task_queue(&tq_disk);
 		current->policy |= SCHED_YIELD;
 		schedule();
-	}
-	/*
-	 * If the file is not being truncated to a block boundary, the
-	 * contents of the partial block following the end of the file
-	 * must be zeroed in case it ever becomes accessible again due
-	 * to subsequent file growth.
-	 */
-	offset = inode->i_size & (inode->i_sb->s_blocksize - 1);
-	if (offset) {
-		struct buffer_head * bh;
-		bh = ext2_bread (inode,
-				 inode->i_size >> EXT2_BLOCK_SIZE_BITS(inode->i_sb),
-				 0, &err);
-		if (bh) {
-			memset (bh->b_data + offset, 0,
-				inode->i_sb->s_blocksize - offset);
-			mark_buffer_dirty (bh, 0);
-			brelse (bh);
-		}
 	}
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(inode);

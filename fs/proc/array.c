@@ -348,7 +348,7 @@ static int get_meminfo(char * buffer)
 	len = sprintf(buffer, "        total:    used:    free:  shared: buffers:  cached:\n"
 		"Mem:  %8lu %8lu %8lu %8lu %8lu %8lu\n"
 		"Swap: %8lu %8lu %8lu\n",
-		i.totalram, i.totalram-i.freeram, i.freeram, i.sharedram, i.bufferram, page_cache_size*PAGE_SIZE,
+		i.totalram, i.totalram-i.freeram, i.freeram, i.sharedram, i.bufferram, atomic_read(&page_cache_size)*PAGE_SIZE,
 		i.totalswap, i.totalswap-i.freeswap, i.freeswap);
 	/*
 	 * Tagged format, for easy grepping and expansion. The above will go away
@@ -359,14 +359,14 @@ static int get_meminfo(char * buffer)
 		"MemFree:   %8lu kB\n"
 		"MemShared: %8lu kB\n"
 		"Buffers:   %8lu kB\n"
-		"Cached:    %8lu kB\n"
+		"Cached:    %8u kB\n"
 		"SwapTotal: %8lu kB\n"
 		"SwapFree:  %8lu kB\n",
 		i.totalram >> 10,
 		i.freeram >> 10,
 		i.sharedram >> 10,
 		i.bufferram >> 10,
-		page_cache_size << (PAGE_SHIFT - 10),
+		atomic_read(&page_cache_size) << (PAGE_SHIFT - 10),
 		i.totalswap >> 10,
 		i.freeswap >> 10);
 }
@@ -975,7 +975,7 @@ static inline void statm_pte_range(pmd_t * pmd, unsigned long address, unsigned 
 			++*dirty;
 		if (MAP_NR(pte_page(page)) >= max_mapnr)
 			continue;
-		if (atomic_read(&mem_map[MAP_NR(pte_page(page))].count) > 1)
+		if (page_count(mem_map + MAP_NR(pte_page(page))) > 1)
 			++*shared;
 	} while (address < end);
 }

@@ -110,7 +110,7 @@ nfs_writepage_sync(struct dentry *dentry, struct inode *inode,
 
 		if (result < 0) {
 			/* Must mark the page invalid after I/O error */
-			clear_bit(PG_uptodate, &page->flags);
+			ClearPageUptodate(page);
 			goto io_error;
 		}
 		if (result != wsize)
@@ -463,7 +463,7 @@ nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsig
 	 * Ok, there's another user of this page with the new request..
 	 * The IO completion will then free the page and the dentry.
 	 */
-	atomic_inc(&page->count);
+	get_page(page);
 	file->f_count++;
 
 	/* Schedule request */
@@ -471,7 +471,7 @@ nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsig
 
 updated:
 	if (req->wb_bytes == PAGE_SIZE)
-		set_bit(PG_uptodate, &page->flags);
+		SetPageUptodate(page);
 
 	retval = count;
 	if (synchronous) {
@@ -486,7 +486,7 @@ updated:
 		}
 
 		if (retval < 0)
-			clear_bit(PG_uptodate, &page->flags);
+			ClearPageUptodate(page);
 	}
 
 	free_write_request(req);
@@ -682,7 +682,7 @@ nfs_wback_result(struct rpc_task *task)
 	rpc_release_task(task);
 
 	if (WB_INVALIDATE(req))
-		clear_bit(PG_uptodate, &page->flags);
+		ClearPageUptodate(page);
 
 	__free_page(page);
 	remove_write_request(&NFS_WRITEBACK(inode), req);

@@ -67,7 +67,7 @@ extern int nr_swap_pages;
 extern int nr_free_pages;
 extern atomic_t nr_async_pages;
 extern struct inode swapper_inode;
-extern unsigned long page_cache_size;
+extern atomic_t page_cache_size;
 extern int buffermem;
 
 /* Incomplete types for prototype declarations: */
@@ -163,7 +163,7 @@ static inline int is_page_shared(struct page *page)
 	unsigned int count;
 	if (PageReserved(page))
 		return 1;
-	count = atomic_read(&page->count);
+	count = page_count(page);
 	if (PageSwapCache(page))
 		count += swap_count(page->offset) - 2;
 	if (PageFreeAfter(page))

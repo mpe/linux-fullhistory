@@ -272,7 +272,7 @@ skip_copy_pte_range:		address = (address + PMD_SIZE) & PMD_MASK;
 				if (vma->vm_flags & VM_SHARED)
 					pte = pte_mkclean(pte);
 				set_pte(dst_pte, pte_mkold(pte));
-				atomic_inc(&mem_map[page_nr].count);
+				get_page(mem_map + page_nr);
 			
 cont_copy_pte_range:		address += PAGE_SIZE;
 				if (address >= end)
@@ -554,7 +554,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 
 	if (MAP_NR(page) >= max_mapnr)
 		printk("put_dirty_page: trying to put page %08lx at %08lx\n",page,address);
-	if (atomic_read(&mem_map[MAP_NR(page)].count) != 1)
+	if (page_count(mem_map + MAP_NR(page)) != 1)
 		printk("mem_map disagrees with %08lx at %08lx\n",page,address);
 	pgd = pgd_offset(tsk->mm,address);
 	pmd = pmd_alloc(pgd, address);
@@ -602,17 +602,17 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	unsigned long address, pte_t *page_table, pte_t pte)
 {
 	unsigned long old_page, new_page;
-	struct page * page_map;
+	struct page * page;
 	
 	new_page = __get_free_page(GFP_USER);
-	/* Did swap_out() unmapped the protected page while we slept? */
+	/* Did swap_out() unmap the protected page while we slept? */
 	if (pte_val(*page_table) != pte_val(pte))
 		goto end_wp_page;
 	old_page = pte_page(pte);
 	if (MAP_NR(old_page) >= max_mapnr)
 		goto bad_wp_page;
 	tsk->min_flt++;
-	page_map = mem_map + MAP_NR(old_page);
+	page = mem_map + MAP_NR(old_page);
 	
 	/*
 	 * We can avoid the copy if:
@@ -622,13 +622,13 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	 *   in which case we can remove the page
 	 *   from the swap cache.
 	 */
-	switch (atomic_read(&page_map->count)) {
+	switch (page_count(page)) {
 	case 2:
-		if (!PageSwapCache(page_map))
+		if (!PageSwapCache(page))
 			break;
-		if (swap_count(page_map->offset) != 1)
+		if (swap_count(page->offset) != 1)
 			break;
-		delete_from_swap_cache(page_map);
+		delete_from_swap_cache(page);
 		/* FallThrough */
 	case 1:
 		flush_cache_page(vma, address);
@@ -650,7 +650,7 @@ end_wp_page:
 	if (!new_page)
 		goto no_new_page;
 
-	if (PageReserved(page_map))
+	if (PageReserved(page))
 		++vma->vm_mm->rss;
 	copy_cow_page(old_page,new_page);
 	flush_page_to_ram(old_page);
@@ -659,7 +659,7 @@ end_wp_page:
 	set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
 	flush_tlb_page(vma, address);
 	unlock_kernel();
-	__free_page(page_map);
+	__free_page(page);
 	return 1;
 
 bad_wp_page:
@@ -774,7 +774,7 @@ static int do_swap_page(struct task_struct * tsk,
 		if (pte_val(*page_table) != pte_val(entry)) {
 			free_page(pte_page(page));
 		} else {
-			if (atomic_read(&mem_map[MAP_NR(pte_page(page))].count) > 1 &&
+			if (page_count(mem_map + MAP_NR(pte_page(page))) > 1 &&
 			    !(vma->vm_flags & VM_SHARED))
 				page = pte_wrprotect(page);
 			++vma->vm_mm->rss;
@@ -858,7 +858,7 @@ static int do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	entry = mk_pte(page, vma->vm_page_prot);
 	if (write_access) {
 		entry = pte_mkwrite(pte_mkdirty(entry));
-	} else if (atomic_read(&mem_map[MAP_NR(page)].count) > 1 &&
+	} else if (page_count(mem_map+MAP_NR(page)) > 1 &&
 		   !(vma->vm_flags & VM_SHARED))
 		entry = pte_wrprotect(entry);
 	set_pte(page_table, entry);

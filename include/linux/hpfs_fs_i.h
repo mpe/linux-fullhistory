@@ -1,17 +1,7 @@
 #ifndef _HPFS_FS_I
 #define _HPFS_FS_I
 
-#if ANALWARNINGS
-#warning Fix the FIFO stuff!
-#warning Fix the FIFO stuff!
-#warning Fix the FIFO stuff!
-#endif
-
 struct hpfs_inode_info {
-	union {				    /* Linux sometimes destroys this structure */
-		struct pipe_inode_info bla; /* due to a bug. Linus doesn't want to fix */
-		struct socket ble;	    /* it so I had to write this workaround :-) */
-	} dummy;
 	ino_t i_parent_dir;	/* (directories) gives fnode of parent dir */
 	unsigned i_dno;		/* (directories) root dnode */
 	unsigned i_dpos;	/* (directories) temp for readdir */

@@ -298,7 +298,7 @@ int mem_mmap(struct file * file, struct vm_area_struct * vma)
 		set_pte(dest_table, *src_table);
 		mapnr = MAP_NR(pte_page(*src_table));
 		if (mapnr < max_mapnr)
-			atomic_inc(&mem_map[MAP_NR(pte_page(*src_table))].count);
+			get_page(mem_map + MAP_NR(pte_page(*src_table)));
 
 		stmp += PAGE_SIZE;
 		dtmp += PAGE_SIZE;

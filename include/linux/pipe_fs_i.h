@@ -12,15 +12,15 @@ struct pipe_inode_info {
 	unsigned int writers;
 };
 
-#define PIPE_WAIT(inode)	((inode).u.pipe_i.wait)
-#define PIPE_BASE(inode)	((inode).u.pipe_i.base)
-#define PIPE_START(inode)	((inode).u.pipe_i.start)
+#define PIPE_WAIT(inode)	((inode).i_pipe->wait)
+#define PIPE_BASE(inode)	((inode).i_pipe->base)
+#define PIPE_START(inode)	((inode).i_pipe->start)
 #define PIPE_LEN(inode)		((inode).i_size)
-#define PIPE_RD_OPENERS(inode)	((inode).u.pipe_i.rd_openers)
-#define PIPE_WR_OPENERS(inode)	((inode).u.pipe_i.wr_openers)
-#define PIPE_READERS(inode)	((inode).u.pipe_i.readers)
-#define PIPE_WRITERS(inode)	((inode).u.pipe_i.writers)
-#define PIPE_LOCK(inode)	((inode).u.pipe_i.lock)
+#define PIPE_RD_OPENERS(inode)	((inode).i_pipe->rd_openers)
+#define PIPE_WR_OPENERS(inode)	((inode).i_pipe->wr_openers)
+#define PIPE_READERS(inode)	((inode).i_pipe->readers)
+#define PIPE_WRITERS(inode)	((inode).i_pipe->writers)
+#define PIPE_LOCK(inode)	((inode).i_pipe->lock)
 #define PIPE_SIZE(inode)	PIPE_LEN(inode)
 
 #define PIPE_EMPTY(inode)	(PIPE_SIZE(inode)==0)

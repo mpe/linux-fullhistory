@@ -358,7 +358,7 @@ error_return:
  * bitmap, and then for any free bit if that fails.
  */
 int ext2_new_block (const struct inode * inode, unsigned long goal,
-		    u32 * prealloc_count, u32 * prealloc_block, int * err)
+    u32 * prealloc_count, u32 * prealloc_block, int * err)
 {
 	struct buffer_head * bh;
 	struct buffer_head * bh2;
@@ -594,20 +594,12 @@ got_block:
 
 	if (j >= le32_to_cpu(es->s_blocks_count)) {
 		ext2_error (sb, "ext2_new_block",
-			    "block >= blocks count - "
-			    "block_group = %d, block=%d", i, j);
+			    "block(%d) >= blocks count(%d) - "
+			    "block_group = %d, es == %p ",j,
+			le32_to_cpu(es->s_blocks_count), i, es);
 		unlock_super (sb);
 		return 0;
 	}
-	if (!(bh = getblk (sb->s_dev, j, sb->s_blocksize))) {
-		ext2_error (sb, "ext2_new_block", "cannot get block %d", j);
-		unlock_super (sb);
-		return 0;
-	}
-	memset(bh->b_data, 0, sb->s_blocksize);
-	mark_buffer_uptodate(bh, 1);
-	mark_buffer_dirty(bh, 1);
-	brelse (bh);
 
 	ext2_debug ("allocating block %d. "
 		    "Goal hits %d of %d.\n", j, goal_hits, goal_attempts);

@@ -77,7 +77,6 @@ nfs_readpage_sync(struct dentry *dentry, struct inode *inode, struct page *page)
 	int		flags = IS_SWAPFILE(inode)? NFS_RPC_SWAPFLAGS : 0;
 
 	dprintk("NFS: nfs_readpage_sync(%p)\n", page);
-	clear_bit(PG_error, &page->flags);
 
 	do {
 		if (count < rsize)
@@ -111,16 +110,14 @@ nfs_readpage_sync(struct dentry *dentry, struct inode *inode, struct page *page)
 	} while (count);
 
 	memset(buffer, 0, count);
-	set_bit(PG_uptodate, &page->flags);
+	SetPageUptodate(page);
 	result = 0;
 
 io_error:
+	UnlockPage(page);
 	/* Note: we don't refresh if the call returned error */
 	if (refresh && result >= 0)
 		nfs_refresh_inode(inode, &rqst.ra_fattr);
-	/* N.B. Use nfs_unlock_page here? */
-	clear_bit(PG_locked, &page->flags);
-	wake_up(&page->wait);
 	return result;
 }
 
@@ -146,17 +143,15 @@ nfs_readpage_result(struct rpc_task *task)
 			memset((char *) address + result, 0, PAGE_SIZE - result);
 		}
 		nfs_refresh_inode(req->ra_inode, &req->ra_fattr);
-		set_bit(PG_uptodate, &page->flags);
+		SetPageUptodate(page);
 		succ++;
 	} else {
-		set_bit(PG_error, &page->flags);
+		SetPageError(page);
 		fail++;
 		dprintk("NFS: %d successful reads, %d failures\n", succ, fail);
 	}
-	/* N.B. Use nfs_unlock_page here? */
-	clear_bit(PG_locked, &page->flags);
-	wake_up(&page->wait);
-
+	page->owner = (int)current; // HACK, FIXME, will go away.
+	UnlockPage(page);
 	free_page(address);
 
 	rpc_release_task(task);
@@ -229,8 +224,7 @@ nfs_readpage(struct file *file, struct page *page)
 
 	dprintk("NFS: nfs_readpage (%p %ld@%ld)\n",
 		page, PAGE_SIZE, page->offset);
-	atomic_inc(&page->count);
-	set_bit(PG_locked, &page->flags);
+	get_page(page);
 
 	/*
 	 * Try to flush any pending writes to the file..
@@ -256,8 +250,7 @@ nfs_readpage(struct file *file, struct page *page)
 	goto out_free;
 
 out_error:
-	clear_bit(PG_locked, &page->flags);
-	wake_up(&page->wait);
+	UnlockPage(page);
 out_free:
 	free_page(page_address(page));
 out:

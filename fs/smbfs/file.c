@@ -14,6 +14,7 @@
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/pagemap.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -271,8 +272,11 @@ static long smb_write_one_page(struct file *file, struct page *page, unsigned lo
 
 	bytes -= copy_from_user((u8*)page_address(page) + offset, buf, bytes);
 	status = -EFAULT;
-	if (bytes)
+	if (bytes) {
+		lock_kernel();
 		status = smb_updatepage(file, page, offset, bytes);
+		unlock_kernel();
+	}
 	return status;
 }
 

@@ -157,7 +157,7 @@ drop_pte:
 	add_to_swap_cache(page_map, entry);
 	/* We checked we were unlocked way up above, and we
 	   have been careful not to stall until here */
-	set_bit(PG_locked, &page_map->flags);
+	LockPage(page_map);
 
 	/* OK, do a physical asynchronous write to swap.  */
 	rw_swap_page(WRITE, entry, (char *) page, 0);

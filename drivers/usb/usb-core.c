@@ -53,7 +53,7 @@ int usb_init(void)
 		usb_acm_init();
 #	endif
 #	ifdef CONFIG_USB_PRINTER
-		usb_print_init();
+		usb_printer_init();
 #	endif
 #	ifdef CONFIG_USB_CPIA
 		usb_cpia_init();
