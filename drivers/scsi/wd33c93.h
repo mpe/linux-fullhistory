@@ -190,6 +190,9 @@
 typedef struct {
    volatile unsigned char   SASR;
    char                     pad;
+#ifdef CONFIG_SGI
+   char                     pad2,pad3;
+#endif
    volatile unsigned char   SCMD;
 } wd33c93_regs;
 

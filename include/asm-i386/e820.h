@@ -16,6 +16,10 @@
 #define E820MAX	32		/* number of entries in E820MAP */
 #define E820NR	0x1e8		/* # entries in E820MAP */
 
+#define E820_RAM	1
+#define E820_RESERVED	2
+#define E820_ACPI	3
+
 #define HIGH_MEMORY	(1024*1024)
 
 #ifndef __ASSEMBLY__

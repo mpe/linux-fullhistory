@@ -90,6 +90,7 @@ static struct dentry *proc_lookupfd(struct inode * dir, struct dentry * dentry)
 	fd = 0;
 	len = dentry->d_name.len;
 	name = dentry->d_name.name;
+	if (len > 1 && *name == '0') goto out;
 	while (len-- > 0) {
 		c = *name - '0';
 		name++;

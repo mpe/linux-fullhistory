@@ -61,6 +61,7 @@
 #include <asm/msr.h>
 #include <asm/desc.h>
 #include <asm/e820.h>
+#include <asm/dma.h>
 
 /*
  * Machine setup..
@@ -401,18 +402,49 @@ void __init add_memory_region(unsigned long start,
 
 void __init setup_memory_region(void)
 {
+#define E820_DEBUG	0
+#ifdef E820_DEBUG
+	int i;
+#endif
+
 	/*
 	 * If we're lucky and live on a modern system, the setup code
 	 * will have given us a memory map that we can use to properly
 	 * set up memory.  If we aren't, we'll fake a memory map.
+	 *
+	 * We check to see that the memory map contains at least 2 elements
+	 * before we'll use it, because the detection code in setup.S may
+	 * not be perfect and most every PC known to man has two memory
+	 * regions: one from 0 to 640k, and one from 1mb up.  (The IBM
+	 * thinkpad 560x, for example, does not cooperate with the memory
+	 * detection code.)
 	 */
-	if (E820_MAP_NR) {
+	if (E820_MAP_NR > 1) {
 		/* got a memory map; copy it into a safe place.
 		 */
 		e820.nr_map = E820_MAP_NR;
 		if (e820.nr_map > E820MAX)
 			e820.nr_map = E820MAX;
 		memcpy(e820.map, E820_MAP, e820.nr_map * sizeof e820.map[0]);
+#ifdef E820_DEBUG
+		for (i=0; i < e820.nr_map; i++) {
+			printk("e820: %ld @ %08lx ",
+				(unsigned long)(e820.map[i].size),
+				(unsigned long)(e820.map[i].addr));
+			switch (e820.map[i].type) {
+			case E820_RAM:	printk("(usable)\n");
+					break;
+			case E820_RESERVED:
+					printk("(reserved)\n");
+					break;
+			case E820_ACPI:
+					printk("(ACPI data)\n");
+					break;
+			default:	printk("type %lu\n", e820.map[i].type);
+					break;
+			}
+		}
+#endif
 	}
 	else {
 		/* otherwise fake a memory map; one section from 0k->640k,
@@ -422,8 +454,8 @@ void __init setup_memory_region(void)
 
 		mem_size = (ALT_MEM_K < EXT_MEM_K) ? EXT_MEM_K : ALT_MEM_K;
 
-		add_memory_region(0, LOWMEMSIZE(), 1);
-		add_memory_region(HIGH_MEMORY, mem_size << 10, 1);
+		add_memory_region(0, LOWMEMSIZE(), E820_RAM);
+		add_memory_region(HIGH_MEMORY, mem_size << 10, E820_RAM);
   	}
 } /* setup_memory_region */
 
@@ -503,7 +535,7 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 					 */
 					e820.nr_map = 0;
 					usermem = 1;
-					add_memory_region(0, LOWMEMSIZE(), 1);
+					add_memory_region(0, LOWMEMSIZE(), E820_RAM);
 				}
 				mem_size = memparse(from+4, &from);
 				if (*from == '@')
@@ -512,7 +544,7 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 					start_at = HIGH_MEMORY;
 					mem_size -= HIGH_MEMORY;
 				}
-				add_memory_region(start_at, mem_size, 1);
+				add_memory_region(start_at, mem_size, E820_RAM);
 			}
 		}
 		c = *(from++);
@@ -531,7 +563,7 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 	memory_end = 0;
 	for (i=0; i < e820.nr_map; i++) {
 		/* RAM? */
-		if (e820.map[i].type == 1) {
+		if (e820.map[i].type == E820_RAM) {
 			unsigned long end = e820.map[i].addr + e820.map[i].size;
 
 			if (end > memory_end)
@@ -856,6 +888,15 @@ static void __init cyrix_model(struct cpuinfo_x86 *c)
 			c->x86_model = (dir1 & 0x20) ? 1 : 2;
 			c->x86_capability&=~X86_FEATURE_TSC;
 		}
+#ifdef CONFIG_PCI
+		/* It isnt really a PCI quirk directly, but the cure is the
+		   same. The MediaGX has deep magic SMM stuff that handles the
+		   SB emulation. It thows away the fifo on disable_dma() which
+		   is wrong and ruins the audio. */
+		
+		printk(KERN_INFO "Working around Cyrix MediaGX virtual DMA bug.\n");
+		isa_dma_bridge_buggy = 1;
+#endif		
 		break;
 
         case 5: /* 6x86MX/M II */
@@ -881,8 +922,8 @@ static void __init cyrix_model(struct cpuinfo_x86 *c)
 			dir0_msn = 0;
 			p = Cx486S_name[0];
 			break;
-		break;
 		}
+		break;
 
 	default:  /* unknown (shouldn't happen, we know everyone ;-) */
 		dir0_msn = 7;

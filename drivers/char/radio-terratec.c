@@ -31,6 +31,7 @@
 #include <asm/uaccess.h>	/* copy to/from user		*/
 #include <linux/videodev.h>	/* kernel radio structs		*/
 #include <linux/config.h>	/* CONFIG_RADIO_TERRATEC_PORT 	*/
+#include <linux/spinlock.h>
 
 #ifndef CONFIG_RADIO_TERRATEC_PORT
 #define CONFIG_RADIO_TERRATEC_PORT 0x590
@@ -50,6 +51,7 @@
 
 static int io = CONFIG_RADIO_TERRATEC_PORT; 
 static int users = 0;
+static spinlock_t lock;
 
 struct tt_device
 {
@@ -66,12 +68,14 @@ static void cardWriteVol(int volume)
 {
 	int i;
 	volume = volume+(volume * 32); // change both channels
+	spin_lock(&lock);
 	for (i=0;i<8;i++)
 	{
 		if (volume & (0x80>>i))
 			outb(0x80, VOLPORT);
 		else outb(0x00, VOLPORT);
 	}
+	spin_unlock(&lock);
 }
 
 
@@ -148,6 +152,8 @@ static int tt_setfreq(struct tt_device *dev, unsigned long freq1)
 		temp = temp/2;
        }
 
+	spin_lock(&lock);
+	
 	for (i=24;i>-1;i--)			/* bit shift the values to the radiocard */
 	{
 		if (buffer[i]==1) 
@@ -163,6 +169,8 @@ static int tt_setfreq(struct tt_device *dev, unsigned long freq1)
 		}
 	}
 	outb(0x00, BASEPORT);     
+	
+	spin_unlock(&lock);
   
   	return 0;
 }
@@ -308,6 +316,8 @@ int __init terratec_init(struct video_init *v)
 	}
 
 	terratec_radio.priv=&terratec_unit;
+	
+	spin_lock_init(&lock);
 	
 	if(video_register_device(&terratec_radio, VFL_TYPE_RADIO)==-1)
 		return -EINVAL;

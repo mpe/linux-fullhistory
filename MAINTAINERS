@@ -29,7 +29,7 @@ trivial patch so apply some common sense.
 	job the maintainers (and especially Linus) do is to keep things
 	looking the same. Sometimes this means that the clever hack in
 	your driver to get around a problem actually needs to become a
-	generalized kernel feature ready for next time. See 
+	generalized kernel feature ready for next time. See
 	Documentation/CodingStyle for guidance here.
 
 	PLEASE try to include any credit lines you want added with the
@@ -63,7 +63,7 @@ S: Status, one of the following:
 	Maintained:	Someone actually looks after it.
 	Odd Fixes:	It has a maintainer but they don't have time to do
 			much other than throw the odd patch in. See below..
-	Orphan:		No current maintainer [but maybe you could take the 
+	Orphan:		No current maintainer [but maybe you could take the
 			role as you write your new code].
 	Obsolete:	Old code. Something tagged obsolete generally means
 			it has been replaced by a better system and you
@@ -131,12 +131,6 @@ M:	Jay.Schulist@spacs.k12.wi.us
 L:	linux-atalk@netspace.org
 S:	Maintained
 
-ARPD SUPPORT
-P:	Jonathan Layes
-M:	layes@loran.com
-L:	linux-net@vger.rutgers.edu
-S:	Maintained
-
 ARM MFM AND FLOPPY DRIVERS
 P:	Dave Gilbert
 M:	linux@treblig.org
@@ -148,6 +142,12 @@ M:	linux@arm.uk.linux.org
 L:	linux-arm@vger.rutgers.edu
 L:	arm-linux@tardis.ed.ac.uk
 W:	http://www.arm.uk.linux.org/~rmk/armlinux.html
+S:	Maintained
+
+ARPD SUPPORT
+P:	Jonathan Layes
+M:	layes@loran.com
+L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
 AX.25 NETWORK LAYER
@@ -180,6 +180,12 @@ CIRRUS LOGIC GENERIC FBDEV DRIVER
 P:	Jeff Garzik
 M:	jgarzik@pobox.com
 L:	linux-fbdev@vuser.vu.union.edu
+S:	Maintained
+
+COMPAQ SMART2 RAID DRIVER
+P:	Charles White	
+M:	Charles White <arrays@compaq.com>
+L:	compaqandlinux@yps.org	
 S:	Maintained
 
 COMPUTONE INTELLIPORT MULTIPORT CARD
@@ -287,12 +293,6 @@ M:	mike@i-Connect.Net
 L:	linux-eata@i-connect.net, linux-scsi@vger.rutgers.edu
 S:	Maintained
 
-COMPAQ SMART2 RAID DRIVER
-P:	Charles White	
-M:	Charles White <arrays@compaq.com>
-L:	compaqandlinux@yps.org	
-S:	Maintained
-
 EATA ISA/EISA/PCI SCSI DRIVER
 P:	Dario Ballabio
 M:	dario@milano.europe.dg.com
@@ -369,7 +369,7 @@ S:	Maintained
 
 HFS FILESYSTEM
 P:      Adrian Sun
-M:      asun@u.washington.edu
+M:      asun@cobaltnet.com
 L:      linux-kernel@vger.rutgers.edu
 S:      Maintained
 
@@ -390,17 +390,23 @@ P:	Jaroslav Kysela
 M:	perex@suse.cz
 S:	Maintained
 
+HPFS FILESYSTEM
+P:	Mikulas Patocka
+M:	mikulas@artax.karlin.mff.cuni.cz
+W:	http://artax.karlin.mff.cuni.cz/~mikulas/vyplody/hpfs/index-e.cgi
+S:	Maintained
+
 IBM MCA SCSI SUBSYSTEM DRIVER
 P:	Michael Lang
 M:	langa2@kph.uni-mainz.de
 W:	http://www.uni-mainz.de/~langm000/linux.html
 S:	Maintained
 
-HPFS FILESYSTEM
-P:	Mikulas Patocka
-M:	mikulas@artax.karlin.mff.cuni.cz
-W:	http://artax.karlin.mff.cuni.cz/~mikulas/vyplody/hpfs/index-e.cgi
-S:	Maintained
+IBM ServeRAID RAID DRIVER
+P:      Keith Mitchell
+M:      ipslinux@us.ibm.com
+W:      http://www.developer.ibm.com/welcome/netfinity/serveraid_beta.html
+S:      Supported
 
 IBM ServeRAID RAID DRIVER
 P:      Keith Mitchell
@@ -415,7 +421,7 @@ L:	linux-kernel@vger.rutgers.edu
 W:	http://linux.kernel.org/pub/linux/kernel/people/hedrick/
 S:	Supported
 
-IDE/ATAPI CDROM DRIVER 
+IDE/ATAPI CDROM DRIVER
 P:	Jens Axboe
 M:	axboe@image.dk
 L:	linux-kernel@vger.rutgers.edu
@@ -524,8 +530,9 @@ S:	Maintained
 
 MISCELLANEOUS MCA-SUPPORT
 P:	David Weinehall
-M:	mcalinux@acc.umu.se (project MCA-team)
 M:	tao@acc.umu.se (personal)
+W:	http://www.acc.umu.se/~tao/
+W:	http://www.acc.umu.se/~mcalinux/
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
@@ -571,7 +578,7 @@ L:	netfilter@lists.samba.org
 S:	Supported
 
 NETROM NETWORK LAYER
-P:	Tomi Manninen 
+P:	Tomi Manninen
 M:	Tomi.Manninen@hut.fi
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained
@@ -627,16 +634,6 @@ L:	linux-tr@emissary.aus-etc.com
 W:	http://www.linuxtr.net
 S:	Maintained
 
-OLYMPIC NETWORK DRIVER
-P:	Peter De Shrijver
-M:	p2@ace.ulyssis.sutdent.kuleuven.ac.be	
-P:	Mike Phillips
-M:	phillim@amtrak.com
-L:	linux-net@vger.rutgers.edu
-L:	linux-tr@emissary.aus-etc.com
-W:	http://www.linuxtr.net
-S:	Maintained
-
 OPL3-SA2, SA3, and SAx DRIVER
 P:	Scott Murray
 M:	scottm@interlog.com
@@ -668,17 +665,23 @@ P:	Jens Maurer
 M:	jmaurer@cck.uni-kl.de
 S:	Maintained
 
+PCI SOUND DRIVERS (ES1370, ES1371 and SONICVIBES)
+P:	Thomas Sailer
+M:	sailer@ife.ee.ethz.ch
+L:	linux-sound@vger.rutgers.edu
+W:	http://www.ife.ee.ethz.ch/~sailer/linux/pciaudio.html
+S:	Maintained
+
 PCI SUBSYSTEM
 P:	Martin Mares
 M:	mj@atrey.karlin.mff.cuni.cz
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
-PCI SOUND DRIVERS (ES1370, ES1371 and SONICVIBES)
-P:	Thomas Sailer
-M:	sailer@ife.ee.ethz.ch
-L:	linux-sound@vger.rutgers.edu
-W:	http://www.ife.ee.ethz.ch/~sailer/linux/pciaudio.html
+PCMCIA SUBSYSTEM
+P:	David Hinds
+M:	dhinds@zen.stanford.edu
+L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 PCNET32 NETWORK DRIVER
@@ -699,6 +702,12 @@ PPP PROTOCOL DRIVERS AND COMPRESSORS
 P:	Al Longyear
 M:	longyear@pobox.com
 L:	linux-ppp@vger.rutgers.edu
+S:	Maintained
+
+RAYLINK/WEBGEAR 802.11 WIRELESS LAN DRIVER
+P:	Corey Thomas
+M:	corey@world.std.com
+L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 REAL TIME CLOCK DRIVER
@@ -725,7 +734,7 @@ M:	emoenke@gwdg.de
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
-SCSI CDROM DRIVER 
+SCSI CDROM DRIVER
 P:	Jens Axboe
 M:	axboe@image.dk
 L:	linux-kernel@vger.rutgers.edu
@@ -776,7 +785,7 @@ L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
 SOUND
-P:	Alan Cox 
+P:	Alan Cox
 M:	alan@redhat.com
 S:	Supported
 
@@ -860,7 +869,7 @@ M:	mnalis@jagor.srce.hr
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
-UNIFORM CDROM DRIVER 
+UNIFORM CDROM DRIVER
 P:	Jens Axboe
 M:	axboe@image.dk
 L:	linux-kernel@vger.rutgers.edu
@@ -886,6 +895,11 @@ P:	Gordon Chaffee
 M:	chaffee@cs.berkeley.edu
 L:	linux-kernel@vger.rutgers.edu
 W:	http://bmrc.berkeley.edu/people/chaffee
+S:	Maintained
+
+VIA 82Cxxx AUDIO DRIVER
+P:	Jeff Garzik
+M:	jgarzik@pobox.com
 S:	Maintained
 
 VIDEO FOR LINUX

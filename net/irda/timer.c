@@ -6,10 +6,11 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Sat Jun 26 17:03:22 1999
+ * Modified at:   Mon Sep 20 11:32:37 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -124,16 +125,14 @@ inline void irlmp_start_idle_timer(struct lap_cb *self, int timeout)
  *    IrLAP slot timer has expired
  *
  */
-static void irlap_slot_timer_expired( void* data)
+static void irlap_slot_timer_expired(void *data)
 {
 	struct irlap_cb *self = (struct irlap_cb *) data;
 
-	DEBUG( 4, "Slot timer expired!\n");
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LAP_MAGIC, return;);
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LAP_MAGIC, return;);
-
-	irlap_do_event( self, SLOT_TIMER_EXPIRED, NULL, NULL);
+	irlap_do_event(self, SLOT_TIMER_EXPIRED, NULL, NULL);
 } 
 
 /*
@@ -142,16 +141,14 @@ static void irlap_slot_timer_expired( void* data)
  *    IrLAP query timer has expired
  *
  */
-static void irlap_query_timer_expired( void* data)
+static void irlap_query_timer_expired(void *data)
 {
 	struct irlap_cb *self = (struct irlap_cb *) data;
 
-	DEBUG( 4, "Query timer expired!\n");
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LAP_MAGIC, return;);
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LAP_MAGIC, return;);
-
-	irlap_do_event( self, QUERY_TIMER_EXPIRED, NULL, NULL);
+	irlap_do_event(self, QUERY_TIMER_EXPIRED, NULL, NULL);
 } 
 
 /*
@@ -160,16 +157,14 @@ static void irlap_query_timer_expired( void* data)
  *    
  *
  */
-static void irlap_final_timer_expired( void* data)
+static void irlap_final_timer_expired(void *data)
 {
 	struct irlap_cb *self = (struct irlap_cb *) data;
 
-	DEBUG( 4, "Final timer expired!\n");
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LAP_MAGIC, return;);
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LAP_MAGIC, return;);
-
-	irlap_do_event( self, FINAL_TIMER_EXPIRED, NULL, NULL);
+	irlap_do_event(self, FINAL_TIMER_EXPIRED, NULL, NULL);
 }
 
 /*
@@ -178,16 +173,14 @@ static void irlap_final_timer_expired( void* data)
  *    
  *
  */
-static void irlap_wd_timer_expired( void* data)
+static void irlap_wd_timer_expired(void *data)
 {
 	struct irlap_cb *self = (struct irlap_cb *) data;
 	
-	DEBUG( 4, "WD timer expired!\n");
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LAP_MAGIC, return;);
 	
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LAP_MAGIC, return;);
-	
-	irlap_do_event( self, WD_TIMER_EXPIRED, NULL, NULL);
+	irlap_do_event(self, WD_TIMER_EXPIRED, NULL, NULL);
 }
 
 /*
@@ -196,16 +189,14 @@ static void irlap_wd_timer_expired( void* data)
  *    
  *
  */
-static void irlap_backoff_timer_expired( void* data)
+static void irlap_backoff_timer_expired(void *data)
 {
 	struct irlap_cb *self = (struct irlap_cb *) data;
 	
-	DEBUG( 0, "Backoff timer expired!\n");
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LAP_MAGIC, return;);
 	
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LAP_MAGIC, return;);
-	
-	irlap_do_event( self, BACKOFF_TIMER_EXPIRED, NULL, NULL);
+	irlap_do_event(self, BACKOFF_TIMER_EXPIRED, NULL, NULL);
 }
 
 
@@ -214,14 +205,12 @@ static void irlap_backoff_timer_expired( void* data)
  *
  *    
  */
-void irda_device_media_busy_expired( void* data)
+void irda_device_media_busy_expired(void* data)
 {
-	struct irda_device *self = ( struct irda_device *) data;
+	struct irda_device *self = (struct irda_device *) data;
 
-	DEBUG( 4, "Mediabusy timer expired!\n");
-	
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return;);
 
-	irda_device_set_media_busy( self, FALSE);
+	irda_device_set_media_busy(&self->netdev, FALSE);
 }

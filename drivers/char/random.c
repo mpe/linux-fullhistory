@@ -1,7 +1,7 @@
 /*
  * random.c -- A strong random number generator
  *
- * Version 1.88, last modified 30-Aug-99
+ * Version 1.89, last modified 19-Sep-99
  * 
  * Copyright Theodore Ts'o, 1994, 1995, 1996, 1997, 1998, 1999.  All
  * rights reserved.
@@ -1329,8 +1329,14 @@ static ssize_t extract_entropy(struct entropy_store *r, void * buf,
  */
 void get_random_bytes(void *buf, int nbytes)
 {
-	extract_entropy(sec_random_state, (char *) buf, nbytes, 
-			EXTRACT_ENTROPY_SECONDARY);
+	if (sec_random_state)  
+		extract_entropy(sec_random_state, (char *) buf, nbytes, 
+				EXTRACT_ENTROPY_SECONDARY);
+	else if (random_state)
+		extract_entropy(random_state, (char *) buf, nbytes, 0);
+	else
+		printk(KERN_NOTICE "get_random_bytes called before "
+				   "random driver initialization\n");
 }
 
 /*********************************************************************
@@ -2012,7 +2018,7 @@ __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
 	if (!rekey_time || (tv.tv_sec - rekey_time) > REKEY_INTERVAL) {
 		rekey_time = tv.tv_sec;
 		/* First three words are overwritten below. */
-		get_random_bytes(&secret+3, sizeof(secret)-12);
+		get_random_bytes(&secret[3], sizeof(secret)-12);
 		count = (tv.tv_sec/REKEY_INTERVAL) << HASH_BITS;
 	}
 

@@ -374,13 +374,13 @@ static int i2c_getdataline(struct i2c_bus *bus)
 	return (btread(ZR36057_I2CBR) >> 1) & 1;
 }
 
-void attach_inform(struct i2c_bus *bus, int id)
+static void attach_inform(struct i2c_bus *bus, int id)
 {
 	DEBUG(struct zoran *zr = (struct zoran *) bus->data);
 	DEBUG(printk(BUZ_DEBUG "-%u: i2c attach %02x\n", zr->id, id));
 }
 
-void detach_inform(struct i2c_bus *bus, int id)
+static void detach_inform(struct i2c_bus *bus, int id)
 {
 	DEBUG(struct zoran *zr = (struct zoran *) bus->data);
 	DEBUG(printk(BUZ_DEBUG "-%u: i2c detach %02x\n", zr->id, id));

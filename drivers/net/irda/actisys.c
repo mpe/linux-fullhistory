@@ -135,14 +135,14 @@ static void actisys_change_speed(struct irda_device *idev, __u32 speed)
 		
 		/* Wait at a few ms */
 		current->state = TASK_INTERRUPTIBLE;
-		schedule_timeout(2);
+		schedule_timeout(MSECS_TO_JIFFIES(20));
 
 		/* Set DTR, Set RTS */
 		irda_device_set_dtr_rts(idev, TRUE, TRUE);
 		
 		/* Wait at a few ms again */
 		current->state = TASK_INTERRUPTIBLE;
-		schedule_timeout(2);
+		schedule_timeout(MSECS_TO_JIFFIES(20));
 
                 /* Go to next baudrate */
 		if (idev->io.dongle_id == ACTISYS_DONGLE)
@@ -174,7 +174,7 @@ static void actisys_reset(struct irda_device *idev)
 
 	/* Sleep 10-20 ms*/
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(2);
+	schedule_timeout(MSECS_TO_JIFFIES(20));
 	
 	/* Go back to normal mode */
 	irda_device_set_dtr_rts(idev, TRUE, TRUE);

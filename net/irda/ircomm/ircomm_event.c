@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      ircomm_event.c
- * Version:       
- * Description:   
+ * Version:       1.0
+ * Description:   IrCOMM layer state machine
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 20:33:11 1999
- * Modified at:   Wed Aug 25 12:58:27 1999
+ * Modified at:   Thu Sep  2 10:09:25 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -161,18 +161,15 @@ static int ircomm_state_waitr(struct ircomm_cb *self, IRCOMM_EVENT event,
 		ircomm_next_state(self, IRCOMM_CONN);
 		ret = self->issue.connect_response(self, skb);
 		break;
-
 	case IRCOMM_DISCONNECT_REQUEST:
 		ircomm_next_state(self, IRCOMM_IDLE);
 		ret = self->issue.disconnect_request(self, skb, info);
 		break;
-
 	case IRCOMM_TTP_DISCONNECT_INDICATION:
 	case IRCOMM_LMP_DISCONNECT_INDICATION:
 		ircomm_next_state(self, IRCOMM_IDLE);
 		ircomm_disconnect_indication(self, skb, info);
 		break;
-
 	default:
 		DEBUG(0, __FUNCTION__ "(), unknown event = %s\n",
 		      ircomm_event[event]);

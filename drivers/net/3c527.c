@@ -1,3 +1,4 @@
+
 /* 3c527.c: 3Com Etherlink/MC32 driver for Linux
  *
  *	(c) Copyright 1998 Red Hat Software Inc
@@ -15,7 +16,7 @@
  */
 
 static const char *version =
-	"3c527.c:v0.04 1999/03/16 Alan Cox (alan@redhat.com)\n";
+	"3c527.c:v0.05 1999/09/06 Alan Cox (alan@redhat.com)\n";
 
 /*
  *	Things you need
@@ -108,6 +109,7 @@ struct mc32_local
 	u16 tx_skb_end;
 	struct sk_buff *rx_skb[RX_RING_MAX];	/* Receive ring */
 	void *rx_ptr[RX_RING_MAX];		/* Data pointers */
+	u32 mc_list_valid;			/* True when the mclist is set */
 };
 
 /* The station (ethernet) address prefix, used for a sanity check. */
@@ -138,6 +140,8 @@ static void	mc32_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int	mc32_close(struct net_device *dev);
 static struct	net_device_stats *mc32_get_stats(struct net_device *dev);
 static void	mc32_set_multicast_list(struct net_device *dev);
+static void	mc32_reset_multicast_list(struct net_device *dev);
+
 
 /*
  * Check for a network adaptor of this type, and return '0' iff one exists.
@@ -445,16 +449,56 @@ static void mc32_ring_poll(struct net_device *dev)
 /*
  *	Send exec commands
  */
- 
+
+
+/*
+ *	Send command from interrupt state
+ */
+
+static int mc32_command_nowait(struct net_device *dev, u16 cmd, void *data, int len)
+{
+	struct mc32_local *lp = (struct mc32_local *)dev->priv;
+	int ioaddr = dev->base_addr;
+	
+	if(lp->exec_pending)
+		return -1;
+		
+	lp->exec_pending=1;
+	lp->exec_box->mbox=0;
+	lp->exec_box->mbox=cmd;
+	memcpy((void *)lp->exec_box->data, data, len);
+	barrier();	/* the memcpy forgot the volatile so be sure */
+
+	/* Send the command */
+	while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
+	outb(1<<6, ioaddr+HOST_CMD);	
+	return 0;
+}
+
+
+/*
+ *	Send command and block for results. On completion spot and reissue
+ *	multicasts
+ */
+  
 static int mc32_command(struct net_device *dev, u16 cmd, void *data, int len)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	int ioaddr = dev->base_addr;
 	unsigned long flags;
+	int ret = 0;
 	
+	/*
+	 *	Wait for a command
+	 */
+	 
 	while(lp->exec_pending)
 		sleep_on(&lp->event);
 		
+	/*
+	 *	Issue mine
+	 */
+
 	lp->exec_pending=1;
 	lp->exec_box->mbox=0;
 	lp->exec_box->mbox=cmd;
@@ -472,17 +516,19 @@ static int mc32_command(struct net_device *dev, u16 cmd, void *data, int len)
 	lp->exec_pending=0;
 	restore_flags(flags);
 	
+	 
+	if(lp->exec_box->data[0]&(1<<13))
+		ret = -1;
 	/*
 	 *	A multicast set got blocked - do it now
 	 */
-	 
+		
 	if(lp->mc_reload_wait)
-		mc32_set_multicast_list(dev);
+		mc32_reset_multicast_list(dev);
 
-	if(lp->exec_box->data[0]&(1<<13))
-		return -1;
-	return 0;
+	return ret;
 }
+
 
 /*
  *	RX abort
@@ -1063,20 +1109,18 @@ static struct net_device_stats *mc32_get_stats(struct net_device *dev)
  * num_addrs > 0	Multicast mode, receive normal and MC packets,
  *			and do best-effort filtering.
  */
-static void mc32_set_multicast_list(struct net_device *dev)
+static void do_mc32_set_multicast_list(struct net_device *dev, int retry)
 {
+	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	u16 filt;
+
 	if (dev->flags&IFF_PROMISC)
-	{
 		/* Enable promiscuous mode */
 		filt = 1;
-		mc32_command(dev, 0, &filt, 2);
-	}
 	else if((dev->flags&IFF_ALLMULTI) || dev->mc_count > 10)
 	{
 		dev->flags|=IFF_PROMISC;
 		filt = 1;
-		mc32_command(dev, 0, &filt, 2);
 	}
 	else if(dev->mc_count)
 	{
@@ -1087,24 +1131,47 @@ static void mc32_set_multicast_list(struct net_device *dev)
 		int i;
 		
 		filt = 0;
-		block[1]=0;
-		block[0]=dev->mc_count;
-		bp=block+2;
 		
-		for(i=0;i<dev->mc_count;i++)
+		if(retry==0)
+			lp->mc_list_valid = 0;
+		if(!lp->mc_list_valid)
 		{
-			memcpy(bp, dmc->dmi_addr, 6);
-			bp+=6;
-			dmc=dmc->next;
+			block[1]=0;
+			block[0]=dev->mc_count;
+			bp=block+2;
+		
+			for(i=0;i<dev->mc_count;i++)
+			{
+				memcpy(bp, dmc->dmi_addr, 6);
+				bp+=6;
+				dmc=dmc->next;
+			}
+			if(mc32_command_nowait(dev, 2, block, 2+6*dev->mc_count)==-1)
+			{
+				lp->mc_reload_wait = 1;
+				return;
+			}
+			lp->mc_list_valid=1;
 		}
-		mc32_command(dev, 2, block, 2+6*dev->mc_count);
-		mc32_command(dev, 0, &filt, 2);
 	}
 	else 
 	{
 		filt = 0;
-		mc32_command(dev, 0, &filt, 2);
 	}
+	if(mc32_command_nowait(dev, 0, &filt, 2)==-1)
+	{
+		lp->mc_reload_wait = 1;
+	}
+}
+
+static void mc32_set_multicast_list(struct net_device *dev)
+{
+	do_mc32_set_multicast_list(dev,0);
+}
+
+static void mc32_reset_multicast_list(struct net_device *dev)
+{
+	do_mc32_set_multicast_list(dev,1);
 }
 
 #ifdef MODULE

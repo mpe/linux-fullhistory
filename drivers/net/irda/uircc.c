@@ -767,7 +767,7 @@ static void uircc_wait_until_sent( struct irda_device *idev)
 {
 	/* Just delay 60 ms */
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(6);
+	schedule_timeout(MSECS_TO_JIFFIES(60));
 }
 
 /*

@@ -187,7 +187,7 @@ int probe_opl3sa_mpu(struct address_info *hw_config)
 {
 #if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	unsigned char conf;
-	static char irq_bits[] = {
+	static signed char irq_bits[] = {
 		-1, -1, -1, -1, -1, 1, -1, 2, -1, 3, 4
 	};
 

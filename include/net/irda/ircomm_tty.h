@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 23:24:22 1999
- * Modified at:   Fri Aug 13 07:31:35 1999
+ * Modified at:   Tue Aug 31 10:22:02 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -83,8 +83,12 @@ struct ircomm_tty_cb {
 	struct termios	  callout_termios;
 
 	wait_queue_head_t open_wait;
+	wait_queue_head_t close_wait;
 	struct timer_list watchdog_timer;
 	struct tq_struct  tqueue;
+
+        unsigned short    close_delay;
+        unsigned short    closing_wait; /* time to wait before closing */
 
 	long pgrp;		/* pgrp of opening process */
 	int  open_count;

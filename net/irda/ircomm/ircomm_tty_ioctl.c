@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Jun 10 14:39:09 1999
- * Modified at:   Wed Aug 25 14:11:02 1999
+ * Modified at:   Tue Aug 31 10:29:36 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -196,12 +196,12 @@ static int ircomm_tty_get_modem_info(struct ircomm_tty_cb *self,
 
 	DEBUG(1, __FUNCTION__ "()\n");
 
-	result =  ((self->session.dte & IRCOMM_RTS)       ? TIOCM_RTS : 0)
-		| ((self->session.dte & IRCOMM_DTR)       ? TIOCM_DTR : 0)
-		| ((self->session.dce & IRCOMM_DELTA_CD)  ? TIOCM_CAR : 0)
-		| ((self->session.dce & IRCOMM_DELTA_RI)  ? TIOCM_RNG : 0)
-		| ((self->session.dce & IRCOMM_DELTA_DSR) ? TIOCM_DSR : 0)
-		| ((self->session.dce & IRCOMM_DELTA_CTS) ? TIOCM_CTS : 0);
+	result =  ((self->session.dte & IRCOMM_RTS) ? TIOCM_RTS : 0)
+		| ((self->session.dte & IRCOMM_DTR) ? TIOCM_DTR : 0)
+		| ((self->session.dce & IRCOMM_CD)  ? TIOCM_CAR : 0)
+		| ((self->session.dce & IRCOMM_RI)  ? TIOCM_RNG : 0)
+		| ((self->session.dce & IRCOMM_DSR) ? TIOCM_DSR : 0)
+		| ((self->session.dce & IRCOMM_CTS) ? TIOCM_CTS : 0);
 
 	return put_user(result, value);
 }
@@ -286,21 +286,19 @@ static int ircomm_tty_get_serial_info(struct ircomm_tty_cb *self,
 
 	memset(&info, 0, sizeof(info));
 	info.line = self->line;
-	/* info.flags = self->flags; */
+	info.flags = self->flags;
 	info.baud_base = self->session.data_rate;
-#if 0
-	info.close_delay = driver->close_delay;
-	info.closing_wait = driver->closing_wait;
-#endif
+	info.close_delay = self->close_delay;
+	info.closing_wait = self->closing_wait;
+
 	/* For compatibility  */
  	info.type = PORT_16550A;
  	info.port = 0;
  	info.irq = 0;
 	info.xmit_fifo_size = 0;
 	info.hub6 = 0;   
-#if 0
-	info.custom_divisor = driver->custom_divisor;
-#endif
+	info.custom_divisor = 0;
+
 	if (copy_to_user(retinfo, &info, sizeof(*retinfo)))
 		return -EFAULT;
 

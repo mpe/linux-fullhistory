@@ -6,7 +6,7 @@
  * Status:        Stable.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 17 20:54:32 1997
- * Modified at:   Mon Aug 23 09:30:56 1999
+ * Modified at:   Mon Sep 27 11:15:20 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -503,24 +503,21 @@ int irlmp_connect_response(struct lsap_cb *self, struct sk_buff *userdata)
  */
 void irlmp_connect_confirm(struct lsap_cb *self, struct sk_buff *skb) 
 {
-	int max_seg_size;
 	int max_header_size;
 	int lap_header_size;
+	int max_seg_size;
 
 	DEBUG(3, __FUNCTION__ "()\n");
 	
 	ASSERT(skb != NULL, return;);
 	ASSERT(self != NULL, return;);
-	ASSERT(self->magic == LMP_LSAP_MAGIC, return;);
-	
+	ASSERT(self->magic == LMP_LSAP_MAGIC, return;);	
 	ASSERT(self->lap != NULL, return;);
+
 	self->qos = *self->lap->qos;
 
-	max_seg_size = self->lap->qos->data_size.value-LMP_HEADER;
-	DEBUG(2, __FUNCTION__ "(), max_seg_size=%d\n", max_seg_size);
-
-	lap_header_size = irlap_get_header_size(self->lap->irlap);
-	
+	max_seg_size    = self->lap->qos->data_size.value-LMP_HEADER;
+	lap_header_size = irlap_get_header_size(self->lap->irlap);	
 	max_header_size = LMP_HEADER + lap_header_size;
 
 	DEBUG(2, __FUNCTION__ "(), max_header_size=%d\n", max_header_size);
@@ -530,7 +527,7 @@ void irlmp_connect_confirm(struct lsap_cb *self, struct sk_buff *skb)
 
 	if (self->notify.connect_confirm) {
 		self->notify.connect_confirm(self->notify.instance, self,
-					     &self->qos, max_seg_size, 
+					     &self->qos, max_seg_size,
 					     max_header_size, skb);
 	}
 }
@@ -1117,6 +1114,10 @@ __u16 irlmp_service_to_hint(int service)
 	case S_OBEX:
 		hint.byte[0] |= HINT_EXTENSION;
 		hint.byte[1] |= HINT_OBEX;
+		break;
+	case S_TELEPHONY:
+		hint.byte[0] |= HINT_EXTENSION;
+		hint.byte[1] |= HINT_TELEPHONY;
 		break;
 	case S_ANY:
 		hint.word = 0xffff;

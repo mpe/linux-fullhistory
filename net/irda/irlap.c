@@ -6,7 +6,7 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Mon Aug 23 12:05:26 1999
+ * Modified at:   Mon Sep 20 11:04:32 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -106,15 +106,12 @@ void irlap_cleanup(void)
  *    Initialize IrLAP layer
  *
  */
-struct irlap_cb *irlap_open(struct irda_device *irdev)
+struct irlap_cb *irlap_open(struct net_device *dev)
 {
 	struct irlap_cb *self;
 
 	DEBUG(4, __FUNCTION__ "()\n");
 	
-	ASSERT(irdev != NULL, return NULL;);
-	ASSERT(irdev->magic == IRDA_DEVICE_MAGIC, return NULL;);
-
 	/* Initialize the irlap structure. */
 	self = kmalloc(sizeof(struct irlap_cb), GFP_KERNEL);
 	if (self == NULL)
@@ -124,8 +121,7 @@ struct irlap_cb *irlap_open(struct irda_device *irdev)
 	self->magic = LAP_MAGIC;
 
 	/* Make a binding between the layers */
-	self->irdev = irdev;
-	self->netdev = &irdev->netdev;
+	self->netdev = dev;
 
 	irlap_next_state(self, LAP_OFFLINE);
 
@@ -186,7 +182,6 @@ static void __irlap_close(struct irlap_cb *self)
 
 	irlap_flush_all_queues(self);
        
-	self->irdev = NULL;
 	self->magic = 0;
 	
 	kfree(self);
@@ -277,7 +272,7 @@ void irlap_connect_request(struct irlap_cb *self, __u32 daddr,
 	irlap_init_qos_capabilities(self, qos_user);
 	
 	if ((self->state == LAP_NDM) && 
-	    !irda_device_is_media_busy(self->irdev))
+	    !irda_device_is_media_busy(self->netdev))
 		irlap_do_event(self, CONNECT_REQUEST, NULL, NULL);
 	else
 		self->connect_pending = TRUE;
@@ -565,7 +560,7 @@ void irlap_discovery_confirm(struct irlap_cb *self, hashbin_t *discovery_log)
 	 * connection attempts much easier.
 	 */
 	if (discovery_log && hashbin_get_size(discovery_log) > 0)
-		irda_device_set_media_busy(self->irdev, FALSE);
+		irda_device_set_media_busy(self->netdev, FALSE);
 	
 	/* Inform IrLMP */
 	irlmp_link_discovery_confirm(self->notify.instance, discovery_log);
@@ -849,17 +844,24 @@ void irlap_flush_all_queues(struct irlap_cb *self)
  */
 void irlap_change_speed(struct irlap_cb *self, __u32 speed)
 {
+	struct ifreq req;
+
 	DEBUG(4, __FUNCTION__ "(), setting speed to %d\n", speed);
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
 
-	if (!self->irdev) {
+	if (!self->netdev) {
 		DEBUG(1, __FUNCTION__ "(), driver missing!\n");
 		return;
 	}
 
-	irda_device_change_speed(self->irdev, speed);
+	/* 
+	 * Warning, ifr_bandwidth is only 16 bits on architectures where ints
+         * are 16 bits wide.
+	 */
+	req.ifr_bandwidth = speed;
+	self->netdev->do_ioctl(self->netdev, &req, SIOCSBANDWIDTH);
 
 	self->qos_rx.baud_rate.value = speed;
 	self->qos_tx.baud_rate.value = speed;
@@ -922,7 +924,7 @@ void irlap_init_qos_capabilities(struct irlap_cb *self,
 {
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
-	ASSERT(self->irdev != NULL, return;);
+	ASSERT(self->netdev != NULL, return;);
 
 	/* Start out with the maximum QoS support possible */
 	irda_init_max_qos_capabilies(&self->qos_rx);
@@ -933,7 +935,7 @@ void irlap_init_qos_capabilities(struct irlap_cb *self,
 
 	/* Apply drivers QoS capabilities */
 	irda_qos_compute_intersection(&self->qos_rx, 
-				      irda_device_get_qos(self->irdev));
+				      irda_device_get_qos(self->netdev));
 
 	/*
 	 *  Check for user supplied QoS parameters. The service user is only 
@@ -1112,8 +1114,7 @@ int irlap_proc_read(char *buf, char **start, off_t offset, int len,
 		ASSERT(self != NULL, return -ENODEV;);
 		ASSERT(self->magic == LAP_MAGIC, return -EBADR;);
 
-		len += sprintf(buf+len, "irlap%d <-> %s ",
-				i++, self->irdev->name);
+		len += sprintf(buf+len, "irlap%d ", i++);
 		len += sprintf(buf+len, "state: %s\n", 
 				irlap_state[ self->state]);
 		

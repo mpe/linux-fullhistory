@@ -285,6 +285,7 @@ CONFIG_EEXPRESS_PRO100=y
 # PCMCIA network devices
 #
 # CONFIG_PCMCIA_PCNET is not set
+# CONFIG_PCMCIA_3C589 is not set
 CONFIG_PCMCIA_RAYCS=y
 
 #

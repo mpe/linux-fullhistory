@@ -84,6 +84,7 @@ struct bttv
 	struct video_picture picture;		/* Current picture params */
 	struct video_audio audio_dev;		/* Current audio params */
 
+	struct semaphore lock;
 	int user;
 	int capuser;
 	struct device_open open_data[MAX_OPENS];

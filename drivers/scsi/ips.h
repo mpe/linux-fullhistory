@@ -613,7 +613,7 @@ typedef struct {
    u8        ProductRevisionLevel[4];
    u8        VendorSpecific[20];
    u8        Reserved3[40];
-} INQUIRYDATA, *PINQUIRYDATA;
+} IPS_INQUIRYDATA, *IPS_PINQUIRYDATA;
 
 /*
  * Read Capacity Data Format

@@ -157,12 +157,6 @@ S: 633 South 550 East
 S: Provo, Utah 84606
 S: USA
 
-N: Paul Barton-Davis
-E: pbd@op.net
-D: Driver for WaveFront soundcards (Turtle Beach Maui, Tropez, Tropez+)
-D: Various bugfixes and changes to sound drivers
-S: USA 
-
 N: Krzysztof G. Baranowski
 E: kgb@manjak.knm.org.pl
 P: 1024/FA6F16D1 96 D1 1A CF 5F CA 69 EC  F9 4F 36 1F 6D 60 7B DA
@@ -173,6 +167,12 @@ D: Various bugfixes.
 S: ul. Koscielna 12a
 S: 62-300 Wrzesnia
 S: Poland
+
+N: Paul Barton-Davis
+E: pbd@op.net
+D: Driver for WaveFront soundcards (Turtle Beach Maui, Tropez, Tropez+)
+D: Various bugfixes and changes to sound drivers
+S: USA 
 
 N: Carlos Henrique Bauer
 E: chbauer@acm.org
@@ -482,11 +482,11 @@ S: Warrendale, Pennsylvania 15086
 S: USA
 
 N: Alex deVries
-E: puffin@redhat.com
-D: Various SGI parts, bits of HAL2 and Newport
-S: 18 Bernier Terrace
-S: Kanata, Ontario
-S: K2L 2V@
+E: adevries@thepuffingroup.com
+D: Various SGI parts, bits of HAL2 and Newport, PA-RISC Linux.
+S: 41.5 William Street
+S: Ottawa, Ontario
+S: K1N 6Z9
 S: CANADA
 
 N: Eddie C. Dost
@@ -794,16 +794,16 @@ S: 77 Clarence Mews
 S: London SE16 1GD
 S: United Kingdom
 
+N: Kai Harrekilde-Petersen
+E: khp@olicom.dk
+D: Original author of the ftape-HOWTO, i82078 fdc detection code.
+
 N: Bart Hartgers
 E: bart@etpmod.phys.tue.nl
 D: MTRR emulation with Centaur MCRs
 S: Gen Stedmanstraat 212
 S: 5623 HZ Eindhoven
 S: The Netherlands
-
-N: Kai Harrekilde-Petersen
-E: khp@olicom.dk
-D: Original author of the ftape-HOWTO, i82078 fdc detection code.
 
 N: Andrew Haylett
 E: ajh@primag.co.uk
@@ -857,6 +857,14 @@ D: Organization of German Linux Conferences
 S: Danckelmannstr. 48
 S: 14059 Berlin
 S: Germany
+
+N: David Hinds
+E: dhinds@zen.stanford.edu
+W: http://hyper.stanford.edu/~dhinds
+D: PCMCIA and CardBus stuff, PCMCIA-HOWTO, PCMCIA client drivers
+S: 2019 W. Middlefield Rd #1
+S: Mountain View, CA  94043
+S: USA
 
 N: Michael Hipp
 E: hippm@informatik.uni-tuebingen.de
@@ -1018,19 +1026,6 @@ S: Gelligaer, Hengoed,
 S: Mid Glamorgan, CF82 8EJ,
 S: Wales, United Kingdom
 
-N: Andreas S. Krebs
-E: akrebs@altavista.net
-D: CYPRESS CY82C693 chipset IDE, Digital's PC-Alpha 164SX boards
-
-N: Andrzej M. Krzysztofowicz
-E: ankry@mif.pg.gda.pl
-D: XT disk driver
-D: Aladdin 1533/1543(C) chipset IDE
-D: PIIX chipset IDE
-S: ul. Matemblewska 1B/10
-S: 80-283 Gdansk
-S: Poland
-
 N: Bernhard Kaindl
 E: bkaindl@netway.at
 E: edv@bartelt.via.at
@@ -1154,6 +1149,10 @@ S: Markham, Ontario
 S: L3R 8B2
 S: Canada
 
+N: Andreas S. Krebs
+E: akrebs@altavista.net
+D: CYPRESS CY82C693 chipset IDE, Digital's PC-Alpha 164SX boards
+
 N: Russell Kroll
 E: rkroll@exploits.org
 W: http://www.exploits.org/
@@ -1161,6 +1160,15 @@ D: V4L Aztech radio card driver, mods to Aimslab driver
 S: Post Office Box 49458
 S: Colorado Springs, Colorado 80949-9458
 S: USA
+
+N: Andrzej M. Krzysztofowicz
+E: ankry@mif.pg.gda.pl
+D: XT disk driver
+D: Aladdin 1533/1543(C) chipset IDE
+D: PIIX chipset IDE
+S: ul. Matemblewska 1B/10
+S: 80-283 Gdansk
+S: Poland
 
 N: Gero Kuhlmann
 E: gero@gkminix.han.de
@@ -1253,10 +1261,14 @@ D: Busmaster driver for HP 10/100 Mbit Network Adapters
 S: University of Stuttgart, Germany and
 S: Ecole Nationale Superieure des Telecommunications, Paris
 
-N: Martin von Löwis
-E: loewis@informatik.hu-berlin.de
-D: script binary format
-D: NTFS driver
+N: Jamie Lokier
+E: jamie@imbolc.ucc.ie
+D: Reboot-through-BIOS for broken 486 motherboards
+S: 11 Goodson Walk
+S: Marston
+S: Oxford
+S: OX3 0HX
+S: United Kingdom
 
 N: Mark Lord
 E: mlord@pobox.com
@@ -1267,21 +1279,17 @@ S: 33 Ridgefield Cr
 S: Nepean, Ontario
 S: Canada K2H 6S3
 
-N: Jamie Lokier
-E: jamie@imbolc.ucc.ie
-D: Reboot-through-BIOS for broken 486 motherboards
-S: 11 Goodson Walk
-S: Marston
-S: Oxford
-S: OX3 0HX
-S: United Kingdom
-
 N: Warner Losh
 E: imp@village.org
 D: Linux/MIPS Deskstation support, Provided OI/OB for Linux
 S: 8786 Niwot Road
 S: Niwot, Colorado 80503
 S: USA
+
+N: Martin von Löwis
+E: loewis@informatik.hu-berlin.de
+D: script binary format
+D: NTFS driver
 
 N: H.J. Lu
 E: hjl@gnu.ai.mit.edu
@@ -1294,10 +1302,6 @@ D: Console-mouse-tracking patches
 S: Puistokaari 1 E 18
 S: 00200 Helsinki
 S: Finland
-
-N: Kai Mäkisara
-E: Kai.Makisara@metla.fi
-D: SCSI Tape Driver
 
 N: Hamish Macdonald
 E: hamishm@lucent.com
@@ -1342,6 +1346,10 @@ D: Program in DOSEMU
 S: PO BOX 220, HFX. CENTRAL
 S: Halifax, Nova Scotia
 S: Canada B3J 3C8
+
+N: Kai Mäkisara
+E: Kai.Makisara@metla.fi
+D: SCSI Tape Driver
 
 N: Martin Mares
 E: mj@atrey.karlin.mff.cuni.cz
@@ -1399,11 +1407,13 @@ N: Arnaldo Carvalho de Melo
 E: acme@conectiva.com.br
 W: http://www.conectiva.com.br/~acme
 D: wanrouter hacking
+D: USB hacking
+D: miscellaneous Makefile & Config.in fixes
 D: Cyclom 2X synchronous card driver
 D: i18n for minicom, net-tools, util-linux, fetchmail, etc
-S: Conectiva Informatica LTDA
+S: Conectiva Informática LTDA
 S: R. Prof. Rubens Elke Braga, 558 - Parolin
-S: 80220-320 Curitiba - Parana
+S: 80220-320 Curitiba - Paraná
 S: Brazil
 
 N: Michael Meskes
@@ -1500,19 +1510,19 @@ S: 30 White Tail Lane
 S: Lafayette, Indiana 47905
 S: USA
 
-N: Johan Myreen
-E: jem@iki.fi
-D: PS/2 mouse driver writer etc.
-S: Dragonvagen 1 A 13
-S: FIN-00330 Helsingfors
-S: Finland
-
 N: Trond Myklebust
 E: trond.myklebust@fys.uio.no
 D: current NFS client hacker.
 S: Dagaliveien 31e
 S: N-0391 Oslo
 S: Norway
+
+N: Johan Myreen
+E: jem@iki.fi
+D: PS/2 mouse driver writer etc.
+S: Dragonvagen 1 A 13
+S: FIN-00330 Helsingfors
+S: Finland
 
 N: Matija Nalis
 E: mnalis@jagor.srce.hr
@@ -1627,6 +1637,13 @@ D: Some smbfs fixes
 S: Demonstratsii 8-382
 S: Tula 300000
 S: Russia
+
+N: Johnnie Peters
+E: jpeters@phx.mcd.mot.com
+D: Motorola PowerPC changes for PReP
+S: 2900 S. Diable Way
+S: Tempe, Arizona 85282
+S: USA
 
 N: Kirk Petersen
 E: kirk@speakeasy.org
@@ -1818,13 +1835,6 @@ S: Dag Hammerskjolds v. 3E
 S: S-226 64 LUND
 S: Sweden
 
-N: Peter De Schrijver
-E: stud11@cc4.kuleuven.ac.be
-D: Mitsumi CD-ROM driver patches March version
-S: Molenbaan 29
-S: B2240 Zandhoven
-S: Belgium
-
 N: Henning P. Schmiedehausen
 E: hps@tanstaafl.de
 D: added PCI support to the serial driver
@@ -1833,6 +1843,13 @@ S: Buckenhof, Germany
 N: Michael Schmitz
 E:
 D: Macintosh IDE Driver
+
+N: Peter De Schrijver
+E: stud11@cc4.kuleuven.ac.be
+D: Mitsumi CD-ROM driver patches March version
+S: Molenbaan 29
+S: B2240 Zandhoven
+S: Belgium
 
 N: Martin Schulze
 E: joey@linux.de
@@ -1954,11 +1971,19 @@ S: Willowdale, Ontario
 S: Canada M2N 2Z1
 
 N: Adrian Sun
-E: asun@u.washington.edu
+E: asun@cobaltnet.com
 D: hfs support
 D: alpha rtc port, random appletalk fixes
 S: Department of Zoology, University of Washington
 S: Seattle, WA  98195-1800
+S: USA
+
+N: Corey Thomas
+E: corey@world.std.com
+W: http://world.std.com/~corey/index.html
+D: Raylink/WebGear wireless LAN device driver (ray_cs) author
+S: 145 Howard St.
+S: Northborough, MA 01532
 S: USA
 
 N: Tommy Thorn
@@ -1997,9 +2022,9 @@ W: http://lie-br.conectiva.com.br/~marcelo/
 D: Miscellaneous kernel hacker
 D: Cyclom 2X driver hacker
 D: linuxconf apache & proftpd module maintainer
-S: Conectiva Informatica LTDA
+S: Conectiva Informática LTDA
 S: R. Prof. Rubens Elke Braga, 558 - Parolin
-S: 80220-320 Curitiba - Parana
+S: 80220-320 Curitiba - Paraná
 S: Brazil
 
 N: Stefan Traby
@@ -2036,6 +2061,17 @@ D: Linux-Workshop Köln (aka LUG Cologne, Germany), Installfests
 S: Tacitusstr. 6
 S: D-50968 Köln
 
+N: Tsu-Sheng Tsao
+E: tsusheng@scf.usc.edu
+D: IGMP(Internet Group Management Protocol) version 2
+S: 2F 14 ALY 31 LN 166 SEC 1 SHIH-PEI RD
+S: Taipei 
+S: Taiwan 112
+S: Republic of China
+S: 24335 Delta Drive
+S: Diamond Bar, California 91765
+S: USA
+
 N: Theodore Ts'o
 E: tytso@mit.edu
 D: Random Linux hacker
@@ -2049,17 +2085,6 @@ D: Author of loopback device driver
 S: MIT Room E40-343
 S: 1 Amherst Street
 S: Cambridge, Massachusetts 02139
-S: USA
-
-N: Tsu-Sheng Tsao
-E: tsusheng@scf.usc.edu
-D: IGMP(Internet Group Management Protocol) version 2
-S: 2F 14 ALY 31 LN 166 SEC 1 SHIH-PEI RD
-S: Taipei 
-S: Taiwan 112
-S: Republic of China
-S: 24335 Delta Drive
-S: Diamond Bar, California 91765
 S: USA
 
 N: Simmule Turner
@@ -2193,8 +2218,14 @@ D: The Linux Support Team Erlangen
 
 N: David Weinehall
 E: tao@acc.umu.se
-D: NE/2-driver maintainer
+W: http://www.acc.umu.se/~tao/
+W: http://www.acc.umu.se/~mcalinux/
+D: Fixes for the NE/2-driver
 D: Miscellaneous MCA-support
+D: Cleanup of the Config-files
+S: Axtorpsvagen 40:20
+S: S-903 37  UMEA
+S: Sweden
 
 N: Matt Welsh
 E: mdw@metalab.unc.edu

@@ -40,7 +40,7 @@
 #include <asm/system.h>
 
 #include <linux/netdevice.h>
-#include "../../drivers/net/8390.h"
+#include "../8390.h"
 
 #include <pcmcia/version.h>
 #include <pcmcia/cs_types.h>

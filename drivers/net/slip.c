@@ -831,6 +831,9 @@ slip_open(struct tty_struct *tty)
 	struct slip *sl;
 	int err;
 
+	if(!capable(CAP_NET_ADMIN))
+		return -EPERM;
+		
 	MOD_INC_USE_COUNT;
 
 	/* RTnetlink lock is misused here to serialize concurrent

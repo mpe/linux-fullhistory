@@ -79,6 +79,7 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
+#include <asm/semaphore.h>
 
 #define VERSION 	"1.6.1"
 
@@ -1588,8 +1589,8 @@ load_fep:
 			ch->blocked_open = 0;
 			ch->callout_termios = pcxe_callout.init_termios;
 			ch->normal_termios = pcxe_driver.init_termios;
-			ch->open_wait = 0;
-			ch->close_wait = 0;
+			init_waitqueue_head(ch->open_wait);
+			init_waitqueue_head(ch->close_wait);
 			ch->asyncflags = 0;
 		}
 

@@ -25,6 +25,12 @@
 
 /*
  * $Log: toshoboe.h,v $
+ * Revision 1.4  1999/06/29 13:46:42  root
+ * ls
+ *
+ * Revision 1.3  1999/06/29 12:31:03  root
+ * *** empty log message ***
+ *
  * Revision 1.2  1999/05/09 01:43:08  root
  * *** empty log message ***
  *
@@ -157,6 +163,8 @@ struct toshoboe_cb
     struct OboeTaskFile *taskfile;  /*The taskfile   */
     void *xmit_bufs[TX_SLOTS];  /*The buffers   */
     void *recv_bufs[RX_SLOTS];
+    int open;
+    int stopped;		/*Stopped by some or other APM stuff*/
   };
 
 

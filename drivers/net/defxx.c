@@ -3295,7 +3295,7 @@ int dfx_xmt_queue_pkt(
 	 *			wide.
 	 */
 
-	p_xmt_descr->long_0	= (u32) (PI_XMT_DESCR_M_SOP | PI_XMT_DESCR_M_EOP | ((skb->len + 3) << PI_XMT_DESCR_V_SEG_LEN));
+	p_xmt_descr->long_0	= (u32) (PI_XMT_DESCR_M_SOP | PI_XMT_DESCR_M_EOP | ((skb->len) << PI_XMT_DESCR_V_SEG_LEN));
 	p_xmt_descr->long_1 = (u32) virt_to_bus(skb->data);
 
 	/*

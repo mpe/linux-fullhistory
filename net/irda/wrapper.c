@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Wed Aug 25 13:13:53 1999
+ * Modified at:   Mon Sep 20 11:18:44 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Modified at:   Fri May 28  3:11 CST 1999
  * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
@@ -203,7 +203,7 @@ static void state_outside_frame(struct irda_device *idev, __u8 byte)
 		/* idev->xbofs++; */
 		break;
 	case EOF:
-		irda_device_set_media_busy( idev, TRUE);
+		irda_device_set_media_busy(&idev->netdev, TRUE);
 		break;
 	default:
 		break;
@@ -261,7 +261,7 @@ static void state_link_escape(struct irda_device *idev, __u8 byte)
 	switch (byte) {
 	case BOF: /* New frame? */
 		idev->rx_buff.state = BEGIN_FRAME;
-		irda_device_set_media_busy(idev, TRUE);
+		irda_device_set_media_busy(&idev->netdev, TRUE);
 		break;
 	case CE:
 		DEBUG(4, "WARNING: State not defined\n");
@@ -299,7 +299,7 @@ static void state_inside_frame(struct irda_device *idev, __u8 byte)
 	switch (byte) {
 	case BOF: /* New frame? */
 		idev->rx_buff.state = BEGIN_FRAME;
-		irda_device_set_media_busy(idev, TRUE);
+		irda_device_set_media_busy(&idev->netdev, TRUE);
 		break;
 	case CE: /* Stuffed char */
 		idev->rx_buff.state = LINK_ESCAPE;
@@ -314,7 +314,7 @@ static void state_inside_frame(struct irda_device *idev, __u8 byte)
 				   idev->rx_buff.len);
 		} else {
 			/* Wrong CRC, discard frame!  */
-			irda_device_set_media_busy(idev, TRUE); 
+			irda_device_set_media_busy(&idev->netdev, TRUE); 
 			
 			idev->stats.rx_errors++;
 			idev->stats.rx_crc_errors++;

@@ -912,6 +912,7 @@ printk("cm0: IP identification: %02x%02x  fragment offset: %02x%02x\n", buffer[3
 	/* datagram completed: send to upper level */
 	skb_trim(skb, dlen);
 	netif_rx(skb);
+	stats->rx_bytes+=dlen;
 	stats->rx_packets++;
 	lp->rx_bytes += dlen;
 	lp->rx_skb[ns] = 0;
@@ -1257,7 +1258,7 @@ init_module(void)
 	int i;
 	for (i = 0; i < 100; i++) {
 		sprintf(devname, "cm%d", i);
-		if (dev_get(devname) == NULL) break;
+		if (dev_get(devname) == 0) break;
 	}
 	if (i == 100) {
 		printk(KERN_ERR "sb1000: can't register any device cm<n>\n");

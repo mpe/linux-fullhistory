@@ -542,7 +542,7 @@ toshoboe_wait_until_sent (struct irda_device *idev)
       while (self->taskfile->xmit[i].control)
         {
           current->state = TASK_INTERRUPTIBLE;
-          schedule_timeout (6);
+          schedule_timeout (MSECS_TO_JIFFIES(60));
         }
     }
 

@@ -75,7 +75,7 @@ extern inline void mem_on(short port, volatile char *mem_base,
 {
 	/* This is a little weird: set the shared memory window by doing a
 	   read.  The low address bits specify the starting page. */
-	mem_base[start_page];
+	readb(mem_base+start_page);
 	inb(port + E21_MEM_ENABLE);
 	outb(E21_MEM_ON, port + E21_MEM_ENABLE + E21_MEM_ON);
 }

@@ -22,6 +22,7 @@
 #include <asm/uaccess.h>	/* copy to/from user		*/
 #include <linux/videodev.h>	/* kernel radio structs		*/
 #include <linux/config.h>	/* CONFIG_RADIO_SF16MI_PORT 	*/
+#include <asm/semaphore.h>
 
 struct fmi_device
 {
@@ -37,6 +38,7 @@ struct fmi_device
 
 static int io = CONFIG_RADIO_SF16FMI_PORT; 
 static int users = 0;
+static struct semaphore lock;
 
 /* freq is in 1/16 kHz to internal number, hw precision is 50 kHz */
 /* It is only usefull to give freq in intervall of 800 (=0.05Mhz),
@@ -67,12 +69,16 @@ static void outbits(int bits, unsigned int data, int port)
 
 static inline void fmi_mute(int port)
 {
+	down(&lock);
 	outb(0x00, port);
+	up(&lock);
 }
 
 static inline void fmi_unmute(int port)
 {
+	down(&lock);
 	outb(0x08, port);
+	up(&lock);
 }
 
 static inline int fmi_setfreq(struct fmi_device *dev)
@@ -80,6 +86,8 @@ static inline int fmi_setfreq(struct fmi_device *dev)
         int myport = dev->port;
 	unsigned long freq = dev->curfreq;
 	int i;
+	
+	down(&lock);
 	
 	outbits(16, RSF16_ENCODE(freq), myport);
 	outbits(8, 0xC0, myport);
@@ -93,6 +101,8 @@ static inline int fmi_setfreq(struct fmi_device *dev)
 	current->state = TASK_UNINTERRUPTIBLE;
 	schedule_timeout(HZ/7);
 */	
+
+	up(&lock);
 	if (dev->curvol) fmi_unmute(myport);
 	return 0;
 }
@@ -104,6 +114,7 @@ static inline int fmi_getsigstr(struct fmi_device *dev)
 	int myport = dev->port;
 	int i;
 	
+	down(&lock);
 	val = dev->curvol ? 0x08 : 0x00;	/* unmute/mute */
 	outb(val, myport);
 	outb(val | 0x10, myport);
@@ -119,6 +130,8 @@ static inline int fmi_getsigstr(struct fmi_device *dev)
 */	
 	res = (int)inb(myport+1);
 	outb(val, myport);
+	
+	up(&lock);
 	return (res & 2) ? 0 : 0xFFFF;
 }
 
@@ -289,6 +302,8 @@ int __init fmi_init(struct video_init *v)
 	fmi_unit.curfreq = 0;
 	fmi_unit.flags = VIDEO_TUNER_LOW;
 	fmi_radio.priv = &fmi_unit;
+	
+	init_MUTEX(&lock);
 	
 	if(video_register_device(&fmi_radio, VFL_TYPE_RADIO)==-1)
 		return -EINVAL;

@@ -6,7 +6,7 @@
  * Status:	  Experimental.
  * Author:	  Dag Brattli <dagb@cs.uit.no>
  * Created at:	  Sun Aug  3 13:49:59 1997
- * Modified at:   Wed Aug 11 09:24:46 1999
+ * Modified at:   Tue Aug 31 13:54:27 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:	  serial.c by Linus Torvalds 
  * 
@@ -280,7 +280,7 @@ void irport_change_speed(struct irda_device *idev, __u32 speed)
 	int lcr;    /* Line control reg */
 	int divisor;
 
-	DEBUG(0, __FUNCTION__ "(), Setting speed to: %d\n", speed);
+	DEBUG(2, __FUNCTION__ "(), Setting speed to: %d\n", speed);
 
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -472,8 +472,8 @@ int irport_hard_xmit(struct sk_buff *skb, struct net_device *dev)
  */
 static void irport_receive(struct irda_device *idev) 
 {
-	int iobase;
 	int boguscount = 0;
+	int iobase;
 
 	ASSERT(idev != NULL, return;);
 
@@ -488,7 +488,7 @@ static void irport_receive(struct irda_device *idev)
 
 		/* Make sure we don't stay here to long */
 		if (boguscount++ > 32) {
-			DEBUG(0,__FUNCTION__ "(), breaking!\n");
+			DEBUG(2,__FUNCTION__ "(), breaking!\n");
 			break;
 		}
 	} while (inb(iobase+UART_LSR) & UART_LSR_DR);	
@@ -530,9 +530,8 @@ void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			DEBUG(2, __FUNCTION__ "(), RLSI\n");
 			break;
 		case UART_IIR_RDI:
-			//if (lsr & UART_LSR_DR)
-				/* Receive interrupt */
-				irport_receive(idev);
+			/* Receive interrupt */
+			irport_receive(idev);
 			break;
 		case UART_IIR_THRI:
 			if (lsr & UART_LSR_THRE)

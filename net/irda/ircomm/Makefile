@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := ircomm_and_tty.o
-O_OBJS	 := ircomm_param.o ircomm_core.o ircomm_event.o ircomm_lmp.o ircomm_ttp.o ircomm_tty.o ircomm_tty_attach.o ircomm_tty_ioctl.c
+O_OBJS	 := ircomm_param.o ircomm_core.o ircomm_event.o ircomm_lmp.o ircomm_ttp.o ircomm_tty.o ircomm_tty_attach.o ircomm_tty_ioctl.o
 M_OBJS   := ircomm.o ircomm-tty.o
 MI_OBJS  := ircomm_param.o ircomm_core.o ircomm_event.o ircomm_lmp.o ircomm_ttp.o ircomm_tty.o ircomm_tty_attach.o ircomm_tty_ioctl.o
 

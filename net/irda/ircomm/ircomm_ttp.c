@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 20:48:27 1999
- * Modified at:   Tue Aug 17 10:28:26 1999
+ * Modified at:   Mon Sep 27 11:17:23 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -196,7 +196,7 @@ void ircomm_ttp_connect_confirm(void *instance, void *sap,
 		return;
 	}
 
-	info.max_data_size = qos->data_size.value - max_header_size
+	info.max_data_size = irttp_get_max_seq_size(self->tsap)
 		- IRCOMM_HEADER_SIZE;
 	info.max_header_size = max_header_size + IRCOMM_HEADER_SIZE;
 	info.qos = qos;
@@ -206,7 +206,7 @@ void ircomm_ttp_connect_confirm(void *instance, void *sap,
 
 /*
  * Function ircomm_ttp_connect_indication (instance, sap, qos, max_sdu_size,
- *                                            max_header_size, skb)
+ *                                         max_header_size, skb)
  *
  *    
  *
@@ -232,7 +232,7 @@ void ircomm_ttp_connect_indication(void *instance, void *sap,
 		return;
 	}
 
-	info.max_data_size = qos->data_size.value - max_header_size
+	info.max_data_size = irttp_get_max_seq_size(self->tsap)
 		- IRCOMM_HEADER_SIZE;
 	info.max_header_size = max_header_size + IRCOMM_HEADER_SIZE;
 	info.qos = qos;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Thu Jul  8 21:22:50 1999
+ * Modified at:   Mon Sep 20 10:14:47 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -90,8 +90,7 @@ struct irlap_cb {
 	QUEUE   q;     /* Must be first */
 	magic_t magic;
 
-	struct irda_device *irdev;
-	struct net_device      *netdev;
+	struct net_device  *netdev;
 
 	/* Connection state */
 	volatile IRLAP_STATE state;       /* Current state */
@@ -183,7 +182,7 @@ extern hashbin_t *irlap;
 int irlap_init(void);
 void irlap_cleanup(void);
 
-struct irlap_cb *irlap_open(struct irda_device *dev);
+struct irlap_cb *irlap_open(struct net_device *dev);
 void irlap_close(struct irlap_cb *self);
 
 void irlap_connect_request(struct irlap_cb *self, __u32 daddr, 

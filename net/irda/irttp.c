@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Thu Jul  8 21:25:31 1999
+ * Modified at:   Mon Sep 27 12:02:52 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -729,9 +729,8 @@ int irttp_connect_request(struct tsap_cb *self, __u8 dtsap_sel,
  *
  */
 static void irttp_connect_confirm(void *instance, void *sap, 
-				  struct qos_info *qos,
-				  __u32 max_seg_size, __u8 max_header_size,
-				  struct sk_buff *skb) 
+				  struct qos_info *qos, __u32 max_seg_size,
+				  __u8 max_header_size, struct sk_buff *skb) 
 {
 	struct tsap_cb *self;
 	int parameters;
@@ -747,7 +746,7 @@ static void irttp_connect_confirm(void *instance, void *sap,
 	ASSERT(self->magic == TTP_TSAP_MAGIC, return;);
 	ASSERT(skb != NULL, return;);
 
-	self->max_seg_size = max_seg_size;
+	self->max_seg_size = max_seg_size - TTP_HEADER;
 	self->max_header_size = max_header_size + TTP_HEADER;
 
 	/*
@@ -797,11 +796,11 @@ static void irttp_connect_confirm(void *instance, void *sap,
 	DEBUG(4, __FUNCTION__ "() send=%d,avail=%d,remote=%d\n", 
 	      self->send_credit, self->avail_credit, self->remote_credit);
 
-	DEBUG(0, __FUNCTION__ "(), MaxSduSize=%d\n", self->tx_max_sdu_size);
+	DEBUG(2, __FUNCTION__ "(), MaxSduSize=%d\n", self->tx_max_sdu_size);
 
 	if (self->notify.connect_confirm) {
 		self->notify.connect_confirm(self->notify.instance, self, qos,
-					     self->tx_max_sdu_size, 
+					     self->tx_max_sdu_size,
 					     self->max_header_size, skb);
 	}
 }
@@ -869,8 +868,6 @@ void irttp_connect_indication(void *instance, void *sap, struct qos_info *qos,
 		/* Remove parameters */
 		skb_pull(skb, MIN(skb->len, plen+1));
 	}
-
-	DEBUG(4, __FUNCTION__ "(), initial send_credit=%d\n", n);
 
 	if (self->notify.connect_indication) {
 		self->notify.connect_indication(self->notify.instance, self, 

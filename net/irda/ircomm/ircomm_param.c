@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Jun  7 10:25:11 1999
- * Modified at:   Wed Aug 25 13:48:14 1999
+ * Modified at:   Fri Sep  3 09:28:20 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -102,6 +102,7 @@ int ircomm_param_flush(struct ircomm_tty_cb *self)
  */
 int ircomm_param_request(struct ircomm_tty_cb *self, __u8 pi, int flush)
 {
+	unsigned long flags;
 	struct sk_buff *skb;
 	int count;
 
@@ -119,12 +120,16 @@ int ircomm_param_request(struct ircomm_tty_cb *self, __u8 pi, int flush)
 	if (self->service_type == IRCOMM_3_WIRE_RAW)
 		return 0;
 
-	skb = self->ctrl_skb;
-	
+	save_flags(flags);
+	cli();
+
+	skb = self->ctrl_skb;	
 	if (!skb) {
 		skb = dev_alloc_skb(256);
-		if (!skb)
-			return -1;
+		if (!skb) {
+			restore_flags(flags);
+			return -ENOMEM;
+		}
 		
 		skb_reserve(skb, self->max_header_size);
 
@@ -136,8 +141,13 @@ int ircomm_param_request(struct ircomm_tty_cb *self, __u8 pi, int flush)
 	 */
 	count = irda_param_insert(self, pi, skb->tail, skb_tailroom(skb),
 				  &ircomm_param_info);
-	if (count > 0)
-		skb_put(skb, count);
+	if (count < 0) {
+		DEBUG(0, __FUNCTION__ "(), no room for parameter!\n");
+		restore_flags(flags);
+		return -1;
+	}
+	skb_put(skb, count);
+	restore_flags(flags);
 
 	if (flush) {
 		ircomm_control_request(self->ircomm, skb);
@@ -201,13 +211,25 @@ static int ircomm_param_service_type(void *instance, param_t *param, int get)
 /*
  * Function ircomm_param_port_type (self, param)
  *
- *    
- *
+ *    The port type parameter tells if the devices are serial or parallel.
+ *    Since we only advertise serial service, this parameter should only
+ *    be equal to IRCOMM_SERIAL.
  */
 static int ircomm_param_port_type(void *instance, param_t *param, int get)
 {
-	DEBUG(0, __FUNCTION__ "(), not impl.\n");
+	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
 
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == IRCOMM_TTY_MAGIC, return -1;);
+	
+	if (get)
+		param->pv.b = IRCOMM_SERIAL;
+	else {
+		self->session.port_type = param->pv.b;
+
+		DEBUG(0, __FUNCTION__ "(), port type=%d\n", 
+		      self->session.port_type);
+	}
 	return 0;
 }
 
@@ -223,11 +245,13 @@ static int ircomm_param_port_name(void *instance, param_t *param, int get)
 	
 	ASSERT(self != NULL, return -1;);
 	ASSERT(self->magic == IRCOMM_TTY_MAGIC, return -1;);
-	
-	if (get)
+
+	if (get) {
 		DEBUG(0, __FUNCTION__ "(), not imp!\n");
-	else
+	} else {
 		DEBUG(0, __FUNCTION__ "(), port-name=%s\n", param->pv.c);
+		strncpy(self->session.port_name, param->pv.c, 32);
+	}
 
 	return 0;
 }
@@ -273,8 +297,6 @@ static int ircomm_param_data_format(void *instance, param_t *param, int get)
 	else
 		self->session.data_format = param->pv.b;
 	
-	DEBUG(1, __FUNCTION__ "(), data format = 0x%02x\n", param->pv.b);
-
 	return 0;
 }
 
@@ -359,9 +381,6 @@ static int ircomm_param_dte(void *instance, param_t *param, int get)
 	else {
 		dte = param->pv.b;
 		
-		/* Null modem cable emulator */
-		self->session.null_modem = TRUE;
-
 		if (dte & IRCOMM_DELTA_DTR)
 			self->session.dce |= (IRCOMM_DELTA_DSR|
 					      IRCOMM_DELTA_RI |
@@ -379,14 +398,9 @@ static int ircomm_param_dte(void *instance, param_t *param, int get)
 		/* Take appropriate actions */
 		ircomm_tty_check_modem_status(self);
 
-		/* 
-		 * Send reply, and remember not to set delta values for the
-		 * initial parameters 
-		 */
-		self->session.dte = (IRCOMM_DTR| IRCOMM_RTS);
-		ircomm_param_request(self, IRCOMM_DTE, TRUE);
+		/* Null modem cable emulator */
+		self->session.null_modem = TRUE;
 	}
-	DEBUG(1, __FUNCTION__ "(), dte = 0x%02x\n", param->pv.b);
 
 	return 0;
 }
@@ -426,18 +440,24 @@ static int ircomm_param_dce(void *instance, param_t *param, int get)
 /*
  * Function ircomm_param_poll (instance, param)
  *
- *    
+ *    Called when the peer device is polling for the line settings
  *
  */
 static int ircomm_param_poll(void *instance, param_t *param, int get)
 {
-	DEBUG(0, __FUNCTION__ "(), not impl.\n");
+	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
+
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == IRCOMM_TTY_MAGIC, return -1;);
+
+	/* Poll parameters are always of lenght 0 (just a signal) */
+	if (!get) {
+		/* Respond with DTE line settings */
+		ircomm_param_request(self, IRCOMM_DTE, TRUE);
+	}
 
 	return 0;
 }
-
-
-
 
 
 

@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Sep  9 00:00:26 1997
- * Modified at:   Tue Aug 17 10:25:21 1999
+ * Modified at:   Wed Sep  1 09:14:55 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -278,7 +278,7 @@ static int irlap_param_baud_rate(void *instance, param_t *param, int get)
 
 	if (get) {
 		param->pv.i = self->qos_rx.baud_rate.bits;
-		DEBUG(0, __FUNCTION__ "(), baud rate = 0x%02x\n", param->pv.i);		
+		DEBUG(2, __FUNCTION__ "(), baud rate = 0x%02x\n", param->pv.i);		
 	} else {
 		/* 
 		 *  Stations must agree on baud rate, so calculate

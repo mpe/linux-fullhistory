@@ -2531,9 +2531,9 @@ ips_send_cmd(ips_ha_t *ha, ips_scb_t *scb) {
                scb->scsi_cmd->result = DID_OK << 16;
 
             if (scb->scsi_cmd->cmnd[0] == INQUIRY) {
-               INQUIRYDATA inq;
+               IPS_INQUIRYDATA inq;
 
-               memset(&inq, 0, sizeof(INQUIRYDATA));
+               memset(&inq, 0, sizeof(IPS_INQUIRYDATA));
 
                inq.DeviceType = TYPE_PROCESSOR;
                inq.DeviceTypeQualifier = 0;
@@ -2925,11 +2925,11 @@ ips_online(ips_ha_t *ha, ips_scb_t *scb) {
 /****************************************************************************/
 static int
 ips_inquiry(ips_ha_t *ha, ips_scb_t *scb) {
-   INQUIRYDATA inq;
+   IPS_INQUIRYDATA inq;
 
    DBG("ips_inquiry");
 
-   memset(&inq, 0, sizeof(INQUIRYDATA));
+   memset(&inq, 0, sizeof(IPS_INQUIRYDATA));
 
    inq.DeviceType = TYPE_DISK;
    inq.DeviceTypeQualifier = 0;

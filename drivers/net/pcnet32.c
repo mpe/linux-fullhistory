@@ -13,13 +13,10 @@
  * 	This driver is for PCnet32 and PCnetPCI based ethercards
  */
 
-static const char *version = "pcnet32.c:v1.23 6.7.1999 tsbogend@alpha.franken.de\n";
+static const char *version = "pcnet32.c:v1.23ac 21.9.1999 tsbogend@alpha.franken.de\n";
 
 #include <linux/config.h>
 #include <linux/module.h>
-#ifdef MODVERSIONS
-#include <linux/modversions.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -39,6 +36,7 @@ static const char *version = "pcnet32.c:v1.23 6.7.1999 tsbogend@alpha.franken.de
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/spinlock.h>
 
 static unsigned int pcnet32_portlist[] __initdata = {0x300, 0x320, 0x340, 0x360, 0};
 
@@ -156,6 +154,7 @@ static int full_duplex[MAX_UNITS] = {0, };
  *	   Michael Richard <mcr@solidum.com>)
  *         added chip id for 79c973/975 (thanks to Zach Brown <zab@zabbo.net>)
  * v1.23   fixed small bug, when manual selecting MII speed/duplex
+ * v1.23ac Added SMP spinlocking - Alan Cox <alan@redhat.com>
  */
 
 
@@ -255,14 +254,15 @@ struct pcnet32_private {
     struct sk_buff *rx_skbuff[RX_RING_SIZE];
     struct pcnet32_access a;
     void *origmem;
-    int cur_rx, cur_tx;			/* The next free ring entry */
-    int dirty_rx, dirty_tx;		        /* The ring entries to be free()ed. */
+    spinlock_t lock;				/* Guard lock */
+    int cur_rx, cur_tx;				/* The next free ring entry */
+    int dirty_rx, dirty_tx;			/* The ring entries to be free()ed. */
     struct net_device_stats stats;
     char tx_full;
     int  options;
-    int  shared_irq:1,                      /* shared irq possible */
-         full_duplex:1,                     /* full duplex possible */
-         mii:1;                             /* mii port available */
+    int  shared_irq:1,                      	/* shared irq possible */
+         full_duplex:1,                     	/* full duplex possible */
+         mii:1;                             	/* mii port available */
 #ifdef MODULE
     struct net_device *next;
 #endif    
@@ -510,7 +510,7 @@ static int __init
 pcnet32_probe1(struct net_device *dev, unsigned long ioaddr, unsigned char irq_line, int shared, int card_idx)
 {
     struct pcnet32_private *lp;
-    int i,media,fdx = 0, mii = 0;
+    int i,media,fdx = 0, mii = 0, fset = 0;
     int chip_version;
     char *chipname;
     char *priv;
@@ -551,11 +551,11 @@ pcnet32_probe1(struct net_device *dev, unsigned long ioaddr, unsigned char irq_l
 	break;
      case 0x2623:
 	chipname = "PCnet/FAST 79C971";
-	fdx = 1; mii = 1;
+	fdx = 1; mii = 1; fset = 1;
 	break;
      case 0x2624:
 	chipname = "PCnet/FAST+ 79C972";
-	fdx = 1; mii = 1;
+	fdx = 1; mii = 1; fset = 1;
 	break;
      case 0x2625:
 	chipname = "PCnet/FAST III 79C973";
@@ -588,6 +588,19 @@ pcnet32_probe1(struct net_device *dev, unsigned long ioaddr, unsigned char irq_l
 	printk("pcnet32: PCnet version %#x, no PCnet32 chip.\n",chip_version);
 	return ENODEV;
     }
+
+    /*
+     *	On selected chips turn on the BCR18:NOUFLO bit. This stops transmit
+     *  starting until the packet is loaded. Strike one for reliability, lose
+     *  one for latency - although on PCI this isnt a big loss. Older chips 
+     *  have FIFO's smaller than a packet, so you can't do this.
+     */
+         
+    if(fset)
+    {
+    	a->write_bcr(ioaddr, 18, (a->read_bcr(ioaddr, 18) | 0x0800));
+	a->write_csr(ioaddr, 80, a->read_csr(ioaddr, 80) | 0x0c00);
+    }
     
     dev = init_etherdev(dev, 0);
 
@@ -611,6 +624,9 @@ pcnet32_probe1(struct net_device *dev, unsigned long ioaddr, unsigned char irq_l
     lp = (struct pcnet32_private *)(((unsigned long)priv+15) & ~15);
       
     memset(lp, 0, sizeof(*lp));
+    
+    spin_lock_init(&lp->lock);
+    
     dev->priv = lp;
     lp->name = chipname;
     lp->shared_irq = shared;
@@ -933,9 +949,7 @@ pcnet32_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	return 1;
     }
 
-    save_flags (flags);
-    cli ();
-
+    spin_lock_irqsave(&lp->lock, flags);
     /* Fill in a Tx ring entry */
 
     /* Mask to ring buffer boundary. */
@@ -964,7 +978,7 @@ pcnet32_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	clear_bit (0, (void *)&dev->tbusy);
     else
 	lp->tx_full = 1;
-    restore_flags(flags);
+    spin_unlock_irqrestore(&lp->lock, flags);
     return 0;
 }
 
@@ -986,6 +1000,9 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
     ioaddr = dev->base_addr;
     lp = (struct pcnet32_private *)dev->priv;
+    
+    spin_lock(&lp->lock);
+    
     if (dev->interrupt)
 	printk("%s: Re-entering the interrupt handler.\n", dev->name);
 
@@ -1094,12 +1111,14 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
     /* Clear any other interrupt, and set interrupt enable. */
     lp->a.write_csr (ioaddr, 0, 0x7940);
     lp->a.write_rap(ioaddr,rap);
-
+    
     if (pcnet32_debug > 4)
 	printk("%s: exiting interrupt, csr0=%#4.4x.\n",
 	       dev->name, lp->a.read_csr (ioaddr, 0));
 
     dev->interrupt = 0;
+    
+    spin_unlock(&lp->lock);
     return;
 }
 
@@ -1248,12 +1267,11 @@ pcnet32_get_stats(struct net_device *dev)
     u16 saved_addr;
     unsigned long flags;
 
-    save_flags(flags);
-    cli();
+    spin_lock_irqsave(&lp->lock, flags);
     saved_addr = lp->a.read_rap(ioaddr);
     lp->stats.rx_missed_errors = lp->a.read_csr (ioaddr, 112);
     lp->a.write_rap(ioaddr, saved_addr);
-    restore_flags(flags);
+    spin_unlock_irqrestore(&lp->lock, flags);
 
     return &lp->stats;
 }

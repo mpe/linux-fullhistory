@@ -205,7 +205,7 @@ static struct video_device pcm20_radio=
 	NULL
 };
 
-int __init pcm20_init(struct video_init *v)
+static int __init pcm20_init(void)
 {
 
 	pcm20_radio.priv=&pcm20_unit;
@@ -224,22 +224,16 @@ int __init pcm20_init(struct video_init *v)
 	return 0;
 }
 
-#ifdef MODULE
-
 MODULE_AUTHOR("Ruurd Reitsma");
 MODULE_DESCRIPTION("A driver for the Miro PCM20 radio card.");
 
 EXPORT_NO_SYMBOLS;
 
-int init_module(void)
-{
-
-	return pcm20_init(NULL); 
-}
-
-void cleanup_module(void)
+static void __exit pcm20_cleanup(void)
 {
 	video_unregister_device(&pcm20_radio);
 }
 
-#endif
+module_init(pcm20_init);
+module_exit(pcm20_cleanup);
+

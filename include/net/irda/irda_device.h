@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr 14 12:41:42 1998
- * Modified at:   Tue Aug 24 13:58:23 1999
+ * Modified at:   Mon Sep 20 11:21:31 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -42,6 +42,11 @@
 #include <net/irda/dongle.h>
 #include <net/irda/irqueue.h>
 #include <net/irda/irlap_frame.h>
+
+/* Some private IOCTL's */
+#define SIOCSDONGLE    (SIOCDEVPRIVATE + 0)
+#define SIOCSBANDWIDTH (SIOCDEVPRIVATE + 1)
+#define SIOCSMEDIABUSY (SIOCDEVPRIVATE + 2)
 
 /* Some non-standard interface flags (should not conflict with any in if.h) */
 #define IFF_SIR 	0x0001 /* Supports SIR speeds */
@@ -153,12 +158,13 @@ int  irda_device_open(struct irda_device *, char *name, void *priv);
 void irda_device_close(struct irda_device *);
 
 /* Interface to be uses by IrLAP */
-inline void irda_device_set_media_busy(struct irda_device *, int status);
-inline int  irda_device_is_media_busy(struct irda_device *);
-inline int  irda_device_is_receiving(struct irda_device *);
-inline void irda_device_change_speed(struct irda_device *, int);
+void irda_device_set_media_busy(struct net_device *dev, int status);
+int  irda_device_is_media_busy(struct net_device *dev);
+int  irda_device_is_receiving(struct net_device *dev);
+struct qos_info *irda_device_get_qos(struct net_device *dev);
 
-inline struct qos_info *irda_device_get_qos(struct irda_device *self);
+/* Interface for internal use */
+void irda_device_change_speed(struct irda_device *, int);
 int  irda_device_txqueue_empty(struct irda_device *self);
 void irda_device_init_dongle(struct irda_device *self, int type);
 void irda_device_unregister_dongle(struct dongle *dongle);

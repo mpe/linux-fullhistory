@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Thu Jul  8 12:53:35 1999
+ * Modified at:   Mon Sep 27 11:13:18 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -73,7 +73,7 @@ if(!(expr)) { \
 #define MSECS_TO_JIFFIES(ms) (((ms)*HZ+999)/1000)
 
 /*
- *  Magic numbers used by Linux/IR. Random numbers which must be unique to 
+ *  Magic numbers used by Linux-IrDA. Random numbers which must be unique to 
  *  give the best protection
  */
 typedef __u32 magic_t;
@@ -245,7 +245,7 @@ typedef struct {
 				struct qos_info *qos, __u32 max_sdu_size,
 				__u8 max_header_size, struct sk_buff *skb);
 	void (*connect_indication)(void *instance, void *sap, 
-				   struct qos_info *qos, __u32 max_sdu_size,
+				   struct qos_info *qos, __u32 max_sdu_size, 
 				   __u8 max_header_size, struct sk_buff *skb);
 	void (*disconnect_indication)(void *instance, void *sap, 
 				      LM_REASON reason, struct sk_buff *);

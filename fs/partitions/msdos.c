@@ -77,6 +77,8 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 	unsigned long first_sector, first_size, this_sector, this_size;
 	int mask = (1 << hd->minor_shift) - 1;
 	int sector_size = get_hardsect_size(dev) / 512;
+	int loopct = 0;		/* number of links followed
+				   without finding a data partition */
 	int i;
 
 	first_sector = hd->part[MINOR(dev)].start_sect;
@@ -84,6 +86,8 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 	this_sector = first_sector;
 
 	while (1) {
+		if (++loopct > 100)
+			return;
 		if ((current_minor & mask) == 0)
 			return;
 		if (!(bh = bread(dev,0,get_ptable_blocksize(dev))))
@@ -121,8 +125,11 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 				     first_sector + first_size))
 				continue;
 
-			add_gd_partition(hd, current_minor, this_sector+START_SECT(p)*sector_size, NR_SECTS(p)*sector_size);
+			add_gd_partition(hd, current_minor,
+					 this_sector+START_SECT(p)*sector_size,
+					 NR_SECTS(p)*sector_size);
 			current_minor++;
+			loopct = 0;
 			if ((current_minor & mask) == 0)
 				goto done;
 		}
@@ -349,18 +356,30 @@ check_table:
 		/*
 		 * Look for various forms of IDE disk geometry translation
 		 */
-		extern int ide_xlate_1024(kdev_t, int, const char *);
+		extern int ide_xlate_1024(kdev_t, int, int, const char *);
 		unsigned int sig = le16_to_cpu(*(unsigned short *)(data + 2));
+		int heads = 0;
+		/*
+		 * The i386 partition handling programs very often
+		 * make partitions end on cylinder boundaries.
+		 * There is no need to do so, and Linux fdisk doesnt always
+		 * do this, and Windows NT on Alpha doesnt do this either,
+		 * but still, this helps to guess #heads.
+		 */
+		for (i = 0; i < 4; i++) {
+			struct partition *q = &p[i];
+			if (NR_SECTS(q)) {
+				if ((q->sector & 63) == 1 &&
+				    (q->end_sector & 63) == 63)
+					heads = q->end_head + 1;
+				break;
+			}
+		}
 		if (SYS_IND(p) == EZD_PARTITION) {
 			/*
-			 * The remainder of the disk must be accessed using
-			 * a translated geometry that reduces the number of 
-			 * apparent cylinders to less than 1024 if possible.
-			 *
-			 * ide_xlate_1024() will take care of the necessary
-			 * adjustments to fool fdisk/LILO and partition check.
+			 * Accesses to sector 0 must go to sector 1 instead.
 			 */
-			if (ide_xlate_1024(dev, -1, " [EZD]")) {
+			if (ide_xlate_1024(dev, -1, heads, " [EZD]")) {
 				data += 512;
 				goto check_table;
 			}
@@ -368,48 +387,25 @@ check_table:
 
 			/*
 			 * Everything on the disk is offset by 63 sectors,
-			 * including a "new" MBR with its own partition table,
-			 * and the remainder of the disk must be accessed using
-			 * a translated geometry that reduces the number of 
-			 * apparent cylinders to less than 1024 if possible.
-			 *
-			 * ide_xlate_1024() will take care of the necessary
-			 * adjustments to fool fdisk/LILO and partition check.
+			 * including a "new" MBR with its own partition table.
 			 */
-			if (ide_xlate_1024(dev, 1, " [DM6:DDO]")) {
+			if (ide_xlate_1024(dev, 1, heads, " [DM6:DDO]")) {
 				bforget(bh);
 				goto read_mbr;	/* start over with new MBR */
 			}
 		} else if (sig <= 0x1ae &&
-			   *(unsigned short *)(data + sig) == cpu_to_le16(0x55AA) &&
-			   (1 & *(unsigned char *)(data + sig + 2))) {
+			   data[sig] == 0xAA && data[sig+1] == 0x55 &&
+			   (data[sig+2] & 1)) {
 			/* DM6 signature in MBR, courtesy of OnTrack */
-			(void) ide_xlate_1024 (dev, 0, " [DM6:MBR]");
-		} else if (SYS_IND(p) == DM6_AUX1PARTITION || SYS_IND(p) == DM6_AUX3PARTITION) {
+			(void) ide_xlate_1024 (dev, 0, heads, " [DM6:MBR]");
+		} else if (SYS_IND(p) == DM6_AUX1PARTITION ||
+			   SYS_IND(p) == DM6_AUX3PARTITION) {
 			/*
 			 * DM6 on other than the first (boot) drive
 			 */
-			(void) ide_xlate_1024(dev, 0, " [DM6:AUX]");
+			(void) ide_xlate_1024(dev, 0, heads, " [DM6:AUX]");
 		} else {
-			/*
-			 * Examine the partition table for common translations.
-			 * This is useful for drives in situations where the
-			 * translated geometry is unavailable from the BIOS.
-			 */
-			for (i = 0; i < 4; i++) {
-				struct partition *q = &p[i];
-				if (NR_SECTS(q)
-				   && (q->sector & 63) == 1
-				   && (q->end_sector & 63) == 63) {
-					unsigned int heads = q->end_head + 1;
-					if (heads == 32 || heads == 64 ||
-					    heads == 128 || heads == 240 ||
-					    heads == 255) {
-						(void) ide_xlate_1024(dev, heads, " [PTBL]");
-						break;
-					}
-				}
-			}
+			(void) ide_xlate_1024(dev, 2, heads, " [PTBL]");
 		}
 	}
 #endif	/* CONFIG_BLK_DEV_IDE */

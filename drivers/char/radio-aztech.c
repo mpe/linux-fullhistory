@@ -42,6 +42,7 @@
 static int io = CONFIG_RADIO_AZTECH_PORT; 
 static int radio_wait_time = 1000;
 static int users = 0;
+static struct semaphore lock;
 
 struct az_device
 {
@@ -86,7 +87,9 @@ static void send_1_byte (struct az_device *dev)
 
 static int az_setvol(struct az_device *dev, int vol)
 {
+	down(&lock);
 	outb (volconvert(vol), io);
+	up(&lock);
 	return 0;
 }
 
@@ -119,6 +122,8 @@ static int az_setfreq(struct az_device *dev, unsigned long frequency)
 	frequency += 171200;		/* Add 10.7 MHz IF		*/
 	frequency /= 800;		/* Convert to 50 kHz units	*/
 					
+	down(&lock);
+	
 	send_0_byte (dev);		/*  0: LSB of frequency       */
 
 	for (i = 0; i < 13; i++)	/*   : frequency bits (1-13)  */
@@ -146,6 +151,8 @@ static int az_setfreq(struct az_device *dev, unsigned long frequency)
 
 	udelay (radio_wait_time);
 	outb_p(128+64+volconvert(dev->curvol), io);
+	
+	up(&lock);
 
 	return 0;
 }
@@ -279,14 +286,21 @@ static struct video_device aztech_radio=
 	NULL
 };
 
-int __init aztech_init(struct video_init *v)
+static int __init aztech_init(void)
 {
+	if(io==-1)
+	{
+		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
+		return -EINVAL;
+	}
+
 	if (check_region(io, 2)) 
 	{
 		printk(KERN_ERR "aztech: port 0x%x already in use\n", io);
 		return -EBUSY;
 	}
 
+	init_MUTEX(&lock);
 	aztech_radio.priv=&aztech_unit;
 	
 	if(video_register_device(&aztech_radio, VFL_TYPE_RADIO)==-1)
@@ -299,8 +313,6 @@ int __init aztech_init(struct video_init *v)
 	return 0;
 }
 
-#ifdef MODULE
-
 MODULE_AUTHOR("Russell Kroll, Quay Lu, Donald Song, Jason Lewis, Scott McGrath, William McGrath");
 MODULE_DESCRIPTION("A driver for the Aztech radio card.");
 MODULE_PARM(io, "i");
@@ -308,20 +320,11 @@ MODULE_PARM_DESC(io, "I/O address of the Aztech card (0x350 or 0x358)");
 
 EXPORT_NO_SYMBOLS;
 
-int init_module(void)
-{
-	if(io==-1)
-	{
-		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
-		return -EINVAL;
-	}
-	return aztech_init(NULL);
-}
-
-void cleanup_module(void)
+static void __exit aztech_cleanup(void)
 {
 	video_unregister_device(&aztech_radio);
 	release_region(io,2);
 }
 
-#endif
+module_init(aztech_init);
+module_exit(aztech_cleanup);

@@ -218,7 +218,7 @@ int __init a2091_detect(Scsi_Host_Template *tpnt)
 	if (num_a2091++ == 0) {
 	    first_instance = instance;
 	    a2091_template = instance->hostt;
-	    request_irq(IRQ_AMIGA_PORTS, a2091_intr, SA_SHORQ, "A2091 SCSI",
+	    request_irq(IRQ_AMIGA_PORTS, a2091_intr, SA_SHIRQ, "A2091 SCSI",
 			a2091_intr);
 	}
 	DMA(instance)->CNTR = CNTR_PDMD | CNTR_INTEN;

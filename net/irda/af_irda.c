@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 31 10:12:43 1998
- * Modified at:   Mon Aug 23 09:44:37 1999
+ * Modified at:   Mon Sep 27 20:11:52 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       af_netroom.c, af_ax25.c, af_rose.c, af_x25.c etc.
  * 
@@ -47,6 +47,8 @@ extern void irda_cleanup(void);
 extern int  irlap_driver_rcv(struct sk_buff *, struct net_device *, 
 			     struct packet_type *);
 
+static int irda_create(struct socket *sock, int protocol);
+
 static struct proto_ops irda_stream_ops;
 static struct proto_ops irda_dgram_ops;
 static hashbin_t *cachelog = NULL;
@@ -65,8 +67,6 @@ static int irda_data_indication(void *instance, void *sap, struct sk_buff *skb)
 	struct irda_sock *self;
 	struct sock *sk;
 	int err;
-
-	DEBUG(1, __FUNCTION__ "()\n");
 
 	self = (struct irda_sock *) instance;
 	ASSERT(self != NULL, return -1;);
@@ -98,7 +98,7 @@ static void irda_disconnect_indication(void *instance, void *sap,
 	struct irda_sock *self;
 	struct sock *sk;
 
-	DEBUG(1, __FUNCTION__ "()\n");
+	DEBUG(2, __FUNCTION__ "()\n");
 
 	self = (struct irda_sock *) instance;
 
@@ -129,7 +129,7 @@ static void irda_connect_confirm(void *instance, void *sap,
 	struct irda_sock *self;
 	struct sock *sk;
 
-	DEBUG(1, __FUNCTION__ "()\n");
+	DEBUG(2, __FUNCTION__ "()\n");
 
 	self = (struct irda_sock *) instance;
 
@@ -141,7 +141,7 @@ static void irda_connect_confirm(void *instance, void *sap,
 
 	/* Find out what the largest chunk of data that we can transmit is */
 	if (max_sdu_size == SAR_DISABLE)
-		self->max_data_size = qos->data_size.value - max_header_size;
+		self->max_data_size = irttp_get_max_seq_size(self->tsap);
 	else
 		self->max_data_size = max_sdu_size;
 
@@ -173,7 +173,7 @@ static void irda_connect_indication(void *instance, void *sap,
 	struct irda_sock *self;
 	struct sock *sk;
 
-	DEBUG(1, __FUNCTION__ "()\n");
+	DEBUG(2, __FUNCTION__ "()\n");
 
 	self = (struct irda_sock *) instance;
 
@@ -185,7 +185,7 @@ static void irda_connect_indication(void *instance, void *sap,
 
 	/* Find out what the largest chunk of data that we can transmit is */
 	if (max_sdu_size == SAR_DISABLE)
-		self->max_data_size = qos->data_size.value - max_header_size;
+		self->max_data_size = irttp_get_max_seq_size(self->tsap);
 	else
 		self->max_data_size = max_sdu_size;
 
@@ -428,8 +428,6 @@ static int irda_listen( struct socket *sock, int backlog)
 {
 	struct sock *sk = sock->sk;
 
-	DEBUG(1, __FUNCTION__ "()\n");
-
 	if (sk->type == SOCK_STREAM && sk->state != TCP_LISTEN) {
 		sk->max_ack_backlog = backlog;
 		sk->state           = TCP_LISTEN;
@@ -494,6 +492,8 @@ static int irda_accept(struct socket *sock, struct socket *newsock, int flags)
 	struct sock *newsk;
 	struct sk_buff *skb;
 	int err;
+
+	DEBUG(0, __FUNCTION__ "()\n");
 
 	self = sk->protinfo.irda;
 	ASSERT(self != NULL, return -1;);
@@ -1171,8 +1171,7 @@ static int irda_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCSIFNETMASK:
 	case SIOCGIFMETRIC:
 	case SIOCSIFMETRIC:
-		return -EINVAL;
-		
+		return -EINVAL;		
 	default:
 		DEBUG(1, __FUNCTION__ "(), doing device ioctl!\n");
 		return dev_ioctl(cmd, (void *) arg);
@@ -1212,7 +1211,7 @@ static int irda_setsockopt(struct socket *sock, int level, int optname,
 		DEBUG(0, __FUNCTION__ "(), sorry not impl. yet!\n");
 		return 0;
 	case IRTTP_MAX_SDU_SIZE:
-		DEBUG(0, __FUNCTION__ "(), setting max_sdu_size = %d\n", opt);
+		DEBUG(2, __FUNCTION__ "(), setting max_sdu_size = %d\n", opt);
 		self->max_sdu_size_rx = opt;
 		break;
 	default:
@@ -1232,13 +1231,12 @@ static int irda_getsockopt(struct socket *sock, int level, int optname,
 {
 	struct sock *sk = sock->sk;
 	struct irda_sock *self;
-	struct irda_device_list *list;
-	__u8 optbuf[sizeof(struct irda_device_list) +
-		   sizeof(struct irda_device_info)*10];
+	struct irda_device_list list;
+	struct irda_device_info *info;
 	discovery_t *discovery;
 	int val = 0;
 	int len = 0;
-	int i = 0;
+	int offset, total;
 
 	self = sk->protinfo.irda;
 
@@ -1261,7 +1259,15 @@ static int irda_getsockopt(struct socket *sock, int level, int optname,
 		if (!cachelog)
 			return -EAGAIN;
 
-		list = (struct irda_device_list *) optbuf;
+		info = &list.dev[0];
+
+		/* Offset to first device entry */
+		offset = sizeof(struct irda_device_list) - 
+			sizeof(struct irda_device_info);
+
+		total = offset;    /* Initialized to size of the device list */
+		list.len = 0;     /* Initialize lenght of list */
+
 		/* 
 		 * Now, check all discovered devices (if any), and notify
 		 * client only about the services that the client is
@@ -1271,36 +1277,43 @@ static int irda_getsockopt(struct socket *sock, int level, int optname,
 		while (discovery != NULL) {
 			/* Mask out the ones we don't want */
 			if (discovery->hints.word & self->mask) {
-				/* Copy discovery information */
-				list->dev[i].saddr = discovery->saddr;
-				list->dev[i].daddr = discovery->daddr;
-				list->dev[i].charset = discovery->charset;
-				list->dev[i].hints[0] = discovery->hints.byte[0];
-				list->dev[i].hints[1] = discovery->hints.byte[1];
-				strncpy(list->dev[i].info, discovery->nickname,
-					NICKNAME_MAX_LEN);
-				if (++i >= 10)
+				
+				/* Check if room for this device entry */
+				if (len - total >= sizeof(struct irda_device_info))
 					break;
+
+				/* Copy discovery information */
+				info->saddr = discovery->saddr;
+				info->daddr = discovery->daddr;
+				info->charset = discovery->charset;
+				info->hints[0] = discovery->hints.byte[0];
+				info->hints[1] = discovery->hints.byte[1];
+				strncpy(info->info, discovery->nickname,
+					NICKNAME_MAX_LEN);
+
+				if (copy_to_user(optval+offset, &info, 
+						 sizeof(struct irda_device_info)))
+					return -EFAULT;
+				list.len++;
+				total += sizeof(struct irda_device_info);
 			}
 			discovery = (discovery_t *) hashbin_get_next(cachelog);
 		}
 		cachelog = NULL;
 
-		list->len = i;
-		len = sizeof(struct irda_device_list) +
-			sizeof(struct irda_device_info) * i;
-
-		DEBUG(1, __FUNCTION__ "(), len=%d, i=%d\n", len, i);
-
-		if (put_user(len, optlen))
+		/* Write total number of bytes used back to client */
+		if (put_user(total, optlen))
 			return -EFAULT;
-		
-		if (copy_to_user(optval, &optbuf, len))
+
+		/* Write total list length back to client */
+		if (copy_to_user(optval, &list, 
+				 sizeof(struct irda_device_list) -
+				 sizeof(struct irda_device_info)))
 			return -EFAULT;
 		break;
 	case IRTTP_MAX_SDU_SIZE:
 		val = self->max_data_size;
-		DEBUG(0, __FUNCTION__ "(), getting max_sdu_size = %d\n", val);
+		DEBUG(2, __FUNCTION__ "(), getting max_sdu_size = %d\n", val);
 		len = sizeof(int);
 		if (put_user(len, optlen))
 			return -EFAULT;
@@ -1370,15 +1383,13 @@ SOCKOPS_WRAP(irda_stream, PF_IRDA);
 /*
  * Function irda_device_event (this, event, ptr)
  *
- *    
+ *    Called when a device is taken up or down
  *
  */
 static int irda_device_event(struct notifier_block *this, unsigned long event,
 			     void *ptr)
 {
 	struct net_device *dev = (struct net_device *) ptr;
-	
-	DEBUG(3, __FUNCTION__ "()\n");
 	
         /* Reject non IrDA devices */
 	if (dev->type != ARPHRD_IRDA) 

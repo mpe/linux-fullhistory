@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Tue Aug 17 15:30:40 1999
+ * Modified at:   Thu Sep  9 11:39:43 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -237,7 +237,7 @@ int irlan_register_netdev(struct irlan_cb *self)
 		/* Get the first free irlan<x> name */
 		do {
 			sprintf(self->ifname, "%s%d", "irlan", i++);
-		} while (dev_get(self->ifname) != NULL);
+		} while (dev_get(self->ifname));
 	}
 	self->dev.name = self->ifname;
 	
@@ -615,7 +615,7 @@ void irlan_ias_register(struct irlan_cb *self, __u8 tsap_sel)
 		irias_add_string_attrib(obj, "DeviceID", "HWP19F0");
 		irias_add_integer_attrib(obj, "CompCnt", 1);
 		if (self->provider.access_type == ACCESS_PEER)
-			irias_add_string_attrib(obj, "Comp#02", "PNP8389");
+			irias_add_string_attrib(obj, "Comp#01", "PNP8389");
 		else
 			irias_add_string_attrib(obj, "Comp#01", "PNP8294");
 

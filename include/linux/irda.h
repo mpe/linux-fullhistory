@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irda.h
- * Version:       
- * Description:   
+ * Version:       1.0
+ * Description:   Exported IrDA sockets interface
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Mar  8 14:06:12 1999
- * Modified at:   Mon Mar 22 14:14:54 1999
+ * Modified at:   Mon Sep 27 12:11:49 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -83,8 +83,8 @@ struct sockaddr_irda {
 };
 
 struct irda_device_info {
-	unsigned int  saddr;       /* Address of remote device */
-	unsigned int  daddr;       /* Link where it was discovered */
+	unsigned int  saddr;        /* Address of remote device */
+	unsigned int  daddr;        /* Link where it was discovered */
 	char          info[22];     /* Description */
 	unsigned char charset;      /* Charset used for description */
 	unsigned char hints[2];     /* Hint bits */
@@ -92,7 +92,7 @@ struct irda_device_info {
 
 struct irda_device_list {
        unsigned int len;
-       struct irda_device_info dev[0];
+       struct irda_device_info dev[1];
 };
 
 struct irda_ias_set {

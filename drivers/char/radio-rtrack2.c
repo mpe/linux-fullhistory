@@ -16,6 +16,7 @@
 #include <asm/uaccess.h>	/* copy to/from user		*/
 #include <linux/videodev.h>	/* kernel radio structs		*/
 #include <linux/config.h>	/* CONFIG_RADIO_RTRACK2_PORT 	*/
+#include <linux/spinlock.h>
 
 #ifndef CONFIG_RADIO_RTRACK2_PORT
 #define CONFIG_RADIO_RTRACK2_PORT -1
@@ -23,6 +24,7 @@
 
 static int io = CONFIG_RADIO_RTRACK2_PORT; 
 static int users = 0;
+static spinlock_t lock;
 
 struct rt_device
 {
@@ -38,7 +40,9 @@ static void rt_mute(struct rt_device *dev)
 {
         if(dev->muted)
 		return;
+	spin_lock(&lock);
 	outb(1, io);
+	spin_unlock(&lock);
 	dev->muted = 1;
 }
 
@@ -46,7 +50,9 @@ static void rt_unmute(struct rt_device *dev)
 {
 	if(dev->muted == 0)
 		return;
+	spin_lock(&lock);
 	outb(0, io);
+	spin_unlock(&lock);
 	dev->muted = 0;
 }
 
@@ -69,6 +75,8 @@ static int rt_setfreq(struct rt_device *dev, unsigned long freq)
 	int i;
 
 	freq = freq / 200 + 856;
+	
+	spin_lock(&lock);
 
 	outb_p(0xc8, io);
 	outb_p(0xc9, io);
@@ -85,11 +93,13 @@ static int rt_setfreq(struct rt_device *dev, unsigned long freq)
 
 	outb_p(0xc8, io);
 	if (!dev->muted)
-	  outb_p(0, io);
+		outb_p(0, io);
+		
+	spin_unlock(&lock);
 	return 0;
 }
 
-int rt_getsigstr(struct rt_device *dev)
+static int rt_getsigstr(struct rt_device *dev)
 {
 	if (inb(io) & 2)	/* bit set = no signal present	*/
 		return 0;
@@ -227,7 +237,8 @@ int __init rtrack2_init(struct video_init *v)
 	}
 
 	rtrack2_radio.priv=&rtrack2_unit;
-	
+
+	spin_lock_init(&lock);	
 	if(video_register_device(&rtrack2_radio, VFL_TYPE_RADIO)==-1)
 		return -EINVAL;
 		

@@ -59,6 +59,13 @@ static	int		sa_int = 0;
 static	int		duplex = 0;
 static	int		speed = 0;
 
+MODULE_PARM(aui, "i");
+MODULE_PARM(sa_int, "i");
+MODULE_PARM(duplex, "i");
+MODULE_PARM(speed, "i");
+MODULE_PARM(debug, "i");
+EXPORT_NO_SYMBOLS;
+
 #endif
 
 
@@ -352,7 +359,7 @@ extern int init_module(void)
 	
 	/* printk( "TLAN:  Found %d device(s).\n", TLanDevicesInstalled ); */
 
-    return ( ( TLanDevicesInstalled >= 0 ) ? 0 : -ENODEV );
+	return ( ( TLanDevicesInstalled > 0 ) ? 0 : -ENODEV );
 
 } /* init_module */
 
@@ -2528,13 +2535,13 @@ void TLan_MiiSendData( u16 base_port, u32 data, unsigned num_bits )
 
 	for ( i = ( 0x1 << ( num_bits - 1 ) ); i; i >>= 1 ) {
 		TLan_ClearBit( TLAN_NET_SIO_MCLK, sio );
-		TLan_GetBit( TLAN_NET_SIO_MCLK, sio );
+		(void) TLan_GetBit( TLAN_NET_SIO_MCLK, sio );
 		if ( data & i )
 			TLan_SetBit( TLAN_NET_SIO_MDATA, sio );
 		else
 			TLan_ClearBit( TLAN_NET_SIO_MDATA, sio );
 		TLan_SetBit( TLAN_NET_SIO_MCLK, sio );
-		TLan_GetBit( TLAN_NET_SIO_MCLK, sio );
+		(void) TLan_GetBit( TLAN_NET_SIO_MCLK, sio );
 	}
 
 } /* TLan_MiiSendData */

@@ -69,6 +69,9 @@ static int riscix_partition(struct gendisk *hd, kdev_t dev, unsigned long first_
 	struct buffer_head *bh;
 	struct riscix_record *rr;
 	unsigned int riscix_minor;
+	
+	if(get_ptable_blocksize(dev)!=1024)
+		return 0;
 
 	printk(" [RISCiX]");
 
@@ -113,6 +116,9 @@ static int linux_partition(struct gendisk *hd, kdev_t dev, unsigned long first_s
 	struct linux_part *linuxp;
 	unsigned int linux_minor, mask = (1 << hd->minor_shift) - 1;
 
+	if(get_ptable_blocksize(dev)!=1024)
+		return 0;
+		
 	printk(" [Linux]");
 
 	add_gd_partition(hd, linux_minor = minor++, first_sect, nr_sects);
@@ -150,6 +156,9 @@ static int adfspart_check_CUMANA(struct gendisk *hd, kdev_t dev, unsigned long f
 	struct buffer_head *bh = NULL;
 	char *name = "CUMANA/ADFS";
 	int first = 1;
+
+	if(get_ptable_blocksize(dev)!=1024)
+		return 0;
 
 	/*
 	 * Try Cumana style partitions - sector 3 contains ADFS boot block with pointer
@@ -236,6 +245,9 @@ static int adfspart_check_ADFS(struct gendisk *hd, kdev_t dev, unsigned long fir
 	struct buffer_head *bh;
 	struct disc_record *dr;
 
+	if(get_ptable_blocksize(dev)!=1024)
+		return 0;
+
 	if (!(bh = bread(dev, 3, 1024)))
 		return -1;
 
@@ -287,6 +299,9 @@ static int adfspart_check_ICSLinux(kdev_t dev, unsigned long block)
 	unsigned int offset = block & 1 ? 512 : 0;
 	int result = 0;
 
+	if(get_ptable_blocksize(dev)!=1024)
+		return 0;
+
 	bh = bread(dev, block >> 1, 1024);
 
 	if (bh != NULL) {
@@ -319,6 +334,9 @@ static int adfspart_check_ICS(struct gendisk *hd, kdev_t dev, unsigned long firs
 	unsigned int i, mask = (1 << hd->minor_shift) - 1;
 	struct ics_part { unsigned long start; signed long size; } *p;
 
+	if(get_ptable_blocksize(dev)!=1024)
+		return 0;
+		
 	/*
 	 * Try ICS style partitions - sector 0 contains partition info.
 	 */

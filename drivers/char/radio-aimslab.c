@@ -35,6 +35,7 @@
 #include <asm/uaccess.h>	/* copy to/from user		*/
 #include <linux/videodev.h>	/* kernel radio structs		*/
 #include <linux/config.h>	/* CONFIG_RADIO_RTRACK_PORT 	*/
+#include <asm/semaphore.h>	/* Lock for the I/O 		*/
 
 #ifndef CONFIG_RADIO_RTRACK_PORT
 #define CONFIG_RADIO_RTRACK_PORT -1
@@ -42,6 +43,7 @@
 
 static int io = CONFIG_RADIO_RTRACK_PORT; 
 static int users = 0;
+static struct semaphore lock;
 
 struct rt_device
 {
@@ -86,19 +88,23 @@ static void rt_incvol(void)
 static void rt_mute(struct rt_device *dev)
 {
 	dev->muted = 1;
+	down(&lock);
 	outb(0xd0, io);			/* volume steady, off		*/
+	up(&lock);
 }
 
 static int rt_setvol(struct rt_device *dev, int vol)
 {
 	int i;
 
+	down(&lock);
+	
 	if(vol == dev->curvol) {	/* requested volume = current */
 		if (dev->muted) {	/* user is unmuting the card  */
 			dev->muted = 0;
 			outb (0xd8, io);	/* enable card */
 		}	
-	
+		up(&lock);
 		return 0;
 	}
 
@@ -107,6 +113,7 @@ static int rt_setvol(struct rt_device *dev, int vol)
 		sleep_delay(2000000);	/* make sure it's totally down	*/
 		outb(0xd0, io);		/* volume steady, off		*/
 		dev->curvol = 0;	/* track the volume state!	*/
+		up(&lock);
 		return 0;
 	}
 
@@ -119,7 +126,7 @@ static int rt_setvol(struct rt_device *dev, int vol)
 			rt_decvol();
 
 	dev->curvol = vol;
-
+	up(&lock);
 	return 0;
 }
 
@@ -165,6 +172,8 @@ static int rt_setfreq(struct rt_device *dev, unsigned long freq)
 
 	freq += 171200;			/* Add 10.7 MHz IF 		*/
 	freq /= 800;			/* Convert to 50 kHz units	*/
+	
+	down(&lock);			/* Stop other ops interfering */
 	 
 	send_0_byte (io, dev);		/*  0: LSB of frequency		*/
 
@@ -191,11 +200,13 @@ static int rt_setfreq(struct rt_device *dev, unsigned long freq)
 		outb (0xd0, io);	/* volume steady + sigstr */
 	else
 		outb (0xd8, io);	/* volume steady + sigstr + on */
+		
+	up(&lock);
 
 	return 0;
 }
 
-int rt_getsigstr(struct rt_device *dev)
+static int rt_getsigstr(struct rt_device *dev)
 {
 	if (inb(io) & 2)	/* bit set = no signal present	*/
 		return 0;
@@ -324,8 +335,14 @@ static struct video_device rtrack_radio=
 	NULL
 };
 
-int __init rtrack_init(struct video_init *v)
+static int __init rtrack_init(void)
 {
+	if(io==-1)
+	{
+		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
+		return -EINVAL;
+	}
+
 	if (check_region(io, 2)) 
 	{
 		printk(KERN_ERR "rtrack: port 0x%x already in use\n", io);
@@ -340,6 +357,10 @@ int __init rtrack_init(struct video_init *v)
 	request_region(io, 2, "rtrack");
 	printk(KERN_INFO "AIMSlab Radiotrack/radioreveal card driver.\n");
 
+	/* Set up the I/O locking */
+	
+	init_MUTEX(&lock);
+	
  	/* mute card - prevents noisy bootups */
 
 	/* this ensures that the volume is all the way down  */
@@ -351,8 +372,6 @@ int __init rtrack_init(struct video_init *v)
 	return 0;
 }
 
-#ifdef MODULE
-
 MODULE_AUTHOR("M.Kirkwood");
 MODULE_DESCRIPTION("A driver for the RadioTrack/RadioReveal radio card.");
 MODULE_PARM(io, "i");
@@ -360,20 +379,12 @@ MODULE_PARM_DESC(io, "I/O address of the RadioTrack card (0x20f or 0x30f)");
 
 EXPORT_NO_SYMBOLS;
 
-int init_module(void)
-{
-	if(io==-1)
-	{
-		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
-		return -EINVAL;
-	}
-	return rtrack_init(NULL);
-}
-
-void cleanup_module(void)
+static void __exit cleanup_rtrack_module(void)
 {
 	video_unregister_device(&rtrack_radio);
 	release_region(io,2);
 }
 
-#endif
+module_init(rtrack_init);
+module_exit(cleanup_rtrack_module);
+

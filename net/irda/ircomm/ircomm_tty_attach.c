@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Jun  5 17:42:00 1999
- * Modified at:   Wed Aug 25 13:32:00 1999
+ * Modified at:   Wed Sep  8 11:54:27 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -96,6 +96,8 @@ char *ircomm_tty_event[] = {
 	"IRCOMM_TTY_DISCOVERY_INDICATION",
 	"IRCOMM_TTY_CONNECT_CONFIRM",
 	"IRCOMM_TTY_CONNECT_INDICATION",
+	"IRCOMM_TTY_DISCONNECT_REQUEST",
+	"IRCOMM_TTY_DISCONNECT_INDICATION",
 	"IRCOMM_TTY_WD_TIMER_EXPIRED",
 	"IRCOMM_TTY_GOT_PARAMETERS",
 	"IRCOMM_TTY_GOT_LSAPSEL",
@@ -167,8 +169,10 @@ void ircomm_tty_detach_cable(struct ircomm_tty_cb *self)
 	irlmp_unregister_service(self->skey);
 
 	/* Remove LM-IAS object */
-	if (self->obj)
+	if (self->obj) {
 		irias_delete_object(self->obj);
+		self->obj = NULL;
+	}
 
 	ircomm_tty_do_event(self, IRCOMM_TTY_DETACH_CABLE, NULL, NULL);
 
@@ -204,7 +208,8 @@ static void ircomm_tty_ias_register(struct ircomm_tty_cb *self)
 		irias_insert_object(self->obj);
 	} else {
 		hints = irlmp_service_to_hint(S_COMM);
-		
+		hints |= irlmp_service_to_hint(S_TELEPHONY);
+
 		/* Register IrCOMM with LM-IAS */
 		self->obj = irias_new_object("IrDA:IrCOMM", IAS_IRCOMM_ID);
 		irias_add_integer_attrib(self->obj, "IrDA:TinyTP:LsapSel", 
@@ -257,8 +262,8 @@ static int ircomm_tty_send_initial_parameters(struct ircomm_tty_cb *self)
 	}
 
 	/* Only 9-wire service types continue here */
-#if 0
 	ircomm_param_request(self, IRCOMM_FLOW_CONTROL, FALSE);
+#if 0
 	ircomm_param_request(self, IRCOMM_XON_XOFF, FALSE);
 	ircomm_param_request(self, IRCOMM_ENQ_ACK, FALSE);
 #endif	
@@ -297,6 +302,30 @@ static void ircomm_tty_discovery_indication(discovery_t *discovery)
 }
 
 /*
+ * Function ircomm_tty_disconnect_indication (instance, sap, reason, skb)
+ *
+ *    Link disconnected
+ *
+ */
+void ircomm_tty_disconnect_indication(void *instance, void *sap, 
+				      LM_REASON reason,
+				      struct sk_buff *skb)
+{
+	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
+
+	DEBUG(2, __FUNCTION__ "()\n");
+
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IRCOMM_TTY_MAGIC, return;);
+
+	if (!self->tty)
+		return;
+
+	ircomm_tty_do_event(self, IRCOMM_TTY_DISCONNECT_INDICATION, NULL, 
+			    NULL);
+}
+
+/*
  * Function ircomm_tty_getvalue_confirm (result, obj_id, value, priv)
  *
  *    Got result from the IAS query we make
@@ -315,7 +344,7 @@ static void ircomm_tty_getvalue_confirm(int result, __u16 obj_id,
 
 	/* Check if request succeeded */
 	if (result != IAS_SUCCESS) {
-		DEBUG(0, __FUNCTION__ "(), got NULL value!\n");
+		DEBUG(4, __FUNCTION__ "(), got NULL value!\n");
 		return;
 	}
 
@@ -421,29 +450,35 @@ void ircomm_tty_link_established(struct ircomm_tty_cb *self)
 
 	/*  
 	 * IrCOMM link is now up, and if we are not using hardware
-	 * flow-control, then declare the hardware as running 
+	 * flow-control, then declare the hardware as running. Otherwise
+	 * the client will have to wait for the CD to be set.
 	 */
 	if (!(self->flags & ASYNC_CTS_FLOW)) {
 		DEBUG(2, __FUNCTION__ "(), starting hardware!\n");
 		if (!self->tty)
 			return;
 		self->tty->hw_stopped = 0;
-
-		/* Kick client */
-		ircomm_tty_do_softint(self);
 	}
+	/* Wake up processes blocked on open */
+	wake_up_interruptible(&self->open_wait);
+
+	/* 
+	 * Wake up processes blocked on write, or waiting for a write 
+	 * wakeup notification
+	 */
+	queue_task(&self->tqueue, &tq_immediate);
+	mark_bh(IMMEDIATE_BH);
 }
 
 /*
  * Function irlan_start_watchdog_timer (self, timeout)
  *
- *    
- *
+ *    Start the watchdog timer. This timer is used to make sure that any 
+ *    connection attempt is successful, and if not, we will retry after 
+ *    the timeout
  */
 void ircomm_tty_start_watchdog_timer(struct ircomm_tty_cb *self, int timeout)
 {
-	DEBUG(4, __FUNCTION__ "()\n");
-	
 	irda_start_timer(&self->watchdog_timer, timeout, (void *) self,
 			 ircomm_tty_watchdog_timer_expired);
 }
@@ -458,7 +493,7 @@ void ircomm_tty_watchdog_timer_expired(void *data)
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) data;
 	
-	DEBUG(1, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRCOMM_TTY_MAGIC, return;);
@@ -479,7 +514,7 @@ static int ircomm_tty_state_idle(struct ircomm_tty_cb *self,
 {
 	int ret = 0;
 
-	DEBUG(1, __FUNCTION__": state=%s, event=%s\n",
+	DEBUG(2, __FUNCTION__": state=%s, event=%s\n",
 	      ircomm_tty_state[self->state], ircomm_tty_event[event]);
 
 	switch (event) {
@@ -507,9 +542,11 @@ static int ircomm_tty_state_idle(struct ircomm_tty_cb *self,
 
 		/* Accept connection */
 		ircomm_connect_response(self->ircomm, NULL);
-		
-		ircomm_tty_link_established(self);
 		ircomm_tty_next_state(self, IRCOMM_TTY_READY);
+
+		/* Init connection */
+		ircomm_tty_send_initial_parameters(self);
+		ircomm_tty_link_established(self);
 		break;
 	case IRCOMM_TTY_WD_TIMER_EXPIRED:
 		/* Just stay idle */
@@ -518,7 +555,7 @@ static int ircomm_tty_state_idle(struct ircomm_tty_cb *self,
 		ircomm_tty_next_state(self, IRCOMM_TTY_IDLE);
 		break;
 	default:
-		DEBUG(0, __FUNCTION__"(), unknown event: %s\n",
+		DEBUG(2, __FUNCTION__"(), unknown event: %s\n",
 		      ircomm_tty_event[event]);
 		return -EINVAL;
 	}
@@ -538,7 +575,7 @@ static int ircomm_tty_state_search(struct ircomm_tty_cb *self,
 {
 	int ret = 0;
 
-	DEBUG(1, __FUNCTION__": state=%s, event=%s\n",
+	DEBUG(2, __FUNCTION__": state=%s, event=%s\n",
 	      ircomm_tty_state[self->state], ircomm_tty_event[event]);
 
 	switch (event) {
@@ -568,8 +605,11 @@ static int ircomm_tty_state_search(struct ircomm_tty_cb *self,
 
 		/* Accept connection */
 		ircomm_connect_response(self->ircomm, NULL);
-		ircomm_tty_link_established(self);
 		ircomm_tty_next_state(self, IRCOMM_TTY_READY);
+
+		/* Init connection */
+		ircomm_tty_send_initial_parameters(self);
+		ircomm_tty_link_established(self);
 		break;
 	case IRCOMM_TTY_WD_TIMER_EXPIRED:
 		/* Try to discover any remote devices */		
@@ -580,7 +620,7 @@ static int ircomm_tty_state_search(struct ircomm_tty_cb *self,
 		ircomm_tty_next_state(self, IRCOMM_TTY_IDLE);
 		break;
 	default:
-		DEBUG(0, __FUNCTION__"(), unknown event: %s\n",
+		DEBUG(2, __FUNCTION__"(), unknown event: %s\n",
 		      ircomm_tty_event[event]);
 		return -EINVAL;
 	}
@@ -600,7 +640,7 @@ static int ircomm_tty_state_query_parameters(struct ircomm_tty_cb *self,
 {
 	int ret = 0;
 
-	DEBUG(1, __FUNCTION__": state=%s, event=%s\n",
+	DEBUG(2, __FUNCTION__": state=%s, event=%s\n",
 	      ircomm_tty_state[self->state], ircomm_tty_event[event]);
 
 	switch (event) {
@@ -624,14 +664,17 @@ static int ircomm_tty_state_query_parameters(struct ircomm_tty_cb *self,
 
 		/* Accept connection */
 		ircomm_connect_response(self->ircomm, NULL);
-		ircomm_tty_link_established(self);
 		ircomm_tty_next_state(self, IRCOMM_TTY_READY);
+
+		/* Init connection */
+		ircomm_tty_send_initial_parameters(self);
+		ircomm_tty_link_established(self);
 		break;
 	case IRCOMM_TTY_DETACH_CABLE:
 		ircomm_tty_next_state(self, IRCOMM_TTY_IDLE);
 		break;
 	default:
-		DEBUG(0, __FUNCTION__"(), unknown event: %s\n",
+		DEBUG(2, __FUNCTION__"(), unknown event: %s\n",
 		      ircomm_tty_event[event]);
 		return -EINVAL;
 	}
@@ -651,7 +694,7 @@ static int ircomm_tty_state_query_lsap_sel(struct ircomm_tty_cb *self,
 {
 	int ret = 0;
 
-	DEBUG(1, __FUNCTION__": state=%s, event=%s\n",
+	DEBUG(2, __FUNCTION__": state=%s, event=%s\n",
 	      ircomm_tty_state[self->state], ircomm_tty_event[event]);
 
 	switch (event) {
@@ -673,14 +716,17 @@ static int ircomm_tty_state_query_lsap_sel(struct ircomm_tty_cb *self,
 
 		/* Accept connection */
 		ircomm_connect_response(self->ircomm, NULL);
-		ircomm_tty_link_established(self);
 		ircomm_tty_next_state(self, IRCOMM_TTY_READY);
+
+		/* Init connection */
+		ircomm_tty_send_initial_parameters(self);
+		ircomm_tty_link_established(self);
 		break;
 	case IRCOMM_TTY_DETACH_CABLE:
 		ircomm_tty_next_state(self, IRCOMM_TTY_IDLE);
 		break;
 	default:
-		DEBUG(0, __FUNCTION__"(), unknown event: %s\n",
+		DEBUG(2, __FUNCTION__"(), unknown event: %s\n",
 		      ircomm_tty_event[event]);
 		return -EINVAL;
 	}
@@ -700,38 +746,20 @@ static int ircomm_tty_state_setup(struct ircomm_tty_cb *self,
 {
 	int ret = 0;
 
-	DEBUG(1, __FUNCTION__": state=%s, event=%s\n",
+	DEBUG(2, __FUNCTION__": state=%s, event=%s\n",
 	      ircomm_tty_state[self->state], ircomm_tty_event[event]);
 
 	switch (event) {
 	case IRCOMM_TTY_CONNECT_CONFIRM:
-		ircomm_tty_link_established(self);
+		del_timer(&self->watchdog_timer);
 		ircomm_tty_next_state(self, IRCOMM_TTY_READY);
-
+		
 		/* 
 		 * Send initial parameters. This will also send out queued
 		 * parameters waiting for the connection to come up 
 		 */
 		ircomm_tty_send_initial_parameters(self);
-
-		ASSERT(self->tty != NULL, return -1;);
-
-		/* Send queued frames */
-		while ((skb = skb_dequeue(&self->tx_queue))) {
-			ret = ircomm_data_request(self->ircomm, skb);
-			if (ret < 0)
-				break;
-		}
-		
-		/* Wake up processes blocked on open */
-		wake_up_interruptible(&self->open_wait);
-
-		/* 
-		 * Wake up processes blocked on write, or waiting for a write 
-		 * wakeup notification
-		 */
-		queue_task(&self->tqueue, &tq_immediate);
-		mark_bh(IMMEDIATE_BH);
+		ircomm_tty_link_established(self);
 		break;
 	case IRCOMM_TTY_CONNECT_INDICATION:
 		del_timer(&self->watchdog_timer);
@@ -739,6 +767,10 @@ static int ircomm_tty_state_setup(struct ircomm_tty_cb *self,
 		/* Accept connection */
 		ircomm_connect_response(self->ircomm, NULL);
 		ircomm_tty_next_state(self, IRCOMM_TTY_READY);
+
+		/* Init connection */
+		ircomm_tty_send_initial_parameters(self);
+		ircomm_tty_link_established(self);
 		break;
 	case IRCOMM_TTY_WD_TIMER_EXPIRED:
 		/* Go back to search mode */
@@ -750,7 +782,7 @@ static int ircomm_tty_state_setup(struct ircomm_tty_cb *self,
 		ircomm_tty_next_state(self, IRCOMM_TTY_IDLE);
 		break;
 	default:
-		DEBUG(0, __FUNCTION__"(), unknown event: %s\n",
+		DEBUG(2, __FUNCTION__"(), unknown event: %s\n",
 		      ircomm_tty_event[event]);
 		return -EINVAL;
 	}
@@ -774,14 +806,20 @@ static int ircomm_tty_state_ready(struct ircomm_tty_cb *self,
 	case IRCOMM_TTY_DATA_REQUEST:
 		ret = ircomm_data_request(self->ircomm, skb);
 		break;		
-	case IRCOMM_TTY_DATA_INDICATION:
-		break;
 	case IRCOMM_TTY_DETACH_CABLE:
 		ircomm_disconnect_request(self->ircomm, NULL);
 		ircomm_tty_next_state(self, IRCOMM_TTY_IDLE);
 		break;
+	case IRCOMM_TTY_DISCONNECT_INDICATION:
+		ircomm_tty_next_state(self, IRCOMM_TTY_SEARCH);
+		ircomm_tty_start_watchdog_timer(self, 3*HZ);
+
+		/* Drop carrier */
+		self->session.dce = IRCOMM_DELTA_CD;
+		ircomm_tty_check_modem_status(self);
+		break;
 	default:
-		DEBUG(0, __FUNCTION__"(), unknown event: %s\n",
+		DEBUG(2, __FUNCTION__"(), unknown event: %s\n",
 		      ircomm_tty_event[event]);
 		return -EINVAL;
 	}
@@ -813,7 +851,7 @@ void ircomm_tty_next_state(struct ircomm_tty_cb *self, IRCOMM_TTY_STATE state)
 {
 	self->state = state;
 	
-	DEBUG(1, __FUNCTION__": next state=%s, service type=%d\n", 
+	DEBUG(2, __FUNCTION__": next state=%s, service type=%d\n", 
 	      ircomm_tty_state[self->state], self->service_type);
 }
 

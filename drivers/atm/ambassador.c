@@ -674,7 +674,7 @@ static inline int tx_take (amb_dev * dev) {
     return 0;
   } else {
     
-    spin_unlock_irqrestore (&dev->lock, flags);
+    spin_unlock_irqrestore (&txq->lock, flags);
     return -1;
   }
 }

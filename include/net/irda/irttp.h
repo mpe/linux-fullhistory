@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Tue Aug 24 09:27:05 1999
+ * Modified at:   Mon Sep 27 11:38:01 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -139,6 +139,11 @@ static __inline __u32 irttp_get_saddr(struct tsap_cb *self)
 static __inline __u32 irttp_get_daddr(struct tsap_cb *self)
 {
 	return irlmp_get_daddr(self->lsap);
+}
+
+static __inline __u32 irttp_get_max_seq_size(struct tsap_cb *self)
+{
+	return self->max_seg_size;
 }
 
 extern struct irttp_cb *irttp;

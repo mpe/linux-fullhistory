@@ -179,7 +179,7 @@ int init_module(void)
 			return -ENODEV;
 #ifdef CONFIG_MIDI
 		config_mpu.io_base = mpu_io;
-		if (mpu_io && probe_sbmpu(&config_mpu))
+		if (probe_sbmpu(&config_mpu))
 			sbmpu = 1;
 		if (sbmpu)
 			attach_sbmpu(&config_mpu);

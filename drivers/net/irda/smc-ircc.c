@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Thomas Davis (tadavis@jps.net)
  * Created at:    
- * Modified at:   Tue Aug 24 13:33:22 1999
+ * Modified at:   Wed Sep 22 07:47:19 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Thomas Davis, All Rights Reserved.
@@ -52,14 +52,16 @@ static char *driver_name = "smc-ircc";
 
 #define CHIP_IO_EXTENT 8
 
-static unsigned int io[]  = { 0x2e8, 0x140, ~0, ~0 };
-static unsigned int io2[] = { 0x2f8, 0x3e8, 0, 0};
+static unsigned int io[]  = { 0x2e8, 0x140, 0x118, ~0 }; 
+static unsigned int io2[] = { 0x2f8, 0x3e8, 0x2e8, 0};
 
 static struct ircc_cb *dev_self[] = { NULL, NULL, NULL, NULL};
 
 /* Some prototypes */
 static int  ircc_open( int i, unsigned int iobase, unsigned int board_addr);
+#ifdef MODULE
 static int  ircc_close( struct irda_device *idev);
+#endif /* MODULE */
 static int  ircc_probe( int iobase, int board_addr);
 static int  ircc_dma_receive( struct irda_device *idev); 
 static int  ircc_dma_receive_complete(struct irda_device *idev, int iobase);
@@ -264,6 +266,7 @@ static int ircc_open( int i, unsigned int iobase, unsigned int iobase2)
  *    Close driver instance
  *
  */
+#ifdef MODULE
 static int ircc_close( struct irda_device *idev)
 {
 	int iobase;
@@ -304,6 +307,7 @@ static int ircc_close( struct irda_device *idev)
 	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 	return 0;
 }
+#endif /* MODULE */
 
 /*
  * Function ircc_probe (iobase, board_addr, irq, dma)
@@ -311,7 +315,7 @@ static int ircc_close( struct irda_device *idev)
  *    Returns non-negative on success.
  *
  */
-static int ircc_probe( int iobase, int iobase2) 
+static int ircc_probe(int iobase, int iobase2) 
 {
 	int version = 1;
 	int low, high, chip, config, dma, irq;
@@ -327,17 +331,17 @@ static int ircc_probe( int iobase, int iobase2)
 	irq = config >> 4 & 0x0f;
 	dma = config & 0x0f;
 
-	if (high == 0x10 && low == 0xb8 && chip == 0xf1) {
-		DEBUG(0, "SMC IrDA Controller found; version = %d, "
+        if (high == 0x10 && low == 0xb8 && (chip == 0xf1 || chip == 0xf2)) { 
+                DEBUG(0, "SMC IrDA Controller found; IrCC version %d.%d, "
 		      "port 0x%04x, dma %d, interrupt %d\n",
-		      version, iobase, dma, irq);
+                      chip & 0x0f, version, iobase, dma, irq);
 	} else {
 		return -1;
 	}
 
 	serial_out(iobase, UART_MASTER, 0);
 
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	DEBUG(ircc_debug, "--> " __FUNCTION__ "\n");
 
 	return config;
 }
@@ -798,7 +802,7 @@ static void ircc_wait_until_sent( struct irda_device *idev)
 
 	/* Just delay 60 ms */
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(6);
+	schedule_timeout(MSECS_TO_JIFFIES(60));
 
 	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 }

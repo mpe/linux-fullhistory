@@ -23,6 +23,7 @@
 #include <asm/uaccess.h>	/* copy to/from user		*/
 #include <linux/videodev.h>	/* kernel radio structs		*/
 #include <linux/config.h>	/* CONFIG_RADIO_GEMTEK_PORT 	*/
+#include <linux/spinlock.h>
 
 #ifndef CONFIG_RADIO_GEMTEK_PORT
 #define CONFIG_RADIO_GEMTEK_PORT -1
@@ -30,6 +31,7 @@
 
 static int io = CONFIG_RADIO_GEMTEK_PORT; 
 static int users = 0;
+static spinlock_t lock;
 
 struct gemtek_device
 {
@@ -48,7 +50,9 @@ static void gemtek_mute(struct gemtek_device *dev)
 {
         if(dev->muted)
 		return;
+	spin_lock(&lock);
 	outb(0x10, io);
+	spin_unlock(&lock);
 	dev->muted = 1;
 }
 
@@ -56,7 +60,9 @@ static void gemtek_unmute(struct gemtek_device *dev)
 {
 	if(dev->muted == 0)
 		return;
+	spin_lock(&lock);
 	outb(0x20, io);
+	spin_unlock(&lock);
 	dev->muted = 0;
 }
 
@@ -87,6 +93,8 @@ static int gemtek_setfreq(struct gemtek_device *dev, unsigned long freq)
 	freq *= 7825;
 	freq /= 100000;
 
+	spin_lock(&lock);
+	
 	/* 2 start bits */
 	outb_p(0x03, io);
 	udelay(5);
@@ -114,13 +122,17 @@ static int gemtek_setfreq(struct gemtek_device *dev, unsigned long freq)
 	outb_p(0x07, io);
 	udelay(5);
 
+	spin_unlock(&lock);
+	
 	return 0;
 }
 
 int gemtek_getsigstr(struct gemtek_device *dev)
 {
+	spin_lock(&lock);
 	inb(io);
 	udelay(5);
+	spin_unlock(&lock);
 	if (inb(io) & 8)		/* bit set = no signal present */
 		return 0;
 	return 1;		/* signal present */
@@ -250,8 +262,14 @@ static struct video_device gemtek_radio=
 	NULL
 };
 
-int __init gemtek_init(struct video_init *v)
+static int __init gemtek_init(void)
 {
+	if(io==-1)
+	{
+		printk(KERN_ERR "You must set an I/O address with io=0x20c, io=0x30c, io=0x24c or io=0x34c (or io=0x248 for the combined sound/radiocard)\n");
+		return -EINVAL;
+	}
+
 	if (check_region(io, 4)) 
 	{
 		printk(KERN_ERR "gemtek: port 0x%x already in use\n", io);
@@ -266,6 +284,7 @@ int __init gemtek_init(struct video_init *v)
 	request_region(io, 4, "gemtek");
 	printk(KERN_INFO "GemTek Radio Card driver.\n");
 
+	spin_lock_init(&lock);
  	/* mute card - prevents noisy bootups */
 	outb(0x10, io);
 	udelay(5);
@@ -277,8 +296,6 @@ int __init gemtek_init(struct video_init *v)
 	return 0;
 }
 
-#ifdef MODULE
-
 MODULE_AUTHOR("Jonas Munsin");
 MODULE_DESCRIPTION("A driver for the GemTek Radio Card");
 MODULE_PARM(io, "i");
@@ -286,23 +303,14 @@ MODULE_PARM_DESC(io, "I/O address of the GemTek card (0x20c, 0x30c, 0x24c or 0x3
 
 EXPORT_NO_SYMBOLS;
 
-int init_module(void)
-{
-	if(io==-1)
-	{
-		printk(KERN_ERR "You must set an I/O address with io=0x20c, io=0x30c, io=0x24c or io=0x34c (or io=0x248 for the combined sound/radiocard)\n");
-		return -EINVAL;
-	}
-	return gemtek_init(NULL);
-}
-
-void cleanup_module(void)
+static void __exit gemtek_cleanup(void)
 {
 	video_unregister_device(&gemtek_radio);
 	release_region(io,4);
 }
 
-#endif
+module_init(gemtek_init);
+module_exit(gemtek_cleanup);
 
 /*
   Local variables:

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:18:38 1997
- * Modified at:   Tue Aug 24 13:32:24 1999
+ * Modified at:   Tue Sep 28 08:39:29 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
@@ -25,11 +25,13 @@
  ********************************************************************/    
 
 #include <linux/module.h>
-#include <asm/uaccess.h>
 #include <linux/kernel.h>
 #include <linux/tty.h>
-#include <asm/segment.h>
 #include <linux/init.h>
+#include <linux/skbuff.h>
+
+#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irtty.h>
@@ -411,7 +413,7 @@ static void irtty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 		 */
  		if (fp && *fp++) { 
 			DEBUG( 0, "Framing or parity error!\n");
-			irda_device_set_media_busy(&self->idev, TRUE);
+			irda_device_set_media_busy(&self->idev.netdev, TRUE);
 
  			cp++;
  			continue;
@@ -726,7 +728,12 @@ static int irtty_net_init(struct net_device *dev)
 
 static int irtty_net_open(struct net_device *dev)
 {
+	struct irda_device *idev = dev->priv;
+
 	irda_device_net_open(dev);
+
+	/* Make sure we can receive more data */
+	irtty_stop_receiver(idev, FALSE);
 
 	MOD_INC_USE_COUNT;
 
@@ -735,6 +742,11 @@ static int irtty_net_open(struct net_device *dev)
 
 static int irtty_net_close(struct net_device *dev)
 {
+	struct irda_device *idev = dev->priv;
+
+	/* Make sure we don't receive more data */
+	irtty_stop_receiver(idev, TRUE);
+
 	irda_device_net_close(dev);
 
 	MOD_DEC_USE_COUNT;

@@ -47,6 +47,7 @@ struct zol_device {
 	unsigned long curfreq;
 	int muted;
 	unsigned int stereo;
+	struct semaphore lock;
 };
 
 
@@ -64,26 +65,30 @@ static int zol_setvol(struct zol_device *dev, int vol)
 	if (dev->muted)
 		return 0;
 
+	down(&dev->lock);
 	if (vol == 0) {
 		outb(0, io);
 		outb(0, io);
 		inb(io + 3);    /* Zoltrix needs to be read to confirm */
+		up(&dev->lock);
 		return 0;
 	}
 
 	outb(dev->curvol-1, io);
 	sleep_delay();
 	inb(io + 2);
-
+	up(&dev->lock);
 	return 0;
 }
 
 static void zol_mute(struct zol_device *dev)
 {
 	dev->muted = 1;
+	down(&dev->lock);
 	outb(0, io);
 	outb(0, io);
 	inb(io + 3);            /* Zoltrix needs to be read to confirm */
+	up(&dev->lock);
 }
 
 static void zol_unmute(struct zol_device *dev)
@@ -107,6 +112,8 @@ static int zol_setfreq(struct zol_device *dev, unsigned long freq)
 	bitmask = 0xc480402c10080000ull;
 	i = 45;
 
+	down(&dev->lock);
+	
 	outb(0, io);
 	outb(0, io);
 	inb(io + 3);            /* Zoltrix needs to be read to confirm */
@@ -141,14 +148,21 @@ static int zol_setfreq(struct zol_device *dev, unsigned long freq)
 	inb(io+2);
 
         udelay(1000);
+        
 	if (dev->muted)
 	{
 		outb(0, io);
 		outb(0, io);
 		inb(io + 3);
 		udelay(1000);
-	} else
-        zol_setvol(dev, dev->curvol);
+	}
+	
+	up(&dev->lock);
+	
+	if(!dev->muted)
+	{
+	        zol_setvol(dev, dev->curvol);
+	}
 	return 0;
 }
 
@@ -158,6 +172,7 @@ int zol_getsigstr(struct zol_device *dev)
 {
 	int a, b;
 
+	down(&dev->lock);
 	outb(0x00, io);         /* This stuff I found to do nothing */
 	outb(dev->curvol, io);
 	sleep_delay();
@@ -167,6 +182,8 @@ int zol_getsigstr(struct zol_device *dev)
 	sleep_delay();
 	b = inb(io);
 
+	up(&dev->lock);
+	
 	if (a != b)
 		return (0);
 
@@ -180,6 +197,8 @@ int zol_is_stereo (struct zol_device *dev)
 {
 	int x1, x2;
 
+	down(&dev->lock);
+	
 	outb(0x00, io);
 	outb(dev->curvol, io);
 	sleep_delay();
@@ -189,6 +208,8 @@ int zol_is_stereo (struct zol_device *dev)
 	sleep_delay();
 	x2 = inb(io);
 
+	up(&dev->lock);
+	
 	if ((x1 == x2) && (x1 == 0xcf))
 		return 1;
 	return 0;
@@ -351,6 +372,8 @@ int __init zoltrix_init(struct video_init *v)
 	request_region(io, 2, "zoltrix");
 	printk(KERN_INFO "Zoltrix Radio Plus card driver.\n");
 
+	init_MUTEX(&zoltrix_unit.lock);
+	
 	/* mute card - prevents noisy bootups */
 
 	/* this ensures that the volume is all the way down  */

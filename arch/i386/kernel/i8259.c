@@ -385,7 +385,7 @@ void __init init_IRQ(void)
 #endif	
 
 	/*
-	 * Set the clock to 100 Hz, we already have a valid
+	 * Set the clock to HZ Hz, we already have a valid
 	 * vector now:
 	 */
 	outb_p(0x34,0x43);		/* binary, mode 2, LSB/MSB, ch 0 */

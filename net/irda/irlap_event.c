@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Wed Aug 25 14:49:47 1999
+ * Modified at:   Mon Sep 20 12:30:31 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>,
@@ -127,9 +127,9 @@ const char *irlap_state[] = {
 	"LAP_RESET_CHECK",
 };
 
-static int (*state[])( struct irlap_cb *self, IRLAP_EVENT event, 
-		       struct sk_buff *skb, struct irlap_info *info) = 
-{ 
+static int (*state[])(struct irlap_cb *self, IRLAP_EVENT event, 
+		      struct sk_buff *skb, struct irlap_info *info) = 
+{
 	irlap_state_ndm,
 	irlap_state_query,
 	irlap_state_reply,
@@ -257,7 +257,7 @@ void irlap_do_event(struct irlap_cb *self, IRLAP_EVENT event,
 	case LAP_NDM:
 		/* Check if we should try to connect */
 		if ((self->connect_pending) && 
-		    !irda_device_is_media_busy(self->irdev)) 
+		    !irda_device_is_media_busy(self->netdev)) 
 		{
 			self->connect_pending = FALSE;
 			
@@ -310,16 +310,14 @@ static int irlap_state_ndm(struct irlap_cb *self, IRLAP_EVENT event,
 	discovery_t *discovery_rsp;
 	int ret = 0;
 	
-	DEBUG(4, __FUNCTION__ "()\n");
-	
 	ASSERT(self != NULL, return -1;);
 	ASSERT(self->magic == LAP_MAGIC, return -1;);
 
 	switch (event) {
 	case CONNECT_REQUEST:
-		ASSERT(self->irdev != NULL, return -1;);
+		ASSERT(self->netdev != NULL, return -1;);
 
-		if (irda_device_is_media_busy(self->irdev)) {
+		if (irda_device_is_media_busy(self->netdev)) {
 			DEBUG(0, __FUNCTION__
 			      "(), CONNECT_REQUEST: media busy!\n");
 			
@@ -337,20 +335,25 @@ static int irlap_state_ndm(struct irlap_cb *self, IRLAP_EVENT event,
 			irlap_next_state(self, LAP_SETUP);
 		}
 		break;
-
 	case RECV_SNRM_CMD:
-		self->daddr = info->daddr;
-		self->caddr = info->caddr;
-		
-		irlap_next_state(self, LAP_CONN);
-
-		irlap_connect_indication(self, skb);
+		/* Check if the frame contains and I field */
+		if (info) {		       
+			self->daddr = info->daddr;
+			self->caddr = info->caddr;
+			
+			irlap_next_state(self, LAP_CONN);
+			
+			irlap_connect_indication(self, skb);
+		} else {
+			DEBUG(0, __FUNCTION__ "(), SNRM frame does not contain"
+			      " and I field!\n");
+			dev_kfree_skb(skb);
+		}
 		break;
-
 	case DISCOVERY_REQUEST:		
 		ASSERT(info != NULL, return -1;);
 
-	 	if (irda_device_is_media_busy(self->irdev)) {
+	 	if (irda_device_is_media_busy(self->netdev)) {
  			DEBUG(0, __FUNCTION__ "(), media busy!\n"); 
 			/* irlap->log.condition = MEDIA_BUSY; */
 			
@@ -371,9 +374,8 @@ static int irlap_state_ndm(struct irlap_cb *self, IRLAP_EVENT event,
 		irlap_start_slot_timer(self, self->slot_timeout);
 		irlap_next_state(self, LAP_QUERY);
 		break;
-
 	case RECV_DISCOVERY_XID_CMD:
-		ASSERT( info != NULL, return -1;);
+		ASSERT(info != NULL, return -1;);
 
 		/* Assert that this is not the final slot */
 		if (info->s <= info->S) {
@@ -422,6 +424,10 @@ static int irlap_state_ndm(struct irlap_cb *self, IRLAP_EVENT event,
 	default:
 		DEBUG(2, __FUNCTION__ "(), Unknown event %s\n", 
 		      irlap_event[event]);
+
+		if (skb)
+			dev_kfree_skb(skb);
+
 		ret = -1;
 		break;
 	}	
@@ -499,7 +505,7 @@ static int irlap_state_query(struct irlap_cb *self, IRLAP_EVENT event,
 		      irlap_event[event]);
 
 		if (skb)
-			dev_kfree_skb( skb);
+			dev_kfree_skb(skb);
 
 		ret = -1;
 		break;
@@ -525,7 +531,7 @@ static int irlap_state_reply(struct irlap_cb *self, IRLAP_EVENT event,
 	ASSERT(self != NULL, return -1;);
 	ASSERT(self->magic == LAP_MAGIC, return -1;);
 
-	switch(event) {
+	switch (event) {
 	case QUERY_TIMER_EXPIRED:
 		DEBUG(2, __FUNCTION__ "(), QUERY_TIMER_EXPIRED <%ld>\n",
 		      jiffies);
@@ -593,7 +599,7 @@ static int irlap_state_conn(struct irlap_cb *self, IRLAP_EVENT event,
 		/* skb_pull(skb, 11); */
 		skb_pull(skb, sizeof(struct snrm_frame));
 
-		ASSERT(self->irdev != NULL, return -1;);
+		ASSERT(self->netdev != NULL, return -1;);
 
 		irlap_qos_negotiate(self, skb);
 
@@ -615,27 +621,21 @@ static int irlap_state_conn(struct irlap_cb *self, IRLAP_EVENT event,
 		irlap_start_wd_timer(self, self->wd_timeout);
 		irlap_next_state( self, LAP_NRM_S);
 		break;
-
-	case RECV_SNRM_CMD:
-		DEBUG( 3, __FUNCTION__ "(), event RECV_SNRM_CMD!\n");
-#if 0
-		irlap_next_state( self, LAP_NDM);
-#endif
-		break;
-		
 	case RECV_DISCOVERY_XID_CMD:
 		DEBUG( 3, __FUNCTION__ "(), event RECV_DISCOVER_XID_CMD!\n");
 		irlap_next_state( self, LAP_NDM);
-		break;
-		
+		break;		
 	case DISCONNECT_REQUEST:
 		irlap_send_dm_frame( self);
 		irlap_next_state( self, LAP_CONN);
 		break;
-
 	default:
 		DEBUG(1, __FUNCTION__ "(), Unknown event %d, %s\n", event, 
 		      irlap_event[event]);
+
+		if (skb)
+			dev_kfree_skb(skb);
+
 		ret = -1;
 		break;
 	}
@@ -694,11 +694,11 @@ static int irlap_state_setup(struct irlap_cb *self, IRLAP_EVENT event,
 		 *  The device with the largest device address wins the battle
 		 *  (both have sent a SNRM command!)
 		 */
-		if (info->daddr > self->saddr) {
+		if (info &&(info->daddr > self->saddr)) {
 			del_timer(&self->final_timer);
 			irlap_initiate_connection_state(self);
 
-			ASSERT(self->irdev != NULL, return -1;);
+			ASSERT(self->netdev != NULL, return -1;);
 
 			skb_pull(skb, sizeof(struct snrm_frame));
 
@@ -718,6 +718,7 @@ static int irlap_state_setup(struct irlap_cb *self, IRLAP_EVENT event,
 			irlap_next_state(self, LAP_NRM_S);
 		} else {
 			/* We just ignore the other device! */
+			dev_kfree_skb(skb);
 			irlap_next_state(self, LAP_SETUP);
 		}
 		break;
@@ -733,7 +734,7 @@ static int irlap_state_setup(struct irlap_cb *self, IRLAP_EVENT event,
 
 		skb_pull(skb, sizeof(struct ua_frame));
 
-		ASSERT(self->irdev != NULL, return -1;);
+		ASSERT(self->netdev != NULL, return -1;);
 
 		irlap_qos_negotiate(self, skb);
 
@@ -756,10 +757,14 @@ static int irlap_state_setup(struct irlap_cb *self, IRLAP_EVENT event,
 		irlap_disconnect_indication(self, LAP_DISC_INDICATION);
 		break;
 
-       /* DM handled in irlap_frame.c, irlap_input() */
-		
+	/* DM handled in irlap_frame.c, irlap_driver_rcv() */		
 	default:
-		DEBUG( 4, "irlap_state_setup: Unknown event");
+		DEBUG(1, __FUNCTION__ "(), Unknown event %d, %s\n", event, 
+		      irlap_event[event]);
+		
+		if (skb)
+			dev_kfree_skb(skb);
+
 		ret = -1;
 		break;
 	}	
@@ -931,6 +936,10 @@ static int irlap_state_pclose(struct irlap_cb *self, IRLAP_EVENT event,
 		break;
 	default:
 		DEBUG(1, __FUNCTION__ "(), Unknown event %d\n", event);
+
+		if (skb)
+			dev_kfree_skb(skb);
+
 		ret = -1;
 		break;	
 	}
@@ -1254,7 +1263,7 @@ static int irlap_state_nrm_p(struct irlap_cb *self, IRLAP_EVENT event,
 		 *  of receiving a frame (page 45, IrLAP). Check that
 		 *  we only do this once for each frame.
 		 */
-		if (irda_device_is_receiving(self->irdev) && !self->add_wait) {
+		if (irda_device_is_receiving(self->netdev) && !self->add_wait) {
 			DEBUG(4, "FINAL_TIMER_EXPIRED when receiving a "
 			      "frame! Waiting a little bit more!\n");
 			irlap_start_final_timer(self, MSECS_TO_JIFFIES(300));
@@ -1373,6 +1382,9 @@ static int irlap_state_reset_wait(struct irlap_cb *self, IRLAP_EVENT event,
 	default:
 		DEBUG(1, __FUNCTION__ "(), Unknown event %s\n", 
 		      irlap_event[event]);
+		if (skb)
+			dev_kfree_skb(skb);
+
 		ret = -1;
 		break;	
 	}
@@ -1425,9 +1437,8 @@ static int irlap_state_reset(struct irlap_cb *self, IRLAP_EVENT event,
 		if (self->retry_count < 3) {
 			irlap_wait_min_turn_around(self, &self->qos_tx);
 
-			ASSERT(self->irdev != NULL, return -1;);
-			irlap_send_snrm_frame(self, 
-					      irda_device_get_qos(self->irdev));
+			ASSERT(self->netdev != NULL, return -1;);
+			irlap_send_snrm_frame(self, irda_device_get_qos(self->netdev));
 
 			self->retry_count++; /* Experimental!! */
 
@@ -1443,17 +1454,31 @@ static int irlap_state_reset(struct irlap_cb *self, IRLAP_EVENT event,
 		}
 		break;
 	case RECV_SNRM_CMD:
-		DEBUG(3, __FUNCTION__ "(), RECV_SNRM_CMD\n");
-		irlap_initiate_connection_state(self);
-		irlap_wait_min_turn_around(self, &self->qos_tx);
-		irlap_send_ua_response_frame(self, &self->qos_rx);
-		irlap_reset_confirm();
-		irlap_start_wd_timer(self, self->wd_timeout);
-		irlap_next_state(self, LAP_NDM);
+		/* 
+		 * SNRM frame is not allowed to contain an I-field in this 
+		 * state
+		 */
+		if (!info) {
+			DEBUG(3, __FUNCTION__ "(), RECV_SNRM_CMD\n");
+			irlap_initiate_connection_state(self);
+			irlap_wait_min_turn_around(self, &self->qos_tx);
+			irlap_send_ua_response_frame(self, &self->qos_rx);
+			irlap_reset_confirm();
+			irlap_start_wd_timer(self, self->wd_timeout);
+			irlap_next_state(self, LAP_NDM);
+		} else {
+			DEBUG(0, __FUNCTION__ "(), SNRM frame contained an I "
+			      "field!\n");
+			dev_kfree_skb(skb);
+		}
 		break;
 	default:
 		DEBUG(1, __FUNCTION__ "(), Unknown event %s\n", 
 		      irlap_event[event]);
+
+		if (skb)
+			dev_kfree_skb(skb);
+
 		ret = -1;
 		break;	
 	}
@@ -1482,14 +1507,13 @@ static int irlap_state_xmit_s(struct irlap_cb *self, IRLAP_EVENT event,
 		/*
 		 *  Send frame only if send window > 1
 		 */ 
-		if ((self->window > 0) && ( !self->remote_busy)) {
+		if ((self->window > 0) && (!self->remote_busy)) {
 			/*
 			 *  Test if we have transmitted more bytes over the 
 			 *  link than its possible to do with the current 
 			 *  speed and turn-around-time.
 			 */
 			if ((skb->len+self->bofs_count) > self->bytes_left) {
-				DEBUG( 4, "IrDA: Not allowed to transmit more bytes!\n");
 				skb_queue_head(&self->tx_list, skb);
 				/*
 				 *  Switch to NRM_S, this is only possible
@@ -1531,6 +1555,9 @@ static int irlap_state_xmit_s(struct irlap_cb *self, IRLAP_EVENT event,
 	default:
 		DEBUG(1, __FUNCTION__ "(), Unknown event %s\n", 
 		      irlap_event[event]);
+		if (skb)
+			dev_kfree_skb(skb);
+
 		ret = -EINVAL;
 		break;
 	}
@@ -1586,7 +1613,7 @@ static int irlap_state_nrm_s(struct irlap_cb *self, IRLAP_EVENT event,
 				 *  Starting WD-timer here is optional, but
 				 *  not recommended. Note 6 IrLAP p. 83
 				 */
-				/* irda_start_timer( WD_TIMER, self->wd_timeout); */
+				/* irda_start_timer(WD_TIMER, self->wd_timeout); */
 
 				/* Keep state, do not move this line */
 				irlap_next_state(self, LAP_NRM_S);
@@ -1785,15 +1812,20 @@ static int irlap_state_nrm_s(struct irlap_cb *self, IRLAP_EVENT event,
 
 		break;
 	case RECV_SNRM_CMD:
-		del_timer(&self->wd_timer);
-		DEBUG(1, __FUNCTION__ "(), received SNRM cmd\n");
-		irlap_next_state(self, LAP_RESET_CHECK);
-
-		irlap_reset_indication(self);
+		/* SNRM frame is not allowed to contain an I-field */
+		if (!info) {
+			del_timer(&self->wd_timer);
+			DEBUG(1, __FUNCTION__ "(), received SNRM cmd\n");
+			irlap_next_state(self, LAP_RESET_CHECK);
+			
+			irlap_reset_indication(self);
+		} else {
+			DEBUG(0, __FUNCTION__ "(), SNRM frame contained an "
+			      "I-field!\n");
+			dev_kfree_skb(skb);	       
+		}
 		break;
 	case WD_TIMER_EXPIRED:
-		DEBUG( 4, "WD_TIMER_EXPIRED: %ld\n", jiffies);
-	
 		/*
 		 *  Wait until retry_count * n matches negotiated threshold/
 		 *  disconnect time (note 2 in IrLAP p. 82)
