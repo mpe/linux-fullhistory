@@ -1145,16 +1145,11 @@ static void speedo_timer(unsigned long data)
 	/* We must continue to monitor the media. */
 	sp->timer.expires = RUN_AT(2*HZ); 			/* 2.0 sec. */
 	add_timer(&sp->timer);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,43)
-	timer_exit(&sp->timer);
-#endif /* LINUX_VERSION_CODE */
 }
 
 static void speedo_show_state(struct net_device *dev)
 {
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
-	long ioaddr = dev->base_addr;
-	int phy_num = sp->phy[0] & 0x1f;
 	int i;
 
 	/* Print a few items for debugging. */
@@ -1181,6 +1176,8 @@ static void speedo_show_state(struct net_device *dev)
 					   (unsigned)sp->rx_ringp[i]->status : 0);
 
 #if 0
+	long ioaddr = dev->base_addr;
+	int phy_num = sp->phy[0] & 0x1f;
 	for (i = 0; i < 16; i++) {
 		/* FIXME: what does it mean?  --SAW */
 		if (i == 6) i = 21;

@@ -276,16 +276,13 @@ struct inode * minix_new_inode(const struct inode * dir, int * error)
 	mark_inode_dirty(inode);
 
 	unlock_super(sb);
-printk("m_n_i: allocated inode ");
 	if(DQUOT_ALLOC_INODE(sb, inode)) {
-printk("fails quota test\n");
 		sb->dq_op->drop(inode);
 		inode->i_nlink = 0;
 		iput(inode);
 		*error = -EDQUOT;
 		return NULL;
 	}
-printk("is within quota\n");
 
 	*error = 0;
 	return inode;

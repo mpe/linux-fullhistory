@@ -11,9 +11,8 @@ extern struct coda_sb_info coda_super_info;
 struct coda_sb_info
 {
 	struct inode *      sbi_psdev;     /* /dev/cfs? Venus/kernel device */
-	struct inode *      sbi_ctlcp;     /* control magic file */
 	int                 sbi_refct;
-	struct venus_comm *      sbi_vcomm;
+	struct venus_comm * sbi_vcomm;
 	struct inode *      sbi_root;
 	struct super_block *sbi_sb;
 	struct list_head    sbi_cchead;
@@ -27,7 +26,6 @@ struct venus_comm {
 	struct list_head    vc_pending;
 	struct list_head    vc_processing;
 	int                 vc_inuse;
-	pid_t               vc_pid;   /* Venus pid */
 };
 
 

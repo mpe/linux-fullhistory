@@ -178,7 +178,7 @@ static int sync_tindirect(struct inode *inode, u32 *tiblockp, int convert,
 	return err;
 }
 
-int sysv_sync_file(struct file * file, struct dentry *dentry)
+int sysv_sync_file(struct file * file, struct dentry *dentry, int datasync)
 {
 	int wait, err = 0;
 	struct inode *inode = dentry->d_inode;

@@ -1144,13 +1144,13 @@ static void NS8390_trigger_send(struct net_device *dev, unsigned int length,
 	outb_p(E8390_NODMA+E8390_TRANS+E8390_START, e8390_base+E8390_CMD);
 }
 
-#ifdef MODULE
-
 EXPORT_SYMBOL(ei_open);
 EXPORT_SYMBOL(ei_close);
 EXPORT_SYMBOL(ei_interrupt);
 EXPORT_SYMBOL(ethdev_init);
 EXPORT_SYMBOL(NS8390_init);
+
+#if defined(MODULE)
 
 int init_module(void)
 {

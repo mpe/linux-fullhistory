@@ -1,11 +1,24 @@
 /*
- * $Id: c4.c,v 1.8 2000/04/03 16:38:05 calle Exp $
+ * $Id: c4.c,v 1.12 2000/06/19 16:51:53 keil Exp $
  * 
  * Module for AVM C4 card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: c4.c,v $
+ * Revision 1.12  2000/06/19 16:51:53  keil
+ * don't free skb in irq context
+ *
+ * Revision 1.11  2000/06/19 15:11:24  keil
+ * avoid use of freed structs
+ * changes from 2.4.0-ac21
+ *
+ * Revision 1.10  2000/05/29 12:29:18  keil
+ * make pci_enable_dev compatible to 2.2 kernel versions
+ *
+ * Revision 1.9  2000/05/19 15:43:22  calle
+ * added calls to pci_device_start().
+ *
  * Revision 1.8  2000/04/03 16:38:05  calle
  * made suppress_pollack static.
  *
@@ -46,6 +59,7 @@
 #include <linux/ioport.h>
 #include <linux/pci.h>
 #include <linux/capi.h>
+#include <linux/isdn.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include "capicmd.h"
@@ -53,7 +67,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.8 $";
+static char *revision = "$Revision: 1.12 $";
 
 #undef CONFIG_C4_DEBUG
 #undef CONFIG_C4_POLLDEBUG
@@ -510,7 +524,7 @@ static void c4_dispatch_tx(avmcard *card)
 	c4outmeml(card->mbase+DOORBELL, DBELL_DOWN_ARM);
 
 	restore_flags(flags);
-	dev_kfree_skb(skb);
+	dev_kfree_skb_any(skb);
 }
 
 /* ------------------------------------------------------------- */
@@ -949,8 +963,10 @@ static void c4_remove_ctr(struct capi_ctr *ctrl)
 
         for (i=0; i < 4; i++) {
 		cinfo = &card->ctrlinfo[i];
-		if (cinfo->capi_ctrl)
+		if (cinfo->capi_ctrl) {
 			di->detach_ctr(cinfo->capi_ctrl);
+			cinfo->capi_ctrl = NULL;
+		}
 	}
 
 	free_irq(card->irq, card);
@@ -1163,7 +1179,6 @@ static int c4_add_card(struct capi_driver *driver, struct capicardparams *p)
         cinfo = (avmctrl_info *) kmalloc(sizeof(avmctrl_info)*4, GFP_ATOMIC);
 	if (!cinfo) {
 		printk(KERN_WARNING "%s: no memory.\n", driver->name);
-	        kfree(card->ctrlinfo);
 		kfree(card->dma);
 		kfree(card);
 	        MOD_DEC_USE_COUNT;
@@ -1333,12 +1348,21 @@ int c4_init(void)
 			PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_C4, dev))) {
 		struct capicardparams param;
 
-		if (pci_enable_device(dev))
-			continue;
-
-		param.port = pci_resource_start (dev, 1);
+		param.port = pci_resource_start(dev, 1);
 		param.irq = dev->irq;
-		param.membase = pci_resource_start (dev, 0);
+		param.membase = pci_resource_start(dev, 0);
+
+		retval = pci_enable_device (dev);
+		if (retval != 0) {
+		        printk(KERN_ERR
+			"%s: failed to enable AVM-C4 at i/o %#x, irq %d, mem %#x err=%d\n",
+			driver->name, param.port, param.irq, param.membase, retval);
+#ifdef MODULE
+			cleanup_module();
+#endif
+			MOD_DEC_USE_COUNT;
+			return -EIO;
+		}
 
 		printk(KERN_INFO
 			"%s: PCI BIOS reports AVM-C4 at i/o %#x, irq %d, mem %#x\n",

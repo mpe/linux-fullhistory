@@ -70,7 +70,7 @@ MFG:HEWLETT-PACKARD;MDL:DESKJET 970C;CMD:MLC,PCL,PML;CLASS:PRINTER;DESCRIPTION:H
 #define USBLP_MINORS		16
 #define USBLP_MINOR_BASE	0
 
-#define USBLP_WRITE_TIMEOUT	(60*HZ)			/* 60 seconds */
+#define USBLP_WRITE_TIMEOUT	(60*60*HZ)		/* 60 minutes */
 
 struct usblp {
 	struct usb_device 	*dev;			/* USB device */
@@ -147,10 +147,8 @@ static int usblp_check_status(struct usblp *usblp)
 			info("usblp%d: off-line", usblp->minor);
 			return -EIO;
 		}
-		if (~status & LP_PERRORP) {
-			info("usblp%d: on fire", usblp->minor);
-			return -EIO;
-		}
+		info("usblp%d: on fire", usblp->minor);
+		return -EIO;
 	}
 
 	return 0;

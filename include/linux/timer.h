@@ -52,9 +52,10 @@ struct timer_list {
 	unsigned long expires;
 	unsigned long data;
 	void (*function)(unsigned long);
-	volatile int running;
+	unsigned long sequence;
 };
 
+extern volatile unsigned long timer_sequence;
 extern void add_timer(struct timer_list * timer);
 extern int del_timer(struct timer_list * timer);
 
@@ -71,7 +72,7 @@ static inline void init_timer(struct timer_list * timer)
 {
 	timer->list.next = timer->list.prev = NULL;
 #ifdef CONFIG_SMP
-	timer->running = 0;
+	timer->sequence = timer_sequence-1;
 #endif
 }
 
@@ -81,17 +82,17 @@ static inline int timer_pending (const struct timer_list * timer)
 }
 
 #ifdef CONFIG_SMP
-#define timer_exit(t) do { (t)->running = 0; mb(); } while (0)
-#define timer_set_running(t) do { (t)->running = 1; mb(); } while (0)
-#define timer_is_running(t) ((t)->running != 0)
+#define timer_enter(t) do { (t)->sequence = timer_sequence; mb(); } while (0)
+#define timer_exit() do { timer_sequence++; } while (0)
+#define timer_is_running(t) ((t)->sequence == timer_sequence)
 #define timer_synchronize(t) while (timer_is_running(t)) barrier()
 extern int del_timer_sync(struct timer_list * timer);
 #else
-#define timer_exit(t) (void)(t)
-#define timer_set_running(t) (void)(t)
-#define timer_is_running(t) (0)
-#define timer_synchronize(t) do { (void)(t); barrier(); } while(0)
-#define del_timer_sync(t) del_timer(t)
+#define timer_enter(t)		do { } while (0)
+#define timer_exit()		do { } while (0)
+#define timer_is_running(t)	(0)
+#define timer_synchronize(t)	do { (void)(t); barrier(); } while(0)
+#define del_timer_sync(t)	del_timer(t)
 #endif
 
 /*

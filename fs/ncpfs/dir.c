@@ -973,7 +973,7 @@ static int ncp_unlink(struct inode *dir, struct dentry *dentry)
 	/*
 	 * Check whether to close the file ...
 	 */
-	if (inode && NCP_FINFO(inode)->opened) {
+	if (inode) {
 		PPRINTK("ncp_unlink: closing file\n");
 		ncp_make_closed(inode);
 	}
@@ -982,7 +982,7 @@ static int ncp_unlink(struct inode *dir, struct dentry *dentry)
 #ifdef CONFIG_NCPFS_STRONG
 	/* 9C is Invalid path.. It should be 8F, 90 - read only, but
 	   it is not :-( */
-	if (error == 0x9C && server->m.flags & NCP_MOUNT_STRONG) { /* R/O */
+	if ((error == 0x9C || error == 0x90) && server->m.flags & NCP_MOUNT_STRONG) { /* R/O */
 		error = ncp_force_unlink(dir, dentry);
 	}
 #endif
@@ -1051,7 +1051,7 @@ static int ncp_rename(struct inode *old_dir, struct dentry *old_dentry,
 	error = ncp_ren_or_mov_file_or_subdir(server, old_dir, __old_name,
 						      new_dir, __new_name);
 #ifdef CONFIG_NCPFS_STRONG
-	if ((error == 0x90 || error == -EACCES) &&
+	if ((error == 0x90 || error == 0x8B || error == -EACCES) &&
 			server->m.flags & NCP_MOUNT_STRONG) {	/* RO */
 		error = ncp_force_rename(old_dir, old_dentry, __old_name,
 					 new_dir, new_dentry, __new_name);

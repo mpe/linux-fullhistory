@@ -546,6 +546,7 @@ _linux_ntfs_mkdir(struct inode *dir, struct dentry* d, int mode)
 }
 #endif
 
+#if 0
 static int 
 ntfs_bmap(struct inode *ino,int block)
 {
@@ -554,6 +555,7 @@ ntfs_bmap(struct inode *ino,int block)
 	       ino->i_ino,block,ret);
 	return (ret==-1) ? 0:ret;
 }
+#endif
 
 /* It's fscking broken. */
 

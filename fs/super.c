@@ -824,8 +824,14 @@ static struct block_device *kill_super(struct super_block *sb, int umount_root)
 {
 	struct block_device *bdev;
 	kdev_t dev;
-	dput(sb->s_root);
+	struct dentry *root = sb->s_root;
 	sb->s_root = NULL;
+	/* Need to clean after the sucker */
+	if (sb->s_type->fs_flags & FS_LITTER)
+		d_genocide(root);
+	if (sb->s_type->fs_flags & (FS_SINGLE|FS_LITTER))
+		shrink_dcache_parent(root);
+	dput(root);
 	lock_super(sb);
 	if (sb->s_op) {
 		if (sb->s_op->write_super && sb->s_dirt)

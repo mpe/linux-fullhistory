@@ -81,9 +81,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       fi
       tristate '    SMC Ultra support' CONFIG_ULTRA
       tristate '    SMC Ultra32 EISA support' CONFIG_ULTRA32
-      if [ "$CONFIG_OBSOLETE" = "y" ]; then
-         tristate '    SMC 9194 support' CONFIG_SMC9194
-      fi
+      tristate '    SMC 9194 support' CONFIG_SMC9194
   fi
   bool '  Racal-Interlan (Micom) NI cards' CONFIG_NET_VENDOR_RACAL
   if [ "$CONFIG_NET_VENDOR_RACAL" = "y" ]; then
@@ -116,7 +114,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       if [ "$CONFIG_OBSOLETE" = "y" ]; then
 	 tristate '    SEEQ8005 support (EXPERIMENTAL)' CONFIG_SEEQ8005
       fi
-      bool '    SK_G16 support' CONFIG_SK_G16
+      tristate '    SK_G16 support' CONFIG_SK_G16
    fi
    if [ "$CONFIG_MCA" = "y" ]; then
       tristate '  SKnet MCA support' CONFIG_SKMC

@@ -323,7 +323,7 @@ asmlinkage long sys_sync(void)
  *	filp may be NULL if called via the msync of a vma.
  */
  
-int file_fsync(struct file *filp, struct dentry *dentry)
+int file_fsync(struct file *filp, struct dentry *dentry, int datasync)
 {
 	struct inode * inode = dentry->d_inode;
 	struct super_block * sb;
@@ -332,7 +332,7 @@ int file_fsync(struct file *filp, struct dentry *dentry)
 
 	lock_kernel();
 	/* sync the inode to buffers */
-	write_inode_now(inode);
+	write_inode_now(inode, 0);
 
 	/* sync the superblock to buffers */
 	sb = inode->i_sb;
@@ -368,7 +368,7 @@ asmlinkage long sys_fsync(unsigned int fd)
 
 	/* We need to protect against concurrent writers.. */
 	down(&inode->i_sem);
-	err = file->f_op->fsync(file, dentry);
+	err = file->f_op->fsync(file, dentry, 0);
 	up(&inode->i_sem);
 
 out_putf:
@@ -396,9 +396,8 @@ asmlinkage long sys_fdatasync(unsigned int fd)
 	if (!file->f_op || !file->f_op->fsync)
 		goto out_putf;
 
-	/* this needs further work, at the moment it is identical to fsync() */
 	down(&inode->i_sem);
-	err = file->f_op->fsync(file, dentry);
+	err = file->f_op->fsync(file, dentry, 1);
 	up(&inode->i_sem);
 
 out_putf:
@@ -2490,7 +2489,7 @@ asmlinkage long sys_bdflush(int func, long data)
  * the syscall above, but now we launch it ourselves internally with
  * kernel_thread(...)  directly after the first thread in init/main.c
  */
-int bdflush(void * unused) 
+int bdflush(void *sem)
 {
 	struct task_struct *tsk = current;
 	int flushed;
@@ -2511,6 +2510,8 @@ int bdflush(void * unused)
 	sigfillset(&tsk->blocked);
 	recalc_sigpending(tsk);
 	spin_unlock_irq(&tsk->sigmask_lock);
+
+	up((struct semaphore *)sem);
 
 	for (;;) {
 		CHECK_EMERGENCY_SYNC
@@ -2546,7 +2547,7 @@ int bdflush(void * unused)
  * You don't need to change your userspace configuration since
  * the userspace `update` will do_exit(0) at the first sys_bdflush().
  */
-int kupdate(void * unused) 
+int kupdate(void *sem)
 {
 	struct task_struct * tsk = current;
 	int interval;
@@ -2561,6 +2562,8 @@ int kupdate(void * unused)
 	siginitsetinv(&current->blocked, sigmask(SIGCONT) | sigmask(SIGSTOP));
 	recalc_sigpending(tsk);
 	spin_unlock_irq(&tsk->sigmask_lock);
+
+	up((struct semaphore *)sem);
 
 	for (;;) {
 		/* update interval */
@@ -2595,8 +2598,11 @@ int kupdate(void * unused)
 
 static int __init bdflush_init(void)
 {
-	kernel_thread(bdflush, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
-	kernel_thread(kupdate, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	DECLARE_MUTEX_LOCKED(sem);
+	kernel_thread(bdflush, &sem, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	down(&sem);
+	kernel_thread(kupdate, &sem, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	down(&sem);
 	return 0;
 }
 

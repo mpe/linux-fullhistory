@@ -373,7 +373,7 @@ int ax25_rt_autobind(ax25_cb *ax25, ax25_address *addr)
 	if (ax25_rt->digipeat != NULL) {
 		if ((ax25->digipeat = kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL)
 			return -ENOMEM;
-		*ax25->digipeat = *ax25_rt->digipeat;
+		memcpy(ax25->digipeat, ax25_rt->digipeat, sizeof(ax25_digi));
 		ax25_adjust_path(addr, ax25->digipeat);
 	}
 

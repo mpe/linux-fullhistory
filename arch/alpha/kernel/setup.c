@@ -246,11 +246,12 @@ get_mem_size_limit(char *s)
 }
 
 static void __init
-setup_memory(void * kernel_end)
+setup_memory(void *kernel_end)
 {
 	struct memclust_struct * cluster;
 	struct memdesc_struct * memdesc;
-	unsigned long start_pfn, bootmap_size, bootmap_pages, bootmap_start;
+	unsigned long start_kernel_pfn, end_kernel_pfn;
+	unsigned long bootmap_size, bootmap_pages, bootmap_start;
 	unsigned long start, end;
 	int i;
 
@@ -282,12 +283,13 @@ setup_memory(void * kernel_end)
 		max_low_pfn = mem_size_limit;
 	}
 
-	/* Find the end of the memory used by the kernel.  */
-	start_pfn = PFN_UP(virt_to_phys(kernel_end));
+	/* Find the bounds of kernel memory.  */
+	start_kernel_pfn = PFN_DOWN(KERNEL_START_PHYS);
+	end_kernel_pfn = PFN_UP(virt_to_phys(kernel_end));
 	bootmap_start = -1;
 
  try_again:
-	if (max_low_pfn <= start_pfn)
+	if (max_low_pfn <= end_kernel_pfn)
 		panic("not enough memory to boot");
 
 	/* We need to know how many physically contiguous pages
@@ -301,14 +303,19 @@ setup_memory(void * kernel_end)
 
 		start = cluster->start_pfn;
 		end = start + cluster->numpages;
-		if (end <= start_pfn)
-			continue;
 		if (start >= max_low_pfn)
 			continue;
-		if (start < start_pfn)
-			start = start_pfn;
 		if (end > max_low_pfn)
 			end = max_low_pfn;
+		if (start < start_kernel_pfn) {
+			if (end > end_kernel_pfn
+			    && end - end_kernel_pfn >= bootmap_pages) {
+				bootmap_start = end_kernel_pfn;
+				break;
+			} else if (end > start_kernel_pfn)
+				end = start_kernel_pfn;
+		} else if (start < end_kernel_pfn)
+			start = end_kernel_pfn;
 		if (end - start >= bootmap_pages) {
 			bootmap_start = start;
 			break;
@@ -329,22 +336,28 @@ setup_memory(void * kernel_end)
 			continue;
 
 		start = cluster->start_pfn;
-		if (start < start_pfn)
-			start = start_pfn;
-
 		end = cluster->start_pfn + cluster->numpages;
+		if (start >= max_low_pfn)
+			continue;
 		if (end > max_low_pfn)
 			end = max_low_pfn;
-
+		if (start < start_kernel_pfn) {
+			if (end > end_kernel_pfn) {
+				free_bootmem(PFN_PHYS(start),
+					     (PFN_PHYS(start_kernel_pfn)
+					      - PFN_PHYS(start)));
+				printk("freeing pages %ld:%ld\n",
+				       start, start_kernel_pfn);
+				start = end_kernel_pfn;
+			} else if (end > start_kernel_pfn)
+				end = start_kernel_pfn;
+		} else if (start < end_kernel_pfn)
+			start = end_kernel_pfn;
 		if (start >= end)
 			continue;
 
-		start = PFN_PHYS(start);
-		end = PFN_PHYS(end);
-
-		free_bootmem(start, end - start);
-		printk("freeing pages %ld:%ld\n",
-		       PFN_UP(start), PFN_DOWN(end));
+		free_bootmem(PFN_PHYS(start), PFN_PHYS(end) - PFN_PHYS(start));
+		printk("freeing pages %ld:%ld\n", start, end);
 	}
 
 	/* Reserve the bootmap memory.  */
@@ -461,11 +474,12 @@ void __init unregister_srm_console(void)
 void __init
 setup_arch(char **cmdline_p)
 {
+	extern char _end[];
+
 	struct alpha_machine_vector *vec = NULL;
 	struct percpu_struct *cpu;
 	char *type_name, *var_name, *p;
-	extern char _end;
-	void * kernel_end = &_end; /* end of kernel */
+	void *kernel_end = _end; /* end of kernel */
 
 	hwrpb = (struct hwrpb_struct*) __va(INIT_HWRPB->phys_addr);
 	boot_cpuid = hard_smp_processor_id();

@@ -43,6 +43,11 @@
  *  Pentium III FXSR, SSE support
  *  General FPU state handling cleanups
  *	Gareth Hughes <gareth@valinux.com>, May 2000
+ *
+ *  Added proper Cascades CPU and L2 cache detection for Cascades
+ *  and 8-way type cache happy bunch from Intel:^)
+ *  Dragan Stancevic <visitor@valinux.com>, May 2000 
+ *
  */
 
 /*

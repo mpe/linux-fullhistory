@@ -1,11 +1,24 @@
 /*
- * $Id: capi.c,v 1.31 2000/04/03 13:29:24 calle Exp $
+ * $Id: capi.c,v 1.35 2000/06/19 15:11:24 keil Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.35  2000/06/19 15:11:24  keil
+ * avoid use of freed structs
+ * changes from 2.4.0-ac21
+ *
+ * Revision 1.34  2000/06/18 16:09:54  keil
+ * more changes for 2.4
+ *
+ * Revision 1.33  2000/05/18 16:35:43  calle
+ * Uaaahh. Bad memory leak fixed.
+ *
+ * Revision 1.32  2000/04/21 12:38:42  calle
+ * Bugfix: error in proc_ functions, begin-off => off-begin
+ *
  * Revision 1.31  2000/04/03 13:29:24  calle
  * make Tim Waugh happy (module unload races in 2.3.99-pre3).
  * no real problem there, but now it is much cleaner ...
@@ -158,7 +171,6 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -193,7 +205,7 @@
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
 #include <linux/slab.h>
 
-static char *revision = "$Revision: 1.31 $";
+static char *revision = "$Revision: 1.35 $";
 
 MODULE_AUTHOR("Carsten Paeth (calle@calle.in-berlin.de)");
 
@@ -816,7 +828,6 @@ static void capi_signal(__u16 applid, void *param)
 
 
 	if (CAPIMSG_SUBCOMMAND(skb->data) == CAPI_IND) {
- 
 		datahandle = CAPIMSG_U16(skb->data, CAPIMSG_BASELEN+4+4+2);
 #ifdef _DEBUG_DATAFLOW
 		printk(KERN_DEBUG "capi_signal: DATA_B3_IND %u len=%d\n",
@@ -854,14 +865,14 @@ static void capi_signal(__u16 applid, void *param)
 
 /* -------- file_operations for capidev ----------------------------- */
 
-static long long capi_llseek(struct file *file,
-			     long long offset, int origin)
+static loff_t
+capi_llseek(struct file *file, loff_t offset, int origin)
 {
 	return -ESPIPE;
 }
 
-static ssize_t capi_read(struct file *file, char *buf,
-		      size_t count, loff_t *ppos)
+static ssize_t
+capi_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 {
 	struct capidev *cdev = (struct capidev *)file->private_data;
 	struct sk_buff *skb;
@@ -911,8 +922,8 @@ static ssize_t capi_read(struct file *file, char *buf,
 	return copied;
 }
 
-static ssize_t capi_write(struct file *file, const char *buf,
-		       size_t count, loff_t *ppos)
+static ssize_t
+capi_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
 	struct capidev *cdev = (struct capidev *)file->private_data;
 	struct sk_buff *skb;
@@ -975,7 +986,8 @@ capi_poll(struct file *file, poll_table * wait)
 	return mask;
 }
 
-static int capi_ioctl(struct inode *inode, struct file *file,
+static int
+capi_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg)
 {
 	struct capidev *cdev = (struct capidev *)file->private_data;
@@ -1190,7 +1202,8 @@ static int capi_ioctl(struct inode *inode, struct file *file,
 	return -EINVAL;
 }
 
-static int capi_open(struct inode *inode, struct file *file)
+static int
+capi_open(struct inode *inode, struct file *file)
 {
 	if (file->private_data)
 		return -EEXIST;
@@ -1198,19 +1211,23 @@ static int capi_open(struct inode *inode, struct file *file)
 	if ((file->private_data = capidev_alloc(file)) == 0)
 		return -ENOMEM;
 
+	MOD_INC_USE_COUNT;
 #ifdef _DEBUG_REFCOUNT
 	printk(KERN_DEBUG "capi_open %d\n", GET_USE_COUNT(THIS_MODULE));
 #endif
 	return 0;
 }
 
-static int capi_release(struct inode *inode, struct file *file)
+static int
+capi_release(struct inode *inode, struct file *file)
 {
 	struct capidev *cdev = (struct capidev *)file->private_data;
 
 	capincci_free(cdev, 0xffffffff);
 	capidev_free(cdev);
+	file->private_data = NULL;
 
+	MOD_DEC_USE_COUNT;
 #ifdef _DEBUG_REFCOUNT
 	printk(KERN_DEBUG "capi_release %d\n", GET_USE_COUNT(THIS_MODULE));
 #endif
@@ -1232,7 +1249,8 @@ static struct file_operations capi_fops =
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
 /* -------- file_operations for capincci ---------------------------- */
 
-int capinc_raw_open(struct inode *inode, struct file *file)
+static int
+capinc_raw_open(struct inode *inode, struct file *file)
 {
 	struct capiminor *mp;
 
@@ -1256,14 +1274,14 @@ int capinc_raw_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-long long capinc_raw_llseek(struct file *file,
-			     long long offset, int origin)
+static loff_t
+capinc_raw_llseek(struct file *file, loff_t offset, int origin)
 {
 	return -ESPIPE;
 }
 
-ssize_t capinc_raw_read(struct file *file, char *buf,
-		      size_t count, loff_t *ppos)
+static ssize_t
+capinc_raw_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 {
 	struct capiminor *mp = (struct capiminor *)file->private_data;
 	struct sk_buff *skb;
@@ -1320,8 +1338,8 @@ ssize_t capinc_raw_read(struct file *file, char *buf,
 	return copied;
 }
 
-ssize_t capinc_raw_write(struct file *file, const char *buf,
-		       size_t count, loff_t *ppos)
+static ssize_t
+capinc_raw_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
 	struct capiminor *mp = (struct capiminor *)file->private_data;
 	struct sk_buff *skb;
@@ -1358,7 +1376,7 @@ ssize_t capinc_raw_write(struct file *file, const char *buf,
 	return count;
 }
 
-unsigned int
+static unsigned int
 capinc_raw_poll(struct file *file, poll_table * wait)
 {
 	struct capiminor *mp = (struct capiminor *)file->private_data;
@@ -1376,7 +1394,8 @@ capinc_raw_poll(struct file *file, poll_table * wait)
 	return mask;
 }
 
-int capinc_raw_ioctl(struct inode *inode, struct file *file,
+static int
+capinc_raw_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg)
 {
 	struct capiminor *mp = (struct capiminor *)file->private_data;
@@ -1388,15 +1407,17 @@ int capinc_raw_ioctl(struct inode *inode, struct file *file,
 	return -EINVAL;
 }
 
-int
+static int
 capinc_raw_release(struct inode *inode, struct file *file)
 {
 	struct capiminor *mp = (struct capiminor *)file->private_data;
 
 	if (mp) {
 		mp->file = 0;
-		if (mp->nccip == 0)
+		if (mp->nccip == 0) {
 			capiminor_free(mp);
+			file->private_data = NULL;
+		}
 	}
 
 #ifdef _DEBUG_REFCOUNT
@@ -1405,7 +1426,7 @@ capinc_raw_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-struct file_operations capinc_raw_fops =
+static struct file_operations capinc_raw_fops =
 {
 	owner:		THIS_MODULE,
 	llseek:		capinc_raw_llseek,
@@ -1875,7 +1896,7 @@ endloop:
 		*eof = 1;
 	if (off >= len+begin)
 		return 0;
-	*start = page + (off-begin);
+	*start = page + (begin-off);
 	return ((count < begin+len-off) ? count : begin+len-off);
 }
 

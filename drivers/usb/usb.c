@@ -1683,8 +1683,9 @@ int usb_new_device(struct usb_device *dev)
 	usb_set_maxpacket(dev);
 
 	/* we set the default configuration here */
-	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
-		err("failed to set default configuration");
+	err = usb_set_configuration(dev, dev->config[0].bConfigurationValue);
+	if (err) {
+		err("failed to set default configuration (error=%d)", err);
 		return -1;
 	}
 

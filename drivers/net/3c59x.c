@@ -1452,7 +1452,6 @@ static void vortex_timer(unsigned long data)
 	mod_timer(&vp->timer, RUN_AT(next_tick));
 	if (vp->deferred)
 		outw(FakeIntr, ioaddr + EL3_CMD);
-	timer_exit(&vp->timer);
 	return;
 }
 

@@ -241,11 +241,13 @@ struct arcnet_local {
 		setup2,		/* Contents of setup2 register */
 		intmask;	/* current value of INTMASK register */
 	uint8_t default_proto[256];	/* default encap to use for each host */
-	int cur_tx,		/* buffer used by current transmit, or -1 */
+	int	cur_tx,		/* buffer used by current transmit, or -1 */
 		next_tx,	/* buffer where a packet is ready to send */
 		cur_rx;		/* current receive buffer */
-	int lastload_dest,	/* can last loaded packet be acked? */
+	int	lastload_dest,	/* can last loaded packet be acked? */
 		lasttrans_dest;	/* can last TX'd packet be acked? */
+	int	timed_out;	/* need to process TX timeout and drop packet */
+	unsigned long last_timeout;	/* time of last reported timeout */
 	char *card_name;	/* card ident string */
 	int card_flags;		/* special card features */
 

@@ -317,7 +317,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 	if (err)
 		goto out_nfserr;
 	if (EX_ISSYNC(fhp->fh_export))
-		write_inode_now(inode);
+		write_inode_now(inode, 0);
 	err = 0;
 out:
 	return err;
@@ -512,7 +512,7 @@ nfsd_sync(struct file *filp)
 {
 	dprintk("nfsd: sync file %s\n", filp->f_dentry->d_name.name);
 	down(&filp->f_dentry->d_inode->i_sem);
-	filp->f_op->fsync(filp, filp->f_dentry);
+	filp->f_op->fsync(filp, filp->f_dentry, 0);
 	up(&filp->f_dentry->d_inode->i_sem);
 }
 
@@ -520,10 +520,10 @@ void
 nfsd_sync_dir(struct dentry *dp)
 {
 	struct inode *inode = dp->d_inode;
-	int (*fsync) (struct file *, struct dentry *);
+	int (*fsync) (struct file *, struct dentry *, int);
 	
 	if (inode->i_fop && (fsync = inode->i_fop->fsync)) {
-		fsync(NULL, dp);
+		fsync(NULL, dp, 0);
 	}
 }
 
@@ -894,7 +894,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	if (EX_ISSYNC(fhp->fh_export)) {
 		nfsd_sync_dir(dentry);
-		write_inode_now(dchild->d_inode);
+		write_inode_now(dchild->d_inode, 0);
 	}
 
 
@@ -1140,7 +1140,7 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 					| S_IFLNK;
 				err = notify_change(dnew, iap);
 				if (!err && EX_ISSYNC(fhp->fh_export))
-					write_inode_now(dentry->d_inode);
+					write_inode_now(dentry->d_inode, 0);
 		       }
 		}
 	} else
@@ -1200,7 +1200,7 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	if (!err) {
 		if (EX_ISSYNC(ffhp->fh_export)) {
 			nfsd_sync_dir(ddir);
-			write_inode_now(dest);
+			write_inode_now(dest, 0);
 		}
 	} else {
 		if (err == -EXDEV && rqstp->rq_vers == 2)

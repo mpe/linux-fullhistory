@@ -26,6 +26,9 @@
 
 	LK1.1.2 (jgarzik):
 	- Merge Becker version 0.15
+
+	LK1.1.3 (Andrew Morton)
+	- Timer cleanups
 */
 
 /* The user-configurable values.
@@ -100,7 +103,7 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 
 /* These identify the driver base version and may not be removed. */
 static char version1[] __devinitdata =
-"starfire.c:v0.15+LK1.1.2 4/28/2000  Written by Donald Becker <becker@scyld.com>\n";
+"starfire.c:v0.15+LK1.1.3 6/17/2000  Written by Donald Becker <becker@scyld.com>\n";
 static char version2[] __devinitdata =
 " Updates and info at http://www.scyld.com/network/starfire.html\n";
 
@@ -536,15 +539,16 @@ static int netdev_open(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
-	int i;
+	int i, retval;
 
 	/* Do we ever need to reset the chip??? */
 
 	MOD_INC_USE_COUNT;
 
-	if (request_irq(dev->irq, &intr_handler, SA_SHIRQ, dev->name, dev)) {
+	retval = request_irq(dev->irq, &intr_handler, SA_SHIRQ, dev->name, dev);
+	if (retval) {
 		MOD_DEC_USE_COUNT;
-		return -EAGAIN;
+		return retval;
 	}
 
 	/* Disable the Rx and Tx, and reset the chip. */
@@ -1260,6 +1264,8 @@ static int netdev_close(struct net_device *dev)
 
 	netif_stop_queue(dev);
 
+	del_timer_sync(&np->timer);
+
 	if (debug > 1) {
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was Int %4.4x.\n",
 			   dev->name, readl(ioaddr + IntrStatus));
@@ -1271,8 +1277,6 @@ static int netdev_close(struct net_device *dev)
 	writel(0, ioaddr + IntrEnable);
 
 	/* Stop the chip's Tx and Rx processes. */
-
-	del_timer(&np->timer);
 
 #ifdef __i386__
 	if (debug > 2) {

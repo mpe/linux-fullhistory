@@ -221,20 +221,23 @@ ncp_close_file(struct ncp_server *server, const char *file_id)
 	return result;
 }
 
-/*
- * Called with the superblock locked.
- */
 int
 ncp_make_closed(struct inode *inode)
 {
 	int err;
-	NCP_FINFO(inode)->opened = 0;
-	err = ncp_close_file(NCP_SERVER(inode), NCP_FINFO(inode)->file_handle);
 
-	if (!err)
-		PPRINTK("ncp_make_closed: volnum=%d, dirent=%u, error=%d\n",
-			NCP_FINFO(inode)->volNumber,
-			NCP_FINFO(inode)->dirEntNum, err);
+	err = 0;
+	down(&NCP_FINFO(inode)->open_sem);	
+	if (atomic_read(&NCP_FINFO(inode)->opened) == 1) {
+		atomic_set(&NCP_FINFO(inode)->opened, 0);
+		err = ncp_close_file(NCP_SERVER(inode), NCP_FINFO(inode)->file_handle);
+
+		if (!err)
+			PPRINTK("ncp_make_closed: volnum=%d, dirent=%u, error=%d\n",
+				NCP_FINFO(inode)->volNumber,
+				NCP_FINFO(inode)->dirEntNum, err);
+	}
+	up(&NCP_FINFO(inode)->open_sem);
 	return err;
 }
 
@@ -613,7 +616,8 @@ int ncp_open_create_file_or_subdir(struct ncp_server *server,
 
 	if ((result = ncp_request(server, 87)) != 0)
 		goto out;
-	target->opened = 1;
+	if (!(create_attributes & aDIR))
+		target->opened = 1;
 	target->server_file_handle = ncp_reply_dword(server, 0);
 	target->open_create_action = ncp_reply_byte(server, 4);
 

@@ -2,35 +2,35 @@
 
 	Hardware driver for Intel i810 Random Number Generator (RNG)
 	Copyright 2000 Jeff Garzik <jgarzik@mandrakesoft.com>
-	
+
 	Driver Web site:  http://gtf.org/garzik/drivers/i810_rng/
 
 
-	
+
 	Based on:
 	Intel 82802AB/82802AC Firmware Hub (FWH) Datasheet
 		May 1999 Order Number: 290658-002 R
-	
+
 	Intel 82802 Firmware Hub: Random Number Generator
 	Programmer's Reference Manual
 		December 1999 Order Number: 298029-001 R
-	
+
 	Intel 82802 Firmware HUB Random Number Generator Driver
 	Copyright (c) 2000 Matt Sottek <msottek@quiknet.com>
 
 	Special thanks to Matt Sottek.  I did the "guts", he
 	did the "brains" and all the testing.  (Anybody wanna send
 	me an i810 or i820?)
-	
+
 	----------------------------------------------------------
-	
+
 	This software may be used and distributed according to the terms
         of the GNU Public License, incorporated herein by reference.
 
 	----------------------------------------------------------
-	
+
 	From the firmware hub datasheet:
-	
+
 	The Firmware Hub integrates a Random Number Generator (RNG)
 	using thermal noise generated from inherently random quantum
 	mechanical properties of silicon. When not generating new random
@@ -44,7 +44,7 @@
 	Theory of operation:
 
 	This driver has TWO modes of operation:
-	
+
 	Mode 1
 	------
 	Character driver.  Using the standard open()
@@ -52,16 +52,16 @@
 	the i810 RNG device.  This data is NOT CHECKED by any
 	fitness tests, and could potentially be bogus (if the
 	hardware is faulty or has been tampered with).
-	
+
 	/dev/intel_rng is char device major 10, minor 183.
-	
+
 
 	Mode 2
 	------
 	Injection of entropy into the kernel entropy pool via a
 	timer function.
 
-	A timer is run at RNG_TIMER_LEN intervals, reading 8 bits
+	A timer is run at rng_timer_len intervals, reading 8 bits
 	of data from the RNG.  If the RNG has previously passed a
 	FIPS test, then the data will be added to the /dev/random
 	entropy pool.  Then, those 8 bits are added to an internal
@@ -71,12 +71,12 @@
 	Thus, the RNG will never be enabled until it passes a
 	FIPS test.  And, data will stop flowing into the system
 	entropy pool if the data is determined to be non-random.
-	
+
 	Finally, note that the timer defaults to OFF.  This ensures
 	that the system entropy pool will not be polluted with
 	RNG-originated data unless a conscious decision is made
 	by the user.
-	
+
 	HOWEVER NOTE THAT UP TO 2499 BYTES OF DATA CAN BE BOGUS
 	BEFORE THE SYSTEM WILL NOTICE VIA THE FIPS TEST.
 
@@ -84,14 +84,13 @@
 
 	Driver notes:
 
-	* You may enable and disable the RNG hardware (and this
-	driver) via sysctl:
+	* You may enable and disable the RNG timer via sysctl:
 
 		# disable RNG
-		echo 0 > /proc/sys/dev/i810_hw_enabled
+		echo 0 > /proc/sys/dev/i810_rng_timer
 
 		# enable RNG
-		echo 1 > /proc/sys/dev/i810_hw_enabled
+		echo 1 > /proc/sys/dev/i810_rng_timer
 
 	* The default number of entropy bits added by default is
 	the full 8 bits.  If you wish to reduce this value for
@@ -103,10 +102,56 @@
 	* The default number of entropy bits can also be set via
 	a module parameter "rng_entropy" at module load time.
 
+	* When the RNG timer is enabled, the driver reads 1 byte
+	from the hardware RNG every N jiffies.  By default, every
+	half-second.  If you would like to change the timer interval,
+	do so via another sysctl:
+
+		echo 200 > /proc/sys/dev/i810_rng_interval
+
+	NOTE THIS VALUE IS IN JIFFIES, NOT SECONDS OR MILLISECONDS.
+	Minimum interval is 1 jiffy, maximum interval is 24 hours.
+
 	* In order to unload the i810_rng module, you must first
 	disable the hardware via sysctl i810_hw_enabled, as shown above,
-	and make sure all users of the character device 
-	
+	and make sure all users of the character device have closed
+
+	* The timer and the character device may be used simultaneously,
+	if desired.
+
+	* FIXME:  Currently only one open() of the character device is allowed.
+	If another user tries to open() the device, they will get an
+	-EBUSY error.  Instead, this really should either support
+	multiple simultaneous users of the character device (not hard),
+	or simply block open() until the current user of the chrdev
+	calls close().
+
+	* FIXME: support poll()
+
+	* FIXME: should we be crazy and support mmap()?
+
+	* FIXME: It is possible for the timer function to read,
+	and shove into the kernel entropy pool, 2499 bytes of data
+	before the internal FIPS test notices that the data is bad.
+	The kernel should handle this (I think???), but we should use a
+	2500-byte array, and re-run the FIPS test for every byte read.
+	This will slow things down but guarantee that bad data is
+	never passed upstream.
+
+	----------------------------------------------------------
+
+	Change history:
+
+	0.6.2:
+	* Clean up spinlocks.  Since we don't have any interrupts
+	  to worry about, but we do have a timer to worry about,
+	  we use spin_lock_bh everywhere except the timer function
+	  itself.
+	* Fix module load/unload.
+	* Fix timer function and h/w enable/disable logic
+	* New timer interval sysctl
+	* Clean up sysctl names
+
  */
 
 
@@ -115,6 +160,7 @@
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/pci.h>
+#include <linux/interrupt.h>
 #include <linux/spinlock.h>
 #include <linux/random.h>
 #include <linux/sysctl.h>
@@ -127,24 +173,24 @@
 /*
  * core module and version information
  */
-#define RNG_VERSION "0.6.1"
+#define RNG_VERSION "0.6.2"
 #define RNG_MODULE_NAME "i810_rng"
 #define RNG_DRIVER_NAME   RNG_MODULE_NAME " hardware driver " RNG_VERSION
-#define PFX RNG_MODULE_NAME ": "                                                                                 
+#define PFX RNG_MODULE_NAME ": "
 
 
 /*
  * debugging macros
  */
 #undef RNG_DEBUG /* define to 1 to enable copious debugging info */
- 
+
 #ifdef RNG_DEBUG
 /* note: prints function name for you */
 #define DPRINTK(fmt, args...) printk(KERN_DEBUG "%s: " fmt, __FUNCTION__ , ## args)
 #else
 #define DPRINTK(fmt, args...)
 #endif
- 
+
 #define RNG_NDEBUG 0        /* define to 1 to disable lightweight runtime checks */
 #if RNG_NDEBUG
 #define assert(expr)
@@ -156,11 +202,11 @@
         }
 #endif
 
- 
+
 /*
  * misc helper macros
  */
-#define arraysize(x)            (sizeof(x)/sizeof(*(x)))                                                             
+#define arraysize(x)            (sizeof(x)/sizeof(*(x)))
 
 /*
  * prototypes
@@ -191,7 +237,7 @@ static void rng_run_fips_test (void);
  * Frequency that data is added to kernel entropy pool
  * HZ>>1 == every half-second
  */
-#define RNG_TIMER_LEN		(HZ >> 1)
+#define RNG_DEF_TIMER_LEN		(HZ >> 1)
 
 
 /*
@@ -206,18 +252,22 @@ static void rng_run_fips_test (void);
  * various RNG status variables.  they are globals
  * as we only support a single RNG device
  */
-static int rng_allocated = 0;		/* is someone using the RNG region? */
-static int rng_hw_enabled = 0;		/* is the RNG h/w, and timer, enabled? */
-static int rng_trusted = 0;		/* does FIPS trust out data? */
+static int rng_allocated;		/* is someone using the RNG region? */
+static int rng_hw_enabled;		/* is the RNG h/w enabled? */
+static int rng_timer_enabled;		/* is the RNG timer enabled? */
+static int rng_use_count;		/* number of times RNG has been enabled */
+static int rng_trusted;			/* does FIPS trust out data? */
 static int rng_enabled_sysctl;		/* sysctl for enabling/disabling RNG */
-static int rng_entropy = 8;	/* number of entropy bits we submit to /dev/random */
-static int rng_entropy_sysctl;	/* sysctl for changing entropy bits */
-static int rng_have_mem_region = 0;	/* did we grab RNG region via request_mem_region? */
-static int rng_fips_counter = 0;	/* size of internal FIPS test data pool */
-static void *rng_mem = NULL;		/* token to our ioremap'd RNG register area */
+static int rng_entropy = 8;		/* number of entropy bits we submit to /dev/random */
+static int rng_entropy_sysctl;		/* sysctl for changing entropy bits */
+static int rng_interval_sysctl;		/* sysctl for changing timer interval */
+static int rng_have_mem_region;		/* did we grab RNG region via request_mem_region? */
+static int rng_fips_counter;		/* size of internal FIPS test data pool */
+static int rng_timer_len = RNG_DEF_TIMER_LEN; /* timer interval, in jiffies */
+static void *rng_mem;			/* token to our ioremap'd RNG register area */
 static spinlock_t rng_lock = SPIN_LOCK_UNLOCKED; /* hardware lock */
 static struct timer_list rng_timer;	/* kernel timer for RNG hardware reads and tests */
-static atomic_t rng_open;
+static int rng_open;			/* boolean, 0 (false) if chrdev is closed, 1 (true) if open */
 
 /*
  * inlined helper functions for accessing RNG registers
@@ -240,7 +290,7 @@ static inline int rng_data_present (void)
 {
 	assert (rng_mem != NULL);
 	assert (rng_hw_enabled == 1);
-	
+
 	return (readb (rng_mem + RNG_STATUS) & RNG_DATA_PRESENT) ? 1 : 0;
 }
 
@@ -249,22 +299,21 @@ static inline int rng_data_read (void)
 {
 	assert (rng_mem != NULL);
 	assert (rng_hw_enabled == 1);
-	
+
 	return readb (rng_mem + RNG_DATA);
 }
 
 
 /*
- * rng_timer_ticker - executes every RNG_TIMER_LEN jiffies,
+ * rng_timer_ticker - executes every rng_timer_len jiffies,
  *		      adds a single byte to system entropy
  *		      and internal FIPS test pools
  */
 static void rng_timer_tick (unsigned long data)
 {
-	unsigned long flags;
 	int rng_data;
 
-	spin_lock_irqsave (&rng_lock, flags);
+	spin_lock (&rng_lock);
 
 	if (rng_data_present ()) {
 		/* gimme some thermal noise, baby */
@@ -285,11 +334,14 @@ static void rng_timer_tick (unsigned long data)
 			rng_run_fips_test ();
 	}
 
-	spin_unlock_irqrestore (&rng_lock, flags);
+	/* run the timer again, if enabled */
+	if (rng_timer_enabled) {
+		rng_timer.expires = jiffies + rng_timer_len;
+		add_timer (&rng_timer);
+	}
 
-	/* run the timer again */
-	rng_timer.expires = jiffies + RNG_TIMER_LEN;
-	add_timer (&rng_timer);
+	spin_unlock (&rng_lock);
+
 }
 
 
@@ -298,42 +350,43 @@ static void rng_timer_tick (unsigned long data)
  */
 static int rng_enable (int enable)
 {
-	unsigned long flags;
 	int rc = 0;
 	u8 hw_status;
-	
+
 	DPRINTK ("ENTER\n");
-	
-	spin_lock_irqsave (&rng_lock, flags);
+
+	spin_lock_bh (&rng_lock);
 
 	hw_status = rng_hwstatus ();
-	
-	if (enable && !rng_hw_enabled) {
-		rng_hwstatus_set (hw_status | RNG_ENABLED);
 
-		printk (KERN_INFO PFX "RNG h/w enabled\n");
+	if (enable) {
 		rng_hw_enabled = 1;
+		rng_use_count++;
 		MOD_INC_USE_COUNT;
-	}
-	
-	else if (!enable && rng_hw_enabled) {
-		del_timer (&rng_timer);
-
-		rng_hwstatus_set (hw_status & ~RNG_ENABLED);
-
-		printk (KERN_INFO PFX "RNG h/w disabled\n");
-		rng_hw_enabled = 0;
+	} else {
+		rng_use_count--;
+		if (rng_use_count == 0)
+			rng_hw_enabled = 0;
 		MOD_DEC_USE_COUNT;
 	}
-	
-	if (enable != (rng_hwstatus () & RNG_ENABLED) ) {
-		del_timer (&rng_timer);
+
+	if (rng_hw_enabled && ((hw_status & RNG_ENABLED) == 0)) {
+		rng_hwstatus_set (hw_status | RNG_ENABLED);
+		printk (KERN_INFO PFX "RNG h/w enabled\n");
+	}
+
+	else if (!rng_hw_enabled && (hw_status & RNG_ENABLED)) {
+		rng_hwstatus_set (hw_status & ~RNG_ENABLED);
+		printk (KERN_INFO PFX "RNG h/w disabled\n");
+	}
+
+	spin_unlock_bh (&rng_lock);
+
+	if ((!!enable) != (!!(rng_hwstatus () & RNG_ENABLED))) {
 		printk (KERN_ERR PFX "Unable to %sable the RNG\n",
 			enable ? "en" : "dis");
 		rc = -EIO;
 	}
-
-	spin_unlock_irqrestore (&rng_lock, flags);
 
 	DPRINTK ("EXIT, returning %d\n", rc);
 	return rc;
@@ -343,25 +396,41 @@ static int rng_enable (int enable)
 /*
  * rng_handle_sysctl_enable - handle a read or write of our enable/disable sysctl
  */
- 
+
 static int rng_handle_sysctl_enable (ctl_table * table, int write, struct file *filp,
 				     void *buffer, size_t * lenp)
 {
-	unsigned long flags;
 	int enabled_save, rc;
 
 	DPRINTK ("ENTER\n");
-	
-	spin_lock_irqsave (&rng_lock, flags);
-	rng_enabled_sysctl = enabled_save = rng_hw_enabled;
-	spin_unlock_irqrestore (&rng_lock, flags);
+
+	spin_lock_bh (&rng_lock);
+
+	rng_enabled_sysctl = enabled_save = rng_timer_enabled;
 
 	rc = proc_dointvec (table, write, filp, buffer, lenp);
-	if (rc)
+	if (rc) {
+		spin_unlock_bh (&rng_lock);
 		return rc;
-	
-	if (enabled_save != rng_enabled_sysctl)
+	}
+
+	if (enabled_save != rng_enabled_sysctl) {
+		rng_timer_enabled = rng_enabled_sysctl;
+		spin_unlock_bh (&rng_lock);
+
+		/* enable/disable hardware */
 		rng_enable (rng_enabled_sysctl);
+
+		/* enable/disable timer */
+		if (rng_enabled_sysctl) {
+			rng_timer.expires = jiffies + rng_timer_len;
+			add_timer (&rng_timer);
+		} else {
+			del_timer_sync (&rng_timer);
+		}
+	} else {
+		spin_unlock_bh (&rng_lock);
+	}
 
 	DPRINTK ("EXIT, returning 0\n");
 	return 0;
@@ -371,36 +440,74 @@ static int rng_handle_sysctl_enable (ctl_table * table, int write, struct file *
 /*
  * rng_handle_sysctl_entropy - handle a read or write of our entropy bits sysctl
  */
- 
+
 static int rng_handle_sysctl_entropy (ctl_table * table, int write, struct file *filp,
 				      void *buffer, size_t * lenp)
 {
-	unsigned long flags;
 	int entropy_bits_save, rc;
 
 	DPRINTK ("ENTER\n");
-	
-	spin_lock_irqsave (&rng_lock, flags);
+
+	spin_lock_bh (&rng_lock);
 	rng_entropy_sysctl = entropy_bits_save = rng_entropy;
-	spin_unlock_irqrestore (&rng_lock, flags);
+	spin_unlock_bh (&rng_lock);
 
 	rc = proc_dointvec (table, write, filp, buffer, lenp);
 	if (rc)
 		return rc;
-	
+
 	if (entropy_bits_save == rng_entropy_sysctl)
 		goto out;
 
 	if ((rng_entropy_sysctl >= 0) &&
     	    (rng_entropy_sysctl <= 8)) {
-		spin_lock_irqsave (&rng_lock, flags);
+		spin_lock_bh (&rng_lock);
 		rng_entropy = rng_entropy_sysctl;
-		spin_unlock_irqrestore (&rng_lock, flags);
+		spin_unlock_bh (&rng_lock);
 
 		printk (KERN_INFO PFX "entropy bits now %d\n", rng_entropy_sysctl);
 	} else {
 		printk (KERN_INFO PFX "ignoring invalid entropy setting (%d)\n",
 			rng_entropy_sysctl);
+	}
+
+out:
+	DPRINTK ("EXIT, returning 0\n");
+	return 0;
+}
+
+/*
+ * rng_handle_sysctl_interval - handle a read or write of our timer interval len sysctl
+ */
+
+static int rng_handle_sysctl_interval (ctl_table * table, int write, struct file *filp,
+				      void *buffer, size_t * lenp)
+{
+	int timer_len_save, rc;
+
+	DPRINTK ("ENTER\n");
+
+	spin_lock_bh (&rng_lock);
+	rng_interval_sysctl = timer_len_save = rng_timer_len;
+	spin_unlock_bh (&rng_lock);
+
+	rc = proc_dointvec (table, write, filp, buffer, lenp);
+	if (rc)
+		return rc;
+
+	if (timer_len_save == rng_interval_sysctl)
+		goto out;
+
+	if ((rng_interval_sysctl > 0) &&
+    	    (rng_interval_sysctl < (HZ*86400))) {
+		spin_lock_bh (&rng_lock);
+		rng_timer_len = rng_interval_sysctl;
+		spin_unlock_bh (&rng_lock);
+
+		printk (KERN_INFO PFX "timer interval now %d\n", rng_interval_sysctl);
+	} else {
+		printk (KERN_INFO PFX "ignoring invalid timer interval (%d)\n",
+			rng_interval_sysctl);
 	}
 
 out:
@@ -414,30 +521,44 @@ out:
  */
 static void rng_sysctl (int add)
 {
-#define DEV_I810_RNG		1
-#define DEV_I810_RNG_ENTROPY	2
+#define DEV_I810_TIMER		1
+#define DEV_I810_ENTROPY	2
+#define DEV_I810_INTERVAL	3
+
 	/* Definition of the sysctl */
+	/* FIXME: use new field:value style of struct initialization */
 	static ctl_table rng_sysctls[] = {
-		{DEV_I810_RNG,	/* ID */
-		 RNG_MODULE_NAME "_enabled",	/* name in /proc */
+		{DEV_I810_TIMER,		/* ID */
+		 RNG_MODULE_NAME "_timer",	/* name in /proc */
 		 &rng_enabled_sysctl,
 		 sizeof (rng_enabled_sysctl),	/* data ptr, data size */
-		 0644,		/* mode */
-		 0,		/* child */
+		 0644,				/* mode */
+		 0,				/* child */
 		 rng_handle_sysctl_enable,	/* proc handler */
-		 0,		/* strategy */
-		 0,		/* proc control block */
+		 0,				/* strategy */
+		 0,				/* proc control block */
 		 0, 0}
 		,
-		{DEV_I810_RNG_ENTROPY,	/* ID */
+		{DEV_I810_ENTROPY,		/* ID */
 		 RNG_MODULE_NAME "_entropy",	/* name in /proc */
 		 &rng_entropy_sysctl,
 		 sizeof (rng_entropy_sysctl),	/* data ptr, data size */
-		 0644,		/* mode */
-		 0,		/* child */
+		 0644,				/* mode */
+		 0,				/* child */
 		 rng_handle_sysctl_entropy,	/* proc handler */
-		 0,		/* strategy */
-		 0,		/* proc control block */
+		 0,				/* strategy */
+		 0,				/* proc control block */
+		 0, 0}
+		,
+		{DEV_I810_INTERVAL,		/* ID */
+		 RNG_MODULE_NAME "_interval",	/* name in /proc */
+		 &rng_interval_sysctl,
+		 sizeof (rng_interval_sysctl),	/* data ptr, data size */
+		 0644,				/* mode */
+		 0,				/* child */
+		 rng_handle_sysctl_interval,	/* proc handler */
+		 0,				/* strategy */
+		 0,				/* proc control block */
 		 0, 0}
 		,
 		{0}
@@ -467,35 +588,36 @@ static void rng_sysctl (int add)
 static int rng_dev_open (struct inode *inode, struct file *filp)
 {
 	int rc = -EINVAL;
-	unsigned long flags;
 
 	if ((filp->f_mode & FMODE_READ) == 0)
 		goto err_out;
 	if (filp->f_mode & FMODE_WRITE)
 		goto err_out;
 
-	spin_lock_irqsave (&rng_lock, flags);
-	
-	if (atomic_read(&rng_open)) {
-		spin_unlock_irqrestore (&rng_lock, flags);
+	spin_lock_bh (&rng_lock);
+
+	/* only allow one open of this device, exit with -EBUSY if already open */
+	/* FIXME: we should sleep on a semaphore here, unless O_NONBLOCK */
+	if (rng_open) {
+		spin_unlock_bh (&rng_lock);
 		rc = -EBUSY;
 		goto err_out;
 	}
-	
-	atomic_set (&rng_open, 1);
 
-	spin_unlock_irqrestore (&rng_lock, flags);
-	
+	rng_open = 1;
+
+	spin_unlock_bh (&rng_lock);
+
 	if (rng_enable(1) != 0) {
-		spin_lock_irqsave (&rng_lock, flags);
-		atomic_set (&rng_open, 0);
-		spin_unlock_irqrestore (&rng_lock, flags);
+		spin_lock_bh (&rng_lock);
+		rng_open = 0;
+		spin_unlock_bh (&rng_lock);
 		rc = -EIO;
 		goto err_out;
 	}
-	
+
 	return 0;
-	
+
 err_out:
 	return rc;
 }
@@ -503,14 +625,13 @@ err_out:
 
 static int rng_dev_release (struct inode *inode, struct file *filp)
 {
-	unsigned long flags;
 
 	if (rng_enable(0) != 0)
 		return -EIO;
 
-	spin_lock_irqsave (&rng_lock, flags);
-	atomic_set (&rng_open, 0);
-	spin_unlock_irqrestore (&rng_lock, flags);
+	spin_lock_bh (&rng_lock);
+	rng_open = 0;
+	spin_unlock_bh (&rng_lock);
 
 	return 0;
 }
@@ -520,14 +641,13 @@ static ssize_t rng_dev_read (struct file *filp, char * buf, size_t size,
 			     loff_t *offp)
 {
 	int have_data, copied = 0;
-	unsigned long flags;
 	u8 data=0;
 	u8 *page;
-	
+
 	if (size < 1)
 		return 0;
-	
-	page = (unsigned char *) get_zeroed_page (GFP_KERNEL);
+
+	page = (unsigned char *) get_free_page (GFP_KERNEL);
 	if (!page)
 		return -ENOMEM;
 
@@ -545,7 +665,7 @@ read_loop:
 		return tmpsize;
 	}
 
-	spin_lock_irqsave (&rng_lock, flags);
+	spin_lock_bh (&rng_lock);
 
 	have_data = 0;
 	if (rng_data_present ()) {
@@ -553,8 +673,8 @@ read_loop:
 		have_data = 1;
 	}
 
-	spin_unlock_irqrestore (&rng_lock, flags);
-	
+	spin_unlock_bh (&rng_lock);
+
 	if (have_data) {
 		page[copied] = data;
 		copied++;
@@ -567,12 +687,12 @@ read_loop:
 
 	if (current->need_resched)
 		schedule ();
-	
+
 	if (signal_pending (current)) {
 		free_page ((long)page);
 		return -ERESTARTSYS;
 	}
-	
+
 	goto read_loop;
 }
 
@@ -585,7 +705,7 @@ static int __init rng_init_one (struct pci_dev *dev,
 {
 	int rc;
 	u8 hw_status;
-	
+
 	DPRINTK ("ENTER\n");
 
 	if (rng_allocated) {
@@ -619,7 +739,7 @@ static int __init rng_init_one (struct pci_dev *dev,
 
 	if (rng_entropy < 0 || rng_entropy > RNG_MAX_ENTROPY)
 		rng_entropy = RNG_MAX_ENTROPY;
-	
+
 	/* init core RNG timer, but do not add it */
 	init_timer (&rng_timer);
 	rng_timer.function = rng_timer_tick;
@@ -653,7 +773,7 @@ const static struct pci_device_id rng_pci_tbl[] __initdata = {
         { 0x8086, 0x2428, PCI_ANY_ID, PCI_ANY_ID, },
 	{ 0, },
 };
-MODULE_DEVICE_TABLE (pci, rng_pci_tbl);                                                                          
+MODULE_DEVICE_TABLE (pci, rng_pci_tbl);
 
 static struct pci_driver rng_driver = {
        name:		RNG_MODULE_NAME,
@@ -690,30 +810,20 @@ static int __init rng_init (void)
 	int rc;
 
 	DPRINTK ("ENTER\n");
-	
-	MOD_INC_USE_COUNT;
 
 	if (pci_register_driver (&rng_driver) < 1) {
 		DPRINTK ("EXIT, returning -ENODEV\n");
-		MOD_DEC_USE_COUNT;
 		return -ENODEV;
 	}
-	
+
 	rc = misc_register (&rng_miscdev);
 	if (rc) {
 		pci_unregister_driver (&rng_driver);
 		DPRINTK ("EXIT, returning %d\n", rc);
-		MOD_DEC_USE_COUNT;
 		return rc;
 	}
 
 	printk (KERN_INFO RNG_DRIVER_NAME " loaded\n");
-
-	/* FIXME: verify module unload logic, then remove
-	 * this additional MOD_INC_USE_COUNT */
-	MOD_INC_USE_COUNT;
-
-	MOD_DEC_USE_COUNT; /* init complete, unload allowed now */
 
 	DPRINTK ("EXIT, returning 0\n");
 	return 0;
@@ -725,13 +835,9 @@ static int __init rng_init (void)
  */
 static void __exit rng_cleanup (void)
 {
-	unsigned long flags;
-
 	DPRINTK ("ENTER\n");
 
-	spin_lock_irqsave (&rng_lock, flags);
-	del_timer (&rng_timer);
-	spin_unlock_irqrestore (&rng_lock, flags);
+	del_timer_sync (&rng_timer);
 
 	rng_sysctl (0);
 	pci_unregister_driver (&rng_driver);

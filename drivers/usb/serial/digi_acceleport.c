@@ -14,6 +14,13 @@
 *  Peter Berger (pberger@brimson.com)
 *  Al Borchers (borchers@steinerpoint.com)
 *
+*  (6/27/2000) pberger and borchers
+*    -- Zeroed out sync field in the wakeup_task before first use;
+*       otherwise the uninitialized value might prevent the task from
+*       being scheduled.
+*    -- Initialized ret value to 0 in write_bulk_callback, otherwise
+*       the uninitialized value could cause a spurious debugging message.
+*
 *  (6/22/2000) pberger and borchers
 *    -- Made cond_wait_... inline--apparently on SPARC the flags arg
 *       to spin_lock_irqsave cannot be passed to another function
@@ -134,7 +141,7 @@
 *  - Following Documentation/DocBook/kernel-locking.pdf no spin locks
 *    are held when calling copy_to/from_user or printk.
 *    
-*  $Id: digi_acceleport.c,v 1.60 2000/06/23 17:43:17 root Exp root $
+*  $Id: digi_acceleport.c,v 1.63 2000/06/28 18:28:31 root Exp root $
 */
 
 #include <linux/config.h>
@@ -321,7 +328,7 @@ typedef struct digi_private {
 	int dp_transmit_idle;
 	int dp_in_close;
 	wait_queue_head_t dp_close_wait;	/* wait queue for close */
-	struct tq_struct dp_tasks;
+	struct tq_struct dp_wakeup_task;
 } digi_private_t;
 
 
@@ -479,6 +486,7 @@ static void digi_wakeup_write( struct usb_serial_port *port )
 
 	/* wake up other tty processes */
 	wake_up_interruptible( &tty->write_wait );
+	/* For 2.2.16 backport -- wake_up_interruptible( &tty->poll_wait ); */
 
 }
 
@@ -1129,7 +1137,7 @@ static void digi_write_bulk_callback( struct urb *urb )
 	struct usb_serial_port *port = (struct usb_serial_port *)urb->context;
 	struct usb_serial *serial = port->serial;
 	digi_private_t *priv = (digi_private_t *)(port->private);
-	int ret;
+	int ret = 0;
 
 
 dbg( "digi_write_bulk_callback: TOP: port=%d", priv->dp_port_num );
@@ -1172,18 +1180,16 @@ dbg( "digi_write_bulk_callback: TOP: port=%d", priv->dp_port_num );
 	/* wake up processes sleeping on writes immediately */
 	digi_wakeup_write( port );
 
+	/* also queue up a wakeup at scheduler time, in case we */
+	/* lost the race in write_chan(). */
+	queue_task( &priv->dp_wakeup_task, &tq_scheduler );
+
 	spin_unlock( &priv->dp_port_lock );
 
 	if( ret ) {
 		dbg( "digi_write_bulk_callback: usb_submit_urb failed, ret=%d",
 		ret );
 	}
-
-	/* also queue up a wakeup at scheduler time, in case we */
-	/* lost the race in write_chan(). */
-	priv->dp_tasks.routine = (void *)digi_wakeup_write_lock;
-	priv->dp_tasks.data = (void *)port;
-	queue_task( &(priv->dp_tasks), &tq_scheduler );
 
 }
 
@@ -1486,8 +1492,10 @@ dbg( "digi_startup: TOP" );
 		priv->dp_transmit_idle = 0;
 		priv->dp_in_close = 0;
 		init_waitqueue_head( &priv->dp_close_wait );
-		priv->dp_tasks.next = NULL;
-		priv->dp_tasks.data = NULL;
+		priv->dp_wakeup_task.next = NULL;
+		priv->dp_wakeup_task.sync = 0;
+		priv->dp_wakeup_task.routine = (void *)digi_wakeup_write_lock;
+		priv->dp_wakeup_task.data = (void *)(&serial->port[i]);
 		spin_lock_init( &priv->dp_port_lock );
 
 		/* initialize write wait queue for this port */

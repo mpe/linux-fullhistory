@@ -1,11 +1,24 @@
 /*
- * $Id: b1pci.c,v 1.21 2000/04/03 13:29:24 calle Exp $
+ * $Id: b1pci.c,v 1.25 2000/05/29 12:29:18 keil Exp $
  * 
  * Module for AVM B1 PCI-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1pci.c,v $
+ * Revision 1.25  2000/05/29 12:29:18  keil
+ * make pci_enable_dev compatible to 2.2 kernel versions
+ *
+ * Revision 1.24  2000/05/19 15:43:22  calle
+ * added calls to pci_device_start().
+ *
+ * Revision 1.23  2000/05/06 00:52:36  kai
+ * merged changes from kernel tree
+ * fixed timer and net_device->name breakage
+ *
+ * Revision 1.22  2000/04/21 13:01:33  calle
+ * Revision in b1pciv4 driver was missing.
+ *
  * Revision 1.21  2000/04/03 13:29:24  calle
  * make Tim Waugh happy (module unload races in 2.3.99-pre3).
  * no real problem there, but now it is much cleaner ...
@@ -74,12 +87,13 @@
 #include <linux/pci.h>
 #include <linux/capi.h>
 #include <asm/io.h>
+#include <linux/isdn.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.21 $";
+static char *revision = "$Revision: 1.25 $";
 
 /* ------------------------------------------------------------- */
 
@@ -466,16 +480,26 @@ static int add_card(struct pci_dev *dev)
 	struct capicardparams param;
 	int retval;
 
-	if (pci_enable_device(dev))
-		return 0; /* return failure */
-
-	if (pci_resource_flags(dev, 2) & IORESOURCE_IO) { /* B1 PCI V4 */
+	if (pci_resource_start(dev, 2)) { /* B1 PCI V4 */
 #ifdef CONFIG_ISDN_DRV_AVMB1_B1PCIV4
 		driver = &b1pciv4_driver;
 #endif
-		param.membase = pci_resource_start (dev, 0);
-		param.port = pci_resource_start (dev, 2);
+		param.membase = pci_resource_start(dev, 0);
+		param.port = pci_resource_start(dev, 2);
 		param.irq = dev->irq;
+
+		retval = pci_enable_device (dev);
+		if (retval != 0) {
+		        printk(KERN_ERR
+			"%s: failed to enable AVM-B1 V4 at i/o %#x, irq %d, mem %#x err=%d\n",
+			driver->name, param.port, param.irq, param.membase, retval);
+#ifdef MODULE
+			cleanup_module();
+#endif
+			MOD_DEC_USE_COUNT;
+			return -EIO;
+		}
+
 		printk(KERN_INFO
 		"%s: PCI BIOS reports AVM-B1 V4 at i/o %#x, irq %d, mem %#x\n",
 		driver->name, param.port, param.irq, param.membase);
@@ -491,8 +515,20 @@ static int add_card(struct pci_dev *dev)
 		}
 	} else {
 		param.membase = 0;
-		param.port = pci_resource_start (dev, 1);
+		param.port = pci_resource_start(dev, 1);
 		param.irq = dev->irq;
+
+		retval = pci_enable_device (dev);
+		if (retval != 0) {
+		        printk(KERN_ERR
+			"%s: failed to enable AVM-B1 at i/o %#x, irq %d, err=%d\n",
+			driver->name, param.port, param.irq, retval);
+#ifdef MODULE
+			cleanup_module();
+#endif
+			MOD_DEC_USE_COUNT;
+			return -EIO;
+		}
 		printk(KERN_INFO
 		"%s: PCI BIOS reports AVM-B1 at i/o %#x, irq %d\n",
 		driver->name, param.port, param.irq);
@@ -522,6 +558,12 @@ int b1pci_init(void)
 		strncpy(driver->revision, p + 1, sizeof(driver->revision));
 		p = strchr(driver->revision, '$');
 		*p = 0;
+#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCIV4
+	        p = strchr(revision, ':');
+		strncpy(driverv4->revision, p + 1, sizeof(driverv4->revision));
+		p = strchr(driverv4->revision, '$');
+		*p = 0;
+#endif
 	}
 
 	printk(KERN_INFO "%s: revision %s\n", driver->name, driver->revision);

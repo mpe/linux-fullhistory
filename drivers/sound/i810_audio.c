@@ -1627,12 +1627,11 @@ static int i810_release(struct inode *inode, struct file *file)
 		state->card->free_pcm_channel(state->card, dmabuf->channel->num);
 	}
 
-	kfree(state->card->states[state->virt]);
-	state->card->states[state->virt] = NULL;
-	state->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
-
 	/* we're covered by the open_sem */
 	up(&state->open_sem);
+	
+	kfree(state->card->states[state->virt]);
+	state->card->states[state->virt] = NULL;
 
 	return 0;
 }

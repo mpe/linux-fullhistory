@@ -1,5 +1,5 @@
 #
-# $Id: Makefile,v 1.16 2000/03/17 12:15:44 calle Exp $
+# $Id: Makefile,v 1.18 2000/04/03 16:39:25 calle Exp $
 #
 # Makefile for the CAPI and AVM-B1 device drivers.
 #
@@ -146,6 +146,11 @@ ifeq ($(CONFIG_ISDN_CAPI),y)
   endif
   ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
   	OX_OBJS   += b1pcmcia.o
+	ifeq ($(CONFIG_HOTPLUG),y)
+		ifneq ($(CONFIG_PCMCIA),n)
+			M_OBJS   += avm_cs.o
+		endif
+	endif
   endif
   ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
   	O_OBJS   += t1pci.o

@@ -1566,7 +1566,7 @@ static struct console dz_sercons = {
 	NULL
 };
 
-void __init dz_serial_console_init(l)
+void __init dz_serial_console_init(void)
 {
 	register_console(&dz_sercons);
 }

@@ -300,7 +300,6 @@ static void shaper_timer(unsigned long data)
 {
 	struct shaper *sh=(struct shaper *)data;
 	shaper_kick(sh);
-	timer_exit(&sh->timer);
 }
 
 /*

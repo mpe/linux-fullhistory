@@ -25,6 +25,9 @@
 	LK1.1.2 (jgarzik):
 	* Merge becker version 1.09
 
+	LK1.1.3:
+	* Major bugfix to 1.09 driver (Francis Romieu)
+
 */
 
 /* The user-configurable values.
@@ -90,7 +93,7 @@ static int rx_copybreak = 200;
 
 /* These identify the driver base version and may not be removed. */
 static char version[] __devinitdata =
-"epic100.c:v1.09+LK1.1.2 4/28/2000 Written by Donald Becker <becker@scyld.com>\n";
+"epic100.c:v1.09+LK1.1.3 6/17/2000 Written by Donald Becker <becker@scyld.com>\n";
 static char version2[] __devinitdata =
 "  	http://www.scyld.com/network/epic100.html\n";
 
@@ -576,6 +579,7 @@ static int epic_open(struct net_device *dev)
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	int i;
+	int retval;
 
 	ep->full_duplex = ep->force_fd;
 
@@ -584,9 +588,9 @@ static int epic_open(struct net_device *dev)
 
 	MOD_INC_USE_COUNT;
 
-	if (request_irq(dev->irq, &epic_interrupt, SA_SHIRQ, dev->name, dev)) {
+	if ((retval = request_irq(dev->irq, &epic_interrupt, SA_SHIRQ, dev->name, dev))) {
 		MOD_DEC_USE_COUNT;
-		return -EAGAIN;
+		return retval;
 	}
 
 	epic_init_ring(dev);
@@ -1142,8 +1146,8 @@ static int epic_close(struct net_device *dev)
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was %2.2x.\n",
 			   dev->name, inl(ioaddr + INTSTAT));
 
+	del_timer_sync(&ep->timer);
 	epic_pause(dev);
-	del_timer(&ep->timer);
 	free_irq(dev->irq, dev);
 
 	/* Free all the skbuffs in the Rx queue. */

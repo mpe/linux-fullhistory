@@ -292,19 +292,27 @@ fb_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	struct fb_info *info = registered_fb[fbidx];
 	struct fb_ops *fb = info->fbops;
 	struct fb_fix_screeninfo fix;
-	char *base_addr;
-	ssize_t copy_size;
 
 	if (! fb || ! info->disp)
 		return -ENODEV;
 
 	fb->fb_get_fix(&fix,PROC_CONSOLE(info), info);
-	base_addr=info->disp->screen_base;
-	copy_size=(count + p <= fix.smem_len ? count : fix.smem_len - p);
-	if (copy_to_user(buf, base_addr+p, copy_size))
-	    return -EFAULT;
-	*ppos += copy_size;
-	return copy_size;
+	if (p >= fix.smem_len)
+	    return 0;
+	if (count >= fix.smem_len)
+	    count = fix.smem_len;
+	if (count + p > fix.smem_len)
+		count = fix.smem_len - p;
+	if (count) {
+	    char *base_addr;
+
+	    base_addr = info->disp->screen_base;
+	    count -= copy_to_user(buf, base_addr+p, count);
+	    if (!count)
+		return -EFAULT;
+	    *ppos += count;
+	}
+	return count;
 }
 
 static ssize_t
@@ -316,19 +324,32 @@ fb_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	struct fb_info *info = registered_fb[fbidx];
 	struct fb_ops *fb = info->fbops;
 	struct fb_fix_screeninfo fix;
-	char *base_addr;
-	ssize_t copy_size;
+	int err;
 
 	if (! fb || ! info->disp)
 		return -ENODEV;
 
 	fb->fb_get_fix(&fix, PROC_CONSOLE(info), info);
-	base_addr=info->disp->screen_base;
-	copy_size=(count + p <= fix.smem_len ? count : fix.smem_len - p);
-	if (copy_from_user(base_addr+p, buf, copy_size))
-	    return -EFAULT;
-	file->f_pos += copy_size;
-	return copy_size;
+	if (p > fix.smem_len)
+	    return -ENOSPC;
+	if (count >= fix.smem_len)
+	    count = fix.smem_len;
+	err = 0;
+	if (count + p > fix.smem_len) {
+	    count = fix.smem_len - p;
+	    err = -ENOSPC;
+	}
+	if (count) {
+	    char *base_addr;
+
+	    base_addr = info->disp->screen_base;
+	    count -= copy_from_user(base_addr+p, buf, count);
+	    *ppos += count;
+	    err = -EFAULT;
+	}
+	if (count)
+		return count;
+	return err;
 }
 
 #ifdef CONFIG_KMOD

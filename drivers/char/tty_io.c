@@ -57,6 +57,9 @@
  *
  * Added support for a Unix98-style ptmx device.
  *      -- C. Scott Ananian <cananian@alumni.princeton.edu>, 14-Jan-1998
+ *
+ * Reduced memory usage for older ARM systems
+ *      -- Russell King <rmk@arm.linux.org.uk>
  */
 
 #include <linux/config.h>
@@ -111,7 +114,7 @@ extern void con_init_devfs (void);
 #define CHECK_TTY_COUNT 1
 
 struct termios tty_std_termios;		/* for the benefit of tty drivers  */
-struct tty_driver *tty_drivers = NULL;	/* linked list of tty drivers */
+struct tty_driver *tty_drivers;		/* linked list of tty drivers */
 struct tty_ldisc ldiscs[NR_LDISCS];	/* line disc dispatch table	*/
 
 #ifdef CONFIG_UNIX98_PTYS
@@ -123,7 +126,7 @@ extern struct tty_driver pts_driver[];	/* Unix98 pty slaves;  for /dev/ptmx */
  * redirect is the pseudo-tty that console output
  * is redirected to if asked by TIOCCONS.
  */
-struct tty_struct * redirect = NULL;
+struct tty_struct * redirect;
 
 static void initialize_tty_struct(struct tty_struct *tty);
 
@@ -135,32 +138,48 @@ static int tty_release(struct inode *, struct file *);
 int tty_ioctl(struct inode * inode, struct file * file,
 	      unsigned int cmd, unsigned long arg);
 static int tty_fasync(int fd, struct file * filp, int on);
-#ifdef CONFIG_SX
 extern int sx_init (void);
-#endif
-#if defined(CONFIG_MVME162_SCC) || defined(CONFIG_BVME6000_SCC) || defined(CONFIG_MVME147_SCC)
 extern int vme_scc_init (void);
 extern long vme_scc_console_init(void);
-#endif
-#ifdef CONFIG_SERIAL167
 extern int serial167_init(void);
 extern long serial167_console_init(void);
-#endif
-#if (defined(CONFIG_8xx) || defined(CONFIG_8260))
 extern void console_8xx_init(void);
 extern int rs_8xx_init(void);
-#endif /* CONFIG_8xx */
-#ifdef CONFIG_HWC
 extern void hwc_console_init(void);
-#endif
-#ifdef CONFIG_3215
 extern void con3215_init(void);
-#endif /* CONFIG_3215 */
-
+extern void rs285_console_init(void);
+extern void rs285_init(void);
+extern void sa1100_rs_console_init(void);
+extern void sa1100_rs_init(void);
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
 #endif
+#ifndef MAX
+#define MAX(a,b)	((a) < (b) ? (b) : (a))
+#endif
+
+static inline struct tty_struct *alloc_tty_struct(void)
+{
+	struct tty_struct *tty;
+
+	if (PAGE_SIZE > 8192) {
+		tty = kmalloc(sizeof(struct tty_struct), GFP_KERNEL);
+		if (tty)
+			memset(tty, 0, sizeof(struct tty_struct));
+	} else
+		tty = (struct tty_struct *)get_zeroed_page(GFP_KERNEL);
+
+	return tty;
+}
+
+static inline void free_tty_struct(struct tty_struct *tty)
+{
+	if (PAGE_SIZE > 8192)
+		kfree(tty);
+	else
+		free_page((unsigned long) tty);
+}
 
 /*
  * This routine returns the name of tty.
@@ -692,7 +711,7 @@ static inline ssize_t do_tty_write(
 		unlock_kernel();
 	} else {
 		for (;;) {
-			unsigned long size = PAGE_SIZE*2;
+			unsigned long size = MAX(PAGE_SIZE*2,16384);
 			if (size > count)
 				size = count;
 			lock_kernel();
@@ -823,7 +842,7 @@ static int init_dev(kdev_t device, struct tty_struct **ret_tty)
 	tp = o_tp = NULL;
 	ltp = o_ltp = NULL;
 
-	tty = (struct tty_struct*) get_zeroed_page(GFP_KERNEL);
+	tty = alloc_tty_struct();
 	if(!tty)
 		goto fail_no_mem;
 	initialize_tty_struct(tty);
@@ -849,7 +868,7 @@ static int init_dev(kdev_t device, struct tty_struct **ret_tty)
 	}
 
 	if (driver->type == TTY_DRIVER_TYPE_PTY) {
-		o_tty = (struct tty_struct *) get_zeroed_page(GFP_KERNEL);
+		o_tty = alloc_tty_struct();
 		if (!o_tty)
 			goto free_mem_out;
 		initialize_tty_struct(o_tty);
@@ -969,12 +988,12 @@ free_mem_out:
 	if (o_tp)
 		kfree_s(o_tp, sizeof(struct termios));
 	if (o_tty)
-		free_page((unsigned long) o_tty);
+		free_tty_struct(o_tty);
 	if (ltp)
 		kfree_s(ltp, sizeof(struct termios));
 	if (tp)
 		kfree_s(tp, sizeof(struct termios));
-	free_page((unsigned long) tty);
+	free_tty_struct(tty);
 
 fail_no_mem:
 	retval = -ENOMEM;
@@ -1005,7 +1024,7 @@ static void release_mem(struct tty_struct *tty, int idx)
 		}
 		o_tty->magic = 0;
 		(*o_tty->driver.refcount)--;
-		free_page((unsigned long) o_tty);
+		free_tty_struct(o_tty);
 	}
 
 	tty->driver.table[idx] = NULL;
@@ -1016,7 +1035,7 @@ static void release_mem(struct tty_struct *tty, int idx)
 	}
 	tty->magic = 0;
 	(*tty->driver.refcount)--;
-	free_page((unsigned long) tty);
+	free_tty_struct(tty);
 }
 
 /*
@@ -1397,9 +1416,9 @@ init_dev_done:
 		static int nr_warns = 0;
 		if (nr_warns < 5) {
 			printk(KERN_WARNING "tty_io.c: "
-				"process %d (%s) used obsolete /dev/%s - " 
+				"process %d (%s) used obsolete /dev/%s - "
 				"update software to use /dev/ttyS%d\n",
-				current->pid, current->comm, 
+				current->pid, current->comm,
 				tty_name(tty, buf), TTY_NUMBER(tty));
 			nr_warns++;
 		}

@@ -426,7 +426,7 @@ static int ax25_rcv(struct sk_buff *skb, struct net_device *dev, ax25_address *d
 		}
 	} else {
 		/* Reverse the source SABM's path */
-		*ax25->digipeat = reverse_dp;
+		memcpy(&ax25->digipeat, &reverse_dp, sizeof(ax25_digi));
 	}
 
 	if ((*skb->data & ~AX25_PF) == AX25_SABME) {

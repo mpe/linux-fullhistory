@@ -103,7 +103,6 @@ void it_real_fn(unsigned long __data)
 		p->real_timer.expires = jiffies + interval;
 		add_timer(&p->real_timer);
 	}
-	timer_exit(&p->real_timer);
 }
 
 int do_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)

@@ -241,7 +241,6 @@ static void tcp_delack_timer(unsigned long data)
 	TCP_CHECK_TIMER(sk);
 
 out_unlock:
-	timer_exit(&tp->delack_timer);
 	bh_unlock_sock(sk);
 	sock_put(sk);
 }
@@ -299,7 +298,6 @@ static void tcp_probe_timer(unsigned long data)
 		TCP_CHECK_TIMER(sk);
 	}
 out_unlock:
-	timer_exit(&tp->probe_timer);
 	bh_unlock_sock(sk);
 	sock_put(sk);
 }
@@ -611,7 +609,6 @@ static void tcp_retransmit_timer(unsigned long data)
 	TCP_CHECK_TIMER(sk);
 
 out_unlock:
-	timer_exit(&tp->retransmit_timer);
 	bh_unlock_sock(sk);
 	sock_put(sk);
 }
@@ -806,7 +803,6 @@ death:
 	tcp_done(sk);
 
 out:
-	timer_exit(&sk->timer);
 	bh_unlock_sock(sk);
 	sock_put(sk);
 }

@@ -298,15 +298,9 @@ static struct inode_operations ramfs_dir_inode_operations = {
 	rename:		ramfs_rename,
 };
 
-static void ramfs_put_super(struct super_block *sb)
-{
-	d_genocide(sb->s_root);
-	shrink_dcache_parent(sb->s_root);
-}
-
 static struct super_operations ramfs_ops = {
-	put_super:	ramfs_put_super,
 	statfs:		ramfs_statfs,
+	put_inode:	force_delete,
 };
 
 static struct super_block *ramfs_read_super(struct super_block * sb, void * data, int silent)
@@ -331,7 +325,7 @@ static struct super_block *ramfs_read_super(struct super_block * sb, void * data
 	return sb;
 }
 
-static DECLARE_FSTYPE(ramfs_fs_type, "ramfs", ramfs_read_super, 0);
+static DECLARE_FSTYPE(ramfs_fs_type, "ramfs", ramfs_read_super, FS_LITTER);
 
 static int __init init_ramfs_fs(void)
 {

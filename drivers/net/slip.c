@@ -1479,7 +1479,6 @@ static void sl_outfill(unsigned long sls)
 	}
 out:
 	spin_unlock(&sl->lock);
-	timer_exit(&sl->outfill_timer);
 }
 
 static void sl_keepalive(unsigned long sls)
@@ -1511,7 +1510,6 @@ static void sl_keepalive(unsigned long sls)
 
 out:
 	spin_unlock(&sl->lock);
-	timer_exit(&sl->keepalive_timer);
 }
 
 #endif

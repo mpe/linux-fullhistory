@@ -562,7 +562,8 @@ int com90xx_reset(struct net_device *dev, int really_reset)
 
 	/* verify that the ARCnet signature byte is present */
 	if (readb(lp->mem_start) != TESTvalue) {
-		BUGMSG(D_NORMAL, "reset failed: TESTvalue not present.\n");
+		if (really_reset)
+			BUGMSG(D_NORMAL, "reset failed: TESTvalue not present.\n");
 		return 1;
 	}
 	/* enable extended (512-byte) packets */

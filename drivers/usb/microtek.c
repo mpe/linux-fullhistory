@@ -52,11 +52,10 @@
  * you want it, just send mail.
  *
  * Status:
- *
- *	This driver does not work properly yet.
+ *	
  *	Untested with multiple scanners.
  *	Untested on SMP.
- *	Untested on UHCI.
+ *	Untested on a bigendian machine.
  *
  * History:
  *
@@ -97,6 +96,8 @@
  *	20000602 Version 0.2.0
  *	20000603 various cosmetic changes
  *	20000603 Version 0.2.1
+ *	20000620 minor cosmetic changes
+ *	20000620 Version 0.2.2
  */
 
 #include <linux/module.h>
@@ -146,7 +147,7 @@ static struct usb_driver mts_usb_driver = {
 
 /* Internal driver stuff */
 
-#define MTS_VERSION	"0.2.1"
+#define MTS_VERSION	"0.2.2"
 #define MTS_NAME	"microtek usb (rev " MTS_VERSION "): "
 
 #define MTS_WARNING(x...) \
@@ -409,7 +410,7 @@ static int mts_scsi_host_reset (Scsi_Cmnd *srb)
 	MTS_DEBUG_GOT_HERE();
 	mts_debug_dump(desc);
 
-	usb_reset_device(desc->usb_dev);
+	usb_reset_device(desc->usb_dev); /*FIXME: untested on new reset code */
 	return 0;  /* RANT why here 0 and not SUCCESS */
 }
 
@@ -519,7 +520,7 @@ static void mts_transfer_done( struct urb *transfer )
 
 	MTS_INT_INIT();
 
-	context->srb->result &= MTS_MAX_CHUNK_MASK;
+	context->srb->result &= MTS_SCSI_ERR_MASK;
 	context->srb->result |= (unsigned)context->status<<1;
 
 	mts_transfer_cleanup(transfer);

@@ -55,7 +55,7 @@ static void coda_prepare_fakefile(struct inode *coda_inode,
 				  struct dentry *open_dentry);
 static int coda_venus_readdir(struct file *filp, void *dirent, 
 			      filldir_t filldir);
-int coda_fsync(struct file *, struct dentry *dentry);
+int coda_fsync(struct file *, struct dentry *dentry, int datasync);
 
 int coda_hasmknod = 0;
 

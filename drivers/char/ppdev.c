@@ -106,6 +106,7 @@ static void pp_attach (struct parport *port)
 	}
 
 	add->next = pp_port_list;
+	add->port = port;
 	down (&pp_port_list_lock);
 	pp_port_list = add;
 	up (&pp_port_list_lock);

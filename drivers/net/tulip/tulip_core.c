@@ -19,7 +19,7 @@
 
 */
 
-static const char version[] = "Linux Tulip driver version 0.9.6 (May 31, 2000)\n";
+static const char version[] = "Linux Tulip driver version 0.9.7 (June 17, 2000)\n";
 
 #include <linux/module.h>
 #include "tulip.h"
@@ -401,11 +401,12 @@ media_picked:
 static int
 tulip_open(struct net_device *dev)
 {
+	int retval;
 	MOD_INC_USE_COUNT;
-	
-	if (request_irq(dev->irq, &tulip_interrupt, SA_SHIRQ, dev->name, dev)) {
+
+	if ((retval = request_irq(dev->irq, &tulip_interrupt, SA_SHIRQ, dev->name, dev))) {
 		MOD_DEC_USE_COUNT;
-		return -EBUSY;
+		return retval;
 	}
 
 	tulip_init_ring (dev);
@@ -639,7 +640,7 @@ static void tulip_down (struct net_device *dev)
 	struct tulip_private *tp = (struct tulip_private *) dev->priv;
 	unsigned long flags;
 
-	del_timer (&tp->timer);
+	del_timer_sync (&tp->timer);
 
 	spin_lock_irqsave (&tp->lock, flags);
 

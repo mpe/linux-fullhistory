@@ -48,7 +48,7 @@ int umsdos_isempty (struct dentry *);
 /* inode.c 12/06/95 09.49.40 */
 void fill_new_filp (struct file *filp, struct dentry *dentry);
 void UMSDOS_read_inode (struct inode *);
-void UMSDOS_write_inode (struct inode *);
+void UMSDOS_write_inode (struct inode *, int);
 int UMSDOS_notify_change (struct dentry *, struct iattr *attr);
 int umsdos_notify_change_locked(struct dentry *, struct iattr *attr);
 void UMSDOS_put_inode (struct inode *);

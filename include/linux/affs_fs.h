@@ -84,7 +84,7 @@ extern int			 affs_add_entry(struct inode *dir, struct inode *link,
 extern void			 affs_put_inode(struct inode *inode);
 extern void			 affs_delete_inode(struct inode *inode);
 extern void			 affs_read_inode(struct inode *inode);
-extern void			 affs_write_inode(struct inode *inode);
+extern void			 affs_write_inode(struct inode *inode, int);
 
 /* super.c */
 

@@ -298,6 +298,10 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				tp->stats.rx_missed_errors += inl(ioaddr + CSR8) & 0xffff;
 				tulip_outl_csr(tp, tp->csr6 | csr6_st | csr6_sr, CSR6);
 			}
+			/*
+			 * NB: t21142_lnk_change() does a del_timer_sync(), so be careful if this
+			 * call is ever done under the spinlock
+			 */
 			if (csr5 & (TPLnkPass | TPLnkFail | 0x08000000)) {
 				if (tp->link_change)
 					(tp->link_change)(dev, csr5);

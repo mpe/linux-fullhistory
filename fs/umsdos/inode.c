@@ -293,11 +293,11 @@ out:
 /*
  * Update the disk with the inode content
  */
-void UMSDOS_write_inode (struct inode *inode)
+void UMSDOS_write_inode (struct inode *inode, int wait)
 {
 	struct iattr newattrs;
 
-	fat_write_inode (inode);
+	fat_write_inode (inode, wait);
 	newattrs.ia_mtime = inode->i_mtime;
 	newattrs.ia_atime = inode->i_atime;
 	newattrs.ia_ctime = inode->i_ctime;

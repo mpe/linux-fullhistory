@@ -18,6 +18,8 @@
  * This file may be redistributed under the terms of the GNU Public
  * License.
  *
+ * Reduced memory usage for older ARM systems  - Russell King.
+ *
  * 2000/01/20   Fixed SMP locking on put_tty_queue using bits of 
  *		the patch by Andrew J. Kroll <ag784@freenet.buffalo.edu>
  *		who actually finally proved there really was a race.
@@ -60,6 +62,29 @@
  */
 #define TTY_THRESHOLD_THROTTLE		128 /* now based on remaining room */
 #define TTY_THRESHOLD_UNTHROTTLE 	128
+
+static inline unsigned char *alloc_buf(void)
+{
+	unsigned char *p;
+	int prio = in_interrupt() ? GFP_ATOMIC : GFP_KERNEL;
+
+	if (PAGE_SIZE != N_TTY_BUF_SIZE) {
+		p = kmalloc(N_TTY_BUF_SIZE, prio);
+		if (p)
+			memset(p, 0, N_TTY_BUF_SIZE);
+	} else
+		p = (unsigned char *)get_zeroed_page(prio);
+
+	return p;
+}
+
+static inline void free_buf(unsigned char *buf)
+{
+	if (PAGE_SIZE != N_TTY_BUF_SIZE)
+		kfree(buf);
+	else
+		free_page((unsigned long) buf);
+}
 
 static inline void put_tty_queue(unsigned char c, struct tty_struct *tty)
 {
@@ -827,7 +852,7 @@ static void n_tty_close(struct tty_struct *tty)
 {
 	n_tty_flush_buffer(tty);
 	if (tty->read_buf) {
-		free_page((unsigned long) tty->read_buf);
+		free_buf(tty->read_buf);
 		tty->read_buf = 0;
 	}
 }
@@ -838,8 +863,7 @@ static int n_tty_open(struct tty_struct *tty)
 		return -EINVAL;
 
 	if (!tty->read_buf) {
-		tty->read_buf = (unsigned char *)
-			get_zeroed_page(in_interrupt() ? GFP_ATOMIC : GFP_KERNEL);
+		tty->read_buf = alloc_buf();
 		if (!tty->read_buf)
 			return -ENOMEM;
 	}

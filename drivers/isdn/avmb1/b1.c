@@ -1,11 +1,14 @@
 /*
- * $Id: b1.c,v 1.13 2000/01/25 14:33:38 calle Exp $
+ * $Id: b1.c,v 1.14 2000/06/19 16:51:53 keil Exp $
  * 
  * Common module for AVM B1 cards.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1.c,v $
+ * Revision 1.14  2000/06/19 16:51:53  keil
+ * don't free skb in irq context
+ *
  * Revision 1.13  2000/01/25 14:33:38  calle
  * - Added Support AVM B1 PCI V4.0 (tested with prototype)
  *   - splitted up t1pci.c into b1dma.c for common function with b1pciv4
@@ -86,12 +89,13 @@
 #include <linux/capi.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
+#include <linux/netdevice.h>
 #include "capilli.h"
 #include "avmcard.h"
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.13 $";
+static char *revision = "$Revision: 1.14 $";
 
 /* ------------------------------------------------------------- */
 
@@ -420,7 +424,7 @@ void b1_send_message(struct capi_ctr *ctrl, struct sk_buff *skb)
 		b1_put_slice(port, skb->data, len);
 	}
 	restore_flags(flags);
-	dev_kfree_skb(skb);
+	dev_kfree_skb_any(skb);
 }
 
 /* ------------------------------------------------------------- */

@@ -1213,10 +1213,10 @@ udf_convert_permissions(struct FileEntry *fe)
  *	Written, tested, and released.
  */
 
-void udf_write_inode(struct inode * inode)
+void udf_write_inode(struct inode * inode, int sync)
 {
 	lock_kernel();
-	udf_update_inode(inode, 0);
+	udf_update_inode(inode, sync);
 	unlock_kernel();
 }
 

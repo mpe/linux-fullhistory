@@ -23,6 +23,7 @@
 	This is a compatibility hardware problem.
 
 	Versions:
+	0.12b	misc fixes (aris, 06/26/2000)
 	0.12a   port of version 0.12a of 2.2.x kernels to 2.3.x
 		(aris (aris@conectiva.com.br), 05/19/2000)
 	0.11e   some tweaks about multiple cards support (PdP, jul/aug 1999)
@@ -95,7 +96,7 @@
 */
 
 static const char *version =
-	"eepro.c: v0.12a 04/26/2000 aris@conectiva.com.br\n";
+	"eepro.c: v0.12b 04/26/2000 aris@conectiva.com.br\n";
 
 #include <linux/module.h>
 
@@ -509,6 +510,20 @@ static unsigned eeprom_reg = EEPROM_REG_PRO;
 /* ack for tx int */
 #define eepro_ack_tx(ioaddr) outb (TX_INT, ioaddr + STATUS_REG)
 
+/* a complete sel reset */
+#define eepro_complete_selreset(ioaddr) { 	eepro_dis_int(ioaddr);\
+						lp->stats.tx_errors++;\
+						eepro_sel_reset(ioaddr);\
+						lp->tx_end = \
+							(XMT_LOWER_LIMIT << 8);\
+						lp->tx_start = lp->tx_end;\
+						lp->tx_last = 0;\
+						dev->trans_start = jiffies;\
+						netif_wake_queue(dev);\
+						eepro_en_int(ioaddr);\
+						eepro_en_rx(ioaddr);\
+					}
+
 /* Check for a network adaptor of this type, and return '0' if one exists.
    If dev->base_addr == 0, probe all likely locations.
    If dev->base_addr == 1, always return failure.
@@ -738,7 +753,8 @@ int eepro_probe1(struct net_device *dev, short ioaddr)
 			 */
 			
 			if (net_debug > 3)
-				printk(", %dK RCV buffer", (int)(dev->mem_end)/1024);
+				printk(", %dK RCV buffer", (int)(dev->mem_end -
+							 dev->mem_start)/1024);
 				
 				
 			/* ............... */
@@ -1085,23 +1101,7 @@ static void eepro_tx_timeout (struct net_device *dev)
 	   one for the the log file  */
 	printk (KERN_DEBUG "%s: transmit timed out, %s?\n", dev->name,
 		"network cable problem");
-	lp->stats.tx_errors++;
-
-	/* Try to restart the adaptor. */
-	eepro_sel_reset(ioaddr);
-	
-	/* Do I also need to flush the transmit buffers here? YES? */
-	lp->tx_start = lp->tx_end = XMT_LOWER_LIMIT;
-	lp->tx_last = 0;
-
-	dev->trans_start = jiffies;
-	netif_wake_queue (dev);
-
-	/* enabling interrupts */
-	eepro_en_int(ioaddr);
-
-	/* enabling rx */
-	eepro_en_rx(ioaddr);
+	eepro_complete_selreset(ioaddr);
 }
 
 
@@ -1375,7 +1375,7 @@ set_multicast_list(struct net_device *dev)
 		/* Re-enable RX and TX interrupts */
 		eepro_en_int(ioaddr);
 	}
-	eepro_en_rx(ioaddr);
+	eepro_complete_selreset(ioaddr);
 }
 
 /* The horrible routine to read a word from the serial EEPROM. */
@@ -1481,7 +1481,8 @@ hardware_send_packet(struct net_device *dev, void *buf, short length)
 				end = last + (((length + 3) >> 1) << 1) + XMT_HEADER;
 			}
 			
-			else end = (XMT_LOWER_LIMIT << 8) + (end - XMT_RAM);
+			else end = (XMT_LOWER_LIMIT << 8) + (end -
+						(XMT_UPPER_LIMIT <<8));
 		}
 		outw(last, ioaddr + HOST_ADDRESS_REG);
 		outw(XMT_CMD, ioaddr + IO_PORT); 
@@ -1542,8 +1543,6 @@ hardware_send_packet(struct net_device *dev, void *buf, short length)
 			printk(KERN_DEBUG "%s: exiting hardware_send_packet routine.\n", dev->name);
 		return;
 	}
-	eepro_en_int(ioaddr);
-	
 	netif_stop_queue(dev);
 	if (net_debug > 5)
 		printk(KERN_DEBUG "%s: exiting hardware_send_packet routine.\n", dev->name);
@@ -1561,9 +1560,6 @@ eepro_rx(struct net_device *dev)
 	if (net_debug > 5)
 		printk(KERN_DEBUG "%s: entering eepro_rx routine.\n", dev->name);
 
-	/* clear all interrupts */
-	eepro_clear_int(ioaddr);
-	
 	/* Set the read pointer to the start of the RCV */
 	outw(rcv_car, ioaddr + HOST_ADDRESS_REG);
 	
@@ -1642,9 +1638,6 @@ eepro_rx(struct net_device *dev)
 
 	if (net_debug > 5)
 		printk(KERN_DEBUG "%s: exiting eepro_rx routine.\n", dev->name);
-
-	/* enable tx/rx interrupts */
-	eepro_en_int(ioaddr);
 }
 
 static void
@@ -1734,6 +1727,12 @@ eepro_transmit_interrupt(struct net_device *dev)
 
 		boguscount--;
 	}
+	/* if it reached here then it's probable that the adapter won't
+	 * interrupt again for tx. in other words: tx timeout what will take
+	 * a lot of time to happen, so we'll do a complete selreset.
+	 */
+	if (!boguscount)
+		eepro_complete_selreset(ioaddr);
 }
 
 #define MAX_EEPRO 8

@@ -780,7 +780,7 @@ void cleanup_module()
 	stlpanel_t	*panelp;
 	stlport_t	*portp;
 	unsigned long	flags;
-	int		i, j, k, l;
+	int		i, j, k;
 
 #if DEBUG
 	printk("cleanup_module()\n");

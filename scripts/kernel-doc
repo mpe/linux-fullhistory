@@ -673,9 +673,9 @@ sub dump_function {
 	$args = $3;
 
 	# allow for up to fours args to function pointers
-	$args =~ s/(\([^\),]+),/\1#/;
-	$args =~ s/(\([^\),]+),/\1#/;
-	$args =~ s/(\([^\),]+),/\1#/;
+	$args =~ s/(\([^\),]+),/\1#/g;
+	$args =~ s/(\([^\),]+),/\1#/g;
+	$args =~ s/(\([^\),]+),/\1#/g;
 #	print STDERR "ARGS = '$args'\n";
 
 	foreach $arg (split ',', $args) {

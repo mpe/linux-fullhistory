@@ -194,7 +194,7 @@
 #define __NR_getpmsg		187	/* some people actually want streams */
 #define __NR_putpmsg		188	/* some people actually want streams */
 #define __NR_vfork		189
-#define __NR_ugetrlimit		191	/* SuS compliant getrlimit */
+#define __NR_ugetrlimit		190	/* SuS compliant getrlimit */
 #define __NR_mmap2		192
 #define __NR_truncate64		193
 #define __NR_ftruncate64	194

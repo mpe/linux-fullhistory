@@ -6,7 +6,7 @@ Author: Mark McClelland
 Homepage: http://alpha.dyndns.org/ov511
 
 NEW IN THIS VERSION:
- o Race conditions and other bugs fixed
+ o Preliminary support for YUV422 and YUV422P V4L modes
 
 INTRODUCTION:
 
@@ -209,7 +209,7 @@ TODO:
  o Setting of contrast and brightness not working with 7620
  o Driver/camera state save/restore for when USB supports suspend/resume
  o Multiple cameras reportedly do not work simultaneously
- o Problems with OHCI
+ o Unstable on SMP systems
 
 HOW TO CONTACT ME:
 

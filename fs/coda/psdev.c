@@ -109,7 +109,7 @@ static ssize_t coda_psdev_write(struct file *file, const char *buf,
 	ssize_t retval = 0, count = 0;
 	int error;
 
-	if ( !coda_upc_comm.vc_pid ) 
+	if ( !coda_upc_comm.vc_inuse ) 
 		return -EIO;
         /* Peek at the opcode, uniquefier */
 	if (copy_from_user(&hdr, buf, 2 * sizeof(u_long)))
@@ -291,29 +291,14 @@ static int coda_psdev_open(struct inode * inode, struct file * file)
         struct venus_comm *vcp = &coda_upc_comm;
         ENTRY;
 	
-	/* first opener: must be lento. Initialize & take its pid */
-	if ( (file->f_flags & O_ACCMODE) == O_RDWR ) {
-		if ( vcp->vc_pid ) {
-			printk("Venus pid already set to %d!!\n", vcp->vc_pid);
-			return -1;
-		}
-		if ( vcp->vc_inuse ) {
-			printk("psdev_open: Cannot O_RDWR while open.\n");
-			return -1;
-		}
-	}
-	
-	vcp->vc_inuse++;
-
-	if ( (file->f_flags & O_ACCMODE) == O_RDWR ) {
-		vcp->vc_pid = current->pid;
-		vcp->vc_seq = 0;
-		INIT_LIST_HEAD(&vcp->vc_pending);
-		INIT_LIST_HEAD(&vcp->vc_processing);
+	/* first opener, initialize */
+	if (!vcp->vc_inuse++) {
+            INIT_LIST_HEAD(&vcp->vc_pending);
+            INIT_LIST_HEAD(&vcp->vc_processing);
+            vcp->vc_seq = 0;
 	}
 
-	CDEBUG(D_PSDEV, "inuse: %d, vc_pid %d, caller %d\n",
-	       vcp->vc_inuse, vcp->vc_pid, current->pid);
+	CDEBUG(D_PSDEV, "inuse: %d\n", vcp->vc_inuse);
 
 	EXIT;
         return 0;
@@ -332,17 +317,9 @@ static int coda_psdev_release(struct inode * inode, struct file * file)
 		return -1;
 	}
 
-	vcp->vc_inuse--;
-	CDEBUG(D_PSDEV, "inuse: %d, vc_pid %d, caller %d\n",
-	       vcp->vc_inuse, vcp->vc_pid, current->pid);
-
-	if ( vcp->vc_pid != current->pid ) {
-		/* FIXME: this is broken. If venus does fork(), accounting goes wrong */
-		printk( "Closed by someone else than caller?\n" );
-		return 0;
-	}
+	CDEBUG(D_PSDEV, "psdev_release: inuse %d\n", vcp->vc_inuse);
+	if (--vcp->vc_inuse) return 0;
         
-	vcp->vc_pid = 0;
         /* Wakeup clients so they can return. */
 	CDEBUG(D_PSDEV, "wake up pending clients\n");
 	lh = vcp->vc_pending.next;

@@ -136,6 +136,7 @@ int ufs_frag_map(struct inode *inode, int frag)
 		       ufs_block_bmap(bread(sb->s_dev, uspi->s_sbbase + i,
 					    sb->s_blocksize),
 				      frag & uspi->s_apbmask, uspi, swab));
+		goto out;
 	}
 	frag -= 1 << (uspi->s_apbshift + uspi->s_fpbshift);
 	if (frag < (1 << (uspi->s_2apbshift + uspi->s_fpbshift))) {
@@ -744,9 +745,9 @@ static int ufs_update_inode(struct inode * inode, int do_sync)
 	return 0;
 }
 
-void ufs_write_inode (struct inode * inode)
+void ufs_write_inode (struct inode * inode, int wait)
 {
-	ufs_update_inode (inode, 0);
+	ufs_update_inode (inode, wait);
 }
 
 int ufs_sync_inode (struct inode *inode)

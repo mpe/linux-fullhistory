@@ -7,7 +7,7 @@
 SUB_DIRS	:=
 MOD_SUB_DIRS	:= $(SUB_DIRS)
 MOD_IN_SUB_DIRS	:= $(SUB_DIRS)
-ALL_SUB_DIRS	:= $(SUB_DIRS) serial
+ALL_SUB_DIRS	:= $(SUB_DIRS) serial storage
 
 # The target object and module list name.
 
@@ -49,6 +49,15 @@ else
 	endif
 endif
 
+ifeq ($(CONFIG_USB_STORAGE),y)
+	SUB_DIRS += storage
+	obj-y += storage/usb-storage.o
+else
+	ifeq ($(CONFIG_USB_STORAGE),m)
+		MOD_IN_SUB_DIRS += storage
+	endif
+endif
+
 
 # Each configuration option enables a list of files.
 
@@ -73,8 +82,7 @@ obj-$(CONFIG_USB_PRINTER)	+= printer.o
 obj-$(CONFIG_USB_AUDIO)		+= audio.o
 obj-$(CONFIG_USB_IBMCAM)	+= ibmcam.o
 obj-$(CONFIG_USB_DC2XX)		+= dc2xx.o
-obj-$(CONFIG_USB_MDC800)   += mdc800.o
-obj-$(CONFIG_USB_STORAGE)	+= usb-storage.o
+obj-$(CONFIG_USB_MDC800)	+= mdc800.o
 obj-$(CONFIG_USB_USS720)	+= uss720.o
 obj-$(CONFIG_USB_DABUSB)	+= dabusb.o
 obj-$(CONFIG_USB_PLUSB)		+= plusb.o

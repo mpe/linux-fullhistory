@@ -176,7 +176,7 @@ filesystem. As of kernel 2.1.99, the following members are defined:
 
 struct super_operations {
 	void (*read_inode) (struct inode *);
-	void (*write_inode) (struct inode *);
+	void (*write_inode) (struct inode *, int);
 	void (*put_inode) (struct inode *);
 	void (*delete_inode) (struct inode *);
 	int (*notify_change) (struct dentry *, struct iattr *);
@@ -198,7 +198,8 @@ or bottom half).
 	read. Other members are filled in by this method
 
   write_inode: this method is called when the VFS needs to write an
-	inode to disc
+	inode to disc.  The second parameter indicates whether the write
+	should be synchronous or not, not all filesystems check this flag.
 
   put_inode: called when the VFS inode is removed from the inode
 	cache. This method is optional

@@ -784,8 +784,8 @@ L:	linux-kernel@vger.rutgers.edu
 S:	Odd Fixes
 
 NVIDIA (RIVA) FRAMEBUFFER DRIVER
-P:	Jeff Garzik
-M:	jgarzik@mandrakesoft.com
+P:	Ani Joshi
+M:	ajoshi@shell.unixbox.com
 L:	linux-nvidia@lists.surfsouth.com
 S:	Maintained
 
@@ -1135,7 +1135,8 @@ S:	Maintained
 USB SUBSYSTEM
 P:	Randy Dunlap
 M:	randy.dunlap@intel.com
-L:	linux-usb@suse.com
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
 W:	http://www.linux-usb.org
 S:	Supported
 

@@ -256,7 +256,7 @@ void hpfs_set_ea(struct inode *, struct fnode *, char *, char *, int);
 
 int hpfs_file_release(struct inode *, struct file *);
 int hpfs_open(struct inode *, struct file *);
-int hpfs_file_fsync(struct file *, struct dentry *);
+int hpfs_file_fsync(struct file *, struct dentry *, int);
 secno hpfs_bmap(struct inode *, unsigned);
 void hpfs_truncate(struct inode *);
 int hpfs_get_block(struct inode *inode, long iblock, struct buffer_head *bh_result, int create);

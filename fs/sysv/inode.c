@@ -1153,7 +1153,7 @@ static struct buffer_head * sysv_update_inode(struct inode * inode)
 	return bh;
 }
 
-void sysv_write_inode(struct inode * inode)
+void sysv_write_inode(struct inode * inode, int wait)
 {
 	struct buffer_head *bh;
 	bh = sysv_update_inode(inode);

@@ -1994,7 +1994,7 @@ int __init tdfxfb_init(void) {
 
       fb_info.iobase = pdev->base_address[2] & PCI_BASE_ADDRESS_IO_MASK;
 #else
-      fb_info.regbase_phys = pdev->resource[0].start;
+      fb_info.regbase_phys = pci_resource_start(pdev, 0);
       fb_info.regbase_size = 1 << 24;
       fb_info.regbase_virt = 
 	(unsigned long)ioremap_nocache(fb_info.regbase_phys, 1 << 24);

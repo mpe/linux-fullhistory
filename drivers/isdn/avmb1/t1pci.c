@@ -1,11 +1,18 @@
 /*
- * $Id: t1pci.c,v 1.7 2000/04/07 15:26:55 calle Exp $
+ * $Id: t1pci.c,v 1.9 2000/05/19 15:43:22 calle Exp $
  * 
  * Module for AVM T1 PCI-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: t1pci.c,v $
+ * Revision 1.9  2000/05/19 15:43:22  calle
+ * added calls to pci_device_start().
+ *
+ * Revision 1.8  2000/05/06 00:52:36  kai
+ * merged changes from kernel tree
+ * fixed timer and net_device->name breakage
+ *
  * Revision 1.7  2000/04/07 15:26:55  calle
  * better error message if cabel not connected or T1 has no power.
  *
@@ -49,12 +56,13 @@
 #include <linux/pci.h>
 #include <linux/capi.h>
 #include <asm/io.h>
+#include <linux/isdn.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.7 $";
+static char *revision = "$Revision: 1.9 $";
 
 #undef CONFIG_T1PCI_DEBUG
 #undef CONFIG_T1PCI_POLLDEBUG
@@ -305,12 +313,21 @@ int t1pci_init(void)
 	while ((dev = pci_find_device(PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_T1, dev))) {
 		struct capicardparams param;
 
-		if (pci_enable_device(dev))
-			continue;
-
-		param.port = pci_resource_start (dev, 1);
+		param.port = pci_resource_start(dev, 1);
 		param.irq = dev->irq;
-		param.membase = pci_resource_start (dev, 0);
+		param.membase = pci_resource_start(dev, 0);
+
+		retval = pci_enable_device (dev);
+		if (retval != 0) {
+		        printk(KERN_ERR
+			"%s: failed to enable AVM-T1-PCI at i/o %#x, irq %d, mem %#x err=%d\n",
+			driver->name, param.port, param.irq, param.membase, retval);
+#ifdef MODULE
+			cleanup_module();
+#endif
+			MOD_DEC_USE_COUNT;
+			return -EIO;
+		}
 
 		printk(KERN_INFO
 			"%s: PCI BIOS reports AVM-T1-PCI at i/o %#x, irq %d, mem %#x\n",

@@ -38,7 +38,7 @@ static int  nfs_file_mmap(struct file *, struct vm_area_struct *);
 static ssize_t nfs_file_read(struct file *, char *, size_t, loff_t *);
 static ssize_t nfs_file_write(struct file *, const char *, size_t, loff_t *);
 static int  nfs_file_flush(struct file *);
-static int  nfs_fsync(struct file *, struct dentry *dentry);
+static int  nfs_fsync(struct file *, struct dentry *dentry, int datasync);
 
 struct file_operations nfs_file_operations = {
 	read:		nfs_file_read,
@@ -123,7 +123,7 @@ nfs_file_mmap(struct file * file, struct vm_area_struct * vma)
  * whether any write errors occurred for this process.
  */
 static int
-nfs_fsync(struct file *file, struct dentry *dentry)
+nfs_fsync(struct file *file, struct dentry *dentry, int datasync)
 {
 	struct inode *inode = dentry->d_inode;
 	int status;

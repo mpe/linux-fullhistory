@@ -68,6 +68,5 @@ struct mts_desc {
 #define MTS_EP_IMAGE	0x3
 #define MTS_EP_TOTAL	0x3
 
-#define MTS_MAX_CHUNK_MASK ~0x3fu 
-/*maximum amount the scanner will transmit at once */ 
+#define MTS_SCSI_ERR_MASK ~0x3fu 
 

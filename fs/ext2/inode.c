@@ -904,7 +904,7 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 	return err;
 }
 
-void ext2_write_inode (struct inode * inode)
+void ext2_write_inode (struct inode * inode, int wait)
 {
 	lock_kernel();
 	ext2_update_inode (inode, 0);

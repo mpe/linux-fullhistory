@@ -160,7 +160,9 @@ static inline void internal_add_timer(struct timer_list *timer)
 	list_add(&timer->list, vec->prev);
 }
 
+/* Initialize both explicitly - let's try to have them in the same cache line */
 spinlock_t timerlist_lock = SPIN_LOCK_UNLOCKED;
+volatile unsigned long timer_sequence = 0xfee1bad;
 
 void add_timer(struct timer_list *timer)
 {
@@ -233,11 +235,12 @@ int del_timer_sync(struct timer_list * timer)
 		spin_lock_irqsave(&timerlist_lock, flags);
 		ret += detach_timer(timer);
 		timer->list.next = timer->list.prev = 0;
-		running = timer->running;
+		running = timer_is_running(timer);
 		spin_unlock_irqrestore(&timerlist_lock, flags);
 
 		if (!running)
-			return ret;
+			break;
+
 		timer_synchronize(timer);
 	}
 
@@ -295,10 +298,11 @@ repeat:
 
 			detach_timer(timer);
 			timer->list.next = timer->list.prev = NULL;
-			timer_set_running(timer);
+			timer_enter(timer);
 			spin_unlock_irq(&timerlist_lock);
 			fn(data);
 			spin_lock_irq(&timerlist_lock);
+			timer_exit();
 			goto repeat;
 		}
 		++timer_jiffies; 
@@ -577,27 +581,32 @@ void update_one_process(struct task_struct *p,
 	do_it_prof(p, ticks);
 }	
 
-static void update_process_times(unsigned long ticks, unsigned long system)
+/*
+ * Called from the timer interrupt handler to charge one tick to the current 
+ * process.  user_tick is 1 if the tick is user time, 0 for system.
+ */
+static void update_process_times(int user_tick)
 {
 /*
  * SMP does this on a per-CPU basis elsewhere
  */
 #ifndef  CONFIG_SMP
-	struct task_struct * p = current;
-	unsigned long user = ticks - system;
+	struct task_struct *p = current;
+	int system = !user_tick;
+
 	if (p->pid) {
-		p->counter -= ticks;
-		if (p->counter <= 0) {
+		if (--p->counter <= 0) {
 			p->counter = 0;
 			p->need_resched = 1;
 		}
 		if (p->priority < DEF_PRIORITY)
-			kstat.cpu_nice += user;
+			kstat.cpu_nice += user_tick;
 		else
-			kstat.cpu_user += user;
+			kstat.cpu_user += user_tick;
 		kstat.cpu_system += system;
-	}
-	update_one_process(p, ticks, user, system, 0);
+	} else if (local_bh_count(0) || local_irq_count(0) > 1)
+		kstat.cpu_system += system;
+	update_one_process(p, 1, user_tick, system, 0);
 #endif
 }
 
@@ -643,7 +652,6 @@ static inline void calc_load(unsigned long ticks)
 }
 
 volatile unsigned long lost_ticks;
-static unsigned long lost_ticks_system;
 
 /*
  * This spinlock protect us from races in SMP while playing with xtime. -arca
@@ -665,17 +673,10 @@ static inline void update_times(void)
 	lost_ticks = 0;
 
 	if (ticks) {
-		unsigned long system;
-		system = xchg(&lost_ticks_system, 0);
-
 		calc_load(ticks);
 		update_wall_time(ticks);
-		write_unlock_irq(&xtime_lock);
-		
-		update_process_times(ticks, system);
-
-	} else
-		write_unlock_irq(&xtime_lock);
+	}
+	write_unlock_irq(&xtime_lock);
 }
 
 void timer_bh(void)
@@ -685,13 +686,12 @@ void timer_bh(void)
 	run_timer_list();
 }
 
-void do_timer(struct pt_regs * regs)
+void do_timer(struct pt_regs *regs)
 {
 	(*(unsigned long *)&jiffies)++;
 	lost_ticks++;
+	update_process_times(user_mode(regs));
 	mark_bh(TIMER_BH);
-	if (!user_mode(regs))
-		lost_ticks_system++;
 	if (tq_timer)
 		mark_bh(TQUEUE_BH);
 }

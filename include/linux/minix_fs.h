@@ -101,7 +101,7 @@ extern struct buffer_head * minix_bread(struct inode *, int, int);
 
 extern void minix_truncate(struct inode *);
 extern int minix_sync_inode(struct inode *);
-extern int minix_sync_file(struct file *, struct dentry *);
+extern int minix_sync_file(struct file *, struct dentry *, int);
 
 extern struct address_space_operations minix_aops;
 extern struct inode_operations minix_file_inode_operations;

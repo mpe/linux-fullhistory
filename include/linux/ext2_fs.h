@@ -548,7 +548,7 @@ extern int ext2_read (struct inode *, struct file *, char *, int);
 extern int ext2_write (struct inode *, struct file *, char *, int);
 
 /* fsync.c */
-extern int ext2_sync_file (struct file *, struct dentry *);
+extern int ext2_sync_file (struct file *, struct dentry *, int);
 
 /* ialloc.c */
 extern struct inode * ext2_new_inode (const struct inode *, int, int *);
@@ -562,7 +562,7 @@ extern struct buffer_head * ext2_getblk (struct inode *, long, int, int *);
 extern struct buffer_head * ext2_bread (struct inode *, int, int, int *);
 
 extern void ext2_read_inode (struct inode *);
-extern void ext2_write_inode (struct inode *);
+extern void ext2_write_inode (struct inode *, int);
 extern void ext2_put_inode (struct inode *);
 extern void ext2_delete_inode (struct inode *);
 extern int ext2_sync_inode (struct inode *);

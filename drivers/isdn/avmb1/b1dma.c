@@ -1,11 +1,14 @@
 /*
- * $Id: b1dma.c,v 1.4 2000/04/03 16:38:05 calle Exp $
+ * $Id: b1dma.c,v 1.5 2000/06/19 16:51:53 keil Exp $
  * 
  * Common module for AVM B1 cards that support dma with AMCC
  * 
  * (c) Copyright 2000 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1dma.c,v $
+ * Revision 1.5  2000/06/19 16:51:53  keil
+ * don't free skb in irq context
+ *
  * Revision 1.4  2000/04/03 16:38:05  calle
  * made suppress_pollack static.
  *
@@ -32,12 +35,13 @@
 #include <linux/capi.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
+#include <linux/netdevice.h>
 #include "capilli.h"
 #include "avmcard.h"
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.4 $";
+static char *revision = "$Revision: 1.5 $";
 
 /* ------------------------------------------------------------- */
 
@@ -430,7 +434,7 @@ static void b1dma_dispatch_tx(avmcard *card)
 		b1dmaoutmeml(card->mbase+AMCC_INTCSR, card->csr);
 
 	restore_flags(flags);
-	dev_kfree_skb(skb);
+	dev_kfree_skb_any(skb);
 }
 
 /* ------------------------------------------------------------- */
@@ -615,11 +619,6 @@ static void b1dma_handle_interrupt(avmcard *card)
 	if ((status & TX_TC_INT) != 0) {
 		card->csr &= ~EN_TX_TC_INT;
 	        b1dma_dispatch_tx(card);
-	} else if (card->csr & EN_TX_TC_INT) {
-		if (b1dmainmeml(card->mbase+AMCC_TXLEN) == 0) {
-			card->csr &= ~EN_TX_TC_INT;
-			b1dma_dispatch_tx(card);
-		}
 	}
 	b1dmaoutmeml(card->mbase+AMCC_INTCSR, card->csr);
 }

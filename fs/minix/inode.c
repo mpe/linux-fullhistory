@@ -28,7 +28,7 @@
 #include <linux/minix_fs.h>
 
 static void minix_read_inode(struct inode * inode);
-static void minix_write_inode(struct inode * inode);
+static void minix_write_inode(struct inode * inode, int wait);
 static int minix_statfs(struct super_block *sb, struct statfs *buf);
 static int minix_remount (struct super_block * sb, int * flags, char * data);
 
@@ -1232,7 +1232,7 @@ static struct buffer_head *minix_update_inode(struct inode *inode)
 		return V2_minix_update_inode(inode);
 }
 
-static void minix_write_inode(struct inode * inode)
+static void minix_write_inode(struct inode * inode, int wait)
 {
 	struct buffer_head *bh;
 

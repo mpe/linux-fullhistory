@@ -26,7 +26,7 @@ static inline unsigned int min(unsigned int a, unsigned int b)
 	return a < b ? a : b;
 }
 
-static int ncp_fsync(struct file *file, struct dentry *dentry)
+static int ncp_fsync(struct file *file, struct dentry *dentry, int datasync)
 {
 	return 0;
 }
@@ -46,12 +46,12 @@ int ncp_make_open(struct inode *inode, int right)
 	}
 
 	DPRINTK("ncp_make_open: opened=%d, volume # %u, dir entry # %u\n",
-		NCP_FINFO(inode)->opened, 
+		atomic_read(&NCP_FINFO(inode)->opened), 
 		NCP_FINFO(inode)->volNumber, 
 		NCP_FINFO(inode)->dirEntNum);
 	error = -EACCES;
-	lock_super(inode->i_sb);
-	if (!NCP_FINFO(inode)->opened) {
+	down(&NCP_FINFO(inode)->open_sem);
+	if (!atomic_read(&NCP_FINFO(inode)->opened)) {
 		struct ncp_entry_info finfo;
 		int result;
 
@@ -88,15 +88,18 @@ int ncp_make_open(struct inode *inode, int right)
 		 */
 	update:
 		ncp_update_inode(inode, &finfo);
+		atomic_set(&NCP_FINFO(inode)->opened, 1);
 	}
 
 	access = NCP_FINFO(inode)->access;
 	PPRINTK("ncp_make_open: file open, access=%x\n", access);
-	if (access == right || access == O_RDWR)
+	if (access == right || access == O_RDWR) {
+		atomic_inc(&NCP_FINFO(inode)->opened);
 		error = 0;
+	}
 
 out_unlock:
-	unlock_super(inode->i_sb);
+	up(&NCP_FINFO(inode)->open_sem);
 out:
 	return error;
 }
@@ -153,7 +156,7 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	freelen = ncp_read_bounce_size(bufsize);
 	freepage = kmalloc(freelen, GFP_NFS);
 	if (!freepage)
-		goto out;
+		goto outrel;
 	error = 0;
 	/* First read in as much as possible for each bufsize. */
 	while (already_read < count) {
@@ -166,9 +169,8 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 				pos, to_read, buf, &read_this_time, 
 				freepage, freelen);
 		if (error) {
-			kfree(freepage);
-			error = -EIO;	/* This is not exact, i know.. */
-			goto out;
+			error = -EIO;	/* NW errno -> Linux errno */
+			break;
 		}
 		pos += read_this_time;
 		buf += read_this_time;
@@ -188,6 +190,8 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	
 	DPRINTK("ncp_file_read: exit %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
+outrel:
+	ncp_inode_close(inode);		
 out:
 	return already_read ? already_read : error;
 }
@@ -236,8 +240,10 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	already_written = 0;
 
 	bouncebuffer = kmalloc(bufsize, GFP_NFS);
-	if (!bouncebuffer)
-		return -EIO;	/* -ENOMEM */
+	if (!bouncebuffer) {
+		errno = -EIO;	/* -ENOMEM */
+		goto outrel;
+	}
 	while (already_written < count) {
 		int written_this_time;
 		size_t to_write = min(bufsize - (pos % bufsize),
@@ -271,15 +277,15 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	}
 	DPRINTK("ncp_file_write: exit %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
+outrel:
+	ncp_inode_close(inode);		
 out:
 	return already_written ? already_written : errno;
 }
 
 static int ncp_release(struct inode *inode, struct file *file) {
-	if (NCP_FINFO(inode)->opened) {
-		if (ncp_make_closed(inode)) {
-			DPRINTK("ncp_release: failed to close\n");
-		}
+	if (ncp_make_closed(inode)) {
+		DPRINTK("ncp_release: failed to close\n");
 	}
 	return 0;
 }

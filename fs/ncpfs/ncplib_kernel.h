@@ -57,6 +57,10 @@ int ncp_read_kernel(struct ncp_server *, const char *, __u32, __u16,
 int ncp_write_kernel(struct ncp_server *, const char *, __u32, __u16,
 		const char *, int *);
 
+static inline void ncp_inode_close(struct inode *inode) {
+	atomic_dec(&NCP_FINFO(inode)->opened);
+}
+
 int ncp_obtain_info(struct ncp_server *server, struct inode *, char *,
 		struct nw_info_struct *target);
 int ncp_lookup_volume(struct ncp_server *, char *, struct nw_info_struct *);

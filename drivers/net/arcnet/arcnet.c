@@ -672,21 +672,20 @@ static void arcnet_timeout(struct net_device *dev)
 	unsigned long flags;
 	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
 	int status = ASTATUS();
+	char *msg;
 
 	save_flags(flags);
 	cli();
 
 	if (status & TXFREEflag) {	/* transmit _DID_ finish */
-		BUGMSG(D_NORMAL, "tx timeout - missed IRQ? (status=%Xh, mask=%Xh, dest=%02Xh)\n",
-		       status, lp->intmask, lp->lasttrans_dest);
-		lp->stats.tx_errors++;
+		msg = " - missed IRQ?";
 	} else {
-		BUGMSG(D_EXTRA, "tx timed out (status=%Xh, intmask=%Xh, dest=%02Xh)\n",
-		       status, lp->intmask, lp->lasttrans_dest);
-		lp->stats.tx_errors++;
+		msg = "";
 		lp->stats.tx_aborted_errors++;
+		lp->timed_out = 1;
 		ACOMMAND(NOTXcmd | (lp->cur_tx << 3));
 	}
+	lp->stats.tx_errors++;
 
 	/* make sure we didn't miss a TX IRQ */
 	AINTMASK(0);
@@ -694,6 +693,12 @@ static void arcnet_timeout(struct net_device *dev)
 	AINTMASK(lp->intmask);
 
 	restore_flags(flags);
+
+	if (jiffies - lp->last_timeout > 10*HZ) {
+		BUGMSG(D_EXTRA, "tx timed out%s (status=%Xh, intmask=%Xh, dest=%02Xh)\n",
+		       msg, status, lp->intmask, lp->lasttrans_dest);
+		lp->last_timeout = jiffies;
+	}
 }
 
 
@@ -778,12 +783,12 @@ void arcnet_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			didsomething++;
 		}
 		/* a transmit finished, and we're interested in it. */
-		if (status & lp->intmask & TXFREEflag) {
+		if ((status & lp->intmask & TXFREEflag) || lp->timed_out) {
 			lp->intmask &= ~TXFREEflag;
 
 			BUGMSG(D_DURING, "TX IRQ (stat=%Xh)\n", status);
 
-			if (lp->cur_tx != -1 && !(status & TXACKflag)) {
+			if (lp->cur_tx != -1 && !(status & TXACKflag) && !lp->timed_out) {
 				if (lp->lasttrans_dest != 0) {
 					BUGMSG(D_EXTRA, "transmit was not acknowledged! "
 					    "(status=%Xh, dest=%02Xh)\n",
@@ -801,6 +806,7 @@ void arcnet_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				release_arcbuf(dev, lp->cur_tx);
 
 			lp->cur_tx = -1;
+			lp->timed_out = 0;
 			didsomething++;
 
 			/* send another packet if there is one */

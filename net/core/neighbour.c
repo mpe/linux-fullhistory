@@ -603,8 +603,6 @@ static void neigh_periodic_timer(unsigned long arg)
 	struct neigh_table *tbl = (struct neigh_table*)arg;
 	
 	tasklet_schedule(&tbl->gc_task);
-
-	timer_exit(&tbl->gc_timer);
 }
 #endif
 
@@ -676,7 +674,6 @@ static void neigh_timer_handler(unsigned long arg)
 
 	neigh->ops->solicit(neigh, skb_peek(&neigh->arp_queue));
 	atomic_inc(&neigh->probes);
-	timer_exit(&neigh->timer);
 	return;
 
 out:
@@ -685,7 +682,6 @@ out:
 	if (notify && neigh->parms->app_probes)
 		neigh_app_notify(neigh);
 #endif
-	timer_exit(&neigh->timer);
 	neigh_release(neigh);
 }
 
@@ -1021,7 +1017,6 @@ static void neigh_proxy_process(unsigned long arg)
 		tbl->proxy_timer.expires = jiffies + sched_next;
 		add_timer(&tbl->proxy_timer);
 	}
-	timer_exit(&tbl->proxy_timer);
 }
 
 void pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,

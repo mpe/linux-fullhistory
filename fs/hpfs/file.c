@@ -23,7 +23,7 @@ int hpfs_file_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-int hpfs_file_fsync(struct file *file, struct dentry *dentry)
+int hpfs_file_fsync(struct file *file, struct dentry *dentry, int datasync)
 {
 	/*return file_fsync(file, dentry);*/
 	return 0; /* Don't fsync :-) */

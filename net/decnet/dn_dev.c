@@ -911,7 +911,6 @@ static void dn_dev_timer_func(unsigned long arg)
 	}
 
 	dn_dev_set_timer(dev);
-	timer_exit(&dn_db->timer);
 }
 
 static void dn_dev_set_timer(struct net_device *dev)

@@ -40,7 +40,7 @@ coda_file_write(struct file *file,const char *buf,size_t count,loff_t *ppos)
 }
 
 /* exported from this file (used for dirs) */
-int coda_fsync(struct file *coda_file, struct dentry *coda_dentry)
+int coda_fsync(struct file *coda_file, struct dentry *coda_dentry, int datasync)
 {
 	struct inode *inode = coda_dentry->d_inode;
 	struct dentry cont_dentry;
@@ -60,7 +60,7 @@ int coda_fsync(struct file *coda_file, struct dentry *coda_dentry)
 	cont_dentry.d_inode = (struct inode *)inode->i_mapping->host;
   
 	down(&cont_dentry.d_inode->i_sem);
-	result = file_fsync(NULL, &cont_dentry);
+	result = file_fsync(NULL, &cont_dentry, datasync);
 	up(&cont_dentry.d_inode->i_sem);
 
 	if ( result == 0 ) {

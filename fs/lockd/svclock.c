@@ -347,7 +347,7 @@ again:
 	/* Append to list of blocked */
 	nlmsvc_insert_block(block, NLM_NEVER);
 
-	if (!block->b_call.a_args.lock.fl.fl_prevblock) {
+	if (!list_empty(&block->b_call.a_args.lock.fl.fl_block)) {
 		/* Now add block to block list of the conflicting lock
 		   if we haven't done so. */
 		dprintk("lockd: blocking on this lock.\n");

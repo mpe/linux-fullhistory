@@ -1,6 +1,6 @@
-# $Id: config.in,v 1.96 2000/06/20 01:10:00 anton Exp $
+# $Id: config.in,v 1.94 2000/06/04 22:23:10 anton Exp $
 # For a description of the syntax of this configuration file,
-# see the Configure script.
+# see Documentation/kbuild/config-language.txt.
 #
 mainmenu_name "Linux/SPARC Kernel Configuration"
 

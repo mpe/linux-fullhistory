@@ -30,7 +30,7 @@
  * Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-static const char version[] = "1.17";
+static const char version[] = "1.18";
 
 #define __NO_VERSION__
 
@@ -49,10 +49,6 @@ static const char version[] = "1.17";
 #include <asm/semaphore.h>
 #include <linux/wrapper.h>
 
-#ifdef CONFIG_KMOD
-#include <linux/kmod.h>
-#endif
-
 #include "ov511.h"
 
 #undef OV511_GBR422		/* Experimental -- sets the 7610 to GBR422 */
@@ -67,7 +63,7 @@ static const char version[] = "1.17";
 #define DEFAULT_HEIGHT 480
 
 #define GET_SEGSIZE(p) ((p) == VIDEO_PALETTE_GREY ? 256 : 384)
-#define GET_DEPTH(p) ((p) == VIDEO_PALETTE_GREY ? 8 : 24)
+#define GET_DEPTH(p) ((p) == VIDEO_PALETTE_GREY ? 8 : ((p) == VIDEO_PALETTE_YUV422 ? 8 : 24))
 
 /* PARAMETER VARIABLES: */
 static int autoadjust = 1;    /* CCD dynamically changes exposure, etc... */
@@ -626,6 +622,7 @@ static void ov511_dump_i2c_regs(struct usb_device *dev)
 	ov511_dump_i2c_range(dev, 0x00, 0x38);
 }
 
+#if 0
 static void ov511_dump_reg_range(struct usb_device *dev, int reg1, int regn)
 {
 	int i;
@@ -636,7 +633,6 @@ static void ov511_dump_reg_range(struct usb_device *dev, int reg1, int regn)
 	}
 }
 
-#if 0
 static void ov511_dump_regs(struct usb_device *dev)
 {
 	PDEBUG(1, "CAMERA INTERFACE REGS");
@@ -1088,7 +1084,7 @@ ov511_move_420_block(int yTL, int yTR, int yBL, int yBR, int u, int v,
 #ifdef OV511_GBR422
 static void
 ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
-		       int iOutY, int iOutUV, int iHalf, int iWidth)    			    
+		       int iOutY, int iOutUV, int iHalf, int iWidth)
 {
 	int k, l, m;
 	unsigned char *pIn;
@@ -1138,7 +1134,7 @@ ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
 
 static void
 ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
-		       int iOutY, int iOutUV, int iHalf, int iWidth)    			    
+		       int iOutY, int iOutUV, int iHalf, int iWidth)
 {
 #ifndef OV511_DUMPPIX
 	int k, l, m;
@@ -1230,6 +1226,139 @@ ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
 #endif
 }
 #endif
+
+static void
+ov511_parse_data_yuv422(unsigned char *pIn0, unsigned char *pOut0,
+		        int iOutY, int iOutUV, int iHalf, int iWidth)
+{
+	int k, l, m;
+	unsigned char *pIn;
+	unsigned char *pOut, *pOut1;
+
+	/* Just copy the Y's if in the first stripe */
+	if (!iHalf) {
+		pIn = pIn0 + 128;
+		pOut = pOut0 + iOutY;
+		for (k = 0; k < 4; k++) {
+			pOut1 = pOut;
+			for (l = 0; l < 8; l++) {
+				for (m = 0; m < 8; m++) {
+					*pOut1++ = (*pIn++) & 0xF0;
+				}
+				pOut1 += iWidth - 8;
+			}
+			pOut += 8;
+		}
+	}
+
+	/* Use the first half of VUs to calculate value */
+	pIn = pIn0;
+	pOut = pOut0 + iOutUV;
+	for (l = 0; l < 4; l++) {
+		for (m=0; m<8; m++) {
+			unsigned char *p00 = pOut;
+			unsigned char *p01 = pOut+1;
+			unsigned char *p10 = pOut+iWidth;
+			unsigned char *p11 = pOut+iWidth+1;
+			int v   = *(pIn+64) - 128;
+			int u   = *pIn++ - 128;
+			int uv  = ((u >> 4) & 0x0C) + (v >> 6);
+
+			*p00 |= uv;
+			*p01 |= uv;
+			*p10 |= uv;
+			*p11 |= uv;
+
+			pOut += 2;
+		}
+		pOut += (iWidth*2 - 16);
+	}
+
+	/* Just copy the other UV rows */
+	for (l = 0; l < 4; l++) {
+		for (m = 0; m < 8; m++) {
+			int v = *(pIn + 64) - 128;
+			int u = (*pIn++) - 128;
+			int uv  = ((u >> 4) & 0x0C) + (v >> 6);
+			*(pOut) = uv;
+			pOut += 2;
+		}
+		pOut += (iWidth*2 - 16);
+	}
+
+	/* Calculate values if it's the second half */
+	if (iHalf) {
+		pIn = pIn0 + 128;
+		pOut = pOut0 + iOutY;
+		for (k = 0; k < 4; k++) {
+			pOut1 = pOut;
+			for (l=0; l<4; l++) {
+				for (m=0; m<4; m++) {
+					int y10 = *(pIn+8);
+					int y00 = *pIn++;
+					int y11 = *(pIn+8);
+					int y01 = *pIn++;
+					int uv = *pOut1;
+
+					*pOut1 = (y00 & 0xF0) | uv;
+					*(pOut1+1) = (y01 & 0xF0) | uv;
+					*(pOut1+iWidth) = (y10 & 0xF0) | uv;
+					*(pOut1+iWidth+1) = (y11 & 0xF0) | uv;
+				
+					pOut1 += 2;
+				}
+				pOut1 += (iWidth*2 - 8);
+				pIn += 8;
+			}
+			pOut += 8;
+		}
+	}
+}
+
+static void
+ov511_parse_data_yuv422p(unsigned char *pIn0, unsigned char *pOut0,
+		       int iOutY, int iOutUV, int iWidth, int iHeight)
+{
+	int k, l, m;
+	unsigned char *pIn;
+	unsigned char *pOut, *pOut1;
+	unsigned a = iWidth * iHeight;
+	unsigned w = iWidth / 2;
+
+	pIn = pIn0;
+	pOut = pOut0 + iOutUV + a;
+	for (k = 0; k < 8; k++) {
+		pOut1 = pOut;
+		for (l = 0; l < 8; l++) {
+			*pOut1 = *(pOut1 + w) = *pIn++;
+			pOut1++;
+		}
+		pOut += iWidth;
+	}
+
+	pIn = pIn0 + 64;
+	pOut = pOut0 + iOutUV + a + a/2;
+	for (k = 0; k < 8; k++) {
+		pOut1 = pOut;
+		for (l = 0; l < 8; l++) {
+			*pOut1 = *(pOut1 + w) = *pIn++;
+			pOut1++;
+		}
+		pOut += iWidth;
+	}
+
+	pIn = pIn0 + 128;
+	pOut = pOut0 + iOutY;
+	for (k = 0; k < 4; k++) {
+		pOut1 = pOut;
+		for (l = 0; l < 8; l++) {
+			for (m = 0; m < 8; m++)
+				*pOut1++ =*pIn++;
+			pOut1 += iWidth - 8;
+		}
+		pOut += 8;
+	}
+}
 
 /*
  * For 640x480 RAW BW images, data shows up in 1200 256 byte segments.
@@ -1432,7 +1561,7 @@ check_middle:
 		    frame->segment < frame->width * frame->height / 256) {
 			int iSegY, iSegUV;
 			int iY, jY, iUV, jUV;
-			int iOutY, iOutUV;
+			int iOutY, iOutYP, iOutUV, iOutUVP;
 			unsigned char *pOut;
 
 			iSegY = iSegUV = frame->segment;
@@ -1465,10 +1594,12 @@ check_middle:
 			 */
 			iY = iSegY / (frame->width / WDIV);
 			jY = iSegY - iY * (frame->width / WDIV);
-			iOutY = (iY*HDIV*frame->width + jY*WDIV) * (frame->depth >> 3);
+			iOutYP = iY*HDIV*frame->width + jY*WDIV;
+			iOutY = iOutYP * (frame->depth >> 3);
 			iUV = iSegUV / (frame->width / WDIV * 2);
 			jUV = iSegUV - iUV * (frame->width / WDIV * 2);
-			iOutUV = (iUV*HDIV*2*frame->width + jUV*WDIV/2) * (frame->depth >> 3);
+			iOutUVP = iUV*HDIV*2*frame->width + jUV*WDIV/2;
+			iOutUV = iOutUVP * (frame->depth >> 3);
 
 			switch (frame->format) {
 			case VIDEO_PALETTE_GREY:
@@ -1478,6 +1609,16 @@ check_middle:
 				ov511_parse_data_rgb24 (pData, pOut, iOutY, iOutUV,
 					iY & 1, frame->width);
 				break;
+			case VIDEO_PALETTE_YUV422:
+				ov511_parse_data_yuv422(pData, pOut, iOutY, iOutUV,
+					iY & 1, frame->width);
+				break;
+			case VIDEO_PALETTE_YUV422P:
+				ov511_parse_data_yuv422p (pData, pOut, iOutYP, iOutUVP/2,
+					frame->width, frame->height);
+				break;
+			default:
+				err("Unsupported format: %d", frame->format);
 			}
 
 			pData = &cdata[iPix];
@@ -1995,17 +2136,22 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 		if (copy_from_user((void *)&vm, (void *)arg, sizeof(vm)))
 			return -EFAULT;
 
-		PDEBUG(4, "MCAPTURE");
+		PDEBUG(4, "CMCAPTURE");
 		PDEBUG(4, "frame: %d, size: %dx%d, format: %d",
 			vm.frame, vm.width, vm.height, vm.format);
 
 		if (vm.format != VIDEO_PALETTE_RGB24 &&
+		    vm.format != VIDEO_PALETTE_YUV422 &&
+		    vm.format != VIDEO_PALETTE_YUV422P &&
 		    vm.format != VIDEO_PALETTE_GREY)
 			return -EINVAL;
 
 		if ((vm.frame != 0) && (vm.frame != 1))
 			return -EINVAL;
 				
+		if (vm.width > DEFAULT_WIDTH || vm.height > DEFAULT_HEIGHT)
+			return -EINVAL;
+
 		if (ov511->frame[vm.frame].grabstate == FRAME_GRABBING)
 			return -EBUSY;
 

@@ -19,6 +19,8 @@
  *                  Paul Gortmaker, 03/97: Fix for v2.1.x to use read{b,w}
  *                  write{b,w} and memcpy -> memcpy_{to,from}io
  *
+ *		    Jeff Garzik, 06/2000, Modularize
+ *
 -*/
 
 static const char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
@@ -53,8 +55,10 @@ static const char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
  *        - Try to find out if the board is in 8 Bit or 16 Bit slot.
  *          If in 8 Bit mode don't use IRQ 11.
  *        - (Try to make it slightly faster.) 
+ *	  - Power management support
  */
 
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/ptrace.h>
@@ -455,7 +459,8 @@ struct priv
 /* static variables */
 
 static SK_RAM *board;  /* pointer to our memory mapped board components */
-
+static struct net_device *SK_dev;
+unsigned long SK_ioaddr;
 static spinlock_t SK_lock = SPIN_LOCK_UNLOCKED;
 
 /* Macros */
@@ -537,7 +542,7 @@ void SK_print_ram(struct net_device *dev);
 
 int __init SK_init(struct net_device *dev)
 {
-	int ioaddr         = 0;            /* I/O port address used for POS regs */
+	int ioaddr;			   /* I/O port address used for POS regs */
 	int *port, ports[] = SK_IO_PORTS;  /* SK_G16 supported ports */
 
 	/* get preconfigured base_addr from dev which is done in Space.c */
@@ -548,15 +553,23 @@ int __init SK_init(struct net_device *dev)
 
 	if (base_addr > 0x0ff)        /* Check a single specified address */
 	{
+	    int rc = -ENODEV;
+
+	    ioaddr = base_addr;
+
 	    /* Check if on specified address is a SK_G16 */
+	    if (!request_region(ioaddr, ETHERCARD_TOTAL_SIZE, "sk_g16"))
+	    	return -EBUSY;
 
 	    if ( (inb(SK_POS0) == SK_IDLOW) ||
 		 (inb(SK_POS1) == SK_IDHIGH) )  
 	    {
-		return SK_probe(dev, base_addr);  
+		rc = SK_probe(dev, ioaddr);
 	    }
 
-	    return -ENODEV;            /* Sorry, but on specified address NO SK_G16 */
+	    if (rc)
+	        release_region(ioaddr, ETHERCARD_TOTAL_SIZE);
+	    return rc;
 	}
 	else if (base_addr > 0)       /* Don't probe at all */
 	{
@@ -571,7 +584,7 @@ int __init SK_init(struct net_device *dev)
 
 	    /* Check if I/O Port region is used by another board */
 
-	    if (check_region(ioaddr, ETHERCARD_TOTAL_SIZE))
+	    if (!request_region(ioaddr, ETHERCARD_TOTAL_SIZE, "sk_g16"))
 	    {
 		continue;             /* Try next Port address */
 	    }
@@ -581,6 +594,7 @@ int __init SK_init(struct net_device *dev)
 	    if ( !(inb(SK_POS0) == SK_IDLOW) ||
 		 !(inb(SK_POS1) == SK_IDHIGH) )
 	    {
+	        release_region(ioaddr, ETHERCARD_TOTAL_SIZE);
 		continue;             /* Try next Port address */
 	    }
 
@@ -590,6 +604,8 @@ int __init SK_init(struct net_device *dev)
 	    {
 		return 0; /* Card found and initialized */
 	    }
+
+	    release_region(ioaddr, ETHERCARD_TOTAL_SIZE);
 	}
 
 	dev->base_addr = base_addr;   /* Write back original base_addr */
@@ -597,6 +613,60 @@ int __init SK_init(struct net_device *dev)
 	return -ENODEV;                /* Failed to find or init driver */
 
 } /* End of SK_init */
+
+
+static int io = 0; /* 0 == probe */
+MODULE_AUTHOR("Patrick J.D. Weichmann");
+MODULE_DESCRIPTION("Schneider & Koch G16 Ethernet Device Driver");
+MODULE_PARM(io, "i");
+MODULE_PARM_DESC(io, "0 to probe common ports (unsafe), or the I/O base of the board");
+
+
+#ifdef MODULE
+static int __init SK_init_module (void)
+{
+	int rc;
+	
+	SK_dev = init_etherdev (NULL, 0);
+	if (!SK_dev)
+		return -ENOMEM;
+	
+	rc = SK_init (SK_dev);
+	if (rc) {
+		unregister_netdev (SK_dev);
+		kfree (SK_dev);
+		SK_dev = NULL;
+	}
+	
+	return rc;
+}
+#endif /* MODULE */
+
+
+static void __exit SK_cleanup_module (void)
+{
+	if (SK_dev) {
+		if (SK_dev->priv) {
+			kfree(SK_dev->priv);
+			SK_dev->priv = NULL;
+		}
+		unregister_netdev(SK_dev);
+		kfree(SK_dev);
+		SK_dev = NULL;
+	}
+	if (SK_ioaddr) {
+		release_region(SK_ioaddr, ETHERCARD_TOTAL_SIZE);
+		SK_ioaddr = 0;
+	}
+		
+}
+
+
+#ifdef MODULE
+module_init(SK_init_module);
+#endif
+module_exit(SK_cleanup_module);
+
 
 
 /*-
@@ -774,9 +844,6 @@ int __init SK_probe(struct net_device *dev, short ioaddr)
     }
     memset((char *) dev->priv, 0, sizeof(struct priv)); /* clear memory */
 
-    /* Grab the I/O Port region */
-    request_region(ioaddr, ETHERCARD_TOTAL_SIZE,"sk_g16");
-
     /* Assign our Device Driver functions */
 
     dev->open                   = SK_open;
@@ -816,6 +883,9 @@ int __init SK_probe(struct net_device *dev, short ioaddr)
     SK_print_pos(dev, "End of SK_probe");
     SK_print_ram(dev);
 #endif 
+
+    SK_dev = dev;
+    SK_ioaddr = ioaddr;
 
     return 0;                            /* Initialization done */
 
@@ -1078,8 +1148,7 @@ static int SK_lance_init(struct net_device *dev, unsigned short mode)
 
     /* Prepare LANCE Control and Status Registers */
 
-    save_flags(flags);
-    cli();
+    spin_lock_irqsave(&SK_lock, flags);
 
     SK_write_reg(CSR3, CSR3_ACON);   /* Ale Control !!!THIS MUST BE SET!!!! */
  
@@ -1114,7 +1183,7 @@ static int SK_lance_init(struct net_device *dev, unsigned short mode)
 
     SK_write_reg(CSR0, CSR0_INIT); 
 
-    restore_flags(flags);
+    spin_unlock_irqrestore(&SK_lock, flags);
 
     /* Wait until LANCE finished initialization */
     

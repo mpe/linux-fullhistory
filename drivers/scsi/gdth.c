@@ -1493,7 +1493,7 @@ static int __init gdth_search_drives(int hanum)
     ha->more_proc = FALSE;
     if (gdth_internal_cmd(hanum,CACHESERVICE,GDT_IOCTL,BOARD_INFO,
                           INVALID_CHANNEL,sizeof(gdth_binfo_str))) {
-        ha->binfo = *(gdth_binfo_str *)ha->pscratch;
+        memcpy(&ha->binfo, (gdth_binfo_str *)ha->pscratch, sizeof(gdth_binfo_str));
         if (gdth_internal_cmd(hanum,CACHESERVICE,GDT_IOCTL,BOARD_FEATURES,
                               INVALID_CHANNEL,sizeof(gdth_bfeat_str))) {
             TRACE2(("BOARD_INFO/BOARD_FEATURES supported\n"));

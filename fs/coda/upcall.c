@@ -625,7 +625,7 @@ static inline unsigned long coda_waitfor_upcall(struct upc_req *vmp)
 			set_current_state(TASK_UNINTERRUPTIBLE);
 
                 /* venus died */
-                if ( !coda_upc_comm.vc_pid )
+                if ( !coda_upc_comm.vc_inuse )
                         break;
 
 		/* got a reply */
@@ -688,7 +688,7 @@ static int coda_upcall(struct coda_sb_info *sbi,
 ENTRY;
 
 	vcommp = &coda_upc_comm;
-	if ( !vcommp->vc_pid ) {
+	if ( !vcommp->vc_inuse ) {
 		printk("No pseudo device in upcall comms at %p\n", vcommp);
                 return -ENXIO;
 	}
@@ -733,7 +733,7 @@ ENTRY;
 	CDEBUG(D_UPCALL, 
 	       "..process %d woken up by Venus for req at %p, data at %p\n", 
 	       current->pid, req, req->uc_data);
-	if (vcommp->vc_pid) {      /* i.e. Venus is still alive */
+	if (vcommp->vc_inuse) {      /* i.e. Venus is still alive */
 	    /* Op went through, interrupt or not... */
 	    if (req->uc_flags & REQ_WRITE) {
 		out = (union outputArgs *)req->uc_data;

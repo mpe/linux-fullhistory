@@ -1290,7 +1290,6 @@ static void lance_set_multicast_retry(unsigned long _opaque)
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 
 	lance_set_multicast(dev);
-	timer_exit(&lp->multicast_timer);
 }
 
 static void lance_free_hwresources(struct lance_private *lp)

@@ -162,8 +162,7 @@ reclaimer(void *ptr)
 {
 	struct nlm_host	  *host = (struct nlm_host *) ptr;
 	struct nlm_wait	  *block;
-	struct file_lock  *fl;
-	struct inode	  *inode;
+	struct list_head *tmp;
 
 	/* This one ensures that our parent doesn't terminate while the
 	 * reclaim is in progress */
@@ -171,19 +170,21 @@ reclaimer(void *ptr)
 	lockd_up();
 
 	/* First, reclaim all locks that have been granted previously. */
-	do {
-		for (fl = file_lock_table; fl; fl = fl->fl_nextlink) {
-			inode = fl->fl_file->f_dentry->d_inode;
-			if (inode->i_sb->s_magic == NFS_SUPER_MAGIC
-			 && nlm_cmp_addr(NFS_ADDR(inode), &host->h_addr)
-			 && fl->fl_u.nfs_fl.state != host->h_state
-			 && (fl->fl_u.nfs_fl.flags & NFS_LCK_GRANTED)) {
-				fl->fl_u.nfs_fl.flags &= ~ NFS_LCK_GRANTED;
-				nlmclnt_reclaim(host, fl);
-				break;
-			}
+restart:
+	tmp = file_lock_list.next;
+	while (tmp != &file_lock_list) {
+		struct file_lock *fl = list_entry(tmp, struct file_lock, fl_link);
+		struct inode *inode = fl->fl_file->f_dentry->d_inode;
+		if (inode->i_sb->s_magic == NFS_SUPER_MAGIC &&
+				nlm_cmp_addr(NFS_ADDR(inode), &host->h_addr) &&
+				fl->fl_u.nfs_fl.state != host->h_state &&
+				(fl->fl_u.nfs_fl.flags & NFS_LCK_GRANTED)) {
+			fl->fl_u.nfs_fl.flags &= ~ NFS_LCK_GRANTED;
+			nlmclnt_reclaim(host, fl);
+			goto restart;
 		}
-	} while (fl);
+		tmp = tmp->next;
+	}
 
 	host->h_reclaiming = 0;
 	wake_up(&host->h_gracewait);

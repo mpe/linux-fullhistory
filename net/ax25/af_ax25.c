@@ -964,7 +964,7 @@ struct sock *ax25_make_new(struct sock *osk, struct ax25_dev *ax25_dev)
 			return NULL;
 		}
 
-		*ax25->digipeat = *osk->protinfo.ax25->digipeat;
+		memcpy(ax25->digipeat, osk->protinfo.ax25->digipeat, sizeof(ax25_digi));
 	}
 
 	sk->protinfo.ax25 = ax25;

@@ -162,10 +162,10 @@ static inline void wait_on_inode(struct inode *inode)
 }
 
 
-static inline void write_inode(struct inode *inode)
+static inline void write_inode(struct inode *inode, int sync)
 {
 	if (inode->i_sb && inode->i_sb->s_op && inode->i_sb->s_op->write_inode)
-		inode->i_sb->s_op->write_inode(inode);
+		inode->i_sb->s_op->write_inode(inode, sync);
 }
 
 static inline void __iget(struct inode * inode)
@@ -182,7 +182,7 @@ static inline void __iget(struct inode * inode)
 	inodes_stat.nr_unused--;
 }
 
-static inline void sync_one(struct inode *inode)
+static inline void sync_one(struct inode *inode, int sync)
 {
 	if (inode->i_state & I_LOCK) {
 		__iget(inode);
@@ -199,7 +199,7 @@ static inline void sync_one(struct inode *inode)
 		inode->i_state ^= I_DIRTY | I_LOCK;
 		spin_unlock(&inode_lock);
 
-		write_inode(inode);
+		write_inode(inode, sync);
 
 		spin_lock(&inode_lock);
 		inode->i_state &= ~I_LOCK;
@@ -212,7 +212,7 @@ static inline void sync_list(struct list_head *head)
 	struct list_head * tmp;
 
 	while ((tmp = head->prev) != head)
-		sync_one(list_entry(tmp, struct inode, i_list));
+		sync_one(list_entry(tmp, struct inode, i_list), 0);
 }
 
 /**
@@ -266,14 +266,14 @@ static void sync_all_inodes(void)
  *	dirty. This is primarily needed by knfsd.
  */
  
-void write_inode_now(struct inode *inode)
+void write_inode_now(struct inode *inode, int sync)
 {
 	struct super_block * sb = inode->i_sb;
 
 	if (sb) {
 		spin_lock(&inode_lock);
 		while (inode->i_state & I_DIRTY)
-			sync_one(inode);
+			sync_one(inode, sync);
 		spin_unlock(&inode_lock);
 	}
 	else

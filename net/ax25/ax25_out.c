@@ -98,7 +98,7 @@ ax25_cb *ax25_send_frame(struct sk_buff *skb, int paclen, ax25_address *src, ax2
 			ax25_free_cb(ax25);
 			return NULL;
 		}
-		*ax25->digipeat = *digi;
+		memcpy(ax25->digipeat, digi, sizeof(ax25_digi));
 	}
 
 	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {

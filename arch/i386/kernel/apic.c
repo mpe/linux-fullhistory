@@ -597,7 +597,9 @@ static inline void handle_smp_time (int user, int cpu)
 		}
 		kstat.cpu_system += system;
 		kstat.per_cpu_system[cpu] += system;
-
+	} else if (local_bh_count(cpu) || local_irq_count(cpu) > 1) {
+		kstat.cpu_system += system;
+		kstat.per_cpu_system[cpu] += system;
 	}
 	irq_exit(cpu, 0);
 }

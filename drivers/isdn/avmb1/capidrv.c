@@ -1,11 +1,25 @@
 /*
- * $Id: capidrv.c,v 1.32 2000/04/07 15:19:58 calle Exp $
+ * $Id: capidrv.c,v 1.36 2000/06/26 15:13:41 keil Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.c,v $
+ * Revision 1.36  2000/06/26 15:13:41  keil
+ * features should be or'ed
+ *
+ * Revision 1.35  2000/06/19 15:11:25  keil
+ * avoid use of freed structs
+ * changes from 2.4.0-ac21
+ *
+ * Revision 1.34  2000/06/19 13:13:55  calle
+ * Added Modemsupport!
+ *
+ * Revision 1.33  2000/05/06 00:52:36  kai
+ * merged changes from kernel tree
+ * fixed timer and net_device->name breakage
+ *
  * Revision 1.32  2000/04/07 15:19:58  calle
  * remove warnings
  *
@@ -192,7 +206,7 @@
 #include "capicmd.h"
 #include "capidrv.h"
 
-static char *revision = "$Revision: 1.32 $";
+static char *revision = "$Revision: 1.36 $";
 static int debugmode = 0;
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
@@ -327,6 +341,8 @@ static inline __u32 b1prot(int l2, int l3)
 		return 2;
         case ISDN_PROTO_L2_FAX:
 		return 4;
+	case ISDN_PROTO_L2_MODEM:
+		return 8;
 	}
 }
 
@@ -343,6 +359,7 @@ static inline __u32 b2prot(int l2, int l3)
         case ISDN_PROTO_L2_V11096:
         case ISDN_PROTO_L2_V11019:
         case ISDN_PROTO_L2_V11038:
+	case ISDN_PROTO_L2_MODEM:
 		return 1;
         case ISDN_PROTO_L2_FAX:
 		return 4;
@@ -360,6 +377,7 @@ static inline __u32 b3prot(int l2, int l3)
         case ISDN_PROTO_L2_V11096:
         case ISDN_PROTO_L2_V11019:
         case ISDN_PROTO_L2_V11038:
+	case ISDN_PROTO_L2_MODEM:
 	default:
 		return 0;
         case ISDN_PROTO_L2_FAX:
@@ -2269,16 +2287,19 @@ static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 	card->interface.writebuf_skb = if_sendbuf;
 	card->interface.writecmd = 0;
 	card->interface.readstat = if_readstat;
-	card->interface.features = ISDN_FEATURE_L2_X75I |
-	    ISDN_FEATURE_L2_X75UI |
-	    ISDN_FEATURE_L2_X75BUI |
-	    ISDN_FEATURE_L2_HDLC |
+	card->interface.features = ISDN_FEATURE_L2_HDLC |
 	    ISDN_FEATURE_L2_TRANS |
 	    ISDN_FEATURE_L3_TRANS |
-	    ISDN_FEATURE_L2_V11096 |
+				   ISDN_FEATURE_P_UNKNOWN |
+				   ISDN_FEATURE_L2_X75I |
+				   ISDN_FEATURE_L2_X75UI |
+				   ISDN_FEATURE_L2_X75BUI;
+	if (profp->support1 & (1<<2))
+		card->interface.features |= ISDN_FEATURE_L2_V11096 |
 	    ISDN_FEATURE_L2_V11019 |
-	    ISDN_FEATURE_L2_V11038 |
-	    ISDN_FEATURE_P_UNKNOWN;
+	    				    ISDN_FEATURE_L2_V11038;
+	if (profp->support1 & (1<<8))
+		card->interface.features |= ISDN_FEATURE_L2_MODEM;
 	card->interface.hl_hdrlen = 22; /* len of DATA_B3_REQ */
 	strncpy(card->interface.id, id, sizeof(card->interface.id) - 1);
 
@@ -2401,9 +2422,9 @@ static int capidrv_delcontr(__u16 contr)
 	}
 	spin_unlock_irqrestore(&global_lock, flags);
 
-	kfree(card);
-
 	printk(KERN_INFO "%s: now down.\n", card->name);
+
+	kfree(card);
 
 	MOD_DEC_USE_COUNT;
 

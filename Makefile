@@ -82,7 +82,7 @@ endif
 
 CPPFLAGS := -D__KERNEL__ -I$(HPATH)
 
-CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
+CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -Werror
 AFLAGS := -D__ASSEMBLY__ $(CPPFLAGS)
 
 # use '-fno-strict-aliasing', but only if the compiler can take it
@@ -329,6 +329,7 @@ modules_install:
 	if [ -f SK98LIN_MODULES ]; then inst_mod SK98LIN_MODULES  net;   fi; \
 	if [ -f SKFP_MODULES ]; then inst_mod SKFP_MODULES   net;   fi; \
 	if [ -f USB_MODULES   ]; then inst_mod USB_MODULES   usb;   fi; \
+	if [ -f USB_STORAGE_MODULES ]; then inst_mod USB_STORAGE_MODULES   usb;   fi; \
 	if [ -f USB_SERIAL_MODULES   ]; then inst_mod USB_SERIAL_MODULES   usb;   fi; \
 	if [ -f IEEE1394_MODULES ]; then inst_mod IEEE1394_MODULES ieee1394; fi; \
 	if [ -f PCMCIA_MODULES ]; then inst_mod PCMCIA_MODULES pcmcia; fi; \
