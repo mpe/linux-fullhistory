@@ -73,6 +73,7 @@ typedef enum {
 	DIBUSB2_0,
 	UMT2_0,
 	DIBUSB2_0B,
+	NOVAT_USB2,
 } dibusb_class_t;
 
 typedef enum {
@@ -90,7 +91,8 @@ typedef enum {
 
 typedef enum {
 	DIBUSB_RC_NO = 0,
-	DIBUSB_RC_NEC_PROTOCOL = 1,
+	DIBUSB_RC_NEC_PROTOCOL,
+	DIBUSB_RC_HAUPPAUGE_PROTO,
 } dibusb_remote_t;
 
 struct dibusb_tuner {
@@ -188,7 +190,10 @@ struct usb_dibusb {
 	/* remote control */
 	struct input_dev rc_input_dev;
 	struct work_struct rc_query_work;
-	int rc_input_event;
+	int last_event;
+	int last_state; /* for Hauppauge RC protocol */
+	int repeat_key_count;
+	int rc_key_repeat_count; /* module parameter */
 
 	/* module parameters */
 	int pid_parse;
@@ -269,6 +274,10 @@ int dibusb_urb_exit(struct usb_dibusb *);
 #define DIBUSB_RC_NEC_EMPTY				0x00
 #define DIBUSB_RC_NEC_KEY_PRESSED		0x01
 #define DIBUSB_RC_NEC_KEY_REPEATED		0x02
+
+/* additional status values for Hauppauge Remote Control Protocol */
+#define DIBUSB_RC_HAUPPAUGE_KEY_PRESSED	0x01
+#define DIBUSB_RC_HAUPPAUGE_KEY_EMPTY	0x03
 
 /* streaming mode:
  * bulk write: 0x05 mode_byte

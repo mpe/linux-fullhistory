@@ -42,9 +42,13 @@ static int pid_parse;
 module_param(pid_parse, int, 0644);
 MODULE_PARM_DESC(pid_parse, "enable pid parsing (filtering) when running at USB2.0");
 
-static int rc_query_interval;
+static int rc_query_interval = 100;
 module_param(rc_query_interval, int, 0644);
 MODULE_PARM_DESC(rc_query_interval, "interval in msecs for remote control query (default: 100; min: 40)");
+
+static int rc_key_repeat_count = 2;
+module_param(rc_key_repeat_count, int, 0644);
+MODULE_PARM_DESC(rc_key_repeat_count, "how many key repeats will be dropped before passing the key event again (default: 2)");
 
 /* Vendor IDs */
 #define USB_VID_ADSTECH						0x06e1
@@ -225,7 +229,7 @@ static struct dibusb_device_class dibusb_device_classes[] = {
 	{ DIBUSB2_0,&dibusb_usb_ctrl[2],
 	  "dvb-dibusb-6.0.0.5.fw",
 	  0x01, 0x06, 
-	  3, 188*210,
+	  7, 4096,
 	  DIBUSB_RC_NEC_PROTOCOL,
 	  &dibusb_demod[DIBUSB_DIB3000MC],
 	  &dibusb_tuner[DIBUSB_TUNER_COFDM_PANASONIC_ENV57H1XD5],
@@ -245,6 +249,14 @@ static struct dibusb_device_class dibusb_device_classes[] = {
 	  DIBUSB_RC_NEC_PROTOCOL,
 	  &dibusb_demod[DIBUSB_DIB3000MB],
 	  &dibusb_tuner[DIBUSB_TUNER_CABLE_THOMSON],
+	},
+	{ NOVAT_USB2,&dibusb_usb_ctrl[2],
+	  "dvb-dibusb-nova-t-1.fw",
+	  0x01, 0x06,
+	  7, 4096,
+	  DIBUSB_RC_HAUPPAUGE_PROTO,
+	  &dibusb_demod[DIBUSB_DIB3000MC],
+	  &dibusb_tuner[DIBUSB_TUNER_COFDM_PANASONIC_ENV57H1XD5],
 	},
 };
 
@@ -305,7 +317,7 @@ static struct dibusb_usb_device dibusb_devices[] = {
 		{ NULL },
 	},
 	{	"Hauppauge WinTV NOVA-T USB2",
-		&dibusb_device_classes[DIBUSB2_0],
+		&dibusb_device_classes[NOVAT_USB2],
 		{ &dib_table[30], NULL },
 		{ &dib_table[31], NULL },
 	},
@@ -475,6 +487,7 @@ static int dibusb_probe(struct usb_interface *intf,
 		/* store parameters to structures */
 		dib->rc_query_interval = rc_query_interval;
 		dib->pid_parse = pid_parse;
+		dib->rc_key_repeat_count = rc_key_repeat_count;
 
 		usb_set_intfdata(intf, dib);
 		

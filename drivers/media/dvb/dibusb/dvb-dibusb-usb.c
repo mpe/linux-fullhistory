@@ -117,9 +117,14 @@ int dibusb_hw_sleep(struct dvb_frontend *fe)
 	u8 b[1] = { DIBUSB_IOCTL_POWER_SLEEP };
 	deb_info("dibusb-device is going to bed.\n");
 	/* workaround, something is wrong, when dibusb 1.1 device are going to bed too late */
-	if (dib->dibdev->dev_cl->id != DIBUSB1_1)
-		dibusb_ioctl_cmd(dib,DIBUSB_IOCTL_CMD_POWER_MODE, b,1);
-
+	switch (dib->dibdev->dev_cl->id) {
+		case DIBUSB1_1:
+		case NOVAT_USB2:
+			break;
+		default:
+			dibusb_ioctl_cmd(dib,DIBUSB_IOCTL_CMD_POWER_MODE, b,1);
+			break;
+	}
 	if (dib->fe_sleep)
 		return dib->fe_sleep(fe);
 
@@ -137,6 +142,7 @@ int dibusb_streaming(struct usb_dibusb *dib,int onoff)
 	switch (dib->dibdev->dev_cl->id) {
 		case DIBUSB2_0:
 		case DIBUSB2_0B:
+		case NOVAT_USB2:
 			if (onoff)
 				return dibusb_ioctl_cmd(dib,DIBUSB_IOCTL_CMD_ENABLE_STREAM,NULL,0);
 			else
