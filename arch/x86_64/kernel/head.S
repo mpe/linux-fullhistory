@@ -377,9 +377,8 @@ ENTRY(cpu_gdt_table)
 	.quad	0x00affa000000ffff	/* __USER_CS */
 	.quad	0x00cf9a000000ffff	/* __KERNEL32_CS */
 	.quad	0,0			/* TSS */
-	.quad	0			/* LDT */
+	.quad	0,0			/* LDT */
 	.quad   0,0,0			/* three TLS descriptors */ 
-	.quad	0			/* unused now */
 	.quad	0x00009a000000ffff	/* __KERNEL16_CS - 16bit PM for S3 wakeup. */
 					/* base must be patched for real base address. */
 gdt_end:	
