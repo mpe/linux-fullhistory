@@ -29,6 +29,7 @@
 #include <linux/sched.h>
 #include <linux/wait.h>
 #include <linux/spinlock.h>
+#include <linux/ioport.h>
 #include <linux/slab.h>
 #include <linux/pci.h>
 #include <asm/uaccess.h>

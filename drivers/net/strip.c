@@ -118,6 +118,7 @@ static const char StripVersion[] = "1.3-STUART.CHESHIRE";
 #include <linux/if_arp.h>
 #include <linux/if_strip.h>
 #include <linux/proc_fs.h>
+#include <linux/serialP.h>
 #include <linux/serial.h>
 #include <net/arp.h>
 

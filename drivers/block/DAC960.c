@@ -19,8 +19,8 @@
 */
 
 
-#define DAC960_DriverVersion			"2.2.4"
-#define DAC960_DriverDate			"23 August 1999"
+#define DAC960_DriverVersion			"2.3.4"
+#define DAC960_DriverDate			"23 September 1999"
 
 
 #include <linux/version.h>
@@ -256,7 +256,7 @@ static void DAC960_QueueCommand(DAC960_Command_T *Command)
 static boolean DAC960_ExecuteCommand(DAC960_Command_T *Command)
 {
   DAC960_Controller_T *Controller = Command->Controller;
-  Semaphore_T Semaphore = MUTEX_LOCKED;
+  DECLARE_MUTEX_LOCKED(Semaphore);
   unsigned long ProcessorFlags;
   Command->Semaphore = &Semaphore;
   DAC960_AcquireControllerLock(Controller, &ProcessorFlags);
@@ -475,8 +475,8 @@ static void DAC960_DetectControllers(DAC960_ControllerType_T ControllerType)
       unsigned char Device = DeviceFunction >> 3;
       unsigned char Function = DeviceFunction & 0x7;
       unsigned int IRQ_Channel = PCI_Device->irq;
-      unsigned long BaseAddress0 = PCI_Device->base_address[0];
-      unsigned long BaseAddress1 = PCI_Device->base_address[1];
+      unsigned long BaseAddress0 = PCI_Device->resource[0].start;
+      unsigned long BaseAddress1 = PCI_Device->resource[1].start;
       unsigned short SubsystemVendorID, SubsystemDeviceID;
       int CommandIdentifier;
       pci_read_config_word(PCI_Device, PCI_SUBSYSTEM_VENDOR_ID,
@@ -825,7 +825,7 @@ static boolean DAC960_ReadDeviceConfiguration(DAC960_Controller_T *Controller)
 	    &Controller->InquiryStandardData[Channel][TargetID];
 	  InquiryStandardData->PeripheralDeviceType = 0x1F;
 	  Semaphore = &Semaphores[Channel];
-	  *Semaphore = MUTEX_LOCKED;
+	  init_MUTEX_LOCKED(Semaphore);
 	  DCDB = &DCDBs[Channel];
 	  DAC960_ClearCommand(Command);
 	  Command->CommandType = DAC960_ImmediateCommand;

@@ -352,7 +352,7 @@ void mmput(struct mm_struct *mm)
 void mm_release(void)
 {
 	struct task_struct *tsk = current;
-	forget_segments();
+
 	/* notify parent sleeping on vfork() */
 	if (tsk->flags & PF_VFORK) {
 		tsk->flags &= ~PF_VFORK;

@@ -48,10 +48,11 @@
 #include <linux/list.h>
 #include <asm/io.h>
 struct usb_ohci_ed;
+struct usb_ohci_td;
 /* for ED and TD structures */
 
 typedef void * __OHCI_BAG;
-typedef int (*f_handler )(void * ohci, struct usb_ohci_ed *ed, void *data, int data_len, int status, __OHCI_BAG lw0, __OHCI_BAG lw1);
+typedef int (*f_handler )(void * ohci, struct usb_ohci_td *td, void *data, int data_len, int dlen, int status, __OHCI_BAG lw0, __OHCI_BAG lw1);
 
  
  
@@ -309,7 +310,9 @@ struct ohci {
 	int irq;
 	struct ohci_regs *regs;					/* OHCI controller's memory */	
 	struct ohci_hc_area *hc_area;			/* hcca, int ed-tree, ohci itself .. */                
-                             
+
+    struct list_head ohci_hcd_list;         /* list of all ohci_hcd */           
+
 	int ohci_int_load[32];                  /* load of the 32 Interrupt Chains (for load ballancing)*/     
 	struct usb_ohci_ed * ed_rm_list;        /* list of all endpoints to be removed */
 	struct usb_ohci_ed * ed_bulktail;       /* last endpoint of bulk list */

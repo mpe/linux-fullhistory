@@ -15,7 +15,9 @@
  *
  *	Split into 2 CPU specific files by Alan Cox to keep #ifdef noise down.
  *
- *	99/9/15  Proper reg args for newer gcc/egcs - Petkan (petkan@spct.net)
+ *	1999/10/5	Proper register args for newer GCCs and minor bugs
+ *			fixed - Petko Manolov (petkan@spct.net)
+ *	1999/10/14	3DNow memscpy() added - Petkan
  */
 
 #define __HAVE_ARCH_STRCPY
@@ -103,7 +105,7 @@ __asm__ __volatile__(
 	"incl %1\n\t"
 	"testb %b0,%b0\n\t"
 	"jne 2b\n"
-	"3:\txorl %0,%0\n\t"
+	"3:\txorb %0,%0\n\t"
 	"movb %b0,(%1)\n\t"
 	:"=q" (dummy), "=r" (tmp), "=r" (src), "=r" (count)
 	:"1"  (tmp), "2"  (src), "3"  (count)
@@ -254,6 +256,7 @@ __asm__ __volatile__(
 return __res-cs;
 }
 
+#if 0
 #define __HAVE_ARCH_STRPBRK
 extern inline char * strpbrk(const char * cs,const char * ct)
 {
@@ -261,7 +264,7 @@ int	d0, d1;
 register char * __res;
 __asm__ __volatile__(
 	"cld\n\t"
-	"movl %4,%%edi\n\t"
+	"movl %6,%%edi\n\t"
 	"repne\n\t"
 	"scasb\n\t"
 	"notl %%ecx\n\t"
@@ -270,7 +273,7 @@ __asm__ __volatile__(
 	"1:\tlodsb\n\t"
 	"testb %%al,%%al\n\t"
 	"je 2f\n\t"
-	"movl %4,%%edi\n\t"
+	"movl %6,%%edi\n\t"
 	"movl %%edx,%%ecx\n\t"
 	"repne\n\t"
 	"scasb\n\t"
@@ -284,7 +287,9 @@ __asm__ __volatile__(
 	:"dx", "di");
 return __res;
 }
+#endif
 
+#if 0
 #define __HAVE_ARCH_STRSTR
 extern inline char * strstr(const char * cs,const char * ct)
 {
@@ -292,13 +297,13 @@ int	d0, d1;
 register char * __res;
 __asm__ __volatile__(
 	"cld\n\t" \
-	"movl %4,%%edi\n\t"
+	"movl %6,%%edi\n\t"
 	"repne\n\t"
 	"scasb\n\t"
 	"notl %%ecx\n\t"
 	"decl %%ecx\n\t"	/* NOTE! This also sets Z if searchstring='' */
 	"movl %%ecx,%%edx\n"
-	"1:\tmovl %4,%%edi\n\t"
+	"1:\tmovl %6,%%edi\n\t"
 	"movl %%esi,%%eax\n\t"
 	"movl %%edx,%%ecx\n\t"
 	"repe\n\t"
@@ -315,6 +320,7 @@ __asm__ __volatile__(
 	:"dx", "di");
 return __res;
 }
+#endif
 
 #define __HAVE_ARCH_STRLEN
 extern inline size_t strlen(const char * s)
@@ -343,7 +349,7 @@ extern inline size_t strnlen(const char * s, size_t count)
 int	d0;
 register int __res;
 __asm__ __volatile__(
-	"movl %1,%0\n\t"
+	"movl %3,%0\n\t"
 	"jmp 2f\n"
 	"1:\tcmpb $0,(%0)\n\t"
 	"je 3f\n\t"
@@ -351,13 +357,14 @@ __asm__ __volatile__(
 	"2:\tdecl %2\n\t"
 	"cmpl $-1,%2\n\t"
 	"jne 1b\n"
-	"3:\tsubl %1,%0"
+	"3:\tsubl %3,%0"
 	:"=a" (__res), "=&d" (d0)
 	:"1" (count), "c" (s));
 return __res;
 }
 /* end of additional stuff */
 
+#if 0
 #define __HAVE_ARCH_STRTOK
 extern inline char * strtok(char * s,const char * ct)
 {
@@ -418,19 +425,7 @@ __asm__ __volatile__(
 	:"ax","cx","dx","di","memory");
 return __res;
 }
-
-#define __memcpy_c(d,s,count) \
-((count%4==0) ? \
- __memcpy_by4((d),(s),(count)) : \
- ((count%2==0) ? \
-  __memcpy_by2((d),(s),(count)) : \
-  __memcpy_g((d),(s),(count))))
-
-#define __HAVE_ARCH_MEMCPY
-#define memcpy(d,s,count) \
-(__builtin_constant_p(count) ? \
- __memcpy_c((d),(s),(count)) : \
- __memcpy_g((d),(s),(count)))
+#endif
 
 /*
  *	These ought to get tweaked to do some cache priming.
@@ -494,6 +489,63 @@ __asm__ __volatile__ (
 return (to);
 }
 
+#define __memcpy_c(d,s,count) \
+((count%4==0) ? \
+ __memcpy_by4((d),(s),(count)) : \
+ ((count%2==0) ? \
+  __memcpy_by2((d),(s),(count)) : \
+  __memcpy_g((d),(s),(count))))
+  
+#define __memcpy(d,s,count) \
+(__builtin_constant_p(count) ? \
+ __memcpy_c((d),(s),(count)) : \
+ __memcpy_g((d),(s),(count)))
+ 
+#define __HAVE_ARCH_MEMCPY
+
+#include <linux/config.h>
+
+#ifdef CONFIG_X86_USE_3DNOW
+
+#include <linux/spinlock.h>
+#include <asm/system.h>
+#include <asm/ptrace.h>
+#include <linux/smp.h>
+#include <linux/interrupt.h>
+#include <asm/mmx.h>
+
+/*
+**      This CPU favours 3DNow strongly (eg AMD K6-II, K6-III, Athlon)
+*/
+
+extern inline void * __constant_memcpy3d(void * to, const void * from, size_t len)
+{
+	if(len<512 || in_interrupt())
+		return __memcpy_c(to, from, len);
+	return _mmx_memcpy(to, from, len);
+}
+
+extern __inline__ void *__memcpy3d(void *to, const void *from, size_t len)
+{
+	if(len<512 || in_interrupt())
+		return __memcpy_g(to, from, len);
+	return _mmx_memcpy(to, from, len);
+}
+
+#define memcpy(d, s, count) \
+(__builtin_constant_p(count) ? \
+ __constant_memcpy3d((d),(s),(count)) : \
+ __memcpy3d((d),(s),(count)))
+ 
+#else /* CONFIG_X86_USE_3DNOW */
+
+/*
+**	Generic routines
+*/
+
+#define memcpy(d, s, count) __memcpy(d, s, count)
+
+#endif /* CONFIG_X86_USE_3DNOW */ 
 
 #define __HAVE_ARCH_MEMMOVE
 extern inline void * memmove(void * dest,const void * src, size_t n)

@@ -14,9 +14,8 @@
  * [ Open Host Controller Interface driver for USB. ]
  * [ (C) Copyright 1999 Linus Torvalds (uhci.c) ]
  * [ (C) Copyright 1999 Gregory P. Smith <greg@electricrain.com> ]
- * [ _Log: ohci-hcd.c,v _
- * [ Revision 1.1  1999/04/05 08:32:30  greg ]
  * 
+ * v4.3 1999/10/27 multiple HCs, bulk_request
  * v4.2 1999/09/05 ISO API alpha, new dev alloc, neg Error-codes
  * v4.1 1999/08/27 Randy Dunlap's - ISO API first impl.
  * v4.0 1999/08/18 
@@ -48,6 +47,7 @@
 #include <linux/errno.h>
 #include <linux/timer.h>
 #include <linux/spinlock.h>
+#include <linux/list.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -61,6 +61,7 @@
 static int handle_apm_event(apm_event_t event);
 static int apm_resume = 0;
 #endif
+static LIST_HEAD(ohci_hcd_list);
 
 static int ohci_link_ed(struct ohci * ohci, struct usb_ohci_ed *ed);
 static int sohci_kill_isoc (struct usb_isoc_desc *id);
@@ -85,10 +86,11 @@ OHCI_DEBUG(printk("******* dev: devnum: %4x, slow: %4x, maxpacketsize: %4x\n",us
  **** Interface functions
  ***********************************************/
  
-static int sohci_blocking_handler(void * ohci_in, struct usb_ohci_ed *ed, void * data, int data_len, int status, __OHCI_BAG lw0, __OHCI_BAG lw1)
+static int sohci_blocking_handler(void * ohci_in, struct usb_ohci_td *td, void * data, int data_len, int dlen, int status, __OHCI_BAG lw0, __OHCI_BAG lw1)
 {  
+	struct usb_ohci_ed *ed = td->ed;
 	if(lw0 != NULL) {
-		if(USB_ST_CRC < 0 && (status == USB_ST_DATAUNDERRUN || status == USB_ST_NOERROR)) 
+		if(0 < 0 && (status == USB_ST_DATAUNDERRUN || status == USB_ST_NOERROR)) 
 			((struct ohci_state * )lw0)->status = data_len;
 		else
 			((struct ohci_state * )lw0)->status = status;
@@ -107,9 +109,9 @@ static int sohci_blocking_handler(void * ohci_in, struct usb_ohci_ed *ed, void *
     return 0;                       
 }
   
-static int sohci_int_handler(void * ohci_in, struct usb_ohci_ed *ed, void * data, int data_len, int status, __OHCI_BAG lw0, __OHCI_BAG lw1)
+static int sohci_int_handler(void * ohci_in, struct usb_ohci_td *td, void * data, int data_len, int dlen, int status, __OHCI_BAG lw0, __OHCI_BAG lw1)
 {
-
+	struct usb_ohci_ed *ed = td->ed;
 	struct ohci * ohci = ohci_in; 
 	usb_device_irq handler=(void *) lw0;
 	void *dev_id = (void *) lw1;
@@ -127,9 +129,30 @@ static int sohci_int_handler(void * ohci_in, struct usb_ohci_ed *ed, void * data
 	return 0;
 }
 
-static int sohci_iso_handler(void * ohci_in, struct usb_ohci_ed *ed, void * data, int data_len, int status, __OHCI_BAG lw0, __OHCI_BAG lw1) {
+static int sohci_ret_handler(void * ohci_in, struct usb_ohci_td *td, void * data, int data_len, int dlen, int status, __OHCI_BAG lw0, __OHCI_BAG lw1)
+{
+	struct usb_ohci_ed *ed = td->ed;
+	struct ohci * ohci = ohci_in; 
+	usb_device_irq handler=(void *) lw0;
+	void *dev_id = (void *) lw1;
+	int ret;
+
+	OHCI_DEBUG({ int i; printk("USB HC RET <<<: %x: data(%d):", ed->hwINFO, data_len);)
+	OHCI_DEBUG( for(i=0; i < data_len; i++ ) printk(" %02x", ((__u8 *) data)[i]);)
+	OHCI_DEBUG( printk(" ret_status: %x\n", status); })
+ 
+	ret = handler(status, data, data_len, dev_id);
+	if(ret == 0) return 0; /* 0 .. do not requeue  */
+	if(status > 0) return -1; /* error occured do not requeue ? */
+	ohci_trans_req(ohci, ed, 0, NULL, data, dlen, (__OHCI_BAG) handler, (__OHCI_BAG) dev_id, td->type & 0x7, sohci_ret_handler); /* requeue int request */
+ 
+	return 0;
+}
+
+static int sohci_iso_handler(void * ohci_in, struct usb_ohci_td *td, void * data, int data_len, int dlen, int status, __OHCI_BAG lw0, __OHCI_BAG lw1) {
 
 	// struct ohci * ohci = ohci_in; 
+	struct usb_ohci_ed *ed = td->ed;
 	unsigned int ix = (unsigned int) lw0;
 	struct usb_isoc_desc * id = (struct usb_isoc_desc *) lw1;
 	struct usb_ohci_td **tdp = id->td;
@@ -311,7 +334,7 @@ static void * sohci_request_bulk(struct usb_device *usb_dev, unsigned int pipe, 
 	
 	OHCI_DEBUG( printk("USB HC BULK_RQ>>>: %x \n", ed->hwINFO);) 
 	
-	ohci_trans_req(ohci, ed, 0, NULL, data, len, (__OHCI_BAG) handler, (__OHCI_BAG) dev_id, (usb_pipeout(pipe))?BULK_OUT:BULK_IN, sohci_int_handler);
+	ohci_trans_req(ohci, ed, 0, NULL, data, len, (__OHCI_BAG) handler, (__OHCI_BAG) dev_id, (usb_pipeout(pipe))?BULK_OUT:BULK_IN, sohci_ret_handler);
 	if (ED_STATE(ed) != ED_OPER)  ohci_link_ed(ohci, ed);
 
 	return ed;   
@@ -482,7 +505,7 @@ static int sohci_kill_isoc(struct usb_isoc_desc *id) {
 	struct usb_ohci_ed	*ed = NULL;
 	struct usb_ohci_td	**td = id->td;
 	int i;
-printk("KILL_ISOC***:\n");	
+ 
 	for (i = 0; i < id->frame_count; i++) {
 		if(td[i]) {
 			td[i]->type |= DEL;
@@ -490,22 +513,17 @@ printk("KILL_ISOC***:\n");
 		}
 	} 
 	if(ed) usb_ohci_rm_ep(id->usb_dev, ed, NULL, NULL, NULL, TD_RM);
-printk(": end KILL_ISOC***: %p\n", ed);		
+ 	
 	id->start_frame = -1;
 	return 0;
 }
 
 
 static void sohci_free_isoc(struct usb_isoc_desc *id) {
-printk("FREE_ISOC***\n");
-wait_ms(2000);
+
 	if(id->start_frame >= 0) sohci_kill_isoc(id);
-printk("FREE_ISOC2***\n");
-wait_ms(2000);
 	kfree(id->td);
 	kfree(id);
-printk("FREE_ISOC3***\n");
-wait_ms(2000);
 }
 
 struct usb_operations sohci_device_operations = {
@@ -772,17 +790,14 @@ struct usb_ohci_ed *usb_ohci_add_ep(struct usb_device * usb_dev, struct usb_hcd_
 
    	// struct ohci * ohci = usb_dev->bus->hcpriv;
 	struct usb_ohci_td * td;  
-	struct usb_ohci_ed * ed, *ed1; 
+	struct usb_ohci_ed * ed; 
 	 
- 	int ed_state, ed_state1;
+ 	int ed_state;
  
 	spin_lock(&usb_ed_lock);
 
 	ed = ohci_find_ep(usb_dev, hcd_ed); 
 
-	 
-	ed1 = ((void *) ed) + 0x40; ed_state1 = ED_STATE(ed1);
-OHCI_DEBUG(printk("++++ USB HC add 60 ed1 %x: %x :state: %x\n", ed1->hwINFO, (unsigned int ) ed1, ed_state1); )
 	ed_state = ED_STATE(ed); /* store state of ed */
 	OHCI_DEBUG(printk("USB HC add ed %x: %x :state: %x\n", ed->hwINFO, (unsigned int ) ed, ed_state); )
 	if (ed_state == ED_NEW) {
@@ -1139,7 +1154,8 @@ static int usb_ohci_done_list(struct ohci * ohci, struct usb_ohci_td * td_list) 
   	struct usb_ohci_td      * td_list_next = NULL;
 
 	int cc;
-	int i;
+	int i; 
+	int dlen = 0;
  
   	while(td_list) {
    		td_list_next = td_list->next_dl_td;
@@ -1156,8 +1172,9 @@ static int usb_ohci_done_list(struct ohci * ohci, struct usb_ohci_td * td_list) 
  			}
  			else {
  				if(td_list->hwBE != 0) {
+ 					dlen = (bus_to_virt(td_list->hwBE) - td_list->buffer_start + 1);
  					if(td_list->hwCBP == 0)
-  			    		td_list->ed->len += (bus_to_virt(td_list->hwBE) - td_list->buffer_start + 1);
+  			    		td_list->ed->len += dlen;
   					else
   			    		td_list->ed->len += (bus_to_virt(td_list->hwCBP) - td_list->buffer_start);
   			    }
@@ -1170,9 +1187,10 @@ static int usb_ohci_done_list(struct ohci * ohci, struct usb_ohci_td * td_list) 
  		
   		if((td_list->type & SEND) && (ED_STATE(td_list->ed) != ED_STOP) && (td_list->handler)) {  /*  send the reply  */	
   			td_list->handler((void *) ohci,
-						td_list->ed,				  
+						td_list,				  
 						td_list->ed->buffer_start, 
 						td_list->ed->len,
+						dlen,
 						cc,
 						td_list->lw0,
 						td_list->lw1); 
@@ -1227,7 +1245,7 @@ void reset_hc(struct ohci *ohci) {
 		udelay(1);
 	}	 
 }
-static struct ohci *__ohci;
+
 
 /*
  * Start an OHCI controller, set the BUS operational
@@ -1353,7 +1371,7 @@ static struct ohci *alloc_ohci(void* mem_base)
 	ohci->irq = -1;
 	ohci->regs = mem_base;   
 	ohci->hc_area = hc_area;
-	__ohci = ohci;
+
 	/*
 	 * for load ballancing of the interrupt branches 
 	 */
@@ -1395,7 +1413,7 @@ static void release_ohci(struct ohci *ohci)
     /* disconnect all devices */    
 	if(ohci->bus->root_hub) usb_disconnect(&ohci->bus->root_hub);
 	
-	reset_hc(__ohci);
+	reset_hc(ohci);
 	writel(OHCI_USB_RESET, &ohci->regs->control);
 	wait_ms(10);
 	
@@ -1428,6 +1446,9 @@ static int found_ohci(int irq, void* mem_base)
 		return -ENOMEM;
 	}
 	
+	INIT_LIST_HEAD(&ohci->ohci_hcd_list);
+	list_add(&ohci->ohci_hcd_list, &ohci_hcd_list);
+	
 	reset_hc(ohci);
 	writel(OHCI_USB_RESET, &ohci->regs->control);
 	wait_ms(10);
@@ -1438,6 +1459,7 @@ static int found_ohci(int irq, void* mem_base)
 		start_hc(ohci);
 		return 0;
  	}	
+ 	printk(KERN_ERR "USB HC (ohci-hcd): request interrupt %d failed\n", irq);
 	release_ohci(ohci);
 	return -EBUSY;
 }
@@ -1445,7 +1467,8 @@ static int found_ohci(int irq, void* mem_base)
 static int start_ohci(struct pci_dev *dev)
 {
 	unsigned int mem_base = dev->resource[0].start;
-	 
+	
+	pci_set_master(dev);
 	mem_base = (unsigned int) ioremap_nocache(mem_base, 4096);
 
 	if (!mem_base) {
@@ -1488,17 +1511,18 @@ static int handle_apm_event(apm_event_t event)
  
 int ohci_hcd_init(void)
 {
+	int ret = -ENODEV;
 	struct pci_dev *dev = NULL;
  
 	while((dev = pci_find_class(PCI_CLASS_SERIAL_USB_OHCI, dev))) { 
-		if (start_ohci(dev) < 0) return -ENODEV;
+		if (start_ohci(dev) >= 0) ret = 0;
 	}
     
 #ifdef CONFIG_APM
 	apm_register_callback(&handle_apm_event);
 #endif
   
-    return 0;
+    return ret;
 }
 
 #ifdef MODULE
@@ -1509,10 +1533,17 @@ int init_module(void)
 
 void cleanup_module(void)
 {	
+	struct ohci *ohci;
+	
 #	ifdef CONFIG_APM
 	apm_unregister_callback(&handle_apm_event);
 #	endif
-	release_ohci(__ohci);
+	while(!list_empty(&ohci_hcd_list)) {
+		ohci = list_entry(ohci_hcd_list.next, struct ohci, ohci_hcd_list);
+		list_del(ohci->ohci_hcd_list);
+		INIT_LIST_HEAD(ohci->ohci_hcd_list);
+		release_ohci(ohci);
+	}		
 }
 #endif //MODULE
 

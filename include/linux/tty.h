@@ -23,7 +23,6 @@
 #include <linux/tqueue.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_ldisc.h>
-#include <linux/serialP.h>
 
 #include <asm/system.h>
 

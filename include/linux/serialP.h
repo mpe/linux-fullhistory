@@ -23,9 +23,6 @@
 #include <linux/termios.h>
 #include <linux/tqueue.h>
 #include <linux/wait.h>
-#ifdef CONFIG_PCI
-#include <linux/pci.h>
-#endif
 
 /*
  * Counters of the input lines (CTS, DSR, RI, CD) interrupts
@@ -151,6 +148,7 @@ struct rs_multiport_struct {
 /*
  * Structures and definitions for PCI support
  */
+struct pci_dev;
 struct pci_board {
 	unsigned short vendor;
 	unsigned short device;

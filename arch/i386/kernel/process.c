@@ -339,70 +339,6 @@ void show_regs(struct pt_regs * regs)
 }
 
 /*
- * Allocation and freeing of basic task resources.
- *
- * NOTE! The task struct and the stack go together
- *
- * The task structure is a two-page thing, and as such
- * not reliable to allocate using the basic page alloc
- * functions. We have a small cache of structures for
- * when the allocations fail..
- *
- * This extra buffer essentially acts to make for less
- * "jitter" in the allocations..
- *
- * On SMP we don't do this right now because:
- *  - we aren't holding any locks when called, and we might
- *    as well just depend on the generic memory management
- *    to do proper locking for us instead of complicating it
- *    here.
- *  - if you use SMP you have a beefy enough machine that
- *    this shouldn't matter..
- */
-#ifndef __SMP__
-#define EXTRA_TASK_STRUCT	16
-static struct task_struct * task_struct_stack[EXTRA_TASK_STRUCT];
-static int task_struct_stack_ptr = -1;
-#endif
-
-struct task_struct * alloc_task_struct(void)
-{
-#ifndef EXTRA_TASK_STRUCT
-	return (struct task_struct *) __get_free_pages(GFP_KERNEL,1);
-#else
-	int index;
-	struct task_struct *ret;
-
-	index = task_struct_stack_ptr;
-	if (index >= EXTRA_TASK_STRUCT/2)
-		goto use_cache;
-	ret = (struct task_struct *) __get_free_pages(GFP_KERNEL,1);
-	if (!ret) {
-		index = task_struct_stack_ptr;
-		if (index >= 0) {
-use_cache:
-			ret = task_struct_stack[index];
-			task_struct_stack_ptr = index-1;
-		}
-	}
-	return ret;
-#endif
-}
-
-void free_task_struct(struct task_struct *p)
-{
-#ifdef EXTRA_TASK_STRUCT
-	int index = task_struct_stack_ptr+1;
-
-	if (index < EXTRA_TASK_STRUCT) {
-		task_struct_stack[index] = p;
-		task_struct_stack_ptr = index;
-	} else
-#endif
-		free_pages((unsigned long) p, 1);
-}
-
-/*
  * No need to lock the MM as we are the last user
  */
 void release_segments(struct mm_struct *mm)
@@ -417,19 +353,6 @@ void release_segments(struct mm_struct *mm)
 		clear_LDT();
 		vfree(ldt);
 	}
-}
-
-void forget_segments(void)
-{
-	/* forget local segments */
-	__asm__ __volatile__("movl %w0,%%fs ; movl %w0,%%gs"
-		: /* no outputs */
-		: "r" (0));
-
-	/*
-	 * Load the LDT entry of init_task.
-	 */
-	load_LDT(&init_mm);
 }
 
 /*

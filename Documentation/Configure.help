@@ -5368,6 +5368,15 @@ CONFIG_PPP_ASYNC
   into and removed from the running kernel).  If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
 
+CONFIG_PPP_SYNC_TTY
+  Say Y (or M) here if you want to be able to use PPP over synchronous
+  (HDLC) tty devices, such as the SyncLink adapter. These devices
+  are often used for high-speed leased lines like T1/E1.
+
+  This code is also available as a module (code which can be inserted
+  into and removed from the running kernel).  If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
+
 PPP Deflate compression
 CONFIG_PPP_DEFLATE
   Support for the Deflate compression method for PPP, which uses the
@@ -10387,7 +10396,7 @@ CONFIG_SOUND
   I'm told that even without a sound card, you can make your computer
   say more than an occasional beep, by programming the PC speaker.
   Kernel patches and supporting utilities to do that are in the pcsp
-  package, available at http://www.imladris.demon.co.uk/pcsp/ .
+  package, available at ftp://ftp.infradead.org/pub/pcsp/.
 
 OSS sound modules
 CONFIG_SOUND_OSS
@@ -10922,6 +10931,23 @@ CONFIG_SOUND_WAVEARTIST
   Say Y here to include support for the Rockwell WaveArtist sound
   system.  This driver is mainly for the NetWinder.
 
+VIA 82Cxxx Audio Codec
+CONFIG_SOUND_VIA82CXXX
+  Say Y here to include support for the audio codec found on
+  VIA 82Cxxx-based chips.  Typically these are built into a motherboard.
+  DO NOT select SoundBlaster or Adlib with this driver, unless you have
+  a SoundBlaster or Adlib card in addition to your VIA audio chip.
+
+NeoMagic 256AV/256ZX sound chipsets
+CONFIG_SOUND_NM256
+  Say M here to include audio support for the NeoMagic 256AV/256ZX
+  chipsets.  These are the audio chipsets found in the Sony Z505S/SX/DX,
+  some Sony F-series, and the Dell Latitude CPi and CPt laptops. It includes 
+  support for an AC97-compatible mixer and an apparently proprietary sound 
+  engine.
+
+  See Documentation/sound/NM256 for further information.
+
 Are you using a crosscompiler
 CONFIG_CROSSCOMPILE
   Say Y here if you are compiling the kernel on a different
@@ -11329,7 +11355,7 @@ CONFIG_SCSI_SUNESP
   This is the driver for the Sun ESP SCSI host adapter. The ESP
   chipset is present in most SPARC-based computers.
 
-SPARC /dev/openprom compatibility driver
+SPARC /dev/openprom compatibility driver (EXPERIMENTAL)
 CONFIG_SUN_OPENPROMIO
   This driver provides user programs with an interface to the SPARC
   PROM device tree. The driver implements a SunOS-compatible
@@ -11427,7 +11453,7 @@ CONFIG_M68060
   If you anticipate running this kernel on a computer with a MC68060
   processor, say Y. Otherwise, say N.
 
-Math emulation support
+Math emulation support (EXPERIMENTAL)
 CONFIG_M68KFPU_EMU
   At some point in the future, this will cause floating-point math
   instructions to be emulated by the kernel on machines that lack a
@@ -11486,7 +11512,7 @@ CONFIG_ZORRO
   Note that even if you say N here, you can still use your expansion
   cards. If in doubt, say Y.
 
-Amiga 1200/600 PCMCIA support
+Amiga 1200/600 PCMCIA support (EXPERIMENTAL)
 CONFIG_AMIGA_PCMCIA
   Include support in the kernel for pcmcia on Amiga 1200 and Amiga
   600. If you intend to use pcmcia cards say Y; otherwise say N.
@@ -11618,7 +11644,7 @@ CONFIG_BLZ1230_SCSI
   1260 accelerator, and the optional SCSI module, say Y. Otherwise,
   say N.
 
-Blizzard PowerUP 603e+ SCSI support
+Blizzard PowerUP 603e+ SCSI support (EXPERIMENTAL)
 CONFIG_BLZ603EPLUS_SCSI
   If you have an Amiga 1200 with a Phase5 Blizzard PowerUP 603e+
   accelerator, say Y. Otherwise, say N.
@@ -11802,7 +11828,7 @@ CONFIG_ATARI_MIDI
   want). If you want to compile it as a module, say M here and read
   Documentation/modules.txt.
 
-Atari DSP56k Digital Signal Processor support
+Atari DSP56k Digital Signal Processor support (EXPERIMENTAL)
 CONFIG_ATARI_DSP56K
   If you want to be able to use the DSP56001 in Falcons, say Y. This
   driver is still experimental, and if you don't know what it is, or
@@ -12414,7 +12440,7 @@ CONFIG_TEXT_SECTIONS
   enabled. Say Y unless you experience problems that you suspect may
   be caused by this.
 
-Disable pgtable cache
+Disable pgtable cache (EXPERIMENTAL)
 CONFIG_NO_PGT_CACHE
   Normally the kernel maintains a `quicklist' of preallocated
   pagetable structures in order to increase performance. On machines
@@ -12437,7 +12463,7 @@ CONFIG_CMDLINE
   time by entering them here. As a minimum, you should specify the
   memory size and the root device (e.g., mem=64M root=/dev/nfs)
 
-Hardware alignment trap
+Hardware alignment trap (EXPERIMENTAL)
 CONFIG_ALIGNMENT_TRAP
   ARM processors can not fetch/store information which is not
   naturally aligned on the bus, i.e., a 4 byte fetch must start at an
@@ -12543,7 +12569,7 @@ CONFIG_IRDA_COMPRESSION
   If you say Y here, you also need to say Y or M to a compression
   protocol below.
 
-IrLAP Deflate Compression Protocol
+IrLAP Deflate Compression Protocol (EXPERIMENTAL)
 CONFIG_IRDA_DEFLATE
   Say Y here if you want to build support for the Deflate compression
   protocol. The deflate compression (GZIP) is exactly
@@ -12746,6 +12772,13 @@ CONFIG_BVME6000_SCSI
   The BVME4000 and BVME6000 boards from BVM Ltd use the NCR53C710
   SCSI controller chip.  Almost everyone using one of these boards
   will want to say Y to this question.
+
+Simple 53c710 SCSI support (Compaq, NCR machines)
+CONFIG_SCSI_SIM710
+  This is a driver for the NCR53C710 chip commonly found in Compaq and
+  NCR machines.  If you are looking for 53C710 support for an Amiga or
+  some 680x0 based VME card then you probably want the other NCR53C710
+  driver.
 
 MVME16x Ethernet support
 CONFIG_MVME16x_NET

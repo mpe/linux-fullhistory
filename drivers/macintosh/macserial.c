@@ -2584,7 +2584,9 @@ void unregister_serial(int line)
  * ------------------------------------------------------------
  */
 #ifdef CONFIG_SERIAL_CONSOLE
-
+#ifdef CONFIG_SERIAL
+#error Cannot build serial console with macserial and serial drivers
+#endif
 
 /*
  *	Print a string to the serial port trying not to disturb
@@ -2843,7 +2845,7 @@ static struct console sercons = {
 /*
  *	Register console.
  */
-long __init serial_console_init(long kmem_start, long kmem_end)
+void __init serial_console_init(void)
 {
 	register_console(&sercons);
 	return kmem_start;
