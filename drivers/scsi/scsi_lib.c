@@ -252,6 +252,16 @@ static void scsi_wait_done(struct scsi_cmnd *cmd)
 		complete(req->waiting);
 }
 
+/* This is the end routine we get to if a command was never attached
+ * to the request.  Simply complete the request without changing
+ * rq_status; this will cause a DRIVER_ERROR. */
+static void scsi_wait_req_end_io(struct request *req)
+{
+	BUG_ON(!req->waiting);
+
+	complete(req->waiting);
+}
+
 void scsi_wait_req(struct scsi_request *sreq, const void *cmnd, void *buffer,
 		   unsigned bufflen, int timeout, int retries)
 {
@@ -259,6 +269,7 @@ void scsi_wait_req(struct scsi_request *sreq, const void *cmnd, void *buffer,
 	
 	sreq->sr_request->waiting = &wait;
 	sreq->sr_request->rq_status = RQ_SCSI_BUSY;
+	sreq->sr_request->end_io = scsi_wait_req_end_io;
 	scsi_do_req(sreq, cmnd, buffer, bufflen, scsi_wait_done,
 			timeout, retries);
 	wait_for_completion(&wait);
