@@ -1,9 +1,6 @@
 /*
  * sound/sound_timer.c
  *
- * Timer for the level 2 interface of the /dev/sequencer. Uses the
- * 80 and 320 usec timers of OPL-3 (PAS16 only) and GUS.
- *
  * Copyright by Hannu Savolainen 1993
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,7 +30,7 @@
 
 #ifdef CONFIGURE_SOUNDCARD
 
-#if !defined(EXCLUDE_SEQUENCER) && (!defined(EXCLUDE_GUS) || (!defined(EXCLUDE_PAS) && !defined(EXCLUDE_YM3812)))
+#if !defined(EXCLUDE_SEQUENCER)
 
 static volatile int initialized = 0, opened = 0, tmr_running = 0;
 static volatile time_t tmr_offs, tmr_ctr;
@@ -42,46 +39,9 @@ static volatile int curr_tempo, curr_timebase;
 static volatile unsigned long curr_ticks;
 static volatile unsigned long next_event_time;
 static unsigned long prev_event_time;
-static volatile int select_addr, data_addr;
-static volatile int curr_timer = 0;
 static volatile unsigned long usecs_per_tmr;	/* Length of the current interval */
 
-
-static void
-timer_command (unsigned int addr, unsigned int val)
-{
-  int             i;
-
-  OUTB ((unsigned char) (addr & 0xff), select_addr);
-
-  for (i = 0; i < 2; i++)
-    INB (select_addr);
-
-  OUTB ((unsigned char) (val & 0xff), data_addr);
-
-  for (i = 0; i < 2; i++)
-    INB (select_addr);
-}
-
-static void
-arm_timer (int timer, unsigned int interval)
-{
-
-  curr_timer = timer;
-
-  if (timer == 1)
-    {
-      gus_write8 (0x46, 256 - interval);	/* Set counter for timer 1 */
-      gus_write8 (0x45, 0x04);	/* Enable timer 1 IRQ */
-      timer_command (0x04, 0x01);	/* Start timer 1 */
-    }
-  else
-    {
-      gus_write8 (0x47, 256 - interval);	/* Set counter for timer 2 */
-      gus_write8 (0x45, 0x08);	/* Enable timer 2 IRQ */
-      timer_command (0x04, 0x02);	/* Start timer 2 */
-    }
-}
+static struct sound_lowlev_timer *tmr = NULL;
 
 static unsigned long
 tmr2ticks (int tmr_value)
@@ -104,8 +64,6 @@ static void
 reprogram_timer (void)
 {
   unsigned long   usecs_per_tick;
-  int             timer_no, resolution;
-  int             divisor;
 
   usecs_per_tick = (60 * 1000000) / (curr_tempo * curr_timebase);
 
@@ -115,21 +73,21 @@ reprogram_timer (void)
   if (usecs_per_tick < 2000)
     usecs_per_tick = 2000;
 
-  if (usecs_per_tick > (256 * 80))
-    {
-      timer_no = 2;
-      resolution = 320;		/* usec */
-    }
-  else
-    {
-      timer_no = 1;
-      resolution = 80;		/* usec */
-    }
+  usecs_per_tmr = tmr->tmr_start (tmr->dev, usecs_per_tick);
+}
 
-  divisor = (usecs_per_tick + (resolution / 2)) / resolution;
-  usecs_per_tmr = divisor * resolution;
+void
+sound_timer_syncinterval (unsigned int new_usecs)
+{
+/*
+ *    This routine is called by the hardware level if
+ *      the clock frequency has changed for some reason.
+ */
+  tmr_offs = tmr_ctr;
+  ticks_offs += tmr2ticks (tmr_ctr);
+  tmr_ctr = 0;
 
-  arm_timer (timer_no, divisor);
+  usecs_per_tmr = new_usecs;
 }
 
 static void
@@ -137,21 +95,22 @@ tmr_reset (void)
 {
   unsigned long   flags;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
   tmr_offs = 0;
   ticks_offs = 0;
   tmr_ctr = 0;
   next_event_time = 0xffffffff;
   prev_event_time = 0;
   curr_ticks = 0;
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 }
 
 static int
 timer_open (int dev, int mode)
 {
   if (opened)
-    return RET_ERROR (EBUSY);
+    return -EBUSY;
 
   tmr_reset ();
   curr_tempo = 60;
@@ -166,7 +125,7 @@ static void
 timer_close (int dev)
 {
   opened = tmr_running = 0;
-  gus_write8 (0x45, 0);		/* Disable both timers */
+  tmr->tmr_disable (tmr->dev);
 }
 
 static int
@@ -245,12 +204,12 @@ timer_get_time (int dev)
 
 static int
 timer_ioctl (int dev,
-	     unsigned int cmd, unsigned int arg)
+	     unsigned int cmd, ioctl_arg arg)
 {
   switch (cmd)
     {
     case SNDCTL_TMR_SOURCE:
-      return IOCTL_OUT (arg, TMR_INTERNAL);
+      return snd_ioctl_return ((int *) arg, TMR_INTERNAL);
       break;
 
     case SNDCTL_TMR_START:
@@ -271,7 +230,7 @@ timer_ioctl (int dev,
 
     case SNDCTL_TMR_TIMEBASE:
       {
-	int             val = IOCTL_IN (arg);
+	int             val = get_fs_long ((long *) arg);
 
 	if (val)
 	  {
@@ -282,13 +241,13 @@ timer_ioctl (int dev,
 	    curr_timebase = val;
 	  }
 
-	return IOCTL_OUT (arg, curr_timebase);
+	return snd_ioctl_return ((int *) arg, curr_timebase);
       }
       break;
 
     case SNDCTL_TMR_TEMPO:
       {
-	int             val = IOCTL_IN (arg);
+	int             val = get_fs_long ((long *) arg);
 
 	if (val)
 	  {
@@ -303,25 +262,25 @@ timer_ioctl (int dev,
 	    reprogram_timer ();
 	  }
 
-	return IOCTL_OUT (arg, curr_tempo);
+	return snd_ioctl_return ((int *) arg, curr_tempo);
       }
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
-      if (IOCTL_IN (arg) != 0)	/* Can't change */
-	return RET_ERROR (EINVAL);
+      if (get_fs_long ((long *) arg) != 0)	/* Can't change */
+	return -EINVAL;
 
-      return IOCTL_OUT (arg, ((curr_tempo * curr_timebase) + 30) / 60);
+      return snd_ioctl_return ((int *) arg, ((curr_tempo * curr_timebase) + 30) / 60);
       break;
 
     case SNDCTL_TMR_METRONOME:
       /* NOP */
       break;
 
-    default:
+    default:;
     }
 
-  return RET_ERROR (EINVAL);
+  return -EINVAL;
 }
 
 static void
@@ -339,7 +298,7 @@ timer_arm (int dev, long time)
 
 static struct sound_timer_operations sound_timer =
 {
-  {"OPL-3/GUS Timer", 0},
+  {"GUS Timer", 0},
   1,				/* Priority */
   0,				/* Local device link */
   timer_open,
@@ -353,16 +312,10 @@ static struct sound_timer_operations sound_timer =
 void
 sound_timer_interrupt (void)
 {
-  gus_write8 (0x45, 0);		/* Ack IRQ */
-  timer_command (4, 0x80);	/* Reset IRQ flags */
-
   if (!opened)
     return;
 
-  if (curr_timer == 1)
-    gus_write8 (0x45, 0x04);	/* Start timer 1 again */
-  else
-    gus_write8 (0x45, 0x08);	/* Start timer 2 again */
+  tmr->tmr_restart (tmr->dev);
 
   if (!tmr_running)
     return;
@@ -378,26 +331,22 @@ sound_timer_interrupt (void)
 }
 
 void
-sound_timer_init (int io_base)
+sound_timer_init (struct sound_lowlev_timer *t, char *name)
 {
   int             n;
 
-  if (initialized)
+  if (initialized || t == NULL)
     return;			/* There is already a similar timer */
 
-  select_addr = io_base;
-  data_addr = io_base + 1;
-
   initialized = 1;
+  tmr = t;
 
-#if 1
   if (num_sound_timers >= MAX_TIMER_DEV)
     n = 0;			/* Overwrite the system timer */
   else
     n = num_sound_timers++;
-#else
-  n = 0;
-#endif
+
+  strcpy (sound_timer.info.name, name);
 
   sound_timer_devs[n] = &sound_timer;
 }

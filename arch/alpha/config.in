@@ -5,6 +5,12 @@
 
 comment 'General setup'
 
+if [ "`uname`" != "Linux" ]; then
+  define_bool CONFIG_CROSSCOMPILE y
+else
+  define_bool CONFIG_NATIVE y
+fi
+
 tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD y
 bool 'Normal (MFM/RLL) disk and IDE disk/cdrom support' CONFIG_ST506 y
 if [ "$CONFIG_ST506" = "y" ]; then

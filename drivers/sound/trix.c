@@ -40,18 +40,20 @@ static int      kilroy_was_here = 0;	/* Don't detect twice */
 static int      sb_initialized = 0;
 static int      mpu_initialized = 0;
 
+static sound_os_info *trix_osp = NULL;
+
 static unsigned char
 trix_read (int addr)
 {
-  OUTB ((unsigned char) addr, 0x390);	/* MT-0002-PC ASIC address */
-  return INB (0x391);		/* MT-0002-PC ASIC data */
+  outb ((unsigned char) addr, 0x390);	/* MT-0002-PC ASIC address */
+  return inb (0x391);		/* MT-0002-PC ASIC data */
 }
 
 static void
 trix_write (int addr, int data)
 {
-  OUTB ((unsigned char) addr, 0x390);	/* MT-0002-PC ASIC address */
-  OUTB ((unsigned char) data, 0x391);	/* MT-0002-PC ASIC data */
+  outb ((unsigned char) addr, 0x390);	/* MT-0002-PC ASIC address */
+  outb ((unsigned char) data, 0x391);	/* MT-0002-PC ASIC data */
 }
 
 static void
@@ -61,22 +63,22 @@ download_boot (int base)
   int             i = 0, n = sizeof (trix_boot);
 
   trix_write (0xf8, 0x00);	/* ??????? */
-  OUTB (0x01, base + 6);	/* Clear the internal data pointer */
-  OUTB (0x00, base + 6);	/* Restart */
+  outb (0x01, base + 6);	/* Clear the internal data pointer */
+  outb (0x00, base + 6);	/* Restart */
 
   /*
      *  Write the boot code to the RAM upload/download register.
      *  Each write increments the internal data pointer.
    */
-  OUTB (0x01, base + 6);	/* Clear the internal data pointer */
-  OUTB (0x1A, 0x390);		/* Select RAM download/upload port */
+  outb (0x01, base + 6);	/* Clear the internal data pointer */
+  outb (0x1A, 0x390);		/* Select RAM download/upload port */
 
   for (i = 0; i < n; i++)
-    OUTB (trix_boot[i], 0x391);
+    outb (trix_boot[i], 0x391);
   for (i = n; i < 10016; i++)	/* Clear up to first 16 bytes of data RAM */
-    OUTB (0x00, 0x391);
-  OUTB (0x00, base + 6);	/* Reset */
-  OUTB (0x50, 0x390);		/* ?????? */
+    outb (0x00, 0x391);
+  outb (0x00, base + 6);	/* Reset */
+  outb (0x50, 0x390);		/* ?????? */
 #endif
 }
 
@@ -85,21 +87,31 @@ trix_set_wss_port (struct address_info *hw_config)
 {
   unsigned char   addr_bits;
 
+  if (check_region (0x390, 2))
+    {
+      printk ("AudioTriX: Config port I/O conflict\n");
+      return 0;
+    }
+
   if (kilroy_was_here)		/* Already initialized */
     return 0;
 
   if (trix_read (0x15) != 0x71)	/* No asic signature */
-    return 0;
+    {
+      DDB (printk ("No AudioTriX ASIC signature found\n"));
+      return 0;
+    }
+
+  request_region (0x390, 2, "AudioTriX");
 
   kilroy_was_here = 1;
 
   /*
-     * Disable separate wave playback and recording DMA channels since
-     * the driver doesn't support duplex mode yet.
+   * Reset some registers.
    */
 
-  trix_write (0x13, trix_read (0x13) & ~0x80);
-  trix_write (0x14, trix_read (0x14) & ~0x80);
+  trix_write (0x13, 0);
+  trix_write (0x14, 0);
 
   /*
      * Configure the ASIC to place the codec to the proper I/O location
@@ -140,10 +152,18 @@ probe_trix_wss (struct address_info *hw_config)
      * system returns 0x04 while some cards (AudioTriX Pro for example)
      * return 0x00.
    */
+  if (check_region (hw_config->io_base, 8))
+    {
+      printk ("AudioTriX: MSS I/O port conflict\n");
+      return 0;
+    }
+
+  trix_osp = hw_config->osp;
+
   if (!trix_set_wss_port (hw_config))
     return 0;
 
-  if ((INB (hw_config->io_base + 3) & 0x3f) != 0x00)
+  if ((inb (hw_config->io_base + 3) & 0x3f) != 0x00)
     {
       DDB (printk ("No MSS signature detected on port 0x%x\n", hw_config->io_base));
       return 0;
@@ -161,23 +181,30 @@ probe_trix_wss (struct address_info *hw_config)
       return 0;
     }
 
+  if (hw_config->dma2 != -1)
+    if (hw_config->dma2 != 0 && hw_config->dma2 != 1 && hw_config->dma2 != 3)
+      {
+	printk ("AudioTriX: Bad capture DMA %d\n", hw_config->dma2);
+	return 0;
+      }
+
   /*
      * Check that DMA0 is not in use with a 8 bit board.
    */
 
-  if (hw_config->dma == 0 && INB (hw_config->io_base + 3) & 0x80)
+  if (hw_config->dma == 0 && inb (hw_config->io_base + 3) & 0x80)
     {
       printk ("AudioTriX: Can't use DMA0 with a 8 bit card\n");
       return 0;
     }
 
-  if (hw_config->irq > 7 && hw_config->irq != 9 && INB (hw_config->io_base + 3) & 0x80)
+  if (hw_config->irq > 7 && hw_config->irq != 9 && inb (hw_config->io_base + 3) & 0x80)
     {
       printk ("AudioTriX: Can't use IRQ%d with a 8 bit card\n", hw_config->irq);
       return 0;
     }
 
-  return ad1848_detect (hw_config->io_base + 4);
+  return ad1848_detect (hw_config->io_base + 4, NULL, hw_config->osp);
 }
 
 long
@@ -191,9 +218,15 @@ attach_trix_wss (long mem_start, struct address_info *hw_config)
   {1, 2, 0, 3};
 
   int             config_port = hw_config->io_base + 0, version_port = hw_config->io_base + 3;
+  int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
+
+  trix_osp = hw_config->osp;
 
   if (!kilroy_was_here)
-    return mem_start;
+    {
+      DDB (printk ("AudioTriX: Attach called but not probed yet???\n"));
+      return mem_start;
+    }
 
   /*
      * Set the IRQ and DMA addresses.
@@ -201,18 +234,40 @@ attach_trix_wss (long mem_start, struct address_info *hw_config)
 
   bits = interrupt_bits[hw_config->irq];
   if (bits == -1)
-    return mem_start;
+    {
+      printk ("AudioTriX: Bad IRQ (%d)\n", hw_config->irq);
+      return mem_start;
+    }
 
-  OUTB (bits | 0x40, config_port);
-  if ((INB (version_port) & 0x40) == 0)
+  outb (bits | 0x40, config_port);
+  if ((inb (version_port) & 0x40) == 0)
     printk ("[IRQ Conflict?]");
 
-  OUTB (bits | dma_bits[hw_config->dma], config_port);	/* Write IRQ+DMA setup */
+  if (hw_config->dma2 == -1)	/* Single DMA mode */
+    {
+      bits |= dma_bits[dma1];
+      dma2 = dma1;
+    }
+  else
+    {
+      unsigned char   tmp;
+
+      tmp = trix_read (0x13) & ~30;
+      trix_write (0x13, tmp | 0x80 | (dma1 << 4));
+
+      tmp = trix_read (0x14) & ~30;
+      trix_write (0x14, tmp | 0x80 | (dma2 << 4));
+    }
+
+  outb (bits, config_port);	/* Write IRQ+DMA setup */
 
   ad1848_init ("AudioTriX Pro", hw_config->io_base + 4,
 	       hw_config->irq,
-	       hw_config->dma,
-	       hw_config->dma);
+	       dma1,
+	       dma2,
+	       0,
+	       hw_config->osp);
+  request_region (hw_config->io_base, 4, "MSS config");
   return mem_start;
 }
 
@@ -233,6 +288,12 @@ probe_trix_sb (struct address_info *hw_config)
 
   if (sb_initialized)
     return 0;
+
+  if (check_region (hw_config->io_base, 16))
+    {
+      printk ("AudioTriX: SB I/O port conflict\n");
+      return 0;
+    }
 
   if (hw_config->io_base & 0xffffff8f != 0x200)
     return 0;
@@ -300,6 +361,12 @@ probe_trix_mpu (struct address_info *hw_config)
   if (mpu_initialized)
     return 0;
 
+  if (check_region (hw_config->io_base, 4))
+    {
+      printk ("AudioTriX: MPU I/O port conflict\n");
+      return 0;
+    }
+
   if (hw_config->irq > 9)
     return 0;
 
@@ -335,5 +402,36 @@ probe_trix_mpu (struct address_info *hw_config)
   return 0;
 #endif
 }
+
+void
+unload_trix_wss (struct address_info *hw_config)
+{
+  int             dma2 = hw_config->dma2;
+
+  if (dma2 == -1)
+    dma2 = hw_config->dma;
+
+  release_region (0x390, 2);
+  release_region (hw_config->io_base, 4);
+
+  ad1848_unload (hw_config->io_base + 4,
+		 hw_config->irq,
+		 hw_config->dma,
+		 dma2,
+		 0);
+}
+
+void
+unload_trix_mpu (struct address_info *hw_config)
+{
+#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+  unload_mpu401 (hw_config);
+#endif
+}
+void
+unload_trix_sb (struct address_info *hw_config)
+{
+}
+
 
 #endif

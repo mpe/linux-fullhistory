@@ -8,10 +8,13 @@
 # Copyright (C) 1994 by Linus Torvalds
 #
 
+ifdef CONFIG_CROSSCOMPILE
 # enable this for linking under OSF/1:
-#LINKFLAGS = -non_shared -T 0x20000000 -N
+LINKFLAGS = -non_shared -T 0x20000000 -N
+else
 # enable this for linking under Linux:
 LINKFLAGS = -static -T bootloader.lds -N 
+endif
 
 .S.s:
 	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.o $<

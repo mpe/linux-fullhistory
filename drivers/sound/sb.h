@@ -18,8 +18,8 @@
 #define DSP_CMD_DMAOFF		0xD4
 
 #define IMODE_NONE		0
-#define IMODE_OUTPUT		1
-#define IMODE_INPUT		2
+#define IMODE_OUTPUT		PCM_ENABLE_OUTPUT
+#define IMODE_INPUT		PCM_ENABLE_INPUT
 #define IMODE_INIT		3
 #define IMODE_MIDI		4
 

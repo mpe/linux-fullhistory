@@ -42,12 +42,12 @@
 #define	STATPORT   (uart6850_base+1)	/*
 					   * * * Midi6850 Status Port on IBM   */
 
-#define uart6850_status()		INB(STATPORT)
-#define input_avail()		((uart6850_status()&INPUT_AVAIL))
-#define output_ready()		((uart6850_status()&OUTPUT_READY))
-#define uart6850_cmd(cmd)	OUTB(cmd, COMDPORT)
-#define uart6850_read()		INB(DATAPORT)
-#define uart6850_write(byte)	OUTB(byte, DATAPORT)
+#define uart6850_status()		inb( STATPORT)
+#define input_avail()		(uart6850_status()&INPUT_AVAIL)
+#define output_ready()		(uart6850_status()&OUTPUT_READY)
+#define uart6850_cmd(cmd)	outb( cmd,  COMDPORT)
+#define uart6850_read()		inb( DATAPORT)
+#define uart6850_write(byte)	outb( byte,  DATAPORT)
 
 #define	OUTPUT_READY	0x02	/*
 				   * * * Mask for Data Read Ready Bit   */
@@ -67,6 +67,13 @@ static int      my_dev;
 
 static int      reset_uart6850 (void);
 static void     (*midi_input_intr) (int dev, unsigned char data);
+static void     poll_uart6850 (unsigned long dummy);
+
+static sound_os_info *uart6850_osp;
+
+
+static struct timer_list uart6850_timer =
+{NULL, NULL, 0, 0, poll_uart6850};
 
 static void
 uart6850_input_loop (void)
@@ -93,7 +100,7 @@ uart6850_input_loop (void)
 }
 
 void
-m6850intr (INTR_HANDLER_PARMS (irq, dummy))
+m6850intr (int irq, struct pt_regs *dummy)
 {
   if (input_avail ())
     uart6850_input_loop ();
@@ -109,23 +116,26 @@ poll_uart6850 (unsigned long dummy)
 {
   unsigned long   flags;
 
-  DEFINE_TIMER (uart6850_timer, poll_uart6850);
-
   if (!(uart6850_opened & OPEN_READ))
     return;			/*
 				 * No longer required
 				 */
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   if (input_avail ())
     uart6850_input_loop ();
 
-  ACTIVATE_TIMER (uart6850_timer, poll_uart6850, 1);	/*
-							 * Come back later
-							 */
 
-  RESTORE_INTR (flags);
+  {
+    uart6850_timer.expires = (1) + jiffies;
+    add_timer (&uart6850_timer);
+  };				/*
+				   * Come back later
+				 */
+
+  restore_flags (flags);
 }
 
 static int
@@ -137,7 +147,7 @@ uart6850_open (int dev, int mode,
   if (uart6850_opened)
     {
       printk ("Midi6850: Midi busy\n");
-      return RET_ERROR (EBUSY);
+      return -EBUSY;
     }
 
   uart6850_cmd (UART_RESET);
@@ -158,6 +168,7 @@ uart6850_close (int dev)
 {
   uart6850_cmd (UART_MODE_ON);
 
+  del_timer (&uart6850_timer);;
   uart6850_opened = 0;
 }
 
@@ -171,12 +182,13 @@ uart6850_out (int dev, unsigned char midi_byte)
    * Test for input since pending input seems to block the output.
    */
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   if (input_avail ())
     uart6850_input_loop ();
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   /*
    * Sometimes it takes about 13000 loops before the output becomes ready
@@ -216,9 +228,9 @@ uart6850_end_read (int dev)
 }
 
 static int
-uart6850_ioctl (int dev, unsigned cmd, unsigned arg)
+uart6850_ioctl (int dev, unsigned cmd, ioctl_arg arg)
 {
-  return RET_ERROR (EINVAL);
+  return -EINVAL;
 }
 
 static void
@@ -268,12 +280,14 @@ attach_uart6850 (long mem_start, struct address_info *hw_config)
     }
 
   uart6850_base = hw_config->io_base;
+  uart6850_osp = hw_config->osp;
   uart6850_irq = hw_config->irq;
 
   if (!uart6850_detected)
-    return RET_ERROR (EIO);
+    return -EIO;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   for (timeout = 30000; timeout < 0 && !output_ready (); timeout--);	/*
 									 * Wait
@@ -282,7 +296,7 @@ attach_uart6850 (long mem_start, struct address_info *hw_config)
 
   ok = 1;
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   printk (" <6850 Midi Interface>");
 
@@ -306,16 +320,23 @@ probe_uart6850 (struct address_info *hw_config)
 {
   int             ok = 0;
 
+  uart6850_osp = hw_config->osp;
   uart6850_base = hw_config->io_base;
   uart6850_irq = hw_config->irq;
 
-  if (snd_set_irq_handler (uart6850_irq, m6850intr, "MIDI6850") < 0)
+  if (snd_set_irq_handler (uart6850_irq, m6850intr, "MIDI6850", uart6850_osp) < 0)
     return 0;
 
   ok = reset_uart6850 ();
 
   uart6850_detected = ok;
   return ok;
+}
+
+void
+unload_uart6850 (struct address_info *hw_config)
+{
+  snd_release_irq (hw_config->irq);
 }
 
 #endif

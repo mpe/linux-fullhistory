@@ -43,6 +43,7 @@
 
 extern int      sbc_base;
 extern int      Jazz16_detected;
+extern sound_os_info *sb_osp;
 
 static int      mixer_initialized = 0;
 
@@ -58,14 +59,15 @@ sb_setmixer (unsigned int port, unsigned int value)
 {
   unsigned long   flags;
 
-  DISABLE_INTR (flags);
-  OUTB ((unsigned char) (port & 0xff), MIXER_ADDR);	/*
+  save_flags (flags);
+  cli ();
+  outb ((unsigned char) (port & 0xff), MIXER_ADDR);	/*
 							 * Select register
 							 */
   tenmicrosec ();
-  OUTB ((unsigned char) (value & 0xff), MIXER_DATA);
+  outb ((unsigned char) (value & 0xff), MIXER_DATA);
   tenmicrosec ();
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 }
 
 int
@@ -74,14 +76,15 @@ sb_getmixer (unsigned int port)
   int             val;
   unsigned long   flags;
 
-  DISABLE_INTR (flags);
-  OUTB ((unsigned char) (port & 0xff), MIXER_ADDR);	/*
+  save_flags (flags);
+  cli ();
+  outb ((unsigned char) (port & 0xff), MIXER_ADDR);	/*
 							 * Select register
 							 */
   tenmicrosec ();
-  val = INB (MIXER_DATA);
+  val = inb (MIXER_DATA);
   tenmicrosec ();
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   return val;
 }
@@ -107,10 +110,10 @@ detect_mixer (void)
 {
 #ifdef __SGNXPRO__
   int             oldbass, oldtreble;
+  extern int      sbc_major;
 
 #endif
   int             retcode = 1;
-  extern int      sbc_major;
 
   /*
    * Detect the mixer by changing parameters of two volume channels. If the
@@ -160,8 +163,8 @@ detect_mixer (void)
    */
   if (sbc_major == 3)
     {
-      OUTB (0x01, sbc_base + 0x1c);
-      OUTB (0x00, sbc_base + 0x1a);
+      outb (0x01, sbc_base + 0x1c);
+      outb (0x00, sbc_base + 0x1a);
     }
 
 #endif
@@ -193,7 +196,7 @@ static int
 sb_mixer_get (int dev)
 {
   if (!((1 << dev) & supported_devices))
-    return RET_ERROR (EINVAL);
+    return -EINVAL;
 
   return levels[dev];
 }
@@ -251,10 +254,10 @@ smw_mixer_set (int dev, int value)
     right = 100;
 
   if (dev > 31)
-    return RET_ERROR (EINVAL);
+    return -EINVAL;
 
   if (!(supported_devices & (1 << dev)))	/* Not supported */
-    return RET_ERROR (EINVAL);
+    return -EINVAL;
 
   switch (dev)
     {
@@ -281,7 +284,7 @@ smw_mixer_set (int dev, int value)
     default:
       reg = smw_mix_regs[dev];
       if (reg == 0)
-	return RET_ERROR (EINVAL);
+	return -EINVAL;
       sb_setmixer (reg, (24 - (24 * left / 100)) | 0x20);	/* 24=mute, 0=max */
       sb_setmixer (reg + 1, (24 - (24 * right / 100)) | 0x40);
     }
@@ -312,17 +315,17 @@ sb_mixer_set (int dev, int value)
     right = 100;
 
   if (dev > 31)
-    return RET_ERROR (EINVAL);
+    return -EINVAL;
 
   if (!(supported_devices & (1 << dev)))	/*
 						 * Not supported
 						 */
-    return RET_ERROR (EINVAL);
+    return -EINVAL;
 
   regoffs = (*iomap)[dev][LEFT_CHN].regno;
 
   if (regoffs == 0)
-    return RET_ERROR (EINVAL);
+    return -EINVAL;
 
   val = sb_getmixer (regoffs);
   change_bits (&val, dev, LEFT_CHN, left);
@@ -442,7 +445,7 @@ set_recmask (int mask)
 }
 
 static int
-sb_mixer_ioctl (int dev, unsigned int cmd, unsigned int arg)
+sb_mixer_ioctl (int dev, unsigned int cmd, ioctl_arg arg)
 {
   if (((cmd >> 8) & 0xff) == 'M')
     {
@@ -450,12 +453,12 @@ sb_mixer_ioctl (int dev, unsigned int cmd, unsigned int arg)
 	switch (cmd & 0xff)
 	  {
 	  case SOUND_MIXER_RECSRC:
-	    return IOCTL_OUT (arg, set_recmask (IOCTL_IN (arg)));
+	    return snd_ioctl_return ((int *) arg, set_recmask (get_fs_long ((long *) arg)));
 	    break;
 
 	  default:
 
-	    return IOCTL_OUT (arg, sb_mixer_set (cmd & 0xff, IOCTL_IN (arg)));
+	    return snd_ioctl_return ((int *) arg, sb_mixer_set (cmd & 0xff, get_fs_long ((long *) arg)));
 	  }
       else
 	switch (cmd & 0xff)	/*
@@ -464,35 +467,34 @@ sb_mixer_ioctl (int dev, unsigned int cmd, unsigned int arg)
 	  {
 
 	  case SOUND_MIXER_RECSRC:
-	    return IOCTL_OUT (arg, recmask);
+	    return snd_ioctl_return ((int *) arg, recmask);
 	    break;
 
 	  case SOUND_MIXER_DEVMASK:
-	    return IOCTL_OUT (arg, supported_devices);
+	    return snd_ioctl_return ((int *) arg, supported_devices);
 	    break;
 
 	  case SOUND_MIXER_STEREODEVS:
 	    if (Jazz16_detected)
-	      return IOCTL_OUT (arg, supported_devices);
+	      return snd_ioctl_return ((int *) arg, supported_devices);
 	    else
-	      return IOCTL_OUT (arg, supported_devices &
-				~(SOUND_MASK_MIC | SOUND_MASK_SPEAKER));
+	      return snd_ioctl_return ((int *) arg, supported_devices & ~(SOUND_MASK_MIC | SOUND_MASK_SPEAKER));
 	    break;
 
 	  case SOUND_MIXER_RECMASK:
-	    return IOCTL_OUT (arg, supported_rec_devices);
+	    return snd_ioctl_return ((int *) arg, supported_rec_devices);
 	    break;
 
 	  case SOUND_MIXER_CAPS:
-	    return IOCTL_OUT (arg, mixer_caps);
+	    return snd_ioctl_return ((int *) arg, mixer_caps);
 	    break;
 
 	  default:
-	    return IOCTL_OUT (arg, sb_mixer_get (cmd & 0xff));
+	    return snd_ioctl_return ((int *) arg, sb_mixer_get (cmd & 0xff));
 	  }
     }
   else
-    return RET_ERROR (EINVAL);
+    return -EINVAL;
 }
 
 static struct mixer_operations sb_mixer_operations =
@@ -553,7 +555,7 @@ sb_mixer_init (int major_model)
 	{
 	  supported_devices = SGNXPRO_MIXER_DEVICES;
 	  supported_rec_devices = SGNXPRO_RECORDING_DEVICES;
-	  iomap = &sgnxpro_mix;
+	  iomap = &sgnxpro_mix[0][0];
 	}
       else
 #endif

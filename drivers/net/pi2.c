@@ -654,6 +654,7 @@ static void b_rxint(struct device *dev, struct pi_local *lp)
 		/* 'skb->data' points to the start of sk_buff data area. */
 		memcpy(cfix, lp->rcvbuf->data, pkt_len - 1);
 		skb->protocol=ntohs(ETH_P_AX25);
+		skb->mac.raw=skb->data;
 		IS_SKB(skb);
 		netif_rx(skb);
 		lp->stats.rx_packets++;

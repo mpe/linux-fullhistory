@@ -23,6 +23,7 @@
 #include <linux/locks.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
+#include <linux/swapctl.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -43,6 +44,10 @@ static int nr_hash = 0;  /* Size of hash table */
 static struct buffer_head ** hash_table;
 struct buffer_head ** buffer_pages;
 static struct buffer_head * lru_list[NR_LIST] = {NULL, };
+/* next_to_age is an array of pointers into the lru lists, used to
+   cycle through the buffers aging their contents when deciding which
+   buffers to discard when more memory is needed */
+static struct buffer_head * next_to_age[NR_LIST] = {NULL, };
 static struct buffer_head * free_list[NR_SIZES] = {NULL, };
 static struct buffer_head * unused_list = NULL;
 static struct wait_queue * buffer_wait = NULL;
@@ -177,9 +182,6 @@ static int sync_buffers(kdev_t dev, int wait)
 			 if (wait && bh->b_req && !bh->b_lock &&
 			     !bh->b_dirt && !bh->b_uptodate) {
 				  err = 1;
-				  printk("Weird - unlocked, clean and not "
-				    "uptodate buffer on list %d %s %lu\n",
-				    nlist, kdevname(bh->b_dev), bh->b_blocknr);
 				  continue;
 			  }
 			 /* Don't write clean buffers.  Don't write ANY buffers
@@ -302,8 +304,13 @@ static inline void remove_from_lru_list(struct buffer_head * bh)
 
 	if (lru_list[bh->b_list] == bh)
 		 lru_list[bh->b_list] = bh->b_next_free;
-	if(lru_list[bh->b_list] == bh)
+	if (lru_list[bh->b_list] == bh)
 		 lru_list[bh->b_list] = NULL;
+	if (next_to_age[bh->b_list] == bh)
+		next_to_age[bh->b_list] = bh->b_next_free;
+	if (next_to_age[bh->b_list] == bh)
+		next_to_age[bh->b_list] = NULL;
+
 	bh->b_next_free = bh->b_prev_free = NULL;
 }
 
@@ -347,6 +354,8 @@ static inline void put_last_lru(struct buffer_head * bh)
 		return;
 	if (bh == lru_list[bh->b_list]) {
 		lru_list[bh->b_list] = bh->b_next_free;
+		if (next_to_age[bh->b_list] == bh)
+			next_to_age[bh->b_list] = bh->b_next_free;
 		return;
 	}
 	if(bh->b_dev == B_FREE)
@@ -358,6 +367,8 @@ static inline void put_last_lru(struct buffer_head * bh)
 		lru_list[bh->b_list] = bh;
 		lru_list[bh->b_list]->b_prev_free = bh;
 	};
+	if (!next_to_age[bh->b_list])
+		next_to_age[bh->b_list] = bh;
 
 	bh->b_next_free = lru_list[bh->b_list];
 	bh->b_prev_free = lru_list[bh->b_list]->b_prev_free;
@@ -373,8 +384,7 @@ static inline void put_last_free(struct buffer_head * bh)
 
 	isize = BUFSIZE_INDEX(bh->b_size);	
 	bh->b_dev = B_FREE;  /* So it is obvious we are on the free list */
-/* add to back of free list */
-
+	/* add to back of free list */
 	if(!free_list[isize]) {
 		free_list[isize] = bh;
 		bh->b_prev_free = bh;
@@ -389,16 +399,17 @@ static inline void put_last_free(struct buffer_head * bh)
 
 static inline void insert_into_queues(struct buffer_head * bh)
 {
-/* put at end of free list */
-
+	/* put at end of free list */
         if(bh->b_dev == B_FREE) {
 		put_last_free(bh);
 		return;
-	};
+	}
 	if(!lru_list[bh->b_list]) {
 		lru_list[bh->b_list] = bh;
 		bh->b_prev_free = bh;
-	};
+	}
+	if (!next_to_age[bh->b_list])
+		next_to_age[bh->b_list] = bh;
 	if (bh->b_next_free) panic("VFS: buffer LRU pointers corrupted");
 	bh->b_next_free = lru_list[bh->b_list];
 	bh->b_prev_free = lru_list[bh->b_list]->b_prev_free;
@@ -672,7 +683,7 @@ repeat0:
 	
 	/* Too bad, that was not enough. Try a little harder to grow some. */
 	
-	if (nr_free_pages > 5) {
+	if (nr_free_pages > min_free_pages + 5) {
 		if (grow_buffers(GFP_BUFFER, size)) {
 	                needed -= PAGE_SIZE;
 			goto repeat0;
@@ -713,6 +724,7 @@ repeat:
 		if (bh->b_uptodate && !bh->b_dirt)
 			 put_last_lru(bh);
 		if(!bh->b_dirt) bh->b_flushtime = 0;
+		bh->b_touched = 1;
 		return bh;
 	}
 
@@ -733,6 +745,8 @@ repeat:
 	bh->b_flushtime=0;
 	bh->b_req=0;
 	bh->b_reuse=0;
+	bh->b_touched = 1;
+	bh->b_has_aged = 0;
 	bh->b_dev=dev;
 	bh->b_blocknr=block;
 	insert_into_queues(bh);
@@ -800,10 +814,10 @@ void brelse(struct buffer_head * buf)
 		if (--buf->b_count)
 			return;
 		wake_up(&buffer_wait);
-#if 0
 		if (buf->b_reuse) {
 			buf->b_reuse = 0;
-			if (!buf->b_lock && !buf->b_dirt && !buf->b_wait) {
+			if (!buf->b_lock && !buf->b_dirt && 
+			    !buf->b_wait && buf->b_uptodate) {
 				if(buf->b_dev == B_FREE)
 					panic("brelse: Wrong list");
 				remove_from_queues(buf);
@@ -811,7 +825,6 @@ void brelse(struct buffer_head * buf)
 				put_last_free(buf);
 			}
 		}
-#endif
 		return;
 	}
 	printk("VFS: brelse: Trying to free free buffer\n");
@@ -1273,7 +1286,8 @@ static int grow_buffers(int pri, int size)
  * try_to_free() checks if all the buffers on this particular page
  * are unused, and free's the page if so.
  */
-static int try_to_free(struct buffer_head * bh, struct buffer_head ** bhp)
+static int try_to_free(struct buffer_head * bh, struct buffer_head ** bhp,
+		       int priority)
 {
 	unsigned long page;
 	struct buffer_head * tmp, * p;
@@ -1287,6 +1301,8 @@ static int try_to_free(struct buffer_head * bh, struct buffer_head ** bhp)
 		if (!tmp)
 			return 0;
 		if (tmp->b_count || tmp->b_dirt || tmp->b_lock || tmp->b_wait)
+			return 0;
+		if (priority && tmp->b_touched)
 			return 0;
 		tmp = tmp->b_this_page;
 	} while (tmp != bh);
@@ -1311,6 +1327,38 @@ static int try_to_free(struct buffer_head * bh, struct buffer_head ** bhp)
 	return !mem_map[MAP_NR(page)].count;
 }
 
+/* Age buffers on a given page, according to whether they have been
+   visited recently or not. */
+static inline void age_buffer(struct buffer_head *bh)
+{
+	struct buffer_head *tmp = bh;
+	int touched = 0;
+
+	/*
+	 * When we age a page, we mark all other buffers in the page
+	 * with the "has_aged" flag.  Then, when these aliased buffers
+	 * come up for aging, we skip them until next pass.  This
+	 * ensures that a page full of multiple buffers only gets aged
+	 * once per pass through the lru lists. 
+	 */
+	if (bh->b_has_aged) {
+		bh->b_has_aged = 0;
+		return;
+	}
+	
+	do {
+		touched |= tmp->b_touched;
+		tmp->b_touched = 0;
+		tmp = tmp->b_this_page;
+		tmp->b_has_aged = 1;
+	} while (tmp != bh);
+	bh->b_has_aged = 0;
+
+	if (touched) 
+		touch_page((unsigned long) bh->b_data);
+	else
+		age_page((unsigned long) bh->b_data);
+}
 
 /*
  * Consult the load average for buffers and decide whether or not
@@ -1361,11 +1409,12 @@ static int maybe_shrink_lav_buffers(int size)
 		  }
 	return 0;
 }
+
 /*
  * Try to free up some pages by shrinking the buffer-cache
  *
  * Priority tells the routine how hard to try to shrink the
- * buffers: 3 means "don't bother too much", while a value
+ * buffers: 6 means "don't bother too much", while a value
  * of 0 means "we'd better get some free pages now".
  *
  * "limit" is meant to limit the shrink-action only to pages
@@ -1406,10 +1455,12 @@ static int shrink_specific_buffers(unsigned int priority, int size)
 		for (i=0 ; !i || bh != free_list[isize]; bh = bh->b_next_free, i++) {
 			if (bh->b_count || !bh->b_this_page)
 				 continue;
-			if (try_to_free(bh, &bh))
+			if (!age_of((unsigned long) bh->b_data) &&
+			    try_to_free(bh, &bh, 6))
 				 return 1;
-			if(!bh) break; /* Some interrupt must have used it after we
-					  freed the page.  No big deal - keep looking */
+			if(!bh) break;
+			/* Some interrupt must have used it after we
+			   freed the page.  No big deal - keep looking */
 		}
 	}
 	
@@ -1417,12 +1468,19 @@ static int shrink_specific_buffers(unsigned int priority, int size)
 	
 	for(nlist = 0; nlist < NR_LIST; nlist++) {
 	repeat1:
-		if(priority > 3 && nlist == BUF_SHARED) continue;
-		bh = lru_list[nlist];
-		if(!bh) continue;
-		i = 2*nr_buffers_type[nlist] >> priority;
-		for ( ; i-- > 0 ; bh = bh->b_next_free) {
-			/* We may have stalled while waiting for I/O to complete. */
+		if(priority > 2 && nlist == BUF_SHARED) continue;
+		i = nr_buffers_type[nlist];
+		i = ((BUFFEROUT_WEIGHT * i) >> 10) >> priority;
+		for ( ; i > 0; i-- ) {
+			bh = next_to_age[nlist];
+			if (!bh)
+				break;
+			next_to_age[nlist] = bh->b_next_free;
+
+			/* First, age the buffer. */
+			age_buffer(bh);
+			/* We may have stalled while waiting for I/O
+			   to complete. */
 			if(bh->b_list != nlist) goto repeat1;
 			if (bh->b_count || !bh->b_this_page)
 				 continue;
@@ -1439,7 +1497,13 @@ static int shrink_specific_buffers(unsigned int priority, int size)
 				bh->b_count--;
 				continue;
 			}
-			if (try_to_free(bh, &bh))
+			/* At priority 6, only consider really old
+                           (age==0) buffers for reclaiming.  At
+                           priority 0, consider any buffers. */
+			if ((age_of((unsigned long) bh->b_data) >>
+			     (6-priority)) > 0)
+				continue;				
+			if (try_to_free(bh, &bh, 0))
 				 return 1;
 			if(!bh) break;
 		}

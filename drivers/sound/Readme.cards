@@ -46,7 +46,7 @@ Gravis Ultrasound (GUS)
 	GUS
 	GUS + the 16 bit option
 	GUS MAX
-	(GUS ACE ????????????)
+	GUS ACE (No MIDI port and audio recording)
 
 MPU-401	and compatibles
 	The driver works both with the full (intelligent mode) MPU-401
@@ -65,7 +65,7 @@ Windows Sound System (MSS/WSS)
 	(AD1848 by Analog Devices and CS4231/CS4248 by Crystal Semiconductor).
 	Currently most soundcards are based on one of the MSS compatible codec
 	chip. The CS4231 is used in the high quality cards such as GUS MAX,
-	MediaTriX AudioTriX Pro and TB Tropez. 
+	MediaTriX AudioTriX Pro and TB Tropez (GUS MAX is not MSS compatible). 
 
 	Having a AD1848, CS4248 or CS4231 codec chip on the card is a good
 	sign. Even if the card is not MSS compatible, it could be easy to write
@@ -267,6 +267,9 @@ select some options automaticly as well.
 	  please look at the card specific instructions later in this file
 	  before answering this question. For an unknown card you may answer 
 	  'y' if the card claims to be SB compatible.
+
+	 Don't enable SB if you have a MAD16 or Mozart compatible card.
+
   "Generic OPL2/OPL3 FM synthesizer support",
 	- Answer 'y' if your card has a FM chip made by Yamaha (OPL2/OPL3/OPL4).
 	  Answering 'y' is usually a safe and recommended choice. However some
@@ -431,7 +434,7 @@ a SB mode so the driver config program will prompt for the SB settings
 do. Use I/O 0x220 and DMA1 for the SB mode. Ensure that you assign different
 IRQ numbers for the SB and PAS16 modes.
 
-With PAS16 you can use two audio devices at the same time. /dev/dsp (and
+With PAS16 you can use two audio device files at the same time. /dev/dsp (and
 /dev/audio) is connected to the 8/16 bit native codec and the /dev/dsp1 (and
 /dev/audio1) is connected to the SB emulation (8 bit mono only).
 
@@ -452,7 +455,7 @@ also contains a mixer.
 
 Configuring GUS is simple. Just enable the GUS support and GUS MAX or
 the 16 bit daughtercard if you have them. Note that enabling the daughter
-card disables GUS MAX.
+card disables GUS MAX driver.
 
 With just the standard GUS enabled the configuration program prompts
 for the I/O, IRQ and DMA numbers for the card. Use the same values than
@@ -466,16 +469,18 @@ recording and /dev/dsp1 (GUS GF1) for playback.
 
 GUS MAX uses the same I/O address and IRQ settings than the original GUS
 (GUS MAX = GUS + a CS4231 codec). In addition an extra DMA channel may be used.
-Using two DMA channels permits simultaneous playback using two devices but
-simultaneous recording and playback is not possible (not before v4.0).
-Also using two DMA channels is required if you want to record in 16 bit modes.
+Using two DMA channels permits simultaneous playback using two devices
+(dev/dsp0 and /dev/dsp1). The second DMA channel is required for
+full duplex audio.
 To enable the second DMA channels, give a valid DMA channel when the config
-program asks for the GUS MAX DMA (entering 0 disables the second DMA).
-Using 16 bit DMA channels (5,6 or 7) is recommended. The drawback of
-using two DMA channels with GUS MAX is that recording from /dev/dsp1
-(the 8 bit codec) is disabled.
+program asks for the GUS MAX DMA (entering -1 disables the second DMA).
+Using 16 bit DMA channels (5,6 or 7) is recommended.
 
-It's not guaranteed that recording using GUS MAX works (in 3.0-beta2).
+If you have problems in recording with GUS MAX, you could try to use
+just one 8 bit DMA channel. Recording will not work with one DMA
+channel if it's a 16 bit one.
+
+
 
 MPU401 and Windows Sound System
 -------------------------------
@@ -551,7 +556,7 @@ The OPL4/OPL3 chip and the (optional) effects daughtercard require
 initialization after boot. Since information about the effect processor
 is not public, the initialization must be done by running a special program
 after boot. The setfx program is distributed in Linux binary form (only)
-in directory sound/audiotrix (of VoxWare-3.0.tar.gz package).
+in snd-util-3.0.tar.gz package.
 It's calls ioperm() so it must be run as root.
 
 Another way to initialize the effects processor (and OPL4) is to boot DOS
@@ -579,11 +584,12 @@ The configuration program asks two DMA channels and two interrupts. One IRQ
 and one DMA is used by the MSS codec. The second IRQ is required for the
 MPU401 mode (you have to use different IRQs for both purposes).
 The second DMA channel is required for initialization of the microcontroller.
+You have to use separate DMA channels.
 
 The SoundScape card has a Motorola microcontroller which must initialized
 _after_ boot (the driver doesn't initialize it during boot).
 The initialization is done by running the 'ssinit' program which is
-distributed in directory sound/sndscape. You have to edit two
+distributed in the snd-util-3.0.tar.gz package. You have to edit two
 defines in the ssinit.c and then compile the program. You may run ssinit 
 manually (after each boot) or add it to /etc/rc.d/rc.local.
 
@@ -621,18 +627,20 @@ MAD16 (Pro) and Mozart
 ----------------------
 
 You need to enable just the MAD16 /Mozart support when configuring
-the driver. Don't enable SB, MPU401 or MSS. However you will need the
+the driver. _Don't_ enable SB, MPU401 or MSS. However you will need the
 /dev/audio, /dev/sequencer and MIDI supports.
 
 Mozart and OPTi 82C928 (the original MAD16) chips don't support
 MPU401 mode so enter just 0 when the configuration program asks the
 MPU/MIDI I/O base. The MAD16 Pro (OPTi 82C929) has MPU401 mode.
 
-TB Tropez is based on the 82C929 chip. However it has two MIDI ports.
+TB Tropez is based on the 82C929 chip. It has two MIDI ports.
 The one connected to the MAD16 chip is the second one (there is a second
 MIDI connector/pins somewhere??). If you have not connected the second MIDI
 port, just disable the MIDI port of MAD16. The 'Maui' compatible synth of
 Tropez is jumper configurable and not connected to the MAD16 chip.
+It can be used by enabling the stand alone MPU401 support but you have
+to initialize it by using the MS-DOS SNDSETUP program.
 
 There are some other OPTi chips which may be used in soundcards such as
 82C930 and MAC32. These chips are not supported by VoxWare yet. Please

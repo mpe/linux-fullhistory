@@ -80,19 +80,20 @@ struct mpu_config
     unsigned char   last_status;
     void            (*inputintr) (int dev, unsigned char data);
     int             shared_irq;
+    sound_os_info  *osp;
   };
 
 #define	DATAPORT(base)   (base)
 #define	COMDPORT(base)   (base+1)
 #define	STATPORT(base)   (base+1)
 
-#define mpu401_status(base)		INB(STATPORT(base))
-#define input_avail(base)		(!(mpu401_status(base)&INPUT_AVAIL))
-#define output_ready(base)		(!(mpu401_status(base)&OUTPUT_READY))
-#define write_command(base, cmd)		OUTB(cmd, COMDPORT(base))
-#define read_data(base)		INB(DATAPORT(base))
+#define mpu401_status(devc)		inb( STATPORT(devc->base))
+#define input_avail(devc)		(!(mpu401_status(devc)&INPUT_AVAIL))
+#define output_ready(devc)		(!(mpu401_status(devc)&OUTPUT_READY))
+#define write_command(devc, cmd)	outb( cmd,  COMDPORT(devc->base))
+#define read_data(devc)		inb( DATAPORT(devc->base))
 
-#define write_data(base, byte)	OUTB(byte, DATAPORT(base))
+#define write_data(devc, byte)	outb( byte,  DATAPORT(devc->base))
 
 #define	OUTPUT_READY	0x40
 #define	INPUT_AVAIL	0x80
@@ -105,9 +106,9 @@ static struct mpu_config dev_conf[MAX_MIDI_DEV] =
   {0}};
 
 static int      n_mpu_devs = 0;
-static int      irq2dev[16] =
+static volatile int irq2dev[17] =
 {-1, -1, -1, -1, -1, -1, -1, -1,
- -1, -1, -1, -1, -1, -1, -1, -1};
+ -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
 static int      reset_mpu401 (struct mpu_config *devc);
 static void     set_uart_mode (int dev, struct mpu_config *devc, int arg);
@@ -216,14 +217,14 @@ mpu_input_scanner (struct mpu_config *devc, unsigned char midic)
 
     case ST_TIMED:
       {
-	int             msg = (midic & 0xf0) >> 4;
+	int             msg = ((int) (midic & 0xf0) >> 4);
 
 	devc->m_state = ST_DATABYTE;
 
 	if (msg < 8)		/* Data byte */
 	  {
 	    /* printk("midi msg (running status) "); */
-	    msg = (devc->last_status & 0xf0) >> 4;
+	    msg = ((int) (devc->last_status & 0xf0) >> 4);
 	    msg -= 8;
 	    devc->m_left = len_tab[msg] - 1;
 
@@ -399,19 +400,20 @@ mpu401_input_loop (struct mpu_config *devc)
   int             busy;
   int             n;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
   busy = devc->m_busy;
   devc->m_busy = 1;
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   if (busy)			/* Already inside the scanner */
     return;
 
   n = 50;
 
-  while (input_avail (devc->base) && n-- > 0)
+  while (input_avail (devc) && n-- > 0)
     {
-      unsigned char   c = read_data (devc->base);
+      unsigned char   c = read_data (devc);
 
       if (devc->mode == MODE_SYNTH)
 	{
@@ -425,37 +427,50 @@ mpu401_input_loop (struct mpu_config *devc)
 }
 
 void
-mpuintr (INT_HANDLER_PARMS (irq, dummy))
+mpuintr (int irq, struct pt_regs *dummy)
 {
   struct mpu_config *devc;
   int             dev;
 
-#ifdef linux
   sti ();
-#endif
+
+/*
+ * FreeBSD (and some others) pass unit number to the interrupt handler.
+ * In this case we have to scan the table for first handler.
+ */
 
   if (irq < 1 || irq > 15)
     {
-      printk ("MPU-401: Interrupt #%d?\n", irq);
-      return;
+      dev = -1;
     }
+  else
+    dev = irq2dev[irq];
 
-  dev = irq2dev[irq];
   if (dev == -1)
     {
-      /* printk ("MPU-401: Interrupt #%d?\n", irq); */
-      return;
+      int             origirq = irq;
+
+      for (irq = 0; irq <= 16; irq++)
+	if (irq2dev[irq] != -1)
+	  break;
+      if (irq > 15)
+	{
+	  printk ("MPU-401: Bogus interrupt #%d?\n", origirq);
+	  return;
+	}
+      dev = irq2dev[irq];
+      devc = &dev_conf[dev];
     }
+  else
+    devc = &dev_conf[dev];
 
-  devc = &dev_conf[dev];
-
-  if (input_avail (devc->base))
+  if (input_avail (devc))
     if (devc->base != 0 && (devc->opened & OPEN_READ || devc->mode == MODE_SYNTH))
       mpu401_input_loop (devc);
     else
       {
 	/* Dummy read (just to acknowledge the interrupt) */
-	read_data (devc->base);
+	read_data (devc);
       }
 
 }
@@ -470,14 +485,14 @@ mpu401_open (int dev, int mode,
   struct mpu_config *devc;
 
   if (dev < 0 || dev >= num_midis)
-    return RET_ERROR (ENXIO);
+    return -ENXIO;
 
   devc = &dev_conf[dev];
 
   if (devc->opened)
     {
       printk ("MPU-401: Midi busy\n");
-      return RET_ERROR (EBUSY);
+      return -EBUSY;
     }
 
   /*
@@ -489,27 +504,20 @@ mpu401_open (int dev, int mode,
 
   if (!devc->initialized)
     {
-      if (mpu401_status (devc->base) == 0xff)	/* Bus float */
+      if (mpu401_status (devc) == 0xff)		/* Bus float */
 	{
 	  printk ("MPU-401: Device not initialized properly\n");
-	  return RET_ERROR (EIO);
+	  return -EIO;
 	}
       reset_mpu401 (devc);
     }
 
   irq2dev[devc->irq] = dev;
-  if (devc->shared_irq == 0)
-    if ((err = snd_set_irq_handler (devc->irq, mpuintr, midi_devs[dev]->info.name) < 0))
-      {
-	return err;
-      }
 
   if (midi_devs[dev]->coproc)
     if ((err = midi_devs[dev]->coproc->
 	 open (midi_devs[dev]->coproc->devc, COPR_MIDI)) < 0)
       {
-	if (devc->shared_irq == 0)
-	  snd_release_irq (devc->irq);
 	printk ("MPU-401: Can't access coprocessor device\n");
 
 	return err;
@@ -540,8 +548,6 @@ mpu401_close (int dev)
 				 */
   devc->mode = 0;
 
-  if (devc->shared_irq == 0)
-    snd_release_irq (devc->irq);
   devc->inputintr = NULL;
 
   if (midi_devs[dev]->coproc)
@@ -559,33 +565,24 @@ mpu401_out (int dev, unsigned char midi_byte)
 
   devc = &dev_conf[dev];
 
-#if 0
-  /*
-   * Test for input since pending input seems to block the output.
-   */
-
-  if (input_avail (devc->base))
-    {
-      mpu401_input_loop (devc);
-    }
-#endif
   /*
    * Sometimes it takes about 13000 loops before the output becomes ready
    * (After reset). Normally it takes just about 10 loops.
    */
 
-  for (timeout = 3000; timeout > 0 && !output_ready (devc->base); timeout--);
+  for (timeout = 3000; timeout > 0 && !output_ready (devc); timeout--);
 
-  DISABLE_INTR (flags);
-  if (!output_ready (devc->base))
+  save_flags (flags);
+  cli ();
+  if (!output_ready (devc))
     {
       printk ("MPU-401: Send data timeout\n");
-      RESTORE_INTR (flags);
+      restore_flags (flags);
       return 0;
     }
 
-  write_data (devc->base, midi_byte);
-  RESTORE_INTR (flags);
+  write_data (devc, midi_byte);
+  restore_flags (flags);
   return 1;
 }
 
@@ -604,13 +601,13 @@ mpu401_command (int dev, mpu_command_rec * cmd)
 				 */
     {
       printk ("MPU-401 commands not possible in the UART mode\n");
-      return RET_ERROR (EINVAL);
+      return -EINVAL;
     }
 
   /*
    * Test for input since pending input seems to block the output.
    */
-  if (input_avail (devc->base))
+  if (input_avail (devc))
     mpu401_input_loop (devc);
 
   /*
@@ -623,49 +620,50 @@ retry:
   if (timeout-- <= 0)
     {
       printk ("MPU-401: Command (0x%x) timeout\n", (int) cmd->cmd);
-      return RET_ERROR (EIO);
+      return -EIO;
     }
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
-  if (!output_ready (devc->base))
+  if (!output_ready (devc))
     {
-      RESTORE_INTR (flags);
+      restore_flags (flags);
       goto retry;
     }
 
-  write_command (devc->base, cmd->cmd);
+  write_command (devc, cmd->cmd);
   ok = 0;
   for (timeout = 50000; timeout > 0 && !ok; timeout--)
-    if (input_avail (devc->base))
+    if (input_avail (devc))
       if (devc->opened && devc->mode == MODE_SYNTH)
 	{
-	  if (mpu_input_scanner (devc, read_data (devc->base)) == MPU_ACK)
+	  if (mpu_input_scanner (devc, read_data (devc)) == MPU_ACK)
 	    ok = 1;
 	}
       else
 	{			/* Device is not currently open. Use simplier method */
-	  if (read_data (devc->base) == MPU_ACK)
+	  if (read_data (devc) == MPU_ACK)
 	    ok = 1;
 	}
 
   if (!ok)
     {
-      RESTORE_INTR (flags);
+      restore_flags (flags);
       /*       printk ("MPU: No ACK to command (0x%x)\n", (int) cmd->cmd); */
-      return RET_ERROR (EIO);
+      return -EIO;
     }
 
   if (cmd->nr_args)
     for (i = 0; i < cmd->nr_args; i++)
       {
-	for (timeout = 3000; timeout > 0 && !output_ready (devc->base); timeout--);
+	for (timeout = 3000; timeout > 0 && !output_ready (devc); timeout--);
 
 	if (!mpu401_out (dev, cmd->data[i]))
 	  {
-	    RESTORE_INTR (flags);
+	    restore_flags (flags);
 	    printk ("MPU: Command (0x%x), parm send failed.\n", (int) cmd->cmd);
-	    return RET_ERROR (EIO);
+	    return -EIO;
 	  }
       }
 
@@ -677,27 +675,27 @@ retry:
       {
 	ok = 0;
 	for (timeout = 5000; timeout > 0 && !ok; timeout--)
-	  if (input_avail (devc->base))
+	  if (input_avail (devc))
 	    {
-	      cmd->data[i] = read_data (devc->base);
+	      cmd->data[i] = read_data (devc);
 	      ok = 1;
 	    }
 
 	if (!ok)
 	  {
-	    RESTORE_INTR (flags);
+	    restore_flags (flags);
 	    /* printk ("MPU: No response(%d) to command (0x%x)\n", i, (int) cmd->cmd);  */
-	    return RET_ERROR (EIO);
+	    return -EIO;
 	  }
       }
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   return ret;
 }
 
 static int
-exec_cmd (int dev, int cmd, int data)
+mpu_cmd (int dev, int cmd, int data)
 {
   int             ret;
 
@@ -709,7 +707,9 @@ exec_cmd (int dev, int cmd, int data)
   rec.data[0] = data & 0xff;
 
   if ((ret = mpu401_command (dev, &rec)) < 0)
-    return ret;
+    {
+      return ret;
+    }
   return (unsigned char) rec.data[0];
 }
 
@@ -723,8 +723,10 @@ mpu401_prefix_cmd (int dev, unsigned char status)
 
   if (status < 0xf0)
     {
-      if (exec_cmd (dev, 0xD0, 0) < 0)
-	return 0;
+      if (mpu_cmd (dev, 0xD0, 0) < 0)
+	{
+	  return 0;
+	}
 
       return 1;
     }
@@ -732,8 +734,10 @@ mpu401_prefix_cmd (int dev, unsigned char status)
   switch (status)
     {
     case 0xF0:
-      if (exec_cmd (dev, 0xDF, 0) < 0)
-	return 0;
+      if (mpu_cmd (dev, 0xDF, 0) < 0)
+	{
+	  return 0;
+	}
 
       return 1;
       break;
@@ -742,7 +746,6 @@ mpu401_prefix_cmd (int dev, unsigned char status)
       return 0;
     }
 
-  return 0;
 }
 
 static int
@@ -758,7 +761,7 @@ mpu401_end_read (int dev)
 }
 
 static int
-mpu401_ioctl (int dev, unsigned cmd, unsigned arg)
+mpu401_ioctl (int dev, unsigned cmd, ioctl_arg arg)
 {
   struct mpu_config *devc;
 
@@ -767,17 +770,17 @@ mpu401_ioctl (int dev, unsigned cmd, unsigned arg)
   switch (cmd)
     {
     case 1:
-      IOCTL_FROM_USER ((char *) &init_sequence, (char *) arg, 0, sizeof (init_sequence));
+      memcpy_fromfs (((char *) init_sequence), &(((char *) arg)[0]), (sizeof (init_sequence)));
       return 0;
       break;
 
     case SNDCTL_MIDI_MPUMODE:
-      if (devc->version == 0)
+      if (!(devc->capabilities & MPU_CAP_INTLG))	/* No intelligent mode */
 	{
 	  printk ("MPU-401: Intelligent mode not supported by the HW\n");
-	  return RET_ERROR (EINVAL);
+	  return -EINVAL;
 	}
-      set_uart_mode (dev, devc, !IOCTL_IN (arg));
+      set_uart_mode (dev, devc, !get_fs_long ((long *) arg));
       return 0;
       break;
 
@@ -786,18 +789,18 @@ mpu401_ioctl (int dev, unsigned cmd, unsigned arg)
 	int             ret;
 	mpu_command_rec rec;
 
-	IOCTL_FROM_USER ((char *) &rec, (char *) arg, 0, sizeof (rec));
+	memcpy_fromfs (((char *) &rec), &(((char *) arg)[0]), (sizeof (rec)));
 
 	if ((ret = mpu401_command (dev, &rec)) < 0)
 	  return ret;
 
-	IOCTL_TO_USER ((char *) arg, 0, (char *) &rec, sizeof (rec));
+	memcpy_tofs (&(((char *) arg)[0]), ((char *) &rec), (sizeof (rec)));
 	return 0;
       }
       break;
 
     default:
-      return RET_ERROR (EINVAL);
+      return -EINVAL;
     }
 }
 
@@ -816,7 +819,7 @@ mpu401_buffer_status (int dev)
 
 static int
 mpu_synth_ioctl (int dev,
-		 unsigned int cmd, unsigned int arg)
+		 unsigned int cmd, ioctl_arg arg)
 {
   int             midi_dev;
   struct mpu_config *devc;
@@ -824,7 +827,7 @@ mpu_synth_ioctl (int dev,
   midi_dev = synth_devs[dev]->midi_dev;
 
   if (midi_dev < 0 || midi_dev > num_midis)
-    return RET_ERROR (ENXIO);
+    return -ENXIO;
 
   devc = &dev_conf[midi_dev];
 
@@ -832,8 +835,7 @@ mpu_synth_ioctl (int dev,
     {
 
     case SNDCTL_SYNTH_INFO:
-      IOCTL_TO_USER ((char *) arg, 0, &mpu_synth_info[midi_dev],
-		     sizeof (struct synth_info));
+      memcpy_tofs (&(((char *) arg)[0]), (&mpu_synth_info[midi_dev]), (sizeof (struct synth_info)));
 
       return 0;
       break;
@@ -843,7 +845,7 @@ mpu_synth_ioctl (int dev,
       break;
 
     default:
-      return RET_ERROR (EINVAL);
+      return -EINVAL;
     }
 }
 
@@ -857,7 +859,7 @@ mpu_synth_open (int dev, int mode)
 
   if (midi_dev < 0 || midi_dev > num_midis)
     {
-      return RET_ERROR (ENXIO);
+      return -ENXIO;
     }
 
   devc = &dev_conf[midi_dev];
@@ -871,10 +873,10 @@ mpu_synth_open (int dev, int mode)
 
   if (!devc->initialized)
     {
-      if (mpu401_status (devc->base) == 0xff)	/* Bus float */
+      if (mpu401_status (devc) == 0xff)		/* Bus float */
 	{
 	  printk ("MPU-401: Device not initialized properly\n");
-	  return RET_ERROR (EIO);
+	  return -EIO;
 	}
       reset_mpu401 (devc);
     }
@@ -882,7 +884,7 @@ mpu_synth_open (int dev, int mode)
   if (devc->opened)
     {
       printk ("MPU-401: Midi busy\n");
-      return RET_ERROR (EBUSY);
+      return -EBUSY;
     }
 
   devc->mode = MODE_SYNTH;
@@ -890,18 +892,11 @@ mpu_synth_open (int dev, int mode)
 
   devc->inputintr = NULL;
   irq2dev[devc->irq] = midi_dev;
-  if (devc->shared_irq == 0)
-    if ((err = snd_set_irq_handler (devc->irq, mpuintr, midi_devs[midi_dev]->info.name) < 0))
-      {
-	return err;
-      }
 
   if (midi_devs[midi_dev]->coproc)
     if ((err = midi_devs[midi_dev]->coproc->
 	 open (midi_devs[midi_dev]->coproc->devc, COPR_MIDI)) < 0)
       {
-	if (devc->shared_irq == 0)
-	  snd_release_irq (devc->irq);
 	printk ("MPU-401: Can't access coprocessor device\n");
 
 	return err;
@@ -912,8 +907,8 @@ mpu_synth_open (int dev, int mode)
 
   if (mode & OPEN_READ)
     {
-      exec_cmd (midi_dev, 0x8B, 0);	/* Enable data in stop mode */
-      exec_cmd (midi_dev, 0x34, 0);	/* Return timing bytes in stop mode */
+      mpu_cmd (midi_dev, 0x8B, 0);	/* Enable data in stop mode */
+      mpu_cmd (midi_dev, 0x34, 0);	/* Return timing bytes in stop mode */
     }
 
   return 0;
@@ -928,11 +923,9 @@ mpu_synth_close (int dev)
   midi_dev = synth_devs[dev]->midi_dev;
 
   devc = &dev_conf[midi_dev];
-  exec_cmd (midi_dev, 0x15, 0);	/* Stop recording, playback and MIDI */
-  exec_cmd (midi_dev, 0x8a, 0);	/* Disable data in stopped mode */
+  mpu_cmd (midi_dev, 0x15, 0);	/* Stop recording, playback and MIDI */
+  mpu_cmd (midi_dev, 0x8a, 0);	/* Disable data in stopped mode */
 
-  if (devc->shared_irq == 0)
-    snd_release_irq (devc->irq);
   devc->inputintr = NULL;
 
   if (midi_devs[midi_dev]->coproc)
@@ -967,7 +960,8 @@ static struct synth_operations mpu401_synth_proto =
   midi_synth_patchmgr,
   midi_synth_bender,
   NULL,				/* alloc */
-  midi_synth_setup_voice
+  midi_synth_setup_voice,
+  midi_synth_send_sysex
 };
 
 static struct synth_operations mpu401_synth_operations[MAX_MIDI_DEV];
@@ -998,7 +992,7 @@ mpu401_chk_version (struct mpu_config *devc)
 
   devc->version = devc->revision = 0;
 
-  if ((tmp = exec_cmd (num_midis, 0xAC, 0)) < 0)
+  if ((tmp = mpu_cmd (num_midis, 0xAC, 0)) < 0)
     return;
 
   if ((tmp & 0xf0) > 0x20)	/* Why it's larger than 2.x ??? */
@@ -1006,7 +1000,7 @@ mpu401_chk_version (struct mpu_config *devc)
 
   devc->version = tmp;
 
-  if ((tmp = exec_cmd (num_midis, 0xAD, 0)) < 0)
+  if ((tmp = mpu_cmd (num_midis, 0xAD, 0)) < 0)
     {
       devc->version = 0;
       return;
@@ -1031,6 +1025,7 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
   devc = &dev_conf[num_midis];
 
   devc->base = hw_config->io_base;
+  devc->osp = hw_config->osp;
   devc->irq = hw_config->irq;
   devc->opened = 0;
   devc->uart_mode = 0;
@@ -1042,6 +1037,14 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
   devc->m_busy = 0;
   devc->m_state = ST_INIT;
   devc->shared_irq = hw_config->always_detect;
+  devc->irq = hw_config->irq;
+
+  if (devc->irq < 0)
+    {
+      devc->irq *= -1;
+      devc->shared_irq = 1;
+    }
+  irq2dev[devc->irq] = num_midis;
 
   if (!hw_config->always_detect)
     {
@@ -1049,14 +1052,28 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
       if (!reset_mpu401 (devc))
 	return mem_start;
 
-      DISABLE_INTR (flags);
+      if (!devc->shared_irq)
+	if (snd_set_irq_handler (devc->irq, mpuintr, "mpu401", devc->osp) < 0)
+	  {
+	    return mem_start;
+	  }
+
+      save_flags (flags);
+      cli ();
       mpu401_chk_version (devc);
       if (devc->version == 0)
 	mpu401_chk_version (devc);
-      RESTORE_INTR (flags);
+      restore_flags (flags);
     }
 
-  if (devc->version == 0)
+  request_region (hw_config->io_base, 2, "mpu401");
+
+  if (devc->version != 0)
+    if (mpu_cmd (num_midis, 0xC5, 0) >= 0)	/* Set timebase OK */
+      if (mpu_cmd (num_midis, 0xE0, 120) >= 0)	/* Set tempo OK */
+	devc->capabilities |= MPU_CAP_INTLG;	/* Supports intelligent mode */
+
+  if (!(devc->capabilities & MPU_CAP_INTLG))	/* No intelligent mode */
     {
       memcpy ((char *) &mpu401_synth_operations[num_midis],
 	      (char *) &std_midi_synth,
@@ -1064,7 +1081,6 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
     }
   else
     {
-      devc->capabilities |= MPU_CAP_INTLG;	/* Supports intelligent mode */
       memcpy ((char *) &mpu401_synth_operations[num_midis],
 	      (char *) &mpu401_synth_proto,
 	      sizeof (struct synth_operations));
@@ -1104,18 +1120,18 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
     {
 
       revision_char = devc->revision ? devc->revision + '@' : ' ';
-      if (devc->revision > ('Z' - '@'))
+      if ((int) devc->revision > ('Z' - '@'))
 	revision_char = '+';
 
       devc->capabilities |= MPU_CAP_SYNC | MPU_CAP_FSK;
 
       printk (" <MPU-401 MIDI Interface %d.%d%c>",
-	      (devc->version & 0xf0) >> 4,
+	      (int) (devc->version & 0xf0) >> 4,
 	      devc->version & 0x0f,
 	      revision_char);
       sprintf (mpu_synth_info[num_midis].name,
 	       "MPU-401 %d.%d%c Midi interface #%d",
-	       (devc->version & 0xf0) >> 4,
+	       (int) (devc->version & 0xf0) >> 4,
 	       devc->version & 0x0f,
 	       revision_char,
 	       n_mpu_devs);
@@ -1128,7 +1144,7 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
   mpu401_synth_operations[devc->devno].info =
     &mpu_synth_info[devc->devno];
 
-  if (devc->capabilities & MPU_CAP_INTLG)	/* Has timer */
+  if (devc->capabilities & MPU_CAP_INTLG)	/* Intelligent mode */
     mpu_timer_init (num_midis);
 
   irq2dev[devc->irq] = num_midis;
@@ -1156,11 +1172,11 @@ reset_mpu401 (struct mpu_config *devc)
   for (n = 0; n < 2 && !ok; n++)
     {
       for (timeout = timeout_limit; timeout > 0 && !ok; timeout--)
-	ok = output_ready (devc->base);
+	ok = output_ready (devc);
 
-      write_command (devc->base, MPU_RESET);	/*
-						 * Send MPU-401 RESET Command
-						 */
+      write_command (devc, MPU_RESET);	/*
+					   * Send MPU-401 RESET Command
+					 */
 
       /*
        * Wait at least 25 msec. This method is not accurate so let's make the
@@ -1169,11 +1185,12 @@ reset_mpu401 (struct mpu_config *devc)
 
       for (timeout = timeout_limit * 2; timeout > 0 && !ok; timeout--)
 	{
-	  DISABLE_INTR (flags);
-	  if (input_avail (devc->base))
-	    if (read_data (devc->base) == MPU_ACK)
+	  save_flags (flags);
+	  cli ();
+	  if (input_avail (devc))
+	    if (read_data (devc) == MPU_ACK)
 	      ok = 1;
-	  RESTORE_INTR (flags);
+	  restore_flags (flags);
 	}
 
     }
@@ -1190,8 +1207,7 @@ reset_mpu401 (struct mpu_config *devc)
 static void
 set_uart_mode (int dev, struct mpu_config *devc, int arg)
 {
-
-  if (!arg && devc->version == 0)
+  if (!arg && (devc->capabilities & MPU_CAP_INTLG))
     {
       return;
     }
@@ -1205,7 +1221,7 @@ set_uart_mode (int dev, struct mpu_config *devc, int arg)
 
   if (arg)
     {
-      if (exec_cmd (dev, UART_MODE_ON, 0) < 0)
+      if (mpu_cmd (dev, UART_MODE_ON, 0) < 0)
 	{
 	  printk ("MPU%d: Can't enter UART mode\n", devc->devno);
 	  devc->uart_mode = 0;
@@ -1222,10 +1238,18 @@ probe_mpu401 (struct address_info *hw_config)
   int             ok = 0;
   struct mpu_config tmp_devc;
 
+  if (check_region (hw_config->io_base, 2))
+    {
+      printk ("\n\nmpu401.c: I/O port %x already in use\n\n",
+	      hw_config->io_base);
+      return 0;
+    }
+
   tmp_devc.base = hw_config->io_base;
   tmp_devc.irq = hw_config->irq;
   tmp_devc.initialized = 0;
   tmp_devc.opened = 0;
+  tmp_devc.osp = hw_config->osp;
 
 #if !defined(EXCLUDE_AEDSP16) && defined(AEDSP16_MPU401)
   /*
@@ -1237,12 +1261,20 @@ probe_mpu401 (struct address_info *hw_config)
   if (hw_config->always_detect)
     return 1;
 
-  if (INB (hw_config->io_base + 1) == 0xff)
+  if (inb (hw_config->io_base + 1) == 0xff)
     return 0;			/* Just bus float? */
 
   ok = reset_mpu401 (&tmp_devc);
 
   return ok;
+}
+
+void
+unload_mpu401 (struct address_info *hw_config)
+{
+  release_region (hw_config->io_base, 2);
+  if (hw_config->always_detect == 0 && hw_config->irq > 0)
+    snd_release_irq (hw_config->irq);
 }
 
 /*****************************************************
@@ -1283,11 +1315,11 @@ set_timebase (int midi_dev, int val)
     val = 1000;
 
   hw_val = val;
-  hw_val = (hw_val + 23) / 24;
+  hw_val = (hw_val + 12) / 24;
   if (hw_val > max_timebase)
     hw_val = max_timebase;
 
-  if (exec_cmd (midi_dev, 0xC0 | (hw_val & 0x0f), 0) < 0)
+  if (mpu_cmd (midi_dev, 0xC0 | (hw_val & 0x0f), 0) < 0)
     {
       printk ("MPU: Can't set HW timebase to %d\n", hw_val * 24);
       return;
@@ -1302,41 +1334,42 @@ tmr_reset (void)
 {
   unsigned long   flags;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
   next_event_time = 0xffffffff;
   prev_event_time = 0;
   curr_ticks = curr_clocks = 0;
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 }
 
 static void
 set_timer_mode (int midi_dev)
 {
   if (timer_mode & TMR_MODE_CLS)
-    exec_cmd (midi_dev, 0x3c, 0);	/* Use CLS sync */
+    mpu_cmd (midi_dev, 0x3c, 0);	/* Use CLS sync */
   else if (timer_mode & TMR_MODE_SMPTE)
-    exec_cmd (midi_dev, 0x3d, 0);	/* Use SMPTE sync */
+    mpu_cmd (midi_dev, 0x3d, 0);	/* Use SMPTE sync */
 
   if (timer_mode & TMR_INTERNAL)
     {
-      exec_cmd (midi_dev, 0x80, 0);	/* Use MIDI sync */
+      mpu_cmd (midi_dev, 0x80, 0);	/* Use MIDI sync */
     }
   else
     {
       if (timer_mode & (TMR_MODE_MIDI | TMR_MODE_CLS))
 	{
-	  exec_cmd (midi_dev, 0x82, 0);		/* Use MIDI sync */
-	  exec_cmd (midi_dev, 0x91, 0);		/* Enable ext MIDI ctrl */
+	  mpu_cmd (midi_dev, 0x82, 0);	/* Use MIDI sync */
+	  mpu_cmd (midi_dev, 0x91, 0);	/* Enable ext MIDI ctrl */
 	}
       else if (timer_mode & TMR_MODE_FSK)
-	exec_cmd (midi_dev, 0x81, 0);	/* Use FSK sync */
+	mpu_cmd (midi_dev, 0x81, 0);	/* Use FSK sync */
     }
 }
 
 static void
 stop_metronome (int midi_dev)
 {
-  exec_cmd (midi_dev, 0x84, 0);	/* Disable metronome */
+  mpu_cmd (midi_dev, 0x84, 0);	/* Disable metronome */
 }
 
 static void
@@ -1353,17 +1386,17 @@ setup_metronome (int midi_dev)
   beats_per_measure = (numerator * 4) >> denominator;
 
   if (!metronome_mode)
-    exec_cmd (midi_dev, 0x84, 0);	/* Disable metronome */
+    mpu_cmd (midi_dev, 0x84, 0);	/* Disable metronome */
   else
     {
-      exec_cmd (midi_dev, 0xE4, clks_per_click);
-      exec_cmd (midi_dev, 0xE6, beats_per_measure);
-      exec_cmd (midi_dev, 0x83, 0);	/* Enable metronome without accents */
+      mpu_cmd (midi_dev, 0xE4, clks_per_click);
+      mpu_cmd (midi_dev, 0xE6, beats_per_measure);
+      mpu_cmd (midi_dev, 0x83, 0);	/* Enable metronome without accents */
     }
 }
 
 static int
-start_timer (int midi_dev)
+mpu_start_timer (int midi_dev)
 {
   tmr_reset ();
   set_timer_mode (midi_dev);
@@ -1373,16 +1406,16 @@ start_timer (int midi_dev)
 
   if (timer_mode & TMR_INTERNAL)
     {
-      exec_cmd (midi_dev, 0x02, 0);	/* Send MIDI start */
+      mpu_cmd (midi_dev, 0x02, 0);	/* Send MIDI start */
       tmr_running = 1;
       return TIMER_NOT_ARMED;
     }
   else
     {
-      exec_cmd (midi_dev, 0x35, 0);	/* Enable mode messages to PC */
-      exec_cmd (midi_dev, 0x38, 0);	/* Enable sys common messages to PC */
-      exec_cmd (midi_dev, 0x39, 0);	/* Enable real time messages to PC */
-      exec_cmd (midi_dev, 0x97, 0);	/* Enable system exclusive messages to PC */
+      mpu_cmd (midi_dev, 0x35, 0);	/* Enable mode messages to PC */
+      mpu_cmd (midi_dev, 0x38, 0);	/* Enable sys common messages to PC */
+      mpu_cmd (midi_dev, 0x39, 0);	/* Enable real time messages to PC */
+      mpu_cmd (midi_dev, 0x97, 0);	/* Enable system exclusive messages to PC */
     }
 
   return TIMER_ARMED;
@@ -1394,19 +1427,19 @@ mpu_timer_open (int dev, int mode)
   int             midi_dev = sound_timer_devs[dev]->devlink;
 
   if (timer_open)
-    return RET_ERROR (EBUSY);
+    return -EBUSY;
 
   tmr_reset ();
   curr_tempo = 50;
-  exec_cmd (midi_dev, 0xE0, 50);
+  mpu_cmd (midi_dev, 0xE0, 50);
   curr_timebase = hw_timebase = 120;
   set_timebase (midi_dev, 120);
   timer_open = 1;
   metronome_mode = 0;
   set_timer_mode (midi_dev);
 
-  exec_cmd (midi_dev, 0xe7, 0x04);	/* Send all clocks to host */
-  exec_cmd (midi_dev, 0x95, 0);	/* Enable clock to host */
+  mpu_cmd (midi_dev, 0xe7, 0x04);	/* Send all clocks to host */
+  mpu_cmd (midi_dev, 0x95, 0);	/* Enable clock to host */
 
   return 0;
 }
@@ -1417,9 +1450,9 @@ mpu_timer_close (int dev)
   int             midi_dev = sound_timer_devs[dev]->devlink;
 
   timer_open = tmr_running = 0;
-  exec_cmd (midi_dev, 0x15, 0);	/* Stop all */
-  exec_cmd (midi_dev, 0x94, 0);	/* Disable clock to host */
-  exec_cmd (midi_dev, 0x8c, 0);	/* Disable measure end messages to host */
+  mpu_cmd (midi_dev, 0x15, 0);	/* Stop all */
+  mpu_cmd (midi_dev, 0x94, 0);	/* Disable clock to host */
+  mpu_cmd (midi_dev, 0x8c, 0);	/* Disable measure end messages to host */
   stop_metronome (midi_dev);
 }
 
@@ -1452,11 +1485,11 @@ mpu_timer_event (int dev, unsigned char *event)
     case TMR_START:
       if (tmr_running)
 	break;
-      return start_timer (midi_dev);
+      return mpu_start_timer (midi_dev);
       break;
 
     case TMR_STOP:
-      exec_cmd (midi_dev, 0x01, 0);	/* Send MIDI stop */
+      mpu_cmd (midi_dev, 0x01, 0);	/* Send MIDI stop */
       stop_metronome (midi_dev);
       tmr_running = 0;
       break;
@@ -1464,7 +1497,7 @@ mpu_timer_event (int dev, unsigned char *event)
     case TMR_CONTINUE:
       if (tmr_running)
 	break;
-      exec_cmd (midi_dev, 0x03, 0);	/* Send MIDI continue */
+      mpu_cmd (midi_dev, 0x03, 0);	/* Send MIDI continue */
       setup_metronome (midi_dev);
       tmr_running = 1;
       break;
@@ -1477,7 +1510,7 @@ mpu_timer_event (int dev, unsigned char *event)
 	  if (parm > 250)
 	    parm = 250;
 
-	  if (exec_cmd (midi_dev, 0xE0, parm) < 0)
+	  if (mpu_cmd (midi_dev, 0xE0, parm) < 0)
 	    printk ("MPU: Can't set tempo to %d\n", (int) parm);
 	  curr_tempo = parm;
 	}
@@ -1512,7 +1545,7 @@ mpu_timer_get_time (int dev)
 
 static int
 mpu_timer_ioctl (int dev,
-		 unsigned int command, unsigned int arg)
+		 unsigned int command, ioctl_arg arg)
 {
   int             midi_dev = sound_timer_devs[dev]->devlink;
 
@@ -1520,30 +1553,30 @@ mpu_timer_ioctl (int dev,
     {
     case SNDCTL_TMR_SOURCE:
       {
-	int             parm = IOCTL_IN (arg) & timer_caps;
+	int             parm = (int) get_fs_long ((long *) arg) & timer_caps;
 
 	if (parm != 0)
 	  {
 	    timer_mode = parm;
 
 	    if (timer_mode & TMR_MODE_CLS)
-	      exec_cmd (midi_dev, 0x3c, 0);	/* Use CLS sync */
+	      mpu_cmd (midi_dev, 0x3c, 0);	/* Use CLS sync */
 	    else if (timer_mode & TMR_MODE_SMPTE)
-	      exec_cmd (midi_dev, 0x3d, 0);	/* Use SMPTE sync */
+	      mpu_cmd (midi_dev, 0x3d, 0);	/* Use SMPTE sync */
 	  }
 
-	return IOCTL_OUT (arg, timer_mode);
+	return snd_ioctl_return ((int *) arg, timer_mode);
       }
       break;
 
     case SNDCTL_TMR_START:
-      start_timer (midi_dev);
+      mpu_start_timer (midi_dev);
       return 0;
       break;
 
     case SNDCTL_TMR_STOP:
       tmr_running = 0;
-      exec_cmd (midi_dev, 0x01, 0);	/* Send MIDI stop */
+      mpu_cmd (midi_dev, 0x01, 0);	/* Send MIDI stop */
       stop_metronome (midi_dev);
       return 0;
       break;
@@ -1552,24 +1585,24 @@ mpu_timer_ioctl (int dev,
       if (tmr_running)
 	return 0;
       tmr_running = 1;
-      exec_cmd (midi_dev, 0x03, 0);	/* Send MIDI continue */
+      mpu_cmd (midi_dev, 0x03, 0);	/* Send MIDI continue */
       return 0;
       break;
 
     case SNDCTL_TMR_TIMEBASE:
       {
-	int             val = IOCTL_IN (arg);
+	int             val = (int) get_fs_long ((long *) arg);
 
 	if (val)
 	  set_timebase (midi_dev, val);
 
-	return IOCTL_OUT (arg, curr_timebase);
+	return snd_ioctl_return ((int *) arg, curr_timebase);
       }
       break;
 
     case SNDCTL_TMR_TEMPO:
       {
-	int             val = IOCTL_IN (arg);
+	int             val = (int) get_fs_long ((long *) arg);
 	int             ret;
 
 	if (val)
@@ -1578,7 +1611,7 @@ mpu_timer_ioctl (int dev,
 	      val = 8;
 	    if (val > 250)
 	      val = 250;
-	    if ((ret = exec_cmd (midi_dev, 0xE0, val)) < 0)
+	    if ((ret = mpu_cmd (midi_dev, 0xE0, val)) < 0)
 	      {
 		printk ("MPU: Can't set tempo to %d\n", (int) val);
 		return ret;
@@ -1587,27 +1620,27 @@ mpu_timer_ioctl (int dev,
 	    curr_tempo = val;
 	  }
 
-	return IOCTL_OUT (arg, curr_tempo);
+	return snd_ioctl_return ((int *) arg, curr_tempo);
       }
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
-      if (IOCTL_IN (arg) != 0)	/* Can't change */
-	return RET_ERROR (EINVAL);
+      if (get_fs_long ((long *) arg) != 0)	/* Can't change */
+	return -EINVAL;
 
-      return IOCTL_OUT (arg, ((curr_tempo * curr_timebase) + 30) / 60);
+      return snd_ioctl_return ((int *) arg, ((curr_tempo * curr_timebase) + 30) / 60);
       break;
 
     case SNDCTL_TMR_METRONOME:
-      metronome_mode = IOCTL_IN (arg);
+      metronome_mode = (int) get_fs_long ((long *) arg);
       setup_metronome (midi_dev);
       return 0;
       break;
 
-    default:
+    default:;
     }
 
-  return RET_ERROR (EINVAL);
+  return -EINVAL;
 }
 
 static void
@@ -1728,14 +1761,10 @@ mpu_timer_init (int midi_dev)
   mpu_timer.devlink = midi_dev;
   dev_conf[midi_dev].timer_flag = 1;
 
-#if 1
   if (num_sound_timers >= MAX_TIMER_DEV)
     n = 0;			/* Overwrite the system timer */
   else
     n = num_sound_timers++;
-#else
-  n = 0;
-#endif
   sound_timer_devs[n] = &mpu_timer;
 
   if (devc->version < 0x20)	/* Original MPU-401 */
@@ -1756,10 +1785,6 @@ mpu_timer_init (int midi_dev)
       if (devc->revision & 0x02)
 	timer_caps |= TMR_MODE_CLS;
 
-#if 0
-      if (devc->revision & 0x04)
-	timer_caps |= TMR_MODE_SMPTE;
-#endif
 
       if (devc->revision & 0x40)
 	max_timebase = 10;	/* Has the 216 and 240 ppqn modes */

@@ -41,6 +41,7 @@ attach_sb_card (long mem_start, struct address_info *hw_config)
   if (!sb_dsp_detect (hw_config))
     return mem_start;
   mem_start = sb_dsp_init (mem_start, hw_config);
+  request_region (hw_config->io_base, 16, "SB");
 #endif
 
   return mem_start;
@@ -49,6 +50,13 @@ attach_sb_card (long mem_start, struct address_info *hw_config)
 int
 probe_sb (struct address_info *hw_config)
 {
+  if (check_region (hw_config->io_base, 16))
+    {
+      printk ("\n\nsb_dsp.c: I/O port %x already in use\n\n",
+	      hw_config->io_base);
+      return 0;
+    }
+
 #if !defined(EXCLUDE_AEDSP16) && defined(AEDSP16_SBPRO)
   /*
      * Initialize Audio Excel DSP 16 to SBPRO.
@@ -56,6 +64,13 @@ probe_sb (struct address_info *hw_config)
   InitAEDSP16_SBPRO (hw_config);
 #endif
   return sb_dsp_detect (hw_config);
+}
+
+void
+unload_sb (struct address_info *hw_config)
+{
+  release_region (hw_config->io_base, 16);
+  sb_dsp_unload ();
 }
 
 #endif

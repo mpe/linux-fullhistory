@@ -37,6 +37,10 @@
 
 #if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_SB)
 
+#ifdef SM_WAVE
+#define JAZZ16
+#endif
+
 #include "sb.h"
 #include "sb_mixer.h"
 #undef SB_TEST_IRQ
@@ -46,6 +50,7 @@ static int      sbc_irq = 0;
 static int      open_mode = 0;	/* Read, write or both */
 int             Jazz16_detected = 0;
 int             sb_no_recording = 0;
+static int      dsp_count = 0;
 
 /*
  * The DSP channel can be used either for input or output. Variable
@@ -87,12 +92,13 @@ volatile int    sb_irq_mode = IMODE_NONE;	/*
 						 * IMODE_NONE   */
 static volatile int irq_ok = 0;
 
+static int      dma8 = 1;
+
 #ifdef JAZZ16
 /* 16 bit support
  */
 
 static int      dsp_16bit = 0;
-static int      dma8 = 1;
 static int      dma16 = 5;
 
 static int      dsp_set_bits (int arg);
@@ -110,6 +116,8 @@ volatile int    sb_intr_active = 0;
 static int      dsp_speed (int);
 static int      dsp_set_stereo (int mode);
 int             sb_dsp_command (unsigned char val);
+static void     sb_dsp_reset (int dev);
+sound_os_info  *sb_osp = NULL;
 
 #if !defined(EXCLUDE_MIDI) || !defined(EXCLUDE_AUDIO)
 
@@ -123,9 +131,9 @@ sb_dsp_command (unsigned char val)
   int             i;
   unsigned long   limit;
 
-  limit = GET_TIME () + HZ / 10;	/*
-					   * The timeout is 0.1 secods
-					 */
+  limit = jiffies + HZ / 10;	/*
+				   * The timeout is 0.1 secods
+				 */
 
   /*
    * Note! the i<500000 is an emergency exit. The sb_dsp_command() is sometimes
@@ -135,11 +143,11 @@ sb_dsp_command (unsigned char val)
    * loops.
    */
 
-  for (i = 0; i < 500000 && GET_TIME () < limit; i++)
+  for (i = 0; i < 500000 && jiffies < limit; i++)
     {
-      if ((INB (DSP_STATUS) & 0x80) == 0)
+      if ((inb (DSP_STATUS) & 0x80) == 0)
 	{
-	  OUTB (val, DSP_COMMAND);
+	  outb (val, DSP_COMMAND);
 	  return 1;
 	}
     }
@@ -150,7 +158,7 @@ sb_dsp_command (unsigned char val)
 }
 
 void
-sbintr (INT_HANDLER_PARMS (irq, dummy))
+sbintr (int irq, struct pt_regs *dummy)
 {
   int             status;
 
@@ -179,7 +187,7 @@ sbintr (INT_HANDLER_PARMS (irq, dummy))
     }
 #endif
 
-  status = INB (DSP_DATA_AVAIL);	/*
+  status = inb (DSP_DATA_AVAIL);	/*
 					   * Clear interrupt
 					 */
 
@@ -215,32 +223,15 @@ sbintr (INT_HANDLER_PARMS (irq, dummy))
       }
 }
 
-static int      sb_irq_usecount = 0;
-
 int
 sb_get_irq (void)
 {
-  int             ok;
-
-  if (!sb_irq_usecount)
-    if ((ok = snd_set_irq_handler (sbc_irq, sbintr, "SoundBlaster")) < 0)
-      return ok;
-
-  sb_irq_usecount++;
-
   return 0;
 }
 
 void
 sb_free_irq (void)
 {
-  if (!sb_irq_usecount)
-    return;
-
-  sb_irq_usecount--;
-
-  if (!sb_irq_usecount)
-    snd_release_irq (sbc_irq);
 }
 
 int
@@ -248,26 +239,17 @@ sb_reset_dsp (void)
 {
   int             loopc;
 
-  OUTB (1, DSP_RESET);
+  outb (1, DSP_RESET);
   tenmicrosec ();
-  OUTB (0, DSP_RESET);
+  outb (0, DSP_RESET);
   tenmicrosec ();
   tenmicrosec ();
   tenmicrosec ();
 
-  for (loopc = 0; loopc < 1000 && !(INB (DSP_DATA_AVAIL) & 0x80); loopc++);	/*
-										 * Wait
-										 * for
-										 * data
-										 * *
-										 * available
-										 * status
-										 */
+  for (loopc = 0; loopc < 1000 && !(inb (DSP_DATA_AVAIL) & 0x80); loopc++);
 
-  if (INB (DSP_READ) != 0xAA)
-    return 0;			/*
-				 * Sorry
-				 */
+  if (inb (DSP_READ) != 0xAA)
+    return 0;			/* Sorry */
 
   return 1;
 }
@@ -350,10 +332,11 @@ dsp_speed (int speed)
 				 ((256000000 + speed / 2) / speed)) >> 8);
       sb_dsp_highspeed = 1;
 
-      DISABLE_INTR (flags);
+      save_flags (flags);
+      cli ();
       if (sb_dsp_command (0x40))
 	sb_dsp_command (tconst);
-      RESTORE_INTR (flags);
+      restore_flags (flags);
 
       tmp = 65536 - (tconst << 8);
       speed = (256000000 + tmp / 2) / tmp;
@@ -365,12 +348,13 @@ dsp_speed (int speed)
       sb_dsp_highspeed = 0;
       tconst = (256 - ((1000000 + speed / 2) / speed)) & 0xff;
 
-      DISABLE_INTR (flags);
+      save_flags (flags);
+      cli ();
       if (sb_dsp_command (0x40))	/*
 					 * Set time constant
 					 */
 	sb_dsp_command (tconst);
-      RESTORE_INTR (flags);
+      restore_flags (flags);
 
       tmp = 256 - tconst;
       speed = (1000000 + tmp / 2) / tmp;
@@ -416,43 +400,48 @@ sb_dsp_output_block (int dev, unsigned long buf, int count,
   if (!sb_irq_mode)
     dsp_speaker (ON);
 
-  sb_irq_mode = IMODE_OUTPUT;
   DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE);
 
-  if (audio_devs[dev]->dmachan > 3)
+  sb_irq_mode = 0;
+
+  if (audio_devs[dev]->dmachan1 > 3)
     count >>= 1;
   count--;
+  dsp_count = count;
 
+  sb_irq_mode = IMODE_OUTPUT;
   if (sb_dsp_highspeed)
     {
-      DISABLE_INTR (flags);
+      save_flags (flags);
+      cli ();
       if (sb_dsp_command (0x48))	/*
 					   * High speed size
 					 */
 	{
-	  sb_dsp_command ((unsigned char) (count & 0xff));
-	  sb_dsp_command ((unsigned char) ((count >> 8) & 0xff));
+	  sb_dsp_command ((unsigned char) (dsp_count & 0xff));
+	  sb_dsp_command ((unsigned char) ((dsp_count >> 8) & 0xff));
 	  sb_dsp_command (0x91);	/*
 					   * High speed 8 bit DAC
 					 */
 	}
       else
 	printk ("SB Error: Unable to start (high speed) DAC\n");
-      RESTORE_INTR (flags);
+      restore_flags (flags);
     }
   else
     {
-      DISABLE_INTR (flags);
+      save_flags (flags);
+      cli ();
       if (sb_dsp_command (0x14))	/*
 					   * 8-bit DAC (DMA)
 					 */
 	{
-	  sb_dsp_command ((unsigned char) (count & 0xff));
-	  sb_dsp_command ((unsigned char) ((count >> 8) & 0xff));
+	  sb_dsp_command ((unsigned char) (dsp_count & 0xff));
+	  sb_dsp_command ((unsigned char) ((dsp_count >> 8) & 0xff));
 	}
       else
 	printk ("SB Error: Unable to start DAC\n");
-      RESTORE_INTR (flags);
+      restore_flags (flags);
     }
   sb_intr_active = 1;
 }
@@ -461,55 +450,74 @@ static void
 sb_dsp_start_input (int dev, unsigned long buf, int count, int intrflag,
 		    int restart_dma)
 {
+  unsigned long   flags;
+
+  if (sb_no_recording)
+    {
+      printk ("SB Error: This device doesn't support recording\n");
+      return;
+    }
+
   /*
    * Start a DMA input to the buffer pointed by dmaqtail
    */
 
-  unsigned long   flags;
-
   if (!sb_irq_mode)
     dsp_speaker (OFF);
 
-  sb_irq_mode = IMODE_INPUT;
   DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
+  sb_irq_mode = 0;
 
-  if (audio_devs[dev]->dmachan > 3)
+  if (audio_devs[dev]->dmachan1 > 3)
     count >>= 1;
   count--;
+  dsp_count = count;
 
+  sb_irq_mode = IMODE_INPUT;
   if (sb_dsp_highspeed)
     {
-      DISABLE_INTR (flags);
+      save_flags (flags);
+      cli ();
       if (sb_dsp_command (0x48))	/*
 					   * High speed size
 					 */
 	{
-	  sb_dsp_command ((unsigned char) (count & 0xff));
-	  sb_dsp_command ((unsigned char) ((count >> 8) & 0xff));
+	  sb_dsp_command ((unsigned char) (dsp_count & 0xff));
+	  sb_dsp_command ((unsigned char) ((dsp_count >> 8) & 0xff));
 	  sb_dsp_command (0x99);	/*
 					   * High speed 8 bit ADC
 					 */
 	}
       else
 	printk ("SB Error: Unable to start (high speed) ADC\n");
-      RESTORE_INTR (flags);
+      restore_flags (flags);
     }
   else
     {
-      DISABLE_INTR (flags);
+      save_flags (flags);
+      cli ();
       if (sb_dsp_command (0x24))	/*
 					   * 8-bit ADC (DMA)
 					 */
 	{
-	  sb_dsp_command ((unsigned char) (count & 0xff));
-	  sb_dsp_command ((unsigned char) ((count >> 8) & 0xff));
+	  sb_dsp_command ((unsigned char) (dsp_count & 0xff));
+	  sb_dsp_command ((unsigned char) ((dsp_count >> 8) & 0xff));
 	}
       else
 	printk ("SB Error: Unable to start ADC\n");
-      RESTORE_INTR (flags);
+      restore_flags (flags);
     }
 
   sb_intr_active = 1;
+}
+
+static void
+sb_dsp_trigger (int dev, int bits)
+{
+  if (!bits)
+    sb_dsp_command (0xd0);	/* Halt DMA */
+  else if (bits & sb_irq_mode)
+    sb_dsp_command (0xd4);	/* Continue DMA */
 }
 
 static void
@@ -532,7 +540,7 @@ sb_dsp_prepare_for_input (int dev, int bsize, int bcount)
       /* Select correct dma channel
          * for 16/8 bit acccess
        */
-      audio_devs[my_dev]->dmachan = dsp_16bit ? dma16 : dma8;
+      audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
       if (dsp_stereo)
 	sb_dsp_command (dsp_16bit ? 0xac : 0xa8);
       else
@@ -567,7 +575,7 @@ sb_dsp_prepare_for_output (int dev, int bsize, int bcount)
 #ifdef JAZZ16
       /* 16 bit specific instructions
        */
-      audio_devs[my_dev]->dmachan = dsp_16bit ? dma16 : dma8;
+      audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
       if (Jazz16_detected != 2)	/* SM Wave */
 	sb_mixer_set_stereo (dsp_stereo);
       if (dsp_stereo)
@@ -594,36 +602,7 @@ sb_dsp_halt_xfer (int dev)
 static int
 verify_irq (void)
 {
-#if 0
-  DEFINE_WAIT_QUEUE (testq, testf);
-
-  irq_ok = 0;
-
-  if (sb_get_irq () == -1)
-    {
-      printk ("*** SB Error: Irq %d already in use\n", sbc_irq);
-      return 0;
-    }
-
-
-  sb_irq_mode = IMODE_INIT;
-
-  sb_dsp_command (0xf2);	/*
-				 * This should cause immediate interrupt
-				 */
-
-  DO_SLEEP (testq, testf, HZ / 5);
-
-  sb_free_irq ();
-
-  if (!irq_ok)
-    {
-      printk ("SB Warning: IRQ%d test not passed!", sbc_irq);
-      irq_ok = 1;
-    }
-#else
   irq_ok = 1;
-#endif
   return irq_ok;
 }
 
@@ -635,19 +614,18 @@ sb_dsp_open (int dev, int mode)
   if (!sb_dsp_ok)
     {
       printk ("SB Error: SoundBlaster board not installed\n");
-      return RET_ERROR (ENXIO);
+      return -ENXIO;
     }
 
   if (sb_no_recording && mode & OPEN_READ)
     {
-      printk ("SB Error: Recording not supported by this device\n");
-      return RET_ERROR (ENOTTY);
+      printk ("SB Warning: Recording not supported by this device\n");
     }
 
   if (sb_intr_active || (sb_midi_busy && sb_midi_mode == UART_MIDI))
     {
       printk ("SB: PCM not possible during MIDI input\n");
-      return RET_ERROR (EBUSY);
+      return -EBUSY;
     }
 
   if (!irq_verified)
@@ -666,26 +644,19 @@ sb_dsp_open (int dev, int mode)
   /* Allocate 8 bit dma
    */
 #ifdef JAZZ16
-  audio_devs[my_dev]->dmachan = dma8;
+  audio_devs[my_dev]->dmachan1 = dma8;
 #endif
-
-  if (DMAbuf_open_dma (dev) < 0)
-    {
-      sb_free_irq ();
-      printk ("SB: DMA Busy\n");
-      return RET_ERROR (EBUSY);
-    }
 #ifdef JAZZ16
   /* Allocate 16 bit dma
    */
   if (Jazz16_detected != 0)
     if (dma16 != dma8)
       {
-	if (ALLOC_DMA_CHN (dma16, "Jazz16 16 bit"))
+	if (sound_open_dma (dma16, "Jazz16 16 bit"))
 	  {
 	    sb_free_irq ();
-	    DMAbuf_close_dma (dev);
-	    return RET_ERROR (EBUSY);
+	    /* DMAbuf_close_dma (dev); */
+	    return -EBUSY;
 	  }
       }
 #endif
@@ -706,15 +677,14 @@ sb_dsp_close (int dev)
    */
   if (Jazz16_detected)
     {
-      if (audio_devs[my_dev]->dmachan == dma8)
-	RELEASE_DMA_CHN (dma16);
-      else
-	RELEASE_DMA_CHN (dma8);
+      audio_devs[my_dev]->dmachan1 = dma8;
 
+      if (dma16 != dma8)
+	sound_close_dma (dma16);
     }
 #endif
 
-  DMAbuf_close_dma (dev);
+  /* DMAbuf_close_dma (dev); */
   sb_free_irq ();
   dsp_cleanup ();
   dsp_speaker (OFF);
@@ -750,38 +720,38 @@ dsp_set_bits (int arg)
 #endif /* ifdef JAZZ16 */
 
 static int
-sb_dsp_ioctl (int dev, unsigned int cmd, unsigned int arg, int local)
+sb_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 {
   switch (cmd)
     {
     case SOUND_PCM_WRITE_RATE:
       if (local)
-	return dsp_speed (arg);
-      return IOCTL_OUT (arg, dsp_speed (IOCTL_IN (arg)));
+	return dsp_speed ((int) arg);
+      return snd_ioctl_return ((int *) arg, dsp_speed (get_fs_long ((long *) arg)));
       break;
 
     case SOUND_PCM_READ_RATE:
       if (local)
 	return dsp_current_speed;
-      return IOCTL_OUT (arg, dsp_current_speed);
+      return snd_ioctl_return ((int *) arg, dsp_current_speed);
       break;
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
-	return dsp_set_stereo (arg - 1) + 1;
-      return IOCTL_OUT (arg, dsp_set_stereo (IOCTL_IN (arg) - 1) + 1);
+	return dsp_set_stereo ((int) arg - 1) + 1;
+      return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg) - 1) + 1);
       break;
 
     case SOUND_PCM_READ_CHANNELS:
       if (local)
 	return dsp_stereo + 1;
-      return IOCTL_OUT (arg, dsp_stereo + 1);
+      return snd_ioctl_return ((int *) arg, dsp_stereo + 1);
       break;
 
     case SNDCTL_DSP_STEREO:
       if (local)
-	return dsp_set_stereo (arg);
-      return IOCTL_OUT (arg, dsp_set_stereo (IOCTL_IN (arg)));
+	return dsp_set_stereo ((int) arg);
+      return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg)));
       break;
 
 #ifdef JAZZ16
@@ -790,36 +760,35 @@ sb_dsp_ioctl (int dev, unsigned int cmd, unsigned int arg, int local)
        */
     case SNDCTL_DSP_SETFMT:
       if (local)
-	return dsp_set_bits (arg);
-      return IOCTL_OUT (arg, dsp_set_bits (IOCTL_IN (arg)));
+	return dsp_set_bits ((int) arg);
+      return snd_ioctl_return ((int *) arg, dsp_set_bits (get_fs_long ((long *) arg)));
       break;
 
     case SOUND_PCM_READ_BITS:
       if (local)
 	return dsp_16bit ? 16 : 8;
-      return IOCTL_OUT (arg, dsp_16bit ? 16 : 8);
+      return snd_ioctl_return ((int *) arg, dsp_16bit ? 16 : 8);
       break;
 #else
     case SOUND_PCM_WRITE_BITS:
     case SOUND_PCM_READ_BITS:
       if (local)
 	return 8;
-      return IOCTL_OUT (arg, 8);	/*
-					   * Only 8 bits/sample supported
-					 */
+      return snd_ioctl_return ((int *) (int) arg, 8);	/*
+							   * Only 8 bits/sample supported
+							 */
       break;
 #endif /* ifdef JAZZ16  */
 
     case SOUND_PCM_WRITE_FILTER:
     case SOUND_PCM_READ_FILTER:
-      return RET_ERROR (EINVAL);
+      return -EINVAL;
       break;
 
-    default:
-      return RET_ERROR (EINVAL);
+    default:;
     }
 
-  return RET_ERROR (EINVAL);
+  return -EINVAL;
 }
 
 static void
@@ -827,13 +796,14 @@ sb_dsp_reset (int dev)
 {
   unsigned long   flags;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   sb_reset_dsp ();
   dsp_speed (dsp_current_speed);
   dsp_cleanup ();
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 }
 
 #endif
@@ -866,9 +836,9 @@ get_sb_byte (void)
   int             i;
 
   for (i = 1000; i; i--)
-    if (INB (DSP_DATA_AVAIL) & 0x80)
+    if (inb (DSP_DATA_AVAIL) & 0x80)
       {
-	return INB (DSP_READ);
+	return inb (DSP_READ);
       }
 
   return 0xffff;
@@ -890,13 +860,14 @@ smw_putmem (int base, int addr, unsigned char val)
 {
   unsigned long   flags;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
-  OUTB (addr & 0xff, base + 1);	/* Low address bits */
-  OUTB (addr >> 8, base + 2);	/* High address bits */
-  OUTB (val, base);		/* Data */
+  outb (addr & 0xff, base + 1);	/* Low address bits */
+  outb (addr >> 8, base + 2);	/* High address bits */
+  outb (val, base);		/* Data */
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 }
 
 static unsigned char
@@ -905,13 +876,14 @@ smw_getmem (int base, int addr)
   unsigned long   flags;
   unsigned char   val;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
-  OUTB (addr & 0xff, base + 1);	/* Low address bits */
-  OUTB (addr >> 8, base + 2);	/* High address bits */
-  val = INB (base);		/* Data */
+  outb (addr & 0xff, base + 1);	/* Low address bits */
+  outb (addr >> 8, base + 2);	/* High address bits */
+  val = inb (base);		/* Data */
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
   return val;
 }
 
@@ -934,14 +906,14 @@ initialize_smw (void)
      *  Reset the microcontroller so that the RAM can be accessed
    */
 
-  control = INB (MPU_BASE + 7);
-  OUTB (control | 3, MPU_BASE + 7);	/* Set last two bits to 1 (?) */
-  OUTB ((control & 0xfe) | 2, MPU_BASE + 7);	/* xxxxxxx0 resets the mc */
+  control = inb (MPU_BASE + 7);
+  outb (control | 3, MPU_BASE + 7);	/* Set last two bits to 1 (?) */
+  outb ((control & 0xfe) | 2, MPU_BASE + 7);	/* xxxxxxx0 resets the mc */
 
   for (i = 0; i < 300; i++)	/* Wait at least 1ms */
     tenmicrosec ();
 
-  OUTB (control & 0xfc, MPU_BASE + 7);	/* xxxxxx00 enables RAM */
+  outb (control & 0xfc, MPU_BASE + 7);	/* xxxxxx00 enables RAM */
 
   /*
      *  Detect microcontroller by probing the 8k RAM area
@@ -967,7 +939,6 @@ initialize_smw (void)
       printk ("\nSM Wave: Invalid microcode (MIDI0001.BIN) length\n");
       return 1;
     }
-#endif
 
   /*
      *  Download microcode
@@ -986,6 +957,8 @@ initialize_smw (void)
 	printk ("SM Wave: Microcode verification failed\n");
 	return 0;
       }
+
+#endif
 
   control = 0;
 #ifdef SMW_SCSI_IRQ
@@ -1015,7 +988,7 @@ initialize_smw (void)
   /* control |= 0x20;      Uncomment this if you want to use IRQ7 */
 #endif
 
-  OUTB (control | 0x03, MPU_BASE + 7);	/* xxxxxx11 restarts */
+  outb (control | 0x03, MPU_BASE + 7);	/* xxxxxx11 restarts */
   return 1;
 }
 
@@ -1029,11 +1002,11 @@ initialize_ProSonic16 (void)
   {0, 0, 2, 3, 0, 1, 0, 4, 0, 2, 5, 0, 0, 0, 0, 6}, dma_translat[8] =
   {0, 1, 0, 2, 0, 3, 0, 4};
 
-  OUTB (0xAF, 0x201);		/* ProSonic/Jazz16 wakeup */
+  outb (0xAF, 0x201);		/* ProSonic/Jazz16 wakeup */
   for (x = 0; x < 1000; ++x)	/* wait 10 milliseconds */
     tenmicrosec ();
-  OUTB (0x50, 0x201);
-  OUTB ((sbc_base & 0x70) | ((MPU_BASE & 0x30) >> 4), 0x201);
+  outb (0x50, 0x201);
+  outb ((sbc_base & 0x70) | ((MPU_BASE & 0x30) >> 4), 0x201);
 
   if (sb_reset_dsp ())
     {				/* OK. We have at least a SB */
@@ -1069,13 +1042,15 @@ sb_dsp_detect (struct address_info *hw_config)
 {
   sbc_base = hw_config->io_base;
   sbc_irq = hw_config->irq;
+  sb_osp = hw_config->osp;
 
   if (sb_dsp_ok)
     return 0;			/*
 				 * Already initialized
 				 */
-#ifdef JAZZ16
   dma8 = hw_config->dma;
+
+#ifdef JAZZ16
   dma16 = JAZZ_DMA16;
 
   if (!initialize_ProSonic16 ())
@@ -1107,7 +1082,10 @@ static struct audio_operations sb_dsp_operations =
   sb_dsp_reset,
   sb_dsp_halt_xfer,
   NULL,				/* local_qlen */
-  NULL				/* copy_from_user */
+  NULL,				/* copy_from_user */
+  NULL,
+  NULL,
+  sb_dsp_trigger
 };
 
 #endif
@@ -1116,8 +1094,13 @@ long
 sb_dsp_init (long mem_start, struct address_info *hw_config)
 {
   int             i;
+
+#ifndef EXCLUDE_SBPRO
   int             mixer_type = 0;
 
+#endif
+
+  sb_osp = hw_config->osp;
   sbc_major = sbc_minor = 0;
   sb_dsp_command (0xe1);	/*
 				 * Get version
@@ -1125,15 +1108,15 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 
   for (i = 1000; i; i--)
     {
-      if (INB (DSP_DATA_AVAIL) & 0x80)
+      if (inb (DSP_DATA_AVAIL) & 0x80)
 	{			/*
 				 * wait for Data Ready
 				 */
 	  if (sbc_major == 0)
-	    sbc_major = INB (DSP_READ);
+	    sbc_major = inb (DSP_READ);
 	  else
 	    {
-	      sbc_minor = INB (DSP_READ);
+	      sbc_minor = inb (DSP_READ);
 	      break;
 	    }
 	}
@@ -1142,7 +1125,7 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
   if (sbc_major == 0)
     {
       printk ("\n\nFailed to get SB version (%x) - possible I/O conflict\n\n",
-	      INB (DSP_DATA_AVAIL));
+	      inb (DSP_DATA_AVAIL));
       sbc_major = 1;
     }
 
@@ -1151,6 +1134,42 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 
   if (sbc_major == 4)
     sb16 = 1;
+
+  if (sbc_major == 3 && sbc_minor == 1)
+    {
+      int             ess_major = 0, ess_minor = 0;
+
+/*
+ * Try to detect ESS chips.
+ */
+
+      sb_dsp_command (0xe7);	/*
+				 * Return identification bytes.
+				 */
+
+      for (i = 1000; i; i--)
+	{
+	  if (inb (DSP_DATA_AVAIL) & 0x80)
+	    {			/*
+				 * wait for Data Ready
+				 */
+	      if (ess_major == 0)
+		ess_major = inb (DSP_READ);
+	      else
+		{
+		  ess_minor = inb (DSP_READ);
+		  break;
+		}
+	    }
+	}
+
+      if (ess_major == 0x48 && (ess_minor & 0xf0) == 0x80)
+	printk ("Hmm... Could this be an ESS488 based card (rev %d)\n",
+		ess_minor & 0x0f);
+      else if (ess_major == 0x68 && (ess_minor & 0xf0) == 0x80)
+	printk ("Hmm... Could this be an ESS688 based card (rev %d)\n",
+		ess_minor & 0x0f);
+    }
 
 #ifndef EXCLUDE_SBPRO
   if (sbc_major >= 3)
@@ -1163,7 +1182,7 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 #ifndef EXCLUDE_YM3812
 
   if (sbc_major > 3 ||
-      (sbc_major == 3 && INB (0x388) == 0x00))	/* Should be 0x06 if not OPL-3 */
+      (sbc_major == 3 && inb (0x388) == 0x00))	/* Should be 0x06 if not OPL-3 */
     enable_opl3_mode (OPL3_LEFT, OPL3_RIGHT, OPL3_BOTH);
 #endif
 
@@ -1211,9 +1230,25 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
     if (num_audiodevs < MAX_AUDIO_DEV)
       {
 	audio_devs[my_dev = num_audiodevs++] = &sb_dsp_operations;
-	audio_devs[my_dev]->buffcount = DSP_BUFFCOUNT;
 	audio_devs[my_dev]->buffsize = DSP_BUFFSIZE;
-	audio_devs[my_dev]->dmachan = hw_config->dma;
+	dma8 = audio_devs[my_dev]->dmachan1 = hw_config->dma;
+	audio_devs[my_dev]->dmachan2 = -1;
+	if (sound_alloc_dma (hw_config->dma, "soundblaster"))
+	  printk ("sb_dsp.c: Can't allocate DMA channel\n");
+#ifdef JAZZ16
+	/* Allocate 16 bit dma
+	 */
+	if (Jazz16_detected != 0)
+	  if (dma16 != dma8)
+	    {
+	      if (sound_alloc_dma (dma16, "Jazz16 16 bit"))
+		{
+		  printk ("Jazz16: Can't allocate 16 bit DMA channel\n");
+		}
+	    }
+#endif
+	if (snd_set_irq_handler (sbc_irq, sbintr, "SoundBlaster", sb_osp) < 0)
+	  printk ("sb_dsp: Can't allocate IRQ\n");;
       }
     else
       printk ("SB: Too many DSP devices available\n");
@@ -1231,6 +1266,22 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 
   sb_dsp_ok = 1;
   return mem_start;
+}
+
+void
+sb_dsp_unload (void)
+{
+  sound_free_dma (dma8);
+#ifdef JAZZ16
+  /* Allocate 16 bit dma
+   */
+  if (Jazz16_detected != 0)
+    if (dma16 != dma8)
+      {
+	sound_free_dma (dma16);
+      }
+#endif
+  snd_release_irq (sbc_irq);
 }
 
 void

@@ -138,10 +138,10 @@ gus_linear_vol (int vol, int mainvol)
   else if (mainvol >= 127)
     mainvol = 127;
 #else
-  mainvol = 128;
+  mainvol = 127;
 #endif
 
-  return gus_linearvol[(((vol * mainvol) / 128) * mixer_mainvol) / 100];
+  return gus_linearvol[(((vol * mainvol) / 127) * mixer_mainvol) / 100];
 }
 
 #endif

@@ -93,7 +93,8 @@ __asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
 #define MAP_NR(addr)		(((unsigned long)(addr)) >> PAGE_SHIFT)
 
 typedef struct {
-	unsigned count:30,
+	unsigned count:24,
+		 age:6,
 		 dirty:1,
 		 reserved:1;
 } mem_map_t;

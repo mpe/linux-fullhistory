@@ -177,16 +177,11 @@ type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5) \
 #include <linux/string.h>
 #include <linux/signal.h>
 
-extern unsigned long kernel_clone(unsigned long clone_flags, void * stack);
+extern long __kernel_thread(unsigned long, int (*)(void *), void *);
 
-static inline long clone(unsigned long clone_flags, void * stack)
+static inline long kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 {
-	return kernel_clone(clone_flags, stack);
-}
-
-static inline long fork(void)
-{
-	return kernel_clone(SIGCHLD, NULL);
+	return __kernel_thread(flags | CLONE_VM, fn, arg);
 }
 
 extern void sys_idle(void);

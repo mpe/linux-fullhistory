@@ -30,10 +30,10 @@
  * headers needed by this source.
  */
 #include "sound_config.h"
-/*
- * all but ioport.h :)
- */
-#include <linux/ioport.h>
+
+#ifndef AEDSP16_BASE
+#define EXCLUDE_AEDSP16
+#endif
 
 #if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_AEDSP16)
 /*
@@ -209,8 +209,7 @@
    - Rearranged the code to let InitAEDSP16 be more general.
    - Erased the REALLY_SLOW_IO. We don't need it. Erased the linux/io.h
    inclusion too. We rely on os.h
-   - Used the INB and OUTB #defined in os.h instead of inb and outb.
-   - Corrected the code for GetCardName (DSP Copyright) to get a variable
+   - Used the  to get a variable
    len string (we are not sure about the len of Copyright string).
    This works with any SB and compatible.
    - Added the code to request_region at device init (should go in
@@ -370,7 +369,7 @@ WaitForDataAvail (int port)
 
   do
     {
-      ret = INB (port + DSP_DATAVAIL);
+      ret = inb (port + DSP_DATAVAIL);
       /*
          * Wait for data available (bit 7 of ret == 1)
        */
@@ -388,7 +387,7 @@ ReadData (int port)
 {
   if (WaitForDataAvail (port))
     return -1;
-  return INB (port + DSP_READ);
+  return inb (port + DSP_READ);
 }
 
 static int
@@ -403,9 +402,9 @@ ResetBoard (int port)
   /*
      * Reset DSP
    */
-  OUTB (1, (port + DSP_RESET));
+  outb (1, (port + DSP_RESET));
   tenmicrosec ();
-  OUTB (0, (port + DSP_RESET));
+  outb (0, (port + DSP_RESET));
   tenmicrosec ();
   tenmicrosec ();
   return CheckDSPOkay (port);
@@ -419,13 +418,13 @@ WriteDSPCommand (int port, int cmd)
 
   do
     {
-      ret = INB (port + DSP_STATUS);
+      ret = inb (port + DSP_STATUS);
       /*
          * DSP ready to receive data if bit 7 of ret == 0
        */
       if (!(ret & 0x80))
 	{
-	  OUTB (cmd, port + DSP_COMMAND);
+	  outb (cmd, port + DSP_COMMAND);
 	  return 0;
 	}
     }
@@ -695,6 +694,7 @@ InitAEDSP16_SBPRO (struct address_info *hw_config)
   portbase = hw_config->io_base;
   irq = hw_config->irq;
   dma = hw_config->dma;
+
   if (InitAEDSP16 (INIT_SBPRO))
     return -1;
 
@@ -762,6 +762,7 @@ InitAEDSP16_MSS (struct address_info *hw_config)
    */
   irq = hw_config->irq;
   dma = hw_config->dma;
+
   if (InitAEDSP16 (INIT_MSS))
     return -1;
 

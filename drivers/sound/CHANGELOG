@@ -1,5 +1,23 @@
-Changelog for version 3.0.1
----------------------------
+Changelog for version 3.5
+-------------------------
+
+Since 3.0.2
+- Support for CS4232 based PnP cards (AcerMagic S23 etc).
+- Full duplex support for some CS4231, CS4232 and AD1845 based cards
+(GUA MAX, AudioTrix Pro, AcerMagic S23 and many MAD16/Mozart cards
+having a codec mentioned above).
+- Almost fully rewritten loadable modules support.
+- Fixed some bugs.
+- Huge amount of testing (more testing is still required).
+- mmap() support (works with some cards). Requires much more testing.
+- Sample/patch/program loading for TB Maui/Tropez. No initialization
+since TB doesn't allow me to release that code.
+- Using CS4231 compatible codecs as timer for /dev/music.
+
+Since 3.0.1
+- Added allocation of I/O ports, DMA channels and interrupts
+to the initialization code. This may break modules support since
+the driver may not free some resources on unload. Should be fixed soon.
 
 Since 3.0
 - Some important bug fixes. 

@@ -74,10 +74,6 @@ extern struct file_operations * get_blkfops(unsigned int);
 
 extern void *sys_call_table;
 
-#ifdef CONFIG_FTAPE
-extern char * ftape_big_buffer;
-#endif
-
 #ifdef CONFIG_SCSI
 #include "../drivers/scsi/scsi.h"
 #include "../drivers/scsi/scsi_ioctl.h"
@@ -154,6 +150,7 @@ struct symbol_table symbol_table = {
 	X(vremap),
 	X(vfree),
  	X(mem_map),
+ 	X(remap_page_range),
 
 	/* filesystem internal functions */
 	X(getname),
@@ -339,10 +336,6 @@ struct symbol_table symbol_table = {
 	X(unregister_netdevice_notifier),
 #endif
 
-#ifdef CONFIG_FTAPE
-	/* The next labels are needed for ftape driver.  */
-	X(ftape_big_buffer),
-#endif
 #ifdef CONFIG_INET
 	/* support for loadable net drivers */
 	X(register_netdev),

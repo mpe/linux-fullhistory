@@ -302,11 +302,6 @@ comment '>>> Which is available from ftp://ftp.funet.fi/pub/OS/Linux/BETA/QIC-02
 fi
 fi
 
-bool 'QIC-117 tape support' CONFIG_FTAPE n
-if [ "$CONFIG_FTAPE" = "y" ]; then
-  int ' number of ftape buffers' NR_FTAPE_BUFFERS 3
-fi
-
 comment 'Sound'
 
 tristate 'Sound card support' CONFIG_SOUND n

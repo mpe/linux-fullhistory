@@ -32,8 +32,11 @@
 
 #if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_SEQUENCER)
 
-DEFINE_WAIT_QUEUES (server_procs[MAX_SYNTH_DEV],
-		    server_wait_flag[MAX_SYNTH_DEV]);
+static struct wait_queue *server_procs[MAX_SYNTH_DEV] =
+{NULL};
+static volatile struct snd_wait server_wait_flag[MAX_SYNTH_DEV] =
+{
+  {0}};
 
 static struct patmgr_info *mbox[MAX_SYNTH_DEV] =
 {NULL};
@@ -46,19 +49,24 @@ static int      pmgr_opened[MAX_SYNTH_DEV] =
 #define A_TO_S	1
 #define S_TO_A 	2
 
-DEFINE_WAIT_QUEUE (appl_proc, appl_wait_flag);
+static struct wait_queue *appl_proc = NULL;
+static volatile struct snd_wait appl_wait_flag =
+{0};
 
 int
 pmgr_open (int dev)
 {
   if (dev < 0 || dev >= num_synths)
-    return RET_ERROR (ENXIO);
+    return -ENXIO;
 
   if (pmgr_opened[dev])
-    return RET_ERROR (EBUSY);
+    return -EBUSY;
   pmgr_opened[dev] = 1;
 
-  RESET_WAIT_QUEUE (server_procs[dev], server_wait_flag[dev]);
+  {
+    server_wait_flag[dev].aborting = 0;
+    server_wait_flag[dev].mode = WK_NONE;
+  };
 
   return 0;
 }
@@ -73,10 +81,13 @@ pmgr_release (int dev)
     {
 
       mbox[dev]->key = PM_ERROR;
-      mbox[dev]->parm1 = RET_ERROR (EIO);
+      mbox[dev]->parm1 = -EIO;
 
-      if (SOMEONE_WAITING (appl_proc, appl_wait_flag))
-	WAKE_UP (appl_proc, appl_wait_flag);
+      if ((appl_wait_flag.mode & WK_SLEEP))
+	{
+	  appl_wait_flag.mode = WK_WAKEUP;
+	  wake_up (&appl_proc);
+	};
     }
 
   pmgr_opened[dev] = 0;
@@ -91,47 +102,66 @@ pmgr_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
   if (count != sizeof (struct patmgr_info))
     {
       printk ("PATMGR%d: Invalid read count\n", dev);
-      return RET_ERROR (EIO);
+      return -EIO;
     }
 
-  while (!ok && !PROCESS_ABORTING (server_procs[dev], server_wait_flag[dev]))
+  while (!ok && !((current->signal & ~current->blocked)))
     {
-      DISABLE_INTR (flags);
+      save_flags (flags);
+      cli ();
 
       while (!(mbox[dev] && msg_direction[dev] == A_TO_S) &&
-	     !PROCESS_ABORTING (server_procs[dev], server_wait_flag[dev]))
+	     !((current->signal & ~current->blocked)))
 	{
-	  DO_SLEEP (server_procs[dev], server_wait_flag[dev], 0);
+
+	  {
+	    unsigned long   tl;
+
+	    if (0)
+	      tl = current->timeout = jiffies + (0);
+	    else
+	      tl = 0xffffffff;
+	    server_wait_flag[dev].mode = WK_SLEEP;
+	    interruptible_sleep_on (&server_procs[dev]);
+	    if (!(server_wait_flag[dev].mode & WK_WAKEUP))
+	      {
+		if (current->signal & ~current->blocked)
+		  server_wait_flag[dev].aborting = 1;
+		else if (jiffies >= tl)
+		  server_wait_flag[dev].mode |= WK_TIMEOUT;
+	      }
+	    server_wait_flag[dev].mode &= ~WK_SLEEP;
+	  };
 	}
 
       if (mbox[dev] && msg_direction[dev] == A_TO_S)
 	{
-	  COPY_TO_USER (buf, 0, (char *) mbox[dev], count);
+	  memcpy_tofs (&((buf)[0]), ((char *) mbox[dev]), (count));
 	  msg_direction[dev] = 0;
 	  ok = 1;
 	}
 
-      RESTORE_INTR (flags);
+      restore_flags (flags);
 
     }
 
   if (!ok)
-    return RET_ERROR (EINTR);
+    return -EINTR;
   return count;
 }
 
 int
-pmgr_write (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
+pmgr_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
 {
   unsigned long   flags;
 
   if (count < 4)
     {
       printk ("PATMGR%d: Write count < 4\n", dev);
-      return RET_ERROR (EIO);
+      return -EIO;
     }
 
-  COPY_FROM_USER (mbox[dev], buf, 0, 4);
+  memcpy_fromfs ((mbox[dev]), &((buf)[0]), (4));
 
   if (*(unsigned char *) mbox[dev] == SEQ_FULLSIZE)
     {
@@ -139,7 +169,7 @@ pmgr_write (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 
       tmp_dev = ((unsigned short *) mbox[dev])[2];
       if (tmp_dev != dev)
-	return RET_ERROR (ENXIO);
+	return -ENXIO;
 
       return synth_devs[dev]->load_patch (dev, *(unsigned short *) mbox[dev],
 					  buf, 4, count, 1);
@@ -148,7 +178,7 @@ pmgr_write (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
   if (count != sizeof (struct patmgr_info))
     {
       printk ("PATMGR%d: Invalid write count\n", dev);
-      return RET_ERROR (EIO);
+      return -EIO;
     }
 
   /*
@@ -156,20 +186,24 @@ pmgr_write (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
    * mailbox and a client waiting.
    */
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   if (mbox[dev] && !msg_direction[dev])
     {
-      COPY_FROM_USER (&((char *) mbox[dev])[4], buf, 4, count - 4);
+      memcpy_fromfs ((&((char *) mbox[dev])[4]), &((buf)[4]), (count - 4));
       msg_direction[dev] = S_TO_A;
 
-      if (SOMEONE_WAITING (appl_proc, appl_wait_flag))
+      if ((appl_wait_flag.mode & WK_SLEEP))
 	{
-	  WAKE_UP (appl_proc, appl_wait_flag);
+	  {
+	    appl_wait_flag.mode = WK_WAKEUP;
+	    wake_up (&appl_proc);
+	  };
 	}
     }
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   return count;
 }
@@ -180,7 +214,8 @@ pmgr_access (int dev, struct patmgr_info *rec)
   unsigned long   flags;
   int             err = 0;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   if (mbox[dev])
     printk ("  PATMGR: Server %d mbox full. Why?\n", dev);
@@ -190,17 +225,38 @@ pmgr_access (int dev, struct patmgr_info *rec)
       mbox[dev] = rec;
       msg_direction[dev] = A_TO_S;
 
-      if (SOMEONE_WAITING (server_procs[dev], server_wait_flag[dev]))
+      if ((server_wait_flag[dev].mode & WK_SLEEP))
 	{
-	  WAKE_UP (server_procs[dev], server_wait_flag[dev]);
+	  {
+	    server_wait_flag[dev].mode = WK_WAKEUP;
+	    wake_up (&server_procs[dev]);
+	  };
 	}
 
-      DO_SLEEP (appl_proc, appl_wait_flag, 0);
+
+      {
+	unsigned long   tl;
+
+	if (0)
+	  tl = current->timeout = jiffies + (0);
+	else
+	  tl = 0xffffffff;
+	appl_wait_flag.mode = WK_SLEEP;
+	interruptible_sleep_on (&appl_proc);
+	if (!(appl_wait_flag.mode & WK_WAKEUP))
+	  {
+	    if (current->signal & ~current->blocked)
+	      appl_wait_flag.aborting = 1;
+	    else if (jiffies >= tl)
+	      appl_wait_flag.mode |= WK_TIMEOUT;
+	  }
+	appl_wait_flag.mode &= ~WK_SLEEP;
+      };
 
       if (msg_direction[dev] != S_TO_A)
 	{
 	  rec->key = PM_ERROR;
-	  rec->parm1 = RET_ERROR (EIO);
+	  rec->parm1 = -EIO;
 	}
       else if (rec->key == PM_ERROR)
 	{
@@ -213,7 +269,7 @@ pmgr_access (int dev, struct patmgr_info *rec)
       msg_direction[dev] = 0;
     }
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   return err;
 }
@@ -228,14 +284,19 @@ pmgr_inform (int dev, int event, unsigned long p1, unsigned long p2,
   if (!pmgr_opened[dev])
     return 0;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   if (mbox[dev])
     printk ("  PATMGR: Server %d mbox full. Why?\n", dev);
   else
     {
       if ((mbox[dev] =
-	   (struct patmgr_info *) KERNEL_MALLOC (sizeof (struct patmgr_info))) == NULL)
+	   (struct patmgr_info *) (
+				    {
+	caddr_t x; x = kmalloc (sizeof (struct patmgr_info), GFP_KERNEL); x;
+				    }
+	   )) == NULL)
 	{
 	  printk ("pmgr: Couldn't allocate memory for a message\n");
 	  return 0;
@@ -248,19 +309,40 @@ pmgr_inform (int dev, int event, unsigned long p1, unsigned long p2,
       mbox[dev]->parm3 = p3;
       msg_direction[dev] = A_TO_S;
 
-      if (SOMEONE_WAITING (server_procs[dev], server_wait_flag[dev]))
+      if ((server_wait_flag[dev].mode & WK_SLEEP))
 	{
-	  WAKE_UP (server_procs[dev], server_wait_flag[dev]);
+	  {
+	    server_wait_flag[dev].mode = WK_WAKEUP;
+	    wake_up (&server_procs[dev]);
+	  };
 	}
 
-      DO_SLEEP (appl_proc, appl_wait_flag, 0);
+
+      {
+	unsigned long   tl;
+
+	if (0)
+	  tl = current->timeout = jiffies + (0);
+	else
+	  tl = 0xffffffff;
+	appl_wait_flag.mode = WK_SLEEP;
+	interruptible_sleep_on (&appl_proc);
+	if (!(appl_wait_flag.mode & WK_WAKEUP))
+	  {
+	    if (current->signal & ~current->blocked)
+	      appl_wait_flag.aborting = 1;
+	    else if (jiffies >= tl)
+	      appl_wait_flag.mode |= WK_TIMEOUT;
+	  }
+	appl_wait_flag.mode &= ~WK_SLEEP;
+      };
       if (mbox[dev])
-	KERNEL_FREE (mbox[dev]);
+	kfree (mbox[dev]);
       mbox[dev] = NULL;
       msg_direction[dev] = 0;
     }
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   return err;
 }

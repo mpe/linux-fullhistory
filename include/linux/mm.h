@@ -75,6 +75,8 @@ struct vm_area_struct {
 #define VM_DENYWRITE	0x0800	/* ETXTBSY on write attempts.. */
 
 #define VM_EXECUTABLE	0x1000
+#define VM_DONTSWAP	0x2000  /* Some vm types have their own
+				 * hard-coded swap mechanism */
 
 #define VM_STACK_FLAGS	0x0177
 
@@ -106,6 +108,7 @@ struct vm_operations_struct {
 };
 
 extern mem_map_t * mem_map;
+extern unsigned char *age_map;
 
 /* planning stage.. */
 #define P_DIRTY		0x0001

@@ -47,7 +47,6 @@ static int      right_fix[ICS_MIXDEVS] =
 static int
 scale_vol (int vol)
 {
-#if 1
   /*
      *  Experimental volume scaling by Risto Kankkunen.
      *  This should give smoother volume response than just
@@ -72,9 +71,6 @@ scale_vol (int vol)
       e += 7;
     }
   return ((e << 4) + vol);
-#else
-  return ((vol * 127) + 50) / 100;
-#endif
 }
 
 static void
@@ -100,12 +96,13 @@ write_mix (int dev, int chn, int vol)
       attn_addr |= 0x03;
     }
 
-  DISABLE_INTR (flags);
-  OUTB (ctrl_addr, u_MixSelect);
-  OUTB (selector[dev], u_MixData);
-  OUTB (attn_addr, u_MixSelect);
-  OUTB ((unsigned char) vol, u_MixData);
-  RESTORE_INTR (flags);
+  save_flags (flags);
+  cli ();
+  outb (ctrl_addr, u_MixSelect);
+  outb (selector[dev], u_MixData);
+  outb (attn_addr, u_MixSelect);
+  outb ((unsigned char) vol, u_MixData);
+  restore_flags (flags);
 }
 
 static int
@@ -132,7 +129,7 @@ set_volumes (int dev, int vol)
 }
 
 static int
-ics2101_mixer_ioctl (int dev, unsigned int cmd, unsigned int arg)
+ics2101_mixer_ioctl (int dev, unsigned int cmd, ioctl_arg arg)
 {
   if (((cmd >> 8) & 0xff) == 'M')
     {
@@ -144,27 +141,27 @@ ics2101_mixer_ioctl (int dev, unsigned int cmd, unsigned int arg)
 	    break;
 
 	  case SOUND_MIXER_MIC:
-	    return IOCTL_OUT (arg, set_volumes (DEV_MIC, IOCTL_IN (arg)));
+	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_MIC, get_fs_long ((long *) arg)));
 	    break;
 
 	  case SOUND_MIXER_CD:
-	    return IOCTL_OUT (arg, set_volumes (DEV_CD, IOCTL_IN (arg)));
+	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_CD, get_fs_long ((long *) arg)));
 	    break;
 
 	  case SOUND_MIXER_LINE:
-	    return IOCTL_OUT (arg, set_volumes (DEV_LINE, IOCTL_IN (arg)));
+	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_LINE, get_fs_long ((long *) arg)));
 	    break;
 
 	  case SOUND_MIXER_SYNTH:
-	    return IOCTL_OUT (arg, set_volumes (DEV_GF1, IOCTL_IN (arg)));
+	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_GF1, get_fs_long ((long *) arg)));
 	    break;
 
 	  case SOUND_MIXER_VOLUME:
-	    return IOCTL_OUT (arg, set_volumes (DEV_VOL, IOCTL_IN (arg)));
+	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_VOL, get_fs_long ((long *) arg)));
 	    break;
 
 	  default:
-	    return RET_ERROR (EINVAL);
+	    return -EINVAL;
 	  }
       else
 	switch (cmd & 0xff)	/*
@@ -177,49 +174,47 @@ ics2101_mixer_ioctl (int dev, unsigned int cmd, unsigned int arg)
 	    break;
 
 	  case SOUND_MIXER_DEVMASK:
-	    return IOCTL_OUT (arg, MIX_DEVS);
+	    return snd_ioctl_return ((int *) arg, MIX_DEVS);
 	    break;
 
 	  case SOUND_MIXER_STEREODEVS:
-	    return IOCTL_OUT (arg, SOUND_MASK_LINE | SOUND_MASK_CD |
-			      SOUND_MASK_SYNTH | SOUND_MASK_VOLUME |
-			      SOUND_MASK_MIC);
+	    return snd_ioctl_return ((int *) arg, SOUND_MASK_LINE | SOUND_MASK_CD | SOUND_MASK_SYNTH | SOUND_MASK_VOLUME | SOUND_MASK_MIC);
 	    break;
 
 	  case SOUND_MIXER_RECMASK:
-	    return IOCTL_OUT (arg, SOUND_MASK_MIC | SOUND_MASK_LINE);
+	    return snd_ioctl_return ((int *) arg, SOUND_MASK_MIC | SOUND_MASK_LINE);
 	    break;
 
 	  case SOUND_MIXER_CAPS:
-	    return IOCTL_OUT (arg, 0);
+	    return snd_ioctl_return ((int *) arg, 0);
 	    break;
 
 	  case SOUND_MIXER_MIC:
-	    return IOCTL_OUT (arg, volumes[DEV_MIC]);
+	    return snd_ioctl_return ((int *) arg, volumes[DEV_MIC]);
 	    break;
 
 	  case SOUND_MIXER_LINE:
-	    return IOCTL_OUT (arg, volumes[DEV_LINE]);
+	    return snd_ioctl_return ((int *) arg, volumes[DEV_LINE]);
 	    break;
 
 	  case SOUND_MIXER_CD:
-	    return IOCTL_OUT (arg, volumes[DEV_CD]);
+	    return snd_ioctl_return ((int *) arg, volumes[DEV_CD]);
 	    break;
 
 	  case SOUND_MIXER_VOLUME:
-	    return IOCTL_OUT (arg, volumes[DEV_VOL]);
+	    return snd_ioctl_return ((int *) arg, volumes[DEV_VOL]);
 	    break;
 
 	  case SOUND_MIXER_SYNTH:
-	    return IOCTL_OUT (arg, volumes[DEV_GF1]);
+	    return snd_ioctl_return ((int *) arg, volumes[DEV_GF1]);
 	    break;
 
 	  default:
-	    return RET_ERROR (EINVAL);
+	    return -EINVAL;
 	  }
     }
 
-  return RET_ERROR (EINVAL);
+  return -EINVAL;
 }
 
 static struct mixer_operations ics2101_mixer_operations =
@@ -242,7 +237,7 @@ ics2101_mixer_init (long mem_start)
          * the flipping feature if the model id is other than 5.
        */
 
-      if (INB (u_MixSelect) != 5)
+      if (inb (u_MixSelect) != 5)
 	{
 	  for (i = 0; i < ICS_MIXDEVS; i++)
 	    left_fix[i] = 1;

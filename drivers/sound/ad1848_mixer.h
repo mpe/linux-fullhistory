@@ -37,7 +37,7 @@
  */
 #ifdef GUSMAX_MIXER
 #define MODE1_REC_DEVICES		(SOUND_MASK_LINE | SOUND_MASK_MIC | \
-					 SOUND_MASK_CD)
+					 SOUND_MASK_CD|SOUND_MASK_IMIX)
 
 #define MODE1_MIXER_DEVICES		(SOUND_MASK_SYNTH | SOUND_MASK_MIC | \
 					 SOUND_MASK_CD | \
@@ -50,7 +50,7 @@
 					 SOUND_MASK_PCM | SOUND_MASK_IMIX)
 #else	/* Generic mapping */
 #define MODE1_REC_DEVICES		(SOUND_MASK_LINE3 | SOUND_MASK_MIC | \
-					 SOUND_MASK_LINE1)
+					 SOUND_MASK_LINE1|SOUND_MASK_IMIX)
 
 #define MODE1_MIXER_DEVICES		(SOUND_MASK_LINE1 | SOUND_MASK_MIC | \
 					 SOUND_MASK_LINE2 | \
@@ -70,6 +70,14 @@ struct mixer_def {
 	unsigned int nbits:4;
 };
 
+static char mix_cvt[101] = {
+	0, 0,3,7,10,13,16,19,21,23,26,28,30,32,34,35,37,39,40,42,
+	43,45,46,47,49,50,51,52,53,55,56,57,58,59,60,61,62,63,64,65,
+	65,66,67,68,69,70,70,71,72,73,73,74,75,75,76,77,77,78,79,79,
+	80,81,81,82,82,83,84,84,85,85,86,86,87,87,88,88,89,89,90,90,
+	91,91,92,92,93,93,94,94,95,95,96,96,96,97,97,98,98,98,99,99,
+	100
+};
 
 typedef struct mixer_def mixer_ent;
 
@@ -83,7 +91,7 @@ typedef struct mixer_def mixer_ent;
  */
 
 #define MIX_ENT(name, reg_l, pola_l, pos_l, len_l, reg_r, pola_r, pos_r, len_r)	\
-	{{reg_l, pola_l, pos_r, len_l}, {reg_r, pola_r, pos_r, len_r}}
+	{{reg_l, pola_l, pos_l, len_l}, {reg_r, pola_r, pos_r, len_r}}
 
 mixer_ent mix_devices[32][2] = {	/* As used in GUS MAX */
 MIX_ENT(SOUND_MIXER_VOLUME,	 0, 0, 0, 0,	 0, 0, 0, 0),
@@ -111,9 +119,9 @@ static unsigned short default_mixer_levels[SOUND_MIXER_NRDEVICES] =
   0x3232,			/* Bass */
   0x3232,			/* Treble */
   0x4b4b,			/* FM */
-  0x6464,			/* PCM */
+  0x4040,			/* PCM */
   0x4b4b,			/* PC Speaker */
-  0x4b4b,			/* Ext Line */
+  0x2020,			/* Ext Line */
   0x1010,			/* Mic */
   0x4b4b,			/* CD */
   0x0000,			/* Recording monitor */
@@ -121,9 +129,9 @@ static unsigned short default_mixer_levels[SOUND_MIXER_NRDEVICES] =
   0x4b4b,			/* Recording level */
   0x4b4b,			/* Input gain */
   0x4b4b,			/* Output gain */
-  0x4b4b,			/* Line1 */
-  0x4b4b,			/* Line2 */
-  0x3232			/* Line3 (usually line in)*/
+  0x4040,			/* Line1 */
+  0x4040,			/* Line2 */
+  0x2020			/* Line3 (usually line in)*/
 };
 
 #define LEFT_CHN	0

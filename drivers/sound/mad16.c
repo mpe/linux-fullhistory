@@ -1,4 +1,3 @@
-#define MAD16_OPL4		/* Disable this if you have problems with OPL3 */
 /*
  * sound/mad16.c
  *
@@ -101,6 +100,8 @@ static int      already_initialized = 0;
 
 static int      board_type = C928;
 
+static sound_os_info *mad16_osp;
+
 #ifndef DDB
 #define DDB(x)
 #endif
@@ -111,22 +112,23 @@ mad_read (int port)
   unsigned long   flags;
   unsigned char   tmp;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   switch (board_type)		/* Output password */
     {
     case C928:
     case MOZART:
-      OUTB (0xE2, PASSWD_REG);
+      outb (0xE2, PASSWD_REG);
       break;
 
     case C929:
-      OUTB (0xE3, PASSWD_REG);
+      outb (0xE3, PASSWD_REG);
       break;
     }
 
-  tmp = INB (port);
-  RESTORE_INTR (flags);
+  tmp = inb (port);
+  restore_flags (flags);
 
   return tmp;
 }
@@ -136,22 +138,23 @@ mad_write (int port, int value)
 {
   unsigned long   flags;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   switch (board_type)		/* Output password */
     {
     case C928:
     case MOZART:
-      OUTB (0xE2, PASSWD_REG);
+      outb (0xE2, PASSWD_REG);
       break;
 
     case C929:
-      OUTB (0xE3, PASSWD_REG);
+      outb (0xE3, PASSWD_REG);
       break;
     }
 
-  OUTB ((unsigned char) (value & 0xff), port);
-  RESTORE_INTR (flags);
+  outb ((unsigned char) (value & 0xff), port);
+  restore_flags (flags);
 }
 
 static int
@@ -175,7 +178,7 @@ detect_mad16 (void)
  * the password. (This is how a MAD16 compatible card works).
  */
 
-  if ((tmp2 = INB (MC1_PORT)) == tmp)	/* It didn't close */
+  if ((tmp2 = inb (MC1_PORT)) == tmp)	/* It didn't close */
     {
       DDB (printk ("MC1_PORT didn't close after read (0x%02x)\n", tmp2));
       return 0;
@@ -202,10 +205,14 @@ probe_mad16 (struct address_info *hw_config)
   static int      valid_ports[] =
   {0x530, 0xe80, 0xf40, 0x604};
   unsigned char   tmp;
+  unsigned char   cs4231_mode = 0;
+
+  int             ad_flags = 0;
 
   if (already_initialized)
     return 0;
 
+  mad16_osp = hw_config->osp;
 /*
  *    Check that all ports return 0xff (bus float) when no password
  *      is written to the password register.
@@ -213,14 +220,6 @@ probe_mad16 (struct address_info *hw_config)
 
   DDB (printk ("--- Detecting MAD16 / Mozart ---\n"));
 
-#if 0
-  for (i = 0xf8d; i <= 0xf93; i++)
-    if (INB (i) != 0xff)
-      {
-	DDB (printk ("port 0x%03x != 0xff (0x%02x)\n", i, INB (i)));
-	return 0;
-      }
-#endif
 
 /*
  *    Then try to detect with the old password
@@ -238,7 +237,7 @@ probe_mad16 (struct address_info *hw_config)
       if (!detect_mad16 ())
 	return 0;
 
-      printk ("mad16.c: 82C929 detected???\n");
+      DDB (printk ("mad16.c: 82C929 detected\n"));
     }
   else
     {
@@ -246,12 +245,12 @@ probe_mad16 (struct address_info *hw_config)
 
       if (((model = mad_read (MC3_PORT)) & 0x03) == 0x03)
 	{
-	  printk ("mad16.c: Mozart detected???\n");
+	  DDB (printk ("mad16.c: Mozart detected\n"));
 	  board_type = MOZART;
 	}
       else
 	{
-	  printk ("mad16.c: 82C928 detected???\n");
+	  DDB (printk ("mad16.c: 82C928 detected???\n"));
 	  board_type = C928;
 	}
     }
@@ -283,8 +282,6 @@ probe_mad16 (struct address_info *hw_config)
 /*
  * Set optional CD-ROM and joystick settings.
  */
-#define MAD16_CONF 0x06
-#define MAD16_CDSEL 0x03
 
 #ifdef MAD16_CONF
   tmp |= ((MAD16_CONF) & 0x0f);	/* CD-ROM and joystick bits */
@@ -304,36 +301,168 @@ probe_mad16 (struct address_info *hw_config)
   mad_write (MC2_PORT, tmp);
   mad_write (MC3_PORT, 0xf0);	/* Disable SB */
 
+  if (!ad1848_detect (hw_config->io_base + 4, &ad_flags, mad16_osp))
+    return 0;
+
+  if (ad_flags & (AD_F_CS4231 | AD_F_CS4248))
+    cs4231_mode = 0x02;		/* CS4248/CS4231 sync delay switch */
+
   if (board_type == C929)
     {
       mad_write (MC4_PORT, 0xa2);
-      mad_write (MC5_PORT, 0x95);	/* AD184x mode (0x9f for CS42xx) */
+      mad_write (MC5_PORT, 0xA5 | cs4231_mode);
       mad_write (MC6_PORT, 0x03);	/* Disable MPU401 */
     }
   else
     {
       mad_write (MC4_PORT, 0x02);
-      mad_write (MC5_PORT, 0x10);	/* AD184x mode (0x12 for CS42xx) */
+      mad_write (MC5_PORT, 0x30 | cs4231_mode);
     }
 
   for (i = 0xf8d; i <= 0xf93; i++)
     DDB (printk ("port %03x after init = %03x\n", i, mad_read (i)));
 
-  return probe_ms_sound (hw_config);
+/*
+ *    Verify the WSS parameters
+ */
+
+  if (check_region (hw_config->io_base, 8))
+    {
+      printk ("MSS: I/O port conflict\n");
+      return 0;
+    }
+
+  /*
+     * Check if the IO port returns valid signature. The original MS Sound
+     * system returns 0x04 while some cards (AudioTriX Pro for example)
+     * return 0x00.
+   */
+
+  if ((inb (hw_config->io_base + 3) & 0x3f) != 0x04 &&
+      (inb (hw_config->io_base + 3) & 0x3f) != 0x00)
+    {
+      DDB (printk ("No MSS signature detected on port 0x%x (0x%x)\n",
+		   hw_config->io_base, inb (hw_config->io_base + 3)));
+      return 0;
+    }
+
+  if (hw_config->irq > 11)
+    {
+      printk ("MSS: Bad IRQ %d\n", hw_config->irq);
+      return 0;
+    }
+
+  if (hw_config->dma != 0 && hw_config->dma != 1 && hw_config->dma != 3)
+    {
+      printk ("MSS: Bad DMA %d\n", hw_config->dma);
+      return 0;
+    }
+
+  /*
+     * Check that DMA0 is not in use with a 8 bit board.
+   */
+
+  if (hw_config->dma == 0 && inb (hw_config->io_base + 3) & 0x80)
+    {
+      printk ("MSS: Can't use DMA0 with a 8 bit card/slot\n");
+      return 0;
+    }
+
+  if (hw_config->irq > 7 && hw_config->irq != 9 && inb (hw_config->io_base + 3) & 0x80)
+    {
+      printk ("MSS: Can't use IRQ%d with a 8 bit card/slot\n", hw_config->irq);
+      return 0;
+    }
+
+  return 1;
 }
 
 long
 attach_mad16 (long mem_start, struct address_info *hw_config)
 {
 
+  static char     interrupt_bits[12] =
+  {
+    -1, -1, -1, -1, -1, -1, -1, 0x08, -1, 0x10, 0x18, 0x20
+  };
+  char            bits;
+
+  static char     dma_bits[4] =
+  {
+    1, 2, 0, 3
+  };
+
+  int             config_port = hw_config->io_base + 0, version_port = hw_config->io_base + 3;
+  int             ad_flags = 0, dma = hw_config->dma, dma2 = hw_config->dma2;
+  unsigned char   dma2_bit = 0;
+
   already_initialized = 1;
 
-  return attach_ms_sound (mem_start, hw_config);
+  if (!ad1848_detect (hw_config->io_base + 4, &ad_flags, mad16_osp))
+    return mem_start;
+
+  /*
+     * Set the IRQ and DMA addresses.
+   */
+
+  bits = interrupt_bits[hw_config->irq];
+  if (bits == -1)
+    return mem_start;
+
+  outb (bits | 0x40, config_port);
+  if ((inb (version_port) & 0x40) == 0)
+    printk ("[IRQ Conflict?]");
+
+/*
+ * Handle the capture DMA channel
+ */
+
+  if (ad_flags & AD_F_CS4231 && dma2 != -1 && dma2 != dma)
+    {
+      if ((dma == 0 && dma2 == 1) ||
+	  (dma == 1 && dma2 == 0) ||
+	  (dma == 3 && dma2 == 0))
+	{
+	  dma2_bit = 0x04;	/* Enable capture DMA */
+	}
+      else
+	{
+	  printk ("MAD16: Invalid capture DMA\n");
+	  dma2 = dma;
+	}
+    }
+  else
+    dma2 = dma;
+
+  outb (bits | dma_bits[dma] | dma2_bit, config_port);	/* Write IRQ+DMA setup */
+
+  ad1848_init ("MAD16 WSS", hw_config->io_base + 4,
+	       hw_config->irq,
+	       dma,
+	       dma2, 0,
+	       hw_config->osp);
+  request_region (hw_config->io_base, 4, "MAD16 WSS config");
+
+  return mem_start;
 }
 
 long
 attach_mad16_mpu (long mem_start, struct address_info *hw_config)
 {
+  if (board_type < C929)	/* Early chip. No MPU support. Just SB MIDI */
+    {
+#ifndef EXCLUDE_MIDI
+
+      if (mad_read (MC1_PORT) & 0x20)
+	hw_config->io_base = 0x240;
+      else
+	hw_config->io_base = 0x220;
+
+      return mad16_sb_dsp_init (mem_start, hw_config);
+#else
+      return 0;
+#endif
+    }
 
 #if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
   if (!already_initialized)
@@ -365,10 +494,46 @@ probe_mad16_mpu (struct address_info *hw_config)
     return 0;
   mpu_attached = 1;
 
-  if (board_type < C929)	/* Early chip. No MPU support */
+  if (board_type < C929)	/* Early chip. No MPU support. Just SB MIDI */
     {
-      printk ("Mozart and OPTi 82C928 based cards don't support MPU401. Sorry\n");
+
+#ifndef EXCLUDE_MIDI
+      unsigned char   tmp;
+
+      tmp = mad_read (MC3_PORT);
+
+      /* 
+       * MAD16 SB base is defined by the WSS base. It cannot be changed 
+       * alone.
+       * Ignore configured I/O base. Use the active setting. 
+       */
+
+      if (mad_read (MC1_PORT) & 0x20)
+	hw_config->io_base = 0x240;
+      else
+	hw_config->io_base = 0x220;
+
+      switch (hw_config->irq)
+	{
+	case 5:
+	  tmp = (tmp & 0x3f) | 0x80;
+	  break;
+	case 7:
+	  tmp = (tmp & 0x3f);
+	  break;
+	case 11:
+	  tmp = (tmp & 0x3f) | 0x40;
+	  break;
+	default:
+	  printk ("mad16/Mozart: Invalid MIDI IRQ\n");
+	  return 0;
+	}
+
+      mad_write (MC3_PORT, tmp | 0x04);
+      return mad16_sb_dsp_detect (hw_config);
+#else
       return 0;
+#endif
     }
 
   tmp = 0x83;			/* MPU-401 enable */
@@ -415,6 +580,25 @@ probe_mad16_mpu (struct address_info *hw_config)
   return probe_mpu401 (hw_config);
 #else
   return 0;
+#endif
+}
+
+void
+unload_mad16 (struct address_info *hw_config)
+{
+  ad1848_unload (hw_config->io_base + 4,
+		 hw_config->irq,
+		 hw_config->dma,
+		 hw_config->dma2, 0);
+  release_region (hw_config->io_base, 4);
+
+}
+
+void
+unload_mad16_mpu (struct address_info *hw_config)
+{
+#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+  unload_mpu401 (hw_config);
 #endif
 }
 

@@ -7,6 +7,8 @@
 /*
  * This file should contain most things doing the swapping from/to disk.
  * Started 18.12.91
+ *
+ * Swap aging added 23.2.95, Stephen Tweedie.
  */
 
 #include <linux/mm.h>
@@ -19,9 +21,11 @@
 #include <linux/stat.h>
 #include <linux/swap.h>
 #include <linux/fs.h>
+#include <linux/swapctl.h>
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
+#include <asm/segment.h> /* for memcpy_to/fromfs */
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 
@@ -31,6 +35,22 @@
 #define SWP_WRITEOK	3
 
 int min_free_pages = 20;
+
+/*
+ * Constants for the page aging mechanism: the maximum age (actually,
+ * the maximum "youthfulness"); the quanta by which pages rejuvinate
+ * and age; and the initial age for new pages. 
+ */
+
+swap_control_t swap_control = {
+	20, 3, 1, 3,		/* Page aging */
+	10, 2, 2, 0,		/* Buffer aging */
+	32, 4,			/* Aging cluster */
+	8192, 4096,		/* Pageout and bufferout weights */
+	-200,			/* Buffer grace */
+	1, 1,			/* Buffs/pages to free */
+	RCL_ROUND_ROBIN		/* Balancing policy */
+};
 
 static int nr_swapfiles = 0;
 static struct wait_queue * lock_queue = NULL;
@@ -112,6 +132,48 @@ static unsigned long init_swap_cache(unsigned long mem_start,
 	memset(swap_cache, 0, swap_cache_size * sizeof (unsigned long));
 	return (unsigned long) (swap_cache + swap_cache_size);
 }
+
+/* General swap control */
+
+/* Parse the kernel command line "swap=" option at load time: */
+void swap_setup(char *str, int *ints)
+{
+	int * swap_vars[8] = {
+		&MAX_PAGE_AGE,
+		&PAGE_ADVANCE,
+		&PAGE_DECLINE,
+		&PAGE_INITIAL_AGE,
+		&AGE_CLUSTER_FRACT,
+		&AGE_CLUSTER_MIN,
+		&PAGEOUT_WEIGHT,
+		&BUFFEROUT_WEIGHT
+	};
+	int i;
+	for (i=0; i < ints[0] && i < 8; i++) {
+		if (ints[i+1])
+			*(swap_vars[i]) = ints[i+1];
+	}
+}
+
+/* Parse the kernel command line "buff=" option at load time: */
+void buff_setup(char *str, int *ints)
+{
+	int * buff_vars[6] = {
+		&MAX_BUFF_AGE,
+		&BUFF_ADVANCE,
+		&BUFF_DECLINE,
+		&BUFF_INITIAL_AGE,
+		&BUFFEROUT_WEIGHT,
+		&BUFFERMEM_GRACE
+	};
+	int i;
+	for (i=0; i < ints[0] && i < 6; i++) {
+		if (ints[i+1])
+			*(buff_vars[i]) = ints[i+1];
+	}
+}
+
+/* Page aging */
 
 void rw_swap_page(int rw, unsigned long entry, char * buf)
 {
@@ -367,12 +429,21 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 		return 0;
 	if (page >= limit)
 		return 0;
+
 	if (mem_map[MAP_NR(page)].reserved)
 		return 0;
-	if ((pte_dirty(pte) && delete_from_swap_cache(page)) || pte_young(pte))  {
+	/* Deal with page aging.  Pages age from being unused; they
+	 * rejuvinate on being accessed.  Only swap old pages (age==0
+	 * is oldest). */
+	if ((pte_dirty(pte) && delete_from_swap_cache(page)) 
+	    || pte_young(pte))  {
 		set_pte(page_table, pte_mkold(pte));
+		touch_page(page);
 		return 0;
 	}	
+	age_page(page);
+	if (age_of(page))
+		return 0;
 	if (pte_dirty(pte)) {
 		if (vma->vm_ops && vma->vm_ops->swapout) {
 			pid_t pid = tsk->pid;
@@ -387,6 +458,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 			vma->vm_mm->rss--;
 			set_pte(page_table, __pte(entry));
 			invalidate();
+			tsk->nswap++;
 			write_swap_page(entry, (char *) page);
 		}
 		free_page(page);
@@ -425,19 +497,6 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
  *
  * (C) 1993 Kai Petzke, wpp@marie.physik.tu-berlin.de
  */
-
-/*
- * These are the minimum and maximum number of pages to swap from one process,
- * before proceeding to the next:
- */
-#define SWAP_MIN	4
-#define SWAP_MAX	32
-
-/*
- * The actual number of pages to swap is determined as:
- * SWAP_RATIO / (number of recent major page faults)
- */
-#define SWAP_RATIO	128
 
 static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct * vma,
 	pmd_t *dir, unsigned long address, unsigned long end, unsigned long limit)
@@ -511,6 +570,11 @@ static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
 	if (vma->vm_flags & VM_SHM)
 		return 0;
 
+	/* Don't swap out areas like shared memory which have their
+           own separate swapping mechanism. */
+	if (vma->vm_flags & VM_DONTSWAP)
+		return 0;
+	
 	end = vma->vm_end;
 	while (start < end) {
 		int result = swap_out_pgd(tsk, vma, pgdir, start, end, limit);
@@ -561,7 +625,7 @@ static int swap_out(unsigned int priority, unsigned long limit)
 	int loop, counter;
 	struct task_struct *p;
 
-	counter = 6*nr_tasks >> priority;
+	counter = ((PAGEOUT_WEIGHT * nr_tasks) >> 10) >> priority;
 	for(; counter >= 0; counter--) {
 		/*
 		 * Check that swap_task is suitable for swapping.  If not, look for
@@ -588,16 +652,9 @@ static int swap_out(unsigned int priority, unsigned long limit)
 		 * Determine the number of pages to swap from this process.
 		 */
 		if (!p->swap_cnt) {
-			p->dec_flt = (p->dec_flt * 3) / 4 + p->maj_flt - p->old_maj_flt;
-			p->old_maj_flt = p->maj_flt;
-
-			if (p->dec_flt >= SWAP_RATIO / SWAP_MIN) {
-				p->dec_flt = SWAP_RATIO / SWAP_MIN;
-				p->swap_cnt = SWAP_MIN;
-			} else if (p->dec_flt <= SWAP_RATIO / SWAP_MAX)
-				p->swap_cnt = SWAP_MAX;
-			else
-				p->swap_cnt = SWAP_RATIO / p->dec_flt;
+ 			/* Normalise the number of pages swapped by
+			   multiplying by (RSS / 1MB) */
+			p->swap_cnt = AGE_CLUSTER_SIZE(p->mm->rss);
 		}
 		if (!--p->swap_cnt)
 			swap_task++;
@@ -616,13 +673,9 @@ static int swap_out(unsigned int priority, unsigned long limit)
 }
 
 /*
- * we keep on shrinking one resource until it's considered "too hard",
- * and then switch to the next one (priority being an indication on how
- * hard we should try with the resource).
- *
- * This should automatically find the resource that can most easily be
- * free'd, so hopefully we'll get reasonable behaviour even under very
- * different circumstances.
+ * We are much more aggressive about trying to swap out than we used
+ * to be.  This works out OK, because we now do proper aging on page
+ * contents. 
  */
 static int try_to_free_page(int priority, unsigned long limit)
 {
@@ -776,6 +829,7 @@ do { unsigned long size = PAGE_SIZE << high; \
 		restore_flags(flags); \
 		addr = (struct mem_list *) (size + (unsigned long) addr); \
 	} mem_map[MAP_NR((unsigned long) addr)].count = 1; \
+	mem_map[MAP_NR((unsigned long) addr)].age = PAGE_INITIAL_AGE; \
 } while (0)
 
 unsigned long __get_free_pages(int priority, unsigned long order, unsigned long limit)

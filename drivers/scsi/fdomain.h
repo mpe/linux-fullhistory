@@ -1,10 +1,10 @@
 /* fdomain.h -- Header for Future Domain TMC-16x0 driver
  * Created: Sun May  3 18:47:33 1992 by faith@cs.unc.edu
- * Revised: Sat Jan 14 20:56:52 1995 by faith@cs.unc.edu
+ * Revised: Thu Oct 12 13:21:35 1995 by r.faith@ieee.org
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994, 1995 Rickard E. Faith
  *
- * $Id: fdomain.h,v 5.10 1995/01/15 01:56:56 root Exp $
+ * $Id: fdomain.h,v 5.12 1995/10/12 19:01:09 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -32,14 +32,16 @@ const char *fdomain_16x0_info( struct Scsi_Host * );
 int        fdomain_16x0_reset( Scsi_Cmnd * ); 
 int        fdomain_16x0_queue( Scsi_Cmnd *, void (*done)(Scsi_Cmnd *) );
 int        fdomain_16x0_biosparam( Disk *, kdev_t, int * );
+int        fdomain_16x0_proc_info( char *buffer, char **start, off_t offset,
+				   int length, int hostno, int inout );
 
 extern struct proc_dir_entry proc_scsi_fdomain;
 
 #define FDOMAIN_16X0 { NULL,                             \
 		       NULL,                             \
 		       NULL,		                 \
+		       fdomain_16x0_proc_info,           \
 		       NULL,		                 \
-		       NULL,				 \
 		       fdomain_16x0_detect,              \
 		       NULL,				 \
 		       fdomain_16x0_info,                \

@@ -23,7 +23,7 @@
 #include <asm/pgtable.h>
 
 #ifdef CONFIG_SOUND
-int soundcard_init(void);
+void soundcard_init(void);
 #endif
 
 static int read_ram(struct inode * inode, struct file * file, char * buf, int count)

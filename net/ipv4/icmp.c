@@ -15,6 +15,7 @@
  *
  *	Fixes:
  *		Mike Shaver	:	RFC1122 checks.
+ *		Alan Cox	:	Multicast ping reply as self.
  *
  *
  *
@@ -455,7 +456,11 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
 			ip_rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_GATEWAY),
 				ip, 0, icmph->un.gateway, dev,0, 0, 0);
 #endif
-			break;
+			/*
+			 *	As per RFC recommendations now handle it as
+			 *	a host redirect.
+			 */
+			 
 		case ICMP_REDIR_HOST:
 			/*
 			 *	Add better route to host.
@@ -632,7 +637,7 @@ int icmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Parse the ICMP message 
 	 */
 
-	if (daddr!=dev->pa_addr && ip_chk_addr(daddr) == IS_BROADCAST)
+	if (daddr!=dev->pa_addr && ip_chk_addr(daddr) != IS_MYADDR)
 	{
 		/*
 		 *	RFC 1122: 3.2.2.6 An ICMP_ECHO to broadcast MAY be silently ignored (we don't as it is used
@@ -645,6 +650,11 @@ int icmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			kfree_skb(skb, FREE_READ);
 			return(0);
   		}
+  		/*
+  		 *	Reply the multicast/broadcast using a legal
+  		 *	interface - in this case the device we got
+  		 *	it from.
+  		 */
 		daddr=dev->pa_addr;
 	}
 	

@@ -2259,6 +2259,8 @@ int scsi_free(void *obj, unsigned int len)
 }
 
 
+int scsi_loadable_module_flag; /* Set after we scan builtin drivers */
+
 void * scsi_init_malloc(unsigned int size, int priority)
 {
     void * retval;
@@ -2351,6 +2353,9 @@ int scsi_dev_init(void)
     /* Yes we're here... */
     dispatch_scsi_info_ptr = dispatch_scsi_info;
 
+    /* Init a few things so we can "malloc" memory. */
+    scsi_loadable_module_flag = 0;
+    
     timer_table[SCSI_TIMER].fn = scsi_main_timeout;
     timer_table[SCSI_TIMER].expires = 0;
 
@@ -2435,6 +2440,8 @@ int scsi_dev_init(void)
     for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
 	if(sdtpnt->finish && sdtpnt->nr_dev)
 	    (*sdtpnt->finish)();
+
+    scsi_loadable_module_flag = 1;
 
     return 0;
 }

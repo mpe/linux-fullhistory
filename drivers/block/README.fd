@@ -32,15 +32,10 @@ restore the default behaviour.
  The floppy related options include:
 
  floppy=<mask>,allowed_drive_mask         
-	Sets the bitmask of allowed drives to <mask>. By default, only units
-	0 and 1 of each floppy controller are allowed. This is done because
-	certain non-standard hardware (ASUS PCI motherboards) mess up the
-	keyboard when accessing units 2 or 3. This option is somewhat
-	obsoleted by the cmos option.
+	Obsolete. Use the floppy=<drive>,<type>,cmos option instead
 
  floppy=all_drives
-	Sets the bitmask of allowed drives to all drives. Use this if you have
-	more than two drives connected to a floppy controller.
+	Obsolete. Use the floppy=<drive>,<type>,cmos option instead
 
  floppy=asus_pci
 	Sets the bitmask to allow only units 0 and 1. (The default)
@@ -60,8 +55,9 @@ restore the default behaviour.
  floppy=two_fdc
  floppy=<address>,two_fdc
 	Tells the floppy driver that you have two floppy controllers. The
-	second floppy controller is assumed to be at <address>. If <address>
-	is not given, 0x370 is assumed.
+	second floppy controller is assumed to be at <address>. This
+	option is not needed if the second controller is at address
+	0x370, and if you use the 'cmos' option	
 
  floppy=thinkpad
 	Tells the floppy driver that you have a Thinkpad. Thinkpads use an
@@ -71,10 +67,10 @@ restore the default behaviour.
 	Tells the floppy driver that you don't have a Thinkpad.
 
  floppy=<drive>,<type>,cmos
-	Sets the cmos type of <drive> to <type>. Additionally, this drive is
-	allowed in the bitmask. This is useful if you have more than two
-	floppy drives (only two can be described in the physical cmos), or if
-	your BIOS uses non-standard CMOS types. The CMOS types are:
+	Sets the cmos type of <drive> to <type>. This is mandatory if
+	you have more than two floppy drives (only two can be
+	described in the physical cmos), or if your BIOS uses
+	non-standard CMOS types. The CMOS types are:
 		0 - unknown or not installed
 		1 - 5 1/4 DD
 		2 - 5 1/4 HD
@@ -110,9 +106,9 @@ package. This package also contains a new version of mtools which
 allows to access high capacity disks (up to 1992K on a high density 3
 1/2 disk!). It also contains additional documentation about the floppy
 driver. It can be found at:
- ftp.imag.fr:pub/Linux/ZLIBC/fdutils/fdutils-4.0.src.tar.gz
- sunsite.unc.edu:/pub/Linux/system/Misc/fdutils-4.0.src.tar.gz
- tsx-11.mit.edu:/pub/linux/sources/sbin/fdutils-4.0.src.tar.gz
+ ftp.imag.fr:pub/Linux/ZLIBC/fdutils/fdutils-4.1.src.tar.gz
+ sunsite.unc.edu:/pub/Linux/system/Misc/fdutils-4.1.src.tar.gz
+ tsx-11.mit.edu:/pub/linux/sources/sbin/fdutils-4.1.src.tar.gz
 
  Alpha patches to these utilities are at:
  ftp.imag.fr:pub/Linux/ZLIBC/fdutils/ALPHA

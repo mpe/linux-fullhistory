@@ -46,6 +46,8 @@ extern void sock_init(void);
 extern long rd_init(long mem_start, int length);
 extern long pci_init(long, long);
 
+extern void swap_setup(char *str, int *ints);
+extern void buff_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
 extern void eth_setup(char *str, int *ints);
 extern void xd_setup(char *str, int *ints);
@@ -158,6 +160,8 @@ struct {
 	{ "reserve=", reserve_setup },
 	{ "profile=", profile_setup },
 	{ "ramdisk=", ramdisk_setup },
+	{ "swap=", swap_setup },
+	{ "buff=", buff_setup },
 #ifdef CONFIG_BUGi386
 	{ "no-hlt", no_halt },
 	{ "no387", no_387 },
@@ -560,12 +564,22 @@ static int printf(const char *fmt, ...)
 	return i;
 }
 
-static int do_shell(void * input)
+static int do_rc(void * rc)
 {
 	close(0);
-	if (open("/etc/rc",O_RDONLY,0))
+	if (open(rc,O_RDONLY,0))
 		return -1;
-	return execve("/bin/sh",argv_rc,envp_rc);
+	return execve("/bin/sh", argv_rc, envp_rc);
+}
+
+static int do_shell(void * shell)
+{
+	close(0);close(1);close(2);
+	setsid();
+	(void) open("/dev/tty1",O_RDWR,0);
+	(void) dup(0);
+	(void) dup(0);
+	return execve(shell, argv, envp);
 }
 
 static int init(void * unused)
@@ -598,22 +612,15 @@ static int init(void * unused)
 	execve("/sbin/init",argv_init,envp_init);
 	/* if this fails, fall through to original stuff */
 
-	pid = kernel_thread(do_shell, "/etc/rc", 0);
+	pid = kernel_thread(do_rc, "/etc/rc", SIGCHLD);
 	if (pid>0)
 		while (pid != wait(&i))
 			/* nothing */;
 	while (1) {
-		if ((pid = fork()) < 0) {
+		pid = kernel_thread(do_shell, "/bin/sh", SIGCHLD);
+		if (pid < 0) {
 			printf("Fork failed in init\n\r");
 			continue;
-		}
-		if (!pid) {
-			close(0);close(1);close(2);
-			setsid();
-			(void) open("/dev/tty1",O_RDWR,0);
-			(void) dup(0);
-			(void) dup(0);
-			_exit(execve("/bin/sh",argv,envp));
 		}
 		while (1)
 			if (pid == wait(&i))

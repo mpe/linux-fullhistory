@@ -75,6 +75,9 @@
 #define SNDCARD_TRXPRO_MPU	18
 #define SNDCARD_MAD16		19
 #define SNDCARD_MAD16_MPU	20
+#define SNDCARD_CS4232		21
+#define SNDCARD_CS4232_MPU	22
+#define SNDCARD_MAUI		23
 
 /***********************************
  * IOCTL Commands for /dev/sequencer
@@ -229,7 +232,6 @@ struct patch_info {
 	        int		spare[4];
 		char data[1];	/* The waveform data starts here */
 	};
-
 
 struct sysex_info {
 		short key;		/* Use GUS_PATCH here */
@@ -519,7 +521,7 @@ struct synth_info {	/* Read only */
 	};
 
 struct sound_timer_info {
-		char name[30];
+		char name[32];
 		int caps;
 	};
 
@@ -582,6 +584,7 @@ typedef struct {
  */
 typedef struct audio_buf_info {
 			int fragments;	/* # of available fragments (partially usend ones not counted) */
+			int fragstotal;	/* Total # of fragments allocated */
 			int fragsize;	/* Size of a fragment in bytes */
 
 			int bytes;	/* Available space in bytes (includes partially used fragments) */
@@ -591,6 +594,39 @@ typedef struct audio_buf_info {
 #define SNDCTL_DSP_GETOSPACE		_IOR ('P',12, audio_buf_info)
 #define SNDCTL_DSP_GETISPACE		_IOR ('P',13, audio_buf_info)
 #define SNDCTL_DSP_NONBLOCK		_IO  ('P',14)
+#define SNDCTL_DSP_GETCAPS		_IOR ('P',15, int)
+#	define DSP_CAP_REVISION		0x000000ff	/* Bits for revision level (0 to 255) */
+#	define DSP_CAP_DUPLEX		0x00000100	/* Full duplex record/playback */
+#	define DSP_CAP_REALTIME		0x00000200	/* Real time capability */
+#	define DSP_CAP_BATCH		0x00000400	/* Device has some kind of */
+							/* internal buffers which may */
+							/* cause some delays and */
+							/* decrease precision of timing */
+#	define DSP_CAP_COPROC		0x00000800	/* Has a coprocessor */
+							/* Sometimes it's a DSP */
+							/* but usually not */
+#	define DSP_CAP_TRIGGER		0x00001000	/* Supports SETTRIGGER */
+
+#define SNDCTL_DSP_GETTRIGGER		_IOR ('P',16, int)
+#define SNDCTL_DSP_SETTRIGGER		_IOW ('P',16, int)
+#	define PCM_ENABLE_INPUT		0x00000001
+#	define PCM_ENABLE_OUTPUT	0x00000002
+
+typedef struct count_info {
+		int bytes;	/* Total # of bytes processed */
+		int blocks;	/* # of fragment transitions since last time */
+		int ptr;	/* Current DMA pointer value */
+	} count_info;
+
+#define SNDCTL_DSP_GETIPTR		_IOR ('P',17, count_info)
+#define SNDCTL_DSP_GETOPTR		_IOR ('P',18, count_info)
+
+typedef struct buffmem_desc {
+		caddr_t buffer;
+		int size;
+	} buffmem_desc;
+#define SNDCTL_DSP_MAPINBUF		_IOR ('P', 19, buffmem_desc)
+#define SNDCTL_DSP_MAPOUTBUF		_IOR ('P', 20, buffmem_desc)
 
 #define SOUND_PCM_READ_RATE		_IOR ('P', 2, int)
 #define SOUND_PCM_READ_CHANNELS		_IOR ('P', 6, int)
@@ -610,6 +646,13 @@ typedef struct audio_buf_info {
 #define SOUND_PCM_GETOSPACE		SNDCTL_DSP_GETOSPACE
 #define SOUND_PCM_GETISPACE		SNDCTL_DSP_GETISPACE
 #define SOUND_PCM_NONBLOCK		SNDCTL_DSP_NONBLOCK
+#define SOUND_PCM_GETCAPS		SNDCTL_DSP_GETCAPS
+#define SOUND_PCM_GETTRIGGER		SNDCTL_DSP_GETTRIGGER
+#define SOUND_PCM_SETTRIGGER		SNDCTL_DSP_SETTRIGGER
+#define SOUND_PCM_GETIPTR		SNDCTL_DSP_GETIPTR
+#define SOUND_PCM_GETOPTR		SNDCTL_DSP_GETOPTR
+#define SOUND_PCM_MAPINBUF		SNDCTL_DSP_MAPINBUF
+#define SOUND_PCM_MAPOUTBUF		SNDCTL_DSP_MAPOUTBUF
 
 /*
  * ioctl calls to be used in communication with coprocessors and
@@ -714,7 +757,7 @@ typedef struct copr_msg {
 #define SOUND_MIXER_DEVMASK	0xfe	/* Arg contains a bit for each supported device */
 #define SOUND_MIXER_RECMASK	0xfd	/* Arg contains a bit for each supported recording source */
 #define SOUND_MIXER_CAPS	0xfc
-	#define SOUND_CAP_EXCL_INPUT	0x00000001	/* Only one recording source at a time */
+#	define SOUND_CAP_EXCL_INPUT	0x00000001	/* Only one recording source at a time */
 #define SOUND_MIXER_STEREODEVS	0xfb	/* Mixer channels supporting stereo */
 
 /*	Device mask bits	*/
@@ -815,6 +858,7 @@ typedef struct copr_msg {
 #define EV_TIMING		0x81
 #define EV_CHN_COMMON		0x92
 #define EV_CHN_VOICE		0x93
+#define EV_SYSEX		0x94
 /*
  * Event types 200 to 220 are reserved for application use.
  * These numbers will not be used by the driver.
@@ -852,6 +896,11 @@ typedef struct copr_msg {
 #define TMR_CLOCK		9	/* MIDI clock */
 #define TMR_SPP			10	/* Song position pointer */
 #define TMR_TIMESIG		11	/* Time signature */
+
+/*
+ *	Local event types
+ */
+#define LOCL_STARTAUDIO		1
 
 #if (!defined(__KERNEL__) && !defined(KERNEL) && !defined(INKERNEL) && !defined(_KERNEL)) || defined(USE_SEQ_MACROS) 
 /*
@@ -967,6 +1016,28 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
 					_seqbuf[_seqbufptr+5] = (p2);\
 					*(short *)&_seqbuf[_seqbufptr+6] = (w14);\
 					_SEQ_ADVBUF(8);}
+/*
+ * SEQ_SYSEX permits sending of sysex messages. (It may look that it permits
+ * sending any MIDI bytes but it's absolutely not possible. Trying to do
+ * so _will_ cause problems with MPU401 intelligent mode).
+ *
+ * Sysex messages are sent in blocks of 1 to 6 bytes. Longer messages must be 
+ * sent by calling SEQ_SYSEX() several times (there must be no other events
+ * between them). First sysex fragment must have 0xf0 in the first byte
+ * and the last byte (buf[len-1] of the last fragment must be 0xf7. No byte
+ * between these sysex start and end markers cannot be larger than 0x7f. Also
+ * lengths of each fragments (except the last one) must be 6.
+ *
+ * Breaking the above rules may work with some MIDI ports but is likely to
+ * cause fatal problems with some other devices (such as MPU401).
+ */
+#define SEQ_SYSEX(dev, buf, len) \
+					{int i, l=(len); if (l>6)l=6;\
+					_SEQ_NEEDBUF(8);\
+					_seqbuf[_seqbufptr] = EV_SYSEX;\
+					for(i=0;i<l;i++)_seqbuf[_seqbufptr+i+1] = (buf)[i];\
+					for(i=l;i<6;i++)_seqbuf[_seqbufptr+i+1] = 0xff;\
+					_SEQ_ADVBUF(8);}
 
 #define SEQ_CHN_PRESSURE(dev, chn, pressure) \
 		_CHN_COMMON(dev, MIDI_CHN_PRESSURE, chn, pressure, 0, 0)
@@ -999,18 +1070,6 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
 #define SEQ_EXPRESSION(dev, voice, value) SEQ_CONTROL(dev, voice, CTL_EXPRESSION, value*128)
 #define SEQ_MAIN_VOLUME(dev, voice, value) SEQ_CONTROL(dev, voice, CTL_MAIN_VOLUME, (value*16383)/100)
 #define SEQ_PANNING(dev, voice, pos) SEQ_CONTROL(dev, voice, CTL_PAN, (pos+128) / 2)
-#if 0
-#define SEQ_PANNING(dev, voice, pos)	{_SEQ_NEEDBUF(8);\
-					_seqbuf[_seqbufptr] = SEQ_EXTENDED;\
-					_seqbuf[_seqbufptr+1] = SEQ_BALANCE;\
-					_seqbuf[_seqbufptr+2] = (dev);\
-					_seqbuf[_seqbufptr+3] = (voice);\
-					(char)_seqbuf[_seqbufptr+4] = (pos);\
-					_seqbuf[_seqbufptr+5] = 0;\
-					_seqbuf[_seqbufptr+6] = 0;\
-					_seqbuf[_seqbufptr+7] = 1;\
-					_SEQ_ADVBUF(8);}
-#endif
 
 /*
  * Timing and syncronization macros
@@ -1035,6 +1094,19 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
 #define SEQ_TIME_SIGNATURE(sig)		_TIMER_EVENT(TMR_TIMESIG, sig)
 
 /*
+ * Local control events
+ */
+
+#define _LOCAL_EVENT(ev, parm)		{_SEQ_NEEDBUF(8);\
+				 	_seqbuf[_seqbufptr+0] = EV_SEQ_LOCAL; \
+				 	_seqbuf[_seqbufptr+1] = (ev); \
+					_seqbuf[_seqbufptr+2] = 0;\
+					_seqbuf[_seqbufptr+3] = 0;\
+				 	*(unsigned int *)&_seqbuf[_seqbufptr+4] = (parm); \
+					_SEQ_ADVBUF(8);}
+
+#define SEQ_PLAYAUDIO(devmask)		_LOCAL_EVENT(LOCL_STARTAUDIO, devmask)
+/*
  * Events for the level 1 interface only 
  */
 
@@ -1054,5 +1126,4 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
 #define SEQ_WRPATCH2(patchx, len)	(seqbuf_dump(), write(seqfd, (char*)(patchx), len))
 
 #endif
-long soundcard_init(long mem_start);
 #endif

@@ -27,11 +27,15 @@ IMPORTANT!	Read this if you are installing a separately
 - Configure and compile Linux as normally (remember to include the
   sound support during "make config").
 
-Boot time configuration (using lilo)
-------------------------------------
+Boot time configuration (using lilo and insmod) 
+-----------------------------------------------
 
 NOTE!	This information is little bit obsolete since it doesn't cover
- 	some cards recently added to the driver.
+ 	some cards recently added to the driver. The following text
+	describes parameters just for some older cards. In addition
+	this method will not work with cards which have more than one
+	DMA channel or if the driver number is bigger than 15. (Driver
+	numbers are defined in soundcard.h).
 
 -------------------------------------------------------------------
 NOTE2!	This method to configure the sound driver is not normally
@@ -42,6 +46,15 @@ NOTE2!	This method to configure the sound driver is not normally
 	So THE METHOD PRESENTED IN THIS CHAPTER IS NORMALLY COMPLETELY
 	USELESS. DON'T USE IT UNLESS YOU HAVE A VERY SPECIAL REASON TO
 	DO THAT.
+
+	!!!!!!!!!!!!!!!!!!!! PLEASE NOTE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	!!! Finding a working sound= command line is a difficult   !!!
+	!!! and timeconsuming task. For this reason I will not     !!!
+	!!! answer to messages asking about how to do it. So       !!!
+	!!! please don't use this method if you have any problems  !!!
+	!!! with it.                                               !!!
+	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 -------------------------------------------------------------------
 
 This version of the sound driver has capability to accept the configuration

@@ -190,7 +190,6 @@ entIF:
  * stack buildup, as we can't do system calls from kernel space.
  */
 .align 3
-.globl	kernel_clone
 .ent	kernel_clone
 kernel_clone:
 	subq $30,6*8,$30
@@ -207,6 +206,36 @@ kernel_clone:
 	stq $0,0($30)	
 	br ret_from_sys_call
 .end	kernel_clone
+
+/*
+ * __kernel_thread(clone_flags, fn, arg)
+ */
+.align 3
+.globl	__kernel_thread
+.ent	__kernel_thread
+__kernel_thread:
+	subq $30,4*8,$30
+	stq $9,0($30)
+	stq $10,8($30)
+	stq $26,16($30)
+	bis $17,$17,$9		/* save fn */
+	bis $18,$18,$10		/* save arg */
+	bsr $26,kernel_clone
+	bne $20,1f		/* $20 is non-zero in child */
+	ldq $9,0($30)
+	ldq $10,8($30)
+	ldq $26,16($30)
+	addq $30,4*8,$30
+	ret $31,($26),1
+/* this is in child: look out as we don't have any stack here.. */
+1:	bis $9,$9,$27		/* get fn */
+	bis $10,$10,$16		/* get arg */
+	jsr $26,($27)
+	bis $0,$0,$16
+	lda $27,sys_exit
+	jsr $26,($27),sys_exit
+	call_pal PAL_halt
+.end	__kernel_thread
 
 .align 3
 .ent	do_switch_stack

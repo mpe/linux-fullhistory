@@ -100,6 +100,7 @@ void release(struct task_struct * p)
 			free_page(p->kernel_stack_page);
 			current->cmin_flt += p->min_flt + p->cmin_flt;
 			current->cmaj_flt += p->maj_flt + p->cmaj_flt;
+			current->cnswap += p->nswap + p->cnswap;
 			kfree(p);
 			return;
 		}

@@ -35,9 +35,10 @@ long
 attach_adlib_card (long mem_start, struct address_info *hw_config)
 {
 
-  if (opl3_detect (FM_MONO))
+  if (opl3_detect (hw_config->io_base, hw_config->osp))
     {
-      mem_start = opl3_init (mem_start);
+      mem_start = opl3_init (mem_start, hw_config->io_base, hw_config->osp);
+      request_region (hw_config->io_base, 4, "OPL3/OPL2");
     }
   return mem_start;
 }
@@ -45,7 +46,20 @@ attach_adlib_card (long mem_start, struct address_info *hw_config)
 int
 probe_adlib (struct address_info *hw_config)
 {
-  return opl3_detect (FM_MONO);
+
+  if (check_region (hw_config->io_base, 4))
+    {
+      printk ("\n\nopl3.c: I/O port %x already in use\n\n", hw_config->io_base);
+      return 0;
+    }
+
+  return opl3_detect (hw_config->io_base, hw_config->osp);
+}
+
+void
+unload_adlib (struct address_info *hw_config)
+{
+  release_region (hw_config->io_base, 4);
 }
 
 #endif

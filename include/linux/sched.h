@@ -192,7 +192,7 @@ struct task_struct {
 	struct timer_list real_timer;
 	long utime, stime, cutime, cstime, start_time;
 /* mm fault and swap info: this can arguably be seen as either mm-specific or thread-specific */
-	unsigned long min_flt, maj_flt, cmin_flt, cmaj_flt;
+	unsigned long min_flt, maj_flt, nswap, cmin_flt, cmaj_flt, cnswap;
 	int swappable:1;
 	unsigned long swap_address;
 	unsigned long old_maj_flt;	/* old value of maj_flt */
@@ -264,7 +264,7 @@ struct task_struct {
 /* timeout */	0,0,0,0,0,0,0, \
 /* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
 /* utime */	0,0,0,0,0, \
-/* flt */	0,0,0,0, \
+/* flt */	0,0,0,0,0,0, \
 /* swp */	0,0,0,0,0, \
 /* rlimits */   { {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
 		  {LONG_MAX, LONG_MAX}, {_STK_LIM, _STK_LIM},  \

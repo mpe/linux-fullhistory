@@ -59,7 +59,7 @@ pas_midi_open (int dev, int mode,
   if (midi_busy)
     {
       printk ("PAS2: Midi busy\n");
-      return RET_ERROR (EBUSY);
+      return -EBUSY;
     }
 
   /*
@@ -68,7 +68,8 @@ pas_midi_open (int dev, int mode,
   pas_write (M_C_RESET_INPUT_FIFO | M_C_RESET_OUTPUT_FIFO,
 	     MIDI_CONTROL);
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   if ((err = pas_set_intr (I_M_MIDI_IRQ_ENABLE)) < 0)
     return err;
@@ -107,7 +108,7 @@ pas_midi_open (int dev, int mode,
   pas_write (0xff, MIDI_STATUS);
   ofifo_bytes = 0;
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   midi_busy = 1;
   qlen = qhead = qtail = 0;
@@ -161,7 +162,8 @@ pas_midi_out (int dev, unsigned char midi_byte)
    * Drain the local queue first
    */
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   while (qlen && dump_to_midi (tmp_queue[qhead]))
     {
@@ -169,7 +171,7 @@ pas_midi_out (int dev, unsigned char midi_byte)
       qhead++;
     }
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   /*
    * Output the byte if the local queue is empty.
@@ -190,13 +192,14 @@ pas_midi_out (int dev, unsigned char midi_byte)
 				 * Local queue full
 				 */
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   tmp_queue[qtail] = midi_byte;
   qlen++;
   qtail++;
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   return 1;
 }
@@ -214,9 +217,9 @@ pas_midi_end_read (int dev)
 }
 
 static int
-pas_midi_ioctl (int dev, unsigned cmd, unsigned arg)
+pas_midi_ioctl (int dev, unsigned cmd, ioctl_arg arg)
 {
-  return RET_ERROR (EINVAL);
+  return -EINVAL;
 }
 
 static void
@@ -228,7 +231,7 @@ pas_midi_kick (int dev)
 static int
 pas_buffer_status (int dev)
 {
-  return !qlen;
+  return qlen;
 }
 
 #define MIDI_SYNTH_NAME	"Pro Audio Spectrum Midi"
@@ -309,7 +312,8 @@ pas_midi_interrupt (void)
 	  ofifo_bytes = 0;
 	}
 
-      DISABLE_INTR (flags);
+      save_flags (flags);
+      cli ();
 
       while (qlen && dump_to_midi (tmp_queue[qhead]))
 	{
@@ -317,13 +321,9 @@ pas_midi_interrupt (void)
 	  qhead++;
 	}
 
-      RESTORE_INTR (flags);
+      restore_flags (flags);
     }
 
-#if 0
-  if (stat & M_S_FRAMING_ERROR)
-    printk ("MIDI framing error\n");
-#endif
 
   if (stat & M_S_OUTPUT_OVERRUN)
     {

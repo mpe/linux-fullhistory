@@ -18,9 +18,12 @@
 static int proc_readlink(struct inode *, char *, int);
 static int proc_follow_link(struct inode *, struct inode *, int, int,
 			    struct inode **);
-static int proc_fd_dupf(struct inode * inode, struct file * f);
 
-#define PLAN9_SEMANTICS
+/*
+ * PLAN9_SEMANTICS won't work any more: it used an ugly hack that broke 
+ * when the files[] array was updated only after the open code
+ */
+#undef PLAN9_SEMANTICS
 
 /*
  * links can't do much...
@@ -33,7 +36,7 @@ static struct file_operations proc_fd_link_operations = {
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
-	proc_fd_dupf,		/* very special open code */
+	NULL,			/* very special open code */
 	NULL,			/* no special release code */
 	NULL			/* can't fsync */
 };
@@ -56,47 +59,6 @@ struct inode_operations proc_link_inode_operations = {
 	NULL			/* permission */
 };
 
-/*
- * This open routine is somewhat of a hack.... what we are doing is
- * looking up the file structure of the newly opened proc fd file, and
- * replacing it with the actual file structure of the process's file
- * descriptor.  This allows plan 9 semantics, so that the returned
- * file descriptor is a dup of the target file descriptor.
- */
-static int proc_fd_dupf(struct inode * inode, struct file * f)
-{
-	unsigned int pid, ino;
-	int	i, fd;
-	struct task_struct * p;
-	struct file *new_f;
-	
-	for(fd=0 ; fd<NR_OPEN ; fd++)
-		if (current->files->fd[fd] == f)
-			break;
-	if (fd>=NR_OPEN)
-		return -ENOENT;	/* should never happen */
-
-	ino = inode->i_ino;
-	pid = ino >> 16;
-	ino &= 0x0000ffff;
-
-	for (i = 0 ; i < NR_TASKS ; i++)
-		if ((p = task[i]) && p->pid == pid)
-			break;
-
-	if ((i >= NR_TASKS) ||
-	    ((ino >> 8) != 1) || !(new_f = p->files->fd[ino & 0x0ff]))
-		return -ENOENT;
-
-	if (new_f->f_mode && !f->f_mode && 3)
-		return -EPERM;
-
-	new_f->f_count++;
-	current->files->fd[fd] = new_f;
-	if (!--f->f_count)
-		iput(f->f_inode);
-	return 0;
-}
 
 static int proc_follow_link(struct inode * dir, struct inode * inode,
 	int flag, int mode, struct inode ** res_inode)
@@ -158,12 +120,6 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 					break;
 				ino &= 0xff;
 				if (ino < NR_OPEN && p->files->fd[ino]) {
-#ifdef PLAN9_SEMANTICS
-					if (dir) {
-						*res_inode = inode;
-						return 0;
-					}
-#endif
 					new_inode = p->files->fd[ino]->f_inode;
 				}
 				break;

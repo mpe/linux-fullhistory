@@ -75,6 +75,10 @@
 #define CMD_GET_BOARD_TYPE      0x82
 #define CMD_SET_CONTROL         0x88
 #define CMD_GET_CONTROL         0x89
+#define 	CTL_MASTER_VOL          0
+#define 	CTL_MIC_MODE            2
+#define 	CTL_SYNTH_VOL           4
+#define 	CTL_WAVE_VOL            7
 #define CMD_SET_MT32            0x96
 #define CMD_GET_MT32            0x97
 #define CMD_SET_EXTMIDI         0x9b
@@ -86,9 +90,11 @@ typedef struct sscape_info
   {
     int             base, irq, dma;
     int             ok;		/* Properly detected */
+    int             failed;
     int             dma_allocated;
     int             my_audiodev;
     int             opened;
+    sound_os_info  *osp;
   }
 
 sscape_info;
@@ -96,7 +102,9 @@ static struct sscape_info dev_info =
 {0};
 static struct sscape_info *devc = &dev_info;
 
-DEFINE_WAIT_QUEUE (sscape_sleeper, sscape_sleep_flag);
+static struct wait_queue *sscape_sleeper = NULL;
+static volatile struct snd_wait sscape_sleep_flag =
+{0};
 
 /* Some older cards have assigned interrupt bits differently than new ones */
 static char     valid_interrupts_old[] =
@@ -121,10 +129,11 @@ sscape_read (struct sscape_info *devc, int reg)
   unsigned long   flags;
   unsigned char   val;
 
-  DISABLE_INTR (flags);
-  OUTB (reg, PORT (ODIE_ADDR));
-  val = INB (PORT (ODIE_DATA));
-  RESTORE_INTR (flags);
+  save_flags (flags);
+  cli ();
+  outb (reg, PORT (ODIE_ADDR));
+  val = inb (PORT (ODIE_DATA));
+  restore_flags (flags);
   return val;
 }
 
@@ -133,31 +142,33 @@ sscape_write (struct sscape_info *devc, int reg, int data)
 {
   unsigned long   flags;
 
-  DISABLE_INTR (flags);
-  OUTB (reg, PORT (ODIE_ADDR));
-  OUTB (data, PORT (ODIE_DATA));
-  RESTORE_INTR (flags);
+  save_flags (flags);
+  cli ();
+  outb (reg, PORT (ODIE_ADDR));
+  outb (data, PORT (ODIE_DATA));
+  restore_flags (flags);
 }
 
 static void
 host_open (struct sscape_info *devc)
 {
-  OUTB (0x00, PORT (HOST_CTRL));	/* Put the board to the host mode */
+  outb (0x00, PORT (HOST_CTRL));	/* Put the board to the host mode */
 }
 
 static void
 host_close (struct sscape_info *devc)
 {
-  OUTB (0x03, PORT (HOST_CTRL));	/* Put the board to the MIDI mode */
+  outb (0x03, PORT (HOST_CTRL));	/* Put the board to the MIDI mode */
 }
 
 static int
 host_write (struct sscape_info *devc, unsigned char *data, int count)
 {
   unsigned long   flags;
-  int             i, timeout;
+  int             i, timeout_val;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   /*
      * Send the command and data bytes
@@ -165,21 +176,21 @@ host_write (struct sscape_info *devc, unsigned char *data, int count)
 
   for (i = 0; i < count; i++)
     {
-      for (timeout = 10000; timeout > 0; timeout--)
-	if (INB (PORT (HOST_CTRL)) & TX_READY)
+      for (timeout_val = 10000; timeout_val > 0; timeout_val--)
+	if (inb (PORT (HOST_CTRL)) & TX_READY)
 	  break;
 
-      if (timeout <= 0)
+      if (timeout_val <= 0)
 	{
-	  RESTORE_INTR (flags);
+	  restore_flags (flags);
 	  return 0;
 	}
 
-      OUTB (data[i], PORT (HOST_DATA));
+      outb (data[i], PORT (HOST_DATA));
     }
 
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   return 1;
 }
@@ -188,28 +199,29 @@ static int
 host_read (struct sscape_info *devc)
 {
   unsigned long   flags;
-  int             timeout;
+  int             timeout_val;
   unsigned char   data;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   /*
      * Read a byte
    */
 
-  for (timeout = 10000; timeout > 0; timeout--)
-    if (INB (PORT (HOST_CTRL)) & RX_READY)
+  for (timeout_val = 10000; timeout_val > 0; timeout_val--)
+    if (inb (PORT (HOST_CTRL)) & RX_READY)
       break;
 
-  if (timeout <= 0)
+  if (timeout_val <= 0)
     {
-      RESTORE_INTR (flags);
+      restore_flags (flags);
       return -1;
     }
 
-  data = INB (PORT (HOST_DATA));
+  data = inb (PORT (HOST_DATA));
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   return data;
 }
@@ -260,6 +272,18 @@ set_mt32 (struct sscape_info *devc, int value)
   host_close (devc);
 }
 
+static void
+set_control (struct sscape_info *devc, int ctrl, int value)
+{
+  host_open (devc);
+  host_command3 (devc, CMD_SET_CONTROL, ctrl, value);
+  if (host_read (devc) != CMD_ACK)
+    {
+      printk ("SNDSCAPE: Setting control (%d) failed\n", ctrl);
+    }
+  host_close (devc);
+}
+
 static int
 get_board_type (struct sscape_info *devc)
 {
@@ -275,15 +299,18 @@ get_board_type (struct sscape_info *devc)
 }
 
 void
-sscapeintr (INT_HANDLER_PARMS (irq, dummy))
+sscapeintr (int irq, struct pt_regs *dummy)
 {
   unsigned char   bits, tmp;
   static int      debug = 0;
 
   printk ("sscapeintr(0x%02x)\n", (bits = sscape_read (devc, GA_INTSTAT_REG)));
-  if (SOMEONE_WAITING (sscape_sleeper, sscape_sleep_flag))
+  if ((sscape_sleep_flag.mode & WK_SLEEP))
     {
-      WAKE_UP (sscape_sleeper, sscape_sleep_flag);
+      {
+	sscape_sleep_flag.mode = WK_WAKEUP;
+	wake_up (&sscape_sleeper);
+      };
     }
 
   if (bits & 0x02)		/* Host interface interrupt */
@@ -294,7 +321,7 @@ sscapeintr (INT_HANDLER_PARMS (irq, dummy))
 #if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
   if (bits & 0x01)
     {
-      mpuintr (INT_HANDLER_CALL (irq));
+      mpuintr (irq, NULL);
       if (debug++ > 10)		/* Temporary debugging hack */
 	{
 	  sscape_write (devc, GA_INTENA_REG, 0x00);	/* Disable all interrupts */
@@ -383,10 +410,10 @@ verify_mpu (struct sscape_info *devc)
 
   for (i = 0; i < 10; i++)
     {
-      if (INB (devc->base + HOST_CTRL) & 0x80)
+      if (inb (devc->base + HOST_CTRL) & 0x80)
 	return 1;
 
-      if (INB (devc->base) != 0x00)
+      if (inb (devc->base) != 0x00)
 	return 1;
     }
 
@@ -401,7 +428,7 @@ sscape_coproc_open (void *dev_info, int sub_device)
     {
       set_mt32 (devc, 0);
       if (!verify_mpu (devc))
-	return RET_ERROR (EIO);
+	return -EIO;
     }
 
   return 0;
@@ -413,17 +440,20 @@ sscape_coproc_close (void *dev_info, int sub_device)
   struct sscape_info *devc = dev_info;
   unsigned long   flags;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
   if (devc->dma_allocated)
     {
       sscape_write (devc, GA_DMAA_REG, 0x20);	/* DMA channel disabled */
 #ifndef EXCLUDE_NATIVE_PCM
-      DMAbuf_close_dma (devc->my_audiodev);
 #endif
       devc->dma_allocated = 0;
     }
-  RESET_WAIT_QUEUE (sscape_sleeper, sscape_sleep_flag);
-  RESTORE_INTR (flags);
+  {
+    sscape_sleep_flag.aborting = 0;
+    sscape_sleep_flag.mode = WK_NONE;
+  };
+  restore_flags (flags);
 
   return;
 }
@@ -438,7 +468,7 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 {
   unsigned long   flags;
   unsigned char   temp;
-  int             done, timeout;
+  int             done, timeout_val;
 
   if (flag & CPF_FIRST)
     {
@@ -447,25 +477,21 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
          * before continuing.
        */
 
-      DISABLE_INTR (flags);
+      save_flags (flags);
+      cli ();
       if (devc->dma_allocated == 0)
 	{
 #ifndef EXCLUDE_NATIVE_PCM
-	  if (DMAbuf_open_dma (devc->my_audiodev) < 0)
-	    {
-	      RESTORE_INTR (flags);
-	      return 0;
-	    }
 #endif
 
 	  devc->dma_allocated = 1;
 	}
-      RESTORE_INTR (flags);
+      restore_flags (flags);
 
       sscape_write (devc, GA_HMCTL_REG,
 		    (temp = sscape_read (devc, GA_HMCTL_REG)) & 0x3f);	/*Reset */
 
-      for (timeout = 10000; timeout > 0; timeout--)
+      for (timeout_val = 10000; timeout_val > 0; timeout_val--)
 	sscape_read (devc, GA_HMCTL_REG);	/* Delay */
 
       /* Take board out of reset */
@@ -476,31 +502,53 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
   /*
      * Transfer one code block using DMA
    */
-  memcpy (audio_devs[devc->my_audiodev]->dmap->raw_buf[0], block, size);
+  memcpy (audio_devs[devc->my_audiodev]->dmap_out->raw_buf, block, size);
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 /******** INTERRUPTS DISABLED NOW ********/
   do_dma (devc, SSCAPE_DMA_A,
-	  audio_devs[devc->my_audiodev]->dmap->raw_buf_phys[0],
+	  audio_devs[devc->my_audiodev]->dmap_out->raw_buf_phys,
 	  size, DMA_MODE_WRITE);
 
   /*
    * Wait until transfer completes.
    */
-  RESET_WAIT_QUEUE (sscape_sleeper, sscape_sleep_flag);
+  {
+    sscape_sleep_flag.aborting = 0;
+    sscape_sleep_flag.mode = WK_NONE;
+  };
   done = 0;
-  timeout = 100;
-  while (!done && timeout-- > 0)
+  timeout_val = 100;
+  while (!done && timeout_val-- > 0)
     {
       int             resid;
 
-      DO_SLEEP (sscape_sleeper, sscape_sleep_flag, 1);
+
+      {
+	unsigned long   tl;
+
+	if (1)
+	  tl = current->timeout = jiffies + (1);
+	else
+	  tl = 0xffffffff;
+	sscape_sleep_flag.mode = WK_SLEEP;
+	interruptible_sleep_on (&sscape_sleeper);
+	if (!(sscape_sleep_flag.mode & WK_WAKEUP))
+	  {
+	    if (current->signal & ~current->blocked)
+	      sscape_sleep_flag.aborting = 1;
+	    else if (jiffies >= tl)
+	      sscape_sleep_flag.mode |= WK_TIMEOUT;
+	  }
+	sscape_sleep_flag.mode &= ~WK_SLEEP;
+      };
       clear_dma_ff (devc->dma);
       if ((resid = get_dma_residue (devc->dma)) == 0)
 	done = 1;
     }
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
   if (!done)
     return 0;
 
@@ -509,8 +557,8 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
       /*
          * Take the board out of reset
        */
-      OUTB (0x00, PORT (HOST_CTRL));
-      OUTB (0x00, PORT (MIDI_CTRL));
+      outb (0x00, PORT (HOST_CTRL));
+      outb (0x00, PORT (MIDI_CTRL));
 
       temp = sscape_read (devc, GA_HMCTL_REG);
       temp |= 0x40;
@@ -520,32 +568,70 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
          * Wait until the ODB wakes up
        */
 
-      DISABLE_INTR (flags);
+      save_flags (flags);
+      cli ();
       done = 0;
-      timeout = 5 * HZ;
-      while (!done && timeout-- > 0)
+      timeout_val = 5 * HZ;
+      while (!done && timeout_val-- > 0)
 	{
-	  DO_SLEEP (sscape_sleeper, sscape_sleep_flag, 1);
-	  if (INB (PORT (HOST_DATA)) == 0xff)	/* OBP startup acknowledge */
+
+	  {
+	    unsigned long   tl;
+
+	    if (1)
+	      tl = current->timeout = jiffies + (1);
+	    else
+	      tl = 0xffffffff;
+	    sscape_sleep_flag.mode = WK_SLEEP;
+	    interruptible_sleep_on (&sscape_sleeper);
+	    if (!(sscape_sleep_flag.mode & WK_WAKEUP))
+	      {
+		if (current->signal & ~current->blocked)
+		  sscape_sleep_flag.aborting = 1;
+		else if (jiffies >= tl)
+		  sscape_sleep_flag.mode |= WK_TIMEOUT;
+	      }
+	    sscape_sleep_flag.mode &= ~WK_SLEEP;
+	  };
+	  if (inb (PORT (HOST_DATA)) == 0xff)	/* OBP startup acknowledge */
 	    done = 1;
 	}
-      RESTORE_INTR (flags);
+      restore_flags (flags);
       if (!done)
 	{
 	  printk ("SoundScape: The OBP didn't respond after code download\n");
 	  return 0;
 	}
 
-      DISABLE_INTR (flags);
+      save_flags (flags);
+      cli ();
       done = 0;
-      timeout = 5 * HZ;
-      while (!done && timeout-- > 0)
+      timeout_val = 5 * HZ;
+      while (!done && timeout_val-- > 0)
 	{
-	  DO_SLEEP (sscape_sleeper, sscape_sleep_flag, 1);
-	  if (INB (PORT (HOST_DATA)) == 0xfe)	/* Host startup acknowledge */
+
+	  {
+	    unsigned long   tl;
+
+	    if (1)
+	      tl = current->timeout = jiffies + (1);
+	    else
+	      tl = 0xffffffff;
+	    sscape_sleep_flag.mode = WK_SLEEP;
+	    interruptible_sleep_on (&sscape_sleeper);
+	    if (!(sscape_sleep_flag.mode & WK_WAKEUP))
+	      {
+		if (current->signal & ~current->blocked)
+		  sscape_sleep_flag.aborting = 1;
+		else if (jiffies >= tl)
+		  sscape_sleep_flag.mode |= WK_TIMEOUT;
+	      }
+	    sscape_sleep_flag.mode &= ~WK_SLEEP;
+	  };
+	  if (inb (PORT (HOST_DATA)) == 0xfe)	/* Host startup acknowledge */
 	    done = 1;
 	}
-      RESTORE_INTR (flags);
+      restore_flags (flags);
       if (!done)
 	{
 	  printk ("SoundScape: OBP Initialization failed.\n");
@@ -554,6 +640,9 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 
       printk ("SoundScape board of type %d initialized OK\n",
 	      get_board_type (devc));
+
+      set_control (devc, CTL_MASTER_VOL, 100);
+      set_control (devc, CTL_SYNTH_VOL, 100);
 
 #ifdef SSCAPE_DEBUG3
       /*
@@ -577,19 +666,19 @@ static int
 download_boot_block (void *dev_info, copr_buffer * buf)
 {
   if (buf->len <= 0 || buf->len > sizeof (buf->data))
-    return RET_ERROR (EINVAL);
+    return -EINVAL;
 
   if (!sscape_download_boot (devc, buf->data, buf->len, buf->flags))
     {
       printk ("SSCAPE: Unable to load microcode block to the OBP.\n");
-      return RET_ERROR (EIO);
+      return -EIO;
     }
 
   return 0;
 }
 
 static int
-sscape_coproc_ioctl (void *dev_info, unsigned int cmd, unsigned int arg, int local)
+sscape_coproc_ioctl (void *dev_info, unsigned int cmd, ioctl_arg arg, int local)
 {
 
   switch (cmd)
@@ -604,19 +693,26 @@ sscape_coproc_ioctl (void *dev_info, unsigned int cmd, unsigned int arg, int loc
 	copr_buffer    *buf;
 	int             err;
 
-	buf = (copr_buffer *) KERNEL_MALLOC (sizeof (copr_buffer));
-	IOCTL_FROM_USER ((char *) buf, (char *) arg, 0, sizeof (*buf));
+	buf = (copr_buffer *) (
+				{
+				caddr_t x;
+			     x = kmalloc (sizeof (copr_buffer), GFP_KERNEL);
+				x;
+				}
+	);
+	if (buf == NULL)
+	  return -ENOSPC;
+	memcpy_fromfs (((char *) buf), &(((char *) arg)[0]), (sizeof (*buf)));
 	err = download_boot_block (dev_info, buf);
-	KERNEL_FREE (buf);
+	kfree (buf);
 	return err;
       }
       break;
 
     default:
-      return RET_ERROR (EINVAL);
+      return -EINVAL;
     }
 
-  return RET_ERROR (EINVAL);
 }
 
 static coproc_operations sscape_coproc_operations =
@@ -635,28 +731,15 @@ sscape_audio_open (int dev, int mode)
   unsigned long   flags;
   sscape_info    *devc = (sscape_info *) audio_devs[dev]->devc;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
   if (devc->opened)
     {
-      RESTORE_INTR (flags);
-      return RET_ERROR (EBUSY);
+      restore_flags (flags);
+      return -EBUSY;
     }
-
-  if (devc->dma_allocated == 0)
-    {
-      int             err;
-
-      if ((err = DMAbuf_open_dma (devc->my_audiodev)) < 0)
-	{
-	  RESTORE_INTR (flags);
-	  return err;
-	}
-
-      devc->dma_allocated = 1;
-    }
-
   devc->opened = 1;
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 #ifdef SSCAPE_DEBUG4
   /*
      * Temporary debugging aid. Print contents of the registers
@@ -681,17 +764,12 @@ sscape_audio_close (int dev)
 
   DEB (printk ("sscape_audio_close(void)\n"));
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
-  if (devc->dma_allocated)
-    {
-      sscape_write (devc, GA_DMAA_REG, 0x20);	/* DMA channel disabled */
-      DMAbuf_close_dma (dev);
-      devc->dma_allocated = 0;
-    }
   devc->opened = 0;
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 }
 
 static int
@@ -713,7 +791,7 @@ set_format (sscape_info * devc, int arg)
 }
 
 static int
-sscape_audio_ioctl (int dev, unsigned int cmd, unsigned int arg, int local)
+sscape_audio_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 {
   sscape_info    *devc = (sscape_info *) audio_devs[dev]->devc;
 
@@ -721,42 +799,42 @@ sscape_audio_ioctl (int dev, unsigned int cmd, unsigned int arg, int local)
     {
     case SOUND_PCM_WRITE_RATE:
       if (local)
-	return set_speed (devc, arg);
-      return IOCTL_OUT (arg, set_speed (devc, IOCTL_IN (arg)));
+	return set_speed (devc, (int) arg);
+      return snd_ioctl_return ((int *) arg, set_speed (devc, get_fs_long ((long *) arg)));
 
     case SOUND_PCM_READ_RATE:
       if (local)
 	return 8000;
-      return IOCTL_OUT (arg, 8000);
+      return snd_ioctl_return ((int *) arg, 8000);
 
     case SNDCTL_DSP_STEREO:
       if (local)
-	return set_channels (devc, arg + 1) - 1;
-      return IOCTL_OUT (arg, set_channels (devc, IOCTL_IN (arg) + 1) - 1);
+	return set_channels (devc, (int) arg + 1) - 1;
+      return snd_ioctl_return ((int *) arg, set_channels (devc, get_fs_long ((long *) arg) + 1) - 1);
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
-	return set_channels (devc, arg);
-      return IOCTL_OUT (arg, set_channels (devc, IOCTL_IN (arg)));
+	return set_channels (devc, (int) arg);
+      return snd_ioctl_return ((int *) arg, set_channels (devc, get_fs_long ((long *) arg)));
 
     case SOUND_PCM_READ_CHANNELS:
       if (local)
 	return 1;
-      return IOCTL_OUT (arg, 1);
+      return snd_ioctl_return ((int *) arg, 1);
 
     case SNDCTL_DSP_SAMPLESIZE:
       if (local)
-	return set_format (devc, arg);
-      return IOCTL_OUT (arg, set_format (devc, IOCTL_IN (arg)));
+	return set_format (devc, (int) arg);
+      return snd_ioctl_return ((int *) arg, set_format (devc, get_fs_long ((long *) arg)));
 
     case SOUND_PCM_READ_BITS:
       if (local)
 	return 8;
-      return IOCTL_OUT (arg, 8);
+      return snd_ioctl_return ((int *) arg, 8);
 
     default:;
     }
-  return RET_ERROR (EINVAL);
+  return -EINVAL;
 }
 
 static void
@@ -811,6 +889,8 @@ static struct audio_operations sscape_audio_operations =
   NULL
 };
 
+static int      sscape_detected = 0;
+
 long
 attach_sscape (long mem_start, struct address_info *hw_config)
 {
@@ -849,7 +929,7 @@ attach_sscape (long mem_start, struct address_info *hw_config)
 
   int             i, irq_bits = 0xff;
 
-  if (!probe_sscape (hw_config))
+  if (sscape_detected != hw_config->io_base)
     return mem_start;
 
   if (old_hardware)
@@ -873,7 +953,8 @@ attach_sscape (long mem_start, struct address_info *hw_config)
       return mem_start;
     }
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   for (i = 1; i < 10; i++)
     switch (i)
@@ -908,7 +989,7 @@ attach_sscape (long mem_start, struct address_info *hw_config)
 	sscape_write (devc, i, regs[i]);
       }
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
 #ifdef SSCAPE_DEBUG2
   /*
@@ -924,17 +1005,17 @@ attach_sscape (long mem_start, struct address_info *hw_config)
 #endif
 
 #if !defined(EXCLUDE_MIDI) && !defined(EXCLUDE_MPU_EMU)
-  hw_config->always_detect = 1;
   if (probe_mpu401 (hw_config))
-    {
-      int             prev_devs;
+    hw_config->always_detect = 1;
+  {
+    int             prev_devs;
 
-      prev_devs = num_midis;
-      mem_start = attach_mpu401 (mem_start, hw_config);
+    prev_devs = num_midis;
+    mem_start = attach_mpu401 (mem_start, hw_config);
 
-      if (num_midis == (prev_devs + 1))		/* The MPU driver installed itself */
-	midi_devs[prev_devs]->coproc = &sscape_coproc_operations;
-    }
+    if (num_midis == (prev_devs + 1))	/* The MPU driver installed itself */
+      midi_devs[prev_devs]->coproc = &sscape_coproc_operations;
+  }
 #endif
 
 #ifndef EXCLUDE_NATIVE_PCM
@@ -944,14 +1025,13 @@ attach_sscape (long mem_start, struct address_info *hw_config)
   if (num_audiodevs < MAX_AUDIO_DEV)
     {
       audio_devs[my_dev = num_audiodevs++] = &sscape_audio_operations;
-      audio_devs[my_dev]->dmachan = hw_config->dma;
-      audio_devs[my_dev]->buffcount = 1;
+      audio_devs[my_dev]->dmachan1 = hw_config->dma;
       audio_devs[my_dev]->buffsize = DSP_BUFFSIZE;
       audio_devs[my_dev]->devc = devc;
       devc->my_audiodev = my_dev;
       devc->opened = 0;
       audio_devs[my_dev]->coproc = &sscape_coproc_operations;
-      if (snd_set_irq_handler (hw_config->irq, sscapeintr, "SoundScape") < 0)
+      if (snd_set_irq_handler (hw_config->irq, sscapeintr, "SoundScape", devc->osp) < 0)
 	printk ("Error: Can't allocate IRQ for SoundScape\n");
 
       sscape_write (devc, GA_INTENA_REG, 0x80);		/* Master IRQ enable */
@@ -961,6 +1041,7 @@ attach_sscape (long mem_start, struct address_info *hw_config)
 #endif
 #endif
   devc->ok = 1;
+  devc->failed = 0;
   return mem_start;
 }
 
@@ -969,27 +1050,32 @@ probe_sscape (struct address_info *hw_config)
 {
   unsigned char   save;
 
+  devc->failed = 1;
   devc->base = hw_config->io_base;
   devc->irq = hw_config->irq;
   devc->dma = hw_config->dma;
+  devc->osp = hw_config->osp;
+
+  if (sscape_detected != 0 && sscape_detected != hw_config->io_base)
+    return 0;
 
   /*
      * First check that the address register of "ODIE" is
      * there and that it has exactly 4 writeable bits.
      * First 4 bits
    */
-  if ((save = INB (PORT (ODIE_ADDR))) & 0xf0)
+  if ((save = inb (PORT (ODIE_ADDR))) & 0xf0)
     return 0;
 
-  OUTB (0x00, PORT (ODIE_ADDR));
-  if (INB (PORT (ODIE_ADDR)) != 0x00)
+  outb (0x00, PORT (ODIE_ADDR));
+  if (inb (PORT (ODIE_ADDR)) != 0x00)
     return 0;
 
-  OUTB (0xff, PORT (ODIE_ADDR));
-  if (INB (PORT (ODIE_ADDR)) != 0x0f)
+  outb (0xff, PORT (ODIE_ADDR));
+  if (inb (PORT (ODIE_ADDR)) != 0x0f)
     return 0;
 
-  OUTB (save, PORT (ODIE_ADDR));
+  outb (save, PORT (ODIE_ADDR));
 
   /*
      * Now verify that some indirect registers return zero on some bits.
@@ -1020,19 +1106,27 @@ probe_sscape (struct address_info *hw_config)
 
   if (old_hardware)		/* Check that it's really an old Spea/Reveal card. */
     {
-      int             tmp, status = 0;
+      int             status = 0;
+      unsigned char   tmp;
       int             cc;
 
       if (!((tmp = sscape_read (devc, GA_HMCTL_REG)) & 0xc0))
 	{
 	  sscape_write (devc, GA_HMCTL_REG, tmp | 0x80);
 	  for (cc = 0; cc < 200000; ++cc)
-	    INB (devc->base + ODIE_ADDR);
+	    inb (devc->base + ODIE_ADDR);
 	}
       else
 	old_hardware = 0;
     }
 
+  if (sound_alloc_dma (hw_config->dma, "soundscape"))
+    {
+      printk ("sscape.c: Can't allocate DMA channel\n");
+      return 0;
+    }
+
+  sscape_detected = hw_config->io_base;
 
   return 1;
 }
@@ -1041,6 +1135,9 @@ int
 probe_ss_ms_sound (struct address_info *hw_config)
 {
   int             i, irq_bits = 0xff;
+
+  if (devc->failed)
+    return 0;
 
   if (devc->ok == 0)
     {
@@ -1060,7 +1157,7 @@ probe_ss_ms_sound (struct address_info *hw_config)
       return 0;
     }
 
-  return ad1848_detect (hw_config->io_base);
+  return ad1848_detect (hw_config->io_base, NULL, hw_config->osp);
 }
 
 long
@@ -1109,7 +1206,9 @@ attach_ss_ms_sound (long mem_start, struct address_info *hw_config)
   ad1848_init ("SoundScape", hw_config->io_base,
 	       hw_config->irq,
 	       hw_config->dma,
-	       hw_config->dma);
+	       hw_config->dma,
+	       0,
+	       devc->osp);
 
 #ifdef EXCLUDE_NATIVE_PCM
   if (num_audiodevs == (prev_devs + 1))		/* The AD1848 driver installed itself */
@@ -1129,6 +1228,24 @@ attach_ss_ms_sound (long mem_start, struct address_info *hw_config)
 #endif
 
   return mem_start;
+}
+
+void
+unload_sscape (struct address_info *hw_config)
+{
+  unload_mpu401 (hw_config);
+  snd_release_irq (hw_config->irq);
+  sound_free_dma (hw_config->dma);
+}
+
+void
+unload_ss_ms_sound (struct address_info *hw_config)
+{
+  ad1848_unload (hw_config->io_base,
+		 hw_config->irq,
+		 hw_config->dma,
+		 hw_config->dma,
+		 0);
 }
 
 #endif

@@ -3,7 +3,7 @@
  * A driver for Soundcards, misc configuration parameters.
  *
  * 
- * Copyright by Hannu Savolainen 1993
+ * Copyright by Hannu Savolainen 1995
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,12 +28,23 @@
  *
  */
 
+#undef CONFIGURE_SOUNDCARD
+#undef DYNAMIC_BUFFER
+
 #include "local.h"
+
+#ifdef KERNEL_SOUNDCARD
+#define CONFIGURE_SOUNDCARD
+#define DYNAMIC_BUFFER
+#undef LOADABLE_SOUNDCARD
+#endif
+
 #include "os.h"
 #include "soundvers.h"
 
 #if !defined(PSS_MPU_BASE) && defined(EXCLUDE_SSCAPE) && \
-      defined(EXCLUDE_TRIX) && !defined(MAD16_MPU_BASE)
+      defined(EXCLUDE_TRIX) && !defined(MAD16_MPU_BASE) && \
+      defined(EXCLUDE_CS4232) && defined(EXCLUDE_MAUI)
 #define EXCLUDE_MPU_EMU
 #endif
 
@@ -47,21 +58,13 @@
 
 #if defined(EXCLUDE_GUS16) && defined(EXCLUDE_MSS) && \
     defined(EXCLUDE_PSS) && defined(EXCLUDE_GUSMAX) && \
-    defined(EXCLUDE_SSCAPE) && defined(EXCLUDE_TRIX) && defined(EXCLUDE_MAD16)
+    defined(EXCLUDE_SSCAPE) && defined(EXCLUDE_TRIX) && defined(EXCLUDE_MAD16) && \
+    defined(EXCLUDE_CS4232) && defined(EXCLUDE_PNP)
 #define EXCLUDE_AD1848
 #endif
 
 #ifdef PSS_MSS_BASE
 #undef EXCLUDE_AD1848
-#endif
-
-#undef CONFIGURE_SOUNDCARD
-#undef DYNAMIC_BUFFER
-
-#ifdef KERNEL_SOUNDCARD
-#define CONFIGURE_SOUNDCARD
-#define DYNAMIC_BUFFER
-#undef LOADABLE_SOUNDCARD
 #endif
 
 #ifdef EXCLUDE_SEQUENCER
@@ -96,7 +99,7 @@
 #endif
 
 #ifndef DSP_BUFFCOUNT
-#define DSP_BUFFCOUNT		2	/* 2 is recommended. */
+#define DSP_BUFFCOUNT		1	/* 1 is recommended. */
 #endif
 
 #define DMA_AUTOINIT		0x10
@@ -105,6 +108,12 @@
 
 #ifndef PAS_BASE
 #define PAS_BASE	0x388
+#endif
+
+#ifdef JAZZ16
+#ifndef JAZZ_DMA16
+#define JAZZ_DMA16	5
+#endif
 #endif
 
 /* SEQ_MAX_QUEUE is the maximum number of sequencer events buffered by the
@@ -150,14 +159,19 @@
 
 struct fileinfo {
        	  int mode;	      /* Open mode */
-	  DECLARE_FILE();     /* Reference to file-flags. OS-dependent. */
+	  struct file *filp;     /* Reference to file-flags. OS-dependent. */
        };
 
 struct address_info {
 	int io_base;
 	int irq;
 	int dma;
+	int dma2;
 	int always_detect;	/* 1=Trust me, it's there */
+	char *name;
+	int driver_use_1;	/* Driver defined field 1 */
+	int driver_use_2;	/* Driver defined field 2 */
+	sound_os_info *osp;	/* OS spesific info */
 };
 
 #define SYNTH_MAX_VOICES	32
@@ -186,9 +200,9 @@ struct channel_info {
 #define WK_SIGNAL	0x04
 #define WK_SLEEP	0x08
 
-#define OPEN_READ	1
-#define OPEN_WRITE	2
-#define OPEN_READWRITE	3
+#define OPEN_READ	PCM_ENABLE_INPUT
+#define OPEN_WRITE	PCM_ENABLE_OUTPUT
+#define OPEN_READWRITE	(OPEN_READ|OPEN_WRITE)
 
 #include "sound_calls.h"
 #include "dev_table.h"

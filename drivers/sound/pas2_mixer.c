@@ -39,6 +39,7 @@
 
 extern int      translat_code;
 extern char     pas_model;
+extern sound_os_info *pas_osp;
 
 static int      rec_devices = (SOUND_MASK_MIC);		/* Default recording source */
 static int      mode_control = 0;
@@ -80,8 +81,8 @@ mix_write (unsigned char data, int ioaddr)
 
   if (pas_model == PAS_16D)
     {
-      OUTW (data | (data << 8), (ioaddr ^ translat_code) - 1);
-      OUTB (0x80, 0);
+      outw (data | (data << 8), (ioaddr ^ translat_code) - 1);
+      outb (0x80, 0);
     }
   else
     pas_write (data, ioaddr);
@@ -235,7 +236,7 @@ pas_mixer_set (int whichDev, unsigned int level)
       break;
 
     default:
-      return RET_ERROR (EINVAL);
+      return -EINVAL;
     }
 
   return (levels[whichDev]);
@@ -257,14 +258,14 @@ pas_mixer_reset (void)
 }
 
 int
-pas_mixer_ioctl (int dev, unsigned int cmd, unsigned int arg)
+pas_mixer_ioctl (int dev, unsigned int cmd, ioctl_arg arg)
 {
   TRACE (printk ("pas2_mixer.c: int pas_mixer_ioctl(unsigned int cmd = %X, unsigned int arg = %X)\n", cmd, arg));
 
   if (((cmd >> 8) & 0xff) == 'M')
     {
       if (cmd & IOC_IN)
-	return IOCTL_OUT (arg, pas_mixer_set (cmd & 0xff, IOCTL_IN (arg)));
+	return snd_ioctl_return ((int *) arg, pas_mixer_set (cmd & 0xff, get_fs_long ((long *) arg)));
       else
 	{			/*
 				   * Read parameters
@@ -274,47 +275,47 @@ pas_mixer_ioctl (int dev, unsigned int cmd, unsigned int arg)
 	    {
 
 	    case SOUND_MIXER_RECSRC:
-	      return IOCTL_OUT (arg, rec_devices);
+	      return snd_ioctl_return ((int *) arg, rec_devices);
 	      break;
 
 	    case SOUND_MIXER_STEREODEVS:
-	      return IOCTL_OUT (arg, SUPPORTED_MIXER_DEVICES & ~(SOUND_MASK_BASS | SOUND_MASK_TREBLE));
+	      return snd_ioctl_return ((int *) arg, SUPPORTED_MIXER_DEVICES & ~(SOUND_MASK_BASS | SOUND_MASK_TREBLE));
 	      break;
 
 	    case SOUND_MIXER_DEVMASK:
-	      return IOCTL_OUT (arg, SUPPORTED_MIXER_DEVICES);
+	      return snd_ioctl_return ((int *) arg, SUPPORTED_MIXER_DEVICES);
 	      break;
 
 	    case SOUND_MIXER_RECMASK:
-	      return IOCTL_OUT (arg, POSSIBLE_RECORDING_DEVICES & SUPPORTED_MIXER_DEVICES);
+	      return snd_ioctl_return ((int *) arg, POSSIBLE_RECORDING_DEVICES & SUPPORTED_MIXER_DEVICES);
 	      break;
 
 	    case SOUND_MIXER_CAPS:
-	      return IOCTL_OUT (arg, 0);	/* No special capabilities */
+	      return snd_ioctl_return ((int *) arg, 0);		/* No special capabilities */
 	      break;
 
 	    case SOUND_MIXER_MUTE:
-	      return IOCTL_OUT (arg, 0);	/* No mute yet */
+	      return snd_ioctl_return ((int *) arg, 0);		/* No mute yet */
 	      break;
 
 	    case SOUND_MIXER_ENHANCE:
 	      if (!(mode_control & P_M_MV508_ENHANCE_BITS))
-		return IOCTL_OUT (arg, 0);
-	      return IOCTL_OUT (arg, ((mode_control & P_M_MV508_ENHANCE_BITS) + 1) * 20);
+		return snd_ioctl_return ((int *) arg, 0);
+	      return snd_ioctl_return ((int *) arg, ((mode_control & P_M_MV508_ENHANCE_BITS) + 1) * 20);
 	      break;
 
 	    case SOUND_MIXER_LOUD:
 	      if (mode_control & P_M_MV508_LOUDNESS)
-		return IOCTL_OUT (arg, 1);
-	      return IOCTL_OUT (arg, 0);
+		return snd_ioctl_return ((int *) arg, 1);
+	      return snd_ioctl_return ((int *) arg, 0);
 	      break;
 
 	    default:
-	      return IOCTL_OUT (arg, levels[cmd & 0xff]);
+	      return snd_ioctl_return ((int *) arg, levels[cmd & 0xff]);
 	    }
 	}
     }
-  return RET_ERROR (EINVAL);
+  return -EINVAL;
 }
 
 static struct mixer_operations pas_mixer_operations =

@@ -36,12 +36,28 @@
 
 #include <linux/major.h>
 
-static int      soundcards_installed = 0;	/* Number of installed
+#ifndef EXCLUDE_PNP
+#include <linux/pnp.h>
+#endif
 
-						 * soundcards */
+static int      soundcards_installed = 0;	/* Number of installed cards */
+
+/*
+ * Table for permanently allocated memory (used when unloading the module)
+ */
+caddr_t         sound_mem_blocks[1024];
+int             sound_num_blocks = 0;
+
 static int      soundcard_configured = 0;
 
 static struct fileinfo files[SND_NDEVS];
+
+static char     dma_alloc_map[8] =
+{0};
+
+#define DMA_MAP_UNAVAIL		0
+#define DMA_MAP_FREE		1
+#define DMA_MAP_BUSY		2
 
 int
 snd_ioctl_return (int *addr, int value)
@@ -49,7 +65,7 @@ snd_ioctl_return (int *addr, int value)
   if (value < 0)
     return value;
 
-  PUT_WORD_TO_USER (addr, 0, value);
+  put_fs_long (value, (long *) &((addr)[0]));
   return 0;
 }
 
@@ -58,7 +74,8 @@ sound_read (struct inode *inode, struct file *file, char *buf, int count)
 {
   int             dev;
 
-  dev = MINOR(inode->i_rdev);
+  dev = inode->i_rdev;
+  dev = MINOR (dev);
 
   return sound_read_sw (dev, &files[dev], buf, count);
 }
@@ -68,12 +85,8 @@ sound_write (struct inode *inode, struct file *file, const char *buf, int count)
 {
   int             dev;
 
-#ifdef MODULE
-  int             err;
-
-#endif
-
-  dev = MINOR(inode->i_rdev);
+  dev = inode->i_rdev;
+  dev = MINOR (dev);
 
   return sound_write_sw (dev, &files[dev], buf, count);
 }
@@ -81,7 +94,7 @@ sound_write (struct inode *inode, struct file *file, const char *buf, int count)
 static int
 sound_lseek (struct inode *inode, struct file *file, off_t offset, int orig)
 {
-  return RET_ERROR (EPERM);
+  return -EPERM;
 }
 
 static int
@@ -90,12 +103,13 @@ sound_open (struct inode *inode, struct file *file)
   int             dev, retval;
   struct fileinfo tmp_file;
 
-  dev = MINOR(inode->i_rdev);
+  dev = inode->i_rdev;
+  dev = MINOR (dev);
 
   if (!soundcard_configured && dev != SND_DEV_CTL && dev != SND_DEV_STATUS)
     {
       printk ("SoundCard Error: The soundcard system has not been configured\n");
-      return RET_ERROR (ENXIO);
+      return -ENXIO;
     }
 
   tmp_file.mode = 0;
@@ -124,7 +138,8 @@ sound_release (struct inode *inode, struct file *file)
 {
   int             dev;
 
-  dev = MINOR(inode->i_rdev);
+  dev = inode->i_rdev;
+  dev = MINOR (dev);
 
   sound_release_sw (dev, &files[dev]);
 #ifdef MODULE
@@ -136,16 +151,37 @@ static int
 sound_ioctl (struct inode *inode, struct file *file,
 	     unsigned int cmd, unsigned long arg)
 {
-  int             dev;
+  int             dev, err;
 
-  dev = MINOR(inode->i_rdev);
+  dev = inode->i_rdev;
+  dev = MINOR (dev);
+
+  if (cmd == 1)
+    {
+      int             i;
+
+      unsigned char  *p;
+
+
+      if (!audio_devs[dev >> 4]->dmap_out)
+	return 0;
+      if (!audio_devs[dev >> 4]->dmap_out->raw_buf)
+	return 0;
+
+      p = audio_devs[dev >> 4]->dmap_out->raw_buf;
+
+      for (i = 0; i < 256; i++)
+	printk ("%02x ", p[i]);
+      printk ("\n");
+      return 0;
+    }
 
   if (cmd & IOC_INOUT)
     {
       /*
          * Have to validate the address given by the process.
        */
-      int             len, err;
+      int             len;
 
       len = (cmd & IOCSIZE_MASK) >> IOCSIZE_SHIFT;
 
@@ -163,7 +199,9 @@ sound_ioctl (struct inode *inode, struct file *file,
 
     }
 
-  return sound_ioctl_sw (dev, &files[dev], cmd, arg);
+  err = sound_ioctl_sw (dev, &files[dev], cmd, (caddr_t) arg);
+
+  return err;
 }
 
 static int
@@ -171,7 +209,8 @@ sound_select (struct inode *inode, struct file *file, int sel_type, select_table
 {
   int             dev;
 
-  dev = MINOR(inode->i_rdev);
+  dev = inode->i_rdev;
+  dev = MINOR (dev);
 
   DEB (printk ("sound_select(dev=%d, type=0x%x)\n", dev, sel_type));
 
@@ -205,6 +244,92 @@ sound_select (struct inode *inode, struct file *file, int sel_type, select_table
   return 0;
 }
 
+static int
+sound_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma)
+{
+  int             dev, dev_class;
+  unsigned long   size;
+  struct dma_buffparms *dmap = NULL;
+
+  dev = inode->i_rdev;
+  dev = MINOR (dev);
+
+  dev_class = dev & 0x0f;
+  dev >>= 4;
+
+  if (dev_class != SND_DEV_DSP && dev_class != SND_DEV_DSP16 && dev_class != SND_DEV_AUDIO)
+    {
+      printk ("Sound: mmap() not supported for other than audio devices\n");
+      return -EINVAL;
+    }
+
+  if ((vma->vm_flags & (VM_READ | VM_WRITE)) == (VM_READ | VM_WRITE))
+    {
+      printk ("Sound: Cannot do read/write mmap()\n");
+      return -EINVAL;
+    }
+
+  if (vma->vm_flags & VM_READ)
+    {
+      dmap = audio_devs[dev]->dmap_in;
+    }
+  else if (vma->vm_flags & VM_WRITE)
+    {
+      dmap = audio_devs[dev]->dmap_out;
+    }
+  else
+    {
+      printk ("Sound: Undefined mmap() access\n");
+      return -EINVAL;
+    }
+
+  if (dmap == NULL)
+    {
+      printk ("Sound: mmap() error. dmap == NULL\n");
+      return -EIO;
+    }
+
+  if (dmap->raw_buf == NULL)
+    {
+      printk ("Sound: mmap() called when raw_buf == NULL\n");
+      return -EIO;
+    }
+
+  if (dmap->mapping_flags)
+    {
+      printk ("Sound: mmap() called twice for the same DMA buffer\n");
+      return -EIO;
+    }
+
+  if (vma->vm_offset != 0)
+    {
+      printk ("Sound: mmap() offset must be 0.\n");
+      return -EINVAL;
+    }
+
+  size = vma->vm_end - vma->vm_start;
+
+  if (size != dmap->bytes_in_use)
+    {
+      printk ("Sound: mmap() size = %ld. Should be %d\n",
+	      size, dmap->bytes_in_use);
+    }
+
+  if (remap_page_range (vma->vm_start, dmap->raw_buf_phys, vma->vm_end - vma->vm_start, vma->vm_page_prot))
+    return -EAGAIN;
+
+
+  vma->vm_inode = inode;
+  inode->i_count++;
+
+  dmap->mapping_flags |= DMA_MAP_MAPPED;
+
+  memset (dmap->raw_buf,
+	  dmap->neutral_byte,
+	  dmap->bytes_in_use);
+  return 0;
+}
+
 static struct file_operations sound_fops =
 {
   sound_lseek,
@@ -213,12 +338,12 @@ static struct file_operations sound_fops =
   NULL,				/* sound_readdir */
   sound_select,
   sound_ioctl,
-  NULL,
+  sound_mmap,
   sound_open,
   sound_release
 };
 
-int
+void
 soundcard_init (void)
 {
 #ifndef MODULE
@@ -227,39 +352,38 @@ soundcard_init (void)
 
   soundcard_configured = 1;
 
-  sndtable_init ();		/* Initialize call tables and
-				 * detect cards */
+  sndtable_init (0);		/* Initialize call tables and
+				   * detect cards */
+#ifndef EXCLUDE_PNP
+  sound_pnp_init ();
+#endif
 
   if (!(soundcards_installed = sndtable_get_cardcount ()))
-    return 0;			/* No cards detected */
+    return;			/* No cards detected */
 
 #ifndef EXCLUDE_AUDIO
   if (num_audiodevs)		/* Audio devices present */
     {
-      DMAbuf_init ();
-      audio_init ();
+      DMAbuf_init (0);
+      audio_init (0);
     }
 #endif
 
 #ifndef EXCLUDE_MIDI
   if (num_midis)
-    MIDIbuf_init ();
+    MIDIbuf_init (0);
 #endif
 
 #ifndef EXCLUDE_SEQUENCER
   if (num_midis + num_synths)
-    sequencer_init ();
+    sequencer_init (0);
 #endif
 
-  return 0;
 }
 
-#ifdef MODULE
 static unsigned long irqs = 0;
-void            snd_release_irq (int);
-static int      module_sound_mem_init (void);
-static void     module_sound_mem_release (void);
 
+#ifdef MODULE
 static void
 free_all_irqs (void)
 {
@@ -267,60 +391,56 @@ free_all_irqs (void)
 
   for (i = 0; i < 31; i++)
     if (irqs & (1ul << i))
-      snd_release_irq (i);
+      {
+	printk ("Sound warning: IRQ%d was left allocated. Fixed.\n", i);
+	snd_release_irq (i);
+      }
   irqs = 0;
 }
 
 char            kernel_version[] = UTS_RELEASE;
 
-static long     memory_pool = 0;
-static int      memsize = 70 * 1024;
+#endif
+
 static int      debugmem = 0;	/* switched off by default */
+
+static int      sound[20] =
+{0};
 
 int
 init_module (void)
 {
-  long            lastbyte;
   int             err;
+  int             ints[21];
+  int             i;
 
-  printk ("sound: made modular by Peter Trattler (peter@sbox.tu-graz.ac.at)\n");
+  /*
+     * "sound=" command line handling by Harald Milz.
+   */
+  i = 0;
+  while (i < 20 && sound[i])
+    ints[i + 1] = sound[i++];
+  ints[0] = i;
+
+  if (i)
+    sound_setup ("sound=", ints);
+
   err = register_chrdev (SOUND_MAJOR, "sound", &sound_fops);
   if (err)
     {
       printk ("sound: driver already loaded/included in kernel\n");
       return err;
     }
-  memory_pool = (long) kmalloc (memsize, GFP_KERNEL);
-  if (memory_pool == 0l)
-    {
-      unregister_chrdev (SOUND_MAJOR, "sound");
-      return -ENOMEM;
-    }
-  lastbyte = soundcard_init (memory_pool);
-  if (lastbyte > memory_pool + memsize)
-    {
-      printk ("sound: Not enough memory; use : 'insmod sound.o memsize=%ld'\n",
-	      lastbyte - memory_pool);
-      kfree ((void *) memory_pool);
-      unregister_chrdev (SOUND_MAJOR, "sound");
-      free_all_irqs ();
-      return -ENOMEM;
-    }
-  err = module_sound_mem_init ();
-  if (err)
-    {
-      module_sound_mem_release ();
-      kfree ((void *) memory_pool);
-      unregister_chrdev (SOUND_MAJOR, "sound");
-      free_all_irqs ();
-      return err;
-    }
-  if (lastbyte < memory_pool + memsize)
-    printk ("sound: (Suggestion) too much memory; use : 'insmod sound.o memsize=%ld'\n",
-	    lastbyte - memory_pool);
+
+  soundcard_init ();
+
+  if (sound_num_blocks >= 1024)
+    printk ("Sound warning: Deallocation table was too small.\n");
+
   return 0;
 }
 
+#ifdef MODULE
 void
 cleanup_module (void)
 {
@@ -328,13 +448,31 @@ cleanup_module (void)
     printk ("sound: module busy -- remove delayed\n");
   else
     {
-      kfree ((void *) memory_pool);
+      int             i;
+
       unregister_chrdev (SOUND_MAJOR, "sound");
-      free_all_irqs ();
-      module_sound_mem_release ();
+
+      sound_stop_timer ();
+      sound_unload_drivers ();
+
+      for (i = 0; i < sound_num_blocks; i++)
+	kfree (sound_mem_blocks[i]);
+
+      free_all_irqs ();		/* If something was left allocated by accident */
+
+      for (i = 0; i < 8; i++)
+	if (dma_alloc_map[i] != DMA_MAP_UNAVAIL)
+	  {
+	    printk ("Sound: Hmm, DMA%d was left allocated\n", i);
+	    sound_free_dma (i);
+	  }
+
+#ifndef EXCLUDE_PNP
+      sound_pnp_disconnect ();
+#endif
+
     }
 }
-
 #endif
 
 void
@@ -347,19 +485,17 @@ tenmicrosec (void)
 }
 
 int
-snd_set_irq_handler (int interrupt_level, INT_HANDLER_PROTO (), char *name)
+snd_set_irq_handler (int interrupt_level, void (*hndlr) (int, struct pt_regs *), char *name, sound_os_info * osp)
 {
   int             retcode;
 
-  retcode = request_irq (interrupt_level, hndlr, SA_INTERRUPT, name);
+  retcode = request_irq (interrupt_level, hndlr, 0 /* SA_INTERRUPT */ , name);
   if (retcode < 0)
     {
       printk ("Sound: IRQ%d already in use\n", interrupt_level);
     }
-#ifdef MODULE
   else
     irqs |= (1ul << interrupt_level);
-#endif
 
   return retcode;
 }
@@ -367,10 +503,71 @@ snd_set_irq_handler (int interrupt_level, INT_HANDLER_PROTO (), char *name)
 void
 snd_release_irq (int vect)
 {
-#ifdef MODULE
   irqs &= ~(1ul << vect);
-#endif
   free_irq (vect);
+}
+
+int
+sound_alloc_dma (int chn, char *deviceID)
+{
+  int             err;
+
+  if ((err = request_dma (chn, deviceID)) != 0)
+    return err;
+
+  dma_alloc_map[chn] = DMA_MAP_FREE;
+
+  return 0;
+}
+
+int
+sound_open_dma (int chn, char *deviceID)
+{
+  unsigned long   flags;
+
+  save_flags (flags);
+  cli ();
+
+  if (dma_alloc_map[chn] != DMA_MAP_FREE)
+    {
+      printk ("sound_open_dma: DMA channel %d busy or not allocated\n", chn);
+      restore_flags (flags);
+      return 1;
+    }
+
+  dma_alloc_map[chn] = DMA_MAP_BUSY;
+  restore_flags (flags);
+  return 0;
+}
+
+void
+sound_free_dma (int chn)
+{
+  if (dma_alloc_map[chn] != DMA_MAP_FREE)
+    {
+      printk ("sound_free_dma: Bad access to DMA channel %d\n", chn);
+      return;
+    }
+  free_dma (chn);
+  dma_alloc_map[chn] = DMA_MAP_UNAVAIL;
+}
+
+void
+sound_close_dma (int chn)
+{
+  unsigned long   flags;
+
+  save_flags (flags);
+  cli ();
+
+  if (dma_alloc_map[chn] != DMA_MAP_BUSY)
+    {
+      printk ("sound_close_dma: Bad access to DMA channel %d\n", chn);
+      restore_flags (flags);
+      return;
+    }
+  dma_alloc_map[chn] = DMA_MAP_FREE;
+  restore_flags (flags);
 }
 
 #ifndef EXCLUDE_SEQUENCER
@@ -379,7 +576,6 @@ request_sound_timer (int count)
 {
   extern unsigned long seq_time;
 
-#if 1
   if (count < 0)
     count = jiffies + (-count);
   else
@@ -387,7 +583,6 @@ request_sound_timer (int count)
   timer_table[SOUND_TIMER].fn = sequencer_timer;
   timer_table[SOUND_TIMER].expires = count;
   timer_active |= 1 << SOUND_TIMER;
-#endif
 }
 
 #endif
@@ -395,264 +590,150 @@ request_sound_timer (int count)
 void
 sound_stop_timer (void)
 {
-#if 1
   timer_table[SOUND_TIMER].expires = 0;
   timer_active &= ~(1 << SOUND_TIMER);
-#endif
 }
 
 #ifndef EXCLUDE_AUDIO
-static int
-valid_dma_page (unsigned long addr, unsigned long dev_buffsize, unsigned long dma_pagesize)
-{
-  if (((addr & (dma_pagesize - 1)) + dev_buffsize) <= dma_pagesize)
-    return 1;
-  else
-    return 0;
-}
-
-#ifdef MODULE
 
 #ifdef KMALLOC_DMA_BROKEN
-#define KMALLOC_MEM_REGIONS 20
-
-static char    *dma_list[KMALLOC_MEM_REGIONS];
-static int      dma_last = 0;
-inline void
-add_to_dma_list (char *adr)
-{
-  dma_list[dma_last++] = adr;
-}
-
+fatal_error__This_version_is_not_compatible_with_this_kernel;
 #endif
 
-static int
-module_sound_mem_init (void)
+static int      dma_buffsize = DSP_BUFFSIZE;
+
+int
+sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 {
-  int             dev, ret = 0;
-  unsigned long   dma_pagesize;
   char           *start_addr, *end_addr;
-  int		  order, size;
-  struct dma_buffparms *dmap;
+  int             i, dma_pagesize;
 
-  for (dev = 0; dev < num_audiodevs; dev++)
-    if (audio_devs[dev]->buffcount > 0 && audio_devs[dev]->dmachan >= 0)
-      {
-	dmap = audio_devs[dev]->dmap;
-	if (audio_devs[dev]->flags & DMA_AUTOMODE)
-	  audio_devs[dev]->buffcount = 1;
+  if (dmap->raw_buf != NULL)
+    return 0;			/* Already done */
 
-	if (audio_devs[dev]->dmachan > 3)
-	  dma_pagesize = 131072;	/* 16bit dma: 128k */
-	else
-	  dma_pagesize = 65536;	/* 8bit dma: 64k */
-	if (debugmem)
-	  printk ("sound: dma-page-size %lu\n", dma_pagesize);
-	/* More sanity checks */
+  if (dma_buffsize < 4096)
+    dma_buffsize = 4096;
 
-	if (audio_devs[dev]->buffsize > dma_pagesize)
-	  audio_devs[dev]->buffsize = dma_pagesize;
-	audio_devs[dev]->buffsize &= 0xfffff000;	/* Truncate to n*4k */
-	if (audio_devs[dev]->buffsize < 4096)
-	  audio_devs[dev]->buffsize = 4096;
-	if (debugmem)
-	  printk ("sound: buffsize %lu\n", audio_devs[dev]->buffsize);
-	/* Now allocate the buffers */
-	for (dmap->raw_count = 0; dmap->raw_count < audio_devs[dev]->buffcount;
-	     dmap->raw_count++)
-	  {
-#ifdef KMALLOC_DMA_BROKEN
-	    start_addr = kmalloc (audio_devs[dev]->buffsize, GFP_KERNEL);
-	    if (start_addr)
-	      {
-		if (debugmem)
-		  printk ("sound: trying 0x%lx for DMA\n", (long) start_addr);
-		if (valid_dma_page ((unsigned long) start_addr,
-				    audio_devs[dev]->buffsize,
-				    dma_pagesize))
-		  add_to_dma_list (start_addr);
-		else
-		  {
-		    kfree (start_addr);
-		    start_addr = kmalloc (audio_devs[dev]->buffsize * 2,
-					  GFP_KERNEL);	/* what a waste :-( */
-		    if (start_addr)
-		      {
-			if (debugmem)
-			  printk ("sound: failed; trying 0x%lx aligned to",
-				  (long) start_addr);
-			add_to_dma_list (start_addr);
-			/* now align it to the next dma-page boundary */
-			start_addr = (char *) (((long) start_addr
-						+ dma_pagesize - 1)
-					       & ~(dma_pagesize - 1));
-			if (debugmem)
-			  printk (" 0x%lx\n", (long) start_addr);
-		      }
-		  }
-	      }
-#else
-	    for (order = 0, size = PAGE_SIZE;
-		 size < audio_devs[dev]->buffsize;
-		 order++, size <<= 1);
-	    start_addr = (char *) __get_free_pages(GFP_KERNEL, order, MAX_DMA_ADDRESS);
-#endif
-	    if (start_addr == NULL)
-	      ret = -ENOMEM;	/* Can't stop the loop in this case, because
-				   * ...->raw_buf [...] must be initilized
-				   * to valid values (at least to NULL)
-				 */
-	    else
-	      {
-		/* make some checks */
-		end_addr = start_addr + audio_devs[dev]->buffsize - 1;
-		if (debugmem)
-		  printk ("sound: start 0x%lx, end 0x%lx\n",
-			  (long) start_addr, (long) end_addr);
-		/* now check if it fits into the same dma-pagesize */
-		if (((long) start_addr & ~(dma_pagesize - 1))
-		    != ((long) end_addr & ~(dma_pagesize - 1))
-		    || end_addr >= (char *) (16 * 1024 * 1024))
-		  {
-		    printk (
-			     "sound: kmalloc returned invalid address 0x%lx for %ld Bytes DMA-buffer\n",
-			     (long) start_addr,
-			     audio_devs[dev]->buffsize);
-		    ret = -EFAULT;
-		  }
-	      }
-	    dmap->raw_buf[dmap->raw_count] = start_addr;
-	    dmap->raw_buf_phys[dmap->raw_count] = (unsigned long) start_addr;
-	  }
-      }
-  return ret;
-}
+  if (chan < 4)
+    dma_pagesize = 64 * 1024;
+  else
+    dma_pagesize = 128 * 1024;
 
-static void
-module_sound_mem_release (void)
-{
-#ifdef KMALLOC_DMA_BROKEN
-  int             i;
+  dmap->raw_buf = NULL;
 
-  for (i = 0; i < dma_last; i++)
+  if (debugmem)
+    printk ("sound: buffsize%d %lu\n", dev, audio_devs[dev]->buffsize);
+
+  audio_devs[dev]->buffsize = dma_buffsize;
+
+  if (audio_devs[dev]->buffsize > dma_pagesize)
+    audio_devs[dev]->buffsize = dma_pagesize;
+
+  start_addr = NULL;
+
+/*
+ * Now loop until we get a free buffer. Try to get smaller buffer if
+ * it fails.
+ */
+
+  while (start_addr == NULL && audio_devs[dev]->buffsize > PAGE_SIZE)
     {
-      if (debugmem)
-	printk ("sound: freeing 0x%lx\n", (long) dma_list[i]);
-      kfree (dma_list[i]);
+      int             sz, size;
+
+      for (sz = 0, size = PAGE_SIZE;
+	   size < audio_devs[dev]->buffsize;
+	   sz++, size <<= 1);
+
+      audio_devs[dev]->buffsize = PAGE_SIZE * (1 << sz);
+
+      if ((start_addr = (char *) __get_free_pages (GFP_ATOMIC, sz, MAX_DMA_ADDRESS)) == NULL)
+	audio_devs[dev]->buffsize /= 2;
     }
-#else
-  int             dev, i;
-  int		  order, size;
 
-  for (dev = 0; dev < num_audiodevs; dev++) {
-    for (order = 0, size = PAGE_SIZE;
+  if (start_addr == NULL)
+    {
+      printk ("Sound error: Couldn't allocate DMA buffer\n");
+      return -ENOMEM;
+    }
+  else
+    {
+      /* make some checks */
+      end_addr = start_addr + audio_devs[dev]->buffsize - 1;
+
+      if (debugmem)
+	printk ("sound: start 0x%lx, end 0x%lx\n",
+		(long) start_addr, (long) end_addr);
+
+      /* now check if it fits into the same dma-pagesize */
+
+      if (((long) start_addr & ~(dma_pagesize - 1))
+	  != ((long) end_addr & ~(dma_pagesize - 1))
+	  || end_addr >= (char *) (16 * 1024 * 1024))
+	{
+	  printk (
+		   "sound: kmalloc returned invalid address 0x%lx for %ld Bytes DMA-buffer\n",
+		   (long) start_addr,
+		   audio_devs[dev]->buffsize);
+	  return -EFAULT;
+	}
+    }
+  dmap->raw_buf = start_addr;
+  dmap->raw_buf_phys = (unsigned long) start_addr;
+
+  for (i = MAP_NR (start_addr); i <= MAP_NR (end_addr); i++)
+    {
+#ifdef MAP_PAGE_RESERVED
+      mem_map[i] |= MAP_PAGE_RESERVED;
+#else
+      mem_map[i].reserved = 1;
+#endif
+    }
+
+  return 0;
+}
+
+void
+sound_free_dmap (int dev, struct dma_buffparms *dmap)
+{
+  if (dmap->raw_buf == NULL)
+    return;
+  {
+    int             sz, size, i;
+    unsigned long   start_addr, end_addr;
+
+    for (sz = 0, size = PAGE_SIZE;
 	 size < audio_devs[dev]->buffsize;
-	 order++, size <<= 1);
-    if (audio_devs[dev]->buffcount > 0 && audio_devs[dev]->dmachan >= 0)
+	 sz++, size <<= 1);
+
+    start_addr = (unsigned long) dmap->raw_buf;
+    end_addr = start_addr + audio_devs[dev]->buffsize;
+
+    for (i = MAP_NR (start_addr); i <= MAP_NR (end_addr); i++)
       {
-	for (i = 0; i < audio_devs[dev]->buffcount; i++)
-	  if (audio_devs[dev]->dmap->raw_buf[i])
-	    {
-	      if (debugmem)
-		printk ("sound: freeing 0x%lx\n",
-			(long) (audio_devs[dev]->dmap->raw_buf[i]));
-	      free_pages((unsigned long) audio_devs[dev]->dmap->raw_buf[i], 
-			 order);
-	    }
+#ifdef MAP_PAGE_RESERVED
+	mem_map[i] &= ~MAP_PAGE_RESERVED;
+#else
+	mem_map[i].reserved = 0;
+#endif
       }
+    free_pages ((unsigned long) dmap->raw_buf, sz);
   }
-#endif
+  dmap->raw_buf = NULL;
 }
 
-#else /* !MODULE */
-
-void
-sound_mem_init (void)
+int
+soud_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc * info)
 {
-  int             i, dev;
-  unsigned long   start_addr, end_addr, mem_ptr, dma_pagesize;
-  struct dma_buffparms *dmap;
-
-  mem_ptr = high_memory;
-
-  /* Some sanity checks */
-
-  if (mem_ptr > (16 * 1024 * 1024))
-    mem_ptr = 16 * 1024 * 1024;	/* Limit to 16M */
-
-  for (dev = 0; dev < num_audiodevs; dev++)	/* Enumerate devices */
-    if (audio_devs[dev]->buffcount > 0 && audio_devs[dev]->dmachan >= 0)
-      {
-	dmap = audio_devs[dev]->dmap;
-
-	if (audio_devs[dev]->flags & DMA_AUTOMODE)
-	  audio_devs[dev]->buffcount = 1;
-
-	if (audio_devs[dev]->dmachan > 3 && audio_devs[dev]->buffsize > 65536)
-	  dma_pagesize = 131072;	/* 128k */
-	else
-	  dma_pagesize = 65536;
-
-	/* More sanity checks */
-
-	if (audio_devs[dev]->buffsize > dma_pagesize)
-	  audio_devs[dev]->buffsize = dma_pagesize;
-	audio_devs[dev]->buffsize &= 0xfffff000;	/* Truncate to n*4k */
-	if (audio_devs[dev]->buffsize < 4096)
-	  audio_devs[dev]->buffsize = 4096;
-
-	/* Now allocate the buffers */
-
-	for (dmap->raw_count = 0; dmap->raw_count < audio_devs[dev]->buffcount; dmap->raw_count++)
-	  {
-	    start_addr = mem_ptr - audio_devs[dev]->buffsize;
-	    if (!valid_dma_page (start_addr, audio_devs[dev]->buffsize, dma_pagesize))
-	      start_addr &= ~(dma_pagesize - 1);	/* Align address to
-							 * dma_pagesize */
-
-	    end_addr = start_addr + audio_devs[dev]->buffsize - 1;
-
-	    dmap->raw_buf[dmap->raw_count] = (char *) start_addr;
-	    dmap->raw_buf_phys[dmap->raw_count] = start_addr;
-	    mem_ptr = start_addr;
-
-	    for (i = MAP_NR (start_addr); i <= MAP_NR (end_addr); i++)
-	      {
-		if (mem_map[i].reserved || mem_map[i].count)
-		  panic ("sound_mem_init: Page not free (driver incompatible with kernel).\n");
-
-		mem_map[i].reserved = 1;
-	      }
-	  }
-      }				/* for dev */
+  printk ("Entered sound_map_buffer()\n");
+  printk ("Exited sound_map_buffer()\n");
+  return -EINVAL;
 }
-
-#endif /* !MODULE */
-
-#endif
 
 #else
 
-long
-soundcard_init (long mem_start)	/* Dummy version */
-{
-  return mem_start;
-}
-
-#endif
-
-#if !defined(CONFIGURE_SOUNDCARD) || defined(EXCLUDE_AUDIO)
 void
-sound_mem_init (void)
+soundcard_init (void)		/* Dummy version */
 {
-  /* Dummy version */
-}
-
-#ifdef MODULE
-static int
-module_sound_mem_init (void)
-{
-  return 0;			/* no error */
 }
 
 #endif

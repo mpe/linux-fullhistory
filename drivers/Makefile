@@ -15,14 +15,20 @@ ifdef CONFIG_PCI
 SUB_DIRS += pci
 endif
 
-ifdef CONFIG_SCSI
+ifeq ($(CONFIG_SCSI),y)
 SUB_DIRS += scsi
-MOD_SUB_DIRS += scsi
+else
+  ifeq ($(CONFIG_SCSI),m)
+  MOD_SUB_DIRS += scsi
+  endif
 endif
 
-ifdef CONFIG_SOUND
+ifeq ($(CONFIG_SOUND),y)
 SUB_DIRS += sound
-MOD_SUB_DIRS += sound
+else
+  ifeq ($(CONFIG_SOUND),m)
+  MOD_SUB_DIRS += sound
+  endif
 endif
 
 include $(TOPDIR)/Rules.make

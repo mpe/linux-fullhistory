@@ -516,7 +516,7 @@ asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	shmd->vm_end = addr + shp->shm_npages * PAGE_SIZE;
 	shmd->vm_mm = current->mm;
 	shmd->vm_page_prot = (shmflg & SHM_RDONLY) ? PAGE_READONLY : PAGE_SHARED;
-	shmd->vm_flags = VM_SHM | VM_MAYSHARE | VM_SHARED
+	shmd->vm_flags = VM_SHM | VM_MAYSHARE | VM_SHARED | VM_DONTSWAP
 			 | VM_MAYREAD | VM_MAYEXEC | VM_READ | VM_EXEC
 			 | ((shmflg & SHM_RDONLY) ? 0 : VM_MAYWRITE | VM_WRITE);
 	shmd->vm_next_share = shmd->vm_prev_share = NULL;
@@ -683,7 +683,7 @@ int shm_swap (int prio, unsigned long limit)
 	unsigned long id, idx;
 	int loop = 0, invalid = 0;
 	int counter;
-
+	
 	counter = shm_rss >> prio;
 	if (!counter || !(swap_nr = get_swap_page()))
 		return 0;

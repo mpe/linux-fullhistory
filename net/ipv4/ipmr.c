@@ -374,6 +374,7 @@ int ipmr_mfc_modify(int action, struct mfcctl *mfc)
 			sti();
 			return 0;
 		}
+		sti();
 		return -ENOENT;
 	}
 	if(cache)
@@ -398,16 +399,21 @@ int ipmr_mfc_modify(int action, struct mfcctl *mfc)
 	/*
 	 *	Unsolicited update - thats ok add anyway.
 	 */
-	sti();
-	cache=ipmr_cache_alloc(GFP_KERNEL);
+	 
+	
+	cache=ipmr_cache_alloc(GFP_ATOMIC);
 	if(cache==NULL)
+	{
+		sti();
 		return -ENOMEM;
+	}
 	cache->mfc_flags=MFC_RESOLVED;
 	cache->mfc_origin=mfc->mfcc_origin.s_addr;
 	cache->mfc_mcastgrp=mfc->mfcc_mcastgrp.s_addr;
 	cache->mfc_parent=mfc->mfcc_parent;
 	memcpy(cache->mfc_ttls, mfc->mfcc_ttls,sizeof(cache->mfc_ttls));
 	ipmr_cache_insert(cache);
+	sti();
 	return 0;
 }
  

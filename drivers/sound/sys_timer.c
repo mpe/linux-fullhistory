@@ -45,29 +45,19 @@ static unsigned long prev_event_time;
 
 static void     poll_def_tmr (unsigned long dummy);
 
-DEFINE_TIMER (def_tmr, poll_def_tmr);
+
+static struct timer_list def_tmr =
+{NULL, NULL, 0, 0, poll_def_tmr};
 
 static unsigned long
 tmr2ticks (int tmr_value)
 {
   /*
-     *    Convert system timer ticks (HZ) to MIDI ticks
+   *    Convert system timer ticks (HZ) to MIDI ticks
+   *    (divide # of MIDI ticks/minute by # of system ticks/minute).
    */
 
-  unsigned long   tmp;
-  unsigned long   scale;
-
-  tmp = (tmr_value * 1000) / HZ;	/* Convert to msecs */
-
-  if (curr_tempo == 0 || curr_timebase == 0)	/* Error? */
-    scale = 1;
-  else
-    scale = (60 * 1000) / (curr_tempo * curr_timebase);		/* msecs per MIDI tick */
-
-  if (scale == 0)		/* Error? */
-    scale = 1;
-
-  return (tmp + (scale >> 1)) / scale;
+  return ((tmr_value * curr_tempo * curr_timebase) + (30 * HZ)) / (60 * HZ);
 }
 
 static void
@@ -76,7 +66,11 @@ poll_def_tmr (unsigned long dummy)
 
   if (opened)
     {
-      ACTIVATE_TIMER (def_tmr, poll_def_tmr, 1);
+
+      {
+	def_tmr.expires = (1) + jiffies;
+	add_timer (&def_tmr);
+      };
 
       if (tmr_running)
 	{
@@ -97,28 +91,33 @@ tmr_reset (void)
 {
   unsigned long   flags;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
   tmr_offs = 0;
   ticks_offs = 0;
   tmr_ctr = 0;
   next_event_time = 0xffffffff;
   prev_event_time = 0;
   curr_ticks = 0;
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 }
 
 static int
 def_tmr_open (int dev, int mode)
 {
   if (opened)
-    return RET_ERROR (EBUSY);
+    return -EBUSY;
 
   tmr_reset ();
   curr_tempo = 60;
   curr_timebase = HZ;
   opened = 1;
 
-  ACTIVATE_TIMER (def_tmr, poll_def_tmr, 1);
+
+  {
+    def_tmr.expires = (1) + jiffies;
+    add_timer (&def_tmr);
+  };
 
   return 0;
 }
@@ -127,6 +126,7 @@ static void
 def_tmr_close (int dev)
 {
   opened = tmr_running = 0;
+  del_timer (&def_tmr);;
 }
 
 static int
@@ -172,8 +172,8 @@ def_tmr_event (int dev, unsigned char *event)
 	{
 	  if (parm < 8)
 	    parm = 8;
-	  if (parm > 250)
-	    parm = 250;
+	  if (parm > 360)
+	    parm = 360;
 	  tmr_offs = tmr_ctr;
 	  ticks_offs += tmr2ticks (tmr_ctr);
 	  tmr_ctr = 0;
@@ -202,12 +202,12 @@ def_tmr_get_time (int dev)
 
 static int
 def_tmr_ioctl (int dev,
-	       unsigned int cmd, unsigned int arg)
+	       unsigned int cmd, ioctl_arg arg)
 {
   switch (cmd)
     {
     case SNDCTL_TMR_SOURCE:
-      return IOCTL_OUT (arg, TMR_INTERNAL);
+      return snd_ioctl_return ((int *) arg, TMR_INTERNAL);
       break;
 
     case SNDCTL_TMR_START:
@@ -228,7 +228,7 @@ def_tmr_ioctl (int dev,
 
     case SNDCTL_TMR_TIMEBASE:
       {
-	int             val = IOCTL_IN (arg);
+	int             val = get_fs_long ((long *) arg);
 
 	if (val)
 	  {
@@ -239,13 +239,13 @@ def_tmr_ioctl (int dev,
 	    curr_timebase = val;
 	  }
 
-	return IOCTL_OUT (arg, curr_timebase);
+	return snd_ioctl_return ((int *) arg, curr_timebase);
       }
       break;
 
     case SNDCTL_TMR_TEMPO:
       {
-	int             val = IOCTL_IN (arg);
+	int             val = get_fs_long ((long *) arg);
 
 	if (val)
 	  {
@@ -259,15 +259,15 @@ def_tmr_ioctl (int dev,
 	    curr_tempo = val;
 	  }
 
-	return IOCTL_OUT (arg, curr_tempo);
+	return snd_ioctl_return ((int *) arg, curr_tempo);
       }
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
-      if (IOCTL_IN (arg) != 0)	/* Can't change */
-	return RET_ERROR (EINVAL);
+      if (get_fs_long ((long *) arg) != 0)	/* Can't change */
+	return -EINVAL;
 
-      return IOCTL_OUT (arg, ((curr_tempo * curr_timebase) + 30) / 60);
+      return snd_ioctl_return ((int *) arg, ((curr_tempo * curr_timebase) + 30) / 60);
       break;
 
     case SNDCTL_TMR_METRONOME:
@@ -277,7 +277,7 @@ def_tmr_ioctl (int dev,
     default:;
     }
 
-  return RET_ERROR (EINVAL);
+  return -EINVAL;
 }
 
 static void
@@ -295,7 +295,7 @@ def_tmr_arm (int dev, long time)
 
 struct sound_timer_operations default_sound_timer =
 {
-  {"System Timer", 0},
+  {"System clock", 0},
   0,				/* Priority */
   0,				/* Local device link */
   def_tmr_open,

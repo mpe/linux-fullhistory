@@ -35,9 +35,9 @@
 int
 snd_find_driver (int type)
 {
-  int             i, n = sizeof (sound_drivers) / sizeof (struct driver_info);
+  int             i, n = num_sound_drivers;
 
-  for (i = 0; i < (n - 1); i++)
+  for (i = 0; i < n; i++)
     if (sound_drivers[i].card_type == type)
       return i;
 
@@ -49,69 +49,118 @@ snd_find_driver (int type)
 long
 sndtable_init (long mem_start)
 {
-  int             i, n = sizeof (snd_installed_cards) / sizeof (struct card_info);
+  int             i, n = num_sound_cards;
   int             drv;
 
   printk ("Sound initialization started\n");
 
-  for (i = 0; i < (n - 1); i++)
+/*
+ * Check the number of cards actually defined in the table
+ */
+
+  for (i = 0; i < n && snd_installed_cards[i].card_type; i++)
+    num_sound_cards = i + 1;
+
+  for (i = 0; i < n && snd_installed_cards[i].card_type; i++)
     if (snd_installed_cards[i].enabled)
-      if ((drv = snd_find_driver (snd_installed_cards[i].card_type)) == -1)
-	snd_installed_cards[i].enabled = 0;	/*
+      {
+	snd_installed_cards[i].for_driver_use = NULL;
+
+	if ((drv = snd_find_driver (snd_installed_cards[i].card_type)) == -1)
+	  snd_installed_cards[i].enabled = 0;	/*
 						 * Mark as not detected
 						 */
-      else if (sound_drivers[drv].probe (&snd_installed_cards[i].config))
-	{
+	else if (sound_drivers[drv].probe (&snd_installed_cards[i].config))
+	  {
 #ifndef SHORT_BANNERS
-	  printk ("snd%d",
-		  snd_installed_cards[i].card_type);
+	    printk ("snd%d",
+		    snd_installed_cards[i].card_type);
 #endif
 
-	  mem_start = sound_drivers[drv].attach (mem_start, &snd_installed_cards[i].config);
+	    mem_start = sound_drivers[drv].attach (mem_start, &snd_installed_cards[i].config);
 #ifndef SHORT_BANNERS
-	  printk (" at 0x%x irq %d drq %d\n",
-		  snd_installed_cards[i].config.io_base,
-		  snd_installed_cards[i].config.irq,
-		  snd_installed_cards[i].config.dma);
+	    printk (" at 0x%x irq %d drq %d",
+		    snd_installed_cards[i].config.io_base,
+		    snd_installed_cards[i].config.irq,
+		    snd_installed_cards[i].config.dma);
+	    if (snd_installed_cards[i].config.dma2 != -1)
+	      printk (",%d\n",
+		      snd_installed_cards[i].config.dma2);
+	    else
+	      printk ("\n");
 #endif
-	}
-      else
-	snd_installed_cards[i].enabled = 0;	/*
+	  }
+	else
+	  snd_installed_cards[i].enabled = 0;	/*
 						 * Mark as not detected
 						 */
+      }
+
   printk ("Sound initialization complete\n");
   return mem_start;
+}
+
+void
+sound_unload_drivers (void)
+{
+  int             i, n = num_sound_cards;
+  int             drv;
+
+  printk ("Sound unload started\n");
+
+  for (i = 0; i < n && snd_installed_cards[i].card_type; i++)
+    if (snd_installed_cards[i].enabled)
+      if ((drv = snd_find_driver (snd_installed_cards[i].card_type)) != -1)
+	if (sound_drivers[drv].unload)
+	  sound_drivers[drv].unload (&snd_installed_cards[i].config);
+
+  printk ("Sound unload complete\n");
 }
 
 int
 sndtable_probe (int unit, struct address_info *hw_config)
 {
-  int             i, n = sizeof (snd_installed_cards) / sizeof (struct card_info);
+  int             i, sel = -1, n = num_sound_cards;
 
   if (!unit)
     return TRUE;
 
-  for (i = 0; i < (n - 1); i++)
+  for (i = 0; i < n && sel == -1 && snd_installed_cards[i].card_type; i++)
     if (snd_installed_cards[i].enabled)
       if (snd_installed_cards[i].card_type == unit)
-	{
-	  int             drv;
+	sel = i;
 
-	  snd_installed_cards[i].config.io_base = hw_config->io_base;
-	  snd_installed_cards[i].config.irq = hw_config->irq;
-	  snd_installed_cards[i].config.dma = hw_config->dma;
-	  if ((drv = snd_find_driver (snd_installed_cards[i].card_type)) == -1)
-	    snd_installed_cards[i].enabled = 0;		/*
-							 * Mark as not
-							 * detected
-							 */
-	  else if (sound_drivers[drv].probe (hw_config))
-	    return 1;
-	  snd_installed_cards[i].enabled = 0;	/*
+  if (sel == -1 && num_sound_cards < max_sound_cards)
+    {
+      int             i;
+
+      i = sel = (num_sound_cards++);
+
+      snd_installed_cards[sel].card_type = unit;
+      snd_installed_cards[sel].enabled = 1;
+    }
+
+  if (sel != -1)
+    {
+      int             drv;
+
+      snd_installed_cards[sel].for_driver_use = NULL;
+      snd_installed_cards[sel].config.io_base = hw_config->io_base;
+      snd_installed_cards[sel].config.irq = hw_config->irq;
+      snd_installed_cards[sel].config.dma = hw_config->dma;
+      snd_installed_cards[sel].config.dma2 = hw_config->dma2;
+      if ((drv = snd_find_driver (snd_installed_cards[sel].card_type)) == -1)
+	{
+	  snd_installed_cards[sel].enabled = 0;
+	}
+      else if (sound_drivers[drv].probe (hw_config))
+	return TRUE;
+
+      snd_installed_cards[sel].enabled = 0;	/*
 						 * Mark as not detected
 						 */
-	  return 0;
-	}
+      return FALSE;
+    }
 
   return FALSE;
 }
@@ -119,16 +168,18 @@ sndtable_probe (int unit, struct address_info *hw_config)
 int
 sndtable_init_card (int unit, struct address_info *hw_config)
 {
-  int             i, n = sizeof (snd_installed_cards) / sizeof (struct card_info);
+  int             i, n = num_sound_cards;
+
+  DDB (printk ("sndtable_init_card(%d) entered\n", unit));
 
   if (!unit)
     {
       if (sndtable_init (0) != 0)
-	panic ("snd: Invalid memory allocation\n");
+	panic ("sound: Invalid memory allocation\n");
       return TRUE;
     }
 
-  for (i = 0; i < (n - 1); i++)
+  for (i = 0; i < n && snd_installed_cards[i].card_type; i++)
     if (snd_installed_cards[i].card_type == unit)
       {
 	int             drv;
@@ -136,16 +187,36 @@ sndtable_init_card (int unit, struct address_info *hw_config)
 	snd_installed_cards[i].config.io_base = hw_config->io_base;
 	snd_installed_cards[i].config.irq = hw_config->irq;
 	snd_installed_cards[i].config.dma = hw_config->dma;
+	snd_installed_cards[i].config.dma2 = hw_config->dma2;
 
 	if ((drv = snd_find_driver (snd_installed_cards[i].card_type)) == -1)
 	  snd_installed_cards[i].enabled = 0;	/*
 						 * Mark as not detected
 						 */
-	else if (sound_drivers[drv].attach (0, hw_config) != 0)
-	  panic ("snd#: Invalid memory allocation\n");
+	else
+	  {
+
+	    DDB (printk ("Located card - calling attach routine\n"));
+	    printk ("snd%d", unit);
+	    if (sound_drivers[drv].attach (0, hw_config) != 0)
+	      panic ("sound: Invalid memory allocation\n");
+
+	    DDB (printk ("attach routine finished\n"));
+	    printk (" at 0x%x irq %d drq %d",
+		    snd_installed_cards[i].config.io_base,
+		    snd_installed_cards[i].config.irq,
+		    snd_installed_cards[i].config.dma);
+	    if (snd_installed_cards[i].config.dma2 != -1)
+	      printk (",%d\n",
+		      snd_installed_cards[i].config.dma2);
+	    else
+	      printk ("\n");
+	  }
 	return TRUE;
       }
 
+  printk ("sndtable_init_card: No card defined with type=%d, num cards: %d\n",
+	  unit, num_sound_cards);
   return FALSE;
 }
 
@@ -155,17 +226,38 @@ sndtable_get_cardcount (void)
   return num_audiodevs + num_mixers + num_synths + num_midis;
 }
 
-#ifdef linux
+int
+sndtable_identify_card (char *name)
+{
+  int             i, n = num_sound_drivers;
+
+  if (name == NULL)
+    return 0;
+
+  for (i = 0; i < n; i++)
+    if (sound_drivers[i].driver_id != NULL)
+      {
+	char           *id = sound_drivers[i].driver_id;
+	int             j;
+
+	for (j = 0; j < 80 && name[j] == id[j]; j++)
+	  if (id[j] == 0 && name[j] == 0)	/* Match */
+	    return sound_drivers[i].card_type;
+      }
+
+  return 0;
+}
+
 void
 sound_setup (char *str, int *ints)
 {
-  int             i, n = sizeof (snd_installed_cards) / sizeof (struct card_info);
+  int             i, n = num_sound_cards;
 
   /*
      * First disable all drivers
    */
 
-  for (i = 0; i < n; i++)
+  for (i = 0; i < n && snd_installed_cards[i].card_type; i++)
     snd_installed_cards[i].enabled = 0;
 
   if (ints[0] == 0 || ints[1] == 0)
@@ -211,48 +303,20 @@ sound_setup (char *str, int *ints)
 	  snd_installed_cards[ptr].config.io_base = ioaddr;
 	  snd_installed_cards[ptr].config.irq = irq;
 	  snd_installed_cards[ptr].config.dma = dma;
+	  snd_installed_cards[ptr].config.dma2 = -1;
 	}
     }
 }
 
-#else
-void
-sound_chconf (int card_type, int ioaddr, int irq, int dma)
-{
-  int             i, n = sizeof (snd_installed_cards) / sizeof (struct card_info);
-
-  int             ptr, j;
-
-  ptr = -1;
-  for (j = 0; j < n && ptr == -1; j++)
-    if (snd_installed_cards[j].card_type == card_type &&
-	!snd_installed_cards[j].enabled)	/*
-						 * Not already found
-						 */
-      ptr = j;
-
-  if (ptr != -1)
-    {
-      snd_installed_cards[ptr].enabled = 1;
-      if (ioaddr)
-	snd_installed_cards[ptr].config.io_base = ioaddr;
-      if (irq)
-	snd_installed_cards[ptr].config.irq = irq;
-      if (dma)
-	snd_installed_cards[ptr].config.dma = dma;
-    }
-}
-
-#endif
 
 struct address_info *
 sound_getconf (int card_type)
 {
   int             j, ptr;
-  int             n = sizeof (snd_installed_cards) / sizeof (struct card_info);
+  int             n = num_sound_cards;
 
   ptr = -1;
-  for (j = 0; j < n && ptr == -1; j++)
+  for (j = 0; j < n && ptr == -1 && snd_installed_cards[j].card_type; j++)
     if (snd_installed_cards[j].card_type == card_type)
       ptr = j;
 

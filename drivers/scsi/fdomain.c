@@ -1,10 +1,10 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Sun Sep 17 00:23:26 1995 by r.faith@ieee.org
+ * Revised: Thu Oct 12 15:59:37 1995 by r.faith@ieee.org
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994, 1995 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.36 1995/09/17 04:23:42 root Exp $
+ * $Id: fdomain.c,v 5.39 1995/10/12 20:31:47 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -209,14 +209,14 @@
 #include <linux/proc_fs.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
-#include<linux/stat.h>
+#include <linux/stat.h>
 
 struct proc_dir_entry proc_scsi_fdomain = {
     PROC_SCSI_FDOMAIN, 7, "fdomain",
     S_IFDIR | S_IRUGO | S_IXUGO, 2
 };
   
-#define VERSION          "$Revision: 5.36 $"
+#define VERSION          "$Revision: 5.39 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -404,6 +404,7 @@ struct signature {
    { "Future Domain Corp. V2.0108/18/93",                   5, 33,  3,  5, 0 },
    { "FUTURE DOMAIN CORP.  V3.5008/18/93",                  5, 34,  3,  5, 0 },
    { "FUTURE DOMAIN 18c30/18c50/1800 (C) 1994 V3.5",        5, 44,  3,  5, 0 },
+   { "FUTURE DOMAIN CORP.  V3.6008/18/93",                  5, 34,  3,  6, 0 },
    { "FUTURE DOMAIN CORP.  V3.6108/18/93",                  5, 34,  3,  6, 0 },
    { "FUTURE DOMAIN TMC-18XX",                              5, 22, -1, -1, 0 },
 
@@ -468,9 +469,9 @@ void fdomain_setup( char *str, int *ints )
       printk( "fdomain: bad LILO parameters?\n" );
    }
 
-   port_base       = ints[0] >= 1 ? ints[1]        : 0;
-   interrupt_level = ints[0] >= 2 ? ints[2]        : 0;
-   adapter_mask    = ints[0] >= 3 ? (1 << ints[3]) : 0;
+   port_base       = ints[0] >= 1 ? ints[1] : 0;
+   interrupt_level = ints[0] >= 2 ? ints[2] : 0;
+   this_id         = ints[0] >= 3 ? ints[3] : 0;
    
    bios_major = bios_minor = -1; /* Use geometry for BIOS version >= 3.4 */
 }
@@ -953,7 +954,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
    }
 
    if (this_id) {
-      tpnt->this_id = (this_id & 0x7);
+      tpnt->this_id = (this_id & 0x07);
       adapter_mask  = (1 << tpnt->this_id);
    } else {
       if ((bios_major == 3 && bios_minor >= 2) || bios_major < 0) {
@@ -1077,7 +1078,6 @@ const char *fdomain_16x0_info( struct Scsi_Host *ignore )
    return buffer;
 }
 
-#if 0
 				/* First pass at /proc information routine. */
 /*
  * inout : decides on the direction of the dataflow and the meaning of the 
@@ -1092,17 +1092,30 @@ const char *fdomain_16x0_info( struct Scsi_Host *ignore )
 int fdomain_16x0_proc_info( char *buffer, char **start, off_t offset,
 			    int length, int hostno, int inout )
 {
-   int        len   = 0;
    const char *info = fdomain_16x0_info( NULL );
-   
-   if (inout) return -ENOSYS;
+   int        len;
+   int        pos;
+   int        begin;
 
+   if (inout) return(-ENOSYS);
+    
+   begin = 0;
    strcpy( buffer, info );
-   len += strlen( info );
+   strcat( buffer, "\n" );
 
-   return( len );
+   pos = len = strlen( buffer );
+
+   if(pos < offset) {
+      len = 0;
+      begin = pos;
+   }
+    
+   *start = buffer + (offset - begin);   /* Start of wanted data */
+   len -= (offset - begin);
+   if(len > length) len = length;
+   
+   return(len);
 }
-#endif
    
 #if 0
 static int fdomain_arbitrate( void )

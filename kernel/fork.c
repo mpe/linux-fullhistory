@@ -125,6 +125,7 @@ static int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	tsk->mm->count = 1;
 	tsk->min_flt = tsk->maj_flt = 0;
 	tsk->cmin_flt = tsk->cmaj_flt = 0;
+	tsk->nswap = tsk->cnswap = 0;
 	if (new_page_tables(tsk))
 		return -1;
 	if (dup_mmap(tsk->mm)) {

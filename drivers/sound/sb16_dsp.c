@@ -41,27 +41,17 @@
 #if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_SB16) && !defined(EXCLUDE_SB) && !defined(EXCLUDE_AUDIO) && !defined(EXCLUDE_SBPRO)
 
 extern int      sbc_base;
+extern sound_os_info *sb_osp;
 
-static int      sb16_dsp_ok = 0;	/*
-
-
-					   * *  * * Set to 1 after successful *
-					   * * initialization   */
+static int      sb16_dsp_ok = 0;
 static int      dsp_16bit = 0;
 static int      dsp_stereo = 0;
-static int      dsp_current_speed = 8000;	/*
-
-
-						 * *  * * DSP_DEFAULT_SPEED;  */
+static int      dsp_current_speed = 8000;
 static int      dsp_busy = 0;
 static int      dma16, dma8;
 static unsigned long dsp_count = 0;
 
-static int      irq_mode = IMODE_NONE;	/*
-
-
-					 * *  * * IMODE_INPUT, IMODE_OUTPUT
-					 * or * * IMODE_NONE   */
+static int      irq_mode = IMODE_NONE;
 static int      my_dev = 0;
 
 static volatile int intr_active = 0;
@@ -70,11 +60,12 @@ static int      sb16_dsp_open (int dev, int mode);
 static void     sb16_dsp_close (int dev);
 static void     sb16_dsp_output_block (int dev, unsigned long buf, int count, int intrflag, int dma_restart);
 static void     sb16_dsp_start_input (int dev, unsigned long buf, int count, int intrflag, int dma_restart);
-static int      sb16_dsp_ioctl (int dev, unsigned int cmd, unsigned int arg, int local);
+static int      sb16_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local);
 static int      sb16_dsp_prepare_for_input (int dev, int bsize, int bcount);
 static int      sb16_dsp_prepare_for_output (int dev, int bsize, int bcount);
 static void     sb16_dsp_reset (int dev);
 static void     sb16_dsp_halt (int dev);
+static void     sb16_dsp_trigger (int dev, int bits);
 static int      dsp_set_speed (int);
 static int      dsp_set_stereo (int);
 static void     dsp_cleanup (void);
@@ -96,7 +87,10 @@ static struct audio_operations sb16_dsp_operations =
   sb16_dsp_reset,
   sb16_dsp_halt,
   NULL,
-  NULL
+  NULL,
+  NULL,
+  NULL,
+  sb16_dsp_trigger
 };
 
 static int
@@ -104,7 +98,7 @@ sb_dsp_command01 (unsigned char val)
 {
   int             i = 1 << 16;
 
-  while (--i & (!INB (DSP_STATUS) & 0x80));
+  while (--i & (!inb (DSP_STATUS) & 0x80));
   if (!i)
     printk ("SB16 sb_dsp_command01 Timeout\n");
   return sb_dsp_command (val);
@@ -156,55 +150,55 @@ dsp_set_bits (int arg)
 }
 
 static int
-sb16_dsp_ioctl (int dev, unsigned int cmd, unsigned int arg, int local)
+sb16_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 {
   switch (cmd)
     {
     case SOUND_PCM_WRITE_RATE:
       if (local)
-	return dsp_set_speed (arg);
-      return IOCTL_OUT (arg, dsp_set_speed (IOCTL_IN (arg)));
+	return dsp_set_speed ((int) arg);
+      return snd_ioctl_return ((int *) arg, dsp_set_speed (get_fs_long ((long *) arg)));
 
     case SOUND_PCM_READ_RATE:
       if (local)
 	return dsp_current_speed;
-      return IOCTL_OUT (arg, dsp_current_speed);
+      return snd_ioctl_return ((int *) arg, dsp_current_speed);
 
     case SNDCTL_DSP_STEREO:
       if (local)
-	return dsp_set_stereo (arg);
-      return IOCTL_OUT (arg, dsp_set_stereo (IOCTL_IN (arg)));
+	return dsp_set_stereo ((int) arg);
+      return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg)));
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
-	return dsp_set_stereo (arg - 1) + 1;
-      return IOCTL_OUT (arg, dsp_set_stereo (IOCTL_IN (arg) - 1) + 1);
+	return dsp_set_stereo ((int) arg - 1) + 1;
+      return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg) - 1) + 1);
 
     case SOUND_PCM_READ_CHANNELS:
       if (local)
 	return dsp_stereo + 1;
-      return IOCTL_OUT (arg, dsp_stereo + 1);
+      return snd_ioctl_return ((int *) arg, dsp_stereo + 1);
 
     case SNDCTL_DSP_SETFMT:
       if (local)
-	return dsp_set_bits (arg);
-      return IOCTL_OUT (arg, dsp_set_bits (IOCTL_IN (arg)));
+	return dsp_set_bits ((int) arg);
+      return snd_ioctl_return ((int *) arg, dsp_set_bits (get_fs_long ((long *) arg)));
 
     case SOUND_PCM_READ_BITS:
       if (local)
 	return dsp_16bit ? 16 : 8;
-      return IOCTL_OUT (arg, dsp_16bit ? 16 : 8);
+      return snd_ioctl_return ((int *) arg, dsp_16bit ? 16 : 8);
 
     case SOUND_PCM_WRITE_FILTER:	/*
 					 * NOT YET IMPLEMENTED
 					 */
-      if (IOCTL_IN (arg) > 1)
-	return IOCTL_OUT (arg, RET_ERROR (EINVAL));
+      if (get_fs_long ((long *) arg) > 1)
+	return snd_ioctl_return ((int *) arg, -EINVAL);
     default:
-      return RET_ERROR (EINVAL);
+      return -EINVAL;
     }
 
-  return RET_ERROR (EINVAL);
+  return -EINVAL;
 }
 
 static int
@@ -216,11 +210,11 @@ sb16_dsp_open (int dev, int mode)
   if (!sb16_dsp_ok)
     {
       printk ("SB16 Error: SoundBlaster board not installed\n");
-      return RET_ERROR (ENXIO);
+      return -ENXIO;
     }
 
   if (intr_active)
-    return RET_ERROR (EBUSY);
+    return -EBUSY;
 
   retval = sb_get_irq ();
   if (retval < 0)
@@ -228,20 +222,12 @@ sb16_dsp_open (int dev, int mode)
 
   sb_reset_dsp ();
 
-  if (ALLOC_DMA_CHN (dma8, "SB16 (8bit)"))
-    {
-      printk ("SB16: Unable to grab DMA%d\n", dma8);
-      sb_free_irq ();
-      return RET_ERROR (EBUSY);
-    }
-
   if (dma16 != dma8)
-    if (ALLOC_DMA_CHN (dma16, "SB16 (16bit)"))
+    if (sound_open_dma (dma16, "SB16 (16bit)"))
       {
 	printk ("SB16: Unable to grab DMA%d\n", dma16);
 	sb_free_irq ();
-	RELEASE_DMA_CHN (dma8);
-	return RET_ERROR (EBUSY);
+	return -EBUSY;
       }
 
   irq_mode = IMODE_NONE;
@@ -259,15 +245,17 @@ sb16_dsp_close (int dev)
   sb_dsp_command01 (0xd9);
   sb_dsp_command01 (0xd5);
 
-  DISABLE_INTR (flags);
-  RELEASE_DMA_CHN (dma8);
+  save_flags (flags);
+  cli ();
+
+  audio_devs[dev]->dmachan1 = dma8;
 
   if (dma16 != dma8)
-    RELEASE_DMA_CHN (dma16);
+    sound_close_dma (dma16);
   sb_free_irq ();
   dsp_cleanup ();
   dsp_busy = 0;
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 }
 
 static void
@@ -286,12 +274,13 @@ sb16_dsp_output_block (int dev, unsigned long buf, int count, int intrflag, int 
     {
       int             pos, chan = audio_devs[dev]->dmachan;
 
-      DISABLE_INTR (flags);
+      save_flags (flags);
+      cli ();
       clear_dma_ff (chan);
       disable_dma (chan);
       pos = get_dma_residue (chan);
       enable_dma (chan);
-      RESTORE_INTR (flags);
+      restore_flags (flags);
       printk ("dmapos=%d %x\n", pos, pos);
     }
 #endif
@@ -305,7 +294,8 @@ sb16_dsp_output_block (int dev, unsigned long buf, int count, int intrflag, int 
 				 * Auto mode on. No need to react
 				 */
     }
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   if (dma_restart)
     {
@@ -316,15 +306,15 @@ sb16_dsp_output_block (int dev, unsigned long buf, int count, int intrflag, int 
   sb_dsp_command ((unsigned char) ((dsp_current_speed >> 8) & 0xff));
   sb_dsp_command ((unsigned char) (dsp_current_speed & 0xff));
   sb_dsp_command ((unsigned char) (dsp_16bit ? 0xb6 : 0xc6));
+  dsp_count = cnt;
   sb_dsp_command ((unsigned char) ((dsp_stereo ? 0x20 : 0) +
 				   (dsp_16bit ? 0x10 : 0)));
   sb_dsp_command01 ((unsigned char) (cnt & 0xff));
   sb_dsp_command ((unsigned char) (cnt >> 8));
 
-  dsp_count = cnt;
   irq_mode = IMODE_OUTPUT;
   intr_active = 1;
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 }
 
 static void
@@ -343,12 +333,13 @@ sb16_dsp_start_input (int dev, unsigned long buf, int count, int intrflag, int d
     {
       int             pos, chan = audio_devs[dev]->dmachan;
 
-      DISABLE_INTR (flags);
+      save_flags (flags);
+      cli ();
       clear_dma_ff (chan);
       disable_dma (chan);
       pos = get_dma_residue (chan);
       enable_dma (chan);
-      RESTORE_INTR (flags);
+      restore_flags (flags);
       printk ("dmapos=%d %x\n", pos, pos);
     }
 #endif
@@ -362,7 +353,8 @@ sb16_dsp_start_input (int dev, unsigned long buf, int count, int intrflag, int d
 				 * Auto mode on. No need to react
 				 */
     }
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   if (dma_restart)
     {
@@ -374,21 +366,21 @@ sb16_dsp_start_input (int dev, unsigned long buf, int count, int intrflag, int d
   sb_dsp_command ((unsigned char) ((dsp_current_speed >> 8) & 0xff));
   sb_dsp_command ((unsigned char) (dsp_current_speed & 0xff));
   sb_dsp_command ((unsigned char) (dsp_16bit ? 0xbe : 0xce));
+  dsp_count = cnt;
   sb_dsp_command ((unsigned char) ((dsp_stereo ? 0x20 : 0) +
 				   (dsp_16bit ? 0x10 : 0)));
   sb_dsp_command01 ((unsigned char) (cnt & 0xff));
   sb_dsp_command ((unsigned char) (cnt >> 8));
 
-  dsp_count = cnt;
   irq_mode = IMODE_INPUT;
   intr_active = 1;
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 }
 
 static int
 sb16_dsp_prepare_for_input (int dev, int bsize, int bcount)
 {
-  audio_devs[my_dev]->dmachan = dsp_16bit ? dma16 : dma8;
+  audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
   dsp_count = 0;
   dsp_cleanup ();
   return 0;
@@ -397,10 +389,19 @@ sb16_dsp_prepare_for_input (int dev, int bsize, int bcount)
 static int
 sb16_dsp_prepare_for_output (int dev, int bsize, int bcount)
 {
-  audio_devs[my_dev]->dmachan = dsp_16bit ? dma16 : dma8;
+  audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
   dsp_count = 0;
   dsp_cleanup ();
   return 0;
+}
+
+static void
+sb16_dsp_trigger (int dev, int bits)
+{
+  if (!bits)
+    sb_dsp_command (0xd0);	/* Halt DMA */
+  else if (bits & irq_mode)
+    sb_dsp_command (0xd4);	/* Continue DMA */
 }
 
 static void
@@ -415,12 +416,13 @@ sb16_dsp_reset (int dev)
 {
   unsigned long   flags;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   sb_reset_dsp ();
   dsp_cleanup ();
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 }
 
 static void
@@ -480,9 +482,19 @@ sb16_dsp_init (long mem_start, struct address_info *hw_config)
   if (num_audiodevs < MAX_AUDIO_DEV)
     {
       audio_devs[my_dev = num_audiodevs++] = &sb16_dsp_operations;
-      audio_devs[my_dev]->dmachan = hw_config->dma;
-      audio_devs[my_dev]->buffcount = 1;
+      audio_devs[my_dev]->dmachan1 = dma8;
       audio_devs[my_dev]->buffsize = DSP_BUFFSIZE;
+
+      if (sound_alloc_dma (dma8, "SB16 (8bit)"))
+	{
+	  printk ("SB16: Unable to grab DMA%d\n", dma8);
+	}
+
+      if (dma16 != dma8)
+	if (sound_alloc_dma (dma16, "SB16 (16bit)"))
+	  {
+	    printk ("SB16: Unable to grab DMA%d\n", dma16);
+	  }
     }
   else
     printk ("SB: Too many DSP devices available\n");
@@ -538,11 +550,21 @@ sb16_dsp_detect (struct address_info *hw_config)
 }
 
 void
+unload_sb16 (struct address_info *hw_config)
+{
+
+  sound_free_dma (dma8);
+
+  if (dma16 != dma8)
+    sound_free_dma (dma16);
+}
+
+void
 sb16_dsp_interrupt (int unused)
 {
   int             data;
 
-  data = INB (DSP_DATA_AVL16);	/*
+  data = inb (DSP_DATA_AVL16);	/*
 				 * Interrupt acknowledge
 				 */
 

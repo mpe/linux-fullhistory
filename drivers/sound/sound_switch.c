@@ -56,9 +56,7 @@ static int      status_busy = 0;
 static int
 put_status (char *s)
 {
-  int             l;
-
-  l = strnlen(s, 256);
+  int             l = strnlen (s, 256);
 
   if (status_len + l >= 4000)
     return 0;
@@ -153,7 +151,7 @@ init_status (void)
 
   for (i = 0; i < (num_sound_cards - 1); i++)
     {
-      int             drv;
+      int             drv, tmp;
 
       if (!snd_installed_cards[i].enabled)
 	if (!put_status ("("))
@@ -172,14 +170,29 @@ init_status (void)
 	return;
       if (!put_status_int (snd_installed_cards[i].config.io_base, 16))
 	return;
+
       if (!put_status (" irq "))
 	return;
-      if (!put_status_int (snd_installed_cards[i].config.irq, 10))
+      tmp = snd_installed_cards[i].config.irq;
+      if (tmp < 0)
+	tmp = -tmp;
+      if (!put_status_int (tmp, 10))
 	return;
-      if (!put_status (" drq "))
-	return;
-      if (!put_status_int (snd_installed_cards[i].config.dma, 10))
-	return;
+
+      if (snd_installed_cards[i].config.dma != -1)
+	{
+	  if (!put_status (" drq "))
+	    return;
+	  if (!put_status_int (snd_installed_cards[i].config.dma, 10))
+	    return;
+	  if (snd_installed_cards[i].config.dma2 != -1)
+	    {
+	      if (!put_status (","))
+		return;
+	      if (!put_status_int (snd_installed_cards[i].config.dma2, 10))
+		return;
+	    }
+	}
 
       if (!snd_installed_cards[i].enabled)
 	if (!put_status (")"))
@@ -204,6 +217,11 @@ init_status (void)
 	return;
       if (!put_status (audio_devs[i]->name))
 	return;
+
+      if (audio_devs[i]->flags & DMA_DUPLEX)
+	if (!put_status (" (DUPLEX)"))
+	  return;
+
       if (!put_status ("\n"))
 	return;
     }
@@ -296,7 +314,7 @@ read_status (snd_rw_buf * buf, int count)
   if (l <= 0)
     return 0;
 
-  COPY_TO_USER (buf, 0, &status_buf[status_ptr], l);
+  memcpy_tofs (&((buf)[0]), (&status_buf[status_ptr]), (l));
   status_ptr += l;
 
   return l;
@@ -333,11 +351,11 @@ sound_read_sw (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
       printk ("Sound: Undefined minor device %d\n", dev);
     }
 
-  return RET_ERROR (EPERM);
+  return -EPERM;
 }
 
 int
-sound_write_sw (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
+sound_write_sw (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
 {
 
   DEB (printk ("sound_write_sw(dev=%d, count=%d)\n", dev, count));
@@ -362,7 +380,7 @@ sound_write_sw (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 #endif
 
     default:
-      return RET_ERROR (EPERM);
+      return -EPERM;
     }
 
   return count;
@@ -378,17 +396,21 @@ sound_open_sw (int dev, struct fileinfo *file)
   if ((dev >= SND_NDEVS) || (dev < 0))
     {
       printk ("Invalid minor device %d\n", dev);
-      return RET_ERROR (ENXIO);
+      return -ENXIO;
     }
 
   switch (dev & 0x0f)
     {
     case SND_DEV_STATUS:
       if (status_busy)
-	return RET_ERROR (EBUSY);
+	return -EBUSY;
       status_busy = 1;
-      if ((status_buf = (char *) KERNEL_MALLOC (4000)) == NULL)
-	return RET_ERROR (EIO);
+      if ((status_buf = (char *) (
+				   {
+			       caddr_t x; x = kmalloc (4000, GFP_KERNEL); x;
+				   }
+	   )) == NULL)
+	return -EIO;
       status_len = status_ptr = 0;
       init_status ();
       break;
@@ -419,7 +441,7 @@ sound_open_sw (int dev, struct fileinfo *file)
 
     default:
       printk ("Invalid minor device %d\n", dev);
-      return RET_ERROR (ENXIO);
+      return -ENXIO;
     }
 
   sbc_devices[dev].usecount++;
@@ -438,7 +460,7 @@ sound_release_sw (int dev, struct fileinfo *file)
     {
     case SND_DEV_STATUS:
       if (status_buf)
-	KERNEL_FREE (status_buf);
+	kfree (status_buf);
       status_buf = NULL;
       status_busy = 0;
       break;
@@ -473,7 +495,7 @@ sound_release_sw (int dev, struct fileinfo *file)
 
 int
 sound_ioctl_sw (int dev, struct fileinfo *file,
-		unsigned int cmd, unsigned long arg)
+		unsigned int cmd, ioctl_arg arg)
 {
   DEB (printk ("sound_ioctl_sw(dev=%d, cmd=0x%x, arg=0x%x)\n", dev, cmd, arg));
 
@@ -490,7 +512,7 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
 	  case SND_DEV_AUDIO:
 	    mixdev = audio_devs[dev >> 4]->mixer_dev;
 	    if (mixdev < 0 || mixdev >= num_mixers)
-	      return RET_ERROR (ENXIO);
+	      return -ENXIO;
 	    return mixer_devs[mixdev]->ioctl (mixdev, cmd, arg);
 	    break;
 
@@ -505,12 +527,12 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
     case SND_DEV_CTL:
 
       if (!num_mixers)
-	return RET_ERROR (ENXIO);
+	return -ENXIO;
 
       dev = dev >> 4;
 
       if (dev >= num_mixers)
-	return RET_ERROR (ENXIO);
+	return -ENXIO;
 
       return mixer_devs[dev]->ioctl (dev, cmd, arg);
       break;
@@ -533,11 +555,11 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
 #endif
 
     default:
-      return RET_ERROR (EPERM);
+      return -EPERM;
       break;
     }
 
-  return RET_ERROR (EPERM);
+  return -EPERM;
 }
 
 #endif

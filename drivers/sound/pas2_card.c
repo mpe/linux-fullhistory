@@ -44,12 +44,14 @@ int             translat_code;
 static int      pas_intr_mask = 0;
 static int      pas_irq = 0;
 
+sound_os_info  *pas_osp;
+
 char            pas_model;
 static char    *pas_model_names[] =
 {"", "Pro AudioSpectrum+", "CDPC", "Pro AudioSpectrum 16", "Pro AudioSpectrum 16D"};
 
 /*
- * pas_read() and pas_write() are equivalents of INB() and OUTB()
+ * pas_read() and pas_write() are equivalents of inb and outb 
  */
 /*
  * These routines perform the I/O address translation required
@@ -62,13 +64,13 @@ extern void     mix_write (unsigned char data, int ioaddr);
 unsigned char
 pas_read (int ioaddr)
 {
-  return INB (ioaddr ^ translat_code);
+  return inb (ioaddr ^ translat_code);
 }
 
 void
 pas_write (unsigned char data, int ioaddr)
 {
-  OUTB (data, ioaddr ^ translat_code);
+  outb (data, ioaddr ^ translat_code);
 }
 
 void
@@ -80,7 +82,7 @@ pas2_msg (char *foo)
 /******************* Begin of the Interrupt Handler ********************/
 
 void
-pasintr (INT_HANDLER_PARMS (irq, dummy))
+pasintr (int irq, struct pt_regs *dummy)
 {
   int             status;
 
@@ -109,16 +111,9 @@ pasintr (INT_HANDLER_PARMS (irq, dummy))
 int
 pas_set_intr (int mask)
 {
-  int             err;
-
   if (!mask)
     return 0;
 
-  if (!pas_intr_mask)
-    {
-      if ((err = snd_set_irq_handler (pas_irq, pasintr, "PAS16")) < 0)
-	return err;
-    }
   pas_intr_mask |= mask;
 
   pas_write (pas_intr_mask, INTERRUPT_MASK);
@@ -134,10 +129,6 @@ pas_remove_intr (int mask)
   pas_intr_mask &= ~mask;
   pas_write (pas_intr_mask, INTERRUPT_MASK);
 
-  if (!pas_intr_mask)
-    {
-      snd_release_irq (pas_irq);
-    }
   return 0;
 }
 
@@ -204,6 +195,11 @@ config_pas_hw (struct address_info *hw_config)
 	  printk ("PAS2: Invalid IRQ %d", pas_irq);
 	  ok = 0;
 	}
+      else
+	{
+	  if (snd_set_irq_handler (pas_irq, pasintr, "PAS16", hw_config->osp) < 0)
+	    ok = 0;
+	}
     }
 
   if (hw_config->dma < 0 || hw_config->dma > 7)
@@ -219,6 +215,14 @@ config_pas_hw (struct address_info *hw_config)
 	  printk ("PAS2: Invalid DMA selection %d", hw_config->dma);
 	  ok = 0;
 	}
+      else
+	{
+	  if (sound_alloc_dma (hw_config->dma, "PAS16"))
+	    {
+	      printk ("pas2_card.c: Can't allocate DMA channel\n");
+	      ok = 0;
+	    }
+	}
     }
 
   /*
@@ -226,8 +230,8 @@ config_pas_hw (struct address_info *hw_config)
      * as per Media Vision.  Only define this if your PAS doesn't work correctly.
    */
 #ifdef SYMPHONY_PAS
-  OUTB (0x05, 0xa8);
-  OUTB (0x60, 0xa9);
+  outb (0x05, 0xa8);
+  outb (0x60, 0xa9);
 #endif
 
 #ifdef BROKEN_BUS_CLOCK
@@ -250,14 +254,7 @@ config_pas_hw (struct address_info *hw_config)
 								 * rate * of
 								 * 17.897 kHz
 								 */
-#if 1
   pas_write (8, PRESCALE_DIVIDER);
-#else
-  if (pas_model == PAS_16 || pas_model == PAS_16D)
-    pas_write (8, PRESCALE_DIVIDER);
-  else
-    pas_write (0, PRESCALE_DIVIDER);
-#endif
 
   mix_write (P_M_MV508_ADDRESS | 5, PARALLEL_MIXER);
   mix_write (5, PARALLEL_MIXER);
@@ -323,10 +320,10 @@ detect_pas_hw (struct address_info *hw_config)
    * you have something on base port 0x388. SO be forewarned.
    */
 
-  OUTB (0xBC, MASTER_DECODE);	/*
+  outb (0xBC, MASTER_DECODE);	/*
 				 * Talk to first board
 				 */
-  OUTB (hw_config->io_base >> 2, MASTER_DECODE);	/*
+  outb (hw_config->io_base >> 2, MASTER_DECODE);	/*
 							 * Set base address
 							 */
   translat_code = PAS_DEFAULT_BASE ^ hw_config->io_base;
@@ -348,7 +345,7 @@ detect_pas_hw (struct address_info *hw_config)
   foo = board_id ^ 0xe0;
 
   pas_write (foo, INTERRUPT_MASK);
-  foo = INB (INTERRUPT_MASK);
+  foo = inb (INTERRUPT_MASK);
   pas_write (board_id, INTERRUPT_MASK);
 
   if (board_id != foo)		/*
@@ -365,6 +362,7 @@ long
 attach_pas_card (long mem_start, struct address_info *hw_config)
 {
   pas_irq = hw_config->irq;
+  pas_osp = hw_config->osp;
 
   if (detect_pas_hw (hw_config))
     {
@@ -407,7 +405,15 @@ attach_pas_card (long mem_start, struct address_info *hw_config)
 int
 probe_pas (struct address_info *hw_config)
 {
+  pas_osp = hw_config->osp;
   return detect_pas_hw (hw_config);
+}
+
+void
+unload_pas (struct address_info *hw_config)
+{
+  sound_free_dma (hw_config->dma);
+  snd_release_irq (hw_config->irq);
 }
 
 #endif

@@ -39,12 +39,14 @@
 #define	COMDPORT   (sb16midi_base+1)
 #define	STATPORT   (sb16midi_base+1)
 
-#define sb16midi_status()		INB(STATPORT)
+extern sound_os_info *sb_osp;
+
+#define sb16midi_status()		inb( STATPORT)
 #define input_avail()		(!(sb16midi_status()&INPUT_AVAIL))
 #define output_ready()		(!(sb16midi_status()&OUTPUT_READY))
-#define sb16midi_cmd(cmd)		OUTB(cmd, COMDPORT)
-#define sb16midi_read()		INB(DATAPORT)
-#define sb16midi_write(byte)	OUTB(byte, DATAPORT)
+#define sb16midi_cmd(cmd)		outb( cmd,  COMDPORT)
+#define sb16midi_read()		inb( DATAPORT)
+#define sb16midi_write(byte)	outb( byte,  DATAPORT)
 
 #define	OUTPUT_READY	0x40
 #define	INPUT_AVAIL	0x80
@@ -88,7 +90,7 @@ sb16midi_open (int dev, int mode,
 {
   if (sb16midi_opened)
     {
-      return RET_ERROR (EBUSY);
+      return -EBUSY;
     }
 
   sb16midi_input_loop ();
@@ -115,12 +117,13 @@ sb16midi_out (int dev, unsigned char midi_byte)
    * Test for input since pending input seems to block the output.
    */
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   if (input_avail ())
     sb16midi_input_loop ();
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   /*
    * Sometimes it takes about 13000 loops before the output becomes ready
@@ -154,9 +157,9 @@ sb16midi_end_read (int dev)
 }
 
 static int
-sb16midi_ioctl (int dev, unsigned cmd, unsigned arg)
+sb16midi_ioctl (int dev, unsigned cmd, ioctl_arg arg)
 {
-  return RET_ERROR (EINVAL);
+  return -EINVAL;
 }
 
 static void
@@ -203,9 +206,10 @@ attach_sb16midi (long mem_start, struct address_info *hw_config)
   sb16midi_base = hw_config->io_base;
 
   if (!sb16midi_detected)
-    return RET_ERROR (EIO);
+    return -EIO;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
   for (timeout = 30000; timeout < 0 && !output_ready (); timeout--);	/*
 									 * Wait
 									 */
@@ -217,7 +221,7 @@ attach_sb16midi (long mem_start, struct address_info *hw_config)
       if (sb16midi_read () == MPU_ACK)
 	ok = 1;
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   if (num_midis >= MAX_MIDI_DEV)
     {
@@ -244,7 +248,8 @@ reset_sb16midi (void)
 
   ok = 0;
 
-  DISABLE_INTR (flags);
+  save_flags (flags);
+  cli ();
 
   for (n = 0; n < 2 && !ok; n++)
     {
@@ -273,7 +278,7 @@ reset_sb16midi (void)
 				 * Flush input before enabling interrupts
 				 */
 
-  RESTORE_INTR (flags);
+  restore_flags (flags);
 
   return ok;
 }
@@ -297,6 +302,11 @@ probe_sb16midi (struct address_info *hw_config)
 
   sb16midi_detected = ok;
   return ok;
+}
+
+void
+unload_sb16midi (struct address_info *hw_config)
+{
 }
 
 #endif

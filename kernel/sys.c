@@ -766,6 +766,7 @@ int getrusage(struct task_struct *p, int who, struct rusage *ru)
 			r.ru_stime.tv_usec = CT_TO_USECS(p->stime);
 			r.ru_minflt = p->min_flt;
 			r.ru_majflt = p->maj_flt;
+			r.ru_nswap = p->nswap;
 			break;
 		case RUSAGE_CHILDREN:
 			r.ru_utime.tv_sec = CT_TO_SECS(p->cutime);
@@ -774,6 +775,7 @@ int getrusage(struct task_struct *p, int who, struct rusage *ru)
 			r.ru_stime.tv_usec = CT_TO_USECS(p->cstime);
 			r.ru_minflt = p->cmin_flt;
 			r.ru_majflt = p->cmaj_flt;
+			r.ru_nswap = p->cnswap;
 			break;
 		default:
 			r.ru_utime.tv_sec = CT_TO_SECS(p->utime + p->cutime);
@@ -782,6 +784,7 @@ int getrusage(struct task_struct *p, int who, struct rusage *ru)
 			r.ru_stime.tv_usec = CT_TO_USECS(p->stime + p->cstime);
 			r.ru_minflt = p->min_flt + p->cmin_flt;
 			r.ru_majflt = p->maj_flt + p->cmaj_flt;
+			r.ru_nswap = p->nswap + p->cnswap;
 			break;
 	}
 	memcpy_tofs(ru, &r, sizeof(r));

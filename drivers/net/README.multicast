@@ -1,5 +1,5 @@
 Behaviour of cards under Multicast. This is how they currently 
-behave not what the hardware can do. In paticular all the 8390 based
+behave not what the hardware can do. In particular all the 8390 based
 cards don't use the onboard hash filter, and the lance driver doesn't
 use its filter, even though the code for loading it is in the DEC
 lance based driver.

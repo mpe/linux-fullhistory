@@ -284,9 +284,10 @@ static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long f
 	long retval;
 
 	__asm__ __volatile__(
+		"movl %%esp,%%esi\n\t"
 		"int $0x80\n\t"		/* Linux/i386 system call */
-		"testl %0,%0\n\t"	/* child or parent? */
-		"jne 1f\n\t"		/* parent - jump */
+		"cmpl %%esp,%%esi\n\t"	/* child or parent? */
+		"je 1f\n\t"		/* parent - jump */
 		"pushl %3\n\t"		/* push argument */
 		"call *%4\n\t"		/* call fn */
 		"movl %2,%0\n\t"	/* exit */
@@ -295,7 +296,8 @@ static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long f
 		:"=a" (retval)
 		:"0" (__NR_clone), "i" (__NR_exit),
 		 "r" (arg), "r" (fn),
-		 "b" (flags | CLONE_VM));
+		 "b" (flags | CLONE_VM)
+		:"si");
 	return retval;
 }
 
