@@ -49,13 +49,9 @@ image.o: piggyback ../coffboot/vmlinux.gz
 initrd.o: ramdisk.image.gz piggyback
 	./piggyback initrd < ramdisk.image.gz | $(AS) -o initrd.o
 
-note.data : mknote
-	rm -f note.data
-	./mknote > note.data
-
-zImage: $(OBJS) no_initrd.o note.data
+zImage: $(OBJS) no_initrd.o
 	$(LD) $(LD_ARGS) -o $@ $(OBJS) no_initrd.o $(LIBS)
-	objcopy zImage --add-section=.note=note.data zImage
+	objcopy zImage zImage
 
 zImage.initrd: $(OBJS) initrd.o
 	$(LD) $(LD_ARGS) -o $@ $(OBJS) initrd.o $(LIBS)
@@ -80,7 +76,7 @@ vmlinux.coff.initrd:
 
 
 clean:
-	rm -f piggyback mknote note.data
+	rm -f piggyback
 	rm -f $(OBJS) zImage
 
 fastdep:

@@ -44,7 +44,7 @@
 /*
  * translate from mc146818 to m48t18  addresses
  */
-unsigned int clock_transl[] = { MOTO_RTC_SECONDS,0 /* alarm */,
+unsigned int clock_transl[] __prepdata = { MOTO_RTC_SECONDS,0 /* alarm */,
 		       MOTO_RTC_MINUTES,0 /* alarm */,
 		       MOTO_RTC_HOURS,0 /* alarm */,                 /*  4,5 */
 		       MOTO_RTC_DAY_OF_WEEK,
@@ -54,6 +54,7 @@ unsigned int clock_transl[] = { MOTO_RTC_SECONDS,0 /* alarm */,
 		       MOTO_RTC_CONTROLA, MOTO_RTC_CONTROLB /* 10,11 */
 };
 
+__prep
 int prep_cmos_clock_read(int addr)
 {
 	if ( _prep_type == _PREP_IBM )
@@ -69,6 +70,7 @@ int prep_cmos_clock_read(int addr)
 	return -1;
 }
 
+__prep
 void prep_cmos_clock_write(unsigned long val, int addr)
 {
 	if ( _prep_type == _PREP_IBM )
@@ -89,6 +91,7 @@ void prep_cmos_clock_write(unsigned long val, int addr)
 /*
  * Set the hardware clock. -- Cort
  */
+__prep
 int prep_set_rtc_time(unsigned long nowtime)
 {
 	unsigned char save_control, save_freq_select;
@@ -135,6 +138,7 @@ int prep_set_rtc_time(unsigned long nowtime)
 	return 0;
 }
 
+__prep
 unsigned long prep_get_rtc_time(void)
 {
 	unsigned int year, mon, day, hour, min, sec;

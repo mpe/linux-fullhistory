@@ -613,7 +613,7 @@ __initfunc(int psaux_init(void))
 		printk(KERN_INFO "PS/2 auxiliary pointing device detected -- driver installed.\n");
 	 	aux_present = 1;
 #ifdef CONFIG_VT
-		kbd_read_mask = AUX_STAT_OBF;
+		pckbd_read_mask = AUX_STAT_OBF;
 #endif
 	} else {
 		return -EIO;

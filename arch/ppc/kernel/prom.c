@@ -1,4 +1,6 @@
 /*
+ * $Id: prom.c,v 1.32 1998/07/28 20:28:46 geert Exp $
+ *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
  *
@@ -78,7 +80,7 @@ char *bootdevice = 0;
 unsigned int rtas_data = 0;   /* virtual pointer */
 unsigned int rtas_entry = 0;  /* physical pointer */
 unsigned int rtas_size = 0;
-char chunk[PAGE_SIZE*64];
+unsigned int old_rtas = 0;
 
 static struct device_node *allnodes = 0;
 
@@ -122,8 +124,7 @@ extern unsigned long reloc_offset(void);
 
 #define ALIGN(x) (((x) + sizeof(unsigned long)-1) & -sizeof(unsigned long))
 
-__pmac
-
+__openfirmware
 static void
 prom_exit()
 {
@@ -138,6 +139,7 @@ prom_exit()
 		;
 }
 
+__openfirmware
 void
 prom_enter(void)
 {
@@ -150,6 +152,7 @@ prom_enter(void)
 	RELOC(prom)(&args);
 }
 
+__openfirmware
 static void *
 call_prom(const char *service, int nargs, int nret, ...)
 {
@@ -171,6 +174,7 @@ call_prom(const char *service, int nargs, int nret, ...)
 	return prom_args.args[nargs];
 }
 
+__openfirmware
 void
 prom_print(const char *msg)
 {
@@ -191,15 +195,11 @@ prom_print(const char *msg)
 	}
 }
 
-
-#ifdef CONFIG_ALL_PPC
-unsigned char OF_type[16], OF_model[16];
-#endif
-
 /*
  * We enter here early on, when the Open Firmware prom is still
  * handling exceptions and the MMU hash table for us.
  */
+__openfirmware
 void
 prom_init(int r3, int r4, prom_entry pp)
 {
@@ -212,7 +212,11 @@ prom_init(int r3, int r4, prom_entry pp)
 	/* check if we're prep, return if we are */
 	if ( *(unsigned long *)(0) == 0xdeadc0de )
 		return;
-	
+
+	/* check if we're apus, return if we are */
+	if ( r3 == 0x61707573 )
+		return;
+
 	/* First get a handle for the stdout device */
 	RELOC(prom) = pp;
 	RELOC(prom_chosen) = call_prom(RELOC("finddevice"), 1, 1,
@@ -256,11 +260,10 @@ prom_init(int r3, int r4, prom_entry pp)
 			RELOC(rtas_data) = 0;
 		} else {
 			mem = (mem + 4095) & -4096; /* round to page bdry */
-			RELOC(rtas_data) = mem - KERNELBASE;
+			RELOC(rtas_data) = mem + KERNELBASE;
 			mem += RELOC(rtas_size);
 		}
 		prom_rtas = call_prom(RELOC("open"), 1, 1, RELOC("/rtas"));
-		RELOC(rtas_data) = ((ulong)chunk+4095)&-4096;
 		{
 			int i, nargs;
 			struct prom_args prom_args;
@@ -270,7 +273,7 @@ prom_init(int r3, int r4, prom_entry pp)
 			prom_args.nret = 2;
 			prom_args.args[0] = RELOC("instantiate-rtas");
 			prom_args.args[1] = prom_rtas;
-			prom_args.args[2] = ((void *)RELOC(rtas_data)-KERNELBASE);
+			prom_args.args[2] = ((void *)RELOC(rtas_data)-KERNELBASE-offset);
 			RELOC(prom)(&prom_args);
 			if (prom_args.args[nargs] != 0)
 				i = 0;
@@ -283,22 +286,7 @@ prom_init(int r3, int r4, prom_entry pp)
 		else
 			prom_print(RELOC(" done\n"));
 	}
-
 	RELOC(klimit) = (char *) (mem - offset);
-#ifdef CONFIG_ALL_PPC
-	{
-
-		ihandle prom_root;
-
-		RELOC(prom_root) = call_prom(RELOC("finddevice"), 1, 1, RELOC("/"));
-		call_prom(RELOC("getprop"), 4, 1, RELOC(prom_root),
-			  RELOC("device_type"), RELOC(OF_type),
-			  (void *) 16);
-		call_prom(RELOC("getprop"), 4, 1, RELOC(prom_root),
-			  RELOC("model"), RELOC(OF_model),
-			  (void *) 16);
-	}
-#endif
 }
 
 /*
@@ -309,13 +297,14 @@ prom_init(int r3, int r4, prom_entry pp)
  * So we check whether we will need to open the display,
  * and if so, open it now.
  */
+__openfirmware
 static unsigned long
 check_display(unsigned long mem)
 {
 	phandle node;
 	ihandle ih;
 	unsigned long offset = reloc_offset();
-	char type[16], *path;
+	char type[16], name[16], *path;
 
 	for (node = 0; prom_next_node(&node); ) {
 		type[0] = 0;
@@ -334,9 +323,17 @@ check_display(unsigned long mem)
 		ih = call_prom(RELOC("open"), 1, 1, path);
 		if (ih == 0 || ih == (ihandle) -1) {
 			prom_print(RELOC("... failed\n"));
-			continue;
+			/* platinum kludge. platinum is a valid display,
+			 * but not handled by OF. Make sure prom_num_display
+			 * is incremented anyway
+			 */
+			call_prom(RELOC("getprop"), 4, 1, node, RELOC("name"),
+				  name, sizeof(name));
+			if (strncmp(name, RELOC("platinum"), 8))
+			    continue;
+		} else {
+			prom_print(RELOC("... ok\n"));
 		}
-		prom_print(RELOC("... ok\n"));
 		mem += strlen(path) + 1;
 		RELOC(prom_display_paths[RELOC(prom_num_displays)++])
 			= PTRUNRELOC(path);
@@ -346,6 +343,7 @@ check_display(unsigned long mem)
 	return ALIGN(mem);
 }
 
+__openfirmware
 static int
 prom_next_node(phandle *nodep)
 {
@@ -368,6 +366,7 @@ prom_next_node(phandle *nodep)
 /*
  * Make a copy of the device tree from the PROM.
  */
+__openfirmware
 static unsigned long
 copy_device_tree(unsigned long mem_start, unsigned long mem_end)
 {
@@ -388,6 +387,7 @@ copy_device_tree(unsigned long mem_start, unsigned long mem_end)
 	return new_start;
 }
 
+__openfirmware
 static unsigned long
 inspect_node(phandle node, struct device_node *dad,
 	     unsigned long mem_start, unsigned long mem_end,
@@ -472,6 +472,7 @@ inspect_node(phandle node, struct device_node *dad,
  * It traverses the device tree and fills in the name, type,
  * {n_}addrs and {n_}intrs fields of each node.
  */
+__openfirmware
 void
 finish_device_tree(void)
 {
@@ -483,6 +484,7 @@ finish_device_tree(void)
 	klimit = (char *) mem;
 }
 
+__openfirmware
 static unsigned long
 finish_node(struct device_node *np, unsigned long mem_start,
 	    interpret_func *ifunc)
@@ -493,8 +495,9 @@ finish_node(struct device_node *np, unsigned long mem_start,
 	np->type = get_property(np, "device_type", 0);
 
 	/* get the device addresses and interrupts */
-	if (ifunc != NULL)
+	if (ifunc != NULL) {
 		mem_start = ifunc(np, mem_start);
+	}
 
 	if (!strcmp(np->name, "device-tree"))
 		ifunc = interpret_root_props;
@@ -520,6 +523,7 @@ finish_node(struct device_node *np, unsigned long mem_start,
 	return mem_start;
 }
 
+__openfirmware
 static unsigned long
 interpret_pci_props(struct device_node *np, unsigned long mem_start)
 {
@@ -560,6 +564,7 @@ interpret_pci_props(struct device_node *np, unsigned long mem_start)
 	return mem_start;
 }
 
+__openfirmware
 static unsigned long
 interpret_dbdma_props(struct device_node *np, unsigned long mem_start)
 {
@@ -608,6 +613,7 @@ interpret_dbdma_props(struct device_node *np, unsigned long mem_start)
 	return mem_start;
 }
 
+__openfirmware
 static unsigned long
 interpret_macio_props(struct device_node *np, unsigned long mem_start)
 {
@@ -656,6 +662,7 @@ interpret_macio_props(struct device_node *np, unsigned long mem_start)
 	return mem_start;
 }
 
+__openfirmware
 static unsigned long
 interpret_isa_props(struct device_node *np, unsigned long mem_start)
 {
@@ -693,6 +700,7 @@ interpret_isa_props(struct device_node *np, unsigned long mem_start)
 	return mem_start;
 }
 
+__openfirmware
 static unsigned long
 interpret_root_props(struct device_node *np, unsigned long mem_start)
 {
@@ -734,6 +742,7 @@ interpret_root_props(struct device_node *np, unsigned long mem_start)
 /*
  * Construct and return a list of the device_nodes with a given name.
  */
+__openfirmware
 struct device_node *
 find_devices(const char *name)
 {
@@ -753,6 +762,7 @@ find_devices(const char *name)
 /*
  * Construct and return a list of the device_nodes with a given type.
  */
+__openfirmware
 struct device_node *
 find_type_devices(const char *type)
 {
@@ -773,6 +783,7 @@ find_type_devices(const char *type)
  * Construct and return a list of the device_nodes with a given type
  * and compatible property.
  */
+__openfirmware
 struct device_node *
 find_compatible_devices(const char *type, const char *compat)
 {
@@ -797,6 +808,7 @@ find_compatible_devices(const char *type, const char *compat)
 /*
  * Find the device_node with a given full_name.
  */
+__openfirmware
 struct device_node *
 find_path_device(const char *path)
 {
@@ -811,6 +823,7 @@ find_path_device(const char *path)
 /*
  * Find the device_node with a given phandle.
  */
+__openfirmware
 struct device_node *
 find_phandle(phandle ph)
 {
@@ -826,6 +839,7 @@ find_phandle(phandle ph)
  * Find a property with a given name for a given node
  * and return the value.
  */
+__openfirmware
 unsigned char *
 get_property(struct device_node *np, const char *name, int *lenp)
 {
@@ -840,6 +854,7 @@ get_property(struct device_node *np, const char *name, int *lenp)
 	return 0;
 }
 
+__openfirmware
 void
 print_properties(struct device_node *np)
 {
@@ -890,6 +905,7 @@ print_properties(struct device_node *np)
 	}
 }
 
+__openfirmware
 int
 call_rtas(const char *service, int nargs, int nret,
 	  unsigned long *outputs, ...)
@@ -925,6 +941,7 @@ call_rtas(const char *service, int nargs, int nret,
 	return u.words[nargs+3];
 }
 
+__openfirmware
 void
 abort()
 {

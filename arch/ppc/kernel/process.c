@@ -30,12 +30,12 @@
 #include <linux/user.h>
 #include <linux/elf.h>
 #include <linux/elf.h>
+#include <linux/init.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/smp_lock.h>
 #include <asm/processor.h>
 #include <asm/mmu.h>
 #include <asm/prom.h>
@@ -45,6 +45,8 @@ void switch_to(struct task_struct *, struct task_struct *);
 
 extern unsigned long _get_SP(void);
 extern spinlock_t scheduler_lock;
+
+struct task_struct *last_task_used_math = NULL;
 
 #undef SHOW_TASK_SWITCHES 1
 #undef CHECK_STACK 1
@@ -437,7 +439,7 @@ print_backtrace(unsigned long *sp)
 /*
  * Low level print for debugging - Cort
  */
-int ll_printk(const char *fmt, ...)
+__initfunc(int ll_printk(const char *fmt, ...))
 {
         va_list args;
 	char buf[256];
@@ -453,10 +455,10 @@ int ll_printk(const char *fmt, ...)
 int lines = 24, cols = 80;
 int orig_x = 0, orig_y = 0;
 
-void ll_puts(const char *s)
+__initfunc(void ll_puts(const char *s))
 {
 	int x,y;
-	char *vidmem = (char *)(_ISA_MEM_BASE + 0xB8000) /*0xC00B8000*/;
+	char *vidmem = (char *)/*(_ISA_MEM_BASE + 0xB8000) */0xD00B8000;
 	char c;
 	extern int mem_init_done;
 

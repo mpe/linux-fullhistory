@@ -214,6 +214,7 @@ CONFIG_PCNET32=y
 # AX.25 network device drivers
 #
 # CONFIG_MKISS is not set
+# CONFIG_6PACK is not set
 # CONFIG_BPQETHER is not set
 # CONFIG_DMASCC is not set
 # CONFIG_SCC is not set
@@ -231,7 +232,6 @@ CONFIG_PCNET32=y
 # CD-ROM drivers (not for SCSI or IDE/ATAPI drives)
 #
 # CONFIG_CD_NO_IDESCSI is not set
-CONFIG_CDROM=y
 
 #
 # Filesystems

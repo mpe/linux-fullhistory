@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.16 1998/03/24 05:54:40 ecd Exp $ */
+/* $Id: io.h,v 1.18 1998/07/12 12:07:43 ecd Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -13,26 +13,47 @@
 #define __SLOW_DOWN_IO	do { } while (0)
 #define SLOW_DOWN_IO	do { } while (0)
 
+
+#define PCI_DVMA_HASHSZ	256
+
 extern unsigned long pci_dvma_offset;
 extern unsigned long pci_dvma_mask;
+
+extern unsigned long pci_dvma_v2p_hash[PCI_DVMA_HASHSZ];
+extern unsigned long pci_dvma_p2v_hash[PCI_DVMA_HASHSZ];
+
+#define pci_dvma_ahashfn(addr)	(((addr) >> 24) & 0xff)
 
 extern __inline__ unsigned long virt_to_phys(volatile void *addr)
 {
 	unsigned long vaddr = (unsigned long)addr;
+	unsigned long off;
 
 	/* Handle kernel variable pointers... */
 	if (vaddr < PAGE_OFFSET)
 		vaddr += PAGE_OFFSET - (unsigned long)&empty_zero_page;
-	return ((vaddr - PAGE_OFFSET) | pci_dvma_offset);
+
+	off = pci_dvma_v2p_hash[pci_dvma_ahashfn(vaddr - PAGE_OFFSET)];
+	return vaddr + off;
 }
 
 extern __inline__ void *phys_to_virt(unsigned long addr)
 {
-	return ((void *)((addr & pci_dvma_mask) + PAGE_OFFSET));
+	unsigned long paddr = addr & 0xffffffffUL;
+	unsigned long off;
+
+	off = pci_dvma_p2v_hash[pci_dvma_ahashfn(paddr)];
+	return (void *)(paddr + off);
 }
 
 #define virt_to_bus virt_to_phys
 #define bus_to_virt phys_to_virt
+
+extern __inline__ unsigned long bus_dvma_to_mem(unsigned long vaddr)
+{
+	return vaddr & pci_dvma_mask;
+}
+
 
 extern __inline__ unsigned int inb(unsigned long addr)
 {

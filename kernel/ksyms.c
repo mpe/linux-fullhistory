@@ -52,7 +52,7 @@
 #include <linux/file.h>
 #include <linux/console.h>
 
-extern unsigned char aux_device_present, kbd_read_mask;
+extern unsigned char aux_device_present, pckbd_read_mask;
 
 #if defined(CONFIG_PROC_FS)
 #include <linux/proc_fs.h>
@@ -121,7 +121,6 @@ EXPORT_SYMBOL(vfree);
 EXPORT_SYMBOL(mem_map);
 EXPORT_SYMBOL(remap_page_range);
 EXPORT_SYMBOL(max_mapnr);
-EXPORT_SYMBOL(num_physpages);
 EXPORT_SYMBOL(high_memory);
 EXPORT_SYMBOL(update_vm_cache);
 EXPORT_SYMBOL(vmtruncate);
@@ -379,10 +378,12 @@ EXPORT_SYMBOL(__up);
 EXPORT_SYMBOL(add_mouse_randomness);
 EXPORT_SYMBOL(fasync_helper);
 
+#ifdef CONFIG_PSMOUSE_MODULE
 /* psaux mouse */
 EXPORT_SYMBOL(aux_device_present);
 #ifdef CONFIG_VT
-EXPORT_SYMBOL(kbd_read_mask);
+EXPORT_SYMBOL(pckbd_read_mask);
+#endif
 #endif
 
 #ifdef CONFIG_BLK_DEV_MD

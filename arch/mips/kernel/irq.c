@@ -1,10 +1,13 @@
-/*
+/* $Id: irq.c,v 1.13 1998/05/08 01:44:12 ralf Exp $
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
  * Code to handle x86 style IRQs plus some generic interrupt stuff.
  *
  * Copyright (C) 1992 Linus Torvalds
- * Copyright (C) 1994, 1995, 1996, 1997 Ralf Baechle
- *
- * $Id: irq.c,v 1.11 1998/05/01 01:34:02 ralf Exp $
+ * Copyright (C) 1994, 1995, 1996, 1997, 1998 Ralf Baechle
  */
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -310,7 +313,15 @@ int probe_irq_off (unsigned long irqs)
 	return i;
 }
 
+int (*irq_cannonicalize)(int irq);
+
+static int i8259a_irq_cannonicalize(int irq)
+{
+	return ((irq == 2) ? 9 : irq);
+}
+
 __initfunc(void init_IRQ(void))
 {
+	irq_cannonicalize = i8259a_irq_cannonicalize;
 	irq_setup();
 }

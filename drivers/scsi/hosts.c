@@ -269,6 +269,10 @@
 #include "../acorn/scsi/powertec.h"
 #endif
 
+#ifdef CONFIG_JAZZ_ESP
+#include "jazz_esp.h"
+#endif
+
 /*
 static const char RCSid[] = "$Header: /vger/u4/cvs/linux/drivers/scsi/hosts.c,v 1.20 1996/12/12 19:18:32 davem Exp $";
 */

@@ -568,9 +568,6 @@ static void do_qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *reg
 /* Detect all PTI Qlogic ISP's in the machine. */
 __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 {
-#ifdef __sparc_v9__
-	struct devid_cookie dcookie;
-#endif
 	struct qlogicpti *qpti, *qlink;
 	struct Scsi_Host *qpti_host;
 	struct linux_sbus *sbus;
@@ -584,13 +581,8 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 
 	tpnt->proc_dir = &proc_scsi_qlogicpti;
 	qptichain = 0;
-	if(!SBus_chain) {
-#ifdef __sparc_v9__
-		return 0; /* Could be a PCI-only machine. */
-#else
-		panic("No SBUS in qlogicpti_detect()");
-#endif
-	}
+	if(!SBus_chain)
+		return 0;
 	for_each_sbus(sbus) {
 		for_each_sbusdev(sbdev_iter, sbus) {
 			qpti_dev = sbdev_iter;
@@ -600,6 +592,16 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 			   strcmp(qpti_dev->prom_name, "PTI,ptisp") &&
 			   strcmp(qpti_dev->prom_name, "QLGC,isp"))
 				continue;
+
+			/* Sometimes Antares cards come up not completely
+			 * setup, and we get a report of a zero IRQ.
+			 * Skip over them in such cases so we survive.
+			 */
+			if(qpti_dev->irqs[0] == 0) {
+				printk("qpti%d: Adapter reports no interrupt, "
+				       "skipping over this card.", nqptis);
+				continue;
+			}
 
 			/* Yep, register and allocate software state. */
 			qpti_host = scsi_register(tpnt, sizeof(struct qlogicpti));
@@ -667,7 +669,7 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 			qpti_host->n_io_port = (unsigned char)
 				qpti->qdev->reg_addrs[0].reg_size;
 
-			qpti_host->irq = qpti->irq = qpti->qdev->irqs[0].pri;
+			qpti_host->irq = qpti->irq = qpti->qdev->irqs[0];
 
 #ifndef __sparc_v9__
 			/* Allocate the irq only if necessary. */
@@ -688,20 +690,14 @@ qpti_irq_acquired:
 			/* On Ultra we must always call request_irq for each
 			 * qpti, so that imap registers get setup etc.
 			 */
-			dcookie.real_dev_id = qpti;
-			dcookie.imap = dcookie.iclr = 0;
-			dcookie.pil = -1;
-			dcookie.bus_cookie = sbus;
 			if(request_irq(qpti->qhost->irq, do_qlogicpti_intr_handler,
-				       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
-				       "PTI Qlogic/ISP SCSI", &dcookie)) {
+				       SA_SHIRQ, "PTI Qlogic/ISP SCSI", qpti)) {
 				printk("Cannot acquire PTI Qlogic/ISP irq line\n");
 				/* XXX Unmap regs, unregister scsi host, free things. */
 				continue;
 			}
-			qpti->qhost->irq = qpti->irq = dcookie.ret_ino;
-			printk("qpti%d: INO[%x] IRQ %d ",
-			       qpti->qpti_id, qpti->qhost->irq, dcookie.ret_pil);
+			printk("qpti%d: IRQ %s ",
+			       qpti->qpti_id, __irq_itoa(qpti->qhost->irq));
 #endif
 
 			/* Figure out our scsi ID on the bus */
@@ -964,7 +960,14 @@ int qlogicpti_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 	Cmnd->scsi_done = done;
 	in_ptr = NEXT_REQ_PTR(in_ptr);
 	if(in_ptr == out_ptr) {
-		printk(KERN_EMERG "qlogicpti%d: request queue overflow\n", qpti->qpti_id);
+		printk(KERN_EMERG "qlogicpti%d: request queue overflow\n",qpti->qpti_id);
+
+		/* Unfortunately, unless you use the new EH code, which
+		 * we don't, the midlayer will ignore the return value,
+		 * which is insane.  We pick up the pieces like this.
+		 */
+		Cmnd->result = DID_BUS_BUSY;
+		done(Cmnd);
 		return 1;
 	}
 	if(qpti->send_marker) {
@@ -973,15 +976,30 @@ int qlogicpti_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 		if(NEXT_REQ_PTR(in_ptr) == out_ptr) {
 			qregs->mbox4 = in_ptr;
 			qpti->req_in_ptr = in_ptr;
-			printk(KERN_EMERG "qlogicpti%d: request queue overflow\n", qpti->qpti_id);
+			printk(KERN_EMERG "qlogicpti%d: request queue overflow\n",
+			       qpti->qpti_id);
+
+			/* Unfortunately, unless you use the new EH code, which
+			 * we don't, the midlayer will ignore the return value,
+			 * which is insane.  We pick up the pieces like this.
+			 */
+			Cmnd->result = DID_BUS_BUSY;
+			done(Cmnd);
 			return 1;
 		}
 		cmd = (struct Command_Entry *) &qpti->req_cpu[in_ptr];
 		in_ptr = NEXT_REQ_PTR(in_ptr);
 	}
 	cmd_frob(cmd, Cmnd, qpti);
-	if((in_ptr = load_cmd(Cmnd, cmd, qpti, qregs, in_ptr, out_ptr)) == -1)
+	if((in_ptr = load_cmd(Cmnd, cmd, qpti, qregs, in_ptr, out_ptr)) == -1) {
+		/* Unfortunately, unless you use the new EH code, which
+		 * we don't, the midlayer will ignore the return value,
+		 * which is insane.  We pick up the pieces like this.
+		 */
+		Cmnd->result = DID_BUS_BUSY;
+		done(Cmnd);
 		return 1;
+	}
 	update_can_queue(host, in_ptr, out_ptr);
 	return 0;
 }

@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.24 1998/05/06 02:07:54 paulus Exp $ */
+/* $Id: mmu_context.h,v 1.26 1998/07/31 10:42:38 jj Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -26,19 +26,21 @@ extern void get_new_mmu_context(struct mm_struct *mm);
  * instance.
  */
 #define init_new_context(mm)	((mm)->context = NO_CONTEXT)
-#define destroy_context(mm)	do { 								\
-	if ((mm)->context != NO_CONTEXT) { 							\
-		spin_lock(&scheduler_lock); 							\
-		if (!(((mm)->context ^ tlb_context_cache) & CTX_VERSION_MASK))			\
-			clear_bit((mm)->context & ~(CTX_VERSION_MASK), mmu_context_bmap);	\
-		spin_unlock(&scheduler_lock); 							\
-		(mm)->context = NO_CONTEXT; 							\
-	} 											\
+#define destroy_context(mm)	do { 						\
+	if ((mm)->context != NO_CONTEXT) { 					\
+		spin_lock(&scheduler_lock); 					\
+		if (!(((mm)->context ^ tlb_context_cache) & CTX_VERSION_MASK))	\
+			clear_bit((mm)->context & ~(CTX_VERSION_MASK),		\
+				  mmu_context_bmap);				\
+		spin_unlock(&scheduler_lock); 					\
+		(mm)->context = NO_CONTEXT; 					\
+	} 									\
 } while (0)
 
 extern __inline__ void get_mmu_context(struct task_struct *tsk)
 {
 	register unsigned long paddr asm("o5");
+	register unsigned long pgd_cache asm("o4");
 	struct mm_struct *mm = tsk->mm;
 
 	flushw_user();
@@ -63,14 +65,21 @@ extern __inline__ void get_mmu_context(struct task_struct *tsk)
 	spitfire_set_secondary_context(tsk->tss.ctx);
 	__asm__ __volatile__("flush %g6");
 	paddr = __pa(mm->pgd);
+	if(tsk->tss.flags & SPARC_FLAG_32BIT)
+		pgd_cache = (unsigned long) mm->pgd[0];
+	else
+		pgd_cache = 0;
 	__asm__ __volatile__("
-		rdpr		%%pstate, %%o4
-		wrpr		%%o4, %1, %%pstate
+		rdpr		%%pstate, %%o3
+		wrpr		%%o3, %2, %%pstate
+		mov		%4, %%g4
 		mov		%0, %%g7
-		wrpr		%%o4, 0x0, %%pstate
+		stxa		%1, [%%g4] %3
+		wrpr		%%o3, 0x0, %%pstate
 	" : /* no outputs */
-	  : "r" (paddr), "i" (PSTATE_MG|PSTATE_IE)
-	  : "o4");
+	  : "r" (paddr), "r" (pgd_cache), "i" (PSTATE_MG|PSTATE_IE),
+	    "i" (ASI_DMMU), "i" (TSB_REG)
+	  : "o3");
 }
 
 /*

@@ -17,10 +17,11 @@
 
 #define LINUX_LOGO_HEIGHT	80
 #define LINUX_LOGO_WIDTH	80
-#define LINUX_LOGO_COLORS	221
+#define LINUX_LOGO_COLORS	214
 
 #ifdef INCLUDE_LINUX_LOGO_DATA
 
+#define INCLUDE_LINUX_LOGOBW
 #define INCLUDE_LINUX_LOGO16
 #include <linux/linux_logo.h>
 

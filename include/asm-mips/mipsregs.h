@@ -8,7 +8,7 @@
  * Copyright (C) 1994, 1995, 1996, 1997 by Ralf Baechle
  * Modified for further R[236]000 support by Paul M. Antoine, 1996.
  *
- * $Id: mipsregs.h,v 1.6 1998/05/01 01:35:58 ralf Exp $
+ * $Id: mipsregs.h,v 1.7 1998/05/21 07:37:31 davem Exp $
  */
 #ifndef __ASM_MIPS_MIPSREGS_H
 #define __ASM_MIPS_MIPSREGS_H

@@ -27,7 +27,7 @@
 #define DEFINE(sym, val) \
 	asm volatile("\n#define\t" #sym "\t%0" : : "i" (val))
 
-void
+int
 main(void)
 {
 	DEFINE(KERNELBASE, KERNELBASE);
@@ -46,6 +46,7 @@ main(void)
 	DEFINE(PT_REGS, offsetof(struct thread_struct, regs));
 	DEFINE(PF_TRACESYS, PF_TRACESYS);
 	DEFINE(TASK_FLAGS, offsetof(struct task_struct, flags));
+	DEFINE(NEED_RESCHED, offsetof(struct task_struct, need_resched));
 	DEFINE(TSS_FPR0, offsetof(struct thread_struct, fpr[0]));
 	DEFINE(TSS_FPSCR, offsetof(struct thread_struct, fpscr));
 	DEFINE(TSS_SMP_FORK_RET, offsetof(struct thread_struct, smp_fork_ret));
@@ -98,4 +99,5 @@ main(void)
 	DEFINE(ORIG_GPR3, STACK_FRAME_OVERHEAD+offsetof(struct pt_regs, orig_gpr3));
 	DEFINE(RESULT, STACK_FRAME_OVERHEAD+offsetof(struct pt_regs, result));
 	DEFINE(TRAP, STACK_FRAME_OVERHEAD+offsetof(struct pt_regs, trap));
+	return 0;
 }

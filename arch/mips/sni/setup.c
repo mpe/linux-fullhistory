@@ -1,4 +1,5 @@
-/*
+/* $Id: setup.c,v 1.7 1998/06/10 07:21:19 davem Exp $
+ *
  * Setup pointers to hardware-dependent routines.
  *
  * This file is subject to the terms and conditions of the GNU General Public
@@ -6,8 +7,6 @@
  * for more details.
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
- *
- * $Id: setup.c,v 1.5 1998/05/04 09:18:42 ralf Exp $
  */
 #include <asm/ptrace.h>
 #include <linux/config.h>
@@ -88,7 +87,7 @@ static inline void sni_pcimt_detect(void)
 	char boardtype[80];
 	unsigned char csmsr;
 	char *p = boardtype;
-	unsigned int asic, cacheconf;
+	unsigned int asic;
 
 	csmsr = *(volatile unsigned char *)PCIMT_CSMSR;
 

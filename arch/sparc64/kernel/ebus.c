@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.26 1998/04/21 06:34:02 ecd Exp $
+/* $Id: ebus.c,v 1.29 1998/07/01 15:39:44 jj Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -51,7 +51,13 @@ extern int envctrl_init(void);
 
 static inline unsigned long ebus_alloc(size_t size)
 {
-	return (unsigned long)kmalloc(size, GFP_ATOMIC);
+	unsigned long mem;
+
+	mem = (unsigned long)kmalloc(size, GFP_ATOMIC);
+	if (!mem)
+		panic(__FUNCTION__ ": out of memory");
+	memset((char *)mem, 0, size);
+	return mem;
 }
 
 __initfunc(void ebus_intmap_match(struct linux_ebus *ebus,
@@ -140,7 +146,7 @@ __initfunc(void fill_ebus_child(int node, struct linux_prom_registers *preg,
 	if (dev->num_irqs) {
 		dprintf("        IRQ%s", dev->num_irqs > 1 ? "s" : "");
 		for (i = 0; i < dev->num_irqs; i++)
-			dprintf(" %08x", dev->irqs[i]);
+			dprintf(" %s", __irq_itoa(dev->irqs[i]));
 		dprintf("\n");
 	}
 #endif
@@ -194,7 +200,7 @@ __initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
 	if (dev->num_irqs) {
 		dprintf("  IRQ%s", dev->num_irqs > 1 ? "s" : "");
 		for (i = 0; i < dev->num_irqs; i++)
-			dprintf(" %08x", dev->irqs[i]);
+			dprintf(" %s", __irq_itoa(dev->irqs[i]));
 		dprintf("\n");
 	}
 #endif

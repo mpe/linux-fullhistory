@@ -602,4 +602,7 @@ extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 #define module_map	vmalloc
 #define module_unmap	vfree
 
+/* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
+#define PageSkip(page)		(0)
+
 #endif /* _ALPHA_PGTABLE_H */

@@ -1,14 +1,13 @@
-/*
+/* $Id: csum_partial.S,v 1.2 1998/05/08 01:44:20 ralf Exp $
+ *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
  * Copyright (C) 1998 Ralf Baechle
- *
- * $Id: csum_partial.S,v 1.1 1998/05/04 09:18:08 ralf Exp $
  */
-#include <sys/asm.h>
-#include <sys/regdef.h>
+#include <asm/asm.h>
+#include <asm/regdef.h>
 
 #define ADDC(sum,reg)			\
 	addu	sum, reg;		\

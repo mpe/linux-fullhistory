@@ -1,4 +1,4 @@
-/* $Id: VISmemset.S,v 1.7 1997/08/22 15:54:56 jj Exp $
+/* $Id: VISmemset.S,v 1.8 1998/06/12 14:53:59 jj Exp $
  * VISmemset.S: High speed memset operations utilizing the UltraSparc
  *        Visual Instruction Set.
  *
@@ -32,6 +32,9 @@
 #endif
 
 #ifdef __KERNEL__
+
+#include <asm/visasm.h>
+
 #define RETL	clr %o0
 #else
 #define RETL	mov %g3, %o0
@@ -135,8 +138,9 @@ memset:
 #endif
 	add		%o0, 32, %o0
 7:	be,pn		%xcc, 9f
+	 nop
 #ifdef __KERNEL__
-	 wr		%g0, FPRS_FEF, %fprs
+	VISEntryHalf
 #endif
 	ldd		[%o0 - 8], %f0
 18:	wr		%g0, ASI_BLK_P, %asi
@@ -170,7 +174,7 @@ memset:
 	 add		%o0, 256, %o0
 12:
 #ifdef __KERNEL__
-	wr		%g0, 0, %fprs
+	VISExitHalf
 #else
 #ifndef REGS_64BIT
 	wr		%g0, FPRS_FEF, %fprs
@@ -231,10 +235,9 @@ memset:
 #endif
 	andncc		%o2, 0x3f, %o3
 	be,pn		%xcc, 9b
-#ifdef __KERNEL__
-	 wr		%g0, FPRS_FEF, %fprs
-#else
 	 nop
+#ifdef __KERNEL__
+	VISEntryHalf
 #endif
 	ba,pt		%xcc, 18b
 	 ldd		[%o0], %f0

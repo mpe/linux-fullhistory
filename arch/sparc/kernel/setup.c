@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.93 1998/03/09 14:03:18 jj Exp $
+/*  $Id: setup.c,v 1.99 1998/07/28 16:52:45 jj Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -47,7 +47,7 @@
 
 struct screen_info screen_info = {
 	0, 0,			/* orig-x, orig-y */
-	{ 0, 0, },		/* unused */
+	0,			/* unused */
 	0,			/* orig-video-page */
 	0,			/* orig-video-mode */
 	128,			/* orig-video-cols */
@@ -66,9 +66,10 @@ unsigned int phys_bytes_of_ram, end_of_phys_memory;
  */
 
 extern unsigned long trapbase;
+extern int serial_console;
 extern void breakpoint(void);
 #if CONFIG_SUN_CONSOLE
-extern void console_restore_palette(void);
+void (*prom_palette)(int);
 #endif
 asmlinkage void sys_sync(void);	/* it's really int */
 
@@ -90,7 +91,8 @@ void prom_sync_me(void)
 			     "nop\n\t" : : "r" (&trapbase));
 
 #ifdef CONFIG_SUN_CONSOLE
-        console_restore_palette ();
+	if (prom_palette)
+		prom_palette(1);
 #endif
 	prom_printf("PROM SYNC COMMAND...\n");
 	show_free_areas();
@@ -217,6 +219,15 @@ __initfunc(static void boot_flags_init(char *commands))
 				} else if (!strncmp (commands, "ttyb", 4)) {
 					console_fb = 3;
 					prom_printf ("Using /dev/ttyb as console.\n");
+#if defined(CONFIG_PROM_CONSOLE)
+				} else if (!strncmp (commands, "prom", 4)) {
+					char *p;
+					
+					for (p = commands - 8; *p && *p != ' '; p++)
+						*p = ' ';
+					conswitchp = &prom_con;
+					console_fb = 1;
+#endif
 				} else {
 					console_fb = 1;
 				}
@@ -321,6 +332,9 @@ __initfunc(void setup_arch(char **cmdline_p,
 	switch(sparc_cpu_model) {
 	case sun4:
 		printk("SUN4\n");
+#ifdef CONFIG_SUN4_FORCECONSOLE
+		register_console(&prom_console);
+#endif
 		packed = 0;
 		break;
 	case sun4c:
@@ -352,6 +366,11 @@ __initfunc(void setup_arch(char **cmdline_p,
 		break;
 	};
 
+#ifdef CONFIG_DUMMY_CONSOLE
+	conswitchp = &dummy_con;
+#elif defined(CONFIG_PROM_CONSOLE)
+	conswitchp = &prom_con;
+#endif
 	boot_flags_init(*cmdline_p);
 
 	idprom_init();
@@ -410,7 +429,6 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*memory_start_p = sun_serial_setup(*memory_start_p); /* set this up ASAP */
 #endif
 	{
-		extern int serial_console;  /* in console.c, of course */
 #if !CONFIG_SUN_SERIAL
 		serial_console = 0;
 #else
@@ -464,13 +482,8 @@ __initfunc(void setup_arch(char **cmdline_p,
 	init_task.mm->context = (unsigned long) NO_CONTEXT;
 	init_task.tss.kregs = &fake_swapper_regs;
 
-	if (!serial_console) {
-#ifdef CONFIG_PROM_CONSOLE
-		conswitchp = &prom_con;
-#elif defined(CONFIG_DUMMY_CONSOLE)
-		conswitchp = &dummy_con;
-#endif
-	}
+	if (serial_console)
+		conswitchp = NULL;
 }
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)

@@ -1,4 +1,4 @@
-/* $Id: central.c,v 1.5 1998/02/12 15:57:59 jj Exp $
+/* $Id: central.c,v 1.6 1998/05/14 13:35:45 jj Exp $
  * central.c: Central FHC driver for Sunfire/Starfire/Wildfire.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -29,13 +29,10 @@ unsigned long central_probe(unsigned long memory_start)
 	char namebuf[128];
 	int cnode, fnode, err;
 
-	printk("CENTRAL: ");
 	cnode = prom_finddevice("/central");
-	if(cnode == 0 || cnode == -1) {
-		printk("no central found.\n");
+	if(cnode == 0 || cnode == -1)
 		return memory_start;
-	}
-	printk("found central PROM node.\n");
+	printk("CENTRAL: found central PROM node %08x.\n", cnode);
 
 	/* Ok we got one, grab some memory for software state. */
 	memory_start = long_align(memory_start);

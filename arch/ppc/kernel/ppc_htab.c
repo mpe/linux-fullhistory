@@ -1,5 +1,5 @@
 /*
- * $Id: ppc_htab.c,v 1.18 1998/04/24 12:29:39 davem Exp $
+ * $Id: ppc_htab.c,v 1.21 1998/05/13 22:34:55 cort Exp $
  *
  * PowerPC hash table management proc entry.  Will show information
  * about the current hash table and will allow changes to it.
@@ -89,7 +89,6 @@ struct inode_operations proc_ppc_htab_inode_operations = {
 #define PMC1 953
 #define PMC2 954
 
-#ifndef CONFIG_8xx
 char *pmc1_lookup(unsigned long mmcr0)
 {
 	switch ( mmcr0 & (0x7f<<7) )
@@ -125,7 +124,6 @@ char *pmc2_lookup(unsigned long mmcr0)
 		return "unknown";
 	}
 }	
-#endif /* CONFIG_8xx */
 
 /*
  * print some useful info about the hash table.  This function
@@ -135,7 +133,6 @@ char *pmc2_lookup(unsigned long mmcr0)
 static ssize_t ppc_htab_read(struct file * file, char * buf,
 			     size_t count, loff_t *ppos)
 {
-#ifndef CONFIG_8xx
 	unsigned long mmcr0 = 0, pmc1 = 0, pmc2 = 0;
 	int n = 0, valid;
 	unsigned int kptes = 0, overflow = 0, uptes = 0, zombie_ptes = 0;
@@ -239,12 +236,14 @@ static ssize_t ppc_htab_read(struct file * file, char * buf,
 
 	n += sprintf( buffer + n,
 		      "Reloads\t\t: %08lx\n"
-		      "Evicts\t\t: %08lx\n"
-		      "Non-error misses: %08lx\n"
-		      "Error misses\t: %08lx\n",
-		      htab_reloads, htab_evicts, pte_misses, pte_errors);
+		      "Evicts\t\t: %08lx\n",
+		      htab_reloads, htab_evicts);
 	
 return_string:
+	n += sprintf( buffer + n,
+		      "Non-error misses: %08lx\n"
+		      "Error misses\t: %08lx\n",
+		      pte_misses, pte_errors);
 	if (*ppos >= strlen(buffer))
 		return 0;
 	if (n > strlen(buffer) - *ppos)
@@ -252,9 +251,6 @@ return_string:
 	copy_to_user(buf, buffer + *ppos, n);
 	*ppos += n;
 	return n;
-#else /* CONFIG_8xx */
-	return 0;
-#endif /* CONFIG_8xx */
 }
 
 /*

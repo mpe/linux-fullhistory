@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.67 1998/05/01 09:33:53 davem Exp $
+/* $Id: pgtable.h,v 1.85 1998/08/04 20:51:33 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -41,10 +41,20 @@
 
 /* Entries per page directory level. */
 #define PTRS_PER_PTE		(1UL << (PAGE_SHIFT-3))
-#define PTRS_PER_PMD		(1UL << (PAGE_SHIFT-2))
-/* We cannot use the top 16G because a half of mm/ would break, so why to check it */
+
+/* We the first one in this file, what we export to the kernel
+ * is different so we can optimize correctly for 32-bit tasks.
+ */
+#define REAL_PTRS_PER_PMD	(1UL << (PAGE_SHIFT-2))
+#define PTRS_PER_PMD		((const int)((current->tss.flags & SPARC_FLAG_32BIT) ? \
+				 (REAL_PTRS_PER_PMD >> 2) : (REAL_PTRS_PER_PMD)))
+
+/* We cannot use the top 16G because VPTE table lives there. */
 #define PTRS_PER_PGD		((1UL << (PAGE_SHIFT-3))-1)
-#define USER_PTRS_PER_PGD	PTRS_PER_PGD	/* Kernel has a separate 44bit address space */
+
+/* Kernel has a separate 44bit address space. */
+#define USER_PTRS_PER_PGD	((const int)((current->tss.flags & SPARC_FLAG_32BIT) ? \
+				 (1) : (PTRS_PER_PGD)))
 
 #define PTE_TABLE_SIZE	0x2000	/* 1024 entries 8 bytes each */
 #define PMD_TABLE_SIZE	0x2000	/* 2048 entries 4 bytes each */
@@ -54,8 +64,9 @@
 #define PTRS_PER_PAGE	(1UL << (PAGE_SHIFT-3))
 
 /* NOTE: TLB miss handlers depend heavily upon where this is. */
-#define VMALLOC_START		0x0000000800000000UL
+#define VMALLOC_START		0x0000000140000000UL
 #define VMALLOC_VMADDR(x)	((unsigned long)(x))
+#define VMALLOC_END		0x0000000200000000UL
 
 #endif /* !(__ASSEMBLY__) */
 
@@ -93,8 +104,7 @@
 #define __ACCESS_BITS	(_PAGE_ACCESSED | _PAGE_READ | _PAGE_R)
 #define __PRIV_BITS	_PAGE_P
 
-#define PAGE_NONE	__pgprot (_PAGE_PRESENT | _PAGE_VALID | _PAGE_CACHE | \
-				  __PRIV_BITS | __ACCESS_BITS)
+#define PAGE_NONE	__pgprot (_PAGE_PRESENT | _PAGE_ACCESSED)
 
 #define PAGE_SHARED	__pgprot (_PAGE_PRESENT | _PAGE_VALID | _PAGE_CACHE | \
 				  __ACCESS_BITS | _PAGE_W | _PAGE_WRITE)
@@ -137,11 +147,7 @@
 #ifndef __ASSEMBLY__
 
 extern pte_t __bad_page(void);
-extern pmd_t *__bad_pmd(void);
-extern pte_t *__bad_pte(void);
 
-#define BAD_PMD		__bad_pmd()
-#define BAD_PTE		__bad_pte()
 #define BAD_PAGE	__bad_page()
 
 /* First physical page can be anywhere, the following is needed so that
@@ -151,12 +157,9 @@ extern pte_t *__bad_pte(void);
 extern unsigned long phys_base;
 #define ZERO_PAGE	((unsigned long)__va(phys_base))
 
-/* This is for making TLB miss faster to process. */
-#define null_pmd_table (null_pte_table - PAGE_SIZE)
-extern unsigned int null_pte_table;
-
 /* Allocate a block of RAM which is aligned to its size.
-   This procedure can be used until the call to mem_init(). */
+ * This procedure can be used until the call to mem_init().
+ */
 extern void *sparc_init_alloc(unsigned long *kbrk, unsigned long size);
 
 /* Cache and TLB flush operations. */
@@ -173,36 +176,38 @@ extern void *sparc_init_alloc(unsigned long *kbrk, unsigned long size);
 extern void __flush_cache_all(void);
 
 extern void __flush_tlb_all(void);
-extern void __flush_tlb_mm(unsigned long context);
+extern void __flush_tlb_mm(unsigned long context, unsigned long r);
 extern void __flush_tlb_range(unsigned long context, unsigned long start,
-			      unsigned long end);
-extern void __flush_tlb_page(unsigned long context, unsigned long page);
+			      unsigned long r, unsigned long end,
+			      unsigned long pgsz, unsigned long size);
+extern void __flush_tlb_page(unsigned long context, unsigned long page, unsigned long r);
 
 #ifndef __SMP__
 
 #define flush_cache_all()	__flush_cache_all()
 #define flush_tlb_all()		__flush_tlb_all()
 
-extern __inline__ void flush_tlb_mm(struct mm_struct *mm)
-{
-	if(mm->context != NO_CONTEXT)
-		__flush_tlb_mm(mm->context & 0x3ff);
-}
+#define flush_tlb_mm(mm) \
+do { if((mm)->context != NO_CONTEXT) \
+	__flush_tlb_mm((mm)->context & 0x3ff, SECONDARY_CONTEXT); \
+} while(0)
 
-extern __inline__ void flush_tlb_range(struct mm_struct *mm, unsigned long start,
-				       unsigned long end)
-{
-	if(mm->context != NO_CONTEXT)
-		__flush_tlb_range(mm->context & 0x3ff, start, end);
-}
+#define flush_tlb_range(mm, start, end) \
+do { if((mm)->context != NO_CONTEXT) { \
+	unsigned long __start = (start)&PAGE_MASK; \
+	unsigned long __end = (end)&PAGE_MASK; \
+	__flush_tlb_range((mm)->context & 0x3ff, __start, \
+			  SECONDARY_CONTEXT, __end, PAGE_SIZE, \
+			  (__end - __start)); \
+     } \
+} while(0)
 
-extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
-{
-	struct mm_struct *mm = vma->vm_mm;
-
-	if(mm->context != NO_CONTEXT)
-		__flush_tlb_page(mm->context & 0x3ff, page & PAGE_MASK);
-}
+#define flush_tlb_page(vma, page) \
+do { struct mm_struct *__mm = (vma)->vm_mm; \
+     if(__mm->context != NO_CONTEXT) \
+	__flush_tlb_page(__mm->context & 0x3ff, (page)&PAGE_MASK, \
+			 SECONDARY_CONTEXT); \
+} while(0)
 
 #else /* __SMP__ */
 
@@ -239,105 +244,74 @@ extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 
 #endif
 
-extern inline pte_t mk_pte(unsigned long page, pgprot_t pgprot)
-{ return __pte(__pa(page) | pgprot_val(pgprot)); }
-
-extern inline pte_t mk_pte_phys(unsigned long physpage, pgprot_t pgprot)
-{ return __pte(physpage | pgprot_val(pgprot)); }
-
-extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
-{ pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }
-
-extern inline void pmd_set(pmd_t *pmdp, pte_t *ptep)
-{ pmd_val(*pmdp) = __pa((unsigned long) ptep); }
-
-extern inline void pgd_set(pgd_t *pgdp, pmd_t *pmdp)
-{ pgd_val(*pgdp) = __pa((unsigned long) pmdp); }
-
-extern inline unsigned long pte_page(pte_t pte)
-{ return (unsigned long) __va((pte_val(pte) & _PFN_MASK)); }
-
-extern inline unsigned long pmd_page(pmd_t pmd)
-{ return (unsigned long) __va(pmd_val(pmd)); }
-
-extern inline unsigned long pgd_page(pgd_t pgd)
-{ return (unsigned long) __va(pgd_val(pgd)); }
-
-#define PMD_NONE_MAGIC		0x40
-#define PGD_NONE_MAGIC		0x40
-
-extern inline int pte_none(pte_t pte) 		{ return !pte_val(pte); }
-extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
-extern inline void pte_clear(pte_t *pte)	{ pte_val(*pte) = 0; }
-
-extern inline int pmd_none(pmd_t pmd)		{ return pmd_val(pmd)&PMD_NONE_MAGIC; }
-extern inline int pmd_bad(pmd_t pmd)		{ return 0; }
-extern inline int pmd_present(pmd_t pmd)	{ return !(pmd_val(pmd)&PMD_NONE_MAGIC);}
-extern inline void pmd_clear(pmd_t *pmdp)	{ pmd_val(*pmdp) = null_pte_table; }
-
-extern inline int pgd_none(pgd_t pgd)		{ return pgd_val(pgd) & PGD_NONE_MAGIC; }
-extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
-extern inline int pgd_present(pgd_t pgd)	{ return !(pgd_val(pgd)&PGD_NONE_MAGIC);}
-extern inline void pgd_clear(pgd_t *pgdp)	{ pgd_val(*pgdp) = null_pmd_table; }
+#define mk_pte(page, pgprot)		(__pte(__pa(page) | pgprot_val(pgprot)))
+#define mk_pte_phys(physpage, pgprot)	(__pte((physpage) | pgprot_val(pgprot)))
+#define pte_modify(_pte, newprot) \
+	(pte_val(_pte) = ((pte_val(_pte) & _PAGE_CHG_MASK) | pgprot_val(newprot)))
+#define pmd_set(pmdp, ptep)		(pmd_val(*(pmdp)) = __pa((unsigned long) (ptep)))
+#define pgd_set(pgdp, pmdp)		(pgd_val(*(pgdp)) = __pa((unsigned long) (pmdp)))
+#define pte_page(pte)   ((unsigned long) __va(((pte_val(pte)&~PAGE_OFFSET)&~(0xfffUL))))
+#define pmd_page(pmd)			((unsigned long) __va(pmd_val(pmd)))
+#define pgd_page(pgd)			((unsigned long) __va(pgd_val(pgd)))
+#define pte_none(pte) 			(!pte_val(pte))
+#define pte_present(pte)		(pte_val(pte) & _PAGE_PRESENT)
+#define pte_clear(pte)			(pte_val(*(pte)) = 0UL)
+#define pmd_none(pmd)			(!pmd_val(pmd))
+#define pmd_bad(pmd)			(0)
+#define pmd_present(pmd)		(pmd_val(pmd) != 0UL)
+#define pmd_clear(pmdp)			(pmd_val(*(pmdp)) = 0UL)
+#define pgd_none(pgd)			(!pgd_val(pgd))
+#define pgd_bad(pgd)			(0)
+#define pgd_present(pgd)		(pgd_val(pgd) != 0UL)
+#define pgd_clear(pgdp)			(pgd_val(*(pgdp)) = 0UL)
 
 /* The following only work if pte_present() is true.
  * Undefined behaviour if not..
  */
-extern inline int pte_read(pte_t pte)		{ return pte_val(pte) & _PAGE_READ; }
-extern inline int pte_write(pte_t pte)		{ return pte_val(pte) & _PAGE_WRITE; }
-extern inline int pte_dirty(pte_t pte)		{ return pte_val(pte) & _PAGE_MODIFIED; }
-extern inline int pte_young(pte_t pte)		{ return pte_val(pte) & _PAGE_ACCESSED; }
+#define pte_read(pte)		(pte_val(pte) & _PAGE_READ)
+#define pte_write(pte)		(pte_val(pte) & _PAGE_WRITE)
+#define pte_dirty(pte)		(pte_val(pte) & _PAGE_MODIFIED)
+#define pte_young(pte)		(pte_val(pte) & _PAGE_ACCESSED)
+#define pte_wrprotect(pte)	(__pte(pte_val(pte) & ~(_PAGE_WRITE|_PAGE_W)))
+#define pte_rdprotect(pte)	(__pte(((pte_val(pte)<<1UL)>>1UL) & ~_PAGE_READ))
+#define pte_mkclean(pte)	(__pte(pte_val(pte) & ~(_PAGE_MODIFIED|_PAGE_W)))
+#define pte_mkold(pte)		(__pte(((pte_val(pte)<<1UL)>>1UL) & ~_PAGE_ACCESSED))
 
-extern inline pte_t pte_wrprotect(pte_t pte)
-{ return __pte(pte_val(pte) & ~(_PAGE_WRITE|_PAGE_W)); }
-
-extern inline pte_t pte_rdprotect(pte_t pte)
-{ return __pte(pte_val(pte) & ~(_PAGE_READ|_PAGE_R)); }
-
-extern inline pte_t pte_mkclean(pte_t pte)
-{ return __pte(pte_val(pte) & ~(_PAGE_MODIFIED | _PAGE_W)); }
-
-extern inline pte_t pte_mkold(pte_t pte)
-{ return __pte(pte_val(pte) & ~(_PAGE_ACCESSED | _PAGE_R)); }
-
-extern inline pte_t pte_mkwrite(pte_t pte)
-{
-	if(pte_val(pte) & _PAGE_MODIFIED)
-		return __pte(pte_val(pte) | (_PAGE_WRITE | _PAGE_W));
+/* Be very careful when you change these three, they are delicate. */
+static __inline__ pte_t pte_mkyoung(pte_t _pte)
+{	if(pte_val(_pte) & _PAGE_READ)
+		return __pte(pte_val(_pte)|(_PAGE_ACCESSED|_PAGE_R));
 	else
-		return __pte(pte_val(pte) | (_PAGE_WRITE));
+		return __pte(pte_val(_pte)|(_PAGE_ACCESSED));
 }
 
-extern inline pte_t pte_mkdirty(pte_t pte)
-{
-	if(pte_val(pte) & _PAGE_WRITE)
-		return __pte(pte_val(pte) | (_PAGE_MODIFIED | _PAGE_W));
+static __inline__ pte_t pte_mkwrite(pte_t _pte)
+{	if(pte_val(_pte) & _PAGE_MODIFIED)
+		return __pte(pte_val(_pte)|(_PAGE_WRITE|_PAGE_W));
 	else
-		return __pte(pte_val(pte) | (_PAGE_MODIFIED));
+		return __pte(pte_val(_pte)|(_PAGE_WRITE));
 }
 
-extern inline pte_t pte_mkyoung(pte_t pte)
-{
-	if(pte_val(pte) & _PAGE_READ)
-		return __pte(pte_val(pte) | (_PAGE_ACCESSED | _PAGE_R));
+static __inline__ pte_t pte_mkdirty(pte_t _pte)
+{	if(pte_val(_pte) & _PAGE_WRITE)
+		return __pte(pte_val(_pte)|(_PAGE_MODIFIED|_PAGE_W));
 	else
-		return __pte(pte_val(pte) | (_PAGE_ACCESSED));
+		return __pte(pte_val(_pte)|(_PAGE_MODIFIED));
 }
 
 /* to find an entry in a page-table-directory. */
-extern inline pgd_t *pgd_offset(struct mm_struct *mm, unsigned long address)
-{ return mm->pgd + ((address >> PGDIR_SHIFT) & (PTRS_PER_PGD)); }
+#define pgd_offset(mm, address) ((mm)->pgd + ((address >> PGDIR_SHIFT) & (PTRS_PER_PGD)))
 
 /* to find an entry in a kernel page-table-directory */
 #define pgd_offset_k(address) pgd_offset(&init_mm, address)
 
 /* Find an entry in the second-level page table.. */
-extern inline pmd_t *pmd_offset(pgd_t *dir, unsigned long address)
-{ return (pmd_t *) pgd_page(*dir) + ((address >> PMD_SHIFT) & (PTRS_PER_PMD - 1)); }
+#define pmd_offset(dir, address)	((pmd_t *) pgd_page(*(dir)) + \
+					((address >> PMD_SHIFT) & (REAL_PTRS_PER_PMD-1)))
 
 /* Find an entry in the third-level page table.. */
-extern inline pte_t *pte_offset(pmd_t *dir, unsigned long address)
-{ return (pte_t *) pmd_page(*dir) + ((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1)); }
+#define pte_offset(dir, address)	((pte_t *) pmd_page(*(dir)) + \
+					((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1)))
 
 /* Very stupidly, we used to get new pgd's and pmd's, init their contents
  * to point to the NULL versions of the next level page table, later on
@@ -352,25 +326,16 @@ extern inline pte_t *pte_offset(pmd_t *dir, unsigned long address)
 #else
 extern struct pgtable_cache_struct {
 	unsigned long *pgd_cache;
-	unsigned long *pmd_cache;
 	unsigned long *pte_cache;
 	unsigned long pgcache_size;
 	unsigned long pgdcache_size;
 } pgt_quicklists;
 #endif
 #define pgd_quicklist		(pgt_quicklists.pgd_cache)
-#define pmd_quicklist		(pgt_quicklists.pmd_cache)
+#define pmd_quicklist		((unsigned long *)0)
 #define pte_quicklist		(pgt_quicklists.pte_cache)
 #define pgtable_cache_size	(pgt_quicklists.pgcache_size)
 #define pgd_cache_size		(pgt_quicklists.pgdcache_size)
-
-extern __inline__ void __init_pgd(pgd_t *pgdp)
-{
-	extern void __bfill64(void *, unsigned long *);
-	extern unsigned long two_null_pmd_table;
-	
-	__bfill64((void *)pgdp, &two_null_pmd_table);
-}
 
 #ifndef __SMP__
 
@@ -382,7 +347,8 @@ extern __inline__ void free_pgd_fast(pgd_t *pgd)
 		(unsigned long *)page->next_hash = pgd_quicklist;
 		pgd_quicklist = (unsigned long *)page;
 	}
-	(unsigned long)page->pprev_hash |= (((unsigned long)pgd & (PAGE_SIZE / 2)) ? 2 : 1);
+	(unsigned long)page->pprev_hash |=
+		(((unsigned long)pgd & (PAGE_SIZE / 2)) ? 2 : 1);
 	pgd_cache_size++;
 }
 
@@ -410,7 +376,7 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 		if(ret) {
 			struct page *page = mem_map + MAP_NR(ret);
 			
-			__init_pgd((pgd_t *)ret);
+			clear_page(ret);
 			(unsigned long)page->pprev_hash = 2;
 			(unsigned long *)page->next_hash = pgd_quicklist;
 			pgd_quicklist = (unsigned long *)page;
@@ -435,21 +401,22 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 
 	if((ret = pgd_quicklist) != NULL) {
 		pgd_quicklist = (unsigned long *)(*ret);
-		ret[0] = ret[1];
+		ret[0] = 0;
 		pgtable_cache_size--;
 	} else {
 		ret = (unsigned long *) __get_free_page(GFP_KERNEL);
 		if(ret)
-			__init_pgd((pgd_t *)ret);
+			clear_page(ret);
 	}
 	return (pgd_t *)ret;
 }
-#endif /* __SMP__ */
 
 extern __inline__ void free_pgd_slow(pgd_t *pgd)
 {
 	free_page((unsigned long)pgd);
 }
+
+#endif /* __SMP__ */
 
 extern pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long address_premasked);
 
@@ -457,9 +424,9 @@ extern __inline__ pmd_t *get_pmd_fast(void)
 {
 	unsigned long *ret;
 
-	if((ret = (unsigned long *)pmd_quicklist) != NULL) {
-		pmd_quicklist = (unsigned long *)(*ret);
-		ret[0] = ret[1];
+	if((ret = (unsigned long *)pte_quicklist) != NULL) {
+		pte_quicklist = (unsigned long *)(*ret);
+		ret[0] = 0;
 		pgtable_cache_size--;
 	}
 	return (pmd_t *)ret;
@@ -467,8 +434,8 @@ extern __inline__ pmd_t *get_pmd_fast(void)
 
 extern __inline__ void free_pmd_fast(pgd_t *pmd)
 {
-	*(unsigned long *)pmd = (unsigned long) pmd_quicklist;
-	pmd_quicklist = (unsigned long *) pmd;
+	*(unsigned long *)pmd = (unsigned long) pte_quicklist;
+	pte_quicklist = (unsigned long *) pmd;
 	pgtable_cache_size++;
 }
 
@@ -485,7 +452,7 @@ extern __inline__ pte_t *get_pte_fast(void)
 
 	if((ret = (unsigned long *)pte_quicklist) != NULL) {
 		pte_quicklist = (unsigned long *)(*ret);
-		ret[0] = ret[1];
+		ret[0] = 0;
 		pgtable_cache_size--;
 	}
 	return (pte_t *)ret;
@@ -526,7 +493,7 @@ extern inline pte_t * pte_alloc(pmd_t *pmd, unsigned long address)
 
 extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
 {
-	address = (address >> PMD_SHIFT) & (PTRS_PER_PMD - 1);
+	address = (address >> PMD_SHIFT) & (REAL_PTRS_PER_PMD - 1);
 	if (pgd_none(*pgd)) {
 		pmd_t *page = get_pmd_fast();
 
@@ -543,12 +510,10 @@ extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
 
 extern int do_check_pgt_cache(int, int);
 
-extern inline void set_pgdir(unsigned long address, pgd_t entry)
-{
-	/* Nothing to do on sparc64 :) */
-}
+/* Nothing to do on sparc64 :) */
+#define set_pgdir(address, entry)	do { } while(0)
 
-extern pgd_t swapper_pg_dir[1024];
+extern pgd_t swapper_pg_dir[1];
 
 extern inline void SET_PAGE_DIR(struct task_struct *tsk, pgd_t *pgdir)
 {
@@ -590,35 +555,26 @@ extern void mmu_release_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbu
 #define mmu_lockarea(vaddr, len)		(vaddr)
 #define mmu_unlockarea(vaddr, len)		do { } while(0)
 
-extern __inline__ void update_mmu_cache(struct vm_area_struct *vma,
-					unsigned long address, pte_t pte)
-{
-	struct mm_struct *mm = vma->vm_mm;
-	unsigned long ctx = mm->context & 0x3ff;
-	unsigned long tag_access;
-
-	tag_access = address | ctx;
-
-	__asm__ __volatile__("
-	rdpr	%%pstate, %%g1
-	wrpr	%%g1, %0, %%pstate
-	brz,pt	%1, 1f
-	 mov	%2, %%g2
-	stxa	%3, [%%g2] %5
-	b,pt	%%xcc, 2f
-	 stxa	%4, [%%g0] %6
-1:
-	stxa	%3, [%%g2] %7
-	stxa	%4, [%%g0] %8
-2:
-	wrpr	%%g1, 0x0, %%pstate
-"	: /* no outputs */
-	: "i" (PSTATE_IE), "r" (vma->vm_flags & VM_EXECUTABLE),
-	  "i" (TLB_TAG_ACCESS), "r" (tag_access), "r" (pte_val(pte)),
-	  "i" (ASI_IMMU), "i" (ASI_ITLB_DATA_IN),
-	  "i" (ASI_DMMU), "i" (ASI_DTLB_DATA_IN)
-	: "g1", "g2");
-}
+#define update_mmu_cache(__vma, __address, _pte) \
+__asm__ __volatile__( \
+	"rdpr	%%pstate, %%g1\n\t" \
+	"wrpr	%%g1, %0, %%pstate\n\t" \
+	"brz,pt	%1, 1f\n\t" \
+	" mov	%2, %%g2\n\t" \
+	"stxa	%3, [%%g2] %5\n\t" \
+	"ba,pt	%%xcc, 2f\n\t" \
+	" stxa	%4, [%%g0] %6\n\t" \
+"1:	stxa	%3, [%%g2] %7\n\t" \
+"	stxa	%4, [%%g0] %8\n\t" \
+"2:	wrpr	%%g1, 0x0, %%pstate\n" \
+	: /* no outputs */ \
+	: "i" (PSTATE_IE), \
+          "r" (((__vma)->vm_flags&(VM_READ|VM_WRITE|VM_EXEC))==(VM_READ|VM_EXEC)), \
+	  "i" (TLB_TAG_ACCESS), \
+	  "r" ((__address) | ((__vma)->vm_mm->context & 0x3ff)), \
+	  "r" (pte_val(_pte)), "i" (ASI_IMMU), "i" (ASI_ITLB_DATA_IN), \
+	  "i" (ASI_DMMU), "i" (ASI_DTLB_DATA_IN) \
+	: "g1", "g2")
 
 /* Make a non-present pseudo-TTE. */
 extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
@@ -660,7 +616,6 @@ __get_iospace (unsigned long addr)
 
 extern void * module_map (unsigned long size);
 extern void module_unmap (void *addr);
-extern void module_shrink (void *addr, unsigned long size);
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
 #define PageSkip(page)		(test_bit(PG_skip, &(page)->flags))

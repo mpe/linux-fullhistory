@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.54 1998/04/28 08:23:28 davem Exp $
+/*  $Id: process.c,v 1.70 1998/08/04 20:49:15 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -52,8 +52,8 @@ asmlinkage int sys_idle(void)
 		return -EPERM;
 
 	/* endless idle loop with no priority at all */
-	current->priority = -100;
-	current->counter = -100;
+	current->priority = 0;
+	current->counter = 0;
 	for (;;) {
 		check_pgt_cache();
 		run_task_queue(&tq_scheduler);
@@ -69,7 +69,7 @@ asmlinkage int sys_idle(void)
  */
 asmlinkage int cpu_idle(void)
 {
-	current->priority = -100;
+	current->priority = 0;
 	while(1) {
 		check_pgt_cache();
 		if(tq_scheduler) {
@@ -78,8 +78,8 @@ asmlinkage int cpu_idle(void)
 			unlock_kernel();
 		}
 		barrier();
-		current->counter = -100;
-		if(need_resched)
+		current->counter = 0;
+		if(current->need_resched)
 			schedule();
 		barrier();
 	}
@@ -99,7 +99,7 @@ asmlinkage int sys_idle(void)
 extern char reboot_command [];
 
 #ifdef CONFIG_SUN_CONSOLE
-extern void console_restore_palette (void);
+extern void (*prom_palette)(int);
 extern int serial_console;
 #endif
 
@@ -109,8 +109,8 @@ void machine_halt(void)
 	mdelay(8);
 	cli();
 #ifdef CONFIG_SUN_CONSOLE
-	if (!serial_console)
-		console_restore_palette ();
+	if (!serial_console && prom_palette)
+		prom_palette (1);
 #endif
 	prom_halt();
 	panic("Halt failed!");
@@ -127,8 +127,8 @@ void machine_restart(char * cmd)
 	p = strchr (reboot_command, '\n');
 	if (p) *p = 0;
 #ifdef CONFIG_SUN_CONSOLE
-	if (!serial_console)
-		console_restore_palette ();
+	if (!serial_console && prom_palette)
+		prom_palette (1);
 #endif
 	if (cmd)
 		prom_reboot(cmd);
@@ -272,7 +272,7 @@ void __show_regs(struct pt_regs * regs)
 	       smp_processor_id(), local_irq_count,
 	       atomic_read(&global_irq_count));
 #endif
-        printk("TSTATE: %016lx TPC: %016lx TNPC: %016lx Y: %08x\n", regs->tstate,
+	printk("TSTATE: %016lx TPC: %016lx TNPC: %016lx Y: %08x\n", regs->tstate,
 	       regs->tpc, regs->tnpc, regs->y);
 	printk("g0: %016lx g1: %016lx g2: %016lx g3: %016lx\n",
 	       regs->u_regs[0], regs->u_regs[1], regs->u_regs[2],
@@ -295,22 +295,22 @@ void __show_regs(struct pt_regs * regs)
 #ifdef VERBOSE_SHOWREGS
 static void idump_from_user (unsigned int *pc)
 {
-        int i;
-        int code;
-        
-        if((((unsigned long) pc) & 3))
-        	return;
-        
-        pc -= 3;
-        for(i = -3; i < 6; i++) {
-        	get_user(code, pc);
-                printk("%c%08x%c",i?' ':'<',code,i?' ':'>');
-                pc++;
-        }
-        printk("\n");
+	int i;
+	int code;
+	
+	if((((unsigned long) pc) & 3))
+		return;
+	
+	pc -= 3;
+	for(i = -3; i < 6; i++) {
+		get_user(code, pc);
+		printk("%c%08x%c",i?' ':'<',code,i?' ':'>');
+		pc++;
+	}
+	printk("\n");
 }
 #endif
-                                                                		
+
 void show_regs(struct pt_regs *regs)
 {
 #ifdef VERBOSE_SHOWREGS
@@ -339,7 +339,7 @@ void show_regs(struct pt_regs *regs)
 
 void show_regs32(struct pt_regs32 *regs)
 {
-        printk("PSR: %08x PC: %08x NPC: %08x Y: %08x\n", regs->psr,
+	printk("PSR: %08x PC: %08x NPC: %08x Y: %08x\n", regs->psr,
 	       regs->pc, regs->npc, regs->y);
 	printk("g0: %08x g1: %08x g2: %08x g3: %08x\n",
 	       regs->u_regs[0], regs->u_regs[1], regs->u_regs[2],
@@ -366,7 +366,6 @@ void show_thread(struct thread_struct *tss)
 	printk("sig_address:       0x%016lx\n", tss->sig_address);
 	printk("sig_desc:          0x%016lx\n", tss->sig_desc);
 	printk("ksp:               0x%016lx\n", tss->ksp);
-	printk("kpc:               0x%08x\n", tss->kpc);
 
 	if (tss->w_saved) {
 		for (i = 0; i < NSWINS; i++) {
@@ -378,10 +377,6 @@ void show_thread(struct thread_struct *tss)
 		printk("w_saved:           0x%04x\n", tss->w_saved);
 	}
 
-	printk("sstk_info.stack:   0x%016lx\n",
-	        (unsigned long)tss->sstk_info.the_stack);
-	printk("sstk_info.status:  0x%016lx\n",
-	        (unsigned long)tss->sstk_info.cur_status);
 	printk("flags:             0x%08x\n", tss->flags);
 	printk("current_ds:        0x%016lx\n", tss->current_ds.seg);
 }
@@ -400,13 +395,10 @@ void exit_thread(void)
 void flush_thread(void)
 {
 	current->tss.w_saved = 0;
-	current->tss.sstk_info.cur_status = 0;
-	current->tss.sstk_info.the_stack = 0;
 
 	/* No new signal delivery by default. */
 	current->tss.new_signal = 0;
-	current->tss.flags &= ~(SPARC_FLAG_USEDFPU | SPARC_FLAG_USEDFPUL |
-			        SPARC_FLAG_USEDFPUU);
+	current->tss.fpsaved[0] = 0;
 	
 	/* Now, this task is no longer a kernel thread. */
 	current->tss.current_ds = USER_DS;
@@ -422,6 +414,8 @@ void flush_thread(void)
 		get_mmu_context(current);
 		spin_unlock(&scheduler_lock);
 	}
+	if (current->tss.flags & SPARC_FLAG_32BIT)
+		__asm__ __volatile__("stxa %%g0, [%0] %1" : : "r"(TSB_REG), "i"(ASI_DMMU));
 	current->tss.ctx = current->mm->context & 0x3ff;
 	spitfire_set_secondary_context (current->tss.ctx);
 	__asm__ __volatile__("flush %g6");
@@ -438,6 +432,13 @@ static unsigned long clone_stackframe(unsigned long csp, unsigned long psp)
 		__get_user(fp, &(((struct reg_window *)psp)->ins[6]));
 	} else
 		__get_user(fp, &(((struct reg_window32 *)psp)->ins[6]));
+
+	/* Now 8-byte align the stack as this is mandatory in the
+	 * Sparc ABI due to how register windows work.  This hides
+	 * the restriction from thread libraries etc.  -DaveM
+	 */
+	csp &= ~7UL;
+
 	distance = fp - psp;
 	rval = (csp - distance);
 	if(copy_in_user(rval, psp, distance))
@@ -537,38 +538,21 @@ barf:
  *       allocate the task_struct and kernel stack in
  *       do_fork().
  */
-#ifdef __SMP__
-extern void ret_from_smpfork(void);
-#else
-extern void ret_from_syscall(void);
-#endif
-
 int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		struct task_struct *p, struct pt_regs *regs)
 {
-	unsigned long stack_offset;
 	char *child_trap_frame;
-	int tframe_size;
 
 	/* Calculate offset to stack_frame & pt_regs */
-	stack_offset = (((PAGE_SIZE << 1) -
-			((sizeof(unsigned int)*64) + (2*sizeof(unsigned long)))) &
-		~(64 - 1)) - (TRACEREG_SZ+REGWIN_SZ);
-	tframe_size = (TRACEREG_SZ + REGWIN_SZ) +
-		(sizeof(unsigned int) * 64) + (2 * sizeof(unsigned long));
-	child_trap_frame = ((char *)p) + stack_offset;
-	memcpy(child_trap_frame, (((struct reg_window *)regs)-1), tframe_size);
+	child_trap_frame = ((char *)p) + ((PAGE_SIZE << 1) - (TRACEREG_SZ+REGWIN_SZ));
+	memcpy(child_trap_frame, (((struct reg_window *)regs)-1), (TRACEREG_SZ+REGWIN_SZ));
 	p->tss.ksp = ((unsigned long) child_trap_frame) - STACK_BIAS;
-#ifdef __SMP__
-	p->tss.kpc = ((unsigned int) ((unsigned long) ret_from_smpfork)) - 0x8;
-#else
-	p->tss.kpc = ((unsigned int) ((unsigned long) ret_from_syscall)) - 0x8;
-#endif
 	p->tss.kregs = (struct pt_regs *)(child_trap_frame+sizeof(struct reg_window));
 	p->tss.cwp = (regs->tstate + 1) & TSTATE_CWP;
+	p->tss.fpsaved[0] = 0;
 	if(regs->tstate & TSTATE_PRIV) {
 		p->tss.kregs->u_regs[UREG_FP] = p->tss.ksp;
-		p->tss.flags |= SPARC_FLAG_KTHREAD;
+		p->tss.flags |= (SPARC_FLAG_KTHREAD | SPARC_FLAG_NEWCHILD);
 		p->tss.current_ds = KERNEL_DS;
 		p->tss.ctx = 0;
 		__asm__ __volatile__("flushw");
@@ -578,11 +562,12 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		p->tss.kregs->u_regs[UREG_G6] = (unsigned long) p;
 	} else {
 		if(current->tss.flags & SPARC_FLAG_32BIT) {
-			sp &= 0x00000000ffffffff;
-			regs->u_regs[UREG_FP] &= 0x00000000ffffffff;
+			sp &= 0x00000000ffffffffUL;
+			regs->u_regs[UREG_FP] &= 0x00000000ffffffffUL;
 		}
 		p->tss.kregs->u_regs[UREG_FP] = sp;
-		p->tss.flags &= ~SPARC_FLAG_KTHREAD;
+		p->tss.flags = (p->tss.flags & ~SPARC_FLAG_KTHREAD) |
+			SPARC_FLAG_NEWCHILD;
 		p->tss.current_ds = USER_DS;
 		p->tss.ctx = (p->mm->context & 0x3ff);
 		if (sp != regs->u_regs[UREG_FP]) {
@@ -667,7 +652,8 @@ asmlinkage int sparc_execve(struct pt_regs *regs)
 	putname(filename);
 	if(!error) {
 		fprs_write(0);
-		regs->fprs = 0;
+		current->tss.xfsr[0] = 0;
+		current->tss.fpsaved[0] = 0;
 		regs->tstate &= ~TSTATE_PEF;
 	}
 out:

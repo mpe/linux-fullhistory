@@ -4,6 +4,10 @@
 
 #include <linux/config.h>
 
+#ifdef CONFIG_APUS
+#include <asm-m68k/serial.h>
+#else
+
 /*
  * This assumes you have a 1.8432 MHz clock for your UART.
  *
@@ -116,3 +120,4 @@
 	HUB6_SERIAL_PORT_DFNS		\
 	MCA_SERIAL_PORT_DFNS
 
+#endif /* CONFIG_APUS */

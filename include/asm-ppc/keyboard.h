@@ -18,6 +18,10 @@
 #include <linux/config.h>
 #include <asm/adb.h>
 
+#ifdef CONFIG_APUS
+#include <asm-m68k/keyboard.h>
+#else
+
 #define KEYBOARD_IRQ			1
 #define DISABLE_KBD_DURING_INTERRUPTS	0
 #define INIT_KBD
@@ -167,6 +171,8 @@ static inline void kbd_init_hw(void)
 	else
 		mackbd_init_hw();
 }
+
+#endif /* CONFIG_APUS */
 
 #endif /* __KERNEL__ */
 

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.13 1998/03/29 10:10:52 davem Exp $
+/* $Id: sys_sparc.c,v 1.20 1998/08/03 20:03:26 davem Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -38,17 +38,9 @@ extern asmlinkage unsigned long sys_brk(unsigned long brk);
 
 asmlinkage unsigned long sparc_brk(unsigned long brk)
 {
-	unsigned long ret;
-
-	lock_kernel();
-	if(brk >= 0x80000000000UL) {	/* VM hole */
-		ret = current->mm->brk;
-		goto out;
-	}
-	ret = sys_brk(brk);
-out:
-	unlock_kernel();
-	return ret;
+	if(brk >= 0x80000000000UL)	/* VM hole */
+		return current->mm->brk;
+	return sys_brk(brk);
 }
 
 /*
@@ -129,16 +121,6 @@ asmlinkage int sys_ipc (unsigned call, int first, int second, unsigned long thir
 	if (call <= SHMCTL) 
 		switch (call) {
 		case SHMAT:
-			if (first >= 0) {
-				extern struct shmid_ds *shm_segs[];
-				struct shmid_ds *shp = shm_segs[(unsigned int) first % SHMMNI];
-				if (shp == IPC_UNUSED || shp == IPC_NOID) {
-					err = -ENOMEM;
-					if ((unsigned long)ptr >= 0x80000000000UL - shp->shm_segsz &&
-					    (unsigned long)ptr < 0xfffff80000000000UL)
-						goto out; /* Somebody is trying to fool us */
-				}
-			}
 			err = sys_shmat (first, (char *) ptr, second, (ulong *) third);
 			goto out;
 		case SHMDT:
@@ -160,8 +142,6 @@ out:
 	unlock_kernel();
 	return err;
 }
-
-extern unsigned long get_unmapped_area(unsigned long addr, unsigned long len);
 
 /* Linux version of mmap */
 asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
@@ -245,15 +225,23 @@ extern void check_pending(int signum);
 
 asmlinkage int sys_getdomainname(char *name, int len)
 {
-        int nlen = strlen(system_utsname.domainname);
+        int nlen;
+	int err = -EFAULT;
+
+ 	down(&uts_sem);
+ 	
+	nlen = strlen(system_utsname.domainname) + 1;
 
         if (nlen < len)
                 len = nlen;
 	if(len > __NEW_UTS_LEN)
-		return -EFAULT;
+		goto done;
 	if(copy_to_user(name, system_utsname.domainname, len))
-		return -EFAULT;
-	return 0;
+		goto done;
+	err = 0;
+done:
+	up(&uts_sem);
+	return err;
 }
 
 /* only AP+ systems have sys_aplib */

@@ -7,7 +7,11 @@
  * assume GCC is being used.
  */
 
+#if __GNUC_MINOR__ > 7
+typedef unsigned long int      __kernel_size_t;
+#else
 typedef unsigned long long     __kernel_size_t;
+#endif
 
 typedef long long              __kernel_ssize_t;
 typedef long                   __kernel_ptrdiff_t;

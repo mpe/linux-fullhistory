@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1997, 1998 by Ralf Baechle
  *
- * $Id: scall_o32.S,v 1.1 1998/05/01 01:34:21 ralf Exp $
+ * $Id: scall_o32.S,v 1.2 1998/07/26 03:02:07 davem Exp $
  */
 #include <asm/asm.h>
 #include <linux/errno.h>
@@ -73,6 +73,7 @@ EXPORT(o32_ret_from_sys_call)
 
 9:	lw	t0,PT_STATUS(sp)	# returning to kernel mode?
 	andi	t1, t0, 0x10
+#error Change this to current->need_resched --DaveM
 	lw	t2, need_resched
 	beqz	t1, o32_return		# -> yes
 	bnez	t2, o32_reschedule

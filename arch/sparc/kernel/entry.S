@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.149 1998/03/19 15:36:30 jj Exp $
+/* $Id: entry.S,v 1.152 1998/07/29 16:32:24 jj Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1265,6 +1265,22 @@ C_LABEL(sys_pipe):
 	mov	%o7, %l5
 	add	%sp, REGWIN_SZ, %o0		! pt_regs *regs arg
 	call	C_LABEL(sparc_pipe)
+	 mov	%l5, %o7
+
+	.align	4
+	.globl	C_LABEL(sys_sigaltstack)
+C_LABEL(sys_sigaltstack):
+	mov	%o7, %l5
+	mov	%fp, %o2
+	call	C_LABEL(do_sigaltstack)
+	 mov	%l5, %o7
+
+	.align	4
+	.globl	C_LABEL(sys_sigstack)
+C_LABEL(sys_sigstack):
+	mov	%o7, %l5
+	mov	%fp, %o2
+	call	C_LABEL(do_sys_sigstack)
 	 mov	%l5, %o7
 
 	.align	4

@@ -19,6 +19,8 @@
 
 #define TIMER_IRQ 0
 
+extern int (*irq_cannonicalize)(int irq);
+
 struct irqaction;
 extern int setup_x86_irq(int irq, struct irqaction * new);
 extern void disable_irq(unsigned int);

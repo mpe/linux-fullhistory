@@ -725,6 +725,7 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 	current->mm->end_data = 0;
 	current->mm->end_code = 0;
 	current->mm->mmap = NULL;
+	current->flags &= ~PF_FORKNOEXEC;
 	elf_entry = (unsigned int) elf_ex.e_entry;
 	
 	/* Do this so that we can load the interpreter, if need be.  We will
@@ -775,8 +776,7 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 	if (current->binfmt && current->binfmt->module)
 		__MOD_INC_USE_COUNT(current->binfmt->module);
 
-	current->suid = current->euid = current->fsuid = bprm->e_uid;
-	current->sgid = current->egid = current->fsgid = bprm->e_gid;
+	compute_creds(bprm);
 	current->flags &= ~PF_FORKNOEXEC;
 	bprm->p = (unsigned long) 
 	  create_irix_tables((char *)bprm->p, bprm->argc, bprm->envc,

@@ -726,7 +726,7 @@ done:	/* pte_val(pte) == shp->shm_pages[idx] */
 static unsigned long swap_id = 0; /* currently being swapped */
 static unsigned long swap_idx = 0; /* next to swap */
 
-int shm_swap (int prio, int dma)
+int shm_swap (int prio, int gfp_mask)
 {
 	pte_t page;
 	struct shmid_ds *shp;
@@ -763,7 +763,7 @@ int shm_swap (int prio, int dma)
 	page = __pte(shp->shm_pages[idx]);
 	if (!pte_present(page))
 		goto check_table;
-	if (dma && !PageDMA(&mem_map[MAP_NR(pte_page(page))]))
+	if ((gfp_mask & __GFP_DMA) && !PageDMA(&mem_map[MAP_NR(pte_page(page))]))
 		goto check_table;
 	swap_attempts++;
 

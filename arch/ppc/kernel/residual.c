@@ -1,11 +1,29 @@
 /*
- * $Id: residual.c,v 1.7 1998/03/08 05:49:20 davem Exp $
+ * $Id: residual.c,v 1.10 1998/07/09 22:23:18 cort Exp $
  *
  * Code to deal with the PReP residual data.
  *
  * Written by: Cort Dougan (cort@cs.nmt.edu)
  * Improved _greatly_ and rewritten by Gabriel Paubert (paubert@iram.es)
+ *
+ *  This file is based on the following documentation:
+ *
+ *	IBM Power Personal Systems Architecture
+ *	Residual Data
+ * 	Document Number: PPS-AR-FW0001
+ *
+ *  This file is subject to the terms and conditions of the GNU General Public
+ *  License.  See the file COPYING in the main directory of this archive
+ *  for more details.
+ *
  */
+
+#include <linux/config.h>
+#include <linux/string.h>
+#include <asm/residual.h>
+#include <asm/pnp.h>
+#include <asm/byteorder.h>
+
 #if 0
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -28,11 +46,9 @@
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
-#include <asm/residual.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/ide.h>
-#include <asm/pnp.h>
 
 
 const char * PnP_BASE_TYPES[]= {
@@ -492,17 +508,17 @@ void print_residual_device_info(void)
 return;
 	
 	/* make sure we have residual data first */
-	if ( res.ResidualLength == 0 )
+	if ( res->ResidualLength == 0 )
 		return;
 	
-	printk("Residual: %ld devices\n", res.ActualNumDevices);
+	printk("Residual: %ld devices\n", res->ActualNumDevices);
 	for ( i = 0;
-	      i < res.ActualNumDevices ;
+	      i < res->ActualNumDevices ;
 	      i++)
 	{
 	  	char decomp[4], sn[20];
 		const char * s;
-		dev = &res.Devices[i];
+		dev = &res->Devices[i];
 		s = PnP_INTERFACE_STR(did.BaseType, did.SubType, 
 				      did.Interface);
 		if(!s) {
@@ -538,18 +554,18 @@ return;
 		       PnP_SUB_TYPE_STR(did.BaseType,did.SubType),
 		       s);
 		printpackets( (union _PnP_TAG_PACKET *)
-		      &res.DevicePnPHeap[dev->AllocatedOffset], "allocated");
+		      &res->DevicePnPHeap[dev->AllocatedOffset], "allocated");
 		printpackets( (union _PnP_TAG_PACKET *)
-		      &res.DevicePnPHeap[dev->PossibleOffset], "possible");
+		      &res->DevicePnPHeap[dev->PossibleOffset], "possible");
 		printpackets( (union _PnP_TAG_PACKET *)
-		      &res.DevicePnPHeap[dev->CompatibleOffset], "compatible");
+		      &res->DevicePnPHeap[dev->CompatibleOffset], "compatible");
 	}
 }
 
 
 
 static void printVPD(void) {
-#define vpd res.VitalProductData
+#define vpd res->VitalProductData
 	int ps=vpd.PageSize, i, j;
 	static const char* Usage[]={
 	  "FirmwareStack",  "FirmwareHeap",  "FirmwareCode", "BootImage",
@@ -594,11 +610,11 @@ static void printVPD(void) {
 	printk("WordWidth, PageSize: %ld, %d\n", vpd.WordWidth, ps);
 	printk("Cache sector size, Lock granularity: %ld, %ld\n",
 	       vpd.CoherenceBlockSize, vpd.GranuleSize);
-	for (i=0; i<res.ActualNumMemSegs; i++) {
-		int mask=res.Segs[i].Usage, first, j;
+	for (i=0; i<res->ActualNumMemSegs; i++) {
+		int mask=res->Segs[i].Usage, first, j;
 		printk("%8.8lx-%8.8lx ", 
-		       res.Segs[i].BasePage*ps,
-		       (res.Segs[i].PageCount+res.Segs[i].BasePage)*ps-1);
+		       res->Segs[i].BasePage*ps,
+		       (res->Segs[i].PageCount+res->Segs[i].BasePage)*ps-1);
 		for(j=15, first=1; j>=0; j--) {
 			if (mask&(1<<j)) {
 				if (first) first=0;
@@ -622,14 +638,14 @@ void print_residual_device_info(void)
 #define did dev->DeviceId
 	
 	/* make sure we have residual data first */
-	if ( res.ResidualLength == 0 )
+	if ( res->ResidualLength == 0 )
 		return;
-	printk("Residual: %ld devices\n", res.ActualNumDevices);
+	printk("Residual: %ld devices\n", res->ActualNumDevices);
 	for ( i = 0;
-	      i < res.ActualNumDevices ;
+	      i < res->ActualNumDevices ;
 	      i++)
 	{
-		dev = &res.Devices[i];
+		dev = &res->Devices[i];
 		/*
 		 * pci devices
 		 */
@@ -653,7 +669,7 @@ void print_residual_device_info(void)
 				printk(" pnp:");
 				/* get pnp info on the device */
 				pkt = (union _PnP_TAG_PACKET *)
-					&res.DevicePnPHeap[dev->AllocatedOffset];
+					&res->DevicePnPHeap[dev->AllocatedOffset];
 				for (; pkt->S1_Pack.Tag != DF_END_TAG;
 				     pkt++ )
 				{
@@ -714,3 +730,125 @@ void print_residual_device_info(void)
 #endif	
 
 #endif /* 0 */
+/* Returns the device index in the residual data, 
+   any of the search items may be set as -1 for wildcard,
+   DevID number field (second halfword) is big endian ! 
+
+   Examples:
+   - search for the Interrupt controller (8259 type), 2 methods:
+     1) i8259 = residual_find_device(~0, 
+                                     NULL, 
+				     SystemPeripheral, 
+				     ProgrammableInterruptController, 
+				     ISA_PIC, 
+				     0);
+     2) i8259 = residual_find_device(~0, "PNP0000", -1, -1, -1, 0) 
+
+   - search for the first two serial devices, whatever their type)
+     iserial1 = residual_find_device(~0,NULL,
+                                     CommunicationsDevice,
+				     RS232Device,
+				     -1, 0)
+     iserial2 = residual_find_device(~0,NULL,
+                                     CommunicationsDevice,
+				     RS232Device,
+				     -1, 1)
+   - but search for typical COM1 and COM2 is not easy due to the
+     fact that the interface may be anything and the name "PNP0500" or 
+     "PNP0501". Quite bad. 
+
+*/
+
+/* devid are easier to uncompress than to compress, so to minimize bloat
+in this rarely used area we unencode and compare */
+
+/* in residual data number is big endian in the device table and
+little endian in the heap, so we use two parameters to avoid writing
+two very similar functions */
+
+static int same_DevID(unsigned short vendor,
+	       unsigned short Number,
+	       char * str) 
+{
+	static unsigned const char hexdigit[]="0123456789ABCDEF";
+	if (strlen(str)!=7) return 0;
+	if ( ( ((vendor>>10)&0x1f)+'A'-1 == str[0])  &&
+	     ( ((vendor>>5)&0x1f)+'A'-1 == str[1])   &&
+	     ( (vendor&0x1f)+'A'-1 == str[2])        &&
+	     (hexdigit[(Number>>12)&0x0f] == str[3]) &&
+	     (hexdigit[(Number>>8)&0x0f] == str[4])  &&
+	     (hexdigit[(Number>>4)&0x0f] == str[5])  &&
+	     (hexdigit[Number&0x0f] == str[6]) ) return 1;
+	return 0;
+}
+
+PPC_DEVICE *residual_find_device(unsigned long BusMask,
+			 unsigned char * DevID,
+			 int BaseType,
+			 int SubType,
+			 int Interface,
+			 int n)
+{
+	int i;
+	if ( !res->ResidualLength ) return NULL;
+	for (i=0; i<res->ActualNumDevices; i++) {
+#define Dev res->Devices[i].DeviceId
+		if ( (Dev.BusId&BusMask)                                  &&
+		     (BaseType==-1 || Dev.BaseType==BaseType)             &&
+		     (SubType==-1 || Dev.SubType==SubType)                &&
+		     (Interface==-1 || Dev.Interface==Interface)          &&
+		     (DevID==NULL || same_DevID((Dev.DevId>>16)&0xffff,
+						Dev.DevId&0xffff, DevID)) &&
+		     !(n--) ) return res->Devices+i;
+#undef Dev
+	}
+	return 0;
+}
+
+PnP_TAG_PACKET *PnP_find_packet(unsigned char *p,
+				unsigned packet_tag,
+				int n)
+{
+	unsigned mask, masked_tag, size;
+	if(!p) return 0;
+	if (tag_type(packet_tag)) mask=0xff; else mask=0xF8;
+	masked_tag = packet_tag&mask;
+	for(; *p != END_TAG; p+=size) {
+		if ((*p & mask) == masked_tag && !(n--)) 
+			return (PnP_TAG_PACKET *) p;
+		if (tag_type(*p))
+			size=ld_le16((unsigned short *)(p+1))+3;
+		else 
+			size=tag_small_count(*p)+1;
+	}
+	return 0; /* not found */
+}
+
+PnP_TAG_PACKET *PnP_find_small_vendor_packet(unsigned char *p,
+					     unsigned packet_type,
+					     int n)
+{
+	int next=0;
+	while (p) {
+		p = (unsigned char *) PnP_find_packet(p, 0x70, next);
+		if (p && p[1]==packet_type && !(n--)) 
+			return (PnP_TAG_PACKET *) p;
+		next = 1;
+	};
+	return 0; /* not found */
+}
+
+PnP_TAG_PACKET *PnP_find_large_vendor_packet(unsigned char *p,
+					   unsigned packet_type,
+					   int n)
+{
+	int next=0;
+	while (p) {
+		p = (unsigned char *) PnP_find_packet(p, 0x84, next);
+		if (p && p[3]==packet_type && !(n--)) 
+			return (PnP_TAG_PACKET *) p;
+		next = 1;
+	};
+	return 0; /* not found */
+}
+

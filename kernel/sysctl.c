@@ -52,7 +52,7 @@ extern int sg_big_buff;
 extern char reboot_command [];
 #endif
 #ifdef __powerpc__
-extern unsigned long htab_reclaim_on, zero_paged_on;
+extern unsigned long htab_reclaim_on, zero_paged_on, powersave_nap;
 #endif
 
 extern int pgt_cache_water[];
@@ -171,6 +171,8 @@ static ctl_table kern_table[] = {
 	{KERN_PPC_HTABRECLAIM, "htab-reclaim", &htab_reclaim_on, sizeof(int),
 	 0644, NULL, &proc_dointvec},
 	{KERN_PPC_ZEROPAGED, "zero-paged", &zero_paged_on, sizeof(int),
+	 0644, NULL, &proc_dointvec},
+	{KERN_PPC_POWERSAVE_NAP, "powersave-nap", &powersave_nap, sizeof(int),
 	 0644, NULL, &proc_dointvec},
 #endif
 	{KERN_CTLALTDEL, "ctrl-alt-del", &C_A_D, sizeof(int),

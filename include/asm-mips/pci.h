@@ -1,18 +1,16 @@
-/*
+/* $Id: pci.h,v 1.4 1998/05/08 01:44:30 ralf Exp $
+ *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
  * Declarations for the MIPS specific implementation of the PCI BIOS32 services.
- *
- * $Id: pci.h,v 1.3 1998/05/01 01:36:00 ralf Exp $
  */
 #ifndef __ASM_MIPS_PCI_H
 #define __ASM_MIPS_PCI_H
 
 struct pci_ops {
-	unsigned long (*pcibios_fixup) (unsigned long memory_start,
-	                                unsigned long memory_end);
+	unsigned long (*pcibios_fixup) (void);
 	int (*pcibios_read_config_byte) (unsigned char bus,
 	                                 unsigned char dev_fn,
 	                                 unsigned char where,

@@ -1,4 +1,4 @@
-/* $Id: sbus.h,v 1.6 1998/03/09 14:05:03 jj Exp $
+/* $Id: sbus.h,v 1.7 1998/05/22 14:33:40 jj Exp $
  * sbus.h:  Defines for the Sun SBus.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -54,7 +54,7 @@ struct linux_sbus_device {
   struct linux_prom_registers reg_addrs[PROMREG_MAX];
   int num_registers, ranges_applied;
 
-  struct linux_prom_irqs irqs[PROMINTR_MAX];
+  unsigned int irqs[4];
   int num_irqs;
 
   unsigned long sbus_addr;             /* Absolute base address for device. */

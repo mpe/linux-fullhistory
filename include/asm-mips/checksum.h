@@ -1,11 +1,10 @@
-/*
- * include/asm-mips/checksum.h
+/* $Id: checksum.h,v 1.8 1998/05/07 00:39:59 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995 by Ralf Baechle
+ * Copyright (C) 1995, 1996, 1997, 1998 by Ralf Baechle
  */
 #ifndef __ASM_MIPS_CHECKSUM_H
 #define __ASM_MIPS_CHECKSUM_H
@@ -25,13 +24,18 @@
 unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum);
 
 /*
- * the same as csum_partial, but copies from src while it
- * checksums
- *
- * here even more important to align src and dst on a 32-bit (or even
- * better 64-bit) boundary
+ * this is a new version of the above that records errors it finds in *errp,
+ * but continues and zeros the rest of the buffer.
  */
-unsigned int csum_partial_copy(const char *src, char *dst, int len, unsigned int sum);
+unsigned int csum_partial_copy_nocheck(const char *src, char *dst, int len,
+                                       unsigned int sum);
+
+/*
+ * this is a new version of the above that records errors it finds in *errp,
+ * but continues and zeros the rest of the buffer.
+ */
+unsigned int csum_partial_copy_from_user(const char *src, char *dst, int len,
+                                         unsigned int sum, int *errp);
 
 /*
  * the same as csum_partial, but copies from user space (but on MIPS
@@ -40,13 +44,8 @@ unsigned int csum_partial_copy(const char *src, char *dst, int len, unsigned int
  * this is obsolete and will go away.
  */
 #define csum_partial_copy_fromuser csum_partial_copy
+unsigned int csum_partial_copy(const char *src, char *dst, int len, unsigned int sum);
   
-/*
- * this is a new version of the above that records errors it finds in *errp,
- * but continues and zeros the rest of the buffer.
- */
-unsigned int csum_partial_copy_from_user(const char *src, char *dst, int len, unsigned int sum, int *errp);
-
 /*
  *	Fold a partial checksum without adding pseudo headers
  */
@@ -126,11 +125,11 @@ static inline unsigned short ip_fast_csum(unsigned char * iph,
  * computes the checksum of the TCP/UDP pseudo-header
  * returns a 16-bit checksum, already complemented
  */
-static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
-						   unsigned long daddr,
-						   unsigned short len,
-						   unsigned short proto,
-						   unsigned int sum)
+static inline unsigned long csum_tcpudp_nofold(unsigned long saddr,
+                                               unsigned long daddr,
+                                               unsigned short len,
+                                               unsigned short proto,
+                                               unsigned int sum)
 {
     __asm__("
 	.set	noat
@@ -156,7 +155,20 @@ static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
 	    "r"(sum)
 	: "$1");
 
-	return csum_fold(sum);
+	return sum;
+}
+
+/*
+ * computes the checksum of the TCP/UDP pseudo-header
+ * returns a 16-bit checksum, already complemented
+ */
+static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
+						   unsigned long daddr,
+						   unsigned short len,
+						   unsigned short proto,
+						   unsigned int sum)
+{
+	return csum_fold(csum_tcpudp_nofold(saddr,daddr,len,proto,sum));
 }
 
 /*

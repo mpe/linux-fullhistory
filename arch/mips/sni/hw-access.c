@@ -1,4 +1,5 @@
-/*
+/* $Id: hw-access.c,v 1.5 1998/05/07 00:39:56 ralf Exp $
+ *
  * Low-level hardware access stuff for SNI RM200 PCI
  *
  * This file is subject to the terms and conditions of the GNU General Public
@@ -6,8 +7,6 @@
  * for more details.
  *
  * Copyright (C) 1996, 1997, 1998 by Ralf Baechle
- *
- * $Id: hw-access.c,v 1.4 1998/05/01 01:35:32 ralf Exp $
  */
 #include <linux/delay.h>
 #include <linux/init.h>
@@ -163,6 +162,8 @@ struct feature sni_rm200_pci_feature = {
 	rtc_write_data
 };
 
+#define KBD_STAT_IBF		0x02	/* Keyboard input buffer full */
+
 static unsigned char sni_read_input(void)
 {
 	return inb(KBD_DATA_REG);
@@ -170,11 +171,21 @@ static unsigned char sni_read_input(void)
 
 static void sni_write_output(unsigned char val)
 {
+	int status;
+
+	do {
+		status = inb(KBD_CNTL_REG);
+	} while (status & KBD_STAT_IBF);
 	outb(val, KBD_DATA_REG);
 }
 
 static void sni_write_command(unsigned char val)
 {
+	int status;
+
+	do {
+		status = inb(KBD_CNTL_REG);
+	} while (status & KBD_STAT_IBF);
 	outb(val, KBD_CNTL_REG);
 }
 

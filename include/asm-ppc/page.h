@@ -64,8 +64,6 @@ typedef unsigned long pgprot_t;
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
 
-#define get_user_page(vaddr)		__get_free_page(GFP_KERNEL)
-#define free_user_page(page, addr)	free_page(addr)
 #define clear_page(page)        memset((void *)(page), 0, PAGE_SIZE)
 #define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
 /* map phys->virtual and virtual->phys for RAM pages */
@@ -82,8 +80,7 @@ typedef unsigned long pgprot_t;
 #define MAP_NR(addr)		(((unsigned long)addr-PAGE_OFFSET) >> PAGE_SHIFT)
 #define MAP_PAGE_RESERVED	(1<<15)
 
-extern unsigned long get_prezerod_page(void);
-
+extern unsigned long get_zero_page_fast(void);
 #endif /* __KERNEL__ */
 #endif /* __ASSEMBLY__ */
 #endif /* _PPC_PAGE_H */

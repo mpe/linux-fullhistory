@@ -1,6 +1,8 @@
 /*
  *  linux/arch/ppc/kernel/signal.c
  *
+ *  $Id: signal.c,v 1.16 1998/06/16 23:34:10 cort Exp $
+ *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
  *

@@ -8,6 +8,7 @@
  *  Updated and modified by Cort Dougan (cort@cs.nmt.edu)
  *  Adapted for Power Macintosh by Paul Mackerras
  *    Copyright (C) 1996 Paul Mackerras (paulus@cs.anu.edu.au)
+ *  Amiga/APUS changes by Jesper Skov (jskov@cygnus.co.uk).
  *
  * This file contains the code used by various IRQ handling routines:
  * asking for different IRQ's should be done through these routines
@@ -38,8 +39,8 @@
 #include <linux/malloc.h>
 #include <linux/openpic.h>
 #include <linux/pci.h>
-#include <linux/openpic.h>
 
+#include <asm/bitops.h>
 #include <asm/hydra.h>
 #include <asm/system.h>
 #include <asm/io.h>
@@ -48,23 +49,41 @@
 #include <asm/bitops.h>
 #include <asm/gg2.h>
 #include <asm/cache.h>
+#include <asm/prom.h>
 #ifdef CONFIG_8xx
 #include <asm/8xx_immap.h>
 #include <asm/mbx.h>
 #endif
 
+#include <asm/amigaints.h>
+#include <asm/amigahw.h>
+#include <asm/amigappc.h>
+#define VEC_SPUR    (24)
+extern void process_int(unsigned long vec, struct pt_regs *fp);
+extern void apus_init_IRQ(void);
+extern void amiga_disable_irq(unsigned int irq);
+extern void amiga_enable_irq(unsigned int irq);
+#ifdef CONFIG_APUS
+/* Rename a few functions. Requires the CONFIG_APUS protection. */
+#define request_irq nop_ppc_request_irq
+#define free_irq nop_ppc_free_irq
+#define get_irq_list nop_get_irq_list
+#endif
+
 #undef SHOW_IRQ
 
-unsigned lost_interrupts = 0;
+#define NR_MASK_WORDS	((NR_IRQS + 31) / 32)
+
+int max_irqs;
 unsigned int local_irq_count[NR_CPUS];
 static struct irqaction *irq_action[NR_IRQS];
 static int spurious_interrupts = 0;
-#ifndef CONFIG_8xx
-static unsigned int cached_irq_mask = 0xffffffff;
-#else
-static unsigned int cached_irq_mask = 0xffffffff;
-#endif
+static unsigned int cached_irq_mask[NR_MASK_WORDS];
+unsigned int lost_interrupts[NR_MASK_WORDS];
+atomic_t n_lost_interrupts;
+
 static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
+
 /*spinlock_t irq_controller_lock = SPIN_LOCK_UNLOCKED;*/
 #ifdef __SMP__
 atomic_t __ppc_bh_counter = ATOMIC_INIT(0);
@@ -74,8 +93,8 @@ int __ppc_bh_counter = 0;
 static volatile unsigned char *gg2_int_ack_special;
 extern volatile unsigned long ipi_count;
 
-#define cached_21	(((char *)(&cached_irq_mask))[3])
-#define cached_A1	(((char *)(&cached_irq_mask))[2])
+#define cached_21	(((char *)(cached_irq_mask))[3])
+#define cached_A1	(((char *)(cached_irq_mask))[2])
 
 /*
  * These are set to the appropriate functions by init_IRQ()
@@ -97,16 +116,22 @@ void (*unmask_irq)(unsigned int irq_nr);
 
 /* prep */
 #define PREP_IRQ_MASK	(((unsigned int)cached_A1)<<8) | (unsigned int)cached_21
-extern unsigned long route_pci_interrupts(void);
 
 /* pmac */
-#define IRQ_FLAG	((unsigned *)0xf3000020)
-#define IRQ_ENABLE	((unsigned *)0xf3000024)
-#define IRQ_ACK		((unsigned *)0xf3000028)
-#define IRQ_LEVEL	((unsigned *)0xf300002c)
-#define KEYBOARD_IRQ	20	/* irq number for command-power interrupt */
-#define PMAC_IRQ_MASK	(~ld_le32(IRQ_ENABLE))
+struct pmac_irq_hw {
+	unsigned int	flag;
+	unsigned int	enable;
+	unsigned int	ack;
+	unsigned int	level;
+};
 
+/* XXX these addresses should be obtained from the device tree */
+volatile struct pmac_irq_hw *pmac_irq_hw[2] = {
+	(struct pmac_irq_hw *) 0xf3000020,
+	(struct pmac_irq_hw *) 0xf3000010,
+};
+
+#define KEYBOARD_IRQ	20	/* irq number for command-power interrupt */
 
 
 /* nasty hack for shared irq's since we need to do kmalloc calls but
@@ -148,7 +173,7 @@ void irq_kfree(void *ptr)
 void i8259_mask_and_ack_irq(int irq_nr)
 {
   /*	spin_lock(&irq_controller_lock);*/
-	cached_irq_mask |= 1 << irq_nr;
+	cached_irq_mask[0] |= 1 << irq_nr;
 	if (irq_nr > 7) {
 		inb(0xA1);	/* DUMMY */
 		outb(cached_A1,0xA1);
@@ -167,17 +192,23 @@ void i8259_mask_and_ack_irq(int irq_nr)
 
 void pmac_mask_and_ack_irq(int irq_nr)
 {
-	unsigned long bit = 1UL << irq_nr;
+	unsigned long bit = 1UL << (irq_nr & 0x1f);
+	int i = irq_nr >> 5;
 
-	/*	spin_lock(&irq_controller_lock);*/
-	cached_irq_mask |= bit;
-	lost_interrupts &= ~bit;
-	out_le32(IRQ_ACK, bit);
-	out_le32(IRQ_ENABLE, ~cached_irq_mask);
-	out_le32(IRQ_ACK, bit);
-	/*	spin_unlock(&irq_controller_lock);*/
+	if (irq_nr >= max_irqs)
+		return;
+	/*spin_lock(&irq_controller_lock);*/
+
+	clear_bit(irq_nr, cached_irq_mask);
+	if (test_and_clear_bit(irq_nr, lost_interrupts))
+		atomic_dec(&n_lost_interrupts);
+	out_le32(&pmac_irq_hw[i]->ack, bit);
+	out_le32(&pmac_irq_hw[i]->enable, cached_irq_mask[i]);
+	out_le32(&pmac_irq_hw[i]->ack, bit);
+
+	/*spin_unlock(&irq_controller_lock);*/
 	/*if ( irq_controller_lock.lock )
-  panic("irq controller lock still held in mask and ack\n");*/
+	  panic("irq controller lock still held in mask and ack\n");*/
 }
 
 void chrp_mask_and_ack_irq(int irq_nr)
@@ -199,18 +230,26 @@ static void i8259_set_irq_mask(int irq_nr)
 
 static void pmac_set_irq_mask(int irq_nr)
 {
-	unsigned long bit = 1UL << irq_nr;
+	unsigned long bit = 1UL << (irq_nr & 0x1f);
+	int i = irq_nr >> 5;
 
-	/* this could be being enabled or disabled - so use cached_irq_mask */
-	out_le32(IRQ_ENABLE, ~cached_irq_mask /* enable all unmasked */ );
+	if (irq_nr >= max_irqs)
+		return;
+
+	/* enable unmasked interrupts */
+	out_le32(&pmac_irq_hw[i]->enable, cached_irq_mask[i]);
+
 	/*
 	 * Unfortunately, setting the bit in the enable register
 	 * when the device interrupt is already on *doesn't* set
 	 * the bit in the flag register or request another interrupt.
 	 */
-	if ((bit & ~cached_irq_mask)
-	    && (ld_le32(IRQ_LEVEL) & bit) && !(ld_le32(IRQ_FLAG) & bit))
-		lost_interrupts |= bit;
+	if ((bit & cached_irq_mask[i])
+	    && (ld_le32(&pmac_irq_hw[i]->level) & bit)
+	    && !(ld_le32(&pmac_irq_hw[i]->flag) & bit)) {
+		if (!test_and_set_bit(irq_nr, lost_interrupts))
+			atomic_inc(&n_lost_interrupts);
+	}
 }
 
 /*
@@ -219,25 +258,25 @@ static void pmac_set_irq_mask(int irq_nr)
  */
 static void i8259_mask_irq(unsigned int irq_nr)
 {
-	cached_irq_mask |= 1 << irq_nr;
+	cached_irq_mask[0] |= 1 << irq_nr;
 	i8259_set_irq_mask(irq_nr);
 }
 
 static void i8259_unmask_irq(unsigned int irq_nr)
 {
-	cached_irq_mask &= ~(1 << irq_nr);
+	cached_irq_mask[0] &= ~(1 << irq_nr);
 	i8259_set_irq_mask(irq_nr);
 }
 
 static void pmac_mask_irq(unsigned int irq_nr)
 {
-	cached_irq_mask |= 1 << irq_nr;
+	clear_bit(irq_nr, cached_irq_mask);
 	pmac_set_irq_mask(irq_nr);
 }
 
 static void pmac_unmask_irq(unsigned int irq_nr)
 {
-	cached_irq_mask &= ~(1 << irq_nr);
+	set_bit(irq_nr, cached_irq_mask);
 	pmac_set_irq_mask(irq_nr);
 }
 
@@ -259,16 +298,16 @@ static void chrp_unmask_irq(unsigned int irq_nr)
 #else /* CONFIG_8xx */
 static void mbx_mask_irq(unsigned int irq_nr)
 {
-	cached_irq_mask &= ~(1 << (31-irq_nr));
+	cached_irq_mask[0] &= ~(1 << (31-irq_nr));
 	((immap_t *)MBX_IMAP_ADDR)->im_siu_conf.sc_simask =
-							cached_irq_mask;
+							cached_irq_mask[0];
 }
 
 static void mbx_unmask_irq(unsigned int irq_nr)
 {
-	cached_irq_mask |= (1 << (31-irq_nr));
+	cached_irq_mask[0] |= (1 << (31-irq_nr));
 	((immap_t *)MBX_IMAP_ADDR)->im_siu_conf.sc_simask =
-							cached_irq_mask;
+							cached_irq_mask[0];
 }
 #endif /* CONFIG_8xx */
 
@@ -527,9 +566,9 @@ asmlinkage void do_IRQ(struct pt_regs *regs)
 #ifdef __SMP__
 	if ( cpu != 0 )
 	{
-		if ( !lost_interrupts )
+		if (!atomic_read(&n_lost_interrupts))
 		{
-			extern smp_message_recv(void);
+			extern void smp_message_recv(void);
 			goto out;
 			
 			ipi_count++;
@@ -545,10 +584,17 @@ asmlinkage void do_IRQ(struct pt_regs *regs)
 	switch ( _machine )
 	{
 	case _MACH_Pmac:
-		bits = ld_le32(IRQ_FLAG) | lost_interrupts;
-		for (irq = NR_IRQS - 1; irq >= 0; --irq)
-			if (bits & (1U << irq))
-				break;
+		for (irq = max_irqs - 1; irq > 0; irq -= 32) {
+			int i = irq >> 5, lz;
+			bits = ld_le32(&pmac_irq_hw[i]->flag)
+				| lost_interrupts[i];
+			if (bits == 0)
+				continue;
+			/* lz = number of 0 bits to left of most sig. 1 */
+			asm ("cntlzw %0,%1" : "=r" (lz) : "r" (bits));
+			irq -= lz;
+			break;
+		}
 		break;
 	case _MACH_chrp:
 		irq = openpic_irq(0);		
@@ -604,10 +650,41 @@ retry_cascade:
 		}
 		bits = 1UL << irq;
 		break;
+#ifdef CONFIG_APUS
+	case _MACH_apus:
+	{
+		int old_level, new_level;
+
+		old_level = ~(regs->mq) & IPLEMU_IPLMASK;
+		new_level = (~(regs->mq) >> 3) & IPLEMU_IPLMASK;
+		
+		if (new_level == 0)
+		{
+			goto apus_out;
+		}
+		
+		APUS_WRITE(APUS_IPL_EMU, IPLEMU_IPLMASK);
+		APUS_WRITE(APUS_IPL_EMU, (IPLEMU_SETRESET
+					  | (~(new_level) & IPLEMU_IPLMASK)));
+		APUS_WRITE(APUS_IPL_EMU, IPLEMU_DISABLEINT);
+		
+		process_int (VEC_SPUR+new_level, regs);
+		
+		APUS_WRITE(APUS_IPL_EMU, IPLEMU_SETRESET | IPLEMU_DISABLEINT);
+		APUS_WRITE(APUS_IPL_EMU, IPLEMU_IPLMASK);
+		APUS_WRITE(APUS_IPL_EMU, (IPLEMU_SETRESET
+					  | (~(old_level) & IPLEMU_IPLMASK)));
+		
+apus_out:
+		hardirq_exit(cpu);
+		APUS_WRITE(APUS_IPL_EMU, IPLEMU_DISABLEINT);
+		goto out2;
+	}
+#endif	
 	}
 	
 	if (irq < 0) {
-		printk("Bogus interrupt from PC = %lx\n", regs->nip);
+		printk(KERN_DEBUG "Bogus interrupt from PC = %lx\n", regs->nip);
 		goto out;
 	}
 	
@@ -624,7 +701,7 @@ retry_cascade:
 	status = 0;
 	action = irq_action[irq];
 	kstat.irqs[cpu][irq]++;
-	if ( action && action->handler) {
+	if (action && action->handler) {
 		if (!(action->flags & SA_INTERRUPT))
 			__sti();
 		do { 
@@ -656,7 +733,10 @@ out:
 		openpic_eoi(0);
 #endif /* CONFIG_8xx */
 	hardirq_exit(cpu);
-	
+
+#ifdef CONFIG_APUS
+out2:
+#endif
 	/* restore the HID0 in case dcache was off - see idle.c
 	 * this hack should leave for a better solution -- Cort */
 	lock_dcache(dcache_locked);
@@ -770,6 +850,7 @@ __initfunc(static void i8259_init(void))
 __initfunc(void init_IRQ(void))
 {
 	extern void xmon_irq(int, void *, struct pt_regs *);
+	int i;
 
 #ifndef CONFIG_8xx
 	switch (_machine)
@@ -778,8 +859,13 @@ __initfunc(void init_IRQ(void))
 		mask_and_ack_irq = pmac_mask_and_ack_irq;
 		mask_irq = pmac_mask_irq;
 		unmask_irq = pmac_unmask_irq;
-		
-		*IRQ_ENABLE = 0;
+
+		/* G3 powermacs have 64 interrupts, others have 32 */
+		max_irqs = (find_devices("mac-io") ? 64 : 32);
+		printk("System has %d possible interrupts\n", max_irqs);
+
+		for (i = 0; i * 32 < max_irqs; ++i)
+			out_le32(&pmac_irq_hw[i]->enable, 0);
 #ifdef CONFIG_XMON
 		request_irq(KEYBOARD_IRQ, xmon_irq, 0, "NMI", 0);
 #endif	/* CONFIG_XMON */
@@ -792,6 +878,7 @@ __initfunc(void init_IRQ(void))
 			ioremap(GG2_INT_ACK_SPECIAL, 1);
 		openpic_init();
 		i8259_init();
+		cached_irq_mask[0] = cached_irq_mask[1] = ~0UL;
 #ifdef CONFIG_XMON
 		request_irq(openpic_to_irq(HYDRA_INT_ADB_NMI),
 			    xmon_irq, 0, "NMI", 0);
@@ -801,9 +888,9 @@ __initfunc(void init_IRQ(void))
 		mask_and_ack_irq = i8259_mask_and_ack_irq;
 		mask_irq = i8259_mask_irq;
 		unmask_irq = i8259_unmask_irq;
+		cached_irq_mask[0] = ~0UL;
 		
 		i8259_init();
-		route_pci_interrupts();
 		/*
 		 * According to the Carolina spec from ibm irqs 0,1,2, and 8
 		 * must be edge triggered.  Also, the pci intrs must be level
@@ -838,6 +925,13 @@ __initfunc(void init_IRQ(void))
 
 		}
 		break;
-	}	
+#ifdef CONFIG_APUS		
+	case _MACH_apus:
+		mask_irq = amiga_disable_irq;
+		unmask_irq = amiga_enable_irq;
+		apus_init_IRQ();
+		break;
+#endif	
+	}
 #endif /* CONFIG_8xx */
 }

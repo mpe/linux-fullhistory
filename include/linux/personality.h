@@ -23,6 +23,7 @@
 #define PER_ISCR4		(0x0005 | STICKY_TIMEOUTS)
 #define PER_BSD			(0x0006)
 #define PER_XENIX		(0x0007 | STICKY_TIMEOUTS)
+#define PER_LINUX32		(0x0008)
 
 /* Prototype for an lcall7 syscall handler. */
 typedef void (*lcall7_func)(struct pt_regs *);

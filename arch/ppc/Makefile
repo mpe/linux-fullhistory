@@ -54,6 +54,12 @@ SUBDIRS += arch/ppc/8xx_io
 DRIVERS += arch/ppc/8xx_io/8xx_io.a drivers/net/net.a
 endif
 
+ifdef CONFIG_APUS
+SUBDIRS += arch/ppc/amiga
+ARCHIVES += arch/ppc/amiga/amiga.o
+CORE_FILES += arch/ppc/amiga/amiga.o
+endif
+
 checks:
 	@$(MAKE) -C arch/$(ARCH)/kernel checks
 
@@ -78,13 +84,16 @@ chrp_config:
 	ln -s chrp_defconfig arch/ppc/defconfig
 
 common_config:
-	rm -f .config arch/ppc/common_defconfig
+	rm -f .config arch/ppc/defconfig
 	ln -s common_defconfig arch/ppc/defconfig
 
 mbx_config:
 	rm -f .config arch/ppc/defconfig
 	ln -s mbx_defconfig arch/ppc/defconfig
 
+apus_config:
+	rm -f .config arch/ppc/defconfig
+	ln -s apus_defconfig arch/ppc/defconfig
 
 tags:
 	etags */*.c include/{asm,linux}/*.h arch/ppc/kernel/*.{c,h}

@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.85 1998/03/09 14:03:40 jj Exp $
+/*  $Id: irq.c,v 1.86 1998/06/04 09:54:49 jj Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -584,9 +584,6 @@ int request_irq(unsigned int irq,
 	if (!handler)
 	    return -EINVAL;
 	    
-	if (irqflags & SA_DCOOKIE)
-		dev_id = ((struct devid_cookie *)dev_id)->real_dev_id;
-	
 	action = *(cpu_irq + irq_action);
 	if (action) {
 		if ((action->flags & SA_SHIRQ) && (irqflags & SA_SHIRQ)) {

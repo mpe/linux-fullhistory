@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.171 1998/04/24 15:03:35 jj Exp $
+/* $Id: srmmu.c,v 1.173 1998/08/04 20:48:57 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -1034,7 +1034,7 @@ static void cypress_flush_cache_mm(struct mm_struct *mm)
 
 	FLUSH_BEGIN(mm)
 	flush_user_windows();
-	save_and_cli(flags);
+	__save_and_cli(flags);
 	octx = srmmu_get_context();
 	srmmu_set_context(mm->context);
 	a = 0x20; b = 0x40; c = 0x60;
@@ -1058,7 +1058,7 @@ static void cypress_flush_cache_mm(struct mm_struct *mm)
 				     "r" (e), "r" (f), "r" (g));
 	} while(faddr);
 	srmmu_set_context(octx);
-	restore_flags(flags);
+	__restore_flags(flags);
 	FLUSH_END
 }
 
@@ -1070,7 +1070,7 @@ static void cypress_flush_cache_range(struct mm_struct *mm, unsigned long start,
 
 	FLUSH_BEGIN(mm)
 	flush_user_windows();
-	save_and_cli(flags);
+	__save_and_cli(flags);
 	octx = srmmu_get_context();
 	srmmu_set_context(mm->context);
 	a = 0x20; b = 0x40; c = 0x60;
@@ -1099,7 +1099,7 @@ static void cypress_flush_cache_range(struct mm_struct *mm, unsigned long start,
 		start += SRMMU_PMD_SIZE;
 	}
 	srmmu_set_context(octx);
-	restore_flags(flags);
+	__restore_flags(flags);
 	FLUSH_END
 }
 
@@ -1112,7 +1112,7 @@ static void cypress_flush_cache_page(struct vm_area_struct *vma, unsigned long p
 
 	FLUSH_BEGIN(mm)
 	flush_user_windows();
-	save_and_cli(flags);
+	__save_and_cli(flags);
 	octx = srmmu_get_context();
 	srmmu_set_context(mm->context);
 	a = 0x20; b = 0x40; c = 0x60;
@@ -1138,7 +1138,7 @@ static void cypress_flush_cache_page(struct vm_area_struct *vma, unsigned long p
 					     "r" (e), "r" (f), "r" (g));
 	} while(line != page);
 	srmmu_set_context(octx);
-	restore_flags(flags);
+	__restore_flags(flags);
 	FLUSH_END
 }
 
@@ -2019,7 +2019,7 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 		pmd_t *pmdp;
 		pte_t *ptep;
 
-		save_and_cli(flags);
+		__save_and_cli(flags);
 
 		file = vma->vm_file;
 		if (!file)
@@ -2065,7 +2065,7 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 			flush_tlb_page(vma, address);
 		}
 	done:
-		restore_flags(flags);
+		__restore_flags(flags);
 	}
 }
 

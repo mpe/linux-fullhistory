@@ -43,6 +43,7 @@ typedef struct {
 
 #else /* __GNUC__ */
 
+#if defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2)
 /* With GNU C, use inline functions instead so args are evaluated only once: */
 
 #undef __FD_SET
@@ -95,6 +96,6 @@ static __inline__ void __FD_ZERO(__kernel_fd_set *p)
 	}
 }
 
+#endif /* defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2) */
 #endif /* __GNUC__ */
-
 #endif /* _PPC_POSIX_TYPES_H */

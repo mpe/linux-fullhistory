@@ -31,30 +31,6 @@ ifdef CONFIG_MAC_KEYBOARD
 L_OBJS += mac_keyb.o
 endif
 
-ifdef CONFIG_VT
-  ifdef CONFIG_PMAC_CONSOLE
-    L_OBJS += pmac-cons.o
-    ifdef CONFIG_CONTROL_VIDEO
-      L_OBJS += control.o
-    endif
-    ifdef CONFIG_PLATINUM_VIDEO
-      L_OBJS += platinum.o
-    endif
-    ifdef CONFIG_VALKYRIE_VIDEO
-      L_OBJS += valkyrie.o
-    endif
-    ifdef CONFIG_CHIPS_VIDEO
-      L_OBJS += chips.o
-    endif
-    ifdef CONFIG_ATY_VIDEO
-      L_OBJS += aty.o
-    endif
-    ifdef CONFIG_IMSTT_VIDEO
-      L_OBJS += imstt.o
-    endif
-  endif
-endif
-
 include $(TOPDIR)/Rules.make
 
 # Integrated in mac_keyb.c

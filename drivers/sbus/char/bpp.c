@@ -957,7 +957,7 @@ static volatile struct bpp_regs *map_bpp(struct linux_sbus_device *dev, int idx)
       areg = dev->reg_addrs[0];
       printk("bpp%d.map_bpp: 0x%x.%p[0x%x] i=%d\n", idx,
             areg.which_io, areg.phys_addr, areg.reg_size,
-            dev->irqs[0].pri);
+            dev->irqs[0]);
       /* IPC Zebra   1.fa200000[1c] i=2  */
       /** prom_apply_sbus_ranges (&areg, 1); **/
 

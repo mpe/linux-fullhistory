@@ -1,4 +1,4 @@
-/* $Id: ttable.S,v 1.23 1998/03/15 17:23:48 ecd Exp $
+/* $Id: ttable.S,v 1.25 1998/05/23 18:24:53 jj Exp $
  * ttable.S: Sparc V9 Trap Table(s) with SpitFire extensions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -6,7 +6,7 @@
 
 #include <linux/config.h>
 
-	.globl	sparc64_ttable_tl0, tl0_itick, sparc64_ttable_tl1,
+	.globl	sparc64_ttable_tl0, sparc64_ttable_tl1,
 
 sparc64_ttable_tl0:
 tl0_resv000:	BOOT_KERNEL BTRAP(0x1) BTRAP(0x2) BTRAP(0x3)
@@ -45,7 +45,11 @@ tl0_irq7:	TRAP_IRQ(handler_irq, 7)  TRAP_IRQ(handler_irq, 8)
 tl0_irq9:	TRAP_IRQ(handler_irq, 9)  TRAP_IRQ(handler_irq, 10)
 tl0_irq11:	TRAP_IRQ(handler_irq, 11) TRAP_IRQ(handler_irq, 12)
 tl0_irq13:	TRAP_IRQ(handler_irq, 13)
-tl0_itick:	TRAP_IRQ(handler_irq, 14)
+#ifndef __SMP__
+tl0_irq14:	TRAP_IRQ(handler_irq, 14)
+#else
+tl0_irq14:	TICK_SMP_IRQ
+#endif
 tl0_irq15:	TRAP_IRQ(handler_irq, 15)
 tl0_resv050:	BTRAP(0x50) BTRAP(0x51) BTRAP(0x52) BTRAP(0x53) BTRAP(0x54) BTRAP(0x55)
 tl0_resv056:	BTRAP(0x56) BTRAP(0x57) BTRAP(0x58) BTRAP(0x59) BTRAP(0x5a) BTRAP(0x5b)
@@ -55,9 +59,9 @@ tl0_paw:	TRAP(do_paw)
 tl0_vaw:	TRAP(do_vaw)
 tl0_cee:	TRAP(do_cee)
 tl0_iamiss:
-#include	"itlb_miss.S"
+#include	"itlb_base.S"
 tl0_damiss:
-#include	"dtlb_miss.S"
+#include	"dtlb_base.S"
 tl0_daprot:
 #include	"dtlb_prot.S"
 tl0_resv070:	BTRAP(0x70) BTRAP(0x71) BTRAP(0x72) BTRAP(0x73) BTRAP(0x74) BTRAP(0x75)
@@ -199,10 +203,9 @@ tl1_ivec:	TRAP_IVEC
 tl1_paw:	TRAPTL1(do_paw_tl1)
 tl1_vaw:	TRAPTL1(do_vaw_tl1)
 tl1_cee:	TRAPTL1(do_cee_tl1)
-tl1_iamiss:
-#include	"itlb_miss.S"
+tl1_iamiss:	BTRAPTL1(0x64) BTRAPTL1(0x65) BTRAPTL1(0x66) BTRAPTL1(0x67)
 tl1_damiss:
-#include	"dtlb_miss.S"
+#include	"dtlb_backend.S"
 tl1_daprot:
 #include	"dtlb_prot.S"
 tl1_resv070:	BTRAPTL1(0x70) BTRAPTL1(0x71) BTRAPTL1(0x72) BTRAPTL1(0x73)

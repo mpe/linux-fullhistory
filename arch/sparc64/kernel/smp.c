@@ -48,7 +48,8 @@ static int smp_activated = 0;
 volatile int cpu_number_map[NR_CPUS];
 volatile int __cpu_logical_map[NR_CPUS];
 
-struct klock_info klock_info = { KLOCK_CLEAR, 0 };
+/* Kernel spinlock */
+spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
 __initfunc(void smp_setup(char *str, int *ints))
 {
@@ -63,8 +64,7 @@ int smp_info(char *buf)
 	for (i = 0; i < NR_CPUS; i++)
 		if(cpu_present_map & (1UL << i))
 			len += sprintf(buf + len,
-					"CPU%d:\t\t%s\n",
-					i, klock_info.akp == i ? "akp" : "online");
+					"CPU%d:\t\tonline\n", i
 	return len;
 }
 
@@ -86,8 +86,8 @@ __initfunc(void smp_store_cpu_info(int id))
 	cpu_data[id].udelay_val			= loops_per_sec;
 	cpu_data[id].irq_count			= 0;
 	cpu_data[id].pgcache_size		= 0;
+	cpu_data[id].pgdcache_size		= 0;
 	cpu_data[id].pgd_cache			= NULL;
-	cpu_data[id].pmd_cache			= NULL;
 	cpu_data[id].pte_cache			= NULL;
 }
 
@@ -163,8 +163,6 @@ void cpu_panic(void)
 	panic("SMP bolixed\n");
 }
 
-static void smp_tickoffset_init(void);
-
 extern struct prom_cpuinfo linux_cpus[NR_CPUS];
 
 extern unsigned long smp_trampoline;
@@ -174,23 +172,8 @@ __initfunc(void smp_boot_cpus(void))
 	int cpucount = 0, i;
 
 	printk("Entering UltraSMPenguin Mode...\n");
-	boot_cpu_id = hard_smp_processor_id();
-	smp_tickoffset_init();
 	__sti();
-	cpu_present_map = 0;
-	for(i = 0; i < linux_num_cpus; i++)
-		cpu_present_map |= (1UL << linux_cpus[i].mid);
-	for(i = 0; i < NR_CPUS; i++) {
-		cpu_number_map[i] = -1;
-		__cpu_logical_map[i] = -1;
-	}
-	cpu_number_map[boot_cpu_id] = 0;
-	prom_cpu_nodes[boot_cpu_id] = linux_cpus[0].prom_node;
-	__cpu_logical_map[0] = boot_cpu_id;
-	klock_info.akp = boot_cpu_id;
-	current->processor = boot_cpu_id;
 	smp_store_cpu_info(boot_cpu_id);
-	smp_setup_percpu_timer();
 
 	if(linux_num_cpus == 1)
 		return;
@@ -406,7 +389,7 @@ void smp_flush_tlb_mm(struct mm_struct *mm)
 	smp_cross_call(&xcall_flush_tlb_mm, ctx, 0, 0);
 
 local_flush_and_out:
-	__flush_tlb_mm(ctx);
+	__flush_tlb_mm(ctx, SECONDARY_CONTEXT);
 }
 
 void smp_flush_tlb_range(struct mm_struct *mm, unsigned long start,
@@ -422,7 +405,9 @@ void smp_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 	smp_cross_call(&xcall_flush_tlb_range, ctx, start, end);
 
 local_flush_and_out:
-	__flush_tlb_range(ctx, start, end);
+	start &= PAGE_MASK;
+	end &= PAGE_MASK;
+	__flush_tlb_range(ctx, start, SECONDARY_CONTEXT, end, PAGE_SIZE, (end-start));
 }
 
 void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
@@ -449,7 +434,7 @@ void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
 	smp_cross_call(&xcall_flush_tlb_page, ctx, page, 0);
 
 local_flush_and_out:
-	__flush_tlb_page(ctx, page);
+	__flush_tlb_page(ctx, (page & PAGE_MASK), SECONDARY_CONTEXT);
 }
 
 /* CPU capture. */
@@ -511,8 +496,7 @@ void smp_penguin_jailcell(void)
 
 static inline void sparc64_do_profile(unsigned long pc)
 {
-#ifdef CONFIG_PROFILE
-	if(prof_buffer && current->pid) {
+	if (prof_buffer && current->pid) {
 		extern int _stext;
 
 		pc -= (unsigned long) &_stext;
@@ -522,7 +506,6 @@ static inline void sparc64_do_profile(unsigned long pc)
 			pc = prof_len - 1;
 		atomic_inc((atomic_t *)&prof_buffer[pc]);
 	}
-#endif
 }
 
 static unsigned long current_tick_offset;
@@ -554,8 +537,8 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 	do {
 		if(!user)
 			sparc64_do_profile(regs->tpc);
-		if(!--prof_counter(cpu)) {
-
+		if(!--prof_counter(cpu))
+		{
 			if (cpu == boot_cpu_id) {
 				extern void irq_enter(int, int);
 				extern void irq_exit(int, int);
@@ -574,7 +557,7 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 				update_one_process(current, 1, user, !user, cpu);
 				if(--current->counter < 0) {
 					current->counter = 0;
-					need_resched = 1;
+					current->need_resched = 1;
 				}
 
 				if(user) {
@@ -592,7 +575,6 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 				atomic_inc((atomic_t *)inc);
 				atomic_inc((atomic_t *)inc2);
 			}
-
 			prof_counter(cpu) = prof_multiplier(cpu);
 		}
 
@@ -611,49 +593,6 @@ __initfunc(static void smp_setup_percpu_timer(void))
 
 	prof_counter(cpu) = prof_multiplier(cpu) = 1;
 
-	if (cpu == boot_cpu_id) {
-		extern unsigned long tl0_itick;
-		extern unsigned long tl0_smp_itick;
-		unsigned long flags;
-
-		save_flags(flags); cli();
-
-		/*
-		 * Steal TICK_INT interrupts from timer_interrupt().
-		 */
-		__asm__ __volatile__("
-			.globl	tl0_smp_itick
-			b,pt	%%xcc, 1f
-			 nop
-
-		tl0_smp_itick:
-			rdpr	%%pil, %%g2
-			wrpr	%%g0, 15, %%pil
-			b,pt	%%xcc, etrap_irq
-			 rd	%%pc, %%g7
-			call	smp_percpu_timer_interrupt
-			 add	%%sp, %0, %%o0
-			b,pt	%%xcc, rtrap
-			 clr	%%l6
-
-		1:"
-			: /* no outputs */
-			: "i" (STACK_BIAS + REGWIN_SZ));
-
-		memcpy(&tl0_itick, &tl0_smp_itick, 8 * 4);
-
-		__asm__ __volatile__("
-			membar	#StoreStore
-			flush	%0 + 0x00
-			flush	%0 + 0x08
-			flush	%0 + 0x10
-			flush	%0 + 0x18"
-			: /* no outputs */
-			: "r" (&tl0_itick));
-
-		restore_flags(flags);
-	}
-
 	__asm__ __volatile__("rd	%%tick, %%g1\n\t"
 			     "add	%%g1, %0, %%g1\n\t"
 			     "wr	%%g1, 0x0, %%tick_cmpr"
@@ -662,12 +601,27 @@ __initfunc(static void smp_setup_percpu_timer(void))
 			     : "g1");
 }
 
-__initfunc(static void smp_tickoffset_init(void))
+__initfunc(void smp_tick_init(void))
 {
+	int i;
+	
+	boot_cpu_id = hard_smp_processor_id();
 	current_tick_offset = timer_tick_offset;
+	cpu_present_map = 0;
+	for(i = 0; i < linux_num_cpus; i++)
+		cpu_present_map |= (1UL << linux_cpus[i].mid);
+	for(i = 0; i < NR_CPUS; i++) {
+		cpu_number_map[i] = -1;
+		__cpu_logical_map[i] = -1;
+	}
+	cpu_number_map[boot_cpu_id] = 0;
+	prom_cpu_nodes[boot_cpu_id] = linux_cpus[0].prom_node;
+	__cpu_logical_map[0] = boot_cpu_id;
+	current->processor = boot_cpu_id;
+	prof_counter(boot_cpu_id) = prof_multiplier(boot_cpu_id) = 1;
 }
 
-__initfunc(int setup_profiling_timer(unsigned int multiplier))
+int __init setup_profiling_timer(unsigned int multiplier)
 {
 	unsigned long flags;
 	int i;

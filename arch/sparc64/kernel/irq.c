@@ -1,8 +1,9 @@
-/* $Id: irq.c,v 1.53 1998/04/20 07:14:58 ecd Exp $
+/* $Id: irq.c,v 1.61 1998/08/02 14:51:38 ecd Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
  * Copyright (C) 1998  Eddie C. Dost    (ecd@skynet.be)
+ * Copyright (C) 1998  Jakub Jelinek    (jj@ultra.linux.cz)
  */
 
 #include <linux/config.h>
@@ -54,35 +55,6 @@ static int irqs_have_been_distributed = 0;
 
 unsigned long ivector_to_mask[NUM_IVECS];
 
-struct ino_bucket {
-	struct ino_bucket *next;
-	unsigned int ino;
-	unsigned int *imap;
-	unsigned int *iclr;
-	unsigned char *imap_refcnt;
-};
-
-#define INO_HASHSZ	(NUM_HARD_IVECS >> 2)
-#define NUM_INO_STATIC	4
-static struct ino_bucket *ino_hash[INO_HASHSZ] = { NULL, };
-static struct ino_bucket static_ino_buckets[NUM_INO_STATIC];
-static int static_ino_bucket_count = 0;
-
-static inline struct ino_bucket *__ino_lookup(unsigned int hash, unsigned int ino)
-{
-	struct ino_bucket *ret = ino_hash[hash];
-
-	for(ret = ino_hash[hash]; ret && ret->ino != ino; ret = ret->next)
-		;
-
-	return ret;
-}
-
-static inline struct ino_bucket *ino_lookup(unsigned int ino)
-{
-	return __ino_lookup((ino & (INO_HASHSZ - 1)), ino);
-}
-
 /* This is based upon code in the 32-bit Sparc kernel written mostly by
  * David Redman (djhr@tadpole.co.uk).
  */
@@ -95,6 +67,24 @@ struct irqaction *irq_action[NR_IRQS+1] = {
 	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL,
 	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL
 };
+
+#define IBF_DMA_SYNC	0x01
+#define IBF_PCI		0x02
+#define IBF_ACTIVE	0x04
+
+#define __imap(bucket) ((bucket)->iclr + (bucket)->imap_off)
+#define __bucket(irq) ((struct ino_bucket *)(unsigned long)(irq))
+#define __irq(bucket) ((unsigned int)(unsigned long)(bucket))
+
+static struct ino_bucket *bucket_base, *buckets, *endbuckets;
+
+__initfunc(unsigned long irq_init(unsigned long start_mem, unsigned long end_mem))
+{
+	start_mem = (start_mem + 15) & ~15;
+	bucket_base = buckets = (struct ino_bucket *)start_mem;
+	endbuckets = buckets + 2048;
+	return (unsigned long)endbuckets;
+}
 
 int get_irq_list(char *buf)
 {
@@ -188,22 +178,6 @@ offset(imap_pmgmt),
 
 #define NUM_SYSIO_OFFSETS (sizeof(sysio_irq_offsets) / sizeof(sysio_irq_offsets[0]))
 
-/* XXX Old compatability cruft, get rid of me when all drivers have been
- * XXX converted to dcookie registry calls... -DaveM
- */
-static unsigned int *sysio_irq_to_imap(unsigned int irq)
-{
-	unsigned long offset;
-	struct sysio_regs *sregs;
-
-	if((irq >= NUM_SYSIO_OFFSETS) ||
-	   ((offset = sysio_irq_offsets[irq]) == ((unsigned long)-1)))
-		return NULL;
-	sregs = SBus_chain->iommu->sysio_regs;
-	offset += ((unsigned long) sregs);
-	return ((unsigned int *)offset);
-}
-
 /* Convert Interrupt Mapping register pointer to assosciated
  * Interrupt Clear register pointer, SYSIO specific version.
  */
@@ -220,10 +194,10 @@ static unsigned int *sysio_imap_to_iclr(unsigned int *imap)
 #ifdef CONFIG_PCI
 /* PCI PSYCHO INO number to Sparc PIL level. */
 unsigned char psycho_ino_to_pil[] = {
-	7, 5, 5, 2,			/* PCI A slot 0  Int A, B, C, D */
-	7, 5, 5, 2,			/* PCI A slot 1  Int A, B, C, D */
-	7, 5, 5, 2,			/* PCI A slot 2  Int A, B, C, D */
-	7, 5, 5, 2,			/* PCI A slot 3  Int A, B, C, D */
+	7, 5, 4, 2,			/* PCI A slot 0  Int A, B, C, D */
+	7, 5, 4, 2,			/* PCI A slot 1  Int A, B, C, D */
+	7, 5, 4, 2,			/* PCI A slot 2  Int A, B, C, D */
+	7, 5, 4, 2,			/* PCI A slot 3  Int A, B, C, D */
 	6, 4, 3, 1,			/* PCI B slot 0  Int A, B, C, D */
 	6, 4, 3, 1,			/* PCI B slot 1  Int A, B, C, D */
 	6, 4, 3, 1,			/* PCI B slot 2  Int A, B, C, D */
@@ -264,21 +238,14 @@ unsigned char psycho_ino_to_pil[] = {
 #endif
 
 /* Now these are always passed a true fully specified sun4u INO. */
-void enable_irq(unsigned int ino)
+void enable_irq(unsigned int irq)
 {
-	struct ino_bucket *bucket;
+	struct ino_bucket *bucket = __bucket(irq);
 	unsigned long tid;
 	unsigned int *imap;
 
-#ifdef CONFIG_PCI
-	if(PCI_IRQ_P(ino))
-		ino &= (PCI_IRQ_IGN | PCI_IRQ_INO);
-#endif
-	bucket = ino_lookup(ino);
-	if(!bucket)
-		return;
-
-	imap = bucket->imap;
+	imap = __imap(bucket);
+	if (!imap) return;
 
 	/* We send it to our UPA MID, for SMP this will be different. */
 	__asm__ __volatile__("ldxa [%%g0] %1, %0" : "=r" (tid) : "i" (ASI_UPA_CONFIG));
@@ -290,26 +257,19 @@ void enable_irq(unsigned int ino)
 	 * However for Graphics and UPA Slave devices the full
 	 * SYSIO_IMAP_INR field can be set by the programmer here.
 	 *
-	 * Things like FFB can now be handled via the dcookie mechanism.
+	 * Things like FFB can now be handled via the new IRQ mechanism.
 	 */
 	*imap = SYSIO_IMAP_VALID | (tid & SYSIO_IMAP_TID);
 }
 
 /* This now gets passed true ino's as well. */
-void disable_irq(unsigned int ino)
+void disable_irq(unsigned int irq)
 {
-	struct ino_bucket *bucket;
+	struct ino_bucket *bucket = __bucket(irq);
 	unsigned int *imap;
 
-#ifdef CONFIG_PCI
-	if(PCI_IRQ_P(ino))
-		ino &= (PCI_IRQ_IGN | PCI_IRQ_INO);
-#endif
-	bucket = ino_lookup(ino);
-	if(!bucket)
-		return;
-
-	imap = bucket->imap;
+	imap = __imap(bucket);
+	if (!imap) return;
 
 	/* NOTE: We do not want to futz with the IRQ clear registers
 	 *       and move the state to IDLE, the SCSI code does call
@@ -319,267 +279,156 @@ void disable_irq(unsigned int ino)
 	*imap &= ~(SYSIO_IMAP_VALID);
 }
 
-static void get_irq_translations(int *cpu_irq, int *ivindex_fixup,
-				 unsigned int **imap, unsigned int **iclr,
-				 void *busp, unsigned long flags,
-				 unsigned int irq)
+unsigned int build_irq(int pil, int inofixup, unsigned int *iclr, unsigned int *imap)
 {
-	if(*cpu_irq != -1 && *imap != NULL && *iclr != NULL)
-		return;
-
-	if(*cpu_irq != -1 || *imap != NULL || *iclr != NULL || busp == NULL) {
-		printk("get_irq_translations: Partial specification, this is bad.\n");
-		printk("get_irq_translations: cpu_irq[%d] imap[%p] iclr[%p] busp[%p]\n",
-		       *cpu_irq, *imap, *iclr, busp);
-		panic("Bad IRQ translations...");
+	if (buckets == endbuckets)
+		panic("Out of IRQ buckets. Should not happen.\n");
+	buckets->pil = pil;
+	if (pil && (!iclr || !imap)) {
+		prom_printf("Invalid build_irq %d %d %016lx %016lx\n", pil, inofixup, iclr, imap);
+		prom_halt();
 	}
+	if (imap)
+		buckets->ino = (*imap & (SYSIO_IMAP_IGN | SYSIO_IMAP_INO)) + inofixup;
+	else
+		buckets->ino = 0;
+		
+	buckets->iclr = iclr;
+	buckets->flags = 0;
+	buckets->imap_off = imap - iclr;
+	return __irq(buckets++);
+}
 
-	if(SA_BUS(flags) == SA_SBUS) {
-		struct linux_sbus *sbusp = busp;
-		struct sysio_regs *sregs = sbusp->iommu->sysio_regs;
-		unsigned long offset;
+unsigned int sbus_build_irq(void *buscookie, unsigned int ino)
+{
+	struct linux_sbus *sbus = (struct linux_sbus *)buscookie;
+	struct sysio_regs *sregs = sbus->iommu->sysio_regs;
+	unsigned long offset;
+	int pil;
+	unsigned int *imap, *iclr;
+	int sbus_level = 0;
 
-		*cpu_irq = sysio_ino_to_pil[irq];
-		if(*cpu_irq == 0) {
-			printk("get_irq_translations: Bad SYSIO INO[%x]\n", irq);
-			panic("Bad SYSIO IRQ translations...");
-		}
-		offset = sysio_irq_offsets[irq];
-		if(offset == ((unsigned long)-1)) {
-			printk("get_irq_translations: Bad SYSIO INO[%x] cpu[%d]\n",
-			       irq, *cpu_irq);
-			panic("BAD SYSIO IRQ offset...");
-		}
-		offset += ((unsigned long)sregs);
-		*imap = ((unsigned int *)offset);
-
-		/* SYSIO inconsistancy.  For external SLOTS, we have to select
-		 * the right ICLR register based upon the lower SBUS irq level
-		 * bits.
-		 */
-		if(irq >= 0x20) {
-			*iclr = sysio_imap_to_iclr(*imap);
-		} else {
-			unsigned long iclraddr;
-			int sbus_slot = (irq & 0x18)>>3;
-			int sbus_level = irq & 0x7;
-
-			switch(sbus_slot) {
-			case 0:
-				*iclr = &sregs->iclr_slot0;
-				break;
-			case 1:
-				*iclr = &sregs->iclr_slot1;
-				break;
-			case 2:
-				*iclr = &sregs->iclr_slot2;
-				break;
-			case 3:
-				*iclr = &sregs->iclr_slot3;
-				break;
-			};
-
-			iclraddr = (unsigned long) *iclr;
-			iclraddr += ((sbus_level - 1) * 8);
-			*iclr = (unsigned int *) iclraddr;
-
-#if 0 /* DEBUGGING */
-			printk("SYSIO_FIXUP: slot[%x] level[%x] iclr[%p] ",
-			       sbus_slot, sbus_level, *iclr);
-#endif
-
-			/* Also, make sure this is accounted for in ivindex
-			 * computations done by the caller.
-			 */
-			*ivindex_fixup = sbus_level;
-		}
-		return;
+	pil = sysio_ino_to_pil[ino];
+	if(!pil) {
+		printk("sbus_irq_build: Bad SYSIO INO[%x]\n", ino);
+		panic("Bad SYSIO IRQ translations...");
 	}
-#ifdef CONFIG_PCI
-	if(SA_BUS(flags) == SA_PCI) {
-		struct pci_bus *pbusp = busp;
-		struct linux_pbm_info *pbm = pbusp->sysdata;
-		struct psycho_regs *pregs = pbm->parent->psycho_regs;
-		unsigned long offset;
-
-		*cpu_irq = psycho_ino_to_pil[irq & 0x3f];
-		if(*cpu_irq == 0) {
-			printk("get_irq_translations: Bad PSYCHO INO[%x]\n", irq);
-			panic("Bad PSYCHO IRQ translations...");
-		}
-		offset = psycho_imap_offset(irq);
-		if(offset == ((unsigned long)-1)) {
-			printk("get_irq_translations: Bad PSYCHO INO[%x] cpu[%d]\n",
-			       irq, *cpu_irq);
-			panic("Bad PSYCHO IRQ offset...");
-		}
-		offset += ((unsigned long)pregs);
-		*imap = ((unsigned int *)offset) + 1;
-		*iclr = (unsigned int *)
-			(((unsigned long)pregs) + psycho_iclr_offset(irq));
-		return;
+	offset = sysio_irq_offsets[ino];
+	if(offset == ((unsigned long)-1)) {
+		printk("get_irq_translations: Bad SYSIO INO[%x] cpu[%d]\n",
+			ino, pil);
+		panic("BAD SYSIO IRQ offset...");
 	}
-#endif
-#if 0	/* XXX More to do before we can use this. -DaveM */
-	if(SA_BUS(flags) == SA_FHC) {
-		struct fhc_bus *fbusp = busp;
-		struct fhc_regs *fregs = fbusp->regs;
-		unsigned long offset;
+	offset += ((unsigned long)sregs);
+	imap = ((unsigned int *)offset);
 
-		*cpu_irq = fhc_ino_to_pil[irq];
-		if(*cpu_irq == 0) {
-			printk("get_irq_translations: Bad FHC INO[%x]\n", irq);
-			panic("Bad FHC IRQ translations...");
-		}
-		offset = fhc_irq_offset[*cpu_irq];
-		if(offset == ((unsigned long)-1)) {
-			printk("get_irq_translations: Bad FHC INO[%x] cpu[%d]\n",
-			       irq, *cpu_irq);
-			panic("Bad FHC IRQ offset...");
-		}
-		offset += ((unsigned long)pregs);
-		*imap = (((unsigned int *)offset)+1);
-		*iclr = fhc_imap_to_iclr(*imap);
-		return;
+	/* SYSIO inconsistancy.  For external SLOTS, we have to select
+	 * the right ICLR register based upon the lower SBUS irq level
+	 * bits.
+	 */
+	if(ino >= 0x20) {
+		iclr = sysio_imap_to_iclr(imap);
+	} else {
+		unsigned long iclraddr;
+		int sbus_slot = (ino & 0x18)>>3;
+		
+		sbus_level = ino & 0x7;
+
+		switch(sbus_slot) {
+		case 0:
+			iclr = &sregs->iclr_slot0;
+			break;
+		case 1:
+			iclr = &sregs->iclr_slot1;
+			break;
+		case 2:
+			iclr = &sregs->iclr_slot2;
+			break;
+		default:
+		case 3:
+			iclr = &sregs->iclr_slot3;
+			break;
+		};
+
+		iclraddr = (unsigned long) iclr;
+		iclraddr += ((sbus_level - 1) * 8);
+		iclr = (unsigned int *) iclraddr;
 	}
-#endif
-	printk("get_irq_translations: IRQ register for unknown bus type.\n");
-	printk("get_irq_translations: BUS[%lx] IRQ[%x]\n",
-	       SA_BUS(flags), irq);
-	panic("Bad IRQ bus type...");
+	return build_irq(pil, sbus_level, iclr, imap);
 }
 
 #ifdef CONFIG_PCI
-static void pci_irq_frobnicate(int *cpu_irq, int *ivindex_fixup,
-			       unsigned int **imap, unsigned int **iclr,
-			       unsigned int irq)
+unsigned int psycho_build_irq(void *buscookie, int imap_off, int ino, int need_dma_sync)
 {
-	struct linux_psycho *psycho;
-	struct psycho_regs *pregs;
-	unsigned long addr, imoff;
+	struct linux_psycho *psycho = (struct linux_psycho *)buscookie;
+	struct psycho_regs *pregs = psycho->psycho_regs;
+	unsigned long addr;
+	struct ino_bucket *bucket;
+	int pil;
+	unsigned int *imap, *iclr;
+	int inofixup = 0;
 
-	psycho = psycho_by_index((irq & PCI_IRQ_BUSNO) >> PCI_IRQ_BUSNO_SHFT);
-	if (!psycho) {
-		printk("get_irq_translations: BAD PSYCHO BUSNO[%x]\n", irq);
-		panic("Bad PSYCHO IRQ frobnication...");
-	}
-	pregs = psycho->psycho_regs;
-
+	pil = psycho_ino_to_pil[ino & PCI_IRQ_INO];
+	
 	addr = (unsigned long) &pregs->imap_a_slot0;
-	imoff = (irq & PCI_IRQ_IMAP_OFF) >> PCI_IRQ_IMAP_OFF_SHFT;
-	addr = addr + imoff;
-
-	*imap = ((unsigned int *)addr) + 1;
+	addr = addr + imap_off;
+	imap = ((unsigned int *)addr) + 1;
 
 	addr = (unsigned long) pregs;
-	addr += psycho_iclr_offset(irq & (PCI_IRQ_INO));
-	*iclr = ((unsigned int *)addr) + 1;
+	addr += psycho_iclr_offset(ino & (PCI_IRQ_INO));
+	iclr = ((unsigned int *)addr) + 1;
 
-	*cpu_irq = psycho_ino_to_pil[irq & (PCI_IRQ_INO)];
-	if(*cpu_irq == 0) {
-		printk("get_irq_translations: BAD PSYCHO INO[%x]\n", irq);
-		panic("Bad PSYCHO IRQ frobnication...");
-	}
+	if(!(ino & 0x20))
+		inofixup = ino & 0x03;
 
-	/* IVINDEX fixup only needed for PCI slot irq lines. */
-	if(!(irq & 0x20))
-		*ivindex_fixup = irq & 0x03;
+	bucket = __bucket(build_irq(pil, inofixup, iclr, imap));
+	
+	if (need_dma_sync)
+		bucket->flags |= IBF_DMA_SYNC;
+		
+	bucket->flags |= IBF_PCI;
+	return __irq(bucket);
 }
 #endif
-
-/* Once added, they are never removed. */
-static struct ino_bucket *add_ino_hash(unsigned int ivindex,
-				       unsigned int *imap, unsigned int *iclr,
-				       unsigned long flags)
-{
-	struct ino_bucket *new = NULL, **hashp;
-	unsigned int hash = (ivindex & (INO_HASHSZ - 1));
-
-	new = __ino_lookup(hash, ivindex);
-	if(new)
-		return new;
-	if(flags & SA_STATIC_ALLOC) {
-		if(static_ino_bucket_count < NUM_INO_STATIC)
-			new = &static_ino_buckets[static_ino_bucket_count++];
-		else
-			printk("Request for ino bucket SA_STATIC_ALLOC failed "
-			       "using kmalloc\n");
-	}
-	if(new == NULL)
-		new = kmalloc(sizeof(struct ino_bucket), GFP_KERNEL);
-	if(new) {
-		hashp = &ino_hash[hash];
-		new->imap = imap;
-		new->iclr = iclr;
-		new->ino  = ivindex;
-		new->next = *hashp;
-		*hashp = new;
-	}
-	return new;
-}
 
 int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
 		unsigned long irqflags, const char *name, void *dev_id)
 {
 	struct irqaction *action, *tmp = NULL;
-	struct devid_cookie *dcookie = NULL;
-	struct ino_bucket *bucket = NULL;
+	struct ino_bucket *bucket = __bucket(irq);
 	unsigned long flags;
-	unsigned int *imap, *iclr;
-	void *bus_id = NULL;
-	int ivindex = -1, ivindex_fixup, cpu_irq = -1, pending = 0;
+	int pending = 0;
+
+	if (irq < 0x400000 || (irq & 0x80000000)) {
+		prom_printf("request_irq with old style irq %08x %016lx\n", irq, handler);
+		prom_halt();
+	}
 	
 	if(!handler)
 	    return -EINVAL;
 
-	imap = iclr = NULL;
-
-	ivindex_fixup = 0;
-
-	if (irq == 0) {
-		cpu_irq = irq;
-		irqflags &= ~(SA_IMAP_MASKED);
-	} else {
+	if (!bucket->pil)
+		irqflags &= ~SA_IMAP_MASKED;
+	else {
 		irqflags |= SA_IMAP_MASKED;
-#ifdef CONFIG_PCI
-		if(PCI_IRQ_P(irq)) {
-			pci_irq_frobnicate(&cpu_irq, &ivindex_fixup, &imap, &iclr, irq);
-			if (irq & PCI_IRQ_DMA_SYNC)
-				irqflags |= SA_DMA_SYNC;
-		} else
-#endif
-		if(irqflags & SA_DCOOKIE) {
-			if(!dev_id) {
-				printk("request_irq: SA_DCOOKIE but dev_id is NULL!\n");
-				panic("Bogus irq registry.");
-			}
-			dcookie		= dev_id;
-			dev_id		= dcookie->real_dev_id;
-			cpu_irq		= dcookie->pil;
-			imap		= dcookie->imap;
-			iclr		= dcookie->iclr;
-			bus_id		= dcookie->bus_cookie;
-			get_irq_translations(&cpu_irq, &ivindex_fixup, &imap,
-					     &iclr, bus_id, irqflags, irq);
-		} else {
-			/* XXX NOTE: This code is maintained for compatability until I can
-			 * XXX       verify that all drivers sparc64 will use are updated
-			 * XXX       to use the new IRQ registry dcookie interface.  -DaveM
+		if (bucket->flags & IBF_PCI) {
+			/*
+			 * PCI IRQs should never use SA_INTERRUPT.
 			 */
-			cpu_irq = sysio_ino_to_pil[irq];
-			imap = sysio_irq_to_imap(irq);
-			if(!imap) {
-				printk("request_irq: BAD, null imap for old style "
-				       "irq registry IRQ[%x].\n", irq);
-				panic("Bad IRQ registery...");
-			}
-			iclr = sysio_imap_to_iclr(imap);
+			irqflags &= ~(SA_INTERRUPT);
+
+			/*
+			 * Check wether we _should_ use DMA Write Sync
+			 * (for devices behind bridges behind APB). 
+			 *
+			 * XXX: Not implemented, yet.
+			 */
+			if (bucket->flags & IBF_DMA_SYNC)
+				irqflags |= SA_DMA_SYNC;
 		}
-		ivindex = (*imap & (SYSIO_IMAP_IGN | SYSIO_IMAP_INO));
-		ivindex += ivindex_fixup;
 	}
 
-	action = *(cpu_irq + irq_action);
+	action = *(bucket->pil + irq_action);
 	if(action) {
 		if((action->flags & SA_SHIRQ) && (irqflags & SA_SHIRQ))
 			for (tmp = action; tmp->next; tmp = tmp->next)
@@ -589,7 +438,7 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 
 		if((action->flags & SA_INTERRUPT) ^ (irqflags & SA_INTERRUPT)) {
 			printk("Attempt to mix fast and slow interrupts on IRQ%d "
-			       "denied\n", irq);
+			       "denied\n", bucket->pil);
 			return -EBUSY;
 		}   
 		action = NULL;		/* Or else! */
@@ -617,22 +466,11 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	}
 
 	if (irqflags & SA_IMAP_MASKED) {
-		bucket = add_ino_hash(ivindex, imap, iclr, irqflags);
-		if(!bucket) {
-			kfree(action);
-			restore_flags(flags);
-			return -ENOMEM;
-		}
-
-		pending = ((ivector_to_mask[ivindex] & 0x80000000) != 0);
-		ivector_to_mask[ivindex] = (1 << cpu_irq);
+		pending = ((ivector_to_mask[bucket->ino] & 0x80000000) != 0);
+		ivector_to_mask[bucket->ino] = (1 << bucket->pil);
 		if(pending)
-			ivector_to_mask[ivindex] |= 0x80000000;
-
-		if(dcookie) {
-			dcookie->ret_ino = ivindex;
-			dcookie->ret_pil = cpu_irq;
-		}
+			ivector_to_mask[bucket->ino] |= 0x80000000;
+		bucket->flags |= IBF_ACTIVE;
 	}
 
 	action->mask = (unsigned long) bucket;
@@ -645,13 +483,13 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	if(tmp)
 		tmp->next = action;
 	else
-		*(cpu_irq + irq_action) = action;
+		*(bucket->pil + irq_action) = action;
 
-	enable_irq(ivindex);
+	enable_irq(irq);
 
 	/* We ate the IVEC already, this makes sure it does not get lost. */
 	if(pending)
-		set_softint(1 << cpu_irq);
+		set_softint(1 << bucket->pil);
 
 	restore_flags(flags);
 #ifdef __SMP__
@@ -666,23 +504,16 @@ void free_irq(unsigned int irq, void *dev_id)
 	struct irqaction *action;
 	struct irqaction *tmp = NULL;
 	unsigned long flags;
-	unsigned int *imap = NULL;
-	unsigned int cpu_irq;
-	int ivindex = -1;
+	struct ino_bucket *bucket = __bucket(irq), *bp;
 
-	if(irq == 0) {
-		cpu_irq = irq;
-	} else {
-#ifdef CONFIG_PCI
-		if(PCI_IRQ_P(irq))
-			cpu_irq = psycho_ino_to_pil[irq & PCI_IRQ_INO];
-		else
-#endif
-			cpu_irq = sysio_ino_to_pil[irq];
+	if (irq < 0x400000 || (irq & 0x80000000)) {
+		prom_printf("free_irq with old style irq %08x\n", irq);
+		prom_halt();
 	}
-	action = *(cpu_irq + irq_action);
+	
+	action = *(bucket->pil + irq_action);
 	if(!action->handler) {
-		printk("Freeing free IRQ %d\n", irq);
+		printk("Freeing free IRQ %d\n", bucket->pil);
 		return;
 	}
 	if(dev_id) {
@@ -692,17 +523,17 @@ void free_irq(unsigned int irq, void *dev_id)
 			tmp = action;
 		}
 		if(!action) {
-			printk("Trying to free free shared IRQ %d\n", irq);
+			printk("Trying to free free shared IRQ %d\n", bucket->pil);
 			return;
 		}
 	} else if(action->flags & SA_SHIRQ) {
-		printk("Trying to free shared IRQ %d with NULL device ID\n", irq);
+		printk("Trying to free shared IRQ %d with NULL device ID\n", bucket->pil);
 		return;
 	}
 
 	if(action->flags & SA_STATIC_ALLOC) {
 		printk("Attempt to free statically allocated IRQ %d (%s)\n",
-		       irq, action->name);
+		       bucket->pil, action->name);
 		return;
 	}
 
@@ -710,43 +541,35 @@ void free_irq(unsigned int irq, void *dev_id)
 	if(action && tmp)
 		tmp->next = action->next;
 	else
-		*(cpu_irq + irq_action) = action->next;
+		*(bucket->pil + irq_action) = action->next;
 
 	if(action->flags & SA_IMAP_MASKED) {
-		struct ino_bucket *bucket = (struct ino_bucket *)action->mask;
+		unsigned int *imap = __imap(bucket);
 
-		imap = bucket->imap;
-		if(imap != NULL) {
-			ivindex = bucket->ino;
-			ivector_to_mask[ivindex] = 0;
-		}
-		else
-			printk("free_irq: WHeee, SYSIO_MASKED yet no imap reg.\n");
-	}
-
-	kfree(action);
-
-	if(ivindex != -1) {
-		struct ino_bucket *bp;
-		int i, count = 0;
-
-		/* The trick is that we can't turn the thing off when there
-		 * are potentially other sub-irq level references.
+		/*
+		 * Only free when no other shared irq uses this bucket.
 		 */
-		if(imap != NULL) {
-			for(i = 0; i < INO_HASHSZ; i++) {
-				bp = ino_hash[i];
-				while(bp) {
-					if(bp->imap == imap)
-						count++;
-					bp = bp->next;
-				}
-			}
-		}
-		if(count < 2)
-			disable_irq(ivindex);
+		tmp = *(bucket->pil + irq_action);
+		for( ; tmp; tmp = tmp->next)
+			if ((struct ino_bucket *)tmp->mask == bucket)
+				goto out;
+
+		ivector_to_mask[bucket->ino] = 0;
+
+		bucket->flags &= ~IBF_ACTIVE;
+		for (bp = bucket_base; bp < endbuckets; bp++)
+			if (__imap(bp) == imap && (bp->flags & IBF_ACTIVE))
+				break;
+		/*
+		 * Only disable when no other sub-irq levels of
+		 * the same imap are active.
+		 */
+		if (bp == endbuckets)
+			disable_irq(irq);
 	}
 
+out:
+	kfree(action);
 	restore_flags(flags);
 }
 
@@ -982,7 +805,7 @@ void handler_irq(int irq, struct pt_regs *regs)
 				if(!(ivector_to_mask[bucket->ino] & 0x80000000))
 					continue;
 			}
-			act->handler(irq, act->dev_id, regs);
+			act->handler(__irq(bucket), act->dev_id, regs);
 		} while((act = act->next) != NULL);
 		act = action;
 		do {
@@ -1047,61 +870,23 @@ int request_fast_irq(unsigned int irq,
 		     unsigned long irqflags, const char *name, void *dev_id)
 {
 	struct irqaction *action;
-	struct devid_cookie *dcookie = NULL;
-	struct ino_bucket *bucket = NULL;
+	struct ino_bucket *bucket = __bucket(irq);
 	unsigned long flags;
-	unsigned int *imap, *iclr;
-	void *bus_id = NULL;
-	int ivindex = -1, ivindex_fixup, cpu_irq = -1;
 
+	if (irq < 0x400000 || (irq & 0x80000000)) {
+		prom_printf("request_irq with old style irq %08x %016lx\n", irq, handler);
+		prom_halt();
+	}
+	
 	if(!handler)
 		return -EINVAL;
 
-	imap = iclr = NULL;
-	ivindex_fixup = 0;
-
-	if ((irq == 0) || (irq == 14)) {
+	if ((bucket->pil == 0) || (bucket->pil == 14)) {
 		printk("request_fast_irq: Trying to register shared IRQ 0 or 14.\n");
 		return -EBUSY;
 	}
 
-#ifdef CONFIG_PCI
-	if(PCI_IRQ_P(irq)) {
-		pci_irq_frobnicate(&cpu_irq, &ivindex_fixup, &imap, &iclr, irq);
-	} else
-#endif
-	if(irqflags & SA_DCOOKIE) {
-		if(!dev_id) {
-			printk("request_fast_irq: SA_DCOOKIE but dev_id is NULL!\n");
-			panic("Bogus irq registry.");
-		}
-		dcookie		= dev_id;
-		dev_id		= dcookie->real_dev_id;
-		cpu_irq		= dcookie->pil;
-		imap		= dcookie->imap;
-		iclr		= dcookie->iclr;
-		bus_id		= dcookie->bus_cookie;
-		get_irq_translations(&cpu_irq, &ivindex_fixup, &imap,
-				     &iclr, bus_id, irqflags, irq);
-	} else {
-		/* XXX NOTE: This code is maintained for compatability until I can
-		 * XXX       verify that all drivers sparc64 will use are updated
-		 * XXX       to use the new IRQ registry dcookie interface.  -DaveM
-		 */
-		cpu_irq = sysio_ino_to_pil[irq];
-		imap = sysio_irq_to_imap(irq);
-		if(!imap) {
-			printk("request_irq: BAD, null imap for old style "
-			       "irq registry IRQ[%x].\n", irq);
-			panic("Bad IRQ registery...");
-		}
-		iclr = sysio_imap_to_iclr(imap);
-	}
-
-	ivindex = (*imap & (SYSIO_IMAP_IGN | SYSIO_IMAP_INO));
-	ivindex += ivindex_fixup;
-
-	action = *(cpu_irq + irq_action);
+	action = *(bucket->pil + irq_action);
 	if(action) {
 		if(action->flags & SA_SHIRQ)
 			panic("Trying to register fast irq when already shared.\n");
@@ -1116,7 +901,7 @@ int request_fast_irq(unsigned int irq,
 			action = &static_irqaction[static_irq_count++];
 		else
 			printk("Request for IRQ%d (%s) SA_STATIC_ALLOC failed "
-			       "using kmalloc\n", irq, name);
+			       "using kmalloc\n", bucket->pil, name);
 	}
 	if(action == NULL)
 		action = (struct irqaction *)kmalloc(sizeof(struct irqaction),
@@ -1125,21 +910,9 @@ int request_fast_irq(unsigned int irq,
 		restore_flags(flags);
 		return -ENOMEM;
 	}
-	install_fast_irq(cpu_irq, handler);
+	install_fast_irq(bucket->pil, handler);
 
-	bucket = add_ino_hash(ivindex, imap, iclr, irqflags);
-	if(!bucket) {
-		kfree(action);
-		restore_flags(flags);
-		return -ENOMEM;
-	}
-
-	ivector_to_mask[ivindex] = (1 << cpu_irq);
-
-	if(dcookie) {
-		dcookie->ret_ino = ivindex;
-		dcookie->ret_pil = cpu_irq;
-	}
+	ivector_to_mask[bucket->ino] = (1 << bucket->pil);
 
 	action->mask = (unsigned long) bucket;
 	action->handler = handler;
@@ -1148,8 +921,8 @@ int request_fast_irq(unsigned int irq,
 	action->name = name;
 	action->next = NULL;
 
-	*(cpu_irq + irq_action) = action;
-	enable_irq(ivindex);
+	*(bucket->pil + irq_action) = action;
+	enable_irq(irq);
 
 	restore_flags(flags);
 #ifdef __SMP__
@@ -1177,15 +950,21 @@ void init_timers(void (*cfunc)(int, void *, struct pt_regs *),
 		 unsigned long *clock)
 {
 	unsigned long flags;
-	unsigned long timer_tick_offset;
+	extern unsigned long timer_tick_offset;
 	int node, err;
+#ifdef __SMP__
+	extern void smp_tick_init(void);
+#endif
 
 	node = linux_cpus[0].prom_node;
 	*clock = prom_getint(node, "clock-frequency");
 	timer_tick_offset = *clock / HZ;
+#ifdef __SMP__
+	smp_tick_init();
+#endif
 
 	/* Register IRQ handler. */
-	err = request_irq(0, cfunc, (SA_INTERRUPT | SA_STATIC_ALLOC),
+	err = request_irq(build_irq(0, 0, NULL, NULL), cfunc, (SA_INTERRUPT | SA_STATIC_ALLOC),
 			  "timer", NULL);
 
 	if(err) {
@@ -1239,7 +1018,7 @@ void distribute_irqs(void)
 		while(p) {
 			if(p->flags & SA_IMAP_MASKED) {
 				struct ino_bucket *bucket = (struct ino_bucket *)p->mask;
-				unsigned int *imap = bucket->imap;
+				unsigned int *imap = __imap(bucket);
 				unsigned int val;
 				unsigned long tid = __cpu_logical_map[cpu] << 9;
 

@@ -7,6 +7,7 @@
 #include <linux/mm.h>
 #include <asm/processor.h>		/* For TASK_SIZE */
 #include <asm/mmu.h>
+#include <asm/page.h>
 
 extern void local_flush_tlb_all(void);
 extern void local_flush_tlb_mm(struct mm_struct *mm);
@@ -14,17 +15,10 @@ extern void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long vmadd
 extern void local_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			    unsigned long end);
 
-#ifndef __SMP__
 #define flush_tlb_all local_flush_tlb_all
 #define flush_tlb_mm local_flush_tlb_mm
 #define flush_tlb_page local_flush_tlb_page
 #define flush_tlb_range local_flush_tlb_range
-#else /* __SMP__ */
-#define flush_tlb_all local_flush_tlb_all
-#define flush_tlb_mm local_flush_tlb_mm
-#define flush_tlb_page local_flush_tlb_page
-#define flush_tlb_range local_flush_tlb_range
-#endif /* __SMP__ */
 
 /*
  * No cache flushing is required when address mappings are
@@ -110,6 +104,7 @@ extern pte_t *va_to_pte(struct task_struct *tsk, unsigned long address);
 #define VMALLOC_OFFSET	(0x4000000) /* 64M */
 #define VMALLOC_START ((((long)high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1)))
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
+#define VMALLOC_END	0xf0000000
 
 /*
  * Bits in a linux-style PTE.  These match the bits in the
@@ -370,36 +365,61 @@ extern inline pte_t * pte_offset(pmd_t * dir, unsigned long address)
 
 
 /*
- * Allocate and free page tables. The xxx_kernel() versions are
- * used to allocate a kernel page table, but are actually identical
- * to the xxx() versions.
+ * This is handled very differently on the PPC since out page tables
+ * are all 0's and I want to be able to use these zero'd pages elsewhere
+ * as well - it gives us quite a speedup.
+ *
+ * Note that the SMP/UP versions are the same since we don't need a
+ * per cpu list of zero pages since we do the zero-ing with the cache
+ * off and the access routines are lock-free but the pgt cache stuff
+ * _IS_ per-cpu since it isn't done with any lock-free access routines
+ * (although I think we need arch-specific routines so I can do lock-free).
+ *
+ * I need to generalize this so we can use it for other arch's as well.
+ * -- Cort
  */
-#ifdef __SMP__
-/* Sliiiicck */
-#define pgd_quicklist           (cpu_data[smp_processor_id()].pgd_quick)
-#define pmd_quicklist           ((unsigned long *)0)
-#define pte_quicklist           (cpu_data[smp_processor_id()].pte_quick)
-#define pgtable_cache_size      (cpu_data[smp_processor_id()].pgtable_cache_sz)
-#else
 extern struct pgtable_cache_struct {
 	unsigned long *pgd_cache;
 	unsigned long *pte_cache;
 	unsigned long pgtable_cache_sz;
+	unsigned long *zero_cache;    /* head linked list of pre-zero'd pages */
+  	unsigned long zero_sz;	      /* # currently pre-zero'd pages */
+	unsigned long zeropage_hits;  /* # zero'd pages request that we've done */
+	unsigned long zeropage_calls; /* # zero'd pages request that've been made */
+  	unsigned long zerototal;      /* # pages zero'd over time */
 } quicklists;
+
+#ifdef __SMP__
+/*#warning Tell Cort to do the pgt cache for SMP*/
 #define pgd_quicklist (quicklists.pgd_cache)
 #define pmd_quicklist ((unsigned long *)0)
 #define pte_quicklist (quicklists.pte_cache)
 #define pgtable_cache_size (quicklists.pgtable_cache_sz)
-#endif
+#else /* __SMP__ */
+#define pgd_quicklist (quicklists.pgd_cache)
+#define pmd_quicklist ((unsigned long *)0)
+#define pte_quicklist (quicklists.pte_cache)
+#define pgtable_cache_size (quicklists.pgtable_cache_sz)
+#endif /* __SMP__ */
 
+#define zero_quicklist (quicklists.zero_cache)
+#define zero_cache_sz  (quicklists.zero_sz)
+
+/* return a pre-zero'd page from the list, return NULL if none available -- Cort */
+extern unsigned long get_zero_page_fast(void);
 
 extern __inline__ pgd_t *get_pgd_slow(void)
 {
-	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL), *init;
+	pgd_t *ret/* = (pgd_t *)__get_free_page(GFP_KERNEL)*/, *init;
 
+	if ( (ret = (pgd_t *)get_zero_page_fast()) == NULL )
+	{
+		ret = (pgd_t *)__get_free_page(GFP_KERNEL);
+		memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
+	}
 	if (ret) {
 		init = pgd_offset(&init_mm, 0);
-		memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
+		/*memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));*/
 		memcpy (ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
 			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
 	}
@@ -441,7 +461,7 @@ extern __inline__ pte_t *get_pte_fast(void)
                 pte_quicklist = (unsigned long *)(*ret);
                 ret[0] = ret[1];
                 pgtable_cache_size--;
-        }
+         }
         return (pte_t *)ret;
 }
 
@@ -590,7 +610,31 @@ extern void flush_hash_page(unsigned context, unsigned long va);
 
 #define module_map      vmalloc
 #define module_unmap    vfree
-#define module_shrink	vshrink
+
+/* CONFIG_APUS */
+/* For virtual address to physical address conversion */
+extern void cache_clear(__u32 addr, int length);
+extern void cache_push(__u32 addr, int length);
+extern int mm_end_of_chunk (unsigned long addr, int len);
+extern unsigned long iopa(unsigned long addr);
+extern unsigned long mm_ptov(unsigned long addr) __attribute__ ((const));
+#define VTOP(addr)  (iopa((unsigned long)(addr)))
+#define PTOV(addr)  (mm_ptov((unsigned long)(addr)))
+
+/* Values for nocacheflag and cmode */
+/* These are not used by the APUS kernel_map, but prevents
+   compilation errors. */
+#define	KERNELMAP_FULL_CACHING		0
+#define	KERNELMAP_NOCACHE_SER		1
+#define	KERNELMAP_NOCACHE_NONSER	2
+#define	KERNELMAP_NO_COPYBACK		3
+
+/*
+ * Map some physical address range into the kernel address space.
+ */
+extern unsigned long kernel_map(unsigned long paddr, unsigned long size,
+				int nocacheflag, unsigned long *memavailp );
+
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
 #define PageSkip(page)		(0)

@@ -85,6 +85,7 @@ extern int nvram_init(void);
 extern int radio_init(void);
 extern void hfmodem_init(void);
 extern int pc110pad_init(void);
+extern int pmu_device_init(void);
 
 #ifdef CONFIG_PROC_FS
 static int misc_read_proc(char *buf, char **start, off_t offset,
@@ -279,6 +280,9 @@ __initfunc(int misc_init(void))
 #endif
 #ifdef CONFIG_HFMODEM
 	hfmodem_init();
+#endif
+#ifdef CONFIG_PMAC_PBOOK
+	pmu_device_init();
 #endif
 #endif /* !MODULE */
 	if (register_chrdev(MISC_MAJOR,"misc",&misc_fops)) {

@@ -10,6 +10,8 @@
  * 2 of the License, or (at your option) any later version.
  */
 
+extern unsigned long loops_per_sec;
+
 extern __inline__ void __delay(unsigned int loops)
 {
 	if (loops != 0)

@@ -1,7 +1,7 @@
-/* $Id: rtrap.S,v 1.37 1997/12/11 15:14:54 jj Exp $
+/* $Id: rtrap.S,v 1.39 1998/07/26 03:02:49 davem Exp $
  * rtrap.S: Preparing for return from trap on Sparc V9.
  *
- * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
@@ -10,13 +10,15 @@
 #include <asm/ptrace.h>
 #include <asm/spitfire.h>
 #include <asm/head.h>
+#include <asm/visasm.h>
+
+#define		PTREGS_OFF		(STACK_BIAS + REGWIN_SZ)
 
 		.text
 		.align			32
 		.globl			rtrap_clr_l6, rtrap
-#define		PTREGS_OFF		(STACK_BIAS + REGWIN_SZ)
-rtrap_clr_l6:	ba,pt			%xcc, rtrap
-		 clr			%l6
+rtrap_clr_l6:	clr			%l6
+		/* Fall through */
 rtrap:		sethi			%hi(bh_active), %l2
 		sethi			%hi(bh_mask), %l1
 		ldx			[%l2 + %lo(bh_active)], %l4
@@ -37,24 +39,37 @@ rtrap:		sethi			%hi(bh_active), %l2
 		be,pt			%icc, to_user
 		 andn			%l7, PSTATE_IE, %l7
 
-		ld			[%sp + PTREGS_OFF + PT_V9_FPRS], %l2
+		ldub			[%g6 + AOFF_task_tss + AOFF_thread_fpdepth], %l5
+		brz,pt			%l5, rt_continue
+		 srl			%l5, 1, %o0
+		add			%g6, AOFF_task_tss + AOFF_thread_fpsaved, %l6
+		ldub			[%l6 + %o0], %l2
+		sub			%l5, 2, %l5
+		add			%g6, AOFF_task_tss + AOFF_thread_gsr, %o1
 		andcc			%l2, FPRS_FEF, %g0
-		be,pt			%icc, rt_continue
+		be,pt			%icc, 2f
 		 and			%l2, FPRS_DL, %l6
-		wr			%g0, FPRS_FEF, %fprs
-		ldx			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x108], %g5
+		rd			%fprs, %g5
+		wr			%g5, FPRS_FEF, %fprs
+		ldub			[%o1 + %o0], %g5
+		sll			%o0, 3, %o5
+		add			%g6, AOFF_task_tss + AOFF_thread_xfsr, %o1
 		membar			#StoreLoad | #LoadLoad
+		sll			%o0, 8, %o2
+		add			%g6, AOFF_task_fpregs, %o3
 		brz,pn			%l6, 1f
-		 wr			%g0, ASI_BLK_P, %asi
-		ldda			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x000] %asi, %f0
-		ldda			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x040] %asi, %f16
+		 add			%g6, AOFF_task_fpregs+0x40, %o4
+		ldda			[%o3 + %o2] ASI_BLK_P, %f0
+		ldda			[%o4 + %o2] ASI_BLK_P, %f16
 1:		andcc			%l2, FPRS_DU, %g0
 		be,pn			%icc, 1f
 		 wr			%g5, 0, %gsr
-		ldda			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x080] %asi, %f32
-		ldda			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x0c0] %asi, %f48
+		add			%o2, 0x80, %o2
+		ldda			[%o3 + %o2] ASI_BLK_P, %f32
+		ldda			[%o4 + %o2] ASI_BLK_P, %f48
 1:		membar			#Sync
-		ldx			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x100], %fsr
+		ldx			[%o1 + %o5], %fsr
+2:		stb			%l5, [%g6 + AOFF_task_tss + AOFF_thread_fpdepth]
 rt_continue:	lduh			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
 		ldx			[%sp + PTREGS_OFF + PT_V9_G1], %g1
 		ldx			[%sp + PTREGS_OFF + PT_V9_G2], %g2
@@ -86,11 +101,10 @@ rt_continue:	lduh			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
 		wrpr			%l1, %g0, %tstate
 		wrpr			%l2, %g0, %tpc
 		wrpr			%o2, %g0, %tnpc
-		mov			PRIMARY_CONTEXT, %l7
 		brnz,pn			%l3, kern_rtt
-		 mov			SECONDARY_CONTEXT, %o4
+		 mov			PRIMARY_CONTEXT, %l7
 		stxa			%l0, [%l7] ASI_DMMU
-		stxa			%l0, [%o4] ASI_DMMU
+		stxa			%l0, [%l7 + %l7] ASI_DMMU
 		flush			%o5
 		rdpr			%wstate, %l1
 
@@ -106,8 +120,7 @@ rt_continue:	lduh			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
 		retry
 kern_rtt:	restore
 		retry
-to_user:	sethi			%hi(need_resched), %l0
-		ldx			[%l0 + %lo(need_resched)], %l0
+to_user:	ldx			[%g6 + AOFF_task_need_resched], %l0
 		wrpr			%l7, PSTATE_IE, %pstate
 		orcc			%g0, %l0, %g0
 		be,a,pt			%xcc, check_signal
@@ -116,8 +129,7 @@ to_user:	sethi			%hi(need_resched), %l0
 		call			schedule
 		 nop
 		lduw			[%g6 + AOFF_task_sigpending], %l0
-check_signal:	ld			[%sp + PTREGS_OFF + PT_V9_FPRS], %l2
-		brz,a,pt		%l0, check_user_wins
+check_signal:	brz,a,pt		%l0, check_user_wins
 		 lduh			[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %o2
 		clr			%o0
 		mov			%l5, %o2  
@@ -127,112 +139,20 @@ check_signal:	ld			[%sp + PTREGS_OFF + PT_V9_FPRS], %l2
 		lduh			[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %o2
 		clr			%l6
 check_user_wins:brz,pt			%o2, 1f
-		 sethi			%hi(TSTATE_PEF), %o3
+		 sethi			%hi(TSTATE_PEF), %l6
 
 		call			fault_in_user_windows
 		 add			%sp, STACK_BIAS + REGWIN_SZ, %o0
 
-		sethi			%hi(TSTATE_PEF), %o3
-1:		andcc			%l2, FPRS_FEF, %g0
-		be,a,pt			%icc, rt_continue
-		 andn			%l1, %o3, %l1		! If fprs.FEF is not set, disable tstate.PEF
-		ldx			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x108], %o3
-		lduh			[%g6 + AOFF_task_tss + AOFF_thread_flags], %l2
-		wr			%g0, FPRS_FEF, %fprs
-		wr			%o3, 0, %gsr
-		andcc			%l2, SPARC_FLAG_USEDFPUL, %g0
-		bne,pn			%icc, 2f
-		 andcc			%l2, SPARC_FLAG_USEDFPUU, %g0
-		fzero			%f0
-		bne,pn			%icc, 1f
-		 fzero			%f2
-		faddd			%f0, %f2, %f4
-		fmuld			%f0, %f2, %f6
-		faddd			%f0, %f2, %f8
-		fmuld			%f0, %f2, %f10
-		faddd			%f0, %f2, %f12
-		fmuld			%f0, %f2, %f14
-		faddd			%f0, %f2, %f16
-		fmuld			%f0, %f2, %f18
-		faddd			%f0, %f2, %f20
-		fmuld			%f0, %f2, %f22
-		faddd			%f0, %f2, %f24
-		fmuld			%f0, %f2, %f26
-		faddd			%f0, %f2, %f28
-		fmuld			%f0, %f2, %f30
-		faddd			%f0, %f2, %f32
-		fmuld			%f0, %f2, %f34
-		faddd			%f0, %f2, %f36
-		fmuld			%f0, %f2, %f38
-		faddd			%f0, %f2, %f40
-		fmuld			%f0, %f2, %f42
-		faddd			%f0, %f2, %f44
-		fmuld			%f0, %f2, %f46
-		faddd			%f0, %f2, %f48
-		fmuld			%f0, %f2, %f50
-		faddd			%f0, %f2, %f52
-		fmuld			%f0, %f2, %f54
-		faddd			%f0, %f2, %f56
-		fmuld			%f0, %f2, %f58
-		faddd			%f0, %f2, %f60
-		ldx			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x100], %fsr
-		ba,pt			%xcc, rt_continue
-		 wr			%g0, FPRS_FEF, %fprs
-1:		wr			%g0, ASI_BLK_P, %asi
-		membar			#StoreLoad | #LoadLoad
-		ldda			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x080] %asi, %f32
-		ldda			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x0c0] %asi, %f48
-		faddd			%f0, %f2, %f4
-		fmuld			%f0, %f2, %f6
-		faddd			%f0, %f2, %f8
-		fmuld			%f0, %f2, %f10
-		faddd			%f0, %f2, %f12
-		fmuld			%f0, %f2, %f14
-		faddd			%f0, %f2, %f16
-		fmuld			%f0, %f2, %f18
-		faddd			%f0, %f2, %f20
-		fmuld			%f0, %f2, %f22
-		faddd			%f0, %f2, %f24
-		fmuld			%f0, %f2, %f26
-		faddd			%f0, %f2, %f28
-		fmuld			%f0, %f2, %f30
-		membar			#Sync
-		ldx			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x100], %fsr
-		ba,pt			%xcc, rt_continue
-		 wr			%g0, FPRS_FEF, %fprs
-2:		membar			#StoreLoad | #LoadLoad
-		andcc			%l2, SPARC_FLAG_USEDFPUU, %g0
-		bne,pt			%icc, 3f
-		 wr			%g0, ASI_BLK_P, %asi
-		ldda			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x000] %asi, %f0
-		ldda			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x040] %asi, %f16
-		fzero			%f32
-		fzero			%f34
-		faddd			%f32, %f34, %f36
-		fmuld			%f32, %f34, %f38
-		faddd			%f32, %f34, %f40
-		fmuld			%f32, %f34, %f42
-		faddd			%f32, %f34, %f44
-		fmuld			%f32, %f34, %f46
-		faddd			%f32, %f34, %f48
-		fmuld			%f32, %f34, %f50
-		faddd			%f32, %f34, %f52
-		fmuld			%f32, %f34, %f54
-		faddd			%f32, %f34, %f56
-		fmuld			%f32, %f34, %f58
-		faddd			%f32, %f34, %f60
-		fmuld			%f32, %f34, %f62
-		membar			#Sync
-		ldx			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x100], %fsr
-		ba,pt			%xcc, rt_continue
-		 wr			%g0, FPRS_FEF, %fprs
-3:		ldda			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x000] %asi, %f0
-		ldda			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x040] %asi, %f16
-		ldda			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x080] %asi, %f32
-		ldda			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x0c0] %asi, %f48
-		membar			#Sync
-		ldx			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x100], %fsr
-		ba,pt			%xcc, rt_continue
-		 wr			%g0, FPRS_FEF, %fprs
+1:		andcc			%l1, %l6, %g0
+		be,pt			%xcc, rt_continue
+		 stb			%g0, [%g6 + AOFF_task_tss + AOFF_thread_fpdepth] ! This is neccessary for non-syscall rtraps only
+
+		rd			%fprs, %l5
+		andcc			%l5, FPRS_FEF, %g0
+		be,a,pn			%icc, rt_continue
+		 andn			%l1, %l6, %l1
+		ba,pt			%xcc, rt_continue+4
+		 lduh			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
 
 #undef PTREGS_OFF

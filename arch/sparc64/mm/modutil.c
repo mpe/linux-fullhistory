@@ -1,4 +1,4 @@
-/*  $Id: modutil.c,v 1.3 1998/01/16 16:35:02 jj Exp $
+/*  $Id: modutil.c,v 1.4 1998/07/26 06:29:08 davem Exp $
  *  arch/sparc64/mm/modutil.c
  *
  *  Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -33,32 +33,6 @@ void module_unmap (void * addr)
 		}
 	}
 	printk("Trying to unmap nonexistent module vm area (%p)\n", addr);
-}
-
-void module_shrink(void * addr, unsigned long size)
-{
-	struct vm_struct *tmp;
-
-	if (!addr)
-		return;
-	if ((PAGE_SIZE-1) & (unsigned long) addr) {
-		printk("Trying to shrink module with bad address (%p)\n", addr);
-		return;
-	}
-	size = PAGE_ALIGN(size);
-	if (!size)
-		module_unmap(addr);
-	for (tmp = modvmlist; tmp; tmp = tmp->next) {
-		if (tmp->addr == addr) {
-			if (size > tmp->size - PAGE_SIZE) {
-				printk("Trying to expand module with module_shrink()\n");
-				return;
-			}
-			vmfree_area_pages(VMALLOC_VMADDR(tmp->addr)+size, tmp->size-size);
-			return;
-		}
-	}
-	printk("Trying to shrink nonexistent module vm area (%p)\n", addr);
 }
 
 void * module_map (unsigned long size)

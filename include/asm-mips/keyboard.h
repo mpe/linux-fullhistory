@@ -5,7 +5,7 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * $Id: keyboard.h,v 1.7 1998/05/01 01:35:57 ralf Exp $
+ * $Id: keyboard.h,v 1.8 1998/05/07 00:40:03 ralf Exp $
  */
 #ifndef __ASM_MIPS_KEYBOARD_H
 #define __ASM_MIPS_KEYBOARD_H
@@ -37,8 +37,6 @@ extern unsigned char pckbd_sysrq_xlate[128];
 #define kbd_sysrq_xlate         pckbd_sysrq_xlate
 
 #define SYSRQ_KEY 0x54
-
-#define INIT_KBD	/* full initialization for the keyboard controller. */
 
 /* Some stoneage hardware needs delays after some operations.  */
 #define kbd_pause() do { } while(0)

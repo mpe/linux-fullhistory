@@ -1,8 +1,11 @@
-/* $Id: time.c,v 1.32 1998/03/23 08:41:13 jj Exp $
+/* $Id: time.c,v 1.33 1998/07/28 16:52:48 jj Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Thomas K. Dyas (tdyas@eden.rutgers.edu)
+ *
+ * Chris Davis (cdavis@cois.on.ca) 03/27/1998
+ * Added support for the intersil on the sun4/4200
  *
  * This file handles the Sparc specific time handling details.
  */
@@ -34,6 +37,27 @@ struct mostek48t02 *mstk48t02_regs = 0;
 struct mostek48t08 *mstk48t08_regs = 0;
 static int set_rtc_mmss(unsigned long);
 
+#ifdef CONFIG_SUN4
+struct intersil *intersil_clock;
+#define intersil_cmd(intersil_reg, intsil_cmd) intersil_reg->int_cmd_reg = \
+	(intsil_cmd)
+
+#define intersil_intr(intersil_reg, intsil_cmd) intersil_reg->int_intr_reg = \
+	(intsil_cmd)
+
+#define intersil_start(intersil_reg) intersil_cmd(intersil_reg, \
+	( INTERSIL_START | INTERSIL_32K | INTERSIL_NORMAL | INTERSIL_24H |\
+	  INTERSIL_INTR_ENABLE))
+
+#define intersil_stop(intersil_reg) intersil_cmd(intersil_reg, \
+	( INTERSIL_STOP | INTERSIL_32K | INTERSIL_NORMAL | INTERSIL_24H |\
+	  INTERSIL_INTR_ENABLE))
+
+#define intersil_read_intr(intersil_reg, towhere) towhere = \
+	intersil_reg->int_intr_reg
+
+#endif
+
 __volatile__ unsigned int *master_l10_counter;
 __volatile__ unsigned int *master_l10_limit;
 
@@ -46,6 +70,12 @@ void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	/* last time the cmos clock got updated */
 	static long last_rtc_update=0;
 
+#ifdef CONFIG_SUN4
+	int temp;
+        intersil_read_intr(intersil_clock, temp);
+	/* re-enable the irq */
+	enable_pil_irq(10);
+#endif
 	clear_clock_irq();
 
 	do_timer(regs);
@@ -154,20 +184,52 @@ static __inline__ int has_low_battery(void)
 	return (data1 == data2);	/* Was the write blocked? */
 }
 
-/* Probe for the real time clock chip on Sun4/300. */
+/* Probe for the real time clock chip on Sun4 */
 static __inline__ void sun4_clock_probe(void)
 {
-	sp_clock_typ = MSTK48T02;
-	mstk48t02_regs = (struct mostek48t02 *) 
-		sparc_alloc_io(SUN4_300_MOSTEK_PHYSADDR, 0,
-			       sizeof(*mstk48t02_regs),
-			       "clock", 0x0, 0x0);
-	mstk48t08_regs = 0;  /* To catch weirdness */
-	/* Kick start the clock if it is completely stopped. */
-	if (mstk48t02_regs->sec & MSTK_STOP) {
-		kick_start_clock();
-	}
+#ifdef CONFIG_SUN4
+	int temp;
 
+	if( idprom->id_machtype == (SM_SUN4 | SM_4_330) ) {
+		sp_clock_typ = MSTK48T02;
+		mstk48t02_regs = (struct mostek48t02 *) 
+				sparc_alloc_io(sun4_clock_physaddr, 0,
+				       sizeof(*mstk48t02_regs),
+				       "clock", 0x0, 0x0);
+		mstk48t08_regs = 0;  /* To catch weirdness */
+		intersil_clock = 0;  /* just in case */
+
+		/* Kick start the clock if it is completely stopped. */
+		if (mstk48t02_regs->sec & MSTK_STOP)
+			kick_start_clock();
+	} else if( idprom->id_machtype == (SM_SUN4 | SM_4_260)) {
+		/* intersil setup code */
+		printk("Clock: INTERSIL at %8x ",sun4_clock_physaddr);
+		sp_clock_typ = INTERSIL;
+		intersil_clock = (struct intersil *) 
+			sparc_alloc_io(sun4_clock_physaddr, 0,
+				       sizeof(*intersil_clock),
+			       	       "clock", 0x0, 0x0);
+		mstk48t02_regs = 0;  /* just be sure */
+		mstk48t08_regs = 0;  /* ditto */
+		/* initialise the clock */
+
+		intersil_intr(intersil_clock,INTERSIL_INT_100HZ);
+
+		intersil_start(intersil_clock);
+
+		intersil_read_intr(intersil_clock, temp);
+                while (!(temp & 0x80))
+                        intersil_read_intr(intersil_clock, temp);
+
+                intersil_read_intr(intersil_clock, temp);
+                while (!(temp & 0x80))
+                        intersil_read_intr(intersil_clock, temp);
+
+		intersil_stop(intersil_clock);
+
+	}
+#endif
 }
 
 /* Probe for the mostek real time clock chip. */
@@ -259,6 +321,11 @@ __initfunc(void time_init(void))
 	unsigned int year, mon, day, hour, min, sec;
 	struct mostek48t02 *mregs;
 
+#ifdef CONFIG_SUN4
+	int temp;
+	struct intersil *iregs;
+#endif
+
 	do_get_fast_time = do_gettimeofday;
 
 #if CONFIG_AP1000
@@ -273,6 +340,10 @@ __initfunc(void time_init(void))
 		clock_probe();
 
 	init_timers(timer_interrupt);
+	
+#ifdef CONFIG_SUN4
+	if(idprom->id_machtype == (SM_SUN4 | SM_4_330)) {
+#endif
 
 	mregs = mstk48t02_regs;
 	if(!mregs) {
@@ -289,6 +360,38 @@ __initfunc(void time_init(void))
 	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
 	xtime.tv_usec = 0;
 	mregs->creg &= ~MSTK_CREG_READ;
+#ifdef CONFIG_SUN4
+	} else if(idprom->id_machtype == (SM_SUN4 | SM_4_260) ) {
+		/* initialise the intersil on sun4 */
+
+		iregs=intersil_clock;
+		if(!iregs) {
+			prom_printf("Something wrong, clock regs not mapped yet.\n");
+			prom_halt();
+		}
+
+		intersil_intr(intersil_clock,INTERSIL_INT_100HZ);
+		disable_pil_irq(10);
+		intersil_stop(iregs);
+		intersil_read_intr(intersil_clock, temp);
+
+		temp = iregs->clk.int_csec;
+
+		sec = iregs->clk.int_sec;
+		min = iregs->clk.int_min;
+		hour = iregs->clk.int_hour;
+		day = iregs->clk.int_day;
+		mon = iregs->clk.int_month;
+		year = MSTK_CVT_YEAR(iregs->clk.int_year);
+
+		enable_pil_irq(10);
+		intersil_start(iregs);
+
+		xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
+		xtime.tv_usec = 0;
+		printk("%u/%u/%u %u:%u:%u\n",day,mon,year,hour,min,sec);
+	}
+#endif
 
 	/* Now that OBP ticker has been silenced, it is safe to enable IRQ. */
 	__sti();
@@ -375,11 +478,39 @@ static int set_rtc_mmss(unsigned long nowtime)
 {
 	int real_seconds, real_minutes, mostek_minutes;
 	struct mostek48t02 *regs = mstk48t02_regs;
+#ifdef CONFIG_SUN4
+	struct intersil *iregs = intersil_clock;
+	int temp;
+#endif
 
 	/* Not having a register set can lead to trouble. */
-	if (!regs) 
+	if (!regs) {
+#ifdef CONFIG_SUN4
+		if(!iregs)
 		return -1;
+	 	else {
+			temp = iregs->clk.int_csec;
 
+			mostek_minutes = iregs->clk.int_min;
+
+			real_seconds = nowtime % 60;
+			real_minutes = nowtime / 60;
+			if (((abs(real_minutes - mostek_minutes) + 15)/30) & 1)
+				real_minutes += 30;	/* correct for half hour time zone */
+			real_minutes %= 60;
+
+			if (abs(real_minutes - mostek_minutes) < 30) {
+				intersil_stop(iregs);
+				iregs->clk.int_sec=real_seconds;
+				iregs->clk.int_min=real_minutes;
+				intersil_start(iregs);
+			} else 
+				return -1;
+
+			return 0;
+		}
+#endif
+	}
 	/* Read the current RTC minutes. */
 	regs->creg |= MSTK_CREG_READ;
 	mostek_minutes = MSTK_REG_MIN(regs);

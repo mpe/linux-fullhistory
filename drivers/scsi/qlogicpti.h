@@ -729,7 +729,8 @@ struct qlogicpti {
 	this_id:	7,					   \
 	sg_tablesize:	QLOGICISP_MAX_SG(QLOGICISP_REQ_QUEUE_LEN), \
 	cmd_per_lun:	1,					   \
-	use_clustering:	DISABLE_CLUSTERING			   \
+	use_clustering:	DISABLE_CLUSTERING,			   \
+	use_new_eh_code: 0					   \
 }
 
 /* For our interrupt engine. */

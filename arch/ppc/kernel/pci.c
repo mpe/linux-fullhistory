@@ -1,5 +1,5 @@
 /*
- * $Id: pci.c,v 1.27 1998/04/24 02:46:47 cort Exp $
+ * $Id: pci.c,v 1.36 1998/08/02 23:22:11 paulus Exp $
  * Common pmac/prep/chrp pci routines. -- Cort
  */
 
@@ -16,15 +16,17 @@
 #include <asm/io.h>
 #include <asm/prom.h>
 #include <asm/pci-bridge.h>
+#include <asm/residual.h>
+#include <asm/byteorder.h>
 #include <asm/irq.h>
+#include <asm/gg2.h>
 
-#if !defined(CONFIG_MACH_SPECIFIC) || defined(CONFIG_PMAC)
 unsigned long isa_io_base;
-#endif /* CONFIG_MACH_SPECIFIC || CONFIG_PMAC */
-#if !defined(CONFIG_MACH_SPECIFIC)
 unsigned long isa_mem_base;
 unsigned long pci_dram_offset;
-#endif /* CONFIG_MACH_SPECIFIC */
+
+unsigned int * pci_config_address;
+unsigned char * pci_config_data;
 
 /*
  * It would be nice if we could create a include/asm/pci.h and have just
@@ -49,57 +51,34 @@ int (*ptr_pcibios_write_config_word)(unsigned char bus, unsigned char dev_fn,
 int (*ptr_pcibios_write_config_dword)(unsigned char bus, unsigned char dev_fn,
 				      unsigned char offset, unsigned int val);
 
-extern int pmac_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
-					 unsigned char offset, unsigned char *val);
-extern int pmac_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
-					 unsigned char offset, unsigned short *val);
-extern int pmac_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
-					  unsigned char offset, unsigned int *val);
-extern int pmac_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
-					  unsigned char offset, unsigned char val);
-extern int pmac_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
-					  unsigned char offset, unsigned short val);
-extern int pmac_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
-					   unsigned char offset, unsigned int val);
+#define decl_config_access_method(name) \
+extern int name##_pcibios_read_config_byte(unsigned char bus, \
+	unsigned char dev_fn, unsigned char offset, unsigned char *val); \
+extern int name##_pcibios_read_config_word(unsigned char bus, \
+	unsigned char dev_fn, unsigned char offset, unsigned short *val); \
+extern int name##_pcibios_read_config_dword(unsigned char bus, \
+	unsigned char dev_fn, unsigned char offset, unsigned int *val); \
+extern int name##_pcibios_write_config_byte(unsigned char bus, \
+	unsigned char dev_fn, unsigned char offset, unsigned char val); \
+extern int name##_pcibios_write_config_word(unsigned char bus, \
+	unsigned char dev_fn, unsigned char offset, unsigned short val); \
+extern int name##_pcibios_write_config_dword(unsigned char bus, \
+	unsigned char dev_fn, unsigned char offset, unsigned int val)
 
-extern int chrp_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
-					 unsigned char offset, unsigned char *val);
-extern int chrp_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
-					 unsigned char offset, unsigned short *val);
-extern int chrp_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
-					  unsigned char offset, unsigned int *val);
-extern int chrp_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
-					  unsigned char offset, unsigned char val);
-extern int chrp_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
-					  unsigned char offset, unsigned short val);
-extern int chrp_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
-					   unsigned char offset, unsigned int val);
+#define set_config_access_method(name) \
+	ptr_pcibios_read_config_byte = name##_pcibios_read_config_byte; \
+	ptr_pcibios_read_config_word = name##_pcibios_read_config_word; \
+	ptr_pcibios_read_config_dword = name##_pcibios_read_config_dword; \
+	ptr_pcibios_write_config_byte = name##_pcibios_write_config_byte; \
+	ptr_pcibios_write_config_word = name##_pcibios_write_config_word; \
+	ptr_pcibios_write_config_dword = name##_pcibios_write_config_dword
 
-extern int prep_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
-					 unsigned char offset, unsigned char *val);
-extern int prep_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
-					 unsigned char offset, unsigned short *val);
-extern int prep_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
-					  unsigned char offset, unsigned int *val);
-extern int prep_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
-					  unsigned char offset, unsigned char val);
-extern int prep_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
-					  unsigned char offset, unsigned short val);
-extern int prep_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
-					   unsigned char offset, unsigned int val);
-
-extern int mbx_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
-					 unsigned char offset, unsigned char *val);
-extern int mbx_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
-					 unsigned char offset, unsigned short *val);
-extern int mbx_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
-					  unsigned char offset, unsigned int *val);
-extern int mbx_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
-					  unsigned char offset, unsigned char val);
-extern int mbx_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
-					  unsigned char offset, unsigned short val);
-extern int mbx_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
-					   unsigned char offset, unsigned int val);
+decl_config_access_method(pmac);
+decl_config_access_method(grackle);
+decl_config_access_method(gg2);
+decl_config_access_method(raven);
+decl_config_access_method(prep);
+decl_config_access_method(mbx);
 
 int pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 			     unsigned char offset, unsigned char *val)
@@ -144,48 +123,67 @@ __initfunc(void pcibios_init(void))
 __initfunc(void
 	   setup_pci_ptrs(void))
 {
+	PPC_DEVICE *hostbridge;
 #ifndef CONFIG_MBX  
 	switch (_machine) {
 	case _MACH_prep:
-		ptr_pcibios_read_config_byte = prep_pcibios_read_config_byte;
-		ptr_pcibios_read_config_word = prep_pcibios_read_config_word;
-		ptr_pcibios_read_config_dword = prep_pcibios_read_config_dword;
-		ptr_pcibios_write_config_byte = prep_pcibios_write_config_byte;
-		ptr_pcibios_write_config_word = prep_pcibios_write_config_word;
-		ptr_pcibios_write_config_dword = prep_pcibios_write_config_dword;
+	  	hostbridge=residual_find_device(PROCESSORDEVICE, NULL,
+						BridgeController, PCIBridge,
+						-1, 0);
+		if (hostbridge && 
+		    hostbridge->DeviceId.Interface == PCIBridgeIndirect) {
+			PnP_TAG_PACKET * pkt;	
+			set_config_access_method(raven);
+			pkt=PnP_find_large_vendor_packet(
+			       res->DevicePnPHeap+hostbridge->AllocatedOffset, 
+			       3, 0);
+			if(pkt) { 
+#define p pkt->L4_Pack.L4_Data.L4_PPCPack
+				pci_config_address= (unsigned *)
+				  ld_le32((unsigned *) p.PPCData);
+				pci_config_data= (unsigned char *)
+				  ld_le32((unsigned *) (p.PPCData+8));
+			} else {/* default values */
+				pci_config_address= (unsigned *) 0x80000cf8;
+				pci_config_data= (unsigned char *) 0x80000cfc; 
+			}  
+		} else {
+			set_config_access_method(prep);
+		}
 		break;
 	case _MACH_Pmac:
-		ptr_pcibios_read_config_byte = pmac_pcibios_read_config_byte;
-		ptr_pcibios_read_config_word = pmac_pcibios_read_config_word;
-		ptr_pcibios_read_config_dword = pmac_pcibios_read_config_dword;
-		ptr_pcibios_write_config_byte = pmac_pcibios_write_config_byte;
-		ptr_pcibios_write_config_word = pmac_pcibios_write_config_word;
-		ptr_pcibios_write_config_dword = pmac_pcibios_write_config_dword;
+		if (find_devices("pci") != 0) {
+			/* looks like a G3 powermac */
+			set_config_access_method(grackle);
+		} else {
+			set_config_access_method(pmac);
+		}
 		break;
 	case _MACH_chrp:
-		ptr_pcibios_read_config_byte = chrp_pcibios_read_config_byte;
-		ptr_pcibios_read_config_word = chrp_pcibios_read_config_word;
-		ptr_pcibios_read_config_dword = chrp_pcibios_read_config_dword;
-		ptr_pcibios_write_config_byte = chrp_pcibios_write_config_byte;
-		ptr_pcibios_write_config_word = chrp_pcibios_write_config_word;
-		ptr_pcibios_write_config_dword = chrp_pcibios_write_config_dword;
+		if ( !strncmp("MOT",
+			      get_property(find_path_device("/"), "model", NULL),3) )
+		{
+			isa_io_base = 0xfe000000;
+			set_config_access_method(raven);
+		}
+		else
+		{
+			isa_io_base = GG2_ISA_IO_BASE;
+			set_config_access_method(gg2);
+		}
 		break;
 	default:
 		printk("setup_pci_ptrs(): unknown machine type!\n");
 	}
-#else  /* CONFIG_MBX */	
-	ptr_pcibios_read_config_byte = mbx_pcibios_read_config_byte;
-	ptr_pcibios_read_config_word = mbx_pcibios_read_config_word;
-	ptr_pcibios_read_config_dword = mbx_pcibios_read_config_dword;
-	ptr_pcibios_write_config_byte = mbx_pcibios_write_config_byte;
-	ptr_pcibios_write_config_word = mbx_pcibios_write_config_word;
-	ptr_pcibios_write_config_dword = mbx_pcibios_write_config_dword;
+#else  /* CONFIG_MBX */
+	set_config_access_method(mbx);
 #endif /* CONFIG_MBX */	
+#undef set_config_access_method
 }
 
 __initfunc(void pcibios_fixup(void))
 {
-	extern route_pci_interrupts(void);
+	extern unsigned long route_pci_interrupts(void);
 	struct pci_dev *dev;
 	extern struct bridge_data **bridges;
 	extern unsigned char *Motherboard_map;

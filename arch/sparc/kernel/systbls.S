@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.72 1998/04/14 13:49:46 jj Exp $
+/* $Id: systbls.S,v 1.75 1998/07/28 13:07:48 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -23,17 +23,17 @@ C_LABEL(sys_call_table):
 /*5*/	.long C_LABEL(sys_open), C_LABEL(sys_close), C_LABEL(sys_wait4)
 	.long C_LABEL(sys_creat), C_LABEL(sys_link)
 /*10*/  .long C_LABEL(sys_unlink), C_LABEL(sunos_execv), C_LABEL(sys_chdir)
-	.long C_LABEL(sys_xstat), C_LABEL(sys_mknod)
+	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_mknod)
 /*15*/	.long C_LABEL(sys_chmod), C_LABEL(sys_lchown), C_LABEL(sparc_brk)
-	.long C_LABEL(sys_xmknod), C_LABEL(sys_lseek)
-/*20*/	.long C_LABEL(sys_getpid), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
+	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_lseek)
+/*20*/	.long C_LABEL(sys_getpid), C_LABEL(sys_capget), C_LABEL(sys_capset)
 	.long C_LABEL(sys_setuid), C_LABEL(sys_getuid)
 /*25*/	.long C_LABEL(sys_time), C_LABEL(sys_ptrace), C_LABEL(sys_alarm)
-	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_pause)
+	.long C_LABEL(sys_sigaltstack), C_LABEL(sys_pause)
 /*30*/	.long C_LABEL(sys_utime), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
 	.long C_LABEL(sys_access), C_LABEL(sys_nice), C_LABEL(sys_nis_syscall)
 	.long C_LABEL(sys_sync), C_LABEL(sys_kill), C_LABEL(sys_newstat)
-	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_newlstat), C_LABEL(sys_dup)
+	.long C_LABEL(sys_sendfile), C_LABEL(sys_newlstat), C_LABEL(sys_dup)
 	.long C_LABEL(sys_pipe), C_LABEL(sys_times), C_LABEL(sys_nis_syscall)
 	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_setgid), C_LABEL(sys_getgid)
 	.long C_LABEL(sys_signal), C_LABEL(sys_geteuid)
@@ -69,8 +69,7 @@ C_LABEL(sys_call_table):
 	.long C_LABEL(sys_setregid), C_LABEL(sys_rename), C_LABEL(sys_truncate)
 	.long C_LABEL(sys_ftruncate), C_LABEL(sys_flock), C_LABEL(sys_nis_syscall)
 	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-
-	.long C_LABEL(sys_mkdir), C_LABEL(sys_rmdir), C_LABEL(sys_nis_syscall)
+	.long C_LABEL(sys_mkdir), C_LABEL(sys_rmdir), C_LABEL(sys_utimes)
 	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
 	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall), C_LABEL(sys_getrlimit)
 	.long C_LABEL(sys_setrlimit), C_LABEL(sys_nis_syscall), C_LABEL(sys_prctl)
@@ -187,7 +186,7 @@ C_LABEL(sunos_sys_table):
 	.long C_LABEL(sys_poll), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
 	.long C_LABEL(sunos_getdirentries), C_LABEL(sys_statfs), C_LABEL(sys_fstatfs)
 	.long C_LABEL(sys_umount), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.long C_LABEL(sunos_getdomainname), C_LABEL(sys_setdomainname)
+	.long C_LABEL(sys_getdomainname), C_LABEL(sys_setdomainname)
 	.long C_LABEL(sunos_nosys), C_LABEL(sys_quotactl), C_LABEL(sunos_nosys)
 	.long C_LABEL(sunos_mount), C_LABEL(sys_ustat), C_LABEL(sunos_semsys)
 	.long C_LABEL(sunos_msgsys), C_LABEL(sunos_shmsys), C_LABEL(sunos_audit)

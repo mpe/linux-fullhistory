@@ -23,7 +23,7 @@
  *	Internal variables of the driver
  */
 
-extern unsigned char kbd_read_mask;
+extern unsigned char pckbd_read_mask;
 extern unsigned char aux_device_present;
 
 /*

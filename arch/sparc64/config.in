@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.51 1998/07/08 10:21:14 jj Exp $
+# $Id: config.in,v 1.55 1998/08/03 15:28:38 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -76,12 +76,14 @@ fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Solaris binary emulation' CONFIG_SOLARIS_EMUL
 fi
-endmenu
 
 if [ "$CONFIG_PCI" = "y" ]; then
   tristate 'Parallel port support' CONFIG_PARPORT
   if [ "$CONFIG_PARPORT" != "n" ]; then
     dep_tristate '  Ultra/AX-style hardware' CONFIG_PARPORT_AX $CONFIG_PARPORT
+    if [ "$CONFIG_PARPORT_AX" = "m" ]; then
+      define_bool CONFIG_PARPORT_LOWLEVEL_MODULE y
+    fi
     if [ "$CONFIG_PARPORT_AX" != "n" ]; then
       bool '  Support foreign hardware' CONFIG_PARPORT_OTHER
     fi
@@ -92,6 +94,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
   fi
   tristate 'SUNW,envctrl support' CONFIG_ENVCTRL
 fi
+endmenu
 
 mainmenu_option next_comment
 comment 'Floppy, IDE, and other block devices'
@@ -124,6 +127,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
 	  dep_tristate '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
 	  define_bool CONFIG_BLK_DEV_IDEPCI y
 	  define_bool CONFIG_BLK_DEV_IDEDMA y
+	  define_bool CONFIG_IDEDMA_AUTO y
 	  define_bool CONFIG_BLK_DEV_NS87415 y
 	  define_bool CONFIG_BLK_DEV_CMD646 y
 	fi
@@ -177,11 +181,11 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 	  fi
 	  dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
 	  if [ "$CONFIG_SCSI_NCR53C8XX" != "n" ]; then
-	    bool '  detect and read serial NVRAMs' CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
-	    bool '  enable tagged command queueing' CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
-	    int  '  maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 12
+	    int  '  default tagged command queue depth' CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS 8
+	    int  '  maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 32
 	    int  '  synchronous transfers frequency in MHz' CONFIG_SCSI_NCR53C8XX_SYNC 10
-	    if [ "$CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE" != "y" ]; then
+	    bool '  enable profiling' CONFIG_SCSI_NCR53C8XX_PROFILE
+	    if [ "$CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS" = "0" ]; then
 	      bool '  not allow targets to disconnect' CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
 	    fi
 	    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
@@ -219,6 +223,7 @@ if [ "$CONFIG_NET" = "y" ]; then
 		tristate 'MyriCOM Gigabit Ethernet support' CONFIG_MYRI_SBUS
 		if [ "$CONFIG_PCI" = "y" ]; then
 			tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
+			tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
 		fi
 #		bool 'FDDI driver support' CONFIG_FDDI
 #		if [ "$CONFIG_FDDI" = "y" ]; then

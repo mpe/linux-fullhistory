@@ -1,5 +1,7 @@
 /*
  * misc.c
+ *
+ * $Id: misc.c,v 1.49 1998/07/26 21:29:15 geert Exp $
  * 
  * Adapted for PowerPC by Gary Thomas
  *
@@ -12,25 +14,14 @@
 #include <elf.h>
 #include <linux/config.h>
 #include <asm/page.h>
+#include <asm/processor.h>
+#include <asm/mmu.h>
 #ifdef CONFIG_MBX
 #include <asm/mbx.h>
 bd_t	hold_board_info;
 #endif
 
 /*
- * MBX: loads at:      	0x00200000
- *      board data at: 	end of ram
- * PREP:
- *  powerstack 1:
- *      network load at:   configurable - should set to link addr-0x400
- *                         exec. addr set to link addr
- *            such as load: 0x005ffc00 exec 0x00600000
- *      hd/floppy/tape load at:
- *  powerstack 2:
- *      loads at:       0x00400000
- *  IBM 830 (carolina):
- *      loads at:	???
- *
  * Please send me load/board info and such data for hardware not
  * listed here so I can keep track since things are getting tricky
  * with the different load addrs with different firmware.  This will
@@ -318,16 +309,27 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	extern unsigned long start;
 	char *cp, ch;
 	unsigned long i;
+	BATU *u;
+	BATL *l;
 
 	lines = 25;
 	cols = 80;
 	orig_x = 0;
 	orig_y = 24;
-	
+
 	
 #ifndef CONFIG_MBX
+	/*
+	 * IBM's have the MMU on, so we have to disable it or
+	 * things get really unhappy in the kernel when
+	 * trying to setup the BATs with the MMU on
+	 * -- Cort
+	 */
+	flush_instruction_cache();
+	_put_HID0(_get_HID0() & ~0x0000C000);
+	_put_MSR(_get_MSR() & ~0x0030);
 	vga_init(0xC0000000);
-	/* copy the residual data */
+
 	if (residual)
 		memcpy(&hold_residual,residual,sizeof(RESIDUAL));
 #else /* CONFIG_MBX */
@@ -336,14 +338,14 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 		_bcopy((char *)residual, (char *)&hold_board_info,
 		       sizeof(hold_board_info));
 #endif /* CONFIG_MBX */
-	
-	/* MBX/prep put the board/residual data at the end of memory */
-	if ( residual )
+
+	/* MBX/prep sometimes put the residual/board info at the end of mem 
+	 * assume 16M for now  -- Cort
+	 */
+	end_avail = (char *)0x01000000;
+	/* let residual data tell us it's higher */
+	if ( (unsigned long)residual > 0x00800000 )
 		end_avail = (char *)PAGE_ALIGN((unsigned long)residual);
-	/* prep netboot looses the residual */
-	else
-		end_avail = (char *)0x00800000;
-	
 
 	puts("loaded at:     "); puthex(load_addr);
 	puts(" "); puthex((unsigned long)(load_addr + (4*num_words))); puts("\n");
@@ -384,8 +386,6 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	   size of the elf header which we strip -- Cort */
 	zimage_start = (char *)(load_addr - 0x10000 + ZIMAGE_OFFSET);
 	zimage_size = ZIMAGE_SIZE;
-	puts("zimage at:     "); puthex((unsigned long)zimage_start);
-	puts(" "); puthex((unsigned long)(zimage_size+zimage_start)); puts("\n");
 
 	if ( INITRD_OFFSET )
 		initrd_start = load_addr - 0x10000 + INITRD_OFFSET;
@@ -398,11 +398,32 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	 * by the uncompress code. -- Cort
 	 */
 	avail_ram = (char *)PAGE_ALIGN((unsigned long)zimage_start+zimage_size);
-	if ( (load_addr+(num_words*4)) > (unsigned long) avail_ram )
+	if ( ((load_addr+(num_words*4)) > (unsigned long) avail_ram)
+		&& (load_addr <= 0x01000000) )
 		avail_ram = (char *)(load_addr+(num_words*4));
-	if ( ((unsigned long)&start+(num_words*4)) > (unsigned long) avail_ram )
+	if ( (((unsigned long)&start+(num_words*4)) > (unsigned long) avail_ram)
+		&& (load_addr <= 0x01000000) )
 		avail_ram = (char *)((unsigned long)&start+(num_words*4));
 	
+	/* relocate zimage */
+	puts("zimage at:     "); puthex((unsigned long)zimage_start);
+	puts(" "); puthex((unsigned long)(zimage_size+zimage_start)); puts("\n");
+	/*
+	 * don't relocate the zimage if it was loaded above 16M since
+	 * things get weird if we try to relocate -- Cort
+	 */
+	if ( (unsigned long)zimage_start <= 0x01000000 )
+	{
+		memcpy ((void *)PAGE_ALIGN(-PAGE_SIZE+(unsigned long)end_avail-zimage_size),
+			(void *)zimage_start, zimage_size );	
+		zimage_start = (char *)PAGE_ALIGN(-PAGE_SIZE+(unsigned long)end_avail-zimage_size);
+		end_avail = (char *)zimage_start;
+		puts("relocated to:  "); puthex((unsigned long)zimage_start);
+		puts(" ");
+		puthex((unsigned long)zimage_size+(unsigned long)zimage_start);
+		puts("\n");
+	}
+
 	/* relocate initrd */
 	if ( initrd_start )
 	{
@@ -427,13 +448,19 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 		puts("relocated to:  "); puthex(initrd_start);
 		puts(" "); puthex(initrd_end); puts("\n");
 	}
-	
+
+	/* this is safe, just use it */
+	avail_ram = (char *)0x00400000;
+	end_avail = (char *)0x00600000;
 	puts("avail ram:     "); puthex((unsigned long)avail_ram); puts(" ");
 	puthex((unsigned long)end_avail); puts("\n");
+
 	
 #ifndef CONFIG_MBX
 	CRT_tstc();  /* Forces keyboard to be initialized */
-#endif	
+#endif
+#ifdef CONFIG_PREP
+/* I need to fix this for mbx -- Cort */
 	puts("\nLinux/PPC load: ");
 	timer = 0;
 	cp = cmd_line;
@@ -452,11 +479,11 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 			}
 			break;  /* Exit 'timer' loop */
 		}
-		mdelay(1);  /* 1 msec */
+		udelay(1000);  /* 1 msec */
 	}
 	*cp = 0;
 	puts("\n");
-
+#endif /* CONFIG_PREP */
 	/* mappings on early boot can only handle 16M */
 	if ( (int)(&cmd_line[0]) > (16<<20))
 		puts("cmd_line located > 16M\n");

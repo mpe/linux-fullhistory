@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.9 1997/07/24 12:15:11 davem Exp $
+/* $Id: misc.c,v 1.10 1998/07/21 10:36:29 jj Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -33,8 +33,7 @@ prom_feval(char *fstring)
 
 /* We want to do this more nicely some day. */
 #ifdef CONFIG_SUN_CONSOLE
-extern void console_restore_palette(void);
-extern void set_palette(void);
+extern void (*prom_palette)(int);
 extern int serial_console;
 #endif
 
@@ -52,10 +51,8 @@ prom_cmdline(void)
     
 	/* kernel_enter_debugger(); */
 #ifdef CONFIG_SUN_CONSOLE
-#if 0
-	if(!serial_console)
-		console_restore_palette ();
-#endif
+	if(!serial_console && prom_palette)
+		prom_palette (1);
 #endif
 	/* install_obp_ticker(); */
 	save_flags(flags); cli();
@@ -63,10 +60,8 @@ prom_cmdline(void)
 	restore_flags(flags);
 	/* install_linux_ticker(); */
 #ifdef CONFIG_SUN_CONSOLE
-#if 0
-	if(!serial_console)
-		set_palette ();
-#endif
+	if(!serial_console && prom_palette)
+		prom_palette (0);
 #endif
 }
 

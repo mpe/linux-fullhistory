@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.10 1998/04/01 05:16:06 davem Exp $
+/* $Id: misc.c,v 1.12 1998/06/16 04:37:08 davem Exp $
  * misc.c: Miscelaneous syscall emulation for Solaris
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -188,6 +188,7 @@ asmlinkage int solaris_utssys(u32 buf, u32 flags, int which, u32 buf2)
 asmlinkage int solaris_utsname(u32 buf)
 {
 	/* Why should we not lie a bit? */
+	down(&uts_sem);
 	set_utsfield(((struct sol_utsname *)A(buf))->sysname, 
 			"SunOS", 0, 0);
 	set_utsfield(((struct sol_utsname *)A(buf))->nodename, 
@@ -198,6 +199,7 @@ asmlinkage int solaris_utsname(u32 buf)
 			"Generic", 0, 0);
 	set_utsfield(((struct sol_utsname *)A(buf))->machine, 
 			machine(), 0, 0);
+	up(&uts_sem);
 	return 0;
 }
 

@@ -72,8 +72,8 @@ _GLOBAL(_enable_interrupts)
 	beqlr			/* nothing to do if state == 0 */
 _GLOBAL(__sti)
 _GLOBAL(_hard_sti)
-	lis	r4,lost_interrupts@ha
-	lwz	r4,lost_interrupts@l(r4)
+	lis	r4,n_lost_interrupts@ha
+	lwz	r4,n_lost_interrupts@l(r4)
 	mfmsr	r3		/* Get current state */
 	ori	r3,r3,MSR_EE	/* Turn on 'EE' bit */
 	cmpi	0,r4,0		/* lost interrupts to process first? */
@@ -93,8 +93,8 @@ do_lost_interrupts:
 	stw	r0,20(r1)
 	stw	r3,8(r1)
 1:	bl	fake_interrupt
-	lis	r4,lost_interrupts@ha
-	lwz	r4,lost_interrupts@l(r4)
+	lis	r4,n_lost_interrupts@ha
+	lwz	r4,n_lost_interrupts@l(r4)
 	cmpi	0,r4,0
 	bne-	1b
 	lwz	r3,8(r1)
@@ -222,11 +222,18 @@ _GLOBAL(atomic_set_mask)
  * outsw(port, buf, len)
  * insl(port, buf, len)
  * outsl(port, buf, len)
+ * insw_ns(port, buf, len)
+ * outsw_ns(port, buf, len)
+ * insl_ns(port, buf, len)
+ * outsl_ns(port, buf, len)
+ *
+ * The *_ns versions don't do byte-swapping.
  */
 _GLOBAL(_insb)
 	mtctr	r5
 	subi	r4,r4,1
 00:	lbz	r5,0(r3)
+	eieio
 	stbu	r5,1(r4)
 	bdnz	00b
 	blr
@@ -236,6 +243,7 @@ _GLOBAL(_outsb)
 	subi	r4,r4,1
 00:	lbzu	r5,1(r4)
 	stb	r5,0(r3)
+	eieio
 	bdnz	00b
 	blr	
 
@@ -243,6 +251,7 @@ _GLOBAL(_insw)
 	mtctr	r5
 	subi	r4,r4,2
 00:	lhbrx	r5,0,r3
+	eieio
 	sthu	r5,2(r4)
 	bdnz	00b
 	blr
@@ -251,6 +260,7 @@ _GLOBAL(_outsw)
 	mtctr	r5
 	subi	r4,r4,2
 00:	lhzu	r5,2(r4)
+	eieio
 	sthbrx	r5,0,r3	
 	bdnz	00b
 	blr	
@@ -259,6 +269,7 @@ _GLOBAL(_insl)
 	mtctr	r5
 	subi	r4,r4,4
 00:	lwbrx	r5,0,r3
+	eieio
 	stwu	r5,4(r4)
 	bdnz	00b
 	blr
@@ -267,23 +278,46 @@ _GLOBAL(_outsl)
 	mtctr	r5
 	subi	r4,r4,4
 00:	lwzu	r5,4(r4)
-	stwbrx	r5,0,r3	
+	stwbrx	r5,0,r3
+	eieio
 	bdnz	00b
 	blr	
 
 _GLOBAL(ide_insw)
+_GLOBAL(_insw_ns)
 	mtctr	r5
 	subi	r4,r4,2
-00:	lhzx	r5,0,r3
+00:	lhz	r5,0(r3)
+	eieio
 	sthu	r5,2(r4)
 	bdnz	00b
 	blr
 
 _GLOBAL(ide_outsw)
+_GLOBAL(_outsw_ns)
 	mtctr	r5
 	subi	r4,r4,2
 00:	lhzu	r5,2(r4)
-	sthx	r5,0,r3	
+	sth	r5,0(r3)
+	eieio
+	bdnz	00b
+	blr	
+
+_GLOBAL(_insl_ns)
+	mtctr	r5
+	subi	r4,r4,4
+00:	lwz	r5,0(r3)
+	eieio
+	stwu	r5,4(r4)
+	bdnz	00b
+	blr
+
+_GLOBAL(_outsl_ns)
+	mtctr	r5
+	subi	r4,r4,4
+00:	lwzu	r5,4(r4)
+	stw	r5,0(r3)
+	eieio
 	bdnz	00b
 	blr	
 
@@ -413,7 +447,8 @@ SYSCALL(waitpid)
 SYSCALL(fork)
 SYSCALL(delete_module)
 SYSCALL(_exit)
-
+SYSCALL(lseek)
+SYSCALL(read)
 
 /* Why isn't this a) automatic, b) written in 'C'? */	
 	.data
@@ -603,6 +638,4 @@ sys_call_table:
 	.long sys_pwrite		/* 180 */
 	.long sys_chown
 	.long sys_getcwd
-	.long sys_xstat
-	.long sys_xmknod
-	.space (NR_syscalls-185)*4
+	.space (NR_syscalls-183)*4

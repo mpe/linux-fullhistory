@@ -314,8 +314,19 @@ typedef struct _RESIDUAL {
   } RESIDUAL;
 
 
-extern RESIDUAL res;
-void print_residual_device_info(void);
+extern RESIDUAL *res;
+extern void print_residual_device_info(void);
+extern PPC_DEVICE *residual_find_device(unsigned long BusMask,
+					unsigned char * DevID, int BaseType,
+					int SubType, int Interface, int n);
+extern PnP_TAG_PACKET *PnP_find_packet(unsigned char *p, unsigned packet_tag,
+				       int n);
+extern PnP_TAG_PACKET *PnP_find_small_vendor_packet(unsigned char *p,
+						    unsigned packet_type,
+						    int n);
+extern PnP_TAG_PACKET *PnP_find_large_vendor_packet(unsigned char *p,
+						    unsigned packet_type,
+						    int n);
 #endif /* __ASSEMBLY__ */
 #endif  /* ndef _RESIDUAL_ */
 

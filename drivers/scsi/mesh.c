@@ -55,6 +55,7 @@ int mesh_sync_offset = 15;
 int mesh_sync_targets = 0xff;	/* targets to set synchronous (bitmap) */
 int mesh_resel_targets = 0xff;	/* targets that we let disconnect (bitmap) */
 int mesh_debug_targets = 0;	/* print debug for these targets */
+unsigned char use_active_neg = 0;  /* bit mask for SEQ_ACTIVE_NEG if used */
 
 #define ALLOW_SYNC(tgt)		((mesh_sync_targets >> (tgt)) & 1)
 #define ALLOW_RESEL(tgt)	((mesh_resel_targets >> (tgt)) & 1)
@@ -66,7 +67,7 @@ struct proc_dir_entry proc_scsi_mesh = {
 	S_IFDIR | S_IRUGO | S_IXUGO, 2
 };
 
-#define MESH_DBG
+#undef MESH_DBG
 #define N_DBG_LOG	50
 #define N_DBG_SLOG	20
 #define NUM_DBG_EVENTS	13
@@ -165,7 +166,6 @@ struct mesh_state {
 static void dlog(struct mesh_state *ms, char *fmt, int a);
 static void dumplog(struct mesh_state *ms, int tgt);
 static void dumpslog(struct mesh_state *ms);
-#define MKWORD(a, b, c, d)	(((a) << 24) + ((b) << 16) + ((c) << 8) + (d))
 
 #else
 static inline void dlog(struct mesh_state *ms, char *fmt, int a)
@@ -176,6 +176,7 @@ static inline void dumpslog(struct mesh_state *ms)
 {}
 
 #endif /* MESH_DBG */
+#define MKWORD(a, b, c, d)	(((a) << 24) + ((b) << 16) + ((c) << 8) + (d))
 
 static struct mesh_state *all_meshes;
 
@@ -301,8 +302,14 @@ mesh_detect(Scsi_Host_Template *tp)
 
 		++nmeshes;
 	}
-	if (_machine == _MACH_Pmac && nmeshes > 0)
+	if (_machine == _MACH_Pmac) {
+	    use_active_neg = (find_devices("mac-io") ? 0 : SEQ_ACTIVE_NEG);
+	    if (nmeshes > 0)
 		register_reboot_notifier(&mesh_notifier);
+	} else {
+	    /* CHRP mac-io */
+	    use_active_neg = SEQ_ACTIVE_NEG;
+	}
 
 	return nmeshes;
 }
@@ -361,6 +368,8 @@ mesh_dump_regs(struct mesh_state *ms)
 	       (mr->bus_status1 << 8) + mr->bus_status0, mr->fifo_count,
 	       mr->exception, mr->error, mr->intr_mask, mr->interrupt,
 	       mr->sync_params);
+	while(in_8(&mr->fifo_count))
+		printk(KERN_DEBUG " fifo data=%.2x\n",in_8(&mr->fifo));
 	printk(KERN_DEBUG "    dma stat=%x cmdptr=%x\n",
 	       in_le32(&md->status), in_le32(&md->cmdptr));
 	printk(KERN_DEBUG "    phase=%d msgphase=%d conn_tgt=%d data_ptr=%d\n",
@@ -610,7 +619,7 @@ mesh_start_cmd(struct mesh_state *ms, Scsi_Cmnd *cmd)
 
 	out_8(&mr->sequence, SEQ_ARBITRATE);
 
-	for (t = 30; t > 0; --t) {
+	for (t = 230; t > 0; --t) {
 		if (in_8(&mr->interrupt) != 0)
 			break;
 		udelay(1);
@@ -735,7 +744,7 @@ start_phase(struct mesh_state *ms)
 	dlog(ms, "start_phase err/exc/fc/seq = %.8x",
 	     MKWORD(mr->error, mr->exception, mr->fifo_count, mr->sequence));
 	out_8(&mr->interrupt, INT_ERROR | INT_EXCEPTION | INT_CMDDONE);
-	seq = SEQ_ACTIVE_NEG + (ms->n_msgout? SEQ_ATN: 0);
+	seq = use_active_neg + (ms->n_msgout? SEQ_ATN: 0);
 	switch (ms->msgphase) {
 	case msg_none:
 		break;
@@ -777,11 +786,13 @@ start_phase(struct mesh_state *ms)
 		 * issue a SEQ_MSGOUT to get the mesh to drop ACK.
 		 */
 		if ((mr->bus_status0 & BS0_ATN) == 0) {
+			dlog(ms, "bus0 was %.2x explictly asserting ATN", mr->bus_status0);
 			out_8(&mr->bus_status0, BS0_ATN); /* explicit ATN */
 			udelay(1);
 			out_8(&mr->count_lo, 1);
 			out_8(&mr->sequence, SEQ_MSGOUT + seq);
 			out_8(&mr->bus_status0, 0); /* release explicit ATN */
+			dlog(ms,"hace: after explicit ATN bus0=%.2x",mr->bus_status0);
 		}
 		if (ms->n_msgout == 1) {
 			/*
@@ -907,7 +918,7 @@ cmd_complete(struct mesh_state *ms)
 	int seq, n, t;
 
 	dlog(ms, "cmd_complete fc=%x", mr->fifo_count);
-	seq = SEQ_ACTIVE_NEG + (ms->n_msgout? SEQ_ATN: 0);
+	seq = use_active_neg + (ms->n_msgout? SEQ_ATN: 0);
 	switch (ms->msgphase) {
 	case msg_out_xxx:
 		/* huh?  we expected a phase mismatch */
@@ -933,7 +944,7 @@ cmd_complete(struct mesh_state *ms)
 		out_8(&mr->sequence, SEQ_FLUSHFIFO);
 		udelay(1);
 		out_8(&mr->count_lo, 1);
-		out_8(&mr->sequence, SEQ_MSGIN + SEQ_ATN + SEQ_ACTIVE_NEG);
+		out_8(&mr->sequence, SEQ_MSGIN + SEQ_ATN + use_active_neg);
 		break;
 
 	case msg_out:
@@ -949,7 +960,7 @@ cmd_complete(struct mesh_state *ms)
 		 * issue the SEQ_MSGOUT without ATN.
 		 */
 		out_8(&mr->count_lo, 1);
-		out_8(&mr->sequence, SEQ_MSGOUT + SEQ_ACTIVE_NEG + SEQ_ATN);
+		out_8(&mr->sequence, SEQ_MSGOUT + use_active_neg + SEQ_ATN);
 		t = 30;		/* wait up to 30us */
 		while ((mr->bus_status0 & BS0_REQ) == 0 && --t >= 0)
 			udelay(1);
@@ -976,12 +987,12 @@ cmd_complete(struct mesh_state *ms)
 			return;
 		}
 		if (mr->bus_status0 & BS0_REQ) {
-			out_8(&mr->sequence, SEQ_MSGOUT + SEQ_ACTIVE_NEG);
+			out_8(&mr->sequence, SEQ_MSGOUT + use_active_neg);
 			udelay(1);
 			out_8(&mr->fifo, ms->msgout[ms->n_msgout-1]);
 			ms->msgphase = msg_out_last;
 		} else {
-			out_8(&mr->sequence, SEQ_MSGIN + SEQ_ACTIVE_NEG + SEQ_ATN);
+			out_8(&mr->sequence, SEQ_MSGIN + use_active_neg + SEQ_ATN);
 			ms->msgphase = msg_out_xxx;
 		}
 		break;
@@ -1000,6 +1011,7 @@ cmd_complete(struct mesh_state *ms)
 			dumpslog(ms);
 			return;
 		case selecting:
+			dlog(ms, "Selecting phase at command completion",0);
 			ms->msgout[0] = IDENTIFY(ALLOW_RESEL(ms->conn_tgt),
 						 (cmd? cmd->lun: 0));
 			ms->n_msgout = 1;
@@ -1021,7 +1033,7 @@ cmd_complete(struct mesh_state *ms)
 			 * which will give us a phase mismatch interrupt
 			 * when REQ does come, and then we send the message.
 			 */
-			t = 30;		/* wait up to 30us */
+			t = 230;		/* wait up to 230us */
 			while ((mr->bus_status0 & BS0_REQ) == 0) {
 				if (--t < 0) {
 					ms->msgphase = msg_none;
@@ -1087,7 +1099,7 @@ static void phase_mismatch(struct mesh_state *ms)
 	if (ms->msgphase == msg_out_xxx && phase == BP_MSGOUT) {
 		/* output the last byte of the message, without ATN */
 		out_8(&mr->count_lo, 1);
-		out_8(&mr->sequence, SEQ_MSGOUT + SEQ_ACTIVE_NEG);
+		out_8(&mr->sequence, SEQ_MSGOUT + use_active_neg);
 		udelay(1);
 		out_8(&mr->fifo, ms->msgout[ms->n_msgout-1]);
 		ms->msgphase = msg_out_last;
@@ -1313,11 +1325,11 @@ handle_reset(struct mesh_state *ms)
 static void
 do_mesh_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 {
-	unsigned long flags;
+	/*unsigned long flags;*/
 
-	spin_lock_irqsave(&io_request_lock, flags);
+	/*spin_lock_irqsave(&io_request_lock, flags);*/
 	mesh_interrupt(irq, dev_id, ptregs);
-	spin_unlock_irqrestore(&io_request_lock, flags);
+	/*spin_unlock_irqrestore(&io_request_lock, flags);*/
 }
 
 static void handle_error(struct mesh_state *ms)

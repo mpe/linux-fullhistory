@@ -302,6 +302,8 @@ static _INLINE_ void receive_chars(struct mac_serial *info,
 		if (info->kgdb_channel) {
 			if (ch == 0x03 || ch == '$')
 				breakpoint();
+			if (stat & (Rx_OVR|FRM_ERR|PAR_ERR))
+				write_zsreg(info->zs_channel, 0, ERR_RES);
 			return;
 		}
 #endif
@@ -322,17 +324,15 @@ static _INLINE_ void receive_chars(struct mac_serial *info,
 		}
 		if (stat & Rx_OVR) {
 			flag = TTY_OVERRUN;
-			/* reset the error indication */
-			write_zsreg(info->zs_channel, 0, ERR_RES);
 		} else if (stat & FRM_ERR) {
-			/* this error is not sticky */
 			flag = TTY_FRAME;
 		} else if (stat & PAR_ERR) {
 			flag = TTY_PARITY;
-			/* reset the error indication */
-			write_zsreg(info->zs_channel, 0, ERR_RES);
 		} else
 			flag = 0;
+		if (flag)
+			/* reset the error indication */
+			write_zsreg(info->zs_channel, 0, ERR_RES);
 		*tty->flip.flag_buf_ptr++ = flag;
 		*tty->flip.char_buf_ptr++ = ch;
 	}
@@ -1582,10 +1582,6 @@ probe_sccs()
 				+ ch->addrs[0].size / 2;
 			zs_soft[n].zs_channel = &zs_channels[n];
 			zs_soft[n].irq = ch->intrs[0].line;
-			if (request_irq(ch->intrs[0].line, rs_interrupt, 0,
-					"SCC", &zs_soft[n]))
-				printk(KERN_ERR "macserial: can't get irq %d\n",
-				       ch->intrs[0].line);
 			/* XXX this assumes the prom puts chan A before B */
 			if (n & 1)
 				zs_soft[n].zs_chan_a = &zs_channels[n-1];
@@ -1616,6 +1612,14 @@ int macserial_init(void)
 	/* Find out how many Z8530 SCCs we have */
 	if (zs_chain == 0)
 		probe_sccs();
+
+	/* Register the interrupt handler for each one */
+	for (i = 0; i < zs_channels_found; ++i) {
+		if (request_irq(zs_soft[i].irq, rs_interrupt, 0,
+				"SCC", &zs_soft[i]))
+			printk(KERN_ERR "macserial: can't get irq %d\n",
+			       zs_soft[i].irq);
+	}
 
 	show_serial_version();
 
@@ -1676,6 +1680,7 @@ int macserial_init(void)
 	for (channel = 0; channel < zs_channels_found; ++channel) {
 #ifdef CONFIG_KGDB
 		if (zs_soft[channel].kgdb_channel) {
+			kgdb_interruptible(1);
 			continue;
 		}
 #endif
@@ -1874,6 +1879,7 @@ __initfunc (void serial_console_init(void))
 	register_console(&sercons);
 }
 #endif /* ifdef CONFIG_SERIAL_CONSOLE */
+
 #ifdef CONFIG_KGDB
 /* These are for receiving and sending characters under the kgdb
  * source level kernel debugger.
@@ -1885,6 +1891,7 @@ void putDebugChar(char kgdb_char)
 		udelay(5);
 	write_zsdata(chan, kgdb_char);
 }
+
 char getDebugChar(void)
 {
 	struct mac_zschannel *chan = zs_kgdbchan;
@@ -1892,6 +1899,7 @@ char getDebugChar(void)
 		eieio(); /*barrier();*/
 	return read_zsdata(chan);
 }
+
 void kgdb_interruptible(int yes)
 {
 	struct mac_zschannel *chan = zs_kgdbchan;
@@ -1909,6 +1917,7 @@ void kgdb_interruptible(int yes)
 	write_zsreg(chan, 1, one);
 	write_zsreg(chan, 9, nine);
 }
+
 /* This sets up the serial port we're using, and turns on
  * interrupts for that channel, so kgdb is usable once we're done.
  */
@@ -1927,23 +1936,26 @@ static inline void kgdb_chaninit(struct mac_zschannel *ms, int intson, int bps)
 		i++;
 	}
 }
+
 /* This is called at boot time to prime the kgdb serial debugging
  * serial line.  The 'tty_num' argument is 0 for /dev/ttya and 1
  * for /dev/ttyb which is determined in setup_arch() from the
  * boot command line flags.
+ * XXX at the moment probably only channel A will work
  */
 __initfunc(void zs_kgdb_hook(int tty_num))
 {
 	/* Find out how many Z8530 SCCs we have */
 	if (zs_chain == 0)
 		probe_sccs();
-	zs_soft[tty_num].zs_channel = &zs_channels[tty_num];
+
 	zs_kgdbchan = zs_soft[tty_num].zs_channel;
 	zs_soft[tty_num].change_needed = 0;
 	zs_soft[tty_num].clk_divisor = 16;
 	zs_soft[tty_num].zs_baud = 38400;
 	zs_soft[tty_num].kgdb_channel = 1;     /* This runs kgdb */
 	zs_soft[tty_num ^ 1].kgdb_channel = 0; /* This does not */
+
 	/* Turn on transmitter/receiver at 8-bits/char */
         kgdb_chaninit(zs_soft[tty_num].zs_channel, 1, 38400);
 	printk("KGDB: on channel %d initialized\n", tty_num);

@@ -20,6 +20,8 @@ static int std_ide_default_irq(ide_ioreg_t base)
 		case 0x170: return 15;
 		case 0x1e8: return 11;
 		case 0x168: return 10;
+		case 0x1e0: return 8;
+		case 0x160: return 12;
 		default:
 			return 0;
 	}
@@ -32,6 +34,8 @@ static ide_ioreg_t std_ide_default_io_base(int index)
 		case 1:	return 0x170;
 		case 2: return 0x1e8;
 		case 3: return 0x168;
+		case 4: return 0x1e0;
+		case 5: return 0x160;
 		default:
 			return 0;
 	}

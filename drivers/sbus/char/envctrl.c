@@ -1,4 +1,4 @@
-/* $Id: envctrl.c,v 1.3 1998/04/10 08:42:24 jj Exp $
+/* $Id: envctrl.c,v 1.7 1998/06/10 07:25:28 davem Exp $
  * envctrl.c: Temperature and Fan monitoring on Machines providing it.
  *
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
@@ -11,8 +11,17 @@
 #include <linux/delay.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
+#include <linux/miscdevice.h>
 
 #include <asm/ebus.h>
+#include <asm/uaccess.h>
+#include <asm/envctrl.h>
+
+#define ENVCTRL_MINOR	162
+
+
+#undef DEBUG_BUS_SCAN
+
 
 #define PCF8584_ADDRESS	0x55
 
@@ -61,6 +70,7 @@ struct pcf8584_reg
 static struct pcf8584_reg *i2c;
 
 
+#ifdef DEBUG_BUS_SCAN
 struct i2c_addr_map {
 	unsigned char addr;
 	unsigned char mask;
@@ -73,9 +83,34 @@ static struct i2c_addr_map devmap[] = {
 	{ 0x48, 0x78, "PCF8591" },
 };
 #define NR_DEVMAP (sizeof(devmap) / sizeof(devmap[0]))
+#endif
+
+static __inline__ int
+PUT_DATA(__volatile__ unsigned char *data, char *buffer, int user)
+{
+	if (user) {
+		if (put_user(*data, buffer))
+			return -EFAULT;
+	} else {
+		*buffer = *data;
+	}
+	return 0;
+}
+
+static __inline__ int
+GET_DATA(__volatile__ unsigned char *data, const char *buffer, int user)
+{
+	if (user) {
+		if (get_user(*data, buffer))
+			return -EFAULT;
+	} else {
+		*data = *buffer;
+	}
+	return 0;
+}
 
 static int
-envctrl_read(unsigned char dev, char *buffer, int len)
+i2c_read(unsigned char dev, char *buffer, int len, int user)
 {
 	unsigned char dummy;
 	unsigned char stat;
@@ -103,16 +138,18 @@ envctrl_read(unsigned char dev, char *buffer, int len)
 		if (count == (len - 2))
 			goto final;
 
-		if (++count > 0)
-			*buffer++ = i2c->data;
-		else
+		if (++count > 0) {
+			error = PUT_DATA(&i2c->data, buffer++, user);
+			if (error)
+				goto final;
+		} else
 			dummy = i2c->data;
 	} while (1);
 
 final:
 	i2c->csr = CONTROL_ES0;
-	if (++count > 0)
-		*buffer++ = i2c->data;
+	if (!error && (++count > 0))
+		error = PUT_DATA(&i2c->data, buffer++, user);
 	else
 		dummy = i2c->data;
 
@@ -122,8 +159,8 @@ final:
 
 stop:
 	i2c->csr = CONTROL_PIN | CONTROL_ES0 | CONTROL_STO | CONTROL_ACK;
-	if (++count > 0)
-		*buffer++ = i2c->data;
+	if (!error && (++count > 0))
+		error = PUT_DATA(&i2c->data, buffer++, user);
 	else
 		dummy = i2c->data;
 
@@ -133,7 +170,7 @@ stop:
 }
 
 static int
-envctrl_write(unsigned char dev, char *buffer, int len)
+i2c_write(unsigned char dev, const char *buffer, int len, int user)
 {
 	int error = -ENODEV;
 	int count = 0;
@@ -157,7 +194,10 @@ envctrl_write(unsigned char dev, char *buffer, int len)
 		if (count == len)
 			goto stop;
 
-		i2c->data = *buffer++;
+		error = GET_DATA(&i2c->data, buffer++, user);
+		if (error)
+			goto stop;
+
 		count++;
 	} while (1);
 
@@ -166,30 +206,106 @@ stop:
 	return error;
 }
 
-__initfunc(static int scan_bus(void))
+__initfunc(static int i2c_scan_bus(void))
 {
 	unsigned char dev;
 	int count = 0;
-	int i;
 
-	/* scan */
-	for (dev = 1; dev < 128; dev++)
-		if (envctrl_write(dev, 0, 0) == 0) {
+	for (dev = 1; dev < 128; dev++) {
+		if (i2c_write(dev, 0, 0, 0) == 0) {
+#ifdef DEBUG_BUS_SCAN
+			int i;
 			for (i = 0; i < NR_DEVMAP; i++)
 				if ((dev & devmap[i].mask) == devmap[i].addr)
 					break;
 			printk("envctrl: i2c device at %02x: %s\n", dev,
 			       i < NR_DEVMAP ? devmap[i].name : "unknown");
-{
-			unsigned char buf[4];
-			if (envctrl_read(dev, buf, 4) == 4)
-				printk("envctrl: read %02x %02x %02x %02x\n",
-			               buf[0], buf[1], buf[2], buf[3]);
-}
+#endif
 			count++;
 		}
+	}
 	return count ? 0 : -ENODEV;
 }
+
+static loff_t
+envctrl_llseek(struct file *file, loff_t offset, int type)
+{
+	return -ESPIPE;
+}
+
+static ssize_t
+envctrl_read(struct file *file, char *buf, size_t count, loff_t *ppos)
+{
+	unsigned long addr = (unsigned long)file->private_data;
+
+	return i2c_read(addr, buf, count, 1);
+}
+
+static ssize_t
+envctrl_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
+{
+	unsigned long addr = (unsigned long)file->private_data;
+
+	return i2c_write(addr, buf, count, 1);
+}
+
+static int
+envctrl_ioctl(struct inode *inode, struct file *file,
+	      unsigned int cmd, unsigned long arg)
+{
+	unsigned long data;
+	int addr;
+
+	switch (cmd) {
+		case I2CIOCSADR:
+			if (get_user(addr, (int *)arg))
+				return -EFAULT;
+			data = addr & 0x7f;
+			file->private_data = (void *)data;
+			break;
+		case I2CIOCGADR:
+			addr = (unsigned long)file->private_data;
+			if (put_user(addr, (int *)arg))
+				return -EFAULT;
+			break;
+		default:
+			return -EINVAL;
+	}
+	return 0;
+}
+
+static int
+envctrl_open(struct inode *inode, struct file *file)
+{
+	file->private_data = 0;
+	MOD_INC_USE_COUNT;
+	return 0;
+}
+
+static int
+envctrl_release(struct inode *inode, struct file *file)
+{
+	MOD_DEC_USE_COUNT;
+	return 0;
+}
+
+static struct file_operations envctrl_fops = {
+	envctrl_llseek,
+	envctrl_read,
+	envctrl_write,
+	NULL,		/* readdir */
+	NULL,		/* poll */	
+	envctrl_ioctl,
+	NULL,		/* mmap */
+	envctrl_open,
+	envctrl_release
+};
+
+static struct miscdevice envctrl_dev = {
+	ENVCTRL_MINOR,
+	"envctrl",
+	&envctrl_fops
+};
 
 #ifdef MODULE
 int init_module(void)
@@ -199,26 +315,29 @@ __initfunc(int envctrl_init(void))
 {
 #ifdef CONFIG_PCI
 	struct linux_ebus *ebus;
-	struct linux_ebus_device *edev;
+	struct linux_ebus_device *edev = 0;
 
-	for_all_ebusdev(edev, ebus)
-		if (!strcmp(edev->prom_name, "SUNW,envctrl"))
-			break;
-
+	for_each_ebus(ebus) {
+		for_each_ebusdev(edev, ebus) {
+			if (!strcmp(edev->prom_name, "SUNW,envctrl"))
+				goto ebus_done;
+			if (!strcmp(edev->prom_name, "SUNW,rasctrl"))
+				goto ebus_done;
+		}
+	}
+ebus_done:
 	if (!edev)
 		return -ENODEV;
 
 	if (check_region(edev->base_address[0], sizeof(*i2c))) {
-		prom_printf("%s: Can't get region %lx, %d\n",
-			    __FUNCTION__, edev->base_address[0],
-			    sizeof(*i2c));
-		prom_halt();
+		printk("%s: Can't get region %lx, %d\n",
+		       __FUNCTION__, edev->base_address[0], (int)sizeof(*i2c));
+		return -ENODEV;
 	}
 
-	request_region(edev->base_address[0],
-		       sizeof(*i2c), "i2c");
-
 	i2c = (struct pcf8584_reg *)edev->base_address[0];
+
+	request_region((unsigned long)i2c, sizeof(*i2c), "i2c");
 
 	i2c->csr = CONTROL_PIN;
 	i2c->data = PCF8584_ADDRESS;
@@ -227,7 +346,13 @@ __initfunc(int envctrl_init(void))
 	i2c->csr = CONTROL_PIN | CONTROL_ES0 | CONTROL_ACK;
 	mdelay(10);
 
-	return scan_bus();
+	if (misc_register(&envctrl_dev)) {
+		printk("%s: unable to get misc minor %d\n",
+		       __FUNCTION__, envctrl_dev.minor);
+		release_region((unsigned long)i2c, sizeof(*i2c));
+	}
+
+	return i2c_scan_bus();
 #else
 	return -ENODEV;
 #endif
@@ -237,5 +362,7 @@ __initfunc(int envctrl_init(void))
 #ifdef MODULE
 void cleanup_module(void)
 {
+	misc_deregister(&envctrl_dev);
+	release_region((unsigned long)i2c, sizeof(*i2c));
 }
 #endif

@@ -72,34 +72,6 @@ static const char *gg2_cachemodes[4] = {
     "Disabled", "Write-Through", "Copy-Back", "Transparent Mode"
 };
 
-#if 0
-#ifdef CONFIG_BLK_DEV_IDE
-int chrp_ide_ports_known;
-ide_ioreg_t chrp_ide_regbase[MAX_HWIFS];
-ide_ioreg_t chrp_idedma_regbase; /* one for both channels */
-unsigned int chrp_ide_irq;
-
-void chrp_ide_probe(void)
-{
-}
-
-__initfunc(void chrp_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq))
-{
-	int i;
-
-	*p = 0;
-	if (base == 0)
-		return;
-	for (i = 0; i < 8; ++i)
-		*p++ = base + i * 0x10;
-	*p = base + 0x160;
-	if (irq != NULL) {
-		*irq = chrp_ide_irq;
-	}
-}
-#endif /* CONFIG_BLK_DEV_IDE */
-#endif
-
 int
 chrp_get_cpuinfo(char *buffer)
 {
@@ -175,35 +147,35 @@ __initfunc(static inline u8 sio_read(u8 index))
     return inb(0x15d);
 }
 
+__initfunc(static void sio_fixup_irq(const char *name, u8 device, u8 level,
+				     u8 type))
+{
+    u8 level0, type0, active;
+
+    /* select logical device */
+    sio_write(device, 0x07);
+    active = sio_read(0x30);
+    level0 = sio_read(0x70);
+    type0 = sio_read(0x71);
+    printk("sio: %s irq level %d, type %d, %sactive: ", name, level0, type0,
+	   !active ? "in" : "");
+    if (level0 == level && type0 == type && active)
+	printk("OK\n");
+    else {
+	printk("remapping to level %d, type %d, active\n", level, type);
+	sio_write(0x01, 0x30);
+	sio_write(level, 0x70);
+	sio_write(type, 0x71);
+    }
+
+}
+
 __initfunc(static void sio_init(void))
 {
-    u8 irq, type;
-
-    /* select logical device 0 (KBC/Keyboard) */
-    sio_write(0, 0x07);
-    irq = sio_read(0x70);
-    type = sio_read(0x71);
-    printk("sio: Keyboard irq %d, type %d: ", irq, type);
-    if (irq == 1 && type == 3)
-	printk("OK\n");
-    else {
-	printk("remapping to irq 1, type 3\n");
-	sio_write(1, 0x70);
-	sio_write(3, 0x71);
-    }
-
+    /* logical device 0 (KBC/Keyboard) */
+    sio_fixup_irq("keyboard", 0, 1, 2);
     /* select logical device 1 (KBC/Mouse) */
-    sio_write(1, 0x07);
-    irq = sio_read(0x70);
-    type = sio_read(0x71);
-    printk("sio: Mouse irq %d, type %d: ", irq, type);
-    if (irq == 12 && type == 3)
-	printk("OK\n");
-    else {
-	printk("remapping to irq 12, type 3\n");
-	sio_write(12, 0x70);
-	sio_write(3, 0x71);
-    }
+    sio_fixup_irq("mouse", 1, 12, 2);
 }
 
 
@@ -219,20 +191,6 @@ chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 
 	ROOT_DEV = to_kdev_t(0x0802); /* sda2 (sda1 is for the kernel) */
 	
-#ifdef CONFIG_BLK_DEV_INITRD
-	/* initrd_start and size are setup by boot/head.S and kernel/head.S */
-	if ( initrd_start )
-	{
-		if (initrd_end > *memory_end_p)
-		{
-			printk("initrd extends beyond end of memory "
-			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-			       initrd_end,*memory_end_p);
-			initrd_start = 0;
-		}
-	}
-#endif
-
 	printk("Boot arguments: %s\n", cmd_line);
 	
 	request_region(0x20,0x20,"pic1");
@@ -260,9 +218,5 @@ chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 
 #ifdef CONFIG_DUMMY_CONSOLE
 	conswitchp = &dummy_con;
-#endif
-#ifdef CONFIG_ABSCON_COMPAT
-	/* Console wrapper */
-	conswitchp = &compat_con;
 #endif
 }

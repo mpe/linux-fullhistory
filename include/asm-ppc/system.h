@@ -3,6 +3,7 @@
 
 #include <linux/kdev_t.h>
 #include <asm/processor.h>
+#include <asm/atomic.h>
 
 #define mb()  __asm__ __volatile__ ("sync" : : : "memory")
 
@@ -28,10 +29,10 @@ extern __inline__ void dcbi(void *line)
      
 extern __inline__ void __restore_flags(unsigned long flags)
 {
-        extern unsigned lost_interrupts;
+        extern atomic_t n_lost_interrupts;
 	extern void do_lost_interrupts(unsigned long);
 
-        if ((flags & MSR_EE) && lost_interrupts != 0) {
+        if ((flags & MSR_EE) && atomic_read(&n_lost_interrupts) != 0) {
                 do_lost_interrupts(flags);
         } else {
                 __asm__ __volatile__ ("sync; mtmsr %0; isync"
@@ -39,28 +40,6 @@ extern __inline__ void __restore_flags(unsigned long flags)
         }
 }
 
-
-#if 0
-/*
- * Gcc bug prevents us from using this inline func so for now
- * it lives in misc.S
- */
-void __inline__ __restore_flags(unsigned long flags)
-{
-	extern unsigned lost_interrupts;
-	__asm__ __volatile__ (
-		"andi.	0,%0,%2 \n\t"
-		"beq	2f \n\t"
-		"cmpi	0,%1,0 \n\t"
-		"bne	do_lost_interrupts \n\t"
-		"2:	sync \n\t"
-		"mtmsr	%0 \n\t"
-		"isync \n\t"
-		: 
-		: "r" (flags), "r"(lost_interrupts), "i" (1<<15)/*MSR_EE*/
-		: "0", "cc");
-}
-#endif
 
 extern void __sti(void);
 extern void __cli(void);

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.35 1998/04/18 03:40:53 davem Exp $
+# $Id: Makefile,v 1.36 1998/06/02 00:36:40 davem Exp $
 # sparc/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -16,7 +16,7 @@ SHELL  =/bin/bash
 # debugging of the kernel to get the proper debugging information.
 
 #CFLAGS := $(CFLAGS) -g -pipe -fcall-used-g5 -fcall-used-g7
-CFLAGS := $(CFLAGS) -pipe -fcall-used-g5 -fcall-used-g7
+CFLAGS := $(CFLAGS) -pipe -mno-fpu -fcall-used-g5 -fcall-used-g7
 
 #LINKFLAGS = -N -Ttext 0xf0004000
 LINKFLAGS = -T arch/sparc/vmlinux.lds

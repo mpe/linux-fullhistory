@@ -105,10 +105,15 @@ static int irq_read_proc(char *page, char **start, off_t off,
 	struct parport *pp = (struct parport *)data;
 	int len;
 	
-	if (pp->irq == PARPORT_IRQ_NONE)
+	if (pp->irq == PARPORT_IRQ_NONE) {
 		len = sprintf(page, "none\n");
-	else
+	} else {
+#ifdef __sparc__
+		len = sprintf(page, "%s\n", __irq_itoa(pp->irq));
+#else
 		len = sprintf(page, "%d\n", pp->irq);
+#endif
+	}
 	
 	*start = 0;
 	*eof   = 1;
@@ -146,10 +151,15 @@ static int hardware_read_proc(char *page, char **start, off_t off,
 	
 	len += sprintf(page+len, "base:\t0x%lx\n",pp->base);
 
-	if (pp->irq == PARPORT_IRQ_NONE)
+	if (pp->irq == PARPORT_IRQ_NONE) {
 		len += sprintf(page+len, "irq:\tnone\n");
-	else
+	} else {
+#ifdef __sparc__
+		len += sprintf(page+len, "irq:\t%s\n",__irq_itoa(pp->irq));
+#else
 		len += sprintf(page+len, "irq:\t%d\n",pp->irq);
+#endif
+	}
 
 	if (pp->dma == PARPORT_DMA_NONE)
 		len += sprintf(page+len, "dma:\tnone\n");

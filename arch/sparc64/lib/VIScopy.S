@@ -1,9 +1,9 @@
-/* $Id: VIScopy.S,v 1.15 1998/04/26 07:21:54 davem Exp $
+/* $Id: VIScopy.S,v 1.18 1998/06/12 14:53:55 jj Exp $
  * VIScopy.S: High speed copy operations utilizing the UltraSparc
  *            Visual Instruction Set.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1996, 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996, 1997, 1998 Jakub Jelinek (jj@ultra.linux.cz)
  */
 
 #include "VIS.h"
@@ -24,12 +24,15 @@
 	 */
 	 
 #ifdef __KERNEL__
+
+#include <asm/visasm.h>
+
 #define FPU_CLEAN_RETL				\
-	wr		%g0, 0, %fprs;		\
+	VISExit					\
 	retl;					\
 	 clr		%o0;
 #define FPU_RETL				\
-	wr		%g0, 0, %fprs;		\
+	VISExit					\
 	retl;					\
 	 clr		%o0;
 #define NORMAL_RETL				\
@@ -40,7 +43,7 @@
 	.section .fixup;			\
 	.align	4;				\
 99:	ba	VIScopyfixup_ret;		\
-	 a, b, %o0;				\
+	 a, b, %o1;				\
 	.section __ex_table;			\
 	.align	4;				\
 	.word	98b, 99b;			\
@@ -52,7 +55,7 @@
 	.align	4;				\
 99:	c, d, e;				\
 	ba	VIScopyfixup_ret;		\
-	 a, b, %o0;				\
+	 a, b, %o1;				\
 	.section __ex_table;			\
 	.align	4;				\
 	.word	98b, 99b;			\
@@ -298,10 +301,6 @@
 
 		.globl			__memcpy_entry
 		.type			__memcpy_entry,@function
-
-		.globl			copy_page
-		.type			copy_page,@function
-
 memcpy_private:
 __memcpy:
 memcpy:		mov		ASI_BLK_P, asi_src		! IEU0	Group
@@ -309,12 +308,6 @@ memcpy:		mov		ASI_BLK_P, asi_src		! IEU0	Group
 		 mov		ASI_BLK_P, asi_dest		! IEU1
 		retl
 		 clr		%o0
-
-copy_page:	wr		%g0, FPRS_FEF, %fprs		! FPU	Group
-		sethi		%hi(8192), %o2			! IEU0	Group
-		mov		ASI_BLK_P, asi_src		! IEU1
-		b,pt		%xcc, dest_is_64byte_aligned	! CTI
-		 mov		ASI_BLK_P, asi_dest		! IEU0	Group
 
 		.align			32
 		.globl			__copy_from_user
@@ -355,7 +348,11 @@ __memcpy_384plus:
 #endif
 VIS_enter:
 	be,pt			%xcc, dest_is_8byte_aligned	! CTI
+#ifdef __KERNEL__
+	 nop							! IEU0	Group
+#else
 	 andcc			%o0, 0x38, %g5			! IEU1	Group
+#endif
 do_dest_8byte_align:
 	mov			8, %g1				! IEU0
 	sub			%g1, %g2, %g2			! IEU0	Group
@@ -377,7 +374,8 @@ do_dest_8byte_align:
 	EX(LDUB			[%o1] ASINORMAL, %o5, 
 				add %o2, %g2)			! Load	Group
 	add			%o0, 2, %o0			! IEU0
-	EX(LDUB			[%o1 + 1] ASINORMAL, %g3,
+	EX2(LDUB		[%o1 + 1] ASINORMAL, %g3,
+				sub %o0, 2, %o0,
 				add %o2, %g2)			! Load	Group
 	ASI_SETDST_NOBLK					! LSU	Group
 	subcc			%g2, 2, %g2			! IEU1	Group
@@ -389,17 +387,17 @@ do_dest_8byte_align:
 	 EX2(STB		%g3, [%o0 - 1] ASINORMAL,
 				add %g2, 1, %g2,
 				add %o2, %g2)			! Store
+#ifdef __KERNEL__
+3:
+dest_is_8byte_aligned:
+	VISEntry
+	andcc			%o0, 0x38, %g5			! IEU1	Group
+#else
 3:	andcc			%o0, 0x38, %g5			! IEU1	Group
 dest_is_8byte_aligned:
-	be,pt			%icc, dest_is_64byte_aligned	! CTI
-#ifdef __KERNEL__
-	 wr			%g0, FPRS_FEF, %fprs		! FPU	Group
-do_dest_64byte_align:
-	mov			64, %g1				! IEU0	Group
-#else
-	 mov			64, %g1				! IEU0	Group
-do_dest_64byte_align:
 #endif
+	be,pt			%icc, dest_is_64byte_aligned	! CTI
+	 mov			64, %g1				! IEU0
 	fmovd			%f0, %f2			! FPU
 	sub			%g1, %g5, %g5			! IEU0	Group
 	ASI_SETSRC_NOBLK					! LSU	Group
@@ -646,7 +644,9 @@ __memcpy_short:
 2:	ASI_SETSRC_NOBLK					! LSU	Group
 	EXO2(LDUB	[%o1] ASINORMAL, %g5)			! LOAD	Group
 	add		%o0, 2, %o0				! IEU0
-	EXO2(LDUB	[%o1 + 1] ASINORMAL, %o5)		! LOAD	Group
+	EX2(LDUB	[%o1 + 1] ASINORMAL, %o5,
+			sub %o0, 2, %o0,
+			add %o2, %g0)				! LOAD	Group
 	add		%o1, 2, %o1				! IEU0
 	ASI_SETDST_NOBLK					! LSU	Group
 	subcc		%o2, 2, %o2				! IEU1	Group
@@ -866,9 +866,9 @@ normal_retl:
 	ASI_SETSRC_NOBLK					! LSU	Group
 	EX(LDX		[%o1] ASINORMAL, %g2,
 			and %o2, 0xf)				! Load	Group
-	add		%o1, 8, %o1				! IEU0
+	add		%o0, 8, %o0				! IEU0
 	ASI_SETDST_NOBLK					! LSU	Group
-	add		%o0, 8, %o0				! IEU0	Group
+	add		%o1, 8, %o1				! IEU0	Group
 	EX(STX		%g2, [%o0 - 0x8] ASINORMAL,
 			and %o2, 0xf)				! Store
 85:	be,pt		%xcc, 1f				! CTI
@@ -876,9 +876,9 @@ normal_retl:
 	ASI_SETSRC_NOBLK					! LSU	Group
 	EX(LDUW		[%o1] ASINORMAL, %g2,
 			and %o2, 0x7)				! Load	Group
-	add		%o1, 4, %o1				! IEU0
+	add		%o0, 4, %o0				! IEU0
 	ASI_SETDST_NOBLK					! LSU	Group
-	add		%o0, 4, %o0				! IEU0	Group
+	add		%o1, 4, %o1				! IEU0	Group
 	EX(STW		%g2, [%o0 - 0x4] ASINORMAL,
 			and %o2, 0x7)				! Store
 1:	be,pt		%xcc, 1f				! CTI
@@ -886,9 +886,9 @@ normal_retl:
 	ASI_SETSRC_NOBLK					! LSU	Group
 	EX(LDUH		[%o1] ASINORMAL, %g2,
 			and %o2, 0x3)				! Load	Group
-	add		%o1, 2, %o1				! IEU0
+	add		%o0, 2, %o0				! IEU0
 	ASI_SETDST_NOBLK					! LSU	Group
-	add		%o0, 2, %o0				! IEU0	Group
+	add		%o1, 2, %o1				! IEU0	Group
 	EX(STH		%g2, [%o0 - 0x2] ASINORMAL,
 			and %o2, 0x3)				! Store
 1:	be,pt		%xcc, 1f				! CTI
@@ -920,7 +920,7 @@ memcpy_noVIS_misaligned:
 				add %o2, 1)			! Store
 2:
 #ifdef __KERNEL__
-	wr			%g0, FPRS_FEF, %fprs		! FPU	Group
+	VISEntry
 #endif
 	andn			%o2, 7, %g5 			! IEU0	Group
 	and			%o2, 7, %o2			! IEU1
@@ -976,25 +976,31 @@ fpu_retl:
 		.section	.fixup
 		.align		4
 VIScopyfixup_reto2:
-		mov		%o2, %o0
+		mov		%o2, %o1
 VIScopyfixup_ret:
 		/* If this is copy_from_user(), zero out the rest of the
 		 * kernel buffer.
 		 */
 		andcc		asi_src, 0x1, %g0
-		bne		1f
-		 mov		%o0, %o4
-		/* XXX Here, somehow get original kernel pointer (was in %o0)
-		 * XXX and bzero() all remaining bytes in kernel buffer.
-		 */
-1:		retl
-		 wr		%g0, 0, %fprs
+		be,pt		%icc, 1f
+		 andcc		asi_dest, 0x1, %g0
+		bne,pn		%icc, 1f
+		 VISExit
+		save		%sp, -160, %sp
+		mov		%i0, %o0
+		call		__bzero
+		 mov		%i1, %o1
+		restore
+1:		mov		%o1, %o0
+		retl
+		 nop
 VIScopyfixup1:	subcc		%g2, 18, %g2
+		add		%o0, 32, %o0
 		bgeu,a,pt	%icc, VIScopyfixup1
 		 sub		%g7, 32, %g7
+		sub		%o0, 32, %o0
 		rd		%pc, %g5
-		add		%g2, 18, %g2
-		add		%g2, 20, %g2
+		add		%g2, (18 + 16), %g2
 		ldub		[%g5 + %g2], %g2
 		ba,a,pt		%xcc, 2f
 .byte		0, 0, 0, 0, 0, 0, 0, 4, 4, 8, 12, 12, 16, 20, 20, 24, 28, 28
@@ -1003,41 +1009,43 @@ VIScopyfixup2:	mov		(7 * 16), %g7
 1:		subcc		%g2, 10, %g2
 		bgeu,a,pt	%icc, 1b
 		 sub		%g7, 16, %g7
+		sub		%o0, %g7, %o0
 		rd		%pc, %g5
-		add		%g2, 10, %g2
-		add		%g2, 20, %g2
+		add		%g2, (10 + 16), %g2
 		ldub		[%g5 + %g2], %g2
 		ba,a,pt		%xcc, 4f
 .byte		0, 0, 0, 0, 0, 4, 4, 8, 12, 12
 		.align		4
 VIScopyfixup3:	subcc		%g2, 10, %g2
+		add		%o0, 32, %o0
 		bgeu,a,pt	%icc, VIScopyfixup3
 		 sub		%g7, 32, %g7
+		sub		%o0, 32, %o0
 		rd		%pc, %g5
-		add		%g2, 10, %g2
-		add		%g2, 20, %g2
+		add		%g2, (10 + 16), %g2
 		ldub		[%g5 + %g2], %g2
 		ba,a,pt		%xcc, 2f
 .byte		0, 0, 0, 0, 0, 0, 0, 8, 16, 24
 		.align		4
-2:		and		%g1, 0x7f, %g1
+2:		and		%o2, 0x7f, %o2
 		sub		%g7, %g2, %g7
 		ba,pt		%xcc, VIScopyfixup_ret
-		 add		%g7, %g1, %o0
+		 add		%g7, %o2, %o1
 VIScopyfixup4:	mov		(7 * 16), %g7
 3:		subcc		%g2, 6, %g2
 		bgeu,a,pt	%icc, 3b
 		 sub		%g7, 16, %g7
+		sub		%o0, %g7, %o0
 		rd		%pc, %g5
-		add		%g2, 6, %g2
-		add		%g2, 20, %g2
+		add		%g2, (6 + 16), %g2
 		ldub		[%g5 + %g2], %g2
 		ba,a,pt		%xcc, 4f
 .byte		0, 0, 0, 0, 0, 8
 		.align		4
-4:		and		%g1, 7, %g1
+4:		and		%o2, 0xf, %o2
+		sub		%g7, %g2, %g7
 		ba,pt		%xcc, VIScopyfixup_ret
-		 add		%g7, %g1, %o0
+		 add		%g7, %o2, %o1
 VIScopyfixup_vis3:
 		sub		%o2, 0x80, %o2
 VIScopyfixup_vis2:
@@ -1047,13 +1055,13 @@ VIScopyfixup_vis0:
 VIScopyfixup_vis1:
 		add		%g7, %g3, %g7
 		ba,pt		%xcc, VIScopyfixup_ret
-		 add		%o2, %g7, %o0
+		 add		%o2, %g7, %o1
 VIScopyfixup_vis5:
 		add		%g3, 8, %g3
 VIScopyfixup_vis4:
 		add		%g3, 8, %g3
 		ba,pt		%xcc, VIScopyfixup_ret
-		 add		%o2, %g3, %o0
+		 add		%o2, %g3, %o1
 #endif
 
 #ifdef __KERNEL__

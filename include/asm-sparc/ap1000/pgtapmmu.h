@@ -38,6 +38,7 @@
 #define APMMU_PGD_TABLE_SIZE    0x400 /* 256 entries, 4 bytes a piece */
 
 #define APMMU_VMALLOC_START   (0xfe300000)
+#define APMMU_VMALLOC_END     ~0x0UL
 
 /* Definition of the values in the ET field of PTD's and PTE's */
 #define APMMU_ET_MASK         0x3

@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.11 1998/03/29 10:10:55 davem Exp $
+/* $Id: sys_sunos32.c,v 1.16 1998/06/16 04:37:06 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -55,8 +55,6 @@
 #define A(x) ((unsigned long)x)
 
 #define SUNOS_NR_OPEN	256
-
-extern unsigned long get_unmapped_area(unsigned long addr, unsigned long len);
 
 asmlinkage u32 sunos_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u32 off)
 {
@@ -259,12 +257,12 @@ asmlinkage void sunos_madvise(u32 address, u32 len, u32 strategy)
  * *or* the passed base address is not aligned on a page boundary you
  * get an error.
  */
-asmlinkage int sunos_mincore(u32 addr, u32 len, u32 u_array)
+asmlinkage int sunos_mincore(u32 __addr, u32 len, u32 u_array)
 {
 	pgd_t *pgdp;
 	pmd_t *pmdp;
 	pte_t *ptep;
-	unsigned long limit;
+	unsigned long limit, addr = (unsigned long)__addr;
 	int num_pages, pnum, retval = -EINVAL;
 	char *array = (char *)A(u_array);
 
@@ -523,26 +521,6 @@ out:
 	return error;
 }
 
-asmlinkage int sunos_getdomainname(u32 u_name, int len)
-{
-        int nlen = strlen(system_utsname.domainname);
-	int ret = -EFAULT;
-	char *name = (char *)A(u_name);
-
-	lock_kernel();
-        if (nlen < len)
-                len = nlen;
-
-	if(len > __NEW_UTS_LEN)
-		goto out;
-	if(copy_to_user(name, system_utsname.domainname, len))
-		goto out;
-	ret = 0;
-out:
-	unlock_kernel();
-	return ret;
-}
-
 struct sunos_utsname {
 	char sname[9];
 	char nname[9];
@@ -557,7 +535,7 @@ asmlinkage int sunos_uname(u32 u_name)
 	struct sunos_utsname *name = (struct sunos_utsname *)A(u_name);
 	int ret = -EFAULT;
 
-	lock_kernel();
+	down(&uts_sem);
 	if(!name)
 		goto out;
 	if(copy_to_user(&name->sname[0],
@@ -573,7 +551,7 @@ asmlinkage int sunos_uname(u32 u_name)
 	copy_to_user(&name->mach[0], &system_utsname.machine[0], sizeof(name->mach) - 1);
 	ret = 0;
 out:
-	unlock_kernel();
+	up(&uts_sem);
 	return ret;
 }
 

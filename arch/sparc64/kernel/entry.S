@@ -1,10 +1,10 @@
-/* $Id: entry.S,v 1.78 1998/05/01 20:36:24 davem Exp $
+/* $Id: entry.S,v 1.87 1998/07/29 16:32:28 jj Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost        (ecd@skynet.be)
  * Copyright (C) 1996 Miguel de Icaza      (miguel@nuclecu.unam.mx)
- * Copyright (C) 1996,1997 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,1998 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
  */
 
 #include <linux/config.h>
@@ -18,6 +18,7 @@
 #include <asm/signal.h>
 #include <asm/pgtable.h>
 #include <asm/processor.h>
+#include <asm/visasm.h>
 
 /* #define SYSCALL_TRACING */
 
@@ -26,115 +27,23 @@
 #define NR_SYSCALLS 256      /* Each OS is different... */
 
 	.text
-	.globl	sparc64_dtlb_prot_catch, sparc64_dtlb_refbit_catch
-	.globl	sparc64_itlb_refbit_catch
-
-	/* Note, DMMU SFAR not updated for fast tlb data access miss
-	 * traps, so we must use tag access to find the right page.
-	 * However for DMMU fast protection traps it is updated so
-	 * we use, but we must also clear it _before_ we enable interrupts
-	 * and save state because there is a race where we can push a user
-	 * window right now in etrap, a protection fault happens (for example
-	 * to update the dirty bit) and since we left crap in the sfsr
-	 * it will not get updated properly.
-	 */
 	.align		32
-sparc64_dtlb_prot_catch:
-	wr		%g0, ASI_DMMU, %asi
-	rdpr		%pstate, %g1
-	wrpr		%g1, PSTATE_AG|PSTATE_MG, %pstate
-	rdpr		%tl, %g3
-	ldxa		[%g0 + TLB_TAG_ACCESS] %asi, %g5
-	stxa		%g0, [%g0 + TLB_SFSR] %asi
-	membar		#Sync
-	cmp		%g3, 1
 
-	bgu,a,pn	%icc, winfix_trampoline
-	 rdpr		%tpc, %g3
-	sethi		%hi(109f), %g7
-	ba,pt		%xcc, etrap
-109:	 or		%g7, %lo(109b), %g7
-	b,pt		%xcc, 1f
-	 mov		1, %o2
-	.align		32
-sparc64_dtlb_refbit_catch:
-	and		%g5, ((_PAGE_PRESENT | _PAGE_READ) >> 9), %g4
-	cmp		%g4, ((_PAGE_PRESENT | _PAGE_READ) >> 9)
-	be,a,pt		%xcc, 2f
-	 mov		1, %g4
-	wr		%g0, ASI_DMMU, %asi
-	rdpr		%pstate, %g1
-	wrpr		%g1, PSTATE_AG|PSTATE_MG, %pstate
-
-	rdpr		%tl, %g3
-	ldxa		[%g0 + TLB_TAG_ACCESS] %asi, %g5
-	cmp		%g3, 1
-	bgu,pn		%icc, winfix_trampoline
-	 rdpr		%tpc, %g3
-	sethi		%hi(109f), %g7
-	b,pt		%xcc, etrap
-109:	 or		%g7, %lo(109b), %g7
-
-	clr		%o2
-1:	srlx		%l5, PAGE_SHIFT, %o1
-	add		%sp, STACK_BIAS + REGWIN_SZ, %o0
-	call		do_sparc64_fault
-	 sllx		%o1, PAGE_SHIFT, %o1
-	b,pt		%xcc, rtrap
-	 clr		%l6
-	.align		32
-sparc64_itlb_refbit_catch:
-	and		%g5, ((_PAGE_PRESENT | _PAGE_READ) >> 9), %g4
-	cmp		%g4, ((_PAGE_PRESENT | _PAGE_READ) >> 9)
-	be,a,pt		%xcc, 3f
-	 mov		1, %g4
-	rdpr		%pstate, %g1
-	wrpr		%g1, PSTATE_AG|PSTATE_MG, %pstate
-	rdpr		%tpc, %g5
-
-	sethi		%hi(109f), %g7
-	b,pt		%xcc, etrap
-109:	 or		%g7, %lo(109b), %g7
-	b,pt		%xcc, 1b
-	 clr		%o2
-
-	.align		32
-2:	sllx		%g4, 63, %g4				! _PAGE_VALID
-	or		%g5, _PAGE_ACCESSED, %g5
-	or		%g5, %g4, %g5
-	stxa		%g5, [%g3 + %g1] ASI_PHYS_USE_EC	! store new PTE
-	stxa		%g5, [%g0] ASI_DTLB_DATA_IN		! TLB load
-	retry
-
-	.align		32
-3:	sllx		%g4, 63, %g4				! _PAGE_VALID
-	or		%g5, _PAGE_ACCESSED, %g5
-	or		%g5, %g4, %g5
-	stxa		%g5, [%g3 + %g1] ASI_PHYS_USE_EC	! store new PTE
-	stxa		%g5, [%g0] ASI_ITLB_DATA_IN		! TLB load
-	retry
-
-#define FPDIS_OFF (((PAGE_SIZE<<1)-((64*4)+(2*8))) & ~(64 - 1))
 	/* This is trivial with the new code... */
 	.align		32
 	.globl		do_fpdis
 do_fpdis:
-	lduh		[%g6 + AOFF_task_tss + AOFF_thread_flags], %g5		! Load	Group
+	ldub		[%g6 + AOFF_task_tss + AOFF_thread_fpsaved], %g5	! Load	Group
 	sethi		%hi(TSTATE_PEF), %g4					! IEU0
-	sethi		%hi(FPDIS_OFF), %g3					! IEU1
 	wr		%g0, FPRS_FEF, %fprs					! LSU	Group+4bubbles
-	andcc		%g5, SPARC_FLAG_USEDFPU, %g0				! IEU1	Group
-	or		%g3, %lo(FPDIS_OFF), %g2				! IEU0
-	sethi		%hi(empty_zero_page), %g1				! IEU0	Group
-	add		%g6, %g2, %g2						! IEU1
-	be,a,pn		%icc, 1f						! CTI
-	 clr		%g7							! IEU0	Group
-	add		%g2, 0x100, %g1						! IEU1
-	ldx		[%g2 + 0x108], %g7					! Load
-1:	andcc		%g5, SPARC_FLAG_USEDFPUL, %g0				! IEU1	Group
+	andcc		%g5, FPRS_FEF, %g0					! IEU1	Group
+	be,a,pt		%icc, 1f						! CTI
+	 clr		%g7							! IEU0
+	ldub		[%g6 + AOFF_task_tss + AOFF_thread_gsr], %g7		! Load	Group
+1:	andcc		%g5, FPRS_DL, %g0					! IEU1
 	bne,pn		%icc, 2f						! CTI
 	 fzero		%f0							! FPA
-	andcc		%g5, SPARC_FLAG_USEDFPUU, %g0				! IEU1  Group
+	andcc		%g5, FPRS_DU, %g0					! IEU1  Group
 	bne,pn		%icc, 1f						! CTI
 	 fzero		%f2							! FPA
 	faddd		%f0, %f2, %f4
@@ -168,17 +77,18 @@ do_fpdis:
 	b,pt		%xcc, fpdis_exit2
 	 faddd		%f0, %f2, %f60
 1:	mov		SECONDARY_CONTEXT, %g3
+	add		%g6, AOFF_task_fpregs + 0x80, %g1
 	faddd		%f0, %f2, %f4
 	fmuld		%f0, %f2, %f6
 	ldxa		[%g3] ASI_DMMU, %g5
+	add		%g6, AOFF_task_fpregs + 0xc0, %g2
 	stxa		%g0, [%g3] ASI_DMMU
 	faddd		%f0, %f2, %f8
 	fmuld		%f0, %f2, %f10
-	flush		%g2
-	wr		%g0, ASI_BLK_S, %asi	! grrr, where is ASI_BLK_NUCLEUS 8-(
+	flush		%g6
 	membar		#StoreLoad | #LoadLoad
-	ldda		[%g2 + 0x080] %asi, %f32
-	ldda		[%g2 + 0x0c0] %asi, %f48
+	ldda		[%g1] ASI_BLK_S, %f32	! grrr, where is ASI_BLK_NUCLEUS 8-(
+	ldda		[%g2] ASI_BLK_S, %f48
 	faddd		%f0, %f2, %f12
 	fmuld		%f0, %f2, %f14
 	faddd		%f0, %f2, %f16
@@ -191,20 +101,21 @@ do_fpdis:
 	fmuld		%f0, %f2, %f30
 	b,pt		%xcc, fpdis_exit
 	 membar		#Sync
-2:	andcc		%g5, SPARC_FLAG_USEDFPUU, %g0
+2:	andcc		%g5, FPRS_DU, %g0
 	bne,pt		%icc, 3f
 	 fzero		%f32
 	mov		SECONDARY_CONTEXT, %g3
 	fzero		%f34
 	ldxa		[%g3] ASI_DMMU, %g5
+	add		%g6, AOFF_task_fpregs, %g1
 	stxa		%g0, [%g3] ASI_DMMU
+	add		%g6, AOFF_task_fpregs + 0x40, %g2
 	faddd		%f32, %f34, %f36
 	fmuld		%f32, %f34, %f38
-	flush		%g2
-	wr		%g0, ASI_BLK_S, %asi	! grrr, where is ASI_BLK_NUCLEUS 8-(
+	flush		%g6
 	membar		#StoreLoad | #LoadLoad
-	ldda		[%g2 + 0x000] %asi, %f0
-	ldda		[%g2 + 0x040] %asi, %f16
+	ldda		[%g1] ASI_BLK_S, %f0	! grrr, where is ASI_BLK_NUCLEUS 8-(
+	ldda		[%g2] ASI_BLK_S, %f16
 	faddd		%f32, %f34, %f40
 	fmuld		%f32, %f34, %f42
 	faddd		%f32, %f34, %f44
@@ -220,22 +131,24 @@ do_fpdis:
 	b,pt		%xcc, fpdis_exit
 	 membar		#Sync
 3:	mov		SECONDARY_CONTEXT, %g3
+	add		%g6, AOFF_task_fpregs, %g1
 	ldxa		[%g3] ASI_DMMU, %g5
+	mov		0x40, %g2
 	stxa		%g0, [%g3] ASI_DMMU
-	flush		%g2
-	wr		%g0, ASI_BLK_S, %asi	! grrr, where is ASI_BLK_NUCLEUS 8-(
+	flush		%g6
 	membar		#StoreLoad | #LoadLoad
-	ldda		[%g2 + 0x000] %asi, %f0
-	ldda		[%g2 + 0x040] %asi, %f16
-	ldda		[%g2 + 0x080] %asi, %f32
-	ldda		[%g2 + 0x0c0] %asi, %f48
+	ldda		[%g1] ASI_BLK_S, %f0		! grrr, where is ASI_BLK_NUCLEUS 8-(
+	ldda		[%g1 + %g2] ASI_BLK_S, %f16
+	add		%g1, 0x80, %g1
+	ldda		[%g1] ASI_BLK_S, %f32
+	ldda		[%g1 + %g2] ASI_BLK_S, %f48
 	membar		#Sync
 fpdis_exit:
 	stxa		%g5, [%g3] ASI_DMMU
-	flush		%g2
+	flush		%g6
 fpdis_exit2:
 	wr		%g7, 0, %gsr
-	ldx		[%g1], %fsr
+	ldx		[%g6 + AOFF_task_tss + AOFF_thread_xfsr], %fsr
 	rdpr		%tstate, %g3
 	or		%g3, %g4, %g3		! anal...
 	wrpr		%g3, %tstate
@@ -298,8 +211,10 @@ do_ivec_xcall:
 	add		%g2, 0x10, %g2
 	ldxa		[%g2] ASI_UDB_INTR_R, %g7
 	stxa		%g0, [%g0] ASI_INTR_RECEIVE
+	membar		#Sync
 	jmpl		%g3, %g0
-	 membar		#Sync
+	 nop
+
 do_ivec_spurious:
 	srl		%g3, 3, %g3
 	sethi		%hi(ivec_spurious_cookie), %g2
@@ -586,6 +501,8 @@ sunos_execv:
 	.globl	sys_sigreturn, sys_rt_sigreturn
 	.globl	sys32_sigreturn, sys32_rt_sigreturn
 	.globl	sys32_execve, sys_ptrace
+	.globl	sys_sigaltstack, sys32_sigaltstack
+	.globl	sys32_sigstack
 	.align	32
 sys_pipe:	sethi		%hi(sparc_pipe), %g1
 		add		%sp, STACK_BIAS + REGWIN_SZ, %o0
@@ -608,6 +525,19 @@ sys_memory_ordering:
 		sethi		%hi(sparc_memory_ordering), %g1
 		add		%sp, STACK_BIAS + REGWIN_SZ, %o1
 		jmpl		%g1 + %lo(sparc_memory_ordering), %g0
+		 nop
+sys_sigaltstack:sethi		%hi(do_sigaltstack), %g1
+		add		%i6, STACK_BIAS, %o2
+		jmpl		%g1 + %lo(do_sigaltstack), %g1
+		 nop
+sys32_sigstack:	sethi		%hi(do_sys32_sigstack), %g1
+		mov		%i6, %o2
+		jmpl		%g1 + %lo(do_sys32_sigstack), %g1
+		 nop
+sys32_sigaltstack:
+		sethi		%hi(do_sys32_sigaltstack), %g1
+		mov		%i6, %o2
+		jmpl		%g1 + %lo(do_sys32_sigaltstack), %g1
 		 nop
 
 		.align		32
@@ -687,8 +617,8 @@ sys_ptrace:	add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 	 * In fact we should take advantage of that fact for other things
 	 * during system calls...
 	 */
-	.globl	sys_fork, sys_vfork, sys_clone
-	.globl	ret_from_syscall, ret_from_smpfork
+	.globl	sys_fork, sys_vfork, sys_clone, sparc_exit
+	.globl	ret_from_syscall
 	.align	32
 sys_fork:
 sys_vfork:	mov		SIGCHLD, %o0
@@ -699,15 +629,31 @@ sys_clone:	flushw
 		movrz		%o1, %fp, %o1
 		call		do_fork
 		 mov		%l5, %o7
+ret_from_syscall:
+		/* Clear SPARC_FLAG_NEWCHILD, switch_to leaves tss.flags in
+		 * %o7 for us.
+		 */
+		andn		%o7, 0x100, %o7
+		sth		%o7, [%g6 + AOFF_task_tss + AOFF_thread_flags]
 #ifdef __SMP__
-ret_from_smpfork:
 		sethi		%hi(scheduler_lock), %o4
 		membar		#StoreStore | #LoadStore
 		stb		%g0, [%o4 + %lo(scheduler_lock)]
 #endif
-ret_from_syscall:
 		b,pt		%xcc, ret_sys_call
 		 ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0], %o0
+sparc_exit:	rdpr		%otherwin, %g1
+		rdpr		%pstate, %g2
+		wrpr		%g2, PSTATE_IE, %pstate
+		rdpr		%cansave, %g3
+		add		%g3, %g1, %g3
+		wrpr		%g3, 0x0, %cansave
+		wrpr		%g0, 0x0, %otherwin
+		wrpr		%g2, 0x0, %pstate
+		mov		%o7, %l5
+		sth		%g0, [%g6 + AOFF_task_tss + AOFF_thread_w_saved]
+		call		sys_exit
+		 mov		%l5, %o7
 
 linux_sparc_ni_syscall:
 	sethi		%hi(sys_ni_syscall), %l7

@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1994, 1995 by Ralf Baechle
  *
- * $Id: entry.S,v 1.9 1998/05/04 09:17:50 ralf Exp $
+ * $Id: entry.S,v 1.10 1998/07/26 03:02:06 davem Exp $
  */
 
 /*
@@ -59,6 +59,7 @@ EXPORT(ret_from_irq)
 
 		andi	t1, t0, 0x10
 		beqz	t1, return		# -> yes
+#error Change this to current->need_resched --DaveM
 		 lw	t1, need_resched
 		bnez	t1, reschedule
 		lw	v0, TASK_SIGPENDING($28)

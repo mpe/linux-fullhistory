@@ -21,7 +21,7 @@
 #define NFSD_PARANOIA 1
 /* #define NFSD_DEBUG_VERBOSE 1 */
 
-extern unsigned long num_physpages;
+extern unsigned long max_mapnr;
 
 #define NFSD_FILE_CACHE 0
 #define NFSD_DIR_CACHE  1
@@ -1197,7 +1197,7 @@ static int nfsd_d_validate(struct dentry *dentry)
 {
 	unsigned long dent_addr = (unsigned long) dentry;
 	unsigned long min_addr = PAGE_OFFSET;
-	unsigned long max_addr = min_addr + (num_physpages << PAGE_SHIFT);
+	unsigned long max_addr = min_addr + (max_mapnr << PAGE_SHIFT);
 	unsigned long align_mask = 0x0F;
 	unsigned int len;
 	int valid = 0;
@@ -1208,6 +1208,11 @@ static int nfsd_d_validate(struct dentry *dentry)
 		goto bad_addr;
 	if ((dent_addr & ~align_mask) != dent_addr)
 		goto bad_align;
+	/* XXX: Should test here, whether the address doesn't belong to
+	        a physical memory hole on sparc32/sparc64. Then it is not
+	        safe to dereference it. On the other side, the previous
+	        use of num_physpages instead of max_mapnr caused the same
+	        to happen, plus some valid addresses could get rejected. -jj */
 	/*
 	 * Looks safe enough to dereference ...
 	 */

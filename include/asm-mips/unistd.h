@@ -1190,11 +1190,12 @@
 #define __NR_pread			(__NR_Linux + 200)
 #define __NR_pwrite			(__NR_Linux + 201)
 #define __NR_chown			(__NR_Linux + 202)
+#define __NR_getcwd			(__NR_Linux + 203)
 
 /*
  * Offset of the last Linux flavoured syscall
  */
-#define __NR_Linux_syscalls		202
+#define __NR_Linux_syscalls		203
 
 #ifndef __LANGUAGE_ASSEMBLY__
 
@@ -1414,8 +1415,6 @@ return -1; \
  */
 #define __NR__exit __NR_exit
 static inline _syscall0(int,idle)
-static inline _syscall0(int,fork)
-static inline _syscall2(int,clone,unsigned long,flags,char *,esp)
 static inline _syscall0(int,pause)
 static inline _syscall1(int,setup,int,magic)
 static inline _syscall0(int,sync)

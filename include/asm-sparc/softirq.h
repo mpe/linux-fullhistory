@@ -99,6 +99,7 @@ extern int __sparc_bh_counter;
 #define softirq_trylock(cpu) (__sparc_bh_counter ? 0 : (__sparc_bh_counter=1))
 #define softirq_endlock(cpu) (__sparc_bh_counter = 0)
 #define clear_active_bhs(x)	(bh_active &= ~(x))
+#define synchronize_bh()	do { } while (0) /* XXX implement SMP version -DaveM */
 
 #define init_bh(nr, routine)	\
 do {	int ent = nr;		\

@@ -1,7 +1,7 @@
 #define BLOCKMOVE
 #define	Z_WAKE
 static char rcsid[] =
-"$Revision: 2.2.1.3 $$Date: 1998/06/01 12:09:10 $";
+"$Revision: 2.2.1.4 $$Date: 1998/08/04 11:02:50 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -31,6 +31,12 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
+ * Revision 2.2.1.4  1998/08/04 11:02:50 ivan
+ * /proc/cyclades implementation with great collaboration of 
+ * Marc Lewis <marc@blarg.net>;
+ * cyy_interrupt was changed to avoid occurence of kernel oopses
+ * during PPP operation.
+ *
  * Revision 2.2.1.3  1998/06/01 12:09:10 ivan
  * General code review in order to comply with 2.1 kernel standards;
  * data loss prevention for slow devices revisited (cy_wait_until_sent
@@ -143,7 +149,7 @@ static char rcsid[] =
  * Price <stevep@fa.tdktca.com> for help on this)
  *
  * Revision 1.36.4.21  1996/09/10 17:00:10  bentson
- * shift from cpu-bound to memcopy in cyz_polling operation
+ * shift from CPU-bound to memcopy in cyz_polling operation
  *
  * Revision 1.36.4.20  1996/09/09 18:30:32  Bentson
  * Added support to set and report higher speeds.
@@ -557,6 +563,10 @@ static char rcsid[] =
 #include <linux/pci.h>
 #include <linux/version.h>
 
+#ifdef CONFIG_PROC_FS
+#include <linux/stat.h>
+#include <linux/proc_fs.h>
+#endif
 
 #define cy_put_user	put_user
 
@@ -588,6 +598,8 @@ static unsigned long cy_get_user(unsigned long *addr)
 #define WAKEUP_CHARS (SERIAL_XMIT_SIZE-256)
 
 #define STD_COM_FLAGS (0)
+
+#define	JIFFIES_DIFF(n, j)	((n) >= (j) ? (n) - (j) : ULONG_MAX - (n) + (j))
 
 static DECLARE_TASK_QUEUE(tq_cyclades);
 
@@ -746,6 +758,10 @@ static void cy_probe(int, void *, struct pt_regs *);
 static void cyz_poll(unsigned long);
 #ifdef CYCLOM_SHOW_STATUS
 static void show_status(int);
+#endif
+
+#ifdef CONFIG_PROC_FS
+static int cyclades_get_proc_info(char *, char **, off_t , int , int *, void *);
 #endif
 
 /* The Cyclades-Z polling cycle is defined by this variable */
@@ -1202,11 +1218,13 @@ printk("cy_interrupt: rcvd intr, chip %d\n\r", chip);
 							    TTY_FRAME;
                                         *tty->flip.char_buf_ptr++ =
 					  cy_readb(base_addr+(CyRDSR<<index));
+					info->idle_stats.frame_errs++;
                                     }else if(data & CyPARITY){
                                         *tty->flip.flag_buf_ptr++ =
 							    TTY_PARITY;
                                         *tty->flip.char_buf_ptr++ =
 					  cy_readb(base_addr+(CyRDSR<<index));
+					info->idle_stats.parity_errs++;
                                     }else if(data & CyOVERRUN){
                                         *tty->flip.flag_buf_ptr++ =
 							    TTY_OVERRUN;
@@ -1223,6 +1241,7 @@ printk("cy_interrupt: rcvd intr, chip %d\n\r", chip);
                                            *tty->flip.char_buf_ptr++ =
 					    cy_readb(base_addr+(CyRDSR<<index));
                                         }
+					info->idle_stats.overruns++;
                                     /* These two conditions may imply */
                                     /* a normal read should be done. */
                                     /* }else if(data & CyTIMEOUT){ */
@@ -1239,6 +1258,7 @@ printk("cy_interrupt: rcvd intr, chip %d\n\r", chip);
                                 /* there was a software buffer
 				   overrun and nothing could be
 				   done about it!!! */
+				info->idle_stats.overruns++;
                             }
                         } else { /* normal character reception */
                             /* load # chars available from the chip */
@@ -1251,6 +1271,8 @@ printk("cy_interrupt: rcvd intr, chip %d\n\r", chip);
                                info->mon.char_max = char_count;
                             info->mon.char_last = char_count;
 #endif
+			    info->idle_stats.recv_bytes += char_count;
+			    info->idle_stats.recv_idle   = jiffies;
                             while(char_count--){
                                 if (tty->flip.count >= TTY_FLIPBUF_SIZE){
                                         break;
@@ -1345,25 +1367,25 @@ printk("cy_interrupt: xmit intr, chip %d\n\r", chip);
                         info->x_break = 0;
                     }
 
-                    if (!info->xmit_cnt){
-                        cy_writeb((u_long)base_addr+(CySRER<<index),
-                           cy_readb(base_addr+(CySRER<<index)) & ~CyTxMpty);
-                        goto txdone;
-                    }
-                    if (info->xmit_buf == 0){
-                        cy_writeb((u_long)base_addr+(CySRER<<index),
-                           cy_readb(base_addr+(CySRER<<index)) & ~CyTxMpty);
-                        goto txdone;
-                    }
-                    if (info->tty->stopped || info->tty->hw_stopped){
-                        cy_writeb((u_long)base_addr+(CySRER<<index),
-                           cy_readb(base_addr+(CySRER<<index)) & ~CyTxMpty);
-                        goto txdone;
-                    }
                     while (char_count-- > 0){
-                        if (!info->xmit_cnt){
+			if (!info->xmit_cnt){
+                            cy_writeb((u_long)base_addr+(CySRER<<index),
+				cy_readb(base_addr+(CySRER<<index)) & 
+					~CyTxMpty);
+			    goto txdone;
+			}
+			if (info->xmit_buf == 0){
+                            cy_writeb((u_long)base_addr+(CySRER<<index),
+				cy_readb(base_addr+(CySRER<<index)) & 
+					~CyTxMpty);
                             goto txdone;
-                        }
+			}
+			if (info->tty->stopped || info->tty->hw_stopped){
+                            cy_writeb((u_long)base_addr+(CySRER<<index),
+				cy_readb(base_addr+(CySRER<<index)) & 
+					~CyTxMpty);
+                            goto txdone;
+			}
                         /* Because the Embedded Transmit Commands have
                            been enabled, we must check to see if the
 			   escape character, NULL, is being sent.  If it
@@ -1737,6 +1759,8 @@ cyz_poll(unsigned long arg)
 		   info->mon.char_max = char_count;
 		info->mon.char_last = char_count;
 #endif
+		info->idle_stats.recv_bytes += char_count;
+		info->idle_stats.recv_idle   = jiffies;
 		if( tty == 0){
 		    /* flush received characters */
 		    rx_get = (rx_get + char_count) & (rx_bufsize - 1);
@@ -1952,6 +1976,10 @@ startup(struct cyclades_port * info)
 		clear_bit(TTY_IO_ERROR, &info->tty->flags);
 	    }
 	    info->xmit_cnt = info->xmit_head = info->xmit_tail = 0;
+	    memset((char *)&info->idle_stats, 0, sizeof(info->idle_stats));
+	    info->idle_stats.in_use    =
+	    info->idle_stats.recv_idle =
+	    info->idle_stats.xmit_idle = jiffies;
 	restore_flags(flags);
     } else {
       struct FIRM_ID *firm_id;
@@ -2013,6 +2041,10 @@ startup(struct cyclades_port * info)
 	}
 	info->xmit_cnt = info->xmit_head = info->xmit_tail = 0;
 
+	memset((char *)&info->idle_stats, 0, sizeof(info->idle_stats));
+	info->idle_stats.in_use    =
+	info->idle_stats.recv_idle =
+	info->idle_stats.xmit_idle = jiffies;
     }
 
 #ifdef CY_DEBUG_OPEN
@@ -2787,6 +2819,10 @@ cy_write(struct tty_struct * tty, int from_user,
 	    ret += c;
 	}
     }
+
+    info->idle_stats.xmit_bytes += ret;
+    info->idle_stats.xmit_idle   = jiffies;
+
     if (info->xmit_cnt && !tty->stopped && !tty->hw_stopped) {
         start_xmit(info);
     }
@@ -2826,6 +2862,8 @@ cy_put_char(struct tty_struct *tty, unsigned char ch)
         info->xmit_buf[info->xmit_head++] = ch;
         info->xmit_head &= SERIAL_XMIT_SIZE - 1;
         info->xmit_cnt++;
+	info->idle_stats.xmit_bytes++;
+	info->idle_stats.xmit_idle = jiffies;
     restore_flags(flags);
 } /* cy_put_char */
 
@@ -3924,9 +3962,12 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
 	case CYGETCD1400VER:
 	    ret_val = info->chip_rev;
 	    break;
-	case CYZPOLLCYCLE:
-            cyz_polling_cycle = (HZ * arg) / 1000;
+	case CYZSETPOLLCYCLE:
+            cyz_polling_cycle = (arg * HZ) / 1000;
 	    ret_val = 0;
+	    break;
+	case CYZGETPOLLCYCLE:
+            ret_val = (cyz_polling_cycle * 1000) / HZ;
 	    break;
 	case CYSETWAIT:
     	    info->closing_wait = (unsigned short)arg * HZ/100;
@@ -4876,6 +4917,65 @@ show_version(void)
 	__DATE__, __TIME__);
 } /* show_version */
 
+#ifdef CONFIG_PROC_FS
+static int 
+cyclades_get_proc_info(char *buf, char **start, off_t offset, int length,
+		       int *eof, void *data)
+{
+    struct cyclades_port  *info;
+    int i;
+    int len=0;
+    off_t begin=0;
+    off_t pos=0;
+    int size;
+    __u32 cur_jifs = jiffies;
+
+    size = sprintf(buf, "Dev TimeOpen   BytesOut  IdleOut    BytesIn   IdleIn  Overruns  Ldisc\n");
+
+    pos += size;
+    len += size;
+
+    /* Output one line for each known port */
+    for (i = 0; i < NR_PORTS && cy_port[i].line >= 0; i++) {
+	info = &cy_port[i];
+
+	if (info->count)
+	    size = sprintf(buf+len,
+			"%3d %8lu %10lu %8lu %10lu %8lu %9lu %6ld\n",
+			info->line,
+			JIFFIES_DIFF(info->idle_stats.in_use, cur_jifs) / HZ,
+			info->idle_stats.xmit_bytes,
+			JIFFIES_DIFF(info->idle_stats.xmit_idle, cur_jifs) / HZ,
+			info->idle_stats.recv_bytes,
+			JIFFIES_DIFF(info->idle_stats.recv_idle, cur_jifs) / HZ,
+			info->idle_stats.overruns,
+			info->tty->ldisc.num);
+	else
+	    size = sprintf(buf+len,
+			"%3d %8lu %10lu %8lu %10lu %8lu %9lu %6ld\n",
+			info->line, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+	len += size;
+	pos = begin + len;
+
+	if (pos < offset) {
+	    len   = 0;
+	    begin = pos;
+	}
+	if (pos > offset + length)
+	    goto done;
+    }
+    *eof = 1;
+done:
+    *start = buf + (offset - begin);	/* Start of wanted data */
+    len -= (offset - begin);		/* Start slop */
+    if (len > length)
+	len = length;			/* Ending slop */
+    if (len < 0)
+	len = 0;
+    return len;
+}
+#endif
+
 
 /* The serial driver boot-time initialization code!
     Hardware I/O ports are mapped to character special devices on a
@@ -4905,6 +5005,7 @@ cy_init(void))
   unsigned long mailbox;
   unsigned short chip_number;
   int nports;
+  struct proc_dir_entry *ent;
 
     show_version();
 
@@ -5145,6 +5246,16 @@ cy_init(void))
 #endif
     }
 
+#ifdef CONFIG_PROC_FS
+        ent = create_proc_entry("cyclades", S_IFREG | S_IRUGO, 0);
+        ent->read_proc = cyclades_get_proc_info;
+#endif
+#if 0
+#ifdef CONFIG_PROC_FS
+    proc_register(&proc_root, &cyclades_proc_entry);
+#endif
+#endif
+
     return 0;
     
 } /* cy_init */
@@ -5187,6 +5298,10 @@ cleanup_module(void)
             free_irq(cy_card[i].irq,NULL);
         }
     }
+#ifdef CONFIG_PROC_FS
+    remove_proc_entry("cyclades", 0);
+#endif
+
 } /* cleanup_module */
 #else
 /* called by linux/init/main.c to parse command line options */

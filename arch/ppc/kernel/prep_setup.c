@@ -11,6 +11,7 @@
  */
 
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -36,8 +37,9 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/ide.h>
+#include <asm/cache.h>
 
-#ifdef CONFIG_SOUND
+#if defined(CONFIG_SOUND) || defined(CONFIG_SOUND_MODULE)
 #include <../drivers/sound/sound_config.h>
 #include <../drivers/sound/dev_table.h>
 #endif
@@ -60,24 +62,11 @@ extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 extern int rd_image_start;	/* starting block # of image */
 #endif
 
-__initfunc(void prep_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq))
-{
-	ide_ioreg_t port = base;
-	int i = 8;
-
-	while (i--)
-		*p++ = port++;
-	*p++ = base + 0x206;
-	if (irq != NULL)
-		*irq = 0;
-}
-
-
+__prep
 int
 prep_get_cpuinfo(char *buffer)
 {
 	extern char *Motherboard_map_name;
-	extern RESIDUAL res;
 	int len, i;
   
 #ifdef __SMP__
@@ -88,61 +77,41 @@ prep_get_cpuinfo(char *buffer)
   
 	len = sprintf(buffer,"machine\t\t: PReP %s\n",Motherboard_map_name);
 	
-	if ( res.ResidualLength == 0 )
+	len += sprintf(buffer+len,"L2\t\t: ");
+	switch(*((unsigned char *)CACHECRBA) & L2CACHE_MASK)
+	{
+	case L2CACHE_512KB:
+		len += sprintf(buffer+len,"512Kb\n");
+		break;
+	case L2CACHE_256KB:
+		len += sprintf(buffer+len,"256Kb\n");
+		break;
+	case L2CACHE_1MB:
+		len += sprintf(buffer+len,"1MB\n");
+		break;
+	case L2CACHE_NONE:
+		len += sprintf(buffer+len,"none\n");
+		break;
+	default:
+		len += sprintf(buffer+len,"%x\n", *((unsigned char *)CACHECRBA));
+	}
+
+	if ( res->ResidualLength == 0 )
 		return len;
 	
 	/* print info about SIMMs */
 	len += sprintf(buffer+len,"simms\t\t: ");
-	for ( i = 0 ; (res.ActualNumMemories) && (i < MAX_MEMS) ; i++ )
+	for ( i = 0 ; (res->ActualNumMemories) && (i < MAX_MEMS) ; i++ )
 	{
-		if ( res.Memories[i].SIMMSize != 0 )
+		if ( res->Memories[i].SIMMSize != 0 )
 			len += sprintf(buffer+len,"%d:%ldM ",i,
-				       (res.Memories[i].SIMMSize > 1024) ?
-				       res.Memories[i].SIMMSize>>20 :
-				       res.Memories[i].SIMMSize);
+				       (res->Memories[i].SIMMSize > 1024) ?
+				       res->Memories[i].SIMMSize>>20 :
+				       res->Memories[i].SIMMSize);
 	}
 	len += sprintf(buffer+len,"\n");
 
 #if 0	
-	/* TLB */
-	len += sprintf(buffer+len,"tlb\t\t:");
-	switch(res.VitalProductData.TLBAttrib)
-	{
-	case CombinedTLB:
-		len += sprintf(buffer+len," %ld entries\n",
-			       res.VitalProductData.TLBSize);
-		break;
-	case SplitTLB:
-		len += sprintf(buffer+len," (split I/D) %ld/%ld entries\n",
-			       res.VitalProductData.I_TLBSize,
-			       res.VitalProductData.D_TLBSize);
-		break;
-	case NoneTLB:
-		len += sprintf(buffer+len," not present\n");
-		break;
-	}
-	/* L1 */
-	len += sprintf(buffer+len,"l1\t\t: ");
-	switch(res.VitalProductData.CacheAttrib)
-	{
-	case CombinedCAC:
-		len += sprintf(buffer+len,"%ldkB LineSize %ldB\n",
-			       res.VitalProductData.CacheSize,
-			       res.VitalProductData.CacheLineSize);
-		break;
-	case SplitCAC:
-		len += sprintf(buffer+len,"(split I/D) %ldkB/%ldkB Linesize %ldB/%ldB\n",
-			       res.VitalProductData.I_CacheSize,
-			       res.VitalProductData.D_CacheSize,
-			       res.VitalProductData.D_CacheLineSize,
-			       res.VitalProductData.D_CacheLineSize);
-		break;
-	case NoneCAC:
-		len += sprintf(buffer+len,"not present\n");
-		break;
-	}
-#endif
-
 	/* L2 */
 	if ( (inb(IBM_EQUIP_PRESENT) & 1) == 0) /* l2 present */
 	{
@@ -154,6 +123,7 @@ prep_get_cpuinfo(char *buffer)
 	{
 		len += sprintf(buffer+len,"l2\t\t: not present\n");
 	}
+#endif	
 
 	return len;
 }
@@ -186,19 +156,6 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 		break;
 	}
 	
-#ifdef CONFIG_BLK_DEV_INITRD
-	/* initrd_start and size are setup by boot/head.S and kernel/head.S */
-	if ( initrd_start )
-	{
-		if (initrd_end > *memory_end_p)
-		{
-			printk("initrd extends beyond end of memory "
-			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-			       initrd_end,*memory_end_p);
-			initrd_start = 0;
-		}
-	}
-#endif
 	/* make the serial port the console */
 	/* strcat(cmd_line,"console=ttyS0,9600n8"); */
 	/* use the normal console but send output to the serial port, too */
@@ -257,8 +214,21 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 #ifdef CONFIG_VGA_CONSOLE
         conswitchp = &vga_con;
 #endif
-#ifdef CONFIG_ABSCON_COMPAT
-	/* Console wrapper */
-	conswitchp = &compat_con;
-#endif
 }
+
+__initfunc(void prep_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq))
+{
+	ide_ioreg_t port = base;
+	int i = 8;
+
+	while (i--)
+		*p++ = port++;
+	*p++ = base + 0x206;
+	if (irq != NULL)
+		*irq = 0;
+}
+
+#ifdef CONFIG_SOUND_MODULE
+EXPORT_SYMBOL(ppc_cs4232_dma);
+EXPORT_SYMBOL(ppc_cs4232_dma2);
+#endif

@@ -1,4 +1,4 @@
-/* $Id: VIScsum.S,v 1.2 1997/08/08 08:34:05 jj Exp $
+/* $Id: VIScsum.S,v 1.3 1998/06/12 14:53:57 jj Exp $
  * VIScsum.S: High bandwidth IP checksumming utilizing the UltraSparc
  *            Visual Instruction Set.
  *
@@ -26,6 +26,7 @@
 #ifdef __KERNEL__
 #include <asm/head.h>
 #include <asm/asi.h>
+#include <asm/visasm.h>
 #else
 #define ASI_BLK_P	0xf0
 #define FRPS_FEF	0x04
@@ -278,13 +279,13 @@ csum_partial:
 	 add		%o2, 1, %o2		/*  IEU0				*/
 3:	cmp		%o1, 0xc0		/*  IEU1	Group			*/
 	blu,pn		%icc, 20f		/*  CTI					*/
-	 sllx		%o2, 32, %g1		/*  IEU0				*/
-	addcc		%o2, %g1, %o2		/*  IEU1	Group			*/
+	 sllx		%o2, 32, %g5		/*  IEU0				*/
+#ifdef __KERNEL__
+	VISEntry
+#endif
+	addcc		%o2, %g5, %o2		/*  IEU1	Group			*/
 	sub		%o1, 0xc0, %o1		/*  IEU0				*/
 	wr		%g0, ASI_BLK_P, %asi	/*  LSU		Group			*/
-#ifdef __KERNEL__
-	wr		%g0, FPRS_FEF, %fprs	/*  LSU		Group			*/
-#endif
 	membar		#StoreLoad		/*  LSU		Group			*/
 	srlx		%o2, 32, %o2		/*  IEU0	Group			*/
 	bcs,a,pn	%xcc, 1f		/*  CTI					*/
@@ -340,7 +341,7 @@ csum_partial:
 	END_THE_TRICK(f60,f62,f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30)
 	and		%o1, 0x3f, %o1		/*  IEU0	Group			*/
 #ifdef __KERNEL__
-	wr		%g0, 0, %fprs		/*  LSU		Group			*/
+	VISExit
 #endif
 20:	andcc		%o1, 0xf0, %g1		/*  IEU1	Group			*/
 	be,pn		%icc, 23f		/*  CTI					*/

@@ -23,7 +23,7 @@ CFLAGS_seagate.o =   -DARBITRATE -DSLOW_HANDSHAKE -DFAST32 -DPARITY
 ifeq (${CFLAGS},)
 CFLAGS = -D__KERNEL__=1 \
 	-DMODULE -Wall -Wstrict-prototypes -I. -I../../include \
-	-O2 -fomit-frame-pointer -m486
+	-O2 -fomit-frame-pointer
 
 include ../../.config
 
@@ -524,6 +524,10 @@ else
   ifeq ($(CONFIG_BLK_DEV_IDESCSI),m)
   M_OBJS += ide-scsi.o
   endif
+endif
+
+ifeq ($(CONFIG_JAZZ_ESP),y)
+L_OBJS += NCR53C9x.o jazz_esp.o
 endif
 
 include $(TOPDIR)/Rules.make

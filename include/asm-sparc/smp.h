@@ -43,16 +43,6 @@ struct cpuinfo_sparc {
 extern struct cpuinfo_sparc cpu_data[NR_CPUS];
 extern unsigned long cpu_offset[NR_CPUS];
 
-struct klock_info {
-	unsigned char kernel_flag;
-	unsigned char akp;
-};
-
-extern struct klock_info klock_info;
-
-#define KLOCK_HELD       0xff
-#define KLOCK_CLEAR      0x00
-
 /*
  *	Private routines/data
  */
@@ -108,6 +98,10 @@ extern __inline__ void xc5(smpfunc_t func, unsigned long arg1, unsigned long arg
 extern __volatile__ int cpu_number_map[NR_CPUS];
 extern __volatile__ int __cpu_logical_map[NR_CPUS];
 extern unsigned long smp_proc_in_lock[NR_CPUS];
+
+/* As idle task checks need_resched in a tight loop, it is not necessary to
+   wake it up. -jj */
+#define smp_send_reschedule(cpu) do {} while (0)
 
 extern __inline__ int cpu_logical_map(int cpu)
 {

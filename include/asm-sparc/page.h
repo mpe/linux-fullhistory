@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.42 1998/05/01 13:55:21 mj Exp $
+/* $Id: page.h,v 1.43 1998/05/11 08:40:11 davem Exp $
  * page.h:  Various defines and such for MMU operations on the Sparc for
  *          the Linux kernel.
  *
@@ -28,8 +28,6 @@
 
 #ifndef __ASSEMBLY__
 
-#define get_user_page(vaddr)		__get_free_page(GFP_KERNEL)
-#define free_user_page(page, addr)	free_page(addr)
 #define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
 #define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
 
@@ -270,8 +268,7 @@ extern unsigned long sparc_unmapped_base;
 
 BTFIXUPDEF_SETHI(sparc_unmapped_base)
 
-#define TASK_UNMAPPED_BASE(off)	BTFIXUP_SETHI(sparc_unmapped_base)
-#define TASK_UNMAPPED_ALIGN(addr, off)	PAGE_ALIGN(addr)
+#define TASK_UNMAPPED_BASE	BTFIXUP_SETHI(sparc_unmapped_base)
 
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)  (((addr)+PAGE_SIZE-1)&PAGE_MASK)

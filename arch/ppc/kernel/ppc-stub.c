@@ -1,4 +1,4 @@
-/* $Id: ppc-stub.c,v 1.2 1998/04/11 17:29:03 geert Exp $
+/* $Id: ppc-stub.c,v 1.4 1998/07/28 08:25:01 paulus Exp $
  * ppc-stub.c:  KGDB support for the Linux kernel.
  *
  * adapted from arch/sparc/kernel/sparc-stub.c for the PowerPC
@@ -385,7 +385,6 @@ void set_debug_traps(void)
 	debugger_iabr_match = kgdb_iabr_match;
 	debugger_dabr_match = kgdb_dabr_match;
 
-	kgdb_interruptible(1);
 	initialized = 1;
 }
 

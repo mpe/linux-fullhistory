@@ -271,8 +271,9 @@ check_if_enabled:
 		printk("%s: bad irq (%d): will probe later\n", d->name, pciirq);
 		pciirq = 0;
 	} else {
-#ifdef __sparc_v9__
-		printk("%s: 100%% native mode on irq %08x\n", d->name, pciirq);
+#ifdef __sparc__
+		printk("%s: 100%% native mode on irq %s\n",
+		       d->name, __irq_itoa(pciirq));
 #else
 		printk("%s: 100%% native mode on irq %d\n", d->name, pciirq);
 #endif

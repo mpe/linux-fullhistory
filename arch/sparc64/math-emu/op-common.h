@@ -83,8 +83,17 @@ do {								\
 	  {							\
 	    _FP_FRAC_SRS_##wc(X, X##_e, _FP_WFRACBITS_##fs);	\
 	    _FP_ROUND(wc, X);					\
-	    X##_e = _FP_FRAC_OVERP_##wc(fs, X);			\
-	    _FP_FRAC_SRL_##wc(X, _FP_WORKBITS);			\
+	    _FP_FRAC_SLL_##wc(X, 1);				\
+	    if (_FP_FRAC_OVERP_##wc(fs, X))			\
+	      {							\
+	        X##_e = 1;					\
+	        _FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);	\
+	      }							\
+	    else						\
+	      {							\
+		X##_e = 0;					\
+		_FP_FRAC_SRL_##wc(X, _FP_WORKBITS+1);		\
+	      }							\
 	  }							\
 	else							\
 	  {							\

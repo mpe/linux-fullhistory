@@ -56,11 +56,6 @@ unsigned long max_mapnr = 0;
 unsigned long num_physpages = 0;
 void * high_memory = NULL;
 
-/* Low and high watermarks for page table cache.
-   The system should try to have pgt_water[0] <= cache elements <= pgt_water[1]
- */
-int pgt_cache_water[2] = { 25, 50 };
-
 /*
  * We special-case the C-O-W ZERO_PAGE, because it's such
  * a common occurrence (no need to read the page to know
@@ -125,7 +120,19 @@ static inline void free_one_pgd(pgd_t * dir)
 		free_one_pmd(pmd+j);
 	pmd_free(pmd);
 }
-	
+
+/* Low and high watermarks for page table cache.
+   The system should try to have pgt_water[0] <= cache elements <= pgt_water[1]
+ */
+int pgt_cache_water[2] = { 25, 50 };
+
+/* Returns the number of pages freed */
+int check_pgt_cache(void)
+{
+	return do_check_pgt_cache(pgt_cache_water[0], pgt_cache_water[1]);
+}
+
+
 /*
  * This function clears all user-level page tables of a process - this
  * is needed by execve(), so that old pages aren't in the way.
@@ -141,8 +148,7 @@ void clear_page_tables(struct task_struct * tsk)
 		free_one_pgd(page_dir + i);
 
 	/* keep the page table cache within bounds */
-	do_check_pgt_cache(pgtable_cache_water[0],
-			   pgtable_cache_water[1]);
+	check_pgt_cache();
 	return;
 
 out_bad:
@@ -171,8 +177,7 @@ void free_page_tables(struct mm_struct * mm)
 	pgd_free(page_dir);
 
 	/* keep the page table cache within bounds */
-	do_check_pgt_cache(pgtable_cache_water[0],
-			   pgtable_cache_water[1]);
+	check_pgt_cache();
 out:
 	return;
 
@@ -953,11 +958,4 @@ void make_pages_present(unsigned long addr, unsigned long end)
 		handle_mm_fault(current, vma, addr, write);
 		addr += PAGE_SIZE;
 	}
-}
-
-/* Returns the number of pages freed */
-int check_pgt_cache(void)
-{
-	return do_check_pgt_cache(pgtable_cache_water[0],
-				  pgtable_cache_water[1]);
 }

@@ -12,9 +12,11 @@
  *	SunOS/Solaris /dev/audio interface
  */
 
+#if defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2)
 #include <linux/types.h>
 #include <linux/time.h>
 #include <linux/ioctl.h>
+#endif
 
 /*
  * This structure contains state information for audio device IO streams.
@@ -262,6 +264,9 @@ struct sparcaudio_driver
 	void *private;
 	unsigned long flags;
 
+        /* This device */
+        struct linux_sbus_device *dev;
+ 
 	/* Processes blocked on open() sit here. */
 	struct wait_queue *open_wait;
 
@@ -286,12 +291,14 @@ struct sparcaudio_driver
 struct sparcaudio_operations
 {
 	int (*open)(struct inode *, struct file *, struct sparcaudio_driver *);
-	void (*release)(struct inode *, struct file *, struct sparcaudio_driver *);
-	int (*ioctl)(struct inode *, struct file *, unsigned int, unsigned long,
-		     struct sparcaudio_driver *);
+	void (*release)(struct inode *, struct file *, struct 
+			sparcaudio_driver *);
+	int (*ioctl)(struct inode *, struct file *, unsigned int, 
+		     unsigned long, struct sparcaudio_driver *);
 
 	/* Ask driver to begin playing a buffer. */
-	void (*start_output)(struct sparcaudio_driver *, __u8 *, unsigned long);
+	void (*start_output)(struct sparcaudio_driver *, __u8 *, 
+			     unsigned long);
 
 	/* Ask driver to stop playing a buffer. */
 	void (*stop_output)(struct sparcaudio_driver *);

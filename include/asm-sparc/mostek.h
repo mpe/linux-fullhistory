@@ -1,8 +1,9 @@
-/* $Id: mostek.h,v 1.8 1996/11/04 00:45:30 ecd Exp $
+/* $Id: mostek.h,v 1.9 1998/07/28 16:53:25 jj Exp $
  * mostek.h:  Describes the various Mostek time of day clock registers.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Thomas K. Dyas (tdyas@eden.rutgers.edu)
+ * Added intersil code 05/25/98 Chris Davis (cdavis@cois.on.ca)
  */
 
 #ifndef _SPARC_MOSTEK_H
@@ -114,7 +115,46 @@ struct mostek48t08 {
 };
 extern struct mostek48t08 *mstk48t08_regs;
 
-enum sparc_clock_type {	MSTK48T02, MSTK48T08, MSTK_INVALID };
 extern enum sparc_clock_type sp_clock_typ;
+
+#ifdef CONFIG_SUN4
+enum sparc_clock_type {	MSTK48T02, MSTK48T08, \
+INTERSIL, MSTK_INVALID };
+#else
+enum sparc_clock_type {	MSTK48T02, MSTK48T08, \
+MSTK_INVALID };
+#endif
+
+#ifdef CONFIG_SUN4
+/* intersil on a sun 4/260 code  data from harris doc */
+struct intersil_dt {
+        volatile unsigned char int_csec;
+        volatile unsigned char int_hour;
+        volatile unsigned char int_min;
+        volatile unsigned char int_sec;
+        volatile unsigned char int_month;
+        volatile unsigned char int_day;
+        volatile unsigned char int_year;
+        volatile unsigned char int_dow;
+};
+
+struct intersil {
+	struct intersil_dt clk;
+	struct intersil_dt cmp;
+	volatile unsigned char int_intr_reg;
+	volatile unsigned char int_cmd_reg;
+};
+
+#define INTERSIL_STOP        0x0
+#define INTERSIL_START       0x8
+#define INTERSIL_INTR_DISABLE   0x0
+#define INTERSIL_INTR_ENABLE   0x10
+#define INTERSIL_32K		0x0
+#define INTERSIL_NORMAL		0x0
+#define INTERSIL_24H		0x4 
+#define INTERSIL_INT_100HZ	0x2
+
+/* end of intersil info */
+#endif
 
 #endif /* !(_SPARC_MOSTEK_H) */

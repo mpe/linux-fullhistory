@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.87 1998/03/29 03:48:16 shadow Exp $
+/* $Id: sys_sunos.c,v 1.91 1998/06/16 04:37:04 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -59,8 +59,6 @@
 
 /* NR_OPEN is now larger and dynamic in recent kernels. */
 #define SUNOS_NR_OPEN	256
-
-extern unsigned long get_unmapped_area(unsigned long addr, unsigned long len);
 
 /* We use the SunOS mmap() semantics. */
 asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
@@ -569,25 +567,6 @@ out:
 	return error;
 }
 
-asmlinkage int sunos_getdomainname(char *name, int len)
-{
-        int nlen = strlen(system_utsname.domainname);
-	int ret = -EFAULT;
-
-	lock_kernel();
-        if (nlen < len)
-                len = nlen;
-
-	if(len > __NEW_UTS_LEN)
-		goto out;
-	if(copy_to_user(name, system_utsname.domainname, len))
-		goto out;
-	ret = 0;
-out:
-	unlock_kernel();
-	return ret;
-}
-
 struct sunos_utsname {
 	char sname[9];
 	char nname[9];
@@ -601,7 +580,7 @@ asmlinkage int sunos_uname(struct sunos_utsname *name)
 {
 	int ret = -EFAULT;
 
-	lock_kernel();
+	down(&uts_sem);
 	if(!name)
 		goto out;
 	if(copy_to_user(&name->sname[0], &system_utsname.sysname[0], sizeof(name->sname) - 1))
@@ -613,7 +592,7 @@ asmlinkage int sunos_uname(struct sunos_utsname *name)
 	copy_to_user(&name->mach[0], &system_utsname.machine[0], sizeof(name->mach) - 1);
 	ret = 0;
 out:
-	unlock_kernel();
+	up(&uts_sem);
 	return ret;
 }
 

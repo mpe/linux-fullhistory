@@ -4,7 +4,7 @@
  * Copyright (C) 1996 David S. Miller
  * Copyright (C) 1997 Miguel de Icaza
  *
- * $Id: sysirix.c,v 1.9 1998/05/01 01:34:35 ralf Exp $
+ * $Id: sysirix.c,v 1.10 1998/05/08 21:01:33 davem Exp $
  */
 
 #include <linux/kernel.h>

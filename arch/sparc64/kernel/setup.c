@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.26 1998/07/08 10:21:15 jj Exp $
+/*  $Id: setup.c,v 1.30 1998/07/24 09:50:08 jj Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -66,9 +66,7 @@ unsigned int phys_bytes_of_ram, end_of_phys_memory;
 
 extern unsigned long sparc64_ttable_tl0;
 #if CONFIG_SUN_CONSOLE
-void console_restore_palette(void) {
-/* FIXME */
-}
+void (*prom_palette)(int);
 #endif
 asmlinkage void sys_sync(void);	/* it's really int */
 
@@ -82,7 +80,8 @@ void prom_sync_me(long *args)
 	__asm__ __volatile__("wrpr %0, 0x0, %%tba\n\t" : : "r" (&sparc64_ttable_tl0));
 
 #ifdef CONFIG_SUN_CONSOLE
-        console_restore_palette ();
+	if (prom_palette)
+        	prom_palette (1);
 #endif
 	prom_printf("PROM SYNC COMMAND...\n");
 	show_free_areas();
@@ -193,6 +192,15 @@ __initfunc(static void boot_flags_init(char *commands))
 				} else if (!strncmp (commands, "ttyb", 4)) {
 					console_fb = 3;
 					prom_printf ("Using /dev/ttyb as console.\n");
+#if defined(CONFIG_PROM_CONSOLE)
+				} else if (!strncmp (commands, "prom", 4)) {
+					char *p;
+					
+					for (p = commands - 8; *p && *p != ' '; p++)
+						*p = ' ';
+					conswitchp = &prom_con;
+					console_fb = 1;
+#endif
 				} else {
 					console_fb = 1;
 				}
@@ -282,6 +290,12 @@ __initfunc(void setup_arch(char **cmdline_p,
 	strcpy(saved_command_line, *cmdline_p);
 
 	printk("ARCH: SUN4U\n");
+
+#ifdef CONFIG_DUMMY_CONSOLE
+	conswitchp = &dummy_con;
+#elif defined(CONFIG_PROM_CONSOLE)
+	conswitchp = &prom_con;
+#endif
 
 	boot_flags_init(*cmdline_p);
 
@@ -409,13 +423,8 @@ __initfunc(void setup_arch(char **cmdline_p,
 #else
 	serial_console = 0;
 #endif
-	if (!serial_console) {
-#ifdef CONFIG_PROM_CONSOLE
-		conswitchp = &prom_con;
-#elif defined(CONFIG_DUMMY_CONSOLE)	
-		conswitchp = &dummy_con;
-#endif
-	}
+	if (serial_console)
+		conswitchp = NULL;
 }
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)

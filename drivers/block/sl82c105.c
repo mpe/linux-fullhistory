@@ -38,7 +38,10 @@ void ide_init_sl82c105(ide_hwif_t *hwif)
 	pci_write_config_dword(dev, 0x40, 0x10ff08a1);
 }
 
-#if 0	/* nobody ever calls these.. ?? */
+/* nobody ever calls these.. ??  -mlord
+ *
+ * Yes somebody certainly does, check asm-ppc/ide.h for the place.  -DaveM
+ */
 void chrp_ide_probe(void) {
 
 	struct pci_dev *pdev = pci_find_device(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105, NULL);
@@ -68,4 +71,3 @@ void chrp_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
         if (irq != NULL)
                 *irq = chrp_ide_irq;
 }
-#endif

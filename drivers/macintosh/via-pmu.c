@@ -16,6 +16,10 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/sched.h>
+#include <linux/miscdevice.h>
+#include <linux/blkdev.h>
+#include <linux/pci.h>
+#include <linux/malloc.h>
 #include <asm/prom.h>
 #include <asm/adb.h>
 #include <asm/pmu.h>
@@ -24,6 +28,10 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/init.h>
+#include <asm/irq.h>
+
+/* Misc minor number allocated for /dev/pmu */
+#define PMU_MINOR	154
 
 static volatile unsigned char *via;
 
@@ -81,6 +89,9 @@ static int pmu_adb_flags;
 static int adb_dev_map = 0;
 static struct adb_request bright_req_1, bright_req_2;
 static struct device_node *vias;
+
+int asleep;
+struct notifier_block *sleep_notifier_list;
 
 static int init_pmu(void);
 static int pmu_queue_request(struct adb_request *req);
@@ -593,6 +604,7 @@ pmu_handle_data(unsigned char *data, int len, struct pt_regs *regs)
 {
 	static int show_pmu_ints = 1;
 
+	asleep = 0;
 	if (len < 1) {
 		adb_int_pending = 0;
 		return;
@@ -663,17 +675,243 @@ static void
 set_brightness(int level)
 {
 	backlight_bright = LEVEL_TO_BRIGHT(level);
+	if (!backlight_enabled)
+		return;
 	if (bright_req_1.complete)
 		pmu_request(&bright_req_1, NULL, 2, PMU_BACKLIGHT_BRIGHT,
 			    backlight_bright);
-	if (bright_req_2.complete) {
-		backlight_enabled = backlight_bright < 0x7f;
+	if (bright_req_2.complete)
 		pmu_request(&bright_req_2, NULL, 2, PMU_BACKLIGHT_CTRL,
-			    backlight_enabled? 0x81: 1);
-	}
+			    backlight_bright < 0x7f? 0x81: 1);
 }
 
 static void
 set_volume(int level)
 {
 }
+
+#ifdef CONFIG_PMAC_PBOOK
+
+/*
+ * This struct is used to store config register values for
+ * PCI devices which may get powered off when we sleep.
+ */
+static struct pci_save {
+	u16	command;
+	u16	cache_lat;
+	u16	intr;
+} *pbook_pci_saves;
+static int n_pbook_pci_saves;
+
+static inline void
+pbook_pci_save(void)
+{
+	int npci;
+	struct pci_dev *pd;
+	struct pci_save *ps;
+
+	npci = 0;
+	for (pd = pci_devices; pd != NULL; pd = pd->next)
+		++npci;
+	n_pbook_pci_saves = npci;
+	if (npci == 0)
+		return;
+	ps = (struct pci_save *) kmalloc(npci * sizeof(*ps), GFP_KERNEL);
+	pbook_pci_saves = ps;
+	if (ps == NULL)
+		return;
+
+	for (pd = pci_devices; pd != NULL && npci != 0; pd = pd->next) {
+		pci_read_config_word(pd, PCI_COMMAND, &ps->command);
+		pci_read_config_word(pd, PCI_CACHE_LINE_SIZE, &ps->cache_lat);
+		pci_read_config_word(pd, PCI_INTERRUPT_LINE, &ps->intr);
+		++ps;
+		--npci;
+	}
+}
+
+static inline void
+pbook_pci_restore(void)
+{
+	u16 cmd;
+	struct pci_save *ps = pbook_pci_saves;
+	struct pci_dev *pd;
+	int j;
+
+	for (pd = pci_devices; pd != NULL; pd = pd->next, ++ps) {
+		if (ps->command == 0)
+			continue;
+		pci_read_config_word(pd, PCI_COMMAND, &cmd);
+		if ((ps->command & ~cmd) == 0)
+			continue;
+		switch (pd->hdr_type) {
+		case PCI_HEADER_TYPE_NORMAL:
+			for (j = 0; j < 6; ++j)
+				pci_write_config_dword(pd,
+					PCI_BASE_ADDRESS_0 + j*4,
+					pd->base_address[j]);
+			pci_write_config_dword(pd, PCI_ROM_ADDRESS,
+				pd->rom_address);
+			pci_write_config_word(pd, PCI_CACHE_LINE_SIZE,
+				ps->cache_lat);
+			pci_write_config_word(pd, PCI_INTERRUPT_LINE,
+				ps->intr);
+			pci_write_config_word(pd, PCI_COMMAND, ps->command);
+			break;
+			/* other header types not restored at present */
+		}
+	}
+}
+
+/*
+ * Put the powerbook to sleep.
+ */
+#define IRQ_ENABLE	((unsigned int *)0xf3000024)
+#define MEM_CTRL	((unsigned int *)0xf8000070)
+
+int powerbook_sleep(void)
+{
+	int ret, i, x;
+	static int save_backlight;
+	static unsigned int save_irqen;
+	unsigned long msr;
+	unsigned int hid0;
+	unsigned long p, wait;
+	struct adb_request sleep_req;
+
+	/* Notify device drivers */
+	ret = notifier_call_chain(&sleep_notifier_list, PBOOK_SLEEP, NULL);
+	if (ret & NOTIFY_STOP_MASK)
+		return -EBUSY;
+
+	/* Sync the disks. */
+	/* XXX It would be nice to have some way to ensure that
+	 * nobody is dirtying any new buffers while we wait. */
+	fsync_dev(0);
+
+	/* Turn off the display backlight */
+	save_backlight = backlight_enabled;
+	if (save_backlight)
+		pmu_enable_backlight(0);
+
+	/* Give the disks a little time to actually finish writing */
+	for (wait = jiffies + (HZ/4); jiffies < wait; )
+		mb();
+
+	/* Disable all interrupts except pmu */
+	save_irqen = in_le32(IRQ_ENABLE);
+	for (i = 0; i < 32; ++i)
+		if (i != vias->intrs[0].line && (save_irqen & (1 << i)))
+			disable_irq(i);
+	asm volatile("mtdec %0" : : "r" (0x7fffffff));
+
+	/* Save the state of PCI config space for some slots */
+	pbook_pci_save();
+
+	/* Set the memory controller to keep the memory refreshed
+	   while we're asleep */
+	for (i = 0x403f; i >= 0x4000; --i) {
+		out_be32(MEM_CTRL, i);
+		do {
+			x = (in_be32(MEM_CTRL) >> 16) & 0x3ff;
+		} while (x == 0);
+		if (x >= 0x100)
+			break;
+	}
+
+	/* Ask the PMU to put us to sleep */
+	pmu_request(&sleep_req, NULL, 5, PMU_SLEEP, 'M', 'A', 'T', 'T');
+	while (!sleep_req.complete)
+		mb();
+	/* displacement-flush the L2 cache - necessary? */
+	for (p = KERNELBASE; p < KERNELBASE + 0x100000; p += 0x1000)
+		i = *(volatile int *)p;
+	asleep = 1;
+
+	/* Put the CPU into sleep mode */
+	asm volatile("mfspr %0,1008" : "=r" (hid0) :);
+	hid0 = (hid0 & ~(HID0_NAP | HID0_DOZE)) | HID0_SLEEP;
+	asm volatile("mtspr 1008,%0" : : "r" (hid0));
+	save_flags(msr);
+	msr |= MSR_POW | MSR_EE;
+	restore_flags(msr);
+	udelay(10);
+
+	/* OK, we're awake again, start restoring things */
+	out_be32(MEM_CTRL, 0x3f);
+	pbook_pci_restore();
+
+	/* wait for the PMU interrupt sequence to complete */
+	while (asleep)
+		mb();
+
+	/* reenable interrupts */
+	for (i = 0; i < 32; ++i)
+		if (i != vias->intrs[0].line && (save_irqen & (1 << i)))
+			enable_irq(i);
+
+	/* Notify drivers */
+	notifier_call_chain(&sleep_notifier_list, PBOOK_WAKE, NULL);
+
+	/* reenable ADB autopoll */
+	pmu_adb_autopoll(1);
+
+	/* Turn on the screen backlight, if it was on before */
+	if (save_backlight)
+		pmu_enable_backlight(1);
+
+	return 0;
+}
+
+/*
+ * Support for /dev/pmu device
+ */
+static int pmu_open(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static ssize_t pmu_read(struct file *file, char *buf,
+			size_t count, loff_t *ppos)
+{
+	return 0;
+}
+
+static ssize_t pmu_write(struct file *file, const char *buf,
+			 size_t count, loff_t *ppos)
+{
+	return 0;
+}
+
+static int pmu_ioctl(struct inode * inode, struct file *filp,
+		     u_int cmd, u_long arg)
+{
+	switch (cmd) {
+	case PMU_IOC_SLEEP:
+		return powerbook_sleep();
+	}
+	return -EINVAL;
+}
+
+static struct file_operations pmu_device_fops = {
+	NULL,		/* no seek */
+	pmu_read,
+	pmu_write,
+	NULL,		/* no readdir */
+	NULL,		/* no poll yet */
+	pmu_ioctl,
+	NULL,		/* no mmap */
+	pmu_open,
+	NULL		/* no release */
+};
+
+static struct miscdevice pmu_device = {
+	PMU_MINOR, "pmu", &pmu_device_fops
+};
+
+void pmu_device_init(void)
+{
+	if (via)
+		misc_register(&pmu_device);
+}
+#endif /* CONFIG_PMAC_PBOOK */

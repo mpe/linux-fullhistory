@@ -8,14 +8,13 @@
 #define _SPARC64_FPUMACRO_H
 
 #include <asm/asi.h>
+#include <asm/visasm.h>
 
 struct fpustate {
 	u32	regs[64];
-	u64	fsr;
-	u64	gsr;
 };
 
-#define FPUSTATE (struct fpustate *)(((unsigned long)current) + (((PAGE_SIZE<<1)-((64*4)+(2*8))) & ~(64 - 1)))
+#define FPUSTATE (struct fpustate *)(((unsigned long)current) + AOFF_task_fpregs)
 
 extern __inline__ unsigned long fprs_read(void)
 {

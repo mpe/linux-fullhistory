@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.40 1998/03/28 08:29:26 davem Exp $
+/* $Id: sys_sparc.c,v 1.46 1998/08/03 23:58:01 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -37,19 +37,11 @@ extern asmlinkage unsigned long sys_brk(unsigned long brk);
 
 asmlinkage unsigned long sparc_brk(unsigned long brk)
 {
-	unsigned long ret;
-
-	lock_kernel();
 	if(ARCH_SUN4C_SUN4) {
-		if(brk >= 0x20000000 && brk < 0xe0000000) {
-			ret = current->mm->brk;
-			goto out;
-		}
+		if(brk >= 0x20000000 && brk < 0xe0000000)
+			return current->mm->brk;
 	}
-	ret = sys_brk(brk);
-out:
-	unlock_kernel();
-	return ret;
+	return sys_brk(brk);
 }
 
 /*
@@ -180,8 +172,6 @@ out:
 	unlock_kernel();
 	return err;
 }
-
-extern unsigned long get_unmapped_area(unsigned long addr, unsigned long len);
 
 /* Linux version of mmap */
 asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
@@ -334,22 +324,22 @@ asmlinkage int sys_pause(void)
 
 asmlinkage int sys_getdomainname(char *name, int len)
 {
-	int nlen;
-	int err = -EFAULT;
-	
-	down(&uts_sem);
-	
-	nlen = strlen(system_utsname.domainname);
+ 	int nlen;
+ 	int err = -EFAULT;
+ 	
+ 	down(&uts_sem);
+ 	
+	nlen = strlen(system_utsname.domainname) + 1;
 
 	if (nlen < len)
 		len = nlen;
 	if(len > __NEW_UTS_LEN)
-		goto done
+		goto done;
 	if(copy_to_user(name, system_utsname.domainname, len))
 		goto done;
-	err=0;
-done:	
-	up(&uts_sem);	
+	err = 0;
+done:
+	up(&uts_sem);
 	return err;
 }
 

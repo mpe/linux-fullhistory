@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.49 1998/04/06 16:09:38 jj Exp $
+/* $Id: traps.c,v 1.51 1998/06/12 14:54:20 jj Exp $
  * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -316,10 +316,10 @@ void do_fpe_common(struct pt_regs *regs)
 
 void do_fpieee(struct pt_regs *regs)
 {
-#ifdef DEBUG_FPU	
-	struct fpustate *f = FPUSTATE;
-
-	printk("fpieee %016lx\n", f->fsr);
+#ifdef DEBUG_FPU
+	save_and_clear_fpu();
+	
+	printk("fpieee %016lx\n", current->tss.xfsr[0]);
 #endif
 	do_fpe_common(regs);
 }
@@ -331,7 +331,8 @@ void do_fpother(struct pt_regs *regs)
 	struct fpustate *f = FPUSTATE;
 	int ret = 0;
 
-	switch ((f->fsr & 0x1c000)) {
+	save_and_clear_fpu();
+	switch ((current->tss.xfsr[0] & 0x1c000)) {
 	case (2 << 14): /* unfinished_FPop */
 	case (3 << 14): /* unimplemented_FPop */
 		ret = do_mathemu(regs, f);
@@ -339,7 +340,7 @@ void do_fpother(struct pt_regs *regs)
 	}
 	if (ret) return;
 #ifdef DEBUG_FPU	
-	printk("fpother %016lx\n", f->fsr);
+	printk("fpother %016lx\n", current->tss.xfsr[0]);
 #endif
 	do_fpe_common(regs);
 }

@@ -216,6 +216,12 @@ int shrink_mmap(int priority, int gfp_mask)
 
 	page = mem_map + clock;
 	do {
+		if (PageSkip(page)) {
+			/* next_hash is overloaded for PageSkip */
+			page = page->next_hash;
+			clock = page->map_nr;
+		}
+		
 		if (shrink_one_page(page, gfp_mask))
 			return 1;
 		count_max--;
@@ -223,7 +229,7 @@ int shrink_mmap(int priority, int gfp_mask)
 			count_min--;
 		page++;
 		clock++;
-		if (clock >= limit) {
+		if (clock >= max_mapnr) {
 			clock = 0;
 			page = mem_map;
 		}

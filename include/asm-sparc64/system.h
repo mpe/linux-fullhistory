@@ -1,10 +1,11 @@
-/* $Id: system.h,v 1.39 1998/05/01 09:33:55 davem Exp $ */
+/* $Id: system.h,v 1.42 1998/07/29 01:32:51 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
 #include <asm/ptrace.h>
 #include <asm/processor.h>
 #include <asm/asm_offsets.h>
+#include <asm/visasm.h>
 
 #ifndef __ASSEMBLY__
 /*
@@ -28,8 +29,6 @@ enum sparc_cpu {
 #define ARCH_SUN4 0
 
 extern unsigned long empty_bad_page;
-extern unsigned long empty_bad_pmd_table;
-extern unsigned long empty_bad_pte_table;
 extern unsigned long empty_zero_page;
 #endif
 
@@ -126,12 +125,10 @@ extern __inline__ void flushw_user(void)
 #define flush_user_windows flushw_user
 
 	/* See what happens when you design the chip correctly?
-	 * NOTE NOTE NOTE this is extremely non-trivial what I
-	 * am doing here.  GCC needs only one register to stuff
-	 * things into ('next' in particular)  So I "claim" that
-	 * I do not clobber it, when in fact I do.  Please,
-	 * when modifying this code inspect output of sched.s very
-	 * carefully to make sure things still work.  -DaveM
+	 *
+	 * XXX What we are doing here assumes a lot about gcc reload
+	 * XXX internals, it heavily risks compiler aborts due to
+	 * XXX forbidden registers being spilled.  Rewrite me...  -DaveM
 	 *
 	 * SMP NOTE: At first glance it looks like there is a tiny
 	 *           race window here at the end.  The possible problem
@@ -144,48 +141,48 @@ extern __inline__ void flushw_user(void)
 	 *           not reference %g6.
 	 */
 #define switch_to(prev, next)							\
-do {	__label__ switch_continue;						\
-	register unsigned long task_pc asm("o7");				\
-	(prev)->tss.kregs->tstate &= ~TSTATE_PEF;				\
-	task_pc = ((unsigned long) &&switch_continue) - 0x8;			\
+do {	save_and_clear_fpu();							\
 	(next)->mm->cpu_vm_mask |= (1UL << smp_processor_id());			\
 	__asm__ __volatile__(							\
 	"rdpr	%%pstate, %%g2\n\t"						\
 	"wrpr	%%g2, 0x3, %%pstate\n\t"					\
 	"flushw\n\t"								\
+	"stx	%%l0, [%%sp + 2047 + 0x60]\n\t"					\
+	"stx	%%l1, [%%sp + 2047 + 0x68]\n\t"					\
 	"stx	%%i6, [%%sp + 2047 + 0x70]\n\t"					\
 	"stx	%%i7, [%%sp + 2047 + 0x78]\n\t"					\
 	"rdpr	%%wstate, %%o5\n\t"						\
-	"stx	%%o6, [%%g6 + %3]\n\t"						\
-	"stw	%%o7, [%%g6 + %4]\n\t"						\
-	"sth	%%o5, [%%g6 + %2]\n\t"						\
+	"stx	%%o6, [%%g6 + %2]\n\t"						\
+	"sth	%%o5, [%%g6 + %1]\n\t"						\
 	"rdpr	%%cwp, %%o5\n\t"						\
-	"sth	%%o5, [%%g6 + %5]\n\t"						\
-	"membar #Sync\n\t"							\
+	"sth	%%o5, [%%g6 + %4]\n\t"						\
 	"mov	%0, %%g6\n\t"							\
-	"lduh	[%0 + %5], %%g1\n\t"						\
+	"lduh	[%0 + %4], %%g1\n\t"						\
 	"wrpr	%%g1, %%cwp\n\t"						\
-	"ldx	[%%g6 + %3], %%o6\n\t"						\
-	"lduw	[%%g6 + %4], %%o7\n\t"						\
-	"lduh	[%%g6 + %2], %%o5\n\t"						\
-	"mov	%%g6, %0\n\t"							\
+	"ldx	[%%g6 + %2], %%o6\n\t"						\
+	"lduh	[%%g6 + %1], %%o5\n\t"						\
+	"lduh	[%%g6 + %3], %%o7\n\t"						\
+	"mov	%%g6, %%l2\n\t"							\
 	"wrpr	%%o5, 0x0, %%wstate\n\t"					\
+	"ldx	[%%sp + 2047 + 0x60], %%l0\n\t"					\
+	"ldx	[%%sp + 2047 + 0x68], %%l1\n\t"					\
 	"ldx	[%%sp + 2047 + 0x70], %%i6\n\t"					\
 	"ldx	[%%sp + 2047 + 0x78], %%i7\n\t"					\
 	"wrpr	%%g0, 0x96, %%pstate\n\t"					\
-	"jmpl	%%o7 + 0x8, %%g0\n\t"						\
-	" mov	%0, %%g6\n\t"							\
-	: /* No outputs */							\
-	: "r" (next), "r" (task_pc),						\
+	"andcc	%%o7, 0x100, %%g0\n\t"						\
+	"bne,pn	%%icc, ret_from_syscall\n\t"					\
+	" mov	%%l2, %%g6\n\t"							\
+	: 									\
+	: "r" (next),								\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.wstate)),	\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),	\
-	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.kpc)),	\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.flags)),	\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.cwp))	\
 	: "cc", "g1", "g2", "g3", "g5", "g7",					\
-	  "l1", "l2", "l3", "l4", "l5", "l6", "l7",				\
+	  "l2", "l3", "l4", "l5", "l6", "l7",					\
 	  "i0", "i1", "i2", "i3", "i4", "i5",					\
-	  "o0", "o1", "o2", "o3", "o4", "o5");					\
-switch_continue: } while(0)
+	  "o0", "o1", "o2", "o3", "o4", "o5", "o7");				\
+} while(0)
 
 extern __inline__ unsigned long xchg32(__volatile__ unsigned int *m, unsigned int val)
 {

@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.54 1998/05/01 19:16:32 ecd Exp $
+/* $Id: psycho.c,v 1.63 1998/08/02 05:55:42 ecd Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -14,6 +14,8 @@
 
 #include <asm/ebus.h>
 #include <asm/sbus.h> /* for sanity check... */
+#include <asm/irq.h>
+#include <asm/io.h>
 
 #undef PROM_DEBUG
 #undef FIXUP_REGS_DEBUG
@@ -27,8 +29,13 @@
 #define dprintf printk
 #endif
 
+
 unsigned long pci_dvma_offset = 0x00000000UL;
-unsigned long pci_dvma_mask   = 0xffffffffUL;
+unsigned long pci_dvma_mask = 0xffffffffUL;
+
+unsigned long pci_dvma_v2p_hash[PCI_DVMA_HASHSZ];
+unsigned long pci_dvma_p2v_hash[PCI_DVMA_HASHSZ];
+
 
 #ifndef CONFIG_PCI
 
@@ -97,10 +104,20 @@ static int pbm_write_config_dword(struct linux_pbm_info *pbm,
  */
 static int pci_probe_enable = 0;
 
+static __inline__ void set_dvma_hash(unsigned long paddr, unsigned long daddr)
+{
+	unsigned long dvma_addr = pci_dvma_offset + daddr;
+	unsigned long vaddr = (unsigned long)__va(paddr);
+
+	pci_dvma_v2p_hash[pci_dvma_ahashfn(paddr)] = dvma_addr - vaddr;
+	pci_dvma_p2v_hash[pci_dvma_ahashfn(dvma_addr)] = vaddr - dvma_addr;
+}
+
 __initfunc(static void psycho_iommu_init(struct linux_psycho *psycho, int tsbsize))
 {
+	struct linux_mlist_p1275 *mlist;
 	unsigned long tsbbase;
-	unsigned long control, i;
+	unsigned long control, i, n;
 	unsigned long *iopte;
 	unsigned long order;
 
@@ -122,12 +139,36 @@ __initfunc(static void psycho_iommu_init(struct linux_psycho *psycho, int tsbsiz
 	}
 	tsbbase = __get_free_pages(GFP_DMA, order);
 	iopte = (unsigned long *)tsbbase;
-	for(i = 0; i < (tsbsize * 1024); i++) {
-		*iopte = (IOPTE_VALID | IOPTE_64K |
-			  IOPTE_CACHE | IOPTE_WRITE);
-		*iopte |= (i << 16);
-		iopte++;
+
+	memset(pci_dvma_v2p_hash, 0, sizeof(pci_dvma_v2p_hash));
+	memset(pci_dvma_p2v_hash, 0, sizeof(pci_dvma_p2v_hash));
+
+	n = 0;
+	mlist = *prom_meminfo()->p1275_totphys;
+	while (mlist) {
+		unsigned long paddr = mlist->start_adr;
+
+		for (i = 0; i < (mlist->num_bytes >> 16); i++) {
+
+			*iopte = (IOPTE_VALID | IOPTE_64K |
+				  IOPTE_CACHE | IOPTE_WRITE);
+			*iopte |= paddr;
+
+			if (!(n & 0xff))
+				set_dvma_hash(paddr, (n << 16));
+						  
+			if (++n > (tsbsize * 1024))
+				goto out;
+
+			paddr += (1 << 16);
+			iopte++;
+		}
+
+		mlist = mlist->theres_more;
 	}
+out:
+	if (mlist)
+		printk("WARNING: not all physical memory mapped in IOMMU\n");
 
 	psycho->psycho_regs->iommu_tsbbase = __pa(tsbbase);
 
@@ -136,15 +177,15 @@ __initfunc(static void psycho_iommu_init(struct linux_psycho *psycho, int tsbsiz
 	control |= (IOMMU_CTRL_TBWSZ | IOMMU_CTRL_ENAB);
 	switch(tsbsize) {
 	case 8:
-		pci_dvma_mask   = 0x1fffffffUL;
+		pci_dvma_mask = 0x1fffffffUL;
 		control |= IOMMU_TSBSZ_8K;
 		break;
 	case 16:
-		pci_dvma_mask   = 0x3fffffffUL;
+		pci_dvma_mask = 0x3fffffffUL;
 		control |= IOMMU_TSBSZ_16K;
 		break;
 	case 32:
-		pci_dvma_mask   = 0x7fffffffUL;
+		pci_dvma_mask = 0x7fffffffUL;
 		control |= IOMMU_TSBSZ_32K;
 		break;
 	default:
@@ -258,8 +299,8 @@ __initfunc(void sabre_init(int pnode))
 			prom_halt();
 	}
 
-	psycho_iommu_init(sabre, tsbsize);
 	pci_dvma_offset = vdma[0];
+	psycho_iommu_init(sabre, tsbsize);
 
 	printk("SABRE: DVMA at %08x [%08x]\n", vdma[0], vdma[1]);
 #ifdef PROM_DEBUG
@@ -448,8 +489,8 @@ __initfunc(void pcibios_init(void))
 			psycho->pci_config_space);
 #endif
 
-		psycho_iommu_init(psycho, 32);
 		pci_dvma_offset = 0x80000000UL;
+		psycho_iommu_init(psycho, 32);
 
 		is_pbm_a = ((pr_regs[0].phys_addr & 0x6000) == 0x2000);
 
@@ -777,22 +818,15 @@ __initfunc(static void pbm_probe(struct linux_pbm_info *pbm))
 
 __initfunc(static int pdev_to_pnode_sibtraverse(struct linux_pbm_info *pbm,
 						struct pci_dev *pdev,
-						int node))
+						int pnode))
 {
 	struct linux_prom_pci_registers pregs[PROMREG_MAX];
+	int node;
 	int err;
 
-	while(node) {
-		int child;
+	node = prom_getchild(pnode);
+	while (node) {
 
-		child = prom_getchild(node);
-		if(child != 0 && child != -1) {
-			int res;
-
-			res = pdev_to_pnode_sibtraverse(pbm, pdev, child);
-			if(res != 0 && res != -1)
-				return res;
-		}
 		err = prom_getproperty(node, "reg", (char *)&pregs[0], sizeof(pregs));
 		if(err != 0 && err != -1) {
 			u32 devfn = (pregs[0].phys_hi >> 8) & 0xff;
@@ -806,12 +840,13 @@ __initfunc(static int pdev_to_pnode_sibtraverse(struct linux_pbm_info *pbm,
 	return 0;
 }
 
-__initfunc(static void pdev_cookie_fillin(struct linux_pbm_info *pbm, struct pci_dev *pdev))
+__initfunc(static void pdev_cookie_fillin(struct linux_pbm_info *pbm,
+					  struct pci_dev *pdev, int pnode))
 {
 	struct pcidev_cookie *pcp;
-	int node = prom_getchild(pbm->prom_node);
+	int node;
 
-	node = pdev_to_pnode_sibtraverse(pbm, pdev, node);
+	node = pdev_to_pnode_sibtraverse(pbm, pdev, pnode);
 	if(node == 0)
 		node = -1;
 	pcp = pci_devcookie_alloc();
@@ -825,7 +860,8 @@ __initfunc(static void pdev_cookie_fillin(struct linux_pbm_info *pbm, struct pci
 }
 
 __initfunc(static void fill_in_pbm_cookies(struct pci_bus *pbus,
-					   struct linux_pbm_info *pbm))
+					   struct linux_pbm_info *pbm,
+					   int node))
 {
 	struct pci_dev *pdev;
 
@@ -837,10 +873,12 @@ __initfunc(static void fill_in_pbm_cookies(struct pci_bus *pbus,
 #endif
 
 	for(pdev = pbus->devices; pdev; pdev = pdev->sibling)
-		pdev_cookie_fillin(pbm, pdev);
+		pdev_cookie_fillin(pbm, pdev, node);
 
-	for(pbus = pbus->children; pbus; pbus = pbus->next)
-		fill_in_pbm_cookies(pbus, pbm);
+	for(pbus = pbus->children; pbus; pbus = pbus->next) {
+		struct pcidev_cookie *pcp = pbus->self->sysdata;
+		fill_in_pbm_cookies(pbus, pbm, pcp->prom_node);
+	}
 }
 
 __initfunc(static void sabre_cookie_fillin(struct linux_psycho *sabre))
@@ -849,9 +887,11 @@ __initfunc(static void sabre_cookie_fillin(struct linux_psycho *sabre))
 
 	for(pbus = pbus->children; pbus; pbus = pbus->next) {
 		if (pbus->number == sabre->pbm_A.pci_first_busno)
-			pdev_cookie_fillin(&sabre->pbm_A, pbus->self);
+			pdev_cookie_fillin(&sabre->pbm_A, pbus->self,
+					   sabre->pbm_A.prom_node);
 		else if (pbus->number == sabre->pbm_B.pci_first_busno)
-			pdev_cookie_fillin(&sabre->pbm_B, pbus->self);
+			pdev_cookie_fillin(&sabre->pbm_B, pbus->self,
+					   sabre->pbm_B.prom_node);
 	}
 }
 
@@ -1431,13 +1471,12 @@ __initfunc(static unsigned long psycho_pcislot_imap_offset(unsigned long ino))
 /* Exported for EBUS probing layer. */
 __initfunc(unsigned int psycho_irq_build(struct linux_pbm_info *pbm,
 					 struct pci_dev *pdev,
-					 unsigned int full_ino))
+					 unsigned int ino))
 {
-	unsigned long imap_off, ign, ino;
+	unsigned long imap_off;
 	int need_dma_sync = 0;
 
-	ign = (full_ino & PSYCHO_IMAP_IGN) >> 6;
-	ino = (full_ino & PSYCHO_IMAP_INO);
+	ino &= PSYCHO_IMAP_INO;
 
 	/* Compute IMAP register offset, generic IRQ layer figures out
 	 * the ICLR register address as this is simple given the 32-bit
@@ -1513,10 +1552,7 @@ __initfunc(unsigned int psycho_irq_build(struct linux_pbm_info *pbm,
 			break;
 
 		default:
-			/* We don't expect anything else.  The other possible
-			 * values are not found in PCI device nodes, and are
-			 * so hardware specific that they should use DCOOKIE's
-			 * anyways.
+			/* We don't expect anything else.
 			 */
 			prom_printf("psycho_irq_build: Wacky INO [%x]\n", ino);
 			prom_halt();
@@ -1528,7 +1564,7 @@ __initfunc(unsigned int psycho_irq_build(struct linux_pbm_info *pbm,
 		need_dma_sync = 1;
 	}
 
-	return pci_irq_encode(imap_off, pbm->parent->index, ign, ino, need_dma_sync);
+	return psycho_build_irq(pbm->parent, imap_off, ino, need_dma_sync);
 }
 
 __initfunc(static int pbm_intmap_match(struct linux_pbm_info *pbm,
@@ -1559,6 +1595,9 @@ __initfunc(static int pbm_intmap_match(struct linux_pbm_info *pbm,
 		if(i == 0 || i == -1)
 			goto out;
 
+		/* Use low slot number bits of child as IRQ line. */
+		*interrupt = ((pdev->devfn >> 3) & 3) + 1;
+
 		preg = &ppreg;
 	}
 
@@ -1566,20 +1605,29 @@ __initfunc(static int pbm_intmap_match(struct linux_pbm_info *pbm,
 	mid = preg->phys_mid & pbm->pbm_intmask.phys_mid;
 	lo = preg->phys_lo & pbm->pbm_intmask.phys_lo;
 	irq = *interrupt & pbm->pbm_intmask.interrupt;
+#ifdef FIXUP_IRQ_DEBUG
+	dprintf("intmap_match: [%02x.%02x.%x] key: [%08x.%08x.%08x.%08x] ",
+		pdev->bus->number, pdev->devfn >> 3, pdev->devfn & 7,
+		hi, mid, lo, irq);
+#endif
 	for (i = 0; i < pbm->num_pbm_intmap; i++) {
 		if ((pbm->pbm_intmap[i].phys_hi == hi) &&
 		    (pbm->pbm_intmap[i].phys_mid == mid) &&
 		    (pbm->pbm_intmap[i].phys_lo == lo) &&
 		    (pbm->pbm_intmap[i].interrupt == irq)) {
+#ifdef FIXUP_IRQ_DEBUG
+			dprintf("irq: [%08x]", pbm->pbm_intmap[i].cinterrupt);
+#endif
 			*interrupt = pbm->pbm_intmap[i].cinterrupt;
-			return *interrupt;
+			return 1;
 		}
 	}
 
 out:
-	prom_printf("pbm_intmap_match: IRQ [%08x.%08x.%08x.%08x] "
-		    "not found in interrupt-map\n", preg->phys_hi,
-		    preg->phys_mid, preg->phys_lo, *interrupt);
+	prom_printf("pbm_intmap_match: bus %02x, devfn %02x: ",
+		    pdev->bus->number, pdev->devfn);
+	prom_printf("IRQ [%08x.%08x.%08x.%08x] not found in interrupt-map\n",
+		    preg->phys_hi, preg->phys_mid, preg->phys_lo, *interrupt);
 	prom_halt();
 }
 
@@ -1610,8 +1658,8 @@ __initfunc(static void fixup_irq(struct pci_dev *pdev,
 					     (pbm->parent->upa_portid << 6)
 					     | prom_irq);
 #ifdef FIXUP_IRQ_DEBUG
-		dprintf("interrupt-map specified prom_irq[%x] pdev->irq[%x]",
-		        prom_irq, pdev->irq);
+		dprintf("interrupt-map specified: prom_irq[%x] pdev->irq[%x]",
+			prom_irq, pdev->irq);
 #endif
 	/* See if fully specified already (ie. for onboard devices like hme) */
 	} else if(((prom_irq & PSYCHO_IMAP_IGN) >> 6) == pbm->parent->upa_portid) {
@@ -1847,9 +1895,11 @@ __initfunc(void pcibios_fixup(void))
 			sabre_cookie_fillin(psycho);
 
 		fill_in_pbm_cookies(&psycho->pbm_A.pci_bus,
-				    &psycho->pbm_A);
+				    &psycho->pbm_A,
+				    psycho->pbm_A.prom_node);
 		fill_in_pbm_cookies(&psycho->pbm_B.pci_bus,
-				    &psycho->pbm_B);
+				    &psycho->pbm_B,
+				    psycho->pbm_B.prom_node);
 
 		/* See what OBP has taken care of already. */
 		record_assignments(&psycho->pbm_A);

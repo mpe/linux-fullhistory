@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.110 1998/04/08 16:15:51 jj Exp $
+/*  $Id: process.c,v 1.118 1998/08/04 20:48:47 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -26,6 +26,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/reboot.h>
+#include <linux/delay.h>
 
 #include <asm/auxio.h>
 #include <asm/oplib.h>
@@ -41,6 +42,7 @@
 
 extern void fpsave(unsigned long *, unsigned long *, void *, unsigned long *);
 
+struct task_struct *last_task_used_math = NULL;
 struct task_struct *current_set[NR_CPUS] = {&init_task, };
 
 #ifndef __SMP__
@@ -122,7 +124,7 @@ int cpu_idle(void *unused)
 		}
 		/* endless idle loop with no priority at all */
 		current->counter = -100;
-		if(!smp_commenced || need_resched)
+		if(!smp_commenced || current->need_resched)
 			schedule();
 	}
 }
@@ -141,7 +143,7 @@ asmlinkage int sys_idle(void)
 extern char reboot_command [];
 
 #ifdef CONFIG_SUN_CONSOLE
-extern void console_restore_palette (void);
+extern void (*prom_palette)(int);
 extern int serial_console;
 #endif
 
@@ -151,8 +153,8 @@ void machine_halt(void)
 	mdelay(8);
 	cli();
 #ifdef CONFIG_SUN_CONSOLE
-	if (!serial_console)
-		console_restore_palette ();
+	if (!serial_console && prom_palette)
+		prom_palette (1);
 #endif
 	prom_halt();
 	panic("Halt failed!");
@@ -169,8 +171,8 @@ void machine_restart(char * cmd)
 	p = strchr (reboot_command, '\n');
 	if (p) *p = 0;
 #ifdef CONFIG_SUN_CONSOLE
-	if (!serial_console)
-		console_restore_palette ();
+	if (!serial_console && prom_palette)
+		prom_palette (1);
 #endif
 	if (cmd)
 		prom_reboot(cmd);
@@ -330,9 +332,6 @@ void show_thread(struct thread_struct *tss)
 	printk("fsr:               0x%08lx  fpqdepth:          0x%08lx\n", tss->fsr, tss->fpqdepth);
 	/* XXX missing: fpqueue */
 
-	printk("sstk_info.stack:   0x%08lx  sstk_info.status:  0x%08lx\n", 
-								(unsigned long)tss->sstk_info.the_stack,
-							        (unsigned long)tss->sstk_info.cur_status);
 	printk("flags:             0x%08lx  current_ds:        0x%08lx\n", tss->flags, tss->current_ds.seg);
 	
 	show_regwindow((struct reg_window *)tss->ksp);
@@ -366,8 +365,6 @@ void exit_thread(void)
 void flush_thread(void)
 {
 	current->tss.w_saved = 0;
-	current->tss.sstk_info.cur_status = 0;
-	current->tss.sstk_info.the_stack = 0;
 
 	/* No new signal delivery by default */
 	current->tss.new_signal = 0;
@@ -537,7 +534,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 			 * This is a clone() call with supplied user stack.
 			 * Set some valid stack frames to give to the child.
 			 */
-			childstack = (struct sparc_stackf *) sp;
+			childstack = (struct sparc_stackf *) (sp & ~0x7UL);
 			parentstack = (struct sparc_stackf *) regs->u_regs[UREG_FP];
 
 #if 0

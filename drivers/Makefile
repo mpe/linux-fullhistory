@@ -10,7 +10,7 @@
 SUB_DIRS     := block char net misc sound
 MOD_SUB_DIRS := $(SUB_DIRS) sbus
 ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sbus cdrom isdn pnp \
-				 macintosh video dio zorro
+				 macintosh video dio zorro fc4
 
 ifdef CONFIG_DIO
 SUB_DIRS += dio
@@ -80,6 +80,15 @@ endif
 ifeq ($(CONFIG_AP1000),y)
 SUB_DIRS += ap1000
 ALL_SUB_DIRS += ap1000
+endif
+
+ifeq ($(CONFIG_FC4),y)
+SUB_DIRS += fc4
+MOD_SUB_DIRS += fc4
+else
+  ifeq ($(CONFIG_FC4),m)
+  MOD_SUB_DIRS += fc4
+  endif
 endif
 
 # When MOD_LIST_NAME is set, make will try to add $(MOD_SUB_DIRS).o to

@@ -48,19 +48,23 @@ device_scan(unsigned long mem_start))
 				prom_getproperty(scan, "upa-portid",
 						 (char *) &thismid, sizeof(thismid));
 				linux_cpus[cpu_ctr].mid = thismid;
-				prom_printf("Found CPU %d <node=%08x,mid=%d>\n",
+#ifdef __SMP__				
+				prom_printf("Found CPU %d (node=%08x,mid=%d)\n",
 					    cpu_ctr, (unsigned) scan,
 					    thismid);
-				printk("Found CPU %d <node=%08x,mid=%d>\n",
+				printk("Found CPU %d (node=%08x,mid=%d)\n",
 				       cpu_ctr, (unsigned) scan, thismid);
+#endif				       
 				cpu_ctr++;
 			}
 		};
 		if(cpu_ctr == 0) {
-			printk("No CPU nodes found, cannot continue.\n");
+			prom_printf("No CPU nodes found, cannot continue.\n");
 			prom_halt();
 		}
+#ifdef __SMP__		
 		printk("Found %d CPU prom device tree node(s).\n", cpu_ctr);
+#endif		
 	};
 	prom_node_cpu = cpu_nds[0];
 

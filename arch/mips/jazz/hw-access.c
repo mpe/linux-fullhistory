@@ -1,4 +1,4 @@
-/*
+/* $Id: hw-access.c,v 1.5 1998/05/07 00:39:27 ralf Exp $
  * Low-level hardware access stuff for Jazz family machines.
  *
  * This file is subject to the terms and conditions of the GNU General Public
@@ -6,8 +6,6 @@
  * for more details.
  *
  * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
- *
- * $Id: hw-access.c,v 1.4 1998/05/01 01:33:36 ralf Exp $
  */
 #include <linux/delay.h>
 #include <linux/init.h>
@@ -154,6 +152,8 @@ struct feature jazz_feature = {
 static volatile keyboard_hardware *jazz_kh = 
 	(keyboard_hardware *) JAZZ_KEYBOARD_ADDRESS;
 
+#define KBD_STAT_IBF		0x02	/* Keyboard input buffer full */
+
 static unsigned char jazz_read_input(void)
 {
 	return jazz_kh->data;
@@ -161,11 +161,21 @@ static unsigned char jazz_read_input(void)
 
 static void jazz_write_output(unsigned char val)
 {
+	int status;
+
+	do {
+		status = jazz_kh->command;
+	} while (status & KBD_STAT_IBF);
 	jazz_kh->data = val;
 }
 
 static void jazz_write_command(unsigned char val)
 {
+	int status;
+
+	do {
+		status = jazz_kh->command;
+	} while (status & KBD_STAT_IBF);
 	jazz_kh->command = val;
 }
 

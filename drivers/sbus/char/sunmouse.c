@@ -457,7 +457,9 @@ sun_mouse_ioctl (struct inode *inode, struct file *file, unsigned int cmd, unsig
 		break;
 		
 	default:
+#ifdef DEBUG
 		printk ("[MOUSE-ioctl: %8.8x]\n", cmd);
+#endif
 		return -1;
 	}
 	return 0;

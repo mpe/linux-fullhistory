@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.40 1998/04/14 13:49:55 jj Exp $ */
+/* $Id: unistd.h,v 1.42 1998/07/28 13:08:35 jj Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -29,22 +29,22 @@
 #define __NR_unlink              10 /* Common                                      */
 #define __NR_execv               11 /* SunOS Specific                              */
 #define __NR_chdir               12 /* Common                                      */
-#define __NR_xstat		 13 /* Linux Specific				   */
+/* #define __NR_ni_syscall       13    ENOSYS under SunOS                          */
 #define __NR_mknod               14 /* Common                                      */
 #define __NR_chmod               15 /* Common                                      */
 #define __NR_chown               16 /* Common                                      */
 #define __NR_brk                 17 /* Common                                      */
-#define __NR_xmknod		 18 /* Linux Specific				   */
+/* #define __NR_ni_syscall       18    ENOSYS under SunOS                          */
 #define __NR_lseek               19 /* Common                                      */
 #define __NR_getpid              20 /* Common                                      */
-/* #define __NR_ni_syscall       21    ENOSYS under SunOS                          */
-/* #define __NR_ni_syscall       22    ENOSYS under SunOS                          */
+#define __NR_capget		 21 /* Linux Specific				   */
+#define __NR_capset		 22 /* Linux Specific				   */
 #define __NR_setuid              23 /* Implemented via setreuid in SunOS           */
 #define __NR_getuid              24 /* Common                                      */
 /* #define __NR_ni_syscall       25    ENOSYS under SunOS                          */
 #define __NR_ptrace              26 /* Common                                      */
 #define __NR_alarm               27 /* Implemented via setitimer in SunOS          */
-/* #define __NR_ni_syscall       28    ENOSYS under SunOS                          */
+#define __NR_sigaltstack	 28 /* Common					   */
 #define __NR_pause               29 /* Is sigblock(0)->sigpause() in SunOS         */
 #define __NR_utime               30 /* Implemented via utimes() under SunOS        */
 #define __NR_stty                31 /* Implemented via ioctl() under SunOS         */
@@ -55,7 +55,7 @@
 #define __NR_sync                36 /* Common                                      */
 #define __NR_kill                37 /* Common                                      */
 #define __NR_stat                38 /* Common                                      */
-/* #define __NR_ni_syscall       39    ENOSYS under SunOS                          */
+#define __NR_sendfile		 39 /* Linux Specific				   */
 #define __NR_lstat               40 /* Common                                      */
 #define __NR_dup                 41 /* Common                                      */
 #define __NR_pipe                42 /* Common                                      */

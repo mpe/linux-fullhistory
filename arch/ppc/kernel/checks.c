@@ -15,7 +15,6 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/smp_lock.h>
 
 /*
  * Do various before compile checks of data structures

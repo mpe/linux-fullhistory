@@ -40,8 +40,8 @@ zdisk:	zImage
 		mcopy -o zImage a:vmlinux; \
 	fi
 
+# Don't build dependencies, this may die if $(CC) isn't gcc
 dep:
-	$(CPP) -M *.[cS] > .depend
 
 clean:
 	rm -f zImage zImage.tmp mkboot

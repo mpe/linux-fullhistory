@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.91 1998/04/24 13:40:48 jj Exp $
+/* $Id: head.S,v 1.92 1998/06/10 07:21:55 davem Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

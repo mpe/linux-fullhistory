@@ -1,6 +1,8 @@
 /*
  *  arch/ppc/kernel/head.S
  *
+ *  $Id: head.S,v 1.98 1998/07/26 21:28:48 geert Exp $
+ *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
  *
@@ -31,11 +33,9 @@
 #include <linux/sys.h>
 #include <linux/errno.h>
 #include <linux/config.h>
-#ifdef CONFIG_8xx
 #include <asm/mmu.h>
 #include <asm/pgtable.h>
 #include <asm/cache.h>
-#endif
 
 #ifdef CONFIG_APUS
 #include <asm/amigappc.h>
@@ -200,9 +200,7 @@ __start:
 	mr	r28,r6
 	mr	r27,r7
 #ifndef CONFIG_8xx
-#ifndef CONFIG_APUS
 	bl	prom_init
-#endif
 
 /*
  * Use the first pair of BAT registers to map the 1st 16MB
@@ -221,10 +219,12 @@ __start:
 	mtspr	IBAT1U,r9
 	mtspr	IBAT1L,r10
 	b	5f
-4:	ori	r11,r11,0x1ff		/* set up BAT registers for 604 */
+4:
 #ifndef CONFIG_APUS
+	ori	r11,r11,0x1ff		/* set up BAT registers for 604 */
 	li	r8,2
 #else
+	ori	r11,r11,0xff		/* set up an 8MB mapping */
 	lis	r8,CYBERBASEp@h
 	lwz	r8,0(r8)
 	addis	r8,r8,KERNELBASE@h
@@ -236,6 +236,17 @@ __start:
 	mtspr	IBAT0L,r8
 	isync
 
+#ifdef CONFIG_APUS
+	/* Unfortunately the APUS specific instructions bloat the
+	 * code so it cannot fit in the 0x100 bytes available. We have
+	 * to do it the crude way. */
+	lis	r3,KERNELBASE@h
+	tophys(r4,r3,r5)
+	lis	r3,0xfff0		/* Copy to 0xfff00000 on APUS */
+	li	r5,0x4000		/* # bytes of memory to copy */
+	li	r6,0
+	bl	copy_and_flush		/* copy the first 0x4000 bytes */
+#else /* CONFIG_APUS */
 /*
  * We need to run with _start at physical address 0.
  * On CHRP, we are loaded at 0x10000 since OF on CHRP uses
@@ -262,26 +273,15 @@ __start:
 	lwz	r25,klimit@l(r9)
 	addis	r25,r25,-KERNELBASE@h
 	li	r6,0			/* Destination */
-#ifdef CONFIG_APUS
-	lis	r9,0x6170
-	ori	r9,r9,0x7573
-	cmpw	0,r9,r31
-	bne	8f
-	lis	r6,0xfff0		/* Copy to 0xfff00000 on APUS */
-8:
-#endif
 	li	r5,0x4000		/* # bytes of memory to copy */
 	bl	copy_and_flush		/* copy the first 0x4000 bytes */
-#ifdef CONFIG_APUS
-	cmpw	0,r9,r31		/* That's all we need on APUS. */
-	beq	2f
-#endif
 	addi	r0,r3,4f@l		/* jump to the address of 4f */
 	mtctr	r0			/* in copy and do the rest. */
 	bctr				/* jump to the copy */
 4:	mr	r5,r25
 	bl	copy_and_flush		/* copy the rest */
 2:
+#endif /* CONFIG_APUS */
 /*
  * we now have the 1st 16M of ram mapped with the bats.
  * prep needs the mmu to be turned on here, but pmac already has it on.
@@ -491,6 +491,11 @@ InstructionAccess:
 HardwareInterrupt:
 	EXCEPTION_PROLOG;
 #ifdef CONFIG_APUS
+	/* This is horrible, but there's no way around it. Enable the
+	data cache so the IRQ hardware register can be accessed
+	without cache intervention. Then disable interrupts and get
+	the current emulated m68k IPL value. */
+	
 	mfmsr	20
 	xori	r20,r20,MSR_DR
 	sync
@@ -1163,78 +1168,6 @@ stack_ovf:
 
 #ifndef CONFIG_8xx
 /*
- * Continuation of the floating-point unavailable handler.
- */
-load_up_fpu:
-
-/*
- * Disable FP for the task which had the FPU previously,
- * and save its floating-point registers in its thread_struct.
- * Enables the FPU for use in the kernel on return.
- */
-#ifndef CONFIG_APUS
-	lis	r6,-KERNELBASE@h
-#else
-	lis	r6,CYBERBASEp@h
-	lwz	r6,0(r6)
-#endif
-	addis	r3,r6,last_task_used_math@ha
-	lwz	r4,last_task_used_math@l(r3)
-	mfmsr	r5
-	ori	r5,r5,MSR_FP
-	SYNC
-	mtmsr	r5			/* enable use of fpu now */
-#ifndef __SMP__
-	SYNC
-	cmpi	0,r4,0
-	beq	1f
-#else
-/*
- * All the saving of last_task_used_math is handled
- * by a switch_to() call to smp_giveup_fpu() in SMP so 
- * last_task_used_math is not used. -- Cort
- */
-	b	1f
-#endif	
-	add	r4,r4,r6
-	addi	r4,r4,TSS	        /* want TSS of last_task_used_math */
-	SAVE_32FPRS(0, r4)
-	mffs	fr0
-	stfd	fr0,TSS_FPSCR-4(r4)
-	lwz	r5,PT_REGS(r4)
-	add	r5,r5,r6
-	lwz	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
-	li	r20,MSR_FP
-	andc	r4,r4,r20		/* disable FP for previous task */
-	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
-
-1:	ori	r23,r23,MSR_FP		/* enable use of FP after return */
-	mfspr	r5,SPRG3		/* current task's TSS (phys) */
-	lfd	fr0,TSS_FPSCR-4(r5)
-	mtfsf	0xff,fr0
-	REST_32FPRS(0, r5)
-#ifndef __SMP__	
-	subi	r4,r5,TSS
-	sub	r4,r4,r6
-	stw	r4,last_task_used_math@l(r3)
-#endif /* __SMP__ */	
-	/* restore registers and return */
-	lwz	r3,_CCR(r21)
-	lwz	r4,_LINK(r21)
-	mtcrf	0xff,r3
-	mtlr	r4
-	REST_GPR(1, r21)
-	REST_4GPRS(3, r21)
-	/* we haven't used ctr or xer */
-	mtspr	SRR1,r23
-	mtspr	SRR0,r22
-	REST_GPR(20, r21)
-	REST_2GPRS(22, r21)
-	lwz	r21,GPR21(r21)
-	SYNC
-	rfi
-
-/*
  * Load a PTE into the hash table, if possible.
  * The address is in r3, and r4 contains access flags:
  * _PAGE_USER (4) if a user-mode access, ored with
@@ -1354,8 +1287,16 @@ hash_page_patch_C:
 	bdnzf	2,2b
 	beq+	found_empty
 
-	/* Choose an arbitrary slot in the primary PTEG to overwrite */
-#if 0
+#if 1
+	/*
+	 * Choose an arbitrary slot in the primary PTEG to overwrite.
+	 * Since both the primary and secondary PTEGs are full, and we
+	 * have no information that the PTEs in the primary PTEG are
+	 * more important or useful than those in the secondary PTEG,
+	 * and we know there is a definite (although small) speed
+	 * advantage to putting the PTE in the primary PTEG, we always
+	 * put the PTE in the primary PTEG.
+	 */
 	xori	r5,r5,0x40		/* clear H bit again */
 	lwz	r2,next_slot@l(0)
 	addi	r2,r2,8
@@ -1396,6 +1337,13 @@ found_empty:
 	stw	r5,0(r3)
 found_slot:
 	stw	r6,4(r3)
+	SYNC
+/*
+ * These nop's seem to be necessary to avoid getting a machine
+ * check on the rfi on 601 processors.
+ */
+	nop
+	nop
 
 /*
  * Update the hash table miss count.  We only want misses here
@@ -1425,10 +1373,8 @@ found_slot:
 	REST_2GPRS(1, r21)
 	REST_4GPRS(3, r21)
 	/* we haven't used xer */
-	SYNC
 	mtspr	SRR1,r23
 	mtspr	SRR0,r22
-	SYNC
 	REST_GPR(20, r21)
 	REST_2GPRS(22, r21)
 	lwz	r21,GPR21(r21)
@@ -1439,9 +1385,144 @@ hash_page_out:
 	blr
 next_slot:
 	.long	0
-#endif /* CONFIG_8xx */
-	
+
+/*
+ * FPU stuff for the 6xx/7xx follows
+ *  -- Cort
+ */
+load_up_fpu:
+/*
+ * Disable FP for the task which had the FPU previously,
+ * and save its floating-point registers in its thread_struct.
+ * Enables the FPU for use in the kernel on return.
+ */
 #ifndef CONFIG_APUS
+	lis	r6,-KERNELBASE@h
+#else
+	lis	r6,CYBERBASEp@h
+	lwz	r6,0(r6)
+#endif
+	addis	r3,r6,last_task_used_math@ha
+	lwz	r4,last_task_used_math@l(r3)
+	mfmsr	r5
+	ori	r5,r5,MSR_FP
+	SYNC
+	mtmsr	r5			/* enable use of fpu now */
+#ifndef __SMP__
+	SYNC
+	cmpi	0,r4,0
+	beq	1f
+#else
+/*
+ * All the saving of last_task_used_math is handled
+ * by a switch_to() call to smp_giveup_fpu() in SMP so 
+ * last_task_used_math is not used.
+ *
+ * We should never be herre on SMP anyway, sinc ethe fpu should
+ * always be on.
+ * -- Cort
+ */
+	b	1f
+#endif	
+	add	r4,r4,r6
+	addi	r4,r4,TSS	        /* want TSS of last_task_used_math */
+	SAVE_32FPRS(0, r4)
+	mffs	fr0
+	stfd	fr0,TSS_FPSCR-4(r4)
+	lwz	r5,PT_REGS(r4)
+	add	r5,r5,r6
+	lwz	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
+	li	r20,MSR_FP
+	andc	r4,r4,r20		/* disable FP for previous task */
+	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
+
+1:	ori	r23,r23,MSR_FP		/* enable use of FP after return */
+	mfspr	r5,SPRG3		/* current task's TSS (phys) */
+	lfd	fr0,TSS_FPSCR-4(r5)
+	mtfsf	0xff,fr0
+	REST_32FPRS(0, r5)
+/* 
+ * on SMP we don't really use last_task_used_math but set it
+ * here anyway to avoid the ifdef's -- Cort
+ */
+	subi	r4,r5,TSS
+	sub	r4,r4,r6
+	stw	r4,last_task_used_math@l(r3)
+	/* restore registers and return */
+	lwz	r3,_CCR(r21)
+	lwz	r4,_LINK(r21)
+	mtcrf	0xff,r3
+	mtlr	r4
+	REST_GPR(1, r21)
+	REST_4GPRS(3, r21)
+	/* we haven't used ctr or xer */
+	mtspr	SRR1,r23
+	mtspr	SRR0,r22
+	REST_GPR(20, r21)
+	REST_2GPRS(22, r21)
+	lwz	r21,GPR21(r21)
+	SYNC
+	rfi
+	
+/*
+ * FP unavailable trap from kernel - print a message, but let
+ * the task use FP in the kernel until it returns to user mode.
+ */
+KernelFP:
+	lwz	r3,_MSR(r1)
+	ori	r3,r3,MSR_FP
+	stw	r3,_MSR(r1)		/* enable use of FP after return */
+	lis	r3,86f@h
+	ori	r3,r3,86f@l
+	mr	r4,r2			/* current */
+	lwz	r5,_NIP(r1)
+	bl	printk
+	b	int_return
+86:	.string	"floating point used in kernel (task=%p, pc=%x)\n"
+	.align	4
+
+/*
+ * Disable FP for the task which had the FPU previously,
+ * and save its floating-point registers in its thread_struct.
+ * Enables the FPU for use in the kernel on return.
+ */
+/* smp_giveup_fpu() takes an arg to tell it where to save the fpu
+ * regs since last_task_used_math can't be trusted (many many race
+ * conditions). -- Cort
+ */
+	.globl	smp_giveup_fpu
+smp_giveup_fpu:	
+	mr	r4,r3
+	b	12f
+	.globl	giveup_fpu
+giveup_fpu:
+	lis	r3,last_task_used_math@ha
+	lwz	r4,last_task_used_math@l(r3)
+12:		
+	mfmsr	r5
+	ori	r5,r5,MSR_FP
+	SYNC
+	mtmsr	r5			/* enable use of fpu now */
+	SYNC
+	cmpi	0,r4,0
+	beqlr-				/* if no previous owner, done */
+	addi	r4,r4,TSS	        /* want TSS of last_task_used_math */
+	li	r5,0
+	stw	r5,last_task_used_math@l(r3)
+	SAVE_32FPRS(0, r4)
+	mffs	fr0
+	stfd	fr0,TSS_FPSCR-4(r4)
+	lwz	r5,PT_REGS(r4)
+	lwz	r3,_MSR-STACK_FRAME_OVERHEAD(r5)
+	li	r4,MSR_FP
+	andc	r3,r3,r4		/* disable FP for previous task */
+	stw	r3,_MSR-STACK_FRAME_OVERHEAD(r5)
+#else  /* CONFIG_8xx */
+	.globl	giveup_fpu
+giveup_fpu:
+#endif /* CONFIG_8xx */
+	blr
+	
 /*
  * Copy routine used to copy the kernel to start at physical address 0
  * and flush and invalidate the caches as needed.
@@ -1466,7 +1547,6 @@ copy_and_flush:
 	addi	r5,r5,4
 	addi	r6,r6,4
 	blr
-#endif
 
 #ifdef CONFIG_APUS
 	/* On APUS the first 0x4000 bytes of the kernel	will be mapped
@@ -1552,9 +1632,6 @@ start_here:
 	mr	r6,r28
 	mr	r7,r27
 	bl	identify_machine
-#ifdef CONFIG_MBX
-	bl	set_mbx_memory
-#endif
 	bl	MMU_init
 /*
  * Go back to running unmapped so we can load up new values
@@ -1622,64 +1699,6 @@ start_here:
 	mtspr	SRR0,r3
 	mtspr	SRR1,r4
 	rfi			/* enable MMU and jump to start_kernel */
-
-
-/*
- * FP unavailable trap from kernel - print a message, but let
- * the task use FP in the kernel until it returns to user mode.
- */
-KernelFP:
-	lwz	r3,_MSR(r1)
-	ori	r3,r3,MSR_FP
-	stw	r3,_MSR(r1)		/* enable use of FP after return */
-	lis	r3,86f@h
-	ori	r3,r3,86f@l
-	mr	r4,r2			/* current */
-	lwz	r5,_NIP(r1)
-	bl	printk
-	b	int_return
-86:	.string	"floating point used in kernel (task=%p, pc=%x)\n"
-	.align	4
-
-/*
- * Disable FP for the task which had the FPU previously,
- * and save its floating-point registers in its thread_struct.
- * Enables the FPU for use in the kernel on return.
- */
-/* smp_giveup_fpu() takes an arg to tell it where to save the fpu
- * regs since last_task_used_math can't be trusted (many many race
- * conditions). -- Cort
- */
-	.globl	smp_giveup_fpu
-smp_giveup_fpu:	
-	mr	r4,r3
-	b	12f
-	.globl	giveup_fpu
-giveup_fpu:
-	lis	r3,last_task_used_math@ha
-	lwz	r4,last_task_used_math@l(r3)
-12:		
-	mfmsr	r5
-	ori	r5,r5,MSR_FP
-	SYNC
-	mtmsr	r5			/* enable use of fpu now */
-	SYNC
-	cmpi	0,r4,0
-	beqlr-				/* if no previous owner, done */
-	addi	r4,r4,TSS	        /* want TSS of last_task_used_math */
-#ifndef __SMP__
-	li	r5,0
-	stw	r5,last_task_used_math@l(r3)
-#endif /* __SMP__ */	
-	SAVE_32FPRS(0, r4)
-	mffs	fr0
-	stfd	fr0,TSS_FPSCR-4(r4)
-	lwz	r5,PT_REGS(r4)
-	lwz	r3,_MSR-STACK_FRAME_OVERHEAD(r5)
-	li	r4,MSR_FP
-	andc	r3,r3,r4		/* disable FP for previous task */
-	stw	r3,_MSR-STACK_FRAME_OVERHEAD(r5)
-	blr
 
 /*
  * Handle a system call.
@@ -1929,8 +1948,8 @@ int_return:
 	lwz	r5,_MSR(r1)
 	and.	r5,r5,r4
 	beq	2f
-3:	lis	r4,lost_interrupts@ha
-	lwz	r4,lost_interrupts@l(r4)
+3:	lis	r4,n_lost_interrupts@ha
+	lwz	r4,n_lost_interrupts@l(r4)
 	cmpi	0,r4,0
 	beq+	1f
 	addi	r3,r1,STACK_FRAME_OVERHEAD
@@ -1949,8 +1968,7 @@ int_return:
 2:	lwz	r3,_MSR(r1)	/* Returning to user mode? */
 	andi.	r3,r3,MSR_PR
 	beq+	10f		/* if so, check need_resched and signals */
-	lis	r3,need_resched@ha
-	lwz	r3,need_resched@l(r3)
+	lwz	r3,NEED_RESCHED(r2)
 	cmpi	0,r3,0		/* check need_resched flag */
 	beq+	7f
 	bl	schedule
@@ -1988,18 +2006,6 @@ int_return:
 	SYNC
 	rfi
 
-#if 0/*def __SMP__*/
-	.globl	ret_from_smpfork
-ret_from_smpfork:
-	/* drop scheduler_lock since schedule() called us */
-	lis	r4,scheduler_lock@ha
-	li	r5,0
-	stw	r5,scheduler_lock@l+4(r4)	/* owner_pc */
-	stw	r5,scheduler_lock@l+8(r4)	/* owner_cpu */
-	stw	r5,scheduler_lock@l(r4)		/* lock */
-	b	int_return
-#endif /* __SMP__ */
-	
 /*
  * Fake an interrupt from kernel mode.
  * This is used when enable_irq loses an interrupt.
@@ -2215,50 +2221,6 @@ _GLOBAL(flush_hash_page)
 _GLOBAL(__main)
 	blr
 
-#ifndef CONFIG_8xx		
-/*
- * On CHRP, the Run-Time Abstraction Services (RTAS) have to be
- * called with the MMU off.
- */
-	.globl	enter_rtas
-enter_rtas:
-	stwu	r1,-16(r1)
-	mflr	r0
-	stw	r0,20(r1)
-	lis	r4,rtas_data@ha
-	lwz	r4,rtas_data@l(r4)
-	addis	r4,r4,-KERNELBASE@h
-	lis	r6,1f@ha	/* physical return address for rtas */
-	addi	r6,r6,1f@l
-	addis	r6,r6,-KERNELBASE@h
-	subi	r7,r1,INT_FRAME_SIZE+STACK_UNDERHEAD
-	addis	r7,r7,-KERNELBASE@h
-	lis	r8,rtas_entry@ha
-	lwz	r8,rtas_entry@l(r8)
-	addis	r5,r8,-KERNELBASE@h
-	mfmsr	r9
-	stw	r9,8(r1)
-	ori	r0,r0,MSR_EE|MSR_SE|MSR_BE
-	andc	r0,r9,r0
-	andi.	r9,r9,MSR_ME|MSR_RI
-	sync			/* disable interrupts so SRR0/1 */
-	mtmsr	r0		/* don't get trashed */
-	li	r6,0	
-	mtlr	r6
-	mtspr	SPRG2,r7
-	mtspr	SRR0,r8
-	mtspr	SRR1,r9
-	rfi
-1:	addis	r9,r1,-KERNELBASE@h
-	lwz	r8,20(r9)	/* get return address */
-	lwz	r9,8(r9)	/* original msr value */
-	li	r0,0
-	mtspr	SPRG2,r0
-	mtspr	SRR0,r8
-	mtspr	SRR1,r9
-	rfi			/* return to caller */
-#endif /* CONFIG_8xx */
-
 #ifdef __SMP__
 /*
  * Secondary processor begins executing here.
@@ -2426,6 +2388,56 @@ secondary_entry:
 	.long 0
 #endif /* __SMP__ */
 
+/*
+ * PROM code for specific machines follows.  Put it 
+ * here so it's easy to add arch-specific sections later.
+ * -- Cort
+ */
+	
+#ifndef CONFIG_8xx		
+/*
+ * On CHRP, the Run-Time Abstraction Services (RTAS) have to be
+ * called with the MMU off.
+ */
+	.globl	enter_rtas
+enter_rtas:
+	stwu	r1,-16(r1)
+	mflr	r0
+	stw	r0,20(r1)
+	lis	r4,rtas_data@ha
+	lwz	r4,rtas_data@l(r4)
+	addis	r4,r4,-KERNELBASE@h
+	lis	r6,1f@ha	/* physical return address for rtas */
+	addi	r6,r6,1f@l
+	addis	r6,r6,-KERNELBASE@h
+	subi	r7,r1,INT_FRAME_SIZE+STACK_UNDERHEAD
+	addis	r7,r7,-KERNELBASE@h
+	lis	r8,rtas_entry@ha
+	lwz	r8,rtas_entry@l(r8)
+	addis	r5,r8,-KERNELBASE@h
+	mfmsr	r9
+	stw	r9,8(r1)
+	ori	r0,r0,MSR_EE|MSR_SE|MSR_BE
+	andc	r0,r9,r0
+	andi.	r9,r9,MSR_ME|MSR_RI
+	sync			/* disable interrupts so SRR0/1 */
+	mtmsr	r0		/* don't get trashed */
+	li	r6,0	
+	mtlr	r6
+	mtspr	SPRG2,r7
+	mtspr	SRR0,r8
+	mtspr	SRR1,r9
+	rfi
+1:	addis	r9,r1,-KERNELBASE@h
+	lwz	r8,20(r9)	/* get return address */
+	lwz	r9,8(r9)	/* original msr value */
+	li	r0,0
+	mtspr	SPRG2,r0
+	mtspr	SRR0,r8
+	mtspr	SRR1,r9
+	rfi			/* return to caller */
+#endif /* CONFIG_8xx */
+
 #ifdef CONFIG_MBX
 /* Jump into the system reset for the MBX rom.
  * We first disable the MMU, and then jump to the ROM reset address.
@@ -2449,7 +2461,7 @@ MBX_gorom:
 	addi	r4, r4, 0xfe000000@l
 	mtlr	r4
 	blr
-#endif
+#endif /* CONFIG_MBX */
 	
 /*
  * We put a few things here that have to be page-aligned.

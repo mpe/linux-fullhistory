@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.77 1998/05/04 07:24:38 geert Exp $
+ * $Id: setup.c,v 1.95 1998/07/20 19:03:47 geert Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -19,20 +19,20 @@
 #include <asm/ide.h>
 #include <asm/prom.h>
 #include <asm/processor.h>
-#ifdef CONFIG_MBX
-#include <asm/mbx.h>
-#endif
-/* ifdef APUS specific stuff until the merge is completed. -jskov */
-#ifdef CONFIG_APUS
+#include <asm/pgtable.h>
 #include <asm/bootinfo.h>
 #include <asm/setup.h>
 #include <asm/amigappc.h>
-extern unsigned long m68k_machtype;
-extern void amiga_reset (void);
-extern struct mem_info m68k_ramdisk;
-extern int m68k_parse_bootinfo(const struct bi_record *);
-extern char _end[];
+#ifdef CONFIG_MBX
+#include <asm/mbx.h>
 #endif
+
+/* APUS defs */
+extern unsigned long m68k_machtype;
+extern struct mem_info ramdisk;
+extern int parse_bootinfo(const struct bi_record *);
+extern char _end[];
+/* END APUS defs */
 
 extern char cmd_line[512];
 char saved_command_line[256];
@@ -47,7 +47,9 @@ unsigned long have_of;
 #endif /* ! CONFIG_MACH_SPECIFIC */
 
 /* copy of the residual data */
-RESIDUAL res;
+unsigned char __res[sizeof(RESIDUAL)] __prepdata = {0,};
+RESIDUAL *res = (RESIDUAL *)&__res;
+
 int _prep_type;
 
 /*
@@ -57,10 +59,9 @@ int _prep_type;
  * that is.  -- Cort
  */ 
 #ifndef CONFIG_MBX
-#if !defined(CONFIG_PMAC_CONSOLE)
 struct screen_info screen_info = {
 	0, 25,			/* orig-x, orig-y */
-	{ 0, 0 },		/* unused */
+	0,			/* unused */
 	0,			/* orig-video-page */
 	0,			/* orig-video-mode */
 	80,			/* orig-video-cols */
@@ -80,7 +81,6 @@ __initfunc(int pmac_display_supported(char *name))
 __initfunc(void pmac_find_display(void))
 {
 }
-#endif
 
 #else /* CONFIG_MBX */
 
@@ -89,7 +89,7 @@ __initfunc(void pmac_find_display(void))
  */
 struct screen_info screen_info = {
 	0, 25,			/* orig-x, orig-y */
-	{ 0, 0 },		/* unused */
+	0,			/* unused */
 	0,			/* orig-video-page */
 	0,			/* orig-video-mode */
 	80,			/* orig-video-cols */
@@ -161,19 +161,15 @@ void machine_restart(char *cmd)
 		break;
 	case _MACH_apus:
 		cli();
-		/* APUS:FIXME: Reset the system. Apparently there's
-		 * more magic to it than this!?!?
-		 */
-#if 0
+
+		APUS_WRITE(APUS_REG_LOCK, 
+			   REGLOCK_BLACKMAGICK1|REGLOCK_BLACKMAGICK2);
+		APUS_WRITE(APUS_REG_LOCK, 
+			   REGLOCK_BLACKMAGICK1|REGLOCK_BLACKMAGICK3);
+		APUS_WRITE(APUS_REG_LOCK, 
+			   REGLOCK_BLACKMAGICK2|REGLOCK_BLACKMAGICK3);
 		APUS_WRITE(APUS_REG_SHADOW, REGSHADOW_SELFRESET);
-		APUS_WRITE(APUS_REG_RESET, 
-			   REGRESET_PPCRESET|REGRESET_M68KRESET|
-			   REGRESET_AMIGARESET|REGRESET_AUXRESET|
-			   REGRESET_SCSIRESET);
-#endif
-		printk("\n**************************************\n");
-		printk("*** You can make a hard reset now! ***\n");
-		printk("**************************************\n");
+		APUS_WRITE(APUS_REG_RESET, REGRESET_AMIGARESET);
 		for(;;);
 		break;
 	}
@@ -220,12 +216,10 @@ void machine_power_off(void)
 
 	case _MACH_prep:
 		machine_restart(NULL);
-#ifdef CONFIG_APUS
 	case _MACH_apus:
 #if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
 		apm_set_power_state(APM_STATE_OFF);
 		for (;;);
-#endif
 #endif
 	}
 	for (;;);
@@ -238,11 +232,7 @@ void machine_halt(void)
 {
 	if ( _machine == _MACH_Pmac )
 	{
-#if 0
-		prom_exit();		/* doesn't work because prom is trashed */
-#else
-		machine_power_off();	/* for now */
-#endif
+		machine_power_off();
 	}
 	else /* prep, chrp or apus */
 		machine_restart(NULL);
@@ -252,7 +242,7 @@ void machine_halt(void)
 #ifdef CONFIG_BLK_DEV_IDE
 void ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
-#ifndef CONFIG_MBX
+#if !defined(CONFIG_MBX) && !defined(CONFIG_APUS)
 	switch (_machine) {
 	case _MACH_Pmac:
 		pmac_ide_init_hwif_ports(p,base,irq);
@@ -383,17 +373,16 @@ int get_cpuinfo(char *buffer)
 			len += sprintf(len+buffer, "603ev\n");
 			break;
 		case 8:
-			len += sprintf(len+buffer,"750\n");
+			len += sprintf(len+buffer, "750\n");
 			cr = _get_L2CR();
-			len += sprintf(len+buffer,"L2CR\t\t: %lx\n",cr);
-			if ( cr & (0x1<<1)) cr = 256;
-			else if ( cr & (0x2<<1)) cr = 512;
-			else if ( cr & (0x3<<1)) cr = 1024;
+			if ( cr & (0x1<<28)) cr = 256;
+			else if ( cr & (0x2<<28)) cr = 512;
+			else if ( cr & (0x3<<28)) cr = 1024;
 			else cr = 0;
-			len += sprintf(len+buffer,"on-chip l2\t: "
+			len += sprintf(len+buffer, "on-chip l2\t: "
 				       "%ld KB (%s)\n",
-				       cr,(_get_L2CR()&1) ? "on" : "off");
-			len += sprintf(len+buffer,"temperature \t: %lu C\n",
+				       cr,(_get_L2CR()&0x80000000) ? "on" : "off");
+			len += sprintf(len+buffer, "temperature \t: %lu C\n",
 				       cpu_temp());
 			break;
 		case 9:
@@ -436,11 +425,11 @@ int get_cpuinfo(char *buffer)
 		if ( is_prep )
 		{
 			len += sprintf(len+buffer, "clock\t\t: ");
-			if ( res.ResidualLength )
+			if ( res->ResidualLength )
 				len += sprintf(len+buffer, "%ldMHz\n",
-				       (res.VitalProductData.ProcessorHz > 1024) ?
-				       res.VitalProductData.ProcessorHz>>20 :
-				       res.VitalProductData.ProcessorHz);
+				       (res->VitalProductData.ProcessorHz > 1024) ?
+				       res->VitalProductData.ProcessorHz>>20 :
+				       res->VitalProductData.ProcessorHz);
 			else
 				len += sprintf(len+buffer, "???\n");
 		}
@@ -479,15 +468,16 @@ int get_cpuinfo(char *buffer)
 	 * Ooh's and aah's info about zero'd pages in idle task
 	 */ 
 	{
-		extern unsigned int zerocount, zerototal, zeropage_hits,zeropage_calls;
-		len += sprintf(buffer+len,"zero pages\t: total %u (%luKb) "
-			       "current: %u (%luKb) hits: %u/%u (%u%%)\n",
-			       zerototal, (zerototal*PAGE_SIZE)>>10,
-			       zerocount, (zerocount*PAGE_SIZE)>>10,
-			       zeropage_hits,zeropage_calls,
+		len += sprintf(buffer+len,"zero pages\t: total %lu (%luKb) "
+			       "current: %lu (%luKb) hits: %lu/%lu (%lu%%)\n",
+			       quicklists.zerototal,
+			       (quicklists.zerototal*PAGE_SIZE)>>10,
+			       quicklists.zero_sz,
+			       (quicklists.zero_sz*PAGE_SIZE)>>10,
+			       quicklists.zeropage_hits,quicklists.zeropage_calls,
 			       /* : 1 below is so we don't div by zero */
-			       (zeropage_hits*100) /
-			            ((zeropage_calls)?zeropage_calls:1));
+			       (quicklists.zeropage_hits*100) /
+			            ((quicklists.zeropage_calls)?quicklists.zeropage_calls:1));
 	}
 
 #ifndef CONFIG_MBX
@@ -502,11 +492,10 @@ int get_cpuinfo(char *buffer)
 	case _MACH_chrp:
 		len += chrp_get_cpuinfo(buffer+len);
 		break;
-#ifdef CONFIG_APUS
 	case _MACH_apus:
-		len += apus_get_cpuinfo(buffer+len);
+		/* Not much point in printing m68k info when it is not
+                   used. */
 		break;
-#endif
 	}
 #endif /* ndef CONFIG_MBX */	
 	return len;
@@ -522,53 +511,29 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 {
 	extern void setup_pci_ptrs(void);
 #ifndef CONFIG_MBX
-
-#ifdef CONFIG_APUS
-	if ( r3 == 0x61707573 )
-	{
-		/* Parse bootinfo. The bootinfo is located right after
-                   the kernel bss */
-		m68k_parse_bootinfo((const struct bi_record *)&_end);
-
-		have_of = 0;
-		
-#ifdef CONFIG_BLK_DEV_INITRD
-		/* Take care of initrd if we have one. Use data from
-		   bootinfo to avoid the need to initialize PPC
-		   registers when kernel is booted via a PPC reset. */
-		if ( m68k_ramdisk.addr ) {
-			initrd_start = (unsigned long) __va(m68k_ramdisk.addr);
-			initrd_end = (unsigned long) 
-				__va(m68k_ramdisk.size + m68k_ramdisk.addr);
-		}
-#endif /* CONFIG_BLK_DEV_INITRD */
-
-		return 0;
-	}
-#endif /* CONFIG_APUS */
-
 #ifndef CONFIG_MACH_SPECIFIC
+	char *model;
 	/* prep boot loader tells us if we're prep or not */
 	if ( *(unsigned long *)(KERNELBASE) == (0xdeadc0de) )
 	{
 		_machine = _MACH_prep;
 		have_of = 0;
+	}
+	/* boot loader will tell us if we're APUS */
+	else if ( r3 == 0x61707573 )
+	{
+		_machine = _MACH_apus;
+		have_of = 0;
+		r3 = 0;
 	} else
 	{
-		/* need to ask OF if we're chrp or pmac */
-		extern unsigned char OF_type[16], OF_model[16];
-		prom_print(OF_type);
-		prom_print(OF_model);
-		if ( !strncmp("chrp", OF_type,4) )
-		{
+		have_of = 1;
+		/* ask the OF info if we're a chrp or pmac */
+		model = get_property(find_path_device("/"), "type", NULL);
+		if ( !strncmp("chrp",model,4) )
 			_machine = _MACH_chrp;
-		}
 		else 
-		{
-		        /*if ( !strncmp("Power Macintosh", type,15) )*/
 			_machine = _MACH_Pmac;
-                }
-		_machine = _MACH_Pmac;
 
 	}
 #endif /* CONFIG_MACH_SPECIFIC */		
@@ -613,18 +578,15 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		cmd_line[sizeof(cmd_line) - 1] = 0;
 	}
 
-#ifdef CONFIG_PCI
-	/* so that pmac/chrp can use pci to find its console -- Cort */
-	setup_pci_ptrs();
-#endif
 
 	switch (_machine)
 	{
 	case _MACH_Pmac:
-#if !defined(CONFIG_MACH_SPECIFIC)
+		setup_pci_ptrs();
 		/* isa_io_base gets set in pmac_find_bridges */
 		isa_mem_base = PMAC_ISA_MEM_BASE;
 		pci_dram_offset = PMAC_PCI_DRAM_OFFSET;
+#if !defined(CONFIG_MACH_SPECIFIC)
 		ISA_DMA_THRESHOLD = ~0L;
 		DMA_MODE_READ = 1;
 		DMA_MODE_WRITE = 2;
@@ -633,20 +595,21 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 	case _MACH_prep:
 		/* make a copy of residual data */
 		if ( r3 )
-			memcpy((void *)&res,(void *)(r3+KERNELBASE),
+			memcpy((void *)res,(void *)(r3+KERNELBASE),
 			       sizeof(RESIDUAL));
-#if !defined(CONFIG_MACH_SPECIFIC)
+		setup_pci_ptrs();
 		isa_io_base = PREP_ISA_IO_BASE;
 		isa_mem_base = PREP_ISA_MEM_BASE;
 		pci_dram_offset = PREP_PCI_DRAM_OFFSET;
+#if !defined(CONFIG_MACH_SPECIFIC)
 		ISA_DMA_THRESHOLD = 0x00ffffff;
 		DMA_MODE_READ = 0x44;
 		DMA_MODE_WRITE = 0x48;
 #endif /* ! CONFIG_MACH_SPECIFIC */
 		/* figure out what kind of prep workstation we are */
-		if ( res.ResidualLength != 0 )
+		if ( res->ResidualLength != 0 )
 		{
-			if ( !strncmp(res.VitalProductData.PrintableModel,"IBM",3) )
+			if ( !strncmp(res->VitalProductData.PrintableModel,"IBM",3) )
 				_prep_type = _PREP_IBM;
 			else
 				_prep_type = _PREP_Motorola;
@@ -669,23 +632,48 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		}
 		break;
 	case _MACH_chrp:
+		setup_pci_ptrs();
 #ifdef CONFIG_BLK_DEV_INITRD
 		/* take care of initrd if we have one */
 		if ( r3 )
 		{
 			initrd_start = r3 + KERNELBASE;
-			initrd_end = r3+ r4 + KERNELBASE;
+			initrd_end = r3 + r4 + KERNELBASE;
 		}
 #endif /* CONFIG_BLK_DEV_INITRD */
-#if !defined(CONFIG_MACH_SPECIFIC)
-		isa_io_base = CHRP_ISA_IO_BASE;
+		/* isa_io_base set by setup_pci_ptrs() */
 		isa_mem_base = CHRP_ISA_MEM_BASE;
 		pci_dram_offset = CHRP_PCI_DRAM_OFFSET;
+#if !defined(CONFIG_MACH_SPECIFIC)
 		ISA_DMA_THRESHOLD = ~0L;
 		DMA_MODE_READ = 0x44;
 		DMA_MODE_WRITE = 0x48;
 #endif /* ! CONFIG_MACH_SPECIFIC */
 		break;
+#ifdef CONFIG_APUS		
+	case _MACH_apus:
+		setup_pci_ptrs();
+		/* Parse bootinfo. The bootinfo is located right after
+                   the kernel bss */
+		parse_bootinfo((const struct bi_record *)&_end);
+#ifdef CONFIG_BLK_DEV_INITRD
+		/* Take care of initrd if we have one. Use data from
+		   bootinfo to avoid the need to initialize PPC
+		   registers when kernel is booted via a PPC reset. */
+		if ( ramdisk.addr ) {
+			initrd_start = (unsigned long) __va(ramdisk.addr);
+			initrd_end = (unsigned long) 
+				__va(ramdisk.size + ramdisk.addr);
+		}
+		/* Make sure code below is not executed. */
+		r4 = 0;
+		r6 = 0;
+#endif /* CONFIG_BLK_DEV_INITRD */
+#if !defined(CONFIG_MACH_SPECIFIC)
+		ISA_DMA_THRESHOLD = 0x00ffffff;
+#endif /* ! CONFIG_MACH_SPECIFIC */
+		break;
+#endif
 	default:
 		printk("Unknown machine type in identify_machine!\n");
 	}
@@ -693,8 +681,10 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 
 	if ( r3 )
 		memcpy( (void *)&res,(void *)(r3+KERNELBASE), sizeof(bd_t) );
-
+	
+#ifdef CONFIG_PCI
 	setup_pci_ptrs();
+#endif
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* take care of initrd if we have one */
@@ -711,7 +701,6 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		*(char *)(r7+KERNELBASE) = 0;
 		strcpy(cmd_line, (char *)(r6+KERNELBASE));
 	}
-
 #endif /* CONFIG_MBX */
 	return 0;
 }
@@ -722,8 +711,8 @@ __initfunc(void setup_arch(char **cmdline_p,
 	extern void pmac_setup_arch(unsigned long *, unsigned long *);
 	extern void chrp_setup_arch(unsigned long *, unsigned long *);
 	extern void prep_setup_arch(unsigned long *, unsigned long *);
-	extern void apus_setup_arch(char **, unsigned long *, unsigned long *);
 	extern void mbx_setup_arch(unsigned long *, unsigned long *);
+	extern void apus_setup_arch(unsigned long *, unsigned long *);
 	extern int panic_timeout;
 	extern char _etext[], _edata[];
 	extern char *klimit;
@@ -749,6 +738,21 @@ __initfunc(void setup_arch(char **cmdline_p,
 
 	*memory_start_p = find_available_memory();
 	*memory_end_p = (unsigned long) end_of_DRAM;
+
+#ifdef CONFIG_BLK_DEV_INITRD
+	/* initrd_start and size are setup by boot/head.S and kernel/head.S */
+	if ( initrd_start )
+	{
+		if (initrd_end > *memory_end_p)
+		{
+			printk("initrd extends beyond end of memory "
+			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
+			       initrd_end,*memory_end_p);
+			initrd_start = 0;
+		}
+	}
+#endif
+	
 #ifdef CONFIG_MBX
 	mbx_setup_arch(memory_start_p,memory_end_p);
 #else /* CONFIG_MBX */	
@@ -762,12 +766,12 @@ __initfunc(void setup_arch(char **cmdline_p,
 	case _MACH_chrp:
 		chrp_setup_arch(memory_start_p, memory_end_p);
 		break;
-#ifdef CONFIG_APUS
+#ifdef CONFIG_APUS		
 	case _MACH_apus:
 		m68k_machtype = MACH_AMIGA;
-		apus_setup_arch(cmdline_p,memory_start_p,memory_end_p);
+		apus_setup_arch(memory_start_p,memory_end_p);
 		break;
-#endif
+#endif		
 	default:
 		printk("Unknown machine %d in setup_arch()\n", _machine);
 	}

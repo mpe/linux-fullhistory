@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.13 1997/08/18 01:20:22 davem Exp $
+/* $Id: ioport.c,v 1.14 1998/05/11 06:23:36 davem Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995,1996 David S. Miller (davem@caip.rutgers.edu)
@@ -20,7 +20,6 @@
 
 /* This points to the next to use virtual memory for io mappings */
 static unsigned long dvma_next_free   = DVMA_VADDR;
-unsigned long sparc_iobase_vaddr = IOBASE_VADDR;
 
 extern void mmu_map_dma_area(unsigned long addr, int len, __u32 *dvma_addr);
 
@@ -33,7 +32,9 @@ extern void mmu_map_dma_area(unsigned long addr, int len, __u32 *dvma_addr);
  * Input:
  *  address: Physical address to map
  *  virtual: if non zero, specifies a fixed virtual address where
- *           the mapping should take place.
+ *           the mapping should take place, not supported on Ultra
+ *           and this feature is scheduled to be removed as nobody
+ *           uses it. -DaveM
  *  len:     the length of the mapping
  *  bus_type: Optional high word of physical address.
  *
@@ -44,59 +45,24 @@ extern void mmu_map_dma_area(unsigned long addr, int len, __u32 *dvma_addr);
 void *sparc_alloc_io (u32 address, void *virtual, int len, char *name,
 		      u32 bus_type, int rdonly)
 {
-	unsigned long vaddr, base_address;
 	unsigned long addr = ((unsigned long)address) + (((unsigned long)bus_type)<<32);
-	unsigned long offset = (addr & (~PAGE_MASK));
+	unsigned long vaddr = (unsigned long) __va(addr);
 
-	if (virtual) {
-		vaddr = (unsigned long) virtual;
+	if(virtual)
+		panic("sparc_alloc_io: Fixed virtual mappings unsupported on Ultra.");
 
-		len += offset;
-		if(((unsigned long) virtual + len) > (IOBASE_VADDR + IOBASE_LEN)) {
-			prom_printf("alloc_io: Mapping outside IOBASE area\n");
-			prom_halt();
-		}
-		if(check_region ((vaddr | offset), len)) {
-			prom_printf("alloc_io: 0x%lx is already in use\n", vaddr);
-			prom_halt();
-		}
+	if(!check_region(vaddr, len))
+		request_region(vaddr, len, name);
 
-		/* Tell Linux resource manager about the mapping */
-		request_region ((vaddr | offset), len, name);
-	} else {
-		unsigned long vaddr = (unsigned long) __va(addr);
-
-		if(!check_region(vaddr, len))
-			request_region(vaddr, len, name);
-
-		return (void *) vaddr;
-	}
-
-	base_address = vaddr;
-	/* Do the actual mapping */
-	for (; len > 0; len -= PAGE_SIZE) {
-		mapioaddr(addr, vaddr, bus_type, rdonly);
-		vaddr += PAGE_SIZE;
-		addr += PAGE_SIZE;
-	}
-
-	return (void *) (base_address | offset);
+	return (void *) vaddr;
 }
 
 void sparc_free_io (void *virtual, int len)
 {
 	unsigned long vaddr = (unsigned long) virtual & PAGE_MASK;
-	unsigned long plen = (((unsigned long)virtual & ~PAGE_MASK) + len + PAGE_SIZE-1) & PAGE_MASK;
-	
+	unsigned long plen = (((unsigned long)virtual & ~PAGE_MASK) +
+			      len + PAGE_SIZE-1) & PAGE_MASK;
 	release_region(vaddr, plen);
-
-	if (((unsigned long)virtual) >= PAGE_OFFSET + 0x10000000000UL)
-		return;
-
-	for (; plen != 0;) {
-		plen -= PAGE_SIZE;
-		unmapioaddr(vaddr + plen);
-	}
 }
 
 /* Does DVMA allocations with PAGE_SIZE granularity.  How this basically

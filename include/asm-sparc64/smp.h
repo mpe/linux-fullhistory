@@ -41,22 +41,12 @@ struct cpuinfo_sparc {
 
 	/* Dcache line 2 */
 	unsigned long	*pgd_cache;
-	unsigned long	*pmd_cache;
 	unsigned long	*pte_cache;
 	unsigned long	udelay_val;
+	unsigned long	dummy;
 };
 
 extern struct cpuinfo_sparc cpu_data[NR_CPUS];
-
-struct klock_info {
-	unsigned char kernel_flag;
-	unsigned char akp;
-};
-
-extern struct klock_info klock_info;
-
-#define KLOCK_HELD       0xff
-#define KLOCK_CLEAR      0x00
 
 /*
  *	Private routines/data
@@ -94,6 +84,10 @@ extern __inline__ int hard_smp_processor_id(void)
 #define smp_processor_id() (current->processor)
 
 extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
+
+/* As idle task checks need_resched in a tight loop, it is not necessary to
+   wake it up. -jj */
+#define smp_send_reschedule(cpu) do {} while (0)
 
 #endif /* !(__ASSEMBLY__) */
 

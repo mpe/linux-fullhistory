@@ -74,6 +74,7 @@ extern void (*add_wired_entry)(unsigned long entrylo0, unsigned long entrylo1,
 
 #define VMALLOC_START     KSEG2
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
+#error You need to define VMALLOC_END --DaveM
 
 /* Note that we shift the lower 32bits of each EntryLo[01] entry
  * 6 bits to the left. That way we can convert the PFN into the

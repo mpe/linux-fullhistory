@@ -1,4 +1,4 @@
-/* $Id: ttable.h,v 1.6 1998/03/15 17:23:54 ecd Exp $ */
+/* $Id: ttable.h,v 1.8 1998/06/12 14:54:32 jj Exp $ */
 #ifndef _SPARC64_TTABLE_H
 #define _SPARC64_TTABLE_H
 
@@ -66,7 +66,7 @@
 	
 #define SYSCALL_TRAP(routine, systbl)			\
 	sethi	%hi(109f), %g7;				\
-	ba,pt	%xcc, etrap;				\
+	ba,pt	%xcc, scetrap;				\
 109:	 or	%g7, %lo(109b), %g7;			\
 	call	routine;				\
 	 sethi	%hi(systbl), %l7;			\
@@ -132,6 +132,16 @@
 	mov	level, %o0;				\
 	call	routine;				\
 	 add	%sp, STACK_BIAS + REGWIN_SZ, %o1;	\
+	ba,a,pt	%xcc, rtrap_clr_l6;
+	
+#define TICK_SMP_IRQ					\
+	rdpr	%pil, %g2;				\
+	wrpr	%g0, 15, %pil;				\
+	sethi	%hi(109f), %g7;				\
+	b,pt	%xcc, etrap_irq;			\
+109:	 or	%g7, %lo(109b), %g7;			\
+	call	smp_percpu_timer_interrupt;		\
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0;	\
 	ba,a,pt	%xcc, rtrap_clr_l6;
 
 #define TRAP_IVEC TRAP_NOSAVE(do_ivec)

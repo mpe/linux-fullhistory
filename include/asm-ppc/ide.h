@@ -11,6 +11,31 @@
 #ifndef __ASMPPC_IDE_H
 #define __ASMPPC_IDE_H
 
+#include <linux/config.h>
+#ifdef CONFIG_APUS
+#include <linux/hdreg.h>
+#include <asm-m68k/ide.h>
+void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
+void ide_insw(ide_ioreg_t port, void *buf, int ns);
+void ide_outsw(ide_ioreg_t port, void *buf, int ns);
+#undef insw
+#define insw(port, buf, ns) 	do {			\
+	if ( _machine != _MACH_Pmac && _machine != _MACH_apus )	\
+		/* this must be the same as insw in io.h!! */	\
+		_insw((unsigned short *)((port)+_IO_BASE), (buf), (ns)); \
+	else						\
+		ide_insw((port), (buf), (ns));		\
+} while (0)
+#undef outsw
+#define outsw(port, buf, ns) 	do {			\
+	if ( _machine != _MACH_Pmac && _machine != _MACH_apus )	\
+		/* this must be the same as outsw in io.h!! */	\
+		_outsw((unsigned short *)((port)+_IO_BASE), (buf), (ns)); \
+	else						\
+		ide_outsw((port), (buf), (ns));		\
+} while (0)
+#else /* CONFIG_APUS */
+
 #ifdef __KERNEL__
 
 #include <linux/ioport.h>
@@ -186,5 +211,6 @@ static __inline__ void ide_free_irq(unsigned int irq, void *dev_id)
 #define ide_get_lock(lock, hdlr, data)	do {} while (0)
 
 #endif /* __KERNEL__ */
+#endif /* CONFIG_APUS */
 
 #endif /* __ASMPPC_IDE_H */

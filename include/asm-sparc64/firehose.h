@@ -1,4 +1,4 @@
-/* $Id: firehose.h,v 1.2 1997/08/08 04:26:31 davem Exp $
+/* $Id: firehose.h,v 1.3 1998/06/10 07:28:43 davem Exp $
  * firehose.h: Defines for the Fire Hose Controller (FHC) found
  *             on Sunfire/Starfire/Wildfire systems.
  *

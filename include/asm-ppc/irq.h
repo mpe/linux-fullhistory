@@ -6,12 +6,18 @@
 #include <asm/processor.h>		/* for is_prep() */
 
 #ifndef CONFIG_8xx
+
+#ifdef CONFIG_APUS
+#include <asm-m68k/irq.h>
+#else /* CONFIG_APUS */
+
 /*
  * this is the # irq's for all ppc arch's (pmac/chrp/prep)
- * so it is the max of them all - which happens to be chrp
- * -- Cort
+ * so it is the max of them all - which happens to be powermac
+ * at present (G3 powermacs have 64).
  */
-#define NR_IRQS			(NUM_8259_INTERRUPTS+NUM_OPENPIC_INTERRUPTS)
+#define NR_IRQS			64
+#endif /* CONFIG_APUS */
 
 #define NUM_8259_INTERRUPTS	16
 #define NUM_OPENPIC_INTERRUPTS	20
@@ -23,6 +29,7 @@
 extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);
 
+#ifndef CONFIG_APUS
 /*
  * This gets called from serial.c, which is now used on
  * powermacs as well as prep/chrp boxes.
@@ -32,7 +39,7 @@ static __inline__ int irq_cannonicalize(int irq)
 {
 	return (((is_prep || is_chrp) && irq == 2) ? 9 : irq);
 }
-
+#endif
 
 #else /* CONFIG_8xx */
 

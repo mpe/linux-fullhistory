@@ -1,4 +1,4 @@
-/* $Id: math.c,v 1.4 1998/04/06 16:09:57 jj Exp $
+/* $Id: math.c,v 1.5 1998/06/12 14:54:27 jj Exp $
  * arch/sparc64/math-emu/math.c
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -122,59 +122,57 @@ int do_mathemu(struct pt_regs *regs, struct fpustate *f)
 	if (type) {
 		void *rs1 = NULL, *rs2 = NULL, *rd = NULL;
 		
-		freg = (f->fsr >> 14) & 0xf;
+		freg = (current->tss.xfsr[0] >> 14) & 0xf;
 		if (freg != (type >> 8))
 			goto err;
-		f->fsr &= ~0x1c000;
+		current->tss.xfsr[0] &= ~0x1c000;
 		freg = ((insn >> 14) & 0x1f);
 		switch (type & 0x3) {
 		case 3: if (freg & 2) {
-				f->fsr |= (6 << 14) /* invalid_fp_register */;
+				current->tss.xfsr[0] |= (6 << 14) /* invalid_fp_register */;
 				goto err;
 			}
 		case 2: freg = ((freg & 1) << 5) | (freg & 0x1e);
 		case 1: rs1 = (void *)&f->regs[freg]; 
-			flags = (freg < 32) ? SPARC_FLAG_USEDFPUL : SPARC_FLAG_USEDFPUU; 
-			if (!(current->tss.flags & flags))
-			rs1 = (void *)&zero;
+			flags = (freg < 32) ? FPRS_DL : FPRS_DU; 
+			if (!(current->tss.fpsaved[0] & flags))
+				rs1 = (void *)&zero;
 			break;
 		}
 		freg = (insn & 0x1f);
 		switch ((type >> 2) & 0x3) {
 		case 3: if (freg & 2) {
-				f->fsr |= (6 << 14) /* invalid_fp_register */;
+				current->tss.xfsr[0] |= (6 << 14) /* invalid_fp_register */;
 				goto err;
 			}
 		case 2: freg = ((freg & 1) << 5) | (freg & 0x1e);
 		case 1: rs2 = (void *)&f->regs[freg];
-			flags = (freg < 32) ? SPARC_FLAG_USEDFPUL : SPARC_FLAG_USEDFPUU; 
-			if (!(current->tss.flags & flags))
+			flags = (freg < 32) ? FPRS_DL : FPRS_DU; 
+			if (!(current->tss.fpsaved[0] & flags))
 				rs2 = (void *)&zero;
 			break;
 		}
 		freg = ((insn >> 25) & 0x1f);
 		switch ((type >> 4) & 0x3) {
-		case 0: rd = (void *)(((long)&f->fsr) | (freg & 3)); break;
+		case 0: rd = (void *)(((long)&current->tss.xfsr[0]) | (freg & 3)); break;
 		case 3: if (freg & 2) {
-				f->fsr |= (6 << 14) /* invalid_fp_register */;
+				current->tss.xfsr[0] |= (6 << 14) /* invalid_fp_register */;
 				goto err;
 			}
 		case 2: freg = ((freg & 1) << 5) | (freg & 0x1e);
 		case 1: rd = (void *)&f->regs[freg];
-			flags = (freg < 32) ? SPARC_FLAG_USEDFPUL : SPARC_FLAG_USEDFPUU; 
-			regs->fprs |= FPRS_FEF;
-			if (!(current->tss.flags & SPARC_FLAG_USEDFPU)) {
-				current->tss.flags |= SPARC_FLAG_USEDFPU;
-				f->fsr = 0;
-				f->gsr = 0;
+			flags = (freg < 32) ? FPRS_DL : FPRS_DU; 
+			if (!(current->tss.fpsaved[0] & FPRS_FEF)) {
+				current->tss.fpsaved[0] = FPRS_FEF;
+				current->tss.gsr[0] = 0;
 			}
-			if (!(current->tss.flags & flags)) {
+			if (!(current->tss.fpsaved[0] & flags)) {
 				if (freg < 32)
 					memset(f->regs, 0, 32*sizeof(u32));
 				else
 					memset(f->regs+32, 0, 32*sizeof(u32));
 			}
-			current->tss.flags |= flags;
+			current->tss.fpsaved[0] |= flags;
 			break;
 		}
 		func(rd, rs2, rs1);

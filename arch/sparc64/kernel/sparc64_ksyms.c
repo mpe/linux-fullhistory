@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.36 1998/04/16 07:07:19 ecd Exp $
+/* $Id: sparc64_ksyms.c,v 1.39 1998/07/04 12:35:59 ecd Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -139,6 +139,8 @@ EXPORT_SYMBOL(dma_chain);
 EXPORT_SYMBOL(ebus_chain);
 EXPORT_SYMBOL(pci_dvma_offset);
 EXPORT_SYMBOL(pci_dvma_mask);
+EXPORT_SYMBOL(pci_dvma_v2p_hash);
+EXPORT_SYMBOL(pci_dvma_p2v_hash);
 EXPORT_SYMBOL(empty_zero_page);
 EXPORT_SYMBOL(outsb);
 EXPORT_SYMBOL(outsw);

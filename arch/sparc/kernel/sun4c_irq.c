@@ -108,9 +108,22 @@ static void sun4c_enable_irq(unsigned int irq_nr)
 
 volatile struct sun4c_timer_info *sun4c_timers;
 
+#ifdef CONFIG_SUN4
+/* This is an ugly hack to work around the
+   current timer code, and make it work with 
+   the sun4/260 intersil 
+   */
+volatile struct sun4c_timer_info sun4_timer;
+#endif
+
 static void sun4c_clear_clock_irq(void)
 {
 	volatile unsigned int clear_intr;
+#ifdef CONFIG_SUN4
+	if( idprom->id_machtype == SM_SUN4 | SM_4_260 ) 
+	  clear_intr = sun4_timer.timer_limit10;
+	else
+#endif
 	clear_intr = sun4c_timers->timer_limit10;
 }
 
@@ -131,6 +144,11 @@ __initfunc(static void sun4c_init_timers(void (*counter_fn)(int, void *, struct 
 	/* Map the Timer chip, this is implemented in hardware inside
 	 * the cache chip on the sun4c.
 	 */
+#ifdef CONFIG_SUN4
+	if (idprom->id_machtype == SM_SUN4 | SM_4_260)
+		sun4c_timers = &sun4_timer;
+	else
+#endif
 	sun4c_timers = sparc_alloc_io (SUN_TIMER_PHYSADDR, 0,
 				       sizeof(struct sun4c_timer_info),
 				       "timer", 0x0, 0x0);
@@ -152,12 +170,15 @@ __initfunc(static void sun4c_init_timers(void (*counter_fn)(int, void *, struct 
 		prom_halt();
 	}
     
+	sun4c_enable_irq(10);
 	claim_ticker14(NULL, PROFILE_IRQ, 0);
 }
 
 #ifdef __SMP__
 static void sun4c_nop(void) {}
 #endif
+
+extern char *sun4m_irq_itoa(unsigned int irq);
 
 __initfunc(void sun4c_init_IRQ(void))
 {
@@ -166,7 +187,7 @@ __initfunc(void sun4c_init_IRQ(void))
 
 	if (ARCH_SUN4) {
 		interrupt_enable =
-			(char *) sparc_alloc_io(SUN4_IE_PHYSADDR, 0,
+			(char *) sparc_alloc_io(sun4_ie_physaddr, 0,
 					   	PAGE_SIZE,
 					   	"sun4c_interrupts",
 					   	0x0, 0x0);
@@ -193,6 +214,7 @@ __initfunc(void sun4c_init_IRQ(void))
 	BTFIXUPSET_CALL(clear_clock_irq, sun4c_clear_clock_irq, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(clear_profile_irq, sun4c_clear_profile_irq, BTFIXUPCALL_NOP);
 	BTFIXUPSET_CALL(load_profile_irq, sun4c_load_profile_irq, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(__irq_itoa, sun4m_irq_itoa, BTFIXUPCALL_NORM);
 	init_timers = sun4c_init_timers;
 #ifdef __SMP__
 	BTFIXUPSET_CALL(set_cpu_int, sun4c_nop, BTFIXUPCALL_NOP);

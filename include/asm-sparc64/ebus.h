@@ -1,4 +1,4 @@
-/* $Id: ebus.h,v 1.6 1998/04/13 07:27:07 davem Exp $
+/* $Id: ebus.h,v 1.8 1998/05/07 21:00:27 ecd Exp $
  * ebus.h: PCI to Ebus pseudo driver software state.
  *
  * Copyright (C) 1997 Eddie C. Dost (ecd@skynet.be)
@@ -92,10 +92,5 @@ extern void ebus_init(void);
 
 #define for_each_edevchild(dev, child)					\
         for((child) = (dev)->children; (child); (child) = (child)->next)
-
-#define for_all_ebusdev(dev, bus)					\
-	for ((bus) = ebus_chain, ((dev) = (bus) ? (bus)->devices : 0);	\
-	     (bus); ((dev) = (dev)->next ? (dev)->next :		\
-	     ((bus) = (bus)->next, (bus) ? (bus)->devices : 0)))
 
 #endif /* !(__SPARC64_EBUS_H) */

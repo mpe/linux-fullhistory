@@ -478,7 +478,7 @@ void smp4m_percpu_timer_interrupt(struct pt_regs *regs)
 
 			if(--current->counter < 0) {
 				current->counter = 0;
-				need_resched = 1;
+				current->need_resched = 1;
 			}
 
 			spin_lock(&ticker_lock);

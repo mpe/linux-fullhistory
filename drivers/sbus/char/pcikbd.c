@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.16 1998/04/01 04:12:40 davem Exp $
+/* $Id: pcikbd.c,v 1.18 1998/05/29 06:00:23 ecd Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -458,11 +458,13 @@ __initfunc(void pcikbd_init_hw(void))
 	struct linux_ebus_child *child;
 	char *msg;
 
-	for_all_ebusdev(edev, ebus) {
-		if(!strcmp(edev->prom_name, "8042")) {
-			for_each_edevchild(edev, child) {
-				if (!strcmp(child->prom_name, "kb_ps2"))
-					goto found;
+	for_each_ebus(ebus) {
+		for_each_ebusdev(edev, ebus) {
+			if(!strcmp(edev->prom_name, "8042")) {
+				for_each_edevchild(edev, child) {
+					if (!strcmp(child->prom_name, "kb_ps2"))
+						goto found;
+				}
 			}
 		}
 	}
@@ -481,17 +483,23 @@ found:
 	pcikbd_irq = child->irqs[0];
 	if (request_irq(pcikbd_irq, &pcikbd_interrupt,
 			SA_SHIRQ, "keyboard", (void *)pcikbd_iobase)) {
-		printk("8042: cannot register IRQ %x\n", pcikbd_irq);
+		printk("8042: cannot register IRQ %s\n",
+		       __irq_itoa(pcikbd_irq));
 		return;
 	}
 
-	printk("8042(kbd): iobase[%016lx] irq[%x]\n", pcikbd_iobase, pcikbd_irq);
+	printk("8042(kbd) at 0x%lx (irq %s)\n", pcikbd_iobase,
+	       __irq_itoa(pcikbd_irq));
 
 	kd_mksound = nop_kd_mksound;
-	for_all_ebusdev(edev, ebus) {
-		if(!strcmp(edev->prom_name, "beeper"))
-			break;
+	edev = 0;
+	for_each_ebus(ebus) {
+		for_each_ebusdev(edev, ebus) {
+			if(!strcmp(edev->prom_name, "beeper"))
+				goto ebus_done;
+		}
 	}
+ebus_done:
 
 	/*
 	 * XXX: my 3.1.3 PROM does not give me the beeper node for the audio
@@ -876,11 +884,13 @@ __initfunc(int pcimouse_init(void))
 	struct linux_ebus_device *edev;
 	struct linux_ebus_child *child;
 
-	for_all_ebusdev(edev, ebus) {
-		if(!strcmp(edev->prom_name, "8042")) {
-			for_each_edevchild(edev, child) {
-				if (!strcmp(child->prom_name, "kdmouse"))
-					goto found;
+	for_each_ebus(ebus) {
+		for_each_ebusdev(edev, ebus) {
+			if(!strcmp(edev->prom_name, "8042")) {
+				for_each_edevchild(edev, child) {
+					if (!strcmp(child->prom_name,"kdmouse"))
+						goto found;
+				}
 			}
 		}
 	}
@@ -899,12 +909,13 @@ found:
 	pcimouse_irq = child->irqs[0];
 	if (request_irq(pcimouse_irq, &pcimouse_interrupt,
 		        SA_SHIRQ, "mouse", (void *)pcimouse_iobase)) {
-		printk("8042: Cannot register IRQ %x\n", pcimouse_irq);
+		printk("8042: Cannot register IRQ %s\n",
+		       __irq_itoa(pcimouse_irq));
 		return -ENODEV;
 	}
 
-	printk("8042(mouse): iobase[%016lx] irq[%x]\n",
-	       pcimouse_iobase, pcimouse_irq);
+	printk("8042(mouse) at %lx (irq %s)\n", pcimouse_iobase,
+	       __irq_itoa(pcimouse_irq));
 
 	printk("8042: PS/2 auxiliary pointing device detected.\n");
 	aux_present = 1;

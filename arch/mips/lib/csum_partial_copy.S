@@ -1,13 +1,13 @@
-/*
+/* $Id: csum_partial_copy.S,v 1.2 1998/05/07 00:39:47 ralf Exp $
+ *
+ * Unified implementation of csum_copy_partial, csum_copy_partial_from_user
+ * and csum_copy_partial_nocheck.
+ *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
  * Copyright (C) 1998 Ralf Baechle
- *
- * $Id: csum_partial_copy.S,v 1.1 1998/05/04 09:18:11 ralf Exp $
- *
- * Unified implementation of csum_copy_partial and csum_copy_partial_from_user.
  */
 #include <asm/asm.h>
 #include <asm/offset.h>
@@ -179,6 +179,7 @@ small_csumcpy:
 	.align	5
 LEAF(csum_partial_copy_from_user)
 	addu	t5, src, a2			# end address for fixup
+EXPORT(csum_partial_copy_nocheck)
 EXPORT(csum_partial_copy)
 	move	sum, zero			# clear computed sum
 	move	t7, zero			# clear odd flag

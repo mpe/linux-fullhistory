@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.42 1998/04/14 13:49:52 jj Exp $
+/* $Id: systbls.S,v 1.47 1998/07/28 13:07:55 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -17,14 +17,14 @@
 
 	.globl sys_call_table32
 sys_call_table32:
-/*0*/	.word sys_setup, sys_exit, sys_fork, sys_read, sys_write
+/*0*/	.word sys_setup, sparc_exit, sys_fork, sys_read, sys_write
 /*5*/	.word sys_open, sys_close, sys32_wait4, sys_creat, sys_link
-/*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys32_xstat, sys32_mknod
-/*15*/	.word sys32_chmod, sys32_lchown, sparc_brk, sys_xmknod, sys32_lseek
-/*20*/	.word sys_getpid, sys_nis_syscall, sys_nis_syscall, sys_setuid, sys_getuid
-/*25*/	.word sys_time, sys_ptrace, sys_alarm, sys_nis_syscall, sys32_pause
+/*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys_nis_syscall, sys32_mknod
+/*15*/	.word sys32_chmod, sys32_lchown, sparc_brk, sys_nis_syscall, sys32_lseek
+/*20*/	.word sys_getpid, sys_capget, sys_capset, sys_setuid, sys_getuid
+/*25*/	.word sys_time, sys_ptrace, sys_alarm, sys32_sigaltstack, sys32_pause
 /*30*/	.word sys32_utime, sys_nis_syscall, sys_nis_syscall, sys_access, sys_nice
-	.word sys_nis_syscall, sys_sync, sys_kill, sys32_newstat, sys_nis_syscall
+	.word sys_nis_syscall, sys_sync, sys_kill, sys32_newstat, sys32_sendfile
 /*40*/	.word sys32_newlstat, sys_dup, sys_pipe, sys32_times, sys_nis_syscall
 	.word sys_nis_syscall, sys_setgid, sys_getgid, sys_signal, sys_geteuid
 /*50*/	.word sys_getegid, sys_acct, sys_nis_syscall, sys_nis_syscall, sys32_ioctl
@@ -65,8 +65,8 @@ sys_call_table32:
 	.word sys32_bdflush, sys32_sysfs, sys_nis_syscall, sys_setfsuid, sys_setfsgid
 /*230*/	.word sys32_select, sys_time, sys_nis_syscall, sys_stime, sys_nis_syscall
 	.word sys_nis_syscall, sys_llseek, sys_mlock, sys_munlock, sys_mlockall
-/*240*/	.word sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_nis_syscall, sys_nis_syscall
-	.word sys_nis_syscall, sys_sched_get_priority_max, sys_sched_get_priority_min, sys32_sched_rr_get_interval, sys32_nanosleep
+/*240*/	.word sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_sched_setscheduler, sys_sched_getscheduler
+	.word sys_sched_yield, sys_sched_get_priority_max, sys_sched_get_priority_min, sys32_sched_rr_get_interval, sys32_nanosleep
 /*250*/	.word sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys32_nfsservctl
 	.word sys_aplib
 
@@ -76,14 +76,14 @@ sys_call_table32:
 	.globl sys_call_table64, sys_call_table
 sys_call_table64:
 sys_call_table:
-/*0*/	.word sys_setup, sys_exit, sys_fork, sys_read, sys_write
+/*0*/	.word sys_setup, sparc_exit, sys_fork, sys_read, sys_write
 /*5*/	.word sys_open, sys_close, sys_wait4, sys_creat, sys_link
-/*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys_xstat, sys_mknod
-/*15*/	.word sys_chmod, sys_lchown, sparc_brk, sys_xmknod, sys_lseek
-/*20*/	.word sys_getpid, sys_nis_syscall, sys_nis_syscall, sys_setuid, sys_getuid
-/*25*/	.word sys_time, sys_ptrace, sys_alarm, sys_nis_syscall, sys_nis_syscall
+/*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys_nis_syscall, sys_mknod
+/*15*/	.word sys_chmod, sys_lchown, sparc_brk, sys_nis_syscall, sys_lseek
+/*20*/	.word sys_getpid, sys_capget, sys_capset, sys_setuid, sys_getuid
+/*25*/	.word sys_time, sys_ptrace, sys_alarm, sys_sigaltstack, sys_nis_syscall
 /*30*/	.word sys_utime, sys_nis_syscall, sys_nis_syscall, sys_access, sys_nice
-	.word sys_nis_syscall, sys_sync, sys_kill, sys_newstat, sys_nis_syscall
+	.word sys_nis_syscall, sys_sync, sys_kill, sys_newstat, sys_sendfile
 /*40*/	.word sys_newlstat, sys_dup, sys_pipe, sys_times, sys_nis_syscall
 	.word sys_nis_syscall, sys_setgid, sys_getgid, sys_signal, sys_geteuid
 /*50*/	.word sys_getegid, sys_acct, sys_memory_ordering, sys_nis_syscall, sys_ioctl
@@ -124,8 +124,8 @@ sys_call_table:
 	.word sys_bdflush, sys_sysfs, sys_nis_syscall, sys_setfsuid, sys_setfsgid
 /*230*/	.word sys_select, sys_time, sys_nis_syscall, sys_stime, sys_nis_syscall
 	.word sys_nis_syscall, sys_llseek, sys_mlock, sys_munlock, sys_mlockall
-/*240*/	.word sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_nis_syscall, sys_nis_syscall
-	.word sys_nis_syscall, sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, sys_nanosleep
+/*240*/	.word sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_sched_setscheduler, sys_sched_getscheduler
+	.word sys_sched_yield, sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, sys_nanosleep
 /*250*/	.word sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nfsservctl
 	.word sys_aplib
 
@@ -134,7 +134,7 @@ sys_call_table:
 	.align 1024
 	.globl sunos_sys_table
 sunos_sys_table:
-/*0*/	.word sunos_indir, sys_exit, sys_fork
+/*0*/	.word sunos_indir, sparc_exit, sys_fork
 	.word sunos_read, sunos_write, sunos_open
 	.word sys_close, sunos_wait4, sys_creat
 	.word sys_link, sys_unlink, sunos_execv
@@ -189,7 +189,7 @@ sunos_sys_table:
 	.word sys_poll, sunos_nosys, sunos_nosys
 	.word sunos_getdirentries, sys32_statfs, sys32_fstatfs
 	.word sys_umount, sunos_nosys, sunos_nosys
-	.word sunos_getdomainname, sys_setdomainname
+	.word sys_getdomainname, sys_setdomainname
 	.word sunos_nosys, sys32_quotactl, sunos_nosys
 	.word sunos_mount, sys_ustat, sunos_semsys
 	.word sunos_nosys, sunos_shmsys, sunos_audit

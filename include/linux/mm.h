@@ -137,6 +137,7 @@ typedef struct page {
 #define PG_DMA			 7
 #define PG_Slab			 8
 #define PG_swap_cache		 9
+#define PG_skip			10
 #define PG_reserved		31
 
 /* Make it prettier to test the above... */

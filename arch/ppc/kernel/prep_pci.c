@@ -1,5 +1,5 @@
 /*
- * $Id: prep_pci.c,v 1.16 1998/02/23 02:47:32 davem Exp $
+ * $Id: prep_pci.c,v 1.20 1998/06/19 16:48:45 cort Exp $
  * PReP pci functions.
  * Originally by Gary Thomas
  * rewritten and updated by Cort Dougan (cort@cs.nmt.edu)
@@ -30,7 +30,7 @@ unsigned char *Motherboard_routes;
 /* Tables for known hardware */   
 
 /* Motorola PowerStackII - Utah */
-static char Utah_pci_IRQ_map[23] =
+static char Utah_pci_IRQ_map[23] __prepdata =
 {
         0,   /* Slot 0  - unused */
         0,   /* Slot 1  - unused */
@@ -59,7 +59,7 @@ static char Utah_pci_IRQ_map[23] =
         0,
 };
 
-static char Utah_pci_IRQ_routes[] =
+static char Utah_pci_IRQ_routes[] __prepdata =
 {
         0,   /* Line 0 - Unused */
         9,   /* Line 1 */
@@ -70,7 +70,7 @@ static char Utah_pci_IRQ_routes[] =
 
 /* Motorola PowerStackII - Omaha */
 /* no integrated SCSI or ethernet */
-static char Omaha_pci_IRQ_map[23] =
+static char Omaha_pci_IRQ_map[23] __prepdata =
 {
         0,   /* Slot 0  - unused */
         0,   /* Slot 1  - unused */
@@ -97,7 +97,7 @@ static char Omaha_pci_IRQ_map[23] =
         0,
 };
 
-static char Omaha_pci_IRQ_routes[] =
+static char Omaha_pci_IRQ_routes[] __prepdata =
 {
         0,   /* Line 0 - Unused */
         9,   /* Line 1 */
@@ -107,7 +107,7 @@ static char Omaha_pci_IRQ_routes[] =
 };
 
 /* Motorola PowerStack */
-static char Blackhawk_pci_IRQ_map[16] =
+static char Blackhawk_pci_IRQ_map[16] __prepdata =
 {
   	0,	/* Slot 0  - unused */
   	0,	/* Slot 1  - unused */
@@ -127,7 +127,7 @@ static char Blackhawk_pci_IRQ_map[16] =
   	0,	/* Slot 15 - unused */
 };
 
-static char Blackhawk_pci_IRQ_routes[] =
+static char Blackhawk_pci_IRQ_routes[] __prepdata =
 {
    	0,	/* Line 0 - Unused */
    	9,	/* Line 1 */
@@ -137,7 +137,7 @@ static char Blackhawk_pci_IRQ_routes[] =
 };
    
 /* Motorola MVME16xx */
-static char Genesis_pci_IRQ_map[16] =
+static char Genesis_pci_IRQ_map[16] __prepdata =
 {
   	0,	/* Slot 0  - unused */
   	0,	/* Slot 1  - unused */
@@ -157,7 +157,7 @@ static char Genesis_pci_IRQ_map[16] =
   	0,	/* Slot 15 - unused */
 };
 
-static char Genesis_pci_IRQ_routes[] =
+static char Genesis_pci_IRQ_routes[] __prepdata =
 {
    	0,	/* Line 0 - Unused */
    	10,	/* Line 1 */
@@ -167,7 +167,7 @@ static char Genesis_pci_IRQ_routes[] =
 };
    
 /* Motorola Series-E */
-static char Comet_pci_IRQ_map[16] =
+static char Comet_pci_IRQ_map[16] __prepdata =
 {
   	0,	/* Slot 0  - unused */
   	0,	/* Slot 1  - unused */
@@ -187,7 +187,7 @@ static char Comet_pci_IRQ_map[16] =
   	0,	/* Slot 15 - unused */
 };
 
-static char Comet_pci_IRQ_routes[] =
+static char Comet_pci_IRQ_routes[] __prepdata =
 {
    	0,	/* Line 0 - Unused */
    	10,	/* Line 1 */
@@ -201,7 +201,7 @@ static char Comet_pci_IRQ_routes[] =
  * This is actually based on the Carolina motherboard
  * -- Cort
  */
-static char ibm8xx_pci_IRQ_map[23] = {
+static char ibm8xx_pci_IRQ_map[23] __prepdata = {
         0, /* Slot 0  - unused */
         0, /* Slot 1  - unused */
         0, /* Slot 2  - unused */
@@ -226,7 +226,7 @@ static char ibm8xx_pci_IRQ_map[23] = {
         0, /* Slot 21 - unused */
         2, /* Slot 22 - PCI slot 1 PCIINTx# (See below) */
 };
-static char ibm8xx_pci_IRQ_routes[] = {
+static char ibm8xx_pci_IRQ_routes[] __prepdata = {
         0,      /* Line 0 - unused */
         13,     /* Line 1 */
         10,     /* Line 2 */
@@ -235,7 +235,7 @@ static char ibm8xx_pci_IRQ_routes[] = {
 };
 
 /* IBM Nobis and 850 */
-static char Nobis_pci_IRQ_map[23] ={
+static char Nobis_pci_IRQ_map[23] __prepdata ={
         0, /* Slot 0  - unused */
         0, /* Slot 1  - unused */
         0, /* Slot 2  - unused */
@@ -254,7 +254,7 @@ static char Nobis_pci_IRQ_map[23] ={
         0, /* Slot 15 - unused */
 };
 
-static char Nobis_pci_IRQ_routes[] = {
+static char Nobis_pci_IRQ_routes[] __prepdata = {
         0, /* Line 0 - Unused */
         13, /* Line 1 */
         13, /* Line 2 */
@@ -270,12 +270,7 @@ static char Nobis_pci_IRQ_routes[] = {
 #define CAROLINA_IRQ_EDGE_MASK_LO   0x00  /* IRQ's 0-7  */
 #define CAROLINA_IRQ_EDGE_MASK_HI   0xA4  /* IRQ's 8-15 [10,13,15] */
 
-/*
- * FIXME: This code incorrectly assumes there's only bus #0, breaking all
- *	  PCI-to-PCI bridges. Also multi-function devices are not supported
- *	  at all. [mj]
- */
-
+__prep
 int
 prep_pcibios_read_config_dword (unsigned char bus,
 			   unsigned char dev, unsigned char offset, unsigned int *val)
@@ -297,6 +292,7 @@ prep_pcibios_read_config_dword (unsigned char bus,
 	return PCIBIOS_SUCCESSFUL;
 }
 
+__prep
 int
 prep_pcibios_read_config_word (unsigned char bus,
 			  unsigned char dev, unsigned char offset, unsigned short *val)
@@ -317,6 +313,7 @@ prep_pcibios_read_config_word (unsigned char bus,
 	return PCIBIOS_SUCCESSFUL;
 }
 
+__prep
 int
 prep_pcibios_read_config_byte (unsigned char bus,
 			  unsigned char dev, unsigned char offset, unsigned char *val)
@@ -337,6 +334,7 @@ prep_pcibios_read_config_byte (unsigned char bus,
 	return PCIBIOS_SUCCESSFUL;
 }
 
+__prep
 int
 prep_pcibios_write_config_dword (unsigned char bus,
 			    unsigned char dev, unsigned char offset, unsigned int val)
@@ -356,6 +354,7 @@ prep_pcibios_write_config_dword (unsigned char bus,
 	return PCIBIOS_SUCCESSFUL;
 }
 
+__prep
 int
 prep_pcibios_write_config_word (unsigned char bus,
 			   unsigned char dev, unsigned char offset, unsigned short val)
@@ -375,6 +374,7 @@ prep_pcibios_write_config_word (unsigned char bus,
 	return PCIBIOS_SUCCESSFUL;
 }
 
+__prep
 int
 prep_pcibios_write_config_byte (unsigned char bus,
 			   unsigned char dev, unsigned char offset, unsigned char val)
@@ -418,6 +418,7 @@ __initfunc(unsigned long route_pci_interrupts(void))
 			Motherboard_map_name = "Omaha (PowerStack II Pro3000)";
 			Motherboard_map = Omaha_pci_IRQ_map;
 			Motherboard_routes = Omaha_pci_IRQ_routes;
+			break;
 		case 0x60: /* PowerStackII Pro4000 */
 			Motherboard_map_name = "Utah (Powerstack II Pro4000)";
 			Motherboard_map = Utah_pci_IRQ_map;

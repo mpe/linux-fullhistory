@@ -1,4 +1,4 @@
-/* $Id: sunserial.c,v 1.57 1998/04/13 07:27:02 davem Exp $
+/* $Id: sunserial.c,v 1.61 1998/07/28 13:59:52 jj Exp $
  * serial.c: Serial port driver infrastructure for the Sparc.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -19,6 +19,11 @@
 #include "sunserial.h"
 
 int serial_console;
+
+__initfunc(int con_is_present(void))
+{
+	return serial_console ? 0 : 1;
+}
 
 __initfunc(static void
 nop_rs_kgdb_hook(int channel))
@@ -64,22 +69,8 @@ rs_kgdb_hook(int channel))
 	rs_ops.rs_kgdb_hook(channel);
 }
 
-__initfunc(static void sun_serial_finish_init(void))
-{
-        extern unsigned char *linux_serial_image;
-	extern int con_is_present(void);
-        char buffer[2048];
-
-	if (con_is_present())
-		return;
-
-        sprintf (buffer, linux_serial_image, UTS_RELEASE);
-	printk(buffer);
-}
-
 __initfunc(void serial_console_init(void))
 {
-	sun_serial_finish_init();
 }
 
 void rs_change_mouse_baud(int baud)

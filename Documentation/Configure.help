@@ -4045,6 +4045,26 @@ CONFIG_SCSI_DEBUG
   important data. This is primarily of use to people trying to debug
   the middle and upper layers of the SCSI subsystem. If unsure, say N.
 
+Fibre Channel support
+CONFIG_FC4
+  This is an experimental support for storage arrays connected to
+  the system using Fibre Optic and the "X3.269-199X Fibre Channel
+  Protocol for SCSI" specification. You'll also need the generic SCSI
+  support, as well as the drivers for the storage array itself and
+  for the interface adapter such as SOC. This subsystem could even
+  serve for IP networking, with some code extensions.
+  If unsure, say N.
+
+Sun SOC
+CONFIG_FC4_SOC
+  Serial Optical Channel is an interface card with one or two Fibre Optic
+  ports, each of which can be connected to a disk array. Only the SBus
+  incarnation of the adapter is supported at the moment.
+
+SparcSTORAGE Array 100 and 200 series
+CONFIG_SCSI_PLUTO
+  If you never bought a disk array made by Sun, go with N.  
+
 AcornSCSI support
 CONFIG_SCSI_ACORNSCSI_3
   This enables support for the Acorn SCSI card (aka30).  If you have an
@@ -8632,6 +8652,12 @@ CONFIG_AP1000
   WWW, you need to have access to a machine on the Internet that has a
   program like lynx or netscape) or mail to hackers@cafe.anu.edu.au
 
+Support for Sun4 architecture
+CONFIG_SUN4
+  Use this option if, and only if, your machine is sun4. Note that
+  kernel compiled with this option will run on sun4 only.
+  (And in current version, it will probably work on sun4/330, only.)
+
 SPARC ESP SCSI support
 CONFIG_SCSI_SUNESP
   This is the driver for the Sun ESP SCSI host adapter. The ESP
@@ -9130,27 +9156,23 @@ CONFIG_MSDOS_PARTITION
   Say Y if you need this feature; users who are only using their
   system-native partitioning scheme can say N here.
 
-Build PowerMac Kernel (not PReP)
+Board Type
 CONFIG_PMAC
-  There are currently two different kinds of PowerPC-based machines
+  There are currently several different kinds of PowerPC-based machines
   available: Apple Power Macintoshes and clones (such as the Motorola
-  Starmax series, and PReP (PowerPC Reference Platform) machines such
-  as the Motorola PowerStack range.  Currently, a single kernel binary
-  only supports one type or the other.  Say Y here to compile a kernel
-  which will run on Power Macintoshes and clones.
+  Starmax series, PReP (PowerPC Reference Platform) machines such
+  as the Motorola PowerStack, Amiga Power-Up systems (APUS), CHRP and the
+  embedded MBX boards from Motorola.  Currently, a single kernel binary
+  only supports one type or the other.  However, there is very early work
+  on support CHRP, PReP and PowerMac's from a single binary.
 
-Build PReP Kernel (not PowerMac)
-CONFIG_PREP
-  Say Y here to compile a kernel which will run on PReP (PowerPC
-  Reference Platform) machines such as the Motorola PowerStack range.
-  For Power Macintosh clones, including the Motorola Starmaxes, you
-  should say N (and Y to the previous question).
 
-Processor type
-CONFIG_MCOMMON
-  If you are compiling a kernel to run on a specific machine, you can
-  indicate which type of PowerPC processor it has.  Currently this
-  option does very little.
+Processor Type
+CONFIG_6xx
+  There are two types of PowerPC chips supported.  The more common
+  types (601,603,604,740,750) and the embedded versions (821 and 860).
+  Unless you are building a kernel for one of the embedded boards using
+  the 821 or 860 choose 6xx.
 
 Support for Open Firmware device tree in /proc
 CONFIG_PROC_DEVICETREE

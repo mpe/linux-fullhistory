@@ -46,7 +46,7 @@
  */
 static inline long get_reg(struct task_struct *task, int regno)
 {
-	if (regno <= PT_MQ)
+	if (regno < sizeof(struct pt_regs) / sizeof(unsigned long))
 		return ((unsigned long *)task->tss.regs)[regno];
 	return (0);
 }

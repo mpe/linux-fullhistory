@@ -1,5 +1,5 @@
 /*
- * $Id: idle.c,v 1.37 1998/04/26 06:59:12 cort Exp $
+ * $Id: idle.c,v 1.48 1998/07/30 11:29:22 davem Exp $
  *
  * Idle daemon for PowerPC.  Idle daemon will handle any action
  * that needs to be taken when the system becomes idle.
@@ -29,7 +29,6 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/smp_lock.h>
 #include <asm/processor.h>
 #include <asm/mmu.h>
 #include <asm/cache.h>
@@ -43,6 +42,7 @@ void inline htab_reclaim(void);
 
 unsigned long htab_reclaim_on = 0;
 unsigned long zero_paged_on = 0;
+unsigned long powersave_nap = 0;
 
 int idled(void *unused)
 {
@@ -55,11 +55,11 @@ int idled(void *unused)
 		/* endless loop with no priority at all */
 		current->priority = -100;
 		current->counter = -100;
-		
+
 		check_pgt_cache();
 
-		if ( !need_resched && zero_paged_on ) zero_paged();
-		if ( !need_resched && htab_reclaim_on ) htab_reclaim();
+		if ( !current->need_resched && zero_paged_on ) zero_paged();
+		if ( !current->need_resched && htab_reclaim_on ) htab_reclaim();
 
 		/*
 		 * Only processor 1 may sleep now since processor 2 would
@@ -67,7 +67,7 @@ int idled(void *unused)
 		 * then it can sleep. -- Cort
 		 */
 #ifndef __SMP__
-		if ( !need_resched ) power_save();
+		if ( !current->need_resched ) power_save();
 #endif /* __SMP__ */
 		schedule();
 	}
@@ -75,6 +75,35 @@ int idled(void *unused)
 	return ret;
 }
 
+#ifdef __SMP__
+/*
+ * SMP entry into the idle task - calls the same thing as the
+ * non-smp versions. -- Cort
+ */
+int cpu_idle(void *unused)
+{
+	idled(unused);
+	return 0; 
+}
+#endif /* __SMP__ */
+
+/*
+ * Syscall entry into the idle task. -- Cort
+ */
+asmlinkage int sys_idle(void)
+{
+	extern int media_bay_task(void *);
+	if(current->pid != 0)
+		return -EPERM;
+
+#ifdef CONFIG_PMAC
+	if (media_bay_present)
+		kernel_thread(media_bay_task, NULL, 0);
+#endif
+
+	idled(NULL);
+	return 0; /* should never execute this but it makes gcc happy -- Cort */
+}
 
 /*
  * Mark 'zombie' pte's in the hash table as invalid.
@@ -106,12 +135,12 @@ void inline htab_reclaim(void)
 	/* go a different direction each time */
 	dir *= -1;
         for ( ptr = start;
-	      !need_resched && (ptr != Hash_end) && (ptr != Hash);
+	      !current->need_resched && (ptr != Hash_end) && (ptr != Hash);
 	      ptr += dir)
 	{
 #else
 	if ( !reclaim_ptr ) reclaim_ptr = Hash;
-	while ( !need_resched )
+	while ( !current->need_resched )
 	{
 		reclaim_ptr++;
 		if ( reclaim_ptr == Hash_end ) reclaim_ptr = Hash;
@@ -121,7 +150,7 @@ void inline htab_reclaim(void)
 		valid = 0;
 		for_each_task(p)
 		{
-			if ( need_resched )
+			if ( current->need_resched )
 				goto out;
 			/* if this vsid/context is in use */
 			if ( (reclaim_ptr->vsid >> 4) == p->mm->context )
@@ -136,79 +165,42 @@ void inline htab_reclaim(void)
 		reclaim_ptr->v = 0;
 	}
 out:
-	if ( need_resched ) printk("need_resched: %x\n", need_resched);
+	if ( current->need_resched ) printk("need_resched: %lx\n", current->need_resched);
 	unlock_dcache();
 #endif /* CONFIG_8xx */
 }
-	
-/*
- * Syscall entry into the idle task. -- Cort
- */
-asmlinkage int sys_idle(void)
-{
-	extern int media_bay_task(void *);
-	if(current->pid != 0)
-		return -EPERM;
-
-#ifdef CONFIG_PMAC
-	if (media_bay_present)
-		kernel_thread(media_bay_task, NULL, 0);
-#endif
-
-	idled(NULL);
-	return 0; /* should never execute this but it makes gcc happy -- Cort */
-}
-
-#ifdef __SMP__
-/*
- * SMP entry into the idle task - calls the same thing as the
- * non-smp versions. -- Cort
- */
-int cpu_idle(void *unused)
-{
-	idled(unused);
-	return 0; 
-}
-#endif /* __SMP__ */
-
-/*
- * vars for idle task zero'ing out pages
- */
-unsigned long zero_list = 0;	/* head linked list of pre-zero'd pages */
-unsigned long bytecount = 0;	/* pointer into the currently being zero'd page */
-unsigned long zerocount = 0;	/* # currently pre-zero'd pages */
-unsigned long zerototal = 0;	/* # pages zero'd over time -- for ooh's and ahhh's */
-unsigned long zeropage_hits = 0;/* # zero'd pages request that we've done */
-unsigned long zeropage_calls = 0;/* # zero'd pages request that've been made */
-#define PAGE_THRESHOLD 96       /* how many pages to keep pre-zero'd */
 
 /*
  * Returns a pre-zero'd page from the list otherwise returns
  * NULL.
  */
-unsigned long get_prezerod_page(void)
+unsigned long get_zero_page_fast(void)
 {
-	unsigned long page;
+	unsigned long page = 0;
 
-	atomic_inc((atomic_t *)&zeropage_calls);
-	if ( zero_list )
+	atomic_inc((atomic_t *)&quicklists.zeropage_calls);
+	if ( zero_quicklist )
 	{
 		/* atomically remove this page from the list */
-		asm (	"101:lwarx  %1,0,%2\n"  /* reserve zero_list */
-			"    lwz    %0,0(%1)\n" /* get next -- new zero_list */
-			"    stwcx. %0,0,%2\n"  /* update zero_list */
+		asm (	"101:lwarx  %1,0,%2\n"  /* reserve zero_cache */
+			"    lwz    %0,0(%1)\n" /* get next -- new zero_cache */
+			"    stwcx. %0,0,%2\n"  /* update zero_cache */
 			"    bne-   101b\n"     /* if lost reservation try again */
-			: "=&r" (zero_list), "=&r" (page)
-			: "r" (&zero_list)
+			: "=&r" (zero_quicklist), "=&r" (page)
+			: "r" (&zero_quicklist)
 			: "cc" );
+#ifdef __SMP__
+		/* if another cpu beat us above this can happen -- Cort */
+		if ( page == 0 ) 
+			return 0;
+#endif /* __SMP__ */		
 		/* we can update zerocount after the fact since it is not
 		 * used for anything but control of a loop which doesn't
-		 * matter since it won't effect anything if it zero's one
+		 * matter since it won't affect anything if it zero's one
 		 * less page -- Cort
 		 */
-		atomic_inc((atomic_t *)&zeropage_hits);
-		atomic_dec((atomic_t *)&zerocount);
-		need_resched = 1;
+		atomic_inc((atomic_t *)&quicklists.zeropage_hits);
+		atomic_dec((atomic_t *)&zero_cache_sz);
 		
 		/* zero out the pointer to next in the page */
 		*(unsigned long *)page = 0;
@@ -224,12 +216,16 @@ unsigned long get_prezerod_page(void)
  * reschedule()'s in here so when we return we know we've
  * zero'd all we need to for now.
  */
+int zero_cache_water[2] = { 25, 96 }; /* high and low water marks for zero cache */
 void zero_paged(void)
 {
 	unsigned long pageptr = 0;	/* current page being zero'd */
+	unsigned long bytecount = 0;  
 	pte_t *pte;
-	
-	while ( zerocount <= PAGE_THRESHOLD )
+
+	if ( zero_cache_sz >= zero_cache_water[0] )
+		return;
+	while ( (zero_cache_sz < zero_cache_water[1]) && (!current->need_resched) )
 	{
 		/*
 		 * Mark a page as reserved so we can mess with it
@@ -240,11 +236,12 @@ void zero_paged(void)
 		if ( !pageptr )
 			return;
 		
-		if ( need_resched )
+		if ( current->need_resched )
 			schedule();
 		
 		/*
 		 * Make the page no cache so we don't blow our cache with 0's
+		 * We should just turn off the cache instead. -- Cort
 		 */
 		pte = find_pte(init_task.mm, pageptr);
 		if ( !pte )
@@ -255,20 +252,19 @@ void zero_paged(void)
 		
 		pte_uncache(*pte);
 		flush_tlb_page(find_vma(init_task.mm,pageptr),pageptr);
-	
 		/*
 		 * Important here to not take time away from real processes.
 		 */
 		for ( bytecount = 0; bytecount < PAGE_SIZE ; bytecount += 4 )
 		{
-			if ( need_resched )
+			if ( current->need_resched )
 				schedule();
 			*(unsigned long *)(bytecount + pageptr) = 0;
 		}
 		
 		/*
 		 * If we finished zero-ing out a page add this page to
-		 * the zero_list atomically -- we can't use
+		 * the zero_cache atomically -- we can't use
 		 * down/up since we can't sleep in idle.
 		 * Disabling interrupts is also a bad idea since we would
 		 * steal time away from real processes.
@@ -278,20 +274,20 @@ void zero_paged(void)
 		 * -- Cort
 		 */
 		/* turn cache on for this page */
+
 		pte_cache(*pte);
 		flush_tlb_page(find_vma(init_task.mm,pageptr),pageptr);
-		
 		/* atomically add this page to the list */
-		asm (	"101:lwarx  %0,0,%1\n"  /* reserve zero_list */
+		asm (	"101:lwarx  %0,0,%1\n"  /* reserve zero_cache */
 			"    stw    %0,0(%2)\n" /* update *pageptr */
 #ifdef __SMP__
 			"    sync\n"            /* let store settle */
 #endif			
-			"    mr     %0,%2\n"    /* update zero_list in reg */
-			"    stwcx. %2,0,%1\n"  /* update zero_list in mem */
+			"    mr     %0,%2\n"    /* update zero_cache in reg */
+			"    stwcx. %2,0,%1\n"  /* update zero_cache in mem */
 			"    bne-   101b\n"     /* if lost reservation try again */
-			: "=&r" (zero_list)
-			: "r" (&zero_list), "r" (pageptr)
+			: "=&r" (zero_quicklist)
+			: "r" (&zero_quicklist), "r" (pageptr)
 			: "cc" );
 		/*
 		 * This variable is used in the above loop and nowhere
@@ -302,12 +298,10 @@ void zero_paged(void)
 		 * zerocount updated yet when another processor
 		 * reads it.  -- Cort
 		 */
-		atomic_inc((atomic_t *)&zerocount);
-		atomic_inc((atomic_t *)&zerototal);
+		atomic_inc((atomic_t *)&zero_cache_sz);
+		atomic_inc((atomic_t *)&quicklists.zerototal);
 	}
 }
-
-int powersave_mode = HID0_DOZE;
 
 void power_save(void)
 {
@@ -321,10 +315,10 @@ void power_save(void)
 	case 8:			/* 750 */
 		save_flags(msr);
 		cli();
-		if (!need_resched) {
+		if (!current->need_resched) {
 			asm("mfspr %0,1008" : "=r" (hid0) :);
 			hid0 &= ~(HID0_NAP | HID0_SLEEP | HID0_DOZE);
-			hid0 |= powersave_mode | HID0_DPM;
+			hid0 |= (powersave_nap? HID0_NAP: HID0_DOZE) | HID0_DPM;
 			asm("mtspr 1008,%0" : : "r" (hid0));
 			msr |= MSR_POW;
 		}

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.43 1998/03/09 14:03:34 jj Exp $
+# $Id: Makefile,v 1.45 1998/07/28 16:52:42 jj Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -25,6 +25,10 @@ O_OBJS   := entry.o wof.o wuf.o etrap.o rtrap.o traps.o ${IRQ_OBJS} \
 	    unaligned.o muldiv.o
 
 OX_OBJS  := sparc_ksyms.o
+
+ifdef CONFIG_SUN4
+O_OBJS += sun4setup.o
+endif
 
 ifdef SMP
 O_OBJS += trampoline.o smp.o sun4m_smp.o sun4d_smp.o

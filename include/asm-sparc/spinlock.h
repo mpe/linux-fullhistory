@@ -10,8 +10,13 @@
 
 #ifndef __SMP__
 
-typedef struct { } spinlock_t;
-#define SPIN_LOCK_UNLOCKED { }
+#if (__GNUC__ > 2) || (__GNUC_MINOR__ >= 8)
+  typedef struct { } spinlock_t;
+  #define SPIN_LOCK_UNLOCKED { }
+#else
+  typedef unsigned char spinlock_t;
+  #define SPIN_LOCK_UNLOCKED 0
+#endif
 
 #define spin_lock_init(lock)	do { } while(0)
 #define spin_lock(lock)		do { } while(0)
@@ -67,7 +72,9 @@ typedef struct _spinlock_debug spinlock_t;
 
 #define SPIN_LOCK_UNLOCKED	{ 0, 0 }
 #define spin_lock_init(lp)	do { (lp)->owner_pc = 0; (lp)->lock = 0; } while(0)
-#define spin_unlock_wait(lp)	do { barrier(); } while((lp)->lock)
+#define spin_unlock_wait(lp)	\
+do { barrier();	\
+} while(*(volatile unsigned char *)(&(lp)->lock))
 
 extern void _spin_lock(spinlock_t *lock);
 extern int _spin_trylock(spinlock_t *lock);

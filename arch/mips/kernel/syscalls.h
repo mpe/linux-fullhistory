@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1995, 1996 by Ralf Baechle
  *
- * $Id: syscalls.h,v 1.13 1998/05/01 01:34:34 ralf Exp $
+ * $Id: syscalls.h,v 1.14 1998/05/07 00:39:37 ralf Exp $
  */
 
 /*
@@ -34,7 +34,7 @@ SYS(sys_chdir, 1)
 SYS(sys_time, 1)
 SYS(sys_mknod, 3)
 SYS(sys_chmod, 2)				/* 4015 */
-SYS(sys_chown, 3)
+SYS(sys_lchown, 3)
 SYS(sys_ni_syscall, 0)
 SYS(sys_stat, 2)
 SYS(sys_lseek, 3)
@@ -220,4 +220,5 @@ SYS(sys_rt_sigqueueinfo, 3)
 SYS(sys_rt_sigsuspend, 2)
 SYS(sys_pread, 4)				/* 4200 */
 SYS(sys_pwrite, 4)
-SYS(sys_lchown, 3)
+SYS(sys_chown, 3)
+SYS(sys_getcwd, 2)

@@ -19,6 +19,8 @@
 
 extern int __ppc_bh_counter;
 
+#define synchronize_bh()	do { } while (0)
+
 #define clear_active_bhs(x)	atomic_clear_mask((x),&bh_active)
 
 extern inline void init_bh(int nr, void (*routine)(void))
@@ -80,6 +82,8 @@ extern atomic_t __ppc_bh_counter;
 	do { atomic_inc(&__ppc_bh_counter); synchronize_irq(); } while(0)
 
 #define end_bh_atomic()		atomic_dec(&__ppc_bh_counter)
+
+#define synchronize_bh()	do { } while (0) /* XXX implement SMP version --Cort */
 
 #include <asm/spinlock.h>
 

@@ -1340,6 +1340,8 @@ static int amd7930_attach(struct sparcaudio_driver *drv, int node,
 	info->Bc.output_count = info->Bc.input_count = 0;
 	info->ints_on = 1; /* force disable below */
 
+	drv->dev = sdev;
+
 	/* Map the registers into memory. */
 	prom_getproperty(node, "reg", (char *)&regs, sizeof(regs));
 	if (sbus && sdev)

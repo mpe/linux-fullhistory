@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.13 1998/03/15 17:23:47 ecd Exp $
+/* $Id: time.c,v 1.15 1998/05/12 22:38:29 ecd Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -227,13 +227,17 @@ __initfunc(void clock_probe(void))
 	struct linux_prom_registers clk_reg[2];
 	char model[128];
 	int node, busnd = -1, err;
+#ifdef CONFIG_PCI
+	struct linux_ebus *ebus = 0;
+#endif
 
 	if(central_bus != NULL) {
 		busnd = central_bus->child->prom_node;
 	}
 #ifdef CONFIG_PCI
 	else if (ebus_chain != NULL) {
-		busnd = ebus_chain->prom_node;
+		ebus = ebus_chain;
+		busnd = ebus->prom_node;
 	}
 #endif
 	else {
@@ -253,6 +257,15 @@ __initfunc(void clock_probe(void))
 		   strcmp(model, "mk48t08") &&
 		   strcmp(model, "mk48t59")) {
 			node = prom_getsibling(node);
+#ifdef CONFIG_PCI
+			if ((node == 0) && ebus) {
+				ebus = ebus->next;
+				if (ebus) {
+					busnd = ebus->prom_node;
+					node = prom_getchild(busnd);
+				}
+			}
+#endif
 			if(node == 0) {
 				prom_printf("clock_probe: Cannot find timer chip\n");
 				prom_halt();
@@ -275,7 +288,7 @@ __initfunc(void clock_probe(void))
 		else if (ebus_chain) {
 			struct linux_ebus_device *edev;
 
-			for_each_ebusdev(edev, ebus_chain)
+			for_each_ebusdev(edev, ebus)
 				if (edev->prom_node == node)
 					break;
 			if (!edev) {

@@ -7,6 +7,8 @@
 	.text
 
 /*
+ * $Id: head.S,v 1.24 1998/07/21 02:43:50 cort Exp $
+ *	
  * This code is loaded by the ROM loader at some arbitrary location.
  * Move it to high memory so that it can load the kernel at 0x0000.
  *
@@ -38,11 +40,12 @@ start_:
 	mr	r11,r3		/* Save pointer to residual/board data */
 	
 #ifndef CONFIG_MBX
-	mfmsr	r3		/* Turn off interrupts */
+	mfmsr	r3		/* Turn off interrupts  */
 	li	r4,0
 	ori	r4,r4,MSR_EE
 	andc	r3,r3,r4
 	mtmsr	r3
+
 /* check if we need to relocate ourselves to the link addr or were we
    loaded there to begin with -- Cort */
 	lis	r4,start@h
@@ -65,6 +68,7 @@ start_:
 	mr	r7,r5
 	b	start_ldr
 1010:
+#if 0	
 /* Copy relocation code down to location 0x0100 (where we hope it's safe!) */
 	mflr	r3
 	addi	r5,r3,start_ldr-start_
@@ -82,6 +86,7 @@ start_:
 	mtlr	r21
 	mtctr	r22
 	bctr			/* Jump to code */
+#endif	
 /* 
  * no matter where we're loaded, move ourselves to -Ttext address
  */
@@ -110,13 +115,12 @@ relocate:
 	stwu	r5,4(r4)
 	xor	r6,r6,r5
 	bdnz	00b
-	lis	r3,start_ldr@h
+  	lis	r3,start_ldr@h
 	ori	r3,r3,start_ldr@l
 	mtlr	r3			/* Easiest way to do an absolute jump */
 	blr
-start_ldr:	
+start_ldr:
 #endif /* ndef CONFIG_MBX */
-	
 /* Clear all of BSS */
 	lis	r3,edata@h
 	ori	r3,r3,edata@l
@@ -137,9 +141,10 @@ start_ldr:
 	andc	r1,r1,r2
 /* Run loader */
 #ifdef CONFIG_MBX
+	mr	r3, r11
         mr      r21, r11
-        bl      serial_init             /* Init MBX serial port */
-        mr      r11, r21
+	bl      serial_init		/* Init MBX serial port */
+	mr      r11, r21
 	lis	r8,start@h
 	ori	r8,r8,start@l
 	li	r9,end@h
@@ -156,6 +161,7 @@ start_ldr:
 	mr	r5,r6			/* Checksum */
 	mr	r6,r11			/* Residual data */
 	bl	decompress_kernel
+	
 	/* changed to use r3 (as firmware does) for kernel
 	   as ptr to residual -- Cort*/
 	lis	r6,cmd_line@h
@@ -187,7 +193,7 @@ start_ldr:
 	ori	r10,r10,0xdeadc0de@l
 	stw	r10,0(r9)
 #endif
-	blr	
+	blr
 hang:
 	b	hang	
 
@@ -229,5 +235,71 @@ udelay:
 	cmp	0,r6,r9
 	blt	2b
 3:	blr		
+
+.globl _get_HID0
+_get_HID0:		
+	mfspr	r3,HID0
+	blr
+
+.globl _put_HID0
+_put_HID0:		
+	mtspr	HID0,r3
+	blr
+		
+.globl _get_MSR
+_get_MSR:		
+	mfmsr	r3
+	blr
 	
+.globl _put_MSR
+_put_MSR:		
+	mtmsr	r3
+	blr
+
+/*
+ * Flush instruction cache
+ * *** I'm really paranoid here!
+ */
+_GLOBAL(flush_instruction_cache)
+	mflr	r5
+	bl	flush_data_cache
+#ifndef CONFIG_MBX
+	mfspr	r3,HID0	/* Caches are controlled by this register */
+	li	r4,0
+	ori	r4,r4,(HID0_ICE|HID0_ICFI)
+	or	r3,r3,r4	/* Need to enable+invalidate to clear */
+	mtspr	HID0,r3
+	andc	r3,r3,r4
+	ori	r3,r3,HID0_ICE	/* Enable cache */
+	mtspr	HID0,r3
+#endif	
+	mtlr	r5
+	blr
+	
+#define NUM_CACHE_LINES 128*8
+#define CACHE_LINE_SIZE 32 
+#if 0
+cache_flush_buffer:
+	.space	NUM_CACHE_LINES*CACHE_LINE_SIZE	/* CAUTION! these need to match hardware */
+#else
+#define cache_flush_buffer 0x1000
+#endif
+
+/*
+ * Flush data cache
+ * *** I'm really paranoid here!
+ */
+_GLOBAL(flush_data_cache)
+	lis	r3,cache_flush_buffer@h
+	ori	r3,r3,cache_flush_buffer@l
+	li	r4,NUM_CACHE_LINES
+	mtctr	r4
+#if 0
+00:	dcbz	0,r3			/* Flush cache line with minimal BUS traffic */
+#else
+00:	lwz	r4,0(r3)
+#endif
+	addi	r3,r3,CACHE_LINE_SIZE	/* Next line, please */
+	bdnz	00b	
+10:	blr
 	.comm	.stack,4096*2,4

@@ -1,4 +1,4 @@
-/* $Id: flash.c,v 1.7 1998/03/10 20:19:05 jj Exp $
+/* $Id: flash.c,v 1.9 1998/05/17 06:33:39 ecd Exp $
  * flash.c: Allow mmap access to the OBP Flash, for OBP updates.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -161,7 +161,7 @@ __initfunc(int flash_init(void))
 	struct linux_ebus *ebus;
 	struct linux_ebus_device *edev = 0;
 	struct linux_prom_registers regs[2];
-	int len, err;
+	int len, err, nregs;
 
 	for_all_sbusdev(sdev, sbus) {
 		if (!strcmp(sdev->prom_name, "flashprom")) {
@@ -190,22 +190,38 @@ __initfunc(int flash_init(void))
 	}
 	if (!sdev) {
 #ifdef CONFIG_PCI
-		for_all_ebusdev(edev, ebus)
-			if (!strcmp(edev->prom_name, "flashprom"))
-				break;
+		for_each_ebus(ebus) {
+			for_each_ebusdev(edev, ebus) {
+				if (!strcmp(edev->prom_name, "flashprom"))
+					goto ebus_done;
+			}
+		}
+	ebus_done:
 		if (!edev)
 			return -ENODEV;
 
 		len = prom_getproperty(edev->prom_node, "reg", (void *)regs, sizeof(regs));
-		if (len != sizeof(regs)) {
+		if ((len % sizeof(regs[0])) != 0) {
 			printk("flash: Strange reg property size %d\n", len);
 			return -ENODEV;
 		}
 
+		nregs = len / sizeof(regs[0]);
+
 		flash.read_base = edev->base_address[0];
 		flash.read_size = regs[0].reg_size;
-		flash.write_base = edev->base_address[1];
-		flash.write_size = regs[1].reg_size;
+
+		if (nregs == 1) {
+			flash.write_base = edev->base_address[0];
+			flash.write_size = regs[0].reg_size;
+		} else if (nregs == 2) {
+			flash.write_base = edev->base_address[1];
+			flash.write_size = regs[1].reg_size;
+		} else {
+			printk("flash: Strange number of regs %d\n", nregs);
+			return -ENODEV;
+		}
+
 		flash.busy = 0;
 
 #else

@@ -1,4 +1,4 @@
-/* $Id: signal.h,v 1.31 1997/12/14 23:24:41 ecd Exp $ */
+/* $Id: signal.h,v 1.34 1998/07/29 16:32:38 jj Exp $ */
 #ifndef _ASMSPARC_SIGNAL_H
 #define _ASMSPARC_SIGNAL_H
 
@@ -75,6 +75,7 @@
 #define SIGPROF		27
 #define SIGWINCH	28
 #define SIGLOST		29
+#define SIGPWR		SIGLOST
 #define SIGUSR1		30
 #define SIGUSR2		31
 
@@ -133,6 +134,7 @@ struct sigstack {
  */
 #define SA_NOCLDSTOP	SV_IGNCHILD
 #define SA_STACK	SV_SSTACK
+#define SA_ONSTACK	SV_SSTACK
 #define SA_RESTART	SV_INTR
 #define SA_ONESHOT	SV_RESET
 #define SA_INTERRUPT	0x10
@@ -144,6 +146,15 @@ struct sigstack {
 #define SIG_BLOCK          0x01	/* for blocking signals */
 #define SIG_UNBLOCK        0x02	/* for unblocking signals */
 #define SIG_SETMASK        0x04	/* for setting the signal mask */
+
+/* 
+ * sigaltstack controls
+ */
+#define SS_ONSTACK	1
+#define SS_DISABLE	2
+
+#define MINSIGSTKSZ	4096
+#define SIGSTKSZ	16384
 
 #ifdef __KERNEL__
 /*

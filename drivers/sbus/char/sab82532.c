@@ -1,4 +1,4 @@
-/* $Id: sab82532.c,v 1.17 1998/04/01 06:55:12 ecd Exp $
+/* $Id: sab82532.c,v 1.20 1998/05/29 06:00:24 ecd Exp $
  * sab82532.c: ASYNC Driver for the SIEMENS SAB82532 DUSCC.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -30,6 +30,7 @@
 #include <asm/sab82532.h>
 #include <asm/uaccess.h>
 #include <asm/ebus.h>
+#include <asm/irq.h>
 
 #include "sunserial.h"
 
@@ -2046,7 +2047,7 @@ int sab82532_read_proc(char *page, char **start, off_t off, int count,
 	int i, len = 0;
 	off_t	begin = 0;
 
-	len += sprintf(page, "serinfo:1.0 driver:%s\n", "$Revision: 1.17 $");
+	len += sprintf(page, "serinfo:1.0 driver:%s\n", "$Revision: 1.20 $");
 	for (i = 0; i < NR_PORTS && len < 4000; i++) {
 		len += line_info(page + len, sab82532_table[i]);
 		if (len+begin > off+count)
@@ -2074,14 +2075,18 @@ done:
 __initfunc(static int get_sab82532(unsigned long *memory_start))
 {
 	struct linux_ebus *ebus;
-	struct linux_ebus_device *edev;
+	struct linux_ebus_device *edev = 0;
 	struct sab82532 *sab;
 	unsigned long regs, offset;
 	int i;
 
-	for_all_ebusdev(edev, ebus)
-		if (!strcmp(edev->prom_name, "se"))
-			break;
+	for_each_ebus(ebus) {
+		for_each_ebusdev(edev, ebus) {
+			if (!strcmp(edev->prom_name, "se"))
+				goto ebus_done;
+		}
+	}
+ebus_done:
 	if (!edev)
 		return -ENODEV;
 
@@ -2137,7 +2142,7 @@ sab82532_kgdb_hook(int line))
 
 __initfunc(static inline void show_serial_version(void))
 {
-	char *revision = "$Revision: 1.17 $";
+	char *revision = "$Revision: 1.20 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2264,9 +2269,10 @@ __initfunc(int sab82532_init(void))
 			}
 		}
 	
-		printk(KERN_INFO "ttyS%02d at 0x%lx (irq = %x) is a SAB82532 %s\n",
-		       info->line, (unsigned long)info->regs, info->irq,
-		       sab82532_version[info->type]);
+		printk(KERN_INFO
+		       "ttyS%02d at 0x%lx (irq = %s) is a SAB82532 %s\n",
+		       info->line, (unsigned long)info->regs,
+		       __irq_itoa(info->irq), sab82532_version[info->type]);
 	}
 	return 0;
 }

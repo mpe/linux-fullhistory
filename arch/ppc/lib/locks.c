@@ -1,5 +1,5 @@
 /*
- * $Id: locks.c,v 1.17 1998/03/26 22:19:38 cort Exp $
+ * $Id: locks.c,v 1.18 1998/07/28 03:50:27 cort Exp $
  *
  * Locks for smp ppc 
  * 
@@ -18,7 +18,7 @@
 #define DEBUG_LOCKS 1
 
 #undef INIT_STUCK
-#define INIT_STUCK 1000000
+#define INIT_STUCK 10000
 
 void _spin_lock(spinlock_t *lock)
 {
@@ -120,7 +120,7 @@ void _read_unlock(rwlock_t *rw)
 {
 #ifdef DEBUG_LOCKS
 	if ( rw->lock == 0 )
-		printk("_read_unlock(): %s/%d (nip %08lX) lock %lx",
+		printk("_read_unlock(): %s/%d (nip %08lX) lock %lx\n",
 		       current->comm,current->pid,current->tss.regs->nip,
 		      rw->lock);
 #endif /* DEBUG_LOCKS */
@@ -176,7 +176,7 @@ void _write_unlock(rwlock_t *rw)
 {
 #ifdef DEBUG_LOCKS
 	if ( !(rw->lock & (1<<31)) )
-		printk("_write_lock(): %s/%d (nip %08lX) lock %lx",
+		printk("_write_lock(): %s/%d (nip %08lX) lock %lx\n",
 		      current->comm,current->pid,current->tss.regs->nip,
 		      rw->lock);
 #endif /* DEBUG_LOCKS */

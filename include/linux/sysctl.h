@@ -65,6 +65,7 @@ enum
 	KERN_NAMETRANS,		/* Name translation */
 	KERN_PPC_HTABRECLAIM,	/* turn htab reclaimation on/off on PPC */
 	KERN_PPC_ZEROPAGED,	/* turn idle page zeroing on/off on PPC */
+	KERN_PPC_POWERSAVE_NAP,	/* use nap mode for power saving */
 	KERN_MODPROBE,
 	KERN_SG_BIG_BUFF
 };

@@ -1,5 +1,5 @@
 /*
- * $Id: smp.c,v 1.24 1998/04/27 09:02:37 cort Exp $
+ * $Id: smp.c,v 1.28 1998/08/04 04:47:45 cort Exp $
  *
  * Smp support for ppc.
  *
@@ -43,8 +43,8 @@ static unsigned char boot_cpu_id = 0;
 struct cpuinfo_PPC cpu_data[NR_CPUS];
 struct klock_info_struct klock_info = { KLOCK_CLEAR, 0 };
 volatile unsigned char active_kernel_processor = NO_PROC_ID;	/* Processor holding kernel spinlock		*/
-
 volatile unsigned long ipi_count;
+spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
 unsigned int prof_multiplier[NR_CPUS];
 unsigned int prof_counter[NR_CPUS];
@@ -81,7 +81,7 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 			p->counter -= 1;
 			if (p->counter < 0) {
 				p->counter = 0;
-				need_resched = 1;
+				current->need_resched = 1;
 			}
 			if (p->priority < DEF_PRIORITY) {
 				kstat.cpu_nice += user;
@@ -136,6 +136,12 @@ printk("recv after msg check\n");
 	/* reset message */
 	smp_message[smp_processor_id()] = -1;
 }
+
+void smp_send_reschedule(int cpu)
+{
+	/* for now, nothing */
+}
+
 
 spinlock_t mesg_pass_lock = SPIN_LOCK_UNLOCKED;
 void smp_message_pass(int target, int msg, unsigned long data, int wait)
@@ -222,13 +228,13 @@ __initfunc(void smp_boot_cpus(void))
 	/* interrupt secondary to begin executing code */
 	*(volatile unsigned long *)(0xf80000c0) = 0L;
 	eieio();
-	/* wait to see if the secondary made a callin (is actually up) */
-	for ( timeout = 0; timeout < 15000 ; timeout++ )
-	{
-		if(cpu_callin_map[1])
-			break;
-		udelay(100);
-	}
+	/*
+	 * wait to see if the secondary made a callin (is actually up).
+	 * udelay() isn't accurate here since we haven't yet called
+	 * calibrate_delay() so use this value that I found through
+	 * experimentation.  -- Cort
+	 */
+	udelay(1);
 	if(cpu_callin_map[1]) {
 		cpu_number_map[1] = 1;
 		__cpu_logical_map[i] = 1;

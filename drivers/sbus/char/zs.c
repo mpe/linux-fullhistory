@@ -1,4 +1,4 @@
-/* $Id: zs.c,v 1.20 1998/02/25 23:51:57 ecd Exp $
+/* $Id: zs.c,v 1.26 1998/08/03 23:58:14 davem Exp $
  * zs.c: Zilog serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -413,10 +413,6 @@ static _INLINE_ void zs_sched_event(struct sun_serial *info,
 extern void breakpoint(void);  /* For the KGDB frame character */
 #endif
 
-#ifdef CONFIG_MAGIC_SYSRQ
-static int serial_sysrq;
-#endif
-
 static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs)
 {
 	struct tty_struct *tty = info->tty;
@@ -455,27 +451,12 @@ static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs
 			return;
 		}
 		if(info->is_cons) {
-#ifdef CONFIG_MAGIC_SYSRQ
-			if (!ch) {
-				serial_sysrq = 1;
-				return;
-			} else if (serial_sysrq) {
-				if (ch == 'a' || ch == 'A')
-					/* whee, break-A received */
-					batten_down_hatches();
-				else
-					handle_sysrq(ch, regs, NULL, NULL);
-				serial_sysrq = 0;
-				return;
-			}
-#else
 			if(ch==0) {
 				/* whee, break received */
 				batten_down_hatches();
 				/* Continue execution... */
 				return;
 			}
-#endif
 			/* It is a 'keyboard interrupt' ;-) */
 			wake_up(&keypress_wait);
 		}
@@ -573,13 +554,8 @@ static _INLINE_ void status_handle(struct sun_serial *info)
 	 * 'break asserted' status change interrupt, call
 	 * the boot prom.
 	 */
-	if((status & BRK_ABRT) && info->break_abort) {
-#ifdef CONFIG_MAGIC_SYSRQ
-		serial_sysrq = 1;
-#else
+	if((status & BRK_ABRT) && info->break_abort)
 		batten_down_hatches();
-#endif
-	}
 
 	/* XXX Whee, put in a buffer somewhere, the status information
 	 * XXX whee whee whee... Where does the information go...
@@ -1832,7 +1808,7 @@ int zs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.20 $";
+	char *revision = "$Revision: 1.26 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -1850,8 +1826,6 @@ static void show_serial_version(void)
  *       we have a special version for sun4u.
  */
 #ifdef __sparc_v9__
-static struct devid_cookie zs_dcookie;
-static unsigned long zs_irq_flags;
 __initfunc(static struct sun_zslayout *
 get_zs(int chip))
 {
@@ -1892,27 +1866,15 @@ get_zs(int chip))
 					       (char *) &sun4u_ino,
 					       (sizeof(sun4u_ino)));
 			if(!irq) {
-				irq = zilog_irq = sun4u_ino;
-
-				/* Construct dcookie. */
-				if(central_bus) {
-				  zs_dcookie.imap =
-				    &central_bus->child->fhc_regs.uregs->fhc_uart_imap;
-				  zs_dcookie.iclr =
-				    &central_bus->child->fhc_regs.uregs->fhc_uart_iclr;
-				  zs_dcookie.pil = 12;
-				  zs_dcookie.bus_cookie = NULL;
-				  zs_irq_flags =
-				    (SA_DCOOKIE|SA_INTERRUPT|SA_STATIC_ALLOC|SA_FHC);
+				if (central_bus) {
+					irq = zilog_irq = 
+						build_irq(12, 0, 
+							&central_bus->child->fhc_regs.uregs->fhc_uart_iclr,
+							&central_bus->child->fhc_regs.uregs->fhc_uart_imap);
 				} else {
-				  zs_dcookie.imap = zs_dcookie.iclr = NULL;
-				  zs_dcookie.pil = -1;
-				  zs_dcookie.bus_cookie = SBus_chain;
-				  zs_irq_flags =
-				    (SA_DCOOKIE|SA_INTERRUPT|SA_STATIC_ALLOC|SA_SBUS);
+					irq = zilog_irq = 
+						sbus_build_irq(SBus_chain, sun4u_ino);
 				}
-			} else if(irq != sun4u_ino) {
-				panic("zilog: bogon irqs");
 			}
 			break;
 		}
@@ -2470,22 +2432,15 @@ __initfunc(int zs_init(void))
 		info->normal_termios = serial_driver.init_termios;
 		info->open_wait = 0;
 		info->close_wait = 0;
-		printk("tty%02d at 0x%04x (irq = %d)", info->line, 
-		       info->port, info->irq);
+		printk("tty%02d at 0x%04x (irq = %s)", info->line, 
+		       info->port, __irq_itoa(info->irq));
 		printk(" is a Zilog8530\n");
 	}
 
-#ifndef __sparc_v9__
 	if (request_irq(zilog_irq, zs_interrupt,
 			(SA_INTERRUPT | SA_STATIC_ALLOC),
 			"Zilog8530", zs_chain))
 		panic("Unable to attach zs intr\n");
-#else
-	zs_dcookie.real_dev_id = zs_chain;
-	if (request_irq(zilog_irq, zs_interrupt,
-			zs_irq_flags, "Zilog8530", &zs_dcookie))
-		panic("Unable to attach zs intr\n");
-#endif
 	restore_flags(flags);
 
 	keyboard_zsinit(kbd_put_char);

@@ -24,6 +24,7 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/psrcompat.h>
+#include <asm/visasm.h>
 
 #define MAGIC_CONSTANT 0x80000000
 
@@ -355,9 +356,11 @@ static inline void read_sunos_user(struct pt_regs *regs, unsigned long offset,
 	case 0:
 		v = t->ksp;
 		break;
+#if 0
 	case 4:
 		v = t->kpc;
 		break;
+#endif
 	case 8:
 		v = t->kpsr;
 		break;
@@ -832,11 +835,11 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 				unsigned int insn;
 			} fpq[16];
 		} *fps = (struct fps *) addr;
-		unsigned long *fpregs = (unsigned long *)(child->tss.kregs+1);
+		unsigned long *fpregs = (unsigned long *)(((char *)child) + AOFF_task_fpregs);
 
 		if (copy_to_user(&fps->regs[0], fpregs,
 				 (32 * sizeof(unsigned int))) ||
-		    __put_user(((unsigned int)fpregs[32]), (&fps->fsr)) ||
+		    __put_user(child->tss.xfsr[0], (&fps->fsr)) ||
 		    __put_user(0, (&fps->fpqd)) ||
 		    __put_user(0, (&fps->flags)) ||
 		    __put_user(0, (&fps->extra)) ||
@@ -853,11 +856,11 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			unsigned int regs[64];
 			unsigned long fsr;
 		} *fps = (struct fps *) addr;
-		unsigned long *fpregs = (unsigned long *)(child->tss.kregs+1);
+		unsigned long *fpregs = (unsigned long *)(((char *)child) + AOFF_task_fpregs);
 
 		if (copy_to_user(&fps->regs[0], fpregs,
 				 (64 * sizeof(unsigned int))) ||
-		    __put_user(fpregs[32], (&fps->fsr))) {
+		    __put_user(child->tss.xfsr[0], (&fps->fsr))) {
 			pt_error_return(regs, EFAULT);
 			goto out;
 		}
@@ -877,7 +880,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 				unsigned int insn;
 			} fpq[16];
 		} *fps = (struct fps *) addr;
-		unsigned long *fpregs = (unsigned long *)(child->tss.kregs+1);
+		unsigned long *fpregs = (unsigned long *)(((char *)child) + AOFF_task_fpregs);
 		unsigned fsr;
 
 		if (copy_from_user(fpregs, &fps->regs[0],
@@ -886,8 +889,11 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			pt_error_return(regs, EFAULT);
 			goto out;
 		}
-		fpregs[32] &= 0xffffffff00000000UL;
-		fpregs[32] |= fsr;
+		child->tss.xfsr[0] &= 0xffffffff00000000UL;
+		child->tss.xfsr[0] |= fsr;
+		if (!(child->tss.fpsaved[0] & FPRS_FEF))
+			child->tss.gsr[0] = 0;
+		child->tss.fpsaved[0] |= (FPRS_FEF | FPRS_DL);
 		pt_succ_return(regs, 0);
 		goto out;
 	}
@@ -897,14 +903,17 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			unsigned int regs[64];
 			unsigned long fsr;
 		} *fps = (struct fps *) addr;
-		unsigned long *fpregs = (unsigned long *)(child->tss.kregs+1);
+		unsigned long *fpregs = (unsigned long *)(((char *)child) + AOFF_task_fpregs);
 
 		if (copy_from_user(fpregs, &fps->regs[0],
 				   (64 * sizeof(unsigned int))) ||
-		    __get_user(fpregs[32], (&fps->fsr))) {
+		    __get_user(child->tss.xfsr[0], (&fps->fsr))) {
 			pt_error_return(regs, EFAULT);
 			goto out;
 		}
+		if (!(child->tss.fpsaved[0] & FPRS_FEF))
+			child->tss.gsr[0] = 0;
+		child->tss.fpsaved[0] |= (FPRS_FEF | FPRS_DL | FPRS_DU);
 		pt_succ_return(regs, 0);
 		goto out;
 	}

@@ -1,16 +1,17 @@
-/*
- * arch/mips/jazz/pica.S
+/* $Id: int-handler.S,v 1.6 1998/05/08 01:44:08 ralf Exp $
  *
- * Copyright (C) 1995, 1996 by Ralf Baechle and Andreas Busse
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
  *
- * Jazz family specific stuff
+ * Copyright (C) 1995, 1996, 1997, 1998 by Ralf Baechle and Andreas Busse
+ *
+ * Jazz family specific interrupt stuff
  *
  * To do: On Jazz machines we remap some non-ISA interrupts to ISA
  *        interrupts.  These interrupts should use their own vectors.
  *        Squeeze the last cycles out of the handlers.  Only a dead
  *        cycle is a good cycle.
- *
- * $Id: int-handler.S,v 1.5 1998/05/01 01:33:37 ralf Exp $
  */
 #include <asm/asm.h>
 #include <asm/mipsconfig.h>
@@ -27,7 +28,6 @@
 		NESTED(jazz_handle_int, PT_SIZE, ra)
 		.set	noat
 		SAVE_ALL
-		REG_S	sp,PT_OR2(sp)
 		CLI
 		.set	at
 

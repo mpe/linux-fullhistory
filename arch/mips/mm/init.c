@@ -5,7 +5,7 @@
  *
  * Copyright (C) 1994, 1995, 1996 by Ralf Baechle
  *
- * $Id: init.c,v 1.14 1998/05/01 01:34:53 ralf Exp $
+ * $Id: init.c,v 1.15 1998/08/04 20:48:30 davem Exp $
  */
 #include <linux/config.h>
 #include <linux/init.h>

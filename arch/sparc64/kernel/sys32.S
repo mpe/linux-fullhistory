@@ -1,4 +1,4 @@
-/* $Id: sys32.S,v 1.5 1998/03/24 05:57:56 ecd Exp $
+/* $Id: sys32.S,v 1.6 1998/06/28 08:28:22 ecd Exp $
  * sys32.S: I-cache tricks for 32-bit compatability layer simple
  *          conversions.
  *
@@ -84,7 +84,7 @@ sys32_getsockopt:
 	srl		%o3, 0, %o3
 	mov		%o7, %g1
 	srl		%o4, 0, %o4
-	call		sys_setsockopt
+	call		sys_getsockopt
 	 mov		%g1, %o7
 
 	.globl		sys32_bdflush

@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.8 1997/10/14 16:21:24 jj Exp $
+/* $Id: unaligned.c,v 1.10 1998/06/19 13:00:32 jj Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -453,7 +453,7 @@ int handle_popc(u32 insn, struct pt_regs *regs)
 		} else {
 			struct reg_window *win;
 			win = (struct reg_window *)(regs->u_regs[UREG_FP] + STACK_BIAS);
-			get_user(ret, &win->locals[rd - 16]);
+			put_user(ret, &win->locals[rd - 16]);
 		}
 	}
 	advance(regs);
@@ -470,11 +470,12 @@ int handle_ldq_stq(u32 insn, struct pt_regs *regs)
 	int freg = ((insn >> 25) & 0x1e) | ((insn >> 20) & 0x20);
 	struct fpustate *f = FPUSTATE;
 	int asi = decode_asi(insn, regs);
-	int flag = (freg < 32) ? SPARC_FLAG_USEDFPUL : SPARC_FLAG_USEDFPUU;
+	int flag = (freg < 32) ? FPRS_DL : FPRS_DU;
 
-	f->fsr &= ~0x1c000;
+	save_and_clear_fpu();
+	current->tss.xfsr[0] &= ~0x1c000;
 	if (freg & 3) {
-		f->fsr |= (6 << 14) /* invalid_fp_register */;
+		current->tss.xfsr[0] |= (6 << 14) /* invalid_fp_register */;
 		do_fpother(regs);
 		return 0;
 	}
@@ -482,7 +483,7 @@ int handle_ldq_stq(u32 insn, struct pt_regs *regs)
 		/* STQ */
 		u64 first = 0, second = 0;
 		
-		if (current->tss.flags & flag) {
+		if (current->tss.fpsaved[0] & flag) {
 			first = *(u64 *)&f->regs[freg];
 			second = *(u64 *)&f->regs[freg+2];
 		}
@@ -545,13 +546,11 @@ int handle_ldq_stq(u32 insn, struct pt_regs *regs)
 			second = le32_to_cpup(&third);
 			third = tmp;
 		}
-		regs->fprs |= FPRS_FEF;
-		if (!(current->tss.flags & SPARC_FLAG_USEDFPU)) {
-			current->tss.flags |= SPARC_FLAG_USEDFPU;
-			f->fsr = 0;
-			f->gsr = 0;
+		if (!(current->tss.fpsaved[0] & FPRS_FEF)) {
+			current->tss.fpsaved[0] = FPRS_FEF;
+			current->tss.gsr[0] = 0;
 		}
-		if (!(current->tss.flags & flag)) {
+		if (!(current->tss.fpsaved[0] & flag)) {
 			if (freg < 32)
 				memset(f->regs, 0, 32*sizeof(u32));
 			else
@@ -561,7 +560,7 @@ int handle_ldq_stq(u32 insn, struct pt_regs *regs)
 		f->regs[freg+1] = second;
 		f->regs[freg+2] = third;
 		f->regs[freg+3] = fourth;
-		current->tss.flags |= flag;
+		current->tss.fpsaved[0] |= flag;
 	}
 	advance(regs);
 	return 1;
@@ -593,25 +592,24 @@ void handle_lddfmna(struct pt_regs *regs, unsigned long sfar, unsigned long sfsr
 			} else
 				goto daex;
 		}
+		save_and_clear_fpu();
 		freg = ((insn >> 25) & 0x1e) | ((insn >> 20) & 0x20);
 		value = (((u64)first) << 32) | second;
 		if (asi & 0x8) /* Little */
 			value = __swab64p(&value);
-		flag = (freg < 32) ? SPARC_FLAG_USEDFPUL : SPARC_FLAG_USEDFPUU;
-		regs->fprs |= FPRS_FEF;
-		if (!(current->tss.flags & SPARC_FLAG_USEDFPU)) {
-			current->tss.flags |= SPARC_FLAG_USEDFPU;
-			f->fsr = 0;
-			f->gsr = 0;
+		flag = (freg < 32) ? FPRS_DL : FPRS_DU;
+		if (!(current->tss.fpsaved[0] & FPRS_FEF)) {
+			current->tss.fpsaved[0] = FPRS_FEF;
+			current->tss.gsr[0] = 0;
 		}
-		if (!(current->tss.flags & flag)) {
+		if (!(current->tss.fpsaved[0] & flag)) {
 			if (freg < 32)
 				memset(f->regs, 0, 32*sizeof(u32));
 			else
 				memset(f->regs+32, 0, 32*sizeof(u32));
 		}
 		*(u64 *)(f->regs + freg) = value;
-		current->tss.flags |= flag;
+		current->tss.fpsaved[0] |= flag;
 	} else {
 daex:		data_access_exception(regs);
 		return;
@@ -638,10 +636,11 @@ void handle_stdfmna(struct pt_regs *regs, unsigned long sfar, unsigned long sfsr
 		freg = ((insn >> 25) & 0x1e) | ((insn >> 20) & 0x20);
 		asi = sfsr >> 16;
 		value = 0;
-		flag = (freg < 32) ? SPARC_FLAG_USEDFPUL : SPARC_FLAG_USEDFPUU;
+		flag = (freg < 32) ? FPRS_DL : FPRS_DU;
 		if (asi > ASI_SNFL)
 			goto daex;
-		if (current->tss.flags & flag)
+		save_and_clear_fpu();
+		if (current->tss.fpsaved[0] & flag)
 			value = *(u64 *)&f->regs[freg];
 		switch (asi) {
 		case ASI_P:

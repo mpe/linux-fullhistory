@@ -88,9 +88,10 @@ void kbd_reset_setup(char *str, int *ints)
 struct wait_queue * keypress_wait = NULL;
 #endif
 
-void keyboard_wait_for_keypress(void)
+int keyboard_wait_for_keypress(struct console *co)
 {
 	sleep_on(&keypress_wait);
+	return 0;
 }
 
 /*
@@ -1297,8 +1298,23 @@ kbd_read (struct file *f, char *buffer, size_t count, loff_t *ppos)
 	/* There is data in the keyboard, fill the user buffer */
 	end = buffer+count;
 	p = buffer;
-	for (; p < end && kbd_head != kbd_tail; p += sizeof (Firm_event)){
-		copy_to_user_ret((Firm_event *)p, &kbd_queue [kbd_tail], sizeof(Firm_event), -EFAULT);
+	for (; p < end && kbd_head != kbd_tail;){
+#ifdef CONFIG_SPARC32_COMPAT
+		if (current->tss.flags & SPARC_FLAG_32BIT) {
+			copy_to_user_ret((Firm_event *)p, &kbd_queue [kbd_tail], 
+					 sizeof(Firm_event)-sizeof(struct timeval), -EFAULT);
+			p += sizeof(Firm_event)-sizeof(struct timeval);
+			__put_user_ret(kbd_queue[kbd_tail].time.tv_sec, (u32 *)p, -EFAULT);
+			p += sizeof(u32);
+			__put_user_ret(kbd_queue[kbd_tail].time.tv_usec, (u32 *)p, -EFAULT);
+			p += sizeof(u32);
+		} else
+#endif
+		{
+			copy_to_user_ret((Firm_event *)p, &kbd_queue [kbd_tail], 
+					 sizeof(Firm_event), -EFAULT);
+			p += sizeof (Firm_event);
+		}
 #ifdef KBD_DEBUG
 		printk ("[%s]", kbd_queue [kbd_tail].value == VKEY_UP ? "UP" : "DOWN");
 #endif
@@ -1495,14 +1511,16 @@ __initfunc(void keyboard_zsinit(void (*put_char)(unsigned char)))
 
 	/* Test out the leds */
 	sunkbd_type = 255;
+	sunkbd_layout = 0;
+
 	send_cmd(SKBDCMD_RESET);
 	send_cmd(SKBDCMD_RESET);
-	while((sunkbd_type==255) && timeout < 500000) {
+	while((sunkbd_type==255) && timeout++ < 25000) {
 		udelay(100);
-		timeout += 20;
+		barrier();
 	}
 
-	if(timeout>=500000) {
+	if(timeout>=25000) {
 		printk("keyboard: not present\n");
 		return;
 	}
@@ -1510,10 +1528,11 @@ __initfunc(void keyboard_zsinit(void (*put_char)(unsigned char)))
 	if(sunkbd_type != SUNKBD_TYPE4) {
 		printk("Sun TYPE %d keyboard detected ", sunkbd_type);
 	} else {
-		udelay(200);
 		timeout=0;
-		while(timeout++ < 500000)
+		while((sunkbd_layout==0) && timeout++ < 10000) {
+			udelay(100);
 			barrier();
+		}
 		printk("Sun TYPE %d keyboard detected ",
 		       ((sunkbd_layout & SUNKBD_LOUT_TYP5_MASK) ? 5 : 4));
 	}

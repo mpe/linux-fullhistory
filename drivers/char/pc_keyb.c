@@ -224,7 +224,7 @@ __initfunc(static void initialize_kbd(void))
 
 
 
-unsigned char kbd_read_mask = KBD_STAT_OBF; /* Modified by psaux.c */
+unsigned char pckbd_read_mask = KBD_STAT_OBF; /* Modified by psaux.c */
 
 /* used only by send_data - set by keyboard_interrupt */
 static volatile unsigned char reply_expected = 0;
@@ -559,7 +559,7 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		unsigned char scancode;
 
 		/* mouse data? */
-		if (status & kbd_read_mask & KBD_STAT_MOUSE_OBF)
+		if (status & pckbd_read_mask & KBD_STAT_MOUSE_OBF)
 			break;
 
 		scancode = inb(KBD_DATA_REG);

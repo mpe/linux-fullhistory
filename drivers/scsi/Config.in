@@ -134,4 +134,7 @@ fi
 if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
   source drivers/acorn/scsi/Config.in
 fi
+if [ "$CONFIG_MIPS_JAZZ" = "y" ]; then
+  bool 'MIPS JAZZ FAS216 SCSI support' CONFIG_JAZZ_ESP
+fi
 endmenu

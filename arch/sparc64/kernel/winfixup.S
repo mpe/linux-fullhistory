@@ -1,4 +1,4 @@
-/* $Id: winfixup.S,v 1.22 1997/10/24 11:57:48 jj Exp $
+/* $Id: winfixup.S,v 1.24 1998/06/12 14:54:19 jj Exp $
  *
  * winfixup.S: Handle cases where user stack pointer is found to be bogus.
  *
@@ -60,15 +60,14 @@ fill_fixup:
 	sll		%g2, 3, %g2			! NORMAL-->OTHER
 
 	wrpr		%g0, 0x0, %canrestore		! Standard etrap stuff.
-	wr		%g0, 0x0, %fprs			! zap FPU just in case...
 	wrpr		%g2, 0x0, %wstate		! This must be consistant.
 	wrpr		%g0, 0x0, %otherwin		! We know this.
 	mov		PRIMARY_CONTEXT, %g1		! Change contexts...
 	stxa		%g0, [%g1] ASI_DMMU		! Back into the nucleus.
 	flush		%g6				! Flush instruction buffers
 	rdpr		%pstate, %l1			! Prepare to change globals.
-
 	mov		%g6, %o7			! Get current.
+
 	andn		%l1, PSTATE_MM, %l1		! We want to be in RMO
 	srlx		%g5, PAGE_SHIFT, %o1		! Fault address
 	wrpr		%g0, 0x0, %tl			! Out of trap levels.
@@ -166,12 +165,6 @@ window_scheisse_from_user_common:
 	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 	ba,pt		%xcc, rtrap
 	 clr		%l6
-winfix_trampoline:
-	andn		%g3, 0x7f, %g3
-	add		%g3, 0x7c, %g3
-
-	wrpr		%g3, %tnpc
-	done
 
 	.globl		winfix_mna, fill_fixup_mna, spill_fixup_mna
 winfix_mna:

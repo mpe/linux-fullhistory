@@ -64,7 +64,7 @@ void sem_exit (void)
     return;
 }
 
-int shm_swap (int prio, unsigned long limit)
+int shm_swap (int prio, int gfp_mask)
 {
     return 0;
 }

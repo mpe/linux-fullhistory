@@ -130,6 +130,19 @@ __initfunc(void ide_init_ns87415 (ide_hwif_t *hwif))
 		int	timeout;
 		byte	stat;
 		/*
+		 * Put reasonable values in the timing registers
+		 * for DMA2 mode performance.
+		 */
+		pci_write_config_byte(dev, 0x44, 0xfe);
+		pci_write_config_byte(dev, 0x45, 0xfe);
+		pci_write_config_byte(dev, 0x48, 0xfe);
+		pci_write_config_byte(dev, 0x49, 0xfe);
+		pci_write_config_byte(dev, 0x4c, 0xfe);
+		pci_write_config_byte(dev, 0x4d, 0xfe);
+		pci_write_config_byte(dev, 0x50, 0xfe);
+		pci_write_config_byte(dev, 0x51, 0xfe);
+
+		/*
 		 * XXX: Reset the device, if we don't it will not respond
 		 *      to SELECT_DRIVE() properly during first probe_hwif().
 		 */

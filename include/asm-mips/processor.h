@@ -5,7 +5,7 @@
  * written by Ralf Baechle
  * Modified further for R[236]000 compatibility by Paul M. Antoine
  *
- * $Id: processor.h,v 1.20 1998/05/04 09:18:59 ralf Exp $
+ * $Id: processor.h,v 1.22 1998/05/11 08:40:07 davem Exp $
  */
 #ifndef __ASM_MIPS_PROCESSOR_H
 #define __ASM_MIPS_PROCESSOR_H
@@ -51,8 +51,7 @@ extern int EISA_bus;
 /* This decides where the kernel will search for a free chunk of vm
  * space during mmap's.
  */
-#define TASK_UNMAPPED_BASE(off)	(TASK_SIZE / 3)
-#define TASK_UNMAPPED_ALIGN(addr, off)	PAGE_ALIGN(addr)
+#define TASK_UNMAPPED_BASE	(TASK_SIZE / 3)
 
 /*
  * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.
@@ -152,6 +151,10 @@ struct thread_struct {
 
 /* Free all resources held by a thread. */
 extern void release_thread(struct task_struct *);
+
+/* Copy and release all segment info associated with a VM */
+#define copy_segments(nr, p, mm) do { } while(0)
+#define release_segments(mm) do { } while(0)
 
 /*
  * Return saved PC of a blocked thread.

@@ -22,14 +22,13 @@
 
 volatile struct Hydra *Hydra = NULL;
 
-#if 1
 /*
  * The VLSI Golden Gate II has only 512K of PCI configuration space, so we
  * limit the bus number to 3 bits
  */
 
-int chrp_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
-				  unsigned char offset, unsigned char *val)
+int gg2_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
+				 unsigned char offset, unsigned char *val)
 {
     if (bus > 7) {
 	*val = 0xff;
@@ -39,8 +38,8 @@ int chrp_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
     return PCIBIOS_SUCCESSFUL;
 }
 
-int chrp_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
-				  unsigned char offset, unsigned short *val)
+int gg2_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
+				 unsigned char offset, unsigned short *val)
 {
     if (bus > 7) {
 	*val = 0xffff;
@@ -51,8 +50,8 @@ int chrp_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
 }
 
 
-int chrp_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
-				   unsigned char offset, unsigned int *val)
+int gg2_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
+				  unsigned char offset, unsigned int *val)
 {
     if (bus > 7) {
 	*val = 0xffffffff;
@@ -62,8 +61,8 @@ int chrp_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
     return PCIBIOS_SUCCESSFUL;
 }
 
-int chrp_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
-				   unsigned char offset, unsigned char val)
+int gg2_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
+				  unsigned char offset, unsigned char val)
 {
     if (bus > 7)
 	return PCIBIOS_DEVICE_NOT_FOUND;
@@ -71,8 +70,8 @@ int chrp_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
     return PCIBIOS_SUCCESSFUL;
 }
 
-int chrp_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
-				   unsigned char offset, unsigned short val)
+int gg2_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
+				  unsigned char offset, unsigned short val)
 {
     if (bus > 7)
 	return PCIBIOS_DEVICE_NOT_FOUND;
@@ -80,21 +79,21 @@ int chrp_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
     return PCIBIOS_SUCCESSFUL;
 }
 
-int chrp_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
-				    unsigned char offset, unsigned int val)
+int gg2_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
+				   unsigned char offset, unsigned int val)
 {
    if (bus > 7)
 	return PCIBIOS_DEVICE_NOT_FOUND;
     out_le32((unsigned int *)pci_config_addr(bus, dev_fn, offset), val);
     return PCIBIOS_SUCCESSFUL;
 }
-#else
-volatile unsigned int *pci_config_address=(volatile unsigned int *)0xfec00cf8;
-volatile unsigned char *pci_config_data=(volatile unsigned char *)0xfee00cfc;
+
+extern volatile unsigned int *pci_config_address;
+extern volatile unsigned char *pci_config_data;
 
 #define DEV_FN_MAX (31<<3)
 
-int chrp_pcibios_read_config_byte(unsigned char bus, 
+int raven_pcibios_read_config_byte(unsigned char bus, 
                                       unsigned char dev_fn,
                                       unsigned char offset, 
                                       unsigned char *val)
@@ -106,7 +105,7 @@ int chrp_pcibios_read_config_byte(unsigned char bus,
         return PCIBIOS_SUCCESSFUL;
 }
 
-int chrp_pcibios_read_config_word(unsigned char bus, 
+int raven_pcibios_read_config_word(unsigned char bus, 
                                       unsigned char dev_fn,
                                       unsigned char offset, 
                                       unsigned short *val)
@@ -120,7 +119,7 @@ int chrp_pcibios_read_config_word(unsigned char bus,
         return PCIBIOS_SUCCESSFUL;
 }
 
-int chrp_pcibios_read_config_dword(unsigned char bus, 
+int raven_pcibios_read_config_dword(unsigned char bus, 
                                        unsigned char dev_fn,
                                        unsigned char offset, 
                                        unsigned int *val)
@@ -133,7 +132,7 @@ int chrp_pcibios_read_config_dword(unsigned char bus,
         return PCIBIOS_SUCCESSFUL;
 }
 
-int chrp_pcibios_write_config_byte(unsigned char bus, 
+int raven_pcibios_write_config_byte(unsigned char bus, 
                                        unsigned char dev_fn,
                                        unsigned char offset, 
                                        unsigned char val) 
@@ -145,7 +144,7 @@ int chrp_pcibios_write_config_byte(unsigned char bus,
         return PCIBIOS_SUCCESSFUL;
 }
 
-int chrp_pcibios_write_config_word(unsigned char bus, 
+int raven_pcibios_write_config_word(unsigned char bus, 
                                        unsigned char dev_fn,
                                        unsigned char offset, 
                                        unsigned short val) 
@@ -158,7 +157,7 @@ int chrp_pcibios_write_config_word(unsigned char bus,
         return PCIBIOS_SUCCESSFUL;
 }
 
-int chrp_pcibios_write_config_dword(unsigned char bus, 
+int raven_pcibios_write_config_dword(unsigned char bus, 
                                         unsigned char dev_fn,
                                         unsigned char offset, 
                                         unsigned int val) 
@@ -170,7 +169,6 @@ int chrp_pcibios_write_config_dword(unsigned char bus,
         out_le32((volatile unsigned int *)pci_config_data,val);
         return PCIBIOS_SUCCESSFUL;
 }
-#endif
 
     /*
      *  Temporary fixes for PCI devices. These should be replaced by OF query
@@ -224,15 +222,17 @@ extern int chrp_ide_irq;
 __initfunc(int w83c553f_init(void))
 {
     u_char bus, dev;
+#if 0    
     unsigned char t8;
     unsigned short t16;
+#endif    
     unsigned int t32;
     struct pci_dev *pdev;
     if ((pdev = pci_find_device(PCI_VENDOR_ID_WINBOND,
 				PCI_DEVICE_ID_WINBOND_83C553, NULL))) {
 	bus = pdev->bus->number;
 	dev = pdev->devfn + 1;
-	chrp_pcibios_read_config_dword(bus, dev, PCI_VENDOR_ID, &t32);
+	pcibios_read_config_dword(bus, dev, PCI_VENDOR_ID, &t32);
 	if (t32 == (PCI_DEVICE_ID_WINBOND_82C105<<16) + PCI_VENDOR_ID_WINBOND) {
 #if 0
 	    printk("Enabling SL82C105 IDE on W83C553F\n");
@@ -241,46 +241,46 @@ __initfunc(int w83c553f_init(void))
 	     */
 
 	    /* I/O mapping */
-	    chrp_pcibios_read_config_word(bus, dev, PCI_COMMAND, &t16);
+	    pcibios_read_config_word(bus, dev, PCI_COMMAND, &t16);
 	    t16 |= PCI_COMMAND_IO;
-	    chrp_pcibios_write_config_word(bus, dev, PCI_COMMAND, t16);
+	    pcibios_write_config_word(bus, dev, PCI_COMMAND, t16);
 
 	    /* Standard IDE registers */
-	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_0,
+	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_0,
 					    0xffffffff);
-	    chrp_pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_0, &t32);
-	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_0,
+	    pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_0, &t32);
+	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_0,
 					    0x000001f0 | 1);
-	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_1,
+	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_1,
 					    0xffffffff);
-	    chrp_pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_1, &t32);
-	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_1,
+	    pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_1, &t32);
+	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_1,
 					    0x000003f4 | 1);
-	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_2,
+	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_2,
 					    0xffffffff);
-	    chrp_pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_2, &t32);
-	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_2,
+	    pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_2, &t32);
+	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_2,
 					    0x00000170 | 1);
-	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_3,
+	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_3,
 					    0xffffffff);
-	    chrp_pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_3, &t32);
-	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_3,
+	    pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_3, &t32);
+	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_3,
 					    0x00000374 | 1);
 
 	    /* IDE Bus Master Control */
-	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_4,
+	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_4,
 					    0xffffffff);
-	    chrp_pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_4, &t32);
-	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_4,
+	    pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_4, &t32);
+	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_4,
 					    0x1000 | 1);
-	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_5,
+	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_5,
 					    0xffffffff);
-	    chrp_pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_5, &t32);
-	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_5,
+	    pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_5, &t32);
+	    pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_5,
 					    0x1010 | 1);
 
 	    /* IDE Interrupt */
-	    chrp_pcibios_read_config_byte(bus, dev, PCI_INTERRUPT_LINE, &t8);
+	    pcibios_read_config_byte(bus, dev, PCI_INTERRUPT_LINE, &t8);
 	    chrp_ide_irq = t8;
 #endif
 	    return 1;

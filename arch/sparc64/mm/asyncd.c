@@ -1,4 +1,4 @@
-/*  $Id: asyncd.c,v 1.3 1997/12/11 15:15:58 jj Exp $
+/*  $Id: asyncd.c,v 1.4 1998/05/24 02:53:58 davem Exp $
  *  The asyncd kernel daemon. This handles paging on behalf of 
  *  processes that receive page faults due to remote (async) memory
  *  accesses. 
@@ -108,7 +108,7 @@ void async_fault(unsigned long address, int write, int taskid,
 
 static int fault_in_page(int taskid,
 			 struct vm_area_struct *vma,
-			 unsigned address,int write)
+			 unsigned long address, int write)
 {
 	static unsigned last_address;
 	static int last_task, loop_counter;

@@ -1,4 +1,4 @@
-/* $Id: parport_ax.c,v 1.5 1998/01/10 18:28:39 ecd Exp $
+/* $Id: parport_ax.c,v 1.12 1998/07/26 03:03:31 davem Exp $
  * Parallel-port routines for Sun Ultra/AX architecture
  * 
  * Author: Eddie C. Dost <ecd@skynet.be>
@@ -27,6 +27,7 @@
 #include <asm/io.h>
 #include <asm/ebus.h>
 #include <asm/ns87303.h>
+#include <asm/irq.h>
 
 
 /*
@@ -78,6 +79,8 @@ parport_ax_read_epp_addr(struct parport *p)
 {
 	return inb(p->base + EPPADDR);
 }
+
+int parport_ax_epp_clear_timeout(struct parport *pb);
 
 int 
 parport_ax_check_epp_timeout(struct parport *p)
@@ -364,6 +367,26 @@ static struct parport_operations parport_ax_ops =
  *  MODE detection section:
  */
 
+/*
+ * Clear TIMEOUT BIT in EPP MODE
+ */
+int parport_ax_epp_clear_timeout(struct parport *pb)
+{
+	unsigned char r;
+
+	if (!(parport_ax_read_status(pb) & 0x01))
+		return 1;
+
+	/* To clear timeout some chips require double read */
+	parport_ax_read_status(pb);
+	r = parport_ax_read_status(pb);
+	parport_ax_write_status(pb, r | 0x01); /* Some reset by writing 1 */
+	parport_ax_write_status(pb, r & 0xfe); /* Others by writing 0 */
+	r = parport_ax_read_status(pb);
+
+	return !(r & 0x01);
+}
+
 /* Check for ECP
  *
  * Old style XT ports alias io ports every 0x400, hence accessing ECONTROL
@@ -553,7 +576,7 @@ init_one_port(struct linux_ebus_device *dev)
 
 	printk(KERN_INFO "%s: PC-style at 0x%lx", p->name, p->base);
 	if (p->irq != PARPORT_IRQ_NONE)
-		printk(", irq %x", (unsigned int)p->irq);
+		printk(", irq %s", __irq_itoa(p->irq));
 	if (p->dma != PARPORT_DMA_NONE)
 		printk(", dma %d", p->dma);
 	printk(" [");
@@ -589,9 +612,12 @@ __initfunc(int parport_ax_init(void))
 	struct linux_ebus_device *edev;
 	int count = 0;
 
-	for_all_ebusdev(edev, ebus)
-		if (!strcmp(edev->prom_name, "ecpp"))
-			count += init_one_port(edev);
+	for_each_ebus(ebus) {
+		for_each_ebusdev(edev, ebus) {
+			if (!strcmp(edev->prom_name, "ecpp"))
+				count += init_one_port(edev);
+		}
+	}
 	return count ? 0 : -ENODEV;
 }
 

@@ -1,10 +1,11 @@
-/* $Id: idprom.c,v 1.22 1996/11/13 05:09:25 davem Exp $
+/* $Id: idprom.c,v 1.23 1998/07/28 16:52:44 jj Exp $
  * idprom.c: Routines to load the idprom into kernel addresses and
  *           interpret the data contained within.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/init.h>
@@ -12,6 +13,10 @@
 #include <asm/oplib.h>
 #include <asm/idprom.h>
 #include <asm/machines.h>  /* Fun with Sun released architectures. */
+#ifdef CONFIG_SUN4
+#include <asm/sun4paddr.h>
+extern void sun4setup(void);
+#endif
 
 struct idprom *idprom;
 static struct idprom idprom_buffer;
@@ -98,4 +103,7 @@ __initfunc(void idprom_init(void))
 		    idprom->id_ethaddr[0], idprom->id_ethaddr[1],
 		    idprom->id_ethaddr[2], idprom->id_ethaddr[3],
 		    idprom->id_ethaddr[4], idprom->id_ethaddr[5]);
+#ifdef CONFIG_SUN4
+	sun4setup();
+#endif
 }

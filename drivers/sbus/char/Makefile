@@ -10,49 +10,8 @@
 # Dave Redman Frame Buffer tuning support.
 # OK this is kind of ugly but it does allow drivers to be added fairly
 # easily. and you can even choose what sort of support you want.
-ifdef SUN_FB_CGSIX
- FB_OBJS +=	cgsix.o
-endif
-ifdef SUN_FB_CGTHREE
- FB_OBJS +=	cgthree.o
-endif
-ifdef SUN_FB_TCX
-  FB_OBJS +=	tcx.o
-endif
-ifdef SUN_FB_BWTWO
- FB_OBJS +=	bwtwo.o
-endif
-ifdef SUN_FB_LEO
- FB_OBJS +=	leo.o
-endif
-ifdef SUN_FB_CGFOURTEEN
- FB_OBJS +=	cgfourteen.o
-endif
-ifdef TADPOLE_FB_WEITEK
- FB_OBJS +=	weitek.o
-endif
-ifdef SUN_FB_CREATOR
- ifeq ($(ARCH),sparc64)
- FB_OBJS += creator.o
- endif
-endif
-#ifdef SUN_FB_FAST_ONE
-# FB_OBJS +=	sun_8bit_fast1.o
-#endif
-#ifdef SUN_FB_FAST_TWO
-# FB_OBJS +=	sun_8bit_fast2.o
-#endif
-#ifdef SUN_FB_FAST_MONO
-# FB_OBJS +=	sun_mono_fast1.o
-#endif
-#ifdef SUN_FB_GENERIC
-# FB_OBJS +=	sun_8bit_generic.o
-#endif
 
 O_TARGET := sunchar.o
-ifneq ($(CONFIG_FB),y)
-O_OBJ    := ${FB_OBJS} suncons.o sbuscons.o pcicons.o sunfb.o
-endif
 O_OBJS   := ${O_OBJ} sunkbd.o sunkbdmap.o sunmouse.o sunserial.o zs.o
 M_OBJS   :=
 
@@ -120,14 +79,6 @@ else
   ifeq ($(CONFIG_SUN_VIDEOPIX),m)
   M_OBJS += vfc.o
   endif
-endif
-
-# Add PCI console/fb drivers here.
-#
-ifneq ($(CONFIG_FB),y)
-ifeq ($(CONFIG_PCI),y)
-O_OBJS += mach64.o
-endif
 endif
 
 include $(TOPDIR)/Rules.make

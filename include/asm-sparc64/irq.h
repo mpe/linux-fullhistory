@@ -1,39 +1,39 @@
-/* $Id: irq.h,v 1.8 1998/03/15 17:23:51 ecd Exp $
+/* $Id: irq.h,v 1.10 1998/05/29 06:00:39 ecd Exp $
  * irq.h: IRQ registers on the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1998 Jakub Jelinek (jj@ultra.linux.cz)
  */
 
 #ifndef _SPARC64_IRQ_H
 #define _SPARC64_IRQ_H
 
 #include <linux/linkage.h>
-
-/* Sparc64 extensions to the interrupt registry flags.  Mostly this is
- * for passing along what bus type the device is on and also the true
- * format of the dev_id cookie, see below.
- */
-#define SA_BUSMASK	0x0f000
-#define SA_SBUS		0x01000
-#define SA_PCI		0x02000
-#define SA_FHC		0x03000
-#define SA_EBUS		0x04000
-#define SA_BUS(mask)	((mask) & SA_BUSMASK)
+#include <linux/kernel.h>
 
 struct devid_cookie {
-	/* Caller specifies these. */
-	void		*real_dev_id;		/* What dev_id would usually contain. */
-	unsigned int	*imap;			/* Anonymous IMAP register */
-	unsigned int	*iclr;			/* Anonymous ICLR register */
-	int		pil;			/* Anonymous PIL */
-	void		*bus_cookie;		/* SYSIO regs, PSYCHO regs, etc. */
-
-	/* Return values. */
-	unsigned int	ret_ino;
-	unsigned int	ret_pil;
+	int dummy;
 };
 
-#define SA_DCOOKIE	0x10000
+/* You should not mess with this directly. That's the job of irq.c. */
+struct ino_bucket {
+	unsigned short ino;
+	short imap_off;
+	unsigned short pil;
+	unsigned short flags;
+	unsigned int *iclr;
+};
+
+#define __irq_ino(irq) ((struct ino_bucket *)(unsigned long)(irq))->ino
+#define __irq_pil(irq) ((struct ino_bucket *)(unsigned long)(irq))->pil
+
+static __inline__ char *__irq_itoa(unsigned int irq)
+{
+	static char buff[16];
+
+	sprintf(buff, "%d,%x", __irq_pil(irq), __irq_ino(irq));
+	return buff;
+}
 
 #define NR_IRQS    15
 
@@ -41,6 +41,9 @@ extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);
 extern void init_timers(void (*lvl10_irq)(int, void *, struct pt_regs *),
 			unsigned long *);
+extern unsigned int build_irq(int pil, int inofixup, unsigned int *iclr, unsigned int *imap);
+extern unsigned int sbus_build_irq(void *sbus, unsigned int ino);
+extern unsigned int psycho_build_irq(void *psycho, int imap_off, int ino, int need_dma_sync);
 
 #ifdef __SMP__
 extern void set_cpu_int(int, int);

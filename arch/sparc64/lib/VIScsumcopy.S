@@ -1,4 +1,4 @@
-/* $Id: VIScsumcopy.S,v 1.4 1998/04/01 08:29:52 davem Exp $
+/* $Id: VIScsumcopy.S,v 1.5 1998/06/12 14:53:48 jj Exp $
  * VIScsumcopy.S: High bandwidth IP checksumming with simultaneous
  *            copying utilizing the UltraSparc Visual Instruction Set.
  *
@@ -27,6 +27,7 @@
 #include <asm/head.h>
 #include <asm/asi.h>
 #include <asm/page.h>
+#include <asm/visasm.h>
 #else
 #define ASI_P		0x80
 #define ASI_BLK_P	0xf0
@@ -42,11 +43,11 @@
 #define sum		o3
 #define x1		g1
 #define x2		g2
-#define x3		g3
+#define x3		o4
 #define x4		g4
 #define x5		g5
 #define x6		g7
-#define x7		o4
+#define x7		g3
 #define x8		o5
 
 /* Dobrou noc, SunSoft engineers. Spete sladce.
@@ -248,7 +249,7 @@
 csum_partial_copy_vis:
 	andcc		%dst, 7, %g0		/*  IEU1	Group			*/
 	be,pt		%icc, 4f		/*  CTI					*/
-	 and		%dst, 0x38, %g3		/*  IEU0				*/
+	 and		%dst, 0x38, %o4		/*  IEU0				*/
 	mov		1, %g5			/*  IEU0	Group			*/
 	andcc		%dst, 2, %g0		/*  IEU1				*/
 	be,pt		%icc, 1f		/*  CTI					*/
@@ -266,18 +267,18 @@ csum_partial_copy_vis:
 	 add		%sum, %g5, %sum		/*  IEU0				*/
 1:	lduwa		[%src] %asi, %g2	/*  Load				*/
 	brz,a,pn	%g7, 4f			/*  CTI+IEU1	Group			*/
-	 and		%dst, 0x38, %g3		/*  IEU0				*/
+	 and		%dst, 0x38, %o4		/*  IEU0				*/
 	add		%dst, 4, %dst		/*  IEU0	Group			*/
 	sub		%len, 4, %len		/*  IEU1				*/
 	addcc		%g2, %sum, %sum		/*  IEU1	Group			*/
 	bcs,a,pn	%icc, 1f		/*  CTI					*/
 	 add		%sum, 1, %sum		/*  IEU0				*/
-1:	and		%dst, 0x38, %g3		/*  IEU0	Group			*/
+1:	and		%dst, 0x38, %o4		/*  IEU0	Group			*/
 	stw		%g2, [%dst - 4]		/*  Store				*/
 	add		%src, 4, %src		/*  IEU1				*/
 4:
 #ifdef __KERNEL__
-	wr		%g0, FPRS_FEF, %fprs	/*  LSU		Group			*/
+	VISEntry
 #endif
 	mov		%src, %g7		/*  IEU1	Group			*/
 	fzero		%f48			/*  FPA					*/
@@ -291,10 +292,10 @@ csum_partial_copy_vis:
 	 sub		%sum, 1, %sum		/*  IEU0				*/
 1:	srl		%sum, 0, %sum		/*  IEU0	Group			*/
 	clr		%g5			/*  IEU1				*/
-	brz,pn		%g3, 3f			/*  CTI+IEU1	Group			*/
-	 sub		%g1, %g3, %g1		/*  IEU0				*/
+	brz,pn		%o4, 3f			/*  CTI+IEU1	Group			*/
+	 sub		%g1, %o4, %g1		/*  IEU0				*/
 	ldda		[%src] %asi, %f0	/*  Load				*/
-	clr		%g3			/*  IEU0	Group			*/
+	clr		%o4			/*  IEU0	Group			*/
 	andcc		%dst, 8, %g0		/*  IEU1				*/
 	be,pn		%icc, 1f		/*  CTI					*/
 	 ldda		[%src + 8] %asi, %f2	/*  Load	Group			*/
@@ -303,7 +304,7 @@ csum_partial_copy_vis:
 	fpadd32		%f0, %f48, %f50		/*  FPA					*/
 	addcc		%dst, 8, %dst		/*  IEU1	Group			*/
 	faligndata	%f0, %f2, %f16		/*  FPA					*/
-	fcmpgt32	%f48, %f50, %g3		/*  FPM		Group			*/
+	fcmpgt32	%f48, %f50, %o4		/*  FPM		Group			*/
 	fmovd		%f2, %f0		/*  FPA		Group			*/
 	ldda		[%src + 8] %asi, %f2	/*  Load				*/
 	std		%f16, [%dst - 8]	/*  Store				*/
@@ -318,13 +319,13 @@ csum_partial_copy_vis:
 	faligndata	%f0, %f2, %f16		/*  FPA					*/
 	fcmpgt32	%f48, %f50, %g5		/*  FPM		Group			*/
 	sub		%len, 16, %len		/*  IEU0				*/
-	inc		%g3			/*  IEU1				*/
+	inc		%o4			/*  IEU1				*/
 	std		%f16, [%dst - 16]	/*  Store	Group			*/
 	fpadd32		%f2, %f50, %f48		/*  FPA					*/
-	srl		%g3, 1, %o5		/*  IEU0				*/
+	srl		%o4, 1, %o5		/*  IEU0				*/
 	faligndata	%f2, %f4, %f18		/*  FPA		Group			*/
 	std		%f18, [%dst - 8]	/*  Store				*/
-	fcmpgt32	%f50, %f48, %g3		/*  FPM		Group			*/
+	fcmpgt32	%f50, %f48, %o4		/*  FPM		Group			*/
 	add		%o5, %sum, %sum		/*  IEU0				*/
 	ldda		[%src + 8] %asi, %f2	/*  Load				*/
 	fmovd		%f4, %f0		/*  FPA					*/
@@ -337,18 +338,18 @@ csum_partial_copy_vis:
 	add		%dst, 32, %dst		/*  IEU1				*/
 	faligndata	%f0, %f2, %f16		/*  FPA					*/
 	fcmpgt32	%f48, %f50, %o5		/*  FPM		Group			*/
-	inc		%g3			/*  IEU0				*/
+	inc		%o4			/*  IEU0				*/
 	ldda		[%src + 24] %asi, %f6	/*  Load				*/
-	srl		%g3, 1, %g3		/*  IEU0	Group			*/
+	srl		%o4, 1, %o4		/*  IEU0	Group			*/
 	add		%g5, %sum, %sum		/*  IEU1				*/
 	ldda		[%src + 32] %asi, %f8	/*  Load				*/
 	fpadd32		%f2, %f50, %f48		/*  FPA					*/
 	faligndata	%f2, %f4, %f18		/*  FPA		Group			*/
 	sub		%len, 32, %len		/*  IEU0				*/
 	std		%f16, [%dst - 32]	/*  Store				*/
-	fcmpgt32	%f50, %f48, %o4		/*  FPM		Group			*/
+	fcmpgt32	%f50, %f48, %g3		/*  FPM		Group			*/
 	inc		%o5			/*  IEU0				*/
-	add		%g3, %sum, %sum		/*  IEU1				*/
+	add		%o4, %sum, %sum		/*  IEU1				*/
 	fpadd32		%f4, %f48, %f50		/*  FPA					*/
 	faligndata	%f4, %f6, %f20		/*  FPA		Group			*/
 	srl		%o5, 1, %o5		/*  IEU0				*/
@@ -356,14 +357,14 @@ csum_partial_copy_vis:
 	add		%o5, %sum, %sum		/*  IEU0				*/
 	std		%f18, [%dst - 24]	/*  Store				*/
 	fpadd32		%f6, %f50, %f48		/*  FPA					*/
-	inc		%o4			/*  IEU0	Group			*/
+	inc		%g3			/*  IEU0	Group			*/
 	std		%f20, [%dst - 16]	/*  Store				*/
 	add		%src, 32, %src		/*  IEU1				*/
 	faligndata	%f6, %f8, %f22		/*  FPA					*/
-	fcmpgt32	%f50, %f48, %g3		/*  FPM		Group			*/
-	srl		%o4, 1, %o4		/*  IEU0				*/
+	fcmpgt32	%f50, %f48, %o4		/*  FPM		Group			*/
+	srl		%g3, 1, %g3		/*  IEU0				*/
 	std		%f22, [%dst - 8]	/*  Store				*/	
-	add		%o4, %sum, %sum		/*  IEU0	Group			*/
+	add		%g3, %sum, %sum		/*  IEU0	Group			*/
 3:	rd		%asi, %g2		/*  LSU		Group + 4 bubbles	*/
 #ifdef __KERNEL__
 4:	sethi		%hi(vis0s), %g7		/*  IEU0	Group			*/
@@ -371,16 +372,16 @@ csum_partial_copy_vis:
 4:	rd		%pc, %g7		/*  LSU		Group + 4 bubbles	*/
 #endif
 	inc		%g5			/*  IEU0	Group			*/
-	and		%src, 0x38, %o4		/*  IEU1				*/	
+	and		%src, 0x38, %g3		/*  IEU1				*/	
 	membar		#StoreLoad		/*  LSU		Group			*/
 	srl		%g5, 1, %g5		/*  IEU0				*/
-	inc		%g3			/*  IEU1				*/
-	sll		%o4, 8, %o4		/*  IEU0	Group			*/
+	inc		%o4			/*  IEU1				*/
+	sll		%g3, 8, %g3		/*  IEU0	Group			*/
 	sub		%len, 0xc0, %len	/*  IEU1				*/
 	addcc		%g5, %sum, %sum		/*  IEU1	Group			*/
-	srl		%g3, 1, %g3		/*  IEU0				*/
-	add		%g7, %o4, %g7		/*  IEU0	Group			*/
-	add		%g3, %sum, %sum		/*  IEU1				*/
+	srl		%o4, 1, %o4		/*  IEU0				*/
+	add		%g7, %g3, %g7		/*  IEU0	Group			*/
+	add		%o4, %sum, %sum		/*  IEU1				*/
 #ifdef __KERNEL__
 	jmpl		%g7 + %lo(vis0s), %g0	/*  CTI+IEU1	Group			*/
 #else
@@ -815,7 +816,7 @@ ett:	rd		%gsr, %x3		/*  LSU		Group+4bubbles		*/
 	END_THE_TRICK2(	f48,f50,f52,f54,f56,f58,f60,f10,f12,f62)
 	membar		#Sync			/*  LSU		Group			*/
 #ifdef __KERNEL__
-	wr		%g0, 0, %fprs		/*  LSU		Group			*/
+	VISExit
 	add		%sp, 8, %sp		/*  IEU0	Group			*/
 #endif
 23:	brnz,pn		%len, 26f		/*  CTI+IEU1	Group			*/
@@ -834,12 +835,12 @@ ett:	rd		%gsr, %x3		/*  LSU		Group+4bubbles		*/
 #endif
 26:	andcc		%len, 8, %g0		/*  IEU1	Group			*/
 	be,pn		%icc, 1f		/*  CTI					*/
-	 lduwa		[%src] %asi, %g3	/*  Load				*/
+	 lduwa		[%src] %asi, %o4	/*  Load				*/
 	lduwa		[%src+4] %asi, %g2	/*  Load	Group			*/
 	add		%src, 8, %src		/*  IEU0				*/
 	add		%dst, 8, %dst		/*  IEU1				*/
-	sllx		%g3, 32, %g5		/*  IEU0	Group			*/
-	stw		%g3, [%dst - 8]		/*  Store				*/
+	sllx		%o4, 32, %g5		/*  IEU0	Group			*/
+	stw		%o4, [%dst - 8]		/*  Store				*/
 	or		%g5, %g2, %g5		/*  IEU0	Group			*/
 	stw		%g2, [%dst - 4]		/*  Store				*/
 	addcc		%g5, %sum, %sum		/*  IEU1	Group			*/
@@ -855,11 +856,11 @@ ett:	rd		%gsr, %x3		/*  LSU		Group+4bubbles		*/
 	stw		%g7, [%dst - 4]		/*  Store				*/
 1:	andcc		%len, 2, %g0		/*  IEU1				*/
 	be,a,pn		%icc, 1f		/*  CTI					*/
-	 clr		%o4			/*  IEU0	Group			*/
+	 clr		%g3			/*  IEU0	Group			*/
 	lduha		[%src] %asi, %g7	/*  Load				*/
 	add		%src, 2, %src		/*  IEU1				*/
 	add		%dst, 2, %dst		/*  IEU0	Group			*/
-	sll		%g7, 16, %o4		/*  IEU0	Group			*/
+	sll		%g7, 16, %g3		/*  IEU0	Group			*/
 	sth		%g7, [%dst - 2]		/*  Store				*/
 1:	andcc		%len, 1, %g0		/*  IEU1				*/
 	be,a,pn		%icc, 1f		/*  CTI					*/
@@ -867,9 +868,9 @@ ett:	rd		%gsr, %x3		/*  LSU		Group+4bubbles		*/
 	lduba		[%src] %asi, %g7	/*  Load				*/
 	sll		%g7, 8, %o5		/*  IEU0	Group			*/
 	stb		%g7, [%dst]		/*  Store				*/
-1:	or		%g2, %o4, %o4		/*  IEU1				*/
-	or		%o5, %o4, %o4		/*  IEU0	Group (regdep)		*/
-	addcc		%o4, %sum, %sum		/*  IEU1	Group (regdep)		*/
+1:	or		%g2, %g3, %g3		/*  IEU1				*/
+	or		%o5, %g3, %g3		/*  IEU0	Group (regdep)		*/
+	addcc		%g3, %sum, %sum		/*  IEU1	Group (regdep)		*/
 	bcs,a,pn	%xcc, 1f		/*  CTI					*/
 	 add		%sum, 1, %sum		/*  IEU0				*/
 1:	ba,pt		%xcc, 25b		/*  CTI		Group			*/

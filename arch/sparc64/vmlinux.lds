@@ -6,7 +6,8 @@ ENTRY(_start)
 SECTIONS
 {
   empty_zero_page = 0x0000000000400000;
-  swapper_pg_dir =  0x0000000000402000;
+  swapper_pmd_dir = 0x0000000000402000;
+  empty_pg_dir = 0x0000000000403000;
   . = 0x4000;
   .text 0x0000000000404000 :
   {
@@ -47,16 +48,6 @@ SECTIONS
    *(.dynbss)
    *(.bss)
    *(COMMON)
-   . = ALIGN(8192);
-   empty_bad_pmd_table = .;
-   . += 8192;
-   empty_bad_pte_table = .;
-   . += 8192;
-   . += 0x40;
-   empty_null_pmd_table = .;
-   . += 8192;
-   empty_null_pte_table = .;
-   . += 8192;
   }
   _end = . ;
   PROVIDE (end = .);

@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.94 1998/05/06 02:07:36 paulus Exp $
+ *  $Id: init.c,v 1.115 1998/08/04 20:48:38 davem Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -45,16 +45,12 @@
 #include <asm/mmu.h>
 #include <asm/residual.h>
 #include <asm/uaccess.h>
-#ifdef CONFIG_8xx
 #include <asm/8xx_immap.h>
-#endif
-#ifdef CONFIG_MBX
 #include <asm/mbx.h>
-#endif
-#ifdef CONFIG_APUS /* ifdef APUS specific stuff until the merge is completed. -jskov */
+/* APUS includes */
 #include <asm/setup.h>
 #include <asm/amigahw.h>
-#endif
+/* END APUS includes */
 
 int prom_trashed;
 int next_mmu_context;
@@ -67,21 +63,23 @@ extern char __init_begin, __init_end;
 extern char __prep_begin, __prep_end;
 extern char __pmac_begin, __pmac_end;
 extern char __openfirmware_begin, __openfirmware_end;
-extern RESIDUAL res;
 char *klimit = _end;
 struct device_node *memory_node;
 unsigned long ioremap_base;
 unsigned long ioremap_bot;
 unsigned long avail_start;
-#ifndef __SMP__
 struct pgtable_cache_struct quicklists;
-#endif
+struct mem_info memory[NUM_MEMINFO];
 
 void MMU_init(void);
 static void *MMU_get_page(void);
 unsigned long *prep_find_end_of_memory(void);
 unsigned long *pmac_find_end_of_memory(void);
+unsigned long *apus_find_end_of_memory(void);
 extern unsigned long *find_end_of_memory(void);
+#ifdef CONFIG_MBX
+unsigned long *mbx_find_end_of_memory(void);
+#endif /* CONFIG_MBX */
 static void mapin_ram(void);
 void map_page(struct task_struct *, unsigned long va,
 		     unsigned long pa, int flags);
@@ -90,10 +88,10 @@ extern void show_net_buffers(void);
 
 extern struct task_struct *current_set[NR_CPUS];
 
-#ifndef CONFIG_8xx
-unsigned long _SDR1;
 PTE *Hash, *Hash_end;
 unsigned long Hash_size, Hash_mask;
+#ifndef CONFIG_8xx
+unsigned long _SDR1;
 static void hash_init(void);
 union ubat {			/* BAT register values to be loaded */
 	BAT	bat;
@@ -107,9 +105,6 @@ struct batrange {		/* stores address ranges mapped by BATs */
 	unsigned long phys;
 } bat_addrs[4];
 #endif /* CONFIG_8xx */
-#ifdef CONFIG_MBX
-void set_mbx_memory(void);
-#endif /* CONFIG_MBX */
 
 /*
  * this tells the system to map all of ram with the segregs
@@ -128,19 +123,20 @@ void __bad_pte(pmd_t *pmd)
 
 pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 {
-        pte_t *pte;
+        pte_t *pte/* = (pte_t *) __get_free_page(GFP_KERNEL)*/;
 
-        pte = (pte_t *) __get_free_page(GFP_KERNEL);
         if (pmd_none(*pmd)) {
+		if ( (pte = (pte_t *) get_zero_page_fast()) == NULL  )
+			if ((pte = (pte_t *) __get_free_page(GFP_KERNEL)))
+				clear_page((unsigned long)pte);
                 if (pte) {
-                        clear_page((unsigned long)pte);
                         pmd_val(*pmd) = (unsigned long)pte;
                         return pte + offset;
                 }
 		pmd_val(*pmd) = (unsigned long)BAD_PAGETABLE;
                 return NULL;
         }
-        free_page((unsigned long)pte);
+        /*free_page((unsigned long)pte);*/
         if (pmd_bad(*pmd)) {
                 __bad_pte(pmd);
                 return NULL;
@@ -181,7 +177,6 @@ unsigned long empty_bad_page_table;
 
 pte_t * __bad_pagetable(void)
 {
-	/*memset((void *)empty_bad_page_table, 0, PAGE_SIZE);*/
 	__clear_user((void *)empty_bad_page_table, PAGE_SIZE);
 	return (pte_t *) empty_bad_page_table;
 }
@@ -190,7 +185,6 @@ unsigned long empty_bad_page;
 
 pte_t __bad_page(void)
 {
-	/*memset((void *)empty_bad_page, 0, PAGE_SIZE);*/
 	__clear_user((void *)empty_bad_page, PAGE_SIZE);
 	return pte_mkdirty(mk_pte(empty_bad_page, PAGE_SHARED));
 }
@@ -327,7 +321,8 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 			v = (ioremap_bot -= size);
 	}
 
-	flags |= pgprot_val(PAGE_KERNEL);
+	if ((flags & _PAGE_PRESENT) == 0)
+		flags |= pgprot_val(PAGE_KERNEL);
 	if (flags & (_PAGE_NO_CACHE | _PAGE_WRITETHRU))
 		flags |= _PAGE_GUARDED;
 	for (i = 0; i < size; i += PAGE_SIZE)
@@ -441,7 +436,6 @@ local_flush_tlb_all(void)
 {
 #ifndef CONFIG_8xx
 	__clear_user(Hash, Hash_size);
-	/*memset(Hash, 0, Hash_size);*/
 	_tlbia();
 #else
 	asm volatile ("tlbia" : : );
@@ -787,11 +781,10 @@ __initfunc(void setbat(int index, unsigned long virt, unsigned long phys,
 
 #define IO_PAGE	(_PAGE_NO_CACHE | _PAGE_GUARDED | _PAGE_RW)
 #ifdef __SMP__
-#define RAM_PAGE (_PAGE_COHERENT | _PAGE_RW)
+#define RAM_PAGE (_PAGE_RW|_PAGE_COHERENT)
 #else
 #define RAM_PAGE (_PAGE_RW)
 #endif
-
 #endif /* CONFIG_8xx */
 
 /*
@@ -808,12 +801,18 @@ __initfunc(static void mapin_ram(void))
 
 #ifndef MAP_RAM_WITH_SEGREGS
 	/* Set up BAT2 and if necessary BAT3 to cover RAM. */
+	mem_base = __pa(KERNELBASE);
 	tot = (unsigned long)end_of_DRAM - KERNELBASE;
-	for (bl = 128<<10; bl < 256<<20; bl <<= 1)
+	for (bl = 128<<10; bl < 256<<20; bl <<= 1) {
 		if (bl * 2 > tot)
 			break;
+		/* On some APUS systems, memory grows downwards, i.e.,
+		   24MB will be 8MB aligned. Handle that properly by
+		   mapping first 8MB, then 16MB. */
+		if (((bl * 2) - 1) & mem_base)
+			break;
+	}
 
-	mem_base = __pa(KERNELBASE);
 	setbat(2, KERNELBASE, mem_base, bl, RAM_PAGE);
 	done = (unsigned long)bat_addrs[2].limit - KERNELBASE + 1;
 	if (done < tot) {
@@ -885,7 +884,7 @@ __initfunc(void free_initmem(void))
 {
 	unsigned long a;
 	unsigned long num_freed_pages = 0, num_prep_pages = 0,
-		num_pmac_pages = 0;
+		num_pmac_pages = 0, num_openfirmware_pages = 0;
 
 #define FREESEC(START,END,CNT) do { \
 	a = (unsigned long)(&START); \
@@ -906,11 +905,11 @@ __initfunc(void free_initmem(void))
 		break;
 	case _MACH_prep:
 		FREESEC(__pmac_begin,__pmac_end,num_pmac_pages);
-		FREESEC(__openfirmware_begin,__openfirmware_end,num_pmac_pages);
+		FREESEC(__openfirmware_begin,__openfirmware_end,num_openfirmware_pages);
 		break;
 	case _MACH_mbx:
 		FREESEC(__pmac_begin,__pmac_end,num_pmac_pages);
-		FREESEC(__openfirmware_begin,__openfirmware_end,num_pmac_pages);
+		FREESEC(__openfirmware_begin,__openfirmware_end,num_openfirmware_pages);
 		FREESEC(__prep_begin,__prep_end,num_prep_pages);
 		break;
 	}
@@ -921,6 +920,8 @@ __initfunc(void free_initmem(void))
 		printk(" %ldk prep",(num_prep_pages*PAGE_SIZE)>>10);
 	if ( num_pmac_pages )
 		printk(" %ldk pmac",(num_pmac_pages*PAGE_SIZE)>>10);
+	if ( num_openfirmware_pages )
+		printk(" %ldk open firmware",(num_openfirmware_pages*PAGE_SIZE)>>10);
 	printk("\n");
 }
 
@@ -936,10 +937,8 @@ __initfunc(void MMU_init(void))
 #ifndef CONFIG_8xx
 	if (have_of)
 		end_of_DRAM = pmac_find_end_of_memory();
-#ifdef CONFIG_APUS
 	else if (_machine == _MACH_apus )
 		end_of_DRAM = apus_find_end_of_memory();
-#endif
 	else /* prep */
 		end_of_DRAM = prep_find_end_of_memory();
 
@@ -957,33 +956,31 @@ __initfunc(void MMU_init(void))
 	 */
 	switch (_machine) {
 	case _MACH_prep:
-		setbat(0, 0x80000000, 0x80000000, 0x10000000,
-		       IO_PAGE + ((_prep_type == _PREP_IBM)? _PAGE_USER: 0));
-		setbat(1, 0xd0000000, 0xc0000000, 0x10000000,
-		       IO_PAGE + ((_prep_type == _PREP_IBM)? _PAGE_USER: 0));
+		setbat(0, 0x80000000, 0x80000000, 0x10000000, IO_PAGE);
+		setbat(1, 0xd0000000, 0xc0000000, 0x10000000, IO_PAGE);
 		break;
 	case _MACH_chrp:
-		setbat(0, 0xf8000000, 0xf8000000, 0x20000, IO_PAGE);
+		setbat(0, 0xf8000000, 0xf8000000, 0x08000000, IO_PAGE);
 		break;
 	case _MACH_Pmac:
 		setbat(0, 0xf3000000, 0xf3000000, 0x100000, IO_PAGE);
 		ioremap_base = 0xf0000000;
 		break;
-#ifdef CONFIG_APUS
 	case _MACH_apus:
-		/* Map Cyberstorm PPC registers. */
-		/* FIXME:APUS: Performance penalty here. Restrict it
-		 *             to the Cyberstorm registers.
-		 */
-		setbat(0, 0xfff00000, 0xfff00000, 0x00080000, IO_PAGE);
+		/* Map PPC exception vectors. */
+		setbat(0, 0xfff00000, 0xfff00000, 0x00010000, RAM_PAGE);
 		/* Map chip and ZorroII memory */
 		setbat(1, zTwoBase,   0x00000000, 0x01000000, IO_PAGE);
+		/* Note: a temporary hack in arch/ppc/amiga/setup.c
+		   (kernel_map) remaps individual IO regions to
+		   0x90000000. */
 		break;
-#endif
 	}
 	ioremap_bot = ioremap_base;
 #else /* CONFIG_8xx */
-
+#ifdef CONFIG_MBX
+	end_of_DRAM = mbx_find_end_of_memory();
+#endif /* CONFIG_MBX */
         /* Map in all of RAM starting at KERNELBASE */
         mapin_ram();
 
@@ -999,321 +996,136 @@ __initfunc(void MMU_init(void))
 #endif /* CONFIG_8xx */
 }
 
-static void *
-MMU_get_page()
+/*
+ * Find some memory for setup_arch to return.
+ * We use the last chunk of available memory as the area
+ * that setup_arch returns, making sure that there are at
+ * least 32 pages unused before this for MMU_get_page to use.
+ */
+__initfunc(unsigned long find_available_memory(void))
 {
-	void *p;
+	int i;
+	unsigned long a, free;
+	unsigned long start, end;
 
-	if (mem_init_done) {
-		p = (void *) __get_free_page(GFP_KERNEL);
-		if (p == 0)
-			panic("couldn't get a page in MMU_get_page");
-	} else {
-		p = find_mem_piece(PAGE_SIZE, PAGE_SIZE);
-	}
-	memset(p, 0, PAGE_SIZE);
-	return p;
-}
-
-void *
-ioremap(unsigned long addr, unsigned long size)
-{
-	return __ioremap(addr, size, _PAGE_NO_CACHE);
-}
-
-void *
-__ioremap(unsigned long addr, unsigned long size, unsigned long flags)
-{
-	unsigned long p, v, i;
-
-	/*
-	 * Choose an address to map it to.
-	 * Once the vmalloc system is running, we use it.
-	 * Before then, we map addresses >= ioremap_base
-	 * virt == phys; for addresses below this we use
-	 * space going down from ioremap_base (ioremap_bot
-	 * records where we're up to).
-	 *
-	 * We should also look out for a frame buffer and
-	 * map it with a free BAT register, if there is one.
-	 */
-	p = addr & PAGE_MASK;
-	size = PAGE_ALIGN(addr + size) - p;
-	if (size == 0)
-		return NULL;
-
-	if (mem_init_done) {
-		struct vm_struct *area;
-		area = get_vm_area(size);
-		if (area == 0)
-			return NULL;
-		v = VMALLOC_VMADDR(area->addr);
-	} else {
-		if (p >= ioremap_base)
-			v = p;
-		else
-			v = (ioremap_bot -= size);
-	}
-
-	flags |= pgprot_val(PAGE_KERNEL);
-	if (flags & (_PAGE_NO_CACHE | _PAGE_WRITETHRU))
-		flags |= _PAGE_GUARDED;
-	for (i = 0; i < size; i += PAGE_SIZE)
-		map_page(&init_task, v+i, p+i, flags);
-
-	return (void *) (v + (addr & ~PAGE_MASK));
-}
-
-void iounmap(void *addr)
-{
-	/* XXX todo */
-}
-
-unsigned long iopa(unsigned long addr)
-{
-	unsigned long idx;
-	pmd_t *pd;
-	pte_t *pg;
-#ifndef CONFIG_8xx
-	int b;
-#endif
-	idx = addr & ~PAGE_MASK;
-	addr = addr & PAGE_MASK;
-
-#ifndef CONFIG_8xx
-	/* Check the BATs */
-	for (b = 0; b < 4; ++b)
-		if (addr >= bat_addrs[b].start && addr <= bat_addrs[b].limit)
-			return bat_addrs[b].phys | idx;
-#endif /* CONFIG_8xx */
-	/* Do we have a page table? */
-	if (init_task.mm->pgd == NULL)
-		return 0;
-
-	/* Use upper 10 bits of addr to index the first level map */
-	pd = (pmd_t *) (init_task.mm->pgd + (addr >> PGDIR_SHIFT));
-	if (pmd_none(*pd))
-		return 0;
-
-	/* Use middle 10 bits of addr to index the second-level map */
-	pg = pte_offset(pd, addr);
-	return (pte_val(*pg) & PAGE_MASK) | idx;
-}
-
-void
-map_page(struct task_struct *tsk, unsigned long va,
-	 unsigned long pa, int flags)
-{
-	pmd_t *pd;
-	pte_t *pg;
-#ifndef CONFIG_8xx
-	int b;
-#endif
+	free = 0;
+	if (_machine == _MACH_mbx) {
+		/* Return the first, not the last region, because we
+                 * may not yet have properly initialized the additonal
+                 * memory DIMM.
+                 */
+                a = PAGE_ALIGN(phys_avail.regions[0].address);
+                avail_start = (unsigned long) __va(a);
+                return avail_start;
+        }
 	
-	if (tsk->mm->pgd == NULL) {
-		/* Allocate upper level page map */
-		tsk->mm->pgd = (pgd_t *) MMU_get_page();
+	for (i = 0; i < phys_avail.n_regions - 1; ++i) {
+		start = phys_avail.regions[i].address;
+		end = start + phys_avail.regions[i].size;
+		free += (end & PAGE_MASK) - PAGE_ALIGN(start);
 	}
-	/* Use upper 10 bits of VA to index the first level map */
-	pd = (pmd_t *) (tsk->mm->pgd + (va >> PGDIR_SHIFT));
-	if (pmd_none(*pd)) {
-#ifndef CONFIG_8xx
-		/*
-		 * Need to allocate second-level table, but first
-		 * check whether this address is already mapped by
-		 * the BATs; if so, don't bother allocating the page.
-		 */
-		for (b = 0; b < 4; ++b) {
-			if (va >= bat_addrs[b].start
-			    && va <= bat_addrs[b].limit) {
-				/* XXX should check the phys address matches */
-				return;
-			}
-		}
-#endif /* CONFIG_8xx */
-		pg = (pte_t *) MMU_get_page();
-		pmd_val(*pd) = (unsigned long) pg;
-	}
-	/* Use middle 10 bits of VA to index the second-level map */
-	pg = pte_offset(pd, va);
-	set_pte(pg, mk_pte_phys(pa & PAGE_MASK, __pgprot(flags)));
-#ifndef CONFIG_8xx
-	flush_hash_page(0, va);
-#endif	
+	a = PAGE_ALIGN(phys_avail.regions[i].address);
+	if (free < 32 * PAGE_SIZE)
+		a += 32 * PAGE_SIZE - free;
+	avail_start = (unsigned long) __va(a);
+	return avail_start;
 }
 
 /*
- * TLB flushing:
- *
- *  - flush_tlb_all() flushes all processes TLBs
- *  - flush_tlb_mm(mm) flushes the specified mm context TLB's
- *  - flush_tlb_page(vma, vmaddr) flushes one page
- *  - flush_tlb_range(mm, start, end) flushes a range of pages
- *
- * since the hardware hash table functions as an extension of the
- * tlb as far as the linux tables are concerned, flush it too.
- *    -- Cort
+ * paging_init() sets up the page tables - in fact we've already done this.
  */
-
-/*
- * Flush all tlb/hash table entries (except perhaps for those
- * mapping RAM starting at PAGE_OFFSET, since they never change).
- */
-void
-local_flush_tlb_all(void)
+__initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_mem))
 {
-#ifndef CONFIG_8xx
-	memset(Hash, 0, Hash_size);
-	_tlbia();
-#else
-	asm volatile ("tlbia" : : );
-#endif
-}
-
-/*
- * Flush all the (user) entries for the address space described
- * by mm.  We can't rely on mm->mmap describing all the entries
- * that might be in the hash table.
- */
-void
-local_flush_tlb_mm(struct mm_struct *mm)
-{
-#ifndef CONFIG_8xx
-	mm->context = NO_CONTEXT;
-	if (mm == current->mm)
-		activate_context(current);
-#else
-	asm volatile ("tlbia" : : );
-#endif
-}
-
-void
-local_flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
-{
-#ifndef CONFIG_8xx
-	if (vmaddr < TASK_SIZE)
-		flush_hash_page(vma->vm_mm->context, vmaddr);
-	else
-		flush_hash_page(0, vmaddr);
-#else
-	asm volatile ("tlbia" : : );
-#endif
-}
-
-
-/*
- * for each page addr in the range, call MMU_invalidate_page()
- * if the range is very large and the hash table is small it might be
- * faster to do a search of the hash table and just invalidate pages
- * that are in the range but that's for study later.
- * -- Cort
- */
-void
-local_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
-{
-#ifndef CONFIG_8xx
-	start &= PAGE_MASK;
-
-	if (end - start > 20 * PAGE_SIZE)
-	{
-		flush_tlb_mm(mm);
-		return;
-	}
-
-	for (; start < end && start < TASK_SIZE; start += PAGE_SIZE)
-	{
-		flush_hash_page(mm->context, start);
-	}
-#else
-	asm volatile ("tlbia" : : );
-#endif
-}
-
-/*
- * The context counter has overflowed.
- * We set mm->context to NO_CONTEXT for all mm's in the system.
- * We assume we can get to all mm's by looking as tsk->mm for
- * all tasks in the system.
- */
-void
-mmu_context_overflow(void)
-{
-#ifndef CONFIG_8xx
-	struct task_struct *tsk;
-
-	printk(KERN_DEBUG "mmu_context_overflow\n");
-	read_lock(&tasklist_lock);
- 	for_each_task(tsk) {
-		if (tsk->mm)
-			tsk->mm->context = NO_CONTEXT;
-	}
-	read_unlock(&tasklist_lock);
-	flush_hash_segments(0x10, 0xffffff);
-	next_mmu_context = 0;
-	/* make sure current always has a context */
-	current->mm->context = MUNGE_CONTEXT(++next_mmu_context);
-	set_context(current->mm->context);
-#else
-	/* We set the value to -1 because it is pre-incremented before
-	 * before use.
+	extern unsigned long free_area_init(unsigned long, unsigned long);
+	/*
+	 * Grab some memory for bad_page and bad_pagetable to use.
 	 */
-	next_mmu_context = -1;
-#endif
+	empty_bad_page = PAGE_ALIGN(start_mem);
+	empty_bad_page_table = empty_bad_page + PAGE_SIZE;
+	start_mem = empty_bad_page + 2 * PAGE_SIZE;
+
+	/* note: free_area_init uses its second argument
+	   to size the mem_map array. */
+	start_mem = free_area_init(start_mem, end_mem);
+	return start_mem;
 }
 
-#if 0
-/*
- * Cache flush functions - these functions cause caches to be flushed
- * on _all_ processors due to their use of dcbf.  local_flush_cache_all() is
- * the only function that will not act on all processors in the system.
- * -- Cort
- */
-void local_flush_cache_all(void)
+__initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 {
-#if 0  
-	unsigned long hid0,tmp;
-	asm volatile(
-		"mfspr %0,1008 \n\t"
-		"mr    %1,%0 \n\t"
-		"or    %0,%2,%2 \n\t"
-		"mtspr 1008,%0 \n\t"
-		"sync \n\t"
-		"isync \n\t"
-		"andc  %0,%0,%2 \n\t"
-		"mtspr 1008,%0 \n\t"
-		: "=r" (tmp), "=r" (hid0)
-		: "r" (HID0_ICFI|HID0_DCI)
-		);
-#endif	
-}
+	unsigned long addr;
+	int i;
+	unsigned long a, lim;
+	int codepages = 0;
+	int datapages = 0;
+	int initpages = 0;
+	extern unsigned int rtas_data, rtas_size;
 
-void local_flush_cache_mm(struct mm_struct *mm)
-{
-	struct vm_area_struct *vma = NULL;
-	vma = mm->mmap;
-	while(vma)
-	{
-		local_flush_cache_range(mm,vma->vm_start,vma->vm_end);
-		vma = vma->vm_next;
+	end_mem &= PAGE_MASK;
+	high_memory = (void *) end_mem;
+	max_mapnr = MAP_NR(high_memory);
+
+	/* mark usable pages in the mem_map[] */
+	start_mem = PAGE_ALIGN(start_mem);
+
+	num_physpages = max_mapnr;	/* RAM is assumed contiguous */
+	remove_mem_piece(&phys_avail, __pa(avail_start),
+			 start_mem - avail_start, 1);
+
+	for (addr = PAGE_OFFSET; addr < end_mem; addr += PAGE_SIZE)
+		set_bit(PG_reserved, &mem_map[MAP_NR(addr)].flags);
+
+	for (i = 0; i < phys_avail.n_regions; ++i) {
+		a = (unsigned long) __va(phys_avail.regions[i].address);
+		lim = a + phys_avail.regions[i].size;
+		a = PAGE_ALIGN(a);
+		for (; a < lim; a += PAGE_SIZE)
+			clear_bit(PG_reserved, &mem_map[MAP_NR(a)].flags);
 	}
-}
+	phys_avail.n_regions = 0;
 
-void local_flush_cache_page(struct vm_area_struct *vma, unsigned long vmaddr)
-{
-	unsigned long i;
-	vmaddr = PAGE_ALIGN(vmaddr);
-	for ( i = vmaddr ; i <= (vmaddr+PAGE_SIZE); i += 32 )
-		asm volatile("dcbf %0,%1\n\ticbi %0,%1\n\t" :: "r" (i), "r" (0));
-}
+	/* free the prom's memory - no-op on prep */
+	for (i = 0; i < prom_mem.n_regions; ++i) {
+		a = (unsigned long) __va(prom_mem.regions[i].address);
+		lim = a + prom_mem.regions[i].size;
+		a = PAGE_ALIGN(a);
+		for (; a < lim; a += PAGE_SIZE)
+			clear_bit(PG_reserved, &mem_map[MAP_NR(a)].flags);
+	}
 
-void local_flush_cache_range(struct mm_struct *mm, unsigned long start,
-			    unsigned long end)
-{
-	unsigned long i;
-	for ( i = start ; i <= end; i += 32 )
-		asm volatile("dcbf %0,%1\n\ticbi %0,%1\n\t" :: "r" (i), "r" (0));
+	prom_trashed = 1;
+	
+	for (addr = PAGE_OFFSET; addr < end_mem; addr += PAGE_SIZE) {
+		if (PageReserved(mem_map + MAP_NR(addr))) {
+			if (addr < (ulong) etext)
+				codepages++;
+			else if (addr >= (unsigned long)&__init_begin
+				 && addr < (unsigned long)&__init_end)
+                                initpages++;
+                        else if (addr < (ulong) start_mem)
+				datapages++;
+			continue;
+		}
+		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
+#ifdef CONFIG_BLK_DEV_INITRD
+		if (!initrd_start ||
+		    addr < (initrd_start & PAGE_MASK) || addr >= initrd_end)
+#endif /* CONFIG_BLK_DEV_INITRD */
+#ifndef CONFIG_8xx		  
+			if ( !rtas_data ||
+			     addr < (rtas_data & PAGE_MASK) ||
+			     addr >= (rtas_data+rtas_size))
+#endif /* CONFIG_8xx */
+				free_page(addr);
+	}
+
+        printk("Memory: %luk available (%dk kernel code, %dk data, %dk init) [%08x,%08lx]\n",
+	       (unsigned long) nr_free_pages << (PAGE_SHIFT-10),
+	       codepages << (PAGE_SHIFT-10),
+	       datapages << (PAGE_SHIFT-10), 
+	       initpages << (PAGE_SHIFT-10),
+	       PAGE_OFFSET, end_mem);
+	mem_init_done = 1;
 }
-#endif
 
 #ifdef CONFIG_MBX
 /*
@@ -1321,63 +1133,267 @@ void local_flush_cache_range(struct mm_struct *mm, unsigned long start,
  * someday.
  *
  * For the MBX860 (at this time anyway), there is nothing to initialize
- * the associated PROM.  Rather than include all of the prom.c
+ * associated the PROM.  Rather than include all of the prom.c
  * functions in the image just to get prom_init, all we really need right
  * now is the initialization of the physical memory region.
  */
-void
-set_mbx_memory(void)
+__initfunc(unsigned long *mbx_find_end_of_memory(void))
 {
 	unsigned long kstart, ksize;
 	bd_t	*binfo;
-#ifdef DIMM_8xx
 	volatile memctl8xx_t	*mcp;
-#endif
-
+	unsigned long *ret;
+	
 	binfo = (bd_t *)&res;
 
-	/* The MBX can have up to three memory regions, the on-board
-	 * DRAM plus two more banks of DIMM socket memory.  The DIMM is
-	 * 64 bits, seen from the processor as two 32 bit banks.
-	 * The on-board DRAM is reflected in the board information
-	 * structure, and is either 4 Mbytes or 16 Mbytes.
-	 * I think there is a way to program the serial EEPROM information
-	 * so EPPC-Bug will initialize this memory, but I have not
-	 * done that and it may not be a wise thing to do.  If you
-	 * remove the DIMM without reprogramming the EEPROM, bad things
-	 * could happen since EPPC-Bug tries to use the upper 128K of
-	 * memory.
-	 */
-	phys_mem.n_regions = 1;
-	phys_mem.regions[0].address = 0;
-	phys_mem.regions[0].size = binfo->bi_memsize;
-	end_of_DRAM = __va(binfo->bi_memsize);
-
-#ifdef DIMM_8xx
-	/* This is a big hack.  It assumes my 32 Mbyte DIMM in a 40 MHz
-	 * MPC860.  Don't do this (or change this) if you are running
-	 * something else.
+	/*
+	 * The MBX does weird things with the mmaps for ram.
+	 * If there's no DIMM, it puts the onboard DRAM at
+	 * 0, if there is a DIMM it sticks it at 0 and puts
+	 * the DRAM at the end of the DIMM.
+	 *
+	 * In fact, it might be the best idea to just read the DRAM
+	 * config registers and set the mem areas accordingly.
 	 */
 	mcp = (memctl8xx_t *)(&(((immap_t *)MBX_IMAP_ADDR)->im_memctl));
-
-	mcp->memc_or2 = (~(DIMM_SIZE-1) | 0x00000400);
-	mcp->memc_br2 = DIMM_SIZE | 0x00000081;
-	mcp->memc_or3 = (~((2*DIMM_SIZE)-1) | 0x00000400);
-	mcp->memc_br3 = 2*DIMM_SIZE | 0x00000081;
-
-
-	phys_mem.regions[phys_mem.n_regions].address = DIMM_SIZE;
-	phys_mem.regions[phys_mem.n_regions++].size = DIMM_SIZE;
-	phys_mem.regions[phys_mem.n_regions].address = 2 * DIMM_SIZE;
-	phys_mem.regions[phys_mem.n_regions++].size = DIMM_SIZE;
-
-	end_of_DRAM = __va(3 * DIMM_SIZE);
-#endif
+	phys_mem.regions[0].address = 0;
+	phys_mem.regions[0].size = binfo->bi_memsize;
+	
+	phys_mem.n_regions = 1;
+	
+	ret = __va(phys_mem.regions[0].address+
+		   phys_mem.regions[0].size);
 
 	phys_avail = phys_mem;
 
 	kstart = __pa(_stext);	/* should be 0 */
 	ksize = PAGE_ALIGN(_end - _stext);
 	remove_mem_piece(&phys_avail, kstart, ksize, 0);
+	return ret;
 }
+#endif /* CONFIG_MBX */
+#ifndef CONFIG_8xx
+/*
+ * On systems with Open Firmware, collect information about
+ * physical RAM and which pieces are already in use.
+ * At this point, we have (at least) the first 8MB mapped with a BAT.
+ * Our text, data, bss use something over 1MB, starting at 0.
+ * Open Firmware may be using 1MB at the 4MB point.
+ */
+__initfunc(unsigned long *pmac_find_end_of_memory(void))
+{
+	unsigned long a, total;
+	unsigned long kstart, ksize;
+	int i;
+
+	memory_node = find_devices("memory");
+	if (memory_node == NULL) {
+		printk(KERN_ERR "can't find memory node\n");
+		abort();
+	}
+
+	/*
+	 * Find out where physical memory is, and check that it
+	 * starts at 0 and is contiguous.  It seems that RAM is
+	 * always physically contiguous on Power Macintoshes,
+	 * because MacOS can't cope if it isn't.
+	 *
+	 * Supporting discontiguous physical memory isn't hard,
+	 * it just makes the virtual <-> physical mapping functions
+	 * more complicated (or else you end up wasting space
+	 * in mem_map).
+	 */
+	get_mem_prop("reg", &phys_mem);
+	if (phys_mem.n_regions == 0)
+		panic("No RAM??");
+	a = phys_mem.regions[0].address;
+	if (a != 0)
+		panic("RAM doesn't start at physical address 0");
+	total = phys_mem.regions[0].size;
+	if (phys_mem.n_regions > 1) {
+		printk("RAM starting at 0x%x is not contiguous\n",
+		       phys_mem.regions[1].address);
+		printk("Using RAM from 0 to 0x%lx\n", total-1);
+		phys_mem.n_regions = 1;
+	}
+
+	/* record which bits the prom is using */
+	get_mem_prop("available", &phys_avail);
+	prom_mem = phys_mem;
+	for (i = 0; i < phys_avail.n_regions; ++i)
+		remove_mem_piece(&prom_mem, phys_avail.regions[i].address,
+				 phys_avail.regions[i].size, 1);
+
+	/*
+	 * phys_avail records memory we can use now.
+	 * prom_mem records memory allocated by the prom that we
+	 * don't want to use now, but we'll reclaim later.
+	 * Make sure the kernel text/data/bss is in neither.
+	 */
+	kstart = __pa(_stext);	/* should be 0 */
+	ksize = PAGE_ALIGN(klimit - _stext);
+	remove_mem_piece(&phys_avail, kstart, ksize, 0);
+	remove_mem_piece(&prom_mem, kstart, ksize, 0);
+	remove_mem_piece(&phys_avail, 0, 0x4000, 0);
+	remove_mem_piece(&prom_mem, 0, 0x4000, 0);
+
+	return __va(total);
+}
+
+/*
+ * This finds the amount of physical ram and does necessary
+ * setup for prep.  This is pretty architecture specific so
+ * this will likely stay seperate from the pmac.
+ * -- Cort
+ */
+__initfunc(unsigned long *prep_find_end_of_memory(void))
+{
+	unsigned long kstart, ksize;
+	unsigned long total;
+	total = res->TotalMemory;
+
+	if (total == 0 )
+	{
+		/*
+		 * I need a way to probe the amount of memory if the residual
+		 * data doesn't contain it. -- Cort
+		 */
+		printk("Ramsize from residual data was 0 -- Probing for value\n");
+		total = 0x02000000;
+		printk("Ramsize default to be %ldM\n", total>>20);
+	}
+	append_mem_piece(&phys_mem, 0, total);
+	phys_avail = phys_mem;
+	kstart = __pa(_stext);	/* should be 0 */
+	ksize = PAGE_ALIGN(klimit - _stext);
+	remove_mem_piece(&phys_avail, kstart, ksize, 0);
+	remove_mem_piece(&phys_avail, 0, 0x4000, 0);
+
+	return (__va(total));
+}
+
+#define HARDWARE_MAPPED_SIZE (512*1024)
+__initfunc(unsigned long *apus_find_end_of_memory(void))
+{
+	unsigned long kstart, ksize;
+
+	/* Add the chunk that ADOS does not see.  This may also
+	 * include a ROM mapping which we reclaim. The top 512KB is
+	 * removed again below.  
+	 * Do it by aligning the size to the nearest 2MB limit upwards.
+	 */
+	memory[0].size = ((memory[0].size+0x001fffff) & 0xffe00000);
+
+	append_mem_piece(&phys_mem, memory[0].addr, memory[0].size);
+
+	phys_avail = phys_mem;
+	kstart = __pa(_stext);
+	ksize = PAGE_ALIGN(klimit - _stext);
+	remove_mem_piece(&phys_avail, kstart, ksize, 1);
+
+	/* Remove the upper HARDWARE_MAPPED_SIZE bytes where the address
+	 * range 0xfff00000-0xfffx0000 is mapped to.
+	 * We do it this way to ensure that the memory registered in the
+	 * system has a power-of-two size.
+	 */
+	remove_mem_piece(&phys_avail, 
+			 (memory[0].addr + memory[0].size 
+			  - HARDWARE_MAPPED_SIZE),
+			 HARDWARE_MAPPED_SIZE, 1);
+
+	/* FIXME:APUS: Only handles one block of memory! Problem is
+	 * that the VTOP/PTOV code in head.S would be a mess if it had
+	 * to handle more than one block.
+	 */
+	return __va(memory[0].addr + memory[0].size);
+}
+
+/*
+ * Initialize the hash table and patch the instructions in head.S.
+ */
+__initfunc(static void hash_init(void))
+{
+	int Hash_bits;
+	unsigned long h, ramsize;
+
+	extern unsigned int hash_page_patch_A[], hash_page_patch_B[],
+		hash_page_patch_C[];
+
+	/*
+	 * Allow 64k of hash table for every 16MB of memory,
+	 * up to a maximum of 2MB.
+	 */
+	ramsize = (ulong)end_of_DRAM - KERNELBASE;
+	for (h = 64<<10; h < ramsize / 256 && h < 2<<20; h *= 2)
+		;
+	Hash_size = h;
+	Hash_mask = (h >> 6) - 1;
+	
+#ifdef NO_RELOAD_HTAB
+	/* shrink the htab since we don't use it on 603's -- Cort */
+	switch (_get_PVR()>>16) {
+	case 3: /* 603 */
+	case 6: /* 603e */
+	case 7: /* 603ev */
+		Hash_size = 0;
+		Hash_mask = 0;
+		break;
+	default:
+	        /* on 601/4 let things be */
+		break;
+ 	}
+#endif /* NO_RELOAD_HTAB */
+	
+	/* Find some memory for the hash table. */
+	if ( Hash_size )
+		Hash = find_mem_piece(Hash_size, Hash_size);
+	else
+		Hash = 0;
+
+	printk("Total memory = %ldMB; using %ldkB for hash table (at %p)\n",
+	       ramsize >> 20, Hash_size >> 10, Hash);
+	if ( Hash_size )
+	{
+#ifdef CONFIG_APUS
+#define b(x) ((unsigned int*)(((unsigned long)(x)) - KERNELBASE + 0xfff00000))
+#else
+#define b(x) (x)
 #endif
+		/*memset(Hash, 0, Hash_size);*/
+		__clear_user(Hash, Hash_size);
+		
+		Hash_end = (PTE *) ((unsigned long)Hash + Hash_size);
+
+		/*
+		 * Patch up the instructions in head.S:hash_page
+		 */
+		Hash_bits = ffz(~Hash_size) - 6;
+		*b(hash_page_patch_A) = (*b(hash_page_patch_A) & ~0xffff)
+			| (__pa(Hash) >> 16);
+		*b(hash_page_patch_A + 1) = (*b(hash_page_patch_A + 1)& ~0x7c0)
+			| ((26 - Hash_bits) << 6);
+		if (Hash_bits > 16)
+			Hash_bits = 16;
+		*b(hash_page_patch_A + 2) = (*b(hash_page_patch_A + 2)& ~0x7c0)
+			| ((26 - Hash_bits) << 6);
+		*b(hash_page_patch_B) = (*b(hash_page_patch_B) & ~0xffff)
+			| (Hash_mask >> 10);
+		*b(hash_page_patch_C) = (*b(hash_page_patch_C) & ~0xffff)
+			| (Hash_mask >> 10);
+#if 0	/* see hash_page in head.S, note also patch_C ref below */
+		*b(hash_page_patch_D) = (*b(hash_page_patch_D) & ~0xffff)
+			| (Hash_mask >> 10);
+#endif
+		/*
+		 * Ensure that the locations we've patched have been written
+		 * out from the data cache and invalidated in the instruction
+		 * cache, on those machines with split caches.
+		 */
+		flush_icache_range((unsigned long) b(hash_page_patch_A),
+				   (unsigned long) b(hash_page_patch_C + 1));
+	}
+	else
+		Hash_end = 0;
+
+}
+#endif /* ndef CONFIG_8xx */

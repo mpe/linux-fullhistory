@@ -1,4 +1,4 @@
-/* $Id: trampoline.S,v 1.3 1998/02/22 21:06:11 jj Exp $
+/* $Id: trampoline.S,v 1.5 1998/05/25 05:31:45 davem Exp $
  * trampoline.S: Jump start slave processors on sparc64.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -172,13 +172,29 @@ bounce:
 	mov	%o2, %g6
 
 	wrpr	%o1, (PSTATE_MG | PSTATE_IE), %pstate
-#define KERN_HIGHBITS ((_PAGE_VALID | _PAGE_SZ4MB) ^ 0xfffff80000000000)
-	sethi   %uhi(KERN_HIGHBITS), %g2
-	sllx    %g2, 32, %g2
-#undef KERN_HIGHBITS
-	ldx	[%o2 + AOFF_task_mm], %g6
-	ldx	[%g6 + AOFF_mm_pgd], %g6
+#define KERN_HIGHBITS		((_PAGE_VALID | _PAGE_SZ4MB) ^ 0xfffff80000000000)
+#define KERN_LOWBITS		(_PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_W)
+#ifdef THIS_IS_CHEETAH
+#error Dave, make sure you took care of other issues in rest of sparc64 code...
+#define VPTE_BASE		0xffe0000000000000
+#else /* Spitfire/Blackbird */
+#define VPTE_BASE		0xfffffffe00000000
+#endif
+	mov	TSB_REG, %g1
+	stxa	%g0, [%g1] ASI_DMMU
+	membar	#Sync
+	mov	TLB_SFSR, %g1
+	sethi	%uhi(KERN_HIGHBITS), %g2
+	or	%g2, %ulo(KERN_HIGHBITS), %g2
+	sllx	%g2, 32, %g2
+	or	%g2, KERN_LOWBITS, %g2
+	sethi	%uhi(VPTE_BASE), %g3
+	or	%g3, %ulo(VPTE_BASE), %g3
+	sllx	%g3, 32, %g3
 	clr	%g7
+#undef KERN_HIGHBITS
+#undef KERN_LOWBITS
+#undef VPTE_BASE
 
 	wrpr	%o1, (PSTATE_IG | PSTATE_IE), %pstate
 	sethi	%hi(ivector_to_mask), %g5
@@ -186,14 +202,6 @@ bounce:
 	mov	0x40, %g2
 
 	wrpr	%g0, 0, %wstate
-	wrpr	%o1, PSTATE_IE, %pstate
-
-	mov	TSB_REG, %o4
-	mov	1, %o5
-	stxa	%o5, [%o4] ASI_DMMU
-	stxa	%o5, [%o4] ASI_IMMU
-	membar	#Sync
-
 	or	%o1, PSTATE_IE, %o1
 	wrpr	%o1, 0, %pstate
 

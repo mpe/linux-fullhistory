@@ -71,6 +71,10 @@
 #define _PREP_IBM      0x00  /* ibm prep */
 #define _PREP_Bull     0x03  /* bull prep */
 
+/* these are arbitrary */
+#define _CHRP_Motorola 0x04  /* motorola chrp, the cobra */
+#define _CHRP_IBM     0x05   /* IBM chrp, the longtrail and longtrail 2 */
+
 #define _GLOBAL(n)\
 	.globl n;\
 n:
@@ -192,6 +196,8 @@ n:
 #ifdef CONFIG_APUS
 #define _machine (_MACH_apus)
 #define is_prep (0)
+#define is_chrp (0)
+#define have_of (0)
 #endif /* CONFIG_APUS */
 
 #else /* CONFIG_MACH_SPECIFIC */
@@ -223,6 +229,9 @@ void release_thread(struct task_struct *);
 #define MCA_bus 0
 #define MCA_bus__is_a_macro /* for versions in ksyms.c */
 
+/* Lazy FPU handling on uni-processor */
+extern struct task_struct *last_task_used_math;
+
 /*
  * this is the minimum allowable io space due to the location
  * of the io areas on prep (first one at 0x80000000) but
@@ -234,13 +243,7 @@ void release_thread(struct task_struct *);
 /* This decides where the kernel will search for a free chunk of vm
  * space during mmap's.
  */
-#define TASK_UNMAPPED_BASE(off)	(TASK_SIZE / 8 * 3)
-#define TASK_UNMAPPED_ALIGN(addr, off)	PAGE_ALIGN(addr)
-
-#define COPY_TASK_STRUCT(dst, src) 	\
-do {					\
-	*dst = *src;			\
-} while (0)
+#define TASK_UNMAPPED_BASE	(TASK_SIZE / 8 * 3)
 
 typedef struct {
 	unsigned long seg;

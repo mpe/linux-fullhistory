@@ -1,9 +1,10 @@
-/* $Id: ipc.c,v 1.2 1997/09/18 10:38:27 rth Exp $
+/* $Id: ipc.c,v 1.3 1998/07/30 11:29:47 davem Exp $
  * ipc.c: Solaris IPC emulation
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
+#include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/smp_lock.h>
 #include <linux/shm.h>

@@ -3,10 +3,6 @@
  *
  *  Copyright (C) 1997 Geert Uytterhoeven
  *
- *  This file is subject to the terms and conditions of the GNU General Public
- *  License.  See the file COPYING in the main directory of this archive
- *  for more details.
- *
  *  This file is based on the following documentation:
  *
  *	The Open Programmable Interrupt Controller (PIC)
@@ -48,6 +44,16 @@
 #define OPENPIC_NUM_IPI		4
 #define OPENPIC_NUM_PRI		16
 #define OPENPIC_NUM_VECTORS	256
+
+
+    /*
+     *  Vector numbers
+     */
+
+#define OPENPIC_VEC_SOURCE      0x10    /* and up */
+#define OPENPIC_VEC_TIMER       0x40    /* and up */
+#define OPENPIC_VEC_IPI         0x50    /* and up */
+#define OPENPIC_VEC_SPURIOUS    99
 
 
     /*
@@ -198,6 +204,8 @@ struct OpenPIC {
 };
 
 extern volatile struct OpenPIC *OpenPIC;
+extern u_int OpenPIC_NumInitSenses;
+extern u_char *OpenPIC_InitSenses;
 
 
     /*

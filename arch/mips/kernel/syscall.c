@@ -11,7 +11,7 @@
  *        Don't waste that much memory for empty entries in the syscall
  *        table.
  *
- * $Id: syscall.c,v 1.11 1998/05/01 01:34:30 ralf Exp $
+ * $Id: syscall.c,v 1.12 1998/07/26 03:02:09 davem Exp $
  */
 #undef CONF_PRINT_SYSCALLS
 #undef CONF_DEBUG_IRIX
@@ -99,7 +99,7 @@ asmlinkage int sys_idle(void)
 		 *        same for logic clocked with the processor generated
 		 *        clocks.
 		 */
-		if (wait_available && !need_resched)
+		if (wait_available && !current->need_resched)
 			__asm__(".set\tmips3\n\t"
 				"wait\n\t"
 				".set\tmips0");

@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.49 1998/03/03 12:31:17 jj Exp $
+/* $Id: head.S,v 1.53 1998/06/15 16:59:35 jj Exp $
  * head.S: Initial boot code for the Sparc64 port of Linux.
  *
  * Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -89,6 +89,7 @@ sparc64_boot:
 	 * (PSTATE_PRIV | PSTATE_PEF | PSTATE_IE) in %pstate.
          */
 	wrpr    %g0, (PSTATE_PRIV|PSTATE_PEF|PSTATE_IE), %pstate
+	wr	%g0, 0, %fprs
 
 #ifdef __SMP__
 	/* Ugly but necessary... */
@@ -348,17 +349,30 @@ setup_tba:
 	/* Set up MMU globals */
 	wrpr	%o1, (PSTATE_MG|PSTATE_IE), %pstate
 
-	/* Set KERN_HIGHBITS used by dTLB miss handler. */
-#define KERN_HIGHBITS ((_PAGE_VALID | _PAGE_SZ4MB) ^ 0xfffff80000000000)
+	/* Set fixed globals used by dTLB miss handler. */
+#define KERN_HIGHBITS		((_PAGE_VALID | _PAGE_SZ4MB) ^ 0xfffff80000000000)
+#define KERN_LOWBITS		(_PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_W)
+#ifdef THIS_IS_CHEETAH
+#error Dave, make sure you took care of other issues in rest of sparc64 code...
+#define VPTE_BASE		0xffe0000000000000
+#else /* Spitfire/Blackbird */
+#define VPTE_BASE		0xfffffffe00000000
+#endif
+	mov	TSB_REG, %g1
+	stxa	%g0, [%g1] ASI_DMMU
+	membar	#Sync
+	mov	TLB_SFSR, %g1
 	sethi	%uhi(KERN_HIGHBITS), %g2
+	or	%g2, %ulo(KERN_HIGHBITS), %g2
 	sllx	%g2, 32, %g2
-#undef KERN_HIGHBITS
-
-	/* Kernel PGDIR used by TLB miss handlers. */
-	mov	%i0, %g6
-
-	/* To catch bootup bugs, this is user PGDIR for TLB miss handlers. */
+	or	%g2, KERN_LOWBITS, %g2
+	sethi	%uhi(VPTE_BASE), %g3
+	or	%g3, %ulo(VPTE_BASE), %g3
+	sllx	%g3, 32, %g3
 	clr	%g7
+#undef KERN_HIGHBITS
+#undef KERN_LOWBITS
+#undef VPTE_BASE
 
 	/* Setup Interrupt globals */
 	wrpr	%o1, (PSTATE_IG|PSTATE_IE), %pstate
@@ -371,14 +385,6 @@ setup_tba:
 	 */
 	wrpr	%g0, %g0, %wstate
 	wrpr	%o1, PSTATE_IE, %pstate
-
-	/* Zap TSB BASE to zero with TSB_size==1. */
-	mov	TSB_REG, %o4
-	mov	1, %o5
-	stxa	%o5, [%o4] ASI_DMMU
-	stxa	%o5, [%o4] ASI_IMMU
-
-	membar	#Sync
 
 	sethi	%hi(sparc64_ttable_tl0), %g5
 	call	prom_set_trap_table
@@ -403,6 +409,12 @@ empty_bad_page:
 
 #include "ttable.S"
 #include "systbls.S"
+
+	.align	1024
+	.globl	swapper_pg_dir
+swapper_pg_dir:
+	.word	0
+
 #include "etrap.S"
 #include "rtrap.S"
 #include "winfixup.S"
@@ -420,3 +432,4 @@ prom_tba:	.xword	0
 __ret_efault:
 	ret
 	 restore %g0, -EFAULT, %o0
+

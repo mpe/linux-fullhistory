@@ -359,19 +359,13 @@ char *get_options(char *str, int *ints)
 	return(cur);
 }
 
-#ifdef CONFIG_PROFILE
-__initfunc(static void profile_setup(char *str, int *ints))
+static void __init profile_setup(char *str, int *ints)
 {
 	if (ints[0] > 0)
 		prof_shift = (unsigned long) ints[1];
 	else
-#ifdef CONFIG_PROFILE_SHIFT
-		prof_shift = CONFIG_PROFILE_SHIFT;
-#else
 		prof_shift = 2;
-#endif
 }
-#endif
 
 
 static struct dev_name_struct {
@@ -518,9 +512,7 @@ static struct kernel_param cooked_params[] __initdata = {
 #else
 	{ "reserve=", pnp_reserve_setup },
 #endif
-#ifdef CONFIG_PROFILE
 	{ "profile=", profile_setup },
-#endif
 #ifdef __SMP__
 	{ "nosmp", smp_setup },
 	{ "maxcpus=", smp_setup },
@@ -1082,7 +1074,6 @@ __initfunc(asmlinkage void start_kernel(void))
 #ifdef CONFIG_MODULES
 	init_modules();
 #endif
-#ifdef CONFIG_PROFILE
 	if (prof_shift) {
 		prof_buffer = (unsigned int *) memory_start;
 		/* only text is profiled */
@@ -1091,7 +1082,6 @@ __initfunc(asmlinkage void start_kernel(void))
 		memory_start += prof_len * sizeof(unsigned int);
 		memset(prof_buffer, 0, prof_len * sizeof(unsigned int));
 	}
-#endif
 
 	memory_start = kmem_cache_init(memory_start, memory_end);
 	sti();

@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.21 1998/04/28 08:23:30 davem Exp $
+/* $Id: ultra.S,v 1.24 1998/05/22 11:02:56 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -8,90 +8,119 @@
 #include <asm/pgtable.h>
 #include <asm/spitfire.h>
 
-	/* All callers check mm->context != NO_CONTEXT for us. */
+	/* This file is meant to be read efficiently by the CPU, not humans.
+	 * Staraj sie tego nikomu nie pierdolnac...
+	 */
 	.text
 	.align		32
-	.globl		__flush_tlb_mm, __flush_tlb_range, __flush_tlb_page
-__flush_tlb_mm:		/* %o0 == (mm->context & 0x3ff) */
-	mov		SECONDARY_CONTEXT, %g7
-9:	ldxa		[%g7] ASI_DMMU, %g2
+	.globl		__flush_tlb_page, __flush_tlb_mm, __flush_tlb_range
+__flush_tlb_page: /* %o0=(ctx & 0x3ff), %o1=page&PAGE_MASK, %o2=SECONDARY_CONTEXT */
+/*IC1*/	ldxa		[%o2] ASI_DMMU, %g2
 	cmp		%g2, %o0
-	bne,pn		%icc, 1f
-	 mov		0x50, %g3
-	stxa		%g0, [%g3] ASI_DMMU_DEMAP
-	stxa		%g0, [%g3] ASI_IMMU_DEMAP
-	retl
-	 flush		%g6
-1:	rdpr		%pstate, %g1
-	wrpr		%g1, PSTATE_IE, %pstate
-	stxa		%o0, [%g7] ASI_DMMU
-	stxa		%g0, [%g3] ASI_DMMU_DEMAP
-	stxa		%g0, [%g3] ASI_IMMU_DEMAP
-	flush		%g6
-	stxa		%g2, [%g7] ASI_DMMU
-	flush		%g6
-	retl
-	 wrpr		%g1, 0, %pstate
-	nop
-__flush_tlb_range:	/* %o0 == (mm->context & 0x3ff), %o1 == start, %o2 == end */
-	sethi		%hi(8192 - 1), %g5
-	or		%g5, %lo(8192 - 1), %g5
-	andn		%o1, %g5, %o1
-	andn		%o2, %g5, %o2
-
-	sub		%o2, %o1, %o3
-	add		%g5, 1, %g5
-	orcc		%o1, 0x10, %o1
-	srlx		%o3, 13, %o4
-	cmp		%o4, 96
-	bgu,pn		%icc, 9b
-	 mov		SECONDARY_CONTEXT, %g7
-	ldxa		[%g7] ASI_DMMU, %g2
-
-	nop
-	nop
-	cmp		%g2, %o0
-	be,pt		%icc, 1f
-	 sub		%o3, %g5, %o3
-	rdpr		%pstate, %g1
-	wrpr		%g1, PSTATE_IE, %pstate
-	stxa		%o0, [%g7] ASI_DMMU
-
-1:	stxa		%g0, [%o1 + %o3] ASI_DMMU_DEMAP
-	stxa		%g0, [%o1 + %o3] ASI_IMMU_DEMAP
-	brnz,pt		%o3, 1b
-	 sub		%o3, %g5, %o3
-	flush		%g6
-	be,pt		%icc, 1f
-	 nop
-	stxa		%g2, [%g7] ASI_DMMU
-
-	flush		%g6
-	wrpr		%g1, 0, %pstate
-1:	retl
-	 nop
-
-	.align		32
-__flush_tlb_page:	/* %o0 == (mm->context & 0x3ff), %o1 == page & PAGE_MASK */
-	mov		SECONDARY_CONTEXT, %g7
-	ldxa		[%g7] ASI_DMMU, %g2
-	cmp		%g2, %o0
-	bne,pt		%icc, 1f
+	bne,pn		%icc, __flush_tlb_page_slow
 	 or		%o1, 0x10, %g3
 	stxa		%g0, [%g3] ASI_DMMU_DEMAP
 	stxa		%g0, [%g3] ASI_IMMU_DEMAP
 	retl
 	 flush		%g6
-1:	rdpr		%pstate, %g1
+__flush_tlb_mm: /* %o0=(ctx & 0x3ff), %o1=SECONDARY_CONTEXT */
+/*IC2*/	ldxa		[%o1] ASI_DMMU, %g2
+	cmp		%g2, %o0
+	bne,pn		%icc, __flush_tlb_mm_slow
+	 mov		0x50, %g3
+	stxa		%g0, [%g3] ASI_DMMU_DEMAP
+	stxa		%g0, [%g3] ASI_IMMU_DEMAP
+	retl
+	 flush		%g6
+__flush_tlb_range: /* %o0=(ctx&0x3ff), %o1=start&PAGE_MASK, %o2=SECONDARY_CONTEXT,
+		    * %o3=end&PAGE_MASK, %o4=PAGE_SIZE, %o5=(end - start)
+		    */
+#define TLB_MAGIC	206 /* Students, do you know how I calculated this?  -DaveM */
+/*IC3*/	cmp		%o5, %o4
+	be,pt		%xcc, __flush_tlb_page
+	 srlx		%o5, 13, %g5
+	cmp		%g5, TLB_MAGIC
+	bgeu,pn		%icc, __flush_tlb_range_constant_time
+	 or		%o1, 0x10, %g5
+	ldxa		[%o2] ASI_DMMU, %g2
+	cmp		%g2, %o0
+__flush_tlb_range_page_by_page:
+/*IC4*/	bne,pn		%icc, __flush_tlb_range_pbp_slow
+	 sub		%o5, %o4, %o5
+1:	stxa		%g0, [%g5 + %o5] ASI_DMMU_DEMAP
+	stxa		%g0, [%g5 + %o5] ASI_IMMU_DEMAP
+	brnz,pt		%o5, 1b
+	 sub		%o5, %o4, %o5
+	retl
+	 flush		%g6
+__flush_tlb_range_constant_time: /* %o0=ctx, %o1=start, %o3=end */
+/*IC5*/	rdpr		%pstate, %g1
 	wrpr		%g1, PSTATE_IE, %pstate
-	stxa		%o0, [%g7] ASI_DMMU
+	mov		(62 << 3), %g2
+1:	ldxa		[%g2] ASI_ITLB_TAG_READ, %o4
+	and		%o4, 0x3ff, %o5
+	cmp		%o5, %o0
+	bne,pt		%icc, 2f
+	 andn		%o4, 0x3ff, %o4
+/*IC6*/	cmp		%o4, %o1
+	blu,pt		%xcc, 2f
+	 cmp		%o4, %o3
+	blu,pn		%xcc, 4f
+2:	 ldxa		[%g2] ASI_DTLB_TAG_READ, %o4
+	and		%o4, 0x3ff, %o5
+	cmp		%o5, %o0
+	andn		%o4, 0x3ff, %o4
+/*IC7*/	bne,pt		%icc, 3f
+	 cmp		%o4, %o1
+	blu,pt		%xcc, 3f
+	 cmp		%o4, %o3
+	blu,pn		%xcc, 5f
+	 nop
+3:	brnz,pt		%g2, 1b
+	 sub		%g2, (1 << 3), %g2
+/*IC8*/	retl
+	 wrpr		%g1, 0x0, %pstate
+4:	stxa		%g0, [%g2] ASI_ITLB_DATA_ACCESS
+	ba,pt		%xcc, 2b
+	 flush		%g6
+5:	stxa		%g0, [%g2] ASI_DTLB_DATA_ACCESS
+	ba,pt		%xcc, 3b
+	 flush		%g6
+__flush_tlb_mm_slow:
+/*IC9*/	rdpr		%pstate, %g1
+	wrpr		%g1, PSTATE_IE, %pstate
+	stxa		%o0, [%o1] ASI_DMMU
 	stxa		%g0, [%g3] ASI_DMMU_DEMAP
 	stxa		%g0, [%g3] ASI_IMMU_DEMAP
 	flush		%g6
-	stxa		%g2, [%g7] ASI_DMMU
+	stxa		%g2, [%o1] ASI_DMMU
+	flush		%g6
+/*IC10*/retl
+	 wrpr		%g1, 0, %pstate
+__flush_tlb_page_slow:
+	rdpr		%pstate, %g1
+	wrpr		%g1, PSTATE_IE, %pstate
+	stxa		%o0, [%o2] ASI_DMMU
+	stxa		%g0, [%g3] ASI_DMMU_DEMAP
+	stxa		%g0, [%g3] ASI_IMMU_DEMAP
+	flush		%g6
+/*IC11*/stxa		%g2, [%o2] ASI_DMMU
 	flush		%g6
 	retl
 	 wrpr		%g1, 0, %pstate
+__flush_tlb_range_pbp_slow:
+	rdpr		%pstate, %g1
+	wrpr		%g1, PSTATE_IE, %pstate
+	stxa		%o0, [%o2] ASI_DMMU
+2:	stxa		%g0, [%g5 + %o5] ASI_DMMU_DEMAP
+	stxa		%g0, [%g5 + %o5] ASI_IMMU_DEMAP
+	brnz,pt		%o5, 2b
+	 sub		%o5, %o4, %o5
+	flush		%g6
+/*IC13*/stxa		%g2, [%o2] ASI_DMMU
+	flush		%g6
+	retl
+	 wrpr		%g1, 0x0, %pstate
 
 #ifdef __SMP__
 	/* These are all called by the slaves of a cross call, at
@@ -106,6 +135,8 @@ __flush_tlb_page:	/* %o0 == (mm->context & 0x3ff), %o1 == page & PAGE_MASK */
 	 *   %g2	scratch 1
 	 *   %g3	scratch 2
 	 *   %g4	scratch 3
+	 *
+	 * TODO: Make xcall TLB range flushes use the tricks above... -DaveM
 	 */
 	.align		32
 	.globl		xcall_flush_tlb_page, xcall_flush_tlb_mm, xcall_flush_tlb_range

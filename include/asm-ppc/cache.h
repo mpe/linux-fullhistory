@@ -46,7 +46,16 @@ static inline void lock_dcache(unsigned long lockit)
 }
 
 #endif /* __ASSEMBLY__ */
-	  
+
+/* prep registers for L2 */
+#define CACHECRBA       0x80000823      /* Cache configuration register address */
+#define L2CACHE_MASK	0x03	/* Mask for 2 L2 Cache bits */
+#define L2CACHE_512KB	0x00	/* 512KB */
+#define L2CACHE_256KB	0x01	/* 256KB */
+#define L2CACHE_1MB	0x02	/* 1MB */
+#define L2CACHE_NONE	0x03	/* NONE */
+#define L2CACHE_PARITY  0x08    /* Mask for L2 Cache Parity Protected bit */
+
 #ifdef CONFIG_8xx
 /* Cache control on the MPC8xx is provided through some additional
  * special purpose registers.

@@ -1,7 +1,8 @@
-/* $Id: ioctl32.c,v 1.37 1998/05/06 05:34:13 davem Exp $
+/* $Id: ioctl32.c,v 1.48 1998/08/03 23:58:04 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
- * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
  *
  * These routines maintain argument size conversion between 32bit and 64bit
  * ioctls.
@@ -30,6 +31,9 @@
 #include <linux/cdrom.h>
 #include <linux/loop.h>
 #include <linux/auto_fs.h>
+#include <linux/tty.h>
+#include <linux/vt_kern.h>
+#include <linux/fb.h>
 
 #include <scsi/scsi.h>
 /* Ugly hack. */
@@ -44,6 +48,8 @@
 #include <asm/vuid_event.h>
 #include <asm/rtc.h>
 #include <asm/openpromio.h>
+#include <asm/envctrl.h>
+#include <asm/audioio.h>
 
 /* As gcc will warn about casting u32 to some ptr, we have to cast it to
  * unsigned long first, and that's what is A() for.
@@ -392,7 +398,7 @@ static inline int fbiogetputcmap(unsigned int fd, unsigned int cmd, u32 arg)
 	}
 	f.red = red; f.green = green; f.blue = blue;
 	set_fs (KERNEL_DS);
-	ret = sys_ioctl (fd, (cmd == FBIOPUTCMAP32) ? FBIOPUTCMAP : FBIOGETCMAP, (long)&f);
+	ret = sys_ioctl (fd, (cmd == FBIOPUTCMAP32) ? FBIOPUTCMAP_SPARC : FBIOGETCMAP_SPARC, (long)&f);
 	set_fs (old_fs);
 	if (!ret && cmd == FBIOGETCMAP32) {
 		if (copy_to_user ((char *)A(r), red, f.count) ||
@@ -458,7 +464,162 @@ static inline int fbiogscursor(unsigned int fd, unsigned int cmd, u32 arg)
 	set_fs (old_fs);
 	return ret;
 }
-	
+
+struct fb_fix_screeninfo32 {
+	char			id[16];
+        __kernel_caddr_t32	smem_start;
+	__u32			smem_len;
+	__u32			type;
+	__u32			type_aux;
+	__u32			visual;
+	__u16			xpanstep;
+	__u16			ypanstep;
+	__u16			ywrapstep;
+	__u32			line_length;
+        __kernel_caddr_t32	mmio_start;
+	__u32			mmio_len;
+	__u32			accel;
+	__u16			reserved[3];
+};
+
+struct fb_cmap32 {
+	__u32			start;
+	__u32			len;
+	__kernel_caddr_t32	red;
+	__kernel_caddr_t32	green;
+	__kernel_caddr_t32	blue;
+	__kernel_caddr_t32	transp;
+};
+
+static int fb_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	mm_segment_t old_fs = get_fs();
+	u32 red = 0, green = 0, blue = 0, transp = 0;
+	struct fb_fix_screeninfo fix;
+	struct fb_cmap cmap;
+	void *karg;
+	int err = 0;
+
+	switch (cmd) {
+	case FBIOGET_FSCREENINFO:
+		karg = &fix;
+		break;
+	case FBIOGETCMAP:
+	case FBIOPUTCMAP:
+		karg = &cmap;
+		if (__get_user(cmap.start, &((struct fb_cmap32 *)A(arg))->start) ||
+		    __get_user(cmap.len, &((struct fb_cmap32 *)A(arg))->len) ||
+		    __get_user(red, &((struct fb_cmap32 *)A(arg))->red) ||
+		    __get_user(green, &((struct fb_cmap32 *)A(arg))->green) ||
+		    __get_user(blue, &((struct fb_cmap32 *)A(arg))->blue) ||
+		    __get_user(transp, &((struct fb_cmap32 *)A(arg))->transp))
+			return -EFAULT;
+		cmap.red = kmalloc(cmap.len * sizeof(__u16), GFP_KERNEL);
+		if (!cmap.red)
+			return -ENOMEM;
+		cmap.green = kmalloc(cmap.len * sizeof(__u16), GFP_KERNEL);
+		if (!cmap.green) {
+			kfree(cmap.red);
+			return -ENOMEM;
+		}
+		cmap.blue = kmalloc(cmap.len * sizeof(__u16), GFP_KERNEL);
+		if (!cmap.blue) {
+			kfree(cmap.red);
+			kfree(cmap.green);
+			return -ENOMEM;
+		}
+		if (transp) {
+			cmap.transp = kmalloc(cmap.len * sizeof(__u16), GFP_KERNEL);
+			if (!cmap.transp) {
+				kfree(cmap.red);
+				kfree(cmap.green);
+				kfree(cmap.blue);
+				return -ENOMEM;
+			}
+		} else {
+			cmap.transp = NULL;
+		}
+		if (cmd == FBIOGETCMAP)
+			break;
+
+		if (__copy_from_user(cmap.red, (char *)A(((struct fb_cmap32 *)A(arg))->red),
+				     cmap.len * sizeof(__u16)) ||
+		    __copy_from_user(cmap.green, (char *)A(((struct fb_cmap32 *)A(arg))->green),
+				     cmap.len * sizeof(__u16)) ||
+		    __copy_from_user(cmap.blue, (char *)A(((struct fb_cmap32 *)A(arg))->blue),
+				     cmap.len * sizeof(__u16)) ||
+		    (cmap.transp &&
+		     __copy_from_user(cmap.transp, (char *)A(((struct fb_cmap32 *)A(arg))->transp),
+				      cmap.len * sizeof(__u16)))) {
+			kfree(cmap.red);
+			kfree(cmap.green);
+			kfree(cmap.blue);
+			if (cmap.transp)
+				kfree(cmap.transp);
+			return -EFAULT;
+		}
+		break;
+	default:
+		printk("%s: Unknown fb ioctl cmd fd(%d) cmd(%08x) arg(%08x)\n",
+		       __FUNCTION__, fd, cmd, arg);
+		return -ENOSYS;
+	}
+	set_fs(KERNEL_DS);
+	err = sys_ioctl(fd, cmd, (unsigned long)karg);
+	set_fs(old_fs);
+	if (err)
+		return err;
+	switch (cmd) {
+	case FBIOGET_FSCREENINFO:
+		if (__copy_to_user((char *)((struct fb_fix_screeninfo32 *)A(arg))->id,
+				   (char *)fix.id, sizeof(fix.id)) ||
+		    __put_user((__u32)(unsigned long)fix.smem_start,
+			       &((struct fb_fix_screeninfo32 *)A(arg))->smem_start) ||
+		    __put_user(fix.smem_len, &((struct fb_fix_screeninfo32 *)A(arg))->smem_len) ||
+		    __put_user(fix.type, &((struct fb_fix_screeninfo32 *)A(arg))->type) ||
+		    __put_user(fix.type_aux, &((struct fb_fix_screeninfo32 *)A(arg))->type_aux) ||
+		    __put_user(fix.visual, &((struct fb_fix_screeninfo32 *)A(arg))->visual) ||
+		    __put_user(fix.xpanstep, &((struct fb_fix_screeninfo32 *)A(arg))->xpanstep) ||
+		    __put_user(fix.ypanstep, &((struct fb_fix_screeninfo32 *)A(arg))->ypanstep) ||
+		    __put_user(fix.ywrapstep, &((struct fb_fix_screeninfo32 *)A(arg))->ywrapstep) ||
+		    __put_user(fix.line_length, &((struct fb_fix_screeninfo32 *)A(arg))->line_length) ||
+		    __put_user((__u32)(unsigned long)fix.mmio_start,
+			       &((struct fb_fix_screeninfo32 *)A(arg))->mmio_start) ||
+		    __put_user(fix.mmio_len, &((struct fb_fix_screeninfo32 *)A(arg))->mmio_len) ||
+		    __put_user(fix.accel, &((struct fb_fix_screeninfo32 *)A(arg))->accel) ||
+		    __copy_to_user((char *)((struct fb_fix_screeninfo32 *)A(arg))->reserved,
+				   (char *)fix.reserved, sizeof(fix.reserved)))
+			return -EFAULT;
+		break;
+	case FBIOGETCMAP:
+		if (__copy_to_user((char *)A(((struct fb_cmap32 *)A(arg))->red), cmap.red,
+				   cmap.len * sizeof(__u16)) ||
+		    __copy_to_user((char *)A(((struct fb_cmap32 *)A(arg))->green), cmap.blue,
+				   cmap.len * sizeof(__u16)) ||
+		    __copy_to_user((char *)A(((struct fb_cmap32 *)A(arg))->blue), cmap.blue,
+				   cmap.len * sizeof(__u16)) ||
+		    (cmap.transp &&
+		     __copy_to_user((char *)A(((struct fb_cmap32 *)A(arg))->transp), cmap.transp,
+				    cmap.len * sizeof(__u16)))) {
+			kfree(cmap.red);
+			kfree(cmap.green);
+			kfree(cmap.blue);
+			if (cmap.transp)
+				kfree(cmap.transp);
+			return -EFAULT;
+		}
+		/* fall through */
+	case FBIOPUTCMAP:
+		kfree(cmap.red);
+		kfree(cmap.green);
+		kfree(cmap.blue);
+		if (cmap.transp)
+			kfree(cmap.transp);
+		break;
+	}
+	return 0;
+}
+
 static int hdio_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 {
 	mm_segment_t old_fs = get_fs();
@@ -1128,6 +1289,139 @@ static int loop_status(unsigned int fd, unsigned int cmd, u32 arg)
 	return err;
 }
 
+extern int tty_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigned long arg);
+
+static int vt_check(struct file *file)
+{
+	struct tty_struct *tty;
+	struct inode *inode = file->f_dentry->d_inode;
+	
+	if (file->f_op->ioctl != tty_ioctl)
+		return -EINVAL;
+	                
+	tty = (struct tty_struct *)file->private_data;
+	if (tty_paranoia_check(tty, inode->i_rdev, "tty_ioctl"))
+		return -EINVAL;
+	                                                
+	if (tty->driver.ioctl != vt_ioctl)
+		return -EINVAL;
+	
+	/*
+	 * To have permissions to do most of the vt ioctls, we either have
+	 * to be the owner of the tty, or super-user.
+	 */
+	if (current->tty == tty || suser())
+		return 1;
+	return 0;                                                    
+}
+
+struct consolefontdesc32 {
+	unsigned short charcount;       /* characters in font (256 or 512) */
+	unsigned short charheight;      /* scan lines per character (1-32) */
+	u32 chardata;			/* font data in expanded form */
+};
+
+static int do_fontx_ioctl(struct file *file, int cmd, struct consolefontdesc32 *user_cfd)
+{
+	struct consolefontdesc cfdarg;
+	struct console_font_op op;
+	int i, perm;
+
+	perm = vt_check(file);
+	if (perm < 0) return perm;
+	
+	if (copy_from_user(&cfdarg, user_cfd, sizeof(struct consolefontdesc32))) 
+		return -EFAULT;
+	
+	cfdarg.chardata = (unsigned char *)A(((struct consolefontdesc32 *)&cfdarg)->chardata);
+ 	
+	switch (cmd) {
+	case PIO_FONTX:
+		if (!perm)
+			return -EPERM;
+		op.op = KD_FONT_OP_SET;
+		op.flags = 0;
+		op.width = 8;
+		op.height = cfdarg.charheight;
+		op.charcount = cfdarg.charcount;
+		op.data = cfdarg.chardata;
+		return con_font_op(fg_console, &op);
+	case GIO_FONTX:
+		if (!cfdarg.chardata)
+			return 0;
+		op.op = KD_FONT_OP_GET;
+		op.flags = 0;
+		op.width = 8;
+		op.height = cfdarg.charheight;
+		op.charcount = cfdarg.charcount;
+		op.data = cfdarg.chardata;
+		i = con_font_op(fg_console, &op);
+		if (i)
+			return i;
+		cfdarg.charheight = op.height;
+		cfdarg.charcount = op.charcount;
+		((struct consolefontdesc32 *)&cfdarg)->chardata	= (unsigned long)cfdarg.chardata;
+		if (copy_to_user(user_cfd, &cfdarg, sizeof(struct consolefontdesc32)))
+			return -EFAULT;
+		return 0;
+	}
+	return -EINVAL;
+}
+
+struct console_font_op32 {
+	unsigned int op;        /* operation code KD_FONT_OP_* */
+	unsigned int flags;     /* KD_FONT_FLAG_* */
+	unsigned int width, height;     /* font size */
+	unsigned int charcount;
+	u32 data;    /* font data with height fixed to 32 */
+};
+                                        
+static int do_kdfontop_ioctl(struct file *file, struct console_font_op32 *fontop)
+{
+	struct console_font_op op;
+	int perm = vt_check(file), i;
+	struct vt_struct *vt;
+	
+	if (perm < 0) return perm;
+	
+	if (copy_from_user(&op, (void *) fontop, sizeof(struct console_font_op32)))
+		return -EFAULT;
+	if (!perm && op.op != KD_FONT_OP_GET)
+		return -EPERM;
+	op.data = (unsigned char *)A(((struct console_font_op32 *)&op)->data);
+	op.flags |= KD_FONT_FLAG_OLD;
+	vt = (struct vt_struct *)((struct tty_struct *)file->private_data)->driver_data;
+	i = con_font_op(vt->vc_num, &op);
+	if (i) return i;
+	((struct console_font_op32 *)&op)->data = (unsigned long)op.data;
+	if (copy_to_user((void *) fontop, &op, sizeof(struct console_font_op32)))
+		return -EFAULT;
+	return 0;
+}
+
+struct unimapdesc32 {
+	unsigned short entry_ct;
+	u32 entries;
+};
+
+static int do_unimap_ioctl(struct file *file, int cmd, struct unimapdesc32 *user_ud)
+{
+	struct unimapdesc32 tmp;
+	int perm = vt_check(file);
+	
+	if (perm < 0) return perm;
+	if (copy_from_user(&tmp, user_ud, sizeof tmp))
+		return -EFAULT;
+	switch (cmd) {
+	case PIO_UNIMAP:
+		if (!perm) return -EPERM;
+		return con_set_unimap(fg_console, tmp.entry_ct, (struct unipair *)A(tmp.entries));
+	case GIO_UNIMAP:
+		return con_get_unimap(fg_console, tmp.entry_ct, &(user_ud->entry_ct), (struct unipair *)A(tmp.entries));
+	}
+	return 0;
+}
+
 asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 {
 	struct file * filp;
@@ -1200,6 +1494,10 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 		
 	case BLKRAGET:
 	case BLKGETSIZE:
+	case 0x1260:
+		/* The mkswap binary hard codes it to Intel value :-((( */
+		if(cmd == 0x1260)
+			cmd = BLKGETSIZE;
 		error = w_long(fd, cmd, arg);
 		goto out;
 		
@@ -1210,6 +1508,12 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 		
 	case FBIOSCURSOR32:
 		error = fbiogscursor(fd, cmd, arg);
+		goto out;
+
+	case FBIOGET_FSCREENINFO:
+	case FBIOGETCMAP:
+	case FBIOPUTCMAP:
+		error = fb_ioctl_trans(fd, cmd, arg);
 		goto out;
 
 	case HDIO_GET_KEEPSETTINGS:
@@ -1263,7 +1567,21 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case AUTOFS_IOC_SETTIMEOUT:
 		error = rw_long(fd, cmd, arg);
 		goto out;
+		
+	case PIO_FONTX:
+	case GIO_FONTX:
+		error = do_fontx_ioctl(filp, cmd, (struct consolefontdesc32 *)A(arg));
+		goto out;
+		
+	case PIO_UNIMAP:
+	case GIO_UNIMAP:
+		error = do_unimap_ioctl(filp, cmd, (struct unimapdesc32 *)A(arg));
+		goto out;
 
+	case KDFONTOP:
+		error = do_kdfontop_ioctl(filp, (struct console_font_op32 *)A(arg));
+		goto out;
+		
 	/* List here exlicitly which ioctl's are known to have
 	 * compatable types passed or none at all...
 	 */
@@ -1314,6 +1632,17 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case FBIOSCURPOS:
 	case FBIOGCURPOS:
 	case FBIOGCURMAX:
+
+	case FBIOGET_VSCREENINFO:
+	case FBIOPUT_VSCREENINFO:
+	case FBIOPAN_DISPLAY:
+	case FBIOGET_FCURSORINFO:
+	case FBIOGET_VCURSORINFO:
+	case FBIOPUT_VCURSORINFO:
+	case FBIOGET_CURSORSTATE:
+	case FBIOPUT_CURSORSTATE:
+	case FBIOGET_CON2FBMAP:
+	case FBIOPUT_CON2FBMAP:
 
 	/* Little f */
 	case FIOCLEX:
@@ -1397,6 +1726,12 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case KDSKBLED:
 	case KDGETLED:
 	case KDSETLED:
+	case GIO_SCRNMAP:
+	case PIO_SCRNMAP:
+	case GIO_UNISCRNMAP:
+	case PIO_UNISCRNMAP:
+	case PIO_FONTRESET:
+	case PIO_UNIMAPCLR:
 	
 	/* Little k */
 	case KIOCTYPE:
@@ -1438,9 +1773,11 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case VUIDSFORMAT:
 	case VUIDGFORMAT:
 
-	/* Little p (/dev/rtc etc.) */
+	/* Little p (/dev/rtc, /dev/envctrl, etc.) */
 	case RTCGET:
 	case RTCSET:
+	case I2CIOCSADR:
+	case I2CIOCGADR:
 
 	/* Little m */
 	case MTIOCTOP:
@@ -1537,6 +1874,14 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	/* Big L */
 	case LOOP_SET_FD:
 	case LOOP_CLR_FD:
+	
+	/* Big A */
+	case AUDIO_GETINFO:
+	case AUDIO_SETINFO:
+	case AUDIO_DRAIN:
+	case AUDIO_GETDEV:
+	case AUDIO_GETDEV_SUNOS:
+	case AUDIO_FLUSH:
 
 	/* AUTOFS */
 	case AUTOFS_IOC_READY:

@@ -1,5 +1,5 @@
 /*
- * $Id: time.c,v 1.32 1998/04/24 12:29:38 davem Exp $
+ * $Id: time.c,v 1.35 1998/07/24 11:05:47 geert Exp $
  * Common time routines among all ppc machines.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) to merge
@@ -95,10 +95,12 @@ void timer_interrupt(struct pt_regs * regs)
 			 * update the rtc when needed
 			 */
 			if ( xtime.tv_sec > last_rtc_update + 660 )
+			{
 				if (set_rtc_time(xtime.tv_sec) == 0)
 					last_rtc_update = xtime.tv_sec;
 				else
 					last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
+			}
 		}
 	}
 #ifdef __SMP__
@@ -199,8 +201,7 @@ __initfunc(void time_init(void))
 		prep_calibrate_decr();
 		set_rtc_time = prep_set_rtc_time;
 		break;
-/* ifdef APUS specific stuff until the merge is completed. -jskov */
-#ifdef CONFIG_APUS
+#ifdef CONFIG_APUS		
 	case _MACH_apus:
 	{
 		xtime.tv_sec = apus_get_rtc_time();
@@ -208,7 +209,7 @@ __initfunc(void time_init(void))
 		set_rtc_time = apus_set_rtc_time;
  		break;
 	}
-#endif
+#endif	
 	}
 	xtime.tv_usec = 0;
 #else /* CONFIG_MBX */

@@ -1,9 +1,8 @@
-/*
+/* $Id: setup.c,v 1.6 1998/05/07 00:39:53 ralf Exp $
+ *
  * setup.c: SGI specific setup, including init of the feature struct.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
- *
- * $Id: setup.c,v 1.5 1998/05/01 01:35:19 ralf Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -31,6 +30,8 @@ struct feature sgi_feature = {
 
 static volatile struct hpc_keyb *sgi_kh = (struct hpc_keyb *) (KSEG1 + 0x1fbd9800 + 64);
 
+#define KBD_STAT_IBF		0x02	/* Keyboard input buffer full */
+
 static unsigned char sgi_read_input(void)
 {
 	return sgi_kh->data;
@@ -38,11 +39,21 @@ static unsigned char sgi_read_input(void)
 
 static void sgi_write_output(unsigned char val)
 {
+	int status;
+
+	do {
+		status = sgi_kh->command;
+	} while (status & KBD_STAT_IBF);
 	sgi_kh->data = val;
 }
 
 static void sgi_write_command(unsigned char val)
 {
+	int status;
+
+	do {
+		status = sgi_kh->command;
+	} while (status & KBD_STAT_IBF);
 	sgi_kh->command = val;
 }
 

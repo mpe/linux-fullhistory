@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.53 1998/05/02 12:06:12 davem Exp $
+# $Id: config.in,v 1.65 1998/07/20 18:42:27 geert Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -51,12 +51,12 @@ if [ "$CONFIG_APUS" = "y" ]; then
 else
   define_bool CONFIG_PCI y
 fi
-if [ "$CONFIG_PREP" = "y" ]; then
-  bool 'PCI quirks' CONFIG_PCI_QUIRKS
-  if [ "$CONFIG_PCI_QUIRKS" = "y" ]; then
-    bool '   PCI bridge optimization' CONFIG_PCI_OPTIMIZE
-  fi
+
+bool 'PCI quirks' CONFIG_PCI_QUIRKS
+if [ "$CONFIG_PCI_QUIRKS" = "y" ]; then
+  bool '   PCI bridge optimization' CONFIG_PCI_OPTIMIZE
 fi
+
 bool 'Backward-compatible /proc/pci' CONFIG_PCI_OLD_PROC
 bool 'Networking support' CONFIG_NET
 bool 'Sysctl support' CONFIG_SYSCTL
@@ -80,22 +80,12 @@ fi
 bool 'Support for frame buffer devices' CONFIG_FB
 if [ "$CONFIG_FB" = "y" ]; then
   bool 'Backward compatibility mode for Xpmac' CONFIG_FB_COMPAT_XPMAC
-else
-  define_bool CONFIG_ABSCON_COMPAT y
+fi
+if [ "$CONFIG_FB" != "y" ]; then
+  bool 'Support for VGA Console' CONFIG_VGA_CONSOLE
 fi
 
-if [ "$CONFIG_PMAC" = "y" ]; then
-  if [ "$CONFIG_FB" != "y" ]; then
-    define_bool CONFIG_PMAC_CONSOLE y
-  fi
-else
-# if compiling specifically for prep or chrp, or supporting all arch's
-  if [ "$CONFIG_FB" = "y" ]; then
-    bool 'Support for VGA devices' CONFIG_VGA_CONSOLE
-  else
-    bool 'Support for PowerMac console' CONFIG_PMAC_CONSOLE
-  fi
-fi
+bool 'Power management support for PowerBook 3400/2400' CONFIG_PMAC_PBOOK
 bool 'Support for PowerMac keyboard' CONFIG_MAC_KEYBOARD
 bool 'Support for PowerMac floppy' CONFIG_MAC_FLOPPY
 bool 'Support for PowerMac serial ports' CONFIG_MAC_SERIAL
@@ -106,17 +96,25 @@ bool 'Support for Open Firmware device tree in /proc' CONFIG_PROC_DEVICETREE
 bool 'Include kgdb kernel debugger' CONFIG_KGDB
 bool 'Include xmon kernel debugger' CONFIG_XMON
 
-if [ "$CONFIG_FB" != "y" ]; then
-  if [ "$CONFIG_PMAC_CONSOLE" = "y" ]; then
-    bool 'Support for Apple "control" display' CONFIG_CONTROL_VIDEO
-    bool 'Support for Apple "platinum" display' CONFIG_PLATINUM_VIDEO
-    bool 'Support for Apple "valkyrie" display' CONFIG_VALKYRIE_VIDEO
-    bool 'Support for ATI Mach64 display cards' CONFIG_ATY_VIDEO
-    bool 'Support for IMS Twin Turbo display card' CONFIG_IMSTT_VIDEO
-    bool 'Support for Chips 65550 display' CONFIG_CHIPS_VIDEO
-  else
-    define_bool CONFIG_VGA_CONSOLE y
+if [ "$CONFIG_APUS" = "y" ]; then
+  define_bool CONFIG_FB_CONSOLE y
+  define_bool CONFIG_AMIGA y
+  define_bool CONFIG_ZORRO y
+  define_bool CONFIG_AMIGAMOUSE y
+  define_bool CONFIG_ABSTRACT_CONSOLE y
+  define_bool CONFIG_FB y
+  tristate 'Amiga floppy support' CONFIG_AMIGA_FLOPPY
+  bool 'Amiga Gayle IDE interface support' CONFIG_BLK_DEV_GAYLE
+  tristate 'Amiga builtin serial support' CONFIG_AMIGA_BUILTIN_SERIAL
+  tristate 'GVP IO-Extender support' CONFIG_GVPIOEXT
+  dep_tristate 'GVP IO-Extender parallel printer support' CONFIG_GVPIOEXT_LP $CONFIG_GVPIOEXT
+  dep_tristate 'GVP IO-Extender PLIP support' CONFIG_GVPIOEXT_PLIP $CONFIG_GVPIOEXT
+  tristate 'Multiface Card III serial support' CONFIG_MULTIFACE_III_TTY
+  if [ "$CONFIG_AMIGA_BUILTIN_SERIAL" = "y" -o "$CONFIG_GVPIOEXT" = "y" -o \
+       "$CONFIG_MULTIFACE_III_TTY" = "y" ]; then
+    bool 'Support for serial port console' CONFIG_SERIAL_CONSOLE
   fi
+bool '/proc/hardware support' CONFIG_PROC_HARDWARE
 fi
 
 endmenu
@@ -174,16 +172,24 @@ source fs/Config.in
 
 source fs/nls/Config.in
 
+mainmenu_option next_comment
+comment 'Console drivers'
 source drivers/video/Config.in
+endmenu
 
 source drivers/char/Config.in
 
-#mainmenu_option next_comment
-#comment 'Sound'
-#
-#tristate 'Sound card support' CONFIG_SOUND
-#if [ "$CONFIG_SOUND" != "n" ]; then
-#  source drivers/sound/Config.in
-#fi
-#
-#endmenu
+mainmenu_option next_comment
+comment 'Sound'
+
+tristate 'Sound card support' CONFIG_SOUND
+if [ "$CONFIG_SOUND" != "n" ]; then
+  if [ "$CONFIG_APUS" = "y" -o "$CONFIG_PMAC" = "y" ]; then
+    tristate 'Amiga or PowerMac DMA sound support' CONFIG_DMASOUND
+  fi
+  if [ "$CONFIG_PREP" = "y" -o "$CONFIG_CHRP" = "y" ]; then
+    source drivers/sound/Config.in
+  fi
+fi
+
+endmenu

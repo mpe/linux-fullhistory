@@ -173,6 +173,7 @@ static int awacs_irq, awacs_tx_irq, awacs_rx_irq;
 static volatile struct awacs_regs *awacs;
 static volatile struct dbdma_regs *awacs_txdma, *awacs_rxdma;
 static int awacs_rate_index;
+static int awacs_subframe;
 
 /*
  * Space for the DBDMA command blocks.
@@ -1906,7 +1907,7 @@ static ssize_t pmac_ct_u16(const u_char *userPtr, size_t userCount,
 			   ssize_t frameLeft)
 {
 	ssize_t count, used;
-	short mask = (sound.soft.format == AFMT_U16_LE? 0x0080: 0x8000);
+	int mask = (sound.soft.format == AFMT_U16_LE? 0x0080: 0x8000);
 	int stereo = sound.soft.stereo;
 	short *fp = (short *) &frame[*frameUsed];
 	short *up = (short *) userPtr;
@@ -1915,7 +1916,7 @@ static ssize_t pmac_ct_u16(const u_char *userPtr, size_t userCount,
 	userCount >>= (stereo? 2: 1);
 	used = count = min(userCount, frameLeft);
 	while (count > 0) {
-		short data;
+		int data;
 		if (get_user(data, up++))
 			return -EFAULT;
 		data ^= mask;
@@ -4428,7 +4429,23 @@ __initfunc(void dmasound_init(void))
 #endif /* __mc68000__ */
 
 #ifdef CONFIG_PMAC
+	awacs_subframe = 0;
 	np = find_devices("awacs");
+	if (np == 0) {
+		/*
+		 * powermac G3 models have a node called "davbus"
+		 * with a child called "sound".
+		 */
+		struct device_node *sound;
+		np = find_devices("davbus");
+		sound = find_devices("sound");
+		if (sound != 0 && sound->parent == np) {
+			int *sfprop;
+			sfprop = (int *) get_property(sound, "sub-frame", 0);
+			if (sfprop != 0 && *sfprop >= 0 && *sfprop < 16)
+				awacs_subframe = *sfprop;
+		}
+	}
 	if (np != NULL && np->n_addrs >= 3 && np->n_intrs >= 3) {
 		int vol;
 		sound.mach = machPMac;
@@ -4454,6 +4471,7 @@ __initfunc(void dmasound_init(void))
 		vol = (~nvram_read_byte(0x1308) & 7) << 1;
 		awacs_reg[2] = vol + (vol << 6);
 		awacs_reg[4] = vol + (vol << 6);
+		out_le32(&awacs->control, 0x11);
 		awacs_write(awacs_reg[0] + MASK_ADDR0);
 		awacs_write(awacs_reg[1] + MASK_ADDR1);
 		awacs_write(awacs_reg[2] + MASK_ADDR2);

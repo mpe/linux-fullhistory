@@ -1,4 +1,4 @@
-/* $Id: pbm.h,v 1.13 1998/04/20 07:15:11 ecd Exp $
+/* $Id: pbm.h,v 1.14 1998/05/29 06:00:40 ecd Exp $
  * pbm.h: U2P PCI bus module pseudo driver software state.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -74,49 +74,9 @@ struct pcidev_cookie {
 	int				prom_node;
 };
 
-extern struct linux_psycho *psycho_root;
-extern struct linux_psycho **psycho_index_map;
-extern int linux_num_psycho;
 
-static __inline__ struct linux_psycho *
-psycho_by_index(int index)
-{
-	if (index >= linux_num_psycho)
-		return NULL;
-	return psycho_index_map[index];
-}
-
-/* Special PCI IRQ encoding, this just makes life easier for the generic
- * irq registry layer, there is already enough crap in there due to sbus,
- * fhc, and dcookies.
- */
-#define PCI_IRQ_IDENT		0x80000000	/* This tells irq.c what we are       */
-#define PCI_IRQ_IMAP_OFF	0x7ff00000	/* Offset from first PSYCHO imap      */
-#define PCI_IRQ_IMAP_OFF_SHFT	20
-#define PCI_IRQ_BUSNO		0x000fc000	/* PSYCHO instance                    */
-#define PCI_IRQ_BUSNO_SHFT	14
-#define PCI_IRQ_DMA_SYNC	0x00001000	/* IRQ needs DMA sync for APB	      */
-#define PCI_IRQ_IGN		0x000007c0	/* PSYCHO "Int Group Number"          */
-#define PCI_IRQ_INO		0x0000003f	/* PSYCHO INO                         */
-
-#define PCI_IRQ_P(__irq)	(((__irq) & PCI_IRQ_IDENT) != 0)
-
-extern __inline__ unsigned int pci_irq_encode(unsigned long imap_off,
-					      unsigned long psycho_instance,
-					      unsigned long ign,
-					      unsigned long ino, int dma_sync)
-{
-	unsigned int irq;
-
-	irq  = PCI_IRQ_IDENT;
-	irq |= ((imap_off << PCI_IRQ_IMAP_OFF_SHFT) & PCI_IRQ_IMAP_OFF);
-	irq |= ((psycho_instance << PCI_IRQ_BUSNO_SHFT) & PCI_IRQ_BUSNO);
-	irq |= ((ign << 6) & PCI_IRQ_IGN);
-	irq |= (ino & PCI_IRQ_INO);
-	irq |= dma_sync ? PCI_IRQ_DMA_SYNC : 0;
-
-	return irq;
-}
+#define PCI_IRQ_IGN	0x000007c0	/* PSYCHO "Int Group Number". */
+#define PCI_IRQ_INO	0x0000003f	/* PSYCHO INO.                */
 
 /* Used by EBus */
 extern unsigned int psycho_irq_build(struct linux_pbm_info *pbm,

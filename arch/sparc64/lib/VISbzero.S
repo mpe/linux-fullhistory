@@ -1,4 +1,4 @@
-/* $Id: VISbzero.S,v 1.8 1997/08/22 15:54:50 jj Exp $
+/* $Id: VISbzero.S,v 1.9 1998/06/12 14:53:50 jj Exp $
  * VISbzero.S: High speed clear operations utilizing the UltraSparc
  *        Visual Instruction Set.
  *
@@ -9,6 +9,8 @@
 #include "VIS.h"
 
 #ifdef __KERNEL__
+#include <asm/visasm.h>
+
 #define EXN(x,y,a,b,z) 				\
 98: 	x,y;					\
 	.section .fixup;			\
@@ -141,9 +143,9 @@ bzero:
 6:	andncc		%o1, 0x3f, %o3
 7:	be,pn		%xcc, 9f
 #ifdef __KERNEL__
-	 rd		%asi, %g7
-	wr		%g0, FPRS_FEF, %fprs
-	wr		%g7, ASI_BLK_XOR, %asi
+	 rd		%asi, %o4
+	wr		%o4, ASI_BLK_XOR, %asi
+	VISEntryHalf
 #else
 	 wr		%g0, ASI_BLK_P, %asi
 #endif
@@ -178,8 +180,8 @@ bzero:
 	 add		%o0, 256, %o0
 12:
 #ifdef __KERNEL__
-	wr		%g0, 0, %fprs
-	wr		%g7, 0x0, %asi
+	VISExitHalf
+	wr		%o4, 0x0, %asi
 #else
 #ifndef REGS_64BIT
 	wr		%g0, FPRS_FEF, %fprs

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.74 1998/03/11 04:08:37 tdyas Exp $ */
+/* $Id: pgtable.h,v 1.77 1998/08/04 20:51:19 davem Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -91,6 +91,7 @@ BTFIXUPDEF_SIMM13(user_ptrs_per_pgd)
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
 /* This is the same accross all platforms */
 #define VMALLOC_START (0xfe300000)
+#define VMALLOC_END   ~0x0UL
 
 BTFIXUPDEF_INT(page_none)
 BTFIXUPDEF_INT(page_shared)
@@ -573,7 +574,6 @@ __get_iospace (unsigned long addr)
 
 #define module_map      vmalloc
 #define module_unmap    vfree
-#define module_shrink	vshrink
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
 #define PageSkip(page)		(test_bit(PG_skip, &(page)->flags))

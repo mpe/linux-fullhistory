@@ -398,9 +398,7 @@ extern inline void esp_cmd(struct Sparc_ESP *esp, struct Sparc_ESP_regs *eregs,
 static inline void append_SC(Scsi_Cmnd **SC, Scsi_Cmnd *new_SC)
 {
 	Scsi_Cmnd *end;
-	unsigned long flags;
 
-	save_flags(flags); cli();
 	new_SC->host_scribble = (unsigned char *) NULL;
 	if(!*SC)
 		*SC = new_SC;
@@ -409,38 +407,27 @@ static inline void append_SC(Scsi_Cmnd **SC, Scsi_Cmnd *new_SC)
 			;
 		end->host_scribble = (unsigned char *) new_SC;
 	}
-	restore_flags(flags);
 }
 
 static inline void prepend_SC(Scsi_Cmnd **SC, Scsi_Cmnd *new_SC)
 {
-	unsigned long flags;
-
-	save_flags(flags); cli();
 	new_SC->host_scribble = (unsigned char *) *SC;
 	*SC = new_SC;
-	restore_flags(flags);
 }
 
 static inline Scsi_Cmnd *remove_first_SC(Scsi_Cmnd **SC)
 {
 	Scsi_Cmnd *ptr;
-	unsigned long flags;
-
-	save_flags(flags); cli();
 	ptr = *SC;
 	if(ptr)
 		*SC = (Scsi_Cmnd *) (*SC)->host_scribble;
-	restore_flags(flags);
 	return ptr;
 }
 
 static inline Scsi_Cmnd *remove_SC(Scsi_Cmnd **SC, int target, int lun)
 {
 	Scsi_Cmnd *ptr, *prev;
-	unsigned long flags;
 
-	save_flags(flags); cli();
 	for(ptr = *SC, prev = NULL;
 	    ptr && ((ptr->target != target) || (ptr->lun != lun));
 	    prev = ptr, ptr = (Scsi_Cmnd *) ptr->host_scribble)
@@ -451,7 +438,6 @@ static inline Scsi_Cmnd *remove_SC(Scsi_Cmnd **SC, int target, int lun)
 		else
 			*SC=(Scsi_Cmnd *)ptr->host_scribble;
 	}
-	restore_flags(flags);
 	return ptr;
 }
 
@@ -647,7 +633,6 @@ __initfunc(int detect_one_esp
 (Scsi_Host_Template *tpnt, struct linux_sbus_device *esp_dev, struct linux_sbus_device *espdma,
  struct linux_sbus *sbus, int id, int hme))
 {
-	struct devid_cookie dcookie;
 	struct Sparc_ESP *esp, *elink;
 	struct Scsi_Host *esp_host;
 	struct Sparc_ESP_regs *eregs;
@@ -757,7 +742,7 @@ __initfunc(int detect_one_esp
 		esp->edev->reg_addrs[0].phys_addr;
 	esp->ehost->n_io_port = (unsigned char)
 		esp->edev->reg_addrs[0].reg_size;
-	esp->ehost->irq = esp->irq = esp->edev->irqs[0].pri;
+	esp->ehost->irq = esp->irq = esp->edev->irqs[0];
 
 #ifndef __sparc_v9__
 	if (sparc_cpu_model != sun4d) {
@@ -773,30 +758,20 @@ __initfunc(int detect_one_esp
 esp_irq_acquired:
 		printk("esp%d: IRQ %d ", esp->esp_id, esp->ehost->irq);
 	} else {
-		dcookie.real_dev_id = esp;
-		dcookie.bus_cookie = esp_dev;
 		if (request_irq(esp->ehost->irq, esp_intr_4d,
-			(SA_SHIRQ | SA_DCOOKIE),
-			"Sparc ESP SCSI", &dcookie))
+			SA_SHIRQ, "Sparc ESP SCSI", esp))
 			panic("Cannot acquire ESP irq line");
-		printk("esp%d: INO[%x] IRQ %d ", esp->esp_id, dcookie.ret_ino, esp->ehost->irq);
-		esp->ehost->irq = esp->irq = dcookie.ret_ino;
+		printk("esp%d: IRQ %s ", esp->esp_id, __irq_itoa(esp->ehost->irq));
 	}
 #else
 	/* On Ultra we must always call request_irq for each
 	 * esp, so that imap registers get setup etc.
 	 */
-	dcookie.real_dev_id = esp;
-	dcookie.imap = dcookie.iclr = 0;
-	dcookie.pil = -1;
-	dcookie.bus_cookie = sbus;
 	if(request_irq(esp->ehost->irq, esp_intr,
-		       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
-		       "Sparc ESP SCSI", &dcookie))
+		       SA_SHIRQ, "Sparc ESP SCSI", esp))
 		panic("Cannot acquire ESP irq line");
-	esp->ehost->irq = esp->irq = dcookie.ret_ino;
-	printk("esp%d: INO[%x] IRQ %d ",
-	       esp->esp_id, esp->ehost->irq, dcookie.ret_pil);
+	printk("esp%d: IRQ %s ",
+	       esp->esp_id, __irq_itoa(esp->ehost->irq));
 #endif
 
 	/* Figure out our scsi ID on the bus */
@@ -1004,14 +979,16 @@ __initfunc(int esp_detect(Scsi_Host_Template *tpnt))
 
 	espchain = 0;
 
-	memset (&esp_dev, 0, sizeof(esp_dev));
-	esp_dev.reg_addrs[0].phys_addr = SUN4_300_ESP_PHYSADDR;
-	esp_dev.irqs[0].pri = 4;
+	if(sun4_esp_physaddr) {
+		memset (&esp_dev, 0, sizeof(esp_dev));
+		esp_dev.reg_addrs[0].phys_addr = sun4_esp_physaddr;
+		esp_dev.irqs[0] = 4;
 
-	if (!detect_one_esp(tpnt, &esp_dev, NULL, NULL, 0, 0))
-		esps_in_use++;
-	printk("ESP: Total of 1 ESP hosts found, %d actually in use.\n", esps_in_use);
-	esps_running = esps_in_use;
+		if (!detect_one_esp(tpnt, &esp_dev, NULL, NULL, 0, 0))
+			esps_in_use++;
+		printk("ESP: Total of 1 ESP hosts found, %d actually in use.\n", esps_in_use);
+		esps_running = esps_in_use;
+	}
 	return esps_in_use;
 }
 
@@ -1588,7 +1565,6 @@ int esp_queue(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 {
 	struct Sparc_ESP *esp;
 	struct sparc_dma_registers *dregs;
-	unsigned long flags;
 
 	/* Set up func ptr and initial driver cmd-phase. */
 	SCpnt->scsi_done = done;
@@ -1642,13 +1618,10 @@ int esp_queue(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 		append_SC(&esp->issue_SC, SCpnt);
 	}
 
-	save_and_cli(flags);
-
 	/* Run it now if we can. */
 	if(!esp->current_SC && !esp->resetting_bus)
 		esp_exec_cmd(esp);
 
-	restore_flags(flags);
 	return 0;
 }
 
@@ -1727,7 +1700,6 @@ int esp_abort(Scsi_Cmnd *SCptr)
 	struct Sparc_ESP *esp = (struct Sparc_ESP *) SCptr->host->hostdata;
 	struct Sparc_ESP_regs *eregs = esp->eregs;
 	struct sparc_dma_registers *dregs = esp->dregs;
-	unsigned long flags;
 	int don;
 
 	ESPLOG(("esp%d: Aborting command\n", esp->esp_id));
@@ -1739,16 +1711,13 @@ int esp_abort(Scsi_Cmnd *SCptr)
 	 * in the driver and timeout because the eventual phase change
 	 * will cause the ESP to (eventually) give an interrupt.
 	 */
-	save_and_cli(flags);
 	if(esp->current_SC == SCptr) {
 		esp->cur_msgout[0] = ABORT;
 		esp->msgout_len = 1;
 		esp->msgout_ctr = 0;
 		esp_cmd(esp, eregs, ESP_CMD_SATN);
-		restore_flags(flags);
 		return SCSI_ABORT_PENDING;
 	}
-	restore_flags(flags);
 
 	/* If it is still in the issue queue then we can safely
 	 * call the completion routine and report abort success.
@@ -1814,8 +1783,6 @@ static void esp_done(struct Sparc_ESP *esp, int error)
 	Scsi_Cmnd *done_SC;
 
 	if(esp->current_SC) {
-		unsigned long flags;
-
 		done_SC = esp->current_SC;
 		esp->current_SC = NULL;
 
@@ -1840,13 +1807,9 @@ static void esp_done(struct Sparc_ESP *esp, int error)
 		done_SC->result = error;
 		done_SC->scsi_done(done_SC);
 
-		save_and_cli(flags);
-
 		/* Bus is free, issue any commands in the queue. */
 		if(esp->issue_SC && !esp->current_SC)
 			esp_exec_cmd(esp);
-
-		restore_flags(flags);
 	} else {
 		/* Panic is safe as current_SC is null so we may still
 		 * be able to accept more commands to sync disk buffers.
@@ -2488,6 +2451,10 @@ static inline int esp_do_data_finale(struct Sparc_ESP *esp,
 		ESPLOG(("esp%d: use_sg=%d ptr=%p this_residual=%d\n",
 			esp->esp_id,
 			SCptr->use_sg, SCptr->SCp.ptr, SCptr->SCp.this_residual));
+		ESPLOG(("esp%d: Forcing async for target %d\n", esp->esp_id, 
+			SCptr->target));
+		SCptr->device->borken = 1;
+		SCptr->device->sync = 0;
 		bytes_sent = 0;
 	}
 
@@ -3590,9 +3557,11 @@ static int esp_do_cmdbegin(struct Sparc_ESP *esp, struct Sparc_ESP_regs *eregs,
 		dregs->st_addr = esp->esp_command_dvma;
 		dregs->cond_reg = tmp;
 	} else {
+		unsigned char tmp;
 		esp_cmd(esp, eregs, ESP_CMD_FLUSH);
-		eregs->esp_fdata = *esp->esp_scmdp++;
+		tmp = *esp->esp_scmdp++;
 		esp->esp_scmdleft--;
+		eregs->esp_fdata = tmp;
 		esp_cmd(esp, eregs, ESP_CMD_TI);
 	}
 	return do_intr_end;

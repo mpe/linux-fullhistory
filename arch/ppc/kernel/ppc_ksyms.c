@@ -5,6 +5,8 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/interrupt.h>
+#include <linux/vt_kern.h>
+#include <linux/nvram.h>
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
@@ -22,6 +24,9 @@
 #include <asm/pci-bridge.h>
 #include <asm/irq.h>
 
+#define __KERNEL_SYSCALLS__
+#include <linux/unistd.h>
+
 extern void transfer_to_handler(void);
 extern void int_return(void);
 extern void syscall_trace(void);
@@ -31,9 +36,12 @@ extern void AlignmentException(struct pt_regs *regs);
 extern void ProgramCheckException(struct pt_regs *regs);
 extern void SingleStepException(struct pt_regs *regs);
 extern int sys_sigreturn(struct pt_regs *regs);
-extern unsigned lost_interrupts;
+extern atomic_t n_lost_interrupts;
 extern void do_lost_interrupts(unsigned long);
 extern int do_signal(sigset_t *, struct pt_regs *);
+
+asmlinkage long long __ashrdi3(long long, int);
+asmlinkage int abs(int);
 
 EXPORT_SYMBOL(do_signal);
 EXPORT_SYMBOL(syscall_trace);
@@ -46,18 +54,16 @@ EXPORT_SYMBOL(AlignmentException);
 EXPORT_SYMBOL(ProgramCheckException);
 EXPORT_SYMBOL(SingleStepException);
 EXPORT_SYMBOL(sys_sigreturn);
-EXPORT_SYMBOL(lost_interrupts);
+EXPORT_SYMBOL(n_lost_interrupts);
 EXPORT_SYMBOL(do_lost_interrupts);
 EXPORT_SYMBOL(__ppc_bh_counter);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
+EXPORT_SYMBOL(local_irq_count);
 
-#if !defined(CONFIG_MACH_SPECIFIC) || defined(CONFIG_PMAC)
 EXPORT_SYMBOL(isa_io_base);
-#endif
-#if !defined(CONFIG_MACH_SPECIFIC)
+EXPORT_SYMBOL(isa_mem_base);
 EXPORT_SYMBOL(pci_dram_offset);
-#endif
 
 EXPORT_SYMBOL(atomic_add);
 EXPORT_SYMBOL(atomic_sub);
@@ -124,11 +130,16 @@ EXPORT_SYMBOL(_insw);
 EXPORT_SYMBOL(_outsw);
 EXPORT_SYMBOL(_insl);
 EXPORT_SYMBOL(_outsl);
+EXPORT_SYMBOL(_insw_ns);
+EXPORT_SYMBOL(_outsw_ns);
+EXPORT_SYMBOL(_insl_ns);
+EXPORT_SYMBOL(_outsl_ns);
 EXPORT_SYMBOL(ioremap);
 EXPORT_SYMBOL(__ioremap);
 EXPORT_SYMBOL(iounmap);
 
 EXPORT_SYMBOL(start_thread);
+EXPORT_SYMBOL(__kernel_thread);
 
 EXPORT_SYMBOL(__down_interruptible);
 
@@ -152,6 +163,9 @@ EXPORT_SYMBOL(cuda_poll);
 EXPORT_SYMBOL(pmu_request);
 EXPORT_SYMBOL(pmu_send_request);
 EXPORT_SYMBOL(pmu_poll);
+#ifdef CONFIG_PMAC_PBOOK
+EXPORT_SYMBOL(sleep_notifier_list);
+#endif CONFIG_PMAC_PBOOK
 EXPORT_SYMBOL(abort);
 EXPORT_SYMBOL(find_devices);
 EXPORT_SYMBOL(find_type_devices);
@@ -160,3 +174,18 @@ EXPORT_SYMBOL(get_property);
 EXPORT_SYMBOL(pci_io_base);
 EXPORT_SYMBOL(pci_device_loc);
 EXPORT_SYMBOL(note_scsi_host);
+EXPORT_SYMBOL(kd_mksound);
+#ifdef CONFIG_PMAC
+EXPORT_SYMBOL(nvram_read_byte);
+EXPORT_SYMBOL(nvram_write_byte);
+#endif /* CONFIG_PMAC */
+
+#ifdef CONFIG_SOUND_MODULE
+EXPORT_SYMBOL(abs);
+#endif
+
+/* The following are special because they're not called
+   explicitly (the C compiler generates them).  Fortunately,
+   their interface isn't gonna change any time soon now, so
+   it's OK to leave it out of version control.  */
+EXPORT_SYMBOL_NOVERS(__ashrdi3);

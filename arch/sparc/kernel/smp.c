@@ -60,7 +60,9 @@ volatile int __cpu_logical_map[NR_CPUS];
  * compared to the Alpha and the Intel no?  Most Sparcs have 'swap'
  * instruction which is much better...
  */
-struct klock_info klock_info = { KLOCK_CLEAR, 0 };
+
+/* Kernel spinlock */
+spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
 volatile unsigned long ipi_count;
 
@@ -238,7 +240,7 @@ void smp_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr)
 /* Reschedule call back. */
 void smp_reschedule_irq(void)
 {
-	need_resched = 1;
+	current->need_resched = 1;
 }
 
 /* Stopping processors. */

@@ -1097,6 +1097,9 @@ __initfunc(void device_setup(void))
 #ifdef CONFIG_MD_BOOT
         extern void md_setup_drive(void) __init;
 #endif
+#ifdef CONFIG_FC4_SOC
+	extern int soc_probe(void);
+#endif
 	struct gendisk *p;
 	int nr=0;
 
@@ -1106,6 +1109,10 @@ __initfunc(void device_setup(void))
 	chr_dev_init();
 	blk_dev_init();
 	sti();
+#ifdef CONFIG_FC4_SOC
+	/* This has to be done before scsi_dev_init */
+	soc_probe();
+#endif
 #ifdef CONFIG_SCSI
 	scsi_dev_init();
 #endif

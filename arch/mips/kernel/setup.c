@@ -5,7 +5,7 @@
  *  Copyright (C) 1995, 1996  Ralf Baechle
  *  Copyright (C) 1996  Stoned Elipot
  *
- * $Id: setup.c,v 1.9 1998/05/04 09:17:56 ralf Exp $
+ * $Id: setup.c,v 1.10 1998/06/10 07:21:10 davem Exp $
  */
 #include <linux/config.h>
 #include <linux/errno.h>

@@ -6,27 +6,29 @@
  * The MBX uxes SMC1 for the serial port.  We reset the port and use
  * only the first BD that EPPC-Bug set up as a character FIFO.
  *
- * It's a big hack, but I don't have time right now....I want a kernel
- * that boots.
+ * Later versions (at least 1.4, maybe earlier) of the MBX EPPC-Bug
+ * use COM1 instead of SMC1 as the console port.  This kinda sucks
+ * for the rest of the kernel, so here we force the use of SMC1 again.
+ * I f**ked around for a day trying to figure out how to make EPPC-Bug
+ * use SMC1, but gave up and decided to fix it here.
  */
 #include <linux/types.h>
 #include <asm/mbx.h>
 #include "../8xx_io/commproc.h"
 
-#define CPM_CPCR	((volatile ushort *)0xfa2009c0)
-#define SMC1_MODE	((volatile ushort *)0xfa200a82)
-#define SMC1_TBDF	((volatile bd_t *)0xfa202c90)
-#define SMC1_RBDF	((volatile bd_t *)0xfa202c10)
+#define MBX_CSR1	((volatile u_char *)0xfa100000)
+#define CSR1_COMEN	(u_char)0x02
 
 static cpm8xx_t	*cpmp = (cpm8xx_t *)&(((immap_t *)MBX_IMAP_ADDR)->im_cpm);
 
 void
-serial_init(void)
+serial_init(bd_t *bd)
 {
 	volatile smc_t		*sp;
 	volatile smc_uart_t	*up;
 	volatile cbd_t	*tbdf, *rbdf;
 	volatile cpm8xx_t	*cp;
+	uint	dpaddr, memaddr;
 
 	cp = cpmp;
 	sp = (smc_t*)&(cp->cp_smc[0]);
@@ -34,15 +36,84 @@ serial_init(void)
 
 	/* Disable transmitter/receiver.
 	*/
-	sp->smc_smcm &= ~(SMCMR_REN | SMCMR_TEN);
+	sp->smc_smcmr &= ~(SMCMR_REN | SMCMR_TEN);
 
-	tbdf = (cbd_t *)&cp->cp_dpmem[up->smc_tbase];
-	rbdf = (cbd_t *)&cp->cp_dpmem[up->smc_rbase];
+	if (*MBX_CSR1 & CSR1_COMEN) {
+		/* COM1 is enabled.  Initialize SMC1 and use it for
+		 * the console port.
+		 */
 
-	/* Issue a stop transmit, and wait for it.
-	*/
-	cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SMC1, CPM_CR_STOP_TX) | CPM_CR_FLG;
-	while (cp->cp_cpcr & CPM_CR_FLG);
+		/* Enable SDMA.
+		*/
+		((immap_t *)MBX_IMAP_ADDR)->im_siu_conf.sc_sdcr = 1;
+
+		/* Use Port B for SMCs instead of other functions.
+		*/
+		cp->cp_pbpar |= 0x00000cc0;
+		cp->cp_pbdir &= ~0x00000cc0;
+		cp->cp_pbodr &= ~0x00000cc0;
+
+		/* Allocate space for two buffer descriptors in the DP ram.
+		 * For now, this address seems OK, but it may have to
+		 * change with newer versions of the firmware.
+		 */
+		dpaddr = 0x0800;
+
+		/* Grab a few bytes from the top of memory.  EPPC-Bug isn't
+		 * running any more, so we can do this.
+		 */
+		memaddr = (bd->bi_memsize - 32) & ~15;
+
+		/* Set the physical address of the host memory buffers in
+		 * the buffer descriptors.
+		 */
+		rbdf = (cbd_t *)&cp->cp_dpmem[dpaddr];
+		rbdf->cbd_bufaddr = memaddr;
+		rbdf->cbd_sc = 0;
+		tbdf = rbdf + 1;
+		tbdf->cbd_bufaddr = memaddr+4;
+		tbdf->cbd_sc = 0;
+
+		/* Set up the uart parameters in the parameter ram.
+		*/
+		up->smc_rbase = dpaddr;
+		up->smc_tbase = dpaddr+sizeof(cbd_t);
+		up->smc_rfcr = SMC_EB;
+		up->smc_tfcr = SMC_EB;
+
+		/* Set UART mode, 8 bit, no parity, one stop.
+		 * Enable receive and transmit.
+		 */
+		sp->smc_smcmr = smcr_mk_clen(9) |  SMCMR_SM_UART;
+
+		/* Mask all interrupts and remove anything pending.
+		*/
+		sp->smc_smcm = 0;
+		sp->smc_smce = 0xff;
+
+		/* Set up the baud rate generator.
+		 * See 8xx_io/commproc.c for details.
+		 */
+		cp->cp_simode = 0x10000000;
+		cp->cp_brgc1 =
+			((((bd->bi_intfreq * 1000000)/16) / 9600) << 1) | CPM_BRG_EN;
+
+		/* Enable SMC1 for console output.
+		*/
+		*MBX_CSR1 &= ~CSR1_COMEN;
+	}
+	else {
+		/* SMC1 is used as console port.
+		*/
+		tbdf = (cbd_t *)&cp->cp_dpmem[up->smc_tbase];
+		rbdf = (cbd_t *)&cp->cp_dpmem[up->smc_rbase];
+
+		/* Issue a stop transmit, and wait for it.
+		*/
+		cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SMC1,
+					CPM_CR_STOP_TX) | CPM_CR_FLG;
+		while (cp->cp_cpcr & CPM_CR_FLG);
+	}
 
 	/* Make the first buffer the only buffer.
 	*/
@@ -61,7 +132,7 @@ serial_init(void)
 
 	/* Enable transmitter/receiver.
 	*/
-	sp->smc_smcm |= SMCMR_REN | SMCMR_TEN;
+	sp->smc_smcmr |= SMCMR_REN | SMCMR_TEN;
 }
 
 void

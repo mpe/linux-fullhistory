@@ -42,9 +42,13 @@ __initfunc(void auxio_probe(void))
 		struct linux_ebus_device *edev = 0;
 		unsigned long led_auxio;
 
-		for_all_ebusdev(edev, ebus)
-			if (!strcmp(edev->prom_name, "auxio"))
-				break;
+		for_each_ebus(ebus) {
+			for_each_ebusdev(edev, ebus) {
+				if (!strcmp(edev->prom_name, "auxio"))
+					goto ebus_done;
+			}
+		}
+	ebus_done:
 
 		if (edev) {
 			if (check_region(edev->base_address[0],

@@ -96,6 +96,18 @@ kdev_t sd_find_target(void *host, int tgt)
 }
 #endif
 
+/*
+ * Dummy mksound function that does nothing.
+ * The real one is in the dmasound driver.
+ */
+static void
+pmac_mksound(unsigned int hz, unsigned int ticks)
+{
+}
+
+static volatile u32 *sysctrl_regs;
+static volatile u32 *feature_addr;
+
 __initfunc(void
 pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 {
@@ -124,7 +136,8 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 
 	/* this area has the CPU identification register
 	   and some registers used by smp boards */
-	ioremap(0xf8000000, 0x1000);
+	sysctrl_regs = (volatile u32 *) ioremap(0xf8000000, 0x1000);
+	__ioremap(0xffc00000, 0x400000, pgprot_val(PAGE_READONLY));
 
 	*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
 
@@ -140,15 +153,9 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 #ifdef CONFIG_DUMMY_CONSOLE
 	conswitchp = &dummy_con;
 #endif
-#ifdef CONFIG_ABSCON_COMPAT
-	/* Console wrapper */
-	conswitchp = &compat_con;
-#endif
 
 	kd_mksound = pmac_mksound;
 }
-
-static volatile u32 *feature_addr;
 
 __initfunc(static void ohare_init(void))
 {
@@ -173,6 +180,19 @@ __initfunc(static void ohare_init(void))
 		out_le32(feature_addr, in_le32(feature_addr) | PBOOK_FEATURES);
 		printk(KERN_DEBUG "feature reg = %x\n", in_le32(feature_addr));
 	}
+
+	/*
+	 * Turn on the L2 cache.
+	 * We assume that we have a PSX memory controller iff
+	 * we have an ohare I/O controller.
+	 */
+	if (((sysctrl_regs[2] >> 24) & 0xf) >= 3) {
+		if (sysctrl_regs[4] & 0x10)
+			sysctrl_regs[4] |= 0x04000020;
+		else
+			sysctrl_regs[4] |= 0x04000000;
+		printk(KERN_INFO "Level 2 cache enabled\n");
+	}
 }
 
 extern char *bootpath;
@@ -189,9 +209,6 @@ __initfunc(void powermac_init(void))
 	if (_machine == _MACH_Pmac) {
 		media_bay_init();
 	}
-#ifdef CONFIG_PMAC_CONSOLE
-	pmac_find_display();
-#endif
 }
 
 __initfunc(void
@@ -298,6 +315,10 @@ __initfunc(void pmac_ide_probe(void))
 	p = find_devices("ATA");
 	if (p == NULL)
 		p = find_devices("IDE");
+	if (p == NULL)
+		p = find_type_devices("ide");
+	if (p == NULL)
+		p = find_type_devices("ata");
 	/* Move removable devices such as the media-bay CDROM
 	   on the PB3400 to the end of the list. */
 	for (; p != NULL; p = p->next) {

@@ -22,6 +22,9 @@
 
 #define PMAC_ISA_MEM_BASE 	0
 #define PMAC_PCI_DRAM_OFFSET 	0
+#define APUS_ISA_IO_BASE 	0
+#define APUS_ISA_MEM_BASE 	0
+#define APUS_PCI_DRAM_OFFSET 	0
 #define CHRP_ISA_IO_BASE 	0xf8000000
 #define CHRP_ISA_MEM_BASE 	0xf7000000
 #define CHRP_PCI_DRAM_OFFSET 	0
@@ -30,47 +33,32 @@
 /*#define PREP_ISA_MEM_BASE 	0xc0000000*/
 #define PREP_PCI_DRAM_OFFSET 	0x80000000
 
-#if defined(CONFIG_MACH_SPECIFIC)
-#ifdef CONFIG_PREP
-#define _IO_BASE	PREP_ISA_IO_BASE
-#define _ISA_MEM_BASE	PREP_ISA_MEM_BASE
-#define PCI_DRAM_OFFSET PREP_PCI_DRAM_OFFSET
-#endif /* CONFIG_PREP */
-
-#ifdef CONFIG_CHRP
-#define _IO_BASE	CHRP_ISA_IO_BASE
-#define _ISA_MEM_BASE	CHRP_ISA_MEM_BASE
-#define PCI_DRAM_OFFSET CHRP_PCI_DRAM_OFFSET
-#endif /* CONFIG_CHRP */
-
-#ifdef CONFIG_PMAC
-extern unsigned long isa_io_base;
-#define _IO_BASE 	isa_io_base	/* well, PCI i/o base really */
-#define _ISA_MEM_BASE	PMAC_ISA_MEM_BASE
-#define PCI_DRAM_OFFSET PMAC_PCI_DRAM_OFFSET
-#endif /* CONFIG_PMAC */
-
 #ifdef CONFIG_MBX
 #define _IO_BASE        0
 #define _ISA_MEM_BASE   0
 #define PCI_DRAM_OFFSET 0x80000000
+#else /* CONFIG_MBX8xx */
+extern unsigned long isa_io_base;
+extern unsigned long isa_mem_base;
+extern unsigned long pci_dram_offset;
+#define _IO_BASE	isa_io_base
+#define _ISA_MEM_BASE	isa_mem_base
+#define PCI_DRAM_OFFSET	pci_dram_offset
 #endif /* CONFIG_MBX8xx */
 
-#else /* CONFIG_MACH_SPECIFIC */
-extern unsigned long isa_io_base;
-#define _IO_BASE isa_io_base
-extern unsigned long isa_mem_base;
-#define _ISA_MEM_BASE isa_mem_base
-#undef PCI_DRAM_OFFSET
-#define PCI_DRAM_OFFSET  pci_dram_offset
-extern unsigned long pci_dram_offset;
-#endif /* CONFIG_MACH_SPECIFIC */
 #define readb(addr) (*(volatile unsigned char *) (addr))
+#define writeb(b,addr) ((*(volatile unsigned char *) (addr)) = (b))
+#if defined(CONFIG_APUS)
+#define readw(addr) (*(volatile unsigned short *) (addr))
+#define readl(addr) (*(volatile unsigned int *) (addr))
+#define writew(b,addr) ((*(volatile unsigned short *) (addr)) = (b))
+#define writel(b,addr) ((*(volatile unsigned int *) (addr)) = (b))
+#else
 #define readw(addr) ld_le16((volatile unsigned short *)(addr))
 #define readl(addr) ld_le32((volatile unsigned *)addr)
-#define writeb(b,addr) ((*(volatile unsigned char *) (addr)) = (b))
 #define writew(b,addr) st_le16((volatile unsigned short *)(addr),(b))
 #define writel(b,addr) st_le32((volatile unsigned *)(addr),(b))
+#endif
 
 #define insb(port, buf, ns)	_insb((unsigned char *)((port)+_IO_BASE), (buf), (ns))
 #define outsb(port, buf, ns)	_outsb((unsigned char *)((port)+_IO_BASE), (buf), (ns))
@@ -81,10 +69,17 @@ extern unsigned long pci_dram_offset;
 
 #define inb(port)		in_8((unsigned char *)((port)+_IO_BASE))
 #define outb(val, port)		out_8((unsigned char *)((port)+_IO_BASE), (val))
+#if defined(CONFIG_APUS)
+#define inw(port)		in_be16((unsigned short *)((port)+_IO_BASE))
+#define outw(val, port)		out_be16((unsigned short *)((port)+_IO_BASE), (val))
+#define inl(port)		in_be32((unsigned *)((port)+_IO_BASE))
+#define outl(val, port)		out_be32((unsigned *)((port)+_IO_BASE), (val))
+#else
 #define inw(port)		in_le16((unsigned short *)((port)+_IO_BASE))
 #define outw(val, port)		out_le16((unsigned short *)((port)+_IO_BASE), (val))
 #define inl(port)		in_le32((unsigned *)((port)+_IO_BASE))
 #define outl(val, port)		out_le32((unsigned *)((port)+_IO_BASE), (val))
+#endif
 
 #define inb_p(port)		in_8((unsigned char *)((port)+_IO_BASE))
 #define outb_p(val, port)	out_8((unsigned char *)((port)+_IO_BASE), (val))
@@ -100,32 +95,24 @@ extern void _outsw(volatile unsigned short *port, const void *buf, int ns);
 extern void _insl(volatile unsigned long *port, void *buf, int nl);
 extern void _outsl(volatile unsigned long *port, const void *buf, int nl);
 
+/*
+ * The *_ns versions below don't do byte-swapping.
+ */
+#define insw_ns(port, buf, ns)	_insw_ns((unsigned short *)((port)+_IO_BASE), (buf), (ns))
+#define outsw_ns(port, buf, ns)	_outsw_ns((unsigned short *)((port)+_IO_BASE), (buf), (ns))
+#define insl_ns(port, buf, nl)	_insl_ns((unsigned long *)((port)+_IO_BASE), (buf), (nl))
+#define outsl_ns(port, buf, nl)	_outsl_ns((unsigned long *)((port)+_IO_BASE), (buf), (nl))
+
+extern void _insw_ns(volatile unsigned short *port, void *buf, int ns);
+extern void _outsw_ns(volatile unsigned short *port, const void *buf, int ns);
+extern void _insl_ns(volatile unsigned long *port, void *buf, int nl);
+extern void _outsl_ns(volatile unsigned long *port, const void *buf, int nl);
+
 #define memset_io(a,b,c)	memset((a),(b),(c))
 #define memcpy_fromio(a,b,c)	memcpy((a),(b),(c))
 #define memcpy_toio(a,b,c)	memcpy((a),(b),(c))
 
 #ifdef __KERNEL__
-/*
- * The PCI bus is inherently Little-Endian.  The PowerPC is being
- * run Big-Endian.  Thus all values which cross the [PCI] barrier
- * must be endian-adjusted.  Also, the local DRAM has a different
- * address from the PCI point of view, thus buffer addresses also
- * have to be modified [mapped] appropriately.
- */
-extern inline unsigned long virt_to_bus(volatile void * address)
-{
-        if (address == (void *)0)
-		return 0;
-        return (unsigned long)address - KERNELBASE + PCI_DRAM_OFFSET;
-}
-
-extern inline void * bus_to_virt(unsigned long address)
-{
-        if (address == 0)
-		return 0;
-        return (void *)(address - PCI_DRAM_OFFSET + KERNELBASE);
-}
-
 /*
  * Map in an area of physical address space, for accessing
  * I/O devices etc.
@@ -135,6 +122,38 @@ extern void *__ioremap(unsigned long address, unsigned long size,
 extern void *ioremap(unsigned long address, unsigned long size);
 extern void iounmap(void *addr);
 extern unsigned long iopa(unsigned long addr);
+#ifdef CONFIG_APUS
+extern unsigned long mm_ptov(unsigned long addr) __attribute__ ((const));
+#endif
+
+/*
+ * The PCI bus is inherently Little-Endian.  The PowerPC is being
+ * run Big-Endian.  Thus all values which cross the [PCI] barrier
+ * must be endian-adjusted.  Also, the local DRAM has a different
+ * address from the PCI point of view, thus buffer addresses also
+ * have to be modified [mapped] appropriately.
+ */
+extern inline unsigned long virt_to_bus(volatile void * address)
+{
+#ifndef CONFIG_APUS
+        if (address == (void *)0)
+		return 0;
+        return (unsigned long)address - KERNELBASE + PCI_DRAM_OFFSET;
+#else
+	return iopa ((unsigned long) address);
+#endif
+}
+
+extern inline void * bus_to_virt(unsigned long address)
+{
+#ifndef CONFIG_APUS
+        if (address == 0)
+		return 0;
+        return (void *)(address - PCI_DRAM_OFFSET + KERNELBASE);
+#else
+	return (void*) mm_ptov (address);
+#endif
+}
 
 /*
  * Change virtual addresses to physical addresses and vv, for
@@ -142,12 +161,36 @@ extern unsigned long iopa(unsigned long addr);
  */
 extern inline unsigned long virt_to_phys(volatile void * address)
 {
+#ifndef CONFIG_APUS
 	return (unsigned long) address - KERNELBASE;
+#else
+	return iopa ((unsigned long) address);
+#endif
 }
 
 extern inline void * phys_to_virt(unsigned long address)
 {
+#ifndef CONFIG_APUS
 	return (void *) (address + KERNELBASE);
+#else
+	return (void*) mm_ptov (address);
+#endif
+}
+
+static inline int check_signature(unsigned long io_addr,
+	const unsigned char *signature, int length)
+{
+	int retval = 0;
+	do {
+		if (readb(io_addr) != *signature)
+			goto out;
+		io_addr++;
+		signature++;
+		length--;
+	} while (length);
+	retval = 1;
+out:
+	return retval;
 }
 
 #endif /* __KERNEL__ */
@@ -159,7 +202,7 @@ extern inline void * phys_to_virt(unsigned long address)
  */
 extern inline void eieio(void)
 {
-	asm volatile ("eieio" : :);
+	__asm__ __volatile__ ("eieio" : : : "memory" );
 }
 
 /*
@@ -169,23 +212,26 @@ extern inline int in_8(volatile unsigned char *addr)
 {
 	int ret;
 
+	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
 	ret = *addr;
-	eieio();
+	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
 	return ret;
 }
 
 extern inline void out_8(volatile unsigned char *addr, int val)
 {
+	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
 	*addr = val;
-	eieio();
+	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
 }
 
 extern inline int in_le16(volatile unsigned short *addr)
 {
 	int ret;
 
+	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
 	ret = ld_le16(addr);
-	eieio();
+	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
 	return ret;
 }
 
@@ -193,29 +239,33 @@ extern inline int in_be16(volatile unsigned short *addr)
 {
 	int ret;
 
+	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
 	ret = *addr;
-	eieio();
+	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
 	return ret;
 }
 
 extern inline void out_le16(volatile unsigned short *addr, int val)
 {
+	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
 	st_le16(addr, val);
-	eieio();
+	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
 }
 
 extern inline void out_be16(volatile unsigned short *addr, int val)
 {
+	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
 	*addr = val;
-	eieio();
+	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
 }
 
 extern inline unsigned in_le32(volatile unsigned *addr)
 {
 	unsigned ret;
 
+	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
 	ret = ld_le32(addr);
-	eieio();
+	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
 	return ret;
 }
 
@@ -223,21 +273,24 @@ extern inline int in_be32(volatile unsigned *addr)
 {
 	int ret;
 
+	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
 	ret = *addr;
-	eieio();
+	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
 	return ret;
 }
 
 extern inline void out_le32(volatile unsigned *addr, int val)
 {
+	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
 	st_le32(addr, val);
-	eieio();
+	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
 }
 
 extern inline void out_be32(volatile unsigned *addr, int val)
 {
+	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
 	*addr = val;
-	eieio();
+	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
 }
 
 #endif

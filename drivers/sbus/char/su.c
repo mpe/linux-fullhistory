@@ -1,4 +1,4 @@
-/* $Id: su.c,v 1.8 1998/04/01 05:07:50 ecd Exp $
+/* $Id: su.c,v 1.10 1998/05/29 06:00:26 ecd Exp $
  * su.c: Small serial driver for keyboard/mouse interface on Ultra/AX
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -21,6 +21,7 @@
 #include <asm/oplib.h>
 #include <asm/io.h>
 #include <asm/ebus.h>
+#include <asm/irq.h>
 
 #include "sunserial.h"
 #include "sunkbd.h"
@@ -151,7 +152,7 @@ su_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	unsigned char status;
 
 #ifdef SERIAL_DEBUG_INTR
-	printk("su_interrupt(%d)...", irq);
+	printk("su_interrupt(%s)...", __irq_itoa(irq));
 #endif
 
 	if (su_inb(info, UART_IIR) & UART_IIR_NO_INT)
@@ -186,7 +187,8 @@ startup(struct su_struct * info)
 	}
 
 #ifdef SERIAL_DEBUG_OPEN
-	printk("starting up su%d (irq %x)...", info->line, info->irq);
+	printk("starting up su%d (irq %s)...", info->line,
+	       __irq_itoa(info->irq));
 #endif
 
 	if (info->type == PORT_16750)
@@ -405,18 +407,21 @@ static void
 autoconfig(struct su_struct *info)
 {
 	unsigned char status1, status2, scratch, scratch2;
-	struct linux_ebus_device *dev;
+	struct linux_ebus_device *dev = 0;
 	struct linux_ebus *ebus;
 	unsigned long flags;
 
-	for_all_ebusdev(dev, ebus) {
-		if (!strncmp(dev->prom_name, "su", 2)) {
-			if (dev->prom_node == info->kbd_node)
-				break;
-			if (dev->prom_node == info->ms_node)
-				break;
+	for_each_ebus(ebus) {
+		for_each_ebusdev(dev, ebus) {
+			if (!strncmp(dev->prom_name, "su", 2)) {
+				if (dev->prom_node == info->kbd_node)
+					goto ebus_done;
+				if (dev->prom_node == info->ms_node)
+					goto ebus_done;
+			}
 		}
 	}
+ebus_done:
 	if (!dev)
 		return;
 
@@ -427,8 +432,8 @@ autoconfig(struct su_struct *info)
 	info->irq = dev->irqs[0];
 
 #ifdef DEBUG_SERIAL_OPEN
-	printk("Found 'su' at %016lx IRQ %08x\n",
-	       dev->base_address[0], dev->irqs[0]);
+	printk("Found 'su' at %016lx IRQ %d,%x\n", dev->base_address[0],
+	       __irq_itoa(dev->irqs[0]));
 #endif
 
 	info->magic = SERIAL_MAGIC;
@@ -564,8 +569,8 @@ __initfunc(int su_init(void))
 		if (info->type == PORT_UNKNOWN)
 			continue;
 
-		printk(KERN_INFO "%s at %16lx (irq = %08x) is a %s\n",
-		       info->name, info->port, info->irq,
+		printk(KERN_INFO "%s at %16lx (irq = %s) is a %s\n",
+		       info->name, info->port, __irq_itoa(info->irq),
 		       uart_config[info->type].name);
 
 		startup(info);

@@ -1,4 +1,4 @@
-/* $Id: pgtsun4.h,v 1.3 1998/01/30 11:00:01 jj Exp $
+/* $Id: pgtsun4.h,v 1.4 1998/07/26 03:05:42 davem Exp $
  * pgtsun4.h:  Sun4 specific pgtable.h defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -48,6 +48,7 @@
  * area, makes sense.  This works out to the value below.
  */
 #define SUN4C_VMALLOC_START   (0xfe300000)
+#define SUN4C_VMALLOC_END     ~0x0UL
 
 /*
  * Sparc SUN4C pte fields.

@@ -80,7 +80,7 @@ typedef struct {
 
 /* flags for stack_t.flags */
 enum svr4_stack_flags {
-	SS_ONSTACK,
+	SVR4_SS_ONSTACK,
 	SVR4_SS_DISABLE,
 };
 

@@ -4,7 +4,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: indy_int.c,v 1.6 1998/05/01 01:35:15 ralf Exp $
+ * $Id: indy_int.c,v 1.7 1998/05/07 00:39:51 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/init.h>
@@ -417,8 +417,16 @@ void free_irq(unsigned int irq, void *dev_id)
 	printk("Trying to free free IRQ%d\n",irq);
 }
 
+int (*irq_cannonicalize)(int irq);
+
+static int indy_irq_cannonicalize(int irq)
+{
+	return irq;	/* Sane hardware, sane code ... */
+}
+
 __initfunc(void init_IRQ(void))
 {
+	irq_cannonicalize = indy_irq_cannonicalize;
 	irq_setup();
 }
 

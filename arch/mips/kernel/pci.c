@@ -1,11 +1,13 @@
-/*
+/* $Id: pci.c,v 1.11 1998/07/15 20:34:33 mj Exp $
+ *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
  * MIPS implementation of PCI BIOS services for PCI support.
+ *
+ * Copyright (C) 1997, 1998 Ralf Baechle
  */
-#include <linux/bios32.h>
 #include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -20,10 +22,8 @@ struct pci_ops *pci_ops;
 /*
  * BIOS32 replacement.
  */
-__initfunc(unsigned long pcibios_init(unsigned long memory_start,
-                                      unsigned long memory_end))
+__initfunc(void pcibios_init(void))
 {
-	return memory_start;
 }
 
 /*
@@ -36,61 +36,13 @@ int pcibios_present (void)
 }
 
 /*
- * Given the vendor and device ids, find the n'th instance of that device
- * in the system.  
- */
-int pcibios_find_device (unsigned short vendor, unsigned short device_id,
-			 unsigned short index, unsigned char *bus,
-			 unsigned char *devfn)
-{
-	unsigned int curr = 0;
-	struct pci_dev *dev;
-
-	for (dev = pci_devices; dev; dev = dev->next) {
-		if (dev->vendor == vendor && dev->device == device_id) {
-			if (curr == index) {
-				*devfn = dev->devfn;
-				*bus = dev->bus->number;
-				return PCIBIOS_SUCCESSFUL;
-			}
-			++curr;
-		}
-	}
-	return PCIBIOS_DEVICE_NOT_FOUND;
-}
-
-/*
- * Given the class, find the n'th instance of that device
- * in the system.
- */
-int pcibios_find_class (unsigned int class_code, unsigned short index,
-			unsigned char *bus, unsigned char *devfn)
-{
-	unsigned int curr = 0;
-	struct pci_dev *dev;
-
-	for (dev = pci_devices; dev; dev = dev->next) {
-		if (dev->class == class_code) {
-			if (curr == index) {
-				*devfn = dev->devfn;
-				*bus = dev->bus->number;
-				return PCIBIOS_SUCCESSFUL;
-			}
-			++curr;
-		}
-	}
-	return PCIBIOS_DEVICE_NOT_FOUND;
-}
-
-/*
  * The functions below are machine specific and must be reimplented for
  * each PCI chipset configuration.  We just run the hook to the machine
  * specific implementation.
  */
-unsigned long pcibios_fixup (unsigned long memory_start,
-                             unsigned long memory_end)
+__initfunc(void pcibios_fixup (void))
 {
-	return pci_ops->pcibios_fixup(memory_start, memory_end);
+	return pci_ops->pcibios_fixup();
 }
 
 int pcibios_read_config_byte (unsigned char bus, unsigned char dev_fn,

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.63 1998/04/23 08:26:22 davem Exp $
+/* $Id: processor.h,v 1.67 1998/07/31 20:03:23 zaitcev Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -36,11 +36,6 @@
  * we can make our access_ok test faster
  */
 #define TASK_SIZE	PAGE_OFFSET
-
-#define COPY_TASK_STRUCT(dst, src) 	\
-do {					\
-	*dst = *src;			\
-} while (0)
 
 struct fpq {
 	unsigned long *insn_addr;
@@ -83,7 +78,6 @@ struct thread_struct {
 	unsigned long   fsr;
 	unsigned long   fpqdepth;
 	struct fpq	fpqueue[16];
-	struct sigstack sstk_info;
 	unsigned long flags;
 	mm_segment_t current_ds;
 	struct exec core_exec;     /* just what it says. */
@@ -111,8 +105,6 @@ struct thread_struct {
                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, }, \
 /* FPU status, FPU qdepth, FPU queue */ \
    0,          0,  { { 0, 0, }, }, \
-/* sstk_info */ \
-{ 0, 0, }, \
 /* flags,              current_ds, */ \
    SPARC_FLAG_KTHREAD, KERNEL_DS, \
 /* core_exec */ \
@@ -158,6 +150,8 @@ extern __inline__ void start_thread(struct pt_regs * regs, unsigned long pc,
 #define release_segments(mm)		do { } while (0)
 
 #ifdef __KERNEL__
+
+extern struct task_struct *last_task_used_math;
 
 /* Allocation and freeing of basic task resources. */
 BTFIXUPDEF_CALL(struct task_struct *, alloc_task_struct, void)

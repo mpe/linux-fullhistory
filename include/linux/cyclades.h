@@ -1,4 +1,4 @@
-/* $Revision: 2.4 $$Date: 1998/06/01 12:09:53 $
+/* $Revision: 2.5 $$Date: 1998/08/03 16:57:01 $
  * linux/include/linux/cyclades.h
  *
  * This file is maintained by Ivan Passos <ivan@cyclades.com>, 
@@ -7,6 +7,9 @@
  *
  * This file contains the general definitions for the cyclades.c driver
  *$Log: cyclades.h,v $
+ *Revision 2.5  1998/08/03 16:57:01  ivan
+ *added cyclades_idle_stats structure;
+ * 
  *Revision 2.4  1998/06/01 12:09:53  ivan
  *removed closing_wait2 from cyclades_port structure;
  *
@@ -60,6 +63,22 @@ struct cyclades_monitor {
         unsigned long           char_last;
 };
 
+/*
+ * These stats all reflect activity since the device was last initialized.
+ * (i.e., since the port was opened with no other processes already having it
+ * open)
+ */
+struct cyclades_idle_stats {
+    time_t	   in_use;	/* Time device has been in use (secs) */
+    time_t	   recv_idle;	/* Time since last char received (secs) */
+    time_t	   xmit_idle;	/* Time since last char transmitted (secs) */
+    unsigned long  recv_bytes;	/* Bytes received */
+    unsigned long  xmit_bytes;	/* Bytes transmitted */
+    unsigned long  overruns;	/* Input overruns */
+    unsigned long  frame_errs;	/* Input framing errors */
+    unsigned long  parity_errs;	/* Input parity errors */
+};
+
 #define CYCLADES_MAGIC  0x4359
 
 #define CYGETMON                0x435901
@@ -75,11 +94,12 @@ struct cyclades_monitor {
 #define CYGETRFLOW		0x43590b
 #define CYSETRTSDTR_INV		0x43590c
 #define CYGETRTSDTR_INV		0x43590d
-#define CYZPOLLCYCLE		0x43590e
-#define CYGETCD1400VER		0x43590f
-#define CYGETCARDINFO		0x435910
-#define	CYSETWAIT		0x435911
-#define	CYGETWAIT		0x435912
+#define CYZSETPOLLCYCLE		0x43590e
+#define CYZGETPOLLCYCLE		0x43590f
+#define CYGETCD1400VER		0x435910
+#define CYGETCARDINFO		0x435911
+#define	CYSETWAIT		0x435912
+#define	CYGETWAIT		0x435913
 
 /*************** CYCLOM-Z ADDITIONS ***************/
 
@@ -534,6 +554,7 @@ struct cyclades_port {
         struct cyclades_monitor mon;
 	unsigned long		jiffies[3];
 	unsigned long		rflush_count;
+	struct cyclades_idle_stats   idle_stats;
 };
 
 /*

@@ -1,4 +1,5 @@
-/* sbus.c:  SBus support routines.
+/* $Id: sbus.c,v 1.69 1998/07/28 16:53:11 jj Exp $
+ * sbus.c:  SBus support routines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
@@ -14,12 +15,14 @@
 #include <asm/dma.h>
 #include <asm/oplib.h>
 #include <asm/bpp.h>
+#include <asm/irq.h>
 
 /* This file has been written to be more dynamic and a bit cleaner,
  * but it still needs some spring cleaning.
  */
 
 struct linux_sbus *SBus_chain;
+static struct linux_prom_irqs irqs[PROMINTR_MAX] __initdata = { { 0 } };
 
 static char lbuf[128];
 
@@ -109,51 +112,60 @@ no_regs:
 		len=0;
 	}
 	sbus_dev->num_vaddrs = (len/4);
-  
-	if(sparc_cpu_model == sun4u) {
-		len = prom_getproperty(nd, "interrupts", (void *)&sbus_dev->irqs[0].pri,
-				       sizeof(sbus_dev->irqs[0].pri));
-		if((len == -1) || (len == 0)) {
-			sbus_dev->irqs[0].pri = 0;
-			sbus_dev->num_irqs = 0;
-		} else {
-			sbus_dev->num_irqs = 1;
-			if(sbus_dev->irqs[0].pri < 0x20) {
-				int old_irq = sbus_dev->irqs[0].pri;
 
-				/* Need to do special SLOT fixups in this case. */
-#if 0 /* DEBUGGING */
-				printk("SBUS[%x:%lx]: INO fixup from [%x] to [%x]\n",
-				       sbus_dev->slot, sbus_dev->offset,
-				       old_irq, old_irq + (sbus_dev->slot * 8));
-#endif
-				sbus_dev->irqs[0].pri =
-					(old_irq + (sbus_dev->slot * 8));
-			}
-		}
+#ifdef __sparc_v9__  
+	len = prom_getproperty(nd, "interrupts", (void *)irqs, sizeof(irqs));
+	if((len == -1) || (len == 0)) {
+		sbus_dev->irqs[0] = 0;
+		sbus_dev->num_irqs = 0;
 	} else {
-		len = prom_getproperty(nd, "intr", (void *)sbus_dev->irqs,
-				       sizeof(sbus_dev->irqs));
-		if (len == -1) len=0;
-		if (len&7) {
-			prom_printf("Grrr, I didn't get a multiple of 8 proplen for "
-				    "device %s got %d\n", sbus_dev->prom_name, len);
-			len=0;
-		}
-		sbus_dev->num_irqs=(len/8);
-		if(sbus_dev->num_irqs == 0)
-			sbus_dev->irqs[0].pri=0;
+		sbus_dev->num_irqs = 1;
+		if (irqs[0].pri < 0x20)
+			sbus_dev->irqs[0] = sbus_build_irq(sbus_dev->my_bus, 
+					irqs[0].pri + (sbus_dev->slot * 8));
+		else
+			sbus_dev->irqs[0] = sbus_build_irq(sbus_dev->my_bus, 
+					irqs[0].pri);
 	}
+#else
+	len = prom_getproperty(nd, "intr", (void *)irqs, sizeof(irqs));
+	if (len == -1) len=0;
+	if (len&7) {
+		prom_printf("Grrr, I didn't get a multiple of 8 proplen for "
+			    "device %s got %d\n", sbus_dev->prom_name, len);
+		len=0;
+	}
+	if (len > 4 * 8) {
+		prom_printf("Device %s has more than 4 interrupts\n", sbus_dev->prom_name);
+		len = 4 * 8;
+	}
+	sbus_dev->num_irqs=(len/8);
+	if(sbus_dev->num_irqs == 0)
+		sbus_dev->irqs[0]=0;
+	else if (sparc_cpu_model != sun4d)
+		for (len = 0; len < sbus_dev->num_irqs; len++)
+			sbus_dev->irqs[len] = irqs[len].pri;
+	else {
+		extern unsigned int sun4d_build_irq(struct linux_sbus_device *sdev, int irq);
+		
+		for (len = 0; len < sbus_dev->num_irqs; len++)
+			sbus_dev->irqs[len] = sun4d_build_irq(sbus_dev, irqs[len].pri);
+	}
+#endif
+
 #ifdef DEBUG_FILL
 #ifdef __sparc_v9__
-	prom_printf("Found %s at SBUS slot %x offset %016lx irq-level %d\n",
-	       sbus_dev->prom_name, sbus_dev->slot, sbus_dev->offset,
-	       sbus_dev->irqs[0].pri);
+	prom_printf("Found %s at SBUS slot %x offset %016lx ",
+	       sbus_dev->prom_name, sbus_dev->slot, sbus_dev->offset);
+	if (sbus_dev->irqs[0])
+		prom_printf("irq %s\n", __irq_itoa(sbus_dev->irqs[0]));
+	else
+		prom_printf("\n");
 	prom_printf("Base address %016lx\n", sbus_dev->sbus_addr);
 #else
 	prom_printf("Found %s at SBUS slot %x offset %08lx irq-level %d\n",
 	       sbus_dev->prom_name, sbus_dev->slot, sbus_dev->offset,
-	       sbus_dev->irqs[0].pri);
+	       sbus_dev->irqs[0]);
 	prom_printf("Base address %08lx\n", sbus_dev->sbus_addr);
 #endif
 	prom_printf("REGISTERS: Probed %d register(s)\n", sbus_dev->num_registers);
@@ -182,7 +194,6 @@ no_regs:
  * devices.
  */
 
-extern void sun_console_init(void);
 extern void iommu_init(int iommu_node, struct linux_sbus *sbus);
 extern void iounit_init(int sbi_node, int iounit_node, struct linux_sbus *sbus);
 void sun4_init(void);
@@ -210,14 +221,14 @@ sbus_do_child_siblings(int start_node, struct linux_sbus_device *child,
 		this_dev = this_dev->next;
 		this_dev->next = 0;
 
-		fill_sbus_device(this_node, this_dev);
 		this_dev->my_bus = sbus;
+		fill_sbus_device(this_node, this_dev);
 
 		if(prom_getchild(this_node)) {
 			this_dev->child = kmalloc(sizeof(struct linux_sbus_device),
 						  GFP_ATOMIC);
-			fill_sbus_device(prom_getchild(this_node), this_dev->child);
 			this_dev->child->my_bus = sbus;
+			fill_sbus_device(prom_getchild(this_node), this_dev->child);
 			sbus_do_child_siblings(prom_getchild(this_node),
 					       this_dev->child, sbus);
 		} else {
@@ -246,8 +257,8 @@ __initfunc(void sbus_init(void))
 		nd = prom_searchsiblings(topnd, "sbus");
 		if(nd == 0) {
 #ifdef CONFIG_PCI
-			printk("SBUS: No SBUS's found.\n");
-			return sun_console_init();
+			/* printk("SBUS: No SBUS's found.\n"); */
+			return;
 #else
 			prom_printf("YEEE, UltraSparc sbus not found\n");
 			prom_halt();
@@ -315,8 +326,8 @@ __initfunc(void sbus_init(void))
 		this_dev = sbus->devices;
 		this_dev->next = 0;
 
-		fill_sbus_device(sbus_devs, this_dev);
 		this_dev->my_bus = sbus;
+		fill_sbus_device(sbus_devs, this_dev);
 
 		/* Should we traverse for children? */
 		if(prom_getchild(sbus_devs)) {
@@ -324,8 +335,8 @@ __initfunc(void sbus_init(void))
 			this_dev->child = kmalloc(sizeof(struct linux_sbus_device),
 						  GFP_ATOMIC);
 			/* Fill it */
-			fill_sbus_device(prom_getchild(sbus_devs), this_dev->child);
 			this_dev->child->my_bus = sbus;
+			fill_sbus_device(prom_getchild(sbus_devs), this_dev->child);
 			sbus_do_child_siblings(prom_getchild(sbus_devs),
 					       this_dev->child, sbus);
 		} else {
@@ -340,8 +351,8 @@ __initfunc(void sbus_init(void))
 			this_dev->next=0;
 
 			/* Fill it */
-			fill_sbus_device(sbus_devs, this_dev);
 			this_dev->my_bus = sbus;
+			fill_sbus_device(sbus_devs, this_dev);
 
 			/* Is there a child node hanging off of us? */
 			if(prom_getchild(sbus_devs)) {
@@ -350,9 +361,9 @@ __initfunc(void sbus_init(void))
 					kmalloc(sizeof(struct linux_sbus_device),
 						GFP_ATOMIC);
 				/* Fill it */
+				this_dev->child->my_bus = sbus;
 				fill_sbus_device(prom_getchild(sbus_devs),
 						 this_dev->child);
-				this_dev->child->my_bus = sbus;
 				sbus_do_child_siblings(prom_getchild(sbus_devs),
 						     this_dev->child, sbus);
 			} else {
@@ -392,7 +403,6 @@ __initfunc(void sbus_init(void))
 		sun4d_init_sbi_irq();
 	}
 	
-	sun_console_init(); /* whee... */
 #ifdef CONFIG_SUN_OPENPROMIO
 	openprom_init();
 #endif
@@ -423,7 +433,6 @@ extern void sun4_dvma_init(void);
 
 __initfunc(void sun4_init(void))
 {
-	sun_console_init();
 	sun4_dvma_init();
 }
 #endif

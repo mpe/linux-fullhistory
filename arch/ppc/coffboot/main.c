@@ -50,6 +50,7 @@ coffboot(int a1, int a2, void *prom)
     }
     setup_bats(RAM_START);
 
+    loadbase += RAM_START;
     eh = (struct external_filehdr *) loadbase;
     ns = get_16be(eh->f_nscns);
     oh = get_16be(eh->f_opthdr);

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.83 1998/05/04 05:35:39 jj Exp $
+/* $Id: sys_sparc32.c,v 1.90 1998/07/29 16:32:30 jj Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -58,27 +58,10 @@
  */
 #define A(x) ((unsigned long)x)
  
-extern char * getname_quicklist;
-extern int getname_quickcount;
-extern spinlock_t getname_quicklock;
-
-/* Tuning: increase locality by reusing same pages again...
- * if getname_quicklist becomes too long on low memory machines, either a limit
- * should be added or after a number of cycles some pages should
- * be released again ...
- */
 static inline char * get_page(void)
 {
 	char * res;
-	spin_lock(&getname_quicklock);
-	res = getname_quicklist;
-	if (res) {
-		getname_quicklist = *(char**)res;
-		getname_quickcount--;
-	}
-	spin_unlock(&getname_quicklock);
-	if (!res)
-		res = (char*)__get_free_page(GFP_KERNEL);
+	res = (char *)__get_free_page(GFP_KERNEL);
 	return res;
 }
 
@@ -1240,27 +1223,6 @@ asmlinkage int sys32_newfstat(unsigned int fd, u32 statbuf)
 	if (putstat ((struct stat32 *)A(statbuf), &s))
 		return -EFAULT;
 	return ret;
-}
-
-extern asmlinkage int sys_xstat(int ver, char *filename, struct stat64 * statbuf);
-
-asmlinkage int sys32_xstat(int ver, u32 file, u32 statbuf)
-{
-	switch (ver & __XSTAT_VER_MASK) {
-	case __XSTAT_VER_1:
-		switch (ver & __XSTAT_VER_TYPEMASK) {
-		case __XSTAT_VER_XSTAT:
-			return sys32_newstat(file, statbuf);
-		case __XSTAT_VER_LXSTAT:
-			return sys32_newlstat(file, statbuf);
-		case __XSTAT_VER_FXSTAT:
-			return sys32_newfstat(file, statbuf);
-		}
-		return -EINVAL;
-	case __XSTAT_VER_2:
-		return sys_xstat(ver, (char *)A(file), (struct stat64 *)A(statbuf));
-	}
-	return -EINVAL;
 }
 
 extern asmlinkage int sys_sysfs(int option, unsigned long arg1, unsigned long arg2);
@@ -2551,16 +2513,14 @@ copy_strings32(int argc,u32 * argv,unsigned long *page,
 			return 0;
 		p -= len; pos = p;
 		while (len) {
-			char *pag = (char *) page[pos/PAGE_SIZE];
+			char *pag;
 			int offset, bytes_to_copy;
 
 			offset = pos % PAGE_SIZE;
-			if(!pag) {
-				pag = (char *) page[pos/PAGE_SIZE] = get_user_page(pos);
-				if(!pag)
-					return 0;
-				clear_page(pag);
-			}
+			if (!(pag = (char *) page[pos/PAGE_SIZE]) &&
+			    !(pag = (char *) page[pos/PAGE_SIZE] =
+			      (unsigned long *) get_free_page(GFP_USER)))
+				return 0;
 			bytes_to_copy = PAGE_SIZE - offset;
 			if (bytes_to_copy > len)
 				bytes_to_copy = len;
@@ -2659,7 +2619,8 @@ asmlinkage int sparc32_execve(struct pt_regs *regs)
 
 	if(!error) {
 		fprs_write(0);
-		regs->fprs = 0;
+		current->tss.xfsr[0] = 0;
+		current->tss.fpsaved[0] = 0;
 		regs->tstate &= ~TSTATE_PEF;
 	}
 out:
@@ -3506,5 +3467,26 @@ asmlinkage int sys32_personality(unsigned long personality)
 	unlock_kernel();
 	if (ret == PER_LINUX32)
 		ret = PER_LINUX;
+	return ret;
+}
+
+extern asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t count);
+
+asmlinkage int sys32_sendfile(int out_fd, int in_fd, u32 offset, s32 count)
+{
+	mm_segment_t old_fs = get_fs();
+	int ret;
+	off_t of;
+	
+	if (offset && get_user(of, (__kernel_off_t32 *)A(offset)))
+		return -EFAULT;
+		
+	set_fs(KERNEL_DS);
+	ret = sys_sendfile(out_fd, in_fd, offset ? &of : NULL, count);
+	set_fs(old_fs);
+	
+	if (!ret && offset && put_user(of, (__kernel_off_t32 *)A(offset)))
+		return -EFAULT;
+		
 	return ret;
 }
