@@ -671,13 +671,13 @@ unsigned long apricot_init(unsigned long mem_start, unsigned long mem_end)
 
 
     for(i = 0; i < 6 ; i++)
-    	eth_addr[i] = inb(ioaddr +8 +i));
+    	eth_addr[i] = inb(ioaddr +8 +i);
     
     /* Some other boards trip the checksum.. but then appear as ether
        address 0. Trap these - AC */
        
     if(memcmp(eth_addr,"\x00\x00\x00\x00\x00\x00",6)==0)
-    	return mem_addr;
+    	return mem_start;
 
     dev = init_etherdev(0, (sizeof (struct i596_private) + 0xf), &mem_start);
     printk("%s: Apricot 82596 at %#3x,", dev->name, ioaddr);

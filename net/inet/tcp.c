@@ -3100,8 +3100,8 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 		 *	the naive implementation:
 		 *		after(new_seq,sk->acked_seq+1)
 		 *	will cause bogus resets IFF a resend of a frame that has
-		 *	been queued but not yet read after a shutdown has been done
-		 *	occured.What we do now is a bit more complex but works as
+		 *	been queued but not yet read after a shutdown has been done.
+		 *	What we do now is a bit more complex but works as
 		 *	follows. If the queue is empty copied_seq+1 is right (+1 for FIN)
 		 *	if the queue has data the shutdown occurs at the right edge of
 		 *	the last packet queued +1
@@ -4160,7 +4160,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			if (!th->rst) {
 				if (!th->ack)
 					th->ack_seq = 0;
-				if(sk->debug) printk("Reset on closed socket %s.\n",sk->blog);
+				if(sk->debug) printk("Reset on closed socket %d.\n",sk->blog);
 				tcp_reset(daddr, saddr, th, sk->prot, opt,dev,sk->ip_tos,sk->ip_ttl);
 			}
 			kfree_skb(skb, FREE_READ);
@@ -4174,7 +4174,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				return(0);
 			}
 			if (th->ack) {
-				printk("Reset on listening socket %d.\n",sk->blog);
+				if(sk->debug) printk("Reset on listening socket %d.\n",sk->blog);
 				tcp_reset(daddr, saddr, th, sk->prot, opt,dev,sk->ip_tos,sk->ip_ttl);
 				kfree_skb(skb, FREE_READ);
 				release_sock(sk);

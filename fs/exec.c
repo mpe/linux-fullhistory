@@ -36,16 +36,12 @@
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
-#include <linux/segment.h>
 #include <linux/malloc.h>
-
-#include <asm/system.h>
-
 #include <linux/binfmts.h>
 #include <linux/personality.h>
 
-#include <asm/segment.h>
 #include <asm/system.h>
+#include <asm/segment.h>
 
 asmlinkage int sys_exit(int exit_code);
 asmlinkage int sys_brk(unsigned long);

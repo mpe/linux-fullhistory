@@ -1,7 +1,7 @@
 #ifndef __ASM_SYSTEM_H
 #define __ASM_SYSTEM_H
 
-#include <linux/segment.h>
+#include <asm/segment.h>
 
 #define move_to_user_mode() \
 __asm__ __volatile__ ("movl %%esp,%%eax\n\t" \

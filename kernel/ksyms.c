@@ -128,6 +128,8 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(blk_dev),
 	X(is_read_only),
 	X(set_device_ro),
+	X(bmap),
+	X(sync_dev),
 	
 	/* Module creation of serial units */
 	X(register_serial),

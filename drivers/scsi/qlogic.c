@@ -212,7 +212,7 @@ int	i,k;
 }
 
 /*----------------------------------------------------------------*/
-/* initate scsi command - queueing handler */
+/* initiate scsi command - queueing handler */
 static void	ql_icmd(Scsi_Cmnd * cmd)
 {
 unsigned int	    i;
@@ -524,7 +524,7 @@ struct	Scsi_Host	*hreg;	/* registered host structure */
 /* return bios parameters */
 int	qlogic_biosparam(Disk * disk, int dev, int ip[])
 {
-/* This should mimmic the DOS Qlogic driver's behavior exactly */
+/* This should mimic the DOS Qlogic driver's behavior exactly */
 	ip[0] = 0x40;
 	ip[1] = 0x20;
 	ip[2] = disk->capacity / (ip[0] * ip[1]);

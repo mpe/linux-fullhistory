@@ -69,7 +69,7 @@ static char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/bitops.h> 
-#include <errno.h>
+#include <linux/errno.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

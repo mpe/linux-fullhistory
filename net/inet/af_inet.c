@@ -1307,12 +1307,6 @@ struct sock *get_sock(struct proto *prot, unsigned short num,
 				continue;
 			score++;
 		}
-		/*
-		 * strange but true: udp sockets don't care that much
-		 * about the remote address.
-		 */
-		if (prot == &udp_prot)
-			return s;
 		/* remote address matches? */
 		if (s->daddr) {
 			if (s->daddr != raddr)

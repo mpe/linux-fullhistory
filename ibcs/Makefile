@@ -26,7 +26,6 @@ ibcs.o: $(OBJS)
 
 dep:
 	$(CPP) -M *.c > .depend
-	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
 
 dummy:
 

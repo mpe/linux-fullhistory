@@ -1,3 +1,4 @@
+#define rw_bugfix
 /* ne.c: A general non-shared-memory NS8390 ethernet driver for linux. */
 /*
     Written 1992-94 by Donald Becker.

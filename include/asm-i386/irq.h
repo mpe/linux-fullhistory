@@ -7,8 +7,8 @@
  *	(C) 1992, 1993 Linus Torvalds
  */
 
-#include <linux/segment.h>
 #include <linux/linkage.h>
+#include <asm/segment.h>
 
 extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);

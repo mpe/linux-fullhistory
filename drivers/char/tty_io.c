@@ -72,7 +72,7 @@ extern int sel_loadlut(const int arg);
 extern int mouse_reporting(void);
 extern int shift_state;
 #endif /* CONFIG_SELECTION */
-extern int do_screendump(int arg);
+extern int do_screendump(int arg, int mode);
 
 struct termios tty_std_termios;		/* for the benefit of tty drivers  */
 struct tty_driver *tty_drivers = NULL;	/* linked list of tty drivers */
@@ -1400,10 +1400,10 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			retval = verify_area(VERIFY_READ, (void *) arg, 1);
 			if (retval)
 				return retval;
-			switch (get_fs_byte((char *)arg))
+			switch (retval = get_fs_byte((char *)arg))
 			{
 				case 0: 
-					return do_screendump(arg);
+					return do_screendump(arg,0);
 				case 1:
 					printk("Deprecated TIOCLINUX (1) ioctl\n");
 					return do_get_ps_info(arg);
@@ -1420,16 +1420,21 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 				case 5:
 					return sel_loadlut(arg);
 				case 6:
-			/* Make it possible to react to Shift+Mousebutton */
-			/* Note that shift_state is an undocumented
-			   kernel-internal variable; programs not closely
-			   related to the kernel should not use this. */
+			/*
+			 * Make it possible to react to Shift+Mousebutton.
+			 * Note that 'shift_state' is an undocumented
+			 * kernel-internal variable; programs not closely
+			 * related to the kernel should not use this.
+			 */
 					put_fs_byte(shift_state,arg);
 					return 0;
 				case 7:
 					put_fs_byte(mouse_reporting(),arg);
 					return 0;
 #endif /* CONFIG_SELECTION */
+				case 8: /* second arg is 1 or 2 */
+				case 9: /* both are explained in console.c */
+					return do_screendump(arg,retval-7);
 				default: 
 					return -EINVAL;
 			}
@@ -1598,7 +1603,7 @@ int tty_unregister_driver(struct tty_driver *driver)
 	int	found = 0;
 	int	major_inuse = 0;
 	
-	if (driver->refcount)
+	if (*driver->refcount)
 		return -EBUSY;
 
 	for (p = tty_drivers; p; p = p->next) {

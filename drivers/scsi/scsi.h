@@ -260,7 +260,7 @@ extern const unsigned char scsi_command_size[8];
 */
 
 /*
-        Manufactors list
+        Manufacturers list
 */
 
 #define SCSI_MAN_UNKNOWN     0
@@ -275,7 +275,7 @@ extern const unsigned char scsi_command_size[8];
 typedef struct scsi_device {
         struct scsi_device * next; /* Used for linked list */
 	unsigned char id, lun;
-	unsigned int manufactor; /* Manufactor of device, for using vendor-specific cmd's */
+	unsigned int manufacturer; /* Manufacturer of device, for using vendor-specific cmd's */
 	int attached;          /* # of high level drivers attached to this */
 	int access_count;	/* Count of open channels/mounts */
 	struct wait_queue * device_wait;  /* Used to wait if device is busy */

@@ -9,8 +9,8 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
-#include <linux/page.h>
 
+#include <asm/page.h>
 #include <asm/segment.h>
 #include <asm/io.h>
 

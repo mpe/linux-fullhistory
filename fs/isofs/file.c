@@ -156,14 +156,15 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 
 	/*
 	 * this is for stopping read ahead at EOF. It's  important for
-	 * reading PhotoCD's, becauce they have many small data tracks instead
+	 * reading PhotoCD's, because they have many small data tracks instead
 	 * of one big. And between two data-tracks are some unreadable sectors.
 	 * A read ahead after a EOF may try to read such an unreadable sector.
 	 *    kraxel@cs.tu-berlin.de (Gerd Knorr)
 	 */
-	total_blocks = inode->i_size >> ISOFS_BUFFER_BITS(inode);
-	if (inode->i_size & (ISOFS_BUFFER_BITS(inode)-1)) total_blocks++;
-	while (block + blocks > total_blocks) blocks--;
+	total_blocks = (inode->i_size + (1 << ISOFS_BUFFER_BITS(inode)) - 1)
+	   >> ISOFS_BUFFER_BITS(inode);
+	if (block + blocks > total_blocks)
+		blocks = total_blocks - block;
 
 	max_block = (inode->i_size + BLOCK_SIZE - 1)/BLOCK_SIZE;
 	nextblock = -1;

@@ -26,7 +26,6 @@ extern struct file_operations * get_blkfops(unsigned int);
 extern struct file_operations * get_chrfops(unsigned int);
 
 extern void wait_for_keypress(void);
-extern void fcntl_init_locks(void);
 
 extern int root_mountflags;
 
@@ -442,14 +441,18 @@ static int do_mount(dev_t dev, const char * dir, char * type, int flags, void * 
 	}
 	if (!S_ISDIR(dir_i->i_mode)) {
 		iput(dir_i);
-		return -EPERM;
+		return -ENOTDIR;
 	}
 	if (!fs_may_mount(dev)) {
 		iput(dir_i);
 		return -EBUSY;
 	}
 	sb = read_super(dev,type,flags,data,0);
-	if (!sb || sb->s_covered) {
+	if (!sb) {
+		iput(dir_i);
+		return -EINVAL;
+	}
+	if (sb->s_covered) {
 		iput(dir_i);
 		return -EBUSY;
 	}
@@ -640,7 +643,6 @@ void mount_root(void)
 	int retval;
 
 	memset(super_blocks, 0, sizeof(super_blocks));
-	fcntl_init_locks();
 #ifdef CONFIG_BLK_DEV_FD
 	if (MAJOR(ROOT_DEV) == FLOPPY_MAJOR) {
 		printk(KERN_NOTICE "VFS: Insert root floppy and press ENTER\n");

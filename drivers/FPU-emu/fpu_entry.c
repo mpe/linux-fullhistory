@@ -24,15 +24,14 @@
  +---------------------------------------------------------------------------*/
 
 #include <linux/signal.h>
-#include <linux/segment.h>
+
+#include <asm/segment.h>
 
 #include "fpu_system.h"
 #include "fpu_emu.h"
 #include "exception.h"
 #include "control_w.h"
 #include "status_w.h"
-
-#include <asm/segment.h>
 
 #define __BAD__ FPU_illegal   /* Illegal on an 80486, causes SIGILL */
 

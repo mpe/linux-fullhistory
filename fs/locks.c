@@ -11,11 +11,17 @@
  *	- mandatory locks (requires lots of changes elsewhere)
  *
  *  Edited by Kai Petzke, wpp@marie.physik.tu-berlin.de
+ *
+ *  Converted file_lock_table to a linked list from an array, which eliminates
+ *  the limits on how many active file locks are open - Chad Page
+ *  (pageone@netcom.com), November 27, 1994 
  */
+
 #define DEADLOCK_DETECTION
 
 #include <asm/segment.h>
 
+#include <linux/malloc.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -36,25 +42,8 @@ static void free_lock(struct file_lock **fl);
 int locks_deadlocked(int my_pid,int blocked_pid);
 #endif
 
-static struct file_lock file_lock_table[NR_FILE_LOCKS];
-static struct file_lock *file_lock_free_list;
-
-/*
- * Called at boot time to initialize the lock table ...
- */
-
-void fcntl_init_locks(void)
-{
-	struct file_lock *fl;
-
-	for (fl = &file_lock_table[0]; fl < file_lock_table + NR_FILE_LOCKS - 1; fl++) {
-		fl->fl_next = fl + 1;
-		fl->fl_owner = NULL;
-	}
-	file_lock_table[NR_FILE_LOCKS - 1].fl_next = NULL;
-	file_lock_table[NR_FILE_LOCKS - 1].fl_owner = NULL;
-	file_lock_free_list = &file_lock_table[0];
-}
+static struct file_lock *file_lock_table = NULL;
+static struct file_lock *file_lock_free_list = NULL;
 
 int fcntl_getlk(unsigned int fd, struct flock *l)
 {
@@ -185,7 +174,7 @@ int locks_deadlocked(int my_pid,int blocked_pid)
 	int ret_val;
 	struct wait_queue *dlock_wait;
 	struct file_lock *fl;
-	for (fl = &file_lock_table[0]; fl < file_lock_table + NR_FILE_LOCKS - 1; fl++) {
+	for (fl = file_lock_table; fl != NULL; fl = fl->fl_nextlink) {
 		if (fl->fl_owner == NULL) continue;	/* not a used lock */
 		if (fl->fl_owner->pid != my_pid) continue;
 		if (fl->fl_wait == NULL) continue;	/* no queues */
@@ -453,6 +442,9 @@ next_lock:
 
 /*
  * File_lock() inserts a lock at the position pos of the linked list.
+ *
+ *  Modified to create a new node if no free entries available - Chad Page
+ *
  */
 
 static struct file_lock *alloc_lock(struct file_lock **pos,
@@ -462,13 +454,24 @@ static struct file_lock *alloc_lock(struct file_lock **pos,
 	struct file_lock *tmp;
 
 	tmp = file_lock_free_list;
+
 	if (tmp == NULL)
-		return NULL;			/* no available entry */
+	{
+		/* Okay, let's make a new file_lock structure... */
+		tmp = (struct file_lock *)kmalloc(sizeof(struct file_lock), GFP_KERNEL);
+		tmp -> fl_owner = NULL;
+		tmp -> fl_next = file_lock_free_list;
+		tmp -> fl_nextlink = file_lock_table;
+		file_lock_table = tmp;
+	}
+	else
+	{
+		/* remove from free list */
+		file_lock_free_list = tmp->fl_next;
+	}
+
 	if (tmp->fl_owner != NULL)
 		panic("alloc_lock: broken free list\n");
-
-	/* remove from free list */
-	file_lock_free_list = tmp->fl_next;
 
 	*tmp = *fl;
 

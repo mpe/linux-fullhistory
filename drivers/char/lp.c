@@ -456,6 +456,8 @@ long lp_init(long kmem_start)
 	}
 	/* take on all known port values */
 	for (offset = 0; offset < LP_NO; offset++) {
+		if (check_region(LP_B(offset), 3))
+			continue;
 		/* write to port & read back to check */
 		outb_p( LP_DUMMY, LP_B(offset));
 		for (testvalue = 0 ; testvalue < LP_DELAY ; testvalue++)
@@ -465,6 +467,7 @@ long lp_init(long kmem_start)
 			LP_F(offset) |= LP_EXIST;
 			lp_reset(offset);
 			printk("lp_init: lp%d exists, ", offset);
+			snarf_region(LP_B(offset), 3);
 			if (LP_IRQ(offset))
 				printk("using IRQ%d\n", LP_IRQ(offset));
 			else

@@ -1,7 +1,8 @@
 #ifndef _LINUX_MM_H
 #define _LINUX_MM_H
 
-#include <linux/page.h>
+#include <asm/page.h>
+
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -203,9 +204,6 @@ extern unsigned long get_unmapped_area(unsigned long);
 	rw_swap_page(READ,(nr),(buf))
 #define write_swap_page(nr,buf) \
 	rw_swap_page(WRITE,(nr),(buf))
-
-#define invalidate() \
-__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
 
 extern unsigned long high_memory;
 

@@ -5,15 +5,11 @@
 
 comment 'General setup'
 
-bool 'Kernel math emulation' CONFIG_MATH_EMULATION n
-bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD y
-bool 'Normal harddisk support' CONFIG_BLK_DEV_HD y
+bool 'Normal harddisk support' CONFIG_BLK_DEV_HD n
 bool 'XT harddisk support' CONFIG_BLK_DEV_XD n
 bool 'Networking support' CONFIG_NET y
-bool 'Limit memory to low 16MB' CONFIG_MAX_16M n
 bool 'System V IPC' CONFIG_SYSVIPC y
 bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
-bool 'Use -m486 flag for 486-specific optimizations' CONFIG_M486 y
 
 if [ "$CONFIG_NET" = "y" ]; then
 comment 'Networking options'
@@ -32,7 +28,7 @@ fi
 
 comment 'SCSI support'
 
-bool 'SCSI support?' CONFIG_SCSI n
+bool 'SCSI support?' CONFIG_SCSI y
 
 if [ "$CONFIG_SCSI" = "n" ]; then
 
@@ -50,15 +46,15 @@ bool 'Scsi generic support' CONFIG_CHR_DEV_SG n
 comment 'SCSI low-level drivers'
 
 bool 'Adaptec AHA152X support' CONFIG_SCSI_AHA152X n
-bool 'Adaptec AHA1542 support' CONFIG_SCSI_AHA1542 y
-bool 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 n
+bool 'Adaptec AHA1542 support' CONFIG_SCSI_AHA1542 n
+bool 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 y
 bool 'Adaptec AHA274X/284X support' CONFIG_SCSI_AHA274X n
 bool 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC n
 bool 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F n
 bool 'Future Domain 16xx SCSI support' CONFIG_SCSI_FUTURE_DOMAIN n
 bool 'Generic NCR5380 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 n
 bool 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx n
-bool 'Always IN2000 SCSI support (test release)' CONFIG_SCSI_IN2000 n
+bool 'Always IN2000 SCSI support' CONFIG_SCSI_IN2000 n
 bool 'PAS16 SCSI support' CONFIG_SCSI_PAS16 n
 bool 'QLOGIC SCSI support' CONFIG_SCSI_QLOGIC n
 bool 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE n
@@ -95,7 +91,7 @@ if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
 	bool 'WD80*3 support' CONFIG_WD80x3 n
 	bool 'SMC Ultra support' CONFIG_ULTRA n
 fi
-bool '3COM cards' CONFIG_NET_VENDOR_3COM y
+bool '3COM cards' CONFIG_NET_VENDOR_3COM n
 if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
 	bool '3c501 support' CONFIG_EL1 n
 	bool '3c503 support' CONFIG_EL2 n
@@ -105,11 +101,11 @@ if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
 	fi
 	bool '3c509/3c579 support' CONFIG_EL3 y
 fi
-bool 'Other ISA cards' CONFIG_NET_ISA n
+bool 'Other ISA cards' CONFIG_NET_ISA y
 if [ "$CONFIG_NET_ISA" = "y" ]; then
 	bool 'AT1500 and NE2100 (LANCE and PCnet-ISA) support' CONFIG_LANCE n
 	bool 'Cabletron E21xx support (not recommended)' CONFIG_E2100 n
-	bool 'DEPCA support' CONFIG_DEPCA n
+	bool 'DEPCA support' CONFIG_DEPCA y
 	bool 'EtherWorks 3 support' CONFIG_EWRK3 n
 	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
 		bool 'EtherExpress support' CONFIG_EEXPRESS n
@@ -119,7 +115,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 	fi
 	bool 'HP PCLAN support' CONFIG_HPLAN n
 	bool 'HP PCLAN PLUS support' CONFIG_HPLAN_PLUS n
-	bool 'NE2000/NE1000 support' CONFIG_NE2000 y
+	bool 'NE2000/NE1000 support' CONFIG_NE2000 n
 	bool 'SK_G16 support' CONFIG_SK_G16 n
 fi
 bool 'EISA and on board controllers' CONFIG_NET_EISA n
@@ -178,7 +174,7 @@ comment 'character devices'
 
 bool 'Parallel printer support' CONFIG_PRINTER n
 bool 'Logitech busmouse support' CONFIG_BUSMOUSE n
-bool 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE n
+bool 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE y
 if [ "$CONFIG_PSMOUSE" = "y" ]; then
 bool 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE y
 fi

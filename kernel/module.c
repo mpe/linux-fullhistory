@@ -7,6 +7,10 @@
 #include <linux/sched.h>
 #include <linux/malloc.h>
 /*
+ * Originally by Anonymous (as far as I know...)
+ * Linux version by Bas Laarhoven <bas@vimec.nl>
+ * 0.99.14 version by Jon Tombs <jon@gtex02.us.es>,
+ *
  * Heavily modified by Bjorn Ekwall <bj0rn@blox.se> May 1994 (C)
  * This source is covered by the GNU GPL, the same as all kernel sources.
  *
@@ -213,6 +217,7 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 		struct module_ref *ref;
 		int size;
 		int i;
+		int legal_start;
 
 		if ((error = verify_area(VERIFY_READ, symtab, sizeof(int))))
 			return error;
@@ -222,13 +227,33 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 			return -ENOMEM;
 		}
 
-		if ((error = verify_area(VERIFY_READ, symtab, size)))
+		if ((error = verify_area(VERIFY_READ, symtab, size))) {
+			kfree_s(newtab, size);
 			return error;
+		}
 		memcpy_fromfs((char *)(newtab), symtab, size);
+
+		/* sanity check */
+		legal_start = sizeof(struct symbol_table) +
+			newtab->n_symbols * sizeof(struct internal_symbol) +
+			newtab->n_refs * sizeof(struct module_ref);
+
+		if ((newtab->n_symbols < 0) || (newtab->n_refs < 0) ||
+			(legal_start > size)) {
+			printk("Illegal symbol table! Rejected!\n");
+			kfree_s(newtab, size);
+			return -EINVAL;
+		}
 
 		/* relocate name pointers, index referred from start of table */
 		for (sym = &(newtab->symbol[0]), i = 0;
 			i < newtab->n_symbols; ++sym, ++i) {
+			if ((int)sym->name < legal_start || size <= (int)sym->name) {
+				printk("Illegal symbol table! Rejected!\n");
+				kfree_s(newtab, size);
+				return -EINVAL;
+			}
+			/* else */
 			sym->name += (long)newtab;
 		}
 		mp->symtab = newtab;
@@ -236,10 +261,24 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 		/* Update module references.
 		 * On entry, from "insmod", ref->module points to
 		 * the referenced module!
+		 * Now it will point to the current module instead!
+		 * The ref structure becomes the first link in the linked
+		 * list of references to the referenced module.
 		 * Also, "sym" from above, points to the first ref entry!!!
 		 */
 		for (ref = (struct module_ref *)sym, i = 0;
 			i < newtab->n_refs; ++ref, ++i) {
+
+			/* Check for valid reference */
+			struct module *link = module_list;
+			while (link && (ref->module != link))
+				link = link->next;
+
+			if (link == (struct module *)0) {
+				printk("Non-module reference! Rejected!\n");
+				return -EINVAL;
+			}
+
 			ref->next = ref->module->ref;
 			ref->module->ref = ref;
 			ref->module = mp;

@@ -18,7 +18,8 @@
  */
 .text
 
-#include <linux/segment.h>
+#define __ASSEMBLY__
+#include <asm/segment.h>
 
 startup_32:
 	cld

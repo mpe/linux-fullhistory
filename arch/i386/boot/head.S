@@ -16,10 +16,10 @@
 .globl _empty_zero_page
 .globl _floppy_track_buffer
 
+#define __ASSEMBLY__
 #include <linux/tasks.h>
-#include <linux/segment.h>
-#define ASSEMBLER
 #include <linux/fd.h>
+#include <asm/segment.h>
 
 #define CL_MAGIC_ADDR	0x90020
 #define CL_MAGIC	0xA33F

@@ -27,7 +27,7 @@
  *     'void poke_blanked_console(void)'
  *     'void scrollback(int lines)'
  *     'void scrollfront(int lines)'
- *     'int do_screendump(int arg)'
+ *     'int do_screendump(int arg, int mode)'
  *
  *     'int con_get_font(char *)' 
  *     'int con_set_font(char *)' 
@@ -2122,10 +2122,18 @@ void update_screen(int new_console)
 	lock = 0;
 }
 
-int do_screendump(int arg)
+/*
+ * do_screendump is used for three tasks:
+ *   if (mode==0) is the old ioctl(TIOCLINUX,0)
+ *   if (mode==1) dumps wd,hg, cursor position, and all the char-attr pairs
+ *   if (mode==2) restores what mode1 got.
+ * the new modes are needed for a fast and complete dump-restore cycle,
+ * needed to implement root-window menus in text mode (A Rubini Nov 1994)
+ */
+int do_screendump(int arg, int mode)
 {
 	char *sptr, *buf = (char *)arg;
-	int currcons, l;
+	int currcons, l, chcount;
 
 	if (!suser())
 		return -EPERM;
@@ -2136,14 +2144,33 @@ int do_screendump(int arg)
 	currcons = (currcons ? currcons-1 : fg_console);
 	if (!vc_cons_allocated(currcons))
 		return -EIO;
-	l = verify_area(VERIFY_WRITE, buf, 2+video_num_columns*video_num_lines);
+	
+	/* mode 0 needs 2+wd*ht, modes 1 and 2 need 4+2*wd*ht */
+	chcount=video_num_columns*video_num_lines;
+	l = verify_area(mode==2 ? VERIFY_READ :VERIFY_WRITE,
+		buf, (2+chcount)*(1+mode!=0));
 	if (l)
 		return l;
+	if (mode<2) {
 	put_fs_byte((char)(video_num_lines),buf++);   
 	put_fs_byte((char)(video_num_columns),buf++);
+	    }
+	switch(mode) {
+	    case 0:
 	sptr = (char *) origin;
-	for (l=video_num_lines*video_num_columns; l>0 ; l--, sptr++)
+			for (l=chcount; l>0 ; l--, sptr++)
 		put_fs_byte(*sptr++,buf++);	
+			break;
+	    case 1:
+			put_fs_byte((char)x,buf++); put_fs_byte((char)y,buf++); 
+			memcpy_tofs(buf,(char *)origin,2*chcount);
+			break;
+	    case 2:
+			buf+=2; /* skip the the numnber 9 and console number */
+			x=get_fs_byte(buf++); y=get_fs_byte(buf++);
+			memcpy_fromfs((char *)origin,buf,2*chcount);
+			break;
+	    }
 	return(0);
 }
 

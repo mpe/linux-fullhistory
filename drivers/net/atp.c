@@ -89,7 +89,7 @@ static char *version =
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
-#include <errno.h>
+#include <linux/errno.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

@@ -36,9 +36,10 @@
 
 #include <linux/config.h>
 #include <linux/kernel.h>
-#include <linux/segment.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
+
+#include <asm/segment.h>
 
 /*
  * It would seem some PCI bioses are buggy, so we don't actually use these

@@ -90,7 +90,7 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 
 	while (filp->f_pos < inode->i_size) {
 #ifdef DEBUG
-		printk("Block, offset: %x %x %x\n",
+		printk("Block, offset, f_pos: %x %x %x\n",
 		       block, offset, filp->f_pos);
 #endif
 		de = (struct iso_directory_record *) (bh->b_data + offset);
@@ -122,7 +122,7 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 		offset += *((unsigned char *) de);
 		filp->f_pos += *((unsigned char *) de);
 
-		if (offset >=  bufsize) {
+		if (offset > bufsize) {
 		        unsigned int frag1;
 			frag1 = bufsize - old_offset;
 			cpnt = kmalloc(*((unsigned char *) de),GFP_KERNEL);

@@ -98,10 +98,10 @@ unsigned int de600_debug = DE600_DEBUG;
 #include <linux/string.h>
 #include <linux/interrupt.h>
 #include <asm/io.h>
-#include <netinet/in.h>
+#include <linux/in.h>
 #include <linux/ptrace.h>
 #include <asm/system.h>
-#include <errno.h>
+#include <linux/errno.h>
 
 #include <linux/inet.h>
 #include <linux/netdevice.h>

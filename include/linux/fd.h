@@ -54,7 +54,7 @@
 			     512 : 128 << FD_SIZECODE(floppy) )
 #define FD_PERP 0x40
 
-#ifndef ASSEMBLER
+#ifndef __ASSEMBLY__
 /* the following structure is used by FDSETPRM, FDDEFPRM and FDGETPRM */
 struct floppy_struct {
 	unsigned int	size,		/* nr of sectors total */

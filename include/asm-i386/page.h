@@ -1,5 +1,8 @@
-#ifndef _LINUX_PAGE_H
-#define _LINUX_PAGE_H
+#ifndef _I386_PAGE_H
+#define _I386_PAGE_H
+
+#define invalidate() \
+__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
 
 			/* PAGE_SHIFT determines the page size */
 #define PAGE_SHIFT			12
@@ -35,4 +38,4 @@
 
 #endif /* __KERNEL__ */
 
-#endif /* _LINUX_PAGE_H */
+#endif /* _I386_PAGE_H */

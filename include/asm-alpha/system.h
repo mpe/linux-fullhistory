@@ -15,7 +15,7 @@
 #define INIT_PCB	0xfffffc0000300000
 #define INIT_STACK	0xfffffc0000302000
 #define START_ADDR	0xfffffc0000304000
-#define SIZE		(32*1024)
+#define START_SIZE	(32*1024)
 
 /*
  * Common PAL-code
@@ -65,18 +65,6 @@
 #ifndef mb
 #define mb() __asm__ __volatile__("mb": : :"memory")
 #endif
-
-#define invalidate_all() \
-__asm__ __volatile__( \
-	"lda $16,-2($31)\n\t" \
-	".long 51" \
-	: : :"$1", "$16", "$17", "$22","$23","$24","$25")
-
-#define invalidate() \
-__asm__ __volatile__( \
-	"lda $16,-1($31)\n\t" \
-	".long 51" \
-	: : :"$1", "$16", "$17", "$22","$23","$24","$25")
 
 #define swpipl(__new_ipl) \
 ({ unsigned long __old_ipl; \

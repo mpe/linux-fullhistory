@@ -6,7 +6,6 @@
  *
  */
 
-#include <stdlib.h>
 #include <linux/fs.h>
 #include <linux/msdos_fs.h>
 #include <linux/kernel.h>

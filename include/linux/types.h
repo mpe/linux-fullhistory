@@ -1,6 +1,8 @@
 #ifndef _LINUX_TYPES_H
 #define _LINUX_TYPES_H
 
+#include <asm/types.h>
+
 #ifndef _SIZE_T
 #define _SIZE_T
 typedef unsigned int size_t;
@@ -34,11 +36,7 @@ typedef int pid_t;
 typedef unsigned short uid_t;
 typedef unsigned short gid_t;
 typedef unsigned short dev_t;
-#ifdef OLD_LINUX
-typedef unsigned short ino_t;
-#else
 typedef unsigned long ino_t;
-#endif
 typedef unsigned short mode_t;
 typedef unsigned short umode_t;
 typedef unsigned short nlink_t;

@@ -15,7 +15,6 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/errno.h>
-#include <linux/segment.h>
 #include <linux/ptrace.h>
 
 #include <asm/system.h>

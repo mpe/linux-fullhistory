@@ -19,8 +19,9 @@
 !
 
 ! NOTE! These had better be the same as in bootsect.s!
+#define __ASSEMBLY__
 #include <linux/config.h>
-#include <linux/segment.h>
+#include <asm/segment.h>
 
 #ifndef SVGA_MODE
 #define SVGA_MODE ASK_VGA

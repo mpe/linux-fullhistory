@@ -1,7 +1,7 @@
 /*
  *  This file is in2000.c, written and
  *  Copyright (C) 1993  Brad McLean
- *	Last edit 07/19/94 WDE
+ *	Last edit 08/25/94 WDE
  * Disclaimer:
  * Note:  This is ugly.  I know it, I wrote it, but my whole
  * focus was on getting the damn thing up and out quickly.
@@ -43,6 +43,9 @@
  * LUN > 0 problems, but that is not host specific. Now 6/6/94.
  */
 /* Changes for 1.1.28 kernel made 7/19/94, code not affected. (WDE)
+ */
+/* Changes for 1.1.43+ kernels made 8/25/94, code added to check for
+ * new BIOS version, derived by jshiffle@netcom.com. (WDE)
  */
 
 #include <linux/kernel.h>
@@ -124,13 +127,14 @@ static int in2000_test_port(int index)
     tmp = inb(INFLED);
 	/* First, see if the DIP switch values are valid */
 	/* The test of B7 may fail on some early boards, mine works. */
-    if (((~tmp & 0x3) != index ) || (tmp & 0x80) || !(tmp & 0x4) )
+    if ( ((~tmp & 0x3) != index ) || (tmp & 0x80) || !(tmp & 0x4) )
     	return 0;
     printk("IN-2000 probe got dip setting of %02X\n", tmp);
     tmp = inb(INVERS);
 /* Add some extra sanity checks here */
     for(i=0; i < 3; i++)
-	if(*(bios_tab[i]+0x04) == 0x41564f4e) {
+	if(*(bios_tab[i]+0x04) == 0x41564f4e ||
+		*(bios_tab[i]+0xc) == 0x61776c41) {
 	  printk("IN-2000 probe found hdw. vers. %02x, BIOS at %06x\n",
 		tmp, (unsigned int)bios_tab[i]);
 		return 1;
@@ -141,7 +145,7 @@ static int in2000_test_port(int index)
 
 
 /*
- * retreive the current transaction counter from the WD
+ * retrieve the current transaction counter from the WD
  */
 
 static unsigned in2000_txcnt(void)
@@ -173,7 +177,7 @@ static void in2000_fifo_out(void)	/* uses FIFOCNTR */
     do {
 	txcnt = in2000_txcnt();
 /*DEB(printk("FIw:%d %02x %d\n", in2000_datalen, infcnt, txcnt));*/
-	count = (infcnt << 3) - 32;	/* dont fill completely */
+	count = (infcnt << 3) - 32;	/* don't fill completely */
 	if ( count > in2000_datalen )
 	    count = in2000_datalen;	/* limit to actual data on hand */
 	count >>= 1;		/* Words, not bytes */

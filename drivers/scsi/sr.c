@@ -19,6 +19,7 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/errno.h>
+#include <linux/cdrom.h>
 #include <asm/system.h>
 
 #define MAJOR_NR SCSI_CDROM_MAJOR
@@ -279,7 +280,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
  *
  * Actually works: (should work ;-)
  *   - NEC:     Detection and support of multisession CD's. Special handling
- *              for XA-disks is not nessesary.
+ *              for XA-disks is not necessary.
  *     
  *   - TOSHIBA: setting density is done here now, mounting PhotoCD's should
  *              work now without running the program "set_density"
@@ -302,7 +303,7 @@ static void sr_photocd(struct inode *inode)
   unsigned char   *buffer;
   int             rc;
 
-  switch(scsi_CDs[MINOR(inode->i_rdev)].device->manufactor) {
+  switch(scsi_CDs[MINOR(inode->i_rdev)].device->manufacturer) {
 
   case SCSI_MAN_NEC:
     printk("sr_photocd: use NEC code\n");
@@ -324,6 +325,7 @@ static void sr_photocd(struct inode *inode)
       sec   = (unsigned long)buffer[16]/16*10 + (unsigned long)buffer[16]%16;
       frame = (unsigned long)buffer[17]/16*10 + (unsigned long)buffer[17]%16;
       sector = min*60*75 + sec*75 + frame;
+      sector-=CD_BLOCK_OFFSET;
       if (sector) {
 	printk("sr_photocd: multisession PhotoCD detected\n"); }}
     scsi_free(buffer,512);
@@ -372,6 +374,7 @@ static void sr_photocd(struct inode *inode)
       sec   = (unsigned long)buffer[2]/16*10 + (unsigned long)buffer[2]%16;
       frame = (unsigned long)buffer[3]/16*10 + (unsigned long)buffer[3]%16;
       sector = min*60*75 + sec*75 + frame;
+      sector-=CD_BLOCK_OFFSET;
       if (sector) {
         printk("sr_photocd: multisession PhotoCD detected: %lu\n",sector); }}
     scsi_free(buffer,512);
@@ -408,7 +411,9 @@ static int sr_open(struct inode * inode, struct file * filp)
 	if(scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size)
 	  get_sectorsize(MINOR(inode->i_rdev));
 
+#if 0	/* don't use for now - it doesn't seem to work for everybody */
 	sr_photocd(inode);
+#endif
 
 	return 0;
 }

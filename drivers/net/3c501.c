@@ -34,9 +34,10 @@ static char *version =
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
+#include <linux/errno.h>
+
 #include <asm/bitops.h>
 #include <asm/io.h>
-#include <errno.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

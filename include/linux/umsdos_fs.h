@@ -79,14 +79,12 @@ struct umsdos_info{
 #define UMSDOS_INIT_EMD		1242	/* Create the EMD file if not there */
 #define UMSDOS_DOS_SETUP	1243	/* Set the defaults of the MsDOS driver */
 
-#ifndef _SYS_STAT_H
-#include <sys/stat.h>
-#endif
+#include <linux/stat.h>
 
 struct umsdos_ioctl{
 	struct dirent dos_dirent;
 	struct umsdos_dirent umsdos_dirent;
-	struct stat stat;
+	struct new_stat stat;
 	char version,release;
 };
 

@@ -1,6 +1,6 @@
 #ifndef _IN2000_H
 
-/* $Id: in2000.h,v 1.1 1994/03/14 06:27:38 root Exp root $
+/* $Id: in2000.h,v 1.2 1994/08/25 06:27:38 root Exp root $
  *
  * Header file for the Always IN 2000 driver for Linux
  *
@@ -26,6 +26,7 @@
 
 /* WD33C93 defines */
 #define	OWNID	0
+#undef	CONTROL
 #define	CONTROL	1
 #define	TIMEOUT	2
 #define	TOTSECT	3
@@ -69,22 +70,17 @@
 /* Select timeout const, 1 count = 8ms */
 #define IN2000_TMOUT 0x1f
 
-#if 0
-/* This is used with scatter-gather */
-struct in2000_chain {
-  ulong  dataptr;		/* Location of data */
-  ulong  datalen;		/* Size of this part of chain */
-};
-#endif
-
 /* These belong in scsi.h also */
+#undef any2scsi
 #define any2scsi(up, p)				\
 (up)[0] = (((unsigned long)(p)) >> 16);		\
 (up)[1] = (((unsigned long)(p)) >> 8);		\
 (up)[2] = ((unsigned long)(p));
 
+#undef scsi2int
 #define scsi2int(up) ( ((((long)*(up))&0x1f) << 16) + (((long)(up)[1]) << 8) + ((long)(up)[2]) )
 
+#undef xany2scsi
 #define xany2scsi(up, p)	\
 (up)[0] = ((long)(p)) >> 24;	\
 (up)[1] = ((long)(p)) >> 16;	\

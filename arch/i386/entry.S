@@ -40,8 +40,9 @@
  *	40(%esp) - %oldss
  */
 
-#include <linux/segment.h>
+#define __ASSEMBLY__
 #include <linux/sys.h>
+#include <asm/segment.h>
 
 EBX		= 0x00
 ECX		= 0x04

@@ -1,3 +1,13 @@
+/*
+ * include/asm-alpha/dma.h
+ *
+ * This is essentially the same as the i386 DMA stuff, as
+ * the AlphaPC uses normal EISA dma (but the DMA controller
+ * is not on the EISA bus, but on the local VL82c106 bus).
+ *
+ * These DMA-functions don't know about EISA DMA yet..
+ */
+
 /* $Id: dma.h,v 1.7 1992/12/14 00:29:34 root Exp root $
  * linux/include/asm/dma.h: Defines for using and allocating dma channels.
  * Written by Hennus Bergman, 1992.
@@ -10,14 +20,8 @@
 
 #include <asm/io.h>		/* need byte IO */
 
-
-#ifdef HAVE_REALLY_SLOW_DMA_CONTROLLER
-#define dma_outb	outb_p
-#else
-#define dma_outb	outb
-#endif
-
-#define dma_inb		inb
+#define dma_outb	outb_local
+#define dma_inb		inb_local
 
 /*
  * NOTES about DMA transfers:

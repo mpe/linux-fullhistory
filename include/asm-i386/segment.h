@@ -1,6 +1,14 @@
 #ifndef _ASM_SEGMENT_H
 #define _ASM_SEGMENT_H
 
+#define KERNEL_CS	0x10
+#define KERNEL_DS	0x18
+
+#define USER_CS		0x23
+#define USER_DS		0x2B
+
+#ifndef __ASSEMBLY__
+
 static inline unsigned char get_user_byte(const char * addr)
 {
 	register unsigned char _v;
@@ -215,5 +223,7 @@ static inline void set_fs(unsigned long val)
 {
 	__asm__ __volatile__("mov %w0,%%fs": /* no output */ :"r" (val));
 }
+
+#endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_SEGMENT_H */

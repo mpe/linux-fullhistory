@@ -29,7 +29,6 @@
 #define NR_FILE 1024	/* this can well be larger on a larger system */
 #define NR_SUPER 32
 #define NR_IHASH 131
-#define NR_FILE_LOCKS 64
 #define BLOCK_SIZE 1024
 #define BLOCK_SIZE_BITS 10
 
@@ -267,6 +266,7 @@ struct file {
 
 struct file_lock {
 	struct file_lock *fl_next;	/* singly linked list */
+	struct file_lock *fl_nextlink;
 	struct task_struct *fl_owner;	/* NULL if on free list, for sanity checks */
         unsigned int fl_fd;             /* File descriptor for this lock */
 	struct wait_queue *fl_wait;

@@ -504,7 +504,7 @@ void release_sock(struct sock *sk)
 	/*
 	 *	Make the backlog atomic. If we don't do this there is a tiny
 	 *	window where a packet may arrive between the sk->blog being 
-	 *	tested and then set with sk->inuse stil 0 causing an extra 
+	 *	tested and then set with sk->inuse still 0 causing an extra 
 	 *	unwanted re-entry into release_sock().
 	 */
 

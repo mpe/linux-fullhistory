@@ -11,7 +11,7 @@
 #ifndef _ASM_MIPS_SYSTEM_H_
 #define _ASM_MIPS_SYSTEM_H_
 
-#include <linux/segment.h>
+#include <asm/segment.h>
 #include <mips/mipsregs.h>
 
 /*

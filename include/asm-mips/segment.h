@@ -12,8 +12,6 @@
 #ifndef _ASM_MIPS_SEGMENT_H_
 #define _ASM_MIPS_SEGMENT_H_
 
-#include <linux/segment.h>
-
 static inline unsigned char get_user_byte(const char * addr)
 {
 	register unsigned char _v;

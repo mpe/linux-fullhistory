@@ -347,11 +347,11 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 			scsi_result[1] |= 0x80;  /* removable */
 		}
 
-	      SDpnt->manufactor = SCSI_MAN_UNKNOWN;
+	      SDpnt->manufacturer = SCSI_MAN_UNKNOWN;
 	      if (!strncmp(scsi_result+8,"NEC",3))
-		SDpnt->manufactor = SCSI_MAN_NEC;
+		SDpnt->manufacturer = SCSI_MAN_NEC;
 	      if (!strncmp(scsi_result+8,"TOSHIBA",7))
-		SDpnt->manufactor = SCSI_MAN_TOSHIBA;
+		SDpnt->manufacturer = SCSI_MAN_TOSHIBA;
 
 	      SDpnt->removable = (0x80 & 
 				  scsi_result[1]) >> 7;

@@ -29,23 +29,24 @@
 
 
 struct timestamp {
-  unsigned char	len;
-  unsigned char ptr;
-  union {
+	u8	len;
+	u8	ptr;
+	union {
 #if defined(__i386__)  
-	unsigned char	flags:4,
+		u8	flags:4,
+			overflow:4;
+#elif defined(__mc680x0__)
+		u8	overflow:4,
+			flags:4;
+#elif defined(__alpha__)
+		u8	flags:4,
 			overflow:4;
 #else
-#if defined(__mc680x0__)
-	unsigned char	overflow:4,
-			flags:4;
-#else
 #error	"Adjust this structure to match your CPU"
-#endif
 #endif						
-	unsigned char	full_char;
-  } x;
-  unsigned long	data[9];
+		u8	full_char;
+	} x;
+	u32	data[9];
 };
 
 
@@ -73,26 +74,27 @@ struct options {
 
 struct iphdr {
 #if defined(__i386__)
-  unsigned char		ihl:4,
-			version:4;
-#else
-#if defined (__mc680x0__)
-  unsigned char		version:4,
-  			ihl:4;
+	u8	ihl:4,
+		version:4;
+#elif defined (__mc680x0__)
+	u8	version:4,
+  		ihl:4;
+#elif defined (__alpha__)
+	u8	ihl:4,
+		version:4;
 #else
 #error "Adjust this structure to match your CPU"
-#endif			
 #endif
-  unsigned char		tos;
-  unsigned short	tot_len;
-  unsigned short	id;
-  unsigned short	frag_off;
-  unsigned char		ttl;
-  unsigned char		protocol;
-  unsigned short	check;
-  unsigned long		saddr;
-  unsigned long		daddr;
-  /*The options start here. */
+	u8	tos;
+	u16	tot_len;
+	u16	id;
+	u16	frag_off;
+	u8	ttl;
+	u8	protocol;
+	u16	check;
+	u32	saddr;
+	u32	daddr;
+	/*The options start here. */
 };
 
 

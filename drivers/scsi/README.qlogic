@@ -14,7 +14,7 @@ you will have to load your socket and card services, and QL41DOS.SYS and
 QL40ENBL.SYS.  These are a minimum, but loading the rest of the modules
 won't interfere with the operation.  The next thing to do is load the kernel
 without resetting the hardware, which can be a simple ctrl-alt-delete with
-a boot floppy, or by using loadlin with the kernel image accessable from
+a boot floppy, or by using loadlin with the kernel image accessible from
 DOS.  If you are using the Linux PCMCIA driver, you will have to adjust
 it or otherwise stop it from configuring the card.
 
@@ -37,7 +37,7 @@ hardware and connections it may be more useful to not reset things.
 
 SOME TROUBLESHOOTING TIPS
 
-Make sure it works properly under DOS.  You should also do an inital FDISK
+Make sure it works properly under DOS.  You should also do an initial FDISK
 on a new drive if you want partitions.
 
 Don't enable all the speedups first.  If anything is wrong, they will make
