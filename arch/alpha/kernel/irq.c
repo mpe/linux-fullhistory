@@ -897,6 +897,7 @@ process_mcheck_info(unsigned long vector, unsigned long la_ptr,
 	case 0x98: reason = "processor detected hard error"; break;
 	
 	/* System specific (these are for Alcor, at least): */
+	case 0x202: reason = "system detected hard error"; break;
 	case 0x203: reason = "system detected uncorrectable ECC error"; break;
 	case 0x204: reason = "SIO SERR occurred on PCI bus"; break;
 	case 0x205: reason = "parity error detected by CIA"; break;

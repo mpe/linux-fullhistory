@@ -101,8 +101,7 @@
 #define DO_TSUNAMI_IO	IO(TSUNAMI,tsunami)
 
 #define BUS(which)					\
-	mv_virt_to_bus:	CAT(which,_virt_to_bus),	\
-	mv_bus_to_virt:	CAT(which,_bus_to_virt)
+	mv_pci_tbi:	CAT(which,_pci_tbi)
 
 #define DO_APECS_BUS	BUS(apecs)
 #define DO_CIA_BUS	BUS(cia)

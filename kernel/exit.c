@@ -247,6 +247,7 @@ struct mm_struct * start_lazy_tlb(void)
 	current->mm = NULL;
 	/* active_mm is still 'mm' */
 	atomic_inc(&mm->mm_count);
+	enter_lazy_tlb(mm, current, smp_processor_id());
 	return mm;
 }
 
@@ -275,6 +276,7 @@ static inline void __exit_mm(struct task_struct * tsk)
 		mm_release();
 		if (mm != tsk->active_mm) BUG();
 		tsk->mm = NULL;
+		enter_lazy_tlb(mm, current, smp_processor_id());
 		mmput(mm);
 	}
 }

@@ -119,6 +119,17 @@
 	interruptible_sleep_on_timeout (&wq, HZ*3); \
 }
 
+/*
+ * This macro checks if ibmcam is still operational. The 'ibmcam'
+ * pointer must be valid, ibmcam->dev must be valid, we are not
+ * removing the device and the device has not erred on us.
+ */
+#define IBMCAM_IS_OPERATIONAL(ibm_cam) (\
+	(ibm_cam != NULL) && \
+	((ibm_cam)->dev != NULL) && \
+	((ibm_cam)->last_error == 0) && \
+	(!(ibm_cam)->remove_pending))
+
 enum {
 	STATE_SCANNING,		/* Scanning for header */
 	STATE_LINES,		/* Parsing lines */
@@ -167,14 +178,17 @@ struct usb_ibmcam {
 	/* Device structure */
 	struct usb_device *dev;
 
-	unsigned char iface;
+	unsigned char iface;                            /* Video interface number */
+	unsigned char ifaceAltActive, ifaceAltInactive; /* Alt settings */
 
 	struct semaphore lock;
 	int user;		/* user count for exclusive use */
 
+	int ibmcam_used;        /* Is this structure in use? */
 	int initialized;	/* Had we already sent init sequence? */
 	int streaming;		/* Are we streaming Isochronous? */
 	int grabbing;		/* Are we grabbing? */
+	int last_error;		/* What calamity struck us? */
 
 	int compress;		/* Should the next frame be compressed? */
 

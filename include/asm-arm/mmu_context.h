@@ -17,6 +17,9 @@
 #define destroy_context(mm)		do { } while(0)
 #define init_new_context(tsk,mm)	do { } while(0)
 
+static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
+{
+}
 /*
  * This is the actual mm switch as far as the scheduler
  * is concerned.  No registers are touched.

@@ -2100,6 +2100,15 @@ D: Optics Storage 8000AT cdrom driver
 S: Cliffwood, New Jersey 07721
 S: USA
 
+N: Manfred Spraul
+E: manfreds@colorfullife.com
+W: http://colorfullife.com/~manfreds
+D: major SysV IPC changes
+D: various bug fixes (mostly SMP code)
+S: Warburgring 67
+S: 66424 Homburg 
+S: Germany
+
 N: Henrik Storner
 E: storner@image.dk
 W: http://www.image.dk/~storner/

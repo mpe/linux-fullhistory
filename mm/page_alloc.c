@@ -515,12 +515,12 @@ static inline void build_zonelists(pg_data_t *pgdat)
  *   - clear the memory bitmaps
  */
 void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
-	unsigned int *zones_size, unsigned long zone_start_paddr)
+	unsigned long *zones_size, unsigned long zone_start_paddr)
 {
 	struct page *p, *lmem_map;
 	unsigned long i, j;
 	unsigned long map_size;
-	unsigned int totalpages, offset;
+	unsigned long totalpages, offset;
 	unsigned int cumulative = 0;
 
 	totalpages = 0;
@@ -528,7 +528,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 		unsigned long size = zones_size[i];
 		totalpages += size;
 	}
-	printk("On node %d totalpages: %08x\n", nid, totalpages);
+	printk("On node %d totalpages: %lu\n", nid, totalpages);
 
 	/*
 	 * Select nr of pages we try to keep free for important stuff
@@ -579,7 +579,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 
 		size = zones_size[j];
 
-		printk("zone(%ld): %ld pages.\n", j, size);
+		printk("zone(%lu): %lu pages.\n", j, size);
 		zone->size = size;
 		zone->name = zone_names[j];
 		zone->lock = SPIN_LOCK_UNLOCKED;
@@ -622,7 +622,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 	build_zonelists(pgdat);
 }
 
-void __init free_area_init(unsigned int *zones_size)
+void __init free_area_init(unsigned long *zones_size)
 {
 	free_area_init_core(0, NODE_DATA(0), &mem_map, zones_size, 0);
 }

@@ -234,7 +234,7 @@ struct input_event {
 #define KEY_RECORD		167		
 #define KEY_REWIND		168		
 
-#define KEY_UNKNOWN		192
+#define KEY_UNKNOWN		180
 
 #define BTN_MISC		0x100
 #define BTN_0			0x100

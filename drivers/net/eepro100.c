@@ -356,12 +356,13 @@ enum commands {
 	CmdTxFlex = 0x00080000,		/* Use "Flexible mode" for CmdTx command. */
 };
 /* Do atomically if possible. */
-#if defined(__i386__) || defined(__alpha__)
-#define clear_suspend(cmd)   clear_bit(30, &(cmd)->cmd_status)
+#if defined(__i386__) || defined(__alpha__) || defined(__ia64__)
+#define clear_suspend(cmd)	clear_bit(30, &(cmd)->cmd_status)
 #elif defined(__powerpc__)
 #define clear_suspend(cmd)	clear_bit(6, &(cmd)->cmd_status)
 #else
-#define clear_suspend(cmd)	(cmd)->cmd_status &= cpu_to_le32(~CmdSuspend)
+# error You are probably in trouble: clear_suspend() MUST be atomic.
+# define clear_suspend(cmd)	(cmd)->cmd_status &= cpu_to_le32(~CmdSuspend)
 #endif
 
 enum SCBCmdBits {
@@ -571,6 +572,7 @@ int eepro100_init(void)
 #ifdef USE_IO
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
 									  PCI_BASE_ADDRESS_1, &pciaddr);
+			pciaddr &= ~3UL;
 #else
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
 									  PCI_BASE_ADDRESS_0, &pciaddr);
@@ -579,15 +581,17 @@ int eepro100_init(void)
 		}
 #endif
 		/* Remove I/O space marker in bit 0. */
-		if (pciaddr & 1) {
-			ioaddr = pciaddr & ~3UL;
-			if (check_region(ioaddr, 32))
-				continue;
-		} else if ((ioaddr = (long)ioremap(pciaddr & ~0xfUL, 0x1000)) == 0) {
+#ifdef USE_IO
+		ioaddr = pciaddr;
+		if (check_region(ioaddr, 32))
+			continue;
+#else
+		if ((ioaddr = (long)ioremap(pciaddr & ~0xfUL, 0x1000)) == 0) {
 			printk(KERN_INFO "Failed to map PCI address %#x.\n",
 				   pciaddr);
 			continue;
 		}
+#endif
 		if (speedo_debug > 2)
 			printk("Found Intel i82557 PCI Speedo at I/O %#lx, IRQ %d.\n",
 				   ioaddr, irq);

@@ -2234,7 +2234,7 @@ static void flush_dirty_buffers(int check_flushtime)
 
 		if (check_flushtime)
 		{
-			/* The dirty lru list is chronogical ordered so
+			/* The dirty lru list is chronologically ordered so
 			   if the current bh is not yet timed out,
 			   then also all the following bhs
 			   will be too young. */

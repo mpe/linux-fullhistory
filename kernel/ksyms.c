@@ -369,7 +369,9 @@ EXPORT_SYMBOL(schedule_timeout);
 EXPORT_SYMBOL(jiffies);
 EXPORT_SYMBOL(xtime);
 EXPORT_SYMBOL(do_gettimeofday);
+#ifndef __ia64__
 EXPORT_SYMBOL(loops_per_sec);
+#endif
 EXPORT_SYMBOL(kstat);
 
 /* misc */

@@ -307,9 +307,11 @@ static void pci_free_resources(struct pci_dev *dev)
 void
 pci_remove_device(struct pci_dev *dev)
 {
-	if (dev->driver->remove)
-		dev->driver->remove(dev);
-	dev->driver = NULL;
+	if (dev->driver) {
+		if (dev->driver->remove)
+			dev->driver->remove(dev);
+		dev->driver = NULL;
+	}
 	list_del(&dev->bus_list);
 	list_del(&dev->global_list);
 	pci_free_resources(dev);

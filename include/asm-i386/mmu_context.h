@@ -12,30 +12,46 @@
 #define init_new_context(tsk,mm)	do { } while (0)
 
 #ifdef __SMP__
-extern unsigned int cpu_tlbbad[NR_CPUS];
+
+static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
+{
+	if(cpu_tlbstate[cpu].state == TLBSTATE_OK)
+		cpu_tlbstate[cpu].state = TLBSTATE_LAZY;	
+}
+#else
+static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
+{
+}
 #endif
 
 static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next, struct task_struct *tsk, unsigned cpu)
 {
+	set_bit(cpu, &next->cpu_vm_mask);
 	if (prev != next) {
 		/*
 		 * Re-load LDT if necessary
 		 */
 		if (prev->segments != next->segments)
 			load_LDT(next);
-
+#ifdef CONFIG_SMP
+		cpu_tlbstate[cpu].state = TLBSTATE_OK;
+		cpu_tlbstate[cpu].active_mm = next;
+#endif
 		/* Re-load page tables */
 		asm volatile("movl %0,%%cr3": :"r" (__pa(next->pgd)));
 		clear_bit(cpu, &prev->cpu_vm_mask);
 	}
 #ifdef __SMP__
 	else {
-		if(cpu_tlbbad[cpu])
+		int old_state = cpu_tlbstate[cpu].state;
+		cpu_tlbstate[cpu].state = TLBSTATE_OK;
+		if(cpu_tlbstate[cpu].active_mm != next)
+			BUG();
+		if(old_state == TLBSTATE_OLD)
 			local_flush_tlb();
 	}
-	cpu_tlbbad[cpu] = 0;
+
 #endif
-	set_bit(cpu, &next->cpu_vm_mask);
 }
 
 #define activate_mm(prev, next) \

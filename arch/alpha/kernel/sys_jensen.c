@@ -111,10 +111,19 @@ jensen_init_irq(void)
 }
 
 static void
+jensen_init_arch(void)
+{
+	__direct_map_base = 0;
+	__direct_map_size = 0xffffffff;
+}
+
+static void
 jensen_machine_check (u64 vector, u64 la, struct pt_regs *regs)
 {
 	printk(KERN_CRIT "Machine check\n");
 }
+
+#define jensen_pci_tbi	((void*)0)
 
 
 /*
@@ -136,7 +145,7 @@ struct alpha_machine_vector jensen_mv __initmv = {
 	ack_irq:		common_ack_irq,
 	device_interrupt:	jensen_device_interrupt,
 
-	init_arch:		NULL,
+	init_arch:		jensen_init_arch,
 	init_irq:		jensen_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		NULL,

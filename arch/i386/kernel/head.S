@@ -212,17 +212,6 @@ is386:	pushl %ecx		# restore original EFLAGS
 	orl $2,%eax		# set MP
 2:	movl %eax,%cr0
 	call check_x87
-#ifdef __SMP__
-	movb ready,%al		# First CPU if 0
-	orb %al,%al
-	jz 4f			# First CPU skip this stuff
-	movl %cr4,%eax		# Turn on 4Mb pages
-	orl $16,%eax
-	movl %eax,%cr4
-	movl %cr3,%eax		# Intel specification clarification says
-	movl %eax,%cr3		# to do this. Maybe it makes a difference.
-				# Who knows ?
-#endif
 4:
 #ifdef __SMP__
 	incb ready

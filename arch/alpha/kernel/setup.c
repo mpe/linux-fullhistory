@@ -96,6 +96,13 @@ struct screen_info screen_info = {
 	orig_video_points: 16
 };
 
+/*
+ * The direct map I/O window, if any.  This should be the same
+ * for all busses, since it's used by virt_to_bus.
+ */
+
+unsigned long __direct_map_base;
+unsigned long __direct_map_size;
 
 /*
  * Declare all of the machine vectors.
@@ -225,15 +232,8 @@ setup_memory(void)
 			max_low_pfn = end;
 	}
 
-	/* Enforce maximum of 2GB even if there is more.  Blah.  */
-	if (max_low_pfn > PFN_MAX)
-		max_low_pfn = PFN_MAX;
-	printk("max_low_pfn %ld\n", max_low_pfn);
-
 	/* Find the end of the kernel memory.  */
 	start_pfn = PFN_UP(virt_to_phys(_end));
-	printk("_end %p, start_pfn %ld\n", _end, start_pfn);
-
 	bootmap_start = -1;
 
  try_again:
@@ -243,7 +243,6 @@ setup_memory(void)
 	/* We need to know how many physically contigous pages
 	   we'll need for the bootmap.  */
 	bootmap_pages = bootmem_bootmap_pages(max_low_pfn);
-	printk("bootmap size: %ld pages\n", bootmap_pages);
 
 	/* Now find a good region where to allocate the bootmap.  */
 	for_each_mem_cluster(memdesc, cluster, i) {
@@ -261,8 +260,6 @@ setup_memory(void)
 		if (end > max_low_pfn)
 			end = max_low_pfn;
 		if (end - start >= bootmap_pages) {
-			printk("allocating bootmap in area %ld:%ld\n",
-			       start, start+bootmap_pages);
 			bootmap_start = start;
 			break;
 		}
@@ -270,8 +267,6 @@ setup_memory(void)
 
 	if (bootmap_start == -1) {
 		max_low_pfn >>= 1;
-		printk("bootmap area not found now trying with %ld pages\n",
-		       max_low_pfn);
 		goto try_again;
 	}
 
@@ -304,8 +299,6 @@ setup_memory(void)
 
 	/* Reserve the bootmap memory.  */
 	reserve_bootmem(PFN_PHYS(bootmap_start), bootmap_size);
-	printk("reserving bootmap %ld:%ld\n", bootmap_start,
-	       bootmap_start + PFN_UP(bootmap_size));
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	initrd_start = INITRD_START;
@@ -328,27 +321,26 @@ setup_memory(void)
 #endif /* CONFIG_BLK_DEV_INITRD */
 }
 
-int __init page_is_ram(unsigned long pfn)
+int __init
+page_is_ram(unsigned long pfn)
 {
 	struct memclust_struct * cluster;
 	struct memdesc_struct * memdesc;
 	int i;
 
-	memdesc = (struct memdesc_struct *) (hwrpb->mddt_offset + (unsigned long) hwrpb);
+	memdesc = (struct memdesc_struct *)
+		(hwrpb->mddt_offset + (unsigned long) hwrpb);
 	for_each_mem_cluster(memdesc, cluster, i)
 	{
 		if (pfn >= cluster->start_pfn  &&
-		    pfn < cluster->start_pfn + cluster->numpages)
-		{
-			if (cluster->usage & 3)
-				return 0;
-			else
-				return 1;
+		    pfn < cluster->start_pfn + cluster->numpages) {
+			return (cluster->usage & 3) ? 0 : 1;
 		}
 	}
 
 	return 0;
 }
+
 #undef PFN_UP
 #undef PFN_DOWN
 #undef PFN_PHYS
@@ -369,8 +361,7 @@ setup_arch(char **cmdline_p)
 
 	/* Hack for Jensen... since we're restricted to 8 or 16 chars for
 	   boot flags depending on the boot mode, we need some shorthand.
-	   This should do for installation.  Later we'll add other
-	   abbreviations as well... */
+	   This should do for installation.  */
 	if (strcmp(COMMAND_LINE, "INSTALL") == 0) {
 		strcpy(command_line, "root=/dev/fd0 load_ramdisk=1");
 	} else {

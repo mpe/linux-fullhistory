@@ -55,10 +55,6 @@
  * ugh).
  */
 
-#define LCA_DMA_WIN_BASE	(1UL*1024*1024*1024)
-#define LCA_DMA_WIN_SIZE	(1UL*1024*1024*1024)
-
-
 /*
  * Memory Controller registers:
  */
@@ -207,29 +203,6 @@ union el_lca {
 #define __EXTERN_INLINE extern inline
 #define __IO_EXTERN_INLINE
 #endif
-
-/*
- * Translate physical memory address as seen on (PCI) bus into
- * a kernel virtual address and vv.
- */
-
-__EXTERN_INLINE unsigned long lca_virt_to_bus(void * address)
-{
-	return virt_to_phys(address) + LCA_DMA_WIN_BASE;
-}
-
-__EXTERN_INLINE void * lca_bus_to_virt(unsigned long address)
-{
-	/*
-	 * This check is a sanity check but also ensures that bus
-	 * address 0 maps to virtual address 0 which is useful to
-	 * detect null "pointers" (the NCR driver is much simpler if
-	 * NULL pointers are preserved).
-	 */
-	if (address < LCA_DMA_WIN_BASE)
-		return 0;
-	return phys_to_virt(address - LCA_DMA_WIN_BASE);
-}
 
 /*
  * I/O functions:
@@ -387,8 +360,6 @@ __EXTERN_INLINE int lca_is_ioaddr(unsigned long addr)
 
 #ifdef __WANT_IO_DEF
 
-#define virt_to_bus	lca_virt_to_bus
-#define bus_to_virt	lca_bus_to_virt
 #define __inb		lca_inb
 #define __inw		lca_inw
 #define __inl		lca_inl

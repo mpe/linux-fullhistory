@@ -9,6 +9,8 @@
  *  <drew@colorado.edu>
  *
  *  Jiffies wrap fixes (host->resetting), 3 Dec 1998 Andrea Arcangeli
+ *  Added QLOGIC QLA1280 SCSI controller kernel host support. 
+ *     August 4, 1999 Fred Lewis, Intel DuPont
  */
 
 
@@ -189,6 +191,10 @@
 
 #ifdef CONFIG_SCSI_QLOGIC_FC
 #include "qlogicfc.h"
+#endif
+
+#ifdef CONFIG_SCSI_QLOGIC_1280
+#include "qla1280.h"
 #endif
 
 #ifdef CONFIG_SCSI_SEAGATE
@@ -527,6 +533,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_QLOGIC_FC
     QLOGICFC,
+#endif
+#ifdef CONFIG_SCSI_QLOGIC_1280
+    QLA1280_LINUX_TEMPLATE, 
 #endif
 #ifdef CONFIG_SCSI_PAS16
     MV_PAS16,

@@ -197,6 +197,12 @@ polaris_init_arch(void)
 	hose->mem_space = &iomem_resource;
 	hose->config_space = POLARIS_DENSE_CONFIG_BASE;
 	hose->index = 0;
+
+	hose->sg_isa = hose->sg_pci = NULL;
+
+	/* The I/O window is fixed at 2G @ 2G.  */
+	__direct_map_base = 0x80000000;
+	__direct_map_size = 0x80000000;
 }
 
 static inline void

@@ -142,7 +142,7 @@ static int do_mlock(unsigned long start, size_t len, int on)
 
 	if (on && !capable(CAP_IPC_LOCK))
 		return -EPERM;
-	len = (len + ~PAGE_MASK) & PAGE_MASK;
+	len = PAGE_ALIGN(len);
 	end = start + len;
 	if (end < start)
 		return -EINVAL;
@@ -191,7 +191,7 @@ asmlinkage long sys_mlock(unsigned long start, size_t len)
 	int error = -ENOMEM;
 
 	down(&current->mm->mmap_sem);
-	len = (len + (start & ~PAGE_MASK) + ~PAGE_MASK) & PAGE_MASK;
+	len = PAGE_ALIGN(len + (start & ~PAGE_MASK));
 	start &= PAGE_MASK;
 
 	locked = len >> PAGE_SHIFT;
@@ -220,7 +220,7 @@ asmlinkage long sys_munlock(unsigned long start, size_t len)
 	int ret;
 
 	down(&current->mm->mmap_sem);
-	len = (len + (start & ~PAGE_MASK) + ~PAGE_MASK) & PAGE_MASK;
+	len = PAGE_ALIGN(len + (start & ~PAGE_MASK));
 	start &= PAGE_MASK;
 	ret = do_mlock(start, len, 0);
 	up(&current->mm->mmap_sem);

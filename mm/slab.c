@@ -110,7 +110,7 @@
 /* If there is a different PAGE_SIZE around, and it works with this allocator,
  * then change the following.
  */
-#if	(PAGE_SIZE != 8192 && PAGE_SIZE != 4096 && PAGE_SIZE != 32768)
+#if	(PAGE_SIZE != 8192 && PAGE_SIZE != 4096 && PAGE_SIZE != 16384 && PAGE_SIZE != 32768)
 #error	Your page size is probably not correctly supported - please check
 #endif
 

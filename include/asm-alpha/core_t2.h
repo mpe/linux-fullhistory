@@ -21,9 +21,6 @@
 
 #define T2_MEM_R1_MASK 0x03ffffff  /* Mem sparse region 1 mask is 26 bits */
 
-#define T2_DMA_WIN_BASE		(1UL*1024*1024*1024)
-#define T2_DMA_WIN_SIZE		(1UL*1024*1024*1024)
-
 /* GAMMA-SABLE is a SABLE with EV5-based CPUs */
 #define _GAMMA_BIAS		0x8000000000UL
 
@@ -322,21 +319,6 @@ struct el_t2_frame_corrected {
 #endif
 
 /*
- * Translate physical memory address as seen on (PCI) bus into
- * a kernel virtual address and vv.
- */
-
-__EXTERN_INLINE unsigned long t2_virt_to_bus(void * address)
-{
-	return virt_to_phys(address) + T2_DMA_WIN_BASE;
-}
-
-__EXTERN_INLINE void * t2_bus_to_virt(unsigned long address)
-{
-	return phys_to_virt(address - T2_DMA_WIN_BASE);
-}
-
-/*
  * I/O functions:
  *
  * T2 (the core logic PCI/memory support chipset for the SABLE
@@ -534,8 +516,6 @@ __EXTERN_INLINE int t2_is_ioaddr(unsigned long addr)
 
 #ifdef __WANT_IO_DEF
 
-#define virt_to_bus	t2_virt_to_bus
-#define bus_to_virt	t2_bus_to_virt
 #define __inb		t2_inb
 #define __inw		t2_inw
 #define __inl		t2_inl

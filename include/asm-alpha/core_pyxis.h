@@ -71,20 +71,6 @@
 #define PYXIS_MEM_R2_MASK 0x07ffffff  /* SPARSE Mem region 2 mask is 27 bits */
 #define PYXIS_MEM_R3_MASK 0x03ffffff  /* SPARSE Mem region 3 mask is 26 bits */
 
-#define PYXIS_DMA_WIN_BASE		(1UL*1024*1024*1024)
-#define PYXIS_DMA_WIN_SIZE		(2UL*1024*1024*1024)
-
-/* Window 0 at 1GB size 1GB mapping 0 */
-#define PYXIS_DMA_WIN0_BASE_DEFAULT	(1UL*1024*1024*1024)
-#define PYXIS_DMA_WIN0_SIZE_DEFAULT	(1UL*1024*1024*1024)
-#define PYXIS_DMA_WIN0_TRAN_DEFAULT	(0UL)
-
-/* Window 0 at 2GB size 1GB mapping 1GB */
-#define PYXIS_DMA_WIN1_BASE_DEFAULT	(2UL*1024*1024*1024)
-#define PYXIS_DMA_WIN1_SIZE_DEFAULT	(1UL*1024*1024*1024)
-#define PYXIS_DMA_WIN1_TRAN_DEFAULT	(1UL*1024*1024*1024)
-
-
 /*
  *  General Registers
  */
@@ -272,22 +258,6 @@ struct el_PYXIS_sysdata_mcheck {
 #endif
 
 /*
- * Translate physical memory address as seen on (PCI) bus into
- * a kernel virtual address and vv.
- */
-
-__EXTERN_INLINE unsigned long pyxis_virt_to_bus(void * address)
-{
-	return virt_to_phys(address) + PYXIS_DMA_WIN_BASE;
-}
-
-__EXTERN_INLINE void * pyxis_bus_to_virt(unsigned long address)
-{
-	return phys_to_virt(address - PYXIS_DMA_WIN_BASE);
-}
-
-
-/*
  * I/O functions:
  *
  * PYXIS, the 21174 PCI/memory support chipset for the EV56 (21164A)
@@ -429,9 +399,6 @@ __EXTERN_INLINE int pyxis_is_ioaddr(unsigned long addr)
 #undef vulp
 
 #ifdef __WANT_IO_DEF
-
-#define virt_to_bus	pyxis_virt_to_bus
-#define bus_to_virt	pyxis_bus_to_virt
 
 #define __inb		pyxis_inb
 #define __inw		pyxis_inw

@@ -314,12 +314,20 @@ struct pci_ops cia_pci_ops =
 	write_dword:	cia_write_config_dword
 };
 
+void
+cia_pci_tbi(struct pci_controler *hose, dma_addr_t start, dma_addr_t end)
+{
+	wmb();
+	*(vip)CIA_IOC_PCI_TBIA = 3;	/* Flush all locked and unlocked.  */
+	mb();
+}
+
 void __init
 cia_init_arch(void)
 {
 	struct pci_controler *hose;
 	struct resource *hae_mem;
-        unsigned int temp;
+	unsigned int temp;
 
 #if DEBUG_DUMP_REGS
 	temp = *(vuip)CIA_IOC_CIA_REV; mb();
@@ -368,63 +376,11 @@ cia_init_arch(void)
 	printk("cia_init: W3_BASE was 0x%x\n", temp);
 #endif /* DEBUG_DUMP_REGS */
 
-        /* 
-	 * Set up error reporting.
-	 */
-	temp = *(vuip)CIA_IOC_CIA_ERR;
-	temp |= 0x180;   /* master, target abort */
-	*(vuip)CIA_IOC_CIA_ERR = temp;
-	mb();
-
-	temp = *(vuip)CIA_IOC_CIA_CTRL;
-	temp |= 0x400;	/* turn on FILL_ERR to get mchecks */
-	*(vuip)CIA_IOC_CIA_CTRL = temp;
-	mb();
-
-	/*
-	 * Set up the PCI->physical memory translation windows.
-	 * For now, windows 2 and 3 are disabled.  In the future,
-	 * we may want to use them to do scatter/gather DMA. 
-	 *
-	 * Window 0 goes at 1 GB and is 1 GB large.
-	 * Window 1 goes at 2 GB and is 1 GB large.
-	 */
-
-	*(vuip)CIA_IOC_PCI_W0_BASE = CIA_DMA_WIN0_BASE_DEFAULT | 1U;
-	*(vuip)CIA_IOC_PCI_W0_MASK = (CIA_DMA_WIN0_SIZE_DEFAULT - 1) &
-				     0xfff00000U;
-	*(vuip)CIA_IOC_PCI_T0_BASE = CIA_DMA_WIN0_TRAN_DEFAULT >> 2;
-		
-	*(vuip)CIA_IOC_PCI_W1_BASE = CIA_DMA_WIN1_BASE_DEFAULT | 1U;
-	*(vuip)CIA_IOC_PCI_W1_MASK = (CIA_DMA_WIN1_SIZE_DEFAULT - 1) &
-				     0xfff00000U;
-	*(vuip)CIA_IOC_PCI_T1_BASE = CIA_DMA_WIN1_TRAN_DEFAULT >> 2;
-
-	*(vuip)CIA_IOC_PCI_W2_BASE = 0x0;
-	*(vuip)CIA_IOC_PCI_W3_BASE = 0x0;
-	mb();
-
-        /*
-         * Next, clear the CIA_CFG register, which gets used
-         * for PCI Config Space accesses. That is the way
-         * we want to use it, and we do not want to depend on
-         * what ARC or SRM might have left behind...
-         */
-	*((vuip)CIA_IOC_CFG) = 0; mb();
- 
-	/*
-	 * Zero the HAEs. 
-	 */
-	*((vuip)CIA_IOC_HAE_MEM) = 0; mb();
-	*((vuip)CIA_IOC_HAE_MEM); /* read it back. */
-	*((vuip)CIA_IOC_HAE_IO) = 0; mb();
-	*((vuip)CIA_IOC_HAE_IO);  /* read it back. */
-
 	/*
 	 * Create our single hose.
 	 */
 
-	hose = alloc_pci_controler();
+	pci_isa_hose = hose = alloc_pci_controler();
 	hae_mem = alloc_resource();
 
 	hose->io_space = &ioport_resource;
@@ -439,6 +395,64 @@ cia_init_arch(void)
 
 	if (request_resource(&iomem_resource, hae_mem) < 0)
 		printk(KERN_ERR "Failed to request HAE_MEM\n");
+
+	/*
+	 * Set up the PCI to main memory translation windows.
+	 *
+	 * Window 0 is scatter-gather 8MB at 8MB (for isa)
+	 * Window 1 is scatter-gather 128MB at 1GB
+	 * Window 2 is direct access 2GB at 2GB
+	 * ??? We ought to scale window 1 with memory.
+	 */
+
+	/* NetBSD hints that page tables must be aligned to 32K due
+	   to a hardware bug.  No description of what models affected.  */
+	hose->sg_isa = iommu_arena_new(0x00800000, 0x00800000, 32768);
+	hose->sg_pci = iommu_arena_new(0x40000000, 0x08000000, 32768);
+	__direct_map_base = 0x80000000;
+	__direct_map_size = 0x80000000;
+
+	*(vuip)CIA_IOC_PCI_W0_BASE = hose->sg_isa->dma_base | 3;
+	*(vuip)CIA_IOC_PCI_W0_MASK = (hose->sg_isa->size - 1) & 0xfff00000;
+	*(vuip)CIA_IOC_PCI_T0_BASE = virt_to_phys(hose->sg_isa->ptes) >> 2;
+
+	*(vuip)CIA_IOC_PCI_W1_BASE = hose->sg_pci->dma_base | 3;
+	*(vuip)CIA_IOC_PCI_W1_MASK = (hose->sg_pci->size - 1) & 0xfff00000;
+	*(vuip)CIA_IOC_PCI_T1_BASE = virt_to_phys(hose->sg_pci->ptes) >> 2;
+
+	*(vuip)CIA_IOC_PCI_W2_BASE = __direct_map_base | 1;
+	*(vuip)CIA_IOC_PCI_W2_MASK = (__direct_map_size - 1) & 0xfff00000;
+	*(vuip)CIA_IOC_PCI_T2_BASE = 0;
+
+	*(vuip)CIA_IOC_PCI_W3_BASE = 0;
+
+	cia_pci_tbi(hose, 0, -1);
+
+	/* 
+	 * Set up error reporting.
+	 */
+	temp = *(vuip)CIA_IOC_CIA_ERR;
+	temp |= 0x180;   /* master, target abort */
+	*(vuip)CIA_IOC_CIA_ERR = temp;
+
+	temp = *(vuip)CIA_IOC_CIA_CTRL;
+	temp |= 0x400;	/* turn on FILL_ERR to get mchecks */
+	*(vuip)CIA_IOC_CIA_CTRL = temp;
+
+	/*
+	 * Next, clear the CIA_CFG register, which gets used
+	 * for PCI Config Space accesses. That is the way
+	 * we want to use it, and we do not want to depend on
+	 * what ARC or SRM might have left behind...
+	 */
+	*(vuip)CIA_IOC_CFG = 0;
+ 
+	/*
+	 * Zero the HAEs. 
+	 */
+	*(vuip)CIA_IOC_HAE_MEM = 0;
+	*(vuip)CIA_IOC_HAE_IO = 0;
+	mb();
 }
 
 static inline void
@@ -456,6 +470,8 @@ void
 cia_machine_check(unsigned long vector, unsigned long la_ptr,
 		  struct pt_regs * regs)
 {
+	int expected;
+
 	/* Clear the error before any reporting.  */
 	mb();
 	mb();  /* magic */
@@ -464,5 +480,23 @@ cia_machine_check(unsigned long vector, unsigned long la_ptr,
 	wrmces(rdmces());	/* reset machine check pending flag.  */
 	mb();
 
-	process_mcheck_info(vector, la_ptr, regs, "CIA", mcheck_expected(0));
+	expected = mcheck_expected(0);
+	if (!expected && vector == 0x660) {
+		struct el_common *com;
+		struct el_common_EV5_uncorrectable_mcheck *ev5;
+		struct el_CIA_sysdata_mcheck *cia;
+
+		com = (void *)la_ptr;
+		ev5 = (void *)(la_ptr + com->proc_offset);
+		cia = (void *)(la_ptr + com->sys_offset);
+
+		if (com->code == 0x202) {
+			printk(KERN_CRIT "CIA PCI machine check: err0=%08x "
+			       "err1=%08x err2=%08x\n",
+			       (int) cia->pci_err0, (int) cia->pci_err1,
+			       (int) cia->pci_err2);
+			expected = 1;
+		}
+	}
+	process_mcheck_info(vector, la_ptr, regs, "CIA", expected);
 }

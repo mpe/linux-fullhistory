@@ -192,20 +192,6 @@ atomic_t global_irq_count;
 atomic_t global_bh_count;
 atomic_t global_bh_lock;
 
-/*
- * "global_cli()" is a special case, in that it can hold the
- * interrupts disabled for a longish time, and also because
- * we may be doing TLB invalidates when holding the global
- * IRQ lock for historical reasons. Thus we may need to check
- * SMP invalidate events specially by hand here (but not in
- * any normal spinlocks)
- */
-static inline void check_smp_invalidate(int cpu)
-{
-	if (test_bit(cpu, &smp_invalidate_needed))
-		do_flush_tlb_local();
-}
-
 static void show(char * str)
 {
 	int i;
@@ -294,7 +280,6 @@ static inline void wait_on_irq(int cpu)
 			__sti();
 			SYNC_OTHER_CORES(cpu);
 			__cli();
-			check_smp_invalidate(cpu);
 			if (atomic_read(&global_irq_count))
 				continue;
 			if (global_irq_lock)
@@ -346,7 +331,6 @@ static inline void get_irqlock(int cpu)
 		/* Uhhuh.. Somebody else got it. Wait.. */
 		do {
 			do {
-				check_smp_invalidate(cpu);
 			} while (test_bit(0,&global_irq_lock));
 		} while (test_and_set_bit(0,&global_irq_lock));		
 	}

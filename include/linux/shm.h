@@ -2,6 +2,7 @@
 #define _LINUX_SHM_H_
 
 #include <linux/ipc.h>
+#include <linux/mm.h>
 
 /*
  * SHMMAX, SHMMNI and SHMALL are upper limits are defaults which can

@@ -278,23 +278,51 @@ struct pci_ops lca_pci_ops =
 	write_dword:	lca_write_config_dword
 };
 
+void
+lca_pci_tbi(struct pci_controler *hose, dma_addr_t start, dma_addr_t end)
+{
+	wmb();
+	*(vip)LCA_IOC_TBIA = 0;
+	mb();
+}
+
 void __init
 lca_init_arch(void)
 {
 	struct pci_controler *hose;
 
 	/*
-	 * Set up the PCI->physical memory translation windows.
-	 * For now, window 1 is disabled.  In the future, we may
-	 * want to use it to do scatter/gather DMA. 
-	 *
-	 * Window 0 goes at 1 GB and is 1 GB large.
+	 * Create our single hose.
 	 */
-	*(vulp)LCA_IOC_W_BASE0 = 1UL << 33 | LCA_DMA_WIN_BASE;
-	*(vulp)LCA_IOC_W_MASK0 = LCA_DMA_WIN_SIZE - 1;
+
+	pci_isa_hose = hose = alloc_pci_controler();
+	hose->io_space = &ioport_resource;
+	hose->mem_space = &iomem_resource;
+	hose->config_space = LCA_CONF;
+	hose->index = 0;
+
+	/*
+	 * Set up the PCI to main memory translation windows.
+	 *
+	 * Window 0 is direct access 1GB at 1GB
+	 * Window 1 is scatter-gather 8MB at 8MB (for isa)
+	 */
+	hose->sg_isa = iommu_arena_new(0x00800000, 0x00800000, PAGE_SIZE);
+	hose->sg_pci = NULL;
+	__direct_map_base = 0x40000000;
+	__direct_map_size = 0x40000000;
+
+	*(vulp)LCA_IOC_W_BASE0 = __direct_map_base | (2UL << 32);
+	*(vulp)LCA_IOC_W_MASK0 = (__direct_map_size - 1) & 0xfff00000;
 	*(vulp)LCA_IOC_T_BASE0 = 0;
 
-	*(vulp)LCA_IOC_W_BASE1 = 0UL;
+	*(vulp)LCA_IOC_W_BASE1 = hose->sg_isa->dma_base | (3UL << 32);
+	*(vulp)LCA_IOC_W_MASK1 = (hose->sg_isa->size - 1) & 0xfff00000;
+	*(vulp)LCA_IOC_T_BASE1 = virt_to_phys(hose->sg_isa->ptes);
+
+	*(vulp)LCA_IOC_TB_ENA = 0x80;
+
+	lca_pci_tbi(hose, 0, -1);
 
 	/*
 	 * Disable PCI parity for now.  The NCR53c810 chip has
@@ -302,16 +330,6 @@ lca_init_arch(void)
 	 * data parity errors.
 	 */
 	*(vulp)LCA_IOC_PAR_DIS = 1UL<<5;
-
-	/*
-	 * Create our single hose.
-	 */
-
-	hose = alloc_pci_controler();
-	hose->io_space = &ioport_resource;
-	hose->mem_space = &iomem_resource;
-	hose->config_space = LCA_CONF;
-	hose->index = 0;
 }
 
 /*

@@ -149,6 +149,9 @@ EXPORT_SYMBOL(__strnlen_user);
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);
 EXPORT_SYMBOL_NOVERS(__up_wakeup);
+EXPORT_SYMBOL_NOVERS(__down_read_failed);
+EXPORT_SYMBOL_NOVERS(__down_write_failed);
+EXPORT_SYMBOL_NOVERS(__rwsem_wake);
 
 /* 
  * SMP-specific symbols.
@@ -161,7 +164,7 @@ EXPORT_SYMBOL(flush_tlb_mm);
 EXPORT_SYMBOL(flush_tlb_page);
 EXPORT_SYMBOL(flush_tlb_range);
 EXPORT_SYMBOL(cpu_data);
-EXPORT_SYMBOL(cpu_number_map);
+EXPORT_SYMBOL(__cpu_number_map);
 EXPORT_SYMBOL(global_bh_lock);
 EXPORT_SYMBOL(global_bh_count);
 EXPORT_SYMBOL(synchronize_bh);

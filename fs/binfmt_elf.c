@@ -405,7 +405,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	int elf_exec_fileno;
 	int retval, size, i;
 	unsigned long elf_entry, interp_load_addr = 0;
-	unsigned long start_code, end_code, end_data;
+	unsigned long start_code, end_code, start_data, end_data;
 	struct elfhdr elf_ex;
 	struct elfhdr interp_elf_ex;
   	struct exec interp_ex;
@@ -462,6 +462,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 	start_code = ~0UL;
 	end_code = 0;
+	start_data = 0;
 	end_data = 0;
 
 	for (i = 0; i < elf_ex.e_phnum; i++) {
@@ -578,6 +579,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		goto out_free_dentry;
 
 	/* OK, This is the point of no return */
+	current->mm->start_data = 0;
 	current->mm->end_data = 0;
 	current->mm->end_code = 0;
 	current->mm->mmap = NULL;
@@ -642,7 +644,10 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		}
 		k = elf_ppnt->p_vaddr;
 		if (k < start_code) start_code = k;
+		if (start_data < k) start_data = k;
+
 		k = elf_ppnt->p_vaddr + elf_ppnt->p_filesz;
+
 		if (k > elf_bss)
 			elf_bss = k;
 		if ((elf_ppnt->p_flags & PF_X) && end_code <  k)
@@ -661,6 +666,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	elf_brk += load_bias;
 	start_code += load_bias;
 	end_code += load_bias;
+	start_data += load_bias;
 	end_data += load_bias;
 
 	if (elf_interpreter) {
@@ -718,6 +724,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	current->mm->start_brk = current->mm->brk = elf_brk;
 	current->mm->end_code = end_code;
 	current->mm->start_code = start_code;
+	current->mm->start_data = start_data;
 	current->mm->end_data = end_data;
 	current->mm->start_stack = bprm->p;
 
@@ -732,6 +739,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	printk("(start_brk) %lx\n" , (long) current->mm->start_brk);
 	printk("(end_code) %lx\n" , (long) current->mm->end_code);
 	printk("(start_code) %lx\n" , (long) current->mm->start_code);
+	printk("(start_data) %lx\n" , (long) current->mm->start_data);
 	printk("(end_data) %lx\n" , (long) current->mm->end_data);
 	printk("(start_stack) %lx\n" , (long) current->mm->start_stack);
 	printk("(brk) %lx\n" , (long) current->mm->brk);

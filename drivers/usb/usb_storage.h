@@ -72,7 +72,7 @@ struct bulk_cs_wrap {
 	__u8	Filler[18];
 };
 
-#define US_BULK_CS_WRAP_LEN	31
+#define US_BULK_CS_WRAP_LEN	13
 #define US_BULK_CS_SIGN		0x53425355
 #define US_BULK_STAT_OK		0
 #define US_BULK_STAT_FAIL	1

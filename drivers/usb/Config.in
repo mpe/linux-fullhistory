@@ -26,6 +26,7 @@ comment 'USB Devices'
       bool '    USB Handspring Visor Driver' CONFIG_USB_SERIAL_VISOR
       bool '    USB ConnectTech WhiteHEAT Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_WHITEHEAT
       bool '    USB FTDI Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_FTDI
+      bool '    USB Keyspan PDA Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_KEYSPAN_PDA
       bool '    USB Belkin Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_BELKIN
       bool '    USB Peracom Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_PERACOM
    fi

@@ -98,4 +98,11 @@ extern inline int ipc_checkid(struct ipc_ids* ids, struct kern_ipc_perm* ipcp, i
 
 void kernel_to_ipc64_perm(struct kern_ipc_perm *in, struct ipc64_perm *out);
 void ipc64_perm_to_ipc_perm(struct ipc64_perm *in, struct ipc_perm *out);
+
+#if BITS_PER_LONG < 64
 int ipc_parse_version (int *cmd);
+#else
+
+#define ipc_parse_version(cmd)	IPC_64
+
+#endif

@@ -114,9 +114,9 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 		goto out;
 	}
 
-	/* Check against rlimit and stack.. */
+	/* Check against rlimit.. */
 	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
-	if (rlim < RLIM_INFINITY && brk - mm->end_code > rlim)
+	if (rlim < RLIM_INFINITY && brk - mm->start_data > rlim)
 		goto out;
 
 	/* Check against existing mmap mappings. */

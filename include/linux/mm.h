@@ -394,7 +394,7 @@ extern int pgt_cache_water[2];
 extern int check_pgt_cache(void);
 
 extern void paging_init(void);
-extern void free_area_init(unsigned int * zones_size);
+extern void free_area_init(unsigned long * zones_size);
 extern void free_area_init_node(int nid, pg_data_t *pgdat, 
 		unsigned int * zones_size, unsigned long zone_start_paddr);
 extern void mem_init(void);
@@ -501,6 +501,8 @@ static inline int expand_stack(struct vm_area_struct * vma, unsigned long addres
 
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
 extern struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned long addr);
+extern struct vm_area_struct * find_vma_prev(struct mm_struct * mm, unsigned long addr,
+					     struct vm_area_struct **pprev);
 
 /* Look up the first VMA which intersects the interval start_addr..end_addr-1,
    NULL if none.  Assume start_addr < end_addr. */

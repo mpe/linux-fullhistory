@@ -5,6 +5,10 @@
 
 #ifndef __ASSEMBLY__
 
+static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
+{
+}
+
 /*
  * Initialize a new mmu context.  This is invoked when a new
  * address space instance (unique or shared) is instantiated.

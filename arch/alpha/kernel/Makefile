@@ -26,11 +26,11 @@ O_OBJS	 += core_apecs.o core_cia.o core_irongate.o core_lca.o core_mcpcia.o \
 	    sys_jensen.o sys_miata.o sys_mikasa.o sys_nautilus.o \
 	    sys_noritake.o sys_rawhide.o sys_ruffian.o sys_rx164.o \
 	    sys_sable.o sys_sio.o sys_sx164.o sys_takara.o sys_rx164.o \
-	    es1888.o smc37c669.o smc37c93x.o ns87312.o pci.o
+	    es1888.o smc37c669.o smc37c93x.o ns87312.o pci.o pci_iommu.o
 else
 
 ifdef CONFIG_PCI
-O_OBJS   += pci.o
+O_OBJS   += pci.o pci_iommu.o
 endif
 
 # Core logic support

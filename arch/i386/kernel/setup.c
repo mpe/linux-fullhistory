@@ -75,7 +75,7 @@
 #include <asm/e820.h>
 #include <asm/dma.h>
 #include <asm/mpspec.h>
-
+#include <asm/mmu_context.h>
 /*
  * Machine setup..
  */
@@ -1543,6 +1543,10 @@ void cpu_init (void)
 	 */
 	atomic_inc(&init_mm.mm_count);
 	current->active_mm = &init_mm;
+	if(current->mm)
+		BUG();
+	enter_lazy_tlb(&init_mm, current, nr);
+
 	t->esp0 = current->thread.esp0;
 	set_tss_desc(nr,t);
 	gdt_table[__TSS(nr)].b &= 0xfffffdff;

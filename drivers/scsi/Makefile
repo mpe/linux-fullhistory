@@ -322,6 +322,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_QLOGIC_1280),y)
+L_OBJS += qla1280.o 
+else
+  ifeq ($(CONFIG_SCSI_QLOGIC_1280),m)
+  M_OBJS += qla1280.o 
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_ACARD),y)
 L_OBJS += atp870u.o
 else

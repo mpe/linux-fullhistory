@@ -116,6 +116,7 @@
  *    28.10.1999   0.31  More waitqueue races fixed
  *    08.01.2000   0.32  Prevent some ioctl's from returning bad count values on underrun/overrun;
  *                       Tim Janik's BSE (Bedevilled Sound Engine) found this
+ *    07.02.2000   0.33  Use pci_alloc_consistent and pci_register_driver
  *
  * some important things missing in Ensoniq documentation:
  *
@@ -307,8 +308,11 @@ struct es1370_state {
 	/* magic */
 	unsigned int magic;
 
-	/* we keep sb cards in a linked list */
-	struct es1370_state *next;
+	/* list of es1370 devices */
+	struct list_head devs;
+
+	/* the corresponding pci_dev structure */
+	struct pci_dev *dev;
 
 	/* soundcore stuff */
 	int dev_audio;
@@ -340,6 +344,7 @@ struct es1370_state {
 
 	struct dmabuf {
 		void *rawbuf;
+		dma_addr_t dmaaddr;
 		unsigned buforder;
 		unsigned numfrag;
 		unsigned fragshift;
@@ -374,7 +379,7 @@ struct es1370_state {
 
 /* --------------------------------------------------------------------- */
 
-static struct es1370_state *devs = NULL;
+static LIST_HEAD(devs);
 
 /*
  * The following buffer is used to point the phantom write channel to,
@@ -532,7 +537,7 @@ static void start_adc(struct es1370_state *s)
 #define DMABUF_DEFAULTORDER (17-PAGE_SHIFT)
 #define DMABUF_MINORDER 1
 
-extern inline void dealloc_dmabuf(struct dmabuf *db)
+extern inline void dealloc_dmabuf(struct es1370_state *s, struct dmabuf *db)
 {
 	unsigned long map, mapend;
 
@@ -541,7 +546,7 @@ extern inline void dealloc_dmabuf(struct dmabuf *db)
 		mapend = MAP_NR(db->rawbuf + (PAGE_SIZE << db->buforder) - 1);
 		for (map = MAP_NR(db->rawbuf); map <= mapend; map++)
 			clear_bit(PG_reserved, &mem_map[map].flags);	
-		free_pages((unsigned long)db->rawbuf, db->buforder);
+		pci_free_consistent(s->dev, PAGE_SIZE << db->buforder, db->rawbuf, db->dmaaddr);
 	}
 	db->rawbuf = NULL;
 	db->mapped = db->ready = 0;
@@ -558,7 +563,7 @@ static int prog_dmabuf(struct es1370_state *s, struct dmabuf *db, unsigned rate,
 	if (!db->rawbuf) {
 		db->ready = db->mapped = 0;
 		for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER; order--)
-			if ((db->rawbuf = (void *)__get_free_pages(GFP_KERNEL, order)))
+			if ((db->rawbuf = pci_alloc_consistent(s->dev, PAGE_SIZE << order, &db->dmaaddr)))
 				break;
 		if (!db->rawbuf)
 			return -ENOMEM;
@@ -593,7 +598,7 @@ static int prog_dmabuf(struct es1370_state *s, struct dmabuf *db, unsigned rate,
 	db->dmasize = db->numfrag << db->fragshift;
 	memset(db->rawbuf, (fmt & ES1370_FMT_S16) ? 0 : 0x80, db->dmasize);
 	outl((reg >> 8) & 15, s->io+ES1370_REG_MEMPAGE);
-	outl(virt_to_bus(db->rawbuf), s->io+(reg & 0xff));
+	outl(db->dmaaddr, s->io+(reg & 0xff));
 	outl((db->dmasize >> 2)-1, s->io+((reg + 4) & 0xff));
 	db->ready = 1;
 	return 0;
@@ -1013,12 +1018,16 @@ static loff_t es1370_llseek(struct file *file, loff_t offset, int origin)
 static int es1370_open_mixdev(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
-	struct es1370_state *s = devs;
+	struct list_head *list;
+	struct es1370_state *s;
 
-	while (s && s->dev_mixer != minor)
-		s = s->next;
-	if (!s)
-		return -ENODEV;
+	for (list = devs.next; ; list = list->next) {
+		if (list == &devs)
+			return -ENODEV;
+		s = list_entry(list, struct es1370_state, devs);
+		if (s->dev_mixer == minor)
+			break;
+	}
        	VALIDATE_STATE(s);
 	file->private_data = s;
 	MOD_INC_USE_COUNT;
@@ -1655,13 +1664,17 @@ static int es1370_open(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
 	DECLARE_WAITQUEUE(wait, current);
-	struct es1370_state *s = devs;
 	unsigned long flags;
+	struct list_head *list;
+	struct es1370_state *s;
 
-	while (s && ((s->dev_audio ^ minor) & ~0xf))
-		s = s->next;
-	if (!s)
-		return -ENODEV;
+	for (list = devs.next; ; list = list->next) {
+		if (list == &devs)
+			return -ENODEV;
+		s = list_entry(list, struct es1370_state, devs);
+		if (!((s->dev_audio ^ minor) & ~0xf))
+			break;
+	}
        	VALIDATE_STATE(s);
 	file->private_data = s;
 	/* wait for device to become free */
@@ -1720,11 +1733,11 @@ static int es1370_release(struct inode *inode, struct file *file)
 	if (file->f_mode & FMODE_WRITE) {
 		stop_dac2(s);
 		synchronize_irq();
-		dealloc_dmabuf(&s->dma_dac2);
+		dealloc_dmabuf(s, &s->dma_dac2);
 	}
 	if (file->f_mode & FMODE_READ) {
 		stop_adc(s);
-		dealloc_dmabuf(&s->dma_adc);
+		dealloc_dmabuf(s, &s->dma_adc);
 	}
 	s->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
 	wake_up(&s->open_wait);
@@ -2065,13 +2078,17 @@ static int es1370_open_dac(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
 	DECLARE_WAITQUEUE(wait, current);
-	struct es1370_state *s = devs;
 	unsigned long flags;
+	struct list_head *list;
+	struct es1370_state *s;
 
-	while (s && ((s->dev_dac ^ minor) & ~0xf))
-		s = s->next;
-	if (!s)
-		return -ENODEV;
+	for (list = devs.next; ; list = list->next) {
+		if (list == &devs)
+			return -ENODEV;
+		s = list_entry(list, struct es1370_state, devs);
+		if (!((s->dev_dac ^ minor) & ~0xf))
+			break;
+	}
        	VALIDATE_STATE(s);
        	/* we allow opening with O_RDWR, most programs do it although they will only write */
 #if 0
@@ -2123,7 +2140,7 @@ static int es1370_release_dac(struct inode *inode, struct file *file)
 	drain_dac1(s, file->f_flags & O_NONBLOCK);
 	down(&s->open_sem);
 	stop_dac1(s);
-	dealloc_dmabuf(&s->dma_dac1);
+	dealloc_dmabuf(s, &s->dma_dac1);
 	s->open_mode &= ~FMODE_DAC;
 	wake_up(&s->open_wait);
 	up(&s->open_sem);
@@ -2307,13 +2324,17 @@ static int es1370_midi_open(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
 	DECLARE_WAITQUEUE(wait, current);
-	struct es1370_state *s = devs;
 	unsigned long flags;
+	struct list_head *list;
+	struct es1370_state *s;
 
-	while (s && s->dev_midi != minor)
-		s = s->next;
-	if (!s)
-		return -ENODEV;
+	for (list = devs.next; ; list = list->next) {
+		if (list == &devs)
+			return -ENODEV;
+		s = list_entry(list, struct es1370_state, devs);
+		if (s->dev_midi == minor)
+			break;
+	}
        	VALIDATE_STATE(s);
 	file->private_data = s;
 	/* wait for device to become free */
@@ -2421,12 +2442,14 @@ static /*const*/ struct file_operations es1370_midi_fops = {
 
 /* --------------------------------------------------------------------- */
 
-/* maximum number of devices */
+/* maximum number of devices; only used for command line params */
 #define NR_DEVICE 5
 
 static int joystick[NR_DEVICE] = { 0, };
 static int lineout[NR_DEVICE] = { 0, };
 static int micbias[NR_DEVICE] = { 0, };
+
+static unsigned int devindex = 0;
 
 MODULE_PARM(joystick, "1-" __MODULE_STRING(NR_DEVICE) "i");
 MODULE_PARM_DESC(joystick, "if 1 enables joystick interface (still need separate driver)");
@@ -2460,142 +2483,168 @@ static struct initvol {
 				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
 #define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
 
+static int es1370_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
+{
+	struct es1370_state *s;
+	mm_segment_t fs;
+	int i, val;
+
+	if (!RSRCISIOREGION(pcidev, 0))
+		return -1;
+	if (pcidev->irq == 0) 
+		return -1;
+	if (!(s = kmalloc(sizeof(struct es1370_state), GFP_KERNEL))) {
+		printk(KERN_WARNING "es1370: out of memory\n");
+		return -1;
+	}
+	memset(s, 0, sizeof(struct es1370_state));
+	init_waitqueue_head(&s->dma_adc.wait);
+	init_waitqueue_head(&s->dma_dac1.wait);
+	init_waitqueue_head(&s->dma_dac2.wait);
+	init_waitqueue_head(&s->open_wait);
+	init_waitqueue_head(&s->midi.iwait);
+	init_waitqueue_head(&s->midi.owait);
+	init_MUTEX(&s->open_sem);
+	spin_lock_init(&s->lock);
+	s->magic = ES1370_MAGIC;
+	s->dev = pcidev;
+	s->io = RSRCADDRESS(pcidev, 0);
+	s->irq = pcidev->irq;
+	if (!request_region(s->io, ES1370_EXTENT, "es1370")) {
+		printk(KERN_ERR "es1370: io ports %#lx-%#lx in use\n", s->io, s->io+ES1370_EXTENT-1);
+		goto err_region;
+	}
+	if (request_irq(s->irq, es1370_interrupt, SA_SHIRQ, "es1370", s)) {
+		printk(KERN_ERR "es1370: irq %u in use\n", s->irq);
+		goto err_irq;
+	}
+	pci_enable_device(pcidev);
+	/* initialize codec registers */
+	/* note: setting CTRL_SERR_DIS is reported to break
+	 * mic bias setting (by Kim.Berts@fisub.mail.abb.com) */
+	s->ctrl = CTRL_CDC_EN | (DAC2_SRTODIV(8000) << CTRL_SH_PCLKDIV) | (1 << CTRL_SH_WTSRSEL);
+	if (joystick[devindex]) {
+		if (check_region(0x200, JOY_EXTENT))
+			printk(KERN_ERR "es1370: io port 0x200 in use\n");
+		else
+			s->ctrl |= CTRL_JYSTK_EN;
+	}
+	if (lineout[devindex])
+		s->ctrl |= CTRL_XCTL0;
+	if (micbias[devindex])
+		s->ctrl |= CTRL_XCTL1;
+	s->sctrl = 0;
+	printk(KERN_INFO "es1370: found adapter at io %#lx irq %u\n"
+	       KERN_INFO "es1370: features: joystick %s, line %s, mic impedance %s\n",
+	       s->io, s->irq, (s->ctrl & CTRL_JYSTK_EN) ? "on" : "off",
+	       (s->ctrl & CTRL_XCTL0) ? "out" : "in",
+		       (s->ctrl & CTRL_XCTL1) ? "1" : "0");
+	/* register devices */
+	if ((s->dev_audio = register_sound_dsp(&es1370_audio_fops, -1)) < 0)
+		goto err_dev1;
+	if ((s->dev_mixer = register_sound_mixer(&es1370_mixer_fops, -1)) < 0)
+		goto err_dev2;
+	if ((s->dev_dac = register_sound_dsp(&es1370_dac_fops, -1)) < 0)
+		goto err_dev3;
+	if ((s->dev_midi = register_sound_midi(&es1370_midi_fops, -1)) < 0)
+		goto err_dev4;
+	/* initialize the chips */
+	outl(s->ctrl, s->io+ES1370_REG_CONTROL);
+	outl(s->sctrl, s->io+ES1370_REG_SERIAL_CONTROL);
+	/* point phantom write channel to "bugbuf" */
+	outl((ES1370_REG_PHANTOM_FRAMEADR >> 8) & 15, s->io+ES1370_REG_MEMPAGE);
+	outl(virt_to_bus(bugbuf), s->io+(ES1370_REG_PHANTOM_FRAMEADR & 0xff));
+	outl(0, s->io+(ES1370_REG_PHANTOM_FRAMECNT & 0xff));
+	pci_set_master(pcidev);  /* enable bus mastering */
+	wrcodec(s, 0x16, 3); /* no RST, PD */
+	wrcodec(s, 0x17, 0); /* CODEC ADC and CODEC DAC use {LR,B}CLK2 and run off the LRCLK2 PLL; program DAC_SYNC=0!!  */
+	wrcodec(s, 0x18, 0); /* recording source is mixer */
+	wrcodec(s, 0x19, s->mix.micpreamp = 1); /* turn on MIC preamp */
+	s->mix.imix = 1;
+	fs = get_fs();
+	set_fs(KERNEL_DS);
+	val = SOUND_MASK_LINE|SOUND_MASK_SYNTH|SOUND_MASK_CD;
+	mixer_ioctl(s, SOUND_MIXER_WRITE_RECSRC, (unsigned long)&val);
+	for (i = 0; i < sizeof(initvol)/sizeof(initvol[0]); i++) {
+		val = initvol[i].vol;
+		mixer_ioctl(s, initvol[i].mixch, (unsigned long)&val);
+	}
+	set_fs(fs);
+	/* store it in the driver field */
+	pcidev->driver_data = s;
+	pcidev->dma_mask = 0xffffffff;
+	/* put it into driver list */
+	list_add_tail(&s->devs, &devs);
+	/* increment devindex */
+	if (devindex < NR_DEVICE-1)
+		devindex++;
+	return 0;
+
+ err_dev4:
+	unregister_sound_dsp(s->dev_dac);
+ err_dev3:
+	unregister_sound_mixer(s->dev_mixer);
+ err_dev2:
+	unregister_sound_dsp(s->dev_audio);
+ err_dev1:
+	printk(KERN_ERR "es1370: cannot register misc device\n");
+	free_irq(s->irq, s);
+ err_irq:
+	release_region(s->io, ES1370_EXTENT);
+ err_region:
+	kfree_s(s, sizeof(struct es1370_state));
+	return -1;
+}
+
+static void es1370_remove(struct pci_dev *dev)
+{
+       struct es1370_state *s = (struct es1370_state *)dev->driver_data;
+
+       if (!s)
+               return;
+       list_del(&s->devs);
+       outl(CTRL_SERR_DIS | (1 << CTRL_SH_WTSRSEL), s->io+ES1370_REG_CONTROL); /* switch everything off */
+       outl(0, s->io+ES1370_REG_SERIAL_CONTROL); /* clear serial interrupts */
+       synchronize_irq();
+       free_irq(s->irq, s);
+       release_region(s->io, ES1370_EXTENT);
+       unregister_sound_dsp(s->dev_audio);
+       unregister_sound_mixer(s->dev_mixer);
+       unregister_sound_dsp(s->dev_dac);
+       unregister_sound_midi(s->dev_midi);
+       kfree_s(s, sizeof(struct es1370_state));
+       dev->driver_data = NULL;
+}
+
+static const struct pci_device_id id_table[] = {
+	{ PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, PCI_ANY_ID, PCI_ANY_ID, 0, 0 },
+	{ 0, 0, 0, 0, 0, 0 }
+};
+
+MODULE_DEVICE_TABLE(pci, id_table);
+
+static struct pci_driver es1370_driver = {
+	name: "es1370",
+	id_table: id_table,
+	probe: es1370_probe,
+	remove: es1370_remove
+};
 
 static int __init init_es1370(void)
 {
-	struct es1370_state *s;
-	struct pci_dev *pcidev = NULL;
-	mm_segment_t fs;
-	int i, val, index = 0;
-
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1370: version v0.32 time " __TIME__ " " __DATE__ "\n");
-	while (index < NR_DEVICE && 
-	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, pcidev))) {
-		if (!RSRCISIOREGION(pcidev, 0))
-			continue;
-		if (pcidev->irq == 0) 
-			continue;
-		if (!(s = kmalloc(sizeof(struct es1370_state), GFP_KERNEL))) {
-			printk(KERN_WARNING "es1370: out of memory\n");
-			continue;
-		}
-		memset(s, 0, sizeof(struct es1370_state));
-		init_waitqueue_head(&s->dma_adc.wait);
-		init_waitqueue_head(&s->dma_dac1.wait);
-		init_waitqueue_head(&s->dma_dac2.wait);
-		init_waitqueue_head(&s->open_wait);
-		init_waitqueue_head(&s->midi.iwait);
-		init_waitqueue_head(&s->midi.owait);
-		init_MUTEX(&s->open_sem);
-		spin_lock_init(&s->lock);
-		s->magic = ES1370_MAGIC;
-		s->io = RSRCADDRESS(pcidev, 0);
-		s->irq = pcidev->irq;
-		if (check_region(s->io, ES1370_EXTENT)) {
-			printk(KERN_ERR "es1370: io ports %#lx-%#lx in use\n", s->io, s->io+ES1370_EXTENT-1);
-			goto err_region;
-		}
-		request_region(s->io, ES1370_EXTENT, "es1370");
-		if (request_irq(s->irq, es1370_interrupt, SA_SHIRQ, "es1370", s)) {
-			printk(KERN_ERR "es1370: irq %u in use\n", s->irq);
-			goto err_irq;
-		}
-		/* initialize codec registers */
-		/* note: setting CTRL_SERR_DIS is reported to break
-		 * mic bias setting (by Kim.Berts@fisub.mail.abb.com) */
-	        s->ctrl = CTRL_CDC_EN | (DAC2_SRTODIV(8000) << CTRL_SH_PCLKDIV) | (1 << CTRL_SH_WTSRSEL);
-	        if (joystick[index]) {
-			if (check_region(0x200, JOY_EXTENT))
-				printk(KERN_ERR "es1370: io port 0x200 in use\n");
-			else
-				s->ctrl |= CTRL_JYSTK_EN;
-		}
-		if (lineout[index])
-			s->ctrl |= CTRL_XCTL0;
-		if (micbias[index])
-			s->ctrl |= CTRL_XCTL1;
-		s->sctrl = 0;
-		printk(KERN_INFO "es1370: found adapter at io %#lx irq %u\n"
-		       KERN_INFO "es1370: features: joystick %s, line %s, mic impedance %s\n",
-		       s->io, s->irq, (s->ctrl & CTRL_JYSTK_EN) ? "on" : "off",
-		       (s->ctrl & CTRL_XCTL0) ? "out" : "in",
-		       (s->ctrl & CTRL_XCTL1) ? "1" : "0");
-		/* register devices */
-		if ((s->dev_audio = register_sound_dsp(&es1370_audio_fops, -1)) < 0)
-			goto err_dev1;
-		if ((s->dev_mixer = register_sound_mixer(&es1370_mixer_fops, -1)) < 0)
-			goto err_dev2;
-		if ((s->dev_dac = register_sound_dsp(&es1370_dac_fops, -1)) < 0)
-			goto err_dev3;
-		if ((s->dev_midi = register_sound_midi(&es1370_midi_fops, -1)) < 0)
-			goto err_dev4;
-		/* initialize the chips */
-		outl(s->ctrl, s->io+ES1370_REG_CONTROL);
-		outl(s->sctrl, s->io+ES1370_REG_SERIAL_CONTROL);
-		/* point phantom write channel to "bugbuf" */
-		outl((ES1370_REG_PHANTOM_FRAMEADR >> 8) & 15, s->io+ES1370_REG_MEMPAGE);
-		outl(virt_to_bus(bugbuf), s->io+(ES1370_REG_PHANTOM_FRAMEADR & 0xff));
-		outl(0, s->io+(ES1370_REG_PHANTOM_FRAMECNT & 0xff));
-		pci_set_master(pcidev);  /* enable bus mastering */
-		wrcodec(s, 0x16, 3); /* no RST, PD */
-		wrcodec(s, 0x17, 0); /* CODEC ADC and CODEC DAC use {LR,B}CLK2 and run off the LRCLK2 PLL; program DAC_SYNC=0!!  */
-		wrcodec(s, 0x18, 0); /* recording source is mixer */
-		wrcodec(s, 0x19, s->mix.micpreamp = 1); /* turn on MIC preamp */
-		s->mix.imix = 1;
-		fs = get_fs();
-		set_fs(KERNEL_DS);
-		val = SOUND_MASK_LINE|SOUND_MASK_SYNTH|SOUND_MASK_CD;
-		mixer_ioctl(s, SOUND_MIXER_WRITE_RECSRC, (unsigned long)&val);
-		for (i = 0; i < sizeof(initvol)/sizeof(initvol[0]); i++) {
-			val = initvol[i].vol;
-			mixer_ioctl(s, initvol[i].mixch, (unsigned long)&val);
-		}
-		set_fs(fs);
-		/* queue it for later freeing */
-		s->next = devs;
-		devs = s;
-		index++;
-		continue;
-
-	err_dev4:
-		unregister_sound_dsp(s->dev_dac);
-	err_dev3:
-		unregister_sound_mixer(s->dev_mixer);
-	err_dev2:
-		unregister_sound_dsp(s->dev_audio);
-	err_dev1:
-		printk(KERN_ERR "es1370: cannot register misc device\n");
-		free_irq(s->irq, s);
-	err_irq:
-		release_region(s->io, ES1370_EXTENT);
-	err_region:
-		kfree_s(s, sizeof(struct es1370_state));
-	}
-	if (!devs)
+	printk(KERN_INFO "es1370: version v0.33 time " __TIME__ " " __DATE__ "\n");
+	if (!pci_register_driver(&es1370_driver))
 		return -ENODEV;
-	return 0;
+        return 0;
+
 }
 
 static void __exit cleanup_es1370(void)
 {
-	struct es1370_state *s;
-
-	while ((s = devs)) {
-		devs = devs->next;
-		outl(CTRL_SERR_DIS | (1 << CTRL_SH_WTSRSEL), s->io+ES1370_REG_CONTROL); /* switch everything off */
-		outl(0, s->io+ES1370_REG_SERIAL_CONTROL); /* clear serial interrupts */
-		synchronize_irq();
-		free_irq(s->irq, s);
-		release_region(s->io, ES1370_EXTENT);
-		unregister_sound_dsp(s->dev_audio);
-		unregister_sound_mixer(s->dev_mixer);
-		unregister_sound_dsp(s->dev_dac);
-		unregister_sound_midi(s->dev_midi);
-		kfree_s(s, sizeof(struct es1370_state));
-	}
 	printk(KERN_INFO "es1370: unloading\n");
+	pci_unregister_driver(&es1370_driver);
 }
 
 module_init(init_es1370);

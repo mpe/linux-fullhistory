@@ -11,6 +11,9 @@
      (b) ASID (Address Space IDentifier)
  */
 
+static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
+{
+}
 /*
  * Cache of MMU context last used.
  */

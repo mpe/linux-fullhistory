@@ -33,7 +33,6 @@ typedef struct
 	int opened;
 	struct list_head free_buff_list;
 	struct list_head rec_buff_list;
-	int in_use;
 } dabusb_t,*pdabusb_t;
 
 typedef struct 

@@ -923,8 +923,8 @@ int __init blk_dev_init(void)
 	floppy_init();
 #else
 #if !defined (__mc68000__) && !defined(CONFIG_PPC) && !defined(__sparc__)\
-    && !defined(CONFIG_APUS) && !defined(__sh__)
-	outb_p(0xc, 0x3f2);
+    && !defined(CONFIG_APUS) && !defined(__sh__) && !defined(__ia64__)
+	outb_p(0xc, 0x3f2);	/* XXX do something with the floppy controller?? */
 #endif
 #endif
 #ifdef CONFIG_CDU31A

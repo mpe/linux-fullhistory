@@ -9,6 +9,9 @@
 #include <asm/page.h>
 #include <asm/pgalloc.h>
 
+static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
+{
+}
 extern inline void
 init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 {

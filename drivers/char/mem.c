@@ -145,11 +145,15 @@ static ssize_t write_mem(struct file * file, const char * buf,
 	return do_write_mem(file, __va(p), p, buf, count, ppos);
 }
 
+#ifndef pgprot_noncached
+
 /*
  * This should probably be per-architecture in <asm/pgtable.h>
  */
-static inline unsigned long pgprot_noncached(unsigned long prot)
+static inline pgprot_t pgprot_noncached(pgprot_t _prot)
 {
+	unsigned long prot = pgprot_val(_prot);
+
 #if defined(__i386__)
 	/* On PPro and successors, PCD alone doesn't always mean 
 	    uncached because of interactions with the MTRRs. PCD | PWT
@@ -173,8 +177,10 @@ static inline unsigned long pgprot_noncached(unsigned long prot)
 	prot &= ~(L_PTE_CACHEABLE | L_PTE_BUFFERABLE);
 #endif
 
-	return prot;
+	return __pgprot(prot);
 }
+
+#endif /* !pgprot_noncached */
 
 /*
  * Architectures vary in how they handle caching for addresses 
@@ -208,8 +214,7 @@ static int mmap_mem(struct file * file, struct vm_area_struct * vma)
 	 * done non-cached.
 	 */
 	if (noncached_address(offset) || (file->f_flags & O_SYNC))
-		pgprot_val(vma->vm_page_prot) 
-			= pgprot_noncached(pgprot_val(vma->vm_page_prot));
+		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 
 	/*
 	 * Don't dump addresses that are not real memory to a core file.

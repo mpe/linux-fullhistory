@@ -55,7 +55,7 @@ r_base = .
 	jmp	flush_instr
 flush_instr:
 	ljmpl	$__KERNEL_CS, $0x00100000
-				# jump to startup_32
+			# jump to startup_32 in arch/i386/kernel/head.S
 
 idt_48:
 	.word	0			# idt limit = 0

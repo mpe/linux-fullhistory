@@ -26,6 +26,21 @@
 #include "usb.h"
 #include "ibmcam.h"
 
+/*
+ * IBMCAM_LOCKS_DRIVER_WHILE_DEVICE_IS_PLUGGED: This symbol controls
+ * the locking of the driver. If non-zero, the driver counts the
+ * probe() call as usage and increments module usage counter; this
+ * effectively prevents removal of the module (with rmmod) until the
+ * device is unplugged (then disconnect() callback reduces the module
+ * usage counter back, and module can be removed).
+ *
+ * This behavior may be useful if you prefer to lock the driver in
+ * memory until device is unplugged. However you can't reload the
+ * driver if you want to alter some parameters - you'd need to unplug
+ * the camera first. Therefore, I recommend setting 0.
+ */
+#define IBMCAM_LOCKS_DRIVER_WHILE_DEVICE_IS_PLUGGED	0
+
 #define	ENABLE_HEXDUMP	0	/* Enable if you need it */
 static int debug = 0;
 
@@ -100,6 +115,7 @@ static int init_brightness = 128;
 static int init_contrast = 192;
 static int init_color = 128;
 static int init_hue = 128;
+static int hue_correction = 128;
 
 MODULE_PARM(debug, "i");
 MODULE_PARM(flags, "i");
@@ -111,6 +127,7 @@ MODULE_PARM(init_brightness, "i");
 MODULE_PARM(init_contrast, "i");
 MODULE_PARM(init_color, "i");
 MODULE_PARM(init_hue, "i");
+MODULE_PARM(hue_correction, "i");
 
 MODULE_AUTHOR ("module author");
 MODULE_DESCRIPTION ("IBM/Xirlink C-it USB Camera Driver for Linux (c) 2000");
@@ -123,6 +140,10 @@ static const unsigned short contrast_14 = 0x0014;
 static const unsigned short light_27 = 0x0027;
 static const unsigned short sharp_13 = 0x0013;
 
+#define MAX_IBMCAM	4
+
+struct usb_ibmcam cams[MAX_IBMCAM];
+
 /*******************************/
 /* Memory management functions */
 /*******************************/
@@ -130,6 +151,7 @@ static const unsigned short sharp_13 = 0x0013;
 #define MDEBUG(x)	do { } while(0)		/* Debug memory management */
 
 static struct usb_driver ibmcam_driver;
+static void usb_ibmcam_release(struct usb_ibmcam *ibmcam);
 
 /* Given PGD from the address space's page table, return the kernel
  * virtual mapping of the physical memory mapped at ADR.
@@ -555,12 +577,14 @@ static scan_state_t usb_ibmcam_parse_lines(struct usb_ibmcam *ibmcam, long *pcop
 	struct ibmcam_frame *frame;
 	unsigned char *data, *f, *chromaLine;
 	unsigned int len;
-	const int v4l_linesize = imgwidth * V4L_BYTES_PER_PIXEL; /* V4L line offset */
-	int y, u, v, i, frame_done=0, mono_plane, hue_corr, color_corr;
+	const int v4l_linesize = imgwidth * V4L_BYTES_PER_PIXEL;	/* V4L line offset */
+	const int hue_corr  = (ibmcam->vpic.hue - 0x8000) >> 10;	/* -32..+31 */
+	const int hue2_corr = (hue_correction - 128) / 4;		/* -32..+31 */
+	const int ccm = 128; /* Color correction median - see below */
+	int y, u, v, i, frame_done=0, mono_plane, color_corr;
 
-	hue_corr = (ibmcam->vpic.hue - 0x8000) >> 10;      /* -32..+31 */
-	color_corr = (ibmcam->vpic.colour - 0x8000) >> 10; /* -32..+31 */
-
+	color_corr = (ibmcam->vpic.colour - 0x8000) >> 8; /* -128..+127 = -ccm..+(ccm-1)*/
+	RESTRICT_TO_RANGE(color_corr, -ccm, ccm+1);
 	data = ibmcam->scratch;
 	frame = &ibmcam->frame[ibmcam->curframe];
 
@@ -694,10 +718,17 @@ static scan_state_t usb_ibmcam_parse_lines(struct usb_ibmcam *ibmcam, long *pcop
 		else {
 			if (frame->order_uv) {
 				u = chromaLine[(i >> 1) << 2] + hue_corr;
-				v = chromaLine[((i >> 1) << 2) + 2] + color_corr;
+				v = chromaLine[((i >> 1) << 2) + 2] + hue2_corr;
 			} else {
-				v = chromaLine[(i >> 1) << 2] + color_corr;
+				v = chromaLine[(i >> 1) << 2] + hue2_corr;
 				u = chromaLine[((i >> 1) << 2) + 2] + hue_corr;
+			}
+
+			/* Apply color correction */
+			if (color_corr != 0) {
+				/* Magnify up to 2 times, reduce down to zero saturation */
+				u = 128 + ((ccm + color_corr) * (u - 128)) / ccm;
+				v = 128 + ((ccm + color_corr) * (v - 128)) / ccm;
 			}
 			YUV_TO_RGB_BY_THE_BOOK(y, u, v, rv, gv, bv);
 		}
@@ -915,7 +946,7 @@ static void ibmcam_isoc_irq(struct urb *urb)
 	int i;
 
 	/* We don't want to do anything if we are about to be removed! */
-	if (ibmcam->remove_pending)
+	if (!IBMCAM_IS_OPERATIONAL(ibmcam))
 		return;
 
 #if 0
@@ -976,38 +1007,46 @@ static void ibmcam_isoc_irq(struct urb *urb)
 	return;
 }
 
+/*
+ * usb_ibmcam_veio()
+ *
+ * History:
+ * 1/27/00  Added check for dev == NULL; this happens if camera is unplugged.
+ */
 static int usb_ibmcam_veio(
-	struct usb_device *dev,
+	struct usb_ibmcam *ibmcam,
 	unsigned char req,
 	unsigned short value,
 	unsigned short index)
 {
 	static const char proc[] = "usb_ibmcam_veio";
-	unsigned char cp[8] = { 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef };
-	const unsigned short len = sizeof(cp);
+	unsigned char cp[8] /* = { 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef } */;
 	int i;
+
+	if (!IBMCAM_IS_OPERATIONAL(ibmcam))
+		return 0;
 
 	if (req == 1) {
 		i = usb_control_msg(
-			dev,
-			usb_rcvctrlpipe(dev, 0),
+			ibmcam->dev,
+			usb_rcvctrlpipe(ibmcam->dev, 0),
 			req,
 			USB_DIR_IN | USB_TYPE_VENDOR | USB_RECIP_ENDPOINT,
 			value,
 			index,
 			cp,
-			len,
+			sizeof(cp),
 			HZ);
 #if 0
 		printk(KERN_DEBUG "USB => %02x%02x%02x%02x%02x%02x%02x%02x "
-		       "(req=$%02x val=$%04x ind=$%04x len=%d.)\n",
+		       "(req=$%02x val=$%04x ind=$%04x)\n",
 		       cp[0],cp[1],cp[2],cp[3],cp[4],cp[5],cp[6],cp[7],
-		       req, value, index, len);
+		       req, value, index);
 #endif
 	} else {
 		i = usb_control_msg(
-			dev,
-			usb_sndctrlpipe(dev, 0),
+			ibmcam->dev,
+			usb_sndctrlpipe(ibmcam->dev, 0),
 			req,
 			USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_ENDPOINT,
 			value,
@@ -1016,8 +1055,11 @@ static int usb_ibmcam_veio(
 			0,
 			HZ);
 	}
-	if (i < 0)
-		printk(KERN_ERR "%s: ERROR=%d.\n", proc, i);
+	if (i < 0) {
+		printk(KERN_ERR "%s: ERROR=%d. Camera stopped - "
+		       "reconnect or reload driver.\n", proc, i);
+		ibmcam->last_error = i;
+	}
 	return i;
 }
 
@@ -1053,86 +1095,86 @@ static int usb_ibmcam_calculate_fps(void)
  * History:
  * 1/2/00   Created.
  */
-static void usb_ibmcam_send_FF_04_02(struct usb_device *dev)
+static void usb_ibmcam_send_FF_04_02(struct usb_ibmcam *ibmcam)
 {
-	usb_ibmcam_veio(dev, 0, 0x00FF, 0x0127);
-	usb_ibmcam_veio(dev, 0, 0x0004, 0x0124);
-	usb_ibmcam_veio(dev, 0, 0x0002, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x00FF, 0x0127);
+	usb_ibmcam_veio(ibmcam, 0, 0x0004, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0002, 0x0124);
 }
 
-static void usb_ibmcam_send_00_04_06(struct usb_device *dev)
+static void usb_ibmcam_send_00_04_06(struct usb_ibmcam *ibmcam)
 {
-	usb_ibmcam_veio(dev, 0, 0x0000, 0x0127);
-	usb_ibmcam_veio(dev, 0, 0x0004, 0x0124);
-	usb_ibmcam_veio(dev, 0, 0x0006, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0000, 0x0127);
+	usb_ibmcam_veio(ibmcam, 0, 0x0004, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0006, 0x0124);
 }
 
-static void usb_ibmcam_send_x_00(struct usb_device *dev, unsigned short x)
+static void usb_ibmcam_send_x_00(struct usb_ibmcam *ibmcam, unsigned short x)
 {
-	usb_ibmcam_veio(dev, 0, x,      0x0127);
-	usb_ibmcam_veio(dev, 0, 0x0000, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, x,      0x0127);
+	usb_ibmcam_veio(ibmcam, 0, 0x0000, 0x0124);
 }
 
-static void usb_ibmcam_send_x_00_05(struct usb_device *dev, unsigned short x)
+static void usb_ibmcam_send_x_00_05(struct usb_ibmcam *ibmcam, unsigned short x)
 {
-	usb_ibmcam_send_x_00(dev, x);
-	usb_ibmcam_veio(dev, 0, 0x0005, 0x0124);
+	usb_ibmcam_send_x_00(ibmcam, x);
+	usb_ibmcam_veio(ibmcam, 0, 0x0005, 0x0124);
 }
 
-static void usb_ibmcam_send_x_00_05_02(struct usb_device *dev, unsigned short x)
+static void usb_ibmcam_send_x_00_05_02(struct usb_ibmcam *ibmcam, unsigned short x)
 {
-	usb_ibmcam_veio(dev, 0, x,      0x0127);
-	usb_ibmcam_veio(dev, 0, 0x0000, 0x0124);
-	usb_ibmcam_veio(dev, 0, 0x0005, 0x0124);
-	usb_ibmcam_veio(dev, 0, 0x0002, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, x,      0x0127);
+	usb_ibmcam_veio(ibmcam, 0, 0x0000, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0005, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0002, 0x0124);
 }
 
-static void usb_ibmcam_send_x_01_00_05(struct usb_device *dev, unsigned short x)
+static void usb_ibmcam_send_x_01_00_05(struct usb_ibmcam *ibmcam, unsigned short x)
 {
-	usb_ibmcam_veio(dev, 0, x,      0x0127);
-	usb_ibmcam_veio(dev, 0, 0x0001, 0x0124);
-	usb_ibmcam_veio(dev, 0, 0x0000, 0x0124);
-	usb_ibmcam_veio(dev, 0, 0x0005, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, x,      0x0127);
+	usb_ibmcam_veio(ibmcam, 0, 0x0001, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0000, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0005, 0x0124);
 }
 
-static void usb_ibmcam_send_x_00_05_02_01(struct usb_device *dev, unsigned short x)
+static void usb_ibmcam_send_x_00_05_02_01(struct usb_ibmcam *ibmcam, unsigned short x)
 {
-	usb_ibmcam_veio(dev, 0, x,      0x0127);
-	usb_ibmcam_veio(dev, 0, 0x0000, 0x0124);
-	usb_ibmcam_veio(dev, 0, 0x0005, 0x0124);
-	usb_ibmcam_veio(dev, 0, 0x0002, 0x0124);
-	usb_ibmcam_veio(dev, 0, 0x0001, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, x,      0x0127);
+	usb_ibmcam_veio(ibmcam, 0, 0x0000, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0005, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0002, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0001, 0x0124);
 }
 
-static void usb_ibmcam_send_x_00_05_02_08_01(struct usb_device *dev, unsigned short x)
+static void usb_ibmcam_send_x_00_05_02_08_01(struct usb_ibmcam *ibmcam, unsigned short x)
 {
-	usb_ibmcam_veio(dev, 0, x,      0x0127);
-	usb_ibmcam_veio(dev, 0, 0x0000, 0x0124);
-	usb_ibmcam_veio(dev, 0, 0x0005, 0x0124);
-	usb_ibmcam_veio(dev, 0, 0x0002, 0x0124);
-	usb_ibmcam_veio(dev, 0, 0x0008, 0x0124);
-	usb_ibmcam_veio(dev, 0, 0x0001, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, x,      0x0127);
+	usb_ibmcam_veio(ibmcam, 0, 0x0000, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0005, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0002, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0008, 0x0124);
+	usb_ibmcam_veio(ibmcam, 0, 0x0001, 0x0124);
 }
 
-static void usb_ibmcam_Packet_Format1(struct usb_device *dev, unsigned char fkey, unsigned char val)
+static void usb_ibmcam_Packet_Format1(struct usb_ibmcam *ibmcam, unsigned char fkey, unsigned char val)
 {
-	usb_ibmcam_send_x_01_00_05	(dev, unknown_88);
-	usb_ibmcam_send_x_00_05		(dev, fkey);
-	usb_ibmcam_send_x_00_05_02_08_01(dev, val);
-	usb_ibmcam_send_x_00_05		(dev, unknown_88);
-	usb_ibmcam_send_x_00_05_02_01	(dev, fkey);
-	usb_ibmcam_send_x_00_05		(dev, unknown_89);
-	usb_ibmcam_send_x_00		(dev, fkey);
-	usb_ibmcam_send_00_04_06	(dev);
-	usb_ibmcam_veio			(dev, 1, 0x0000, 0x0126);
-	usb_ibmcam_send_FF_04_02	(dev);
+	usb_ibmcam_send_x_01_00_05	(ibmcam, unknown_88);
+	usb_ibmcam_send_x_00_05		(ibmcam, fkey);
+	usb_ibmcam_send_x_00_05_02_08_01(ibmcam, val);
+	usb_ibmcam_send_x_00_05		(ibmcam, unknown_88);
+	usb_ibmcam_send_x_00_05_02_01	(ibmcam, fkey);
+	usb_ibmcam_send_x_00_05		(ibmcam, unknown_89);
+	usb_ibmcam_send_x_00		(ibmcam, fkey);
+	usb_ibmcam_send_00_04_06	(ibmcam);
+	usb_ibmcam_veio			(ibmcam, 1, 0x0000, 0x0126);
+	usb_ibmcam_send_FF_04_02	(ibmcam);
 }
 
-static void usb_ibmcam_PacketFormat2(struct usb_device *dev, unsigned char fkey, unsigned char val)
+static void usb_ibmcam_PacketFormat2(struct usb_ibmcam *ibmcam, unsigned char fkey, unsigned char val)
 {
-	usb_ibmcam_send_x_01_00_05	(dev, unknown_88);
-	usb_ibmcam_send_x_00_05		(dev, fkey);
-	usb_ibmcam_send_x_00_05_02	(dev, val);
+	usb_ibmcam_send_x_01_00_05	(ibmcam, unknown_88);
+	usb_ibmcam_send_x_00_05		(ibmcam, fkey);
+	usb_ibmcam_send_x_00_05_02	(ibmcam, val);
 }
 
 /*
@@ -1149,7 +1191,6 @@ static void usb_ibmcam_PacketFormat2(struct usb_device *dev, unsigned char fkey,
  */
 static void usb_ibmcam_adjust_contrast(struct usb_ibmcam *ibmcam)
 {
-	struct usb_device *dev = ibmcam->dev;
 	unsigned char new_contrast = ibmcam->vpic.contrast >> 12;
 	const int ntries = 5;
 
@@ -1160,10 +1201,9 @@ static void usb_ibmcam_adjust_contrast(struct usb_ibmcam *ibmcam)
 		int i;
 		ibmcam->vpic_old.contrast = new_contrast;
 		for (i=0; i < ntries; i++) {
-			usb_ibmcam_Packet_Format1(dev, contrast_14, new_contrast);
-			usb_ibmcam_send_FF_04_02(dev);
+			usb_ibmcam_Packet_Format1(ibmcam, contrast_14, new_contrast);
+			usb_ibmcam_send_FF_04_02(ibmcam);
 		}
-		/*usb_ibmcam_veio(dev, 0, 0x00FF, 0x0127);*/
 	}
 }
 
@@ -1179,7 +1219,6 @@ static void usb_ibmcam_adjust_contrast(struct usb_ibmcam *ibmcam)
 static void usb_ibmcam_change_lighting_conditions(struct usb_ibmcam *ibmcam)
 {
 	static const char proc[] = "usb_ibmcam_change_lighting_conditions";
-	struct usb_device *dev = ibmcam->dev;
 	const int ntries = 5;
 	int i;
 
@@ -1188,13 +1227,12 @@ static void usb_ibmcam_change_lighting_conditions(struct usb_ibmcam *ibmcam)
 		printk(KERN_INFO "%s: Set lighting to %hu.\n", proc, lighting);
 
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, light_27, (unsigned short) lighting);
+		usb_ibmcam_Packet_Format1(ibmcam, light_27, (unsigned short) lighting);
 }
 
 static void usb_ibmcam_set_sharpness(struct usb_ibmcam *ibmcam)
 {
 	static const char proc[] = "usb_ibmcam_set_sharpness";
-	struct usb_device *dev = ibmcam->dev;
 	static const unsigned short sa[] = { 0x11, 0x13, 0x16, 0x18, 0x1a, 0x8, 0x0a };
 	unsigned short i, sv;
 
@@ -1204,16 +1242,15 @@ static void usb_ibmcam_set_sharpness(struct usb_ibmcam *ibmcam)
 
 	sv = sa[sharpness - SHARPNESS_MIN];
 	for (i=0; i < 2; i++) {
-		usb_ibmcam_send_x_01_00_05	(dev, unknown_88);
-		usb_ibmcam_send_x_00_05		(dev, sharp_13);
-		usb_ibmcam_send_x_00_05_02	(dev, sv);
+		usb_ibmcam_send_x_01_00_05	(ibmcam, unknown_88);
+		usb_ibmcam_send_x_00_05		(ibmcam, sharp_13);
+		usb_ibmcam_send_x_00_05_02	(ibmcam, sv);
 	}
 }
 
 static void usb_ibmcam_set_brightness(struct usb_ibmcam *ibmcam)
 {
 	static const char proc[] = "usb_ibmcam_set_brightness";
-	struct usb_device *dev = ibmcam->dev;
 	static const unsigned short n = 1;
 	unsigned short i, j, bv[3];
 
@@ -1228,7 +1265,7 @@ static void usb_ibmcam_set_brightness(struct usb_ibmcam *ibmcam)
 
 	for (j=0; j < 3; j++)
 		for (i=0; i < n; i++)
-			usb_ibmcam_Packet_Format1(dev, bright_3x[j], bv[j]);
+			usb_ibmcam_Packet_Format1(ibmcam, bright_3x[j], bv[j]);
 }
 
 static void usb_ibmcam_adjust_picture(struct usb_ibmcam *ibmcam)
@@ -1239,197 +1276,196 @@ static void usb_ibmcam_adjust_picture(struct usb_ibmcam *ibmcam)
 
 static int usb_ibmcam_setup(struct usb_ibmcam *ibmcam)
 {
-	struct usb_device *dev = ibmcam->dev;
 	const int ntries = 5;
 	int i;
 
-	usb_ibmcam_veio(dev, 1, 0, 0x128);
-	usb_ibmcam_veio(dev, 1, 0x00, 0x0100);
-	usb_ibmcam_veio(dev, 0, 0x01, 0x0100);	/* LED On  */
-	usb_ibmcam_veio(dev, 1, 0x00, 0x0100);
-	usb_ibmcam_veio(dev, 0, 0x81, 0x0100);  /* LED Off */
-	usb_ibmcam_veio(dev, 1, 0x00, 0x0100);
-	usb_ibmcam_veio(dev, 0, 0x01, 0x0100);	/* LED On  */
-	usb_ibmcam_veio(dev, 0, 0x01, 0x0108);
+	usb_ibmcam_veio(ibmcam, 1, 0x00, 0x0128);
+	usb_ibmcam_veio(ibmcam, 1, 0x00, 0x0100);
+	usb_ibmcam_veio(ibmcam, 0, 0x01, 0x0100);	/* LED On  */
+	usb_ibmcam_veio(ibmcam, 1, 0x00, 0x0100);
+	usb_ibmcam_veio(ibmcam, 0, 0x81, 0x0100);  /* LED Off */
+	usb_ibmcam_veio(ibmcam, 1, 0x00, 0x0100);
+	usb_ibmcam_veio(ibmcam, 0, 0x01, 0x0100);	/* LED On  */
+	usb_ibmcam_veio(ibmcam, 0, 0x01, 0x0108);
 
-	usb_ibmcam_veio(dev, 0, 0x03, 0x0112);
-	usb_ibmcam_veio(dev, 1, 0x00, 0x0115);
-	usb_ibmcam_veio(dev, 0, 0x06, 0x0115);
-	usb_ibmcam_veio(dev, 1, 0x00, 0x0116);
-	usb_ibmcam_veio(dev, 0, 0x44, 0x0116);
-	usb_ibmcam_veio(dev, 1, 0x00, 0x0116);
-	usb_ibmcam_veio(dev, 0, 0x40, 0x0116);
-	usb_ibmcam_veio(dev, 1, 0x00, 0x0115);
-	usb_ibmcam_veio(dev, 0, 0x0e, 0x0115);
-	usb_ibmcam_veio(dev, 0, 0x19, 0x012c);
+	usb_ibmcam_veio(ibmcam, 0, 0x03, 0x0112);
+	usb_ibmcam_veio(ibmcam, 1, 0x00, 0x0115);
+	usb_ibmcam_veio(ibmcam, 0, 0x06, 0x0115);
+	usb_ibmcam_veio(ibmcam, 1, 0x00, 0x0116);
+	usb_ibmcam_veio(ibmcam, 0, 0x44, 0x0116);
+	usb_ibmcam_veio(ibmcam, 1, 0x00, 0x0116);
+	usb_ibmcam_veio(ibmcam, 0, 0x40, 0x0116);
+	usb_ibmcam_veio(ibmcam, 1, 0x00, 0x0115);
+	usb_ibmcam_veio(ibmcam, 0, 0x0e, 0x0115);
+	usb_ibmcam_veio(ibmcam, 0, 0x19, 0x012c);
 
-	usb_ibmcam_Packet_Format1(dev, 0x00, 0x1e);
-	usb_ibmcam_Packet_Format1(dev, 0x39, 0x0d);
-	usb_ibmcam_Packet_Format1(dev, 0x39, 0x09);
-	usb_ibmcam_Packet_Format1(dev, 0x3b, 0x00);
-	usb_ibmcam_Packet_Format1(dev, 0x28, 0x22);
-	usb_ibmcam_Packet_Format1(dev, light_27, 0);
-	usb_ibmcam_Packet_Format1(dev, 0x2b, 0x1f);
-	usb_ibmcam_Packet_Format1(dev, 0x39, 0x08);
-
-	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x2c, 0x00);
+	usb_ibmcam_Packet_Format1(ibmcam, 0x00, 0x1e);
+	usb_ibmcam_Packet_Format1(ibmcam, 0x39, 0x0d);
+	usb_ibmcam_Packet_Format1(ibmcam, 0x39, 0x09);
+	usb_ibmcam_Packet_Format1(ibmcam, 0x3b, 0x00);
+	usb_ibmcam_Packet_Format1(ibmcam, 0x28, 0x22);
+	usb_ibmcam_Packet_Format1(ibmcam, light_27, 0);
+	usb_ibmcam_Packet_Format1(ibmcam, 0x2b, 0x1f);
+	usb_ibmcam_Packet_Format1(ibmcam, 0x39, 0x08);
 
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x30, 0x14);
-
-	usb_ibmcam_PacketFormat2(dev, 0x39, 0x02);
-	usb_ibmcam_PacketFormat2(dev, 0x01, 0xe1);
-	usb_ibmcam_PacketFormat2(dev, 0x02, 0xcd);
-	usb_ibmcam_PacketFormat2(dev, 0x03, 0xcd);
-	usb_ibmcam_PacketFormat2(dev, 0x04, 0xfa);
-	usb_ibmcam_PacketFormat2(dev, 0x3f, 0xff);
-	usb_ibmcam_PacketFormat2(dev, 0x39, 0x00);
-
-	usb_ibmcam_PacketFormat2(dev, 0x39, 0x02);
-	usb_ibmcam_PacketFormat2(dev, 0x0a, 0x37);
-	usb_ibmcam_PacketFormat2(dev, 0x0b, 0xb8);
-	usb_ibmcam_PacketFormat2(dev, 0x0c, 0xf3);
-	usb_ibmcam_PacketFormat2(dev, 0x0d, 0xe3);
-	usb_ibmcam_PacketFormat2(dev, 0x0e, 0x0d);
-	usb_ibmcam_PacketFormat2(dev, 0x0f, 0xf2);
-	usb_ibmcam_PacketFormat2(dev, 0x10, 0xd5);
-	usb_ibmcam_PacketFormat2(dev, 0x11, 0xba);
-	usb_ibmcam_PacketFormat2(dev, 0x12, 0x53);
-	usb_ibmcam_PacketFormat2(dev, 0x3f, 0xff);
-	usb_ibmcam_PacketFormat2(dev, 0x39, 0x00);
-
-	usb_ibmcam_PacketFormat2(dev, 0x39, 0x02);
-	usb_ibmcam_PacketFormat2(dev, 0x16, 0x00);
-	usb_ibmcam_PacketFormat2(dev, 0x17, 0x28);
-	usb_ibmcam_PacketFormat2(dev, 0x18, 0x7d);
-	usb_ibmcam_PacketFormat2(dev, 0x19, 0xbe);
-	usb_ibmcam_PacketFormat2(dev, 0x3f, 0xff);
-	usb_ibmcam_PacketFormat2(dev, 0x39, 0x00);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x2c, 0x00);
 
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x00, 0x18);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x30, 0x14);
+
+	usb_ibmcam_PacketFormat2(ibmcam, 0x39, 0x02);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x01, 0xe1);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x02, 0xcd);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x03, 0xcd);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x04, 0xfa);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x3f, 0xff);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x39, 0x00);
+
+	usb_ibmcam_PacketFormat2(ibmcam, 0x39, 0x02);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x0a, 0x37);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x0b, 0xb8);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x0c, 0xf3);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x0d, 0xe3);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x0e, 0x0d);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x0f, 0xf2);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x10, 0xd5);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x11, 0xba);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x12, 0x53);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x3f, 0xff);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x39, 0x00);
+
+	usb_ibmcam_PacketFormat2(ibmcam, 0x39, 0x02);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x16, 0x00);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x17, 0x28);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x18, 0x7d);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x19, 0xbe);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x3f, 0xff);
+	usb_ibmcam_PacketFormat2(ibmcam, 0x39, 0x00);
+
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x13, 0x18);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x00, 0x18);
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x14, 0x06);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x13, 0x18);
+	for (i=0; i < ntries; i++)
+		usb_ibmcam_Packet_Format1(ibmcam, 0x14, 0x06);
 
 	/* This is default brightness */
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x31, 0x37);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x31, 0x37);
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x32, 0x46);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x32, 0x46);
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x33, 0x55);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x33, 0x55);
 
-	usb_ibmcam_Packet_Format1(dev, 0x2e, 0x04);
+	usb_ibmcam_Packet_Format1(ibmcam, 0x2e, 0x04);
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x2d, 0x04);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x2d, 0x04);
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x29, 0x80);
-	usb_ibmcam_Packet_Format1(dev, 0x2c, 0x01);
-	usb_ibmcam_Packet_Format1(dev, 0x30, 0x17);
-	usb_ibmcam_Packet_Format1(dev, 0x39, 0x08);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x29, 0x80);
+	usb_ibmcam_Packet_Format1(ibmcam, 0x2c, 0x01);
+	usb_ibmcam_Packet_Format1(ibmcam, 0x30, 0x17);
+	usb_ibmcam_Packet_Format1(ibmcam, 0x39, 0x08);
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x34, 0x00);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x34, 0x00);
 
-	usb_ibmcam_veio(dev, 0, 0x00, 0x0101);
-	usb_ibmcam_veio(dev, 0, 0x00, 0x010a);
+	usb_ibmcam_veio(ibmcam, 0, 0x00, 0x0101);
+	usb_ibmcam_veio(ibmcam, 0, 0x00, 0x010a);
 
 	switch (videosize) {
 	case VIDEOSIZE_128x96:
-		usb_ibmcam_veio(dev, 0, 0x80, 0x0103);
-		usb_ibmcam_veio(dev, 0, 0x60, 0x0105);
-		usb_ibmcam_veio(dev, 0, 0x0c, 0x010b);
-		usb_ibmcam_veio(dev, 0, 0x04, 0x011b);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x0b, 0x011d);
-		usb_ibmcam_veio(dev, 0, 0x00, 0x011e);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x00, 0x0129);
+		usb_ibmcam_veio(ibmcam, 0, 0x80, 0x0103);
+		usb_ibmcam_veio(ibmcam, 0, 0x60, 0x0105);
+		usb_ibmcam_veio(ibmcam, 0, 0x0c, 0x010b);
+		usb_ibmcam_veio(ibmcam, 0, 0x04, 0x011b);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x0b, 0x011d);
+		usb_ibmcam_veio(ibmcam, 0, 0x00, 0x011e);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x00, 0x0129);
 		break;
 	case VIDEOSIZE_176x144:
-		usb_ibmcam_veio(dev, 0, 0xb0, 0x0103);
-		usb_ibmcam_veio(dev, 0, 0x8f, 0x0105);
-		usb_ibmcam_veio(dev, 0, 0x06, 0x010b);
-		usb_ibmcam_veio(dev, 0, 0x04, 0x011b);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x0d, 0x011d);
-		usb_ibmcam_veio(dev, 0, 0x00, 0x011e);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x03, 0x0129);
+		usb_ibmcam_veio(ibmcam, 0, 0xb0, 0x0103);
+		usb_ibmcam_veio(ibmcam, 0, 0x8f, 0x0105);
+		usb_ibmcam_veio(ibmcam, 0, 0x06, 0x010b);
+		usb_ibmcam_veio(ibmcam, 0, 0x04, 0x011b);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x0d, 0x011d);
+		usb_ibmcam_veio(ibmcam, 0, 0x00, 0x011e);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x03, 0x0129);
 		break;
 	case VIDEOSIZE_352x288:
-		usb_ibmcam_veio(dev, 0, 0xb0, 0x0103);
-		usb_ibmcam_veio(dev, 0, 0x90, 0x0105);
-		usb_ibmcam_veio(dev, 0, 0x02, 0x010b);
-		usb_ibmcam_veio(dev, 0, 0x04, 0x011b);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x05, 0x011d);
-		usb_ibmcam_veio(dev, 0, 0x00, 0x011e);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x00, 0x0129);
+		usb_ibmcam_veio(ibmcam, 0, 0xb0, 0x0103);
+		usb_ibmcam_veio(ibmcam, 0, 0x90, 0x0105);
+		usb_ibmcam_veio(ibmcam, 0, 0x02, 0x010b);
+		usb_ibmcam_veio(ibmcam, 0, 0x04, 0x011b);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x05, 0x011d);
+		usb_ibmcam_veio(ibmcam, 0, 0x00, 0x011e);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x00, 0x0129);
 		break;
 	}
 
-	usb_ibmcam_veio(dev, 0, 0xff, 0x012b);
+	usb_ibmcam_veio(ibmcam, 0, 0xff, 0x012b);
 
 	/* This is another brightness - don't know why */
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x31, 0xc3);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x31, 0xc3);
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x32, 0xd2);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x32, 0xd2);
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, 0x33, 0xe1);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x33, 0xe1);
 
 	/* Default contrast */
 	for (i=0; i < ntries; i++)
-		usb_ibmcam_Packet_Format1(dev, contrast_14, 0x0a);
+		usb_ibmcam_Packet_Format1(ibmcam, contrast_14, 0x0a);
 
 	/* Default sharpness */
 	for (i=0; i < 2; i++)
-		usb_ibmcam_PacketFormat2(dev, sharp_13, 0x1a);	/* Level 4 FIXME */
+		usb_ibmcam_PacketFormat2(ibmcam, sharp_13, 0x1a);	/* Level 4 FIXME */
 
 	/* Default lighting conditions */
-	usb_ibmcam_Packet_Format1(dev, light_27, lighting); /* 0=Bright 2=Low */
+	usb_ibmcam_Packet_Format1(ibmcam, light_27, lighting); /* 0=Bright 2=Low */
 
 	/* Assorted init */
 
 	switch (videosize) {
 	case VIDEOSIZE_128x96:
-		usb_ibmcam_Packet_Format1(dev, 0x2b, 0x1e);
-		usb_ibmcam_veio(dev, 0, 0xc9, 0x0119);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x80, 0x0109);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x36, 0x0102);
-		usb_ibmcam_veio(dev, 0, 0x1a, 0x0104);
-		usb_ibmcam_veio(dev, 0, 0x04, 0x011a);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x2b, 0x011c);
-		usb_ibmcam_veio(dev, 0, 0x23, 0x012a);	/* Same everywhere */
+		usb_ibmcam_Packet_Format1(ibmcam, 0x2b, 0x1e);
+		usb_ibmcam_veio(ibmcam, 0, 0xc9, 0x0119);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x80, 0x0109);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x36, 0x0102);
+		usb_ibmcam_veio(ibmcam, 0, 0x1a, 0x0104);
+		usb_ibmcam_veio(ibmcam, 0, 0x04, 0x011a);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x2b, 0x011c);
+		usb_ibmcam_veio(ibmcam, 0, 0x23, 0x012a);	/* Same everywhere */
 #if 0
-		usb_ibmcam_veio(dev, 0, 0x00, 0x0106);
-		usb_ibmcam_veio(dev, 0, 0x38, 0x0107);
+		usb_ibmcam_veio(ibmcam, 0, 0x00, 0x0106);
+		usb_ibmcam_veio(ibmcam, 0, 0x38, 0x0107);
 #else
-		usb_ibmcam_veio(dev, 0, 0x02, 0x0106);
-		usb_ibmcam_veio(dev, 0, 0x2a, 0x0107);
+		usb_ibmcam_veio(ibmcam, 0, 0x02, 0x0106);
+		usb_ibmcam_veio(ibmcam, 0, 0x2a, 0x0107);
 #endif
 		break;
 	case VIDEOSIZE_176x144:
-		usb_ibmcam_Packet_Format1(dev, 0x2b, 0x1e);
-		usb_ibmcam_veio(dev, 0, 0xc9, 0x0119);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x80, 0x0109);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x04, 0x0102);
-		usb_ibmcam_veio(dev, 0, 0x02, 0x0104);
-		usb_ibmcam_veio(dev, 0, 0x04, 0x011a);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x2b, 0x011c);
-		usb_ibmcam_veio(dev, 0, 0x23, 0x012a);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x01, 0x0106);
-		usb_ibmcam_veio(dev, 0, 0xca, 0x0107);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x2b, 0x1e);
+		usb_ibmcam_veio(ibmcam, 0, 0xc9, 0x0119);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x80, 0x0109);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x04, 0x0102);
+		usb_ibmcam_veio(ibmcam, 0, 0x02, 0x0104);
+		usb_ibmcam_veio(ibmcam, 0, 0x04, 0x011a);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x2b, 0x011c);
+		usb_ibmcam_veio(ibmcam, 0, 0x23, 0x012a);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x01, 0x0106);
+		usb_ibmcam_veio(ibmcam, 0, 0xca, 0x0107);
 		break;
 	case VIDEOSIZE_352x288:
-		usb_ibmcam_Packet_Format1(dev, 0x2b, 0x1f);
-		usb_ibmcam_veio(dev, 0, 0xc9, 0x0119);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x80, 0x0109);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x08, 0x0102);
-		usb_ibmcam_veio(dev, 0, 0x01, 0x0104);
-		usb_ibmcam_veio(dev, 0, 0x04, 0x011a);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x2f, 0x011c);
-		usb_ibmcam_veio(dev, 0, 0x23, 0x012a);	/* Same everywhere */
-		usb_ibmcam_veio(dev, 0, 0x03, 0x0106);
-		usb_ibmcam_veio(dev, 0, 0xf6, 0x0107);
+		usb_ibmcam_Packet_Format1(ibmcam, 0x2b, 0x1f);
+		usb_ibmcam_veio(ibmcam, 0, 0xc9, 0x0119);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x80, 0x0109);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x08, 0x0102);
+		usb_ibmcam_veio(ibmcam, 0, 0x01, 0x0104);
+		usb_ibmcam_veio(ibmcam, 0, 0x04, 0x011a);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x2f, 0x011c);
+		usb_ibmcam_veio(ibmcam, 0, 0x23, 0x012a);	/* Same everywhere */
+		usb_ibmcam_veio(ibmcam, 0, 0x03, 0x0106);
+		usb_ibmcam_veio(ibmcam, 0, 0xf6, 0x0107);
 		break;
 	}
 	return 0; /* TODO: return actual completion status! */
@@ -1441,16 +1477,16 @@ static int usb_ibmcam_setup(struct usb_ibmcam *ibmcam)
  * This code adds finishing touches to the video data interface.
  * Here we configure the frame rate and turn on the LED.
  */
-static void usb_ibmcam_setup_after_video_if(struct usb_device *dev)
+static void usb_ibmcam_setup_after_video_if(struct usb_ibmcam *ibmcam)
 {
 	unsigned short internal_frame_rate;
 
 	RESTRICT_TO_RANGE(framerate, FRAMERATE_MIN, FRAMERATE_MAX);
 	internal_frame_rate = FRAMERATE_MAX - framerate; /* 0=Fast 6=Slow */
-	usb_ibmcam_veio(dev, 0, 0x01, 0x0100);	/* LED On  */
-	usb_ibmcam_veio(dev, 0, internal_frame_rate, 0x0111);
-	usb_ibmcam_veio(dev, 0, 0x01, 0x0114);
-	usb_ibmcam_veio(dev, 0, 0xc0, 0x010c);
+	usb_ibmcam_veio(ibmcam, 0, 0x01, 0x0100);	/* LED On  */
+	usb_ibmcam_veio(ibmcam, 0, internal_frame_rate, 0x0111);
+	usb_ibmcam_veio(ibmcam, 0, 0x01, 0x0114);
+	usb_ibmcam_veio(ibmcam, 0, 0xc0, 0x010c);
 }
 
 /*
@@ -1459,16 +1495,16 @@ static void usb_ibmcam_setup_after_video_if(struct usb_device *dev)
  * This code tells camera to stop streaming. The interface remains
  * configured and bandwidth - claimed.
  */
-static void usb_ibmcam_setup_video_stop(struct usb_device *dev)
+static void usb_ibmcam_setup_video_stop(struct usb_ibmcam *ibmcam)
 {
-	usb_ibmcam_veio(dev, 0, 0x00, 0x010c);
-	usb_ibmcam_veio(dev, 0, 0x00, 0x010c);
-	usb_ibmcam_veio(dev, 0, 0x01, 0x0114);
-	usb_ibmcam_veio(dev, 0, 0xc0, 0x010c);
-	usb_ibmcam_veio(dev, 0, 0x00, 0x010c);
-	usb_ibmcam_send_FF_04_02(dev);
-	usb_ibmcam_veio(dev, 1, 0x00, 0x0100);
-	usb_ibmcam_veio(dev, 0, 0x81, 0x0100);	/* LED Off */
+	usb_ibmcam_veio(ibmcam, 0, 0x00, 0x010c);
+	usb_ibmcam_veio(ibmcam, 0, 0x00, 0x010c);
+	usb_ibmcam_veio(ibmcam, 0, 0x01, 0x0114);
+	usb_ibmcam_veio(ibmcam, 0, 0xc0, 0x010c);
+	usb_ibmcam_veio(ibmcam, 0, 0x00, 0x010c);
+	usb_ibmcam_send_FF_04_02(ibmcam);
+	usb_ibmcam_veio(ibmcam, 1, 0x00, 0x0100);
+	usb_ibmcam_veio(ibmcam, 0, 0x81, 0x0100);	/* LED Off */
 }
 
 /*
@@ -1484,19 +1520,28 @@ static void usb_ibmcam_setup_video_stop(struct usb_device *dev)
 static void usb_ibmcam_reinit_iso(struct usb_ibmcam *ibmcam, int do_stop)
 {
 	if (do_stop)
-		usb_ibmcam_setup_video_stop(ibmcam->dev);
+		usb_ibmcam_setup_video_stop(ibmcam);
 
-	usb_ibmcam_veio(ibmcam->dev, 0, 0x0001, 0x0114);
-	usb_ibmcam_veio(ibmcam->dev, 0, 0x00c0, 0x010c);
+	usb_ibmcam_veio(ibmcam, 0, 0x0001, 0x0114);
+	usb_ibmcam_veio(ibmcam, 0, 0x00c0, 0x010c);
 	usb_clear_halt(ibmcam->dev, ibmcam->video_endp);
-	usb_ibmcam_setup_after_video_if(ibmcam->dev);
+	usb_ibmcam_setup_after_video_if(ibmcam);
 }
 
+/*
+ * ibmcam_init_isoc()
+ *
+ * History:
+ * 1/27/00  Used ibmcam->iface, ibmcam->ifaceAltActive instead of hardcoded values.
+ *          Simplified by using for loop, allowed any number of URBs.
+ */
 static int ibmcam_init_isoc(struct usb_ibmcam *ibmcam)
 {
 	struct usb_device *dev = ibmcam->dev;
-	urb_t *urb;
-	int fx, err;
+	int i, err;
+
+	if (!IBMCAM_IS_OPERATIONAL(ibmcam))
+		return -EFAULT;
 
 	ibmcam->compress = 0;
 	ibmcam->curframe = -1;
@@ -1504,8 +1549,10 @@ static int ibmcam_init_isoc(struct usb_ibmcam *ibmcam)
 	ibmcam->scratchlen = 0;
 
 	/* Alternate interface 1 is is the biggest frame size */
-	if (usb_set_interface(ibmcam->dev, 2, 1) < 0) {
+	i = usb_set_interface(dev, ibmcam->iface, ibmcam->ifaceAltActive);
+	if (i < 0) {
 		printk(KERN_ERR "usb_set_interface error\n");
+		ibmcam->last_error = i;
 		return -EBUSY;
 	}
 	usb_ibmcam_change_lighting_conditions(ibmcam);
@@ -1513,57 +1560,46 @@ static int ibmcam_init_isoc(struct usb_ibmcam *ibmcam)
 	usb_ibmcam_reinit_iso(ibmcam, 0);
 
 	/* We double buffer the Iso lists */
-	urb = usb_alloc_urb(FRAMES_PER_DESC);
-	
-	if (!urb) {
-		printk(KERN_ERR "ibmcam_init_isoc: usb_init_isoc ret %d\n",
-			0);
-		return -ENOMEM;
-	}
-	ibmcam->sbuf[0].urb = urb;
-	urb->dev = dev;
-	urb->context = ibmcam;
-	urb->pipe = usb_rcvisocpipe(dev, ibmcam->video_endp);
-	urb->transfer_flags = USB_ISO_ASAP;
-	urb->transfer_buffer = ibmcam->sbuf[0].data;
- 	urb->complete = ibmcam_isoc_irq;
- 	urb->number_of_packets = FRAMES_PER_DESC;
- 	urb->transfer_buffer_length = ibmcam->iso_packet_len * FRAMES_PER_DESC;
- 	for (fx = 0; fx < FRAMES_PER_DESC; fx++) {
- 		urb->iso_frame_desc[fx].offset = ibmcam->iso_packet_len * fx;
-		urb->iso_frame_desc[fx].length = ibmcam->iso_packet_len;
-	}
-	urb = usb_alloc_urb(FRAMES_PER_DESC);
-	if (!urb) {
-		printk(KERN_ERR "ibmcam_init_isoc: usb_init_isoc ret %d\n",
-			0);
-		return -ENOMEM;
-	}
-	ibmcam->sbuf[1].urb = urb;
-	urb->dev = dev;
-	urb->context = ibmcam;
-	urb->pipe = usb_rcvisocpipe(dev, ibmcam->video_endp);
-	urb->transfer_flags = USB_ISO_ASAP;
-	urb->transfer_buffer = ibmcam->sbuf[1].data;
- 	urb->complete = ibmcam_isoc_irq;
- 	urb->number_of_packets = FRAMES_PER_DESC;
- 	urb->transfer_buffer_length = ibmcam->iso_packet_len * FRAMES_PER_DESC;
- 	for (fx = 0; fx < FRAMES_PER_DESC; fx++) {
- 		urb->iso_frame_desc[fx].offset = ibmcam->iso_packet_len * fx;
-		urb->iso_frame_desc[fx].length = ibmcam->iso_packet_len;
+
+	for (i=0; i < IBMCAM_NUMSBUF; i++) {
+		int j, k;
+		urb_t *urb;
+
+		urb = usb_alloc_urb(FRAMES_PER_DESC);
+		if (urb == NULL) {
+			printk(KERN_ERR "ibmcam_init_isoc: usb_init_isoc() failed.\n");
+			return -ENOMEM;
+		}
+		ibmcam->sbuf[i].urb = urb;
+		urb->dev = dev;
+		urb->context = ibmcam;
+		urb->pipe = usb_rcvisocpipe(dev, ibmcam->video_endp);
+		urb->transfer_flags = USB_ISO_ASAP;
+		urb->transfer_buffer = ibmcam->sbuf[i].data;
+		urb->complete = ibmcam_isoc_irq;
+		urb->number_of_packets = FRAMES_PER_DESC;
+		urb->transfer_buffer_length = ibmcam->iso_packet_len * FRAMES_PER_DESC;
+		for (j=k=0; j < FRAMES_PER_DESC; j++, k += ibmcam->iso_packet_len) {
+			urb->iso_frame_desc[j].offset = k;
+			urb->iso_frame_desc[j].length = ibmcam->iso_packet_len;
+		}
 	}
 
-	ibmcam->sbuf[1].urb->next = ibmcam->sbuf[0].urb;
-	ibmcam->sbuf[0].urb->next = ibmcam->sbuf[1].urb;
-	
-	err = usb_submit_urb(ibmcam->sbuf[0].urb);
-	if (err)
-		printk(KERN_ERR "ibmcam_init_isoc: usb_run_isoc(0) ret %d\n",
-			err);
-	err = usb_submit_urb(ibmcam->sbuf[1].urb);
-	if (err)
-		printk(KERN_ERR "ibmcam_init_isoc: usb_run_isoc(1) ret %d\n",
-			err);
+	/* Link URBs into a ring so that they invoke each other infinitely */
+	for (i=0; i < IBMCAM_NUMSBUF; i++) {
+		if ((i+1) < IBMCAM_NUMSBUF)
+			ibmcam->sbuf[i].urb->next = ibmcam->sbuf[i+1].urb;
+		else
+			ibmcam->sbuf[i].urb->next = ibmcam->sbuf[0].urb;
+	}
+
+	/* Submit all URBs */
+	for (i=0; i < IBMCAM_NUMSBUF; i++) {
+		err = usb_submit_urb(ibmcam->sbuf[i].urb);
+		if (err)
+			printk(KERN_ERR "ibmcam_init_isoc: usb_run_isoc(%d) ret %d\n",
+			       i, err);
+	}
 
 	ibmcam->streaming = 1;
 	// printk(KERN_DEBUG "streaming=1 ibmcam->video_endp=$%02x\n", ibmcam->video_endp);
@@ -1578,28 +1614,39 @@ static int ibmcam_init_isoc(struct usb_ibmcam *ibmcam)
  *
  * History:
  * 1/22/00  Corrected order of actions to work after surprise removal.
+ * 1/27/00  Used ibmcam->iface, ibmcam->ifaceAltInactive instead of hardcoded values.
  */
 static void ibmcam_stop_isoc(struct usb_ibmcam *ibmcam)
 {
-	if (!ibmcam->streaming)
+	static const char proc[] = "ibmcam_stop_isoc";
+	int i, j;
+
+	if (!ibmcam->streaming || (ibmcam->dev == NULL))
 		return;
 
 	/* Unschedule all of the iso td's */
-	usb_unlink_urb(ibmcam->sbuf[1].urb);
-	usb_unlink_urb(ibmcam->sbuf[0].urb);
-
+	for (i=0; i < IBMCAM_NUMSBUF; i++) {
+		j = usb_unlink_urb(ibmcam->sbuf[i].urb);
+		if (j < 0)
+			printk(KERN_ERR "%s: usb_unlink_urb() error %d.\n", proc, j);
+	}
 	/* printk(KERN_DEBUG "streaming=0\n"); */
 	ibmcam->streaming = 0;
 
 	/* Delete them all */
-	usb_free_urb(ibmcam->sbuf[1].urb);
-	usb_free_urb(ibmcam->sbuf[0].urb);
+	for (i=0; i < IBMCAM_NUMSBUF; i++)
+		usb_free_urb(ibmcam->sbuf[i].urb);
 
-	usb_ibmcam_setup_video_stop(ibmcam->dev);
+	if (!ibmcam->remove_pending) {
+		usb_ibmcam_setup_video_stop(ibmcam);
 
-	/* Set packet size to 0 */
-	if (usb_set_interface(ibmcam->dev, 2, 0) < 0)
-		printk(KERN_ERR "usb_set_interface error\n");
+		/* Set packet size to 0 */
+		j = usb_set_interface(ibmcam->dev, ibmcam->iface, ibmcam->ifaceAltInactive);
+		if (j < 0) {
+			printk(KERN_ERR "%s: usb_set_interface() error %d.\n", proc, j);
+			ibmcam->last_error = j;
+		}
+	}
 }
 
 static int ibmcam_new_frame(struct usb_ibmcam *ibmcam, int framenum)
@@ -1669,11 +1716,11 @@ static int ibmcam_new_frame(struct usb_ibmcam *ibmcam, int framenum)
  * 1/22/00  Rewrote, moved scratch buffer allocation here. Now the
  *          camera is also initialized here (once per connect), at
  *          expense of V4L client (it waits on open() call).
+ * 1/27/00  Used IBMCAM_NUMSBUF as number of URB buffers.
  */
 static int ibmcam_open(struct video_device *dev, int flags)
 {
 	struct usb_ibmcam *ibmcam = (struct usb_ibmcam *)dev;
-	const int nbuffers = 2;
 	const int sb_size = FRAMES_PER_DESC * ibmcam->iso_packet_len;
 	int i, err = 0;
 
@@ -1683,11 +1730,11 @@ static int ibmcam_open(struct video_device *dev, int flags)
 		err = -EBUSY;
 	else {
 		/* Clean pointers so we know if we allocated something */
-		for (i=0; i < nbuffers; i++)
+		for (i=0; i < IBMCAM_NUMSBUF; i++)
 			ibmcam->sbuf[i].data = NULL;
 
 		/* Allocate memory for the frame buffers */
-		ibmcam->fbuf_size = nbuffers * MAX_FRAME_SIZE;
+		ibmcam->fbuf_size = IBMCAM_NUMFRAMES * MAX_FRAME_SIZE;
 		ibmcam->fbuf = rvmalloc(ibmcam->fbuf_size);
 		ibmcam->scratch = kmalloc(scratchbufsize, GFP_KERNEL);
 		ibmcam->scratchlen = 0;
@@ -1695,15 +1742,9 @@ static int ibmcam_open(struct video_device *dev, int flags)
 			err = -ENOMEM;
 		else {
 			/* Allocate all buffers */
-			for (i=0; i < nbuffers; i++) {
+			for (i=0; i < IBMCAM_NUMFRAMES; i++) {
 				ibmcam->frame[i].grabstate = FRAME_UNUSED;
 				ibmcam->frame[i].data = ibmcam->fbuf + i*MAX_FRAME_SIZE;
-
-				ibmcam->sbuf[i].data = kmalloc(sb_size, GFP_KERNEL);
-				if (ibmcam->sbuf[i].data == NULL) {
-					err = -ENOMEM;
-					break;
-				}
 				/*
 				 * Set default sizes in case IOCTL (VIDIOCMCAPTURE)
 				 * is not used (using read() instead).
@@ -1711,6 +1752,13 @@ static int ibmcam_open(struct video_device *dev, int flags)
 				ibmcam->frame[i].width = imgwidth;
 				ibmcam->frame[i].height = imgheight;
 				ibmcam->frame[i].bytes_read = 0;
+			}
+			for (i=0; i < IBMCAM_NUMSBUF; i++) {
+				ibmcam->sbuf[i].data = kmalloc(sb_size, GFP_KERNEL);
+				if (ibmcam->sbuf[i].data == NULL) {
+					err = -ENOMEM;
+					break;
+				}
 			}
 		}
 		if (err) {
@@ -1723,7 +1771,7 @@ static int ibmcam_open(struct video_device *dev, int flags)
 				kfree(ibmcam->scratch);
 				ibmcam->scratch = NULL;
 			}
-			for (i=0; i < nbuffers; i++) {
+			for (i=0; i < IBMCAM_NUMSBUF; i++) {
 				if (ibmcam->sbuf[i].data != NULL) {
 					kfree (ibmcam->sbuf[i].data);
 					ibmcam->sbuf[i].data = NULL;
@@ -1762,10 +1810,12 @@ static int ibmcam_open(struct video_device *dev, int flags)
  *
  * History:
  * 1/22/00  Moved scratch buffer deallocation here.
+ * 1/27/00  Used IBMCAM_NUMSBUF as number of URB buffers.
  */
 static void ibmcam_close(struct video_device *dev)
 {
 	struct usb_ibmcam *ibmcam = (struct usb_ibmcam *)dev;
+	int i;
 
 	down(&ibmcam->lock);	
 
@@ -1773,12 +1823,16 @@ static void ibmcam_close(struct video_device *dev)
 
 	rvfree(ibmcam->fbuf, ibmcam->fbuf_size);
 	kfree(ibmcam->scratch);
-	kfree(ibmcam->sbuf[1].data);
-	kfree(ibmcam->sbuf[0].data);
+	for (i=0; i < IBMCAM_NUMSBUF; i++)
+		kfree(ibmcam->sbuf[i].data);
 
 	ibmcam->user--;
 	MOD_DEC_USE_COUNT;
 
+	if (ibmcam->remove_pending) {
+		printk(KERN_INFO "ibmcam_close: Final disconnect.\n");
+		usb_ibmcam_release(ibmcam);
+	}
 	up(&ibmcam->lock);
 }
 
@@ -1804,7 +1858,7 @@ static int ibmcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 {
 	struct usb_ibmcam *ibmcam = (struct usb_ibmcam *)dev;
 
-	if (ibmcam->remove_pending)
+	if (!IBMCAM_IS_OPERATIONAL(ibmcam))
 		return -EFAULT;
 
 	switch (cmd) {
@@ -1959,6 +2013,8 @@ static int ibmcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			{
 				int ntries;
 		redo:
+				if (!IBMCAM_IS_OPERATIONAL(ibmcam))
+					return -EIO;
 				ntries = 0; 
 				do {
 					interruptible_sleep_on(&ibmcam->frame[frame].wq);
@@ -2042,10 +2098,7 @@ static long ibmcam_read(struct video_device *dev, char *buf, unsigned long count
 	if (debug >= 1)
 		printk(KERN_DEBUG "ibmcam_read: %ld bytes, noblock=%d\n", count, noblock);
 
-	if (ibmcam->remove_pending)
-		return -EFAULT;
-
-	if (!dev || !buf)
+	if (!IBMCAM_IS_OPERATIONAL(ibmcam) || (buf == NULL))
 		return -EFAULT;
 
 	/* See if a frame is completed, then use it. */
@@ -2073,6 +2126,8 @@ static long ibmcam_read(struct video_device *dev, char *buf, unsigned long count
 	frame = &ibmcam->frame[frmx];
 
 restart:
+	if (!IBMCAM_IS_OPERATIONAL(ibmcam))
+		return -EIO;
 	while (frame->grabstate == FRAME_GRABBING) {
 		interruptible_sleep_on((void *)&frame->wq);
 		if (signal_pending(current))
@@ -2120,7 +2175,7 @@ static int ibmcam_mmap(struct video_device *dev, const char *adr, unsigned long 
 	unsigned long start = (unsigned long)adr;
 	unsigned long page, pos;
 
-	if (ibmcam->remove_pending)
+	if (!IBMCAM_IS_OPERATIONAL(ibmcam))
 		return -EFAULT;
 
 	if (size > (((2 * MAX_FRAME_SIZE) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)))
@@ -2169,6 +2224,7 @@ static void usb_ibmcam_configure_video(struct usb_ibmcam *ibmcam)
 	RESTRICT_TO_RANGE(init_contrast, 0, 255);
 	RESTRICT_TO_RANGE(init_color, 0, 255);
 	RESTRICT_TO_RANGE(init_hue, 0, 255);
+	RESTRICT_TO_RANGE(hue_correction, 0, 255);
 
 	memset(&ibmcam->vpic, 0, sizeof(ibmcam->vpic));
 	memset(&ibmcam->vpic_old, 0x55, sizeof(ibmcam->vpic_old));
@@ -2200,6 +2256,27 @@ static void usb_ibmcam_configure_video(struct usb_ibmcam *ibmcam)
 }
 
 /*
+ * usb_ibmcam_release()
+ *
+ * This code searches the array of preallocated (static) structures
+ * and returns index of the first one that isn't in use. Returns -1
+ * if there are no free structures.
+ *
+ * History:
+ * 1/27/00  Created.
+ */
+static int ibmcam_find_struct(void)
+{
+	int u;
+
+	for (u = 0; u < MAX_IBMCAM; u++) {
+		if (!cams[u].ibmcam_used) /* This one is free */
+			return u;
+	}
+	return -1;
+}
+
+/*
  * usb_ibmcam_probe()
  *
  * This procedure queries device descriptor and accepts the interface
@@ -2207,11 +2284,13 @@ static void usb_ibmcam_configure_video(struct usb_ibmcam *ibmcam)
  *
  * History:
  * 1/22/00  Moved camera init code to ibmcam_open()
+ * 1/27/00  Changed to use static structures, added locking.
  */
 static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_ibmcam *ibmcam = NULL;
 	struct usb_interface_descriptor *interface;
+	int devnum;
 
 	if (debug >= 1)
 		printk(KERN_DEBUG "ibmcam_probe(%p,%u.)\n", dev, ifnum);
@@ -2225,6 +2304,8 @@ static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 	    (dev->descriptor.idProduct != 0x8080))
 		return NULL;
 
+	interface = &dev->actconfig->interface[ifnum].altsetting[0];
+
 	/* Camera confirmed. We claim only interface 2 (video data) */
 	if (ifnum != 2)
 		return NULL;
@@ -2232,26 +2313,32 @@ static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 	/* We found an IBM camera */
 	printk(KERN_INFO "IBM USB camera found (interface %u.)\n", ifnum);
 
-	if (debug >= 1)
-		printk(KERN_DEBUG "ibmcam_probe: new ibmcam alloc\n");
-	ibmcam = kmalloc(sizeof(*ibmcam), GFP_KERNEL);
-	if (ibmcam == NULL) {
-		printk(KERN_ERR "couldn't kmalloc ibmcam struct\n");
+	devnum = ibmcam_find_struct();
+	if (devnum == -1) {
+		printk(KERN_INFO "IBM USB camera driver: Too many devices!\n");
 		return NULL;
 	}
-	memset(ibmcam, 0, sizeof(struct usb_ibmcam));
+	ibmcam = &cams[devnum];
+
+	down(&ibmcam->lock);
+	ibmcam->ibmcam_used = 1;	/* In use now */
+	ibmcam->remove_pending = 0;
+	ibmcam->last_error = 0;
 	ibmcam->dev = dev;
-	interface = &dev->actconfig->interface[ifnum].altsetting[0];
-	ibmcam->iface = interface->bInterfaceNumber;
+	ibmcam->iface = ifnum;
+	ibmcam->ifaceAltInactive = 0;
+	ibmcam->ifaceAltActive = 1;
 	ibmcam->video_endp = 0x82;
-	init_waitqueue_head (&ibmcam->remove_ok);
 	ibmcam->iso_packet_len = 1014;
+	ibmcam->compress = 0;
+	ibmcam->user=0; 
 
-	memcpy(&ibmcam->vdev, &ibmcam_template, sizeof(ibmcam_template));
 	usb_ibmcam_configure_video(ibmcam);
+	up (&ibmcam->lock);
 
-	init_waitqueue_head(&ibmcam->frame[0].wq);
-	init_waitqueue_head(&ibmcam->frame[1].wq);
+#if IBMCAM_LOCKS_DRIVER_WHILE_DEVICE_IS_PLUGGED
+	MOD_INC_USE_COUNT;
+#endif
 
 	if (video_register_device(&ibmcam->vdev, VFL_TYPE_GRABBER) == -1) {
 		printk(KERN_ERR "video_register_device failed\n");
@@ -2260,11 +2347,24 @@ static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 	if (debug > 1)
 		printk(KERN_DEBUG "video_register_device() successful\n");
 
-	ibmcam->compress = 0;
-	ibmcam->user=0; 
-	init_MUTEX(&ibmcam->lock);	/* to 1 == available */
-
 	return ibmcam;
+}
+
+/*
+ * usb_ibmcam_release()
+ *
+ * This code does final release of struct usb_ibmcam. This happens
+ * after the device is disconnected -and- all clients closed their files.
+ *
+ * History:
+ * 1/27/00  Created.
+ */
+static void usb_ibmcam_release(struct usb_ibmcam *ibmcam)
+{
+	video_unregister_device(&ibmcam->vdev);
+	if (debug > 0)
+		printk(KERN_DEBUG "usb_ibmcam_release: Video unregistered.\n");
+	ibmcam->ibmcam_used = 0;
 }
 
 /*
@@ -2278,40 +2378,32 @@ static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
  *
  * History:
  * 1/22/00  Added polling of MOD_IN_USE to delay removal until all users gone.
+ * 1/27/00  Reworked to allow pending disconnects; see ibmcam_close()
  */
 static void usb_ibmcam_disconnect(struct usb_device *dev, void *ptr)
 {
 	static const char proc[] = "usb_ibmcam_disconnect";
 	struct usb_ibmcam *ibmcam = (struct usb_ibmcam *) ptr;
-	wait_queue_head_t wq;	/* Wait here until removal is safe */
 
 	if (debug > 0)
 		printk(KERN_DEBUG "%s(%p,%p.)\n", proc, dev, ptr);
 
-	init_waitqueue_head(&wq);
+	down(&ibmcam->lock);
 	ibmcam->remove_pending = 1; /* Now all ISO data will be ignored */
 
 	/* At this time we ask to cancel outstanding URBs */
 	ibmcam_stop_isoc(ibmcam);
 
-	if (MOD_IN_USE) {
+	ibmcam->dev = NULL;    	    /* USB device is no more */
+
+#if IBMCAM_LOCKS_DRIVER_WHILE_DEVICE_IS_PLUGGED
+	MOD_DEC_USE_COUNT;
+#endif
+	if (ibmcam->user)
 		printk(KERN_INFO "%s: In use, disconnect pending.\n", proc);
-		while (MOD_IN_USE)
-			interruptible_sleep_on_timeout (&wq, HZ);
-		printk(KERN_INFO "%s: Released, wait.\n", proc);
-//		interruptible_sleep_on_timeout (&wq, HZ*10);
-	}
-	video_unregister_device(&ibmcam->vdev);
-	printk(KERN_INFO "%s: Video dereg'd, wait.\n", proc);
-//	interruptible_sleep_on_timeout (&wq, HZ*10);
-
-	/* Free the memory */
-	if (debug > 0)
-		printk(KERN_DEBUG "%s: freeing ibmcam=%p\n", proc, ibmcam);
-	kfree(ibmcam);
-
-	printk(KERN_INFO "%s: Memory freed, wait.\n", proc);
-//	interruptible_sleep_on_timeout (&wq, HZ*10);
+	else
+		usb_ibmcam_release(ibmcam);
+	up(&ibmcam->lock);
 
 	printk(KERN_INFO "IBM USB camera disconnected.\n");
 }
@@ -2323,8 +2415,30 @@ static struct usb_driver ibmcam_driver = {
 	{ NULL, NULL }
 };
 
+/*
+ * usb_ibmcam_init()
+ *
+ * This code is run to initialize the driver.
+ *
+ * History:
+ * 1/27/00  Reworked to use statically allocated usb_ibmcam structures.
+ */
 int usb_ibmcam_init(void)
 {
+	unsigned i, u;
+
+	/* Initialize struct */
+	for (u = 0; u < MAX_IBMCAM; u++) {
+		struct usb_ibmcam *ibmcam = &cams[u];
+		memset (ibmcam, 0, sizeof(struct usb_ibmcam));
+
+		init_waitqueue_head (&ibmcam->remove_ok);
+		for (i=0; i < IBMCAM_NUMFRAMES; i++)
+			init_waitqueue_head(&ibmcam->frame[i].wq);
+		init_MUTEX(&ibmcam->lock);	/* to 1 == available */
+		ibmcam->dev = NULL;
+		memcpy(&ibmcam->vdev, &ibmcam_template, sizeof(ibmcam_template));
+	}
 	return usb_register(&ibmcam_driver);
 }
 

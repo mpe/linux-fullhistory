@@ -22,12 +22,7 @@
  * and I/O address space. Memory address space resides in the lower
  * half of the physical address space (PA[43]=0) and I/O address space
  * resides in the upper half of the physical address space (PA[43]=1).
- *
  */
-
-#define IRONGATE_DMA_WIN_BASE		 (0UL)
-#define IRONGATE_DMA_WIN_SIZE		 (0UL)
-
 
 /*
  * Irongate CSR map.  Some of the CSRs are 8 or 16 bits, but all access
@@ -393,21 +388,6 @@ struct el_IRONGATE_sysdata_mcheck {
 #endif
 
 /*
- * Translate physical memory address as seen on (PCI) bus into
- * a kernel virtual address and vv.
- */
-
-__EXTERN_INLINE unsigned long irongate_virt_to_bus(void * address)
-{
-	return virt_to_phys(address) + IRONGATE_DMA_WIN_BASE;
-}
-
-__EXTERN_INLINE void * irongate_bus_to_virt(unsigned long address)
-{
-	return phys_to_virt(address - IRONGATE_DMA_WIN_BASE);
-}
-
-/*
  * I/O functions:
  *
  * IRONGATE (AMD-751) PCI/memory support chip for the EV6 (21264) and
@@ -512,9 +492,6 @@ __EXTERN_INLINE int irongate_is_ioaddr(unsigned long addr)
 #undef vulp
 
 #ifdef __WANT_IO_DEF
-
-#define virt_to_bus	irongate_virt_to_bus
-#define bus_to_virt	irongate_bus_to_virt
 
 #define __inb		irongate_inb
 #define __inw		irongate_inw

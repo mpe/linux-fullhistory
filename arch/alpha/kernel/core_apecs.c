@@ -356,22 +356,49 @@ struct pci_ops apecs_pci_ops =
 	write_dword:	apecs_write_config_dword
 };
 
+void
+apecs_pci_tbi(struct pci_controler *hose, dma_addr_t start, dma_addr_t end)
+{
+	wmb();
+	*(vip)APECS_IOC_TBIA = 0;
+	mb();
+}
+
 void __init
 apecs_init_arch(void)
 {
 	struct pci_controler *hose;
 
 	/*
-	 * Set up the PCI->physical memory translation windows.
-	 * For now, window 2 is disabled.  In the future, we may
-	 * want to use it to do scatter/gather DMA.  Window 1
-	 * goes at 1 GB and is 1 GB large.
+	 * Create our single hose.
 	 */
-	*(vuip)APECS_IOC_PB1R = 1UL << 19 | (APECS_DMA_WIN_BASE & 0xfff00000U);
-	*(vuip)APECS_IOC_PM1R = (APECS_DMA_WIN_SIZE - 1) & 0xfff00000U;
+
+	pci_isa_hose = hose = alloc_pci_controler();
+	hose->io_space = &ioport_resource;
+	hose->mem_space = &iomem_resource;
+	hose->config_space = APECS_CONF;
+	hose->index = 0;
+
+	/*
+	 * Set up the PCI to main memory translation windows.
+	 *
+	 * Window 1 is direct access 1GB at 1GB
+	 * Window 2 is scatter-gather 8MB at 8MB (for isa)
+	 */
+	hose->sg_isa = iommu_arena_new(0x00800000, 0x00800000, PAGE_SIZE);
+	hose->sg_pci = NULL;
+	__direct_map_base = 0x40000000;
+	__direct_map_size = 0x40000000;
+
+	*(vuip)APECS_IOC_PB1R = __direct_map_base | 0x00080000;
+	*(vuip)APECS_IOC_PM1R = (__direct_map_size - 1) & 0xfff00000U;
 	*(vuip)APECS_IOC_TB1R = 0;
 
-	*(vuip)APECS_IOC_PB2R = 0U;	/* disable window 2 */
+	*(vuip)APECS_IOC_PB2R = hose->sg_isa->dma_base | 0x000c0000;
+	*(vuip)APECS_IOC_PM2R = (hose->sg_isa->size - 1) & 0xfff00000;
+	*(vuip)APECS_IOC_TB2R = virt_to_phys(hose->sg_isa->ptes) >> 1;
+
+	apecs_pci_tbi(hose, 0, -1);
 
 	/*
 	 * Finally, clear the HAXR2 register, which gets used
@@ -381,16 +408,6 @@ apecs_init_arch(void)
 	 */
 	*(vuip)APECS_IOC_HAXR2 = 0;
 	mb();
-
-	/*
-	 * Create our single hose.
-	 */
-
-	hose = alloc_pci_controler();
-	hose->io_space = &ioport_resource;
-	hose->mem_space = &iomem_resource;
-	hose->config_space = APECS_CONF;
-	hose->index = 0;
 }
 
 void

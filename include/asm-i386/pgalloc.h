@@ -220,11 +220,6 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 
 #else
 
-/*
- * We aren't very clever about this yet -  SMP could certainly
- * avoid some global flushes..
- */
-
 #include <asm/smp.h>
 
 #define local_flush_tlb() \
@@ -242,22 +237,17 @@ static inline void flush_tlb_range(struct mm_struct * mm, unsigned long start, u
 	flush_tlb_mm(mm);
 }
 
-extern volatile unsigned long smp_invalidate_needed;
-extern unsigned int cpu_tlbbad[NR_CPUS];
+#define TLBSTATE_OK	1
+#define TLBSTATE_LAZY	2
+#define TLBSTATE_OLD	3
 
-static inline void do_flush_tlb_local(void)
+struct tlb_state
 {
-	unsigned long cpu = smp_processor_id();
-	struct mm_struct *mm = current->mm;
+	struct mm_struct *active_mm;
+	int state;
+};
+extern struct tlb_state cpu_tlbstate[NR_CPUS];
 
-	clear_bit(cpu, &smp_invalidate_needed);
-	if (mm) {
-		set_bit(cpu, &mm->cpu_vm_mask);
-		local_flush_tlb();
-	} else {
-		cpu_tlbbad[cpu] = 1;
-	}
-}
 
 #endif
 

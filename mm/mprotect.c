@@ -214,7 +214,7 @@ asmlinkage long sys_mprotect(unsigned long start, size_t len, unsigned long prot
 
 	if (start & ~PAGE_MASK)
 		return -EINVAL;
-	len = (len + ~PAGE_MASK) & PAGE_MASK;
+	len = PAGE_ALIGN(len);
 	end = start + len;
 	if (end < start)
 		return -EINVAL;

@@ -2,10 +2,21 @@
 #define __LINUX_UHCI_H
 
 /*
-   $Id: usb-uhci.h,v 1.31 2000/01/15 22:02:30 acher Exp $
+   $Id: usb-uhci.h,v 1.39 2000/02/05 20:25:27 acher Exp $
  */
 #define MODNAME "usb-uhci"
-#define VERSTR "version v1.169 time " __TIME__ " " __DATE__
+#define VERSTR "version v1.184 time " __TIME__ " " __DATE__
+
+static __inline__ void uhci_wait_ms(unsigned int ms)
+{
+	if(!in_interrupt())
+	{
+		current->state = TASK_UNINTERRUPTIBLE;
+		schedule_timeout(1 + ms * HZ / 1000);
+	}
+	else
+		mdelay(ms);
+}
 
 /* Command register */
 #define USBCMD		0
@@ -56,6 +67,7 @@
 #define USBLEGSUP_DEFAULT 0x2000	/* only PIRQ enable set */
 
 #define UHCI_NULL_DATA_SIZE	0x7ff	/* for UHCI controller TD */
+#define UHCI_PID 		0xff	/* PID MASK */
 
 #define UHCI_PTR_BITS		0x000F
 #define UHCI_PTR_TERM		0x0001
@@ -137,6 +149,7 @@ typedef struct {
 	struct list_head horizontal;
 	struct list_head vertical;
 	struct list_head desc_list;
+	int last_used;
 } uhci_desc_t, *puhci_desc_t;
 
 typedef struct {
@@ -170,9 +183,9 @@ typedef struct uhci {
 
 	spinlock_t urb_list_lock;	// lock to keep consistency 
 
+	int unlink_urb_done;
+	
 	struct usb_bus *bus;	// our bus
-
-	spinlock_t unlink_urb_lock;	// lock for unlink_urb
 
 	__u32 *framelist;
 	uhci_desc_t **iso_td;
@@ -180,6 +193,7 @@ typedef struct uhci {
 	uhci_desc_t *control_chain;
 	uhci_desc_t *bulk_chain;
 	uhci_desc_t *chain_end;
+	struct list_head free_desc;
 	spinlock_t qh_lock;
 	spinlock_t td_lock;
 	struct virt_root_hub rh;	//private data of the virtual root hub

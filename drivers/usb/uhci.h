@@ -108,7 +108,7 @@ struct uhci_qh {
 	/* Software fields */
 	struct uhci_qh *prevqh, *nextqh;	/* Previous and next TD in queue */
 
-	struct uhci_device *dev;		/* The owning device */
+	struct usb_device *dev;			/* The owning device */
 
 	struct list_head list;
 } __attribute__((aligned(16)));
@@ -182,33 +182,13 @@ struct uhci_td {
 	unsigned int *frameptr;		/* Frame list pointer */
 	struct uhci_td *prevtd, *nexttd; /* Previous and next TD in queue */
 
-	struct uhci_device *dev;
+	struct usb_device *dev;
 	struct urb *urb;		/* URB this TD belongs to */
 	struct uhci_td *next;		/* List of chained TD's for an URB */
 
 	struct list_head irq_list;	/* Active interrupt list.. */
 	struct list_head list;
 } __attribute__((aligned(16)));
-
-/*
- * Note the alignment requirements of the entries
- *
- * Each UHCI device has pre-allocated QH and TD entries.
- * You can use more than the pre-allocated ones, but I
- * don't see you usually needing to.
- */
-struct uhci;
-
-struct uhci_device {
-	struct usb_device	*usb;
-
-	atomic_t		refcnt;
-
-	struct uhci		*uhci;		/* HC this device is connected to */
-};
-
-#define uhci_to_usb(uhci)	((uhci)->usb)
-#define usb_to_uhci(usb)	((struct uhci_device *)(usb)->hcpriv)
 
 /*
  * There are various standard queues. We set up several different

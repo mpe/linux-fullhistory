@@ -7,7 +7,7 @@
 
 struct pci_dev;
 struct pci_controler;
-
+struct pci_iommu_arena;
 
 /*
  * We can't just blindly use 64K for machines with EISA busses; they
@@ -125,11 +125,16 @@ static inline u8 bridge_swizzle(u8 pin, u8 slot)
 
 /* The hose list.  */
 extern struct pci_controler *hose_head, **hose_tail;
+extern struct pci_controler *pci_isa_hose;
 
 extern void common_init_pci(void);
 extern u8 common_swizzle(struct pci_dev *, u8 *);
 extern struct pci_controler *alloc_pci_controler(void);
 extern struct resource *alloc_resource(void);
+
+extern struct pci_iommu_arena *iommu_arena_new(dma_addr_t, unsigned long,
+					   unsigned long);
+extern long iommu_arena_alloc(struct pci_iommu_arena *arena, long n);
 
 extern const char *const pci_io_names[];
 extern const char *const pci_mem_names[];

@@ -265,7 +265,7 @@ int copy_strings_kernel(int argc,char ** argv, struct linux_binprm *bprm)
  * This routine is used to map in a page into an address space: needed by
  * execve() for the initial stack and environment pages.
  */
-static void put_dirty_page(struct task_struct * tsk, struct page *page, unsigned long address)
+void put_dirty_page(struct task_struct * tsk, struct page *page, unsigned long address)
 {
 	pgd_t * pgd;
 	pmd_t * pmd;

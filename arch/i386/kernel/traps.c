@@ -124,11 +124,56 @@ int kstack_depth_to_print = 24;
 
 /*
  * These constants are for searching for possible module text
- * segments.  VMALLOC_OFFSET comes from mm/vmalloc.c; MODULE_RANGE is
- * a guess of how much space is likely to be vmalloced.
+ * segments. MODULE_RANGE is a guess of how much space is likely
+ * to be vmalloced.
  */
-#define VMALLOC_OFFSET (8*1024*1024)
 #define MODULE_RANGE (8*1024*1024)
+
+void show_stack(unsigned long * esp)
+{
+	unsigned long *stack, addr, module_start, module_end;
+	int i;
+
+	// debugging aid: "show_stack(NULL);" prints the
+	// back trace for this cpu.
+
+	if(esp==NULL)
+		esp=(unsigned long*)&esp;
+
+	stack = esp;
+	for(i=0; i < kstack_depth_to_print; i++) {
+		if (((long) stack & (THREAD_SIZE-1)) == 0)
+			break;
+		if (i && ((i % 8) == 0))
+			printk("\n       ");
+		printk("%08lx ", *stack++);
+	}
+
+	printk("\nCall Trace: ");
+	stack = esp;
+	i = 1;
+	module_start = VMALLOC_START;
+	module_end = module_start + MODULE_RANGE;
+	while (((long) stack & (THREAD_SIZE-1)) != 0) {
+		addr = *stack++;
+		/*
+		 * If the address is either in the text segment of the
+		 * kernel, or in the region which contains vmalloc'ed
+		 * memory, it *may* be the address of a calling
+		 * routine; if so, print it so that someone tracing
+		 * down the cause of the crash will be able to figure
+		 * out the call path that was taken.
+		 */
+		if (((addr >= (unsigned long) &_stext) &&
+		     (addr <= (unsigned long) &_etext)) ||
+		    ((addr >= module_start) && (addr <= module_end))) {
+			if (i && ((i % 8) == 0))
+				printk("\n       ");
+			printk("[<%08lx>] ", addr);
+			i++;
+		}
+	}
+}
 
 static void show_registers(struct pt_regs *regs)
 {
@@ -136,7 +181,6 @@ static void show_registers(struct pt_regs *regs)
 	int in_kernel = 1;
 	unsigned long esp;
 	unsigned short ss;
-	unsigned long *stack, addr, module_start, module_end;
 
 	esp = (unsigned long) (&regs->esp);
 	ss = __KERNEL_DS;
@@ -160,43 +204,24 @@ static void show_registers(struct pt_regs *regs)
 	 * time of the fault..
 	 */
 	if (in_kernel) {
+
 		printk("\nStack: ");
-		stack = (unsigned long *) esp;
-		for(i=0; i < kstack_depth_to_print; i++) {
-			if (((long) stack & 4095) == 0)
-				break;
-			if (i && ((i % 8) == 0))
-				printk("\n       ");
-			printk("%08lx ", *stack++);
-		}
-		printk("\nCall Trace: ");
-		stack = (unsigned long *) esp;
-		i = 1;
-		module_start = PAGE_OFFSET + (max_mapnr << PAGE_SHIFT);
-		module_start = ((module_start + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1));
-		module_end = module_start + MODULE_RANGE;
-		while (((long) stack & 4095) != 0) {
-			addr = *stack++;
-			/*
-			 * If the address is either in the text segment of the
-			 * kernel, or in the region which contains vmalloc'ed
-			 * memory, it *may* be the address of a calling
-			 * routine; if so, print it so that someone tracing
-			 * down the cause of the crash will be able to figure
-			 * out the call path that was taken.
-			 */
-			if (((addr >= (unsigned long) &_stext) &&
-			     (addr <= (unsigned long) &_etext)) ||
-			    ((addr >= module_start) && (addr <= module_end))) {
-				if (i && ((i % 8) == 0))
-					printk("\n       ");
-				printk("[<%08lx>] ", addr);
-				i++;
-			}
-		}
+		show_stack((unsigned long*)esp);
+
 		printk("\nCode: ");
+		if(regs->eip < PAGE_OFFSET)
+			goto bad;
+
 		for(i=0;i<20;i++)
-			printk("%02x ", ((unsigned char *)regs->eip)[i]);
+		{
+			unsigned char c;
+			if(__get_user(c, &((unsigned char*)regs->eip)[i])) {
+bad:
+				printk(" Bad EIP value.");
+				break;
+			}
+			printk("%02x ", c);
+		}
 	}
 	printk("\n");
 }	

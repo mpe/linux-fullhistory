@@ -42,7 +42,8 @@ extern struct cpuinfo_alpha cpu_data[NR_CPUS];
 
 /* Map from cpu id to sequential logical cpu number.  This will only
    not be idempotent when cpus failed to come on-line.  */
-extern int cpu_number_map[NR_CPUS];
+extern int __cpu_number_map[NR_CPUS];
+#define cpu_number_map(cpu)  __cpu_number_map[cpu]
 
 /* The reverse map from sequential logical cpu number to cpu id.  */
 extern int __cpu_logical_map[NR_CPUS];

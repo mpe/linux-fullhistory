@@ -581,6 +581,7 @@ still_running_back:
 			if (next->active_mm) BUG();
 			next->active_mm = oldmm;
 			atomic_inc(&oldmm->mm_count);
+			enter_lazy_tlb(oldmm, next, this_cpu);
 		} else {
 			if (next->active_mm != mm) BUG();
 			switch_mm(oldmm, mm, next, this_cpu);
@@ -1184,5 +1185,6 @@ void __init sched_init(void)
 	 * The boot idle thread does lazy MMU switching as well:
 	 */
 	atomic_inc(&init_mm.mm_count);
+	enter_lazy_tlb(&init_mm, current, cpu);
 }
 

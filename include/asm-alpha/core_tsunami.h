@@ -15,26 +15,6 @@
  *
  */
 
-/*
- * We must actually use 2 windows to direct-map the 2GB space, because
- * of an "idiot-syncracy" of the CYPRESS chip used on DS20 and others.
- * It may respond to a PCI bus address in the last 1MB of the 4GB
- * address range, and that is where real memory may appear.
- *
- * Sigh...
- */
-#define TSUNAMI_DMA_WIN_BASE		(1UL*1024*1024*1024)
-#define TSUNAMI_DMA_WIN_SIZE		(2UL*1024*1024*1024)
-
-#define TSUNAMI_DMA_WIN0_BASE_DEFAULT	(1UL*1024*1024*1024)
-#define TSUNAMI_DMA_WIN0_SIZE_DEFAULT	(1UL*1024*1024*1024)
-#define TSUNAMI_DMA_WIN0_TRAN_DEFAULT	(0UL)
-
-#define TSUNAMI_DMA_WIN1_BASE_DEFAULT	(2UL*1024*1024*1024)
-#define TSUNAMI_DMA_WIN1_SIZE_DEFAULT	(1UL*1024*1024*1024)
-#define TSUNAMI_DMA_WIN1_TRAN_DEFAULT	(1UL*1024*1024*1024)
-
-
 /* XXX: Do we need to conditionalize on this?  */
 #ifdef USE_48_BIT_KSEG
 #define TS_BIAS 0x80000000000UL
@@ -309,20 +289,6 @@ struct el_TSUNAMI_sysdata_mcheck {
 #endif
 
 /*
- * Translate physical memory address as seen on (PCI) bus into
- * a kernel virtual address and vv.
- */
-__EXTERN_INLINE unsigned long tsunami_virt_to_bus(void * address)
-{
-	return virt_to_phys(address) + TSUNAMI_DMA_WIN_BASE;
-}
-
-__EXTERN_INLINE void * tsunami_bus_to_virt(unsigned long address)
-{
-	return phys_to_virt(address - TSUNAMI_DMA_WIN_BASE);
-}
-
-/*
  * I/O functions:
  *
  * TSUNAMI, the 21??? PCI/memory support chipset for the EV6 (21264)
@@ -438,9 +404,6 @@ __EXTERN_INLINE void tsunami_writeq(unsigned long b, unsigned long addr)
 #undef vulp
 
 #ifdef __WANT_IO_DEF
-
-#define virt_to_bus	tsunami_virt_to_bus
-#define bus_to_virt	tsunami_bus_to_virt
 
 #define __inb		tsunami_inb
 #define __inw		tsunami_inw

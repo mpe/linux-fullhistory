@@ -51,9 +51,9 @@ static struct {
 } ipi_data[NR_CPUS] __cacheline_aligned;
 
 enum ipi_message_type {
-        IPI_RESCHEDULE,
-        IPI_CALL_FUNC,
-        IPI_CPU_STOP,
+	IPI_RESCHEDULE,
+	IPI_CALL_FUNC,
+	IPI_CPU_STOP,
 };
 
 spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
@@ -70,7 +70,7 @@ int smp_num_cpus = 1;		/* Number that came online.  */
 int smp_threads_ready;		/* True once the per process idle is forked. */
 cycles_t cacheflush_time;
 
-int cpu_number_map[NR_CPUS];
+int __cpu_number_map[NR_CPUS];
 int __cpu_logical_map[NR_CPUS];
 
 extern void calibrate_delay(void);
@@ -426,13 +426,13 @@ smp_boot_one_cpu(int cpuid, int cpunum)
 	if (fork_by_hand() < 0)
 		panic("failed fork for CPU %d", cpuid);
 
-        idle = init_task.prev_task;
-        if (!idle)
-                panic("No idle process for CPU %d", cpuid);
+	idle = init_task.prev_task;
+	if (!idle)
+		panic("No idle process for CPU %d", cpuid);
 
 	idle->processor = cpuid;
 	__cpu_logical_map[cpunum] = cpuid;
-	cpu_number_map[cpuid] = cpunum;
+	__cpu_number_map[cpuid] = cpunum;
 	idle->has_cpu = 1; /* we schedule the first task manually */
  
 	del_from_runqueue(idle);
@@ -461,7 +461,7 @@ smp_boot_one_cpu(int cpuid, int cpunum)
 
 	/* we must invalidate our stuff as we failed to boot the CPU */
 	__cpu_logical_map[cpunum] = -1;
-	cpu_number_map[cpuid] = -1;
+	__cpu_number_map[cpuid] = -1;
 
 	/* the idle task is local to us so free it as we don't use it */
 	free_task_struct(idle);
@@ -534,11 +534,11 @@ smp_boot_cpus(void)
 	unsigned long bogosum;
 
 	/* Take care of some initial bookkeeping.  */
-	memset(cpu_number_map, -1, sizeof(cpu_number_map));
+	memset(__cpu_number_map, -1, sizeof(__cpu_number_map));
 	memset(__cpu_logical_map, -1, sizeof(__cpu_logical_map));
 	memset(ipi_data, 0, sizeof(ipi_data));
 
-	cpu_number_map[smp_boot_cpuid] = 0;
+	__cpu_number_map[smp_boot_cpuid] = 0;
 	__cpu_logical_map[0] = smp_boot_cpuid;
 	current->processor = smp_boot_cpuid;
 
@@ -554,7 +554,7 @@ smp_boot_cpus(void)
 
 	/* Nothing to do on a UP box, or when told not to.  */
 	if (smp_num_probed == 1 || max_cpus == 0) {
-	        printk(KERN_INFO "SMP mode deactivated.\n");
+		printk(KERN_INFO "SMP mode deactivated.\n");
 		return;
 	}
 
@@ -565,7 +565,7 @@ smp_boot_cpus(void)
 		if (i == smp_boot_cpuid)
 			continue;
 
-	        if (((cpu_present_mask >> i) & 1) == 0)
+		if (((cpu_present_mask >> i) & 1) == 0)
 			continue;
 
 		if (smp_boot_one_cpu(i, cpu_count))
@@ -580,10 +580,10 @@ smp_boot_cpus(void)
 	}
 
 	bogosum = 0;
-        for (i = 0; i < NR_CPUS; i++) {
+	for (i = 0; i < NR_CPUS; i++) {
 		if (cpu_present_mask & (1L << i))
 			bogosum += cpu_data[i].loops_per_sec;
-        }
+	}
 	printk(KERN_INFO "SMP: Total of %d processors activated "
 	       "(%lu.%02lu BogoMIPS).\n",
 	       cpu_count, (bogosum + 2500) / 500000,
@@ -605,7 +605,7 @@ smp_commence(void)
 
 
 extern void update_one_process(struct task_struct *p, unsigned long ticks,
-	                       unsigned long user, unsigned long system,
+			       unsigned long user, unsigned long system,
 			       int cpu);
 
 void
@@ -626,13 +626,13 @@ smp_percpu_timer_interrupt(struct pt_regs *regs)
 		irq_enter(cpu, TIMER_IRQ);
 
 		update_one_process(current, 1, user, !user, cpu);
-	        if (current->pid) {
-	                if (--current->counter <= 0) {
+		if (current->pid) {
+			if (--current->counter <= 0) {
 				current->counter = 0;
-	                        current->need_resched = 1;
-	                }
+				current->need_resched = 1;
+			}
 
-	                if (user) {
+			if (user) {
 				if (current->priority < DEF_PRIORITY) {
 					kstat.cpu_nice++;
 					kstat.per_cpu_nice[cpu]++;
@@ -640,11 +640,11 @@ smp_percpu_timer_interrupt(struct pt_regs *regs)
 					kstat.cpu_user++;
 					kstat.per_cpu_user[cpu]++;
 				}
-	                } else {
+			} else {
 				kstat.cpu_system++;
 				kstat.per_cpu_system[cpu]++;
-	                }
-	        }
+			}
+		}
 
 		data->prof_counter = data->prof_multiplier;
 		irq_exit(cpu, TIMER_IRQ);

@@ -55,52 +55,6 @@ sio_init_irq(void)
 }
 
 static inline void __init
-xl_init_arch(void)
-{
-	struct pci_controler *hose;
-
-	/*
-	 * Set up the PCI->physical memory translation windows.  For
-	 * the XL we *must* use both windows, in order to maximize the
-	 * amount of physical memory that can be used to DMA from the
-	 * ISA bus, and still allow PCI bus devices access to all of
-	 * host memory.
-	 *
-	 * See <asm/apecs.h> for window bases and sizes.
-	 *
-	 * This restriction due to the true XL motherboards' 82379AB SIO
-	 * PCI<->ISA bridge chip which passes only 27 bits of address...
-	 */
-
-	*(vuip)APECS_IOC_PB1R = 1<<19 | (APECS_XL_DMA_WIN1_BASE & 0xfff00000U);
-	*(vuip)APECS_IOC_PM1R = (APECS_XL_DMA_WIN1_SIZE - 1) & 0xfff00000U;
-	*(vuip)APECS_IOC_TB1R = 0;
-
-	*(vuip)APECS_IOC_PB2R = 1<<19 | (APECS_XL_DMA_WIN2_BASE & 0xfff00000U);
-	*(vuip)APECS_IOC_PM2R = (APECS_XL_DMA_WIN2_SIZE - 1) & 0xfff00000U;
-	*(vuip)APECS_IOC_TB2R = 0;
-
-	/*
-	 * Finally, clear the HAXR2 register, which gets used for PCI
-	 * Config Space accesses. That is the way we want to use it,
-	 * and we do not want to depend on what ARC or SRM might have
-	 * left behind...
-	 */
-
-	*(vuip)APECS_IOC_HAXR2 = 0; mb();
-
-	/*
-	 * Create our single hose.
-	 */
-
-	hose = alloc_pci_controler();
-	hose->io_space = &ioport_resource;
-	hose->mem_space = &iomem_resource;
-	hose->config_space = LCA_CONF;
-	hose->index = 0;
-}
-
-static inline void __init
 alphabook1_init_arch(void)
 {
 	/* The AlphaBook1 has LCD video fixed at 800x600,
@@ -448,7 +402,7 @@ struct alpha_machine_vector xl_mv __initmv = {
 	DO_EV4_MMU,
 	DO_DEFAULT_RTC,
 	DO_APECS_IO,
-	BUS(apecs_xl),
+	BUS(apecs),
 	machine_check:		apecs_machine_check,
 	max_dma_address:	ALPHA_XL_MAX_DMA_ADDRESS,
 	min_io_address:		DEFAULT_IO_BASE,
@@ -460,7 +414,7 @@ struct alpha_machine_vector xl_mv __initmv = {
 	ack_irq:		common_ack_irq,
 	device_interrupt:	isa_device_interrupt,
 
-	init_arch:		xl_init_arch,
+	init_arch:		lca_init_arch,
 	init_irq:		sio_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		noname_init_pci,

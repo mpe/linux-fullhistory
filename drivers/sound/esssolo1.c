@@ -66,6 +66,7 @@
  *    12.01.2000   0.12  Prevent some ioctl's from returning bad count values on underrun/overrun;
  *                       Tim Janik's BSE (Bedevilled Sound Engine) found this
  *                       Integrated (aka redid 8-)) APM support patch by Zach Brown
+ *    07.02.2000   0.13  Use pci_alloc_consistent and pci_register_driver
  *
  */
 
@@ -137,11 +138,11 @@ struct solo1_state {
 	/* magic */
 	unsigned int magic;
 
-	/* we keep the cards in a linked list */
-	struct solo1_state *next;
+	/* list of esssolo1 devices */
+	struct list_head devs;
 	
-	/* pcidev is needed to turn off the DDMA controller at driver shutdown */
-	struct pci_dev *pcidev;
+	/* the corresponding pci_dev structure */
+	struct pci_dev *dev;
 
 	/* soundcore stuff */
 	int dev_audio;
@@ -175,6 +176,7 @@ struct solo1_state {
 
 	struct dmabuf {
 		void *rawbuf;
+		dma_addr_t dmaaddr;
 		unsigned buforder;
 		unsigned numfrag;
 		unsigned fragshift;
@@ -210,7 +212,7 @@ struct solo1_state {
 
 /* --------------------------------------------------------------------- */
 
-struct solo1_state *devs = NULL;
+static LIST_HEAD(devs);
 
 /* --------------------------------------------------------------------- */
 
@@ -396,7 +398,7 @@ static void start_adc(struct solo1_state *s)
 #define DMABUF_DEFAULTORDER (15-PAGE_SHIFT)
 #define DMABUF_MINORDER 1
 
-extern inline void dealloc_dmabuf(struct dmabuf *db)
+extern inline void dealloc_dmabuf(struct solo1_state *s, struct dmabuf *db)
 {
 	unsigned long map, mapend;
 
@@ -405,13 +407,13 @@ extern inline void dealloc_dmabuf(struct dmabuf *db)
 		mapend = MAP_NR(db->rawbuf + (PAGE_SIZE << db->buforder) - 1);
 		for (map = MAP_NR(db->rawbuf); map <= mapend; map++)
 			clear_bit(PG_reserved, &mem_map[map].flags);	
-		free_pages((unsigned long)db->rawbuf, db->buforder);
+		pci_free_consistent(s->dev, PAGE_SIZE << db->buforder, db->rawbuf, db->dmaaddr);
 	}
 	db->rawbuf = NULL;
 	db->mapped = db->ready = 0;
 }
 
-static int prog_dmabuf(struct solo1_state *s, struct dmabuf *db, int gfp_mask)
+static int prog_dmabuf(struct solo1_state *s, struct dmabuf *db, unsigned long dmamask)
 {
 	int order;
 	unsigned bytespersec;
@@ -421,19 +423,12 @@ static int prog_dmabuf(struct solo1_state *s, struct dmabuf *db, int gfp_mask)
 	db->hwptr = db->swptr = db->total_bytes = db->count = db->error = db->endcleared = 0;
 	if (!db->rawbuf) {
 		db->ready = db->mapped = 0;
+		s->dev->dma_mask = dmamask;
                 for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER; order--)
-                        if ((db->rawbuf = (void *)__get_free_pages(gfp_mask, order)))
+			if ((db->rawbuf = pci_alloc_consistent(s->dev, PAGE_SIZE << order, &db->dmaaddr)))
 				break;
 		if (!db->rawbuf)
 			return -ENOMEM;
-		/* work around a problem of the alpha port */
-		if ((gfp_mask & GFP_DMA) && (virt_to_bus(db->rawbuf) & (~0xffffffUL))) {
-			printk(KERN_ERR "solo1: requested DMA buffer below 16M but got 0x%lx, Alpha bug?\n", 
-			       (unsigned long)virt_to_bus(db->rawbuf));
-			kfree(db->rawbuf);
-			db->rawbuf = NULL;
-			return -ENOMEM;
-		}
 		db->buforder = order;
 		/* now mark the pages as reserved; otherwise remap_page_range doesn't do what we want */
 		mapend = MAP_NR(db->rawbuf + (PAGE_SIZE << db->buforder) - 1);
@@ -475,9 +470,9 @@ extern inline int prog_dmabuf_adc(struct solo1_state *s)
 	int c;
 
 	stop_adc(s);
-	if ((c = prog_dmabuf(s, &s->dma_adc, GFP_KERNEL | GFP_DMA)))
+	if ((c = prog_dmabuf(s, &s->dma_adc, 0xffffff)))
 		return c;
-	va = virt_to_bus(s->dma_adc.rawbuf);
+	va = s->dma_adc.dmaaddr;
 	if ((va & ~((1<<24)-1)))
 		panic("solo1: buffer above 16M boundary");
 	outb(0, s->ddmabase+0xd);  /* clear */
@@ -500,10 +495,10 @@ extern inline int prog_dmabuf_dac(struct solo1_state *s)
 	int c;
 
 	stop_dac(s);
-	if ((c = prog_dmabuf(s, &s->dma_dac, GFP_KERNEL)))
+	if ((c = prog_dmabuf(s, &s->dma_dac, 0xffffffff)))
 		return c;
 	memset(s->dma_dac.rawbuf, (s->fmt & (AFMT_U8 | AFMT_U16_LE)) ? 0 : 0x80, s->dma_dac.dmasize); /* almost correct for U16 */
-	va = virt_to_bus(s->dma_dac.rawbuf);
+	va = s->dma_dac.dmaaddr;
 	if ((va ^ (va + s->dma_dac.dmasize - 1)) & ~((1<<20)-1))
 		panic("solo1: buffer crosses 1M boundary");
 	outl(va, s->iobase);
@@ -900,12 +895,16 @@ static loff_t solo1_llseek(struct file *file, loff_t offset, int origin)
 static int solo1_open_mixdev(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
-	struct solo1_state *s = devs;
+	struct list_head *list;
+	struct solo1_state *s;
 
-	while (s && s->dev_mixer != minor)
-		s = s->next;
-	if (!s)
-		return -ENODEV;
+	for (list = devs.next; ; list = list->next) {
+		if (list == &devs)
+			return -ENODEV;
+		s = list_entry(list, struct solo1_state, devs);
+		if (s->dev_mixer == minor)
+			break;
+	}
        	VALIDATE_STATE(s);
 	file->private_data = s;
 	MOD_INC_USE_COUNT;
@@ -915,7 +914,7 @@ static int solo1_open_mixdev(struct inode *inode, struct file *file)
 static int solo1_release_mixdev(struct inode *inode, struct file *file)
 {
 	struct solo1_state *s = (struct solo1_state *)file->private_data;
-	
+
 	VALIDATE_STATE(s);
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -1522,13 +1521,13 @@ static int solo1_release(struct inode *inode, struct file *file)
 	if (file->f_mode & FMODE_WRITE) {
 		stop_dac(s);
 		outb(0, s->iobase+6);  /* disable DMA */
-		dealloc_dmabuf(&s->dma_dac);
+		dealloc_dmabuf(s, &s->dma_dac);
 	}
 	if (file->f_mode & FMODE_READ) {
 		stop_adc(s);
 		outb(1, s->ddmabase+0xf); /* mask DMA channel */
 		outb(0, s->ddmabase+0xd); /* DMA master clear */
-		dealloc_dmabuf(&s->dma_adc);
+		dealloc_dmabuf(s, &s->dma_adc);
 	}
 	s->open_mode &= ~(FMODE_READ | FMODE_WRITE);
 	wake_up(&s->open_wait);
@@ -1541,12 +1540,16 @@ static int solo1_open(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
 	DECLARE_WAITQUEUE(wait, current);
-	struct solo1_state *s = devs;
-
-	while (s && ((s->dev_audio ^ minor) & ~0xf))
-		s = s->next;
-	if (!s)
-		return -ENODEV;
+	struct list_head *list;
+	struct solo1_state *s;
+	
+	for (list = devs.next; ; list = list->next) {
+		if (list == &devs)
+			return -ENODEV;
+		s = list_entry(list, struct solo1_state, devs);
+		if (!((s->dev_audio ^ minor) & ~0xf))
+			break;
+	}
        	VALIDATE_STATE(s);
 	file->private_data = s;
 	/* wait for device to become free */
@@ -1821,13 +1824,17 @@ static int solo1_midi_open(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
 	DECLARE_WAITQUEUE(wait, current);
-	struct solo1_state *s = devs;
 	unsigned long flags;
+	struct list_head *list;
+	struct solo1_state *s;
 
-	while (s && s->dev_midi != minor)
-		s = s->next;
-	if (!s)
-		return -ENODEV;
+	for (list = devs.next; ; list = list->next) {
+		if (list == &devs)
+			return -ENODEV;
+		s = list_entry(list, struct solo1_state, devs);
+		if (s->dev_midi == minor)
+			break;
+	}
        	VALIDATE_STATE(s);
 	file->private_data = s;
 	/* wait for device to become free */
@@ -2041,12 +2048,16 @@ static int solo1_dmfm_open(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
 	DECLARE_WAITQUEUE(wait, current);
-	struct solo1_state *s = devs;
+	struct list_head *list;
+	struct solo1_state *s;
 
-	while (s && s->dev_dmfm != minor)
-		s = s->next;
-	if (!s)
-		return -ENODEV;
+	for (list = devs.next; ; list = list->next) {
+		if (list == &devs)
+			return -ENODEV;
+		s = list_entry(list, struct solo1_state, devs);
+		if (s->dev_dmfm == minor)
+			break;
+	}
        	VALIDATE_STATE(s);
 	file->private_data = s;
 	/* wait for device to become free */
@@ -2124,11 +2135,6 @@ static /*const*/ struct file_operations solo1_dmfm_fops = {
 
 /* --------------------------------------------------------------------- */
 
-/* maximum number of devices */
-#define NR_DEVICE 5
-
-/* --------------------------------------------------------------------- */
-
 static struct initvol {
 	int mixch;
 	int vol;
@@ -2147,7 +2153,7 @@ static struct initvol {
 
 static int setup_solo1(struct solo1_state *s)
 {
-	struct pci_dev *pcidev = s->pcidev;
+	struct pci_dev *pcidev = s->dev;
 	mm_segment_t fs;
 	int i, val;
 
@@ -2209,7 +2215,7 @@ static int solo1_apm_callback(apm_event_t event)
 				/* reset sequencer and FIFO */
 				outb(3, s->sbbase+6); 
 				/* turn off DDMA controller address space */
-				pci_write_config_word(s->pcidev, 0x60, 0); 
+				pci_write_config_word(s->dev, 0x60, 0); 
 			}
 	}
 	return 0;
@@ -2222,103 +2228,151 @@ static int solo1_apm_callback(apm_event_t event)
 				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
 #define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
 
+static int solo1_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
+{
+	struct solo1_state *s;
+
+	if (!RSRCISIOREGION(pcidev, 0) ||
+	    !RSRCISIOREGION(pcidev, 1) ||
+	    !RSRCISIOREGION(pcidev, 2) ||
+	    !RSRCISIOREGION(pcidev, 3))
+		return -1;
+	if (pcidev->irq == 0)
+		return -1;
+	if (!(s = kmalloc(sizeof(struct solo1_state), GFP_KERNEL))) {
+		printk(KERN_WARNING "solo1: out of memory\n");
+		return -1;
+	}
+	memset(s, 0, sizeof(struct solo1_state));
+	init_waitqueue_head(&s->dma_adc.wait);
+	init_waitqueue_head(&s->dma_dac.wait);
+	init_waitqueue_head(&s->open_wait);
+	init_waitqueue_head(&s->midi.iwait);
+	init_waitqueue_head(&s->midi.owait);
+	init_MUTEX(&s->open_sem);
+	spin_lock_init(&s->lock);
+	s->magic = SOLO1_MAGIC;
+	s->dev = pcidev;
+	s->iobase = RSRCADDRESS(pcidev, 0);
+	s->sbbase = RSRCADDRESS(pcidev, 1);
+	s->vcbase = RSRCADDRESS(pcidev, 2);
+	s->ddmabase = s->vcbase + DDMABASE_OFFSET;
+	s->mpubase = RSRCADDRESS(pcidev, 3);
+	s->gpbase = RSRCADDRESS(pcidev, 4);
+	s->irq = pcidev->irq;
+	if (!request_region(s->iobase, IOBASE_EXTENT, "ESS Solo1")) {
+		printk(KERN_ERR "solo1: io ports in use\n");
+		goto err_region1;
+	}
+	if (!request_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT, "ESS Solo1")) {
+		printk(KERN_ERR "solo1: io ports in use\n");
+		goto err_region2;
+	}
+	if (!request_region(s->ddmabase, DDMABASE_EXTENT, "ESS Solo1")) {
+		printk(KERN_ERR "solo1: io ports in use\n");
+		goto err_region3;
+	}
+	if (!request_region(s->mpubase, MPUBASE_EXTENT, "ESS Solo1")) {
+		printk(KERN_ERR "solo1: io ports in use\n");
+		goto err_region4;
+	}
+	if (request_irq(s->irq, solo1_interrupt, SA_SHIRQ, "ESS Solo1", s)) {
+		printk(KERN_ERR "solo1: irq %u in use\n", s->irq);
+		goto err_irq;
+	}
+	pci_enable_device(pcidev);
+	printk(KERN_DEBUG "solo1: ddma base address: 0x%lx\n", s->ddmabase);
+	printk(KERN_INFO "solo1: joystick port at %#lx\n", s->gpbase+1);
+	/* register devices */
+	if ((s->dev_audio = register_sound_dsp(&solo1_audio_fops, -1)) < 0)
+		goto err_dev1;
+	if ((s->dev_mixer = register_sound_mixer(&solo1_mixer_fops, -1)) < 0)
+		goto err_dev2;
+	if ((s->dev_midi = register_sound_midi(&solo1_midi_fops, -1)) < 0)
+		goto err_dev3;
+	if ((s->dev_dmfm = register_sound_special(&solo1_dmfm_fops, 15 /* ?? */)) < 0)
+		goto err_dev4;
+	if (setup_solo1(s))
+		goto err;
+	/* store it in the driver field */
+	pcidev->driver_data = s;
+	pcidev->dma_mask = 0xffffff;  /* pessimistic; play can handle 32bit addrs */
+	/* put it into driver list */
+	list_add_tail(&s->devs, &devs);
+	return 0;
+
+ err:
+	unregister_sound_dsp(s->dev_dmfm);
+ err_dev4:
+	unregister_sound_dsp(s->dev_midi);
+ err_dev3:
+	unregister_sound_mixer(s->dev_mixer);
+ err_dev2:
+	unregister_sound_dsp(s->dev_audio);
+ err_dev1:
+	printk(KERN_ERR "solo1: initialisation error\n");
+	free_irq(s->irq, s);
+ err_irq:
+	release_region(s->iobase, IOBASE_EXTENT);
+ err_region4:
+	release_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT);
+ err_region3:
+	release_region(s->ddmabase, DDMABASE_EXTENT);
+ err_region2:
+	release_region(s->mpubase, MPUBASE_EXTENT);
+ err_region1:
+	kfree_s(s, sizeof(struct solo1_state));
+	return -1;
+}
+
+static void solo1_remove(struct pci_dev *dev)
+{
+	struct solo1_state *s = (struct solo1_state *)dev->driver_data;
+	
+	if (!s)
+		return;
+	list_del(&s->devs);
+	/* stop DMA controller */
+	outb(0, s->iobase+6);
+	outb(0, s->ddmabase+0xd); /* DMA master clear */
+	outb(3, s->sbbase+6); /* reset sequencer and FIFO */
+	synchronize_irq();
+	pci_write_config_word(s->dev, 0x60, 0); /* turn off DDMA controller address space */
+	free_irq(s->irq, s);
+	release_region(s->iobase, IOBASE_EXTENT);
+	release_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT);
+	release_region(s->ddmabase, DDMABASE_EXTENT);
+	release_region(s->mpubase, MPUBASE_EXTENT);
+	unregister_sound_dsp(s->dev_audio);
+	unregister_sound_mixer(s->dev_mixer);
+	unregister_sound_midi(s->dev_midi);
+	unregister_sound_special(s->dev_dmfm);
+	kfree_s(s, sizeof(struct solo1_state));
+	dev->driver_data = NULL;
+}
+
+static const struct pci_device_id id_table[] = {
+	{ PCI_VENDOR_ID_ESS, PCI_DEVICE_ID_ESS_SOLO1, PCI_ANY_ID, PCI_ANY_ID, 0, 0 },
+	{ 0, 0, 0, 0, 0, 0 }
+};
+
+MODULE_DEVICE_TABLE(pci, id_table);
+
+static struct pci_driver solo1_driver = {
+	name: "ESS Solo1",
+	id_table: id_table,
+	probe: solo1_probe,
+	remove: solo1_remove
+};
+
 
 static int __init init_solo1(void)
 {
-	struct solo1_state *s;
-	struct pci_dev *pcidev = NULL;
-	int index = 0;
-
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "solo1: version v0.12 time " __TIME__ " " __DATE__ "\n");
-	while (index < NR_DEVICE && 
-	       (pcidev = pci_find_device(PCI_VENDOR_ID_ESS, PCI_DEVICE_ID_ESS_SOLO1, pcidev))) {
-		if (!RSRCISIOREGION(pcidev, 0) ||
-		    !RSRCISIOREGION(pcidev, 1) ||
-		    !RSRCISIOREGION(pcidev, 2) ||
-		    !RSRCISIOREGION(pcidev, 3))
-			continue;
-		if (pcidev->irq == 0)
-			continue;
-		if (!(s = kmalloc(sizeof(struct solo1_state), GFP_KERNEL))) {
-			printk(KERN_WARNING "solo1: out of memory\n");
-			continue;
-		}
-		memset(s, 0, sizeof(struct solo1_state));
-		init_waitqueue_head(&s->dma_adc.wait);
-		init_waitqueue_head(&s->dma_dac.wait);
-		init_waitqueue_head(&s->open_wait);
-		init_waitqueue_head(&s->midi.iwait);
-		init_waitqueue_head(&s->midi.owait);
-		init_MUTEX(&s->open_sem);
-		spin_lock_init(&s->lock);
-		s->magic = SOLO1_MAGIC;
-		s->pcidev = pcidev;
-		s->iobase = RSRCADDRESS(pcidev, 0);
-		s->sbbase = RSRCADDRESS(pcidev, 1);
-		s->vcbase = RSRCADDRESS(pcidev, 2);
-		s->ddmabase = s->vcbase + DDMABASE_OFFSET;
-		s->mpubase = RSRCADDRESS(pcidev, 3);
-		s->gpbase = RSRCADDRESS(pcidev, 4);
-		s->irq = pcidev->irq;
-		if (check_region(s->iobase, IOBASE_EXTENT) ||
-		    check_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT) ||
-		    check_region(s->ddmabase, DDMABASE_EXTENT) ||
-		    check_region(s->mpubase, MPUBASE_EXTENT)) {
-			printk(KERN_ERR "solo1: io ports in use\n");
-			goto err_region;
-		}
-		request_region(s->iobase, IOBASE_EXTENT, "ESS Solo1");
-		request_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT, "ESS Solo1");
-		request_region(s->ddmabase, DDMABASE_EXTENT, "ESS Solo1");
-		request_region(s->mpubase, MPUBASE_EXTENT, "ESS Solo1");
-		if (request_irq(s->irq, solo1_interrupt, SA_SHIRQ, "ESS Solo1", s)) {
-			printk(KERN_ERR "solo1: irq %u in use\n", s->irq);
-			goto err_irq;
-		}
-		printk(KERN_DEBUG "solo1: ddma base address: 0x%lx\n", s->ddmabase);
-
-		printk(KERN_INFO "solo1: joystick port at %#lx\n", s->gpbase+1);
-
-		/* register devices */
-		if ((s->dev_audio = register_sound_dsp(&solo1_audio_fops, -1)) < 0)
-			goto err_dev1;
-		if ((s->dev_mixer = register_sound_mixer(&solo1_mixer_fops, -1)) < 0)
-			goto err_dev2;
-		if ((s->dev_midi = register_sound_midi(&solo1_midi_fops, -1)) < 0)
-			goto err_dev3;
-		if ((s->dev_dmfm = register_sound_special(&solo1_dmfm_fops, 15 /* ?? */)) < 0)
-			goto err_dev4;
-		if (setup_solo1(s))
-			goto err;
-		/* queue it for later freeing */
-		s->next = devs;
-		devs = s;
-		index++;
-		continue;
-
-	err:
-		unregister_sound_dsp(s->dev_dmfm);
-	err_dev4:
-		unregister_sound_dsp(s->dev_midi);
-	err_dev3:
-		unregister_sound_mixer(s->dev_mixer);
-	err_dev2:
-		unregister_sound_dsp(s->dev_audio);
-	err_dev1:
-		printk(KERN_ERR "solo1: initialisation error\n");
-		free_irq(s->irq, s);
-	err_irq:
-		release_region(s->iobase, IOBASE_EXTENT);
-		release_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT);
-		release_region(s->ddmabase, DDMABASE_EXTENT);
-		release_region(s->mpubase, MPUBASE_EXTENT);
-	err_region:
-		kfree_s(s, sizeof(struct solo1_state));
-	}
-	if (!devs)
-		return -ENODEV;
+	printk(KERN_INFO "solo1: version v0.13 time " __TIME__ " " __DATE__ "\n");
+	if (!pci_register_driver(&solo1_driver))
+                return -ENODEV;
 #ifdef CONFIG_APM
 	apm_register_callback(solo1_apm_callback);
 #endif
@@ -2332,31 +2386,11 @@ MODULE_DESCRIPTION("ESS Solo1 Driver");
 
 static void __exit cleanup_solo1(void)
 {
-	struct solo1_state *s;
-
-	while ((s = devs)) {
-		devs = devs->next;
-		/* stop DMA controller */
-		outb(0, s->iobase+6);
-		outb(0, s->ddmabase+0xd); /* DMA master clear */
-		outb(3, s->sbbase+6); /* reset sequencer and FIFO */
-		synchronize_irq();
-		pci_write_config_word(s->pcidev, 0x60, 0); /* turn off DDMA controller address space */
-		free_irq(s->irq, s);
-		release_region(s->iobase, IOBASE_EXTENT);
-		release_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT);
-		release_region(s->ddmabase, DDMABASE_EXTENT);
-		release_region(s->mpubase, MPUBASE_EXTENT);
-		unregister_sound_dsp(s->dev_audio);
-		unregister_sound_mixer(s->dev_mixer);
-		unregister_sound_midi(s->dev_midi);
-		unregister_sound_special(s->dev_dmfm);
-		kfree_s(s, sizeof(struct solo1_state));
-	}
+	printk(KERN_INFO "solo1: unloading\n");
+	pci_unregister_driver(&solo1_driver);
 #ifdef CONFIG_APM
 	apm_unregister_callback(solo1_apm_callback);
 #endif
-	printk(KERN_INFO "solo1: unloading\n");
 }
 
 /* --------------------------------------------------------------------- */

@@ -23,11 +23,30 @@ SUPPORTED CAMERAS:
 
 IBM "C-It" camera, also known as "Xirlink PC Camera"
 The device uses proprietary ASIC (and compression method);
-it is manufactured by Xirlink. See http://www.xirlink.com
+it is manufactured by Xirlink. See http://www.xirlink.com/
+or http://www.c-itnow.com/ for details and pictures.
+
+The Linux driver was developed with camera with following
+model number (or FCC ID): KSX-XVP510. This camera has three
+interfaces, each with one endpoint (control, iso, iso).
+
+It appears that Xirlink made some changes in their cameras recently.
+In particular, following models [FCC ID] are suspect; one with
+with FCC ID KSX-X9903 is known to be one of them:
+
+XVP300 [KSX-X9903]
+XVP600 [KSX-X9902]
+XVP610 [KSX-X9902]
+
+(see http://www.xirlink.com/ibmpccamera/ for updates, they refer
+to these new cameras by Windows driver dated 12-27-99, v3005 BETA)
+These cameras have two interfaces, one endpoint in each (iso, bulk).
+Attempts to remotely debug one of these cameras weren't successful.
+I'd need to have a camera to figure out how to use it.
 
 WHAT YOU NEED:
 
-- An IBM C-it camera
+- A supported IBM PC (C-it) camera (see above)
 
 - A Linux box with USB support (2.3/2.4 or 2.2 w/backport)
 
@@ -73,6 +92,7 @@ Name            Type            Range [default] Example
 debug           Integer         0-9 [0]         debug=1
 flags           Integer         0-0xFF [0]      flags=0x0d
 framerate       Integer         0-6 [2]         framerate=1
+hue_correction  Integer         0-255 [128]     hue_correction=115
 init_brightness Integer         0-255 [128]     init_brightness=100
 init_contrast   Integer         0-255 [192]     init_contrast=200
 init_color      Integer         0-255 [128]     init_color=130
@@ -107,6 +127,16 @@ framerate       This setting controls frame rate of the camera. This is
                 of light available. Setting 0 is slowest, 6 is fastest.
                 Beware - fast settings are very demanding and may not
                 work well with all video sizes. Be conservative.
+
+hue_correction  This highly optional setting allows to adjust the
+                hue of the image in a way slightly different from
+                what usual "hue" control does. Both controls affect
+                YUV colorspace: regular "hue" control adjusts only
+                U component, and this "hue_correction" option similarly
+                adjusts only V component. However usually it is enough
+                to tweak only U or V to compensate for colored light or
+                color temperature; this option simply allows more
+                complicated correction when and if it is necessary.
 
 init_brightness These settings specify _initial_ values which will be
 init_contrast   used to set up the camera. If your V4L application has
@@ -143,8 +173,8 @@ videosize       This setting chooses one if three image sizes that are
 
 WHAT NEEDS TO BE DONE:
 
-- The box freezes if working camera (with xawtv) is unplugged (OHCI).
-  Workaround: don't do that :) End the V4L application first.
+- The box freezes if camera is unplugged after being used (OHCI).
+  Workaround: don't do that :)
 - Some USB frames are lost on high frame rates, though they shouldn't
 - ViCE compression (Xirlink proprietary) may improve frame rate
 - On occasion camera does not start properly; xawtv reports errors.

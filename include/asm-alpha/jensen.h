@@ -80,24 +80,6 @@
 #endif
 
 /*
- * Change virtual addresses to bus addresses and vv.
- *
- * NOTE! On the Jensen, the physical address is the same
- * as the bus address, but this is not necessarily true on
- * other alpha hardware.
- */
-__EXTERN_INLINE unsigned long jensen_virt_to_bus(void * address)
-{
-	return virt_to_phys(address);
-}
-
-__EXTERN_INLINE void * jensen_bus_to_virt(unsigned long address)
-{
-	return phys_to_virt(address);
-}
-
-
-/*
  * Handle the "host address register". This needs to be set
  * to the high 7 bits of the EISA address.  This is also needed
  * for EISA IO addresses, which are only 16 bits wide (the
@@ -306,8 +288,6 @@ __EXTERN_INLINE int jensen_is_ioaddr(unsigned long addr)
 
 #ifdef __WANT_IO_DEF
 
-#define virt_to_bus	jensen_virt_to_bus
-#define bus_to_virt	jensen_bus_to_virt
 #define __inb		jensen_inb
 #define __inw		jensen_inw
 #define __inl		jensen_inl

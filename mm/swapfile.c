@@ -603,10 +603,9 @@ asmlinkage long sys_swapon(const char * specialfile, int swap_flags)
 	for (type = 0 ; type < nr_swapfiles ; type++,p++)
 		if (!(p->flags & SWP_USED))
 			break;
-	if (type >= MAX_SWAPFILES) {
-		err = -EPERM;
+	error = -EPERM;
+	if (type >= MAX_SWAPFILES)
 		goto out;
-	}
 	if (type >= nr_swapfiles)
 		nr_swapfiles = type+1;
 	p->flags = SWP_USED;

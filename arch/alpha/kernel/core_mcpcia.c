@@ -293,6 +293,14 @@ struct pci_ops mcpcia_pci_ops =
 	write_dword:	mcpcia_write_config_dword
 };
 
+void
+mcpcia_pci_tbi(struct pci_controler *hose, dma_addr_t start, dma_addr_t end)
+{
+	wmb();
+	BUG();
+	mb();
+}
+
 static int __init
 mcpcia_probe_hose(int h)
 {
@@ -395,31 +403,36 @@ mcpcia_startup_hose(struct pci_controler *hose)
 
 	/*
 	 * Set up the PCI->physical memory translation windows.
-	 * For now, windows 1,2 and 3 are disabled.  In the
-	 * future, we may want to use them to do scatter/
-	 * gather DMA.
 	 *
-	 * Window 0 goes at 2 GB and is 2 GB large.
+	 * Window 0 is scatter-gather 8MB at 8MB (for isa)
+	 * Window 1 is scatter-gather 128MB at 1GB
+	 * Window 2 is direct access 2GB at 2GB
+	 * ??? We ought to scale window 1 with memory.
 	 */
 
-	*(vuip)MCPCIA_W0_BASE(mid) = 1U | (MCPCIA_DMA_WIN_BASE & 0xfff00000U);
-	*(vuip)MCPCIA_W0_MASK(mid) = (MCPCIA_DMA_WIN_SIZE - 1) & 0xfff00000U;
-	*(vuip)MCPCIA_T0_BASE(mid) = 0;
+	hose->sg_isa = iommu_arena_new(0x00800000, 0x00800000, PAGE_SIZE);
+	hose->sg_pci = iommu_arena_new(0x40000000, 0x08000000, PAGE_SIZE);
+	__direct_map_base = 0x80000000;
+	__direct_map_size = 0x80000000;
 
-	*(vuip)MCPCIA_W1_BASE(mid) = 0x0;
-	*(vuip)MCPCIA_W2_BASE(mid) = 0x0;
+	*(vuip)MCPCIA_W0_BASE(mid) = hose->sg_isa->dma_base | 3;
+	*(vuip)MCPCIA_W0_MASK(mid) = (hose->sg_isa->size - 1) & 0xfff00000;
+	*(vuip)MCPCIA_T0_BASE(mid) = virt_to_phys(hose->sg_isa->ptes) >> 2;
+
+	*(vuip)MCPCIA_W1_BASE(mid) = hose->sg_pci->dma_base | 3;
+	*(vuip)MCPCIA_W1_MASK(mid) = (hose->sg_pci->size - 1) & 0xfff00000;
+	*(vuip)MCPCIA_T1_BASE(mid) = virt_to_phys(hose->sg_pci->ptes) >> 2;
+
+	*(vuip)MCPCIA_W2_BASE(mid) = __direct_map_base | 1;
+	*(vuip)MCPCIA_W2_MASK(mid) = (__direct_map_size - 1) & 0xfff00000;
+	*(vuip)MCPCIA_T2_BASE(mid) = 0;
+
 	*(vuip)MCPCIA_W3_BASE(mid) = 0x0;
+
+	mcpcia_pci_tbi(hose, 0, -1);
 
 	*(vuip)MCPCIA_HBASE(mid) = 0x0;
 	mb();
-
-#if 0
-	tmp = *(vuip)MCPCIA_INT_CTL(mid);
-	printk("mcpcia_startup_hose: INT_CTL was 0x%x\n", tmp);
-	*(vuip)MCPCIA_INT_CTL(mid) = 1U;
-	mb();
-	tmp = *(vuip)MCPCIA_INT_CTL(mid);
-#endif
 
 	*(vuip)MCPCIA_HAE_MEM(mid) = 0U;
 	mb();

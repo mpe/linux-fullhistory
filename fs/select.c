@@ -43,6 +43,39 @@
  * Linus noticed.  -- jrs
  */
 
+static poll_table* alloc_wait(int nfds)
+{
+	poll_table* out;
+	poll_table* walk;
+
+	out = (poll_table *) __get_free_page(GFP_KERNEL);
+	if(out==NULL)
+		return NULL;
+	out->nr = 0;
+	out->entry = (struct poll_table_entry *)(out + 1);
+	out->next = NULL;
+	nfds -=__MAX_POLL_TABLE_ENTRIES;
+	walk = out;
+	while(nfds > 0) {
+		poll_table *tmp = (poll_table *) __get_free_page(GFP_KERNEL);
+		if (!tmp) {
+			while(out != NULL) {
+				tmp = out->next;
+				free_page((unsigned long)out);
+				out = tmp;
+			}
+			return NULL;
+		}
+		tmp->nr = 0;
+		tmp->entry = (struct poll_table_entry *)(tmp + 1);
+		tmp->next = NULL;
+		walk->next = tmp;
+		walk = tmp;
+		nfds -=__MAX_POLL_TABLE_ENTRIES;
+	}
+	return out;
+}
+
 static void free_wait(poll_table * p)
 {
 	struct poll_table_entry * entry;
@@ -67,7 +100,6 @@ void __pollwait(struct file * filp, wait_queue_head_t * wait_address, poll_table
 	for (;;) {
 		if (p->nr < __MAX_POLL_TABLE_ENTRIES) {
 			struct poll_table_entry * entry;
-ok_table:
 		 	entry = p->entry + p->nr;
 		 	get_file(filp);
 		 	entry->filp = filp;
@@ -76,17 +108,6 @@ ok_table:
 			add_wait_queue(wait_address,&entry->wait);
 			p->nr++;
 			return;
-		}
-		if (p->next == NULL) {
-			poll_table *tmp = (poll_table *) __get_free_page(GFP_KERNEL);
-			if (!tmp)
-				return;
-			tmp->nr = 0;
-			tmp->entry = (struct poll_table_entry *)(tmp + 1);
-			tmp->next = NULL;
-			p->next = tmp;
-			p = tmp;
-			goto ok_table;
 		}
 		p = p->next;
 	}
@@ -152,33 +173,28 @@ get_max:
 
 int do_select(int n, fd_set_bits *fds, long *timeout)
 {
-	poll_table *wait_table, *wait;
+	poll_table *wait;
 	int retval, i, off;
 	long __timeout = *timeout;
 
-	wait = wait_table = NULL;
-	if (__timeout) {
-		wait_table = (poll_table *) __get_free_page(GFP_KERNEL);
-		if (!wait_table)
-			return -ENOMEM;
+	wait = NULL;
 
-		wait_table->nr = 0;
-		wait_table->entry = (struct poll_table_entry *)(wait_table + 1);
-		wait_table->next = NULL;
-		wait = wait_table;
-	}
-
-	read_lock(&current->files->file_lock);
+ 	read_lock(&current->files->file_lock);
 	retval = max_select_fd(n, fds);
 	read_unlock(&current->files->file_lock);
 
-	lock_kernel();
 	if (retval < 0)
-		goto out;
+		return retval;
 	n = retval;
+	if (__timeout) {
+ 		wait = alloc_wait(n);
+ 		if (!wait)
+			return -ENOMEM;
+ 	}
 	retval = 0;
 	for (;;) {
 		set_current_state(TASK_INTERRUPTIBLE);
+		lock_kernel();
 		for (i = 0 ; i < n; i++) {
 			unsigned long bit = BIT(i);
 			unsigned long mask;
@@ -211,6 +227,7 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 				wait = NULL;
 			}
 		}
+		unlock_kernel();
 		wait = NULL;
 		if (retval || !__timeout || signal_pending(current))
 			break;
@@ -218,15 +235,12 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 	}
 	current->state = TASK_RUNNING;
 
-out:
-	if (*timeout)
-		free_wait(wait_table);
+	free_wait(wait);
 
 	/*
 	 * Up-to-date the caller timeout.
 	 */
 	*timeout = __timeout;
-	unlock_kernel();
 	return retval;
 }
 
@@ -334,29 +348,36 @@ out_nofds:
 
 #define POLLFD_PER_PAGE  ((PAGE_SIZE) / sizeof(struct pollfd))
 
-static void do_pollfd(struct pollfd * fdp, poll_table * wait, int *count)
+static void do_pollfd(unsigned int num, struct pollfd * fdpage,
+	poll_table ** pwait, int *count)
 {
-	int fd;
-	unsigned int mask;
+	int i;
 
-	mask = 0;
-	fd = fdp->fd;
-	if (fd >= 0) {
-		struct file * file = fget(fd);
-		mask = POLLNVAL;
-		if (file != NULL) {
-			mask = DEFAULT_POLLMASK;
-			if (file->f_op && file->f_op->poll)
-			mask = file->f_op->poll(file, wait);
-			mask &= fdp->events | POLLERR | POLLHUP;
-			fput(file);
+	for (i = 0; i < num; i++) {
+		int fd;
+		unsigned int mask;
+		struct pollfd *fdp;
+
+		mask = 0;
+		fdp = fdpage+i;
+		fd = fdp->fd;
+		if (fd >= 0) {
+			struct file * file = fget(fd);
+			mask = POLLNVAL;
+			if (file != NULL) {
+				mask = DEFAULT_POLLMASK;
+				if (file->f_op && file->f_op->poll)
+					mask = file->f_op->poll(file, *pwait);
+				mask &= fdp->events | POLLERR | POLLHUP;
+				fput(file);
+			}
+			if (mask) {
+				*pwait = NULL;
+				(*count)++;
+			}
 		}
-		if (mask) {
-			wait = NULL;
-			(*count)++;
-		}
+		fdp->revents = mask;
 	}
-	fdp->revents = mask;
 }
 
 static int do_poll(unsigned int nfds, unsigned int nchunks, unsigned int nleft, 
@@ -365,16 +386,13 @@ static int do_poll(unsigned int nfds, unsigned int nchunks, unsigned int nleft,
 	int count = 0;
 
 	for (;;) {
-		unsigned int i, j;
+		unsigned int i;
 
 		set_current_state(TASK_INTERRUPTIBLE);
 		for (i=0; i < nchunks; i++)
-			for (j = 0; j < POLLFD_PER_PAGE; j++)
-				do_pollfd(fds[i] + j, wait, &count);
+			do_pollfd(POLLFD_PER_PAGE, fds[i], &wait, &count);
 		if (nleft)
-			for (j = 0; j < nleft; j++)
-				do_pollfd(fds[nchunks] + j, wait, &count);
-
+			do_pollfd(nleft, fds[nchunks], &wait, &count);
 		wait = NULL;
 		if (count || !timeout || signal_pending(current))
 			break;
@@ -388,7 +406,7 @@ asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 {
 	int i, j, fdcount, err;
 	struct pollfd **fds;
-	poll_table *wait_table = NULL, *wait = NULL;
+	poll_table *wait = NULL;
 	int nchunks, nleft;
 
 	/* Do a sanity check on nfds ... */
@@ -403,16 +421,12 @@ asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 			timeout = MAX_SCHEDULE_TIMEOUT;
 	}
 
-	err = -ENOMEM;
 	if (timeout) {
-		wait_table = (poll_table *) __get_free_page(GFP_KERNEL);
-		if (!wait_table)
-			goto out;
-		wait_table->nr = 0;
-		wait_table->entry = (struct poll_table_entry *)(wait_table + 1);
-		wait_table->next = NULL;
-		wait = wait_table;
+		wait = alloc_wait(nfds);
+		if (!wait)
+			return -ENOMEM;
 	}
+	err = -ENOMEM;
 
 	fds = NULL;
 	if (nfds != 0) {
@@ -473,7 +487,6 @@ out_fds:
 	if (nfds != 0)
 		kfree(fds);
 out:
-	if (wait)
-		free_wait(wait_table);
+	free_wait(wait);
 	return err;
 }

@@ -2,10 +2,8 @@
  * USB CPiA Video Camera driver
  *
  * Supports CPiA based Video Cameras. Many manufacturers use this chipset.
- * There's a good chance, if you have a USB video camera, it's a CPiA based
- * one.
  *
- * (C) Copyright 1999 Johannes Erdfelt
+ * (C) Copyright 1999-2000 Johannes Erdfelt, jerdfelt@valinux.com
  * (C) Copyright 1999 Randy Dunlap
  */
 
@@ -496,7 +494,6 @@ error:
 	copylen = 0;
 
 wakeup:
-
 	cpia->curframe = -1;
 
 	/* This will cause the process to request another frame. */
@@ -555,9 +552,8 @@ static void cpia_isoc_irq(struct urb *urb)
 	struct cpia_sbuf *sbuf;
 	int i;
 
-#if 0
-printk("cpia_isoc_irq: %p status %d, errcount = %d, length = %d\n", urb, urb->status, urb->error_count, urb->actual_length);
-#endif
+	if (!cpia->dev)
+		return;
 
 	if (!cpia->streaming) {
 		if (debug >= 1)
@@ -566,7 +562,6 @@ printk("cpia_isoc_irq: %p status %d, errcount = %d, length = %d\n", urb, urb->st
 	}
 	
 	sbuf = &cpia->sbuf[cpia->cursbuf];
-	// usb_kill_isoc(sbuf->isodesc);
 
 	/* Copy the data received into our scratch buffer */
 	len = cpia_compress_isochronous(cpia, urb);
@@ -584,18 +579,15 @@ printk("cpia_isoc_irq: %p status %d, errcount = %d, length = %d\n", urb, urb->st
 		sbuf->urb->iso_frame_desc[i].status = 0;
 		sbuf->urb->iso_frame_desc[i].actual_length = 0;
 	}
+
 	/* Move to the next sbuf */
 	cpia->cursbuf = (cpia->cursbuf + 1) % CPIA_NUMSBUF;
-
-	/* Reschedule this block of Isochronous desc */
-	// usb_run_isoc(sbuf->isodesc, cpia->sbuf[cpia->cursbuf].isodesc);
 
 	return;
 }
 
 static int cpia_init_isoc(struct usb_cpia *cpia)
 {
-	struct usb_device *dev = cpia->dev;
 	urb_t *urb;
 	int fx, err;
 
@@ -611,7 +603,6 @@ static int cpia_init_isoc(struct usb_cpia *cpia)
 	}
 
 	/* We double buffer the Iso lists */
-//	err = usb_init_isoc(dev, usb_rcvisocpipe(dev, 1), FRAMES_PER_DESC, cpia, &cpia->sbuf[0].isodesc);
 	urb = usb_alloc_urb(FRAMES_PER_DESC);
 	
 	if (!urb) {
@@ -620,9 +611,9 @@ static int cpia_init_isoc(struct usb_cpia *cpia)
 		return -ENOMEM;
 	}
 	cpia->sbuf[0].urb = urb;
-	urb->dev = dev;
+	urb->dev = cpia->dev;
 	urb->context = cpia;
-	urb->pipe = usb_rcvisocpipe(dev, 1);
+	urb->pipe = usb_rcvisocpipe(cpia->dev, 1);
 	urb->transfer_flags = USB_ISO_ASAP;
 	urb->transfer_buffer = cpia->sbuf[0].data;
  	urb->complete = cpia_isoc_irq;
@@ -639,9 +630,9 @@ static int cpia_init_isoc(struct usb_cpia *cpia)
 		return -ENOMEM;
 	}
 	cpia->sbuf[1].urb = urb;
-	urb->dev = dev;
+	urb->dev = cpia->dev;
 	urb->context = cpia;
-	urb->pipe = usb_rcvisocpipe(dev, 1);
+	urb->pipe = usb_rcvisocpipe(cpia->dev, 1);
 	urb->transfer_flags = USB_ISO_ASAP;
 	urb->transfer_buffer = cpia->sbuf[1].data;
  	urb->complete = cpia_isoc_irq;
@@ -657,11 +648,11 @@ static int cpia_init_isoc(struct usb_cpia *cpia)
 	
 	err = usb_submit_urb(cpia->sbuf[0].urb);
 	if (err)
-		printk(KERN_ERR "cpia_init_isoc: usb_run_isoc(0) ret %d\n",
+		printk(KERN_ERR "cpia_init_isoc: usb_submit_urb(0) ret %d\n",
 			err);
 	err = usb_submit_urb(cpia->sbuf[1].urb);
 	if (err)
-		printk(KERN_ERR "cpia_init_isoc: usb_run_isoc(1) ret %d\n",
+		printk(KERN_ERR "cpia_init_isoc: usb_submit_urb(1) ret %d\n",
 			err);
 
 	cpia->streaming = 1;
@@ -671,7 +662,7 @@ static int cpia_init_isoc(struct usb_cpia *cpia)
 
 static void cpia_stop_isoc(struct usb_cpia *cpia)
 {
-	if (!cpia->streaming)
+	if (!cpia->streaming || !cpia->dev)
 		return;
 
 	/* Turn off continuous grab */
@@ -686,21 +677,30 @@ static void cpia_stop_isoc(struct usb_cpia *cpia)
 		return /* -EINVAL */;
 	}
 
-	/* Unschedule all of the iso td's */
-	usb_unlink_urb(cpia->sbuf[1].urb);
-	usb_unlink_urb(cpia->sbuf[0].urb);
-
 	cpia->streaming = 0;
 
-	/* Delete them all */
-	usb_free_urb(cpia->sbuf[1].urb);
-	usb_free_urb(cpia->sbuf[0].urb);
+	/* Unschedule all of the iso td's */
+	if (cpia->sbuf[1].urb) {
+		cpia->sbuf[1].urb->next = NULL;
+		usb_unlink_urb(cpia->sbuf[1].urb);
+		usb_free_urb(cpia->sbuf[1].urb);
+		cpia->sbuf[1].urb = NULL;
+	}
+	if (cpia->sbuf[0].urb) {
+		cpia->sbuf[0].urb->next = NULL;
+		usb_unlink_urb(cpia->sbuf[0].urb);
+		usb_free_urb(cpia->sbuf[0].urb);
+		cpia->sbuf[0].urb = NULL;
+	}
 }
 
 static int cpia_new_frame(struct usb_cpia *cpia, int framenum)
 {
 	struct cpia_frame *frame;
 	int width, height;
+
+	if (!cpia->dev)
+		return -1;
 
 	/* If we're not grabbing a frame right now and the other frame is */
 	/*  ready to be grabbed into, then use it instead */
@@ -833,6 +833,11 @@ static void cpia_close(struct video_device *dev)
 	kfree(cpia->sbuf[0].data);
 
 	up(&cpia->lock);
+
+	if (!cpia->dev) {
+		video_unregister_device(&cpia->vdev);
+		kfree(cpia);
+	}
 }
 
 static int cpia_init_done(struct video_device *dev)
@@ -848,6 +853,9 @@ static long cpia_write(struct video_device *dev, const char *buf, unsigned long 
 static int cpia_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 {
 	struct usb_cpia *cpia = (struct usb_cpia *)dev;
+
+	if (!cpia->dev)
+		return -EIO;
 
 	switch (cmd) {
 		case VIDIOCGCAP:
@@ -1025,10 +1033,10 @@ static int cpia_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			case FRAME_GRABBING:
 			case FRAME_ERROR:
 redo:
+				if (!cpia->dev)
+					return -EIO;
+
 				do {
-#if 0
-					init_waitqueue_head(&cpia->frame[frame].wq);
-#endif
 					interruptible_sleep_on(&cpia->frame[frame].wq);
 					if (signal_pending(current))
 						return -EINTR;
@@ -1095,6 +1103,9 @@ static long cpia_read(struct video_device *dev, char *buf, unsigned long count, 
 	if (!dev || !buf)
 		return -EFAULT;
 
+	if (!cpia->dev)
+		return -EIO;
+
 	/* See if a frame is completed, then use it. */
 	if (cpia->frame[0].grabstate >= FRAME_DONE)	/* _DONE or _ERROR */
 		frmx = 0;
@@ -1120,6 +1131,9 @@ static long cpia_read(struct video_device *dev, char *buf, unsigned long count, 
 	frame = &cpia->frame[frmx];
 
 restart:
+	if (!cpia->dev)
+		return -EIO;
+
 	while (frame->grabstate == FRAME_GRABBING) {
 		interruptible_sleep_on(&frame->wq);
 		if (signal_pending(current))
@@ -1167,6 +1181,9 @@ static int cpia_mmap(struct video_device *dev, const char *adr, unsigned long si
 	struct usb_cpia *cpia = (struct usb_cpia *)dev;
 	unsigned long start = (unsigned long)adr;
 	unsigned long page, pos;
+
+	if (!cpia->dev)
+		return -EIO;
 
 	if (size > (((2 * MAX_FRAME_SIZE) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)))
 		return -EINVAL;
@@ -1326,23 +1343,56 @@ static void * cpia_probe(struct usb_device *dev, unsigned int ifnum)
 	cpia->iface = interface->bInterfaceNumber;
 
 	if (!usb_cpia_configure(cpia)) {
-	    cpia->user=0; 
-	    init_MUTEX(&cpia->lock);	/* to 1 == available */
-	    return cpia;
-	} else return NULL;
+		cpia->user=0; 
+		init_MUTEX(&cpia->lock);	/* to 1 == available */
+
+		return cpia;
+	} else
+		return NULL;
 }
 
 static void cpia_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct usb_cpia *cpia = (struct usb_cpia *) ptr;
 
-	video_unregister_device(&cpia->vdev);
+	/* We don't want people trying to open up the device */
+	if (!cpia->user)
+		video_unregister_device(&cpia->vdev);
 
 	usb_driver_release_interface(&cpia_driver,
 		&cpia->dev->actconfig->interface[0]);
 
+	cpia->dev = NULL;
+	cpia->frame[0].grabstate = FRAME_ERROR;
+	cpia->frame[1].grabstate = FRAME_ERROR;
+	cpia->curframe = -1;
+
+	/* This will cause the process to request another frame. */
+	if (waitqueue_active(&cpia->frame[0].wq))
+		wake_up_interruptible(&cpia->frame[0].wq);
+
+	if (waitqueue_active(&cpia->frame[1].wq))
+		wake_up_interruptible(&cpia->frame[1].wq);
+
+	cpia->streaming = 0;
+
+	/* Unschedule all of the iso td's */
+	if (cpia->sbuf[1].urb) {
+		cpia->sbuf[1].urb->next = NULL;
+		usb_unlink_urb(cpia->sbuf[1].urb);
+		usb_free_urb(cpia->sbuf[1].urb);
+		cpia->sbuf[1].urb = NULL;
+	}
+	if (cpia->sbuf[0].urb) {
+		cpia->sbuf[0].urb->next = NULL;
+		usb_unlink_urb(cpia->sbuf[0].urb);
+		usb_free_urb(cpia->sbuf[0].urb);
+		cpia->sbuf[0].urb = NULL;
+	}
+
 	/* Free the memory */
-	kfree(cpia);
+	if (!cpia->user)
+		kfree(cpia);
 }
 
 static struct usb_driver cpia_driver = {

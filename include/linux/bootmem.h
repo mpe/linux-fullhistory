@@ -55,6 +55,3 @@ extern void * __init __alloc_bootmem_node (int nid, unsigned long size, unsigned
 	__alloc_bootmem_node((nid), (x), PAGE_SIZE, 0)
 
 #endif /* _LINUX_BOOTMEM_H */
-
-
-

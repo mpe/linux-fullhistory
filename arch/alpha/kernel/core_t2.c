@@ -389,6 +389,10 @@ t2_init_arch(void)
 	hose->mem_space = &iomem_resource;
 	hose->config_space = T2_CONF;
 	hose->index = 0;
+
+	hose->sg_isa = hose->sg_pci = NULL;
+	__direct_map_base = 0x40000000;
+	__direct_map_size = 0x40000000;
 }
 
 #define SIC_SEIC (1UL << 33)    /* System Event Clear */

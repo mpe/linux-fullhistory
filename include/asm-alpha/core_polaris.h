@@ -36,14 +36,6 @@
 #define POLARIS_W_CMD		(POLARIS_DENSE_CONFIG_BASE+4)
 #define POLARIS_W_STATUS	(POLARIS_DENSE_CONFIG_BASE+6)
 
-/* No HAE address.  Polaris has no concept of an HAE, since it
- * supports transfers of all sizes in dense space.
- */
-
-#define POLARIS_DMA_WIN_BASE	0x80000000UL	/* fixed, 2G @ 2G */
-#define POLARIS_DMA_WIN_SIZE	0x80000000UL	/* fixed, 2G @ 2G */
-
-
 /*
  * Data structure for handling POLARIS machine checks:
  */
@@ -60,16 +52,6 @@ struct el_POLARIS_sysdata_mcheck {
 #define __EXTERN_INLINE extern inline
 #define __IO_EXTERN_INLINE
 #endif
-
-__EXTERN_INLINE unsigned long polaris_virt_to_bus(void * address)
-{
-	return virt_to_phys(address) + POLARIS_DMA_WIN_BASE;
-}
-
-__EXTERN_INLINE void * polaris_bus_to_virt(unsigned long address)
-{
-	return phys_to_virt(address - POLARIS_DMA_WIN_BASE);
-}
 
 /*
  * I/O functions:
@@ -187,9 +169,6 @@ __EXTERN_INLINE int polaris_is_ioaddr(unsigned long addr)
 #undef vulp
 
 #ifdef __WANT_IO_DEF
-
-#define virt_to_bus     polaris_virt_to_bus
-#define bus_to_virt     polaris_bus_to_virt
 
 #define __inb           polaris_inb
 #define __inw           polaris_inw

@@ -66,19 +66,10 @@
    for most other things they are identical. It didn't seem reasonable to
    make the AVANTI support pay for the limitations of the XL. It is true,
    however, that an XL kernel will run on an AVANTI without problems.
+
+   %%% All of this should be obviated by the ability to route
+   everything through the iommu.
 */
-#define APECS_XL_DMA_WIN1_BASE		(64UL*1024*1024)
-#define APECS_XL_DMA_WIN1_SIZE		(64UL*1024*1024)
-#define APECS_XL_DMA_WIN1_SIZE_PARANOID	(48UL*1024*1024)
-#define APECS_XL_DMA_WIN2_BASE		(1UL*1024*1024*1024)
-#define APECS_XL_DMA_WIN2_SIZE		(1UL*1024*1024*1024)
-
-
-/* These are for normal APECS family machines, AVANTI/MUSTANG/EB64/PC64.  */
-
-#define APECS_DMA_WIN_BASE		(1UL*1024*1024*1024)
-#define APECS_DMA_WIN_SIZE		(1UL*1024*1024*1024)
-
 
 /*
  * 21071-DA Control and Status registers.
@@ -370,64 +361,6 @@ struct el_apecs_procdata
 #endif
 
 /*
- * Translate physical memory address as seen on (PCI) bus into
- * a kernel virtual address and vv.
- */
-
-/*
- * NOTE: we fudge the window 1 maximum as 48Mb instead of 64Mb, to prevent 
- * virt_to_bus() from returning an address in the first window, for a
- * data area that goes beyond the 64Mb first DMA window. Sigh...
- * This MUST match with <asm/dma.h> MAX_DMA_ADDRESS for consistency, but
- * we can't just use that here, because of header file looping... :-(
- */
-
-__EXTERN_INLINE unsigned long apecs_virt_to_bus(void * address)
-{
-	unsigned long paddr = virt_to_phys(address);
-	return paddr + APECS_DMA_WIN_BASE;
-}
-
-static inline unsigned long apecs_xl_virt_to_bus(void * address)
-{
-	unsigned long paddr = virt_to_phys(address);
-	if (paddr < APECS_XL_DMA_WIN1_SIZE_PARANOID)
-		return paddr + APECS_XL_DMA_WIN1_BASE;
-	else
-		return paddr + APECS_XL_DMA_WIN2_BASE;
-}
-
-__EXTERN_INLINE void * apecs_bus_to_virt(unsigned long address)
-{
-	/*
-	 * This check is a sanity check but also ensures that bus
-	 * address 0 maps to virtual address 0 which is useful to
-	 * detect null "pointers" (the NCR driver is much simpler if
-	 * NULL pointers are preserved).
-	 */
-	if (address < APECS_DMA_WIN_BASE)
-		return 0;
-	return phys_to_virt(address - APECS_DMA_WIN_BASE);
-}
-
-static inline void * apecs_xl_bus_to_virt(unsigned long address)
-{
-	/*
-	 * This check is a sanity check but also ensures that bus
-	 * address 0 maps to virtual address 0 which is useful to
-	 * detect null "pointers" (the NCR driver is much simpler if
-	 * NULL pointers are preserved).
-	 */
-	if (address < APECS_XL_DMA_WIN1_BASE)
-		return 0;
-	else if (address < (APECS_XL_DMA_WIN1_BASE + APECS_XL_DMA_WIN1_SIZE))
-		address -= APECS_XL_DMA_WIN1_BASE;
-	else /* should be more checking here, maybe? */
-		address -= APECS_XL_DMA_WIN2_BASE;
-	return phys_to_virt(address);
-}
-
-/*
  * I/O functions:
  *
  * Unlike Jensen, the APECS machines have no concept of local
@@ -578,14 +511,6 @@ __EXTERN_INLINE int apecs_is_ioaddr(unsigned long addr)
 #undef vulp
 
 #ifdef __WANT_IO_DEF
-
-#ifdef CONFIG_ALPHA_XL
-#define virt_to_bus	apecs_xl_virt_to_bus
-#define bus_to_virt	apecs_xl_bus_to_virt
-#else
-#define virt_to_bus	apecs_virt_to_bus
-#define bus_to_virt	apecs_bus_to_virt
-#endif
 
 #define __inb		apecs_inb
 #define __inw		apecs_inw

@@ -129,11 +129,10 @@ static void __init free_bootmem_core(bootmem_data_t *bdata, unsigned long addr, 
 static void * __init __alloc_bootmem_core (bootmem_data_t *bdata, 
 	unsigned long size, unsigned long align, unsigned long goal)
 {
-	int area = 0;
-	unsigned long i, start = 0, reserved;
+	unsigned long i, start = 0;
 	void *ret;
 	unsigned long offset, remaining_size;
-	unsigned long areasize, preferred;
+	unsigned long areasize, preferred, incr;
 	unsigned long eidx = bdata->node_low_pfn - (bdata->node_boot_start >>
 							PAGE_SHIFT);
 
@@ -145,26 +144,28 @@ static void * __init __alloc_bootmem_core (bootmem_data_t *bdata,
 	 */
 	if (goal && (goal >= bdata->node_boot_start) && 
 			((goal >> PAGE_SHIFT) < bdata->node_low_pfn)) {
-		preferred = (goal - bdata->node_boot_start) >> PAGE_SHIFT;
+		preferred = goal - bdata->node_boot_start;
 	} else
 		preferred = 0;
 
+	preferred = ((preferred + align - 1) & ~(align - 1)) >> PAGE_SHIFT;
 	areasize = (size+PAGE_SIZE-1)/PAGE_SIZE;
+	incr = align >> PAGE_SHIFT ? : 1;
 
 restart_scan:
-	for (i = preferred; i < eidx; i++) {
-		reserved = test_bit(i, bdata->node_bootmem_map);
-		if (!reserved) {
-			if (!area) {
-				area = 1;
-				start = i;
-			}
-			if (i - start + 1 == areasize)
-				goto found;
-		} else {
-			area = 0;
-			start = -1;
+	for (i = preferred; i < eidx; i += incr) {
+		unsigned long j;
+		if (test_bit(i, bdata->node_bootmem_map))
+			continue;
+		for (j = i + 1; j < i + areasize; ++j) {
+			if (j >= eidx)
+				goto fail_block;
+			if (test_bit (j, bdata->node_bootmem_map))
+				goto fail_block;
 		}
+		start = i;
+		goto found;
+	fail_block:;
 	}
 	if (preferred) {
 		preferred = 0;
@@ -183,13 +184,12 @@ found:
 	 * of this allocation's buffer? If yes then we can 'merge'
 	 * the previous partial page with this allocation.
 	 */
-	if (bdata->last_offset && (bdata->last_pos+1 == start)) {
+	if (align <= PAGE_SIZE
+	    && bdata->last_offset && bdata->last_pos+1 == start) {
 		offset = (bdata->last_offset+align-1) & ~(align-1);
 		if (offset > PAGE_SIZE)
 			BUG();
 		remaining_size = PAGE_SIZE-offset;
-		if (remaining_size > PAGE_SIZE)
-			BUG();
 		if (size < remaining_size) {
 			areasize = 0;
 			// last_pos unchanged

@@ -1,7 +1,7 @@
 /*
  *  linux/arch/alpha/lib/semaphore.S
  *
- *  Copyright (C) 1999  Richard Henderson
+ *  Copyright (C) 1999, 2000  Richard Henderson
  */
 
 /*
@@ -181,3 +181,168 @@ __up_wakeup:
 	lda	$30, 20*8($30)
 	ret	$31, ($28), 0
 	.end	__up_wakeup
+
+/* __down_read_failed takes the semaphore in $24, count in $25;
+   clobbers $24, $25 and $28.  */
+
+	.globl	__down_read_failed
+	.ent	__down_read_failed
+__down_read_failed:
+	ldgp	$29,0($27)
+	lda	$30, -18*8($30)
+	stq	$28, 0*8($30)
+	stq	$0, 1*8($30)
+	stq	$1, 2*8($30)
+	stq	$2, 3*8($30)
+	stq	$3, 4*8($30)
+	stq	$4, 5*8($30)
+	stq	$5, 6*8($30)
+	stq	$6, 7*8($30)
+	stq	$7, 8*8($30)
+	stq	$16, 9*8($30)
+	stq	$17, 10*8($30)
+	stq	$18, 11*8($30)
+	stq	$19, 12*8($30)
+	stq	$20, 13*8($30)
+	stq	$21, 14*8($30)
+	stq	$22, 15*8($30)
+	stq	$23, 16*8($30)
+	stq	$26, 17*8($30)
+	.frame $30, 18*8, $28
+	.prologue 1
+	
+	mov	$24, $16
+	mov	$25, $17
+	jsr	__down_read
+	
+	ldq	$28, 0*8($30)
+	ldq	$0, 1*8($30)
+	ldq	$1, 2*8($30)
+	ldq	$2, 3*8($30)
+	ldq	$3, 4*8($30)
+	ldq	$4, 5*8($30)
+	ldq	$5, 6*8($30)
+	ldq	$6, 7*8($30)
+	ldq	$7, 8*8($30)
+	ldq	$16, 9*8($30)
+	ldq	$17, 10*8($30)
+	ldq	$18, 11*8($30)
+	ldq	$19, 12*8($30)
+	ldq	$20, 13*8($30)
+	ldq	$21, 14*8($30)
+	ldq	$22, 15*8($30)
+	ldq	$23, 16*8($30)
+	ldq	$26, 17*8($30)
+	lda	$30, 18*8($30)
+	ret	$31, ($28), 0
+	.end	__down_read_failed
+
+/* __down_write_failed takes the semaphore in $24, count in $25;
+   clobbers $24, $25 and $28.  */
+
+	.globl	__down_write_failed
+	.ent	__down_write_failed
+__down_write_failed:
+	ldgp	$29,0($27)
+	lda	$30, -20*8($30)
+	stq	$28, 0*8($30)
+	stq	$0, 1*8($30)
+	stq	$1, 2*8($30)
+	stq	$2, 3*8($30)
+	stq	$3, 4*8($30)
+	stq	$4, 5*8($30)
+	stq	$5, 6*8($30)
+	stq	$6, 7*8($30)
+	stq	$7, 8*8($30)
+	stq	$16, 9*8($30)
+	stq	$17, 10*8($30)
+	stq	$18, 11*8($30)
+	stq	$19, 12*8($30)
+	stq	$20, 13*8($30)
+	stq	$21, 14*8($30)
+	stq	$22, 15*8($30)
+	stq	$23, 16*8($30)
+	stq	$26, 17*8($30)
+	.frame $30, 18*8, $28
+	.prologue 1
+	
+	mov	$24, $16
+	mov	$25, $17
+	jsr	__down_write
+	
+	ldq	$28, 0*8($30)
+	ldq	$0, 1*8($30)
+	ldq	$1, 2*8($30)
+	ldq	$2, 3*8($30)
+	ldq	$3, 4*8($30)
+	ldq	$4, 5*8($30)
+	ldq	$5, 6*8($30)
+	ldq	$6, 7*8($30)
+	ldq	$7, 8*8($30)
+	ldq	$16, 9*8($30)
+	ldq	$17, 10*8($30)
+	ldq	$18, 11*8($30)
+	ldq	$19, 12*8($30)
+	ldq	$20, 13*8($30)
+	ldq	$21, 14*8($30)
+	ldq	$22, 15*8($30)
+	ldq	$23, 16*8($30)
+	ldq	$26, 17*8($30)
+	lda	$30, 18*8($30)
+	ret	$31, ($28), 0
+	.end	__down_write_failed
+
+/* __rwsem_wake takes the semaphore in $24, readers in $25;
+   clobbers $24, $25, and $28.  */
+
+	.globl	__rwsem_wake
+	.ent	__rwsem_wake
+__rwsem_wake:
+	ldgp	$29,0($27)
+	lda	$30, -18*8($30)
+	stq	$28, 0*8($30)
+	stq	$0, 1*8($30)
+	stq	$1, 2*8($30)
+	stq	$2, 3*8($30)
+	stq	$3, 4*8($30)
+	stq	$4, 5*8($30)
+	stq	$5, 6*8($30)
+	stq	$6, 7*8($30)
+	stq	$7, 8*8($30)
+	stq	$16, 9*8($30)
+	stq	$17, 10*8($30)
+	stq	$18, 11*8($30)
+	stq	$19, 12*8($30)
+	stq	$20, 13*8($30)
+	stq	$21, 14*8($30)
+	stq	$22, 15*8($30)
+	stq	$23, 16*8($30)
+	stq	$26, 17*8($30)
+	.frame $30, 18*8, $28
+	.prologue 1
+	
+	mov	$24, $16
+	mov	$25, $17
+	jsr	__do_rwsem_wake
+	
+	ldq	$28, 0*8($30)
+	ldq	$0, 1*8($30)
+	ldq	$1, 2*8($30)
+	ldq	$2, 3*8($30)
+	ldq	$3, 4*8($30)
+	ldq	$4, 5*8($30)
+	ldq	$5, 6*8($30)
+	ldq	$6, 7*8($30)
+	ldq	$7, 8*8($30)
+	ldq	$16, 9*8($30)
+	ldq	$17, 10*8($30)
+	ldq	$18, 11*8($30)
+	ldq	$19, 12*8($30)
+	ldq	$20, 13*8($30)
+	ldq	$21, 14*8($30)
+	ldq	$22, 15*8($30)
+	ldq	$23, 16*8($30)
+	ldq	$26, 17*8($30)
+	lda	$30, 18*8($30)
+	ret	$31, ($28), 0
+	.end	__rwsem_wake

@@ -6,19 +6,21 @@
  * Code common to all PYXIS core logic chips.
  */
 
-#include <linux/kernel.h>
 #include <linux/types.h>
-#include <linux/pci.h>
-#include <linux/sched.h>
-#include <linux/init.h>
-
-#include <asm/ptrace.h>
-#include <asm/system.h>
+#include <linux/kernel.h>
 
 #define __EXTERN_INLINE inline
 #include <asm/io.h>
 #include <asm/core_pyxis.h>
 #undef __EXTERN_INLINE
+
+#include <linux/pci.h>
+#include <linux/sched.h>
+#include <linux/init.h>
+#include <linux/bootmem.h>
+
+#include <asm/ptrace.h>
+#include <asm/system.h>
 
 #include "proto.h"
 #include "pci_impl.h"
@@ -284,6 +286,84 @@ struct pci_ops pyxis_pci_ops =
 	write_dword:	pyxis_write_config_dword
 };
 
+void
+pyxis_pci_tbi(struct pci_controler *hose, dma_addr_t start, dma_addr_t end)
+{
+	wmb();
+	*(vip)PYXIS_TBIA = 3;	/* Flush all locked and unlocked.  */
+	mb();
+}
+
+/*
+ * Pass 1 and 2 have a broken scatter-gather tlb -- it cannot be invalidated.
+ * To work around this problem, we allocate mappings, and put the chip into
+ * DMA loopback mode to read a garbage page.  This works by causing TLB
+ * misses, causing old entries to be purged to make room for the new entries
+ * coming in for the garbage page.
+ * 
+ * Thanks to NetBSD sources for pointing out this bug.  What a pain.
+ */
+
+static unsigned long broken_tbi_addr;
+
+#define BROKEN_TBI_READS 12
+
+static void
+pyxis_broken_pci_tbi(struct pci_controler *hose,
+		     dma_addr_t start, dma_addr_t end)
+{
+	unsigned long flags;
+	unsigned long bus_addr;
+	unsigned int ctrl;
+	long i;
+
+	__save_and_cli(flags);
+
+	/* Put the chip into PCI loopback mode.  */
+	mb();
+	ctrl = *(vuip)PYXIS_CTRL;
+	*(vuip)PYXIS_CTRL = ctrl | 4;
+	mb();
+
+	/* Read from PCI dense memory space at TBI_ADDR, skipping 64k
+	   on each read.  This forces SG TLB misses.  It appears that
+	   the TLB entries are "not quite LRU", meaning that we need
+	   to read more times than there are actual tags.  */
+
+	bus_addr = broken_tbi_addr;
+	for (i = 0; i < BROKEN_TBI_READS; ++i, bus_addr += 64*1024)
+		pyxis_readl(bus_addr);
+
+	/* Restore normal PCI operation.  */
+	mb();
+	*(vuip)PYXIS_CTRL = ctrl;
+	mb();
+
+	__restore_flags(flags);
+}
+
+static void
+pyxis_enable_broken_tbi(struct pci_iommu_arena *arena)
+{
+	void *page;
+	unsigned long *ppte, ofs, pte;
+	long i, npages;
+
+	page = alloc_bootmem_pages(PAGE_SIZE);
+	pte = (virt_to_phys(page) >> (PAGE_SHIFT - 1)) | 1;
+	npages = (BROKEN_TBI_READS + 1) * 64*1024 / PAGE_SIZE;
+
+	ofs = iommu_arena_alloc(arena, npages);
+	ppte = arena->ptes + ofs;
+	for (i = 0; i < npages; ++i)
+		ppte[i] = pte;
+
+	broken_tbi_addr = pyxis_ioremap(arena->dma_base + ofs*PAGE_SIZE);
+	alpha_mv.mv_pci_tbi = pyxis_broken_pci_tbi;
+
+	printk("PYXIS: Enabling broken tbia workaround.\n");
+}
+
 void __init
 pyxis_init_arch(void)
 {
@@ -306,76 +386,17 @@ pyxis_init_arch(void)
 	 */
 	temp = *(vuip)PYXIS_ERR_MASK;
 	temp &= ~4;   
-	*(vuip)PYXIS_ERR_MASK = temp; mb();
-	temp = *(vuip)PYXIS_ERR_MASK; /* re-read to force write */
-
-	temp = *(vuip)PYXIS_ERR ;
-	temp |= 0x180;   /* master/target abort */
-	*(vuip)PYXIS_ERR = temp; mb();
-	temp = *(vuip)PYXIS_ERR; /* re-read to force write */
-
-	/*
-	 * Set up the PCI->physical memory translation windows.
-	 * For now, windows 2 and 3 are disabled.  In the future, we may
-	 * want to use them to do scatter/gather DMA. 
-	 *
-	 * Window 0 goes at 2 GB and is 1 GB large.
-	 * Window 1 goes at 3 GB and is 1 GB large.
-	 */
-
-	*(vuip)PYXIS_W0_BASE = PYXIS_DMA_WIN0_BASE_DEFAULT | 1U;
-	*(vuip)PYXIS_W0_MASK = (PYXIS_DMA_WIN0_SIZE_DEFAULT - 1) & 0xfff00000U;
-	*(vuip)PYXIS_T0_BASE = PYXIS_DMA_WIN0_TRAN_DEFAULT >> 2;
-
-	*(vuip)PYXIS_W1_BASE = PYXIS_DMA_WIN1_BASE_DEFAULT | 1U;
-	*(vuip)PYXIS_W1_MASK = (PYXIS_DMA_WIN1_SIZE_DEFAULT - 1) & 0xfff00000U;
-	*(vuip)PYXIS_T1_BASE = PYXIS_DMA_WIN1_TRAN_DEFAULT >> 2;
-
-	*(vuip)PYXIS_W2_BASE = 0x0;
-	*(vuip)PYXIS_W3_BASE = 0x0;
+	*(vuip)PYXIS_ERR_MASK = temp;
 	mb();
+	*(vuip)PYXIS_ERR_MASK;	/* re-read to force write */
 
-	/*
-         * Next, clear the PYXIS_CFG register, which gets used
-	 *  for PCI Config Space accesses. That is the way
-	 *  we want to use it, and we do not want to depend on
-	 *  what ARC or SRM might have left behind...
-	 */
-	{
-		unsigned int pyxis_cfg, temp;
-		pyxis_cfg = *(vuip)PYXIS_CFG; mb();
-		if (pyxis_cfg != 0) {
-#if 1
-			printk("PYXIS_init: CFG was 0x%x\n", pyxis_cfg);
-#endif
-			*(vuip)PYXIS_CFG = 0; mb();
-			temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
-		}
-	}
- 
-	/* Zero the HAE.  */
-	*(vuip)PYXIS_HAE_MEM = 0U; mb();
-	*(vuip)PYXIS_HAE_MEM; /* re-read to force write */
-	*(vuip)PYXIS_HAE_IO = 0; mb();
-	*(vuip)PYXIS_HAE_IO;  /* re-read to force write */
+	temp = *(vuip)PYXIS_ERR;
+	temp |= 0x180;		/* master/target abort */
+	*(vuip)PYXIS_ERR = temp;
+	mb();
+	*(vuip)PYXIS_ERR;	/* re-read to force write */
 
-	/*
-	 * Finally, check that the PYXIS_CTRL1 has IOA_BEN set for
-	 * enabling byte/word PCI bus space(s) access.
-	 */
-	{
-		unsigned int ctrl1;
-		ctrl1 = *(vuip) PYXIS_CTRL1;
-		if (!(ctrl1 & 1)) {
-#if 1
-			printk("PYXIS_init: enabling byte/word PCI space\n");
-#endif
-			*(vuip) PYXIS_CTRL1 = ctrl1 | 1; mb();
-			ctrl1 = *(vuip)PYXIS_CTRL1;  /* re-read */
-		}
-	}
-
-	/*
+ 	/*
 	 * Create our single hose.
 	 */
 
@@ -384,6 +405,81 @@ pyxis_init_arch(void)
 	hose->mem_space = &iomem_resource;
 	hose->config_space = PYXIS_CONF;
 	hose->index = 0;
+
+	/*
+	 * Set up the PCI to main memory translation windows.
+	 *
+	 * Window 0 is scatter-gather 8MB at 8MB (for isa)
+	 * Window 1 is scatter-gather 128MB at 3GB
+	 * Window 2 is direct access 1GB at 1GB
+	 * Window 3 is direct access 1GB at 2GB
+	 * ??? We ought to scale window 1 with memory.
+	 *
+	 * We must actually use 2 windows to direct-map the 2GB space,
+	 * because of an idiot-syncrasy of the CYPRESS chip.  It may
+	 * respond to a PCI bus address in the last 1MB of the 4GB
+	 * address range.
+	 */
+
+	/* NetBSD hints that page tables must be aligned to 32K due
+	   to a hardware bug.  No description of what models affected.  */
+	hose->sg_isa = iommu_arena_new(0x00800000, 0x00800000, 32768);
+	hose->sg_pci = iommu_arena_new(0xc0000000, 0x08000000, 32768);
+	__direct_map_base = 0x40000000;
+	__direct_map_size = 0x80000000;
+
+	*(vuip)PYXIS_W0_BASE = hose->sg_isa->dma_base | 3;
+	*(vuip)PYXIS_W0_MASK = (hose->sg_isa->size - 1) & 0xfff00000;
+	*(vuip)PYXIS_T0_BASE = virt_to_phys(hose->sg_isa->ptes) >> 2;
+
+	*(vuip)PYXIS_W1_BASE = hose->sg_pci->dma_base | 3;
+	*(vuip)PYXIS_W1_MASK = (hose->sg_pci->size - 1) & 0xfff00000;
+	*(vuip)PYXIS_T1_BASE = virt_to_phys(hose->sg_pci->ptes) >> 2;
+
+	*(vuip)PYXIS_W2_BASE = 0x40000000 | 1;
+	*(vuip)PYXIS_W2_MASK = (0x40000000 - 1) & 0xfff00000;
+	*(vuip)PYXIS_T2_BASE = 0;
+
+	*(vuip)PYXIS_W3_BASE = 0x80000000 | 1;
+	*(vuip)PYXIS_W3_MASK = (0x40000000 - 1) & 0xfff00000;
+	*(vuip)PYXIS_T3_BASE = 0;
+
+	/* Pass 1 and 2 (ie revision <= 1) have a broken TBIA.  See the
+	   complete description next to pyxis_broken_pci_tbi for details.  */
+	if ((*(vuip)PYXIS_REV & 0xff) <= 1)
+		pyxis_enable_broken_tbi(hose->sg_pci);
+
+	alpha_mv.mv_pci_tbi(hose, 0, -1);
+
+	/*
+	 * Next, clear the PYXIS_CFG register, which gets used
+	 *  for PCI Config Space accesses. That is the way
+	 *  we want to use it, and we do not want to depend on
+	 *  what ARC or SRM might have left behind...
+	 */
+	temp = *(vuip)PYXIS_CFG;
+	if (temp != 0) {
+		*(vuip)PYXIS_CFG = 0;
+		mb();
+		*(vuip)PYXIS_CFG; /* re-read to force write */
+	}
+ 
+	/* Zero the HAE.  */
+	*(vuip)PYXIS_HAE_MEM = 0U; mb();
+	*(vuip)PYXIS_HAE_MEM;	/* re-read to force write */
+	*(vuip)PYXIS_HAE_IO = 0; mb();
+	*(vuip)PYXIS_HAE_IO;	/* re-read to force write */
+
+	/*
+	 * Finally, check that the PYXIS_CTRL1 has IOA_BEN set for
+	 * enabling byte/word PCI bus space(s) access.
+	 */
+	temp = *(vuip) PYXIS_CTRL1;
+	if (!(temp & 1)) {
+		*(vuip)PYXIS_CTRL1 = temp | 1;
+		mb();
+		*(vuip)PYXIS_CTRL1; /* re-read */
+	}
 }
 
 static inline void
@@ -401,6 +497,8 @@ void
 pyxis_machine_check(unsigned long vector, unsigned long la_ptr,
 		    struct pt_regs * regs)
 {
+	int expected;
+
 	/* Clear the error before reporting anything.  */
 	mb();
 	mb();  /* magic */
@@ -409,5 +507,23 @@ pyxis_machine_check(unsigned long vector, unsigned long la_ptr,
 	wrmces(0x7);
 	mb();
 
-	process_mcheck_info(vector, la_ptr, regs, "PYXIS", mcheck_expected(0));
+	expected = mcheck_expected(0);
+	if (!expected && vector == 0x660) {
+		struct el_common *com;
+		struct el_common_EV5_uncorrectable_mcheck *ev5;
+		struct el_PYXIS_sysdata_mcheck *pyxis;
+
+		com = (void *)la_ptr;
+		ev5 = (void *)(la_ptr + com->proc_offset);
+		pyxis = (void *)(la_ptr + com->sys_offset);
+
+		if (com->code == 0x202) {
+			printk(KERN_CRIT "PYXIS PCI machine check: err0=%08x "
+			       "err1=%08x err2=%08x\n",
+			       (int) pyxis->pci_err0, (int) pyxis->pci_err1,
+			       (int) pyxis->pci_err2);
+			expected = 1;
+		}
+	}
+	process_mcheck_info(vector, la_ptr, regs, "PYXIS", expected);
 }

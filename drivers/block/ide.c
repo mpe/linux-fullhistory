@@ -861,7 +861,7 @@ static void try_to_flush_leftover_data (ide_drive_t *drive)
 	if (drive->media != ide_disk)
 		return;
 	while (i > 0) {
-		unsigned long buffer[16];
+		u32 buffer[16];
 		unsigned int wcount = (i > 16) ? 16 : i;
 		i -= wcount;
 		ide_input_data (drive, buffer, wcount);

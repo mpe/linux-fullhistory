@@ -51,7 +51,7 @@ static inline void set_hae(unsigned long new_hae)
 /*
  * Change virtual addresses to physical addresses and vv.
  */
-static inline unsigned long virt_to_phys(volatile void * address)
+static inline unsigned long virt_to_phys(void *address)
 {
 	return (unsigned long)address - IDENT_ADDR;
 }
@@ -59,6 +59,36 @@ static inline unsigned long virt_to_phys(volatile void * address)
 static inline void * phys_to_virt(unsigned long address)
 {
 	return (void *) (address + IDENT_ADDR);
+}
+
+/*
+ * Change addresses as seen by the kernel (virtual) to addresses as
+ * seen by a device (bus), and vice versa.
+ *
+ * Note that this only works for a limited range of kernel addresses,
+ * and very well may not span all memory.  Consider this interface 
+ * deprecated in favour of the mapping functions in <asm/pci.h>.
+ */
+extern unsigned long __direct_map_base;
+extern unsigned long __direct_map_size;
+
+static inline unsigned long virt_to_bus(void *address)
+{
+	unsigned long phys = virt_to_phys(address);
+	unsigned long bus = phys + __direct_map_base;
+	return phys <= __direct_map_size ? bus : 0;
+}
+
+static inline void *bus_to_virt(unsigned long address)
+{
+	void *virt;
+
+	/* This check is a sanity check but also ensures that bus address 0
+	   maps to virtual address 0 which is useful to detect null pointers
+	   (the NCR driver is much simpler if NULL pointers are preserved).  */
+	address -= __direct_map_base;
+	virt = phys_to_virt(address);
+	return (long)address <= 0 ? NULL : virt;
 }
 
 #else /* !__KERNEL__ */
@@ -81,9 +111,6 @@ extern void _sethae (unsigned long addr);	/* cached version */
 #ifdef CONFIG_ALPHA_GENERIC
 
 /* In a generic kernel, we always go through the machine vector.  */
-
-# define virt_to_bus(a)	alpha_mv.mv_virt_to_bus(a)
-# define bus_to_virt(a)	alpha_mv.mv_bus_to_virt(a)
 
 # define __inb		alpha_mv.mv_inb
 # define __inw		alpha_mv.mv_inw

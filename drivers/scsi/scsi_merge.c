@@ -109,9 +109,7 @@ static int dump_stats(struct request *req,
 #define SANITY_CHECK(req, _CLUSTER, _DMA)				\
     if( req->nr_segments != __count_segments(req, _CLUSTER, _DMA, NULL) )	\
     {									\
-	__label__ here;							\
-here:									\
-	printk("Incorrect segment count at 0x%p", &&here);		\
+	printk("Incorrect segment count at 0x%p", current_text_addr());	\
 	dump_stats(req, _CLUSTER, _DMA, __count_segments(req, _CLUSTER, _DMA, NULL)); \
     }
 #else

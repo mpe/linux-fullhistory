@@ -40,6 +40,7 @@ const char pci_hae0_name[] = "HAE0";
  */
 
 struct pci_controler *hose_head, **hose_tail = &hose_head;
+struct pci_controler *pci_isa_hose;
 
 /*
  * Quirks.

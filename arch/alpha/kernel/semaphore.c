@@ -36,7 +36,9 @@
  * critical part is the inline stuff in <asm/semaphore.h>
  * where we want to avoid any extra jumps and calls.
  */
-void __up(struct semaphore *sem)
+
+void
+__up(struct semaphore *sem)
 {
 	wake_one_more(sem);
 	wake_up(&sem->wait);
@@ -63,7 +65,7 @@ void __up(struct semaphore *sem)
 #define DOWN_VAR				\
 	struct task_struct *tsk = current;	\
 	wait_queue_t wait;			\
-	init_waitqueue_entry(&wait, tsk);
+	init_waitqueue_entry(&wait, tsk)
 
 #define DOWN_HEAD(task_state)						\
 									\
@@ -92,23 +94,27 @@ void __up(struct semaphore *sem)
 		tsk->state = (task_state);	\
 	}					\
 	tsk->state = TASK_RUNNING;		\
-	remove_wait_queue(&sem->wait, &wait);
+	remove_wait_queue(&sem->wait, &wait)
 
-void __down(struct semaphore * sem)
+void
+__down(struct semaphore * sem)
 {
-	DOWN_VAR
-	DOWN_HEAD(TASK_UNINTERRUPTIBLE)
+	DOWN_VAR;
+	DOWN_HEAD(TASK_UNINTERRUPTIBLE);
+
 	if (waking_non_zero(sem))
 		break;
 	schedule();
-	DOWN_TAIL(TASK_UNINTERRUPTIBLE)
+
+	DOWN_TAIL(TASK_UNINTERRUPTIBLE);
 }
 
-int __down_interruptible(struct semaphore * sem)
+int
+__down_interruptible(struct semaphore * sem)
 {
 	int ret = 0;
-	DOWN_VAR
-	DOWN_HEAD(TASK_INTERRUPTIBLE)
+	DOWN_VAR;
+	DOWN_HEAD(TASK_INTERRUPTIBLE);
 
 	ret = waking_non_zero_interruptible(sem, tsk);
 	if (ret)
@@ -119,11 +125,149 @@ int __down_interruptible(struct semaphore * sem)
 		break;
 	}
 	schedule();
-	DOWN_TAIL(TASK_INTERRUPTIBLE)
+
+	DOWN_TAIL(TASK_INTERRUPTIBLE);
 	return ret;
 }
 
-int __down_trylock(struct semaphore * sem)
+int
+__down_trylock(struct semaphore * sem)
 {
 	return waking_non_zero_trylock(sem);
+}
+
+
+/*
+ * RW Semaphores
+ */
+
+void
+__down_read(struct rw_semaphore *sem, int count)
+{
+	long tmp;
+	DOWN_VAR;
+
+ retry_down:
+	if (count < 0) {
+		/* Wait for the lock to become unbiased.  Readers
+		   are non-exclusive.  */
+		
+		/* This takes care of granting the lock.  */
+		up_read(sem);
+
+		add_wait_queue(&sem->wait, &wait);
+		while (sem->count < 0) {
+			set_task_state(tsk, TASK_UNINTERRUPTIBLE);
+			if (sem->count >= 0)
+				break;
+			schedule();
+		}
+
+		remove_wait_queue(&sem->wait, &wait);
+		tsk->state = TASK_RUNNING;
+
+		__asm __volatile (
+			"	mb\n"
+			"1:	ldl_l	%0,%1\n"
+			"	subl	%0,1,%2\n"
+			"	subl	%0,1,%0\n"
+			"	stl_c	%2,%1\n"
+			"	bne	%2,2f\n"
+			".section .text2,\"ax\"\n"
+			"2:	br	1b\n"
+			".previous"
+			: "=r"(count), "=m"(sem->count), "=r"(tmp)
+			: : "memory");
+		if (count <= 0)
+			goto retry_down;
+	} else {
+		add_wait_queue(&sem->wait, &wait);
+
+		while (1) {
+			if (test_and_clear_bit(0, &sem->granted))
+				break;
+			set_task_state(tsk, TASK_UNINTERRUPTIBLE);
+			if ((sem->granted & 1) == 0)
+				schedule();
+		}
+
+		remove_wait_queue(&sem->wait, &wait);
+		tsk->state = TASK_RUNNING;
+	}
+}
+
+void
+__down_write(struct rw_semaphore *sem, int count)
+{
+	long tmp;
+	DOWN_VAR;
+
+ retry_down:
+	if (count + RW_LOCK_BIAS < 0) {
+		up_write(sem);
+
+		add_wait_queue_exclusive(&sem->wait, &wait);
+	
+		while (sem->count < 0) {
+			set_task_state(tsk, (TASK_UNINTERRUPTIBLE
+					     | TASK_EXCLUSIVE));
+			if (sem->count >= RW_LOCK_BIAS)
+				break;
+			schedule();
+		}
+
+		remove_wait_queue(&sem->wait, &wait);
+		tsk->state = TASK_RUNNING;
+
+		__asm __volatile (
+			"	mb\n"
+			"1:	ldl_l	%0,%1\n"
+			"	ldah	%2,%3(%0)\n"
+			"	ldah	%0,%3(%0)\n"
+			"	stl_c	%2,%1\n"
+			"	bne	%2,2f\n"
+			".section .text2,\"ax\"\n"
+			"2:	br	1b\n"
+			".previous"
+			: "=r"(count), "=m"(sem->count), "=r"(tmp)
+			: "i"(-(RW_LOCK_BIAS >> 16))
+			: "memory");
+		if (count != 0)
+			goto retry_down;
+	} else {
+		/* Put ourselves at the end of the list.  */
+		add_wait_queue_exclusive(&sem->write_bias_wait, &wait);
+
+		while (1) {
+			if (test_and_clear_bit(1, &sem->granted))
+				break;
+			set_task_state(tsk, (TASK_UNINTERRUPTIBLE
+					     | TASK_EXCLUSIVE));
+			if ((sem->granted & 2) == 0)
+				schedule();
+		}
+
+		remove_wait_queue(&sem->write_bias_wait, &wait);
+		tsk->state = TASK_RUNNING;
+
+		/* If the lock is currently unbiased, awaken the sleepers.
+		   FIXME: This wakes up the readers early in a bit of a
+		   stampede -> bad!  */
+		if (sem->count >= 0)
+			wake_up(&sem->wait);
+	}
+}
+
+void
+__do_rwsem_wake(struct rw_semaphore *sem, int readers)
+{
+	if (readers) {
+		if (test_and_set_bit(0, &sem->granted))
+			BUG();
+		wake_up(&sem->wait);
+	} else {
+		if (test_and_set_bit(1, &sem->granted))
+			BUG();
+		wake_up(&sem->write_bias_wait);
+	}
 }

@@ -266,10 +266,8 @@ svc_sendto(struct svc_rqst *rqstp, struct iovec *iov, int nr)
 	set_fs(oldfs);
 #endif
 
-	dprintk("svc: socket %p sendto([%p %lu... ], %d, %d) = %d\n",
-		rqstp->rq_sock, iov[0].iov_base,
-		(unsigned long) iov[0].iov_len, nr,
-		buflen, len);
+	dprintk("svc: socket %p sendto([%p %Zu... ], %d, %d) = %d\n",
+			rqstp->rq_sock, iov[0].iov_base, iov[0].iov_len, nr, buflen, len);
 
 	return len;
 }
@@ -326,8 +324,8 @@ svc_recvfrom(struct svc_rqst *rqstp, struct iovec *iov, int nr, int buflen)
 	set_fs(oldfs);
 #endif
 
-	dprintk("svc: socket %p recvfrom(%p, %lu) = %d\n", rqstp->rq_sock,
-		iov[0].iov_base, (unsigned long) iov[0].iov_len, len);
+	dprintk("svc: socket %p recvfrom(%p, %Zu) = %d\n",
+		rqstp->rq_sock, iov[0].iov_base, iov[0].iov_len, len);
 
 	return len;
 }

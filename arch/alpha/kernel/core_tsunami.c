@@ -100,11 +100,11 @@ mk_conf_addr(struct pci_dev *dev, int where, unsigned long *pci_addr,
 		 "pci_addr=0x%p, type1=0x%p)\n",
 		 bus, device_fn, where, pci_addr, type1));
 
-        if (hose->first_busno == dev->bus->number)
+	if (hose->first_busno == dev->bus->number)
 		bus = 0;
-        *type1 = (bus != 0);
+	*type1 = (bus != 0);
 
-        addr = (bus << 16) | (device_fn << 8) | where;
+	addr = (bus << 16) | (device_fn << 8) | where;
 	addr |= hose->config_space;
 		
 	*pci_addr = addr;
@@ -206,6 +206,23 @@ struct pci_ops tsunami_pci_ops =
 	write_dword:	tsunami_write_config_dword
 };
 
+void
+tsunami_pci_tbi(struct pci_controler *hose, dma_addr_t start, dma_addr_t end)
+{
+	tsunami_pchip *pchip = hose->index ? TSUNAMI_pchip1 : TSUNAMI_pchip0;
+
+	wmb();
+
+	/* We can invalidate up to 8 tlb entries in a go.  The flush
+	   matches against <31:16> in the pci address.  */
+	if (((start ^ end) & 0xffff0000) == 0)
+		pchip->tlbiv.csr = (start & 0xffff0000) >> 12;
+	else
+		pchip->tlbia.csr = 0;
+
+	mb();
+}
+
 #ifdef NXM_MACHINE_CHECKS_ON_TSUNAMI
 static long
 tsunami_probe_read(volatile unsigned long *vaddr)
@@ -264,6 +281,8 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index)
 		return;
 
 	hose = alloc_pci_controler();
+	if (index == 0)
+		pci_isa_hose = hose;
 	hose->io_space = alloc_resource();
 	hose->mem_space = alloc_resource();
 
@@ -307,27 +326,41 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index)
 	saved_pchip[index].tba[3] = pchip->tba[3].csr;
 
 	/*
-	 * Set up the PCI->physical memory translation windows.
-	 * For now, windows 1,2 and 3 are disabled.  In the future,
-	 * we may want to use them to do scatter/gather DMA. 
+	 * Set up the PCI to main memory translation windows.
 	 *
-	 * Window 0 goes at 1 GB and is 1 GB large, mapping to 0.
-	 * Window 1 goes at 2 GB and is 1 GB large, mapping to 1GB.
+	 * Window 0 is scatter-gather 8MB at 8MB (for isa)
+	 * Window 1 is scatter-gather 128MB at 3GB
+	 * Window 2 is direct access 1GB at 1GB
+	 * Window 3 is direct access 1GB at 2GB
+	 * ??? We ought to scale window 1 memory.
+	 *
+	 * We must actually use 2 windows to direct-map the 2GB space,
+	 * because of an idiot-syncrasy of the CYPRESS chip.  It may
+	 * respond to a PCI bus address in the last 1MB of the 4GB
+	 * address range.
 	 */
+	hose->sg_isa = iommu_arena_new(0x00800000, 0x00800000, PAGE_SIZE);
+	hose->sg_pci = iommu_arena_new(0xc0000000, 0x08000000, PAGE_SIZE);
+	__direct_map_base = 0x40000000;
+	__direct_map_size = 0x80000000;
 
-	pchip->wsba[0].csr = TSUNAMI_DMA_WIN0_BASE_DEFAULT | 1UL;
-	pchip->wsm[0].csr  = (TSUNAMI_DMA_WIN0_SIZE_DEFAULT - 1) &
-			     0xfff00000UL;
-	pchip->tba[0].csr  = TSUNAMI_DMA_WIN0_TRAN_DEFAULT;
+	pchip->wsba[0].csr = hose->sg_isa->dma_base | 3;
+	pchip->wsm[0].csr  = (hose->sg_isa->size - 1) & 0xfff00000;
+	pchip->tba[0].csr  = virt_to_phys(hose->sg_isa->ptes);
 
-	pchip->wsba[1].csr = TSUNAMI_DMA_WIN1_BASE_DEFAULT | 1UL;
-	pchip->wsm[1].csr  = (TSUNAMI_DMA_WIN1_SIZE_DEFAULT - 1) &
-			     0xfff00000UL;
-	pchip->tba[1].csr  = TSUNAMI_DMA_WIN1_TRAN_DEFAULT;
+	pchip->wsba[1].csr = hose->sg_pci->dma_base | 3;
+	pchip->wsm[1].csr  = (hose->sg_pci->size - 1) & 0xfff00000;
+	pchip->tba[1].csr  = virt_to_phys(hose->sg_pci->ptes);
 
-	pchip->wsba[2].csr = 0;
-	pchip->wsba[3].csr = 0;
-	mb();
+	pchip->wsba[2].csr = 0x40000000 | 1;
+	pchip->wsm[2].csr  = (0x40000000 - 1) & 0xfff00000;
+	pchip->tba[2].csr  = 0;
+
+	pchip->wsba[3].csr = 0x80000000 | 1;
+	pchip->wsm[3].csr  = (0x40000000 - 1) & 0xfff00000;
+	pchip->tba[3].csr  = 0;
+
+	tsunami_pci_tbi(hose, 0, -1);
 }
 
 void __init
@@ -335,7 +368,7 @@ tsunami_init_arch(void)
 {
 #ifdef NXM_MACHINE_CHECKS_ON_TSUNAMI
 	extern asmlinkage void entInt(void);
-        unsigned long tmp;
+	unsigned long tmp;
 	
 	/* Ho hum.. init_arch is called before init_IRQ, but we need to be
 	   able to handle machine checks.  So install the handler now.  */
@@ -426,7 +459,7 @@ tsunami_pci_clr_err(void)
 
 	/* TSUNAMI and TYPHOON can have 2, but might only have 1 (DS10) */
 	if (TSUNAMI_cchip->csc.csr & 1L<<14)
-	    tsunami_pci_clr_err_1(TSUNAMI_pchip1);
+		tsunami_pci_clr_err_1(TSUNAMI_pchip1);
 }
 
 void

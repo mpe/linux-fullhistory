@@ -11,6 +11,10 @@
 #ifndef __ASM_MIPS_MMU_CONTEXT_H
 #define __ASM_MIPS_MMU_CONTEXT_H
 
+static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
+{
+}
+
 /* Fuck.  The f-word is here so you can grep for it :-)  */
 extern unsigned long asid_cache;
 

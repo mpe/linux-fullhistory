@@ -77,20 +77,6 @@
 #define CIA_MEM_R2_MASK 0x07ffffff  /* SPARSE Mem region 2 mask is 27 bits */
 #define CIA_MEM_R3_MASK 0x03ffffff  /* SPARSE Mem region 3 mask is 26 bits */
 
-#define CIA_DMA_WIN_BASE		(1UL*1024*1024*1024)
-#define CIA_DMA_WIN_SIZE		(2UL*1024*1024*1024)
-
-/* Window 0 at 1GB size 1GB mapping to 0.  */
-#define CIA_DMA_WIN0_BASE_DEFAULT      (1UL*1024*1024*1024)
-#define CIA_DMA_WIN0_SIZE_DEFAULT      (1UL*1024*1024*1024)
-#define CIA_DMA_WIN0_TRAN_DEFAULT      (0UL)
-
-/* Window 1 at 2GB size 1GB mapping to 1GB.  */
-#define CIA_DMA_WIN1_BASE_DEFAULT      (2UL*1024*1024*1024)
-#define CIA_DMA_WIN1_SIZE_DEFAULT      (1UL*1024*1024*1024)
-#define CIA_DMA_WIN1_TRAN_DEFAULT      (1UL*1024*1024*1024)
-
-
 /*
  * 21171-CA Control and Status Registers (p4-1)
  */
@@ -289,21 +275,6 @@ struct el_CIA_sysdata_mcheck {
 #endif
 
 /*
- * Translate physical memory address as seen on (PCI) bus into
- * a kernel virtual address and vv.
- */
-
-__EXTERN_INLINE unsigned long cia_virt_to_bus(void * address)
-{
-	return virt_to_phys(address) + CIA_DMA_WIN_BASE;
-}
-
-__EXTERN_INLINE void * cia_bus_to_virt(unsigned long address)
-{
-	return phys_to_virt(address - CIA_DMA_WIN_BASE);
-}
-
-/*
  * I/O functions:
  *
  * CIA (the 2117x PCI/memory support chipset for the EV5 (21164)
@@ -491,8 +462,6 @@ __EXTERN_INLINE int cia_is_ioaddr(unsigned long addr)
 
 #ifdef __WANT_IO_DEF
 
-#define virt_to_bus	cia_virt_to_bus
-#define bus_to_virt	cia_bus_to_virt
 #define __inb		cia_inb
 #define __inw		cia_inw
 #define __inl		cia_inl

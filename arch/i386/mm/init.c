@@ -448,7 +448,7 @@ void __init paging_init(void)
 	kmap_init();
 #endif
 	{
-		unsigned int zones_size[MAX_NR_ZONES] = {0, 0, 0};
+		unsigned long zones_size[MAX_NR_ZONES] = {0, 0, 0};
 		unsigned int max_dma, high, low;
 
 		max_dma = virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT;

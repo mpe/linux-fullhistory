@@ -72,12 +72,9 @@
  *
  */
 
-#define MCPCIA_MEM_MASK 0x07ffffff /* SPARSE Mem region mask is 27 bits */
-
-#define MCPCIA_DMA_WIN_BASE		(2UL*1024*1024*1024)
-#define MCPCIA_DMA_WIN_SIZE		(2UL*1024*1024*1024)
-
 #define MCPCIA_MID(m)		((unsigned long)(m) << 33)
+
+#define MCPCIA_MEM_MASK 0x07ffffff /* SPARSE Mem region mask is 27 bits */
 
 /*
  * Memory spaces:
@@ -196,21 +193,6 @@ struct el_MCPCIA_uncorrected_frame_mcheck {
 #define __EXTERN_INLINE extern inline
 #define __IO_EXTERN_INLINE
 #endif
-
-/*
- * Translate physical memory address as seen on (PCI) bus into
- * a kernel virtual address and vv.
- */
-
-__EXTERN_INLINE unsigned long mcpcia_virt_to_bus(void * address)
-{
-	return virt_to_phys(address) + MCPCIA_DMA_WIN_BASE;
-}
-
-__EXTERN_INLINE void * mcpcia_bus_to_virt(unsigned long address)
-{
-	return phys_to_virt(address - MCPCIA_DMA_WIN_BASE);
-}
 
 /*
  * I/O functions:
@@ -451,9 +433,6 @@ __EXTERN_INLINE void mcpcia_writeq(unsigned long b, unsigned long addr)
 #undef vulp
 
 #ifdef __WANT_IO_DEF
-
-#define virt_to_bus	mcpcia_virt_to_bus
-#define bus_to_virt	mcpcia_bus_to_virt
 
 #define __inb		mcpcia_inb
 #define __inw		mcpcia_inw

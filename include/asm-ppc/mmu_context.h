@@ -19,6 +19,9 @@
         -- Dan
  */
 
+static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
+{
+}
 #ifdef CONFIG_8xx
 #define NO_CONTEXT      	16
 #define LAST_CONTEXT    	15

@@ -22,6 +22,10 @@
 #include <asm/io.h>
 #endif
 
+static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
+{
+}
+
 extern inline unsigned long
 __reload_thread(struct thread_struct *pcb)
 {
