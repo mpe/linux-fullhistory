@@ -4,6 +4,8 @@
 #include <asm/ldt.h>
 #include <asm/segment.h>
 
+#define CPU_16BIT_STACK_SIZE 1024
+
 #ifndef __ASSEMBLY__
 
 #include <linux/preempt.h>
@@ -14,6 +16,8 @@
 
 extern struct desc_struct cpu_gdt_table[GDT_ENTRIES];
 DECLARE_PER_CPU(struct desc_struct, cpu_gdt_table[GDT_ENTRIES]);
+
+DECLARE_PER_CPU(unsigned char, cpu_16bit_stack[CPU_16BIT_STACK_SIZE]);
 
 struct Xgt_desc_struct {
 	unsigned short size;

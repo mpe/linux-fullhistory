@@ -77,6 +77,15 @@ enum radeon_chip_flags {
 	CHIP_HAS_CRTC2		= 0x00040000UL,	
 };
 
+/*
+ * Errata workarounds
+ */
+enum radeon_errata {
+	CHIP_ERRATA_R300_CG		= 0x00000001,
+	CHIP_ERRATA_PLL_DUMMYREADS	= 0x00000002,
+	CHIP_ERRATA_PLL_DELAY		= 0x00000004,
+};
+
 
 /*
  * Monitor types
@@ -295,6 +304,7 @@ struct radeonfb_info {
 	int			chipset;
 	u8			family;
 	u8			rev;
+	unsigned int		errata;
 	unsigned long		video_ram;
 	unsigned long		mapped_vram;
 	int			vram_width;
@@ -305,7 +315,6 @@ struct radeonfb_info {
 	int			has_CRTC2;
 	int			is_mobility;
 	int			is_IGP;
-	int			R300_cg_workaround;
 	int			reversed_DAC;
 	int			reversed_TMDS;
 	struct panel_info	panel_info;
@@ -369,6 +378,21 @@ struct radeonfb_info {
  * IO macros
  */
 
+/* Note about this function: we have some rare cases where we must not schedule,
+ * this typically happen with our special "wake up early" hook which allows us to
+ * wake up the graphic chip (and thus get the console back) before everything else
+ * on some machines that support that mecanism. At this point, interrupts are off
+ * and scheduling is not permitted
+ */
+static inline void _radeon_msleep(struct radeonfb_info *rinfo, unsigned long ms)
+{
+	if (rinfo->no_schedule || oops_in_progress)
+		mdelay(ms);
+	else
+		msleep(ms);
+}
+
+
 #define INREG8(addr)		readb((rinfo->mmio_base)+addr)
 #define OUTREG8(addr,val)	writeb(val, (rinfo->mmio_base)+addr)
 #define INREG(addr)		readl((rinfo->mmio_base)+addr)
@@ -390,107 +414,85 @@ static inline void _OUTREGP(struct radeonfb_info *rinfo, u32 addr,
 
 #define OUTREGP(addr,val,mask)	_OUTREGP(rinfo, addr, val,mask)
 
-/* This function is required to workaround a hardware bug in some (all?)
- * revisions of the R300.  This workaround should be called after every
- * CLOCK_CNTL_INDEX register access.  If not, register reads afterward
- * may not be correct.
- */
-static inline void R300_cg_workardound(struct radeonfb_info *rinfo)
-{
-	u32 save, tmp;
-	save = INREG(CLOCK_CNTL_INDEX);
-	tmp = save & ~(0x3f | PLL_WR_EN);
-	OUTREG(CLOCK_CNTL_INDEX, tmp);
-	tmp = INREG(CLOCK_CNTL_DATA);
-	OUTREG(CLOCK_CNTL_INDEX, save);
-}
-
 /*
- * PLL accesses suffer from various HW issues on the different chip
- * families. Some R300's need the above workaround, rv200 & friends
- * need a couple of dummy reads after any write of CLOCK_CNTL_INDEX,
- * and some RS100/200 need a dummy read before writing to
- * CLOCK_CNTL_INDEX as well. Instead of testing every chip revision,
- * we just unconditionally do  the workarounds at once since PLL
- * accesses are far from beeing performance critical. Except for R300
- * one which stays separate for now
+ * Note about PLL register accesses:
+ *
+ * I have removed the spinlock on them on purpose. The driver now
+ * expects that it will only manipulate the PLL registers in normal
+ * task environment, where radeon_msleep() will be called, protected
+ * by a semaphore (currently the console semaphore) so that no conflict
+ * will happen on the PLL register index.
+ *
+ * With the latest changes to the VT layer, this is guaranteed for all
+ * calls except the actual drawing/blits which aren't supposed to use
+ * the PLL registers anyway
+ *
+ * This is very important for the workarounds to work properly. The only
+ * possible exception to this rule is the call to unblank(), which may
+ * be done at irq time if an oops is in progress.
  */
-
-static inline void radeon_pll_workaround_before(struct radeonfb_info *rinfo)
+static inline void radeon_pll_errata_after_index(struct radeonfb_info *rinfo)
 {
-	(void)INREG(CRTC_GEN_CNTL);
-}
+	if (!(rinfo->errata & CHIP_ERRATA_PLL_DUMMYREADS))
+		return;
 
-static inline void radeon_pll_workaround_after(struct radeonfb_info *rinfo)
-{
 	(void)INREG(CLOCK_CNTL_DATA);
 	(void)INREG(CRTC_GEN_CNTL);
+}
+
+static inline void radeon_pll_errata_after_data(struct radeonfb_info *rinfo)
+{
+	if (rinfo->errata & CHIP_ERRATA_PLL_DELAY) {
+		/* we can't deal with posted writes here ... */
+		_radeon_msleep(rinfo, 5);
+	}
+	if (rinfo->errata & CHIP_ERRATA_R300_CG) {
+		u32 save, tmp;
+		save = INREG(CLOCK_CNTL_INDEX);
+		tmp = save & ~(0x3f | PLL_WR_EN);
+		OUTREG(CLOCK_CNTL_INDEX, tmp);
+		tmp = INREG(CLOCK_CNTL_DATA);
+		OUTREG(CLOCK_CNTL_INDEX, save);
+	}
 }
 
 static inline u32 __INPLL(struct radeonfb_info *rinfo, u32 addr)
 {
 	u32 data;
 
-	radeon_pll_workaround_before(rinfo);
 	OUTREG8(CLOCK_CNTL_INDEX, addr & 0x0000003f);
-	radeon_pll_workaround_after(rinfo);
+	radeon_pll_errata_after_index(rinfo);
 	data = INREG(CLOCK_CNTL_DATA);
-	if (rinfo->R300_cg_workaround)
-		R300_cg_workardound(rinfo);
+	radeon_pll_errata_after_data(rinfo);
 	return data;
 }
-
-static inline u32 _INPLL(struct radeonfb_info *rinfo, u32 addr)
-{
-       	unsigned long flags;
-	u32 data;
-
-	spin_lock_irqsave(&rinfo->reg_lock, flags);
-	data = __INPLL(rinfo, addr);
-	spin_unlock_irqrestore(&rinfo->reg_lock, flags);
-	return data;
-}
-
-#define INPLL(addr)		_INPLL(rinfo, addr)
-
 
 static inline void __OUTPLL(struct radeonfb_info *rinfo, unsigned int index,
 			    u32 val)
 {
 
-	radeon_pll_workaround_before(rinfo);
 	OUTREG8(CLOCK_CNTL_INDEX, (index & 0x0000003f) | 0x00000080);
-	radeon_pll_workaround_after(rinfo);
+	radeon_pll_errata_after_index(rinfo);
 	OUTREG(CLOCK_CNTL_DATA, val);
-	if (rinfo->R300_cg_workaround)
-		R300_cg_workardound(rinfo);
+	radeon_pll_errata_after_data(rinfo);
 }
 
-static inline void _OUTPLL(struct radeonfb_info *rinfo, unsigned int index, u32 val)
-{
-       	unsigned long flags;
-	spin_lock_irqsave(&rinfo->reg_lock, flags);
-	__OUTPLL(rinfo, index, val);
-	spin_unlock_irqrestore(&rinfo->reg_lock, flags);
-}
 
-static inline void _OUTPLLP(struct radeonfb_info *rinfo, unsigned int index,
-			    u32 val, u32 mask)
+static inline void __OUTPLLP(struct radeonfb_info *rinfo, unsigned int index,
+			     u32 val, u32 mask)
 {
-	unsigned long flags;
 	unsigned int tmp;
 
-	spin_lock_irqsave(&rinfo->reg_lock, flags);
 	tmp  = __INPLL(rinfo, index);
 	tmp &= (mask);
 	tmp |= (val);
 	__OUTPLL(rinfo, index, tmp);
-	spin_unlock_irqrestore(&rinfo->reg_lock, flags);
 }
 
 
-#define OUTPLL(index, val)		_OUTPLL(rinfo, index, val)
-#define OUTPLLP(index, val, mask)	_OUTPLLP(rinfo, index, val, mask)
+#define INPLL(addr)			__INPLL(rinfo, addr)
+#define OUTPLL(index, val)		__OUTPLL(rinfo, index, val)
+#define OUTPLLP(index, val, mask)	__OUTPLLP(rinfo, index, val, mask)
 
 
 #define BIOS_IN8(v)  	(readb(rinfo->bios_seg + (v)))
@@ -580,20 +582,6 @@ static inline void _radeon_engine_idle(struct radeonfb_info *rinfo)
 		udelay(1);
 	}
 	printk(KERN_ERR "radeonfb: Idle Timeout !\n");
-}
-
-/* Note about this function: we have some rare cases where we must not schedule,
- * this typically happen with our special "wake up early" hook which allows us to
- * wake up the graphic chip (and thus get the console back) before everything else
- * on some machines that support that mecanism. At this point, interrupts are off
- * and scheduling is not permitted
- */
-static inline void _radeon_msleep(struct radeonfb_info *rinfo, unsigned long ms)
-{
-	if (rinfo->no_schedule)
-		mdelay(ms);
-	else
-		msleep(ms);
 }
 
 

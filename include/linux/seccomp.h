@@ -8,6 +8,7 @@
 #define NR_SECCOMP_MODES 1
 
 #include <linux/thread_info.h>
+#include <asm/seccomp.h>
 
 typedef struct { int mode; } seccomp_t;
 

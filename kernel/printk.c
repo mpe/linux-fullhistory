@@ -54,7 +54,12 @@ int console_printk[4] = {
 
 EXPORT_SYMBOL(console_printk);
 
+/*
+ * Low lever drivers may need that to know if they can schedule in
+ * their unblank() callback or not. So let's export it.
+ */
 int oops_in_progress;
+EXPORT_SYMBOL(oops_in_progress);
 
 /*
  * console_sem protects the console_drivers list, and also
@@ -751,12 +756,15 @@ void console_unblank(void)
 	struct console *c;
 
 	/*
-	 * Try to get the console semaphore. If someone else owns it
-	 * we have to return without unblanking because console_unblank
-	 * may be called in interrupt context.
+	 * console_unblank can no longer be called in interrupt context unless
+	 * oops_in_progress is set to 1..
 	 */
-	if (down_trylock(&console_sem) != 0)
-		return;
+	if (oops_in_progress) {
+		if (down_trylock(&console_sem) != 0)
+			return;
+	} else
+		acquire_console_sem();
+
 	console_locked = 1;
 	console_may_schedule = 0;
 	for (c = console_drivers; c != NULL; c = c->next)

@@ -325,7 +325,7 @@ static int rd_ioctl(struct inode *inode, struct file *file,
  */
 static struct backing_dev_info rd_backing_dev_info = {
 	.ra_pages	= 0,	/* No readahead */
-	.memory_backed	= 1,	/* Does not contribute to dirty memory */
+	.capabilities	= BDI_CAP_NO_ACCT_DIRTY | BDI_CAP_NO_WRITEBACK | BDI_CAP_MAP_COPY,
 	.unplug_io_fn	= default_unplug_io_fn,
 };
 
@@ -336,7 +336,7 @@ static struct backing_dev_info rd_backing_dev_info = {
  */
 static struct backing_dev_info rd_file_backing_dev_info = {
 	.ra_pages	= 0,	/* No readahead */
-	.memory_backed	= 0,	/* Does contribute to dirty memory */
+	.capabilities	= BDI_CAP_MAP_COPY,	/* Does contribute to dirty memory */
 	.unplug_io_fn	= default_unplug_io_fn,
 };
 

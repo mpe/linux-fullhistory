@@ -1611,7 +1611,7 @@ static int __init imsttfb_init(void)
 
 	imsttfb_setup(option);
 #endif
-	return pci_module_init(&imsttfb_pci_driver);
+	return pci_register_driver(&imsttfb_pci_driver);
 }
  
 static void __exit imsttfb_exit(void)

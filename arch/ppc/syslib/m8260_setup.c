@@ -167,18 +167,12 @@ m8260_show_cpuinfo(struct seq_file *m)
 static void __init
 m8260_init_IRQ(void)
 {
-	int i;
-
-        for ( i = 0 ; i < NR_SIU_INTS ; i++ )
-                irq_desc[i].handler = &cpm2_pic;
+	cpm2_init_IRQ();
 
 	/* Initialize the default interrupt mapping priorities,
 	 * in case the boot rom changed something on us.
 	 */
-	cpm2_immr->im_intctl.ic_sicr = 0;
 	cpm2_immr->im_intctl.ic_siprr = 0x05309770;
-	cpm2_immr->im_intctl.ic_scprrh = 0x05309770;
-	cpm2_immr->im_intctl.ic_scprrl = 0x05309770;
 }
 
 /*

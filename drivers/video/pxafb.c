@@ -1343,8 +1343,7 @@ int __init pxafb_probe(struct device *dev)
 
 failed:
 	dev_set_drvdata(dev, NULL);
-	if (fbi)
-		kfree(fbi);
+	kfree(fbi);
 	return ret;
 }
 

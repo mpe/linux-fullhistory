@@ -65,7 +65,6 @@
 #include <asm/types.h>
 #include <asm/uaccess.h>
 #include <asm/semaphore.h>
-#include <asm/ipc.h>
 #include <asm/atomic.h>
 #include <asm/ldt.h>
 

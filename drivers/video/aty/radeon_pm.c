@@ -1372,12 +1372,10 @@ static void radeon_pm_start_mclk_sclk(struct radeonfb_info *rinfo)
 
 	/* Reconfigure SPLL charge pump, VCO gain, duty cycle */
 	tmp = INPLL(pllSPLL_CNTL);
-	radeon_pll_workaround_before(rinfo);
 	OUTREG8(CLOCK_CNTL_INDEX, pllSPLL_CNTL + PLL_WR_EN);
-	radeon_pll_workaround_after(rinfo);
+	radeon_pll_errata_after_index(rinfo);
 	OUTREG8(CLOCK_CNTL_DATA + 1, (tmp >> 8) & 0xff);
-	if (rinfo->R300_cg_workaround)
-		R300_cg_workardound(rinfo);
+	radeon_pll_errata_after_data(rinfo);
 
 	/* Set SPLL feedback divider */
 	tmp = INPLL(pllM_SPLL_REF_FB_DIV);
@@ -1409,12 +1407,10 @@ static void radeon_pm_start_mclk_sclk(struct radeonfb_info *rinfo)
 
 	/* Reconfigure MPLL charge pump, VCO gain, duty cycle */
 	tmp = INPLL(pllMPLL_CNTL);
-	radeon_pll_workaround_before(rinfo);
 	OUTREG8(CLOCK_CNTL_INDEX, pllMPLL_CNTL + PLL_WR_EN);
-	radeon_pll_workaround_after(rinfo);
+	radeon_pll_errata_after_index(rinfo);
 	OUTREG8(CLOCK_CNTL_DATA + 1, (tmp >> 8) & 0xff);
-	if (rinfo->R300_cg_workaround)
-		R300_cg_workardound(rinfo);
+	radeon_pll_errata_after_data(rinfo);
 
 	/* Set MPLL feedback divider */
 	tmp = INPLL(pllM_SPLL_REF_FB_DIV);
@@ -1532,12 +1528,10 @@ static void radeon_pm_restore_pixel_pll(struct radeonfb_info *rinfo)
 {
 	u32 tmp;
 
-	radeon_pll_workaround_before(rinfo);
 	OUTREG8(CLOCK_CNTL_INDEX, pllHTOTAL_CNTL + PLL_WR_EN);
-	radeon_pll_workaround_after(rinfo);
+	radeon_pll_errata_after_index(rinfo);
 	OUTREG8(CLOCK_CNTL_DATA, 0);
-	if (rinfo->R300_cg_workaround)
-		R300_cg_workardound(rinfo);
+	radeon_pll_errata_after_data(rinfo);
 
 	tmp = INPLL(pllVCLK_ECP_CNTL);
 	OUTPLL(pllVCLK_ECP_CNTL, tmp | 0x80);
@@ -1552,12 +1546,10 @@ static void radeon_pm_restore_pixel_pll(struct radeonfb_info *rinfo)
 	 * probably useless since we already did it ...
 	 */
 	tmp = INPLL(pllPPLL_CNTL);
-	radeon_pll_workaround_before(rinfo);
 	OUTREG8(CLOCK_CNTL_INDEX, pllSPLL_CNTL + PLL_WR_EN);
-	radeon_pll_workaround_after(rinfo);
+	radeon_pll_errata_after_index(rinfo);
 	OUTREG8(CLOCK_CNTL_DATA + 1, (tmp >> 8) & 0xff);
-	if (rinfo->R300_cg_workaround)
-		R300_cg_workardound(rinfo);
+	radeon_pll_errata_after_data(rinfo);
 
 	/* Restore our "reference" PPLL divider set by firmware
 	 * according to proper spread spectrum calculations
@@ -1581,11 +1573,9 @@ static void radeon_pm_restore_pixel_pll(struct radeonfb_info *rinfo)
 	mdelay(5);
 
 	/* Switch pixel clock to firmware default div 0 */
-	radeon_pll_workaround_before(rinfo);
 	OUTREG8(CLOCK_CNTL_INDEX+1, 0);
-	radeon_pll_workaround_after(rinfo);
-	if (rinfo->R300_cg_workaround)
-		R300_cg_workardound(rinfo);
+	radeon_pll_errata_after_index(rinfo);
+	radeon_pll_errata_after_data(rinfo);
 }
 
 static void radeon_pm_m10_reconfigure_mc(struct radeonfb_info *rinfo)
@@ -2173,7 +2163,9 @@ static void radeon_reinitialize_QW(struct radeonfb_info *rinfo)
 
 	tmp = INPLL(MPLL_CNTL);
 	OUTREG8(CLOCK_CNTL_INDEX, MPLL_CNTL + PLL_WR_EN);
+	radeon_pll_errata_after_index(rinfo);
 	OUTREG8(CLOCK_CNTL_DATA + 1, (tmp >> 8) & 0xff);
+	radeon_pll_errata_after_data(rinfo);
 
 	tmp = INPLL(M_SPLL_REF_FB_DIV);
 	OUTPLL(M_SPLL_REF_FB_DIV, tmp | 0x5900);
@@ -2194,7 +2186,9 @@ static void radeon_reinitialize_QW(struct radeonfb_info *rinfo)
 
 	tmp = INPLL(SPLL_CNTL);
 	OUTREG8(CLOCK_CNTL_INDEX, SPLL_CNTL + PLL_WR_EN);
+	radeon_pll_errata_after_index(rinfo);
 	OUTREG8(CLOCK_CNTL_DATA + 1, (tmp >> 8) & 0xff);
+	radeon_pll_errata_after_data(rinfo);
 
 	tmp = INPLL(M_SPLL_REF_FB_DIV);
 	OUTPLL(M_SPLL_REF_FB_DIV, tmp | 0x780000);
@@ -2322,7 +2316,9 @@ static void radeon_reinitialize_QW(struct radeonfb_info *rinfo)
 	OUTREG(CRTC_H_SYNC_STRT_WID, 0x008e0580);
 	OUTREG(CRTC_H_TOTAL_DISP, 0x009f00d2);
 	OUTREG8(CLOCK_CNTL_INDEX, HTOTAL_CNTL + PLL_WR_EN);
+	radeon_pll_errata_after_index(rinfo);
 	OUTREG8(CLOCK_CNTL_DATA, 0);
+	radeon_pll_errata_after_data(rinfo);
 	OUTREG(CRTC_V_SYNC_STRT_WID, 0x00830403);
 	OUTREG(CRTC_V_TOTAL_DISP, 0x03ff0429);
 	OUTREG(FP_CRTC_H_TOTAL_DISP, 0x009f0033);
@@ -2344,10 +2340,15 @@ static void radeon_reinitialize_QW(struct radeonfb_info *rinfo)
 	INPLL(PPLL_REF_DIV);
 
 	OUTREG8(CLOCK_CNTL_INDEX, PPLL_CNTL + PLL_WR_EN);
+	radeon_pll_errata_after_index(rinfo);
 	OUTREG8(CLOCK_CNTL_DATA + 1, 0xbc);
+	radeon_pll_errata_after_data(rinfo);
 
 	tmp = INREG(CLOCK_CNTL_INDEX);
+	radeon_pll_errata_after_index(rinfo);
 	OUTREG(CLOCK_CNTL_INDEX, tmp & 0xff);
+	radeon_pll_errata_after_index(rinfo);
+	radeon_pll_errata_after_data(rinfo);
 
 	OUTPLL(PPLL_DIV_0, 0x48090);
 

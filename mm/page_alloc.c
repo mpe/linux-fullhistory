@@ -780,6 +780,9 @@ __alloc_pages(unsigned int __nocast gfp_mask, unsigned int order,
 	/*
 	 * Go through the zonelist again. Let __GFP_HIGH and allocations
 	 * coming from realtime tasks to go deeper into reserves
+	 *
+	 * This is the last chance, in general, before the goto nopage.
+	 * Ignore cpuset if GFP_ATOMIC (!wait) rather than fail alloc.
 	 */
 	for (i = 0; (z = zones[i]) != NULL; i++) {
 		if (!zone_watermark_ok(z, order, z->pages_min,
@@ -787,7 +790,7 @@ __alloc_pages(unsigned int __nocast gfp_mask, unsigned int order,
 				       gfp_mask & __GFP_HIGH))
 			continue;
 
-		if (!cpuset_zone_allowed(z))
+		if (wait && !cpuset_zone_allowed(z))
 			continue;
 
 		page = buffered_rmqueue(z, order, gfp_mask);

@@ -2212,9 +2212,6 @@ static void vt_console_print(struct console *co, const char *b, unsigned count)
 	}
 	set_cursor(vc);
 
-	if (!oops_in_progress)
-		poke_blanked_console();
-
 quit:
 	clear_bit(0, &printing);
 }
@@ -2815,6 +2812,13 @@ void do_unblank_screen(int leaving_gfx)
 {
 	struct vc_data *vc;
 
+	/* This should now always be called from a "sane" (read: can schedule)
+	 * context for the sake of the low level drivers, except in the special
+	 * case of oops_in_progress
+	 */
+	if (!oops_in_progress)
+		might_sleep();
+
 	WARN_CONSOLE_UNLOCKED();
 
 	ignore_poke = 0;
@@ -2870,6 +2874,14 @@ static void blank_screen_t(unsigned long dummy)
 void poke_blanked_console(void)
 {
 	WARN_CONSOLE_UNLOCKED();
+
+	/* Add this so we quickly catch whoever might call us in a non
+	 * safe context. Nowadays, unblank_screen() isn't to be called in
+	 * atomic contexts and is allowed to schedule (with the special case
+	 * of oops_in_progress, but that isn't of any concern for this
+	 * function. --BenH.
+	 */
+	might_sleep();
 
 	/* This isn't perfectly race free, but a race here would be mostly harmless,
 	 * at worse, we'll do a spurrious blank and it's unlikely

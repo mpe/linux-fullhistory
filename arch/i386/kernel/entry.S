@@ -47,6 +47,7 @@
 #include <asm/segment.h>
 #include <asm/smp.h>
 #include <asm/page.h>
+#include <asm/desc.h>
 #include "irq_vectors.h"
 
 #define nr_syscalls ((syscall_table_size)/4)
@@ -78,7 +79,7 @@ VM_MASK		= 0x00020000
 #define preempt_stop		cli
 #else
 #define preempt_stop
-#define resume_kernel		restore_all
+#define resume_kernel		restore_nocheck
 #endif
 
 #define SAVE_ALL \
@@ -122,24 +123,6 @@ VM_MASK		= 0x00020000
 .previous
 
 
-#define RESTORE_ALL	\
-	RESTORE_REGS	\
-	addl $4, %esp;	\
-1:	iret;		\
-.section .fixup,"ax";   \
-2:	sti;		\
-	movl $(__USER_DS), %edx; \
-	movl %edx, %ds; \
-	movl %edx, %es; \
-	movl $11,%eax;	\
-	call do_exit;	\
-.previous;		\
-.section __ex_table,"a";\
-	.align 4;	\
-	.long 1b,2b;	\
-.previous
-
-
 ENTRY(ret_from_fork)
 	pushl %eax
 	call schedule_tail
@@ -163,7 +146,7 @@ ret_from_intr:
 	movl EFLAGS(%esp), %eax		# mix EFLAGS and CS
 	movb CS(%esp), %al
 	testl $(VM_MASK | 3), %eax
-	jz resume_kernel		# returning to kernel or vm86-space
+	jz resume_kernel
 ENTRY(resume_userspace)
  	cli				# make sure we don't miss an interrupt
 					# setting need_resched or sigpending
@@ -178,7 +161,7 @@ ENTRY(resume_userspace)
 ENTRY(resume_kernel)
 	cli
 	cmpl $0,TI_preempt_count(%ebp)	# non-zero preempt_count ?
-	jnz restore_all
+	jnz restore_nocheck
 need_resched:
 	movl TI_flags(%ebp), %ecx	# need_resched set ?
 	testb $_TIF_NEED_RESCHED, %cl
@@ -259,8 +242,56 @@ syscall_exit:
 	movl TI_flags(%ebp), %ecx
 	testw $_TIF_ALLWORK_MASK, %cx	# current->work
 	jne syscall_exit_work
+
 restore_all:
-	RESTORE_ALL
+	movl EFLAGS(%esp), %eax		# mix EFLAGS, SS and CS
+	movb OLDSS(%esp), %ah
+	movb CS(%esp), %al
+	andl $(VM_MASK | (4 << 8) | 3), %eax
+	cmpl $((4 << 8) | 3), %eax
+	je ldt_ss			# returning to user-space with LDT SS
+restore_nocheck:
+	RESTORE_REGS
+	addl $4, %esp
+1:	iret
+.section .fixup,"ax"
+iret_exc:
+	sti
+	movl $__USER_DS, %edx
+	movl %edx, %ds
+	movl %edx, %es
+	movl $11,%eax
+	call do_exit
+.previous
+.section __ex_table,"a"
+	.align 4
+	.long 1b,iret_exc
+.previous
+
+ldt_ss:
+	larl OLDSS(%esp), %eax
+	jnz restore_nocheck
+	testl $0x00400000, %eax		# returning to 32bit stack?
+	jnz restore_nocheck		# allright, normal return
+	/* If returning to userspace with 16bit stack,
+	 * try to fix the higher word of ESP, as the CPU
+	 * won't restore it.
+	 * This is an "official" bug of all the x86-compatible
+	 * CPUs, which we can try to work around to make
+	 * dosemu and wine happy. */
+	subl $8, %esp		# reserve space for switch16 pointer
+	cli
+	movl %esp, %eax
+	/* Set up the 16bit stack frame with switch32 pointer on top,
+	 * and a switch16 pointer on top of the current frame. */
+	call setup_x86_bogus_stack
+	RESTORE_REGS
+	lss 20+4(%esp), %esp	# switch to 16bit stack
+1:	iret
+.section __ex_table,"a"
+	.align 4
+	.long 1b,iret_exc
+.previous
 
 	# perform work that needs to be done immediately before resumption
 	ALIGN
@@ -336,6 +367,27 @@ syscall_badsys:
 	movl $-ENOSYS,EAX(%esp)
 	jmp resume_userspace
 
+#define FIXUP_ESPFIX_STACK \
+	movl %esp, %eax; \
+	/* switch to 32bit stack using the pointer on top of 16bit stack */ \
+	lss %ss:CPU_16BIT_STACK_SIZE-8, %esp; \
+	/* copy data from 16bit stack to 32bit stack */ \
+	call fixup_x86_bogus_stack; \
+	/* put ESP to the proper location */ \
+	movl %eax, %esp;
+#define UNWIND_ESPFIX_STACK \
+	pushl %eax; \
+	movl %ss, %eax; \
+	/* see if on 16bit stack */ \
+	cmpw $__ESPFIX_SS, %ax; \
+	jne 28f; \
+	movl $__KERNEL_DS, %edx; \
+	movl %edx, %ds; \
+	movl %edx, %es; \
+	/* switch to 32bit stack */ \
+	FIXUP_ESPFIX_STACK \
+28:	popl %eax;
+
 /*
  * Build the entry stubs and pointer table with
  * some assembler magic.
@@ -390,7 +442,9 @@ error_code:
 	pushl %ecx
 	pushl %ebx
 	cld
-	movl %es, %ecx
+	pushl %es
+	UNWIND_ESPFIX_STACK
+	popl %ecx
 	movl ES(%esp), %edi		# get the function address
 	movl ORIG_EAX(%esp), %edx	# get the error code
 	movl %eax, ORIG_EAX(%esp)
@@ -472,6 +526,11 @@ debug_stack_correct:
  * fault happened on the sysenter path.
  */
 ENTRY(nmi)
+	pushl %eax
+	movl %ss, %eax
+	cmpw $__ESPFIX_SS, %ax
+	popl %eax
+	je nmi_16bit_stack
 	cmpl $sysenter_entry,(%esp)
 	je nmi_stack_fixup
 	pushl %eax
@@ -491,7 +550,7 @@ nmi_stack_correct:
 	xorl %edx,%edx		# zero error code
 	movl %esp,%eax		# pt_regs pointer
 	call do_nmi
-	RESTORE_ALL
+	jmp restore_all
 
 nmi_stack_fixup:
 	FIX_STACK(12,nmi_stack_correct, 1)
@@ -506,6 +565,29 @@ nmi_debug_stack_check:
 nmi_debug_stack_fixup:
 	FIX_STACK(24,nmi_stack_correct, 1)
 	jmp nmi_stack_correct
+
+nmi_16bit_stack:
+	/* create the pointer to lss back */
+	pushl %ss
+	pushl %esp
+	movzwl %sp, %esp
+	addw $4, (%esp)
+	/* copy the iret frame of 12 bytes */
+	.rept 3
+	pushl 16(%esp)
+	.endr
+	pushl %eax
+	SAVE_ALL
+	FIXUP_ESPFIX_STACK		# %eax == %esp
+	xorl %edx,%edx			# zero error code
+	call do_nmi
+	RESTORE_REGS
+	lss 12+4(%esp), %esp		# back to 16bit stack
+1:	iret
+.section __ex_table,"a"
+	.align 4
+	.long 1b,iret_exc
+.previous
 
 ENTRY(int3)
 	pushl $-1			# mark this as an int

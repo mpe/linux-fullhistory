@@ -8,10 +8,6 @@
 
 #include <linux/seccomp.h>
 #include <linux/sched.h>
-#include <asm/unistd.h>
-#ifdef TIF_IA32
-#include <asm/ia32_unistd.h>
-#endif
 
 /* #define SECCOMP_DEBUG 1 */
 
@@ -21,27 +17,13 @@
  * to limit the stack allocations too.
  */
 static int mode1_syscalls[] = {
-	__NR_read, __NR_write, __NR_exit,
-	/*
-	 * Allow either sigreturn or rt_sigreturn, newer archs
-	 * like x86-64 only defines __NR_rt_sigreturn.
-	 */
-#ifdef __NR_sigreturn
-	__NR_sigreturn,
-#else
-	__NR_rt_sigreturn,
-#endif
+	__NR_seccomp_read, __NR_seccomp_write, __NR_seccomp_exit, __NR_seccomp_sigreturn,
 	0, /* null terminated */
 };
 
-#ifdef TIF_IA32
-static int mode1_syscalls_32bit[] = {
-	__NR_ia32_read, __NR_ia32_write, __NR_ia32_exit,
-	/*
-	 * Allow either sigreturn or rt_sigreturn, newer archs
-	 * like x86-64 only defines __NR_rt_sigreturn.
-	 */
-	__NR_ia32_sigreturn,
+#ifdef TIF_32BIT
+static int mode1_syscalls_32[] = {
+	__NR_seccomp_read_32, __NR_seccomp_write_32, __NR_seccomp_exit_32, __NR_seccomp_sigreturn_32,
 	0, /* null terminated */
 };
 #endif
@@ -54,9 +36,9 @@ void __secure_computing(int this_syscall)
 	switch (mode) {
 	case 1:
 		syscall = mode1_syscalls;
-#ifdef TIF_IA32
-		if (test_thread_flag(TIF_IA32))
-			syscall = mode1_syscalls_32bit;
+#ifdef TIF_32BIT
+		if (test_thread_flag(TIF_32BIT))
+			syscall = mode1_syscalls_32;
 #endif
 		do {
 			if (*syscall == this_syscall)

@@ -2976,10 +2976,12 @@ static void __devexit parport_pc_pci_remove(struct pci_dev *dev)
 
 	pci_set_drvdata(dev, NULL);
 
-	for (i = data->num - 1; i >= 0; i--)
-		parport_pc_unregister_port(data->ports[i]);
+	if (data) {
+		for (i = data->num - 1; i >= 0; i--)
+			parport_pc_unregister_port(data->ports[i]);
 
-	kfree(data);
+		kfree(data);
+	}
 }
 
 static struct pci_driver parport_pc_pci_driver = {

@@ -38,6 +38,16 @@
 |*                                                                           *|
  \***************************************************************************/
 
+/*
+ * GPL Licensing Note - According to Mark Vojkovich, author of the Xorg/
+ * XFree86 'nv' driver, this source code is provided under MIT-style licensing
+ * where the source code is provided "as is" without warranty of any kind.
+ * The only usage restriction is for the copyright notices to be retained
+ * whenever code is used.
+ *
+ * Antonino Daplas <adaplas@pol.net> 2005-03-11
+ */
+
 #define SURFACE_FORMAT                                              0x00000300
 #define SURFACE_FORMAT_DEPTH8                                       0x00000001
 #define SURFACE_FORMAT_DEPTH15                                      0x00000002

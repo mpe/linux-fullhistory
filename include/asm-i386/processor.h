@@ -146,6 +146,18 @@ static inline void cpuid(unsigned int op, unsigned int *eax, unsigned int *ebx, 
 		: "0" (op), "c"(0));
 }
 
+/* Some CPUID calls want 'count' to be placed in ecx */
+static inline void cpuid_count(int op, int count, int *eax, int *ebx, int *ecx,
+	       	int *edx)
+{
+	__asm__("cpuid"
+		: "=a" (*eax),
+		  "=b" (*ebx),
+		  "=c" (*ecx),
+		  "=d" (*edx)
+		: "0" (op), "c" (count));
+}
+
 /*
  * CPUID functions returning a single datum
  */

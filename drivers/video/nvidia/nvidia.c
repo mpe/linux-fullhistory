@@ -402,25 +402,25 @@ static struct pci_device_id nvidiafb_pci_tbl[] = {
 MODULE_DEVICE_TABLE(pci, nvidiafb_pci_tbl);
 
 /* command line data, set in nvidiafb_setup() */
-static int flatpanel __initdata = -1;	/* Autodetect later */
-static int forceCRTC __initdata = -1;
-static int hwcur __initdata = 0;
-static int noaccel __initdata = 0;
-static int noscale __initdata = 0;
-static int paneltweak __initdata = 0;
+static int flatpanel __devinitdata = -1;	/* Autodetect later */
+static int forceCRTC __devinitdata = -1;
+static int hwcur __devinitdata = 0;
+static int noaccel __devinitdata = 0;
+static int noscale __devinitdata = 0;
+static int paneltweak __devinitdata = 0;
 #ifdef CONFIG_MTRR
-static int nomtrr __initdata = 0;
+static int nomtrr __devinitdata = 0;
 #endif
 
-static char *mode_option __initdata = NULL;
+static char *mode_option __devinitdata = NULL;
 
-static struct fb_fix_screeninfo __initdata nvidiafb_fix = {
+static struct fb_fix_screeninfo __devinitdata nvidiafb_fix = {
 	.type = FB_TYPE_PACKED_PIXELS,
 	.xpanstep = 8,
 	.ypanstep = 1,
 };
 
-static struct fb_var_screeninfo __initdata nvidiafb_default_var = {
+static struct fb_var_screeninfo __devinitdata nvidiafb_default_var = {
 	.xres = 640,
 	.yres = 480,
 	.xres_virtual = 640,
@@ -1191,6 +1191,7 @@ static int nvidiafb_check_var(struct fb_var_screeninfo *var,
 			var->yres_virtual = var->yres;
 			var->xres_virtual = vramlen / var->yres_virtual;
 			var->xres_virtual /= var->bits_per_pixel / 8;
+			var->xres_virtual &= ~63;
 			pitch = (var->xres_virtual *
 				 var->bits_per_pixel + 7) / 8;
 			memlen = pitch * var->yres;
@@ -1301,7 +1302,7 @@ static int __devinit nvidia_set_fbinfo(struct fb_info *info)
 	    | FBINFO_HWACCEL_IMAGEBLIT
 	    | FBINFO_HWACCEL_FILLRECT
 	    | FBINFO_HWACCEL_COPYAREA
-	    | FBINFO_HWACCEL_YPAN | FBINFO_MISC_MODESWITCHLATE;
+	    | FBINFO_HWACCEL_YPAN;
 
 	fb_videomode_to_modelist(info->monspecs.modedb,
 				 info->monspecs.modedb_len, &info->modelist);
@@ -1352,8 +1353,6 @@ static int __devinit nvidia_set_fbinfo(struct fb_info *info)
 	if (!hwcur)
 		info->fbops->fb_cursor = soft_cursor;
 	info->var.accel_flags = (!noaccel);
-	par->FpScale = (!noscale);
-	par->paneltweak = paneltweak;
 
 	switch (par->Architecture) {
 	case NV_ARCH_04:
@@ -1485,6 +1484,8 @@ static int __devinit nvidiafb_probe(struct pci_dev *pd,
 		printk(KERN_INFO PFX "flatpanel support enabled\n");
 
 	par->CRTCnumber = forceCRTC;
+	par->FpScale = (!noscale);
+	par->paneltweak = paneltweak;
 
 	/* enable IO and mem if not already done */
 	pci_read_config_word(pd, PCI_COMMAND, &cmd);
@@ -1565,8 +1566,9 @@ static int __devinit nvidiafb_probe(struct pci_dev *pd,
 
       err_out_iounmap_fb:
 	iounmap(info->screen_base);
-      err_out_free_base1:
 	fb_destroy_modedb(info->monspecs.modedb);
+	nvidia_delete_i2c_busses(par);
+      err_out_free_base1:
 	iounmap(par->REGS);
       err_out_free_base0:
 	pci_release_regions(pd);
@@ -1596,9 +1598,10 @@ static void __exit nvidiafb_remove(struct pci_dev *pd)
 			 info->fix.smem_len);
 #endif				/* CONFIG_MTRR */
 
-	fb_destroy_modedb(info->monspecs.modedb);
-	iounmap(par->REGS);
 	iounmap(info->screen_base);
+	fb_destroy_modedb(info->monspecs.modedb);
+	nvidia_delete_i2c_busses(par);
+	iounmap(par->REGS);
 	pci_release_regions(pd);
 	pci_disable_device(pd);
 	kfree(info->pixmap.addr);
@@ -1614,7 +1617,7 @@ static void __exit nvidiafb_remove(struct pci_dev *pd)
  * ------------------------------------------------------------------------- */
 
 #ifndef MODULE
-static int __init nvidiafb_setup(char *options)
+static int __devinit nvidiafb_setup(char *options)
 {
 	char *this_opt;
 

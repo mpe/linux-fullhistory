@@ -1507,8 +1507,7 @@ static int __init sa1100fb_probe(struct device *dev)
 
 failed:
 	dev_set_drvdata(dev, NULL);
-	if (fbi)
-		kfree(fbi);
+	kfree(fbi);
 	release_mem_region(0xb0100000, 0x10000);
 	return ret;
 }

@@ -27,6 +27,7 @@
 #include <linux/user.h>
 #include <linux/security.h>
 #include <linux/audit.h>
+#include <linux/seccomp.h>
 
 #include <asm/uaccess.h>
 #include <asm/page.h>
@@ -315,6 +316,8 @@ void do_syscall_trace_enter(struct pt_regs *regs)
 
 void do_syscall_trace_leave(struct pt_regs *regs)
 {
+	secure_computing(regs->gpr[0]);
+
 	if (unlikely(current->audit_context))
 		audit_syscall_exit(current, regs->result);
 

@@ -9,14 +9,10 @@
 #include "uml-config.h"
 #include "user_constants.h"
 
-#ifdef UML_CONFIG_MODE_TT
-#include "sysdep/sc.h"
-#endif
-
-#ifdef UML_CONFIG_MODE_SKAS
-
 #define MAX_REG_NR (UM_FRAME_SIZE / sizeof(unsigned long))
 #define MAX_REG_OFFSET (UM_FRAME_SIZE)
+
+extern void update_debugregs(int seq);
 
 /* syscall emulation path in ptrace */
 
@@ -28,9 +24,13 @@ void set_using_sysemu(int value);
 int get_using_sysemu(void);
 extern int sysemu_supported;
 
-#include "skas_ptregs.h"
+#ifdef UML_CONFIG_MODE_TT
+#include "sysdep/sc.h"
+#endif
 
-extern void update_debugregs(int seq);
+#ifdef UML_CONFIG_MODE_SKAS
+
+#include "skas_ptregs.h"
 
 #define REGS_IP(r) ((r)[HOST_IP])
 #define REGS_SP(r) ((r)[HOST_SP])

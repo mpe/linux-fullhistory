@@ -285,6 +285,35 @@ static int cpu_numa_callback(struct notifier_block *nfb,
 	return ret;
 }
 
+/*
+ * Check and possibly modify a memory region to enforce the memory limit.
+ *
+ * Returns the size the region should have to enforce the memory limit.
+ * This will either be the original value of size, a truncated value,
+ * or zero. If the returned value of size is 0 the region should be
+ * discarded as it lies wholy above the memory limit.
+ */
+static unsigned long __init numa_enforce_memory_limit(unsigned long start, unsigned long size)
+{
+	/*
+	 * We use lmb_end_of_DRAM() in here instead of memory_limit because
+	 * we've already adjusted it for the limit and it takes care of
+	 * having memory holes below the limit.
+	 */
+	extern unsigned long memory_limit;
+
+	if (! memory_limit)
+		return size;
+
+	if (start + size <= lmb_end_of_DRAM())
+		return size;
+
+	if (start >= lmb_end_of_DRAM())
+		return 0;
+
+	return lmb_end_of_DRAM() - start;
+}
+
 static int __init parse_numa_properties(void)
 {
 	struct device_node *cpu = NULL;
@@ -373,6 +402,13 @@ new_range:
 		if (max_domain < numa_domain)
 			max_domain = numa_domain;
 
+		if (! (size = numa_enforce_memory_limit(start, size))) {
+			if (--ranges)
+				goto new_range;
+			else
+				continue;
+		}
+
 		/*
 		 * Initialize new node struct, or add to an existing one.
 		 */
@@ -405,8 +441,7 @@ new_range:
 			numa_memory_lookup_table[i >> MEMORY_INCREMENT_SHIFT] =
 				numa_domain;
 
-		ranges--;
-		if (ranges)
+		if (--ranges)
 			goto new_range;
 	}
 
@@ -614,8 +649,11 @@ new_range:
 			if (numa_domain != nid)
 				continue;
 
-			dbg("free_bootmem %lx %lx\n", mem_start, mem_size);
-			free_bootmem_node(NODE_DATA(nid), mem_start, mem_size);
+			mem_size = numa_enforce_memory_limit(mem_start, mem_size);
+  			if (mem_size) {
+  				dbg("free_bootmem %lx %lx\n", mem_start, mem_size);
+  				free_bootmem_node(NODE_DATA(nid), mem_start, mem_size);
+			}
 
 			if (--ranges)		/* process all ranges in cell */
 				goto new_range;

@@ -393,7 +393,7 @@ set_nfsv4_acl_one(struct dentry *dentry, struct posix_acl *pacl, char *key)
 	}
 out:
 	kfree(buf);
-	return (error);
+	return error;
 }
 
 int
@@ -417,7 +417,10 @@ nfsd4_set_nfs4_acl(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		flags = NFS4_ACL_DIR;
 
 	error = nfs4_acl_nfsv4_to_posix(acl, &pacl, &dpacl, flags);
-	if (error < 0)
+	if (error == -EINVAL) {
+		error = nfserr_attrnotsupp;
+		goto out;
+	} else if (error < 0)
 		goto out_nfserr;
 
 	if (pacl) {

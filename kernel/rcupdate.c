@@ -465,6 +465,6 @@ void synchronize_kernel(void)
 }
 
 module_param(maxbatch, int, 0);
-EXPORT_SYMBOL(call_rcu);
-EXPORT_SYMBOL(call_rcu_bh);
-EXPORT_SYMBOL(synchronize_kernel);
+EXPORT_SYMBOL_GPL(call_rcu);
+EXPORT_SYMBOL_GPL(call_rcu_bh);
+EXPORT_SYMBOL_GPL(synchronize_kernel);

@@ -107,15 +107,15 @@ enum {
 };
 
 struct display fb_display[MAX_NR_CONSOLES];
-signed char con2fb_map[MAX_NR_CONSOLES];
-signed char con2fb_map_boot[MAX_NR_CONSOLES];
+static signed char con2fb_map[MAX_NR_CONSOLES];
+static signed char con2fb_map_boot[MAX_NR_CONSOLES];
 static int logo_height;
 static int logo_lines;
 /* logo_shown is an index to vc_cons when >= 0; otherwise follows FBCON_LOGO
    enums.  */
 static int logo_shown = FBCON_LOGO_CANSHOW;
 /* Software scrollback */
-int fbcon_softback_size = 32768;
+static int fbcon_softback_size = 32768;
 static unsigned long softback_buf, softback_curr;
 static unsigned long softback_in;
 static unsigned long softback_top, softback_end;
@@ -129,6 +129,8 @@ static char fontname[40];
 
 /* current fb_info */
 static int info_idx = -1;
+
+static const struct consw fb_con;
 
 #define CM_SOFTBACK	(8)
 
@@ -204,8 +206,10 @@ static irqreturn_t fb_vbl_detect(int irq, void *dummy, struct pt_regs *fp)
 
 static inline int fbcon_is_inactive(struct vc_data *vc, struct fb_info *info)
 {
+	struct fbcon_ops *ops = info->fbcon_par;
+
 	return (info->state != FBINFO_STATE_RUNNING ||
-		vc->vc_mode != KD_TEXT);
+		vc->vc_mode != KD_TEXT || ops->graphics);
 }
 
 static inline int get_color(struct vc_data *vc, struct fb_info *info,
@@ -307,7 +311,8 @@ static void cursor_timer_handler(unsigned long dev_addr)
 	mod_timer(&ops->cursor_timer, jiffies + HZ/5);
 }
 
-int __init fb_console_setup(char *this_opt)
+#ifndef MODULE
+static int __init fb_console_setup(char *this_opt)
 {
 	char *options;
 	int i, j;
@@ -361,6 +366,7 @@ int __init fb_console_setup(char *this_opt)
 }
 
 __setup("fbcon=", fb_console_setup);
+#endif
 
 static int search_fb_in_map(int idx)
 {
@@ -593,8 +599,11 @@ static void con2fb_init_display(struct vc_data *vc, struct fb_info *info,
 
 	ops->currcon = fg_console;
 
-	if (info->fbops->fb_set_par)
+	if (info->fbops->fb_set_par && !(ops->flags & FBCON_FLAGS_INIT))
 		info->fbops->fb_set_par(info);
+
+	ops->flags |= FBCON_FLAGS_INIT;
+	ops->graphics = 0;
 
 	if (vc)
 		fbcon_set_disp(info, &info->var, vc);
@@ -695,6 +704,7 @@ static int var_to_display(struct display *disp,
 	disp->green = var->green;
 	disp->blue = var->blue;
 	disp->transp = var->transp;
+	disp->rotate = var->rotate;
 	disp->mode = fb_match_mode(var, &info->modelist);
 	if (disp->mode == NULL)
 		/* This should not happen */
@@ -718,6 +728,7 @@ static void display_to_var(struct fb_var_screeninfo *var,
 	var->green = disp->green;
 	var->blue = disp->blue;
 	var->transp = disp->transp;
+	var->rotate = disp->rotate;
 }
 
 static const char *fbcon_startup(void)
@@ -763,6 +774,7 @@ static const char *fbcon_startup(void)
 
 	memset(ops, 0, sizeof(struct fbcon_ops));
 	ops->currcon = -1;
+	ops->graphics = 1;
 	info->fbcon_par = ops;
 	set_blitting_type(vc, info, NULL);
 
@@ -889,6 +901,7 @@ static const char *fbcon_startup(void)
 static void fbcon_init(struct vc_data *vc, int init)
 {
 	struct fb_info *info = registered_fb[con2fb_map[vc->vc_num]];
+	struct fbcon_ops *ops;
 	struct vc_data **default_mode = vc->vc_display_fg;
 	struct vc_data *svc = *default_mode;
 	struct display *t, *p = &fb_display[vc->vc_num];
@@ -939,6 +952,8 @@ static void fbcon_init(struct vc_data *vc, int init)
 	new_cols = info->var.xres / vc->vc_font.width;
 	new_rows = info->var.yres / vc->vc_font.height;
 	vc_resize(vc, new_cols, new_rows);
+
+	ops = info->fbcon_par;
 	/*
 	 * We must always set the mode. The mode of the previous console
 	 * driver could be in the same resolution but we are using different
@@ -946,9 +961,14 @@ static void fbcon_init(struct vc_data *vc, int init)
 	 *
 	 * We need to do it in fbcon_init() to prevent screen corruption.
 	 */
-	if (CON_IS_VISIBLE(vc) && info->fbops->fb_set_par)
-		info->fbops->fb_set_par(info);
+	if (CON_IS_VISIBLE(vc)) {
+		if (info->fbops->fb_set_par &&
+		    !(ops->flags & FBCON_FLAGS_INIT))
+			info->fbops->fb_set_par(info);
+		ops->flags |= FBCON_FLAGS_INIT;
+	}
 
+	ops->graphics = 0;
 
 	if ((cap & FBINFO_HWACCEL_COPYAREA) &&
 	    !(cap & FBINFO_HWACCEL_DISABLED))
@@ -1111,7 +1131,7 @@ static int scrollback_phys_max = 0;
 static int scrollback_max = 0;
 static int scrollback_current = 0;
 
-int update_var(int con, struct fb_info *info)
+static int update_var(int con, struct fb_info *info)
 {
 	if (con == ((struct fbcon_ops *)info->fbcon_par)->currcon)
 		return fb_pan_display(info, &info->var);
@@ -1871,7 +1891,6 @@ static int fbcon_resize(struct vc_data *vc, unsigned int width,
 			var.activate = FB_ACTIVATE_NOW |
 				FB_ACTIVATE_FORCE;
 			fb_set_var(info, &var);
-			info->flags &= ~FBINFO_MISC_MODESWITCH;
 		}
 		var_to_display(p, &info->var, info);
 	}
@@ -1884,7 +1903,7 @@ static int fbcon_switch(struct vc_data *vc)
 	struct fb_info *info;
 	struct display *p = &fb_display[vc->vc_num];
 	struct fb_var_screeninfo var;
-	int i, prev_console, do_set_par = 0;
+	int i, prev_console;
 
 	info = registered_fb[con2fb_map[vc->vc_num]];
 
@@ -1943,14 +1962,9 @@ static int fbcon_switch(struct vc_data *vc)
 	fb_set_var(info, &var);
 
 	if (prev_console != -1 &&
-	    registered_fb[con2fb_map[prev_console]] != info)
-		do_set_par = 1;
-
-	if (do_set_par || info->flags & FBINFO_MISC_MODESWITCH) {
-		if (info->fbops->fb_set_par)
-			info->fbops->fb_set_par(info);
-		info->flags &= ~FBINFO_MISC_MODESWITCH;
-	}
+	    registered_fb[con2fb_map[prev_console]] != info &&
+	    info->fbops->fb_set_par)
+		info->fbops->fb_set_par(info);
 
 	set_blitting_type(vc, info, p);
 	((struct fbcon_ops *)info->fbcon_par)->cursor_reset = 1;
@@ -2013,29 +2027,20 @@ static int fbcon_blank(struct vc_data *vc, int blank, int mode_switch)
 {
 	struct fb_info *info = registered_fb[con2fb_map[vc->vc_num]];
 	struct fbcon_ops *ops = info->fbcon_par;
-	int active = !fbcon_is_inactive(vc, info);
 
 	if (mode_switch) {
 		struct fb_var_screeninfo var = info->var;
-/*
- * HACK ALERT: Some hardware will require reinitializion at this stage,
- *             others will require it to be done as late as possible.
- *             For now, we differentiate this with the
- *             FBINFO_MISC_MODESWITCHLATE bitflag.  Worst case will be
- *             hardware that requires it here and another one later.
- *             A definitive solution may require fixing X or the VT
- *             system.
- */
-		if (info->flags & FBINFO_MISC_MODESWITCHLATE)
-			info->flags |= FBINFO_MISC_MODESWITCH;
 
-		if (!blank && !(info->flags & FBINFO_MISC_MODESWITCHLATE)) {
+		ops->graphics = 1;
+
+		if (!blank) {
 			var.activate = FB_ACTIVATE_NOW | FB_ACTIVATE_FORCE;
 			fb_set_var(info, &var);
+			ops->graphics = 0;
 		}
 	}
 
- 	if (active) {
+ 	if (!fbcon_is_inactive(vc, info)) {
 		if (ops->blank_state != blank) {
 			ops->blank_state = blank;
 			fbcon_cursor(vc, blank ? CM_ERASE : CM_DRAW);
@@ -2325,6 +2330,9 @@ static int fbcon_set_palette(struct vc_data *vc, unsigned char *table)
 
 	if (fbcon_is_inactive(vc, info))
 		return -EINVAL;
+
+	if (!CON_IS_VISIBLE(vc))
+		return 0;
 
 	depth = fb_get_color_depth(&info->var);
 	if (depth > 3) {
@@ -2733,7 +2741,7 @@ static int fbcon_event_notify(struct notifier_block *self,
  *  The console `switch' structure for the frame buffer based console
  */
 
-const struct consw fb_con = {
+static const struct consw fb_con = {
 	.owner			= THIS_MODULE,
 	.con_startup 		= fbcon_startup,
 	.con_init 		= fbcon_init,
@@ -2763,7 +2771,7 @@ static struct notifier_block fbcon_event_notifier = {
 	.notifier_call	= fbcon_event_notify,
 };
 
-int __init fb_console_init(void)
+static int __init fb_console_init(void)
 {
 	int i;
 
@@ -2791,7 +2799,7 @@ module_init(fb_console_init);
 
 #ifdef MODULE
 
-void __exit fb_console_exit(void)
+static void __exit fb_console_exit(void)
 {
 	acquire_console_sem();
 	fb_unregister_client(&fbcon_event_notifier);
@@ -2802,11 +2810,5 @@ void __exit fb_console_exit(void)
 module_exit(fb_console_exit);
 
 #endif
-
-/*
- *  Visible symbols for modules
- */
-
-EXPORT_SYMBOL(fb_con);
 
 MODULE_LICENSE("GPL");

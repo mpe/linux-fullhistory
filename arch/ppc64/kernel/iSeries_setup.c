@@ -285,7 +285,7 @@ static unsigned long iSeries_process_mainstore_vpd(struct MemoryBlock *mb_array,
 	return mem_blocks;
 }
 
-static void __init iSeries_parse_cmdline(void)
+static void __init iSeries_get_cmdline(void)
 {
 	char *p, *q;
 
@@ -305,6 +305,8 @@ static void __init iSeries_parse_cmdline(void)
 
 static void __init iSeries_init_early(void)
 {
+	extern unsigned long memory_limit;
+
 	DBG(" -> iSeries_init_early()\n");
 
 	ppcdbg_initialize();
@@ -352,6 +354,31 @@ static void __init iSeries_init_early(void)
 	 */
 	build_iSeries_Memory_Map();
 
+	iSeries_get_cmdline();
+
+	/* Save unparsed command line copy for /proc/cmdline */
+	strlcpy(saved_command_line, cmd_line, COMMAND_LINE_SIZE);
+
+	/* Parse early parameters, in particular mem=x */
+	parse_early_param();
+
+	if (memory_limit) {
+		if (memory_limit < systemcfg->physicalMemorySize)
+			systemcfg->physicalMemorySize = memory_limit;
+		else {
+			printk("Ignoring mem=%lu >= ram_top.\n", memory_limit);
+			memory_limit = 0;
+		}
+	}
+
+	/* Bolt kernel mappings for all of memory (or just a bit if we've got a limit) */
+	iSeries_bolt_kernel(0, systemcfg->physicalMemorySize);
+
+	lmb_init();
+	lmb_add(0, systemcfg->physicalMemorySize);
+	lmb_analyze();
+	lmb_reserve(0, __pa(klimit));
+
 	/* Initialize machine-dependency vectors */
 #ifdef CONFIG_SMP
 	smp_init_iSeries();
@@ -376,9 +403,6 @@ static void __init iSeries_init_early(void)
 	else
 		initrd_start = initrd_end = 0;
 #endif /* CONFIG_BLK_DEV_INITRD */
-
-
-	iSeries_parse_cmdline();
 
 	DBG(" <- iSeries_init_early()\n");
 }
@@ -540,14 +564,6 @@ static void __init build_iSeries_Memory_Map(void)
 	 *   nextPhysChunk
 	 */
 	systemcfg->physicalMemorySize = chunk_to_addr(nextPhysChunk);
-
-	/* Bolt kernel mappings for all of memory */
-	iSeries_bolt_kernel(0, systemcfg->physicalMemorySize);
-
-	lmb_init();
-	lmb_add(0, systemcfg->physicalMemorySize);
-	lmb_analyze();	/* ?? */
-	lmb_reserve(0, __pa(klimit));
 }
 
 /*

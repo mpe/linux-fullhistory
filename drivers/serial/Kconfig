@@ -615,7 +615,7 @@ config SERIAL_68360
 
 config SERIAL_PMACZILOG
 	tristate "PowerMac z85c30 ESCC support"
-	depends on PPC_OF
+	depends on PPC_OF && PPC_PMAC
 	select SERIAL_CORE
 	help
 	  This driver supports the Zilog z85C30 serial ports found on

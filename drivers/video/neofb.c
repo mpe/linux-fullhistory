@@ -1691,7 +1691,27 @@ static int __devinit neo_map_mmio(struct fb_info *info,
 
 	DBG("neo_map_mmio");
 
-	info->fix.mmio_start = pci_resource_start(dev, 1);
+	switch (info->fix.accel) {
+		case FB_ACCEL_NEOMAGIC_NM2070:
+			info->fix.mmio_start = pci_resource_start(dev, 0)+
+				0x100000;
+			break;
+		case FB_ACCEL_NEOMAGIC_NM2090:
+		case FB_ACCEL_NEOMAGIC_NM2093:
+			info->fix.mmio_start = pci_resource_start(dev, 0)+
+				0x200000;
+			break;
+		case FB_ACCEL_NEOMAGIC_NM2160:
+		case FB_ACCEL_NEOMAGIC_NM2097:
+		case FB_ACCEL_NEOMAGIC_NM2200:
+		case FB_ACCEL_NEOMAGIC_NM2230:
+		case FB_ACCEL_NEOMAGIC_NM2360:
+		case FB_ACCEL_NEOMAGIC_NM2380:
+			info->fix.mmio_start = pci_resource_start(dev, 1);
+			break;
+		default:
+			info->fix.mmio_start = pci_resource_start(dev, 0);
+	}
 	info->fix.mmio_len = MMIO_SIZE;
 
 	if (!request_mem_region
@@ -2010,6 +2030,7 @@ static struct fb_info *__devinit neo_alloc_fb_info(struct pci_dev *dev, const st
 
 	par->internal_display = internal;
 	par->external_display = external;
+	info->flags = FBINFO_DEFAULT | FBINFO_HWACCEL_YPAN;
 
 	switch (info->fix.accel) {
 	case FB_ACCEL_NEOMAGIC_NM2070:
@@ -2029,15 +2050,27 @@ static struct fb_info *__devinit neo_alloc_fb_info(struct pci_dev *dev, const st
 		break;
 	case FB_ACCEL_NEOMAGIC_NM2200:
 		sprintf(info->fix.id, "MagicGraph 256AV");
+		info->flags |= FBINFO_HWACCEL_IMAGEBLIT |
+		               FBINFO_HWACCEL_COPYAREA |
+                	       FBINFO_HWACCEL_FILLRECT;
 		break;
 	case FB_ACCEL_NEOMAGIC_NM2230:
 		sprintf(info->fix.id, "MagicGraph 256AV+");
+		info->flags |= FBINFO_HWACCEL_IMAGEBLIT |
+		               FBINFO_HWACCEL_COPYAREA |
+                	       FBINFO_HWACCEL_FILLRECT;
 		break;
 	case FB_ACCEL_NEOMAGIC_NM2360:
 		sprintf(info->fix.id, "MagicGraph 256ZX");
+		info->flags |= FBINFO_HWACCEL_IMAGEBLIT |
+		               FBINFO_HWACCEL_COPYAREA |
+                	       FBINFO_HWACCEL_FILLRECT;
 		break;
 	case FB_ACCEL_NEOMAGIC_NM2380:
 		sprintf(info->fix.id, "MagicGraph 256XL+");
+		info->flags |= FBINFO_HWACCEL_IMAGEBLIT |
+		               FBINFO_HWACCEL_COPYAREA |
+                	       FBINFO_HWACCEL_FILLRECT;
 		break;
 	}
 
@@ -2049,9 +2082,6 @@ static struct fb_info *__devinit neo_alloc_fb_info(struct pci_dev *dev, const st
 	info->fix.accel = id->driver_data;
 
 	info->fbops = &neofb_ops;
-	info->flags = FBINFO_DEFAULT | FBINFO_HWACCEL_YPAN |
-		FBINFO_HWACCEL_IMAGEBLIT | FBINFO_HWACCEL_COPYAREA |
-		FBINFO_HWACCEL_COPYAREA;
 	info->pseudo_palette = (void *) (par + 1);
 	return info;
 }

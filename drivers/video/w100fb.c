@@ -537,10 +537,8 @@ static void w100fb_clear_buffer(void)
 {
 	int i;
 	for (i = 0; i < W100_BUF_NUM; i++) {
-		if (gSaveImagePtr[i] != NULL) {
-			kfree(gSaveImagePtr[i]);
-			gSaveImagePtr[i] = NULL;
-		}
+		kfree(gSaveImagePtr[i]);
+		gSaveImagePtr[i] = NULL;
 	}
 }
 

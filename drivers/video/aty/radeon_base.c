@@ -1,4 +1,3 @@
-
 /*
  *	drivers/video/aty/radeon_base.c
  *
@@ -530,11 +529,8 @@ static int __devinit radeon_probe_pll_params(struct radeonfb_info *rinfo)
         break;
 	}
 
-	radeon_pll_workaround_before(rinfo);
 	ppll_div_sel = INREG8(CLOCK_CNTL_INDEX + 1) & 0x3;
-	radeon_pll_workaround_after(rinfo);
-	if (rinfo->R300_cg_workaround)
-		R300_cg_workardound(rinfo);
+	radeon_pll_errata_after_index(rinfo);
 
 	n = (INPLL(PPLL_DIV_0 + ppll_div_sel) & 0x7ff);
 	m = (INPLL(PPLL_REF_DIV) & 0x3ff);
@@ -1173,11 +1169,8 @@ static void radeon_save_state (struct radeonfb_info *rinfo,
 	save->vclk_ecp_cntl = INPLL(VCLK_ECP_CNTL);
 
 	/* PLL regs */
-	radeon_pll_workaround_before(rinfo);
 	save->clk_cntl_index = INREG(CLOCK_CNTL_INDEX) & ~0x3f;
-	radeon_pll_workaround_after(rinfo);
-	if (rinfo->R300_cg_workaround)
-		R300_cg_workardound(rinfo);
+	radeon_pll_errata_after_index(rinfo);
 	save->ppll_div_3 = INPLL(PPLL_DIV_3);
 	save->ppll_ref_div = INPLL(PPLL_REF_DIV);
 }
@@ -1204,13 +1197,11 @@ static void radeon_write_pll_regs(struct radeonfb_info *rinfo, struct radeon_reg
 			/* We still have to force a switch to selected PPLL div thanks to
 			 * an XFree86 driver bug which will switch it away in some cases
 			 * even when using UseFDev */
-			radeon_pll_workaround_before(rinfo);
 			OUTREGP(CLOCK_CNTL_INDEX,
 				mode->clk_cntl_index & PPLL_DIV_SEL_MASK,
 				~PPLL_DIV_SEL_MASK);
-			radeon_pll_workaround_after(rinfo);
-			if (rinfo->R300_cg_workaround)
-				R300_cg_workardound(rinfo);
+			radeon_pll_errata_after_index(rinfo);
+			radeon_pll_errata_after_data(rinfo);
             		return;
 		}
 	}
@@ -1224,13 +1215,11 @@ static void radeon_write_pll_regs(struct radeonfb_info *rinfo, struct radeon_reg
 		~(PPLL_RESET | PPLL_ATOMIC_UPDATE_EN | PPLL_VGA_ATOMIC_UPDATE_EN));
 
 	/* Switch to selected PPLL divider */
-	radeon_pll_workaround_before(rinfo);
 	OUTREGP(CLOCK_CNTL_INDEX,
 		mode->clk_cntl_index & PPLL_DIV_SEL_MASK,
 		~PPLL_DIV_SEL_MASK);
-	radeon_pll_workaround_after(rinfo);
-	if (rinfo->R300_cg_workaround)
-		R300_cg_workardound(rinfo);
+	radeon_pll_errata_after_index(rinfo);
+	radeon_pll_errata_after_data(rinfo);
 
 	/* Set PPLL ref. div */
 	if (rinfo->family == CHIP_FAMILY_R300 ||
@@ -1754,8 +1743,7 @@ static int radeonfb_set_par(struct fb_info *info)
 		} else {
 			/* DFP */
 			newmode->fp_gen_cntl |= (FP_FPON | FP_TMDS_EN);
-			newmode->tmds_transmitter_cntl = (TMDS_RAN_PAT_RST | TMDS_ICHCSEL) &
-							 ~(TMDS_PLLRST);
+			newmode->tmds_transmitter_cntl &= ~(TMDS_PLLRST);
 			/* TMDS_PLL_EN bit is reversed on RV (and mobility) chips */
 			if (IS_R300_VARIANT(rinfo) ||
 			    (rinfo->family == CHIP_FAMILY_R200) || !rinfo->has_CRTC2)
@@ -2248,7 +2236,7 @@ static int radeonfb_pci_register (struct pci_dev *pdev,
 	rinfo->has_CRTC2 = (ent->driver_data & CHIP_HAS_CRTC2) != 0;
 	rinfo->is_mobility = (ent->driver_data & CHIP_IS_MOBILITY) != 0;
 	rinfo->is_IGP = (ent->driver_data & CHIP_IS_IGP) != 0;
-		
+
 	/* Set base addrs */
 	rinfo->fb_base_phys = pci_resource_start (pdev, 0);
 	rinfo->mmio_base_phys = pci_resource_start (pdev, 2);
@@ -2270,6 +2258,24 @@ static int radeonfb_pci_register (struct pci_dev *pdev,
 	}
 
 	rinfo->fb_local_base = INREG(MC_FB_LOCATION) << 16;
+
+	/*
+	 * Check for errata
+	 */
+	rinfo->errata = 0;
+	if (rinfo->family == CHIP_FAMILY_R300 &&
+	    (INREG(CONFIG_CNTL) & CFG_ATI_REV_ID_MASK)
+	    == CFG_ATI_REV_A11)
+		rinfo->errata |= CHIP_ERRATA_R300_CG;
+
+	if (rinfo->family == CHIP_FAMILY_RV200 ||
+	    rinfo->family == CHIP_FAMILY_RS200)
+		rinfo->errata |= CHIP_ERRATA_PLL_DUMMYREADS;
+
+	if (rinfo->family == CHIP_FAMILY_RV100 ||
+	    rinfo->family == CHIP_FAMILY_RS100 ||
+	    rinfo->family == CHIP_FAMILY_RS200)
+		rinfo->errata |= CHIP_ERRATA_PLL_DELAY;
 
 #ifdef CONFIG_PPC_OF
 	/* On PPC, we obtain the OF device-node pointer to the firmware
@@ -2308,13 +2314,6 @@ static int radeonfb_pci_register (struct pci_dev *pdev,
 
 	RTRACE("radeonfb (%s): mapped %ldk videoram\n", pci_name(rinfo->pdev),
 	       rinfo->mapped_vram/1024);
-
-	/*
-	 * Check for required workaround for PLL accesses
-	 */
-	rinfo->R300_cg_workaround = (rinfo->family == CHIP_FAMILY_R300 &&
-				     (INREG(CONFIG_CNTL) & CFG_ATI_REV_ID_MASK)
-				     == CFG_ATI_REV_A11);
 
 	/*
 	 * Map the BIOS ROM if any and retreive PLL parameters from
@@ -2420,10 +2419,8 @@ static int radeonfb_pci_register (struct pci_dev *pdev,
 err_unmap_fb:
 	iounmap(rinfo->fb_base);
 err_unmap_rom:
-	if (rinfo->mon1_EDID)
-	    kfree(rinfo->mon1_EDID);
-	if (rinfo->mon2_EDID)
-	    kfree(rinfo->mon2_EDID);
+	kfree(rinfo->mon1_EDID);
+	kfree(rinfo->mon2_EDID);
 	if (rinfo->mon1_modedb)
 		fb_destroy_modedb(rinfo->mon1_modedb);
 	fb_dealloc_cmap(&info->cmap);
@@ -2479,10 +2476,8 @@ static void __devexit radeonfb_pci_unregister (struct pci_dev *pdev)
  
  	pci_release_regions(pdev);
 
-	if (rinfo->mon1_EDID)
-		kfree(rinfo->mon1_EDID);
-	if (rinfo->mon2_EDID)
-		kfree(rinfo->mon2_EDID);
+	kfree(rinfo->mon1_EDID);
+	kfree(rinfo->mon2_EDID);
 	if (rinfo->mon1_modedb)
 		fb_destroy_modedb(rinfo->mon1_modedb);
 #ifdef CONFIG_FB_RADEON_I2C
@@ -2551,7 +2546,7 @@ static int __init radeonfb_init (void)
 		return -ENODEV;
 	radeonfb_setup(option);
 #endif
-	return pci_module_init (&radeonfb_driver);
+	return pci_register_driver (&radeonfb_driver);
 }
 
 

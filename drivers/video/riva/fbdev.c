@@ -1708,8 +1708,7 @@ static int __devinit riva_set_fbinfo(struct fb_info *info)
 		    | FBINFO_HWACCEL_YPAN
 		    | FBINFO_HWACCEL_COPYAREA
 		    | FBINFO_HWACCEL_FILLRECT
-		    | FBINFO_HWACCEL_IMAGEBLIT
-	            | FBINFO_MISC_MODESWITCHLATE;
+	            | FBINFO_HWACCEL_IMAGEBLIT;
 
 	/* Accel seems to not work properly on NV30 yet...*/
 	if ((par->riva.Architecture == NV_ARCH_30) || noaccel) {
@@ -2109,8 +2108,7 @@ static void __exit rivafb_remove(struct pci_dev *pd)
 
 #ifdef CONFIG_FB_RIVA_I2C
 	riva_delete_i2c_busses(par);
-	if (par->EDID)
-		kfree(par->EDID);
+	kfree(par->EDID);
 #endif
 
 	unregister_framebuffer(info);

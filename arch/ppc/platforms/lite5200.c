@@ -13,7 +13,7 @@
  * Dale Farnsworth <dale.farnsworth@mvista.com> and
  * Wolfgang Denk <wd@denx.de>
  * 
- * Copyright 2004 Sylvain Munaut <tnt@246tNt.com>
+ * Copyright 2004-2005 Sylvain Munaut <tnt@246tNt.com>
  * Copyright 2003 Motorola Inc.
  * Copyright 2003 MontaVista Software Inc.
  * Copyright 2003 DENX Software Engineering (wd@denx.de)
@@ -29,11 +29,12 @@
 #include <linux/kdev_t.h>
 #include <linux/root_dev.h>
 #include <linux/console.h>
+#include <linux/module.h>
 
 #include <asm/bootinfo.h>
 #include <asm/io.h>
-#include <asm/ocp.h>
 #include <asm/mpc52xx.h>
+#include <asm/ppc_sys.h>
 
 #include <syslib/mpc52xx_pci.h>
 
@@ -46,33 +47,19 @@ EXPORT_SYMBOL(__res);	/* For modules */
 
 
 /* ======================================================================== */
-/* OCP device definition                                                    */
-/* For board/shared resources like PSCs                                     */
-/* ======================================================================== */
-/* Be sure not to load conficting devices : e.g. loading the UART drivers for
- * PSC1 and then also loading a AC97 for this same PSC.
- * For details about how to create an entry, look in the doc of the concerned
- * driver ( eg drivers/serial/mpc52xx_uart.c for the PSC in uart mode )
- */
-
-static struct ocp_def board_ocp[] = {
-	{
-		.vendor		= OCP_VENDOR_FREESCALE,
-		.function	= OCP_FUNC_PSC_UART,
-		.index		= 0,
-		.paddr		= MPC52xx_PSC1,
-		.irq		= MPC52xx_PSC1_IRQ,
-		.pm		= OCP_CPM_NA,
-	},
-	{	/* Terminating entry */
-		.vendor		= OCP_VENDOR_INVALID
-	}
-};
-
-
-/* ======================================================================== */
 /* Platform specific code                                                   */
 /* ======================================================================== */
+
+/* Supported PSC function in "preference" order */
+struct mpc52xx_psc_func mpc52xx_psc_functions[] = {
+		{       .id     = 0,
+			.func   = "uart",
+		},
+		{       .id     = -1,   /* End entry */
+			.func   = NULL,
+		}
+	};
+
 
 static int
 lite5200_show_cpuinfo(struct seq_file *m)
@@ -92,20 +79,46 @@ lite5200_map_irq(struct pci_dev *dev, unsigned char idsel, unsigned char pin)
 static void __init
 lite5200_setup_cpu(void)
 {
+	struct mpc52xx_cdm  __iomem *cdm;
+	struct mpc52xx_gpio __iomem *gpio;
 	struct mpc52xx_intr __iomem *intr;
 	struct mpc52xx_xlb  __iomem *xlb;
 
+	u32 port_config;
 	u32 intr_ctrl;
 
 	/* Map zones */
-	xlb  = ioremap(MPC52xx_XLB,sizeof(struct mpc52xx_xlb));
-	intr = ioremap(MPC52xx_INTR,sizeof(struct mpc52xx_intr));
+	cdm  = ioremap(MPC52xx_PA(MPC52xx_CDM_OFFSET), MPC52xx_CDM_SIZE);
+	gpio = ioremap(MPC52xx_PA(MPC52xx_GPIO_OFFSET), MPC52xx_GPIO_SIZE);
+	xlb  = ioremap(MPC52xx_PA(MPC52xx_XLB_OFFSET), MPC52xx_XLB_SIZE);
+	intr = ioremap(MPC52xx_PA(MPC52xx_INTR_OFFSET), MPC52xx_INTR_SIZE);
 
-	if (!xlb || !intr) {
-		printk("lite5200.c: Error while mapping XLB/INTR during "
+	if (!cdm || !gpio || !xlb || !intr) {
+		printk("lite5200.c: Error while mapping CDM/GPIO/XLB/INTR during"
 				"lite5200_setup_cpu\n");
 		goto unmap_regs;
 	}
+
+	/* Use internal 48 Mhz */
+	out_8(&cdm->ext_48mhz_en, 0x00);
+	out_8(&cdm->fd_enable, 0x01);
+	if (in_be32(&cdm->rstcfg) & 0x40)	/* Assumes 33Mhz clock */
+		out_be16(&cdm->fd_counters, 0x0001);
+	else
+		out_be16(&cdm->fd_counters, 0x5555);
+
+	/* Get port mux config */
+	port_config = in_be32(&gpio->port_config);
+
+	/* 48Mhz internal, pin is GPIO */
+	port_config &= ~0x00800000;
+
+	/* USB port */
+	port_config &= ~0x00007000;	/* Differential mode - USB1 only */
+	port_config |=  0x00001000;
+
+	/* Commit port config */
+	out_be32(&gpio->port_config, port_config);
 
 	/* Configure the XLB Arbiter */
 	out_be32(&xlb->master_pri_enable, 0xff);
@@ -124,6 +137,8 @@ lite5200_setup_cpu(void)
 
 	/* Unmap reg zone */
 unmap_regs:
+	if (cdm)  iounmap(cdm);
+	if (gpio) iounmap(gpio);
 	if (xlb)  iounmap(xlb);
 	if (intr) iounmap(intr);
 }
@@ -131,9 +146,6 @@ unmap_regs:
 static void __init
 lite5200_setup_arch(void)
 {
-	/* Add board OCP definitions */
-	mpc52xx_add_board_devices(board_ocp);
-
 	/* CPU & Port mux setup */
 	lite5200_setup_cpu();
 
@@ -176,6 +188,9 @@ platform_init(unsigned long r3, unsigned long r4, unsigned long r5,
 		}
 	}
 
+	/* PPC Sys identification */
+	identify_ppc_sys_by_id(mfspr(SPRN_SVR));
+
 	/* BAT setup */
 	mpc52xx_set_bat();
 
@@ -184,7 +199,11 @@ platform_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	isa_mem_base		= 0;
 
 	/* Powersave */
-	powersave_nap = 1;	/* We allow this platform to NAP */
+	/* This is provided as an example on how to do it. But you
+	   need to be aware that NAP disable bus snoop and that may
+	   be required for some devices to work properly, like USB ... */
+	/* powersave_nap = 1; */
+
 
 	/* Setup the ppc_md struct */
 	ppc_md.setup_arch	= lite5200_setup_arch;

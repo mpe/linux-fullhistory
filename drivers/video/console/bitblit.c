@@ -199,7 +199,10 @@ static void bit_putcs(struct vc_data *vc, struct fb_info *info,
 		count -= cnt;
 	}
 
-	if (buf)
+	/* buf is always NULL except when in monochrome mode, so in this case
+	   it's a gain to check buf against NULL even though kfree() handles
+	   NULL pointers just fine */
+	if (unlikely(buf))
 		kfree(buf);
 }
 
@@ -273,8 +276,7 @@ static void bit_cursor(struct vc_data *vc, struct fb_info *info,
 		dst = kmalloc(w * vc->vc_font.height, GFP_ATOMIC);
 		if (!dst)
 			return;
-		if (ops->cursor_data)
-			kfree(ops->cursor_data);
+		kfree(ops->cursor_data);
 		ops->cursor_data = dst;
 		update_attr(dst, src, attribute, vc);
 		src = dst;
@@ -321,8 +323,7 @@ static void bit_cursor(struct vc_data *vc, struct fb_info *info,
 		if (!mask)
 			return;
 
-		if (ops->cursor_state.mask)
-			kfree(ops->cursor_state.mask);
+		kfree(ops->cursor_state.mask);
 		ops->cursor_state.mask = mask;
 
 		p->cursor_shape = vc->vc_cursor_type;
