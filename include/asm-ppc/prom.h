@@ -9,9 +9,10 @@
 #define _PPC_PROM_H
 
 #include <linux/config.h>
+#include <linux/types.h>
 
-typedef void *phandle;
-typedef void *ihandle;
+typedef u32 phandle;
+typedef u32 ihandle;
 
 extern char *prom_display_paths[];
 extern unsigned int prom_num_displays;
