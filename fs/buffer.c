@@ -741,20 +741,19 @@ void set_writetime(struct buffer_head * buf, int flag)
 }
 
 
-static char buffer_disposition[] = {BUF_CLEAN, BUF_SHARED, BUF_LOCKED, BUF_SHARED, 
-				      BUF_DIRTY, BUF_DIRTY, BUF_DIRTY, BUF_DIRTY};
-
 void refile_buffer(struct buffer_head * buf){
-	int i, dispose;
-	i = 0;
+	int dispose;
 	if(buf->b_dev == 0xffff) panic("Attempt to refile free buffer\n");
-	if(mem_map[MAP_NR((unsigned long) buf->b_data)] != 1) i = 1;
-	if(buf->b_lock) i |= 2;
-	if(buf->b_dirt) i |= 4;
-	dispose = buffer_disposition[i];
-	if(buf->b_list == BUF_SHARED && dispose == BUF_CLEAN)
-		 dispose = BUF_UNSHARED;
-	if(dispose == -1) panic("Bad buffer settings (%d)\n", i);
+	if (buf->b_dirt)
+		dispose = BUF_DIRTY;
+	else if (mem_map[MAP_NR((unsigned long) buf->b_data)] > 1)
+		dispose = BUF_SHARED;
+	else if (buf->b_lock)
+		dispose = BUF_LOCKED;
+	else if (buf->b_list == BUF_SHARED)
+		dispose = BUF_UNSHARED;
+	else
+		dispose = BUF_CLEAN;
 	if(dispose == BUF_CLEAN) buf->b_lru_time = jiffies;
 	if(dispose != buf->b_list)  {
 		if(dispose == BUF_DIRTY || dispose == BUF_UNSHARED)
@@ -1211,6 +1210,9 @@ static int grow_buffers(int pri, int size)
 	return 1;
 }
 
+
+/* =========== Reduce the buffer memory ============= */
+
 /*
  * try_to_free() checks if all the buffers on this particular page
  * are unused, and free's the page if so.
@@ -1386,6 +1388,8 @@ static int shrink_specific_buffers(unsigned int priority, int size)
 }
 
 
+/* ================== Debugging =================== */
+
 void show_buffers(void)
 {
 	struct buffer_head * bh;
@@ -1424,6 +1428,9 @@ void show_buffers(void)
 		printk("\n");
 	}
 }
+
+
+/* ====================== Cluster patches for ext2 ==================== */
 
 /*
  * try_to_reassign() checks if all the buffers on this particular page
@@ -1556,7 +1563,7 @@ static unsigned long try_to_generate_cluster(dev_t dev, int block, int size)
 	bh->b_this_page = tmp;
 	while (nblock-- > 0)
 		brelse(arr[nblock]);
-	return 4;
+	return 4; /* ?? */
 not_aligned:
 	while ((tmp = bh) != NULL) {
 		bh = bh->b_this_page;
@@ -1591,6 +1598,9 @@ unsigned long generate_cluster(dev_t dev, int b[], int size)
 	else
 		 return reassign_cluster(dev, b[0], size);
 }
+
+
+/* ===================== Init ======================= */
 
 /*
  * This initializes the initial buffer free list.  nr_buffers_type is set
@@ -1630,6 +1640,9 @@ void buffer_init(void)
 		panic("VFS: Unable to initialize buffer free list!");
 	return;
 }
+
+
+/* ====================== bdflush support =================== */
 
 /* This is a simple kernel daemon, whose job it is to provide a dynamically
  * response to dirty buffers.  Once this process is activated, we write back

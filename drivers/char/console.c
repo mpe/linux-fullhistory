@@ -1082,7 +1082,7 @@ static void invert_screen(int currcons) {
 	if (can_do_color)
 		for (p = (unsigned short *)origin; p < (unsigned short *)scr_end; p++) {
 			unsigned short old = readw(p);
-			writew((old & 0x88ff) | (((old >> 4) | (old << 4)) & 0x7700), p);
+			writew((old & 0x88ff) | (((old >> 4) | ((old & 0xff00) << 4)) & 0x7700), p);
 		}
 	else
 		for (p = (unsigned short *)origin; p < (unsigned short *)scr_end; p++) {
@@ -2004,6 +2004,7 @@ long con_init(long kmem_start)
 	scr_end	= video_mem_start + video_num_lines * video_size_row;
 	gotoxy(currcons,orig_x,orig_y);
 	set_origin(currcons);
+	csi_J(currcons, 0);
 	printable = 1;
 	printk("Console: %s %s %ldx%ld, %d virtual console%s (max %d)\n",
 		can_do_color ? "colour" : "mono",

@@ -360,7 +360,7 @@ struct pci_device_type {
 	{0xff,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82378,	"82378IB"}, \
 	{0x00,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82424,	"82424ZX Saturn"}, \
 	{0xff,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82375,	"82375EB"}, \
-	{0x00,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82434,	"82434LX Mercury/Netpune"}, \
+	{0x00,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82434,	"82434LX Mercury/Neptune"}, \
 	{0xff,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82430,	"82430ZX Aries"}, \
 	{0xff,	PCI_VENDOR_ID_SMC,	PCI_DEVICE_ID_SMC_37C665,	"FDC 37C665"}, \
 	{0xff,	PCI_VENDOR_ID_ATI,	PCI_DEVICE_ID_ATI_M32,		"Mach 32"}, \
@@ -385,7 +385,7 @@ struct pci_device_type {
 }
 
 /* An item of this structure has the following meaning	*/
-/* For each optimisation, the register adress, the mask	*/
+/* For each optimisation, the register address, the mask	*/
 /* and value to write to turn it on.			*/
 /* There are 5 optimizations for the moment :		*/
 /* Cache L2 write back best than write through		*/
@@ -414,7 +414,7 @@ struct optimisation_type {
 }
 
 struct bridge_mapping_type {
-	unsigned char	adress;
+	unsigned char	address;
 	unsigned char	mask;
 	unsigned char	value;
 };
@@ -430,7 +430,7 @@ struct bridge_mapping_type {
 /*	This is a dummy entry for my tests.	*/
 /*	I have this chipset and no docs....	*/   
 
-/* I'am gathering docs. If you can help......	*/
+/* I'm gathering docs. If you can help......	*/
 
 #define BRIDGE_MAPPING_NUM 3
 #define BRIDGE_MAPPING_TYPE { \

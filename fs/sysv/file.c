@@ -189,8 +189,10 @@ int sysv_file_read(struct inode * inode, struct file * filp, char * buf, int cou
 	if (!read)
 		return -EIO;
 	filp->f_reada = 1;
-	if (!IS_RDONLY(inode))
+	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;
+		inode->i_dirt = 1;
+	}
 	return read;
 }
 

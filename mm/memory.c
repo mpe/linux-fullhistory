@@ -615,12 +615,9 @@ int verify_area(int type, const void * addr, unsigned long size)
 	if (get_fs() == get_ds())
 		return 0;
 
-	for (vma = current->mm->mmap ; ; vma = vma->vm_next) {
-		if (!vma)
-			goto bad_area;
-		if (vma->vm_end > start)
-			break;
-	}
+	vma = find_vma(current, start);
+	if (!vma)
+		goto bad_area;
 	if (vma->vm_start <= start)
 		goto good_area;
 	if (!(vma->vm_flags & VM_GROWSDOWN))

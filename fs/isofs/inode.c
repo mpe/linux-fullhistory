@@ -154,6 +154,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	int high_sierra;
 	int dev=s->s_dev;
 	int i;
+	struct cdrom_multisession ms_info;
 	unsigned int vol_desc_start;
 	struct inode inode_fake;
 	extern struct file_operations * get_blkfops(unsigned int);
@@ -204,16 +205,26 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	 * <emoenke@gwdg.de>
 	 */
 	vol_desc_start=0;
-	inode_fake.i_rdev=dev;
-	i=get_blkfops(MAJOR(dev))->ioctl(&inode_fake,
-					 NULL,
-					 CDROMMULTISESSION_SYS,
-					 (unsigned long) &vol_desc_start);
+	if (get_blkfops(MAJOR(dev))->ioctl!=NULL)
+	  {
+	    inode_fake.i_rdev=dev;
+	    ms_info.addr_format=CDROM_LBA;
+	    set_fs(KERNEL_DS);
+	    i=get_blkfops(MAJOR(dev))->ioctl(&inode_fake,
+					     NULL,
+					     CDROMMULTISESSION,
+					     (unsigned long) &ms_info);
+	    set_fs(USER_DS);
 #if 0
-	printk("isofs.inode: CDROMMULTISESSION_SYS rc=%d\n",i);
-	printk("isofs.inode: vol_desc_start = %d\n", vol_desc_start);
+	    printk("isofs.inode: CDROMMULTISESSION: rc=%d\n",i);
+	    if (i==0)
+	      {
+		printk("isofs.inode: XA disk: %s\n", ms_info.xa_flag ? "yes":"no");
+		printk("isofs.inode: vol_desc_start = %d\n", ms_info.addr.lba);
+	      }
 #endif 0
-	if (i!=0) vol_desc_start=0;
+	    if ((i==0)&&(ms_info.xa_flag)) vol_desc_start=ms_info.addr.lba;
+	  }
 	for (iso_blknum = vol_desc_start+16; iso_blknum < vol_desc_start+100; iso_blknum++) {
 #if 0
 	printk("isofs.inode: iso_blknum=%d\n", iso_blknum);

@@ -15,10 +15,6 @@ typedef struct resource_entry_t {
 	struct resource_entry_t *next;
 } resource_entry_t;
 
-static resource_entry_t iolist = { 0, 0, "", NULL };
-
-static resource_entry_t iotable[IOTABLE_SIZE];
-
 /* Set EXTENT bits starting at BASE in BITMAP to value TURN_ON. */
 static void set_bitmap(unsigned long *bitmap, short base, short extent, int new_value)
 {

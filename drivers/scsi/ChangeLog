@@ -1,3 +1,97 @@
+Mon Jan 16 07:18:23 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.82 released.
+
+	Throughout.
+	- Change all interrupt handlers to accept new calling convention.
+	In particular, we now receive the irq number as one of the arguments.
+
+	* More minor spelling corrections in some of the new files.
+
+	* aha1542.c, buslogic.c: Clean up interrupt handler a little now
+	that we receive the irq as an arg.
+
+	* aha274x.c: s/snarf_region/request_region/
+
+	* eata.c: Update to version 1.12.   Fix some comments and display a
+	message if we cannot reserve the port addresses.
+
+	* u14-34f.c: Update to version 1.13.   Fix some comments and display a
+	message if we cannot reserve the port addresses.
+
+	* eata_dma.c: Define get_board_data function (send INQUIRY command).
+	Use to improve detection of variants of different DPT boards.  Change
+	version subnumber to "0g".
+
+	* fdomain.c:  Update to version 5.26.  Improve detection of some boards
+	repackaged by IBM.
+
+	* scsi.c (scsi_register_host): Change "name" to const char *.
+
+	* sr.c: Fix problem in set mode command for Toshiba drives.
+
+	* sr.c: Fix typo from patch 81.
+
+Fri Jan 13 12:54:46 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.81 released.  Codefreeze for 1.2 release announced.
+
+	Big changes here.
+
+	* eata_dma.*: New files from Michael Neuffer.
+	(neuffer@goofy.zdv.uni-mainz.de).  Should support
+	all eata/dpt cards.
+
+	* hosts.c, Makefile: Add eata_dma.
+
+	* README.st: Document MTEOM.
+
+	Patches from me (ERY) to finish support for low-level loadable scsi.
+	It now works, and is actually useful.
+
+	* Throughout - add new argument to scsi_init_malloc that takes an
+	additional parameter.  This is used as a priority to kmalloc,
+	and you can specify the GFP_DMA flag if you need DMA-able memory.
+
+	* Makefile: For source files that are loadable, always add name
+	to SCSI_SRCS.  Fill in modules: target.
+
+	* hosts.c:  Change next_host to next_scsi_host, and make global.
+	Print hosts after we have identified all of them.  Use info()
+	function if present, otherwise use name field.
+
+	* hosts.h: Change attach function to return int, not void.
+	Define number of device slots to allow for loadable devices.
+	Define tags to tell scsi module code what type of module we
+	are loading.
+
+	* scsi.c: Fix scan_scsis so that it can be run by a user process.
+	Do not use waiting loops - use up and down mechanism as long
+	as current != task[0].
+
+	* scsi.c(scan_scsis): Do not use stack variables for I/O - this
+	could be > 16Mb if we are loading a module at runtime (i.e. use
+	scsi_init_malloc to get some memory we know will be safe).
+
+	* scsi.c: Change dma freelist to be a set of pages.  This allows
+	us to dynamicly adjust the size of the list by adding more pages
+	to the pagelist.  Fix scsi_malloc and scsi_free accordingly.
+
+	* scsi_module.c: Fix include.
+
+	* sd.c: Declare detach function.  Increment/decrement module usage
+	count as required.  Fix init functions to allow loaded devices.
+	Revalidate all new disks so we get the partition tables.  Define
+	detach function.
+
+	* sr.c: Likewise.
+
+	* sg.c: Declare detach function.  Allow attachment of devices on
+	loaded drivers.
+
+	* st.c: Declare detach function.  Increment/decrement module usage
+	count as required.
+
 Tue Jan 10 10:09:58 1995  Eric Youngdale  (eric@andante)
 
 	* Linux 1.1.79 released.

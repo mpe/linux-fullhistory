@@ -96,7 +96,9 @@ static void *base_address = NULL;	/*
 						used to calculate memory mapped
 						register location.
 					*/
+#ifdef notyet
 static volatile int abort_confirm = 0;
+#endif
 
 static volatile void *st0x_cr_sr;       /*
 						control register write,

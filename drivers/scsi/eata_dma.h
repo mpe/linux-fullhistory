@@ -377,7 +377,7 @@ typedef struct emul_pp {
   unchar p_code:6,
            null:1,
          p_save:1;
-  unchar p_lenght;
+  unchar p_length;
   ushort cylinder;
   unchar heads;
   unchar sectors;

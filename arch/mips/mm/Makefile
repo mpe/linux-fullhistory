@@ -14,7 +14,7 @@
 .c.s:
 	$(CC) $(CFLAGS) -S $<
 
-OBJS	= fault.o
+OBJS	= fault.o init.o
 
 mm.o: $(OBJS)
 	$(LD) -r -o mm.o $(OBJS)

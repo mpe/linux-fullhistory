@@ -941,6 +941,10 @@ static int startup(struct async_struct * info)
 		info->MCR = UART_MCR_DTR | UART_MCR_RTS | UART_MCR_OUT2;
 		info->MCR_noint = UART_MCR_DTR | UART_MCR_RTS;
 	}
+#ifdef __alpha__
+	info->MCR |= UART_MCR_OUT1 | UART_MCR_OUT2;
+	info->MCR_noint |= UART_MCR_OUT1 | UART_MCR_OUT2;
+#endif
 	if (info->irq == 0)
 		info->MCR = info->MCR_noint;
 	serial_outp(info, UART_MCR, info->MCR);
@@ -2358,7 +2362,15 @@ static void autoconfig(struct async_struct * info)
 	/*
 	 * Reset the UART.
 	 */
+#ifdef __alpha__
+	/*
+	 * I wonder what DEC did to the OUT1 and OUT2 lines?
+	 * clearing them results in endless interrupts.
+	 */
+	serial_outp(info, UART_MCR, 0x0c);
+#else
 	serial_outp(info, UART_MCR, 0x00);
+#endif
 	serial_outp(info, UART_FCR, (UART_FCR_CLEAR_RCVR |
 				     UART_FCR_CLEAR_XMIT));
 	(void)serial_in(info, UART_RX);

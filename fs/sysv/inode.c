@@ -510,13 +510,9 @@ void sysv_write_super (struct super_block *sb)
 		unsigned long old_time = *sb->sv_sb_time;
 		if (sb->sv_convert)
 			old_time = from_coh_ulong(old_time);
-		switch (sb->sv_type) {
-			case FSTYPE_SYSV4:
-				if (*sb->sv_sb_state == 0x7c269d38 - old_time)
-					*sb->sv_sb_state = 0x7c269d38 - time;
-			default:
-				break;
-		}
+		if (sb->sv_type == FSTYPE_SYSV4)
+			if (*sb->sv_sb_state == 0x7c269d38 - old_time)
+				*sb->sv_sb_state = 0x7c269d38 - time;
 		if (sb->sv_convert)
 			time = to_coh_ulong(time);
 		*sb->sv_sb_time = time;

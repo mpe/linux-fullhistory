@@ -36,8 +36,12 @@ struct vm_area_struct {
 	unsigned short vm_flags;
 /* linked list of VM areas per task, sorted by address */
 	struct vm_area_struct * vm_next;
+/* AVL tree of VM areas per task, sorted by address */
+	struct vm_area_struct * vm_avl_left;
+	struct vm_area_struct * vm_avl_right;
+	short vm_avl_height;
 /* for areas with inode, the circular list inode->i_mmap */
-/* for shm areas, the linked list of attaches */
+/* for shm areas, the circular list of attaches */
 /* otherwise unused */
 	struct vm_area_struct * vm_next_share;
 	struct vm_area_struct * vm_prev_share;
@@ -192,9 +196,13 @@ extern void rw_swap_page(int rw, unsigned long nr, char * buf);
 /* mmap.c */
 extern int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off);
-extern void merge_segments(struct vm_area_struct *);
+extern struct vm_area_struct * find_vma (struct task_struct *, unsigned long);
+extern struct vm_area_struct * find_vma_intersection (struct task_struct *, unsigned long, unsigned long);
+extern void merge_segments(struct task_struct *, unsigned long, unsigned long);
 extern void insert_vm_struct(struct task_struct *, struct vm_area_struct *);
 extern void remove_shared_vm_struct(struct vm_area_struct *);
+extern void build_mmap_avl(struct task_struct *);
+extern void exit_mmap(struct task_struct *);
 extern int do_munmap(unsigned long, size_t);
 extern unsigned long get_unmapped_area(unsigned long);
 

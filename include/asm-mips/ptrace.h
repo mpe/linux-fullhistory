@@ -1,7 +1,7 @@
 /*
  * linux/include/asm-mips/ptrace.h
  *
- * machine dependend structs and defines to help the user use
+ * machine dependent structs and defines to help the user use
  * the ptrace system call.
  */
 #ifndef __ASM_MIPS_PTRACE_H
@@ -11,7 +11,7 @@
  * use ptrace (3 or 6, pid, PT_EXCL, data); to read or write
  * the processes registers.
  *
- * This defines/structures corrospond to the register layout on stack -
+ * This defines/structures correspond to the register layout on stack -
  * if the order here is changed, it needs to be updated in
  * arch/mips/fork.c:copy_process, asm/mips/signal.c:do_signal,
  * asm-mips/ptrace.c, include/asm-mips/ptrace.h.
@@ -58,7 +58,6 @@ struct pt_regs {
 	long orig_reg2;
 };
 
-#ifdef __KERNEL__
 /*
  * Does the process account for user or for system time?
  */
@@ -71,11 +70,5 @@ struct pt_regs {
 #error "#define user_mode(regs) for R3000!"
 
 #endif /* !defined (__R4000__) */
-#endif /* __KERNEL */
-
-/*
- * This function computes the interrupt number from the stack frame
- */
-#define pt_regs2irq(p) ((int) ((struct pt_regs *)p)->interrupt)        
 
 #endif /* __ASM_MIPS_PTRACE_H */

@@ -17,6 +17,7 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/locks.h>
+#include <linux/mm.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -517,15 +518,9 @@ static int copy_mount_options (const void * data, unsigned long *where)
 	if (!data)
 		return 0;
 
-	for (vma = current->mm->mmap ; ; ) {
-		if (!vma ||
-		    (unsigned long) data < vma->vm_start) {
-			return -EFAULT;
-		}
-		if ((unsigned long) data < vma->vm_end)
-			break;
-		vma = vma->vm_next;
-	}
+	vma = find_vma(current, (unsigned long) data);
+	if (!vma || (unsigned long) data < vma->vm_start)
+		return -EFAULT;
 	i = vma->vm_end - (unsigned long) data;
 	if (PAGE_SIZE <= (unsigned long) i)
 		i = PAGE_SIZE-1;

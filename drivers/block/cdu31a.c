@@ -78,16 +78,9 @@
  *
  * Multi-Session
  *
- * A multi-session disk is treated like a partitioned disk, each session
- * has it's own minor device number, starting with 0.  The support is
- * pretty transparent, music, TOC operations, and read operations should
- * all work transparently on any session.  Note that since the driver
- * writer doesn't have a multi-session disk, this is all theoretical.
- * Also, music operation will obviously only work on one session at a
- * time.
- *
- * NOTE: At the current time, multi-session still doesn't work.  Maybe
- * I'll get a multi-session disk soon so I can play with it.
+ * A multi-session disk looks just like a normal disk to the user.
+ * Just mount one normally, and all the data should be there.
+ * A special thanks to Koen for help with this!
  * 
  * Raw sector I/O
  *
@@ -226,7 +219,7 @@ static struct
 
 static int handle_sony_cd_attention(void);
 static int read_subcode(void);
-static void sony_get_toc(int dev);
+static void sony_get_toc(void);
 static int scd_open(struct inode *inode, struct file *filp);
 static void do_sony_cd_cmd(unsigned char cmd,
                            unsigned char *params,
@@ -274,9 +267,12 @@ static unsigned int sony_usage = 0;        /* How many processes have the
 static int sony_pas_init = 0;		   /* Initialize the Pro-Audio
 					      Spectrum card? */
 
-static struct s_sony_session_toc *(ses_tocs[MAX_TRACKS]); /* Points to the
-							     table of
-							     contents. */
+static struct s_sony_session_toc *sony_toc; /* Points to the
+					       table of
+					       contents. */
+
+static int sony_toc_read = 0;		   /* Has the TOC been read for
+					      the drive? */
 
 static struct s_sony_subcode * volatile last_sony_subcode; /* Points to the last
                                                     subcode address read */
@@ -317,11 +313,10 @@ static struct wait_queue *cdu31a_irq_wait = NULL;
 
 static int curr_control_reg = 0; /* Current value of the control register */
 
-/* A disk changed variable for every possible session.  When a disk change
-   is detected, these will all be set to TRUE.  As the upper layers ask
-   for disk_changed status for individual minor numbers, they will be
-   cleared. */
-static char disk_changed[MAX_TRACKS];
+/* A disk changed variable.  When a disk change is detected, it will
+   all be set to TRUE.  As the upper layers ask for disk_changed status
+   it will be cleared. */
+static char disk_changed;
 
 /* Variable for using the readahead buffer.  The readahead buffer
    is used for raw sector reads and for blocksizes that are smaller
@@ -338,18 +333,10 @@ static int readahead_bad = 0;
 static int
 scd_disk_change(dev_t full_dev)
 {
-   int retval, target;
+   int retval;
 
-
-   target = MINOR(full_dev);
-
-   if (target >= MAX_TRACKS) {
-      printk("Sony CD-ROM request error: invalid device.\n");
-      return 0;
-   }
-
-   retval = disk_changed[target];
-   disk_changed[target] = 0;
+   retval = disk_changed;
+   disk_changed = 0;
 
    return retval;
 }
@@ -859,7 +846,6 @@ handle_sony_cd_attention(void)
 {
    unsigned char atten_code;
    static int num_consecutive_attentions = 0;
-   int i;
 
 
    if (is_attention())
@@ -879,15 +865,8 @@ handle_sony_cd_attention(void)
       {
        /* Someone changed the CD.  Mark it as changed */
       case SONY_MECH_LOADED_ATTN:
-         for (i=0; i<MAX_TRACKS; i++)
-         {
-            disk_changed[i] = 1;
-	    if (ses_tocs[i] != NULL)
-	    {
-	       kfree_s(ses_tocs[i], sizeof(struct s_sony_session_toc));
-	       ses_tocs[i] = NULL;
-	    }
-         }
+         disk_changed = 1;
+	 sony_toc_read = 0;
          sony_audio_status = CDROM_AUDIO_NO_STATUS;
          sony_blocks_left = 0;
          break;
@@ -1000,8 +979,7 @@ size_to_buf(unsigned int size,
 static int
 start_request(unsigned int sector,
               unsigned int nsect,
-              int          read_nsect_only,
-	      int          dev)
+              int          read_nsect_only)
 {
    unsigned char params[6];
    unsigned int read_size;
@@ -1018,9 +996,9 @@ start_request(unsigned int sector,
     * If the full read-ahead would go beyond the end of the media, trim
     * it back to read just till the end of the media.
     */
-   else if ((sector + nsect) >= ses_tocs[dev]->lead_out_start_lba)
+   else if ((sector + nsect) >= sony_toc->lead_out_start_lba)
    {
-      read_size = ses_tocs[dev]->lead_out_start_lba - sector;
+      read_size = sony_toc->lead_out_start_lba - sector;
    }
    /* Read the full readahead amount. */
    else
@@ -1374,7 +1352,6 @@ static void
 do_cdu31a_request(void)
 {
    int block;
-   unsigned int dev;
    int nblock;
    unsigned char res_reg[12];
    unsigned int res_size;
@@ -1440,36 +1417,24 @@ cdu31a_request_startover:
          }
       }
 
-      dev = MINOR(CURRENT->dev);
       block = CURRENT->sector;
       nblock = CURRENT->nr_sectors;
 
-      /* Check for multi-session disks. */
-      if (dev > MAX_TRACKS)
+      if (!sony_toc_read)
       {
-	 printk("CDU31A: Invalid device request: %d\n", dev);
-	 end_request(0);
-	 goto cdu31a_request_startover;
-      }
-      else if (ses_tocs[dev] == NULL)
-      {
-	 printk("CDU31A: session TOC not read: %d\n", dev);
+	 printk("CDU31A: TOC not read\n");
 	 end_request(0);
 	 goto cdu31a_request_startover;
       }
 
-      /* Check for base read of multi-session disk. */
-      if ((dev != 0) && (block == 64))
+      /* Check for base read of multi-session disk.  This will still work
+         for single session disks, so just do it.  Blocks less than 80
+         are for the volume info, so offset them by the start track (which
+         should be zero for a single-session disk). */
+      if (block < 80)
       {
-         if (ses_tocs[dev]->first_track_num == ses_tocs[dev]->last_track_num)
-         {
-            printk("CDU31A: Not a multi-session disk: %d\n", dev);
-            end_request(0);
-            goto cdu31a_request_startover;
-         }
-
 	 /* Offset the request into the session. */
-	 block += (ses_tocs[dev]->start_track_lba * 4);
+	 block += (sony_toc->start_track_lba * 4);
       }
 
       switch(CURRENT->cmd)
@@ -1479,19 +1444,21 @@ cdu31a_request_startover:
           * If the block address is invalid or the request goes beyond the end of
           * the media, return an error.
           */
-	 if ((block / 4) < ses_tocs[dev]->start_track_lba)
+#if 0
+	 if ((block / 4) < sony_toc->start_track_lba)
 	 {
             printk("CDU31A: Request before beginning of media\n");
             end_request(0);
             goto cdu31a_request_startover;
 	 }
-         if ((block / 4) >= ses_tocs[dev]->lead_out_start_lba)
+#endif
+         if ((block / 4) >= sony_toc->lead_out_start_lba)
          {
             printk("CDU31A: Request past end of media\n");
             end_request(0);
             goto cdu31a_request_startover;
          }
-         if (((block + nblock) / 4) >= ses_tocs[dev]->lead_out_start_lba)
+         if (((block + nblock) / 4) >= sony_toc->lead_out_start_lba)
          {
             printk("CDU31A: Request past end of media\n");
             end_request(0);
@@ -1504,9 +1471,9 @@ try_read_again:
          while (handle_sony_cd_attention())
             ;
 
-         if (ses_tocs[dev] == NULL)
+         if (!sony_toc_read)
          {
-	    printk("CDU31A: session TOC not read: %d\n", dev);
+	    printk("CDU31A: TOC not read\n");
 	    end_request(0);
 	    goto cdu31a_request_startover;
          }
@@ -1515,7 +1482,7 @@ try_read_again:
 	    next request. */
          if (sony_blocks_left == 0)
          {
-            if (start_request(block / 4, CDU31A_READAHEAD / 4, 0, dev))
+            if (start_request(block / 4, CDU31A_READAHEAD / 4, 0))
             {
                end_request(0);
                goto cdu31a_request_startover;
@@ -1532,13 +1499,13 @@ try_read_again:
                    sony_next_block);
 #endif
             abort_read();
-            if (ses_tocs[dev] == NULL)
+            if (!sony_toc_read)
             {
-	       printk("CDU31A: session TOC not read: %d\n", dev);
+	       printk("CDU31A: TOC not read\n");
 	       end_request(0);
                goto cdu31a_request_startover;
             }
-            else if (start_request(block / 4, CDU31A_READAHEAD / 4, 0, dev))
+            if (start_request(block / 4, CDU31A_READAHEAD / 4, 0))
             {
                end_request(0);
                goto cdu31a_request_startover;
@@ -1581,7 +1548,7 @@ try_read_again:
    }
 
 end_do_cdu31a_request:
-#if 0
+#if 1
    /* After finished, cancel any pending operations. */
    abort_read();
 #endif
@@ -1614,93 +1581,137 @@ mcovlp(char *dst,
  * successful.
  */
 static void
-sony_get_toc(int dev)
+sony_get_toc(void)
 {
+   unsigned char res_reg[2];
    unsigned int res_size;
    unsigned char parms[1];
+   int session;
 
 
-   if (dev >= MAX_TRACKS)
+#if DEBUG
+   printk("Entering sony_get_toc\n");
+#endif
+
+   if (!sony_toc_read)
    {
-      printk("CDU31A: Request for invalid TOC track: %d\n", dev);
-   }
-   else if (ses_tocs[dev] == NULL)
-   {
-      ses_tocs[dev] = kmalloc(sizeof(struct s_sony_session_toc), 0);
-      if (ses_tocs[dev] == NULL)
+      /* The idea here is we keep asking for sessions until the command
+	 fails.  Then we know what the last valid session on the disk is.
+	 No need to check session 0, since session 0 is the same as session
+         1; the command returns different information if you give it 0. 
+         Don't check session 1 because that is the first session, it must
+         be there. */
+      session = 2;
+      while (1)
       {
-	 printk("CDU31A: Unable to alloc mem for TOC\n");
-      }
-      else
-      {
-	 parms[0] = dev+1;
-	 do_sony_cd_cmd(SONY_REQ_TOC_DATA_SPEC_CMD,
+#if DEBUG
+         printk("Trying session %d\n", session);
+#endif
+	 parms[0] = session;
+	 do_sony_cd_cmd(SONY_READ_TOC_SPEC_CMD,
 			parms,
 			1, 
-			(unsigned char *) ses_tocs[dev], 
+			res_reg,
 			&res_size);
-	 if ((res_size < 2) || ((ses_tocs[dev]->exec_status[0] & 0xf0) == 0x20))
-	 {
-	    kfree_s(ses_tocs[dev], sizeof(struct s_sony_session_toc));
-	    ses_tocs[dev] = NULL;
-	    return;
-	 }
 
-         /* For points that do not exist, move the data over them
-            to the right location. */
-         if (ses_tocs[dev]->pointb0 != 0xb0)
-         {
-            mcovlp(((char *) ses_tocs[dev]) + 27,
-                   ((char *) ses_tocs[dev]) + 18,
-                   res_size - 18);
-            res_size += 9;
-         }
-         if (ses_tocs[dev]->pointb1 != 0xb1)
-         {
-            mcovlp(((char *) ses_tocs[dev]) + 36,
-                   ((char *) ses_tocs[dev]) + 27,
-                   res_size - 27);
-            res_size += 9;
-         }
-         if (ses_tocs[dev]->pointb2 != 0xb2)
-         {
-            mcovlp(((char *) ses_tocs[dev]) + 45,
-                   ((char *) ses_tocs[dev]) + 36,
-                   res_size - 36);
-            res_size += 9;
-         }
-         if (ses_tocs[dev]->pointb3 != 0xb3)
-         {
-            mcovlp(((char *) ses_tocs[dev]) + 54,
-                   ((char *) ses_tocs[dev]) + 45,
-                   res_size - 45);
-            res_size += 9;
-         }
-         if (ses_tocs[dev]->pointb4 != 0xb4)
-         {
-            mcovlp(((char *) ses_tocs[dev]) + 63,
-                   ((char *) ses_tocs[dev]) + 54,
-                   res_size - 54);
-            res_size += 9;
-         }
-         if (ses_tocs[dev]->pointc0 != 0xc0)
-         {
-            mcovlp(((char *) ses_tocs[dev]) + 72,
-                   ((char *) ses_tocs[dev]) + 63,
-                   res_size - 63);
-            res_size += 9;
-         }
-
-	 ses_tocs[dev]->start_track_lba = msf_to_log(ses_tocs[dev]->tracks[0].track_start_msf);
-	 ses_tocs[dev]->lead_out_start_lba = msf_to_log(ses_tocs[dev]->lead_out_start_msf);
 #if DEBUG
-	 printk("Disk session %d, start track: %d, stop track: %d\n",
-		dev,
-		ses_tocs[dev]->start_track_lba,
-		ses_tocs[dev]->lead_out_start_lba);
+         printk("%2.2x %2.2x\n", res_reg[0], res_reg[1]);
 #endif
+
+	 if ((res_size < 2) || ((res_reg[0] & 0xf0) == 0x20))
+	 {
+	    /* An error reading the TOC, this must be past the last session. */
+	    break;
+         }
+
+         session++;
+
+         /* Let's not get carried away... */
+         if (session > 20)
+         {
+            return;
+         }
       }
+
+      session--;
+
+#if DEBUG
+      printk("Reading session %d\n", session);
+#endif
+
+      parms[0] = session;
+      do_sony_cd_cmd(SONY_REQ_TOC_DATA_SPEC_CMD,
+		     parms,
+		     1, 
+		     (unsigned char *) sony_toc, 
+		     &res_size);
+      if ((res_size < 2) || ((sony_toc->exec_status[0] & 0xf0) == 0x20))
+      {
+	 /* An error reading the TOC.  Return without sony_toc_read
+	    set. */
+	 return;
+      }
+      
+      sony_toc_read = 1;
+
+      /* For points that do not exist, move the data over them
+	 to the right location. */
+      if (sony_toc->pointb0 != 0xb0)
+      {
+	 mcovlp(((char *) sony_toc) + 27,
+		((char *) sony_toc) + 18,
+		res_size - 18);
+	 res_size += 9;
+      }
+      if (sony_toc->pointb1 != 0xb1)
+      {
+	 mcovlp(((char *) sony_toc) + 36,
+		((char *) sony_toc) + 27,
+		res_size - 27);
+	 res_size += 9;
+      }
+      if (sony_toc->pointb2 != 0xb2)
+      {
+	 mcovlp(((char *) sony_toc) + 45,
+		((char *) sony_toc) + 36,
+		res_size - 36);
+	 res_size += 9;
+      }
+      if (sony_toc->pointb3 != 0xb3)
+      {
+	 mcovlp(((char *) sony_toc) + 54,
+		((char *) sony_toc) + 45,
+		res_size - 45);
+	 res_size += 9;
+      }
+      if (sony_toc->pointb4 != 0xb4)
+      {
+	 mcovlp(((char *) sony_toc) + 63,
+		((char *) sony_toc) + 54,
+		res_size - 54);
+	 res_size += 9;
+      }
+      if (sony_toc->pointc0 != 0xc0)
+      {
+	 mcovlp(((char *) sony_toc) + 72,
+		((char *) sony_toc) + 63,
+		res_size - 63);
+	 res_size += 9;
+      }
+
+      sony_toc->start_track_lba = msf_to_log(sony_toc->tracks[0].track_start_msf);
+      sony_toc->lead_out_start_lba = msf_to_log(sony_toc->lead_out_start_msf);
+
+#if DEBUG
+   printk("Disk session %d, start track: %d, stop track: %d\n",
+	  session,
+	  sony_toc->start_track_lba,
+	  sony_toc->lead_out_start_lba);
+#endif
    }
+#if DEBUG
+   printk("Leaving sony_get_toc\n");
+#endif
 }
 
 
@@ -1708,17 +1719,16 @@ sony_get_toc(int dev)
  * Search for a specific track in the table of contents.
  */
 static int
-find_track(int track,
-	   int dev)
+find_track(int track)
 {
    int i;
    int num_tracks;
 
 
-   num_tracks = ses_tocs[dev]->last_track_num - ses_tocs[dev]->first_track_num + 1;
+   num_tracks = sony_toc->last_track_num - sony_toc->first_track_num + 1;
    for (i = 0; i < num_tracks; i++)
    {
-      if (ses_tocs[dev]->tracks[i].track == track)
+      if (sony_toc->tracks[i].track == track)
       {
          return i;
       }
@@ -1761,8 +1771,7 @@ read_subcode(void)
  * (not BCD), so all the conversions are done.
  */
 static int
-sony_get_subchnl_info(long arg,
-		      int  dev)
+sony_get_subchnl_info(long arg)
 {
    struct cdrom_subchnl schi;
 
@@ -1771,8 +1780,8 @@ sony_get_subchnl_info(long arg,
    while (handle_sony_cd_attention())
       ;
 
-   sony_get_toc(dev);
-   if (ses_tocs[dev] == NULL)
+   sony_get_toc();
+   if (!sony_toc_read)
    {
       return -EIO;
    }
@@ -2025,7 +2034,7 @@ read_audio(struct cdrom_read_audio *ra,
 
    retval = 0;
    /* start_request clears out any readahead data, so it should be safe. */
-   if (start_request(ra->addr.lba, ra->nframes, 1, 0))
+   if (start_request(ra->addr.lba, ra->nframes, 1))
    {
       retval = -EIO;
       goto exit_read_audio;
@@ -2064,7 +2073,7 @@ read_audio(struct cdrom_read_audio *ra,
             }
 
             /* Restart the request on the current frame. */
-            if (start_request(ra->addr.lba + cframe, ra->nframes - cframe, 1, 0))
+            if (start_request(ra->addr.lba + cframe, ra->nframes - cframe, 1))
             {
                retval = -EIO;
                goto exit_read_audio;
@@ -2164,7 +2173,6 @@ scd_ioctl(struct inode *inode,
           unsigned int  cmd,
           unsigned long arg)
 {
-   unsigned int dev;
    unsigned char res_reg[12];
    unsigned int res_size;
    unsigned char params[7];
@@ -2172,11 +2180,6 @@ scd_ioctl(struct inode *inode,
 
 
    if (!inode)
-   {
-      return -EINVAL;
-   }
-   dev = MINOR(inode->i_rdev);
-   if (dev > MAX_TRACKS)
    {
       return -EINVAL;
    }
@@ -2289,16 +2292,16 @@ scd_ioctl(struct inode *inode,
          struct cdrom_tochdr *hdr;
          struct cdrom_tochdr loc_hdr;
          
-         sony_get_toc(dev);
-         if (ses_tocs[dev] == NULL)
+         sony_get_toc();
+         if (!sony_toc_read)
          {
             return -EIO;
          }
          
          hdr = (struct cdrom_tochdr *) arg;
          verify_area(VERIFY_WRITE, hdr, sizeof(*hdr));
-         loc_hdr.cdth_trk0 = bcd_to_int(ses_tocs[dev]->first_track_num);
-         loc_hdr.cdth_trk1 = bcd_to_int(ses_tocs[dev]->last_track_num);
+         loc_hdr.cdth_trk0 = bcd_to_int(sony_toc->first_track_num);
+         loc_hdr.cdth_trk1 = bcd_to_int(sony_toc->last_track_num);
          memcpy_tofs(hdr, &loc_hdr, sizeof(*hdr));
       }
       return 0;
@@ -2311,8 +2314,8 @@ scd_ioctl(struct inode *inode,
          int track_idx;
          unsigned char *msf_val = NULL;
          
-         sony_get_toc(dev);
-         if (ses_tocs[dev] == NULL)
+         sony_get_toc();
+         if (!sony_toc_read)
          {
             return -EIO;
          }
@@ -2326,21 +2329,21 @@ scd_ioctl(struct inode *inode,
          /* Lead out is handled separately since it is special. */
          if (loc_entry.cdte_track == CDROM_LEADOUT)
          {
-            loc_entry.cdte_adr = ses_tocs[dev]->address2;
-            loc_entry.cdte_ctrl = ses_tocs[dev]->control2;
-            msf_val = ses_tocs[dev]->lead_out_start_msf;
+            loc_entry.cdte_adr = sony_toc->address2;
+            loc_entry.cdte_ctrl = sony_toc->control2;
+            msf_val = sony_toc->lead_out_start_msf;
          }
          else
          {
-            track_idx = find_track(int_to_bcd(loc_entry.cdte_track), dev);
+            track_idx = find_track(int_to_bcd(loc_entry.cdte_track));
             if (track_idx < 0)
             {
                return -EINVAL;
             }
             
-            loc_entry.cdte_adr = ses_tocs[dev]->tracks[track_idx].address;
-            loc_entry.cdte_ctrl = ses_tocs[dev]->tracks[track_idx].control;
-            msf_val = ses_tocs[dev]->tracks[track_idx].track_start_msf;
+            loc_entry.cdte_adr = sony_toc->tracks[track_idx].address;
+            loc_entry.cdte_ctrl = sony_toc->tracks[track_idx].control;
+            msf_val = sony_toc->tracks[track_idx].track_start_msf;
          }
          
          /* Logical buffer address or MSF format requested? */
@@ -2364,8 +2367,8 @@ scd_ioctl(struct inode *inode,
          struct cdrom_ti ti;
          int track_idx;
          
-         sony_get_toc(dev);
-         if (ses_tocs[dev] == NULL)
+         sony_get_toc();
+         if (!sony_toc_read)
          {
             return -EIO;
          }
@@ -2373,39 +2376,39 @@ scd_ioctl(struct inode *inode,
          verify_area(VERIFY_READ, (char *) arg, sizeof(ti));
          
          memcpy_fromfs(&ti, (char *) arg, sizeof(ti));
-         if (   (ti.cdti_trk0 < ses_tocs[dev]->first_track_num)
-             || (ti.cdti_trk0 > ses_tocs[dev]->last_track_num)
+         if (   (ti.cdti_trk0 < sony_toc->first_track_num)
+             || (ti.cdti_trk0 > sony_toc->last_track_num)
              || (ti.cdti_trk1 < ti.cdti_trk0))
          {
             return -EINVAL;
          }
          
-         track_idx = find_track(int_to_bcd(ti.cdti_trk0), dev);
+         track_idx = find_track(int_to_bcd(ti.cdti_trk0));
          if (track_idx < 0)
          {
             return -EINVAL;
          }
-         params[1] = ses_tocs[dev]->tracks[track_idx].track_start_msf[0];
-         params[2] = ses_tocs[dev]->tracks[track_idx].track_start_msf[1];
-         params[3] = ses_tocs[dev]->tracks[track_idx].track_start_msf[2];
+         params[1] = sony_toc->tracks[track_idx].track_start_msf[0];
+         params[2] = sony_toc->tracks[track_idx].track_start_msf[1];
+         params[3] = sony_toc->tracks[track_idx].track_start_msf[2];
          
          /*
           * If we want to stop after the last track, use the lead-out
           * MSF to do that.
           */
-         if (ti.cdti_trk1 >= bcd_to_int(ses_tocs[dev]->last_track_num))
+         if (ti.cdti_trk1 >= bcd_to_int(sony_toc->last_track_num))
          {
-            log_to_msf(msf_to_log(ses_tocs[dev]->lead_out_start_msf)-1,
+            log_to_msf(msf_to_log(sony_toc->lead_out_start_msf)-1,
                        &(params[4]));
          }
          else
          {
-            track_idx = find_track(int_to_bcd(ti.cdti_trk1+1), dev);
+            track_idx = find_track(int_to_bcd(ti.cdti_trk1+1));
             if (track_idx < 0)
             {
                return -EINVAL;
             }
-            log_to_msf(msf_to_log(ses_tocs[dev]->tracks[track_idx].track_start_msf)-1,
+            log_to_msf(msf_to_log(sony_toc->tracks[track_idx].track_start_msf)-1,
                        &(params[4]));
          }
          params[0] = 0x03;
@@ -2430,7 +2433,7 @@ scd_ioctl(struct inode *inode,
       }
      
    case CDROMSUBCHNL:   /* Get subchannel info */
-      return sony_get_subchnl_info(arg, dev);
+      return sony_get_subchnl_info(arg);
 
    case CDROMVOLCTRL:   /* Volume control.  What volume does this change, anyway? */
       {
@@ -2471,8 +2474,8 @@ scd_ioctl(struct inode *inode,
          struct cdrom_read_audio ra;
 
 
-         sony_get_toc(dev);
-         if (ses_tocs[dev] == NULL)
+         sony_get_toc();
+         if (!sony_toc_read)
          {
             return -EIO;
          }
@@ -2484,8 +2487,8 @@ scd_ioctl(struct inode *inode,
 
          if (ra.addr_format == CDROM_LBA)
          {
-            if (   (ra.addr.lba >= ses_tocs[dev]->lead_out_start_lba)
-                || (ra.addr.lba + ra.nframes >= ses_tocs[dev]->lead_out_start_lba))
+            if (   (ra.addr.lba >= sony_toc->lead_out_start_lba)
+                || (ra.addr.lba + ra.nframes >= sony_toc->lead_out_start_lba))
             {
                return -EINVAL;
             }
@@ -2502,8 +2505,8 @@ scd_ioctl(struct inode *inode,
             ra.addr.lba = (  (ra.addr.msf.minute * 4500)
                            + (ra.addr.msf.second * 75)
                            + ra.addr.msf.frame);
-            if (   (ra.addr.lba >= ses_tocs[dev]->lead_out_start_lba)
-                || (ra.addr.lba + ra.nframes >= ses_tocs[dev]->lead_out_start_lba))
+            if (   (ra.addr.lba >= sony_toc->lead_out_start_lba)
+                || (ra.addr.lba + ra.nframes >= sony_toc->lead_out_start_lba))
             {
                return -EINVAL;
             }
@@ -2541,7 +2544,6 @@ scd_open(struct inode *inode,
    unsigned int res_size;
    int num_spin_ups;
    unsigned char params[2];
-   int dev;
 
 
    if ((filp) && filp->f_mode & 2)
@@ -2589,9 +2591,8 @@ respinup_on_open:
          return -EIO;
       }
 
-      dev = MINOR(inode->i_rdev);
-      sony_get_toc(dev);
-      if (ses_tocs[dev] == NULL)
+      sony_get_toc();
+      if (!sony_toc_read)
       {
          do_sony_cd_cmd(SONY_SPIN_DOWN_CMD, NULL, 0, res_reg, &res_size);
          return -EIO;
@@ -2599,7 +2600,7 @@ respinup_on_open:
 
       /* For XA on the CDU31A only, we have to do special reads.
          The CDU33A handles XA automagically. */
-      if (   (ses_tocs[dev]->disk_type == SONY_XA_DISK_TYPE)
+      if (   (sony_toc->disk_type == SONY_XA_DISK_TYPE)
           && (!is_double_speed))
       {
          params[0] = SONY_SD_DECODE_PARAM;
@@ -2954,13 +2955,12 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
       mem_start += sizeof(*last_sony_subcode);
       readahead_buffer = (unsigned char *) mem_start;
       mem_start += CD_FRAMESIZE_RAW;
+      sony_toc = (struct s_sony_session_toc *) mem_start;
+      mem_start += sizeof(struct s_sony_session_toc);
    }
 
 
-   for (i=0; i<MAX_TRACKS; i++)
-   {
-      disk_changed[i] = 1;
-   }
+   disk_changed = 1;
    
    return mem_start;
 }

@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 82
+SUBLEVEL = 83
 
 ARCH = i386
 
@@ -165,6 +165,7 @@ include/linux/version.h: $(CONFIGURATION) Makefile newversion
 	   echo \#define LINUX_COMPILE_DOMAIN \"`domainname`\"; \
 	 fi >> include/linux/version.h
 	@echo \#define LINUX_COMPILER \"`$(HOSTCC) -v 2>&1 | tail -1`\" >> include/linux/version.h
+	@echo \#define LINUX_VERSION_CODE `expr $(VERSION) \\* 65536 + $(PATCHLEVEL) \\* 256 + $(SUBLEVEL)` >> include/linux/version.h
 
 init/version.o: init/version.c include/linux/version.h
 	$(CC) $(CFLAGS) -DUTS_MACHINE='"$(ARCH)"' -c -o init/version.o init/version.c

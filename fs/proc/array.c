@@ -22,6 +22,9 @@
  *
  * Jeff Tranter      :  added BogoMips field to cpuinfo
  *                      <Jeff_Tranter@Mitel.COM>
+ *
+ * Bruno Haible      :  remove 4K limit for the maps file
+ * <haible@ma2s2.mathematik.uni-karlsruhe.de>
  */
 
 #include <linux/types.h>
@@ -48,6 +51,7 @@
 #ifdef CONFIG_DEBUG_MALLOC
 int get_malloc(char * buffer);
 #endif
+
 
 static int read_core(struct inode * inode, struct file * file,char * buf, int count)
 {
@@ -102,6 +106,7 @@ static struct file_operations proc_kcore_operations = {
 struct inode_operations proc_kcore_inode_operations = {
 	&proc_kcore_operations, 
 };
+
 
 #ifdef CONFIG_PROFILE
 
@@ -160,6 +165,7 @@ struct inode_operations proc_profile_inode_operations = {
 };
 
 #endif /* CONFIG_PROFILE */
+
 
 static int get_loadavg(char * buffer)
 {
@@ -549,21 +555,64 @@ static int get_statm(int pid, char * buffer)
 		       size, resident, share, trs, lrs, drs, dt);
 }
 
-static int get_maps(int pid, char *buf)
+/*
+ * The way we support synthetic files > 4K
+ * - without storing their contents in some buffer and
+ * - without walking through the entire synthetic file until we reach the
+ *   position of the requested data
+ * is to cleverly encode the current position in the file's f_pos field.
+ * There is no requirement that a read() call which returns `count' bytes
+ * of data increases f_pos by exactly `count'.
+ *
+ * This idea is Linus' one. Bruno implemented it.
+ */
+
+/*
+ * For the /proc/<pid>/maps file, we use fixed length records, each containing
+ * a single line.
+ */
+#define MAPS_LINE_LENGTH	1024
+#define MAPS_LINE_SHIFT		10
+/*
+ * f_pos = (number of the vma in the task->mm->mmap list) * MAPS_LINE_LENGTH
+ *         + (index into the line)
+ */
+#define MAPS_LINE_FORMAT	  "%08lx-%08lx %s %08lx %02x:%02x %lu\n"
+#define MAPS_LINE_MAX	49 /* sum of 8  1  8  1 4 1 8  1  2 1  2 1 10 1 */
+
+static int read_maps (int pid, struct file * file, char * buf, int count)
 {
-	int sz = 0;
-	struct task_struct **p = get_task(pid);
-	struct vm_area_struct *map;
+	struct task_struct ** p = get_task(pid);
+	char * destptr;
+	loff_t lineno;
+	int column;
+	struct vm_area_struct * map;
+	int i;
 
 	if (!p || !*p)
+		return -EINVAL;
+
+	if (count == 0)
 		return 0;
 
-	for(map = (*p)->mm->mmap; map != NULL; map = map->vm_next) {
-		char str[7], *cp = str;
+	/* decode f_pos */
+	lineno = file->f_pos >> MAPS_LINE_SHIFT;
+	column = file->f_pos & (MAPS_LINE_LENGTH-1);
+
+	/* quickly go to line lineno */
+	for (map = (*p)->mm->mmap, i = 0; map && (i < lineno); map = map->vm_next, i++)
+		continue;
+
+	destptr = buf;
+
+	for ( ; map ; ) {
+		/* produce the next line */
+		char line[MAPS_LINE_MAX+1];
+		char str[5], *cp = str;
 		int flags;
-		int end = sz + 80;	/* Length of line */
 		dev_t dev;
 		unsigned long ino;
+		int len;
 
 		flags = map->vm_flags;
 
@@ -572,12 +621,7 @@ static int get_maps(int pid, char *buf)
 		*cp++ = flags & VM_EXEC ? 'x' : '-';
 		*cp++ = flags & VM_SHARED ? 's' : 'p';
 		*cp++ = 0;
-		
-		if (end >= PAGE_SIZE) {
-			sprintf(buf+sz, "...\n");
-			break;
-		}
-		
+
 		if (map->vm_inode != NULL) {
 			dev = map->vm_inode->i_dev;
 			ino = map->vm_inode->i_ino;
@@ -586,16 +630,44 @@ static int get_maps(int pid, char *buf)
 			ino = 0;
 		}
 
-		sz += sprintf(buf+sz, "%08lx-%08lx %s %08lx %02x:%02x %lu\n",
+		len = sprintf(line, MAPS_LINE_FORMAT,
 			      map->vm_start, map->vm_end, str, map->vm_offset,
 			      MAJOR(dev),MINOR(dev), ino);
-		if (sz > end) {
-			printk("get_maps: end(%d) < sz(%d)\n", end, sz);
-			break;
+
+		if (column >= len) {
+			column = 0; /* continue with next line at column 0 */
+			lineno++;
+			map = map->vm_next;
+			continue;
 		}
+
+		i = len-column;
+		if (i > count)
+			i = count;
+		memcpy_tofs(destptr, line+column, i);
+		destptr += i; count -= i;
+		column += i;
+		if (column >= len) {
+			column = 0; /* next time: next line at column 0 */
+			lineno++;
+			map = map->vm_next;
+		}
+
+		/* done? */
+		if (count == 0)
+			break;
+
+		/* By writing to user space, we might have slept.
+		 * Stop the loop, to avoid a race condition.
+		 */
+		if (*p != current)
+			break;
 	}
-	
-	return sz;
+
+	/* encode f_pos */
+	file->f_pos = (lineno << MAPS_LINE_SHIFT) + column;
+
+	return destptr-buf;
 }
 
 extern int get_module_list(char *);
@@ -673,8 +745,6 @@ static int get_process_array(char * page, int pid, int type)
 			return get_stat(pid, page);
 		case PROC_PID_STATM:
 			return get_statm(pid, page);
-		case PROC_PID_MAPS:
-			return get_maps(pid, page);
 	}
 	return -EBADF;
 }
@@ -734,6 +804,52 @@ static struct file_operations proc_array_operations = {
 
 struct inode_operations proc_array_inode_operations = {
 	&proc_array_operations,	/* default base directory file-ops */
+	NULL,			/* create */
+	NULL,			/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	NULL,			/* readlink */
+	NULL,			/* follow_link */
+	NULL,			/* bmap */
+	NULL,			/* truncate */
+	NULL			/* permission */
+};
+
+static int arraylong_read (struct inode * inode, struct file * file, char * buf, int count)
+{
+	unsigned int pid = inode->i_ino >> 16;
+	unsigned int type = inode->i_ino & 0x0000ffff;
+
+	if (count < 0)
+		return -EINVAL;
+
+	switch (type) {
+		case PROC_PID_MAPS:
+			return read_maps(pid, file, buf, count);
+	}
+	return -EINVAL;
+}
+
+static struct file_operations proc_arraylong_operations = {
+	NULL,		/* array_lseek */
+	arraylong_read,
+	NULL,		/* array_write */
+	NULL,		/* array_readdir */
+	NULL,		/* array_select */
+	NULL,		/* array_ioctl */
+	NULL,		/* mmap */
+	NULL,		/* no special open code */
+	NULL,		/* no special release code */
+	NULL		/* can't fsync */
+};
+
+struct inode_operations proc_arraylong_inode_operations = {
+	&proc_arraylong_operations,	/* default base directory file-ops */
 	NULL,			/* create */
 	NULL,			/* lookup */
 	NULL,			/* link */

@@ -41,6 +41,10 @@ ENOSYS		= 38
 		.set	noreorder
 		.align 4
 handle_bottom_half:
+		/*
+		 * If your assembler breaks on the next line it's
+		 * time to update!
+		 */
 		lui	s0,%hi(_intr_count)
 		lw	s1,%lo(_intr_count)(s0)
 		mfc0	s3,CP0_STATUS			# Enable IRQs
@@ -286,7 +290,7 @@ poll_second:	li	t1,0x0f
 		.align	5
 spurious_interrupt:
 		/*
-		 * Nothing happend... (whistle)
+		 * Nothing happened... (whistle)
 		 */
 		lui	t1,%hi(_spurious_count)
 		lw	t0,%lo(_spurious_count)(t1)

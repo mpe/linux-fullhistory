@@ -369,6 +369,44 @@ static struct vm_operations_struct shm_vm_ops = {
 	shm_swap_in		/* swapin */
 };
 
+/* Insert shmd into the circular list shp->attaches */
+static inline void insert_attach (struct shmid_ds * shp, struct vm_area_struct * shmd)
+{
+	struct vm_area_struct * attaches;
+
+	if ((attaches = shp->attaches)) {
+		shmd->vm_next_share = attaches;
+		shmd->vm_prev_share = attaches->vm_prev_share;
+		shmd->vm_prev_share->vm_next_share = shmd;
+		attaches->vm_prev_share = shmd;
+	} else
+		shp->attaches = shmd->vm_next_share = shmd->vm_prev_share = shmd;
+}
+
+/* Remove shmd from circular list shp->attaches */
+static inline void remove_attach (struct shmid_ds * shp, struct vm_area_struct * shmd)
+{
+	if (shmd->vm_next_share == shmd) {
+		if (shp->attaches != shmd) {
+			printk("shm_close: shm segment (id=%ld) attach list inconsistent\n",
+				(shmd->vm_pte >> SHM_ID_SHIFT) & SHM_ID_MASK);
+			printk("shm_close: %d %08lx-%08lx %c%c%c%c %08lx %08lx\n",
+				shmd->vm_task->pid, shmd->vm_start, shmd->vm_end,
+				shmd->vm_flags & VM_READ ? 'r' : '-',
+				shmd->vm_flags & VM_WRITE ? 'w' : '-',
+				shmd->vm_flags & VM_EXEC ? 'x' : '-',
+				shmd->vm_flags & VM_SHARED ? 's' : 'p',
+				shmd->vm_offset, shmd->vm_pte);
+		}
+		shp->attaches = NULL;
+	} else {
+		if (shp->attaches == shmd)
+			shp->attaches = shmd->vm_next_share;
+		shmd->vm_prev_share->vm_next_share = shmd->vm_next_share;
+		shmd->vm_next_share->vm_prev_share = shmd->vm_prev_share;
+	}
+}
+
 /*
  * check range is unmapped, ensure page tables exist
  * mark page table entries with shm_sgn.
@@ -398,7 +436,7 @@ static int shm_map (struct vm_area_struct *shmd, int remap)
 
 	/* add new mapping */
 	insert_vm_struct(current, shmd);
-	merge_segments(current->mm->mmap);
+	merge_segments(current, shmd->vm_start, shmd->vm_end);
 
 	/* check that the range has page_tables */
 	for (tmp = shmd->vm_start; tmp < shmd->vm_end; tmp += PAGE_SIZE) {
@@ -475,12 +513,11 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		return -EINVAL;
 	}
 	if (!(shmflg & SHM_REMAP))
-		for (shmd = current->mm->mmap; shmd; shmd = shmd->vm_next)
-			if (!(addr >= shmd->vm_end || addr + shp->shm_segsz <= shmd->vm_start)) {
-				/* printk("shmat() -> EINVAL because the interval [0x%lx,0x%lx) intersects an already mapped interval [0x%lx,0x%lx).\n",
-					addr, addr + shp->shm_segsz, shmd->vm_start, shmd->vm_end); */
-				return -EINVAL;
-			}
+		if ((shmd = find_vma_intersection(current, addr, addr + shp->shm_segsz))) {
+			/* printk("shmat() -> EINVAL because the interval [0x%lx,0x%lx) intersects an already mapped interval [0x%lx,0x%lx).\n",
+				addr, addr + shp->shm_segsz, shmd->vm_start, shmd->vm_end); */
+			return -EINVAL;
+		}
 
 	if (ipcperms(&shp->shm_perm, shmflg & SHM_RDONLY ? S_IRUGO : S_IRUGO|S_IWUGO))
 		return -EACCES;
@@ -503,7 +540,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	shmd->vm_flags = VM_SHM | VM_MAYSHARE | VM_SHARED
 			 | VM_MAYREAD | VM_MAYEXEC | VM_READ | VM_EXEC
 			 | ((shmflg & SHM_RDONLY) ? 0 : VM_MAYWRITE | VM_WRITE);
-	shmd->vm_next_share = NULL;
+	shmd->vm_next_share = shmd->vm_prev_share = NULL;
 	shmd->vm_inode = NULL;
 	shmd->vm_offset = 0;
 	shmd->vm_ops = &shm_vm_ops;
@@ -516,8 +553,8 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		return err;
 	}
 
-	shmd->vm_next_share = shp->attaches;
-	shp->attaches = shmd;
+	insert_attach(shp,shmd);  /* insert shmd into shp->attaches */
+
 	shp->shm_lpid = current->pid;
 	shp->shm_atime = CURRENT_TIME;
 
@@ -537,8 +574,7 @@ static void shm_open (struct vm_area_struct *shmd)
 		printk("shm_open: unused id=%d PANIC\n", id);
 		return;
 	}
-	shmd->vm_next_share = shp->attaches;
-	shp->attaches = shmd;
+	insert_attach(shp,shmd);  /* insert shmd into shp->attaches */
 	shp->shm_nattch++;
 	shp->shm_atime = CURRENT_TIME;
 	shp->shm_lpid = current->pid;
@@ -552,7 +588,6 @@ static void shm_open (struct vm_area_struct *shmd)
  */
 static void shm_close (struct vm_area_struct *shmd)
 {
-	struct vm_area_struct **shmdp;
 	struct shmid_ds *shp;
 	int id;
 
@@ -561,21 +596,7 @@ static void shm_close (struct vm_area_struct *shmd)
 	/* remove from the list of attaches of the shm segment */
 	id = (shmd->vm_pte >> SHM_ID_SHIFT) & SHM_ID_MASK;
 	shp = shm_segs[id];
-	for (shmdp = &shp->attaches; *shmdp; shmdp = &(*shmdp)->vm_next_share)
-		if (*shmdp == shmd) {
-			*shmdp = shmd->vm_next_share;
-			goto found;
-		}
-	printk("shm_close: shm segment (id=%d) attach list inconsistent\n",id);
-	printk("shm_close: %d %08lx-%08lx %c%c%c%c %08lx %08lx\n",
-		shmd->vm_task->pid, shmd->vm_start, shmd->vm_end,
-		shmd->vm_flags & VM_READ ? 'r' : '-',
-		shmd->vm_flags & VM_WRITE ? 'w' : '-',
-		shmd->vm_flags & VM_EXEC ? 'x' : '-',
-		shmd->vm_flags & VM_SHARED ? 's' : 'p',
-		shmd->vm_offset, shmd->vm_pte);
-
- found:
+	remove_attach(shp,shmd);  /* remove from shp->attaches */
   	shp->shm_lpid = current->pid;
 	shp->shm_dtime = CURRENT_TIME;
 	if (--shp->shm_nattch <= 0 && shp->shm_perm.mode & SHM_DEST)
@@ -714,7 +735,8 @@ int shm_swap (int prio)
 		swap_free (swap_nr);
 		return 0;
 	}
-	for (shmd = shp->attaches; shmd; shmd = shmd->vm_next_share) {
+	for (shmd = shp->attaches; ; ) {
+	    do {
 		unsigned long tmp, *pte;
 		if ((shmd->vm_pte >> SHM_ID_SHIFT & SHM_ID_MASK) != id) {
 			printk ("shm_swap: id=%ld does not match shmd->vm_pte.id=%ld\n", id, shmd->vm_pte >> SHM_ID_SHIFT & SHM_ID_MASK);
@@ -743,6 +765,10 @@ int shm_swap (int prio)
 		mem_map[MAP_NR(page)]--;
 		shmd->vm_task->mm->rss--;
 		invalid++;
+	    /* continue looping through circular list */
+	    } while (0);
+	    if ((shmd = shmd->vm_next_share) == shp->attaches)
+		break;
 	}
 
 	if (mem_map[MAP_NR(page)] != 1)

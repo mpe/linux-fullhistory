@@ -94,7 +94,7 @@
 #define PFN(addr,pagesizeshift) (((addr) & ((1 << (pagesizeshift))-1)) << 6)
 
 /*
- * Macros to access the system control copprocessor
+ * Macros to access the system control coprocessor
  */
 #define read_32bit_cp0_register(source)                                        \
 ({ int __res;                                                                  \

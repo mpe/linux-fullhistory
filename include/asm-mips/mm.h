@@ -6,7 +6,7 @@
 /*
  * Note that we shift the lower 32bits of each EntryLo[01] entry
  * 6 bits to the left. That way we can convert the PFN into the
- * physical address by a single 'and' operation and gain 6 aditional
+ * physical address by a single 'and' operation and gain 6 additional
  * bits for storing information which isn't present in a normal
  * MIPS page table.
  * I've also changed the naming of some bits so that they conform

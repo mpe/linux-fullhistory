@@ -2,7 +2,7 @@
  *  linux/kernel/aha1542.c
  *
  *  Copyright (C) 1992  Tommy Thorn
- *  Copyright (C) 1993, 1994 Eric Youngdale
+ *  Copyright (C) 1993, 1994, 1995 Eric Youngdale
  *
  *  Modified by Eric Youngdale
  *        Use request_irq and request_dma to help prevent unexpected conflicts
@@ -1093,7 +1093,6 @@ static int aha1542_restart(struct Scsi_Host * shost)
 int aha1542_abort(Scsi_Cmnd * SCpnt)
 {
 #if 0
-  int intval[3];
   unchar ahacmd = CMD_START_SCSI;
   unsigned long flags;
   struct mailbox * mb;
@@ -1119,8 +1118,7 @@ int aha1542_abort(Scsi_Cmnd * SCpnt)
   if(mb[mbi].status) {
     printk("Lost interrupt discovered on irq %d - attempting to recover\n", 
 	   SCpnt->host->irq);
-    intval[0] = SCpnt->host->irq;
-    aha1542_intr_handle((int) &intval[2]);
+    aha1542_intr_handle(SCpnt->host->irq, NULL);
     return 0;
   }
 

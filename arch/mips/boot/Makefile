@@ -10,7 +10,7 @@
 #
 
 #
-# Fake compessed boot
+# Fake compressed boot
 #
 zImage:	$(CONFIGURE) $(TOPDIR)/vmlinux
 	ln -fs $(TOPDIR)/vmlinux zImage

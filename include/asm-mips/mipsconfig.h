@@ -13,7 +13,7 @@
 #define __ASM_MIPS_MIPS_CONFIG_H
 
 /*
- * This is the virtual adress to which all ports are being mapped.
+ * This is the virtual address to which all ports are being mapped.
  * Must be a value that can be load with a lui instruction.
  */
 #define PORT_BASE		0xe0000000
@@ -31,7 +31,7 @@
  * The virtual address where we'll map the pagetables
  * For a base address of 0xe3000000 this is 0xe338c000
  * For a base address of 0xe4000000 this is 0xe4390000
- * FIXME: Gas misscomputes the following expression!
+ * FIXME: Gas miscomputes the following expression!
 #define TLB_ROOT		(TLBMAP + (TLBMAP >> (12-2)))
  */
 #define TLB_ROOT		0xe4390000

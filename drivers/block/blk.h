@@ -44,6 +44,9 @@
 
 extern unsigned long cdu31a_init(unsigned long mem_start, unsigned long mem_end);
 extern unsigned long mcd_init(unsigned long mem_start, unsigned long mem_end);
+#ifdef CONFIG_AZTCD
+extern unsigned long aztcd_init(unsigned long mem_start, unsigned long mem_end);
+#endif
 #ifdef CONFIG_BLK_DEV_HD
 extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
 #endif
@@ -166,6 +169,14 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_NAME "Mitsumi CD-ROM"
 /* #define DEVICE_INTR do_mcd */
 #define DEVICE_REQUEST do_mcd_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == AZTECH_CDROM_MAJOR)
+
+#define DEVICE_NAME "Aztech CD-ROM"
+#define DEVICE_REQUEST do_aztcd_request
 #define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)

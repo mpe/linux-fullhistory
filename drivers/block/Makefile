@@ -34,6 +34,11 @@ OBJS := $(OBJS) mcd.o
 SRCS := $(SRCS) mcd.c
 endif
 
+ifdef CONFIG_AZTCD
+OBJS := $(OBJS) aztcd.o
+SRCS := $(SRCS) aztcd.c
+endif
+
 ifdef CONFIG_SBPCD
 OBJS := $(OBJS) sbpcd.o
 SRCS := $(SRCS) sbpcd.c

@@ -184,6 +184,7 @@ static int sysv_add_entry(struct inode * dir,
 			}
 		} else {
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
+			dir->i_dirt = 1;
 			for (i = 0; i < SYSV_NAMELEN ; i++)
 				de->name[i] = (i < namelen) ? name[i] : 0;
 			mark_buffer_dirty(bh, 1);

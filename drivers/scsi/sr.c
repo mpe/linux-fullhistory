@@ -1,6 +1,6 @@
 /*
  *      sr.c Copyright (C) 1992 David Giller
- *	     Copyright (C) 1993, 1994 Eric Youngdale
+ *	     Copyright (C) 1993, 1994, 1995 Eric Youngdale
  *
  *      adapted from:
  *	sd.c Copyright (C) 1992 Drew Eckhardt 
@@ -12,6 +12,9 @@
  *       Modified by Eric Youngdale ericy@cais.com to
  *       add scatter-gather, multiple outstanding request, and other
  *       enhancements.
+ *
+ *	 Modified by Eric Youngdale eric@aib.com to support loadable
+ *	 low-level scsi drivers.
  */
 
 #include <linux/fs.h>
@@ -31,7 +34,7 @@
 #include "constants.h"
 
 #define MAX_RETRIES 3
-#define SR_TIMEOUT 5000
+#define SR_TIMEOUT 15000
 
 static void sr_init(void);
 static void sr_finish(void);
@@ -236,14 +239,16 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 		}
 	    
 		if (SCpnt->sense_buffer[2] == ILLEGAL_REQUEST) {
-			printk("CD-ROM error: Drive reports ILLEGAL REQUEST.\n");
+			printk("CD-ROM error: ");
+			print_sense("sr", SCpnt);
+			printk("command was: ");
+			print_command(SCpnt->cmnd);
 			if (scsi_CDs[DEVICE_NR(SCpnt->request.dev)].ten) {
 				scsi_CDs[DEVICE_NR(SCpnt->request.dev)].ten = 0;
 				requeue_sr_request(SCpnt);
 				result = 0;
 				return;
 			} else {
-			  printk("CD-ROM error: Drive reports %d.\n", SCpnt->sense_buffer[2]);				
 			  SCpnt = end_scsi_request(SCpnt, 0, this_count);
 			  requeue_sr_request(SCpnt); /* Do next request */
 			  return;
@@ -958,8 +963,14 @@ void sr_finish()
 		  /* If we have already seen this, then skip it.  Comes up
 		     with loadable modules. */
 		  if (scsi_CDs[i].capacity) continue;
+		  scsi_CDs[i].capacity = 0x1fffff;
+		  scsi_CDs[i].sector_size = 2048;  /* A guess, just in case */
+		  scsi_CDs[i].needs_sector_size = 1;
+#if 0
+		  /* seems better to leave this for later */
 		  get_sectorsize(i);
 		  printk("Scd sectorsize = %d bytes.\n", scsi_CDs[i].sector_size);
+#endif
 		  scsi_CDs[i].use = 1;
 		  scsi_CDs[i].ten = 1;
 		  scsi_CDs[i].remap = 1;

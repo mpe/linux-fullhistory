@@ -1218,7 +1218,7 @@ static void ide_intr (int irq, struct pt_regs *regs)
 
 #if SUPPORT_SHARING_IRQ
 /* entry point for all interrupts on ide0/ide1 when sharing_single_irq==1 */
-static void ide_shared_intr (int irq)
+static void ide_shared_intr (int irq, struct pt_regs * regs)
 {
 	IDE_INTR(current_hwif);
 }

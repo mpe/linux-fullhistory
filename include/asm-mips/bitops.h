@@ -5,14 +5,14 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (c) 1994 by Ralf Baechle
+ * Copyright (c) 1994, 1995  Ralf Baechle
  */
 #ifndef __ASM_MIPS_BITOPS_H
 #define __ASM_MIPS_BITOPS_H
 
-#include <asm/mipsregs.h>
+#ifdef __R4000__
 
-#if defined(__R4000__)
+#include <asm/mipsregs.h>
 
 /*
  * The following functions will only work for the R4000!
@@ -62,6 +62,90 @@ extern __inline__ int change_bit(int nr, void *addr)
 	return retval;
 }
 
+#else /* !defined(__R4000__) */
+
+#include <asm/system.h>
+
+#ifdef __KERNEL__
+/*
+ * Only disable interrupt for kernelmode stuff to keep some
+ * usermode stuff alive
+ */
+#define __flags unsigned long flags
+#define __cli() cli()
+#define __save_flags(x) save_flags(x)
+#define __restore_flags(x) restore_flags(x)
+#endif /* __KERNEL__ */
+
+extern __inline__ int set_bit(int nr, void * addr)
+{
+	int	mask, retval;
+	int	*a = addr;
+	__flags;
+
+	a += nr >> 5;
+	mask = 1 << (nr & 0x1f);
+	__save_flags(flags);
+	__cli();
+	retval = (mask & *a) != 0;
+	*a |= mask;
+	__restore_flags(flags);
+
+	return retval;
+}
+
+extern __inline__ int clear_bit(int nr, void * addr)
+{
+	int	mask, retval;
+	int	*a = addr;
+	__flags;
+
+	a += nr >> 5;
+	mask = 1 << (nr & 0x1f);
+	__save_flags(flags);
+	__cli();
+	retval = (mask & *a) != 0;
+	*a &= ~mask;
+	__restore_flags(flags);
+
+	return retval;
+}
+
+extern __inline__ int change_bit(int nr, void * addr)
+{
+	int	mask, retval;
+	int	*a = addr;
+	__flags;
+
+	a += nr >> 5;
+	mask = 1 << (nr & 0x1f);
+	__save_flags(flags);
+	__cli();
+	retval = (mask & *a) != 0;
+	*a ^= mask;
+	__restore_flags(flags);
+
+	return retval;
+}
+
+#undef __flags
+#undef __cli()
+#undef __save_flags(x)
+#undef __restore_flags(x)
+
+#endif /* !defined(__R4000__) */
+
+extern __inline__ int test_bit(int nr, void *addr)
+{
+	int	mask;
+	unsigned long	*a;
+
+	a = addr;
+	addr += nr >> 5;
+	mask = 1 << (nr & 0x1f);
+	return ((mask & *a) != 0);
+}
+
 extern __inline__ int find_first_zero_bit (void *addr, unsigned size)
 {
 	int res;
@@ -86,36 +170,14 @@ extern __inline__ int find_first_zero_bit (void *addr, unsigned size)
 		".set\tat\n\t"
 		".set\treorder\n"
 		"2:"
-		: "=d" (res)
-		: "d" ((unsigned int) 0xffffffff),
-		  "d" (size),
+		: "=r" (res)
+		: "r" ((unsigned int) 0xffffffff),
+		  "r" (size),
 		  "0" ((signed int) 0),
-		  "d" (addr)
+		  "r" (addr)
 		: "$1");
 
 	return res;
-}
-
-#else /* !defined(__R4000__) */
-
-#define __USE_PORTABLE_STRINGS_H
-
-#define __USE_GENERIC_set_bit
-#define __USE_GENERIC_clear_bit
-#define __USE_GENERIC_change_bit
-#define __USE_GENERIC_find_first_zero_bit
-
-#endif /* !defined(__R4000__) */
-
-extern __inline__ int test_bit(int nr, void *addr)
-{
-	int	mask;
-	unsigned long	*a;
-
-	a = addr;
-	addr += nr >> 5;
-	mask = 1 << (nr & 0x1f);
-	return ((mask & *a) != 0);
 }
 
 extern __inline__ int find_next_zero_bit (void * addr, int size, int offset)
@@ -182,9 +244,5 @@ extern __inline__ unsigned long ffz(unsigned long word)
 
 	return __res;
 }
-
-#ifdef __USE_PORTABLE_BITOPS_H
-#include <asm-generic/bitops.h>
-#endif
 
 #endif /* __ASM_MIPS_BITOPS_H */

@@ -49,6 +49,7 @@
 #define TCP_TIMEOUT_LEN	(15*60*HZ) /* should be about 15 mins		*/
 #define TCP_TIMEWAIT_LEN (60*HZ) /* how long to wait to successfully 
 				  * close the socket, about 60 seconds	*/
+#define TCP_FIN_TIMEOUT (3*60*HZ) /* BSD style FIN_WAIT2 deadlock breaker */				  
 #define TCP_ACK_TIME	(3*HZ)	/* time to delay before sending an ACK	*/
 #define TCP_DONE_TIME	250	/* maximum time to wait before actually
 				 * destroying a socket			*/
@@ -69,9 +70,15 @@
  *	TCP option
  */
  
-#define TCPOPT_NOP		1
-#define TCPOPT_EOL		0
-#define TCPOPT_MSS		2
+#define TCPOPT_NOP		1	/* Padding */
+#define TCPOPT_EOL		0	/* End of options */
+#define TCPOPT_MSS		2	/* Segment size negotiating */
+/*
+ *	We don't use these yet, but they are for PAWS and big windows
+ */
+#define TCPOPT_WINDOW		3	/* Window scaling */
+#define TCPOPT_TIMESTAMP	8	/* Better RTT estimations/PAWS */
+
 
 /*
  * The next routines deal with comparing 32 bit unsigned ints

@@ -335,9 +335,8 @@ struct cdrom_read_audio
 	};
 
 /*
- * preliminary extension for obtaining multi session info
- * (still may change if other drivers will use it, too):
- * this has to be the "arg" of the CDROMMULTISESSION ioctl.
+ * this has to be the "arg" of the CDROMMULTISESSION ioctl
+ * for obtaining multi session info.
  * The returned "addr" is valid only if "xa_flag" is true.
  */
 struct cdrom_multisession
@@ -411,12 +410,8 @@ struct cdrom_multisession
 #define	CDROMEJECT_SW		0x530f		/* arg: 0 or 1 */
  
 /*
- * preliminary extension for obtaining the start-of-last-session
- * address of multi session disks
- * currently used by sbpcd.c
- * (still may change if more drivers will use it).
+ * obtain the start-of-last-session address of multi session disks
  */
-#define	CDROMMULTISESSION_SYS	0x5310 /* internal use only (linux/fs/isofs/inode.c) */
-#define	CDROMMULTISESSION	0x5311 /* "user" interface (arg has to be a "cdrom_multisession" struct) */
+#define	CDROMMULTISESSION	0x5310 /* (struct cdrom_multisession) */
 
 #endif  _LINUX_CDROM_H

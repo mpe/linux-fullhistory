@@ -100,6 +100,13 @@ static char *version =
 #define COUNT_LOOPS
  */
 #endif
+static int bnc, utp;
+/*
+ * Force media with insmod:
+ *	insmod de620.o bnc=1
+ * or
+ *	insmod de620.o utp=1
+ */
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -107,6 +114,7 @@ static char *version =
 #include <linux/fcntl.h>
 #include <linux/string.h>
 #include <linux/interrupt.h>
+#include <linux/ioport.h>
 #include <asm/io.h>
 #include <linux/in.h>
 #include <linux/ptrace.h>
@@ -192,7 +200,6 @@ static int	read_eeprom(void);
 #define DE620_RX_START_PAGE 12		/* 12 pages (=3k) reserved for tx */
 #define DEF_NIC_CMD IRQEN | ICEN | DS1
 
-extern struct device *irq2dev_map[16];
 unsigned int de620_debug = DE620_DEBUG;
 
 static volatile byte	NIC_Cmd;
@@ -719,6 +726,11 @@ adapter_init(struct device *dev)
 		EIPRegister = NCTL0 | NIS0;
 	}
 
+	if (utp)
+		EIPRegister = NCTL0 | NIS0;
+	if (bnc)
+		EIPRegister = NCTL0;
+
 	de620_send_command(W_CR | RNOP | CLEAR);
 	de620_send_command(W_CR | RNOP);
 
@@ -811,6 +823,12 @@ de620_probe(struct device *dev)
 		printk(" not identified in the printer port\n");
 		return ENODEV;
 	}
+
+	if (check_region(DE620_IO, 3)) {
+		printk(", port 0x%x busy\n", DE620_IO);
+		return EBUSY;
+	}
+	request_region(DE620_IO, 3, "de620");
 
 	/* else, got it! */
 	printk(", Ethernet Address: %2.2X",
@@ -973,6 +991,7 @@ cleanup_module(void)
 		printk("de620: device busy, remove delayed\n");
 	else
 		unregister_netdev(&de620_dev);
+	release_region(DE620_IO, 3);
 }
 #endif /* MODULE */
 

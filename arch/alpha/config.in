@@ -9,6 +9,7 @@ bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD n
 bool 'Normal harddisk support' CONFIG_BLK_DEV_HD n
 bool 'XT harddisk support' CONFIG_BLK_DEV_XD n
 bool 'Networking support' CONFIG_NET n
+bool 'PCI alpha motherboard' CONFIG_PCI n
 bool 'System V IPC' CONFIG_SYSVIPC n
 bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
 

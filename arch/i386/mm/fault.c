@@ -14,6 +14,7 @@
 #include <linux/types.h>
 #include <linux/ptrace.h>
 #include <linux/mman.h>
+#include <linux/mm.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -33,12 +34,9 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 
 	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
-	for (vma = current->mm->mmap ; ; vma = vma->vm_next) {
-		if (!vma)
-			goto bad_area;
-		if (vma->vm_end > address)
-			break;
-	}
+	vma = find_vma(current, address);
+	if (!vma)
+		goto bad_area;
 	if (vma->vm_start <= address)
 		goto good_area;
 	if (!(vma->vm_flags & VM_GROWSDOWN))

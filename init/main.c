@@ -85,6 +85,7 @@ extern void eth_setup(char *str, int *ints);
 extern void xd_setup(char *str, int *ints);
 extern void floppy_setup(char *str, int *ints);
 extern void mcd_setup(char *str, int *ints);
+extern void aztcd_setup(char *str, int *ints);
 extern void st_setup(char *str, int *ints);
 extern void st0x_setup(char *str, int *ints);
 extern void tmc8xx_setup(char *str, int *ints);
@@ -216,6 +217,9 @@ struct {
 #endif
 #ifdef CONFIG_MCD
 	{ "mcd=", mcd_setup },
+#endif
+#ifdef CONFIG_AZTCD
+	{ "aztcd=", aztcd_setup },
 #endif
 #ifdef CONFIG_SOUND
 	{ "sound=", sound_setup },
@@ -385,7 +389,6 @@ asmlinkage void start_kernel(void)
 	memory_start = kmalloc_init(memory_start,memory_end);
 	sti();
 	calibrate_delay();
-	cli();
 	memory_start = chr_dev_init(memory_start,memory_end);
 	memory_start = blk_dev_init(memory_start,memory_end);
 	sti();

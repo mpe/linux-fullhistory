@@ -550,17 +550,17 @@ void burst_bridge(unsigned char bus,unsigned char dev_fn,unsigned char pos, int 
 	for (i=0;i<OPTIMISATION_NUM;i++)
 	{
 		printk("    %s : ",optimisation[i].type);
-		if (bridge_mapping[pos+i].adress==0) printk("Not supported.");
+		if (bridge_mapping[pos+i].address==0) printk("Not supported.");
 		else {
 			pcibios_read_config_byte(
-				bus, dev_fn, bridge_mapping[pos+i].adress, &val);
+				bus, dev_fn, bridge_mapping[pos+i].address, &val);
 			if ((val & bridge_mapping[pos+i].mask)==bridge_mapping[pos+i].value) 
 			{
 				printk("%s.",optimisation[i].on);
 				if (turn_on==0) 
 				{
 				pcibios_write_config_byte(
-					bus, dev_fn, bridge_mapping[pos+i].adress,
+					bus, dev_fn, bridge_mapping[pos+i].address,
 					(val | bridge_mapping[pos+i].mask) -
 					bridge_mapping[pos+i].value);
 				printk("Changed! now %s.",optimisation[i].off);
@@ -570,7 +570,7 @@ void burst_bridge(unsigned char bus,unsigned char dev_fn,unsigned char pos, int 
 				if (turn_on==1) 
 				{
 				pcibios_write_config_byte(
-					bus, dev_fn, bridge_mapping[pos+i].adress,
+					bus, dev_fn, bridge_mapping[pos+i].address,
 					(val & (0xff-bridge_mapping[pos+i].mask)) +
 					bridge_mapping[pos+i].value);
 				printk("Changed! now %s.",optimisation[i].on);
@@ -644,7 +644,7 @@ void add_pci_resource(unsigned char bus, unsigned char dev_fn)
 	{
 		printk("Unknown PCI device. PCI Vendor id=%x. PCI Device id=%x.\n",
 			vendor_id & 0xffff,device_id & 0xffff);
-		printk("PLEASE MAIL POTTER@CAO-VLSI.IBP.FR your harware description and /proc/pci.\n");
+		printk("PLEASE MAIL POTTER@CAO-VLSI.IBP.FR your hardware description and /proc/pci.\n");
 		return;
 	}
 	/*

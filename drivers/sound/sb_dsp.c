@@ -131,7 +131,7 @@ sb_dsp_command (unsigned char val)
 }
 
 void
-sbintr (int unit)
+sbintr (int unit, struct pt_regs *regs)
 {
   int             status;
 
@@ -803,7 +803,7 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 
   if (sbc_major >= 3)
     {
-#ifndef SCO
+#if !defined(SCO) && !defined(EXCLUDE_AUDIO)
 #  ifdef __SGNXPRO__
       if (mixer_type == 2)
 	{

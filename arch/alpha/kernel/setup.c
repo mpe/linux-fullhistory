@@ -65,12 +65,12 @@ static unsigned long find_end_memory(void)
 	cluster = memdesc->cluster;
 	for (i = memdesc->numclusters ; i > 0; i--, cluster++) {
 		unsigned long tmp;
-		if (cluster->usage & 1)
-			continue;
 		tmp = (cluster->start_pfn + cluster->numpages) << PAGE_SHIFT;
 		if (tmp > high)
 			high = tmp;
 	}
+	/* round it up to an even number of pages.. */
+	high = (high + PAGE_SIZE) & (PAGE_MASK*2);
 	return PAGE_OFFSET + high;
 }
 

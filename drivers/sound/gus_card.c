@@ -33,7 +33,7 @@
 
 #include "gus_hw.h"
 
-void            gusintr (int);
+void            gusintr (int, struct pt_regs * regs);
 
 int             gus_base, gus_irq, gus_dma;
 extern int      gus_wave_volume;
@@ -118,7 +118,7 @@ probe_gus (struct address_info *hw_config)
 }
 
 void
-gusintr (int irq)
+gusintr (int irq, struct pt_regs * regs)
 {
   unsigned char   src;
 

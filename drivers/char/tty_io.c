@@ -1443,7 +1443,8 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			arg = get_fs_long((unsigned long *) arg);
 			return tty_set_ldisc(tty, arg);
 		case TIOCLINUX:
-			if (current->tty != tty && !suser())
+			if ((current->tty != tty || 
+			     tty->driver.type != TTY_DRIVER_TYPE_CONSOLE) && !suser())
 				return -EPERM;
 			retval = verify_area(VERIFY_READ, (void *) arg, 1);
 			if (retval)

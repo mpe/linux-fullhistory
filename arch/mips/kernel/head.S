@@ -306,7 +306,7 @@ setup_paging:
 		mtc0	zero,CP0_INDEX
 		la	t0,TLB_ROOT
 		dmtc0	t0,CP0_ENTRYHI
-		li	t0,_swapper_pg_dir
+		la	t0,_swapper_pg_dir
 		srl	t0,t0,6
 		ori	t0,t0,MODE_ALIAS	# uncachable, dirty, valid
 		dmtc0	t0,CP0_ENTRYLO0
@@ -315,8 +315,9 @@ setup_paging:
 		/*
 		 * Make page zero unaccessible to catch zero references
 		 */
+		la	t0,_pg0
 		li	t0,KERNELBASE
-		addiu	t0,_pg0
+		addu	t0,t1
 		sw	zero,(t0)
 		/*
 		 * Load the context register with a value that allows
@@ -437,7 +438,7 @@ final:
 
 		.data
 /*
- * Instead of Intel's strage and unportable segment descriptor magic
+ * Instead of Intel's strange and unportable segment descriptor magic
  * we difference user and kernel space by their address.
  * Kernel space (== physical memory) is mapped at KSEG[01],
  * User space is mapped at 0x0.
@@ -446,7 +447,7 @@ final:
 _segment_fs:	.word	KERNEL_DS
 
 /*
- * Inital mapping tables for supported Mips boards.
+ * Initial mapping tables for supported Mips boards.
  * First item is always the number of wired TLB entries,
  * following by EntryHi/EntryLo pairs and page mask.
  * Since everything must be quad-aligned (8) we insert
@@ -501,7 +502,7 @@ map0_tyne: 	.word   3			# no. of wired TLB entries
  * Initial mapping for ACER PICA-61 boards.
  * FIXME: These are rather preliminary since many drivers,
  * such as serial, parallel, scsi and ethernet need some
- * changes to distuingish between "local" (built-in) and
+ * changes to distinguish between "local" (built-in) and
  * "optional" (ISA/PCI) I/O hardware.
  * Local video ram is mapped to the same location as the
  * bios maps it to. Console driver has been changed

@@ -695,8 +695,8 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
 
     buff = get_board_data((uint)base, gc->IRQ, gc->scsi_id[3]);
 
-    if(!(strncmp("PM2322", &buff[16], 6) || strncmp("PM3021", &buff[16], 6)
-       || strncmp("PM3222", &buff[16], 6) || strncmp("PM3224", &buff[16], 6)))
+    if(strncmp("PM2322", &buff[16], 6) && strncmp("PM3021", &buff[16], 6)
+       && strncmp("PM3222", &buff[16], 6) && strncmp("PM3224", &buff[16], 6))
       gc->MAX_CHAN = 0;
     
     if (gc->MAX_CHAN) {
@@ -732,7 +732,9 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
 	sh->can_queue = ntohs(gc->queuesiz) / (gc->MAX_CHAN + 1);
 
 	if (gc->OCS_enabled == TRUE) {
-	    sh->cmd_per_lun = sh->can_queue/C_P_L_DIV; 
+	    sh->cmd_per_lun = sh->can_queue/C_P_L_DIV;
+            if (sh->cmd_per_lun < 2)
+                sh->cmd_per_lun = 2;
 	} else {
 	    sh->cmd_per_lun = 1;
 	}

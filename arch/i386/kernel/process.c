@@ -53,6 +53,8 @@ asmlinkage int sys_idle(void)
  */
 void start_thread(struct pt_regs * regs, unsigned long eip, unsigned long esp)
 {
+	regs->cs = USER_CS;
+	regs->ds = regs->es = regs->ss = regs->fs = regs->gs = USER_DS;
 	regs->eip = eip;
 	regs->esp = esp;
 }

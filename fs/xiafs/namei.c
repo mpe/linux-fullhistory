@@ -356,6 +356,7 @@ int xiafs_mkdir(struct inode * dir, const char * name, int len, int mode)
     inode->i_op = &xiafs_dir_inode_operations;
     inode->i_size = XIAFS_ZSIZE(dir->i_sb);
     inode->i_atime = inode->i_ctime = inode->i_mtime = CURRENT_TIME;
+    inode->i_dirt = 1;
     dir_block = xiafs_bread(inode,0,1);
     if (!dir_block) {
         iput(dir);

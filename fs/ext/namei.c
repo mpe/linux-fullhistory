@@ -285,6 +285,7 @@ printk ("ext_add_entry : creating next block\n");
 				de->rec_len = rec_len;
 			}
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
+			dir->i_dirt = 1;
 			de->name_len = namelen;
 			for (i=0; i < namelen ; i++)
 				de->name[i] = name[i];

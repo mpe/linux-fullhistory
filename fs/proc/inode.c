@@ -205,9 +205,12 @@ void proc_read_inode(struct inode * inode)
 		case PROC_PID_CMDLINE:
 		case PROC_PID_STAT:
 		case PROC_PID_STATM:
-		case PROC_PID_MAPS:
 			inode->i_mode = S_IFREG | S_IRUGO;
 			inode->i_op = &proc_array_inode_operations;
+			return;
+		case PROC_PID_MAPS:
+			inode->i_mode = S_IFIFO | S_IRUGO;
+			inode->i_op = &proc_arraylong_inode_operations;
 			return;
 	}
 	switch (ino >> 8) {

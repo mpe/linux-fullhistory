@@ -1,14 +1,19 @@
 /*
  *	sd.c Copyright (C) 1992 Drew Eckhardt 
- *	     Copyright (C) 1993, 1994 Eric Youngdale
- *	Linux scsi disk driver by
- *		Drew Eckhardt 
+ *	     Copyright (C) 1993, 1994, 1995 Eric Youngdale
+ *
+ *	Linux scsi disk driver
+ *		Initial versions: Drew Eckhardt 
+ *		Subsequent revisions: Eric Youngdale
  *
  *	<drew@colorado.edu>
  *
  *       Modified by Eric Youngdale ericy@cais.com to
  *       add scatter-gather, multiple outstanding request, and other
  *       enhancements.
+ *
+ *	 Modified by Eric Youngdale eric@aib.com to support loadable
+ *	 low-level scsi drivers.
  */
 
 #include <linux/fs.h>
@@ -80,6 +85,12 @@ static int sd_open(struct inode * inode, struct file * filp)
 	if(target >= sd_template.dev_max || !rscsi_disks[target].device)
 	  return -ENXIO;   /* No such device */
 	
+	/*
+	 * See if we are requesting a non-existant partition.
+	 */
+	if(sd_sizes[MINOR(inode->i_rdev)] == 0)
+	  return -ENXIO;
+
 /* Make sure that only one process can do a check_change_disk at one time.
  This is also used to lock out further access when the partition table is being re-read. */
 

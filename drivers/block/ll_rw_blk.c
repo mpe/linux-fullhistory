@@ -547,6 +547,9 @@ long blk_dev_init(long mem_start, long mem_end)
 #ifdef CONFIG_MCD
 	mem_start = mcd_init(mem_start,mem_end);
 #endif
+#ifdef CONFIG_AZTCD
+        mem_start = aztcd_init(mem_start,mem_end);
+#endif
 #ifdef CONFIG_BLK_DEV_FD
 	floppy_init();
 #else

@@ -44,12 +44,9 @@ asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr,
 
 	if (mmcsr == 1)
 		goto bad_area;
-	for (vma = current->mm->mmap ; ; vma = vma->vm_next) {
-		if (!vma)
-			goto bad_area;
-		if (vma->vm_end > address)
-			break;
-	}
+	vma = find_vma(current, address);
+	if (!vma)
+		goto bad_area;
 	if (vma->vm_start <= address)
 		goto good_area;
 	if (!(vma->vm_flags & VM_GROWSDOWN))

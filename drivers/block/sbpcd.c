@@ -153,11 +153,11 @@
  *       experiments by Serge Robyns.
  *       First attempts to support the TEAC CD-55A drives; but still not
  *       usable yet.
- *       Implemented the CDROMMULTISESSION and CDROMMULTISESSION_SYS ioctls;
- *       this is an attempt to handle multi session CDs more "transparent"
- *       (redirection handling has to be done within the isofs routines, and
- *       only for the special purpose of obtaining the "right" volume
- *       descriptor; accesses to the raw device should not get redirected).
+ *       Implemented the CDROMMULTISESSION ioctl; this is an attempt to handle
+ *       multi session CDs more "transparent" (redirection handling has to be
+ *       done within the isofs routines, and only for the special purpose of
+ *       obtaining the "right" volume descriptor; accesses to the raw device
+ *       should not get redirected).
  *
  *  3.0  Just a "normal" increment, with some provisions to do it better. ;-)
  *       Introduced "#define READ_AUDIO" to specify the maximum number of 
@@ -3472,7 +3472,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	return (0);
       } /* end of CDROMREADAUDIO */
 
-    case CDROMMULTISESSION: /* tell start-of-last-session to user */
+    case CDROMMULTISESSION: /* tell start-of-last-session */
       DPRINTF((DBG_IOC,"SBPCD: ioctl: CDROMMULTISESSION entered.\n"));
       st=verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_multisession));
       if (st) return (st);
@@ -3489,17 +3489,6 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
       memcpy_tofs((void *) arg, &ms_info, sizeof(struct cdrom_multisession));
       DPRINTF((DBG_MUL,"SBPCD: ioctl: CDROMMULTISESSION done (%d, %08X).\n",
 	       ms_info.xa_flag, ms_info.addr.lba));
-      return (0);
-
-    case CDROMMULTISESSION_SYS: /* tell start-of-last-session to kernel */
-      DPRINTF((DBG_IOC,"SBPCD: ioctl: CDROMMULTISESSION_SYS entered.\n"));
-      if(!suser()) return -EACCES;
-      if (DriveStruct[d].f_multisession)
-	*((unsigned int *) arg)=DriveStruct[d].lba_multi;
-      else
-	*((unsigned int *) arg)=0;
-      DPRINTF((DBG_MUL,"SBPCD: ioctl: CDROMMULTISESSION_SYS done (%d).\n",
-	       ((unsigned int *) arg)[0]));
       return (0);
 
     case BLKRASET:

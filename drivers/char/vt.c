@@ -364,7 +364,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		const struct kbentry * a = (struct kbentry *)arg;
 		ushort *key_map;
 		u_char s;
-		u_short v;
+		u_short v, ov;
 
 		if (!perm)
 			return -EPERM;
@@ -379,7 +379,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		if (!i && v == K_NOSUCHMAP) {
 			/* disallocate map */
 			key_map = key_maps[s];
-			if (key_map) {
+			if (s && key_map) {
 			    key_maps[s] = 0;
 			    if (key_map[0] == U(K_ALLOCATED)) {
 				kfree_s(key_map, sizeof(plain_map));
@@ -401,6 +401,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return 0;
 
 		if (!(key_map = key_maps[s])) {
+			int j;
+
 			if (keymap_count >= MAX_NR_OF_USER_KEYMAPS && !suser())
 				return -EPERM;
 
@@ -410,18 +412,22 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 				return -ENOMEM;
 			key_maps[s] = key_map;
 			key_map[0] = U(K_ALLOCATED);
-			for (s = 1; s < NR_KEYS; s++)
-				key_map[s] = U(K_HOLE);
+			for (j = 1; j < NR_KEYS; j++)
+				key_map[j] = U(K_HOLE);
 			keymap_count++;
 		}
+		ov = U(key_map[i]);
+		if (v == ov)
+			return 0;	/* nothing to do */
 		/*
 		 * Only the Superuser can set or unset the Secure
 		 * Attention Key.
 		 */
-		if (((key_map[i] == U(K_SAK)) || (v == K_SAK)) &&
-		    !suser())
+		if (((ov == K_SAK) || (v == K_SAK)) && !suser())
 			return -EPERM;
 		key_map[i] = U(v);
+		if (!s && (KTYP(ov) == KT_SHIFT || KTYP(v) == KT_SHIFT))
+			compute_shiftstate();
 		return 0;
 	}
 

@@ -21,8 +21,8 @@
 
 OBJECTS = head.o main.o
 
-all:
-	@echo Be careful.. This works for me, not for you
+all:	tools/lxboot tools/bootlx vmlinux
+	@echo run mkfloppy on machine with floppy drive
 
 msb:	tools/lxboot tools/bootlx vmlinux
 	( cat tools/lxboot tools/bootlx vmlinux ) > /dev/rz0a

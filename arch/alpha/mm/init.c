@@ -91,7 +91,7 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
  * unmaps the bootup page table (as we're now in KSEG, so we don't need it).
  *
  * The bootup sequence put the virtual page table into high memory: that
- * means that we cah change the L1 page table by just using VL1p below.
+ * means that we can change the L1 page table by just using VL1p below.
  */
 #define VL1p ((unsigned long *) 0xffffffffffffe000)
 unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)

@@ -120,6 +120,7 @@ struct mm_struct {
 	unsigned long dec_flt;		/* page fault count of the last time */
 	unsigned long swap_cnt;		/* number of pages to swap on next pass */
 	struct vm_area_struct * mmap;
+	struct vm_area_struct * mmap_avl;
 };
 
 #define INIT_MMAP { &init_task, 0, 0x40000000, PAGE_SHARED, }
@@ -133,7 +134,7 @@ struct mm_struct {
 /* ?_flt */	0, 0, 0, 0, \
 		0, \
 /* swap */	0, 0, 0, 0, \
-		&init_mmap }
+		&init_mmap, &init_mmap }
 
 struct task_struct {
 /* these are hardcoded - don't touch */

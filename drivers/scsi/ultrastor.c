@@ -873,7 +873,7 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt)
 	printk("Ux4F: abort while completed command pending\n");
 	restore_flags(flags);
 	cli();
-	ultrastor_interrupt(0);
+	ultrastor_interrupt(0, NULL);
 	restore_flags(flags);
 	return SCSI_ABORT_SUCCESS;  /* FIXME - is this correct? -ERY */
       }

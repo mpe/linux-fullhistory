@@ -1,7 +1,10 @@
 /*
  *	hosts.c Copyright (C) 1992 Drew Eckhardt
- *	mid to lowlevel SCSI driver interface by
- *		Drew Eckhardt
+ *	        Copyright (C) 1993, 1994, 1995 Eric Youngdale
+ *
+ *	mid to lowlevel SCSI driver interface
+ *		Initial versions: Drew Eckhardt
+ *		Subsequent revisions: Eric Youngdale
  *
  *	<drew@colorado.edu>
  */
@@ -329,7 +332,8 @@ unsigned int scsi_init()
 		      shpnt->host_no, name);
 	    }
 
-	printk ("scsi : %d hosts.\n", next_scsi_host);
+	printk ("scsi : %d host%s.\n", next_scsi_host,
+		(next_scsi_host == 1) ? "" : "s");
 
       {
       int block_count = 0, index;

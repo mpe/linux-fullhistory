@@ -172,7 +172,7 @@ static int mprotect_fixup(struct vm_area_struct * vma,
 
 asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 {
-	unsigned long end, tmp;
+	unsigned long nstart, end, tmp;
 	struct vm_area_struct * vma, * next;
 	int error;
 
@@ -186,19 +186,14 @@ asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 		return -EINVAL;
 	if (end == start)
 		return 0;
-	for (vma = current->mm->mmap ; ; vma = vma->vm_next) {
-		if (!vma)
-			return -EFAULT;
-		if (vma->vm_end > start)
-			break;
-	}
-	if (vma->vm_start > start)
+	vma = find_vma(current, start);
+	if (!vma || vma->vm_start > start)
 		return -EFAULT;
 
-	for ( ; ; ) {
+	for (nstart = start ; ; ) {
 		unsigned int newflags;
 
-		/* Here we know that  vma->vm_start <= start < vma->vm_end. */
+		/* Here we know that  vma->vm_start <= nstart < vma->vm_end. */
 
 		newflags = prot | (vma->vm_flags & ~(PROT_READ | PROT_WRITE | PROT_EXEC));
 		if ((newflags & ~(newflags >> 4)) & 0xf) {
@@ -207,22 +202,22 @@ asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 		}
 
 		if (vma->vm_end >= end) {
-			error = mprotect_fixup(vma, start, end, newflags);
+			error = mprotect_fixup(vma, nstart, end, newflags);
 			break;
 		}
 
 		tmp = vma->vm_end;
 		next = vma->vm_next;
-		error = mprotect_fixup(vma, start, tmp, newflags);
+		error = mprotect_fixup(vma, nstart, tmp, newflags);
 		if (error)
 			break;
-		start = tmp;
+		nstart = tmp;
 		vma = next;
-		if (!vma || vma->vm_start != start) {
+		if (!vma || vma->vm_start != nstart) {
 			error = -EFAULT;
 			break;
 		}
 	}
-	merge_segments(current->mm->mmap);
+	merge_segments(current, start, end);
 	return error;
 }

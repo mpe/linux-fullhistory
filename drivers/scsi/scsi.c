@@ -1,9 +1,10 @@
 /*
  *	scsi.c Copyright (C) 1992 Drew Eckhardt 
- *	       Copyright (C) 1993, 1994 Eric Youngdale
+ *	       Copyright (C) 1993, 1994, 1995 Eric Youngdale
  *
- *	generic mid-level SCSI driver by
- *		Drew Eckhardt 
+ *	generic mid-level SCSI driver
+ *		Initial versions: Drew Eckhardt 
+ *		Subsequent revisions: Eric Youngdale
  *
  *	<drew@colorado.edu>
  *
@@ -1132,10 +1133,7 @@ static int check_sense (Scsi_Cmnd * SCpnt)
 		case NO_SENSE:
 			return 0;
 		case RECOVERED_ERROR:
-			if (SCpnt->device->type == TYPE_TAPE)
-			  return SUGGEST_IS_OK;
-			else
-			  return 0;
+			return SUGGEST_IS_OK;
 
 		case ABORTED_COMMAND:
 			return SUGGEST_RETRY;	

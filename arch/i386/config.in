@@ -187,6 +187,7 @@ if [ "$CONFIG_SBPCD" = "y" ]; then
     fi
   fi
 fi
+bool 'Aztech/Orchid/Okano/Wearnes (non IDE) CDROM support' CONFIG_AZTCD n
 
 comment 'Filesystems'
 

@@ -87,6 +87,42 @@ entMM:
 	rti
 .end entMM
 
+.align 5
+.globl	entArith
+.ent	entArith
+entArith:
+	SAVE_ALL
+	bis	$30,$30,$19
+	lda	$27,do_entArith
+	jsr	$26,($27),do_entArith
+	RESTORE_ALL
+	rti
+.end entArith
+
+.align 5
+.globl	entIF
+.ent	entIF
+entIF:
+	SAVE_ALL
+	bis	$30,$30,$19
+	lda	$27,do_entIF
+	jsr	$26,($27),do_entIF
+	RESTORE_ALL
+	rti
+.end entIF
+
+.align 5
+.globl	entUna
+.ent	entUna
+entUna:
+	SAVE_ALL
+	bis	$30,$30,$19
+	lda	$27,do_entUna
+	jsr	$26,($27),do_entUna
+	RESTORE_ALL
+	rti
+.end entUna
+
 	.align 5
 	.globl sys_call_table
 sys_call_table:

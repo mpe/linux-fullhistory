@@ -135,7 +135,7 @@ char           *questions[] =
 
   "SoundBlaster Pro support",
   "SoundBlaster 16 support",
-  "digitized voice support",
+  "/dev/dsp and /dev/audio support (_recommended_)",
   "This should not be asked",
   "MIDI interface support",
   "This should not be asked",

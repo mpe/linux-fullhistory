@@ -152,17 +152,14 @@ repeat:
 	} 
 }
 
-static struct vm_area_struct * find_vma(struct task_struct * tsk, unsigned long addr)
+static struct vm_area_struct * find_extend_vma(struct task_struct * tsk, unsigned long addr)
 {
 	struct vm_area_struct * vma;
 
 	addr &= PAGE_MASK;
-	for (vma = tsk->mm->mmap ; ; vma = vma->vm_next) {
-		if (!vma)
-			return NULL;
-		if (vma->vm_end > addr)
-			break;
-	}
+	vma = find_vma(tsk,addr);
+	if (!vma)
+		return NULL;
 	if (vma->vm_start <= addr)
 		return vma;
 	if (!(vma->vm_flags & VM_GROWSDOWN))
@@ -181,7 +178,7 @@ static struct vm_area_struct * find_vma(struct task_struct * tsk, unsigned long 
 static int read_long(struct task_struct * tsk, unsigned long addr,
 	unsigned long * result)
 {
-	struct vm_area_struct * vma = find_vma(tsk, addr);
+	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
 
 	if (!vma)
 		return -EIO;
@@ -223,7 +220,7 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 static int write_long(struct task_struct * tsk, unsigned long addr,
 	unsigned long data)
 {
-	struct vm_area_struct * vma = find_vma(tsk, addr);
+	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
 
 	if (!vma)
 		return -EIO;

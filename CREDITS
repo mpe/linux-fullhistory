@@ -32,6 +32,14 @@ S: Department of Computer Science
 S: University of Calgary
 S: Calgary, Alberta, Canada
 
+N: Ralf Baechle
+E: ralf@waldorf-gmbh.de
+D: Linux/MIPS port
+D: Linux/68k hacker
+S: Hauptstrasse 19
+S: 79837 St. Blasien
+S: Germany
+
 N: Krishna Balasubramanian
 E: balasub@cis.ohio-state.edu
 D: Wrote SYS V IPC (part of standard kernel since 0.99.10)
@@ -629,6 +637,13 @@ S: Dragonvagen 1 A 13
 S: FIN-00330 Helsingfors
 S: Finland
 
+N: Michael Neuffer
+E: neuffer@goofy.zdv.uni-mainz.de
+D: developer and maintainer of the eata_dma SCSI driver 
+S: Zum Schiersteiner Grund 2
+S: 55127 Mainz
+S: Germany
+
 N: David C. Niemi
 E: niemidc@clark.net
 E: niemidc@slma.com
@@ -921,6 +936,15 @@ D: SCSI iso9660 and ELF
 S: 17 Canterbury Square #101
 S: Alexandria, Virginia 22304
 S: USA
+
+N: Niibe Yutaka
+E: gniibe@mri.co.jp
+D: PLIP driver
+D: Asynchronous socket I/O in the NET code
+S: Mitsubishi Research Institute, Inc.
+S: ARCO Tower 1-8-1 Shimomeguro Meguro-ku
+S: Tokyo 153
+S: Japan
 
 N: Orest Zborowski
 E: orestz@eskimo.com

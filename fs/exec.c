@@ -505,7 +505,6 @@ void flush_old_exec(struct linux_binprm * bprm)
 	int i;
 	int ch;
 	char * name;
-	struct vm_area_struct * mpnt, *mpnt1;
 
 	current->dumpable = 1;
 	name = bprm->filename;
@@ -517,20 +516,9 @@ void flush_old_exec(struct linux_binprm * bprm)
 				current->comm[i++] = ch;
 	}
 	current->comm[i] = '\0';
-	/* Release all of the old mmap stuff. */
 
-	mpnt = current->mm->mmap;
-	current->mm->mmap = NULL;
-	while (mpnt) {
-		mpnt1 = mpnt->vm_next;
-		if (mpnt->vm_ops && mpnt->vm_ops->close)
-			mpnt->vm_ops->close(mpnt);
-		remove_shared_vm_struct(mpnt);
-		if (mpnt->vm_inode)
-			iput(mpnt->vm_inode);
-		kfree(mpnt);
-		mpnt = mpnt1;
-	}
+	/* Release all of the old mmap stuff. */
+	exit_mmap(current);
 
 	flush_thread();
 

@@ -244,7 +244,7 @@ void do_cpu(struct pt_regs *regs)
 		case 0x44000000:
 		case 0xc4000000:
 		case 0xe4000000:
-			printk("CP1 instruction - enabeling cp1.\n");
+			printk("CP1 instruction - enabling cp1.\n");
 			regs->cp0_status |= ST0_CU1;
 			/*
 			 * No need to handle branch delay slots
@@ -252,7 +252,7 @@ void do_cpu(struct pt_regs *regs)
 			break;
 		default:
 			/*
-			 * This wasn't a cp1 instruction and therfore illegal.
+			 * This wasn't a cp1 instruction and therefore illegal.
 			 * Default is to kill the process.
 			 */
 			send_sig(SIGILL, current, 1);
@@ -289,7 +289,7 @@ void do_watch(struct pt_regs *regs)
 void do_reserved(struct pt_regs *regs)
 {
 	/*
-	 * Game over - no way to handle this if it ever occours.
+	 * Game over - no way to handle this if it ever occurs.
 	 * Most probably caused by a new unknown cpu type or a
 	 * after another deadly hard/software error.
 	 */

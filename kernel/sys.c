@@ -16,6 +16,7 @@
 #include <linux/ptrace.h>
 #include <linux/stat.h>
 #include <linux/mman.h>
+#include <linux/mm.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -380,7 +381,6 @@ asmlinkage int sys_brk(unsigned long brk)
 	int freepages;
 	unsigned long rlim;
 	unsigned long newbrk, oldbrk;
-	struct vm_area_struct * vma;
 
 	if (brk < current->mm->end_code)
 		return current->mm->brk;
@@ -409,12 +409,8 @@ asmlinkage int sys_brk(unsigned long brk)
 	/*
 	 * Check against existing mmap mappings.
 	 */
-	for (vma = current->mm->mmap; vma; vma = vma->vm_next) {
-		if (newbrk <= vma->vm_start)
-			break;
-		if (oldbrk < vma->vm_end)
-			return current->mm->brk;
-	}
+	if (find_vma_intersection(current, oldbrk, newbrk))
+		return current->mm->brk;
 	/*
 	 * stupid algorithm to decide if we have enough memory: while
 	 * simple, it hopefully works in most obvious cases.. Easy to

@@ -19,7 +19,7 @@
 	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
 
 OBJS  = process.o signal.o entry.o traps.o irq.o ptrace.o cache.o resume.o \
-	ioport.o bootinfo.o
+	ioport.o setup.o bios32.o
 
 all: kernel.o head.o
 

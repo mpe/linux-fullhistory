@@ -93,7 +93,7 @@ uart6850_input_loop (void)
 }
 
 void
-m6850intr (int unit)
+m6850intr (int unit, struct pt_regs * regs)
 {
   printk ("M");
   if (input_avail ())

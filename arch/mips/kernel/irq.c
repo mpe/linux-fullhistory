@@ -1,5 +1,5 @@
 /*
- *	linux/kernel/irq.c
+ *	linux/arch/mips/kernel/irq.c
  *
  *	Copyright (C) 1992 Linus Torvalds
  *
@@ -12,14 +12,7 @@
 
 /*
  * IRQ's are in fact implemented a bit like signal handlers for the kernel.
- * The same sigaction struct is used, and with similar semantics (ie there
- * is a SA_INTERRUPT flag etc). Naturally it's not a 1:1 relation, but there
- * are similarities.
- *
- * sa_handler(int irq_NR) is the default function called (0 if no).
- * sa_mask is horribly ugly (I won't even mention it)
- * sa_flags contains various info: SA_INTERRUPT etc
- * sa_restorer is the unused
+ * Naturally it's not a 1:1 relation, but there are similarities.
  */
 
 #include <linux/ptrace.h>
@@ -28,6 +21,7 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
+#include <linux/timex.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -90,7 +84,14 @@ extern void bad_interrupt(void);
 /*
  * Initial irq handlers.
  */
-static struct sigaction irq_sigaction[16] = {
+struct irqaction {
+	void (*handler)(int, struct pt_regs *);
+	unsigned long flags;
+	unsigned long mask;
+	const char *name;
+};
+
+static struct irqaction irq_action[16] = {
 	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
 	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
 	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
@@ -104,15 +105,15 @@ static struct sigaction irq_sigaction[16] = {
 int get_irq_list(char *buf)
 {
 	int i, len = 0;
-	struct sigaction * sa = irq_sigaction;
+	struct irqaction * action = irq_action;
 
-	for (i = 0 ; i < 16 ; i++, sa++) {
-		if (!sa->sa_handler)
+	for (i = 0 ; i < 16 ; i++, action++) {
+		if (!action->handler)
 			continue;
 		len += sprintf(buf+len, "%2d: %8d %c %s\n",
 			i, kstat.interrupts[i],
-			(sa->sa_flags & SA_INTERRUPT) ? '+' : ' ',
-			(char *) sa->sa_mask);
+			(action->flags & SA_INTERRUPT) ? '+' : ' ',
+			action->name);
 	}
 	return len;
 }
@@ -126,10 +127,10 @@ int get_irq_list(char *buf)
  */
 asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 {
-	struct sigaction * sa = irq + irq_sigaction;
+	struct irqaction * action = irq + irq_action;
 
 	kstat.interrupts[irq]++;
-	sa->sa_handler((int) regs);
+	action->handler(irq, regs);
 }
 
 /*
@@ -139,38 +140,38 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
  */
 asmlinkage void do_fast_IRQ(int irq)
 {
-	struct sigaction * sa = irq + irq_sigaction;
+	struct irqaction * action = irq + irq_action;
 
 	kstat.interrupts[irq]++;
-	sa->sa_handler(irq);
+	action->handler(irq, NULL);
 }
 
 #define SA_PROBE SA_ONESHOT
 
-/*
- * Using "struct sigaction" is slightly silly, but there
- * are historical reasons and it works well, so..
- */
-static int irqaction(unsigned int irq, struct sigaction * new_sa)
+int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
+	unsigned long irqflags, const char * devname)
 {
-	struct sigaction * sa;
+	struct irqaction * action;
 	unsigned long flags;
 
 	if (irq > 15)
 		return -EINVAL;
-	sa = irq + irq_sigaction;
-	if (sa->sa_handler)
+	action = irq + irq_action;
+	if (action->handler)
 		return -EBUSY;
-	if (!new_sa->sa_handler)
+	if (!handler)
 		return -EINVAL;
 	save_flags(flags);
 	cli();
-	*sa = *new_sa;
-	/*
-	 * FIXME: Does the SA_INTERRUPT flag make any sense on the MIPS???
-	 */
-	if (!(sa->sa_flags & SA_PROBE)) { /* SA_ONESHOT is used by probing */
-		if (sa->sa_flags & SA_INTERRUPT)
+	action->handler = handler;
+	action->flags = irqflags;
+	action->mask = 0;
+	action->name = devname;
+	if (!(action->flags & SA_PROBE)) { /* SA_ONESHOT is used by probing */
+		/*
+		 * FIXME: Does the SA_INTERRUPT flag make any sense on MIPS???
+		 */
+		if (action->flags & SA_INTERRUPT)
 			set_intr_gate(irq,fast_interrupt);
 		else
 			set_intr_gate(irq,interrupt);
@@ -188,28 +189,16 @@ static int irqaction(unsigned int irq, struct sigaction * new_sa)
 	return 0;
 }
 
-int request_irq(unsigned int irq, void (*handler)(int),
-	unsigned long flags, const char * devname)
-{
-	struct sigaction sa;
-
-	sa.sa_handler = handler;
-	sa.sa_flags = flags;
-	sa.sa_mask = (unsigned long) devname;
-	sa.sa_restorer = NULL;
-	return irqaction(irq,&sa);
-}
-
 void free_irq(unsigned int irq)
 {
-	struct sigaction * sa = irq + irq_sigaction;
+	struct irqaction * action = irq + irq_action;
 	unsigned long flags;
 
 	if (irq > 15) {
 		printk("Trying to free IRQ%d\n",irq);
 		return;
 	}
-	if (!sa->sa_handler) {
+	if (!action->handler) {
 		printk("Trying to free free IRQ%d\n",irq);
 		return;
 	}
@@ -223,26 +212,14 @@ void free_irq(unsigned int irq)
 		outb(cache_A1,0xA1);
 	}
 	set_intr_gate(irq,bad_interrupt);
-	sa->sa_handler = NULL;
-	sa->sa_flags = 0;
-	sa->sa_mask = 0;
-	sa->sa_restorer = NULL;
+	action->handler = NULL;
+	action->flags = 0;
+	action->mask = 0;
+	action->name = NULL;
 	restore_flags(flags);
 }
 
-#if 0
-/*
- * handle fpu errors
- */
-static void math_error_irq(int cpl)
-{
-	if (!hard_math)
-		return;
-	handle_fpe();
-}
-#endif
-
-static void no_action(int cpl) { }
+static void no_action(int cpl, struct pt_regs * regs) { }
 
 unsigned int probe_irq_on (void)
 {
@@ -300,6 +277,10 @@ void init_IRQ(void)
 {
 	int i;
 
+	/* set the clock to 100 Hz */
+	outb_p(0x34,0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
+	outb_p(LATCH & 0xff , 0x40);	/* LSB */
+	outb(LATCH >> 8 , 0x40);	/* MSB */
 	for (i = 0; i < 16 ; i++)
 		set_intr_gate(i, bad_interrupt);
 	if (request_irq(2, no_action, SA_INTERRUPT, "cascade"))

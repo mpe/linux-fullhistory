@@ -27,17 +27,6 @@
 #include <asm/mipsconfig.h>
 #include <asm/stackframe.h>
 
-/*
- * Tell us the machine setup..
- */
-#pragma char wp_works_ok = 0;		/* set if paging hardware honours WP */ 
-char wait_available;		/* set if the "wait" instruction available */
-
-/*
- * Bus types ..
- */
-int EISA_bus = 0;
-
 asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
 
 /*
@@ -115,7 +104,7 @@ unsigned long copy_thread(int nr, unsigned long clone_flags, struct task_struct 
 
 	/*
 	 * New tasks loose permission to use the fpu. This accelerates context
-	 * switching for non fp programms, which true for the most programms.
+	 * switching for non fp programs, which true for the most programs.
 	 */
 	p->tss.cp0_status = regs->cp0_status &
 	                    ~(ST0_CU1|ST0_CU0|ST0_KSU|ST0_ERL|ST0_EXL);

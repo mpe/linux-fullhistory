@@ -381,14 +381,9 @@ static int swap_out_process(struct task_struct * p)
 	/*
 	 * Find the proper vm-area
 	 */
-	vma = p->mm->mmap;
-	for (;;) {
-		if (!vma)
-			return 0;
-		if (address <= vma->vm_end)
-			break;
-		vma = vma->vm_next;
-	}
+	vma = find_vma(p, address);
+	if (!vma)
+		return 0;
 	if (address < vma->vm_start)
 		address = vma->vm_start;
 

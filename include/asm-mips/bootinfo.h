@@ -63,8 +63,11 @@
  * bss segment directly after startup.
  */
 
-struct bootinfo {
+struct drive_info_struct {
+	char dummy[32];
+	};
 
+struct bootinfo {
 	unsigned long machtype;			/* machine type */
 	unsigned long cputype;			/* system CPU & FPU */
 
@@ -100,6 +103,12 @@ struct bootinfo {
 	 */
 	unsigned long ramdisk_size;		/* ramdisk size in 1024 byte blocks */
 	unsigned long ramdisk_base;		/* address of the ram disk in mem */
+
+	/*
+	 * Boot flags for the kernel
+	 */
+	unsigned long mount_root_rdonly;
+	struct drive_info_struct drive_info;
 
 	/*
 	 * Video ram info (not in tty.h)
