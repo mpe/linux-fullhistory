@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.191 1999/08/31 06:54:38 davem Exp $
+/* $Id: srmmu.c,v 1.192 1999/09/10 10:40:40 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)

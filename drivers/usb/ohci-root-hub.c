@@ -309,7 +309,7 @@ static int ohci_del_rh_int_timer(struct ohci * ohci) {
 	return 0;
 }
  
-void * root_hub_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id) 
+int root_hub_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id, void **handle)
 {
 	struct ohci * ohci = usb_dev->bus->hcpriv;
 	
@@ -319,7 +319,8 @@ void * root_hub_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_d
 	ohci->rh.send = 1;
 	ohci->rh.interval = period;
 	ohci_init_rh_int_timer(usb_dev, period);
-	return ohci->rh.int_addr = usb_to_ohci(usb_dev);
+	*handle = ohci->rh.int_addr = usb_to_ohci(usb_dev);
+	return 0;
 }
 
 int root_hub_release_irq(struct usb_device *usb_dev, void * ed) 

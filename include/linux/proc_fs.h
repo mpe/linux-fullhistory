@@ -55,7 +55,8 @@ enum root_directory_inos {
 	PROC_SOUND,
 	PROC_MTRR, /* whether enabled or not */
 	PROC_FS,
-	PROC_SYSVIPC
+	PROC_SYSVIPC,
+	PROC_DRIVER,
 };
 
 enum pid_directory_inos {
@@ -330,6 +331,7 @@ extern struct proc_dir_entry proc_pid_fd;
 extern struct proc_dir_entry proc_mca;
 extern struct proc_dir_entry *proc_bus;
 extern struct proc_dir_entry *proc_sysvipc;
+extern struct proc_dir_entry proc_root_driver;
 
 extern struct inode_operations proc_scsi_inode_operations;
 
@@ -338,6 +340,19 @@ extern void proc_base_init(void);
 
 extern int proc_register(struct proc_dir_entry *, struct proc_dir_entry *);
 extern int proc_unregister(struct proc_dir_entry *, int);
+
+/*
+ * generic.c
+ */
+extern struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
+					        struct proc_dir_entry *parent);
+extern void remove_proc_entry(const char *name, struct proc_dir_entry *parent);
+
+
+
+/*
+ * inlined /proc helper functions
+ */
 
 static inline int proc_net_register(struct proc_dir_entry * x)
 {
@@ -380,6 +395,50 @@ static inline int proc_scsi_unregister(struct proc_dir_entry *driver, int x)
 	return(ret);
     }
 }
+
+
+/*
+ * retrieve the proc_dir_entry associated with /proc/driver/$module_name
+ */
+extern inline
+struct proc_dir_entry *proc_driver_find (const char *module_name)
+{
+        struct proc_dir_entry *p;
+        
+        p = proc_root_driver.subdir;
+        while (p != NULL) {
+                if (strcmp (p->name, module_name) == 0)
+                        return p;
+                
+                p = p->next;
+        }
+        return NULL;
+}
+
+
+/*
+ * remove /proc/driver/$module_name, and all its contents
+ */
+extern inline int proc_driver_unregister(const char *module_name)
+{
+        remove_proc_entry (module_name, &proc_root_driver);
+        return 0;
+}
+
+
+/*
+ * create driver-specific playground directory, /proc/driver/$module_name
+ */
+extern inline int proc_driver_register(const char *module_name)
+{
+        struct proc_dir_entry *p;
+
+        p = create_proc_entry (module_name, S_IFDIR, &proc_root_driver);
+
+        return (p == NULL) ? -1 : 0;
+}
+
+
 
 extern struct super_block *proc_super_blocks;
 extern struct dentry_operations proc_dentry_operations;
@@ -443,13 +502,6 @@ extern struct inode_operations proc_ppc_htab_inode_operations;
 extern struct inode_operations proc_sysvipc_inode_operations;
 
 /*
- * generic.c
- */
-struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
-					 struct proc_dir_entry *parent);
-void remove_proc_entry(const char *name, struct proc_dir_entry *parent);
-
-/*
  * proc_tty.c
  */
 extern void proc_tty_init(void);
@@ -481,6 +533,23 @@ extern inline void remove_proc_entry(const char *name, struct proc_dir_entry *pa
 extern inline void proc_tty_register_driver(struct tty_driver *driver) {};
 extern inline void proc_tty_unregister_driver(struct tty_driver *driver) {};
 
+extern inline
+struct proc_dir_entry *proc_driver_find (const char *module_name)
+{
+        return NULL;
+}
 
-#endif
+extern inline int proc_driver_unregister(const char *module_name)
+{
+        return 0;
+}
+
+extern inline int proc_driver_register(const char *module_name)
+{
+        return 0;
+}
+
+
+#endif /* CONFIG_PROC_FS */
+
 #endif /* _LINUX_PROC_FS_H */

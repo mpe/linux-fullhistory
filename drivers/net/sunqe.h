@@ -289,28 +289,18 @@ struct qe_txd {
 #define TX_RING_MAXSIZE   256
 #define RX_RING_MAXSIZE   256
 
-#define TX_RING_SIZE      256
-#define RX_RING_SIZE      256
+#define TX_RING_SIZE      16
+#define RX_RING_SIZE      16
 
-#define NEXT_RX(num)       (((num) + 1) & (RX_RING_SIZE - 1))
-#define NEXT_TX(num)       (((num) + 1) & (TX_RING_SIZE - 1))
-#define PREV_RX(num)       (((num) - 1) & (RX_RING_SIZE - 1))
-#define PREV_TX(num)       (((num) - 1) & (TX_RING_SIZE - 1))
+#define NEXT_RX(num)       (((num) + 1) & (RX_RING_MAXSIZE - 1))
+#define NEXT_TX(num)       (((num) + 1) & (TX_RING_MAXSIZE - 1))
+#define PREV_RX(num)       (((num) - 1) & (RX_RING_MAXSIZE - 1))
+#define PREV_TX(num)       (((num) - 1) & (TX_RING_MAXSIZE - 1))
 
 #define TX_BUFFS_AVAIL(qp)                                    \
         (((qp)->tx_old <= (qp)->tx_new) ?                     \
 	  (qp)->tx_old + (TX_RING_SIZE - 1) - (qp)->tx_new :  \
 			    (qp)->tx_old - (qp)->tx_new - 1)
-
-
-#define SUN4C_TX_BUFFS_AVAIL(qp)                                    \
-        (((qp)->tx_old <= (qp)->tx_new) ?                           \
-	  (qp)->tx_old + (SUN4C_TX_RING_SIZE - 1) - (qp)->tx_new :  \
-	  (qp)->tx_old - (qp)->tx_new - (TX_RING_SIZE - SUN4C_TX_RING_SIZE))
-
-
-#define RX_COPY_THRESHOLD  256
-#define RX_BUF_ALLOC_SIZE  (1546 + 64)
 
 struct qe_init_block {
 	struct qe_rxd qe_rxd[RX_RING_MAXSIZE];
@@ -324,72 +314,39 @@ struct sunqe;
 
 struct sunqec {
 	struct qe_globreg         *gregs;             /* QEC Global Registers         */
-
-	struct sunqe              *qes[4];
-	unsigned int               qec_bursts;
-	struct linux_sbus_device  *qec_sbus_dev;
-	struct sunqec             *next_module;
+	struct sunqe              *qes[4];	      /* Each child MACE              */
+	unsigned int               qec_bursts;	      /* Support burst sizes          */
+	struct linux_sbus_device  *qec_sbus_dev;      /* QEC's SBUS device            */
+	struct sunqec             *next_module;	      /* List of all QECs in system   */
 };
 
-#define SUN4C_PKT_BUF_SZ	1544
-#define SUN4C_RX_BUFF_SIZE	SUN4C_PKT_BUF_SZ
-#define SUN4C_TX_BUFF_SIZE	SUN4C_PKT_BUF_SZ
-
-#define SUN4C_RX_RING_SIZE	16
-#define SUN4C_TX_RING_SIZE	16
+#define PKT_BUF_SZ	1664
+#define RXD_PKT_SZ	1664
 
 struct sunqe_buffers {
-	char	tx_buf[SUN4C_TX_RING_SIZE][SUN4C_TX_BUFF_SIZE];
-	char	pad[2];		/* Align rx_buf for copy_and_sum(). */
-	char	rx_buf[SUN4C_RX_RING_SIZE][SUN4C_RX_BUFF_SIZE];
+	char	tx_buf[TX_RING_SIZE][PKT_BUF_SZ];
+	char	__pad[2];
+	char	rx_buf[RX_RING_SIZE][PKT_BUF_SZ];
 };
 
 #define qebuf_offset(mem, elem) \
 ((__u32)((unsigned long)(&(((struct sunqe_buffers *)0)->mem[elem][0]))))
-
-#define SUN4C_NEXT_RX(num)	(((num) + 1) & (SUN4C_RX_RING_SIZE - 1))
-#define SUN4C_NEXT_TX(num)	(((num) + 1) & (SUN4C_TX_RING_SIZE - 1))
-#define SUN4C_PREV_RX(num)	(((num) - 1) & (SUN4C_RX_RING_SIZE - 1))
-#define SUN4C_PREV_TX(num)	(((num) - 1) & (SUN4C_TX_RING_SIZE - 1))
 
 struct sunqe {
 	struct qe_creg            *qcregs;           /* QEC per-channel Registers      */
 	struct qe_mregs           *mregs;            /* Per-channel MACE Registers     */
 	struct qe_init_block      *qe_block;         /* RX and TX descriptors          */
 	__u32                      qblock_dvma;      /* RX and TX descriptors          */
-
-	struct sk_buff            *rx_skbs[RX_RING_SIZE];
-	struct sk_buff            *tx_skbs[TX_RING_SIZE];
-
-	int                        rx_new, tx_new, rx_old, tx_old;
-
-	struct sunqe_buffers      *sun4c_buffers; /* CPU visible address.  */
-	__u32                      s4c_buf_dvma;  /* DVMA visible address. */
-
+	int                        rx_new, rx_old;   /* RX ring extents		       */
+	int			   tx_new, tx_old;   /* TX ring extents		       */
+	struct sunqe_buffers      *buffers;	     /* CPU visible address.           */
+	__u32                      buffers_dvma;     /* DVMA visible address.          */
 	struct sunqec             *parent;
-
-	struct net_device_stats   net_stats;     /* Statistical counters               */
-	struct linux_sbus_device  *qe_sbusdev;   /* QE's SBUS device struct            */
-	struct net_device             *dev;          /* QE's netdevice struct              */
-	int                        channel;      /* Who am I?                          */
+	unsigned char		   mconfig;	     /* Base MACE mconfig value        */
+	struct net_device_stats    net_stats;        /* Statistical counters           */
+	struct linux_sbus_device  *qe_sbusdev;       /* QE's SBUS device struct        */
+	struct net_device         *dev;              /* QE's netdevice struct          */
+	int                        channel;          /* Who am I?                      */
 };
-
-/* We use this to acquire receive skb's that we can DMA directly into. */
-#define ALIGNED_RX_SKB_ADDR(addr) \
-        ((((unsigned long)(addr) + (64 - 1)) & ~(64 - 1)) - (unsigned long)(addr))
-
-static inline struct sk_buff *qe_alloc_skb(unsigned int length, int gfp_flags)
-{
-	struct sk_buff *skb;
-
-	skb = alloc_skb(length + 64, gfp_flags);
-	if(skb) {
-		int offset = ALIGNED_RX_SKB_ADDR(skb->data);
-
-		if(offset)
-			skb_reserve(skb, offset);
-	}
-	return skb;
-}
 
 #endif /* !(_SUNQE_H) */

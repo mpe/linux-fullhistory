@@ -29,7 +29,7 @@
 #define write_unlock_irq(lock)			do { write_unlock(lock); local_irq_enable();       } while (0)
 #define write_unlock_bh(lock)			do { write_unlock(lock); local_bh_enable();        } while (0)
 
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 #include <asm/spinlock.h>
 
 #else /* !SMP */

@@ -69,80 +69,9 @@ extern __inline__ int spin_trylock(spinlock_t *lock)
 extern __inline__ void spin_unlock(spinlock_t *lock)
 {
 	__asm__ __volatile__("membar	#StoreStore | #LoadStore\n\t"
-			     "stb	%%g0, [%0]\n\t"
-			     "membar	#StoreStore | #StoreLoad"
+			     "stb	%%g0, [%0]"
 			     : /* No outputs */
 			     : "r" (lock)
-			     : "memory");
-}
-
-extern __inline__ void spin_lock_irq(spinlock_t *lock)
-{
-	__asm__ __volatile__("
-	wrpr		%%g0, 15, %%pil
-1:	ldstub		[%0], %%g7
-	brnz,pn		%%g7, 2f
-	 membar		#StoreLoad | #StoreStore
-	.subsection	2
-2:	ldub		[%0], %%g7
-	brnz,pt		%%g7, 2b
-	 membar		#LoadLoad
-	b,a,pt		%%xcc, 1b
-	.previous
-"	: /* no outputs */
-	: "r" (lock)
-	: "g7", "memory");
-}
-
-extern __inline__ void spin_unlock_irq(spinlock_t *lock)
-{
-	__asm__ __volatile__("membar	#StoreStore | #LoadStore\n\t"
-			     "stb	%%g0, [%0]\n\t"
-			     "membar	#StoreStore | #StoreLoad\n\t"
-			     "wrpr	%%g0, 0x0, %%pil"
-			     : /* no outputs */
-			     : "r" (lock)
-			     : "memory");
-}
-
-#define spin_lock_bh(__lock)	\
-do {	local_bh_count++;	\
-	spin_lock(__lock);	\
-} while(0)
-
-#define spin_unlock_bh(__lock)		\
-do {	spin_unlock(__lock);		\
-	local_bh_count--;		\
-} while(0)
-
-#define spin_lock_irqsave(__lock, flags)			\
-do {	register spinlock_t *__lp asm("g1");			\
-	__lp = (__lock);					\
-	__asm__ __volatile__(					\
-	"\n	rdpr		%%pil, %0\n"			\
-	"	wrpr		%%g0, 15, %%pil\n"		\
-	"1:	ldstub		[%1], %%g7\n"			\
-	"	brnz,pn		%%g7, 2f\n"			\
-	"	 membar		#StoreLoad | #StoreStore\n"	\
-	"	.subsection	2\n"				\
-	"2:	ldub		[%1], %%g7\n"			\
-	"	brnz,pt		%%g7, 2b\n"			\
-	"	 membar		#LoadLoad\n"			\
-	"	b,a,pt		%%xcc, 1b\n"			\
-	"	.previous\n"					\
-	: "=&r" (flags)						\
-	: "r" (__lp)						\
-	: "g7", "memory");					\
-} while(0)
-
-extern __inline__ void spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags)
-{
-	__asm__ __volatile__("membar	#StoreStore | #LoadStore\n\t"
-			     "stb	%%g0, [%0]\n\t"
-			     "membar	#StoreStore | #StoreLoad\n\t"
-			     "wrpr	%1, 0x0, %%pil"
-			     : /* no outputs */
-			     : "r" (lock), "r" (flags)
 			     : "memory");
 }
 
@@ -170,13 +99,7 @@ extern int _spin_trylock (spinlock_t *lock);
 
 #define spin_trylock(lp)	_spin_trylock(lp)
 #define spin_lock(lock)		_do_spin_lock(lock, "spin_lock")
-#define spin_lock_irq(lock)	do { __cli(); _do_spin_lock(lock, "spin_lock_irq"); } while(0)
-#define spin_lock_bh(lock)	do { local_bh_count++; _do_spin_lock(lock, "spin_lock_bh"); } while(0)
-#define spin_lock_irqsave(lock, flags) do { __save_and_cli(flags); _do_spin_lock(lock, "spin_lock_irqsave"); } while(0)
 #define spin_unlock(lock)	_do_spin_unlock(lock)
-#define spin_unlock_irq(lock)	do { _do_spin_unlock(lock); __sti(); } while(0)
-#define spin_unlock_bh(lock)	do { _do_spin_unlock(lock); local_bh_count--; } while(0)
-#define spin_unlock_irqrestore(lock, flags) do { _do_spin_unlock(lock); __restore_flags(flags); } while(0)
 
 #endif /* SPIN_LOCK_DEBUG */
 
@@ -223,24 +146,6 @@ do {	register rwlock_t *__X asm("g1"); \
 	  : "g2", "g3", "g5", "g7", "cc", "memory"); \
 } while(0)
 
-#define read_lock_irq(lock)	do { __cli(); read_lock(lock); } while (0)
-#define read_unlock_irq(lock)	do { read_unlock(lock); __sti(); } while (0)
-#define read_lock_bh(lock)	do { local_bh_count++; read_lock(lock); } while (0)
-#define read_unlock_bh(lock)	do { read_unlock(lock); local_bh_count--; } while (0)
-#define write_lock_irq(lock)	do { __cli(); write_lock(lock); } while (0)
-#define write_unlock_irq(lock)	do { write_unlock(lock); __sti(); } while (0)
-#define write_lock_bh(lock)	do { local_bh_count++; write_lock(lock); } while (0)
-#define write_unlock_bh(lock)	do { write_unlock(lock); local_bh_count--; } while (0)
-
-#define read_lock_irqsave(lock, flags)	\
-	do { __save_and_cli(flags); read_lock(lock); } while (0)
-#define read_unlock_irqrestore(lock, flags) \
-	do { read_unlock(lock); __restore_flags(flags); } while (0)
-#define write_lock_irqsave(lock, flags)	\
-	do { __save_and_cli(flags); write_lock(lock); } while (0)
-#define write_unlock_irqrestore(lock, flags) \
-	do { write_unlock(lock); __restore_flags(flags); } while (0)
-
 #else /* !(SPIN_LOCK_DEBUG) */
 
 typedef struct {
@@ -261,9 +166,6 @@ do {	unsigned long flags; \
 	_do_read_lock(lock, "read_lock"); \
 	__restore_flags(flags); \
 } while(0)
-#define read_lock_irq(lock)	do { __cli(); _do_read_lock(lock, "read_lock_irq"); } while(0)
-#define read_lock_bh(lock)	do { local_bh_count++; _do_read_lock(lock, "read_lock_bh"); } while(0)
-#define read_lock_irqsave(lock, flags) do { __save_and_cli(flags); _do_read_lock(lock, "read_lock_irqsave"); } while(0)
 
 #define read_unlock(lock) \
 do {	unsigned long flags; \
@@ -271,9 +173,6 @@ do {	unsigned long flags; \
 	_do_read_unlock(lock, "read_unlock"); \
 	__restore_flags(flags); \
 } while(0)
-#define read_unlock_irq(lock)	do { _do_read_unlock(lock, "read_unlock_irq"); __sti() } while(0)
-#define read_unlock_bh(lock)	do { _do_read_unlock(lock, "read_unlock_bh"); local_bh_count--; } while(0)
-#define read_unlock_irqrestore(lock, flags) do { _do_read_unlock(lock, "read_unlock_irqrestore"); __restore_flags(flags); } while(0)
 
 #define write_lock(lock) \
 do {	unsigned long flags; \
@@ -281,9 +180,6 @@ do {	unsigned long flags; \
 	_do_write_lock(lock, "write_lock"); \
 	__restore_flags(flags); \
 } while(0)
-#define write_lock_irq(lock)	do { __cli(); _do_write_lock(lock, "write_lock_irq"); } while(0)
-#define write_lock_bh(lock)	do { local_bh_count++; _do_write_lock(lock, "write_lock_bh"); } while(0)
-#define write_lock_irqsave(lock, flags) do { __save_and_cli(flags); _do_write_lock(lock, "write_lock_irqsave"); } while(0)
 
 #define write_unlock(lock) \
 do {	unsigned long flags; \
@@ -291,9 +187,6 @@ do {	unsigned long flags; \
 	_do_write_unlock(lock); \
 	__restore_flags(flags); \
 } while(0)
-#define write_unlock_irq(lock)	do { _do_write_unlock(lock); __sti(); } while(0)
-#define write_unlock_bh(lock)	do { _do_write_unlock(lock); local_bh_count--; } while(0)
-#define write_unlock_irqrestore(lock, flags) do { _do_write_unlock(lock); __restore_flags(flags); } while(0)
 
 #endif /* SPIN_LOCK_DEBUG */
 

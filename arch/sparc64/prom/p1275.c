@@ -1,4 +1,4 @@
-/* $Id: p1275.c,v 1.17 1999/08/31 19:25:43 davem Exp $
+/* $Id: p1275.c,v 1.18 1999/09/10 10:40:53 davem Exp $
  * p1275.c: Sun IEEE 1275 PROM low level interface routines
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)

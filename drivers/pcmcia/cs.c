@@ -2255,6 +2255,9 @@ int pcmcia_init(void)
 #ifdef CONFIG_PCMCIA_PCNET
 	init_pcnet_cs();
 #endif
+#ifdef CONFIG_PCMCIA_3C589
+	init_3c589_cs();
+#endif
 #ifdef CONFIG_PCMCIA_RAYCS
 	init_ray_cs();
 #endif

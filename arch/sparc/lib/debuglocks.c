@@ -1,4 +1,4 @@
-/* $Id: debuglocks.c,v 1.9 1999/08/14 03:51:39 anton Exp $
+/* $Id: debuglocks.c,v 1.10 1999/09/10 10:40:36 davem Exp $
  * debuglocks.c: Debugging versions of SMP locking primitives.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)

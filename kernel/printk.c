@@ -174,10 +174,10 @@ int do_syslog(int type, char * buf, int len)
 		error = verify_area(VERIFY_WRITE,buf,len);
 		if (error)
 			goto out;
-		spin_lock_irq(&console_lock);
 		count = len;
 		if (count > LOG_BUF_LEN)
 			count = LOG_BUF_LEN;
+		spin_lock_irq(&console_lock);
 		if (count > logged_chars)
 			count = logged_chars;
 		if (do_clear)

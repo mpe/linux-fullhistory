@@ -191,6 +191,7 @@ static int hub_probe(struct usb_device *dev)
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_hub *hub;
 	unsigned long flags;
+	int ret;
 
 	/* We don't handle multi-config hubs */
 	if (dev->descriptor.bNumConfigurations != 1)
@@ -248,8 +249,15 @@ static int hub_probe(struct usb_device *dev)
 	spin_unlock_irqrestore(&hub_list_lock, flags);
 
 	if (usb_hub_configure(hub) >= 0) {
-		hub->irq_handle = usb_request_irq(dev, usb_rcvctrlpipe(dev,
-			endpoint->bEndpointAddress), hub_irq, endpoint->bInterval, hub);
+		hub->irqpipe = usb_rcvctrlpipe(dev, endpoint->bEndpointAddress);
+		ret = usb_request_irq(dev, hub->irqpipe,
+			hub_irq, endpoint->bInterval,
+			hub, &hub->irq_handle);
+		if (ret) {
+			printk (KERN_WARNING "usb-hub: usb_request_irq failed (0x%x)\n", ret);
+			/* FIXME: need to free <hub> but first clean up its list. */
+			return -1;
+		}
 
 		/* Wake up khubd */
 		wake_up(&khubd_wait);
@@ -274,8 +282,7 @@ static void hub_disconnect(struct usb_device *dev)
 	spin_unlock_irqrestore(&hub_event_lock, flags);
 
 	if (hub->irq_handle) {
-		usb_release_irq(hub->dev, hub->irq_handle);
-		hub->irq_handle = NULL;
+		usb_release_irq(hub->dev, hub->irq_handle, hub->irqpipe);
 	}
 
 	/* Free the memory */

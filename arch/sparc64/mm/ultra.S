@@ -1,8 +1,10 @@
-/* $Id: ultra.S,v 1.33 1999/08/02 08:39:49 davem Exp $
+/* $Id: ultra.S,v 1.34 1999/09/10 10:40:51 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
+
+#include <linux/config.h>
 
 #include <asm/asi.h>
 #include <asm/pgtable.h>

@@ -92,6 +92,7 @@ struct us_data {
 	int			pid;			/* control thread */
 	struct semaphore      	*notify; 		/* wait for thread to begin */
 	void			*irq_handle;		/* for USB interrupt requests */
+	unsigned int		irqpipe;		/* remember pipe for release_irq */
 };
 
 /*
@@ -374,7 +375,6 @@ static int pop_CB_status(Scsi_Cmnd *srb)
     __u8 status[2];
     devrequest dr;
     int retry = 5;
-    void *irq_handle;
 
     US_DEBUGP("pop_CB_status, proto=%x\n", us->protocol);
     switch (us->protocol) {
@@ -382,7 +382,7 @@ static int pop_CB_status(Scsi_Cmnd *srb)
 	/* get from control */
 
 	while (retry--) {
-	    dr.requesttype = 0x80 | USB_TYPE_STANDARD | USB_RT_DEVICE;
+	    dr.requesttype = USB_DIR_IN | USB_TYPE_STANDARD | USB_RT_DEVICE;
 	    dr.request = USB_REQ_GET_STATUS;
 	    dr.index = 0;
 	    dr.value = 0;
@@ -410,14 +410,14 @@ static int pop_CB_status(Scsi_Cmnd *srb)
 
 	/* add interrupt transfer, marked for removal */
 	us->ip_wanted = 1;
-	irq_handle = us->pusb_dev->bus->op->request_irq(us->pusb_dev, 
-						    usb_rcvctrlpipe(us->pusb_dev, us->ep_int),
-						     pop_CBI_irq, 0, (void *)us);
-	if (!irq_handle) {
-	    US_DEBUGP("No interrupt for CBI\n");
+	us->irqpipe = usb_rcvctrlpipe(us->pusb_dev, us->ep_int);
+	result = us->pusb_dev->bus->op->request_irq(us->pusb_dev, us->irqpipe,
+						pop_CBI_irq, 0,
+						(void *)us, &us->irq_handle);
+	if (result) {
+	    US_DEBUGP("usb_scsi: usb_request_irq failed (0x%x), No interrupt for CBI\n", result);
 	    return DID_ABORT << 16;
 	}
-	us->irq_handle = irq_handle;
 
 	sleep_on(&us->ip_waitq);
 	if (us->ip_wanted) {
@@ -651,8 +651,9 @@ static int us_release(struct Scsi_Host *psh)
     struct us_data *prev = (struct us_data *)&us_list;
 
     if (us->irq_handle) {
-    	usb_release_irq(us->pusb_dev, us->irq_handle);
+    	usb_release_irq(us->pusb_dev, us->irq_handle, us->irqpipe);
 	us->irq_handle = NULL;
+	us->irqpipe = 0;
     }
     if (us->filter)
 	us->filter->release(us->fdata);
@@ -892,7 +893,7 @@ static int usbscsi_control_thread(void * __us)
 			us->srb->result = DID_OK << 16;
 		    else {
 			unsigned int savelen = us->srb->request_bufflen;
-			unsigned int saveallocation;
+			unsigned int saveallocation = 0;
 
 			switch (us->srb->cmnd[0]) {
 			case REQUEST_SENSE:
@@ -941,7 +942,7 @@ static int usbscsi_control_thread(void * __us)
 			if (savelen != us->srb->request_bufflen &&
 			    us->srb->result == (DID_OK << 16)) {
 			    unsigned char *p = (unsigned char *)us->srb->request_buffer;
-			    unsigned int length;
+			    unsigned int length = 0;
 
 			    /* set correct length and retry */
 			    switch (us->srb->cmnd[0]) {
@@ -1194,7 +1195,7 @@ static int scsi_probe(struct usb_device *dev)
 
     for (i = 0; i < interface->bNumEndpoints; i++) { 
 	    if (interface->endpoint[i].bmAttributes == 0x02) {
-		    if (interface->endpoint[i].bEndpointAddress & 0x80)
+		    if (interface->endpoint[i].bEndpointAddress & USB_DIR_IN)
 			    ss->ep_in = interface->endpoint[i].bEndpointAddress & 0x0f;
 		    else
 			    ss->ep_out = interface->endpoint[i].bEndpointAddress & 0x0f;
@@ -1287,7 +1288,7 @@ static int scsi_probe(struct usb_device *dev)
 	    dev->descriptor.idProduct == 0x0001) {
 	    devrequest dr;
 	    __u8 qstat[2];
-	    void *irq_handle;
+	    int result;
 
 	    /* shuttle E-USB */
 	    dr.requesttype = 0xC0;
@@ -1298,12 +1299,12 @@ static int scsi_probe(struct usb_device *dev)
 	    ss->pusb_dev->bus->op->control_msg(ss->pusb_dev, usb_rcvctrlpipe(dev,0), &dr, qstat, 2);
 	    US_DEBUGP("C0 status %x %x\n", qstat[0], qstat[1]);
 	    init_waitqueue_head(&ss->ip_waitq);
-	    irq_handle = ss->pusb_dev->bus->op->request_irq(ss->pusb_dev, 
-						usb_rcvctrlpipe(ss->pusb_dev, ss->ep_int),
-						pop_CBI_irq, 0, (void *)ss);
-	    if (!irq_handle)
+	    ss->irqpipe = usb_rcvctrlpipe(ss->pusb_dev, ss->ep_int);
+	    result = ss->pusb_dev->bus->op->request_irq(ss->pusb_dev, ss->irqpipe,
+						pop_CBI_irq, 0,
+						(void *)ss, &ss->irq_handle);
+	    if (result)
 	    	return -1;
-	    ss->irq_handle = irq_handle;
 	    interruptible_sleep_on_timeout(&ss->ip_waitq, HZ*5);
 
 	} else if (ss->protocol == US_PR_CBI)

@@ -148,7 +148,8 @@ static int release_mouse(struct inode * inode, struct file * file)
 	if (--mouse->active == 0) {
 		mouse->suspended = 0;
 		/* stop polling the mouse while its not in use */
-	    	usb_release_irq(mouse->dev, mouse->irq_handle);
+	    	usb_release_irq(mouse->dev, mouse->irq_handle,
+				usb_rcvctrlpipe(mouse->dev, mouse->bEndpointAddress));
 		/* never keep a reference to a released IRQ! */
 		mouse->irq_handle = NULL;
 	}
@@ -159,6 +160,7 @@ static int release_mouse(struct inode * inode, struct file * file)
 static int open_mouse(struct inode * inode, struct file * file)
 {
 	struct mouse_state *mouse = &static_mouse_state;
+	int ret;
 
 	printk(KERN_DEBUG "%s(%d): open_mouse\n", __FILE__, __LINE__);
 	/*
@@ -194,7 +196,13 @@ static int open_mouse(struct inode * inode, struct file * file)
 		return 0;
 
 	/* start the usb controller's polling of the mouse */
-	mouse->irq_handle = usb_request_irq(mouse->dev, usb_rcvctrlpipe(mouse->dev, mouse->bEndpointAddress), mouse_irq, mouse->bInterval, NULL);
+	ret = usb_request_irq(mouse->dev, usb_rcvctrlpipe(mouse->dev, mouse->bEndpointAddress),
+			mouse_irq, mouse->bInterval,
+			NULL, &mouse->irq_handle);
+	if (ret) {
+		printk (KERN_WARNING "usb-mouse: usb_request_irq failed (0x%x)\n", ret);
+		return ret;
+	}
 
 	return 0;
 }
@@ -320,6 +328,7 @@ static int mouse_probe(struct usb_device *dev)
 	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *endpoint;
 	struct mouse_state *mouse = &static_mouse_state;
+	int ret;
 
 	/* We don't handle multi-config mice */
 	if (dev->descriptor.bNumConfigurations != 1)
@@ -372,9 +381,13 @@ static int mouse_probe(struct usb_device *dev)
 	{
 		printk(KERN_DEBUG "%s(%d): mouse resume\n", __FILE__, __LINE__);
 		/* restart the usb controller's polling of the mouse */
-		mouse->irq_handle = usb_request_irq(mouse->dev,
-			usb_rcvctrlpipe(mouse->dev, mouse->bEndpointAddress),
-			mouse_irq, mouse->bInterval, NULL);
+		ret = usb_request_irq(mouse->dev, usb_rcvctrlpipe(mouse->dev, mouse->bEndpointAddress),
+			mouse_irq, mouse->bInterval,
+			NULL, &mouse->irq_handle);
+		if (ret) {
+			printk (KERN_WARNING "usb-mouse: usb_request_irq failed (0x%x)\n", ret);
+			return ret;
+		}
 		mouse->suspended = 0;
 	}
 
@@ -387,7 +400,8 @@ static void mouse_disconnect(struct usb_device *dev)
 
 	/* stop the usb interrupt transfer */
 	if (mouse->present) {
-	    	usb_release_irq(mouse->dev, mouse->irq_handle);
+	    	usb_release_irq(mouse->dev, mouse->irq_handle,
+				usb_rcvctrlpipe(mouse->dev, mouse->bEndpointAddress));
 		/* never keep a reference to a released IRQ! */
 	}
 
@@ -427,7 +441,8 @@ void usb_mouse_cleanup(void)
 
 	/* stop the usb interrupt transfer */
 	if (mouse->present) {
-	    	usb_release_irq(mouse->dev, mouse->irq_handle);
+	    	usb_release_irq(mouse->dev, mouse->irq_handle,
+				usb_rcvctrlpipe(mouse->dev, mouse->bEndpointAddress));
 		/* never keep a reference to a released IRQ! */
 		mouse->irq_handle = NULL;
 	}

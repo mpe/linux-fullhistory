@@ -48,6 +48,7 @@
 struct parport_uss720_private {
 	struct usb_device *usbdev;
 	void *irqhandle;
+	unsigned int irqpipe;
         unsigned char reg[7];  /* USB registers */
 };
 
@@ -616,8 +617,15 @@ static int uss720_probe(struct usb_device *usbdev)
         endpoint = &interface->endpoint[2];
 	printk(KERN_DEBUG "uss720: epaddr %d interval %d\n", endpoint->bEndpointAddress, endpoint->bInterval);
 #if 0
-        priv->irqhandle = usb_request_irq(usbdev, usb_rcvctrlpipe(usbdev, endpoint->bEndpointAddress),
-					  uss720_irq, endpoint->bInterval, pp);
+	priv->irqpipe = usb_rcvctrlpipe(usbdev, endpoint->bEndpointAddress);
+	i = usb_request_irq(usbdev, priv->irqpipe,
+				  uss720_irq, endpoint->bInterval,
+				  pp, &priv->irqhandle);
+	if (i) {
+		printk (KERN_WARNING "usb-uss720: usb_request_irq failed (0x%x)\n", i);
+		/* FIXME: undo some stuff and free some memory. */
+		return -1;
+	}
 #endif
         parport_proc_register(pp);
         parport_announce_port(pp);
@@ -632,7 +640,7 @@ static void uss720_disconnect(struct usb_device *usbdev)
 	struct parport_uss720_private *priv = pp->private_data;
 
 #if 0
-	usb_release_irq(usbdev, priv->irqhandle);
+	usb_release_irq(usbdev, priv->irqhandle, priv->irqpipe);
 #endif
         usbdev->private = NULL;
         priv->usbdev = NULL;

@@ -29,9 +29,13 @@ CONFIG_85230_MODULE  :=
 CONFIG_SYNCPPP_BUILTIN :=
 CONFIG_SYNCPPP_MODULE  :=
 
-ifneq ($(CONFIG_PCMCIA),n)
+ifeq ($(CONFIG_PCMCIA),y)
   SUB_DIRS += pcmcia
   MOD_SUB_DIRS += pcmcia
+else
+  ifeq ($(CONFIG_PCMCIA),m)
+    MOD_SUB_DIRS += pcmcia
+  endif
 endif
 
 ifeq ($(CONFIG_ISDN),y)

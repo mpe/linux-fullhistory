@@ -201,6 +201,7 @@ typedef struct {
 #define USB_ST_NOTSUPPORTED	-2
 #define USB_ST_BANDWIDTH_ERROR	-3
 
+
 /*
  * USB device number allocation bitmap. There's one bitmap
  * per USB tree.
@@ -430,7 +431,7 @@ struct usb_operations {
 	int (*deallocate)(struct usb_device *);
 	int (*control_msg)(struct usb_device *, unsigned int, devrequest *, void *, int);
 	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int,unsigned long *);
-	void *(*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *);
+	int (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *, void **);
 	int (*release_irq)(struct usb_device *, void *);
 	void *(*request_bulk)(struct usb_device *, unsigned int, usb_device_irq,
  void *, int, void *);
@@ -452,6 +453,14 @@ struct usb_bus {
 	struct usb_device *root_hub;    /* Root hub */
 	struct list_head bus_list;
 	void *hcpriv;                   /* Host Controller private data */
+
+	unsigned int bandwidth_allocated; /* on this Host Controller; */
+					  /* applies to Int. and Isoc. pipes; */
+					  /* measured in microseconds/frame; */
+					  /* range is 0..900, where 900 = */
+					  /* 90% of a 1-millisecond frame */
+	int bandwidth_int_reqs;		/* number of Interrupt requesters */
+	int bandwidth_isoc_reqs;	/* number of Isoc. requesters */
 
 	/* procfs entry */
 	int proc_busnum;
@@ -522,8 +531,8 @@ extern void usb_inc_dev_use(struct usb_device *);
 
 extern int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size);
 
-extern void *usb_request_irq(struct usb_device *, unsigned int, usb_device_irq, int, void *);
-extern int usb_release_irq(struct usb_device *dev, void *handle);
+extern int usb_request_irq(struct usb_device *, unsigned int, usb_device_irq, int, void *, void **);
+extern int usb_release_irq(struct usb_device *dev, void *handle, unsigned int pipe);
 
 extern void *usb_request_bulk(struct usb_device *, unsigned int, usb_device_irq, void *, int, void *);
 extern int usb_terminate_bulk(struct usb_device *, void *);
@@ -653,6 +662,26 @@ char *usb_string(struct usb_device *dev, int index);
 int usb_clear_halt(struct usb_device *dev, int endp);
 
 /*
+ * Some USB bandwidth allocation constants.
+ */
+#define BW_HOST_DELAY	1000L		/* nanoseconds */
+#define BW_HUB_LS_SETUP	333L		/* nanoseconds */
+                        /* 4 full-speed bit times (est.) */
+
+#define FRAME_TIME_BITS         12000L		/* frame = 1 millisecond */
+#define FRAME_TIME_MAX_BITS_ALLOC	(90L * FRAME_TIME_BITS / 100L)
+#define FRAME_TIME_USECS	1000L
+#define FRAME_TIME_MAX_USECS_ALLOC	(90L * FRAME_TIME_USECS / 100L)
+
+#define BitTime(bytecount)  (7 * 8 * bytecount / 6)  /* with integer truncation */
+		/* Trying not to use worst-case bit-stuffing
+                   of (7/6 * 8 * bytecount) = 9.33 * bytecount */
+		/* bytecount = data payload byte count */
+
+#define NS_TO_US(ns)	((ns + 500L) / 1000L)
+			/* convert & round nanoseconds to microseconds */
+
+/*
  * Debugging helpers..
  */
 void usb_show_device_descriptor(struct usb_device_descriptor *);
@@ -662,6 +691,14 @@ void usb_show_hid_descriptor(struct usb_hid_descriptor * desc);
 void usb_show_endpoint_descriptor(struct usb_endpoint_descriptor *);
 void usb_show_device(struct usb_device *);
 void usb_show_string(struct usb_device *dev, char *id, int index);
+
+#ifdef USB_DEBUG
+#define PRINTD(format, args...) printk("usb: " format "\n" , ## args);
+#else /* NOT DEBUGGING */
+#define PRINTD(fmt, arg...) do {} while (0) /**/
+#endif /* USB_DEBUG */
+/* A simple way to change one line from DEBUG to NOT DEBUG: */
+#define XPRINTD(fmt, arg...)	do {} while (0)
 
 /*
  * procfs stuff
@@ -679,7 +716,7 @@ extern inline void proc_usb_add_device(struct usb_device *dev) {}
 extern inline void proc_usb_remove_device(struct usb_device *dev) {}
 #endif
 
-#endif  /* __KERNEL */
+#endif  /* __KERNEL__ */
 
 #endif
 

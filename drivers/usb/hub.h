@@ -86,8 +86,9 @@ struct usb_hub {
 	/* Device structure */
 	struct usb_device *dev;
 
-	/* Reference to the hub's polling IRQ */
+	/* Reference to the hub's polling IRQ and its associated pipe */
 	void *irq_handle;
+	unsigned int irqpipe;
 
 	/* List of hubs */
 	struct list_head hub_list;

@@ -589,28 +589,33 @@ static void uhci_remove_transfer(struct uhci_td *td, char removeirq)
 /*
  * Request a interrupt handler..
  *
- * Returns: a "handle pointer" that release_irq can use to stop this
+ * Returns 0 (success) or negative (failure).
+ * Also returns/sets a "handle pointer" that release_irq can use to stop this
  * interrupt.  (It's really a pointer to the TD).
  */
-static void *uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
+static int uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id, void **handle)
 {
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
 	struct uhci_td *td = uhci_td_alloc(dev);
 	struct uhci_qh *qh = uhci_qh_alloc(dev);
 	unsigned int destination, status;
 
-	if (!td || !qh)
-		return NULL;
+	if (!td || !qh) {
+		if (td)
+			uhci_td_free(td);
+		if (qh)
+			uhci_qh_free(qh);
+		return (-ENOMEM);
+	}
 
 	/* Destination: pipe destination with INPUT */
 	destination = (pipe & PIPE_DEVEP_MASK) | usb_packetid(pipe);
 
 	/* Infinite errors is 0, so no bits */
-	status = (pipe & TD_CTRL_LS) | TD_CTRL_IOC | TD_CTRL_ACTIVE |
-			TD_CTRL_SPD;
+	status = (pipe & TD_CTRL_LS) | TD_CTRL_IOC | TD_CTRL_ACTIVE | TD_CTRL_SPD;
 
 	td->link = UHCI_PTR_TERM;		/* Terminate */
-	td->status = status;			/* In */
+	td->status = status;
 	td->info = destination | ((usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe)) - 1) << 21) |
 		(usb_gettoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) << TD_TOKEN_TOGGLE);
 
@@ -632,7 +637,8 @@ static void *uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb
 	/* Add it into the skeleton */
 	uhci_insert_qh(qh->skel, qh);
 
-	return (void *)td;
+	*handle = (void *)td;
+	return 0;
 }
 
 /*
@@ -684,7 +690,6 @@ static int uhci_get_current_frame_number(struct usb_device *usb_dev)
 /*
  * uhci_init_isoc()
  *
- * Checks bus bandwidth allocation for this USB bus.
  * Allocates some data structures.
  * Initializes parts of them from the function parameters.
  *
@@ -704,11 +709,6 @@ static int uhci_init_isoc (struct usb_device *usb_dev,
 {
 	struct usb_isoc_desc *id;
 	int i;
-
-#ifdef BANDWIDTH_ALLOCATION
-	/* TBD: add bandwidth allocation/checking/management HERE. */
-	/* TBD: some way to factor in frame_spacing ??? */
-#endif
 
 	*isocdesc = NULL;
 
@@ -866,7 +866,7 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 					return -EINVAL;
 			}
 		} /* end START_ABSOLUTE */
-	}
+	} /* end not pr_isocdesc */
 
 	/*
 	 * Set the start/end frame numbers.
@@ -1384,7 +1384,7 @@ static void * uhci_request_bulk(struct usb_device *usb_dev, unsigned int pipe, u
 		if (pktsze > maxsze)
 			pktsze = maxsze;
 
-		td->status = status;                                    /* Status */
+		td->status = status;
 		td->info = destination | ((pktsze-1) << 21) |
 			(usb_gettoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) << TD_TOKEN_TOGGLE); /* pktsze bytes of data */
 		td->buffer = virt_to_bus(data);
@@ -1715,6 +1715,8 @@ static void uhci_interrupt(int irq, void *__uhci, struct pt_regs *regs)
 	 * interrupt cause
 	 */
 	status = inw(io_addr + USBSTS);
+	if (!status)	/* shared interrupt, not mine */
+		return;
 	outw(status, io_addr + USBSTS);
 
 	/* Walk the list of pending TD's to see which ones completed.. */

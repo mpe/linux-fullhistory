@@ -27,7 +27,7 @@
 
 void us_show_command(Scsi_Cmnd *srb)
 {
-    char *what;
+    char *what = NULL;
 
     switch (srb->cmnd[0]) {
     case TEST_UNIT_READY: what = "TEST_UNIT_READY"; break;

@@ -13,6 +13,8 @@
  * are evil.
  */
 
+#define USB_DEBUG	1
+
 #include <linux/config.h>
 #include <linux/string.h>
 #include <linux/bitops.h>
@@ -110,6 +112,82 @@ static void usb_driver_purge(struct usb_driver *driver,struct usb_device *dev)
 }
 
 /*
+ * calc_bus_time:
+ *
+ * returns (approximate) USB bus time in nanoseconds for a USB transaction.
+ */
+static long calc_bus_time (int low_speed, int input_dir, int isoc, int bytecount)
+{
+	unsigned long	tmp;
+
+	if (low_speed)		/* no isoc. here */
+	{
+		if (input_dir)
+                {
+		        tmp = (67667L * (31L + 10L * BitTime (bytecount))) / 1000L;
+			return (64060L + (2 * BW_HUB_LS_SETUP) + BW_HOST_DELAY + tmp);
+		}
+		else
+                {
+			tmp = (66700L * (31L + 10L * BitTime (bytecount))) / 1000L;
+			return (64107L + (2 * BW_HUB_LS_SETUP) + BW_HOST_DELAY + tmp);
+		}
+	}
+
+	/* for full-speed: */
+
+	if (!isoc)		/* Input or Output */
+	{
+		tmp = (8354L * (31L + 10L * BitTime (bytecount))) / 1000L;
+		return (9107L + BW_HOST_DELAY + tmp);
+	} /* end not Isoc */
+
+	/* for isoc: */
+
+	tmp = (8354L * (31L + 10L * BitTime (bytecount))) / 1000L;
+	return (((input_dir) ? 7268L : 6265L) + BW_HOST_DELAY + tmp);
+} /* end calc_bus_time */
+
+/*
+ * check_bandwidth_alloc():
+ *
+ * old_alloc is from host_controller->bandwidth_allocated in microseconds;
+ * bustime is from calc_bus_time(), but converted to microseconds.
+ *
+ * returns 0 if successful,
+ * -1 if bandwidth request fails.
+ *
+ * FIXME:
+ * This initial implementation does not use Endpoint.bInterval
+ * in managing bandwidth allocation.
+ * It probably needs to be expanded to use Endpoint.bInterval.
+ * This can be done as a later enhancement (correction).
+ * This will also probably require some kind of
+ * frame allocation tracking...meaning, for example,
+ * that if multiple drivers request interrupts every 10 USB frames,
+ * they don't all have to be allocated at
+ * frame numbers N, N+10, N+20, etc.  Some of them could be at
+ * N+11, N+21, N+31, etc., and others at
+ * N+12, N+22, N+32, etc.
+ * However, this first cut at USB bandwidth allocation does not
+ * contain any frame allocation tracking.
+ */
+int check_bandwidth_alloc (unsigned int old_alloc, long bustime)
+{
+	unsigned int	new_alloc;
+
+	new_alloc = old_alloc + bustime;
+		/* what new total allocated bus time would be */
+
+	PRINTD ("usb-bandwidth-alloc: was: %ld, new: %ld, bustime = %ld us, Pipe allowed: %s",
+		old_alloc, new_alloc, bustime,
+		(new_alloc <= FRAME_TIME_MAX_USECS_ALLOC) ?
+			"yes" : "no");
+
+	return (new_alloc <= FRAME_TIME_MAX_USECS_ALLOC) ? 0 : -1;
+} /* end check_bandwidth_alloc */
+
+/*
  * New functions for (de)registering a controller
  */
 struct usb_bus *usb_alloc_bus(struct usb_operations *op)
@@ -125,6 +203,9 @@ struct usb_bus *usb_alloc_bus(struct usb_operations *op)
 	bus->op = op;
 	bus->root_hub = NULL;
 	bus->hcpriv = NULL;
+	bus->bandwidth_allocated = 0;
+	bus->bandwidth_int_reqs  = 0;
+	bus->bandwidth_isoc_reqs = 0;
 
 	INIT_LIST_HEAD(&bus->bus_list);
 
@@ -609,7 +690,7 @@ int usb_get_descriptor(struct usb_device *dev, unsigned char type, unsigned char
 	int i = 5;
 	int result;
 
-	dr.requesttype = 0x80;
+	dr.requesttype = USB_DIR_IN;
 	dr.request = USB_REQ_GET_DESCRIPTOR;
 	dr.value = (type << 8) + index;
 	dr.index = 0;
@@ -627,7 +708,7 @@ int usb_get_string(struct usb_device *dev, unsigned short langid, unsigned char 
 {
 	devrequest dr;
 
-	dr.requesttype = 0x80;
+	dr.requesttype = USB_DIR_IN;
 	dr.request = USB_REQ_GET_DESCRIPTOR;
 	dr.value = (USB_DT_STRING << 8) + index;
 	dr.index = langid;
@@ -667,7 +748,7 @@ int usb_get_protocol(struct usb_device *dev)
 	unsigned char buf[8];
 	devrequest dr;
 
-	dr.requesttype = USB_RT_HIDD | 0x80;
+	dr.requesttype = USB_RT_HIDD | USB_DIR_IN;
 	dr.request = USB_REQ_GET_PROTOCOL;
 	dr.value = 0;
 	dr.index = 1;
@@ -764,7 +845,7 @@ int usb_clear_halt(struct usb_device *dev, int endp)
 	    return result;
 
 #if 1	/* let's be really tough */
-	dr.requesttype = 0x80 | USB_RT_ENDPOINT;
+	dr.requesttype = USB_DIR_IN | USB_RT_ENDPOINT;
 	dr.request = USB_REQ_GET_STATUS;
 	dr.length = 2;
 	status = 0xffff;
@@ -840,7 +921,7 @@ int usb_get_report(struct usb_device *dev, unsigned char type, unsigned char id,
 {
 	devrequest dr;
 
-	dr.requesttype = USB_RT_HIDD | 0x80;
+	dr.requesttype = USB_RT_HIDD | USB_DIR_IN;
 	dr.request = USB_REQ_GET_REPORT;
 	dr.value = (type << 8) + id;
 	dr.index = index;
@@ -1047,9 +1128,32 @@ int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u
         return dev->bus->op->control_msg(dev, pipe, &dr, data, size);
 }
 
-void *usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
+int usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id, void **handle)
 {
-	return dev->bus->op->request_irq(dev, pipe, handler, period, dev_id);
+	long    bustime;
+	int	ret;
+
+	*handle = NULL;
+
+	/* Check host controller's bandwidth for this int. request. */
+	bustime = calc_bus_time (usb_pipeslow(pipe), usb_pipein(pipe), 0,
+			usb_maxpacket(dev, pipe, usb_pipeout(pipe)));
+	bustime = NS_TO_US(bustime);	/* work in microseconds */
+	if (check_bandwidth_alloc (dev->bus->bandwidth_allocated, bustime))
+		return (USB_ST_BANDWIDTH_ERROR);
+
+	ret = dev->bus->op->request_irq(dev, pipe, handler, period, dev_id, handle);
+
+	/* Claim the USB bandwidth if no error. */
+	if (!ret) {
+		dev->bus->bandwidth_allocated += bustime;
+		dev->bus->bandwidth_int_reqs++;
+		PRINTD ("bw_alloc bumped to %d for %d requesters\n",
+			dev->bus->bandwidth_allocated,
+			dev->bus->bandwidth_int_reqs);
+	}
+
+	return ret;
 }
 
 void *usb_request_bulk(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, void *data, int len, void *dev_id)
@@ -1062,9 +1166,26 @@ int usb_terminate_bulk(struct usb_device *dev, void *first)
 	return dev->bus->op->terminate_bulk(dev, first);
 }
 
-int usb_release_irq(struct usb_device *dev, void *handle)
+int usb_release_irq(struct usb_device *dev, void *handle, unsigned int pipe)
 {
-	return dev->bus->op->release_irq(dev, handle);
+	long    bustime;
+	int	err;
+
+	err = dev->bus->op->release_irq(dev, handle);
+
+	/* Return the USB bandwidth if no error. */
+	if (!err) {
+		bustime = calc_bus_time (usb_pipeslow(pipe), usb_pipein(pipe), 0,
+				usb_maxpacket(dev, pipe, usb_pipeout(pipe)));
+		bustime = NS_TO_US(bustime);
+		dev->bus->bandwidth_allocated -= bustime;
+		dev->bus->bandwidth_int_reqs--;
+		PRINTD ("bw_alloc reduced to %d for %d requesters\n",
+			dev->bus->bandwidth_allocated,
+			dev->bus->bandwidth_int_reqs);
+	}
+
+	return err;
 }
 
 /*
@@ -1084,11 +1205,46 @@ int usb_init_isoc (struct usb_device *usb_dev,
 			void *context,
 			struct usb_isoc_desc **isocdesc)
 {
-	return usb_dev->bus->op->init_isoc (usb_dev, pipe, frame_count, context, isocdesc);
+	long    bustime;
+	int	err;
+
+	/* Check host controller's bandwidth for this Isoc. request. */
+	/* TBD: some way to factor in frame_spacing ??? */
+	bustime = calc_bus_time (0, usb_pipein(pipe), 1,
+			usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe)));
+	bustime = NS_TO_US(bustime);	/* work in microseconds */
+	if (check_bandwidth_alloc (usb_dev->bus->bandwidth_allocated, bustime))
+		return USB_ST_BANDWIDTH_ERROR;
+
+	err = usb_dev->bus->op->init_isoc (usb_dev, pipe, frame_count, context, isocdesc);
+
+	/* Claim the USB bandwidth if no error. */
+	if (!err) {
+		usb_dev->bus->bandwidth_allocated += bustime;
+		usb_dev->bus->bandwidth_isoc_reqs++;
+		PRINTD ("bw_alloc bumped to %d for %d requesters\n",
+			usb_dev->bus->bandwidth_allocated,
+			usb_dev->bus->bandwidth_isoc_reqs);
+	}
+
+	return err;
 }
 
 void usb_free_isoc (struct usb_isoc_desc *isocdesc)
 {
+	long    bustime;
+
+	/* Return the USB bandwidth. */
+	bustime = calc_bus_time (0, usb_pipein(isocdesc->pipe), 1,
+			usb_maxpacket(isocdesc->usb_dev, isocdesc->pipe,
+			usb_pipeout(isocdesc->pipe)));
+	bustime = NS_TO_US(bustime);
+	isocdesc->usb_dev->bus->bandwidth_allocated -= bustime;
+	isocdesc->usb_dev->bus->bandwidth_isoc_reqs--;
+	PRINTD ("bw_alloc reduced to %d for %d requesters\n",
+		isocdesc->usb_dev->bus->bandwidth_allocated,
+		isocdesc->usb_dev->bus->bandwidth_isoc_reqs);
+
 	isocdesc->usb_dev->bus->op->free_isoc (isocdesc);
 }
 

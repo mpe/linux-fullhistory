@@ -39,6 +39,7 @@ struct usb_keyboard
     unsigned char repeat_key;
     struct timer_list repeat_timer;
     struct list_head list;
+    unsigned int irqpipe;
     void *irq_handler; /* host controller's IRQ transfer handle */
 };
 
@@ -195,7 +196,8 @@ usb_kbd_probe(struct usb_device *dev)
     struct usb_interface_descriptor *interface;
     struct usb_endpoint_descriptor *endpoint;
     struct usb_keyboard *kbd;
-
+    int ret;
+    
     if (dev->descriptor.bNumConfigurations < 1)
 	return -1;
 
@@ -225,9 +227,14 @@ usb_kbd_probe(struct usb_device *dev)
         usb_set_protocol(dev, 0);
         usb_set_idle(dev, 0, 0);
         
-        kbd->irq_handler = usb_request_irq(dev,
-                        		usb_rcvctrlpipe(dev, endpoint->bEndpointAddress),
-					usb_kbd_irq, endpoint->bInterval, kbd);
+	kbd->irqpipe = usb_rcvctrlpipe(dev, endpoint->bEndpointAddress);
+	ret = usb_request_irq(dev, kbd->irqpipe,
+				usb_kbd_irq, endpoint->bInterval,
+				kbd, &kbd->irq_handler);
+	if (ret) {
+		printk(KERN_INFO "usb-keyboard failed usb_request_irq (0x%x)\n", ret);
+		goto probe_err;
+	}
 
         list_add(&kbd->list, &usb_kbd_list);
 	
@@ -244,12 +251,13 @@ static void
 usb_kbd_disconnect(struct usb_device *dev)
 {
     struct usb_keyboard *kbd = (struct usb_keyboard*) dev->private;
-    if(kbd)
+    if (kbd)
     {
-        dev->private = NULL;
-        list_del(&kbd->list);
-        del_timer(&kbd->repeat_timer);
-        kfree(kbd);
+	usb_release_irq(dev, kbd->irq_handler, kbd->irqpipe);
+	dev->private = NULL;
+	list_del(&kbd->list);
+	del_timer(&kbd->repeat_timer);
+	kfree(kbd);
     }
 
     printk(KERN_INFO "USB HID boot protocol keyboard removed.\n");
@@ -276,7 +284,7 @@ void usb_kbd_cleanup(void)
                 INIT_LIST_HEAD(&kbd->list);
 
 		if (kbd->irq_handler) {
-			usb_release_irq(kbd->dev, kbd->irq_handler);
+			usb_release_irq(kbd->dev, kbd->irq_handler, kbd->irqpipe);
 			/* never keep a reference to a released IRQ! */
 			kbd->irq_handler = NULL;
 		}

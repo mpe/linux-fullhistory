@@ -253,7 +253,7 @@ static int acm_write_irq(int state, void *__buffer, int count, void *dev_id)
 static int rs_open(struct tty_struct *tty, struct file * filp) 
 {
 	struct acm_state *acm;
-
+	int ret;
 	
 	info("USB_FILE_OPEN\n");
 
@@ -272,10 +272,12 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	acm->active=1;
  
 	/*Start reading from the device*/
-	acm->ctrltransfer=usb_request_irq(acm->dev,acm->ctrlpipe, acm_irq, acm->ctrlinterval, acm);
-	
+	ret = usb_request_irq(acm->dev,acm->ctrlpipe, acm_irq, acm->ctrlinterval, acm, &acm->ctrltransfer);
+	if (ret) {
+		printk (KERN_WARNING "usb-acm: usb_request_irq failed (0x%x)\n", ret);
+	}
 	acm->reading=1;
-	acm->readtransfer=usb_request_bulk(acm->dev,acm->readpipe, acm_read_irq, acm->readbuffer, acm->readsize, acm );
+	acm->readtransfer=usb_request_bulk(acm->dev,acm->readpipe, acm_read_irq, acm->readbuffer, acm->readsize, acm);
 	
 	Set_Control_Line_Status (CTRL_STAT_DTR | CTRL_STAT_RTS, acm);
 				                  
@@ -307,7 +309,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		usb_terminate_bulk(acm->dev, acm->readtransfer);
 		acm->reading=0;
 	}
-//  usb_release_irq(acm->dev,acm->ctrltransfer);
+//  usb_release_irq(acm->dev,acm->ctrltransfer, acm->ctrlpipe);
 	
 	acm->active=0;
 }
@@ -591,7 +593,7 @@ static void acm_disconnect(struct usb_device *dev)
 		usb_terminate_bulk(acm->dev, acm->readtransfer);
 		acm->reading=0;
 	}
-//  usb_release_irq(acm->dev,acm->ctrltransfer);
+//  usb_release_irq(acm->dev,acm->ctrltransfer, acm->ctrlpipe);
 	//BUG: What to do if a device is open?? Notify process or not allow cleanup?
 	acm->active=0;
 	acm->present=0;

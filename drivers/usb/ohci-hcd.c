@@ -179,7 +179,7 @@ static int sohci_iso_handler(void * ohci_in, struct usb_ohci_ed *ed, void * data
 	return 0;
 }
                                                      
-static void * sohci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
+static int sohci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id, void **handle)
 {
 	struct ohci * ohci = usb_dev->bus->hcpriv;
 	struct ohci_device * dev = usb_to_ohci(usb_dev);
@@ -188,7 +188,7 @@ static void * sohci_request_irq(struct usb_device *usb_dev, unsigned int pipe, u
 
 #ifdef  VROOTHUB
 	if(usb_pipedevice(pipe) == ohci->rh.devnum) 
-		return root_hub_request_irq(usb_dev, pipe, handler, period, dev_id);
+		return root_hub_request_irq(usb_dev, pipe, handler, period, dev_id, handle);
 #endif		
 
 	usb_pipe_to_hcd_ed(usb_dev, pipe, &hcd_ed);
@@ -198,8 +198,9 @@ static void * sohci_request_irq(struct usb_device *usb_dev, unsigned int pipe, u
 	OHCI_DEBUG( printk("USB HC IRQ>>>: %x: every %d ms\n", ed->hwINFO, period);) 
 	
 	ohci_trans_req(ohci, ed, 0, NULL, dev->data, hcd_ed.maxpack, (__OHCI_BAG) handler, (__OHCI_BAG) dev_id, INT_IN, sohci_int_handler);
-	if (ED_STATE(ed) != ED_OPER)  ohci_link_ed(ohci, ed);	
-	return ed;
+	if (ED_STATE(ed) != ED_OPER)  ohci_link_ed(ohci, ed);
+	*handle = ed;
+	return 0;
     
 }
 

@@ -21,6 +21,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_PCMCIA_3C589),y)
+  O_OBJS += 3c589_cs.o
+else
+  ifeq ($(CONFIG_PCMCIA_3C589),m)
+    MX_OBJS += 3c589_cs.o
+  endif
+endif
+
 ifeq ($(CONFIG_PCMCIA_RAYCS),y)
   OX_OBJS += ray_cs.o
 else

@@ -17,6 +17,7 @@ struct usb_audio {
 	struct list_head list;
 
 	void *irq_handle;
+	unsigned int irqpipe;
 };
 
 static struct usb_driver usb_audio_driver = {
@@ -90,11 +91,13 @@ static int usb_audio_probe(struct usb_device *dev)
 */
         
 /*
-	aud->irq_handle = usb_request_irq(dev,
-		usb_rcvctrlpipe(dev, endpoint->bEndpointAddress),
-		usb_audio_irq,
-		endpoint->bInterval,
-		aud);
+	aud->irqpipe = usb_rcvctrlpipe(dev, endpoint->bEndpointAddress);
+	na = usb_request_irq(dev, aud->irqpipe,
+		usb_audio_irq, endpoint->bInterval,
+		aud, &aud->irq_handle);
+	if (na) {
+		printk (KERN_WARNING "usb-audio: usb_request_irq failed (0x%x)\n", na);
+	}
 */
 
 	list_add(&aud->list, &usb_audio_list);
@@ -111,8 +114,7 @@ static void usb_audio_disconnect(struct usb_device *dev)
 
        	list_del(&aud->list);
 
-	usb_release_irq(aud->dev, aud->irq_handle);
-	aud->irq_handle = NULL;
+	usb_release_irq(aud->dev, aud->irq_handle, aud->irqpipe);
 
        	kfree(aud);
        	dev->private = NULL;

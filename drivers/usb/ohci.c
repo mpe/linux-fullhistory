@@ -943,11 +943,12 @@ static __u16 ohci_td_bytes_done(struct ohci_td *td)
  * Period is desired polling interval in ms.  The closest, shorter
  * match will be used.  Powers of two from 1-32 are supported by OHCI.
  *
- * Returns: a "handle pointer" that release_irq can use to stop this
- * interrupt.  (It's really a pointer to the TD).  NULL = error.
+ * Returns: success (0) or failure (< 0).
+ * Also sets the "handle pointer" that release_irq can use to stop this
+ * interrupt.  (It's really a pointer to the TD).
  */
-static void* ohci_request_irq(struct usb_device *usb, unsigned int pipe,
-	usb_device_irq handler, int period, void *dev_id)
+static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
+	usb_device_irq handler, int period, void *dev_id, void **handle)
 {
 	struct ohci_device *dev = usb_to_ohci(usb);
 	struct ohci_td *td;
@@ -961,7 +962,7 @@ static void* ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 		interrupt_ed = ohci_get_free_ed(dev);
 		if (!interrupt_ed) {
 			printk(KERN_ERR "Out of EDs on device %p in ohci_request_irq\n", dev);
-			return NULL;
+			return (-ENOMEM);
 		}
 
 		/*
@@ -988,7 +989,7 @@ static void* ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	if (!td) {
 		printk(KERN_ERR "Out of TDs in ohci_request_irq\n");
 		ohci_free_ed(interrupt_ed);
-		return NULL;
+		return (-ENOMEM);
 	}
 
 	/* Fill in the TD */
@@ -1009,7 +1010,8 @@ static void* ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	td = ohci_add_tds_to_ed(td, interrupt_ed);
 	spin_unlock_irqrestore(&ohci_edtd_lock, flags);
 
-	return (void*)td;
+	*handle = (void*)td;
+	return 0;
 } /* ohci_request_irq() */
 
 /*

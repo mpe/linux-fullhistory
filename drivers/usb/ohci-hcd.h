@@ -354,7 +354,7 @@ struct usb_ohci_ed * ohci_find_ep(struct usb_device * usb_dev, struct usb_hcd_ed
 
 int root_hub_control_msg(struct usb_device *usb_dev, unsigned int pipe, devrequest *cmd, void *data, int len);
 int root_hub_release_irq(struct usb_device *usb_dev, void * ed);  
-void * root_hub_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id);
+int root_hub_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id, void **handle);
 
 /* Root-Hub Register info */
 

@@ -1,8 +1,10 @@
-/* $Id: trampoline.S,v 1.9 1999/05/25 16:53:12 jj Exp $
+/* $Id: trampoline.S,v 1.10 1999/09/10 10:40:48 davem Exp $
  * trampoline.S: Jump start slave processors on sparc64.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
+
+#include <linux/config.h>
 
 #include <asm/head.h>
 #include <asm/asi.h>

@@ -641,6 +641,14 @@ struct proc_dir_entry proc_root_fs = {
 	NULL,
 	NULL, NULL
 };
+struct proc_dir_entry proc_root_driver = {
+        PROC_DRIVER, 6, "driver",
+        S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
+        0, &proc_dir_inode_operations,
+	NULL, NULL,
+	NULL,
+	NULL, NULL
+};
 static struct proc_dir_entry proc_root_dma = {
 	PROC_DMA, 3, "dma",
 	S_IFREG | S_IRUGO, 1, 0, 0,
@@ -738,6 +746,7 @@ void __init proc_root_init(void)
 #endif
 	proc_register(&proc_root, &proc_root_stat);
 	proc_register(&proc_root, &proc_root_devices);
+	proc_register(&proc_root, &proc_root_driver);
 	proc_register(&proc_root, &proc_root_partitions);
 	proc_register(&proc_root, &proc_root_interrupts);
 	proc_register(&proc_root, &proc_root_filesystems);

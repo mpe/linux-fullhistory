@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.54 1999/09/01 08:06:12 davem Exp $ */
+/* $Id: system.h,v 1.55 1999/09/10 10:44:44 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -63,9 +63,13 @@ extern unsigned long empty_zero_page;
 	retval; \
 })
 
-#define __save_flags(flags)	((flags) = getipl())
-#define __save_and_cli(flags)	((flags) = read_pil_and_cli())
-#define __restore_flags(flags)	setipl((flags))
+#define __save_flags(flags)		((flags) = getipl())
+#define __save_and_cli(flags)		((flags) = read_pil_and_cli())
+#define __restore_flags(flags)		setipl((flags))
+#define local_irq_disable()		__cli()
+#define local_irq_enable()		__sti()
+#define local_irq_save(flags)		__save_and_cli(flags)
+#define local_irq_restore(flags)	__restore_flags(flags)
 
 #ifndef __SMP__
 #define cli() __cli()

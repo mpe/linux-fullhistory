@@ -64,6 +64,10 @@
 static char *format_topo =
 /* T:  Lev=dd Prnt=dd Port=dd Cnt=dd Dev#=ddd Spd=ddd If#=ddd MxCh=dd Driver=%s */
   "T:  Lev=%2.2d Prnt=%2.2d Port=%2.2d Cnt=%2.2d Dev#=%3d Spd=%3s If#=%3d MxCh=%2d Driver=%s\n";
+
+static char *format_bandwidth =
+/* B:  Alloc=ddd/ddd us (xx%), #Int=ddd, #Iso=ddd */
+  "B:  Alloc=%3d/%3d us (%2d%%), #Int=%3d, #Iso=%3d\n";
   
 static char *format_device1 =
 /* D:  Ver=xx.xx Cls=xx(sssss) Sub=xx Prot=xx MxPS=dd #Cfgs=dd */
@@ -193,10 +197,7 @@ static int usb_dump_interface (const struct usb_interface_descriptor *interface,
  * 0. TBDs
  * 1. marking active config and ifaces (code lists all, but should mark
  *    which ones are active, if any)
- * 2. Add proc_usb_init() call from usb-core.c.
- * 3. proc_usb as a MODULE ?
- * 4. use __init ?
- * 5. add <halted> status to each endpoint line
+ * 2. add <halted> status to each endpoint line
  */
 
 static int usb_dump_config_descriptor (const struct usb_config_descriptor *desc,
@@ -282,6 +283,17 @@ static int usb_dump_desc (const struct usb_device *dev, char *buf, int *len)
 	return 0;
 }
 
+static int usb_hcd_bandwidth (const struct usb_device *dev, char *buf, int *len)
+{
+	*len += sprintf (buf + *len, format_bandwidth,
+			dev->bus->bandwidth_allocated, FRAME_TIME_MAX_USECS_ALLOC,
+			100 * dev->bus->bandwidth_allocated / FRAME_TIME_MAX_USECS_ALLOC,
+			dev->bus->bandwidth_int_reqs, dev->bus->bandwidth_isoc_reqs
+			);
+
+	return (*len >= DUMP_LIMIT) ? -1 : 0;
+}
+
 #ifdef PROC_EXTRA /* TBD: may want to add this code later */
 
 static int usb_dump_hub_descriptor (const struct usb_hub_descriptor * desc,
@@ -350,6 +362,10 @@ static int usb_device_dump (char *buf, int *len,
 
 	if (usbdev->devnum > 0) {	/* for any except root hub */
 		if (usb_dump_desc (usbdev, buf, len) < 0)
+			return -1;
+	}
+	else {		/* for a host controller */
+		if (usb_hcd_bandwidth (usbdev, buf, len) < 0)
 			return -1;
 	}
 
@@ -850,19 +866,5 @@ int proc_usb_init (void)
 
 	return 0;
 }
-
-#ifdef PROCFS_MODULE /* TBD: support proc_fs MODULE ??? */
-
-int init_module (void)
-{
-	return proc_usb_init ();
-}
-
-void cleanup_module (void)
-{
-	proc_usb_cleanup ();
-}
-
-#endif /* PROCFS_MODULE */
 
 /* end proc_usb.c */
