@@ -870,7 +870,7 @@ extern struct buffer_head * breada(kdev_t, int, int, unsigned int, unsigned int)
 extern int brw_page(int, struct page *, kdev_t, int [], int, int);
 
 typedef long (*writepage_t)(struct file *, struct page *, unsigned long, unsigned long, const char *);
-typedef int (*fs_getblock_t)(struct inode *, long, int, int *, int *);
+typedef int (*fs_getblock_t)(struct inode *, unsigned long, struct buffer_head *, int);
 
 /* Generic buffer handling for block filesystems.. */
 extern int block_read_full_page(struct file *, struct page *);

@@ -786,8 +786,11 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	 */
 	flags = vma->vm_flags;
 	addr = vma->vm_start;
+
+	lock_kernel();		/* kswapd, ugh */
 	insert_vm_struct(mm, vma);
 	merge_segments(mm, vma->vm_start, vma->vm_end);
+	unlock_kernel();
 	
 	mm->total_vm += len >> PAGE_SHIFT;
 	if (flags & VM_LOCKED) {

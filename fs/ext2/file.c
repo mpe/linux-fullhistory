@@ -106,14 +106,48 @@ static inline void remove_suid(struct inode *inode)
 	}
 }
 
+static int ext2_get_block(struct inode *inode, unsigned long block, struct buffer_head *bh, int update)
+{
+	if (!bh->b_blocknr) {
+		int error, created;
+		unsigned long blocknr;
+
+		blocknr = ext2_getblk_block(inode, block, 1, &error, &created);
+		if (!blocknr)
+			return error;
+
+		bh->b_dev = inode->i_dev;
+		bh->b_blocknr = blocknr;
+
+		if (!update)
+			return 0;
+
+		if (created) {
+			memset(bh->b_data, 0, bh->b_size);
+			set_bit(BH_Uptodate, &bh->b_state);
+			return 0;
+		}
+	}
+
+	if (!update)
+		return 0;
+
+	lock_kernel();
+	ll_rw_block(READ, 1, &bh);
+	wait_on_buffer(bh);
+	unlock_kernel();
+
+	return buffer_uptodate(bh) ? 0 : -EIO;
+}
+
 static int ext2_writepage (struct file * file, struct page * page)
 {
-	return block_write_full_page(file, page, ext2_getblk_block);
+	return block_write_full_page(file, page, ext2_get_block);
 }
 
 static long ext2_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
 {
-	return block_write_partial_page(file, page, offset, bytes, buf, ext2_getblk_block);
+	return block_write_partial_page(file, page, offset, bytes, buf, ext2_get_block);
 }
 
 /*

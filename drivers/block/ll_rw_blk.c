@@ -17,6 +17,7 @@
 #include <linux/locks.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/io.h>

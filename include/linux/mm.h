@@ -148,7 +148,7 @@ typedef struct page {
 #define PG_uptodate		 3
 #define PG_free_after		 4
 #define PG_decr_after		 5
-#define PG_swap_unlock_after	 6
+#define PG_free_swap_after	 6
 #define PG_DMA			 7
 #define PG_Slab			 8
 #define PG_swap_cache		 9
@@ -182,7 +182,7 @@ if (!test_and_clear_bit(PG_locked, &(page)->flags)) { \
 #define PageReferenced(page)	(test_bit(PG_referenced, &(page)->flags))
 #define PageFreeAfter(page)	(test_bit(PG_free_after, &(page)->flags))
 #define PageDecrAfter(page)	(test_bit(PG_decr_after, &(page)->flags))
-#define PageSwapUnlockAfter(page) (test_bit(PG_swap_unlock_after, &(page)->flags))
+#define PageSwapUnlockAfter(page) (test_bit(PG_free_swap_after, &(page)->flags))
 #define PageDMA(page)		(test_bit(PG_DMA, &(page)->flags))
 #define PageSlab(page)		(test_bit(PG_Slab, &(page)->flags))
 #define PageSwapCache(page)	(test_bit(PG_swap_cache, &(page)->flags))

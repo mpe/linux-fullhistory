@@ -273,8 +273,8 @@ int shrink_mmap(int priority, int gfp_mask)
 			continue;
 		}
 		if (!page_count(page)) {
-//			BUG();
 			spin_unlock(&pagecache_lock);
+			BUG();
 			continue;
 		}
 		get_page(page);
@@ -292,13 +292,18 @@ int shrink_mmap(int priority, int gfp_mask)
 
 		/* Is it a buffer page? */
 		if (page->buffers) {
+			int mem = page->inode ? 0 : PAGE_CACHE_SIZE;
 			spin_unlock(&pagecache_lock);
-			if (try_to_free_buffers(page))
-				goto made_progress;
+			if (!try_to_free_buffers(page))
+				goto unlock_continue;
+			buffermem -= mem;
 			spin_lock(&pagecache_lock);
 		}
 
-		/* We can't free pages unless there's just one user */
+		/*
+		 * We can't free pages unless there's just one user
+		 * (count == 2 because we added one ourselves above).
+		 */
 		if (page_count(page) != 2)
 			goto spin_unlock_continue;
 

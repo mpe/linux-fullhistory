@@ -234,9 +234,9 @@ L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 DIGI INTL. EPCA DRIVER
-P:      Daniel Taylor
+P:	 Chad Schwartz
 M:      support@dgii.com
-M:      danielt@dgii.com
+M:      chads@dgii.com
 L:      digilnux@dgii.com
 S:      Maintained
 

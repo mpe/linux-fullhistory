@@ -366,7 +366,7 @@ __initfunc(static void ide_setup_pci_device (struct pci_dev *dev, ide_pci_device
 	byte tmp = 0;
 	ide_hwif_t *hwif, *mate = NULL;
 
-#ifdef CONFIG_IDEDMA_AUTO
+#ifdef CONFIG_IDEDMA_PCI_AUTO
 	autodma = 1;
 #endif
 check_if_enabled:

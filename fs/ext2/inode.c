@@ -174,6 +174,7 @@ int ext2_bmap (struct inode * inode, int block)
 		ret = block_bmap (bread (inode->i_dev, i,
 					  inode->i_sb->s_blocksize),
 				block & (addr_per_block - 1));
+		goto out;
 	}
 	block -= (1 << (addr_per_block_bits * 2));
 	i = inode_bmap (inode, EXT2_TIND_BLOCK);
