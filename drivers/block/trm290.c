@@ -212,7 +212,7 @@ static int trm290_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 /*
  * Invoked from ide-dma.c at boot time.
  */
-__initfunc(void ide_init_trm290 (ide_hwif_t *hwif))
+void __init ide_init_trm290 (ide_hwif_t *hwif)
 {
 	unsigned int cfgbase = 0;
 	unsigned long flags;

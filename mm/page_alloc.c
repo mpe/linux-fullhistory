@@ -194,8 +194,6 @@ do { unsigned long size = 1 << high; \
 	set_page_count(map, 1); \
 } while (0)
 
-int low_on_memory = 0;
-
 unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 {
 	unsigned long flags;
@@ -221,6 +219,7 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 	 */
 	if (!(current->flags & PF_MEMALLOC)) {
 		int freed;
+		static int low_on_memory = 0;
 
 		if (nr_free_pages > freepages.min) {
 			if (!low_on_memory)

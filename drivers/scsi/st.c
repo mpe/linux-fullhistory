@@ -11,7 +11,7 @@
   Copyright 1992 - 1999 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Tue May 18 08:32:34 1999 by makisara@home
+  Last modified: Sat Aug  7 13:54:31 1999 by makisara@kai.makisara.local
   Some small formal changes - aeb, 950809
 */
 
@@ -55,16 +55,28 @@
 
 #include "constants.h"
 
+static int buffer_kbs = 0;
+static int write_threshold_kbs = 0;
+static int max_buffers = (-1);
+static int max_sg_segs = 0;
 #ifdef MODULE
+MODULE_AUTHOR("Kai Makisara");
+MODULE_DESCRIPTION("SCSI Tape Driver");
 MODULE_PARM(buffer_kbs, "i");
 MODULE_PARM(write_threshold_kbs, "i");
 MODULE_PARM(max_buffers, "i");
 MODULE_PARM(max_sg_segs, "i");
-static int buffer_kbs = 0;
-static int write_threshold_kbs = 0;
-static int max_buffers = 0;
-static int max_sg_segs = 0;
+#else
+static struct st_dev_parm {
+    char *name;
+    int *val;
+} parms[] __initdata = {
+    {"buffer_kbs", &buffer_kbs},
+    {"write_threshold_kbs", &write_threshold_kbs},
+    {"max_buffers", &max_buffers},
+    {"max_sg_segs", &max_sg_segs}};
 #endif
+
 
 /* The default definitions have been moved to st_options.h */
 
@@ -183,7 +195,7 @@ st_chk_result(Scsi_Cmnd * SCpnt)
     else
       printk(KERN_WARNING
 	     "st%d: Error %x (sugg. bt 0x%x, driver bt 0x%x, host bt 0x%x).\n",
-	     dev, result, suggestion(result), driver_byte(result),
+	     dev, result, suggestion(result), driver_byte(result) & DRIVER_MASK,
 	     host_byte(result));
   }
 
@@ -3318,23 +3330,66 @@ from_buffer(ST_buffer *st_bp, char *ubp, int do_count)
 }
 
 
-#ifndef MODULE
-/* Set the boot options. Syntax: st=xxx,yyy
-   where xxx is buffer size in 1024 byte blocks and yyy is write threshold
-   in 1024 byte blocks. */
-	__initfunc( void
-st_setup(char *str, int *ints))
+/* Validate the options from command line or module parameters */
+static void validate_options(void)
 {
-  if (ints[0] > 0 && ints[1] > 0)
-    st_buffer_size = ints[1] * ST_KILOBYTE;
-  if (ints[0] > 1 && ints[2] > 0) {
-    st_write_threshold = ints[2] * ST_KILOBYTE;
-    if (st_write_threshold > st_buffer_size)
-      st_write_threshold = st_buffer_size;
-  }
-  if (ints[0] > 2 && ints[3] > 0)
-    st_max_buffers = ints[3];
+    if (buffer_kbs > 0)
+	st_buffer_size = buffer_kbs * ST_KILOBYTE;
+    if (write_threshold_kbs > 0)
+	st_write_threshold = write_threshold_kbs * ST_KILOBYTE;
+    else if (buffer_kbs > 0)
+	st_write_threshold = st_buffer_size - 2048;
+    if (st_write_threshold > st_buffer_size) {
+	st_write_threshold = st_buffer_size;
+	printk(KERN_WARNING "st: write_threshold limited to %d bytes.\n",
+	       st_write_threshold);
+    }
+    if (max_buffers >= 0)
+	st_max_buffers = max_buffers;
+    if (max_sg_segs >= ST_FIRST_SG)
+	st_max_sg_segs = max_sg_segs;
 }
+
+#ifndef MODULE
+/* Set the boot options. Syntax is defined in README.st.
+*/
+static int __init st_setup(char *str)
+{
+    int i, len, ints[5];
+    char *stp;
+
+    stp = get_options(str, ARRAY_SIZE(ints), ints);
+
+    if (ints[0] > 0) {
+	for (i=0; i < ints[0] && i < ARRAY_SIZE(parms) ; i++)
+	    *parms[i].val = ints[i + 1];
+    }
+    else {
+	while (stp != NULL) {
+	    for (i=0; i < ARRAY_SIZE(parms); i++) {
+		len = strlen(parms[i].name);
+		if (!strncmp(stp, parms[i].name, len) &&
+		    (*(stp + len) == ':' || *(stp + len) == '=')) {
+		    *parms[i].val = simple_strtoul(stp + len + 1, NULL, 0);
+		    break;
+		}
+	    }
+	    if (i >= sizeof(parms) / sizeof(struct st_dev_parm))
+		printk(KERN_WARNING "st: illegal parameter in '%s'\n",
+		       stp);
+	    stp = strchr(stp, ',');
+	    if (stp)
+		stp++;
+	}
+    }
+
+    validate_options();
+
+    return 1;
+}
+
+__setup("st=", st_setup);
+
 #endif
 
 
@@ -3449,11 +3504,12 @@ static int st_init()
 {
   int i;
   Scsi_Tape * STp;
-#if !ST_RUNTIME_BUFFERS
   int target_nbr;
-#endif
 
   if (st_template.dev_noticed == 0) return 0;
+
+  printk(KERN_INFO "st: bufsize %d, wrt %d, max init. buffers %d, s/g segs %d.\n",
+	 st_buffer_size, st_write_threshold, st_max_buffers, st_max_sg_segs);
 
   if(!st_registered) {
     if (register_chrdev(SCSI_TAPE_MAJOR,"st",&st_fops)) {
@@ -3505,9 +3561,6 @@ static int st_init()
     return 1;
   }
 
-#if ST_RUNTIME_BUFFERS
-  st_nbr_buffers = 0;
-#else
   target_nbr = st_template.dev_noticed;
   if (target_nbr < ST_EXTRA_DEVS)
     target_nbr = ST_EXTRA_DEVS;
@@ -3517,24 +3570,14 @@ static int st_init()
   for (i=st_nbr_buffers=0; i < target_nbr; i++) {
     if (!new_tape_buffer(TRUE, TRUE)) {
       if (i == 0) {
-#if 0
-	printk(KERN_ERR "Can't continue without at least one tape buffer.\n");
-	unregister_chrdev(SCSI_TAPE_MAJOR, "st");
-	scsi_init_free((char *) st_buffers,
-		       st_template.dev_max * sizeof(ST_buffer *));
-	scsi_init_free((char *) scsi_tapes,
-		       st_template.dev_max * sizeof(Scsi_Tape));
-	return 1;
-#else
 	printk(KERN_INFO "No tape buffers allocated at initialization.\n");
 	break;
-#endif
       }
       printk(KERN_INFO "Number of tape buffers adjusted.\n");
       break;
     }
   }
-#endif
+
   return 0;
 }
 
@@ -3557,21 +3600,10 @@ static void st_detach(Scsi_Device * SDp)
 
 #ifdef MODULE
 
-int init_module(void) {
+int __init init_module(void) {
   int result;
 
-  if (buffer_kbs > 0)
-      st_buffer_size = buffer_kbs * ST_KILOBYTE;
-  if (write_threshold_kbs > 0)
-      st_write_threshold = write_threshold_kbs * ST_KILOBYTE;
-  if (st_write_threshold > st_buffer_size)
-      st_write_threshold = st_buffer_size;
-  if (max_buffers > 0)
-      st_max_buffers = max_buffers;
-  if (max_sg_segs >= ST_FIRST_SG)
-      st_max_sg_segs = max_sg_segs;
-  printk(KERN_INFO "st: bufsize %d, wrt %d, max buffers %d, s/g segs %d.\n",
-	 st_buffer_size, st_write_threshold, st_max_buffers, st_max_sg_segs);
+  validate_options();
 
   st_template.module = &__this_module;
   result = scsi_register_module(MODULE_SCSI_DEV, &st_template);

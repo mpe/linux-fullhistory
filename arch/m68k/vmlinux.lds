@@ -31,22 +31,32 @@ SECTIONS
 	CONSTRUCTORS
 	}
 
-  .bss : { *(.bss) }		/* BSS */
-
   _edata = .;			/* End of data section */
 
-  . = ALIGN(16);
-  .data.cacheline_aligned : { *(.data.cacheline_aligned) }
+  . = ALIGN(8192);
+  init_task : { *(init_task) }
 
   . = ALIGN(4096);		/* Init code and data */
   __init_begin = .;
   .text.init : { *(.text.init) }
   .data.init : { *(.data.init) }
+  . = ALIGN(16);
+  __setup_start = .;
+  .setup.init : { *(.setup.init) }
+  __setup_end = .;
+  __initcall_start = .;
+  .initcall.init : { *(.initcall.init) }
+  __initcall_end = .;
   . = ALIGN(8192);
   __init_end = .;
 
-  init_task : { *(init_task) }	/* The initial task and kernel stack */
+  . = ALIGN(16);
+  .data.cacheline_aligned : { *(.data.cacheline_aligned) }
 
+  __bss_start = .;		/* BSS */
+  .bss : {
+	*(.bss)
+	}
   _end = . ;
 
   /* Stabs debugging sections.  */

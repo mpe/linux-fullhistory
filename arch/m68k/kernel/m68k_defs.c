@@ -26,25 +26,34 @@ int main(void)
 	DEFINE(TASK_FLAGS, offsetof(struct task_struct, flags));
 	DEFINE(TASK_SIGPENDING, offsetof(struct task_struct, sigpending));
 	DEFINE(TASK_NEEDRESCHED, offsetof(struct task_struct, need_resched));
-	DEFINE(TASK_TSS, offsetof(struct task_struct, tss));
+	DEFINE(TASK_THREAD, offsetof(struct task_struct, thread));
 	DEFINE(TASK_MM, offsetof(struct task_struct, mm));
+	DEFINE(TASK_ACTIVE_MM, offsetof(struct task_struct, active_mm));
 
 	/* offsets into the thread struct */
-	DEFINE(TSS_KSP, offsetof(struct thread_struct, ksp));
-	DEFINE(TSS_USP, offsetof(struct thread_struct, usp));
-	DEFINE(TSS_SR, offsetof(struct thread_struct, sr));
-	DEFINE(TSS_FS, offsetof(struct thread_struct, fs));
-	DEFINE(TSS_CRP, offsetof(struct thread_struct, crp));
-	DEFINE(TSS_ESP0, offsetof(struct thread_struct, esp0));
-	DEFINE(TSS_FPREG, offsetof(struct thread_struct, fp));
-	DEFINE(TSS_FPCNTL, offsetof(struct thread_struct, fpcntl));
-	DEFINE(TSS_FPSTATE, offsetof(struct thread_struct, fpstate));
+	DEFINE(THREAD_KSP, offsetof(struct thread_struct, ksp));
+	DEFINE(THREAD_USP, offsetof(struct thread_struct, usp));
+	DEFINE(THREAD_SR, offsetof(struct thread_struct, sr));
+	DEFINE(THREAD_FS, offsetof(struct thread_struct, fs));
+	DEFINE(THREAD_CRP, offsetof(struct thread_struct, crp));
+	DEFINE(THREAD_ESP0, offsetof(struct thread_struct, esp0));
+	DEFINE(THREAD_FPREG, offsetof(struct thread_struct, fp));
+	DEFINE(THREAD_FPCNTL, offsetof(struct thread_struct, fpcntl));
+	DEFINE(THREAD_FPSTATE, offsetof(struct thread_struct, fpstate));
 
 	/* offsets into the pt_regs */
 	DEFINE(PT_D0, offsetof(struct pt_regs, d0));
 	DEFINE(PT_ORIG_D0, offsetof(struct pt_regs, orig_d0));
+	DEFINE(PT_D1, offsetof(struct pt_regs, d1));
+	DEFINE(PT_D2, offsetof(struct pt_regs, d2));
+	DEFINE(PT_D3, offsetof(struct pt_regs, d3));
+	DEFINE(PT_D4, offsetof(struct pt_regs, d4));
+	DEFINE(PT_D5, offsetof(struct pt_regs, d5));
+	DEFINE(PT_A0, offsetof(struct pt_regs, a0));
+	DEFINE(PT_A1, offsetof(struct pt_regs, a1));
+	DEFINE(PT_A2, offsetof(struct pt_regs, a2));
+	DEFINE(PT_PC, offsetof(struct pt_regs, pc));
 	DEFINE(PT_SR, offsetof(struct pt_regs, sr));
-
 	/* bitfields are a bit difficult */
 	DEFINE(PT_VECTOR, offsetof(struct pt_regs, pc) + 4);
 
@@ -68,6 +77,12 @@ int main(void)
 	DEFINE(FBCON_FONT_DESC_HEIGHT, offsetof(struct fbcon_font_desc, height));
 	DEFINE(FBCON_FONT_DESC_DATA, offsetof(struct fbcon_font_desc, data));
 	DEFINE(FBCON_FONT_DESC_PREF, offsetof(struct fbcon_font_desc, pref));
+
+	/* signal defines */
+	DEFINE(SIGSEGV, SIGSEGV);
+	DEFINE(SEGV_MAPERR, SEGV_MAPERR);
+	DEFINE(SIGTRAP, SIGTRAP);
+	DEFINE(TRAP_TRACE, TRAP_TRACE);
 
 	/* offsets into the custom struct */
 	DEFINE(CUSTOMBASE, &custom);

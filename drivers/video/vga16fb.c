@@ -1003,7 +1003,7 @@ static void vga16fb_blank(int blank, struct fb_info *fb_info)
 	}
 }
 
-__initfunc(void vga16fb_init(void))
+void __init vga16_init(void)
 {
 	int i,j;
 
@@ -1047,12 +1047,35 @@ __initfunc(void vga16fb_init(void))
 	vga16fb_set_disp(-1, &vga16fb);
 
 	if (register_framebuffer(&vga16fb.fb_info)<0)
-		return;
+		return -EINVAL;
 
 	printk("fb%d: %s frame buffer device\n",
 	       GET_FB_IDX(vga16fb.fb_info.node), vga16fb.fb_info.modename);
+
+	return 0;
 }
 
+#ifndef MODULE
+__initfunc(void vga16fb_init(void))
+{
+    vga16_init();
+}
+
+#else /* MODULE */
+
+__initfunc(int init_module(void))
+{
+    return vga16_init();
+}
+
+void cleanup_module(void)
+{
+    unregister_framebuffer(&vga16fb.fb_info);
+    release_region(0x3c0, 32);
+    iounmap(vga16fb.video_vbase);
+}
+
+#endif
 
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.

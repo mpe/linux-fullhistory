@@ -215,11 +215,10 @@ static struct atari_disk_type user_params[FD_MAX_UNITS];
  * restored upon disk change by floppy_revalidate() if valid (as seen by
  * default_params[].blocks > 0 - a bit in unit[].flags might be used for this?)
  */
-static struct atari_disk_type default_params[FD_MAX_UNITS] = {
-	{ NULL,  0, 0, 0, 0},  };
+static struct atari_disk_type default_params[FD_MAX_UNITS];
 
 static int floppy_sizes[256];
-static int floppy_blocksizes[256] = { 0, };
+static int floppy_blocksizes[256];
 
 /* current info on each unit */
 static struct atari_floppy_struct {
@@ -331,26 +330,6 @@ static unsigned int changed_floppies = 0xff, fake_change = 0;
 					 * will give up. */
 
 
-#define	START_MOTOR_OFF_TIMER(delay)				\
-    do {							\
-        motor_off_timer.expires = jiffies + (delay);		\
-        add_timer( &motor_off_timer );				\
-        MotorOffTrys = 0;					\
-	} while(0)
-
-#define	START_CHECK_CHANGE_TIMER(delay)				\
-    do {							\
-        timer_table[FLOPPY_TIMER].expires = jiffies + (delay);	\
-        timer_active |= (1 << FLOPPY_TIMER);			\
-	} while(0)
-
-#define	START_TIMEOUT()						\
-    mod_timer(&timeout_timer, jiffies + FLOPPY_TIMEOUT)
-
-#define	STOP_TIMEOUT()						\
-    del_timer(&timeout_timer)
-
-
 /*
  * The driver is trying to determine the correct media format
  * while Probing is set. fd_rwsec_done() clears it after a
@@ -420,6 +399,31 @@ static struct timer_list timeout_timer =
 	{ NULL, NULL, 0, 0, fd_times_out };
 
 
+static inline void
+start_motor_off_timer(void)
+{
+	mod_timer(&motor_off_timer, jiffies + FD_MOTOR_OFF_DELAY);
+	MotorOffTrys = 0;
+}
+
+static inline void
+start_check_change_timer(void)
+{
+	timer_table[FLOPPY_TIMER].expires = jiffies + CHECK_CHANGE_DELAY;
+	timer_active |= (1 << FLOPPY_TIMER);
+}
+
+static inline void
+start_timeout(void)
+{
+	mod_timer(&timeout_timer, jiffies + FLOPPY_TIMEOUT);
+}
+
+static inline void
+stop_timeout(void)
+{
+	del_timer(&timeout_timer);
+}
 
 /* Select the side to use. */
 
@@ -497,19 +501,12 @@ static void fd_deselect( void )
 
 static void fd_motor_off_timer( unsigned long dummy )
 {
-/*	unsigned long flags; */
 	unsigned char status;
-	int		      delay;
 
-	del_timer( &motor_off_timer );
-	
 	if (SelectedDrive < 0)
 		/* no drive selected, needn't deselect anyone */
 		return;
 
-/*	save_flags(flags);
-	cli(); */
-	
 	if (stdma_islocked())
 		goto retry;
 
@@ -519,21 +516,18 @@ static void fd_motor_off_timer( unsigned long dummy )
 		/* motor already turned off by FDC -> deselect drives */
 		MotorOn = 0;
 		fd_deselect();
-/*		restore_flags(flags); */
 		return;
 	}
 	/* not yet off, try again */
 
   retry:
-/*	restore_flags(flags); */
 	/* Test again later; if tested too often, it seems there is no disk
 	 * in the drive and the FDC will leave the motor on forever (or,
 	 * at least until a disk is inserted). So we'll test only twice
 	 * per second from then on...
 	 */
-	delay = (MotorOffTrys < FD_MOTOR_OFF_MAXTRY) ?
-		        (++MotorOffTrys, HZ/20) : HZ/2;
-	START_MOTOR_OFF_TIMER( delay );
+	mod_timer(&motor_off_timer,
+		  jiffies + (MotorOffTrys++ < FD_MOTOR_OFF_MAXTRY ? HZ/20 : HZ/2));
 }
 
 
@@ -571,7 +565,7 @@ static void check_change( void )
 	}
 	restore_flags(flags);
 
-	START_CHECK_CHANGE_TIMER( CHECK_CHANGE_DELAY );
+	start_check_change_timer();
 }
 
  
@@ -603,8 +597,7 @@ static void floppy_irq (int irq, void *dummy, struct pt_regs *fp)
 	unsigned char status;
 	void (*handler)( int );
 
-	handler = FloppyIRQHandler;
-	FloppyIRQHandler = NULL;
+	handler = xchg(&FloppyIRQHandler, NULL);
 
 	if (handler) {
 		nop();
@@ -805,7 +798,7 @@ static void fd_calibrate( void )
 
 	NeedSeek = 1;
 	MotorOn = 1;
-	START_TIMEOUT();
+	start_timeout();
 	/* wait for IRQ */
 }
 
@@ -813,7 +806,7 @@ static void fd_calibrate( void )
 static void fd_calibrate_done( int status )
 {
 	DPRINT(("fd_calibrate_done()\n"));
-	STOP_TIMEOUT();
+	stop_timeout();
     
 	/* set the correct speed now */
 	if (ATARIHW_PRESENT(FDCSPEED))
@@ -853,7 +846,7 @@ static void fd_seek( void )
 
 	MotorOn = 1;
 	set_head_settle_flag();
-	START_TIMEOUT();
+	start_timeout();
 	/* wait for IRQ */
 }
 
@@ -861,7 +854,7 @@ static void fd_seek( void )
 static void fd_seek_done( int status )
 {
 	DPRINT(("fd_seek_done()\n"));
-	STOP_TIMEOUT();
+	stop_timeout();
 	
 	/* set the correct speed */
 	if (ATARIHW_PRESENT(FDCSPEED))
@@ -900,7 +893,7 @@ static void fd_rwsec( void )
 	DPRINT(("fd_rwsec(), Sec=%d, Access=%c\n",ReqSector, ReqCmd == WRITE ? 'w' : 'r' ));
 	if (ReqCmd == WRITE) {
 		if (ATARIHW_PRESENT(EXTD_DMA)) {
-			paddr = (unsigned long)VTOP(ReqData);
+			paddr = virt_to_phys(ReqData);
 		}
 		else {
 			copy_buffer( ReqData, DMABuffer );
@@ -913,7 +906,8 @@ static void fd_rwsec( void )
 		if (read_track)
 			paddr = PhysTrackBuffer;
 		else
-			paddr = ATARIHW_PRESENT(EXTD_DMA) ? VTOP(ReqData) : PhysDMABuffer;
+			paddr = ATARIHW_PRESENT(EXTD_DMA) ? 
+				virt_to_phys(ReqData) : PhysDMABuffer;
 		rwflag = 0;
 	}
 
@@ -978,14 +972,12 @@ static void fd_rwsec( void )
 		 * search for the first non-existent sector and need 1 sec to
 		 * recognise that it isn't present :-(
 		 */
-		del_timer (&readtrack_timer);
-		readtrack_timer.expires =
-		  jiffies + HZ/5 + (old_motoron ? 0 : HZ);
-		       /* 1 rot. + 5 rot.s if motor was off  */
 		MultReadInProgress = 1;
-		add_timer( &readtrack_timer );
+		mod_timer(&readtrack_timer,
+			  /* 1 rot. + 5 rot.s if motor was off  */
+			  jiffies + HZ/5 + (old_motoron ? 0 : HZ));
 	}
-	START_TIMEOUT();
+	start_timeout();
 }
 
     
@@ -995,8 +987,6 @@ static void fd_readtrack_check( unsigned long dummy )
 
 	save_flags(flags);  
 	cli();
-
-	del_timer( &readtrack_timer );
 
 	if (!MultReadInProgress) {
 		/* This prevents a race condition that could arise if the
@@ -1045,8 +1035,7 @@ static void fd_readtrack_check( unsigned long dummy )
 		/* not yet finished, wait another tenth rotation */
 		restore_flags(flags);
 		DPRINT(("fd_readtrack_check(): not yet finished\n"));
-		readtrack_timer.expires = jiffies + HZ/5/10;
-		add_timer( &readtrack_timer );
+		mod_timer(&readtrack_timer, jiffies + HZ/5/10);
 	}
 }
 
@@ -1068,7 +1057,7 @@ static void fd_rwsec_done1(int status)
 {
 	unsigned int track;
 
-	STOP_TIMEOUT();
+	stop_timeout();
 	
 	/* Correct the track if stretch != 0 */
 	if (SUDT->stretch) {
@@ -1150,7 +1139,7 @@ static void fd_rwsec_done1(int status)
 		if (!read_track) {
 			void *addr;
 			addr = ATARIHW_PRESENT( EXTD_DMA ) ? ReqData : DMABuffer;
-			dma_cache_maintenance( VTOP(addr), 512, 0 );
+			dma_cache_maintenance( virt_to_phys(addr), 512, 0 );
 			if (!ATARIHW_PRESENT( EXTD_DMA ))
 				copy_buffer (addr, ReqData);
 		} else {
@@ -1237,7 +1226,7 @@ static void fd_writetrack( void )
 	dma_wd.fdc_acces_seccount = FDCCMD_WRTRA | get_head_settle_flag(); 
 
 	MotorOn = 1;
-	START_TIMEOUT();
+	start_timeout();
 	/* wait for interrupt */
 }
 
@@ -1246,7 +1235,7 @@ static void fd_writetrack_done( int status )
 {
 	DPRINT(("fd_writetrack_done()\n"));
 
-	STOP_TIMEOUT();
+	stop_timeout();
 
 	if (status & FDCSTAT_WPROT) {
 		printk(KERN_NOTICE "fd%d: is write protected\n", SelectedDrive );
@@ -1304,7 +1293,7 @@ static void finish_fdc( void )
 		SET_IRQ_HANDLER( finish_fdc_done );
 		FDC_WRITE (FDCREG_CMD, FDCCMD_SEEK);
 		MotorOn = 1;
-		START_TIMEOUT();
+		start_timeout();
 		/* we must wait for the IRQ here, because the ST-DMA
 		   is released immediately afterwards and the interrupt
 		   may be delivered to the wrong driver. */
@@ -1317,19 +1306,18 @@ static void finish_fdc_done( int dummy )
 	unsigned long flags;
 
 	DPRINT(("finish_fdc_done entered\n"));
-	STOP_TIMEOUT();
+	stop_timeout();
 	NeedSeek = 0;
 
 	if ((timer_active & (1 << FLOPPY_TIMER)) &&
-	    timer_table[FLOPPY_TIMER].expires < jiffies + 5)
+	    time_before(timer_table[FLOPPY_TIMER].expires, jiffies + 5))
 		/* If the check for a disk change is done too early after this
 		 * last seek command, the WP bit still reads wrong :-((
 		 */
 		timer_table[FLOPPY_TIMER].expires = jiffies + 5;
 	else
-		START_CHECK_CHANGE_TIMER( CHECK_CHANGE_DELAY );
-	del_timer( &motor_off_timer );
-	START_MOTOR_OFF_TIMER( FD_MOTOR_OFF_DELAY );
+		start_check_change_timer();
+	start_motor_off_timer();
 
 	save_flags(flags);
 	cli();
@@ -1828,10 +1816,10 @@ static int __init fd_test_drive_present( int drive )
 	FDC_WRITE (FDCREG_TRACK, 0xff00);
 	FDC_WRITE( FDCREG_CMD, FDCCMD_RESTORE | FDCCMDADD_H | FDCSTEP_6 );
 
-	for( ok = 0, timeout = jiffies + 2*HZ+HZ/2; time_before(jiffies, timeout); ) {
+	timeout = jiffies + 2*HZ+HZ/2;
+	while (time_before(jiffies, timeout))
 		if (!(mfp.par_dt_reg & 0x20))
 			break;
-	}
 
 	status = FDC_READ( FDCREG_STATUS );
 	ok = (status & FDCSTAT_TR00) != 0;
@@ -1892,9 +1880,9 @@ static void __init config_types( void )
 	}
 	
 	if (cnt > 0) {
-		START_MOTOR_OFF_TIMER( FD_MOTOR_OFF_DELAY );
+		start_motor_off_timer();
 		if (cnt == 1) fd_select_drive( 0 );
-		START_CHECK_CHANGE_TIMER( CHECK_CHANGE_DELAY );
+		start_check_change_timer();
 	}
 }
 
@@ -2045,8 +2033,8 @@ int __init atari_floppy_init (void)
 		return -ENOMEM;
 	}
 	TrackBuffer = DMABuffer + 512;
-	PhysDMABuffer = (unsigned long) VTOP(DMABuffer);
-	PhysTrackBuffer = (unsigned long) VTOP(TrackBuffer);
+	PhysDMABuffer = virt_to_phys(DMABuffer);
+	PhysTrackBuffer = virt_to_phys(TrackBuffer);
 	BufferDrive = BufferSide = BufferTrack = -1;
 
 	for (i = 0; i < FD_MAX_UNITS; i++) {

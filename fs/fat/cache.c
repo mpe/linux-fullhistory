@@ -30,13 +30,19 @@ static struct fat_cache *fat_cache,cache[FAT_CACHE];
 
 int fat_access(struct super_block *sb,int nr,int new_value)
 {
+	return MSDOS_SB(sb)->cvf_format->fat_access(sb,nr,new_value);
+}
+
+int fat_bmap(struct inode *inode,int sector)
+{
+	return MSDOS_SB(inode->i_sb)->cvf_format->cvf_bmap(inode,sector);
+}
+
+int default_fat_access(struct super_block *sb,int nr,int new_value)
+{
 	struct buffer_head *bh,*bh2,*c_bh,*c_bh2;
 	unsigned char *p_first,*p_last;
 	int copy,first,last,next,b;
-
-	if (MSDOS_SB(sb)->cvf_format &&
-	    MSDOS_SB(sb)->cvf_format->fat_access)
-		return MSDOS_SB(sb)->cvf_format->fat_access(sb,nr,new_value);
 
 	if ((unsigned) (nr-2) >= MSDOS_SB(sb)->clusters)
 		return 0;
@@ -265,14 +271,11 @@ int fat_get_cluster(struct inode *inode,int cluster)
 	return nr;
 }
 
-int fat_smap(struct inode *inode,int sector)
+int default_fat_bmap(struct inode *inode,int sector)
 {
-	struct msdos_sb_info *sb;
+	struct msdos_sb_info *sb=MSDOS_SB(inode->i_sb);
 	int cluster,offset;
 
-	sb = MSDOS_SB(inode->i_sb);
-	if (sb->cvf_format && sb->cvf_format->cvf_smap)
-		return sb->cvf_format->cvf_smap(inode,sector);
 	if ((sb->fat_bits != 32) &&
 	    (inode->i_ino == MSDOS_ROOT_INO || (S_ISDIR(inode->i_mode) &&
 	     !MSDOS_I(inode)->i_start))) {
@@ -280,6 +283,8 @@ int fat_smap(struct inode *inode,int sector)
 			return 0;
 		return sector+sb->dir_start;
 	}
+	if (sector >= (MSDOS_I(inode)->i_realsize>>9))
+		return 0;
 	cluster = sector/sb->cluster_size;
 	offset = sector % sb->cluster_size;
 	if (!(cluster = fat_get_cluster(inode,cluster))) return 0;

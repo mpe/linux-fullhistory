@@ -319,7 +319,7 @@
 # define PCI_PRESENT pci_present ()
 # define PCI_SET_MASTER pci_set_master (pdev)
 # define PCI_FIND_DEVICE(vend, id) (pdev = pci_find_device (vend, id, pdev))
-# define PCI_GET_IO_AND_IRQ io_port = pdev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK; irq = pdev->irq
+# define PCI_GET_IO_AND_IRQ io_port = pdev->resource[0].start; irq = pdev->irq
 #else
 # include <linux/bios32.h>
 # define PDEV pbus, pdevfn

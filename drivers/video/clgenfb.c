@@ -1467,7 +1467,7 @@ static void fbcon_clgen8_clear(struct vc_data *conp, struct display *p,
 /********************************************************************/
 /* clgenfb_init() - master initialization function                  */
 /********************************************************************/
-__initfunc(void clgenfb_init(void))
+void __init clgenfb_init(void)
 {
     const struct ConfigDev *cd  = NULL;
     const struct ConfigDev *cd2 = NULL;
@@ -1655,7 +1655,7 @@ static char *strtoke(char *s,const char *ct)
 /* arguments to the video= bootstrap parameter. Right now, there */
 /* is nothing I do here.                                         */
 /*****************************************************************/
-__initfunc(void clgenfb_setup(char *options, int *ints))
+void __init clgenfb_setup(char *options, int *ints)
 {
 //    char *this_opt;
 

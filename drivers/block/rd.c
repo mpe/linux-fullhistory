@@ -343,7 +343,7 @@ static struct file_operations fd_fops = {
 };
 
 /* This is the registration and initialization section of the RAM disk driver */
-__initfunc(int rd_init(void))
+int __init rd_init(void)
 {
 	int		i;
 
@@ -416,8 +416,8 @@ void cleanup_module(void)
  *	romfs
  * 	gzip
  */
-__initfunc(int
-identify_ramdisk_image(kdev_t device, struct file *fp, int start_block))
+int __init 
+identify_ramdisk_image(kdev_t device, struct file *fp, int start_block)
 {
 	const int size = 512;
 	struct minix_super_block *minixsb;
@@ -509,7 +509,7 @@ done:
 /*
  * This routine loads in the RAM disk image.
  */
-__initfunc(static void rd_load_image(kdev_t device, int offset, int unit))
+static void __init rd_load_image(kdev_t device, int offset, int unit)
 {
  	struct inode inode, out_inode;
 	struct file infile, outfile;
@@ -631,7 +631,7 @@ done:
 }
 
 
-__initfunc(static void rd_load_disk(int n))
+static void __init rd_load_disk(int n)
 {
 #ifdef CONFIG_BLK_DEV_INITRD
 	extern kdev_t real_root_dev;
@@ -660,18 +660,18 @@ __initfunc(static void rd_load_disk(int n))
 
 }
 
-__initfunc(void rd_load(void))
+void __init rd_load(void)
 {
 	rd_load_disk(0);
 }
 
-__initfunc(void rd_load_secondary(void))
+void __init rd_load_secondary(void)
 {
 	rd_load_disk(1);
 }
 
 #ifdef CONFIG_BLK_DEV_INITRD
-__initfunc(void initrd_load(void))
+void __init initrd_load(void)
 {
 	rd_load_image(MKDEV(MAJOR_NR, INITRD_MINOR),rd_image_start,0);
 }
@@ -730,21 +730,21 @@ static void gzip_release(void **);
 
 #include "../../lib/inflate.c"
 
-__initfunc(static void *malloc(int size))
+static void __init *malloc(int size)
 {
 	return kmalloc(size, GFP_KERNEL);
 }
 
-__initfunc(static void free(void *where))
+static void __init free(void *where)
 {
 	kfree(where);
 }
 
-__initfunc(static void gzip_mark(void **ptr))
+static void __init gzip_mark(void **ptr)
 {
 }
 
-__initfunc(static void gzip_release(void **ptr))
+static void __init gzip_release(void **ptr)
 {
 }
 
@@ -753,7 +753,7 @@ __initfunc(static void gzip_release(void **ptr))
  * Fill the input buffer. This is called only when the buffer is empty
  * and at least one byte is really needed.
  */
-__initfunc(static int fill_inbuf(void))
+static int __init fill_inbuf(void)
 {
 	if (exit_code) return -1;
 	
@@ -770,7 +770,7 @@ __initfunc(static int fill_inbuf(void))
  * Write the output window window[0..outcnt-1] and update crc and bytes_out.
  * (Used for the decompressed data only.)
  */
-__initfunc(static void flush_window(void))
+static void __init flush_window(void)
 {
     ulg c = crc;         /* temporary variable */
     unsigned n;
@@ -787,14 +787,14 @@ __initfunc(static void flush_window(void))
     outcnt = 0;
 }
 
-__initfunc(static void error(char *x))
+static void __init error(char *x)
 {
 	printk(KERN_ERR "%s", x);
 	exit_code = 1;
 }
 
-__initfunc(static int
-crd_load(struct file * fp, struct file *outfp))
+static int __init 
+crd_load(struct file * fp, struct file *outfp)
 {
 	int result;
 

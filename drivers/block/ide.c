@@ -2553,7 +2553,7 @@ char *ide_xfer_verbose (byte xfer_rate) {
  * stridx() returns the offset of c within s,
  * or -1 if c is '\0' or not found within s.
  */
-__initfunc(static int stridx (const char *s, char c))
+static int __init stridx (const char *s, char c)
 {
 	char *i = strchr(s, c);
 	return (i && c) ? i - s : -1;
@@ -2571,7 +2571,7 @@ __initfunc(static int stridx (const char *s, char c))
  *     and base16 is allowed when prefixed with "0x".
  * 4. otherwise, zero is returned.
  */
-__initfunc(static int match_parm (char *s, const char *keywords[], int vals[], int max_vals))
+static int __init match_parm (char *s, const char *keywords[], int vals[], int max_vals)
 {
 	static const char *decimal = "0123456789";
 	static const char *hex = "0123456789abcdef";
@@ -2701,8 +2701,9 @@ __initfunc(static int match_parm (char *s, const char *keywords[], int vals[], i
  * "ide0=ali14xx"	: probe/support ali14xx chipsets (ALI M1439, M1443, M1445)
  * "ide0=umc8672"	: probe/support umc8672 chipsets
  * "idex=dc4030"	: probe/support Promise DC4030VL interface
+ * "ide=doubler"	: probe/support IDE doublers on Amiga
  */
-__initfunc(void ide_setup (char *s))
+void __init ide_setup (char *s)
 {
 	int i, vals[3];
 	ide_hwif_t *hwif;
@@ -3128,7 +3129,7 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 /*
  * probe_for_hwifs() finds/initializes "known" IDE interfaces
  */
-__initfunc(static void probe_for_hwifs (void))
+static void __init probe_for_hwifs (void)
 {
 #ifdef CONFIG_PCI
 	if (pci_present())
@@ -3202,7 +3203,7 @@ __initfunc(static void probe_for_hwifs (void))
 #endif /* CONFIG_BLK_DEV_BUDDHA */
 }
 
-__initfunc(void ide_init_builtin_drivers (void))
+void __init ide_init_builtin_drivers (void)
 {
 	/*
 	 * Probe for special PCI and other "known" interface chipsets
@@ -3523,7 +3524,7 @@ EXPORT_SYMBOL(ide_setup_ports);
 /*
  * This is gets invoked once during initialization, to set *everything* up
  */
-__initfunc(int ide_init (void))
+int __init ide_init (void)
 {
 	static char banner_printed = 0;
 
@@ -3545,7 +3546,7 @@ __initfunc(int ide_init (void))
 char *options = NULL;
 MODULE_PARM(options,"s");
 
-__initfunc(static void parse_options (char *line))
+static void __init parse_options (char *line)
 {
 	char *next = line;
 

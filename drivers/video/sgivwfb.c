@@ -919,7 +919,7 @@ static int sgivwfb_mmap(struct fb_info *info, struct file *file,
   return 0;
 }
 
-__initfunc(void sgivwfb_setup(char *options, int *ints))
+void __init sgivwfb_setup(char *options, int *ints)
 {
   char *this_opt;
 
@@ -938,7 +938,7 @@ __initfunc(void sgivwfb_setup(char *options, int *ints))
 /*
  *  Initialisation
  */
-__initfunc(void sgivwfb_init(void))
+void __init sgivwfb_init(void)
 {
   printk("sgivwfb: framebuffer at 0x%lx, size %ldk\n",
 	 sgivwfb_mem_phys, sgivwfb_mem_size/1024);

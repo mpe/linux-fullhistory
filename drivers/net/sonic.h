@@ -9,6 +9,9 @@
  * and pad structure members must be exchanged. Also, the structures
  * need to be changed accordingly to the bus size. 
  *
+ * 981229 MSch:	did just that for the 68k Mac port (32 bit, big endian),
+ *		see CONFIG_MACSONIC branch below.
+ *
  */
 
 #ifndef SONIC_H
@@ -213,6 +216,108 @@
 #define	SONIC_END_OF_LINKS	0x0001
 
 
+#ifdef CONFIG_MACSONIC
+/* Big endian like structures on Mac
+ * (680x0)
+ */
+
+typedef struct {
+  u32 rx_bufadr_l;	/* receive buffer ptr */
+  u32 rx_bufadr_h;
+
+  u32 rx_bufsize_l;	/* no. of words in the receive buffer */
+  u32 rx_bufsize_h;
+} sonic_rr_t;
+
+/*
+ * Sonic receive descriptor. Receive descriptors are
+ * kept in a linked list of these structures.
+ */
+
+typedef struct {
+  SREGS_PAD(pad0);
+  u16 rx_status;	/* status after reception of a packet */
+  SREGS_PAD(pad1);
+  u16 rx_pktlen;	/* length of the packet incl. CRC */
+  
+  /*
+   * Pointers to the location in the receive buffer area (RBA)
+   * where the packet resides. A packet is always received into
+   * a contiguous piece of memory.
+   */
+  SREGS_PAD(pad2);
+  u16 rx_pktptr_l;
+  SREGS_PAD(pad3);
+  u16 rx_pktptr_h;
+
+  SREGS_PAD(pad4);
+  u16 rx_seqno;	/* sequence no. */
+
+  SREGS_PAD(pad5);
+  u16 link;		/* link to next RDD (end if EOL bit set) */
+
+  /*
+   * Owner of this descriptor, 0= driver, 1=sonic
+   */
+  
+  SREGS_PAD(pad6);
+  u16 in_use;	
+
+  caddr_t rda_next;		/* pointer to next RD */
+} sonic_rd_t;
+
+
+/*
+ * Describes a Transmit Descriptor
+ */
+typedef struct {
+  SREGS_PAD(pad0);		
+  u16 tx_status;	/* status after transmission of a packet */
+  SREGS_PAD(pad1);		
+  u16 tx_config;	/* transmit configuration for this packet */
+  SREGS_PAD(pad2);		
+  u16 tx_pktsize;	/* size of the packet to be transmitted */
+  SREGS_PAD(pad3);		
+  u16 tx_frag_count;	/* no. of fragments */
+
+  SREGS_PAD(pad4);		
+  u16 tx_frag_ptr_l;
+  SREGS_PAD(pad5);		
+  u16 tx_frag_ptr_h;
+  SREGS_PAD(pad6);		
+  u16 tx_frag_size;
+  
+  SREGS_PAD(pad7);		
+  u16 link;		/* ptr to next descriptor */
+} sonic_td_t;
+
+
+/*
+ * Describes an entry in the CAM Descriptor Area.
+ */
+
+typedef struct {
+  SREGS_PAD(pad0);
+  u16 cam_entry_pointer;
+  SREGS_PAD(pad1);
+  u16 cam_cap0;
+  SREGS_PAD(pad2);
+  u16 cam_cap1;
+  SREGS_PAD(pad3);
+  u16 cam_cap2;
+} sonic_cd_t;
+
+#define CAM_DESCRIPTORS 16
+
+
+typedef struct {
+  sonic_cd_t cam_desc[CAM_DESCRIPTORS];
+  SREGS_PAD(pad);
+  u16 cam_enable;
+} sonic_cda_t;
+
+#else /* original declarations, little endian 32 bit */
+
 /*
  * structure definitions
  */
@@ -311,14 +416,23 @@ typedef struct {
   u16 cam_enable;
   SREGS_PAD(pad);
 } sonic_cda_t;
+#endif	/* endianness */ 
 
 /*
  * Some tunables for the buffer areas. Power of 2 is required
  * the current driver uses one receive buffer for each descriptor.
+ *
+ * MSch: use more buffer space for the slow m68k Macs!
  */
+#ifdef CONFIG_MACSONIC
+#define SONIC_NUM_RRS    32             /* number of receive resources */
+#define SONIC_NUM_RDS    SONIC_NUM_RRS  /* number of receive descriptors */
+#define SONIC_NUM_TDS    32      /* number of transmit descriptors */
+#else
 #define SONIC_NUM_RRS    16             /* number of receive resources */
 #define SONIC_NUM_RDS    SONIC_NUM_RRS  /* number of receive descriptors */
 #define SONIC_NUM_TDS    16      /* number of transmit descriptors */
+#endif
 #define SONIC_RBSIZE   1520      /* size of one resource buffer */
 
 #define SONIC_RDS_MASK   (SONIC_NUM_RDS-1)

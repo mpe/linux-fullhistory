@@ -982,35 +982,6 @@ int vfat_create(struct inode *dir,struct dentry* dentry,int mode)
 	return 0;
 }
 
-static int vfat_create_dotdirs(struct inode *dir, struct inode *parent)
-{
-	struct super_block *sb = dir->i_sb;
-	struct buffer_head *bh;
-	struct msdos_dir_entry *de;
-	__u16 date, time;
-
-	if ((bh = fat_add_cluster1(dir)) == NULL) return -ENOSPC;
-	/* zeroed out, so... */
-	fat_date_unix2dos(dir->i_mtime,&time,&date);
-	de = (struct msdos_dir_entry*)&bh->b_data[0];
-	memcpy(de[0].name,MSDOS_DOT,MSDOS_NAME);
-	memcpy(de[1].name,MSDOS_DOTDOT,MSDOS_NAME);
-	de[0].attr = de[1].attr = ATTR_DIR;
-	de[0].ctime = de[0].time = de[1].ctime = de[1].time = CT_LE_W(time);
-	de[0].adate = de[0].cdate = de[0].date = de[1].adate =
-		de[1].cdate = de[1].date = CT_LE_W(date);
-	de[0].start = CT_LE_W(MSDOS_I(dir)->i_logstart);
-	de[0].starthi = CT_LE_W(MSDOS_I(dir)->i_logstart>>16);
-	de[1].start = CT_LE_W(MSDOS_I(parent)->i_logstart);
-	de[1].starthi = CT_LE_W(MSDOS_I(parent)->i_logstart>>16);
-	fat_mark_buffer_dirty(sb, bh, 1);
-	fat_brelse(sb, bh);
-	dir->i_atime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
-	mark_inode_dirty(dir);
-
-	return 0;
-}
-
 static void vfat_remove_entry(struct inode *dir,struct vfat_slot_info *sinfo,
      struct buffer_head *bh, struct msdos_dir_entry *de)
 {
@@ -1110,8 +1081,7 @@ int vfat_mkdir(struct inode *dir,struct dentry* dentry,int mode)
 	dir->i_version = event;
 	dir->i_nlink++;
 	inode->i_nlink = 2; /* no need to mark them dirty */
-
-	res = vfat_create_dotdirs(inode, dir);
+	res = fat_new_dir(inode, dir, 1);
 	if (res < 0)
 		goto mkdir_failed;
 	dentry->d_time = dentry->d_parent->d_inode->i_version;

@@ -85,6 +85,15 @@ ifeq ($(CONFIG_USB_PRINTER),m)
   MIX_OBJS += printer.o  
 endif
 
+ifeq ($(CONFIG_USB_CPIA),y)
+  L_OBJS += cpia.o
+endif
+
+ifeq ($(CONFIG_USB_CPIA),m)
+  M_OBJS += cpia.o
+  MIX_OBJS += cpia.o  
+endif
+
 ifeq ($(CONFIG_USB_KBD),y)
   L_OBJS += keyboard.o keymap.o
 endif
@@ -119,6 +128,14 @@ ifeq ($(CONFIG_USB_SCSI),y)
   endif
 endif
 
+ifeq ($(CONFIG_USB_SCSI),m)
+  M_OBJS += usb-scsi.o
+  MIX_OBJS += usb_scsi.o
+  ifeq ($(CONFIG_USB_SCSI_DEBUG),y)
+    MIX_OBJS += usb_scsi_debug.o
+  endif
+endif
+
 ifeq ($(CONFIG_USB_EZUSB),y)
   L_OBJS += ezusb.o
 endif
@@ -126,6 +143,15 @@ endif
 ifeq ($(CONFIG_USB_EZUSB),m)
   M_OBJS += ezusb.o
   MIX_OBJS += ezusb.o
+endif
+
+ifeq ($(CONFIG_USB_USS720),y)
+  L_OBJS += uss720.o
+endif
+
+ifeq ($(CONFIG_USB_USS720),m)
+  M_OBJS += uss720.o
+  MIX_OBJS += uss720.o
 endif
 
 include $(TOPDIR)/Rules.make
@@ -145,6 +171,14 @@ usb-keyboard.o: keymap.o keyboard.o
 else
 usb-keyboard.o: keymap-mac.o keyboard.o
 	$(LD) $(LD_RFLAG) -r -o $@  keymap-mac.o keyboard.o 
+endif
+
+ifeq ($(CONFIG_USB_SCSI_DEBUG),y)
+usb-scsi.o: usb_scsi.o usb_scsi_debug.o
+	$(LD) $(LD_RFLAG) -r -o $@  usb_scsi.o usb_scsi_debug.o 
+else
+usb-scsi.o: usb_scsi.o
+	$(LD) $(LD_RFLAG) -r -o $@  usb_scsi.o
 endif
 
 usb-uhci.o: uhci.o uhci-debug.o 

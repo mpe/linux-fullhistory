@@ -42,7 +42,7 @@ void fill_new_filp (struct file *filp, struct dentry *dentry)
 	filp->f_reada = 1;
 	filp->f_flags = O_RDWR;
 	filp->f_dentry = dentry;
-	filp->f_op = &umsdos_file_operations;
+	filp->f_op = dentry->d_inode->i_op->default_file_ops;
 }
 
 
@@ -146,19 +146,7 @@ dentry, f_pos));
 	umsdos_set_dirinfo_new(dentry, f_pos);
 
 	if (S_ISREG (inode->i_mode)) {
-		if (MSDOS_SB (inode->i_sb)->cvf_format) {
-			if (MSDOS_SB (inode->i_sb)->cvf_format->flags & CVF_USE_READPAGE) {
-				inode->i_op = &umsdos_file_inode_operations_readpage;
-			} else {
-				inode->i_op = &umsdos_file_inode_operations_no_bmap;
-			}
-		} else {
-			if (inode->i_op->bmap != NULL) {
-				inode->i_op = &umsdos_file_inode_operations;
-			} else {
-				inode->i_op = &umsdos_file_inode_operations_no_bmap;
-			}
-		}
+		/* All set */
 	} else if (S_ISDIR (inode->i_mode)) {
 		umsdos_setup_dir(dentry);
 	} else if (S_ISLNK (inode->i_mode)) {

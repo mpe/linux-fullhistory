@@ -152,6 +152,7 @@ typedef struct page {
 #define PG_Slab			 8
 #define PG_swap_cache		 9
 #define PG_skip			10
+#define PG_swap_entry		11
 				/* bits 21-30 unused */
 #define PG_reserved		31
 
@@ -291,8 +292,6 @@ extern inline unsigned long get_free_page(int gfp_mask)
 		clear_page(page);
 	return page;
 }
-
-extern int low_on_memory;
 
 /* memory.c & swap.c*/
 

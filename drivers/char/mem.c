@@ -17,6 +17,7 @@
 #include <linux/joystick.h>
 #include <linux/i2c.h>
 #include <linux/raw.h>
+#include <linux/capability.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -459,11 +460,23 @@ static loff_t memory_lseek(struct file * file, loff_t offset, int orig)
 	}
 }
 
+static int open_port(struct inode * inode, struct file * filp)
+{
+	return capable(CAP_SYS_RAWIO) ? 0 : -EPERM;
+}
+
+static int open_mem(struct inode * inode, struct file * filp)
+{
+	return (capable(CAP_SYS_RAWIO)
+		|| !(filp->f_mode & FMODE_WRITE)) ? 0 : -EPERM;
+}
+
 #define mmap_kmem	mmap_mem
 #define zero_lseek	null_lseek
 #define full_lseek      null_lseek
 #define write_zero	write_null
 #define read_full       read_zero
+#define open_kmem	open_mem
 
 static struct file_operations mem_fops = {
 	memory_lseek,
@@ -473,7 +486,7 @@ static struct file_operations mem_fops = {
 	NULL,		/* mem_poll */
 	NULL,		/* mem_ioctl */
 	mmap_mem,
-	NULL,		/* no special open code */
+	open_mem,
 	NULL,		/* flush */
 	NULL,		/* no special release code */
 	NULL		/* fsync */
@@ -487,7 +500,7 @@ static struct file_operations kmem_fops = {
 	NULL,		/* kmem_poll */
 	NULL,		/* kmem_ioctl */
 	mmap_kmem,
-	NULL,		/* no special open code */
+	open_kmem,
 	NULL,		/* flush */
 	NULL,		/* no special release code */
 	NULL		/* fsync */
@@ -515,7 +528,7 @@ static struct file_operations port_fops = {
 	NULL,		/* port_poll */
 	NULL,		/* port_ioctl */
 	NULL,		/* port_mmap */
-	NULL,		/* no special open code */
+	open_port,
 	NULL,		/* flush */
 	NULL,		/* no special release code */
 	NULL		/* fsync */

@@ -13,7 +13,6 @@
  *	MSch (1/98) Integrated start of IIsi driver by Robert Thompson
  */
  
-#include <stdarg.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/miscdevice.h>

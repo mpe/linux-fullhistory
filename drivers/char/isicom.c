@@ -2002,7 +2002,7 @@ int init_module(void)
 					break;
 					
 				/* found a PCI ISI card! */
-				ioaddr = dev->base_address[3]; /* i.e at offset 0x1c in the
+				ioaddr = dev->resource[3].start; /* i.e at offset 0x1c in the
 								* PCI configuration register
 								* space.
 								*/

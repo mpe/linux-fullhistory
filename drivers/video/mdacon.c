@@ -182,7 +182,7 @@ static inline void mda_set_cursor_size(int from, int to)
 
 
 #ifndef MODULE
-__initfunc(void mdacon_setup(char *str, int *ints))
+void __init mdacon_setup(char *str, int *ints)
 {
 	/* command line format: mdacon=<first>,<last> */
 
@@ -201,7 +201,7 @@ __initfunc(void mdacon_setup(char *str, int *ints))
 #ifdef MODULE
 static int mda_detect(void)
 #else
-__initfunc(static int mda_detect(void))
+static int __init mda_detect(void)
 #endif
 {
 	int count=0;
@@ -283,7 +283,7 @@ __initfunc(static int mda_detect(void))
 #ifdef MODULE
 static void mda_initialize(void)
 #else
-__initfunc(static void mda_initialize(void))
+static void __init mda_initialize(void)
 #endif
 {
 	write_mda_b(97, 0x00);		/* horizontal total */
@@ -312,7 +312,7 @@ __initfunc(static void mda_initialize(void))
 #ifdef MODULE
 static const char *mdacon_startup(void)
 #else
-__initfunc(static const char *mdacon_startup(void))
+static const char __init *mdacon_startup(void)
 #endif
 {
 	mda_num_columns = 80;
@@ -591,7 +591,7 @@ struct consw mda_con = {
 #ifdef MODULE
 void mda_console_init(void)
 #else
-__initfunc(void mda_console_init(void))
+void __init mda_console_init(void)
 #endif
 {
 	if (mda_first_vc > mda_last_vc)

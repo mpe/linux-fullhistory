@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.107 1999/06/08 19:59:03 geert Exp $
+/*  $Id: atyfb.c,v 1.109 1999/08/08 01:38:05 davem Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -191,6 +191,7 @@ struct aty_cursor {
 
 struct fb_info_aty {
     struct fb_info fb_info;
+    struct fb_info_aty *next;
     unsigned long ati_regbase_phys;
     unsigned long ati_regbase;
     unsigned long frame_buffer_phys;
@@ -946,8 +947,10 @@ atyfb_cursor(struct display *p, int mode, int x, int y)
 	}
 }
 
-__initfunc(static struct aty_cursor *
-aty_init_cursor(struct fb_info_aty *fb))
+static struct fb_info_aty *fb_list = NULL;
+
+static struct aty_cursor * __init 
+aty_init_cursor(struct fb_info_aty *fb)
 {
 	struct aty_cursor *cursor;
 	unsigned long addr;
@@ -2488,7 +2491,7 @@ static void atyfb_palette(int enter)
      *  Initialisation
      */
 
-__initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
+static int __init aty_init(struct fb_info_aty *info, const char *name)
 {
     u32 chip_id;
     u32 i;
@@ -2810,12 +2813,15 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
     if (register_framebuffer(&info->fb_info) < 0)
 	return 0;
 
+    info->next = fb_list;
+    fb_list = info;
+
     printk("fb%d: %s frame buffer device on %s\n",
 	   GET_FB_IDX(info->fb_info.node), atyfb_name, name);
     return 1;
 }
 
-__initfunc(void atyfb_init(void))
+void __init atyfb_init(void)
 {
 #if defined(CONFIG_FB_OF)
     /* We don't want to be called like this. */
@@ -2843,6 +2849,7 @@ __initfunc(void atyfb_init(void))
     for (pdev = pci_devices; pdev; pdev = pdev->next) {
 	if (((pdev->class >> 16) == PCI_BASE_CLASS_DISPLAY) &&
 	    (pdev->vendor == PCI_VENDOR_ID_ATI)) {
+	    struct resource *rp;
 
 	    info = kmalloc(sizeof(struct fb_info_aty), GFP_ATOMIC);
 	    if (!info) {
@@ -2851,12 +2858,12 @@ __initfunc(void atyfb_init(void))
 	    }
 	    memset(info, 0, sizeof(struct fb_info_aty));
 
-	    addr = pdev->base_address[0];
-	    if ((addr & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
-		addr = pdev->base_address[1];
+	    rp = &pdev->resource[0];
+	    if (rp->flags & IORESOURCE_IOPORT)
+		    rp = &pdev->resource[1];
+	    addr = rp->start;
 	    if (!addr)
 		continue;
-	    addr &= PCI_BASE_ADDRESS_MEM_MASK;
 
 #ifdef __sparc__
 	    /*
@@ -2875,7 +2882,7 @@ __initfunc(void atyfb_init(void))
 	     * Figure mmap addresses from PCI config space.
 	     * Split Framebuffer in big- and little-endian halfs.
 	     */
-	    for (i = 0; i < 6 && pdev->base_address[i]; i++)
+	    for (i = 0; i < 6 && pdev->resource[i].start; i++)
 		/* nothing */;
 	    j = i + 4;
 
@@ -2887,14 +2894,15 @@ __initfunc(void atyfb_init(void))
 	    }
 	    memset(info->mmap_map, 0, j * sizeof(*info->mmap_map));
 
-	    for (i = 0, j = 2; i < 6 && pdev->base_address[i]; i++) {
+	    for (i = 0, j = 2; i < 6 && pdev->resource[i].start; i++) {
+		struct resource *rp = &pdev->resource[i];
 		int io, breg = PCI_BASE_ADDRESS_0 + (i << 2);
 		unsigned long base;
 		u32 size, pbase;
 
-		base = pdev->base_address[i];
+		base = rp->start;
 
-		io = (base & PCI_BASE_ADDRESS_SPACE)==PCI_BASE_ADDRESS_SPACE_IO;
+		io = (rp->flags & IORESOURCE_IOPORT);
 
 		pci_read_config_dword(pdev, breg, &pbase);
 		pci_write_config_dword(pdev, breg, 0xffffffff);
@@ -3160,7 +3168,7 @@ __initfunc(void atyfb_init(void))
 }
 
 #ifdef CONFIG_FB_OF
-__initfunc(void atyfb_of_init(struct device_node *dp))
+void __init atyfb_of_init(struct device_node *dp)
 {
     unsigned long addr;
     u8 bus, devfn;
@@ -3199,7 +3207,7 @@ __initfunc(void atyfb_of_init(struct device_node *dp))
 						   0x1000);
 
     if(! info->ati_regbase) {
-	    printk("atyfb_init: ioremap() returned NULL\n");
+	    printk("atyfb_of_init: ioremap() returned NULL\n");
 	    kfree(info);
 	    return;
     }
@@ -3226,7 +3234,7 @@ __initfunc(void atyfb_of_init(struct device_node *dp))
     info->frame_buffer = (unsigned long)ioremap(addr, 0x800000);
 
     if(! info->frame_buffer) {
-	    printk("atyfb_init: ioremap() returned NULL\n");
+	    printk("atyfb_of_init: ioremap() returned NULL\n");
 	    kfree(info);
 	    return;
     }
@@ -3244,7 +3252,7 @@ __initfunc(void atyfb_of_init(struct device_node *dp))
 #endif /* CONFIG_FB_OF */
 
 
-__initfunc(void atyfb_setup(char *options, int *ints))
+void __init atyfb_setup(char *options, int *ints)
 {
     char *this_opt;
 
@@ -3315,7 +3323,7 @@ __initfunc(void atyfb_setup(char *options, int *ints))
 }
 
 #ifdef CONFIG_ATARI
-__initfunc(static int store_video_par(char *video_str, unsigned char m64_num))
+static int __init store_video_par(char *video_str, unsigned char m64_num)
 {
     char *p;
     unsigned long vmembase, size, guiregbase;
@@ -3344,7 +3352,7 @@ mach64_invalid:
     return -1;
 }
 
-__initfunc(static char *strtoke(char *s, const char *ct))
+static char __init *strtoke(char *s, const char *ct)
 {
     static char *ssave = NULL;
     char *sbegin, *send;
@@ -3933,4 +3941,45 @@ static struct display_switch fbcon_aty32 = {
     fbcon_aty32_putcs, fbcon_cfb32_revc, NULL, NULL, fbcon_aty32_clear_margins,
     FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
+#endif
+
+#ifdef MODULE
+int __init init_module(void)
+{
+    atyfb_init();
+    return fb_list ? 0 : -ENXIO;
+}
+
+void cleanup_module(void)
+{
+    while (fb_list) {
+	struct fb_info_aty *info = fb_list;
+	fb_list = info->next;
+
+	unregister_framebuffer(&info->fb_info);
+
+#ifndef __sparc__
+	if (info->ati_regbase)
+	    iounmap((void *)info->ati_regbase);
+	if (info->frame_buffer)
+	    iounmap((void *)info->frame_buffer);
+#ifdef __BIG_ENDIAN
+	if (info->cursor && info->cursor->ram)
+	    iounmap(info->cursor->ram);
+#endif
+#endif
+
+	if (info->cursor) {
+	    if (info->cursor->timer)
+		kfree(info->cursor->timer);
+	    kfree(info->cursor);
+	}
+#ifdef __sparc__
+	if (info->mmap_map)
+	    kfree(info->mmap_map);
+#endif
+	kfree(info);
+    }
+}
+
 #endif

@@ -406,7 +406,7 @@ static int vfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 }
 
 
-__initfunc(void vfb_setup(char *options, int *ints))
+void __init vfb_setup(char *options, int *ints)
 {
     char *this_opt;
 
@@ -429,7 +429,7 @@ __initfunc(void vfb_setup(char *options, int *ints))
      *  Initialisation
      */
 
-__initfunc(void vfb_init(void))
+void __init vfb_init(void)
 {
     if (!vfb_enable)
 	return;

@@ -743,7 +743,7 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
      *  Setup: parse used options
      */
 
-__initfunc(void sbusfb_setup(char *options, int *ints))
+void __init sbusfb_setup(char *options, int *ints)
 {
 	char *p;
 	
@@ -960,8 +960,8 @@ void sbusfb_palette(int enter)
      
 extern void (*prom_palette)(int);
 
-__initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
-				      struct linux_sbus_device *sbdp))
+static void __init sbusfb_init_fb(int node, int parent, int fbtype,
+				      struct linux_sbus_device *sbdp)
 {
 	struct fb_fix_screeninfo *fix;
 	struct fb_var_screeninfo *var;
@@ -1151,7 +1151,7 @@ static inline int known_card(char *name)
 	return FBTYPE_NOTYPE;
 }
 
-__initfunc(void sbusfb_init(void))
+void __init sbusfb_init(void)
 {
 	int type;
 	struct linux_sbus_device *sbdp;

@@ -4874,9 +4874,9 @@ cy_detect_pci(void))
 
                 /* read PCI configuration area */
 		cy_pci_irq = pdev->irq;
-		cy_pci_addr0 = pdev->base_address[0];
-		cy_pci_addr1 = pdev->base_address[1]; 
-		cy_pci_addr2 = pdev->base_address[2]; 
+		cy_pci_addr0 = pdev->resource[0].start;
+		cy_pci_addr1 = pdev->resource[1].start; 
+		cy_pci_addr2 = pdev->resource[2].start; 
                 pci_read_config_byte(pdev, PCI_REVISION_ID, &cyy_rev_id);
 
 		device_id &= ~PCI_DEVICE_ID_MASK;
@@ -4891,10 +4891,8 @@ cy_detect_pci(void))
             printk("Cyclom-Y/PCI:found  winaddr=0x%lx ctladdr=0x%lx\n",
 		(ulong)cy_pci_addr2, (ulong)cy_pci_addr0);
 #endif
-		cy_pci_addr0  &= PCI_BASE_ADDRESS_MEM_MASK;
-		cy_pci_addr2  &= PCI_BASE_ADDRESS_MEM_MASK;
 
-		if (cy_pci_addr2 & ~PCI_BASE_ADDRESS_IO_MASK) {
+		if (pdev->resource[2].flags & ~PCI_BASE_ADDRESS_IO_MASK) {
 		    printk("  Warning: PCI I/O bit incorrectly set. "
 			   "Ignoring it...\n");
 		    cy_pci_addr2 &= PCI_BASE_ADDRESS_IO_MASK;

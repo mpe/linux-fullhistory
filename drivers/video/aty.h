@@ -88,6 +88,8 @@
 #define MEM_VGA_WP_SEL		0x00B4	/* Dword offset 0_2D */
 #define MEM_VGA_RP_SEL		0x00B8	/* Dword offset 0_2E */
 
+#define I2C_CNTL_1		0x00BC	/* Dword offset 0_2F */
+
 #define DAC_REGS		0x00C0	/* Dword offset 0_30 */
 #define DAC_W_INDEX		0x00C0	/* Dword offset 0_30 */
 #define DAC_DATA		0x00C1	/* Dword offset 0_30 */

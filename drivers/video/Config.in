@@ -49,7 +49,7 @@ if [ "$CONFIG_FB" = "y" ]; then
   fi
   if [ "$CONFIG_ATARI" = "y" ]; then
     bool 'Atari native chipset support' CONFIG_FB_ATARI
-    bool 'ATI Mach64 display support' CONFIG_FB_ATY
+    tristate 'ATI Mach64 display support' CONFIG_FB_ATY
   fi
   if [ "$CONFIG_PPC" = "y" ]; then
     bool 'Open Firmware frame buffer device support' CONFIG_FB_OF
@@ -57,11 +57,12 @@ if [ "$CONFIG_FB" = "y" ]; then
       bool 'Apple "control" display support' CONFIG_FB_CONTROL
       bool 'Apple "platinum" display support' CONFIG_FB_PLATINUM
       bool 'Apple "valkyrie" display support' CONFIG_FB_VALKYRIE
-      bool 'ATI Mach64 display support' CONFIG_FB_ATY
+      tristate 'ATI Mach64 display support' CONFIG_FB_ATY
       bool 'IMS Twin Turbo display support' CONFIG_FB_IMSTT
       bool 'Chips 65550 display support' CONFIG_FB_CT65550
       bool 'S3 Trio display support' CONFIG_FB_S3TRIO
     fi
+    tristate 'VGA 16-color graphics console' CONFIG_FB_VGA16
   fi
   if [ "$CONFIG_MAC" = "y" ]; then
     define_bool CONFIG_FB_MAC y
@@ -74,7 +75,7 @@ if [ "$CONFIG_FB" = "y" ]; then
   fi
   if [ "$ARCH" = "i386" ]; then
     bool 'VESA VGA graphics console' CONFIG_FB_VESA
-    bool 'VGA 16-color graphics console' CONFIG_FB_VGA16
+    tristate 'VGA 16-color graphics console' CONFIG_FB_VGA16
     define_bool CONFIG_VIDEO_SELECT y
   fi
   if [ "$CONFIG_VISWS" = "y" ]; then
@@ -86,10 +87,10 @@ if [ "$CONFIG_FB" = "y" ]; then
       if  [ "$CONFIG_FB_MATROX" != "n" ]; then
         bool '  Millennium I/II support' CONFIG_FB_MATROX_MILLENIUM
         bool '  Mystique support' CONFIG_FB_MATROX_MYSTIQUE
-        bool '  G100/G200 support' CONFIG_FB_MATROX_G100
+        bool '  G100/G200/G400 support' CONFIG_FB_MATROX_G100
         bool '  Multihead support' CONFIG_FB_MATROX_MULTIHEAD
       fi
-      bool 'ATI Mach64 display support' CONFIG_FB_ATY
+      tristate 'ATI Mach64 display support' CONFIG_FB_ATY
     fi
   fi
   if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
@@ -120,7 +121,7 @@ if [ "$CONFIG_FB" = "y" ]; then
     if [ "$CONFIG_PCI" != "n" ]; then
       bool 'PCI framebuffers' CONFIG_FB_PCI
       if [ "$CONFIG_FB_PCI" != "n" ]; then
-        bool '  ATI Mach64 display support' CONFIG_FB_ATY
+        tristate '  ATI Mach64 display support' CONFIG_FB_ATY
       fi
     fi
   fi
@@ -142,7 +143,7 @@ if [ "$CONFIG_FB" = "y" ]; then
     tristate 'Atari interleaved bitplanes (8 planes) support' CONFIG_FBCON_IPLAN2P8
 #   tristate 'Atari interleaved bitplanes (16 planes) support' CONFIG_FBCON_IPLAN2P16
     tristate 'Mac variable bpp packed pixels support' CONFIG_FBCON_MAC
-    bool 'VGA 16-color planar support' CONFIG_FBCON_VGA_PLANES
+    tristate 'VGA 16-color planar support' CONFIG_FBCON_VGA_PLANES
     tristate 'VGA characters/attributes support' CONFIG_FBCON_VGA
   else
     # Guess what we need
@@ -287,6 +288,10 @@ if [ "$CONFIG_FB" = "y" ]; then
     fi
     if [ "$CONFIG_FB_VGA16" = "y" ]; then
       define_bool CONFIG_FBCON_VGA_PLANES y
+    else
+      if [ "$CONFIG_FB_VGA16" = "m" ]; then
+	define_bool CONFIG_FBCON_VGA_PLANES m
+      fi
     fi
     if [ "$CONFIG_FB_MDA" = "y" -o "$CONFIG_FB_VGA" = "y" ]; then
       define_bool CONFIG_FBCON_VGA y

@@ -92,7 +92,7 @@ parport_atari_read_status(struct parport *p)
 }
 
 static void
-parport_atari_init_state(struct parport_state *s)
+parport_atari_init_state(struct pardevice *d, struct parport_state *s)
 {
 }
 
@@ -147,18 +147,18 @@ static struct parport_operations parport_atari_ops = {
 	parport_atari_inc_use_count,
 	parport_atari_dec_use_count,
 
-	parport_ieee1284_epp_write_data,
-	parport_ieee1284_epp_read_data,
-	parport_ieee1284_epp_write_addr,
-	parport_ieee1284_epp_read_addr,
+	NULL, /* epp_write_data */
+	NULL, /* epp_read_data */
+	NULL, /* epp_write_addr */
+	NULL, /* epp_read_addr */
 
-	parport_ieee1284_ecp_write_data,
-	parport_ieee1284_ecp_read_data,
-	parport_ieee1284_ecp_write_addr,
+	NULL, /* ecp_write_data */
+	NULL, /* ecp_read_data */
+	NULL, /* ecp_write_addr */
 
-	parport_ieee1284_write_compat,
-	parport_ieee1284_read_nibble,
-	parport_ieee1284_read_byte,
+	NULL, /* compat_write_data */
+	NULL, /* nibble_read_data */
+	NULL, /* byte_read_data */
 };
 
 
@@ -219,8 +219,8 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	if (p->irq != PARPORT_IRQ_NONE)
-		free_irq(IRQ_MFP_BUSY, p);
+	if (this_port->irq != PARPORT_IRQ_NONE)
+		free_irq(IRQ_MFP_BUSY, this_port);
 	parport_proc_unregister(this_port);
 	parport_unregister_port(this_port);
 }

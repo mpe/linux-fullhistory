@@ -348,7 +348,7 @@ int tul_NewReturnNumberOfAdapters(void)
 				dRegValue = 0;
 			wBIOS = (wBIOS << 8) + ((UWORD) ((dRegValue & 0xFF00) >> 8));
 			if (Addi91u_into_Adapter_table(wBIOS,
-							(pDev->base_address[0] & 0xFFFE),
+							(pDev->resource[0].start),
 						       	pDev->irq,
 						       	pDev->bus->number,
 					       		(pDev->devfn >> 3)

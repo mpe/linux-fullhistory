@@ -196,7 +196,7 @@ extern int fat_is_binary(char conversion,char *extension);
 extern void lock_fat(struct super_block *sb);
 extern void unlock_fat(struct super_block *sb);
 extern int fat_add_cluster(struct inode *inode);
-extern struct buffer_head *fat_add_cluster1(struct inode *inode);
+extern struct buffer_head *fat_extend_dir(struct inode *inode);
 extern int date_dos2unix(__u16 time, __u16 date);
 extern void fat_fs_panic(struct super_block *s,const char *msg);
 extern void fat_lock_creation(void);
@@ -225,7 +225,6 @@ void fat_clusters_flush(struct super_block *sb);
 
 /* fat.c */
 extern int fat_access(struct super_block *sb,int nr,int new_value);
-extern int fat_smap(struct inode *inode,int sector);
 extern int fat_free(struct inode *inode,int skip);
 void fat_cache_inval_inode(struct inode *inode);
 void fat_cache_inval_dev(kdev_t device);
@@ -237,6 +236,7 @@ int fat_get_cluster(struct inode *inode,int cluster);
 /* inode.c */
 extern void fat_hash_init(void);
 extern int fat_bmap(struct inode *inode,int block);
+extern int fat_get_block(struct inode *, long, struct buffer_head *, int);
 extern int fat_notify_change(struct dentry *, struct iattr *);
 extern void fat_clear_inode(struct inode *inode);
 extern void fat_delete_inode(struct inode *inode);
@@ -261,6 +261,7 @@ extern int fat_dir_ioctl(struct inode * inode, struct file * filp,
 int fat_add_entries(struct inode *dir,int slots, struct buffer_head **bh,
 		  struct msdos_dir_entry **de, int *ino);
 int fat_dir_empty(struct inode *dir);
+int fat_new_dir(struct inode *inode, struct inode *parent, int is_vfat);
 
 /* file.c */
 extern struct inode_operations fat_file_inode_operations;

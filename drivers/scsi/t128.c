@@ -168,7 +168,7 @@ static const struct signature {
  *
  */
 
-__initfunc(void t128_setup(char *str, int *ints)) {
+void __init t128_setup(char *str, int *ints){
     static int commandline_current = 0;
     int i;
     if (ints[0] != 2) 
@@ -199,7 +199,7 @@ __initfunc(void t128_setup(char *str, int *ints)) {
  *
  */
 
-__initfunc(int t128_detect(Scsi_Host_Template * tpnt)) {
+int __init t128_detect(Scsi_Host_Template * tpnt){
     static int current_override = 0, current_base = 0;
     struct Scsi_Host *instance;
     unsigned char *base;

@@ -385,41 +385,16 @@ int msdos_mkdir(struct inode *dir,struct dentry *dentry,int mode)
 		fat_brelse(sb, bh);
 		goto out_unlock;
 	}
-	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
-	mark_inode_dirty(inode);
 	res = 0;
 
 	dir->i_nlink++;
 	inode->i_nlink = 2; /* no need to mark them dirty */
 
-	if (!(bh1 = fat_add_cluster1(inode))) {
-		res = -ENOSPC;
+	res = fat_new_dir(inode, dir, 0);
+	if (res)
 		goto mkdir_error;
-	}
-	fat_brelse(sb, bh);
-	de1 = (struct msdos_dir_entry *)bh1->b_data;
-	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
-	mark_inode_dirty(inode);
 
-	memcpy(de1->name,MSDOS_DOT,MSDOS_NAME);
-	de1->attr = ATTR_DIR;
-	de1->start = CT_LE_W(MSDOS_I(inode)->i_logstart);
-	de1->starthi = CT_LE_W(MSDOS_I(inode)->i_logstart >> 16);
-	fat_date_unix2dos(inode->i_mtime,&de1->time,&de1->date);
-	de1->size = 0;
-	de1->time = CT_LE_W(de1->time);
-	de1->date = CT_LE_W(de1->date);
-	de1++;
-	memcpy(de1->name,MSDOS_DOTDOT,MSDOS_NAME);
-	de1->attr = ATTR_DIR;
-	de1->start = CT_LE_W(MSDOS_I(dir)->i_logstart);
-	de1->starthi = CT_LE_W(MSDOS_I(dir)->i_logstart >> 16);
-	fat_date_unix2dos(dir->i_mtime,&de1->time,&de1->date);
-	de1->size = 0;
-	de1->time = CT_LE_W(de1->time);
-	de1->date = CT_LE_W(de1->date);
-	fat_mark_buffer_dirty(sb, bh1, 1);
-	fat_brelse(sb, bh1);
+	fat_brelse(sb, bh);
 	d_instantiate(dentry, inode);
 	res = 0;
 

@@ -471,7 +471,7 @@ static void set_valkyrie_clock(unsigned char *params)
 	}
 }
 
-__initfunc(static void init_valkyrie(struct fb_info_valkyrie *p))
+static void __init init_valkyrie(struct fb_info_valkyrie *p)
 {
 	struct fb_par_valkyrie *par = &p->par;
 	struct fb_var_screeninfo var;
@@ -584,7 +584,7 @@ static void valkyrie_set_par(const struct fb_par_valkyrie *par,
 #endif /* CONFIG_FB_COMPAT_XPMAC */
 }
 
-__initfunc(void valkyriefb_init(void))
+void __init valkyriefb_init(void)
 {
 #ifndef CONFIG_FB_OF
 	struct device_node *dp;
@@ -595,7 +595,7 @@ __initfunc(void valkyriefb_init(void))
 #endif /* CONFIG_FB_OF */
 }
 
-__initfunc(void valkyrie_of_init(struct device_node *dp))
+void __init valkyrie_of_init(struct device_node *dp)
 {
 	struct fb_info_valkyrie	*p;
 	unsigned long addr, size;
@@ -848,7 +848,7 @@ static void __init valkyrie_init_info(struct fb_info *info, struct fb_info_valky
 /*
  * Parse user speficied options (`video=valkyriefb:')
  */
-__initfunc(void valkyriefb_setup(char *options, int *ints))
+void __init valkyriefb_setup(char *options, int *ints)
 {
 	char *this_opt;
 

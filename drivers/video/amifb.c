@@ -1259,8 +1259,7 @@ static struct fb_ops amifb_ops = {
 	amifb_pan_display, amifb_ioctl
 };
 
-
-__initfunc(void amifb_setup(char *options, int *ints))
+void __init amifb_setup(char *options, int *ints)
 {
 	char *this_opt;
 	char mcap_spec[80];
@@ -1715,7 +1714,7 @@ static int amifb_set_cursorstate(struct fb_cursorstate *state, int con)
 	 * Initialisation
 	 */
 
-__initfunc(void amifb_init(void))
+void __init amifb_init(void)
 {
 	int tag, i;
 	u_long chipptr;
@@ -2053,7 +2052,7 @@ static void amifb_interrupt(int irq, void *dev_id, struct pt_regs *fp)
 	 * Get a Video Mode
 	 */
 
-__initfunc(static void get_video_mode(const char *name))
+static void __init get_video_mode(const char *name)
 {
 	int i;
 
@@ -2070,7 +2069,7 @@ __initfunc(static void get_video_mode(const char *name))
 	 *  Probe the Video Modes
 	 */
 
-__initfunc(static void check_default_mode(void))
+static void __init check_default_mode(void)
 {
 	struct amifb_par par;
 	int mode;
@@ -2090,7 +2089,7 @@ __initfunc(static void check_default_mode(void))
 	 * Allocate, Clear and Align a Block of Chip Memory
 	 */
 
-__initfunc(static u_long chipalloc(u_long size))
+static u_long __init chipalloc(u_long size)
 {
 	u_long ptr;
 
@@ -2107,7 +2106,7 @@ __initfunc(static u_long chipalloc(u_long size))
 	 * A strtok which returns empty strings, too
 	 */
 
-__initfunc(static char *strtoke(char *s,const char *ct))
+static char __init *strtoke(char *s,const char *ct)
 {
 	char *sbegin, *send;
 	static char *ssave = NULL;
@@ -3314,7 +3313,7 @@ static void ami_set_sprite(void)
 	 * Initialise the Copper Initialisation List
 	 */
 
-__initfunc(static void ami_init_copper(void))
+static void __init ami_init_copper(void)
 {
 	copins *cop = copdisplay.init;
 	u_long p;

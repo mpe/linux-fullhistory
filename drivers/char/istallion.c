@@ -4387,7 +4387,7 @@ stli_donestartup:
  *	Probe and initialize the specified board.
  */
 
-__initfunc(static int stli_brdinit(stlibrd_t *brdp))
+static int __init stli_brdinit(stlibrd_t *brdp)
 {
 #if DEBUG
 	printk("stli_brdinit(brdp=%x)\n", (int) brdp);
@@ -5305,7 +5305,7 @@ static int stli_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, un
 
 /*****************************************************************************/
 
-__initfunc(int stli_init(void))
+int __init stli_init(void)
 {
 	printk(KERN_INFO "%s: version %s\n", stli_drvtitle, stli_drvversion);
 

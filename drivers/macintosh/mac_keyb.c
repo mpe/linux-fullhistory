@@ -673,7 +673,7 @@ static void leds_done(struct adb_request *req)
 
 }
 
-__initfunc(void mackbd_init_hw(void))
+void __init mackbd_init_hw(void)
 {
 	if ( (_machine != _MACH_chrp) && (_machine != _MACH_Pmac) )
 	    return;

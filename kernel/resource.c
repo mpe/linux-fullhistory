@@ -145,7 +145,7 @@ struct resource * __request_region(struct resource *parent, unsigned long start,
 
 		write_lock(&resource_lock);
 
-		while (!(parent->flags & IORESOURCE_BUSY)) {
+		for (;;) {
 			struct resource *conflict;
 
 			conflict = __request_resource(parent, res);
@@ -153,7 +153,8 @@ struct resource * __request_region(struct resource *parent, unsigned long start,
 				break;
 			if (conflict != parent) {
 				parent = conflict;
-				continue;
+				if (!(conflict->flags & IORESOURCE_BUSY))
+					continue;
 			}
 
 			/* Uhhuh, that didn't work out.. */

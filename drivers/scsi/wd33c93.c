@@ -75,6 +75,7 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/version.h>
+#include <linux/init.h>
 #include <asm/irq.h>
 
 #if LINUX_VERSION_CODE >= 0x010300
@@ -176,6 +177,7 @@ MODULE_PARM(setup_strings, "s");
 static inline uchar read_wd33c93(wd33c93_regs *regp,uchar reg_num)
 {
    regp->SASR = reg_num;
+   mb();
    return(regp->SCMD);
 }
 
@@ -186,14 +188,18 @@ static inline uchar read_wd33c93(wd33c93_regs *regp,uchar reg_num)
 static inline void write_wd33c93(wd33c93_regs *regp,uchar reg_num, uchar value)
 {
    regp->SASR = reg_num;
+   mb();
    regp->SCMD = value;
+   mb();
 }
 
 
 static inline void write_wd33c93_cmd(wd33c93_regs *regp, uchar cmd)
 {
    regp->SASR = WD_COMMAND;
+   mb();
    regp->SCMD = cmd;
+   mb();
 }
 
 
@@ -216,9 +222,11 @@ uchar x = 0;
 static void write_wd33c93_count(wd33c93_regs *regp,unsigned long value)
 {
    regp->SASR = WD_TRANSFER_COUNT_MSB;
+   mb();
    regp->SCMD = value >> 16;
    regp->SCMD = value >> 8;
    regp->SCMD = value;
+   mb();
 }
 
 
@@ -227,9 +235,11 @@ static unsigned long read_wd33c93_count(wd33c93_regs *regp)
 unsigned long value;
 
    regp->SASR = WD_TRANSFER_COUNT_MSB;
+   mb();
    value = regp->SCMD << 16;
    value |= regp->SCMD << 8;
    value |= regp->SCMD;
+   mb();
    return value;
 }
 
@@ -1587,10 +1597,10 @@ static char setup_buffer[SETUP_BUFFER_SIZE];
 static char setup_used[MAX_SETUP_ARGS];
 static int done_setup = 0;
 
-void wd33c93_setup (char *str, int *ints)
+int wd33c93_setup (char *str)
 {
-int i,x;
-char *p1,*p2;
+   int i;
+   char *p1,*p2;
 
    /* The kernel does some processing of the command-line before calling
     * this function: If it begins with any decimal or hex number arguments,
@@ -1603,12 +1613,17 @@ char *p1,*p2;
 
    p1 = setup_buffer;
    *p1 = '\0';
+#if 0
+/*
+ * Old style command line arguments are now dead
+ */
    if (ints[0]) {
       for (i=0; i<ints[0]; i++) {
          x = vsprintf(p1,"nosync:0x%02x,",&(ints[i+1]));
          p1 += x;
          }
       }
+#endif
    if (str)
       strncpy(p1, str, SETUP_BUFFER_SIZE - strlen(setup_buffer));
    setup_buffer[SETUP_BUFFER_SIZE - 1] = '\0';
@@ -1631,7 +1646,11 @@ char *p1,*p2;
    for (i=0; i<MAX_SETUP_ARGS; i++)
       setup_used[i] = 0;
    done_setup = 1;
+
+   return 0;
 }
+
+__setup("wd33c93", wd33c93_setup);
 
 
 /* check_setup_args() returns index if key found, 0 if not
@@ -1676,7 +1695,7 @@ int val;
 char buf[32];
 
    if (!done_setup && setup_strings)
-      wd33c93_setup(setup_strings,0);
+      wd33c93_setup(setup_strings);
 
    hostdata = (struct WD33C93_hostdata *)instance->hostdata;
 

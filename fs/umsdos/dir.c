@@ -393,7 +393,6 @@ void umsdos_lookup_patch_new(struct dentry *dentry, struct umsdos_info *info)
 	inode->i_uid = entry->uid;
 	inode->i_gid = entry->gid;
 
-	MSDOS_I (inode)->i_binary = 1;
 	/* #Specification: umsdos / i_nlink
 	 * The nlink field of an inode is maintained by the MSDOS file system
 	 * for directory and by UMSDOS for other files.  The logic is that
@@ -832,8 +831,8 @@ struct inode_operations umsdos_dir_inode_operations =
 	UMSDOS_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* followlink */
-	fat_bmap,		/* get_block */
-	block_read_full_page,	/* readpage */
+	NULL,			/* get_block */
+	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */
 	NULL,			/* truncate */

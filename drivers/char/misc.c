@@ -78,7 +78,6 @@ extern int rtc_MK48T08_init(void);
 extern int dsp56k_init(void);
 extern int nvram_init(void);
 extern int radio_init(void);
-extern void hfmodem_init(void);
 extern int pc110pad_init(void);
 extern int pmu_device_init(void);
 extern int qpmouse_init(void);
@@ -236,17 +235,11 @@ int __init misc_init(void)
 #ifdef CONFIG_ATARI_DSP56K
 	dsp56k_init();
 #endif
-#ifdef CONFIG_HFMODEM
-	hfmodem_init();
-#endif
 #ifdef CONFIG_NVRAM
 	nvram_init();
 #endif
 #ifdef CONFIG_MISC_RADIO
 	radio_init();
-#endif
-#ifdef CONFIG_HFMODEM
-	hfmodem_init();
 #endif
 #ifdef CONFIG_PMAC_PBOOK
 	pmu_device_init();

@@ -109,7 +109,10 @@ static void cv64_dump(void);
 
 #define arraysize(x)    (sizeof(x)/sizeof(*(x)))
 
-#define wb_64(reg,dat) (*((unsigned char volatile *)CyberRegs + reg) = dat)
+#define wb_64(regs,reg,dat) (*(((volatile unsigned char *)regs) + reg) = dat)
+#define rb_64(regs, reg) (*(((volatile unsigned char *)regs) + reg))
+
+#define ww_64(regs,reg,dat) (*((volatile unsigned short *)(regs + reg) = dat)
 
 struct cyberfb_par {
 	struct fb_var_screeninfo var;
@@ -129,60 +132,32 @@ static struct fb_info fb_info;
 
 
 /*
-*    Switch for Chipset Independency
-*/
-
-static struct fb_hwswitch {
-
-/* Initialisation */
-
-int (*init)(void);
-
-/* Display Control */
-
-int (*encode_fix)(struct fb_fix_screeninfo *fix, struct cyberfb_par *par);
-int (*decode_var)(struct fb_var_screeninfo *var, struct cyberfb_par *par);
-int (*encode_var)(struct fb_var_screeninfo *var, struct cyberfb_par *par);
-int (*getcolreg)(u_int regno, u_int *red, u_int *green, u_int *blue,
-		 u_int *transp, struct fb_info *info);
-int (*setcolreg)(u_int regno, u_int red, u_int green, u_int blue,
-		 u_int transp, struct fb_info *info);
-void (*blank)(int blank);
-} *fbhw;
-
-
-/*
-*    Frame Buffer Name
-*/
+ *    Frame Buffer Name
+ */
 
 static char cyberfb_name[16] = "Cybervision";
 
 
 /*
-*    Cybervision Graphics Board
-*/
+ *    CyberVision Graphics Board
+ */
 
 static unsigned char Cyber_colour_table [256][3];
-static unsigned long CyberMem;
 static unsigned long CyberSize;
-static volatile char *CyberRegs;
+static volatile unsigned char *CyberBase;
+static volatile unsigned char *CyberMem;
+static volatile unsigned char *CyberRegs;
 static unsigned long CyberMem_phys;
 static unsigned long CyberRegs_phys;
-/* From cvision.c  for cvision_core.c */
-static unsigned long cv64_mem;
-static unsigned long cv64_fbmem;
-static volatile char *cv64_regs;
-static unsigned long cv64_size;
-#if 0
-static int cvision_custom_mode = 0;
-static int hbs, hbe, hss, hse, ht, vbs, vbe, vss, vse, vt;
-#endif
 
 /*
-*    Predefined Video Modes
-*/
+ *    Predefined Video Modes
+ */
 
-static struct fb_videomode cyberfb_predefined[] __initdata = {
+static struct {
+    const char *name;
+    struct fb_var_screeninfo var;
+} cyberfb_predefined[] __initdata = {
 	{ "640x480-8", {		/* Default 8 BPP mode (cyber8) */
 		640, 480, 640, 480, 0, 0, 8, 0,
 		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
@@ -251,17 +226,18 @@ static struct fb_videomode cyberfb_predefined[] __initdata = {
 static int Cyberfb_inverse = 0;
 
 /*
-*    Some default modes
-*/
+ *    Some default modes
+ */
 
 #define CYBER8_DEFMODE     (0)
 #define CYBER16_DEFMODE    (1)
 
 static struct fb_var_screeninfo cyberfb_default;
+static int cyberfb_usermode __initdata = 0;
 
 /*
-*    Interface used by the world
-*/
+ *    Interface used by the world
+ */
 
 void cyberfb_setup(char *options, int *ints);
 
@@ -283,8 +259,8 @@ static int cyberfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			 u_long arg, int con, struct fb_info *info);
 
 /*
-*    Interface to the low level console driver
-*/
+ *    Interface to the low level console driver
+ */
 
 void cyberfb_init(void);
 static int Cyberfb_switch(int con, struct fb_info *info);
@@ -292,16 +268,16 @@ static int Cyberfb_updatevar(int con, struct fb_info *info);
 static void Cyberfb_blank(int blank, struct fb_info *info);
 
 /*
-*    Text console acceleration
-*/
+ *    Text console acceleration
+ */
 
 #ifdef FBCON_HAS_CFB8
 static struct display_switch fbcon_cyber8;
 #endif
 
 /*
-*    Accelerated Functions used by the low level console driver
-*/
+ *    Accelerated Functions used by the low level console driver
+ */
 
 static void Cyber_WaitQueue(u_short fifo);
 static void Cyber_WaitBlit(void);
@@ -310,11 +286,13 @@ static void Cyber_BitBLT(u_short curx, u_short cury, u_short destx,
 			 u_short mode);
 static void Cyber_RectFill(u_short x, u_short y, u_short width, u_short height,
 			   u_short mode, u_short color);
+#if 0
 static void Cyber_MoveCursor(u_short x, u_short y);
+#endif
 
 /*
-*   Hardware Specific Routines
-*/
+ *   Hardware Specific Routines
+ */
 
 static int Cyber_init(void);
 static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
@@ -327,11 +305,10 @@ static int Cyber_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 			   u_int *transp, struct fb_info *info);
 static int Cyber_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			   u_int transp, struct fb_info *info);
-static void Cyber_blank(int blank);
 
 /*
-*    Internal routines
-*/
+ *    Internal routines
+ */
 
 static void cyberfb_get_par(struct cyberfb_par *par);
 static void cyberfb_set_par(struct cyberfb_par *par);
@@ -342,7 +319,7 @@ static int get_video_mode(const char *name);
 
 /* For cvision_core.c */
 static unsigned short cv64_compute_clock(unsigned long);
-static int cv_has_4mb (volatile caddr_t);
+static int cv_has_4mb (volatile unsigned char *);
 static void cv64_board_init (void);
 static void cv64_load_video_mode (struct fb_var_screeninfo *);
 
@@ -351,16 +328,17 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *);
 
 
 /*
-*    Initialization
-*
-*    Set the default video mode for this chipset. If a video mode was
-*    specified on the command line, it will override the default mode.
-*/
+ *    Initialization
+ *
+ *    Set the default video mode for this chipset. If a video mode was
+ *    specified on the command line, it will override the default mode.
+ */
 
 static int Cyber_init(void)
 {
+	volatile unsigned char *regs = CyberRegs;
+	volatile unsigned long *CursorBase;
 	int i;
-	volatile u_long *CursorBase;
 	DPRINTK("ENTER\n");
 
 /* Init local cmap as greyscale levels */
@@ -371,27 +349,25 @@ static int Cyber_init(void)
 	}
 
 /* Initialize the board and determine fbmem size */
-	cv64_board_init (); 
+	cv64_board_init(); 
 #ifdef CYBERFBDEBUG
 	DPRINTK("Register state after initing board\n");
 	cv64_dump();
 #endif
 /* Clear framebuffer memory */
 	DPRINTK("Clear framebuffer memory\n");
-	memset ((char *) cv64_fbmem, 0, cv64_size);
+	memset ((char *)CyberMem, 0, CyberSize);
 
 /* Disable hardware cursor */
 	DPRINTK("Disable HW cursor\n");
-	wb_64(S3_CRTC_ADR, S3_REG_LOCK2);
-	wb_64(S3_CRTC_DATA, 0xa0);
-	wb_64(S3_CRTC_ADR, S3_HGC_MODE);
-	wb_64(S3_CRTC_DATA, 0x00);
-	wb_64(S3_CRTC_ADR, S3_HWGC_DX);
-	wb_64(S3_CRTC_DATA, 0x00);
-	wb_64(S3_CRTC_ADR, S3_HWGC_DY);
-	wb_64(S3_CRTC_DATA, 0x00);
-
-	CyberSize = cv64_size;
+	wb_64(regs, S3_CRTC_ADR, S3_REG_LOCK2);
+	wb_64(regs, S3_CRTC_DATA, 0xa0);
+	wb_64(regs, S3_CRTC_ADR, S3_HGC_MODE);
+	wb_64(regs, S3_CRTC_DATA, 0x00);
+	wb_64(regs, S3_CRTC_ADR, S3_HWGC_DX);
+	wb_64(regs, S3_CRTC_DATA, 0x00);
+	wb_64(regs, S3_CRTC_ADR, S3_HWGC_DY);
+	wb_64(regs, S3_CRTC_DATA, 0x00);
 
 /* Initialize hardware cursor */
 	DPRINTK("Init HW cursor\n");
@@ -420,9 +396,9 @@ static int Cyber_init(void)
 
 
 /*
-*    This function should fill in the `fix' structure based on the
-*    values in the `par' structure.
-*/
+ *    This function should fill in the `fix' structure based on the
+ *    values in the `par' structure.
+ */
 
 static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
 			    struct cyberfb_par *par)
@@ -546,19 +522,21 @@ static int Cyber_encode_var(struct fb_var_screeninfo *var,
 
 
 /*
-*    Set a single color register. Return != 0 for invalid regno.
-*/
+ *    Set a single color register. Return != 0 for invalid regno.
+ */
 
 static int Cyber_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			   u_int transp, struct fb_info *info)
 {
+	volatile unsigned char *regs = CyberRegs;
+
 	/*DPRINTK("ENTER\n");*/
 	if (regno > 255) {
 		DPRINTK("EXIT - Register # > 255\n");
 		return (1);
 	}
 
-	wb_64(0x3c8, (unsigned char) regno);
+	wb_64(regs, 0x3c8, (unsigned char) regno);
 
  	red >>= 10;
  	green >>= 10;
@@ -568,9 +546,9 @@ static int Cyber_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	Cyber_colour_table [regno][1] = green;
 	Cyber_colour_table [regno][2] = blue;
 
-	wb_64(0x3c9, red);
-	wb_64(0x3c9, green);
-	wb_64(0x3c9, blue);
+	wb_64(regs, 0x3c9, red);
+	wb_64(regs, 0x3c9, green);
+	wb_64(regs, 0x3c9, blue);
 
 	/*DPRINTK("EXIT\n");*/
 	return (0);
@@ -611,29 +589,30 @@ static int Cyber_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 *           0 = restore fb cmap from local cmap
 */
 
-void Cyber_blank(int blank)
+void Cyberfb_blank(int blank, struct fb_info *info)
 {
+	volatile unsigned char *regs = CyberRegs;
 	int i;
 
 	DPRINTK("ENTER\n");
 #if 0
 /* Blank by turning gfx off */
-	gfx_on_off (1, cv64_regs);
+	gfx_on_off (1, regs);
 #else
 	if (blank) {
 		for (i = 0; i < 256; i++) {
-			wb_64(0x3c8, (unsigned char) i);
+			wb_64(regs, 0x3c8, (unsigned char) i);
 			/* ARB Pale red to detect this blanking method */
-			wb_64(0x3c9, 48); 
-			wb_64(0x3c9, 0);
-			wb_64(0x3c9, 0);
+			wb_64(regs, 0x3c9, 48); 
+			wb_64(regs, 0x3c9, 0);
+			wb_64(regs, 0x3c9, 0);
 		}
 	} else {
 		for (i = 0; i < 256; i++) {
-			wb_64(0x3c8, (unsigned char) i);
-			wb_64(0x3c9, Cyber_colour_table[i][0]);
-			wb_64(0x3c9, Cyber_colour_table[i][1]);
-			wb_64(0x3c9, Cyber_colour_table[i][2]);
+			wb_64(regs, 0x3c8, (unsigned char) i);
+			wb_64(regs, 0x3c9, Cyber_colour_table[i][0]);
+			wb_64(regs, 0x3c9, Cyber_colour_table[i][1]);
+			wb_64(regs, 0x3c9, Cyber_colour_table[i][2]);
 		}
 	}
 #endif
@@ -646,13 +625,12 @@ void Cyber_blank(int blank)
  */
 static void Cyber_WaitQueue (u_short fifo)
 {
-	u_short status;
+	unsigned short status;
 
 	DPRINTK("ENTER\n");
 	do {
 		status = *((u_short volatile *)(CyberRegs + S3_GP_STAT));
-	}
-	while (status & fifo);
+	} while (status & fifo);
 	DPRINTK("EXIT\n");
 }
 
@@ -661,13 +639,12 @@ static void Cyber_WaitQueue (u_short fifo)
  */
 static void Cyber_WaitBlit (void)
 {
-	u_short status;
+	unsigned short status;
 
 	DPRINTK("ENTER\n");
 	do {
 		status = *((u_short volatile *)(CyberRegs + S3_GP_STAT));
-	}
-	while (status & S3_HDW_BUSY);
+	} while (status & S3_HDW_BUSY);
 	DPRINTK("EXIT\n");
 }
 
@@ -678,6 +655,7 @@ static void Cyber_BitBLT (u_short curx, u_short cury, u_short destx,
 			  u_short desty, u_short width, u_short height,
 			  u_short mode)
 {
+	volatile unsigned char *regs = CyberRegs;
 	u_short blitcmd = S3_BITBLT;
 
 	DPRINTK("ENTER\n");
@@ -699,19 +677,19 @@ static void Cyber_BitBLT (u_short curx, u_short cury, u_short destx,
 
 	Cyber_WaitQueue (0x8000);
 
-	*((u_short volatile *)(CyberRegs + S3_PIXEL_CNTL)) = 0xa000;
-	*((u_short volatile *)(CyberRegs + S3_FRGD_MIX)) = (0x0060 | mode);
+	*((u_short volatile *)(regs + S3_PIXEL_CNTL)) = 0xa000;
+	*((u_short volatile *)(regs + S3_FRGD_MIX)) = (0x0060 | mode);
 
-	*((u_short volatile *)(CyberRegs + S3_CUR_X)) = curx;
-	*((u_short volatile *)(CyberRegs + S3_CUR_Y)) = cury;
+	*((u_short volatile *)(regs + S3_CUR_X)) = curx;
+	*((u_short volatile *)(regs + S3_CUR_Y)) = cury;
 
-	*((u_short volatile *)(CyberRegs + S3_DESTX_DIASTP)) = destx;
-	*((u_short volatile *)(CyberRegs + S3_DESTY_AXSTP)) = desty;
+	*((u_short volatile *)(regs + S3_DESTX_DIASTP)) = destx;
+	*((u_short volatile *)(regs + S3_DESTY_AXSTP)) = desty;
 
-	*((u_short volatile *)(CyberRegs + S3_MIN_AXIS_PCNT)) = height - 1;
-	*((u_short volatile *)(CyberRegs + S3_MAJ_AXIS_PCNT)) = width  - 1;
+	*((u_short volatile *)(regs + S3_MIN_AXIS_PCNT)) = height - 1;
+	*((u_short volatile *)(regs + S3_MAJ_AXIS_PCNT)) = width  - 1;
 
-	*((u_short volatile *)(CyberRegs + S3_CMD)) = blitcmd;
+	*((u_short volatile *)(regs + S3_CMD)) = blitcmd;
 	DPRINTK("EXIT\n");
 }
 
@@ -721,56 +699,52 @@ static void Cyber_BitBLT (u_short curx, u_short cury, u_short destx,
 static void Cyber_RectFill (u_short x, u_short y, u_short width,
 			    u_short height, u_short mode, u_short color)
 {
+	volatile unsigned char *regs = CyberRegs;
 	u_short blitcmd = S3_FILLEDRECT;
 
 	DPRINTK("ENTER\n");
 	Cyber_WaitQueue (0x8000);
 
-	*((u_short volatile *)(CyberRegs + S3_PIXEL_CNTL)) = 0xa000;
-	*((u_short volatile *)(CyberRegs + S3_FRGD_MIX)) = (0x0020 | mode);
+	*((u_short volatile *)(regs + S3_PIXEL_CNTL)) = 0xa000;
+	*((u_short volatile *)(regs + S3_FRGD_MIX)) = (0x0020 | mode);
 
-	*((u_short volatile *)(CyberRegs + S3_MULT_MISC)) = 0xe000;
-	*((u_short volatile *)(CyberRegs + S3_FRGD_COLOR)) = color;
+	*((u_short volatile *)(regs + S3_MULT_MISC)) = 0xe000;
+	*((u_short volatile *)(regs + S3_FRGD_COLOR)) = color;
 
-	*((u_short volatile *)(CyberRegs + S3_CUR_X)) = x;
-	*((u_short volatile *)(CyberRegs + S3_CUR_Y)) = y;
+	*((u_short volatile *)(regs + S3_CUR_X)) = x;
+	*((u_short volatile *)(regs + S3_CUR_Y)) = y;
 
-	*((u_short volatile *)(CyberRegs + S3_MIN_AXIS_PCNT)) = height - 1;
-	*((u_short volatile *)(CyberRegs + S3_MAJ_AXIS_PCNT)) = width  - 1;
+	*((u_short volatile *)(regs + S3_MIN_AXIS_PCNT)) = height - 1;
+	*((u_short volatile *)(regs + S3_MAJ_AXIS_PCNT)) = width  - 1;
 
-	*((u_short volatile *)(CyberRegs + S3_CMD)) = blitcmd;
+	*((u_short volatile *)(regs + S3_CMD)) = blitcmd;
 	DPRINTK("EXIT\n");
 }
 
+
+#if 0
 /**************************************************************
  * Move cursor to x, y
  */
 static void Cyber_MoveCursor (u_short x, u_short y)
 {
+	volatile unsigned char *regs = CyberRegs;
 	DPRINTK("ENTER\n");
-	*(CyberRegs + S3_CRTC_ADR)  = 0x39;
-	*(CyberRegs + S3_CRTC_DATA) = 0xa0;
+	*(regs + S3_CRTC_ADR)  = 0x39;
+	*(regs + S3_CRTC_DATA) = 0xa0;
 
-	*(CyberRegs + S3_CRTC_ADR)  = S3_HWGC_ORGX_H;
-	*(CyberRegs + S3_CRTC_DATA) = (char)((x & 0x0700) >> 8);
-	*(CyberRegs + S3_CRTC_ADR)  = S3_HWGC_ORGX_L;
-	*(CyberRegs + S3_CRTC_DATA) = (char)(x & 0x00ff);
+	*(regs + S3_CRTC_ADR)  = S3_HWGC_ORGX_H;
+	*(regs + S3_CRTC_DATA) = (char)((x & 0x0700) >> 8);
+	*(regs + S3_CRTC_ADR)  = S3_HWGC_ORGX_L;
+	*(regs + S3_CRTC_DATA) = (char)(x & 0x00ff);
 
-	*(CyberRegs + S3_CRTC_ADR)  = S3_HWGC_ORGY_H;
-	*(CyberRegs + S3_CRTC_DATA) = (char)((y & 0x0700) >> 8);
-	*(CyberRegs + S3_CRTC_ADR)  = S3_HWGC_ORGY_L;
-	*(CyberRegs + S3_CRTC_DATA) = (char)(y & 0x00ff);
+	*(regs + S3_CRTC_ADR)  = S3_HWGC_ORGY_H;
+	*(regs + S3_CRTC_DATA) = (char)((y & 0x0700) >> 8);
+	*(regs + S3_CRTC_ADR)  = S3_HWGC_ORGY_L;
+	*(regs + S3_CRTC_DATA) = (char)(y & 0x00ff);
 	DPRINTK("EXIT\n");
 }
-
-
-/* -------------------- Interfaces to hardware functions -------------------- */
-
-
-static struct fb_hwswitch Cyber_switch = {
-	Cyber_init, Cyber_encode_fix, Cyber_decode_var, Cyber_encode_var,
-	Cyber_getcolreg, Cyber_setcolreg, Cyber_blank
-};
+#endif
 
 
 /* -------------------- Generic routines ---------------------------------- */
@@ -786,7 +760,7 @@ static void cyberfb_get_par(struct cyberfb_par *par)
 	if (current_par_valid) {
 		*par = current_par;
 	} else {
-		fbhw->decode_var(&cyberfb_default, par);
+		Cyber_decode_var(&cyberfb_default, par);
 	}
 	DPRINTK("EXIT\n");
 }
@@ -819,14 +793,14 @@ static int do_fb_set_var(struct fb_var_screeninfo *var, int isactive)
 	struct cyberfb_par par;
 
 	DPRINTK("ENTER\n");
-	if ((err = fbhw->decode_var(var, &par))) {
+	if ((err = Cyber_decode_var(var, &par))) {
 		DPRINTK("EXIT - decode_var failed\n");
 		return(err);
 	}
 	activate = var->activate;
 	if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW && isactive)
 		cyberfb_set_par(&par);
-	fbhw->encode_var(var, &par);
+	Cyber_encode_var(var, &par);
 	var->activate = activate;
 
 	cyber_set_video(var);
@@ -844,11 +818,11 @@ static void do_install_cmap(int con, struct fb_info *info)
 	}
 	if (fb_display[con].cmap.len) {
 		DPRINTK("Use console cmap\n");
-		fb_set_cmap(&fb_display[con].cmap, 1, fbhw->setcolreg, info);
+		fb_set_cmap(&fb_display[con].cmap, 1, Cyber_setcolreg, info);
 	} else {
 		DPRINTK("Use default cmap\n");
 		fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-			    1, fbhw->setcolreg, info);
+			    1, Cyber_setcolreg, info);
 	}
 	DPRINTK("EXIT\n");
 }
@@ -889,10 +863,10 @@ static int cyberfb_get_fix(struct fb_fix_screeninfo *fix, int con,
 	if (con == -1) {
 		cyberfb_get_par(&par);
 	} else {
-		error = fbhw->decode_var(&fb_display[con].var, &par);
+		error = Cyber_decode_var(&fb_display[con].var, &par);
 	}
 	DPRINTK("EXIT\n");
-	return(error ? error : fbhw->encode_fix(fix, &par));
+	return(error ? error : Cyber_encode_fix(fix, &par));
 }
 
 
@@ -909,7 +883,7 @@ static int cyberfb_get_var(struct fb_var_screeninfo *var, int con,
 	DPRINTK("ENTER\n");
 	if (con == -1) {
 		cyberfb_get_par(&par);
-		error = fbhw->encode_var(var, &par);
+		error = Cyber_encode_var(var, &par);
 		disp.var = *var;   /* ++Andre: don't know if this is the right place */
 	} else {
 		*var = fb_display[con].var;
@@ -934,7 +908,7 @@ static void cyberfb_set_disp(int con, struct fb_info *info)
 	cyberfb_get_fix(&fix, con, info);
 	if (con == -1)
 		con = 0;
-	display->screen_base = phys_to_virt ((unsigned long) fix.smem_start);
+	display->screen_base = (unsigned char *)CyberMem;
 	display->visual = fix.visual;
 	display->type = fix.type;
 	display->type_aux = fix.type_aux;
@@ -1014,7 +988,7 @@ static int cyberfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 	DPRINTK("ENTER\n");
 	if (con == currcon) { /* current console? */
 		DPRINTK("EXIT - console is current console\n");
-		return(fb_get_cmap(cmap, kspc, fbhw->getcolreg, info));
+		return(fb_get_cmap(cmap, kspc, Cyber_getcolreg, info));
 	} else if (fb_display[con].cmap.len) { /* non default colormap? */
 		DPRINTK("Use console cmap\n");
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
@@ -1048,7 +1022,7 @@ static int cyberfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	}
 	if (con == currcon) {		 /* current console? */
 		DPRINTK("EXIT - Current console\n");
-		return(fb_set_cmap(cmap, kspc, fbhw->setcolreg, info));
+		return(fb_set_cmap(cmap, kspc, Cyber_setcolreg, info));
 	} else {
 		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
 	}
@@ -1066,7 +1040,7 @@ static int cyberfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 static int cyberfb_pan_display(struct fb_var_screeninfo *var, int con,
 			       struct fb_info *info)
 {
-	return(-EINVAL);
+	return -EINVAL;
 }
 
 
@@ -1077,7 +1051,7 @@ static int cyberfb_pan_display(struct fb_var_screeninfo *var, int con,
 static int cyberfb_ioctl(struct inode *inode, struct file *file,
 			 u_int cmd, u_long arg, int con, struct fb_info *info)
 {
-	return(-EINVAL);
+	return -EINVAL;
 }
 
 
@@ -1088,7 +1062,7 @@ static struct fb_ops cyberfb_ops = {
 };
 
 
-__initfunc(void cyberfb_setup(char *options, int *ints))
+void __init cyberfb_setup(char *options, int *ints)
 {
 	char *this_opt;
 	DPRINTK("ENTER\n");
@@ -1109,8 +1083,10 @@ __initfunc(void cyberfb_setup(char *options, int *ints))
 			strcpy(fb_info.fontname, this_opt+5);
 		} else if (!strcmp (this_opt, "cyber8")) {
 			cyberfb_default = cyberfb_predefined[CYBER8_DEFMODE].var;
+			cyberfb_usermode = 1;
 		} else if (!strcmp (this_opt, "cyber16")) {
 			cyberfb_default = cyberfb_predefined[CYBER16_DEFMODE].var;
+			cyberfb_usermode = 1;
 		} else get_video_mode(this_opt);
 	}
 
@@ -1125,7 +1101,7 @@ __initfunc(void cyberfb_setup(char *options, int *ints))
  *    Initialization
  */
 
-__initfunc(void cyberfb_init(void))
+void __init cyberfb_init(void)
 {
 	struct cyberfb_par par;
 	unsigned long board_addr;
@@ -1146,14 +1122,12 @@ __initfunc(void cyberfb_init(void))
 	DPRINTK("board_addr=%08lx\n", board_addr);
 	DPRINTK("board_size=%08lx\n", board_size);
 
-	cv64_mem = ioremap(board_addr, board_size);
-	cv64_regs = (volatile char *)(cv64_mem + 0x02000000);
-	cv64_fbmem = cv64_mem + 0x01400000;
-	DPRINTK("cv64_mem=%08lx cv64_regs=%08lx cv64_fbmem=%08lx\n",
-		cv64_mem, (long unsigned int)cv64_regs, cv64_fbmem);
+	CyberBase = ioremap(board_addr, board_size);
+	CyberRegs = CyberBase + 0x02000000;
+	CyberMem = CyberBase + 0x01400000;
+	DPRINTK("CyberBase=%08lx CyberRegs=%08lx CyberMem=%08lx\n",
+		CyberBase, (long unsigned int)CyberRegs, CyberMem);
 
-	CyberMem = cv64_fbmem;
-	CyberRegs = cv64_regs;
 	CyberMem_phys = board_addr + 0x01400000;
 	CyberRegs_phys = CyberMem_phys + 0x00c00000;
 	DPRINTK("CyberMem=%08lx CyberRegs=%08lx\n", CyberMem,
@@ -1164,8 +1138,6 @@ __initfunc(void cyberfb_init(void))
 	cv64_dump();
 #endif
 
-	fbhw = &Cyber_switch;
-
 	strcpy(fb_info.modename, cyberfb_name);
 	fb_info.changevar = NULL;
 	fb_info.node = -1;
@@ -1175,9 +1147,14 @@ __initfunc(void cyberfb_init(void))
 	fb_info.updatevar = &Cyberfb_updatevar;
 	fb_info.blank = &Cyberfb_blank;
 
-	fbhw->init();
-	fbhw->decode_var(&cyberfb_default, &par);
-	fbhw->encode_var(&cyberfb_default, &par);
+	Cyber_init();
+	/* ++Andre: set cyberfb default mode */
+	if (!cyberfb_usermode) {
+		cyberfb_default = cyberfb_predefined[CYBER8_DEFMODE].var;
+		DPRINTK("Use default cyber8 mode\n");
+	}
+	Cyber_decode_var(&cyberfb_default, &par);
+	Cyber_encode_var(&cyberfb_default, &par);
 
 	do_fb_set_var(&cyberfb_default, 1);
 	cyberfb_get_var(&fb_display[0].var, -1, &fb_info);
@@ -1203,7 +1180,7 @@ static int Cyberfb_switch(int con, struct fb_info *info)
         DPRINTK("ENTER\n");
 	/* Do we have to save the colormap? */
 	if (fb_display[currcon].cmap.len) {
-		fb_get_cmap(&fb_display[currcon].cmap, 1, fbhw->getcolreg,
+		fb_get_cmap(&fb_display[currcon].cmap, 1, Cyber_getcolreg,
 			    info);
 	}
 
@@ -1231,22 +1208,10 @@ static int Cyberfb_updatevar(int con, struct fb_info *info)
 
 
 /*
- *    Blank the display.
- */
-
-static void Cyberfb_blank(int blank, struct fb_info *info)
-{
-	DPRINTK("Enter\n");
-	fbhw->blank(blank);
-	DPRINTK("Exit\n");
-}
-
-
-/*
  *    Get a Video Mode
  */
 
-__initfunc(static int get_video_mode(const char *name))
+static int __init get_video_mode(const char *name)
 {
 	int i;
 
@@ -1254,13 +1219,11 @@ __initfunc(static int get_video_mode(const char *name))
 	for (i = 0; i < NUM_TOTAL_MODES; i++) {
 		if (!strcmp(name, cyberfb_predefined[i].name)) {
 			cyberfb_default = cyberfb_predefined[i].var;
+			cyberfb_usermode = 1;
 			DPRINTK("EXIT - Matched predefined mode\n");
 			return(i);
 		}
 	}
-	/* ++Andre: set cyberfb default mode */
-	cyberfb_default = cyberfb_predefined[CYBER8_DEFMODE].var;
-	DPRINTK("EXIT - Use default cyber8 mode\n");
 	return(0);
 }
 
@@ -1454,71 +1417,38 @@ unsigned char cvconscolors[16][3] = {	/* background, foreground, hilite */
 };
 
 /* -------------------- Hardware specific routines ------------------------- */
-#if 0
-/* ARB Generates 100 usec delay */
-inline void __cv_delay (unsigned long usecs)
-{
-	int k;
-	
-	for (k = 0; k < 1000; k++) {
-		asm volatile ("nop");
-	}
-}
-#endif
-
-/* Wait while Graphics Engine is busy */
-inline void GfxBusyWait (volatile caddr_t board)
-{
-	int test;
-	DPRINTK("ENTER\n");
-	
-	do {
-		test = vgar16 (board, ECR_GP_STAT);
-		asm volatile ("nop");
-	} while (test & (1 << 9));
-	DPRINTK("EXIT\n");
-}
-
-/* Wait for any of the 8 Trio32 FIFOs to be free */ 
-inline void GfxFifoWait (volatile caddr_t board)
-{
-	int test;
-	DPRINTK("ENTER\n");
-	
-	do {
-		test = vgar16 (board, ECR_GP_STAT);
-	} while (test & 0x0f);
-	DPRINTK("EXIT\n");
-}
 
 /* Read Attribute Controller Register=idx */
-inline unsigned char RAttr (volatile caddr_t board, short idx)
+inline unsigned char RAttr (volatile unsigned char *regs, short idx)
 {
-	vgaw (board, ACT_ADDRESS_W, idx);
+	wb_64 (regs, ACT_ADDRESS_W, idx);
+	mb();
 	udelay(100);
-	/* __cv_delay (0); */
-	return (vgar (board, ACT_ADDRESS_R));
+	return (rb_64(regs, ACT_ADDRESS_R));
 }
 
 /* Read Sequencer Register=idx */
-inline unsigned char RSeq (volatile caddr_t board, short idx)
+inline unsigned char RSeq (volatile unsigned char *regs, short idx)
 {
-	vgaw (board, SEQ_ADDRESS, idx);
-	return (vgar (board, SEQ_ADDRESS_R));
+	wb_64 (regs, SEQ_ADDRESS, idx);
+	mb();
+	return (rb_64(regs, SEQ_ADDRESS_R));
 }
 
 /* Read CRT Controller Register=idx */
-inline unsigned char RCrt (volatile caddr_t board, short idx)
+inline unsigned char RCrt (volatile unsigned char *regs, short idx)
 {
-	vgaw (board, CRT_ADDRESS, idx);
-	return (vgar (board, CRT_ADDRESS_R));
+	wb_64 (regs, CRT_ADDRESS, idx);
+	mb();
+	return (rb_64(regs, CRT_ADDRESS_R));
 }
 
 /* Read Graphics Controller Register=idx */
-inline unsigned char RGfx (volatile caddr_t board, short idx)
+inline unsigned char RGfx (volatile unsigned char *regs, short idx)
 {
-	vgaw (board, GCT_ADDRESS, idx);
-	return (vgar (board, GCT_ADDRESS_R));
+	wb_64 (regs, GCT_ADDRESS, idx);
+	mb();
+	return (rb_64(regs, GCT_ADDRESS_R));
 }
 
 /*
@@ -1526,13 +1456,13 @@ inline unsigned char RGfx (volatile caddr_t board, short idx)
  */
 
 inline void cv64_write_port (unsigned short bits,
-			     volatile unsigned char *board)
+			     volatile unsigned char *base)
 {
 	volatile unsigned char *addr;
 	static unsigned char cvportbits = 0; /* Mirror port bits here */
 	DPRINTK("ENTER\n");
 
-	addr = board + 0x40001;
+	addr = base + 0x40001;
 	if (bits & 0x8000) {
 		cvportbits |= bits & 0xff; /* Set bits */
 		DPRINTK("Set bits: %04x\n", bits);
@@ -1542,7 +1472,7 @@ inline void cv64_write_port (unsigned short bits,
 		cvportbits &= bits; /* Clear bits */
 		DPRINTK("Clear bits: %04x\n", bits);
 	}
-	
+
 	*addr = cvportbits;
 	DPRINTK("EXIT\n");
 }
@@ -1572,7 +1502,7 @@ inline void cvscreen (int toggle, volatile unsigned char *board)
 /* Control screen display */
 /* toggle: 0 = on, 1 = off */
 /* board = registerbase */
-inline void gfx_on_off (int toggle, volatile unsigned char *board)
+inline void gfx_on_off(int toggle, volatile unsigned char *regs)
 {
 	int r;
 	DPRINTK("ENTER\n");
@@ -1581,10 +1511,10 @@ inline void gfx_on_off (int toggle, volatile unsigned char *board)
 	toggle = toggle << 5;
 	DPRINTK("Turn display %s\n", (toggle ? "off" : "on"));
 	
-	r = (int) RSeq ((volatile caddr_t) board, SEQ_ID_CLOCKING_MODE);
+	r = (int) RSeq(regs, SEQ_ID_CLOCKING_MODE);
 	r &= 0xdf;	/* Set bit 5 to 0 */
 	
-	WSeq (board, SEQ_ID_CLOCKING_MODE, r | toggle);
+	WSeq (regs, SEQ_ID_CLOCKING_MODE, r | toggle);
 	DPRINTK("EXIT\n");
 }
 
@@ -1640,11 +1570,11 @@ static unsigned short cv64_compute_clock(unsigned long freq)
 	return (erg);
 }
 
-static int cv_has_4mb (volatile caddr_t fb)
+static int cv_has_4mb (volatile unsigned char *fb)
 {
 	volatile unsigned long *tr, *tw;
 	DPRINTK("ENTER\n");
-	
+
 	/* write patterns in memory and test if they can be read */
 	tw = (volatile unsigned long *) fb;
 	tr = (volatile unsigned long *) (fb + 0x02000000);
@@ -1655,41 +1585,42 @@ static int cv_has_4mb (volatile caddr_t fb)
 		DPRINTK("EXIT - <4MB\n");
 		return (0);
 	}
-	
+
 	/* upper memory region */
 	tw = (volatile unsigned long *) (fb + 0x00200000);
 	tr = (volatile unsigned long *) (fb + 0x02200000);
-	
+
 	*tw = 0x87654321;
-	
+
 	if (*tr != 0x87654321) {
 		DPRINTK("EXIT - <4MB\n");
 		return (0);
 	}
-	
+
 	*tw = 0xAAAAAAAA;
-	
+
 	if (*tr != 0xAAAAAAAA) {
 		DPRINTK("EXIT - <4MB\n");
 		return (0);
 	}
-	
+
 	*tw = 0x55555555;
-	
+
 	if (*tr != 0x55555555) {
 		DPRINTK("EXIT - <4MB\n");
 		return (0);
 	}
-	
+
 	DPRINTK("EXIT\n");
 	return (1);
 }
 
 static void cv64_board_init (void)
 {
+	volatile unsigned char *regs = CyberRegs;
 	int i;
-	unsigned char test;
 	unsigned int clockpar;
+	unsigned char test;
 	
 	DPRINTK("ENTER\n");
 
@@ -1698,259 +1629,252 @@ static void cv64_board_init (void)
 	 */
 	/* Reset board */
 	for (i = 0; i < 6; i++) {
-		cv64_write_port (0xff, (volatile unsigned char *) cv64_mem);
+		cv64_write_port (0xff, CyberBase);
 	}
 	/* Return to operational mode */
-	cv64_write_port (0x8004, (volatile unsigned char *) cv64_mem);
+	cv64_write_port (0x8004, CyberBase);
 	
-  /*
-   * Generic (?) S3 chip wakeup
-   */
-  /* Disable I/O & memory decoders, video in setup mode */
-  vgaw (cv64_regs, SREG_VIDEO_SUBS_ENABLE, 0x10);
-  /* Video responds to cmds, addrs & data */
-  vgaw (cv64_regs, SREG_OPTION_SELECT, 0x1);
-  /* Enable I/O & memory decoders, video in operational mode */
-  vgaw (cv64_regs, SREG_VIDEO_SUBS_ENABLE, 0x8);
-  /* VGA color emulation, enable cpu access to display mem */ 
-  vgaw (cv64_regs, GREG_MISC_OUTPUT_W, 0x03);
-  /* Unlock S3 VGA regs */
-  WCrt (cv64_regs, CRT_ID_REGISTER_LOCK_1, 0x48); 
-  /* Unlock system control & extension registers */
-  WCrt (cv64_regs, CRT_ID_REGISTER_LOCK_2, 0xA5);
+	/*
+	 * Generic (?) S3 chip wakeup
+	 */
+	/* Disable I/O & memory decoders, video in setup mode */
+	wb_64 (regs, SREG_VIDEO_SUBS_ENABLE, 0x10);
+	/* Video responds to cmds, addrs & data */
+	wb_64 (regs, SREG_OPTION_SELECT, 0x1);
+	/* Enable I/O & memory decoders, video in operational mode */
+	wb_64 (regs, SREG_VIDEO_SUBS_ENABLE, 0x8);
+	/* VGA color emulation, enable cpu access to display mem */ 
+	wb_64 (regs, GREG_MISC_OUTPUT_W, 0x03);
+	/* Unlock S3 VGA regs */
+	WCrt (regs, CRT_ID_REGISTER_LOCK_1, 0x48); 
+	/* Unlock system control & extension registers */
+	WCrt (regs, CRT_ID_REGISTER_LOCK_2, 0xA5);
 /* GRF - Enable interrupts */
-  /* Enable enhanced regs access, Ready cntl 0 wait states */
-  test = RCrt (cv64_regs, CRT_ID_SYSTEM_CONFIG);
-  test = test | 0x01;		/* enable enhaced register access */
-  test = test & 0xEF;		/* clear bit 4, 0 wait state */
-  WCrt (cv64_regs, CRT_ID_SYSTEM_CONFIG, test);
-  /*
-   * bit 0=1: Enable enhaced mode functions
-   * bit 2=0: Enhanced mode 8+ bits/pixel
-   * bit 4=1: Enable linear addressing
-   * bit 5=1: Enable MMIO
-   */
-  vgaw (cv64_regs, ECR_ADV_FUNC_CNTL, 0x31);
-  /*
-   * bit 0=1: Color emulation
-   * bit 1=1: Enable CPU access to display memory
-   * bit 5=1: Select high 64K memory page
-   */
+	/* Enable enhanced regs access, Ready cntl 0 wait states */
+	test = RCrt (regs, CRT_ID_SYSTEM_CONFIG);
+	test = test | 0x01;		/* enable enhanced register access */
+	test = test & 0xEF;		/* clear bit 4, 0 wait state */
+	WCrt (regs, CRT_ID_SYSTEM_CONFIG, test);
+	/*
+	 * bit 0=1: Enable enhaced mode functions
+	 * bit 2=0: Enhanced mode 8+ bits/pixel
+	 * bit 4=1: Enable linear addressing
+	 * bit 5=1: Enable MMIO
+	 */
+	wb_64 (regs, ECR_ADV_FUNC_CNTL, 0x31);
+	/*
+	 * bit 0=1: Color emulation
+	 * bit 1=1: Enable CPU access to display memory
+	 * bit 5=1: Select high 64K memory page
+	 */
 /* GRF - 0xE3 */
-  vgaw (cv64_regs, GREG_MISC_OUTPUT_W, 0x23);
+	wb_64 (regs, GREG_MISC_OUTPUT_W, 0x23);
 	
-  /* Cpu base addr */
-  WCrt (cv64_regs, CRT_ID_EXT_SYS_CNTL_4, 0x0);
+	/* Cpu base addr */
+	WCrt (regs, CRT_ID_EXT_SYS_CNTL_4, 0x0);
 	
-  /* Reset. This does nothing on Trio, but standard VGA practice */
-  /* WSeq (cv64_regs, SEQ_ID_RESET, 0x03); */
-  /* Character clocks 8 dots wide */
-  WSeq (cv64_regs, SEQ_ID_CLOCKING_MODE, 0x01);
-  /* Enable cpu write to all color planes */
-  WSeq (cv64_regs, SEQ_ID_MAP_MASK, 0x0F);
-  /* Font table in 1st 8k of plane 2, font A=B disables swtich */
-  WSeq (cv64_regs, SEQ_ID_CHAR_MAP_SELECT, 0x0);
-  /* Allow mem access to 256kb */
-  WSeq (cv64_regs, SEQ_ID_MEMORY_MODE, 0x2);
-  /* Unlock S3 extensions to VGA Sequencer regs */
-  WSeq (cv64_regs, SEQ_ID_UNLOCK_EXT, 0x6);
+	/* Reset. This does nothing on Trio, but standard VGA practice */
+	/* WSeq (CyberRegs, SEQ_ID_RESET, 0x03); */
+	/* Character clocks 8 dots wide */
+	WSeq (regs, SEQ_ID_CLOCKING_MODE, 0x01);
+	/* Enable cpu write to all color planes */
+	WSeq (regs, SEQ_ID_MAP_MASK, 0x0F);
+	/* Font table in 1st 8k of plane 2, font A=B disables swtich */
+	WSeq (regs, SEQ_ID_CHAR_MAP_SELECT, 0x0);
+	/* Allow mem access to 256kb */
+	WSeq (regs, SEQ_ID_MEMORY_MODE, 0x2);
+	/* Unlock S3 extensions to VGA Sequencer regs */
+	WSeq (regs, SEQ_ID_UNLOCK_EXT, 0x6);
 	
-  /* Enable 4MB fast page mode */
-  test = RSeq (cv64_regs, SEQ_ID_BUS_REQ_CNTL);
-  test = test | 1 << 6;
-  WSeq (cv64_regs, SEQ_ID_BUS_REQ_CNTL, test);
+	/* Enable 4MB fast page mode */
+	test = RSeq (regs, SEQ_ID_BUS_REQ_CNTL);
+	test = test | 1 << 6;
+	WSeq (regs, SEQ_ID_BUS_REQ_CNTL, test);
 	
-  /* Faster LUT write: 1 DCLK LUT write cycle, RAMDAC clk doubled */
-  WSeq (cv64_regs, SEQ_ID_RAMDAC_CNTL, 0xC0);
-	
-  /* Clear immediate clock load bit */
-  test = RSeq (cv64_regs, SEQ_ID_CLKSYN_CNTL_2);
-  test = test & 0xDF;
-  /* If > 55MHz, enable 2 cycle memory write */
-  if (cv64_memclk >= 55000000) {
-    test |= 0x80;
-  }
-  WSeq (cv64_regs, SEQ_ID_CLKSYN_CNTL_2, test);
+	/* Faster LUT write: 1 DCLK LUT write cycle, RAMDAC clk doubled */
+	WSeq (regs, SEQ_ID_RAMDAC_CNTL, 0xC0);
 
-  /* Set MCLK value */
-  clockpar = cv64_compute_clock (cv64_memclk);
-  test = (clockpar & 0xFF00) >> 8;
-  WSeq (cv64_regs, SEQ_ID_MCLK_HI, test);
-  test = clockpar & 0xFF;
-  WSeq (cv64_regs, SEQ_ID_MCLK_LO, test);
+	/* Clear immediate clock load bit */
+	test = RSeq (regs, SEQ_ID_CLKSYN_CNTL_2);
+	test = test & 0xDF;
+	/* If > 55MHz, enable 2 cycle memory write */
+	if (cv64_memclk >= 55000000) {
+		test |= 0x80;
+	}
+	WSeq (regs, SEQ_ID_CLKSYN_CNTL_2, test);
 
-  /* Chip rev specific: Not in my Trio manual!!! */
-  if (RCrt (cv64_regs, CRT_ID_REVISION) == 0x10)
-    WSeq (cv64_regs, SEQ_ID_MORE_MAGIC, test);
-	
-  /* We now load an 25 MHz, 31kHz, 640x480 standard VGA Mode. */
+	/* Set MCLK value */
+	clockpar = cv64_compute_clock (cv64_memclk);
+	test = (clockpar & 0xFF00) >> 8;
+	WSeq (regs, SEQ_ID_MCLK_HI, test);
+	test = clockpar & 0xFF;
+	WSeq (regs, SEQ_ID_MCLK_LO, test);
 
-  /* Set DCLK value */
-  WSeq (cv64_regs, SEQ_ID_DCLK_HI, 0x13);
-  WSeq (cv64_regs, SEQ_ID_DCLK_LO, 0x41);
+	/* Chip rev specific: Not in my Trio manual!!! */
+	if (RCrt (regs, CRT_ID_REVISION) == 0x10)
+		WSeq (regs, SEQ_ID_MORE_MAGIC, test);
 
-  /* Load DCLK (and MCLK?) immediately */
-  test = RSeq (cv64_regs, SEQ_ID_CLKSYN_CNTL_2);
-  test = test | 0x22;
-  WSeq (cv64_regs, SEQ_ID_CLKSYN_CNTL_2, test);
+	/* We now load an 25 MHz, 31kHz, 640x480 standard VGA Mode. */
 
-  /* Enable loading of DCLK */
-  test = vgar (cv64_regs, GREG_MISC_OUTPUT_R);
-  test = test | 0x0C;
-  vgaw (cv64_regs, GREG_MISC_OUTPUT_W, test);
+	/* Set DCLK value */
+	WSeq (regs, SEQ_ID_DCLK_HI, 0x13);
+	WSeq (regs, SEQ_ID_DCLK_LO, 0x41);
 
-  /* Turn off immediate xCLK load */
-  WSeq (cv64_regs, SEQ_ID_CLKSYN_CNTL_2, 0x2);
+	/* Load DCLK (and MCLK?) immediately */
+	test = RSeq (regs, SEQ_ID_CLKSYN_CNTL_2);
+	test = test | 0x22;
+	WSeq (regs, SEQ_ID_CLKSYN_CNTL_2, test);
 
-  /* Horizontal character clock counts */
-  /* 8 LSB of 9 bits = total line - 5 */
-  WCrt (cv64_regs, CRT_ID_HOR_TOTAL, 0x5F);
-  /* Active display line */
-  WCrt (cv64_regs, CRT_ID_HOR_DISP_ENA_END, 0x4F);
-  /* Blank assertion start */
-  WCrt (cv64_regs, CRT_ID_START_HOR_BLANK, 0x50);
-  /* Blank assertion end */
-  WCrt (cv64_regs, CRT_ID_END_HOR_BLANK, 0x82);
-  /* HSYNC assertion start */
-  WCrt (cv64_regs, CRT_ID_START_HOR_RETR, 0x54);
-  /* HSYNC assertion end */
-  WCrt (cv64_regs, CRT_ID_END_HOR_RETR, 0x80);
-  WCrt (cv64_regs, CRT_ID_VER_TOTAL, 0xBF);
-  WCrt (cv64_regs, CRT_ID_OVERFLOW, 0x1F);
-  WCrt (cv64_regs, CRT_ID_PRESET_ROW_SCAN, 0x0);
-  WCrt (cv64_regs, CRT_ID_MAX_SCAN_LINE, 0x40);
-  WCrt (cv64_regs, CRT_ID_CURSOR_START, 0x00);
-  WCrt (cv64_regs, CRT_ID_CURSOR_END, 0x00);
-  WCrt (cv64_regs, CRT_ID_START_ADDR_HIGH, 0x00);
-  WCrt (cv64_regs, CRT_ID_START_ADDR_LOW, 0x00);
-  WCrt (cv64_regs, CRT_ID_CURSOR_LOC_HIGH, 0x00);
-  WCrt (cv64_regs, CRT_ID_CURSOR_LOC_LOW, 0x00);
-  WCrt (cv64_regs, CRT_ID_START_VER_RETR, 0x9C);
-  WCrt (cv64_regs, CRT_ID_END_VER_RETR, 0x0E);
-  WCrt (cv64_regs, CRT_ID_VER_DISP_ENA_END, 0x8F);
-  WCrt (cv64_regs, CRT_ID_SCREEN_OFFSET, 0x50);
-  WCrt (cv64_regs, CRT_ID_UNDERLINE_LOC, 0x00);
-  WCrt (cv64_regs, CRT_ID_START_VER_BLANK, 0x96);
-  WCrt (cv64_regs, CRT_ID_END_VER_BLANK, 0xB9);
-  WCrt (cv64_regs, CRT_ID_MODE_CONTROL, 0xE3);
-  WCrt (cv64_regs, CRT_ID_LINE_COMPARE, 0xFF);
-  WCrt (cv64_regs, CRT_ID_BACKWAD_COMP_3, 0x10);	/* FIFO enabled */
-  WCrt (cv64_regs, CRT_ID_MISC_1, 0x35);
-  WCrt (cv64_regs, CRT_ID_DISPLAY_FIFO, 0x5A);
-  WCrt (cv64_regs, CRT_ID_EXT_MEM_CNTL_2, 0x70);
-  WCrt (cv64_regs, CRT_ID_LAW_POS_LO, 0x40);
-  WCrt (cv64_regs, CRT_ID_EXT_MEM_CNTL_3, 0xFF);
-  
-  WGfx (cv64_regs, GCT_ID_SET_RESET, 0x0);
-  WGfx (cv64_regs, GCT_ID_ENABLE_SET_RESET, 0x0);
-  WGfx (cv64_regs, GCT_ID_COLOR_COMPARE, 0x0);
-  WGfx (cv64_regs, GCT_ID_DATA_ROTATE, 0x0);
-  WGfx (cv64_regs, GCT_ID_READ_MAP_SELECT, 0x0);
-  WGfx (cv64_regs, GCT_ID_GRAPHICS_MODE, 0x40);
-  WGfx (cv64_regs, GCT_ID_MISC, 0x01);
-  WGfx (cv64_regs, GCT_ID_COLOR_XCARE, 0x0F);
-  WGfx (cv64_regs, GCT_ID_BITMASK, 0xFF);
-	
-  /* Colors for text mode */
-  for (i = 0; i < 0xf; i++)
-    WAttr (cv64_regs, i, i);
-	
-  WAttr (cv64_regs, ACT_ID_ATTR_MODE_CNTL, 0x41);
-  WAttr (cv64_regs, ACT_ID_OVERSCAN_COLOR, 0x01);
-  WAttr (cv64_regs, ACT_ID_COLOR_PLANE_ENA, 0x0F);
-  WAttr (cv64_regs, ACT_ID_HOR_PEL_PANNING, 0x0);
-  WAttr (cv64_regs, ACT_ID_COLOR_SELECT, 0x0);
-	
-  vgaw (cv64_regs, VDAC_MASK, 0xFF);
-	
-  *((unsigned long *) (cv64_regs + ECR_FRGD_COLOR)) = 0xFF;
-  *((unsigned long *) (cv64_regs + ECR_BKGD_COLOR)) = 0;
-	
-  /* Colors initially set to grayscale */
-	
-  vgaw (cv64_regs, VDAC_ADDRESS_W, 0);
-  for (i = 255; i >= 0; i--) {
-    vgaw (cv64_regs, VDAC_DATA, i);
-    vgaw (cv64_regs, VDAC_DATA, i);
-    vgaw (cv64_regs, VDAC_DATA, i);
-  }
+	/* Enable loading of DCLK */
+	test = rb_64(regs, GREG_MISC_OUTPUT_R);
+	test = test | 0x0C;
+	wb_64 (regs, GREG_MISC_OUTPUT_W, test);
 
-  /* GFx hardware cursor off */
-  WCrt (cv64_regs, CRT_ID_HWGC_MODE, 0x00);
+	/* Turn off immediate xCLK load */
+	WSeq (regs, SEQ_ID_CLKSYN_CNTL_2, 0x2);
 
-  /* Set first to 4MB, so test will work */
-  WCrt (cv64_regs, CRT_ID_LAW_CNTL, 0x13);
-  /* Find "correct" size of fbmem of Z3 board */
-  if (cv_has_4mb ((volatile caddr_t) cv64_fbmem)) {
-    cv64_size = 1024 * 1024 * 4;
-    WCrt (cv64_regs, CRT_ID_LAW_CNTL, 0x13);
-    DPRINTK("4MB board\n");
-  } else {
-    cv64_size = 1024 * 1024 * 2;
-    WCrt (cv64_regs, CRT_ID_LAW_CNTL, 0x12);
-    DPRINTK("2MB board\n");
-  }
-	
-  /* Initialize graphics engine */
-  Cyber_WaitBlit();
-  /* GfxBusyWait (cv64_regs); */
-  vgaw16 (cv64_regs, ECR_FRGD_MIX, 0x27);
-  vgaw16 (cv64_regs, ECR_BKGD_MIX, 0x07);
-  vgaw16 (cv64_regs, ECR_READ_REG_DATA, 0x1000);
-  udelay(200);
-  /* __cv_delay (200000); */
-  vgaw16 (cv64_regs, ECR_READ_REG_DATA, 0x2000);
-  Cyber_WaitBlit();
-  /* GfxBusyWait (cv64_regs); */
-  vgaw16 (cv64_regs, ECR_READ_REG_DATA, 0x3FFF);
-  Cyber_WaitBlit();
-  /* GfxBusyWait (cv64_regs); */
-  udelay(200);
-  /* __cv_delay (200000); */
-  vgaw16 (cv64_regs, ECR_READ_REG_DATA, 0x4FFF);
-  Cyber_WaitBlit();
-  /* GfxBusyWait (cv64_regs); */
-  vgaw16 (cv64_regs, ECR_BITPLANE_WRITE_MASK, ~0);
-  Cyber_WaitBlit();
-  /* GfxBusyWait (cv64_regs); */
-  vgaw16 (cv64_regs, ECR_READ_REG_DATA, 0xE000);
-  vgaw16 (cv64_regs, ECR_CURRENT_Y_POS2, 0x00);
-  vgaw16 (cv64_regs, ECR_CURRENT_X_POS2, 0x00);
-  vgaw16 (cv64_regs, ECR_READ_REG_DATA, 0xA000);
-  vgaw16 (cv64_regs, ECR_DEST_Y__AX_STEP, 0x00);
-  vgaw16 (cv64_regs, ECR_DEST_Y2__AX_STEP2, 0x00);
-  vgaw16 (cv64_regs, ECR_DEST_X__DIA_STEP, 0x00);
-  vgaw16 (cv64_regs, ECR_DEST_X2__DIA_STEP2, 0x00);
-  vgaw16 (cv64_regs, ECR_SHORT_STROKE, 0x00);
-  vgaw16 (cv64_regs, ECR_DRAW_CMD, 0x01);
-	
-  Cyber_WaitBlit();
-  /* GfxBusyWait (cv64_regs); */
-	
-  vgaw16 (cv64_regs, ECR_READ_REG_DATA, 0x4FFF);
-  vgaw16 (cv64_regs, ECR_BKGD_COLOR, 0x01);
-  vgaw16 (cv64_regs, ECR_FRGD_COLOR, 0x00);
-	
-	
-  /* Enable video display (set bit 5) */
+	/* Horizontal character clock counts */
+	/* 8 LSB of 9 bits = total line - 5 */
+	WCrt (regs, CRT_ID_HOR_TOTAL, 0x5F);
+	/* Active display line */
+	WCrt (regs, CRT_ID_HOR_DISP_ENA_END, 0x4F);
+	/* Blank assertion start */
+	WCrt (regs, CRT_ID_START_HOR_BLANK, 0x50);
+	/* Blank assertion end */
+	WCrt (regs, CRT_ID_END_HOR_BLANK, 0x82);
+	/* HSYNC assertion start */
+	WCrt (regs, CRT_ID_START_HOR_RETR, 0x54);
+	/* HSYNC assertion end */
+	WCrt (regs, CRT_ID_END_HOR_RETR, 0x80);
+	WCrt (regs, CRT_ID_VER_TOTAL, 0xBF);
+	WCrt (regs, CRT_ID_OVERFLOW, 0x1F);
+	WCrt (regs, CRT_ID_PRESET_ROW_SCAN, 0x0);
+	WCrt (regs, CRT_ID_MAX_SCAN_LINE, 0x40);
+	WCrt (regs, CRT_ID_CURSOR_START, 0x00);
+	WCrt (regs, CRT_ID_CURSOR_END, 0x00);
+	WCrt (regs, CRT_ID_START_ADDR_HIGH, 0x00);
+	WCrt (regs, CRT_ID_START_ADDR_LOW, 0x00);
+	WCrt (regs, CRT_ID_CURSOR_LOC_HIGH, 0x00);
+	WCrt (regs, CRT_ID_CURSOR_LOC_LOW, 0x00);
+	WCrt (regs, CRT_ID_START_VER_RETR, 0x9C);
+	WCrt (regs, CRT_ID_END_VER_RETR, 0x0E);
+	WCrt (regs, CRT_ID_VER_DISP_ENA_END, 0x8F);
+	WCrt (regs, CRT_ID_SCREEN_OFFSET, 0x50);
+	WCrt (regs, CRT_ID_UNDERLINE_LOC, 0x00);
+	WCrt (regs, CRT_ID_START_VER_BLANK, 0x96);
+	WCrt (regs, CRT_ID_END_VER_BLANK, 0xB9);
+	WCrt (regs, CRT_ID_MODE_CONTROL, 0xE3);
+	WCrt (regs, CRT_ID_LINE_COMPARE, 0xFF);
+	WCrt (regs, CRT_ID_BACKWAD_COMP_3, 0x10);	/* FIFO enabled */
+	WCrt (regs, CRT_ID_MISC_1, 0x35);
+	WCrt (regs, CRT_ID_DISPLAY_FIFO, 0x5A);
+	WCrt (regs, CRT_ID_EXT_MEM_CNTL_2, 0x70);
+	WCrt (regs, CRT_ID_LAW_POS_LO, 0x40);
+	WCrt (regs, CRT_ID_EXT_MEM_CNTL_3, 0xFF);
+
+	WGfx (regs, GCT_ID_SET_RESET, 0x0);
+	WGfx (regs, GCT_ID_ENABLE_SET_RESET, 0x0);
+	WGfx (regs, GCT_ID_COLOR_COMPARE, 0x0);
+	WGfx (regs, GCT_ID_DATA_ROTATE, 0x0);
+	WGfx (regs, GCT_ID_READ_MAP_SELECT, 0x0);
+	WGfx (regs, GCT_ID_GRAPHICS_MODE, 0x40);
+	WGfx (regs, GCT_ID_MISC, 0x01);
+	WGfx (regs, GCT_ID_COLOR_XCARE, 0x0F);
+	WGfx (regs, GCT_ID_BITMASK, 0xFF);
+
+	/* Colors for text mode */
+	for (i = 0; i < 0xf; i++)
+		WAttr (regs, i, i);
+
+	WAttr (regs, ACT_ID_ATTR_MODE_CNTL, 0x41);
+	WAttr (regs, ACT_ID_OVERSCAN_COLOR, 0x01);
+	WAttr (regs, ACT_ID_COLOR_PLANE_ENA, 0x0F);
+	WAttr (regs, ACT_ID_HOR_PEL_PANNING, 0x0);
+	WAttr (regs, ACT_ID_COLOR_SELECT, 0x0);
+
+	wb_64 (regs, VDAC_MASK, 0xFF);
+
+	*((unsigned long *) (regs + ECR_FRGD_COLOR)) = 0xFF;
+	*((unsigned long *) (regs + ECR_BKGD_COLOR)) = 0;
+
+	/* Colors initially set to grayscale */
+
+	wb_64 (regs, VDAC_ADDRESS_W, 0);
+	for (i = 255; i >= 0; i--) {
+		wb_64(regs, VDAC_DATA, i);
+		wb_64(regs, VDAC_DATA, i);
+		wb_64(regs, VDAC_DATA, i);
+	}
+
+	/* GFx hardware cursor off */
+	WCrt (regs, CRT_ID_HWGC_MODE, 0x00);
+
+	/* Set first to 4MB, so test will work */
+	WCrt (regs, CRT_ID_LAW_CNTL, 0x13);
+	/* Find "correct" size of fbmem of Z3 board */
+	if (cv_has_4mb (CyberMem)) {
+		CyberSize = 1024 * 1024 * 4;
+		WCrt (regs, CRT_ID_LAW_CNTL, 0x13);
+		DPRINTK("4MB board\n");
+	} else {
+		CyberSize = 1024 * 1024 * 2;
+		WCrt (regs, CRT_ID_LAW_CNTL, 0x12);
+		DPRINTK("2MB board\n");
+	}
+
+	/* Initialize graphics engine */
+	Cyber_WaitBlit();
+	vgaw16 (regs, ECR_FRGD_MIX, 0x27);
+	vgaw16 (regs, ECR_BKGD_MIX, 0x07);
+	vgaw16 (regs, ECR_READ_REG_DATA, 0x1000);
+	udelay(200);
+	vgaw16 (regs, ECR_READ_REG_DATA, 0x2000);
+	Cyber_WaitBlit();
+	vgaw16 (regs, ECR_READ_REG_DATA, 0x3FFF);
+	Cyber_WaitBlit();
+	udelay(200);
+	vgaw16 (regs, ECR_READ_REG_DATA, 0x4FFF);
+	Cyber_WaitBlit();
+	vgaw16 (regs, ECR_BITPLANE_WRITE_MASK, ~0);
+	Cyber_WaitBlit();
+	vgaw16 (regs, ECR_READ_REG_DATA, 0xE000);
+	vgaw16 (regs, ECR_CURRENT_Y_POS2, 0x00);
+	vgaw16 (regs, ECR_CURRENT_X_POS2, 0x00);
+	vgaw16 (regs, ECR_READ_REG_DATA, 0xA000);
+	vgaw16 (regs, ECR_DEST_Y__AX_STEP, 0x00);
+	vgaw16 (regs, ECR_DEST_Y2__AX_STEP2, 0x00);
+	vgaw16 (regs, ECR_DEST_X__DIA_STEP, 0x00);
+	vgaw16 (regs, ECR_DEST_X2__DIA_STEP2, 0x00);
+	vgaw16 (regs, ECR_SHORT_STROKE, 0x00);
+	vgaw16 (regs, ECR_DRAW_CMD, 0x01);
+
+	Cyber_WaitBlit();
+
+	vgaw16 (regs, ECR_READ_REG_DATA, 0x4FFF);
+	vgaw16 (regs, ECR_BKGD_COLOR, 0x01);
+	vgaw16 (regs, ECR_FRGD_COLOR, 0x00);
+
+
+	/* Enable video display (set bit 5) */
 /* ARB - Would also seem to write to AR13.
  *       May want to use parts of WAttr to set JUST bit 5
  */
-  WAttr (cv64_regs, 0x33, 0);
+	WAttr (regs, 0x33, 0);
 	
 /* GRF - function code ended here */
 
-  /* Turn gfx on again */
-  gfx_on_off (0, cv64_regs);
-	
-  /* Pass-through */
-  cvscreen (0, (volatile unsigned char *) cv64_mem);
+	/* Turn gfx on again */
+	gfx_on_off (0, regs);
 
-  DPRINTK("EXIT\n");
+	/* Pass-through */
+	cvscreen (0, CyberBase);
+
+	DPRINTK("EXIT\n");
 }
 
 static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
 {
+  volatile unsigned char *regs = CyberRegs;
   int fx, fy;
   unsigned short mnr;
   unsigned short HT, HDE, HBS, HBE, HSS, HSE, VDE, VBS, VBE, VSS, VSE, VT;
@@ -1977,7 +1901,7 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
 
 /* GRF - Disable interrupts */	
 	
-  gfx_on_off (1, cv64_regs);
+  gfx_on_off (1, regs);
 	
   switch (video_mode->bits_per_pixel) {
   case 15:
@@ -2049,7 +1973,7 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
     VT  = yres + vfront + vsync + vback - 2;
   }
 
-  vgaw (cv64_regs, ECR_ADV_FUNC_CNTL, (TEXT ? 0x00 : 0x31));
+  wb_64 (regs, ECR_ADV_FUNC_CNTL, (TEXT ? 0x00 : 0x31));
 	
   if (TEXT)
     HDE = ((video_mode->xres + fx - 1) / fx) - 1;
@@ -2058,15 +1982,15 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
 	
   VDE = video_mode->yres - 1;
 
-  WCrt (cv64_regs, CRT_ID_HWGC_MODE, 0x00);
-  WCrt (cv64_regs, CRT_ID_EXT_DAC_CNTL, 0x00);
+  WCrt (regs, CRT_ID_HWGC_MODE, 0x00);
+  WCrt (regs, CRT_ID_EXT_DAC_CNTL, 0x00);
 	
-  WSeq (cv64_regs, SEQ_ID_MEMORY_MODE,
+  WSeq (regs, SEQ_ID_MEMORY_MODE,
 	(TEXT || (video_mode->bits_per_pixel == 1)) ? 0x06 : 0x0e);
-  WGfx (cv64_regs, GCT_ID_READ_MAP_SELECT, 0x00);
-  WSeq (cv64_regs, SEQ_ID_MAP_MASK,
+  WGfx (regs, GCT_ID_READ_MAP_SELECT, 0x00);
+  WSeq (regs, SEQ_ID_MAP_MASK,
 	(video_mode->bits_per_pixel == 1) ? 0x01 : 0xFF);
-  WSeq (cv64_regs, SEQ_ID_CHAR_MAP_SELECT, 0x00);
+  WSeq (regs, SEQ_ID_CHAR_MAP_SELECT, 0x00);
 	
   /* cv64_compute_clock accepts arguments in Hz */
   /* pixclock is in ps ... convert to Hz */
@@ -2081,11 +2005,11 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
 #endif
 
   mnr = cv64_compute_clock (freq);
-  WSeq (cv64_regs, SEQ_ID_DCLK_HI, ((mnr & 0xFF00) >> 8));
-  WSeq (cv64_regs, SEQ_ID_DCLK_LO, (mnr & 0xFF));
+  WSeq (regs, SEQ_ID_DCLK_HI, ((mnr & 0xFF00) >> 8));
+  WSeq (regs, SEQ_ID_DCLK_LO, (mnr & 0xFF));
 	
   /* Load display parameters into board */
-  WCrt (cv64_regs, CRT_ID_EXT_HOR_OVF,
+  WCrt (regs, CRT_ID_EXT_HOR_OVF,
 	((HT & 0x100) ? 0x01 : 0x00) |
 	((HDE & 0x100) ? 0x02 : 0x00) |
 	((HBS & 0x100) ? 0x04 : 0x00) |
@@ -2095,7 +2019,7 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
 	(((HT-5) & 0x100) ? 0x40 : 0x00)
 	);
 	
-  WCrt (cv64_regs, CRT_ID_EXT_VER_OVF,
+  WCrt (regs, CRT_ID_EXT_VER_OVF,
 	0x40 |
 	((VT & 0x400) ? 0x01 : 0x00) |
 	((VDE & 0x400) ? 0x02 : 0x00) |
@@ -2103,18 +2027,18 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
 	((VSS & 0x400) ? 0x10 : 0x00)
 	);
 	
-  WCrt (cv64_regs, CRT_ID_HOR_TOTAL, HT);
-  WCrt (cv64_regs, CRT_ID_DISPLAY_FIFO, HT - 5);
-  WCrt (cv64_regs, CRT_ID_HOR_DISP_ENA_END, ((HDE >= HBS) ? (HBS - 1) : HDE));
-  WCrt (cv64_regs, CRT_ID_START_HOR_BLANK, HBS);
-  WCrt (cv64_regs, CRT_ID_END_HOR_BLANK, ((HBE & 0x1F) | 0x80));
-  WCrt (cv64_regs, CRT_ID_START_HOR_RETR, HSS);
-  WCrt (cv64_regs, CRT_ID_END_HOR_RETR,
+  WCrt (regs, CRT_ID_HOR_TOTAL, HT);
+  WCrt (regs, CRT_ID_DISPLAY_FIFO, HT - 5);
+  WCrt (regs, CRT_ID_HOR_DISP_ENA_END, ((HDE >= HBS) ? (HBS - 1) : HDE));
+  WCrt (regs, CRT_ID_START_HOR_BLANK, HBS);
+  WCrt (regs, CRT_ID_END_HOR_BLANK, ((HBE & 0x1F) | 0x80));
+  WCrt (regs, CRT_ID_START_HOR_RETR, HSS);
+  WCrt (regs, CRT_ID_END_HOR_RETR,
 	(HSE & 0x1F) |
 	((HBE & 0x20) ? 0x80 : 0x00)
 	);
-  WCrt (cv64_regs, CRT_ID_VER_TOTAL, VT);
-  WCrt (cv64_regs, CRT_ID_OVERFLOW,
+  WCrt (regs, CRT_ID_VER_TOTAL, VT);
+  WCrt (regs, CRT_ID_OVERFLOW,
 	0x10 |
 	((VT & 0x100) ? 0x01 : 0x00) |
 	((VDE & 0x100) ? 0x02 : 0x00) |
@@ -2124,65 +2048,65 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
 	((VDE & 0x200) ? 0x40 : 0x00) |
 	((VSS & 0x200) ? 0x80 : 0x00)
 	);
-  WCrt (cv64_regs, CRT_ID_MAX_SCAN_LINE,
+  WCrt (regs, CRT_ID_MAX_SCAN_LINE,
 	0x40 |
 	(DBLSCAN ? 0x80 : 0x00) |
 	((VBS & 0x200) ? 0x20 : 0x00) |
 	(TEXT ? ((fy - 1) & 0x1F) : 0x00)
 	);
 	
-  WCrt (cv64_regs, CRT_ID_MODE_CONTROL, 0xE3);
+  WCrt (regs, CRT_ID_MODE_CONTROL, 0xE3);
 
   /* Text cursor */
 	
   if (TEXT) {
 #if 1
-    WCrt (cv64_regs, CRT_ID_CURSOR_START, (fy & 0x1f) - 2);
-    WCrt (cv64_regs, CRT_ID_CURSOR_END, (fy & 0x1F) - 1);
+    WCrt (regs, CRT_ID_CURSOR_START, (fy & 0x1f) - 2);
+    WCrt (regs, CRT_ID_CURSOR_END, (fy & 0x1F) - 1);
 #else
-    WCrt (cv64_regs, CRT_ID_CURSOR_START, 0x00);
-    WCrt (cv64_regs, CRT_ID_CURSOR_END, fy & 0x1F);
+    WCrt (regs, CRT_ID_CURSOR_START, 0x00);
+    WCrt (regs, CRT_ID_CURSOR_END, fy & 0x1F);
 #endif
-    WCrt (cv64_regs, CRT_ID_UNDERLINE_LOC, (fy - 1) & 0x1F);
-    WCrt (cv64_regs, CRT_ID_CURSOR_LOC_HIGH, 0x00);
-    WCrt (cv64_regs, CRT_ID_CURSOR_LOC_LOW, 0x00);
+    WCrt (regs, CRT_ID_UNDERLINE_LOC, (fy - 1) & 0x1F);
+    WCrt (regs, CRT_ID_CURSOR_LOC_HIGH, 0x00);
+    WCrt (regs, CRT_ID_CURSOR_LOC_LOW, 0x00);
   }
 	
-  WCrt (cv64_regs, CRT_ID_START_ADDR_HIGH, 0x00);
-  WCrt (cv64_regs, CRT_ID_START_ADDR_LOW, 0x00);
-  WCrt (cv64_regs, CRT_ID_START_VER_RETR, VSS);
-  WCrt (cv64_regs, CRT_ID_END_VER_RETR, (VSE & 0x0F));
-  WCrt (cv64_regs, CRT_ID_VER_DISP_ENA_END, VDE);
-  WCrt (cv64_regs, CRT_ID_START_VER_BLANK, VBS);
-  WCrt (cv64_regs, CRT_ID_END_VER_BLANK, VBE);
-  WCrt (cv64_regs, CRT_ID_LINE_COMPARE, 0xFF);
-  WCrt (cv64_regs, CRT_ID_LACE_RETR_START, HT / 2);
-  WCrt (cv64_regs, CRT_ID_LACE_CONTROL, (LACE ? 0x20 : 0x00));
-  WGfx (cv64_regs, GCT_ID_GRAPHICS_MODE,
+  WCrt (regs, CRT_ID_START_ADDR_HIGH, 0x00);
+  WCrt (regs, CRT_ID_START_ADDR_LOW, 0x00);
+  WCrt (regs, CRT_ID_START_VER_RETR, VSS);
+  WCrt (regs, CRT_ID_END_VER_RETR, (VSE & 0x0F));
+  WCrt (regs, CRT_ID_VER_DISP_ENA_END, VDE);
+  WCrt (regs, CRT_ID_START_VER_BLANK, VBS);
+  WCrt (regs, CRT_ID_END_VER_BLANK, VBE);
+  WCrt (regs, CRT_ID_LINE_COMPARE, 0xFF);
+  WCrt (regs, CRT_ID_LACE_RETR_START, HT / 2);
+  WCrt (regs, CRT_ID_LACE_CONTROL, (LACE ? 0x20 : 0x00));
+  WGfx (regs, GCT_ID_GRAPHICS_MODE,
 	((TEXT || (video_mode->bits_per_pixel == 1)) ? 0x00 : 0x40));
-  WGfx (cv64_regs, GCT_ID_MISC, (TEXT ? 0x04 : 0x01));
-  WSeq (cv64_regs, SEQ_ID_MEMORY_MODE,
+  WGfx (regs, GCT_ID_MISC, (TEXT ? 0x04 : 0x01));
+  WSeq (regs, SEQ_ID_MEMORY_MODE,
 	((TEXT || (video_mode->bits_per_pixel == 1)) ? 0x06 : 0x02));
 	
-  vgaw (cv64_regs, VDAC_MASK, 0xFF);
+  wb_64 (regs, VDAC_MASK, 0xFF);
 	
   /* Blank border */
-  test = RCrt (cv64_regs, CRT_ID_BACKWAD_COMP_2);
-  WCrt (cv64_regs, CRT_ID_BACKWAD_COMP_2, (test | 0x20));
+  test = RCrt (regs, CRT_ID_BACKWAD_COMP_2);
+  WCrt (regs, CRT_ID_BACKWAD_COMP_2, (test | 0x20));
 	
-  sr15 = RSeq (cv64_regs, SEQ_ID_CLKSYN_CNTL_2);
+  sr15 = RSeq (regs, SEQ_ID_CLKSYN_CNTL_2);
   sr15 &= 0xEF;
-  sr18 = RSeq (cv64_regs, SEQ_ID_RAMDAC_CNTL);
+  sr18 = RSeq (regs, SEQ_ID_RAMDAC_CNTL);
   sr18 &= 0x7F;
   clock_mode = 0x00;
   cr50 = 0x00;
 	
-  test = RCrt (cv64_regs, CRT_ID_EXT_MISC_CNTL_2);
+  test = RCrt (regs, CRT_ID_EXT_MISC_CNTL_2);
   test &= 0xD;
 	
   /* Clear roxxler byte-swapping... */
-  cv64_write_port (0x0040, (volatile unsigned char *) cv64_mem);
-  cv64_write_port (0x0020, (volatile unsigned char *) cv64_mem);
+  cv64_write_port (0x0040, CyberBase);
+  cv64_write_port (0x0020, CyberBase);
 	
   switch (video_mode->bits_per_pixel) {
   case 1:
@@ -2201,14 +2125,14 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
     break;
 		
   case 15:
-    cv64_write_port (0x8020, (volatile unsigned char *) cv64_mem);
+    cv64_write_port (0x8020, CyberBase);
     clock_mode = 0x30;
     HDE = video_mode->xres / 4;
     cr50 |= 0x10;
     break;
 		
   case 16:
-    cv64_write_port (0x8020, (volatile unsigned char *) cv64_mem);
+    cv64_write_port (0x8020, CyberBase);
     clock_mode = 0x50;
     HDE = video_mode->xres / 4;
     cr50 |= 0x10;
@@ -2216,24 +2140,24 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
 		
   case 24:
   case 32:
-    cv64_write_port (0x8040, (volatile unsigned char *) cv64_mem);
+    cv64_write_port (0x8040, CyberBase);
     clock_mode = 0xD0;
     HDE = video_mode->xres / 2;
     cr50 |= 0x30;
     break;
   }
-	
-  WCrt (cv64_regs, CRT_ID_EXT_MISC_CNTL_2, clock_mode | test);
-  WSeq (cv64_regs, SEQ_ID_CLKSYN_CNTL_2, sr15);
-  WSeq (cv64_regs, SEQ_ID_RAMDAC_CNTL, sr18);
-  WCrt (cv64_regs, CRT_ID_SCREEN_OFFSET, HDE);
 
-  WCrt (cv64_regs, CRT_ID_MISC_1, (TEXT ? 0x05 : 0x35));
+  WCrt (regs, CRT_ID_EXT_MISC_CNTL_2, clock_mode | test);
+  WSeq (regs, SEQ_ID_CLKSYN_CNTL_2, sr15);
+  WSeq (regs, SEQ_ID_RAMDAC_CNTL, sr18);
+  WCrt (regs, CRT_ID_SCREEN_OFFSET, HDE);
+
+  WCrt (regs, CRT_ID_MISC_1, (TEXT ? 0x05 : 0x35));
 	
-  test = RCrt (cv64_regs, CRT_ID_EXT_SYS_CNTL_2);
+  test = RCrt (regs, CRT_ID_EXT_SYS_CNTL_2);
   test &= ~0x30;
   test |= (HDE >> 4) & 0x30;
-  WCrt (cv64_regs, CRT_ID_EXT_SYS_CNTL_2, test);
+  WCrt (regs, CRT_ID_EXT_SYS_CNTL_2, test);
 	
   /* Set up graphics engine */
   switch (video_mode->xres) {
@@ -2265,17 +2189,14 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
     break;
   }
 	
-  WCrt (cv64_regs, CRT_ID_EXT_SYS_CNTL_1, cr50);
+  WCrt (regs, CRT_ID_EXT_SYS_CNTL_1, cr50);
 	
   udelay(100);
-  /* __cv_delay (100000); */
-  WAttr (cv64_regs, ACT_ID_ATTR_MODE_CNTL, (TEXT ? 0x08 : 0x41));
+  WAttr (regs, ACT_ID_ATTR_MODE_CNTL, (TEXT ? 0x08 : 0x41));
   udelay(100);
-  /* __cv_delay (100000); */
-  WAttr (cv64_regs, ACT_ID_COLOR_PLANE_ENA,
+  WAttr (regs, ACT_ID_COLOR_PLANE_ENA,
 	 (video_mode->bits_per_pixel == 1) ? 0x01 : 0x0F);
   udelay(100);
-  /* __cv_delay (100000); */
 	
   tfillm = (96 * (cv64_memclk / 1000)) / 240000;
 	
@@ -2304,10 +2225,9 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
     m = 0x18;
   n = 0xFF;
 	
-  WCrt (cv64_regs, CRT_ID_EXT_MEM_CNTL_2, m);
-  WCrt (cv64_regs, CRT_ID_EXT_MEM_CNTL_3, n);
+  WCrt (regs, CRT_ID_EXT_MEM_CNTL_2, m);
+  WCrt (regs, CRT_ID_EXT_MEM_CNTL_3, n);
   udelay(10);
-  /* __cv_delay (10000); */
 	
   /* Text initialization */
 	
@@ -2317,21 +2237,21 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
 	
   if (CONSOLE) {
     int i;
-    vgaw (cv64_regs, VDAC_ADDRESS_W, 0);
+    wb_64 (regs, VDAC_ADDRESS_W, 0);
     for (i = 0; i < 4; i++) {
-      vgaw (cv64_regs, VDAC_DATA, cvconscolors [i][0]);
-      vgaw (cv64_regs, VDAC_DATA, cvconscolors [i][1]);
-      vgaw (cv64_regs, VDAC_DATA, cvconscolors [i][2]);
+      wb_64 (regs, VDAC_DATA, cvconscolors [i][0]);
+      wb_64 (regs, VDAC_DATA, cvconscolors [i][1]);
+      wb_64 (regs, VDAC_DATA, cvconscolors [i][2]);
     }
   }
 	
-  WAttr (cv64_regs, 0x33, 0);
+  WAttr (regs, 0x33, 0);
 	
   /* Turn gfx on again */
-  gfx_on_off (0, (volatile unsigned char *) cv64_regs);
+  gfx_on_off (0, (volatile unsigned char *) regs);
 	
   /* Pass-through */
-  cvscreen (0, (volatile unsigned char *) cv64_mem);
+  cvscreen (0, CyberBase);
 
 DPRINTK("EXIT\n");
 }
@@ -2339,6 +2259,7 @@ DPRINTK("EXIT\n");
 void cvision_bitblt (u_short sx, u_short sy, u_short dx, u_short dy,
 		     u_short w, u_short h)
 {
+	volatile unsigned char *regs = CyberRegs;
 	unsigned short drawdir = 0;
 	
 	DPRINTK("ENTER\n");
@@ -2357,37 +2278,36 @@ void cvision_bitblt (u_short sx, u_short sy, u_short dx, u_short dy,
 	}
 	
 	Cyber_WaitBlit();
-	/* GfxBusyWait (cv64_regs); */
-	vgaw16 (cv64_regs, ECR_READ_REG_DATA, 0xA000);
-	vgaw16 (cv64_regs, ECR_BKGD_MIX, 0x7);
-	vgaw16 (cv64_regs, ECR_FRGD_MIX, 0x67);
-	vgaw16 (cv64_regs, ECR_BKGD_COLOR, 0x0);
-	vgaw16 (cv64_regs, ECR_FRGD_COLOR, 0x1);
-	vgaw16 (cv64_regs, ECR_BITPLANE_READ_MASK, 0x1);
-	vgaw16 (cv64_regs, ECR_BITPLANE_WRITE_MASK, 0xFFF);
-	vgaw16 (cv64_regs, ECR_CURRENT_Y_POS, sy);
-	vgaw16 (cv64_regs, ECR_CURRENT_X_POS, sx);
-	vgaw16 (cv64_regs, ECR_DEST_Y__AX_STEP, dy);
-	vgaw16 (cv64_regs, ECR_DEST_X__DIA_STEP, dx);
-	vgaw16 (cv64_regs, ECR_READ_REG_DATA, h - 1);
-	vgaw16 (cv64_regs, ECR_MAJ_AXIS_PIX_CNT, w - 1);
-	vgaw16 (cv64_regs, ECR_DRAW_CMD, 0xC051 | drawdir);
+	vgaw16 (regs, ECR_READ_REG_DATA, 0xA000);
+	vgaw16 (regs, ECR_BKGD_MIX, 0x7);
+	vgaw16 (regs, ECR_FRGD_MIX, 0x67);
+	vgaw16 (regs, ECR_BKGD_COLOR, 0x0);
+	vgaw16 (regs, ECR_FRGD_COLOR, 0x1);
+	vgaw16 (regs, ECR_BITPLANE_READ_MASK, 0x1);
+	vgaw16 (regs, ECR_BITPLANE_WRITE_MASK, 0xFFF);
+	vgaw16 (regs, ECR_CURRENT_Y_POS, sy);
+	vgaw16 (regs, ECR_CURRENT_X_POS, sx);
+	vgaw16 (regs, ECR_DEST_Y__AX_STEP, dy);
+	vgaw16 (regs, ECR_DEST_X__DIA_STEP, dx);
+	vgaw16 (regs, ECR_READ_REG_DATA, h - 1);
+	vgaw16 (regs, ECR_MAJ_AXIS_PIX_CNT, w - 1);
+	vgaw16 (regs, ECR_DRAW_CMD, 0xC051 | drawdir);
 	DPRINTK("EXIT\n");
 }
 
 void cvision_clear (u_short dx, u_short dy, u_short w, u_short h, u_short bg)
 {
+	volatile unsigned char *regs = CyberRegs;
 	DPRINTK("ENTER\n");
 	Cyber_WaitBlit();
-	/* GfxBusyWait (cv64_regs); */
-	vgaw16 (cv64_regs, ECR_FRGD_MIX, 0x0027);
-	vgaw16 (cv64_regs, ECR_FRGD_COLOR, bg);
-	vgaw16 (cv64_regs, ECR_READ_REG_DATA, 0xA000);
-	vgaw16 (cv64_regs, ECR_CURRENT_Y_POS, dy);
-	vgaw16 (cv64_regs, ECR_CURRENT_X_POS, dx);
-	vgaw16 (cv64_regs, ECR_READ_REG_DATA, h - 1);
-	vgaw16 (cv64_regs, ECR_MAJ_AXIS_PIX_CNT, w - 1);
-	vgaw16 (cv64_regs, ECR_DRAW_CMD, 0x40B1);	
+	vgaw16 (regs, ECR_FRGD_MIX, 0x0027);
+	vgaw16 (regs, ECR_FRGD_COLOR, bg);
+	vgaw16 (regs, ECR_READ_REG_DATA, 0xA000);
+	vgaw16 (regs, ECR_CURRENT_Y_POS, dy);
+	vgaw16 (regs, ECR_CURRENT_X_POS, dx);
+	vgaw16 (regs, ECR_READ_REG_DATA, h - 1);
+	vgaw16 (regs, ECR_MAJ_AXIS_PIX_CNT, w - 1);
+	vgaw16 (regs, ECR_DRAW_CMD, 0x40B1);	
 	DPRINTK("EXIT\n");
 }
 
@@ -2397,83 +2317,84 @@ void cvision_clear (u_short dx, u_short dy, u_short w, u_short h, u_short bg)
  */
 static void cv64_dump (void)
 {
+	volatile unsigned char *regs = CyberRegs;
 	DPRINTK("ENTER\n");
         /* Dump the VGA setup values */
-	*(CyberRegs + S3_CRTC_ADR) = 0x00;
-	DPRINTK("CR00 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x01;
-	DPRINTK("CR01 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x02;
-	DPRINTK("CR02 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x03;
-	DPRINTK("CR03 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x04;
-	DPRINTK("CR04 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x05;
-	DPRINTK("CR05 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x06;
-	DPRINTK("CR06 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x07;
-	DPRINTK("CR07 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x08;
-	DPRINTK("CR08 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x09;
-	DPRINTK("CR09 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x10;
-	DPRINTK("CR10 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x11;
-	DPRINTK("CR11 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x12;
-	DPRINTK("CR12 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x13;
-	DPRINTK("CR13 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x15;
-	DPRINTK("CR15 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x16;
-	DPRINTK("CR16 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x36;
-	DPRINTK("CR36 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x37;
-	DPRINTK("CR37 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x42;
-	DPRINTK("CR42 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x43;
-	DPRINTK("CR43 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x50;
-	DPRINTK("CR50 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x51;
-	DPRINTK("CR51 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x53;
-	DPRINTK("CR53 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x58;
-	DPRINTK("CR58 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x59;
-	DPRINTK("CR59 = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x5A;
-	DPRINTK("CR5A = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x5D;
-	DPRINTK("CR5D = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	*(CyberRegs + S3_CRTC_ADR) = 0x5E;
-	DPRINTK("CR5E = %x\n", *(CyberRegs + S3_CRTC_DATA));
-	DPRINTK("MISC = %x\n", *(CyberRegs + GREG_MISC_OUTPUT_R));
-	*(CyberRegs + SEQ_ADDRESS) = 0x01;
-	DPRINTK("SR01 = %x\n", *(CyberRegs + SEQ_ADDRESS_R));
-	*(CyberRegs + SEQ_ADDRESS) = 0x02;
-	DPRINTK("SR02 = %x\n", *(CyberRegs + SEQ_ADDRESS_R));
-	*(CyberRegs + SEQ_ADDRESS) = 0x03;
-	DPRINTK("SR03 = %x\n", *(CyberRegs + SEQ_ADDRESS_R));
-	*(CyberRegs + SEQ_ADDRESS) = 0x09;
-	DPRINTK("SR09 = %x\n", *(CyberRegs + SEQ_ADDRESS_R));
-	*(CyberRegs + SEQ_ADDRESS) = 0x10;
-	DPRINTK("SR10 = %x\n", *(CyberRegs + SEQ_ADDRESS_R));
-	*(CyberRegs + SEQ_ADDRESS) = 0x11;
-	DPRINTK("SR11 = %x\n", *(CyberRegs + SEQ_ADDRESS_R));
-	*(CyberRegs + SEQ_ADDRESS) = 0x12;
-	DPRINTK("SR12 = %x\n", *(CyberRegs + SEQ_ADDRESS_R));
-	*(CyberRegs + SEQ_ADDRESS) = 0x13;
-	DPRINTK("SR13 = %x\n", *(CyberRegs + SEQ_ADDRESS_R));
-	*(CyberRegs + SEQ_ADDRESS) = 0x15;
-	DPRINTK("SR15 = %x\n", *(CyberRegs + SEQ_ADDRESS_R));
+	*(regs + S3_CRTC_ADR) = 0x00;
+	DPRINTK("CR00 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x01;
+	DPRINTK("CR01 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x02;
+	DPRINTK("CR02 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x03;
+	DPRINTK("CR03 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x04;
+	DPRINTK("CR04 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x05;
+	DPRINTK("CR05 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x06;
+	DPRINTK("CR06 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x07;
+	DPRINTK("CR07 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x08;
+	DPRINTK("CR08 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x09;
+	DPRINTK("CR09 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x10;
+	DPRINTK("CR10 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x11;
+	DPRINTK("CR11 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x12;
+	DPRINTK("CR12 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x13;
+	DPRINTK("CR13 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x15;
+	DPRINTK("CR15 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x16;
+	DPRINTK("CR16 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x36;
+	DPRINTK("CR36 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x37;
+	DPRINTK("CR37 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x42;
+	DPRINTK("CR42 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x43;
+	DPRINTK("CR43 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x50;
+	DPRINTK("CR50 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x51;
+	DPRINTK("CR51 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x53;
+	DPRINTK("CR53 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x58;
+	DPRINTK("CR58 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x59;
+	DPRINTK("CR59 = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x5A;
+	DPRINTK("CR5A = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x5D;
+	DPRINTK("CR5D = %x\n", *(regs + S3_CRTC_DATA));
+	*(regs + S3_CRTC_ADR) = 0x5E;
+	DPRINTK("CR5E = %x\n", *(regs + S3_CRTC_DATA));
+	DPRINTK("MISC = %x\n", *(regs + GREG_MISC_OUTPUT_R));
+	*(regs + SEQ_ADDRESS) = 0x01;
+	DPRINTK("SR01 = %x\n", *(regs + SEQ_ADDRESS_R));
+	*(regs + SEQ_ADDRESS) = 0x02;
+	DPRINTK("SR02 = %x\n", *(regs + SEQ_ADDRESS_R));
+	*(regs + SEQ_ADDRESS) = 0x03;
+	DPRINTK("SR03 = %x\n", *(regs + SEQ_ADDRESS_R));
+	*(regs + SEQ_ADDRESS) = 0x09;
+	DPRINTK("SR09 = %x\n", *(regs + SEQ_ADDRESS_R));
+	*(regs + SEQ_ADDRESS) = 0x10;
+	DPRINTK("SR10 = %x\n", *(regs + SEQ_ADDRESS_R));
+	*(regs + SEQ_ADDRESS) = 0x11;
+	DPRINTK("SR11 = %x\n", *(regs + SEQ_ADDRESS_R));
+	*(regs + SEQ_ADDRESS) = 0x12;
+	DPRINTK("SR12 = %x\n", *(regs + SEQ_ADDRESS_R));
+	*(regs + SEQ_ADDRESS) = 0x13;
+	DPRINTK("SR13 = %x\n", *(regs + SEQ_ADDRESS_R));
+	*(regs + SEQ_ADDRESS) = 0x15;
+	DPRINTK("SR15 = %x\n", *(regs + SEQ_ADDRESS_R));
 	
 	return;
 }

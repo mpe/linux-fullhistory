@@ -67,7 +67,7 @@ ENTRY(trap)
 
 ENTRY(reschedule)
 	| save top of frame
-	movel	%sp,%curptr@(TASK_TSS+TSS_ESP0)
+	movel	%sp,%curptr@(TASK_THREAD+THREAD_ESP0)
 
 	pea	SYMBOL_NAME(ret_from_exception)
 	jmp	SYMBOL_NAME(schedule)
@@ -89,6 +89,16 @@ do_trace:
 	SAVE_SWITCH_STACK
 	jbsr	SYMBOL_NAME(syscall_trace)
 
+	| After a fork we jump here directly from resume,
+	| so that %d1 contains the previous task
+	| Theoretically only needed on SMP, but let's watch
+	| what happens in schedule_tail() in future...
+ENTRY(ret_from_fork)
+	movel	%d1,%sp@-
+	jsr	SYMBOL_NAME(schedule_tail)
+	addql	#4,%sp
+	jra	SYMBOL_NAME(ret_from_exception)
+
 SYMBOL_NAME_LABEL(ret_from_signal)
 	RESTORE_SWITCH_STACK
 	addql	#4,%sp
@@ -100,7 +110,7 @@ ENTRY(system_call)
 
 	GET_CURRENT(%d0)
 	| save top of frame
-	movel	%sp,%curptr@(TASK_TSS+TSS_ESP0)
+	movel	%sp,%curptr@(TASK_THREAD+THREAD_ESP0)
 
 	cmpl	#NR_syscalls,%d2
 	jcc	badsys
@@ -118,8 +128,10 @@ SYMBOL_NAME_LABEL(ret_from_exception)
 	andw	#ALLOWINT,%sr
 	tstl	%curptr@(TASK_NEEDRESCHED)
 	jne	SYMBOL_NAME(reschedule)
+#if 0
 	cmpl	#SYMBOL_NAME(task),%curptr	| task[0] cannot have signals
 	jeq	2f
+#endif
 					| check for delayed trace
 	bclr	#PF_DTRACE_BIT,%curptr@(TASK_FLAGS+PF_DTRACE_OFF)
 	jne	do_delayed_trace
@@ -265,25 +277,25 @@ SYMBOL_NAME_LABEL(resume)
 	 */
 
 	/* save sr */
-	movew	%sr,%a0@(TASK_TSS+TSS_SR)
+	movew	%sr,%a0@(TASK_THREAD+THREAD_SR)
 
 	/* save fs (sfc,%dfc) (may be pointing to kernel memory) */
 	movec	%sfc,%d0
-	movew	%d0,%a0@(TASK_TSS+TSS_FS)
+	movew	%d0,%a0@(TASK_THREAD+THREAD_FS)
 
 	/* save usp */
 	/* it is better to use a movel here instead of a movew 8*) */
 	movec	%usp,%d0
-	movel	%d0,%a0@(TASK_TSS+TSS_USP)
+	movel	%d0,%a0@(TASK_THREAD+THREAD_USP)
 
 	/* save non-scratch registers on stack */
 	SAVE_SWITCH_STACK
 
 	/* save current kernel stack pointer */
-	movel	%sp,%a0@(TASK_TSS+TSS_KSP)
+	movel	%sp,%a0@(TASK_THREAD+THREAD_KSP)
 
 	/* save floating point context */
-	fsave	%a0@(TASK_TSS+TSS_FPSTATE)
+	fsave	%a0@(TASK_THREAD+THREAD_FPSTATE)
 
 #if defined(CONFIG_M68060)
 #if !defined(CPU_M68060_ONLY)
@@ -291,18 +303,18 @@ SYMBOL_NAME_LABEL(resume)
 	beqs	1f
 #endif
 	/* The 060 FPU keeps status in bits 15-8 of the first longword */
-	tstb	%a0@(TASK_TSS+TSS_FPSTATE+2)
+	tstb	%a0@(TASK_THREAD+THREAD_FPSTATE+2)
 	jeq	3f
 #if !defined(CPU_M68060_ONLY)
 	jra	2f
 #endif
 #endif /* CONFIG_M68060 */
 #if !defined(CPU_M68060_ONLY)
-1:	tstb	%a0@(TASK_TSS+TSS_FPSTATE)
+1:	tstb	%a0@(TASK_THREAD+THREAD_FPSTATE)
 	jeq	3f
 #endif
-2:	fmovemx	%fp0-%fp7,%a0@(TASK_TSS+TSS_FPREG)
-	fmoveml	%fpcr/%fpsr/%fpiar,%a0@(TASK_TSS+TSS_FPCNTL)
+2:	fmovemx	%fp0-%fp7,%a0@(TASK_THREAD+THREAD_FPREG)
+	fmoveml	%fpcr/%fpsr/%fpiar,%a0@(TASK_THREAD+THREAD_FPCNTL)
 3:
 	/* Return previous task in %d1 */
 	movel	%curptr,%d1
@@ -310,69 +322,6 @@ SYMBOL_NAME_LABEL(resume)
 	/* switch to new task (a1 contains new task) */
 	movel	%a1,%curptr
 
-	/* Skip address space switching if they are the same. */
-	movel	%a0@(TASK_MM),%d0
-	cmpl	%a1@(TASK_MM),%d0
-	jeq	4f
-
-#if defined(CPU_M68020_OR_M68030) && defined(CPU_M68040_OR_M68060)
-	/* 68040 or 68060 ? */
-	tstl	SYMBOL_NAME(m68k_is040or060)
-	bnes	1f
-#endif
-#if defined(CPU_M68020_OR_M68030)
-	/*
-	 * switch address space
-	 */
-
-	/* flush MC68030/MC68020 caches (they are virtually addressed) */
-	movec	%cacr,%d0
-	oriw	#LFLUSH_I_AND_D,%d0
-	movec	%d0,%cacr
-
-	/* switch the root pointer */
-#ifdef CPU_M68030_ONLY
-	.chip	68030
-	pmovefd	%a1@(TASK_TSS+TSS_CRP),%crp
-	.chip	68k
-	pflush	#0,#4
-#else
-	pmove	%a1@(TASK_TSS+TSS_CRP),%crp
-#endif
-#endif
-
-#if defined(CPU_M68020_OR_M68030) && defined(CPU_M68040_OR_M68060)
-	jra	2f	/* skip m68040 stuff */
-1:
-#endif
-#if defined(CPU_M68040_OR_M68060)
-	/*
-	 * switch address space
-	 */
-	.chip	68040
-
-	/* flush address translation cache (user entries) */
-	pflushan
-
-	/* switch the root pointer */
-	movel	%a1@(TASK_TSS+TSS_CRP+4),%d0
-	movec	%d0,%urp
-
-#if defined (CONFIG_M68060)
-	/* is it a '060 ? */
-#if !defined(CPU_M68060_ONLY)
-	btst	#3,SYMBOL_NAME(m68k_cputype)+3
-	beqs	2f
-#endif
-	/* clear user entries in the branch cache */
-	movec	%cacr,%d0
-	orl	#0x00200000,%d0
-	movec	%d0,%cacr
-#endif /* CONFIG_M68060 */
-	.chip	68k
-#endif /* CPU_M68040_OR_M68060 */
-2:
-4:
 	/* restore floating point context */
 
 #if defined(CONFIG_M68060)
@@ -381,37 +330,37 @@ SYMBOL_NAME_LABEL(resume)
 	beqs	1f
 #endif
 	/* The 060 FPU keeps status in bits 15-8 of the first longword */
-	tstb	%a1@(TASK_TSS+TSS_FPSTATE+2)
+	tstb	%a1@(TASK_THREAD+THREAD_FPSTATE+2)
 	jeq	3f
 #if !defined(CPU_M68060_ONLY)
 	jra	2f
 #endif
 #endif /* CONFIG_M68060 */
 #if !defined(CPU_M68060_ONLY)
-1:	tstb	%a1@(TASK_TSS+TSS_FPSTATE)
+1:	tstb	%a1@(TASK_THREAD+THREAD_FPSTATE)
 	jeq	3f
 #endif	
-2:	fmovemx	%a1@(TASK_TSS+TSS_FPREG),%fp0-%fp7
-	fmoveml	%a1@(TASK_TSS+TSS_FPCNTL),%fpcr/%fpsr/%fpiar
-3:	frestore %a1@(TASK_TSS+TSS_FPSTATE)
+2:	fmovemx	%a1@(TASK_THREAD+THREAD_FPREG),%fp0-%fp7
+	fmoveml	%a1@(TASK_THREAD+THREAD_FPCNTL),%fpcr/%fpsr/%fpiar
+3:	frestore %a1@(TASK_THREAD+THREAD_FPSTATE)
 
 	/* restore the kernel stack pointer */
-	movel	%a1@(TASK_TSS+TSS_KSP),%sp
+	movel	%a1@(TASK_THREAD+THREAD_KSP),%sp
 
 	/* restore non-scratch registers */
 	RESTORE_SWITCH_STACK
 
 	/* restore user stack pointer */
-	movel	%a1@(TASK_TSS+TSS_USP),%a0
+	movel	%a1@(TASK_THREAD+THREAD_USP),%a0
 	movel	%a0,%usp
 
 	/* restore fs (sfc,%dfc) */
-	movew	%a1@(TASK_TSS+TSS_FS),%a0
+	movew	%a1@(TASK_THREAD+THREAD_FS),%a0
 	movec	%a0,%sfc
 	movec	%a0,%dfc
 
 	/* restore status register */
-	movew	%a1@(TASK_TSS+TSS_SR),%sr
+	movew	%a1@(TASK_THREAD+THREAD_SR),%sr
 
 	rts
 
@@ -530,7 +479,7 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_ni_syscall)
 	.long SYMBOL_NAME(sys_ni_syscall)	/* iopl for i386 */ /* 110 */
 	.long SYMBOL_NAME(sys_vhangup)
-	.long SYMBOL_NAME(sys_idle)
+	.long SYMBOL_NAME(sys_ni_syscall)	/* obsolete idle() syscall */
 	.long SYMBOL_NAME(sys_ni_syscall)	/* vm86old for i386 */
 	.long SYMBOL_NAME(sys_wait4)
 	.long SYMBOL_NAME(sys_swapoff)		/* 115 */

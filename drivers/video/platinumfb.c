@@ -581,7 +581,7 @@ static void platinum_set_par(const struct fb_par_platinum *par, struct fb_info_p
 }
 
 
-__initfunc(static int init_platinum(struct fb_info_platinum *info))
+static int __init init_platinum(struct fb_info_platinum *info)
 {
 	struct fb_var_screeninfo var;
 	struct display *disp;
@@ -651,7 +651,7 @@ __initfunc(static int init_platinum(struct fb_info_platinum *info))
 	return 1;
 }
 
-__initfunc(void platinum_init(void))
+void __init platinum_init(void)
 {
 #ifndef CONFIG_FB_OF
 	struct device_node *dp;
@@ -670,7 +670,7 @@ __initfunc(void platinum_init(void))
 #define invalidate_cache(addr)
 #endif
 
-__initfunc(void platinum_of_init(struct device_node *dp))
+void __init platinum_of_init(struct device_node *dp)
 {
 	struct fb_info_platinum	*info;
 	unsigned long		addr, size;
@@ -854,7 +854,7 @@ static int platinum_encode_fix(struct fb_fix_screeninfo *fix,
 /* 
  * Parse user speficied options (`video=platinumfb:')
  */
-__initfunc(void platinum_setup(char *options, int *ints))
+void __init platinum_setup(char *options, int *ints)
 {
 	char *this_opt;
 

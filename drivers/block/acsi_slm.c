@@ -413,8 +413,8 @@ static void start_print( int device )
 
 	CMDSET_TARG_LUN( slmprint_cmd, sip->target, sip->lun );
 	cmd = slmprint_cmd;
-	paddr = VTOP( SLMBuffer );
-	dma_cache_maintenance( paddr, VTOP(BufferP)-paddr, 1 );
+	paddr = virt_to_phys( SLMBuffer );
+	dma_cache_maintenance( paddr, virt_to_phys(BufferP)-paddr, 1 );
 	DISABLE_IRQ();
 
 	/* Low on A1 */
@@ -466,7 +466,7 @@ static void slm_interrupt(int irc, void *data, struct pt_regs *fp)
 	addr = get_dma_addr();
 	stat = acsi_getstatus();
 	SLMError = (stat < 0)             ? SLMSTAT_ACSITO :
-		       (addr < VTOP(BufferP)) ? SLMSTAT_NOTALL :
+		       (addr < virt_to_phys(BufferP)) ? SLMSTAT_NOTALL :
 									    stat;
 
 	dma_wd.dma_mode_status = 0x80;

@@ -63,7 +63,7 @@ extern int max_super_blocks, nr_super_blocks;
 #define READ 0
 #define WRITE 1
 #define READA 2		/* read-ahead  - don't block if no resources */
-#define WRITEA 3	/* write-ahead - don't block if no resources */
+
 #define WRITERAW 5	/* raw write - don't play with buffer lists */
 
 #ifndef NULL
@@ -898,6 +898,7 @@ typedef int (*writepage_t)(struct file *, struct page *, unsigned long, unsigned
 extern int block_read_full_page(struct file *, struct page *);
 extern int block_write_full_page (struct file *, struct page *);
 extern int block_write_partial_page (struct file *, struct page *, unsigned long, unsigned long, const char *);
+extern int block_write_cont_page (struct file *, struct page *, unsigned long, unsigned long, const char *);
 extern int block_flushpage(struct inode *, struct page *, unsigned long);
 
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);

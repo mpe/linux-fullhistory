@@ -3,6 +3,8 @@
  * Written by Mark Hemment, 1996/97.
  * (markhe@nextd.demon.co.uk)
  *
+ * kmem_cache_destroy() + some cleanup - 1999 Andrea Arcangeli
+ *
  * 11 April '97.  Started multi-threading - markhe
  *	The global cache-chain is protected by the semaphore 'cache_chain_sem'.
  *	The sem is only needed when accessing/extending the cache-chain, which
@@ -979,50 +981,40 @@ opps:
 	return cachep;
 }
 
-/* Shrink a cache.  Releases as many slabs as possible for a cache.
- * It is expected this function will be called by a module when it is
- * unloaded.  The cache is _not_ removed, this creates too many problems and
- * the cache-structure does not take up much room.  A module should keep its
- * cache pointer(s) in unloaded memory, so when reloaded it knows the cache
- * is available.  To help debugging, a zero exit status indicates all slabs
- * were released.
+/*
+ * This check if the kmem_cache_t pointer is chained in the cache_cache
+ * list. -arca
  */
-int
-kmem_cache_shrink(kmem_cache_t *cachep)
+static int is_chained_kmem_cache(kmem_cache_t * cachep)
 {
-	kmem_cache_t	*searchp;
-	kmem_slab_t	*slabp;
-	int	ret;
-
-	if (!cachep) {
-		printk(KERN_ERR "kmem_shrink: NULL ptr\n");
-		return 2;
-	}
-	if (in_interrupt()) {
-		printk(KERN_ERR "kmem_shrink: Called during int - %s\n", cachep->c_name);
-		return 2;
-	}
+	kmem_cache_t * searchp;
+	int ret = 0;
 
 	/* Find the cache in the chain of caches. */
-	down(&cache_chain_sem);		/* Semaphore is needed. */
-	searchp = &cache_cache;
-	for (;searchp->c_nextp != &cache_cache; searchp = searchp->c_nextp) {
+	down(&cache_chain_sem);
+	for (searchp = &cache_cache; searchp->c_nextp != &cache_cache;
+	     searchp = searchp->c_nextp)
+	{
 		if (searchp->c_nextp != cachep)
 			continue;
 
 		/* Accessing clock_searchp is safe - we hold the mutex. */
 		if (cachep == clock_searchp)
 			clock_searchp = cachep->c_nextp;
-		goto found;
+		ret = 1;
+		break;
 	}
 	up(&cache_chain_sem);
-	printk(KERN_ERR "kmem_shrink: Invalid cache addr %p\n", cachep);
-	return 2;
-found:
-	/* Release the semaphore before getting the cache-lock.  This could
-	 * mean multiple engines are shrinking the cache, but so what.
-	 */
-	up(&cache_chain_sem);
+
+	return ret;
+}
+
+/* returns 0 if every slab is been freed -arca */
+static int __kmem_cache_shrink(kmem_cache_t *cachep)
+{
+	kmem_slab_t	*slabp;
+	int	ret;
+
 	spin_lock_irq(&cachep->c_spinlock);
 
 	/* If the cache is growing, stop shrinking. */
@@ -1037,9 +1029,102 @@ found:
 	}
 	ret = 1;
 	if (cachep->c_lastp == kmem_slab_end(cachep))
-		ret--;		/* Cache is empty. */
+		ret = 0;		/* Cache is empty. */
 	spin_unlock_irq(&cachep->c_spinlock);
 	return ret;
+}
+
+/* Shrink a cache.  Releases as many slabs as possible for a cache.
+ * It is expected this function will be called by a module when it is
+ * unloaded.  The cache is _not_ removed, this creates too many problems and
+ * the cache-structure does not take up much room.  A module should keep its
+ * cache pointer(s) in unloaded memory, so when reloaded it knows the cache
+ * is available.  To help debugging, a zero exit status indicates all slabs
+ * were released.
+ */
+int
+kmem_cache_shrink(kmem_cache_t *cachep)
+{
+	if (!cachep) {
+		printk(KERN_ERR "kmem_shrink: NULL ptr\n");
+		return 2;
+	}
+	if (in_interrupt()) {
+		printk(KERN_ERR "kmem_shrink: Called during int - %s\n", cachep->c_name);
+		return 2;
+	}
+
+	if (!is_chained_kmem_cache(cachep))
+	{
+		printk(KERN_ERR "kmem_shrink: Invalid cache addr %p\n",
+		       cachep);
+		return 2;
+	}
+
+	return __kmem_cache_shrink(cachep);
+}
+
+/*
+ * Remove a kmem_cache_t object from the slab cache. When returns 0 it
+ * completed succesfully. -arca
+ */
+int kmem_cache_destroy(kmem_cache_t * cachep)
+{
+	kmem_cache_t * prev;
+	int ret;
+
+	if (!cachep) {
+		printk(KERN_ERR "kmem_destroy: NULL ptr\n");
+		return 1;
+	}
+	if (in_interrupt()) {
+		printk(KERN_ERR "kmem_destroy: Called during int - %s\n",
+		       cachep->c_name);
+		return 1;
+	}
+
+	ret = 0;
+	/* Find the cache in the chain of caches. */
+	down(&cache_chain_sem);
+	for (prev = &cache_cache; prev->c_nextp != &cache_cache;
+	     prev = prev->c_nextp)
+	{
+		if (prev->c_nextp != cachep)
+			continue;
+
+		/* Accessing clock_searchp is safe - we hold the mutex. */
+		if (cachep == clock_searchp)
+			clock_searchp = cachep->c_nextp;
+
+		/* remove the cachep from the cache_cache list. -arca */
+		prev->c_nextp = cachep->c_nextp;
+
+		ret = 1;
+		break;
+	}
+	up(&cache_chain_sem);
+
+	if (!ret)
+	{
+		printk(KERN_ERR "kmem_destroy: Invalid cache addr %p\n",
+		       cachep);
+		return 1;
+	}
+
+	if (__kmem_cache_shrink(cachep))
+	{
+		printk(KERN_ERR "kmem_destroy: Can't free all objects %p\n",
+		       cachep);
+		down(&cache_chain_sem);
+		cachep->c_nextp = cache_cache.c_nextp;
+		cache_cache.c_nextp = cachep;
+		up(&cache_chain_sem);
+		return 1;
+	}
+
+	kmem_cache_free(&cache_cache, cachep);
+
+	return 0;
 }
 
 /* Get the memory for a slab management obj. */

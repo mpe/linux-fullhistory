@@ -11,6 +11,7 @@
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/errno.h>
+#include <linux/quotaops.h>
 
 #include <asm/uaccess.h>
 
@@ -212,7 +213,9 @@ int minix_create(struct inode * dir, struct dentry *dentry, int mode)
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
 
-	inode = minix_new_inode(dir);
+	inode = minix_new_inode(dir, &error);
+	if (error)
+		return error;
 	if (!inode)
 		return -ENOSPC;
 	inode->i_op = &minix_file_inode_operations;
@@ -240,7 +243,9 @@ int minix_mknod(struct inode * dir, struct dentry *dentry, int mode, int rdev)
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
 
-	inode = minix_new_inode(dir);
+	inode = minix_new_inode(dir, &error);
+	if (error)
+		return error;
 	if (!inode)
 		return -ENOSPC;
 	inode->i_uid = current->fsuid;
@@ -271,7 +276,9 @@ int minix_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 	info = &dir->i_sb->u.minix_sb;
 	if (dir->i_nlink >= info->s_link_max)
 		return -EMLINK;
-	inode = minix_new_inode(dir);
+	inode = minix_new_inode(dir, &error);
+	if (error)
+		return error;
 	if (!inode)
 		return -ENOSPC;
 	inode->i_op = &minix_dir_inode_operations;
@@ -383,6 +390,7 @@ int minix_rmdir(struct inode * dir, struct dentry *dentry)
 	if (!bh)
 		goto end_rmdir;
 	inode = dentry->d_inode;
+	DQUOT_INIT(inode);
 
 	if (!empty_dir(inode)) {
 		retval = -ENOTEMPTY;
@@ -422,6 +430,7 @@ int minix_unlink(struct inode * dir, struct dentry *dentry)
 
 	retval = -ENOENT;
 	inode = dentry->d_inode;
+	DQUOT_INIT(inode);
 	bh = minix_find_entry(dir, dentry->d_name.name,
 			      dentry->d_name.len, &de);
 	if (!bh || de->inode != inode->i_ino)
@@ -456,7 +465,10 @@ int minix_symlink(struct inode * dir, struct dentry *dentry,
 	int i;
 	char c;
 
-	if (!(inode = minix_new_inode(dir)))
+	inode = minix_new_inode(dir, &i);
+	if (i)
+		return i;
+	if (!inode)
 		return -ENOSPC;
 
 	inode->i_mode = S_IFLNK | 0777;
@@ -554,6 +566,8 @@ int minix_rename(struct inode * old_dir, struct dentry *old_dentry,
 		if (!new_inode) {
 			brelse(new_bh);
 			new_bh = NULL;
+		} else {
+			DQUOT_INIT(new_inode);
 		}
 	}
 	if (S_ISDIR(old_inode->i_mode)) {

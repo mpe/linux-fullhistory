@@ -92,24 +92,7 @@ void check_inode (struct inode *inode)
 		}
 		
 		printk (" (i_patched=%d)", inode->u.umsdos_i.i_patched);
-		
-		if (inode->i_op == NULL) {
-			printk (" (i_op is NULL)\n");
-		} else if (inode->i_op == &umsdos_dir_inode_operations) {
-			printk (" (i_op is umsdos_dir_inode_operations)\n");
-		} else if (inode->i_op == &umsdos_file_inode_operations) {
-			printk (" (i_op is umsdos_file_inode_operations)\n");
-		} else if (inode->i_op == &umsdos_file_inode_operations_no_bmap) {
-			printk (" (i_op is umsdos_file_inode_operations_no_bmap)\n");
-		} else if (inode->i_op == &umsdos_file_inode_operations_readpage) {
-			printk (" (i_op is umsdos_file_inode_operations_readpage)\n");
-		} else if (inode->i_op == &umsdos_rdir_inode_operations) {
-			printk (" (i_op is umsdos_rdir_inode_operations)\n");
-		} else if (inode->i_op == &umsdos_symlink_inode_operations) {
-			printk (" (i_op is umsdos_symlink_inode_operations)\n");
-		} else {
-			printk (" (i_op is UNKNOWN: %p)\n", inode->i_op);
-		}
+
 	} else {
 		printk (KERN_DEBUG "*   inode is NULL\n");
 	}

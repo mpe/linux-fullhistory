@@ -55,7 +55,8 @@ static void debug_keyb_timer_handler(unsigned long ignored);
 static u_char debug_buf1[4096],debug_buf2[4096],*debug_buf=&debug_buf1[0];
 static u_char *shadow_buf=&debug_buf2[0];
 static short debug_buf_count=0;
-static int debug_buf_overrun=0,debug_timer_running=0,debug_buffer_updated=0;
+static int debug_buf_overrun=0,debug_timer_running=0;
+static unsigned long debug_buffer_updated=0;
 static struct timer_list debug_keyb_timer = { NULL, NULL, 0, 0,
 											  debug_keyb_timer_handler };
 #endif
@@ -280,7 +281,7 @@ static void debug_keyb_timer_handler(unsigned long ignored) {
 	u_char *swap;
 	short length,i;
 
-	if((jiffies-debug_buffer_updated) > 100) {
+	if (time_after(jiffies, debug_buffer_updated + 100)) {
 		save_flags(flags);
 		cli();
 		length=debug_buf_count;		
@@ -422,7 +423,7 @@ static void dn_keyb_process_key_event(unsigned char scancode) {
    			!(prev_scancode==DNKEY_CTRL || prev_scancode==DNKEY_LSHIFT ||
        	   	prev_scancode==DNKEY_RSHIFT || prev_scancode==DNKEY_REPT ||
        	  	prev_scancode==DNKEY_LALT || prev_scancode==DNKEY_RALT)) {
-        		if(jiffies-lastkeypress > DNKEY_REPEAT_DELAY) {
+			if (time_after(jiffies, lastkeypress + DNKEY_REPEAT_DELAY)) {
 			/*    	printk("handle_scancode: %02x\n",prev_scancode); */
            			handle_scancode(prev_scancode, 1);
 			  	}
@@ -491,8 +492,8 @@ static void dn_keyb_int(int irq, void *dummy, struct pt_regs *fp) {
 				debug_buf[debug_buf_count++]=data;
 				debug_buffer_updated=jiffies;	
 				if(!debug_timer_running) {
-					add_timer(&debug_keyb_timer);
 					debug_keyb_timer.expires=jiffies+10;
+					add_timer(&debug_keyb_timer);
 					debug_timer_running=1;
 				}
 			}

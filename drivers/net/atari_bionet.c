@@ -446,7 +446,7 @@ bionet_send_packet(struct sk_buff *skb, struct device *dev) {
 	}
 	else {
 		int length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		unsigned long buf = VTOP(skb->data);
+		unsigned long buf = virt_to_phys(skb->data);
 		int stat;
 
 		stdma_lock(bionet_intr, NULL);

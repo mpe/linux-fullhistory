@@ -461,8 +461,8 @@ static __inline__ int NCR53c406a_pio_write(unsigned char *request,
 }
 #endif USE_PIO
 
-__initfunc(int 
-NCR53c406a_detect(Scsi_Host_Template * tpnt)){
+int  __init 
+NCR53c406a_detect(Scsi_Host_Template * tpnt){
     struct Scsi_Host *shpnt;
 #ifndef PORT_BASE
     int i;
@@ -593,7 +593,7 @@ NCR53c406a_detect(Scsi_Host_Template * tpnt)){
 }
 
 /* called from init/main.c */
-__initfunc(void NCR53c406a_setup(char *str, int *ints))
+void __init NCR53c406a_setup(char *str, int *ints)
 {
     static size_t setup_idx = 0;
     size_t i;
@@ -1022,7 +1022,7 @@ static void chip_init()
     outb(SYNC_MODE, SYNCOFF);   /* synchronous mode */  
 }
 
-__initfunc(void calc_port_addr(void))
+void __init calc_port_addr(void)
 {
     /* Control Register Set 0 */
     TC_LSB		= (port_base+0x00);

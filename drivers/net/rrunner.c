@@ -152,14 +152,14 @@ int __init rr_hippi_probe (struct device *dev)
 
 		printk(KERN_INFO "%s: Essential RoadRunner serial HIPPI "
 		       "at 0x%08lx, irq %i, PCI latency %i\n", dev->name,
-		       pdev->base_address[0], dev->irq, pci_latency);
+		       pdev->resource[0].start, dev->irq, pci_latency);
 
 		/*
 		 * Remap the regs into kernel space.
 		 */
 
 		rrpriv->regs = (struct rr_regs *)
-			ioremap(pdev->base_address[0], 0x1000);
+			ioremap(pdev->resource[0].start, 0x1000);
 
 		if (!rrpriv->regs){
 			printk(KERN_ERR "%s:  Unable to map I/O register, "

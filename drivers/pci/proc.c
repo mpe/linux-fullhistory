@@ -513,7 +513,7 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 		base = res->start;
 		end = res->end;
 		flags = res->flags;
-		if (!flags)
+		if (!end)
 			continue;
 
 		if (flags & PCI_BASE_ADDRESS_SPACE_IO) {

@@ -36,14 +36,13 @@ asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct * vma;
 	unsigned long fixup;
-	int write;
+	int write, fault;
 
 #ifdef DEBUG
 	printk ("regs->sr=%#x, regs->pc=%#lx, address=%#lx, %ld, %p\n",
 		regs->sr, regs->pc, address, error_code,
 		current->mm->pgd);
 #endif
-
 
 	/*
 	 * If we're in an interrupt or have no user
@@ -100,7 +99,10 @@ good_area:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
-	if (!handle_mm_fault(current, vma, address, write))
+	fault = handle_mm_fault(current, vma, address, write);
+	if (fault < 0)
+		goto out_of_memory;
+	if (!fault)
 		goto do_sigbus;
 
 	/* There seems to be a missing invalidate somewhere in do_no_page.
@@ -160,6 +162,13 @@ no_context:
  * We ran out of memory, or some other thing happened to us that made
  * us unable to handle the page fault gracefully.
  */
+out_of_memory:
+	up(&mm->mmap_sem);
+	printk("VM: killing process %s\n", current->comm);
+	if (error_code & 4)
+		do_exit(SIGKILL);
+	goto no_context;
+
 do_sigbus:
 	up(&mm->mmap_sem);
 

@@ -184,7 +184,7 @@ static struct md_personality linear_personality=
 
 #ifndef MODULE
 
-__initfunc(void linear_init (void))
+void __init linear_init (void)
 {
   register_md_personality (LINEAR, &linear_personality);
 }

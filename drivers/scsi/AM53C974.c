@@ -1,4 +1,5 @@
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -659,7 +660,7 @@ static __inline__ int AM53C974_pci_detect(Scsi_Host_Template * tpnt)
 * 
 * Returns : number of host adapters detected
 **************************************************************************/
-__initfunc(int AM53C974_detect(Scsi_Host_Template * tpnt))
+int __init AM53C974_detect(Scsi_Host_Template * tpnt)
 {
 	int count = 0;		/* number of boards detected */
 
@@ -686,7 +687,7 @@ __initfunc(int AM53C974_detect(Scsi_Host_Template * tpnt))
 *       set up by the BIOS (as reflected by contents of register CNTLREG1).
 *       This is the only BIOS assistance we need.
 **************************************************************************/
-__initfunc(static int AM53C974_init(Scsi_Host_Template * tpnt, struct pci_dev *pdev))
+static int __init  AM53C974_init(Scsi_Host_Template * tpnt, struct pci_dev *pdev)
 {
 	AM53C974_local_declare();
 	int i, j;
@@ -701,7 +702,7 @@ __initfunc(static int AM53C974_init(Scsi_Host_Template * tpnt, struct pci_dev *p
 	instance = scsi_register(tpnt, sizeof(struct AM53C974_hostdata));
 	hostdata = (struct AM53C974_hostdata *) instance->hostdata;
 	instance->base = NULL;
-	instance->io_port = pdev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+	instance->io_port = pdev->resource[0].start;
 	instance->irq = pdev->irq;
 	instance->dma_channel = -1;
 	AM53C974_setio(instance);
@@ -2467,5 +2468,9 @@ int AM53C974_release(struct Scsi_Host *shp)
 #ifdef MODULE
 static Scsi_Host_Template driver_template = AM53C974;
 
+/* You can specify overrides=a,b,c,d in the same format at AM53C974=a,b,c,d
+   on boot up */
+   
+MODULE_PARM(overrides, "1-32i");
 #include "scsi_module.c"
 #endif

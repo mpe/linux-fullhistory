@@ -1198,10 +1198,10 @@ NCR53c7x0_init (struct Scsi_Host *host) {
  *
  */
 
-__initfunc(static int 
+static int  __init 
 normal_init (Scsi_Host_Template *tpnt, int board, int chip, 
     u32 base, int io_port, int irq, int dma, int pci_valid, 
-    unsigned char pci_bus, unsigned char pci_device_fn, long long options)) {
+    unsigned char pci_bus, unsigned char pci_device_fn, long long options){
     struct Scsi_Host *instance;
     struct NCR53c7x0_hostdata *hostdata;
     char chip_str[80];
@@ -1411,9 +1411,9 @@ normal_init (Scsi_Host_Template *tpnt, int board, int chip,
  *
  */
 
-__initfunc(static int 
+static int  __init 
 ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip, 
-    unsigned char bus, unsigned char device_fn, long long options)) {
+    unsigned char bus, unsigned char device_fn, long long options){
     unsigned short command;
 #ifdef LINUX_1_2
     unsigned long
@@ -1445,8 +1445,8 @@ ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
 		"	 perhaps you specified an incorrect PCI bus, device, or function.\n", error);
 	return -1;
     }
-    io_port = pdev->base_address[0];
-    base = pdev->base_address[1];
+    io_port = pdev->resource[0].start;
+    base = pdev->resource[1].start;
     irq = pdev->irq;
 
     /* If any one ever clones the NCR chips, this will have to change */
@@ -1560,8 +1560,8 @@ ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
  *
  */
 
-__initfunc(int 
-NCR53c7xx_detect(Scsi_Host_Template *tpnt)) {
+int __init 
+NCR53c7xx_detect(Scsi_Host_Template *tpnt){
     int i;
     int current_override;
     int count;			/* Number of boards detected */

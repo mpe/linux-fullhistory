@@ -1364,7 +1364,6 @@ static int fbcon_switch(struct vc_data *conp)
 	p->dispsw->clear_margins(conp, p, 0);
     if (logo_shown == -2) {
 	logo_shown = fg_console;
-	fbcon_clear(conp, 0, 0, LOGO_H, p->var.xres-LOGO_W);
 	fbcon_show_logo(); /* This is protected above by initmem_freed */
 	update_region(fg_console,
 		      conp->vc_origin + conp->vc_size_row * conp->vc_top,
@@ -1952,7 +1951,7 @@ static inline unsigned safe_shift(unsigned d,int n)
     return n<0 ? d>>-n : d<<n;
 }
 
-__initfunc(static int fbcon_show_logo( void ))
+static int __init fbcon_show_logo( void )
 {
     struct display *p = &fb_display[fg_console]; /* draw to vt in foreground */
     int depth = p->var.bits_per_pixel;

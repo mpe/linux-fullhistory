@@ -230,8 +230,8 @@ __initfunc(void pmac_ide_probe(void))
 
 #ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
 
-__initfunc(static void
-pmac_ide_setup_dma(struct device_node *np, ide_hwif_t *hwif))
+static void __init 
+pmac_ide_setup_dma(struct device_node *np, ide_hwif_t *hwif)
 {
 	hwif->dma_base = (unsigned long) ioremap(np->addrs[1].address, 0x200);
 

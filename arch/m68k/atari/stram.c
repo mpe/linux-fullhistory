@@ -200,7 +200,7 @@ static struct swap_info_struct *stram_swap_info;
 static int stram_swap_type;
 
 /* Semaphore for get_stram_region.  */
-static struct semaphore stram_swap_sem = MUTEX;
+static DECLARE_MUTEX(stram_swap_sem);
 
 /* major and minor device number of the ST-RAM device; for the major, we use
  * the same as Amiga z2ram, which is really similar and impossible on Atari,
@@ -346,12 +346,11 @@ void __init atari_stram_reserve_pages(unsigned long start_mem)
 				 "swap=%08lx-%08lx\n", swap_start, swap_end );
 		
 		/* reserve some amount of memory for maintainance of
-		 * swapping itself: 1 page for the lockmap, and one page
-		 * for each 2048 (PAGE_SIZE/2) swap pages. (2 bytes for
-		 * each page) */
+		 * swapping itself: one page for each 2048 (PAGE_SIZE/2)
+		 * swap pages. (2 bytes for each page) */
 		swap_data = start_mem;
-		start_mem += (((SWAP_NR(swap_end) + PAGE_SIZE/2 - 1)
-			       >> (PAGE_SHIFT-1)) + 1) << PAGE_SHIFT;
+		start_mem += ((SWAP_NR(swap_end) + PAGE_SIZE/2 - 1)
+			      >> (PAGE_SHIFT-1)) << PAGE_SHIFT;
 		/* correct swap_start if necessary */
 		if (swap_start == swap_data)
 			swap_start = start_mem;
@@ -610,8 +609,7 @@ static int __init swap_init(unsigned long start_mem, unsigned long swap_data)
 	p->flags        = SWP_USED;
 	p->swap_file    = &fake_dentry[0];
 	p->swap_device  = 0;
-	p->swap_lockmap = (unsigned char *)(swap_data);
-	p->swap_map	= (unsigned short *)(swap_data + PAGE_SIZE);
+	p->swap_map	= (unsigned short *)swap_data;
 	p->cluster_nr   = 0;
 	p->next         = -1;
 	p->prio         = 0x7ff0;	/* a rather high priority, but not the higest
@@ -623,9 +621,6 @@ static int __init swap_init(unsigned long start_mem, unsigned long swap_data)
 	swap_inode.i_rdev = p->swap_device;
 	stram_open( &swap_inode, MAGIC_FILE_P );
 	p->max = SWAP_NR(swap_end);
-
-	/* initialize lockmap */
-	memset( p->swap_lockmap, 0, PAGE_SIZE );
 
 	/* initialize swap_map: set regions that are already allocated or belong
 	 * to kernel data space to SWAP_MAP_BAD, otherwise to free */

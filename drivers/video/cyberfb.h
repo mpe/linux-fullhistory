@@ -128,26 +128,9 @@
 #define GRFBBOPset		0xf	/* 1 */
 
 
-/* Read VGA register */
-#define vgar(ba, reg) (*(((volatile caddr_t)ba)+reg))
-
-/* Write VGA register */
-#define vgaw(ba, reg, val) \
-*(((volatile caddr_t)ba)+reg) = ((val) & 0xff)
-
-/* Read 16 Bit VGA register */
-#define vgar16(ba, reg) (  *((unsigned short *) (((volatile caddr_t)ba)+reg)) )
-
 /* Write 16 Bit VGA register */
 #define vgaw16(ba, reg, val) \
-*((unsigned short *)  (((volatile caddr_t)ba)+reg)) = val
-
-/* Read 32 Bit VGA register */
-#define vgar32(ba, reg) (  *((unsigned long *) (((volatile caddr_t)ba)+reg)) )
-
-/* Write 32 Bit VGA register */
-#define vgaw32(ba, reg, val) \
-     *((unsigned long *)  (((volatile caddr_t)ba)+reg)) = val
+*((unsigned short *)  (((volatile unsigned char *)ba)+reg)) = val
 
 /*
  * Defines for the used register addresses (mw)
@@ -394,20 +377,20 @@
 
 
 #define WGfx(ba, idx, val) \
-do { vgaw(ba, GCT_ADDRESS, idx); vgaw(ba, GCT_ADDRESS_W , val); } while (0)
+do { wb_64(ba, GCT_ADDRESS, idx); wb_64(ba, GCT_ADDRESS_W , val); } while (0)
 
 #define WSeq(ba, idx, val) \
-do { vgaw(ba, SEQ_ADDRESS, idx); vgaw(ba, SEQ_ADDRESS_W , val); } while (0)
+do { wb_64(ba, SEQ_ADDRESS, idx); wb_64(ba, SEQ_ADDRESS_W , val); } while (0)
 
 #define WCrt(ba, idx, val) \
-do { vgaw(ba, CRT_ADDRESS, idx); vgaw(ba, CRT_ADDRESS_W , val); } while (0)
+do { wb_64(ba, CRT_ADDRESS, idx); wb_64(ba, CRT_ADDRESS_W , val); } while (0)
 
 #define WAttr(ba, idx, val) \
 do { \
   unsigned char tmp;\
-  tmp = vgar(ba, ACT_ADDRESS_RESET);\
-  vgaw(ba, ACT_ADDRESS_W, idx);\
-  vgaw(ba, ACT_ADDRESS_W, val);\
+  tmp = rb_64(ba, ACT_ADDRESS_RESET);\
+  wb_64(ba, ACT_ADDRESS_W, idx);\
+  wb_64(ba, ACT_ADDRESS_W, val);\
 } while (0)
 
 #define SetTextPlane(ba, m) \
@@ -420,21 +403,17 @@ do { \
      /* prototypes                        */
      /* --------------------------------- */
 
-/* in cvision_core.c */
-inline void __cv_delay(unsigned long usecs);
-inline void GfxBusyWait(volatile caddr_t board);
-inline void GfxFifoWait(volatile caddr_t board);
-inline unsigned char RAttr(volatile caddr_t board, short idx);
-inline unsigned char RSeq(volatile caddr_t board, short idx);
-inline unsigned char RCrt(volatile caddr_t board, short idx);
-inline unsigned char RGfx(volatile caddr_t board, short idx);
+inline unsigned char RAttr(volatile unsigned char * board, short idx);
+inline unsigned char RSeq(volatile unsigned char * board, short idx);
+inline unsigned char RCrt(volatile unsigned char * board, short idx);
+inline unsigned char RGfx(volatile unsigned char * board, short idx);
 inline void cv64_write_port(unsigned short bits,
 			    volatile unsigned char *board);
 inline void cvscreen(int toggle, volatile unsigned char *board);
 inline void gfx_on_off(int toggle, volatile unsigned char *board);
 #if 0
 unsigned short cv64_compute_clock(unsigned long freq);
-int cv_has_4mb(volatile caddr_t fb);
+int cv_has_4mb(volatile unsigned char * fb);
 void cv64_board_init(void);
 void cv64_load_video_mode(struct fb_var_screeninfo *video_mode);
 #endif

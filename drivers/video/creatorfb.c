@@ -637,7 +637,7 @@ static void ffb_switch_from_graph (struct fb_info_sbusfb *fb)
 
 static char idstring[60] __initdata = { 0 };
 
-__initfunc(char *creatorfb_init(struct fb_info_sbusfb *fb))
+char __init *creatorfb_init(struct fb_info_sbusfb *fb)
 {
 	struct fb_fix_screeninfo *fix = &fb->fix;
 	struct fb_var_screeninfo *var = &fb->var;

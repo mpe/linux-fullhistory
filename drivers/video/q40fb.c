@@ -6,6 +6,8 @@
 #include <linux/malloc.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
+
+#include <asm/uaccess.h>
 #include <asm/setup.h>
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -15,8 +17,10 @@
 #include <linux/module.h>
 #include <asm/pgtable.h>
 
+#include <video/fbcon.h>
 #include <video/fbcon-cfb16.h>
 
+#define FBIOSETSCROLLMODE   0x4611
 
 #define Q40_PHYS_SCREEN_ADDR 0xFE800000
 static unsigned long q40_screen_addr;
@@ -212,7 +216,7 @@ static int q40_setcolreg(unsigned regno, unsigned red, unsigned green,
   blue>>=10;
 
     if (regno < 16) {
-      fbcon_cmap_cfb16[regno] = ((red & 31) <<5) |
+      fbcon_cmap_cfb16[regno] = ((red & 31) <<6) |
 	                         ((green & 31) << 11) |
 	                         (blue & 63);
     }
@@ -275,6 +279,27 @@ static int q40fb_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg, int con,
 		      struct fb_info *info)
 {
+#if 0
+        unsigned long i;
+	struct display *display;
+
+	if (con>=0)
+	  display = &fb_display[con];
+	else
+	  display = &disp[0];
+
+        if (cmd == FBIOSETSCROLLMODE)
+	  {
+	    i = verify_area(VERIFY_READ, (void *)arg, sizeof(unsigned long));
+	    if (!i) 
+	      {
+		copy_from_user(&i, (void *)arg, sizeof(unsigned long));
+		display->scrollmode = i;
+	      }
+	    q40_updatescrollmode(display);
+	    return i;
+	  }
+#endif
 	return -EINVAL;
 }
 
@@ -302,6 +327,8 @@ static void q40fb_set_disp(int con, struct fb_info *info)
    display->inverse = 0;
    display->line_length = fix.line_length;
 
+   display->scrollmode = SCROLL_YREDRAW;
+
 #ifdef FBCON_HAS_CFB16
    display->dispsw = &fbcon_cfb16;
    disp->dispsw_data = fbcon_cmap_cfb16;
@@ -312,6 +339,9 @@ static void q40fb_set_disp(int con, struct fb_info *info)
   
 void q40fb_init(void)
 {
+
+        if ( !MACH_IS_Q40)
+	  return;
 #if 0
         q40_screen_addr = kernel_map(Q40_PHYS_SCREEN_ADDR, 1024*1024,
 					   KERNELMAP_NO_COPYBACK, NULL);

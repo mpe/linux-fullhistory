@@ -149,11 +149,20 @@
   correctly.
   -- Fix up ioctl handling so the device specific ones actually get
   called :).
+  
+  3.02 Aug 8, 1999 - Jens Axboe <axboe@image.dk>
+  -- Fixed volume control on SCSI drives (or others with longer audio
+  page).
+  -- Fixed a couple of DVD minors. Thanks to Andrew T. Veliath
+  <andrewtv@usa.net> for telling me and for having defined the various
+  DVD structures and ioctls in the first place! He designed the original
+  DVD patches for ide-cd and while I rearranged and unified them, the
+  interface is still the same.
 
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 3.01"
-#define VERSION "Id: cdrom.c 3.01 1999/08/06"
+#define REVISION "Revision: 3.02"
+#define VERSION "Id: cdrom.c 3.02 1999/08/08"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -452,6 +461,9 @@ int open_for_data(struct cdrom_device_info * cdi)
 	 * for example, need bit CDO_CHECK_TYPE cleared! */
 	if (tracks.data==0) {
 		if (cdi->options & CDO_CHECK_TYPE) {
+		    /* give people a warning shot, now that CDO_CHECK_TYPE
+		       is the default case! */
+		    printk("cdrom: pid %d is buggy!\n", (unsigned int)current->pid);
 		    cdinfo(CD_OPEN, "bummer. wrong media type.\n"); 
 		    ret=-EMEDIUMTYPE;
 		    goto clean_up_and_return;
@@ -804,7 +816,7 @@ static int dvd_do_auth (struct cdrom_device_info *cdi, dvd_authinfo *ai)
 
 	case DVD_LU_SEND_ASF:
 		cdinfo(CD_DO_IOCTL, "entering DVD_LU_SEND_ASF\n"); 
-		setup_report_key (&cgc, ai->lsasf.agid, 5);
+		setup_report_key (&cgc, ai->lsasf.asf, 5);
 		cgc.buflen = cgc.cmd[9] = 8;
 
 		rv = cdo->generic_packet(cdi, &cgc);
@@ -847,7 +859,7 @@ static int dvd_do_auth (struct cdrom_device_info *cdi, dvd_authinfo *ai)
 	/* Misc */
 	case DVD_INVALIDATE_AGID:
 		cdinfo(CD_DO_IOCTL, "entering DVD_INVALIDATE_AGID\n"); 
-		setup_report_key (&cgc, ai->lsasf.agid, 0x3f);
+		setup_report_key (&cgc, ai->lsa.agid, 0x3f);
 
 		rv = cdo->generic_packet(cdi, &cgc);
 		if (rv)
@@ -1051,7 +1063,7 @@ static int cdrom_mode_sense(struct cdrom_device_info *cdi,
 			    int page_code, int page_control)
 {
 	struct cdrom_device_ops *cdo = cdi->ops;
-	
+
 	memset(cgc->cmd, 0, sizeof(cgc->cmd));
 
 	cgc->cmd[0] = 0x5a;		/* MODE_SENSE_10 */
@@ -1070,7 +1082,6 @@ static int cdrom_mode_select(struct cdrom_device_info *cdi,
 	
 	cgc->cmd[0] = 0x55;		/* MODE_SELECT_10 */
 	cgc->cmd[1] = 0x10;		/* PF */
-	cgc->cmd[2] = 0x0e;		/* PF */
 
 	/* generic_packet() wants the length as seen from the drive, i.e.
 	   it will transfer data _to_ us. The CD-ROM wants the absolute
@@ -1469,41 +1480,53 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 	case CDROMVOLREAD: {
 		struct cdrom_volctrl volctrl;
 		char buffer[32], mask[32];
+		unsigned short offset;
 		cdinfo(CD_DO_IOCTL, "entering CDROMVOLUME\n");
 
 		IOCTL_IN(arg, struct cdrom_volctrl, volctrl);
 
 		cgc.buffer = buffer;
 		cgc.buflen = 24;
-		rv = cdrom_mode_sense(cdi, &cgc, 0x0e, 0);
+		rv = cdrom_mode_sense(cdi, &cgc, 0xe, 0);
 		if (rv) return rv;
 		
+		/* some drives have longer pages, adjust and reread. */
+		if (buffer[1] > cgc.buflen) {
+			cgc.buflen = buffer[1] + 2;
+			rv = cdrom_mode_sense(cdi, &cgc, 0xe, 0);
+			if (rv) return rv;
+		}
+		
+		/* get the offset from the length of the page. length
+		   is measure from byte 2 an on, thus the 14. */
+		offset = buffer[1] - 14;
+
 		/* now we have the current volume settings. if it was only
 		   a CDROMVOLREAD, return these values */
 		if (cmd == CDROMVOLREAD) {
-			volctrl.channel0 = buffer[17];
-			volctrl.channel1 = buffer[19];
-			volctrl.channel2 = buffer[21];
-			volctrl.channel3 = buffer[23];
+			volctrl.channel0 = buffer[offset+9];
+			volctrl.channel1 = buffer[offset+11];
+			volctrl.channel2 = buffer[offset+13];
+			volctrl.channel3 = buffer[offset+15];
 			IOCTL_OUT(arg, struct cdrom_volctrl, volctrl);
 			return 0;
 		}
 		
 		/* get the volume mask */
 		cgc.buffer = mask;
-		rv = cdrom_mode_sense(cdi, &cgc, 0x0e, 1);
+		rv = cdrom_mode_sense(cdi, &cgc, 0xe, 1);
 		if (rv) return rv;
 
-		buffer[17] = volctrl.channel0 & mask[17];
-		buffer[19] = volctrl.channel1 & mask[19];
-		buffer[21] = volctrl.channel2 & mask[21];
-		buffer[23] = volctrl.channel3 & mask[23];
+		buffer[offset+9] = volctrl.channel0 & mask[offset+9];
+		buffer[offset+11] = volctrl.channel1 & mask[offset+11];
+		buffer[offset+13] = volctrl.channel2 & mask[offset+13];
+		buffer[offset+15] = volctrl.channel3 & mask[offset+15];
 
 		/* clear the first three */
 		memset(buffer, 0, 3);
 
 		/* set volume */
-		cgc.buflen = -24;
+		cgc.buflen = -cgc.buflen;
 		cgc.buffer = buffer;
 		return cdrom_mode_select(cdi, &cgc);
 		}
@@ -1551,6 +1574,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		}
 
 	case CDROM_SEND_PACKET: {
+		if (!CDROM_CAN(CDC_GENERIC_PACKET))
+			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "entering send_packet\n"); 
 		IOCTL_IN(arg, struct cdrom_generic_command, cgc);
 		cgc.buffer = kmalloc(cgc.buflen, GFP_KERNEL);

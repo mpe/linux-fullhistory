@@ -46,6 +46,9 @@ extern inline void remove_bh(int nr)
 
 extern unsigned int local_bh_count[NR_CPUS];
 
+#define local_bh_disable()	(local_bh_count[smp_processor_id()]++)
+#define local_bh_enable()	(local_bh_count[smp_processor_id()]--)
+
 extern inline void start_bh_atomic(void)
 {
 	local_bh_count[smp_processor_id()]++;

@@ -350,7 +350,7 @@ ncp_lookup_validate(struct dentry * dentry, int flags)
 	struct ncpfs_inode_info finfo;
 	__u8 __name[dentry->d_name.len + 1];
 
-	if (!dir)
+	if (!dentry->d_inode || !dir)
 		return 0;
         
 	server = NCP_SERVER(dir);

@@ -144,7 +144,70 @@ void fat_clusters_flush(struct super_block *sb)
  * represented by inode. The cluster is zero-initialized.
  */
 
-struct buffer_head *fat_add_cluster1(struct inode *inode)
+/* not a directory */
+
+int fat_add_cluster(struct inode *inode)
+{
+	struct super_block *sb = inode->i_sb;
+	int count,nr,limit,last,curr,file_cluster;
+	int res = -ENOSPC;
+	int cluster_size = MSDOS_SB(sb)->cluster_size;
+
+	if (!MSDOS_SB(sb)->free_clusters) return res;
+	lock_fat(sb);
+	limit = MSDOS_SB(sb)->clusters;
+	nr = limit; /* to keep GCC happy */
+	for (count = 0; count < limit; count++) {
+		nr = ((count+MSDOS_SB(sb)->prev_free) % limit)+2;
+		if (fat_access(sb,nr,-1) == 0) break;
+	}
+	MSDOS_SB(sb)->prev_free = (count+MSDOS_SB(sb)->prev_free+1) % limit;
+	if (count >= limit) {
+		MSDOS_SB(sb)->free_clusters = 0;
+		unlock_fat(sb);
+		return res;
+	}
+	fat_access(sb,nr,EOF_FAT(sb));
+	if (MSDOS_SB(sb)->free_clusters != -1)
+		MSDOS_SB(sb)->free_clusters--;
+	if (MSDOS_SB(sb)->fat_bits == 32)
+		fat_clusters_flush(sb);
+	unlock_fat(sb);
+	last = 0;
+	/* We must locate the last cluster of the file to add this
+	   new one (nr) to the end of the link list (the FAT).
+	   
+	   Here file_cluster will be the number of the last cluster of the
+	   file (before we add nr).
+	   
+	   last is the corresponding cluster number on the disk. We will
+	   use last to plug the nr cluster. We will use file_cluster to
+	   update the cache.
+	*/
+	file_cluster = 0;
+	if ((curr = MSDOS_I(inode)->i_start) != 0) {
+		fat_cache_lookup(inode,INT_MAX,&last,&curr);
+		file_cluster = last;
+		while (curr && curr != -1){
+			file_cluster++;
+			if (!(curr = fat_access(sb, last = curr,-1))) {
+				fat_fs_panic(sb,"File without EOF");
+				return res;
+			}
+		}
+	}
+	if (last) fat_access(sb,last,nr);
+	else {
+		MSDOS_I(inode)->i_start = nr;
+		MSDOS_I(inode)->i_logstart = nr;
+		mark_inode_dirty(inode);
+	}
+	fat_cache_add(inode,file_cluster,nr);
+	inode->i_blocks += cluster_size;
+	return 0;
+}
+
+struct buffer_head *fat_extend_dir(struct inode *inode)
 {
 	struct super_block *sb = inode->i_sb;
 	int count,nr,limit,last,curr,sector,last_sector,file_cluster;
@@ -248,28 +311,15 @@ if (last) printk("next set to %d\n",fat_access(sb,last,-1));
 		fat_cache_add(inode,file_cluster,nr);
 	}
 	inode->i_blocks += cluster_size;
-	if (S_ISDIR(inode->i_mode)) {
-		if (inode->i_size & (SECTOR_SIZE-1)) {
-			fat_fs_panic(sb,"Odd directory size");
-			inode->i_size = (inode->i_size+SECTOR_SIZE) &
-			    ~(SECTOR_SIZE-1);
-		}
-		inode->i_size += SECTOR_SIZE*cluster_size;
-#ifdef DEBUG
-printk("size is %d now (%x)\n",inode->i_size,inode);
-#endif
-		mark_inode_dirty(inode);
+	if (inode->i_size & (SECTOR_SIZE-1)) {
+		fat_fs_panic(sb,"Odd directory size");
+		inode->i_size = (inode->i_size+SECTOR_SIZE) &
+		    ~(SECTOR_SIZE-1);
 	}
+	inode->i_size += SECTOR_SIZE*cluster_size;
+	MSDOS_I(inode)->i_realsize += SECTOR_SIZE*cluster_size;
+	mark_inode_dirty(inode);
 	return res;
-}
-
-int fat_add_cluster(struct inode *inode)
-{
-	struct buffer_head *bh = fat_add_cluster1(inode);
-	if (!bh)
-		return -ENOSPC;
-	fat_brelse(inode->i_sb, bh);
-	return 0;
 }
 
 /* Linear day numbers of the respective 1sts in non-leap years. */
@@ -351,7 +401,7 @@ int fat__get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
 		if (*bh)
 			fat_brelse(sb, *bh);
 		*bh = NULL;
-		if ((sector = fat_smap(dir,offset >> SECTOR_BITS)) == -1)
+		if ((sector = fat_bmap(dir,offset >> SECTOR_BITS)) == -1)
 			return -1;
 		PRINTK (("get_entry sector %d %p\n",sector,*bh));
 		PRINTK (("get_entry sector apres brelse\n"));

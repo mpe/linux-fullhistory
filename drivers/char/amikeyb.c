@@ -257,7 +257,7 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 	    amikeyb_rep_timer.prev = amikeyb_rep_timer.next = NULL;
 	    add_timer(&amikeyb_rep_timer);
 	}
-	handle_scancode(scancode, !break_flag);
+	handle_scancode(keycode, !break_flag);
     } else
 	switch (keycode) {
 	    case 0x78:
@@ -340,9 +340,4 @@ int amiga_kbdrate( struct kbd_repeat *k )
     k->rate  = key_repeat_rate  * 1000 / HZ;
     
     return( 0 );
-}
-
-/* for "kbd-reset" cmdline param */
-void __init amiga_kbd_reset_setup(char *str, int *ints)
-{
 }

@@ -752,7 +752,7 @@ static void launch_error_handler_thread(struct Scsi_Host * shpnt)
             shpnt->eh_notify = NULL;
 }
 
-__initfunc(unsigned int scsi_init(void))
+unsigned int __init scsi_init(void)
 {
     static int called = 0;
     int i, pcount;

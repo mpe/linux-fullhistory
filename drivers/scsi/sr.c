@@ -1054,6 +1054,7 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 	/* do the locking and issue the command */
 	SCpnt->request.rq_dev = cdi->dev;
 	SCpnt->request.rq_status = RQ_SCSI_BUSY;
+	/* scsi_do_cmd sets the command length */
 	SCpnt->cmd_len = 0;
 	SCpnt->request.sem = &sem;
 	spin_lock_irqsave(&io_request_lock, flags);

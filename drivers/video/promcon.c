@@ -104,7 +104,7 @@ promcon_end(struct vc_data *conp, char *b)
 	return b - p;
 }
 
-__initfunc(const char *promcon_startup(void))
+const char __init *promcon_startup(void)
 {
 	const char *display_desc = "PROM";
 	int node;
@@ -128,8 +128,8 @@ __initfunc(const char *promcon_startup(void))
 	return display_desc;
 }
 
-__initfunc(static void
-promcon_init_unimap(struct vc_data *conp))
+static void __init 
+promcon_init_unimap(struct vc_data *conp)
 {
 	mm_segment_t old_fs = get_fs();
 	struct unipair *p, *p1;
@@ -591,7 +591,7 @@ struct consw prom_con = {
 	con_invert_region:	NULL,
 };
 
-__initfunc(void prom_con_init(void))
+void __init prom_con_init(void)
 {
 #ifdef CONFIG_DUMMY_CONSOLE
 	if (conswitchp == &dummy_con)

@@ -736,12 +736,12 @@ static inline void NCR5380_all_init(void)
 
 static int probe_irq __initdata = 0;
 
-__initfunc(static void probe_intr(int irq, void *dev_id, struct pt_regs *regs))
+static void __init probe_intr(int irq, void *dev_id, struct pt_regs *regs)
 {
 	probe_irq = irq;
 }
 
-__initfunc(static int NCR5380_probe_irq(struct Scsi_Host *instance, int possible))
+static int __init NCR5380_probe_irq(struct Scsi_Host *instance, int possible)
 {
 	NCR5380_local_declare();
 	struct NCR5380_hostdata *hostdata = (struct NCR5380_hostdata *)
@@ -797,7 +797,7 @@ __initfunc(static int NCR5380_probe_irq(struct Scsi_Host *instance, int possible
  * Inputs : instance, pointer to this instance.  Unused.
  */
 
-__initfunc(static void NCR5380_print_options(struct Scsi_Host *instance))
+static void __init NCR5380_print_options(struct Scsi_Host *instance)
 {
 	printk(" generic options"
 #ifdef AUTOPROBE_IRQ
@@ -1018,7 +1018,7 @@ char *lprint_opcode(int opcode, char *pos, char *buffer, int length)
  * 
  */
 
-__initfunc(static void NCR5380_init(struct Scsi_Host *instance, int flags))
+static void __init NCR5380_init(struct Scsi_Host *instance, int flags)
 {
 	NCR5380_local_declare();
 	int i, pass;

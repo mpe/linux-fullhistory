@@ -374,7 +374,7 @@ static int fm2fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
      *  Initialisation
      */
 
-__initfunc(void fm2fb_init(void))
+void __init fm2fb_init(void)
 {
     int key, is_fm;
     const struct ConfigDev *cd  = NULL;
@@ -466,7 +466,7 @@ __initfunc(void fm2fb_init(void))
 	   fb_fix.id);
 }
 
-__initfunc(void fm2fb_setup(char *options, int *ints))
+void __init fm2fb_setup(char *options, int *ints)
 {
     char *this_opt;
 

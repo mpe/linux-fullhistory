@@ -534,6 +534,8 @@ int __init dsp56k_init(void)
 	dsp56k.in_use = 0;
 
 	printk("DSP56k driver installed\n");
+
+	return 0;
 }
 
 #ifdef MODULE

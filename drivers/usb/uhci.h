@@ -55,16 +55,43 @@
 
 #define UHCI_NULL_DATA_SIZE	0x7ff	/* for UHCI controller TD */
 
+#define UHCI_PTR_BITS		0x000F
+#define UHCI_PTR_TERM		0x0001
+#define UHCI_PTR_QH		0x0002
+#define UHCI_PTR_DEPTH		0x0004
+
 struct uhci_qh {
-	unsigned int link;	/* Next queue */
-	unsigned int element;	/* Queue element pointer */
-	int inuse;		/* Inuse? */
-	struct uhci_qh *skel;	/* Skeleton head */
+	/* Hardware fields */
+	__u32 link;				/* Next queue */
+	__u32 element;				/* Queue element pointer */
+
+	/* Software fields */
+	atomic_t refcnt;			/* Reference counting */
+	struct uhci_device *dev;		/* The owning device */
+	struct uhci_qh *skel;			/* Skeleton head */
+
+	wait_queue_head_t wakeup;
 } __attribute__((aligned(16)));
 
 struct uhci_framelist {
-	unsigned int frame[1024];
+	__u32 frame[1024];
 } __attribute__((aligned(4096)));
+
+#define TD_CTRL_SPD		(1 << 29)	/* Short Packet Detect */
+#define TD_CTRL_LS		(1 << 26)	/* Low Speed Device */
+#define TD_CTRL_IOS		(1 << 25)	/* Isochronous Select */
+#define TD_CTRL_IOC		(1 << 24)	/* Interrupt on Complete */
+#define TD_CTRL_ACTIVE		(1 << 23)	/* TD Active */
+#define TD_CTRL_STALLED		(1 << 22)	/* TD Stalled */
+#define TD_CTRL_DBUFERR		(1 << 21)	/* Data Buffer Error */
+#define TD_CTRL_BABBLE		(1 << 20)	/* Babble Detected */
+#define TD_CTRL_NAK		(1 << 19)	/* NAK Received */
+#define TD_CTRL_CRCTIME		(1 << 18)	/* CTC/Time Out Error */
+#define TD_CTRL_BITSTUFF	(1 << 17)	/* Bit Stuff Error */
+
+#define uhci_ptr_to_virt(x)	bus_to_virt(x & ~UHCI_PTR_BITS)
+
+#define UHCI_TD_REMOVE		0x0001		/* Remove when done */
 
 /*
  * The documentation says "4 words for hardware, 4 words for software".
@@ -77,7 +104,7 @@ struct uhci_framelist {
  * On 64-bit machines we probably want to take advantage of the fact that
  * hw doesn't really care about the size of the sw-only area.
  *
- * Alas, not anymore, we have more than 4 words of software, woops
+ * Alas, not anymore, we have more than 4 words for software, woops
  */
 struct uhci_td {
 	/* Hardware fields */
@@ -87,25 +114,27 @@ struct uhci_td {
 	__u32 buffer;
 
 	/* Software fields */
-	struct list_head irq_list;	/* Active interrupt list.. */
-	usb_device_irq completed;	/* Completion handler routine */
 	unsigned int *backptr;		/* Where to remove this from.. */
+	struct list_head irq_list;	/* Active interrupt list.. */
+
+	usb_device_irq completed;	/* Completion handler routine */
 	void *dev_id;
-	int inuse;			/* Inuse? (b0) Remove (b1)*/
-	struct uhci_qh *qh;
-	struct uhci_td *first;
-	struct usb_device *dev;		/* the owning device */
-} __attribute__((aligned(32)));
+
+	atomic_t refcnt;		/* Reference counting */
+	struct uhci_device *dev;	/* The owning device */
+	struct uhci_qh *qh;		/* QH this TD is a part of (ignored for Isochronous) */
+	int flags;			/* Remove, etc */
+} __attribute__((aligned(16)));
 
 struct uhci_iso_td {
-	int num;
-	char *data;
-	int maxsze;
+	int num;			/* Total number of TD's */
+	char *data;			/* Beginning of buffer */
+	int maxsze;			/* Maximum size of each data block */
 
-	struct uhci_td *td;
+	struct uhci_td *td;		/* Pointer to first TD */
 
-	int frame;
-	int endframe;
+	int frame;			/* Beginning frame */
+	int endframe;			/* End frame */
 };
 
 /*
@@ -117,33 +146,27 @@ struct uhci_iso_td {
  */
 struct uhci;
 
+#if 0
 #define UHCI_MAXTD	64
 
 #define UHCI_MAXQH	16
+#endif
 
 /* The usb device part must be first! */
 struct uhci_device {
 	struct usb_device	*usb;
 
 	struct uhci		*uhci;
+#if 0
 	struct uhci_qh		qh[UHCI_MAXQH];		/* These are the "common" qh's for each device */
 	struct uhci_td		td[UHCI_MAXTD];
+#endif
 
 	unsigned long		data[16];
 };
 
 #define uhci_to_usb(uhci)	((uhci)->usb)
 #define usb_to_uhci(usb)	((struct uhci_device *)(usb)->hcpriv)
-
-/*
- * The root hub pre-allocated QH's and TD's have
- * some special global uses..
- */
-#if 0
-#define control_td	td		/* Td's 0-30 */
-/* This is only for the root hub's TD list */
-#define tick_td		td[31]
-#endif
 
 /*
  * There are various standard queues. We set up several different
@@ -180,37 +203,25 @@ struct uhci_device {
  * transfers in QH's and all of their pictures don't have that either) but
  * other than that, that is what we're doing now
  *
- * To keep with Linus' nomenclature, this is called the qh skeleton. These
- * labels (below) are only signficant to the root hub's qh's
+ * And now we don't put Iso transfers in QH's, so we don't waste one on it
+ *
+ * To keep with Linus' nomenclature, this is called the QH skeleton. These
+ * labels (below) are only signficant to the root hub's QH's
  */
-#define skel_iso_qh		qh[0]
+#define UHCI_NUM_SKELQH		10
 
-#define skel_int2_qh		qh[1]
-#define skel_int4_qh		qh[2]
-#define skel_int8_qh		qh[3]
-#define skel_int16_qh		qh[4]
-#define skel_int32_qh		qh[5]
-#define skel_int64_qh		qh[6]
-#define skel_int128_qh		qh[7]
-#define skel_int256_qh		qh[8]
+#define skel_int2_qh		skelqh[0]
+#define skel_int4_qh		skelqh[1]
+#define skel_int8_qh		skelqh[2]
+#define skel_int16_qh		skelqh[3]
+#define skel_int32_qh		skelqh[4]
+#define skel_int64_qh		skelqh[5]
+#define skel_int128_qh		skelqh[6]
+#define skel_int256_qh		skelqh[7]
 
-#define skel_control_qh		qh[9]
+#define skel_control_qh		skelqh[8]
 
-#define skel_bulk0_qh		qh[10]
-#define skel_bulk1_qh		qh[11]
-#define skel_bulk2_qh		qh[12]
-#define skel_bulk3_qh		qh[13]
-
-/*
- * These are significant to the devices allocation of QH's
- */
-#if 0
-#define iso_qh			qh[0]
-#define int_qh			qh[1]	/* We have 2 "common" interrupt QH's */
-#define control_qh		qh[3]
-#define bulk_qh			qh[4]	/* We have 4 "common" bulk QH's */
-#define extra_qh		qh[8]	/* The rest, anything goes */
-#endif
+#define skel_bulk_qh		skelqh[9]
 
 /*
  * This describes the full uhci information.
@@ -222,14 +233,20 @@ struct uhci {
 	int irq;
 	unsigned int io_addr;
 
+	int control_pid;
+	int control_running;
+	int control_continue;
+
+	struct list_head uhci_list;
+
 	struct usb_bus *bus;
 
-#if 0
-	/* These are "standard" QH's for the entire bus */
-	struct uhci_qh qh[UHCI_MAXQH];
-#endif
+	struct uhci_qh skelqh[UHCI_NUM_SKELQH];	/* Skeleton QH's */
+
 	struct uhci_framelist *fl;		/* Frame list */
 	struct list_head interrupt_list;	/* List of interrupt-active TD's for this uhci */
+
+	struct uhci_td *ticktd;
 };
 
 /* needed for the debugging code */

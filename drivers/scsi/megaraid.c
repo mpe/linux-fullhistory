@@ -1267,17 +1267,8 @@ int findCard (Scsi_Host_Template * pHostTmpl,
 	    PCI_FUNC (pciDevFun));
 
     /* Read the base port and IRQ from PCI */
-#if LINUX_VERSION_CODE < 0x20100
-    pcibios_read_config_dword (pciBus, pciDevFun,
-			       PCI_BASE_ADDRESS_0,
-			       (u_int *) & megaBase);
-    pcibios_read_config_byte (pciBus, pciDevFun,
-			      PCI_INTERRUPT_LINE,
-			      &megaIrq);
-#else
-    megaBase = pdev->base_address[0];
+    megaBase = pdev->resource[0].start;
     megaIrq  = pdev->irq;
-#endif
     pciIdx++;
 
     if (flag & BOARD_QUARTZ) {

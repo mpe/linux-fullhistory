@@ -145,7 +145,7 @@ static u_char cg3_dacvals[] __initdata = {
 
 static char idstring[60] __initdata = { 0 };
 
-__initfunc(char *cgthreefb_init(struct fb_info_sbusfb *fb))
+char __init *cgthreefb_init(struct fb_info_sbusfb *fb)
 {
 	struct fb_fix_screeninfo *fix = &fb->fix;
 	struct display *disp = &fb->disp;

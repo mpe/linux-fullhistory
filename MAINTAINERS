@@ -706,11 +706,6 @@ L:	linux-scsi@vger.rutgers.edu
 W:	http://www.torque.net/sg
 S:	Maintained
 
-SCSI GENERIC
-L:	linux-scsi@vger.rutgers.edu
-M:	douglas.gilbert@rbcds.com
-S:	Maintained
-
 SCSI SUBSYSTEM
 L:	linux-scsi@vger.rutgers.edu
 S:	Unmaintained

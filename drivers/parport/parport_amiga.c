@@ -25,7 +25,7 @@
 #ifdef DEBUG
 #define DPRINTK printk
 #else
-static inline int DPRINTK() {return 0;}
+#define DPRINTK(format, args...)
 #endif
 
 static struct parport *this_port = NULL;
@@ -64,7 +64,7 @@ static unsigned char control_amiga_to_pc(unsigned char control)
 {
 	return PARPORT_CONTROL_SELECT |
 	      PARPORT_CONTROL_AUTOFD | PARPORT_CONTROL_STROBE;
-	/* fake value: select in, no reset,
+	/* fake value: interrupt enable, select in, no reset,
 	no autolf, no strobe - seems to be closest the wiring diagram */
 }
 
@@ -138,7 +138,6 @@ static void amiga_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	parport_generic_irq(irq, (struct parport *) dev_id, regs);
 }
 
-
 static void amiga_init_state(struct pardevice *dev, struct parport_state *s)
 {
 	s->u.amiga.data = 0;
@@ -206,18 +205,18 @@ static struct parport_operations pp_amiga_ops = {
 	amiga_inc_use_count,
 	amiga_dec_use_count,
 
-	parport_ieee1284_epp_write_data,
-	parport_ieee1284_epp_read_data, /* impossible? */
-	parport_ieee1284_epp_write_addr,
-	parport_ieee1284_epp_read_addr, /* impossible? */
+	NULL, /* epp_write_data */
+	NULL, /* epp_read_data */
+	NULL, /* epp_write_addr */
+	NULL, /* epp_read_addr */
 
-	parport_ieee1284_ecp_write_data,
-	parport_ieee1284_ecp_read_data, /* impossible? */
-	parport_ieee1284_ecp_write_addr,
+	NULL, /* ecp_write_data */
+	NULL, /* ecp_read_data */
+	NULL, /* ecp_write_addr */
 
-	parport_ieee1284_write_compat, /* FIXME - need to write amiga one */
-	parport_ieee1284_read_nibble,
-	parport_ieee1284_read_byte, /* impossible? */
+	NULL, /* compat_write_data */
+	NULL, /* nibble_read_data */
+	NULL, /* byte_read_data */
 };
 
 /* ----------- Initialisation code --------------------------------- */
@@ -233,17 +232,17 @@ __initfunc(int parport_amiga_init(void))
 					IRQ_AMIGA_CIAA_FLG, PARPORT_DMA_NONE,
 					&pp_amiga_ops)))
 			return 0;
-		this_port = p;
-		printk(KERN_INFO "%s: Amiga built-in port using irq\n", p->name);
-		/* XXX: set operating mode */
-		parport_proc_register(p);
-		if (request_irq(IRQ_AMIGA_CIAA_FLG, amiga_interrupt, 0,
-				p->name, p)) {
+		if (!request_irq(IRQ_AMIGA_CIAA_FLG, amiga_interrupt, 0, p->name, p)) {
 			parport_unregister_port (p);
 			return 0;
 		}
 
-		parport_announce_port (p);
+		this_port = p;
+		printk(KERN_INFO "%s: Amiga built-in port using irq\n", p->name);
+		/* XXX: set operating mode */
+		parport_proc_register(p);
+
+		parport_announce_port(p);
 
 		return 1;
 
@@ -264,8 +263,8 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	if (p->irq != PARPORT_IRQ_NONE)
-		free_irq(IRQ_AMIGA_CIAA_FLG, p);
+	if (this_port->irq != PARPORT_IRQ_NONE)
+		free_irq(IRQ_MFP_BUSY, this_port);
 	parport_proc_unregister(this_port);
 	parport_unregister_port(this_port);
 }

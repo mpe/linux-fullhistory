@@ -523,7 +523,7 @@ static void set_control_clock(unsigned char *params)
 }
 
 
-__initfunc(static void init_control(struct fb_info_control *p))
+static void __init init_control(struct fb_info_control *p)
 {
 	struct fb_par_control parstruct;
 	struct fb_par_control *par = &parstruct;
@@ -660,7 +660,7 @@ static void control_set_hardware(struct fb_info_control *p, struct fb_par_contro
 #endif /* CONFIG_FB_COMPAT_XPMAC */
 }
 
-__initfunc(void control_init(void))
+void __init control_init(void)
 {
 #ifndef CONFIG_FB_OF
 	struct device_node *dp;
@@ -671,7 +671,7 @@ __initfunc(void control_init(void))
 #endif /* CONFIG_FB_OF */
 }
 
-__initfunc(void control_of_init(struct device_node *dp))
+void __init control_of_init(struct device_node *dp)
 {
 	struct fb_info_control	*p;
 	unsigned long		addr, size;
@@ -1152,7 +1152,7 @@ static void control_init_info(struct fb_info *info, struct fb_info_control *p)
 }
 
 /* Parse user speficied options (`video=controlfb:') */
-__initfunc(void control_setup(char *options, int *ints))
+void __init control_setup(char *options, int *ints)
 {
 	char *this_opt;
 

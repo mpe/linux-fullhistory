@@ -794,8 +794,8 @@ speedo_found1(int pci_bus, int pci_devfn, struct device *dev,
 		void *mem = kmalloc(sizeof(*sp), GFP_KERNEL);
 		dev->priv = sp = mem;		/* Cache align here if kmalloc does not. */
 		sp->priv_addr = mem;
-	} else
-		memset(sp, 0, sizeof(*sp));
+	}
+	memset(sp, 0, sizeof(*sp));
 	sp->next_module = root_speedo_dev;
 	root_speedo_dev = dev;
 

@@ -286,7 +286,7 @@ static inline void drive_stat_acct(int cmd, unsigned long nr_sectors,
  * with the request-lists in peace. Thus it should be called with no spinlocks
  * held.
  *
- * By this point, req->cmd is always either READ/WRITE, never READA/WRITEA,
+ * By this point, req->cmd is always either READ/WRITE, never READA,
  * which is important for drive_stat_acct() above.
  */
 
@@ -417,7 +417,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 		}
 	}
 
-	rw_ahead = 0;	/* normal case; gets changed below for READA/WRITEA */
+	rw_ahead = 0;	/* normal case; gets changed below for READA */
 	switch (rw) {
 		case READA:
 			rw_ahead = 1;
@@ -431,9 +431,6 @@ void make_request(int major,int rw, struct buffer_head * bh)
 		case WRITERAW:
 			rw = WRITE;
 			goto do_write;	/* Skip the buffer refile */
-		case WRITEA:
-			rw_ahead = 1;
-			rw = WRITE;	/* drop into WRITE */
 		case WRITE:
 			if (!test_and_clear_bit(BH_Dirty, &bh->b_state))
 				goto end_io;	/* Hmmph! Nothing to write */
@@ -598,13 +595,6 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	struct blk_dev_struct * dev;
 	int i;
 
-	/* Make sure that the first block contains something reasonable */
-	while (!*bh) {
-		bh++;
-		if (--nr <= 0)
-			return;
-	}
-
 	dev = NULL;
 	if ((major = MAJOR(bh[0]->b_dev)) < MAX_BLKDEV)
 		dev = blk_dev + major;
@@ -654,26 +644,22 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	}
 
 	for (i = 0; i < nr; i++) {
-		if (bh[i]) {
-			set_bit(BH_Req, &bh[i]->b_state);
+		set_bit(BH_Req, &bh[i]->b_state);
 #ifdef CONFIG_BLK_DEV_MD
-			if (MAJOR(bh[i]->b_dev) == MD_MAJOR) {
-				md_make_request(MINOR (bh[i]->b_dev), rw, bh[i]);
-				continue;
-			}
-#endif
-			make_request(MAJOR(bh[i]->b_rdev), rw, bh[i]);
+		if (MAJOR(bh[i]->b_dev) == MD_MAJOR) {
+			md_make_request(MINOR (bh[i]->b_dev), rw, bh[i]);
+			continue;
 		}
+#endif
+		make_request(MAJOR(bh[i]->b_rdev), rw, bh[i]);
 	}
 	return;
 
       sorry:
 	for (i = 0; i < nr; i++) {
-		if (bh[i]) {
-			clear_bit(BH_Dirty, &bh[i]->b_state);
-			clear_bit(BH_Uptodate, &bh[i]->b_state);
-			bh[i]->b_end_io(bh[i], 0);
-		}
+		clear_bit(BH_Dirty, &bh[i]->b_state);
+		clear_bit(BH_Uptodate, &bh[i]->b_state);
+		bh[i]->b_end_io(bh[i], 0);
 	}
 	return;
 }

@@ -297,7 +297,7 @@ struct fbgen_hwswitch xxx_switch = {
      *  Initialization
      */
 
-__initfunc(void xxxfb_init(void))
+void __init xxxfb_init(void)
 {
     fb_info.gen.fbhw = &xxx_switch;
     fb_info.gen.fbhw->detect();
@@ -345,7 +345,7 @@ void xxxfb_cleanup(struct fb_info *info)
      *  Setup
      */
 
-__initfunc(void xxxfb_setup(char *options, int *ints))
+void __init xxxfb_setup(char *options, int *ints)
 {
     /* Parse user speficied options (`video=xxxfb:') */
 }

@@ -227,31 +227,33 @@ static unsigned long transp_transl_matches( unsigned long regval,
     /* address match? */
     base = regval & 0xff000000;
     mask = ~(regval << 8) & 0xff000000;
-    return ((vaddr ^ base) & mask) == 0;
+    return (((unsigned long)vaddr ^ base) & mask) == 0;
 }
+
+#if DEBUG_INVALID_PTOV
+int mm_inv_cnt = 5;
+#endif
 
 #ifndef CONFIG_SINGLE_MEMORY_CHUNK
 /*
  * The following two routines map from a physical address to a kernel
  * virtual address and vice versa.
  */
-unsigned long mm_vtop (unsigned long vaddr)
+unsigned long mm_vtop(unsigned long vaddr)
 {
 	int i=0;
-	unsigned long voff = vaddr;
-	unsigned long offset = 0;
+	unsigned long voff = (unsigned long)vaddr - PAGE_OFFSET;
 
-	do{
-		if (voff < offset + m68k_memory[i].size) {
+	do {
+		if (voff < m68k_memory[i].size) {
 #ifdef DEBUGPV
-			printk ("VTOP(%lx)=%lx\n", vaddr,
-				m68k_memory[i].addr + voff - offset);
+			printk ("VTOP(%p)=%lx\n", vaddr,
+				m68k_memory[i].addr + voff);
 #endif
-			return m68k_memory[i].addr + voff - offset;
-		} else
-			offset += m68k_memory[i].size;
-		i++;
-	}while (i < m68k_num_memory);
+			return m68k_memory[i].addr + voff;
+		}
+		voff -= m68k_memory[i].size;
+	} while (++i < m68k_num_memory);
 
 	return mm_vtop_fallback(vaddr);
 }
@@ -259,7 +261,7 @@ unsigned long mm_vtop (unsigned long vaddr)
 
 /* Separate function to make the common case faster (needs to save less
    registers) */
-unsigned long mm_vtop_fallback (unsigned long vaddr)
+unsigned long mm_vtop_fallback(unsigned long vaddr)
 {
 	/* not in one of the memory chunks; test for applying transparent
 	 * translation */
@@ -272,13 +274,13 @@ unsigned long mm_vtop_fallback (unsigned long vaddr)
 			  ".chip 68k"
 			  : : "a" (&ttreg) );
 	    if (transp_transl_matches( ttreg, vaddr ))
-		return vaddr;
+		return (unsigned long)vaddr;
 	    asm volatile( ".chip 68030\n\t"
 			  "pmove %/tt1,%0@\n\t"
 			  ".chip 68k"
 			  : : "a" (&ttreg) );
 	    if (transp_transl_matches( ttreg, vaddr ))
-		return vaddr;
+		return (unsigned long)vaddr;
 	}
 	else if (CPU_IS_040_OR_060) {
 	    unsigned long ttreg;
@@ -288,13 +290,13 @@ unsigned long mm_vtop_fallback (unsigned long vaddr)
 			  ".chip 68k"
 			  : "=d" (ttreg) );
 	    if (transp_transl_matches( ttreg, vaddr ))
-		return vaddr;
+		return (unsigned long)vaddr;
 	    asm volatile( ".chip 68040\n\t"
 			  "movec %%dtt1,%0\n\t"
 			  ".chip 68k"
 			  : "=d" (ttreg) );
 	    if (transp_transl_matches( ttreg, vaddr ))
-		return vaddr;
+		return (unsigned long)vaddr;
 	}
 
 	/* no match, too, so get the actual physical address from the MMU. */
@@ -306,11 +308,21 @@ unsigned long mm_vtop_fallback (unsigned long vaddr)
 	  set_fs (MAKE_MM_SEG(SUPER_DATA));
 
 	  /* The PLPAR instruction causes an access error if the translation
-	   * is not possible. We don't catch that here, so a bad kernel trap
-	   * will be reported in this case. */
-	  asm volatile (".chip 68060\n\t"
-			"plpar (%0)\n\t"
-			".chip 68k"
+	   * is not possible. To catch this we use the same exception mechanism
+	   * as for user space accesses in <asm/uaccess.h>. */
+	  asm volatile (".chip 68060\n"
+			"1: plpar (%0)\n"
+			".chip 68k\n"
+			"2:\n"
+			".section .fixup,\"ax\"\n"
+			"   .even\n"
+			"3: lea -1,%0\n"
+			"   jra 2b\n"
+			".previous\n"
+			".section __ex_table,\"a\"\n"
+			"   .align 4\n"
+			"   .long 1b,3b\n"
+			".previous"
 			: "=a" (paddr)
 			: "0" (vaddr));
 	  set_fs (fs);
@@ -332,12 +344,13 @@ unsigned long mm_vtop_fallback (unsigned long vaddr)
 	  set_fs (fs);
 
 	  if (mmusr & MMU_T_040) {
-	    return (vaddr);	/* Transparent translation */
+	    return (unsigned long)vaddr;	/* Transparent translation */
 	  }
 	  if (mmusr & MMU_R_040)
-	    return (mmusr & PAGE_MASK) | (vaddr & (PAGE_SIZE-1));
+	    return (mmusr & PAGE_MASK) | ((unsigned long)vaddr & (PAGE_SIZE-1));
 
-	  panic ("VTOP040: bad virtual address %08lx (%lx)", vaddr, mmusr);
+	  printk("VTOP040: bad virtual address %lx (%lx)", vaddr, mmusr);
+	  return -1;
 	} else {
 	  volatile unsigned short temp;
 	  unsigned short mmusr;
@@ -350,46 +363,51 @@ unsigned long mm_vtop_fallback (unsigned long vaddr)
 	  mmusr = temp;
 
 	  if (mmusr & (MMU_I|MMU_B|MMU_L))
-	    panic ("VTOP030: bad virtual address %08lx (%x)", vaddr, mmusr);
+	    printk("VTOP030: bad virtual address %lx (%x)\n", vaddr, mmusr);
 
 	  descaddr = phys_to_virt((unsigned long)descaddr);
 
 	  switch (mmusr & MMU_NUM) {
 	  case 1:
-	    return (*descaddr & 0xfe000000) | (vaddr & 0x01ffffff);
+	    return (*descaddr & 0xfe000000) | ((unsigned long)vaddr & 0x01ffffff);
 	  case 2:
-	    return (*descaddr & 0xfffc0000) | (vaddr & 0x0003ffff);
+	    return (*descaddr & 0xfffc0000) | ((unsigned long)vaddr & 0x0003ffff);
 	  case 3:
-	    return (*descaddr & PAGE_MASK) | (vaddr & (PAGE_SIZE-1));
+	    return (*descaddr & PAGE_MASK) | ((unsigned long)vaddr & (PAGE_SIZE-1));
 	  default:
-	    panic ("VTOP: bad levels (%u) for virtual address %08lx", 
+	    printk("VTOP: bad levels (%u) for virtual address %lx\n", 
 		   mmusr & MMU_NUM, vaddr);
 	  }
 	}
 
-	panic ("VTOP: bad virtual address %08lx", vaddr);
+	printk("VTOP: bad virtual address %lx\n", vaddr);
+	return -1;
 }
 
 #ifndef CONFIG_SINGLE_MEMORY_CHUNK
-unsigned long mm_ptov (unsigned long paddr)
+void *mm_ptov (unsigned long paddr)
 {
 	int i = 0;
-	unsigned long offset = 0;
+	unsigned long poff, voff = PAGE_OFFSET;
 
-	do{
-		if (paddr >= m68k_memory[i].addr &&
-		    paddr < (m68k_memory[i].addr
-			     + m68k_memory[i].size)) {
+	do {
+		poff = paddr - m68k_memory[i].addr;
+		if (poff < m68k_memory[i].size) {
 #ifdef DEBUGPV
-			printk ("PTOV(%lx)=%lx\n", paddr,
-				(paddr - m68k_memory[i].addr) + offset);
+			printk ("PTOV(%lx)=%lx\n", paddr, poff + voff);
 #endif
-			return (paddr - m68k_memory[i].addr) + offset;
-		} else
-			offset += m68k_memory[i].size;
-		i++;
-	}while (i < m68k_num_memory);
+			return (void *)(poff + voff);
+		}
+		voff += m68k_memory[i].size;
+	} while (++i < m68k_num_memory);
 
+#if DEBUG_INVALID_PTOV
+	if (mm_inv_cnt > 0) {
+		mm_inv_cnt--;
+		printk("Invalid use of phys_to_virt(0x%lx) at 0x%p!\n",
+			paddr, __builtin_return_address(0));
+	}
+#endif
 	/*
 	 * assume that the kernel virtual address is the same as the
 	 * physical address.
@@ -411,9 +429,9 @@ unsigned long mm_ptov (unsigned long paddr)
 	 * to the ZTWO_VADDR range
 	 */
 	if (MACH_IS_AMIGA && paddr < 16*1024*1024)
-		return ZTWO_VADDR(paddr);
+		return (void *)ZTWO_VADDR(paddr);
 #endif
-	return paddr;
+	return (void *)-1;
 }
 #endif
 

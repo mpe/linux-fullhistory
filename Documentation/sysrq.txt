@@ -9,8 +9,8 @@ regardless of whatever else it is doing, unless it is completely locked up.
 
 *  How do I enable the magic SysRQ key?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-You need to say yes to 'Magic SysRq key (CONFIG_MAGIC_SYSRQ)' when
-configuring the kernel. This option is only available it 2.1.x or later
+You need to say "yes" to 'Magic SysRq key (CONFIG_MAGIC_SYSRQ)' when
+configuring the kernel. This option is only available in 2.1.x or later
 kernels.
 
 *  How do I use the magic SysRQ key?

@@ -2080,6 +2080,9 @@ static int ide_cdrom_packet(struct cdrom_device_info *cdi,
 	struct packet_command pc;
 	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
 
+	/* here we queue the commands from the uniform CD-ROM
+	   layer. the packet must be complete, as we do not
+	   touch it at all. */
 	memset(&pc, 0, sizeof(pc));
 	memcpy(pc.c, cgc->cmd, CDROM_PACKET_SIZE);
 	pc.buffer = cgc->buffer;

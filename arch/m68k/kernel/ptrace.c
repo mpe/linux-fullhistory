@@ -37,7 +37,7 @@
 /* sets the trace bits. */
 #define TRACE_BITS 0x8000
 
-/* Find the stack offset for a register, relative to tss.esp0. */
+/* Find the stack offset for a register, relative to thread.esp0. */
 #define PT_REG(reg)	((long)&((struct pt_regs *)0)->reg)
 #define SW_REG(reg)	((long)&((struct switch_stack *)0)->reg \
 			 - sizeof(struct switch_stack))
@@ -60,9 +60,9 @@ static inline long get_reg(struct task_struct *task, int regno)
 	unsigned long *addr;
 
 	if (regno == PT_USP)
-		addr = &task->tss.usp;
+		addr = &task->thread.usp;
 	else if (regno < sizeof(regoff)/sizeof(regoff[0]))
-		addr = (unsigned long *)(task->tss.esp0 + regoff[regno]);
+		addr = (unsigned long *)(task->thread.esp0 + regoff[regno]);
 	else
 		return 0;
 	return *addr;
@@ -77,9 +77,9 @@ static inline int put_reg(struct task_struct *task, int regno,
 	unsigned long *addr;
 
 	if (regno == PT_USP)
-		addr = &task->tss.usp;
+		addr = &task->thread.usp;
 	else if (regno < sizeof(regoff)/sizeof(regoff[0]))
-		addr = (unsigned long *) (task->tss.esp0 + regoff[regno]);
+		addr = (unsigned long *) (task->thread.esp0 + regoff[regno]);
 	else
 		return -1;
 	*addr = data;
@@ -386,7 +386,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 					tmp >>= 16;
 			}
 			else if (addr >= 21 && addr < 49)
-				tmp = child->tss.fp[addr - 21];
+				tmp = child->thread.fp[addr - 21];
 			else
 				goto out;
 			ret = put_user(tmp,(unsigned long *) data);
@@ -423,7 +423,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			}
 			if (addr >= 21 && addr < 48)
 			{
-				child->tss.fp[addr - 21] = data;
+				child->thread.fp[addr - 21] = data;
 				ret = 0;
 			}
 			goto out;
@@ -544,7 +544,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 
 		case PTRACE_GETFPREGS: { /* Get the child FPU state. */
 			ret = 0;
-			if (copy_to_user((void *)data, &child->tss.fp,
+			if (copy_to_user((void *)data, &child->thread.fp,
 					 sizeof(struct user_m68kfp_struct)))
 				ret = -EFAULT;
 			goto out;
@@ -552,7 +552,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 
 		case PTRACE_SETFPREGS: { /* Set the child FPU state. */
 			ret = 0;
-			if (copy_from_user(&child->tss.fp, (void *)data,
+			if (copy_from_user(&child->thread.fp, (void *)data,
 					   sizeof(struct user_m68kfp_struct)))
 				ret = -EFAULT;
 			goto out;

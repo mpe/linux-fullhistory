@@ -85,9 +85,20 @@
                 (*((unsigned word volatile *)(CyberRegs + reg)) = dat)
 #define wl_3d(reg,dat) \
                 (*((unsigned long volatile *)(CyberRegs + reg)) = dat)
-
 #define rl_3d(reg) \
                 (*((unsigned long volatile *)(CyberRegs + reg)))
+
+#define Select_Zorro2_FrameBuffer(flag) \
+	do { \
+		*((unsigned char volatile *)((Cyber_vcode_switch_base) + 0x08)) = \
+		((flag * 0x40) & 0xffff); asm volatile ("nop"); \
+	} while (0)
+/*
+ *	may be needed when we initialize the board?
+ *	8bit: flag = 2, 16 bit: flag = 1, 24/32bit: flag = 0 
+ *	_when_ the board is initialized, depth doesnt matter, we allways write
+ *	to the same address, aperture seems not to matter on Z2.
+ */
 
 struct virgefb_par {
    int xres;
@@ -175,7 +186,10 @@ static unsigned char cv3d_on_zorro2;
  *    Predefined Video Modes
  */
 
-static struct fb_videomode virgefb_predefined[] __initdata = {
+static struct {
+    const char *name;
+    struct fb_var_screeninfo var;
+} virgefb_predefined[] __initdata = {
     {
 	"640x480-8", {		/* Cybervision 8 bpp */
 	    640, 480, 640, 480, 0, 0, 8, 0,
@@ -236,28 +250,28 @@ static struct fb_videomode virgefb_predefined[] __initdata = {
 	"1024x768-16", {         /* Cybervision 16 bpp */
 	    1024, 768, 1024, 768, 0, 0, 16, 0,
 	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
        }
     }, {
 	"1152x886-16", {         /* Cybervision 16 bpp */
 	    1152, 886, 1152, 886, 0, 0, 16, 0,
 	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
        }
     }, {
 	"1280x1024-16", {         /* Cybervision 16 bpp */
 	    1280, 1024, 1280, 1024, 0, 0, 16, 0,
 	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
        }
     }, {
 	"1600x1200-16", {         /* Cybervision 16 bpp */
 	    1600, 1200, 1600, 1200, 0, 0, 16, 0,
 	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
        }
     }
@@ -268,10 +282,6 @@ static struct fb_videomode virgefb_predefined[] __initdata = {
 
 
 static int Cyberfb_inverse = 0;
-#if 0
-static int Cyberfb_Cyber8 = 0;        /* Use Cybervision board */
-static int Cyberfb_Cyber16 = 0;       /* Use Cybervision board */
-#endif
 
 /*
  *    Some default modes
@@ -392,6 +402,7 @@ static int Cyber_init(void)
 	} else {
 		CyberSize = 0x00400000; /* 4 MB */
 	}
+
 	memset ((char*)CyberMem, 0, CyberSize);
 
 	/* Disable hardware cursor */
@@ -667,7 +678,13 @@ void Cyber_blank(int blank)
  * CV3D low-level support
  */
 
-#define Cyber3D_WaitQueue(v)	 { do { while ((rl_3d(0x8504) & 0x1f00) < (((v)+2) << 8)); } while (0); }
+#define Cyber3D_WaitQueue(v) \
+{ \
+	 do { \
+		while ((rl_3d(0x8504) & 0x1f00) < (((v)+2) << 8)); \
+	 } \
+	while (0); \
+}
 
 static inline void Cyber3D_WaitBusy(void)
 {
@@ -699,11 +716,22 @@ unsigned long status;
   */
 
 static void Cyber3D_BitBLT(u_short curx, u_short cury, u_short destx,
-			   u_short desty, u_short width, u_short height)
+			   u_short desty, u_short width, u_short height, u_short depth)
 {
-	unsigned int blitcmd = S3V_BITBLT | S3V_DRAW | S3V_DST_8BPP;
+	unsigned int blitcmd = S3V_BITBLT | S3V_DRAW | S3V_BLT_COPY;
 
-	blitcmd |= S3V_BLT_COPY;
+	switch (depth) {
+#ifdef FBCON_HAS_CFB8
+		case 8 :
+			blitcmd |= S3V_DST_8BPP;
+			break;
+#endif
+#ifdef FBCON_HAS_CFB16
+		case 16 :
+			blitcmd |= S3V_DST_16BPP;
+			break;
+#endif
+	}
 
 	/* Set drawing direction */
 	/* -Y, X maj, -X (default) */
@@ -748,15 +776,28 @@ static void Cyber3D_BitBLT(u_short curx, u_short cury, u_short destx,
  */
 
 static void Cyber3D_RectFill(u_short x, u_short y, u_short width,
-			     u_short height, u_short color)
+			     u_short height, u_short color, u_short depth)
 {
 	unsigned int tmp;
-	unsigned int blitcmd = S3V_RECTFILL | S3V_DRAW | S3V_DST_8BPP |
+	unsigned int blitcmd = S3V_RECTFILL | S3V_DRAW |
 		S3V_BLT_CLEAR | S3V_MONO_PAT | (1 << 26) | (1 << 25);
 
 	if (blit_maybe_busy)
 		Cyber3D_WaitBusy();
 	blit_maybe_busy = 1;
+
+	switch (depth) {
+#ifdef FBCON_HAS_CFB8
+		case 8 :
+			blitcmd |= S3V_DST_8BPP;
+			break;
+#endif
+#ifdef FBCON_HAS_CFB16
+		case 16 :
+			blitcmd |= S3V_DST_16BPP;
+			break;
+#endif
+	}
 
 	tmp = color & 0xff;
 	wl_3d(0xa4f4, tmp);
@@ -1087,7 +1128,7 @@ static struct fb_ops virgefb_ops = {
 };
 
 
-__initfunc(void virgefb_setup(char *options, int *ints))
+void __init virgefb_setup(char *options, int *ints)
 {
 	char *this_opt;
 
@@ -1121,7 +1162,7 @@ __initfunc(void virgefb_setup(char *options, int *ints))
  *    Initialization
  */
 
-__initfunc(void virgefb_init(void))
+void __init virgefb_init(void)
 {
 	struct virgefb_par par;
 	unsigned long board_addr;
@@ -1157,7 +1198,6 @@ __initfunc(void virgefb_init(void))
 	else
 	{
 		CyberVGARegs = (unsigned long)ioremap(board_addr +0x0c000000, 0x00010000);
-
 		CyberRegs_phys = board_addr + 0x05000000;
 		CyberMem_phys  = board_addr + 0x04000000;	/* was 0x04800000 */
 		CyberRegs = ioremap(CyberRegs_phys, 0x00010000);
@@ -1242,7 +1282,7 @@ static void Cyberfb_blank(int blank, struct fb_info *info)
  *    Get a Video Mode
  */
 
-__initfunc(static int get_video_mode(const char *name))
+static int __init get_video_mode(const char *name)
 {
 	int i;
 
@@ -1269,7 +1309,7 @@ static void fbcon_virge8_bmove(struct display *p, int sy, int sx, int dy,
         sx *= 8; dx *= 8; width *= 8;
         Cyber3D_BitBLT((u_short)sx, (u_short)(sy*fontheight(p)), (u_short)dx,
                        (u_short)(dy*fontheight(p)), (u_short)width,
-                       (u_short)(height*fontheight(p)));
+                       (u_short)(height*fontheight(p)), 8);
 }
 
 static void fbcon_virge8_clear(struct vc_data *conp, struct display *p, int sy,
@@ -1281,7 +1321,7 @@ static void fbcon_virge8_clear(struct vc_data *conp, struct display *p, int sy,
         bg = attr_bgcol_ec(p,conp);
         Cyber3D_RectFill((u_short)sx, (u_short)(sy*fontheight(p)),
                          (u_short)width, (u_short)(height*fontheight(p)),
-                         (u_short)bg);
+                         (u_short)bg, 8);
 }
 
 static void fbcon_virge8_putc(struct vc_data *conp, struct display *p, int c, int yy,
@@ -1326,10 +1366,10 @@ static struct display_switch fbcon_virge8 = {
 static void fbcon_virge16_bmove(struct display *p, int sy, int sx, int dy,
                                int dx, int height, int width)
 {
-        sx *= 16; dx *= 16; width *= 16;
+        sx *= 8; dx *= 8; width *= 8;
         Cyber3D_BitBLT((u_short)sx, (u_short)(sy*fontheight(p)), (u_short)dx,
                        (u_short)(dy*fontheight(p)), (u_short)width,
-                       (u_short)(height*fontheight(p)));
+                       (u_short)(height*fontheight(p)), 16);
 }
                 
 static void fbcon_virge16_clear(struct vc_data *conp, struct display *p, int sy,
@@ -1337,11 +1377,11 @@ static void fbcon_virge16_clear(struct vc_data *conp, struct display *p, int sy,
 {
         unsigned char bg;   
                 
-        sx *= 16; width *= 16;
+        sx *= 8; width *= 8;
         bg = attr_bgcol_ec(p,conp);
         Cyber3D_RectFill((u_short)sx, (u_short)(sy*fontheight(p)),
                          (u_short)width, (u_short)(height*fontheight(p)),
-                         (u_short)bg);
+                         (u_short)bg, 16);
 }
    
 static void fbcon_virge16_putc(struct vc_data *conp, struct display *p, int c, int yy,

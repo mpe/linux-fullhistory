@@ -134,7 +134,8 @@ __initfunc(int atari_joystick_init(void))
 {
     joystick[0].active = joystick[1].active = 0;
     joystick[0].ready = joystick[1].ready = 0;
-    joystick[0].wait = joystick[1].wait = NULL;
+    init_waitqueue_head(&joystick[0].wait);
+    init_waitqueue_head(&joystick[1].wait);
 
     if (register_chrdev(MAJOR_NR, "Joystick", &atari_joystick_fops))
 	printk("unable to get major %d for joystick devices\n", MAJOR_NR);

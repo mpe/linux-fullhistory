@@ -219,7 +219,7 @@ static struct lp_struct tab = {
 	NULL,
 };
 
-__initfunc(int lp_internal_init(void))
+int __init lp_internal_init(void)
 {
 #ifdef CONFIG_AMIGA
   if (MACH_IS_AMIGA && AMIGAHW_PRESENT(AMI_PARALLEL))

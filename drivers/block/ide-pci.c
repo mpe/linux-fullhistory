@@ -252,7 +252,7 @@ static byte hpt363_shared_irq = 0;
  * settings of split-mirror pci-config space, place chipset into init-mode,
  * and/or preserve an interrupt if the card is not native ide support.
  */
-__initfunc(static unsigned int ide_special_settings (struct pci_dev *dev, const char *name))
+static unsigned int __init ide_special_settings (struct pci_dev *dev, const char *name)
 {
 	switch(dev->device) {
 		case PCI_DEVICE_ID_TTI_HPT343:
@@ -300,7 +300,7 @@ __initfunc(static unsigned int ide_special_settings (struct pci_dev *dev, const 
  * Match a PCI IDE port against an entry in ide_hwifs[],
  * based on io_base port if possible.
  */
-__initfunc(static ide_hwif_t *ide_match_hwif (unsigned long io_base, byte bootable, const char *name))
+static ide_hwif_t __init *ide_match_hwif (unsigned long io_base, byte bootable, const char *name)
 {
 	int h;
 	ide_hwif_t *hwif;
@@ -362,7 +362,7 @@ __initfunc(static ide_hwif_t *ide_match_hwif (unsigned long io_base, byte bootab
 	return NULL;
 }
 
-__initfunc(static int ide_setup_pci_baseregs (struct pci_dev *dev, const char *name))
+static int __init ide_setup_pci_baseregs (struct pci_dev *dev, const char *name)
 {
 	byte reg, progif = 0;
 
@@ -406,7 +406,7 @@ __initfunc(static int ide_setup_pci_baseregs (struct pci_dev *dev, const char *n
  * we "know" about, this information is in the ide_pci_device_t struct;
  * for all other chipsets, we just assume both interfaces are enabled.
  */
-__initfunc(static void ide_setup_pci_device (struct pci_dev *dev, ide_pci_device_t *d))
+static void __init ide_setup_pci_device (struct pci_dev *dev, ide_pci_device_t *d)
 {
 	unsigned int port, at_least_one_hwif_enabled = 0, autodma = 0, pciirq = 0;
 	unsigned short pcicmd = 0, tried_config = 0;
@@ -621,7 +621,7 @@ __initfunc(static void hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_d
  * ide_scan_pcibus() gets invoked at boot time from ide.c.
  * It finds all PCI IDE controllers and calls ide_setup_pci_device for them.
  */
-__initfunc(void ide_scan_pcibus (void))
+void __init ide_scan_pcibus (void)
 {
 	struct pci_dev		*dev;
 	ide_pci_devid_t		devid;

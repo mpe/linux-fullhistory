@@ -590,7 +590,7 @@ static void cg6_margins (struct fb_info_sbusfb *fb, struct display *p, int x_mar
 
 static char idstring[70] __initdata = { 0 };
 
-__initfunc(char *cgsixfb_init(struct fb_info_sbusfb *fb))
+char __init *cgsixfb_init(struct fb_info_sbusfb *fb)
 {
 	struct fb_fix_screeninfo *fix = &fb->fix;
 	struct fb_var_screeninfo *var = &fb->var;

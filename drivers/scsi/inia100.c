@@ -330,7 +330,7 @@ int orc_ReturnNumberOfAdapters(void)
 #if LINUX_VERSION_CODE > CVT_LINUX_VERSION(2,1,92)
 					bPCIBusNum = pdev->bus->number;
 					bPCIDeviceNum = pdev->devfn;
-					dRegValue = pdev->base_address[0];
+					dRegValue = pdev->resource[0].start;
 					if (dRegValue == -1) {	/* Check return code            */
 						printk("\n\rinia100: orchid read configuration error.\n");
 						return (0);	/* Read configuration space error  */

@@ -213,8 +213,8 @@ unsigned short  pas16_offset[ 8 ] =
  *
  */
 
-__initfunc(static void
-	enable_board( int  board_num,  unsigned short port ))
+static void __init
+	enable_board( int  board_num,  unsigned short port )
 {
     outb( 0xbc + board_num, MASTER_ADDRESS_PTR );
     outb( port >> 2, MASTER_ADDRESS_PTR );
@@ -233,8 +233,8 @@ __initfunc(static void
  *
  */
 
-__initfunc (static void
-	init_board( unsigned short io_port, int irq, int force_irq ))
+static void __init 
+	init_board( unsigned short io_port, int irq, int force_irq )
 {
 	unsigned int	tmp;
 	unsigned int	pas_irq_code;
@@ -282,8 +282,8 @@ __initfunc (static void
  * Returns : 0 if board not found, 1 if found.
  */
 
-__initfunc(static int
-     pas16_hw_detect( unsigned short  board_num ))
+static int __init 
+     pas16_hw_detect( unsigned short  board_num )
 {
     unsigned char	board_rev, tmp;
     unsigned short	io_port = bases[ board_num ].io_port;
@@ -342,7 +342,8 @@ __initfunc(static int
  *
  */
 
-__initfunc(void pas16_setup(char *str, int *ints)) {
+void __init pas16_setup(char *str, int *ints)
+{
     static int commandline_current = 0;
     int i;
     if (ints[0] != 2) 
@@ -373,7 +374,8 @@ __initfunc(void pas16_setup(char *str, int *ints)) {
  *
  */
 
-__initfunc(int pas16_detect(Scsi_Host_Template * tpnt)) {
+int __init pas16_detect(Scsi_Host_Template * tpnt)
+{
     static int current_override = 0;
     static unsigned short current_base = 0;
     struct Scsi_Host *instance;

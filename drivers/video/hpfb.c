@@ -301,7 +301,7 @@ static struct fb_ops hpfb_ops = {
 #define TOPCAT_FBOMSB	0x5d
 #define TOPCAT_FBOLSB	0x5f
 
-__initfunc(int hpfb_init_one(unsigned long base))
+int __init hpfb_init_one(unsigned long base)
 {
 	unsigned long fboff;
 
@@ -384,7 +384,7 @@ __initfunc(int hpfb_init_one(unsigned long base))
  * Initialise the framebuffer
  */
 
-__initfunc(unsigned long hpfb_init(unsigned long mem_start))
+unsigned long __init hpfb_init(unsigned long mem_start)
 {
 	unsigned int sid;
 
@@ -424,6 +424,6 @@ __initfunc(unsigned long hpfb_init(unsigned long mem_start))
 	return mem_start;
 }
 
-__initfunc(void hpfb_setup(char *options, int *ints))
+void __init hpfb_setup(char *options, int *ints)
 {
 }

@@ -178,7 +178,7 @@ static struct gendisk ps2esdi_gendisk =
 };
 
 /* initialization routine called by ll_rw_blk.c   */
-__initfunc(int ps2esdi_init(void))
+int __init ps2esdi_init(void)
 {
 
 	/* register the device - pass the name, major number and operations
@@ -244,7 +244,7 @@ cleanup_module(void)
 #endif /* MODULE */
 
 /* handles boot time command line parameters */
-__initfunc(void tp720_setup(char *str, int *ints))
+void __init tp720_setup(char *str, int *ints)
 {
 	/* no params, just sets the tp720esdi flag if it exists */
 
@@ -252,7 +252,7 @@ __initfunc(void tp720_setup(char *str, int *ints))
 	tp720esdi = 1;
 }
 
-__initfunc(void ed_setup(char *str, int *ints))
+void __init ed_setup(char *str, int *ints)
 {
 	int hdind = 0;
 
@@ -299,7 +299,7 @@ static int ps2esdi_getinfo(char *buf, int slot, void *d)
 }
 
 /* ps2 esdi specific initialization - called thru the gendisk chain */
-__initfunc(static void ps2esdi_geninit(struct gendisk *ignored))
+static void __init ps2esdi_geninit(struct gendisk *ignored)
 {
 	/*
 	   The first part contains the initialization code
@@ -437,7 +437,7 @@ __initfunc(static void ps2esdi_geninit(struct gendisk *ignored))
 }				/* ps2esdi_geninit */
 
 
-__initfunc(static void ps2esdi_get_device_cfg(void))
+static void __init ps2esdi_get_device_cfg(void)
 {
 	u_short cmd_blk[TYPE_0_CMD_BLK_LENGTH];
 

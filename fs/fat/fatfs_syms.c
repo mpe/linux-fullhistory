@@ -17,9 +17,9 @@
 
 extern struct file_operations fat_dir_operations;
 
-EXPORT_SYMBOL(fat_add_cluster);
-EXPORT_SYMBOL(fat_add_cluster1);
+EXPORT_SYMBOL(fat_new_dir);
 EXPORT_SYMBOL(fat_bmap);
+EXPORT_SYMBOL(fat_get_block);
 EXPORT_SYMBOL(fat_brelse);
 EXPORT_SYMBOL(fat_cache_inval_inode);
 EXPORT_SYMBOL(fat_clear_inode);
@@ -44,9 +44,7 @@ EXPORT_SYMBOL(fat_read_super);
 EXPORT_SYMBOL(fat_search_long);
 EXPORT_SYMBOL(fat_readdir);
 EXPORT_SYMBOL(fat_scan);
-EXPORT_SYMBOL(fat_smap);
 EXPORT_SYMBOL(fat_statfs);
-EXPORT_SYMBOL(fat_truncate);
 EXPORT_SYMBOL(fat_uni2esc);
 EXPORT_SYMBOL(fat_unlock_creation);
 EXPORT_SYMBOL(fat_write_inode);

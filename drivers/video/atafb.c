@@ -2745,7 +2745,7 @@ atafb_blank(int blank, struct fb_info *info)
 		do_install_cmap(currcon, info);
 }
 
-__initfunc(void atafb_init(void))
+void __init atafb_init(void)
 {
 	int pad;
 	int detected_mode;
@@ -2828,9 +2828,12 @@ __initfunc(void atafb_init(void))
 		/* Map the video memory (physical address given) to somewhere
 		 * in the kernel address space.
 		 */
-		external_addr = ioremap_writethrough(external_addr, external_len);
+		external_addr =
+		  ioremap_writethrough((unsigned long)external_addr,
+				       external_len);
 		if (external_vgaiobase)
-			external_vgaiobase = ioremap(external_vgaiobase, 0x10000 );
+			external_vgaiobase =
+			  (unsigned long)ioremap(external_vgaiobase, 0x10000);
 		screen_base      =
 		real_screen_base = external_addr;
 		screen_len       = external_len & PAGE_MASK;
@@ -2892,7 +2895,7 @@ static char * strtoke(char * s,const char * ct)
   return sbegin;
 }
 
-__initfunc(void atafb_setup( char *options, int *ints ))
+void __init atafb_setup( char *options, int *ints )
 {
     char *this_opt;
     int temp;
@@ -3069,7 +3072,7 @@ __initfunc(void atafb_setup( char *options, int *ints ))
 	external_yres  = yres;
 	external_depth = depth;
 	external_pmode = planes;
-	external_addr  = addr;
+	external_addr  = (void *)addr;
 	external_len   = len;
 		
 	if (external_card_type == IS_MV300)

@@ -619,8 +619,8 @@ unregister_framebuffer(const struct fb_info *fb_info)
 
 static struct proc_dir_entry *proc_fbmem;
 
-__initfunc(void
-fbmem_init(void))
+void __init 
+fbmem_init(void)
 {
 	int i;
 
@@ -679,7 +679,7 @@ int fbmon_dpms(const struct fb_info *fb_info)
      *  Command line options
      */
 
-__initfunc(void video_setup(char *options, int *ints))
+void __init video_setup(char *options, int *ints)
 {
     int i, j;
 

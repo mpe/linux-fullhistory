@@ -25,7 +25,7 @@
 #define DUMMY_ROWS	25
 #endif
 
-__initfunc(static const char *dummycon_startup(void))
+static const char __init *dummycon_startup(void)
 {
     return "dummy device";
 }

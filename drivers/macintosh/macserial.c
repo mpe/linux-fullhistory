@@ -2121,7 +2121,7 @@ static kdev_t serial_console_device(struct console *c)
  *	- initialize the serial port
  *	Return non-zero if we didn't find a serial port.
  */
-__initfunc(static int serial_console_setup(struct console *co, char *options))
+static int __init serial_console_setup(struct console *co, char *options)
 {
 	struct mac_serial *info = zs_soft + co->index;
 	int	baud = 38400;
@@ -2306,7 +2306,7 @@ static struct console sercons = {
 /*
  *	Register console.
  */
-__initfunc (long serial_console_init(long kmem_start, long kmem_end))
+long __init serial_console_init(long kmem_start, long kmem_end)
 {
 	register_console(&sercons);
 	return kmem_start;
@@ -2376,7 +2376,7 @@ static inline void kgdb_chaninit(struct mac_zschannel *ms, int intson, int bps)
  * boot command line flags.
  * XXX at the moment probably only channel A will work
  */
-__initfunc(void zs_kgdb_hook(int tty_num))
+void __init zs_kgdb_hook(int tty_num)
 {
 	/* Find out how many Z8530 SCCs we have */
 	if (zs_chain == 0)

@@ -102,7 +102,7 @@ static int ns87415_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 	}
 }
 
-__initfunc(void ide_init_ns87415 (ide_hwif_t *hwif))
+void __init ide_init_ns87415 (ide_hwif_t *hwif)
 {
 	struct pci_dev *dev = hwif->pci_dev;
 	unsigned int ctrl, using_inta;

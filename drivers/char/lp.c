@@ -711,7 +711,7 @@ static int reset = 0;
 
 static int parport_ptr = 0;
 
-__initfunc(void lp_setup(char *str, int *ints))
+void __init lp_setup(char *str, int *ints)
 {
 	if (!str) {
 		if (ints[0] == 0 || ints[1] == 0) {

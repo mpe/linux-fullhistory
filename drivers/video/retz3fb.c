@@ -109,6 +109,7 @@ struct retz3_fb_info {
 	unsigned long physregs;
 	int currcon;
 	int current_par_valid; /* set to 0 by memset */
+	int blitbusy;
 	struct display disp;
 	struct retz3fb_par current_par;
 	unsigned char color_table [256][3];
@@ -178,11 +179,7 @@ static struct fb_videomode retz3fb_predefined[] __initdata = {
 	"640x480", {		/* 640x480, 8 bpp */
 	    640, 480, 640, 480, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-#if 1
 	    0, 0, -1, -1, FB_ACCEL_NONE, 39722, 48, 16, 33, 10, 96, 2,
-#else
-	    0, 0, -1, -1, FB_ACCELF_TEXT, 38461, 28, 32, 12, 10, 96, 2,
-#endif
 	    FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,FB_VMODE_NONINTERLACED
 	}
     },
@@ -265,7 +262,7 @@ static int z3fb_mode __initdata = 0;
  *    Interface used by the world
  */
 
-void retz3fb_setup(char *options, int *ints);
+void retz3fb_setup(char *options);
 
 static int retz3fb_open(struct fb_info *info, int user);
 static int retz3fb_release(struct fb_info *info, int user);
@@ -346,7 +343,7 @@ static void retz3fb_set_disp(int con, struct fb_info *info);
 static int get_video_mode(const char *name);
 
 
-/* -------------------- Hardware specific routines -------------------------- */
+/* -------------------- Hardware specific routines ------------------------- */
 
 static unsigned short find_fq(unsigned int freq)
 {
@@ -959,6 +956,21 @@ static int retz3_getcolreg(unsigned int regno, unsigned int *red,
 }
 
 
+static inline void retz3_busy(struct display *p)
+{
+	struct retz3_fb_info *zinfo = retz3info(p->fb_info);
+	volatile unsigned char *acm = zinfo->base + ACM_OFFSET;
+	unsigned char blt_status;
+
+	if (zinfo->blitbusy) {
+		do{
+			blt_status = *((acm) + (ACM_START_STATUS + 2));
+		}while ((blt_status & 1) == 0);
+		zinfo->blitbusy = 0;
+	}
+}
+
+
 static void retz3_bitblt (struct display *p,
 			  unsigned short srcx, unsigned short srcy,
 			  unsigned short destx, unsigned short desty,
@@ -973,7 +985,6 @@ static void retz3_bitblt (struct display *p,
 	unsigned short mod;
 	unsigned long tmp;
 	unsigned long pat, src, dst;
-	unsigned char blt_status;
 
 	int i, xres_virtual = var->xres_virtual;
 	short bpp = (var->bits_per_pixel & 0xff);
@@ -983,16 +994,7 @@ static void retz3_bitblt (struct display *p,
 
 	tmp = mask | (mask << 16);
 
-#if 0
-	/*
-	 * Check for blitter finished before we start messing with the
-	 * pattern.
-	 */
-	do{
-		blt_status = *(((volatile unsigned char *)acm) +
-			       (ACM_START_STATUS + 2));
-	}while ((blt_status & 1) == 0);
-#endif
+	retz3_busy(p);
 
 	i = 0;
 	do{
@@ -1042,23 +1044,7 @@ static void retz3_bitblt (struct display *p,
 
 	*(((volatile unsigned char *)acm) + ACM_START_STATUS) = 0x00;
 	*(((volatile unsigned char *)acm) + ACM_START_STATUS) = 0x01;
-
-	/*
-	 * No reason to wait for the blitter to finish, it is better
-	 * just to check if it has finished before we use it again.
-	 */
-#if 1
-#if 0
-	while ((*(((volatile unsigned char *)acm) +
-		  (ACM_START_STATUS + 2)) & 1) == 0);
-#else
-	do{
-		blt_status = *(((volatile unsigned char *)acm) +
-			       (ACM_START_STATUS + 2));
-	}
-	while ((blt_status & 1) == 0);
-#endif
-#endif
+	zinfo->blitbusy = 1;
 }
 
 #if 0
@@ -1192,7 +1178,6 @@ static int retz3fb_get_var(struct fb_var_screeninfo *var, int con,
 }
 
 
-#if 1
 static void retz3fb_set_disp(int con, struct fb_info *info)
 {
 	struct fb_fix_screeninfo fix;
@@ -1243,7 +1228,6 @@ static void retz3fb_set_disp(int con, struct fb_info *info)
 		break;
 	}
 }
-#endif
 
 
 /*
@@ -1407,7 +1391,7 @@ static struct fb_ops retz3fb_ops = {
 };
 
 
-__initfunc(void retz3fb_setup(char *options, int *ints))
+void __init retz3fb_setup(char *options, int *ints)
 {
 	char *this_opt;
 
@@ -1422,7 +1406,7 @@ __initfunc(void retz3fb_setup(char *options, int *ints))
 		} else if (!strncmp(this_opt, "font:", 5)) {
 			strncpy(fontname, this_opt+5, 39);
 			fontname[39] = '\0';
-		}else
+		} else
 			z3fb_mode = get_video_mode(this_opt);
 	}
 }
@@ -1432,7 +1416,7 @@ __initfunc(void retz3fb_setup(char *options, int *ints))
  *    Initialization
  */
 
-__initfunc(void retz3fb_init(void))
+void __init retz3fb_init(void)
 {
 	unsigned long board_addr, board_size;
 	unsigned int key;
@@ -1576,11 +1560,11 @@ static void z3fb_blank(int blank, struct fb_info *info)
  *    Get a Video Mode
  */
 
-__initfunc(static int get_video_mode(const char *name))
+static int __init get_video_mode(const char *name)
 {
 	short i;
 
-	for (i = 0; i <= NUM_TOTAL_MODES; i++)
+	for (i = 0; i < NUM_TOTAL_MODES; i++)
 		if (!strcmp(name, retz3fb_predefined[i].name)){
 			retz3fb_default = retz3fb_predefined[i].var;
 			return i;
@@ -1613,8 +1597,8 @@ void cleanup_module(void)
  */
 
 #ifdef FBCON_HAS_CFB8
-static void fbcon_retz3_8_bmove(struct display *p, int sy, int sx,
-				int dy, int dx, int height, int width)
+static void retz3_8_bmove(struct display *p, int sy, int sx,
+			  int dy, int dx, int height, int width)
 {
 	int fontwidth = fontwidth(p);
 
@@ -1633,8 +1617,8 @@ static void fbcon_retz3_8_bmove(struct display *p, int sy, int sx,
 		     0xffff);
 }
 
-static void fbcon_retz3_8_clear(struct vc_data *conp, struct display *p,
-				int sy, int sx, int height, int width)
+static void retz3_8_clear(struct vc_data *conp, struct display *p,
+			  int sy, int sx, int height, int width)
 {
 	unsigned short col;
 	int fontwidth = fontwidth(p);
@@ -1657,9 +1641,42 @@ static void fbcon_retz3_8_clear(struct vc_data *conp, struct display *p,
 		     col);
 }
 
+
+static void retz3_putc(struct vc_data *conp, struct display *p, int c,
+		       int yy, int xx)
+{
+	retz3_busy(p);
+	fbcon_cfb8_putc(conp, p, c, yy, xx);
+}
+
+
+static void retz3_putcs(struct vc_data *conp, struct display *p,
+			const unsigned short *s, int count,
+			int yy, int xx)
+{
+	retz3_busy(p);
+	fbcon_cfb8_putcs(conp, p, s, count, yy, xx);
+}
+
+
+static void retz3_revc(struct display *p, int xx, int yy)
+{
+	retz3_busy(p);
+	fbcon_cfb8_revc(p, xx, yy);
+}
+
+
+static void retz3_clear_margins(struct vc_data* conp, struct display* p,
+				int bottom_only)
+{
+	retz3_busy(p);
+	fbcon_cfb8_clear_margins(conp, p, bottom_only);
+}
+
+
 static struct display_switch fbcon_retz3_8 = {
-    fbcon_cfb8_setup, fbcon_retz3_8_bmove, fbcon_retz3_8_clear,
-    fbcon_cfb8_putc, fbcon_cfb8_putcs, fbcon_cfb8_revc, NULL, NULL,
-    fbcon_cfb8_clear_margins, FONTWIDTH(8)
+    fbcon_cfb8_setup, retz3_8_bmove, retz3_8_clear,
+    retz3_putc, retz3_putcs, retz3_revc, NULL, NULL,
+    retz3_clear_margins, FONTWIDTH(8)
 };
 #endif

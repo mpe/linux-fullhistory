@@ -559,7 +559,7 @@ static void igafb_blank(int blank, struct fb_info *info)
 }
 
 
-__initfunc(static int iga_init(struct fb_info_iga *info))
+static int __init iga_init(struct fb_info_iga *info)
 {
         char vramsz = iga_inb(info, IGA_EXT_CNTRL, IGA_IDX_EXT_BUS_CNTL) 
 		                                         & MEM_SIZE_ALIAS;
@@ -624,7 +624,7 @@ __initfunc(static int iga_init(struct fb_info_iga *info))
 }	
 
 
-__initfunc(void igafb_init(void))
+void __init igafb_init(void)
 {
         struct pci_dev *pdev;
         struct fb_info_iga *info;
@@ -777,7 +777,7 @@ __initfunc(void igafb_init(void))
 #endif /* __sparc__ */
 }
 
-__initfunc(void igafb_setup(char *options, int *ints))
+void __init igafb_setup(char *options, int *ints)
 {
     char *this_opt;
 

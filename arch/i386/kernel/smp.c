@@ -1244,6 +1244,7 @@ void __init smp_boot_cpus(void)
 		io_apic_irqs = 0;
 #endif
 		cpu_online_map = cpu_present_map;
+		smp_num_cpus = 1;
 		goto smp_done;
 	}
 

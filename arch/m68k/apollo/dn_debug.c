@@ -1,4 +1,3 @@
-#include <stdarg.h>
 
 #define DN_DEBUG_BUFFER_BASE 0x82800000
 #define DN_DEBUG_BUFFER_SIZE 8*1024*1024

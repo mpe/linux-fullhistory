@@ -3538,6 +3538,13 @@ CONFIG_SCC_DELAY
 ### Don't know what's going on here.
 ###
 #
+YAM driver for AX.25
+CONFIG_YAM
+  Support for the YAM modem on serial port. If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
+
 BAYCOM picpar and par96 driver for AX.25
 CONFIG_BAYCOM_PAR
   This is a driver for Baycom style simple amateur radio modems that
@@ -5344,26 +5351,6 @@ CONFIG_X25_ASY
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. The module will be
   called x25_asy.o. If unsure, say N.
-
-Shortwave radio modem driver
-CONFIG_HFMODEM
-  This experimental driver is used by a package (to be released)
-  that implements the shortwave radio protocols RTTY, Sitor (Amtor),
-  Pactor 1 and GTOR using a standard PC sound card. If unsure,
-  say N.
-
-Shortwave radio modem driver support for Sound Blaster and compatible cards
-CONFIG_HFMODEM_SBC
-  This option enables the hfmodem driver to use Sound Blaster and
-  compatible cards. It requires a 16bit capable card, i.e.
-  SB16 or better, or ESS1688 or newer.
-
-Shortwave radio modem driver support for WSS and Crystal cards
-CONFIG_HFMODEM_WSS
-  This option enables the hfmodem driver to use WindowsSoundSystem
-  compatible cards. These cards feature a codec chip from either
-  Analog Devices (such as AD1848, AD1845) or Crystal Semiconductors
-  (such as CS4248, CS423x).
 
 PLIP (parallel port) support
 CONFIG_PLIP
@@ -9430,7 +9417,7 @@ CONFIG_RTC
 
   If you run Linux on a multiprocessor machine and said Y to
   "Symmetric Multi Processing" above, you should say Y here to read
-  and set the RTC clock in an SMP compatible fashion.
+  and set the RTC in an SMP compatible fashion.
 
   If you think you have a use for such a device (such as periodic data
   sampling), then say Y here, and read Documentation/rtc.txt for
@@ -11981,6 +11968,11 @@ CONFIG_USB_ACM
   mknod /dev/ttyACM2 c 166 2
   mknod /dev/ttyACM3 c 166 3
 
+USS720 parport driver
+CONFIG_USB_USS720
+  This driver is for USB parallel port adapters that use the USS-720
+  chip.
+
 USB /proc filesystem entry support (Preliminary)
 CONFIG_USB_PROC
   This reports USB drivers and devices in the /proc filesystem.
@@ -12140,7 +12132,7 @@ CONFIG_PPDEV
 # LocalWords:  KERNNAME kname ktype kernelname Kerneltype KERNTYPE Alt RX mdafb
 # LocalWords:  dataless kerneltype SYSNAME Comtrol Rocketport palmtop fbset EGS
 # LocalWords:  nvram SYSRQ SysRq PrintScreen sysrq NVRAMs NvRAM Shortwave RTTY
-# LocalWords:  HFMODEM shortwave Sitor Amtor Pactor GTOR hfmodem hayes TX TMOUT
+# LocalWords:  hayes TX TMOUT
 # LocalWords:  IDEPCI IDEDMA idedma PDC pdc TRM trm raidtools luthien nuclecu
 # LocalWords:  unam mx miguel koobera uic EMUL solaris pp ieee lpsg co DMAs TOS
 # LocalWords:  BLDCONFIG preloading jumperless BOOTINIT modutils multipath GRE

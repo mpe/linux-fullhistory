@@ -992,6 +992,7 @@ static int do_swap_page(struct task_struct * tsk,
 
 	pte = mk_pte(page_address(page), vma->vm_page_prot);
 
+	set_bit(PG_swap_entry, &page->flags);
 	if (write_access && !is_page_shared(page)) {
 		delete_from_swap_cache(page);
 		pte = pte_mkwrite(pte_mkdirty(pte));

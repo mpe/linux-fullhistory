@@ -130,6 +130,15 @@ extern inline void *__va(unsigned long physaddr)
 }
 #define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
 
+#define BUG() do { \
+	printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); \
+	asm volatile("illegal"); \
+} while (0)
+
+#define PAGE_BUG(page) do { \
+	BUG(); \
+} while (0)
+
 #endif /* __KERNEL__ */
 
 #endif /* _M68K_PAGE_H */

@@ -290,8 +290,9 @@ struct usb_operations {
 	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int,unsigned long *);
 	void* (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *);
 	int (*release_irq)(void* handle);
-	void* (*request_bulk)(struct usb_device *, unsigned int, usb_device_irq, void *, int, void *);
-	int (*terminate_bulk)(struct usb_device *, void*);
+	void *(*request_bulk)(struct usb_device *, unsigned int, usb_device_irq,
+ void *, int, void *);
+	int (*terminate_bulk)(struct usb_device *, void *);
 	void *(*alloc_isoc)(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id);
 	void (*delete_isoc)(struct usb_device *dev, void *_isodesc);
 	int (*sched_isoc)(struct usb_device *usb_dev, void *_isodesc, void *_pisodesc);
@@ -348,20 +349,22 @@ struct usb_device {
 extern int usb_register(struct usb_driver *);
 extern void usb_deregister(struct usb_driver *);
 
+extern struct usb_bus *usb_alloc_bus(struct usb_operations *);
+extern void usb_free_bus(struct usb_bus *);
 extern void usb_register_bus(struct usb_bus *);
 extern void usb_deregister_bus(struct usb_bus *);
 
 extern void* usb_request_irq(struct usb_device *, unsigned int, usb_device_irq, int, void *);
 extern int usb_release_irq(struct usb_device *dev, void *handle);
 
-extern void* usb_request_bulk(struct usb_device *, unsigned int, usb_device_irq, void *, int, void *);
-extern int usb_terminate_bulk(struct usb_device *, void*);
+extern void *usb_request_bulk(struct usb_device *, unsigned int, usb_device_irq, void *, int, void *);
+extern int usb_terminate_bulk(struct usb_device *, void *);
 
 extern void usb_init_root_hub(struct usb_device *dev);
 extern void usb_connect(struct usb_device *dev);
 extern void usb_disconnect(struct usb_device **);
 
-extern int usb_device_descriptor(struct usb_device *dev);
+extern int usb_find_driver(struct usb_device *dev);
 void usb_check_support(struct usb_device *);
 void usb_driver_purge(struct usb_driver *,struct usb_device *);
 extern int  usb_parse_configuration(struct usb_device *dev, void *buf, int len);
@@ -458,17 +461,12 @@ static inline unsigned int __default_pipe(struct usb_device *dev)
 /*
  * Send and receive control messages..
  */
-void usb_new_device(struct usb_device *dev);
+int usb_new_device(struct usb_device *dev);
 int usb_set_address(struct usb_device *dev);
 int usb_get_descriptor(struct usb_device *dev, unsigned char desctype, unsigned
 char descindex, void *buf, int size);
 int usb_get_device_descriptor(struct usb_device *dev);
-int usb_get_hub_descriptor(struct usb_device *dev, void *data, int size);
-int usb_clear_port_feature(struct usb_device *dev, int port, int feature);
-int usb_set_port_feature(struct usb_device *dev, int port, int feature);
 int usb_get_status (struct usb_device *dev, int type, int target, void *data);
-int usb_get_hub_status(struct usb_device *dev, void *data);
-int usb_get_port_status(struct usb_device *dev, int port, void *data);
 int usb_get_protocol(struct usb_device *dev);
 int usb_set_protocol(struct usb_device *dev, int protocol);
 int usb_set_interface(struct usb_device *dev, int interface, int alternate);

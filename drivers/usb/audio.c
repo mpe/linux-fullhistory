@@ -11,24 +11,25 @@ static int usb_audio_probe(struct usb_device *dev);
 static void usb_audio_disconnect(struct usb_device *dev);
 static LIST_HEAD(usb_audio_list);
 
-struct usb_audio
-{
+struct usb_audio {
 	struct usb_device *dev;
 	struct list_head list;
 };
 
-static struct usb_driver usb_audio_driver =
-{
+static struct usb_driver usb_audio_driver = {
 	"audio",
 	usb_audio_probe,
 	usb_audio_disconnect,
-	{NULL, NULL}
+	{ NULL, NULL }
 };
 
 
 static int usb_audio_irq(int state, void *buffer, int len, void *dev_id)
 {
-	struct usb_audio *aud = (struct usb_audio*) dev_id;
+	struct usb_audio *aud = (struct usb_audio *)dev_id;
+
+	printk("irq on %p\n", aud);
+
 	return 1;
 }
 
@@ -37,16 +38,12 @@ static int usb_audio_probe(struct usb_device *dev)
 	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_audio *aud;
-
 	int i;
 	int na=0;
 	
 	interface = &dev->config[0].altsetting[0].interface[0];
 
-	for(i=0;i<dev->config[0].bNumInterfaces;i++)
-	{
-		int x;
-		
+	for (i=0; i<dev->config[0].bNumInterfaces; i++) {
 		endpoint = &interface->endpoint[i];
 
 		if(interface->bInterfaceClass != 1) 
@@ -54,8 +51,7 @@ static int usb_audio_probe(struct usb_device *dev)
 
 		printk(KERN_INFO "USB audio device detected.\n");
 	
-		switch(interface->bInterfaceSubClass)
-		{
+		switch(interface->bInterfaceSubClass) {
 			case 0x01:
 				printk(KERN_INFO "audio: Control device.\n");
 				break;
@@ -69,12 +65,11 @@ static int usb_audio_probe(struct usb_device *dev)
 		na++;
 	}
 	
-	if(na==0)
+	if (!na)
 		return -1;
 
 	aud = kmalloc(sizeof(struct usb_audio), GFP_KERNEL);
-	if(aud)
-	{
+	if (aud) {
         	memset(aud, 0, sizeof(*aud));
         	aud->dev = dev;
         	dev->private = aud;
@@ -107,8 +102,8 @@ static int usb_audio_probe(struct usb_device *dev)
 static void usb_audio_disconnect(struct usb_device *dev)
 {
 	struct usb_audio *aud = (struct usb_audio*) dev->private;
-	if(aud)
-	{
+
+	if (aud) {
         	dev->private = NULL;
         	list_del(&aud->list);
         	kfree(aud);
@@ -146,3 +141,4 @@ void cleanup_module(void)
 }
 
 #endif
+

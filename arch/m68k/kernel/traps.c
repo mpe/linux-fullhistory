@@ -648,7 +648,7 @@ asmlinkage void buserr_c(struct frame *fp)
 {
 	/* Only set esp0 if coming from user mode */
 	if (user_mode(&fp->ptregs))
-		current->tss.esp0 = (unsigned long) fp;
+		current->thread.esp0 = (unsigned long) fp;
 
 #if DEBUG
 	printk ("*** Bus Error *** Format is %x\n", fp->ptregs.format);

@@ -223,13 +223,13 @@ struct WD33C93_hostdata {
     uchar            clock_freq;
     uchar            chip;             /* what kind of wd33c93? */
     uchar            microcode;        /* microcode rev */
+    uchar            dma_buffer_pool;  /* FEF: buffer from chip_ram? */
     int              dma_dir;          /* data transfer dir. */
     dma_setup_t      dma_setup;
     dma_stop_t       dma_stop;
     unsigned int     dma_xfer_mask;
     uchar            *dma_bounce_buffer;
     unsigned int     dma_bounce_len;
-    uchar            dma_buffer_pool;  /* FEF: buffer from chip_ram? */
     volatile uchar   busy[8];          /* index = target, bit = lun */
     volatile Scsi_Cmnd *input_Q;       /* commands waiting to be started */
     volatile Scsi_Cmnd *selecting;     /* trying to select this command */

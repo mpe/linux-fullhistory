@@ -3325,11 +3325,10 @@ static int __init happy_meal_pci_init(struct device *dev, struct pci_dev *pdev)
 	}		
 
 	hpreg_base = pdev->resource[0].start;
-	if((pdev->resource[0].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_MEMORY) {
+	if ((pdev->resource[0].flags & IORESOURCE_IOPORT) != 0) {
 		printk("happymeal(PCI): Cannot find proper PCI device base address.\n");
 		return ENODEV;
 	}
-	hpreg_base &= PCI_BASE_ADDRESS_MEM_MASK;
 
 	if (qfe_slot != -1 && prom_getproplen(node, "local-mac-address") == 6)
 		prom_getproperty(node, "local-mac-address", dev->dev_addr, 6);

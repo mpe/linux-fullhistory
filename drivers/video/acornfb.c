@@ -1429,8 +1429,8 @@ static const struct modex_params modex_params[] __initdata = {
 	}
 };
 
-__initfunc(static int
-acornfb_lookup_timing(struct fb_var_screeninfo *var))
+static int __init 
+acornfb_lookup_timing(struct fb_var_screeninfo *var)
 {
 	const struct modex_params *x;
 	const struct modey_params *y;
@@ -1518,8 +1518,8 @@ found:
 	return 0;
 }
 
-__initfunc(static void
-acornfb_init_fbinfo(void))
+static void __init 
+acornfb_init_fbinfo(void)
 {
 	static int first = 1;
 
@@ -1612,14 +1612,14 @@ acornfb_init_fbinfo(void))
  *	size can optionally be followed by 'M' or 'K' for
  *	MB or KB respectively.
  */
-__initfunc(static void
-acornfb_parse_font(char *opt))
+static void __init 
+acornfb_parse_font(char *opt)
 {
 	strcpy(fb_info.fontname, opt);
 }
 
-__initfunc(static void
-acornfb_parse_mon(char *opt))
+static void __init 
+acornfb_parse_mon(char *opt)
 {
 	fb_info.monspecs.hfmin = simple_strtoul(opt, &opt, 0);
 	if (*opt == '-')
@@ -1652,8 +1652,8 @@ acornfb_parse_mon(char *opt))
 	init_var.height = simple_strtoul(opt + 1, NULL, 0);
 }
 
-__initfunc(static void
-acornfb_parse_montype(char *opt))
+static void __init 
+acornfb_parse_montype(char *opt)
 {
 	current_par.montype = -2;
 
@@ -1694,8 +1694,8 @@ acornfb_parse_montype(char *opt))
 	}
 }
 
-__initfunc(static void
-acornfb_parse_dram(char *opt))
+static void __init 
+acornfb_parse_dram(char *opt)
 {
 	unsigned int size;
 
@@ -1728,8 +1728,8 @@ static struct options {
 	{ NULL, NULL }
 };
 
-__initfunc(void
-acornfb_setup(char *options, int *ints))
+void __init 
+acornfb_setup(char *options, int *ints)
 {
 	struct options *optp;
 	char *opt;
@@ -1765,8 +1765,8 @@ acornfb_setup(char *options, int *ints))
  * Detect type of monitor connected
  *  For now, we just assume SVGA
  */
-__initfunc(static int
-acornfb_detect_monitortype(void))
+static int __init 
+acornfb_detect_monitortype(void)
 {
 	return 4;
 }
@@ -1802,8 +1802,8 @@ free_unused_pages(unsigned int virtual_start, unsigned int virtual_end)
 	printk("acornfb: freed %dK memory\n", mb_freed);
 }
 
-__initfunc(void
-acornfb_init(void))
+void __init 
+acornfb_init(void)
 {
 	unsigned long size;
 	u_int h_sync, v_sync;

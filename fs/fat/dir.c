@@ -605,7 +605,7 @@ int fat_add_entries(struct inode *dir,int slots, struct buffer_head **bh,
 	struct super_block *sb = dir->i_sb;
 	loff_t offset, curr;
 	int row;
-	int res;
+	struct buffer_head *new_bh;
 
 	offset = curr = 0;
 	*bh = NULL;
@@ -621,9 +621,45 @@ int fat_add_entries(struct inode *dir,int slots, struct buffer_head **bh,
 	}
 	if ((dir->i_ino == MSDOS_ROOT_INO) && (MSDOS_SB(sb)->fat_bits != 32)) 
 		return -ENOSPC;
-	if ((res = fat_add_cluster(dir)) < 0) return res;
+	new_bh = fat_extend_dir(dir);
+	if (!new_bh)
+		return -ENOSPC;
+	fat_brelse(sb, new_bh);
 	do fat_get_entry(dir,&curr,bh,de,ino); while (++row<slots);
 	return offset;
+}
+
+int fat_new_dir(struct inode *dir, struct inode *parent, int is_vfat)
+{
+	struct super_block *sb = dir->i_sb;
+	struct buffer_head *bh;
+	struct msdos_dir_entry *de;
+	__u16 date, time;
+
+	if ((bh = fat_extend_dir(dir)) == NULL) return -ENOSPC;
+	/* zeroed out, so... */
+	fat_date_unix2dos(dir->i_mtime,&time,&date);
+	de = (struct msdos_dir_entry*)&bh->b_data[0];
+	memcpy(de[0].name,MSDOS_DOT,MSDOS_NAME);
+	memcpy(de[1].name,MSDOS_DOTDOT,MSDOS_NAME);
+	de[0].attr = de[1].attr = ATTR_DIR;
+	de[0].time = de[1].time = CT_LE_W(time);
+	de[0].date = de[1].date = CT_LE_W(date);
+	if (is_vfat) {	/* extra timestamps */
+		de[0].ctime = de[1].ctime = CT_LE_W(time);
+		de[0].adate = de[0].cdate =
+			de[1].adate = de[1].cdate = CT_LE_W(date);
+	}
+	de[0].start = CT_LE_W(MSDOS_I(dir)->i_logstart);
+	de[0].starthi = CT_LE_W(MSDOS_I(dir)->i_logstart>>16);
+	de[1].start = CT_LE_W(MSDOS_I(parent)->i_logstart);
+	de[1].starthi = CT_LE_W(MSDOS_I(parent)->i_logstart>>16);
+	fat_mark_buffer_dirty(sb, bh, 1);
+	fat_brelse(sb, bh);
+	dir->i_atime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+	mark_inode_dirty(dir);
+
+	return 0;
 }
 
 /*

@@ -967,8 +967,8 @@ out:
 	add_timer(&c->timer);
 }
 
-__initfunc(static void
-imstt_cursor_init (struct fb_info_imstt *p))
+static void __init 
+imstt_cursor_init (struct fb_info_imstt *p)
 {
 	struct imstt_cursor *c = &p->cursor;
 
@@ -1728,8 +1728,8 @@ imsttfbcon_blank (int blank, struct fb_info *info)
 	out_le32(&p->dc_regs[STGCTL], ctrl);
 }
 
-__initfunc(static void
-init_imstt(struct fb_info_imstt *p))
+static void __init 
+init_imstt(struct fb_info_imstt *p)
 {
 	__u32 i, tmp;
 	__u32 *ip, *end;
@@ -1868,8 +1868,8 @@ init_imstt(struct fb_info_imstt *p))
 }
 
 #if defined(CONFIG_FB_OF) && !defined(MODULE)
-__initfunc(void
-imsttfb_of_init(struct device_node *dp))
+void __init 
+imsttfb_of_init(struct device_node *dp)
 {
 	struct fb_info_imstt *p;
 	int i;
@@ -1912,8 +1912,8 @@ imsttfb_of_init(struct device_node *dp))
 }
 #endif
 
-__initfunc(void
-imsttfb_init(void))
+void __init 
+imsttfb_init(void)
 {
 #if defined(CONFIG_FB_OF) && !defined(MODULE)
 	/* We don't want to be called like this. */
@@ -1969,8 +1969,8 @@ imsttfb_init(void))
 }
 
 #ifndef MODULE
-__initfunc(void
-imsttfb_setup(char *options, int *ints))
+void __init 
+imsttfb_setup(char *options, int *ints)
 {
 	char *this_opt;
 

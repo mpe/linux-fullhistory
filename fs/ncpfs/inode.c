@@ -134,7 +134,15 @@ void ncp_update_inode2(struct inode* inode, struct nw_file_info *nwinfo)
 	if ((inode->i_size)&&(inode->i_blksize)) {
 		inode->i_blocks = (inode->i_size-1)/(inode->i_blksize)+1;
 	}
+
 	/* TODO: times? I'm not sure... */
+	inode->i_mtime = ncp_date_dos2unix(le16_to_cpu(nwinfo->i.modifyTime),
+			  		   le16_to_cpu(nwinfo->i.modifyDate));
+	inode->i_ctime = ncp_date_dos2unix(le16_to_cpu(nwinfo->i.creationTime),
+			    		   le16_to_cpu(nwinfo->i.creationDate));
+	inode->i_atime = ncp_date_dos2unix(0,
+					   le16_to_cpu(nwinfo->i.lastAccessDate));
+
 	NCP_FINFO(inode)->DosDirNum = nwinfo->i.DosDirNum;
 	NCP_FINFO(inode)->dirEntNum = nwinfo->i.dirEntNum;
 	NCP_FINFO(inode)->volNumber = nwinfo->i.volNumber;

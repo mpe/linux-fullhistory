@@ -102,6 +102,10 @@ endif
 
 ifeq ($(CONFIG_FB_ATY),y)
 L_OBJS += atyfb.o
+else
+  ifeq ($(CONFIG_FB_ATY),m)
+  M_OBJS += atyfb.o
+  endif
 endif
 
 ifeq ($(CONFIG_FB_IGA),y)
@@ -206,6 +210,10 @@ endif
 
 ifeq ($(CONFIG_FB_VGA16),y)
 L_OBJS += vga16fb.o
+else
+  ifeq ($(CONFIG_FB_VGA16),m)
+  M_OBJS += vga16fb.o
+  endif
 endif
 
 ifeq ($(CONFIG_FB_VIRGE),y)

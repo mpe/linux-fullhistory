@@ -2,7 +2,7 @@ This file contains brief information about the SCSI tape driver.
 The driver is currently maintained by Kai M{kisara (email
 Kai.Makisara@metla.fi)
 
-Last modified: Sun Apr 18 13:24:43 1999 by makisara@home
+Last modified: Sat Aug  7 13:52:16 1999 by makisara@kai.makisara.local
 
 
 BASICS
@@ -130,22 +130,26 @@ closed. Buffer allocation uses chunks of memory having sizes
 2^n * (page size). Because of this the actual buffer size may be
 larger than the buffer size specified with ST_BUFFER_BLOCKS.
 
-Allocation of the buffers is done at run-time when they are
-needed. Allocation of the specified number of buffers can be done at
-initialization if ST_RUNTIME_BUFFERS is defined non-zero. The
-advantage of run-time allocation is that memory is not wasted for
-buffers not being used. The disadvantage is that there may not be
-memory available at the time when a buffer is needed for the first
-time (once a buffer is allocated, it is not released).
+A small number of buffers are allocated at driver initialisation. The
+maximum number of these buffers is defined by ST_MAX_BUFFERS. The
+maximum can be changed with kernel or module startup options. One
+buffer is allocated for each drive detected when the driver is
+initialized up to the maximum. The minimum number of allocated buffers
+is ST_EXTRA_DEVS (in hosts.h) (unless this number exceeds the defined
+maximum). This ensures some functionality also for the drives found
+after tape driver initialization (a SCSI adapter driver is loaded as a
+module). The default for ST_EXTRA_DEVS is two.
 
-The maximum number of buffers allocated at initialization is defined by
-ST_MAX_BUFFERS. One buffer is allocated for each drive detected when
-the driver is initialized up to the maximum. The minimum number of
-allocated buffers is ST_EXTRA_DEVS (in hosts.h). This ensures some
-functionality also for the drives found after tape driver
-initialization (a SCSI adapter driver is loaded as a module). The
-default for ST_EXTRA_DEVS is two. The driver tries to allocate new
-buffers at run-time if necessary.
+The driver tries to allocate new buffers at run-time if
+necessary. These buffers are freed after use. If the maximum number of
+initial buffers is set to zero, all buffer allocation is done at
+run-time. The advantage of run-time allocation is that memory is not
+wasted for buffers not being used. The disadvantage is that there may
+not be memory available at the time when a buffer is needed for the
+first time (once a buffer is allocated, it is not released). This risk
+should not be big if the tape drive is connected to a PCI adapter that
+supports scatter/gather (the allocation is not limited to "DMA memory"
+and the buffer can be composed of several fragments).
 
 The threshold for triggering asynchronous write in fixed block mode
 is defined by ST_WRITE_THRESHOLD. This may be optimized for each
@@ -178,31 +182,43 @@ is smaller than the number of segments used in phases 1 and 2,
 extending the buffer will always fail.
 
 
-BOOT TIME CONFIGURATION
-
-The buffer size, write threshold, and the maximum number of allocated buffers
-are configurable at boot time using, e.g., the LILO command line. The option
-syntax is the following:
-
-           st=aa[,bb[,cc]]
-
-where
-  aa is the buffer size in 1024 byte units
-  bb is the write threshold in 1024 byte units
-  cc is the maximum number of tape buffers to allocate (the number of
-        buffers is bounded also by the number of drives detected)
-
-
 MODULE PARAMETERS
 
-The same parameters can be also set when the driver is loaded as a
-module. The keywords are:
+The buffer size, write threshold, and the maximum number of allocated buffers
+are configurable when the driver is loaded as a module. The keywords are:
 
 buffer_kbs=xxx             the buffer size in kilobytes is set to xxx
 write_threshold_kbs=xxx    the write threshold in kilobytes set to xxx
 max_buffers=xxx            the maximum number of tape buffer set to xxx
 max_sg_segs=xxx		   the maximum number of scatter/gather
 			   segments
+
+Note that if the buffer size is changed but the write threshold is not
+set, the write threshold is set to the new buffer size - 2 kB.
+
+
+BOOT TIME CONFIGURATION
+
+If the driver is compiled into the kernel, the same parameters can be
+also set using, e.g., the LILO command line. The preferred syntax is
+to use the same keywords as when loading the driver as module. If
+several parameters are set, the keyword-value pairs are separated with
+a comma (no spaces allowed). A colon can be used instead of the equal
+mark. The definition is prepended by the string st=. Here is an
+example:
+
+	st=buffer_kbs:64,max_buffers:2
+
+The following syntax used by the old kernel versions is also supported:
+
+           st=aa[,bb[,cc[,dd]]]
+
+where
+  aa is the buffer size in 1024 byte units
+  bb is the write threshold in 1024 byte units
+  cc is the maximum number of tape buffers to allocate (the number of
+        buffers is bounded also by the number of drives detected)
+  dd is the maximum number of scatter/gather segments
 
 
 IOCTLS

@@ -179,7 +179,7 @@ static volatile u_char xd_error;
 static int nodma = XD_DONT_USE_DMA;
 
 /* xd_init: register the block device number and set up pointer tables */
-__initfunc(int xd_init (void))
+int __init xd_init (void)
 {
 	if (register_blkdev(MAJOR_NR,"xd",&xd_fops)) {
 		printk("xd: Unable to get major number %d\n",MAJOR_NR);
@@ -194,7 +194,7 @@ __initfunc(int xd_init (void))
 }
 
 /* xd_detect: scan the possible BIOS ROM locations for the signature strings */
-__initfunc(static u_char xd_detect (u_char *controller, unsigned int *address))
+static __init u_char xd_detect (u_char *controller, unsigned int *address)
 {
 	u_char i,j,found = 0;
 
@@ -218,7 +218,7 @@ __initfunc(static u_char xd_detect (u_char *controller, unsigned int *address))
 
 /* xd_geninit: grab the IRQ and DMA channel, initialise the drives */
 /* and set up the "raw" device entries in the table */
-__initfunc(static void xd_geninit (struct gendisk *ignored))
+static void __init xd_geninit (struct gendisk *ignored)
 {
 	u_char i,controller;
 	unsigned int address;
@@ -686,7 +686,7 @@ static u_int xd_command (u_char *command,u_char mode,u_char *indata,u_char *outd
 	return (csb & CSB_ERROR);
 }
 
-__initfunc(static u_char xd_initdrives (void (*init_drive)(u_char drive)))
+static u_char __init xd_initdrives (void (*init_drive)(u_char drive))
 {
 	u_char cmdblk[6],i,count = 0;
 
@@ -708,14 +708,14 @@ __initfunc(static u_char xd_initdrives (void (*init_drive)(u_char drive)))
 	return (count);
 }
 
-__initfunc(static void xd_manual_geo_set (u_char drive))
+static void __init xd_manual_geo_set (u_char drive)
 {
 	xd_info[drive].heads = (u_char)(xd_geo[3 * drive + 1]);
 	xd_info[drive].cylinders = (u_short)(xd_geo[3 * drive]);
 	xd_info[drive].sectors = (u_char)(xd_geo[3 * drive + 2]);
 }
 
-__initfunc(static void xd_dtc_init_controller (unsigned int address))
+static void __init xd_dtc_init_controller (unsigned int address)
 {
 	switch (address) {
 		case 0x00000:
@@ -732,7 +732,7 @@ __initfunc(static void xd_dtc_init_controller (unsigned int address))
 }
 
 
-__initfunc(static void xd_dtc5150cx_init_drive (u_char drive))
+static void __init xd_dtc5150cx_init_drive (u_char drive)
 {
 	/* values from controller's BIOS - BIOS chip may be removed */
 	static u_short geometry_table[][4] = {
@@ -779,7 +779,7 @@ __initfunc(static void xd_dtc5150cx_init_drive (u_char drive))
 	xd_recalibrate(drive);
 }
 
-__initfunc(static void xd_dtc_init_drive (u_char drive))
+static void __init xd_dtc_init_drive (u_char drive)
 {
 	u_char cmdblk[6],buf[64];
 
@@ -806,7 +806,7 @@ __initfunc(static void xd_dtc_init_drive (u_char drive))
 		printk("xd_dtc_init_drive: error reading geometry for xd%c\n", 'a'+drive);
 }
 
-__initfunc(static void xd_wd_init_controller (unsigned int address))
+static void __init xd_wd_init_controller (unsigned int address)
 {
 	switch (address) {
 		case 0x00000:
@@ -828,7 +828,7 @@ __initfunc(static void xd_wd_init_controller (unsigned int address))
 	sleep_on(&xdc_wait);
 }
 
-__initfunc(static void xd_wd_init_drive (u_char drive))
+static void __init xd_wd_init_drive (u_char drive)
 {
 	/* values from controller's BIOS - BIOS may be disabled */
 	static u_short geometry_table[][4] = {
@@ -912,7 +912,7 @@ __initfunc(static void xd_wd_init_drive (u_char drive))
 
 }
 
-__initfunc(static void xd_seagate_init_controller (unsigned int address))
+static void __init xd_seagate_init_controller (unsigned int address)
 {
 	switch (address) {
 		case 0x00000:
@@ -928,7 +928,7 @@ __initfunc(static void xd_seagate_init_controller (unsigned int address))
 	outb(0,XD_RESET);		/* reset the controller */
 }
 
-__initfunc(static void xd_seagate_init_drive (u_char drive))
+static void __init xd_seagate_init_drive (u_char drive)
 {
 	u_char cmdblk[6],buf[0x200];
 
@@ -944,7 +944,7 @@ __initfunc(static void xd_seagate_init_drive (u_char drive))
 }
 
 /* Omti support courtesy Dirk Melchers */
-__initfunc(static void xd_omti_init_controller (unsigned int address))
+static void __init xd_omti_init_controller (unsigned int address)
 {
 	switch (address) {
 		case 0x00000:
@@ -961,7 +961,7 @@ __initfunc(static void xd_omti_init_controller (unsigned int address))
 	outb(0,XD_RESET);		/* reset the controller */
 }
 
-__initfunc(static void xd_omti_init_drive (u_char drive))
+static void __init xd_omti_init_drive (u_char drive)
 {
 	/* gets infos from drive */
 	xd_override_init_drive(drive);
@@ -971,7 +971,7 @@ __initfunc(static void xd_omti_init_drive (u_char drive))
 }
 
 /* Xebec support (AK) */
-__initfunc(static void xd_xebec_init_controller (unsigned int address))
+static void __init xd_xebec_init_controller (unsigned int address)
 {
 /* iobase may be set manually in range 0x300 - 0x33C
       irq may be set manually to 2(9),3,4,5,6,7
@@ -1004,7 +1004,7 @@ If you need non-standard settings use the xd=... command */
 	sleep_on(&xdc_wait);
 }
 
-__initfunc(static void xd_xebec_init_drive (u_char drive))
+static void __init xd_xebec_init_drive (u_char drive)
 {
 	/* values from controller's BIOS - BIOS chip may be removed */
 	static u_short geometry_table[][5] = {
@@ -1047,7 +1047,7 @@ __initfunc(static void xd_xebec_init_drive (u_char drive))
 
 /* xd_override_init_drive: this finds disk geometry in a "binary search" style, narrowing in on the "correct" number of heads
    etc. by trying values until it gets the highest successful value. Idea courtesy Salvador Abreu (spa@fct.unl.pt). */
-__initfunc(static void xd_override_init_drive (u_char drive))
+static void __init xd_override_init_drive (u_char drive)
 {
 	u_short min[] = { 0,0,0 },max[] = { 16,1024,64 },test[] = { 0,0,0 };
 	u_char cmdblk[6],i;
@@ -1074,7 +1074,7 @@ __initfunc(static void xd_override_init_drive (u_char drive))
 }
 
 /* xd_setup: initialise controler from command line parameters */
-__initfunc(void xd_setup (char *command,int *integers))
+void __init xd_setup (char *command,int *integers)
 {
 	switch (integers[0]) {
 		case 4: if (integers[4] < 0)
@@ -1097,7 +1097,7 @@ __initfunc(void xd_setup (char *command,int *integers))
 #ifndef MODULE
 /* xd_manual_geo_init: initialise drive geometry from command line parameters
    (used only for WD drives) */
-__initfunc(void xd_manual_geo_init (char *command,int *integers))
+void __init xd_manual_geo_init (char *command,int *integers)
 {
 	int i;
 	if (integers[0]%3 != 0) {
@@ -1110,7 +1110,7 @@ __initfunc(void xd_manual_geo_init (char *command,int *integers))
 #endif /* MODULE */
 
 /* xd_setparam: set the drive characteristics */
-__initfunc(static void xd_setparam (u_char command,u_char drive,u_char heads,u_short cylinders,u_short rwrite,u_short wprecomp,u_char ecc))
+static void __init xd_setparam (u_char command,u_char drive,u_char heads,u_short cylinders,u_short rwrite,u_short wprecomp,u_char ecc)
 {
 	u_char cmdblk[14];
 

@@ -439,7 +439,7 @@ inquiry (target, buffer)
 	unsigned char *buffer;
 {
 	int ret = -1;
-	unsigned char *vbuffer = (unsigned char *)PTOV(buffer);
+	unsigned char *vbuffer = phys_to_virt((unsigned long)buffer);
 	unsigned char cmd_buffer[5];
 
 	if (send_first(target, INQUIRY))
@@ -487,7 +487,7 @@ static HADDR
 	    !acsi_wait_for_IRQ(TIMEOUTDMA) ||
 	    get_status())
 		goto bad;
-	ret = (HADDR *)PTOV(&(((DMAHWADDR *)buffer)->hwaddr));
+	ret = phys_to_virt(&(((DMAHWADDR *)buffer)->hwaddr));
 	dma_cache_maintenance((unsigned long)buffer, 512, 0);
 bad:
 	return (ret);
@@ -707,7 +707,7 @@ pamsnet_send_packet(struct sk_buff *skb, struct device *dev) {
 	}
 	else {
 		int length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		unsigned long buf = VTOP(skb->data);
+		unsigned long buf = virt_to_phys(skb->data);
 		int stat;
 
 		stdma_lock(pamsnet_intr, NULL);

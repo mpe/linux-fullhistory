@@ -1018,7 +1018,7 @@ static void cyber2000fb_blank(int blank, struct fb_info *fb_info)
 	}
 }
 
-__initfunc(void cyber2000fb_setup(char *options, int *ints))
+void __init cyber2000fb_setup(char *options, int *ints)
 {
 }
 
@@ -1035,8 +1035,8 @@ static struct fb_ops cyber2000fb_ops =
 	cyber2000fb_ioctl
 };
 
-__initfunc(static void
-cyber2000fb_init_fbinfo(void))
+static void __init 
+cyber2000fb_init_fbinfo(void)
 {
 	static int first = 1;
 
@@ -1138,7 +1138,7 @@ cyber2000fb_init_fbinfo(void))
 /*
  *    Initialization
  */
-__initfunc(void cyber2000fb_init(void))
+void __init cyber2000fb_init(void)
 {
 	struct pci_dev *dev;
 	u_int h_sync, v_sync;

@@ -525,7 +525,7 @@ static struct chips_init_reg chips_init_xr[] = {
 	{ 0xa8, 0x00 }
 };
 
-__initfunc(static void chips_hw_init(struct fb_info_chips *p))
+static void __init chips_hw_init(struct fb_info_chips *p)
 {
 	int i;
 
@@ -544,7 +544,7 @@ __initfunc(static void chips_hw_init(struct fb_info_chips *p))
 		write_fr(chips_init_fr[i].addr, chips_init_fr[i].data);
 }
 
-__initfunc(static void init_chips(struct fb_info_chips *p))
+static void __init init_chips(struct fb_info_chips *p)
 {
 	int i;
 
@@ -645,7 +645,7 @@ __initfunc(static void init_chips(struct fb_info_chips *p))
 	all_chips = p;
 }
 
-__initfunc(void chips_init(void))
+void __init chips_init(void)
 {
 #ifndef CONFIG_FB_OF
 	struct device_node *dp;
@@ -656,7 +656,7 @@ __initfunc(void chips_init(void))
 #endif /* CONFIG_FB_OF */
 }
 
-__initfunc(void chips_of_init(struct device_node *dp))
+void __init chips_of_init(struct device_node *dp)
 {
 	struct fb_info_chips *p;
 	unsigned long addr;

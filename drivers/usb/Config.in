@@ -30,11 +30,13 @@ if [ ! "$CONFIG_USB" = "n" ]; then
   dep_tristate 'USB audio parsing support' CONFIG_USB_AUDIO $CONFIG_USB
   dep_tristate 'USB Communications Device Class (ACM) support' CONFIG_USB_ACM $CONFIG_USB
   dep_tristate 'USB Printer support' CONFIG_USB_PRINTER $CONFIG_USB
+  dep_tristate 'USB CPiA Camera support' CONFIG_USB_CPIA $CONFIG_USB
   dep_tristate 'USB SCSI Support' CONFIG_USB_SCSI $CONFIG_USB
   if [ "$CONFIG_USB_SCSI" != "n" ]; then
 	  dep_tristate '  USB SCSI verbose debug' CONFIG_USB_SCSI_DEBUG $CONFIG_USB_SCSI
   fi
   dep_tristate 'EZUSB Firmware downloader' CONFIG_USB_EZUSB $CONFIG_USB
+  dep_tristate 'USS720 parport driver' CONFIG_USB_USS720 $CONFIG_USB $CONFIG_PARPORT
   if [ "$CONFIG_PROC_FS" != "n" ]; then
   	bool 'Preliminary /proc/bus/usb support' CONFIG_USB_PROC
   fi

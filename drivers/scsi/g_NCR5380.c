@@ -158,7 +158,7 @@ static struct override {
  *
  */
 
-__initfunc(static void internal_setup(int board, char *str, int *ints)) {
+static void __init internal_setup(int board, char *str, int *ints){
     static int commandline_current = 0;
     switch (board) {
     case BOARD_NCR5380:
@@ -204,7 +204,7 @@ __initfunc(static void internal_setup(int board, char *str, int *ints)) {
  * 	equal to the number of ints.
  */
 
-__initfunc(void generic_NCR5380_setup (char *str, int *ints)) {
+void __init generic_NCR5380_setup (char *str, int *ints){
     internal_setup (BOARD_NCR5380, str, ints);
 }
 
@@ -217,7 +217,7 @@ __initfunc(void generic_NCR5380_setup (char *str, int *ints)) {
  * 	equal to the number of ints.
  */
 
-__initfunc(void generic_NCR53C400_setup (char *str, int *ints)) {
+void __init generic_NCR53C400_setup (char *str, int *ints){
     internal_setup (BOARD_NCR53C400, str, ints);
 }
 
@@ -259,7 +259,7 @@ void generic_DTC3181E_setup (char *str, int *ints) {
  *
  */
 
-__initfunc(int generic_NCR5380_detect(Scsi_Host_Template * tpnt)) {
+int __init generic_NCR5380_detect(Scsi_Host_Template * tpnt){
     static int current_override = 0;
     int count, i;
     u_int *ports;

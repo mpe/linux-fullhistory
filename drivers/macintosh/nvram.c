@@ -108,7 +108,7 @@ static struct miscdevice nvram_dev = {
 	&nvram_fops
 };
 
-__initfunc(int nvram_init(void))
+int nvram_init(void)
 {
 	printk(KERN_INFO "Macintosh non-volatile memory driver v%s\n",
 		NVRAM_VERSION);

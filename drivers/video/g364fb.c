@@ -297,7 +297,7 @@ static int g364fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 /*
  *  Initialisation
  */
-__initfunc(void g364fb_init(void))
+void __init g364fb_init(void)
 {
     int i,j;
     volatile unsigned int *pal_ptr = (volatile unsigned int *) CLR_PAL_REG;

@@ -115,12 +115,12 @@ void show_status(struct uhci *uhci)
 
 #define uhci_link_to_qh(x) ((struct uhci_qh *) uhci_link_to_td(x))
 
-struct uhci_td * uhci_link_to_td(unsigned int link)
+struct uhci_td *uhci_link_to_td(unsigned int link)
 {
-	if (link & 1)
+	if (link & UHCI_PTR_TERM)
 		return NULL;
 
-	return bus_to_virt(link & ~15);
+	return bus_to_virt(link & ~UHCI_PTR_BITS);
 }
 
 void show_queue(struct uhci_qh *qh)
@@ -128,18 +128,24 @@ void show_queue(struct uhci_qh *qh)
 	struct uhci_td *td;
 	int i = 0;
 
-#if 0
-	printk("    link = %p, element = %p\n", qh->link, qh->element);
-#endif
-	if(!(qh->element & ~0xF)) {
-		printk("    td 0 = NULL\n");
+	if (qh->element & UHCI_PTR_QH)
+		printk("      Element points to QH?\n");
+
+	if (qh->element & UHCI_PTR_DEPTH)
+		printk("      Depth traverse\n");
+
+	if (qh->element & UHCI_PTR_TERM)
+		printk("      Terminate\n");
+
+	if (!(qh->element & ~UHCI_PTR_BITS)) {
+		printk("      td 0 = NULL\n");
 		return;
 	}
 
 	for(td = uhci_link_to_td(qh->element); td; 
 	    td = uhci_link_to_td(td->link)) {
-		printk("    td %d = %p\n", i++, td);
-		printk("    ");
+		printk("      td %d = %p\n", i++, td);
+		printk("      ");
 		show_td(td);
 	}
 }
@@ -147,39 +153,39 @@ void show_queue(struct uhci_qh *qh)
 int is_skeleton_qh(struct uhci *uhci, struct uhci_qh *qh)
 {
 	int j;
-	struct uhci_device * root_hub=usb_to_uhci(uhci->bus->root_hub);
-	for (j = 0; j < UHCI_MAXQH; j++)
-		if (qh == root_hub->qh + j)
+
+	for (j = 0; j < UHCI_NUM_SKELQH; j++)
+		if (qh == uhci->skelqh + j)
 			return 1;
 
 	return 0;
 }
 
-static const char *qh_names[] = {"isochronous", "interrupt2", "interrupt4",
-				 "interrupt8", "interrupt16", "interrupt32",
-				 "interrupt64", "interrupt128", "interrupt256",
-				 "control", "bulk0", "bulk1", "bulk2", "bulk3",
-				 "unused", "unused"};
+static const char *qh_names[] = {"interrupt2", "interrupt4", "interrupt8",
+				 "interrupt16", "interrupt32", "interrupt64",
+				 "interrupt128", "interrupt256", "control",
+				 "bulk"};
 
 void show_queues(struct uhci *uhci)
 {
 	int i;
 	struct uhci_qh *qh;
-	struct uhci_device * root_hub=usb_to_uhci(uhci->bus->root_hub);
 
-	for (i = 0; i < UHCI_MAXQH; ++i) {
-		printk("  %s:\n", qh_names[i]);
-#if 0
-		printk("  qh #%d, %p\n", i, virt_to_bus(root_hub->qh + i));
-		show_queue(uhci->root_hub->qh + i);
-#endif
+	for (i = 0; i < UHCI_NUM_SKELQH; ++i) {
+		printk("  %s: [%p] (%08X) (%08X)\n", qh_names[i],
+			&uhci->skelqh[i],
+			uhci->skelqh[i].link, uhci->skelqh[i].element);
 
-		qh = uhci_link_to_qh(root_hub->qh[i].link);
+		qh = uhci_link_to_qh(uhci->skelqh[i].link);
 		for (; qh; qh = uhci_link_to_qh(qh->link)) {
 			if (is_skeleton_qh(uhci, qh))
 				break;
+
+			printk("    [%p] (%08X) (%08x)\n",
+				qh, qh->link, qh->element);
 
 			show_queue(qh);
 		}
 	}
 }
+

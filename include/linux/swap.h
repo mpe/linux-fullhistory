@@ -100,6 +100,8 @@ struct page * lookup_swap_cache(unsigned long);
 extern struct page * read_swap_cache_async(unsigned long, int);
 #define read_swap_cache(entry) read_swap_cache_async(entry, 1);
 extern int FASTCALL(swap_count(unsigned long));
+extern unsigned long acquire_swap_entry(struct page *page);
+
 /*
  * Make these inline later once they are working properly.
  */

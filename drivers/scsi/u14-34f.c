@@ -700,8 +700,8 @@ static int board_inquiry(unsigned int j) {
    return FALSE;
 }
 
-__initfunc (static inline int port_detect \
-      (unsigned long port_base, unsigned int j, Scsi_Host_Template *tpnt)) {
+static inline int __init port_detect \
+      (unsigned long port_base, unsigned int j, Scsi_Host_Template *tpnt) {
    unsigned char irq, dma_channel, subversion, i;
    unsigned char in_byte;
    char *bus_type, dma_name[16];
@@ -914,7 +914,8 @@ __initfunc (static inline int port_detect \
    return TRUE;
 }
 
-__initfunc (void u14_34f_setup(char *str, int *ints)) {
+void __init u14_34f_setup(char *str, int *ints)
+{
    int i, argc = ints[0];
    char *cur = str, *pc;
 
@@ -948,7 +949,8 @@ __initfunc (void u14_34f_setup(char *str, int *ints)) {
    return;
 }
 
-__initfunc (int u14_34f_detect(Scsi_Host_Template *tpnt)) {
+int __init u14_34f_detect(Scsi_Host_Template *tpnt)
+{
    unsigned int j = 0, k;
    IRQ_FLAGS
 

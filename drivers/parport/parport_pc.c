@@ -10,7 +10,6 @@
  *
  * Cleaned up include files - Russell King <linux@arm.uk.linux.org>
  * DMA support - Bert De Jonghe <bert@sophis.be>
- * Better EPP probing - Carlos Henrique Bauer <chbauer@acm.org>
  */
 
 /* This driver should work with any hardware that is broadly compatible
@@ -34,6 +33,9 @@
  * only in register addresses (eg because your registers are on 32-bit
  * word boundaries) then you can alter the constants in parport_pc.h to
  * accomodate this.
+ *
+ * Note that the ECP registers may not start at offset 0x400 for PCI cards,
+ * but rather will start at port->base_hi.
  */
 
 #include <linux/config.h>
@@ -74,7 +76,7 @@ static void frob_econtrol (struct parport *pb, unsigned char m,
 	outb ((inb (ECONTROL (pb)) & ~m) ^ v, ECONTROL (pb));
 }
 
-#ifdef CONFIG_PARPORT_1284
+#if defined(CONFIG_PARPORT_1284) || defined(CONFIG_PARPORT_PC_FIFO)
 /* Safely change the mode bits in the ECR */
 static int change_mode(struct parport *p, int m)
 {
@@ -179,7 +181,7 @@ static int get_fifo_residue (struct parport *p)
 	return residue;
 }
 
-#endif /* IEEE 1284 support */
+#endif /* IEEE 1284 support or FIFO support */
 
 /*
  * Clear TIMEOUT BIT in EPP MODE
@@ -1594,21 +1596,22 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 	}
 	if (p->dma == PARPORT_DMA_AUTO)		
 		p->dma = PARPORT_DMA_NONE;
-	if (p->dma != PARPORT_DMA_NONE) 
-		printk(", dma %d", p->dma);
 
 #ifdef CONFIG_PARPORT_PC_FIFO
 	if (priv->fifo_depth > 0 && p->irq != PARPORT_IRQ_NONE) {
-		p->ops->compat_write_data =
-			parport_pc_compat_write_block_pio;
+		p->ops->compat_write_data = parport_pc_compat_write_block_pio;
 #ifdef CONFIG_PARPORT_1284
-		p->ops->ecp_write_data =
-			parport_pc_ecp_write_block_pio;
+		p->ops->ecp_write_data = parport_pc_ecp_write_block_pio;
 #endif /* IEEE 1284 support */
-		if (p->dma != PARPORT_DMA_NONE)
+		if (p->dma != PARPORT_DMA_NONE) {
+			printk(", dma %d", p->dma);
 			p->modes |= PARPORT_MODE_DMA;
-		printk(", using FIFO");
+		}
+		else printk(", using FIFO");
 	}
+	else
+		/* We can't use the DMA channel after all. */
+		p->dma = PARPORT_DMA_NONE;
 #endif /* Allowed to use FIFO/DMA */
 
 	printk(" [");

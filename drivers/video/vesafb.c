@@ -96,8 +96,7 @@ static int             mtrr      = 0;
 static int             currcon   = 0;
 
 static int             pmi_setpal = 0;	/* pmi for palette changes ??? */
-static int             ypan       = 0;
-static int             ywrap      = 0;
+static int             ypan       = 0;  /* 0..nothing, 1..ypan, 2..ywrap */
 static unsigned short  *pmi_base  = 0;
 static void            (*pmi_start)(void);
 static void            (*pmi_pal)(void);
@@ -130,13 +129,13 @@ static int vesafb_pan_display(struct fb_var_screeninfo *var, int con,
 {
 	int offset;
 
-	if (!ypan && !ywrap)
+	if (!ypan)
 		return -EINVAL;
 	if (var->xoffset)
 		return -EINVAL;
-	if (ypan && var->yoffset+var->yres > var->yres_virtual)
+	if (var->yoffset > var->yres_virtual)
 		return -EINVAL;
-	if (ywrap && var->yoffset > var->yres_virtual)
+	if ((ypan==1) && var->yoffset+var->yres > var->yres_virtual)
 		return -EINVAL;
 
 	offset = (var->yoffset * video_linelength + var->xoffset) / 4;
@@ -154,7 +153,7 @@ static int vesafb_pan_display(struct fb_var_screeninfo *var, int con,
 
 static int vesafb_update_var(int con, struct fb_info *info)
 {
-	if (con == currcon && (ywrap || ypan)) {
+	if (con == currcon && ypan) {
 		struct fb_var_screeninfo *var = &fb_display[currcon].var;
 		return vesafb_pan_display(var,con,info);
 	}
@@ -172,8 +171,8 @@ static int vesafb_get_fix(struct fb_fix_screeninfo *fix, int con,
 	fix->type = video_type;
 	fix->visual = video_visual;
 	fix->xpanstep  = 0;
-	fix->ypanstep  = (ywrap || ypan)  ? 1 : 0;
-	fix->ywrapstep =  ywrap           ? 1 : 0;
+	fix->ypanstep  = ypan     ? 1 : 0;
+	fix->ywrapstep = (ypan>1) ? 1 : 0;
 	fix->line_length=video_linelength;
 	return 0;
 }
@@ -245,7 +244,7 @@ static void vesafb_set_disp(int con)
 	}
 	memcpy(&vesafb_sw, sw, sizeof(*sw));
 	display->dispsw = &vesafb_sw;
-	if (!ypan && !ywrap) {
+	if (!ypan) {
 		display->scrollmode = SCROLL_YREDRAW;
 		vesafb_sw.bmove = fbcon_redraw_bmove;
 	}
@@ -274,7 +273,7 @@ static int vesafb_set_var(struct fb_var_screeninfo *var, int con,
 	if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_TEST)
 		return 0;
 
-	if (ypan || ywrap) {
+	if (ypan) {
 		if (vesafb_defined.yres_virtual != var->yres_virtual) {
 			vesafb_defined.yres_virtual = var->yres_virtual;
 			if (con != -1) {
@@ -486,11 +485,11 @@ void vesafb_setup(char *options, int *ints)
 		if (! strcmp(this_opt, "inverse"))
 			inverse=1;
 		else if (! strcmp(this_opt, "redraw"))
-			ywrap=0,ypan=0;
+			ypan=0;
 		else if (! strcmp(this_opt, "ypan"))
-			ywrap=0,ypan=1;
+			ypan=1;
 		else if (! strcmp(this_opt, "ywrap"))
-			ywrap=1,ypan=0;
+			ypan=2;
 		else if (! strcmp(this_opt, "vgapal"))
 			pmi_setpal=0;
 		else if (! strcmp(this_opt, "pmipal"))
@@ -523,7 +522,7 @@ static void vesafb_blank(int blank, struct fb_info *info)
 	/* Not supported */
 }
 
-__initfunc(void vesafb_init(void))
+void __init vesafb_init(void)
 {
 	int i,j;
 
@@ -551,9 +550,9 @@ __initfunc(void vesafb_init(void))
 	}
 
 	if (screen_info.vesapm_seg < 0xc000)
-		ywrap = ypan = pmi_setpal = 0; /* not available or some DOS TSR ... */
+		ypan = pmi_setpal = 0; /* not available or some DOS TSR ... */
 
-	if (ypan || ywrap || pmi_setpal) {
+	if (ypan || pmi_setpal) {
 		pmi_base  = (unsigned short*)(__PAGE_OFFSET+((unsigned long)screen_info.vesapm_seg << 4) + screen_info.vesapm_off);
 		pmi_start = (void*)((char*)pmi_base + pmi_base[1]);
 		pmi_pal   = (void*)((char*)pmi_base + pmi_base[2]);
@@ -571,7 +570,7 @@ __initfunc(void vesafb_init(void))
 				 * memory area and pass it in the ES register to the BIOS function.
 				 */
 				printk("vesafb: can't handle memory requests, pmi disabled\n");
-				ywrap = ypan = pmi_setpal = 0;
+				ypan = pmi_setpal = 0;
 			}
 		}
 	}
@@ -582,13 +581,13 @@ __initfunc(void vesafb_init(void))
 	vesafb_defined.yres_virtual=video_size / video_linelength;
 	vesafb_defined.bits_per_pixel=video_bpp;
 
-	if ((ypan || ywrap) && vesafb_defined.yres_virtual > video_height) {
+	if (ypan && vesafb_defined.yres_virtual > video_height) {
 		printk("vesafb: scrolling: %s using protected mode interface, yres_virtual=%d\n",
-		       ywrap ? "ywrap" : "ypan",vesafb_defined.yres_virtual);
+		       (ypan > 1) ? "ywrap" : "ypan",vesafb_defined.yres_virtual);
 	} else {
 		printk("vesafb: scrolling: redraw\n");
 		vesafb_defined.yres_virtual = video_height;
-		ypan = ywrap = 0;
+		ypan = 0;
 	}
 	video_height_virtual = vesafb_defined.yres_virtual;
 

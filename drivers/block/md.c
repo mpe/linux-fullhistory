@@ -1174,7 +1174,7 @@ struct {
 };
 
 /* called from init/main.c */
-__initfunc(void md_setup(char *str,int *ints))
+void __init md_setup(char *str,int *ints)
 {
 	int i;
 	for(i=0;i<=ints[0];i++) {
@@ -1186,7 +1186,7 @@ __initfunc(void md_setup(char *str,int *ints))
 	return;
 }
 
-__initfunc(void do_md_setup(char *str,int *ints))
+void __init do_md_setup(char *str,int *ints)
 {
 	int minor, pers, factor, fault;
 	kdev_t dev;
@@ -1265,7 +1265,7 @@ void raid0_init (void);
 void raid1_init (void);
 void raid5_init (void);
 
-__initfunc(int md_init (void))
+int __init md_init (void)
 {
   printk ("md driver %d.%d.%d MAX_MD_DEV=%d, MAX_REAL=%d\n",
     MD_MAJOR_VERSION, MD_MINOR_VERSION, MD_PATCHLEVEL_VERSION,
@@ -1306,7 +1306,7 @@ __initfunc(int md_init (void))
 }
 
 #ifdef CONFIG_MD_BOOT
-__initfunc(void md_setup_drive(void))
+void __init md_setup_drive(void)
 {
 	if(md_setup_args.set)
 		do_md_setup(md_setup_args.str, md_setup_args.ints);

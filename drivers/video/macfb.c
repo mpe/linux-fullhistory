@@ -512,7 +512,7 @@ static struct nubus_device_specifier nb_video={
 	NULL
 };
 
-__initfunc(void macfb_init(void))
+void __init macfb_init(void)
 {
 	/* nubus_remap the video .. */
 

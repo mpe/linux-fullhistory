@@ -741,7 +741,7 @@ static void pm2fb_reset(struct pm2fb_info* p) {
 		set_memclock(p, p->memclock);
 }
 
-__initfunc(static int pm2fb_conf(struct pm2fb_info* p)) {
+static int __init pm2fb_conf(struct pm2fb_info* p){
 
 	for (p->board=0; board_table[p->board].detect &&
 			!(board_table[p->board].detect(p)); p->board++);
@@ -1526,14 +1526,14 @@ static int pm2fb_setcolreg(unsigned regno,
 }
 
 static void pm2fb_set_disp(const void* par, struct display* disp,
-						struct fb_info_gen* info) {
+						   struct fb_info_gen* info) {
 	struct pm2fb_info* i=(struct pm2fb_info* )info;
-	u32 flags;
-	u32 depth;
+	unsigned long flags;
+	unsigned long depth;
 
 	save_flags(flags);
 	cli();
-	disp->screen_base=i->regions.v_fb;
+	disp->screen_base = i->regions.v_fb;
 	switch (depth=((struct pm2fb_par* )par)->depth) {
 #ifdef FBCON_HAS_CFB8
 		case 8:
@@ -1591,7 +1591,7 @@ void pm2fb_cleanup(struct fb_info* info) {
 		board_table[i->board].cleanup(i);
 }
 
-__initfunc(void pm2fb_init(void)) {
+void __init pm2fb_init(void){
 
 	memset(&fb_info, 0, sizeof(fb_info));
 	if (!pm2fb_conf(&fb_info))
@@ -1624,7 +1624,7 @@ __initfunc(void pm2fb_init(void)) {
 	MOD_INC_USE_COUNT;
 }
 
-__initfunc(void pm2fb_mode_setup(char* options)) {
+void __init pm2fb_mode_setup(char* options){
 	int i;
 
 	for (i=0; user_mode[i].name[0] &&
@@ -1634,13 +1634,13 @@ __initfunc(void pm2fb_mode_setup(char* options)) {
 					sizeof(pm2fb_options.user_mode));
 }
 
-__initfunc(void pm2fb_font_setup(char* options)) {
+void __init pm2fb_font_setup(char* options){
 
 	strncpy(pm2fb_options.font, options, sizeof(pm2fb_options.font));
 	pm2fb_options.font[sizeof(pm2fb_options.font)-1]='\0';
 }
 
-__initfunc(void pm2fb_setup(char* options, int* ints)) {
+void __init pm2fb_setup(char* options, int* ints){
 	char* next;
 
 	while (options) {

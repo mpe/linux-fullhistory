@@ -126,15 +126,17 @@ void swap_free(unsigned long entry)
 	offset = SWP_OFFSET(entry);
 	if (offset >= p->max)
 		goto bad_offset;
-	if (offset < p->lowest_bit)
-		p->lowest_bit = offset;
-	if (offset > p->highest_bit)
-		p->highest_bit = offset;
 	if (!p->swap_map[offset])
 		goto bad_free;
 	if (p->swap_map[offset] < SWAP_MAP_MAX) {
 		if (!--p->swap_map[offset])
+		{
+			if (offset < p->lowest_bit)
+				p->lowest_bit = offset;
+			if (offset > p->highest_bit)
+				p->highest_bit = offset;
 			nr_swap_pages++;
+		}
 	}
 #ifdef DEBUG_SWAP
 	printk("DebugVM: swap_free(entry %08lx, count now %d)\n",
@@ -155,6 +157,44 @@ bad_offset:
 bad_free:
 	printk("swap_free: swap-space map bad (entry %08lx)\n",entry);
 	goto out;
+}
+
+/* needs the big kernel lock */
+unsigned long acquire_swap_entry(struct page *page)
+{
+	struct swap_info_struct * p;
+	unsigned long offset, type;
+	unsigned long entry;
+
+	if (!test_bit(PG_swap_entry, &page->flags))
+		goto new_swap_entry;
+
+	/* We have the old entry in the page offset still */
+	entry = page->offset;
+	if (!entry)
+		goto new_swap_entry;
+	type = SWP_TYPE(entry);
+	if (type & SHM_SWP_TYPE)
+		goto new_swap_entry;
+	if (type >= nr_swapfiles)
+		goto new_swap_entry;
+	p = type + swap_info;
+	if ((p->flags & SWP_WRITEOK) != SWP_WRITEOK)
+		goto new_swap_entry;
+	offset = SWP_OFFSET(entry);
+	if (offset >= p->max)
+		goto new_swap_entry;
+	/* Has it been re-used for something else? */
+	if (p->swap_map[offset])
+		goto new_swap_entry;
+
+	/* We're cool, we can just use the old one */
+	p->swap_map[offset] = 1;
+	nr_swap_pages--;
+	return entry;
+
+new_swap_entry:
+	return get_swap_page();
 }
 
 /*
@@ -495,7 +535,6 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	static int least_priority = 0;
 	union swap_header *swap_header = 0;
 	int swap_header_version;
-	int lock_map_size = PAGE_SIZE;
 	int nr_good_pages = 0;
 	unsigned long maxpages;
 	int swapfilesize;
@@ -664,7 +703,6 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		nr_good_pages = swap_header->info.last_page -
 				swap_header->info.nr_badpages -
 				1 /* header page */;
-		lock_map_size = (p->max + 7) / 8;
 		if (error) 
 			goto bad_swap;
 	}

@@ -219,3 +219,7 @@ EXPORT_SYMBOL_NOVERS(memcmp);
 
 EXPORT_SYMBOL(abs);
 EXPORT_SYMBOL(device_is_compatible);
+
+#ifdef CONFIG_VT
+EXPORT_SYMBOL(screen_info);
+#endif

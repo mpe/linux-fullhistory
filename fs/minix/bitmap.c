@@ -16,6 +16,8 @@
 #include <linux/stat.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/locks.h>
+#include <linux/quotaops.h>
 
 #include <asm/bitops.h>
 
@@ -51,8 +53,9 @@ static unsigned long count_free(struct buffer_head *map[], unsigned numblocks, _
 	return(sum);
 }
 
-void minix_free_block(struct super_block * sb, int block)
+void minix_free_block(struct inode * inode, int block)
 {
+	struct super_block * sb = inode->i_sb;
 	struct buffer_head * bh;
 	unsigned int bit,zone;
 
@@ -80,12 +83,15 @@ void minix_free_block(struct super_block * sb, int block)
 	if (!minix_clear_bit(bit,bh->b_data))
 		printk("free_block (%s:%d): bit already cleared\n",
 		       kdevname(sb->s_dev), block);
+	else
+		DQUOT_FREE_BLOCK(sb, inode, 1);
 	mark_buffer_dirty(bh, 1);
 	return;
 }
 
-int minix_new_block(struct super_block * sb)
+int minix_new_block(struct inode * inode)
 {
+	struct super_block * sb = inode->i_sb;
 	struct buffer_head * bh;
 	int i,j;
 
@@ -94,6 +100,9 @@ int minix_new_block(struct super_block * sb)
 		return 0;
 	}
 repeat:
+	if(DQUOT_ALLOC_BLOCK(sb, inode, 1))
+		return -EDQUOT;
+
 	j = 8192;
 	bh = NULL;
 	for (i = 0; i < sb->u.minix_sb.s_zmap_blocks; i++) {
@@ -105,6 +114,7 @@ repeat:
 		return 0;
 	if (minix_set_bit(j,bh->b_data)) {
 		printk("new_block: bit already set");
+		DQUOT_FREE_BLOCK(sb, inode, 1);
 		goto repeat;
 	}
 	mark_buffer_dirty(bh, 1);
@@ -222,6 +232,10 @@ void minix_free_inode(struct inode * inode)
 		printk("free_inode: nonexistent imap in superblock\n");
 		return;
 	}
+
+	DQUOT_FREE_INODE(inode->i_sb, inode);
+	DQUOT_DROP(inode);
+
 	bh = inode->i_sb->u.minix_sb.s_imap[ino >> 13];
 	minix_clear_inode(inode);
 	clear_inode(inode);
@@ -230,7 +244,7 @@ void minix_free_inode(struct inode * inode)
 	mark_buffer_dirty(bh, 1);
 }
 
-struct inode * minix_new_inode(const struct inode * dir)
+struct inode * minix_new_inode(const struct inode * dir, int * error)
 {
 	struct super_block * sb;
 	struct inode * inode;
@@ -274,6 +288,20 @@ struct inode * minix_new_inode(const struct inode * dir)
 	inode->i_blocks = inode->i_blksize = 0;
 	insert_inode_hash(inode);
 	mark_inode_dirty(inode);
+
+	unlock_super(sb);
+printk("m_n_i: allocated inode ");
+	if(DQUOT_ALLOC_INODE(sb, inode)) {
+printk("fails quota test\n");
+		sb->dq_op->drop(inode);
+		inode->i_nlink = 0;
+		iput(inode);
+		*error = -EDQUOT;
+		return NULL;
+	}
+printk("is within quota\n");
+
+	*error = 0;
 	return inode;
 }
 

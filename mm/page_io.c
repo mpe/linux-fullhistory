@@ -99,44 +99,18 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 	} else if (p->swap_file) {
 		struct inode *swapf = p->swap_file->d_inode;
 		int i;
-		if (swapf->i_op->get_block == NULL
-			&& swapf->i_op->smap != NULL){
-			/*
-				With MS-DOS, we use msdos_smap which returns
-				a sector number (not a cluster or block number).
-				It is a patch to enable the UMSDOS project.
-				Other people are working on better solution.
+		int j;
+		unsigned int block = offset
+			<< (PAGE_SHIFT - swapf->i_sb->s_blocksize_bits);
 
-				It sounds like ll_rw_swap_file defined
-				its operation size (sector size) based on
-				PAGE_SIZE and the number of blocks to read.
-				So using get_block or smap should work even if
-				smap will require more blocks.
-			*/
-			int j;
-			unsigned int block = offset << 3;
-
-			for (i=0, j=0; j< PAGE_SIZE ; i++, j += 512){
-				if (!(zones[i] = swapf->i_op->smap(swapf,block++))) {
-					printk("rw_swap_page: bad swap file\n");
-					return;
-				}
+		block_size = swapf->i_sb->s_blocksize;
+		for (i=0, j=0; j< PAGE_SIZE ; i++, j += block_size)
+			if (!(zones[i] = bmap(swapf,block++))) {
+				printk("rw_swap_page: bad swap file\n");
+				return;
 			}
-			block_size = 512;
-		}else{
-			int j;
-			unsigned int block = offset
-				<< (PAGE_SHIFT - swapf->i_sb->s_blocksize_bits);
-
-			block_size = swapf->i_sb->s_blocksize;
-			for (i=0, j=0; j< PAGE_SIZE ; i++, j += block_size)
-				if (!(zones[i] = bmap(swapf,block++))) {
-					printk("rw_swap_page: bad swap file\n");
-					return;
-				}
-			zones_used = i;
-			dev = swapf->i_dev;
-		}
+		zones_used = i;
+		dev = swapf->i_dev;
 	} else {
 		printk(KERN_ERR "rw_swap_page: no swap file or device\n");
 		put_page(page);

@@ -13,6 +13,7 @@
 #include <linux/major.h>
 #include <linux/blkdev.h>
 #include <linux/raw.h>
+#include <linux/capability.h>
 #include <asm/uaccess.h>
 
 #define dprintk(x...) 
@@ -233,6 +234,15 @@ int raw_ctl_ioctl(struct inode *inode,
 		}
 
 		if (command == RAW_SETBIND) {
+			/*
+			 * This is like making block devices, so demand the
+			 * same capability
+			 */
+			if (!capable(CAP_SYS_ADMIN)) {
+				err = -EPERM;
+				break;
+			}
+
 			/* 
 			 * For now, we don't need to check that the underlying
 			 * block device is present or not: we can do that when

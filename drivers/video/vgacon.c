@@ -162,7 +162,7 @@ static inline void write_vga(unsigned char reg, unsigned int val)
 	restore_flags(flags);
 }
 
-__initfunc(static const char *vgacon_startup(void))
+static const char __init *vgacon_startup(void)
 {
 	const char *display_desc = NULL;
 	u16 saved1, saved2;

@@ -325,11 +325,11 @@ void kernel_set_cachemode( unsigned long address, unsigned long size,
 
 	switch (cmode)
 	{
-	case KERNELMAP_FULL_CACHING:
+	case IOMAP_FULL_CACHING:
 		mask = ~(_PAGE_NO_CACHE | _PAGE_GUARDED);
 		flags = 0;
 		break;
-	case KERNELMAP_NOCACHE_SER:
+	case IOMAP_NOCACHE_SER:
 		mask = ~0;
 		flags = (_PAGE_NO_CACHE | _PAGE_GUARDED);
 		break;

@@ -253,17 +253,8 @@ static int				CurrentNSect;
 static char				*CurrentBuffer;
 
 
-#define SET_TIMER()							\
-	do {								\
-		del_timer( &acsi_timer );				\
-		acsi_timer.expires = jiffies + ACSI_TIMEOUT;		\
-		add_timer( &acsi_timer );				\
-	} while(0)
-
-#define CLEAR_TIMER()							\
-	do {								\
-		del_timer( &acsi_timer );				\
-	} while(0)
+#define SET_TIMER()	mod_timer(&acsi_timer, jiffies + ACSI_TIMEOUT)
+#define CLEAR_TIMER()	del_timer(&acsi_timer)
 
 static unsigned long	STramMask;
 #define STRAM_ADDR(a)	(((a) & STramMask) == 0)
@@ -425,8 +416,8 @@ int acsi_wait_for_IRQ( unsigned timeout )
 
 {
 	if (INT_LEVEL < 6) {
-		unsigned long maxjif;
-		for( maxjif = jiffies + timeout; time_before(jiffies, maxjif); )
+		unsigned long maxjif = jiffies + timeout;
+		while (time_before(jiffies, maxjif))
 			if (!(mfp.par_dt_reg & 0x20)) return( 1 );
 	}
 	else {
@@ -442,8 +433,8 @@ int acsi_wait_for_noIRQ( unsigned timeout )
 
 {
 	if (INT_LEVEL < 6) {
-		unsigned long maxjif;
-		for( maxjif = jiffies + timeout; time_before(jiffies, maxjif); )
+		unsigned long maxjif = jiffies + timeout;
+		while (time_before(jiffies, maxjif))
 			if (mfp.par_dt_reg & 0x20) return( 1 );
 	}
 	else {
@@ -502,7 +493,7 @@ static int acsicmd_dma( const char *cmd, char *buffer, int blocks, int rwflag, i
 #endif
 	
 	rwflag = rwflag ? 0x100 : 0;
-	paddr = VTOP( buffer );
+	paddr = virt_to_phys( buffer );
 
 	acsi_delay_end(COMMAND_DELAY);
 	DISABLE_IRQ();
@@ -610,7 +601,7 @@ static int acsi_reqsense( char *buffer, int targ, int lun)
 	if (!acsicmd_nodma( reqsense_cmd, 0 )) return( 0 );
 	if (!acsi_wait_for_IRQ( 10 )) return( 0 );
 	acsi_getstatus();
-	dma_cache_maintenance( VTOP(buffer), 16, 0 );
+	dma_cache_maintenance( virt_to_phys(buffer), 16, 0 );
 	
 	return( 1 );
 }	
@@ -809,7 +800,7 @@ static void read_intr( void )
 		return;
 	}
 
-	dma_cache_maintenance( VTOP(CurrentBuffer), CurrentNSect*512, 0 );
+	dma_cache_maintenance( virt_to_phys(CurrentBuffer), CurrentNSect*512, 0 );
 	if (CurrentBuffer == acsi_buffer)
 		copy_from_acsibuffer();
 
@@ -1030,7 +1021,7 @@ static void redo_acsi_request( void )
 	 * consecutive buffers and thus can be done with a single command.
 	 */
 	buffer      = CURRENT->buffer;
-	pbuffer     = VTOP(buffer);
+	pbuffer     = virt_to_phys(buffer);
 	nsect       = CURRENT->current_nr_sectors;
 	CurrentNReq = 1;
 
@@ -1052,7 +1043,7 @@ static void redo_acsi_request( void )
 			unsigned long pendadr, pnewadr;
 			pendadr = pbuffer + nsect*512;
 			while( (bh = bh->b_reqnext) ) {
-				pnewadr = VTOP(bh->b_data);
+				pnewadr = virt_to_phys(bh->b_data);
 				if (!STRAM_ADDR(pnewadr) || pendadr != pnewadr) break;
 				nsect += bh->b_size >> 9;
 				pendadr = pnewadr + bh->b_size;
@@ -1814,7 +1805,7 @@ int acsi_init( void )
 		unregister_blkdev( MAJOR_NR, "ad" );
 		return -ENOMEM;
 	}
-	phys_acsi_buffer = VTOP( acsi_buffer );
+	phys_acsi_buffer = virt_to_phys( acsi_buffer );
 	STramMask = ATARIHW_PRESENT(EXTD_DMA) ? 0x00000000 : 0xff000000;
 	
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;

@@ -15,6 +15,18 @@
 
 #include <asm/segment.h>
 #include <asm/fpu.h>
+#include <asm/ptrace.h>
+
+extern inline unsigned long rdusp(void) {
+  	unsigned long usp;
+
+	__asm__ __volatile__("move %/usp,%0" : "=a" (usp));
+	return usp;
+}
+
+extern inline void wrusp(unsigned long usp) {
+	__asm__ __volatile__("move %0,%/usp" : : "a" (usp));
+}
 
 /*
  * User space process size: 3.75GB. This is hardcoded into a few places,
@@ -53,7 +65,7 @@ struct thread_struct {
 
 #define INIT_MMAP { &init_mm, 0, 0x40000000, NULL, __pgprot(_PAGE_PRESENT|_PAGE_ACCESSED), VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
 
-#define INIT_TSS  { \
+#define INIT_THREAD  { \
 	sizeof(init_stack) + (unsigned long) init_stack, 0, \
 	PS_S, __KERNEL_DS, \
 	{0, 0}, 0, {0,}, {0, 0, 0}, {0,}, \
@@ -73,6 +85,9 @@ static inline void start_thread(struct pt_regs * regs, unsigned long pc,
 	wrusp(usp);
 }
 
+/* Forward declaration, a strange C thing */
+struct task_struct;
+
 /* Free all resources held by a thread. */
 static inline void release_thread(struct task_struct *dead_task)
 {
@@ -80,7 +95,7 @@ static inline void release_thread(struct task_struct *dead_task)
 
 extern int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
 
-#define copy_segments(nr, tsk, mm)	do { } while (0)
+#define copy_segments(tsk, mm)		do { } while (0)
 #define release_segments(mm)		do { } while (0)
 #define forget_segments()		do { } while (0)
 
@@ -106,6 +121,8 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 	else
 		return sw->retpc;
 }
+
+#define THREAD_SIZE (2*PAGE_SIZE)
 
 /* Allocation and freeing of basic task resources. */
 #define alloc_task_struct() \

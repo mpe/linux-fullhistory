@@ -320,7 +320,7 @@ extern void platinum_of_init(struct device_node *dp);
      *  Initialisation
      */
 
-__initfunc(void offb_init(void))
+void __init offb_init(void)
 {
     struct device_node *dp;
     unsigned int dpy;
@@ -391,7 +391,7 @@ __initfunc(void offb_init(void))
     }
 }
 
-__initfunc(static int offb_init_driver(struct device_node *dp))
+static int __init offb_init_driver(struct device_node *dp)
 {
 #ifdef CONFIG_FB_ATY
     if (!strncmp(dp->name, "ATY", 3)) {
@@ -444,7 +444,7 @@ __initfunc(static int offb_init_driver(struct device_node *dp))
     return 0;
 }
 
-__initfunc(static void offb_init_nodriver(struct device_node *dp))
+static void __init offb_init_nodriver(struct device_node *dp)
 {
     int *pp, i;
     unsigned int len;
@@ -488,9 +488,9 @@ __initfunc(static void offb_init_nodriver(struct device_node *dp))
     
 }
 
-__initfunc(static void offb_init_fb(const char *name, const char *full_name,
+static void offb_init_fb(const char *name, const char *full_name,
 				    int width, int height, int depth,
-				    int pitch, unsigned long address))
+				    int pitch, unsigned long address)
 {
     int i;
     struct fb_fix_screeninfo *fix;

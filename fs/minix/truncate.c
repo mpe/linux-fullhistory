@@ -66,7 +66,7 @@ repeat:
 			mark_buffer_clean(bh);
 			brelse(bh);
 		}
-		minix_free_block(inode->i_sb,tmp);
+		minix_free_block(inode,tmp);
 	}
 	return retry;
 }
@@ -114,7 +114,7 @@ repeat:
 		*ind = 0;
 		mark_buffer_dirty(ind_bh, 1);
 		brelse(bh);
-		minix_free_block(inode->i_sb,tmp);
+		minix_free_block(inode,tmp);
 	}
 	ind = (unsigned short *) ind_bh->b_data;
 	for (i = 0; i < 512; i++)
@@ -126,7 +126,7 @@ repeat:
 		else {
 			tmp = *p;
 			*p = 0;
-			minix_free_block(inode->i_sb,tmp);
+			minix_free_block(inode,tmp);
 		}
 	}
 	brelse(ind_bh);
@@ -172,7 +172,7 @@ repeat:
 			tmp = *p;
 			*p = 0;
 			mark_inode_dirty(inode);
-			minix_free_block(inode->i_sb,tmp);
+			minix_free_block(inode,tmp);
 		}
 	}
 	brelse(dind_bh);
@@ -230,7 +230,7 @@ repeat:
 			mark_buffer_clean(bh);
 			brelse(bh);
 		}
-		minix_free_block(inode->i_sb,tmp);
+		minix_free_block(inode,tmp);
 	}
 	return retry;
 }
@@ -278,7 +278,7 @@ repeat:
 		*ind = 0;
 		mark_buffer_dirty(ind_bh, 1);
 		brelse(bh);
-		minix_free_block(inode->i_sb,tmp);
+		minix_free_block(inode,tmp);
 	}
 	ind = (unsigned long *) ind_bh->b_data;
 	for (i = 0; i < 256; i++)
@@ -290,7 +290,7 @@ repeat:
 		else {
 			tmp = *p;
 			*p = 0;
-			minix_free_block(inode->i_sb,tmp);
+			minix_free_block(inode,tmp);
 		}
 	}
 	brelse(ind_bh);
@@ -336,7 +336,7 @@ repeat:
 			tmp = *p;
 			*p = 0;
 			mark_inode_dirty(inode);
-			minix_free_block(inode->i_sb,tmp);
+			minix_free_block(inode,tmp);
 		}
 	}
 	brelse(dind_bh);
@@ -382,7 +382,7 @@ repeat:
                         tmp = *p;
                         *p = 0;
                         mark_inode_dirty(inode);
-                        minix_free_block(inode->i_sb,tmp);
+                        minix_free_block(inode,tmp);
 		}
 	}
         brelse(tind_bh);

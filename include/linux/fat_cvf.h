@@ -27,7 +27,6 @@ struct cvf_format
   int (*fat_access) (struct super_block *sb,int nr,int new_value);
   int (*cvf_statfs) (struct super_block *sb,struct statfs *buf, int bufsiz);
   int (*cvf_bmap) (struct inode *inode,int block);
-  int (*cvf_smap) (struct inode *inode,int sector);
   ssize_t (*cvf_file_read) ( struct file *, char *, size_t, loff_t *);
   ssize_t (*cvf_file_write) ( struct file *, const char *, size_t, loff_t *);
   int (*cvf_mmap) (struct file *, struct vm_area_struct *);

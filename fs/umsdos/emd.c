@@ -34,7 +34,6 @@ ssize_t umsdos_file_read_kmem (	struct file *filp,
 	mm_segment_t old_fs = get_fs ();
 
 	set_fs (KERNEL_DS);
-	MSDOS_I (filp->f_dentry->d_inode)->i_binary = 2;
 	ret = fat_file_read (filp, buf, count, &filp->f_pos);
 	set_fs (old_fs);
 	return ret;
@@ -53,15 +52,6 @@ ssize_t umsdos_file_write_kmem_real (struct file * filp,
 {
 	mm_segment_t old_fs = get_fs ();
 	ssize_t ret;
-
-	/* note: i_binary=2 is for CVF-FAT. We put it here, instead of
-	 * umsdos_file_write_kmem, since it is also wise not to compress
-	 * symlinks (in the unlikely event that they are > 512 bytes and
-	 * can be compressed.
-	 * FIXME: should we set it when reading symlinks too?
-	 */
-
-	MSDOS_I (filp->f_dentry->d_inode)->i_binary = 2;
 
 	set_fs (KERNEL_DS);
 	ret = fat_file_write (filp, buf, count, &filp->f_pos);

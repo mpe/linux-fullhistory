@@ -54,7 +54,7 @@ static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pt
 	 * Dont be too eager to get aging right if
 	 * memory is dangerously low.
 	 */
-	if (!low_on_memory && pte_young(pte)) {
+	if (pte_young(pte)) {
 		/*
 		 * Transfer the "accessed" bit from the page
 		 * tables to the global page map.
@@ -153,7 +153,7 @@ drop_pte:
 	 * we have the swap cache set up to associate the
 	 * page with that swap entry.
 	 */
-	entry = get_swap_page();
+	entry = acquire_swap_entry(page);
 	if (!entry)
 		goto out_failed_unlock; /* No swap space left */
 		

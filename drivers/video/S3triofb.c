@@ -288,7 +288,7 @@ static int s3trio_ioctl(struct inode *inode, struct file *file, u_int cmd,
     return -EINVAL;
 }
 
-__initfunc(void s3triofb_init(void))
+void __init s3triofb_init(void)
 {
 #ifdef __powerpc__
     /* We don't want to be called like this. */
@@ -298,7 +298,7 @@ __initfunc(void s3triofb_init(void))
 #endif /* !__powerpc__ */
 }
 
-__initfunc(void s3trio_resetaccel(void)) {
+void __init s3trio_resetaccel(void){
 
 
 #define EC01_ENH_ENB    0x0005
@@ -341,7 +341,7 @@ __initfunc(void s3trio_resetaccel(void)) {
 	outw( MF_PIX_CONTROL | MFA_SRC_FOREGR_MIX,  0xbee8);
 }
 
-__initfunc(int s3trio_init(struct device_node *dp)) {
+int __init s3trio_init(struct device_node *dp){
 
     u_char bus, dev;
     unsigned int t32;
@@ -402,7 +402,7 @@ __initfunc(int s3trio_init(struct device_node *dp)) {
      *  We heavily rely on OF for the moment. This needs fixing.
      */
 
-__initfunc(void s3triofb_init_of(struct device_node *dp))
+void __init s3triofb_init_of(struct device_node *dp)
 {
     int i, *pp, len;
     unsigned long address;

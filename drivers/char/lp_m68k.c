@@ -474,7 +474,7 @@ EXPORT_SYMBOL(lp_interrupt);
 EXPORT_SYMBOL(register_parallel);
 EXPORT_SYMBOL(unregister_parallel);
 
-__initfunc(int lp_m68k_init(void))
+int __init lp_m68k_init(void)
 {
 	extern char m68k_debug_device[];
 
@@ -507,7 +507,7 @@ __initfunc(int lp_m68k_init(void))
 /*
  * Currently we do not accept any lp-parameters, but that may change.
  */
-__initfunc(void lp_setup(char *str, int *ints))
+void __init lp_setup(char *str, int *ints)
 {	
 }
 

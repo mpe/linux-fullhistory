@@ -274,6 +274,8 @@ void free_page_and_swap_cache(unsigned long addr)
 	}
 	UnlockPage(page);
 	
+	clear_bit(PG_swap_entry, &page->flags);
+
 	__free_page(page);
 }
 

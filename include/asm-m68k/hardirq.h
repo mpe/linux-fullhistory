@@ -1,7 +1,7 @@
 #ifndef __M68K_HARDIRQ_H
 #define __M68K_HARDIRQ_H
 
-#include <linux/tasks.h>
+#include <linux/threads.h>
 
 extern unsigned int local_irq_count[NR_CPUS];
 

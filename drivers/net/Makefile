@@ -904,6 +904,17 @@ else
   M_OBJS += hplance.o
   endif
 endif
+
+ifeq ($(CONFIG_MVME147_NET),y)
+L_OBJS += mvme147.o
+CONFIG_7990_BUILTIN = y
+else
+  ifeq ($(CONFIG_MVME147_NET),m)
+  CONFIG_7990_MODULE = y
+  M_OBJS += mvme147.o
+  endif
+endif
+
 # If we need generic LANCE support, either in the kernel or as a module,
 # build it in the appropriate way.
 ifdef CONFIG_7990_BUILTIN
@@ -1074,6 +1085,10 @@ else
   ifeq ($(CONFIG_MACE),m)
   M_OBJS += mace.o
   endif
+endif
+
+ifeq ($(CONFIG_MACSONIC),y)
+L_OBJS += macsonic.o
 endif
 
 ifeq ($(CONFIG_BMAC),y)

@@ -32,23 +32,18 @@
 #include <linux/malloc.h>
 #include <linux/blk.h>
 #include <linux/init.h>
-
-#if defined(MODULE)
 #include <linux/module.h>
-#endif
 
 #include <asm/setup.h>
 #include <asm/bitops.h>
 #include <asm/amigahw.h>
-#ifdef CONFIG_APUS
 #include <asm/pgtable.h>
 #include <asm/io.h>
-#endif
 #include <linux/zorro.h>
 
 
-extern int num_memory;
-extern struct mem_info memory[NUM_MEMINFO];
+extern int m68k_realnum_memory;
+extern struct mem_info m68k_memory[NUM_MEMINFO];
 
 #define TRUE                  (1)
 #define FALSE                 (0)
@@ -191,14 +186,14 @@ z2_open( struct inode *inode, struct file *filp )
 		int index = device - Z2MINOR_MEMLIST1 + 1;
 		unsigned long size, paddr, vaddr;
 
-		if (index >= num_memory) {
+		if (index >= m68k_realnum_memory) {
 			printk( KERN_ERR DEVICE_NAME
 				": no such entry in z2ram_map\n" );
 			return -ENOMEM;
 		}
 
-		paddr = memory[index].addr;
-		size = memory[index].size & ~(Z2RAM_CHUNKSIZE-1);
+		paddr = m68k_memory[index].addr;
+		size = m68k_memory[index].size & ~(Z2RAM_CHUNKSIZE-1);
 
 #ifdef __powerpc__
 		/* FIXME: ioremap doesn't build correct memory tables. */
@@ -212,8 +207,7 @@ z2_open( struct inode *inode, struct file *filp )
 						   _PAGE_WRITETHRU);
 
 #else
-		vaddr = kernel_map (paddr, size, KERNELMAP_FULL_CACHING,
-				    NULL);
+		vaddr = (unsigned long)ioremap(paddr, size);
 #endif
 		z2ram_map = 
 			kmalloc((size/Z2RAM_CHUNKSIZE)*sizeof(z2ram_map[0]),
@@ -316,9 +310,7 @@ z2_open( struct inode *inode, struct file *filp )
 	blk_size[ MAJOR_NR ] = z2_sizes;
     }
 
-#if defined(MODULE)
     MOD_INC_USE_COUNT;
-#endif
 
     return 0;
 }
@@ -331,9 +323,11 @@ z2_release( struct inode *inode, struct file *filp )
 
     sync_dev( inode->i_rdev );
 
-#if defined(MODULE)
+    /*
+     * FIXME: unmap memory
+     */
+
     MOD_DEC_USE_COUNT;
-#endif
 
     return 0;
 }
@@ -356,8 +350,8 @@ static struct file_operations z2_fops =
 	NULL,			/* revalidate */
 };
 
-__initfunc(int
-z2_init( void ))
+int __init 
+z2_init( void )
 {
 
     if ( !MACH_IS_AMIGA )

@@ -28,8 +28,6 @@
 #include <asm/atari_stram.h>
 #endif
 
-#undef DEBUG
-
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
 
@@ -94,12 +92,12 @@ void show_mem(void)
 	    reserved++;
 	else if (PageSwapCache(mem_map+i))
 	    cached++;
-	else if (!atomic_read(&mem_map[i].count))
+	else if (!page_count(mem_map+i))
 	    free++;
-	else if (atomic_read(&mem_map[i].count) == 1)
+	else if (page_count(mem_map+i) == 1)
 	    nonshared++;
 	else
-	    shared += atomic_read(&mem_map[i].count) - 1;
+	    shared += page_count(mem_map+i) - 1;
     }
     printk("%d pages of RAM\n",total);
     printk("%d free pages\n",free);
@@ -138,6 +136,7 @@ __initfunc(static pte_t * kernel_page_table(unsigned long *memavailp))
 }
 
 static pmd_t *last_pgtable __initdata = NULL;
+static pmd_t *zero_pgtable __initdata = NULL;
 
 __initfunc(static pmd_t * kernel_ptr_table(unsigned long *memavailp))
 {
@@ -183,7 +182,7 @@ map_chunk (unsigned long addr, long size, unsigned long *memavailp))
 {
 #define PTRTREESIZE (256*1024)
 #define ROOTTREESIZE (32*1024*1024)
-	static unsigned long virtaddr = 0;
+	static unsigned long virtaddr = PAGE_OFFSET;
 	unsigned long physaddr;
 	pgd_t *pgd_dir;
 	pmd_t *pmd_dir;
@@ -235,7 +234,8 @@ map_chunk (unsigned long addr, long size, unsigned long *memavailp))
 #ifdef DEBUG
 				printk ("[zero map]");
 #endif
-				pte_dir = (pte_t *)kernel_ptr_table(memavailp);
+				zero_pgtable = kernel_ptr_table(memavailp);
+				pte_dir = (pte_t *)zero_pgtable;
 				pmd_dir->pmd[0] = virt_to_phys(pte_dir) |
 					_PAGE_TABLE | _PAGE_ACCESSED;
 				pte_val(*pte_dir++) = 0;
@@ -352,38 +352,6 @@ __initfunc(unsigned long paging_init(unsigned long start_mem,
 	start_mem += PAGE_SIZE;
 	memset((void *)empty_zero_page, 0, PAGE_SIZE);
 
-	/* 
-	 * allocate the "swapper" page directory and
-	 * record in task 0 (swapper) tss 
-	 */
-	init_mm.pgd = (pgd_t *)kernel_ptr_table(&start_mem);
-	memset (init_mm.pgd, 0, sizeof(pgd_t)*PTRS_PER_PGD);
-
-	/* setup CPU root pointer for swapper task */
-	task[0]->tss.crp[0] = 0x80000000 | _PAGE_TABLE;
-	task[0]->tss.crp[1] = virt_to_phys(init_mm.pgd);
-
-#ifdef DEBUG
-	printk ("task 0 pagedir at %p virt, %#lx phys\n",
-		swapper_pg_dir, task[0]->tss.crp[1]);
-#endif
-
-	if (CPU_IS_040_OR_060)
-		asm __volatile__ (".chip 68040\n\t"
-				  "movec %0,%%urp\n\t"
-				  ".chip 68k"
-				  : /* no outputs */
-				  : "r" (task[0]->tss.crp[1]));
-	else
-		asm __volatile__ (".chip 68030\n\t"
-				  "pmove %0,%%crp\n\t"
-				  ".chip 68k"
-				  : /* no outputs */
-				  : "m" (task[0]->tss.crp[0]));
-#ifdef DEBUG
-	printk ("set crp\n");
-#endif
-
 	/*
 	 * Set up SFC/DFC registers (user data space)
 	 */
@@ -418,7 +386,7 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 		atari_stram_reserve_pages( start_mem );
 #endif
 
-	for (tmp = 0 ; tmp < end_mem ; tmp += PAGE_SIZE) {
+	for (tmp = PAGE_OFFSET ; tmp < end_mem ; tmp += PAGE_SIZE) {
 		if (virt_to_phys ((void *)tmp) >= mach_max_dma_address)
 			clear_bit(PG_DMA, &mem_map[MAP_NR(tmp)].flags);
 		if (PageReserved(mem_map+MAP_NR(tmp))) {
@@ -435,7 +403,7 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 				datapages++;
 			continue;
 		}
-		atomic_set(&mem_map[MAP_NR(tmp)].count, 1);
+		set_page_count(mem_map+MAP_NR(tmp), 1);
 #ifdef CONFIG_BLK_DEV_INITRD
 		if (!initrd_start ||
 		    (tmp < (initrd_start & PAGE_MASK) || tmp >= initrd_end))
@@ -449,6 +417,10 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 		if (pgd_present(kernel_pg_dir[i]))
 			init_pointer_table(pgd_page(kernel_pg_dir[i]));
 	}
+
+	/* insert also pointer table that we used to unmap the zero page */
+	if (zero_pgtable)
+		init_pointer_table((unsigned long)zero_pgtable);
 
 	printk("Memory: %luk/%luk available (%dk kernel code, %dk data, %dk init)\n",
 	       (unsigned long) nr_free_pages << (PAGE_SHIFT-10),
@@ -465,7 +437,7 @@ void free_initmem(void)
 	addr = (unsigned long)&__init_begin;
 	for (; addr < (unsigned long)&__init_end; addr += PAGE_SIZE) {
 		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
-		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
+		set_page_count(mem_map+MAP_NR(addr), 1);
 		free_page(addr);
 	}
 }
@@ -483,9 +455,9 @@ void si_meminfo(struct sysinfo *val)
 	if (PageReserved(mem_map+i))
 	    continue;
 	val->totalram++;
-	if (!atomic_read(&mem_map[i].count))
+	if (!page_count(mem_map+i))
 	    continue;
-	val->sharedram += atomic_read(&mem_map[i].count) - 1;
+	val->sharedram += page_count(mem_map+i) - 1;
     }
     val->totalram <<= PAGE_SHIFT;
     val->sharedram <<= PAGE_SHIFT;

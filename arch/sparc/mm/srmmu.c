@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.189 1999/07/30 09:35:08 davem Exp $
+/* $Id: srmmu.c,v 1.190 1999/08/07 17:47:01 anton Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -114,6 +114,7 @@ static unsigned long srmmu_p2v_hash[SRMMU_HASHSZ];
 #define srmmu_ahashfn(addr)	((addr) >> 24)
 
 int viking_mxcc_present = 0;
+static spinlock_t srmmu_context_spinlock = SPIN_LOCK_UNLOCKED;
 
 /* Physical memory can be _very_ non-contiguous on the sun4m, especially
  * the SS10/20 class machines and with the latest openprom revisions.
@@ -819,7 +820,9 @@ static inline void free_context(int context)
 static void srmmu_switch_to_context(struct task_struct *tsk)
 {
 	if(tsk->mm->context == NO_CONTEXT) {
+		spin_lock(&srmmu_context_spinlock);
 		alloc_context(tsk->mm);
+		spin_unlock(&srmmu_context_spinlock);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], tsk->mm->pgd);
 	}
 	srmmu_set_context(tsk->mm->context);
@@ -827,7 +830,9 @@ static void srmmu_switch_to_context(struct task_struct *tsk)
 
 static void srmmu_init_new_context(struct mm_struct *mm)
 {
+	spin_lock(&srmmu_context_spinlock);
 	alloc_context(mm);
+	spin_unlock(&srmmu_context_spinlock);
 
 	flush_cache_mm(mm);
 	ctxd_set(&srmmu_context_table[mm->context], mm->pgd);
@@ -1398,7 +1403,9 @@ static void hypersparc_switch_to_context(struct task_struct *tsk)
 	if(tsk->mm->context == NO_CONTEXT) {
 		ctxd_t *ctxp;
 
+		spin_lock(&srmmu_context_spinlock);
 		alloc_context(tsk->mm);
+		spin_unlock(&srmmu_context_spinlock);
 		ctxp = &srmmu_context_table[tsk->mm->context];
 		srmmu_set_entry((pte_t *)ctxp, __pte((SRMMU_ET_PTD | (srmmu_v2p((unsigned long) tsk->mm->pgd) >> 4))));
 		hypersparc_flush_page_to_ram((unsigned long)ctxp);
@@ -1411,7 +1418,9 @@ static void hypersparc_init_new_context(struct mm_struct *mm)
 {
 	ctxd_t *ctxp;
 
+	spin_lock(&srmmu_context_spinlock);
 	alloc_context(mm);
+	spin_unlock(&srmmu_context_spinlock);
 
 	ctxp = &srmmu_context_table[mm->context];
 	srmmu_set_entry((pte_t *)ctxp, __pte((SRMMU_ET_PTD | (srmmu_v2p((unsigned long) mm->pgd) >> 4))));

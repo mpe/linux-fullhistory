@@ -100,11 +100,11 @@ extern int minix_link(struct dentry * old_dentry, struct inode * dir, struct den
 extern int minix_mknod(struct inode * dir, struct dentry *dentry, int mode, int rdev);
 extern int minix_rename(struct inode * old_dir, struct dentry *old_dentry,
 			struct inode * new_dir, struct dentry *new_dentry);
-extern struct inode * minix_new_inode(const struct inode * dir);
+extern struct inode * minix_new_inode(const struct inode * dir, int * error);
 extern void minix_free_inode(struct inode * inode);
 extern unsigned long minix_count_free_inodes(struct super_block *sb);
-extern int minix_new_block(struct super_block * sb);
-extern void minix_free_block(struct super_block * sb, int block);
+extern int minix_new_block(struct inode * inode);
+extern void minix_free_block(struct inode * inode, int block);
 extern unsigned long minix_count_free_blocks(struct super_block *sb);
 
 extern int minix_bmap(struct inode *,int);

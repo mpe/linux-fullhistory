@@ -39,6 +39,10 @@
 #define FB_AUX_TEXT_MGA_STEP16	3	/* MGA Millenium I: text, attr, 14 reserved bytes */
 #define FB_AUX_TEXT_MGA_STEP8	4	/* other MGAs:      text, attr,  6 reserved bytes */
 
+#define FB_AUX_VGA_PLANES_VGA4		0	/* 16 color planes (EGA/VGA) */
+#define FB_AUX_VGA_PLANES_CFB4		1	/* CFB4 in planes (VGA) */
+#define FB_AUX_VGA_PLANES_CFB8		2	/* CFB8 in planes (VGA) */
+
 #define FB_VISUAL_MONO01		0	/* Monochr. 1=Black 0=White */
 #define FB_VISUAL_MONO10		1	/* Monochr. 1=White 0=Black */
 #define FB_VISUAL_TRUECOLOR		2	/* True color	*/
@@ -69,9 +73,13 @@
 #define FB_ACCEL_MATROX_MGAG100	20	/* Matrox G100 (Productiva G100) */
 #define FB_ACCEL_MATROX_MGAG200	21	/* Matrox G200 (Myst, Mill, ...) */
 #define FB_ACCEL_SUN_CG14	22	/* Sun cgfourteen		 */
-#define FB_ACCEL_SUN_BWTWO	23	/* Sun bwtwo			 */
-#define FB_ACCEL_SUN_CGTHREE	24	/* Sun cgthree			 */
-#define FB_ACCEL_SUN_TCX	25	/* Sun tcx			 */
+#define FB_ACCEL_SUN_BWTWO	23	/* Sun bwtwo			*/
+#define FB_ACCEL_SUN_CGTHREE	24	/* Sun cgthree			*/
+#define FB_ACCEL_SUN_TCX	25	/* Sun tcx			*/
+#define FB_ACCEL_MATROX_MGAG400	26	/* Matrox G400			*/
+#define FB_ACCEL_NV3		27	/* nVidia RIVA 128              */
+#define FB_ACCEL_NV4		28	/* nVidia RIVA TNT		*/
+#define FB_ACCEL_NV5		29	/* nVidia RIVA TNT2		*/
 
 struct fb_fix_screeninfo {
 	char id[16];			/* identification string eg "TT Builtin" */

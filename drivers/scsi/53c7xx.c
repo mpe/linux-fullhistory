@@ -296,6 +296,10 @@
  */
 #undef inb
 #undef outb
+#undef inw
+#undef outw
+#undef inl
+#undef outl
 #define inb(x)          1
 #define inw(x)          1
 #define inl(x)          1
@@ -1207,7 +1211,7 @@ ncr53c7xx_init (Scsi_Host_Template *tpnt, int board, int chip,
     memset((void *)instance->hostdata[0], 0, 8192);
     cache_push(virt_to_phys((void *)(instance->hostdata[0])), 8192);
     cache_clear(virt_to_phys((void *)(instance->hostdata[0])), 8192);
-    kernel_set_cachemode(instance->hostdata[0], 8192, KERNELMAP_NOCACHE_SER);
+    kernel_set_cachemode(instance->hostdata[0], 8192, IOMAP_NOCACHE_SER);
 
     /* FIXME : if we ever support an ISA NCR53c7xx based board, we
        need to check if the chip is running in a 16 bit mode, and if so 
@@ -1897,7 +1901,7 @@ abnormal_finished (struct NCR53c7x0_cmd *cmd, int result) {
     if (left < 0) 
 	printk("scsi%d: loop detected in ncr reconncect list\n",
 	    host->host_no);
-    else if (ncr_search) 
+    else if (ncr_search) {
 	if (found)
 	    printk("scsi%d: scsi %ld in ncr issue array and reconnect lists\n",
 		host->host_no, c->pid);
@@ -1908,6 +1912,7 @@ abnormal_finished (struct NCR53c7x0_cmd *cmd, int result) {
 /* If we're at the tail end of the issue queue, update that pointer too. */
 	    found = 1;
 	}
+    }
 
     /*
      * Traverse the host running list until we find this command or discover
@@ -2958,14 +2963,14 @@ NCR53c7x0_soft_reset (struct Scsi_Host *host) {
     	NCR53c7x0_write8(DCNTL_REG, hostdata->saved_dcntl | DCNTL_SSM);
     else
     	NCR53c7x0_write8(DCNTL_REG, hostdata->saved_dcntl);
-#if 0
-    /* Following disables snooping - run with caches disabled at first */
+    /* Following disables snooping - snooping is not required, as non-
+     * cached pages are used for shared data, and appropriate use is
+     * made of cache_push/cache_clear.  Indeed, for 68060
+     * enabling snooping causes disk corruption of ext2fs free block
+     * bitmaps and the like.  If you have a 68060 with snooping hardwared
+     * on, then you need to enable CONFIG_060_WRITETHROUGH.
+     */
     NCR53c7x0_write8(CTEST7_REG, CTEST7_10_TT1|CTEST7_STD);
-#else
-    /* Setup CTEST7 for SC1=0, SC0=1 - sink/source data without invalidating
-     * cache lines. */
-    NCR53c7x0_write8(CTEST7_REG, CTEST7_10_TT1|CTEST7_STD|CTEST7_10_SC0);
-#endif
     /* Actually burst of eight, according to my 53c710 databook */
     NCR53c7x0_write8(hostdata->dmode, DMODE_10_BL_8 | DMODE_10_FC2);
     NCR53c7x0_write8(SCID_REG, 1 << host->this_id);
@@ -3028,10 +3033,10 @@ NCR53c7x0_soft_reset (struct Scsi_Host *host) {
 static void
 my_free_page (void *addr, int dummy)
 {
-    /* XXX This assumes default cache mode to be KERNELMAP_FULL_CACHING, which
+    /* XXX This assumes default cache mode to be IOMAP_FULL_CACHING, which
      * XXX may be invalid (CONFIG_060_WRITETHROUGH)
      */
-    kernel_set_cachemode((u32)addr, 4096, KERNELMAP_FULL_CACHING);
+    kernel_set_cachemode((u32)addr, 4096, IOMAP_FULL_CACHING);
     free_page ((u32)addr);
 }
 
@@ -3087,7 +3092,7 @@ allocate_cmd (Scsi_Cmnd *cmd) {
         memset((void *)real, 0, 4096);
         cache_push(virt_to_phys((void *)real), 4096);
         cache_clear(virt_to_phys((void *)real), 4096);
-        kernel_set_cachemode(real, 4096, KERNELMAP_NOCACHE_SER);
+        kernel_set_cachemode(real, 4096, IOMAP_NOCACHE_SER);
 	tmp = ROUNDUP(real, void *);
 #ifdef FORCE_DSA_ALIGNMENT
 	{
@@ -3190,7 +3195,6 @@ create_cmd (Scsi_Cmnd *cmd) {
     case MODE_SELECT: 
     case WRITE_6:
     case WRITE_10:
-    case START_STOP: /* also SCAN, which may do DATA OUT */
 #if 0
 	printk("scsi%d : command is ", host->host_no);
 	print_command(cmd->cmnd);
@@ -3211,6 +3215,7 @@ create_cmd (Scsi_Cmnd *cmd) {
      */
     case TEST_UNIT_READY:
     case ALLOW_MEDIUM_REMOVAL:
+    case START_STOP:
     	datain = dataout = 0;
 	break;
     /*
@@ -5945,11 +5950,12 @@ ncr_halt (struct Scsi_Host *host) {
 	    	}
     	    }
 	}
-	if (!(istat & (ISTAT_SIP|ISTAT_DIP))) 
+	if (!(istat & (ISTAT_SIP|ISTAT_DIP))) {
 	    if (stage == 0)
 	    	++stage;
 	    else if (stage == 3)
 		break;
+	}
     }
     hostdata->state = STATE_HALTED;
     restore_flags(flags);
@@ -6090,10 +6096,10 @@ NCR53c7x0_release(struct Scsi_Host *host) {
     if (hostdata->events) 
 	vfree ((void *)hostdata->events);
 
-    /* XXX This assumes default cache mode to be KERNELMAP_FULL_CACHING, which
+    /* XXX This assumes default cache mode to be IOMAP_FULL_CACHING, which
      * XXX may be invalid (CONFIG_060_WRITETHROUGH)
      */
-    kernel_set_cachemode((u32)hostdata, 8192, KERNELMAP_FULL_CACHING);
+    kernel_set_cachemode((u32)hostdata, 8192, IOMAP_FULL_CACHING);
     free_pages ((u32)hostdata, 1);
     return 1;
 }

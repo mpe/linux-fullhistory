@@ -5,17 +5,6 @@
 #include <linux/linkage.h>
 #include <asm/segment.h>
 
-extern inline unsigned long rdusp(void) {
-  	unsigned long usp;
-
-	__asm__ __volatile__("move %/usp,%0" : "=a" (usp));
-	return usp;
-}
-
-extern inline void wrusp(unsigned long usp) {
-	__asm__ __volatile__("move %0,%/usp" : : "a" (usp));
-}
-
 #define prepare_to_switch()	do { } while(0)
 
 /*

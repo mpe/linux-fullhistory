@@ -598,7 +598,7 @@ static void gdth_eval_mapping(ulong32 size, int *cyls, int *heads, int *secs)
 
 /* controller search and initialization functions */
 
-__initfunc (static int gdth_search_eisa(ushort eisa_adr))
+static int __init gdth_search_eisa(ushort eisa_adr)
 {
     ulong32 id;
     
@@ -616,7 +616,7 @@ __initfunc (static int gdth_search_eisa(ushort eisa_adr))
 }
 
 
-__initfunc (static int gdth_search_isa(ulong32 bios_adr))
+static int __init gdth_search_isa(ulong32 bios_adr)
 {
     void *addr;
     ulong32 id;
@@ -632,7 +632,7 @@ __initfunc (static int gdth_search_isa(ulong32 bios_adr))
 }
 
 
-__initfunc (static int gdth_search_pci(gdth_pci_str *pcistr))
+static int __init gdth_search_pci(gdth_pci_str *pcistr)
 {
     ulong32 base0, base1, base2;
     ushort device_id, cnt;
@@ -651,7 +651,6 @@ __initfunc (static int gdth_search_pci(gdth_pci_str *pcistr))
         if (device_id > PCI_DEVICE_ID_VORTEX_GDT6555 &&
             device_id < PCI_DEVICE_ID_VORTEX_GDT6x17RP)
             continue;
-#if LINUX_VERSION_CODE >= 0x2015C
         pdev = NULL;
         while ((pdev = pci_find_device(PCI_VENDOR_ID_VORTEX,device_id,pdev)) 
                != NULL) {
@@ -663,15 +662,15 @@ __initfunc (static int gdth_search_pci(gdth_pci_str *pcistr))
             pcistr[cnt].bus = pdev->bus->number;
             pcistr[cnt].device_fn = pdev->devfn;
             pcistr[cnt].irq = pdev->irq;
-            base0 = pdev->base_address[0];
-            base1 = pdev->base_address[1];
-            base2 = pdev->base_address[2];
+            base0 = pdev->resource[0].flags;
+            base1 = pdev->resource[1].flags;
+            base2 = pdev->resource[2].flags;
             if (device_id <= PCI_DEVICE_ID_VORTEX_GDT6000B ||   /* GDT6000/B */
                 device_id >= PCI_DEVICE_ID_VORTEX_GDT6x17RP) {  /* MPR */
                 if ((base0 & PCI_BASE_ADDRESS_SPACE) != 
                     PCI_BASE_ADDRESS_SPACE_MEMORY)
                     continue;
-                pcistr[cnt].dpmem = base0 & PCI_BASE_ADDRESS_MEM_MASK;
+                pcistr[cnt].dpmem = pdev->resource[0].start;
             } else {                                    /* GDT6110, GDT6120, .. */
                 if ((base0 & PCI_BASE_ADDRESS_SPACE) !=
                     PCI_BASE_ADDRESS_SPACE_MEMORY ||
@@ -680,77 +679,21 @@ __initfunc (static int gdth_search_pci(gdth_pci_str *pcistr))
                     (base1 & PCI_BASE_ADDRESS_SPACE) !=
                     PCI_BASE_ADDRESS_SPACE_IO)
                     continue;
-                pcistr[cnt].dpmem = base2 & PCI_BASE_ADDRESS_MEM_MASK;
-                pcistr[cnt].io_mm = base0 & PCI_BASE_ADDRESS_MEM_MASK;
-                pcistr[cnt].io    = base1 & PCI_BASE_ADDRESS_IO_MASK;
+                pcistr[cnt].dpmem = pdev->resource[2].start;
+                pcistr[cnt].io_mm = pdev->resource[0].start;
+                pcistr[cnt].io    = pdev->resource[1].start;
             }
             TRACE2(("Controller found at %d/%d, irq %d, dpmem 0x%x\n",
                     pcistr[cnt].bus, PCI_SLOT(pcistr[cnt].device_fn), 
                     pcistr[cnt].irq, pcistr[cnt].dpmem));
             cnt++;
         }       
-#else   
-        idx = 0;
-        while (!pcibios_find_device(PCI_VENDOR_ID_VORTEX,device_id,idx++,
-                                    &pcistr[cnt].bus,&pcistr[cnt].device_fn)) {
-            if (cnt >= MAXHA)
-                return cnt;
-            /* GDT PCI ctr. found, now read resources from config space */
-#if LINUX_VERSION_CODE >= 0x010300
-#define GDTH_BASEP      (int *)
-#else
-#define GDTH_BASEP
-#endif
-            if ((error = pcibios_read_config_dword(pcistr[cnt].bus,
-                                                   pcistr[cnt].device_fn,
-                                                   PCI_BASE_ADDRESS_0,
-                                                   GDTH_BASEP&base0)) ||
-                (error = pcibios_read_config_dword(pcistr[cnt].bus,
-                                                   pcistr[cnt].device_fn,
-                                                   PCI_BASE_ADDRESS_1,
-                                                   GDTH_BASEP&base1)) ||
-                (error = pcibios_read_config_dword(pcistr[cnt].bus,
-                                                   pcistr[cnt].device_fn,
-                                                   PCI_BASE_ADDRESS_2,
-                                                   GDTH_BASEP&base2)) ||
-                (error = pcibios_read_config_byte(pcistr[cnt].bus,
-                                                  pcistr[cnt].device_fn,
-                                                  PCI_INTERRUPT_LINE,
-                                                  &pcistr[cnt].irq))) {
-                printk("GDT-PCI: error %d reading configuration space", error);
-                continue;
-            }
-            pcistr[cnt].device_id = device_id;
-            if (device_id <= PCI_DEVICE_ID_VORTEX_GDT6000B ||   /* GDT6000/B */
-                device_id >= PCI_DEVICE_ID_VORTEX_GDT6x17RP) {  /* MPR */
-                if ((base0 & PCI_BASE_ADDRESS_SPACE) !=
-                    PCI_BASE_ADDRESS_SPACE_MEMORY)
-                    continue;
-                pcistr[cnt].dpmem = base0 & PCI_BASE_ADDRESS_MEM_MASK;
-            } else {                                    /* GDT6110, GDT6120, .. */
-                if ((base0 & PCI_BASE_ADDRESS_SPACE) !=
-                    PCI_BASE_ADDRESS_SPACE_MEMORY ||
-                    (base2 & PCI_BASE_ADDRESS_SPACE) !=
-                    PCI_BASE_ADDRESS_SPACE_MEMORY ||
-                    (base1 & PCI_BASE_ADDRESS_SPACE) !=
-                    PCI_BASE_ADDRESS_SPACE_IO)
-                    continue;
-                pcistr[cnt].dpmem = base2 & PCI_BASE_ADDRESS_MEM_MASK;
-                pcistr[cnt].io_mm = base0 & PCI_BASE_ADDRESS_MEM_MASK;
-                pcistr[cnt].io    = base1 & PCI_BASE_ADDRESS_IO_MASK;
-            }
-            TRACE2(("Controller found at %d/%d, irq %d, dpmem 0x%x\n",
-                    pcistr[cnt].bus, PCI_SLOT(pcistr[cnt].device_fn), 
-                    pcistr[cnt].irq, pcistr[cnt].dpmem));
-            cnt++;
-        }
-#endif
     }   
     return cnt;
 }
 
 
-__initfunc (static void gdth_sort_pci(gdth_pci_str *pcistr, int cnt))
+static void __init gdth_sort_pci(gdth_pci_str *pcistr, int cnt)
 {    
     gdth_pci_str temp;
     int i, changed;
@@ -788,7 +731,7 @@ __initfunc (static void gdth_sort_pci(gdth_pci_str *pcistr, int cnt))
 }
 
 
-__initfunc (static int gdth_init_eisa(ushort eisa_adr,gdth_ha_str *ha))
+static int __init gdth_init_eisa(ushort eisa_adr,gdth_ha_str *ha)
 {
     ulong32 retries,id;
     unchar prot_ver,eisacf,i,irq_found;
@@ -877,7 +820,7 @@ __initfunc (static int gdth_init_eisa(ushort eisa_adr,gdth_ha_str *ha))
 }
 
        
-__initfunc (static int gdth_init_isa(ulong32 bios_adr,gdth_ha_str *ha))
+static int __init gdth_init_isa(ulong32 bios_adr,gdth_ha_str *ha)
 {
     register gdt2_dpram_str *dp2_ptr;
     int i;
@@ -974,7 +917,7 @@ __initfunc (static int gdth_init_isa(ulong32 bios_adr,gdth_ha_str *ha))
 }
 
 
-__initfunc (static int gdth_init_pci(gdth_pci_str *pcistr,gdth_ha_str *ha))
+static int __init gdth_init_pci(gdth_pci_str *pcistr,gdth_ha_str *ha)
 {
     register gdt6_dpram_str *dp6_ptr;
     register gdt6c_dpram_str *dp6c_ptr;
@@ -1241,7 +1184,7 @@ __initfunc (static int gdth_init_pci(gdth_pci_str *pcistr,gdth_ha_str *ha))
 
 /* controller protocol functions */
 
-__initfunc (static void gdth_enable_int(int hanum))
+static void __init gdth_enable_int(int hanum)
 {
     gdth_ha_str *ha;
     ulong flags;
@@ -1574,7 +1517,7 @@ static int gdth_internal_cmd(int hanum,unchar service,ushort opcode,ulong32 p1,
 
 /* search for devices */
 
-__initfunc (static int gdth_search_drives(int hanum))
+static int __init gdth_search_drives(int hanum)
 {
     register gdth_ha_str *ha;
     ushort cdev_cnt, i;
@@ -3287,7 +3230,7 @@ void gdth_timeout(ulong data)
 #endif
 
 
-__initfunc (int gdth_detect(Scsi_Host_Template *shtp))
+int __init gdth_detect(Scsi_Host_Template *shtp)
 {
     struct Scsi_Host *shp;
     gdth_ha_str *ha;
@@ -3959,7 +3902,7 @@ void gdth_halt(void)
 
 
 /* called from init/main.c */
-__initfunc (void gdth_setup(char *str,int *ints))
+void __init gdth_setup(char *str,int *ints)
 {
     int i, argc;
     char *cur_str, *argv;

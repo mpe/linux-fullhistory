@@ -246,7 +246,7 @@ static int __init sktr_pci_chk_card(struct device *dev)
 
 		pdev		= pci_find_slot(pci_bus, pci_device_fn);
 		pci_irq_line 	= pdev->irq;
-		pci_ioaddr 	= pdev->base_address[0];
+		pci_ioaddr 	= pdev->resource[0].start;
 
 		pcibios_read_config_word(pci_bus, pci_device_fn,
 						PCI_COMMAND, &pci_command);
