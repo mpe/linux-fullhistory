@@ -804,7 +804,7 @@ depca_start_xmit(struct sk_buff *skb, struct device *dev)
     dev_tint(dev);
   } else if (skb->len > 0) {
     /* Enforce 1 process per h/w access */
-    if (set_bit(0, (void*)&dev->tbusy) != 0) {
+    if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
       printk("%s: Transmitter access conflict.\n", dev->name);
       status = -1;
     } else {

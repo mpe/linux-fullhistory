@@ -390,16 +390,8 @@ static inline void check_smp_invalidate(int cpu)
 
 static unsigned long previous_irqholder;
 
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
-
-#undef STUCK
-#define STUCK \
-if (!--stuck) {printk("wait_on_irq CPU#%d stuck at %08lx, waiting for %08lx (local=%d, global=%d)\n", cpu, where, previous_irqholder, local_count, atomic_read(&global_irq_count)); stuck = INIT_STUCK; }
-
 static inline void wait_on_irq(int cpu, unsigned long where)
 {
-	int stuck = INIT_STUCK;
 	int local_count = local_irq_count[cpu];
 
 	/* Are we the only one in an interrupt context? */
@@ -418,13 +410,12 @@ static inline void wait_on_irq(int cpu, unsigned long where)
 		 * their things before trying to get the lock again.
 		 */
 		for (;;) {
-			STUCK;
 			check_smp_invalidate(cpu);
 			if (atomic_read(&global_irq_count))
 				continue;
 			if (global_irq_lock)
 				continue;
-			if (!set_bit(0,&global_irq_lock))
+			if (!test_and_set_bit(0,&global_irq_lock))
 				break;
 		}
 		atomic_add(local_count, &global_irq_count);
@@ -453,28 +444,18 @@ void synchronize_irq(void)
 	}
 }
 
-#undef INIT_STUCK
-#define INIT_STUCK 10000000
-
-#undef STUCK
-#define STUCK \
-if (!--stuck) {printk("get_irqlock stuck at %08lx, waiting for %08lx\n", where, previous_irqholder); stuck = INIT_STUCK;}
-
 static inline void get_irqlock(int cpu, unsigned long where)
 {
-	int stuck = INIT_STUCK;
-
-	if (set_bit(0,&global_irq_lock)) {
+	if (test_and_set_bit(0,&global_irq_lock)) {
 		/* do we already hold the lock? */
 		if ((unsigned char) cpu == global_irq_holder)
 			return;
 		/* Uhhuh.. Somebody else got it. Wait.. */
 		do {
 			do {
-				STUCK;
 				check_smp_invalidate(cpu);
 			} while (test_bit(0,&global_irq_lock));
-		} while (set_bit(0,&global_irq_lock));		
+		} while (test_and_set_bit(0,&global_irq_lock));		
 	}
 	/*
 	 * Ok, we got the lock bit.

@@ -1005,7 +1005,7 @@ static int stli_initopen(stlibrd_t *brdp, stliport_t *portp)
 	set_bit(ST_GETSIGS, &portp->state);
 	if ((rc = stli_cmdwait(brdp, portp, A_GETSIGNALS, &portp->asig, sizeof(asysigs_t), 1)) < 0)
 		return(rc);
-	if (clear_bit(ST_GETSIGS, &portp->state))
+	if (test_and_clear_bit(ST_GETSIGS, &portp->state))
 		portp->sigs = stli_mktiocm(portp->asig.sigvalue);
 	stli_mkasysigs(&portp->asig, 1, 1);
 	if ((rc = stli_cmdwait(brdp, portp, A_SETSIGNALS, &portp->asig, sizeof(asysigs_t), 0)) < 0)

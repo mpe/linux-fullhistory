@@ -413,7 +413,7 @@ static int el_start_xmit(struct sk_buff *skb, struct device *dev)
 	 *	Avoid timer-based retransmission conflicts.
 	 */
 
-	if (set_bit(0, (void*)&dev->tbusy) != 0)
+	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
 	{
 		restore_flags(flags);
 		printk("%s: Transmitter access conflict.\n", dev->name);

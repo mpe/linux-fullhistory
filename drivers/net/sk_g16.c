@@ -1211,7 +1211,7 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
      * This means check if we are already in. 
      */
 
-    if (set_bit(0, (void *) &dev->tbusy) != 0) /* dev->tbusy already set ? */ 
+    if (test_and_set_bit(0, (void *) &dev->tbusy) != 0) /* dev->tbusy already set ? */ 
     {
 	printk("%s: Transmitter access conflict.\n", dev->name);
     }

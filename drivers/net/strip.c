@@ -891,7 +891,7 @@ static void strip_unlock(struct strip *strip_info)
      */
     strip_info->idle_timer.expires  = jiffies + HZ;
     add_timer(&strip_info->idle_timer);
-    if (!clear_bit(0, (void *)&strip_info->dev.tbusy))
+    if (!test_and_clear_bit(0, (void *)&strip_info->dev.tbusy))
         printk(KERN_ERR "%s: trying to unlock already unlocked device!\n",
             strip_info->dev.name);
 }
@@ -1745,7 +1745,7 @@ static int strip_xmit(struct sk_buff *skb, struct device *dev)
         printk(KERN_ERR "%s: xmit call when iface is down\n", dev->name);
         return(1);
     }
-    if (set_bit(0, (void *) &strip_info->dev.tbusy)) return(1);
+    if (test_and_set_bit(0, (void *) &strip_info->dev.tbusy)) return(1);
     del_timer(&strip_info->idle_timer);
 
     /* See if someone has been ifconfigging */

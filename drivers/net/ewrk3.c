@@ -767,7 +767,7 @@ ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev)
     ** Block a timer-based transmit from overlapping.  This could better be
     ** done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
     */
-    if (set_bit(0, (void*)&dev->tbusy) != 0)
+    if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
       printk("%s: Transmitter access conflict.\n", dev->name);
 
     DISABLE_IRQs;                      /* So that the page # remains correct */
@@ -783,7 +783,7 @@ ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev)
 	/*
 	** Set up shared memory window and pointer into the window
 	*/
-	while (set_bit(0, (void *)&lp->lock) != 0); /* Wait for lock to free */
+	while (test_and_set_bit(0, (void *)&lp->lock) != 0); /* Wait for lock to free */
 	if (lp->shmem_length == IO_ONLY) {
 	  outb(page, EWRK3_IOPR);
 	} else if (lp->shmem_length == SHMEM_2K) {
@@ -953,7 +953,7 @@ ewrk3_rx(struct device *dev)
       ** Preempt any process using the current page register. Check for
       ** an existing lock to reduce time taken in I/O transactions.
       */
-      if ((tmpLock = set_bit(0, (void *)&lp->lock)) == 1) {   /* Assert lock */
+      if ((tmpLock = test_and_set_bit(0, (void *)&lp->lock)) == 1) {   /* Assert lock */
 	if (lp->shmem_length == IO_ONLY) {              /* Get existing page */
 	  tmpPage = inb(EWRK3_IOPR);
 	} else {
@@ -1217,7 +1217,7 @@ static void SetMulticastFilter(struct device *dev)
   u16 hashcode;
   s32 crc, poly = CRC_POLYNOMIAL_LE;
 
-  while (set_bit(0, (void *)&lp->lock) != 0); /* Wait for lock to free */
+  while (test_and_set_bit(0, (void *)&lp->lock) != 0); /* Wait for lock to free */
 
   if (lp->shmem_length == IO_ONLY) {
     outb(0, EWRK3_IOPR);
@@ -1723,7 +1723,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     break;
   case EWRK3_GET_MCA:                /* Get the multicast address table */
     if (!(status = verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-      while (set_bit(0, (void *)&lp->lock) != 0); /* Wait for lock to free */
+      while (test_and_set_bit(0, (void *)&lp->lock) != 0); /* Wait for lock to free */
       if (lp->shmem_length == IO_ONLY) {
 	outb(0, EWRK3_IOPR);
 	outw(PAGE0_HTE, EWRK3_PIR1);

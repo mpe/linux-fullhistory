@@ -109,7 +109,7 @@ static inline struct ax_disp *ax_alloc(void)
 			break;
 
 		/* Not in use ? */
-		if (!set_bit(AXF_INUSE, &axp->ctrl.flags))
+		if (!test_and_set_bit(AXF_INUSE, &axp->ctrl.flags))
 			break;
 	}
 
@@ -165,7 +165,7 @@ static inline void ax_free(struct ax_disp *ax)
 	if (ax->xbuff)
 		kfree(ax->xbuff);
 	ax->xbuff = NULL;
-	if (!clear_bit(AXF_INUSE, &ax->flags))
+	if (!test_and_clear_bit(AXF_INUSE, &ax->flags))
 		printk(KERN_ERR "%s: ax_free for already free unit.\n", ax->dev->name);
 }
 
@@ -244,7 +244,7 @@ static void ax_changedmtu(struct ax_disp *ax)
 /* Set the "sending" flag.  This must be atomic, hence the ASM. */
 static inline void ax_lock(struct ax_disp *ax)
 {
-	if (set_bit(0, (void *)&ax->dev->tbusy))
+	if (test_and_set_bit(0, (void *)&ax->dev->tbusy))
 		printk(KERN_ERR "%s: trying to lock already locked device!\n", ax->dev->name);
 }
 
@@ -252,7 +252,7 @@ static inline void ax_lock(struct ax_disp *ax)
 /* Clear the "sending" flag.  This must be atomic, hence the ASM. */
 static inline void ax_unlock(struct ax_disp *ax)
 {
-	if (!clear_bit(0, (void *)&ax->dev->tbusy))
+	if (!test_and_clear_bit(0, (void *)&ax->dev->tbusy))
 		printk(KERN_ERR "%s: trying to unlock already unlocked device!\n", ax->dev->name);
 }
 
@@ -551,7 +551,7 @@ static void ax25_receive_buf(struct tty_struct *tty, const unsigned char *cp, ch
 	/* Read the characters out of the buffer */
 	while (count--) {
 		if (fp != NULL && *fp++) {
-			if (!set_bit(AXF_ERROR, &ax->flags))
+			if (!test_and_set_bit(AXF_ERROR, &ax->flags))
 				ax->rx_errors++;
 			cp++;
 			continue;
@@ -709,7 +709,7 @@ static void kiss_unesc(struct ax_disp *ax, unsigned char s)
 			if (test_bit(AXF_KEEPTEST, &ax->flags))
 				clear_bit(AXF_KEEPTEST, &ax->flags);
 
-			if (!clear_bit(AXF_ERROR, &ax->flags) && (ax->rcount > 2))
+			if (!test_and_clear_bit(AXF_ERROR, &ax->flags) && (ax->rcount > 2))
 				ax_bump(ax);
 
 			clear_bit(AXF_ESCAPE, &ax->flags);
@@ -720,11 +720,11 @@ static void kiss_unesc(struct ax_disp *ax, unsigned char s)
 			set_bit(AXF_ESCAPE, &ax->flags);
 			return;
 		case ESC_ESC:
-			if (clear_bit(AXF_ESCAPE, &ax->flags))
+			if (test_and_clear_bit(AXF_ESCAPE, &ax->flags))
 				s = ESC;
 			break;
 		case ESC_END:
-			if (clear_bit(AXF_ESCAPE, &ax->flags))
+			if (test_and_clear_bit(AXF_ESCAPE, &ax->flags))
 				s = END;
 			break;
 	}

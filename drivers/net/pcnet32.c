@@ -594,12 +594,12 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	/* Block a timer-based transmit from overlapping.  This could better be
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (set_bit(0, (void*)&dev->tbusy) != 0) {
+	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
 		printk("%s: Transmitter access conflict.\n", dev->name);
 		return 1;
 	}
 
-	if (set_bit(0, (void*)&lp->lock) != 0) {
+	if (test_and_set_bit(0, (void*)&lp->lock) != 0) {
 		if (pcnet32_debug > 0)
 			printk("%s: tx queue lock!.\n", dev->name);
 		/* don't clear dev->tbusy flag. */

@@ -800,7 +800,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	}
 
 	/* Block a timer-based transmit from overlapping. */
-	if (set_bit (0, (void *) &dev->tbusy) != 0) {
+	if (test_and_set_bit (0, (void *) &dev->tbusy) != 0) {
 		printk ("Transmitter access conflict.\n");
 		return -1;
 	}

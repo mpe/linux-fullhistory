@@ -412,7 +412,7 @@ static int send_pcb(struct device *dev, pcb_struct * pcb)
 		return FALSE;
 
 	/* Avoid contention */
-	if (set_bit(1, &adapter->send_pcb_semaphore)) {
+	if (test_and_set_bit(1, &adapter->send_pcb_semaphore)) {
 		if (elp_debug >= 3) {
 			printk("%s: send_pcb entered while threaded\n", dev->name);
 		}
@@ -545,7 +545,7 @@ static int receive_pcb(struct device *dev, pcb_struct * pcb)
 	}
 
 	if (pcb->command == CMD_RECEIVE_PACKET_COMPLETE) {
-		if (set_bit(0, (void *) &adapter->busy)) {
+		if (test_and_set_bit(0, (void *) &adapter->busy)) {
 			if (backlog_next(adapter->rx_backlog.in) == adapter->rx_backlog.out) {
 				set_hsf(dev, HSF_PCB_NAK);
 				printk("%s: PCB rejected, transfer in progress and backlog full\n", dev->name);
@@ -621,7 +621,7 @@ static void receive_packet(struct device *dev, int len)
 	}
 
 	/* if this happens, we die */
-	if (set_bit(0, (void *) &adapter->dmaing))
+	if (test_and_set_bit(0, (void *) &adapter->dmaing))
 		printk("%s: rx blocked, DMA in progress, dir %d\n", dev->name, adapter->current_dma.direction);
 
 	skb->dev = dev;
@@ -1031,7 +1031,7 @@ static int send_packet(struct device *dev, struct sk_buff *skb)
 	 */
 	unsigned int nlen = (((skb->len < 60) ? 60 : skb->len) + 1) & (~1);
 
-	if (set_bit(0, (void *) &adapter->busy)) {
+	if (test_and_set_bit(0, (void *) &adapter->busy)) {
 		if (elp_debug >= 2)
 			printk("%s: transmit blocked\n", dev->name);
 		return FALSE;
@@ -1054,7 +1054,7 @@ static int send_packet(struct device *dev, struct sk_buff *skb)
 		return FALSE;
 	}
 	/* if this happens, we die */
-	if (set_bit(0, (void *) &adapter->dmaing))
+	if (test_and_set_bit(0, (void *) &adapter->dmaing))
 		printk("%s: tx: DMA %d in progress\n", dev->name, adapter->current_dma.direction);
 
 	adapter->current_dma.direction = 1;
@@ -1119,7 +1119,7 @@ static int elp_start_xmit(struct sk_buff *skb, struct device *dev)
 	if (elp_debug >= 3)
 		printk("%s: request to send packet of length %d\n", dev->name, (int) skb->len);
 
-	if (set_bit(0, (void *) &dev->tbusy)) {
+	if (test_and_set_bit(0, (void *) &dev->tbusy)) {
 		printk("%s: transmitter access conflict\n", dev->name);
 		return 1;
 	}

@@ -526,7 +526,7 @@ static int eexp_xmit(struct sk_buff *buf, struct device *dev)
 		}
 	}
   
-	if (set_bit(0,(void *)&dev->tbusy))
+	if (test_and_set_bit(0,(void *)&dev->tbusy))
 	{
 		lp->stats.tx_dropped++;
 	}

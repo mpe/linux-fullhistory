@@ -286,7 +286,7 @@ static int if_open (struct device* dev)
 	if (dev->start)
 		return -EBUSY		/* only one open is allowed */
 	;
-	if (set_bit(0, (void*)&card->wandev.critical))
+	if (test_and_set_bit(0, (void*)&card->wandev.critical))
 		return -EAGAIN;
 	;
 	if ((card->hw.fwid == SFID_PPP502) ? config502(card) : config508(card))
@@ -365,7 +365,7 @@ static int if_close (struct device* dev)
 {
 	sdla_t* card = dev->priv;
 
-	if (set_bit(0, (void*)&card->wandev.critical))
+	if (test_and_set_bit(0, (void*)&card->wandev.critical))
 		return -EAGAIN;
 	;
 	dev->start = 0;
@@ -441,7 +441,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 	sdla_t* card = dev->priv;
 	int retry = 0;
 
-	if (set_bit(0, (void*)&card->wandev.critical))
+	if (test_and_set_bit(0, (void*)&card->wandev.critical))
 	{
 #ifdef _DEBUG_
 		printk(KERN_INFO "%s: if_send() hit critical section!\n",
@@ -451,7 +451,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 		return 1;
 	}
 
-	if (set_bit(0, (void*)&dev->tbusy))
+	if (test_and_set_bit(0, (void*)&dev->tbusy))
 	{
 #ifdef _DEBUG_
 		printk(KERN_INFO "%s: Tx collision on interface %s!\n",

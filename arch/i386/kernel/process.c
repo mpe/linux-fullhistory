@@ -150,7 +150,7 @@ int cpu_idle(void *unused)
 	current->priority = -100;
 	while(1)
 	{
-		if(cpu_data[hard_smp_processor_id()].hlt_works_ok &&
+		if(cpu_data[smp_processor_id()].hlt_works_ok &&
 		 		!hlt_counter && !need_resched)
 			__asm("hlt");
 		/*

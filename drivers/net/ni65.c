@@ -804,7 +804,7 @@ static void ni65_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 		return;
 	}
 
-	if(set_bit(0,(int *) &dev->interrupt)) {
+	if(test_and_set_bit(0,(int *) &dev->interrupt)) {
 		printk("ni65: oops .. interrupt while proceeding interrupt\n");
 		return;
 	}
@@ -1087,11 +1087,11 @@ static int ni65_send_packet(struct sk_buff *skb, struct device *dev)
 		dev->trans_start = jiffies;
 	}
 
-	if (set_bit(0, (void*)&dev->tbusy) != 0) {
+	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
 		 printk(KERN_ERR "%s: Transmitter access conflict.\n", dev->name);
 		 return 1;
 	}
-	if (set_bit(0, (void*)&p->lock)) {
+	if (test_and_set_bit(0, (void*)&p->lock)) {
 		printk(KERN_ERR "%s: Queue was locked.\n", dev->name);
 		return 1;
 	}

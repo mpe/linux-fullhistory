@@ -1291,7 +1291,7 @@ rcv_proto_unknown (struct ppp *ppp, __u16 proto,
  * The total length includes the protocol data.
  * Lock the user information buffer.
  */
-	if (set_bit (0, &ppp->ubuf->locked)) {
+	if (test_and_set_bit (0, &ppp->ubuf->locked)) {
 		if (ppp->flags & SC_DEBUG)
 			printk (KERN_DEBUG
 				"ppp_us_queue: can't get lock\n");
@@ -1698,7 +1698,7 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf,
 		if (!ppp || ppp->magic != PPP_MAGIC || !ppp->inuse)
 			return 0;
 
-		if (set_bit (0, &ppp->ubuf->locked) != 0) {
+		if (test_and_set_bit (0, &ppp->ubuf->locked) != 0) {
 			if (ppp->flags & SC_DEBUG)
 				printk (KERN_DEBUG
 				     "ppp_tty_read: sleeping(ubuf)\n");
@@ -2584,7 +2584,7 @@ ppp_tty_poll (struct tty_struct *tty, struct file *filp, poll_table * wait)
 		poll_wait(&ppp->write_wait, wait);
 
 		/* Must lock the user buffer area while checking. */
-		if(set_bit(0, &ppp->ubuf->locked) == 0) {
+		if(test_and_set_bit(0, &ppp->ubuf->locked) == 0) {
 			if(ppp->ubuf->head != ppp->ubuf->tail)
 				mask |= POLLIN | POLLRDNORM;
 			clear_bit(0, &ppp->ubuf->locked);
@@ -3130,7 +3130,7 @@ ppp_find (int pid_value)
 
 	while (ctl) {
 		ppp = ctl2ppp (ctl);
-		if (!set_bit(0, &ppp->inuse)) {
+		if (!test_and_set_bit(0, &ppp->inuse)) {
 			if (ppp->sc_xfer == pid_value) {
 				ppp->sc_xfer = 0;
 				return (ppp);
@@ -3160,7 +3160,7 @@ ppp_alloc (void)
 
 	while (ctl) {
 		ppp = ctl2ppp (ctl);
-		if (!set_bit(0, &ppp->inuse))
+		if (!test_and_set_bit(0, &ppp->inuse))
 			return (ppp);
 		ctl = ctl->next;
 		if (++if_num == max_dev)

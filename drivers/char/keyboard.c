@@ -501,7 +501,7 @@ static void handle_scancode(unsigned char scancode)
 
 	if (up_flag) {
 		rep = 0;
- 		if(!clear_bit(keycode, key_down)) {
+		if(!test_and_clear_bit(keycode, key_down)) {
 		    /* unexpected, but this can happen:
 		       maybe this was a key release for a FOCUS 9000
 		       PF key; if we want to see it, we have to clear
@@ -510,7 +510,7 @@ static void handle_scancode(unsigned char scancode)
 		      up_flag = 0;
 		}
 	} else
- 		rep = set_bit(keycode, key_down);
+ 		rep = test_and_set_bit(keycode, key_down);
 
 	if (kbd->kbdmode == VC_MEDIUMRAW) {
 		/* soon keycodes will require more than one byte */

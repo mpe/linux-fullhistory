@@ -1898,7 +1898,7 @@ static int happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 		}
 	}
 
-	if(set_bit(0, (void *) &dev->tbusy) != 0) {
+	if(test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
 		printk("happy meal: Transmitter access conflict.\n");
 		return 1;
 	}
@@ -1955,7 +1955,7 @@ static int sun4c_happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 		return 0;
 	}
 
-	if(set_bit(0, (void *) &dev->tbusy) != 0) {
+	if(test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
 		printk("happy meal: Transmitter access conflict.\n");
 		return 1;
 	}

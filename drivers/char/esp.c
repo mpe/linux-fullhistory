@@ -689,7 +689,7 @@ static void do_softint(void *private_)
 	if (!tty)
 		return;
 
-	if (clear_bit(ESP_EVENT_WRITE_WAKEUP, &info->event)) {
+	if (test_and_clear_bit(ESP_EVENT_WRITE_WAKEUP, &info->event)) {
 		if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 		    tty->ldisc.write_wakeup)
 			(tty->ldisc.write_wakeup)(tty);

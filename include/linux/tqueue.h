@@ -83,7 +83,7 @@ extern spinlock_t tqueue_lock;
 extern __inline__ void queue_task(struct tq_struct *bh_pointer,
 			   task_queue *bh_list)
 {
-	if (!set_bit(0,&bh_pointer->sync)) {
+	if (!test_and_set_bit(0,&bh_pointer->sync)) {
 		unsigned long flags;
 		spin_lock_irqsave(&tqueue_lock, flags);
 		bh_pointer->next = *bh_list;

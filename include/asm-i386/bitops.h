@@ -26,7 +26,31 @@ struct __dummy { unsigned long a[100]; };
 #define ADDR (*(struct __dummy *) addr)
 #define CONST_ADDR (*(const struct __dummy *) addr)
 
-extern __inline__ int set_bit(int nr, volatile void * addr)
+extern __inline__ void set_bit(int nr, volatile void * addr)
+{
+	__asm__ __volatile__( LOCK_PREFIX
+		"btsl %1,%0"
+		:"=m" (ADDR)
+		:"ir" (nr));
+}
+
+extern __inline__ void clear_bit(int nr, volatile void * addr)
+{
+	__asm__ __volatile__( LOCK_PREFIX
+		"btrl %1,%0"
+		:"=m" (ADDR)
+		:"ir" (nr));
+}
+
+extern __inline__ void change_bit(int nr, volatile void * addr)
+{
+	__asm__ __volatile__( LOCK_PREFIX
+		"btcl %1,%0"
+		:"=m" (ADDR)
+		:"ir" (nr));
+}
+
+extern __inline__ int test_and_set_bit(int nr, volatile void * addr)
 {
 	int oldbit;
 
@@ -37,7 +61,7 @@ extern __inline__ int set_bit(int nr, volatile void * addr)
 	return oldbit;
 }
 
-extern __inline__ int clear_bit(int nr, volatile void * addr)
+extern __inline__ int test_and_clear_bit(int nr, volatile void * addr)
 {
 	int oldbit;
 
@@ -48,7 +72,7 @@ extern __inline__ int clear_bit(int nr, volatile void * addr)
 	return oldbit;
 }
 
-extern __inline__ int change_bit(int nr, volatile void * addr)
+extern __inline__ int test_and_change_bit(int nr, volatile void * addr)
 {
 	int oldbit;
 
@@ -150,15 +174,15 @@ extern __inline__ unsigned long ffz(unsigned long word)
 
 #ifdef __KERNEL__
 
-#define ext2_set_bit                 set_bit
-#define ext2_clear_bit               clear_bit
+#define ext2_set_bit                 test_and_set_bit
+#define ext2_clear_bit               test_and_clear_bit
 #define ext2_test_bit                test_bit
 #define ext2_find_first_zero_bit     find_first_zero_bit
 #define ext2_find_next_zero_bit      find_next_zero_bit
 
 /* Bitmap functions for the minix filesystem.  */
-#define minix_set_bit(nr,addr) set_bit(nr,addr)
-#define minix_clear_bit(nr,addr) clear_bit(nr,addr)
+#define minix_set_bit(nr,addr) test_and_set_bit(nr,addr)
+#define minix_clear_bit(nr,addr) test_and_clear_bit(nr,addr)
 #define minix_test_bit(nr,addr) test_bit(nr,addr)
 #define minix_find_first_zero_bit(addr,size) find_first_zero_bit(addr,size)
 

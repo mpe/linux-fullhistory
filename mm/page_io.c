@@ -67,7 +67,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		return;
 	}
 	/* Make sure we are the only process doing I/O with this swap page. */
-	while (set_bit(offset,p->swap_lockmap)) {
+	while (test_and_set_bit(offset,p->swap_lockmap)) {
 		run_task_queue(&tq_disk);
 		sleep_on(&lock_queue);
 	}
@@ -136,7 +136,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 	} else
 		printk("rw_swap_page: no swap file or device\n");
 	atomic_dec(&page->count);
-	if (offset && !clear_bit(offset,p->swap_lockmap))
+	if (offset && !test_and_clear_bit(offset,p->swap_lockmap))
 		printk("rw_swap_page: lock already cleared\n");
 	wake_up(&lock_queue);
 }
@@ -158,7 +158,7 @@ void swap_after_unlock_page (unsigned long entry)
 		printk("swap_after_unlock_page: weirdness\n");
 		return;
 	}
-	if (!clear_bit(offset,p->swap_lockmap))
+	if (!test_and_clear_bit(offset,p->swap_lockmap))
 		printk("swap_after_unlock_page: lock already cleared\n");
 	wake_up(&lock_queue);
 }
@@ -187,7 +187,7 @@ void ll_rw_page(int rw, kdev_t dev, unsigned long offset, char * buffer)
 			panic("ll_rw_page: bad block dev cmd, must be R/W");
 	}
 	page = mem_map + MAP_NR(buffer);
-	if (set_bit(PG_locked, &page->flags))
+	if (test_and_set_bit(PG_locked, &page->flags))
 		panic ("ll_rw_page: page already locked");
 	brw_page(rw, page, dev, &block, PAGE_SIZE, 0);
 }

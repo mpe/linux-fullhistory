@@ -1588,7 +1588,7 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 
 	/* Block a timer-based transmit from overlapping.  This could better be
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-        if (set_bit(0, (void*)&dev->tbusy) != 0)
+        if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
         {
             BUGMSG(D_NORMAL,"transmitter called with busy bit set! (status=%Xh, inTX=%d, tickssofar=%ld)\n",
             		ARCSTATUS,lp->intx,jiffies-dev->trans_start);

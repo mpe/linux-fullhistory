@@ -332,7 +332,7 @@ static int shutdown (wan_device_t* wandev)
 	if (wandev->state == WAN_UNCONFIGURED)
 		return 0
 	;
-	if (set_bit(0, (void*)&wandev->critical))
+	if (test_and_set_bit(0, (void*)&wandev->critical))
 		return -EAGAIN
 	;
 	card = wandev->private;
@@ -364,7 +364,7 @@ static int ioctl (wan_device_t* wandev, unsigned cmd, unsigned long arg)
 	if (wandev->state == WAN_UNCONFIGURED)
 		return -ENODEV
 	;
-	if (set_bit(0, (void*)&wandev->critical))
+	if (test_and_set_bit(0, (void*)&wandev->critical))
 		return -EAGAIN
 	;
 	switch (cmd)
@@ -514,7 +514,7 @@ STATIC void sdla_poll (void* data)
 		sdla_t* card = &card_array[i];
 
 		if ((card->wandev.state != WAN_UNCONFIGURED) && card->poll &&
-		    !set_bit(0, (void*)&card->wandev.critical))
+		    !test_and_set_bit(0, (void*)&card->wandev.critical))
 		{
 			card->poll(card);
 			card->wandev.critical = 0;

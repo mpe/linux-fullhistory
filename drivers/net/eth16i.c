@@ -932,7 +932,7 @@ static int eth16i_tx(struct sk_buff *skb, struct device *dev)
 	/* Turn off TX interrupts */
 	outw(ETH16I_INTR_OFF, ioaddr + TX_INTR_REG);
 
-	if(set_bit(0, (void *)&dev->tbusy) != 0)
+	if(test_and_set_bit(0, (void *)&dev->tbusy) != 0)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;

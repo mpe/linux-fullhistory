@@ -655,7 +655,7 @@ __initfunc(int start_secondary(void *unused))
 	smp_callin();
 	while (!smp_commenced)
 		barrier();
-	cpu_idle(NULL);
+	return cpu_idle(NULL);
 }
 
 /*
@@ -1082,7 +1082,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	unsigned long flags;
 	unsigned long cfg;
 	unsigned long target_map;
-	int p=hard_smp_processor_id();
+	int p=smp_processor_id();
 	int irq;
 	int ct=0;
 
@@ -1250,8 +1250,8 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 void smp_flush_tlb(void)
 {
 	unsigned long flags;
-	if(smp_activated && hard_smp_processor_id()!=active_kernel_processor) {
-		printk("CPU #%d:Attempted flush tlb IPI when not AKP(=%d)\n",hard_smp_processor_id(),active_kernel_processor);
+	if(smp_activated && smp_processor_id()!=active_kernel_processor) {
+		printk("CPU #%d:Attempted flush tlb IPI when not AKP(=%d)\n",smp_processor_id(),active_kernel_processor);
 		*(char *)0=0;
 	}
 /*	printk("SMI-");*/
@@ -1304,7 +1304,7 @@ unsigned int prof_counter[NR_CPUS];
 
 void smp_local_timer_interrupt(struct pt_regs * regs)
 {
-	int cpu = hard_smp_processor_id();
+	int cpu = smp_processor_id();
 
 	/*
 	 * The profiling function is SMP safe. (nothing can mess
@@ -1400,7 +1400,7 @@ void smp_apic_timer_interrupt(struct pt_regs * regs)
  */
 asmlinkage void smp_reschedule_interrupt(void)
 {
-	int cpu = hard_smp_processor_id();
+	int cpu = smp_processor_id();
 
 	ack_APIC_irq();
 	/*
@@ -1417,7 +1417,7 @@ asmlinkage void smp_reschedule_interrupt(void)
  */
 asmlinkage void smp_invalidate_interrupt(void)
 {
-	if (clear_bit(hard_smp_processor_id(), &smp_invalidate_needed))
+	if (test_and_clear_bit(smp_processor_id(), &smp_invalidate_needed))
 		local_flush_tlb();
 
 	ack_APIC_irq ();
@@ -1428,7 +1428,7 @@ asmlinkage void smp_invalidate_interrupt(void)
  */
 asmlinkage void smp_stop_cpu_interrupt(void)
 {
-	if (cpu_data[hard_smp_processor_id()].hlt_works_ok)
+	if (cpu_data[smp_processor_id()].hlt_works_ok)
 		for(;;) __asm__("hlt");
 	for  (;;) ;
 }
@@ -1613,7 +1613,7 @@ static unsigned int calibration_result;
 
 __initfunc(void setup_APIC_clock (void))
 {
-	int cpu = hard_smp_processor_id();
+	int cpu = smp_processor_id();
 	unsigned long flags;
 
 	static volatile int calibration_lock;
@@ -1628,7 +1628,7 @@ __initfunc(void setup_APIC_clock (void))
 	 *   to do this part of the setup only once ... and it fits
 	 *   here best ]
 	 */
-	if (!set_bit(0,&calibration_lock)) {
+	if (!test_and_set_bit(0,&calibration_lock)) {
 
 		calibration_result=calibrate_APIC_clock();
 		/*
@@ -1668,7 +1668,7 @@ __initfunc(void setup_APIC_clock (void))
  */
 int setup_profiling_timer (unsigned int multiplier)
 {
-	int cpu = hard_smp_processor_id();
+	int cpu = smp_processor_id();
 	unsigned long flags;
 
 	/*

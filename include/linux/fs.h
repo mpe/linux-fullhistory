@@ -619,7 +619,7 @@ void mark_buffer_uptodate(struct buffer_head * bh, int on);
 
 extern inline void mark_buffer_clean(struct buffer_head * bh)
 {
-	if (clear_bit(BH_Dirty, &bh->b_state)) {
+	if (test_and_clear_bit(BH_Dirty, &bh->b_state)) {
 		if (bh->b_list == BUF_DIRTY)
 			refile_buffer(bh);
 	}
@@ -627,7 +627,7 @@ extern inline void mark_buffer_clean(struct buffer_head * bh)
 
 extern inline void mark_buffer_dirty(struct buffer_head * bh, int flag)
 {
-	if (!set_bit(BH_Dirty, &bh->b_state)) {
+	if (!test_and_set_bit(BH_Dirty, &bh->b_state)) {
 		set_writetime(bh, flag);
 		if (bh->b_list != BUF_DIRTY)
 			refile_buffer(bh);

@@ -123,7 +123,7 @@ sl_alloc(void)
 	  if (slp == NULL)
 	    break;
 	  /* Not in use ? */
-	  if (!set_bit(SLF_INUSE, &slp->ctrl.flags))
+	  if (!test_and_set_bit(SLF_INUSE, &slp->ctrl.flags))
 	    break;
 	}
 	/* SLP is set.. */
@@ -207,7 +207,7 @@ sl_free(struct slip *sl)
 	sl->slcomp = NULL;
 #endif
 
-	if (!clear_bit(SLF_INUSE, &sl->flags)) {
+	if (!test_and_clear_bit(SLF_INUSE, &sl->flags)) {
 		printk("%s: sl_free for already free unit.\n", sl->dev->name);
 	}
 }
@@ -317,7 +317,7 @@ static void sl_changedmtu(struct slip *sl)
 static inline void
 sl_lock(struct slip *sl)
 {
-	if (set_bit(0, (void *) &sl->dev->tbusy))  {
+	if (test_and_set_bit(0, (void *) &sl->dev->tbusy))  {
 		printk("%s: trying to lock already locked device!\n", sl->dev->name);
         }
 }
@@ -327,7 +327,7 @@ sl_lock(struct slip *sl)
 static inline void
 sl_unlock(struct slip *sl)
 {
-	if (!clear_bit(0, (void *)&sl->dev->tbusy))  {
+	if (!test_and_clear_bit(0, (void *)&sl->dev->tbusy))  {
 		printk("%s: trying to unlock already unlocked device!\n", sl->dev->name);
         }
 }
@@ -661,7 +661,7 @@ static void slip_receive_buf(struct tty_struct *tty, const unsigned char *cp, ch
 	/* Read the characters out of the buffer */
 	while (count--) {
 		if (fp && *fp++) {
-			if (!set_bit(SLF_ERROR, &sl->flags))  {
+			if (!test_and_set_bit(SLF_ERROR, &sl->flags))  {
 				sl->rx_errors++;
 			}
 			cp++;
@@ -843,7 +843,7 @@ static void slip_unesc(struct slip *sl, unsigned char s)
 		if (test_bit(SLF_KEEPTEST, &sl->flags))
 			clear_bit(SLF_KEEPTEST, &sl->flags);
 
-		if (!clear_bit(SLF_ERROR, &sl->flags) && (sl->rcount > 2))  {
+		if (!test_and_clear_bit(SLF_ERROR, &sl->flags) && (sl->rcount > 2))  {
 			sl_bump(sl);
 		}
 		clear_bit(SLF_ESCAPE, &sl->flags);
@@ -854,12 +854,12 @@ static void slip_unesc(struct slip *sl, unsigned char s)
 		set_bit(SLF_ESCAPE, &sl->flags);
 		return;
 	 case ESC_ESC:
-		if (clear_bit(SLF_ESCAPE, &sl->flags))  {
+		if (test_and_clear_bit(SLF_ESCAPE, &sl->flags))  {
 			s = ESC;
 		}
 		break;
 	 case ESC_END:
-		if (clear_bit(SLF_ESCAPE, &sl->flags))  {
+		if (test_and_clear_bit(SLF_ESCAPE, &sl->flags))  {
 			s = END;
 		}
 		break;
@@ -928,7 +928,7 @@ slip_unesc6(struct slip *sl, unsigned char s)
 		if (test_bit(SLF_KEEPTEST, &sl->flags))
 			clear_bit(SLF_KEEPTEST, &sl->flags);
 
-		if (!clear_bit(SLF_ERROR, &sl->flags) && (sl->rcount > 2))  {
+		if (!test_and_clear_bit(SLF_ERROR, &sl->flags) && (sl->rcount > 2))  {
 			sl_bump(sl);
 		}
 		sl->rcount = 0;

@@ -1,6 +1,6 @@
 SUB_DIRS     :=
 MOD_SUB_DIRS :=
-ALL_SUB_DIRS := icn teles pcbit hisax
+ALL_SUB_DIRS := icn pcbit hisax
 
 L_OBJS :=
 LX_OBJS :=
@@ -33,16 +33,6 @@ else
     ifdef CONFIG_ISDN_AUDIO
       O_OBJS += isdn_audio.o
     endif
-  endif
-endif
-
-ifeq ($(CONFIG_ISDN_DRV_TELES),y)
-  L_OBJS += teles/teles.o
-  SUB_DIRS += teles
-  MOD_SUB_DIRS += teles
-else
-  ifeq ($(CONFIG_ISDN_DRV_TELES),m)
-    MOD_SUB_DIRS += teles
   endif
 endif
 

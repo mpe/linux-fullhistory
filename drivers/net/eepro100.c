@@ -1033,7 +1033,7 @@ speedo_start_xmit(struct sk_buff *skb, struct device *dev)
 	/* Block a timer-based transmit from overlapping.  This could better be
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
 	   If this ever occurs the queue layer is doing something evil! */
-	if (set_bit(0, (void*)&dev->tbusy) != 0) {
+	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
 		int tickssofar = jiffies - dev->trans_start;
 		if (tickssofar < TX_TIMEOUT - 2)
 			return 1;

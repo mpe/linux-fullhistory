@@ -584,7 +584,7 @@ static int myri_start_xmit(struct sk_buff *skb, struct device *dev)
 		return 0;
 	}
 
-	if(set_bit(0, (void *) &dev->tbusy) != 0) {
+	if(test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
 		DTX(("tbusy, maybe a race? returning 1\n"));
 		printk("%s: Transmitter access conflict.\n", dev->name);
 		return 1;

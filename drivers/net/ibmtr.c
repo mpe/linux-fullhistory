@@ -1495,7 +1495,7 @@ static int tok_send_packet(struct sk_buff *skb, struct device *dev)
 		return 0;
 	}
 
-	if (set_bit(0,(void *)&dev->tbusy)!=0)
+	if (test_and_set_bit(0,(void *)&dev->tbusy)!=0)
 		DPRINTK("Transmitter access conflict\n");
 	else {
 		/* Save skb; we'll need it when the adapter asks for the data */

@@ -22,7 +22,7 @@ extern inline void wait_on_buffer(struct buffer_head * bh)
 
 extern inline void lock_buffer(struct buffer_head * bh)
 {
-	while (set_bit(BH_Lock, &bh->b_state))
+	while (test_and_set_bit(BH_Lock, &bh->b_state))
 		__wait_on_buffer(bh);
 }
 

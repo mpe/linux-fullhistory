@@ -115,7 +115,7 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 	map_nr &= mask;
 	nr_free_pages -= mask;
 	while (mask + (1 << (NR_MEM_LISTS-1))) {
-		if (!change_bit(index, area->map))
+		if (!test_and_change_bit(index, area->map))
 			break;
 		remove_mem_queue(list(map_nr ^ -mask));
 		mask <<= 1;

@@ -171,7 +171,7 @@ int shrink_mmap(int priority, int dma)
 		switch (atomic_read(&page->count)) {
 			case 1:
 				/* If it has been referenced recently, don't free it */
-				if (clear_bit(PG_referenced, &page->flags))
+				if (test_and_clear_bit(PG_referenced, &page->flags))
 					break;
 
 				/* is it a page cache page? */
@@ -1340,7 +1340,7 @@ generic_file_write(struct inode *inode, struct file *file, const char *buf, unsi
 		}
 
 lockit:
-		while (set_bit(PG_locked, &page->flags))
+		while (test_and_set_bit(PG_locked, &page->flags))
 			wait_on_page(page);
 
 		/*

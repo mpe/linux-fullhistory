@@ -476,7 +476,7 @@ static int if_open (struct device* dev)
 	if (dev->start)
 		return -EBUSY		/* only one open is allowed */
 	;
-	if (set_bit(0, (void*)&card->wandev.critical))
+	if (test_and_set_bit(0, (void*)&card->wandev.critical))
 		return -EAGAIN;
 	;
 
@@ -503,7 +503,7 @@ static int if_close (struct device* dev)
 	x25_channel_t* chan = dev->priv;
 	sdla_t* card = chan->card;
 
-	if (set_bit(0, (void*)&card->wandev.critical))
+	if (test_and_set_bit(0, (void*)&card->wandev.critical))
 		return -EAGAIN;
 	;
 	dev->start = 0;
@@ -590,7 +590,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 	sdla_t* card = chan->card;
 	int retry = 0, queued = 0;
 
-	if (set_bit(0, (void*)&card->wandev.critical))
+	if (test_and_set_bit(0, (void*)&card->wandev.critical))
 	{
 #ifdef _DEBUG_
 		printk(KERN_INFO "%s: if_send() hit critical section!\n",
@@ -600,7 +600,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 		return 1;
 	}
 
-	if (set_bit(0, (void*)&dev->tbusy))
+	if (test_and_set_bit(0, (void*)&dev->tbusy))
 	{
 #ifdef _DEBUG_
 		printk(KERN_INFO "%s: Tx collision on interface %s!\n",

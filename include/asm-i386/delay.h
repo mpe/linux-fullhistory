@@ -30,20 +30,25 @@ extern __inline__ void __delay(int loops)
  * first constant multiplications gets optimized away if the delay is
  * a constant)
  */
-extern __inline__ void udelay(unsigned long usecs)
+extern __inline__ void __udelay(unsigned long usecs, unsigned long lps)
 {
 	usecs *= 0x000010c6;		/* 2**32 / 1000000 */
 	__asm__("mull %0"
 		:"=d" (usecs)
-#ifdef __SMP__
-		:"a" (usecs),"0" (cpu_data[hard_smp_processor_id()].udelay_val)
-#else
-		:"a" (usecs),"0" (loops_per_sec)
-#endif
+		:"a" (usecs),"0" (lps)
 		:"ax");
 		
 	__delay(usecs);
 }
+
+#ifdef __SMP__
+#define __udelay_val cpu_data[smp_processor_id()].udelay_val
+#else
+#define __udelay_val loops_per_sec
+#endif
+
+#define udelay(usecs) __udelay((usecs),__udelay_val)
+
 
 extern __inline__ unsigned long muldiv(unsigned long a, unsigned long b, unsigned long c)
 {

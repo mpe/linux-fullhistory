@@ -468,7 +468,7 @@ static int el3_start_xmit(struct sk_buff *skb, struct device *dev)
 #endif
 #endif
 	/* Avoid timer-based retransmission conflicts. */
-	if (set_bit(0, (void*)&dev->tbusy) != 0)
+	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
 		lp->stats.tx_bytes+=skb->len;

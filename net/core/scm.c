@@ -243,7 +243,7 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 	int i;
 	struct file **fp = scm->fp->fp;
 
-	if (fdnum > fdmax)
+	if (fdnum < fdmax)
 		fdmax = fdnum;
 
 	for (i=0, cmfptr=(int*)cm->cmsg_data; i<fdmax; i++, cmfptr++)
@@ -253,7 +253,6 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 			break;
 		current->files->fd[new_fd] = fp[i];
 		err = put_user(new_fd, cmfptr);
-		cmfptr++;
 	}
 
 	if (i > 0)

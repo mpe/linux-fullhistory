@@ -59,7 +59,7 @@ static inline struct x25_asy *x25_asy_alloc(void)
 		if (slp == NULL)
 			break;
 		/* Not in use ? */
-		if (!set_bit(SLF_INUSE, &slp->ctrl.flags))
+		if (!test_and_set_bit(SLF_INUSE, &slp->ctrl.flags))
 			break;
 	}
 	/* SLP is set.. */
@@ -124,7 +124,7 @@ static inline void x25_asy_free(struct x25_asy *sl)
 	}
 	sl->xbuff = NULL;
 
-	if (!clear_bit(SLF_INUSE, &sl->flags)) {
+	if (!test_and_clear_bit(SLF_INUSE, &sl->flags)) {
 		printk("%s: x25_asy_free for already free unit.\n", sl->dev->name);
 	}
 }
@@ -201,7 +201,7 @@ static void x25_asy_changed_mtu(struct x25_asy *sl)
 
 static inline void x25_asy_lock(struct x25_asy *sl)
 {
-	if (set_bit(0, (void *) &sl->dev->tbusy))
+	if (test_and_set_bit(0, (void *) &sl->dev->tbusy))
 		printk("%s: trying to lock already locked device!\n", sl->dev->name);
 }
 
@@ -210,7 +210,7 @@ static inline void x25_asy_lock(struct x25_asy *sl)
 
 static inline void x25_asy_unlock(struct x25_asy *sl)
 {
-	if (!clear_bit(0, (void *)&sl->dev->tbusy))
+	if (!test_and_clear_bit(0, (void *)&sl->dev->tbusy))
 		printk("%s: trying to unlock already unlocked device!\n", sl->dev->name);
 }
 
@@ -587,7 +587,7 @@ static void x25_asy_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 	/* Read the characters out of the buffer */
 	while (count--) {
 		if (fp && *fp++) {
-			if (!set_bit(SLF_ERROR, &sl->flags))  {
+			if (!test_and_set_bit(SLF_ERROR, &sl->flags))  {
 				sl->rx_errors++;
 			}
 			cp++;
@@ -736,7 +736,7 @@ static void x25_asy_unesc(struct x25_asy *sl, unsigned char s)
 	switch(s) 
 	{
 		case X25_END:
-			if (!clear_bit(SLF_ERROR, &sl->flags) && (sl->rcount > 2))  
+			if (!test_and_clear_bit(SLF_ERROR, &sl->flags) && (sl->rcount > 2))  
 			{
 				x25_asy_bump(sl);
 			}
@@ -750,7 +750,7 @@ static void x25_asy_unesc(struct x25_asy *sl, unsigned char s)
 			
 		case X25_ESCAPE(X25_ESC):
 		case X25_ESCAPE(X25_END):
-			if (clear_bit(SLF_ESCAPE, &sl->flags))
+			if (test_and_clear_bit(SLF_ESCAPE, &sl->flags))
 				s = X25_UNESCAPE(s);
 			break;
 	}

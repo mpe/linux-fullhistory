@@ -3491,7 +3491,7 @@ static void do_softint(void *private_)
 
 		if (tty && tty->driver_data) 
 		{ 
-			if (clear_bit(EPCA_EVENT_HANGUP, &ch->event)) 
+			if (test_and_clear_bit(EPCA_EVENT_HANGUP, &ch->event)) 
 			{ /* Begin if clear_bit */
 
 				tty_hangup(tty);

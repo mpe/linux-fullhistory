@@ -758,16 +758,16 @@ do_softint(void *private_)
     if (!tty)
         return;
 
-    if (clear_bit(Cy_EVENT_HANGUP, &info->event)) {
+    if (test_and_clear_bit(Cy_EVENT_HANGUP, &info->event)) {
         tty_hangup(info->tty);
         wake_up_interruptible(&info->open_wait);
         info->flags &= ~(ASYNC_NORMAL_ACTIVE|
                              ASYNC_CALLOUT_ACTIVE);
     }
-    if (clear_bit(Cy_EVENT_OPEN_WAKEUP, &info->event)) {
+    if (test_and_clear_bit(Cy_EVENT_OPEN_WAKEUP, &info->event)) {
         wake_up_interruptible(&info->open_wait);
     }
-    if (clear_bit(Cy_EVENT_WRITE_WAKEUP, &info->event)) {
+    if (test_and_clear_bit(Cy_EVENT_WRITE_WAKEUP, &info->event)) {
         if((tty->flags & (1<< TTY_DO_WRITE_WAKEUP))
         && tty->ldisc.write_wakeup){
             (tty->ldisc.write_wakeup)(tty);

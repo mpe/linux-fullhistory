@@ -17,7 +17,66 @@
  * bit 0 is the LSB of addr; bit 64 is the LSB of (addr+1).
  */
 
-extern __inline__ unsigned long set_bit(unsigned long nr, void * addr)
+extern __inline__ void set_bit(unsigned long nr, void * addr)
+{
+	unsigned long oldbit;
+	unsigned long temp;
+	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+
+	__asm__ __volatile__(
+	"1:	ldl_l %0,%1\n"
+	"	and %0,%3,%2\n"
+	"	bne %2,2f\n"
+	"	xor %0,%3,%0\n"
+	"	stl_c %0,%1\n"
+	"	beq %0,3f\n"
+	"2:\n"
+	".section .text2,\"ax\"\n"
+	"3:	br 1b\n"
+	".previous"
+	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
+	:"Ir" (1UL << (nr & 31)), "m" (*m));
+}
+
+extern __inline__ void clear_bit(unsigned long nr, void * addr)
+{
+	unsigned long oldbit;
+	unsigned long temp;
+	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+
+	__asm__ __volatile__(
+	"1:	ldl_l %0,%1\n"
+	"	and %0,%3,%2\n\t"
+	"	beq %2,2f\n\t"
+	"	xor %0,%3,%0\n\t"
+	"	stl_c %0,%1\n\t"
+	"	beq %0,3f\n"
+	"2:\n"
+	".section .text2,\"ax\"\n"
+	"3:	br 1b\n"
+	".previous"
+	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
+	:"Ir" (1UL << (nr & 31)), "m" (*m));
+}
+
+extern __inline__ void change_bit(unsigned long nr, void * addr)
+{
+	unsigned long temp;
+	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+
+	__asm__ __volatile__(
+	"1:	ldl_l %0,%1\n"
+	"	xor %0,%2,%0\n\t"
+	"	stl_c %0,%1\n\t"
+	"	beq %0,3f\n"
+	".section .text2,\"ax\"\n"
+	"3:	br 1b\n"
+	".previous"
+	:"=&r" (temp), "=m" (*m)
+	:"Ir" (1UL << (nr & 31)), "m" (*m));
+}
+
+extern __inline__ unsigned long test_and_set_bit(unsigned long nr, void * addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
@@ -40,7 +99,7 @@ extern __inline__ unsigned long set_bit(unsigned long nr, void * addr)
 	return oldbit != 0;
 }
 
-extern __inline__ unsigned long clear_bit(unsigned long nr, void * addr)
+extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, void * addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
@@ -63,7 +122,7 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, void * addr)
 	return oldbit != 0;
 }
 
-extern __inline__ unsigned long change_bit(unsigned long nr, void * addr)
+extern __inline__ unsigned long test_and_change_bit(unsigned long nr, void * addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
@@ -166,15 +225,15 @@ found_middle:
 
 #ifdef __KERNEL__
 
-#define ext2_set_bit                 set_bit
-#define ext2_clear_bit               clear_bit
+#define ext2_set_bit                 test_and_set_bit
+#define ext2_clear_bit               test_and_clear_bit
 #define ext2_test_bit                test_bit
 #define ext2_find_first_zero_bit     find_first_zero_bit
 #define ext2_find_next_zero_bit      find_next_zero_bit
 
 /* Bitmap functions for the minix filesystem.  */
-#define minix_set_bit(nr,addr) set_bit(nr,addr)
-#define minix_clear_bit(nr,addr) clear_bit(nr,addr)
+#define minix_set_bit(nr,addr) test_and_set_bit(nr,addr)
+#define minix_clear_bit(nr,addr) test_and_clear_bit(nr,addr)
 #define minix_test_bit(nr,addr) test_bit(nr,addr)
 #define minix_find_first_zero_bit(addr,size) find_first_zero_bit(addr,size)
 

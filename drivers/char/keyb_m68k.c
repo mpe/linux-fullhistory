@@ -205,7 +205,7 @@ void process_keycode (int keycode)
         keycode &= 0x7f;
 	if (up_flag) {
 		rep = 0;
- 		if(!clear_bit(keycode, key_down)) {
+ 		if(!test_and_clear_bit(keycode, key_down)) {
 		    /* unexpected, but this can happen:
 		       maybe this was a key release for a FOCUS 9000
 		       PF key; if we want to see it, we have to clear

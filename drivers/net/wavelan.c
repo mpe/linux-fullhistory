@@ -895,7 +895,7 @@ wv_82586_reconfig(device *	dev)
   net_local *	lp = (net_local *)dev->priv;
 
   /* Check if we can do it now ! */
-  if(!(dev->start) || (set_bit(0, (void *)&dev->tbusy) != 0))
+  if(!(dev->start) || (test_and_set_bit(0, (void *)&dev->tbusy) != 0))
     {
       lp->reconfig_82586 = 1;
 #ifdef DEBUG_CONFIG_INFO
@@ -2799,7 +2799,7 @@ wavelan_packet_xmit(struct sk_buff *	skb,
    * Block a timer-based transmit from overlapping.
    * In other words, prevent reentering this routine.
    */
-  if(set_bit(0, (void *)&dev->tbusy) != 0)
+  if(test_and_set_bit(0, (void *)&dev->tbusy) != 0)
 #ifdef DEBUG_TX_ERROR
     printk(KERN_INFO "%s: Transmitter access conflict.\n", dev->name);
 #endif

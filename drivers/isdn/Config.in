@@ -11,7 +11,6 @@ fi
 bool 'Support audio via ISDN' CONFIG_ISDN_AUDIO
 dep_tristate 'ICN 2B and 4B support' CONFIG_ISDN_DRV_ICN $CONFIG_ISDN
 dep_tristate 'PCBIT-D support' CONFIG_ISDN_DRV_PCBIT $CONFIG_ISDN
-dep_tristate 'Teles/NICCY1016PC/Creatix support' CONFIG_ISDN_DRV_TELES $CONFIG_ISDN
 dep_tristate 'HiSax SiemensChipSet driver support' CONFIG_ISDN_DRV_HISAX $CONFIG_ISDN
 if [ "$CONFIG_ISDN_DRV_HISAX" != "n" ]; then
     bool 'HiSax Support for Teles 16.0/8.0' CONFIG_HISAX_16_0

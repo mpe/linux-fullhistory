@@ -599,7 +599,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 #ifdef OLD_METHOD
 	dev->tbusy = 1;
 #else
-	if (set_bit (0, (void *) &dev->tbusy) != 0) {
+	if (test_and_set_bit (0, (void *) &dev->tbusy) != 0) {
 		printk ("Transmitter access conflict.\n");
 		return -1;
 	}

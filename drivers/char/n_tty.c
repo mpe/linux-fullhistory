@@ -78,7 +78,7 @@ void n_tty_flush_buffer(struct tty_struct * tty)
 		return;
 
 	if (tty->driver.unthrottle &&
-	    clear_bit(TTY_THROTTLED, &tty->flags))
+	    test_and_clear_bit(TTY_THROTTLED, &tty->flags))
 		tty->driver.unthrottle(tty);
 	if (tty->link->packet) {
 		tty->ctrl_status |= TIOCPKT_FLUSHREAD;
@@ -598,7 +598,7 @@ static void n_tty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 
 	if ((tty->read_cnt >= TTY_THRESHOLD_THROTTLE) &&
 	    tty->driver.throttle &&
-	    !set_bit(TTY_THROTTLED, &tty->flags))
+	    !test_and_set_bit(TTY_THROTTLED, &tty->flags))
 		tty->driver.throttle(tty);
 }
 
@@ -874,7 +874,7 @@ do_it_again:
 				if (!tty->read_cnt) {
 					break;
 				}
-				eol = clear_bit(tty->read_tail,
+				eol = test_and_clear_bit(tty->read_tail,
 						&tty->read_flags);
 				c = tty->read_buf[tty->read_tail];
 				tty->read_tail = ((tty->read_tail+1) &
@@ -904,7 +904,7 @@ do_it_again:
 		   low-level driver know. */
 		if (tty->driver.unthrottle &&
 		    (tty->read_cnt <= TTY_THRESHOLD_UNTHROTTLE)
-		    && clear_bit(TTY_THROTTLED, &tty->flags))
+		    && test_and_clear_bit(TTY_THROTTLED, &tty->flags))
 			tty->driver.unthrottle(tty);
 
 		if (b - buf >= minimum || !nr)
@@ -923,7 +923,7 @@ do_it_again:
 	size = b - buf;
 	if (size && nr)
 	        clear_bit(TTY_PUSH, &tty->flags);
-        if (!size && clear_bit(TTY_PUSH, &tty->flags))
+        if (!size && test_and_clear_bit(TTY_PUSH, &tty->flags))
                 goto do_it_again;
 	if (!size && !retval)
 	        clear_bit(TTY_PUSH, &tty->flags);

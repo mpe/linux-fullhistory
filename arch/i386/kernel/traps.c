@@ -23,6 +23,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -240,34 +241,45 @@ out:
 	unlock_kernel();
 }
 
-void enable_NMI(void)
+static void mem_parity_error(unsigned char reason, struct pt_regs * regs)
 {
-	unsigned char reason;
+	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");
+	printk("You probably have a hardware problem with your RAM chips\n");
+}	
+
+static void io_check_error(unsigned char reason, struct pt_regs * regs)
+{
 	unsigned long i;
 
-	reason = inb(0x61);
-	printk("NMI reason = %02x\n", reason);
+	printk("NMI: IOCK error (debug interrupt?)\n");
+	show_registers(regs);
+
+	/* Re-enable the IOCK line, wait for a few seconds */
 	reason |= 8;
 	outb(reason, 0x61);
-	i = 400000000;
-	while (--i) ;
+	i = 2000;
+	while (--i) udelay(1000);
 	reason &= ~8;
 	outb(reason, 0x61);
 }
 
+static void unknown_nmi_error(unsigned char reason, struct pt_regs * regs)
+{
+	printk("Uhhuh. NMI received for unknown reason %02x.\n", reason);
+	printk("Dazed and confused, but trying to continue\n");
+	printk("Do you have a strange power saving mode enabled?\n");
+}
+
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
-	show_registers(regs);
-#ifdef CONFIG_SMP_NMI_INVAL
-	smp_flush_tlb_rcv();
-#else
-#ifndef CONFIG_IGNORE_NMI
-	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");
-	printk("You probably have a hardware problem with your RAM chips or a\n");
-	printk("power saving mode enabled.\n");
-#endif	
-#endif
-	enable_NMI();
+	unsigned char reason = inb(0x61);
+
+	if (reason & 0x80)
+		mem_parity_error(reason, regs);
+	if (reason & 0x40)
+		io_check_error(reason, regs);
+	if (!(reason & 0xc0))
+		unknown_nmi_error(reason, regs);
 }
 
 asmlinkage void do_debug(struct pt_regs * regs, long error_code)

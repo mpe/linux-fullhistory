@@ -1171,12 +1171,12 @@ static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
 		return 0;
 	}
 
-	if (set_bit(0, (void*)&dev->tbusy)) {
+	if (test_and_set_bit(0, (void*)&dev->tbusy)) {
 		printk("%s: Transmitter access conflict.\n", dev->name);
 		return 1;
 	}
 #if(NUM_XMIT_BUFFS > 1)
-	else if(set_bit(0,(void *) &p->lock)) {
+	else if(test_and_set_bit(0,(void *) &p->lock)) {
 		printk("%s: Queue was locked\n",dev->name);
 		return 1;
 	}

@@ -104,12 +104,6 @@ struct kernel_stat kstat = { 0 };
 
 static inline void add_to_runqueue(struct task_struct * p)
 {
-#if 1	/* sanity tests */
-	if (p->next_run || p->prev_run) {
-		printk("task already on run-queue\n");
-		return;
-	}
-#endif
 	if (p->counter > current->counter + 3)
 		need_resched = 1;
 	nr_running++;
@@ -123,20 +117,6 @@ static inline void del_from_runqueue(struct task_struct * p)
 	struct task_struct *next = p->next_run;
 	struct task_struct *prev = p->prev_run;
 
-#if 1	/* sanity tests */
-	if (!next || !prev) {
-		printk("task not on run-queue\n");
-		return;
-	}
-#endif
-	if (!p->pid) {
-		static int nr = 0;
-		if (nr < 5) {
-			nr++;
-			printk("idle task may not sleep\n");
-		}
-		return;
-	}
 	nr_running--;
 	next->prev_run = prev;
 	prev->next_run = next;
@@ -262,8 +242,6 @@ static inline int goodness(struct task_struct * p, struct task_struct * prev, in
 #define TVN_MASK (TVN_SIZE - 1)
 #define TVR_MASK (TVR_SIZE - 1)
 
-#define SLOW_BUT_DEBUGGING_TIMERS 0
-
 struct timer_vec {
         int index;
         struct timer_list *vec[TVN_SIZE];
@@ -338,17 +316,7 @@ void add_timer(struct timer_list *timer)
 	unsigned long flags;
 
 	spin_lock_irqsave(&timerlist_lock, flags);
-#if SLOW_BUT_DEBUGGING_TIMERS
-        if (timer->next || timer->prev) {
-                printk("add_timer() called with non-zero list from %p\n",
-		       __builtin_return_address(0));
-		goto out;
-        }
-#endif
 	internal_add_timer(timer);
-#if SLOW_BUT_DEBUGGING_TIMERS
-out:
-#endif
 	spin_unlock_irqrestore(&timerlist_lock, flags);
 }
 
@@ -550,26 +518,18 @@ rwlock_t waitqueue_lock = RW_LOCK_UNLOCKED;
 void wake_up(struct wait_queue **q)
 {
 	struct wait_queue *next;
-	struct wait_queue *head;
 
 	read_lock(&waitqueue_lock);
 	if (q && (next = *q)) {
+		struct wait_queue *head;
+
 		head = WAIT_QUEUE_HEAD(q);
 		while (next != head) {
 			struct task_struct *p = next->task;
 			next = next->next;
-			if (p != NULL) {
-				if ((p->state == TASK_UNINTERRUPTIBLE) ||
-				    (p->state == TASK_INTERRUPTIBLE))
-					wake_up_process(p);
-			}
-			if (next)
-				continue;
-			printk("wait_queue is bad (eip = %p)\n",
-				__builtin_return_address(0));
-			printk("        q = %p\n",q);
-			printk("       *q = %p\n",*q);
-			break;
+			if ((p->state == TASK_UNINTERRUPTIBLE) ||
+			    (p->state == TASK_INTERRUPTIBLE))
+				wake_up_process(p);
 		}
 	}
 	read_unlock(&waitqueue_lock);
@@ -578,25 +538,17 @@ void wake_up(struct wait_queue **q)
 void wake_up_interruptible(struct wait_queue **q)
 {
 	struct wait_queue *next;
-	struct wait_queue *head;
 
 	read_lock(&waitqueue_lock);
 	if (q && (next = *q)) {
+		struct wait_queue *head;
+
 		head = WAIT_QUEUE_HEAD(q);
 		while (next != head) {
 			struct task_struct *p = next->task;
 			next = next->next;
-			if (p != NULL) {
-				if (p->state == TASK_INTERRUPTIBLE)
-					wake_up_process(p);
-			}
-			if (next)
-				continue;
-			printk("wait_queue is bad (eip = %p)\n",
-				__builtin_return_address(0));
-			printk("        q = %p\n",q);
-			printk("       *q = %p\n",*q);
-			break;
+			if (p->state == TASK_INTERRUPTIBLE)
+				wake_up_process(p);
 		}
 	}
 	read_unlock(&waitqueue_lock);
@@ -718,13 +670,10 @@ static inline void __sleep_on(struct wait_queue **p, int state)
 
 	if (!p)
 		return;
-	if (current == task[0])
-		panic("task[0] trying to sleep");
 	current->state = state;
 	write_lock_irqsave(&waitqueue_lock, flags);
 	__add_wait_queue(p, &wait);
 	write_unlock(&waitqueue_lock);
-	sti();
 	schedule();
 	write_lock_irq(&waitqueue_lock);
 	__remove_wait_queue(p, &wait);

@@ -553,7 +553,7 @@ kdev_t get_unnamed_dev(void)
 	int i;
 
 	for (i = 1; i < 256; i++) {
-		if (!set_bit(i,unnamed_dev_in_use))
+		if (!test_and_set_bit(i,unnamed_dev_in_use))
 			return MKDEV(UNNAMED_MAJOR, i);
 	}
 	return 0;
@@ -563,7 +563,7 @@ void put_unnamed_dev(kdev_t dev)
 {
 	if (!dev || MAJOR(dev) != UNNAMED_MAJOR)
 		return;
-	if (clear_bit(MINOR(dev), unnamed_dev_in_use))
+	if (test_and_clear_bit(MINOR(dev), unnamed_dev_in_use))
 		return;
 	printk("VFS: put_unnamed_dev: freeing unused device %s\n",
 			kdevname(dev));

@@ -288,7 +288,7 @@ void hdlcdrv_receiver(struct device *dev, struct hdlcdrv_state *s)
 	
 	if (!s || s->magic != HDLCDRV_MAGIC) 
 		return;
-	if (set_bit(0, &s->hdlcrx.in_hdlc_rx))
+	if (test_and_set_bit(0, &s->hdlcrx.in_hdlc_rx))
 		return;
 
 	while (!hdlcdrv_hbuf_empty(&s->hdlcrx.hbuf)) {
@@ -387,7 +387,7 @@ void hdlcdrv_transmitter(struct device *dev, struct hdlcdrv_state *s)
 
 	if (!s || s->magic != HDLCDRV_MAGIC) 
 		return;
-	if (set_bit(0, &s->hdlctx.in_hdlc_tx))
+	if (test_and_set_bit(0, &s->hdlctx.in_hdlc_tx))
 		return;
 	for (;;) {
 		if (s->hdlctx.numbits >= 16) {

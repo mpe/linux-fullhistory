@@ -248,7 +248,7 @@ static int dlci_transmit(struct sk_buff *skb, struct device *dev)
 
 	dlp = dev->priv;
 
-	if (set_bit(0, (void*)&dev->tbusy) != 0)
+	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
 		printk(KERN_WARNING "%s: transmitter access conflict.\n", dev->name);
 	else
 	{

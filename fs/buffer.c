@@ -1120,11 +1120,11 @@ no_grow:
 /* Run the hooks that have to be done when a page I/O has completed. */
 static inline void after_unlock_page (struct page * page)
 {
-	if (clear_bit(PG_decr_after, &page->flags))
+	if (test_and_clear_bit(PG_decr_after, &page->flags))
 		atomic_dec(&nr_async_pages);
-	if (clear_bit(PG_free_after, &page->flags))
+	if (test_and_clear_bit(PG_free_after, &page->flags))
 		__free_page(page);
-	if (clear_bit(PG_swap_unlock_after, &page->flags))
+	if (test_and_clear_bit(PG_swap_unlock_after, &page->flags))
 		swap_after_unlock_page(page->swap_unlock_entry);
 }
 
