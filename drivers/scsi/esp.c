@@ -1,4 +1,4 @@
-/* $Id: esp.c,v 1.88 1999/12/21 02:38:07 davem Exp $
+/* $Id: esp.c,v 1.89 1999/12/23 01:46:14 davem Exp $
  * esp.c:  EnhancedScsiProcessor Sun SCSI driver code.
  *
  * Copyright (C) 1995, 1998 David S. Miller (davem@caip.rutgers.edu)
@@ -39,6 +39,8 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/idprom.h>
+
+#include <linux/module.h>
 
 #define DEBUG_ESP
 /* #define DEBUG_ESP_HME */
@@ -4337,3 +4339,11 @@ static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 	}
 	spin_unlock_irqrestore(&esp->lock, flags);
 }
+
+#ifdef MODULE
+Scsi_Host_Template driver_template = SCSI_SPARC_ESP;
+
+#include "scsi_module.c"
+
+EXPORT_NO_SYMBOLS;
+#endif /* MODULE */

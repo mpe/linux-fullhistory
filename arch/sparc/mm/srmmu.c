@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.198 1999/11/14 06:15:14 zaitcev Exp $
+/* $Id: srmmu.c,v 1.199 1999/12/23 02:00:51 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -1560,7 +1560,8 @@ static unsigned long __init map_spbank(unsigned long vbase, int sp_entry)
 	srmmu_map[srmmu_bank].vbase = vbase;
 	srmmu_map[srmmu_bank].pbase = sp_banks[sp_entry].base_addr;
 	srmmu_map[srmmu_bank].size = sp_banks[sp_entry].num_bytes;
-	srmmu_bank++;
+	if (srmmu_map[srmmu_bank].size)
+		srmmu_bank++;
 	map_spbank_last_pa = pstart - SRMMU_PGDIR_SIZE;
 	return vstart;
 }

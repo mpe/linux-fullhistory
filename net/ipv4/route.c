@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.72 1999/08/30 10:17:12 davem Exp $
+ * Version:	$Id: route.c,v 1.75 1999/12/23 01:41:44 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -736,7 +736,7 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 					goto do_next;
 				}
 
-				rt_del(hash, rt);
+				rt_del(hash, rth);
 				if (!rt_intern_hash(hash, rt, &rt))
 					ip_rt_put(rt);
 				goto do_next;

@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.85 1999/12/20 05:01:56 davem Exp $
+# $Id: config.in,v 1.86 1999/12/23 01:46:09 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -145,7 +145,7 @@ if [ "$CONFIG_SCSI" != "n" ]; then
    mainmenu_option next_comment
    comment 'SCSI low-level drivers'
 
-   bool 'Sparc ESP Scsi Driver' CONFIG_SCSI_SUNESP $CONFIG_SCSI
+   tristate 'Sparc ESP Scsi Driver' CONFIG_SCSI_SUNESP $CONFIG_SCSI
    tristate 'PTI Qlogic, ISP Driver' CONFIG_SCSI_QLOGICPTI $CONFIG_SCSI
 
    if [ "$CONFIG_PCI" != "n" ]; then

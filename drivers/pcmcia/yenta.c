@@ -23,10 +23,10 @@
 static int yenta_inquire(pci_socket_t *socket, socket_cap_t *cap)
 {
 	cap->features = SS_CAP_PAGE_REGS | SS_CAP_PCCARD | SS_CAP_CARDBUS;
-	cap->irq_mask = 0;
-	cap->map_size = 0;
+	cap->irq_mask = 0xdeb8;		/* irq 15,14,12,11,10,9,7,5,4,3 */
+	cap->map_size = 0x1000;
 	cap->pci_irq = socket->irq;
-	cap->cardbus = 1;
+	cap->cardbus = 0;
 	cap->cb_bus = NULL;
 	cap->bus = NULL;
 
@@ -36,7 +36,7 @@ printk("yenta_inquire()\n");
 }
 
 /*
- * Silly interface. We convert the cardbus status to a internal status,
+ * Silly interface. We convert the cardbus status to a internal status,
  * and we probably really should keep it in cardbus status form and
  * only convert for old-style 16-bit PCMCIA cards..
  */
@@ -265,7 +265,7 @@ static int yenta_get_mem_map(pci_socket_t *socket, struct pccard_mem_map *mem)
 	mem->speed  = (stop & I365_MEM_WS0) ? 1 : 0;
 	mem->speed += (stop & I365_MEM_WS1) ? 2 : 0;
 	mem->speed = to_ns(mem->speed);
-	stop = ((u_long)(stop & 0x0fff) << 12) + 0x0fff;
+	stop = ((stop & 0x0fff) << 12) + 0x0fff;
 
 	offset = exca_readw(socket, I365_MEM(map) + I365_W_OFF);
 	mem->flags |= (offset & I365_MEM_WRPROT) ? MAP_WRPROT : 0;
@@ -353,13 +353,31 @@ static void yenta_proc_setup(pci_socket_t *socket, struct proc_dir_entry *base)
 
 static void yenta_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	pci_socket_t *sock = (pci_socket_t *) dev_id;
-	u32 event = readl(sock->base + CB_SOCKET_EVENT);
+	u8 csc;
+	u32 cb_event;
+	unsigned int events;
+	pci_socket_t *socket = (pci_socket_t *) dev_id;
 
 	/* Clear interrupt status for the event */
-	writel(event, sock->base +CB_SOCKET_EVENT);
+	cb_event = cb_readl(socket, CB_SOCKET_EVENT);
+	cb_writel(socket, CB_SOCKET_EVENT, cb_event);
 
-	printk("Socket interrupt event %08x\n", event);
+	csc = exca_readb(socket, I365_CSC);
+
+	events = (cb_event & (CB_CD1EVENT | CB_CD2EVENT)) ? SS_DETECT : 0 ;
+	events |= (csc & I365_CSC_DETECT) ? SS_DETECT : 0;
+	if (exca_readb(socket, I365_INTCTL) & I365_PC_IOCARD) {
+		events |= (csc & I365_CSC_STSCHG) ? SS_STSCHG : 0;
+	} else {
+		events |= (csc & I365_CSC_BVD1) ? SS_BATDEAD : 0;
+		events |= (csc & I365_CSC_BVD2) ? SS_BATWARN : 0;
+		events |= (csc & I365_CSC_READY) ? SS_READY : 0;
+	}
+
+	printk("Socket interrupt event %08x (%08x %02x)\n", events, cb_event, csc);
+
+	if (events && socket->handler)
+		socket->handler(socket->info, events);
 }
 
 /*

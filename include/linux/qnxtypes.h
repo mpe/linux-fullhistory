@@ -12,17 +12,17 @@
 #ifndef _QNX4TYPES_H
 #define _QNX4TYPES_H
 
-typedef unsigned short _nxtnt_t;
-typedef unsigned char _ftype_t;
+typedef unsigned short qnx4_nxtnt_t;
+typedef unsigned char qnx4_ftype_t;
 
 typedef struct {
 	long xtnt_blk;
 	long xtnt_size;
-} _xtnt_t;
+} qnx4_xtnt_t;
 
-typedef unsigned short muid_t;
-typedef unsigned short mgid_t;
-typedef unsigned long qnx_off_t;
-typedef unsigned short qnx_nlink_t;
+typedef unsigned short qnx4_muid_t;
+typedef unsigned short qnx4_mgid_t;
+typedef unsigned long qnx4_off_t;
+typedef unsigned short qnx4_nlink_t;
 
 #endif

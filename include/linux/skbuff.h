@@ -168,18 +168,24 @@ extern struct sk_buff *		alloc_skb(unsigned int size, int priority);
 extern struct sk_buff *		dev_alloc_skb(unsigned int size);
 extern void			kfree_skbmem(struct sk_buff *skb);
 extern struct sk_buff *		skb_clone(struct sk_buff *skb, int priority);
-extern struct sk_buff *		skb_copy(struct sk_buff *skb, int priority);
-extern struct sk_buff *		skb_realloc_headroom(struct sk_buff *skb, int newheadroom);
+extern struct sk_buff *		skb_copy(const struct sk_buff *skb, int priority);
+extern struct sk_buff *		skb_copy_expand(const struct sk_buff *skb, 
+						int newheadroom,
+						int newtailroom,
+						int priority);
 #define dev_kfree_skb(a)	kfree_skb(a)
 extern unsigned char *		skb_put(struct sk_buff *skb, unsigned int len);
 extern unsigned char *		skb_push(struct sk_buff *skb, unsigned int len);
 extern unsigned char *		skb_pull(struct sk_buff *skb, unsigned int len);
-extern int			skb_headroom(struct sk_buff *skb);
-extern int			skb_tailroom(struct sk_buff *skb);
+extern int			skb_headroom(const struct sk_buff *skb);
+extern int			skb_tailroom(const struct sk_buff *skb);
 extern void			skb_reserve(struct sk_buff *skb, unsigned int len);
 extern void 			skb_trim(struct sk_buff *skb, unsigned int len);
 extern void	skb_over_panic(struct sk_buff *skb, int len, void *here);
 extern void	skb_under_panic(struct sk_buff *skb, int len, void *here);
+
+/* Backwards compatibility */
+#define skb_realloc_headroom(skb, nhr) skb_copy_expand(skb, nhr, skb_tailroom(skb), GFP_ATOMIC)
 
 /* Internal */
 extern __inline__ atomic_t *skb_datarefp(struct sk_buff *skb)
@@ -534,12 +540,12 @@ extern __inline__ unsigned char * skb_pull(struct sk_buff *skb, unsigned int len
 	return __skb_pull(skb,len);
 }
 
-extern __inline__ int skb_headroom(struct sk_buff *skb)
+extern __inline__ int skb_headroom(const struct sk_buff *skb)
 {
 	return skb->data-skb->head;
 }
 
-extern __inline__ int skb_tailroom(struct sk_buff *skb)
+extern __inline__ int skb_tailroom(const struct sk_buff *skb)
 {
 	return skb->end-skb->tail;
 }

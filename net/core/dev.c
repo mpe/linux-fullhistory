@@ -55,7 +55,7 @@
  *		Adam Sulmicki   :	Bug Fix : Network Device Unload
  *					A network device unload needs to purge
  *					the backlog queue.
- *	Paul Rusty Russel	:	SIOCSIFNAME
+ *	Paul Rusty Russell	:	SIOCSIFNAME
  */
 
 #include <asm/uaccess.h>

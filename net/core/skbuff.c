@@ -4,7 +4,7 @@
  *	Authors:	Alan Cox <iiitac@pyr.swan.ac.uk>
  *			Florian La Roche <rzsfl@rz.uni-sb.de>
  *
- *	Version:	$Id: skbuff.c,v 1.60 1999/08/23 07:02:01 davem Exp $
+ *	Version:	$Id: skbuff.c,v 1.62 1999/12/23 02:13:42 davem Exp $
  *
  *	Fixes:	
  *		Alan Cox	:	Fixed the worst of the load balancer bugs.
@@ -275,14 +275,48 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int gfp_mask)
 	return n;
 }
 
+static void copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
+{
+	/*
+	 *	Shift between the two data areas in bytes
+	 */
+	unsigned long offset = new->data - old->data;
+
+	new->list=NULL;
+	new->sk=NULL;
+	new->dev=old->dev;
+	new->rx_dev=NULL;
+	new->priority=old->priority;
+	new->protocol=old->protocol;
+	new->dst=dst_clone(old->dst);
+	new->h.raw=old->h.raw+offset;
+	new->nh.raw=old->nh.raw+offset;
+	new->mac.raw=old->mac.raw+offset;
+	memcpy(new->cb, old->cb, sizeof(old->cb));
+	new->used=old->used;
+	new->is_clone=0;
+	atomic_set(&new->users, 1);
+	new->pkt_type=old->pkt_type;
+	new->stamp=old->stamp;
+	new->destructor = NULL;
+	new->security=old->security;
+#ifdef CONFIG_NETFILTER
+	new->nfmark=old->nfmark;
+	new->nfreason=old->nfreason;
+	new->nfcache=old->nfcache;
+#ifdef CONFIG_NETFILTER_DEBUG
+	new->nf_debug=old->nf_debug;
+#endif
+#endif
+}
+
 /*
  *	This is slower, and copies the whole data area 
  */
  
-struct sk_buff *skb_copy(struct sk_buff *skb, int gfp_mask)
+struct sk_buff *skb_copy(const struct sk_buff *skb, int gfp_mask)
 {
 	struct sk_buff *n;
-	unsigned long offset;
 
 	/*
 	 *	Allocate the copy buffer
@@ -292,12 +326,6 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int gfp_mask)
 	if(n==NULL)
 		return NULL;
 
-	/*
-	 *	Shift between the two data areas in bytes
-	 */
-	 
-	offset=n->head-skb->head;
-
 	/* Set the data pointer */
 	skb_reserve(n,skb->data-skb->head);
 	/* Set the tail pointer and length */
@@ -305,86 +333,35 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int gfp_mask)
 	/* Copy the bytes */
 	memcpy(n->head,skb->head,skb->end-skb->head);
 	n->csum = skb->csum;
-	n->list=NULL;
-	n->sk=NULL;
-	n->dev=skb->dev;
-	n->rx_dev=NULL;
-	n->priority=skb->priority;
-	n->protocol=skb->protocol;
-	n->dst=dst_clone(skb->dst);
-	n->h.raw=skb->h.raw+offset;
-	n->nh.raw=skb->nh.raw+offset;
-	n->mac.raw=skb->mac.raw+offset;
-	memcpy(n->cb, skb->cb, sizeof(skb->cb));
-	n->used=skb->used;
-	n->is_clone=0;
-	atomic_set(&n->users, 1);
-	n->pkt_type=skb->pkt_type;
-	n->stamp=skb->stamp;
-	n->destructor = NULL;
-	n->security=skb->security;
-#ifdef CONFIG_NETFILTER
-	n->nfmark=skb->nfmark;
-	n->nfreason=skb->nfreason;
-	n->nfcache=skb->nfcache;
-#ifdef CONFIG_NETFILTER_DEBUG
-	n->nf_debug=skb->nf_debug;
-#endif
-#endif
+	copy_skb_header(n, skb);
+
 	return n;
 }
 
-struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
+struct sk_buff *skb_copy_expand(const struct sk_buff *skb,
+				int newheadroom,
+				int newtailroom,
+				int gfp_mask)
 {
 	struct sk_buff *n;
-	unsigned long offset;
 
 	/*
 	 *	Allocate the copy buffer
 	 */
  	 
-	n=alloc_skb((skb->end-skb->data)+newheadroom, GFP_ATOMIC);
+	n=alloc_skb(newheadroom + (skb->tail - skb->data) + newtailroom,
+		    gfp_mask);
 	if(n==NULL)
 		return NULL;
 
 	skb_reserve(n,newheadroom);
 
-	/*
-	 *	Shift between the two data areas in bytes
-	 */
-	 
-	offset=n->data-skb->data;
-
 	/* Set the tail pointer and length */
 	skb_put(n,skb->len);
-	/* Copy the bytes */
-	memcpy(n->data,skb->data,skb->len);
-	n->list=NULL;
-	n->sk=NULL;
-	n->priority=skb->priority;
-	n->protocol=skb->protocol;
-	n->dev=skb->dev;
-	n->rx_dev=NULL;
-	n->dst=dst_clone(skb->dst);
-	n->h.raw=skb->h.raw+offset;
-	n->nh.raw=skb->nh.raw+offset;
-	n->mac.raw=skb->mac.raw+offset;
-	memcpy(n->cb, skb->cb, sizeof(skb->cb));
-	n->used=skb->used;
-	n->is_clone=0;
-	atomic_set(&n->users, 1);
-	n->pkt_type=skb->pkt_type;
-	n->stamp=skb->stamp;
-	n->destructor = NULL;
-	n->security=skb->security;
-#ifdef CONFIG_NETFILTER
-	n->nfmark=skb->nfmark;
-	n->nfreason=skb->nfreason;
-	n->nfcache=skb->nfcache;
-#ifdef CONFIG_NETFILTER_DEBUG
-	n->nf_debug=skb->nf_debug;
-#endif
-#endif
+	/* Copy the bytes: data pointers must point to same data. */
+	memcpy(n->data - skb_headroom(skb), skb->head, skb->end-skb->head);
+
+	copy_skb_header(n, skb);
 	return n;
 }
 

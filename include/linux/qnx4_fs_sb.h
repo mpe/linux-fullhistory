@@ -11,7 +11,7 @@
 #ifndef _QNX4_FS_SB
 #define _QNX4_FS_SB
 
-#include <linux/qnxtypes.h>
+#include <linux/qnx4_fs.h>
 
 /*
  * qnx4 super-block data in memory

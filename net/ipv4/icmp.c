@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@redhat.com>
  *
- *	Version: $Id: icmp.c,v 1.61 1999/08/31 07:03:33 davem Exp $
+ *	Version: $Id: icmp.c,v 1.62 1999/12/23 01:43:37 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -483,7 +483,7 @@ static int icmp_glue_bits(const void *p, char *to, unsigned int offset, unsigned
 	unsigned long csum;
 
 	if (offset) {
-		icmp_param->csum=csum_partial_copy(icmp_param->data_ptr+offset-sizeof(struct icmphdr), 
+		icmp_param->csum=csum_partial_copy_nocheck(icmp_param->data_ptr+offset-sizeof(struct icmphdr), 
 				to, fraglen,icmp_param->csum);
 		return 0;
 	}
@@ -493,10 +493,10 @@ static int icmp_glue_bits(const void *p, char *to, unsigned int offset, unsigned
 	 *	the other fragments first, so that we get the checksum
 	 *	for the whole packet here.
 	 */
-	csum = csum_partial_copy((void *)&icmp_param->icmph,
+	csum = csum_partial_copy_nocheck((void *)&icmp_param->icmph,
 		to, sizeof(struct icmphdr), 
 		icmp_param->csum);
-	csum = csum_partial_copy(icmp_param->data_ptr,
+	csum = csum_partial_copy_nocheck(icmp_param->data_ptr,
 		to+sizeof(struct icmphdr),
 		fraglen-sizeof(struct icmphdr), csum);
 	icmph=(struct icmphdr *)to;

@@ -30,6 +30,7 @@
 
 static struct pci_simple_probe_entry controller_list[] = {
 	{ PCI_VENDOR_ID_TI, PCI_DEVICE_ID_TI_1225, 0, 0, &yenta_operations },
+	{ 0x1180, 0x0475, 0, 0, &yenta_operations },
 	{ 0, 0, 0, 0, NULL }
 };
 
