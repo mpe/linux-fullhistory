@@ -759,7 +759,7 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 	for (l = 0; l < inode->i_sb->s_blocksize - 1 &&
 	     symname [l]; l++)
 		;
-	if (l >= EXT2_N_BLOCKS * sizeof (unsigned long)) {
+	if (l >= EXT2_N_BLOCKS * sizeof (__u32)) {
 
 		ext2_debug ("l=%d, normal symlink\n", l);
 

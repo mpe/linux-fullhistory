@@ -50,7 +50,6 @@ asmlinkage int sys_brk(unsigned long);
 
 static int load_aout_binary(struct linux_binprm *, struct pt_regs * regs);
 static int load_aout_library(int fd);
-static int aout_core_dump(long signr, struct pt_regs * regs);
 
 extern void dump_thread(struct pt_regs *, struct user *);
 
@@ -163,7 +162,7 @@ if (file.f_op->lseek) { \
  * field, which also makes sure the core-dumps won't be recursive if the
  * dumping of the process results in another error..
  */
-static int aout_core_dump(long signr, struct pt_regs * regs)
+int aout_core_dump(long signr, struct pt_regs * regs)
 {
 	struct inode * inode = NULL;
 	struct file file;

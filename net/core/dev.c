@@ -356,7 +356,8 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 
 	save_flags(flags);
 	cli();	
-	if (dev_nit && !where) 
+	if (/*dev_nit && */!where) 	/* Always keep order. It helps other hosts
+					   far more than it costs us */
 	{
 		skb_queue_tail(dev->buffs + pri,skb);
 		skb_device_unlock(skb);		/* Buffer is on the device queue and can be freed safely */
@@ -381,6 +382,7 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 				if ((skb2 = skb_clone(skb, GFP_ATOMIC)) == NULL)
 					break;
 				skb2->h.raw = skb2->data + dev->hard_header_len;
+				skb2->mac.raw = skb2->data;
 				ptype->func(skb2, skb->dev, ptype);
 				nitcount--;
 			}

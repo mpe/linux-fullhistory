@@ -1660,7 +1660,7 @@ static void ip_loopback(struct device *old_dev, struct sk_buff *skb)
 	extern struct device loopback_dev;
 	struct device *dev=&loopback_dev;
 	int len=skb->len-old_dev->hard_header_len;
-	struct sk_buff *newskb=dev_alloc_skb(len+dev->hard_header_len);
+	struct sk_buff *newskb=dev_alloc_skb(len+dev->hard_header_len+15);
 	
 	if(newskb==NULL)
 		return;

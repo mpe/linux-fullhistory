@@ -127,6 +127,7 @@ enum scsi_directory_inos {
 	PROC_SCSI_NCR53C7xx,
 	PROC_SCSI_ULTRASTOR,
 	PROC_SCSI_7000FASST,
+	PROC_SCSI_EATA2X,
 	PROC_SCSI_SCSI_DEBUG,	
 	PROC_SCSI_NOT_PRESENT,
 	PROC_SCSI_FILE,                        /* I'm asuming here that we */

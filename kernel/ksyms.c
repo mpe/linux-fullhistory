@@ -176,6 +176,7 @@ struct symbol_table symbol_table = {
 	X(__wait_on_buffer),
 	X(dcache_lookup),
 	X(dcache_add),
+	X(aout_core_dump),
 
 	/* device registration */
 	X(register_chrdev),

@@ -1298,7 +1298,7 @@ static int ipx_setsockopt(struct socket *sock, int level, int optname, char *opt
 			}
 			break;
 			
-		case SOL_SOCKET:		
+		case SOL_SOCKET:
 			return sock_setsockopt(sk,level,optname,optval,optlen);
 
 		default:

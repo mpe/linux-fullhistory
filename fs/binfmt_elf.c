@@ -53,11 +53,17 @@ static int load_elf_library(int fd);
 static int elf_core_dump(long signr, struct pt_regs * regs);
 extern int dump_fpu (elf_fpregset_t *);
 
+/*
+ * Please do not change the default core dump format to ELF when most people
+ * do not have a gdb capable of interpreting ELF core files.  Once a gdb has
+ * been released that understands ELF, *THEN* switch the core dump format.
+ */
+
 struct linux_binfmt elf_format = {
 #ifndef MODULE
-	NULL, NULL, load_elf_binary, load_elf_library, elf_core_dump
+	NULL, NULL, load_elf_binary, load_elf_library, aout_core_dump
 #else
-	NULL, &mod_use_count_, load_elf_binary, load_elf_library, elf_core_dump
+	NULL, &mod_use_count_, load_elf_binary, load_elf_library, aout_core_dump
 #endif
 };
 

@@ -613,6 +613,7 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	n->when=skb->when;
 	n->dev=skb->dev;
 	n->h.raw=skb->h.raw+offset;
+	n->mac.raw=skb->mac.raw+offset;
 	n->ip_hdr=(struct iphdr *)(((char *)skb->ip_hdr)+offset);
 	n->saddr=skb->saddr;
 	n->daddr=skb->daddr;
@@ -674,8 +675,11 @@ void dev_kfree_skb(struct sk_buff *skb, int mode)
 
 struct sk_buff *dev_alloc_skb(unsigned int length)
 {
-	struct sk_buff *skb=alloc_skb(length+16, GFP_ATOMIC);
-	skb_reserve(skb,16);
+	struct sk_buff *skb;
+
+	skb = alloc_skb(length+16, GFP_ATOMIC);
+	if (skb)
+		skb_reserve(skb,16);
 	return skb;
 }
 

@@ -1280,7 +1280,7 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	struct sock *sk=(struct sock *)sock->data;
 	int err;
-	int tmp;
+	int pid;
 
 	switch(cmd) 
 	{
@@ -1289,11 +1289,11 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			err=verify_area(VERIFY_READ,(int *)arg,sizeof(long));
 			if(err)
 				return err;
-			tmp = get_fs_long((int *) arg);
+			pid = get_user((int *) arg);
 			/* see inet_fcntl */
-			if (current->pid != tmp && current->pgrp != -tmp && !suser())
+			if (current->pid != pid && current->pgrp != -pid && !suser())
 				return -EPERM;
-			sk->proc = tmp;
+			sk->proc = pid;
 			return(0);
 		case FIOGETOWN:
 		case SIOCGPGRP:

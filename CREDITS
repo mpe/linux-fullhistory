@@ -233,6 +233,13 @@ S: Myrstuguv. 83
 S: S-143 32 VARBY
 S: Sweden
 
+N: Paal-Kristian Engstad
+E: engstad@funcom.com
+D: Wrote smbfs (to mount WfW, NT and OS/2 network drives.)
+S: Oscars gt. 35
+S: N-0258 OSLO
+S: Norway
+
 N: Doug Evans
 E: dje@cygnus.com
 D: Wrote Xenix FS (part of standard kernel since 0.99.15)
@@ -451,6 +458,14 @@ S: Germany
 N: Rudolf Koenig
 E: rfkoenig@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen
+
+N: Markus Kuhn
+E: mskuhn@cip.informatik.uni-erlangen.de
+W: http://wwwcip.informatik.uni-erlangen.de/user/mskuhn
+D: Unicode, time, standards
+S: Schlehenweg 9
+S: D-91080 Uttenreuth
+S: Germany
 
 N: Bas Laarhoven
 E: bas@vimec.nl

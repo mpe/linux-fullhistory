@@ -112,7 +112,7 @@ bool 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE 
 bool 'Trantor T128/T128F/T228 SCSI support' CONFIG_SCSI_T128 n
 bool 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR n
 bool '7000FASST SCSI support' CONFIG_SCSI_7000FASST n
-#bool 'EATA ISA/EISA (DPT PM2011/021/012/022/122/322) support' CONFIG_SCSI_EATA n
+bool 'EATA ISA/EISA (DPT PM2011/021/012/022/122/322) support' CONFIG_SCSI_EATA n
 #bool 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG n
 fi
 

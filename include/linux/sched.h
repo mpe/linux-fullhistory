@@ -225,7 +225,7 @@ struct task_struct {
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
  */
 #define INIT_TASK \
-/* state etc */	{ 0,15,15,0,0,0,0, \
+/* state etc */	{ 0,15*HZ/100,15*HZ/100,0,0,0,0, \
 /* debugregs */ { 0, },            \
 /* exec domain */&default_exec_domain, \
 /* binfmt */	NULL, \

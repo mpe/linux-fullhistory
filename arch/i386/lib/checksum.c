@@ -180,7 +180,7 @@ unsigned int csum_partial_copy_fromuser( char *src, char *dst,
 	movw %%cx, (%%edi)
 	leal 2(%%edi), %%edi
 	je 6f
-	shll $16,%%edx
+	shll $16,%%ecx
 5:	movb %%fs:(%%esi), %%cl
 	movb %%cl, (%%edi)
 6:	addl %%ecx, %%eax
@@ -275,7 +275,7 @@ unsigned int csum_partial_copy( char *src, char *dst,
 	movw %%cx, (%%edi)
 	leal 2(%%edi), %%edi
 	je 6f
-	shll $16,%%edx
+	shll $16,%%ecx
 5:	movb (%%esi), %%cl
 	movb %%cl, (%%edi)
 6:	addl %%ecx, %%eax

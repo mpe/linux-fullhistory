@@ -1,6 +1,9 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *       6 Jul 1995 rev. 2.01 for linux 1.3.7
+ *          Update required by the new /proc/scsi support.
+ *
  *      11 Mar 1995 rev. 2.00 for linux 1.2.0
  *          Fixed a bug which prevented media change detection for removable
  *          disk drives.
@@ -118,6 +121,7 @@
 #include <linux/ioport.h>
 #include <asm/io.h>
 #include <asm/system.h>
+#include <linux/proc_fs.h>
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"

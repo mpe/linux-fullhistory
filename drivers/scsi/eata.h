@@ -7,16 +7,19 @@
 
 #include <linux/scsicam.h>
 
-#define EATA_VERSION "2.00.00"
-
 int eata2x_detect(Scsi_Host_Template *);
 int eata2x_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int eata2x_abort(Scsi_Cmnd *);
 int eata2x_reset(Scsi_Cmnd *);
 
+#define EATA_VERSION "2.01.00"
+
 #define EATA {                                                 \
 		NULL, /* Ptr for modules */                    \
 		NULL, /* usage count for modules */	       \
+		NULL,                                          \
+		"eata2x",                                      \
+		PROC_SCSI_EATA2X,                              \
 		"EATA/DMA 2.0x rev. " EATA_VERSION " ",        \
 		eata2x_detect,				       \
 		NULL, /* Release */     		       \

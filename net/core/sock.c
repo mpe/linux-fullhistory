@@ -129,7 +129,7 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
   	if(err)
   		return err;
   	
-  	val = get_fs_long((unsigned long *)optval);
+  	val = get_user((int *)optval);
   	valbool = val?1:0;
   	
   	switch(optname) 

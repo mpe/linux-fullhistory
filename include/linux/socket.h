@@ -1,6 +1,7 @@
 #ifndef _LINUX_SOCKET_H
 #define _LINUX_SOCKET_H
 
+#include <asm/socket.h>			/* arch-dependent defines	*/
 #include <linux/sockios.h>		/* the SIOCxxx I/O controls	*/
 
 
@@ -59,7 +60,6 @@ struct linger {
 #define MSG_DONTROUTE	4
 
 /* Setsockoptions(2) level. Thanks to BSD these must match IPPROTO_xxx */
-#define SOL_SOCKET	1
 #define SOL_IP		0
 #define SOL_IPX		256
 #define SOL_AX25	257
@@ -67,22 +67,6 @@ struct linger {
 #define	SOL_NETROM	259
 #define SOL_TCP		6
 #define SOL_UDP		17
-
-/* For setsockoptions(2) */
-#define SO_DEBUG	1
-#define SO_REUSEADDR	2
-#define SO_TYPE		3
-#define SO_ERROR	4
-#define SO_DONTROUTE	5
-#define SO_BROADCAST	6
-#define SO_SNDBUF	7
-#define SO_RCVBUF	8
-#define SO_KEEPALIVE	9
-#define SO_OOBINLINE	10
-#define SO_NO_CHECK	11
-#define SO_PRIORITY	12
-#define SO_LINGER	13
-/* To add :#define SO_REUSEPORT 14 */
 
 /* IP options */
 #define IP_TOS		1

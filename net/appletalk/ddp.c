@@ -958,7 +958,7 @@ static int atalk_setsockopt(struct socket *sock, int level, int optname, char *o
 			}
 			break;
 			
-		case SOL_SOCKET:		
+		case SOL_SOCKET:
 			return sock_setsockopt(sk,level,optname,optval,optlen);
 
 		default:

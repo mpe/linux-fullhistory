@@ -1000,7 +1000,6 @@ lance_rx(struct device *dev)
 			}
 			skb->dev = dev;
 			skb_reserve(skb,2);	/* 16 byte align */
-			skb_put(skb,pkt_len);	/* Make room */
 			eth_copy_and_sum(skb_put(skb,pkt_len),
 				   (unsigned char *)(lp->rx_ring[entry].base & 0x00ffffff),
 				   pkt_len,0);

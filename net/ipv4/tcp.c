@@ -2020,7 +2020,7 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 	while (len > 0) 
 	{
 		struct sk_buff * skb;
-		unsigned long offset;
+		u32 offset;
 	
 		/*
 		 * Are we at urgent data? Stop if we have read anything.
@@ -2125,7 +2125,7 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 		
 		if (sk->urg_data) 
 		{
-			unsigned long urg_offset = sk->urg_seq - *seq;
+			u32 urg_offset = sk->urg_seq - *seq;
 			if (urg_offset < used) 
 			{
 				if (!urg_offset) 
@@ -4085,7 +4085,7 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
  
 static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
 {
-	unsigned long ptr = ntohs(th->urg_ptr);
+	u32 ptr = ntohs(th->urg_ptr);
 
 	if (ptr)
 		ptr--;
@@ -4118,7 +4118,7 @@ static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
 extern __inline__ int tcp_urg(struct sock *sk, struct tcphdr *th,
 	unsigned long saddr, unsigned long len)
 {
-	unsigned long ptr;
+	u32 ptr;
 
 	/*
 	 *	Check if we get a new urgent pointer - normally not 
