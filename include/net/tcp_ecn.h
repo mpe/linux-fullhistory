@@ -79,6 +79,12 @@ TCP_ECN_accept_cwr(struct tcp_opt *tp, struct sk_buff *skb)
 }
 
 static __inline__ void
+TCP_ECN_withdraw_cwr(struct tcp_opt *tp)
+{
+	tp->ecn_flags &= ~TCP_ECN_DEMAND_CWR;
+}
+
+static __inline__ void
 TCP_ECN_check_ce(struct tcp_opt *tp, struct sk_buff *skb)
 {
 	if (tp->ecn_flags&TCP_ECN_OK) {
@@ -148,6 +154,7 @@ TCP_ECN_create_request(struct open_request *req, struct tcphdr *th)
 #define TCP_ECN_rcv_ecn_echo(x...)	(0)
 #define TCP_ECN_openreq_child(x...)	do { } while (0)
 #define TCP_ECN_create_request(x...)	do { } while (0)
+#define TCP_ECN_withdraw_cwr(x...)	do { } while (0)
 
 
 #endif

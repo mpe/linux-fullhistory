@@ -258,7 +258,6 @@ EXPORT_SYMBOL(dcache_readdir);
 EXPORT_SYMBOL(default_llseek);
 EXPORT_SYMBOL(dentry_open);
 EXPORT_SYMBOL(filemap_nopage);
-EXPORT_SYMBOL(filemap_swapout);
 EXPORT_SYMBOL(filemap_sync);
 EXPORT_SYMBOL(lock_page);
 

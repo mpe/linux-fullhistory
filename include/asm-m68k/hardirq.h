@@ -2,6 +2,7 @@
 #define __M68K_HARDIRQ_H
 
 #include <linux/threads.h>
+#include <linux/cache.h>
 
 /* entry.S is sensitive to the offsets of these fields */
 typedef struct {

@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_input.c,v 1.6 2000/06/26 18:09:17 davem Exp $
+ *	$Id: br_input.c,v 1.7 2000/12/13 16:44:14 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -28,8 +28,7 @@ static void br_pass_frame_up(struct net_bridge *br, struct sk_buff *skb)
 
 	skb->dev = &br->dev;
 	skb->pkt_type = PACKET_HOST;
-	skb->mac.raw = skb->data;
-	skb_pull(skb, skb->nh.raw - skb->data);
+	skb_pull(skb, skb->mac.raw - skb->data);
 	skb->protocol = eth_type_trans(skb, &br->dev);
 	netif_rx(skb);
 }
@@ -42,7 +41,6 @@ static void __br_handle_frame(struct sk_buff *skb)
 	struct net_bridge_port *p;
 	int passedup;
 
-	skb->nh.raw = skb->mac.raw;
 	dest = skb->mac.ethernet->h_dest;
 
 	p = skb->dev->br_port;

@@ -14,18 +14,28 @@
 #ifdef CONFIG_SUN3
 /* sun3 dvma page support */
 
-/* memory and pmegs reserved for dvma */
+#define DVMA_RESERVED_PMEGS 2 /* 256k of dvma */
+
+/* memory and pmegs potentially reserved for dvma */
 #define DVMA_PMEG_START 10
 #define DVMA_PMEG_END 16
 #define DVMA_START 0xff00000
 #define DVMA_END 0xffe0000
 #define DVMA_SIZE (DVMA_END-DVMA_START)
 
+/* empirical kludge -- dvma regions only seem to work right on 0x10000 
+   byte boundries */
+#define DVMA_REGION_SIZE 0x10000
+#define DVMA_ALIGN(addr) (((addr)+DVMA_REGION_SIZE-1) & \
+                         ~(DVMA_REGION_SIZE-1))
+
+
 /* virt <-> phys conversions */
 #define sun3_dvma_vtop(x) ((unsigned long)(x) & 0xffffff)
 #define sun3_dvma_ptov(x) ((unsigned long)(x) | 0xf000000)
-	
-void *sun3_dvma_malloc(int len);
+
+extern void sun3_dvma_init(void);	
+extern void *sun3_dvma_malloc(int len);
 #else /* Sun3x */
 
 /* Structure to describe the current status of DMA registers on the Sparc */

@@ -49,6 +49,7 @@
  */
 
 struct sh_cpuinfo boot_cpu_data = { CPU_SH_NONE, 0, 0, 0, };
+struct screen_info screen_info;
 
 #ifdef CONFIG_BLK_DEV_RAM
 extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
@@ -259,6 +260,7 @@ static inline void parse_cmdline (char ** cmdline_p, char mv_name[MV_NAME_SIZE],
 
 void __init setup_arch(char **cmdline_p)
 {
+	extern struct sh_machine_vector mv_unknown;
 	struct sh_machine_vector *mv = NULL;
 	char mv_name[MV_NAME_SIZE] = "";
 	unsigned long mv_io_base = 0;
@@ -294,7 +296,6 @@ void __init setup_arch(char **cmdline_p)
 
 #ifdef CONFIG_SH_GENERIC
 	if (mv == NULL) {
-		extern struct sh_machine_vector mv_unknown;
 		mv = &mv_unknown;
 		if (*mv_name != '\0') {
 			printk("Warning: Unsupported machine %s, using unknown\n",

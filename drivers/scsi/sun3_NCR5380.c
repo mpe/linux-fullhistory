@@ -2016,9 +2016,11 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance)
 		if((count > SUN3_DMA_MINSIZE) && (sun3_dma_setup_done
 						  != cmd))
 		{
-			sun3scsi_dma_setup(d, count,
-					   cmd->request.cmd);
-			sun3_dma_setup_done = cmd;
+			if((cmd->request.cmd == 0) || (cmd->request.cmd == 1)) {
+				sun3scsi_dma_setup(d, count,
+						   cmd->request.cmd);
+				sun3_dma_setup_done = cmd;
+			}
 		}
 #endif
 	    }

@@ -923,8 +923,11 @@ static __inline__ unsigned int tcp_current_mss(struct sock *sk)
 static inline void tcp_initialize_rcv_mss(struct sock *sk)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	int hint = min(tp->advmss, tp->mss_cache);
 
-	tp->ack.rcv_mss = max(min(tp->advmss, TCP_MIN_RCVMSS), TCP_MIN_MSS);
+	hint = min(hint, tp->rcv_wnd/2);
+		
+	tp->ack.rcv_mss = max(min(hint, TCP_MIN_RCVMSS), TCP_MIN_MSS);
 }
 
 static __inline__ void __tcp_fast_path_on(struct tcp_opt *tp, u32 snd_wnd)

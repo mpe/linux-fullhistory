@@ -34,6 +34,7 @@ static char *version = "sun3lance.c: v1.1 11/17/1999  Sam Creasey (sammy@oh.veri
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/init.h>
+#include <linux/ioport.h>
 
 #include <asm/setup.h>
 #include <asm/irq.h>
@@ -362,7 +363,9 @@ static int __init lance_probe( struct net_device *dev)
 	dev->get_stats = &lance_get_stats;
 	dev->set_multicast_list = &set_multicast_list;
 	dev->set_mac_address = 0;
-	dev->start = 0;
+//	KLUDGE -- REMOVE ME
+	set_bit(__LINK_STATE_PRESENT, &dev->state);
+
 
 	memset( &lp->stats, 0, sizeof(lp->stats) );
 
@@ -404,10 +407,8 @@ static int lance_open( struct net_device *dev )
 
 	DREG = CSR0_IDON | CSR0_STRT | CSR0_INEA;
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-
+	netif_start_queue(dev);
+	
 	DPRINTK( 2, ( "%s: LANCE is open, csr0 %04x\n", dev->name, DREG ));
 	MOD_INC_USE_COUNT;
 
@@ -456,7 +457,7 @@ static int lance_start_xmit( struct sk_buff *skb, struct net_device *dev )
 	unsigned long flags;
 
 	/* Transmitter timeout, serious problems. */
-	if (dev->tbusy) {
+	if (netif_queue_stopped(dev)) {
 		int tickssofar = jiffies - dev->trans_start;
 		if (tickssofar < 20)
 			return( 1 );
@@ -492,28 +493,31 @@ static int lance_start_xmit( struct sk_buff *skb, struct net_device *dev )
 		lance_init_ring(dev);
 		REGA( CSR0 ) = CSR0_INEA | CSR0_INIT | CSR0_STRT;
 		
-		dev->tbusy = 0;
+		netif_start_queue(dev);
 		dev->trans_start = jiffies;
 		
 		return 0;
 	}
-	
-	AREG = CSR0;
-//	DPRINTK( 2, ( "%s: lance_start_xmit() called, csr0 %4.4x.\n",
-//				  dev->name, DREG ));
+
 	
 	/* Block a timer-based transmit from overlapping.  This could better be
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit( 0, (void*)&dev->tbusy ) != 0) {
-		printk("%s: Transmitter access conflict.\n", dev->name);
-		return 1;
-	}
+
+	/* Block a timer-based transmit from overlapping with us by
+	   stopping the queue for a bit... */
+     
+	netif_stop_queue(dev);
 
 	if (test_and_set_bit( 0, (void*)&lp->lock ) != 0) {
 		printk( "%s: tx queue lock!.\n", dev->name);
 		/* don't clear dev->tbusy flag. */
 		return 1;
 	}
+
+	AREG = CSR0;
+//	DPRINTK( 2, ( "%s: lance_start_xmit() called, csr0 %4.4x.\n",
+//				  dev->name, DREG ));
+	
 
 	/* Fill in a Tx ring entry */
 #if 0
@@ -564,7 +568,7 @@ static int lance_start_xmit( struct sk_buff *skb, struct net_device *dev )
 	lp->lock = 0;
 	if ((MEM->tx_head[(entry+1) & TX_RING_MOD_MASK].flag & TMD1_OWN) ==
 	    TMD1_OWN_HOST) 
-		dev->tbusy = 0;
+		netif_start_queue(dev);
 
 	restore_flags(flags);
 
@@ -578,15 +582,16 @@ static void lance_interrupt( int irq, void *dev_id, struct pt_regs *fp)
 	struct net_device *dev = dev_id;
 	struct lance_private *lp = dev->priv;
 	int csr0;
+	static int in_interrupt = 0;
 
 	if (dev == NULL) {
 		DPRINTK( 1, ( "lance_interrupt(): invalid dev_id\n" ));
 		return;
 	}
 
-	if (dev->interrupt)
+	if (in_interrupt)
 		DPRINTK( 2, ( "%s: Re-entering the interrupt handler.\n", dev->name ));
-	dev->interrupt = 1;
+	in_interrupt = 1;
 
  still_more:
 
@@ -657,10 +662,10 @@ static void lance_interrupt( int irq, void *dev_id, struct pt_regs *fp)
 	}
 
 
-	if (dev->tbusy) {
+	if (netif_queue_stopped(dev)) {
 		/* The ring is no longer full, clear tbusy. */
-		dev->tbusy = 0;
-		mark_bh( NET_BH );
+		netif_start_queue(dev);
+		netif_wake_queue(dev);
 	}
 
 	if (csr0 & CSR0_RINT)			/* Rx interrupt */
@@ -693,7 +698,7 @@ static void lance_interrupt( int irq, void *dev_id, struct pt_regs *fp)
 
 	DPRINTK( 2, ( "%s: exiting interrupt, csr0=%#04x.\n",
 				  dev->name, DREG ));
-	dev->interrupt = 0;
+	in_interrupt = 0;
 	return;
 }
 
@@ -799,8 +804,7 @@ static int lance_close( struct net_device *dev )
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 	AREG = CSR0;
 
@@ -836,7 +840,7 @@ static void set_multicast_list( struct net_device *dev )
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 
-	if (!dev->start)
+	if(netif_queue_stopped(dev))
 		/* Only possible if board is already started */
 		return;
 

@@ -152,6 +152,7 @@ CD_sizeof	= CD_Unused+(4*4)
 
 #ifdef __KERNEL__
 
+#include <linux/init.h>
 #include <linux/ioport.h>
 
 struct zorro_dev {

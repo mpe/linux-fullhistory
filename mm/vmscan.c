@@ -40,7 +40,6 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 	pte_t pte;
 	swp_entry_t entry;
 	struct page * page;
-	int (*swapout)(struct page *, struct file *);
 	int onlist;
 
 	pte = *page_table;
@@ -119,64 +118,20 @@ out_failed:
 	 * Basically, this just makes it possible for us to do
 	 * some real work in the future in "refill_inactive()".
 	 */
-	if (!pte_dirty(pte)) {
-		flush_cache_page(vma, address);
+	flush_cache_page(vma, address);
+	if (!pte_dirty(pte))
 		goto drop_pte;
-	}
-
-	/*
-	 * Don't go down into the swap-out stuff if
-	 * we cannot do I/O! Avoid recursing on FS
-	 * locks etc.
-	 */
-	if (!(gfp_mask & __GFP_IO))
-		goto out_unlock_restore;
-
-	/*
-	 * Don't do any of the expensive stuff if
-	 * we're not really interested in this zone.
-	 */
-	if (page->zone->free_pages + page->zone->inactive_clean_pages
-					+ page->zone->inactive_dirty_pages
-		      	> page->zone->pages_high + inactive_target)
-		goto out_unlock_restore;
 
 	/*
 	 * Ok, it's really dirty. That means that
 	 * we should either create a new swap cache
 	 * entry for it, or we should write it back
 	 * to its own backing store.
-	 *
-	 * Note that in neither case do we actually
-	 * know that we make a page available, but
-	 * as we potentially sleep we can no longer
-	 * continue scanning, so we migth as well
-	 * assume we free'd something.
-	 *
-	 * NOTE NOTE NOTE! This should just set a
-	 * dirty bit in 'page', and just drop the
-	 * pte. All the hard work would be done by
-	 * refill_inactive().
-	 *
-	 * That would get rid of a lot of problems.
 	 */
 	flush_cache_page(vma, address);
-	if (vma->vm_ops && (swapout = vma->vm_ops->swapout)) {
-		int error;
-		struct file *file = vma->vm_file;
-		if (file) get_file(file);
-
-		mm->rss--;
-		flush_tlb_page(vma, address);
-		spin_unlock(&mm->page_table_lock);
-		error = swapout(page, file);
-		if (file) fput(file);
-		if (error < 0)
-			goto out_unlock_restore;
-		UnlockPage(page);
-		deactivate_page(page);
-		page_cache_release(page);
-		return 1;	/* We released page_table_lock */
+	if (page->mapping) {
+		SetPageDirty(page);
+		goto drop_pte;
 	}
 
 	/*
@@ -426,11 +381,6 @@ static int swap_out(unsigned int priority, int gfp_mask, unsigned long idle_time
 			ret = swap_out_mm(best, gfp_mask);
 			mmdrop(best);
 
-			if (!ret)
-				continue;
-
-			if (ret < 0)
-				kill_proc(pid, SIGBUS, 1);
 			__ret = 1;
 			goto out;
 		}
@@ -484,7 +434,7 @@ struct page * reclaim_page(zone_t * zone)
 		}
 
 		/* The page is dirty, or locked, move to inactive_dirty list. */
-		if (page->buffers || TryLockPage(page)) {
+		if (page->buffers || PageDirty(page) || TryLockPage(page)) {
 			del_page_from_inactive_clean_list(page);
 			add_page_to_inactive_dirty_list(page);
 			continue;
@@ -608,8 +558,8 @@ dirty_page_rescan:
 			if (!writepage)
 				goto page_active;
 
-			/* Can't start IO? Move it to the back of the list */
-			if (!can_get_io_locks) {
+			/* First time through? Move it to the back of the list */
+			if (!launder_loop) {
 				list_del(page_lru);
 				list_add(page_lru, &inactive_dirty_list);
 				UnlockPage(page);

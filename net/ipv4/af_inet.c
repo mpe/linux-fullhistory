@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.123 2000/11/10 01:42:43 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.127 2000/12/22 19:51:50 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -723,11 +723,7 @@ int inet_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	struct sock *sk = sock->sk;
 	int addr_len = 0;
 	int err;
-	
-	/* We may need to bind the socket. */
-	/* It is pretty strange. I would return error in this case --ANK */
-	if (sk->num==0 && inet_autobind(sk) != 0)
-		return -EAGAIN;
+
 	err = sk->prot->recvmsg(sk, msg, size, flags&MSG_DONTWAIT,
 				flags&~MSG_DONTWAIT, &addr_len);
 	if (err >= 0)

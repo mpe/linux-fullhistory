@@ -125,7 +125,6 @@ struct vm_operations_struct {
 	int (*sync)(struct vm_area_struct *area, unsigned long, size_t, unsigned int flags);
 	struct page * (*nopage)(struct vm_area_struct * area, unsigned long address, int write_access);
 	struct page * (*wppage)(struct vm_area_struct * area, unsigned long address, struct page * page);
-	int (*swapout)(struct page *, struct file *);
 };
 
 /*
@@ -381,7 +380,6 @@ extern void show_free_areas_node(pg_data_t *pgdat);
 
 extern void clear_page_tables(struct mm_struct *, unsigned long, int);
 
-int shmem_swapout(struct page * page, struct file *file);
 struct page * shmem_nopage(struct vm_area_struct * vma, unsigned long address, int no_share);
 struct file *shmem_file_setup(char * name, loff_t size);
 extern int shmem_zero_setup(struct vm_area_struct *);
@@ -447,7 +445,6 @@ extern unsigned long page_unuse(struct page *);
 extern void truncate_inode_pages(struct address_space *, loff_t);
 
 /* generic vm_area_ops exported for stackable file systems */
-extern int filemap_swapout(struct page *, struct file *);
 extern int filemap_sync(struct vm_area_struct *, unsigned long,	size_t, unsigned int);
 extern struct page *filemap_nopage(struct vm_area_struct *, unsigned long, int);
 

@@ -3,8 +3,13 @@
  * specific changes in <asm/semaphore-helper.h>
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <asm/semaphore-helper.h>
+
+#ifndef CONFIG_RMW_INSNS
+spinlock_t semaphore_wake_lock;
+#endif
 
 /*
  * Semaphores are implemented using a two-way counter:

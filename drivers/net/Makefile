@@ -8,7 +8,7 @@ obj-m           :=
 obj-n           :=
 obj-            :=
 
-mod-subdirs     := wan
+mod-subdirs     := appletalk arcnet fc irda tokenring pcmcia wan
 
 O_TARGET := net.o
 

@@ -22,7 +22,6 @@
 #include <asm/amigahw.h>
 #include <asm/io.h>
 #include <asm/irq.h>
-#include <asm/init.h>
 
 #include "scsi.h"
 #include "hosts.h"

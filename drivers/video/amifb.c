@@ -1766,7 +1766,7 @@ default_chipset:
 	 * access the videomem with writethrough cache
 	 */
 	videomemory_phys = (u_long)ZTWO_PADDR(videomemory);
-	//videomemory = (u_long)ioremap_writethrough(videomemory_phys, videomemorysize);
+	videomemory = (u_long)ioremap_writethrough(videomemory_phys, videomemorysize);
 	if (!videomemory) {
 		printk("amifb: WARNING! unable to map videomem cached writethrough\n");
 		videomemory = ZTWO_VADDR(videomemory_phys);

@@ -91,25 +91,9 @@ void (*mach_reset)( void );
 void (*mach_halt)( void ) = NULL;
 void (*mach_power_off)( void ) = NULL;
 long mach_max_dma_address = 0x00ffffff; /* default set to the lower 16MB */
-#if defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY) || defined(CONFIG_BLK_DEV_FD)
+#if defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY) 
 void (*mach_floppy_setup) (char *, int *) __initdata = NULL;
 void (*mach_floppy_eject) (void) = NULL;
-#endif
-struct serial_struct;
-#ifdef CONFIG_SERIAL
-long serial_rs_init(void);
-int serial_register_serial(struct serial_struct *);
-void serial_unregister_serial(int);
-long ser_console_init(long, long );
-#endif
-#if defined(CONFIG_USERIAL)||defined(CONFIG_HPDCA)||defined(CONFIG_WHIPPET_SERIAL)||defined(CONFIG_MULTIFACE_III_TTY)||defined(CONFIG_GVPIOEXT)||defined(CONFIG_AMIGA_BUILTIN_SERIAL)||defined(CONFIG_MAC_SCC)||defined(CONFIG_ATARI_MIDI)||defined(CONFIG_ATARI_SCC)||defined(CONFIG_ATARI_MFPSER)
-#define M68K_SERIAL
-#endif
-#ifdef M68K_SERIAL
-long m68k_rs_init(void);
-int m68k_register_serial(struct serial_struct *);
-void m68k_unregister_serial(int);
-long m68k_serial_console_init(void);
 #endif
 #ifdef CONFIG_HEARTBEAT
 void (*mach_heartbeat) (int) = NULL;
@@ -137,7 +121,7 @@ extern int mvme147_parse_bootinfo(const struct bi_record *);
 extern void config_amiga(void);
 extern void config_atari(void);
 extern void config_mac(void);
-extern void config_sun3(unsigned long *, unsigned long *);
+extern void config_sun3(void);
 extern void config_apollo(void);
 extern void config_mvme147(void);
 extern void config_mvme16x(void);
@@ -150,6 +134,8 @@ extern void mac_debugging_short (int, short);
 extern void mac_debugging_long  (int, long);
 
 #define MASK_256K 0xfffc0000
+
+extern void paging_init(void);
 
 static void __init m68k_parse_bootinfo(const struct bi_record *record)
 {
@@ -221,7 +207,9 @@ static void __init m68k_parse_bootinfo(const struct bi_record *record)
 void __init setup_arch(char **cmdline_p)
 {
 	extern int _etext, _edata, _end;
+#ifndef CONFIG_SUN3
 	unsigned long endmem, startmem;
+#endif
 	int i;
 	char *p, *q;
 
@@ -305,7 +293,7 @@ void __init setup_arch(char **cmdline_p)
 #endif
 #ifdef CONFIG_SUN3
 	    case MACH_SUN3:
-	    	config_sun3(memory_start_p, memory_end_p);
+	    	config_sun3();
 	    	break;
 #endif
 #ifdef CONFIG_APOLLO
@@ -347,13 +335,6 @@ void __init setup_arch(char **cmdline_p)
 		panic ("No configuration setup");
 	}
 
-#ifdef CONFIG_BLK_DEV_INITRD
-	if (m68k_ramdisk.size) {
-		initrd_start = (unsigned long)phys_to_virt(m68k_ramdisk.addr);
-		initrd_end = initrd_start + m68k_ramdisk.size;
-	}
-#endif
-
 #ifndef CONFIG_SUN3
 	startmem= m68k_memory[0].addr;
 	endmem = startmem + m68k_memory[0].size;
@@ -371,10 +352,25 @@ void __init setup_arch(char **cmdline_p)
 				      startmem >> PAGE_SHIFT, endmem >> PAGE_SHIFT);
 
 	for (i = 0; i < m68k_num_memory; i++)
-		free_bootmem(m68k_memory[0].addr, m68k_memory[0].size);
+		free_bootmem(m68k_memory[i].addr, m68k_memory[i].size);
 
 	reserve_bootmem(m68k_memory[0].addr, availmem - m68k_memory[0].addr);
+
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (m68k_ramdisk.size) {
+		reserve_bootmem(m68k_ramdisk.addr, m68k_ramdisk.size);
+		initrd_start = (unsigned long)phys_to_virt(m68k_ramdisk.addr);
+		initrd_end = initrd_start + m68k_ramdisk.size;
+		printk ("initrd: %08lx - %08lx\n", initrd_start, initrd_end);
+	}
 #endif
+
+#ifdef CONFIG_ATARI
+	if (MACH_IS_ATARI)
+		atari_stram_reserve_pages(availmem);
+#endif
+#endif /* !CONFIG_SUN3 */
+	paging_init();
 }
 
 int get_cpuinfo(char * buffer)
@@ -475,57 +471,8 @@ int get_hardware_list(char *buffer)
     return(len);
 }
 
-#if defined(CONFIG_SERIAL) || defined(M68K_SERIAL)
-int rs_init(void)
-{
-#ifdef CONFIG_SERIAL
-  if (MACH_IS_Q40)
-    return serial_rs_init();
-#endif
-#ifdef M68K_SERIAL  
-    return m68k_rs_init();
-#endif
-}
-int register_serial(struct serial_struct *p)
-{
-#ifdef CONFIG_SERIAL
-  if (MACH_IS_Q40)
-    return serial_register_serial(p);
-#endif
-#ifdef M68K_SERIAL
-  return m68k_register_serial(p);
-#endif
-}
-void unregister_serial(int i)
-{
-#ifdef CONFIG_SERIAL
-  if (MACH_IS_Q40)
-    serial_unregister_serial(i);
-#endif
-#ifdef M68K_SERIAL
-  m68k_unregister_serial(i);
-#endif
-}
-EXPORT_SYMBOL(register_serial);
-EXPORT_SYMBOL(unregister_serial);
 
-#ifdef CONFIG_SERIAL_CONSOLE
-void serial_console_init(void)
-{
-#ifdef CONFIG_Q40_SERIAL
-  if (MACH_IS_Q40) {
-    ser_console_init();
-    return;
-  }
-#endif
-#if defined(M68K_SERIAL) && defined(CONFIG_SERIAL_CONSOLE)
-  m68k_serial_console_init();
-#endif
-}
-#endif
-#endif
-
-#if defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY) || defined(CONFIG_BLK_DEV_FD)
+#if defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY)
 void __init floppy_setup(char *str, int *ints)
 {
 	if (mach_floppy_setup)
@@ -564,5 +511,7 @@ void check_bugs(void)
 		printk( KERN_EMERG "(see http://no-fpu.linux-m68k.org)\n" );
 		panic( "no FPU" );
 	}
-#endif
+
+#endif /* CONFIG_SUN3 */
+
 }

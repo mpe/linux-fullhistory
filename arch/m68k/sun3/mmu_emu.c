@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/ptrace.h>
 #include <linux/delay.h>
+#include <linux/bootmem.h>
 
 #include <asm/setup.h>
 #include <asm/traps.h>
@@ -23,6 +24,7 @@
 #include <asm/bitops.h>
 #include <asm/oplib.h>
 #include <asm/mmu_context.h>
+#include <asm/dvma.h>
 
 extern void prom_reboot (char *) __attribute__ ((__noreturn__));
 
@@ -115,32 +117,42 @@ void print_pte_vaddr (unsigned long vaddr)
 /*
  * Initialise the MMU emulator.
  */
-void mmu_emu_init(void)
+void mmu_emu_init(unsigned long bootmem_end)
 {
 	unsigned long seg, num;
 	int i,j;
-	extern char _stext, _etext;
-	unsigned long page;
-
+	
 	memset(rom_pages, 0, sizeof(rom_pages));
 	memset(pmeg_vaddr, 0, sizeof(pmeg_vaddr));
 	memset(pmeg_alloc, 0, sizeof(pmeg_alloc));
 	memset(pmeg_ctx, 0, sizeof(pmeg_ctx));
+	
+	/* pmeg align the end of bootmem, adding another pmeg,
+	 * later bootmem allocations will likely need it */
+	bootmem_end = (bootmem_end + (2 * SUN3_PMEG_SIZE)) & ~SUN3_PMEG_MASK;
 
-#ifdef DEBUG_MMU_EMU
-	printk ("mmu_emu_init: stext=%p etext=%p pmegs=%u\n", &_stext,
-		&_etext, (&_etext-&_stext+SUN3_PMEG_SIZE-1) >>
-		SUN3_PMEG_SIZE_BITS); 
-#endif
-
-	/* mark the pmegs copied in sun3-head.S as used */
-	for (i=0; i<10; ++i)
+	/* mark all of the pmegs used thus far as reserved */
+	for (i=0; i < __pa(bootmem_end) / SUN3_PMEG_SIZE ; ++i)
 		pmeg_alloc[i] = 2;
+
 
 	/* I'm thinking that most of the top pmeg's are going to be
 	   used for something, and we probably shouldn't risk it */
 	for(num = 0xf0; num <= 0xff; num++)
 		pmeg_alloc[num] = 2;
+
+	/* liberate all existing mappings in the rest of kernel space */
+	for(seg = bootmem_end; seg < 0x0f800000; seg += SUN3_PMEG_SIZE) {
+		i = sun3_get_segmap(seg);
+		
+		if(!pmeg_alloc[i]) {
+#ifdef DEBUG_MMU_EMU
+			printk("freed: ");
+			print_pte_vaddr (seg);
+#endif
+			sun3_put_segmap(seg, SUN3_INVALID_PMEG);
+		}
+	}
 
 	j = 0;
 	for (num=0, seg=0x0F800000; seg<0x10000000; seg+=16*PAGE_SIZE) {
@@ -158,19 +170,12 @@ void mmu_emu_init(void)
 			// of the first 0xbff pages the hardware is
 			// already using...  does any sun3 support > 24mb?
 			pmeg_alloc[sun3_get_segmap(seg)] = 2;
-			for(i = 0; i < SUN3_PMEG_SIZE; i += PAGE_SIZE)
-			{
-				page = (sun3_get_pte(seg+i) &
-					SUN3_PAGE_PGNUM_MASK);
-
-				if((page) && (page < 0xbff)) {
-					rom_pages[j] = page;
-					j++;
-				}
-			}
 		}
 	}
 
+	
+	sun3_dvma_init();
+	
 	
 	/* blank everything below the kernel, and we've got the base
 	   mapping to start all the contexts off with... */
@@ -185,20 +190,6 @@ void mmu_emu_init(void)
 	}
 	set_fs(KERNEL_DS);
 	
-}
-
-/* called during mem_init to create the needed holes in the mem
-   mappings */
-void mmu_emu_reserve_pages(unsigned long max_page)
-{
-	int i = 0;
-	
-	while(rom_pages[i] != 0) {
-		// don't tamper with pages that wound up after end_mem
-		if(rom_pages[i] < max_page) 
-			set_bit(PG_reserved, &mem_map[rom_pages[i]].flags);
-	     i++;
-	}
 }
 
 /* erase the mappings for a dead context.  Uses the pg_dir for hints

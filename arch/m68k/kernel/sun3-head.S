@@ -11,7 +11,7 @@ CACHES_OFF	= 0x00000008	| actually a clear and disable --m
 #define MAS_STACK INT_STACK 
 ROOT_TABLE_SIZE = 128
 PAGESIZE	= 8192
-
+SUN3_INVALID_PMEG = 255
 .globl SYMBOL_NAME(bootup_user_stack)
 .globl SYMBOL_NAME(bootup_kernel_stack)
 .globl SYMBOL_NAME(pg0)
@@ -20,6 +20,7 @@ PAGESIZE	= 8192
 .globl SYMBOL_NAME(empty_zero_page)
 .globl SYMBOL_NAME(swapper_pg_dir)
 .globl SYMBOL_NAME(kernel_pmd_table)
+.globl SYMBOL_NAME(availmem)
 .global SYMBOL_NAME(m68k_pgtable_cachemode)
 .global SYMBOL_NAME(kpt)
 | todo: all these should be in bss!
@@ -47,15 +48,20 @@ ENTRY(_start)
 	moveq	#0, %d0
 	movsb	%d0, AC_CONTEXT
 
-/* Copy mappings for first megabyte of RAM to address 0xE000000. */
-	lea	(AC_SEGMAP+0),%a0		
+/* map everything the bootloader left us into high memory, clean up the
+   excess later */
+	lea	(AC_SEGMAP+0),%a0 
 	lea	(AC_SEGMAP+KERNBASE),%a1	
-	moveq	#(0x140000/NBSG-1),%d0
-1:	movsb	%a0@,%d1			
-	movsb	%d1,%a1@
-	addl	#NBSG,%a0		
+1:	
+	movsb	%a0@, %d1
+	movsb	%d1, %a1@
+	cmpib	#SUN3_INVALID_PMEG, %d1
+	beq	2f
+	addl	#NBSG,%a0
 	addl	#NBSG,%a1
-	dbf	%d0,1b
+	jmp	1b
+	
+2:				
 	
 /* Disable caches and jump to high code. */
 	moveq	#ICACHE_ONLY,%d0	| Cache disabled until we're ready to enable it
@@ -83,7 +89,9 @@ ENTRY(_start)
 	movsb	%d0,(AC_SEGMAP+0x0)
 
 	jbsr	SYMBOL_NAME(sun3_init)
-		
+
+	jbsr	SYMBOL_NAME(base_trap_init)
+			
         jbsr    SYMBOL_NAME(start_kernel)
 	trap	#15			
 

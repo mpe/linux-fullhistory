@@ -37,10 +37,6 @@ int led_pattern[8] = {
 
 unsigned char* sun3_intreg;
 
-void sun3_init_IRQ(void)
-{
-}
-                                
 void sun3_insert_irq(irq_node_t **list, irq_node_t *node)
 {
 }
@@ -117,14 +113,38 @@ void (*sun3_default_handler[SYS_IRQS])(int, void *, struct pt_regs *) = {
 	sun3_inthandle, sun3_int5, sun3_inthandle, sun3_int7
 };
 
+static char *dev_names[SYS_IRQS] = { NULL, NULL, NULL, NULL, 
+				     NULL, "timer", NULL, NULL };
+
+void sun3_init_IRQ(void)
+{
+	int i;
+
+	for(i = 0; i < SYS_IRQS; i++)
+	{
+		if(dev_names[i])
+			sys_request_irq(i, sun3_default_handler[i],
+					0, dev_names[i], NULL);
+	}
+
+}
+                                
 int sun3_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
                       unsigned long flags, const char *devname, void *dev_id)
 {
-	if(inthandler[irq] != NULL)
+	if(inthandler[irq] != NULL) {
+		printk("sun3_request_irq: request for irq %d -- already taken!\n", irq);
 		return -1;
+	}
 
 	inthandler[irq] = handler;
 	dev_ids[irq] = dev_id;
+	dev_names[irq] = devname;
+
+	/* setting devname would be nice */
+	
+	sys_request_irq(irq, sun3_default_handler[irq], 0, devname, NULL);
+	
 
 	return 0;
 }

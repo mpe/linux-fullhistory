@@ -1909,7 +1909,7 @@ int block_truncate_page(struct address_space *mapping, loff_t from, get_block_t 
 	flush_dcache_page(page);
 	kunmap(page);
 
-	mark_buffer_dirty(bh);
+	__mark_buffer_dirty(bh);
 	err = 0;
 
 unlock:

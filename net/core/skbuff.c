@@ -223,15 +223,20 @@ static inline void skb_headerinit(void *p, kmem_cache_t *cache,
 {
 	struct sk_buff *skb = p;
 
-	skb->destructor = NULL;
-	skb->pkt_type = PACKET_HOST;	/* Default type */
-	skb->prev = skb->next = NULL;
+	skb->next = NULL;
+	skb->prev = NULL;
 	skb->list = NULL;
 	skb->sk = NULL;
 	skb->stamp.tv_sec=0;	/* No idea about time */
-	skb->ip_summed = 0;
-	skb->security = 0;	/* By default packets are insecure */
+	skb->dev = NULL;
 	skb->dst = NULL;
+	memset(skb->cb, 0, sizeof(skb->cb));
+	skb->pkt_type = PACKET_HOST;	/* Default type */
+	skb->ip_summed = 0;
+	skb->priority = 0;
+	skb->security = 0;	/* By default packets are insecure */
+	skb->destructor = NULL;
+
 #ifdef CONFIG_NETFILTER
 	skb->nfmark = skb->nfcache = 0;
 	skb->nfct = NULL;
@@ -242,8 +247,6 @@ static inline void skb_headerinit(void *p, kmem_cache_t *cache,
 #ifdef CONFIG_NET_SCHED
 	skb->tc_index = 0;
 #endif
-	memset(skb->cb, 0, sizeof(skb->cb));
-	skb->priority = 0;
 }
 
 /*

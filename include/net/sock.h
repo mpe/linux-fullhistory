@@ -302,6 +302,9 @@ struct tcp_opt {
 	__u8	backoff;	/* backoff				*/
 	__u32	srtt;		/* smothed round trip time << 3		*/
 	__u32	mdev;		/* medium deviation			*/
+	__u32	mdev_max;	/* maximal mdev for the last rtt period	*/
+	__u32	rttvar;		/* smoothed mdev_max			*/
+	__u32	rtt_seq;	/* sequence number to update rttvar	*/
 	__u32	rto;		/* retransmit timeout			*/
 
 	__u32	packets_out;	/* Packets which are "in flight"	*/

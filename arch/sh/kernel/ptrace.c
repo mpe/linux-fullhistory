@@ -366,7 +366,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		ret = -EIO;
 		if ((unsigned long) data > _NSIG)
 			break;
-		child->ptrace &= ~(PT_PTRACED|PT_TRACESYS);
+		child->ptrace = 0;
 		child->exit_code = data;
 		write_lock_irq(&tasklist_lock);
 		REMOVE_LINKS(child);
@@ -374,6 +374,15 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		SET_LINKS(child);
 		write_unlock_irq(&tasklist_lock);
 		wake_up_process(child);
+		ret = 0;
+		break;
+	}
+
+	case PTRACE_SETOPTIONS: {
+		if (data & PTRACE_O_TRACESYSGOOD)
+			child->ptrace |= PT_TRACESYSGOOD;
+		else
+			child->ptrace &= ~PT_TRACESYSGOOD;
 		ret = 0;
 		break;
 	}
@@ -396,7 +405,10 @@ asmlinkage void syscall_trace(void)
 	if ((tsk->ptrace & (PT_PTRACED|PT_TRACESYS))
 	    != (PT_PTRACED|PT_TRACESYS))
 		return;
-	tsk->exit_code = SIGTRAP;
+	/* the 0x80 provides a way for the tracing parent to distinguish
+	   between a syscall stop and SIGTRAP delivery */
+	tsk->exit_code = SIGTRAP | ((current->ptrace & PT_TRACESYSGOOD)
+				    ? 0x80 : 0);
 	tsk->state = TASK_STOPPED;
 	notify_parent(tsk, SIGCHLD);
 	schedule();

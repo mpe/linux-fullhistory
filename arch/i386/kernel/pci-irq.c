@@ -325,6 +325,30 @@ static int pirq_vlsi_set(struct pci_dev *router, struct pci_dev *dev, int pirq, 
 	return 1;
 }
 
+/*
+ * ServerWorks: PCI interrupts mapped to system IRQ lines through Index
+ * and Redirect I/O registers (0x0c00 and 0x0c01).  The Index register
+ * format is (PCIIRQ## | 0x10), e.g.: PCIIRQ10=0x1a.  The Redirect
+ * register is a straight binary coding of desired PIC IRQ (low nibble).
+ *
+ * The 'link' value in the PIRQ table is already in the correct format
+ * for the Index register.  There are some special index values:
+ * 0x00 for ACPI (SCI), 0x01 for USB, 0x02 for IDE0, 0x04 for IDE1,
+ * and 0x03 for SMBus.
+ */
+static int pirq_serverworks_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
+{
+	outb_p(pirq, 0xc00);
+	return inb(0xc01) & 0xf;
+}
+
+static int pirq_serverworks_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
+{
+	outb_p(pirq, 0xc00);
+	outb_p(irq, 0xc01);
+	return 1;
+}
+
 #ifdef CONFIG_PCI_BIOS
 
 static int pirq_bios_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
@@ -357,6 +381,9 @@ static struct irq_router pirq_routers[] = {
 	{ "NatSemi", PCI_VENDOR_ID_CYRIX, PCI_DEVICE_ID_CYRIX_5520, pirq_cyrix_get, pirq_cyrix_set },
 	{ "SIS", PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_503, pirq_sis_get, pirq_sis_set },
 	{ "VLSI 82C534", PCI_VENDOR_ID_VLSI, PCI_DEVICE_ID_VLSI_82C534, pirq_vlsi_get, pirq_vlsi_set },
+	{ "ServerWorks", PCI_VENDOR_ID_SERVERWORKS, PCI_DEVICE_ID_SERVERWORKS_OSB4,
+	  pirq_serverworks_get, pirq_serverworks_set },
+
 	{ "default", 0, 0, NULL, NULL }
 };
 

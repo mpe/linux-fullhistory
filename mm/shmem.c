@@ -193,17 +193,6 @@ static void shmem_delete_inode(struct inode * inode)
 }
 
 /*
- * We mark int dirty so the vm will not simply drop it
- * The real work is done in shmem_writepage
- */
-
-int shmem_swapout(struct page * page, struct file *file)
-{
-	SetPageDirty (page);
-	return 0;
-}
-
-/*
  * Move the page from the page cache to the swap cache
  */
 static int shmem_writepage(struct page * page)
@@ -709,7 +698,6 @@ static struct vm_operations_struct shmem_private_vm_ops = {
 
 static struct vm_operations_struct shmem_shared_vm_ops = {
 	nopage:	shmem_nopage,
-	swapout:shmem_swapout,
 };
 
 static DECLARE_FSTYPE(shmem_fs_type, "shm", shmem_read_super, FS_LITTER);
@@ -761,14 +749,16 @@ static int shmem_unuse_inode (struct inode *inode, swp_entry_t entry, struct pag
 	swp_entry_t **base, **ptr;
 	unsigned long idx;
 	int offset;
+	struct shmem_inode_info *info = &inode->u.shmem_i;
 	
 	idx = 0;
-	if ((offset = shmem_clear_swp (entry, inode->u.shmem_i.i_direct, SHMEM_NR_DIRECT)) >= 0)
+	spin_lock (&info->lock);
+	if ((offset = shmem_clear_swp (entry,info->i_direct, SHMEM_NR_DIRECT)) >= 0)
 		goto found;
 
 	idx = SHMEM_NR_DIRECT;
-	if (!(base = inode->u.shmem_i.i_indirect))
-		return 0;
+	if (!(base = info->i_indirect))
+		goto out;
 
 	for (ptr = base; ptr < base + ENTRIES_PER_PAGE; ptr++) {
 		if (*ptr &&
@@ -776,16 +766,16 @@ static int shmem_unuse_inode (struct inode *inode, swp_entry_t entry, struct pag
 			goto found;
 		idx += ENTRIES_PER_PAGE;
 	}
+out:
+	spin_unlock (&info->lock);
 	return 0;
 found:
-	delete_from_swap_cache (page);
-	add_to_page_cache (page, inode->i_mapping, idx);
+	add_to_page_cache (page, inode->i_mapping, offset + idx);
 	SetPageDirty (page);
 	SetPageUptodate (page);
 	UnlockPage (page);
-	spin_lock (&inode->u.shmem_i.lock);
-	inode->u.shmem_i.swapped--;
-	spin_unlock (&inode->u.shmem_i.lock);
+	info->swapped--;
+	spin_unlock (&info->lock);
 	return 1;
 }
 

@@ -95,6 +95,7 @@ static int  ircc_pmproc(struct pm_dev *dev, pm_request_t rqst, void *data);
 static smc_chip_t chips[] =
 {
 	{ "FDC37C669", 0x55, 0x55, 0x0d, 0x04, ircc_probe_69 },
+	{ "FDC37N769", 0x55, 0x55, 0x0d, 0x28, ircc_probe_69 },
 	{ "FDC37N869", 0x55, 0x00, 0x0d, 0x29, ircc_probe_69 },
 	{ "FDC37N958", 0x55, 0x55, 0x20, 0x09, ircc_probe_58 },
 	{ NULL }

@@ -55,35 +55,48 @@ spinlock_t pagemap_lru_lock = SPIN_LOCK_UNLOCKED;
 #define CLUSTER_PAGES		(1 << page_cluster)
 #define CLUSTER_OFFSET(x)	(((x) >> page_cluster) << page_cluster)
 
-void __add_page_to_hash_queue(struct page * page, struct page **p)
+static void add_page_to_hash_queue(struct page * page, struct page **p)
 {
-	atomic_inc(&page_cache_size);
-	if((page->next_hash = *p) != NULL)
-		(*p)->pprev_hash = &page->next_hash;
+	struct page *next = *p;
+
 	*p = page;
+	page->next_hash = next;
 	page->pprev_hash = p;
+	if (next)
+		next->pprev_hash = &page->next_hash;
 	if (page->buffers)
 		PAGE_BUG(page);
+	atomic_inc(&page_cache_size);
+}
+
+static inline void add_page_to_inode_queue(struct address_space *mapping, struct page * page)
+{
+	struct list_head *head = &mapping->pages;
+
+	mapping->nrpages++;
+	list_add(&page->list, head);
+	page->mapping = mapping;
+}
+
+static inline void remove_page_from_inode_queue(struct page * page)
+{
+	struct address_space * mapping = page->mapping;
+
+	mapping->nrpages--;
+	list_del(&page->list);
+	page->mapping = NULL;
 }
 
 static inline void remove_page_from_hash_queue(struct page * page)
 {
-	if(page->pprev_hash) {
-		if(page->next_hash)
-			page->next_hash->pprev_hash = page->pprev_hash;
-		*page->pprev_hash = page->next_hash;
-		page->pprev_hash = NULL;
-	}
+	struct page *next = page->next_hash;
+	struct page **pprev = page->pprev_hash;
+
+	if (next)
+		next->pprev_hash = pprev;
+	*pprev = next;
+	page->pprev_hash = NULL;
 	atomic_dec(&page_cache_size);
-}
-
-static inline int sync_page(struct page *page)
-{
-	struct address_space *mapping = page->mapping;
-
-	if (mapping && mapping->a_ops && mapping->a_ops->sync_page)
-		return mapping->a_ops->sync_page(page);
-	return 0;
 }
 
 /*
@@ -93,6 +106,7 @@ static inline int sync_page(struct page *page)
  */
 void __remove_inode_page(struct page *page)
 {
+	if (PageDirty(page)) BUG();
 	remove_page_from_inode_queue(page);
 	remove_page_from_hash_queue(page);
 	page->mapping = NULL;
@@ -106,6 +120,15 @@ void remove_inode_page(struct page *page)
 	spin_lock(&pagecache_lock);
 	__remove_inode_page(page);
 	spin_unlock(&pagecache_lock);
+}
+
+static inline int sync_page(struct page *page)
+{
+	struct address_space *mapping = page->mapping;
+
+	if (mapping && mapping->a_ops && mapping->a_ops->sync_page)
+		return mapping->a_ops->sync_page(page);
+	return 0;
 }
 
 /**
@@ -131,15 +154,17 @@ void invalidate_inode_pages(struct inode * inode)
 		page = list_entry(curr, struct page, list);
 		curr = curr->next;
 
-		/* We cannot invalidate a locked page */
-		if (TryLockPage(page))
+		/* We cannot invalidate something in use.. */
+		if (page_count(page) != 1)
 			continue;
 
-		/* Neither can we invalidate something in use.. */
-		if (page_count(page) != 1) {
-			UnlockPage(page);
+		/* ..or dirty.. */
+		if (PageDirty(page))
 			continue;
-		}
+
+		/* ..or locked */
+		if (TryLockPage(page))
+			continue;
 
 		__lru_cache_del(page);
 		__remove_inode_page(page);
@@ -369,7 +394,7 @@ void add_to_page_cache_locked(struct page * page, struct address_space *mapping,
 	spin_lock(&pagecache_lock);
 	page->index = index;
 	add_page_to_inode_queue(mapping, page);
-	__add_page_to_hash_queue(page, page_hash(mapping, index));
+	add_page_to_hash_queue(page, page_hash(mapping, index));
 	lru_cache_add(page);
 	spin_unlock(&pagecache_lock);
 }
@@ -392,7 +417,7 @@ static inline void __add_to_page_cache(struct page * page,
 	page_cache_get(page);
 	page->index = offset;
 	add_page_to_inode_queue(mapping, page);
-	__add_page_to_hash_queue(page, hash);
+	add_page_to_hash_queue(page, hash);
 	lru_cache_add(page);
 }
 
@@ -1482,18 +1507,6 @@ static int filemap_write_page(struct page * page, int wait)
 }
 
 
-/*
- * The page cache takes care of races between somebody
- * trying to swap something out and swap something in
- * at the same time..
- */
-extern void wakeup_bdflush(int);
-int filemap_swapout(struct page * page, struct file *file)
-{
-	SetPageDirty(page);
-	return 0;
-}
-
 /* Called with mm->page_table_lock held to protect against other
  * threads/the swapper from ripping pte's out from under us.
  */
@@ -1625,7 +1638,6 @@ int filemap_sync(struct vm_area_struct * vma, unsigned long address,
 static struct vm_operations_struct file_shared_mmap = {
 	sync:		filemap_sync,
 	nopage:		filemap_nopage,
-	swapout:	filemap_swapout,
 };
 
 /*

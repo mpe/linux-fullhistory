@@ -167,7 +167,6 @@ static struct vm_operations_struct shm_vm_ops = {
 	open:	shm_open,	/* callback for a new vm-area open */
 	close:	shm_close,	/* callback for when the vm-area is released */
 	nopage:	shmem_nopage,
-	swapout:shmem_swapout,
 };
 
 static int newseg (key_t key, int shmflg, size_t size)
@@ -178,6 +177,9 @@ static int newseg (key_t key, int shmflg, size_t size)
 	struct file * file;
 	char name[13];
 	int id;
+
+	if (size < SHMMIN || size > shm_ctlmax)
+		return -EINVAL;
 
 	if (shm_tot + numpages >= shm_ctlall)
 		return -ENOSPC;
@@ -222,9 +224,6 @@ asmlinkage long sys_shmget (key_t key, size_t size, int shmflg)
 {
 	struct shmid_kernel *shp;
 	int err, id = 0;
-
-	if (size < SHMMIN || size > shm_ctlmax)
-		return -EINVAL;
 
 	down(&shm_ids.sem);
 	if (key == IPC_PRIVATE) {

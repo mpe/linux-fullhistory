@@ -80,34 +80,6 @@ extern void __add_page_to_hash_queue(struct page * page, struct page **p);
 extern void add_to_page_cache(struct page * page, struct address_space *mapping, unsigned long index);
 extern void add_to_page_cache_locked(struct page * page, struct address_space *mapping, unsigned long index);
 
-extern inline void add_page_to_hash_queue(struct page * page, struct inode * inode, unsigned long index)
-{
-	__add_page_to_hash_queue(page, page_hash(inode->i_mapping,index));
-}
-
-extern inline void add_page_to_inode_queue(struct address_space *mapping, struct page * page)
-{
-	struct list_head *head = &mapping->pages;
-
-	if (!mapping->nrpages++) {
-		if (!list_empty(head))
-			BUG();
-	} else {
-		if (list_empty(head))
-			BUG();
-	}
-	list_add(&page->list, head);
-	page->mapping = mapping;
-}
-
-extern inline void remove_page_from_inode_queue(struct page * page)
-{
-	struct address_space * mapping = page->mapping;
-
-	mapping->nrpages--;
-	list_del(&page->list);
-}
-
 extern void ___wait_on_page(struct page *);
 
 extern inline void wait_on_page(struct page * page)

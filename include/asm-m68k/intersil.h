@@ -11,7 +11,7 @@
 #define INTERSIL_24H_MODE   0x04
 
 /* bit 3 */
-#define INTESIL_STOP            0x00
+#define INTERSIL_STOP            0x00
 #define INTERSIL_RUN             0x08
 
 /* bit 4 */

@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.101 2000/11/10 04:02:04 davem Exp $
+ * Version:	$Id: sock.c,v 1.102 2000/12/11 23:00:24 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -866,24 +866,17 @@ void sklist_remove_socket(struct sock **list, struct sock *sk)
 
 	write_lock_bh(&net_big_sklist_lock);
 
-	s= *list;
-	if(s==sk)
-	{
-		*list = s->next;
-		write_unlock_bh(&net_big_sklist_lock);
-		sock_put(sk);
-		return;
-	}
-	while(s && s->next)
-	{
-		if(s->next==sk)
-		{
-			s->next=sk->next;
+	while ((s = *list) != NULL) {
+		if (s == sk) {
+			*list = s->next;
 			break;
 		}
-		s=s->next;
+		list = &s->next;
 	}
+
 	write_unlock_bh(&net_big_sklist_lock);
+	if (s)
+		sock_put(s);
 }
 
 void sklist_insert_socket(struct sock **list, struct sock *sk)

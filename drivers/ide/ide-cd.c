@@ -333,7 +333,7 @@ static int cdrom_log_sense(ide_drive_t *drive, struct packet_command *pc,
 {
 	int log = 0;
 
-	if (sense == NULL || pc->quiet)
+	if (sense == NULL || pc == NULL || pc->quiet)
 		return 0;
 
 	switch (sense->sense_key) {

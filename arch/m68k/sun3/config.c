@@ -18,6 +18,7 @@
 #include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/init.h>
+#include <linux/bootmem.h>
 
 #include <asm/oplib.h>
 #include <asm/setup.h>
@@ -33,7 +34,6 @@
 
 extern char _text, _end;
 
-static int kernel_start, kernel_end;
 char sun3_reserved_pmeg[SUN3_PMEGS_NUM];
 
 extern unsigned long sun3_gettimeoffset(void);
@@ -48,15 +48,17 @@ extern void sun3_enable_irq (unsigned int);
 extern void sun3_disable_irq (unsigned int);
 extern void sun3_enable_interrupts (void);
 extern void sun3_disable_interrupts (void);
-extern void sun3_get_model (unsigned char* model);
+extern void sun3_get_model (char* model);
 extern void idprom_init (void);
 extern void sun3_gettod (int *yearp, int *monp, int *dayp,
                    int *hourp, int *minp, int *secp);
 extern int sun3_hwclk(int set, struct hwclk_time *t);
 
-extern unsigned long sun_serial_setup(unsigned long memory_start);
+extern void sun_serial_setup(void);
 volatile char* clock_va; 
 extern unsigned char* sun3_intreg;
+extern unsigned long availmem;
+unsigned long num_pages;
 
 void __init sun3_init(void)
 {
@@ -112,8 +114,33 @@ static void sun3_halt (void)
 	prom_halt ();
 }
 
-void __init config_sun3(unsigned long *start_mem_p, unsigned long *end_mem_p)
+/* sun3 bootmem allocation */
+
+void __init sun3_bootmem_alloc(unsigned long memory_start, unsigned long memory_end)
 {
+	unsigned long start_page;
+
+	/* align start/end to page boundries */
+	memory_start = ((memory_start + (PAGE_SIZE-1)) & PAGE_MASK);
+	memory_end = memory_end & PAGE_MASK;
+		
+	start_page = __pa(memory_start) >> PAGE_SHIFT;
+	num_pages = __pa(memory_end) >> PAGE_SHIFT;
+
+	high_memory = (void *)memory_end;
+	availmem = memory_start;
+
+	availmem += init_bootmem(start_page, num_pages);
+	availmem = (availmem + (PAGE_SIZE-1)) & PAGE_MASK;
+
+	free_bootmem(__pa(availmem), memory_end - (availmem));
+}
+	
+
+void __init config_sun3(void)
+{
+	unsigned long memory_start, memory_end;
+
 	printk("ARCH: SUN3\n");
 	idprom_init();
 
@@ -137,16 +164,19 @@ void __init config_sun3(unsigned long *start_mem_p, unsigned long *end_mem_p)
 #ifndef CONFIG_SERIAL_CONSOLE
 	conswitchp 	     = &dummy_con;
 #endif
-	kernel_start = 0x00000000; /* NOT &_text */
-	kernel_end   = ((((int)&_end) + 0x2000) & ~0x1fff) - 1;
 
-	*start_mem_p = kernel_end + 1;
+	memory_start = ((((int)&_end) + 0x2000) & ~0x1fff);
 // PROM seems to want the last couple of physical pages. --m
-	*end_mem_p   = *(romvec->pv_sun3mem) + PAGE_OFFSET - 2*PAGE_SIZE;
+	memory_end   = *(romvec->pv_sun3mem) + PAGE_OFFSET - 2*PAGE_SIZE;
+
 	m68k_num_memory=1;
         m68k_memory[0].size=*(romvec->pv_sun3mem);
-           
-        *start_mem_p = sun_serial_setup(*start_mem_p);
+	
+	sun3_bootmem_alloc(memory_start, memory_end);
+
+	sun_serial_setup();
+
+
 }
 
 void __init sun3_sched_init(void (*timer_routine)(int, void *, struct pt_regs *))

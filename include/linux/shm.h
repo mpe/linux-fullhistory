@@ -10,7 +10,7 @@
  */
 
 #define SHMMAX 0x2000000		 /* max shared seg size (bytes) */
-#define SHMMIN 0			 /* min shared seg size (bytes) */
+#define SHMMIN 1			 /* min shared seg size (bytes) */
 #define SHMMNI 4096			 /* max num of segs system wide */
 #define SHMALL (SHMMAX/PAGE_SIZE*(SHMMNI/16)) /* max shm system wide (pages) */
 #define SHMSEG SHMMNI			 /* max shared segs per process */

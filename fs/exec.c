@@ -765,29 +765,26 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 	/* handle /sbin/loader.. */
 	{
 	    struct exec * eh = (struct exec *) bprm->buf;
-	    struct linux_binprm bprm_loader;
 
 	    if (!bprm->loader && eh->fh.f_magic == 0x183 &&
 		(eh->fh.f_flags & 0x3000) == 0x3000)
 	    {
-		int i;
 		char * dynloader[] = { "/sbin/loader" };
 		struct file * file;
+		unsigned long loader;
 
 		allow_write_access(bprm->file);
 		fput(bprm->file);
 		bprm->file = NULL;
 
-	        bprm_loader.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
-	        for (i = 0 ; i < MAX_ARG_PAGES ; i++)	/* clear page-table */
-                    bprm_loader.page[i] = NULL;
+	        loader = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 
 		file = open_exec(dynloader[0]);
 		retval = PTR_ERR(file);
 		if (IS_ERR(file))
 			return retval;
 		bprm->file = file;
-		bprm->loader = bprm_loader.p;
+		bprm->loader = loader;
 		retval = prepare_binprm(bprm);
 		if (retval<0)
 			return retval;

@@ -282,19 +282,17 @@ __inline__ struct sock *udp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport
 }
 
 static inline struct sock *udp_v4_mcast_next(struct sock *sk,
-					     unsigned short num,
-					     unsigned long raddr,
-					     unsigned short rnum,
-					     unsigned long laddr,
+					     u16 loc_port, u32 loc_addr,
+					     u16 rmt_port, u32 rmt_addr,
 					     int dif)
 {
 	struct sock *s = sk;
-	unsigned short hnum = ntohs(num);
+	unsigned short hnum = ntohs(loc_port);
 	for(; s; s = s->next) {
 		if ((s->num != hnum)					||
-		    (s->daddr && s->daddr!=raddr)			||
-		    (s->dport != rnum && s->dport != 0)			||
-		    (s->rcv_saddr  && s->rcv_saddr != laddr)		||
+		    (s->daddr && s->daddr!=rmt_addr)			||
+		    (s->dport != rmt_port && s->dport != 0)			||
+		    (s->rcv_saddr  && s->rcv_saddr != loc_addr)		||
 		    (s->bound_dev_if && s->bound_dev_if != dif))
 			continue;
 		break;
@@ -861,15 +859,15 @@ static int udp_v4_mcast_deliver(struct sk_buff *skb, struct udphdr *uh,
 	read_lock(&udp_hash_lock);
 	sk = udp_hash[ntohs(uh->dest) & (UDP_HTABLE_SIZE - 1)];
 	dif = skb->dev->ifindex;
-	sk = udp_v4_mcast_next(sk, uh->dest, saddr, uh->source, daddr, dif);
+	sk = udp_v4_mcast_next(sk, uh->dest, daddr, uh->source, saddr, dif);
 	if (sk) {
 		struct sock *sknext = NULL;
 
 		do {
 			struct sk_buff *skb1 = skb;
 
-			sknext = udp_v4_mcast_next(sk->next, uh->dest, saddr,
-						   uh->source, daddr, dif);
+			sknext = udp_v4_mcast_next(sk->next, uh->dest, daddr,
+						   uh->source, saddr, dif);
 			if(sknext)
 				skb1 = skb_clone(skb, GFP_ATOMIC);
 

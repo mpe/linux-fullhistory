@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.203 2000/11/28 17:04:09 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.205 2000/12/13 18:31:48 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -108,6 +108,7 @@ int sysctl_tcp_max_orphans = NR_FILE;
 
 #define IsReno(tp) ((tp)->sack_ok == 0)
 #define IsFack(tp) ((tp)->sack_ok & 2)
+#define IsDSack(tp) ((tp)->sack_ok & 4)
 
 #define TCP_REMNANT (TCP_FLAG_FIN|TCP_FLAG_URG|TCP_FLAG_SYN|TCP_FLAG_PSH)
 
@@ -438,14 +439,40 @@ static __inline__ void tcp_rtt_estimator(struct tcp_opt *tp, __u32 mrtt)
 	if (tp->srtt != 0) {
 		m -= (tp->srtt >> 3);	/* m is now error in rtt est */
 		tp->srtt += m;		/* rtt = 7/8 rtt + 1/8 new */
-		if (m < 0)
+		if (m < 0) {
 			m = -m;		/* m is now abs(error) */
-		m -= (tp->mdev >> 2);   /* similar update on mdev */
+			m -= (tp->mdev >> 2);   /* similar update on mdev */
+			/* This is similar to one of Eifel findings.
+			 * Eifel blocks mdev updates when rtt decreases.
+			 * This solution is a bit different: we use finer gain
+			 * for mdev in this case (alpha*beta).
+			 * Like Eifel it also prevents growth of rto,
+			 * but also it limits too fast rto decreases,
+			 * happening in pure Eifel.
+			 */
+			if (m > 0)
+				m >>= 3;
+		} else {
+			m -= (tp->mdev >> 2);   /* similar update on mdev */
+		}
 		tp->mdev += m;	    	/* mdev = 3/4 mdev + 1/4 new */
+		if (tp->mdev > tp->mdev_max) {
+			tp->mdev_max = tp->mdev;
+			if (tp->mdev_max > tp->rttvar)
+				tp->rttvar = tp->mdev_max;
+		}
+		if (after(tp->snd_una, tp->rtt_seq)) {
+			if (tp->mdev_max < tp->rttvar)
+				tp->rttvar -= (tp->rttvar-tp->mdev_max)>>2;
+			tp->rtt_seq = tp->snd_una;
+			tp->mdev_max = TCP_RTO_MIN;
+		}
 	} else {
 		/* no previous measure. */
 		tp->srtt = m<<3;	/* take the measured time to be rtt */
 		tp->mdev = m<<2;	/* make sure rto = 3*rtt */
+		tp->mdev_max = tp->rttvar = max(tp->mdev, TCP_RTO_MIN);
+		tp->rtt_seq = tp->snd_nxt;
 	}
 }
 
@@ -454,44 +481,33 @@ static __inline__ void tcp_rtt_estimator(struct tcp_opt *tp, __u32 mrtt)
  */
 static __inline__ void tcp_set_rto(struct tcp_opt *tp)
 {
-	tp->rto = (tp->srtt >> 3) + tp->mdev;
-	/* I am not enough educated to understand this magic.
-	 * However, it smells bad. snd_cwnd>31 is common case.
+	/* Old crap is replaced with new one. 8)
+	 *
+	 * More seriously:
+	 * 1. If rtt variance happened to be less 50msec, it is hallucination.
+	 *    It cannot be less due to utterly erratic ACK generation made
+	 *    at least by solaris and freebsd. "Erratic ACKs" has _nothing_
+	 *    to do with delayed acks, because at cwnd>2 true delack timeout
+	 *    is invisible. Actually, Linux-2.4 also generates erratic
+	 *    ACKs in some curcumstances.
 	 */
-	/* OK, I found comment in 2.0 source tree, it deserves
-	 * to be reproduced:
-	 * ====
-	 * Note: Jacobson's algorithm is fine on BSD which has a 1/2 second
-	 * granularity clock, but with our 1/100 second granularity clock we
-	 * become too sensitive to minor changes in the round trip time.
-	 * We add in two compensating factors. First we multiply by 5/4.
-	 * For large congestion windows this allows us to tolerate burst
-	 * traffic delaying up to 1/4 of our packets. We also add in
-	 * a rtt / cong_window term. For small congestion windows this allows
-	 * a single packet delay, but has negligible effect
-	 * on the compensation for large windows.
+	tp->rto = (tp->srtt >> 3) + tp->rttvar;
+
+	/* 2. Fixups made earlier cannot be right.
+	 *    If we do not estimate RTO correctly without them,
+	 *    all the algo is pure shit and should be replaced
+	 *    with correct one. It is exaclty, which we pretend to do.
 	 */
-	tp->rto += (tp->rto >> 2) + (tp->rto >> (tp->snd_cwnd-1));
 }
 
-/* Keep the rto between HZ/5 and 120*HZ. 120*HZ is the upper bound
- * on packet lifetime in the internet. We need the HZ/5 lower
- * bound to behave correctly against BSD stacks with a fixed
- * delayed ack.
- * FIXME: It's not entirely clear this lower bound is the best
- * way to avoid the problem. Is it possible to drop the lower
- * bound and still avoid trouble with BSD stacks? Perhaps
- * some modification to the RTO calculation that takes delayed
- * ack bias into account? This needs serious thought. -- erics
+/* NOTE: clamping at TCP_RTO_MIN is not required, current algo
+ * guarantees that rto is higher.
  */
 static __inline__ void tcp_bound_rto(struct tcp_opt *tp)
 {
-	if (tp->rto < TCP_RTO_MIN)
-		tp->rto = TCP_RTO_MIN;
-	else if (tp->rto > TCP_RTO_MAX)
+	if (tp->rto > TCP_RTO_MAX)
 		tp->rto = TCP_RTO_MAX;
 }
-
 
 /* Save metrics learned by this TCP session.
    This function is called only, when TCP finishes sucessfully
@@ -649,8 +665,10 @@ static void tcp_init_metrics(struct sock *sk)
 	 */
 	if (dst->rtt > tp->srtt)
 		tp->srtt = dst->rtt;
-	if (dst->rttvar > tp->mdev)
+	if (dst->rttvar > tp->mdev) {
 		tp->mdev = dst->rttvar;
+		tp->mdev_max = tp->rttvar = max(tp->mdev, TCP_RTO_MIN);
+	}
 	tcp_set_rto(tp);
 	tcp_bound_rto(tp);
 	if (tp->rto < TCP_TIMEOUT_INIT && !tp->saw_tstamp)
@@ -666,7 +684,7 @@ reset:
 	 */
 	if (!tp->saw_tstamp && tp->srtt) {
 		tp->srtt = 0;
-		tp->mdev = TCP_TIMEOUT_INIT;
+		tp->mdev = tp->mdev_max = tp->rttvar = TCP_TIMEOUT_INIT;
 		tp->rto = TCP_TIMEOUT_INIT;
 	}
 }
@@ -774,11 +792,13 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 
 			if (before(start_seq, ack)) {
 				dup_sack = 1;
+				tp->sack_ok |= 4;
 				NET_INC_STATS_BH(TCPDSACKRecv);
 			} else if (num_sacks > 1 &&
 				   !after(end_seq, ntohl(sp[1].end_seq)) &&
 				   !before(start_seq, ntohl(sp[1].start_seq))) {
 				dup_sack = 1;
+				tp->sack_ok |= 4;
 				NET_INC_STATS_BH(TCPDSACKOfoRecv);
 			}
 
@@ -1286,8 +1306,10 @@ static void tcp_undo_cwr(struct tcp_opt *tp, int undo)
 {
 	if (tp->prior_ssthresh) {
 		tp->snd_cwnd = max(tp->snd_cwnd, tp->snd_ssthresh<<1);
-		if (undo && tp->prior_ssthresh > tp->snd_ssthresh)
+		if (undo && tp->prior_ssthresh > tp->snd_ssthresh) {
 			tp->snd_ssthresh = tp->prior_ssthresh;
+			TCP_ECN_withdraw_cwr(tp);
+		}
 	} else {
 		tp->snd_cwnd = max(tp->snd_cwnd, tp->snd_ssthresh);
 	}
@@ -1615,13 +1637,16 @@ static void tcp_ack_no_tstamp(struct tcp_opt *tp, u32 seq_rtt, int flag)
 	 * I.e. Karn's algorithm. (SIGCOMM '87, p5.)
 	 */
 
+	if (flag & FLAG_RETRANS_DATA_ACKED)
+		return;
+
 	tcp_rtt_estimator(tp, seq_rtt);
 	tcp_set_rto(tp);
 	if (tp->backoff) {
 		/* To relax it? We have valid sample as soon as we are
 		 * here. Why not to clear backoff?
 		 */
-		if (!tp->retransmits || !(flag & FLAG_RETRANS_DATA_ACKED))
+		if (!tp->retransmits)
 			tp->backoff = 0;
 		else
 			tp->rto <<= tp->backoff;
@@ -1661,16 +1686,25 @@ static __inline__ void tcp_cong_avoid(struct tcp_opt *tp)
         }
 }
 
+/* Restart timer after forward progress on connection.
+ * RFC2988 recommends (and BSD does) to restart timer to now+rto,
+ * which is certainly wrong and effectively means that
+ * rto includes one more _full_ rtt.
+ *
+ * For details see:
+ * 	ftp://ftp.inr.ac.ru:/ip-routing/README.rto
+ */
+
 static __inline__ void tcp_ack_packets_out(struct sock *sk, struct tcp_opt *tp)
 {
 	if (tp->packets_out==0) {
 		tcp_clear_xmit_timer(sk, TCP_TIME_RETRANS);
 	} else {
 		struct sk_buff *skb = skb_peek(&sk->write_queue);
-		__u32 when = tp->rto - (tcp_time_stamp - TCP_SKB_CB(skb)->when);
+		__u32 when = tp->rto + tp->rttvar - (tcp_time_stamp - TCP_SKB_CB(skb)->when);
 
-		if ((__s32)when <= 0)
-			when = TCP_RTO_MIN;
+		if ((__s32)when < (__s32)tp->rttvar)
+			when = tp->rttvar;
 		tcp_reset_xmit_timer(sk, TCP_TIME_RETRANS, when);
 	}
 }
@@ -1841,7 +1875,7 @@ static int tcp_ack_update_window(struct sock *sk, struct tcp_opt *tp,
 
 #ifdef TCP_DEBUG
 	if (before(tp->snd_una + tp->snd_wnd, tp->snd_nxt)) {
-		if ((tp->snd_una + tp->snd_wnd)-tp->snd_nxt >= (1<<tp->snd_wscale)
+		if (tp->snd_nxt-(tp->snd_una + tp->snd_wnd) >= (1<<tp->snd_wscale)
 		    && net_ratelimit())
 			printk(KERN_DEBUG "TCP: peer %u.%u.%u.%u:%u/%u shrinks window %u:%u:%u. Bad, what else can I say?\n",
 			       NIPQUAD(sk->daddr), htons(sk->dport), sk->num,

@@ -65,7 +65,7 @@ extern struct kernel_param __setup_start, __setup_end;
 
 #define __setup(str, fn)								\
 	static char __setup_str_##fn[] __initdata = str;				\
-	static struct kernel_param __setup_##fn __initsetup = { __setup_str_##fn, fn }
+	static struct kernel_param __setup_##fn __attribute__((unused)) __initsetup = { __setup_str_##fn, fn }
 
 #endif /* __ASSEMBLY__ */
 

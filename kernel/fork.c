@@ -177,10 +177,9 @@ static inline int dup_mmap(struct mm_struct * mm)
 		 * Link in the new vma even if an error occurred,
 		 * so that exit_mmap() can clean up the mess.
 		 */
-		tmp->vm_next = *pprev;
 		*pprev = tmp;
-
 		pprev = &tmp->vm_next;
+
 		if (retval)
 			goto fail_nomem;
 	}
