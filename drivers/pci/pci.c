@@ -150,6 +150,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( CMD,		CMD_646,	"646"),
 	DEVICE( VISION,		VISION_QD8500,	"QD-8500"),
 	DEVICE( VISION,		VISION_QD8580,	"QD-8580"),
+	DEVICE( BROOKTREE,	BT848,		"Brooktree 848"),
 	DEVICE( SIERRA,		SIERRA_STB,	"STB Horizon 64"),
 	DEVICE( ACC,		ACC_2056,	"2056"),
 	DEVICE( WINBOND,	WINBOND_83769,	"W83769F"),
@@ -264,6 +265,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( INTEL,		INTEL_82437VX,	"82437VX Triton II"),
 	DEVICE( INTEL,		INTEL_82371AB,	"82371AB 430TX PIIX4"),
 	DEVICE( INTEL,		INTEL_P6,	"Orion P6"),
+ 	DEVICE( INTEL,		INTEL_P6_2,	"82450GX Orion P6"),
 	DEVICE(	KTI,		KTI_ET32P2,	"ET32P2"),
 	DEVICE( ADAPTEC,	ADAPTEC_7850,	"AIC-7850"),
 	DEVICE( ADAPTEC,	ADAPTEC_7855,	"AIC-7855"),
@@ -518,6 +520,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_OLICOM:	return "Olicom";
 	      case PCI_VENDOR_ID_CMD:		return "CMD";
 	      case PCI_VENDOR_ID_VISION:	return "Vision";
+	      case PCI_VENDOR_ID_BROOKTREE:	return "Brooktree";
 	      case PCI_VENDOR_ID_SIERRA:	return "Sierra";
 	      case PCI_VENDOR_ID_ACC:		return "ACC MICROELECTRONICS";
 	      case PCI_VENDOR_ID_WINBOND:	return "Winbond";

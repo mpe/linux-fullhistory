@@ -218,7 +218,13 @@ extern int scsi_dev_init (void);
 
 #include <asm/scatterlist.h>
 
+#ifdef __mc68000__
+#include <asm/pgtable.h>
+#define CONTIGUOUS_BUFFERS(X,Y) \
+	(VTOP((X)->b_data+(X)->b_size-1)+1 == VTOP((Y)->b_data))
+#else
 #define CONTIGUOUS_BUFFERS(X,Y) ((X->b_data+X->b_size) == Y->b_data)
+#endif
 
 
 /*

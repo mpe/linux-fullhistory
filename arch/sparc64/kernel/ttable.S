@@ -1,4 +1,4 @@
-/* $Id: ttable.S,v 1.11 1997/03/25 09:47:21 davem Exp $
+/* $Id: ttable.S,v 1.12 1997/05/17 08:22:30 davem Exp $
  * ttable.S: Sparc V9 Trap Table(s) with SpitFire extensions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -13,7 +13,7 @@ tl0_iax:	ACCESS_EXCEPTION_TRAP(instruction_access_exception)
 tl0_resv009:	BTRAP(0x9)
 tl0_iae:	TRAP(do_iae)
 tl0_resv00b:	BTRAP(0xb) BTRAP(0xc) BTRAP(0xd) BTRAP(0xe) BTRAP(0xf)
-tl0_ill:	TRAP(do_ill)
+tl0_ill:	TRAP(do_illegal_instruction)
 tl0_privop:	TRAP(do_privop)
 tl0_resv012:	BTRAP(0x12) BTRAP(0x13) BTRAP(0x14) BTRAP(0x15) BTRAP(0x16) BTRAP(0x17)
 tl0_resv018:	BTRAP(0x18) BTRAP(0x19) BTRAP(0x1a) BTRAP(0x1b) BTRAP(0x1c) BTRAP(0x1d)
@@ -226,27 +226,3 @@ tl1_f4o:	FILL_4_OTHER
 tl1_f5o:	FILL_5_OTHER
 tl1_f6o:	FILL_6_OTHER
 tl1_f7o:	FILL_7_OTHER
-
-#if 0
-/* Unless we are going to have software trap insns in the kernel code, we
- * don't need this. For now we just save 8KB.
- */
-
-#define BTRAPSTL1(x) BTRAPTL1(x) BTRAPTL1(x+1) BTRAPTL1(x+2) BTRAPTL1(x+3) BTRAPTL1(x+4) BTRAPTL1(x+5) BTRAPTL1(x+6) BTRAPTL1(x+7)
-
-tl1_sunos:	BTRAPTL1(0x100)
-tl1_bkpt:	BREAKPOINT_TRAP
-tl1_resv102:	BTRAPTL1(0x102)
-tl1_flushw:	FLUSH_WINDOW_TRAP
-tl1_resv104:	BTRAPTL1(0x104) BTRAPTL1(0x105) BTRAPTL1(0x106)
-tl1_resv107:	BTRAPTL1(0x107) BTRAPTL1(0x108) BTRAPTL1(0x109) BTRAPTL1(0x10a)
-tl1_resv10b:	BTRAPTL1(0x10b) BTRAPTL1(0x10c) BTRAPTL1(0x10d) BTRAPTL1(0x10e)
-tl1_resv10f:	BTRAPTL1(0x10f) 
-tl1_resv110:	BTRAPSTL1(0x110) BTRAPSTL1(0x118)
-tl1_resv120:	BTRAPSTL1(0x120) BTRAPSTL1(0x128)
-tl1_resv130:	BTRAPSTL1(0x130) BTRAPSTL1(0x138)
-tl1_resv140:	BTRAPSTL1(0x140) BTRAPSTL1(0x148)
-tl1_resv150:	BTRAPSTL1(0x150) BTRAPSTL1(0x158)
-tl1_resv160:	BTRAPSTL1(0x160) BTRAPSTL1(0x168)
-tl1_resv170:	BTRAPSTL1(0x170) BTRAPSTL1(0x178)
-#endif

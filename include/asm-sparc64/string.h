@@ -1,4 +1,4 @@
-/* $Id: string.h,v 1.4 1997/04/01 09:34:41 davem Exp $
+/* $Id: string.h,v 1.5 1997/05/18 04:16:57 davem Exp $
  * string.h: External definitions for optimized assembly string
  *           routines for the Linux Kernel.
  *
@@ -41,14 +41,18 @@ extern inline void *__constant_memcpy(void *to, const void *from, __kernel_size_
 		if(n <= 32) {
 			__builtin_memcpy(to, from, n);
 		} else {
+#if 0
 			switch(n) {
 			case 8192:
 				__copy_1page(to, from);
 				break;
 			default:
+#endif
 				__memcpy(to, from, n);
+#if 0
 				break;
 			}
+#endif
 		}
 	}
 	return to;
@@ -74,9 +78,11 @@ extern inline void *__constant_c_and_count_memset(void *s, char c, __kernel_size
 	extern __kernel_size_t __bzero(void *, __kernel_size_t);
 
 	if(!c) {
+#if 0
 		if(count == 8192)
 			bzero_1page(s);
 		else
+#endif
 			__bzero(s, count);
 	} else {
 		__memset(s, c, count);

@@ -47,7 +47,7 @@ struct thread_struct {
 #define INIT_MMAP { &init_mm, 0, 0x40000000, __pgprot(_PAGE_PRESENT|_PAGE_ACCESSED), VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
 #define INIT_TSS  { \
-	sizeof(init_kernel_stack) + (long) init_kernel_stack, 0, \
+	sizeof(init_stack) + (unsigned long) init_stack, 0, \
 	PS_S, KERNEL_DS, \
 	{0, 0}, 0, {0,}, {0, 0, 0}, {0,}, \
 }
@@ -93,9 +93,11 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 }
 
 /* Allocation and freeing of basic task resources. */
-#define alloc_task_struct()	kmalloc(sizeof(struct task_struct), GFP_KERNEL)
-#define alloc_kernel_stack(p)	__get_free_page(GFP_KERNEL)
-#define free_task_struct(p)	kfree(p)
-#define free_kernel_stack(page) free_page((page))
+#define alloc_task_struct() \
+	((struct task_struct *) __get_free_pages(GFP_KERNEL,1,0))
+#define free_task_struct(p)	free_pages((unsigned long)(p),1)
+
+#define init_task	(init_task_union.task)
+#define init_stack	(init_task_union.stack)
 
 #endif

@@ -32,14 +32,10 @@ extern const int frame_extra_sizes[]; /* in m68k/kernel/signal.c */
 asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
 			      unsigned long error_code)
 {
-	void (*handler)(struct task_struct *,
-			struct vm_area_struct *,
-			unsigned long,
-			int);
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
 	struct vm_area_struct * vma;
-	unsigned long fixup, fault_pc;
+	unsigned long fixup;
 	int write;
 
 #ifdef DEBUG
@@ -73,10 +69,8 @@ asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
  */
 good_area:
 	write = 0;
-	handler = do_no_page;
 	switch (error_code & 3) {
 		default:	/* 3: write, present */
-			handler = do_wp_page;
 			/* fall through */
 		case 2:		/* write, not present */
 			if (!(vma->vm_flags & VM_WRITE))
@@ -89,7 +83,7 @@ good_area:
 			if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
 				goto bad_area;
 	}
-	handler(tsk, vma, address, write);
+	handle_mm_fault(current, vma, address, write);
 	up(&mm->mmap_sem);
 
 	/* There seems to be a missing invalidate somewhere in do_no_page.
@@ -108,10 +102,10 @@ bad_area:
 	up(&mm->mmap_sem);
 
 	/* Are we prepared to handle this fault?  */
-	fault_pc = regs->pc;
-	if ((fixup = search_exception_table(fault_pc)) != 0) {
+	if ((fixup = search_exception_table(regs->pc)) != 0) {
 		struct pt_regs *tregs;
-		printk(KERN_DEBUG "Exception at [<%lx>] (%lx)\n", fault_pc, fixup);
+		printk(KERN_DEBUG "%s: Exception at [<%lx>] (%lx)\n",
+		       current->comm, regs->pc, fixup);
 		/* Create a new four word stack frame, discarding the old
 		   one.  */
 		regs->stkadj = frame_extra_sizes[regs->format];

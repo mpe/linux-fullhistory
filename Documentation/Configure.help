@@ -4650,6 +4650,40 @@ CONFIG_ACI_MIXER
   also controls the radio tuner on this card, however this is not
   yet supported in this software.
 
+Gallant's Audio Excel DSP 16 support (SC-6000 and SC-6600)
+CONFIG_AEDSP16
+  Answer Y if you have a Gallant's Audio Excel DSP 16 card. This card
+  emulate an SBPro or a Microsoft Sound System card.
+  You must select one of the Sound Blaster or Microsoft Sound System
+  drivers before select this menu item.
+  Read the drivers/sound/lowlevel/README.aedsp16 file and the head of
+  drivers/sound/lowlevel/aedsp16.c to have more informations about
+  this driver and its configuration.
+
+  If you are changing the card configuration, please, undefine all
+  the old Audio Excel parameters because leaving it defined while
+  selecting the alternate emulation, may screw up your .config file.
+
+  !!!NOTE!!!
+  The driver supports Audio Excel DSP 16 but not the III version of
+  this card. Read drivers/sound/lowlevel/Readme.aedsp16 if you want
+  to know something more on how to use the III version with this sound
+  driver.
+
+SC-6600 based audio cards (new Audio Excel DSP 16)
+CONFIG_SC6600
+  The SC6600 is the new version of DSP mounted on the Audio Excel DSP 16
+  cards. Check the FCC ID of your audio card and answer Y if you have an
+  SC6600 DSP.
+
+Audio Excel DSP 16 (MSS emulation)
+CONFIG_AEDSP16_MSS
+  Answer Y if you want your audio card emulate Microsoft Sound System.
+
+Audio Excel DSP 16 (SBPro emulation)
+CONFIG_AEDSP16_SBPRO
+  Answer Y if you want your audio card emulate Sound Blaster Pro.
+
 Kernel profiling support
 CONFIG_PROFILE
   This is for kernel hackers who want to know how much time the kernel

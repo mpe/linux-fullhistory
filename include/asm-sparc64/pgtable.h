@@ -1,7 +1,7 @@
-/* $Id: pgtable.h,v 1.28 1997/04/14 17:05:19 jj Exp $
+/* $Id: pgtable.h,v 1.31 1997/05/18 21:11:42 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
- * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
 #ifndef _SPARC64_PGTABLE_H
@@ -204,13 +204,8 @@ extern __inline__ void flush_cache_all(void)
 	unsigned long addr;
 
 	flushw_all();
-	for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32) {
+	for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32)
 		spitfire_put_icache_tag(addr, 0x0UL);
-		membar("#Sync");
-	}
-
-	/* Kill the pipeline. */
-	flushi(PAGE_OFFSET);
 }
 
 extern __inline__ void flush_cache_mm(struct mm_struct *mm)
@@ -219,13 +214,8 @@ extern __inline__ void flush_cache_mm(struct mm_struct *mm)
 		unsigned long addr;
 
 		flushw_user();
-		for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32) {
+		for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32)
 			spitfire_put_icache_tag(addr, 0x0UL);
-			membar("#Sync");
-		}
-
-		/* Kill the pipeline. */
-		flushi(PAGE_OFFSET);
 	}
 }
 
@@ -236,13 +226,8 @@ extern __inline__ void flush_cache_range(struct mm_struct *mm, unsigned long sta
 		unsigned long addr;
 
 		flushw_user();
-		for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32) {
+		for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32)
 			spitfire_put_icache_tag(addr, 0x0UL);
-			membar("#Sync");
-		}
-
-		/* Kill the pipeline. */
-		flushi(PAGE_OFFSET);
 	}
 }
 
@@ -254,13 +239,8 @@ extern __inline__ void flush_cache_page(struct vm_area_struct *vma, unsigned lon
 		unsigned long addr;
 
 		flushw_user();
-		for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32) {
+		for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32)
 			spitfire_put_icache_tag(addr, 0x0UL);
-			membar("#Sync");
-		}
-
-		/* Kill the pipeline. */
-		flushi(PAGE_OFFSET);
 	}
 }
 
@@ -290,15 +270,28 @@ extern __inline__ void flush_tlb_all(void)
 extern __inline__ void flush_tlb_mm(struct mm_struct *mm)
 {
 	if(mm->context != NO_CONTEXT) {
-		unsigned long orig_ctx = spitfire_get_secondary_context();
-		unsigned long flags;
-
-		save_and_cli(flags);
-		spitfire_set_secondary_context(mm->context);
-		spitfire_flush_dtlb_secondary_context();
-		spitfire_flush_itlb_secondary_context();
-		spitfire_set_secondary_context(orig_ctx);
-		restore_flags(flags);
+		__asm__ __volatile__("
+	/* flush_tlb_mm() */
+	rdpr		%%pil, %%g1
+	mov		%1, %%g7
+	wrpr		%%g0, 15, %%pil
+	ldxa		[%%g7] %2, %%g2
+	cmp		%%g2, %0
+	be,pt		%%icc, 1f
+	 mov		0x50, %%g3
+	stxa		%0, [%%g7] %2
+1:
+	stxa		%%g0, [%%g3] %3
+	stxa		%%g0, [%%g3] %4
+	bne,a,pn	%%icc, 1f
+	 stxa		%%g2, [%%g7] %2
+1:
+	flush		%%g4
+	wrpr		%%g1, 0x0, %%pil
+"	: /* no outputs */
+	: "r" (mm->context), "i" (SECONDARY_CONTEXT), "i" (ASI_DMMU),
+	  "i" (ASI_DMMU_DEMAP), "i" (ASI_IMMU_DEMAP)
+	: "g1", "g2", "g3", "g7", "cc");
 	}
 }
 
@@ -307,17 +300,21 @@ extern __inline__ void flush_tlb_range(struct mm_struct *mm, unsigned long start
 {
 	if(mm->context != NO_CONTEXT) {
 		unsigned long old_ctx = spitfire_get_secondary_context();
+		unsigned long new_ctx = mm->context;
 		unsigned long flags;
 
 		start &= PAGE_MASK;
 		save_and_cli(flags);
-		spitfire_set_secondary_context(mm->context);
+		if(new_ctx != old_ctx)
+			spitfire_set_secondary_context(mm->context);
 		while(start < end) {
 			spitfire_flush_dtlb_secondary_page(start);
 			spitfire_flush_itlb_secondary_page(start);
 			start += PAGE_SIZE;
 		}
-		spitfire_set_secondary_context(old_ctx);
+		if(new_ctx != old_ctx)
+			spitfire_set_secondary_context(old_ctx);
+		__asm__ __volatile__("flush %g4");
 		restore_flags(flags);
 	}
 }
@@ -327,17 +324,31 @@ extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 	struct mm_struct *mm = vma->vm_mm;
 
 	if(mm->context != NO_CONTEXT) {
-		unsigned long old_ctx = spitfire_get_secondary_context();
-		unsigned long flags;
-
-		page &= PAGE_MASK;
-		save_and_cli(flags);
-		spitfire_set_secondary_context(mm->context);
-		if(vma->vm_flags & VM_EXEC)
-			spitfire_flush_itlb_secondary_page(page);
-		spitfire_flush_dtlb_secondary_page(page);
-		spitfire_set_secondary_context(old_ctx);
-		restore_flags(flags);
+	__asm__ __volatile__("
+	/* flush_tlb_page() */
+	rdpr		%%pil, %%g1
+	mov		%1, %%g7
+	wrpr		%%g0, 15, %%pil
+	ldxa		[%%g7] %2, %%g2
+	cmp		%%g2, %0
+	be,pt		%%icc, 1f
+	 or		%5, 0x10, %5
+	stxa		%0, [%%g7] %2
+1:
+	stxa		%%g0, [%5] %3
+	brnz,a		%6, 1f
+	 stxa		%%g0, [%5] %4
+1:
+	bne,a,pn	%%icc, 1f
+	 stxa		%%g2, [%%g7] %2
+1:
+	flush		%%g4
+	wrpr		%%g1, 0x0, %%pil
+"	: /* no outputs */
+	: "r" (mm->context), "i" (SECONDARY_CONTEXT), "i" (ASI_DMMU),
+	  "i" (ASI_DMMU_DEMAP), "i" (ASI_IMMU_DEMAP), "r" (page & PAGE_MASK),
+	  "r" (vma->vm_flags & VM_EXEC)
+	: "g1", "g2", "g3", "g7", "cc");
 	}
 }
 
@@ -649,7 +660,7 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 					start += PAGE_SIZE;
 				}
 			}
-		} while((vmaring = vmaring->vm_next_share) != inode->i_mmap);
+		} while((vmaring = vmaring->vm_next_share) != NULL);
 
 		if(alias_found && (pte_val(pte) & _PAGE_CV)) {
 			pgdp = pgd_offset(vma->vm_mm, address);

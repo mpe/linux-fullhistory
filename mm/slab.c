@@ -105,10 +105,10 @@
 #include	<linux/interrupt.h>
 #include	<linux/config.h>
 #include	<linux/init.h>
+#include	<linux/smp.h>
 
 #include	<asm/system.h>
 #include	<asm/atomic.h>
-#include	<asm/smp.h>
 #include	<asm/smp_lock.h>
 #include	<asm/spinlock.h>
 

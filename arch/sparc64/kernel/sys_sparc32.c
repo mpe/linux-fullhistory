@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.12 1997/05/14 14:50:58 jj Exp $
+/* $Id: sys_sparc32.c,v 1.13 1997/05/18 04:16:44 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -34,9 +34,12 @@
 #include <asm/ipc.h>
 #include <asm/uaccess.h>
 
-/* As gcc will warn about casting u32 to some ptr, we have to cast it to unsigned long first, and that's what is A() for.
- * You just do (void *)A(x), instead of having to type (void *)((unsigned long)x) or instead of just (void *)x, which will
- * produce warnings */
+/* As gcc will warn about casting u32 to some ptr, we have to cast it to
+ * unsigned long first, and that's what is A() for.
+ * You just do (void *)A(x), instead of having to
+ * type (void *)((unsigned long)x) or instead of just (void *)x, which will
+ * produce warnings.
+ */
 #define A(x) ((unsigned long)x)
  
 extern asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on);

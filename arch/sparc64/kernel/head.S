@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.28 1997/05/04 07:21:02 davem Exp $
+/* $Id: head.S,v 1.30 1997/05/18 22:52:12 davem Exp $
  * head.S: Initial boot code for the Sparc64 port of Linux.
  *
  * Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -268,6 +268,10 @@ sun4u_init:
 	mov	%sp, %l6
 	mov	%o4, %l7
 
+	/* Setup "Linux Current Register", thanks Sun 8-) */
+	wr	%g0, 0x1, %pcr
+	wr	%g6, 0x0, %pic
+
 	mov	1, %g5
 	sllx	%g5, (PAGE_SHIFT + 1), %g5
 	sub	%g5, (REGWIN_SZ + STACK_BIAS), %g5
@@ -289,14 +293,20 @@ sun4u_init:
 	add	%l2, 1, %l2
 	add	%l0, %g4, %o0
 1:
-	call	bzero_1page
+	clr	%o1
+	sethi	%hi(PAGE_SIZE), %o2
+	or	%o2, %lo(PAGE_SIZE), %o2
+	call	__memset
 	 add	%l0, %l2, %l0
 	cmp	%l0, %l1
 	blu,pt	%xcc, 1b
 	 add	%l0, %g4, %o0
 
 	/* Now clear empty_zero_page */
-	call	bzero_1page
+	clr	%o1
+	sethi	%hi(PAGE_SIZE), %o2
+	or	%o2, %lo(PAGE_SIZE), %o2
+	call	__memset
 	 mov	%g4, %o0
 
 	mov	%l6, %o1			! OpenPROM stack

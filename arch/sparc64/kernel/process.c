@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.8 1997/05/14 20:45:06 davem Exp $
+/*  $Id: process.c,v 1.11 1997/05/18 22:52:19 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -36,8 +36,6 @@
 #include <asm/pstate.h>
 #include <asm/elf.h>
 #include <asm/fpumacro.h>
-
-struct task_struct *current_set[NR_CPUS] = {&init_task, };
 
 #ifndef __SMP__
 
@@ -348,7 +346,14 @@ void flush_thread(void)
 	}
 	
 	/* Now, this task is no longer a kernel thread. */
-	current->tss.flags &= ~SPARC_FLAG_KTHREAD;
+	if(current->tss.flags & SPARC_FLAG_KTHREAD) {
+		current->tss.flags &= ~SPARC_FLAG_KTHREAD;
+
+		/* exec_mmap() set context to NO_CONTEXT, here is
+		 * where we grab a new one.
+		 */
+		get_mmu_context(current);
+	}
 	current->tss.current_ds = USER_DS;
 }
 
@@ -418,6 +423,64 @@ clone_stackframe(struct sparc_stackf *dst, struct sparc_stackf *src)
 	return sp;
 }
 
+/* Standard stuff. */
+static inline void shift_window_buffer(int first_win, int last_win,
+				       struct thread_struct *tp)
+{
+	int i;
+
+	for(i = first_win; i < last_win; i++) {
+		tp->rwbuf_stkptrs[i] = tp->rwbuf_stkptrs[i+1];
+		memcpy(&tp->reg_window[i], &tp->reg_window[i+1],
+		       sizeof(struct reg_window));
+	}
+}
+
+void synchronize_user_stack(void)
+{
+	struct thread_struct *tp = &current->tss;
+	unsigned long window = tp->w_saved;
+
+	flush_user_windows();
+	if(window) {
+		int winsize = REGWIN_SZ;
+
+		if(tp->flags & SPARC_FLAG_32BIT)
+			winsize = REGWIN32_SZ;
+
+		window -= 1;
+		do {
+			unsigned long sp = tp->rwbuf_stkptrs[window];
+			struct reg_window *rwin = &tp->reg_window[window];
+
+			if(!copy_to_user((char *)sp, rwin, winsize)) {
+				shift_window_buffer(window, tp->w_saved - 1, tp);
+				tp->w_saved--;
+			}
+		} while(window--);
+	}
+}
+
+void fault_in_user_windows(struct pt_regs *regs)
+{
+	struct thread_struct *tp = &current->tss;
+	unsigned long window = tp->w_saved;
+	int winsize = REGWIN_SZ;
+
+	if(tp->flags & SPARC_FLAG_32BIT)
+		winsize = REGWIN32_SZ;
+	if(window) {
+		window -= 1;
+		do {
+			unsigned long sp = tp->rwbuf_stkptrs[window];
+			struct reg_window *rwin = &tp->reg_window[window];
+
+			if(copy_to_user((char *)sp, rwin, winsize))
+				do_exit(SIGILL);
+		} while(window--);
+	}
+	current->tss.w_saved = 0;
+}
 
 /* Copy a Sparc thread.  The fork() return value conventions
  * under SunOS are nothing short of bletcherous:

@@ -163,15 +163,19 @@ static int free_vme_vec_bitmap = 0;
 
 #define	MFP_MK_BASE	"0xfa13"
 
-/* This must agree with head.S.  */
-#define ORIG_DO "0x20"
-#define FORMATVEC "0x2E"
-#define SR "0x28"
+/* This must agree with entry.S.  */
+#define ORIG_DO "0x24"
+#define FORMATVEC "0x32"
+#define SR "0x2C"
 #define SAVE_ALL				\
 	"clrl	%%sp@-;"    /* stk_adj */	\
 	"pea	-1:w;"	    /* orig d0 = -1 */	\
 	"movel	%%d0,%%sp@-;" /* d0 */		\
-	"moveml	%%d1-%%d5/%%a0-%%a1,%%sp@-"
+	"moveml	%%d1-%%d5/%%a0-%%a2,%%sp@-"
+#define GET_CURRENT(tmp) \
+	"movel	%%sp,"#tmp";" \
+	"andw	#-8192,"#tmp";" \
+	"movel	"#tmp",%%a2"
 
 #define	BUILD_SLOW_IRQ(n)						   \
 asmlinkage void IRQ_NAME(n);						   \
@@ -181,6 +185,7 @@ __asm__ (ALIGN_STR "\n"							   \
 SYMBOL_NAME_STR(atari_slow_irq_) #n "_handler:\t"			   \
 "	addql	#1,"SYMBOL_NAME_STR(local_irq_count)"\n"		   \
 	SAVE_ALL "\n"							   \
+	GET_CURRENT(%%d0) "\n"						   \
 "	andb	#~(1<<(" #n "&7)),"	/* mask this interrupt */	   \
 	"("MFP_MK_BASE"+(((" #n "&8)^8)>>2)+((" #n "&16)<<3)):w\n"	   \
 "	bfextu	%%sp@("SR"){#5,#3},%%d0\n" /* get old IPL from stack frame */ \
@@ -283,7 +288,8 @@ SYMBOL_NAME_STR(atari_fast_irq_handler) ":
 	orw 	#0x700,%%sr		/* disable all interrupts */
 "SYMBOL_NAME_STR(atari_prio_irq_handler) ":\t
 	addql	#1,"SYMBOL_NAME_STR(local_irq_count)"\n"
-	SAVE_ALL "
+	SAVE_ALL "\n"
+	GET_CURRENT(%%d0) "
 	/* get vector number from stack frame and convert to source */
 	bfextu	%%sp@(" FORMATVEC "){#4,#10},%%d0
 	subw	#(0x40-8),%%d0

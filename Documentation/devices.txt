@@ -1,7 +1,7 @@
 		       LINUX ALLOCATED DEVICES
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		      Last revised: May 1, 1997
+		      Last revised: May 20, 1997
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -273,6 +273,7 @@ reply.
 		  6 = /dev/sunmouse	Sun mouse
 		  7 = /dev/amigamouse1	Second Amiga mouse
 		  8 = /dev/smouse	Simple serial mouse driver
+		  9 = /dev/pc110pad	IBM PC-110 digitizer pad
 		128 = /dev/beep		Fancy beep device
 		129 = /dev/modreq	Kernel module load request
 		130 = /dev/watchdog	Watchdog timer port
@@ -997,7 +998,11 @@ reply.
                 Devices for the driver contained in the VideoteXt package.
                 More information on http://home.pages.de/~videotext/
 
- 84-119		UNALLOCATED
+ 84 char	Ikon 1011[57] Versatec Greensheet Interface
+                  0 = /dev/ihcp0        First Greensheet port
+                  1 = /dev/ihcp1        Second Greensheet port
+
+ 85-119		UNALLOCATED
 
 120-127		LOCAL/EXPERIMENTAL USE
 

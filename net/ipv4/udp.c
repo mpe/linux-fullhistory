@@ -154,7 +154,7 @@ static int udp_v4_verify_bind(struct sock *sk, unsigned short snum)
 	return retval;
 }
 
-static inline int udp_lport_inuse(int num)
+static inline int udp_lport_inuse(u16 num)
 {
 	struct sock *sk = udp_hash[num & (UDP_HTABLE_SIZE - 1)];
 
@@ -168,36 +168,42 @@ static inline int udp_lport_inuse(int num)
 /* Shared by v4/v6 tcp. */
 unsigned short udp_good_socknum(void)
 {
-	static int start = 0;
-	unsigned short base;
-	int i, best = 0, size = 32767; /* a big num. */
 	int result;
-
-	base = PROT_SOCK + (start & 1023) + 1;
+	static int start = 0;
+	int i, best, best_size_so_far;
 
 	SOCKHASH_LOCK();
-	for(i = 0; i < UDP_HTABLE_SIZE; i++) {
-		struct sock *sk = udp_hash[i];
-		if(!sk) {
-			start = (i + 1 + start) & 1023;
-			result = i + base + 1;
+
+	/* Select initial not-so-random "best" */
+	best = PROT_SOCK + 1 + (start & 1023);
+	best_size_so_far = 32767;	/* "big" num */
+	result = best;
+	for (i = 0; i < UDP_HTABLE_SIZE; i++, result++) {
+		struct sock *sk;
+		int size;
+
+		sk = udp_hash[result & (UDP_HTABLE_SIZE - 1)];
+
+		/* No clashes - take it */
+		if (!sk)
 			goto out;
-		} else {
-			int j = 0;
-			do {
-				if(++j >= size)
-					goto next;
-			} while((sk = sk->next));
-			best = i;
-			size = j;
-		}
-	next:
+
+		/* Is this one better than our best so far? */
+		size = 0;
+		do {
+			if(++size >= best_size_so_far)
+				goto next;
+		} while((sk = sk->next) != NULL);
+		best_size_so_far = size;
+		best = result;
+next:
 	}
 
-	while(udp_lport_inuse(base + best + 1))
+	while (udp_lport_inuse(best))
 		best += UDP_HTABLE_SIZE;
-	result = (best + base + 1);
+	result = best;
 out:
+	start = result;
 	SOCKHASH_UNLOCK();
 	return result;
 }

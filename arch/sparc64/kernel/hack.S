@@ -4,8 +4,6 @@
    to compile... */
 	.text
 	.align	8
-	.globl	_sigpause_common
-_sigpause_common:	retl;nop
 	.globl	breakpoint
 breakpoint:	retl;nop
 	.globl	do_cee
@@ -36,8 +34,6 @@ do_fpother_tl1:	retl;nop
 do_iae:	retl;nop
 	.globl	do_iae_tl1
 do_iae_tl1:	retl;nop
-	.globl	do_ill
-do_ill:	retl;nop
 	.globl	do_ill_tl1
 do_ill_tl1:	retl;nop
 	.globl	do_irq
@@ -48,8 +44,6 @@ do_irq_tl1:	retl;nop
 do_lddfmna:	retl;nop
 	.globl	do_lddfmna_tl1
 do_lddfmna_tl1:	retl;nop
-	.globl	do_mna
-do_mna:	retl;nop
 	.globl	do_mna_tl1
 do_mna_tl1:	retl;nop
 	.globl	do_paw
@@ -60,8 +54,6 @@ do_paw_tl1:	retl;nop
 do_privact:	retl;nop
 	.globl	do_privop
 do_privop:	retl;nop
-	.globl	do_signal
-do_signal:	retl;nop
 	.globl	do_stdfmna
 do_stdfmna:	retl;nop
 	.globl	do_stdfmna_tl1
@@ -200,15 +192,7 @@ sunos_write:	retl;nop
 sunos_writev:	retl;nop
 	.globl	sys_ptrace
 sys_ptrace:	retl;nop
-	.globl	sys_sigreturn
-sys_sigreturn:	retl;nop
-	.globl	sys_sigstack
-sys_sigstack:	retl;nop
-	.globl	sys_sigsuspend
-sys_sigsuspend:	retl;nop
 	.globl	syscall_trace
 syscall_trace:	retl;nop
 	.globl	sys32_ptrace
 sys32_ptrace:	retl;nop
-	.globl	do_sigpause
-do_sigpause:	retl;nop

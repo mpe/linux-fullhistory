@@ -833,10 +833,6 @@ swap_page:
 }
 
 /*
- * The above separate functions for the no-page and wp-page
- * cases will go away (they mostly do the same thing anyway),
- * and we'll instead use only a general "handle_mm_fault()".
- *
  * These routines also need to handle stuff like marking pages dirty
  * and/or accessed for architectures that don't do it in hardware (most
  * RISC architectures).  The early dirtying is also good on the i386.

@@ -35,6 +35,10 @@ extern int sysctl_arp_check_interval;
 extern int sysctl_arp_confirm_interval;
 extern int sysctl_arp_confirm_timeout;
 
+/* From ip_fragment.c */
+extern int sysctl_ipfrag_low_thresh;
+extern int sysctl_ipfrag_high_thresh; 
+
 extern int sysctl_tcp_cong_avoidance;
 extern int sysctl_tcp_hoe_retransmits;
 extern int sysctl_tcp_sack;
@@ -147,6 +151,10 @@ ctl_table ipv4_table[] = {
          &proc_dointvec},
 	{NET_TCP_SYN_RETRIES, "tcp_syn_retries",
 	&sysctl_syn_retries, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPFRAG_HIGH_THRESH, "ipfrag_high_thresh",
+	&sysctl_ipfrag_high_thresh, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPFRAG_LOW_THRESH, "ipfrag_low_thresh",
+	&sysctl_ipfrag_low_thresh, sizeof(int), 0644, NULL, &proc_dointvec},
 	{0}
 };
 

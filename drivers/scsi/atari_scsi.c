@@ -1026,6 +1026,10 @@ static unsigned long atari_dma_xfer_len( unsigned long wanted_len,
 {
 	unsigned long	possible_len, limit;
 
+	if (is_hades)
+		/* Hades has no SCSI DMA at all :-( Always force use of PIO */
+		return( 0 );
+	
 	if (IS_A_TT())
 		/* TT SCSI DMA can transfer arbitrary #bytes */
 		return( wanted_len );

@@ -47,6 +47,11 @@ extern void dump_thread(struct pt_regs *, struct user *);
 extern unsigned long get_unmapped_area(unsigned long addr, unsigned long len);
 #endif
 
+#ifndef elf_addr_t
+#define elf_addr_t unsigned long
+#define elf_caddr_t char *
+#endif
+
 /*
  * If we don't support core dumping, then supply a NULL so we
  * don't even try.
@@ -59,6 +64,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs);
 
 #define ELF_PAGESTART(_v) ((_v) & ~(unsigned long)(ELF_EXEC_PAGESIZE-1))
 #define ELF_PAGEOFFSET(_v) ((_v) & (ELF_EXEC_PAGESIZE-1))
+#define ELF_PAGEALIGN(_v) (((_v) + ELF_EXEC_PAGESIZE - 1) & ~(ELF_EXEC_PAGESIZE - 1))
 
 static struct linux_binfmt elf_format = {
 #ifndef MODULE
@@ -70,8 +76,8 @@ static struct linux_binfmt elf_format = {
 
 static void set_brk(unsigned long start, unsigned long end)
 {
-	start = PAGE_ALIGN(start);
-	end = PAGE_ALIGN(end);
+	start = ELF_PAGEALIGN(start);
+	end = ELF_PAGEALIGN(end);
 	if (end <= start)
 		return;
 	do_mmap(NULL, start, end - start,
@@ -90,28 +96,30 @@ static void padzero(unsigned long elf_bss)
 {
 	unsigned long nbyte;
 
-	nbyte = elf_bss & (PAGE_SIZE-1);
+	nbyte = ELF_PAGEOFFSET(elf_bss);
 	if (nbyte) {
-		nbyte = PAGE_SIZE - nbyte;
+		nbyte = ELF_EXEC_PAGESIZE - nbyte;
 		clear_user((void *) elf_bss, nbyte);
 	}
 }
 
-unsigned long * create_elf_tables(char *p, int argc, int envc,
-				  struct elfhdr * exec,
-				  unsigned long load_addr,
-				  unsigned long interp_load_addr, int ibcs)
+static elf_addr_t * 
+create_elf_tables(char *p, int argc, int envc,
+		  struct elfhdr * exec,
+		  unsigned long load_addr,
+		  unsigned long interp_load_addr, int ibcs)
 {
-	char **argv, **envp;
-	unsigned long *sp;
+	elf_caddr_t *argv;
+	elf_caddr_t *envp;
+	elf_addr_t *sp;
 
 	/*
 	 * Force 16 byte alignment here for generality.
 	 */
-	sp = (unsigned long *) (~15UL & (unsigned long) p);
+	sp = (elf_addr_t *) (~15UL & (unsigned long) p);
 #ifdef __sparc__
 {
-	unsigned long *csp;
+	elf_addr_t *csp;
 	csp = sp;
 	csp -= exec ? DLINFO_ITEMS*2 : 2;
 	csp -= envc+1;
@@ -137,36 +145,36 @@ unsigned long * create_elf_tables(char *p, int argc, int envc,
 	  NEW_AUX_ENT (0, AT_PHDR, load_addr + exec->e_phoff);
 	  NEW_AUX_ENT (1, AT_PHENT, sizeof (struct elf_phdr));
 	  NEW_AUX_ENT (2, AT_PHNUM, exec->e_phnum);
-	  NEW_AUX_ENT (3, AT_PAGESZ, PAGE_SIZE);
+	  NEW_AUX_ENT (3, AT_PAGESZ, ELF_EXEC_PAGESIZE);
 	  NEW_AUX_ENT (4, AT_BASE, interp_load_addr);
 	  NEW_AUX_ENT (5, AT_FLAGS, 0);
-	  NEW_AUX_ENT (6, AT_ENTRY, (unsigned long) exec->e_entry);
-	  NEW_AUX_ENT (7, AT_UID, (unsigned long) current->uid);
-	  NEW_AUX_ENT (8, AT_EUID, (unsigned long) current->euid);
-	  NEW_AUX_ENT (9, AT_GID, (unsigned long) current->gid);
-	  NEW_AUX_ENT (10, AT_EGID, (unsigned long) current->egid);
+	  NEW_AUX_ENT (6, AT_ENTRY, (elf_addr_t) exec->e_entry);
+	  NEW_AUX_ENT (7, AT_UID, (elf_addr_t) current->uid);
+	  NEW_AUX_ENT (8, AT_EUID, (elf_addr_t) current->euid);
+	  NEW_AUX_ENT (9, AT_GID, (elf_addr_t) current->gid);
+	  NEW_AUX_ENT (10, AT_EGID, (elf_addr_t) current->egid);
 	}
 #undef NEW_AUX_ENT
 
 	sp -= envc+1;
-	envp = (char **) sp;
+	envp = (elf_caddr_t *) sp;
 	sp -= argc+1;
-	argv = (char **) sp;
+	argv = (elf_caddr_t *) sp;
 	if (!ibcs) {
-		__put_user((unsigned long) envp,--sp);
-		__put_user((unsigned long) argv,--sp);
+		__put_user((elf_addr_t)(unsigned long) envp,--sp);
+		__put_user((elf_addr_t)(unsigned long) argv,--sp);
 	}
 
-	__put_user((unsigned long)argc,--sp);
+	__put_user((elf_addr_t)argc,--sp);
 	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
-		__put_user(p,argv++);
+		__put_user((elf_caddr_t)(unsigned long)p,argv++);
 		p += strlen_user(p);
 	}
 	__put_user(NULL, argv);
 	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
-		__put_user(p,envp++);
+		__put_user((elf_caddr_t)(unsigned long)p,envp++);
 		p += strlen_user(p);
 	}
 	__put_user(NULL, envp);
@@ -210,7 +218,7 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 
 	/* Now read in all of the header information */
 
-	if (sizeof(struct elf_phdr) * interp_elf_ex->e_phnum > PAGE_SIZE) {
+	if (sizeof(struct elf_phdr) * interp_elf_ex->e_phnum > ELF_EXEC_PAGESIZE) {
 	    return ~0UL;
 	}
 
@@ -579,8 +587,8 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	/* Do this so that we can load the interpreter, if need be.  We will
 	   change some of these later */
 	current->mm->rss = 0;
-#ifdef __sparc_v9__
-	current->tss.flags &= ~(SPARC_FLAG_32BIT);
+#ifdef ELF_FLAGS_INIT
+	ELF_FLAGS_INIT;
 #endif
 	bprm->p = setup_arg_pages(bprm->p, bprm);
 	current->mm->start_stack = bprm->p;
@@ -799,7 +807,7 @@ do_load_elf_library(int fd){
 
 	/* Now read in all of the header information */
 
-	if (sizeof(struct elf_phdr) * elf_ex.e_phnum > PAGE_SIZE)
+	if (sizeof(struct elf_phdr) * elf_ex.e_phnum > ELF_EXEC_PAGESIZE)
 		return -ENOEXEC;
 
 	elf_phdata =  (struct elf_phdr *)
@@ -902,6 +910,10 @@ static int dump_seek(struct file *file, off_t off)
 static inline int maydump(struct vm_area_struct *vma)
 {
 	if (!(vma->vm_flags & (VM_READ|VM_WRITE|VM_EXEC)))
+		return 0;
+
+	/* Do not dump I/O mapped devices! -DaveM */
+	if(vma->vm_flags & VM_IO)
 		return 0;
 #if 1
 	if (vma->vm_flags & (VM_WRITE|VM_GROWSUP|VM_GROWSDOWN))
@@ -1012,7 +1024,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	elf_fpregset_t fpu;		/* NT_PRFPREG */
 	struct elf_prpsinfo psinfo;	/* NT_PRPSINFO */
 
-	if (!current->dumpable || limit < PAGE_SIZE || current->mm->count != 1)
+	if (!current->dumpable || limit < ELF_EXEC_PAGESIZE || current->mm->count != 1)
 		return 0;
 	current->dumpable = 0;
 
@@ -1114,14 +1126,14 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	psinfo.pr_ppid = prstatus.pr_ppid = current->p_pptr->pid;
 	psinfo.pr_pgrp = prstatus.pr_pgrp = current->pgrp;
 	psinfo.pr_sid = prstatus.pr_sid = current->session;
-	prstatus.pr_utime.tv_sec = CT_TO_SECS(current->utime);
-	prstatus.pr_utime.tv_usec = CT_TO_USECS(current->utime);
-	prstatus.pr_stime.tv_sec = CT_TO_SECS(current->stime);
-	prstatus.pr_stime.tv_usec = CT_TO_USECS(current->stime);
-	prstatus.pr_cutime.tv_sec = CT_TO_SECS(current->cutime);
-	prstatus.pr_cutime.tv_usec = CT_TO_USECS(current->cutime);
-	prstatus.pr_cstime.tv_sec = CT_TO_SECS(current->cstime);
-	prstatus.pr_cstime.tv_usec = CT_TO_USECS(current->cstime);
+	prstatus.pr_utime.tv_sec = CT_TO_SECS(current->times.tms_utime);
+	prstatus.pr_utime.tv_usec = CT_TO_USECS(current->times.tms_utime);
+	prstatus.pr_stime.tv_sec = CT_TO_SECS(current->times.tms_stime);
+	prstatus.pr_stime.tv_usec = CT_TO_USECS(current->times.tms_stime);
+	prstatus.pr_cutime.tv_sec = CT_TO_SECS(current->times.tms_cutime);
+	prstatus.pr_cutime.tv_usec = CT_TO_USECS(current->times.tms_cutime);
+	prstatus.pr_cstime.tv_sec = CT_TO_SECS(current->times.tms_cstime);
+	prstatus.pr_cstime.tv_usec = CT_TO_USECS(current->times.tms_cstime);
 
 	/*
 	 * This transfers the registers from regs into the standard
@@ -1133,7 +1145,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	if (sizeof(elf_gregset_t) != sizeof(struct pt_regs))
 	{
 		printk("sizeof(elf_gregset_t) (%ld) != sizeof(struct pt_regs) (%ld)\n",
-			sizeof(elf_gregset_t), sizeof(struct pt_regs));
+			(long)sizeof(elf_gregset_t), (long)sizeof(struct pt_regs));
 	}
 	else
 		*(struct pt_regs *)&prstatus.pr_reg = *regs;
@@ -1215,7 +1227,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	}
 
 	/* Page-align dumped data */
-	dataoff = offset = roundup(offset, PAGE_SIZE);
+	dataoff = offset = roundup(offset, ELF_EXEC_PAGESIZE);
 
 	/* Write program headers for segments dump */
 	for(vma = current->mm->mmap, i = 0;
@@ -1237,7 +1249,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 		phdr.p_flags = vma->vm_flags & VM_READ ? PF_R : 0;
 		if (vma->vm_flags & VM_WRITE) phdr.p_flags |= PF_W;
 		if (vma->vm_flags & VM_EXEC) phdr.p_flags |= PF_X;
-		phdr.p_align = PAGE_SIZE;
+		phdr.p_align = ELF_EXEC_PAGESIZE;
 
 		DUMP_WRITE(&phdr, sizeof(phdr));
 	}

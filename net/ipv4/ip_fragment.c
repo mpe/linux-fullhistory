@@ -5,7 +5,7 @@
  *
  *		The IP fragmentation functionality.
  *		
- * Version:	$Id: ip_fragment.c,v 1.21 1997/05/13 07:45:08 davem Exp $
+ * Version:	$Id: ip_fragment.c,v 1.22 1997/05/17 05:21:56 freitag Exp $
  *
  * Authors:	Fred N. van Kempen <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox <Alan.Cox@linux.org>
@@ -13,6 +13,7 @@
  * Fixes:
  *		Alan Cox	:	Split from ip.c , see ip_input.c for history.
  *		David S. Miller :	Begin massive cleanup...
+ *		Andi Kleen	:	Add sysctls.
  */
 
 #include <linux/types.h>
@@ -37,8 +38,8 @@
  * even the most extreme cases without allowing an attacker to measurably
  * harm machine performance.
  */
-#define IPFRAG_HIGH_THRESH		(256*1024)
-#define IPFRAG_LOW_THRESH		(192*1024)
+int sysctl_ipfrag_high_thresh = 256*1024;
+int sysctl_ipfrag_low_thresh = 192*1024;
 
 /* Describe an IP fragment. */
 struct ipfrag {
@@ -203,7 +204,7 @@ static void ip_expire(unsigned long arg)
  */
 static void ip_evictor(void)
 {
-	while(atomic_read(&ip_frag_mem)>IPFRAG_LOW_THRESH) {
+	while(atomic_read(&ip_frag_mem)>sysctl_ipfrag_low_thresh) {
 		int i;
 
 		/* FIXME: Make LRU queue of frag heads. -DaveM */
@@ -382,7 +383,7 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 	ip_statistics.IpReasmReqds++;
 
 	/* Start by cleaning up the memory. */
-	if(atomic_read(&ip_frag_mem)>IPFRAG_HIGH_THRESH)
+	if(atomic_read(&ip_frag_mem)>sysctl_ipfrag_high_thresh)
 		ip_evictor();
 
 	/* Find the entry of this IP datagram in the "incomplete datagrams" queue. */

@@ -8,6 +8,8 @@
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
+#include <asm/asi.h>
+
 #define LO_MAGIC 0x01010101
 #define HI_MAGIC 0x80808080
 
@@ -19,21 +21,21 @@ __strlen_user:
 	be,pt	%icc, 9f
 	 sethi	%hi(HI_MAGIC), %o4
 10:
-	ldub	[%o0], %o5
+	lduba	[%o0] ASI_S, %o5
 	brz,pn	%o5, 21f
 	 add	%o0, 1, %o0
 	andcc	%o0, 3, %g0
 	be,pn	%icc, 4f
 	 or	%o4, %lo(HI_MAGIC), %o3
 11:
-	ldub	[%o0], %o5
+	lduba	[%o0] ASI_S, %o5
 	brz,pn	%o5, 22f
 	 add	%o0, 1, %o0
 	andcc	%o0, 3, %g0
 	be,pt	%icc, 5f
 	 sethi	%hi(LO_MAGIC), %o4
 12:
-	ldub	[%o0], %o5
+	lduba	[%o0] ASI_S, %o5
 	brz,pn	%o5, 23f
 	 add	%o0, 1, %o0
 	ba,pt	%icc, 13f
@@ -45,7 +47,7 @@ __strlen_user:
 5:
 	or	%o4, %lo(LO_MAGIC), %o2
 13:
-	ld	[%o0], %o5
+	lda	[%o0] ASI_S, %o5
 2:
 	sub	%o5, %o2, %o4
 	andcc	%o4, %o3, %g0
@@ -68,7 +70,7 @@ __strlen_user:
 	andcc	%o5, 0xff, %g0
 	bne,a,pt %icc, 2b
 14:
-	 ld	[%o0], %o5
+	 lda	[%o0] ASI_S, %o5
 	add	%o4, 1, %o4
 1:
 	retl

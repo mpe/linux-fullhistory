@@ -83,6 +83,7 @@ __asm__ __volatile__("movew %0,%/sr": /* no outputs */ :"d" (x) : "memory")
 #define sti() __sti()
 #define save_flags(x) __save_flags(x)
 #define restore_flags(x) __restore_flags(x)
+#define save_and_cli(flags)   do { save_flags(flags); cli(); } while(0)
 
 #ifndef CONFIG_RMW_INSNS
 static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int size)

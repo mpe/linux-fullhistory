@@ -32,6 +32,7 @@
 #include <linux/fb.h>
 #include <linux/zorro.h>
 #include <linux/init.h>
+
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/irq.h>

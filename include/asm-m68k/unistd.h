@@ -322,9 +322,11 @@ static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long f
 	set_fs (KERNEL_DS);
 
 	__asm__ __volatile__
-	  ("trap #0\n\t"		/* Linux/m68k system call */
+	  ("clrl %%d2\n\t"
+	   "trap #0\n\t"		/* Linux/m68k system call */
 	   "tstl %0\n\t"		/* child or parent */
 	   "jne 1f\n\t"			/* parent - jump */
+	   "lea %%sp@(-8192),%6\n\t"	/* reload current */
 	   "movel %3,%%sp@-\n\t"	/* push argument */
 	   "jsr %4@\n\t"		/* call fn */
 	   "movel %0,%%d1\n\t"		/* pass exit value */
@@ -333,8 +335,8 @@ static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long f
 	   "1:"
 	   : "=d" (retval)
 	   : "0" (__NR_clone), "i" (__NR_exit),
-	     "r" (arg), "a" (fn), "d" (clone_arg)
-	   : "d0");
+	     "r" (arg), "a" (fn), "d" (clone_arg), "r" (current)
+	   : "d0", "d2");
 
 	set_fs (fs);
 	return retval;

@@ -14,7 +14,7 @@
  * They use the standard big-endian m680x0 bit ordering.
  */
 
-extern __inline__ int set_bit(int nr,void * vaddr)
+extern __inline__ int test_and_set_bit(int nr,void * vaddr)
 {
 	char retval;
 
@@ -24,7 +24,13 @@ extern __inline__ int set_bit(int nr,void * vaddr)
 	return retval;
 }
 
-extern __inline__ int clear_bit(int nr, void * vaddr)
+extern __inline__ void set_bit(int nr, void * vaddr)
+{
+	__asm__ __volatile__ ("bfset %1@{%0:#1}"
+	     : : "d" (nr^31), "a" (vaddr));
+}
+
+extern __inline__ int test_and_clear_bit(int nr, void * vaddr)
 {
 	char retval;
 
@@ -34,7 +40,13 @@ extern __inline__ int clear_bit(int nr, void * vaddr)
 	return retval;
 }
 
-extern __inline__ int change_bit(int nr, void * vaddr)
+extern __inline__ void clear_bit(int nr, void * vaddr)
+{
+	__asm__ __volatile__ ("bfclr %1@{%0:#1}"
+	     : : "d" (nr^31), "a" (vaddr));
+}
+
+extern __inline__ int test_and_change_bit(int nr, void * vaddr)
 {
 	char retval;
 
@@ -42,6 +54,12 @@ extern __inline__ int change_bit(int nr, void * vaddr)
 	     : "=d" (retval) : "d" (nr^31), "a" (vaddr));
 
 	return retval;
+}
+
+extern __inline__ void change_bit(int nr, void * vaddr)
+{
+	__asm__ __volatile__ ("bfchg %1@{%0:#1}"
+	     : : "d" (nr^31), "a" (vaddr));
 }
 
 extern __inline__ int test_bit(int nr, const void * vaddr)

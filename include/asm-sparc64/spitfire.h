@@ -1,4 +1,4 @@
-/* $Id: spitfire.h,v 1.7 1997/04/04 00:50:29 davem Exp $
+/* $Id: spitfire.h,v 1.8 1997/05/18 04:16:56 davem Exp $
  * spitfire.h: SpitFire/BlackBird/Cheetah inline MMU operations.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -209,28 +209,28 @@ extern __inline__ void spitfire_flush_dtlb_secondary_context(void)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
 			     : /* No outputs */
-			     : "r" (0x41), "i" (ASI_DMMU_DEMAP));
+			     : "r" (0x50), "i" (ASI_DMMU_DEMAP));
 }
 
 extern __inline__ void spitfire_flush_itlb_secondary_context(void)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
 			     : /* No outputs */
-			     : "r" (0x41), "i" (ASI_IMMU_DEMAP));
+			     : "r" (0x50), "i" (ASI_IMMU_DEMAP));
 }
 
 extern __inline__ void spitfire_flush_dtlb_nucleus_context(void)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
 			     : /* No outputs */
-			     : "r" (0x42), "i" (ASI_DMMU_DEMAP));
+			     : "r" (0x60), "i" (ASI_DMMU_DEMAP));
 }
 
 extern __inline__ void spitfire_flush_itlb_nucleus_context(void)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
 			     : /* No outputs */
-			     : "r" (0x42), "i" (ASI_IMMU_DEMAP));
+			     : "r" (0x60), "i" (ASI_IMMU_DEMAP));
 }
 
 /* Page level flushes. */

@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.5 1997/05/15 21:14:31 davem Exp $
+/* $Id: fault.c,v 1.8 1997/05/18 04:16:52 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -134,8 +134,11 @@ asmlinkage int lookup_fault(unsigned long pc, unsigned long ret_pc,
 	return 0;
 }
 
+/* #define FAULT_TRACER */
+
 asmlinkage void do_sparc64_fault(struct pt_regs *regs, int text_fault, int write,
-				 unsigned long address)
+				 unsigned long address, unsigned long tag,
+				 unsigned long sfsr)
 {
 	struct vm_area_struct *vma;
 	struct task_struct *tsk = current;
@@ -143,7 +146,19 @@ asmlinkage void do_sparc64_fault(struct pt_regs *regs, int text_fault, int write
 	unsigned long fixup;
 	unsigned long g2;
 	int from_user = !(regs->tstate & TSTATE_PRIV);
+#ifdef FAULT_TRACER
+	static unsigned long last_addr = 0;
+	static int rcnt = 0;
 
+	printk("do_sparc64_fault(PC[%016lx],t[%d],w[%d],addr[%016lx]tag[%016lx]"
+	       "sfar[%016lx])\n", regs->tpc, text_fault, write, address, tag, sfsr);
+	if(address == last_addr && rcnt++ > 5) {
+		printk("Wheee lotsa bogus faults, something wrong, spinning\n");
+		while(1)
+			barrier();
+	}
+	last_addr = address;
+#endif
 	lock_kernel ();
 	down(&mm->mmap_sem);
 	vma = find_vma(mm, address);

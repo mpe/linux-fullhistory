@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.15 1997/04/28 14:57:08 davem Exp $
+/* $Id: entry.S,v 1.21 1997/05/18 10:04:44 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -24,35 +24,55 @@
 
 	.text
         .align  4
-/* FIXME: This is still debugging hack */
-	.globl	sparc64_dtlb_fault, sparc64_dtlb_refbit_catch, sparc64_itlb_refbit_catch
-sparc64_dtlb_fault:
-	rdpr	%pstate, %g1
-	wrpr	%g1, PSTATE_AG|PSTATE_MG, %pstate
-	ba,pt	%xcc, etrap
-	 rd	%pc, %g7
-	call	sparc64_dtlb_fault_handler
-	 nop
+	.globl	sparc64_dtlb_prot_catch, sparc64_dtlb_refbit_catch
+	.globl	sparc64_itlb_refbit_catch
 
 	/* Note, DMMU SFAR not updated for fast tlb data access miss
 	 * traps, so we must use tag access to find the right page.
+	 * However for DMMU fast protection traps it is updated so
+	 * we use, but we must also clear it _before_ we enable interrupts
+	 * and save state because there is a race where we can push a user
+	 * window right now in etrap, a protection fault happens (for example
+	 * to update the dirty bit) and since we left crap in the sfsr
+	 * it will not get updated properly.
 	 */
+sparc64_dtlb_prot_catch:
+	wr	%g0, ASI_DMMU, %asi
+	rdpr	%pstate, %g1
+	wrpr	%g1, PSTATE_AG|PSTATE_MG, %pstate
+	rdpr	%tl, %g2
+	ldxa	[%g0 + TLB_TAG_ACCESS] %asi, %g5
+	ldxa	[%g0 + TLB_SFSR] %asi, %g4
+	cmp	%g2, 1
+	stxa	%g0, [%g0 + TLB_SFSR] %asi
+	bgu,a	%icc, winfix_trampoline
+	 rdpr	%tpc, %g5
+	ba,pt	%xcc, etrap
+	 rd	%pc, %g7
+	b,a,pt	%xcc, 1f
+
 sparc64_dtlb_refbit_catch:
 	wr	%g0, ASI_DMMU, %asi
 	rdpr	%pstate, %g1
 	wrpr	%g1, PSTATE_AG|PSTATE_MG, %pstate
+	rdpr	%tl, %g2
 	ldxa	[%g0 + TLB_TAG_ACCESS] %asi, %g5
-	srlx	%g5, PAGE_SHIFT, %g5
-	ldxa	[%g0 + TLB_SFSR] %asi, %g4
-	sllx	%g5, PAGE_SHIFT, %g5
+	cmp	%g2, 1
+	clr	%g4				! sfsr not updated for tlb misses
+	bgu,a	%icc, winfix_trampoline
+	 rdpr	%tpc, %g5
 	ba,pt	%xcc, etrap
 	 rd	%pc, %g7
-
+1:
+	mov	%l5, %o4				! raw tag access
+	mov	%l4, %o5				! raw sfsr
+	srlx	%l5, PAGE_SHIFT, %o3
 	clr	%o1					! text_fault == 0
-	mov	%l5, %o3				! address == sfar
+	sllx	%o3, PAGE_SHIFT, %o3			! address
 	and	%l4, 0x4, %o2				! write == sfsr.W
 	call	do_sparc64_fault
 	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0	! pt_regs ptr
+	ba,a,pt	%xcc, rtrap
 
 sparc64_itlb_refbit_catch:
 	rdpr	%pstate, %g1
@@ -63,8 +83,11 @@ sparc64_itlb_refbit_catch:
 	ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC], %o3
 	mov	1, %o1					! text_fault == 1
 	clr	%o2					! write == 0
+	clr	%o4					! tag access (N/A)
+	clr	%o5					! raw sfsr (N/A)
 	call	do_sparc64_fault
 	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0	! pt_regs ptr
+	ba,a,pt	%xcc, rtrap
 
 	/* Note check out head.h, this code isn't even used for UP,
 	 * for SMP things will be different.  In particular the data
@@ -137,6 +160,7 @@ breakpoint_trap:
 	ba,a,pt	%xcc, rtrap
 
 	.globl	sys_pipe, sys_execve, sys_sigpause, sys_nis_syscall
+	.globl	sys_sigsuspend, sys_sigreturn
 
 sys_pipe:
 	sethi	%hi(sparc_pipe), %g1
@@ -163,12 +187,35 @@ sys_sigpause:
 	
 	ld	[%curptr + AOFF_task_flags], %l5
 	andcc	%l5, 0x20, %g0
-	be,pt	%icc, ret_sys_call
-	 clr	%o0
+	be,pt	%icc, rtrap
+	 nop
 	call	syscall_trace
 	 nop
-	ba,pt	%xcc, ret_sys_call
-	 clr	%o0
+	ba,a,pt	%xcc, rtrap
+
+sys_sigsuspend:
+	call	do_sigsuspend
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0
+	
+	ld	[%curptr + AOFF_task_flags], %l5
+	andcc	%l5, 0x20, %g0
+	be,pt	%icc, ret_sys_call
+	 nop
+	call	syscall_trace
+	 nop
+	ba,a,pt	%xcc, rtrap
+	
+sys_sigreturn:
+	call	do_sigreturn
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0
+	
+	ld	[%curptr + AOFF_task_flags], %l5
+	andcc	%l5, 0x20, %g0
+	be,pt	%icc, ret_sys_call
+	 nop
+	call	syscall_trace
+	 nop
+	ba,a,pt	%xcc, rtrap
 
 	/* This is how fork() was meant to be done, 11 instruction entry. -DaveM */
 	.globl	sys_fork, sys_vfork, sys_clone
@@ -216,7 +263,7 @@ linux_syscall_trace:
 	.globl	ret_from_syscall
 ret_from_syscall:
 	ba,pt	%xcc, ret_sys_call
-	 ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_I0], %o0
+	 ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0], %o0
 
 	/* Linux native and SunOS system calls enter here... */
 	.align	4
@@ -248,13 +295,18 @@ syscall_is_too_hard:
 	call	%l7
 	 mov	%i5, %o5
 
-	stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_I0]
-
+	stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0]
+#if 0
+	/* Debugging... */
+	call	syscall_trace_exit
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0
+	ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0], %o0
+#endif
 	.globl	ret_sys_call
 ret_sys_call:
 	ldx	[%curptr + AOFF_task_flags], %l6
 	mov	%ulo(TSTATE_XCARRY | TSTATE_ICARRY), %g2
-	ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_TSTATE], %g3
+	ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TSTATE], %g3
 	cmp	%o0, -ENOIOCTLCMD
 	sllx	%g2, 32, %g2
 	bgeu,pn	%xcc, 1f
@@ -263,34 +315,34 @@ ret_sys_call:
 	/* System call success, clear Carry condition code. */
 	andn	%g3, %g2, %g3
 	clr	%l6
-	stx	%g3, [%sp + STACK_BIAS + REGWIN_SZ + PT_TSTATE]	
+	stx	%g3, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TSTATE]	
 	bne,pn	%icc, linux_syscall_trace2
-	 ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_TNPC], %l1 /* pc = npc */
+	 ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC], %l1 /* pc = npc */
 	add	%l1, 0x4, %l2				      /* npc = npc+4 */
-	stx	%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_TPC]
+	stx	%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC]
 	ba,pt	%xcc, rtrap
-	 stx	%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_TNPC]
+	 stx	%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC]
 1:
 	/* System call failure, set Carry condition code.
 	 * Also, get abs(errno) to return to the process.
 	 */
 	sub	%g0, %o0, %o0
 	or	%g3, %g2, %g3
-	stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_I0]
+	stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0]
 	mov	1, %l6
-	stx	%g3, [%sp + STACK_BIAS + REGWIN_SZ + PT_TSTATE]
+	stx	%g3, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TSTATE]
 	bne,pn	%icc, linux_syscall_trace2
-	 ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_TNPC], %l1 /* pc = npc */
+	 ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC], %l1 /* pc = npc */
 	add	%l1, 0x4, %l2				      /* npc = npc+4 */
-	stx	%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_TPC]
+	stx	%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC]
 	ba,pt	%xcc, rtrap
-	 stx	%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_TNPC]
+	 stx	%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC]
 
 linux_syscall_trace2:
 	call	syscall_trace
 	 add	%l1, 0x4, %l2			/* npc = npc+4 */
-	stx	%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_TPC]
+	stx	%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC]
 	ba,pt	%xcc, rtrap
-	 stx	%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_TNPC]
+	 stx	%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC]
 
 /* End of entry.S */

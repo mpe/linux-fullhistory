@@ -33,18 +33,24 @@
  *	10(sp) - d5
  *	14(sp) - a0
  *	18(sp) - a1
- *	1C(sp) - d0
- *	20(sp) - orig_d0
- *	24(sp) - stack adjustment
- *	28(sp) - sr
- *	2A(sp) - pc
- *	2E(sp) - format & vector
+ *	1C(sp) - a2
+ *	20(sp) - d0
+ *	24(sp) - orig_d0
+ *	28(sp) - stack adjustment
+ *	2C(sp) - sr
+ *	2E(sp) - pc
+ *	32(sp) - format & vector
  */
 
 /*
  * 12/03/96 Jes: Currently we only support m68k single-cpu systems, so
  *               all pointers that used to be 'current' are now entry
  *               number 0 in the 'current_set' list.
+ */
+
+/*
+ * 97/05/14 Andreas: Register %a2 is now set to the current task throughout
+ *		     the whole kernel.
  */
 
 #include <linux/sys.h>
@@ -56,6 +62,8 @@
 #include <asm/kgdb.h>
 .globl SYMBOL_NAME(kgdb_registers)
 #endif
+
+#define curptr a2
 
 LENOSYS = 38
 
@@ -80,15 +88,15 @@ LTASK_FLAGS	= 20
 #define	MAX_NOINT_IPL	0
 #endif /* machine compilation types */ 
 
-LD0		= 0x1C
-LORIG_D0	= 0x20
-LSR		= 0x28
-LFORMATVEC	= 0x2E
+LD0		= 0x20
+LORIG_D0	= 0x24
+LSR		= 0x2C
+LFORMATVEC	= 0x32
 
 /*
  * This defines the normal kernel pt-regs layout.
  *
- * regs are a2-a6 and d6-d7 preserved by C code
+ * regs a3-a6 and d6-d7 are preserved by C code
  * the kernel doesn't mess with usp unless it needs to
  */
 #ifndef CONFIG_KGDB
@@ -96,7 +104,7 @@ LFORMATVEC	= 0x2E
 	clrl	%sp@-;    /* stk_adj */	\
 	movel	%d0,%sp@-; /* orig d0 */	\
 	movel	%d0,%sp@-; /* d0 */	\
-	moveml	%d1-%d5/%a0-%a1,%sp@-
+	moveml	%d1-%d5/%a0-%a1/%curptr,%sp@-;
 #else
 /* Need to save the "missing" registers for kgdb...
  */
@@ -104,25 +112,30 @@ LFORMATVEC	= 0x2E
 	clrl	%sp@-;    /* stk_adj */				\
 	movel	%d0,%sp@-; /* orig d0 */			\
 	movel	%d0,%sp@-; /* d0 */				\
-	moveml	%d1-%d5/%a0-%a1,%sp@-;				\
+	moveml	%d1-%d5/%a0-%a1/%curptr,%sp@-;			\
 	moveml	%d6-%d7,SYMBOL_NAME(kgdb_registers)+GDBOFFA_D6;	\
-	moveml	%a2-%a6,SYMBOL_NAME(kgdb_registers)+GDBOFFA_A2
+	moveml	%a3-%a6,SYMBOL_NAME(kgdb_registers)+GDBOFFA_A3;
 #endif
 
 #define RESTORE_ALL			\
-	moveml	%sp@+,%a0-%a1/%d1-%d5;	\
+	moveml	%sp@+,%a0-%a1/%curptr/%d1-%d5;	\
 	movel	%sp@+,%d0;		\
 	addql	#4,%sp;	 /* orig d0 */	\
 	addl	%sp@+,%sp; /* stk adj */	\
 	rte
 
-#define SWITCH_STACK_SIZE (7*4+4)	/* includes return address */
+#define SWITCH_STACK_SIZE (6*4+4)	/* includes return address */
 
 #define SAVE_SWITCH_STACK \
-	moveml	%a2-%a6/%d6-%d7,%sp@-
+	moveml	%a3-%a6/%d6-%d7,%sp@-
 
 #define RESTORE_SWITCH_STACK \
-	moveml	%sp@+,%a2-%a6/%d6-%d7
+	moveml	%sp@+,%a3-%a6/%d6-%d7
+
+#define GET_CURRENT(tmp) \
+	movel	%sp,tmp; \
+	andw	&-8192,tmp; \
+	movel	tmp,%curptr;
 
 .globl SYMBOL_NAME(system_call), SYMBOL_NAME(buserr), SYMBOL_NAME(trap)
 .globl SYMBOL_NAME(resume), SYMBOL_NAME(ret_from_exception)
@@ -139,6 +152,7 @@ ENTRY(buserr)
 					| signifies that the stack frame
 					| is NOT for syscall
 
+	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(buserr_c)
 	addql	#4,%sp
@@ -150,6 +164,7 @@ ENTRY(trap)
 	movel	%d0,%sp@(LORIG_D0)	| a -1 in the ORIG_D0 field
 					| signifies that the stack frame
 					| is NOT for syscall
+	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
 	addql	#4,%sp
@@ -190,6 +205,7 @@ ENTRY(system_call)
 	SAVE_ALL
 	movel	%d0,%d2
 
+	GET_CURRENT(%d0)
 	| save top of frame
 	pea	%sp@
 	jbsr	SYMBOL_NAME(set_esp0)
@@ -197,8 +213,7 @@ ENTRY(system_call)
 
 	cmpl	#NR_syscalls,%d2
 	jcc	badsys
-	movel	SYMBOL_NAME(current_set),%a0
-	btst	#5,%a0@(LTASK_FLAGS+3)	| PF_TRACESYS
+	btst	#5,%curptr@(LTASK_FLAGS+3)	| PF_TRACESYS
 	jne	do_trace
 	jbsr	@(SYMBOL_NAME(sys_call_table),%d2:l:4)@(0)
 	movel	%d0,%sp@(LD0)		| save the return value
@@ -208,24 +223,23 @@ SYMBOL_NAME_LABEL(ret_from_exception)
 	bnes	2f			| if so, skip resched, signals
 	tstl	SYMBOL_NAME(need_resched)
 	jne	SYMBOL_NAME(reschedule)
-	movel	SYMBOL_NAME(current_set),%a0
-	cmpl	#SYMBOL_NAME(task),%a0	| task[0] cannot have signals
+	cmpl	#SYMBOL_NAME(task),%curptr	| task[0] cannot have signals
 	jeq	2f
-	bclr	#5,%a0@(LTASK_FLAGS+1)	| check for delayed trace
+	bclr	#5,%curptr@(LTASK_FLAGS+1)	| check for delayed trace
 	jne	do_delayed_trace
 5:
-	tstl	%a0@(LTASK_STATE)	| state
+	tstl	%curptr@(LTASK_STATE)	| state
 	jne	SYMBOL_NAME(reschedule)
-	tstl	%a0@(LTASK_COUNTER)	| counter
+	tstl	%curptr@(LTASK_COUNTER)	| counter
 	jeq	SYMBOL_NAME(reschedule)
 
-	movel	%a0@(LTASK_BLOCKED),%d0
+	movel	%curptr@(LTASK_BLOCKED),%d0
 	movel	%d0,%d1			| save blocked in d1 for sig handling
 	notl	%d0
-	btst	#4,%a0@(LTASK_FLAGS+3)	| PF_PTRACED
+	btst	#4,%curptr@(LTASK_FLAGS+3)	| PF_PTRACED
 	jeq	1f
 	moveq	#-1,%d0			| let the debugger see all signals
-1:	andl	%a0@(LTASK_SIGNAL),%d0
+1:	andl	%curptr@(LTASK_SIGNAL),%d0
 	jne	Lsignal_return
 2:	RESTORE_ALL
 
@@ -248,7 +262,6 @@ do_delayed_trace:
 	jbsr	SYMBOL_NAME(send_sig)
 	addql	#8,%sp
 	addql	#4,%sp
-	movel	SYMBOL_NAME(current_set),%a0
 	jra	5b
 
 /*
@@ -260,6 +273,7 @@ SYMBOL_NAME_LABEL(inthandler)
 	movel	%d0,%sp@(LORIG_D0)	| a -1 in the ORIG_D0 field
 					| signifies that the stack frame
 					| is NOT for syscall
+	GET_CURRENT(%d0)
 	addql	#1,SYMBOL_NAME(local_irq_count)
 					|  put exception # in d0
 	bfextu %sp@(LFORMATVEC){#4,#10},%d0
@@ -270,28 +284,31 @@ SYMBOL_NAME_LABEL(inthandler)
 	addql	#8,%sp			|  pop parameters off stack
 
 SYMBOL_NAME_LABEL(ret_from_interrupt)
-	/* check if we need to do software interrupts */
-	movel	SYMBOL_NAME(local_irq_count),%d1
-	subql	#1,%d1
-	jne	4f
-#if 0
-		bfextu  %sp@(LSR){#5,#3},%d0    | Check for nested interrupt.
+	subql	#1,SYMBOL_NAME(local_irq_count)
+	jeq	1f
+2:	
+	RESTORE_ALL
+1:
+#if 1
+	bfextu  %sp@(LSR){#5,#3},%d0    | Check for nested interrupt.
 #if MAX_NOINT_IPL > 0
 	cmpiw	#MAX_NOINT_IPL,%d0
 #endif
-	jhi	4f
+	jhi	2b
 #endif
+	/* Let the rest run with interrupts allowed.  This is safe since
+	   the kernel never uses a non-standard ipl and this is the outer
+	   level interrupt. */
+	andw	#ALLOWINT,%sr
+
+	/* check if we need to do software interrupts */
+	
 	movel	SYMBOL_NAME(bh_active),%d0
 	andl	SYMBOL_NAME(bh_mask),%d0
-	jeq	3f
+	jeq	SYMBOL_NAME(ret_from_exception)
 
-	jbsr	SYMBOL_NAME(do_bottom_half)
-3:	
-	clrl	SYMBOL_NAME(local_irq_count)
-	jra	SYMBOL_NAME(ret_from_exception)
-4:
-	movel	%d1,SYMBOL_NAME(local_irq_count)
-	RESTORE_ALL
+	pea	SYMBOL_NAME(ret_from_exception)
+	jra	SYMBOL_NAME(do_bottom_half)
 
 
 /* Handler for uninitialized and spurious interrupts */
@@ -398,7 +415,7 @@ SYMBOL_NAME_LABEL(resume)
 3:
 
 	/* get pointer to tss struct (a1 contains new task) */
-	movel	%a1,SYMBOL_NAME(current_set)
+	movel	%a1,%curptr
 	addl	%d1,%a1
 
 	/* Skip address space switching if they are the same. */
@@ -419,7 +436,7 @@ SYMBOL_NAME_LABEL(resume)
 	movec	%cacr,%d0
 	oriw	#LFLUSH_I_AND_D,%d0
 	movec	%d0,%cacr
-	
+
 	/* switch the root pointer */
 	pmove	%a1@(LTSS_CRP),%crp
 #endif

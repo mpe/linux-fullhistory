@@ -19,8 +19,7 @@ ENTRY(__down_failed)
 	movel %a1,-(%sp)
 	jbsr SYMBOL_NAME(__down)
 	movel (%sp)+,%a1
-	movel (%sp)+,%d0
-	movel (%sp)+,%d1
+	moveml (%sp)+,%a0/%d0/%d1
 	rts
 
 ENTRY(__down_failed_interruptible)
@@ -30,6 +29,7 @@ ENTRY(__down_failed_interruptible)
 	jbsr SYMBOL_NAME(__down_interruptible)
 	movel (%sp)+,%a1
 	movel (%sp)+,%d1
+	movel (%sp)+,%a0
 	rts
 
 ENTRY(__up_wakeup)
@@ -37,6 +37,5 @@ ENTRY(__up_wakeup)
 	movel %a1,-(%sp)
 	jbsr SYMBOL_NAME(__up)
 	movel (%sp)+,%a1
-	movel (%sp)+,%d0
-	movel (%sp)+,%d1
+	moveml (%sp)+,%a0/%d0/%d1
 	rts

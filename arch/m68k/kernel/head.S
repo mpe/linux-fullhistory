@@ -223,17 +223,9 @@ ENTRY(_start)
 	movel	%d0,%a0@		/* save cache mode for page tables */
 
 /*
- * raise interrupt level with MASTER bit set, copy isp to msp (if not 68060)
+ * raise interrupt level
  */
-#ifdef FROM_PL9
-	movew	#0x3700,%sr
-	is_060(1f)
-	movec	%isp,%d0
-	movel	%d0,%sp
-1:
-#else
 	movew	#0x2700,%sr
-#endif
 
 /*
    If running on an Atari, determine the I/O base of the
@@ -896,8 +888,10 @@ Lcache68060:
 
 /*
  * Setup initial stack pointer
+ * We need to get current loaded up with our first task...
  */
-	lea	SYMBOL_NAME(init_user_stack)+PAGESIZE,%sp
+	lea	SYMBOL_NAME(init_task_union),%a2
+	lea	8192(%a2),%sp
 
 /* jump to the kernel start */
 	putr()

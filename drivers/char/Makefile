@@ -39,7 +39,10 @@ endif
 
 ifndef CONFIG_SUN_KEYBOARD
 ifdef CONFIG_VT
-L_OBJS += keyboard.o defkeymap.o
+L_OBJS += keyboard.o
+endif
+ifneq ($(ARCH),m68k)
+L_OBJS += pc_keyb.o defkeymap.o
 endif
 endif
 

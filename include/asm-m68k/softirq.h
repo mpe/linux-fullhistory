@@ -4,6 +4,9 @@
 /*
  * Software interrupts.. no SMP here either.
  */
+
+#include <asm/atomic.h>
+
 #define get_active_bhs()	(bh_mask & bh_active)
 #define clear_active_bhs(x)	atomic_clear_mask((x),&bh_active)
 
@@ -12,12 +15,6 @@ extern inline void init_bh(int nr, void (*routine)(void))
 	bh_base[nr] = routine;
 	bh_mask_count[nr] = 0;
 	bh_mask |= 1 << nr;
-}
-
-extern inline void remove_bh(int nr)
-{
-	bh_base[nr] = NULL;
-	bh_mask &= ~(1 << nr);
 }
 
 extern inline void mark_bh(int nr)
@@ -39,6 +36,12 @@ extern inline void enable_bh(int nr)
 {
 	if (!--bh_mask_count[nr])
 		bh_mask |= 1 << nr;
+}
+
+extern inline void remove_bh(int nr)
+{
+	bh_base[nr] = NULL;
+	bh_mask &= ~(1 << nr);
 }
 
 extern int __m68k_bh_counter;

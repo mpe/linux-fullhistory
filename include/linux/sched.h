@@ -9,6 +9,8 @@ extern unsigned long event;
 #include <linux/personality.h>
 #include <linux/tasks.h>
 #include <linux/kernel.h>
+#include <linux/types.h>
+#include <linux/times.h>
 
 #include <asm/system.h>
 #include <asm/semaphore.h>
@@ -223,7 +225,8 @@ struct task_struct {
 	unsigned long it_real_value, it_prof_value, it_virt_value;
 	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
 	struct timer_list real_timer;
-	long utime, stime, cutime, cstime, start_time;
+	struct tms times;
+	unsigned long start_time;
 /* mm fault and swap info: this can arguably be seen as either mm-specific or thread-specific */
 	unsigned long min_flt, maj_flt, nswap, cmin_flt, cmaj_flt, cnswap;
 	int swappable:1;
@@ -319,7 +322,7 @@ struct task_struct {
 /* uid etc */	0,0,0,0,0,0,0,0, \
 /* timeout */	0,SCHED_OTHER,0,0,0,0,0,0,0, \
 /* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
-/* utime */	0,0,0,0,0, \
+/* utime */	{0,0,0,0},0, \
 /* flt */	0,0,0,0,0,0, \
 /* swp */	0,0,0,0,0, \
 /* rlimits */   INIT_RLIMITS, \

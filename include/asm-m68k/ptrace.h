@@ -34,6 +34,7 @@ struct pt_regs {
   long     d5;
   long     a0;
   long     a1;
+  long     a2;
   long     d0;
   long     orig_d0;
   long     stkadj;
@@ -50,7 +51,6 @@ struct pt_regs {
 struct switch_stack {
 	unsigned long  d6;
 	unsigned long  d7;
-	unsigned long  a2;
 	unsigned long  a3;
 	unsigned long  a4;
 	unsigned long  a5;

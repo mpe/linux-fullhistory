@@ -268,7 +268,7 @@ static int get_uptime(char * buffer)
 	unsigned long idle;
 
 	uptime = jiffies;
-	idle = task[0]->utime + task[0]->stime;
+	idle = task[0]->times.tms_utime + task[0]->times.tms_stime;
 
 	/* The formula for the fraction parts really is ((t * 100) / HZ) % 100, but
 	   that would overflow about every five days at HZ == 100.
@@ -748,10 +748,10 @@ static int get_stat(int pid, char * buffer)
 		tsk->cmin_flt,
 		tsk->maj_flt,
 		tsk->cmaj_flt,
-		tsk->utime,
-		tsk->stime,
-		tsk->cutime,
-		tsk->cstime,
+		tsk->times.tms_utime,
+		tsk->times.tms_stime,
+		tsk->times.tms_cutime,
+		tsk->times.tms_cstime,
 		priority,
 		nice,
 		tsk->timeout,

@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.17 1997/04/28 14:57:13 davem Exp $ */
+/* $Id: head.h,v 1.19 1997/05/18 08:42:18 davem Exp $ */
 #ifndef _SPARC64_HEAD_H
 #define _SPARC64_HEAD_H
 
@@ -147,6 +147,9 @@
 	flushw;							\
 	done; nop; nop; nop; nop; nop; nop;
 	        
+/* Before touching these macros, you owe it to yourself to go and
+ * see how arch/sparc64/kernel/winfixup.S works... -DaveM
+ */
 
 /* Normal kernel spill */
 #define SPILL_0_NORMAL					\
@@ -189,23 +192,25 @@
 	stxa	%i6, [%sp + STACK_BIAS + 0x70] %asi;	\
 	stxa	%i7, [%sp + STACK_BIAS + 0x78] %asi;	\
 	saved; retry; nop; nop; nop; nop; nop; nop;	\
-	nop; nop; nop; nop; nop; nop; nop;
+	nop; nop; nop; nop; nop; nop;			\
+	b,a,pt	%xcc, spill_fixup;
 
 /* Normal 32bit spill */
 #define SPILL_2_GENERIC(xxx)				\
 	wr	%g0, xxx, %asi;				\
 	srl	%sp, 0, %sp;				\
 	stda	%l0, [%sp + 0x00] %asi;			\
-	stda	%l2, [%sp + 0x10] %asi;			\
-	stda	%l4, [%sp + 0x20] %asi;			\
-	stda	%l6, [%sp + 0x30] %asi;			\
-	stda	%i0, [%sp + 0x40] %asi;			\
-	stda	%i2, [%sp + 0x50] %asi;			\
-	stda	%i4, [%sp + 0x60] %asi;			\
-	stda	%i6, [%sp + 0x70] %asi;			\
+	stda	%l2, [%sp + 0x08] %asi;			\
+	stda	%l4, [%sp + 0x10] %asi;			\
+	stda	%l6, [%sp + 0x18] %asi;			\
+	stda	%i0, [%sp + 0x20] %asi;			\
+	stda	%i2, [%sp + 0x28] %asi;			\
+	stda	%i4, [%sp + 0x30] %asi;			\
+	stda	%i6, [%sp + 0x38] %asi;			\
 	saved; retry; nop; nop; nop; nop;		\
 	nop; nop; nop; nop; nop; nop; nop; nop;		\
-	nop; nop; nop; nop; nop; nop; nop; nop;
+	nop; nop; nop; nop; nop; nop; nop;		\
+	b,a,pt	%xcc, spill_fixup;
 
 #define SPILL_1_NORMAL SPILL_1_GENERIC(ASI_AIUP)
 #define SPILL_2_NORMAL SPILL_2_GENERIC(ASI_AIUP)
@@ -265,23 +270,25 @@
 	ldxa	[%sp + STACK_BIAS + 0x70] %asi, %i6;	\
 	ldxa	[%sp + STACK_BIAS + 0x78] %asi, %i7;	\
 	restored; retry; nop; nop; nop; nop; nop; nop;	\
-	nop; nop; nop; nop; nop; nop; nop;
+	nop; nop; nop; nop; nop; nop;			\
+	b,a,pt	%xcc, fill_fixup;
 
 /* Normal 32bit fill */
 #define FILL_2_GENERIC(xxx)				\
 	wr	%g0, xxx, %asi;				\
 	srl	%sp, 0, %sp;				\
 	ldda	[%sp + 0x00] %asi, %l0;			\
-	ldda	[%sp + 0x10] %asi, %l2;			\
-	ldda	[%sp + 0x20] %asi, %l4;			\
-	ldda	[%sp + 0x30] %asi, %l6;			\
-	ldda	[%sp + 0x40] %asi, %i0;			\
-	ldda	[%sp + 0x50] %asi, %i2;			\
-	ldda	[%sp + 0x60] %asi, %i4;			\
-	ldda	[%sp + 0x70] %asi, %i6;			\
+	ldda	[%sp + 0x08] %asi, %l2;			\
+	ldda	[%sp + 0x10] %asi, %l4;			\
+	ldda	[%sp + 0x18] %asi, %l6;			\
+	ldda	[%sp + 0x20] %asi, %i0;			\
+	ldda	[%sp + 0x28] %asi, %i2;			\
+	ldda	[%sp + 0x30] %asi, %i4;			\
+	ldda	[%sp + 0x38] %asi, %i6;			\
 	restored; retry; nop; nop; nop; nop;		\
 	nop; nop; nop; nop; nop; nop; nop; nop;		\
-	nop; nop; nop; nop; nop; nop; nop; nop;
+	nop; nop; nop; nop; nop; nop; nop;		\
+	b,a,pt	%xcc, fill_fixup;
 
 #define FILL_1_NORMAL FILL_1_GENERIC(ASI_AIUP)
 #define FILL_2_NORMAL FILL_2_GENERIC(ASI_AIUP)

@@ -226,6 +226,11 @@ static const char *version = "defxx.c:v1.04 09/16/96  Lawrence V. Stefani (stefa
 
 #include "defxx.h"
 
+#define DYNAMIC_BUFFERS 1
+
+#define SKBUFF_RX_COPYBREAK 200
+#define NEW_SKB_SIZE (PI_RCV_DATA_K_SIZE_MAX)
+
 /* Define global routines */
 
 int	dfx_probe(struct device *dev);
@@ -1083,7 +1088,9 @@ __initfunc(int dfx_driver_init(
 	alloc_size = sizeof(PI_DESCR_BLOCK) +
 					PI_CMD_REQ_K_SIZE_MAX +
 					PI_CMD_RSP_K_SIZE_MAX +
+#ifndef DYNAMIC_BUFFERS
 					(bp->rcv_bufs_to_post * PI_RCV_DATA_K_SIZE_MAX) +
+#endif
 					sizeof(PI_CONSUMER_BLOCK) +
 					(PI_ALIGN_K_DESC_BLK - 1);
 	top_v = (char *) kmalloc(alloc_size, GFP_KERNEL);
@@ -1135,8 +1142,11 @@ __initfunc(int dfx_driver_init(
 
 	bp->rcv_block_virt = curr_v;
 	bp->rcv_block_phys = curr_p;
+
+#ifndef DYNAMIC_BUFFERS
 	curr_v += (bp->rcv_bufs_to_post * PI_RCV_DATA_K_SIZE_MAX);
 	curr_p += (bp->rcv_bufs_to_post * PI_RCV_DATA_K_SIZE_MAX);
+#endif
 
 	/* Reserve space for the consumer block */
 
@@ -2926,6 +2936,22 @@ void dfx_rcv_init(
 	 *		driver initialization when we allocated memory for the receive buffers.
 	 */
 
+#ifdef DYNAMIC_BUFFERS
+	for (i = 0; i < (int)(bp->rcv_bufs_to_post); i++)
+		for (j = 0; (i + j) < (int)PI_RCV_DATA_K_NUM_ENTRIES; j += bp->rcv_bufs_to_post)
+		{
+			struct sk_buff *newskb;
+			bp->descr_block_virt->rcv_data[i+j].long_0 = (u32) (PI_RCV_DESCR_M_SOP |
+				((PI_RCV_DATA_K_SIZE_MAX / PI_ALIGN_K_RCV_DATA_BUFF) << PI_RCV_DESCR_V_SEG_LEN));
+			newskb = dev_alloc_skb(NEW_SKB_SIZE);
+			bp->descr_block_virt->rcv_data[i+j].long_1 = virt_to_bus(newskb->data);
+			/*
+			 * p_rcv_buff_va is only used inside the
+			 * kernel so we put the skb pointer here.
+			 */
+			bp->p_rcv_buff_va[i+j] = (char *) newskb;
+		}
+#else
 	for (i=0; i < (int)(bp->rcv_bufs_to_post); i++)
 		for (j=0; (i + j) < (int)PI_RCV_DATA_K_NUM_ENTRIES; j += bp->rcv_bufs_to_post)
 			{
@@ -2934,6 +2960,7 @@ void dfx_rcv_init(
 			bp->descr_block_virt->rcv_data[i+j].long_1 = (u32) (bp->rcv_block_phys + (i * PI_RCV_DATA_K_SIZE_MAX));
 			bp->p_rcv_buff_va[i+j] = (char *) (bp->rcv_block_virt + (i * PI_RCV_DATA_K_SIZE_MAX));
 			}
+#endif
 
 	/* Update receive producer and Type 2 register */
 
@@ -2985,6 +3012,8 @@ void dfx_rcv_queue_process(
 	u32					descr, pkt_len;		/* FMC descriptor field and packet length */
 	struct sk_buff		*skb;				/* pointer to a sk_buff to hold incoming packet data */
 
+	static int testing_dyn;
+
 	/* Service all consumed LLC receive frames */
 
 	p_type_2_cons = (PI_TYPE_2_CONSUMER *)(&bp->cons_block_virt->xmt_rcv_data);
@@ -2992,7 +3021,14 @@ void dfx_rcv_queue_process(
 		{
 		/* Process any errors */
 
-		p_buff = (char *) bp->p_rcv_buff_va[bp->rcv_xmt_reg.index.rcv_comp];
+		int entry;
+
+		entry = bp->rcv_xmt_reg.index.rcv_comp;
+#ifdef DYNAMIC_BUFFERS
+		p_buff = (char *) (((struct sk_buff *)bp->p_rcv_buff_va[entry])->data);
+#else
+		p_buff = (char *) bp->p_rcv_buff_va[entry];
+#endif
 		memcpy(&descr, p_buff + RCV_BUFF_K_DESCR, sizeof(u32));
 
 		if (descr & PI_FMC_DESCR_M_RCC_FLUSH)
@@ -3003,29 +3039,60 @@ void dfx_rcv_queue_process(
 				bp->rcv_frame_status_errors++;
 			}
 		else
-			{
+		{
+			int rx_in_place = 0;
+
 			/* The frame was received without errors - verify packet length */
 
 			pkt_len = (u32)((descr & PI_FMC_DESCR_M_LEN) >> PI_FMC_DESCR_V_LEN);
 			pkt_len -= 4;				/* subtract 4 byte CRC */
 			if (!IN_RANGE(pkt_len, FDDI_K_LLC_ZLEN, FDDI_K_LLC_LEN))
 				bp->rcv_length_errors++;
-			else
-				{
-				skb = dev_alloc_skb(pkt_len+3);	/* alloc new buffer to pass up, add room for PRH */
+			else{
+#ifdef DYNAMIC_BUFFERS
+				if (pkt_len > SKBUFF_RX_COPYBREAK) {
+					struct sk_buff *newskb;
+
+					newskb = dev_alloc_skb(NEW_SKB_SIZE);
+					if (newskb){
+						rx_in_place = 1;
+#define JES_TESTING
+#ifdef JES_TESTING
+						if(testing_dyn++ < 5)
+						  printk("Skipping a memcpy\n");
+						skb = (struct sk_buff *)bp->p_rcv_buff_va[entry];
+						skb->data += RCV_BUFF_K_PADDING;
+						bp->p_rcv_buff_va[entry] = (char *)newskb;
+						bp->descr_block_virt->rcv_data[entry].long_1 = virt_to_bus(newskb->data);
+#else
+						memcpy(newskb->data, p_buff + RCV_BUFF_K_PADDING, pkt_len+3);
+						skb = newskb;
+#endif
+					} else
+						skb = 0;
+				} else
+#endif
+					skb = dev_alloc_skb(pkt_len+3);	/* alloc new buffer to pass up, add room for PRH */
 				if (skb == NULL)
 					{
 					printk("%s: Could not allocate receive buffer.  Dropping packet.\n", bp->dev->name);
 					bp->rcv_discards++;
+					break;
 					}
-				else
+				else {
+#ifndef DYNAMIC_BUFFERS
+					if (! rx_in_place)
+#endif
 					{
-					/* Receive buffer allocated, pass receive packet up */
+						/* Receive buffer allocated, pass receive packet up */
 
-					memcpy(skb->data, p_buff + RCV_BUFF_K_PADDING, pkt_len+3);
+						memcpy(skb->data, p_buff + RCV_BUFF_K_PADDING, pkt_len+3);
+					}
+
 					skb->data += 3;			/* adjust data field so that it points to FC byte */
 					skb->len = pkt_len;		/* pass up packet length, NOT including CRC */
 					skb->dev = bp->dev;		/* pass up device pointer */
+
 					skb->protocol = fddi_type_trans(skb, bp->dev);
 					netif_rx(skb);
 
@@ -3034,8 +3101,8 @@ void dfx_rcv_queue_process(
 					bp->rcv_total_frames++;
 					if (*(p_buff + RCV_BUFF_K_DA) & 0x01)
 						bp->rcv_multicast_frames++;
-					}
 				}
+			}
 			}
 
 		/*
@@ -3140,6 +3207,7 @@ int dfx_xmt_queue_pkt(
 			dev->name, skb->len);
 		bp->xmt_length_errors++;		/* bump error counter */
 		dev_tint(dev);				/* dequeue packets from xmt queue and send them */
+		dev_kfree_skb(skb, FREE_WRITE);
 		return(0);				/* return "success" */
 	}
 	/*

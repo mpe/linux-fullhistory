@@ -30,6 +30,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ATARI_ACSI),y)
+  LX_OBJS += acsi.o
+else
+  ifeq ($(CONFIG_ATARI_ACSI),m)
+  MX_OBJS += acsi.o
+  endif
+endif
+
+ifeq ($(CONFIG_ATARI_SLM),y)
+  L_OBJS += acsi_slm.o
+else
+  ifeq ($(CONFIG_ATARI_SLM),m)
+  M_OBJS += acsi_slm.o
+  endif
+endif
+
 ifeq ($(CONFIG_AMIGA_Z2RAM),y)
 L_OBJS += z2ram.o
 else

@@ -175,7 +175,7 @@ extern inline void flush_pages_to_ram (unsigned long address, int n)
 }
 
 /*
- * flush all atc entries (user-space entries only for the 680[46]0).
+ * flush all user-space atc entries.
  */
 static inline void __flush_tlb(void)
 {
@@ -184,7 +184,7 @@ static inline void __flush_tlb(void)
 				     "pflushan\n\t"
 				     ".chip 68k");
 	else
-		__asm__ __volatile__("pflusha");
+		__asm__ __volatile__("pflush #0,#4");
 }
 
 static inline void __flush_tlb_one(unsigned long addr)

@@ -14,6 +14,7 @@ ENTRY(__lock_kernel)
 	lock
 	btsl	$0, SYMBOL_NAME(kernel_flag)
 	jnc	3f
+	sti
 2:
 	btl	%dl, SYMBOL_NAME(smp_invalidate_needed)
 	jnc	0f
@@ -27,6 +28,7 @@ ENTRY(__lock_kernel)
 0:
 	btl	$0, SYMBOL_NAME(kernel_flag)
 	jc	2b
+	cli
 	jmp	1b
 
 3:

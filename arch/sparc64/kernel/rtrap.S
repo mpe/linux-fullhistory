@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.11 1997/04/03 13:03:50 davem Exp $
+/* $Id: rtrap.S,v 1.14 1997/05/18 08:42:14 davem Exp $
  * rtrap.S: Preparing for return from trap on Sparc V9.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -71,12 +71,11 @@ rtrap:
 	/* We came here from to_user, ie. we have now AG.
 	 * Also have to push user context back into primary.
 	 */
-	restore
-
 	mov	SECONDARY_CONTEXT, %g6
 	mov	PRIMARY_CONTEXT, %g7
 	ldxa	[%g6] ASI_DMMU, %g4
 	stxa	%g4, [%g7] ASI_DMMU
+	membar	#Sync			/* XXX flushi would be better -DaveM */
 
 	rdpr	%wstate, %g1
 	rdpr	%otherwin, %g2
@@ -84,7 +83,6 @@ rtrap:
 	wrpr	%g2, %g0, %canrestore
 	wrpr	%g1, %g0, %wstate
 	wrpr	%g0, %g0, %otherwin
-	retry
 1:
 	restore
 	retry
@@ -101,9 +99,14 @@ to_user:
 	ldx	[%g6 + AOFF_task_blocked], %o0
 	or	%l7, PSTATE_AG, %l7		! Will need this for setting back wstate
 	andncc	%l0, %o0, %g0
-	be,pt	%xcc, 3b
+	be,pt	%xcc, check_user_wins
 	 mov	%l5, %o2  
 	mov	%l6, %o3
-	add	%sp, STACK_BIAS + REGWIN_SZ, %o1
 	call	do_signal
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o1
+check_user_wins:
+	ldx	[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %o2
+	brz,pt	%o2, 3b
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o1
+	call	fault_in_user_windows
 	 add	%o7, 3b-.-4, %o7

@@ -625,8 +625,8 @@ repeat:
 				retval = p->pid;
 				goto end_wait4;
 			case TASK_ZOMBIE:
-				current->cutime += p->utime + p->cutime;
-				current->cstime += p->stime + p->cstime;
+				current->times.tms_cutime += p->times.tms_utime + p->times.tms_cutime;
+				current->times.tms_cstime += p->times.tms_stime + p->times.tms_cstime;
 				read_unlock(&tasklist_lock);
 				if (ru != NULL)
 					getrusage(p, RUSAGE_BOTH, ru);

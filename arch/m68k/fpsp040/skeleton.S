@@ -51,13 +51,23 @@
  
 	.include "fpsp.h"
 
-LOFF_ORIG_D0	= 0x20
+/*
+ * This has to match entry.S
+ */
+LOFF_ORIG_D0	= 0x24
+
+#define curptr a2
 
 #define SAVE_ALL				\
 	clrl	%sp@-;     /* stk_adj */	\
 	movel	%d0,%sp@-; /* orig d0 */	\
 	movel	%d0,%sp@-; /* d0 */		\
-	moveml	%d1-%d5/%a0-%a1,%sp@-
+	moveml	%d1-%d5/%a0-%a1/%curptr,%sp@-;
+
+#define GET_CURRENT(tmp) \
+	movel	%sp,tmp; \
+	andw	&-8192,tmp; \
+	movel	tmp,%curptr;
 
 	|xref	b1238_fix
 
@@ -81,6 +91,7 @@ real_dz:
 	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
 					| signifies that the stack frame
 					| is NOT for syscall
+	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
 	addql	#4,%sp
@@ -175,6 +186,7 @@ inex_done:
 	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
 					| signifies that the stack frame
 					| is NOT for syscall
+	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
 	addql	#4,%sp
@@ -204,6 +216,7 @@ ovfl_done:
 	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
 					| signifies that the stack frame
 					| is NOT for syscall
+	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
 	addql	#4,%sp
@@ -233,6 +246,7 @@ unfl_done:
 	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
 					| signifies that the stack frame
 					| is NOT for syscall
+	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
 	addql	#4,%sp
@@ -258,6 +272,7 @@ real_snan:
 	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
 					| signifies that the stack frame
 					| is NOT for syscall
+	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
 	addql	#4,%sp
@@ -283,6 +298,7 @@ real_operr:
 	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
 					| signifies that the stack frame
 					| is NOT for syscall
+	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
 	addql	#4,%sp
@@ -314,6 +330,7 @@ real_bsun:
 	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
 					| signifies that the stack frame
 					| is NOT for syscall
+	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
 	addql	#4,%sp
@@ -338,6 +355,7 @@ real_fline:
 	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
 					| signifies that the stack frame
 					| is NOT for syscall
+	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
 	addql	#4,%sp
@@ -363,6 +381,7 @@ real_unsupp:
 	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
 					| signifies that the stack frame
 					| is NOT for syscall
+	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
 	addql	#4,%sp
@@ -419,6 +438,7 @@ Lmustsched:
 	SAVE_ALL
 	moveq	#-1,%d0
 	movel	%d0,%sp@(LOFF_ORIG_D0)    | indicate stack frame not for syscall
+	GET_CURRENT(%d0)
 	bral	SYMBOL_NAME(ret_from_exception)	| deliver signals, reschedule etc..
 
 
@@ -497,7 +517,7 @@ user_read:
 	movel	%d0,-(%sp)
 	movel	%a1,-(%sp)
 	movel	%a0,-(%sp)
-	jsr		copyin
+	jsr	copyin
 	addw	#12,%sp
 	movel	(%sp)+,%d1
 	rts

@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.147 1997/05/01 08:53:42 davem Exp $
+/* $Id: sun4c.c,v 1.148 1997/05/18 21:11:19 davem Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -2467,7 +2467,7 @@ static void sun4c_vac_alias_fixup(struct vm_area_struct *vma, unsigned long addr
 					start += PAGE_SIZE;
 				}
 			}
-		} while ((vmaring = vmaring->vm_next_share) != inode->i_mmap);
+		} while ((vmaring = vmaring->vm_next_share) != NULL);
 
 		if(alias_found && !(pte_val(pte) & _SUN4C_PAGE_NOCACHE)) {
 			pgdp = sun4c_pgd_offset(vma->vm_mm, address);

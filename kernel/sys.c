@@ -370,8 +370,8 @@ int acct_process(long exitcode)
    if (acct_active) {
       strncpy(ac.ac_comm, current->comm, ACCT_COMM);
       ac.ac_comm[ACCT_COMM-1] = '\0';
-      ac.ac_utime = current->utime;
-      ac.ac_stime = current->stime;
+      ac.ac_utime = current->times.tms_utime;
+      ac.ac_stime = current->times.tms_stime;
       ac.ac_btime = CT_TO_SECS(current->start_time) + (xtime.tv_sec - (jiffies / HZ));
       ac.ac_etime = CURRENT_TIME - ac.ac_btime;
       ac.ac_uid   = current->uid;
@@ -695,16 +695,9 @@ asmlinkage long sys_times(struct tms * tbuf)
 	 *	atomically safe type this is just fine. Conceptually its
 	 *	as if the syscall took an instant longer to occur.
 	 */
-	if (tbuf) 
-	{
-		/* ?? use copy_to_user() */
-		if(!access_ok(VERIFY_READ, tbuf, sizeof(struct tms)) ||
-		   __put_user(current->utime,&tbuf->tms_utime)||
-		   __put_user(current->stime,&tbuf->tms_stime) ||
-		   __put_user(current->cutime,&tbuf->tms_cutime) ||
-		   __put_user(current->cstime,&tbuf->tms_cstime))
+	if (tbuf)
+		if (copy_to_user(tbuf, &current->times, sizeof(struct tms)))
 			return -EFAULT;
-	}
 	return jiffies;
 }
 
@@ -1030,28 +1023,28 @@ int getrusage(struct task_struct *p, int who, struct rusage *ru)
 	memset((char *) &r, 0, sizeof(r));
 	switch (who) {
 		case RUSAGE_SELF:
-			r.ru_utime.tv_sec = CT_TO_SECS(p->utime);
-			r.ru_utime.tv_usec = CT_TO_USECS(p->utime);
-			r.ru_stime.tv_sec = CT_TO_SECS(p->stime);
-			r.ru_stime.tv_usec = CT_TO_USECS(p->stime);
+			r.ru_utime.tv_sec = CT_TO_SECS(p->times.tms_utime);
+			r.ru_utime.tv_usec = CT_TO_USECS(p->times.tms_utime);
+			r.ru_stime.tv_sec = CT_TO_SECS(p->times.tms_stime);
+			r.ru_stime.tv_usec = CT_TO_USECS(p->times.tms_stime);
 			r.ru_minflt = p->min_flt;
 			r.ru_majflt = p->maj_flt;
 			r.ru_nswap = p->nswap;
 			break;
 		case RUSAGE_CHILDREN:
-			r.ru_utime.tv_sec = CT_TO_SECS(p->cutime);
-			r.ru_utime.tv_usec = CT_TO_USECS(p->cutime);
-			r.ru_stime.tv_sec = CT_TO_SECS(p->cstime);
-			r.ru_stime.tv_usec = CT_TO_USECS(p->cstime);
+			r.ru_utime.tv_sec = CT_TO_SECS(p->times.tms_cutime);
+			r.ru_utime.tv_usec = CT_TO_USECS(p->times.tms_cutime);
+			r.ru_stime.tv_sec = CT_TO_SECS(p->times.tms_cstime);
+			r.ru_stime.tv_usec = CT_TO_USECS(p->times.tms_cstime);
 			r.ru_minflt = p->cmin_flt;
 			r.ru_majflt = p->cmaj_flt;
 			r.ru_nswap = p->cnswap;
 			break;
 		default:
-			r.ru_utime.tv_sec = CT_TO_SECS(p->utime + p->cutime);
-			r.ru_utime.tv_usec = CT_TO_USECS(p->utime + p->cutime);
-			r.ru_stime.tv_sec = CT_TO_SECS(p->stime + p->cstime);
-			r.ru_stime.tv_usec = CT_TO_USECS(p->stime + p->cstime);
+			r.ru_utime.tv_sec = CT_TO_SECS(p->times.tms_utime + p->times.tms_cutime);
+			r.ru_utime.tv_usec = CT_TO_USECS(p->times.tms_utime + p->times.tms_cutime);
+			r.ru_stime.tv_sec = CT_TO_SECS(p->times.tms_stime + p->times.tms_cstime);
+			r.ru_stime.tv_usec = CT_TO_USECS(p->times.tms_stime + p->times.tms_cstime);
 			r.ru_minflt = p->min_flt + p->cmin_flt;
 			r.ru_majflt = p->maj_flt + p->cmaj_flt;
 			r.ru_nswap = p->nswap + p->cnswap;

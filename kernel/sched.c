@@ -1000,16 +1000,14 @@ static inline void do_process_times(struct task_struct *p,
 {
 	long psecs;
 
-	p->utime += user;
-	p->stime += system;
-
-	psecs = (p->stime + p->utime) / HZ;
-	if (psecs > p->rlim[RLIMIT_CPU].rlim_cur) {
+	psecs = (p->times.tms_utime += user);
+	psecs += (p->times.tms_stime += system);
+	if (psecs / HZ > p->rlim[RLIMIT_CPU].rlim_cur) {
 		/* Send SIGXCPU every second.. */
-		if (psecs * HZ == p->stime + p->utime)
+		if (!(psecs % HZ))
 			send_sig(SIGXCPU, p, 1);
 		/* and SIGKILL when we go over max.. */
-		if (psecs > p->rlim[RLIMIT_CPU].rlim_max)
+		if (psecs / HZ > p->rlim[RLIMIT_CPU].rlim_max)
 			send_sig(SIGKILL, p, 1);
 	}
 }

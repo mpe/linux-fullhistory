@@ -1,8 +1,8 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 39
+SUBLEVEL = 40
 
-ARCH := $(shell uname -m | sed s/i.86/i386/)
+ARCH := $(shell uname -m | sed s/i.86/i386/ | sed s/sun4u/sparc64/)
 
 #
 # For SMP kernels, set this. We don't want to have this in the config file

@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.6 1997/04/16 10:27:17 jj Exp $
+/*  $Id: signal32.c,v 1.8 1997/05/18 08:42:15 davem Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -29,8 +29,6 @@
 #define _S(nr) (1<<((nr)-1))
 
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
-
-#define synchronize_user_stack() do { } while (0)
 
 asmlinkage int sys_wait4(pid_t pid, unsigned long *stat_addr,
 			 int options, unsigned long *ru);
@@ -116,17 +114,6 @@ asmlinkage void _sigpause32_common(unsigned int set, struct pt_regs *regs)
 			return;
 	}
 }
-
-asmlinkage void do_sigpause32(unsigned int set, struct pt_regs *regs)
-{
-	_sigpause32_common(set, regs);
-}
-
-asmlinkage void do_sigsuspend32(struct pt_regs *regs)
-{
-	_sigpause32_common(regs->u_regs[UREG_I0], regs);
-}
-
 
 static inline void
 restore_fpu_state32(struct pt_regs *regs, __siginfo_fpu32_t *fpu)
@@ -248,7 +235,9 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 {
 	struct signal_sframe32 *sframep;
 	struct sigcontext32 *sc;
+#if 0	
 	int window = 0;
+#endif	
 	int old_status = current->tss.sstk_info.cur_status;
 	unsigned psr;
 	int i;
@@ -424,7 +413,9 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	svr4_mcontext_t *mc;
 	svr4_gwindows_t *gw;
 	svr4_ucontext_t *uc;
+#if 0	
 	int window = 0;
+#endif	
 	unsigned psr;
 	int i;
 

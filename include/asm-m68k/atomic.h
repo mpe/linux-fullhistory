@@ -11,7 +11,7 @@
  */
 
 typedef struct { int counter; } atomic_t;
-#define ATOMIC_INIT	{ 0 }
+#define ATOMIC_INIT(i)	{ (i) }
 
 #define atomic_read(v)		((v)->counter)
 #define atomic_set(v, i)	(((v)->counter) = i)

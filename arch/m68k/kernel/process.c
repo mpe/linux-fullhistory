@@ -30,6 +30,7 @@
 #include <asm/traps.h>
 #include <asm/machdep.h>
 #include <asm/setup.h>
+#include <asm/pgtable.h>
 
 /*
  * Initial task structure. Make this a per-architecture thing,
@@ -37,15 +38,15 @@
  * alignment requirements and potentially different initial
  * setup.
  */
-static unsigned long init_kernel_stack[1024] = { STACK_MAGIC, };
-unsigned long init_user_stack[1024] = { STACK_MAGIC, };
 static struct vm_area_struct init_mmap = INIT_MMAP;
 static struct fs_struct init_fs = INIT_FS;
 static struct files_struct init_files = INIT_FILES;
 static struct signal_struct init_signals = INIT_SIGNALS;
-
 struct mm_struct init_mm = INIT_MM;
-struct task_struct init_task = INIT_TASK;
+
+union task_union init_task_union
+	__attribute__((section("init_task"), aligned(2*PAGE_SIZE)))
+	= { task: INIT_TASK };
 
 asmlinkage void ret_from_exception(void);
 
@@ -71,6 +72,7 @@ asmlinkage int sys_idle(void)
 #else /* portable version */
 			__asm__("stop #0x2000" : : : "cc");
 #endif /* machine compilation types */ 
+		run_task_queue(&tq_scheduler);
 		schedule();
 	}
 	ret = 0;
@@ -101,8 +103,8 @@ void show_regs(struct pt_regs * regs)
 	printk("\n");
 	printk("Format %02x  Vector: %04x  PC: %08lx  Status: %04x\n",
 	       regs->format, regs->vector, regs->pc, regs->sr);
-	printk("ORIG_D0: %08lx  D0: %08lx  A1: %08lx\n",
-	       regs->orig_d0, regs->d0, regs->a1);
+	printk("ORIG_D0: %08lx  D0: %08lx  A2: %08lx  A1: %08lx\n",
+	       regs->orig_d0, regs->d0, regs->a2, regs->a1);
 	printk("A0: %08lx  D5: %08lx  D4: %08lx\n",
 	       regs->a0, regs->d5, regs->d4);
 	printk("D3: %08lx  D2: %08lx  D1: %08lx\n",
@@ -169,8 +171,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	struct switch_stack * childstack, *stack;
 	unsigned long stack_offset, *retp;
 
-	stack_offset = PAGE_SIZE - sizeof(struct pt_regs);
-	childregs = (struct pt_regs *) (p->kernel_stack_page + stack_offset);
+	stack_offset = 2*PAGE_SIZE - sizeof(struct pt_regs);
+	childregs = (struct pt_regs *) ((unsigned long) p + stack_offset);
 
 	*childregs = *regs;
 	childregs->d0 = 0;
@@ -256,7 +258,7 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->regs.d7 = sw->d7;
 	dump->regs.a0 = regs->a0;
 	dump->regs.a1 = regs->a1;
-	dump->regs.a2 = sw->a2;
+	dump->regs.a2 = regs->a2;
 	dump->regs.a3 = sw->a3;
 	dump->regs.a4 = sw->a4;
 	dump->regs.a5 = sw->a5;

@@ -26,7 +26,7 @@ endif
 
 LINKFLAGS = -T $(TOPDIR)/arch/m68k/vmlinux.lds
 
-CFLAGS := $(CFLAGS) -pipe -fno-strength-reduce
+CFLAGS += -pipe -fno-strength-reduce -ffixed-a2
 
 ifdef CONFIG_OPTIMIZE_040
 CFLAGS := $(CFLAGS) -m68040

@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.13 1997/05/04 07:21:00 davem Exp $
+/* $Id: etrap.S,v 1.17 1997/05/18 22:52:09 davem Exp $
  * etrap.S: Preparing for entry into the kernel on Sparc V9.
  *
  * Copyright (C) 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -50,27 +50,11 @@ etrap_irq:
 	mov		SECONDARY_CONTEXT, %g1
 	stxa		%g2, [%g1] ASI_DMMU
 
-	rdpr		%wstate, %g1
-	sll		%g1, 3, %g1
-	wrpr		%g1, %wstate
-
-	sethi		%uhi(KERNBASE), %g2
-	or		%g2, %ulo(KERNBASE), %g2
-	sethi		%hi(current_set), %g1
-	or		%g1, %lo(current_set), %g1
-	sllx		%g2, 32, %g2
-	ldx		[%g1 + %g2], %g1
-#ifdef __SMP__
-/* FIXME: Fix the above insn for SMP */
-#endif
-	rdpr		%canrestore, %g2
-	wrpr		%g0, 0, %canrestore
-	wrpr		%g2, 0, %otherwin
-
-	mov		1, %g2
-	sllx		%g2, (PAGE_SHIFT + 1), %g2
-	sub		%g2, (TRACEREG_SZ + REGWIN_SZ), %g2
+	rd		%pic, %g1
+	sethi		%hi((PAGE_SIZE<<1)-TRACEREG_SZ-REGWIN_SZ), %g2
+	or		%g2, %lo((PAGE_SIZE<<1)-TRACEREG_SZ-REGWIN_SZ), %g2
 	add		%g1, %g2, %g2
+	rdpr		%tstate, %g1
 1:
 	stx		%g1, [%g2 + REGWIN_SZ + PT_V9_TSTATE]
 	rdpr		%tpc, %g1
@@ -81,9 +65,23 @@ etrap_irq:
 	stx		%g1, [%g2 + REGWIN_SZ + PT_V9_Y]
 
 	wrpr		%g0, 0x0, %tl
-
 	rdpr		%pstate, %g1
 	save		%g2, -STACK_BIAS, %sp
+
+	/* Must guarentee that here andcc of TSTATE_PRIV at the top is
+	 * still valid in %ccr register.  Don't show this trick to your
+	 * mom. -DaveM
+	 */
+	bne,pn		%xcc, 1f
+	 rdpr		%canrestore, %g3
+	wrpr		%g0, 0, %canrestore
+	wrpr		%g3, 0, %otherwin
+
+	rdpr		%wstate, %g6
+	sll		%g6, 3, %g6
+	wrpr		%g6, %wstate
+
+1:
 	mov		%g1, %l1
 	mov		%g4, %l4
 	mov		%g5, %l5
@@ -105,15 +103,10 @@ etrap_irq:
 	stx		%i6, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I6]
 	stx		%i7, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I7]
 	wrpr		%l1, (PSTATE_IE | PSTATE_AG), %pstate
-	sethi		%uhi(KERNBASE), %g4
-	or		%g4, %ulo(KERNBASE), %g4
-	srlx		%sp, (PAGE_SHIFT + 1), %g6
-	sllx		%g4, 32, %g4
+	srlx		%sp, 43, %g4
+	rd		%pic, %g6
 	jmpl		%l2 + 0x4, %g0
-	 sllx		%g6, (PAGE_SHIFT + 1), %g6
-#ifdef __SMP__
-/* FIXME: Fix the above insn for SMP */
-#endif
+	 sllx		%g4, 43, %g4
 
 	.globl	etraptl1
 etraptl1:

@@ -933,16 +933,15 @@ void die_if_kernel (char *str, struct pt_regs *fp, int nr)
 #endif
 	console_verbose();
 	printk("%s: %08x\n",str,nr);
-	printk("PC: [<%08lx>]\nSR: %04x  SP: %p\n", fp->pc, fp->sr, fp);
+	printk("PC: [<%08lx>]\nSR: %04x  SP: %p  a2: %08lx\n",
+	       fp->pc, fp->sr, fp, fp->a2);
 	printk("d0: %08lx    d1: %08lx    d2: %08lx    d3: %08lx\n",
 	       fp->d0, fp->d1, fp->d2, fp->d3);
 	printk("d4: %08lx    d5: %08lx    a0: %08lx    a1: %08lx\n",
 	       fp->d4, fp->d5, fp->a0, fp->a1);
 
-	if (STACK_MAGIC != *(unsigned long *)current->kernel_stack_page)
-		printk("Corrupted stack page\n");
 	printk("Process %s (pid: %d, stackpage=%08lx)\n",
-		current->comm, current->pid, current->kernel_stack_page);
+		current->comm, current->pid, PAGE_SIZE+(unsigned long)current);
 #ifdef CONFIG_KGDB
 	}
 #endif

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.24 1997/05/04 07:21:21 davem Exp $
+/* $Id: processor.h,v 1.26 1997/05/17 05:59:10 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -115,6 +115,7 @@ do { \
 	regs->tpc = ((pc & (~3)) - 4); \
 	regs->tnpc = regs->tpc + 4; \
 	regs->y = 0; \
+	current->tss.flags &= ~SPARC_FLAG_32BIT; \
 	__asm__ __volatile__( \
 	"stx		%%g0, [%0 + %2 + 0x00]\n\t" \
 	"stx		%%g0, [%0 + %2 + 0x08]\n\t" \
@@ -132,7 +133,7 @@ do { \
 	"stx		%%g0, [%0 + %2 + 0x68]\n\t" \
 	"stx		%1,   [%0 + %2 + 0x70]\n\t" \
 	"stx		%%g0, [%0 + %2 + 0x78]\n\t" \
-	"wrpr		%%g0, 1, %%wstate\n\t" \
+	"wrpr		%%g0, (1 << 3), %%wstate\n\t" \
 	: \
 	: "r" (regs), "r" (sp - REGWIN_SZ), \
 	  "i" ((const unsigned long)(&((struct pt_regs *)0)->u_regs[0]))); \
@@ -168,7 +169,7 @@ do { \
 	"stx		%%g0, [%0 + %2 + 0x68]\n\t" \
 	"stx		%1,   [%0 + %2 + 0x70]\n\t" \
 	"stx		%%g0, [%0 + %2 + 0x78]\n\t" \
-	"wrpr		%%g0, 2, %%wstate\n\t" \
+	"wrpr		%%g0, (2 << 3), %%wstate\n\t" \
 	: \
 	: "r" (regs), "r" (sp - REGWIN32_SZ), \
 	  "i" ((const unsigned long)(&((struct pt_regs *)0)->u_regs[0])), \

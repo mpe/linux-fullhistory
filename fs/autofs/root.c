@@ -376,6 +376,8 @@ static inline int autofs_expire_run(struct autofs_sb_info *sbi,
 	struct autofs_packet_expire pkt;
 	struct autofs_dirhash *dh = &(sbi->dirhash);
 	
+	memset(&pkt,0,sizeof pkt);
+
 	pkt.hdr.proto_version = AUTOFS_PROTO_VERSION;
 	pkt.hdr.type = autofs_ptype_expire;
 

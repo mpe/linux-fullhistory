@@ -301,9 +301,6 @@
 #define PROD_MASTER_CARD_SCSI  (0x04)	/* Master Card SCSI Controller */
 #define PROD_MVD_819           (0x07)	/* MVD 819 */
 
-#define MANUF_DELACOMP         (0x0873)	/* DelaComp */
-#define PROD_DELACOMP_RAM_2000 (0x01)	/* RAM Expansion 2000 */
-
 #define MANUF_VILLAGE_TRONIC   (0x0877)	/* Village Tronic */
 #define PROD_DOMINO_RAM        (0x01)	/* Domino Graphics Board */
 #define PROD_DOMINO_REG        (0x02)

@@ -47,7 +47,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: May 1, 1997}
+\date{Last revised: May 20, 1997}
 \maketitle
 %
 \noindent
@@ -212,7 +212,8 @@ reply.
 \major{81}{}{char }{Brooktree Bt848 frame grabbers}
 \major{82}{}{char }{WiNRADiO communications receiver card}
 \major{83}{}{char }{Teletext/videotext interfaces}
-\major{84}{--119}{}{Unallocated}
+\major{84}{}{char }{Ikon 1011[57] Versatec Greensheet Interface}
+\major{85}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
 \major{128}{--239}{}{Unallocated}
 \major{240}{--254}{}{Local/experimental use}
@@ -492,6 +493,7 @@ physical disks.
 	\minor{6}{/dev/sunmouse}{Sun mouse}
 	\minor{7}{/dev/amigamouse1}{Second Amiga mouse}
 	\minor{8}{/dev/smouse}{Simple serial mouse driver}
+	\minor{9}{/dev/pc110pad}{IBM PC-110 digitizer pad}
 	\minor{128}{/dev/beep}{Fancy beep device}
 	\minor{129}{/dev/modreq}{Kernel module load request}
 	\minor{130}{/dev/watchdog}{Watchdog timer port}
@@ -1418,7 +1420,13 @@ Devices for the driver contained in the VideoteXt package. More information
 on {\url http://home.pages.de/~videotext/\/}.
 
 \begin{devicelist}
-\major{84}{--119}{}{Unallocated}
+\major{84}{}{char }{Ikon 1011[57] Versatec Greensheet Interface}
+	\minor{0}{/dev/ihcp0}{First Greensheet port}
+	\minor{1}{/dev/ihcp1}{Second Greensheet port}
+\end{devicelist}
+
+\begin{devicelist}
+\major{85}{--119}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

@@ -302,7 +302,7 @@ extern struct wait_queue * keypress_wait;
 #define K_F243		K(KT_FN,252)
 #define K_F244		K(KT_FN,253)
 #define K_F245		K(KT_FN,254)
-#define K_F246		K(KT_FN,255)
+#define K_UNDO		K(KT_FN,255)
 
 
 #define K_HOLE		K(KT_SPEC,0)
@@ -347,8 +347,10 @@ extern struct wait_queue * keypress_wait;
 #define K_PCOMMA	K(KT_PAD,15)	/* key-pad comma: kludge... */
 #define K_PDOT		K(KT_PAD,16)	/* key-pad dot (period): kludge... */
 #define K_PPLUSMINUS	K(KT_PAD,17)	/* key-pad plus/minus */
+#define K_PPARENL	K(KT_PAD,18)	/* key-pad left parenthesis */
+#define K_PPARENR	K(KT_PAD,19)	/* key-pad right parenthesis */
 
-#define NR_PAD		18
+#define NR_PAD		20
 
 #define K_DGRAVE	K(KT_DEAD,0)
 #define K_DACUTE	K(KT_DEAD,1)

@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.145 1997/05/04 10:02:15 ecd Exp $
+/* $Id: srmmu.c,v 1.146 1997/05/18 21:11:09 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -2255,7 +2255,7 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 					start += PAGE_SIZE;
 				}
 			}
-		} while ((vmaring = vmaring->vm_next_share) != inode->i_mmap);
+		} while ((vmaring = vmaring->vm_next_share) != NULL);
 
 		if(alias_found && !(pte_val(pte) & _SUN4C_PAGE_NOCACHE)) {
 			pgdp = srmmu_pgd_offset(vma->vm_mm, address);

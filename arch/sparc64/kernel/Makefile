@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.17 1997/05/04 07:20:58 davem Exp $
+# $Id: Makefile,v 1.20 1997/05/18 08:42:11 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -18,7 +18,7 @@ all: kernel.o head.o init_task.o
 O_TARGET := kernel.o
 O_OBJS   := etrap.o rtrap.o hack.o process.o setup.o cpu.o idprom.o \
 	    systbls.o traps.o entry.o devices.o auxio.o ioport.o \
-	    irq.o time.o sys_sparc.o
+	    irq.o time.o sys_sparc.o signal.o winfixup.o
 OX_OBJS  := sparc64_ksyms.o
 
 ifdef CONFIG_SPARC32_COMPAT
@@ -26,11 +26,16 @@ ifdef CONFIG_SPARC32_COMPAT
 endif
 
 ifdef CONFIG_BINFMT_ELF32
-  O_OBJS += sparcelf32.o
+  O_OBJS += binfmt_elf32.o
 endif
 
 head.o: head.S ttable.S itlb_miss.S dtlb_miss.S dtlb_prot.S
 	$(CC) -D__ASSEMBLY__ -ansi -c $*.S -o $*.o
+
+#
+# This is just to get the dependencies...
+#
+binfmt_elf32.o: $(TOPDIR)/fs/binfmt_elf.c
 
 check_asm: dummy
 	@echo "#include <linux/sched.h>" > tmp.c

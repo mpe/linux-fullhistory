@@ -193,6 +193,7 @@ extern void atari_scsi_setup (char *str, int *ints);
 #endif
 extern void wd33c93_setup (char *str, int *ints);
 extern void gvp11_setup (char *str, int *ints);
+extern void ncr53c7xx_setup (char *str, int *ints);
 
 #ifdef CONFIG_CYCLADES
 extern void cy_setup(char *str, int *ints);
@@ -476,6 +477,9 @@ struct {
 #endif
 #ifdef CONFIG_ATARI_SCSI
 	{ "atascsi=", atari_scsi_setup },
+#endif
+#if defined(CONFIG_A4000T_SCSI) || defined(CONFIG_WARPENGINE_SCSI) || defined(CONFIG_A4091_SCSI)
+        { "53c7xx=", ncr53c7xx_setup },
 #endif
 #if defined(CONFIG_A3000_SCSI) || defined(CONFIG_A2091_SCSI) \
 	    || defined(CONFIG_GVP11_SCSI)

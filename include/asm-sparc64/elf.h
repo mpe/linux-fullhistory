@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.4 1997/05/04 07:21:21 davem Exp $ */
+/* $Id: elf.h,v 1.6 1997/05/17 11:51:27 davem Exp $ */
 #ifndef __ASM_SPARC64_ELF_H
 #define __ASM_SPARC64_ELF_H
 
@@ -7,6 +7,7 @@
  */
 
 #include <asm/ptrace.h>
+#include <asm/processor.h>
 
 typedef unsigned long elf_greg_t;
 
@@ -19,9 +20,13 @@ typedef unsigned long elf_fpregset_t;
  * These are used to set parameters in the core dumps.
  */
 #ifndef ELF_ARCH
-#define ELF_ARCH	EM_SPARC64
-#define ELF_CLASS	ELFCLASS64
-#define ELF_DATA	ELFDATA2MSB;
+#define ELF_ARCH		EM_SPARC64
+#define ELF_CLASS		ELFCLASS64
+#define ELF_DATA		ELFDATA2MSB;
+#endif
+
+#ifndef ELF_FLAGS_INIT
+#define ELF_FLAGS_INIT current->tss.flags &= ~SPARC_FLAG_32BIT
 #endif
 
 /*
@@ -30,7 +35,6 @@ typedef unsigned long elf_fpregset_t;
 #define elf_check_arch(x) ((x) == ELF_ARCH)	/* Might be EM_SPARC64 or EM_SPARC */
 
 #define USE_ELF_CORE_DUMP
-#define ELF_EXEC_PAGESIZE	4096
-
+#define ELF_EXEC_PAGESIZE	8192
 
 #endif /* !(__ASM_SPARC64_ELF_H) */

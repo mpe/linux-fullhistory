@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.25 1997/04/28 14:57:11 davem Exp $
+/*  $Id: init.c,v 1.28 1997/05/18 04:16:53 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -457,16 +457,18 @@ void sparc_ultra_unmapioaddr(unsigned long virt_addr)
 	pte_clear(ptep);
 }
 
-#ifdef DEBUG_MMU
 void sparc_ultra_dump_itlb(void)
 {
         int slot;
 
-        prom_printf ("Contents of itlb:\n");
-        for (slot = 0; slot < 64; slot+=2) {
-        	prom_printf ("%2x:%016lx,%016lx    %2x:%016lx,%016lx\n", 
+        printk ("Contents of itlb: ");
+	for (slot = 0; slot < 14; slot++) printk ("    ");
+	printk ("%2x:%016lx,%016lx\n", 0, spitfire_get_itlb_tag(0), spitfire_get_itlb_data(0));
+        for (slot = 1; slot < 64; slot+=3) {
+        	printk ("%2x:%016lx,%016lx %2x:%016lx,%016lx %2x:%016lx,%016lx\n", 
         		slot, spitfire_get_itlb_tag(slot), spitfire_get_itlb_data(slot),
-        		slot+1, spitfire_get_itlb_tag(slot+1), spitfire_get_itlb_data(slot+1));
+        		slot+1, spitfire_get_itlb_tag(slot+1), spitfire_get_itlb_data(slot+1),
+        		slot+2, spitfire_get_itlb_tag(slot+2), spitfire_get_itlb_data(slot+2));
         }
 }
 
@@ -474,14 +476,16 @@ void sparc_ultra_dump_dtlb(void)
 {
         int slot;
 
-        prom_printf ("Contents of dtlb:\n");
-        for (slot = 0; slot < 64; slot+=2) {
-        	prom_printf ("%2x:%016lx,%016lx    %2x:%016lx,%016lx\n", 
+        printk ("Contents of dtlb: ");
+	for (slot = 0; slot < 14; slot++) printk ("    ");
+	printk ("%2x:%016lx,%016lx\n", 0, spitfire_get_dtlb_tag(0), spitfire_get_dtlb_data(0));
+        for (slot = 1; slot < 64; slot+=3) {
+        	printk ("%2x:%016lx,%016lx %2x:%016lx,%016lx %2x:%016lx,%016lx\n", 
         		slot, spitfire_get_dtlb_tag(slot), spitfire_get_dtlb_data(slot),
-        		slot+1, spitfire_get_dtlb_tag(slot+1), spitfire_get_dtlb_data(slot+1));
+        		slot+1, spitfire_get_dtlb_tag(slot+1), spitfire_get_dtlb_data(slot+1),
+        		slot+2, spitfire_get_dtlb_tag(slot+2), spitfire_get_dtlb_data(slot+2));
         }
 }
-#endif
 
 /* paging_init() sets up the page tables */
 
@@ -643,7 +647,7 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	high_memory = (void *) end_mem;
 
 	start_mem = PAGE_ALIGN(start_mem);
-	num_physpages = (start_mem - phys_base - PAGE_OFFSET) >> PAGE_SHIFT;
+	num_physpages = (start_mem - PAGE_OFFSET) >> PAGE_SHIFT;
 
 	addr = PAGE_OFFSET;
 	while(addr < start_mem) {
@@ -707,9 +711,14 @@ void free_initmem (void)
 	
 	addr = (unsigned long)(&__init_begin);
 	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
-		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
-		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
-		free_page(addr);
+		unsigned long page = addr;
+
+		if(page < ((unsigned long)__va(phys_base)))
+			page += phys_base;
+
+		mem_map[MAP_NR(page)].flags &= ~(1 << PG_reserved);
+		atomic_set(&mem_map[MAP_NR(page)].count, 1);
+		free_page(page);
 	}
 }
 

@@ -573,12 +573,12 @@ static int sun_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sec
 	spc = be16_to_cpu(label->ntrks) * be16_to_cpu(label->nsect);
 	for(i=0; i < 8; i++, p++) {
 		unsigned long st_sector;
+		int num_sectors;
 
-		/* We register all partitions, even if zero size, so that
-		 * the minor numbers end up ok as per SunOS interpretation.
-		 */
 		st_sector = first_sector + be32_to_cpu(p->start_cylinder) * spc;
-		add_partition(hd, current_minor, st_sector, be32_to_cpu(p->num_sectors));
+		num_sectors = be32_to_cpu(p->num_sectors);
+		if (num_sectors)
+			add_partition(hd, current_minor, st_sector, num_sectors);
 		current_minor++;
 	}
 	printk("\n");
@@ -592,10 +592,10 @@ static int sun_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sec
 #include <asm/byteorder.h>
 #include <linux/affs_hardblocks.h>
 
-static __inline__ __u32
-checksum_block(__u32 *m, int size)
+static __inline__ u32
+checksum_block(u32 *m, int size)
 {
-	__u32 sum = 0;
+	u32 sum = 0;
 
 	while (size--)
 		sum += htonl(*m++);

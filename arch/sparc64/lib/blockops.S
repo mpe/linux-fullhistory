@@ -1,4 +1,4 @@
-/* $Id: blockops.S,v 1.5 1997/03/26 18:34:28 jj Exp $
+/* $Id: blockops.S,v 1.6 1997/05/18 04:16:49 davem Exp $
  * arch/sparc64/lib/blockops.S: UltraSparc block zero optimized routines.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -31,37 +31,8 @@
 	.text
 	.align	4
 
-	.globl		bzero_2page, bzero_1page
-bzero_2page:
-	/* %o0 = buf */
-	mov		%o0, %o1
-	wr		%g0, ASI_BLK_P, %asi
-	mov		0x10, %g2
-
-	membar		#Sync|#StoreLoad
-
-	fzero		%f48
-	fzero		%f50
-	fzero		%f52
-	fzero		%f54
-	fzero		%f56
-	fzero		%f58
-	fzero		%f60
-	fzero		%f62
-1:
-	BLAST_BLOCK(%o0, 0x000)
-	BLAST_BLOCK(%o0, 0x100)
-	BLAST_BLOCK(%o0, 0x200)
-	BLAST_BLOCK(%o0, 0x300)
-	subcc		%g2, 1, %g2
-	bne,pt		%icc, 1b
-	 add		%o0, 0x400, %o0
-
-	membar		#Sync|#LoadStore|#StoreStore
-
-	retl
-	 mov		%o1, %o0
-
+#if 0
+	.globl		bzero_1page
 bzero_1page:
 	/* %o0 = buf */
 	mov		%o0, %o1
@@ -89,9 +60,36 @@ bzero_1page:
 
 	retl
 	 mov		%o1, %o0
+#endif
 
 	.globl		__bfill64
 __bfill64:
+#if 1
+	/* %o0 = buf, %o1 = 64-bit pattern */
+#define FILL_BLOCK(buf, offset) \
+	stx	%o1, [buf + offset + 0x38]; \
+	stx	%o1, [buf + offset + 0x30]; \
+	stx	%o1, [buf + offset + 0x28]; \
+	stx	%o1, [buf + offset + 0x20]; \
+	stx	%o1, [buf + offset + 0x18]; \
+	stx	%o1, [buf + offset + 0x10]; \
+	stx	%o1, [buf + offset + 0x08]; \
+	stx	%o1, [buf + offset + 0x00];
+
+	mov	0x20, %g2
+1:
+	FILL_BLOCK(%o0, 0x00)
+	FILL_BLOCK(%o0, 0x40)
+	FILL_BLOCK(%o0, 0x80)
+	FILL_BLOCK(%o0, 0xc0)
+	subcc	%g2, 1, %g2
+	bne,pt	%icc, 1b
+	 add	%o0, 0x100, %o0
+	retl
+	 nop
+#undef FILL_BLOCK
+
+#else
 	/* %o0 = buf */
 	stx		%o1, [%sp + 0x7ff + 128]
 	wr		%g0, ASI_BLK_P, %asi
@@ -116,7 +114,9 @@ __bfill64:
 
 	retl
 	 membar		#Sync|#LoadStore|#StoreStore
+#endif
 
+#if 0
 	.globl		__copy_1page
 __copy_1page:
 	/* %o0 = dst, %o1 = src */
@@ -135,4 +135,4 @@ __copy_1page:
 
 	retl
 	 membar		#Sync|#LoadStore|#StoreStore
-
+#endif

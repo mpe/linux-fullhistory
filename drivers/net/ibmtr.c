@@ -84,7 +84,7 @@
 /* version and credits */
 static char *version =
 "ibmtr.c: v1.3.57  8/ 7/94 Peter De Schrijver and Mark Swanson\n"
-"         v2.1.29  3/15/97 Paul Norton <pnorton@cts.com>\n";
+"         v2.1.35  5/ 1/97 Paul Norton <pnorton@cts.com>\n";
 
 static char pcchannelid[] = {
 	0x05, 0x00, 0x04, 0x09,
@@ -1013,14 +1013,15 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 			} /* ARB response */
 
 			if (status & SSB_RESP_INT) { /* SSB response */
-
+				unsigned char retcode;
 				switch (readb(ti->ssb)) { /* SSB command check */
-
+				      
 				      case XMIT_DIR_FRAME:
 				      case XMIT_UI_FRAME:
-					if (readb(ti->ssb+2)) /* checks ret_code */
+					retcode = readb(ti->ssb+2);
+					if (retcode && (retcode != 0x22)) /* checks ret_code */
 						DPRINTK("xmit ret_code: %02X xmit error code: %02X\n",
-							(int)readb(ti->ssb+2), (int)readb(ti->ssb+6));
+							(int)retcode, (int)readb(ti->ssb+6));
 					else ti->tr_stats.tx_packets++;
 					break;
 
@@ -1321,12 +1322,12 @@ static void tr_rx(struct device *dev)
 	__u32 rbuffer, rbufdata;
 	__u32 llc;
 	unsigned char *data;
-	unsigned int rbuffer_len, lan_hdr_len, hdr_len;
-	unsigned int arb_frame_len;
+	unsigned int rbuffer_len, lan_hdr_len, hdr_len, ip_len, length;
 	struct sk_buff *skb;
 	unsigned int skb_size = 0;
 	int	is8022 = 0;
 	unsigned int chksum = 0;
+	struct iphdr *iph;
 
 	rbuffer=(ti->sram
 		 +ntohs(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr))))+2;
@@ -1400,8 +1401,8 @@ static void tr_rx(struct device *dev)
        	}
 #endif
 
-       	arb_frame_len=ntohs(readw(ti->arb+offsetof(struct arb_rec_req, frame_len)));
-       	skb_size = arb_frame_len-lan_hdr_len+sizeof(struct trh_hdr);
+       	length = ntohs(readw(ti->arb+offsetof(struct arb_rec_req, frame_len)));
+       	skb_size = length-lan_hdr_len+sizeof(struct trh_hdr);
        	if (is8022) {
        		skb_size += sizeof(struct trllc);
        	}
@@ -1429,30 +1430,42 @@ static void tr_rx(struct device *dev)
 	rbuffer_len=ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_len)))-lan_hdr_len;
 
 	if (is8022) {
-		/* create whitewashed LLC header in skb buffer (why not the real one?) */
+		/* create whitewashed LLC header in sk buffer */
 		struct trllc	*local_llc = (struct trllc *)data;
 		memset(local_llc, 0, sizeof(*local_llc));
 		local_llc->ethertype = htons(ETH_P_TR_802_2);
 		hdr_len = sizeof(struct trllc);
+		/* copy the real LLC header to the sk buffer */
+		data += hdr_len;
+		memcpy_fromio(data, rbuffer+offsetof(struct rec_buf, data)+lan_hdr_len,hdr_len);
 	} else {
                 /* Copy the LLC header and the IPv4 header */
 		hdr_len = sizeof(struct trllc) + sizeof(struct iphdr);
 		memcpy_fromio(data, rbuffer+offsetof(struct rec_buf, data)+lan_hdr_len,hdr_len);
+
+		/* Watch for padded packets and bogons */
+		iph=(struct iphdr*)(data+sizeof(struct trllc));
+		ip_len = ntohs(iph->tot_len) - sizeof(struct iphdr);
+		length -= lan_hdr_len + hdr_len;
+		if ((ip_len <= length) && (ip_len > 7))
+			length = ip_len;
         }
 	data        += hdr_len;
-       	lan_hdr_len += hdr_len;
 	rbuffer_len -= hdr_len;
-	rbufdata     = rbuffer + offsetof(struct rec_buf,data) + lan_hdr_len;
+	rbufdata     = rbuffer + offsetof(struct rec_buf,data) + lan_hdr_len + hdr_len;
 
 	/* Copy the payload... */
 	for (;;) {
 		if (is8022)
 			memcpy_fromio(data, rbufdata, rbuffer_len);
 		else
-			chksum = csum_partial_copy(bus_to_virt(rbufdata), data, rbuffer_len, chksum);
+			chksum = csum_partial_copy(bus_to_virt(rbufdata), data,
+						   length < rbuffer_len ? length : rbuffer_len,
+						   chksum);
 		rbuffer = ntohs(readw(rbuffer));
 		if (!rbuffer)
 			break;
+		length -= rbuffer_len;
 		data += rbuffer_len;
 		rbuffer += ti->sram;
 		rbuffer_len = ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_len)));

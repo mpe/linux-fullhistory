@@ -52,10 +52,6 @@
 #include <linux/ctype.h>
 #include <linux/file.h>
 
-#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_HD) || defined(CONFIG_BLK_DEV_IDE_MODULE) || defined(CONFIG_BLK_DEV_HD_MODULE)
-extern struct drive_info_struct drive_info;
-#endif
-
 extern unsigned char aux_device_present, kbd_read_mask;
 
 #ifdef CONFIG_PCI
@@ -217,10 +213,6 @@ EXPORT_SYMBOL(blkdev_release);
 EXPORT_SYMBOL(gendisk_head);
 EXPORT_SYMBOL(resetup_one_dev);
 EXPORT_SYMBOL(unplug_device);
-
-#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_HD) || defined(CONFIG_BLK_DEV_IDE_MODULE) || defined(CONFIG_BLK_DEV_HD_MODULE)
-EXPORT_SYMBOL(drive_info);
-#endif
 
 /* tty routines */
 EXPORT_SYMBOL(tty_hangup);

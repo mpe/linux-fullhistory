@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.7 1997/04/04 00:50:23 davem Exp $ */
+/* $Id: mmu_context.h,v 1.8 1997/05/18 20:44:23 davem Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -63,11 +63,21 @@ extern __inline__ void get_mmu_context(struct task_struct *tsk)
 	   !(tsk->tss.flags & SPARC_FLAG_KTHREAD)	&&
 	   !(tsk->flags & PF_EXITING)) {
 		unsigned long ctx = tlb_context_cache;
+		register unsigned long paddr asm("o5");
 
 		flushw_user();
 		if((mm->context ^ ctx) & CTX_VERSION_MASK)
 			get_new_mmu_context(mm, ctx);
 		spitfire_set_secondary_context(mm->context);
+		paddr = __pa(mm->pgd);
+		__asm__ __volatile__("
+			rdpr		%%pstate, %%o4
+			wrpr		%%o4, %1, %%pstate
+			mov		%0, %%g7
+			wrpr		%%o4, 0x0, %%pstate
+		" : /* no outputs */
+		  : "r" (paddr), "i" (PSTATE_MG|PSTATE_IE)
+		  : "o4");
 	}
 }
 

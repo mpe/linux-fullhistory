@@ -532,12 +532,15 @@ sys_cacheflush (unsigned long addr, int scope, int cache, unsigned long len)
 		 */
 		vma = find_vma (current->mm, addr);
 		ret = -EINVAL;
+		/* Check for overflow.  */
+		if (addr + len < addr)
+			goto out;
 		if (vma == NULL || addr < vma->vm_start || addr + len > vma->vm_end)
 			goto out;
 	}
 
 	if (CPU_IS_020_OR_030) {
-		if (scope == FLUSH_SCOPE_LINE) {
+		if (scope == FLUSH_SCOPE_LINE && len < 256) {
 			unsigned long cacr;
 			__asm__ ("movec %%cacr, %0" : "=r" (cacr));
 			if (cache & FLUSH_CACHE_INSN)

@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.16 1997/05/14 20:48:07 davem Exp $ */
+/* $Id: system.h,v 1.19 1997/05/18 22:52:32 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -89,18 +89,24 @@ extern unsigned long empty_zero_page;
 
 #ifndef __ASSEMBLY__
 
+extern void synchronize_user_stack(void);
+
 extern __inline__ void flushw_user(void)
 {
 	__asm__ __volatile__("
 		rdpr		%%otherwin, %%g1
+		brz,pt		%%g1, 2f
+		 clr		%%g2
 1:
-		rdpr		%%otherwin, %%g2
-		brnz,pn		%%g2, 1b
-		 save		%%sp, %0, %%sp
+		save		%%sp, %0, %%sp
+		rdpr		%%otherwin, %%g1
+		brnz,pt		%%g1, 1b
+		 add		%%g2, 1, %%g2
 1:
-		subcc		%%g1, 1, %%g1
-		bne,pn		%%xcc, 1b
+		subcc		%%g2, 1, %%g2
+		bne,pt		%%xcc, 1b
 		 restore	%%g0, %%g0, %%g0
+2:
 	" : : "i" (-REGWIN_SZ)
 	  : "g1", "g2", "cc");
 }
@@ -122,9 +128,9 @@ extern __inline__ void flushw_user(void)
 
 	/* See what happens when you design the chip correctly?
 	 * NOTE NOTE NOTE this is extremely non-trivial what I
-	 * am doing here.  GCC needs only two registers to stuff
-	 * things into ('next' and &current_set[cpu])  So I "claim"
-	 * that I do not clobber them, when in fact I do.  Please,
+	 * am doing here.  GCC needs only one register to stuff
+	 * things into ('next' in particular)  So I "claim" that
+	 * I do not clobber it, when in fact I do.  Please,
 	 * when modifying this code inspect output of sched.s very
 	 * carefully to make sure things still work.  -DaveM
 	 */
@@ -132,7 +138,6 @@ extern __inline__ void flushw_user(void)
 do {											\
 	__label__ switch_continue;							\
 	register unsigned long task_pc asm("o7");					\
-	extern struct task_struct *current_set[NR_CPUS];				\
 	SWITCH_DO_LAZY_FPU(next);							\
 	task_pc = ((unsigned long) &&switch_continue) - 0x8;				\
 	__asm__ __volatile__(								\
@@ -142,14 +147,12 @@ do {											\
 	"stx	%%o6, [%%g6 + %3]\n\t"							\
 	"rdpr	%%wstate, %%o5\n\t"							\
 	"stx	%%o7, [%%g6 + %4]\n\t"							\
-	"mov	%6, %%o4\n\t"								\
 	"stx	%%o5, [%%g6 + %2]\n\t"							\
-	"st	%%o4, [%%g6 + %7]\n\t"							\
 	"rdpr	%%cwp, %%o5\n\t"							\
-	"stx	%%o5, [%%g6 + %8]\n\t"							\
-	"mov	%1, %%g6\n\t"								\
-	"stx	%%g6, [%0]\n\t"								\
-	"ldx	[%%g6 + %8], %%g1\n\t"							\
+	"stx	%%o5, [%%g6 + %5]\n\t"							\
+	"mov	%0, %%g6\n\t"								\
+	"wr	%0, 0x0, %%pic\n\t"							\
+	"ldx	[%%g6 + %5], %%g1\n\t"							\
 	"wrpr	%%g1, %%cwp\n\t"							\
 	"ldx	[%%g6 + %2], %%o5\n\t"							\
 	"ldx	[%%g6 + %3], %%o6\n\t"							\
@@ -159,15 +162,13 @@ do {											\
 	"jmpl	%%o7 + 0x8, %%g0\n\t"							\
 	" ldx	[%%sp + 2047 + 0x78], %%i7\n\t"						\
 	: /* No outputs */								\
-	: "r" (&(current_set[smp_processor_id()])), "r" (next),				\
+	: "r" (next), "r" (task_pc),							\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.wstate)),		\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),		\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.kpc)),		\
-	  "r" (task_pc), "i" (255),							\
-	  "i" ((const unsigned long)(&((struct task_struct *)0)->processor)),		\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.cwp))		\
 	: "cc", "g1", "g2", "g3", "g5", "g7",						\
-	  "l2", "l3", "l4", "l5", "l6", "l7",						\
+	  "l1", "l2", "l3", "l4", "l5", "l6", "l7",					\
 	  "i0", "i1", "i2", "i3", "i4", "i5",						\
 	  "o0", "o1", "o2", "o3", "o4", "o5");						\
 switch_continue: } while(0)

@@ -366,8 +366,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		do {
 			if (vma->vm_flags & VM_MAYSHARE)
 				return (-EAGAIN);
-			vma = vma->vm_next_share;
-		} while (vma != inode->i_mmap);
+		} while ((vma = vma->vm_next_share) != NULL);
 	}
 
 	if (copy_from_user(&flock, l, sizeof(flock)))

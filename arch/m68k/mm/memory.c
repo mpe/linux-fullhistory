@@ -280,6 +280,8 @@ static unsigned long transp_transl_matches( unsigned long regval,
     return( (vaddr & mask) == (base & mask) );
 }
 
+static unsigned long mm_vtop_fallback (unsigned long);
+
 /*
  * The following two routines map from a physical address to a kernel
  * virtual address and vice versa.
@@ -301,7 +303,13 @@ unsigned long mm_vtop (unsigned long vaddr)
 			offset += m68k_memory[i].size;
 		i++;
 	}while (i < m68k_num_memory);
+	return mm_vtop_fallback(vaddr);
+}
 
+/* Separate function to make the common case faster (needs to save less
+   registers) */
+static unsigned long mm_vtop_fallback (unsigned long vaddr)
+{
 	/* not in one of the memory chunks; test for applying transparent
 	 * translation */
 

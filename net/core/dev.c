@@ -986,6 +986,9 @@ static int dev_ifconf(char *arg)
 	/*
 	 *	Loop over the interfaces, and write an info block for each. 
 	 */
+	 
+	dev_lock_wait();
+	dev_lock_list();
 
 	for (dev = dev_base; dev != NULL; dev = dev->next) 
 	{
@@ -1013,6 +1016,8 @@ static int dev_ifconf(char *arg)
 		len -= sizeof(struct ifreq);		
   	}
 
+	dev_unlock_list();
+	
 	/*
 	 *	All done.  Write the updated control block back to the caller. 
 	 */

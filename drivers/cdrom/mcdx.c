@@ -359,6 +359,10 @@ mcdx_ioctl(
             msf.cdmsf_sec1 = uint2bcd(msf.cdmsf_sec1);
             msf.cdmsf_frame1 = uint2bcd(msf.cdmsf_frame1);
 
+            stuffp->stop.dt.minute = msf.cdmsf_min1;
+            stuffp->stop.dt.second = msf.cdmsf_sec1;
+            stuffp->stop.dt.frame = msf.cdmsf_frame1;
+
             return mcdx_playmsf(stuffp, &msf);
         }
 

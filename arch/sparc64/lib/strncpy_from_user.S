@@ -24,14 +24,14 @@ __strncpy_from_user:
 	sub	%g0, %o2, %o3
 	add	%o0, %o2, %o0
 10:
-	ldub	[%o1 + %o3], %o4
+	lduba	[%o1 + %o3] ASI_S, %o4
 1:
 	brz,pn	%o4, 2f
 	 stb	%o4, [%o0 + %o3]
 	addcc	%o3, 1, %o3
 	bne,pt	%xcc, 1b
 11:
-	 ldub	[%o1 + %o3], %o4
+	 lduba	[%o1 + %o3] ASI_S, %o4
 	retl
 	 mov	%o2, %o0
 2:

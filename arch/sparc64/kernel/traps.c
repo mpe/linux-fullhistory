@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.5 1997/04/14 06:56:55 davem Exp $
+/* $Id: traps.c,v 1.10 1997/05/18 08:42:16 davem Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -22,6 +22,7 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/unistd.h>
+#include <asm/uaccess.h>
 
 /* #define TRAP_DEBUG */
 
@@ -42,6 +43,8 @@ void syscall_trace_entry(struct pt_regs *regs)
 
 void syscall_trace_exit(struct pt_regs *regs)
 {
+	printk("Syscall return check, reg dump.\n");
+	show_regs(regs);
 }
 
 void sparc64_dtlb_fault_handler (void)
@@ -116,25 +119,45 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 	show_regs(regs);
 	printk("Instruction DUMP:");
 	instruction_dump ((unsigned int *) regs->tpc);
+	while(1)
+		barrier();
 	if(regs->tstate & TSTATE_PRIV)
 		do_exit(SIGKILL);
 	do_exit(SIGSEGV);
 }
 
-void do_illegal_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-			    unsigned long tstate)
+void do_illegal_instruction(struct pt_regs *regs)
 {
+	unsigned long pc = regs->tpc;
+	unsigned long tstate = regs->tstate;
+
 	lock_kernel();
 	if(tstate & TSTATE_PRIV)
 		die_if_kernel("Kernel illegal instruction", regs);
-#ifdef TRAP_DEBUG
-	printk("Ill instr. at pc=%016lx instruction is %08x\n",
-	       regs->tpc, *(unsigned int *)regs->tpc);
+#if 1
+	{
+		unsigned int insn;
+
+		printk("Ill instr. at pc=%016lx ", pc);
+		get_user(insn, ((unsigned int *)pc));
+		printk("insn=[%08x]\n", insn);
+	}
 #endif
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_ILLINST;
 	send_sig(SIGILL, current, 1);
 	unlock_kernel();
+
+	while(1)
+		barrier();
+}
+
+void do_mna(struct pt_regs *regs)
+{
+	printk("AIEEE: do_mna at %016lx\n", regs->tpc);
+	show_regs(regs);
+	while(1)
+		barrier();
 }
 
 void do_priv_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,

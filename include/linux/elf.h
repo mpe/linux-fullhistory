@@ -3,11 +3,20 @@
 
 #include <asm/elf.h>
 
-typedef unsigned long	Elf32_Addr;
-typedef unsigned short	Elf32_Half;
-typedef unsigned long	Elf32_Off;
-typedef long		Elf32_Sword;
-typedef unsigned long	Elf32_Word;
+/* 32-bit ELF base types. */
+typedef __u32	Elf32_Addr;
+typedef __u16	Elf32_Half;
+typedef __u32	Elf32_Off;
+typedef __s32	Elf32_Sword;
+typedef __u32	Elf32_Word;
+
+/* 64-bit ELF base types. */
+typedef __u64	Elf64_Addr;
+typedef __u16	Elf64_Half;
+typedef __s16	Elf64_SHalf;
+typedef __u64	Elf64_Off;
+typedef __s64	Elf64_Sword;
+typedef __u64	Elf64_Word;
 
 /* These constants are for the segment types stored in the image headers */
 #define PT_NULL    0
@@ -128,10 +137,10 @@ typedef struct dynamic{
 } Elf32_Dyn;
 
 typedef struct {
-  unsigned long long d_tag;		/* entry tag value */
+  Elf64_Word d_tag;		/* entry tag value */
   union {
-    unsigned long long d_val;
-    unsigned long long d_ptr;
+    Elf64_Word d_val;
+    Elf64_Word d_ptr;
   } d_un;
 } Elf64_Dyn;
 
@@ -226,8 +235,8 @@ typedef struct elf32_rel {
 } Elf32_Rel;
 
 typedef struct elf64_rel {
-  unsigned long long r_offset;	/* Location at which to apply the action */
-  unsigned long long r_info;	/* index and type of relocation */
+  Elf64_Addr r_offset;	/* Location at which to apply the action */
+  Elf64_Word r_info;	/* index and type of relocation */
 } Elf64_Rel;
 
 typedef struct elf32_rela{
@@ -237,9 +246,9 @@ typedef struct elf32_rela{
 } Elf32_Rela;
 
 typedef struct elf64_rela {
-  unsigned long long r_offset;	/* Location at which to apply the action */
-  unsigned long long r_info;	/* index and type of relocation */
-  unsigned long long r_addend;	/* Constant addend used to compute value */
+  Elf64_Addr r_offset;	/* Location at which to apply the action */
+  Elf64_Word r_info;	/* index and type of relocation */
+  Elf64_Word r_addend;	/* Constant addend used to compute value */
 } Elf64_Rela;
 
 typedef struct elf32_sym{
@@ -252,12 +261,12 @@ typedef struct elf32_sym{
 } Elf32_Sym;
 
 typedef struct elf64_sym {
-  unsigned int	st_name;		/* Symbol name, index in string tbl */
-  unsigned char	st_info;		/* Type and binding attributes */
-  unsigned char	st_other;		/* No defined meaning, 0 */
-  unsigned short st_shndx;		/* Associated section index */
-  unsigned long long st_value;		/* Value of the symbol */
-  unsigned long long st_size;		/* Associated symbol size */
+  Elf32_Word st_name;		/* Symbol name, index in string tbl (yes, Elf32) */
+  unsigned char	st_info;	/* Type and binding attributes */
+  unsigned char	st_other;	/* No defined meaning, 0 */
+  Elf64_Half st_shndx;		/* Associated section index */
+  Elf64_Addr st_value;		/* Value of the symbol */
+  Elf64_Word st_size;		/* Associated symbol size */
 } Elf64_Sym;
 
 
@@ -282,19 +291,19 @@ typedef struct elf32_hdr{
 
 typedef struct elf64_hdr {
   unsigned char	e_ident[16];		/* ELF "magic number" */
-  short int e_type;
-  short unsigned int e_machine;
-  int   e_version;
-  unsigned long long e_entry;		/* Entry point virtual address */
-  unsigned long long e_phoff;		/* Program header table file offset */
-  unsigned long long e_shoff;		/* Section header table file offset */
-  int   e_flags;
-  short int e_ehsize;
-  short int e_phentsize;
-  short int e_phnum;
-  short int e_shentsize;
-  short int e_shnum;
-  short int e_shstrndx;
+  Elf64_SHalf e_type;
+  Elf64_Half e_machine;
+  __s32 e_version;
+  Elf64_Addr e_entry;		/* Entry point virtual address */
+  Elf64_Off e_phoff;		/* Program header table file offset */
+  Elf64_Off e_shoff;		/* Section header table file offset */
+  __s32 e_flags;
+  Elf64_SHalf e_ehsize;
+  Elf64_SHalf e_phentsize;
+  Elf64_SHalf e_phnum;
+  Elf64_SHalf e_shentsize;
+  Elf64_SHalf e_shnum;
+  Elf64_SHalf e_shstrndx;
 } Elf64_Ehdr;
 
 /* These constants define the permissions on sections in the program
@@ -315,14 +324,14 @@ typedef struct elf32_phdr{
 } Elf32_Phdr;
 
 typedef struct elf64_phdr {
-  int p_type;
-  int p_flags;
-  unsigned long long p_offset;		/* Segment file offset */
-  unsigned long long p_vaddr;		/* Segment virtual address */
-  unsigned long long p_paddr;		/* Segment physical address */
-  unsigned long long p_filesz;		/* Segment size in file */
-  unsigned long long p_memsz;		/* Segment size in memory */
-  unsigned long long p_align;		/* Segment alignment, file & memory */
+  __s32 p_type;
+  __s32 p_flags;
+  Elf64_Off p_offset;		/* Segment file offset */
+  Elf64_Addr p_vaddr;		/* Segment virtual address */
+  Elf64_Addr p_paddr;		/* Segment physical address */
+  Elf64_Word p_filesz;		/* Segment size in file */
+  Elf64_Word p_memsz;		/* Segment size in memory */
+  Elf64_Word p_align;		/* Segment alignment, file & memory */
 } Elf64_Phdr;
 
 /* sh_type */
@@ -373,16 +382,16 @@ typedef struct {
 } Elf32_Shdr;
 
 typedef struct elf64_shdr {
-  unsigned int	sh_name;		/* Section name, index in string tbl */
-  unsigned int	sh_type;		/* Type of section */
-  unsigned long long sh_flags;		/* Miscellaneous section attributes */
-  unsigned long long sh_addr;		/* Section virtual addr at execution */
-  unsigned long long sh_offset;		/* Section file offset */
-  unsigned long long sh_size;		/* Size of section in bytes */
-  unsigned int	sh_link;		/* Index of another section */
-  unsigned int	sh_info;		/* Additional section information */
-  unsigned long long sh_addralign;	/* Section alignment */
-  unsigned long long sh_entsize;	/* Entry size if section holds table */
+  Elf32_Word sh_name;		/* Section name, index in string tbl (yes Elf32) */
+  Elf32_Word sh_type;		/* Type of section (yes Elf32) */
+  Elf64_Word sh_flags;		/* Miscellaneous section attributes */
+  Elf64_Addr sh_addr;		/* Section virtual addr at execution */
+  Elf64_Off sh_offset;		/* Section file offset */
+  Elf64_Word sh_size;		/* Size of section in bytes */
+  Elf32_Word sh_link;		/* Index of another section (yes Elf32) */
+  Elf32_Word sh_info;		/* Additional section information (yes Elf32) */
+  Elf64_Word sh_addralign;	/* Section alignment */
+  Elf64_Word sh_entsize;	/* Entry size if section holds table */
 } Elf64_Shdr;
 
 #define	EI_MAG0		0		/* e_ident[] indexes */
@@ -434,9 +443,9 @@ typedef struct elf32_note {
  * is only 32 bits.
  */
 typedef struct elf64_note {
-  unsigned int	n_namesz;	/* Name size */
-  unsigned int	n_descsz;	/* Content size */
-  unsigned int	n_type;		/* Content type */
+  Elf32_Word n_namesz;	/* Name size */
+  Elf32_Word n_descsz;	/* Content size */
+  Elf32_Word n_type;	/* Content type */
 } Elf64_Nhdr;
 
 #define ELF_START_MMAP 0x80000000

@@ -134,7 +134,7 @@ int init_module(void)
 {
 	/* Find a name for this unit */
 	int err=dev_alloc_name(&dev_dummy,"dummy%d");
-	if(err)
+	if(err<0)
 		return err;
 	if (register_netdev(&dev_dummy) != 0)
 		return -EIO;

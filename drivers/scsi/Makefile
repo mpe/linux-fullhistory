@@ -95,6 +95,30 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_A4000T_SCSI),y)
+L_OBJS += amiga7xx.o 53c7xx.o
+else
+  ifeq ($(CONFIG_A4000T_SCSI),m)
+  M_OBJS += amiga7xx.o 53c7xx.o
+  endif
+endif
+
+ifeq ($(CONFIG_A4091_SCSI),y)
+L_OBJS += amiga7xx.o 53c7xx.o
+else
+  ifeq ($(CONFIG_A4091_SCSI),m)
+  M_OBJS += amiga7xx.o 53c7xx.o
+  endif
+endif
+
+ifeq ($(CONFIG_WARPENGINE_SCSI),y)
+L_OBJS += amiga7xx.o 53c7xx.o
+else
+  ifeq ($(CONFIG_WARPENGINE_SCSI),m)
+  M_OBJS += amiga7xx.o 53c7xx.o
+  endif
+endif
+
 ifeq ($(CONFIG_A3000_SCSI),y)
 L_OBJS += a3000.o wd33c93.o
 else
@@ -416,6 +440,16 @@ seagate.o: seagate.c
 	$(CPP) -traditional -DCHIP=810 fake.c | grep -v '^#' | perl script_asm.pl 
 	mv script.h 53c8xx_d.h
 	mv scriptu.h 53c8xx_u.h
+	rm fake.c
+
+53c7xx.o : 53c7xx_d.h 53c7xx.c
+	$(CC) $(CFLAGS) -c 53c7xx.c
+
+53c7xx_d.h 53c7xx_u.h : 53c7xx.scr script_asm.pl
+	ln -sf 53c7xx.scr fake.c
+	$(CPP) -traditional -DCHIP=710 fake.c | grep -v '^#' | perl -s script_asm.pl -ncr7x0_family
+	mv script.h 53c7xx_d.h
+	mv scriptu.h 53c7xx_u.h
 	rm fake.c
 
 ncr53c8xx.o : ncr53c8xx.c

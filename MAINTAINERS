@@ -234,6 +234,13 @@ M:	fritz@wuemaus.franken.de
 L:	isdn4linux@hub-wue.franken.de
 S:	Maintained
 
+M68K:
+P:	Jes Sorensen
+M:	Jes.Sorensen@cern.ch
+W:	http://www.clark.net/pub/lawrencc/linux/index.html
+L:	linux-m68k@phil.uni-sb.de
+S:	Maintained
+
 MODULE SUPPORT [GENERAL], KERNELD
 P:	Bjorn Ekwall
 M:	bj0rn@blox.se

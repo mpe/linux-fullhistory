@@ -395,8 +395,8 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->real_timer.data = (unsigned long) p;
 	p->leader = 0;		/* session leadership doesn't inherit */
 	p->tty_old_pgrp = 0;
-	p->utime = p->stime = 0;
-	p->cutime = p->cstime = 0;
+	p->times.tms_utime = p->times.tms_stime = 0;
+	p->times.tms_cutime = p->times.tms_cstime = 0;
 #ifdef __SMP__
 	p->has_cpu = 0;
 	p->processor = NO_PROC_ID;

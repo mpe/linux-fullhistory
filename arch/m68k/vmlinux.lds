@@ -9,6 +9,7 @@ SECTIONS
   .text : {
 	*(.text)
 	*(.fixup)
+	*(.text.lock)		/* out-of-line lock text */
 	*(.gnu.warning)
 	} = 0x4e75
   .rodata : { *(.rodata) }
@@ -29,6 +30,9 @@ SECTIONS
 	*(.data)
 	CONSTRUCTORS
 	}
+
+  . = ALIGN(8192);
+  init_task : { *(init_task) }	/* The initial task and kernel stack */
 
   _edata = .;			/* End of data section */
 

@@ -77,6 +77,8 @@ static void autofs_notify_daemon(struct autofs_sb_info *sbi, struct autofs_wait_
 	DPRINTK(("autofs_wait: wait id = 0x%08lx, name = ", wq->wait_queue_token));
 	autofs_say(wq->name,wq->len);
 
+	memset(&pkt,0,sizeof pkt); /* For security reasons */
+
 	pkt.hdr.proto_version = AUTOFS_PROTO_VERSION;
 	pkt.hdr.type = autofs_ptype_missing;
 	pkt.wait_queue_token = wq->wait_queue_token;
@@ -96,7 +98,7 @@ int autofs_wait(struct autofs_sb_info *sbi, autofs_hash_t hash, const char *name
 	for ( wq = sbi->queues ; wq ; wq = wq->next ) {
 		if ( wq->hash == hash &&
 		     wq->len == len &&
-		     !memcmp(wq->name,name,len) )
+		     wq->name && !memcmp(wq->name,name,len) )
 			break;
 	}
 	
@@ -115,12 +117,13 @@ int autofs_wait(struct autofs_sb_info *sbi, autofs_hash_t hash, const char *name
 		init_waitqueue(&wq->queue);
 		wq->hash = hash;
 		wq->len = len;
+		wq->status = -EINTR; /* Status return if interrupted */
 		memcpy(wq->name, name, len);
 		wq->next = sbi->queues;
 		sbi->queues = wq;
 
 		/* autofs_notify_daemon() may block */
-		wq->wait_ctr++;
+		wq->wait_ctr = 1;
 		autofs_notify_daemon(sbi,wq);
 	} else
 		wq->wait_ctr++;
@@ -132,7 +135,8 @@ int autofs_wait(struct autofs_sb_info *sbi, autofs_hash_t hash, const char *name
 		DPRINTK(("autofs_wait: skipped sleeping\n"));
 	}
 
-	status = (current->signal & ~current->blocked) ? -EINTR : wq->status;
+	status = wq->status;
+
 	if ( ! --wq->wait_ctr )	/* Are we the last process to need status? */
 		kfree(wq);
 
