@@ -180,7 +180,7 @@ again:
 			goto again;
 		}
 
-		if (ismydir && cache->mtime != NFS_OLDMTIME(inode))
+		if (ismydir && cache->mtime != inode->i_mtime)
 			cache->valid = 0;
 
 		if (!cache->valid || cache->age < dead) {
@@ -207,7 +207,7 @@ again:
 			if (j < cache->size - 1) {
 				index = j + 1;
 				entry = this_ent + 3;
-			} else if (*(this_ent+2) >> 16) {
+			} else if (*(this_ent+2) & (1 << 15)) {
 				/* eof */
 				return 0;
 			}
@@ -253,7 +253,7 @@ again:
 		cache->valid = 1;
 		entry = cache->entry + (index = 0);
 	}
-	cache->mtime = NFS_OLDMTIME(inode);
+	cache->mtime = inode->i_mtime;
 	cache->age = jiffies;
 
 	/*
@@ -926,99 +926,6 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		/* Update the dcache */
 		d_move(old_dentry, new_dentry);
 	}
-	return error;
-}
-
-/*
- * Many nfs protocol calls return the new file attributes after
- * an operation.  Here we update the inode to reflect the state
- * of the server's inode.
- */
-
-int nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
-{
-	int error = -EIO;
-
-	dfprintk(VFS, "NFS: refresh_inode(%x/%ld ct=%d)\n",
-		 inode->i_dev, inode->i_ino, inode->i_count);
-
-	if (!inode || !fattr) {
-		printk("nfs_refresh_inode: inode or fattr is NULL\n");
-		goto out;
-	}
-	if (inode->i_ino != fattr->fileid) {
-		printk("nfs_refresh_inode: inode number mismatch\n");
-		goto out;
-	}
-	/*
-	 * Check whether the mode has been set, as we only want to
-	 * do this once. (We don't allow inodes to change types.)
-	 */
-	if (inode->i_mode == 0) {
-		inode->i_mode = fattr->mode;
-		if (S_ISREG(inode->i_mode))
-			inode->i_op = &nfs_file_inode_operations;
-		else if (S_ISDIR(inode->i_mode))
-			inode->i_op = &nfs_dir_inode_operations;
-		else if (S_ISLNK(inode->i_mode))
-			inode->i_op = &nfs_symlink_inode_operations;
-		else if (S_ISCHR(inode->i_mode)) {
-			inode->i_op = &chrdev_inode_operations;
-			inode->i_rdev = to_kdev_t(fattr->rdev);
-		} else if (S_ISBLK(inode->i_mode)) {
-			inode->i_op = &blkdev_inode_operations;
-			inode->i_rdev = to_kdev_t(fattr->rdev);
-		} else if (S_ISFIFO(inode->i_mode))
-			init_fifo(inode);
-		else
-			inode->i_op = NULL;
-	} else if ((inode->i_mode & S_IFMT) == (fattr->mode & S_IFMT)) {
-		inode->i_mode = fattr->mode;
-	} else {
-		mode_t old_mode;
-		/*
-		 * Big trouble! The inode has become a different object.
-		 */
-#if 1
-printk("nfs_refresh_inode: mode changed, %07o to %07o\n",
-inode->i_mode, fattr->mode);
-#endif
-		old_mode = inode->i_mode; /* save mode */
-		make_bad_inode(inode);
-		inode->i_mode = old_mode; /* restore mode */
-		inode->i_nlink = 0;
-		/*
-		 * No need to worry about unhashing the dentry, as the
-		 * lookup validation will know that the inode is bad.
-		 * (But we do want to invalidate the caches.)
-		 */
-		invalidate_inode_pages(inode);
-		nfs_invalidate_dircache(inode);
-		goto out;
-	}
-
-	inode->i_nlink = fattr->nlink;
-	inode->i_uid = fattr->uid;
-	inode->i_gid = fattr->gid;
-
-	/* Size changed from outside: invalidate caches on next read */
-	if (inode->i_size != fattr->size) {
-		dfprintk(PAGECACHE, "NFS:      cacheinv(%x/%ld)\n",
-					inode->i_dev, inode->i_ino);
-		NFS_CACHEINV(inode);
-	}
-	if (NFS_OLDMTIME(inode) != fattr->mtime.seconds) {
-		dfprintk(PAGECACHE, "NFS:      mtime change on %x/%ld\n",
-					inode->i_dev, inode->i_ino);
-		NFS_ATTRTIMEO(inode) = NFS_MINATTRTIMEO(inode);
-	}
-	inode->i_size = fattr->size;
-	inode->i_blocks = fattr->blocks;
-	inode->i_atime = fattr->atime.seconds;
-	inode->i_mtime = fattr->mtime.seconds;
-	inode->i_ctime = fattr->ctime.seconds;
-	error = 0;
-out:
 	return error;
 }
 

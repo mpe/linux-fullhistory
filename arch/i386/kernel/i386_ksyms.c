@@ -63,6 +63,7 @@ EXPORT_SYMBOL(__global_restore_flags);
 
 #ifdef CONFIG_MCA
 /* Adapter probing and info methods. */
+EXPORT_SYMBOL(machine_id);
 EXPORT_SYMBOL(mca_find_adapter);
 EXPORT_SYMBOL(mca_write_pos);
 EXPORT_SYMBOL(mca_read_pos);

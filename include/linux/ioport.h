@@ -30,7 +30,7 @@ extern unsigned long occupy_region(unsigned long base, unsigned long end,
 
 #define HAVE_AUTOIRQ
 extern void *irq2dev_map[16];		/* Use only if you own the IRQ. */
-extern int autoirq_setup(int waittime);
+extern void autoirq_setup(int waittime);
 extern int autoirq_report(int waittime);
 
 #endif	/* _LINUX_PORTIO_H */

@@ -37,6 +37,18 @@
 #  error Unable to handle more than 64 irq levels.
 #endif
 
+/* PROBE_MASK is the bitset of irqs that we consider for autoprobing: */
+#if defined(CONFIG_ALPHA_P2K)
+  /* always mask out unused timer irq 0 and RTC irq 8 */
+# define PROBE_MASK (((1UL << NR_IRQS) - 1) & ~0x101UL)
+#elif defined(CONFIG_ALPHA_ALCOR)
+  /* always mask out unused timer irq 0, "irqs" 20-30, and the EISA cascade: */
+# define PROBE_MASK (((1UL << NR_IRQS) - 1) & ~0xfff000000001UL)
+#else
+  /* always mask out unused timer irq 0: */
+# define PROBE_MASK (((1UL << NR_IRQS) - 1) & ~1UL)
+#endif
+
 /* Reserved interrupts.  These must NEVER be requested by any driver!
  */
 #define	IS_RESERVED_IRQ(irq)	((irq)==2)	/* IRQ 2 used by hw cascade */
@@ -644,10 +656,13 @@ unsigned long probe_irq_on(void)
 	unsigned int i;
 
 	for (i = NR_IRQS - 1; i > 0; i--) {
+		if (!(PROBE_MASK & (1UL << i))) {
+			continue;
+		}
 		action = irq_action[i];
 		if (!action) {
 			enable_irq(i);
-			irqs |= (1 << i);
+			irqs |= (1UL << i);
 		}
 	}
 	/*
@@ -668,14 +683,10 @@ unsigned long probe_irq_on(void)
  */
 int probe_irq_off(unsigned long irqs)
 {
+	unsigned long delay;
 	int i;
 	
-        /* as irq 0 & 8 handling don't use this function, i didn't
-	 * bother changing the following: */
-        irqs &= irq_mask & ~1;  /* always mask out irq 0---it's the unused timer */
-#ifdef CONFIG_ALPHA_P2K
-	irqs &= ~(1 << 8);	/* mask out irq 8 since that's the unused RTC input to PIC */
-#endif
+        irqs &= irq_mask;
 	if (!irqs)
 		return 0;
 	i = ffz(~irqs);

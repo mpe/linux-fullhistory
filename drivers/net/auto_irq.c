@@ -39,76 +39,18 @@ static const char *version=
 #include <asm/irq.h>
 #include <linux/netdevice.h>
 
-struct device *irq2dev_map[16] = {0, 0, /* ... zeroed */};
+struct device *irq2dev_map[NR_IRQS] = {0, 0, /* ... zeroed */};
 
-unsigned long irqs_busy = 0x2147;		/* The set of fixed IRQs (keyboard, timer, etc) */
-unsigned long irqs_used = 0x0001;		/* The set of fixed IRQs sometimes enabled. */
-unsigned long irqs_reserved = 0x0000;		/* An advisory "reserved" table. */
-unsigned long irqs_shared = 0x0000;		/* IRQ lines "shared" among conforming cards.*/
+static unsigned long irqs;
 
-static volatile unsigned long irq_bitmap;	/* The irqs we actually found. */
-static unsigned long irq_handled;		/* The irq lines we have a handler on. */
-static volatile int irq_number;			/* The latest irq number we actually found. */
-
-static void autoirq_probe(int irq, void *dev_id, struct pt_regs * regs)
+void autoirq_setup(int waittime)
 {
-	irq_number = irq;
-	set_bit(irq, (void *)&irq_bitmap);	/* irq_bitmap |= 1 << irq; */
-	disable_irq(irq);
-	return;
-}
-
-int autoirq_setup(int waittime)
-{
-	int i, mask;
-	int timeout = jiffies + waittime;
-	int boguscount = (waittime*loops_per_sec) / 100;
-
-	irq_handled = 0;
-	for (i = 0; i < 16; i++) {
-		if (test_bit(i, &irqs_busy) == 0
-			&& request_irq(i, autoirq_probe, SA_INTERRUPT, "irq probe", NULL) == 0)
-			set_bit(i, (void *)&irq_handled);	/* irq_handled |= 1 << i;*/
-	}
-	/* Update our USED lists. */
-	irqs_used |= ~irq_handled;
-	irq_number = 0;
-	irq_bitmap = 0;
-
-	/* Hang out at least <waittime> jiffies waiting for bogus IRQ hits. */
-	while (timeout > jiffies  &&  --boguscount > 0)
-		;
-
-	for (i = 0, mask = 0x01; i < 16; i++, mask <<= 1) {
-		if (irq_bitmap & irq_handled & mask) {
-			irq_handled &= ~mask;
-#ifdef notdef
-			printk(" Spurious interrupt on IRQ %d\n", i);
-#endif
-			free_irq(i, NULL);
-		}
-	}
-	return irq_handled;
+	irqs = probe_irq_on();
 }
 
 int autoirq_report(int waittime)
 {
-	int i;
-	int timeout = jiffies+waittime;
-	int boguscount = (waittime*loops_per_sec) / 100;
-
-	/* Hang out at least <waittime> jiffies waiting for the IRQ. */
-
-	while (timeout > jiffies  &&  --boguscount > 0)
-		if (irq_number)
-			break;
-
-	/* Retract the irq handlers that we installed. */
-	for (i = 0; i < 16; i++) {
-		if (test_bit(i, (void *)&irq_handled))
-			free_irq(i, NULL);
-	}
-	return irq_number;
+	return probe_irq_off(irqs);
 }
 
 /*

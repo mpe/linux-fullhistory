@@ -1,12 +1,12 @@
-
 #ifndef _IBMMCA_H
 #define _IBMMCA_H
 
-/*
+/* 
  * Low Level Driver for the IBM Microchannel SCSI Subsystem
  */
 
 /*services provided to the higher level of Linux SCSI driver */
+int ibmmca_proc_info (char *, char **, off_t, int, int, int);
 int ibmmca_detect (Scsi_Host_Template *);
 int ibmmca_release (struct Scsi_Host *);
 int ibmmca_command (Scsi_Cmnd *);
@@ -21,9 +21,9 @@ extern struct proc_dir_entry proc_scsi_ibmmca;
 /*initialization for Scsi_host_template type */
 #define IBMMCA {                                      \
           NULL,                 /*next*/              \
-          NULL,                 /*module*/	      \
+          NULL,                 /*usage_count*/       \
           &proc_scsi_ibmmca,    /*proc_dir*/          \
-          NULL,                 /*proc info fn*/      \
+          ibmmca_proc_info,     /*proc info fn*/      \
           "IBMMCA",             /*name*/              \
           ibmmca_detect,        /*detect fn*/         \
           ibmmca_release,       /*release fn*/        \

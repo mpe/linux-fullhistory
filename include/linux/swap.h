@@ -73,7 +73,7 @@ extern unsigned int nr_swapfiles;
 extern struct swap_info_struct swap_info[];
 void si_swapinfo(struct sysinfo *);
 unsigned long get_swap_page(void);
-extern void swap_free(unsigned long);
+extern void FASTCALL(swap_free(unsigned long));
 
 /*
  * vm_ops not present page codes for shared memory.

@@ -840,6 +840,13 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
 	int retval;
 	struct vfsmount *vfsmnt;
 	
+	/*
+	 * Invalidate the inodes, as some mount options may be changed.
+	 * N.B. If we are changing media, we should check the return
+	 * from invalidate_inodes ... can't allow _any_ open files.
+	 */
+	invalidate_inodes(sb);
+
 	if (!(flags & MS_RDONLY) && sb->s_dev && is_read_only(sb->s_dev))
 		return -EACCES;
 		/*flags |= MS_RDONLY;*/
@@ -870,8 +877,14 @@ static int do_remount(const char *dir,int flags,char *data)
 		struct super_block * sb = dentry->d_inode->i_sb;
 
 		retval = -EINVAL;
-		if (dentry == sb->s_root)
+		if (dentry == sb->s_root) {
+			/*
+			 * Shrink the dcache and sync the device.
+			 */
+			shrink_dcache_sb(sb);
+			fsync_dev(sb->s_dev);
 			retval = do_remount_sb(sb, flags, data);
+		}
 		dput(dentry);
 	}
 	return retval;

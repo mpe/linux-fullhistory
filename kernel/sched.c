@@ -104,7 +104,7 @@ struct kernel_stat kstat = { 0 };
 
 static inline void add_to_runqueue(struct task_struct * p)
 {
-	if (p->counter > current->counter + 3)
+	if (p->policy != SCHED_OTHER || p->counter > current->counter + 3)
 		need_resched = 1;
 	nr_running++;
 	(p->prev_run = init_task.prev_run)->next_run = p;
@@ -649,14 +649,14 @@ int __down_interruptible(struct semaphore * sem)
 }
 
 
-static inline void __sleep_on(struct wait_queue **p, int state)
+static void FASTCALL(__sleep_on(struct wait_queue **p, int state));
+static void __sleep_on(struct wait_queue **p, int state)
 {
 	unsigned long flags;
-	struct wait_queue wait = { current, NULL };
+	struct wait_queue wait;
 
-	if (!p)
-		return;
 	current->state = state;
+	wait.task = current;
 	write_lock_irqsave(&waitqueue_lock, flags);
 	__add_wait_queue(p, &wait);
 	write_unlock(&waitqueue_lock);

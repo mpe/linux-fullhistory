@@ -196,22 +196,44 @@ nfs_writepage_sync(struct inode *inode, struct page *page,
 			clear_bit(PG_uptodate, &page->flags);
 			goto io_error;
 		}
+		if (result != wsize)
+			printk("NFS: short write, wsize=%u, result=%d\n",
+			wsize, result);
 		refresh = 1;
 		buffer  += wsize;
 		offset  += wsize;
 		written += wsize;
 		count   -= wsize;
+		/*
+		 * If we've extended the file, update the inode
+		 * now so we don't invalidate the cache.
+		 */
+		if (offset > inode->i_size)
+			inode->i_size = offset;
 	} while (count);
 
 io_error:
+	/* N.B. do we want to refresh if there was an error?? (fattr valid?) */
 	if (refresh) {
 		/* See comments in nfs_wback_result */
+		/* N.B. I don't think this is right -- sync writes in order */
 		if (fattr.size < inode->i_size)
 			fattr.size = inode->i_size;
+		if (fattr.mtime.seconds < inode->i_mtime)
+			printk("nfs_writepage_sync: prior time??\n");
 		/* Solaris 2.5 server seems to send garbled
 		 * fattrs occasionally */
-		if (inode->i_ino == fattr.fileid)
+		if (inode->i_ino == fattr.fileid) {
+			/*
+			 * We expect the mtime value to change, and
+			 * don't want to invalidate the caches.
+			 */
+			inode->i_mtime = fattr.mtime.seconds;
 			nfs_refresh_inode(inode, &fattr);
+		} 
+		else
+			printk("nfs_writepage_sync: inode %ld, got %u?\n",
+				inode->i_ino, fattr.fileid);
 	}
 
 	nfs_unlock_page(page);
@@ -327,7 +349,7 @@ create_write_request(struct inode *inode, struct page *page,
 
 	wreq = (struct nfs_wreq *) kmalloc(sizeof(*wreq), GFP_USER);
 	if (!wreq)
-		return NULL;
+		goto out_fail;
 	memset(wreq, 0, sizeof(*wreq));
 
 	task = &wreq->wb_task;
@@ -336,11 +358,8 @@ create_write_request(struct inode *inode, struct page *page,
 	task->tk_action = nfs_wback_lock;
 
 	rpcauth_lookupcred(task);	/* Obtain user creds */
-	if (task->tk_status < 0) {
-		rpc_release_task(task);
-		kfree(wreq);
-		return NULL;
-	}
+	if (task->tk_status < 0)
+		goto out_req;
 
 	/* Put the task on inode's writeback request list. */
 	wreq->wb_inode  = inode;
@@ -357,6 +376,12 @@ create_write_request(struct inode *inode, struct page *page,
 		rpc_wake_up_next(&write_queue);
 
 	return wreq;
+
+out_req:
+	rpc_release_task(task);
+	kfree(wreq);
+out_fail:
+	return NULL;
 }
 
 /*
@@ -423,6 +448,8 @@ wait_on_write_request(struct nfs_wreq *req)
 	}
 	remove_wait_queue(&page->wait, &wait);
 	current->state = TASK_RUNNING;
+if (atomic_read(&page->count) == 1)
+printk("NFS: lost a page\n");
 	atomic_dec(&page->count);
 	return retval;
 }
@@ -808,15 +835,29 @@ nfs_wback_result(struct rpc_task *task)
 		}
 		clear_bit(PG_uptodate, &page->flags);
 	} else if (!WB_CANCELLED(req)) {
+		struct nfs_fattr *fattr = req->wb_fattr;
 		/* Update attributes as result of writeback. 
 		 * Beware: when UDP replies arrive out of order, we
 		 * may end up overwriting a previous, bigger file size.
 		 */
-		if (req->wb_fattr->size < inode->i_size)
-			req->wb_fattr->size = inode->i_size;
-		/* possible Solaris 2.5 server bug workaround */
-		if (inode->i_ino == req->wb_fattr->fileid)
-			nfs_refresh_inode(inode, req->wb_fattr);
+		if (fattr->mtime.seconds >= inode->i_mtime) {
+			if (fattr->size < inode->i_size)
+				fattr->size = inode->i_size;
+
+			/* possible Solaris 2.5 server bug workaround */
+			if (inode->i_ino == fattr->fileid) {
+				/*
+				 * We expect these values to change, and
+				 * don't want to invalidate the caches.
+				 */
+				inode->i_size  = fattr->size;
+				inode->i_mtime = fattr->mtime.seconds;
+				nfs_refresh_inode(inode, fattr);
+			}
+			else
+				printk("nfs_wback_result: inode %ld, got %u?\n",
+					inode->i_ino, fattr->fileid);
+		}
 	}
 
 	rpc_release_task(task);

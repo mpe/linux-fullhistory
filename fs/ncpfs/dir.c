@@ -216,7 +216,7 @@ static int ncp_readdir(struct file *filp,
 	int result = 0;
 	int i = 0;
 	int index = 0;
-	struct inode *inode = file->f_dentry->d_inode;
+	struct inode *inode = filp->f_dentry->d_inode;
 	struct ncp_dirent *entry = NULL;
 	struct ncp_server *server = NCP_SERVER(inode);
 	struct ncp_inode_info *dir = NCP_INOP(inode);

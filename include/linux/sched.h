@@ -439,11 +439,11 @@ extern int securelevel;	/* system security level */
 
 #define CURRENT_TIME (xtime.tv_sec)
 
-extern void sleep_on(struct wait_queue ** p);
-extern void interruptible_sleep_on(struct wait_queue ** p);
-extern void wake_up(struct wait_queue ** p);
-extern void wake_up_interruptible(struct wait_queue ** p);
-extern void wake_up_process(struct task_struct * tsk);
+extern void FASTCALL(sleep_on(struct wait_queue ** p));
+extern void FASTCALL(interruptible_sleep_on(struct wait_queue ** p));
+extern void FASTCALL(wake_up(struct wait_queue ** p));
+extern void FASTCALL(wake_up_interruptible(struct wait_queue ** p));
+extern void FASTCALL(wake_up_process(struct task_struct * tsk));
 
 extern void notify_parent(struct task_struct * tsk, int signal);
 extern void force_sig(unsigned long sig,struct task_struct * p);

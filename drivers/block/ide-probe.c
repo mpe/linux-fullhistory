@@ -176,7 +176,7 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 	int rc;
 	ide_ioreg_t hd_status;
 	unsigned long timeout;
-	int irqs = 0;
+	unsigned long irqs = 0;
 
 	if (!HWIF(drive)->irq) {		/* already got an IRQ? */
 		probe_irq_off(probe_irq_on());	/* clear dangling irqs */
@@ -235,7 +235,7 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 			(void) GET_STAT();	/* clear drive IRQ */
 
 		} else {	/* Mmmm.. multiple IRQs.. don't know which was ours */
-			printk("%s: IRQ probe failed (%d)\n", drive->name, irqs);
+			printk("%s: IRQ probe failed (%ld)\n", drive->name, irqs);
 #ifdef CONFIG_BLK_DEV_CMD640
 #ifdef CMD640_DUMP_REGS
 			if (HWIF(drive)->chipset == ide_cmd640) {

@@ -42,6 +42,7 @@ static const char *version =
 #include <linux/pci.h>
 #include <linux/bios32.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 #include <asm/system.h>
 #include <asm/io.h>
 
@@ -408,6 +409,7 @@ __initfunc(static int ne_probe1(struct device *dev, int ioaddr))
 	outb_p(0x00, ioaddr + EN0_RCNTLO);
 	outb_p(0x00, ioaddr + EN0_RCNTHI);
 	outb_p(E8390_RREAD+E8390_START, ioaddr); /* Trigger it... */
+	udelay(10000);		/* wait 10ms for interrupt to propagate */
 	outb_p(0x00, ioaddr + EN0_IMR); 		/* Mask it again. */
 	dev->irq = autoirq_report(0);
 	if (ei_debug > 2)
