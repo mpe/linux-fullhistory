@@ -41,6 +41,7 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 #include <net/slhc_vj.h>
 #include <asm/atomic.h>
 
@@ -319,6 +320,7 @@ static int ppp_release(struct inode *inode, struct file *file)
 {
 	struct ppp_file *pf = (struct ppp_file *) file->private_data;
 
+	lock_kernel();
 	if (pf != 0) {
 		file->private_data = 0;
 		if (atomic_dec_and_test(&pf->refcnt)) {
@@ -332,6 +334,7 @@ static int ppp_release(struct inode *inode, struct file *file)
 			}
 		}
 	}
+	unlock_kernel();
 	return 0;
 }
 

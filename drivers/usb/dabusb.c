@@ -38,6 +38,7 @@
 #include <asm/atomic.h>
 #include <linux/delay.h>
 #include <linux/usb.h>
+#include <linux/smp_lock.h>
 
 #include "dabusb.h"
 #include "dabfirmware.h"
@@ -613,6 +614,7 @@ static int dabusb_release (struct inode *inode, struct file *file)
 
 	dbg("dabusb_release");
 
+	lock_kernel();
 	down (&s->mutex);
 	dabusb_stop (s);
 	dabusb_free_buffers (s);
@@ -626,6 +628,7 @@ static int dabusb_release (struct inode *inode, struct file *file)
 		wake_up (&s->remove_ok);
 
 	s->opened = 0;
+	unlock_kernel();
 	return 0;
 }
 

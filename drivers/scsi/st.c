@@ -31,6 +31,7 @@
 #include <linux/ioctl.h>
 #include <linux/fcntl.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 #include <asm/uaccess.h>
 #include <asm/dma.h>
 #include <asm/system.h>
@@ -620,8 +621,6 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 
 	if (STp->device->host->hostt->module)
 		__MOD_INC_USE_COUNT(STp->device->host->hostt->module);
-	if (st_template.module)
-		__MOD_INC_USE_COUNT(st_template.module);
 
 	if (mode != STp->current_mode) {
                 DEBC(printk(ST_DEB_MSG "st%d: Mode change from %d to %d.\n",
@@ -859,8 +858,6 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 	STp->in_use = 0;
 	if (STp->device->host->hostt->module)
 	    __MOD_DEC_USE_COUNT(STp->device->host->hostt->module);
-	if (st_template.module)
-	    __MOD_DEC_USE_COUNT(st_template.module);
 	return retval;
 
 }
@@ -995,6 +992,7 @@ static int scsi_tape_close(struct inode *inode, struct file *filp)
 	int dev;
 
 	dev = TAPE_NR(devt);
+	lock_kernel();
 	read_lock(&st_dev_arr_lock);
 	STp = scsi_tapes[dev];
 	read_unlock(&st_dev_arr_lock);
@@ -1010,8 +1008,7 @@ static int scsi_tape_close(struct inode *inode, struct file *filp)
 	STp->in_use = 0;
 	if (STp->device->host->hostt->module)
 		__MOD_DEC_USE_COUNT(STp->device->host->hostt->module);
-	if (st_template.module)
-		__MOD_DEC_USE_COUNT(st_template.module);
+	unlock_kernel();
 
 	return result;
 }
@@ -3428,6 +3425,7 @@ __setup("st=", st_setup);
 
 static struct file_operations st_fops =
 {
+	owner:		THIS_MODULE,
 	read:		st_read,
 	write:		st_write,
 	ioctl:		st_ioctl,

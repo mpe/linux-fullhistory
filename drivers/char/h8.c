@@ -106,16 +106,6 @@ static int h8_monitor_timer_active = 0;
 
 static char  driver_version[] = "X0.0";/* no spaces */
 
-static struct file_operations h8_fops = {
-	/* twelve lines of crap^WNULLs were here */
-};
-
-static struct miscdevice h8_device = {
-        H8_MINOR_DEV,
-        "h8",
-        &h8_fops
-};
-
 union	intr_buf intrbuf;
 int	intr_buf_ptr;
 union   intr_buf xx;	
@@ -297,7 +287,6 @@ static void h8_intr(int irq, void *dev_id, struct pt_regs *regs)
 static void __exit h8_cleanup (void)
 {
 	remove_proc_entry("driver/h8", NULL);
-        misc_deregister(&h8_device);
         release_region(h8_base, 8);
         free_irq(h8_irq, NULL);
 }
@@ -313,7 +302,6 @@ static int __init h8_init(void)
 
         create_proc_info_entry("driver/h8", 0, NULL, h8_get_info);
 
-        misc_register(&h8_device);
         request_region(h8_base, 8, "h8");
 
 	h8_alloc_queues();

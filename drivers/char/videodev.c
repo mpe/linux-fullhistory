@@ -21,6 +21,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/errno.h>
@@ -158,11 +159,9 @@ static int video_open(struct inode *inode, struct file *file)
 	if(vfl==NULL) {
 		char modname[20];
 
-		MOD_INC_USE_COUNT;
 		sprintf (modname, "char-major-%d-%d", VIDEO_MAJOR, minor);
 		request_module(modname);
 		vfl=video_device[minor];
-		MOD_DEC_USE_COUNT;
 		if (vfl==NULL)
 			return -ENODEV;
 	}
@@ -188,10 +187,13 @@ static int video_open(struct inode *inode, struct file *file)
 	
 static int video_release(struct inode *inode, struct file *file)
 {
-	struct video_device *vfl=video_device[MINOR(inode->i_rdev)];
+	struct video_device *vfl;
+	lock_kernel();
+	vfl=video_device[MINOR(inode->i_rdev)];
 	if(vfl->close)
 		vfl->close(vfl);
 	vfl->busy=0;
+	unlock_kernel();
 	return 0;
 }
 
@@ -229,11 +231,15 @@ static int video_ioctl(struct inode *inode, struct file *file,
  
 int video_mmap(struct file *file, struct vm_area_struct *vma)
 {
+	int ret = -EINVAL;
 	struct video_device *vfl=video_device[MINOR(file->f_dentry->d_inode->i_rdev)];
-	if(vfl->mmap)
-		return vfl->mmap(vfl, (char *)vma->vm_start, 
+	if(vfl->mmap) {
+		lock_kernel();
+		ret = vfl->mmap(vfl, (char *)vma->vm_start, 
 				(unsigned long)(vma->vm_end-vma->vm_start));
-	return -EINVAL;
+		unlock_kernel();
+	}
+	return ret;
 }
 
 /*
@@ -515,6 +521,7 @@ void video_unregister_device(struct video_device *vfd)
 
 static struct file_operations video_fops=
 {
+	owner:		THIS_MODULE,
 	llseek:		video_lseek,
 	read:		video_read,
 	write:		video_write,

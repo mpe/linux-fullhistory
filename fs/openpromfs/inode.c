@@ -13,6 +13,7 @@
 #include <linux/locks.h>
 #include <linux/init.h>
 #include <linux/malloc.h>
+#include <linux/smp_lock.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -507,6 +508,7 @@ int property_release (struct inode *inode, struct file *filp)
 	
 	if (!op)
 		return 0;
+	lock_kernel();
 	node = nodes[(u16)((long)inode->u.generic_ip)].node;
 	if ((u16)((long)inode->u.generic_ip) == aliases) {
 		if ((op->flag & OPP_DIRTY) && (op->flag & OPP_STRING)) {
@@ -548,6 +550,7 @@ int property_release (struct inode *inode, struct file *filp)
 				op->name);
 		}
 	}
+	unlock_kernel();
 	kfree (filp->private_data);
 	return 0;
 }

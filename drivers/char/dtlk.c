@@ -69,6 +69,7 @@
 #include <linux/poll.h>		/* for POLLIN, etc. */
 #include <linux/dtlk.h>		/* local header file for DoubleTalk values */
 #include <linux/devfs_fs_kernel.h>
+#include <linux/smp_lock.h>
 
 #ifdef TRACING
 #define TRACE_TEXT(str) printk(str);
@@ -333,7 +334,9 @@ static int dtlk_release(struct inode *inode, struct file *file)
 	}
 	TRACE_RET;
 
+	lock_kernel();
 	del_timer(&dtlk_timer);
+	unlock_kernel();
 
 	return 0;
 }

@@ -84,10 +84,9 @@
  * Locking Notes
  *
  *	INC_USE_COUNT and DEC_USE_COUNT keep track of the number of
- *	open descriptors to this driver.  When the driver is compiled
- *	as a module, they call MOD_{INC,DEC}_USE_COUNT; otherwise they
- *	bump vwsnd_use_count.  The global device list, vwsnd_dev_list,
- *	is immutable when the IN_USE is true.
+ *	open descriptors to this driver. They store it in vwsnd_use_count.
+ * 	The global device list, vwsnd_dev_list,	is immutable when the IN_USE
+ *	is true.
  *
  *	devc->open_lock is a semaphore that is used to enforce the
  *	single reader/single writer rule for /dev/audio.  The rule is
@@ -141,6 +140,7 @@
 #include <linux/module.h>
 #include <linux/stddef.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 #include <asm/fixmap.h>
 #include <asm/cobalt.h>
 #include <asm/semaphore.h>
@@ -1517,21 +1517,11 @@ typedef struct vwsnd_dev {
 
 static vwsnd_dev_t *vwsnd_dev_list;	/* linked list of all devices */
 
-#ifdef MODULE
-
-# define INC_USE_COUNT MOD_INC_USE_COUNT
-# define DEC_USE_COUNT MOD_DEC_USE_COUNT
-# define IN_USE        MOD_IN_USE
-
-#else
-
 static atomic_t vwsnd_use_count = ATOMIC_INIT(0);
 
 # define INC_USE_COUNT (atomic_inc(&vwsnd_use_count))
 # define DEC_USE_COUNT (atomic_dec(&vwsnd_use_count))
 # define IN_USE        (atomic_read(&vwsnd_use_count) != 0)
-
-#endif
 
 /*
  * Lithium can only DMA multiples of 32 bytes.  Its DMA buffer may
@@ -2998,6 +2988,7 @@ static int vwsnd_audio_release(struct inode *inode, struct file *file)
 	vwsnd_port_t *wport = NULL, *rport = NULL;
 	int err = 0;
 
+	lock_kernel();
 	down(&devc->io_sema);
 	{
 		DBGEV("(inode=0x%p, file=0x%p)\n", inode, file);
@@ -3023,13 +3014,14 @@ static int vwsnd_audio_release(struct inode *inode, struct file *file)
 	}
 	up(&devc->open_sema);
 	wake_up(&devc->open_wait);
-	DBGDO(if (IN_USE))		/* see hack in vwsnd_mixer_release() */
-		DEC_USE_COUNT;
+	DEC_USE_COUNT;
 	DBGR();
+	unlock_kernel();
 	return err;
 }
 
 static struct file_operations vwsnd_audio_fops = {
+	owner:		THIS_MODULE,
 	llseek:		vwsnd_audio_llseek,
 	read:		vwsnd_audio_read,
 	write:		vwsnd_audio_write,
@@ -3069,15 +3061,7 @@ static int vwsnd_mixer_open(struct inode *inode, struct file *file)
 static int vwsnd_mixer_release(struct inode *inode, struct file *file)
 {
 	DBGEV("(inode=0x%p, file=0x%p)\n", inode, file);
-
-	/*
-	 * hack -- opening/closing the mixer device zeroes use count
-	 * so driver can be unloaded.
-	 * Use only while debugging module, and then use it carefully.
-	 */
-
-	DBGDO(while (IN_USE))
-		DEC_USE_COUNT;
+	DEC_USE_COUNT;
 	return 0;
 }
 
@@ -3234,6 +3218,7 @@ static int vwsnd_mixer_ioctl(struct inode *ioctl,
 }
 
 static struct file_operations vwsnd_mixer_fops = {
+	owner:		THIS_MODULE,
 	llseek:		vwsnd_mixer_llseek,
 	ioctl:		vwsnd_mixer_ioctl,
 	open:		vwsnd_mixer_open,
@@ -3429,8 +3414,6 @@ static int unload_vwsnd(struct address_info *hw_config)
 
 	DBGE("()\n");
 
-	if (IN_USE)
-		return -EBUSY;
 	devcp = &vwsnd_dev_list;
 	while ((devc = *devcp)) {
 		if (devc->audio_minor == hw_config->slots[0]) {

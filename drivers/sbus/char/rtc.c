@@ -19,6 +19,7 @@
 #include <linux/fcntl.h>
 #include <linux/poll.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 #include <asm/mostek.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -129,7 +130,9 @@ static int rtc_open(struct inode *inode, struct file *file)
 
 static int rtc_release(struct inode *inode, struct file *file)
 {
+	lock_kernel();
 	rtc_busy = 0;
+	unlock_kernel();
 	return 0;
 }
 

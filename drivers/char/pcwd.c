@@ -63,6 +63,7 @@
 #include <linux/init.h>
 #include <linux/proc_fs.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -451,6 +452,7 @@ static int pcwd_close(struct inode *ino, struct file *filep)
 {
 	if (MINOR(ino->i_rdev)==WATCHDOG_MINOR)
 	{
+		lock_kernel();
 	        is_open = 0;
 #ifndef CONFIG_WATCHDOG_NOWAYOUT
 		/*  Disable the board  */
@@ -460,6 +462,7 @@ static int pcwd_close(struct inode *ino, struct file *filep)
 			outb_p(0xA5, current_readport + 3);
 			spin_unlock(&io_lock);
 		}
+		unlock_kernel();
 #endif
 	}
 	return 0;

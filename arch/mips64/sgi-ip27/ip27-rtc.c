@@ -34,6 +34,7 @@
 #include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
+#include <linux/smp_lock.h>
 
 #include <asm/m48t35.h>
 #include <asm/ioc3.h>
@@ -179,7 +180,9 @@ static int rtc_release(struct inode *inode, struct file *file)
 	 * in use, and clear the data.
 	 */
 
+	lock_kernel();
 	rtc_status &= ~RTC_IS_OPEN;
+	unlock_kernel();
 	return 0;
 }
 

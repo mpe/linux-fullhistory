@@ -345,6 +345,7 @@ hysdn_log_close(struct inode *ino, struct file *filep)
 	int flags, retval = 0;
 
 
+	lock_kernel();
 	if ((filep->f_mode & (FMODE_READ | FMODE_WRITE)) == FMODE_WRITE) {
 		/* write only access -> write debug level written */
 		retval = 0;	/* success */
@@ -386,6 +387,7 @@ hysdn_log_close(struct inode *ino, struct file *filep)
 					kfree(inf);
 				}
 	}			/* read access */
+	unlock_kernel();
 
 	return (retval);
 }				/* hysdn_log_close */

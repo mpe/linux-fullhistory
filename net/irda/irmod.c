@@ -28,6 +28,7 @@
 #include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
+#include <linux/smp_lock.h>
 
 #include <asm/segment.h>
 
@@ -389,12 +390,15 @@ static int irda_open( struct inode * inode, struct file *file)
 {
 	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
+	lock_kernel();
 	if (irda.in_use) {
+		unlock_kernel();
 		IRDA_DEBUG(0, __FUNCTION__ 
 			   "(), irmanager is already running!\n");
 		return -1;
 	}
 	irda.in_use = TRUE;
+	unlock_kernel();
 	
 	return 0;
 }
@@ -446,7 +450,9 @@ static int irda_close(struct inode *inode, struct file *file)
 {
 	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 	
+	lock_kernel();
 	irda.in_use = FALSE;
+	unlock_kernel();
 
 	return 0;
 }

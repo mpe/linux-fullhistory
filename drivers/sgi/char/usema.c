@@ -163,17 +163,10 @@ sgi_usemaclone_open(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static int
-sgi_usemaclone_release(struct inode *inode, struct file *filp)
-{
-	return 0;
-}
-
 struct file_operations sgi_usemaclone_fops = {
 	poll:		sgi_usemaclone_poll,
 	ioctl:		sgi_usemaclone_ioctl,
 	open:		sgi_usemaclone_open,
-	release:	sgi_usemaclone_release,
 };
 
 static struct miscdevice dev_usemaclone = {

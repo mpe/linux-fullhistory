@@ -76,6 +76,7 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/module.h>
+#include <linux/smp_lock.h>
 
 #include <linux/usb.h>
 
@@ -582,6 +583,7 @@ static int mdc800_device_release (struct inode* inode, struct file *file)
 	int retval=0;
 	dbg ("Mustek MDC800 device closed.");
 
+	lock_kernel();
 	if (mdc800->open && (mdc800->state != NOT_CONNECTED))
 	{
 		mdc800->open=0;
@@ -593,6 +595,7 @@ static int mdc800_device_release (struct inode* inode, struct file *file)
 	{
 		retval=-EIO;
 	}
+	unlock_kernel();
 
 	return retval;
 }

@@ -343,8 +343,10 @@ smb_file_open(struct inode *inode, struct file * file)
 static int
 smb_file_release(struct inode *inode, struct file * file)
 {
+	lock_kernel();
 	if (!--inode->u.smbfs_i.openers)
 		smb_close(inode);
+	unlock_kernel();
 	return 0;
 }
 

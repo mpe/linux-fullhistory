@@ -111,6 +111,7 @@
 #include <linux/sound.h>
 #include <linux/init.h>
 #include <linux/soundcard.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -501,8 +502,10 @@ static int mixer_open(struct inode *inode, struct file *file)
 
 static int mixer_release(struct inode *inode, struct file *file)
 {
+	lock_kernel();
 	mixer.busy = 0;
 	dmasound.mach.release();
+	unlock_kernel();
 	return 0;
 }
 static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
@@ -905,6 +908,7 @@ static int sq_release(struct inode *inode, struct file *file)
 {
 	int rc = 0;
 
+	lock_kernel();
 	if (write_sq.busy)
 		rc = sq_fsync(file, file->f_dentry);
 	dmasound.soft = dmasound.dsp;
@@ -923,6 +927,7 @@ static int sq_release(struct inode *inode, struct file *file)
 	/* Wake up a process waiting for the queue being released.
 	 * Note: There may be several processes waiting for a call
 	 * to open() returning. */
+	unlock_kernel();
 
 	return rc;
 }
@@ -1141,8 +1146,10 @@ static int state_open(struct inode *inode, struct file *file)
 
 static int state_release(struct inode *inode, struct file *file)
 {
+	lock_kernel();
 	state.busy = 0;
 	dmasound.mach.release();
+	unlock_kernel();
 	return 0;
 }
 

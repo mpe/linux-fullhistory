@@ -93,6 +93,7 @@
 #include <linux/ioport.h>
 #include <linux/netdevice.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 
 #undef COSA_SLOW_IO	/* for testing purposes only */
 #undef REALLY_SLOW_IO
@@ -977,13 +978,16 @@ static int cosa_open(struct inode *inode, struct file *file)
 static int cosa_release(struct inode *inode, struct file *file)
 {
 	struct channel_data *channel = (struct channel_data *)file->private_data;
-	struct cosa_data *cosa = channel->cosa;
+	struct cosa_data *cosa;
 	unsigned long flags;
 
+	lock_kernel();
+	cosa = channel->cosa;
 	spin_lock_irqsave(&cosa->lock, flags);
 	cosa->usage--;
 	channel->usage--;
 	spin_unlock_irqrestore(&cosa->lock, flags);
+	unlock_kernel();
 	return 0;
 }
 

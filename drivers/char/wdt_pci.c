@@ -51,6 +51,7 @@
 #include <linux/notifier.h>
 #include <linux/reboot.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 #include <linux/pci.h>
 
@@ -358,7 +359,9 @@ static int wdtpci_open(struct inode *inode, struct file *file)
 		case WATCHDOG_MINOR:
 			if(wdt_is_open)
 				return -EBUSY;
+#ifdef CONFIG_WATCHDOG_NOWAYOUT	
 			MOD_INC_USE_COUNT;
+#endif
 			/*
 			 *	Activate 
 			 */
@@ -391,7 +394,6 @@ static int wdtpci_open(struct inode *inode, struct file *file)
 			outb_p(0, WDT_DC);	/* Enable */
 			return 0;
 		case TEMP_MINOR:
-			MOD_INC_USE_COUNT;
 			return 0;
 		default:
 			return -ENODEV;
@@ -414,13 +416,14 @@ static int wdtpci_release(struct inode *inode, struct file *file)
 {
 	if(MINOR(inode->i_rdev)==WATCHDOG_MINOR)
 	{
+		lock_kernel();
 #ifndef CONFIG_WATCHDOG_NOWAYOUT	
 		inb_p(WDT_DC);		/* Disable counters */
 		wdtpci_ctr_load(2,0);	/* 0 length reset pulses now */
 #endif		
 		wdt_is_open=0;
+		unlock_kernel();
 	}
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -454,6 +457,7 @@ static int wdtpci_notify_sys(struct notifier_block *this, unsigned long code,
  
  
 static struct file_operations wdtpci_fops = {
+	owner:		THIS_MODULE,
 	llseek:		wdtpci_llseek,
 	read:		wdtpci_read,
 	write:		wdtpci_write,

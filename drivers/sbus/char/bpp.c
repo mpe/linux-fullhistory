@@ -16,6 +16,7 @@
 #include <linux/fs.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include <linux/timer.h>
 #include <linux/ioport.h>
 #include <linux/major.h>
@@ -456,10 +457,13 @@ static int bpp_open(struct inode *inode, struct file *f)
 static int bpp_release(struct inode *inode, struct file *f)
 {
       unsigned minor = MINOR(inode->i_rdev);
+
+      lock_kernel();
       instances[minor].opened = 0;
 
       if (instances[minor].mode != COMPATIBILITY)
       terminate(minor);
+      unlock_kernel();
       return 0;
 }
 

@@ -21,6 +21,7 @@
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
+#include <linux/smp_lock.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -203,16 +204,19 @@ static int vfc_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static void vfc_release(struct inode *inode,struct file *file) 
+static int vfc_release(struct inode *inode,struct file *file) 
 {
 	struct vfc_dev *dev;
 
+	lock_kernel();
 	dev = vfc_get_dev_ptr(MINOR(inode->i_rdev));
-	if (dev == NULL)
-		return;
-	if (!dev->busy)
-		return;
+	if (!dev || !dev->busy) {
+		unlock_kernel();
+		return -EINVAL;
+	}
 	dev->busy = 0;
+	unlock_kernel();
+	return 0;
 }
 
 static int vfc_debug(struct vfc_dev *dev, int cmd, unsigned long arg) 
@@ -606,10 +610,12 @@ static int vfc_mmap(struct inode *inode, struct file *file,
 	unsigned int map_size, ret, map_offset;
 	struct vfc_dev *dev;
 	
+	lock_kernel();
 	dev = vfc_get_dev_ptr(MINOR(inode->i_rdev));
-	if(dev == NULL)
+	if(dev == NULL) {
+		unlock_kernel();
 		return -ENODEV;
-	
+	}
 	map_size = vma->vm_end - vma->vm_start;
 	if(map_size > sizeof(struct vfc_regs)) 
 		map_size = sizeof(struct vfc_regs);
@@ -619,6 +625,7 @@ static int vfc_mmap(struct inode *inode, struct file *file,
 	map_offset = (unsigned int) (long)dev->phys_regs;
 	ret = io_remap_page_range(vma->vm_start, map_offset, map_size, 
 				  vma->vm_page_prot, dev->which_io);
+	unlock_kernel();
 	if(ret)
 		return -EAGAIN;
 

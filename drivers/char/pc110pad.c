@@ -41,6 +41,7 @@
 #include <linux/poll.h>
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
+#include <linux/smp_lock.h>
 
 #include <asm/signal.h>
 #include <asm/io.h>
@@ -583,10 +584,11 @@ static int fasync_pad(int fd, struct file *filp, int on)
  
 static int close_pad(struct inode * inode, struct file * file)
 {
+	lock_kernel();
 	fasync_pad(-1, file, 0);
-	if (--active)
-		return 0;
-	outb(0x30, current_params.io+2);	/* switch off digitiser */
+	if (!--active)
+		outb(0x30, current_params.io+2);  /* switch off digitiser */
+	unlock_kernel();
 	return 0;
 }
 

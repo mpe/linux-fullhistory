@@ -37,6 +37,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include <linux/signal.h>
 #include <linux/poll.h>
 #include <linux/init.h>
@@ -167,17 +168,19 @@ static int usblp_open(struct inode *inode, struct file *file)
 	if (minor < 0 || minor >= USBLP_MINORS)
 		return -ENODEV;
 
+	lock_kernel();
 	usblp  = usblp_table[minor];
 
+	retval = -ENODEV;
 	if (!usblp || !usblp->dev)
-		return -ENODEV;
+		goto out;
 
+	retval = -EBUSY;
 	if (usblp->used)
-		return -EBUSY;
+		goto out;
 
-	if ((retval = usblp_check_status(usblp))) {
-		return retval;
-	}
+	if ((retval = usblp_check_status(usblp)))
+		goto out;
 
 	usblp->used = 1;
 	file->private_data = usblp;
@@ -189,8 +192,9 @@ static int usblp_open(struct inode *inode, struct file *file)
 		usblp->readcount = 0;
 		usb_submit_urb(&usblp->readurb);
 	}
-
-	return 0;
+out:
+	unlock_kernel();
+	return retval;
 }
 
 static int usblp_release(struct inode *inode, struct file *file)

@@ -3311,7 +3311,12 @@ static int devfsd_close (struct inode *inode, struct file *file)
 {
     struct fs_info *fs_info = inode->i_sb->u.generic_sbp;
 
-    if (fs_info->devfsd_file != file) return 0;
+    lock_kernel();
+    if (fs_info->devfsd_file != file)
+    {
+	unlock_kernel();
+	return 0;
+    }
     fs_info->devfsd_event_mask = 0;
     fs_info->devfsd_file = NULL;
     if (fs_info->devfsd_buffer)
@@ -3322,6 +3327,7 @@ static int devfsd_close (struct inode *inode, struct file *file)
     fs_info->devfsd_buffer = NULL;
     fs_info->devfsd_task = NULL;
     wake_up (&fs_info->revalidate_wait_queue);
+    unlock_kernel();
     return 0;
 }   /*  End Function devfsd_close  */
 

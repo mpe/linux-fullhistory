@@ -50,6 +50,7 @@ static char ixj_c_rcsid[] = "$Id: ixj.c,v 3.4 1999/12/16 22:18:36 root Exp root 
 #include <linux/timer.h>
 #include <linux/delay.h>
 #include <linux/pci.h>
+#include <linux/smp_lock.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -1056,6 +1057,7 @@ int ixj_release(struct inode *inode, struct file *file_p)
 	if (ixjdebug > 0)
 		printk(KERN_INFO "Closing board %d\n", NUM(inode->i_rdev));
 
+	lock_kernel();
 	daa_set_mode(board, SOP_PU_SLEEP);
 	ixj_set_port(board, PORT_POTS);
 	aec_stop(board);
@@ -1189,6 +1191,7 @@ int ixj_release(struct inode *inode, struct file *file_p)
 	j->rec_frame_size = j->play_frame_size = 0;
 	ixj_fasync(-1, file_p, 0);	// remove from list of async notification
 
+	unlock_kernel();
 	return 0;
 }
 

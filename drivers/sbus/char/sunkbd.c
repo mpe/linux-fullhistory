@@ -25,6 +25,7 @@
 #include <linux/init.h>
 #include <linux/sysrq.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 #include <linux/devfs_fs_kernel.h>
 
 #include <asm/kbio.h>
@@ -1527,16 +1528,15 @@ kbd_open (struct inode *i, struct file *f)
 static int
 kbd_close (struct inode *i, struct file *f)
 {
-	if (--kbd_active)
-		return 0;
-
-	if (kbd_redirected)
-		kbd_table [kbd_redirected-1].kbdmode = VC_XLATE;
-
-	kbd_redirected = 0;
-	kbd_opened = 0;
-
-	kbd_fasync (-1, f, 0);
+	lock_kernel();
+	if (!--kbd_active) {
+		if (kbd_redirected)
+			kbd_table [kbd_redirected-1].kbdmode = VC_XLATE;
+		kbd_redirected = 0;
+		kbd_opened = 0;
+		kbd_fasync (-1, f, 0);
+	}
+	unlock_kernel();
 	return 0;
 }
 

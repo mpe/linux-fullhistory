@@ -635,6 +635,7 @@ int blkdev_put(struct block_device *bdev, int kind)
 	kdev_t rdev = to_kdev_t(bdev->bd_dev); /* this should become bdev */
 	down(&bdev->bd_sem);
 	/* syncing will go here */
+	lock_kernel();
 	if (kind == BDEV_FILE || kind == BDEV_FS)
 		fsync_dev(rdev);
 	if (atomic_dec_and_test(&bdev->bd_openers)) {
@@ -653,6 +654,7 @@ int blkdev_put(struct block_device *bdev, int kind)
 	if (!atomic_read(&bdev->bd_openers))
 		bdev->bd_op = NULL;	/* we can't rely on driver being */
 					/* kind to stay around. */
+	unlock_kernel();
 	up(&bdev->bd_sem);
 	return ret;
 }

@@ -304,6 +304,7 @@ static int
 pipe_release(struct inode *inode, int decr, int decw)
 {
 	down(PIPE_SEM(*inode));
+	lock_kernel();
 	PIPE_READERS(*inode) -= decr;
 	PIPE_WRITERS(*inode) -= decw;
 	if (!PIPE_READERS(*inode) && !PIPE_WRITERS(*inode)) {
@@ -314,6 +315,7 @@ pipe_release(struct inode *inode, int decr, int decw)
 	} else {
 		wake_up_interruptible(PIPE_WAIT(*inode));
 	}
+	unlock_kernel();
 	up(PIPE_SEM(*inode));
 
 	return 0;

@@ -372,6 +372,7 @@ hysdn_conf_close(struct inode *ino, struct file *filep)
 	int retval = 0;
 	struct proc_dir_entry *pd;
 
+	lock_kernel();
 	/* search the addressed card */
 	card = card_root;
 	while (card) {
@@ -381,6 +382,7 @@ hysdn_conf_close(struct inode *ino, struct file *filep)
 		card = card->next;	/* search next entry */
 	}
 	if (!card) {
+		unlock_kernel();
 		return (-ENODEV);	/* device is unknown/invalid */
 	}
 	if (card->debug_flags & (LOG_PROC_OPEN | LOG_PROC_ALL))
@@ -403,6 +405,7 @@ hysdn_conf_close(struct inode *ino, struct file *filep)
 		if (filep->private_data)
 			kfree(filep->private_data);	/* release memory */
 	}
+	unlock_kernel();
 	return (retval);
 }				/* hysdn_conf_close */
 

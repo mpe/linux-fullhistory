@@ -14,6 +14,7 @@
 #include <linux/blkdev.h>
 #include <linux/raw.h>
 #include <linux/capability.h>
+#include <linux/smp_lock.h>
 #include <asm/uaccess.h>
 
 #define dprintk(x...) 
@@ -126,9 +127,11 @@ int raw_release(struct inode *inode, struct file *filp)
 	struct block_device *bdev;
 	
 	minor = MINOR(inode->i_rdev);
+	lock_kernel();
 	bdev = raw_device_bindings[minor];
 	blkdev_put(bdev, BDEV_RAW);
 	raw_device_inuse[minor]--;
+	unlock_kernel();
 	return 0;
 }
 

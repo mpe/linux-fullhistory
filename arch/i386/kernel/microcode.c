@@ -147,7 +147,9 @@ static int microcode_open(struct inode *inode, struct file *file)
 
 static int microcode_release(struct inode *inode, struct file *file)
 {
+	lock_kernel();
 	clear_bit(MICROCODE_IS_OPEN, &microcode_status);
+	unlock_kernel();
 	return 0;
 }
 

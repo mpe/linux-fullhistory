@@ -14,6 +14,7 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/malloc.h>
@@ -473,8 +474,13 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	off = vma->vm_pgoff << PAGE_SHIFT;
 	if (!fb)
 		return -ENODEV;
-	if (fb->fb_mmap)
-		return fb->fb_mmap(info, file, vma);
+	if (fb->fb_mmap) {
+		int res;
+		lock_kernel();
+		res = fb->fb_mmap(info, file, vma);
+		unlock_kernel();
+		return res;
+	}
 
 #if defined(__sparc__) && !defined(__sparc_v9__)
 	/* Should never get here, all fb drivers should have their own
@@ -483,6 +489,7 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 #else
 	/* !sparc32... */
 
+	lock_kernel();
 	fb->fb_get_fix(&fix, PROC_CONSOLE(info), info);
 
 	/* frame buffer memory */
@@ -497,6 +504,7 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 		start = fix.mmio_start;
 		len = PAGE_ALIGN((start & ~PAGE_MASK)+fix.mmio_len);
 	}
+	unlock_kernel();
 	start &= PAGE_MASK;
 	if ((vma->vm_end - vma->vm_start + off) > len)
 		return -EINVAL;
@@ -612,12 +620,15 @@ static int
 fb_release(struct inode *inode, struct file *file)
 {
 	int fbidx = GET_FB_IDX(inode->i_rdev);
-	struct fb_info *info = registered_fb[fbidx];
+	struct fb_info *info;
 
+	lock_kernel();
+	info = registered_fb[fbidx];
 	if (info->fbops->fb_release)
 		info->fbops->fb_release(info,1);
 	if (info->fbops->owner)
 		__MOD_DEC_USE_COUNT(info->fbops->owner);
+	unlock_kernel();
 	return 0;
 }
 

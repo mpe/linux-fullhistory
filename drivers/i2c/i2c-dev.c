@@ -32,6 +32,7 @@
 #include <linux/fs.h>
 #include <linux/malloc.h>
 #include <linux/version.h>
+#include <linux/smp_lock.h>
 
 /* If you want debugging uncomment: */
 /* #define DEBUG */
@@ -76,6 +77,7 @@ extern
 static int i2cdev_cleanup(void);
 
 static struct file_operations i2cdev_fops = {
+	owner:		THIS_MODULE,
 	llseek:		i2cdev_lseek,
 	read:		i2cdev_read,
 	write:		i2cdev_write,
@@ -374,7 +376,6 @@ int i2cdev_open (struct inode *inode, struct file *file)
 
 	if (i2cdev_adaps[minor]->inc_use)
 		i2cdev_adaps[minor]->inc_use(i2cdev_adaps[minor]);
-	MOD_INC_USE_COUNT;
 
 #ifdef DEBUG
 	printk("i2c-dev.o: opened i2c-%d\n",minor);
@@ -390,9 +391,10 @@ static int i2cdev_release (struct inode *inode, struct file *file)
 #ifdef DEBUG
 	printk("i2c-dev.o: Closed: i2c-%d\n", minor);
 #endif
-	MOD_DEC_USE_COUNT;
+	lock_kernel();
 	if (i2cdev_adaps[minor]->dec_use)
 		i2cdev_adaps[minor]->dec_use(i2cdev_adaps[minor]);
+	unlock_kernel();
 	return 0;
 }
 

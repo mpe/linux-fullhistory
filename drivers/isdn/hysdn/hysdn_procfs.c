@@ -254,7 +254,7 @@ hysdn_log_close(struct inode *ino, struct file *filep)
 	hysdn_card *card;
 	int flags, retval = 0;
 
-
+	lock_kernel();
 	if ((filep->f_mode & (FMODE_READ | FMODE_WRITE)) == FMODE_WRITE) {
 		/* write only access -> write debug completely written */
 		retval = 0;	/* success */
@@ -297,6 +297,7 @@ hysdn_log_close(struct inode *ino, struct file *filep)
 				}
 	}			/* read access */
 
+	unlock_kernel();
 	return (retval);
 }				/* hysdn_log_close */
 

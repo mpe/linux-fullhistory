@@ -66,6 +66,7 @@ getattr:						(see below)
 revalidate:	no					(see below)
 	Additionally, ->rmdir() has i_zombie on victim and so does ->rename()
 in case when target exists and is a directory.
+	->rename() on directories has (per-superblock) ->s_vfs_rename_sem.
 	->revalidate(), it may be called both with and without the i_sem
 on dentry->d_inode. VFS never calls it with i_zombie on dentry->d_inode,
 but watch for other methods directly calling this one...
@@ -226,7 +227,7 @@ ioctl:		yes	(see below)
 mmap:		no
 open:		maybe	(see below)
 flush:		yes
-release:	yes
+release:	no
 fsync:		yes	(see below)
 fasync:		yes	(see below)
 lock:		yes
@@ -238,12 +239,13 @@ The only exception is ->open() in the instances of file_operations that never
 end up in ->i_fop/->proc_fops, i.e. ones that belong to character devices
 (chrdev_open() takes lock before replacing ->f_op and calling the secondary
 method. As soon as we fix the handling of module reference counters all
-instances of ->open() will be called without the BKL. At the same point
-->release() will lose BKL. Currently ext2_release() is *the* source of
-contention on fs-intensive loads and dropping BKL on ->release() will get
-rid of that (we will still need some locking for cases when we close a file
-that had been opened r/w, but that can be done using the internal locking with
-smaller critical areas). sock_close() is also going to win from that change.
+instances of ->open() will be called without the BKL.
+
+Note: ext2_release() was *the* source of contention on fs-intensive
+loads and dropping BKL on ->release() helps to get rid of that (we still
+grab BKL for cases when we close a file that had been opened r/w, but that
+can and should be done using the internal locking with smaller critical areas).
+Current worst offender is ext2_get_block()...
 
 ->fasync() is a mess. This area needs a big cleanup and that will probably
 affect locking.

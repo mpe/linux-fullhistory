@@ -66,6 +66,7 @@ not be guaranteed. There are several ways to assure this:
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/devfs_fs_kernel.h>
+#include <linux/smp_lock.h>
 
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -799,10 +800,12 @@ static int slm_release( struct inode *inode, struct file *file )
 	device = MINOR(inode->i_rdev);
 	sip = &slm_info[device];
 
+	lock_kernel();
 	if (file->f_mode & 2)
 		sip->wbusy = 0;
 	if (file->f_mode & 1)
 		sip->rbusy = 0;
+	unlock_kernel();
 	
 	return( 0 );
 }

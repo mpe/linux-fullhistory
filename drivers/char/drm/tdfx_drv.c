@@ -30,6 +30,8 @@
  */
 
 #include <linux/config.h>
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include "drmP.h"
 #include "tdfx_drv.h"
 
@@ -44,6 +46,7 @@ static drm_device_t	      tdfx_device;
 drm_ctx_t	              tdfx_res_ctx;
 
 static struct file_operations tdfx_fops = {
+	owner:	THIS_MODULE,
 	open:	 tdfx_open,
 	flush:	 drm_flush,
 	release: tdfx_release,
@@ -343,7 +346,6 @@ int tdfx_open(struct inode *inode, struct file *filp)
 	
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_open_helper(inode, filp, dev))) {
-		MOD_INC_USE_COUNT;
 		atomic_inc(&dev->total_open);
 		spin_lock(&dev->count_lock);
 		if (!dev->open_count++) {
@@ -358,12 +360,13 @@ int tdfx_open(struct inode *inode, struct file *filp)
 int tdfx_release(struct inode *inode, struct file *filp)
 {
 	drm_file_t    *priv   = filp->private_data;
-	drm_device_t  *dev    = priv->dev;
+	drm_device_t  *dev;
 	int	      retcode = 0;
 
+	lock_kernel();
+	dev    = priv->dev;
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_release(inode, filp))) {
-		MOD_DEC_USE_COUNT;
 		atomic_inc(&dev->total_close);
 		spin_lock(&dev->count_lock);
 		if (!--dev->open_count) {
@@ -372,13 +375,17 @@ int tdfx_release(struct inode *inode, struct file *filp)
 					  atomic_read(&dev->ioctl_count),
 					  dev->blocked);
 				spin_unlock(&dev->count_lock);
+				unlock_kernel();
 				return -EBUSY;
 			}
 			spin_unlock(&dev->count_lock);
-			return tdfx_takedown(dev);
+			retcode = tdfx_takedown(dev);
+			unlock_kernel();
+			return retcode;
 		}
 		spin_unlock(&dev->count_lock);
 	}
+	unlock_kernel();
 	return retcode;
 }
 

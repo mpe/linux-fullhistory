@@ -20,6 +20,7 @@
 
 #include <linux/fs.h>
 #include <linux/sched.h>
+#include <linux/smp_lock.h>
 
 static loff_t ext2_file_lseek(struct file *, loff_t, int);
 static int ext2_open_file (struct inode *, struct file *);
@@ -73,8 +74,11 @@ static loff_t ext2_file_lseek(
  */
 static int ext2_release_file (struct inode * inode, struct file * filp)
 {
-	if (filp->f_mode & FMODE_WRITE)
+	if (filp->f_mode & FMODE_WRITE) {
+		lock_kernel();
 		ext2_discard_prealloc (inode);
+		unlock_kernel();
+	}
 	return 0;
 }
 

@@ -38,6 +38,7 @@
 #include <linux/string.h> /* memset */
 #include <linux/errno.h>
 #include <linux/locks.h>
+#include <linux/smp_lock.h>
 
 #include "udf_i.h"
 #include "udf_sb.h"
@@ -296,8 +297,11 @@ int udf_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
  */
 static int udf_release_file(struct inode * inode, struct file * filp)
 {
-	if (filp->f_mode & FMODE_WRITE)
+	if (filp->f_mode & FMODE_WRITE) {
+		lock_kernel();
 		udf_discard_prealloc(inode);
+		unlock_kernel();
+	}
 	return 0;
 }
 

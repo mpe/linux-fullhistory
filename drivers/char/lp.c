@@ -119,6 +119,7 @@
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include <linux/devfs_fs_kernel.h>
 #include <linux/malloc.h>
 #include <linux/fcntl.h>
@@ -407,9 +408,11 @@ static int lp_release(struct inode * inode, struct file * file)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
 
+	lock_kernel();
 	kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
 	lp_table[minor].lp_buffer = NULL;
 	LP_F(minor) &= ~LP_BUSY;
+	unlock_kernel();
 	return 0;
 }
 

@@ -439,6 +439,7 @@
 #include <linux/poll.h>
 #include <linux/vmalloc.h>
 #include <linux/isdn.h>
+#include <linux/smp_lock.h>
 #include "isdn_common.h"
 #include "isdn_tty.h"
 #include "isdn_net.h"
@@ -485,11 +486,10 @@ static void isdn_register_devfs(int);
 static void isdn_unregister_devfs(int);
 
 void
-isdn_MOD_INC_USE_COUNT(void)
+isdn_lock_drivers(void)
 {
 	int i;
 
-	MOD_INC_USE_COUNT;
 	for (i = 0; i < dev->drivers; i++) {
 		isdn_ctrl cmd;
 
@@ -502,11 +502,17 @@ isdn_MOD_INC_USE_COUNT(void)
 }
 
 void
-isdn_MOD_DEC_USE_COUNT(void)
+isdn_MOD_INC_USE_COUNT(void)
+{
+	MOD_INC_USE_COUNT;
+	isdn_lock_drivers();
+}
+
+void
+isdn_unlock_drivers(void)
 {
 	int i;
 
-	MOD_DEC_USE_COUNT;
 	for (i = 0; i < dev->drivers; i++)
 		if (dev->drv[i]->locks > 0) {
 			isdn_ctrl cmd;
@@ -517,6 +523,13 @@ isdn_MOD_DEC_USE_COUNT(void)
 			isdn_command(&cmd);
 			dev->drv[i]->locks--;
 		}
+}
+
+void
+isdn_MOD_DEC_USE_COUNT(void)
+{
+	MOD_DEC_USE_COUNT;
+	isdn_unlock_drivers();
 }
 
 #if defined(ISDN_DEBUG_NET_DUMP) || defined(ISDN_DEBUG_MODEM_DUMP)
@@ -1976,8 +1989,6 @@ isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong arg)
 
 /*
  * Open the device code.
- * MOD_INC_USE_COUNT make sure that the driver memory is not freed
- * while the device is in use.
  */
 static int
 isdn_open(struct inode *ino, struct file *filep)
@@ -1990,7 +2001,6 @@ isdn_open(struct inode *ino, struct file *filep)
 		infostruct *p;
 
 		if ((p = (infostruct *) kmalloc(sizeof(infostruct), GFP_KERNEL))) {
-			MOD_INC_USE_COUNT;
 			p->next = (char *) dev->infochain;
 			p->private = (char *) &(filep->private_data);
 			dev->infochain = p;
@@ -2011,21 +2021,21 @@ isdn_open(struct inode *ino, struct file *filep)
 			return -ENODEV;
 		if (!(dev->drv[drvidx]->online & (1 << chidx)))
 			return -ENODEV;
-		isdn_MOD_INC_USE_COUNT();
+		isdn_lock_drivers();
 		return 0;
 	}
 	if (minor <= ISDN_MINOR_CTRLMAX) {
 		drvidx = isdn_minor2drv(minor - ISDN_MINOR_CTRL);
 		if (drvidx < 0)
 			return -ENODEV;
-		isdn_MOD_INC_USE_COUNT();
+		isdn_lock_drivers();
 		return 0;
 	}
 #ifdef CONFIG_ISDN_PPP
 	if (minor <= ISDN_MINOR_PPPMAX) {
 		int ret;
 		if (!(ret = isdn_ppp_open(minor - ISDN_MINOR_PPP, filep)))
-			isdn_MOD_INC_USE_COUNT();
+			isdn_lock_drivers();
 		return ret;
 	}
 #endif
@@ -2037,11 +2047,11 @@ isdn_close(struct inode *ino, struct file *filep)
 {
 	uint minor = MINOR(ino->i_rdev);
 
+	lock_kernel();
 	if (minor == ISDN_MINOR_STATUS) {
 		infostruct *p = dev->infochain;
 		infostruct *q = NULL;
 
-		MOD_DEC_USE_COUNT;
 		while (p) {
 			if (p->private == (char *) &(filep->private_data)) {
 				if (q)
@@ -2049,31 +2059,38 @@ isdn_close(struct inode *ino, struct file *filep)
 				else
 					dev->infochain = (infostruct *) (p->next);
 				kfree(p);
+				unlock_kernel();
 				return 0;
 			}
 			q = p;
 			p = (infostruct *) (p->next);
 		}
 		printk(KERN_WARNING "isdn: No private data while closing isdnctrl\n");
+		unlock_kernel();
 		return 0;
 	}
-	isdn_MOD_DEC_USE_COUNT();
-	if (minor < ISDN_MINOR_CTRL)
+	isdn_unlock_drivers();
+	if (minor < ISDN_MINOR_CTRL) {
+		unlock_kernel();
 		return 0;
+	}
 	if (minor <= ISDN_MINOR_CTRLMAX) {
 		if (dev->profd == current)
 			dev->profd = NULL;
+		unlock_kernel();
 		return 0;
 	}
 #ifdef CONFIG_ISDN_PPP
 	if (minor <= ISDN_MINOR_PPPMAX)
 		isdn_ppp_release(minor - ISDN_MINOR_PPP, filep);
 #endif
+	unlock_kernel();
 	return 0;
 }
 
 static struct file_operations isdn_fops =
 {
+	owner:		THIS_MODULE,
 	llseek:		isdn_lseek,
 	read:		isdn_read,
 	write:		isdn_write,

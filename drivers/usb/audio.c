@@ -171,6 +171,7 @@
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include <linux/module.h>
 #include <linux/sound.h>
 #include <linux/soundcard.h>
@@ -1944,10 +1945,13 @@ static int usb_audio_open_mixdev(struct inode *inode, struct file *file)
 static int usb_audio_release_mixdev(struct inode *inode, struct file *file)
 {
 	struct usb_mixerdev *ms = (struct usb_mixerdev *)file->private_data;
-	struct usb_audio_state *s = ms->state;
+	struct usb_audio_state *s;
 
+	lock_kernel();
+	s = ms->state;
 	down(&open_sem);
 	release(s);
+	unlock_kernel();
 	return 0;
 }
 
@@ -2283,23 +2287,28 @@ static int usb_audio_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct usb_audiodev *as = (struct usb_audiodev *)file->private_data;
 	struct dmabuf *db;
-	int ret;
+	int ret = -EINVAL;
 
+	lock_kernel();
 	if (vma->vm_flags & VM_WRITE) {
 		if ((ret = prog_dmabuf_out(as)) != 0)
-			return ret;
+			goto out;
 		db = &as->usbout.dma;
 	} else if (vma->vm_flags & VM_READ) {
 		if ((ret = prog_dmabuf_in(as)) != 0)
-			return ret;
+			goto out;
 		db = &as->usbin.dma;
 	} else
-		return -EINVAL;
+		goto out;
 
+	ret = -EINVAL;
 	if (vma->vm_pgoff != 0)
-		return -EINVAL;
+		goto out;
 
-	return dmabuf_mmap(db,  vma->vm_start, vma->vm_end - vma->vm_start, vma->vm_page_prot);
+	ret = dmabuf_mmap(db,  vma->vm_start, vma->vm_end - vma->vm_start, vma->vm_page_prot);
+out:
+	unlock_kernel();
+	return ret;
 }
 
 static int usb_audio_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
@@ -2615,10 +2624,13 @@ static int usb_audio_open(struct inode *inode, struct file *file)
 static int usb_audio_release(struct inode *inode, struct file *file)
 {
 	struct usb_audiodev *as = (struct usb_audiodev *)file->private_data;
-	struct usb_audio_state *s = as->state;
-	struct usb_device *dev = s->usbdev;
+	struct usb_audio_state *s;
+	struct usb_device *dev;
 	struct usb_interface *iface;
 
+	lock_kernel();
+	s = as->state;
+	dev = s->usbdev;
 	if (file->f_mode & FMODE_WRITE)
 		drain_out(as, file->f_flags & O_NONBLOCK);
 	down(&open_sem);
@@ -2643,6 +2655,7 @@ static int usb_audio_release(struct inode *inode, struct file *file)
 	as->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
 	release(s);
 	wake_up(&open_wait);
+	unlock_kernel();
 	return 0;
 }
 

@@ -197,6 +197,8 @@
 
 #include <linux/version.h>
 #include <linux/module.h>
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
 
@@ -2422,13 +2424,14 @@ static int ess_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct ess_state *s = (struct ess_state *)file->private_data;
 	struct dmabuf *db;
-	int ret;
+	int ret = -EINVAL;
 	unsigned long size;
 
 	VALIDATE_STATE(s);
+	lock_kernel();
 	if (vma->vm_flags & VM_WRITE) {
 		if ((ret = prog_dmabuf(s, 1)) != 0)
-			return ret;
+			goto out;
 		db = &s->dma_dac;
 	} else 
 #if 0
@@ -2436,20 +2439,25 @@ static int ess_mmap(struct file *file, struct vm_area_struct *vma)
 		we can turn this back on.  */
 	      if (vma->vm_flags & VM_READ) {
 		if ((ret = prog_dmabuf(s, 0)) != 0)
-			return ret;
+			goto out;
 		db = &s->dma_adc;
 	} else  
 #endif
-		return -EINVAL;
+		goto out;
+	ret = -EINVAL;
 	if (SILLY_OFFSET(vma) != 0)
-		return -EINVAL;
+		goto out;
 	size = vma->vm_end - vma->vm_start;
 	if (size > (PAGE_SIZE << db->buforder))
-		return -EINVAL;
+		goto out;
+	ret = -EAGAIN;
 	if (remap_page_range(vma->vm_start, virt_to_phys(db->rawbuf), size, vma->vm_page_prot))
-		return -EAGAIN;
+		goto out;
 	db->mapped = 1;
-	return 0;
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 static int ess_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
@@ -2985,6 +2993,7 @@ ess_release(struct inode *inode, struct file *file)
 	struct ess_state *s = (struct ess_state *)file->private_data;
 
 	VALIDATE_STATE(s);
+	lock_kernel();
 	if (file->f_mode & FMODE_WRITE)
 		drain_dac(s, file->f_flags & O_NONBLOCK);
 	down(&s->open_sem);
@@ -3006,6 +3015,7 @@ ess_release(struct inode *inode, struct file *file)
 	}
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
+	unlock_kernel();
 	return 0;
 }
 

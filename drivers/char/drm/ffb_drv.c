@@ -6,6 +6,8 @@
 
 #include "drmP.h"
 
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include <asm/oplib.h>
 #include <asm/upa.h>
 
@@ -44,6 +46,7 @@ extern int ffb_rmctx(struct inode *, struct file *, unsigned int, unsigned long)
 extern int ffb_context_switch(drm_device_t *, int, int);
 
 static struct file_operations ffb_fops = {
+	owner:		THIS_MODULE,
 	open:		ffb_open,
 	flush:		drm_flush,
 	release:	ffb_release,
@@ -501,7 +504,6 @@ static int ffb_open(struct inode *inode, struct file *filp)
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	ret = drm_open_helper(inode, filp, dev);
 	if (!ret) {
-		MOD_INC_USE_COUNT;
 		atomic_inc(&dev->total_open);
 		spin_lock(&dev->count_lock);
 		if (!dev->open_count++) {
@@ -517,9 +519,11 @@ static int ffb_open(struct inode *inode, struct file *filp)
 static int ffb_release(struct inode *inode, struct file *filp)
 {
 	drm_file_t *priv = filp->private_data;
-	drm_device_t *dev = priv->dev;
+	drm_device_t *dev;
 	int ret = 0;
 
+	lock_kernel();
+	dev = priv->dev;
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (dev->lock.hw_lock != NULL
 	    && _DRM_LOCK_IS_HELD(dev->lock.hw_lock->lock)
@@ -541,7 +545,6 @@ static int ffb_release(struct inode *inode, struct file *filp)
 	ret = drm_release(inode, filp);
 
 	if (!ret) {
-		MOD_DEC_USE_COUNT;
 		atomic_inc(&dev->total_close);
 		spin_lock(&dev->count_lock);
 		if (!--dev->open_count) {
@@ -550,14 +553,18 @@ static int ffb_release(struct inode *inode, struct file *filp)
 					  atomic_read(&dev->ioctl_count),
 					  dev->blocked);
 				spin_unlock(&dev->count_lock);
+				unlock_kernel();
 				return -EBUSY;
 			}
 			spin_unlock(&dev->count_lock);
-			return ffb_takedown(dev);
+			ret = ffb_takedown(dev);
+			unlock_kernel();
+			return ret;
 		}
 		spin_unlock(&dev->count_lock);
 	}
 
+	unlock_kernel();
 	return ret;
 }
 
@@ -756,6 +763,7 @@ static int ffb_mmap(struct file *filp, struct vm_area_struct *vma)
 	DRM_DEBUG("start = 0x%lx, end = 0x%lx, offset = 0x%lx\n",
 		  vma->vm_start, vma->vm_end, VM_OFFSET(vma));
 
+	lock_kernel();
 	minor = MINOR(filp->f_dentry->d_inode->i_rdev);
 	ffb_priv = NULL;
 	for (i = 0; i < ffb_dev_table_size; i++) {
@@ -763,13 +771,15 @@ static int ffb_mmap(struct file *filp, struct vm_area_struct *vma)
 		if (ffb_priv->miscdev.minor == minor)
 			break;
 	}
-	if (i >= ffb_dev_table_size)
+	if (i >= ffb_dev_table_size) {
+		unlock_kernel();
 		return -EINVAL;
-
+	}
 	/* We don't support/need dma mappings, so... */
-	if (!VM_OFFSET(vma))
+	if (!VM_OFFSET(vma)) {
+		unlock_kernel();
 		return -EINVAL;
-
+	}
 	for (i = 0; i < dev->map_count; i++) {
 		unsigned long off;
 
@@ -781,16 +791,19 @@ static int ffb_mmap(struct file *filp, struct vm_area_struct *vma)
 			break;
 	}
 
-	if (i >= dev->map_count)
+	if (i >= dev->map_count) {
+		unlock_kernel();
 		return -EINVAL;
-
+	}
 	if (!map ||
-	    ((map->flags & _DRM_RESTRICTED) && !capable(CAP_SYS_ADMIN)))
+	    ((map->flags & _DRM_RESTRICTED) && !capable(CAP_SYS_ADMIN))) {
+		unlock_kernel();
 		return -EPERM;
-
-	if (map->size != (vma->vm_end - vma->vm_start))
+	}
+	if (map->size != (vma->vm_end - vma->vm_start)) {
+		unlock_kernel();
 		return -EINVAL;
-
+	}
 	/* Set read-only attribute before mappings are created
 	 * so it works for fb/reg maps too.
 	 */
@@ -813,9 +826,10 @@ static int ffb_mmap(struct file *filp, struct vm_area_struct *vma)
 		if (io_remap_page_range(vma->vm_start,
 					ffb_priv->card_phys_base + VM_OFFSET(vma),
 					vma->vm_end - vma->vm_start,
-					vma->vm_page_prot, 0))
+					vma->vm_page_prot, 0)) {
+			unlock_kernel();
 			return -EAGAIN;
-
+		}
 		vma->vm_ops = &drm_vm_ops;
 		break;
 	case _DRM_SHM:
@@ -828,8 +842,10 @@ static int ffb_mmap(struct file *filp, struct vm_area_struct *vma)
 		vma->vm_flags |= VM_LOCKED;
 		break;
 	default:
+		unlock_kernel();
 		return -EINVAL;	/* This should never happen. */
 	};
+	unlock_kernel();
 
 	vma->vm_flags |= VM_LOCKED | VM_SHM; /* Don't swap */
 

@@ -26,6 +26,7 @@
 #include <linux/poll.h>
 #include <linux/init.h>
 #include <linux/devfs_fs_kernel.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -138,10 +139,13 @@ out:
 static int netlink_release(struct inode * inode, struct file * file)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
-	struct socket *sock = netlink_user[minor];
+	struct socket *sock;
 
+	lock_kernel();
+	sock = netlink_user[minor];
 	netlink_user[minor] = NULL;
 	open_map &= ~(1<<minor);
+	unlock_kernel();
 	sock_release(sock);
 	return 0;
 }

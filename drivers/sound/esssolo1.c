@@ -90,6 +90,7 @@
 #include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
 
@@ -1192,29 +1193,35 @@ static int solo1_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct solo1_state *s = (struct solo1_state *)file->private_data;
 	struct dmabuf *db;
-	int ret;
+	int ret = -EINVAL;
 	unsigned long size;
 
 	VALIDATE_STATE(s);
+	lock_kernel();
 	if (vma->vm_flags & VM_WRITE) {
 		if ((ret = prog_dmabuf_dac(s)) != 0)
-			return ret;
+			goto out;
 		db = &s->dma_dac;
 	} else if (vma->vm_flags & VM_READ) {
 		if ((ret = prog_dmabuf_adc(s)) != 0)
-			return ret;
+			goto out;
 		db = &s->dma_adc;
 	} else 
-		return -EINVAL;
+		goto out;
+	ret = -EINVAL;
 	if (vma->vm_pgoff != 0)
-		return -EINVAL;
+		goto out;
 	size = vma->vm_end - vma->vm_start;
 	if (size > (PAGE_SIZE << db->buforder))
-		return -EINVAL;
+		goto out;
+	ret = -EAGAIN;
 	if (remap_page_range(vma->vm_start, virt_to_phys(db->rawbuf), size, vma->vm_page_prot))
-		return -EAGAIN;
+		goto out;
 	db->mapped = 1;
-	return 0;
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
@@ -1510,6 +1517,7 @@ static int solo1_release(struct inode *inode, struct file *file)
 	struct solo1_state *s = (struct solo1_state *)file->private_data;
 
 	VALIDATE_STATE(s);
+	lock_kernel();
 	if (file->f_mode & FMODE_WRITE)
 		drain_dac(s, file->f_flags & O_NONBLOCK);
 	down(&s->open_sem);
@@ -1527,6 +1535,7 @@ static int solo1_release(struct inode *inode, struct file *file)
 	s->open_mode &= ~(FMODE_READ | FMODE_WRITE);
 	wake_up(&s->open_wait);
 	up(&s->open_sem);
+	unlock_kernel();
 	return 0;
 }
 
@@ -1881,6 +1890,7 @@ static int solo1_midi_release(struct inode *inode, struct file *file)
 
 	VALIDATE_STATE(s);
 
+	lock_kernel();
 	if (file->f_mode & FMODE_WRITE) {
 		add_wait_queue(&s->midi.owait, &wait);
 		for (;;) {
@@ -1914,6 +1924,7 @@ static int solo1_midi_release(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	wake_up(&s->open_wait);
 	up(&s->open_sem);
+	unlock_kernel();
 	return 0;
 }
 
@@ -2083,6 +2094,7 @@ static int solo1_dmfm_release(struct inode *inode, struct file *file)
 	unsigned int regb;
 
 	VALIDATE_STATE(s);
+	lock_kernel();
 	down(&s->open_sem);
 	s->open_mode &= ~FMODE_DMFM;
 	for (regb = 0xb0; regb < 0xb9; regb++) {
@@ -2094,6 +2106,7 @@ static int solo1_dmfm_release(struct inode *inode, struct file *file)
 	release_region(s->sbbase, FMSYNTH_EXTENT);
 	wake_up(&s->open_wait);
 	up(&s->open_sem);
+	unlock_kernel();
 	return 0;
 }
 

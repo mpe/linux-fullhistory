@@ -24,6 +24,7 @@
 #include <linux/kbd_kern.h>
 #include <linux/delay.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 #include <linux/init.h>
 
 #include <asm/ebus.h>
@@ -745,9 +746,10 @@ static int aux_release(struct inode * inode, struct file * file)
 {
 	unsigned long flags;
 
+	lock_kernel();
 	aux_fasync(-1, file, 0);
 	if (--aux_count)
-		return 0;
+		goto out;
 
 	spin_lock_irqsave(&pcikbd_lock, flags);
 
@@ -760,6 +762,8 @@ static int aux_release(struct inode * inode, struct file * file)
 	poll_aux_status();
 
 	spin_unlock_irqrestore(&pcikbd_lock, flags);
+out:
+	unlock_kernel();
 
 	return 0;
 }

@@ -35,16 +35,12 @@
 
 #include <linux/config.h>
 #include <linux/version.h>
-#if LINUX_VERSION_CODE < 0x020101
-#  define LINUX20
-#endif
 #include <linux/module.h>
 #include <linux/malloc.h>
 #include <linux/types.h>
 #include <linux/delay.h>
-#ifndef LINUX20
-#  include <linux/init.h>
-#endif
+#include <linux/init.h>
+#include <linux/smp_lock.h>
 #include <asm/irq.h>
 #include <asm/io.h>
 #include "sound_config.h"
@@ -747,16 +743,6 @@ static void set_default_audio_parameters(void)
 	set_default_rec_audio_parameters();
 }
 
-static void mod_inc_ref(void)
-{
-	MOD_INC_USE_COUNT;
-}
-
-static void mod_dec_ref(void)
-{
-	MOD_DEC_USE_COUNT;
-}
-
 static int dev_open(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
@@ -789,43 +775,23 @@ static int dev_open(struct inode *inode, struct file *file)
 	} else
 		err = -EINVAL;
 
-	if (err >= 0)
-		mod_inc_ref();
-
 	return err;
 }
 
-#ifdef LINUX20
-static void dev_release(struct inode *inode, struct file *file)
-#else
 static int dev_release(struct inode *inode, struct file *file)
-#endif
 {
 	int minor = MINOR(inode->i_rdev);
-#ifndef LINUX20
 	int err = 0;
-#endif
 
-	if (minor == dev.dsp_minor) {
-#ifndef LINUX20
-		err = 
-#endif
-			dsp_release(file);
-	}
+	lock_kernel();
+	if (minor == dev.dsp_minor)
+		err = dsp_release(file);
 	else if (minor == dev.mixer_minor) {
 		/* nothing */
-	}
-#ifndef LINUX20
-	else
+	} else
 		err = -EINVAL;
-
-	if (err >= 0)
-#endif
-		mod_dec_ref();
-
-#ifndef LINUX20	
+	unlock_kernel();
 	return err;
-#endif
 }
 
 static __inline__ int pack_DARQ_to_DARF(register int bank)
@@ -1002,30 +968,18 @@ static int dsp_write(const char *buf, size_t len)
 	return len - count;
 }
 
-#ifdef LINUX20
-static int dev_read(struct inode *inode, struct file *file, char *buf, int count)
-{
-       int minor = MINOR(inode->i_rdev);
-#else
 static ssize_t dev_read(struct file *file, char *buf, size_t count, loff_t *off)
 {
 	int minor = MINOR(file->f_dentry->d_inode->i_rdev);
-#endif
 	if (minor == dev.dsp_minor)
 		return dsp_read(buf, count);
 	else
 		return -EINVAL;
 }
 
-#ifdef LINUX20
-static int dev_write(struct inode *inode, struct file *file, const char *buf, int count)
-{
-	int minor = MINOR(inode->i_rdev);
-#else
 static ssize_t dev_write(struct file *file, const char *buf, size_t count, loff_t *off)
 {
 	int minor = MINOR(file->f_dentry->d_inode->i_rdev);
-#endif
 	if (minor == dev.dsp_minor)
 		return dsp_write(buf, count);
 	else
@@ -1042,15 +996,8 @@ static __inline__ void eval_dsp_msg(register WORD wMessage)
 
 		if (pack_DAPF_to_DAPQ(0) <= 0) {
 			if (!test_bit(F_WRITEBLOCK, &dev.flags)) {
-#ifdef LINUX20
-				if (test_bit(F_WRITEFLUSH, &dev.flags)) {
-					clear_bit(F_WRITEFLUSH, &dev.flags);
-					wake_up_interruptible(&dev.writeflush);
-				}
-#else
 				if (test_and_clear_bit(F_WRITEFLUSH, &dev.flags))
 					wake_up_interruptible(&dev.writeflush);
-#endif
 			}
 			clear_bit(F_WRITING, &dev.flags);
 		}
@@ -1122,6 +1069,7 @@ static void intr(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 static struct file_operations dev_fileops = {
+	owner:		THIS_MODULE,
 	read:		dev_read,
 	write:		dev_write,
 	ioctl:		dev_ioctl,
@@ -1881,8 +1829,6 @@ int __init msnd_pinnacle_init(void)
 	dev.recsrc = 0;
 	dev.dspq_data_buff = DSPQ_DATA_BUFF;
 	dev.dspq_buff_size = DSPQ_BUFF_SIZE;
-	dev.inc_ref = mod_inc_ref;
-	dev.dec_ref = mod_dec_ref;
 	if (write_ndelay == -1)
 		write_ndelay = CONFIG_MSND_WRITE_NDELAY;
 	if (write_ndelay)
@@ -1898,9 +1844,7 @@ int __init msnd_pinnacle_init(void)
 	init_waitqueue_head(&dev.writeflush);
 	msnd_fifo_init(&dev.DAPF);
 	msnd_fifo_init(&dev.DARF);
-#ifndef LINUX20
 	spin_lock_init(&dev.lock);
-#endif
 	printk(KERN_INFO LOGNAME ": %u byte audio FIFOs (x2)\n", dev.fifosize);
 	if ((err = msnd_fifo_alloc(&dev.DAPF, dev.fifosize)) < 0) {
 		printk(KERN_ERR LOGNAME ": Couldn't allocate write FIFO\n");

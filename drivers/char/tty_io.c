@@ -1430,7 +1430,9 @@ init_dev_done:
 
 static int tty_release(struct inode * inode, struct file * filp)
 {
+	lock_kernel();
 	release_dev(filp);
+	unlock_kernel();
 	return 0;
 }
 

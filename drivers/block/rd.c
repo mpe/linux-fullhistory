@@ -59,6 +59,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/devfs_fs_kernel.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -298,11 +299,14 @@ static int initrd_release(struct inode *inode,struct file *file)
 {
 	extern void free_initrd_mem(unsigned long, unsigned long);
 
-	if (--initrd_users) return 0;
-	blkdev_put(inode->i_bdev, BDEV_FILE);
-	iput(inode);
-	free_initrd_mem(initrd_start, initrd_end);
-	initrd_start = 0;
+	lock_kernel();
+	if (!--initrd_users) {
+		blkdev_put(inode->i_bdev, BDEV_FILE);
+		iput(inode);
+		free_initrd_mem(initrd_start, initrd_end);
+		initrd_start = 0;
+	}
+	unlock_kernel();
 	return 0;
 }
 

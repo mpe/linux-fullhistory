@@ -149,6 +149,7 @@ static int pt_drive_count;
 #include <linux/malloc.h>
 #include <linux/mtio.h>
 #include <linux/wait.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -773,6 +774,7 @@ static int pt_release (struct inode *inode, struct file *file)
         if ((unit >= PT_UNITS) || (PT.access <= 0)) 
                 return -EINVAL;
 
+	lock_kernel();
 	if (PT.flags & PT_WRITING) pt_write_fm(unit);
 
 	if (PT.flags & PT_REWIND) pt_rewind(unit);	
@@ -781,6 +783,7 @@ static int pt_release (struct inode *inode, struct file *file)
 
 	kfree(PT.bufptr);
 	PT.bufptr = NULL;
+	unlock_kernel();
 
 	return 0;
 

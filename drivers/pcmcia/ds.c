@@ -42,6 +42,7 @@
 #include <linux/mm.h>
 #include <linux/fcntl.h>
 #include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include <linux/timer.h>
 #include <linux/ioctl.h>
 #include <linux/proc_fs.h>
@@ -561,7 +562,6 @@ static int ds_open(struct inode *inode, struct file *file)
     
     user = kmalloc(sizeof(user_info_t), GFP_KERNEL);
     if (!user) return -ENOMEM;
-    MOD_INC_USE_COUNT;
     user->event_tail = user->event_head = 0;
     user->next = s->user;
     user->user_magic = USER_MAGIC;
@@ -584,10 +584,11 @@ static int ds_release(struct inode *inode, struct file *file)
     DEBUG(0, "ds_release(socket %d)\n", i);
     if ((i >= sockets) || (sockets == 0))
 	return 0;
+    lock_kernel();
     s = &socket_table[i];
     user = file->private_data;
     if (CHECK_USER(user))
-	return 0;
+	goto out;
 
     /* Unlink user data structure */
     if ((file->f_flags & O_ACCMODE) != O_RDONLY)
@@ -596,12 +597,12 @@ static int ds_release(struct inode *inode, struct file *file)
     for (link = &s->user; *link; link = &(*link)->next)
 	if (*link == user) break;
     if (link == NULL)
-	return 0;
+	goto out;
     *link = user->next;
     user->user_magic = 0;
     kfree(user);
-    
-    MOD_DEC_USE_COUNT;
+out:
+    unlock_kernel();
     return 0;
 } /* ds_release */
 
@@ -854,12 +855,13 @@ static int ds_ioctl(struct inode * inode, struct file * file,
 /*====================================================================*/
 
 static struct file_operations ds_fops = {
-	 open:		ds_open,
-	 release:	ds_release,
-	 ioctl:		ds_ioctl,
-	 read:		ds_read,
-	 write:		ds_write,
-	 poll:		ds_poll,
+	owner:		THIS_MODULE,
+	open:		ds_open,
+	release:	ds_release,
+	ioctl:		ds_ioctl,
+	read:		ds_read,
+	write:		ds_write,
+	poll:		ds_poll,
 };
 
 EXPORT_SYMBOL(register_pccard_driver);

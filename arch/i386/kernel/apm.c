@@ -181,6 +181,7 @@
 #include <linux/sched.h>
 #include <linux/pm.h>
 #include <linux/kernel.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -1268,6 +1269,7 @@ static int do_release(struct inode * inode, struct file * filp)
 	if (check_apm_user(as, "release"))
 		return 0;
 	filp->private_data = NULL;
+	lock_kernel();
 	if (as->standbys_pending > 0) {
 		standbys_pending -= as->standbys_pending;
 		if (standbys_pending <= 0)
@@ -1292,6 +1294,7 @@ static int do_release(struct inode * inode, struct file * filp)
 		else
 			as1->next = as->next;
 	}
+	unlock_kernel();
 	kfree_s(as, sizeof(*as));
 	return 0;
 }

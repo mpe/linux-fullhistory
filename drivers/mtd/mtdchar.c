@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/mtd/mtd.h>
 #include <linux/malloc.h>
+#include <linux/smp_lock.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,2,0)
 static loff_t mtd_lseek (struct file *file, loff_t offset, int orig)
@@ -63,21 +64,16 @@ static int mtd_open(struct inode *inode, struct file *file)
 	if ((file->f_mode & 2) && (minor & 1))
 		return -EACCES;
 
-	MOD_INC_USE_COUNT;
-
 	mtd = get_mtd_device(NULL, devnum);
 		
-	if (!mtd) {
-		MOD_DEC_USE_COUNT;
+	if (!mtd)
 		return -ENODEV;
-	}
 	
 	file->private_data = mtd;
 		
 	/* You can't open it RW if it's not a writeable device */
 	if ((file->f_mode & 2) && !(mtd->flags & MTD_WRITEABLE)) {
 		put_mtd_device(mtd);
-		MOD_DEC_USE_COUNT;
 		return -EACCES;
 	}
 		
@@ -95,12 +91,13 @@ static release_t mtd_close(struct inode *inode,
 
 	mtd = (struct mtd_info *)file->private_data;
 	
+	lock_kernel();
 	if (mtd->sync)
 		mtd->sync(mtd);
 	
 	put_mtd_device(mtd);
+	unlock_kernel();
 
-	MOD_DEC_USE_COUNT;
 	release_return(0);
 } /* mtd_close */
 
@@ -362,7 +359,7 @@ static int mtd_ioctl(struct inode *inode, struct file *file,
 } /* memory_ioctl */
 
 static struct file_operations mtd_fops = {
-
+	owner:		THIS_MODULE,
 	llseek:		mtd_lseek,     	/* lseek */
 	read:		mtd_read,	/* read */
 	write: 		mtd_write, 	/* write */

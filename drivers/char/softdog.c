@@ -37,6 +37,7 @@
 #include <linux/miscdevice.h>
 #include <linux/watchdog.h>
 #include <linux/reboot.h>
+#include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <asm/uaccess.h>
 
@@ -79,7 +80,9 @@ static int softdog_open(struct inode *inode, struct file *file)
 {
 	if(timer_alive)
 		return -EBUSY;
+#ifdef CONFIG_WATCHDOG_NOWAYOUT	 
 	MOD_INC_USE_COUNT;
+#endif	
 	/*
 	 *	Activate timer
 	 */
@@ -94,11 +97,12 @@ static int softdog_release(struct inode *inode, struct file *file)
 	 *	Shut off the timer.
 	 * 	Lock it in if it's a module and we defined ...NOWAYOUT
 	 */
+	 lock_kernel();
 #ifndef CONFIG_WATCHDOG_NOWAYOUT	 
 	del_timer(&watchdog_ticktock);
-	MOD_DEC_USE_COUNT;
 #endif	
 	timer_alive=0;
+	unlock_kernel();
 	return 0;
 }
 
@@ -146,6 +150,7 @@ static int softdog_ioctl(struct inode *inode, struct file *file,
 
 static struct file_operations softdog_fops=
 {
+	owner:		THIS_MODULE,
 	write:		softdog_write,
 	ioctl:		softdog_ioctl,
 	open:		softdog_open,

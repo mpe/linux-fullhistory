@@ -121,6 +121,7 @@
 #include <linux/bitops.h>
 #include <linux/proc_fs.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 #include <linux/ac97_codec.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -1494,24 +1495,38 @@ static int es1371_mmap(struct file *file, struct vm_area_struct *vma)
 	unsigned long size;
 
 	VALIDATE_STATE(s);
+	lock_kernel();
 	if (vma->vm_flags & VM_WRITE) {
-		if ((ret = prog_dmabuf_dac2(s)) != 0)
+		if ((ret = prog_dmabuf_dac2(s)) != 0) {
+			unlock_kernel();
 			return ret;
+		}
 		db = &s->dma_dac2;
 	} else if (vma->vm_flags & VM_READ) {
-		if ((ret = prog_dmabuf_adc(s)) != 0)
+		if ((ret = prog_dmabuf_adc(s)) != 0) {
+			unlock_kernel();
 			return ret;
+		}
 		db = &s->dma_adc;
-	} else 
+	} else {
+		unlock_kernel();
 		return -EINVAL;
-	if (vma->vm_pgoff != 0)
+	}
+	if (vma->vm_pgoff != 0) {
+		unlock_kernel();
 		return -EINVAL;
+	}
 	size = vma->vm_end - vma->vm_start;
-	if (size > (PAGE_SIZE << db->buforder))
+	if (size > (PAGE_SIZE << db->buforder)) {
+		unlock_kernel();
 		return -EINVAL;
-	if (remap_page_range(vma->vm_start, virt_to_phys(db->rawbuf), size, vma->vm_page_prot))
+	}
+	if (remap_page_range(vma->vm_start, virt_to_phys(db->rawbuf), size, vma->vm_page_prot)) {
+		unlock_kernel();
 		return -EAGAIN;
+	}
 	db->mapped = 1;
+	unlock_kernel();
 	return 0;
 }
 
@@ -1903,6 +1918,7 @@ static int es1371_release(struct inode *inode, struct file *file)
 	struct es1371_state *s = (struct es1371_state *)file->private_data;
 
 	VALIDATE_STATE(s);
+	lock_kernel();
 	if (file->f_mode & FMODE_WRITE)
 		drain_dac2(s, file->f_flags & O_NONBLOCK);
 	down(&s->open_sem);
@@ -1917,6 +1933,7 @@ static int es1371_release(struct inode *inode, struct file *file)
 	s->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
+	unlock_kernel();
 	return 0;
 }
 
@@ -2035,17 +2052,23 @@ static int es1371_mmap_dac(struct file *file, struct vm_area_struct *vma)
 	VALIDATE_STATE(s);
 	if (!(vma->vm_flags & VM_WRITE))
 		return -EINVAL;
+	lock_kernel();
 	if ((ret = prog_dmabuf_dac1(s)) != 0)
-		return ret;
+		goto out;
+	ret = -EINVAL;
 	if (vma->vm_pgoff != 0)
-		return -EINVAL;
+		goto out;
 	size = vma->vm_end - vma->vm_start;
 	if (size > (PAGE_SIZE << s->dma_dac1.buforder))
-		return -EINVAL;
+		goto out;
+	ret = -EAGAIN;
 	if (remap_page_range(vma->vm_start, virt_to_phys(s->dma_dac1.rawbuf), size, vma->vm_page_prot))
-		return -EAGAIN;
+		goto out;
 	s->dma_dac1.mapped = 1;
-	return 0;
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
@@ -2297,6 +2320,7 @@ static int es1371_release_dac(struct inode *inode, struct file *file)
 	struct es1371_state *s = (struct es1371_state *)file->private_data;
 
 	VALIDATE_STATE(s);
+	lock_kernel();
 	drain_dac1(s, file->f_flags & O_NONBLOCK);
 	down(&s->open_sem);
 	stop_dac1(s);
@@ -2304,6 +2328,7 @@ static int es1371_release_dac(struct inode *inode, struct file *file)
 	s->open_mode &= ~FMODE_DAC;
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
+	unlock_kernel();
 	return 0;
 }
 
@@ -2540,6 +2565,7 @@ static int es1371_midi_release(struct inode *inode, struct file *file)
 	unsigned count, tmo;
 
 	VALIDATE_STATE(s);
+	lock_kernel();
 	if (file->f_mode & FMODE_WRITE) {
 		add_wait_queue(&s->midi.owait, &wait);
 		for (;;) {
@@ -2573,6 +2599,7 @@ static int es1371_midi_release(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
+	unlock_kernel();
 	return 0;
 }
 

@@ -52,6 +52,7 @@
 #include <linux/poll.h>
 #include <asm/uaccess.h>
 #include <linux/ppdev.h>
+#include <linux/smp_lock.h>
 
 #define PP_VERSION "ppdev: user-space parallel port driver"
 #define CHRDEV "ppdev"
@@ -531,6 +532,7 @@ static int pp_release (struct inode * inode, struct file * file)
 	unsigned int minor = MINOR (inode->i_rdev);
 	struct pp_struct *pp = file->private_data;
 
+	lock_kernel();
 	if (pp->pdev && pp->pdev->port->ieee1284.mode != IEEE1284_MODE_COMPAT) {
 		if (!(pp->flags & PP_CLAIMED)) {
 			parport_claim_or_block (pp->pdev);
@@ -556,6 +558,7 @@ static int pp_release (struct inode * inode, struct file * file)
 		printk (KERN_DEBUG CHRDEV "%x: unregistered pardevice\n",
 			minor);
 	}
+	unlock_kernel();
 
 	kfree (pp);
 

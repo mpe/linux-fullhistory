@@ -635,6 +635,7 @@ int coda_release(struct inode *i, struct file *f)
 	unsigned short cflags = coda_flags_to_cflags(flags);
 	struct coda_cred *cred;
 
+	lock_kernel();
         ENTRY;
 	coda_vfs_stat.release++;
 
@@ -655,6 +656,7 @@ int coda_release(struct inode *i, struct file *f)
 		CODA_FREE(cred, sizeof(*cred));
 
         CDEBUG(D_FILE, "coda_release: result: %d\n", error);
+	unlock_kernel();
         return error;
 }
 

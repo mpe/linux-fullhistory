@@ -329,9 +329,12 @@ shmiq_qcntl_mmap (struct file *file, struct vm_area_struct *vma)
 
 	size  = vma->vm_end - vma->vm_start;
 	start = vma->vm_start; 
+	lock_kernel();
 	mem = (unsigned long) shmiqs [minor].shmiq_vaddr =  vmalloc_uncached (size);
-	if (!mem)
+	if (!mem) {
+		unlock_kernel();
 		return -EINVAL;
+	}
 
 	/* Prevent the swapper from considering these pages for swap and touching them */
 	vma->vm_flags    |= (VM_SHM  | VM_LOCKED | VM_IO);
@@ -345,6 +348,7 @@ shmiq_qcntl_mmap (struct file *file, struct vm_area_struct *vma)
 	shmiqs [minor].tail = 0;
 	/* Init the shared memory input queue */
 	memset (shmiqs [minor].shmiq_vaddr, 0, size);
+	unlock_kernel();
 	
 	return error;
 }

@@ -702,10 +702,8 @@ int sock_close(struct inode *inode, struct file *filp)
 		printk(KERN_DEBUG "sock_close: NULL inode\n");
 		return 0;
 	}
-	unlock_kernel();
 	sock_fasync(-1, filp, 0);
 	sock_release(socki_lookup(inode));
-	lock_kernel();
 	return 0;
 }
 

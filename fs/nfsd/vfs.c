@@ -317,7 +317,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 	if (err)
 		goto out_nfserr;
 	if (EX_ISSYNC(fhp->fh_export))
-		write_inode_now(inode, 0);
+		write_inode_now(inode, 1);
 	err = 0;
 out:
 	return err;
@@ -894,7 +894,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	if (EX_ISSYNC(fhp->fh_export)) {
 		nfsd_sync_dir(dentry);
-		write_inode_now(dchild->d_inode, 0);
+		write_inode_now(dchild->d_inode, 1);
 	}
 
 
@@ -1140,7 +1140,7 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 					| S_IFLNK;
 				err = notify_change(dnew, iap);
 				if (!err && EX_ISSYNC(fhp->fh_export))
-					write_inode_now(dentry->d_inode, 0);
+					write_inode_now(dentry->d_inode, 1);
 		       }
 		}
 	} else
@@ -1200,7 +1200,7 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	if (!err) {
 		if (EX_ISSYNC(ffhp->fh_export)) {
 			nfsd_sync_dir(ddir);
-			write_inode_now(dest, 0);
+			write_inode_now(dest, 1);
 		}
 	} else {
 		if (err == -EXDEV && rqstp->rq_vers == 2)

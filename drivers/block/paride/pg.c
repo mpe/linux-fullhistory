@@ -171,6 +171,7 @@ static int pg_drive_count;
 #include <linux/mtio.h>
 #include <linux/pg.h>
 #include <linux/wait.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -604,10 +605,12 @@ static int pg_release (struct inode *inode, struct file *file)
 	if ((unit >= PG_UNITS) || (PG.access <= 0)) 
 		return -EINVAL;
 
+	lock_kernel();
 	PG.access--;
 
 	kfree(PG.bufptr);
 	PG.bufptr = NULL;
+	unlock_kernel();
 
 	return 0;
 

@@ -19,6 +19,7 @@
 #include <linux/miscdevice.h>
 #include <linux/random.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -167,6 +168,7 @@ static int busmouse_release(struct inode *inode, struct file *file)
 	struct busmouse_data *mse = (struct busmouse_data *)file->private_data;
 	int ret = 0;
 
+	lock_kernel();
 	busmouse_fasync(-1, file, 0);
 
 	if (--mse->active == 0) {
@@ -178,6 +180,7 @@ static int busmouse_release(struct inode *inode, struct file *file)
 		}
 		mse->ready = 0;
 	}
+	unlock_kernel();
 
 	return ret;
 }

@@ -20,6 +20,7 @@
 #include <linux/fs.h>
 #include <linux/miscdevice.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -38,7 +39,9 @@ static int wdt977_open(struct inode *inode, struct file *file)
 {
 	if(timer_alive)
 		return -EBUSY;
+#ifdef CONFIG_WATCHDOG_NOWAYOUT
 	MOD_INC_USE_COUNT;
+#endif
 	timer_alive++;
 
 	//max timeout value = 255 minutes (0xFF). Write 0 to disable WatchDog.
@@ -88,6 +91,7 @@ static int wdt977_release(struct inode *inode, struct file *file)
 	 * 	Lock it in if it's a module and we defined ...NOWAYOUT
 	 */
 #ifndef CONFIG_WATCHDOG_NOWAYOUT
+	lock_kernel();
 
 	// unlock the SuperIO chip
 	outb(0x87,0x370); 
@@ -118,8 +122,8 @@ static int wdt977_release(struct inode *inode, struct file *file)
 	// lock the SuperIO chip
 	outb(0xAA,0x370);
 
-	MOD_DEC_USE_COUNT;
 	timer_alive=0;
+	unlock_kernel();
 
 	printk(KERN_INFO "Watchdog: shutdown.\n");
 #endif
@@ -162,6 +166,7 @@ static ssize_t wdt977_write(struct file *file, const char *data, size_t len, lof
 
 static struct file_operations wdt977_fops=
 {
+	owner:		THIS_MODULE,
 	write:		wdt977_write,
 	open:		wdt977_open,
 	release:	wdt977_release,

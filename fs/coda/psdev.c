@@ -292,6 +292,7 @@ static int coda_psdev_open(struct inode * inode, struct file * file)
         ENTRY;
 	
 	/* first opener, initialize */
+	lock_kernel();
 	if (!vcp->vc_inuse++) {
             INIT_LIST_HEAD(&vcp->vc_pending);
             INIT_LIST_HEAD(&vcp->vc_processing);
@@ -301,6 +302,7 @@ static int coda_psdev_open(struct inode * inode, struct file * file)
 	CDEBUG(D_PSDEV, "inuse: %d\n", vcp->vc_inuse);
 
 	EXIT;
+	unlock_kernel();
         return 0;
 }
 
@@ -312,13 +314,18 @@ static int coda_psdev_release(struct inode * inode, struct file * file)
 	struct list_head *lh, *next;
 	ENTRY;
 
+	lock_kernel();
 	if ( !vcp->vc_inuse ) {
+		unlock_kernel();
 		printk("psdev_release: Not open.\n");
 		return -1;
 	}
 
 	CDEBUG(D_PSDEV, "psdev_release: inuse %d\n", vcp->vc_inuse);
-	if (--vcp->vc_inuse) return 0;
+	if (--vcp->vc_inuse) {
+		unlock_kernel();
+		return 0;
+	}
         
         /* Wakeup clients so they can return. */
 	CDEBUG(D_PSDEV, "wake up pending clients\n");
@@ -347,6 +354,7 @@ static int coda_psdev_release(struct inode * inode, struct file * file)
 	CDEBUG(D_PSDEV, "Done.\n");
 
 	EXIT;
+	unlock_kernel();
 	return 0;
 }
 

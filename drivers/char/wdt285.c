@@ -26,6 +26,7 @@
 #include <linux/reboot.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/smp_lock.h>
 
 #include <asm/irq.h>
 #include <asm/uaccess.h>
@@ -74,7 +75,6 @@ static int watchdog_open(struct inode *inode, struct file *file)
 {
 	if(timer_alive)
 		return -EBUSY;
-	MOD_INC_USE_COUNT;
 	/*
 	 *	Ahead watchdog factor ten, Mr Sulu
 	 */
@@ -86,6 +86,7 @@ static int watchdog_open(struct inode *inode, struct file *file)
 	request_irq(IRQ_TIMER4, watchdog_fire, 0, "watchdog", NULL);
 #else
 	*CSR_SA110_CNTL |= 1 << 13;
+	MOD_INC_USE_COUNT;
 #endif
 	timer_alive = 1;
 	return 0;
@@ -94,9 +95,10 @@ static int watchdog_open(struct inode *inode, struct file *file)
 static int watchdog_release(struct inode *inode, struct file *file)
 {
 #ifdef ONLY_TESTING
+	lock_kernel();
 	free_irq(IRQ_TIMER4, NULL);
 	timer_alive = 0;
-	MOD_DEC_USE_COUNT;
+	unlock_kernel();
 #else
 	/*
 	 *	It's irreversible!
@@ -153,6 +155,7 @@ static int watchdog_ioctl(struct inode *inode, struct file *file,
 
 static struct file_operations watchdog_fops=
 {
+	owner:		THIS_MODULE,
 	write:		watchdog_write,
 	ioctl:		watchdog_ioctl,
 	open:		watchdog_open,

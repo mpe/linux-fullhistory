@@ -67,6 +67,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include <linux/ptrace.h>
 #include <linux/fcntl.h>
 #include <linux/ioport.h>    
@@ -1959,8 +1960,10 @@ wavefront_open (struct inode *inode, struct file *file)
 static int
 wavefront_release(struct inode *inode, struct file *file)
 {
+	lock_kernel();
 	dev.opened = 0;
 	dev.debug = 0;
+	unlock_kernel();
 	return 0;
 }
 

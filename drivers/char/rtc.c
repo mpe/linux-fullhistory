@@ -65,6 +65,7 @@
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -537,6 +538,7 @@ static int rtc_release(struct inode *inode, struct file *file)
 
 	unsigned char tmp;
 
+	lock_kernel();
 	spin_lock_irq(&rtc_lock);
 	tmp = CMOS_READ(RTC_CONTROL);
 	tmp &=  ~RTC_PIE;
@@ -555,12 +557,15 @@ static int rtc_release(struct inode *inode, struct file *file)
 		rtc_fasync (-1, file, 0);
 	}
 
+#else
+	lock_kernel();
 #endif
 
 	spin_lock_irq (&rtc_lock);
 	rtc_irq_data = 0;
 	spin_unlock_irq (&rtc_lock);
 	rtc_status = rtc_status & ~RTC_IS_OPEN;
+	unlock_kernel();
 	return 0;
 }
 

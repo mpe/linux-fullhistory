@@ -151,7 +151,7 @@ extern struct blk_dev_struct blk_dev[MAX_BLKDEV];
 extern void grok_partitions(struct gendisk *dev, int drive, unsigned minors, long size);
 extern void register_disk(struct gendisk *dev, kdev_t first, unsigned minors, struct block_device_operations *ops, long size);
 extern void generic_unplug_device(void *data);
-extern int generic_make_request(request_queue_t *q, int rw,
+extern void generic_make_request(request_queue_t *q, int rw,
 						struct buffer_head * bh);
 extern request_queue_t *blk_get_queue(kdev_t dev);
 extern void blkdev_release_request(struct request *);

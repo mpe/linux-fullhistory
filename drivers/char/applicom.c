@@ -101,21 +101,18 @@ static unsigned int ReadErrorCount;	/* number of read error       */
 static unsigned int DeviceErrorCount;	/* number of device error     */
 
 static loff_t ac_llseek(struct file *, loff_t, int);
-static int ac_open(struct inode *, struct file *);
 static ssize_t ac_read (struct file *, char *, size_t, loff_t *);
 static ssize_t ac_write (struct file *, const char *, size_t, loff_t *);
 static int ac_ioctl(struct inode *, struct file *, unsigned int,
 		    unsigned long);
-static int ac_release(struct inode *, struct file *);
 static void ac_interrupt(int, void *, struct pt_regs *);
 
 struct file_operations ac_fops = {
+	owner:THIS_MODULE,
 	llseek:ac_llseek,
 	read:ac_read,
 	write:ac_write,
 	ioctl:ac_ioctl,
-	open:ac_open,
-	release:ac_release,
 };
 
 struct miscdevice ac_miscdev = {
@@ -123,6 +120,8 @@ struct miscdevice ac_miscdev = {
 	"ac",
 	&ac_fops
 };
+
+static int dummy;	/* dev_id for request_irq() */
 
 int ac_register_board(unsigned long physloc, unsigned long loc, 
 		      unsigned char boardno)
@@ -180,7 +179,7 @@ void cleanup_module(void)
 		iounmap((void *) apbs[i].RamIO);
 
 		if (apbs[i].irq)
-			free_irq(apbs[i].irq, &ac_open);
+			free_irq(apbs[i].irq, &dummy);
 	}
 }
 
@@ -226,7 +225,7 @@ int __init applicom_init(void)
 			continue;
 		}
 
-		if (request_irq(dev->irq, &ac_interrupt, SA_SHIRQ, "Applicom PCI", &ac_open)) {
+		if (request_irq(dev->irq, &ac_interrupt, SA_SHIRQ, "Applicom PCI", &dummy)) {
 			printk(KERN_INFO "Could not allocate IRQ %d for PCI Applicom device.\n", dev->irq);
 			iounmap(RamIO);
 			apbs[boardno - 1].RamIO = 0;
@@ -277,7 +276,7 @@ int __init applicom_init(void)
 		printk(KERN_NOTICE "Applicom ISA card found at mem 0x%lx, irq %d\n", mem + (LEN_RAM_IO*i), irq);
 
 		if (!numisa) {
-			if (request_irq(irq, &ac_interrupt, SA_SHIRQ, "Applicom ISA", &ac_open)) {
+			if (request_irq(irq, &ac_interrupt, SA_SHIRQ, "Applicom ISA", &dummy)) {
 				printk(KERN_WARNING "Could not allocate IRQ %d for ISA Applicom device.\n", irq);
 				iounmap((void *) RamIO);
 				apbs[boardno - 1].RamIO = 0;
@@ -345,19 +344,6 @@ static loff_t ac_llseek(struct file *file, loff_t offset, int origin)
 {
 	return -ESPIPE;
 }
-
-static int ac_open(struct inode *inode, struct file *filp)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int ac_release(struct inode *inode, struct file *file)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
 
 static ssize_t ac_write(struct file *file, const char *buf, size_t count, loff_t * ppos)
 {

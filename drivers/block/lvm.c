@@ -301,6 +301,7 @@ static spinlock_t lvm_lock = SPIN_LOCK_UNLOCKED;
 
 static struct file_operations lvm_chr_fops =
 {
+	owner:		THIS_MODULE,
 	open:		lvm_chr_open,
 	release:	lvm_chr_close,
 	ioctl:		lvm_chr_ioctl,
@@ -516,8 +517,6 @@ static int lvm_chr_open(struct inode *inode,
 
 	/* Group special file open */
 	if (VG_CHR(minor) > MAX_VG) return -ENXIO;
-
-	MOD_INC_USE_COUNT;
 
 	lvm_chr_open_count++;
 	return 0;
@@ -743,6 +742,7 @@ static int lvm_chr_close(struct inode *inode, struct file *file)
 	     "%s -- lvm_chr_close   VG#: %d\n", lvm_name, VG_CHR(minor));
 #endif
 
+	lock_kernel();
 #ifdef LVM_TOTAL_RESET
 	if (lvm_reset_spindown > 0) {
 		lvm_reset_spindown = 0;
@@ -755,10 +755,7 @@ static int lvm_chr_close(struct inode *inode, struct file *file)
 		lock = 0;	/* release lock */
 		wake_up_interruptible(&lvm_wait);
 	}
-
-#ifdef MODULE
-	if (GET_USE_COUNT(&__this_module) > 0) MOD_DEC_USE_COUNT;
-#endif
+	unlock_kernel();
 
 	return 0;
 } /* lvm_chr_close() */

@@ -24,7 +24,9 @@ int hpfs_open(struct inode *i, struct file *f)
 
 int hpfs_file_release(struct inode *inode, struct file *file)
 {
+	lock_kernel();
 	hpfs_write_if_changed(inode);
+	unlock_kernel();
 	return 0;
 }
 

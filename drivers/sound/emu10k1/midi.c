@@ -32,6 +32,8 @@
 
 #define __NO_VERSION__
 #include <linux/module.h>
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include <asm/uaccess.h>
 
 #include "hwaccess.h"
@@ -183,8 +185,10 @@ static int emu10k1_midi_open(struct inode *inode, struct file *file)
 static int emu10k1_midi_release(struct inode *inode, struct file *file)
 {
 	struct emu10k1_mididevice *midi_dev = (struct emu10k1_mididevice *) file->private_data;
-	struct emu10k1_card *card = midi_dev->card;
+	struct emu10k1_card *card;
 
+	lock_kernel();
+	card = midi_dev->card;
 	DPF(2, "emu10k1_midi_release()\n");
 
 	if (file->f_mode & FMODE_WRITE) {
@@ -227,6 +231,7 @@ static int emu10k1_midi_release(struct inode *inode, struct file *file)
 	card->open_mode &= ~((file->f_mode << FMODE_MIDI_SHIFT) & (FMODE_MIDI_READ | FMODE_MIDI_WRITE));
 	up(&card->open_sem);
 	wake_up_interruptible(&card->open_wait);
+	unlock_kernel();
 
 	return 0;
 }

@@ -16,6 +16,8 @@
 #include <linux/locks.h>
 #include <asm/segment.h>
 #include <linux/string.h>
+#define __NO_VERSION__
+#include <linux/module.h>
 #include <asm/uaccess.h>
 
 #include <linux/coda.h>
@@ -26,8 +28,6 @@
 
 /* pioctl ops */
 static int coda_ioctl_permission(struct inode *inode, int mask);
-static int coda_ioctl_open(struct inode *i, struct file *f);
-static int coda_ioctl_release(struct inode *i, struct file *f);
 static int coda_pioctl(struct inode * inode, struct file * filp, 
                        unsigned int cmd, unsigned long arg);
 
@@ -39,9 +39,8 @@ struct inode_operations coda_ioctl_inode_operations =
 };
 
 struct file_operations coda_ioctl_operations = {
+	owner:		THIS_MODULE,
 	ioctl:		coda_pioctl,
-	open:		coda_ioctl_open,
-	release:	coda_ioctl_release,
 };
 
 /* the coda pioctl inode ops */
@@ -51,24 +50,6 @@ static int coda_ioctl_permission(struct inode *inode, int mask)
 
         return 0;
 }
-
-/* The pioctl file ops*/
-int coda_ioctl_open(struct inode *i, struct file *f)
-{
-        ENTRY;
-
-        CDEBUG(D_PIOCTL, "File inode number: %ld\n", 
-	       f->f_dentry->d_inode->i_ino);
-
-	EXIT;
-        return 0;
-}
-
-int coda_ioctl_release(struct inode *i, struct file *f) 
-{
-        return 0;
-}
-
 
 static int coda_pioctl(struct inode * inode, struct file * filp, 
 		       unsigned int cmd, unsigned long user_data)

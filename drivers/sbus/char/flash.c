@@ -13,6 +13,7 @@
 #include <linux/fcntl.h>
 #include <linux/poll.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -37,23 +38,28 @@ flash_mmap(struct file *file, struct vm_area_struct *vma)
 	unsigned long addr;
 	unsigned long size;
 
+	lock_kernel();
 	if (flash.read_base == flash.write_base) {
 		addr = flash.read_base;
 		size = flash.read_size;
 	} else {
 		if ((vma->vm_flags & VM_READ) &&
-		    (vma->vm_flags & VM_WRITE))
+		    (vma->vm_flags & VM_WRITE)) {
+			unlock_kernel();
 			return -EINVAL;
-
+		}
 		if (vma->vm_flags & VM_READ) {
 			addr = flash.read_base;
 			size = flash.read_size;
 		} else if (vma->vm_flags & VM_WRITE) {
 			addr = flash.write_base;
 			size = flash.write_size;
-		} else
+		} else {
+			unlock_kernel();
 			return -ENXIO;
+		}
 	}
+	unlock_kernel();
 
 	if ((vma->vm_pgoff << PAGE_SHIFT) > size)
 		return -ENXIO;
@@ -121,7 +127,9 @@ flash_open(struct inode *inode, struct file *file)
 static int
 flash_release(struct inode *inode, struct file *file)
 {
+	lock_kernel();
 	flash.busy = 0;
+	unlock_kernel();
 	return 0;
 }
 

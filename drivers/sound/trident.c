@@ -107,6 +107,7 @@
 #include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 #include <linux/ac97_codec.h>
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
@@ -1560,30 +1561,35 @@ static int trident_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct trident_state *state = (struct trident_state *)file->private_data;
 	struct dmabuf *dmabuf = &state->dmabuf;
-	int ret;
+	int ret = -EINVAL;
 	unsigned long size;
 
 	VALIDATE_STATE(state);
+	lock_kernel();
 	if (vma->vm_flags & VM_WRITE) {
 		if ((ret = prog_dmabuf(state, 0)) != 0)
-			return ret;
+			goto out;
 	} else if (vma->vm_flags & VM_READ) {
 		if ((ret = prog_dmabuf(state, 1)) != 0)
-			return ret;
-	} else 
-		return -EINVAL;
+			goto out;
+	} else
+		goto out;
 
+	ret = -EINVAL;
 	if (vma->vm_pgoff != 0)
-		return -EINVAL;
+		goto out;
 	size = vma->vm_end - vma->vm_start;
 	if (size > (PAGE_SIZE << dmabuf->buforder))
-		return -EINVAL;
+		goto out;
+	ret = -EAGAIN;
 	if (remap_page_range(vma->vm_start, virt_to_phys(dmabuf->rawbuf),
 			     size, vma->vm_page_prot))
-		return -EAGAIN;
+		goto out;
 	dmabuf->mapped = 1;
-
-	return 0;
+	ret = 0;
+out;
+	unlock_kernel();
+	return ret;
 }
 
 static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
@@ -2009,9 +2015,12 @@ static int trident_open(struct inode *inode, struct file *file)
 static int trident_release(struct inode *inode, struct file *file)
 {
 	struct trident_state *state = (struct trident_state *)file->private_data;
-	struct trident_card *card = state->card;
-	struct dmabuf *dmabuf = &state->dmabuf;
+	struct trident_card *card;
+	struct dmabuf *dmabuf;
 
+	lock_kernel();
+	card = state->card;
+	dmabuf = &state->dmabuf;
 	VALIDATE_STATE(state);
 
 	if (file->f_mode & FMODE_WRITE) {
@@ -2038,6 +2047,7 @@ static int trident_release(struct inode *inode, struct file *file)
 
 	/* we're covered by the open_sem */
 	up(&card->open_sem);
+	unlock_kernel();
 
 	return 0;
 }

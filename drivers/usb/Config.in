@@ -28,6 +28,9 @@ comment 'USB Controllers'
 comment 'USB Devices'
    dep_tristate '  USB Printer support' CONFIG_USB_PRINTER $CONFIG_USB
    dep_tristate '  USB Scanner support' CONFIG_USB_SCANNER $CONFIG_USB
+   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      dep_tristate '  Microtek X6USB scanner support (EXPERIMENTAL)' CONFIG_USB_MICROTEK $CONFIG_USB $CONFIG_SCSI
+   fi
    dep_tristate '  USB Audio support' CONFIG_USB_AUDIO $CONFIG_USB $CONFIG_SOUND
    dep_tristate '  USB Modem (CDC ACM) support' CONFIG_USB_ACM $CONFIG_USB
    dep_tristate '  USB Serial Converter support' CONFIG_USB_SERIAL $CONFIG_USB
@@ -68,7 +71,6 @@ comment 'USB Devices'
       dep_tristate '  USB ADMtek Pegasus-based device support (EXPERIMENTAL)' CONFIG_USB_PEGASUS $CONFIG_USB $CONFIG_NET
       dep_tristate '  USB Diamond Rio500 support (EXPERIMENTAL)' CONFIG_USB_RIO500 $CONFIG_USB
       dep_tristate '  D-Link USB FM radio support (EXPERIMENTAL)' CONFIG_USB_DSBR $CONFIG_USB $CONFIG_VIDEO_DEV
-      dep_tristate '  Microtek X6USB scanner support (EXPERIMENTAL)' CONFIG_USB_MICROTEK $CONFIG_USB $CONFIG_SCSI
       dep_tristate '  USB Bluetooth support (EXPERIMENTAL)' CONFIG_USB_BLUETOOTH $CONFIG_USB
    fi
 

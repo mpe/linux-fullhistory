@@ -124,11 +124,8 @@ static void __fput(struct file *filp)
 	struct vfsmount * mnt = filp->f_vfsmnt;
 	struct inode * inode = dentry->d_inode;
 
-	if (filp->f_op && filp->f_op->release) {
-		lock_kernel();
+	if (filp->f_op && filp->f_op->release)
 		filp->f_op->release(inode, filp);
-		unlock_kernel();
-	}
 	fops_put(filp->f_op);
 	filp->f_dentry = NULL;
 	filp->f_vfsmnt = NULL;

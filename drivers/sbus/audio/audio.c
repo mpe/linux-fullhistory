@@ -24,6 +24,7 @@
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include <linux/mm.h>
 #include <linux/tqueue.h>
 #include <linux/major.h>
@@ -1910,6 +1911,7 @@ static int sparcaudio_release(struct inode * inode, struct file * file)
         struct sparcaudio_driver *drv = drivers[(MINOR(inode->i_rdev) >>
                                                  SPARCAUDIO_DEVICE_SHIFT)];
 
+	lock_kernel();
         if (file->f_mode & FMODE_READ) {
                 /* Stop input */
                 drv->ops->stop_input(drv);
@@ -1951,11 +1953,13 @@ static int sparcaudio_release(struct inode * inode, struct file * file)
         kill_procs(drv->sd_siglist,SIGPOLL,S_MSG);
 
         wake_up_interruptible(&drv->open_wait);
+	unlock_kernel();
 
         return 0;
 }
 
 static struct file_operations sparcaudio_fops = {
+	owner:		THIS_MODULE,
 	llseek:		sparcaudio_lseek,
 	read:		sparcaudio_read,
 	write:		sparcaudio_write,

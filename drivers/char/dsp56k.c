@@ -35,6 +35,7 @@
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/devfs_fs_kernel.h>
+#include <linux/smp_lock.h>
 
 #include <asm/segment.h>
 #include <asm/atarihw.h>
@@ -483,7 +484,9 @@ static int dsp56k_release(struct inode *inode, struct file *file)
 	{
 	case DSP56K_DEV_56001:
 
+		lock_kernel();
 		dsp56k.in_use = 0;
+		unlock_kernel();
 
 		break;
 	default:

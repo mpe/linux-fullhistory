@@ -49,6 +49,7 @@
 #include <linux/mm.h>
 #include <linux/poll.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -411,8 +412,10 @@ static int sun_mouse_fasync (int fd, struct file *filp, int on)
 static int
 sun_mouse_close(struct inode *inode, struct file *file)
 {
+	lock_kernel();
 	sun_mouse_fasync (-1, file, 0);
 	sunmouse.active--;
+	unlock_kernel();
 	return 0;
 }
 

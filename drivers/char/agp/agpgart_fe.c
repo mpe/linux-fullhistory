@@ -41,6 +41,7 @@
 #include <linux/miscdevice.h>
 #include <linux/agp_backend.h>
 #include <linux/agpgart.h>
+#include <linux/smp_lock.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -605,14 +606,17 @@ static int agp_mmap(struct file *file, struct vm_area_struct *vma)
 	agp_file_private *priv = (agp_file_private *) file->private_data;
 	agp_kern_info kerninfo;
 
+	lock_kernel();
 	AGP_LOCK();
 
 	if (agp_fe.backend_acquired != TRUE) {
 		AGP_UNLOCK();
+		unlock_kernel();
 		return -EPERM;
 	}
 	if (!(test_bit(AGP_FF_IS_VALID, &priv->access_flags))) {
 		AGP_UNLOCK();
+		unlock_kernel();
 		return -EPERM;
 	}
 	agp_copy_info(&kerninfo);
@@ -624,42 +628,51 @@ static int agp_mmap(struct file *file, struct vm_area_struct *vma)
 	if (test_bit(AGP_FF_IS_CLIENT, &priv->access_flags)) {
 		if ((size + offset) > current_size) {
 			AGP_UNLOCK();
+			unlock_kernel();
 			return -EINVAL;
 		}
 		client = agp_find_client_by_pid(current->pid);
 
 		if (client == NULL) {
 			AGP_UNLOCK();
+			unlock_kernel();
 			return -EPERM;
 		}
 		if (!agp_find_seg_in_client(client, offset,
 					    size, vma->vm_page_prot)) {
 			AGP_UNLOCK();
+			unlock_kernel();
 			return -EINVAL;
 		}
 		if (remap_page_range(vma->vm_start,
 				     (kerninfo.aper_base + offset),
 				     size, vma->vm_page_prot)) {
 			AGP_UNLOCK();
+			unlock_kernel();
 			return -EAGAIN;
 		}
 		AGP_UNLOCK();
+		unlock_kernel();
 		return 0;
 	}
 	if (test_bit(AGP_FF_IS_CONTROLLER, &priv->access_flags)) {
 		if (size != current_size) {
 			AGP_UNLOCK();
+			unlock_kernel();
 			return -EINVAL;
 		}
 		if (remap_page_range(vma->vm_start, kerninfo.aper_base,
 				     size, vma->vm_page_prot)) {
 			AGP_UNLOCK();
+			unlock_kernel();
 			return -EAGAIN;
 		}
 		AGP_UNLOCK();
+		unlock_kernel();
 		return 0;
 	}
 	AGP_UNLOCK();
+	unlock_kernel();
 	return -EPERM;
 }
 
@@ -667,6 +680,7 @@ static int agp_release(struct inode *inode, struct file *file)
 {
 	agp_file_private *priv = (agp_file_private *) file->private_data;
 
+	lock_kernel();
 	AGP_LOCK();
 
 	if (test_bit(AGP_FF_IS_CONTROLLER, &priv->access_flags)) {
@@ -688,6 +702,7 @@ static int agp_release(struct inode *inode, struct file *file)
 	agp_remove_file_private(priv);
 	kfree(priv);
 	AGP_UNLOCK();
+	unlock_kernel();
 	return 0;
 }
 

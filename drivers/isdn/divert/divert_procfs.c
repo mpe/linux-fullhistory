@@ -199,6 +199,7 @@ isdn_divert_close(struct inode *ino, struct file *filep)
 	struct divert_info *inf;
 	int flags;
 
+	lock_kernel();
 	save_flags(flags);
 	cli();
 	if_used--;
@@ -214,6 +215,7 @@ isdn_divert_close(struct inode *ino, struct file *filep)
 			divert_info_head = divert_info_head->next;
 			kfree(inf);
 		}
+	unlock_kernel();
 	return (0);
 }				/* isdn_divert_close */
 

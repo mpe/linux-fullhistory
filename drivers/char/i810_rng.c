@@ -165,6 +165,7 @@
 #include <linux/random.h>
 #include <linux/sysctl.h>
 #include <linux/miscdevice.h>
+#include <linux/smp_lock.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -626,12 +627,16 @@ err_out:
 static int rng_dev_release (struct inode *inode, struct file *filp)
 {
 
-	if (rng_enable(0) != 0)
+	lock_kernel();
+	if (rng_enable(0) != 0) {
+		unlock_kernel();
 		return -EIO;
+	}
 
 	spin_lock_bh (&rng_lock);
 	rng_open = 0;
 	spin_unlock_bh (&rng_lock);
+	unlock_kernel();
 
 	return 0;
 }

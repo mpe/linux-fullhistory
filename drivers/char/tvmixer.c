@@ -7,6 +7,7 @@
 #include <linux/errno.h>
 #include <linux/malloc.h>
 #include <linux/i2c.h>
+#include <linux/smp_lock.h>
 #include <linux/videodev.h>
 #include <asm/semaphore.h>
 #include <linux/init.h>
@@ -220,13 +221,18 @@ static int tvmixer_open(struct inode *inode, struct file *file)
 static int tvmixer_release(struct inode *inode, struct file *file)
 {
         struct TVMIXER *mix = file->private_data;
-	struct i2c_client *client = mix->dev;
+	struct i2c_client *client;
 
-	if (NULL == client)
+	lock_kernel();
+	client = mix->dev;
+	if (NULL == client) {
+		unlock_kernel();
 		return -ENODEV;
+	}
 
 	if (client->adapter->dec_use) 
 		client->adapter->dec_use(client->adapter);
+	unlock_kernel();
         return 0;
 }
 

@@ -182,6 +182,7 @@
 #include <linux/fs.h>
 #include <linux/signal.h>
 #include <linux/mm.h>
+#include <linux/smp_lock.h>
 #include <linux/timer.h>
 #include <linux/wait.h>
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
@@ -379,10 +380,8 @@ struct capiminor *capiminor_alloc(__u16 applid, __u32 ncci)
 	struct capiminor *mp, **pp;
         unsigned int minor = 0;
 
-	MOD_INC_USE_COUNT;
 	mp = (struct capiminor *)kmem_cache_alloc(capiminor_cachep, GFP_ATOMIC);
 	if (!mp) {
-		MOD_DEC_USE_COUNT;
 		printk(KERN_ERR "capi: can't alloc capiminor\n");
 		return 0;
 	}
@@ -434,7 +433,6 @@ void capiminor_free(struct capiminor *mp)
 				kfree_skb(skb);
 			capiminor_del_all_ack(mp);
 			kmem_cache_free(capiminor_cachep, mp);
-			MOD_DEC_USE_COUNT;
 #ifdef _DEBUG_REFCOUNT
 			printk(KERN_DEBUG "capiminor_free %d\n", GET_USE_COUNT(THIS_MODULE));
 #endif
@@ -1212,7 +1210,6 @@ capi_open(struct inode *inode, struct file *file)
 	if ((file->private_data = capidev_alloc(file)) == 0)
 		return -ENOMEM;
 
-	MOD_INC_USE_COUNT;
 #ifdef _DEBUG_REFCOUNT
 	printk(KERN_DEBUG "capi_open %d\n", GET_USE_COUNT(THIS_MODULE));
 #endif
@@ -1224,14 +1221,15 @@ capi_release(struct inode *inode, struct file *file)
 {
 	struct capidev *cdev = (struct capidev *)file->private_data;
 
+	lock_kernel();
 	capincci_free(cdev, 0xffffffff);
 	capidev_free(cdev);
 	file->private_data = NULL;
 
-	MOD_DEC_USE_COUNT;
 #ifdef _DEBUG_REFCOUNT
 	printk(KERN_DEBUG "capi_release %d\n", GET_USE_COUNT(THIS_MODULE));
 #endif
+	unlock_kernel();
 	return 0;
 }
 
@@ -1414,11 +1412,13 @@ capinc_raw_release(struct inode *inode, struct file *file)
 	struct capiminor *mp = (struct capiminor *)file->private_data;
 
 	if (mp) {
+		lock_kernel();
 		mp->file = 0;
 		if (mp->nccip == 0) {
 			capiminor_free(mp);
 			file->private_data = NULL;
 		}
+		unlock_kernel();
 	}
 
 #ifdef _DEBUG_REFCOUNT
@@ -2050,8 +2050,6 @@ int capi_init(void)
 {
 	char *p;
 
-	MOD_INC_USE_COUNT;
-
 	if ((p = strchr(revision, ':'))) {
 		strcpy(rev, p + 2);
 		p = strchr(rev, '$');
@@ -2061,7 +2059,6 @@ int capi_init(void)
 
 	if (devfs_register_chrdev(capi_major, "capi20", &capi_fops)) {
 		printk(KERN_ERR "capi20: unable to get major %d\n", capi_major);
-		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
@@ -2069,7 +2066,6 @@ int capi_init(void)
 	if (devfs_register_chrdev(capi_rawmajor, "capi/r%d", &capinc_raw_fops)) {
 		devfs_unregister_chrdev(capi_major, "capi20");
 		printk(KERN_ERR "capi20: unable to get major %d\n", capi_rawmajor);
-		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
         devfs_register_series (NULL, "capi/r%u", CAPINC_NR_PORTS,
@@ -2085,7 +2081,6 @@ int capi_init(void)
 
 	if ((capifuncs = attach_capi_interface(&cuser)) == 0) {
 
-		MOD_DEC_USE_COUNT;
 		devfs_unregister_chrdev(capi_major, "capi20");
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
 		devfs_unregister_chrdev(capi_rawmajor, "capi/r%d");
@@ -2101,7 +2096,6 @@ int capi_init(void)
 		(void) detach_capi_interface(&cuser);
 		devfs_unregister_chrdev(capi_major, "capi20");
 		devfs_unregister_chrdev(capi_rawmajor, "capi/r%d");
-		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
@@ -2122,7 +2116,6 @@ int capi_init(void)
 		devfs_unregister(devfs_find_handle(NULL, "capi20",
 						   capi_major, 0,
 						   DEVFS_SPECIAL_CHR, 0));
-		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 
@@ -2131,7 +2124,6 @@ int capi_init(void)
 	printk(KERN_NOTICE "capi20: Rev%s: started up with major %d\n",
 				rev, capi_major);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

@@ -60,6 +60,7 @@
 #include <linux/module.h>
 #undef DEBUG
 #include <linux/usb.h>
+#include <linux/smp_lock.h>
 
 
 
@@ -298,10 +299,12 @@ static int camera_release (struct inode *inode, struct file *file)
 	kfree (camera->buf);
 
 	/* If camera was unplugged with open file ... */
+	lock_kernel();
 	if (!camera->dev) {
 		minor_data [camera->subminor] = NULL;
 		kfree (camera);
 	}
+	unlock_kernel();
 
 	dbg ("close"); 
 

@@ -76,6 +76,7 @@
 #include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 #include <linux/ac97_codec.h>
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
@@ -1227,29 +1228,34 @@ static int i810_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct i810_state *state = (struct i810_state *)file->private_data;
 	struct dmabuf *dmabuf = &state->dmabuf;
-	int ret;
+	int ret = -EINVAL;
 	unsigned long size;
 
+	lock_kernel();
 	if (vma->vm_flags & VM_WRITE) {
 		if ((ret = prog_dmabuf(state, 0)) != 0)
-			return ret;
+			goto out;
 	} else if (vma->vm_flags & VM_READ) {
 		if ((ret = prog_dmabuf(state, 1)) != 0)
-			return ret;
+			goto out;
 	} else 
-		return -EINVAL;
+		goto out;
 
+	ret = -EINVAL;
 	if (vma->vm_pgoff != 0)
-		return -EINVAL;
+		goto out;
 	size = vma->vm_end - vma->vm_start;
 	if (size > (PAGE_SIZE << dmabuf->buforder))
-		return -EINVAL;
+		goto out;
+	ret = -EAGAIN;
 	if (remap_page_range(vma->vm_start, virt_to_phys(dmabuf->rawbuf),
 			     size, vma->vm_page_prot))
-		return -EAGAIN;
+		goto out;
 	dmabuf->mapped = 1;
-
-	return 0;
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 static int i810_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
@@ -1608,6 +1614,7 @@ static int i810_release(struct inode *inode, struct file *file)
 	struct i810_state *state = (struct i810_state *)file->private_data;
 	struct dmabuf *dmabuf = &state->dmabuf;
 
+	lock_kernel();
 	if (file->f_mode & FMODE_WRITE) {
 		i810_clear_tail(state);
 		drain_dac(state, file->f_flags & O_NONBLOCK);
@@ -1632,6 +1639,7 @@ static int i810_release(struct inode *inode, struct file *file)
 	
 	kfree(state->card->states[state->virt]);
 	state->card->states[state->virt] = NULL;
+	unlock_kernel();
 
 	return 0;
 }

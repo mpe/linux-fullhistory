@@ -34,6 +34,8 @@
 
 #include <linux/module.h>
 #include <linux/config.h>
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 
 #define PC		1
 #define ATARI	2
@@ -341,11 +343,13 @@ static int nvram_open( struct inode *inode, struct file *file )
 
 static int nvram_release( struct inode *inode, struct file *file )
 {
+	lock_kernel();
 	nvram_open_cnt--;
 	if (file->f_flags & O_EXCL)
 		nvram_open_mode &= ~NVRAM_EXCL;
 	if (file->f_mode & 2)
 		nvram_open_mode &= ~NVRAM_WRITE;
+	unlock_kernel();
 
 	return( 0 );
 }

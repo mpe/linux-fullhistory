@@ -38,6 +38,7 @@
 #include <linux/reboot.h>
 #include <linux/init.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 
 static int acq_is_open=0;
 static spinlock_t acq_lock;
@@ -140,6 +141,7 @@ static int acq_open(struct inode *inode, struct file *file)
 
 static int acq_close(struct inode *inode, struct file *file)
 {
+	lock_kernel();
 	if(MINOR(inode->i_rdev)==WATCHDOG_MINOR)
 	{
 		spin_lock(&acq_lock);
@@ -149,6 +151,7 @@ static int acq_close(struct inode *inode, struct file *file)
 		acq_is_open=0;
 		spin_unlock(&acq_lock);
 	}
+	unlock_kernel();
 	return 0;
 }
 

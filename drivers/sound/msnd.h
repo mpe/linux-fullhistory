@@ -160,13 +160,6 @@
 #  define inb			inb_p
 #endif
 
-#ifdef LINUX20
-#  define __initfunc(f)				f
-#  define __initdata				/* nothing */
-#  define spin_lock_irqsave(junk,flags)		do { save_flags(flags); cli(); } while (0)
-#  define spin_unlock_irqrestore(junk,flags)	do { restore_flags(flags); } while (0)
-#endif
-
 /* JobQueueStruct */
 #define JQS_wStart		0x00
 #define JQS_wSize		0x02
@@ -236,9 +229,7 @@ typedef struct multisound_dev {
 	wait_queue_head_t writeblock;
 	wait_queue_head_t readblock;
 	wait_queue_head_t writeflush;
-#ifndef LINUX20
 	spinlock_t lock;
-#endif
 	int nresets;
 	unsigned long recsrc;
 	int left_levels[16];
@@ -250,8 +241,6 @@ typedef struct multisound_dev {
 	int rec_sample_size, rec_sample_rate, rec_channels;
 	int rec_ndelay;
 	BYTE bCurrentMidiPatch;
-	void (*inc_ref)(void);
-	void (*dec_ref)(void);
 
 	/* Digital audio FIFOs */
 	msnd_fifo DAPF, DARF;

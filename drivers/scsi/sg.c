@@ -52,6 +52,7 @@
 #include <linux/fcntl.h>
 #include <linux/init.h>
 #include <linux/poll.h>
+#include <linux/smp_lock.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -304,8 +305,6 @@ static int sg_open(struct inode * inode, struct file * filp)
 
     if (sdp->device->host->hostt->module)
         __MOD_INC_USE_COUNT(sdp->device->host->hostt->module);
-    if (sg_template.module)
-        __MOD_INC_USE_COUNT(sg_template.module);
     return 0;
 }
 
@@ -315,8 +314,11 @@ static int sg_release(struct inode * inode, struct file * filp)
     Sg_device * sdp;
     Sg_fd * sfp;
 
-    if ((! (sfp = (Sg_fd *)filp->private_data)) || (! (sdp = sfp->parentdp)))
+    lock_kernel();
+    if ((! (sfp = (Sg_fd *)filp->private_data)) || (! (sdp = sfp->parentdp))) {
+	unlock_kernel();
         return -ENXIO;
+    }
     SCSI_LOG_TIMEOUT(3, printk("sg_release: dev=%d\n", MINOR(sdp->i_rdev)));
     sg_fasync(-1, filp, 0);   /* remove filp from async notification list */
     sg_remove_sfp(sdp, sfp);
@@ -325,10 +327,9 @@ static int sg_release(struct inode * inode, struct file * filp)
 
     if (sdp->device->host->hostt->module)
         __MOD_DEC_USE_COUNT(sdp->device->host->hostt->module);
-    if(sg_template.module)
-        __MOD_DEC_USE_COUNT(sg_template.module);
     sdp->exclude = 0;
     wake_up_interruptible(&sdp->o_excl_wait);
+    unlock_kernel();
     return 0;
 }
 
@@ -1094,13 +1095,14 @@ static void sg_cmd_done_bh(Scsi_Cmnd * SCpnt)
 }
 
 static struct file_operations sg_fops = {
-	 read:		sg_read,
-	 write:		sg_write,
-	 poll:		sg_poll,
-	 ioctl:		sg_ioctl,
-	 open:		sg_open,
-	 release:	sg_release,
-	 fasync:	sg_fasync,
+	owner:		THIS_MODULE,
+	read:		sg_read,
+	write:		sg_write,
+	poll:		sg_poll,
+	ioctl:		sg_ioctl,
+	open:		sg_open,
+	release:	sg_release,
+	fasync:		sg_fasync,
 };
 
 

@@ -251,6 +251,7 @@
 #include <asm/mtrr.h>
 #include <linux/init.h>
 #include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -1532,6 +1533,7 @@ static int mtrr_close (struct inode *ino, struct file *file)
     unsigned int *fcount = file->private_data;
 
     if (fcount == NULL) return 0;
+    lock_kernel();
     max = get_num_var_ranges ();
     for (i = 0; i < max; ++i)
     {
@@ -1541,6 +1543,7 @@ static int mtrr_close (struct inode *ino, struct file *file)
 	    --fcount[i];
 	}
     }
+    unlock_kernel();
     kfree (fcount);
     file->private_data = NULL;
     return 0;

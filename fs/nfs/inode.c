@@ -897,11 +897,15 @@ int nfs_open(struct inode *inode, struct file *filp)
 
 int nfs_release(struct inode *inode, struct file *filp)
 {
-	struct rpc_auth *auth = NFS_CLIENT(inode)->cl_auth;
-	struct rpc_cred *cred = nfs_file_cred(filp);
+	struct rpc_auth *auth;
+	struct rpc_cred *cred;
 
+	lock_kernel();
+	auth = NFS_CLIENT(inode)->cl_auth;
+	cred = nfs_file_cred(filp);
 	if (cred)
 		rpcauth_releasecred(auth, cred);
+	unlock_kernel();
 	return 0;
 }
 

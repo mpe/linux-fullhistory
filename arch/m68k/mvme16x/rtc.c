@@ -15,6 +15,7 @@
 #include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/mc146818rtc.h>	/* For struct rtc_time and ioctls, etc */
+#include <linux/smp_lock.h>
 #include <asm/mvme16xhw.h>
 
 #include <asm/io.h>
@@ -138,7 +139,9 @@ static int rtc_open(struct inode *inode, struct file *file)
 
 static int rtc_release(struct inode *inode, struct file *file)
 {
+	lock_kernel();
 	rtc_status = 0;
+	unlock_kernel();
 	return 0;
 }
 

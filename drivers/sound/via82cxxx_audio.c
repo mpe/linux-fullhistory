@@ -30,6 +30,7 @@
 #include <linux/poll.h>
 #include <linux/soundcard.h>
 #include <linux/ac97_codec.h>
+#include <linux/smp_lock.h>
 #include <asm/io.h>
 #include <asm/delay.h>
 #include <asm/uaccess.h>
@@ -2207,6 +2208,7 @@ static int via_dsp_release(struct inode *inode, struct file *file)
 	card = file->private_data;
 	assert (card != NULL);
 	
+	lock_kernel();
 	if (file->f_mode & FMODE_READ)
 		via_chan_free (card, &card->ch_in);
 
@@ -2220,6 +2222,7 @@ static int via_dsp_release(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore (&card->lock, flags);
 
  	wake_up (&card->open_wait);
+	unlock_kernel();
 
 	DPRINTK("EXIT, returning 0\n");
 	return 0;

@@ -36,6 +36,8 @@
 #include "cardwi.h"
 #include "recmgr.h"
 #include "audio.h"
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 
 static void calculate_ofrag(struct woinst *);
 static void calculate_ifrag(struct wiinst *);
@@ -890,6 +892,7 @@ static int emu10k1_audio_mmap(struct file *file, struct vm_area_struct *vma)
 	if (vma_get_pgoff(vma) != 0)
 		return -ENXIO;
 
+	lock_kernel();
 	if (vma->vm_flags & VM_WRITE) {
 		struct woinst *woinst = wave_dev->woinst;
 		struct wave_out *wave_out;
@@ -907,6 +910,7 @@ static int emu10k1_audio_mmap(struct file *file, struct vm_area_struct *vma)
 			if (emu10k1_waveout_open(wave_dev) != CTSTATUS_SUCCESS) {
 				spin_unlock_irqrestore(&woinst->lock, flags);
 				ERROR();
+				unlock_kernel();
 				return -EINVAL;
 			}
 
@@ -921,12 +925,14 @@ static int emu10k1_audio_mmap(struct file *file, struct vm_area_struct *vma)
 
 		if (size > (PAGE_SIZE * wave_out->wavexferbuf->numpages)) {
 			spin_unlock_irqrestore(&woinst->lock, flags);
+			unlock_kernel();
 			return -EINVAL;
 		}
 
 		for (i = 0; i < wave_out->wavexferbuf->numpages; i++) {
 			if (remap_page_range(vma->vm_start + (i * PAGE_SIZE), virt_to_phys(wave_out->pagetable[i]), PAGE_SIZE, vma->vm_page_prot)) {
 				spin_unlock_irqrestore(&woinst->lock, flags);
+				unlock_kernel();
 				return -EAGAIN;
 			}
 		}
@@ -944,6 +950,7 @@ static int emu10k1_audio_mmap(struct file *file, struct vm_area_struct *vma)
 		wiinst->mapped = 1;
 		spin_unlock_irqrestore(&wiinst->lock, flags);
 	}
+	unlock_kernel();
 
 	return 0;
 }
@@ -1098,9 +1105,11 @@ static int emu10k1_audio_open(struct inode *inode, struct file *file)
 static int emu10k1_audio_release(struct inode *inode, struct file *file)
 {
 	struct emu10k1_wavedevice *wave_dev = (struct emu10k1_wavedevice *) file->private_data;
-	struct emu10k1_card *card = wave_dev->card;
+	struct emu10k1_card *card;
 	unsigned long flags;
 
+	lock_kernel();
+	card = wave_dev->card;
 	DPF(2, "emu10k1_audio_release()\n");
 
 	if (file->f_mode & FMODE_WRITE) {
@@ -1171,6 +1180,7 @@ static int emu10k1_audio_release(struct inode *inode, struct file *file)
 	kfree(wave_dev);
 
 	wake_up_interruptible(&card->open_wait);
+	unlock_kernel();
 
 	return 0;
 }

@@ -270,6 +270,7 @@ static int sound_release(struct inode *inode, struct file *file)
 {
 	int dev = MINOR(inode->i_rdev);
 
+	lock_kernel();
 	DEB(printk("sound_release(dev=%d)\n", dev));
 	switch (dev & 0x0f) {
 	case SND_DEV_CTL:
@@ -297,6 +298,7 @@ static int sound_release(struct inode *inode, struct file *file)
 
 	notifier_call_chain(&sound_locker, 0, 0);
 	lock_depth--;
+	unlock_kernel();
 
 	return 0;
 }
@@ -449,29 +451,35 @@ static int sound_mmap(struct file *file, struct vm_area_struct *vma)
 		printk(KERN_ERR "Sound: mmap() not supported for other than audio devices\n");
 		return -EINVAL;
 	}
+	lock_kernel();
 	if (vma->vm_flags & VM_WRITE)	/* Map write and read/write to the output buf */
 		dmap = audio_devs[dev]->dmap_out;
 	else if (vma->vm_flags & VM_READ)
 		dmap = audio_devs[dev]->dmap_in;
 	else {
 		printk(KERN_ERR "Sound: Undefined mmap() access\n");
+		unlock_kernel();
 		return -EINVAL;
 	}
 
 	if (dmap == NULL) {
 		printk(KERN_ERR "Sound: mmap() error. dmap == NULL\n");
+		unlock_kernel();
 		return -EIO;
 	}
 	if (dmap->raw_buf == NULL) {
 		printk(KERN_ERR "Sound: mmap() called when raw_buf == NULL\n");
+		unlock_kernel();
 		return -EIO;
 	}
 	if (dmap->mapping_flags) {
 		printk(KERN_ERR "Sound: mmap() called twice for the same DMA buffer\n");
+		unlock_kernel();
 		return -EIO;
 	}
 	if (vma->vm_pgoff != 0) {
 		printk(KERN_ERR "Sound: mmap() offset must be 0.\n");
+		unlock_kernel();
 		return -EINVAL;
 	}
 	size = vma->vm_end - vma->vm_start;
@@ -481,8 +489,10 @@ static int sound_mmap(struct file *file, struct vm_area_struct *vma)
 	}
 	if (remap_page_range(vma->vm_start, virt_to_phys(dmap->raw_buf),
 		vma->vm_end - vma->vm_start,
-		vma->vm_page_prot))
+		vma->vm_page_prot)) {
+		unlock_kernel();
 		return -EAGAIN;
+	}
 
 	dmap->mapping_flags |= DMA_MAP_MAPPED;
 
@@ -492,6 +502,7 @@ static int sound_mmap(struct file *file, struct vm_area_struct *vma)
 	memset(dmap->raw_buf,
 	       dmap->neutral_byte,
 	       dmap->bytes_in_use);
+	unlock_kernel();
 	return 0;
 }
 

@@ -7,11 +7,15 @@
  */
 
 #include "hpfs_fn.h"
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 
 int hpfs_dir_release(struct inode *inode, struct file *filp)
 {
+	lock_kernel();
 	hpfs_del_pos(inode, &filp->f_pos);
 	/*hpfs_write_if_changed(inode);*/
+	unlock_kernel();
 	return 0;
 }
 

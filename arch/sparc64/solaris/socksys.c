@@ -19,6 +19,7 @@
 #include <linux/malloc.h>
 #include <linux/in.h>
 #include <linux/devfs_fs_kernel.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/termios.h>
@@ -118,6 +119,7 @@ static int socksys_release(struct inode * inode, struct file * filp)
         struct T_primsg *it;
 
 	/* XXX: check this */
+	lock_kernel();
 	sock = (struct sol_socket_struct *)filp->private_data;
 	SOLDD(("sock release %016lx(%016lx)\n", sock, filp));
 	it = sock->pfirst;
@@ -131,6 +133,7 @@ static int socksys_release(struct inode * inode, struct file * filp)
 	filp->private_data = NULL;
 	SOLDD(("socksys_release %016lx\n", sock));
 	mykfree((char*)sock);
+	unlock_kernel();
 	return 0;
 }
 

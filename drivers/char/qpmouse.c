@@ -36,6 +36,7 @@
 #include <linux/random.h>
 #include <linux/poll.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -141,6 +142,7 @@ static int release_qp(struct inode * inode, struct file * file)
 {
 	unsigned char status;
 
+	lock_kernel();
 	fasync_qp(-1, file, 0);
 	if (!--qp_count) {
 		if (!poll_qp_status())
@@ -151,6 +153,7 @@ static int release_qp(struct inode * inode, struct file * file)
 			printk("Warning: Mouse device busy in release_qp()\n");
 		free_irq(QP_IRQ, NULL);
 	}
+	unlock_kernel();
 	return 0;
 }
 

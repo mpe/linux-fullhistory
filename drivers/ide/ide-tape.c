@@ -402,6 +402,7 @@
 #include <linux/malloc.h>
 #include <linux/pci.h>
 #include <linux/ide.h>
+#include <linux/smp_lock.h>
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>
@@ -5235,11 +5236,6 @@ static int idetape_chrdev_open (struct inode *inode, struct file *filp)
 
 	if (test_and_set_bit (IDETAPE_BUSY, &tape->flags))
 		return -EBUSY;
-	MOD_INC_USE_COUNT;
-#if ONSTREAM_DEBUG
-	if (tape->debug_level >= 6)
-		printk(KERN_INFO "ide-tape: MOD_INC_USE_COUNT in idetape_chrdev_open-1\n");
-#endif
 	if (!tape->onstream) {
 		idetape_read_position(drive);
 		if (!test_bit (IDETAPE_ADDRESS_VALID, &tape->flags))
@@ -5255,28 +5251,13 @@ static int idetape_chrdev_open (struct inode *inode, struct file *filp)
 	}
 	if (idetape_wait_ready(drive, 60 * HZ)) {
 		clear_bit(IDETAPE_BUSY, &tape->flags);
-		MOD_DEC_USE_COUNT;
-#if ONSTREAM_DEBUG
-	if (tape->debug_level >= 6)
-		printk(KERN_INFO "ide-tape: MOD_DEC_USE_COUNT in idetape_chrdev_open-1\n");
-#endif
 		printk(KERN_ERR "ide-tape: %s: drive not ready\n", tape->name);
 		return -EBUSY;
 	}
 	idetape_read_position(drive);
-	MOD_DEC_USE_COUNT;
-#if ONSTREAM_DEBUG
-	if (tape->debug_level >= 6)
-		printk(KERN_INFO "ide-tape: MOD_DEC_USE_COUNT in idetape_chrdev_open-2\n");
-#endif
 	clear_bit (IDETAPE_PIPELINE_ERROR, &tape->flags);
 
 	if (tape->chrdev_direction == idetape_direction_none) {
-		MOD_INC_USE_COUNT;
-#if ONSTREAM_DEBUG
-		if (tape->debug_level >= 6)
-			printk(KERN_INFO "ide-tape: MOD_INC_USE_COUNT in idetape_chrdev_open-2\n");
-#endif
 		idetape_create_prevent_cmd(drive, &pc, 1);
 		if (!idetape_queue_pc_tail (drive,&pc)) {
 			if (tape->door_locked != DOOR_EXPLICITLY_LOCKED)
@@ -5296,10 +5277,12 @@ static int idetape_chrdev_open (struct inode *inode, struct file *filp)
 static int idetape_chrdev_release (struct inode *inode, struct file *filp)
 {
 	ide_drive_t *drive = get_drive_ptr (inode->i_rdev);
-	idetape_tape_t *tape = drive->driver_data;
+	idetape_tape_t *tape;
 	idetape_pc_t pc;
 	unsigned int minor=MINOR (inode->i_rdev);
-			
+
+	lock_kernel();
+	tape = drive->driver_data;
 #if IDETAPE_DEBUG_LOG
 	if (tape->debug_level >= 3)
 		printk (KERN_INFO "ide-tape: Reached idetape_chrdev_release\n");
@@ -5337,13 +5320,9 @@ static int idetape_chrdev_release (struct inode *inode, struct file *filp)
 			if (!idetape_queue_pc_tail (drive,&pc))
 				tape->door_locked = DOOR_UNLOCKED;
 		}
-		MOD_DEC_USE_COUNT;
-#if ONSTREAM_DEBUG
-		if (tape->debug_level >= 6)
-			printk(KERN_INFO "ide-tape: MOD_DEC_USE_COUNT in idetape_chrdev_release\n");
-#endif
 	}
 	clear_bit (IDETAPE_BUSY, &tape->flags);
+	unlock_kernel();
 	return 0;
 }
 
@@ -5919,6 +5898,7 @@ static ide_module_t idetape_module = {
  *	Our character device supporting functions, passed to register_chrdev.
  */
 static struct file_operations idetape_fops = {
+	owner:		THIS_MODULE,
 	read:		idetape_chrdev_read,
 	write:		idetape_chrdev_write,
 	ioctl:		idetape_chrdev_ioctl,

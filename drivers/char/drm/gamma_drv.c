@@ -29,6 +29,8 @@
  */
 
 #include <linux/config.h>
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include "drmP.h"
 #include "gamma_drv.h"
 EXPORT_SYMBOL(gamma_init);
@@ -44,14 +46,15 @@ EXPORT_SYMBOL(gamma_cleanup);
 static drm_device_t	      gamma_device;
 
 static struct file_operations gamma_fops = {
-	open:	 gamma_open,
-	flush:	 drm_flush,
-	release: gamma_release,
-	ioctl:	 gamma_ioctl,
-	mmap:	 drm_mmap,
-	read:	 drm_read,
-	fasync:	 drm_fasync,
-	poll:	 drm_poll,
+	owner:		THIS_MODULE,
+	open:		gamma_open,
+	flush:		drm_flush,
+	release:	gamma_release,
+	ioctl:		gamma_ioctl,
+	mmap:		drm_mmap,
+	read:		drm_read,
+	fasync:		drm_fasync,
+	poll:		drm_poll,
 };
 
 static struct miscdevice      gamma_misc = {
@@ -407,7 +410,6 @@ int gamma_open(struct inode *inode, struct file *filp)
 	
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_open_helper(inode, filp, dev))) {
-		MOD_INC_USE_COUNT;
 		atomic_inc(&dev->total_open);
 		spin_lock(&dev->count_lock);
 		if (!dev->open_count++) {
@@ -422,12 +424,13 @@ int gamma_open(struct inode *inode, struct file *filp)
 int gamma_release(struct inode *inode, struct file *filp)
 {
 	drm_file_t    *priv   = filp->private_data;
-	drm_device_t  *dev    = priv->dev;
+	drm_device_t  *dev;
 	int	      retcode = 0;
 
+	lock_kernel();
+	dev    = priv->dev;
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_release(inode, filp))) {
-		MOD_DEC_USE_COUNT;
 		atomic_inc(&dev->total_close);
 		spin_lock(&dev->count_lock);
 		if (!--dev->open_count) {
@@ -436,13 +439,17 @@ int gamma_release(struct inode *inode, struct file *filp)
 					  atomic_read(&dev->ioctl_count),
 					  dev->blocked);
 				spin_unlock(&dev->count_lock);
+				unlock_kernel();
 				return -EBUSY;
 			}
 			spin_unlock(&dev->count_lock);
-			return gamma_takedown(dev);
+			retcode = gamma_takedown(dev);
+			unlock_kernel();
+			return retcode;
 		}
 		spin_unlock(&dev->count_lock);
 	}
+	unlock_kernel();
 	return retcode;
 }
 

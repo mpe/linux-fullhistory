@@ -1265,8 +1265,10 @@ msp3400c_mixer_release(struct inode *inode, struct file *file)
 {
 	struct i2c_client *client = file->private_data;
 
+	lock_kernel();
 	if (client->adapter->dec_use) 
 		client->adapter->dec_use(client->adapter);
+	unlock_kernel();
         return 0;
 }
 

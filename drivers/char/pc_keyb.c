@@ -31,6 +31,7 @@
 #include <linux/miscdevice.h>
 #include <linux/malloc.h>
 #include <linux/kbd_kern.h>
+#include <linux/smp_lock.h>
 
 #include <asm/keyboard.h>
 #include <asm/bitops.h>
@@ -872,12 +873,16 @@ static int fasync_aux(int fd, struct file *filp, int on)
 
 static int release_aux(struct inode * inode, struct file * file)
 {
+	lock_kernel();
 	fasync_aux(-1, file, 0);
-	if (--aux_count)
+	if (--aux_count) {
+		unlock_kernel();
 		return 0;
+	}
 	kbd_write_cmd(AUX_INTS_OFF);			    /* Disable controller ints */
 	kbd_write_command_w(KBD_CCMD_MOUSE_DISABLE);
 	aux_free_irq(AUX_DEV);
+	unlock_kernel();
 	return 0;
 }
 

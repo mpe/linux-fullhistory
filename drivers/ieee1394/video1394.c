@@ -27,6 +27,7 @@
 #include <linux/pci.h>
 #include <linux/fs.h>
 #include <linux/poll.h>
+#include <linux/smp_lock.h>
 #include <asm/byteorder.h>
 #include <asm/atomic.h>
 #include <asm/io.h>
@@ -1043,18 +1044,20 @@ int video1394_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct video_card *video = 
 		&video_cards[MINOR(file->f_dentry->d_inode->i_rdev)];
-	struct ti_ohci *ohci= video->ohci;
+	struct ti_ohci *ohci;
+	int res = -EINVAL;
 
+	lock_kernel();
+	ohci = video->ohci;
 	PRINT(KERN_INFO, ohci->id, "mmap");
 	if (video->current_ctx == NULL) {
 		PRINT(KERN_ERR, ohci->id, "current iso context not set");
-		return -EINVAL;
-	}
-	
-	return do_iso_mmap(ohci, video->current_ctx, 
+	} else
+		res = do_iso_mmap(ohci, video->current_ctx, 
 			   (char *)vma->vm_start, 
 			   (unsigned long)(vma->vm_end-vma->vm_start));
-	return 0;
+	unlock_kernel();
+	return res;
 }
 
 static int video1394_open(struct inode *inode, struct file *file)
@@ -1079,6 +1082,7 @@ static int video1394_release(struct inode *inode, struct file *file)
 	struct ti_ohci *ohci= video->ohci;
 	int i;
 
+	lock_kernel();
 	for (i=0;i<ohci->nb_iso_rcv_ctx-1;i++) 
 		if (video->ir_context[i]) {
 			if (!test_and_clear_bit(
@@ -1115,6 +1119,7 @@ static int video1394_release(struct inode *inode, struct file *file)
 	V22_COMPAT_MOD_DEC_USE_COUNT;
 
 	PRINT(KERN_INFO, ohci->id, "release");
+	unlock_kernel();
 	return 0;
 }
 

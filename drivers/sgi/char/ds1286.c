@@ -38,6 +38,7 @@
 #include <linux/poll.h>
 #include <linux/rtc.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 
 #include <asm/ds1286.h>
 #include <asm/io.h>
@@ -354,7 +355,9 @@ static int ds1286_open(struct inode *inode, struct file *file)
 
 static int ds1286_release(struct inode *inode, struct file *file)
 {
+	lock_kernel();
 	ds1286_status &= ~RTC_IS_OPEN;
+	unlock_kernel();
 	return 0;
 }
 
