@@ -1283,7 +1283,7 @@ STATIC void
 _pagebuf_ioapply(
 	xfs_buf_t		*pb)
 {
-	int			i, map_i, total_nr_pages, nr_pages;
+	int			i, rw, map_i, total_nr_pages, nr_pages;
 	struct bio		*bio;
 	int			offset = pb->pb_offset;
 	int			size = pb->pb_count_desired;
@@ -1293,6 +1293,13 @@ _pagebuf_ioapply(
 
 	total_nr_pages = pb->pb_page_count;
 	map_i = 0;
+
+	if (pb->pb_flags & _PBF_RUN_QUEUES) {
+		pb->pb_flags &= ~_PBF_RUN_QUEUES;
+		rw = (pb->pb_flags & PBF_READ) ? READ_SYNC : WRITE_SYNC;
+	} else {
+		rw = (pb->pb_flags & PBF_READ) ? READ : WRITE;
+	}
 
 	/* Special code path for reading a sub page size pagebuf in --
 	 * we populate up the whole page, and hence the other metadata
@@ -1365,18 +1372,12 @@ next_chunk:
 
 submit_io:
 	if (likely(bio->bi_size)) {
-		submit_bio((pb->pb_flags & PBF_READ) ? READ : WRITE, bio);
+		submit_bio(rw, bio);
 		if (size)
 			goto next_chunk;
 	} else {
 		bio_put(bio);
 		pagebuf_ioerror(pb, EIO);
-	}
-
-	if (pb->pb_flags & _PBF_RUN_QUEUES) {
-		pb->pb_flags &= ~_PBF_RUN_QUEUES;
-		if (atomic_read(&pb->pb_io_remaining) > 1)
-			blk_run_address_space(pb->pb_target->pbr_mapping);
 	}
 }
 
