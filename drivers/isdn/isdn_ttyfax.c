@@ -1,4 +1,4 @@
-/* $Id: isdn_ttyfax.c,v 1.2 1999/08/05 10:36:10 armin Exp $
+/* $Id: isdn_ttyfax.c,v 1.3 1999/08/22 20:26:12 calle Exp $
  * Linux ISDN subsystem, tty_fax AT-command emulator (linklevel).
  *
  * Copyright 1999    by Armin Schindler (mac@melware.de)
@@ -20,6 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ttyfax.c,v $
+ * Revision 1.3  1999/08/22 20:26:12  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.2  1999/08/05 10:36:10  armin
  * Bugfix: kernel oops on getting revision.
  *
@@ -40,7 +46,7 @@
 #include "isdn_ttyfax.h"
 
 
-static char *isdn_tty_fax_revision = "$Revision: 1.2 $";
+static char *isdn_tty_fax_revision = "$Revision: 1.3 $";
 
 #define PARSE_ERROR1 { isdn_tty_fax_modem_result(1, info); return 1; }
 

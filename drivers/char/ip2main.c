@@ -41,10 +41,8 @@
 #include <linux/ptrace.h>
 #include <linux/ioport.h>
 
-#include <linux/wait.h>
 #include <linux/cdk.h>
 #include <linux/comstats.h>
-#include <linux/ioport.h>
 #include <linux/delay.h>
 
 #include <asm/system.h>

@@ -1,11 +1,17 @@
 /*
- * $Id: t1isa.c,v 1.4 1999/07/09 15:05:50 keil Exp $
+ * $Id: t1isa.c,v 1.5 1999/08/22 20:26:28 calle Exp $
  * 
  * Module for AVM T1 HEMA-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: t1isa.c,v $
+ * Revision 1.5  1999/08/22 20:26:28  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.4  1999/07/09 15:05:50  keil
  * compat.h is now isdn_compat.h
  *
@@ -53,7 +59,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.4 $";
+static char *revision = "$Revision: 1.5 $";
 
 /* ------------------------------------------------------------- */
 

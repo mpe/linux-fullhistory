@@ -2145,7 +2145,7 @@ static int ip_rt_acct_read(char *buffer, char **start, off_t offset,
 #endif
 
 
-__initfunc(void ip_rt_init(void))
+void __init ip_rt_init(void)
 {
 #ifdef CONFIG_PROC_FS
 #ifdef CONFIG_NET_CLS_ROUTE

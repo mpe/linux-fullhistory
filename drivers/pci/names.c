@@ -57,8 +57,6 @@ void __init pci_name_device(struct pci_dev *dev)
 	int i = VENDORS;
 	char *name = dev->name;
 
-	name += sprintf(name, "PCI<%02x:%02x.%d>", dev->bus->number, PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
-
 	do {
 		if (vendor_p->vendor == dev->vendor)
 			goto match_vendor;
@@ -66,7 +64,7 @@ void __init pci_name_device(struct pci_dev *dev)
 	} while (--i);
 
 	/* Couldn't find either the vendor nor the device */
-	sprintf(name, " %04x:%04x", dev->vendor, dev->device);
+	sprintf(name, "PCI device %04x:%04x", dev->vendor, dev->device);
 	return;
 
 	match_vendor: {
@@ -81,7 +79,7 @@ void __init pci_name_device(struct pci_dev *dev)
 		}
 
 		/* Ok, found the vendor, but unknown device */
-		sprintf(name, " %04x:%04x (%s)", dev->vendor, dev->device, vendor_p->name);
+		sprintf(name, " PCI device %04x:%04x (%s)", dev->vendor, dev->device, vendor_p->name);
 		return;
 
 		/* Full match */

@@ -24,7 +24,6 @@ Sysctl interface
 
 
 #include <linux/kernel.h>
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
 #include <linux/net.h>

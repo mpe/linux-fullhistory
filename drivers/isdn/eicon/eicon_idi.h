@@ -1,4 +1,4 @@
-/* $Id: eicon_idi.h,v 1.6 1999/07/25 15:12:04 armin Exp $
+/* $Id: eicon_idi.h,v 1.7 1999/08/22 20:26:46 calle Exp $
  *
  * ISDN lowlevel-module for the Eicon.Diehl active cards.
  * IDI-Interface
@@ -21,6 +21,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_idi.h,v $
+ * Revision 1.7  1999/08/22 20:26:46  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.6  1999/07/25 15:12:04  armin
  * fix of some debug logs.
  * enabled ISA-cards option.

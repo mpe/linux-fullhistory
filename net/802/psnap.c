@@ -89,7 +89,7 @@ static void snap_datalink_header(struct datalink_proto *dl, struct sk_buff *skb,
 EXPORT_SYMBOL(register_snap_client);
 EXPORT_SYMBOL(unregister_snap_client);
 
-__initfunc(void snap_proto_init(struct net_proto *pro))
+void __init snap_proto_init(struct net_proto *pro)
 {
 	snap_dl=register_8022_client(0xAA, snap_rcv);
 	if(snap_dl==NULL)

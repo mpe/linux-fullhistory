@@ -2108,7 +2108,7 @@ static struct proc_dir_entry proc_atalk_iface=
 
 /* Called by proto.c on kernel start up */
 
-__initfunc(void atalk_proto_init(struct net_proto *pro))
+void __init atalk_proto_init(struct net_proto *pro)
 {
 	(void) sock_register(&atalk_family_ops);
 	if((ddp_dl = register_snap_client(ddp_snap_id, atalk_rcv)) == NULL)

@@ -274,11 +274,7 @@ static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 		dev_cache = NULL;
 		dev->vendor = l & 0xffff;
 		dev->device = (l >> 16) & 0xffff;
-#ifdef CONFIG_PCI_NO_NAMES
-		sprintf(dev->name, "pci:%02x:%02x.%d", bus->number, PCI_SLOT(devfn), PCI_FUNC(devfn));
-#else
 		pci_name_device(dev);
-#endif
 
 		/* non-destructively determine if device can be a master: */
 		pci_read_config_byte(dev, PCI_COMMAND, &cmd);

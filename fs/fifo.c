@@ -12,38 +12,38 @@
 #include <linux/mm.h>
 #include <linux/malloc.h>
 
-static int fifo_open(struct inode * inode,struct file * filp)
+static int fifo_open(struct inode *inode, struct file *filp)
 {
-	int retval = 0;
-	unsigned long page = 0;
-	struct pipe_inode_info *info, *tmp = NULL;
+	int ret;
 
-	if (inode->i_pipe)
-		goto got_it;
-	tmp = kmalloc(sizeof(struct pipe_inode_info),GFP_KERNEL);
-	if (inode->i_pipe)
-		goto got_it;
-	if (!tmp)
-		goto oom;
-	page = __get_free_page(GFP_KERNEL);
-	if (inode->i_pipe)
-		goto got_it;
-	if (!page)
-		goto oom;
-	inode->i_pipe = tmp;
-	PIPE_LOCK(*inode) = 0;
-	PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
-	PIPE_BASE(*inode) = (char *) page;
-	PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
-	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
-	init_waitqueue_head(&PIPE_WAIT(*inode));
-	tmp = NULL;	/* no need to free it */
-	page = 0;
+	ret = -ERESTARTSYS;
+	if (down_interruptible(PIPE_SEM(*inode)))
+		goto err_nolock_nocleanup;
 
-got_it:
+	if (! inode->i_pipe) {
+		unsigned long page;
+		struct pipe_inode_info *info;
 
-	switch( filp->f_mode ) {
+		info = kmalloc(sizeof(struct pipe_inode_info),GFP_KERNEL);
 
+		ret = -ENOMEM;
+		if (!info)
+			goto err_nocleanup;
+		page = __get_free_page(GFP_KERNEL);
+		if (!page) {
+			kfree(info);
+			goto err_nocleanup;
+		}
+
+		inode->i_pipe = info;
+
+		init_waitqueue_head(PIPE_WAIT(*inode));
+		PIPE_BASE(*inode) = (char *) page;
+		PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
+		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
+	}
+
+	switch (filp->f_mode) {
 	case 1:
 	/*
 	 *  O_RDONLY
@@ -51,26 +51,26 @@ got_it:
 	 *  opened, even when there is no process writing the FIFO.
 	 */
 		filp->f_op = &connecting_fifo_fops;
-		if (!PIPE_READERS(*inode)++)
-			wake_up_interruptible(&PIPE_WAIT(*inode));
-		if (!(filp->f_flags & O_NONBLOCK) && !PIPE_WRITERS(*inode)) {
-			PIPE_RD_OPENERS(*inode)++;
+		if (PIPE_READERS(*inode)++ == 0)
+			wake_up_interruptible(PIPE_WAIT(*inode));
+
+		if (!(filp->f_flags & O_NONBLOCK)) {
 			while (!PIPE_WRITERS(*inode)) {
-				if (signal_pending(current)) {
-					retval = -ERESTARTSYS;
-					break;
-				}
-				interruptible_sleep_on(&PIPE_WAIT(*inode));
+				if (signal_pending(current))
+					goto err_rd;
+				up(PIPE_SEM(*inode));
+				interruptible_sleep_on(PIPE_WAIT(*inode));
+
+				/* Note that using down_interruptible here
+				   and similar places below is pointless,
+				   since we have to acquire the lock to clean
+				   up properly.  */
+				down(PIPE_SEM(*inode));
 			}
-			if (!--PIPE_RD_OPENERS(*inode))
-				wake_up_interruptible(&PIPE_WAIT(*inode));
 		}
-		while (PIPE_WR_OPENERS(*inode))
-			interruptible_sleep_on(&PIPE_WAIT(*inode));
+
 		if (PIPE_WRITERS(*inode))
 			filp->f_op = &read_fifo_fops;
-		if (retval && !--PIPE_READERS(*inode))
-			wake_up_interruptible(&PIPE_WAIT(*inode));
 		break;
 	
 	case 2:
@@ -79,29 +79,21 @@ got_it:
 	 *  POSIX.1 says that O_NONBLOCK means return -1 with
 	 *  errno=ENXIO when there is no process reading the FIFO.
 	 */
-		if ((filp->f_flags & O_NONBLOCK) && !PIPE_READERS(*inode)) {
-			retval = -ENXIO;
-			break;
-		}
+		ret = -ENXIO;
+		if ((filp->f_flags & O_NONBLOCK) && !PIPE_READERS(*inode))
+			goto err;
+
 		filp->f_op = &write_fifo_fops;
 		if (!PIPE_WRITERS(*inode)++)
-			wake_up_interruptible(&PIPE_WAIT(*inode));
-		if (!PIPE_READERS(*inode)) {
-			PIPE_WR_OPENERS(*inode)++;
-			while (!PIPE_READERS(*inode)) {
-				if (signal_pending(current)) {
-					retval = -ERESTARTSYS;
-					break;
-				}
-				interruptible_sleep_on(&PIPE_WAIT(*inode));
-			}
-			if (!--PIPE_WR_OPENERS(*inode))
-				wake_up_interruptible(&PIPE_WAIT(*inode));
+			wake_up_interruptible(PIPE_WAIT(*inode));
+
+		while (!PIPE_READERS(*inode)) {
+			if (signal_pending(current))
+				goto err_wr;
+			up(PIPE_SEM(*inode));
+			interruptible_sleep_on(PIPE_WAIT(*inode));
+			down(PIPE_SEM(*inode));
 		}
-		while (PIPE_RD_OPENERS(*inode))
-			interruptible_sleep_on(&PIPE_WAIT(*inode));
-		if (retval && !--PIPE_WRITERS(*inode))
-			wake_up_interruptible(&PIPE_WAIT(*inode));
 		break;
 	
 	case 3:
@@ -112,39 +104,47 @@ got_it:
 	 *  the process can at least talk to itself.
 	 */
 		filp->f_op = &rdwr_fifo_fops;
-		if (!PIPE_READERS(*inode)++)
-			wake_up_interruptible(&PIPE_WAIT(*inode));
-		while (PIPE_WR_OPENERS(*inode))
-			interruptible_sleep_on(&PIPE_WAIT(*inode));
-		if (!PIPE_WRITERS(*inode)++)
-			wake_up_interruptible(&PIPE_WAIT(*inode));
-		while (PIPE_RD_OPENERS(*inode))
-			interruptible_sleep_on(&PIPE_WAIT(*inode));
+
+		PIPE_READERS(*inode)++;
+		PIPE_WRITERS(*inode)++;
+		if (PIPE_READERS(*inode) == 1 || PIPE_WRITERS(*inode) == 1)
+			wake_up_interruptible(PIPE_WAIT(*inode));
 		break;
 
 	default:
-		retval = -EINVAL;
+		ret = -EINVAL;
+		goto err;
 	}
-	if (retval) 
-		goto cleanup;
-out:
-	if (tmp)
-		kfree(tmp);
-	if (page)
-		free_page(page);
-	return retval;
 
-cleanup:
+	/* Ok! */
+	up(PIPE_SEM(*inode));
+	return 0;
+
+err_rd:
+	if (!--PIPE_READERS(*inode))
+		wake_up_interruptible(PIPE_WAIT(*inode));
+	ret = -ERESTARTSYS;
+	goto err;
+
+err_wr:
+	if (!--PIPE_WRITERS(*inode))
+		wake_up_interruptible(PIPE_WAIT(*inode));
+	ret = -ERESTARTSYS;
+	goto err;
+
+err:
 	if (!PIPE_READERS(*inode) && !PIPE_WRITERS(*inode)) {
-		info = inode->i_pipe;
+		struct pipe_inode_info *info = inode->i_pipe;
 		inode->i_pipe = NULL;
 		free_page((unsigned long)info->base);
 		kfree(info);
 	}
-	goto out;
-oom:
-	retval = -ENOMEM;
-	goto out;
+
+err_nocleanup:
+	up(PIPE_SEM(*inode));
+
+err_nolock_nocleanup:
+	return ret;
 }
 
 /*

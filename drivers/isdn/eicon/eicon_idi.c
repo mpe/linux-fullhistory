@@ -1,4 +1,4 @@
-/* $Id: eicon_idi.c,v 1.11 1999/07/25 15:12:03 armin Exp $
+/* $Id: eicon_idi.c,v 1.13 1999/08/22 20:26:44 calle Exp $
  *
  * ISDN lowlevel-module for Eicon.Diehl active cards.
  *        IDI interface 
@@ -21,6 +21,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_idi.c,v $
+ * Revision 1.13  1999/08/22 20:26:44  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
+ * Revision 1.12  1999/08/18 20:16:59  armin
+ * Added XLOG function for all cards.
+ * Bugfix of alloc_skb NULL pointer.
+ *
  * Revision 1.11  1999/07/25 15:12:03  armin
  * fix of some debug logs.
  * enabled ISA-cards option.
@@ -78,7 +88,7 @@
 
 #undef EICON_FULL_SERVICE_OKTETT
 
-char *eicon_idi_revision = "$Revision: 1.11 $";
+char *eicon_idi_revision = "$Revision: 1.13 $";
 
 eicon_manifbuf *manbuf;
 
@@ -265,8 +275,8 @@ idi_call_res_req(eicon_REQ *reqbuf, eicon_chan *chan)
 int
 idi_do_req(eicon_card *card, eicon_chan *chan, int cmd, int layer)
 {
-        struct sk_buff *skb = 0;
-        struct sk_buff *skb2 = 0;
+        struct sk_buff *skb;
+        struct sk_buff *skb2;
 	eicon_REQ *reqbuf;
 	eicon_chan_ptr *chan2;
 
@@ -1081,7 +1091,8 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 				ccard->interface.statcallb(&cmd);
 				eicon_idi_listen_req(ccard, chan);
 #ifdef CONFIG_ISDN_TTY_FAX
-				chan->fax = 0;
+				if (!chan->e.B2Id)
+					chan->fax = 0;
 #endif
 				break;
 			case INDICATE_IND:
@@ -1274,12 +1285,16 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 				chan->queued = 0;
 				chan->waitq = 0;
 				chan->waitpq = 0;
+				idi_do_req(ccard, chan, HANGUP, 0);
 				if (chan->fsm_state == EICON_STATE_ACTIVE) {
 					cmd.driver = ccard->myid;
 					cmd.command = ISDN_STAT_BHUP;
 					cmd.arg = chan->No;
 					ccard->interface.statcallb(&cmd);
 				}
+#ifdef CONFIG_ISDN_TTY_FAX
+				chan->fax = 0;
+#endif
 				break; 
 			case IDI_N_DISC_ACK:
 				if (DebugVar & 16)
@@ -1328,7 +1343,7 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
    if (free_buff) dev_kfree_skb(skb);
 }
 
-void
+int
 idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 {
 	isdn_ctrl cmd;
@@ -1338,7 +1353,7 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 		if (DebugVar & 16)
 			printk(KERN_DEBUG "idi_ack: Ch%d: RcId %d not equal to last %d\n", chan->No, 
 				ack->RcId, (chan->e.ReqCh) ? chan->e.B2Id : chan->e.D3Id);
-		return;
+		return 1;
 	}
 
 	/* Management Interface */	
@@ -1351,25 +1366,26 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 	/* Remove an Id */
 	if (chan->e.Req == REMOVE) {
 		if (ack->Reference != chan->e.ref) {
-			if (DebugVar & 1)
+			if (DebugVar & 16)
 				printk(KERN_DEBUG "idi_ack: Ch%d: Rc-Ref %d not equal to stored %d\n", chan->No,
 					ack->Reference, chan->e.ref);
+			return 0;
 		}
 		ccard->IdTable[ack->RcId] = NULL;
 		if (DebugVar & 16)
-			printk(KERN_DEBUG "idi_ack: Ch%d: Removed : Id=%d Ch=%d (%s)\n", chan->No,
+			printk(KERN_DEBUG "idi_ack: Ch%d: Removed : Id=%x Ch=%d (%s)\n", chan->No,
 				ack->RcId, ack->RcCh, (chan->e.ReqCh)? "Net":"Sig");
 		if (!chan->e.ReqCh) 
 			chan->e.D3Id = 0;
 		else
 			chan->e.B2Id = 0;
-		return;
+		return 1;
 	}
 
 	/* Signal layer */
 	if (!chan->e.ReqCh) {
 		if (DebugVar & 16)
-			printk(KERN_DEBUG "idi_ack: Ch%d: RC OK Id=%d Ch=%d (ref:%d)\n", chan->No,
+			printk(KERN_DEBUG "idi_ack: Ch%d: RC OK Id=%x Ch=%d (ref:%d)\n", chan->No,
 				ack->RcId, ack->RcCh, ack->Reference);
 	} else {
 	/* Network layer */
@@ -1410,10 +1426,11 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 				break;
 			default:
 				if (DebugVar & 16)
-					printk(KERN_DEBUG "idi_ack: Ch%d: RC OK Id=%d Ch=%d (ref:%d)\n", chan->No,
+					printk(KERN_DEBUG "idi_ack: Ch%d: RC OK Id=%x Ch=%d (ref:%d)\n", chan->No,
 						ack->RcId, ack->RcCh, ack->Reference);
 		}
 	}
+	return 1;
 }
 
 void
@@ -1448,7 +1465,8 @@ idi_handle_ack(eicon_card *ccard, struct sk_buff *skb)
 					printk(KERN_ERR "idi_ack: Ch%d: OK on chan without Id\n", dCh);
 				break;
 			}
-			idi_handle_ack_ok(ccard, chan, ack);
+			if (!idi_handle_ack_ok(ccard, chan, ack))
+				chan = NULL;
 			break;
 
 		case ASSIGN_OK:
@@ -1487,9 +1505,8 @@ idi_handle_ack(eicon_card *ccard, struct sk_buff *skb)
 		case UNKNOWN_IE:
 		case WRONG_IE:
 		default:
-			chan->e.busy = 0;
-			if (DebugVar & 24)
-				printk(KERN_ERR "eicon_ack: Ch%d: Not OK: Rc=%d Id=%d Ch=%d\n", dCh, 
+			if (DebugVar & 1)
+				printk(KERN_ERR "eicon_ack: Ch%d: Not OK !!: Rc=%d Id=%x Ch=%d\n", dCh, 
 					ack->Rc, ack->RcId, ack->RcCh);
 			if (dCh == ccard->nchannels) { /* Management */
 				chan->fsm_state = 2;
@@ -1584,7 +1601,6 @@ idi_send_data(eicon_card *card, eicon_chan *chan, int ack, struct sk_buff *skb, 
         dev_kfree_skb(skb);
         return len;
 }
-
 
 
 int

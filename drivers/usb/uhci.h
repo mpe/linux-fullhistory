@@ -60,6 +60,10 @@
 #define UHCI_PTR_QH		0x0002
 #define UHCI_PTR_DEPTH		0x0004
 
+#define UHCI_NUMFRAMES		1024
+
+struct uhci_td;
+
 struct uhci_qh {
 	/* Hardware fields */
 	__u32 link;				/* Next queue */
@@ -69,6 +73,8 @@ struct uhci_qh {
 	atomic_t refcnt;			/* Reference counting */
 	struct uhci_device *dev;		/* The owning device */
 	struct uhci_qh *skel;			/* Skeleton head */
+
+	struct uhci_td *first;			/* First TD in the chain */
 
 	wait_queue_head_t wakeup;
 } __attribute__((aligned(16)));
@@ -81,6 +87,7 @@ struct uhci_framelist {
  * for TD <status>:
  */
 #define TD_CTRL_SPD		(1 << 29)	/* Short Packet Detect */
+#define TD_CTRL_C_ERR_MASK	(3 << 27)	/* Error Counter bits */
 #define TD_CTRL_LS		(1 << 26)	/* Low Speed Device */
 #define TD_CTRL_IOS		(1 << 25)	/* Isochronous Select */
 #define TD_CTRL_IOC		(1 << 24)	/* Interrupt on Complete */
@@ -89,14 +96,14 @@ struct uhci_framelist {
 #define TD_CTRL_DBUFERR		(1 << 21)	/* Data Buffer Error */
 #define TD_CTRL_BABBLE		(1 << 20)	/* Babble Detected */
 #define TD_CTRL_NAK		(1 << 19)	/* NAK Received */
-#define TD_CTRL_CRCTIME		(1 << 18)	/* CTC/Time Out Error */
+#define TD_CTRL_CRCTIMEO	(1 << 18)	/* CRC/Time Out Error */
 #define TD_CTRL_BITSTUFF	(1 << 17)	/* Bit Stuff Error */
 #define TD_CTRL_ACTLEN_MASK	0x7ff		/* actual length, encoded as n - 1 */
 
 #define TD_CTRL_ANY_ERROR	(TD_CTRL_STALLED | TD_CTRL_DBUFERR | \
 				 TD_CTRL_BABBLE | TD_CTRL_CRCTIME | TD_CTRL_BITSTUFF)
 
-#define uhci_status_bits(ctrl_sts)	((ctrl_sts >> 16) & 0xff)
+#define uhci_status_bits(ctrl_sts)	(ctrl_sts & 0xFE0000)
 #define uhci_actual_length(ctrl_sts)	((ctrl_sts + 1) & TD_CTRL_ACTLEN_MASK) /* 1-based */
 
 #define uhci_ptr_to_virt(x)	bus_to_virt(x & ~UHCI_PTR_BITS)
@@ -105,6 +112,20 @@ struct uhci_framelist {
  * for TD <flags>:
  */
 #define UHCI_TD_REMOVE		0x0001		/* Remove when done */
+
+/*
+ * for TD <info>: (a.k.a. Token)
+ */
+#define TD_TOKEN_TOGGLE		19
+
+#define uhci_maxlen(token)	((token) >> 21)
+#define uhci_toggle(token)	(((token) >> TD_TOKEN_TOGGLE) & 1)
+#define uhci_endpoint(token)	(((token) >> 15) & 0xf)
+#define uhci_devaddr(token)	(((token) >> 8) & 0x7f)
+#define uhci_devep(token)	(((token) >> 8) & 0x7ff)
+#define uhci_packetid(token)	((token) & 0xff)
+#define uhci_packetout(token)	(uhci_packetid(token) != USB_PID_IN)
+#define uhci_packetin(token)	(uhci_packetid(token) == USB_PID_IN)
 
 /*
  * for TD <info>: (a.k.a. Token)
@@ -152,6 +173,7 @@ struct uhci_td {
 	struct uhci_device *dev;	/* The owning device */
 	struct uhci_qh *qh;		/* QH this TD is a part of (ignored for Isochronous) */
 	int flags;			/* Remove, etc */
+	int isoc_td_number;		/* 0-relative number within a usb_isoc_desc. */
 } __attribute__((aligned(16)));
 
 struct uhci_iso_td {
@@ -180,9 +202,11 @@ struct uhci;
 #define UHCI_MAXQH	16
 #endif
 
-/* The usb device part must be first! */
+/* The usb device part must be first! Not anymore -jerdfelt */
 struct uhci_device {
 	struct usb_device	*usb;
+
+	atomic_t		refcnt;
 
 	struct uhci		*uhci;
 #if 0
@@ -260,6 +284,7 @@ struct uhci_device {
 struct uhci {
 	int irq;
 	unsigned int io_addr;
+	unsigned int io_size;
 
 	int control_pid;
 	int control_running;
@@ -281,9 +306,10 @@ struct uhci {
 struct uhci_td *uhci_link_to_td(unsigned int element);
 
 /* Debugging code */
-void show_td(struct uhci_td * td);
-void show_status(struct uhci *uhci);
-void show_queues(struct uhci *uhci);
+void uhci_show_td(struct uhci_td *td);
+void uhci_show_status(struct uhci *uhci);
+void uhci_show_queue(struct uhci_qh *qh);
+void uhci_show_queues(struct uhci *uhci);
 
 #endif
 

@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.h,v 1.13 1998/03/22 18:50:50 hipp Exp $
+/* $Id: isdn_ppp.h,v 1.14 1999/08/22 20:26:10 calle Exp $
 
  * header for Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ppp.h,v $
+ * Revision 1.14  1999/08/22 20:26:10  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.13  1998/03/22 18:50:50  hipp
  * Added BSD Compression for syncPPP .. UNTESTED at the moment
  *

@@ -998,6 +998,9 @@ asmlinkage long sys_prctl(int option, unsigned long arg2, unsigned long arg3,
 			}
 			current->pdeath_signal = sig;
 			break;
+		case PR_GET_PDEATHSIG:
+			error = put_user(current->pdeath_signal, (int *)arg2);
+			break;
 		default:
 			error = -EINVAL;
 			break;

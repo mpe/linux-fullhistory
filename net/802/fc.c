@@ -12,7 +12,6 @@
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -25,7 +24,6 @@
 #include <linux/fcdevice.h>
 #include <linux/skbuff.h>
 #include <linux/errno.h>
-#include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/net.h>
 #include <linux/proc_fs.h>

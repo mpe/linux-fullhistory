@@ -6,6 +6,7 @@
  *
  * Rusty Russell (C)1998 -- This code is GPL.
  */
+#include <linux/config.h>
 #include <linux/netfilter.h>
 #include <net/protocol.h>
 #include <linux/init.h>
@@ -149,7 +150,6 @@ void nf_unregister_sockopt(struct nf_setsockopt_ops *reg)
 
 #ifdef CONFIG_NETFILTER_DEBUG
 #include <net/ip.h>
-#include <net/protocol.h>
 #include <net/route.h>
 #include <net/tcp.h>
 #include <linux/netfilter_ipv4.h>
@@ -554,7 +554,6 @@ void nf_invalidate_cache(int pf)
 }
 
 #ifdef CONFIG_NETFILTER_DEBUG
-#include <linux/netfilter_ipv4.h>
 
 void debug_print_hooks_ip(unsigned int nf_debug)
 {

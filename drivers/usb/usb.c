@@ -2,6 +2,7 @@
  * drivers/usb/usb.c
  *
  * (C) Copyright Linus Torvalds 1999
+ * (C) Copyright Johannes Erdfelt 1999
  *
  * NOTE! This is not actually a driver at all, rather this is
  * just a collection of helper routines that implement the
@@ -10,30 +11,6 @@
  * Think of this as a "USB library" rather than anything else.
  * It should be considered a slave, with no callbacks. Callbacks
  * are evil.
- */
-
-/*
- * Table 9-2
- *
- * Offset	Field		Size	Value		Desc
- * 0		bmRequestType	1	Bitmap		D7:	Direction
- *							0 = Host-to-device
- *							1 = Device-to-host
- *							D6..5:	Type
- *							0 = Standard
- *							1 = Class
- *							2 = Vendor
- *							3 = Reserved
- *							D4..0:	Recipient
- *							0 = Device
- *							1 = Interface
- *							2 = Endpoint
- *							3 = Other
- *							4..31 = Reserved
- * 1		bRequest	1	Value		Specific request (9-3)
- * 2		wValue		2	Value		Varies
- * 4		wIndex		2	Index/Offset	Varies
- * 6		wLength		2	Count		Bytes for data
  */
 
 #include <linux/config.h>
@@ -67,7 +44,7 @@ int usb_register(struct usb_driver *new_driver)
 	 */
 	tmp = usb_bus_list.next;
 	while (tmp != &usb_bus_list) {
-		struct usb_bus *bus = list_entry(tmp,struct usb_bus,bus_list);
+		struct usb_bus *bus = list_entry(tmp,struct usb_bus, bus_list);
 
 	        tmp = tmp->next;
 		usb_check_support(bus->root_hub);
@@ -96,12 +73,13 @@ void usb_deregister(struct usb_driver *driver)
 	}
 }
 
-/* This function is part of a depth-first search down the device tree,
+/*
+ * This function is part of a depth-first search down the device tree,
  * removing any instances of a device driver.
  */
-void usb_driver_purge(struct usb_driver *driver,struct usb_device *dev)
+static void usb_driver_purge(struct usb_driver *driver,struct usb_device *dev)
 {
-       int i;
+	int i;
 
 	if (!dev) {
 		printk(KERN_ERR "usbcore: null device being purged!!!\n");
@@ -158,16 +136,16 @@ void usb_free_bus(struct usb_bus *bus)
 	if (!bus)
 		return;
 
-	if (bus->bus_list.next != &bus->bus_list)
-		printk(KERN_ERR "usbcore: freeing non-empty bus\n");
-
 	kfree(bus);
 }
 
-void usb_register_bus(struct usb_bus *new_bus)
+void usb_register_bus(struct usb_bus *bus)
 {
+	proc_usb_add_bus(bus);
+
 	/* Add it to the list of buses */
-	list_add(&new_bus->bus_list, &usb_bus_list);
+	list_add(&bus->bus_list, &usb_bus_list);
+
 	printk("New USB bus registered\n");
 }
 
@@ -179,13 +157,15 @@ void usb_deregister_bus(struct usb_bus *bus)
 	 * itself up
 	 */
 	list_del(&bus->bus_list);
+
+	proc_usb_remove_bus(bus);
 }
 
 /*
  * This function is for doing a depth-first search for devices which
  * have support, for dynamic loading of driver modules.
  */
-void usb_check_support(struct usb_device *dev)
+static void usb_check_support(struct usb_device *dev)
 {
 	int i;
 
@@ -209,7 +189,7 @@ void usb_check_support(struct usb_device *dev)
  * looking for one that will accept this device as
  * his..
  */
-int usb_find_driver(struct usb_device *dev)
+static int usb_find_driver(struct usb_device *dev)
 {
 	struct list_head *tmp = usb_driver_list.next;
 
@@ -231,283 +211,311 @@ int usb_find_driver(struct usb_device *dev)
 }
 
 /*
- * Parse the fairly incomprehensible output of
- * the USB configuration data, and build up the
- * USB device database.
+ * Only HC's should call usb_alloc_dev and usb_free_dev directly
+ * Anybody may use usb_inc_dev_use or usb_dec_dev_use
  */
-static int usb_expect_descriptor(unsigned char *ptr, int len, unsigned char desctype, unsigned char descindex)
+struct usb_device *usb_alloc_dev(struct usb_device *parent, struct usb_bus *bus)
 {
+	struct usb_device *dev;
+
+	dev = kmalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev)
+		return NULL;
+
+	memset(dev, 0, sizeof(*dev));
+
+	dev->bus = bus;
+	dev->parent = parent;
+	atomic_set(&dev->refcnt, 1);
+
+	dev->bus->op->allocate(dev);
+
+	return dev;
+}
+
+void usb_free_dev(struct usb_device *dev)
+{
+	if (atomic_dec_and_test(&dev->refcnt)) {
+		usb_destroy_configuration(dev);
+		kfree(dev);
+
+		dev->bus->op->deallocate(dev);
+	}
+}
+
+void usb_inc_dev_use(struct usb_device *dev)
+{
+	atomic_inc(&dev->refcnt);
+}
+
+static int usb_parse_endpoint(struct usb_device *dev, struct usb_endpoint_descriptor *endpoint, unsigned char *buffer, int size)
+{
+	struct usb_descriptor_header *header;
 	int parsed = 0;
-	int n_len;
-	unsigned short n_desc;
 
-	for (;;) {
-		int i;
+	header = (struct usb_descriptor_header *)buffer;
 
-		if (len < descindex)
-			return -1;
-		n_desc = le16_to_cpup((unsigned short *)ptr);
-		n_len = ptr[0];
-
-		if (n_desc == ((desctype << 8) + descindex))
-			break;
-
-		if (((n_desc >> 8)&0xFF) == desctype &&
-			n_len > descindex)
-		{
-			printk("bug: oversized descriptor.\n");
-			break;
-		}
-			
-		if (n_len < 2 || n_len > len)
-		{
-			printk("Short descriptor\n");
-			return -1;
-		}
-		printk(
-		"Expected descriptor %02X/%02X, got %02X/%02X - skipping\n",
-			desctype, descindex,
-			(n_desc >> 8) & 0xFF, n_desc & 0xFF);
-		for (i = 0 ; i < n_len; i++)
-			printk("   %d %02x\n", i, ptr[i]);
-		len -= n_len;
-		ptr += n_len;
-		parsed += n_len;
-	}
-	
-	printk("Found %02X:%02X\n",
-		desctype, descindex);
-	return parsed;
-}
-
-/*
- * Parse the even more incomprehensible mess made of the USB spec
- * by USB audio having private magic to go with it.
- */
- 
-static int usb_check_descriptor(unsigned char *ptr, int len, unsigned char desctype)
-{
-	int n_len = ptr[0];
-
-	if (len <= 0)
-		return -1;
-
-	if (n_len < 2 || n_len > len) {
-		int i;
-		printk("Short descriptor. (%d, %d):\n", len, n_len);
-		for (i = 0; i < len; ++i)
-			printk(" %d: %x\n", i, ptr[i]);
+	/* Everything should be fine being passed into here, but we sanity */
+	/*  check JIC */
+	if (header->bLength > size) {
+		printk(KERN_ERR "usb: ran out of descriptors parsing\n");
 		return -1;
 	}
-
-	if (ptr[1] == desctype)
-		return 0;
 		
-	return -1;
-}
-
-
-static int usb_parse_endpoint(struct usb_device *dev, struct usb_endpoint_descriptor *endpoint, unsigned char *ptr, int len)
-{
-	int parsed = usb_expect_descriptor(ptr, len, USB_DT_ENDPOINT, USB_DT_ENDPOINT_SIZE);
-	int i;
-
-	if (parsed < 0)
+	if (header->bDescriptorType != USB_DT_ENDPOINT) {
+		printk(KERN_INFO "usb: unexpected descriptor 0x%X\n",
+			endpoint->bDescriptorType);
 		return parsed;
-	memcpy(endpoint, ptr + parsed, ptr[parsed]);
-	le16_to_cpus(&endpoint->wMaxPacketSize);
-
-	parsed += ptr[parsed];
-	len -= parsed;
-
-	while((i = usb_check_descriptor(ptr+parsed, len, 0x25)) >= 0) {
-		usb_audio_endpoint(endpoint, ptr+parsed+i);
-		len -= ptr[parsed+i];
-		parsed += ptr[parsed+i];
-	}
-	
-	return parsed;// + ptr[parsed];
-}
-
-static int usb_parse_altsetting(struct usb_device *dev, struct usb_interface_descriptor *altsetting, unsigned char *ptr, int len)
-{
-	int i;
-	int parsed = usb_expect_descriptor(ptr, len, USB_DT_INTERFACE, USB_DT_INTERFACE_SIZE);
-	int retval;
-
-	if (parsed < 0)
-		return parsed;
-
-	memcpy(altsetting, ptr + parsed, *ptr);
-	len -= ptr[parsed];
-	parsed += ptr[parsed];
-
-	while((i=usb_check_descriptor(ptr+parsed, len, 0x24)) >= 0) {
-		usb_audio_interface(altsetting, ptr+parsed+i);
-		len -= ptr[parsed+i];
-		parsed += ptr[parsed+i];
-	}
-	
-	if (altsetting->bNumEndpoints > USB_MAXENDPOINTS) {
-		printk(KERN_WARNING "usb: too many endpoints.\n");
-		return -1;
 	}
 
-	altsetting->endpoint = (struct usb_endpoint_descriptor *)
-		kmalloc(altsetting->bNumEndpoints * sizeof(struct usb_endpoint_descriptor), GFP_KERNEL);
-	if (!altsetting->endpoint) {
-		printk(KERN_WARNING "usb: out of memory.\n");
-		return -1;	
+	memcpy(endpoint, buffer, USB_DT_ENDPOINT_SIZE);
+        le16_to_cpus(&endpoint->wMaxPacketSize);
+
+	buffer += header->bLength;
+	size -= header->bLength;
+	parsed += header->bLength;
+
+	/* Skip over the rest of the Class Specific or Vendor Specific */
+	/*  descriptors */
+	while (size >= sizeof(struct usb_descriptor_header)) {
+		header = (struct usb_descriptor_header *)buffer;
+
+		if (header->bLength < 2) {
+			printk(KERN_ERR "usb: invalid descriptor length of %d\n", header->bLength);
+			return -1;
+		}
+
+		/* If we find another descriptor which is at or below us */
+		/*  in the descriptor heirarchy then return */
+		if ((header->bDescriptorType == USB_DT_ENDPOINT) ||
+		    (header->bDescriptorType == USB_DT_INTERFACE) ||
+		    (header->bDescriptorType == USB_DT_CONFIG) ||
+		    (header->bDescriptorType == USB_DT_DEVICE))
+			return parsed;
+
+		printk(KERN_INFO "usb: skipping descriptor 0x%X\n",
+			header->bDescriptorType);
+
+		buffer += header->bLength;
+		size -= header->bLength;
+		parsed += header->bLength;
 	}
-	memset(altsetting->endpoint, 0, altsetting->bNumEndpoints*sizeof(struct usb_endpoint_descriptor));
-	
-	for (i = 0; i < altsetting->bNumEndpoints; i++) {
-//		if(((USB_DT_HID << 8) | 9) == *(unsigned short*)(ptr + parsed)) {
-//			parsed += 9;	/* skip over the HID descriptor for now */
-//			len -= 9;
-//		}
-		retval = usb_parse_endpoint(dev, altsetting->endpoint + i, ptr + parsed, len);
-		if (retval < 0)
-			return retval;
-		parsed += retval;
-		len -= retval;
-	}
+
 	return parsed;
 }
 
-static int usb_parse_config(struct usb_device *dev, struct usb_config_descriptor *config, unsigned char *ptr, int len)
+#if 0
+static int usb_parse_hid(struct usb_device *dev, struct usb_hid_descriptor *hid, unsigned char *ptr, int len)
 {
+	int parsed = usb_expect_descriptor(ptr, len, USB_DT_HID, ptr[0]);
 	int i;
-	int retval;
-	struct usb_interface *intf;
-	struct usb_interface_descriptor as;	/* This is needing for copying. */
-	int parsed = usb_expect_descriptor(ptr, len, USB_DT_CONFIG, 9);
-	unsigned short bNumInterfaces;
-	unsigned short bIntfaceNum = 0, bAltSetting = 0;
 
 	if (parsed < 0)
 		return parsed;
 
-	memcpy(config, ptr + parsed, *ptr);
-	len -= *ptr;
-	parsed += *ptr;
-	le16_to_cpus(&config->wTotalLength);
-	bNumInterfaces = config->bNumInterfaces;
+	memcpy(hid, ptr + parsed, ptr[parsed]);
+	le16_to_cpus(&hid->bcdHID);
 
-	if (bNumInterfaces > USB_MAXINTERFACES) {
-		printk(KERN_WARNING "usb: too many interfaces.\n");
+	for (i=0; i<hid->bNumDescriptors; i++)
+		le16_to_cpus(&(hid->desc[i].wDescriptorLength));
+
+	return parsed + ptr[parsed];
+}
+#endif
+
+static int usb_parse_interface(struct usb_device *dev, struct usb_interface *interface, unsigned char *buffer, int size)
+{
+	int i;
+	int retval, parsed = 0;
+	struct usb_descriptor_header *header;
+	struct usb_interface_descriptor *ifp;
+
+	interface->act_altsetting = 0;
+	interface->num_altsetting = 0;
+
+	interface->altsetting = kmalloc(sizeof(struct usb_interface_descriptor) * USB_MAXALTSETTING, GFP_KERNEL);
+	if (!interface->altsetting) {
+		printk("couldn't kmalloc interface->altsetting\n");
+		return -1;
+	}
+
+	while (size > 0) {
+		ifp = interface->altsetting + interface->num_altsetting;
+		interface->num_altsetting++;
+
+		if (interface->num_altsetting >= USB_MAXALTSETTING) {
+			printk(KERN_WARNING "usb: too many alternate settings\n");
+			return -1;
+		}
+		memcpy(ifp, buffer, USB_DT_INTERFACE_SIZE);
+
+		/* Skip over the interface */
+		buffer += ifp->bLength;
+		parsed += ifp->bLength;
+		size -= ifp->bLength;
+
+		/* Skip over at Interface class or vendor descriptors */
+		while (size >= sizeof(struct usb_descriptor_header)) {
+			header = (struct usb_descriptor_header *)buffer;
+
+			if (header->bLength < 2) {
+				printk(KERN_ERR "usb: invalid descriptor length of %d\n", header->bLength);
+				return -1;
+			}
+
+			/* If we find another descriptor which is at or below us */
+			/*  in the descriptor heirarchy then return */
+			if ((header->bDescriptorType == USB_DT_INTERFACE) ||
+			    (header->bDescriptorType == USB_DT_ENDPOINT))
+				break;
+
+			if ((header->bDescriptorType == USB_DT_CONFIG) ||
+			    (header->bDescriptorType == USB_DT_DEVICE))
+				return parsed;
+
+			if (header->bDescriptorType == USB_DT_HID)
+				printk(KERN_INFO "usb: skipping HID descriptor\n");
+			else
+				printk(KERN_INFO "usb: unexpected descriptor 0x%X\n",
+					header->bDescriptorType);
+
+			buffer += header->bLength;
+			parsed += header->bLength;
+			size -= header->bLength;
+		}
+
+		if (ifp->bNumEndpoints > USB_MAXENDPOINTS) {
+			printk(KERN_WARNING "usb: too many endpoints\n");
+			return -1;
+		}
+
+		ifp->endpoint = (struct usb_endpoint_descriptor *)
+			kmalloc(ifp->bNumEndpoints *
+			sizeof(struct usb_endpoint_descriptor), GFP_KERNEL);
+		if (!ifp->endpoint) {
+			printk(KERN_WARNING "usb: out of memory\n");
+			return -1;	
+		}
+
+		memset(ifp->endpoint, 0, ifp->bNumEndpoints *
+			sizeof(struct usb_endpoint_descriptor));
+	
+		for (i = 0; i < ifp->bNumEndpoints; i++) {
+			header = (struct usb_descriptor_header *)buffer;
+
+			if (header->bLength > size) {
+				printk(KERN_ERR "usb: ran out of descriptors parsing\n");
+				return -1;
+			}
+		
+			retval = usb_parse_endpoint(dev, ifp->endpoint + i, buffer, size);
+			if (retval < 0)
+				return retval;
+
+			buffer += retval;
+			parsed += retval;
+			size -= retval;
+		}
+
+		/* We check to see if it's an alternate to this one */
+		ifp = (struct usb_interface_descriptor *)buffer;
+		if (size < USB_DT_INTERFACE_SIZE ||
+		    ifp->bDescriptorType != USB_DT_INTERFACE ||
+		    !ifp->bAlternateSetting)
+			return parsed;
+	}
+
+	return parsed;
+}
+
+static int usb_parse_configuration(struct usb_device *dev, struct usb_config_descriptor *config, char *buffer)
+{
+	int i;
+	int retval;
+	int size;
+	struct usb_descriptor_header *header;
+
+	memcpy(config, buffer, USB_DT_INTERFACE_SIZE);
+
+	le16_to_cpus(&config->wTotalLength);
+	size = config->wTotalLength;
+
+	if (config->bNumInterfaces > USB_MAXINTERFACES) {
+		printk(KERN_WARNING "usb: too many interfaces\n");
 		return -1;
 	}
 
 	config->interface = (struct usb_interface *)
-	        kmalloc(bNumInterfaces * sizeof(struct usb_interface), GFP_KERNEL);
+		kmalloc(config->bNumInterfaces *
+		sizeof(struct usb_interface), GFP_KERNEL);
 	if (!config->interface) {
-		printk(KERN_WARNING "usb: out of memory.\n");
-		return -1;
-	}
-	memset(config->interface, 
-		   0, (bNumInterfaces) * sizeof(struct usb_interface));
-
-	for (i = 0; i < bNumInterfaces; i++) {
-		intf = (config->interface) +i;
-		/* We have at least one interface */
-		intf->num_altsetting = 1;
-		intf->altsetting = (struct usb_interface_descriptor*)
-			kmalloc((USB_MAXALTSETTING +1) * sizeof(struct usb_interface_descriptor), GFP_KERNEL);
-		if (!config->interface[i].altsetting) {
-			printk(KERN_WARNING "usb: out of memory.\n");
-			return -1;	
-		}
-		memset(intf->altsetting, 
-			   0, (USB_MAXALTSETTING+1) * sizeof(struct usb_interface_descriptor));
-	}
-		
-	/* Ok, we now have allocated the necessary structures, now decide
-     * where to put the parsed interface descriptors - sort by
-	 * bAltSetting and bInterfaceNumber.
-	 */
-	while (len > 0) {
-		retval = usb_parse_altsetting(dev, &as, ptr + parsed, len);
-		if (retval < 0)
-			return parsed; // HACK
-	//		return retval;
-		parsed += retval;
-		len -= retval;
-		bIntfaceNum = as.bInterfaceNumber;
-		if (bIntfaceNum > config->bNumInterfaces) {
-			printk(KERN_WARNING "usb: bInterfaceNumber %2u exceeding config->bNumINterfaces.\n", bIntfaceNum);
-			return -1;
-		}
-		bAltSetting = as.bAlternateSetting;
-		if (bAltSetting > USB_MAXALTSETTING) {
-			printk(KERN_WARNING "usb: illegal bAlternateSetting %2u.\n", bAltSetting);
-			return -1;
-		}
-		if (bAltSetting > config->interface[bIntfaceNum].num_altsetting) {
-			config->interface[bIntfaceNum].num_altsetting = bAltSetting +1;
-		}
-		memcpy( &(config->interface[bIntfaceNum].altsetting[bAltSetting]),
-		   		&as, sizeof(struct usb_interface_descriptor));
-	}
-
-	printk("parsed = %d len = %d\n", parsed, len);
-	return parsed;
-}
-
-int usb_parse_configuration(struct usb_device *dev, void *__buf, int bytes)
-{
-	int i;
-	unsigned char *ptr = __buf;
-
-	if (dev->descriptor.bNumConfigurations > USB_MAXCONFIG) {
-		printk(KERN_WARNING "usb: too many configurations.\n");
-		return -1;
-	}
-
-	dev->config = (struct usb_config_descriptor *)
-		kmalloc(dev->descriptor.bNumConfigurations * sizeof(struct usb_config_descriptor), GFP_KERNEL);
-	if (!dev->config) {
-		printk(KERN_WARNING "usb: out of memory.\n");
+		printk(KERN_WARNING "usb: out of memory\n");
 		return -1;	
 	}
-	memset(dev->config, 0, dev->descriptor.bNumConfigurations*sizeof(struct usb_config_descriptor));
-	for (i = 0; i < dev->descriptor.bNumConfigurations; i++) {
-		int retval = usb_parse_config(dev, dev->config + i, ptr, bytes);
+
+	memset(config->interface, 0,
+	       config->bNumInterfaces*sizeof(struct usb_interface_descriptor));
+
+	buffer += config->bLength;
+	size -= config->bLength;
+	
+	for (i = 0; i < config->bNumInterfaces; i++) {
+		header = (struct usb_descriptor_header *)buffer;
+		if (header->bLength > size) {
+			printk(KERN_ERR "usb: ran out of descriptors parsing\n");
+			return -1;
+		}
+		
+		if (header->bDescriptorType != USB_DT_INTERFACE) {
+			printk(KERN_INFO "usb: unexpected descriptor 0x%X\n",
+				header->bDescriptorType);
+
+			buffer += header->bLength;
+			size -= header->bLength;
+			continue;
+		}
+
+		retval = usb_parse_interface(dev, config->interface + i, buffer, size);
 		if (retval < 0)
 			return retval;
-		ptr += retval;
-		bytes -= retval;
+
+		buffer += retval;
+		size -= retval;
 	}
-	if (bytes)
-		printk(KERN_WARNING "usb: %d bytes of extra configuration data left\n", bytes);
-	return 0;
+
+	return size;
 }
 
 void usb_destroy_configuration(struct usb_device *dev)
 {
-	int c, a, i;
-	struct usb_config_descriptor *cf;
-	struct usb_interface *intf;
-	struct usb_interface_descriptor *as;
+	int c, i, j;
 	
 	if (!dev->config)
 		return;
 
 	for (c = 0; c < dev->descriptor.bNumConfigurations; c++) {
-		cf = &dev->config[c];
+		struct usb_config_descriptor *cf = &dev->config[c];
+
 		if (!cf->interface)
 		        break;
-		for (a = 0; a < cf->bNumInterfaces; a++) {
-		        intf = &cf->interface[a];
-			if (intf->altsetting == NULL)
+
+		for (i = 0; i < cf->bNumInterfaces; i++) {
+			struct usb_interface *ifp =
+				&cf->interface[i];
+
+			if (!ifp->altsetting)
 			        break;
-			for(i=0; i <= USB_MAXALTSETTING ;i++) {
-			        as = &intf->altsetting[i];
-				if(as->endpoint==NULL)
-				       break;
+
+			for (j = 0; j < ifp->num_altsetting; j++) {
+				struct usb_interface_descriptor *as =
+					&ifp->altsetting[j];
+
+				if (!as->endpoint)
+					break;
+
 				kfree(as->endpoint);
 			}
-			kfree(intf->altsetting);
+			kfree(ifp->altsetting);
 		}
 		kfree(cf->interface);
 	}
@@ -531,29 +539,33 @@ void usb_init_root_hub(struct usb_device *dev)
 void usb_disconnect(struct usb_device **pdev)
 {
 	struct usb_device * dev = *pdev;
+	int i;
 
-	if (dev) {
-		int i;
+	if (!dev)
+		return;
 
-		*pdev = NULL;
+	*pdev = NULL;
 
-		printk("USB disconnect on device %d\n", dev->devnum);
+	printk("USB disconnect on device %d\n", dev->devnum);
 
-		if(dev->driver) dev->driver->disconnect(dev);
+	if (dev->driver)
+		dev->driver->disconnect(dev);
 
-		/* Free up all the children.. */
-		for (i = 0; i < USB_MAXCHILDREN; i++) {
-			struct usb_device **child = dev->children + i;
-			usb_disconnect(child);
-		}
-
-		/* Free up the device itself, including its device number */
-		if (dev->devnum > 0)
-			clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
-		dev->bus->op->deallocate(dev);
+	/* Free up all the children.. */
+	for (i = 0; i < USB_MAXCHILDREN; i++) {
+		struct usb_device **child = dev->children + i;
+		usb_disconnect(child);
 	}
-}
 
+	/* remove /proc/bus/usb entry */
+	proc_usb_remove_device(dev);
+
+	/* Free up the device itself, including its device number */
+	if (dev->devnum > 0)
+		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
+
+	usb_free_dev(dev);
+}
 
 /*
  * Connect a new USB device. This basically just initializes
@@ -704,12 +716,13 @@ int usb_set_idle(struct usb_device *dev,  int duration, int report_id)
 static void usb_set_maxpacket(struct usb_device *dev)
 {
 	int i, j;
-	struct usb_interface *intf;
+	struct usb_interface *ifp;
 
 	for (i=0; i<dev->actconfig->bNumInterfaces; i++) {
-		intf = (dev->actconfig->interface) +i;
-		for (j = 0; j < intf->num_altsetting; j++) {
-			struct usb_interface_descriptor *as = intf->altsetting +j;
+		ifp = dev->actconfig->interface + i;
+
+		for (j = 0; j < ifp->num_altsetting; j++) {
+			struct usb_interface_descriptor *as = ifp->altsetting + j;
 			struct usb_endpoint_descriptor *ep = as->endpoint;
 			int e;
 
@@ -718,7 +731,7 @@ static void usb_set_maxpacket(struct usb_device *dev)
 					dev->epmaxpacketout[ep[e].bEndpointAddress & 0x0f] =
 						ep[e].wMaxPacketSize;
 				else
-					dev->epmaxpacketin[ep[e].bEndpointAddress & 0x0f] =
+					dev->epmaxpacketin [ep[e].bEndpointAddress & 0x0f] =
 						ep[e].wMaxPacketSize;
 			}
 		}
@@ -823,60 +836,78 @@ int usb_set_configuration(struct usb_device *dev, int configuration)
 	return 0;
 }
 
-int usb_get_report(struct usb_device *dev)
+int usb_get_report(struct usb_device *dev, unsigned char type, unsigned char id, unsigned char index, void *buf, int size)
 {
-	unsigned char buf[8];
 	devrequest dr;
 
 	dr.requesttype = USB_RT_HIDD | 0x80;
 	dr.request = USB_REQ_GET_REPORT;
-	dr.value = 0x100;
-	dr.index = 1;
-	dr.length = 3;
+	dr.value = (type << 8) + id;
+	dr.index = index;
+	dr.length = size;
 
-	if (dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev, 0), &dr, buf, 3))
+	if (dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev, 0), &dr, buf, size))
 		return -1;
 
-	return buf[0];
+	return 0;
 }
 
 int usb_get_configuration(struct usb_device *dev)
 {
 	unsigned int cfgno;
-	unsigned char * bufptr;
-	unsigned char * buffer;
-	int parse;
+	unsigned char buffer[8];
+	unsigned char *bigbuffer;
+	struct usb_config_descriptor *desc =
+		(struct usb_config_descriptor *)buffer;
 
-	buffer = (unsigned char *) __get_free_page (GFP_KERNEL);
-	if (!buffer)
+	if (dev->descriptor.bNumConfigurations > USB_MAXCONFIG) {
+		printk(KERN_WARNING "usb: too many configurations\n");
 		return -1;
+	}
 
-	bufptr = buffer;
-	for (cfgno = 0 ; cfgno < dev->descriptor.bNumConfigurations ; cfgno++) {
-		unsigned int size;
-  		/* Get the first 8 bytes - guaranteed */
-	  	if (usb_get_descriptor(dev, USB_DT_CONFIG, cfgno, bufptr, 8)) {
-			__free_page ((struct page *) buffer);
+	dev->config = (struct usb_config_descriptor *)
+		kmalloc(dev->descriptor.bNumConfigurations *
+		sizeof(struct usb_config_descriptor), GFP_KERNEL);
+	if (!dev->config) {
+		printk(KERN_WARNING "usb: out of memory.\n");
+		return -1;	
+	}
+	memset(dev->config, 0, dev->descriptor.bNumConfigurations *
+		sizeof(struct usb_config_descriptor));
+
+	for (cfgno = 0; cfgno < dev->descriptor.bNumConfigurations; cfgno++) {
+        	int result;
+
+		/* We grab the first 8 bytes so we know how long the whole */
+		/*  configuration is */
+		result = usb_get_descriptor(dev, USB_DT_CONFIG, cfgno, buffer, 8);
+		if (result)
 	    		return -1;
-		}
 
   	  	/* Get the full buffer */
-	  	size = le16_to_cpup((unsigned short *)(bufptr+2));
-	  	if (bufptr+size > buffer+PAGE_SIZE) {
-			printk(KERN_INFO "usb: truncated DT_CONFIG (want %d).\n", size);
-			size = buffer+PAGE_SIZE-bufptr;
-		}
-		if (usb_get_descriptor(dev, USB_DT_CONFIG, cfgno, bufptr, size)) {
-			__free_page ((struct page *) buffer);
+		le16_to_cpus(&desc->wTotalLength);
+
+		bigbuffer = kmalloc(desc->wTotalLength, GFP_KERNEL);
+		if (!bigbuffer)
+			return -1;
+
+		/* Now that we know the length, get the whole thing */
+		result = usb_get_descriptor(dev, USB_DT_CONFIG, cfgno, bigbuffer, desc->wTotalLength);
+		if (result) {
+			kfree(bigbuffer);
 			return -1;
 		}
 			
-		/* Prepare for next configuration */
-		bufptr += size;
+		result = usb_parse_configuration(dev, &dev->config[cfgno], bigbuffer);
+		kfree(bigbuffer);
+
+		if (result > 0)
+			printk(KERN_INFO "usb: descriptor data left\n");
+		else if (result < 0)
+			return -1;
 	}
-	parse = usb_parse_configuration(dev, buffer, bufptr - buffer);
-	__free_page ((struct page *) buffer);
-	return parse;
+
+	return 0;
 }
 
 
@@ -903,14 +934,15 @@ char *usb_string(struct usb_device *dev, int index)
 		dev->string_langid |= 0x10000;	/* so it's non-zero */
 	}
 
-	if (usb_get_string(dev, dev->string_langid, index, u.buffer, 2)
-	    || usb_get_string(dev, dev->string_langid, index, u.buffer,
+	if (usb_get_string(dev, dev->string_langid, index, u.buffer, 2) ||
+	    usb_get_string(dev, dev->string_langid, index, u.buffer,
 			      u.desc.bLength))
 		return 0;
 
 	len = u.desc.bLength / 2;	/* includes terminating null */
+
 	ptr = kmalloc(len, GFP_KERNEL);
-	if (ptr == 0)
+	if (!ptr)
 		return 0;
 
 	for (i = 0; i < len - 1; ++i)
@@ -943,7 +975,7 @@ int usb_new_device(struct usb_device *dev)
 
 	/* Slow devices */
 	if (usb_get_descriptor(dev, USB_DT_DEVICE, 0, &dev->descriptor, 8)) {
-		printk(KERN_ERR "USB device not responding, giving up\n");
+		printk(KERN_ERR "usbcore: USB device not responding, giving up\n");
 		dev->devnum = -1;
 		return 1;
 	}
@@ -960,7 +992,7 @@ int usb_new_device(struct usb_device *dev)
 	dev->devnum = addr;
 
 	if (usb_set_address(dev)) {
-		printk(KERN_ERR "USB device not accepting new address\n");
+		printk(KERN_ERR "usbcore: USB device not accepting new address\n");
 		dev->devnum = -1;
 		return 1;
 	}
@@ -968,13 +1000,13 @@ int usb_new_device(struct usb_device *dev)
 	wait_ms(10);	/* Let the SET_ADDRESS settle */
 
 	if (usb_get_device_descriptor(dev)) {
-		printk(KERN_ERR "Unable to get device descriptor\n");
+		printk(KERN_ERR "usbcore: unable to get device descriptor\n");
 		dev->devnum = -1;
 		return 1;
 	}
 
 	if (usb_get_configuration(dev)) {
-		printk(KERN_ERR "Unable to get configuration\n");
+		printk(KERN_ERR "usbcore: unable to get configuration\n");
 		dev->devnum = -1;
 		return 1;
 	}
@@ -986,6 +1018,9 @@ int usb_new_device(struct usb_device *dev)
 	usb_show_string(dev, "Manufacturer", dev->descriptor.iManufacturer);
 	usb_show_string(dev, "Product", dev->descriptor.iProduct);
 	usb_show_string(dev, "SerialNumber", dev->descriptor.iSerialNumber);
+
+	/* now that the basic setup is over, add a /proc/bus/usb entry */
+	proc_usb_add_device(dev);
 
 	if (!usb_find_driver(dev)) {
 		/*
@@ -999,7 +1034,21 @@ int usb_new_device(struct usb_device *dev)
 	return 0;
 }
 
-void* usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
+int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size)
+{
+        devrequest dr;
+
+        dr.requesttype = requesttype;
+        dr.request = request;
+        dr.value = cpu_to_le16p(&value);
+        dr.index = cpu_to_le16p(&index);
+        dr.length = cpu_to_le16p(&size);
+
+        return dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr,
+                data, size);
+}
+
+void *usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
 {
 	return dev->bus->op->request_irq(dev, pipe, handler, period, dev_id);
 }
@@ -1014,44 +1063,56 @@ int usb_terminate_bulk(struct usb_device *dev, void *first)
 	return dev->bus->op->terminate_bulk(dev, first);
 }
 
-void *usb_allocate_isochronous (struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id)
-{
-	return usb_dev->bus->op->alloc_isoc (usb_dev, pipe, data, len, maxsze, completed, dev_id);
-}
-
-void usb_delete_isochronous (struct usb_device *dev, void *_isodesc)
-{
-	return dev->bus->op->delete_isoc (dev, _isodesc);
-}
-
-int usb_schedule_isochronous (struct usb_device *usb_dev, void *_isodesc, void *_pisodesc)
-{
-	return usb_dev->bus->op->sched_isoc (usb_dev, _isodesc, _pisodesc);
-}
-
-int usb_unschedule_isochronous (struct usb_device *usb_dev, void *_isodesc)
-{
-	return usb_dev->bus->op->unsched_isoc (usb_dev, _isodesc);
-}
-
-int usb_compress_isochronous (struct usb_device *usb_dev, void *_isodesc)
-{
-	return usb_dev->bus->op->compress_isoc (usb_dev, _isodesc);
-}
-
-int usb_release_irq(struct usb_device *dev, void* handle)
+int usb_release_irq(struct usb_device *dev, void *handle)
 {
 	return dev->bus->op->release_irq(dev, handle);
 }
 
+/*
+ * usb_get_current_frame_number()
+ *
+ * returns the current frame number for the parent USB bus/controller
+ * of the given USB device.
+ */
+int usb_get_current_frame_number (struct usb_device *usb_dev)
+{
+	return usb_dev->bus->op->get_frame_number (usb_dev);
+}
+
+int usb_init_isoc (struct usb_device *usb_dev,
+			unsigned int pipe,
+			int frame_count,
+			void *context,
+			struct usb_isoc_desc **isocdesc)
+{
+	return usb_dev->bus->op->init_isoc (usb_dev, pipe, frame_count, context, isocdesc);
+}
+
+void usb_free_isoc (struct usb_isoc_desc *isocdesc)
+{
+	isocdesc->usb_dev->bus->op->free_isoc (isocdesc);
+}
+
+int usb_run_isoc (struct usb_isoc_desc *isocdesc,
+			struct usb_isoc_desc *pr_isocdesc)
+{
+	return isocdesc->usb_dev->bus->op->run_isoc (isocdesc, pr_isocdesc);
+}
+
+int usb_kill_isoc (struct usb_isoc_desc *isocdesc)
+{
+	return isocdesc->usb_dev->bus->op->kill_isoc (isocdesc);
+}
+
 #ifdef CONFIG_PROC_FS
-struct list_head * usb_driver_get_list (void)
+struct list_head *usb_driver_get_list(void)
 {
 	return &usb_driver_list;
 }
 
-struct list_head * usb_bus_get_list (void)
+struct list_head *usb_bus_get_list(void)
 {
 	return &usb_bus_list;
 }
 #endif
+

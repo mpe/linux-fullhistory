@@ -412,6 +412,7 @@
  * (Updated by AK, but not complete yet.)
  **/
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
 #include <linux/poll.h>

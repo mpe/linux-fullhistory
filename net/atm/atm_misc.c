@@ -3,7 +3,6 @@
 /* Written 1995-1999 by Werner Almesberger, EPFL ICA */
 
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/atm.h>
 #include <linux/atmdev.h>

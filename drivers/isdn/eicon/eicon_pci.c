@@ -1,4 +1,4 @@
-/* $Id: eicon_pci.c,v 1.9 1999/08/11 21:01:11 keil Exp $
+/* $Id: eicon_pci.c,v 1.10 1999/08/22 20:26:49 calle Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  * Hardware-specific code for PCI cards.
@@ -26,6 +26,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_pci.c,v $
+ * Revision 1.10  1999/08/22 20:26:49  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.9  1999/08/11 21:01:11  keil
  * new PCI codefix
  *
@@ -71,7 +77,7 @@
 #include "eicon_pci.h"
 
 
-char *eicon_pci_revision = "$Revision: 1.9 $";
+char *eicon_pci_revision = "$Revision: 1.10 $";
 
 #if CONFIG_PCI	         /* intire stuff is only for PCI */
 

@@ -138,7 +138,6 @@
  *	This happens in pcm_copy_{in,out}().
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/stddef.h>
 #include <asm/fixmap.h>

@@ -1,11 +1,17 @@
 /*
- * $Id: b1.c,v 1.7 1999/08/04 10:10:09 calle Exp $
+ * $Id: b1.c,v 1.8 1999/08/22 20:26:22 calle Exp $
  * 
  * Common module for AVM B1 cards.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1.c,v $
+ * Revision 1.8  1999/08/22 20:26:22  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.7  1999/08/04 10:10:09  calle
  * Bugfix: corrected /proc functions, added structure for new AVM cards.
  *
@@ -62,7 +68,7 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.7 $";
+static char *revision = "$Revision: 1.8 $";
 
 /* ------------------------------------------------------------- */
 

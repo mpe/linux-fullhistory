@@ -31,8 +31,9 @@
  *
  */
 
-#define CLGEN_VERSION "1.9.4.2"
+#define CLGEN_VERSION "1.9.4.3"
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -324,6 +325,8 @@ struct clgenfb_info {
 #ifdef CONFIG_ZORRO
 	int keyRAM;		/* RAM, REG zorro board keys */
 	int keyREG;
+	unsigned long board_addr,
+		      board_size;
 #endif
 
 #ifdef CONFIG_PCI
@@ -338,7 +341,9 @@ static struct display disp;
 
 static struct clgenfb_info boards[MAX_NUM_BOARDS];	/* the boards */
 
-static unsigned clgen_def_mode = 0;
+static unsigned clgen_def_mode = 1;
+
+static int release_io_ports = 0;
 
 
 
@@ -1787,12 +1792,16 @@ static void __init init_vgachip (struct clgenfb_info *fb_info)
 		break;
 	}
 
+#ifdef CLGEN_USE_HARDCODED_RAM_SETTINGS
 	/* "pre-set" a RAMsize; if the test succeeds, double it */
 	if (fb_info->btype == BT_SD64 ||
 	    fb_info->btype == BT_PICASSO4)
 		fb_info->size = 0x400000;
 	else
 		fb_info->size = 0x200000;
+#else
+	assert (fb_info->size > 0); /* make sure RAM size set by this point */
+#endif
 
 	/* assume it's a "large memory" board (2/4 MB) */
 	fb_info->smallboard = FALSE;
@@ -2362,7 +2371,7 @@ static void __init get_pci_addrs (const struct pci_dev *pdev,
 
 #else
 
-	if (pdev->resource[0].flags & IORESOURCE_IOPORT) {
+	if (pdev->resource[0].flags & IORESOURCE_IO) {
 		*display = pdev->resource[1].start;
 		*registers = pdev->resource[0].start;
 	} else {
@@ -2378,6 +2387,21 @@ static void __init get_pci_addrs (const struct pci_dev *pdev,
 }
 
 
+
+
+/* clgen_pci_unmap only used in modules */
+#ifdef MODULE
+static void clgen_pci_unmap (struct clgenfb_info *info)
+{
+	iounmap (info->fbmem);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,13)
+	__release_region (&iomem_resource, info->fbmem_phys, info->size);
+	__release_region (&iomem_resource, 0xA0000, 65535);
+	if (release_io_ports)
+		__release_region (&ioport_resource, 0x3C0, 32);
+#endif
+}
+#endif /* MODULE */
 
 
 static int __init clgen_pci_setup (struct clgenfb_info *info,
@@ -2411,8 +2435,8 @@ static int __init clgen_pci_setup (struct clgenfb_info *info,
 
 	pci_read_config_word (pdev, PCI_COMMAND, &tmp16);
 	if (!(tmp16 & (PCI_COMMAND_MEMORY | PCI_COMMAND_IO))) {
-		tmp16 |= PCI_COMMAND_MEMORY | PCI_COMMAND_IO;
-		pci_write_config_word (pdev, PCI_COMMAND, tmp16);
+		u16 tmp16_o = tmp16 | PCI_COMMAND_MEMORY | PCI_COMMAND_IO;
+		pci_write_config_word (pdev, PCI_COMMAND, tmp16_o);
 	}
 
 #ifdef CONFIG_FB_OF
@@ -2453,10 +2477,33 @@ static int __init clgen_pci_setup (struct clgenfb_info *info,
 	} else {
 		board_size = clgen_get_memsize (info->regs);
 	}
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,13)
+
+	if (!__request_region (&iomem_resource, board_addr,
+			       board_size, "clgenfb")) {
+		pci_write_config_word (pdev, PCI_COMMAND, tmp16);
+		printk(KERN_ERR "clgen: cannot reserve region 0x%lu, abort\n",
+		       board_addr);
+		return -1;
+	}
+	if (!__request_region (&iomem_resource, 0xA0000, 65535, "clgenfb")) {
+		pci_write_config_word (pdev, PCI_COMMAND, tmp16);
+		printk(KERN_ERR "clgen: cannot reserve region 0x%lu, abort\n",
+		       0xA0000L);
+		__release_region(&iomem_resource, board_addr, board_size);
+		return -1;
+	}
+	if (__request_region(&ioport_resource, 0x3C0, 32, "clgenfb"))
+		release_io_ports = 1;
+
+#endif /* kernel > 2.3.13 */
+
 	info->fbmem = ioremap (board_addr, board_size);
 	info->fbmem_phys = board_addr;
+	info->size = board_size;
 
-	printk (" RAM (%lu MB) at $%lx, ", board_size / 0x100000, board_addr);
+	printk (" RAM (%lu MB) at 0x%lx, ", info->size / MB_, board_addr);
 
 	printk (KERN_INFO "Cirrus Logic chipset on PCI bus\n");
 
@@ -2499,6 +2546,25 @@ static int __init clgen_zorro_find (int *key_o, int *key2_o, clgen_board_t *btyp
 
 
 
+/* clgen_zorro_unmap only used in modules */
+#ifdef MODULE
+static void clgen_zorro_unmap (struct clgenfb_info *info)
+{
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,13)
+	__release_region(&iomem_resource, info->board_addr, info->board_size);
+#endif
+	if (info->btype == BT_PICASSO4) {
+		iounmap (info->board_addr);
+		iounmap (info->fbmem_phys);
+	} else {
+		if (info->board_addr > 0x01000000)
+			iounmap (info->board_addr);
+	}
+}
+#endif /* MODULE */
+
+
+
 static int __init clgen_zorro_setup (struct clgenfb_info *info,
 				     clgen_board_t *btype)
 {
@@ -2520,9 +2586,17 @@ static int __init clgen_zorro_setup (struct clgenfb_info *info,
 	info->keyRAM = key;
 	info->keyREG = key2;
 	cd = zorro_get_board (key);
-	board_addr = (unsigned long) cd->cd_BoardAddr;
-	board_size = (unsigned long) cd->cd_BoardSize;
-	printk (" RAM (%lu MB) at $%lx, ", board_size / 0x100000, board_addr);
+	info->board_addr = board_addr = (unsigned long) cd->cd_BoardAddr;
+	info->board_size = board_size = (unsigned long) cd->cd_BoardSize;
+
+	if (!__request_region(&iomem_resource, board_addr,
+			      board_size, "clgenfb")) {
+		printk(KERN_ERR "clgen: cannot reserve region 0x%lu, abort\n",
+		       board_addr);
+		return -1;
+	}
+
+	printk (" RAM (%lu MB) at $%lx, ", board_size / MB_, board_addr);
 
 	if (*btype == BT_PICASSO4) {
 		printk (" REG at $%lx\n", board_addr + 0x600000);
@@ -2683,9 +2757,13 @@ static void clgenfb_cleanup (struct clgenfb_info *info)
 #ifdef CONFIG_ZORRO
 	switch_monitor (info, 0);
 
+	clgen_zorro_unmap (info);
+
 	zorro_unconfig_board (info->keyRAM, 0);
 	if (info->btype != BT_PICASSO4)
 		zorro_unconfig_board (info->keyREG, 0);
+#else
+	clgen_pci_unmap (info);
 #endif				/* CONFIG_ZORRO */
 
 	unregister_framebuffer ((struct fb_info *) info);

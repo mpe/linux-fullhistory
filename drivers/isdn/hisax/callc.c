@@ -1,4 +1,4 @@
-/* $Id: callc.c,v 2.31 1999/08/05 20:43:10 keil Exp $
+/* $Id: callc.c,v 2.34 1999/08/25 20:02:34 werner Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,6 +11,20 @@
  *              Fritz Elfert
  *
  * $Log: callc.c,v $
+ * Revision 2.34  1999/08/25 20:02:34  werner
+ * Changed return values for stat_icall(w) from 3->4 and 4->5 because of conflicts
+ * with existing software definitions. (PtP incomplete called party number)
+ *
+ * Revision 2.33  1999/08/25 17:00:09  keil
+ * Make ISAR V32bis modem running
+ * Make LL->HL interface open for additional commands
+ *
+ * Revision 2.32  1999/08/22 20:27:01  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 2.31  1999/08/05 20:43:10  keil
  * ISAR analog modem support
  *
@@ -140,7 +154,7 @@ extern long mod_use_count_;
 #endif /* COMPAT_HAS_NEW_SYMTAB */
 #endif	/* MODULE */
 
-const char *lli_revision = "$Revision: 2.31 $";
+const char *lli_revision = "$Revision: 2.34 $";
 
 extern struct IsdnCard cards[];
 extern int nrcards;
@@ -498,12 +512,12 @@ lli_deliver_call(struct FsmInst *fi, int event, void *arg)
 				FsmChangeState(fi, ST_IN_ALERT_SENT);
 				chanp->d_st->lli.l4l3(chanp->d_st, CC_ALERTING | REQUEST, chanp->proc);
 				break;
-	      	        case 4: /* direct redirect */
-		        case 3: /* Proceeding desired */
+	      	        case 5: /* direct redirect */
+		        case 4: /* Proceeding desired */
 				FsmDelTimer(&chanp->drel_timer, 61);
 				FsmChangeState(fi, ST_IN_PROCEED_SEND);
                                 chanp->d_st->lli.l4l3(chanp->d_st, CC_PROCEED_SEND | REQUEST, chanp->proc);
-                                if (ret == 4)
+                                if (ret == 5)
 				 { chanp->setup = ic.parm.setup;
 				   chanp->d_st->lli.l4l3(chanp->d_st, CC_REDIR | REQUEST, chanp->proc);
                                  }   
@@ -971,6 +985,7 @@ release_b_st(struct Channel *chanp)
 			case (ISDN_PROTO_L2_HDLC):
 			case (ISDN_PROTO_L2_TRANS):
 			case (ISDN_PROTO_L2_MODEM):
+			case (ISDN_PROTO_L2_FAX):
                                 releasestack_transl2(st);
                                 break;
                 }
@@ -1359,6 +1374,9 @@ init_b_st(struct Channel *chanp, int incoming)
 		case (ISDN_PROTO_L2_MODEM):
 			st->l1.mode = L1_MODE_V32;
 			break;
+		case (ISDN_PROTO_L2_FAX):
+			st->l1.mode = L1_MODE_FAX;
+			break;
 	}
 	chanp->bcs->conmsg = NULL;
 	if (chanp->bcs->BC_SetStack(st, chanp->bcs))
@@ -1388,6 +1406,7 @@ init_b_st(struct Channel *chanp, int incoming)
 		case (ISDN_PROTO_L2_HDLC):
 		case (ISDN_PROTO_L2_TRANS):
 		case (ISDN_PROTO_L2_MODEM):
+		case (ISDN_PROTO_L2_FAX):
 			st->l1.l1l2 = lltrans_handler;
 			st->lli.userdata = chanp;
 			st->lli.l1writewakeup = ll_writewakeup;
@@ -1395,8 +1414,7 @@ init_b_st(struct Channel *chanp, int incoming)
 			setstack_l3bc(st, chanp);
 			break;
 	}
-        test_and_set_bit(FLG_START_B, &chanp->Flags);
- 
+	test_and_set_bit(FLG_START_B, &chanp->Flags);
 	return (0);
 }
 
@@ -1547,28 +1565,28 @@ lli_got_manufacturer(struct Channel *chanp, struct IsdnCardState *cs, capi_msg *
 /***************************************************************/
 static int 
 set_channel_limit(struct IsdnCardState *cs, int chanmax)
-{ isdn_ctrl ic;
-  int i, ii;
-  
-  if ((chanmax < 0) || (chanmax > 2))
-    return(-EINVAL);
-  cs->chanlimit = 0;
-  for (ii = 0; ii < 2; ii++) {
-    ic.driver = cs->myid;
-    ic.command = ISDN_STAT_DISCH;
-    ic.arg = ii;
-    if (ii >= chanmax)
-      ic.parm.num[0] = 0; /* disabled */
-    else
-      ic.parm.num[0] = 1; /* enabled */
-    i = cs->iif.statcallb(&ic); 
-    if (i) return(-EINVAL);
-    if (ii < chanmax) 
-      cs->chanlimit++;
-  }
-  return(0);
-} /* set_channel_limit */
+{
+	isdn_ctrl ic;
+	int i, ii;
 
+	if ((chanmax < 0) || (chanmax > 2))
+		return(-EINVAL);
+	cs->chanlimit = 0;
+	for (ii = 0; ii < 2; ii++) {
+		ic.driver = cs->myid;
+		ic.command = ISDN_STAT_DISCH;
+		ic.arg = ii;
+		if (ii >= chanmax)
+			ic.parm.num[0] = 0; /* disabled */
+		else
+			ic.parm.num[0] = 1; /* enabled */
+		i = cs->iif.statcallb(&ic); 
+		if (i) return(-EINVAL);
+		if (ii < chanmax) 
+			cs->chanlimit++;
+	}
+	return(0);
+} /* set_channel_limit */
 
 int
 HiSax_command(isdn_ctrl * ic)
@@ -1578,7 +1596,6 @@ HiSax_command(isdn_ctrl * ic)
 	struct Channel *chanp;
 	int i;
 	u_int num;
-	u_long adr;
 
 	if (!csta) {
 		printk(KERN_ERR
@@ -1586,12 +1603,10 @@ HiSax_command(isdn_ctrl * ic)
 		       ic->command, ic->driver);
 		return -ENODEV;
 	}
-
 	switch (ic->command) {
 		case (ISDN_CMD_SETEAZ):
 			chanp = csta->channel + ic->arg;
 			break;
-
 		case (ISDN_CMD_SETL2):
 			chanp = csta->channel + (ic->arg & 0xff);
 			if (chanp->debug & 1)
@@ -1767,11 +1782,6 @@ HiSax_command(isdn_ctrl * ic)
 					chanp->d_st->lli.l4l3(chanp->d_st,
 						DL_ESTABLISH | REQUEST, NULL);
 					break;
-				case (9): /* load firmware */
-					memcpy(&adr, ic->parm.num, sizeof(ulong));
-					csta->cardmsg(csta, CARD_LOAD_FIRM,
-						(void *) adr);
-					break;
 #ifdef MODULE
 				case (55):
 					MOD_USE_COUNT = 0;
@@ -1797,23 +1807,12 @@ HiSax_command(isdn_ctrl * ic)
 					printk(KERN_DEBUG "HiSax: l3 debugging flags card %d set to %x\n",
 						csta->cardnr + 1, *(unsigned int *) ic->parm.num);
 					break;
-			        case  (10):
-				        i = *(unsigned int *) ic->parm.num;
-					if ((i < 0) || (i > 2))
-					  return(-EINVAL); /* invalid number */
+				case (10):
+					i = *(unsigned int *) ic->parm.num;
 					return(set_channel_limit(csta, i));
-				        break;
-			        case  (12):
-				        i = *(unsigned int *) ic->parm.num;
-#ifdef CONFIG_HISAX_HFC_PCI
-					if (csta->typ != ISDN_CTYPE_HFC_PCI)
-					  return(-EINVAL);
-					return(hfcpci_set_echo(csta,i));    
-#else
-					return(-EINVAL);    
-#endif
-				        break;
 				default:
+					if (csta->auxcmd)
+						return(csta->auxcmd(csta, ic));
 					printk(KERN_DEBUG "HiSax: invalid ioclt %d\n",
 					       (int) ic->arg);
 					return (-EINVAL);
@@ -1850,9 +1849,10 @@ HiSax_command(isdn_ctrl * ic)
 			return(-EINVAL);                     
 			break;
 		default:
-			break;
+			if (csta->auxcmd)
+				return(csta->auxcmd(csta, ic));
+			return(-EINVAL);
 	}
-
 	return (0);
 }
 

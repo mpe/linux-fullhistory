@@ -538,7 +538,7 @@ static struct proc_dir_entry tr_rif_proc = {
 };
 #endif
 
-__initfunc(void rif_init(struct net_proto *unused))
+void __init rif_init(struct net_proto *unused)
 {
 	rif_timer.expires  = RIF_TIMEOUT;
 	rif_timer.data     = 0L;

@@ -1,4 +1,4 @@
-/* $Id: arcofi.c,v 1.7 1999/07/01 08:11:17 keil Exp $
+/* $Id: arcofi.c,v 1.8 1999/08/25 16:50:51 keil Exp $
 
  * arcofi.c   Ansteuerung ARCOFI 2165
  *
@@ -7,6 +7,9 @@
  *
  *
  * $Log: arcofi.c,v $
+ * Revision 1.8  1999/08/25 16:50:51  keil
+ * Fix bugs which cause 2.3.14 hangs (waitqueue init)
+ *
  * Revision 1.7  1999/07/01 08:11:17  keil
  * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
  *
@@ -151,4 +154,8 @@ init_arcofi(struct IsdnCardState *cs) {
 	cs->dc.isac.arcofitimer.function = (void *) arcofi_timer;
 	cs->dc.isac.arcofitimer.data = (long) cs;
 	init_timer(&cs->dc.isac.arcofitimer);
+#ifdef COMPAT_HAS_NEW_WAITQ
+	init_waitqueue_head(&cs->dc.isac.arcofi_wait);
+#endif
+	test_and_set_bit(HW_ARCOFI, &cs->HW_Flags);
 }

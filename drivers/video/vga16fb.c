@@ -32,6 +32,9 @@
 #define dac_reg	(0x3c8)
 #define dac_val	(0x3c9)
 
+#define VGA_FB_PHYS 0xA0000
+#define VGA_FB_PHYS_LEN 65535
+
 /* --------------------------------------------------------------------- */
 
 /*
@@ -101,6 +104,8 @@ static struct { u_short blue, green, red, pad; } palette[256];
 
 static int             currcon   = 0;
 
+static int release_io_ports = 0;
+
 /* --------------------------------------------------------------------- */
 
 	/*
@@ -158,8 +163,8 @@ static int vga16fb_get_fix(struct fb_fix_screeninfo *fix, int con,
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id,"VGA16 VGA");
 
-	fix->smem_start = 0xa0000;
-	fix->smem_len = 65536;
+	fix->smem_start = VGA_FB_PHYS;
+	fix->smem_len = VGA_FB_PHYS_LEN;
 	fix->type = FB_TYPE_VGA_PLANES;
 	fix->visual = FB_VISUAL_PSEUDOCOLOR;
 	fix->xpanstep  = 8;
@@ -919,7 +924,13 @@ int __init vga16_init(void)
 
 	printk(KERN_DEBUG "vga16fb: initializing\n");
 
-        vga16fb.video_vbase = ioremap((unsigned long)0xa0000, 65536);
+	if (!__request_region(&iomem_resource, VGA_FB_PHYS, VGA_FB_PHYS_LEN,
+			      "vga16fb")) {
+		printk (KERN_ERR "vga16fb: unable to reserve VGA memory, exiting\n");
+		return -1;
+	}
+
+        vga16fb.video_vbase = ioremap(VGA_FB_PHYS, VGA_FB_PHYS_LEN);
 	printk(KERN_INFO "vga16fb: mapped to 0x%p\n", vga16fb.video_vbase);
 
 	vga16fb.isVGA = ORIG_VIDEO_ISVGA;
@@ -937,10 +948,11 @@ int __init vga16_init(void)
 		palette[i].green = default_grn[j];
 		palette[i].blue  = default_blu[j];
 	}
-	if (vga16fb.isVGA)
-		request_region(0x3c0, 32, "vga+");
-	else
-		request_region(0x3C0, 32, "ega");
+
+	/* note - does not cause failure, b/c vgacon probably still owns this 
+	 * region (FIXME) */
+	if (__request_region(&ioport_resource, 0x3C0, 32, "vga16fb"))
+		release_io_ports = 1;
 
 	disp.var = vga16fb_defined;
 
@@ -981,8 +993,10 @@ int init_module(void)
 void cleanup_module(void)
 {
     unregister_framebuffer(&vga16fb.fb_info);
-    release_region(0x3c0, 32);
     iounmap(vga16fb.video_vbase);
+    __release_region(&iomem_resource, VGA_FB_PHYS, VGA_FB_PHYS_LEN);
+    if (release_io_ports)
+    	__release_region(&ioport_resource, 0x3c0, 32);
 }
 
 #endif

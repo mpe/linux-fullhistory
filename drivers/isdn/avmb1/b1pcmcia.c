@@ -1,11 +1,17 @@
 /*
- * $Id: b1pcmcia.c,v 1.3 1999/07/09 15:05:41 keil Exp $
+ * $Id: b1pcmcia.c,v 1.4 1999/08/22 20:26:26 calle Exp $
  * 
  * Module for AVM B1/M1/M2 PCMCIA-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1pcmcia.c,v $
+ * Revision 1.4  1999/08/22 20:26:26  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.3  1999/07/09 15:05:41  keil
  * compat.h is now isdn_compat.h
  *
@@ -50,7 +56,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.3 $";
+static char *revision = "$Revision: 1.4 $";
 
 /* ------------------------------------------------------------- */
 

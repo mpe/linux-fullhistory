@@ -390,7 +390,9 @@ int atyfb_init(void);
 #ifdef CONFIG_FB_OF
 void atyfb_of_init(struct device_node *dp);
 #endif
+#ifndef MODULE
 int atyfb_setup(char*);
+#endif
 
 static int currcon = 0;
 
@@ -411,7 +413,10 @@ static char noaccel __initdata = 0;
 static u32 default_vram __initdata = 0;
 static int default_pll __initdata = 0;
 static int default_mclk __initdata = 0;
+
+#ifndef MODULE
 static const char *mode_option __initdata = NULL;
+#endif
 
 #if defined(CONFIG_PPC)
 static int default_vmode __initdata = VMODE_NVRAM;
@@ -2869,7 +2874,7 @@ int __init atyfb_init(void)
 	    memset(info, 0, sizeof(struct fb_info_aty));
 
 	    rp = &pdev->resource[0];
-	    if (rp->flags & IORESOURCE_IOPORT)
+	    if (rp->flags & IORESOURCE_IO)
 		    rp = &pdev->resource[1];
 	    addr = rp->start;
 	    if (!addr)
@@ -2912,7 +2917,7 @@ int __init atyfb_init(void)
 
 		base = rp->start;
 
-		io = (rp->flags & IORESOURCE_IOPORT);
+		io = (rp->flags & IORESOURCE_IO);
 
 		size = rp->end - base + 1;
 		
@@ -3261,6 +3266,7 @@ void __init atyfb_of_init(struct device_node *dp)
 #endif /* CONFIG_FB_OF */
 
 
+#ifndef MODULE
 int __init atyfb_setup(char *options)
 {
     char *this_opt;
@@ -3328,9 +3334,12 @@ int __init atyfb_setup(char *options)
 	    }
 	}
 #endif
+       else
+           mode_option = this_opt;
     }
     return 0;
 }
+#endif /* !MODULE */
 
 #ifdef CONFIG_ATARI
 static int __init store_video_par(char *video_str, unsigned char m64_num)

@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.88 1999/07/07 10:13:31 detabc Exp $
+/* $Id: isdn_net.c,v 1.89 1999/08/22 20:26:03 calle Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,6 +21,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.c,v $
+ * Revision 1.89  1999/08/22 20:26:03  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.88  1999/07/07 10:13:31  detabc
  * remove unused messages
  *
@@ -360,7 +366,7 @@ int isdn_net_force_dial_lp(isdn_net_local *);
 static int isdn_net_start_xmit(struct sk_buff *, struct net_device *);
 static int isdn_net_xmit(struct net_device *, isdn_net_local *, struct sk_buff *);
 
-char *isdn_net_revision = "$Revision: 1.88 $";
+char *isdn_net_revision = "$Revision: 1.89 $";
 
  /*
   * Code for raw-networking over ISDN

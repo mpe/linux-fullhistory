@@ -1,5 +1,5 @@
 /* 
- * $Id: isdn_divert.h,v 1.2 1999/07/04 21:37:33 werner Exp $
+ * $Id: isdn_divert.h,v 1.3 1999/08/22 20:26:37 calle Exp $
  *
  * Header for the diversion supplementary ioctl interface.
  *
@@ -20,6 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_divert.h,v $
+ * Revision 1.3  1999/08/22 20:26:37  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.2  1999/07/04 21:37:33  werner
  * Ported from kernel version 2.0
  *

@@ -504,7 +504,7 @@ struct notifier_block rtnetlink_dev_notifier = {
 };
 
 
-__initfunc(void rtnetlink_init(void))
+void __init rtnetlink_init(void)
 {
 #ifdef RTNL_DEBUG
 	printk("Initializing RT netlink socket\n");

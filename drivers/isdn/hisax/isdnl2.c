@@ -1,4 +1,4 @@
-/* $Id: isdnl2.c,v 2.19 1999/08/05 20:40:26 keil Exp $
+/* $Id: isdnl2.c,v 2.20 1999/08/25 16:52:04 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,6 +11,9 @@
  *              Fritz Elfert
  *
  * $Log: isdnl2.c,v $
+ * Revision 2.20  1999/08/25 16:52:04  keil
+ * Make gcc on AXP happy
+ *
  * Revision 2.19  1999/08/05 20:40:26  keil
  * Fix interlayer communication
  *
@@ -80,7 +83,7 @@
 #include "hisax.h"
 #include "isdnl2.h"
 
-const char *l2_revision = "$Revision: 2.19 $";
+const char *l2_revision = "$Revision: 2.20 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -1747,7 +1750,7 @@ isdnl2_l1l2(struct PStack *st, int pr, void *arg)
 			}
 			if(c) {
 				FreeSkb(skb);
-				FsmEvent(&st->l2.l2m, EV_L2_FRAME_ERROR, (void *) c);
+				FsmEvent(&st->l2.l2m, EV_L2_FRAME_ERROR, (void *)(long)c);
 				ret = 0;
 			}
 			if (ret)

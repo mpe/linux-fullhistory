@@ -1021,7 +1021,7 @@ static struct notifier_block aarp_notifier={
 static char aarp_snap_id[]={0x00,0x00,0x00,0x80,0xF3};
 
 
-__initfunc(void aarp_proto_init(void))
+void __init aarp_proto_init(void)
 {
 	if((aarp_dl=register_snap_client(aarp_snap_id, aarp_rcv))==NULL)
 		printk(KERN_CRIT "Unable to register AARP with SNAP.\n");

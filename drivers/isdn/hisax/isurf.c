@@ -1,10 +1,20 @@
-/* $Id: isurf.c,v 1.3 1999/07/12 21:05:18 keil Exp $
+/* $Id: isurf.c,v 1.5 1999/08/25 17:00:02 keil Exp $
 
  * isurf.c  low level stuff for Siemens I-Surf/I-Talk cards
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
  *
  * $Log: isurf.c,v $
+ * Revision 1.5  1999/08/25 17:00:02  keil
+ * Make ISAR V32bis modem running
+ * Make LL->HL interface open for additional commands
+ *
+ * Revision 1.4  1999/08/22 20:27:09  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.3  1999/07/12 21:05:18  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -24,7 +34,7 @@
 
 extern const char *CardType[];
 
-static const char *ISurf_revision = "$Revision: 1.3 $";
+static const char *ISurf_revision = "$Revision: 1.5 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -174,18 +184,26 @@ ISurf_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			return(0);
 		case CARD_TEST:
 			return(0);
-		case CARD_LOAD_FIRM:
-			if (isar_load_firmware(cs, arg))
-				return(1);
-			ll_run(cs);
+	}
+	return(0);
+}
+
+static int
+isurf_auxcmd(struct IsdnCardState *cs, isdn_ctrl *ic) {
+	int ret;
+
+	if ((ic->command == ISDN_CMD_IOCTL) && (ic->arg == 9)) {
+		ret = isar_auxcmd(cs, ic);
+		if (!ret) {
 			reset_isurf(cs, ISURF_ISAR_EA | ISURF_ISAC_RESET |
 				ISURF_ARCOFI_RESET);
 			initisac(cs);
 			cs->writeisac(cs, ISAC_MASK, 0);
 			cs->writeisac(cs, ISAC_CMDR, 0x41);
-			return(0);
+		}
+		return(ret);
 	}
-	return(0);
+	return(isar_auxcmd(cs, ic));
 }
 
 __initfunc(int
@@ -228,6 +246,7 @@ setup_isurf(struct IsdnCard *card))
 
 	cs->cardmsg = &ISurf_card_msg;
 	cs->irq_func = &isurf_interrupt;
+	cs->auxcmd = &isurf_auxcmd;
 	cs->readisac = &ReadISAC;
 	cs->writeisac = &WriteISAC;
 	cs->readisacfifo = &ReadISACfifo;

@@ -82,6 +82,11 @@ endif
 ifeq ($(CONFIG_FB_PM2),y)
 L_OBJS += pm2fb.o
 CONFIG_FBGEN_BUILTIN = y
+else
+  ifeq ($(CONFIG_FB_PM2),m)
+  M_OBJS += pm2fb.o
+  CONFIG_FBGEN_MODULE = y
+  endif
 endif
 
 ifeq ($(CONFIG_FB_APOLLO),y)

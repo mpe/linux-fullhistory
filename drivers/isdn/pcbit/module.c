@@ -102,10 +102,21 @@ void cleanup_module(void)
 }
 
 #else
+#ifdef COMPAT_HAS_NEW_SETUP
+#define MAX_PARA	(MAX_PCBIT_CARDS * 2)
+#include <linux/init.h>
+int pcbit_setup(char *line)
+{
+	int i, j, argc;
+	char *str;
+	int ints[MAX_PARA+1];
+
+	str = get_options(line, MAX_PARA, ints);
+#else
 void pcbit_setup(char *str, int *ints)
 {
 	int i, j, argc;
-
+#endif
 	argc = ints[0];
 	i = 0;
 	j = 1;
@@ -124,7 +135,13 @@ void pcbit_setup(char *str, int *ints)
 
 		i++;
 	}
+#ifdef COMPAT_HAS_NEW_SETUP
+	return(1);
 }
+__setup("pcbit=", pcbit_setup);
+#else
+}
+#endif
 #endif
 
 

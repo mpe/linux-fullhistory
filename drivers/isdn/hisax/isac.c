@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.22 1999/08/09 19:04:40 keil Exp $
+/* $Id: isac.c,v 1.23 1999/08/25 16:50:52 keil Exp $
 
  * isac.c   ISAC specific routines
  *
@@ -9,6 +9,9 @@
  *		../../../Documentation/isdn/HiSax.cert
  *
  * $Log: isac.c,v $
+ * Revision 1.23  1999/08/25 16:50:52  keil
+ * Fix bugs which cause 2.3.14 hangs (waitqueue init)
+ *
  * Revision 1.22  1999/08/09 19:04:40  keil
  * Fix race condition - Thanks to Christer Weinigel
  *
@@ -168,10 +171,14 @@ isac_bh(struct IsdnCardState *cs)
 		DChannel_proc_rcv(cs);
 	if (test_and_clear_bit(D_XMTBUFREADY, &cs->event))
 		DChannel_proc_xmt(cs);
+#if ARCOFI_USE
+	if (!test_bit(HW_ARCOFI, &cs->HW_Flags))
+		return;
 	if (test_and_clear_bit(D_RX_MON1, &cs->event))
 		arcofi_fsm(cs, ARCOFI_RX_END, NULL);
 	if (test_and_clear_bit(D_TX_MON1, &cs->event))
 		arcofi_fsm(cs, ARCOFI_TX_END, NULL);
+#endif
 }
 
 void

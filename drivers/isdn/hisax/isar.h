@@ -1,10 +1,14 @@
-/* $Id: isar.h,v 1.4 1999/08/05 20:43:20 keil Exp $
+/* $Id: isar.h,v 1.5 1999/08/25 16:59:59 keil Exp $
  * isar.h   ISAR (Siemens PSB 7110) specific defines
  *
  * Author Karsten Keil (keil@isdn4linux.de)
  *
  *
  * $Log: isar.h,v $
+ * Revision 1.5  1999/08/25 16:59:59  keil
+ * Make ISAR V32bis modem running
+ * Make LL->HL interface open for additional commands
+ *
  * Revision 1.4  1999/08/05 20:43:20  keil
  * ISAR analog modem support
  *
@@ -33,40 +37,41 @@
 #define ISAR_WADR	0x4a
 #define ISAR_RADR	0x48 
 
-#define ISAR_HIS_VNR	0x14
-#define ISAR_HIS_DKEY	0x02
-#define ISAR_HIS_FIRM	0x1e
-#define ISAR_HIS_STDSP  0x08
-#define ISAR_HIS_DIAG	0x05
-#define ISAR_HIS_P0CFG	0x3c
-#define ISAR_HIS_P12CFG	0x24
+#define ISAR_HIS_VNR		0x14
+#define ISAR_HIS_DKEY		0x02
+#define ISAR_HIS_FIRM		0x1e
+#define ISAR_HIS_STDSP		0x08
+#define ISAR_HIS_DIAG		0x05
+#define ISAR_HIS_P0CFG		0x3c
+#define ISAR_HIS_P12CFG		0x24
 #define ISAR_HIS_SARTCFG	0x25	
 #define ISAR_HIS_PUMPCFG	0x26	
 #define ISAR_HIS_PUMPCTRL	0x2a	
 #define ISAR_HIS_IOM2CFG	0x27
 #define ISAR_HIS_IOM2REQ	0x07
 #define ISAR_HIS_IOM2CTRL	0x2b
-#define ISAR_HIS_BSTREQ	0x0c
-#define ISAR_HIS_PSTREQ	0x0e
-#define ISAR_HIS_SDATA	0x20
-#define ISAR_HIS_DPS1	0x40
-#define ISAR_HIS_DPS2	0x80
-#define SET_DPS(x)	((x<<6) & 0xc0)
+#define ISAR_HIS_BSTREQ		0x0c
+#define ISAR_HIS_PSTREQ		0x0e
+#define ISAR_HIS_SDATA		0x20
+#define ISAR_HIS_DPS1		0x40
+#define ISAR_HIS_DPS2		0x80
+#define SET_DPS(x)		((x<<6) & 0xc0)
 
-#define ISAR_IIS_MSCMSD 0x3f
-#define ISAR_IIS_VNR	0x15
-#define ISAR_IIS_DKEY	0x03
-#define ISAR_IIS_FIRM	0x1f
-#define ISAR_IIS_STDSP  0x09
-#define ISAR_IIS_DIAG	0x25
-#define ISAR_IIS_GSTEV	0x0
-#define ISAR_IIS_BSTEV	0x28
-#define ISAR_IIS_BSTRSP	0x2c
-#define ISAR_IIS_PSTRSP	0x2e
-#define ISAR_IIS_PSTEV	0x2a
+#define ISAR_IIS_MSCMSD		0x3f
+#define ISAR_IIS_VNR		0x15
+#define ISAR_IIS_DKEY		0x03
+#define ISAR_IIS_FIRM		0x1f
+#define ISAR_IIS_STDSP		0x09
+#define ISAR_IIS_DIAG		0x25
+#define ISAR_IIS_GSTEV		0x00
+#define ISAR_IIS_BSTEV		0x28
+#define ISAR_IIS_BSTRSP		0x2c
+#define ISAR_IIS_PSTRSP		0x2e
+#define ISAR_IIS_PSTEV		0x2a
 #define ISAR_IIS_IOM2RSP	0x27
+#define ISAR_IIS_RDATA		0x20
+#define ISAR_IIS_INVMSG		0x3f
 
-#define ISAR_IIS_RDATA	0x20
 #define ISAR_CTRL_SWVER	0x10
 #define ISAR_CTRL_STST	0x40
 
@@ -93,30 +98,33 @@
 #define PV32P2_V21	0x02
 #define PV32P2_BEL	0x01
 
+// LSB MSB in ISAR doc wrong !!! Arghhh
 #define PV32P3_AMOD	0x80
 #define PV32P3_V32B	0x02
-#define PV32P4_48	0x05
-#define PV32P5_48	0x11
-#define PV32P4_UT48	0x0d
-#define PV32P5_UT48	0x11
-#define PV32P4_96	0x03
-#define PV32P5_96	0x11
-#define PV32P4_UT96	0x0f
-#define PV32P5_UT96	0x11
-#define PV32P4_B96	0x0b
-#define PV32P5_B96	0x91
-#define PV32P4_UTB96	0x0f
-#define PV32P5_UTB96	0xd1
-#define PV32P4_120	0x09
-#define PV32P5_120	0xb1
-#define PV32P4_UT120	0x0f
-#define PV32P5_UT120	0xf1
-#define PV32P4_144	0x09
-#define PV32P5_144	0x99
-#define PV32P4_UT144	0x0f
-#define PV32P5_UT144	0xf9
+#define PV32P3_V23B	0x01
+#define PV32P4_48	0x11
+#define PV32P5_48	0x05
+#define PV32P4_UT48	0x11
+#define PV32P5_UT48	0x0d
+#define PV32P4_96	0x11
+#define PV32P5_96	0x03
+#define PV32P4_UT96	0x11
+#define PV32P5_UT96	0x0f
+#define PV32P4_B96	0x91
+#define PV32P5_B96	0x0b
+#define PV32P4_UTB96	0xd1
+#define PV32P5_UTB96	0x0f
+#define PV32P4_120	0xb1
+#define PV32P5_120	0x09
+#define PV32P4_UT120	0xf1
+#define PV32P5_UT120	0x0f
+#define PV32P4_144	0x99
+#define PV32P5_144	0x09
+#define PV32P4_UT144	0xf9
+#define PV32P5_UT144	0x0f
 #define PV32P6_CTN	0x01
 #define PV32P6_ATN	0x02
+
 #define PFAXP2_CTN	0x01
 #define PFAXP2_ATN	0x04
 
@@ -156,7 +164,7 @@
 #define S_P1_CHS_6	0x01
 #define S_P1_CHS_5	0x00
 
-#define S_P2_BFT_DEF	30
+#define S_P2_BFT_DEF	0x10
 
 #define IOM_CTRL_ENA	0x80
 #define IOM_CTRL_NOPCM	0x00
@@ -170,15 +178,15 @@
 #define HDLC_FSD	0x20
 #define HDLC_FST	0x20
 #define HDLC_ERROR	0x1c
+#define SART_NMD	0x01
 
 #define BSTAT_RDM0	0x1
 #define BSTAT_RDM1	0x2
 #define BSTAT_RDM2	0x4
 #define BSTAT_RDM3	0x8
 
-
 extern int ISARVersion(struct IsdnCardState *cs, char *s);
-extern int isar_load_firmware(struct IsdnCardState *cs, u_char *buf);
 extern void isar_int_main(struct IsdnCardState *cs);
 extern void initisar(struct IsdnCardState *cs);
 extern void isar_fill_fifo(struct BCState *bcs);
+extern int isar_auxcmd(struct IsdnCardState *cs, isdn_ctrl *ic);

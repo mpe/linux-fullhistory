@@ -92,8 +92,6 @@ struct i2c_driver
 
 /* needed: unsigned long flags */
 
-#include <linux/version.h>
-
 #if LINUX_VERSION_CODE >= 0x020100
 # if 0
 #  define LOCK_FLAGS unsigned long flags;

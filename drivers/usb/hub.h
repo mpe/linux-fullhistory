@@ -46,6 +46,24 @@
 #define HUB_CHAR_COMPOUND	0x0004
 #define HUB_CHAR_OCPM		0x0018
 
+/* Hub descriptor */
+struct usb_hub_descriptor {
+	__u8  bLength;
+	__u8  bDescriptorType;
+	__u8  bNbrPorts;
+	__u16 wHubCharacteristics;
+#if 0
+	__u8  wHubCharacteristics[2];   /* __u16 but not aligned! */
+#endif
+	__u8  bPwrOn2PwrGood;
+	__u8  bHubContrCurrent;
+	/* DeviceRemovable and PortPwrCtrlMask want to be variable-length 
+	   bitmaps that hold max 256 entries, but for now they're ignored */
+#if 0
+	__u8  filler;
+#endif
+} __attribute__ ((packed));
+
 struct usb_device;
 
 typedef enum {
@@ -69,7 +87,7 @@ struct usb_hub {
 	struct usb_device *dev;
 
 	/* Reference to the hub's polling IRQ */
-	void* irq_handle;
+	void *irq_handle;
 
 	/* List of hubs */
 	struct list_head hub_list;

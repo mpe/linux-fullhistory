@@ -73,15 +73,15 @@ static __inline__ int atomic_dec_and_test(volatile atomic_t *v)
 	return c != 0;
 }
 
-extern __inline__ int atomic_inc_and_test_greater_zero(volatile atomic_t *v)
+extern __inline__ int atomic_add_negative(int i, volatile atomic_t *v)
 {
 	unsigned char c;
 
 	__asm__ __volatile__(
-		LOCK "incl %0; setg %1"
+		LOCK "addl %2,%0; sets %1"
 		:"=m" (__atomic_fool_gcc(v)), "=qm" (c)
-		:"m" (__atomic_fool_gcc(v)));
-	return c; /* can be only 0 or 1 */
+		:"ir" (i), "m" (__atomic_fool_gcc(v)));
+	return c;
 }
 
 /* These are x86-specific, used by some header files */

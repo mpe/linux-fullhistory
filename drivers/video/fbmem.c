@@ -470,6 +470,14 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 		return -ENODEV;
 	if (fb->fb_mmap)
 		return fb->fb_mmap(info, file, vma);
+
+#if defined(__sparc__)
+	/* Should never get here, all fb drivers should have their own
+	   mmap routines */
+	return -EINVAL;
+#else
+	/* non-SPARC... */
+
 	fb->fb_get_fix(&fix, PROC_CONSOLE(info), info);
 
 	/* frame buffer memory */
@@ -505,9 +513,6 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	pgprot_val(vma->vm_page_prot) |= _PAGE_NO_CACHE|_PAGE_GUARDED;
 #elif defined(__alpha__)
 	/* Caching is off in the I/O space quadrant by design.  */
-#elif defined(__sparc__)
-	/* Should never get here, all fb drivers should have their own
-	   mmap routines */
 #elif defined(__i386__)
 	if (boot_cpu_data.x86 > 3)
 		pgprot_val(vma->vm_page_prot) |= _PAGE_PCD;
@@ -528,6 +533,8 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 			     vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
 	return 0;
+
+#endif /* defined(__sparc__) */
 }
 
 static int

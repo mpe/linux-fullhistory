@@ -55,7 +55,8 @@ USR Sportster internal TA (compatible Stollmann tina-pp V3)
 ith Kommunikationstechnik GmbH MIC 16 ISA card
 Traverse Technologie NETjet PCI S0 card
 Dr. Neuhaus Niccy PnP/PCI
-Siemens I-Surf
+Siemens I-Surf 1.0
+Siemens I-Surf 2.0 (with IPAC, try type 12 asuscom) 
 ACER P10
 HST Saphir
 Berkom Telekom A4T
@@ -173,7 +174,7 @@ Card types:
    27   AVM PnP (Fritz!PnP)      irq, io  (from isapnp setup)
    27   AVM PCI (Fritz!PCI)      no parameter
    28   Sedlbauer Speed Fax+     irq, io (from isapnp setup)
-   29	Siemens I-Surf           irq, io, memory (from isapnp setup)   
+   29	Siemens I-Surf 1.0       irq, io, memory (from isapnp setup)   
    30	ACER P10                 irq, io (from isapnp setup)   
    31	HST Saphir               irq, io
    32	Telekom A4T              none
@@ -276,7 +277,7 @@ type
    27   AVM PnP (Fritz!PnP)     ONLY WORKS AS A MODULE !
    27   AVM PCI (Fritz!PCI)     no parameter
    28   Sedlbauer Speed Fax+    ONLY WORKS AS A MODULE !
-   29	Siemens I-Surf          ONLY WORKS AS A MODULE !
+   29	Siemens I-Surf 1.0      ONLY WORKS AS A MODULE !
    30	ACER P10                ONLY WORKS AS A MODULE !
    31	HST Saphir              pa=irq, pb=io
    32	Telekom A4T             no parameter

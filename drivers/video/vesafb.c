@@ -41,7 +41,7 @@
  */
 
 /* card */
-char *video_base;
+unsigned long video_base; /* physical addr */
 int   video_size;
 char *video_vbase;        /* mapped */
 
@@ -530,7 +530,7 @@ int __init vesafb_init(void)
 	if (screen_info.orig_video_isVGA != VIDEO_TYPE_VLFB)
 		return -ENXIO;
 
-	video_base          = (char*)screen_info.lfb_base;
+	video_base          = screen_info.lfb_base;
 	video_bpp           = screen_info.lfb_depth;
 	video_width         = screen_info.lfb_width;
 	video_height        = screen_info.lfb_height;
@@ -538,9 +538,18 @@ int __init vesafb_init(void)
 	video_size          = screen_info.lfb_size * 65536;
 	video_visual = (video_bpp == 8) ?
 		FB_VISUAL_PSEUDOCOLOR : FB_VISUAL_TRUECOLOR;
-        video_vbase = ioremap((unsigned long)video_base, video_size);
 
-	printk(KERN_INFO "vesafb: framebuffer at 0x%p, mapped to 0x%p, size %dk\n",
+	if (!__request_region(&iomem_resource, video_base, video_size,
+			      "vesafb")) {
+		printk(KERN_ERR
+		       "vesafb: abort, cannot reserve video memory at 0x%lu\n",
+			video_base);
+		return -1;
+	}
+
+        video_vbase = ioremap(video_base, video_size);
+
+	printk(KERN_INFO "vesafb: framebuffer at 0x%lu, mapped to 0x%p, size %dk\n",
 	       video_base, video_vbase, video_size/1024);
 	printk(KERN_INFO "vesafb: mode is %dx%dx%d, linelength=%d, pages=%d\n",
 	       video_width, video_height, video_bpp, video_linelength, screen_info.pages);
@@ -633,9 +642,13 @@ int __init vesafb_init(void)
 		}
 		video_cmap_len = 256;
 	}
-	request_region(0x3c0, 32, "vga+");
+
+	/* request failure does not faze us, as vgacon probably has this
+	 * region already (FIXME) */
+	__request_region(&ioport_resource, 0x3c0, 32, "vesafb");
+
 	if (mtrr)
-		mtrr_add((unsigned long)video_base, video_size, MTRR_TYPE_WRCOMB, 1);
+		mtrr_add(video_base, video_size, MTRR_TYPE_WRCOMB, 1);
 	
 	strcpy(fb_info.modename, "VESA VGA");
 	fb_info.changevar = NULL;

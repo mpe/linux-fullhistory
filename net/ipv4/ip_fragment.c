@@ -20,6 +20,7 @@
  *		John McDonald	:	0 length frag bug.
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/sched.h>

@@ -32,72 +32,35 @@ static int khubd_running = 0;
 
 static int usb_get_hub_descriptor(struct usb_device *dev, void *data, int size)
 {
-	devrequest dr;
-
-	dr.requesttype = USB_DIR_IN | USB_RT_HUB;
-	dr.request = USB_REQ_GET_DESCRIPTOR;
-	dr.value = (USB_DT_HUB << 8);
-	dr.index = 0;
-	dr.length = size;
-
-	return dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr,
-		data, size);
+	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
+		USB_REQ_GET_DESCRIPTOR, USB_DIR_IN | USB_RT_HUB,
+		USB_DT_HUB << 8, 0, data, size);
 }
 
 static int usb_clear_port_feature(struct usb_device *dev, int port, int feature)
 {
-	devrequest dr;
-
-	dr.requesttype = USB_RT_PORT;
-	dr.request = USB_REQ_CLEAR_FEATURE;
-	dr.value = feature;
-	dr.index = port;
-	dr.length = 0;
-
-	return dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev,0), &dr,
-		NULL, 0);
+	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
+		USB_REQ_CLEAR_FEATURE, USB_RT_PORT, feature, port, NULL, 0);
 }
 
 static int usb_set_port_feature(struct usb_device *dev, int port, int feature)
 {
-	devrequest dr;
-
-	dr.requesttype = USB_RT_PORT;
-	dr.request = USB_REQ_SET_FEATURE;
-	dr.value = feature;
-	dr.index = port;
-	dr.length = 0;
-
-	return dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev,0), &dr,
-		NULL, 0);
+	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
+		USB_REQ_SET_FEATURE, USB_RT_PORT, feature, port, NULL, 0);
 }
 
 static int usb_get_hub_status(struct usb_device *dev, void *data)
 {
-	devrequest dr;
-
-	dr.requesttype = USB_DIR_IN | USB_RT_HUB;
-	dr.request = USB_REQ_GET_STATUS;
-	dr.value = 0;
-	dr.index = 0;
-	dr.length = 4;
-
-	return dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr,
-		data, 4);
+	/* FIXME: Don't hardcode 4 */
+	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
+		USB_REQ_GET_STATUS, USB_DIR_IN | USB_RT_HUB, 0, 0, data, 4);
 }
 
 static int usb_get_port_status(struct usb_device *dev, int port, void *data)
 {
-	devrequest dr;
-
-	dr.requesttype = USB_DIR_IN | USB_RT_PORT;
-	dr.request = USB_REQ_GET_STATUS;
-	dr.value = 0;
-	dr.index = port;
-	dr.length = 4;
-
-	return dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr,
-		data, 4);
+	/* FIXME: Don't hardcode 4 */
+	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
+		USB_REQ_GET_STATUS, USB_DIR_IN | USB_RT_PORT, 0, port, data, 4);
 }
 
 /*
@@ -110,37 +73,58 @@ static int hub_irq(int status, void *__buffer, int len, void *dev_id)
 	struct usb_hub *hub = dev_id;
 	unsigned long flags;
 
-	if (waitqueue_active(&khubd_wait)) {
-		/* Add the hub to the event queue */
-		spin_lock_irqsave(&hub_event_lock, flags);
-		if (hub->event_list.next == &hub->event_list) {
-			list_add(&hub->event_list, &hub_event_list);
-			/* Wake up khubd */
-			wake_up(&khubd_wait);
+	switch (status) {
+	case USB_ST_REMOVED:
+		/* Just ignore it */
+		break;
+	case USB_ST_NOERROR:
+		/* Something happened, let khubd figure it out */
+		if (waitqueue_active(&khubd_wait)) {
+			/* Add the hub to the event queue */
+			spin_lock_irqsave(&hub_event_lock, flags);
+			if (hub->event_list.next == &hub->event_list) {
+				list_add(&hub->event_list, &hub_event_list);
+				/* Wake up khubd */
+				wake_up(&khubd_wait);
+			}
+			spin_unlock_irqrestore(&hub_event_lock, flags);
 		}
-		spin_unlock_irqrestore(&hub_event_lock, flags);
+		break;
 	}
 
 	return 1;
 }
 
-static void usb_hub_configure(struct usb_hub *hub)
+static int usb_hub_configure(struct usb_hub *hub)
 {
 	struct usb_device *dev = hub->dev;
-	unsigned char hubdescriptor[8], buf[4];
-	int charac, i;
+	unsigned char buffer[4], *bitmap;
+	struct usb_hub_descriptor *descriptor;
+	struct usb_descriptor_header *header;
+	int i;
 
+	/* Set it to the first configuration */
 	usb_set_configuration(dev, dev->config[0].bConfigurationValue);
 
-	if (usb_get_hub_descriptor(dev, hubdescriptor, 8))
-		return;
+	/* Get the length first */
+	if (usb_get_hub_descriptor(dev, buffer, 4))
+		return -1;
 
-	hub->nports = dev->maxchild = hubdescriptor[2];
+	header = (struct usb_descriptor_header *)buffer;
+	bitmap = kmalloc(header->bLength, GFP_KERNEL);
+	if (!bitmap)
+		return -1;
+
+	if (usb_get_hub_descriptor(dev, bitmap, header->bLength))
+		return -1;
+
+	descriptor = (struct usb_hub_descriptor *)bitmap;
+
+	hub->nports = dev->maxchild = descriptor->bNbrPorts;
 	printk(KERN_INFO "hub: %d-port%s detected\n", hub->nports,
 		(hub->nports == 1) ? "" : "s");
 
-	charac = (hubdescriptor[4] << 8) + hubdescriptor[3];
-	switch (charac & HUB_CHAR_LPSM) {
+	switch (descriptor->wHubCharacteristics & HUB_CHAR_LPSM) {
 		case 0x00:
 			printk(KERN_INFO "hub: ganged power switching\n");
 			break;
@@ -153,12 +137,12 @@ static void usb_hub_configure(struct usb_hub *hub)
 			break;
 	}
 
-	if (charac & HUB_CHAR_COMPOUND)
+	if (descriptor->wHubCharacteristics & HUB_CHAR_COMPOUND)
 		printk(KERN_INFO "hub: part of a compound device\n");
 	else
 		printk(KERN_INFO "hub: standalone hub\n");
 
-	switch (charac & HUB_CHAR_OCPM) {
+	switch (descriptor->wHubCharacteristics & HUB_CHAR_OCPM) {
 		case 0x00:
 			printk(KERN_INFO "hub: global over current protection\n");
 			break;
@@ -172,34 +156,38 @@ static void usb_hub_configure(struct usb_hub *hub)
 	}
 
 	printk(KERN_INFO "hub: power on to power good time: %dms\n",
-		hubdescriptor[5] * 2);
+		descriptor->bPwrOn2PwrGood * 2);
 
 	printk(KERN_INFO "hub: hub controller current requirement: %dmA\n",
-		hubdescriptor[6]);
+		descriptor->bHubContrCurrent);
 
 	for (i = 0; i < dev->maxchild; i++)
 		printk(KERN_INFO "hub:  port %d is%s removable\n", i + 1,
-			hubdescriptor[7 + ((i + 1)/8)] & (1 << ((i + 1) % 8))
+			bitmap[7 + ((i + 1)/8)] & (1 << ((i + 1) % 8))
 			? " not" : "");
 
-	if (usb_get_hub_status(dev, buf))
-		return;
+	kfree(bitmap);
+
+	if (usb_get_hub_status(dev, buffer))
+		return -1;
 
 	printk(KERN_INFO "hub: local power source is %s\n",
-		(buf[0] & 1) ? "lost (inactive)" : "good");
+		(buffer[0] & 1) ? "lost (inactive)" : "good");
 
 	printk(KERN_INFO "hub: %sover current condition exists\n",
-		(buf[0] & 2) ? "" : "no ");
+		(buffer[0] & 2) ? "" : "no ");
 
 	/* Enable power to the ports */
 	printk(KERN_INFO "hub: enabling power on all ports\n");
 	for (i = 0; i < hub->nports; i++)
 		usb_set_port_feature(dev, i + 1, USB_PORT_FEAT_POWER);
+
+	return 0;
 }
 
 static int hub_probe(struct usb_device *dev)
 {
-	struct usb_interface_descriptor *intf_desc;
+	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_hub *hub;
 	unsigned long flags;
@@ -212,20 +200,23 @@ static int hub_probe(struct usb_device *dev)
 	if (dev->config[0].bNumInterfaces != 1)
 		return -1;
 
-	intf_desc = &dev->config[0].interface[0].altsetting[0];
+	interface = &dev->config[0].interface[0].altsetting[0];
 
 	/* Is it a hub? */
-	if (intf_desc->bInterfaceClass != 9)
+	if (interface->bInterfaceClass != USB_CLASS_HUB)
 		return -1;
-	if ((intf_desc->bInterfaceSubClass != 0) &&
-	    (intf_desc->bInterfaceSubClass != 1))
+
+	/* Some hubs have a subclass of 1, which AFAICT according to the */
+	/*  specs is not defined, but it works */
+	if ((interface->bInterfaceSubClass != 0) &&
+	    (interface->bInterfaceSubClass != 1))
 		return -1;
 
 	/* Multiple endpoints? What kind of mutant ninja-hub is this? */
-	if (intf_desc->bNumEndpoints != 1)
+	if (interface->bNumEndpoints != 1)
 		return -1;
 
-	endpoint = &intf_desc->endpoint[0];
+	endpoint = &interface->endpoint[0];
 
 	/* Output endpoint? Curiousier and curiousier.. */
 	if (!(endpoint->bEndpointAddress & USB_DIR_IN))
@@ -256,13 +247,13 @@ static int hub_probe(struct usb_device *dev)
 	list_add(&hub->hub_list, &hub_list);
 	spin_unlock_irqrestore(&hub_list_lock, flags);
 
-	usb_hub_configure(hub);
+	if (usb_hub_configure(hub) >= 0) {
+		hub->irq_handle = usb_request_irq(dev, usb_rcvctrlpipe(dev,
+			endpoint->bEndpointAddress), hub_irq, endpoint->bInterval, hub);
 
-	hub->irq_handle = usb_request_irq(dev, usb_rcvctrlpipe(dev,
-		endpoint->bEndpointAddress), hub_irq, endpoint->bInterval, hub);
-
-	/* Wake up khubd */
-	wake_up(&khubd_wait);
+		/* Wake up khubd */
+		wake_up(&khubd_wait);
+	}
 
 	return 0;
 }
@@ -282,8 +273,10 @@ static void hub_disconnect(struct usb_device *dev)
 
 	spin_unlock_irqrestore(&hub_event_lock, flags);
 
-	usb_release_irq(hub->dev, hub->irq_handle);
-	hub->irq_handle = NULL;
+	if (hub->irq_handle) {
+		usb_release_irq(hub->dev, hub->irq_handle);
+		hub->irq_handle = NULL;
+	}
 
 	/* Free the memory */
 	kfree(hub);
@@ -319,7 +312,7 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 		return;
 
 	/* Allocate a new device struct for it */
-	usb = hub->bus->op->allocate(hub);
+	usb = usb_alloc_dev(hub, hub->bus);
 	if (!usb) {
 		printk(KERN_ERR "couldn't allocate usb_device\n");
 		return;
@@ -335,36 +328,47 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 	/* Run it through the hoops (find a driver, etc) */
 	if (usb_new_device(usb)) {
 		/* Woops, disable the port */
-		printk(KERN_DEBUG "hub: disabling malfunctioning port %d\n",
+		printk(KERN_DEBUG "hub: disabling port %d\n",
 			port + 1);
 		usb_clear_port_feature(hub, port + 1, USB_PORT_FEAT_ENABLE);
-		usb_clear_port_feature(hub, port + 1, USB_PORT_FEAT_POWER);
 	}
 }
 
 static void usb_hub_events(void)
 {
 	unsigned long flags;
-	unsigned char buf[4];
-	unsigned short portstatus, portchange;
 	int i;
-	struct list_head *next, *tmp, *head = &hub_event_list;
+	struct list_head *tmp;
 	struct usb_device *dev;
 	struct usb_hub *hub;
 
-	spin_lock_irqsave(&hub_event_lock, flags);
+	/*
+	 *  We restart the list everytime to avoid a deadlock with
+	 * deleting hubs downstream from this one. This should be
+	 * safe since we delete the hub from the event list.
+	 * Not the most efficient, but avoids deadlocks.
+	 */
+	while (1) {
+		spin_lock_irqsave(&hub_event_lock, flags);
 
-	tmp = head->next;
-	while (tmp != head) {
+		if (list_empty(&hub_event_list))
+			goto he_unlock;
+
+		/* Grab the next entry from the beginning of the list */
+		tmp = hub_event_list.next;
+
 		hub = list_entry(tmp, struct usb_hub, event_list);
 		dev = hub->dev;
-
-		next = tmp->next;
 
 		list_del(tmp);
 		INIT_LIST_HEAD(tmp);
 
+		spin_unlock_irqrestore(&hub_event_lock, flags);
+
 		for (i = 0; i < hub->nports; i++) {
+			unsigned char buf[4];
+			unsigned short portstatus, portchange;
+
 			if (usb_get_port_status(dev, i + 1, buf)) {
 				printk(KERN_ERR "get_port_status failed\n");
 				continue;
@@ -406,9 +410,9 @@ static void usb_hub_events(void)
 			}
 
 		}
-		tmp = next;
         }
 
+he_unlock:
 	spin_unlock_irqrestore(&hub_event_lock, flags);
 }
 
@@ -464,7 +468,6 @@ int usb_hub_init(void)
 	int pid;
 
 	usb_register(&hub_driver);
-	printk(KERN_INFO "USB hub driver registered\n");
 
 	pid = kernel_thread(usb_hub_thread, NULL,
 		CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
@@ -482,15 +485,13 @@ int usb_hub_init(void)
 
 void usb_hub_cleanup(void)
 {
-	struct list_head *next, *tmp, *head = &hub_list;
-	struct usb_hub *hub;
-	unsigned long flags, flags2;
 	int ret;
 
 	/* Kill the thread */
 	ret = kill_proc(khubd_pid, SIGTERM, 1);
 	if (!ret) {
-		int count = 10;
+		/* Wait 10 seconds */
+		int count = 10 * 100;
 
 		while (khubd_running && --count) {
 			current->state = TASK_INTERRUPTIBLE;

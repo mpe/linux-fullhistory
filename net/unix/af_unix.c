@@ -1779,7 +1779,7 @@ extern void unix_sysctl_unregister(void);
 
 int init_module(void)
 #else
-__initfunc(void unix_proto_init(struct net_proto *pro))
+void __init unix_proto_init(struct net_proto *pro)
 #endif
 {
 	struct sk_buff *dummy_skb;

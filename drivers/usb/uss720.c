@@ -36,7 +36,6 @@
 
 /*****************************************************************************/
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/socket.h>
 #include <linux/parport.h>
@@ -561,8 +560,8 @@ static int uss720_probe(struct usb_device *usbdev)
                usbdev->descriptor.idVendor, usbdev->descriptor.idProduct);
 
         if ((usbdev->descriptor.idVendor != 0x047e || usbdev->descriptor.idProduct != 0x1001) &&
-            (usbdev->descriptor.idVendor != 0x0557 || usbdev->descriptor.idProduct != 0x2001) &&
-            (usbdev->descriptor.idVendor != 0x0729 || usbdev->descriptor.idProduct != 0x1284))
+	    (usbdev->descriptor.idVendor != 0x0557 || usbdev->descriptor.idProduct != 0x2001) &&
+	    (usbdev->descriptor.idVendor != 0x0729 || usbdev->descriptor.idProduct != 0x1284))
                 return -1;
 
         /* We don't handle multiple configurations */

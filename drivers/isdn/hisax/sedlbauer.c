@@ -1,4 +1,4 @@
-/* $Id: sedlbauer.c,v 1.14 1999/08/11 20:59:22 keil Exp $
+/* $Id: sedlbauer.c,v 1.15 1999/08/25 17:00:00 keil Exp $
 
  * sedlbauer.c  low level stuff for Sedlbauer cards
  *              includes support for the Sedlbauer speed star (speed star II),
@@ -17,6 +17,10 @@
  *            Edgar Toernig
  *
  * $Log: sedlbauer.c,v $
+ * Revision 1.15  1999/08/25 17:00:00  keil
+ * Make ISAR V32bis modem running
+ * Make LL->HL interface open for additional commands
+ *
  * Revision 1.14  1999/08/11 20:59:22  keil
  * new PCI codefix
  * fix IRQ problem while unload
@@ -99,7 +103,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlbauer_revision = "$Revision: 1.14 $";
+const char *Sedlbauer_revision = "$Revision: 1.15 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed card/win", "speed star", "speed fax+", 
@@ -530,18 +534,9 @@ Sedl_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			return(0);
 		case CARD_TEST:
 			return(0);
-		case CARD_LOAD_FIRM:
-			if (cs->hw.sedl.chip == SEDL_CHIP_ISAC_ISAR) {
-				if (isar_load_firmware(cs, arg))
-					return(1);
-				else 
-					ll_run(cs);
-			}
-			return(0);
 	}
 	return(0);
 }
-
 
 #ifdef SEDLBAUER_PCI
 #ifdef COMPAT_HAS_NEW_PCI
@@ -743,7 +738,7 @@ setup_sedlbauer(struct IsdnCard *card))
 			cs->bcs[1].hw.isar.reg = &cs->hw.sedl.isar;
 			test_and_set_bit(HW_ISAR, &cs->HW_Flags);
 			cs->irq_func = &sedlbauer_interrupt_isar;
-	
+			cs->auxcmd = &isar_auxcmd;
 			ISACVersion(cs, "Sedlbauer:");
 		
 			cs->BC_Read_Reg = &ReadISAR;

@@ -1,10 +1,16 @@
-/* $Id: isdn_concap.c,v 1.5 1998/10/30 18:44:48 he Exp $
+/* $Id: isdn_concap.c,v 1.6 1999/08/22 20:26:01 calle Exp $
  
  * Stuff to support the concap_proto by isdn4linux. isdn4linux - specific
  * stuff goes here. Stuff that depends only on the concap protocol goes to
  * another -- protocol specific -- source file.
  *
  * $Log: isdn_concap.c,v $
+ * Revision 1.6  1999/08/22 20:26:01  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.5  1998/10/30 18:44:48  he
  * pass return value from isdn_net_dial_req for dialmode change
  *

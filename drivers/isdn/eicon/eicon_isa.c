@@ -1,4 +1,4 @@
-/* $Id: eicon_isa.c,v 1.6 1999/07/25 15:12:06 armin Exp $
+/* $Id: eicon_isa.c,v 1.7 1999/08/22 20:26:48 calle Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  * Hardware-specific code for old ISA cards.
@@ -22,6 +22,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_isa.c,v $
+ * Revision 1.7  1999/08/22 20:26:48  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.6  1999/07/25 15:12:06  armin
  * fix of some debug logs.
  * enabled ISA-cards option.
@@ -58,7 +64,7 @@
 #define release_shmem release_region
 #define request_shmem request_region
 
-char *eicon_isa_revision = "$Revision: 1.6 $";
+char *eicon_isa_revision = "$Revision: 1.7 $";
 
 #ifdef CONFIG_ISDN_DRV_EICON_ISA
 

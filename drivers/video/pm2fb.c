@@ -192,12 +192,12 @@ static struct pm2fb_info {
 	int board;			/* Permedia2 board index (see
 					   board_table[] below) */
 	struct {
-		unsigned char* fb_base;	/* framebuffer memory base */
+		unsigned long  fb_base;	/* physical framebuffer memory base */
 		u32 fb_size;		/* framebuffer memory size */
-		unsigned char* rg_base;	/* register memory base */
-		unsigned char* p_fb;	/* physical address of frame buffer */
+		unsigned long  rg_base;	/* physical register memory base */
+		unsigned long  p_fb;	/* physical address of frame buffer */
 		unsigned char* v_fb;	/* virtual address of frame buffer */
-		unsigned char* p_regs;	/* physical address of registers
+		unsigned long  p_regs;	/* physical address of registers
 					   region, must be rg_base or
 					   rg_base+PM2_REGS_SIZE depending on
 					   the host endianness */
@@ -750,13 +750,26 @@ static int __init pm2fb_conf(struct pm2fb_info* p){
 		return 0;
 	}
 	DPRINTK("found board: %s\n", board_table[p->board].name);
+
 	p->regions.p_fb=p->regions.fb_base;
+	if (!__request_region(&iomem_resource, p->regions.p_fb,
+			      p->regions.fb_size, "pm2fb")) {
+		printk (KERN_ERR "pm2fb: cannot reserve fb memory, abort\n");
+		return 0;
+	}
 	p->regions.v_fb=MMAP(p->regions.p_fb, p->regions.fb_size);
+
 #ifdef __LITTLE_ENDIAN
 	p->regions.p_regs=p->regions.rg_base;
 #else
 	p->regions.p_regs=p->regions.rg_base+PM2_REGS_SIZE;
 #endif
+	if (!__request_region(&iomem_resource, p->regions.p_regs,
+			      PM2_REGS_SIZE, "pm2fb")) {
+		printk (KERN_ERR "pm2fb: cannot reserve mmio memory, abort\n");
+		UNMAP(p->regions.v_fb, p->regions.fb_size);
+		return 0;
+	}
 	p->regions.v_regs=MMAP(p->regions.p_regs, PM2_REGS_SIZE);
 	return 1;
 }
@@ -809,9 +822,9 @@ static int cvppc_detect(struct pm2fb_info* p) {
 
 	if (!cvppc_PCI_init(&p->board_par.cvppc))
 		return 0;
-	p->regions.fb_base=(unsigned char* )CVPPC_FB_APERTURE_ONE;
+	p->regions.fb_base=CVPPC_FB_APERTURE_ONE;
 	p->regions.fb_size=CVPPC_FB_SIZE;
-	p->regions.rg_base=(unsigned char* )CVPPC_REGS_REGION;
+	p->regions.rg_base=CVPPC_REGS_REGION;
 	p->memclock=CVPPC_MEMCLOCK;
 	return 1;
 }
@@ -855,24 +868,18 @@ static int pm2pci_detect(struct pm2fb_info* p) {
 			pci->dev->resource[0].start,
 			pci->dev->resource[1].start,
 			pci->dev->resource[2].start,
-			pci->dev->rom_address);
+			pci->dev->resource[PCI_ROM_RESOURCE].start);
 #ifdef __sparc__
-	p->regions.rg_base=(unsigned char* )
-		__pa(pci->dev->resource[0].start);
-	p->regions.fb_base=(unsigned char* )
-		__pa(pci->dev->resource[1].start);
+	p->regions.rg_base= __pa(pci->dev->resource[0].start);
+	p->regions.fb_base= __pa(pci->dev->resource[1].start);
 #else
 	if (pm2fb_options.flags & OPTF_VIRTUAL) {
-		p->regions.rg_base=(unsigned char* )
-			__pa(pci->dev->resource[0].start);
-		p->regions.fb_base=(unsigned char* )
-			__pa(pci->dev->resource[1].start);
+		p->regions.rg_base= __pa(pci->dev->resource[0].start);
+		p->regions.fb_base= __pa(pci->dev->resource[1].start);
 	}
 	else {
-		p->regions.rg_base=(unsigned char* )
-			(pci->dev->resource[0].start);
-		p->regions.fb_base=(unsigned char* )
-			(pci->dev->resource[0].start);
+		p->regions.rg_base= (pci->dev->resource[0].start);
+		p->regions.fb_base= (pci->dev->resource[0].start);
 	}
 #endif
 #ifdef __BIG_ENDIAN
@@ -1581,15 +1588,23 @@ static int pm2fb_release(struct fb_info* info, int user) {
  * Begin of public functions
  ***************************************************************************/
 
-void pm2fb_cleanup(struct fb_info* info) {
-	struct pm2fb_info* i=(struct pm2fb_info* )info;
+#ifdef MODULE
+static void pm2fb_cleanup(void) {
+	struct pm2fb_info* i = &fb_info;
 
-	unregister_framebuffer(info);
+	unregister_framebuffer((struct fb_info *)i);
 	pm2fb_reset(i);
-	/* FIXME UNMAP()??? */
+
+	UNMAP(i->regions.v_fb, i->regions.fb_size);
+	__release_region(&iomem_resource, i->regions.p_fb, i->regions.fb_size);
+
+	UNMAP(i->regions.v_regs, PM2_REGS_SIZE);
+	__release_region(&iomem_resource, i->regions.p_regs, PM2_REGS_SIZE);
+
 	if (board_table[i->board].cleanup)
 		board_table[i->board].cleanup(i);
 }
+#endif /* MODULE */
 
 int __init pm2fb_init(void){
 

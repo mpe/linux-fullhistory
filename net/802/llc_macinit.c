@@ -204,7 +204,7 @@ EXPORT_SYMBOL(llc_cancel_timers);
 
 #define ALL_TYPES_8022 0
 
-__initfunc(void llc_init(struct net_proto *proto))
+void __init llc_init(struct net_proto *proto)
 {
 	printk(KERN_NOTICE "IEEE 802.2 LLC for Linux 2.1 (c) 1996 Tim Alpaerts\n");
 	return;

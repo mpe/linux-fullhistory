@@ -161,7 +161,7 @@ static ssize_t write_printer(struct file * file,
 	unsigned long copy_size;
 	unsigned long bytes_written = 0;
 	unsigned long partial;
-	int result;
+	int result = USB_ST_NOERROR;
 	int maxretry;
 
 	do {

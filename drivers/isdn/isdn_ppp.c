@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.c,v 1.49 1999/07/06 07:47:11 calle Exp $
+/* $Id: isdn_ppp.c,v 1.52 1999/08/22 20:26:07 calle Exp $
  *
  * Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,18 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ppp.c,v $
+ * Revision 1.52  1999/08/22 20:26:07  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
+ * Revision 1.51  1999/08/18 16:19:17  hipp
+ * applied MPPP-resize-headroom patch
+ *
+ * Revision 1.50  1999/08/16 07:11:41  hipp
+ * Additional VJ decomp-buffer-size increased from 40 to 128
+ *
  * Revision 1.49  1999/07/06 07:47:11  calle
  * bugfix: dev_alloc_skb only reserve 16 bytes. We need to look at the
  *  	hdrlen the driver want. So I changed dev_alloc_skb calls
@@ -269,7 +281,7 @@ static int isdn_ppp_fill_mpqueue(isdn_net_dev *, struct sk_buff **skb,
 static void isdn_ppp_free_mpqueue(isdn_net_dev *);
 #endif
 
-char *isdn_ppp_revision = "$Revision: 1.49 $";
+char *isdn_ppp_revision = "$Revision: 1.52 $";
 
 static struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
 static struct isdn_ppp_compressor *ipc_head = NULL;
@@ -1352,7 +1364,7 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 			{
 				struct sk_buff *skb_old = skb;
 				int pkt_len;
-				skb = dev_alloc_skb(skb_old->len + 40);
+				skb = dev_alloc_skb(skb_old->len + 128);
 
 				if (!skb) {
 					printk(KERN_WARNING "%s: Memory squeeze, dropping packet.\n", dev->name);
@@ -1361,7 +1373,7 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 					return;
 				}
 				skb->dev = dev;
-				skb_put(skb, skb_old->len + 40);
+				skb_put(skb, skb_old->len + 128);
 				memcpy(skb->data, skb_old->data, skb_old->len);
 				skb->mac.raw = skb->data;
 				pkt_len = slhc_uncompress(ippp_table[net_dev->local->ppp_slot]->slcomp,
@@ -1415,9 +1427,17 @@ static unsigned char *isdn_ppp_skb_push(struct sk_buff **skb_p,int len)
 	struct sk_buff *skb = *skb_p;
 
 	if(skb_headroom(skb) < len) {
-		printk(KERN_ERR "isdn_ppp_skb_push:under %d %d\n",skb_headroom(skb),len);
+		struct sk_buff *nskb = skb_realloc_headroom(skb, len);
+
+		if (!nskb) {
+			printk(KERN_ERR "isdn_ppp_skb_push: can't realloc headroom!\n");
+			dev_kfree_skb(skb);
+			return NULL;
+		}
+		printk(KERN_DEBUG "isdn_ppp_skb_push:under %d %d\n",skb_headroom(skb),len);
 		dev_kfree_skb(skb);
-		return NULL;
+		*skb_p = nskb;
+		return skb_push(nskb, len);
 	}
 	return skb_push(skb,len);
 }

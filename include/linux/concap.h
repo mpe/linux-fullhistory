@@ -1,10 +1,11 @@
-/* $Id: concap.h,v 1.1 1998/02/01 00:15:11 keil Exp $
+/* $Id: concap.h,v 1.2 1999/08/23 15:54:21 keil Exp $
 */
 #ifndef _LINUX_CONCAP_H
 #define _LINUX_CONCAP_H
 #ifdef __KERNEL__
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
+#include <linux/isdn_compat.h>
 
 /* Stuff to support encapsulation protocols genericly. The encapsulation
    protocol is processed at the uppermost layer of the network interface.
@@ -25,11 +26,11 @@ struct concap_device_ops;
 /* this manages all data needed by the encapsulation protocol
  */
 struct concap_proto{
-	struct net_device *net_dev;		/* net device using our service  */
-	struct concap_device_ops *dops; /* callbacks provided by device */
- 	struct concap_proto_ops  *pops; /* callbacks provided by us */
+	struct net_device *net_dev;	/* net device using our service  */
+	struct concap_device_ops *dops;	/* callbacks provided by device */
+ 	struct concap_proto_ops  *pops;	/* callbacks provided by us */
 	int flags;
-	void *proto_data;               /* protocol specific private data, to
+	void *proto_data;		/* protocol specific private data, to
 					   be accessed via *pops methods only*/
 	/*
 	  :
@@ -107,7 +108,3 @@ extern int concap_nop(struct concap_proto *cprot);
 extern int concap_drop_skb(struct concap_proto *cprot, struct sk_buff *skb);
 #endif
 #endif
-
-
-
-

@@ -82,6 +82,9 @@
 
 #define SCRATCH_BUF_SIZE (STREAM_BUF_SIZE * 2)
 
+#define FRAMES_PER_DESC		500
+#define FRAME_SIZE_PER_DESC	960	/* Shouldn't be hardcoded */
+
 enum {
 	STATE_SCANNING,		/* Scanning for start */
 	STATE_HEADER,		/* Parsing header */
@@ -93,7 +96,10 @@ struct usb_device;
 struct cpia_sbuf {
 	char *data;
 	int len;
+	struct usb_isoc_desc *isodesc;
+#if 0
 	void *isodesc;
+#endif
 };
 
 enum {

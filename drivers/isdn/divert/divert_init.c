@@ -1,5 +1,5 @@
 /* 
- * $Id: divert_init.c,v 1.3 1999/07/05 20:21:39 werner Exp $
+ * $Id: divert_init.c,v 1.4 1999/08/22 20:26:32 calle Exp $
  *
  * Module init for DSS1 diversion services for i4l.
  *
@@ -20,6 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: divert_init.c,v $
+ * Revision 1.4  1999/08/22 20:26:32  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.3  1999/07/05 20:21:39  werner
  * changes to use diversion sources for all kernel versions.
  * removed static device, only proc filesystem used

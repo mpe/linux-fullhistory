@@ -199,6 +199,7 @@ static int AddSocketToAcceptQueue(struct socket *sock,const int Port)
 	if (sk->state != TCP_LISTEN || 
 	    sk->ack_backlog > sk->max_ack_backlog) /* To many pending requests */
 	{
+		release_sock(sk);
 		sock_put(sk);
 		return -1;
 	}
@@ -207,6 +208,7 @@ static int AddSocketToAcceptQueue(struct socket *sock,const int Port)
 	
 	if (req==NULL)
 	{	
+		release_sock(sk);
 		sock_put(sk);
 		return -1;
 	}

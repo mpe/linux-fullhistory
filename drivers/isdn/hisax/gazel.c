@@ -1,4 +1,4 @@
-/* $Id: gazel.c,v 2.5 1999/08/11 21:01:26 keil Exp $
+/* $Id: gazel.c,v 2.6 1999/08/22 20:27:03 calle Exp $
 
  * gazel.c     low level stuff for Gazel isdn cards
  *
@@ -6,6 +6,12 @@
  *              based on source code from Karsten Keil
  *
  * $Log: gazel.c,v $
+ * Revision 2.6  1999/08/22 20:27:03  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 2.5  1999/08/11 21:01:26  keil
  * new PCI codefix
  *
@@ -36,7 +42,7 @@
 #endif
 
 extern const char *CardType[];
-const char *gazel_revision = "$Revision: 2.5 $";
+const char *gazel_revision = "$Revision: 2.6 $";
 
 #define R647      1
 #define R685      2

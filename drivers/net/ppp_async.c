@@ -313,7 +313,7 @@ ppp_async_ioctl(struct tty_struct *tty, struct file *file,
 	switch (cmd) {
 	case PPPIOCGFLAGS:
 		val = ap->flags | ap->rbits;
-		if (put_user(ap->flags, (int *) arg))
+		if (put_user(val, (int *) arg))
 			break;
 		err = 0;
 		break;

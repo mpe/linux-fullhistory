@@ -1,5 +1,5 @@
 /* 
- * $Id: isdn_divert.c,v 1.2 1999/07/04 21:37:32 werner Exp $
+ * $Id: isdn_divert.c,v 1.4 1999/08/25 20:02:21 werner Exp $
  *
  * DSS1 main diversion supplementary handling for i4l.
  *
@@ -20,6 +20,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_divert.c,v $
+ * Revision 1.4  1999/08/25 20:02:21  werner
+ * Changed return values for stat_icall(w) from 3->4 and 4->5 because of conflicts
+ * with existing software definitions. (PtP incomplete called party number)
+ *
+ * Revision 1.3  1999/08/22 20:26:35  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.2  1999/07/04 21:37:32  werner
  * Ported from kernel version 2.0
  *
@@ -508,14 +518,14 @@ int isdn_divert_icall(isdn_ctrl *ic)
                    strcpy(ic->parm.setup.phone,dv->rule.to_nr);
                    cs->akt_state = DEFLECT_AUTODEL; /* delete after timeout */
                    cs->timer.expires = jiffies + (HZ * AUTODEL_TIME);
-                   retval = 4; 
+                   retval = 5; 
                  }
                else
                  retval = 1; /* alerting */                 
              }
            else
              { cs->deflect_dest[0] = '\0';
-	       retval = 3; /* only proceed */
+	       retval = 4; /* only proceed */
              }  
            sprintf(cs->info,"%d 0x%lx %s %s %s %s 0x%x 0x%x %d %d %s\n",
                    cs->akt_state,

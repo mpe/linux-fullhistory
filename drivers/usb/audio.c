@@ -15,6 +15,8 @@ static LIST_HEAD(usb_audio_list);
 struct usb_audio {
 	struct usb_device *dev;
 	struct list_head list;
+
+	void *irq_handle;
 };
 
 static struct usb_driver usb_audio_driver = {
@@ -25,42 +27,43 @@ static struct usb_driver usb_audio_driver = {
 };
 
 
+#if 0
 static int usb_audio_irq(int state, void *buffer, int len, void *dev_id)
 {
+#if 0
 	struct usb_audio *aud = (struct usb_audio *)dev_id;
 
 	printk("irq on %p\n", aud);
+#endif
 
 	return 1;
 }
+#endif
 
 static int usb_audio_probe(struct usb_device *dev)
 {
-	struct usb_interface_descriptor *intf_desc;
-	struct usb_endpoint_descriptor *endpoint;
+	struct usb_interface_descriptor *interface;
 	struct usb_audio *aud;
-	int bEndpointAddress = 0;
 	int i;
 	int na=0;
 	
-
 	for (i=0; i<dev->config[0].bNumInterfaces; i++) {
-		intf_desc = &dev->config->interface[i].altsetting[0];
+		interface = &dev->config->interface[i].altsetting[0];
 
-		if(intf_desc->bInterfaceClass != 1) 
+		if (interface->bInterfaceClass != 1) 
 	        	continue;
 
 		printk(KERN_INFO "USB audio device detected.\n");
 	
-		switch(intf_desc->bInterfaceSubClass) {
+		switch(interface->bInterfaceSubClass) {
 			case 0x01:
-				printk(KERN_INFO "audio: Control device.\n");
+				printk(KERN_INFO "audio: control device\n");
 				break;
 			case 0x02:
-				printk(KERN_INFO "audio: streaming.\n");
+				printk(KERN_INFO "audio: streaming\n");
 				break;
 			case 0x03:
-				printk(KERN_INFO "audio: nonstreaming.\n");
+				printk(KERN_INFO "audio: nonstreaming\n");
 				break;
 		}
 		na++;
@@ -70,44 +73,49 @@ static int usb_audio_probe(struct usb_device *dev)
 		return -1;
 
 	aud = kmalloc(sizeof(struct usb_audio), GFP_KERNEL);
-	if (aud) {
-        	memset(aud, 0, sizeof(*aud));
-        	aud->dev = dev;
-        	dev->private = aud;
+	if (!aud)
+		return -1;
 
-//        	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
-//			printk (KERN_INFO " Failed usb_set_configuration: Audio\n");
-//			break;
-//		}
-//        	usb_set_protocol(dev, 0);
-//        	usb_set_idle(dev, 0, 0);
-        
-//        	usb_request_irq(dev,
-//                        usb_rcvctrlpipe(dev, bEndpointAddress),
-//                        usb_audio_irq,
-//                        endpoint->bInterval,
-//                        aud);
+       	memset(aud, 0, sizeof(*aud));
+       	aud->dev = dev;
+       	dev->private = aud;
 
-		list_add(&aud->list, &usb_audio_list);
-		
-		return 0;
+/*
+	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
+		printk (KERN_INFO "Failed usb_set_configuration: Audio\n");
+		break;
 	}
-	
-	if (aud)
-		kfree (aud);
-	return -1;
+	usb_set_protocol(dev, 0);
+	usb_set_idle(dev, 0, 0);
+*/
+        
+/*
+	aud->irq_handle = usb_request_irq(dev,
+		usb_rcvctrlpipe(dev, endpoint->bEndpointAddress),
+		usb_audio_irq,
+		endpoint->bInterval,
+		aud);
+*/
+
+	list_add(&aud->list, &usb_audio_list);
+		
+	return 0;
 }
 
 static void usb_audio_disconnect(struct usb_device *dev)
 {
 	struct usb_audio *aud = (struct usb_audio*) dev->private;
 
-	if (aud) {
-        	dev->private = NULL;
-        	list_del(&aud->list);
-        	kfree(aud);
-	}
-	printk(KERN_INFO "USB audio driver removed.\n");
+	if (!aud)
+		return;
+
+       	list_del(&aud->list);
+
+	usb_release_irq(aud->dev, aud->irq_handle);
+	aud->irq_handle = NULL;
+
+       	kfree(aud);
+       	dev->private = NULL;
 }
 
 int usb_audio_init(void)

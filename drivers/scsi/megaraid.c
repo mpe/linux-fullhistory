@@ -127,7 +127,6 @@
 
 #define MEGARAID_VERSION "v1.04 (August 16, 1999)"
 
-#include <linux/config.h>
 #include <linux/version.h>
 
 #ifdef MODULE

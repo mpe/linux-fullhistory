@@ -1,7 +1,7 @@
 /*
  *  linux/fs/pipe.c
  *
- *  Copyright (C) 1991, 1992  Linus Torvalds
+ *  Copyright (C) 1991, 1992, 1999  Linus Torvalds
  */
 
 #include <linux/mm.h>
@@ -22,187 +22,263 @@
 #undef FIFO_SUNOS_BRAINDAMAGE
 #endif
 
-/* We don't use the head/tail construction any more. Now we use the start/len*/
-/* construction providing full use of PIPE_BUF (multiple of PAGE_SIZE) */
-/* Florian Coosmann (FGC)                                ^ current = 1       */
-/* Additionally, we now use locking technique. This prevents race condition  */
-/* in case of paging and multiple read/write on the same pipe. (FGC)         */
-/* Reads with count = 0 should always return 0. Julian Bradfield 1999-06-07. */
+/*
+ * We use a start+len construction, which provides full use of the 
+ * allocated memory.
+ * -- Florian Coosmann (FGC)
+ * 
+ * Reads with count = 0 should always return 0.
+ * -- Julian Bradfield 1999-06-07.
+ */
 
-static ssize_t do_pipe_read(struct file * filp, char * buf, size_t count)
+/* Drop the inode semaphore and wait for a pipe event, atomically */
+static void pipe_wait(struct inode * inode)
 {
-	struct inode * inode = filp->f_dentry->d_inode;
-	ssize_t chars = 0, size = 0, read = 0;
-        char *pipebuf;
+	DECLARE_WAITQUEUE(wait, current);
+	current->state = TASK_INTERRUPTIBLE;
+	add_wait_queue(PIPE_WAIT(*inode), &wait);
+	up(PIPE_SEM(*inode));
+	schedule();
+	remove_wait_queue(PIPE_WAIT(*inode), &wait);
+	current->state = TASK_RUNNING;
+}
 
+static ssize_t
+pipe_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
+{
+	struct inode *inode = filp->f_dentry->d_inode;
+	ssize_t size, read, ret;
+
+	/* Seeks are not allowed on pipes.  */
+	ret = -ESPIPE;
+	if (ppos != &filp->f_pos)
+		goto out_nolock;
+
+	/* Always return 0 on null read.  */
+	ret = 0;
+	if (count == 0)
+		goto out_nolock;
+
+	/* Grab, or try to grab, the pipe's semaphore with data present.  */
 	if (filp->f_flags & O_NONBLOCK) {
-		if (PIPE_LOCK(*inode))
-			return -EAGAIN;
+		ret = -EAGAIN;
+		if (down_trylock(PIPE_SEM(*inode)))
+			goto out_nolock;
+		ret = PIPE_WRITERS(*inode) ? -EAGAIN : 0;
+		if (PIPE_EMPTY(*inode))
+			goto out;
+	} else {
+		ret = -ERESTARTSYS;
+		if (down_interruptible(PIPE_SEM(*inode)))
+			goto out_nolock;
+
 		if (PIPE_EMPTY(*inode)) {
-			if (PIPE_WRITERS(*inode))
-				return -EAGAIN;
-			else
-				return 0;
+			ret = 0;
+			if (!PIPE_WRITERS(*inode))
+				goto out;
+
+			for (;;) {
+				pipe_wait(inode);
+				ret = -ERESTARTSYS;
+				if (signal_pending(current))
+					goto out_nolock;
+				if (down_interruptible(PIPE_SEM(*inode)))
+					goto out_nolock;
+				ret = 0;
+				if (!PIPE_EMPTY(*inode))
+					break;
+				if (!PIPE_WRITERS(*inode))
+					goto out;
+			}
 		}
-	} else while (PIPE_EMPTY(*inode) || PIPE_LOCK(*inode)) {
-		if (PIPE_EMPTY(*inode)) {
-			if (!PIPE_WRITERS(*inode) || !count)
-				return 0;
-		}
-		if (signal_pending(current))
-			return -ERESTARTSYS;
-		interruptible_sleep_on(&PIPE_WAIT(*inode));
 	}
-	PIPE_LOCK(*inode)++;
-	while (count>0 && (size = PIPE_SIZE(*inode))) {
-		chars = PIPE_MAX_RCHUNK(*inode);
+
+	/* Read what data is available.  */
+	ret = -EFAULT;
+	read = 0;
+	while (count > 0 && (size = PIPE_LEN(*inode))) {
+		char *pipebuf = PIPE_BASE(*inode) + PIPE_START(*inode);
+		ssize_t chars = PIPE_MAX_RCHUNK(*inode);
+
 		if (chars > count)
 			chars = count;
 		if (chars > size)
 			chars = size;
+
+		if (copy_to_user(buf, pipebuf, chars))
+			goto out;
+
 		read += chars;
-                pipebuf = PIPE_BASE(*inode)+PIPE_START(*inode);
 		PIPE_START(*inode) += chars;
-		PIPE_START(*inode) &= (PIPE_BUF-1);
+		PIPE_START(*inode) &= (PIPE_SIZE - 1);
 		PIPE_LEN(*inode) -= chars;
 		count -= chars;
-		copy_to_user(buf, pipebuf, chars );
 		buf += chars;
 	}
-	PIPE_LOCK(*inode)--;
-	wake_up_interruptible(&PIPE_WAIT(*inode));
-	if (read) {
+
+	/* Cache behaviour optimization */
+	if (!PIPE_LEN(*inode))
+		PIPE_START(*inode) = 0;
+
+	/* Signal writers there is more room.  */
+	wake_up_interruptible(PIPE_WAIT(*inode));
+
+	if (read)
 		UPDATE_ATIME(inode);
-		return read;
-	}
-	if (PIPE_WRITERS(*inode))
-		return -EAGAIN;
-	return 0;
+	ret = read;
+
+out:
+	up(PIPE_SEM(*inode));
+out_nolock:
+	return ret;
 }
 
-static ssize_t do_pipe_write(struct file * filp, const char * buf, size_t count)
+static ssize_t
+pipe_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 {
-	struct inode * inode = filp->f_dentry->d_inode;
-	ssize_t chars = 0, free = 0, written = 0, err=0;
-	char *pipebuf;
+	struct inode *inode = filp->f_dentry->d_inode;
+	ssize_t free, written, ret;
 
-	if (!PIPE_READERS(*inode)) { /* no readers */
-		send_sig(SIGPIPE,current,0);
-		return -EPIPE;
-	}
-	/* if count <= PIPE_BUF, we have to make it atomic */
-	if (count <= PIPE_BUF)
-		free = count;
-	else
-		free = 1; /* can't do it atomically, wait for any free space */
-	if (down_interruptible(&inode->i_sem)) {
-		return -ERESTARTSYS;
-	}
-	while (count>0) {
-		while ((PIPE_FREE(*inode) < free) || PIPE_LOCK(*inode)) {
-			if (!PIPE_READERS(*inode)) { /* no readers */
-				send_sig(SIGPIPE,current,0);
-				err = -EPIPE;
-				goto errout;
-			}
-			if (signal_pending(current)) {
-				err = -ERESTARTSYS;
-				goto errout;
-			}
-			if (filp->f_flags & O_NONBLOCK) {
-				err = -EAGAIN;
-				goto errout;
-			}
-			interruptible_sleep_on(&PIPE_WAIT(*inode));
+	/* Seeks are not allowed on pipes.  */
+	ret = -ESPIPE;
+	if (ppos != &filp->f_pos)
+		goto out_nolock;
+
+	/* Null write succeeds.  */
+	ret = 0;
+	if (count == 0)
+		goto out_nolock;
+
+	ret = -ERESTARTSYS;
+	if (down_interruptible(PIPE_SEM(*inode)))
+		goto out_nolock;
+
+	/* No readers yields SIGPIPE.  */
+	if (!PIPE_READERS(*inode))
+		goto sigpipe;
+
+	/* If count <= PIPE_BUF, we have to make it atomic.  */
+	free = (count <= PIPE_BUF ? count : 1);
+	written = 0;
+
+	/* Wait, or check for, available space.  */
+	if (filp->f_flags & O_NONBLOCK) {
+		ret = -EAGAIN;
+		if (PIPE_FREE(*inode) < free)
+			goto out;
+	} else {
+		while (PIPE_FREE(*inode) < free) {
+			pipe_wait(inode);
+			ret = -ERESTARTSYS;
+			if (signal_pending(current))
+				goto out_nolock;
+			if (down_interruptible(PIPE_SEM(*inode)))
+				goto out_nolock;
+
+			if (!PIPE_READERS(*inode))
+				goto sigpipe;
 		}
-		PIPE_LOCK(*inode)++;
-		while (count>0 && (free = PIPE_FREE(*inode))) {
-			chars = PIPE_MAX_WCHUNK(*inode);
+	}
+
+	/* Copy into available space.  */
+	ret = -EFAULT;
+	while (count > 0) {
+		int space;
+		char *pipebuf = PIPE_BASE(*inode) + PIPE_END(*inode);
+		ssize_t chars = PIPE_MAX_WCHUNK(*inode);
+
+		if ((space = PIPE_FREE(*inode)) != 0) {
 			if (chars > count)
 				chars = count;
-			if (chars > free)
-				chars = free;
-                        pipebuf = PIPE_BASE(*inode)+PIPE_END(*inode);
+			if (chars > space)
+				chars = space;
+
+			if (copy_from_user(pipebuf, buf, chars))
+				goto out;
+
 			written += chars;
 			PIPE_LEN(*inode) += chars;
 			count -= chars;
-			copy_from_user(pipebuf, buf, chars );
 			buf += chars;
+			space = PIPE_FREE(*inode);
+			continue;
 		}
-		PIPE_LOCK(*inode)--;
-		wake_up_interruptible(&PIPE_WAIT(*inode));
-		free = 1;
+
+		ret = written;
+		if (filp->f_flags & O_NONBLOCK)
+			break;
+
+		do {
+			/* This should be a synchronous wake-up: don't do idle reschedules! */
+			wake_up_interruptible(PIPE_WAIT(*inode));
+			pipe_wait(inode);
+			if (signal_pending(current))
+				goto out;
+			if (down_interruptible(PIPE_SEM(*inode)))
+				goto out_nolock;
+			if (!PIPE_READERS(*inode))
+				goto sigpipe;
+		} while (!PIPE_FREE(*inode));
+		ret = -EFAULT;
 	}
+
+	/* Signal readers there is more data.  */
+	wake_up_interruptible(PIPE_WAIT(*inode));
+
+	ret = (written ? written : -EAGAIN);
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(inode);
-errout:
-	up(&inode->i_sem);
-	return written ? written : err;
+
+out:
+	up(PIPE_SEM(*inode));
+out_nolock:
+	return ret;
+
+sigpipe:
+	up(PIPE_SEM(*inode));
+	send_sig(SIGPIPE, current, 0);
+	return -EPIPE;
 }
 
-static ssize_t pipe_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
-{
-	ssize_t retval;
-
-
-	if (ppos != &filp->f_pos)
-		return -ESPIPE;
-
-	if ( !count ) return 0;
-
-	lock_kernel();
-	retval = do_pipe_read(filp, buf, count);
-	unlock_kernel();
-	return retval;
-}
-
-static ssize_t pipe_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
-{
-	ssize_t retval;
-
-	if (ppos != &filp->f_pos)
-		return -ESPIPE;
-
-	lock_kernel();
-	retval = do_pipe_write(filp, buf, count);
-	unlock_kernel();
-	return retval;
-}
-
-static long long pipe_lseek(struct file * file, long long offset, int orig)
+static loff_t
+pipe_lseek(struct file *file, loff_t offset, int orig)
 {
 	return -ESPIPE;
 }
 
-static ssize_t bad_pipe_r(struct file * filp, char * buf,
-			  size_t count, loff_t *ppos)
+static ssize_t
+bad_pipe_r(struct file *filp, char *buf, size_t count, loff_t *ppos)
 {
 	return -EBADF;
 }
 
-static ssize_t bad_pipe_w(struct file * filp, const char * buf,
-			  size_t count, loff_t *ppos)
+static ssize_t
+bad_pipe_w(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 {
 	return -EBADF;
 }
 
-static int pipe_ioctl(struct inode *pino, struct file * filp,
-		      unsigned int cmd, unsigned long arg)
+static int
+pipe_ioctl(struct inode *pino, struct file *filp,
+	   unsigned int cmd, unsigned long arg)
 {
 	switch (cmd) {
 		case FIONREAD:
-			return put_user(PIPE_SIZE(*pino),(int *) arg);
+			return put_user(PIPE_LEN(*pino), (int *)arg);
 		default:
 			return -EINVAL;
 	}
 }
 
-static unsigned int pipe_poll(struct file * filp, poll_table * wait)
+static unsigned int
+pipe_poll(struct file *filp, poll_table *wait)
 {
 	unsigned int mask;
-	struct inode * inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_dentry->d_inode;
 
-	poll_wait(filp, &PIPE_WAIT(*inode), wait);
+	poll_wait(filp, PIPE_WAIT(*inode), wait);
+
+	/* Reading only -- no need for aquiring the semaphore.  */
 	mask = POLLIN | POLLRDNORM;
 	if (PIPE_EMPTY(*inode))
 		mask = POLLOUT | POLLWRNORM;
@@ -210,6 +286,7 @@ static unsigned int pipe_poll(struct file * filp, poll_table * wait)
 		mask |= POLLHUP;
 	if (!PIPE_READERS(*inode))
 		mask |= POLLERR;
+
 	return mask;
 }
 
@@ -218,17 +295,21 @@ static unsigned int pipe_poll(struct file * filp, poll_table * wait)
  * Argh!  Why does SunOS have to have different select() behaviour
  * for pipes and FIFOs?  Hate, hate, hate!  SunOS lacks POLLHUP.
  */
-static unsigned int fifo_poll(struct file * filp, poll_table * wait)
+static unsigned int
+fifo_poll(struct file *filp, poll_table *wait)
 {
 	unsigned int mask;
-	struct inode * inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_dentry->d_inode;
 
-	poll_wait(filp, &PIPE_WAIT(*inode), wait);
+	poll_wait(filp, PIPE_WAIT(*inode), wait);
+
+	/* Reading only -- no need for aquiring the semaphore.  */
 	mask = POLLIN | POLLRDNORM;
 	if (PIPE_EMPTY(*inode))
 		mask = POLLOUT | POLLWRNORM;
 	if (!PIPE_READERS(*inode))
 		mask |= POLLERR;
+
 	return mask;
 }
 #else
@@ -242,82 +323,112 @@ static unsigned int fifo_poll(struct file * filp, poll_table * wait)
  * the open() code hasn't guaranteed a connection (O_NONBLOCK),
  * and we need to act differently until we do get a writer..
  */
-static ssize_t connect_read(struct file * filp, char * buf,
-			    size_t count, loff_t *ppos)
+static ssize_t
+connect_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 {
-	struct inode * inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_dentry->d_inode;
+
+	/* Reading only -- no need for aquiring the semaphore.  */
 	if (PIPE_EMPTY(*inode) && !PIPE_WRITERS(*inode))
 		return 0;
+
 	filp->f_op = &read_fifo_fops;
-	return pipe_read(filp,buf,count,ppos);
+	return pipe_read(filp, buf, count, ppos);
 }
 
-static unsigned int connect_poll(struct file * filp, poll_table * wait)
+static unsigned int
+connect_poll(struct file *filp, poll_table *wait)
 {
-	struct inode * inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_dentry->d_inode;
+	unsigned int mask = 0;
 
-	poll_wait(filp, &PIPE_WAIT(*inode), wait);
+	poll_wait(filp, PIPE_WAIT(*inode), wait);
+
+	/* Reading only -- no need for aquiring the semaphore.  */
 	if (!PIPE_EMPTY(*inode)) {
 		filp->f_op = &read_fifo_fops;
-		return POLLIN | POLLRDNORM;
-	}
-	if (PIPE_WRITERS(*inode))
+		mask = POLLIN | POLLRDNORM;
+	} else if (PIPE_WRITERS(*inode)) {
 		filp->f_op = &read_fifo_fops;
-	return POLLOUT | POLLWRNORM;
+		mask = POLLOUT | POLLWRNORM;
+	}
+
+	return mask;
 }
 
-static int pipe_release(struct inode * inode)
+static int
+pipe_release(struct inode *inode, int decr, int decw)
 {
+	down(PIPE_SEM(*inode));
+	PIPE_READERS(*inode) -= decr;
+	PIPE_WRITERS(*inode) -= decw;
 	if (!PIPE_READERS(*inode) && !PIPE_WRITERS(*inode)) {
 		struct pipe_inode_info *info = inode->i_pipe;
 		inode->i_pipe = NULL;
 		free_page((unsigned long) info->base);
 		kfree(info);
-		return 0;
+	} else {
+		wake_up_interruptible(PIPE_WAIT(*inode));
 	}
-	wake_up_interruptible(&PIPE_WAIT(*inode));
+	up(PIPE_SEM(*inode));
+
 	return 0;
 }
 
-static int pipe_read_release(struct inode * inode, struct file * filp)
+static int
+pipe_read_release(struct inode *inode, struct file *filp)
 {
-	PIPE_READERS(*inode)--;
-	return pipe_release(inode);
+	return pipe_release(inode, 1, 0);
 }
 
-static int pipe_write_release(struct inode * inode, struct file * filp)
+static int
+pipe_write_release(struct inode *inode, struct file *filp)
 {
-	PIPE_WRITERS(*inode)--;
-	return pipe_release(inode);
+	return pipe_release(inode, 0, 1);
 }
 
-static int pipe_rdwr_release(struct inode * inode, struct file * filp)
+static int
+pipe_rdwr_release(struct inode *inode, struct file *filp)
 {
-	if (filp->f_mode & FMODE_READ)
-		PIPE_READERS(*inode)--;
-	if (filp->f_mode & FMODE_WRITE)
-		PIPE_WRITERS(*inode)--;
-	return pipe_release(inode);
+	int decr, decw;
+
+	decr = (filp->f_mode & FMODE_READ) != 0;
+	decw = (filp->f_mode & FMODE_WRITE) != 0;
+	return pipe_release(inode, decr, decw);
 }
 
-static int pipe_read_open(struct inode * inode, struct file * filp)
+static int
+pipe_read_open(struct inode *inode, struct file *filp)
 {
+	/* We could have perhaps used atomic_t, but this and friends
+	   below are the only places.  So it doesn't seem worthwhile.  */
+	down(PIPE_SEM(*inode));
 	PIPE_READERS(*inode)++;
+	up(PIPE_SEM(*inode));
+
 	return 0;
 }
 
-static int pipe_write_open(struct inode * inode, struct file * filp)
+static int
+pipe_write_open(struct inode *inode, struct file *filp)
 {
+	down(PIPE_SEM(*inode));
 	PIPE_WRITERS(*inode)++;
+	up(PIPE_SEM(*inode));
+
 	return 0;
 }
 
-static int pipe_rdwr_open(struct inode * inode, struct file * filp)
+static int
+pipe_rdwr_open(struct inode *inode, struct file *filp)
 {
+	down(PIPE_SEM(*inode));
 	if (filp->f_mode & FMODE_READ)
 		PIPE_READERS(*inode)++;
 	if (filp->f_mode & FMODE_WRITE)
 		PIPE_WRITERS(*inode)++;
+	up(PIPE_SEM(*inode));
+
 	return 0;
 }
 
@@ -433,22 +544,20 @@ static struct inode * get_pipe_inode(void)
 		goto fail_inode;
 
 	page = __get_free_page(GFP_USER);
-
 	if (!page)
 		goto fail_iput;
 
-	/* XXX */
 	inode->i_pipe = kmalloc(sizeof(struct pipe_inode_info), GFP_KERNEL);
 	if (!inode->i_pipe)
 		goto fail_page;
 
-	PIPE_BASE(*inode) = (char *) page;
 	inode->i_op = &pipe_inode_operations;
-	init_waitqueue_head(&PIPE_WAIT(*inode));
+
+	init_waitqueue_head(PIPE_WAIT(*inode));
+	PIPE_BASE(*inode) = (char *) page;
 	PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
-	PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
 	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
-	PIPE_LOCK(*inode) = 0;
+
 	/*
 	 * Mark the inode dirty from the very beginning,
 	 * that way it will never be moved to the dirty

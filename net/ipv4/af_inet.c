@@ -1005,7 +1005,7 @@ extern void tcp_v4_init(struct net_proto_family *);
  *	Called by socket.c on kernel startup.  
  */
  
-__initfunc(void inet_proto_init(struct net_proto *pro))
+void __init inet_proto_init(struct net_proto *pro)
 {
 	struct sk_buff *dummy_skb;
 	struct inet_protocol *p;

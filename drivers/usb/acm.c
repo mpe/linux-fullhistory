@@ -468,15 +468,15 @@ static void rs_unthrottle(struct tty_struct * tty)
 		Set_Control_Line_Status (acm->ctrlstate | CTRL_STAT_RTS, acm);
 }
 
-static int get_free_acm()
+static int get_free_acm(void)
 {
- int i;
+	int i;
  
- for (i=0;i<NR_PORTS;i++) {
-	 if (!acm_state_table[i].present)
-		 return i;
- }
- return -1;
+	for (i=0;i<NR_PORTS;i++) {
+		if (!acm_state_table[i].present)
+			return i;
+	}
+	return -1;
 }
 
 static int acm_probe(struct usb_device *dev)
@@ -500,10 +500,10 @@ static int acm_probe(struct usb_device *dev)
             dev->descriptor.bDeviceProtocol != 0)
 		return -1;
 
-	/*Now scan all configs for a ACM configuration*/
+	/* Now scan all configs for a ACM configuration */
 	for (cfgnum=0;cfgnum<dev->descriptor.bNumConfigurations;cfgnum++) {
 		/* The first one should be Communications interface? */
-		interface = &dev->config[cfgnum].altsetting[0].interface[0];
+		interface = &dev->config[cfgnum].interface[0].altsetting[0];
 		if (interface->bInterfaceClass != 2 ||
 		    interface->bInterfaceSubClass != 2 ||
 		    interface->bInterfaceProtocol != 1 ||
@@ -517,7 +517,7 @@ static int acm_probe(struct usb_device *dev)
 			continue;
 			
 		/* The second one should be a Data interface? */
-		interface = &dev->config[cfgnum].altsetting[0].interface[1];
+		interface = &dev->config[cfgnum].interface[1].altsetting[0];
 		if (interface->bInterfaceClass != 10 ||
 		    interface->bInterfaceSubClass != 0 ||
 		    interface->bInterfaceProtocol != 0 ||
@@ -542,18 +542,18 @@ static int acm_probe(struct usb_device *dev)
 		acm->dev=dev;
 		dev->private=acm;
 
-		acm->readendp=dev->config[cfgnum].altsetting[0].interface[1].endpoint[0].bEndpointAddress;
+		acm->readendp=dev->config[cfgnum].interface[1].altsetting[0].endpoint[0].bEndpointAddress;
 		acm->readpipe=usb_rcvbulkpipe(dev,acm->readendp);
-		acm->readbuffer=kmalloc(acm->readsize=dev->config[cfgnum].altsetting[0].interface[1].endpoint[0].wMaxPacketSize,GFP_KERNEL);
+		acm->readbuffer=kmalloc(acm->readsize=dev->config[cfgnum].interface[1].altsetting[0].endpoint[0].wMaxPacketSize,GFP_KERNEL);
 		acm->reading=0;
 		if (!acm->readbuffer) {
 			printk("ACM: Couldn't allocate readbuffer\n");
 			return -1;
 		}
 		
-		acm->writeendp=dev->config[cfgnum].altsetting[0].interface[1].endpoint[1].bEndpointAddress;
+		acm->writeendp=dev->config[cfgnum].interface[1].altsetting[0].endpoint[1].bEndpointAddress;
 		acm->writepipe=usb_sndbulkpipe(dev,acm->writeendp);
-		acm->writebuffer=kmalloc(acm->writesize=dev->config[cfgnum].altsetting[0].interface[1].endpoint[1].wMaxPacketSize, GFP_KERNEL);
+		acm->writebuffer=kmalloc(acm->writesize=dev->config[cfgnum].interface[1].altsetting[0].endpoint[1].wMaxPacketSize, GFP_KERNEL);
 		acm->writing=0;
 		if (!acm->writebuffer) {
 			printk("ACM: Couldn't allocate writebuffer\n");
@@ -561,11 +561,11 @@ static int acm_probe(struct usb_device *dev)
 			return -1;
 		}
 		
-		acm->ctrlendp=dev->config[cfgnum].altsetting[0].interface[0].endpoint[0].bEndpointAddress;
+		acm->ctrlendp=dev->config[cfgnum].interface[0].altsetting[0].endpoint[0].bEndpointAddress;
 		acm->ctrlpipe=usb_rcvctrlpipe(acm->dev,acm->ctrlendp);
-		acm->ctrlinterval=dev->config[cfgnum].altsetting[0].interface[0].endpoint[0].bInterval;
+		acm->ctrlinterval=dev->config[cfgnum].interface[0].altsetting[0].endpoint[0].bInterval;
 
-		acm->present=1;				
+		acm->present=1;
 		MOD_INC_USE_COUNT;
 		return 0;
 	}

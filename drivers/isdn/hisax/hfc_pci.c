@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.13 1999/08/11 21:01:28 keil Exp $
+/* $Id: hfc_pci.c,v 1.16 1999/08/25 17:01:27 keil Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -23,6 +23,18 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: hfc_pci.c,v $
+ * Revision 1.16  1999/08/25 17:01:27  keil
+ * Use new LL->HL auxcmd call
+ *
+ * Revision 1.15  1999/08/22 20:27:05  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
+ * Revision 1.14  1999/08/12 18:59:45  werner
+ * Added further manufacturer and device ids to PCI list
+ *
  * Revision 1.13  1999/08/11 21:01:28  keil
  * new PCI codefix
  *
@@ -80,20 +92,33 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.13 $";
+static const char *hfcpci_revision = "$Revision: 1.16 $";
 
-static const int CCD_VENDOR_IDS[] = { 
-	0x1043,   /* Asuscom  */
-	0x1051,   /* Motorola MC145575 */
-        0x1397,   /* CCD and Billion */
-	0,
-};
+/* table entry in the PCI devices list */
+typedef struct {
+  int vendor_id; 
+  int device_id;
+  char *vendor_name;
+  char *card_name;
+  } PCI_ENTRY;
 
-static const int CCD_DEVICE_IDS[] = { 
-	0x675,    /* Asuscom  */
-	0x100,    /* Motorola MC145575 */
-        0x2BD0,   /* CCD and Billion */
-	0,
+static const PCI_ENTRY id_list[] = {
+  {0x1397,0x2BD0,"CCD/Billion/Asuscom","2BD0"},
+  {0x1397,0xB000,"Billion","B000"},
+  {0x1397,0xB006,"Billion","B006"},
+  {0x1397,0xB007,"Billion","B007"},
+  {0x1397,0xB008,"Billion","B008"},
+  {0x1397,0xB009,"Billion","B009"},
+  {0x1397,0xB00A,"Billion","B00A"},
+  {0x1397,0xB00B,"Billion","B00B"},
+  {0x1397,0xB00C,"Billion","B00C"},
+  {0x1043,0x0675,"Asuscom/Askey","675"},
+  {0x0871,0xFFA2,"German telekom","T-Concept"},
+  {0x0871,0xFFA1,"German telekom","A1T"},
+  {0x1051,0x0100,"Motorola MC145575","MC145575"},
+  {0x1397,0xB100,"Seyeon","B100"},
+  {0x15B0,0x2BD0,"Zoltrix","2BD0"},
+  {0,0,NULL,NULL},      
 };
 
 
@@ -618,9 +643,12 @@ hfcpci_fill_fifo(struct BCState *bcs)
 /***********************/
 /* set/reset echo mode */
 /***********************/ 
-int hfcpci_set_echo(struct IsdnCardState *cs, int i)
-{ int flags;
-
+static int
+hfcpci_auxcmd(struct IsdnCardState *cs, isdn_ctrl *ic)
+{
+  int flags;
+  int i = *(unsigned int *) ic->parm.num;
+  
   if (cs->chanlimit > 1)
     return(-EINVAL);
 
@@ -651,7 +679,7 @@ int hfcpci_set_echo(struct IsdnCardState *cs, int i)
   Write_hfc(cs, HFCPCI_INT_M1, cs->hw.hfcpci.int_m1);
   restore_flags(flags);
   return(0);
-} /* hfcpci_set_echo */ 
+} /* hfcpci_auxcmd */ 
 
 /*****************************/
 /* E-channel receive routine */
@@ -1476,9 +1504,9 @@ __initfunc(int
 			return (0);
 		}
 		i = 0;
-                while (CCD_VENDOR_IDS[i]) {
-		  tmp_hfcpci = pci_find_device(CCD_VENDOR_IDS[i],
-					       CCD_DEVICE_IDS[i],
+                while (id_list[i].vendor_id) {
+		  tmp_hfcpci = pci_find_device(id_list[i].vendor_id,
+					       id_list[i].device_id,
 					       dev_hfcpci);
 		  if (tmp_hfcpci) break;
 		  i++;
@@ -1494,6 +1522,7 @@ __initfunc(int
 				return (0);
 			}
 			cs->hw.hfcpci.pci_io = (char *) get_pcibase(dev_hfcpci, 1);
+			printk(KERN_INFO "HiSax: HFC-PCI card manufacturer: %s card name: %s\n",id_list[i].vendor_name,id_list[i].card_name);
 		} else {
 			printk(KERN_WARNING "HFC-PCI: No PCI card found\n");
 			return (0);
@@ -1503,14 +1532,14 @@ __initfunc(int
 			unsigned char irq;
 
 			i = 0;
-                        while (CCD_VENDOR_IDS[i]) {
-			  if (pcibios_find_device(CCD_VENDOR_IDS[i],
-						  CCD_DEVICE_IDS[i], pci_index,
+                        while (id_list[i].vendor_id) {
+			  if (pcibios_find_device(id_list[i].vendor_id,
+						  id_list[i].device_id, pci_index,
 						  &cs->hw.hfcpci.pci_bus, &cs->hw.hfcpci.pci_device_fn) == 0) 
 			    break;
 			  i++;
 			}
-			if (!CCD_VENDOR_IDS[i]) 
+			if (!id_list[i].vendor_id) 
 			  continue;
 
 			pcibios_read_config_byte(cs->hw.hfcpci.pci_bus, cs->hw.hfcpci.pci_device_fn,
@@ -1520,6 +1549,7 @@ __initfunc(int
 			pcibios_read_config_dword(cs->hw.hfcpci.pci_bus,
 				cs->hw.hfcpci.pci_device_fn, PCI_BASE_ADDRESS_1,
 				(void *) &cs->hw.hfcpci.pci_io);
+			printk(KERN_INFO "HiSax: HFC-PCI card manufacturer: %s card name: %s\n",id_list[i].vendor_name,id_list[i].card_name);
 			break;
 		}
 		if (pci_index == 255) {
@@ -1577,6 +1607,7 @@ __initfunc(int
 
 	reset_hfcpci(cs);
 	cs->cardmsg = &hfcpci_card_msg;
+	cs->auxcmd  = &hfcpci_auxcmd;
 	return (1);
 #else
 	printk(KERN_WARNING "HFC-PCI: NO_PCI_BIOS\n");

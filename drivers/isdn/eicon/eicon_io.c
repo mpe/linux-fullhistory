@@ -1,4 +1,4 @@
-/* $Id: eicon_io.c,v 1.2 1999/07/25 15:12:05 armin Exp $
+/* $Id: eicon_io.c,v 1.4 1999/08/22 20:26:47 calle Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  * Code for communicating with hardware.
@@ -24,6 +24,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_io.c,v $
+ * Revision 1.4  1999/08/22 20:26:47  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
+ * Revision 1.3  1999/08/18 20:17:01  armin
+ * Added XLOG function for all cards.
+ * Bugfix of alloc_skb NULL pointer.
+ *
  * Revision 1.2  1999/07/25 15:12:05  armin
  * fix of some debug logs.
  * enabled ISA-cards option.
@@ -61,7 +71,7 @@ eicon_io_rcv_dispatch(eicon_card *ccard) {
 						/* doesn't matter if this happens */ 
 						break;
 					default: 
-						printk(KERN_ERR "idi: Indication for unknown channel Ind=%d Id=%d\n", ind->Ind, ind->IndId);
+						printk(KERN_ERR "idi: Indication for unknown channel Ind=%d Id=%x\n", ind->Ind, ind->IndId);
 						printk(KERN_DEBUG "idi_hdl: Ch??: Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
 							ind->Ind,ind->IndId,ind->IndCh,ind->MInd,ind->MLength,ind->RBuffer.length);
 				}
@@ -89,12 +99,18 @@ eicon_io_rcv_dispatch(eicon_card *ccard) {
 				if (DebugVar & 1)
 	                		printk(KERN_ERR "eicon: buffer incomplete, but 0 in queue\n");
 	                	dev_kfree_skb(skb);
-	                	dev_kfree_skb(skb2);
 				continue;	
 			}
 	        	ind2 = (eicon_IND *)skb2->data;
 			skb_new = alloc_skb(((sizeof(eicon_IND)-1)+ind->RBuffer.length+ind2->RBuffer.length),
 					GFP_ATOMIC);
+			if (!skb_new) {
+				if (DebugVar & 1)
+	                		printk(KERN_ERR "eicon_io: skb_alloc failed in rcv_dispatch()\n");
+	                	dev_kfree_skb(skb);
+	                	dev_kfree_skb(skb2);
+				continue;	
+			}
 			ind_new = (eicon_IND *)skb_put(skb_new,
 					((sizeof(eicon_IND)-1)+ind->RBuffer.length+ind2->RBuffer.length));
 			ind_new->Ind = ind2->Ind;
@@ -277,6 +293,92 @@ void ram_copytocard(eicon_card *card, void *adrto, void *adr, int len) {
 }
 
 /*
+ * XLOG
+ */
+int
+eicon_get_xlog(eicon_card *card, xlogreq_t *xlogreq)
+{
+	int timeout, i;
+	int divas_shared_offset = 0;
+	int len = 0;
+	int stype = 0;
+	__u32 time = 0;
+	mi_pc_maint_t	*pcm = &xlogreq->pcm;
+        eicon_pci_card *pci_card = &card->hwif.pci;
+        eicon_isa_card *isa_card = &card->hwif.isa;
+	eicon_pr_ram  *prram = 0;
+        char *ram;
+
+	switch(card->type) {
+		case EICON_CTYPE_MAESTRAP:
+			ram = (char *)pci_card->PCIram;
+			prram = (eicon_pr_ram *)ram;
+			divas_shared_offset = DIVAS_SHARED_OFFSET;
+			len = sizeof(mi_pc_maint_t);
+			break;
+		case EICON_CTYPE_MAESTRA:
+			prram = 0;
+			divas_shared_offset = 0;
+			len = sizeof(mi_pc_maint_t);
+			break;
+		case EICON_CTYPE_S:
+		case EICON_CTYPE_SX:
+		case EICON_CTYPE_SCOM:
+		case EICON_CTYPE_QUADRO:
+		case EICON_CTYPE_S2M:
+			prram = (eicon_pr_ram *)isa_card->shmem;
+			divas_shared_offset = 0xfb80;
+			len = sizeof(mi_pc_maint_t) - 78;
+			stype = 1;
+			break;
+		default:
+			return -ENODEV;
+	}
+
+        memset(&(xlogreq->pcm), 0, sizeof(mi_pc_maint_t));
+
+        xlogreq->pcm.rc = 0;
+        xlogreq->pcm.req = 1; /* DO_LOG */
+
+        ram = ((char *)prram) + MIPS_MAINT_OFFS - divas_shared_offset;
+
+	ram_outb(card, ram+1, pcm->rc); 
+	ram_outb(card, ram+0, pcm->req); 
+
+        timeout = jiffies + 50;
+        while (timeout > jiffies) {
+		pcm->rc = ram_inb(card, ram+1);
+		pcm->req = ram_inb(card, ram+0);
+                if (!pcm->req) break;
+                SLEEP(10);
+        }
+
+	if (pcm->req) {
+		return XLOG_ERR_TIMEOUT;
+	}
+
+	if (pcm->rc != OK) {
+		return XLOG_ERR_DONE;
+	}
+	
+	ram_copyfromcard(card, pcm, ram, len);
+
+	if (stype) {
+		for (i=0; i<8; i++)
+			((__u8 *)pcm)[11-i] = ((__u8 *)pcm)[9-i];
+		time =	(__u32)pcm->data.w[2] * 3600 	* 1000 +
+			(__u32)pcm->data.w[1] 		* 1000 +
+			(__u32)pcm->data.b[1] 		* 20 +
+			(__u32)pcm->data.b[0]		;
+		pcm->data.w[1] = (__u16) (time >> 16);
+		pcm->data.w[2] = (__u16) (time & 0x0000ffff);
+		pcm->data.w[0] = 2;
+	}
+
+	return XLOG_OK;
+}
+
+/*
  *  Transmit-Function
  */
 void
@@ -373,9 +475,13 @@ eicon_io_transmit(eicon_card *ccard) {
 		chan = chan2->ptr;
 		if (!chan->e.busy) {
 		 if((skb = skb_dequeue(&chan->e.X))) { 
-                	save_flags(flags);
-	                cli();
-			reqbuf = (eicon_REQ *)skb->data;
+		  save_flags(flags);
+		  cli();
+		  reqbuf = (eicon_REQ *)skb->data;
+		  if ((reqbuf->Reference) && (chan->e.B2Id == 0) && (reqbuf->ReqId & 0x1f)) {
+			if (DebugVar & 16)
+				printk(KERN_WARNING "eicon: transmit: error Id=0 on %d (Net)\n", chan->No); 
+		  } else {
 			if (scom) {
 				ram_outw(ccard, &com->XBuffer.length, reqbuf->XBuffer.length);
 				ram_copytocard(ccard, &com->XBuffer.P, &reqbuf->XBuffer.P, reqbuf->XBuffer.length);
@@ -390,7 +496,7 @@ eicon_io_transmit(eicon_card *ccard) {
 				ram_outb(ccard, &ReqOut->Req, reqbuf->Req); 
 			}
 
-			if (reqbuf->ReqId &0x1f) { /* if this is no ASSIGN */
+			if (reqbuf->ReqId & 0x1f) { /* if this is no ASSIGN */
 
 				if (!reqbuf->Reference) { /* Signal Layer */
 					if (scom)
@@ -439,14 +545,15 @@ eicon_io_transmit(eicon_card *ccard) {
 				ram_outw(ccard, &prram->NextReq, ram_inw(ccard, &ReqOut->next)); 
 
 			chan->e.busy = 1; 
-			restore_flags(flags);
 			if (DebugVar & 32)
 	                	printk(KERN_DEBUG "eicon: Req=%d Id=%x Ch=%d Len=%d Ref=%d\n", 
 							reqbuf->Req, 
 							ram_inb(ccard, &ReqOut->ReqId),
 							reqbuf->ReqCh, reqbuf->XBuffer.length,
 							chan->e.ref); 
-			dev_kfree_skb(skb);
+		  }
+		  restore_flags(flags);
+		  dev_kfree_skb(skb);
 		 }
 		 dev_kfree_skb(skb2);
 		} 
@@ -636,16 +743,21 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 			}
 		} else {
 			skb = alloc_skb(sizeof(eicon_RC), GFP_ATOMIC);
-			ack = (eicon_RC *)skb_put(skb, sizeof(eicon_RC));
-			ack->Rc = tmp;
-			ack->RcId = ram_inb(ccard, &com->RcId);
-			ack->RcCh = ram_inb(ccard, &com->RcCh);
-			ack->Reference = ccard->ref_in++;
-			if (DebugVar & 64)
-                        	printk(KERN_INFO "eicon: IRQ Rc=%d Id=%x Ch=%d Ref=%d\n",
-					tmp,ack->RcId,ack->RcCh,ack->Reference);
-			skb_queue_tail(&ccard->rackq, skb);
-			eicon_schedule_ack(ccard);
+			if (!skb) {
+				if (DebugVar & 1)
+	                		printk(KERN_ERR "eicon_io: skb_alloc failed in _irq()\n");
+			} else {
+				ack = (eicon_RC *)skb_put(skb, sizeof(eicon_RC));
+				ack->Rc = tmp;
+				ack->RcId = ram_inb(ccard, &com->RcId);
+				ack->RcCh = ram_inb(ccard, &com->RcCh);
+				ack->Reference = ccard->ref_in++;
+				if (DebugVar & 64)
+                	        	printk(KERN_INFO "eicon: IRQ Rc=%d Id=%x Ch=%d Ref=%d\n",
+						tmp,ack->RcId,ack->RcCh,ack->Reference);
+				skb_queue_tail(&ccard->rackq, skb);
+				eicon_schedule_ack(ccard);
+			}
 			ram_outb(ccard, &com->Req, 0);
 			ram_outb(ccard, &com->Rc, 0);
 		}
@@ -657,19 +769,24 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 			eicon_IND *ind;
 			int len = ram_inw(ccard, &com->RBuffer.length);
 			skb = alloc_skb((sizeof(eicon_IND) + len - 1), GFP_ATOMIC);
-			ind = (eicon_IND *)skb_put(skb, (sizeof(eicon_IND) + len - 1));
-			ind->Ind = tmp;
-			ind->IndId = ram_inb(ccard, &com->IndId);
-			ind->IndCh = ram_inb(ccard, &com->IndCh);
-			ind->MInd  = ram_inb(ccard, &com->MInd);
-			ind->MLength = ram_inw(ccard, &com->MLength);
-			ind->RBuffer.length = len; 
-			if (DebugVar & 64)
-                        	printk(KERN_INFO "eicon: IRQ Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
-				tmp,ind->IndId,ind->IndCh,ind->MInd,ind->MLength,len);
-			ram_copyfromcard(ccard, &ind->RBuffer.P, &com->RBuffer.P, len);
-			skb_queue_tail(&ccard->rcvq, skb);
-			eicon_schedule_rx(ccard);
+			if (!skb) {
+				if (DebugVar & 1)
+	                		printk(KERN_ERR "eicon_io: skb_alloc failed in _irq()\n");
+			} else {
+				ind = (eicon_IND *)skb_put(skb, (sizeof(eicon_IND) + len - 1));
+				ind->Ind = tmp;
+				ind->IndId = ram_inb(ccard, &com->IndId);
+				ind->IndCh = ram_inb(ccard, &com->IndCh);
+				ind->MInd  = ram_inb(ccard, &com->MInd);
+				ind->MLength = ram_inw(ccard, &com->MLength);
+				ind->RBuffer.length = len; 
+				if (DebugVar & 64)
+                        		printk(KERN_INFO "eicon: IRQ Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
+					tmp,ind->IndId,ind->IndCh,ind->MInd,ind->MLength,len);
+				ram_copyfromcard(ccard, &ind->RBuffer.P, &com->RBuffer.P, len);
+				skb_queue_tail(&ccard->rcvq, skb);
+				eicon_schedule_rx(ccard);
+			}
 			ram_outb(ccard, &com->Ind, 0);
 		}
 	}
@@ -686,17 +803,22 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 
                         if((Rc=ram_inb(ccard, &RcIn->Rc))) {
 				skb = alloc_skb(sizeof(eicon_RC), GFP_ATOMIC);
-				ack = (eicon_RC *)skb_put(skb, sizeof(eicon_RC));
-				ack->Rc = Rc;
-				ack->RcId = ram_inb(ccard, &RcIn->RcId);
-				ack->RcCh = ram_inb(ccard, &RcIn->RcCh);
-				ack->Reference = ram_inw(ccard, &RcIn->Reference);
-				if (DebugVar & 64)
-	                        	printk(KERN_INFO "eicon: IRQ Rc=%d Id=%x Ch=%d Ref=%d\n",
-						Rc,ack->RcId,ack->RcCh,ack->Reference);
-                        	ram_outb(ccard, &RcIn->Rc, 0);
-				 skb_queue_tail(&ccard->rackq, skb);
-				 eicon_schedule_ack(ccard);
+				if (!skb) {
+					if (DebugVar & 1)
+	                			printk(KERN_ERR "eicon_io: skb_alloc failed in _irq()\n");
+				} else {
+					ack = (eicon_RC *)skb_put(skb, sizeof(eicon_RC));
+					ack->Rc = Rc;
+					ack->RcId = ram_inb(ccard, &RcIn->RcId);
+					ack->RcCh = ram_inb(ccard, &RcIn->RcCh);
+					ack->Reference = ram_inw(ccard, &RcIn->Reference);
+					if (DebugVar & 64)
+	        	                	printk(KERN_INFO "eicon: IRQ Rc=%d Id=%x Ch=%d Ref=%d\n",
+							Rc,ack->RcId,ack->RcCh,ack->Reference);
+					skb_queue_tail(&ccard->rackq, skb);
+					eicon_schedule_ack(ccard);
+				}
+                       		ram_outb(ccard, &RcIn->Rc, 0);
                         }
                         /* get buffer address of next return code   */
                         RcIn = (eicon_RC *)&prram->B[ram_inw(ccard, &RcIn->next)];
@@ -716,19 +838,24 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 			if(Ind) {
 				int len = ram_inw(ccard, &IndIn->RBuffer.length);
 				skb = alloc_skb((sizeof(eicon_IND) + len - 1), GFP_ATOMIC);
-				ind = (eicon_IND *)skb_put(skb, (sizeof(eicon_IND) + len - 1));
-				ind->Ind = Ind;
-				ind->IndId = ram_inb(ccard, &IndIn->IndId);
-				ind->IndCh = ram_inb(ccard, &IndIn->IndCh);
-				ind->MInd  = ram_inb(ccard, &IndIn->MInd);
-				ind->MLength = ram_inw(ccard, &IndIn->MLength);
-				ind->RBuffer.length = len;
-				if (DebugVar & 64)
-	                        	printk(KERN_INFO "eicon: IRQ Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
-					Ind,ind->IndId,ind->IndCh,ind->MInd,ind->MLength,len);
-                                ram_copyfromcard(ccard, &ind->RBuffer.P, &IndIn->RBuffer.P, len);
-				skb_queue_tail(&ccard->rcvq, skb);
-				eicon_schedule_rx(ccard);
+				if (!skb) {
+					if (DebugVar & 1)
+	                			printk(KERN_ERR "eicon_io: skb_alloc failed in _irq()\n");
+				} else {
+					ind = (eicon_IND *)skb_put(skb, (sizeof(eicon_IND) + len - 1));
+					ind->Ind = Ind;
+					ind->IndId = ram_inb(ccard, &IndIn->IndId);
+					ind->IndCh = ram_inb(ccard, &IndIn->IndCh);
+					ind->MInd  = ram_inb(ccard, &IndIn->MInd);
+					ind->MLength = ram_inw(ccard, &IndIn->MLength);
+					ind->RBuffer.length = len;
+					if (DebugVar & 64)
+	                	        	printk(KERN_INFO "eicon: IRQ Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
+						Ind,ind->IndId,ind->IndCh,ind->MInd,ind->MLength,len);
+	                                ram_copyfromcard(ccard, &ind->RBuffer.P, &IndIn->RBuffer.P, len);
+					skb_queue_tail(&ccard->rcvq, skb);
+					eicon_schedule_rx(ccard);
+				}
 				ram_outb(ccard, &IndIn->Ind, 0);
                         }
                         /* get buffer address of next indication  */

@@ -35,7 +35,7 @@
 
 struct semaphore {
 	atomic_t count;
-	int waking;
+	int sleepers;
 	wait_queue_head_t wait;
 #if WAITQUEUE_DEBUG
 	long __magic;
@@ -71,7 +71,7 @@ extern inline void sema_init (struct semaphore *sem, int val)
  * GCC 2.7.2.3 emits a bogus warning. EGCS doesnt. Oh well.
  */
 	atomic_set(&sem->count, val);
-	sem->waking = 0;
+	sem->sleepers = 0;
 	init_waitqueue_head(&sem->wait);
 #if WAITQUEUE_DEBUG
 	sem->__magic = (int)&sem->__magic;

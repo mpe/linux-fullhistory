@@ -34,7 +34,7 @@ cdrom/
 cpqarray.txt
 	- info on using Compaq's SMART2 Intelligent Disk Array Controllers.
 devices.tex
-	- TeX source listing of all the nodes in /dev/ with major minor #'s
+	- LaTeX source listing of all the nodes in /dev/ with major minor #'s
 devices.txt
 	- plain ASCII listing of all the nodes in /dev/ with major minor #'s
 digiboard.txt
@@ -138,7 +138,7 @@ sgi-visws.txt
 smart-config.txt
 	- description of the Smart Config makefile feature.
 smp.tex
-	- TeX document describing implementation of Multiprocessor Linux
+	- LaTeX document describing implementation of Multiprocessor Linux
 smp.txt
 	- a few more notes on symmetric multi-processing
 sound/

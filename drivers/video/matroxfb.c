@@ -5152,7 +5152,10 @@ static unsigned int fv = 0;		/* "matrox:fv:xxxxx" */
 static unsigned int fh = 0;		/* "matrox:fh:xxxxxk" */
 static unsigned int maxclk = 0;		/* "matrox:maxclk:xxxxM" */
 static char fontname[64];		/* "matrox:font:xxxxx" */
+
+#ifndef MODULE
 static char videomode[64];		/* "matrox:mode:xxxxx" or "matrox:xxxxx" */
+#endif
 
 #ifndef MODULE
 int __init matroxfb_setup(char *options) {
@@ -5295,7 +5298,7 @@ int __init matroxfb_setup(char *options) {
 	}
 	return 0;
 }
-#endif
+#endif /* !MODULE */
 
 static int matroxfb_getmemory(WPMINFO unsigned int maxSize, unsigned int* realOffset, unsigned int *realSize){
 	vaddr_t vm;
@@ -5884,7 +5887,7 @@ static int __init initMatrox2(WPMINFO struct display* d, struct board* b){
 		fb_find_mode(&vesafb_defined, &ACCESS_FBINFO(fbcon), videomode[0]?videomode:NULL,
 		NULL, 0, &defaultmode, vesafb_defined.bits_per_pixel);
 	}
-#endif
+#endif /* !MODULE */
 
 	/* mode modifiers */
 	if (hslen)

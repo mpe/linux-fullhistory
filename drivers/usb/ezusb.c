@@ -31,7 +31,6 @@
 
 /*****************************************************************************/
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/socket.h>
 #include <asm/uaccess.h>
@@ -68,9 +67,9 @@ struct isodesc {
 	void *hcbuf[2];
 	void *hcisodesc[2];
 	unsigned char *buf;
-};	
+};     
 
-#define ISOFLG_ACTIVE  (1<<0)
+#define ISOFLG_ACTIVE	(1<<0)
 
 /* --------------------------------------------------------------------- */
 
@@ -231,7 +230,7 @@ static void iso_schedrcv(struct isodesc *isodesc)
 	unsigned diff;
 
 	if (!(isodesc->flags & ISOFLG_ACTIVE))
-	    return;
+		return;
 	diff = (isodesc->buflen - 1 + isodesc->rd - isodesc->wr) % isodesc->buflen;
 	if (diff < isodesc->framesperint * isodesc->pktsz)
 		return;
@@ -249,9 +248,9 @@ static void iso_schedsnd(struct isodesc *isodesc)
 {
 	unsigned diff, bcnt, x;
 	unsigned char *p1, *p2;
-	
+
 	if (!(isodesc->flags & ISOFLG_ACTIVE))
-	    return;
+		return;
 	for (;;) {
 		diff = (isodesc->schedcnt - isodesc->unschedcnt) & 3;
 		if (diff >= 2)
@@ -646,7 +645,7 @@ static int ezusb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		else
 			iso_schedsnd(isodesc);
 		spin_unlock_irqrestore(&isodesc->lock, flags);
-				up(&ez->mutex);
+		up(&ez->mutex);
 		return 0;
 	}
 	return -ENOIOCTLCMD;

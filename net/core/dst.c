@@ -190,7 +190,7 @@ struct notifier_block dst_dev_notifier = {
 	0
 };
 
-__initfunc(void dst_init(void))
+void __init dst_init(void)
 {
 	register_netdevice_notifier(&dst_dev_notifier);
 }

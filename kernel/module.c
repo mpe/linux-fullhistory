@@ -57,7 +57,7 @@ static void free_module(struct module *, int tag_freed);
  * Called at boot time
  */
 
-__initfunc(void init_modules(void))
+void __init init_modules(void)
 {
 	kernel_module.nsyms = __stop___ksymtab - __start___ksymtab;
 

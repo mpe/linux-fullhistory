@@ -3,7 +3,6 @@
 /* Written 1996,1997 by Werner Almesberger, EPFL LRC */
 
 
-#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>

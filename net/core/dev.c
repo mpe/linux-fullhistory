@@ -1996,7 +1996,7 @@ static struct proc_dir_entry proc_net_wireless = {
 #endif	/* CONFIG_PROC_FS */
 #endif	/* CONFIG_NET_RADIO */
 
-__initfunc(int net_dev_init(void))
+int __init net_dev_init(void)
 {
 	struct net_device *dev, **dp;
 

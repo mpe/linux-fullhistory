@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.h,v 1.15 1999/07/31 12:59:48 armin Exp $
+/* $Id: isdn_tty.h,v 1.16 1999/08/22 20:26:10 calle Exp $
 
  * header for Linux ISDN subsystem, tty related functions (linklevel).
  *
@@ -20,6 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_tty.h,v $
+ * Revision 1.16  1999/08/22 20:26:10  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.15  1999/07/31 12:59:48  armin
  * Added tty fax capabilities.
  *

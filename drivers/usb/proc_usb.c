@@ -213,7 +213,7 @@ static int usb_dump_config (const struct usb_config_descriptor *config,
 				const int active, char *buf, int *len)
 {
 	int i, j;
-	struct usb_interface *intf;
+	struct usb_interface *interface;
 
 	if (!config) {		/* getting these some in 2.3.7; none in 2.3.6 */
 		*len += sprintf (buf + *len, "(null Cfg. desc.)\n");
@@ -224,12 +224,12 @@ static int usb_dump_config (const struct usb_config_descriptor *config,
 		return -1;
 
 	for (i = 0; i < config->bNumInterfaces; i++) {
-		intf = config->interface + i;
-		if ((intf) == NULL)
+		interface = config->interface + i;
+		if (!interface)
 			break;
 
-		for (j = 0; j < intf->num_altsetting; j++)
-			if (usb_dump_interface (intf->altsetting + j, buf, len) < 0)
+		for (j = 0; j < interface->num_altsetting; j++)
+			if (usb_dump_interface (interface->altsetting + j, buf, len) < 0)
 				return -1;
 	}
 
@@ -432,6 +432,250 @@ static int usb_driver_list_dump (char *buf, char **start, off_t offset,
 		len += sprintf (buf + len, "(none)\n");
 	return (len);
 }
+
+/*
+ * proc entry for every device
+ * sailer@ife.ee.ethz.ch
+ */
+#include <linux/bitops.h>
+#include <asm/uaccess.h>
+#include <linux/mm.h>
+#include "ezusb.h"
+
+static long long usbdev_lseek(struct file * file, long long offset, int orig)
+{
+	switch (orig) {
+	case 0:
+		file->f_pos = offset;
+		return file->f_pos;
+
+	case 1:
+		file->f_pos += offset;
+		return file->f_pos;
+
+	case 2:
+		return -EINVAL;
+
+	default:
+		return -EINVAL;
+	}
+}
+
+static ssize_t usbdev_read(struct file * file, char * buf, size_t nbytes, loff_t *ppos)
+{
+        struct inode *inode = file->f_dentry->d_inode;
+	struct proc_dir_entry *dp = (struct proc_dir_entry *)inode->u.generic_ip;
+	struct usb_device *dev = (struct usb_device *)dp->data;
+	ssize_t ret = 0;
+	unsigned len;
+
+	if (*ppos < 0)
+		return -EINVAL;
+	if (*ppos < sizeof(struct usb_device_descriptor)) {
+		len = sizeof(struct usb_device_descriptor);
+		if (len > nbytes)
+			len = nbytes;
+		copy_to_user_ret(buf, ((char *)&dev->descriptor) + *ppos, len, -EFAULT);
+		*ppos += len;
+		buf += len;
+		nbytes -= len;
+		ret += len;
+	}
+	return ret;
+}
+
+static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct proc_dir_entry *dp = (struct proc_dir_entry *)inode->u.generic_ip;
+	struct usb_device *dev = (struct usb_device *)dp->data;
+	struct ezusb_ctrltransfer ctrl;
+	struct ezusb_bulktransfer bulk;
+	struct ezusb_setinterface setintf;
+	unsigned int len1, ep, pipe;
+	unsigned long len2;
+	unsigned char *tbuf;
+	int i;
+
+	switch (cmd) {
+	case EZUSB_CONTROL:
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		copy_from_user_ret(&ctrl, (void *)arg, sizeof(ctrl), -EFAULT);
+		if (ctrl.dlen > PAGE_SIZE)
+			return -EINVAL;
+		if (!(tbuf = (unsigned char *)__get_free_page(GFP_KERNEL)))
+			return -ENOMEM;
+		if (ctrl.requesttype & 0x80) {
+			if (ctrl.dlen && !access_ok(VERIFY_WRITE, ctrl.data, ctrl.dlen)) {
+				free_page((unsigned long)tbuf);
+				return -EINVAL;
+			}
+			i = dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev, 0), (devrequest *)&ctrl, tbuf, ctrl.dlen);
+			if (!i && ctrl.dlen) {
+				copy_to_user_ret(ctrl.data, tbuf, ctrl.dlen, -EFAULT);
+			}
+		} else {
+			if (ctrl.dlen) {
+				copy_from_user_ret(tbuf, ctrl.data, ctrl.dlen, -EFAULT);
+			}
+			i = dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), (devrequest *)&ctrl, tbuf, ctrl.dlen);
+		}
+		free_page((unsigned long)tbuf);
+		if (i) {
+			printk(KERN_WARNING "procusb: EZUSB_CONTROL failed rqt %u rq %u len %u ret %d\n", 
+			       ctrl.requesttype, ctrl.request, ctrl.length, i);
+			return -ENXIO;
+		}
+		return 0;
+
+	case EZUSB_BULK:
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		copy_from_user_ret(&bulk, (void *)arg, sizeof(bulk), -EFAULT);
+		if (bulk.ep & 0x80)
+			pipe = usb_rcvbulkpipe(dev, bulk.ep & 0x7f);
+		else
+			pipe = usb_sndbulkpipe(dev, bulk.ep & 0x7f);
+		if (!usb_maxpacket(dev, pipe, !(bulk.ep & 0x80)))
+			return -EINVAL;
+		len1 = bulk.len;
+		if (len1 > PAGE_SIZE)
+			len1 = PAGE_SIZE;
+		if (!(tbuf = (unsigned char *)__get_free_page(GFP_KERNEL)))
+			return -ENOMEM;
+		if (bulk.ep & 0x80) {
+			if (len1 && !access_ok(VERIFY_WRITE, bulk.data, len1)) {
+				free_page((unsigned long)tbuf);
+				return -EINVAL;
+			}
+			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2);
+			if (!i && len2) {
+				copy_to_user_ret(bulk.data, tbuf, len2, -EFAULT);
+			}
+		} else {
+			if (len1) {
+				copy_from_user_ret(tbuf, bulk.data, len1, -EFAULT);
+			}
+			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2);
+		}
+		free_page((unsigned long)tbuf);
+		if (i) {
+			printk(KERN_WARNING "procusb: EZUSB_BULK failed ep 0x%x len %u ret %d\n", 
+			       bulk.ep, bulk.len, i);
+			return -ENXIO;
+		}
+		return len2;
+
+	case EZUSB_RESETEP:
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		get_user_ret(ep, (unsigned int *)arg, -EFAULT);
+		if ((ep & ~0x80) >= 16)
+			return -EINVAL;
+		usb_settoggle(dev, ep & 0xf, !(ep & 0x80), 0);
+		return 0;
+
+	case EZUSB_SETINTERFACE:
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		copy_from_user_ret(&setintf, (void *)arg, sizeof(setintf), -EFAULT);
+		if (usb_set_interface(dev, setintf.interface, setintf.altsetting))
+			return -EINVAL;
+		return 0;
+	}
+	return -ENOIOCTLCMD;
+}
+
+static struct file_operations proc_usb_device_file_operations = {
+	usbdev_lseek,    /* lseek   */
+	usbdev_read,     /* read    */
+	NULL,            /* write   */
+	NULL,            /* readdir */
+	NULL,            /* poll    */
+	usbdev_ioctl,    /* ioctl   */
+	NULL,            /* mmap    */
+	NULL,            /* no special open code    */
+	NULL,            /* flush */
+	NULL,            /* no special release code */
+	NULL             /* can't fsync */
+};
+
+static struct inode_operations proc_usb_device_inode_operations = {
+        &proc_usb_device_file_operations,  /* file-ops */
+        NULL,                              /* create       */
+        NULL,                              /* lookup       */
+        NULL,                              /* link         */
+        NULL,                              /* unlink       */
+        NULL,                              /* symlink      */
+        NULL,                              /* mkdir        */
+        NULL,                              /* rmdir        */
+        NULL,                              /* mknod        */
+        NULL,                              /* rename       */
+        NULL,                              /* readlink     */
+        NULL,                              /* follow_link  */
+        NULL,                              /* get_block    */
+        NULL,                              /* readpage     */
+        NULL,                              /* writepage    */
+        NULL,                              /* flushpage    */
+        NULL,                              /* truncate     */
+        NULL,                              /* permission   */
+        NULL,                              /* smap         */
+        NULL                               /* revalidate   */
+};
+
+#define PROCUSB_MAXBUSSES 64
+
+static unsigned long busnumbermap[(PROCUSB_MAXBUSSES+8 * sizeof(unsigned long)-1) / (8 * sizeof(unsigned long))] = { 0, };
+
+void proc_usb_add_bus(struct usb_bus *bus)
+{
+	int bnum;
+	char buf[16];
+
+	bus->proc_busnum = -1;
+	bus->proc_entry = NULL;
+	if (!usbdir)
+		return;
+	bnum = find_first_zero_bit(busnumbermap, PROCUSB_MAXBUSSES);
+	if (bnum >= PROCUSB_MAXBUSSES)
+		return;
+	sprintf(buf, "%03d", bnum);
+	if (!(bus->proc_entry = create_proc_entry(buf, S_IFDIR, usbdir)))
+		return;
+	set_bit(bnum, busnumbermap);
+	bus->proc_busnum = bnum;
+	bus->proc_entry->data = bus;
+}
+
+/* devices need already be removed! */
+void proc_usb_remove_bus(struct usb_bus *bus)
+{
+	if (!bus->proc_entry)
+		return;
+	remove_proc_entry(bus->proc_entry->name, usbdir);
+	clear_bit(bus->proc_busnum, busnumbermap);
+}
+
+void proc_usb_add_device(struct usb_device *dev)
+{
+	char buf[16];
+
+	dev->proc_entry = NULL;
+	if (!dev->bus->proc_entry)
+		return;
+	sprintf(buf, "%03d", dev->devnum);
+	if (!(dev->proc_entry = create_proc_entry(buf, 0, dev->bus->proc_entry)))
+		return;
+	dev->proc_entry->ops = &proc_usb_device_inode_operations;
+	dev->proc_entry->data = dev;
+}
+
+void proc_usb_remove_device(struct usb_device *dev)
+{
+	if (dev->proc_entry)
+		remove_proc_entry(dev->proc_entry->name, dev->bus->proc_entry);
+}
+
 
 void proc_usb_cleanup (void)
 {

@@ -4,6 +4,7 @@
  *
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 
 /* We are ethernet device */
@@ -34,7 +35,6 @@
 #endif
 
 /* Modular too */
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include "lec.h"

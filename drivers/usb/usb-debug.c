@@ -18,24 +18,27 @@ static void usb_show_interface(struct usb_interface_descriptor *altsetting)
 	int i;
 
 	usb_show_interface_descriptor(altsetting);
-	for (i = 0 ; i < altsetting->bNumEndpoints; i++)
+
+	for (i = 0; i < altsetting->bNumEndpoints; i++)
 		usb_show_endpoint(altsetting->endpoint + i);
 }
 
 static void usb_show_config(struct usb_config_descriptor *config)
 {
-  int i, j;
-  struct usb_interface *intf;
+	int i, j;
+	struct usb_interface *ifp;
 
-  usb_show_config_descriptor(config);
-  for (i = 0; i < config->bNumInterfaces; i++) {
-    intf = config->interface + i;
-    if ((intf) == NULL)
-      break;
-    printk("\n  Interface: %d\n", i);
-    for (j = 0 ; j < intf->num_altsetting; j++)
-      usb_show_interface(intf->altsetting + j);
-  }
+	usb_show_config_descriptor(config);
+	for (i = 0; i < config->bNumInterfaces; i++) {
+		ifp = config->interface + i;
+
+		if (!ifp)
+			break;
+
+		printk("\n  Interface: %d\n", i);
+		for (j = 0; j < ifp->num_altsetting; j++)
+			usb_show_interface(ifp->altsetting + j);
+	}
 }
 
 void usb_show_device(struct usb_device *dev)
@@ -46,7 +49,6 @@ void usb_show_device(struct usb_device *dev)
 	for (i = 0; i < dev->descriptor.bNumConfigurations; i++)
 		usb_show_config(dev->config + i);
 }
-
 
 /*
  * Parse and show the different USB descriptors.
@@ -72,10 +74,25 @@ void usb_show_device_descriptor(struct usb_device_descriptor *desc)
 	case 0:
 		printk("    Per-interface classes\n");
 		break;
-	case 9:
+	case USB_CLASS_AUDIO:
+		printk("    Audio device class\n");
+		break;
+	case USB_CLASS_COMM:
+		printk("    Communications class\n");
+		break;
+	case USB_CLASS_HID:
+		printk("    Human Interface Devices class\n");
+		break;
+	case USB_CLASS_PRINTER:
+		printk("    Printer device class\n");
+		break;
+	case USB_CLASS_MASS_STORAGE:
+		printk("    Mass Storage device class\n");
+		break;
+	case USB_CLASS_HUB:
 		printk("    Hub device class\n");
 		break;
-	case 0xff:
+	case USB_CLASS_VENDOR_SPEC:
 		printk("    Vendor class\n");
 		break;
 	default:
@@ -83,7 +100,7 @@ void usb_show_device_descriptor(struct usb_device_descriptor *desc)
 	}
 }
 
-void usb_show_config_descriptor(struct usb_config_descriptor * desc)
+void usb_show_config_descriptor(struct usb_config_descriptor *desc)
 {
 	printk("Configuration:\n");
 	printk("  bLength             = %4d%s\n", desc->bLength,
@@ -97,7 +114,7 @@ void usb_show_config_descriptor(struct usb_config_descriptor * desc)
 	printk("  MaxPower            = %4dmA\n", desc->MaxPower * 2);
 }
 
-void usb_show_interface_descriptor(struct usb_interface_descriptor * desc)
+void usb_show_interface_descriptor(struct usb_interface_descriptor *desc)
 {
 	printk("  Alternate Setting: %2d\n", desc->bAlternateSetting);
 	printk("    bLength             = %4d%s\n", desc->bLength,
@@ -111,15 +128,33 @@ void usb_show_interface_descriptor(struct usb_interface_descriptor * desc)
 	printk("    iInterface          =   %02x\n", desc->iInterface);
 }
 
-void usb_show_endpoint_descriptor(struct usb_endpoint_descriptor * desc)
+void usb_show_hid_descriptor(struct usb_hid_descriptor * desc)
 {
-	char *bLengthCommentString = (USB_DT_AUCLSTEP_SIZE == desc->bLength) ?
-		  " (!Audio)" : " (!!!)";
+	int i;
+    
+	printk("    HID:\n");
+	printk("      HID version %x.%02x\n", desc->bcdHID >> 8, desc->bcdHID & 0xff);
+	printk("      bLength             = %4d\n", desc->bLength);
+	printk("      bDescriptorType     =   %02x\n", desc->bDescriptorType);
+	printk("      bCountryCode        =   %02x\n", desc->bCountryCode);
+	printk("      bNumDescriptors     =   %02x\n", desc->bNumDescriptors);
 
+	for (i=0; i<desc->bNumDescriptors; i++) {
+		printk("        %d:\n", i);
+		printk("            bDescriptorType      =   %02x\n", desc->desc[i].bDescriptorType);
+		printk("            wDescriptorLength    =   %04x\n", desc->desc[i].wDescriptorLength);
+	}
+}
+
+void usb_show_endpoint_descriptor(struct usb_endpoint_descriptor *desc)
+{
+	char *LengthCommentString = (desc->bLength ==
+		USB_DT_ENDPOINT_AUDIO_SIZE) ? " (Audio)" : (desc->bLength ==
+		USB_DT_ENDPOINT_SIZE) ? "" : " (!!!)";
 	char *EndpointType[4] = { "Control", "Isochronous", "Bulk", "Interrupt" };
 	printk("    Endpoint:\n");
 	printk("      bLength             = %4d%s\n", desc->bLength,
-		desc->bLength == USB_DT_ENDPOINT_SIZE ? "" : bLengthCommentString);
+		LengthCommentString);
 	printk("      bDescriptorType     =   %02x\n", desc->bDescriptorType);
 	printk("      bEndpointAddress    =   %02x (%s)\n", desc->bEndpointAddress,
 		(desc->bEndpointAddress & 0x80) ? "in" : "out");
@@ -127,29 +162,19 @@ void usb_show_endpoint_descriptor(struct usb_endpoint_descriptor * desc)
 		EndpointType[3 & desc->bmAttributes]);
 	printk("      wMaxPacketSize      = %04x\n", desc->wMaxPacketSize);
 	printk("      bInterval           =   %02x\n", desc->bInterval);
-	if (USB_DT_AUCLSTEP_SIZE == desc->bLength) {
-		printk("      bRefresh            = %04x\n", desc->bRefresh);
+
+	/* Audio extensions to the endpoint descriptor */
+	if (desc->bLength == USB_DT_ENDPOINT_AUDIO_SIZE) {
+		printk("      bRefresh            =   %02x\n", desc->bRefresh);
 		printk("      bSynchAddress       =   %02x\n", desc->bSynchAddress);
 	}
 }
 
-void usb_show_hub_descriptor(struct usb_hub_descriptor * desc)
-{
-	int len = 7;
-	unsigned char *ptr = (unsigned char *) desc;
-
-	printk("Interface:");
-	while (len) {
-		printk(" %02x", *ptr);
-		ptr++; len--;
-	}
-	printk("\n");
-}
-
-void usb_show_string(struct usb_device* dev, char *id, int index)
+void usb_show_string(struct usb_device *dev, char *id, int index)
 {
 	char *p = usb_string(dev, index);
 
 	if (p != 0)
 		printk(KERN_INFO "%s: %s\n", id, p);
 }
+

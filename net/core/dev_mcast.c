@@ -255,7 +255,7 @@ done:
 }
 #endif
 
-__initfunc(void dev_mcast_init(void))
+void __init dev_mcast_init(void)
 {
 #ifdef CONFIG_PROC_FS
 	struct proc_dir_entry *ent;

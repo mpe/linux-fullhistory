@@ -76,11 +76,12 @@ struct ezusb_isodata {
 	void *data;
 };
 
-#define EZUSB_STARTISO       _IOR('E', 8, struct ezusb_isotransfer)
-#define EZUSB_STOPISO        _IOR('E', 9, unsigned int)
-#define EZUSB_ISODATA        _IOWR('E', 10, struct ezusb_isodata)
-#define EZUSB_PAUSEISO       _IOR('E', 11, unsigned int)
-#define EZUSB_RESUMEISO      _IOR('E', 12, unsigned int)
+#define EZUSB_STARTISO		_IOR('E', 8, struct ezusb_isotransfer)
+#define EZUSB_STOPISO		_IOR('E', 9, unsigned int)
+#define EZUSB_ISODATA		_IOWR('E', 10, struct ezusb_isodata)
+#define EZUSB_PAUSEISO		_IOR('E', 11, unsigned int)
+#define EZUSB_RESUMEISO		_IOR('E', 12, unsigned int)
 
 /* --------------------------------------------------------------------- */
 #endif /* _LINUX_EZUSB_H */
+

@@ -1,11 +1,12 @@
 /*
  * USB CPiA Video Camera driver
  *
- * Supports CPiA based Video Camera's. Many manufacturers use this chipset.
+ * Supports CPiA based Video Cameras. Many manufacturers use this chipset.
  * There's a good chance, if you have a USB video camera, it's a CPiA based
- * one
+ * one.
  *
  * (C) Copyright 1999 Johannes Erdfelt
+ * (C) Copyright 1999 Randy Dunlap
  */
 
 #include <linux/kernel.h>
@@ -453,6 +454,31 @@ static void cpia_parse_data(struct usb_cpia *cpia)
 	cpia->scratchlen = l;
 }
 
+/*
+ * For the moment there is no actual data compression (making blocks
+ * of data contiguous).  This just checks the "frames" array for errors.
+ */
+static int cpia_compress_isochronous(struct usb_isoc_desc *isodesc)
+{
+	char *data = isodesc->data;
+	int i, totlen = 0;
+
+	for (i = 0; i < isodesc->frame_count; i++) {
+		int n = isodesc->frames [i].frame_length;
+		int st = isodesc->frames [i].frame_status;
+
+#ifdef CPIA_DEBUG
+		/* Debugging */
+		if (st)
+			printk(KERN_DEBUG "cpia data error: [%d] len=%d, status=%X\n",
+				i, n, st);
+#endif
+
+	}
+
+	return totlen;
+}
+
 static int cpia_isoc_irq(int status, void *__buffer, int len, void *dev_id)
 {
 	struct usb_cpia *cpia = dev_id;
@@ -489,10 +515,10 @@ static int cpia_isoc_irq(int status, void *__buffer, int len, void *dev_id)
 
 	sbuf = &cpia->sbuf[cpia->receivesbuf];
 
-	usb_unschedule_isochronous(dev, sbuf->isodesc);
+	usb_kill_isoc(sbuf->isodesc);
 
 	/* Do something to it now */
-	sbuf->len = usb_compress_isochronous(dev, sbuf->isodesc);
+	sbuf->len = cpia_compress_isochronous(sbuf->isodesc);
 
 #ifdef CPIA_DEBUG
 	if (sbuf->len)
@@ -511,7 +537,12 @@ static int cpia_isoc_irq(int status, void *__buffer, int len, void *dev_id)
 	}
 
 	/* Reschedule this block of Isochronous desc */
+	/*
+	usb_run_isoc(sbuf->isodesc, NULL);
+	*/
+/*
 	usb_schedule_isochronous(dev, sbuf->isodesc, cpia->sbuf[(cpia->receivesbuf + 2) % 3].isodesc);
+*/
 
 	/* Move to the next one */
 	cpia->receivesbuf = (cpia->receivesbuf + 1) % 3;
@@ -522,6 +553,8 @@ static int cpia_isoc_irq(int status, void *__buffer, int len, void *dev_id)
 int cpia_init_isoc(struct usb_cpia *cpia)
 {
 	struct usb_device *dev = cpia->dev;
+	struct usb_isoc_desc *id;
+	int fx, err;
 
 	cpia->receivesbuf = 0;
 
@@ -529,21 +562,66 @@ int cpia_init_isoc(struct usb_cpia *cpia)
 	cpia->curline = 0;
 	cpia->state = STATE_SCANNING;
 
-	/* Allocate all of the memory necessary */
+	/* ALT_ISOC is only doing double-buffering, not triple. */
+	err = usb_init_isoc (dev, usb_rcvisocpipe (dev, 1), FRAMES_PER_DESC, cpia,
+		&cpia->sbuf[0].isodesc);
+	if (err)
+		printk ("cpia_init_isoc: usb_init_isoc() ret. %d\n", err);
+	err = usb_init_isoc (dev, usb_rcvisocpipe (dev, 1), FRAMES_PER_DESC, cpia,
+		&cpia->sbuf[1].isodesc);
+	if (err)
+		printk ("cpia_init_isoc: usb_init_isoc() ret. %d\n", err);
+
+	if (!cpia->sbuf[0].isodesc || !cpia->sbuf[1].isodesc) {
+		if (cpia->sbuf[0].isodesc)
+			usb_free_isoc (cpia->sbuf[0].isodesc);
+		if (cpia->sbuf[1].isodesc)
+			usb_free_isoc (cpia->sbuf[1].isodesc);
+		return -ENOMEM;
+	}
+#if 0
 	cpia->sbuf[0].isodesc = usb_allocate_isochronous(dev, usb_rcvisocpipe(dev,1), cpia->sbuf[0].data, STREAM_BUF_SIZE, 960, cpia_isoc_irq, cpia);
 	cpia->sbuf[1].isodesc = usb_allocate_isochronous(dev, usb_rcvisocpipe(dev,1), cpia->sbuf[1].data, STREAM_BUF_SIZE, 960, cpia_isoc_irq, cpia);
 	cpia->sbuf[2].isodesc = usb_allocate_isochronous(dev, usb_rcvisocpipe(dev,1), cpia->sbuf[2].data, STREAM_BUF_SIZE, 960, cpia_isoc_irq, cpia);
+#endif
 
 #ifdef CPIA_DEBUG
 	printk("isodesc[0] @ %p\n", cpia->sbuf[0].isodesc);
 	printk("isodesc[1] @ %p\n", cpia->sbuf[1].isodesc);
+#if 0
 	printk("isodesc[2] @ %p\n", cpia->sbuf[2].isodesc);
 #endif
+#endif
 
-	/* Schedule the queues */
+	/* Set the Isoc. desc. parameters. */
+	/* First for desc. [0] */
+	id = cpia->sbuf [0].isodesc;
+	id->start_type = START_ASAP;
+	id->callback_frames = 1;        /* on every frame */
+	id->callback_fn = cpia_isoc_irq;
+	id->data = cpia->sbuf [0].data;
+	id->buf_size = FRAME_SIZE_PER_DESC * FRAMES_PER_DESC;
+	for (fx = 0; fx < FRAMES_PER_DESC; fx++)
+		id->frames [fx].frame_length = FRAME_SIZE_PER_DESC;
+
+	/* and the desc. [1] */
+	id = cpia->sbuf [1].isodesc;
+	id->start_type = 0;             /* will follow the first desc. */
+	id->callback_frames = 1;        /* on every frame */
+	id->callback_fn = cpia_isoc_irq;
+	id->data = cpia->sbuf [1].data;
+	id->buf_size = FRAME_SIZE_PER_DESC * FRAMES_PER_DESC;
+	for (fx = 0; fx < FRAMES_PER_DESC; fx++)
+		id->frames [fx].frame_length = FRAME_SIZE_PER_DESC;
+
+	usb_run_isoc (cpia->sbuf [0].isodesc, NULL);
+	usb_run_isoc (cpia->sbuf [1].isodesc, cpia->sbuf [0].isodesc);
+
+#if 0
 	usb_schedule_isochronous(dev, cpia->sbuf[0].isodesc, NULL);
 	usb_schedule_isochronous(dev, cpia->sbuf[1].isodesc, cpia->sbuf[0].isodesc);
 	usb_schedule_isochronous(dev, cpia->sbuf[2].isodesc, cpia->sbuf[1].isodesc);
+#endif
 
 #ifdef CPIA_DEBUG
 	printk("done scheduling\n");
@@ -582,19 +660,28 @@ void cpia_stop_isoc(struct usb_cpia *cpia)
 	}
 
 	/* Unschedule all of the iso td's */
+	usb_kill_isoc (cpia->sbuf[1].isodesc);
+	usb_kill_isoc (cpia->sbuf[0].isodesc);
+#if 0
 	usb_unschedule_isochronous(dev, cpia->sbuf[2].isodesc);
 	usb_unschedule_isochronous(dev, cpia->sbuf[1].isodesc);
 	usb_unschedule_isochronous(dev, cpia->sbuf[0].isodesc);
+#endif
 
 	/* Delete them all */
+	usb_free_isoc (cpia->sbuf[1].isodesc);
+	usb_free_isoc (cpia->sbuf[0].isodesc);
+#if 0
 	usb_delete_isochronous(dev, cpia->sbuf[2].isodesc);
 	usb_delete_isochronous(dev, cpia->sbuf[1].isodesc);
 	usb_delete_isochronous(dev, cpia->sbuf[0].isodesc);
+#endif
 }
 
 /* Video 4 Linux API */
 static int cpia_open(struct video_device *dev, int flags)
 {
+	int err = -ENOMEM;
 	struct usb_cpia *cpia = (struct usb_cpia *)dev;
 
 #ifdef CPIA_DEBUG
@@ -615,6 +702,15 @@ static int cpia_open(struct video_device *dev, int flags)
 	printk("frame [1] @ %p\n", cpia->frame[1].data);
 #endif
 
+	cpia->sbuf[0].data = kmalloc (FRAMES_PER_DESC * FRAME_SIZE_PER_DESC, GFP_KERNEL);
+	if (!cpia->sbuf[0].data)
+		goto open_err_on0;
+
+	cpia->sbuf[1].data = kmalloc (FRAMES_PER_DESC * FRAME_SIZE_PER_DESC, GFP_KERNEL);
+	if (!cpia->sbuf[1].data)
+		goto open_err_on1;
+
+#if 0
 	cpia->sbuf[0].data = kmalloc(STREAM_BUF_SIZE, GFP_KERNEL);
 	if (!cpia->sbuf[0].data)
 		goto open_err_on0;
@@ -626,11 +722,14 @@ static int cpia_open(struct video_device *dev, int flags)
 	cpia->sbuf[2].data = kmalloc(STREAM_BUF_SIZE, GFP_KERNEL);
 	if (!cpia->sbuf[2].data)
 		goto open_err_on2;
+#endif
 
 #ifdef CPIA_DEBUG
 	printk("sbuf[0] @ %p\n", cpia->sbuf[0].data);
 	printk("sbuf[1] @ %p\n", cpia->sbuf[1].data);
+#if 0
 	printk("sbuf[2] @ %p\n", cpia->sbuf[2].data);
+#endif
 #endif
 
 	cpia->curframe = -1;
@@ -638,7 +737,9 @@ static int cpia_open(struct video_device *dev, int flags)
 
 	usb_cpia_initstreamcap(cpia->dev, 0, 60);
 
-	cpia_init_isoc(cpia);
+	err = cpia_init_isoc(cpia);
+	if (err)
+		goto open_err_on2;
 
 	return 0;
 
@@ -649,7 +750,7 @@ open_err_on1:
 open_err_on0:
 	rvfree(cpia->fbuf, 2 * MAX_FRAME_SIZE);
 open_err_ret:
-	return -ENOMEM;
+	return err;
 }
 
 static void cpia_close(struct video_device *dev)

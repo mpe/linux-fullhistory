@@ -40,12 +40,10 @@
 #include <net/udp.h>
 #include <net/tcp.h>
 #include <net/icmp.h>
-#include <net/route.h>
 #include <net/inet_common.h>
 #include <linux/inet.h>
 #include <linux/mroute.h>
 #include <linux/igmp.h>
-#include <linux/inetdevice.h>
 
 extern struct net_proto_family inet_family_ops;
 extern __u32 sysctl_wmem_max;

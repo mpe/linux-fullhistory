@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.70 1999/07/31 12:59:58 armin Exp $
+/* $Id: isdn.h,v 1.71 1999/08/23 15:54:22 keil Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.71  1999/08/23 15:54:22  keil
+ * more backported changes from kernel 2.3.14
+ *
  * Revision 1.70  1999/07/31 12:59:58  armin
  * Added tty fax capabilities.
  *
@@ -577,13 +580,13 @@ typedef struct isdn_net_local_s {
   ulong                  sqfull_stamp; /* Start-Time of overload           */
   ulong                  slavedelay;   /* Dynamic bundling delaytime       */
   int                    triggercps;   /* BogoCPS needed for trigger slave */
-  struct net_device          *srobin;      /* Ptr to Master device for slaves  */
+  struct net_device      *srobin;      /* Ptr to Master device for slaves  */
   isdn_net_phone         *phone[2];    /* List of remote-phonenumbers      */
 				       /* phone[0] = Incoming Numbers      */
 				       /* phone[1] = Outgoing Numbers      */
   isdn_net_phone         *dial;        /* Pointer to dialed number         */
-  struct net_device          *master;      /* Ptr to Master device for slaves  */
-  struct net_device          *slave;       /* Ptr to Slave device for masters  */
+  struct net_device      *master;      /* Ptr to Master device for slaves  */
+  struct net_device      *slave;       /* Ptr to Slave device for masters  */
   struct isdn_net_local_s *next;       /* Ptr to next link in bundle       */
   struct isdn_net_local_s *last;       /* Ptr to last link in bundle       */
   struct isdn_net_dev_s  *netdev;      /* Ptr to netdev                    */
@@ -616,7 +619,7 @@ typedef struct isdn_net_dev_s {
   isdn_net_local *local;
   isdn_net_local *queue;
   void           *next;                /* Pointer to next isdn-interface   */
-  struct net_device   dev;	       /* interface to upper levels        */
+  struct net_device dev;               /* interface to upper levels        */
 #ifdef CONFIG_ISDN_PPP
   struct mpqueue *mp_last; 
   struct ippp_bundle ib;

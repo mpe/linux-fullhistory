@@ -1787,7 +1787,7 @@ static struct proc_dir_entry proc_ax25_calls = {
 };
 #endif
 
-__initfunc(void ax25_proto_init(struct net_proto *pro))
+void __init ax25_proto_init(struct net_proto *pro)
 {
 	sock_register(&ax25_family_ops);
 	ax25_packet_type.type = htons(ETH_P_AX25);

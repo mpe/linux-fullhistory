@@ -1134,11 +1134,11 @@ void cpu_init (void)
 	struct tss_struct * t = &init_tss[nr];
 
 	if (test_and_set_bit(nr,&cpu_initialized)) {
-		printk("CPU#%d ALREADY INITIALIZED!!!!!!!!!\n", nr);
+		printk("CPU#%d already initialized!\n", nr);
 		for (;;) __sti();
 	}
 	cpus_initialized++;
-	printk("INITIALIZING CPU#%d\n", nr);
+	printk("Initializing CPU#%d\n", nr);
 
 	if (boot_cpu_data.x86_capability & X86_FEATURE_PSE)
 		clear_in_cr4(X86_CR4_VME|X86_CR4_PVI|X86_CR4_TSD|X86_CR4_DE);

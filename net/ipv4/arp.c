@@ -1125,7 +1125,7 @@ static struct proc_dir_entry proc_net_arp = {
 };
 #endif
 
-__initfunc(void arp_init (void))
+void __init arp_init (void)
 {
 	neigh_table_init(&arp_tbl);
 

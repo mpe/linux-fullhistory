@@ -1,8 +1,12 @@
-/* $Id: hisax.h,v 2.33 1999/08/05 20:43:16 keil Exp $
+/* $Id: hisax.h,v 2.34 1999/08/25 17:00:04 keil Exp $
 
  *   Basic declarations, defines and prototypes
  *
  * $Log: hisax.h,v $
+ * Revision 2.34  1999/08/25 17:00:04  keil
+ * Make ISAR V32bis modem running
+ * Make LL->HL interface open for additional commands
+ *
  * Revision 2.33  1999/08/05 20:43:16  keil
  * ISAR analog modem support
  *
@@ -154,7 +158,6 @@
 #define CARD_RELEASE	0x00F3
 #define CARD_TEST	0x00F4
 #define CARD_AUX_IND	0x00F5
-#define CARD_LOAD_FIRM	0x00F6
 
 #define PH_ACTIVATE	0x0100
 #define PH_DEACTIVATE	0x0110
@@ -458,6 +461,12 @@ struct isar_hw {
 	int rcvidx;
 	int txcnt;
 	int mml;
+	u_char state;
+	u_char cmd;
+	u_char mod;
+	u_char newcmd;
+	u_char newmod;
+	struct timer_list ftimer;
 	u_char *rcvbuf;         /* B-Channel receive Buffer */
 	u_char conmsg[16];
 	struct isar_reg *reg;
@@ -528,6 +537,14 @@ struct amd7930_hw {
 #define BC_FLG_HALF	5
 #define BC_FLG_EMPTY	6
 #define BC_FLG_ORIG	7
+#define BC_FLG_DLEETX	8
+#define BC_FLG_LASTDLE	9
+#define BC_FLG_FIRST	10
+#define BC_FLG_LASTDATA	11
+#define BC_FLG_NMD_DATA	12
+#define BC_FLG_FTI_RUN	13
+#define BC_FLG_LL_OK	14
+#define BC_FLG_LL_CONN	15
 
 #define L1_MODE_NULL	0
 #define L1_MODE_TRANS	1
@@ -852,6 +869,7 @@ struct hfcpci_chip {
 #define HW_IOM1			0
 #define HW_IPAC			1
 #define HW_ISAR			2
+#define HW_ARCOFI		3
 #define FLG_TWO_DCHAN		4
 #define FLG_L1_DBUSY		5
 #define FLG_DBUSY_TIMER 	6
@@ -910,6 +928,7 @@ struct IsdnCardState {
 	void   (*setstack_d) (struct PStack *, struct IsdnCardState *);
 	void   (*DC_Close) (struct IsdnCardState *);
 	void   (*irq_func) (int, void *, struct pt_regs *);
+	int    (*auxcmd) (struct IsdnCardState *, isdn_ctrl *);
 	struct Channel channel[2+MAX_WAITING_CALLS];
 	struct BCState bcs[2+MAX_WAITING_CALLS];
 	struct PStack *stlist;
@@ -1138,7 +1157,6 @@ struct IsdnCardState {
 
 #ifdef	CONFIG_HISAX_HFC_PCI
 #define  CARD_HFC_PCI 1
-extern int hfcpci_set_echo(struct IsdnCardState *, int);
 #else
 #define  CARD_HFC_PCI 0
 #endif
@@ -1327,7 +1345,7 @@ void setstack_isac(struct PStack *st, struct IsdnCardState *cs);
 
 #define HZDELAY(jiffs) {int tout = jiffs; while (tout--) udelay(1000000/HZ);}
 
-int ll_run(struct IsdnCardState *cs);
+int ll_run(struct IsdnCardState *cs, int addfeatures);
 void ll_stop(struct IsdnCardState *cs);
 void CallcNew(void);
 void CallcFree(void);

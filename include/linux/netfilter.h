@@ -169,9 +169,6 @@ extern void nf_invalidate_cache(int pf);
  * seconds to see why.		- Linus
  */
 
-/* Use which one you mean explicitly.  You have been warned. */
-#include <linux/types.h>
-
 /* Two signed, return a signed. */
 #define SMAX(a,b) ((ssize_t)(a)>(ssize_t)(b) ? (ssize_t)(a) : (ssize_t)(b))
 #define SMIN(a,b) ((ssize_t)(a)<(ssize_t)(b) ? (ssize_t)(a) : (ssize_t)(b))

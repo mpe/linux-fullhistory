@@ -1,4 +1,4 @@
-/* $Id: isdnif.h,v 1.29 1999/07/31 13:00:02 armin Exp $
+/* $Id: isdnif.h,v 1.30 1999/08/23 15:54:29 keil Exp $
  *
  * Linux ISDN subsystem
  *
@@ -22,6 +22,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdnif.h,v $
+ * Revision 1.30  1999/08/23 15:54:29  keil
+ * more backported changes from kernel 2.3.14
+ *
  * Revision 1.29  1999/07/31 13:00:02  armin
  * Added tty fax capabilities.
  *

@@ -34,6 +34,7 @@ Return value:
 	The number of requests that changed status (ie: made some progress)
 */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/skbuff.h>
 

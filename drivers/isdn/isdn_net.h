@@ -1,4 +1,4 @@
-/* $Id: isdn_net.h,v 1.9 1999/04/12 12:33:27 fritz Exp $
+/* $Id: isdn_net.h,v 1.10 1999/08/22 20:26:06 calle Exp $
 
  * header for Linux ISDN subsystem, network related functions (linklevel).
  *
@@ -21,6 +21,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.h,v $
+ * Revision 1.10  1999/08/22 20:26:06  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.9  1999/04/12 12:33:27  fritz
  * Changes from 2.0 tree.
  *

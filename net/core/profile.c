@@ -210,7 +210,7 @@ static struct net_device_stats *whitehole_get_stats(struct net_device *dev)
 	return stats;
 }
 
-__initfunc(int whitehole_init(struct net_device *dev))
+int __init whitehole_init(struct net_device *dev)
 {
 	dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
 	if (dev->priv == NULL)
@@ -260,7 +260,7 @@ int net_profile_unregister(struct net_profile_slot *slot)
 }
 
 
-__initfunc(int net_profile_init(void))
+int __init net_profile_init(void)
 {
 	int i;
 

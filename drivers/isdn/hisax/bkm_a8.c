@@ -1,4 +1,4 @@
-/* $Id: bkm_a8.c,v 1.6 1999/08/11 21:01:24 keil Exp $
+/* $Id: bkm_a8.c,v 1.7 1999/08/22 20:26:58 calle Exp $
  * bkm_a8.c     low level stuff for Scitel Quadro (4*S0, passive)
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -7,6 +7,12 @@
  * Author       Roland Klabunde (R.Klabunde@Berkom.de)
  *
  * $Log: bkm_a8.c,v $
+ * Revision 1.7  1999/08/22 20:26:58  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.6  1999/08/11 21:01:24  keil
  * new PCI codefix
  *
@@ -43,7 +49,7 @@
 
 extern const char *CardType[];
 
-const char sct_quadro_revision[] = "$Revision: 1.6 $";
+const char sct_quadro_revision[] = "$Revision: 1.7 $";
 
 /* To survive the startup phase */
 typedef struct {

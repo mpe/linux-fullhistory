@@ -1,4 +1,4 @@
-/* $Id: l3dss1.c,v 2.18 1999/08/11 20:54:39 keil Exp $
+/* $Id: l3dss1.c,v 2.19 1999/08/25 16:55:23 keil Exp $
 
  * EURO/DSS1 D-channel protocol
  *
@@ -13,6 +13,9 @@
  *              Fritz Elfert
  *
  * $Log: l3dss1.c,v $
+ * Revision 2.19  1999/08/25 16:55:23  keil
+ * Fix for test case TC10011
+ *
  * Revision 2.18  1999/08/11 20:54:39  keil
  * High layer compatibility is valid in SETUP
  *
@@ -87,7 +90,7 @@
 #include <linux/ctype.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 2.18 $";
+const char *dss1_revision = "$Revision: 2.19 $";
 
 #define EXT_BEARER_CAPS 1
 
@@ -764,11 +767,6 @@ ie_in_set(struct l3_process *pc, u_char ie, int *checklist) {
 	int ret = 1;
 
 	while (*checklist != -1) {
-#if 0
-		if (pc->debug & L3_DEB_CHECK)
-			l3_debug(pc->st, "ie_in_set ie(%x) cl(%x)",
-				ie, *checklist);
-#endif
 		if ((*checklist & 0xff) == ie) {
 			if (ie & 0x80)
 				return(-ret);
@@ -1737,15 +1735,12 @@ l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 		return;
 	}
 	/* Now we are on none mandatory IEs */
-#if 1
-/* !!!!!! this check seems to be a problem ? info bugfix to Karsten */
 	err = check_infoelements(pc, skb, ie_SETUP);
 	if (ERR_IE_COMPREHENSION == err) {
 		pc->para.cause = 96;
 		l3dss1_msg_without_setup(pc, pr, NULL);
 		return;
 	}
-#endif
 	p = skb->data;
 	if ((p = findie(p, skb->len, 0x70, 0)))
 		iecpy(pc->para.setup.eazmsn, p, 1);
@@ -1787,29 +1782,10 @@ l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 		} else if (pc->debug & L3_DEB_WARN)
 			l3_debug(pc->st, "wrong calling subaddress");
 	}
-
-#if 0
-	if (bcfound) {
-		if ((pc->para.setup.si1 != 7) && (pc->debug & L3_DEB_WARN)) {
-			l3_debug(pc->st, "non-digital call: %s -> %s",
-			    pc->para.setup.phone, pc->para.setup.eazmsn);
-		}
-		if ((pc->para.setup.si1 != 7) &&
-		    test_bit(FLG_PTP, &pc->st->l2.flag)) {
-			pc->para.cause = 88; /* incompatible destination */
-			l3dss1_msg_without_setup(pc, pr, NULL);
-			return;
-		}
-		newl3state(pc, 6);
-		pc->st->l3.l3l4(pc->st, CC_SETUP | INDICATION, pc);
-	} else
-		dss1_release_l3_process(pc);
-#else
 	newl3state(pc, 6);
 	if (err) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, err);
 	pc->st->l3.l3l4(pc->st, CC_SETUP | INDICATION, pc);
-#endif
 }
 
 static void
@@ -2106,8 +2082,6 @@ l3dss1_status_enq(struct l3_process *pc, u_char pr, void *arg)
 
 	ret = check_infoelements(pc, skb, ie_STATUS_ENQUIRY);
 	l3dss1_std_ie_err(pc, ret);
-// KKe 19.7.99 test eicon
-//        idev_kfree_skb(skb, FREE_READ);
 	pc->para.cause = 30; /* response to STATUS_ENQUIRY */
         l3dss1_status_send(pc, pr, NULL);
 }
@@ -2862,7 +2836,8 @@ static struct stateentry datastatelist[] =
 	 MT_STATUS, l3dss1_status},
 	{SBIT(0),
 	 MT_SETUP, l3dss1_setup},
-	{SBIT(6) | SBIT(7),
+	{SBIT(6) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(11) | SBIT(12) |
+	 SBIT(15) | SBIT(17) | SBIT(19) | SBIT(25),
 	 MT_SETUP, l3dss1_dummy},
 	{SBIT(1) | SBIT(2),
 	 MT_CALL_PROCEEDING, l3dss1_call_proc},
@@ -2885,8 +2860,6 @@ static struct stateentry datastatelist[] =
 	{SBIT(19),  MT_RELEASE, l3dss1_release_ind},
 	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(11) | SBIT(15) | SBIT(17) | SBIT(25),
 	 MT_DISCONNECT, l3dss1_disconnect},
-//	{SBIT(11),
-//	 MT_DISCONNECT, l3dss1_release_req},
 	{SBIT(19),
 	 MT_DISCONNECT, l3dss1_dummy},
 	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4),

@@ -1,4 +1,4 @@
-/* $Id: eicon_mod.c,v 1.8 1999/07/25 15:12:08 armin Exp $
+/* $Id: eicon_mod.c,v 1.9 1999/08/18 20:17:02 armin Exp $
  *
  * ISDN lowlevel-module for Eicon.Diehl active cards.
  * 
@@ -26,6 +26,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_mod.c,v $
+ * Revision 1.9  1999/08/18 20:17:02  armin
+ * Added XLOG function for all cards.
+ * Bugfix of alloc_skb NULL pointer.
+ *
  * Revision 1.8  1999/07/25 15:12:08  armin
  * fix of some debug logs.
  * enabled ISA-cards option.
@@ -63,6 +67,8 @@
  *
  */
 
+#define DRIVERPATCH ""
+
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -77,7 +83,7 @@
 static eicon_card *cards = (eicon_card *) NULL;   /* glob. var , contains
                                                      start of card-list   */
 
-static char *eicon_revision = "$Revision: 1.8 $";
+static char *eicon_revision = "$Revision: 1.9 $";
 
 extern char *eicon_pci_revision;
 extern char *eicon_isa_revision;
@@ -87,7 +93,7 @@ extern char *eicon_idi_revision;
 #define MOD_USE_COUNT (GET_USE_COUNT (&__this_module))
 #endif
 
-#define EICON_CTRL_VERSION 1
+#define EICON_CTRL_VERSION 2 
 
 ulong DebugVar;
 
@@ -355,6 +361,32 @@ eicon_transmit(struct eicon_card *card)
 	}
 }
 
+static int eicon_xlog(eicon_card *card, xlogreq_t *xlogreq)
+{
+	xlogreq_t *xlr;
+	int ret_val;
+
+	if (!(xlr = kmalloc(sizeof(xlogreq_t), GFP_KERNEL))) {
+		if (DebugVar & 1)
+			printk(KERN_WARNING "idi_err: alloc_xlogreq_t failed\n");
+		return -ENOMEM;
+	}
+	if (copy_from_user(xlr, xlogreq, sizeof(xlogreq_t))) {
+		kfree(xlr);
+		return -EFAULT;
+	}
+
+	ret_val = eicon_get_xlog(card, xlr);
+
+	if (copy_to_user(xlogreq, xlr, sizeof(xlogreq_t))) {
+		kfree(xlr);
+		return -EFAULT;
+	}
+	kfree(xlr);
+
+	return ret_val;
+}
+
 static int
 eicon_command(eicon_card * card, isdn_ctrl * c)
 {
@@ -366,6 +398,10 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 	int ret = 0;
 	unsigned long flags;
  
+	if (DebugVar & 16)
+		printk(KERN_WARNING "eicon_cmd 0x%x with arg 0x%lx (0x%lx)\n",
+			c->command, c->arg, (ulong) *c->parm.num);
+
         switch (c->command) {
 		case ISDN_CMD_IOCTL:
 			memcpy(&a, c->parm.num, sizeof(ulong));
@@ -506,6 +542,12 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 					ret = eicon_idi_manage(
 						card, 
 						(eicon_manifbuf *)a);
+					return ret;
+
+				case EICON_IOCTL_GETXLOG:
+					if (!card->flags & EICON_FLAGS_RUNNING)
+						return XLOG_ERR_CARD_STATE;
+					ret = eicon_xlog(card, (xlogreq_t *)a);
 					return ret;
 #if CONFIG_PCI 
 				case EICON_IOCTL_LOADPCI:
@@ -674,6 +716,10 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 			if (!(chan = find_channel(card, c->arg & 0x1f)))
 				break;
 			chan->l3prot = (c->arg >> 8);
+#ifdef CONFIG_ISDN_TTY_FAX
+			if (chan->l3prot == ISDN_PROTO_L3_FAX)
+				chan->fax = c->parm.fax;
+#endif
 			return 0;
 		case ISDN_CMD_GETL3:
 			if (!card->flags & EICON_FLAGS_RUNNING)
@@ -705,6 +751,17 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 		case ISDN_CMD_UNLOCK:
 			MOD_DEC_USE_COUNT;
 			return 0;
+#ifdef CONFIG_ISDN_TTY_FAX
+		case ISDN_CMD_FAXCMD:
+			if (!card->flags & EICON_FLAGS_RUNNING)
+				return -ENODEV;
+			if (!(chan = find_channel(card, c->arg & 0x1f)))
+				break;
+			if (!chan->fax)
+				break;
+			idi_fax_cmd(card, chan);
+			return 0;
+#endif
 		case ISDN_CMD_AUDIO:
 			if (!card->flags & EICON_FLAGS_RUNNING)
 				return -ENODEV;
@@ -752,16 +809,19 @@ if_command(isdn_ctrl * c)
 static int
 if_writecmd(const u_char * buf, int len, int user, int id, int channel)
 {
+#if 0
+	/* Not yet used */
         eicon_card *card = eicon_findcard(id);
 
         if (card) {
                 if (!card->flags & EICON_FLAGS_RUNNING)
-                        return -ENODEV;
+                        return (len);
                 return (len);
         }
         printk(KERN_ERR
                "eicon: if_writecmd called with invalid driverId!\n");
-        return -ENODEV;
+#endif
+        return (len);
 }
 
 static int
@@ -779,7 +839,7 @@ if_readstatus(u_char * buf, int len, int user, int id, int channel)
         printk(KERN_ERR
                "eicon: if_readstatus called with invalid driverId!\n");
 #endif
-        return -ENODEV;
+        return 0;
 }
 
 static int
@@ -802,6 +862,13 @@ if_sendbuf(int id, int channel, int ack, struct sk_buff *skb)
 			return -ENODEV;
 		}
 		if (chan->fsm_state == EICON_STATE_ACTIVE) {
+#ifdef CONFIG_ISDN_TTY_FAX
+			if (chan->l2prot == ISDN_PROTO_L2_FAX) {
+				if ((ret = idi_faxdata_send(card, chan, skb)) > 0)
+					ret = len;
+			}
+			else
+#endif
 				ret = idi_send_data(card, chan, ack, skb, 1);
 			return (ret);
 		} else {
@@ -1231,8 +1298,8 @@ eicon_init(void))
 	printk("%s\n", eicon_getrev(tmprev));
 	release += getrel(tmprev);
 	sprintf(tmprev,"%d", release);
-        printk(KERN_INFO "%s Release: %s.%s\n", DRIVERNAME,
-		DRIVERRELEASE, tmprev);
+        printk(KERN_INFO "%s Release: %s.%s%s\n", DRIVERNAME,
+		DRIVERRELEASE, tmprev, DRIVERPATCH);
 
 #ifdef CONFIG_ISDN_DRV_EICON_ISA
 #ifdef CONFIG_MCA

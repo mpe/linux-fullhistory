@@ -30,7 +30,7 @@ static int findkey (key_t key);
 static int sysvipc_msg_read_proc(char *buffer, char **start, off_t offset, int length, int *eof, void *data);
 #endif
 
-static struct msqid_ds *msgque[MSGMNI];
+static struct msqid_ds_kern *msgque[MSGMNI];
 static int msgbytes = 0;
 static int msghdrs = 0;
 static unsigned short msg_seq = 0;
@@ -46,7 +46,7 @@ void __init msg_init (void)
 #endif
 
 	for (id = 0; id < MSGMNI; id++) 
-		msgque[id] = (struct msqid_ds *) IPC_UNUSED;
+		msgque[id] = (struct msqid_ds_kern *) IPC_UNUSED;
 	msgbytes = msghdrs = msg_seq = max_msqid = used_queues = 0;
 	init_waitqueue_head(&msg_lock);
 #ifdef CONFIG_PROC_FS
@@ -59,7 +59,7 @@ void __init msg_init (void)
 static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
 {
 	int id;
-	struct msqid_ds *msq;
+	struct msqid_ds_kern *msq;
 	struct ipc_perm *ipcp;
 	struct msg *msgh;
 	long mtype;
@@ -136,7 +136,7 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 
 static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, int msgflg)
 {
-	struct msqid_ds *msq;
+	struct msqid_ds_kern *msq;
 	struct ipc_perm *ipcp;
 	struct msg *tmsg, *leastp = NULL;
 	struct msg *nmsg = NULL;
@@ -257,7 +257,7 @@ asmlinkage long sys_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz,
 static int findkey (key_t key)
 {
 	int id;
-	struct msqid_ds *msq;
+	struct msqid_ds_kern *msq;
 	
 	for (id = 0; id <= max_msqid; id++) {
 		while ((msq = msgque[id]) == IPC_NOID) 
@@ -273,20 +273,20 @@ static int findkey (key_t key)
 static int newque (key_t key, int msgflg)
 {
 	int id;
-	struct msqid_ds *msq;
+	struct msqid_ds_kern *msq;
 	struct ipc_perm *ipcp;
 
 	for (id = 0; id < MSGMNI; id++) 
 		if (msgque[id] == IPC_UNUSED) {
-			msgque[id] = (struct msqid_ds *) IPC_NOID;
+			msgque[id] = (struct msqid_ds_kern *) IPC_NOID;
 			goto found;
 		}
 	return -ENOSPC;
 
 found:
-	msq = (struct msqid_ds *) kmalloc (sizeof (*msq), GFP_KERNEL);
+	msq = (struct msqid_ds_kern *) kmalloc (sizeof (*msq), GFP_KERNEL);
 	if (!msq) {
-		msgque[id] = (struct msqid_ds *) IPC_UNUSED;
+		msgque[id] = (struct msqid_ds_kern *) IPC_UNUSED;
 		wake_up (&msg_lock);
 		return -ENOMEM;
 	}
@@ -315,7 +315,7 @@ found:
 asmlinkage long sys_msgget (key_t key, int msgflg)
 {
 	int id, ret = -EPERM;
-	struct msqid_ds *msq;
+	struct msqid_ds_kern *msq;
 	
 	lock_kernel();
 	if (key == IPC_PRIVATE) 
@@ -342,7 +342,7 @@ asmlinkage long sys_msgget (key_t key, int msgflg)
 
 static void freeque (int id)
 {
-	struct msqid_ds *msq = msgque[id];
+	struct msqid_ds_kern *msq = msgque[id];
 	struct msg *msgp, *msgh;
 
 	msq->msg_perm.seq++;
@@ -350,7 +350,7 @@ static void freeque (int id)
 	msgbytes -= msq->msg_cbytes;
 	if (id == max_msqid)
 		while (max_msqid && (msgque[--max_msqid] == IPC_UNUSED));
-	msgque[id] = (struct msqid_ds *) IPC_UNUSED;
+	msgque[id] = (struct msqid_ds_kern *) IPC_UNUSED;
 	used_queues--;
 	while (waitqueue_active(&msq->rwait) || waitqueue_active(&msq->wwait)) {
 		wake_up (&msq->rwait); 
@@ -368,7 +368,7 @@ static void freeque (int id)
 asmlinkage long sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 {
 	int id, err = -EINVAL;
-	struct msqid_ds *msq;
+	struct msqid_ds_kern *msq;
 	struct msqid_ds tbuf;
 	struct ipc_perm *ipcp;
 	
@@ -420,8 +420,10 @@ asmlinkage long sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		tbuf.msg_stime  = msq->msg_stime;
 		tbuf.msg_rtime  = msq->msg_rtime;
 		tbuf.msg_ctime  = msq->msg_ctime;
+		tbuf.msg_cbytes_old = msq->msg_cbytes;
 		tbuf.msg_cbytes = msq->msg_cbytes;
 		tbuf.msg_qnum   = msq->msg_qnum;
+		tbuf.msg_qbytes_old = msq->msg_qbytes;
 		tbuf.msg_qbytes = msq->msg_qbytes;
 		tbuf.msg_lspid  = msq->msg_lspid;
 		tbuf.msg_lrpid  = msq->msg_lrpid;
@@ -462,8 +464,10 @@ asmlinkage long sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		tbuf.msg_stime  = msq->msg_stime;
 		tbuf.msg_rtime  = msq->msg_rtime;
 		tbuf.msg_ctime  = msq->msg_ctime;
+		tbuf.msg_cbytes_old = msq->msg_cbytes;
 		tbuf.msg_cbytes = msq->msg_cbytes;
 		tbuf.msg_qnum   = msq->msg_qnum;
+		tbuf.msg_qbytes_old = msq->msg_qbytes;
 		tbuf.msg_qbytes = msq->msg_qbytes;
 		tbuf.msg_lspid  = msq->msg_lspid;
 		tbuf.msg_lrpid  = msq->msg_lrpid;
