@@ -34,6 +34,7 @@
 #include <asm/bootinfo.h>
 #include <asm/io.h>
 #include <asm/mpc52xx.h>
+#include <asm/ppc_sys.h>
 
 #include <syslib/mpc52xx_pci.h>
 
@@ -48,6 +49,17 @@ EXPORT_SYMBOL(__res);	/* For modules */
 /* ======================================================================== */
 /* Platform specific code                                                   */
 /* ======================================================================== */
+
+/* Supported PSC function in "preference" order */
+struct mpc52xx_psc_func mpc52xx_psc_functions[] = {
+		{       .id     = 0,
+			.func   = "uart",
+		},
+		{       .id     = -1,   /* End entry */
+			.func   = NULL,
+		}
+	};
+
 
 static int
 lite5200_show_cpuinfo(struct seq_file *m)
@@ -147,6 +159,9 @@ platform_init(unsigned long r3, unsigned long r4, unsigned long r5,
 			strcpy(cmd_line, (char *)(r6+KERNELBASE));
 		}
 	}
+
+	/* PPC Sys identification */
+	identify_ppc_sys_by_id(mfspr(SPRN_SVR));
 
 	/* BAT setup */
 	mpc52xx_set_bat();

@@ -30,6 +30,29 @@ struct pt_regs;
 
 
 /* ======================================================================== */
+/* PPC Sys devices definition                                               */
+/* ======================================================================== */
+
+enum ppc_sys_devices {
+	MPC52xx_MSCAN1,
+	MPC52xx_MSCAN2,
+	MPC52xx_SPI,
+	MPC52xx_USB,
+	MPC52xx_BDLC,
+	MPC52xx_PSC1,
+	MPC52xx_PSC2,
+	MPC52xx_PSC3,
+	MPC52xx_PSC4,
+	MPC52xx_PSC5,
+	MPC52xx_PSC6,
+	MPC52xx_FEC,
+	MPC52xx_ATA,
+	MPC52xx_I2C1,
+	MPC52xx_I2C2,
+};
+
+
+/* ======================================================================== */
 /* Main registers/struct addresses                                          */
 /* ======================================================================== */
 
@@ -391,6 +414,17 @@ extern void mpc52xx_progress(char *s, unsigned short hex);
 extern void mpc52xx_calibrate_decr(void);
 
 extern void mpc52xx_find_bridges(void);
+
+
+	/* Matching of PSC function */
+struct mpc52xx_psc_func {
+	int id;
+	char *func;
+};
+
+extern int mpc52xx_match_psc_function(int psc_idx, const char *func);
+extern struct  mpc52xx_psc_func mpc52xx_psc_functions[];
+	/* This array is to be defined in platform file */
 
 #endif /* __ASSEMBLY__ */
 

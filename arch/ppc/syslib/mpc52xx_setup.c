@@ -215,3 +215,16 @@ mpc52xx_calibrate_decr(void)
 	tb_ticks_per_jiffy = xlbfreq / HZ / divisor;
 	tb_to_us = mulhwu_scale_factor(xlbfreq / divisor, 1000000);
 }
+
+int mpc52xx_match_psc_function(int psc_idx, const char *func)
+{
+	struct mpc52xx_psc_func *cf = mpc52xx_psc_functions;
+
+	while ((cf->id != -1) && (cf->func != NULL)) {
+		if ((cf->id == psc_idx) && !strcmp(cf->func,func))
+			return 1;
+		cf++;
+	}
+
+	return 0;
+}
