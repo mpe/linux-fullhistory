@@ -282,7 +282,7 @@ repeat:
 	spin_lock_irqsave(&page_alloc_lock, flags);
 	RMQUEUE(order, maxorder, (gfp_mask & GFP_DMA));
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
-	if ((gfp_mask & __GFP_WAIT) && try_to_free_page(gfp_mask))
+	if ((gfp_mask & __GFP_WAIT) && try_to_free_pages(gfp_mask,SWAP_CLUSTER_MAX))
 		goto repeat;
 nopage:
 	return 0;

@@ -413,6 +413,7 @@ SYSCALL(execve)
 SYSCALL(open)
 SYSCALL(close)
 SYSCALL(waitpid)
+SYSCALL(delete_module)
 
 
 /* Why isn't this a) automatic, b) written in 'C'? */	

@@ -1410,6 +1410,7 @@ static inline _syscall3(int,open,const char *,file,int,flag,int,mode)
 static inline _syscall1(int,close,int,fd)
 static inline _syscall1(int,_exit,int,exitcode)
 static inline _syscall3(pid_t,waitpid,pid_t,pid,int *,wait_stat,int,options)
+static inline _syscall1(int,delete_module,const char *,name)
 
 static inline pid_t wait(int * wait_stat)
 {

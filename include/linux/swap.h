@@ -122,6 +122,21 @@ static inline int is_page_shared(struct page *page)
 }
 
 /*
+ * When we're freeing pages from a user application, we want
+ * to cluster swapouts too.	-- Rik.
+ * linux/mm/page_alloc.c
+ */
+static inline int try_to_free_pages(int gfp_mask, int count)
+{
+	int retval = 0;
+	while (count--) {
+		if (try_to_free_page(gfp_mask))
+			retval = 1;
+	}
+	return retval;
+}
+
+/*
  * Make these inline later once they are working properly.
  */
 extern long find_in_swap_cache(struct page *page);

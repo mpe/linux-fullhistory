@@ -60,6 +60,11 @@
 #include <asm/system.h>
 
 /*
+ * Skb list spinlock
+ */
+spinlock_t skb_queue_lock = SPIN_LOCK_UNLOCKED;
+
+/*
  *	Resource tracking variables
  */
 
@@ -300,7 +305,7 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 	 *	Allocate the copy buffer
 	 */
  	 
-	n=alloc_skb(skb->truesize+newheadroom-headroom-sizeof(struct sk_buff), GFP_ATOMIC);
+	n=alloc_skb(skb->truesize+newheadroom-headroom, GFP_ATOMIC);
 	if(n==NULL)
 		return NULL;
 

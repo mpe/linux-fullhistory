@@ -152,7 +152,7 @@ int shrink_mmap(int priority, int gfp_mask)
 			} while (tmp != bh);
 
 			/* Refuse to swap out all buffer pages */
-			if ((buffermem >> PAGE_SHIFT) * 100 > (buffer_mem.min_percent * num_physpages))
+			if ((buffermem >> PAGE_SHIFT) * 100 < (buffer_mem.min_percent * num_physpages))
 				goto next;
 		}
 
@@ -171,7 +171,7 @@ int shrink_mmap(int priority, int gfp_mask)
 						break;
 					}
 					age_page(page);
-					if (page->age)
+					if (page->age || page_cache_size * 100 < (page_cache.min_percent * num_physpages))
 						break;
 					if (PageSwapCache(page)) {
 						delete_from_swap_cache(page);

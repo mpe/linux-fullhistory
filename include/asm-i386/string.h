@@ -114,7 +114,7 @@ __asm__ __volatile__(
 	"xorl %%eax,%%eax\n\t"
 	"jmp 3f\n"
 	"2:\tsbbl %%eax,%%eax\n\t"
-	"orb $1,%%eax\n"
+	"orb $1,%%al\n"
 	"3:"
 	:"=a" (__res):"S" (cs),"D" (ct):"si","di");
 return __res;

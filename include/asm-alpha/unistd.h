@@ -421,6 +421,12 @@ static inline int read(int fd, char * buf, int nr)
 	return sys_read(fd, buf, nr);
 }
 
+extern int sys_fork(void);
+static inline int fork(void)
+{
+	return sys_fork();
+}
+
 extern int __kernel_execve(char *, char **, char **, struct pt_regs *);
 static inline int execve(char * file, char ** argvp, char ** envp)
 {
@@ -450,6 +456,12 @@ static inline pid_t waitpid(int pid, int * wait_stat, int flags)
 static inline pid_t wait(int * wait_stat)
 {
 	return waitpid(-1,wait_stat,0);
+}
+
+extern int sys_delete_module(const char *name);
+static inline int delete_module(const char *name)
+{
+	return sys_delete_module(name);
 }
 
 #endif

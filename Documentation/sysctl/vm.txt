@@ -19,6 +19,7 @@ Currently, these files are in /proc/sys/vm:
 - buffermem
 - freepages
 - overcommit_memory
+- pagecache
 - swapctl
 - swapout_interval
 
@@ -93,17 +94,16 @@ buffermem:
 
 The three values in this file correspond to the values in
 the struct buffer_mem. It controls how much memory should
-be used for buffer and cache memory. Note that memorymapped
-files are also counted as cache memory...
+be used for buffer memory.
 
 The values are:
 min_percent	-- this is the minumum percentage of memory
-		   that should be spent on buffer + page cache
-borrow_percent  -- when Linux is short on memory, and buffer
-                   and cache use more than this percentage of
-                   memory, free pages are stolen from them
+		   that should be spent on buffer memory
+borrow_percent  -- when Linux is short on memory, and the
+                   buffer cache uses more memory, free pages
+                   are stolen from it
 max_percent     -- this is the maximum amount of memory that
-                   can be used for buffer and cache memory 
+                   can be used for buffer memory 
 
 ==============================================================
 freepages:
@@ -173,6 +173,18 @@ static inline int vm_enough_memory(long pages)
     freepages -= num_physpages >> 4;
     return freepages > pages;
 }
+
+==============================================================
+
+pagecache:
+
+This file does exactly the same as buffermem, only this
+file controls the struct page_cache, and thus controls
+the amount of memory allowed for memory mapping of files.
+
+You don't want the minimum level to be too low, otherwise
+your system might thrash when memory is tight or fragmentation
+is high...
 
 ==============================================================
 

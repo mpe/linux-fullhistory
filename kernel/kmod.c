@@ -9,24 +9,22 @@
 #include <linux/types.h>
 #include <linux/unistd.h>
 
-static inline _syscall1(int,delete_module,const char *,name_user)
-
 /*
 	kmod_unload_delay and modprobe_path are set via /proc/sys.
 */
 int kmod_unload_delay = 60;
 char modprobe_path[256] = "/sbin/modprobe";
-char module_name[64] = "";
-char * argv[] = { "modprobe", "-k", NULL, NULL, };
-char * envp[] = { "HOME=/", "TERM=linux", NULL, };
+static char module_name[64] = "";
+static char * argv[] = { "modprobe", "-k", module_name, NULL, };
+static char * envp[] = { "HOME=/", "TERM=linux", NULL, };
 
 /*
 	kmod_queue synchronizes the kmod thread and the rest of the system
 	kmod_unload_timer is what we use to unload modules
 	after kmod_unload_delay seconds
 */
-struct wait_queue * kmod_queue = NULL;
-struct timer_list kmod_unload_timer;
+static struct wait_queue * kmod_queue = NULL;
+static struct timer_list kmod_unload_timer;
 
 /*
 	kmod_thread is the thread that does most of the work.  kmod_unload and
@@ -74,7 +72,6 @@ int kmod_thread(void * data)
 					Call modprobe with module_name.  If execve returns,
 					print out an error.
 				*/
-				argv[2] = module_name;
 				execve(modprobe_path, argv, envp);
 
 				printk("kmod: failed to load module %s\n", module_name);
@@ -136,7 +133,8 @@ int request_module(const char * name)
 		the module into module_name.  Once that is done, wake up
 		kmod_thread.
 	*/
-	strcpy(module_name, name);
+	strncpy(module_name, name, sizeof(module_name));
+	module_name[sizeof(module_name)-1] = '\0';
 	wake_up(&kmod_queue);
 
 	/*

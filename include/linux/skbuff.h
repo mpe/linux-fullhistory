@@ -19,6 +19,7 @@
 
 #include <asm/atomic.h>
 #include <asm/types.h>
+#include <asm/spinlock.h>
 
 #define HAVE_ALLOC_SKB		/* For the drivers to know */
 #define HAVE_ALIGNABLE_SKB	/* Ditto 8)		   */
@@ -275,14 +276,15 @@ extern __inline__ void __skb_queue_head(struct sk_buff_head *list, struct sk_buf
 	prev->next = newsk;
 }
 
+extern spinlock_t skb_queue_lock;
+
 extern __inline__ void skb_queue_head(struct sk_buff_head *list, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&skb_queue_lock, flags);
 	__skb_queue_head(list, newsk);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&skb_queue_lock, flags);
 }
 
 /*
@@ -307,10 +309,9 @@ extern __inline__ void skb_queue_tail(struct sk_buff_head *list, struct sk_buff 
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&skb_queue_lock, flags);
 	__skb_queue_tail(list, newsk);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&skb_queue_lock, flags);
 }
 
 /*
@@ -342,10 +343,9 @@ extern __inline__ struct sk_buff *skb_dequeue(struct sk_buff_head *list)
 	long flags;
 	struct sk_buff *result;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&skb_queue_lock, flags);
 	result = __skb_dequeue(list);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&skb_queue_lock, flags);
 	return result;
 }
 
@@ -372,10 +372,9 @@ extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&skb_queue_lock, flags);
 	__skb_insert(newsk, old->prev, old, old->list);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&skb_queue_lock, flags);
 }
 
 /*
@@ -386,10 +385,9 @@ extern __inline__ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&skb_queue_lock, flags);
 	__skb_insert(newsk, old, old->next, old->list);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&skb_queue_lock, flags);
 }
 
 /*
@@ -421,11 +419,10 @@ extern __inline__ void skb_unlink(struct sk_buff *skb)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&skb_queue_lock, flags);
 	if(skb->list)
 		__skb_unlink(skb, skb->list);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&skb_queue_lock, flags);
 }
 
 /* XXX: more streamlined implementation */
@@ -442,10 +439,9 @@ extern __inline__ struct sk_buff *skb_dequeue_tail(struct sk_buff_head *list)
 	long flags;
 	struct sk_buff *result;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&skb_queue_lock, flags);
 	result = __skb_dequeue_tail(list);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&skb_queue_lock, flags);
 	return result;
 }
 

@@ -16,10 +16,10 @@ ENTRY(__lock_kernel)
 	jnc	3f
 	sti
 2:
-	btl	%dl, SYMBOL_NAME(smp_invalidate_needed)
+	btl	%edx, SYMBOL_NAME(smp_invalidate_needed)
 	jnc	0f
 	lock
-	btrl	%dl, SYMBOL_NAME(smp_invalidate_needed)
+	btrl	%edx, SYMBOL_NAME(smp_invalidate_needed)
 	jnc	0f
 	pushl	%eax
 	movl	%cr3, %eax

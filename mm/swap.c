@@ -72,3 +72,8 @@ buffer_mem_t buffer_mem = {
 	30	/* maximum percent buffer */
 };
 
+buffer_mem_t page_cache = {
+	10,	/* minimum percent page cache */
+	30,	/* borrow percent page cache */
+	75	/* maximum */
+};

@@ -451,7 +451,8 @@ static inline int do_try_to_free_page(int gfp_mask)
 	stop = 3;
 	if (gfp_mask & __GFP_WAIT)
 		stop = 0;
-	if ((buffermem >> PAGE_SHIFT) * 100 > buffer_mem.borrow_percent * num_physpages)
+	if (((buffermem >> PAGE_SHIFT) * 100 > buffer_mem.borrow_percent * num_physpages)
+		   || (page_cache_size * 100 > page_cache.borrow_percent * num_physpages))
 		state = 0;
 
 	switch (state) {
@@ -568,7 +569,7 @@ int kswapd(void *unused)
 		 * per second (1.6MB/s). This should be a /proc
 		 * thing.
 		 */
-		tries = 50;
+		tries = (50 << 2) >> free_memory_available(3);
 	
 		while (tries--) {
 			int gfp_mask;
@@ -620,7 +621,8 @@ void swap_tick(void)
 	}
  
 	if ((long) (now - want) >= 0) {
-		if (want_wakeup || (num_physpages * buffer_mem.max_percent) < (buffermem >> PAGE_SHIFT) * 100) {
+		if (want_wakeup || (num_physpages * buffer_mem.max_percent) < (buffermem >> PAGE_SHIFT) * 100
+				|| (num_physpages * page_cache.max_percent < page_cache_size)) {
 			/* Set the next wake-up time */
 			next_swap_jiffies = now + swapout_interval;
 			wake_up(&kswapd_wait);

@@ -201,6 +201,8 @@ static ctl_table vm_table[] = {
 	 sizeof(sysctl_overcommit_memory), 0644, NULL, &proc_dointvec},
 	{VM_BUFFERMEM, "buffermem",
 	 &buffer_mem, sizeof(buffer_mem_t), 0600, NULL, &proc_dointvec},
+	{VM_PAGECACHE, "pagecache",
+	 &page_cache, sizeof(buffer_mem_t), 0600, NULL, &proc_dointvec},
 	{0}
 };
 

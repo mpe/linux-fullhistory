@@ -39,6 +39,7 @@ typedef struct buffer_mem_v1
 } buffer_mem_v1;
 typedef buffer_mem_v1 buffer_mem_t;
 extern buffer_mem_t buffer_mem;
+extern buffer_mem_t page_cache;
 
 typedef struct freepages_v1
 {

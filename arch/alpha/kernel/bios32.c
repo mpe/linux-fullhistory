@@ -813,7 +813,7 @@ common_fixup(long min_idsel, long max_idsel, long irqs_per_slot,
  */
 static inline void eb66p_fixup(void)
 {
-	static char irq_tab[5][5] __initdata = {
+	static char irq_tab[5][5] __initlocaldata = {
 		{16+0, 16+0, 16+5,  16+9, 16+13},  /* IdSel 6,  slot 0, J25 */
 		{16+1, 16+1, 16+6, 16+10, 16+14},  /* IdSel 7,  slot 1, J26 */
 		{  -1,   -1,   -1,    -1,    -1},  /* IdSel 8,  SIO         */
@@ -869,7 +869,7 @@ static inline void eb66p_fixup(void)
 #if defined(CONFIG_ALPHA_PC164) || defined(CONFIG_ALPHA_LX164)
 static inline void alphapc164_fixup(void)
 {
-	static char irq_tab[7][5] __initdata = {
+	static char irq_tab[7][5] __initlocaldata = {
 		/*INT   INTA  INTB   INTC   INTD */
 		{ 16+2, 16+2, 16+9,  16+13, 16+17}, /* IdSel  5, slot 2, J20 */
 		{ 16+0, 16+0, 16+7,  16+11, 16+15}, /* IdSel  6, slot 0, J29 */
@@ -900,7 +900,7 @@ static inline void alphapc164_fixup(void)
  */
 static inline void cabriolet_fixup(void)
 {
-	static char irq_tab[5][5] __initdata = {
+	static char irq_tab[5][5] __initlocaldata = {
 		{ 16+2, 16+2, 16+7, 16+11, 16+15}, /* IdSel 5,  slot 2, J21 */
 		{ 16+0, 16+0, 16+5,  16+9, 16+13}, /* IdSel 6,  slot 0, J19 */
 		{ 16+1, 16+1, 16+6, 16+10, 16+14}, /* IdSel 7,  slot 1, J20 */
@@ -956,7 +956,7 @@ static inline void cabriolet_fixup(void)
  */
 static inline void eb66_and_eb64p_fixup(void)
 {
-	static char irq_tab[5][5] __initdata = {
+	static char irq_tab[5][5] __initlocaldata = {
 		{16+7, 16+7, 16+7, 16+7,  16+7},  /* IdSel 5,  slot ?, ?? */
 		{16+0, 16+0, 16+2, 16+4,  16+9},  /* IdSel 6,  slot ?, ?? */
 		{16+1, 16+1, 16+3, 16+8, 16+10},  /* IdSel 7,  slot ?, ?? */
@@ -1005,7 +1005,7 @@ static inline void eb66_and_eb64p_fixup(void)
  */
 static inline void mikasa_fixup(void)
 {
-	static char irq_tab[8][5] __initdata = {
+	static char irq_tab[8][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{16+12, 16+12, 16+12, 16+12, 16+12},	/* IdSel 17,  SCSI */
 		{   -1,    -1,    -1,    -1,    -1},	/* IdSel 18,  PCEB */
@@ -1076,7 +1076,7 @@ static inline void mikasa_fixup(void)
  */
 static inline void noritake_fixup(void)
 {
-	static char irq_tab[13][5] __initdata = {
+	static char irq_tab[13][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 18,  PCEB */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 19,  PPB  */
@@ -1140,7 +1140,7 @@ static inline void noritake_fixup(void)
  */
 static inline void alcor_fixup(void)
 {
-	static char irq_tab[6][5] __initdata = {
+	static char irq_tab[6][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{ 16+8,  16+8,  16+9, 16+10, 16+11},	/* IdSel 18,  slot 0 */
 		{16+16, 16+16, 16+17, 16+18, 16+19},	/* IdSel 19,  slot 3 */
@@ -1195,7 +1195,7 @@ static inline void alcor_fixup(void)
  */
 static inline void xlt_fixup(void)
 {
-	static char irq_tab[7][5] __initdata = {
+	static char irq_tab[7][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{16+13, 16+13, 16+13, 16+13, 16+13},	/* IdSel 17,  TULIP  */
 		{ 16+8,  16+8,  16+9, 16+10, 16+11},	/* IdSel 18,  slot 0 */
@@ -1266,7 +1266,7 @@ static inline void xlt_fixup(void)
 #ifdef CONFIG_ALPHA_SABLE
 static inline void sable_fixup(void)
 {
-        static char irq_tab[9][5] __initdata = {
+        static char irq_tab[9][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{ 32+0,  32+0,  32+0,  32+0,  32+0},  /* IdSel 0,  TULIP  */
 		{ 32+1,  32+1,  32+1,  32+1,  32+1},  /* IdSel 1,  SCSI   */
@@ -1349,7 +1349,7 @@ static inline void sable_fixup(void)
 #ifdef CONFIG_ALPHA_MIATA
 static inline void miata_fixup(void)
 {
-        static char irq_tab[18][5] __initdata = {
+        static char irq_tab[18][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{16+ 8, 16+ 8, 16+ 8, 16+ 8, 16+ 8},  /* IdSel 14,  DC21142  */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 15,  EIDE   */
@@ -1420,7 +1420,7 @@ static inline void miata_fixup(void)
 #ifdef CONFIG_ALPHA_SX164
 static inline void sx164_fixup(void)
 {
-	static char irq_tab[5][5] __initdata = {
+	static char irq_tab[5][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{ 16+ 9, 16+ 9, 16+13, 16+17, 16+21}, /* IdSel 5 slot 2 J17 */
 		{ 16+11, 16+11, 16+15, 16+19, 16+23}, /* IdSel 6 slot 0 J19 */
@@ -1461,7 +1461,7 @@ static inline void sio_fixup(void)
 	 * that they use the default INTA line, if they are interrupt
 	 * driven at all).
 	 */
-	static const char pirq_tab[][5] __initdata = {
+	static const char pirq_tab[][5] __initlocaldata = {
 #ifdef CONFIG_ALPHA_P2K
 		{ 0,  0, -1, -1, -1}, /* idsel  6 (53c810) */
 		{-1, -1, -1, -1, -1}, /* idsel  7 (SIO: PCI/ISA bridge) */
