@@ -35,39 +35,12 @@
 
 static int sysv_writepage (struct file * file, struct page * page)
 {
-	struct dentry *dentry = file->f_dentry;
-	struct inode *inode = dentry->d_inode;
-	unsigned long block;
-	int *p, nr[PAGE_SIZE/512];
-	int i, err, created;
-	struct buffer_head *bh;
-
-	i = PAGE_SIZE >> inode->i_sb->sv_block_size_bits;
-	block = page->offset >> inode->i_sb->sv_block_size_bits;
-	p = nr;
-	bh = page->buffers;
-	do {
-		if (bh && bh->b_blocknr)
-			*p = bh->b_blocknr;
-		else
-			*p = sysv_getblk_block (inode, block, 1, &err, &created);
-		if (!*p)
-			return -EIO;
-		i--;
-		block++;
-		p++;
-		if (bh)
-			bh = bh->b_this_page;
-	} while (i > 0);
-
-	/* IO start */
-	brw_page(WRITE, page, inode->i_dev, nr, inode->i_sb->sv_block_size, 1);
-	return 0;
+	return block_write_full_page(file, page, sysv_getblk_block);
 }
 
 static long sysv_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
 {
-	return block_write_one_page(file, page, offset, bytes, buf, sysv_getblk_block);
+	return block_write_partial_page(file, page, offset, bytes, buf, sysv_getblk_block);
 }
 
 /*
@@ -113,12 +86,12 @@ struct inode_operations sysv_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	generic_readpage,	/* readpage */
-	sysv_writepage,		/* writepage */
 	sysv_bmap,		/* bmap */
+	block_read_full_page,	/* readpage */
+	sysv_writepage,		/* writepage */
+	block_flushpage,	/* flushpage */
 	sysv_truncate,		/* truncate */
 	NULL,   		/* permission */
 	NULL,			/* smap */
-	NULL,			/* revalidate */
-	block_flushpage,	/* flushpage */
+	NULL			/* revalidate */
 };

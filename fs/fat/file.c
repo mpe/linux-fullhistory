@@ -57,12 +57,14 @@ struct inode_operations fat_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	generic_readpage,	/* readpage */
-	NULL,			/* writepage */
 	fat_bmap,		/* bmap */
+	block_read_full_page,	/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* flushpage */
 	fat_truncate,		/* truncate */
 	NULL,			/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 /* #Specification: msdos / special devices / mmap	
@@ -107,12 +109,14 @@ struct inode_operations fat_file_inode_operations_1024 = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	generic_readpage,	/* readpage */
-	NULL,			/* writepage */
 	NULL,			/* bmap */
+	block_read_full_page,	/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* flushpage */
 	fat_truncate,		/* truncate */
 	NULL,			/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 static struct file_operations fat_file_operations_readpage = {
@@ -142,12 +146,14 @@ struct inode_operations fat_file_inode_operations_readpage = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap */
 	fat_readpage,		/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	fat_truncate,		/* truncate */
 	NULL,			/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 #define MSDOS_PREFETCH	32

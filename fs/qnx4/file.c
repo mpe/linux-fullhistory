@@ -189,16 +189,18 @@ struct inode_operations qnx4_file_inode_operations =
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	qnx4_bmap,	        /* bmap */
 	qnx4_readpage,		/* readpage */
 	NULL,			/* writepage */
-	qnx4_bmap,	        /* bmap */
+	NULL,			/* flushpage */
 #ifdef CONFIG_QNX4FS_RW
 	qnx4_truncate,		/* truncate */
 #else
 	NULL,
 #endif
 	NULL,			/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 static int qnx4_readpage(struct file *file, struct page *page)

@@ -1232,11 +1232,14 @@ struct inode_operations vfat_dir_inode_operations = {
 	vfat_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* followlink */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
-	NULL			/* permission */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 struct super_block *vfat_read_super(struct super_block *sb,void *data,

@@ -93,9 +93,10 @@ struct inode_operations hfs_nat_ndir_inode_operations = {
 	hfs_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
@@ -115,9 +116,10 @@ struct inode_operations hfs_nat_hdir_inode_operations = {
 	nat_hdr_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */

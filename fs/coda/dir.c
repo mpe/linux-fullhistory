@@ -77,9 +77,10 @@ struct inode_operations coda_dir_inode_operations =
 	coda_rename,	        /* rename */
 	NULL,	                /* readlink */
 	NULL,	                /* follow_link */
+	NULL,		        /* bmap */
 	NULL,	                /* readpage */
 	NULL,		        /* writepage */
-	NULL,		        /* bmap */
+	NULL,		        /* flushpage */
 	NULL,	                /* truncate */
 	coda_permission,        /* permission */
 	NULL,                   /* smap */

@@ -29,39 +29,12 @@
 
 static int minix_writepage(struct file *file, struct page *page)
 {
-	struct dentry *dentry = file->f_dentry;
-	struct inode *inode = dentry->d_inode;
-	unsigned long block;
-	int *p, nr[PAGE_SIZE/BLOCK_SIZE];
-	int i, err, created;
-	struct buffer_head *bh;
-
-	i = PAGE_SIZE / BLOCK_SIZE;
-	block = page->offset / BLOCK_SIZE;
-	p = nr;
-	bh = page->buffers;
-	do {
-		if (bh && bh->b_blocknr)
-			*p = bh->b_blocknr;
-		else
-			*p = minix_getblk_block(inode, block, 1, &err, &created);
-		if (!*p)
-			return -EIO;
-		i--;
-		block++;
-		p++;
-		if (bh)
-			bh = bh->b_this_page;
-	} while(i > 0);
-
-	/* IO start */
-	brw_page(WRITE, page, inode->i_dev, nr, BLOCK_SIZE, 1);
-	return 0;
+	return block_write_full_page(file, page, minix_getblk_block);
 }
 
 static long minix_write_one_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char *buf)
 {
-	return block_write_one_page(file, page, offset, bytes, buf, minix_getblk_block);
+	return block_write_partial_page(file, page, offset, bytes, buf, minix_getblk_block);
 }
 
 /*
@@ -88,7 +61,10 @@ static struct file_operations minix_file_operations = {
 	NULL,			/* no special open is needed */
 	NULL,			/* flush */
 	NULL,			/* release */
-	minix_sync_file		/* fsync */
+	minix_sync_file,	/* fsync */
+	NULL,			/* fasync */
+	NULL,			/* check_media_change */
+	NULL			/* revalidate */
 };
 
 struct inode_operations minix_file_inode_operations = {
@@ -104,12 +80,12 @@ struct inode_operations minix_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	generic_readpage,	/* readpage */
-	minix_writepage,	/* writepage */
 	minix_bmap,		/* bmap */
+	block_read_full_page,	/* readpage */
+	minix_writepage,	/* writepage */
+	block_flushpage,	/* flushpage */
 	minix_truncate,		/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
 	NULL,			/* revalidate */
-	block_flushpage,	/* flushpage */
 };

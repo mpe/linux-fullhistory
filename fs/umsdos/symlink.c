@@ -135,9 +135,10 @@ struct inode_operations umsdos_symlink_inode_operations =
 	NULL,			/* rename */
 	UMSDOS_readlink,	/* readlink */
 	UMSDOS_followlink,	/* followlink */
-	generic_readpage,	/* readpage */
-	NULL,			/* writepage */
 	fat_bmap,		/* bmap */
+	block_read_full_page,	/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */

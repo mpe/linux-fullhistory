@@ -74,11 +74,14 @@ struct inode_operations proc_ppc_htab_inode_operations = {
     NULL,	    /* rename	   */
     NULL,	    /* readlink	   */
     NULL,	    /* follow_link */
+    NULL,	    /* bmap	   */
     NULL,	    /* readpage	   */
     NULL,	    /* writepage   */
-    NULL,	    /* bmap	   */
+    NULL,	    /* flushpage   */
     NULL,	    /* truncate	   */
-    NULL	    /* permission  */
+    NULL,	    /* permission  */
+    NULL,	    /* smap        */
+    NULL	    /* revalidate  */
 };
 
 /* these will go into processor.h when I'm done debugging -- Cort */

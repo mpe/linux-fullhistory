@@ -855,17 +855,15 @@ asmlinkage long sys32_readv(int fd, struct iovec32 *vector, u32 count)
 	long ret = -EBADF;
 
 	lock_kernel();
+
 	file = fget(fd);
 	if(!file)
 		goto bad_file;
 
-	if(!(file->f_mode & 1))
-		goto out;
-
-	ret = do_readv_writev32(VERIFY_WRITE, file,
-				vector, count);
-out:
+	if (file->f_op && file->f_op->read && (file->f_mode & FMODE_READ))
+		ret = do_readv_writev32(VERIFY_WRITE, file, vector, count);
 	fput(file);
+
 bad_file:
 	unlock_kernel();
 	return ret;
@@ -877,19 +875,14 @@ asmlinkage long sys32_writev(int fd, struct iovec32 *vector, u32 count)
 	int ret = -EBADF;
 
 	lock_kernel();
+
 	file = fget(fd);
 	if(!file)
 		goto bad_file;
-
-	if(!(file->f_mode & 2))
-		goto out;
-
-	down(&file->f_dentry->d_inode->i_sem);
-	ret = do_readv_writev32(VERIFY_READ, file,
-				vector, count);
-	up(&file->f_dentry->d_inode->i_sem);
-out:
+	if (file->f_op && file->f_op->write && (file->f_mode & FMODE_WRITE))
+		ret = do_readv_writev32(VERIFY_READ, file, vector, count);
 	fput(file);
+
 bad_file:
 	unlock_kernel();
 	return ret;

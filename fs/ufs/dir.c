@@ -209,10 +209,12 @@ struct inode_operations ufs_dir_inode_operations = {
 	ufs_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	ufs_permission,		/* permission */
 	NULL,			/* smap */
+	NULL			/* revalidate */
 };

@@ -26,12 +26,14 @@ struct inode_operations efs_symlink_inode_operations = {
 	NULL,			/* rename */
 	efs_readlink,		/* readlink */
 	efs_follow_link,	/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 static char *efs_linktarget(struct inode *in, int *len) {

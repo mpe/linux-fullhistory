@@ -46,13 +46,13 @@ struct inode_operations coda_ioctl_inode_operations =
 	NULL,		        /* rename */
 	NULL,	                /* readlink */
 	NULL,	                /* follow_link */
+	NULL,		        /* bmap */
 	NULL,	                /* readpage */
 	NULL,		        /* writepage */
-	NULL,		        /* bmap */
+	NULL,		        /* flushpage */
 	NULL,	                /* truncate */
 	coda_ioctl_permission,  /* permission */
 	NULL,                   /* smap */
-	NULL,                   /* update page */
         NULL                    /* revalidate */
 };
 

@@ -322,8 +322,6 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	spin_lock_irqsave(&io_request_lock,flags);
 	current_request = get_queue(req->rq_dev);
 
-	if (req->bh)
-		mark_buffer_clean(req->bh);
 	if (!(tmp = *current_request)) {
 		*current_request = req;
 		if (dev->current_request != &dev->plug)
@@ -425,9 +423,13 @@ void make_request(int major,int rw, struct buffer_head * bh)
 			rw_ahead = 1;
 			rw = WRITE;	/* drop into WRITE */
 		case WRITE:
-			if (!buffer_dirty(bh))   /* Hmmph! Nothing to write */
-				goto end_io;
-			/* We don't allow the write-requests to fill up the
+			if (!test_and_clear_bit(BH_Dirty, &bh->b_state))
+				goto end_io;	/* Hmmph! Nothing to write */
+			lock_kernel();
+			refile_buffer(bh);
+			unlock_kernel();
+			/*
+			 * We don't allow the write-requests to fill up the
 			 * queue completely:  we want some room for reads,
 			 * as they take precedence. The last third of the
 			 * requests are only for reads.
@@ -528,7 +530,6 @@ void make_request(int major,int rw, struct buffer_head * bh)
 			} else
 				continue;
 
-			mark_buffer_clean(bh);
 			spin_unlock_irqrestore(&io_request_lock,flags);
 		    	return;
 

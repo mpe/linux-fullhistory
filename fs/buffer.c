@@ -1539,9 +1539,11 @@ int block_write_partial_page (struct file *file, struct page *page, unsigned lon
 		 * lots of dirty pages.
 		 */
 		if (!test_and_set_bit(BH_Dirty, &bh->b_state)) {
-			__atomic_mark_buffer_dirty(bh, bdf_prm.b_un.age_buffer);
+			lock_kernel();
+			__mark_dirty(bh, 0);
 			if (too_many_dirty_buffers)
 				balance_dirty(bh->b_dev);
+			unlock_kernel();
 		}
 
 skip:

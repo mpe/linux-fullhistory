@@ -38,12 +38,14 @@ struct inode_operations efs_dir_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	efs_bmap,		/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	efs_bmap,		/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 static int efs_readdir(struct file *filp, void *dirent, filldir_t filldir) {

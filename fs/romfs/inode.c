@@ -1,7 +1,7 @@
 /*
  * ROMFS file system, Linux implementation
  *
- * Copyright (C) 1997  Janos Farkas <chexum@shadow.banki.hu>
+ * Copyright (C) 1997-1999  Janos Farkas <chexum@shadow.banki.hu>
  *
  * Using parts of the minix filesystem
  * Copyright (C) 1991, 1992  Linus Torvalds
@@ -57,6 +57,7 @@
 #include <linux/fs.h>
 #include <linux/locks.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -320,7 +321,7 @@ romfs_lookup(struct inode *dir, struct dentry *dentry)
 	const char *name;		/* got from dentry */
 	int len;
 
-	res = 0;			/* instead of ENOENT */
+	res = -EACCES;			/* placeholder for "no data here" */
 	offset = dir->i_ino & ROMFH_MASK;
 	if (romfs_copyfrom(dir, &ri, offset, ROMFH_SIZE) <= 0)
 		goto out;
@@ -335,8 +336,9 @@ romfs_lookup(struct inode *dir, struct dentry *dentry)
 	len = dentry->d_name.len;
 
 	for(;;) {
-		if (!offset || offset >= maxoff
-		    || romfs_copyfrom(dir, &ri, offset, ROMFH_SIZE) <= 0)
+		if (!offset || offset >= maxoff)
+			goto out0;
+		if (romfs_copyfrom(dir, &ri, offset, ROMFH_SIZE) <= 0)
 			goto out;
 
 		/* try to match the first 16 bytes of name */
@@ -365,19 +367,28 @@ romfs_lookup(struct inode *dir, struct dentry *dentry)
 	if ((ntohl(ri.next) & ROMFH_TYPE) == ROMFH_HRD)
 		offset = ntohl(ri.spec) & ROMFH_MASK;
 
-	if ((inode = iget(dir->i_sb, offset))==NULL) {
-		res = -EACCES;
-	} else {
-		d_add(dentry, inode);
-	}
+	if ((inode = iget(dir->i_sb, offset)))
+		goto outi;
 
-out:
-	return ERR_PTR(res);
+	/*
+	 * it's a bit funky, _lookup needs to return an error code
+	 * (negative) or a NULL, both as a dentry.  ENOENT should not
+	 * be returned, instead we need to create a negative dentry by
+	 * d_add(dentry, NULL); and return 0 as no error.
+	 * (Although as I see, it only matters on writable file
+	 * systems).
+	 */
+
+out0:	inode = NULL;
+outi:	res = 0;
+	d_add (dentry, inode);
+
+out:	return ERR_PTR(res);
 }
 
 /*
  * Ok, we do readpage, to be able to execute programs.  Unfortunately,
- * we can't use bmap, since we have looser alignments.
+ * we can't use bmap, since we may have looser alignments.
  */
 
 static int
@@ -389,12 +400,13 @@ romfs_readpage(struct file * file, struct page * page)
 	unsigned long offset, avail, readlen;
 	int result = -EIO;
 
-	atomic_inc(&page->count);
-	set_bit(PG_locked, &page->flags);
-
+	lock_kernel();
+	get_page(page);
 	buf = page_address(page);
-	clear_bit(PG_uptodate, &page->flags);
-	clear_bit(PG_error, &page->flags);
+
+	/* hack? */
+	page->owner = (int)current;
+
 	offset = page->offset;
 	if (offset < inode->i_size) {
 		avail = inode->i_size-offset;
@@ -403,18 +415,19 @@ romfs_readpage(struct file * file, struct page * page)
 			if (readlen < PAGE_SIZE) {
 				memset((void *)(buf+readlen),0,PAGE_SIZE-readlen);
 			}
-			set_bit(PG_uptodate, &page->flags);
+			SetPageUptodate(page);
 			result = 0;
 		}
 	}
 	if (result) {
-		set_bit(PG_error, &page->flags);
 		memset((void *)buf, 0, PAGE_SIZE);
+		SetPageError(page);
 	}
 
-	clear_bit(PG_locked, &page->flags);
-	wake_up(&page->wait);
+	UnlockPage(page);
+
 	free_page(buf);
+	unlock_kernel();
 
 	return result;
 }
@@ -508,12 +521,14 @@ static struct inode_operations romfs_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap -- not really */
 	romfs_readpage,		/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap -- not really */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 static struct file_operations romfs_dir_operations = {
@@ -550,12 +565,14 @@ static struct inode_operations romfs_dir_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 static struct inode_operations romfs_link_inode_operations = {
@@ -571,18 +588,20 @@ static struct inode_operations romfs_link_inode_operations = {
 	NULL,			/* rename */
 	romfs_readlink,		/* readlink */
 	romfs_follow_link,	/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 static mode_t romfs_modemap[] =
 {
-	0, S_IFDIR, S_IFREG, S_IFLNK+0777,
-	S_IFBLK, S_IFCHR, S_IFSOCK, S_IFIFO
+	0, S_IFDIR+0644, S_IFREG+0644, S_IFLNK+0777,
+	S_IFBLK+0600, S_IFCHR+0600, S_IFSOCK+0644, S_IFIFO+0644
 };
 
 static struct inode_operations *romfs_inoops[] =
@@ -591,10 +610,10 @@ static struct inode_operations *romfs_inoops[] =
 	&romfs_dir_inode_operations,
 	&romfs_file_inode_operations,
 	&romfs_link_inode_operations,
-	&blkdev_inode_operations,	/* standard handlers */
-	&chrdev_inode_operations,
-	NULL,				/* socket */
-	NULL,				/* fifo */
+	NULL,				/* device/fifo/socket nodes, */
+	NULL,				/*   set by init_special_inode */
+	NULL,
+	NULL,
 };
 
 static void
@@ -627,34 +646,30 @@ romfs_read_inode(struct inode *i)
 	i->i_mtime = i->i_atime = i->i_ctime = 0;
 	i->i_uid = i->i_gid = 0;
 
-	i->i_op = romfs_inoops[nextfh & ROMFH_TYPE];
+        /* Precalculate the data offset */
+        ino = romfs_strnlen(i, ino+ROMFH_SIZE, ROMFS_MAXFN);
+        if (ino >= 0)
+                ino = ((ROMFH_SIZE+ino+1+ROMFH_PAD)&ROMFH_MASK);
+        else
+                ino = 0;
 
-	/* Precalculate the data offset */
-	ino = romfs_strnlen(i, ino+ROMFH_SIZE, ROMFS_MAXFN);
-	if (ino >= 0)
-		ino = ((ROMFH_SIZE+ino+1+ROMFH_PAD)&ROMFH_MASK);
-	else
-		ino = 0;
+        i->u.romfs_i.i_metasize = ino;
+        i->u.romfs_i.i_dataoffset = ino+(i->i_ino&ROMFH_MASK);
 
-	i->u.romfs_i.i_metasize = ino;
-	i->u.romfs_i.i_dataoffset = ino+(i->i_ino&ROMFH_MASK);
-
-	/* Compute permissions */
-	ino = S_IRUGO|S_IWUSR;
-	ino |= romfs_modemap[nextfh & ROMFH_TYPE];
-	if (nextfh & ROMFH_EXEC) {
-		ino |= S_IXUGO;
-	}
-	i->i_mode = ino;
-
-	if (S_ISFIFO(ino))
-		init_fifo(i);
-	else if (S_ISDIR(ino))
-		i->i_size = i->u.romfs_i.i_metasize;
-	else if (S_ISBLK(ino) || S_ISCHR(ino)) {
-		i->i_mode &= ~(S_IRWXG|S_IRWXO);
-		ino = ntohl(ri.spec);
-		i->i_rdev = MKDEV(ino>>16,ino&0xffff);
+        /* Compute permissions */
+        ino = romfs_modemap[nextfh & ROMFH_TYPE];
+	/* only "normal" files have ops */
+        if ((i->i_op = romfs_inoops[nextfh & ROMFH_TYPE])) {
+		if (nextfh & ROMFH_EXEC)
+			ino |= S_IXUGO;
+		i->i_mode = ino;
+		if (S_ISDIR(ino))
+			i->i_size = i->u.romfs_i.i_metasize;
+	} else {
+		/* depending on MBZ for sock/fifos */
+		nextfh = ntohl(ri.spec);
+		nextfh = kdev_t_to_nr(MKDEV(nextfh>>16,nextfh&0xffff));
+		init_special_inode(i, ino, nextfh);
 	}
 }
 

@@ -51,12 +51,14 @@ struct inode_operations adfs_dir_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* read link */
 	NULL,			/* follow link */
+	NULL,			/* bmap */
 	NULL,			/* read page */
 	NULL,			/* write page */
-	NULL,			/* bmap */
+	NULL,			/* flush page */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 unsigned int adfs_val (unsigned char *p, int len)

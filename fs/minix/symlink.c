@@ -33,11 +33,14 @@ struct inode_operations minix_symlink_inode_operations = {
 	NULL,			/* rename */
 	minix_readlink,		/* readlink */
 	minix_follow_link,	/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
-	NULL			/* permission */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 static struct dentry * minix_follow_link(struct dentry * dentry,

@@ -53,5 +53,7 @@ struct inode_operations isofs_file_inode_operations = {
 	NULL,			/* writepage */
 	NULL,			/* flushpage */
 	NULL,	       		/* truncate */
-	NULL			/* permission */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };

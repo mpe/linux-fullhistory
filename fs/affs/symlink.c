@@ -35,12 +35,14 @@ struct inode_operations affs_symlink_inode_operations = {
 	NULL,			/* rename */
 	affs_readlink,		/* readlink */
 	affs_follow_link,	/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 static int

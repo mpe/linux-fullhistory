@@ -57,9 +57,10 @@ struct inode_operations affs_dir_inode_operations = {
 	affs_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permissions */
 	NULL,			/* smap */

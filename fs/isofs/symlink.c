@@ -38,11 +38,14 @@ struct inode_operations isofs_symlink_inode_operations = {
 	NULL,			/* rename */
 	isofs_readlink,		/* readlink */
 	isofs_follow_link,	/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
-	NULL			/* permission */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 static int isofs_readlink(struct dentry * dentry, char * buffer, int buflen)
