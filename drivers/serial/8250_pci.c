@@ -31,6 +31,8 @@
 
 #include "8250.h"
 
+#undef SERIAL_DEBUG_PCI
+
 /*
  * Definitions for PCI support.
  */

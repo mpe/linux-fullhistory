@@ -51,13 +51,7 @@ struct serial8250_config {
 #define UART_CAP_AFE	(1 << 11)	/* MCR-based hw flow control */
 #define UART_CAP_UUE	(1 << 12)	/* UART needs IER bit 6 set (Xscale) */
 
-#undef SERIAL_DEBUG_PCI
-
 #if defined(__i386__) && (defined(CONFIG_M386) || defined(CONFIG_M486))
-#define SERIAL_INLINE
-#endif
-  
-#ifdef SERIAL_INLINE
 #define _INLINE_ inline
 #else
 #define _INLINE_
