@@ -14,6 +14,10 @@ if [ "$CONFIG_SBPCD" = "y" ]; then
   fi
 fi
 tristate 'Mitsumi (standard) [no XA/Multisession] CDROM support' CONFIG_MCD
+if [ "$CONFIG_MCD" != "n" ]; then
+   int 'MCD IRQ' CONFIG_MCD_IRQ 11
+   hex 'MCD I/O base' CONFIG_MCD_BASE 300
+fi
 tristate 'Mitsumi [XA/MultiSession] CDROM support' CONFIG_MCDX
 tristate 'Optics Storage DOLPHIN 8000AT CDROM support' CONFIG_OPTCD
 tristate 'Philips/LMS CM206 CDROM support' CONFIG_CM206

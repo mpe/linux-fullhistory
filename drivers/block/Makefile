@@ -220,6 +220,10 @@ endif
 
 ifeq ($(CONFIG_BLK_DEV_PS2),y)
 L_OBJS += ps2esdi.o
+else
+  ifeq ($(CONFIG_BLK_DEV_PS2),m)
+  M_OBJS += ps2esdi.o
+  endif
 endif
 
 ifeq ($(CONFIG_BLK_DEV_XD),y)

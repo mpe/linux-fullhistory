@@ -2,7 +2,7 @@
 ** *************************************************************************
 **
 **
-**     R C L A N M T L . C             $Revision: 5 $
+**     R C L A N M T L . C             $Revision: 6 $
 **
 **
 **  RedCreek I2O LAN Message Transport Layer program module.
@@ -29,6 +29,10 @@
 **  You should have received a copy of the GNU General Public License
 **  along with this program; if not, write to the Free Software
 **  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+**
+** 1998-1999, LAN API was modified and enhanced by Alice Hennessy.
+**
+** Sometime in 1997, LAN API was written from scratch by Wendell Nichols.
 ** *************************************************************************
 */
 
@@ -200,7 +204,7 @@ extern int printk(const char * fmt, ...);
 /* Special TID Assignments */
 
 #define I2O_IOP_TID   0
-#define I2O_HOST_TID  1
+#define I2O_HOST_TID  0xB91
 
  /* RedCreek I2O private message codes */
 #define RC_PRIVATE_GET_MAC_ADDR     0x0001/**/ /* OBSOLETE */

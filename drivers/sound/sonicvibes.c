@@ -3,7 +3,7 @@
 /*
  *      sonicvibes.c  --  S3 Sonic Vibes audio driver.
  *
- *      Copyright (C) 1998  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *      Copyright (C) 1998-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
@@ -55,6 +55,19 @@
  *                     reported by Johan Maes <joma@telindus.be>
  *    22.03.99   0.12  return EAGAIN instead of EBUSY when O_NONBLOCK
  *                     read/write cannot be executed
+ *    05.04.99   0.13  added code to sv_read and sv_write which should detect
+ *                     lockups of the sound chip and revive it. This is basically
+ *                     an ugly hack, but at least applications using this driver
+ *                     won't hang forever. I don't know why these lockups happen,
+ *                     it might well be the motherboard chipset (an early 486 PCI
+ *                     board with ALI chipset), since every busmastering 100MB
+ *                     ethernet card I've tried (Realtek 8139 and Macronix tulip clone)
+ *                     exhibit similar behaviour (they work for a couple of packets
+ *                     and then lock up and can be revived by ifconfig down/up).
+ *    07.04.99   0.14  implemented the following ioctl's: SOUND_PCM_READ_RATE, 
+ *                     SOUND_PCM_READ_CHANNELS, SOUND_PCM_READ_BITS; 
+ *                     Alpha fixes reported by Peter Jones <pjones@redhat.com>
+ *                     Note: dmaio hack might still be wrong on archs other than i386
  *
  */
 
@@ -255,7 +268,8 @@ struct sv_state {
 	int dev_dmfm;
 
 	/* hardware resources */
-	unsigned int iosb, ioenh, iosynth, iomidi, iogame, iodmaa, iodmac, irq;
+	unsigned long iosb, ioenh, iosynth, iomidi, iogame;  /* long for SPARC */
+	unsigned int iodmaa, iodmac, irq;
 
         /* mixer stuff */
         struct {
@@ -1298,7 +1312,19 @@ static ssize_t sv_read(struct file *file, char *buffer, size_t count, loff_t *pp
 			start_adc(s);
 			if (file->f_flags & O_NONBLOCK)
 				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->dma_adc.wait);
+			if (!interruptible_sleep_on_timeout(&s->dma_adc.wait, HZ)) {
+				printk(KERN_DEBUG "sv: read: chip lockup? dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
+				       s->dma_adc.dmasize, s->dma_adc.fragsize, s->dma_adc.count, 
+				       s->dma_adc.hwptr, s->dma_adc.swptr);
+				stop_adc(s);
+				spin_lock_irqsave(&s->lock, flags);
+				set_dmac(s, virt_to_bus(s->dma_adc.rawbuf), s->dma_adc.numfrag << s->dma_adc.fragshift);
+				/* program enhanced mode registers */
+				wrindir(s, SV_CIDMACBASECOUNT1, (s->dma_adc.fragsamples-1) >> 8);
+				wrindir(s, SV_CIDMACBASECOUNT0, s->dma_adc.fragsamples-1);
+				s->dma_adc.count = s->dma_adc.hwptr = s->dma_adc.swptr = 0;
+				spin_unlock_irqrestore(&s->lock, flags);
+			}
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
 			continue;
@@ -1358,7 +1384,19 @@ static ssize_t sv_write(struct file *file, const char *buffer, size_t count, lof
 			start_dac(s);
 			if (file->f_flags & O_NONBLOCK)
 				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->dma_dac.wait);
+			if (!interruptible_sleep_on_timeout(&s->dma_dac.wait, HZ)) {
+				printk(KERN_DEBUG "sv: write: chip lockup? dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
+				       s->dma_dac.dmasize, s->dma_dac.fragsize, s->dma_dac.count, 
+				       s->dma_dac.hwptr, s->dma_dac.swptr);
+				stop_dac(s);
+				spin_lock_irqsave(&s->lock, flags);
+				set_dmaa(s, virt_to_bus(s->dma_dac.rawbuf), s->dma_dac.numfrag << s->dma_dac.fragshift);
+				/* program enhanced mode registers */
+				wrindir(s, SV_CIDMAABASECOUNT1, (s->dma_dac.fragsamples-1) >> 8);
+				wrindir(s, SV_CIDMAABASECOUNT0, s->dma_dac.fragsamples-1);
+				s->dma_dac.count = s->dma_dac.hwptr = s->dma_dac.swptr = 0;
+				spin_unlock_irqrestore(&s->lock, flags);
+			}
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
 			continue;
@@ -1717,11 +1755,19 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 			s->dma_dac.subdivision = val;
 		return 0;
 
+        case SOUND_PCM_READ_RATE:
+		return put_user((file->f_mode & FMODE_READ) ? s->rateadc : s->ratedac, (int *)arg);
+
+        case SOUND_PCM_READ_CHANNELS:
+		return put_user((s->fmt & ((file->f_mode & FMODE_READ) ? (SV_CFMT_STEREO << SV_CFMT_CSHIFT) 
+					   : (SV_CFMT_STEREO << SV_CFMT_ASHIFT))) ? 2 : 1, (int *)arg);
+
+        case SOUND_PCM_READ_BITS:
+		return put_user((s->fmt & ((file->f_mode & FMODE_READ) ? (SV_CFMT_16BIT << SV_CFMT_CSHIFT) 
+					   : (SV_CFMT_16BIT << SV_CFMT_ASHIFT))) ? 16 : 8, (int *)arg);
+
         case SOUND_PCM_WRITE_FILTER:
         case SNDCTL_DSP_SETSYNCRO:
-        case SOUND_PCM_READ_RATE:
-        case SOUND_PCM_READ_CHANNELS:
-        case SOUND_PCM_READ_BITS:
         case SOUND_PCM_READ_FILTER:
                 return -EINVAL;
 		
@@ -2275,7 +2321,7 @@ __initfunc(int init_sonicvibes(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.12 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.14 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");
@@ -2329,7 +2375,7 @@ __initfunc(int init_sonicvibes(void))
 		}
 		pci_write_config_dword(pcidev, 0x40, s->iodmaa | 9);  /* enable and use extended mode */
 		pci_write_config_dword(pcidev, 0x48, s->iodmac | 9);  /* enable */
-		printk(KERN_DEBUG "sv: io ports: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+		printk(KERN_DEBUG "sv: io ports: %#lx %#lx %#lx %#lx %#lx %#x %#x\n",
 		       s->iosb, s->ioenh, s->iosynth, s->iomidi, s->iogame, s->iodmaa, s->iodmac);
 		if (s->ioenh == 0 || s->iodmaa == 0 || s->iodmac == 0)
 			continue;
@@ -2339,7 +2385,7 @@ __initfunc(int init_sonicvibes(void))
 		pci_write_config_dword(pcidev, 0x60, wavetable_mem >> 12);  /* wavetable base address */
 
 		if (check_region(s->ioenh, SV_EXTENT_ENH)) {
-			printk(KERN_ERR "sv: io ports %#x-%#x in use\n", s->ioenh, s->ioenh+SV_EXTENT_ENH-1);
+			printk(KERN_ERR "sv: io ports %#lx-%#lx in use\n", s->ioenh, s->ioenh+SV_EXTENT_ENH-1);
 			goto err_region5;
 		}
 		request_region(s->ioenh, SV_EXTENT_ENH, "S3 SonicVibes PCM");
@@ -2354,12 +2400,12 @@ __initfunc(int init_sonicvibes(void))
 		}
 		request_region(s->iodmac, SV_EXTENT_DMA, "S3 SonicVibes DMAC");
 		if (check_region(s->iomidi, SV_EXTENT_MIDI)) {
-			printk(KERN_ERR "sv: io ports %#x-%#x in use\n", s->iomidi, s->iomidi+SV_EXTENT_MIDI-1);
+			printk(KERN_ERR "sv: io ports %#lx-%#lx in use\n", s->iomidi, s->iomidi+SV_EXTENT_MIDI-1);
 			goto err_region2;
 		}
 		request_region(s->iomidi, SV_EXTENT_MIDI, "S3 SonicVibes Midi");
 		if (check_region(s->iosynth, SV_EXTENT_SYNTH)) {
-			printk(KERN_ERR "sv: io ports %#x-%#x in use\n", s->iosynth, s->iosynth+SV_EXTENT_SYNTH-1);
+			printk(KERN_ERR "sv: io ports %#lx-%#lx in use\n", s->iosynth, s->iosynth+SV_EXTENT_SYNTH-1);
 			goto err_region1;
 		}
 		request_region(s->iosynth, SV_EXTENT_SYNTH, "S3 SonicVibes Synth");
@@ -2390,7 +2436,7 @@ __initfunc(int init_sonicvibes(void))
 			printk(KERN_ERR "sv: irq %u in use\n", s->irq);
 			goto err_irq;
 		}
-		printk(KERN_INFO "sv: found adapter at io %#06x irq %u dmaa %#06x dmac %#06x revision %u\n",
+		printk(KERN_INFO "sv: found adapter at io %#lx irq %u dmaa %#06x dmac %#06x revision %u\n",
 		       s->ioenh, s->irq, s->iodmaa, s->iodmac, rdindir(s, SV_CIREVISION));
 		/* register devices */
 		if ((s->dev_audio = register_sound_dsp(&sv_audio_fops, -1)) < 0)

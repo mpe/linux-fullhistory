@@ -935,6 +935,7 @@ static void finish_output_interrupt(int dev, struct dma_buffparms *dmap)
 	if (dmap->audio_callback != NULL)
 		dmap->audio_callback(dev, dmap->callback_parm);
 	wake_up(&adev->out_sleeper);
+	wake_up(&adev->poll_sleeper);
 }
 
 static void do_outputintr(int dev, int dummy)
@@ -1103,7 +1104,10 @@ static void do_inputintr(int dev)
 	}
 	dmap->flags |= DMA_ACTIVE;
 	if (dmap->qlen > 0)
+	{
 		wake_up(&adev->in_sleeper);
+		wake_up(&adev->poll_sleeper);
+	}
 }
 
 void DMAbuf_inputintr(int dev)
@@ -1217,7 +1221,6 @@ static unsigned int poll_input(struct file * file, int dev, poll_table *wait)
 	if (!(adev->open_mode & OPEN_READ))
 		return 0;
 	if (dmap->mapping_flags & DMA_MAP_MAPPED) {
-		poll_wait(file, &adev->in_sleeper, wait);
 		if (dmap->qlen)
 			return POLLIN | POLLRDNORM;
 		return 0;
@@ -1228,7 +1231,6 @@ static unsigned int poll_input(struct file * file, int dev, poll_table *wait)
 		    !dmap->qlen && adev->go) {
 			unsigned long flags;
 			
-			poll_wait(file, &adev->in_sleeper, wait);
 			save_flags(flags);
 			cli();
 			DMAbuf_activate_recording(dev, dmap);
@@ -1236,7 +1238,6 @@ static unsigned int poll_input(struct file * file, int dev, poll_table *wait)
 		}
 		return 0;
 	}
-	poll_wait(file, &adev->in_sleeper, wait);
 	if (!dmap->qlen)
 		return 0;
 	return POLLIN | POLLRDNORM;
@@ -1250,14 +1251,12 @@ static unsigned int poll_output(struct file * file, int dev, poll_table *wait)
 	if (!(adev->open_mode & OPEN_WRITE))
 		return 0;
 	if (dmap->mapping_flags & DMA_MAP_MAPPED) {
-		poll_wait(file, &adev->out_sleeper, wait);
 		if (dmap->qlen)
 			return POLLOUT | POLLWRNORM;
 		return 0;
 	}
 	if (dmap->dma_mode == DMODE_INPUT)
 		return 0;
-	poll_wait(file, &adev->out_sleeper, wait);
 	if (dmap->dma_mode == DMODE_NONE)
 		return POLLOUT | POLLWRNORM;
 	if (!DMAbuf_space_in_queue(dev))
@@ -1267,6 +1266,8 @@ static unsigned int poll_output(struct file * file, int dev, poll_table *wait)
 
 unsigned int DMAbuf_poll(struct file * file, int dev, poll_table *wait)
 {
+	struct audio_operations *adev = audio_devs[dev];
+	poll_wait(file, &adev->poll_sleeper, wait);
 	return poll_input(file, dev, wait) | poll_output(file, dev, wait);
 }
 

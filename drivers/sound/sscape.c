@@ -943,7 +943,9 @@ int init_module(void)
 
 	mpu_config.irq = mpu_irq;
 	mpu_config.io_base = mpu_io;
-
+	/* WEH - Try to get right dma channel */
+        mpu_config.dma = dma;
+      
 	if(spea != -1)
 	{
 		old_hardware = spea;

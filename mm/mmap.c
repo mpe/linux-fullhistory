@@ -567,8 +567,8 @@ static void free_pgtables(struct mm_struct * mm, struct vm_area_struct *prev,
 		if (!prev)
 			goto no_mmaps;
 		if (prev->vm_end > start) {
-			if (last > prev->vm_end)
-				last = prev->vm_end;
+			if (last > prev->vm_start)
+				last = prev->vm_start;
 			goto no_mmaps;
 		}
 	}

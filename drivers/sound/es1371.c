@@ -58,6 +58,13 @@
  *                     reported by Johan Maes <joma@telindus.be>
  *    22.03.99   0.10  return EAGAIN instead of EBUSY when O_NONBLOCK
  *                     read/write cannot be executed
+ *    07.04.99   0.11  implemented the following ioctl's: SOUND_PCM_READ_RATE, 
+ *                     SOUND_PCM_READ_CHANNELS, SOUND_PCM_READ_BITS; 
+ *                     Alpha fixes reported by Peter Jones <pjones@redhat.com>
+ *                     Another Alpha fix (wait_src_ready in init routine)
+ *                     reported by "Ivan N. Kokshaysky" <ink@jurassic.park.msu.ru>
+ *                     Note: joystick address handling might still be wrong on archs
+ *                     other than i386
  *
  */
 
@@ -334,7 +341,8 @@ struct es1371_state {
 	int dev_midi;
 	
 	/* hardware resources */
-	unsigned int io, irq;
+	unsigned long io; /* long for SPARC */
+	unsigned int irq;
 
 	/* mixer registers; there is no HW readback */
 	struct {
@@ -1968,11 +1976,17 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 			s->dma_dac2.subdivision = val;
 		return 0;
 
+        case SOUND_PCM_READ_RATE:
+		return put_user((file->f_mode & FMODE_READ) ? s->adcrate : s->dac2rate, (int *)arg);
+
+        case SOUND_PCM_READ_CHANNELS:
+		return put_user((s->sctrl & ((file->f_mode & FMODE_READ) ? SCTRL_R1SMB : SCTRL_P2SMB)) ? 2 : 1, (int *)arg);
+		
+        case SOUND_PCM_READ_BITS:
+		return put_user((s->sctrl & ((file->f_mode & FMODE_READ) ? SCTRL_R1SEB : SCTRL_P2SEB)) ? 16 : 8, (int *)arg);
+
         case SOUND_PCM_WRITE_FILTER:
         case SNDCTL_DSP_SETSYNCRO:
-        case SOUND_PCM_READ_RATE:
-        case SOUND_PCM_READ_CHANNELS:
-        case SOUND_PCM_READ_BITS:
         case SOUND_PCM_READ_FILTER:
                 return -EINVAL;
 		
@@ -2338,11 +2352,17 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 		s->dma_dac1.subdivision = val;
 		return 0;
 
+        case SOUND_PCM_READ_RATE:
+		return put_user(s->dac1rate, (int *)arg);
+
+        case SOUND_PCM_READ_CHANNELS:
+		return put_user((s->sctrl & SCTRL_P1SMB) ? 2 : 1, (int *)arg);
+
+        case SOUND_PCM_READ_BITS:
+		return put_user((s->sctrl & SCTRL_P1SEB) ? 16 : 8, (int *)arg);
+
         case SOUND_PCM_WRITE_FILTER:
         case SNDCTL_DSP_SETSYNCRO:
-        case SOUND_PCM_READ_RATE:
-        case SOUND_PCM_READ_CHANNELS:
-        case SOUND_PCM_READ_BITS:
         case SOUND_PCM_READ_FILTER:
                 return -EINVAL;
 		
@@ -2712,7 +2732,7 @@ __initfunc(int init_es1371(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1371: version v0.10 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1371: version v0.11 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1371, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 
@@ -2736,7 +2756,7 @@ __initfunc(int init_es1371(void))
 		s->io = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
 		s->irq = pcidev->irq;
 		if (check_region(s->io, ES1371_EXTENT)) {
-			printk(KERN_ERR "es1371: io ports %#x-%#x in use\n", s->io, s->io+ES1371_EXTENT-1);
+			printk(KERN_ERR "es1371: io ports %#lx-%#lx in use\n", s->io, s->io+ES1371_EXTENT-1);
 			goto err_region;
 		}
 		request_region(s->io, ES1371_EXTENT, "es1371");
@@ -2744,7 +2764,7 @@ __initfunc(int init_es1371(void))
 			printk(KERN_ERR "es1371: irq %u in use\n", s->irq);
 			goto err_irq;
 		}
-		printk(KERN_INFO "es1371: found adapter at io %#06x irq %u\n"
+		printk(KERN_INFO "es1371: found adapter at io %#lx irq %u\n"
 		       KERN_INFO "es1371: features: joystick 0x%x\n", s->io, s->irq, joystick[index]);
 		/* register devices */
 		if ((s->dev_audio = register_sound_dsp(&es1371_audio_fops, -1)) < 0)
@@ -2796,6 +2816,7 @@ __initfunc(int init_es1371(void))
 		 * be stuck high, and I've found no way to rectify this other than
 		 * power cycle)
 		 */
+		wait_src_ready(s);
 		outl(0, s->io+ES1371_REG_SRCONV);
 		/* codec init */
 		wrcodec(s, 0x00, 0); /* reset codec */

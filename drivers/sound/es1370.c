@@ -3,7 +3,7 @@
 /*
  *      es1370.c  --  Ensoniq ES1370/Asahi Kasei AK4531 audio driver.
  *
- *      Copyright (C) 1998  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *      Copyright (C) 1998-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
@@ -87,6 +87,11 @@
  *                     reported by Johan Maes <joma@telindus.be>
  *    22.03.99   0.19  return EAGAIN instead of EBUSY when O_NONBLOCK
  *                     read/write cannot be executed
+ *    07.04.99   0.20  implemented the following ioctl's: SOUND_PCM_READ_RATE, 
+ *                     SOUND_PCM_READ_CHANNELS, SOUND_PCM_READ_BITS; 
+ *                     Alpha fixes reported by Peter Jones <pjones@redhat.com>
+ *                     Note: joystick address handling might still be wrong on archs
+ *                     other than i386
  *
  * some important things missing in Ensoniq documentation:
  *
@@ -287,7 +292,8 @@ struct es1370_state {
 	int dev_midi;
 	
 	/* hardware resources */
-	unsigned int io, irq;
+	unsigned long io; /* long for SPARC */
+	unsigned int irq;
 
 	/* mixer registers; there is no HW readback */
 	struct {
@@ -1526,11 +1532,19 @@ static int es1370_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 			s->dma_dac2.subdivision = val;
 		return 0;
 
+        case SOUND_PCM_READ_RATE:
+		return put_user(DAC2_DIVTOSR((s->ctrl & CTRL_PCLKDIV) >> CTRL_SH_PCLKDIV), (int *)arg);
+
+        case SOUND_PCM_READ_CHANNELS:
+		return put_user((s->sctrl & ((file->f_mode & FMODE_READ) ? SCTRL_R1SMB : SCTRL_P2SMB)) ?
+				2 : 1, (int *)arg);
+
+        case SOUND_PCM_READ_BITS:
+		return put_user((s->sctrl & ((file->f_mode & FMODE_READ) ? SCTRL_R1SEB : SCTRL_P2SEB)) ? 
+				16 : 8, (int *)arg);
+
         case SOUND_PCM_WRITE_FILTER:
         case SNDCTL_DSP_SETSYNCRO:
-        case SOUND_PCM_READ_RATE:
-        case SOUND_PCM_READ_CHANNELS:
-        case SOUND_PCM_READ_BITS:
         case SOUND_PCM_READ_FILTER:
                 return -EINVAL;
 		
@@ -1903,11 +1917,17 @@ static int es1370_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 		s->dma_dac1.subdivision = val;
 		return 0;
 
+        case SOUND_PCM_READ_RATE:
+		return put_user(dac1_samplerate[(s->ctrl & CTRL_WTSRSEL) >> CTRL_SH_WTSRSEL], (int *)arg);
+
+        case SOUND_PCM_READ_CHANNELS:
+		return put_user((s->sctrl & SCTRL_P1SMB) ? 2 : 1, (int *)arg);
+
+        case SOUND_PCM_READ_BITS:
+		return put_user((s->sctrl & SCTRL_P1SEB) ? 16 : 8, (int *)arg);
+
         case SOUND_PCM_WRITE_FILTER:
         case SNDCTL_DSP_SETSYNCRO:
-        case SOUND_PCM_READ_RATE:
-        case SOUND_PCM_READ_CHANNELS:
-        case SOUND_PCM_READ_BITS:
         case SOUND_PCM_READ_FILTER:
                 return -EINVAL;
 		
@@ -2275,7 +2295,7 @@ __initfunc(int init_es1370(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1370: version v0.19 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1370: version v0.20 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 
@@ -2299,7 +2319,7 @@ __initfunc(int init_es1370(void))
 		s->io = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
 		s->irq = pcidev->irq;
 		if (check_region(s->io, ES1370_EXTENT)) {
-			printk(KERN_ERR "es1370: io ports %#x-%#x in use\n", s->io, s->io+ES1370_EXTENT-1);
+			printk(KERN_ERR "es1370: io ports %#lx-%#lx in use\n", s->io, s->io+ES1370_EXTENT-1);
 			goto err_region;
 		}
 		request_region(s->io, ES1370_EXTENT, "es1370");
@@ -2320,7 +2340,7 @@ __initfunc(int init_es1370(void))
 		if (micz[index])
 			s->ctrl |= CTRL_XCTL1;
 		s->sctrl = 0;
-		printk(KERN_INFO "es1370: found adapter at io %#06x irq %u\n"
+		printk(KERN_INFO "es1370: found adapter at io %#lx irq %u\n"
 		       KERN_INFO "es1370: features: joystick %s, line %s, mic impedance %s\n",
 		       s->io, s->irq, (s->ctrl & CTRL_JYSTK_EN) ? "on" : "off",
 		       (s->ctrl & CTRL_XCTL0) ? "out" : "in",

@@ -261,7 +261,7 @@ static void dsp_get_vers(sb_devc * devc)
 			}
 		}
 	}
-	DDB(printk("DSP version %d.%d\n", devc->major, devc->minor));
+	DDB(printk("DSP version %d.%02d\n", devc->major, devc->minor));
 	restore_flags(flags);
 }
 
@@ -532,8 +532,12 @@ int sb_dsp_detect(struct address_info *hw_config, int pci, int pciio)
 	
 	if(pci == SB_PCI_YAMAHA)
 	{
+		devc->model = MDL_YMPCI;
 		devc->caps |= SB_PCI_IRQ;
 		hw_config->driver_use_1 |= SB_PCI_IRQ;
+		hw_config->card_subtype	= MDL_YMPCI;
+		
+		printk("Yamaha PCI mode.\n");
 	}
 	
 	if (acer)
@@ -600,6 +604,12 @@ int sb_dsp_detect(struct address_info *hw_config, int pci, int pciio)
 	if(devc->type == MDL_ESSPCI)
 		devc->model = MDL_ESSPCI;
 		
+	if(devc->type == MDL_YMPCI)
+	{
+		printk("YMPCI selected\n");
+		devc->model = MDL_YMPCI;
+	}
+		
 	/*
 	 * Save device information for sb_dsp_init()
 	 */
@@ -612,7 +622,7 @@ int sb_dsp_detect(struct address_info *hw_config, int pci, int pciio)
 		return 0;
 	}
 	memcpy((char *) detected_devc, (char *) devc, sizeof(sb_devc));
-	MDB(printk(KERN_INFO "SB %d.%d detected OK (%x)\n", devc->major, devc->minor, hw_config->io_base));
+	MDB(printk(KERN_INFO "SB %d.%02d detected OK (%x)\n", devc->major, devc->minor, hw_config->io_base));
 	return 1;
 }
 
@@ -648,7 +658,7 @@ int sb_dsp_init(struct address_info *hw_config)
 
 	devc->caps = hw_config->driver_use_1;
 
-	if (!(devc->caps & SB_NO_AUDIO && devc->caps & SB_NO_MIDI) && hw_config->irq > 0)
+	if (!((devc->caps & SB_NO_AUDIO) && (devc->caps & SB_NO_MIDI)) && hw_config->irq > 0)
 	{			/* IRQ setup */
 		
 		/*
@@ -807,7 +817,7 @@ int sb_dsp_init(struct address_info *hw_config)
 	if (hw_config->name == NULL)
 		hw_config->name = "Sound Blaster (8 BIT/MONO ONLY)";
 
-	sprintf(name, "%s (%d.%d)", hw_config->name, devc->major, devc->minor);
+	sprintf(name, "%s (%d.%02d)", hw_config->name, devc->major, devc->minor);
 	conf_printf(name, hw_config);
 
 	/*
@@ -828,7 +838,7 @@ int sb_dsp_init(struct address_info *hw_config)
 		}
 		else if (!sb_be_quiet && devc->model == MDL_SBPRO)
 		{
-			printk(KERN_INFO "SB DSP version is just %d.%d which means that your card is\n", devc->major, devc->minor);
+			printk(KERN_INFO "SB DSP version is just %d.%02d which means that your card is\n", devc->major, devc->minor);
 			printk(KERN_INFO "several years old (8 bit only device) or alternatively the sound driver\n");
 			printk(KERN_INFO "is incorrectly configured.\n");
 		}
@@ -1233,6 +1243,10 @@ int probe_sbmpu(struct address_info *hw_config)
 				return 0;
 			break;
 
+		case MDL_YMPCI:
+			hw_config->name = "Yamaha PCI Legacy";
+			printk("Yamaha PCI legacy UART401 check.\n");
+			break;
 		default:
 			return 0;
 	}

@@ -294,11 +294,16 @@ asmlinkage int sys_access(const char * filename, int mode)
 	/* Clear the capabilities if we switch to a non-root user */
 	if (current->uid)
 		cap_clear(current->cap_effective);
-
+	else
+		current->cap_effective = current->cap_permitted;
+		
 	dentry = namei(filename);
 	res = PTR_ERR(dentry);
 	if (!IS_ERR(dentry)) {
 		res = permission(dentry->d_inode, mode);
+		/* SuS v2 requires we report a read only fs too */
+		if(!res && (mode & S_IWOTH) && IS_RDONLY(dentry->d_inode))
+			res = -EROFS;
 		dput(dentry);
 	}
 

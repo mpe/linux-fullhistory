@@ -128,6 +128,8 @@ static void aarp_send_query(struct aarp_entry *a)
 
 	skb_reserve(skb,dev->hard_header_len+aarp_dl->header_length);
 	eah		=	(struct elapaarp *)skb_put(skb,sizeof(struct elapaarp));
+	skb->protocol   =       htons(ETH_P_ATALK);
+	skb->nh.raw     =       skb->h.raw = (void *) eah;
 	skb->dev	=	dev;
 	
 	/*
@@ -186,6 +188,8 @@ static void aarp_send_reply(struct device *dev, struct at_addr *us, struct at_ad
 
 	skb_reserve(skb,dev->hard_header_len+aarp_dl->header_length);
 	eah		=	(struct elapaarp *)skb_put(skb,sizeof(struct elapaarp));	 
+	skb->protocol   =       htons(ETH_P_ATALK);
+	skb->nh.raw     =       skb->h.raw = (void *) eah;
 	skb->dev	=	dev;
 	
 	/*
@@ -246,7 +250,8 @@ void aarp_send_probe(struct device *dev, struct at_addr *us)
 
 	skb_reserve(skb,dev->hard_header_len+aarp_dl->header_length);
 	eah		=	(struct elapaarp *)skb_put(skb,sizeof(struct elapaarp));
-	
+	skb->protocol   =       htons(ETH_P_ATALK);
+	skb->nh.raw     =       skb->h.raw = (void *) eah;
 	skb->dev	=	dev;
 	
 	/*
@@ -365,12 +370,10 @@ static void aarp_expire_timeout(unsigned long unused)
 		aarp_expire_timer(&unresolved[ct]);
 		aarp_expire_timer(&proxies[ct]);
 	}
-	del_timer(&aarp_timer);
-	if(unresolved_count==0)
-		aarp_timer.expires=jiffies+sysctl_aarp_expiry_time;
-	else
-		aarp_timer.expires=jiffies+sysctl_aarp_tick_time;
-	add_timer(&aarp_timer);
+
+	mod_timer(&aarp_timer, jiffies + 
+		  (unresolved_count ? sysctl_aarp_tick_time:
+		   sysctl_aarp_expiry_time));
 }
 
 /*
@@ -750,9 +753,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 
 	if(unresolved_count==1)
 	{
-		del_timer(&aarp_timer);
-		aarp_timer.expires=jiffies+sysctl_aarp_tick_time;
-		add_timer(&aarp_timer);
+		mod_timer(&aarp_timer, jiffies + sysctl_aarp_tick_time);
 	}
 
 	/*
@@ -939,9 +940,8 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 			aarp_resolved(&unresolved[hash],a,hash);
 			if(unresolved_count==0)
 			{
-				del_timer(&aarp_timer);
-				aarp_timer.expires=jiffies+sysctl_aarp_expiry_time;
-				add_timer(&aarp_timer);
+				mod_timer(&aarp_timer, jiffies +
+					  sysctl_aarp_expiry_time);
 			}
 			break;
 			

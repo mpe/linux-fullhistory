@@ -1176,11 +1176,10 @@ static void z8530_tx_done(struct z8530_channel *c)
 
 	spin_lock_irqsave(&z8530_buffer_lock, flags);
 	c->netdevice->tbusy=0;
-	/* Can't happen */
+	/* Actually this can happen.*/
 	if(c->tx_skb==NULL)
 	{
 		spin_unlock_irqrestore(&z8530_buffer_lock, flags);
-		printk(KERN_WARNING "%s: spurious tx done\n", c->dev->name);
 		return;
 	}
 	skb=c->tx_skb;

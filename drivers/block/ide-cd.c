@@ -3005,9 +3005,6 @@ int ide_cdrom_setup (ide_drive_t *drive)
 			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;
 		else if (!strcmp(drive->id->model, "SAMSUNG CD-ROM SCR-2432"))
 			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;
-		else if (!strcmp (drive->id->model, "GCD-R580B"))
-			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;
-				/* 124/SECTORS_PER_FRAME; ? */
 	}
 
 #if ! STANDARD_ATAPI

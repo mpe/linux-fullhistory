@@ -67,6 +67,7 @@
 	a CD.
 
 	November 1997 -- ported to the Uniform CD-ROM driver by Erik Andersen.
+	March    1999 -- made io base and irq CONFIG_ options (Tigran Aivazian).
 */
 
 #include <linux/module.h>
@@ -83,6 +84,7 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/init.h>
+#include <linux/config.h>
 
 /* #define REALLY_SLOW_IO  */
 #include <asm/system.h>
@@ -155,8 +157,8 @@ static int MCMD_DATA_READ= MCMD_PLAY_READ;
 int mitsumi_bug_93_wait = 0;
 #endif /* WORK_AROUND_MITSUMI_BUG_93 */
 
-static short mcd_port = MCD_BASE_ADDR; /* used as "mcd" by "insmod" */
-static int   mcd_irq  = MCD_INTR_NR; /* must directly follow mcd_port */
+static short mcd_port = CONFIG_MCD_BASE; /* used as "mcd" by "insmod" */
+static int   mcd_irq  = CONFIG_MCD_IRQ; /* must directly follow mcd_port */
 MODULE_PARM(mcd, "1-2i");
 
 static int McdTimeout, McdTries;

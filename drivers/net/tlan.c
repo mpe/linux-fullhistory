@@ -1877,6 +1877,7 @@ TLan_ResetAdapter( struct device *dev )
 	u8		data8;
 
 	priv->tlanFullDuplex = FALSE;
+	priv->phyOnline=0;
 /*  1.	Assert reset bit. */
 
 	data = inl(dev->base_addr + TLAN_HOST_CMD);

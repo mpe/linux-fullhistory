@@ -1,14 +1,8 @@
 	How to try to survive an IBM Mwave under Linux SB drivers
 
 
-* IBM refuses to provide documentation. If anyone can ever find out what
-  MWD50430.EXE actually does to load firmware then this comedy could go
-  away.
-
-* If you'd like to ask IBM why they don't release Mwave information.
-  phone IBM (425-556-8822) and ask them why they still haven't 
-  released any documentation.
-  [http://204.200.238.31/cgi-bin/link.pl?co=i&cl=/ts/ibm/contact.html]
++	IBM have now released documentation of sorts and Torsten is busy
+	trying to make the Mwave work. This is not however a trivial task.
 
 ----------------------------------------------------------------------------
 

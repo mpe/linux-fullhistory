@@ -158,7 +158,7 @@ static int do_proc_readlink(struct dentry *dentry, char * buffer, int buflen)
 		path = tmp;
 	} else {
 		path = d_path(dentry, tmp, PAGE_SIZE);
-		len = tmp + PAGE_SIZE - path;
+		len = tmp + PAGE_SIZE - 1 - path;
 	}
 
 	if (len < buflen)

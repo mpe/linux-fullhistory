@@ -674,6 +674,7 @@ int sb_mixer_init(sb_devc * devc)
 	switch (devc->model)
 	{
 		case MDL_ESSPCI:
+		case MDL_YMPCI:
 		case MDL_SBPRO:
 		case MDL_AZTECH:
 		case MDL_JAZZ:

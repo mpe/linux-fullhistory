@@ -45,11 +45,14 @@
  *      Allow only to set io base address on command line: sjcd=<io_base>
  *      Changes to Documentation/cdrom/sjcd
  *      Added cleanup after any error in the initialisation.
+ *  1.7 Added code to set the sector size tables to prevent the bug present in 
+ *      the previous version of this driver.  Coded added by Anthony Barbachan 
+ *      from bugfix tip originally suggested by Alan Cox.
  *
  */
 
 #define SJCD_VERSION_MAJOR 1
-#define SJCD_VERSION_MINOR 6
+#define SJCD_VERSION_MINOR 7
 
 #ifdef MODULE
 #include <linux/module.h>
@@ -1437,6 +1440,9 @@ static struct file_operations sjcd_fops = {
   NULL                /* revalidate */
 };
 
+static int blksize = 2048;
+static int secsize = 2048;
+
 /*
  * Following stuff is intended for initialization of the cdrom. It
  * first looks for presence of device. If the device is present, it
@@ -1460,6 +1466,9 @@ __initfunc(int sjcd_init( void )){
 #if defined( SJCD_TRACE )
   printk("SJCD: sjcd=0x%x: ", sjcd_base);
 #endif  
+
+	hardsect_size[MAJOR_NR] = &secsize;
+	blksize_size[MAJOR_NR] = &blksize;
 
   if( register_blkdev( MAJOR_NR, "sjcd", &sjcd_fops ) != 0 ){
     printk( "SJCD: Unable to get major %d for Sanyo CD-ROM\n", MAJOR_NR );

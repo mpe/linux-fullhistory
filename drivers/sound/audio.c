@@ -60,7 +60,10 @@ static int set_format(int dev, int fmt)
 	else
 		return audio_devs[dev]->local_format;
 
-	return audio_devs[dev]->local_format;
+	if (audio_devs[dev]->local_conversion)
+		return audio_devs[dev]->local_conversion;
+	else 
+		return audio_devs[dev]->local_format;
 }
 
 int audio_open(int dev, struct file *file)
@@ -387,7 +390,7 @@ int audio_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 			return 0;
 
 		case SNDCTL_DSP_GETFMTS:
-			val = audio_devs[dev]->format_mask;
+			val = audio_devs[dev]->format_mask | AFMT_MU_LAW;
 			break;
 	
 		case SNDCTL_DSP_SETFMT:

@@ -208,6 +208,7 @@ struct bttv
 #define BTTV_AVERMEDIA98   0x0d
 #define BTTV_VHX           0x0e
 #define BTTV_ZOLTRIX       0x0f
+#define BTTV_PIXVIEWPLAYTV 0x10
 
 #define AUDIO_TUNER        0x00
 #define AUDIO_RADIO        0x01

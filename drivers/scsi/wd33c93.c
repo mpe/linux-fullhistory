@@ -1457,6 +1457,8 @@ Scsi_Cmnd *tmp, *prev;
       if (tmp == cmd) {
          if (prev)
             prev->host_scribble = cmd->host_scribble;
+	 else
+            hostdata->input_Q = (Scsi_Cmnd *)cmd->host_scribble;
          cmd->host_scribble = NULL;
          cmd->result = DID_ABORT << 16;
          printk("scsi%d: Abort - removing command %ld from input_Q. ",

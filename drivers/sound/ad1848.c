@@ -137,6 +137,21 @@ static ad1848_info adev_info[MAX_AUDIO_DEV];
 #define io_Status(d)		((d)->base+2)
 #define io_Polled_IO(d)		((d)->base+3)
 
+static struct {
+     unsigned char flags;
+#define CAP_F_TIMER 0x01     
+} capabilities [9 /*devc->model */ ] = {
+     {0}
+    ,{0}           /* MD_1848  */
+    ,{CAP_F_TIMER} /* MD_4231  */
+    ,{CAP_F_TIMER} /* MD_4231A */
+    ,{CAP_F_TIMER} /* MD_1845  */
+    ,{CAP_F_TIMER} /* MD_4232  */
+    ,{0}           /* MD_C930  */
+    ,{CAP_F_TIMER} /* MD_IWAVE */
+    ,{0}           /* MD_4235 */
+};
+
 static int      ad1848_open(int dev, int mode);
 static void     ad1848_close(int dev);
 static void     ad1848_output_block(int dev, unsigned long buf, int count, int intrflag);
@@ -1894,7 +1909,7 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 			/* Don't free it either then.. */
 			devc->irq = 0;
 		}
-		if (devc->model != MD_1848 && devc->model != MD_C930)
+		if (capabilities[devc->model].flags & CAP_F_TIMER)
 		{
 #ifndef __SMP__
 			int x;
@@ -1927,8 +1942,8 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 		irq2dev[-irq] = devc->dev_no = my_dev;
 
 #if defined(CONFIG_SEQUENCER) && !defined(EXCLUDE_TIMERS)
-	if (devc->model != MD_1848 &&
-	    devc->model != MD_C930 && devc->irq_ok)
+	if ((capabilities[devc->model].flags & CAP_F_TIMER) &&
+	    devc->irq_ok)
 		ad1848_tmr_install(my_dev);
 #endif
 

@@ -343,6 +343,7 @@
 #include <linux/wait.h>
 #include <linux/ioport.h>
 #include <linux/proc_fs.h>
+#include <linux/interrupt.h>
 
 #include "aha152x.h"
 #include <linux/stat.h>
@@ -489,6 +490,7 @@ struct aha152x_hostdata {
   int           ext_trans;
 
   int           swint;
+  int		service;
  
   unsigned char syncrate[8];
   
@@ -500,7 +502,7 @@ struct aha152x_hostdata {
 #endif
 };
 
-void aha152x_intr(int irq, void *dev_id, struct pt_regs *);
+static void aha152x_intr(int irq, void *dev_id, struct pt_regs *);
 void aha152x_done(struct Scsi_Host *shpnt, int error);
 void aha152x_setup(char *str, int *ints);
 int aha152x_checksetup(struct aha152x_setup *setup);
@@ -1550,38 +1552,72 @@ void aha152x_done(struct Scsi_Host *shpnt, int error)
     aha152x_panic(shpnt, "done() called outside of command");
 }
 
+
+static void aha152x_complete(struct Scsi_Host *);
+
+static struct tq_struct aha152x_tq;
+
 /*
- * Interrupts handler (main routine of the driver)
+ *	Run service completions on the card with interrupts enabled.
  */
-void aha152x_intr(int irqno, void *dev_id, struct pt_regs * regs)
+ 
+static void aha152x_run(void)
 {
-  struct Scsi_Host *shpnt = aha152x_host[irqno-IRQ_MIN];
-  unsigned int flags;
-  int done=0, phase;
+	int i;
+	for(i=0;i<IRQS;i++)
+	{
+		struct Scsi_Host *shpnt=aha152x_host[i];
+		if(shpnt && HOSTDATA(shpnt)->service)
+		{
+			HOSTDATA(shpnt)->service=0;
+			aha152x_complete(shpnt);
+		}
+	}
+}
+
+/*
+ *	Interrupts handler (main routine of the driver)
+ */
+
+static void aha152x_intr(int irqno, void *dev_id, struct pt_regs * regs)
+{
+	struct Scsi_Host *shpnt = aha152x_host[irqno-IRQ_MIN];
 
 #if defined(DEBUG_RACE)
-  enter_driver("intr");
+	enter_driver("intr");
 #else
 #if defined(DEBUG_INTR)
-  if(HOSTDATA(shpnt)->debug & debug_intr)
-    printk("\naha152x: intr(), ");
+	if(HOSTDATA(shpnt)->debug & debug_intr)
+		printk("\naha152x: intr(), ");
 #endif
 #endif
 
-  if(!shpnt)
-    panic("aha152x: catched interrupt for unknown controller.\n");
+	if(!shpnt)
+		panic("aha152x: catched interrupt for unknown controller.\n");
 
-  /* no more interrupts from the controller, while we're busy.
-     INTEN has to be restored, when we're ready to leave
-     intr(). To avoid race conditions, we have to return
-     immediately afterwards. */
-  CLRBITS(DMACNTRL0, INTEN);
-  /* sti();  FIXME!!! Yes, sti() really needs to be here if we want to lock up */
+	/* no more interrupts from the controller, while we're busy.
+	   INTEN is restored by the BH handler */
 
-  /* disconnected target is trying to reconnect.
-     Only possible, if we have disconnected nexuses and
-     nothing is occupying the bus.
-  */
+	CLRBITS(DMACNTRL0, INTEN);
+
+	/* Poke the BH handler */
+	
+	HOSTDATA(shpnt)->service=1;
+	aha152x_tq.routine = (void *)aha152x_run;
+	queue_task(&aha152x_tq, &tq_immediate);
+	mark_bh(IMMEDIATE_BH);
+}
+
+static void aha152x_complete(struct Scsi_Host *shpnt)
+{
+	unsigned int flags;
+	int done=0, phase;
+
+	/* disconnected target is trying to reconnect.
+	   Only possible, if we have disconnected nexuses and
+	   nothing is occupying the bus.
+	 */
+	 
   if(TESTHI(SSTAT0, SELDI) &&
       DISCONNECTED_SC &&
       (!CURRENT_SC || (CURRENT_SC->SCp.phase & in_selection)) ) {

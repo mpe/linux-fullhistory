@@ -585,7 +585,8 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 		return 0;
 	}
 	if (!pte_none(*pte)) {
-		printk("put_dirty_page: page already exists\n");
+		printk("put_dirty_page: pte %08lx already exists\n",
+		       pte_val(*pte));
 		free_page(page);
 		return 0;
 	}

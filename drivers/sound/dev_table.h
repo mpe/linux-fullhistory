@@ -236,6 +236,7 @@ struct audio_operations
 	/* fields formerly in dmabuf.c */
 	struct wait_queue *in_sleeper;
 	struct wait_queue *out_sleeper;
+	struct wait_queue *poll_sleeper;
 
 	/* fields formerly in audio.c */
 	int audio_mode;

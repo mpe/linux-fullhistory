@@ -24,7 +24,8 @@ static int shm_map (struct vm_area_struct *shmd);
 static void killseg (int id);
 static void shm_open (struct vm_area_struct *shmd);
 static void shm_close (struct vm_area_struct *shmd);
-static pte_t shm_swap_in(struct vm_area_struct *, unsigned long, unsigned long);
+static unsigned long shm_nopage(struct vm_area_struct *, unsigned long, int);
+static int shm_swapout(struct vm_area_struct *, struct page *);
 
 static int shm_tot = 0; /* total number of shared memory pages */
 static int shm_rss = 0; /* number of shared memory pages that are in memory */
@@ -364,10 +365,10 @@ static struct vm_operations_struct shm_vm_ops = {
 	NULL,			/* protect */
 	NULL,			/* sync */
 	NULL,			/* advise */
-	NULL,			/* nopage (done with swapin) */
+	shm_nopage,		/* nopage */
 	NULL,			/* wppage */
-	NULL,			/* swapout (hardcoded right now) */
-	shm_swap_in		/* swapin */
+	shm_swapout,		/* swapout */
+	NULL			/* swapin */
 };
 
 /* Insert shmd into the list shp->attaches */
@@ -393,11 +394,7 @@ static inline void remove_attach (struct shmid_kernel * shp, struct vm_area_stru
  */
 static int shm_map (struct vm_area_struct *shmd)
 {
-	pgd_t *page_dir;
-	pmd_t *page_middle;
-	pte_t *page_table;
-	unsigned long tmp, shm_sgn;
-	int error;
+	unsigned long tmp;
 
 	/* clear old mappings */
 	do_munmap(shmd->vm_start, shmd->vm_end - shmd->vm_start);
@@ -411,30 +408,7 @@ static int shm_map (struct vm_area_struct *shmd)
 	insert_vm_struct(current->mm, shmd);
 	merge_segments(current->mm, shmd->vm_start, shmd->vm_end);
 
-	/* map page range */
-	error = 0;
-	shm_sgn = shmd->vm_pte +
-	  SWP_ENTRY(0, (shmd->vm_offset >> PAGE_SHIFT) << SHM_IDX_SHIFT);
-	flush_cache_range(shmd->vm_mm, shmd->vm_start, shmd->vm_end);
-	for (tmp = shmd->vm_start;
-	     tmp < shmd->vm_end;
-	     tmp += PAGE_SIZE, shm_sgn += SWP_ENTRY(0, 1 << SHM_IDX_SHIFT))
-	{
-		page_dir = pgd_offset(shmd->vm_mm,tmp);
-		page_middle = pmd_alloc(page_dir,tmp);
-		if (!page_middle) {
-			error = -ENOMEM;
-			break;
-		}
-		page_table = pte_alloc(page_middle,tmp);
-		if (!page_table) {
-			error = -ENOMEM;
-			break;
-		}
-		set_pte(page_table, __pte(shm_sgn));
-	}
-	flush_tlb_range(shmd->vm_mm, shmd->vm_start, shmd->vm_end);
-	return error;
+	return 0;
 }
 
 /*
@@ -615,44 +589,46 @@ asmlinkage int sys_shmdt (char *shmaddr)
 }
 
 /*
+ * Enter the shm page into the SHM data structures.
+ *
+ * The way "nopage" is done, we don't actually have to
+ * do anything here: nopage will have filled in the shm
+ * data structures already, and shm_swap_out() will just
+ * work off them..
+ */
+static int shm_swapout(struct vm_area_struct * vma, struct page * page)
+{
+	return 0;
+}
+
+/*
  * page not present ... go through shm_pages
  */
-static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, unsigned long code)
+static unsigned long shm_nopage(struct vm_area_struct * shmd, unsigned long address, int no_share)
 {
 	pte_t pte;
 	struct shmid_kernel *shp;
 	unsigned int id, idx;
 
-	id = SWP_OFFSET(code) & SHM_ID_MASK;
+	id = SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK;
+	idx = (address - shmd->vm_start + shmd->vm_offset) >> PAGE_SHIFT;
+
 #ifdef DEBUG_SHM
-	if (id != (SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK)) {
-		printk ("shm_swap_in: code id = %d and shmd id = %ld differ\n",
-			id, SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK);
-		return BAD_PAGE;
-	}
 	if (id > max_shmid) {
-		printk ("shm_swap_in: id=%d too big. proc mem corrupted\n", id);
-		return BAD_PAGE;
+		printk ("shm_nopage: id=%d too big. proc mem corrupted\n", id);
+		return 0;
 	}
 #endif
 	shp = shm_segs[id];
 
 #ifdef DEBUG_SHM
 	if (shp == IPC_UNUSED || shp == IPC_NOID) {
-		printk ("shm_swap_in: id=%d invalid. Race.\n", id);
-		return BAD_PAGE;
-	}
-#endif
-	idx = (SWP_OFFSET(code) >> SHM_IDX_SHIFT) & SHM_IDX_MASK;
-#ifdef DEBUG_SHM
-	if (idx != (offset >> PAGE_SHIFT)) {
-		printk ("shm_swap_in: code idx = %u and shmd idx = %lu differ\n",
-			idx, offset >> PAGE_SHIFT);
-		return BAD_PAGE;
+		printk ("shm_nopage: id=%d invalid. Race.\n", id);
+		return 0;
 	}
 	if (idx >= shp->shm_npages) {
-		printk ("shm_swap_in : too large page index. id=%d\n", id);
-		return BAD_PAGE;
+		printk ("shm_nopage : too large page index. id=%d\n", id);
+		return 0;
 	}
 #endif
 
@@ -661,7 +637,7 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 		unsigned long page = get_free_page(GFP_KERNEL);
 		if (!page) {
 			oom(current);
-			return BAD_PAGE;
+			return 0;
 		}
 		pte = __pte(shp->shm_pages[idx]);
 		if (pte_present(pte)) {
@@ -687,7 +663,7 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 done:	/* pte_val(pte) == shp->shm_pages[idx] */
 	current->min_flt++;
 	atomic_inc(&mem_map[MAP_NR(pte_page(pte))].count);
-	return pte_modify(pte, shmd->vm_page_prot);
+	return pte_page(pte);
 }
 
 /*
@@ -700,7 +676,6 @@ int shm_swap (int prio, int gfp_mask)
 {
 	pte_t page;
 	struct shmid_kernel *shp;
-	struct vm_area_struct *shmd;
 	unsigned long swap_nr;
 	unsigned long id, idx;
 	int loop = 0;
@@ -742,61 +717,6 @@ int shm_swap (int prio, int gfp_mask)
 		swap_free (swap_nr);
 		return 0;
 	}
-	if (shp->attaches)
-	  for (shmd = shp->attaches; ; ) {
-	    do {
-		pgd_t *page_dir;
-		pmd_t *page_middle;
-		pte_t *page_table, pte;
-		unsigned long tmp;
-
-		if ((SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK) != id) {
-			printk ("shm_swap: id=%ld does not match shmd->vm_pte.id=%ld\n",
-				id, SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK);
-			continue;
-		}
-		tmp = shmd->vm_start + (idx << PAGE_SHIFT) - shmd->vm_offset;
-		if (!(tmp >= shmd->vm_start && tmp < shmd->vm_end))
-			continue;
-		page_dir = pgd_offset(shmd->vm_mm,tmp);
-		if (pgd_none(*page_dir) || pgd_bad(*page_dir)) {
-			printk("shm_swap: bad pgtbl! id=%ld start=%lx idx=%ld\n",
-					id, shmd->vm_start, idx);
-			pgd_clear(page_dir);
-			continue;
-		}
-		page_middle = pmd_offset(page_dir,tmp);
-		if (pmd_none(*page_middle) || pmd_bad(*page_middle)) {
-			printk("shm_swap: bad pgmid! id=%ld start=%lx idx=%ld\n",
-					id, shmd->vm_start, idx);
-			pmd_clear(page_middle);
-			continue;
-		}
-		page_table = pte_offset(page_middle,tmp);
-		pte = *page_table;
-		if (!pte_present(pte))
-			continue;
-		if (pte_young(pte)) {
-			set_pte(page_table, pte_mkold(pte));
-			continue;
-		}
-		if (pte_page(pte) != pte_page(page))
-			printk("shm_swap_out: page and pte mismatch %lx %lx\n",
-			       pte_page(pte),pte_page(page));
-		flush_cache_page(shmd, tmp);
-		set_pte(page_table,
-		  __pte(shmd->vm_pte + SWP_ENTRY(0, idx << SHM_IDX_SHIFT)));
-		atomic_dec(&mem_map[MAP_NR(pte_page(pte))].count);
-		if (shmd->vm_mm->rss > 0)
-			shmd->vm_mm->rss--;
-		flush_tlb_page(shmd, tmp);
-	    /* continue looping through the linked list */
-	    } while (0);
-	    shmd = shmd->vm_next_share;
-	    if (!shmd)
-		break;
-	}
-
 	if (atomic_read(&mem_map[MAP_NR(pte_page(page))].count) != 1)
 		goto check_table;
 	shp->shm_pages[idx] = swap_nr;

@@ -541,6 +541,8 @@ static struct tvcard tvcards[] =
         { 3, 1, 0, 2, 7, { 2, 3, 1, 1}, { 0, 1, 2, 3, 4}},
         /* Zoltrix TV-Max */
         { 3, 1, 0, 2,15, { 2, 3, 1, 1}, { 0, 0, 0, 0, 0}},
+        /* Pixelview PlayTV (bt878) */
+        { 3, 4, 0, 2, 0x01e000, { 2, 0, 1, 1}, {0x01c000, 0, 0x018000, 0x014000, 0x002000, 0 }},
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(tvcard))
 
@@ -2388,7 +2390,7 @@ static void radio_close(struct video_device *dev)
   
 	btv->user--;
 	btv->radio = 0;
-	audio(btv, AUDIO_MUTE);
+	/*audio(btv, AUDIO_MUTE);*/
 	MOD_DEC_USE_COUNT;  
 }
 
@@ -2927,6 +2929,12 @@ static void idcard(int i)
 			btv->pll.pll_crystal=BT848_IFORM_XT0;
 		}
         }
+
+        if (btv->type == BTTV_PIXVIEWPLAYTV) {
+		btv->pll.pll_ifreq=28636363;
+		btv->pll.pll_crystal=BT848_IFORM_XT0;
+        }
+
         if(btv->type==BTTV_AVERMEDIA98)
         {
         	btv->pll.pll_ifreq=28636363;

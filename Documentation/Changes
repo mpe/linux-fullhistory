@@ -258,6 +258,11 @@ available from http://juanjox.linuxhq.com/ .
    The ISDN code in the stock 2.2 kernel may not work for you.  If it
 doesn't, look in ftp://ftp.suse.com/pub/isdn4linux for updated versions.
 
+   In 2.0.x the kernel could be configured to drop source routed IP
+packets via a compile time configuration option.  In 2.2.x, this has
+been replaced by a sysctl.  See Documentation/networking/ip-sysctl.txt
+for more information.
+
 Memory
 ======
 
@@ -281,6 +286,20 @@ Util-linux (including mount)
 128 meg limit on IA32 swap partition sizes has been eliminated.  To use
 larger swap spaces, you need the new mkswap found in util-linux.  You
 also need to upgrade util-linux to get the latest version of mount.
+
+   Partitions on 2048 byte sectored media (certain magneto opticals 
+most prominently) were broken throughout the whole of 2.1 kernel 
+series, meaning that you will be unable to use 2.1-partitioned media on 
+Linux 2.2. This is not a 2.2 bug - 2.2 finally does the right thing! 
+[If you have to interchange media between Linux 2.1 and 2.2, your best 
+bet is to not use partitions at all but create the filesystem on the 
+raw device (e.g. /dev/sda) instead. This is also known as the 
+superfloppy format.]
+
+   To properly create partitions on 2048 byte sectored media with Linux
+2.2, be sure to use no less than fdisk version 2.9i and invoke fdisk
+using '-b 2048' as an option.
+
 
 RPM
 ===

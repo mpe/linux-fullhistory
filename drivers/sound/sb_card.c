@@ -222,5 +222,8 @@ EXPORT_SYMBOL(attach_sb_card);
 EXPORT_SYMBOL(probe_sb);
 EXPORT_SYMBOL(unload_sb);
 EXPORT_SYMBOL(sb_be_quiet);
+EXPORT_SYMBOL(attach_sbmpu);
+EXPORT_SYMBOL(probe_sbmpu);
+EXPORT_SYMBOL(unload_sbmpu);
 
 #endif
