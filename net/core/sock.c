@@ -185,7 +185,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
   	switch(optname) 
   	{
 		case SO_DEBUG:	
-			if(val && !suser())
+			if(val && !capable(CAP_NET_ADMIN))
 			{
 				ret = -EACCES;
 			}
@@ -924,7 +924,7 @@ int sock_no_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			 */
 			if (current->pgrp != -arg &&
 				current->pid != arg &&
-				!suser()) return(-EPERM);
+				!capable(CAP_NET_ADMIN)) return(-EPERM);
 			sk->proc = arg;
 			return(0);
 		case F_GETOWN:

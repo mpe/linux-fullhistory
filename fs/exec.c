@@ -419,6 +419,7 @@ static int exec_mmap(void)
 	retval = new_page_tables(current);
 	if (retval)
 		goto fail_restore;
+	activate_context(current);
 	up(&mm->mmap_sem);
 	mmput(old_mm);
 	return 0;
@@ -564,7 +565,7 @@ flush_failed:
 int prepare_binprm(struct linux_binprm *bprm)
 {
 	int mode;
-	int retval,id_change;
+	int retval,id_change,cap_raised;
 	struct inode * inode = bprm->dentry->d_inode;
 
 	mode = inode->i_mode;
@@ -584,7 +585,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 
 	bprm->e_uid = current->euid;
 	bprm->e_gid = current->egid;
-	id_change = 0;
+	id_change = cap_raised = 0;
 
 	/* Set-uid? */
 	if (mode & S_ISUID) {
@@ -630,21 +631,25 @@ int prepare_binprm(struct linux_binprm *bprm)
 			cap_set_full(bprm->cap_effective);
 	}
 
-        /* We use a conservative definition of suid for capabilities.
-         * The process is suid if the permitted set is not a subset of
-         * the current permitted set after the exec call.
-         *         new permitted set = forced | (allowed & inherited)
-         *                       pP' = fP     | (fI      & pI)
-         */
-
-        if ((bprm->cap_permitted.cap |
-	     (current->cap_inheritable.cap &
-	      bprm->cap_inheritable.cap)) &
-	    ~current->cap_permitted.cap) {
-		id_change = 1;
+        /* Only if pP' is _not_ a subset of pP, do we consider there
+         * has been a capability related "change of capability".  In
+         * such cases, we need to check that the elevation of
+         * privilege does not go against other system constraints.
+         * The new Permitted set is defined below -- see (***). */
+	{
+		kernel_cap_t working =
+			cap_combine(bprm->cap_permitted,
+				    cap_intersect(bprm->cap_inheritable,
+						  current->cap_inheritable));
+		if (!cap_issubset(working, current->cap_permitted)) {
+			cap_raised = 1;
+		}
 	}
 
-	if (id_change) {
+
+
+
+	if (id_change || cap_raised) {
 		/* We can't suid-execute if we're sharing parts of the executable */
 		/* or if we're being traced (or if suid execs are not allowed)    */
 		/* (current->mm->count > 1 is ok, as we'll get a new mm anyway)   */
@@ -653,8 +658,10 @@ int prepare_binprm(struct linux_binprm *bprm)
 		    || (current->fs->count > 1)
 		    || (atomic_read(&current->sig->count) > 1)
 		    || (current->files->count > 1)) {
-			if (!suser())
-				return -EPERM;
+ 			if (id_change && !capable(CAP_SETUID))
+ 				return -EPERM;
+ 			if (cap_raised && !capable(CAP_SETPCAP))
+  				return -EPERM;
 		}
 	}
 
@@ -669,7 +676,7 @@ int prepare_binprm(struct linux_binprm *bprm)
  * The formula used for evolving capabilities is:
  *
  *       pI' = pI
- *       pP' = fP | (fI & pI)
+ * (***) pP' = fP | (fI & pI)
  *       pE' = pP' & fE          [NB. fE is 0 or ~0]
  *
  * I=Inheritable, P=Permitted, E=Effective // p=process, f=file
@@ -678,11 +685,18 @@ int prepare_binprm(struct linux_binprm *bprm)
 
 void compute_creds(struct linux_binprm *bprm) 
 {
-	int new_permitted = bprm->cap_permitted.cap |
-		(bprm->cap_inheritable.cap & current->cap_inheritable.cap);
+	/* For init, we want to retain the capabilities set
+         * in the init_task struct. Thus we skip the usual
+         * capability rules */
+	if (current->pid != 1) {
+		int new_permitted = bprm->cap_permitted.cap |
+			(bprm->cap_inheritable.cap & 
+			current->cap_inheritable.cap);
 
-	current->cap_permitted.cap = new_permitted;
-	current->cap_effective.cap = new_permitted & bprm->cap_effective.cap;
+		current->cap_permitted.cap = new_permitted;
+		current->cap_effective.cap = new_permitted & 
+						bprm->cap_effective.cap;
+	}
 	
         /* AUD: Audit candidate if current->cap_effective is set */
 

@@ -18,9 +18,10 @@
  * Version 1.04		add /proc configurable settings and S.M.A.R.T support
  * Version 1.05		add capacity support for ATA3 >= 8GB
  * Version 1.06		get boot-up messages to show full cyl count
+ * Version 1.07		disable door-locking if it fails
  */
 
-#define IDEDISK_VERSION	"1.06"
+#define IDEDISK_VERSION	"1.07"
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
 
@@ -185,9 +186,7 @@ static void write_intr (ide_drive_t *drive)
 		}
 	} else
 		error = 1;
-
 out:
-
 	if (error)
 		ide_error(drive, "write_intr", stat);
 }
@@ -258,9 +257,7 @@ static void multwrite_intr (ide_drive_t *drive)
 		}
 	} else
 		error = 1;
-
 out:
-
 	if (error)
 		ide_error(drive, "multwrite_intr", stat);
 }
@@ -380,7 +377,7 @@ static void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long bl
 			return;
 		}
 		if (!drive->unmask)
-			__cli();
+			__cli();	/* local CPU only */
 		if (drive->mult_count) {
 			HWGROUP(drive)->wrq = *rq; /* scratchpad */
 			ide_set_handler (drive, &multwrite_intr, WAIT_CMD);
@@ -405,7 +402,8 @@ static int idedisk_open (struct inode *inode, struct file *filp, ide_drive_t *dr
 		 * since the open() has already succeeded,
 		 * and the door_lock is irrelevant at this point.
 		 */
-		(void) ide_wait_cmd(drive, WIN_DOORLOCK, 0, 0, 0, NULL);
+		if (drive->doorlocking && ide_wait_cmd(drive, WIN_DOORLOCK, 0, 0, 0, NULL))
+			drive->doorlocking = 0;
 	}
 	return 0;
 }
@@ -414,7 +412,8 @@ static void idedisk_release (struct inode *inode, struct file *filp, ide_drive_t
 {
 	if (drive->removable && !drive->usage) {
 		invalidate_buffers(inode->i_rdev);
-		(void) ide_wait_cmd(drive, WIN_DOORUNLOCK, 0, 0, 0, NULL);
+		if (drive->doorlocking && ide_wait_cmd(drive, WIN_DOORUNLOCK, 0, 0, 0, NULL))
+			drive->doorlocking = 0;
 	}
 	MOD_DEC_USE_COUNT;
 }
@@ -587,8 +586,13 @@ static int set_multcount(ide_drive_t *drive, int arg)
 
 static int set_nowerr(ide_drive_t *drive, int arg)
 {
+	unsigned long flags;
+
+	if (ide_spin_wait_hwgroup("set_nowerr", drive, &flags))
+		return -EBUSY;
 	drive->nowerr = arg;
 	drive->bad_wstat = arg ? BAD_R_STAT : BAD_W_STAT;
+	spin_unlock_irqrestore(&HWGROUP(drive)->spinlock, flags);
 	return 0;
 }
 
@@ -658,13 +662,11 @@ static void idedisk_setup (ide_drive_t *drive)
 
 	/* check for removable disks (eg. SYQUEST), ignore 'WD' drives */
 	if (id->config & (1<<7)) {	/* removable disk ? */
-		if (id->model[0] != 'W' || id->model[1] != 'D')
+		if (id->model[0] != 'W' || id->model[1] != 'D') {
 			drive->removable = 1;
+			drive->doorlocking = 1;
+		}
 	}
-
-	/* SunDisk drives: treat as non-removable;   can mess up non-Sun systems!  FIXME */
-	if (id->model[0] == 'S' && id->model[1] == 'u')
-		drive->removable = 0;
 
 	/* Extract geometry if we did not already have one for the drive */
 	if (!drive->cyl || !drive->head || !drive->sect) {
@@ -714,9 +716,10 @@ static void idedisk_setup (ide_drive_t *drive)
 		if (drive->cyl > drive->bios_cyl)
 			drive->bios_cyl = drive->cyl;
 	}
+#if 0	/* done instead for entire identify block in arch/ide.h stuff */
 	/* fix byte-ordering of buffer size field */
 	id->buf_size = le16_to_cpu(id->buf_size);
-
+#endif
 	printk (KERN_INFO "%s: %.40s, %ldMB w/%dkB Cache, CHS=%d/%d/%d",
 	 drive->name, id->model, idedisk_capacity(drive)/2048L, id->buf_size/2,
 	 drive->bios_cyl, drive->bios_head, drive->bios_sect);

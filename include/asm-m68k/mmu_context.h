@@ -8,5 +8,6 @@
 
 #define init_new_context(mm)	do { } while(0)
 #define destroy_context(mm)	do { } while(0)
+#define activate_context(tsk)	do { } while(0)
 
 #endif

@@ -3,6 +3,10 @@
 
 #ifndef __SMP__
 
+#define DEBUG_SPINLOCKS	0	/* 0 == no debugging, 1 == maintain lock state, 2 == full debug */
+
+#if (DEBUG_SPINLOCKS < 1)
+
 /*
  * Your basic spinlocks, allowing only a single CPU anywhere
  */
@@ -11,7 +15,7 @@ typedef struct { } spinlock_t;
 
 #define spin_lock_init(lock)	do { } while(0)
 #define spin_lock(lock)		do { } while(0)
-#define spin_trylock(lock)	do { } while(0)
+#define spin_trylock(lock)	(1)
 #define spin_unlock_wait(lock)	do { } while(0)
 #define spin_unlock(lock)	do { } while(0)
 #define spin_lock_irq(lock)	cli()
@@ -21,6 +25,52 @@ typedef struct { } spinlock_t;
 	do { save_flags(flags); cli(); } while (0)
 #define spin_unlock_irqrestore(lock, flags) \
 	restore_flags(flags)
+
+#elif (DEBUG_SPINLOCKS < 2)
+
+typedef struct {
+	volatile unsigned int lock;
+} spinlock_t;
+#define SPIN_LOCK_UNLOCKED { 0 }
+
+#define spin_lock_init(x)	do { (x)->lock = 0; } while (0)
+#define spin_trylock(lock)	(!test_and_set_bit(0,(lock)))
+
+#define spin_lock(x)		do { (x)->lock = 1; } while (0)
+#define spin_unlock_wait(x)	do { } while (0)
+#define spin_unlock(x)		do { (x)->lock = 0; } while (0)
+#define spin_lock_irq(x)	do { cli(); spin_lock(x); } while (0)
+#define spin_unlock_irq(x)	do { spin_unlock(x); sti(); } while (0)
+
+#define spin_lock_irqsave(x, flags) \
+	do { save_flags(flags); spin_lock_irq(x); } while (0)
+#define spin_unlock_irqrestore(x, flags) \
+	do { spin_unlock(x); restore_flags(flags); } while (0)
+
+#else /* (DEBUG_SPINLOCKS >= 2) */
+
+typedef struct {
+	volatile unsigned int lock;
+	volatile unsigned int babble;
+	const char *module;
+} spinlock_t;
+#define SPIN_LOCK_UNLOCKED { 0, 25, __BASE_FILE__ }
+
+#include <linux/kernel.h>
+
+#define spin_lock_init(x)	do { (x)->lock = 0; } while (0)
+#define spin_trylock(lock)	(!test_and_set_bit(0,(lock)))
+
+#define spin_lock(x)		do {unsigned long __spinflags; save_flags(__spinflags); cli(); if ((x)->lock&&(x)->babble) {printk("%s: spin_lock(%s:%p) already locked\n", __BASE_FILE__, (x)->module, (x));(x)->babble--;} (x)->lock = 1; restore_flags(__spinflags);} while (0)
+#define spin_unlock_wait(x)	do {unsigned long __spinflags; save_flags(__spinflags); cli(); if ((x)->lock&&(x)->babble) {printk("%s: spin_unlock_wait(%s:%p) deadlock\n", __BASE_FILE__, (x)->module, (x));(x)->babble--;} restore_flags(__spinflags);} while (0)
+#define spin_unlock(x)		do {unsigned long __spinflags; save_flags(__spinflags); cli(); if (!(x)->lock&&(x)->babble) {printk("%s: spin_unlock(%s:%p) not locked\n", __BASE_FILE__, (x)->module, (x));(x)->babble--;} (x)->lock = 0; restore_flags(__spinflags);} while (0)
+#define spin_lock_irq(x)	do {cli(); if ((x)->lock&&(x)->babble) {printk("%s: spin_lock_irq(%s:%p) already locked\n", __BASE_FILE__, (x)->module, (x));(x)->babble--;} (x)->lock = 1;} while (0)
+#define spin_unlock_irq(x)	do {cli(); if ((x)->lock&&(x)->babble) {printk("%s: spin_lock(%s:%p) already locked\n", __BASE_FILE__, (x)->module, (x));(x)->babble--;} (x)->lock = 1; sti();} while (0)
+
+#define spin_lock_irqsave(x,flags)      do {save_flags(flags); cli(); if ((x)->lock&&(x)->babble) {printk("%s: spin_lock_irqsave(%s:%p) already locked\n", __BASE_FILE__, (x)->module, (x));(x)->babble--;} (x)->lock = 1;} while (0)
+#define spin_unlock_irqrestore(x,flags) do {cli(); if (!(x)->lock&&(x)->babble) {printk("%s: spin_unlock_irqrestore(%s:%p) not locked\n", __BASE_FILE__, (x)->module, (x));(x)->babble--;} (x)->lock = 0; restore_flags(flags);} while (0)
+
+#endif	/* DEBUG_SPINLOCKS */
 
 /*
  * Read-write spinlocks, allowing multiple readers
@@ -53,13 +103,10 @@ typedef struct { } rwlock_t;
 #define write_unlock_irqrestore(lock, flags) \
 	restore_flags(flags)
 
-#else
+#else	/* __SMP__ */
 
 /*
- * Simple spin lock operations.  There are two variants, one clears IRQ's
- * on the local processor, one does not.
- *
- * We make no fairness assumptions. They have a cost.
+ * Your basic spinlocks, allowing only a single CPU anywhere
  */
 
 typedef struct {
@@ -69,6 +116,13 @@ typedef struct {
 #define SPIN_LOCK_UNLOCKED { 0 }
 
 #define spin_lock_init(x)	do { (x)->lock = 0; } while(0)
+/*
+ * Simple spin lock operations.  There are two variants, one clears IRQ's
+ * on the local processor, one does not.
+ *
+ * We make no fairness assumptions. They have a cost.
+ */
+
 #define spin_unlock_wait(x)	do { barrier(); } while(((volatile spinlock_t *)(x))->lock)
 
 typedef struct { unsigned long a[100]; } __dummy_lock_t;
@@ -176,5 +230,5 @@ typedef struct {
 #define write_unlock_irqrestore(lock, flags) \
 	do { write_unlock(lock); __restore_flags(flags); } while (0)
 
-#endif /* SMP */
+#endif /* __SMP__ */
 #endif /* __ASM_SPINLOCK_H */

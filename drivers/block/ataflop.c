@@ -1631,7 +1631,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 			return -EFAULT;
 		return 0;
 	case BLKRASET:
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return -EACCES;
 		if (param > 0xff)
 			return -EINVAL;
@@ -1641,7 +1641,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 		return put_user(read_ahead[MAJOR(inode->i_rdev)],
 				(int *) param);
 	case BLKFLSBUF:
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return -EACCES;
 		fsync_dev(inode->i_rdev);
 		invalidate_buffers(inode->i_rdev);

@@ -95,7 +95,7 @@ void initrd_init(void);
 #endif
 
 #define RO_IOCTLS(dev,where) \
-  case BLKROSET: { int __val;  if (!suser()) return -EACCES; \
+  case BLKROSET: { int __val;  if (!capable(CAP_SYS_ADMIN)) return -EACCES; \
 		   if (get_user(__val, (int *)(where))) return -EFAULT; \
 		   set_device_ro((dev),__val); return 0; } \
   case BLKROGET: { int __val = (is_read_only(dev) != 0) ; \
@@ -411,14 +411,20 @@ void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);
 
 #ifdef IDE_DRIVER
 void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup) {
-	struct request *req = hwgroup->rq;
+	int nsect;
+	struct buffer_head *bh;
+	struct request *req;
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock,flags);
+	req = hwgroup->rq;
 #else
 static void end_request(int uptodate) {
-	struct request *req = CURRENT;
-#endif /* IDE_DRIVER */
-	struct buffer_head * bh;
 	int nsect;
+	struct buffer_head *bh;
+	struct request *req = CURRENT;
 
+#endif /* IDE_DRIVER */
 	req->errors = 0;
 	if (!uptodate) {
 		printk("end_request: I/O error, dev %s, sector %lu\n",
@@ -443,6 +449,9 @@ static void end_request(int uptodate) {
 				printk("end_request: buffer-list destroyed\n");
 			}
 			req->buffer = bh->b_data;
+#ifdef IDE_DRIVER
+			spin_unlock_irqrestore(&io_request_lock,flags);
+#endif /* IDE_DRIVER */
 			return;
 		}
 	}
@@ -461,6 +470,9 @@ static void end_request(int uptodate) {
 		up(req->sem);
 	req->rq_status = RQ_INACTIVE;
 	wake_up(&wait_for_request);
+#ifdef IDE_DRIVER
+	spin_unlock_irqrestore(&io_request_lock,flags);
+#endif /* IDE_DRIVER */
 }
 #endif /* defined(IDE_DRIVER) && !defined(_IDE_C) */
 #endif /* ! SCSI_BLK_MAJOR(MAJOR_NR) */

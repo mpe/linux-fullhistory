@@ -1096,7 +1096,7 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 		case SIOCADDRT:
 		case SIOCDELRT:
-			if (!suser()) return -EPERM;
+			if (!capable(CAP_NET_ADMIN)) return -EPERM;
 			return x25_route_ioctl(cmd, (void *)arg);
 
 		case SIOCX25GSUBSCRIP:

@@ -1050,7 +1050,7 @@ static int do_open(struct inode * inode, struct file * filp)
 	 * we might close the device immediately without doing a
 	 * privileged operation -- cevans
 	 */
-	as->suser = suser();
+	as->suser = capable(CAP_SYS_ADMIN);
 	as->next = user_list;
 	user_list = as;
 	filp->private_data = as;

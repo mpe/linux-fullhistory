@@ -58,7 +58,7 @@ asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int turn_on)
 	if (from + num > IO_BITMAP_SIZE*32)
 		return -EINVAL;
 #endif
-	if (!suser())
+	if (!capable(CAP_SYS_RAWIO))
 		return -EPERM;
 
 #ifdef IODEBUG
@@ -91,7 +91,7 @@ asmlinkage int sys_iopl(long ebx,long ecx,long edx,
 
 	if (level > 3)
 		return -EINVAL;
-	if (!suser())
+	if (!capable(CAP_SYS_RAWIO))
 		return -EPERM;
 	*(&eflags) = (eflags & 0xffffcfff) | (level << 12);
 	return 0;

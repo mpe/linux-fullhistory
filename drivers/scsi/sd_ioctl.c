@@ -79,7 +79,7 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	return 0;
 
     case BLKRASET:
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
 	if(!(inode->i_rdev)) return -EINVAL;
 	if(arg > 0xff) return -EINVAL;
@@ -96,13 +96,15 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	return 0;
 
     case BLKFLSBUF:
-	if(!suser())  return -EACCES;
+	if(!capable(CAP_SYS_ADMIN))  return -EACCES;
 	if(!(inode->i_rdev)) return -EINVAL;
 	fsync_dev(inode->i_rdev);
 	invalidate_buffers(inode->i_rdev);
 	return 0;
 	
     case BLKRRPART: /* Re-read partition tables */
+        if (!capable(CAP_SYS_ADMIN))
+                return -EACCES;
 	return revalidate_scsidisk(dev, 1);
 
     RO_IOCTLS(dev, arg);

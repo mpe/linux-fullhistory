@@ -1149,13 +1149,15 @@ static int acsi_ioctl( struct inode *inode, struct file *file,
 				(long *) arg);
 		
 	  case BLKFLSBUF:
-		if(!suser())  return -EACCES;
+		if(!capable(CAP_SYS_ADMIN))  return -EACCES;
 		if(!inode->i_rdev) return -EINVAL;
 		fsync_dev(inode->i_rdev);
 		invalidate_buffers(inode->i_rdev);
 		return 0;
 
 	  case BLKRRPART: /* Re-read partition tables */
+	        if (!capable(CAP_SYS_ADMIN)) 
+			return -EACCES;
 		return revalidate_acsidisk(inode->i_rdev, 1);
 	  RO_IOCTLS(inode->i_rdev,arg);
 	  default:

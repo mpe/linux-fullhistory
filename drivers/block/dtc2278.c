@@ -74,14 +74,14 @@ static void tune_dtc2278 (ide_drive_t *drive, byte pio)
 	pio = ide_get_best_pio_mode(drive, pio, 4, NULL);
 
 	if (pio >= 3) {
-		save_flags(flags);
-		cli();
+		save_flags(flags);	/* all CPUs */
+		cli();			/* all CPUs */
 		/*
 		 * This enables PIO mode4 (3?) on the first interface
 		 */
 		sub22(1,0xc3);
 		sub22(0,0xa0);
-		restore_flags(flags);
+		restore_flags(flags);	/* all CPUs */
 	} else {
 		/* we don't know how to set it back again.. */
 	}
@@ -97,8 +97,8 @@ void init_dtc2278 (void)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	__save_flags(flags);	/* local CPU only */
+	__cli();		/* local CPU only */
 	/*
 	 * This enables the second interface
 	 */
@@ -114,7 +114,7 @@ void init_dtc2278 (void)
 	sub22(1,0xc3);
 	sub22(0,0xa0);
 #endif
-	restore_flags(flags);
+	__restore_flags(flags);	/* local CPU only */
 
 	ide_hwifs[0].serialized = 1;
 	ide_hwifs[1].serialized = 1;

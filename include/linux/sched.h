@@ -354,7 +354,7 @@ struct task_struct {
 /* process credentials */					\
 /* uid etc */	0,0,0,0,0,0,0,0,				\
 /* suppl grps*/ 0, {0,},					\
-/* caps */      CAP_FULL_SET, CAP_FULL_SET, CAP_FULL_SET,    \
+/* caps */      CAP_INIT_EFF_SET,CAP_INIT_INH_SET,CAP_FULL_SET, \
 /* rlimits */   INIT_RLIMITS, \
 /* math */	0, \
 /* comm */	"swapper", \

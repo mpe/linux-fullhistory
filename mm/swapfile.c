@@ -356,7 +356,7 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	int err = -EPERM;
 	
 	lock_kernel();
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		goto out;
 
 	dentry = namei(specialfile);
@@ -491,7 +491,7 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	static int least_priority = 0;
 
 	lock_kernel();
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		goto out;
 	memset(&filp, 0, sizeof(filp));
 	p = swap_info;

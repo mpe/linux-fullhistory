@@ -19,7 +19,7 @@ typedef unsigned short ide_ioreg_t;
 #define MAX_HWIFS	6
 #endif
 
-#define ide_sti()	sti()
+#define ide__sti()	__sti()
 
 static __inline__ int ide_default_irq(ide_ioreg_t base)
 {

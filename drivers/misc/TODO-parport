@@ -6,20 +6,13 @@ Things to be done.
 
 2. A better lp.c:
 
-   a) It's a _mess_
-
-   b) ECP support would be nice.  This can only work if both the port and
+   a) ECP support would be nice.  This can only work if both the port and
       the printer support it.
 
-   c) Errors could do with being handled better.  There's no point logging a
-      message every 10 seconds when the printer is out of paper. 
-
-   d) Handle status readback automatically.  IEEE1284 printers can post status
+   b) Handle status readback automatically.  IEEE1284 printers can post status
       bits when they have something to say.  We should read out and deal 
       with (maybe just log) whatever the printer wants to tell the world.
 
 3. Support more hardware (eg m68k, Sun bpp).
 
 4. A better PLIP (make use of bidirectional/ECP/EPP ports).
-
-

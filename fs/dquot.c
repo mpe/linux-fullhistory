@@ -375,7 +375,8 @@ static int check_idq(struct dquot *dquot, short type, u_long short inodes)
 	if (inodes <= 0 || dquot->dq_flags & DQ_FAKE)
 		return(QUOTA_OK);
 	if (dquot->dq_ihardlimit &&
-	   (dquot->dq_curinodes + inodes) > dquot->dq_ihardlimit && !fsuser()) {
+	   (dquot->dq_curinodes + inodes) > dquot->dq_ihardlimit && 
+	    !capable(CAP_SYS_RESOURCE)) {
 		if ((dquot->dq_flags & DQ_INODES) == 0 &&
                      need_print_warning(type, dquot)) {
 			sprintf(quotamessage, "%s: write failed, %s file limit reached\r\n",
@@ -387,7 +388,8 @@ static int check_idq(struct dquot *dquot, short type, u_long short inodes)
 	}
 	if (dquot->dq_isoftlimit &&
 	   (dquot->dq_curinodes + inodes) > dquot->dq_isoftlimit &&
-	    dquot->dq_itime && CURRENT_TIME >= dquot->dq_itime && !fsuser()) {
+	    dquot->dq_itime && CURRENT_TIME >= dquot->dq_itime && 
+	    !capable(CAP_SYS_RESOURCE)) {
                 if (need_print_warning(type, dquot)) {
 			sprintf(quotamessage, "%s: warning, %s file quota exceeded too long.\r\n",
 		        	dquot->dq_mnt->mnt_dirname, quotatypes[type]);
@@ -397,7 +399,8 @@ static int check_idq(struct dquot *dquot, short type, u_long short inodes)
 	}
 	if (dquot->dq_isoftlimit &&
 	   (dquot->dq_curinodes + inodes) > dquot->dq_isoftlimit &&
-	    dquot->dq_itime == 0 && !fsuser()) {
+	    dquot->dq_itime == 0 && 
+	    !capable(CAP_SYS_RESOURCE)) {
                 if (need_print_warning(type, dquot)) {
 			sprintf(quotamessage, "%s: warning, %s file quota exceeded\r\n",
 		        	dquot->dq_mnt->mnt_dirname, quotatypes[type]);
@@ -413,7 +416,8 @@ static int check_bdq(struct dquot *dquot, short type, u_long blocks)
 	if (blocks <= 0 || dquot->dq_flags & DQ_FAKE)
 		return(QUOTA_OK);
 	if (dquot->dq_bhardlimit &&
-	   (dquot->dq_curblocks + blocks) > dquot->dq_bhardlimit && !fsuser()) {
+	   (dquot->dq_curblocks + blocks) > dquot->dq_bhardlimit && 
+	    !capable(CAP_SYS_RESOURCE)) {
 		if ((dquot->dq_flags & DQ_BLKS) == 0 &&
                      need_print_warning(type, dquot)) {
 			sprintf(quotamessage, "%s: write failed, %s disk limit reached.\r\n",
@@ -425,7 +429,8 @@ static int check_bdq(struct dquot *dquot, short type, u_long blocks)
 	}
 	if (dquot->dq_bsoftlimit &&
 	   (dquot->dq_curblocks + blocks) > dquot->dq_bsoftlimit &&
-	    dquot->dq_btime && CURRENT_TIME >= dquot->dq_btime && !fsuser()) {
+	    dquot->dq_btime && CURRENT_TIME >= dquot->dq_btime && 
+	    !capable(CAP_SYS_RESOURCE)) {
                 if (need_print_warning(type, dquot)) {
 			sprintf(quotamessage, "%s: write failed, %s disk quota exceeded too long.\r\n",
 		        	dquot->dq_mnt->mnt_dirname, quotatypes[type]);
@@ -435,7 +440,8 @@ static int check_bdq(struct dquot *dquot, short type, u_long blocks)
 	}
 	if (dquot->dq_bsoftlimit &&
 	   (dquot->dq_curblocks + blocks) > dquot->dq_bsoftlimit &&
-	    dquot->dq_btime == 0 && !fsuser()) {
+	    dquot->dq_btime == 0 && 
+	    !capable(CAP_SYS_RESOURCE)) {
                 if (need_print_warning(type, dquot)) {
 			sprintf(quotamessage, "%s: warning, %s disk quota exceeded\r\n",
 		        	dquot->dq_mnt->mnt_dirname, quotatypes[type]);
@@ -1039,11 +1045,12 @@ asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 			break;
 		case Q_GETQUOTA:
 			if (((type == USRQUOTA && current->uid != id) ||
-			     (type == GRPQUOTA && in_group_p(id))) && !fsuser())
+			     (type == GRPQUOTA && in_group_p(id))) && 
+			    !capable(CAP_SYS_ADMIN))
 				goto out;
 			break;
 		default:
-			if (!fsuser())
+			if (!capable(CAP_SYS_ADMIN))
 				goto out;
 	}
 

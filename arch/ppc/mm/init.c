@@ -1296,11 +1296,8 @@ local_flush_tlb_mm(struct mm_struct *mm)
 {
 #ifndef CONFIG_8xx
 	mm->context = NO_CONTEXT;
-	if (mm == current->mm) {
-		get_mmu_context(current);
-		/* done by get_mmu_context() now -- Cort */
-		/*set_context(current->mm->context);*/
-	}
+	if (mm == current->mm)
+		activate_context(current);
 #else
 	asm volatile ("tlbia" : : );
 #endif

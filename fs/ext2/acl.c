@@ -51,8 +51,11 @@ int ext2_permission (struct inode * inode, int mask)
 	 * Access is always granted for root. We now check last,
          * though, for BSD process accounting correctness
 	 */
-	if (((mode & mask & S_IRWXO) == mask) || fsuser())
+	if (((mode & mask & S_IRWXO) == mask) || capable(CAP_DAC_OVERRIDE))
 		return 0;
-	else
-		return -EACCES;
+	if ((mask == S_IROTH) ||
+	    (S_ISDIR(mode)  && !(mask & ~(S_IROTH | S_IXOTH))))
+		if (capable(CAP_DAC_READ_SEARCH))
+			return 0;
+	return -EACCES;
 }

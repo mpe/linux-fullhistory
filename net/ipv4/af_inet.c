@@ -374,7 +374,7 @@ static int inet_create(struct socket *sock, int protocol)
 		sock->ops = &inet_dgram_ops;
 		break;
 	case SOCK_RAW:
-		if (!suser())
+		if (!capable(CAP_NET_RAW))
 			goto free_and_badperm;
 		if (!protocol)
 			goto free_and_noproto;
@@ -521,7 +521,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 #endif		 
 	if (snum == 0) 
 		snum = sk->prot->good_socknum();
-	if (snum < PROT_SOCK && !suser())
+	if (snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
 		return(-EACCES);
 	
 	chk_addr_ret = inet_addr_type(addr->sin_addr.s_addr);
@@ -529,7 +529,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	    chk_addr_ret != RTN_MULTICAST && chk_addr_ret != RTN_BROADCAST) {
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 		/* Superuser may bind to any address to allow transparent proxying. */
-		if(chk_addr_ret != RTN_UNICAST || !suser())
+		if(chk_addr_ret != RTN_UNICAST || !capable(CAP_NET_ADMIN))
 #endif
 			return -EADDRNOTAVAIL;	/* Source address MUST be ours! */
 	}
@@ -868,7 +868,8 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			err = get_user(pid, (int *) arg);
 			if (err)
 				return err; 
-			if (current->pid != pid && current->pgrp != -pid && !suser())
+			if (current->pid != pid && current->pgrp != -pid && 
+			    !capable(CAP_NET_ADMIN))
 				return -EPERM;
 			sk->proc = pid;
 			return(0);

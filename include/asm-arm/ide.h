@@ -19,7 +19,7 @@ typedef unsigned long ide_ioreg_t;
 #define MAX_HWIFS	4
 #endif
 
-#define ide_sti()	sti()
+#define ide__sti()	__sti()
 
 #include <asm/arch/ide.h>
 

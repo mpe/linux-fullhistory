@@ -145,8 +145,13 @@ static int standard_permission(struct inode *inode, int mask)
 		mode >>= 6;
 	else if (in_group_p(inode->i_gid))
 		mode >>= 3;
-	if (((mode & mask & 0007) == mask) || fsuser())
+	if (((mode & mask & S_IRWXO) == mask) || capable(CAP_DAC_OVERRIDE))
 		return 0;
+	/* read and search access */
+	if ((mask == S_IROTH) ||
+	    (S_ISDIR(mode)  && !(mask & ~(S_IROTH | S_IXOTH))))
+		if (capable(CAP_DAC_READ_SEARCH))
+			return 0;
 	return -EACCES;
 }
 

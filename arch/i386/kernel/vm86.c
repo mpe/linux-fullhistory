@@ -660,7 +660,7 @@ static int do_vm86_irq_handling(int subfunction, int irqnumber)
 			int sig = irqnumber >> 8;
 			int irq = irqnumber & 255;
 			handle_irq_zombies();
-			if (!suser()) return -EPERM;
+			if (!capable(CAP_SYS_ADMIN)) return -EPERM;
 			if (!((1 << sig) & ALLOWED_SIGS)) return -EPERM;
 			if ( (irq<3) || (irq>15) ) return -EPERM;
 			if (vm86_irqs[irq].tsk) return -EPERM;

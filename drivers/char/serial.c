@@ -973,7 +973,7 @@ static int startup(struct async_struct * info)
 	 * here.
 	 */
 	if (serial_inp(info, UART_LSR) == 0xff) {
-		if (suser()) {
+		if (capable(CAP_SYS_ADMIN)) {
 			if (info->tty)
 				set_bit(TTY_IO_ERROR, &info->tty->flags);
 		} else
@@ -1005,7 +1005,7 @@ static int startup(struct async_struct * info)
 		retval = request_irq(state->irq, handler, IRQ_T(info),
 				     "serial", NULL);
 		if (retval) {
-			if (suser()) {
+			if (capable(CAP_SYS_ADMIN)) {
 				if (info->tty)
 					set_bit(TTY_IO_ERROR,
 						&info->tty->flags);
@@ -1638,7 +1638,7 @@ static int set_serial_info(struct async_struct * info,
 	change_port = (new_serial.port != state->port) ||
 		(new_serial.hub6 != state->hub6);
   
-	if (!suser()) {
+	if (!capable(CAP_SYS_ADMIN)) {
 		if (change_irq || change_port ||
 		    (new_serial.baud_base != state->baud_base) ||
 		    (new_serial.type != state->type) ||
@@ -1837,7 +1837,7 @@ static int do_autoconfig(struct async_struct * info)
 {
 	int			retval;
 	
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	
 	if (info->state->count > 1)
@@ -1922,7 +1922,7 @@ static int set_multiport_struct(struct async_struct * info,
 	int	retval;
 	void (*handler)(int, void *, struct pt_regs *);
 
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	state = info->state;
 	

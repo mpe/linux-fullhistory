@@ -111,7 +111,7 @@ static int proc_ide_write_config
 	unsigned long	startn = 0, n, flags;
 	const char	*start = NULL, *msg = NULL;
 
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
 	/*
 	 * Skip over leading whitespace
@@ -124,7 +124,7 @@ static int proc_ide_write_config
 	 * Do one full pass to verify all parameters,
 	 * then do another to actually write the regs.
 	 */
-	save_flags(flags);
+	save_flags(flags);	/* all CPUs */
 	do {
 		const char *p;
 		if (for_real) {
@@ -133,14 +133,15 @@ static int proc_ide_write_config
 			ide_hwgroup_t *mategroup = NULL;
 			if (hwif->mate && hwif->mate->hwgroup)
 				mategroup = (ide_hwgroup_t *)(hwif->mate->hwgroup);
-			cli();	/* ensure all writes are done together */
-			while (mygroup->active || (mategroup && mategroup->active)) {
-				restore_flags(flags);
+			cli();	/* all CPUs; ensure all writes are done together */
+			while (mygroup->busy || (mategroup && mategroup->busy)) {
+				sti();	/* all CPUs */
 				if (0 < (signed long)(jiffies - timeout)) {
 					printk("/proc/ide/%s/config: channel(s) busy, cannot write\n", hwif->name);
+					restore_flags(flags);	/* all CPUs */
 					return -EBUSY;
 				}
-				cli();
+				cli();	/* all CPUs */
 			}
 		}
 		p = buffer;
@@ -155,7 +156,7 @@ static int proc_ide_write_config
 						break;
 				case 'P':	is_pci = 1;
 #ifdef CONFIG_BLK_DEV_IDEPCI
-						if (!IDE_PCI_DEVID_EQ(hwif->pci_devid, IDE_PCI_DEVID_NULL))
+						if (hwif->pci_dev && !IDE_PCI_DEVID_EQ(hwif->pci_devid, IDE_PCI_DEVID_NULL))
 							break;
 #endif	/* CONFIG_BLK_DEV_IDEPCI */
 						msg = "not a PCI device";
@@ -174,7 +175,7 @@ static int proc_ide_write_config
 				msg = "bad/missing register number";
 				goto parse_error;
 			}
-			if (--n < 0 || *p++ != ':') {
+			if (n-- == 0 || *p++ != ':') {
 				msg = "missing ':'";
 				goto parse_error;
 			}
@@ -223,7 +224,7 @@ static int proc_ide_write_config
 							break;
 					}
 					if (rc) {
-						restore_flags(flags);
+						restore_flags(flags);	/* all CPUs */
 						printk("proc_ide_write_config: error writing %s at bus %02x dev %02x reg 0x%x value 0x%x\n",
 							msg, dev->bus->number, dev->devfn, reg, val);
 						printk("proc_ide_write_config: error %d\n", rc);
@@ -243,10 +244,10 @@ static int proc_ide_write_config
 			}
 		}
 	} while (!for_real++);
-	restore_flags(flags);
+	restore_flags(flags);	/* all CPUs */
 	return count;
 parse_error:
-	restore_flags(flags);
+	restore_flags(flags);	/* all CPUs */
 	printk("parse error\n");
 	return xx_xx_parse_error(start, startn, msg);
 }
@@ -259,27 +260,25 @@ static int proc_ide_read_config
 
 #ifdef CONFIG_BLK_DEV_IDEPCI
 	ide_hwif_t	*hwif = (ide_hwif_t *)data;
-	int		reg = 0;
+	struct pci_dev	*dev = hwif->pci_dev;
+	if (!IDE_PCI_DEVID_EQ(hwif->pci_devid, IDE_PCI_DEVID_NULL) && dev && dev->bus) {
+		int reg = 0;
 
-	struct pci_dev *dev = hwif->pci_dev;
-
-	out += sprintf(out, "pci bus %02x device %02x vid %04x did %04x channel %d\n",
-		dev->bus->number, dev->devfn, hwif->pci_devid.vid, hwif->pci_devid.did, hwif->channel);
-	do {
-		byte val;
-		int rc = pci_read_config_byte(dev, reg, &val);
-		if (rc) {
-			printk("proc_ide_read_config: error reading bus %02x dev %02x reg 0x%02x\n",
-				dev->bus->number, dev->devfn, reg);
-			printk("proc_ide_read_config: error %d\n", rc);
-			return -EIO;
-			out += sprintf(out, "??%c", (++reg & 0xf) ? ' ' : '\n');
-		} else
-			out += sprintf(out, "%02x%c", val, (++reg & 0xf) ? ' ' : '\n');
-	} while (reg < 0x100);
-#else	/* CONFIG_BLK_DEV_IDEPCI */
-	out += sprintf(out, "(none)\n");
+		out += sprintf(out, "pci bus %02x device %02x vid %04x did %04x channel %d\n",
+			dev->bus->number, dev->devfn, hwif->pci_devid.vid, hwif->pci_devid.did, hwif->channel);
+		do {
+			byte val;
+			int rc = pci_read_config_byte(dev, reg, &val);
+			if (rc) {
+				printk("proc_ide_read_config: error %d reading bus %02x dev %02x reg 0x%02x\n",
+					rc, dev->bus->number, dev->devfn, reg);
+				out += sprintf(out, "??%c", (++reg & 0xf) ? ' ' : '\n');
+			} else
+				out += sprintf(out, "%02x%c", val, (++reg & 0xf) ? ' ' : '\n');
+		} while (reg < 0x100);
+	} else
 #endif	/* CONFIG_BLK_DEV_IDEPCI */
+		out += sprintf(out, "(none)\n");
 	len = out - page;
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }
@@ -425,14 +424,13 @@ static int proc_ide_write_settings
 	(struct file *file, const char *buffer, unsigned long count, void *data)
 {
 	ide_drive_t	*drive = (ide_drive_t *) data;
-	ide_hwif_t	*hwif = HWIF(drive);
 	char		name[MAX_LEN + 1];
 	int		for_real = 0, len;
-	unsigned long	n, flags;
+	unsigned long	n;
 	const char	*start = NULL;
 	ide_settings_t	*setting;
 
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
 	/*
 	 * Skip over leading whitespace
@@ -443,27 +441,10 @@ static int proc_ide_write_settings
 	}
 	/*
 	 * Do one full pass to verify all parameters,
-	 * then do another to actually write the pci regs.
+	 * then do another to actually write the new settings.
 	 */
-	save_flags(flags);
 	do {
 		const char *p;
-		if (for_real) {
-			unsigned long timeout = jiffies + (3 * HZ);
-			ide_hwgroup_t *mygroup = (ide_hwgroup_t *)(hwif->hwgroup);
-			ide_hwgroup_t *mategroup = NULL;
-			if (hwif->mate && hwif->mate->hwgroup)
-				mategroup = (ide_hwgroup_t *)(hwif->mate->hwgroup);
-			cli();	/* ensure all writes are done together */
-			while (mygroup->active || (mategroup && mategroup->active)) {
-				restore_flags(flags);
-				if (0 < (signed long)(jiffies - timeout)) {
-					printk("/proc/ide/%s/settings: channel(s) busy, cannot write\n", drive->name);
-					return -EBUSY;
-				}
-				cli();
-			}
-		}
 		p = buffer;
 		n = count;
 		while (n > 0) {
@@ -508,10 +489,8 @@ static int proc_ide_write_settings
 				ide_write_setting(drive, setting, val * setting->div_factor / setting->mul_factor);
 		}
 	} while (!for_real++);
-	restore_flags(flags);
 	return count;
 parse_error:
-	restore_flags(flags);
 	printk("proc_ide_write_settings(): parse error\n");
 	return -EINVAL;
 }
@@ -573,7 +552,7 @@ static int proc_ide_write_driver
 {
 	ide_drive_t	*drive = (ide_drive_t *) data;
 
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
 	if (ide_replace_subdriver(drive, buffer))
 		return -EINVAL;

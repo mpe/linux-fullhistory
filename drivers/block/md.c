@@ -622,7 +622,7 @@ static int md_ioctl (struct inode *inode, struct file *file,
   int minor, err;
   struct hd_geometry *loc = (struct hd_geometry *) arg;
 
-  if (!suser())
+  if (!capable(CAP_SYS_ADMIN))
     return -EACCES;
 
   if (((minor=MINOR(inode->i_rdev)) & 0x80) &&

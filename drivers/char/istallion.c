@@ -1774,7 +1774,7 @@ static int stli_setserial(stliport_t *portp, struct serial_struct *sp)
 #endif
 
 	copy_from_user(&sio, sp, sizeof(struct serial_struct));
-	if (!suser()) {
+	if (!capable(CAP_SYS_ADMIN)) {
 		if ((sio.baud_base != portp->baud_base) ||
 		    (sio.close_delay != portp->close_delay) ||
 		    ((sio.flags & ~ASYNC_USR_MASK) !=

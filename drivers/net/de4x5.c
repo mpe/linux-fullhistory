@@ -5487,7 +5487,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	if (status)
 	  break;
 	status = -EPERM;
-	if (!suser())
+	if (!capable(CAP_NET_ADMIN))
 	  break;
 	status = 0;
 	copy_from_user(tmp.addr, ioc->data, ETH_ALEN);
@@ -5505,7 +5505,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	
 	break;
       case DE4X5_SET_PROM:             /* Set Promiscuous Mode */
-	if (suser()) {
+	if (capable(CAP_NET_ADMIN)) {
 	    omr = inl(DE4X5_OMR);
 	    omr |= OMR_PR;
 	    outl(omr, DE4X5_OMR);
@@ -5516,7 +5516,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	
 	break;
       case DE4X5_CLR_PROM:             /* Clear Promiscuous Mode */
-	if (suser()) {
+	if (capable(CAP_NET_ADMIN)) {
 	    omr = inl(DE4X5_OMR);
 	    omr &= ~OMR_PR;
 	    outb(omr, DE4X5_OMR);
@@ -5531,7 +5531,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	
 	break;
       case DE4X5_MCA_EN:               /* Enable pass all multicast addressing */
-	if (suser()) {
+	if (capable(CAP_NET_ADMIN)) {
 	    omr = inl(DE4X5_OMR);
 	    omr |= OMR_PM;
 	    outl(omr, DE4X5_OMR);
@@ -5552,7 +5552,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	
 	break;
       case DE4X5_CLR_STATS:            /* Zero out the driver statistics */
-	if (suser()) {
+	if (capable(CAP_NET_ADMIN)) {
 	    cli();
 	    memset(&lp->pktStats, 0, sizeof(lp->pktStats));
 	    sti();
@@ -5569,7 +5569,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	
 	break;
       case DE4X5_SET_OMR:              /* Set the OMR Register contents */
-	if (suser()) {
+	if (capable(CAP_NET_ADMIN)) {
 	    if (!(status = verify_area(VERIFY_READ, (void *)ioc->data, 1))) {
 		copy_from_user(tmp.addr, ioc->data, 1);
 		outl(tmp.addr[0], DE4X5_OMR);

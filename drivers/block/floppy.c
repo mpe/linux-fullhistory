@@ -1825,7 +1825,6 @@ static void floppy_shutdown(void)
 	if (!initialising)
 		show_floppy();
 	cancel_activity();
-	sti();
 
 	floppy_enable_hlt();
 	fd_disable_dma();
@@ -2876,7 +2875,6 @@ static void do_fd_request(void)
 		printk("sect=%ld cmd=%d\n", CURRENT->sector, CURRENT->cmd);
 		return;
 	}
-	sti();
 	if (fdc_busy){
 		/* fdc busy, this new request will be treated when the
 		   current one is done */
@@ -3208,7 +3206,7 @@ static inline int set_geometry(unsigned int cmd, struct floppy_struct *g,
 	    (g->stretch&~(FD_STRETCH|FD_SWAPSIDES)) != 0)
 		return -EINVAL;
 	if (type){
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		LOCK_FDC(drive,1);
 		for (cnt = 0; cnt < N_DRIVE; cnt++){
@@ -3373,7 +3371,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			return _COPYOUT(loc);
 		}
 		case BLKRASET:
-			if(!suser()) return -EACCES;
+			if(!capable(CAP_SYS_ADMIN)) return -EACCES;
 			if(param > 0xff) return -EINVAL;
 			read_ahead[MAJOR(inode->i_rdev)] = param;
 			return 0;
@@ -3381,7 +3379,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			return put_user(read_ahead[MAJOR(inode->i_rdev)],
 					(long *) param);
 		case BLKFLSBUF:
-			if(!suser()) return -EACCES;
+			if(!capable(CAP_SYS_ADMIN)) return -EACCES;
 			fsync_dev(inode->i_rdev);
 			invalidate_buffers(inode->i_rdev);
 			return 0;

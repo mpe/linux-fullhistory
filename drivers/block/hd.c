@@ -603,7 +603,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			return copy_to_user(loc, &g, sizeof g) ? -EFAULT : 0; 
 		}
 		case BLKRASET:
-			if(!suser())  return -EACCES;
+			if(!capable(CAP_SYS_ADMIN))  return -EACCES;
 			if(arg > 0xff) return -EINVAL;
 			read_ahead[MAJOR(inode->i_rdev)] = arg;
 			return 0;
@@ -616,12 +616,14 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			return put_user(hd[MINOR(inode->i_rdev)].nr_sects, 
 					(long *) arg);
 		case BLKFLSBUF:
-			if(!suser())  return -EACCES;
+			if(!capable(CAP_SYS_ADMIN))  return -EACCES;
 			fsync_dev(inode->i_rdev);
 			invalidate_buffers(inode->i_rdev);
 			return 0;
 
 		case BLKRRPART: /* Re-read partition tables */
+			if (!capable(CAP_SYS_ADMIN)) 
+				return -EACCES;
 			return revalidate_hddisk(inode->i_rdev, 1);
 
 		RO_IOCTLS(inode->i_rdev,arg);

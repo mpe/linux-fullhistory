@@ -743,7 +743,7 @@ asmlinkage int sys_umount(char * name)
 	struct dentry * dentry;
 	int retval;
 
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
 	lock_kernel();
@@ -985,7 +985,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	struct file dummy;	/* allows read-write or read-only flag */
 
 	lock_kernel();
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		goto out;
 	if ((new_flags &
 	     (MS_MGC_MSK | MS_REMOUNT)) == (MS_MGC_VAL | MS_REMOUNT)) {

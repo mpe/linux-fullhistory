@@ -2281,7 +2281,7 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 /*
  * The user must have an euid of root to do these requests.
  */
-	if (!suser ())
+	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 /*
  * Set the MRU value

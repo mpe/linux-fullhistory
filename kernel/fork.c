@@ -56,9 +56,7 @@ static struct uid_taskcount {
 	int task_count;
 } *uidhash[UIDHASH_SZ];
 
-#ifdef __SMP__
-static spinlock_t uidhash_lock = SPIN_LOCK_UNLOCKED;
-#endif
+spinlock_t uidhash_lock = SPIN_LOCK_UNLOCKED;
 
 kmem_cache_t *uid_cachep;
 
@@ -154,10 +152,8 @@ static inline int find_empty_process(void)
 	return -EAGAIN;
 }
 
-#ifdef __SMP__
 /* Protects next_safe and last_pid. */
-static spinlock_t lastpid_lock = SPIN_LOCK_UNLOCKED;
-#endif
+spinlock_t lastpid_lock = SPIN_LOCK_UNLOCKED;
 
 static int get_pid(unsigned long flags)
 {

@@ -311,7 +311,8 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			  /* Reject setting of unused bits */
 			if (val & ~(IPTOS_TOS_MASK|IPTOS_PREC_MASK))
 				return -EINVAL;
-			if (IPTOS_PREC(val) >= IPTOS_PREC_CRITIC_ECP && !suser())
+			if (IPTOS_PREC(val) >= IPTOS_PREC_CRITIC_ECP && 
+			    !capable(CAP_NET_ADMIN))
 				return -EPERM;
 			if (sk->ip_tos != val) {
 				sk->ip_tos=val;
@@ -453,7 +454,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		case IP_FW_POLICY_OUT:
 		case IP_FW_POLICY_FWD:
 		case IP_FW_MASQ_TIMEOUTS:
-			if(!suser())
+			if(!capable(CAP_NET_ADMIN))
 				return -EACCES;
 			if(optlen>sizeof(tmp_fw) || optlen<1)
 				return -EINVAL;
@@ -467,7 +468,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		case IP_FW_MASQ_ADD:
 		case IP_FW_MASQ_DEL:
 		case IP_FW_MASQ_FLUSH:
-			if(!suser())
+			if(!capable(CAP_NET_ADMIN))
 				return -EPERM;
 			if(optlen>sizeof(masq_ctl) || optlen<1)
 				return -EINVAL;
@@ -483,7 +484,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		case IP_ACCT_DELETE:
 		case IP_ACCT_FLUSH:
 		case IP_ACCT_ZERO:
-			if(!suser())
+			if(!capable(CAP_NET_ADMIN))
 				return -EACCES;
 			if(optlen>sizeof(tmp_fw) || optlen<1)
 				return -EINVAL;

@@ -371,7 +371,7 @@ int wanrouter_ioctl(struct inode* inode, struct file* file,
 	struct proc_dir_entry* dent;
 	wan_device_t* wandev;
 
-	if (!suser())
+	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 		
 	if ((cmd >> 8) != ROUTER_IOCTL)

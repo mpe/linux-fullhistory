@@ -26,7 +26,7 @@
 #define SUPPORT_VLB_SYNC	0
 
 
-#define ide_sti()	sti()
+#define ide__sti()	__sti()
 
 typedef unsigned int ide_ioreg_t;
 void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);

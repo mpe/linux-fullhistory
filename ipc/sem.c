@@ -482,7 +482,8 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 			goto out;
 		break;
 	case IPC_RMID:
-		if (current->euid == ipcp->cuid || current->euid == ipcp->uid || suser()) {
+		if (current->euid == ipcp->cuid || 
+		    current->euid == ipcp->uid || capable(CAP_SYS_ADMIN)) {
 			freeary (id);
 			err = 0;
 			goto out;
@@ -540,7 +541,8 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		update_queue(sma);
 		break;
 	case IPC_SET:
-		if (current->euid == ipcp->cuid || current->euid == ipcp->uid || suser()) {
+		if (current->euid == ipcp->cuid || 
+		    current->euid == ipcp->uid || capable(CAP_SYS_ADMIN)) {
 			ipcp->uid = tbuf.sem_perm.uid;
 			ipcp->gid = tbuf.sem_perm.gid;
 			ipcp->mode = (ipcp->mode & ~S_IRWXUGO)

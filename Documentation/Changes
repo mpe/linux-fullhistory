@@ -33,7 +33,7 @@ http://cyberbuzz.gatech.edu/kaboom/linux/ as well.
    Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
 needs.
 
-Last updated: April 27, 1998
+Last updated: May 5, 1998
 Current Author: Chris Ricker (kaboom@gatech.edu).
 
 Current Minimal Requirements
@@ -60,7 +60,7 @@ running, the suggested command should tell you.
 - Bash                   1.14.7                  ; bash -version
 - Ncpfs                  2.1.1                   ; ncpmount -v
 - Pcmcia-cs              3.0.0
-- PPP                    2.3.3                   ; pppd -v
+- PPP                    2.3.5                   ; pppd -v
 
 Upgrade notes
 *************
@@ -126,6 +126,12 @@ Binutils
    If you upgrade binutils, please read its accompanying release notes
 to find out the proper way to upgrade it.  No, the instruction to "rm
 `which encaps`" is not a joke.
+
+The last public release of the binutils 2.8.x series is 2.8.1.0.23. 
+Binutils 2.8.1.0.25 to 2.9.1.0.2 are all very buggy; do not use them. 
+Binutils 2.9.1 (note the absence of a suffix) is all right, and binutils
+2.9.1.0.3 (and presumably later revisions) will probably work, too. 
+Stick with 2.8.1.0.23 to be safe. 
 
 Gnu C
 =====
@@ -423,14 +429,14 @@ ftp://ftp.gwdg.de/pub/linux/misc/ncpfs/ncpfs-2.1.1.tgz
 Pcmcia-cs
 =========
 
-The 3.0.0 release:
-ftp://hyper.stanford.edu/pub/pcmcia/pcmcia-cs-3.0.0.tar.gz
+The May 4, 1998 release:
+ftp://hyper.stanford.edu/pub/pcmcia/NEW/pcmcia-cs.04-May-98.tar.gz
 
 PPP
 ===
 
-The 2.3.3 release:
-ftp://cs.anu.edu.au/pub/software/ppp/ppp-2.3.3.tar.gz
+The 2.3.5 release:
+ftp://cs.anu.edu.au/pub/software/ppp/ppp-2.3.5.tar.gz
 
 Other Info
 ==========

@@ -1366,7 +1366,7 @@ asmlinkage int sys32_mount(u32 dev_name, u32 dir_name, u32 type, u32 new_flags, 
 	unsigned long type_page;
 	int err, is_smb, is_ncp;
 
-	if(!suser())
+	if(!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	is_smb = is_ncp = 0;
 	err = copy_mount_stuff_to_kernel((const void *)A(type), &type_page);

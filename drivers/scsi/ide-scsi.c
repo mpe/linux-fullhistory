@@ -327,7 +327,7 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 	if ((status & DRQ_STAT) == 0) {					/* No more interrupts */
 		if (test_bit(IDESCSI_LOG_CMD, &scsi->log))
 			printk (KERN_INFO "Packet command completed, %d bytes transferred\n", pc->actually_transferred);
-		ide_sti();
+		ide__sti();
 		if (status & ERR_STAT)
 			rq->errors++;
 		idescsi_end_request (1, HWGROUP(drive));

@@ -112,39 +112,39 @@ static void tune_umc (ide_drive_t *drive, byte pio)
 
 	pio = ide_get_best_pio_mode(drive, pio, 4, NULL);
 	printk("%s: setting umc8672 to PIO mode%d (speed %d)\n", drive->name, pio, pio_to_umc[pio]);
-	save_flags(flags);
-	cli();
+	save_flags(flags);	/* all CPUs */
+	cli();			/* all CPUs */
 	if (hwgroup && hwgroup->handler != NULL) {
 		printk("umc8672: other interface is busy: exiting tune_umc()\n");
 	} else {
 		current_speeds[drive->name[2] - 'a'] = pio_to_umc[pio];
 		umc_set_speeds (current_speeds);
 	}
-	restore_flags(flags);
+	restore_flags(flags);	/* all CPUs */
 }
 
 void init_umc8672 (void)	/* called from ide.c */
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli ();
+	__save_flags(flags);	/* local CPU only */
+	__cli();		/* local CPU only */
 	if (check_region(0x108, 2)) {
-		restore_flags(flags);
+		__restore_flags(flags);
 		printk("\numc8672: PORTS 0x108-0x109 ALREADY IN USE\n");
 		return;
 	}
 	outb_p (0x5A,0x108); /* enable umc */
 	if (in_umc (0xd5) != 0xa0)
 	{
-		restore_flags(flags);
+		__restore_flags(flags);	/* local CPU only */
 		printk ("umc8672: not found\n");
 		return;  
 	}
 	outb_p (0xa5,0x108); /* disable umc */
 
 	umc_set_speeds (current_speeds);
-	restore_flags(flags);
+	__restore_flags(flags);	/* local CPU only */
 
 	request_region(0x108, 2, "umc8672");
 	ide_hwifs[0].chipset = ide_umc8672;

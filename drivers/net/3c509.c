@@ -1,8 +1,8 @@
 /* 3c509.c: A 3c509 EtherLink3 ethernet driver for linux. */
 /*
-	Written 1993-1995 by Donald Becker.
+	Written 1993-1997 by Donald Becker.
 
-	Copyright 1994,1995 by Donald Becker.
+	Copyright 1994-1997 by Donald Becker.
 	Copyright 1993 United States Government as represented by the
 	Director, National Security Agency.	 This software may be used and
 	distributed according to the terms of the GNU Public License,
@@ -27,10 +27,22 @@
 	FIXES:
 		Alan Cox:       Removed the 'Unexpected interrupt' bug.
 		Michael Meskes:	Upgraded to Donald Becker's version 1.07.
-		Phil Blundell:  Media selection support.
+		Alan Cox:	Increased the eeprom delay. Regardless of 
+				what the docs say some people definitely
+				get problems with lower (but in card spec)
+				delays
+		v1.10 4/21/97 Fixed module code so that multiple cards may be detected,
+				other cleanups.  -djb
+		Andrea Arcangeli:	Upgraded to Donald Becker's version 1.12.
 */
 
-static char *version = "3c509.c:1.07 6/15/95 becker@cesdis.gsfc.nasa.gov\n";
+static char *version = "3c509.c:1.12 6/4/97 becker@cesdis.gsfc.nasa.gov\n";
+/* A few values that may be tweaked. */
+
+/* Time in jiffies before concluding the transmitter is hung. */
+#define TX_TIMEOUT  (400*HZ/1000)
+/* Maximum events (Rx packets, etc.) to handle at each interrupt. */
+#define INTR_WORK      10
 
 #include <linux/module.h>
 
@@ -48,20 +60,19 @@ static char *version = "3c509.c:1.07 6/15/95 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/delay.h>	/* for udelay() */
-#include <linux/init.h>
 
 #include <asm/bitops.h>
 #include <asm/io.h>
 
 #ifdef EL3_DEBUG
-static int el3_debug = EL3_DEBUG;
+int el3_debug = EL3_DEBUG;
 #else
-static int el3_debug = 2;
+int el3_debug = 2;
 #endif
 
 /* To minimize the size of the driver source I only define operating
    constants if they are used several times.  You'll need the manual
-   if you want to understand driver details. */
+   anyway if you want to understand driver details. */
 /* Offsets from base I/O address. */
 #define EL3_DATA 0x00
 #define EL3_CMD 0x0e
@@ -111,12 +122,14 @@ enum RxFilter {
 #define SKB_QUEUE_SIZE	64
 
 struct el3_private {
-	struct net_device_stats stats;
+	struct enet_statistics stats;
+	struct device *next_dev;
 	/* skb send-queue */
 	int head, size;
 	struct sk_buff *queue[SKB_QUEUE_SIZE];
 };
 static int id_port = 0x100;
+static struct device *el3_root_dev = NULL;
 
 static ushort id_read_eeprom(int index);
 static ushort read_eeprom(short ioaddr, int index);
@@ -124,28 +137,19 @@ static int el3_open(struct device *dev);
 static int el3_start_xmit(struct sk_buff *skb, struct device *dev);
 static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void update_stats(int addr, struct device *dev);
-static struct net_device_stats *el3_get_stats(struct device *dev);
+static struct enet_statistics *el3_get_stats(struct device *dev);
 static int el3_rx(struct device *dev);
 static int el3_close(struct device *dev);
-static int el3_set_config(struct device *dev, struct ifmap *map);
-#ifdef HAVE_MULTICAST
 static void set_multicast_list(struct device *dev);
-#endif
 
 
 
-__initfunc(int el3_probe(struct device *dev))
+int el3_probe(struct device *dev)
 {
 	short lrs_state = 0xff, i;
-	ushort ioaddr, irq, port;
-	short *phys_addr = (short *)dev->dev_addr;
+	ushort ioaddr, irq, if_port;
+	short phys_addr[3];
 	static int current_tag = 0;
-	static int el3_portmap[] = { 
-	  IF_PORT_10BASET, 
-	  IF_PORT_AUI, 
-	  IF_PORT_UNKNOWN, 
-	  IF_PORT_10BASE2 
-	};
 
 	/* First check all slots of the EISA bus.  The next slot address to
 	   probe is kept in 'eisa_addr' to support multiple probe() calls. */
@@ -163,7 +167,7 @@ __initfunc(int el3_probe(struct device *dev))
 			outw(SelectWindow | 0, ioaddr + 0xC80 + EL3_CMD);
 
 			irq = inw(ioaddr + WN0_IRQ) >> 12;
-			port = inw(ioaddr + 6)>>14;
+			if_port = inw(ioaddr + 6)>>14;
 			for (i = 0; i < 3; i++)
 				phys_addr[i] = htons(read_eeprom(ioaddr, i));
 
@@ -175,18 +179,14 @@ __initfunc(int el3_probe(struct device *dev))
 		}
 	}
 
-/*
- * This has to be coded according to Documentation/mca.txt before
- * this driver can be used with the 3c529 MCA cards.
- */
-#if 0 /* #ifdef CONFIG_MCA */
+#ifdef CONFIG_MCA
 	if (MCA_bus) {
 		mca_adaptor_select_mode(1);
 		for (i = 0; i < 8; i++)
 			if ((mca_adaptor_id(i) | 1) == 0x627c) {
 				ioaddr = mca_pos_base_addr(i);
 				irq = inw(ioaddr + WN0_IRQ) >> 12;
-				port = inw(ioaddr + 6)>>14;
+				if_port = inw(ioaddr + 6)>>14;
 				for (i = 0; i < 3; i++)
 					phys_addr[i] = htons(read_eeprom(ioaddr, i));
 
@@ -203,6 +203,8 @@ __initfunc(int el3_probe(struct device *dev))
 	outb(0x02, 0xA79);           /* Return to WaitForKey state. */
 	/* Select an open I/O location at 0x1*0 to do contention select. */
 	for (id_port = 0x100; id_port < 0x200; id_port += 0x10) {
+		if (check_region(id_port, 1))
+			continue;
 		outb(0x00, id_port);
 		outb(0xff, id_port);
 		if (inb(id_port) & 0x01)
@@ -217,13 +219,6 @@ __initfunc(int el3_probe(struct device *dev))
 	   ID_PORT.  We find cards past the first by setting the 'current_tag'
 	   on cards as they are found.  Cards with their tag set will not
 	   respond to subsequent ID sequences. */
-
-	if (check_region(id_port,1)) {
-	  static int once = 1;
-	  if (once) printk("3c509: Somebody has reserved 0x%x, can't do ID_PORT lookup, nor card auto-probing\n",id_port);
-          once = 0;
-          return -ENODEV;
-        }
 
 	outb(0x00, id_port);
 	outb(0x00, id_port);
@@ -252,16 +247,16 @@ __initfunc(int el3_probe(struct device *dev))
 
 	{
 		unsigned short iobase = id_read_eeprom(8);
-		port = iobase >> 14;
+		if_port = iobase >> 14;
 		ioaddr = 0x200 + ((iobase & 0x1f) << 4);
 	}
-	if (dev->irq > 1  &&  dev->irq < 16)
+	if (dev  &&  dev->irq > 1  &&  dev->irq < 16)
 		irq = dev->irq;
 	else
 		irq = id_read_eeprom(9) >> 12;
 
-	if (dev->base_addr != 0
-		&&      dev->base_addr != (unsigned short)ioaddr) {
+	if (dev  &&  dev->base_addr != 0
+		&&  dev->base_addr != (unsigned short)ioaddr) {
 		return -ENODEV;
 	}
 
@@ -278,15 +273,20 @@ __initfunc(int el3_probe(struct device *dev))
 	/* Free the interrupt so that some other card can use it. */
 	outw(0x0f00, ioaddr + WN0_IRQ);
  found:
+	if (dev == NULL) {
+		dev = init_etherdev(dev, sizeof(struct el3_private));
+	}
+	memcpy(dev->dev_addr, phys_addr, sizeof(phys_addr));
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
-	dev->if_port = el3_portmap[port];
+	dev->if_port = (dev->mem_start & 0x1f) ? dev->mem_start & 3 : if_port;
+
 	request_region(dev->base_addr, EL3_IO_EXTENT, "3c509");
 
 	{
-		static const char *if_names[] = {"10baseT", "AUI", "undefined", "BNC"};
+		const char *if_names[] = {"10baseT", "AUI", "undefined", "BNC"};
 		printk("%s: 3c509 at %#3.3lx tag %d, %s port, address ",
-			   dev->name, dev->base_addr, current_tag, if_names[port]);
+			   dev->name, dev->base_addr, current_tag, if_names[dev->if_port]);
 	}
 
 	/* Read in the station address. */
@@ -295,10 +295,14 @@ __initfunc(int el3_probe(struct device *dev))
 	printk(", IRQ %d.\n", dev->irq);
 
 	/* Make up a EL3-specific-data structure. */
-	dev->priv = kmalloc(sizeof(struct el3_private), GFP_KERNEL);
+	if (dev->priv == NULL)
+		dev->priv = kmalloc(sizeof(struct el3_private), GFP_KERNEL);
 	if (dev->priv == NULL)
 		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct el3_private));
+
+	((struct el3_private *)dev->priv)->next_dev = el3_root_dev;
+	el3_root_dev = dev;
 
 	if (el3_debug > 0)
 		printk(version);
@@ -308,30 +312,26 @@ __initfunc(int el3_probe(struct device *dev))
 	dev->hard_start_xmit = &el3_start_xmit;
 	dev->stop = &el3_close;
 	dev->get_stats = &el3_get_stats;
-	dev->set_config = &el3_set_config;
-#ifdef HAVE_MULTICAST
-		dev->set_multicast_list = &set_multicast_list;
-#endif
+	dev->set_multicast_list = &set_multicast_list;
 
 	/* Fill in the generic fields of the device structure. */
 	ether_setup(dev);
-	dev->flags |= IFF_PORTSEL;
 	return 0;
 }
 
 /* Read a word from the EEPROM using the regular EEPROM access register.
    Assume that we are in register window zero.
  */
-__initfunc(static ushort read_eeprom(short ioaddr, int index))
+static ushort read_eeprom(short ioaddr, int index)
 {
 	outw(EEPROM_READ + index, ioaddr + 10);
 	/* Pause for at least 162 us. for the read to take place. */
-	udelay (300);
+	udelay (500);
 	return inw(ioaddr + 12);
 }
 
 /* Read a word from the EEPROM when in the ISA ID probe state. */
-__initfunc(static ushort id_read_eeprom(int index))
+static ushort id_read_eeprom(int index)
 {
 	int bit, word = 0;
 
@@ -340,8 +340,8 @@ __initfunc(static ushort id_read_eeprom(int index))
 	outb(EEPROM_READ + index, id_port);
 
 	/* Pause for at least 162 us. for the read to take place. */
-	udelay (300);
-
+	udelay (500);
+	
 	for (bit = 15; bit >= 0; bit--)
 		word = (word << 1) + (inb(id_port) & 0x01);
 
@@ -351,59 +351,6 @@ __initfunc(static ushort id_read_eeprom(int index))
 	return word;
 }
 
-
-
-static int
-el3_set_config(struct device *dev, struct ifmap *map)
-{
-	int ioaddr = dev->base_addr;
-    if (map->port != dev->if_port) {
-	  switch (map->port) {
-	  case IF_PORT_10BASE2:
-	  case IF_PORT_10BASET:
-	  case IF_PORT_AUI:
-		if (dev->start) {
-		  if (dev->if_port == IF_PORT_10BASE2)
-			/* Turn off thinnet power. */
-			outw(StopCoax, ioaddr + EL3_CMD);
-		  else if (dev->if_port == IF_PORT_10BASET) {
-			/* Disable link beat and jabber */
-			EL3WINDOW(4);
-			outw(inw(ioaddr + WN4_MEDIA) & ~MEDIA_TP, ioaddr + WN4_MEDIA);
-			EL3WINDOW(1);
-		  }
-		}
-		printk(KERN_INFO "%s: %s port selected.\n", dev->name, 
-			   if_port_text[map->port]);
-		dev->if_port = map->port;
-		if (dev->start) {
-		  if (dev->if_port == IF_PORT_10BASE2)
-			/* Start the thinnet transceiver. We should really wait 50ms...*/
-			outw(StartCoax, ioaddr + EL3_CMD);
-		  else if (dev->if_port == IF_PORT_10BASET) {
-			/* 10baseT interface, enabled link beat and jabber check. */
-			EL3WINDOW(4);
-			outw(inw(ioaddr + WN4_MEDIA) | MEDIA_TP, ioaddr + WN4_MEDIA);
-			EL3WINDOW(1);
-		  }
-		}
-		break;
-	  default:
-		printk(KERN_ERR "%s: %s port not supported.\n", dev->name, 
-			   if_port_text[map->port]);
-		return -EINVAL;
-	  }
-	}
-	if (map->irq != dev->irq) {
-	  printk(KERN_ERR "%s: cannot change interrupt.\n", dev->name);
-	  return -EINVAL;
-	}
-	if (map->base_addr != dev->base_addr) {
-	  printk(KERN_ERR "%s: cannot change base address.\n", dev->name);
-	  return -EINVAL;
-	}
-	return 0;
-}
 
 
 static int
@@ -437,10 +384,10 @@ el3_open(struct device *dev)
 	for (i = 0; i < 6; i++)
 		outb(dev->dev_addr[i], ioaddr + i);
 
-	if (dev->if_port == IF_PORT_10BASE2)
+	if (dev->if_port == 3)
 		/* Start the thinnet transceiver. We should really wait 50ms...*/
 		outw(StartCoax, ioaddr + EL3_CMD);
-	else if (dev->if_port == IF_PORT_10BASET) {
+	else if (dev->if_port == 0) {
 		/* 10baseT interface, enabled link beat and jabber check. */
 		EL3WINDOW(4);
 		outw(inw(ioaddr + WN4_MEDIA) | MEDIA_TP, ioaddr + WN4_MEDIA);
@@ -483,7 +430,8 @@ el3_open(struct device *dev)
 	return 0;					/* Always succeed */
 }
 
-static int el3_start_xmit(struct sk_buff *skb, struct device *dev)
+static int
+el3_start_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -491,7 +439,7 @@ static int el3_start_xmit(struct sk_buff *skb, struct device *dev)
 	/* Transmitter timeout, serious problems. */
 	if (dev->tbusy) {
 		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 40*HZ/100)
+		if (tickssofar < TX_TIMEOUT)
 			return 1;
 		printk("%s: transmit timed out, Tx_status %2.2x status %4.4x "
 			   "Tx FIFO room %d.\n",
@@ -532,12 +480,15 @@ static int el3_start_xmit(struct sk_buff *skb, struct device *dev)
 	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
-		lp->stats.tx_bytes+=skb->len;
 		/* Put out the doubleword header... */
 		outw(skb->len, ioaddr + TX_FIFO);
 		outw(0x00, ioaddr + TX_FIFO);
 		/* ... and the packet rounded to a doubleword. */
+#ifdef  __powerpc__
+		outsl_unswapped(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
+#else
 		outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
+#endif
 
 		dev->trans_start = jiffies;
 		if (inw(ioaddr + TX_FREE) > 1536) {
@@ -570,7 +521,7 @@ el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)dev_id;
 	int ioaddr, status;
-	int i = 0;
+	int i = INTR_WORK;
 
 	if (dev == NULL) {
 		printk ("el3_interrupt(): irq %d for unknown device.\n", irq);
@@ -622,7 +573,7 @@ el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			}
 		}
 
-		if (++i > 10) {
+		if (--i < 0) {
 			printk("%s: Infinite loop in interrupt, status %4.4x.\n",
 				   dev->name, status);
 			/* Clear all interrupts. */
@@ -643,7 +594,8 @@ el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 
-static struct net_device_stats *el3_get_stats(struct device *dev)
+static struct enet_statistics *
+el3_get_stats(struct device *dev)
 {
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	unsigned long flags;
@@ -720,18 +672,21 @@ el3_rx(struct device *dev)
 					   pkt_len, rx_status);
 			if (skb != NULL) {
 				skb->dev = dev;
-				skb_reserve(skb,2);     /* Align IP on 16 byte */
+				skb_reserve(skb, 2);     /* Align IP on 16 byte */
 
 				/* 'skb->data' points to the start of sk_buff data area. */
-				insl(ioaddr+RX_FIFO, skb_put(skb,pkt_len),
-							(pkt_len + 3) >> 2);
+#ifdef  __powerpc__
+				insl_unswapped(ioaddr+RX_FIFO, skb_put(skb,pkt_len),
+							   (pkt_len + 3) >> 2);
+#else
+				insl(ioaddr + RX_FIFO, skb_put(skb,pkt_len),
+					 (pkt_len + 3) >> 2);
+#endif
 
-				skb->protocol=eth_type_trans(skb,dev);
+				skb->protocol = eth_type_trans(skb,dev);
 				netif_rx(skb);
 				outw(RxDiscard, ioaddr + EL3_CMD); /* Pop top Rx packet. */
-				lp->stats.rx_bytes+=skb->len;
 				lp->stats.rx_packets++;
-				lp->stats.rx_bytes+=pkt_len;
 				continue;
 			} else if (el3_debug)
 				printk("%s: Couldn't allocate a sk_buff of size %d.\n",
@@ -747,7 +702,6 @@ el3_rx(struct device *dev)
 	return 0;
 }
 
-#ifdef HAVE_MULTICAST
 /*
  *     Set or clear the multicast filter for this adaptor.
  */
@@ -772,7 +726,6 @@ set_multicast_list(struct device *dev)
 	else
                 outw(SetRxFilter | RxStation | RxBroadcast, ioaddr + EL3_CMD);
 }
-#endif
 
 static int
 el3_close(struct device *dev)
@@ -792,10 +745,10 @@ el3_close(struct device *dev)
 	outw(RxDisable, ioaddr + EL3_CMD);
 	outw(TxDisable, ioaddr + EL3_CMD);
 
-	if (dev->if_port == IF_PORT_10BASE2)
+	if (dev->if_port == 3)
 		/* Turn off thinnet power.  Green! */
 		outw(StopCoax, ioaddr + EL3_CMD);
-	else if (dev->if_port == IF_PORT_10BASET) {
+	else if (dev->if_port == 0) {
 		/* Disable link beat and jabber, if_port may change ere next open(). */
 		EL3WINDOW(4);
 		outw(inw(ioaddr + WN4_MEDIA) & ~MEDIA_TP, ioaddr + WN4_MEDIA);
@@ -813,69 +766,50 @@ el3_close(struct device *dev)
 }
 
 #ifdef MODULE
-#define MAX_3C_CARDS	4	/* Max number of NE cards per module */
-#define NAMELEN		8	/* # of chars for storing dev->name */
-static char namelist[NAMELEN * MAX_3C_CARDS] = { 0, };
-static struct device dev_3c509[MAX_3C_CARDS] = {
-	{
-		NULL,		/* assign a chunk of namelist[] below */
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
-static int io[MAX_3C_CARDS] = { 0, };
-static int irq[MAX_3C_CARDS]  = { 0, };
-MODULE_PARM(io, "1-" __MODULE_STRING(MAX_3C_CARDS) "i");
-MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_3C_CARDS) "i");
+/* Parameter that may be passed into the module. */
+static int debug = -1;
+static int irq[] = {-1, -1, -1, -1, -1, -1, -1, -1};
+static int xcvr[] = {-1, -1, -1, -1, -1, -1, -1, -1};
 
 int
 init_module(void)
 {
-	int this_dev, found = 0;
+	int el3_cards = 0;
 
-	for (this_dev = 0; this_dev < MAX_3C_CARDS; this_dev++) {
-		struct device *dev = &dev_3c509[this_dev];
-		dev->name = namelist+(NAMELEN*this_dev);
-		dev->irq = irq[this_dev];
-		dev->base_addr = io[this_dev];
-		dev->init = el3_probe;
-		if (io[this_dev] == 0)  {
-			if (this_dev != 0) break; /* only complain once */
-			printk("3c509: WARNING! Module load-time probing works reliably only for EISA bus!!\n");
-		}
-		if (register_netdev(dev) != 0) {
-			printk(KERN_WARNING "3c509.c: No 3c509 card found (i/o = 0x%x).\n", io[this_dev]);
-			if (found != 0) return 0;	/* Got at least one. */
-			return -ENXIO;
-		}
-		found++;
+	if (debug >= 0)
+		el3_debug = debug;
+
+	el3_root_dev = NULL;
+	while (el3_probe(0) == 0) {
+		if (irq[el3_cards] > 1)
+			el3_root_dev->irq = irq[el3_cards];
+		if (xcvr[el3_cards] >= 0)
+			el3_root_dev->if_port = xcvr[el3_cards];
+		el3_cards++;
 	}
-	return 0;
+
+	return el3_cards ? 0 : -ENODEV;
 }
 
 void
 cleanup_module(void)
 {
-	int this_dev;
+	struct device *next_dev;
 
-	for (this_dev = 0; this_dev < MAX_3C_CARDS; this_dev++) {
-		struct device *dev = &dev_3c509[this_dev];
-		if (dev->priv != NULL) {
-			unregister_netdev(dev);
-			kfree_s(dev->priv,sizeof(struct el3_private));
-			dev->priv = NULL;
-			free_irq(dev->irq, dev);
-			release_region(dev->base_addr, EL3_IO_EXTENT);
-		}
+	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
+	while (el3_root_dev) {
+		next_dev = ((struct el3_private *)el3_root_dev->priv)->next_dev;
+		unregister_netdev(el3_root_dev);
+		release_region(el3_root_dev->base_addr, EL3_IO_EXTENT);
+		kfree(el3_root_dev);
+		el3_root_dev = next_dev;
 	}
 }
 #endif /* MODULE */
 
 /*
  * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c 3c509.c"
+ *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c509.c"
  *  version-control: t
  *  kept-new-versions: 5
  *  tab-width: 4

@@ -245,7 +245,7 @@ affs_unlink(struct inode *dir, struct dentry *dentry)
 	if (S_ISDIR(inode->i_mode))
 		goto unlink_done;
 	if (current->fsuid != inode->i_uid &&
-	    current->fsuid != dir->i_uid && !fsuser())
+	    current->fsuid != dir->i_uid && !capable(CAP_FOWNER))
 		goto unlink_done;
 
 	if ((retval = affs_remove_header(bh,inode)) < 0)
@@ -363,7 +363,7 @@ affs_rmdir(struct inode *dir, struct dentry *dentry)
 
 	retval = -EPERM;
         if (current->fsuid != inode->i_uid &&
-            current->fsuid != dir->i_uid && !fsuser())
+            current->fsuid != dir->i_uid && !capable(CAP_FOWNER))
 		goto rmdir_done;
 	if (inode->i_dev != dir->i_dev)
 		goto rmdir_done;

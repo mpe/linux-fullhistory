@@ -1199,7 +1199,7 @@ random_ioctl(struct inode * inode, struct file * file,
 		put_user(ent_count, (int *) arg);
 		return 0;
 	case RNDADDTOENTCNT:
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		retval = verify_area(VERIFY_READ, (void *) arg, sizeof(int));
 		if (retval)
@@ -1228,7 +1228,7 @@ random_ioctl(struct inode * inode, struct file * file,
 			wake_up_interruptible(&random_read_wait);
 		return 0;
 	case RNDGETPOOL:
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		p = (int *) arg;
 		retval = verify_area(VERIFY_WRITE, (void *) p, sizeof(int));
@@ -1249,7 +1249,7 @@ random_ioctl(struct inode * inode, struct file * file,
 			return -EFAULT;
 		return 0;
 	case RNDADDENTROPY:
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		p = (int *) arg;
 		retval = verify_area(VERIFY_READ, (void *) p, 2*sizeof(int));
@@ -1287,13 +1287,13 @@ random_ioctl(struct inode * inode, struct file * file,
 			wake_up_interruptible(&random_read_wait);
 		return 0;
 	case RNDZAPENTCNT:
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		random_state.entropy_count = 0;
 		return 0;
 	case RNDCLEARPOOL:
 		/* Clear the entropy pool and associated counters. */
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		rand_clear_pool();
 		return 0;

@@ -792,7 +792,7 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
 	return 0;
 
     case BLKRASET:
-	if(!suser())
+	if(!capable(CAP_SYS_ADMIN))
         	return -EACCES;
 	if(!(cdi->dev))
         	return -EINVAL;
@@ -804,7 +804,7 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
     RO_IOCTLS(cdi->dev,arg);
 
     case BLKFLSBUF:
-	if(!suser())
+	if(!capable(CAP_SYS_ADMIN))
 		return -EACCES;
 	if(!(cdi->dev))
 		return -EINVAL;

@@ -544,7 +544,9 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_pwrite)
 	.long SYMBOL_NAME(sys_chown)
 	.long SYMBOL_NAME(sys_getcwd)
+	.long SYMBOL_NAME(sys_capget)
+	.long SYMBOL_NAME(sys_capset)           /* 185 */
 	
-	.rept NR_syscalls-182
+	.rept NR_syscalls-184
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

@@ -62,4 +62,14 @@ extern inline void destroy_context(struct mm_struct *mm)
 	mm->context = 0;
 }
 
+/*
+ * After we have set current->mm to a new value, this activates
+ * the context for the new mm so we see the new mappings.
+ */
+extern inline activate_context(struct task_struct *tsk)
+{
+	get_mmu_context(tsk);
+	/* XXX here we presumably need to set some cpu register - paulus. */
+}
+
 #endif /* __ASM_MIPS_MMU_CONTEXT_H */

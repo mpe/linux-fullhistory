@@ -35,7 +35,8 @@ static void ns87415_prepare_drive (ide_drive_t *drive, unsigned int use_dma)
 	struct pci_dev *dev = hwif->pci_dev;
 	unsigned long flags;
 
-	save_flags(flags); cli();
+	__save_flags(flags);	/* local CPU only */
+	__cli();		/* local CPU only */
 	new = *old;
 
 	/* adjust IRQ enable bit */
@@ -56,7 +57,7 @@ static void ns87415_prepare_drive (ide_drive_t *drive, unsigned int use_dma)
 		*old = new;
 		(void) pci_write_config_dword(dev, 0x40, new);
 	}
-	restore_flags(flags);
+	__restore_flags(flags);	/* local CPU only */
 }
 
 static void ns87415_selectproc (ide_drive_t *drive)
@@ -66,33 +67,25 @@ static void ns87415_selectproc (ide_drive_t *drive)
 
 static int ns87415_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 {
-	ide_hwif_t *hwif = HWIF(drive);
+	ide_hwif_t	*hwif = HWIF(drive);
+	byte		dma_stat;
 
 	switch (func) {
 		case ide_dma_end: /* returns 1 on error, 0 otherwise */
-		{
-			byte dma_stat = inb(hwif->dma_base+2);
-			int rc = (dma_stat & 7) != 4;
-			/* from errata: stop DMA, clear INTR & ERROR */
-			outb(7, hwif->dma_base);
-			/* clear the INTR & ERROR bits */
-			outb(dma_stat|6, hwif->dma_base+2);
-			/* verify good DMA status */
-			return rc;
-		}
+			drive->waiting_for_dma = 0;
+			dma_stat = inb(hwif->dma_base+2);
+			outb(7, hwif->dma_base);		/* from errata: stop DMA, clear INTR & ERROR */
+			outb(dma_stat|6, hwif->dma_base+2);	/* clear the INTR & ERROR bits */
+			return (dma_stat & 7) != 4;		/* verify good DMA status */
 		case ide_dma_write:
 		case ide_dma_read:
-			/* select DMA xfer */
-			ns87415_prepare_drive(drive, 1);
-			/* use standard DMA stuff */
-			if (!ide_dmaproc(func, drive))
+			ns87415_prepare_drive(drive, 1);	/* select DMA xfer */
+			if (!ide_dmaproc(func, drive))		/* use standard DMA stuff */
 				return 0;
-			/* DMA failed: select PIO xfer */
-			ns87415_prepare_drive(drive, 0);
+			ns87415_prepare_drive(drive, 0);	/* DMA failed: select PIO xfer */
 			return 1;
 		default:
-			/* use standard DMA stuff */
-			return ide_dmaproc(func, drive);
+			return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 	}
 }
 
@@ -100,8 +93,7 @@ __initfunc(void ide_init_ns87415 (ide_hwif_t *hwif))
 {
 	struct pci_dev *dev = hwif->pci_dev;
 	unsigned int ctrl, using_inta;
-	byte progif, stat;
-	int timeout;
+	byte progif;
 
 	/*
 	 * We cannot probe for IRQ: both ports share common IRQ on INTA.
@@ -134,6 +126,9 @@ __initfunc(void ide_init_ns87415 (ide_hwif_t *hwif))
 		pci_write_config_byte(dev, 0x55, 0xee);
 
 #ifdef __sparc_v9__
+{
+		int	timeout;
+		byte	stat;
 		/*
 		 * XXX: Reset the device, if we don't it will not respond
 		 *      to SELECT_DRIVE() properly during first probe_hwif().
@@ -148,6 +143,7 @@ __initfunc(void ide_init_ns87415 (ide_hwif_t *hwif))
                 	if (stat == 0xff)
                         	break;
         	} while ((stat & BUSY_STAT) && --timeout);
+}
 #endif
 	}
 	if (!using_inta)

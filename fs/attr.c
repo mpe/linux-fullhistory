@@ -27,28 +27,28 @@ int inode_change_ok(struct inode *inode, struct iattr *attr)
 	/* Make sure a caller can chown. */
 	if ((ia_valid & ATTR_UID) &&
 	    (current->fsuid != inode->i_uid ||
-	     attr->ia_uid != inode->i_uid) && !fsuser())
+	     attr->ia_uid != inode->i_uid) && !capable(CAP_CHOWN))
 		goto error;
 
 	/* Make sure caller can chgrp. */
 	if ((ia_valid & ATTR_GID) &&
 	    (!in_group_p(attr->ia_gid) && attr->ia_gid != inode->i_gid) &&
-	    !fsuser())
+	    !capable(CAP_CHOWN))
 		goto error;
 
 	/* Make sure a caller can chmod. */
 	if (ia_valid & ATTR_MODE) {
-		if ((current->fsuid != inode->i_uid) && !fsuser())
+		if ((current->fsuid != inode->i_uid) && !capable(CAP_FOWNER))
 			goto error;
 		/* Also check the setgid bit! */
 		if (!in_group_p((ia_valid & ATTR_GID) ? attr->ia_gid :
-				inode->i_gid) && !fsuser())
+				inode->i_gid) && !capable(CAP_FSETID))
 			attr->ia_mode &= ~S_ISGID;
 	}
 
 	/* Check for setting the inode time. */
 	if (ia_valid & (ATTR_MTIME_SET | ATTR_ATIME_SET)) {
-		if (current->fsuid != inode->i_uid && !fsuser())
+		if (current->fsuid != inode->i_uid && !capable(CAP_FOWNER))
 			goto error;
 	}
 fine:
@@ -75,7 +75,7 @@ void inode_setattr(struct inode * inode, struct iattr * attr)
 		inode->i_ctime = attr->ia_ctime;
 	if (ia_valid & ATTR_MODE) {
 		inode->i_mode = attr->ia_mode;
-		if (!in_group_p(inode->i_gid) && !fsuser())
+		if (!in_group_p(inode->i_gid) && !capable(CAP_FSETID))
 			inode->i_mode &= ~S_ISGID;
 	}
 	mark_inode_dirty(inode);

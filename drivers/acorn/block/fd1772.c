@@ -1368,7 +1368,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 	case FDFLUSH:
 		return invalidate_drive(drive);
 	}
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	if (drive < 0 || drive > 3)
 		return -EINVAL;

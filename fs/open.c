@@ -285,12 +285,14 @@ out:
 
 /*
  * access() needs to use the real uid/gid, not the effective uid/gid.
- * We do this by temporarily setting fsuid/fsgid to the wanted values
+ * We do this by temporarily clearing all FS-related capabilities and
+ * switching the fsuid/fsgid around to the real ones.
  */
 asmlinkage int sys_access(const char * filename, int mode)
 {
 	struct dentry * dentry;
 	int old_fsuid, old_fsgid;
+	kernel_cap_t old_cap;
 	int res = -EINVAL;
 
 	lock_kernel();
@@ -298,8 +300,14 @@ asmlinkage int sys_access(const char * filename, int mode)
 		goto out;
 	old_fsuid = current->fsuid;
 	old_fsgid = current->fsgid;
+	old_cap = current->cap_effective;
+
 	current->fsuid = current->uid;
 	current->fsgid = current->gid;
+
+	/* Clear the capabilities if we switch to a non-root user */
+	if (current->uid)
+		cap_clear(current->cap_effective);
 
 	dentry = namei(filename);
 	res = PTR_ERR(dentry);
@@ -310,6 +318,7 @@ asmlinkage int sys_access(const char * filename, int mode)
 
 	current->fsuid = old_fsuid;
 	current->fsgid = old_fsgid;
+	current->cap_effective = old_cap;
 out:
 	unlock_kernel();
 	return res;
@@ -411,7 +420,7 @@ asmlinkage int sys_chroot(const char * filename)
 		goto dput_and_out;
 
 	error = -EPERM;
-	if (!fsuser())
+	if (!capable(CAP_SYS_CHROOT))
 		goto dput_and_out;
 
 	/* exchange dentries */
@@ -833,7 +842,7 @@ asmlinkage int sys_vhangup(void)
 	int ret = -EPERM;
 
 	lock_kernel();
-	if (!suser())
+	if (!capable(CAP_SYS_TTY_CONFIG))
 		goto out;
 	/* If there is a controlling tty, hang it up */
 	if (current->tty)

@@ -726,9 +726,9 @@ int ext2_notify_change(struct dentry *dentry, struct iattr *iattr)
 	     (ATTR_FLAG_APPEND | ATTR_FLAG_IMMUTABLE)) ^
 	    (inode->u.ext2_i.i_flags &
 	     (EXT2_APPEND_FL | EXT2_IMMUTABLE_FL))) {
-		if (!fsuser())
+		if (!capable(CAP_LINUX_IMMUTABLE))
 			goto out;
-	} else if ((current->fsuid != inode->i_uid) && !fsuser())
+	} else if ((current->fsuid != inode->i_uid) && !capable(CAP_FOWNER))
 		goto out;
 
 	retval = inode_change_ok(inode, iattr);

@@ -45,7 +45,7 @@
 #define WIN_VERIFY		0x40
 #define WIN_FORMAT		0x50
 #define WIN_INIT		0x60
-#define WIN_SEEK 		0x70
+#define WIN_SEEK		0x70
 #define WIN_DIAGNOSE		0x90
 #define WIN_SPECIFY		0x91	/* set drive geometry translation */
 #define WIN_SETIDLE1		0xE3
@@ -101,12 +101,13 @@ struct hd_geometry {
 #define HDIO_GETGEO		0x0301	/* get device geometry */
 #define HDIO_GET_UNMASKINTR	0x0302	/* get current unmask setting */
 #define HDIO_GET_MULTCOUNT	0x0304	/* get current IDE blockmode setting */
-#define HDIO_GET_IDENTITY 	0x0307	/* get IDE identification info */
-#define HDIO_GET_KEEPSETTINGS 	0x0308	/* get keep-settings-on-reset flag */
-#define HDIO_GET_32BIT 		0x0309	/* get current io_32bit setting */
+#define HDIO_OBSOLETE_IDENTITY	0x0307	/* OBSOLETE, DO NOT USE: returns 142 bytes */
+#define HDIO_GET_KEEPSETTINGS	0x0308	/* get keep-settings-on-reset flag */
+#define HDIO_GET_32BIT		0x0309	/* get current io_32bit setting */
 #define HDIO_GET_NOWERR		0x030a	/* get ignore-write-error flag */
 #define HDIO_GET_DMA		0x030b	/* get use-dma flag */
 #define HDIO_GET_NICE		0x030c	/* get nice flags */
+#define HDIO_GET_IDENTITY	0x030d	/* get IDE identification info */
 #define HDIO_DRIVE_CMD		0x031f	/* execute a special drive command */
 
 /* hd/ide ctl's that pass (arg) non-ptr values are numbered 0x032n/0x033n */

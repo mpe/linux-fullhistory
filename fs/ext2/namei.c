@@ -631,7 +631,7 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 	retval = -EPERM;
 	if ((dir->i_mode & S_ISVTX) && 
 	    current->fsuid != inode->i_uid &&
-	    current->fsuid != dir->i_uid && !fsuser())
+	    current->fsuid != dir->i_uid && !capable(CAP_FOWNER))
 		goto end_rmdir;
 	if (inode == dir)	/* we may not delete ".", but "../dir" is ok */
 		goto end_rmdir;
@@ -725,7 +725,7 @@ int ext2_unlink(struct inode * dir, struct dentry *dentry)
 		goto end_unlink;
 	if ((dir->i_mode & S_ISVTX) &&
 	    current->fsuid != inode->i_uid &&
-	    current->fsuid != dir->i_uid && !fsuser())
+	    current->fsuid != dir->i_uid && !capable(CAP_FOWNER))
 		goto end_unlink;
 
 	retval = -EIO;
@@ -923,7 +923,7 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 	retval = -EPERM;
 	if ((old_dir->i_mode & S_ISVTX) && 
 	    current->fsuid != old_inode->i_uid &&
-	    current->fsuid != old_dir->i_uid && !fsuser())
+	    current->fsuid != old_dir->i_uid && !capable(CAP_FOWNER))
 		goto end_rename;
 	if (IS_APPEND(old_inode) || IS_IMMUTABLE(old_inode))
 		goto end_rename;
@@ -964,7 +964,7 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 	if (new_inode) {
 		if ((new_dir->i_mode & S_ISVTX) &&
 		    current->fsuid != new_inode->i_uid &&
-		    current->fsuid != new_dir->i_uid && !fsuser())
+		    current->fsuid != new_dir->i_uid && !capable(CAP_FOWNER))
 			goto end_rename;
 		if (IS_APPEND(new_inode) || IS_IMMUTABLE(new_inode))
 			goto end_rename;

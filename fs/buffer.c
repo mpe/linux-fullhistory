@@ -1871,7 +1871,7 @@ asmlinkage int sys_bdflush(int func, long data)
 	int i, error = -EPERM;
 
 	lock_kernel();
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		goto out;
 
 	if (func == 1) {

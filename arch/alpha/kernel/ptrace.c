@@ -506,7 +506,7 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 		     (current->uid != child->uid) ||
 		     (current->gid != child->egid) ||
 		     (current->gid != child->sgid) ||
-		     (current->gid != child->gid)) && !suser())
+		     (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE))
 			goto out;
 		/* the same process cannot be attached many times */
 		if (child->flags & PF_PTRACED)

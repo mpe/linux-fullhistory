@@ -646,7 +646,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	if (msg->msg_flags&~(MSG_DONTROUTE|MSG_DONTWAIT|MSG_PROXY|MSG_NOSIGNAL))
 	  	return -EINVAL;
-	if ((msg->msg_flags&MSG_PROXY) && !suser() )
+	if ((msg->msg_flags&MSG_PROXY) && !capable(CAP_NET_ADMIN))
 	  	return -EPERM;
 #else
 	if (msg->msg_flags&~(MSG_DONTROUTE|MSG_DONTWAIT|MSG_NOSIGNAL))

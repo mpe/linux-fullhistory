@@ -43,6 +43,7 @@
 #define DEVID_NS87415	((ide_pci_devid_t){PCI_VENDOR_ID_NS,      PCI_DEVICE_ID_NS_87415})
 #define DEVID_HT6565	((ide_pci_devid_t){PCI_VENDOR_ID_HOLTEK,  PCI_DEVICE_ID_HOLTEK_6565})
 #define DEVID_AEC6210	((ide_pci_devid_t){0x1191,                0x0005})
+#define DEVID_W82C105	((ide_pci_devid_t){PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105})
 
 #define IDE_IGNORE	((void *)-1)
 
@@ -71,7 +72,18 @@ extern void ide_init_ns87415(ide_hwif_t *);
 extern void ide_init_cmd646(ide_hwif_t *);
 #define INIT_CMD646	&ide_init_cmd646
 #else
+#ifdef __sparc_v9__
 #define INIT_CMD646	IDE_IGNORE
+#else
+#define INIT_CMD646	NULL
+#endif
+#endif
+
+#ifdef CONFIG_BLK_DEV_SL82C105
+extern void ide_init_sl82c105(ide_hwif_t *);
+#define INIT_W82C105	&ide_init_sl82c105
+#else
+#define INIT_W82C105	IDE_IGNORE
 #endif
 
 #ifdef CONFIG_BLK_DEV_RZ1000
@@ -113,6 +125,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_TRM290,	"TRM290",	INIT_TRM290,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
 	{DEVID_NS87415,	"NS87415",	INIT_NS87415,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
 	{DEVID_AEC6210,	"AEC6210",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
+	{DEVID_W82C105,	"W82C105",	INIT_W82C105,	{{0x40,0x01,0x01}, {0x40,0x10,0x10}} },
 	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} }};
 
 /*
@@ -269,7 +282,7 @@ check_if_enabled:
 		ide_pci_enablebit_t *e = &(d->enablebits[port]);
 		if (e->reg && (pci_read_config_byte(dev, e->reg, &tmp) || (tmp & e->mask) != e->val))
 			continue;	/* port not enabled */
-		ctl = dev->base_address[1+2*port] & PCI_BASE_ADDRESS_IO_MASK;
+		ctl = dev->base_address[(2*port)+1] & PCI_BASE_ADDRESS_IO_MASK;
 		if (!ctl)
 			ctl = port ? 0x374 : 0x3f4;	/* use default value */
 		base = dev->base_address[2*port] & ~7;
@@ -299,7 +312,7 @@ check_if_enabled:
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246) ||
 		    ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && (dev->class & 0x80))) {
 			unsigned int extra = (!mate && IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246)) ? 16 : 0;
-			unsigned long dma_base = ide_get_or_set_dma_base(dev, hwif, extra, d->name);
+			unsigned long dma_base = ide_get_or_set_dma_base(hwif, extra, d->name);
 			if (dma_base && !(pcicmd & PCI_COMMAND_MASTER)) {
 				/*
  	 			 * Set up BM-DMA capability (PnP BIOS should have done this)

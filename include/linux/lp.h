@@ -20,11 +20,14 @@
 #define LP_EXIST 0x0001
 #define LP_SELEC 0x0002
 #define LP_BUSY	 0x0004
+#define LP_BUSY_BIT_POS 2
 #define LP_OFFL	 0x0008
 #define LP_NOPA  0x0010
 #define LP_ERR   0x0020
 #define LP_ABORT 0x0040
+#ifdef LP_NEED_CAREFUL
 #define LP_CAREFUL 0x0080
+#endif
 #define LP_ABORTOPEN 0x0100
 
 /* timeout for each character.  This is relative to bus cycles -- it
@@ -67,14 +70,18 @@
 			    or 0 for polling (no IRQ) */
 #define LPGETIRQ 0x0606  /* get the current IRQ number */
 #define LPWAIT   0x0608  /* corresponds to LP_INIT_WAIT */
+#ifdef LP_NEED_CAREFUL
 #define LPCAREFUL   0x0609  /* call with TRUE arg to require out-of-paper, off-
 			    line, and error indicators good on all writes,
 			    FALSE to ignore them.  Default is ignore. */
+#endif
 #define LPABORTOPEN 0x060a  /* call with TRUE arg to abort open() on error,
 			    FALSE to ignore error.  Default is ignore.  */
 #define LPGETSTATUS 0x060b  /* return LP_S(minor) */
 #define LPRESET     0x060c  /* reset printer */
+#ifdef LP_STATS
 #define LPGETSTATS  0x060d  /* get statistics (struct lp_stats) */
+#endif
 #define LPGETFLAGS  0x060e  /* get status flags */
 
 /* timeout for printk'ing a timeout, in jiffies (100ths of a second).
@@ -90,11 +97,14 @@
 #define LP_WAIT(minor)	lp_table[(minor)].wait		/* strobe wait */
 #define LP_IRQ(minor)	lp_table[(minor)].dev->port->irq /* interrupt # */
 							/* 0 means polled */
+#ifdef LP_STATS
 #define LP_STAT(minor)	lp_table[(minor)].stats		/* statistics area */
+#endif
 #define LP_BUFFER_SIZE 256
 
 #define LP_BASE(x)	lp_table[(x)].dev->port->base
 
+#ifdef LP_STATS
 struct lp_stats {
 	unsigned long chars;
 	unsigned long sleeps;
@@ -103,6 +113,7 @@ struct lp_stats {
 	unsigned int meanwait;
 	unsigned int mdev;
 };
+#endif
 
 struct lp_struct {
 	struct pardevice *dev;
@@ -111,10 +122,13 @@ struct lp_struct {
 	unsigned int time;
 	unsigned int wait;
 	char *lp_buffer;
+#ifdef LP_STATS
 	unsigned int lastcall;
 	unsigned int runchars;
-	unsigned int waittime;
 	struct lp_stats stats;
+#endif
+	struct wait_queue *wait_q;
+	unsigned int last_error;
 };
 
 /*
@@ -160,7 +174,7 @@ struct lp_struct {
  */
 #define LP_DELAY 	50
 
-#define LP_POLLING(minor) (lp_table[(minor)].dev->port->irq == PARPORT_IRQ_NONE)
+#define LP_POLLED(minor) (lp_table[(minor)].dev->port->irq == PARPORT_IRQ_NONE)
 #define LP_PREEMPTED(minor) (lp_table[(minor)].dev->port->waithead != NULL)
 
 /*

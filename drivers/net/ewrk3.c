@@ -1684,7 +1684,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 		}
 		break;
 	case EWRK3_SET_HWADDR:	/* Set the hardware address */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			if (!(status = verify_area(VERIFY_READ, (void *) ioc->data, ETH_ALEN))) {
 				csr = inb(EWRK3_CSR);
 				csr |= (CSR_TXD | CSR_RXD);
@@ -1705,7 +1705,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case EWRK3_SET_PROM:	/* Set Promiscuous Mode */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			csr = inb(EWRK3_CSR);
 			csr |= CSR_PME;
 			csr &= ~CSR_MCE;
@@ -1716,7 +1716,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case EWRK3_CLR_PROM:	/* Clear Promiscuous Mode */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			csr = inb(EWRK3_CSR);
 			csr &= ~CSR_PME;
 			outb(csr, EWRK3_CSR);
@@ -1749,7 +1749,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case EWRK3_SET_MCA:	/* Set a multicast address */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			if (!(status = verify_area(VERIFY_READ, ioc->data, ETH_ALEN * ioc->len))) {
 				copy_from_user(tmp.addr, ioc->data, ETH_ALEN * ioc->len);
 				set_multicast_list(dev);
@@ -1760,7 +1760,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case EWRK3_CLR_MCA:	/* Clear all multicast addresses */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			set_multicast_list(dev);
 		} else {
 			status = -EPERM;
@@ -1768,7 +1768,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case EWRK3_MCA_EN:	/* Enable multicast addressing */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			csr = inb(EWRK3_CSR);
 			csr |= CSR_MCE;
 			csr &= ~CSR_PME;
@@ -1788,7 +1788,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case EWRK3_CLR_STATS:	/* Zero out the driver statistics */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			cli();
 			memset(&lp->pktStats, 0, sizeof(lp->pktStats));
 			sti();
@@ -1805,7 +1805,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 		}
 		break;
 	case EWRK3_SET_CSR:	/* Set the CSR Register contents */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			if (!(status = verify_area(VERIFY_READ, ioc->data, 1))) {
 				copy_from_user(tmp.addr, ioc->data, 1);
 				outb(tmp.addr[0], EWRK3_CSR);
@@ -1816,7 +1816,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case EWRK3_GET_EEPROM:	/* Get the EEPROM contents */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			for (i = 0; i < (EEPROM_MAX >> 1); i++) {
 				tmp.val[i] = (short) Read_EEPROM(iobase, i);
 			}
@@ -1835,7 +1835,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case EWRK3_SET_EEPROM:	/* Set the EEPROM contents */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			if (!(status = verify_area(VERIFY_READ, ioc->data, EEPROM_MAX))) {
 				copy_from_user(tmp.addr, ioc->data, EEPROM_MAX);
 				for (i = 0; i < (EEPROM_MAX >> 1); i++) {

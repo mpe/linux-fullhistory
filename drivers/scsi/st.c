@@ -2831,7 +2831,7 @@ st_ioctl(struct inode * inode,struct file * file,
      if (i)
 	 return (-EFAULT);
 
-     if (mtc.mt_op == MTSETDRVBUFFER && !suser()) {
+     if (mtc.mt_op == MTSETDRVBUFFER && !capable(CAP_SYS_ADMIN)) {
        printk(KERN_WARNING "st%d: MTSETDRVBUFFER only allowed for root.\n", dev);
        return (-EPERM);
      }

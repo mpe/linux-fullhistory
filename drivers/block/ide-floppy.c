@@ -713,7 +713,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 #endif /* IDEFLOPPY_DEBUG_LOG */
 		clear_bit (PC_DMA_IN_PROGRESS, &pc->flags);
 
-		ide_sti();
+		ide__sti();	/* local CPU only */
 
 		if (status.b.check || test_bit (PC_DMA_ERROR, &pc->flags)) {	/* Error detected */
 #if IDEFLOPPY_DEBUG_LOG

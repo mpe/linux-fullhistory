@@ -331,7 +331,7 @@ int vc_allocate(unsigned int i)		/* return 0 on success */
 	    long p, q;
 
 	    /* prevent users from taking too much memory */
-	    if (i >= MAX_NR_USER_CONSOLES && !suser())
+	    if (i >= MAX_NR_USER_CONSOLES && !capable(CAP_SYS_RESOURCE))
 	      return -EPERM;
 
 	    /* due to the granularity of kmalloc, we waste some memory here */

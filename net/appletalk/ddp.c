@@ -719,7 +719,7 @@ int atif_ioctl(int cmd, void *arg)
 	switch(cmd)
 	{
 		case SIOCSIFADDR:
-			if(!suser())
+			if(!capable(CAP_NET_ADMIN))
 				return (-EPERM);
 			if(sa->sat_family != AF_APPLETALK)
 				return (-EINVAL);
@@ -830,7 +830,7 @@ int atif_ioctl(int cmd, void *arg)
 
 	        case SIOCATALKDIFADDR:
 	        case SIOCDIFADDR:
-			if(!suser())
+			if(!capable(CAP_NET_ADMIN))
 				return (-EPERM);
 			if(sa->sat_family != AF_APPLETALK)
 				return (-EINVAL);
@@ -1809,7 +1809,7 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 		 */
 		case SIOCADDRT:
 		case SIOCDELRT:
-			if(!suser())
+			if(!capable(CAP_NET_ADMIN))
 				return -EPERM;
 			return (atrtr_ioctl(cmd,(void *)arg));
 

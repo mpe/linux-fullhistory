@@ -1227,7 +1227,7 @@ asmlinkage int sys_nice(int increment)
 	 
 	newprio = increment;
 	if (increment < 0) {
-		if (!suser())
+		if (!capable(CAP_SYS_NICE))
 			return -EPERM;
 		newprio = -increment;
 		increase = 1;
@@ -1322,10 +1322,11 @@ static int setscheduler(pid_t pid, int policy,
 		goto out_unlock;
 
 	retval = -EPERM;
-	if ((policy == SCHED_FIFO || policy == SCHED_RR) && !suser())
+	if ((policy == SCHED_FIFO || policy == SCHED_RR) && 
+	    !capable(CAP_SYS_NICE))
 		goto out_unlock;
 	if ((current->euid != p->euid) && (current->euid != p->uid) &&
-	    !suser())
+	    !capable(CAP_SYS_NICE))
 		goto out_unlock;
 
 	retval = 0;

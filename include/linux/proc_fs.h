@@ -379,7 +379,6 @@ extern struct inode_operations proc_dir_inode_operations;
 extern struct inode_operations proc_file_inode_operations;
 extern struct inode_operations proc_net_inode_operations;
 extern struct inode_operations proc_netdir_inode_operations;
-extern struct inode_operations proc_scsi_inode_operations;
 extern struct inode_operations proc_openprom_inode_operations;
 extern struct inode_operations proc_mem_inode_operations;
 extern struct inode_operations proc_sys_inode_operations;
@@ -395,8 +394,6 @@ extern struct inode_operations proc_ringbuf_inode_operations;
 #endif
 extern struct inode_operations proc_omirr_inode_operations;
 extern struct inode_operations proc_ppc_htab_inode_operations;
-
-#endif
 
 /*
  * generic.c
@@ -416,3 +413,5 @@ extern void proc_tty_unregister_driver(struct tty_driver *driver);
  * proc_devtree.c
  */
 extern void proc_device_tree_init(void);
+
+#endif /* _LINUX_PROC_FS_H */

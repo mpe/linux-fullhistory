@@ -321,7 +321,7 @@ struct device *dev_alloc(const char *name, int *err)
 
 void dev_load(const char *name)
 {
-	if(!dev_get(name) && suser())
+	if(!dev_get(name) && capable(CAP_SYS_MODULE))
 		request_module(name);
 }
 
@@ -1591,7 +1591,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCDELMULTI:
 		case SIOCSIFHWBROADCAST:
 		case SIOCSIFTXQLEN:
-			if (!suser())
+			if (!capable(CAP_NET_ADMIN))
 				return -EPERM;
 			dev_load(ifr.ifr_name);
 			rtnl_lock();

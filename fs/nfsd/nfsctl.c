@@ -148,7 +148,7 @@ asmlinkage handle_sys_nfsservctl(int cmd, void *opaque_argp, void *opaque_resp)
 	if (!initialized)
 		nfsd_init();
 	err = -EPERM;
-	if (!suser()) {
+	if (!capable(CAP_SYS_ADMIN)) {
 		goto done;
 	}
 	err = -EFAULT;

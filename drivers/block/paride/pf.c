@@ -416,7 +416,7 @@ static int pf_ioctl(struct inode *inode,struct file *file,
                 put_user(0,(long *)&geo->start);
                 return 0;
             case BLKRASET:
-                if(!suser()) return -EACCES;
+                if(!capable(CAP_SYS_ADMIN)) return -EACCES;
                 if(!(inode->i_rdev)) return -EINVAL;
                 if(arg > 0xff) return -EINVAL;
                 read_ahead[MAJOR(inode->i_rdev)] = arg;
@@ -434,7 +434,7 @@ static int pf_ioctl(struct inode *inode,struct file *file,
                 put_user(PF.capacity,(long *) arg);
                 return (0);
             case BLKFLSBUF:
-                if(!suser())  return -EACCES;
+                if(!capable(CAP_SYS_ADMIN))  return -EACCES;
                 if(!(inode->i_rdev)) return -EINVAL;
                 fsync_dev(inode->i_rdev);
                 invalidate_buffers(inode->i_rdev);

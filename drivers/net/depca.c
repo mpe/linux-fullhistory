@@ -1714,7 +1714,7 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 		}
 		break;
 	case DEPCA_SET_HWADDR:	/* Set the hardware address */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			if (!(status = verify_area(VERIFY_READ, (void *) ioc->data, ETH_ALEN))) {
 				copy_from_user(tmp.addr, ioc->data, ETH_ALEN);
 				for (i = 0; i < ETH_ALEN; i++) {
@@ -1736,7 +1736,7 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case DEPCA_SET_PROM:	/* Set Promiscuous Mode */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			while (dev->tbusy);	/* Stop ring access */
 			set_bit(0, (void *) &dev->tbusy);
 			while (lp->tx_old != lp->tx_new);	/* Wait for the ring to empty */
@@ -1754,7 +1754,7 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case DEPCA_CLR_PROM:	/* Clear Promiscuous Mode */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			while (dev->tbusy);	/* Stop ring access */
 			set_bit(0, (void *) &dev->tbusy);
 			while (lp->tx_old != lp->tx_new);	/* Wait for the ring to empty */
@@ -1782,7 +1782,7 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 		}
 		break;
 	case DEPCA_SET_MCA:	/* Set a multicast address */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			if (!(status = verify_area(VERIFY_READ, ioc->data, ETH_ALEN * ioc->len))) {
 				copy_from_user(tmp.addr, ioc->data, ETH_ALEN * ioc->len);
 				set_multicast_list(dev);
@@ -1793,7 +1793,7 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case DEPCA_CLR_MCA:	/* Clear all multicast addresses */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			set_multicast_list(dev);
 		} else {
 			status = -EPERM;
@@ -1801,7 +1801,7 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case DEPCA_MCA_EN:	/* Enable pass all multicast addressing */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			set_multicast_list(dev);
 		} else {
 			status = -EPERM;
@@ -1818,7 +1818,7 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case DEPCA_CLR_STATS:	/* Zero out the driver statistics */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			cli();
 			memset(&lp->pktStats, 0, sizeof(lp->pktStats));
 			sti();

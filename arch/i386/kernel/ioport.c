@@ -58,7 +58,7 @@ asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int turn_on)
 
 	if ((from + num <= from) || (from + num > IO_BITMAP_SIZE*32))
 		return -EINVAL;
-	if (!suser())
+	if (!capable(CAP_SYS_RAWIO))
 		return -EPERM;
 	/*
 	 * If it's the first ioperm() call in this thread's lifetime, set the
@@ -94,7 +94,7 @@ asmlinkage int sys_iopl(unsigned long unused)
 
 	if (level > 3)
 		return -EINVAL;
-	if (!suser())
+	if (!capable(CAP_SYS_RAWIO))
 		return -EPERM;
 	regs->eflags = (regs->eflags & 0xffffcfff) | (level << 12);
 	return 0;

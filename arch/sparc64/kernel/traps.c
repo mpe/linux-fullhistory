@@ -583,7 +583,7 @@ void cache_flush_trap(struct pt_regs *regs)
 
 	regs->tpc = regs->tnpc;
 	regs->tnpc = regs->tnpc + 4;
-	if (!suser()) return;
+	if (!capable(CAP_SYS_ADMIN)) return;
 	size >>= PAGE_SHIFT;
 	addr = PAGE_OFFSET - PAGE_SIZE;
 	page = mem_map - 1;

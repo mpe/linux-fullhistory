@@ -926,7 +926,7 @@ static int startup(struct esp_struct * info)
 			     "esp serial", info);
 
 	if (retval) {
-		if (suser()) {
+		if (capable(CAP_SYS_ADMIN)) {
 			if (info->tty)
 				set_bit(TTY_IO_ERROR,
 					&info->tty->flags);
@@ -1499,7 +1499,7 @@ static int set_serial_info(struct esp_struct * info,
 	if (change_irq && (info->line % 8))
 		return -EINVAL;
 
-	if (!suser()) {
+	if (!capable(CAP_SYS_ADMIN)) {
 		if (change_irq || 
 		    (new_serial.close_delay != info->close_delay) ||
 		    ((new_serial.flags & ~ASYNC_USR_MASK) !=

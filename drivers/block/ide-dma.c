@@ -84,7 +84,7 @@
  */
 const char *good_dma_drives[] = {"Micropolis 2112A",
 				 "CONNER CTMA 4000",
-				 "ST34342A",
+				 "ST34342A",	/* for Sun Ultra */
 				 NULL};
 
 /*
@@ -128,7 +128,7 @@ void ide_dma_intr (ide_drive_t *drive)
 		}
 		printk("%s: dma_intr: bad DMA status\n", drive->name);
 	}
-	sti();
+	ide__sti();	/* local CPU only */
 	ide_error(drive, "dma_intr", stat);
 }
 
@@ -210,7 +210,7 @@ static int config_drive_for_dma (ide_drive_t *drive)
 	struct hd_driveid *id = drive->id;
 	ide_hwif_t *hwif = HWIF(drive);
 
-	if (id && (id->capability & 1) && !HWIF(drive)->no_autodma) {
+	if (id && (id->capability & 1) && !hwif->no_autodma) {
 		/* Enable DMA on any drive that has UltraDMA (mode 0/1/2) enabled */
 		if (id->field_valid & 4)	/* UltraDMA */
 			if  ((id->dma_ultra & (id->dma_ultra >> 8) & 7))
@@ -250,6 +250,7 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	ide_hwif_t *hwif = HWIF(drive);
 	unsigned long dma_base = hwif->dma_base;
 	unsigned int count, reading = 0;
+	byte dma_stat;
 
 	switch (func) {
 		case ide_dma_off:
@@ -267,22 +268,29 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 				return 1;	/* try PIO instead of DMA */
 			outl(virt_to_bus(hwif->dmatable), dma_base + 4); /* PRD table */
 			outb(reading, dma_base);			/* specify r/w */
-			outb(inb(dma_base+2)|0x06, dma_base+2);		/* clear status bits */
+			outb(inb(dma_base+2)|6, dma_base+2);		/* clear INTR & ERROR flags */
+			drive->waiting_for_dma = 1;
 			if (drive->media != ide_disk)
 				return 0;
 			ide_set_handler(drive, &ide_dma_intr, WAIT_CMD);/* issue cmd to drive */
 			OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
 		case ide_dma_begin:
+			/* Note that this is done *after* the cmd has
+			 * been issued to the drive, as per the BM-IDE spec.
+			 * The Promise Ultra33 doesn't work correctly when
+			 * we do this part before issuing the drive cmd.
+			 */
 			outb(inb(dma_base)|1, dma_base);		/* start DMA */
 			return 0;
 		case ide_dma_end: /* returns 1 on error, 0 otherwise */
-		{
-			byte dma_stat = inb(dma_base+2);
-			int rc = (dma_stat & 7) != 4;
+			drive->waiting_for_dma = 0;
+			dma_stat = inb(dma_base+2);
 			outb(inb(dma_base)&~1, dma_base);		/* stop DMA */
 			outb(dma_stat|6, dma_base+2);	/* clear the INTR & ERROR bits */
-			return rc;	/* verify good DMA status */
-		}
+			return (dma_stat & 7) != 4;	/* verify good DMA status */
+		case ide_dma_test_irq: /* returns 1 if dma irq issued, 0 otherwise */
+			dma_stat = inb(dma_base+2);
+			return (dma_stat & 4) == 4;	/* return 1 if INTR asserted */
 		default:
 			printk("ide_dmaproc: unsupported func: %d\n", func);
 			return 1;
@@ -331,9 +339,10 @@ __initfunc(void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigne
 /*
  * Fetch the DMA Bus-Master-I/O-Base-Address (BMIBA) from PCI space:
  */
-__initfunc(unsigned long ide_get_or_set_dma_base (struct pci_dev *dev, ide_hwif_t *hwif, int extra, const char *name))
+__initfunc(unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name))
 {
-	unsigned long dma_base = 0;
+	unsigned long	dma_base = 0;
+	struct pci_dev	*dev = hwif->pci_dev;
 
 	if (hwif->mate && hwif->mate->dma_base) {
 		dma_base = hwif->mate->dma_base - (hwif->channel ? 0 : 8);

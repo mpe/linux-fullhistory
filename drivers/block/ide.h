@@ -204,26 +204,28 @@ typedef struct ide_drive_s {
 	unsigned long service_start;	/* time we started last request */
 	unsigned long service_time;	/* service time of last request */
 	special_t	special;	/* special action flags */
+	byte     keep_settings;		/* restore settings after drive reset */
+	byte     using_dma;		/* disk is using dma for read/write */
+	byte     waiting_for_dma;	/* dma currently in progress */
+	byte     unmask;		/* flag: okay to unmask other irqs */
+	byte     slow;			/* flag: slow data port */
+	byte     bswap;			/* flag: byte swap data */
+	byte     dsc_overlap;		/* flag: DSC overlap */
+	byte     nice1;			/* flag: give potential excess bandwidth */
 	unsigned present	: 1;	/* drive is physically present */
 	unsigned noprobe 	: 1;	/* from:  hdx=noprobe */
-	byte     keep_settings;		/* restore settings after drive reset */
 	unsigned busy		: 1;	/* currently doing revalidate_disk() */
 	unsigned removable	: 1;	/* 1 if need to do check_media_change */
-	byte     using_dma;		/* disk is using dma for read/write */
 	unsigned forced_geom	: 1;	/* 1 if hdx=c,h,s was given at boot */
-	byte     unmask;		/* flag: okay to unmask other irqs */
 	unsigned no_unmask	: 1;	/* disallow setting unmask bit */
 	unsigned no_io_32bit	: 1;	/* disallow enabling 32bit I/O */
 	unsigned nobios		: 1;	/* flag: do not probe bios for drive */
-	byte     slow;			/* flag: slow data port */
-	unsigned autotune	: 2;	/* 1=autotune, 2=noautotune, 0=default */
 	unsigned revalidate	: 1;	/* request revalidation */
-	byte     bswap;			/* flag: byte swap data */
-	byte     dsc_overlap;		/* flag: DSC overlap */
 	unsigned atapi_overlap	: 1;	/* flag: ATAPI overlap (not supported) */
 	unsigned nice0		: 1;	/* flag: give obvious excess bandwidth */
-	byte     nice1;			/* flag: give potential excess bandwidth */
 	unsigned nice2		: 1;	/* flag: give a share in our own bandwidth */
+	unsigned doorlocking	: 1;	/* flag: for removable only: door lock/unlock works */
+	unsigned autotune	: 2;	/* 1=autotune, 2=noautotune, 0=default */
 #if FAKE_FDISK_FOR_EZDRIVE
 	unsigned remap_0_to_1	: 1;	/* flag: partitioned with ezdrive */
 #endif /* FAKE_FDISK_FOR_EZDRIVE */
@@ -270,7 +272,8 @@ typedef struct ide_drive_s {
  * should either try again later, or revert to PIO for the current request.
  */
 typedef enum {	ide_dma_read,	ide_dma_write,	ide_dma_begin,	ide_dma_end,
-		ide_dma_check,	ide_dma_on,	ide_dma_off,	ide_dma_off_quietly
+		ide_dma_check,	ide_dma_on,	ide_dma_off,	ide_dma_off_quietly,
+		ide_dma_test_irq
 	} ide_dma_action_t;
 
 typedef int (ide_dmaproc_t)(ide_dma_action_t, ide_drive_t *);
@@ -340,7 +343,7 @@ typedef struct hwif_s {
 	unsigned	reset      : 1;	/* reset after probe */
 	unsigned	no_autodma : 1;	/* don't automatically enable DMA at boot */
 	byte		channel;	/* for dual-port chips: 0=primary, 1=secondary */
-	struct		pci_dev *pci_dev; /* for pci chipsets */
+	struct pci_dev	*pci_dev;	/* for pci chipsets */
 	ide_pci_devid_t	pci_devid;	/* for pci chipsets: {VID,DID} */
 #if (DISK_RECOVERY_TIME > 0)
 	unsigned long	last_time;	/* time when previous rq was done */
@@ -353,14 +356,15 @@ typedef struct hwif_s {
 typedef void (ide_handler_t)(ide_drive_t *);
 
 typedef struct hwgroup_s {
+	spinlock_t		spinlock; /* protects "busy" and "handler" */
 	ide_handler_t		*handler;/* irq handler, if active */
+	int			busy;	/* BOOL: protects all fields below */
 	ide_drive_t		*drive;	/* current drive */
 	ide_hwif_t		*hwif;	/* ptr to current hwif in linked-list */
 	struct request		*rq;	/* current request */
 	struct timer_list	timer;	/* failsafe timer */
 	struct request		wrq;	/* local copy of current write rq */
 	unsigned long		poll_timeout;	/* timeout value during long polls */
-	int			active;	/* set when servicing requests */
 	} ide_hwgroup_t;
 
 /*
@@ -393,7 +397,7 @@ typedef struct ide_settings_s {
 	struct ide_settings_s	*next;
 } ide_settings_t;
 
-void ide_add_setting(ide_drive_t *drive, char *name, int rw, int read_ioctl, int write_ioctl, int data_type, int min, int max, int mul_factor, int div_factor, void *data, ide_procset_t *set);
+void ide_add_setting(ide_drive_t *drive, const char *name, int rw, int read_ioctl, int write_ioctl, int data_type, int min, int max, int mul_factor, int div_factor, void *data, ide_procset_t *set);
 void ide_remove_setting(ide_drive_t *drive, char *name);
 ide_settings_t *ide_find_setting_by_name(ide_drive_t *drive, char *name);
 int ide_read_setting(ide_drive_t *t, ide_settings_t *setting);
@@ -663,6 +667,7 @@ void ide_stall_queue (ide_drive_t *drive, unsigned long timeout);
  */
 struct request **ide_get_queue (kdev_t dev);
 
+int  ide_spin_wait_hwgroup(const char *msg, ide_drive_t *drive, unsigned long *flags);
 void ide_timer_expiry (unsigned long data);
 void ide_intr (int irq, void *dev_id, struct pt_regs *regs);
 void ide_geninit (struct gendisk *gd);
@@ -689,6 +694,9 @@ extern struct file_operations ide_fops[];
 #endif
 
 #ifdef _IDE_C
+#ifdef CONFIG_BLK_DEV_IDE
+int ideprobe_init (void);
+#endif /* CONFIG_BLK_DEV_IDE */
 #ifdef CONFIG_BLK_DEV_IDEDISK
 int idedisk_init (void);
 #endif /* CONFIG_BLK_DEV_IDEDISK */
@@ -722,12 +730,8 @@ int ide_build_dmatable (ide_drive_t *drive);
 void ide_dma_intr  (ide_drive_t *drive);
 int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive);
 void ide_setup_dma (ide_hwif_t *hwif, unsigned long dmabase, unsigned int num_ports) __init;
-unsigned long ide_get_or_set_dma_base (struct pci_dev *dev, ide_hwif_t *hwif, int extra, const char *name) __init;
+unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name) __init;
 #endif
-
-#ifdef CONFIG_BLK_DEV_IDE
-int ideprobe_init (void);
-#endif /* CONFIG_BLK_DEV_IDE */
 
 #ifdef CONFIG_BLK_DEV_PDC4030
 #include "pdc4030.h"

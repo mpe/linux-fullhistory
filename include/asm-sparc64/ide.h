@@ -15,7 +15,7 @@ typedef unsigned long ide_ioreg_t;
 #undef  MAX_HWIFS
 #define MAX_HWIFS	2
 
-#define	ide_sti()	sti()
+#define	ide__sti()	__sti()
 
 static __inline__ int ide_default_irq(ide_ioreg_t base)
 {
@@ -38,7 +38,7 @@ static __inline__ void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int
 	for ( ; i < 10; i++)
 		*p++ = 0;
 	/* PCI code needs to figure out this. */
-	if(irq != NULL)
+	if (irq != NULL)
 		*irq = 0;
 }
 

@@ -285,7 +285,7 @@ static int nvram_ioctl( struct inode *inode, struct file *file,
 	switch( cmd ) {
 
 	  case NVRAM_INIT:			/* initialize NVRAM contents and checksum */
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return( -EACCES );
 
 		save_flags(flags);
@@ -301,7 +301,7 @@ static int nvram_ioctl( struct inode *inode, struct file *file,
 	  case NVRAM_SETCKS:		/* just set checksum, contents unchanged
 								 * (maybe useful after checksum garbaged
 								 * somehow...) */
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return( -EACCES );
 
 		save_flags(flags);

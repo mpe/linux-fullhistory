@@ -630,7 +630,8 @@ printk("smb_newconn: fd=%d, pid=%d\n", opt->fd, current->pid);
 		goto out;
 
 	error = -EACCES;
-	if (current->uid != server->mnt->mounted_uid && !suser())
+	if (current->uid != server->mnt->mounted_uid && 
+	    !capable(CAP_SYS_ADMIN))
 		goto out;
 
 	error = -EBADF;

@@ -114,13 +114,13 @@ asmlinkage int sys_setpriority(int which, int who, int niceval)
 		if (!proc_sel(p, which, who))
 			continue;
 		if (p->uid != current->euid &&
-			p->uid != current->uid && !suser()) {
+			p->uid != current->uid && !capable(CAP_SYS_NICE)) {
 			error = EPERM;
 			continue;
 		}
 		if (error == ESRCH)
 			error = 0;
-		if (priority > p->priority && !suser())
+		if (priority > p->priority && !capable(CAP_SYS_NICE))
 			error = EACCES;
 		else
 			p->priority = priority;
@@ -172,7 +172,7 @@ asmlinkage int sys_reboot(int magic1, int magic2, int cmd, void * arg)
 	char buffer[256];
 
 	/* We only trust the superuser with rebooting the system. */
-	if (!suser())
+	if (!capable(CAP_SYS_BOOT))
 		return -EPERM;
 
 	/* For safety, we require "magic" arguments. */
@@ -273,7 +273,7 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 	if (rgid != (gid_t) -1) {
 		if ((old_rgid == rgid) ||
 		    (current->egid==rgid) ||
-		    suser())
+		    capable(CAP_SETGID))
 			current->gid = rgid;
 		else
 			return -EPERM;
@@ -282,7 +282,7 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 		if ((old_rgid == egid) ||
 		    (current->egid == egid) ||
 		    (current->sgid == egid) ||
-		    suser())
+		    capable(CAP_SETGID))
 			current->fsgid = current->egid = egid;
 		else {
 			current->gid = old_rgid;
@@ -307,7 +307,7 @@ asmlinkage int sys_setgid(gid_t gid)
 {
 	int old_egid = current->egid;
 
-	if (suser())
+	if (capable(CAP_SETGID))
 		current->gid = current->egid = current->sgid = current->fsgid = gid;
 	else if ((gid == current->gid) || (gid == current->sgid))
 		current->egid = current->fsgid = gid;
@@ -319,6 +319,41 @@ asmlinkage int sys_setgid(gid_t gid)
 	return 0;
 }
   
+/* 
+ * cap_emulate_setxuid() fixes the effective / permitted capabilities of
+ * a process after a call to setuid, setreuid, or setresuid.
+ *
+ *  1) When set*uiding _from_ one of {r,e,s}uid == 0 _to_ all of
+ *  {r,e,s}uid != 0, the permitted and effective capabilities are
+ *  cleared.
+ *
+ *  2) When set*uiding _from_ euid == 0 _to_ euid != 0, the effective
+ *  capabilities of the process are cleared.
+ *
+ *  3) When set*uiding _from_ euid != 0 _to_ euid == 0, the effective
+ *  capabilities are set to the permitted capabilities.
+ *
+ *  fsuid is handled elsewhere. fsuid == 0 and {r,e,s}uid!= 0 should 
+ *  never happen.
+ *
+ *  -astor 
+ */
+extern inline void cap_emulate_setxuid(int old_ruid, int old_euid, 
+				       int old_suid)
+{
+	if ((old_ruid == 0 || old_euid == 0 || old_suid == 0) &&
+	    (current->uid != 0 && current->euid != 0 && current->suid != 0)) {
+		cap_clear(current->cap_permitted);
+		cap_clear(current->cap_effective);
+	}
+	if (old_euid == 0 && current->euid != 0) {
+		cap_clear(current->cap_effective);
+	}
+	if (old_euid != 0 && current->euid == 0) {
+		current->cap_effective = current->cap_permitted;
+	}
+}
+
 /*
  * Unprivileged users may change the real uid to the effective uid
  * or vice versa.  (BSD-style)
@@ -336,14 +371,15 @@ asmlinkage int sys_setgid(gid_t gid)
  */
 asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 {
-	int old_ruid, old_euid, new_ruid;
+	int old_ruid, old_euid, old_suid, new_ruid;
 
 	new_ruid = old_ruid = current->uid;
 	old_euid = current->euid;
+	old_suid = current->suid;
 	if (ruid != (uid_t) -1) {
 		if ((old_ruid == ruid) || 
 		    (current->euid==ruid) ||
-		    suser())
+		    capable(CAP_SETUID))
 			new_ruid = ruid;
 		else
 			return -EPERM;
@@ -352,7 +388,7 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 		if ((old_ruid == euid) ||
 		    (current->euid == euid) ||
 		    (current->suid == euid) ||
-		    suser())
+		    capable(CAP_SETUID))
 			current->fsuid = current->euid = euid;
 		else
 			return -EPERM;
@@ -375,9 +411,16 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 		if(new_ruid)
 			charge_uid(current, 1);
 	}
+	
+	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
+		cap_emulate_setxuid(old_ruid, old_euid, old_suid);
+	}
+
 	return 0;
 }
 
+
+		
 /*
  * setuid() is implemented like SysV w/ SAVED_IDS 
  * 
@@ -392,10 +435,11 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 asmlinkage int sys_setuid(uid_t uid)
 {
 	int old_euid = current->euid;
-	int old_ruid, new_ruid;
+	int old_ruid, old_suid, new_ruid;
 
 	old_ruid = new_ruid = current->uid;
-	if (suser())
+	old_suid = current->suid;
+	if (capable(CAP_SETUID))
 		new_ruid = current->euid = current->suid = current->fsuid = uid;
 	else if ((uid == current->uid) || (uid == current->suid))
 		current->fsuid = current->euid = uid;
@@ -412,6 +456,11 @@ asmlinkage int sys_setuid(uid_t uid)
 		if(new_ruid)
 			charge_uid(current, 1);
 	}
+
+	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
+		cap_emulate_setxuid(old_ruid, old_euid, old_suid);
+	}
+
 	return 0;
 }
 
@@ -422,6 +471,9 @@ asmlinkage int sys_setuid(uid_t uid)
  */
 asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 {
+	int old_ruid = current->uid;
+	int old_euid = current->euid;
+	int old_suid = current->suid;
 	if (current->uid != 0 && current->euid != 0 && current->suid != 0) {
 		if ((ruid != (uid_t) -1) && (ruid != current->uid) &&
 		    (ruid != current->euid) && (ruid != current->suid))
@@ -448,6 +500,11 @@ asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 	}
 	if (suid != (uid_t) -1)
 		current->suid = suid;
+
+	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
+		cap_emulate_setxuid(old_ruid, old_euid, old_suid);
+	}
+
 	return 0;
 }
 
@@ -515,10 +572,30 @@ asmlinkage int sys_setfsuid(uid_t uid)
 
 	old_fsuid = current->fsuid;
 	if (uid == current->uid || uid == current->euid ||
-	    uid == current->suid || uid == current->fsuid || suser())
+	    uid == current->suid || uid == current->fsuid || 
+	    capable(CAP_SETUID))
 		current->fsuid = uid;
 	if (current->fsuid != old_fsuid)
 		current->dumpable = 0;
+
+	/* We emulate fsuid by essentially doing a scaled-down version
+         * of what we did in setresuid and friends. However, we only
+         * operate on the fs-specific bits of the process' effective
+         * capabilities 
+         *
+         * FIXME - is fsuser used for all CAP_FS_MASK capabilities?
+         *          if not, we might be a bit too harsh here.
+         */
+	
+	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
+		if (old_fsuid == 0 && current->fsuid != 0) {
+			current->cap_effective.cap &= ~CAP_FS_MASK;
+		}
+		if (old_fsuid != 0 && current->fsuid == 0) {
+			current->cap_effective.cap |=
+				(current->cap_permitted.cap & CAP_FS_MASK);
+		}
+	}
 
 	return old_fsuid;
 }
@@ -532,7 +609,8 @@ asmlinkage int sys_setfsgid(gid_t gid)
 
 	old_fsgid = current->fsgid;
 	if (gid == current->gid || gid == current->egid ||
-	    gid == current->sgid || gid == current->fsgid || suser())
+	    gid == current->sgid || gid == current->fsgid || 
+	    capable(CAP_SETGID))
 		current->fsgid = gid;
 	if (current->fsgid != old_fsgid)
 		current->dumpable = 0;
@@ -716,7 +794,7 @@ asmlinkage int sys_getgroups(int gidsetsize, gid_t *grouplist)
  
 asmlinkage int sys_setgroups(int gidsetsize, gid_t *grouplist)
 {
-	if (!suser())
+	if (!capable(CAP_SETGID))
 		return -EPERM;
 	if ((unsigned) gidsetsize > NGROUPS)
 		return -EINVAL;
@@ -756,7 +834,7 @@ asmlinkage int sys_newuname(struct new_utsname * name)
 
 asmlinkage int sys_sethostname(char *name, int len)
 {
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	if (len < 0 || len > __NEW_UTS_LEN)
 		return -EINVAL;
@@ -787,7 +865,7 @@ asmlinkage int sys_gethostname(char *name, int len)
  */
 asmlinkage int sys_setdomainname(char *name, int len)
 {
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	if (len < 0 || len > __NEW_UTS_LEN)
 		return -EINVAL;
@@ -820,7 +898,7 @@ asmlinkage int sys_setrlimit(unsigned int resource, struct rlimit *rlim)
 	old_rlim = current->rlim + resource;
 	if (((new_rlim.rlim_cur > old_rlim->rlim_max) ||
 	     (new_rlim.rlim_max > old_rlim->rlim_max)) &&
-	    !suser())
+	    !capable(CAP_SYS_RESOURCE))
 		return -EPERM;
 	if (resource == RLIMIT_NOFILE) {
 		if (new_rlim.rlim_cur > NR_OPEN || new_rlim.rlim_max > NR_OPEN)
@@ -916,3 +994,4 @@ asmlinkage int sys_prctl(int option, unsigned long arg2, unsigned long arg3,
         }
         return error;
 }
+

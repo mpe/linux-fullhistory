@@ -47,8 +47,10 @@ int ipcperms (struct ipc_perm *ipcp, short flag)
 	else if (in_group_p(ipcp->cgid) || in_group_p(ipcp->gid))
 		granted_mode >>= 3;
 	/* is there some bit set in requested_mode but not in granted_mode? */
-	if ((requested_mode & ~granted_mode & 0007) && !suser())
+	if ((requested_mode & ~granted_mode & 0007) && 
+	    !capable(CAP_IPC_OWNER))
 		return -1;
+
 	return 0;
 }
 

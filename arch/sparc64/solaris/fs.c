@@ -464,7 +464,7 @@ asmlinkage int solaris_ulimit(int cmd, int val)
 		val <<= 9;
 		lock_kernel();
 		if (val > current->rlim[RLIMIT_FSIZE].rlim_max) {
-			if (!suser()) {
+			if (!capable(CAP_SYS_RESOURCE)) {
 				unlock_kernel();
 				return -EPERM;
 			}

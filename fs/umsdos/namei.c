@@ -350,14 +350,14 @@ static int umsdos_rename_f(
     Printk (("ret %d ",ret));
     if (ret == 0){
       /* check sticky bit on old_dir */
-      if ( !(old_dir->i_mode & S_ISVTX) || fsuser() ||
+      if ( !(old_dir->i_mode & S_ISVTX) || capable(CAP_FOWNER) ||
 	   current->fsuid == old_info.entry.uid ||
 	   current->fsuid == old_dir->i_uid ) {
 	/* Does new_name already exist? */
 	PRINTK(("new findentry "));
 	ret = umsdos_findentry(new_dir,&new_info,0);
 	if (ret != 0 || /* if destination file exists, are we allowed to replace it ? */
-	    !(new_dir->i_mode & S_ISVTX) || fsuser() ||
+	    !(new_dir->i_mode & S_ISVTX) || capable(CAP_FOWNER) ||
 	    current->fsuid == new_info.entry.uid ||
 	    current->fsuid == new_dir->i_uid ) {
 	  PRINTK (("new newentry "));
@@ -933,7 +933,7 @@ int UMSDOS_rmdir(
         umsdos_real_lookup (dir, tdentry);	/* fill inode part */
 	Printk (("isempty %d i_count %d ",empty,sdir->i_count));
 				/* check sticky bit */
-	if ( !(dir->i_mode & S_ISVTX) || fsuser() ||
+	if ( !(dir->i_mode & S_ISVTX) || capable(CAP_FOWNER) ||
 	     current->fsuid == sdir->i_uid ||
 	     current->fsuid == dir->i_uid ) {
 	  if (empty == 1){
@@ -1024,7 +1024,7 @@ int UMSDOS_unlink (
       if (ret == 0){
 	Printk (("UMSDOS_unlink %.*s ",info.fake.len,info.fake.fname));
 				/* check sticky bit */
-	if ( !(dir->i_mode & S_ISVTX) || fsuser() ||
+	if ( !(dir->i_mode & S_ISVTX) || capable(CAP_FOWNER) ||
 	     current->fsuid == info.entry.uid ||
 	     current->fsuid == dir->i_uid ) {
 	  if (info.entry.flags & UMSDOS_HLINK){

@@ -764,6 +764,17 @@ static inline char * task_sig(struct task_struct *p, char *buffer)
 	return buffer;
 }
 
+extern inline char *task_cap(struct task_struct *p, char *buffer)
+{
+    return buffer + sprintf(buffer, "CapInh:\t%016x\n"
+			    "CapPrm:\t%016x\n"
+			    "CapEff:\t%016x\n",
+			    p->cap_inheritable.cap,
+			    p->cap_permitted.cap,
+			    p->cap_effective.cap);
+}
+
+
 static int get_status(int pid, char * buffer)
 {
 	char * orig = buffer;
@@ -778,6 +789,7 @@ static int get_status(int pid, char * buffer)
 	buffer = task_state(tsk, buffer);
 	buffer = task_mem(tsk, buffer);
 	buffer = task_sig(tsk, buffer);
+	buffer = task_cap(tsk, buffer);
 	return buffer - orig;
 }
 

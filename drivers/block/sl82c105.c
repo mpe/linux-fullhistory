@@ -19,8 +19,9 @@ int chrp_ide_ports_known = 0;
 ide_ioreg_t chrp_ide_regbase[MAX_HWIFS];
 ide_ioreg_t chrp_idedma_regbase;
 
-void ide_init_sl82c105(struct pci_dev *dev) {
-
+void ide_init_sl82c105(ide_hwif_t *hwif)
+{
+	struct pci_dev *dev = hwif->pci_dev;
 	unsigned short t16;
 	unsigned int t32;
 
@@ -37,15 +38,7 @@ void ide_init_sl82c105(struct pci_dev *dev) {
 	pci_write_config_dword(dev, 0x40, 0x10ff08a1);
 }
 
-
-void ide_probe_for_sl82c105(void)
-{
-	struct pci_dev *dev = NULL;
-
-        while ((dev = pci_find_device(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105, dev)))
-                ide_init_sl82c105(dev);
-}
-
+#if 0	/* nobody ever calls these.. ?? */
 void chrp_ide_probe(void) {
 
 	struct pci_dev *pdev = pci_find_device(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105, NULL);
@@ -75,4 +68,4 @@ void chrp_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
         if (irq != NULL)
                 *irq = chrp_ide_irq;
 }
-
+#endif

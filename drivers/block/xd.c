@@ -338,7 +338,7 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 			return copy_to_user(geometry, &g, sizeof g) ? -EFAULT : 0;
 		}
 		case BLKRASET:
-			if(!suser()) return -EACCES;
+			if(!capable(CAP_SYS_ADMIN)) return -EACCES;
 			if(arg > 0xff) return -EINVAL;
 			read_ahead[MAJOR(inode->i_rdev)] = arg;
 			return 0;
@@ -348,12 +348,12 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 			if (!arg) return -EINVAL;
 			return put_user(xd_struct[MINOR(inode->i_rdev)].nr_sects,(long *) arg);
 		case BLKFLSBUF:   /* Return devices size */
-			if(!suser())  return -EACCES;
+			if(!capable(CAP_SYS_ADMIN))  return -EACCES;
 			fsync_dev(inode->i_rdev);
 			invalidate_buffers(inode->i_rdev);
 			return 0;
 		case HDIO_SET_DMA:
-			if (!suser()) return -EACCES;
+			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
 			if (xdc_busy) return -EBUSY;
 			nodma = !arg;
 			if (nodma && xd_dma_buffer) {
@@ -366,6 +366,8 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 		case HDIO_GET_MULTCOUNT:
 			return put_user(xd_maxsectors, (long *) arg);
 		case BLKRRPART:
+			if (!capable(CAP_SYS_ADMIN)) 
+				return -EACCES;
 			return xd_reread_partitions(inode->i_rdev);
 		RO_IOCTLS(inode->i_rdev,arg);
 		default:

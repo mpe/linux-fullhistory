@@ -384,7 +384,7 @@ static int capi_ioctl(struct inode *inode, struct file *file,
 			struct capi_manufacturer_cmd mcmd;
 			if (minor)
 				return -EINVAL;
-			if (!suser())
+			if (!capable(CAP_SYS_ADMIN))
 				return -EPERM;
 			retval = copy_from_user((void *) &mcmd, (void *) arg,
 						sizeof(mcmd));

@@ -91,7 +91,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 
 
 	case RTCSET:
-		if (!suser())
+		if (!capable(CAP_SYS_TIME))
 			return -EPERM;
 
 		copy_from_user_ret(&rtc_tm, (struct rtc_time*)arg, sizeof(struct rtc_time), -EFAULT);

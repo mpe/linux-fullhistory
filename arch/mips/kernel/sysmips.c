@@ -58,7 +58,7 @@ sys_sysmips(int cmd, int arg1, int arg2, int arg3)
 	{
 	case SETNAME:
 		retval = -EPERM;
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			goto out;
 
 		name = (char *) arg1;

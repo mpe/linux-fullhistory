@@ -22,9 +22,20 @@
 #ifdef CONFIG_8xx
 #define NO_CONTEXT      16
 #define LAST_CONTEXT    15
+#define MUNGE_CONTEXT(n)        (n)
+
 #else
+
+/* PPC 6xx, 7xx CPUs */
 #define NO_CONTEXT      0
 #define LAST_CONTEXT    0xfffff
+
+/*
+ * Allocating context numbers this way tends to spread out
+ * the entries in the hash table better than a simple linear
+ * allocation.
+ */
+#define MUNGE_CONTEXT(n)        (((n) * 897) & LAST_CONTEXT)
 #endif
 
 extern int next_mmu_context;
@@ -34,17 +45,6 @@ extern void mmu_context_overflow(void);
 extern void set_context(int context);
 #else
 #define set_context(context)    do { } while (0)
-#endif
-
-#ifndef CONFIG_8xx
-/*
- * Allocating context numbers this way tends to spread out
- * the entries in the hash table better than a simple linear
- * allocation.
- */
-#define MUNGE_CONTEXT(n)        (((n) * 897) & LAST_CONTEXT)
-#else
-#define MUNGE_CONTEXT(n)        (n)
 #endif
 
 /*
@@ -57,8 +57,6 @@ do { 								\
 		if (next_mmu_context == LAST_CONTEXT)		\
 			mmu_context_overflow();			\
 		mm->context = MUNGE_CONTEXT(++next_mmu_context);\
-	 	if ( tsk == current )                           \
-			set_context(mm->context);               \
 	}							\
 } while (0)
 
@@ -70,11 +68,17 @@ do { 								\
 /*
  * We're finished using the context for an address space.
  */
-#ifdef CONFIG_8xx
 #define destroy_context(mm)     ((mm)->context = NO_CONTEXT)
-#else
-#define destroy_context(mm)     do { } while (0)
-#endif
+
+/*
+ * After we have set current->mm to a new value, this activates
+ * the context for the new mm so we see the new mappings.
+ */
+extern inline void activate_context(struct task_struct *tsk)
+{
+	get_mmu_context(tsk);
+	set_context(tsk->mm->context);
+}
 
 /*
  * compute the vsid from the context and segment

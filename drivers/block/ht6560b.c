@@ -133,8 +133,8 @@ static void ht6560b_selectproc (ide_drive_t *drive)
 	if (select != current_select || timing != current_timing) {
 		current_select = select;
 		current_timing = timing;
-		save_flags (flags);
-		cli();
+		__save_flags (flags);	/* local CPU only */
+		__cli();		/* local CPU only */
 		(void) inb(HT_SELECT_PORT);
 		(void) inb(HT_SELECT_PORT);
 		(void) inb(HT_SELECT_PORT);
@@ -150,7 +150,7 @@ static void ht6560b_selectproc (ide_drive_t *drive)
                  */
                 outb (timing, IDE_SELECT_REG);
                 (void) inb (IDE_STATUS_REG);
-		restore_flags (flags);
+		__restore_flags (flags);	/* local CPU only */
 #ifdef DEBUG
 		printk("ht6560b: %s: select=%#x timing=%#x\n", drive->name, t, timing);
 #endif

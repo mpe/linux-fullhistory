@@ -1201,7 +1201,7 @@ static int set_serial_info(struct sgi_serial * info,
 	copy_from_user(&new_serial,new_info,sizeof(new_serial));
 	old_info = *info;
 
-	if (!suser()) {
+	if (!capable(CAP_SYS_ADMIN)) {
 		if ((new_serial.baud_base != info->baud_base) ||
 		    (new_serial.type != info->type) ||
 		    (new_serial.close_delay != info->close_delay) ||

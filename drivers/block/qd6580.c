@@ -49,13 +49,13 @@ static void tune_qd6580 (ide_drive_t *drive, byte pio)
 
 	pio = ide_get_best_pio_mode(drive, pio, 3, NULL);
 
-	save_flags(flags);
-	cli();
+	save_flags(flags);	/* all CPUs */
+	cli();			/* all CPUs */
 	outb_p(0x8d,0xb0);
 	outb_p(0x0 ,0xb2);
 	outb_p(((pio+1)<<4)|0x0f,0xb3);
 	inb(0x3f6);
-	restore_flags(flags);
+	restore_flags(flags);	/* all CPUs */
 }
 
 void init_qd6580 (void)

@@ -1342,9 +1342,9 @@ static int mtiocftcmd(struct mtftcmd *ftcmd, int arg_size)
 	TRACE_FUN(ft_t_flow);
 
 	TRACE(ft_t_noise, "Mag tape ioctl command: MTIOCFTCMD");
-	if (!suser()) {
+	if (!capable(CAP_SYS_ADMIN)) {
 		TRACE_ABORT(-EPERM, ft_t_info,
-			    "only the superuser may send raw qic-117 commands");
+			    "need CAP_SYS_ADMIN capability to send raw qic-117 commands");
 	}
 	if (zft_qic_mode) {
 		TRACE_ABORT(-EACCES, ft_t_info,

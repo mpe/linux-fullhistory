@@ -379,13 +379,13 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
         put_user( dev->host->host_no, (int *) arg);
 	return 0;
     case SCSI_IOCTL_TAGGED_ENABLE:
-	if(!suser())  return -EACCES;
+	if(!capable(CAP_SYS_ADMIN))  return -EACCES;
 	if(!dev->tagged_supported) return -EINVAL;
 	dev->tagged_queue = 1;
 	dev->current_tag = 1;
 	return 0;
     case SCSI_IOCTL_TAGGED_DISABLE:
-	if(!suser())  return -EACCES;
+	if(!capable(CAP_SYS_ADMIN))  return -EACCES;
 	if(!dev->tagged_supported) return -EINVAL;
 	dev->tagged_queue = 0;
 	dev->current_tag = 0;
@@ -393,7 +393,7 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
     case SCSI_IOCTL_PROBE_HOST:
 	return ioctl_probe(dev->host, arg);
     case SCSI_IOCTL_SEND_COMMAND:
-	if(!suser())  return -EACCES;
+	if(!capable(CAP_SYS_ADMIN))  return -EACCES;
 	return scsi_ioctl_send_command((Scsi_Device *) dev,
 				       (Scsi_Ioctl_Command *) arg);
     case SCSI_IOCTL_DOORLOCK:

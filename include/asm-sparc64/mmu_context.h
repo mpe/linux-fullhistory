@@ -72,6 +72,12 @@ extern __inline__ void get_mmu_context(struct task_struct *tsk)
 	  : "o4");
 }
 
+/*
+ * After we have set current->mm to a new value, this activates
+ * the context for the new mm so we see the new mappings.
+ */
+#define activate_context(tsk)	get_mmu_context(tsk)
+
 #endif /* !(__ASSEMBLY__) */
 
 #endif /* !(__SPARC64_MMU_CONTEXT_H) */

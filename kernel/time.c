@@ -87,7 +87,7 @@ asmlinkage int sys_stime(int * tptr)
 {
 	int value;
 
-	if (!suser())
+	if (!capable(CAP_SYS_TIME))
 		return -EPERM;
 	if (get_user(value, tptr))
 		return -EFAULT;
@@ -156,7 +156,7 @@ int do_sys_settimeofday(struct timeval *tv, struct timezone *tz)
 {
 	static int firsttime = 1;
 
-	if (!suser())
+	if (!capable(CAP_SYS_TIME))
 		return -EPERM;
 		
 	if (tz) {
@@ -221,7 +221,7 @@ int do_adjtimex(struct timex *txc)
         long ltemp, mtemp, save_adjust;
 
 	/* In order to modify anything, you gotta be super-user! */
-	if (txc->modes && !suser())
+	if (txc->modes && !capable(CAP_SYS_TIME))
 		return -EPERM;
 		
 	/* Now we validate the data before disabling interrupts */

@@ -356,13 +356,14 @@ int get_irq_list(char *buf)
 			p += sprintf(p, "%10u ",
 				kstat.irqs[cpu_logical_map(j)][i]);
 #endif
-
 		if (IO_APIC_IRQ(i)) {
 			p += sprintf(p, " IO-APIC");
+#ifdef __SMP__
 			if (irq_desc[i].handler == &ioapic_level_irq_type)
 				p += sprintf(p, "-level ");
 			else
 				p += sprintf(p, "-edge  ");
+#endif
 		} else
 			p += sprintf(p, "  XT-PIC       ");
 		p += sprintf(p, "  %s", action->name);
@@ -770,15 +771,25 @@ static void disable_edge_ioapic_irq(unsigned int irq)
 {
 }
 
+/*
+ * if we enable this, why does it cause a hang in the BusLogic
+ * driver, when level triggered PCI IRQs are used?
+ */
+#define NOT_BROKEN 0
+
 static void enable_level_ioapic_irq(unsigned int irq)
 {
+#if NOT_BROKEN
 	enable_IO_APIC_irq(irq);
+#endif
 	self_IPI(irq);
 }
 
 static void disable_level_ioapic_irq(unsigned int irq)
 {
+#if NOT_BROKEN
 	disable_IO_APIC_irq(irq);
+#endif
 }
 
 /*
@@ -855,7 +866,9 @@ static void do_level_ioapic_IRQ (unsigned int irq, int cpu,
 	 * in the IO-APIC, then we 'early ACK' the IRQ, then we
 	 * handle it and enable the IRQ when finished.
 	 */
+#if NOT_BROKEN
 	disable_IO_APIC_irq(irq);
+#endif
 	ack_APIC_irq();
 	desc->ipi = 0;
 

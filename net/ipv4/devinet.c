@@ -435,7 +435,7 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 		break;
 
 	case SIOCSIFFLAGS:
-		if (!suser())
+		if (!capable(CAP_NET_ADMIN))
 			return -EACCES;
 		rtnl_lock();
 		exclusive = 1;
@@ -444,7 +444,7 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 	case SIOCSIFBRDADDR:	/* Set the broadcast address */
 	case SIOCSIFDSTADDR:	/* Set the destination address */
 	case SIOCSIFNETMASK: 	/* Set the netmask for the interface */
-		if (!suser())
+		if (!capable(CAP_NET_ADMIN))
 			return -EACCES;
 		if (sin->sin_family != AF_INET)
 			return -EINVAL;

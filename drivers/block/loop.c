@@ -448,7 +448,7 @@ static int loop_get_status(struct loop_device *lo, struct loop_info *arg)
 	info.lo_flags = lo->lo_flags;
 	strncpy(info.lo_name, lo->lo_name, LO_NAME_SIZE);
 	info.lo_encrypt_type = lo->lo_encrypt_type;
-	if (lo->lo_encrypt_key_size && suser()) {
+	if (lo->lo_encrypt_key_size && capable(CAP_SYS_ADMIN)) {
 		info.lo_encrypt_key_size = lo->lo_encrypt_key_size;
 		memcpy(info.lo_encrypt_key, lo->lo_encrypt_key,
 		       lo->lo_encrypt_key_size);

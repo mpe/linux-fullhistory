@@ -50,13 +50,6 @@ NULL,		/* cur_cmd */	\
 #include  "ppa.h"
 #include <linux/parport.h>
 
-#ifdef CONFIG_KMOD
-#include  <linux/kmod.h>
-#ifndef PARPORT_MODULES
-#define PARPORT_MODULES "parport_pc"
-#endif
-#endif
-
 #define NO_HOSTS 4
 static ppa_struct ppa_hosts[NO_HOSTS] =
 {PPA_EMPTY, PPA_EMPTY, PPA_EMPTY, PPA_EMPTY};
@@ -98,7 +91,6 @@ static int ppa_pb_claim(int host_no)
 	return 1;
     }
 
-    PPA_BASE(host_no) = ppa_hosts[host_no].dev->port->base;
     if (ppa_hosts[host_no].cur_cmd)
 	ppa_hosts[host_no].cur_cmd->SCp.phase++;
     return 0;
@@ -130,12 +122,8 @@ int ppa_detect(Scsi_Host_Template * host)
     nhosts = 0;
     try_again = 0;
 
-#ifdef CONFIG_KMOD
-    if (!pb) {
-	request_module(PARPORT_MODULES);
+    if (!pb)
 	pb = parport_enumerate();
-    }
-#endif
 
     if (!pb) {
 	printk("ppa: parport reports no devices.\n");
@@ -155,7 +143,7 @@ int ppa_detect(Scsi_Host_Template * host)
 	if (ppa_pb_claim(i))
 	    while (ppa_hosts[i].p_busy)
 		schedule(); /* Whe can safe schedule() here */
-	ppb = PPA_BASE(i);
+	ppb = PPA_BASE(i) = ppa_hosts[i].dev->port->base;
 	w_ctr(ppb, 0x0c);
 	modes = ppa_hosts[i].dev->port->modes;
 

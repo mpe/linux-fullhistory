@@ -1581,7 +1581,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		case VIDIOCSFBUF:
 		{
 			struct video_buffer v;
-			if(!suser())
+			if(!capable(CAP_SYS_ADMIN))
 				return -EPERM;
 			if(copy_from_user(&v, arg,sizeof(v)))
 				return -EFAULT;
@@ -1680,7 +1680,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		        return 0;
 
 		case BTTV_WRITEE:
-			if(!suser())
+			if(!capable(CAP_SYS_ADMIN))
 				return -EPERM;
 			if(copy_from_user((void *) eedata, (void *) arg, 256))
 				return -EFAULT;
@@ -1688,7 +1688,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			return 0;
 
 		case BTTV_READEE:
-			if(!suser())
+			if(!capable(CAP_SYS_ADMIN))
 				return -EPERM;
 			readee(&(btv->i2c), eedata);
 			if(copy_to_user((void *) arg, (void *) eedata, 256))

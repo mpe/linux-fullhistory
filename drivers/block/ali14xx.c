@@ -134,15 +134,15 @@ static void ali14xx_tune_drive (ide_drive_t *drive, byte pio)
 
 	/* stuff timing parameters into controller registers */
 	driveNum = (HWIF(drive)->index << 1) + drive->select.b.unit;
-	save_flags(flags);
-	cli();
+	save_flags(flags);	/* all CPUs */
+	cli();			/* all CPUs */
 	outb_p(regOn, basePort);
 	outReg(param1, regTab[driveNum].reg1);
 	outReg(param2, regTab[driveNum].reg2);
 	outReg(param3, regTab[driveNum].reg3);
 	outReg(param4, regTab[driveNum].reg4);
 	outb_p(regOff, basePort);
-	restore_flags(flags);
+	restore_flags(flags);	/* all CPUs */
 }
 
 /*
@@ -154,8 +154,8 @@ static int findPort (void)
 	byte t;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	__save_flags(flags);	/* local CPU only */
+	__cli();		/* local CPU only */
 	for (i = 0; i < ALI_NUM_PORTS; ++i) {
 		basePort = ports[i];
 		regOff = inb(basePort);
@@ -166,7 +166,7 @@ static int findPort (void)
 				dataPort = basePort + 8;
 				t = inReg(0) & 0xf0;
 				outb_p(regOff, basePort);
-				restore_flags(flags);
+				__restore_flags(flags);	/* local CPU only */
 				if (t != 0x50)
 					return 0;
 				return 1;  /* success */
@@ -174,7 +174,7 @@ static int findPort (void)
 		}
 		outb_p(regOff, basePort);
 	}
-	restore_flags(flags);
+	__restore_flags(flags);	/* local CPU only */
 	return 0;
 }
 
@@ -186,15 +186,15 @@ static int initRegisters (void) {
 	byte t;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	__save_flags(flags);	/* local CPU only */
+	__cli();		/* local CPU only */
 	outb_p(regOn, basePort);
 	for (p = initData; p->reg != 0; ++p)
 		outReg(p->data, p->reg);
 	outb_p(0x01, regPort);
 	t = inb(regPort) & 0x01;
 	outb_p(regOff, basePort);
-	restore_flags(flags);
+	__restore_flags(flags);	/* local CPU only */
 	return t;
 }
 

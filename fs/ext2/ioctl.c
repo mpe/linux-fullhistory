@@ -39,10 +39,11 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		    (inode->u.ext2_i.i_flags &
 		     (EXT2_APPEND_FL | EXT2_IMMUTABLE_FL))) {
 			/* This test looks nicer. Thanks to Pauline Middelink */
-			if (!fsuser())
+			if (!capable(CAP_LINUX_IMMUTABLE))
 				return -EPERM;
 		} else
-			if ((current->fsuid != inode->i_uid) && !fsuser())
+			if ((current->fsuid != inode->i_uid) && 
+			    !capable(CAP_FOWNER))
 				return -EPERM;
 		if (IS_RDONLY(inode))
 			return -EROFS;
@@ -70,7 +71,7 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 	case EXT2_IOC_GETVERSION:
 		return put_user(inode->u.ext2_i.i_version, (int *) arg);
 	case EXT2_IOC_SETVERSION:
-		if ((current->fsuid != inode->i_uid) && !fsuser())
+		if ((current->fsuid != inode->i_uid) && !capable(CAP_FOWNER))
 			return -EPERM;
 		if (IS_RDONLY(inode))
 			return -EROFS;

@@ -548,7 +548,7 @@ sys_cacheflush (unsigned long addr, int scope, int cache, unsigned long len)
 	if (scope == FLUSH_SCOPE_ALL) {
 		/* Only the superuser may flush the whole cache. */
 		ret = -EPERM;
-		if (!suser ())
+		if (!capable(CAP_SYS_ADMIN))
 			goto out;
 	} else {
 		/* Verify that the specified address region actually belongs to

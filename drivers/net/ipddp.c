@@ -307,7 +307,7 @@ static int ipddp_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 {
         struct ipddp_route *rt = (struct ipddp_route *)ifr->ifr_data;
 
-        if(!suser())
+        if(!capable(CAP_NET_ADMIN))
                 return -EPERM;
 
         switch(cmd)

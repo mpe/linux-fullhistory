@@ -4189,7 +4189,7 @@ static int sbpcd_dev_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 	switch (cmd) 		/* Sun-compatible */
 	{
 	case DDIOCSDBG:		/* DDI Debug */
-		if (!suser()) RETURN_UP(-EPERM);
+		if (!capable(CAP_SYS_ADMIN)) RETURN_UP(-EPERM);
 		i=sbpcd_dbg_ioctl(arg,1);
 		RETURN_UP(i);
 	case CDROMRESET:      /* hard reset the drive */
@@ -4478,7 +4478,7 @@ static int sbpcd_dev_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 	} /* end of CDROMREADAUDIO */
 		
 	case BLKRASET:
-		if(!suser()) RETURN_UP(-EACCES);
+		if(!capable(CAP_SYS_ADMIN)) RETURN_UP(-EACCES);
 		if(!(cdi->dev)) RETURN_UP(-EINVAL);
 		if(arg > 0xff) RETURN_UP(-EINVAL);
 		read_ahead[MAJOR(cdi->dev)] = arg;

@@ -119,7 +119,7 @@ asmlinkage int sys_acct(const char *name)
 	int error = -EPERM;
 
 	lock_kernel();
-	if (!suser())
+	if (!capable(CAP_SYS_PACCT))
 		goto out;
 
 	if (name == (char *)NULL) {

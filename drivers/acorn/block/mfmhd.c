@@ -1206,14 +1206,14 @@ static int mfm_ioctl(struct inode *inode, struct file *file, u_int cmd, u_long a
 		return 0;
 
 	case BLKFLSBUF:
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return -EACCES;
 		fsync_dev(dev);
 		invalidate_buffers(dev);
 		return 0;
 
 	case BLKRASET:
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return -EACCES;
 		if (arg > 0xff)
 			return -EINVAL;
@@ -1227,7 +1227,7 @@ static int mfm_ioctl(struct inode *inode, struct file *file, u_int cmd, u_long a
 		return put_user (mfm[minor].nr_sects, (long *)arg);
 
 	case BLKFRASET:
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return -EACCES;
 		max_readahead[major][minor] = arg;
 		return 0;
@@ -1239,7 +1239,7 @@ static int mfm_ioctl(struct inode *inode, struct file *file, u_int cmd, u_long a
 		return put_user(max_sectors[major][minor], (long *) arg);
 
 	case BLKRRPART:
-		if (!suser())
+		if (!capable(CAP_SYS_ADMIN))
 			return -EACCES;
 		return mfm_reread_partitions(dev);
 

@@ -242,8 +242,8 @@ static void opti621_tune_drive (ide_drive_t *drive, byte pio)
 		hwif->name, ax, second.data_time, second.recovery_time, drdy);
 #endif
 
-	save_flags(flags);
-	cli();
+	save_flags(flags);	/* all CPUs */
+	cli();			/* all CPUs */
 
      	reg_base = hwif->io_ports[IDE_DATA_OFFSET];
 	outb(0xc0, reg_base+CNTRL_REG);	/* allow Register-B */
@@ -268,7 +268,7 @@ static void opti621_tune_drive (ide_drive_t *drive, byte pio)
  	write_reg(misc, MISC_REG);	/* set address setup, DRDY timings,   */
  					/*  and read prefetch for both drives */
 
-	restore_flags(flags);
+	restore_flags(flags);	/* all CPUs */
 }
 
 /*

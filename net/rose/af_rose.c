@@ -1193,7 +1193,7 @@ static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCADDRT:
 		case SIOCDELRT:
 		case SIOCRSCLRRT:
-			if (!suser()) return -EPERM;
+			if (!capable(CAP_NET_ADMIN)) return -EPERM;
 			return rose_rt_ioctl(cmd, (void *)arg);
 
 		case SIOCRSGCAUSE: {

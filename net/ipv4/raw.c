@@ -398,7 +398,7 @@ static int raw_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	   chk_addr_ret != RTN_MULTICAST && chk_addr_ret != RTN_BROADCAST) {
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 		/* Superuser may bind to any address to allow transparent proxying. */
-		if(chk_addr_ret != RTN_UNICAST || !suser())
+		if(chk_addr_ret != RTN_UNICAST || !capable(CAP_NET_ADMIN))
 #endif
 			return -EADDRNOTAVAIL;
 	}

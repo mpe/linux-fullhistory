@@ -130,7 +130,7 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 	int error = -EPERM;
 
 	lock_kernel();
-	if ((type != 3) && !suser())
+	if ((type != 3) && !capable(CAP_SYS_ADMIN))
 		goto out;
 	error = 0;
 	switch (type) {

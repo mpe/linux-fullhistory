@@ -148,8 +148,8 @@ static void trm290_prepare_drive (ide_drive_t *drive, unsigned int use_dma)
 	/* select PIO or DMA */
 	reg = use_dma ? (0x21 | 0x82) : (0x21 & ~0x82);
 
-	save_flags(flags);
-	cli();
+	__save_flags(flags);	/* local CPU only */
+	__cli();		/* local CPU only */
 
 	if (reg != hwif->select_data) {
 		hwif->select_data = reg;
@@ -164,7 +164,7 @@ static void trm290_prepare_drive (ide_drive_t *drive, unsigned int use_dma)
 		outw(reg, hwif->config_data+3);
 	}
 
-	restore_flags(flags);
+	__restore_flags(flags);	/* local CPU only */
 }
 
 static void trm290_selectproc (ide_drive_t *drive)
@@ -189,15 +189,20 @@ static int trm290_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 				break;		/* try PIO instead of DMA */
 			trm290_prepare_drive(drive, 1);	/* select DMA xfer */
 			outl(virt_to_bus(hwif->dmatable)|reading|writing, hwif->dma_base);
+			drive->waiting_for_dma = 1;
 			outw((count * 2) - 1, hwif->dma_base+2); /* start DMA */
 			if (drive->media != ide_disk)
 				return 0;
 			ide_set_handler(drive, &ide_dma_intr, WAIT_CMD);
 			OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
+			return 0;
 		case ide_dma_begin:
 			return 0;
 		case ide_dma_end:
+			drive->waiting_for_dma = 0;
 			return (inw(hwif->dma_base+2) != 0x00ff);
+		case ide_dma_test_irq:
+			return (inw(hwif->dma_base+2) == 0x00ff);
 		default:
 			return ide_dmaproc(func, drive);
 	}
@@ -226,8 +231,8 @@ __initfunc(void ide_init_trm290 (ide_hwif_t *hwif))
 		printk("TRM290: using default config base at 0x%04lx\n", hwif->config_data);
 	}
 
-	save_flags(flags);
-	cli();
+	__save_flags(flags);	/* local CPU only */
+	__cli();		/* local CPU only */
 	/* put config reg into first byte of hwif->select_data */
 	outb(0x51|(hwif->channel<<3), hwif->config_data+1);
 	hwif->select_data = 0x21;			/* select PIO as default */
@@ -235,13 +240,13 @@ __initfunc(void ide_init_trm290 (ide_hwif_t *hwif))
 	reg = inb(hwif->config_data+3);			/* get IRQ info */
 	reg = (reg & 0x10) | 0x03;			/* mask IRQs for both ports */
 	outb(reg, hwif->config_data+3);
-	restore_flags(flags);
+	__restore_flags(flags);	/* local CPU only */
 
 	if ((reg & 0x10))
 		hwif->irq = hwif->channel ? 15 : 14;	/* legacy mode */
 	else if (!hwif->irq && hwif->mate && hwif->mate->irq)
 		hwif->irq = hwif->mate->irq;		/* sharing IRQ with mate */
-	ide_setup_dma(hwif, (hwif->config_data + 4) ^ (hwif->channel ? 0x0080 : 0x0000), 2);
+	ide_setup_dma(hwif, (hwif->config_data + 4) ^ (hwif->channel ? 0x0080 : 0x0000), 3);
 	hwif->dmaproc = &trm290_dmaproc;
 	hwif->selectproc = &trm290_selectproc;
 	hwif->no_autodma = 1;				/* play it safe for now */

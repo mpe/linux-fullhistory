@@ -249,7 +249,8 @@ do_kdsk_ioctl(int cmd, struct kbentry *user_kbe, int perm, struct kbd_struct *kb
 		if (!(key_map = key_maps[s])) {
 			int j;
 
-			if (keymap_count >= MAX_NR_OF_USER_KEYMAPS && !suser())
+			if (keymap_count >= MAX_NR_OF_USER_KEYMAPS && 
+			    !capable(CAP_SYS_RESOURCE))
 				return -EPERM;
 
 			key_map = (ushort *) kmalloc(sizeof(plain_map),
@@ -268,7 +269,7 @@ do_kdsk_ioctl(int cmd, struct kbentry *user_kbe, int perm, struct kbd_struct *kb
 		/*
 		 * Attention Key.
 		 */
-		if (((ov == K_SAK) || (v == K_SAK)) && !suser())
+		if (((ov == K_SAK) || (v == K_SAK)) && !capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		key_map[i] = U(v);
 		if (!s && (KTYP(ov) == KT_SHIFT || KTYP(v) == KT_SHIFT))

@@ -327,15 +327,9 @@ void do_pdc4030_io (ide_drive_t *drive, struct request *rq)
 	    do {
 		stat=GET_STAT();
 		if(stat & DRQ_STAT) {
-/*                    unsigned long flags;
-                    save_flags(flags);
-                    cli();
                     disable_irq(HWIF(drive)->irq);
-*/
 		    ide_intr(HWIF(drive)->irq,HWGROUP(drive),NULL);
-/*                    enable_irq(HWIF(drive)->irq);
-                    restore_flags(flags);
-*/
+                    enable_irq(HWIF(drive)->irq);
 		    return;
 		}
 		if(IN_BYTE(IDE_SELECT_REG) & 0x01)
@@ -353,7 +347,7 @@ void do_pdc4030_io (ide_drive_t *drive, struct request *rq)
 		return;
 	    }
 	    if (!drive->unmask)
-		cli();
+		__cli();	/* local CPU only */
 	    HWGROUP(drive)->wrq = *rq; /* scratchpad */
 	    promise_write(drive);
 	    return;

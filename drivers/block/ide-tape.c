@@ -1432,8 +1432,8 @@ static void idetape_add_stage_tail (ide_drive_t *drive,idetape_stage_t *stage)
 #if IDETAPE_DEBUG_LOG
 	printk (KERN_INFO "Reached idetape_add_stage_tail\n");
 #endif /* IDETAPE_DEBUG_LOG */
-	save_flags (flags);
-	cli ();
+	save_flags (flags);	/* all CPUs (overkill?) */
+	cli();			/* all CPUs (overkill?) */
 	stage->next=NULL;
 	if (tape->last_stage != NULL)
 		tape->last_stage->next=stage;
@@ -1444,7 +1444,7 @@ static void idetape_add_stage_tail (ide_drive_t *drive,idetape_stage_t *stage)
 		tape->next_stage=tape->last_stage;
 	tape->nr_stages++;
 	tape->nr_pending_stages++;
-	restore_flags (flags);
+	restore_flags (flags);	/* all CPUs (overkill?) */
 }
 
 /*
@@ -1754,7 +1754,7 @@ static void idetape_pc_intr (ide_drive_t *drive)
 #endif /* IDETAPE_DEBUG_LOG */
 		clear_bit (PC_DMA_IN_PROGRESS, &pc->flags);
 
-		ide_sti();
+		ide__sti();	/* local CPU only */
 
 		if (status.b.check || test_bit (PC_DMA_ERROR, &pc->flags)) {	/* Error detected */
 #if IDETAPE_DEBUG_LOG
@@ -2398,11 +2398,11 @@ static int idetape_add_chrdev_read_request (ide_drive_t *drive,int blocks)
 		 */
 		return (idetape_queue_rw_tail (drive, IDETAPE_READ_RQ, blocks, tape->merge_stage->bh));
 	}
-	save_flags (flags);
-	cli ();
+	save_flags (flags);	/* all CPUs (overkill?) */
+	cli();			/* all CPUs (overkill?) */
 	if (tape->active_stage == tape->first_stage)
 		idetape_wait_for_request (tape->active_data_request);
-	restore_flags (flags);
+	restore_flags (flags);	/* all CPUs (overkill?) */
 
 	rq_ptr = &tape->first_stage->rq;
 	bytes_read = tape->tape_block_size * (rq_ptr->nr_sectors - rq_ptr->current_nr_sectors);
@@ -2451,13 +2451,13 @@ static int idetape_add_chrdev_write_request (ide_drive_t *drive, int blocks)
 	 *	Pay special attention to possible race conditions.
 	 */
 	while ((new_stage = idetape_kmalloc_stage (tape)) == NULL) {
-		save_flags (flags);
-		cli ();
+		save_flags (flags);	/* all CPUs (overkill?) */
+		cli();			/* all CPUs (overkill?) */
 		if (idetape_pipeline_active (tape)) {
 			idetape_wait_for_request (tape->active_data_request);
-			restore_flags (flags);
+			restore_flags (flags);	/* all CPUs (overkill?) */
 		} else {
-			restore_flags (flags);
+			restore_flags (flags);	/* all CPUs (overkill?) */
 			idetape_insert_pipeline_into_queue (drive);
 			if (idetape_pipeline_active (tape))
 				continue;
@@ -2514,12 +2514,12 @@ static void idetape_discard_read_pipeline (ide_drive_t *drive)
 	if (tape->first_stage == NULL)
 		return;
 		
-	save_flags (flags);
-	cli ();
+	save_flags (flags);	/* all CPUs (overkill?) */
+	cli();			/* all CPUs (overkill?) */
 	tape->next_stage = NULL;
 	if (idetape_pipeline_active (tape))
 		idetape_wait_for_request (tape->active_data_request);
-	restore_flags (flags);
+	restore_flags (flags);	/* all CPUs (overkill?) */
 
 	while (tape->first_stage != NULL)
 		idetape_remove_stage_head (drive);
@@ -2539,8 +2539,8 @@ static void idetape_wait_for_pipeline (ide_drive_t *drive)
 	if (!idetape_pipeline_active (tape))
 		idetape_insert_pipeline_into_queue (drive);
 
-	save_flags (flags);
-	cli ();
+	save_flags (flags);	/* all CPUs (overkill?) */
+	cli();			/* all CPUs (overkill?) */
 	if (!idetape_pipeline_active (tape))
 		goto abort;
 #if IDETAPE_DEBUG_BUGS
@@ -2550,7 +2550,7 @@ static void idetape_wait_for_pipeline (ide_drive_t *drive)
 #endif /* IDETAPE_DEBUG_BUGS */
 	idetape_wait_for_request (&tape->last_stage->rq);
 abort:
-	restore_flags (flags);
+	restore_flags (flags);	/* all CPUs (overkill?) */
 }
 
 static void idetape_pad_zeros (ide_drive_t *drive, int bcount)
@@ -2795,11 +2795,11 @@ static int idetape_space_over_filemarks (ide_drive_t *drive,short mt_op,int mt_c
 			 *	Wait until the first read-ahead request
 			 *	is serviced.
 			 */
-			save_flags (flags);
-			cli ();
+			save_flags (flags);	/* all CPUs (overkill?) */
+			cli();			/* all CPUs (overkill?) */
 			if (tape->active_stage == tape->first_stage)
 				idetape_wait_for_request (tape->active_data_request);
-			restore_flags (flags);
+			restore_flags (flags);	/* all CPUs (overkill?) */
 
 			if (tape->first_stage->rq.errors == IDETAPE_ERROR_FILEMARK)
 				count++;
@@ -3620,14 +3620,14 @@ static int idetape_cleanup (ide_drive_t *drive)
 	int minor = tape->minor;
 	unsigned long flags;
 
-	save_flags (flags);
-	cli ();
+	save_flags (flags);	/* all CPUs (overkill?) */
+	cli();			/* all CPUs (overkill?) */
 	if (test_bit (IDETAPE_BUSY, &tape->flags) || tape->first_stage != NULL || tape->merge_stage_size || drive->usage) {
-		restore_flags(flags);
+		restore_flags(flags);	/* all CPUs (overkill?) */
 		return 1;
 	}
 	idetape_chrdevs[minor].drive = NULL;
-	restore_flags (flags);
+	restore_flags (flags);	/* all CPUs (overkill?) */
 	DRIVER(drive)->busy = 0;
 	(void) ide_unregister_subdriver (drive);
 	drive->driver_data = NULL;

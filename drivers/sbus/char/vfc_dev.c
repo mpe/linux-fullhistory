@@ -205,7 +205,7 @@ static int vfc_debug(struct vfc_dev *dev, int cmd, unsigned long arg)
 	unsigned char *buffer;
 	int ret;
 
-	if(!suser()) return -EPERM;
+	if(!capable(CAP_SYS_ADMIN)) return -EPERM;
 
 	switch(cmd) {
 	case VFC_I2C_SEND:

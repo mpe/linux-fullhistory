@@ -253,7 +253,7 @@ int ip_rt_ioctl(unsigned int cmd, void *arg)
 	switch (cmd) {
 	case SIOCADDRT:		/* Add a route */
 	case SIOCDELRT:		/* Delete a route */
-		if (!suser())
+		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 		if (copy_from_user(&r, arg, sizeof(struct rtentry)))
 			return -EFAULT;

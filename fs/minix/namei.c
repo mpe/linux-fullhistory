@@ -416,7 +416,7 @@ int minix_rmdir(struct inode * dir, struct dentry *dentry)
 
         if ((dir->i_mode & S_ISVTX) &&
             current->fsuid != inode->i_uid &&
-            current->fsuid != dir->i_uid && !fsuser())
+            current->fsuid != dir->i_uid && !capable(CAP_FOWNER))
 		goto end_rmdir;
 	if (inode->i_dev != dir->i_dev)
 		goto end_rmdir;
@@ -482,7 +482,7 @@ repeat:
 	}
 	if ((dir->i_mode & S_ISVTX) &&
 	    current->fsuid != inode->i_uid &&
-	    current->fsuid != dir->i_uid && !fsuser())
+	    current->fsuid != dir->i_uid && !capable(CAP_FOWNER))
 		goto end_unlink;
 	if (de->inode != inode->i_ino) {
 		retval = -ENOENT;
@@ -641,7 +641,7 @@ start_up:
 	retval = -EPERM;
 	if ((old_dir->i_mode & S_ISVTX) && 
 	    current->fsuid != old_inode->i_uid &&
-	    current->fsuid != old_dir->i_uid && !fsuser())
+	    current->fsuid != old_dir->i_uid && !capable(CAP_FOWNER))
 		goto end_rename;
 	new_inode = new_dentry->d_inode;
 	new_bh = minix_find_entry(new_dir, new_dentry->d_name.name,
@@ -673,7 +673,7 @@ start_up:
 	retval = -EPERM;
 	if (new_inode && (new_dir->i_mode & S_ISVTX) && 
 	    current->fsuid != new_inode->i_uid &&
-	    current->fsuid != new_dir->i_uid && !fsuser())
+	    current->fsuid != new_dir->i_uid && !capable(CAP_FOWNER))
 		goto end_rename;
 	if (S_ISDIR(old_inode->i_mode)) {
 		retval = -ENOTDIR;

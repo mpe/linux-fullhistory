@@ -198,8 +198,13 @@ int permission(struct inode * inode,int mask)
 		mode >>= 6;
 	else if (in_group_p(inode->i_gid))
 		mode >>= 3;
-	if (((mode & mask & 0007) == mask) || fsuser())
+	if (((mode & mask & S_IRWXO) == mask) || capable(CAP_DAC_OVERRIDE))
 		return 0;
+	/* read and search access */
+	if ((mask == S_IROTH) ||
+	    (S_ISDIR(mode)  && !(mask & ~(S_IROTH | S_IXOTH))))
+		if (capable(CAP_DAC_READ_SEARCH))
+			return 0;
 	return -EACCES;
 }
 
@@ -706,7 +711,7 @@ asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev)
 
 	lock_kernel();
 	error = -EPERM;
-	if (S_ISDIR(mode) || (!S_ISFIFO(mode) && !fsuser()))
+	if (S_ISDIR(mode) || (!S_ISFIFO(mode) && !capable(CAP_SYS_ADMIN)))
 		goto out;
 	error = -EINVAL;
 	switch (mode & S_IFMT) {

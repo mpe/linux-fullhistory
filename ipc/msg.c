@@ -477,9 +477,10 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 	case IPC_SET:
 		err = -EPERM;
 		if (current->euid != ipcp->cuid && 
-		    current->euid != ipcp->uid && !suser())
+		    current->euid != ipcp->uid && !capable(CAP_SYS_ADMIN))
+		    /* We _could_ check for CAP_CHOWN above, but we don't */
 			goto out;
-		if (tbuf.msg_qbytes > MSGMNB && !suser())
+		if (tbuf.msg_qbytes > MSGMNB && !capable(CAP_SYS_RESOURCE))
 			goto out;
 		msq->msg_qbytes = tbuf.msg_qbytes;
 		ipcp->uid = tbuf.msg_perm.uid;
@@ -492,7 +493,7 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 	case IPC_RMID:
 		err = -EPERM;
 		if (current->euid != ipcp->cuid && 
-		    current->euid != ipcp->uid && !suser())
+		    current->euid != ipcp->uid && !capable(CAP_SYS_ADMIN))
 			goto out;
 
 		freeque (id); 

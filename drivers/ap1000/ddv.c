@@ -856,6 +856,8 @@ static int ddv_ioctl(struct inode *inode, struct file *file,
 
 	case BLKRRPART:
 		printk("\tBLKRRPART\n");
+		if (!capable(CAP_SYS_ADMIN))
+			return -EACCES;
 		return ddv_revalidate(inode->i_rdev,&ddv_gendisk);
 
 	case BLKGETSIZE:   /* Return device size */

@@ -439,6 +439,8 @@ __initfunc(int smp_scan_config(unsigned long base, unsigned long length))
 				{
 					unsigned long cfg;
 
+					/* local APIC has default address */
+					mp_lapic_addr = 0xFEE00000;
 					/*
 					 *	We need to know what the local
 					 *	APIC id of the boot CPU is!

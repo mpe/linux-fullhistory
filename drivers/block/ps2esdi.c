@@ -1091,7 +1091,7 @@ static int ps2esdi_ioctl(struct inode *inode,
 			}
 			break;
 		case BLKRASET:
-			if (!suser())
+			if (!capable(CAP_SYS_ADMIN))
 				return -EACCES;
 			if (!inode->i_rdev)
 				return -EINVAL;
@@ -1109,7 +1109,7 @@ static int ps2esdi_ioctl(struct inode *inode,
 			}
 			break;
 		case BLKFLSBUF:
-			if (!suser())
+			if (!capable(CAP_SYS_ADMIN))
 				return -EACCES;
 			if (!inode->i_rdev)
 				return -EINVAL;
@@ -1118,6 +1118,8 @@ static int ps2esdi_ioctl(struct inode *inode,
 			return 0;
 
 		case BLKRRPART:
+                        if (!capable(CAP_SYS_ADMIN)) 
+				return -EACCES;
 			return (ps2esdi_reread_partitions(inode->i_rdev));
 			RO_IOCTLS(inode->i_rdev, arg);
 		}

@@ -424,17 +424,17 @@ static __inline__ void ide_get_lock (int *ide_lock, void (*handler)(int, void *,
  * works. (Roman)
  */
 #if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA)
-#define	ide_sti()					\
+#define	ide__sti()					\
     do {						\
-	if (!in_interrupt()) sti();			\
+	if (!in_interrupt()) __sti();			\
     } while(0)
 #elif defined(CONFIG_ATARI)
-#define	ide_sti()						\
+#define	ide__sti()						\
     do {							\
 	if (!MACH_IS_ATARI || !in_interrupt()) sti();		\
     } while(0)
 #else /* !defined(CONFIG_ATARI) */
-#define	ide_sti()	sti()
+#define	ide__sti()	__sti()
 #endif
 
 #endif /* __KERNEL__ */

@@ -113,7 +113,7 @@ asmlinkage int irix_prctl(struct pt_regs *regs)
 		       current->comm, current->pid, (unsigned long) value);
 		if(value > RLIM_INFINITY)
 			value = RLIM_INFINITY;
-		if(suser()) {
+		if(capable(CAP_SYS_ADMIN)) {
 			current->rlim[RLIMIT_STACK].rlim_max =
 				current->rlim[RLIMIT_STACK].rlim_cur = value;
 			error = value;
@@ -545,7 +545,7 @@ asmlinkage int irix_stime(int value)
 	int ret;
 
 	lock_kernel();
-	if(!suser()) {
+	if(!capable(CAP_SYS_TIME)) {
 		ret = -EPERM;
 		goto out;
 	}

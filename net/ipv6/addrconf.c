@@ -894,7 +894,7 @@ int addrconf_add_ifaddr(void *arg)
 	struct in6_ifreq ireq;
 	int err;
 	
-	if (!suser())
+	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 	
 	if (copy_from_user(&ireq, arg, sizeof(struct in6_ifreq)))
@@ -911,7 +911,7 @@ int addrconf_del_ifaddr(void *arg)
 	struct in6_ifreq ireq;
 	int err;
 	
-	if (!suser())
+	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 
 	if (copy_from_user(&ireq, arg, sizeof(struct in6_ifreq)))

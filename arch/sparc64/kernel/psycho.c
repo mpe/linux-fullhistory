@@ -2323,7 +2323,7 @@ asmlinkage int sys_pciconfig_read(unsigned long bus,
 	unsigned int uint;
 	int err = 0;
 
-	if(!suser())
+	if(!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
 	lock_kernel();
@@ -2361,7 +2361,7 @@ asmlinkage int sys_pciconfig_write(unsigned long bus,
 	unsigned int uint;
 	int err = 0;
 
-	if(!suser())
+	if(!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
 	lock_kernel();

@@ -89,7 +89,7 @@ static int inet6_create(struct socket *sock, int protocol)
 		prot=&udpv6_prot;
 		sock->ops = &inet6_dgram_ops;
 	} else if(sock->type == SOCK_RAW) {
-		if (!suser()) 
+		if (!capable(CAP_NET_RAW))
 			goto free_and_badperm;
 		if (!protocol) 
 			goto free_and_noproto;
@@ -187,7 +187,7 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	snum = ntohs(addr->sin6_port);
 	if (snum == 0) 
 		snum = sk->prot->good_socknum();
-	if (snum < PROT_SOCK && !suser()) 
+	if (snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
 		return(-EACCES);
 	
 	addr_type = ipv6_addr_type(&addr->sin6_addr);
@@ -291,7 +291,8 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			return err;
 
 		/* see sock_no_fcntl */
-		if (current->pid != pid && current->pgrp != -pid && !suser())
+		if (current->pid != pid && current->pgrp != -pid && 
+		    !capable(CAP_NET_ADMIN))
 			return -EPERM;
 		sk->proc = pid;
 		return(0);

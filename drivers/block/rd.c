@@ -164,7 +164,7 @@ static int rd_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 
 	switch (cmd) {
 		case BLKFLSBUF:
-			if (!suser()) return -EACCES;
+			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
 			invalidate_buffers(inode->i_rdev);
 			break;
          	case BLKGETSIZE:   /* Return device size */

@@ -57,7 +57,7 @@ proc_bus_pci_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 	 * undefined locations (think of Intel PIIX4 as a typical example).
 	 */
 
-	if (fsuser())
+	if (capable(CAP_SYS_ADMIN))
 		size = PCI_CFG_SPACE_SIZE;
 	else if (dev->hdr_type == PCI_HEADER_TYPE_CARDBUS)
 		size = 128;

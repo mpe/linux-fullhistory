@@ -17,19 +17,33 @@
    kernel might be somewhat backwards compatible, but don't bet on
    it. */
 
+/* XXX - Note, cap_t, is defined by POSIX to be an "opaque" pointer to
+   a set of three capability sets.  The transposition of 3*the
+   following structure to such a composite is better handled in a user
+   library since the draft standard requires the use of malloc/free
+   etc.. */
+ 
 #define _LINUX_CAPABILITY_VERSION  0x19980330
 
-typedef struct _user_cap_struct {
+typedef struct __user_cap_header_struct {
 	__u32 version;
-	__u32 size;
-	__u8  cap[1];
-} *cap_t;
-
+	int pid;
+} *cap_user_header_t;
+ 
+typedef struct __user_cap_data_struct {
+        __u32 effective;
+        __u32 permitted;
+        __u32 inheritable;
+} *cap_user_data_t;
+  
 #ifdef __KERNEL__
 
 typedef struct kernel_cap_struct {
-	int cap;
+	__u32 cap;
 } kernel_cap_t;
+  
+#define _USER_CAP_HEADER_SIZE  (2*sizeof(__u32))
+#define _KERNEL_CAP_T_SIZE     (sizeof(kernel_cap_t))
 
 #endif
 
@@ -46,13 +60,13 @@ typedef struct kernel_cap_struct {
 
 /* Override all DAC access, including ACL execute access if
    [_POSIX_ACL] is defined. Excluding DAC access covered by
-   CAP_LINUX_IMMUTABLE */
+   CAP_LINUX_IMMUTABLE. */
 
 #define CAP_DAC_OVERRIDE     1
 
 /* Overrides all DAC restrictions regarding read and search on files
    and directories, including ACL restrictions if [_POSIX_ACL] is
-   defined. Excluding DAC access covered by CAP_LINUX_IMMUTABLE */
+   defined. Excluding DAC access covered by CAP_LINUX_IMMUTABLE. */
 
 #define CAP_DAC_READ_SEARCH  2
     
@@ -82,10 +96,13 @@ typedef struct kernel_cap_struct {
 #define CAP_KILL             5
 
 /* Allows setgid(2) manipulation */
+/* Allows setgroups(2) */
+/* Allows forged gids on socket credentials passing. */
 
 #define CAP_SETGID           6
 
-/* Allows setuid(2) manipulation */
+/* Allows set*uid(2) manipulation (including fsuid). */
+/* Allows forged pids on socket credentials passing. */
 
 #define CAP_SETUID           7
 
@@ -112,9 +129,17 @@ typedef struct kernel_cap_struct {
 #define CAP_NET_BROADCAST    11
 
 /* Allow interface configuration */
-/* Allow configuring of firewall stuff */
+/* Allow administration of IP firewall, masquerading and accounting */
 /* Allow setting debug option on sockets */
 /* Allow modification of routing tables */
+/* Allow setting arbitrary process / process group ownership on
+   sockets */
+/* Allow binding to any address for transparent proxying */
+/* Allow setting TOS (type of service) */
+/* Allow setting promiscuous mode */
+/* Allow clearing driver statistics */
+/* Allow multicasting */
+/* Allow read/write of device-specific registers */
 
 #define CAP_NET_ADMIN        12
 
@@ -123,7 +148,9 @@ typedef struct kernel_cap_struct {
 
 #define CAP_NET_RAW          13
 
-/* Allow locking of segments in memory */
+/* Allow locking of shared memory segments */
+/* Allow mlock and mlockall (which doesn't really have anything to do
+   with IPC) */
 
 #define CAP_IPC_LOCK         14
 
@@ -153,9 +180,42 @@ typedef struct kernel_cap_struct {
 
 /* Allow configuration of the secure attention key */
 /* Allow administration of the random device */
-/* Allow device administration */
+/* Allow device administration (mknod)*/
 /* Allow examination and configuration of disk quotas */
-/* System Admin functions: mount et al */
+/* Allow configuring the kernel's syslog (printk behaviour) */
+/* Allow sending a signal to any process */
+/* Allow setting the domainname */
+/* Allow setting the hostname */
+/* Allow calling bdflush() */
+/* Allow mount() and umount(), setting up new smb connection */
+/* Allow some autofs root ioctls */
+/* Allow nfsservctl */
+/* Allow VM86_REQUEST_IRQ */
+/* Allow to read/write pci config on alpha */
+/* Allow irix_prctl on mips (setstacksize) */
+/* Allow flushing all cache on m68k (sys_cacheflush) */
+/* Allow removing semaphores */
+/* Used instead of CAP_CHOWN to "chown" IPC message queues, semaphores
+   and shared memory */
+/* Allow locking/unlocking of shared memory segment */
+/* Allow turning swap on/off */
+/* Allow forged pids on socket credentials passing */
+/* Allow setting readahead and flushing buffers on block devices */
+/* Allow setting geometry in floppy driver */
+/* Allow turning DMA on/off in xd driver */
+/* Allow administration of md devices (mostly the above, but some
+   extra ioctls) */
+/* Allow tuning the ide driver */
+/* Allow access to the nvram device */
+/* Allow administration of apm_bios, serial and bttv (TV) device */
+/* Allow manufacturer commands in isdn CAPI support driver */
+/* Allow reading non-standardized portions of pci configuration space */
+/* Allow DDI debug ioctl on sbpcd driver */
+/* Allow setting up serial ports */
+/* Allow sending raw qic-117 commands */
+/* Allow enabling/disabling tagged queuing on SCSI controllers and sending
+   arbitrary SCSI commands */
+/* Allow setting encryption key on loopback filesystem */
 
 #define CAP_SYS_ADMIN        21
 
@@ -163,19 +223,34 @@ typedef struct kernel_cap_struct {
 
 #define CAP_SYS_BOOT         22
 
-/* Allow use of renice() on others, and raising of priority */
+/* Allow raising priority and setting priority on other (different
+   UID) processes */
+/* Allow use of FIFO and round-robin (realtime) scheduling on own
+   processes and setting the scheduling algorithm used by another
+   process. */
 
 #define CAP_SYS_NICE         23
 
-/* Override resource limits */
+/* Override resource limits. Set resource limits. */
+/* Override quota limits. */
+/* Override reserved space on ext2 filesystem */
+/* NOTE: ext2 honors fsuid when checking for resource overrides, so 
+   you can override using fsuid too */
+/* Override size restrictions on IPC message queues */
+/* Allow more than 64hz interrupts from the real-time clock */
+/* Override max number of consoles on console allocation */
+/* Override max number of keymaps */
 
 #define CAP_SYS_RESOURCE     24
 
 /* Allow manipulation of system clock */
+/* Allow irix_stime on mips */
+/* Allow setting the real-time clock */
 
 #define CAP_SYS_TIME         25
 
 /* Allow configuration of tty devices */
+/* Allow vhangup() of tty */
 
 #define CAP_SYS_TTY_CONFIG   26
 
@@ -187,17 +262,48 @@ typedef struct kernel_cap_struct {
 
 #define CAP_EMPTY_SET       {  0 }
 #define CAP_FULL_SET        { ~0 }
+#define CAP_INIT_EFF_SET    { ~0 & ~CAP_TO_MASK(CAP_SETPCAP) }
+#define CAP_INIT_INH_SET    { ~0 & ~CAP_TO_MASK(CAP_SETPCAP) }
 
 #define CAP_TO_MASK(x) (1 << (x))
-#define cap_raise(c, flag)   (c.cap |=  CAP_TO_MASK(flag))
-#define cap_lower(c, flag)   (c.cap &= ~CAP_TO_MASK(flag))
-#define cap_raised(c, flag)  (c.cap &   CAP_TO_MASK(flag))
+#define cap_raise(c, flag)   ((c).cap |=  CAP_TO_MASK(flag))
+#define cap_lower(c, flag)   ((c).cap &= ~CAP_TO_MASK(flag))
+#define cap_raised(c, flag)  ((c).cap &   CAP_TO_MASK(flag))
 
-#define cap_isclear(c) (!c.cap)
+static inline kernel_cap_t cap_combine(kernel_cap_t a, kernel_cap_t b)
+{
+     kernel_cap_t dest;
+     dest.cap = a.cap | b.cap;
+     return dest;
+}
 
-#define cap_copy(dest,src) do { (dest).cap = (src).cap; } while(0)
-#define cap_clear(c)       do {  c.cap =  0; } while(0)
-#define cap_set_full(c)    do {  c.cap = ~0; } while(0)
+static inline kernel_cap_t cap_intersect(kernel_cap_t a, kernel_cap_t b)
+{
+     kernel_cap_t dest;
+     dest.cap = a.cap & b.cap;
+     return dest;
+}
+
+static inline kernel_cap_t cap_drop(kernel_cap_t a, kernel_cap_t drop)
+{
+     kernel_cap_t dest;
+     dest.cap = a.cap & ~drop.cap;
+     return dest;
+}
+
+static inline kernel_cap_t cap_invert(kernel_cap_t c)
+{
+     kernel_cap_t dest;
+     dest.cap = ~c.cap;
+     return dest;
+}
+
+#define cap_isclear(c)       (!(c).cap)
+#define cap_issubset(a,set)  (!((a).cap & ~(set).cap))
+
+#define cap_clear(c)         do { (c).cap =  0; } while(0)
+#define cap_set_full(c)      do { (c).cap = ~0; } while(0)
+#define cap_mask(c,mask)     do { (c).cap &= (mask).cap; } while(0)
 
 #define cap_is_fs_cap(c)     ((c) & CAP_FS_MASK)
 

@@ -322,7 +322,7 @@ int dlci_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 {
 	struct dlci_local *dlp;
 
-	if (!suser())
+	if (!capable(CAP_NET_ADMIN))
 		return(-EPERM);
 
 	dlp = dev->priv;
@@ -542,7 +542,7 @@ int dlci_ioctl(unsigned int cmd, void *arg)
 	struct dlci_add add;
 	int err;
 	
-	if (!suser())
+	if (!capable(CAP_NET_ADMIN))
 		return(-EPERM);
 
 	if(copy_from_user(&add, arg, sizeof(struct dlci_add)))

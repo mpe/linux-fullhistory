@@ -45,18 +45,15 @@
 
 static __inline__ int scm_check_creds(struct ucred *creds)
 {
-	/* N.B. The test for suser should follow the credential check */
-	if (suser())
+	if ((creds->pid == current->pid || capable(CAP_SYS_ADMIN)) &&
+	    ((creds->uid == current->uid || creds->uid == current->euid ||
+	      creds->uid == current->suid) || capable(CAP_SETUID)) &&
+	    ((creds->gid == current->gid || creds->gid == current->egid ||
+	      creds->gid == current->sgid) || capable(CAP_SETGID))) {
 		return 0;
-	if (creds->pid != current->pid ||
-	    (creds->uid != current->uid && creds->uid != current->euid &&
-	     creds->uid != current->suid) ||
-	    (creds->gid != current->gid && creds->gid != current->egid &&
-	     creds->gid != current->sgid))
-		return -EPERM;
-	return 0;
+	}
+	return -EPERM;
 }
-
 
 static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 {

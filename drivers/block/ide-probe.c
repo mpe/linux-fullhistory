@@ -47,7 +47,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 
 	id = drive->id = kmalloc (SECTOR_WORDS*4, GFP_KERNEL);
 	ide_input_data(drive, id, SECTOR_WORDS);	/* read 512 bytes of id info */
-	sti();
+	ide__sti();	/* local CPU only */
 	ide_fix_driveid(id);
 
 #if defined (CONFIG_SCSI_EATA_DMA) || defined (CONFIG_SCSI_EATA_PIO) || defined (CONFIG_SCSI_EATA)
@@ -195,12 +195,12 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 	delay_50ms();		/* wait for IRQ and DRQ_STAT */
 	if (OK_STAT(GET_STAT(),DRQ_STAT,BAD_R_STAT)) {
 		unsigned long flags;
-		save_flags(flags);
-		cli();			/* some systems need this */
+		__save_flags(flags);	/* local CPU only */
+		__cli();		/* local CPU only; some systems need this */
 		do_identify(drive, cmd); /* drive returned ID */
 		rc = 0;			/* drive responded with ID */
 		(void) GET_STAT();	/* clear drive IRQ */
-		restore_flags(flags);
+		__restore_flags(flags);	/* local CPU only */
 	} else
 		rc = 2;			/* drive refused ID */
 	if (!HWIF(drive)->irq) {
@@ -398,8 +398,8 @@ static void probe_hwif (ide_hwif_t *hwif)
 		return;	
 	}
 
-	save_flags(flags);
-	sti();	/* needed for jiffies and irq probing */
+	__save_flags(flags);	/* local CPU only */
+	__sti();		/* local CPU only; needed for jiffies and irq probing */
 	/*
 	 * Second drive should only exist if first drive was found,
 	 * but a lot of cdrom drives are configured as single slaves.
@@ -429,7 +429,7 @@ static void probe_hwif (ide_hwif_t *hwif)
 		} while ((stat & BUSY_STAT) && 0 < (signed long)(timeout - jiffies));
 
 	}
-	restore_flags(flags);
+	__restore_flags(flags);	/* local CPU only */
 	for (unit = 0; unit < MAX_DRIVES; ++unit) {
 		ide_drive_t *drive = &hwif->drives[unit];
 		if (drive->present) {
@@ -486,8 +486,8 @@ static int init_irq (ide_hwif_t *hwif)
 	ide_hwgroup_t *hwgroup;
 	ide_hwif_t *match = NULL;
 
-	save_flags(flags);
-	cli();
+	save_flags(flags);	/* all CPUs */
+	cli();			/* all CPUs */
 
 	hwif->hwgroup = NULL;
 #if MAX_HWIFS > 1
@@ -499,7 +499,9 @@ static int init_irq (ide_hwif_t *hwif)
 		if (h->hwgroup) {  /* scan only initialized hwif's */
 			if (hwif->irq == h->irq) {
 				hwif->sharing_irq = h->sharing_irq = 1;
-				save_match(hwif, h, &match);
+				if (hwif->chipset != ide_pci || h->chipset != ide_pci) {
+					save_match(hwif, h, &match);
+				}
 			}
 			if (hwif->serialized) {
 				if (hwif->mate && hwif->mate->irq == h->irq)
@@ -520,10 +522,15 @@ static int init_irq (ide_hwif_t *hwif)
 	} else {
 		hwgroup = kmalloc(sizeof(ide_hwgroup_t), GFP_KERNEL);
 		memset(hwgroup, 0, sizeof(ide_hwgroup_t));
-		hwgroup->hwif 	 = hwif->next = hwif;
-		hwgroup->rq      = NULL;
-		hwgroup->handler = NULL;
-		hwgroup->drive   = NULL;
+		hwgroup->hwif     = hwif->next = hwif;
+		hwgroup->rq       = NULL;
+		hwgroup->handler  = NULL;
+		hwgroup->drive    = NULL;
+		hwgroup->busy     = 0;
+		hwgroup->spinlock = (spinlock_t)SPIN_LOCK_UNLOCKED;
+#if (DEBUG_SPINLOCK > 0)
+		printk("hwgroup(%s) spinlock is %p\n", hwif->name,  &hwgroup->spinlock);	/* FIXME */
+#endif
 		init_timer(&hwgroup->timer);
 		hwgroup->timer.function = &ide_timer_expiry;
 		hwgroup->timer.data = (unsigned long) hwgroup;
@@ -533,10 +540,11 @@ static int init_irq (ide_hwif_t *hwif)
 	 * Allocate the irq, if not already obtained for another hwif
 	 */
 	if (!match || match->irq != hwif->irq) {
-		if (ide_request_irq(hwif->irq, &ide_intr, SA_INTERRUPT, hwif->name, hwgroup)) {
+		int sa = (hwif->chipset == ide_pci) ? SA_INTERRUPT|SA_SHIRQ : SA_INTERRUPT;
+		if (ide_request_irq(hwif->irq, &ide_intr, sa, hwif->name, hwgroup)) {
 			if (!match)
 				kfree(hwgroup);
-			restore_flags(flags);
+			restore_flags(flags);	/* all CPUs */
 			return 1;
 		}
 	}
@@ -558,7 +566,7 @@ static int init_irq (ide_hwif_t *hwif)
 		hwgroup->drive->next = drive;
 	}
 	hwgroup->hwif = HWIF(hwgroup->drive);
-	restore_flags(flags);	/* safe now that hwif->hwgroup is set up */
+	restore_flags(flags);	/* all CPUs; safe now that hwif->hwgroup is set up */
 
 #ifndef __mc68000__
 	printk("%s at 0x%03x-0x%03x,0x%03x on irq %d", hwif->name,
@@ -685,13 +693,17 @@ static int hwif_init (ide_hwif_t *hwif)
 		read_ahead[hwif->major] = 8;	/* (4kB) */
 		hwif->present = 1;	/* success */
 	}
+#if (DEBUG_SPINLOCK > 0)
+{
+	static int done = 0;
+	if (!done++)
+		printk("io_request_lock is %p\n", &io_request_lock);    /* FIXME */
+}
+#endif
 	return hwif->present;
 }
 
-
-int ideprobe_init(void);
-
-
+int ideprobe_init (void);
 static ide_module_t ideprobe_module = {
 	IDE_PROBE_MODULE,
 	ideprobe_init,

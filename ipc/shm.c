@@ -306,7 +306,7 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 	switch (cmd) {
 	case SHM_UNLOCK:
 		err = -EPERM;
-		if (!suser())
+		if (!capable(CAP_IPC_LOCK))
 			goto out;
 		err = -EINVAL;
 		if (!(ipcp->mode & SHM_LOCKED))
@@ -318,7 +318,7 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 /* Should the pages be faulted in here or leave it to user? */
 /* need to determine interaction with current->swappable */
 		err = -EPERM;
-		if (!suser())
+		if (!capable(CAP_IPC_LOCK))
 			goto out;
 		err = -EINVAL;
 		if (ipcp->mode & SHM_LOCKED)
@@ -347,7 +347,8 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		break;
 	case IPC_SET:
 		if (current->euid == shp->shm_perm.uid ||
-		    current->euid == shp->shm_perm.cuid || suser()) {
+		    current->euid == shp->shm_perm.cuid || 
+		    capable(CAP_SYS_ADMIN)) {
 			ipcp->uid = tbuf.shm_perm.uid;
 			ipcp->gid = tbuf.shm_perm.gid;
 			ipcp->mode = (ipcp->mode & ~S_IRWXUGO)
@@ -359,7 +360,8 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		goto out;
 	case IPC_RMID:
 		if (current->euid == shp->shm_perm.uid ||
-		    current->euid == shp->shm_perm.cuid || suser()) {
+		    current->euid == shp->shm_perm.cuid || 
+		    capable(CAP_SYS_ADMIN)) {
 			shp->shm_perm.mode |= SHM_DEST;
 			if (shp->shm_nattch <= 0)
 				killseg (id);

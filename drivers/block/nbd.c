@@ -316,7 +316,7 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 	struct nbd_device *lo;
 	int dev, error;
 
-	if (!suser())
+	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	if (!inode)
 		return -EINVAL;

@@ -329,7 +329,8 @@ static int eql_close(struct device *dev)
 
 static int eql_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 {  
-	if(cmd!=EQL_GETMASTRCFG && cmd!=EQL_GETSLAVECFG && !suser())
+	if(cmd!=EQL_GETMASTRCFG && cmd!=EQL_GETSLAVECFG && 
+	   !capable(CAP_NET_ADMIN))
 	  	return -EPERM;
 	switch (cmd)
 	{
