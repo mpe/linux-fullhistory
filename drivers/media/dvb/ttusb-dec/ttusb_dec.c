@@ -62,7 +62,7 @@ MODULE_PARM_DESC(output_pva, "Output PVA from dvr device (default:off)");
 
 #define ISO_BUF_COUNT		0x04
 #define FRAMES_PER_ISO_BUF	0x04
-#define ISO_FRAME_SIZE		0x03FF
+#define ISO_FRAME_SIZE		0x0380
 
 #define	MAX_PVA_LENGTH		6144
 
@@ -781,7 +781,7 @@ static int ttusb_dec_set_interface(struct ttusb_dec *dec,
 							b, NULL, NULL);
 			if (result)
 				return result;
-			result = usb_set_interface(dec->udev, 0, 7);
+			result = usb_set_interface(dec->udev, 0, 8);
 			break;
 		case TTUSB_DEC_INTERFACE_OUT:
 			result = usb_set_interface(dec->udev, 0, 1);
