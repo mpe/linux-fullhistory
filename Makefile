@@ -112,7 +112,7 @@ linuxsubdirs: dummy
 
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.97.pl3-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.97.pl4-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h

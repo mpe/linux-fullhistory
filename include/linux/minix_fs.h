@@ -63,7 +63,7 @@ extern struct inode * minix_new_inode(int dev);
 extern void minix_free_inode(struct inode * inode);
 extern unsigned long minix_count_free_inodes(struct super_block *sb);
 extern int minix_new_block(int dev);
-extern int minix_free_block(int dev, int block);
+extern void minix_free_block(int dev, int block);
 extern unsigned long minix_count_free_blocks(struct super_block *sb);
 
 extern int minix_bmap(struct inode *,int);

@@ -26,111 +26,159 @@
 
 static int trunc_direct(struct inode * inode)
 {
-	int i;
-	int result = 0;
+	struct buffer_head * bh;
+	int i, tmp;
+	int retry = 0;
 #define DIRECT_BLOCK ((inode->i_size + 1023) >> 10)
 
 repeat:
 	for (i = DIRECT_BLOCK ; i < 7 ; i++) {
-		if (i < DIRECT_BLOCK)
-			goto repeat;
-		if (!inode->i_data[i])
+		tmp = inode->i_data[i];
+		if (!tmp)
 			continue;
-		result = 1;
-		if (minix_free_block(inode->i_dev,inode->i_data[i]))
-			inode->i_data[i] = 0;
+		bh = getblk(inode->i_dev,tmp,BLOCK_SIZE);
+		if (i < DIRECT_BLOCK) {
+			brelse(bh);
+			goto repeat;
+		}
+		if ((bh && bh->b_count != 1) || tmp != inode->i_data[i]) {
+			retry = 1;
+			brelse(bh);
+			continue;
+		}
+		inode->i_data[i] = 0;
+		inode->i_dirt = 1;
+		brelse(bh);
+		minix_free_block(inode->i_dev,tmp);
 	}
-	return result;
+	return retry;
 }
 
 static int trunc_indirect(struct inode * inode, int offset, unsigned short * p)
 {
-	int i;
-	struct buffer_head * bh = NULL;
+	struct buffer_head * bh;
+	int i, tmp;
+	struct buffer_head * ind_bh;
 	unsigned short * ind;
-	int result = 0;
+	int retry = 0;
 #define INDIRECT_BLOCK (DIRECT_BLOCK-offset)
 
-	if (*p)
-		bh = bread(inode->i_dev, *p, BLOCK_SIZE);
-	if (!bh)
+	tmp = *p;
+	if (!tmp)
 		return 0;
+	ind_bh = bread(inode->i_dev, tmp, BLOCK_SIZE);
+	if (tmp != *p) {
+		brelse(ind_bh);
+		return 1;
+	}
+	if (!ind_bh) {
+		*p = 0;
+		return 0;
+	}
 repeat:
 	for (i = INDIRECT_BLOCK ; i < 512 ; i++) {
 		if (i < 0)
 			i = 0;
 		if (i < INDIRECT_BLOCK)
 			goto repeat;
-		ind = i+(unsigned short *) bh->b_data;
-		if (!*ind)
+		ind = i+(unsigned short *) ind_bh->b_data;
+		tmp = *ind;
+		if (!tmp)
 			continue;
-		result = 1;
-		if (minix_free_block(inode->i_dev,*ind))
-			*ind = 0;
+		bh = getblk(inode->i_dev,tmp,BLOCK_SIZE);
+		if (i < INDIRECT_BLOCK) {
+			brelse(bh);
+			goto repeat;
+		}
+		if ((bh && bh->b_count != 1) || tmp != *ind) {
+			retry = 1;
+			brelse(bh);
+			continue;
+		}
+		*ind = 0;
+		ind_bh->b_dirt = 1;
+		brelse(bh);
+		minix_free_block(inode->i_dev,tmp);
 	}
-	ind = (unsigned short *) bh->b_data;
+	ind = (unsigned short *) ind_bh->b_data;
 	for (i = 0; i < 512; i++)
 		if (*(ind++))
 			break;
-	brelse(bh);
-	if (i >= 512) {
-		result = 1;
-		if (minix_free_block(inode->i_dev,*p))
+	if (i >= 512)
+		if (ind_bh->b_count != 1)
+			retry = 1;
+		else {
+			tmp = *p;
 			*p = 0;
-	}
-	return result;
+			minix_free_block(inode->i_dev,tmp);
+		}
+	brelse(ind_bh);
+	return retry;
 }
 		
 static int trunc_dindirect(struct inode * inode)
 {
-	int i;
-	struct buffer_head * bh = NULL;
+	int i, tmp;
+	struct buffer_head * dind_bh;
 	unsigned short * dind;
-	int result = 0;
+	int retry = 0;
 #define DINDIRECT_BLOCK ((DIRECT_BLOCK-(512+7))>>9)
 
-	if (inode->i_data[8])
-		bh = bread(inode->i_dev, inode->i_data[8], BLOCK_SIZE);
-	if (!bh)
+	tmp = inode->i_data[8];
+	if (!tmp)
 		return 0;
+	dind_bh = bread(inode->i_dev, tmp, BLOCK_SIZE);
+	if (tmp != inode->i_data[8]) {
+		brelse(dind_bh);
+		return 1;
+	}
+	if (!dind_bh) {
+		inode->i_data[8] = 0;
+		return 0;
+	}
 repeat:
 	for (i = DINDIRECT_BLOCK ; i < 512 ; i ++) {
 		if (i < 0)
 			i = 0;
 		if (i < DINDIRECT_BLOCK)
 			goto repeat;
-		dind = i+(unsigned short *) bh->b_data;
-		if (!*dind)
-			continue;
-		result |= trunc_indirect(inode,7+512+(i<<9),dind);
+		dind = i+(unsigned short *) dind_bh->b_data;
+		retry |= trunc_indirect(inode,7+512+(i<<9),dind);
+		dind_bh->b_dirt = 1;
 	}
-	dind = (unsigned short *) bh->b_data;
+	dind = (unsigned short *) dind_bh->b_data;
 	for (i = 0; i < 512; i++)
 		if (*(dind++))
 			break;
-	brelse(bh);
-	if (i >= 512) {
-		result = 1;
-		if (minix_free_block(inode->i_dev,inode->i_data[8]))
+	if (i >= 512)
+		if (dind_bh->b_count != 1)
+			retry = 1;
+		else {
+			tmp = inode->i_data[8];
 			inode->i_data[8] = 0;
-	}
-	return result;
+			inode->i_dirt = 1;
+			minix_free_block(inode->i_dev,tmp);
+		}
+	brelse(dind_bh);
+	return retry;
 }
 		
 void minix_truncate(struct inode * inode)
 {
-	int flag;
+	int retry;
 
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 	     S_ISLNK(inode->i_mode)))
 		return;
-	if (inode->i_data[7] & 0xffff0000)
+	if (inode->i_data[7] & 0xffff0000) {
 		printk("BAD! minix inode has 16 high bits set\n");
+		inode->i_data[7] = 0;
+	}
 	while (1) {
-		flag = trunc_direct(inode);
-		flag |= trunc_indirect(inode,7,(unsigned short *)&inode->i_data[7]);
-		flag |= trunc_dindirect(inode);
-		if (!flag)
+		retry = trunc_direct(inode);
+		retry |= trunc_indirect(inode,7,(unsigned short *)&inode->i_data[7]);
+		retry |= trunc_dindirect(inode);
+		if (!retry)
 			break;
 		current->counter = 0;
 		schedule();

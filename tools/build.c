@@ -80,12 +80,6 @@ int main(int argc, char ** argv)
 		minor_root = DEFAULT_MINOR_ROOT;
 	}
 	fprintf(stderr, "Root device is (%d, %d)\n", major_root, minor_root);
-	if ((major_root != 2) && (major_root != 3) &&
-	    (major_root != 8) && (major_root != 0)) {
-		fprintf(stderr, "Illegal root device (major = %d)\n",
-			major_root);
-		die("Bad root device --- major #");
-	}
 	for (i=0;i<sizeof buf; i++) buf[i]=0;
 	if ((id=open(argv[1],O_RDONLY,0))<0)
 		die("Unable to open 'boot'");
