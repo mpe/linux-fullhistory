@@ -871,8 +871,7 @@ static inline void wv_82586_reconfig(device * dev)
 	net_local *lp = (net_local *) dev->priv;
 
 	/* Check if we can do it now ! */
-	if (!test_bit(LINK_STATE_START, &dev->state) &&
-	    test_bit(LINK_STATE_XOFF, &dev->state)) {
+	if (!netif_running(dev) && netif_queue_stopped(dev)) {
 		lp->reconfig_82586 = 1;
 #ifdef DEBUG_CONFIG_INFO
 		printk(KERN_DEBUG
@@ -3713,7 +3712,7 @@ static void wavelan_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	/* Check the state of the command unit. */
 	if (((status & SCB_ST_CNA) == SCB_ST_CNA) ||
-	    (((status & SCB_ST_CUS) != SCB_ST_CUS_ACTV) && test_bit(LINK_STATE_START, &dev->state))) {
+	    (((status & SCB_ST_CUS) != SCB_ST_CUS_ACTV) && netif_running(dev))) {
 #ifdef DEBUG_INTERRUPT_ERROR
 		printk(KERN_INFO
 		       "%s: wavelan_interrupt(): CU inactive -- restarting\n",
@@ -3724,7 +3723,7 @@ static void wavelan_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	/* Check the state of the command unit. */
 	if (((status & SCB_ST_RNR) == SCB_ST_RNR) ||
-	    (((status & SCB_ST_RUS) != SCB_ST_RUS_RDY) && test_bit(LINK_STATE_START, &dev->state))) {
+	    (((status & SCB_ST_RUS) != SCB_ST_RUS_RDY) && netif_running(dev))) {
 #ifdef DEBUG_INTERRUPT_ERROR
 		printk(KERN_INFO
 		       "%s: wavelan_interrupt(): RU not ready -- restarting\n",

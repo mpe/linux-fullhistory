@@ -965,7 +965,7 @@ plip_tx_packet(struct sk_buff *skb, struct net_device *dev)
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct plip_local *snd = &nl->snd_data;
 
-	if (test_bit(LINK_STATE_XOFF, &dev->flags))
+	if (netif_queue_stopped(dev))
 		return 1;
 
 	/* We may need to grab the bus */

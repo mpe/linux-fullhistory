@@ -245,10 +245,10 @@ typedef struct {
  * Mode status
  */
 
-#define ACE_BYTE_SWAP_DATA	0x10
+#define ACE_BYTE_SWAP_BD	0x02
+#define ACE_WORD_SWAP_BD	0x04		/* not actually used */
 #define ACE_WARN		0x08
-#define ACE_WORD_SWAP		0x04
-#define ACE_BYTE_SWAP		0x02
+#define ACE_BYTE_SWAP_DMA	0x10
 #define ACE_NO_JUMBO_FRAG	0x200
 #define ACE_FATAL		0x40000000
 
@@ -298,7 +298,7 @@ typedef struct {
 #define EVT_RING_SIZE	(EVT_RING_ENTRIES * sizeof(struct event))
 
 struct event {
-#ifdef __LITTLE_ENDIAN
+#ifdef __LITTLE_ENDIAN_BITFIELD
 	u32	idx:12;
 	u32	code:12;
 	u32	evt:8;
@@ -344,7 +344,7 @@ struct event {
 #define CMD_RING_ENTRIES	64
 
 struct cmd {
-#ifdef __LITTLE_ENDIAN
+#ifdef __LITTLE_ENDIAN_BITFIELD
 	u32	idx:12;
 	u32	code:12;
 	u32	evt:8;
@@ -594,7 +594,8 @@ struct ace_private
 {
 	struct ace_skb		*skb;
 	struct ace_regs		*regs;		/* register base */
-	int			version, fw_running, fw_up, link;
+	volatile int		fw_running;
+	int			version, fw_up, link;
 	int			promisc, mcast_all;
 	/*
 	 * The send ring is located in the shared memory window
@@ -648,31 +649,20 @@ struct ace_private
 
 static inline void set_aceaddr(aceaddr *aa, dma_addr_t addr)
 {
+	unsigned long baddr = (unsigned long) addr;
 #if (BITS_PER_LONG == 64)
-	aa->addrlo = addr & 0xffffffff;
-	aa->addrhi = addr >> 32;
+	aa->addrlo = baddr & 0xffffffff;
+	aa->addrhi = baddr >> 32;
 #else
-    /* Don't bother setting zero every time */
-	aa->addrlo = addr;
+	/* Don't bother setting zero every time */
+	aa->addrlo = baddr;
 #endif
 	mb();
 }
 
 
+#if 0
 static inline void *get_aceaddr(aceaddr *aa)
-{
-	unsigned long addr;
-	mb();
-#if (BITS_PER_LONG == 64)
-	addr = (u64)aa->addrhi << 32 | aa->addrlo;
-#else
-	addr = aa->addrlo;
-#endif
-	return bus_to_virt(addr);
-}
-
-
-static inline void *get_aceaddr_bus(aceaddr *aa)
 {
 	unsigned long addr;
 	mb();
@@ -683,6 +673,7 @@ static inline void *get_aceaddr_bus(aceaddr *aa)
 #endif
 	return (void *)addr;
 }
+#endif
 
 
 static inline void ace_set_txprd(struct ace_regs *regs,

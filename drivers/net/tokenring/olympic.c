@@ -1152,7 +1152,7 @@ static int olympic_set_mac_address (struct net_device *dev, void *addr)
 	struct sockaddr *saddr = addr ; 
 	struct olympic_private *olympic_priv = (struct olympic_private *)dev->priv ; 
 
-	if (test_bit(LINK_STATE_START, &dev->state)) { 
+	if (netif_running(dev)) { 
 		printk(KERN_WARNING "%s: Cannot set mac/laa address while card is open\n", dev->name) ; 
 		return -EIO ; 
 	}

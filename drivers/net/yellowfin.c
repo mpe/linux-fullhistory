@@ -851,7 +851,7 @@ static void yellowfin_interrupt(int irq, void *dev_instance, struct pt_regs *reg
 	/* Code that should never be run!  Perhaps remove after testing.. */
 	{
 		static int stopit = 10;
-		if ((!(test_bit(LINK_STATE_START, &dev->state)))  &&  --stopit < 0) {
+		if ((!(netif_running(dev)))  &&  --stopit < 0) {
 			printk(KERN_ERR "%s: Emergency stop, looping startup interrupt.\n",
 				   dev->name);
 			free_irq(irq, dev);

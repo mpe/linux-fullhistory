@@ -2589,8 +2589,8 @@ static int DAC960_IOCTL(Inode_T *Inode, File_T *File,
 		      (long *) Argument);
     case BLKRAGET:
       /* Get Read-Ahead. */
-      if ((int *) Argument == NULL) return -EINVAL;
-      return put_user(read_ahead[MAJOR(Inode->i_rdev)], (int *) Argument);
+      if ((long *) Argument == NULL) return -EINVAL;
+      return put_user(read_ahead[MAJOR(Inode->i_rdev)], (long *) Argument);
     case BLKRASET:
       /* Set Read-Ahead. */
       if (!capable(CAP_SYS_ADMIN)) return -EACCES;

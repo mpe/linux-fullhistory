@@ -253,7 +253,7 @@ void blk_init_queue(request_queue_t * q, request_fn_proc * rfn)
 	INIT_LIST_HEAD(&q->queue_head);
 	q->elevator = ELEVATOR_DEFAULTS;
 	q->request_fn     	= rfn;
-	q->back_merges_fn       	= ll_back_merge_fn;
+	q->back_merge_fn       	= ll_back_merge_fn;
 	q->front_merge_fn      	= ll_front_merge_fn;
 	q->merge_requests_fn	= ll_merge_requests_fn;
 	q->make_request_fn	= NULL;
@@ -469,22 +469,17 @@ static inline int elevator_sequence(elevator_t * e, int latency)
 #define elevator_merge_after(q, req, lat)	__elevator_merge((q), (req), (lat), 1)
 static inline void __elevator_merge(request_queue_t * q, struct request * req, int latency, int after)
 {
-#ifdef DEBUG_ELEVATOR
 	int sequence = elevator_sequence(&q->elevator, latency);
 	if (after)
 		sequence -= req->nr_segments;
 	if (elevator_sequence_before(sequence, req->elevator_sequence)) {
-		static int warned = 0;
-		if (!warned) {
+		if (!after)
 			printk(KERN_WARNING __FUNCTION__
 			       ": req latency %d req latency %d\n",
 			       req->elevator_sequence - q->elevator.sequence,
 			       sequence - q->elevator.sequence);
-			warned = 1;
-		}
 		req->elevator_sequence = sequence;
 	}
-#endif
 }
 
 static inline void elevator_queue(request_queue_t * q,
@@ -679,7 +674,7 @@ static inline void __make_request(request_queue_t * q, int rw,
 	int rw_ahead, max_req, max_sectors;
 	unsigned long flags;
 	int orig_latency, latency, __latency, starving, __starving, empty;
-	struct list_head * entry, * __entry;
+	struct list_head * entry, * __entry = NULL;
 
 	count = bh->b_size >> 9;
 	sector = bh->b_rsector;

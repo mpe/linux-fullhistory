@@ -1852,7 +1852,7 @@ static struct net_device_stats *vortex_get_stats(struct net_device *dev)
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	unsigned long flags;
 
-	if (test_bit(LINK_STATE_START, &dev->state)) {
+	if (netif_running(dev)) {
 		save_flags(flags);
 		cli();
 		update_stats(dev->base_addr, dev);

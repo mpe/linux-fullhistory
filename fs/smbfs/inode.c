@@ -483,16 +483,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name,
 					 attr->ia_size);
 		if (error)
 			goto out;
-		/*
-		 * We don't implement an i_op->truncate operation,
-		 * so we have to update the page cache here.
-		 */
-		if (attr->ia_size < inode->i_size)
-		{
-			/* must die */
-			truncate_inode_pages(inode->i_mapping, attr->ia_size);
-			inode->i_size = attr->ia_size;
-		}
+		vmtruncate(inode, attr->ia_size);
 		refresh = 1;
 	}
 
@@ -563,8 +554,6 @@ dentry->d_parent->d_name.name, dentry->d_name.name, fattr.f_mode,attr->ia_mode);
 out:
 	if (refresh)
 		smb_refresh_inode(dentry);
-	if (!error && (attr->ia_valid & ATTR_SIZE))
-		vmtruncate(inode, attr->ia_size);
 	return error;
 }
 

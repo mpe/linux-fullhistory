@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.31 2000/02/08 05:11:38 jj Exp $ */
+/* $Id: io.h,v 1.32 2000/02/15 10:04:54 jj Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -82,6 +82,10 @@ extern __inline__ void outl(unsigned int l, unsigned long addr)
 
 #define inb_p inb
 #define outb_p outb
+#define inw_p inw
+#define outw_p outw
+#define inl_p inl
+#define outl_p outl
 
 extern void outsb(unsigned long addr, const void *src, unsigned long count);
 extern void outsw(unsigned long addr, const void *src, unsigned long count);

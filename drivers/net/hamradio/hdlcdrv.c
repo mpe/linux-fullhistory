@@ -656,7 +656,7 @@ static int hdlcdrv_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case HDLCDRVCTL_SETMODEMPAR:
-		if ((!suser()) || test_bit(LINK_STATE_START, &dev->state))
+		if ((!suser()) || netif_running(dev))
 			return -EACCES;
 		dev->base_addr = bi.data.mp.iobase;
 		dev->irq = bi.data.mp.irq;

@@ -361,7 +361,8 @@ static inline unsigned int send_pcb_fast(unsigned int base_addr, unsigned char b
 static inline void prime_rx(struct net_device *dev)
 {
 	elp_device *adapter = dev->priv;
-	while (adapter->rx_active < ELP_RX_PCBS && test_bit(LINK_STATE_START, &dev->state)) {
+	while (adapter->rx_active < ELP_RX_PCBS &&
+	       netif_running(dev->state)) {
 		if (!start_receive(dev, &adapter->itx_pcb))
 			break;
 	}
@@ -722,7 +723,7 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 				case 0xff:
 				case CMD_RECEIVE_PACKET_COMPLETE:
 					/* if the device isn't open, don't pass packets up the stack */
-					if (test_bit(LINK_STATE_START, &dev->state) == 0)
+					if (!netif_running(dev))
 						break;
 					len = adapter->irx_pcb.data.rcv_resp.pkt_len;
 					dlen = adapter->irx_pcb.data.rcv_resp.buf_len;
@@ -806,7 +807,7 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 				case CMD_TRANSMIT_PACKET_COMPLETE:
 					if (elp_debug >= 3)
 						printk("%s: interrupt - packet sent\n", dev->name);
-					if (test_bit(LINK_STATE_START, &dev->state) == 0)
+					if (!netif_running(dev))
 						break;
 					switch (adapter->irx_pcb.data.xmit_resp.c_stat) {
 					case 0xffff:
@@ -1121,7 +1122,7 @@ static struct net_device_stats *elp_get_stats(struct net_device *dev)
 
 	/* If the device is closed, just return the latest stats we have,
 	   - we cannot ask from the adapter without interrupts */
-	if (!test_bit(LINK_STATE_START, &dev->state))
+	if (!netif_running(dev))
 		return &adapter->stats;
 
 	/* send a get statistics command to the board */

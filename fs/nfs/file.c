@@ -165,11 +165,16 @@ static int nfs_prepare_write(struct page *page, unsigned offset, unsigned to)
 static int nfs_commit_write(struct file *file, struct page *page, unsigned offset, unsigned to)
 {
 	long status;
+	loff_t pos = ((loff_t)page->index<<PAGE_CACHE_SHIFT) + to;
+	struct inode *inode = (struct inode*)page->mapping->host;
 
 	kunmap(page);
 	lock_kernel();
 	status = nfs_updatepage(file, page, offset, to-offset);
 	unlock_kernel();
+	/* most likely it's already done. CHECKME */
+	if (pos > inode->i_size)
+		inode->i_size = pos;
 	return status;
 }
 

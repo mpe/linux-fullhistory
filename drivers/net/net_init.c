@@ -153,7 +153,7 @@ struct net_device *init_etherdev(struct net_device *dev, int sizeof_priv)
 static int eth_mac_addr(struct net_device *dev, void *p)
 {
 	struct sockaddr *addr=p;
-	if(test_bit(LINK_STATE_START, &dev->state))
+	if (netif_running(dev))
 		return -EBUSY;
 	memcpy(dev->dev_addr, addr->sa_data,dev->addr_len);
 	return 0;
@@ -200,7 +200,7 @@ static int hippi_change_mtu(struct net_device *dev, int new_mtu)
 static int hippi_mac_addr(struct net_device *dev, void *p)
 {
 	struct sockaddr *addr = p;
-	if(test_bit(LINK_STATE_START, &dev->state))
+	if (netif_running(dev))
 		return -EBUSY;
 	memcpy(dev->dev_addr, addr->sa_data, dev->addr_len);
 	return 0;

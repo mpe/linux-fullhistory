@@ -502,6 +502,7 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	SCpnt->target = SDpnt->id;
 	SCpnt->lun = SDpnt->lun;
 	SCpnt->channel = SDpnt->channel;
+	SCpnt->sc_data_direction = SCSI_DATA_NONE;
 
 	scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
 	          (void *) NULL,
@@ -539,6 +540,7 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	scsi_cmd[4] = 255;
 	scsi_cmd[5] = 0;
 	SCpnt->cmd_len = 0;
+	SCpnt->sc_data_direction = SCSI_DATA_READ;
 
 	scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
 	          (void *) scsi_result,
@@ -703,6 +705,7 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 		scsi_cmd[4] = 0x2a;
 		scsi_cmd[5] = 0;
 		SCpnt->cmd_len = 0;
+		SCpnt->sc_data_direction = SCSI_DATA_NONE;
 		scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
 	        	(void *) scsi_result, 0x2a,
 	        	SCSI_TIMEOUT, 3);

@@ -296,8 +296,7 @@ restart:
 		
 		if (slave->qdisc_sleeping != q)
 			continue;
-		if (test_bit(LINK_STATE_XOFF, &slave->state) ||
-		    test_bit(LINK_STATE_DOWN, &slave->state)) {
+		if (netif_queue_stopped(slave) || ! netif_running(slave)) {
 			busy = 1;
 			continue;
 		}
@@ -306,7 +305,7 @@ restart:
 		case 0:
 			if (spin_trylock(&slave->xmit_lock)) {
 				slave->xmit_lock_owner = smp_processor_id();
-				if (!test_bit(LINK_STATE_XOFF, &slave->state) &&
+				if (!netif_queue_stopped(slave) &&
 				    slave->hard_start_xmit(skb, slave) == 0) {
 					slave->xmit_lock_owner = -1;
 					spin_unlock(&slave->xmit_lock);
@@ -319,7 +318,7 @@ restart:
 				slave->xmit_lock_owner = -1;
 				spin_unlock(&slave->xmit_lock);
 			}
-			if (test_bit(LINK_STATE_XOFF, &dev->state))
+			if (netif_queue_stopped(dev))
 				busy = 1;
 			break;
 		case 1:

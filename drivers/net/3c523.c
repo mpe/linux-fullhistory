@@ -869,7 +869,7 @@ static void elmc_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 	if (dev == NULL) {
 		printk(KERN_ERR "elmc-interrupt: irq %d for unknown device.\n", (int) -(((struct pt_regs *) reg_ptr)->orig_eax + 2));
 		return;
-	} else if (!test_bit(LINK_STATE_START, &dev->state)) {
+	} else if (!netif_running(dev)) {
 		/* The 3c523 has this habit of generating interrupts during the
 		   reset.  I'm not sure if the ni52 has this same problem, but it's
 		   really annoying if we haven't finished initializing it.  I was
@@ -902,7 +902,7 @@ static void elmc_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 #ifndef NO_NOPCOMMANDS
 		if (stat & STAT_CNA) {
 			/* CU went 'not ready' */
-			if (test_bit(LINK_STATE_START, &dev->state)) {
+			if (netif_running(dev->state)) {
 				printk(KERN_WARNING "%s: oops! CU has left active state. stat: %04x/%04x.\n", dev->name, (int) stat, (int) p->scb->status);
 			}
 		}

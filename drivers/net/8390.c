@@ -167,7 +167,6 @@ int ei_open(struct net_device *dev)
 	NS8390_init(dev, 1);
 	/* Set the flag before we drop the lock, That way the IRQ arrives
 	   after its set and we get no silly warnings */
-	clear_bit(LINK_STATE_RXSEM, &dev->state);
 	netif_start_queue(dev);
       	spin_unlock_irqrestore(&ei_local->page_lock, flags);
 	ei_local->irqlock = 0;
@@ -203,8 +202,8 @@ static int ei_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	 *  board has died and kick it.
 	 */
  
-	if (test_bit(LINK_STATE_XOFF, &dev->state)) 
-	{	/* Do timeouts, just like the 8003 driver. */
+	if (netif_queue_stopped(dev)) {
+		/* Do timeouts, just like the 8003 driver. */
 		int txsr;
 		int isr;
 		int tickssofar = jiffies - dev->trans_start;
@@ -224,8 +223,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 		ei_local->stat.tx_errors++;
 		isr = inb(e8390_base+EN0_ISR);
-		if (!test_bit(LINK_STATE_START, &dev->state))
-		{
+		if (!netif_running(dev)) {
 			spin_unlock_irqrestore(&ei_local->page_lock, flags);
 			printk(KERN_WARNING "%s: xmit on stopped card\n", dev->name);
 			return 1;
@@ -430,8 +428,6 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		return;
 	}
     
-	set_bit(LINK_STATE_RXSEM, &dev->state);
-    
 	/* Change to page 0 and read the intr status reg. */
 	outb_p(E8390_NODMA+E8390_PAGE0, e8390_base + E8390_CMD);
 	if (ei_debug > 3)
@@ -442,8 +438,7 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	while ((interrupts = inb_p(e8390_base + EN0_ISR)) != 0
 		   && ++nr_serviced < MAX_SERVICE) 
 	{
-		if (!test_bit(LINK_STATE_START, &dev->state))
-		{
+		if (!netif_running(dev)) {
 			printk(KERN_WARNING "%s: interrupt from stopped card\n", dev->name);
 			interrupts = 0;
 			break;
@@ -491,7 +486,6 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			outb_p(0xff, e8390_base + EN0_ISR); /* Ack. all intrs. */
 		}
 	}
-	clear_bit(LINK_STATE_RXSEM, &dev->state);
 	spin_unlock(&ei_local->page_lock);
 	return;
 }
@@ -837,7 +831,7 @@ static struct net_device_stats *get_stats(struct net_device *dev)
 	unsigned long flags;
     
 	/* If the card is stopped, just return the present stats. */
-	if (!test_bit(LINK_STATE_START, &dev->state))
+	if (!netif_running(dev))
 		return &ei_local->stat;
 
 	spin_lock_irqsave(&ei_local->page_lock,flags);
@@ -933,7 +927,7 @@ static void do_set_multicast_list(struct net_device *dev)
 	 * Ultra32 EISA) appears to have this bug fixed.
 	 */
 	 
-	if (test_bit(LINK_STATE_START, &dev->state))
+	if (netif_running(dev))
 		outb_p(E8390_RXCONFIG, e8390_base + EN0_RXCR);
 	outb_p(E8390_NODMA + E8390_PAGE1, e8390_base + E8390_CMD);
 	for(i = 0; i < 8; i++) 

@@ -2440,7 +2440,7 @@ tulip_get_stats(struct net_device *dev)
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 
-	if (test_bit(LINK_STATE_START, &dev->state))
+	if (netif_running(dev))
 		tp->stats.rx_missed_errors += inl(ioaddr + CSR8) & 0xffff;
 
 	return &tp->stats;

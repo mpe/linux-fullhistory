@@ -8,8 +8,11 @@
 #ifndef __SMP__
 extern int __local_irq_count;
 #define local_irq_count(cpu)  ((void)(cpu), __local_irq_count)
+extern unsigned long __irq_attempt[];
+#define irq_attempt(cpu, irq)  ((void)(cpu), __irq_attempt[irq])
 #else
 #define local_irq_count(cpu)  (cpu_data[cpu].irq_count)
+#define irq_attempt(cpu, irq) (cpu_data[cpu].irq_attempt[irq])
 #endif
 
 /*

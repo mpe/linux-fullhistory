@@ -145,6 +145,9 @@ static int udf_adinicb_commit_write(struct file *file, struct page *page, unsign
 	brelse(bh);
 	kunmap(page);
 	SetPageUptodate(page);
+	/* only one page here */
+	if (to > inode->i_size)
+		inode->i_size = to;
 	return 0;
 }
 

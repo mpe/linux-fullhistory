@@ -543,7 +543,7 @@ static void unstick_cu(struct net_device *dev)
 				else
 				{
 					unsigned short txstatus = eexp_hw_lasttxstat(dev);
-					if (test_bit(LINK_STATE_XOFF, &dev->state) && !txstatus)
+					if (netif_queue_stopped(dev) && !txstatus)
 					{
 						printk(KERN_WARNING "%s: CU wedged, status %04x %04x, resetting...\n",
 						       dev->name,status,txstatus);
@@ -1204,7 +1204,7 @@ static unsigned short eexp_hw_lasttxstat(struct net_device *dev)
 	unsigned short tx_block = lp->tx_reap;
 	unsigned short status;
 
-	if (!test_bit(LINK_STATE_XOFF, &dev->state) && lp->tx_head==lp->tx_reap)
+	if (!netif_queue_stopped(dev) && lp->tx_head==lp->tx_reap)
 		return 0x0000;
 
 	do

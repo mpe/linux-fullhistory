@@ -510,7 +510,7 @@ int sdla_activate(struct net_device *slave, struct net_device *master)
 
 	flp->dlci[i] = abs(flp->dlci[i]);
 
-	if (test_bit(LINK_STATE_START, &slave->state) && (flp->config.station == FRAD_STATION_NODE))
+	if (netif_running(slave) && (flp->config.station == FRAD_STATION_NODE))
 		sdla_cmd(slave, SDLA_ACTIVATE_DLCI, 0, 0, &flp->dlci[i], sizeof(short), NULL, NULL);
 
 	return(0);
@@ -532,7 +532,7 @@ int sdla_deactivate(struct net_device *slave, struct net_device *master)
 
 	flp->dlci[i] = -abs(flp->dlci[i]);
 
-	if (test_bit(LINK_STATE_START, &slave->state) && (flp->config.station == FRAD_STATION_NODE))
+	if (netif_running(slave) && (flp->config.station == FRAD_STATION_NODE))
 		sdla_cmd(slave, SDLA_DEACTIVATE_DLCI, 0, 0, &flp->dlci[i], sizeof(short), NULL, NULL);
 
 	return(0);
@@ -565,7 +565,7 @@ int sdla_assoc(struct net_device *slave, struct net_device *master)
 	flp->dlci[i] = -*(short *)(master->dev_addr);
 	master->mtu = slave->mtu;
 
-	if (test_bit(LINK_STATE_START, &slave->state)) {
+	if (netif_running(dev)) {
 		if (flp->config.station == FRAD_STATION_CPE)
 			sdla_reconfig(slave);
 		else
@@ -594,7 +594,7 @@ int sdla_deassoc(struct net_device *slave, struct net_device *master)
 
 	MOD_DEC_USE_COUNT;
 
-	if (test_bit(LINK_STATE_START, &slave->state)) {
+	if (netif_running(slave)) {
 		if (flp->config.station == FRAD_STATION_CPE)
 			sdla_reconfig(slave);
 		else
@@ -624,7 +624,7 @@ int sdla_dlci_conf(struct net_device *slave, struct net_device *master, int get)
 
 	ret = SDLA_RET_OK;
 	len = sizeof(struct dlci_conf);
-	if (test_bit(LINK_STATE_START, &slave->state)) {
+	if (netif_running(slave)) {
 		if (get)
 			ret = sdla_cmd(slave, SDLA_READ_DLCI_CONFIGURATION, abs(flp->dlci[i]), 0,  
 			            NULL, 0, &dlp->config, &len);
@@ -1104,7 +1104,7 @@ static int sdla_config(struct net_device *dev, struct frad_conf *conf, int get)
 
 	if (!get)
 	{
-		if (test_bit(LINK_STATE_START, &dev->state))
+		if (netif_running(dev))
 			return(-EBUSY);
 
 		if(copy_from_user(&data.config, conf, sizeof(struct frad_conf)))
@@ -1167,7 +1167,7 @@ static int sdla_config(struct net_device *dev, struct frad_conf *conf, int get)
 	else
 	{
 		/* no sense reading if the CPU isn't started */
-		if (test_bit(LINK_STATE_START, &dev->state))
+		if (netif_running(dev))
 		{
 			size = sizeof(data);
 			if (sdla_cmd(dev, SDLA_READ_DLCI_CONFIGURATION, 0, 0, NULL, 0, &data, &size) != SDLA_RET_OK)
@@ -1316,7 +1316,7 @@ int sdla_change_mtu(struct net_device *dev, int new_mtu)
 
 	flp = dev->priv;
 
-	if (test_bit(LINK_STATE_START, &dev->state))
+	if (netif_running(dev))
 		return(-EBUSY);
 
 	/* for now, you can't change the MTU! */

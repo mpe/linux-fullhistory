@@ -812,8 +812,7 @@ static int pcnet_event(event_t event, int priority,
     case CS_EVENT_CARD_REMOVAL:
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
-	    netif_stop_queue(&info->dev);
-	    clear_bit(LINK_STATE_START, &info->dev.state);
+	    netif_device_detach(&info->dev);
 	    link->release.expires = jiffies + HZ/20;
 	    link->state |= DEV_RELEASE_PENDING;
 	    add_timer(&link->release);
@@ -828,10 +827,9 @@ static int pcnet_event(event_t event, int priority,
 	/* Fall through... */
     case CS_EVENT_RESET_PHYSICAL:
 	if (link->state & DEV_CONFIG) {
-	    if (link->open) {
-		netif_stop_queue(&info->dev);
-		clear_bit(LINK_STATE_START, &info->dev.state);
-	    }
+	    if (link->open)
+		netif_device_detach(&info->dev);
+
 	    CardServices(ReleaseConfiguration, link->handle);
 	}
 	break;
@@ -844,8 +842,7 @@ static int pcnet_event(event_t event, int priority,
 	    if (link->open) {
 		pcnet_reset_8390(&info->dev);
 		NS8390_init(&info->dev, 1);
-		netif_start_queue(&info->dev);
-		set_bit(LINK_STATE_START, &info->dev.state);
+		netif_device_attach(&info->dev);
 	    }
 	}
 	break;
@@ -988,7 +985,7 @@ static void ei_watchdog(u_long arg)
     struct net_device *dev = &info->dev;
     ioaddr_t nic_base = dev->base_addr;
 
-    if (!test_bit(LINK_STATE_START, &dev->state))
+    if (!netif_device_present(dev))
 	    goto reschedule;
 
     /* Check for pending interrupt with expired latency timer: with

@@ -27,6 +27,8 @@
  *                with 'testing the tx_ret_csm and setting tx_full'
  *   David S. Miller <davem@redhat.com>: conversion to new PCI dma mapping
  *                                       infrastructure and Sparc support
+ *   Pierrick Pinasseau (CERN): For lending me an Ultra 5 to test the
+ *                              driver under Linux/Sparc64
  */
 
 #include <linux/config.h>
@@ -58,6 +60,7 @@
 #include <asm/irq.h>
 #include <asm/byteorder.h>
 #include <asm/uaccess.h>
+
 
 #ifdef CONFIG_ACENIC_OMIT_TIGON_I
 #define ACE_IS_TIGON_I(ap)	0
@@ -144,8 +147,8 @@ static inline void netif_start_queue(struct net_device *dev)
 #else
 #define NET_BH			0
 #define ace_mark_net_bh(foo)	{do{} while(0);}
-#define ace_if_busy(dev)	test_bit(LINK_STATE_XOFF, &dev->state)
-#define ace_if_running(dev)	test_bit(LINK_STATE_START, &dev->state)
+#define ace_if_busy(dev)	netif_queue_stopped(dev)
+#define ace_if_running(dev)	netif_running(dev)
 #define ace_if_down(dev)	{do{} while(0);}
 #endif
 
@@ -334,10 +337,14 @@ static inline void netif_start_queue(struct net_device *dev)
 #define ACE_JUMBO_BUFSIZE	(ACE_JUMBO_MTU + ETH_HLEN + 2+4+16)
 
 #define DEF_TX_RATIO		24
-#define DEF_TX_COAL		1000
+/*
+ * There seems to be a magic difference in the effect between 995 and 996
+ * but little difference between 900 and 995 ... no idea why.
+ */
+#define DEF_TX_COAL		996
 #define DEF_TX_MAX_DESC		40
 #define DEF_RX_COAL		1000
-#define DEF_RX_MAX_DESC		20
+#define DEF_RX_MAX_DESC		25
 #define TX_COAL_INTS_ONLY	0	/* seems not worth it */
 #define DEF_TRACE		0
 #define DEF_STAT		2 * TICKS_PER_SEC
@@ -352,7 +359,7 @@ static int tx_ratio[8] = {0, };
 static int dis_pci_mem_inval[8] = {1, 1, 1, 1, 1, 1, 1, 1};
 
 static const char __initdata *version = 
-  "acenic.c: v0.39 02/11/2000  Jes Sorensen, linux-acenic@SunSITE.auc.dk\n"
+  "acenic.c: v0.41 02/16/2000  Jes Sorensen, linux-acenic@SunSITE.auc.dk\n"
   "                            http://home.cern.ch/~jes/gige/acenic.html\n";
 
 static struct net_device *root_dev = NULL;
@@ -421,7 +428,6 @@ int __init acenic_probe (struct net_device *dev)
 		ap->pdev = pdev;
 
 		dev->irq = pdev->irq;
-
 		dev->open = &ace_open;
 		dev->hard_start_xmit = &ace_start_xmit;
 		dev->stop = &ace_close;
@@ -523,8 +529,12 @@ int __init acenic_probe (struct net_device *dev)
 			break;
 		}
 		ap->name [sizeof (ap->name) - 1] = '\0';
-		printk("Gigabit Ethernet at 0x%08lx, irq %i\n",
-		       dev->base_addr, dev->irq);
+		printk("Gigabit Ethernet at 0x%08lx, ", dev->base_addr);
+#ifdef __sparc__
+		printk("irq %s\n", __irq_itoa(dev->irq));
+#else
+		printk("irq %i\n", dev->irq);
+#endif
 
 #ifdef CONFIG_ACENIC_OMIT_TIGON_I
 		if ((readl(&ap->regs->HostCtrl) >> 28) == 4) {
@@ -598,7 +608,7 @@ void __exit ace_module_cleanup(void)
 		/*
 		 * This clears any pending interrupts
 		 */
-		writel(0, &regs->Mb0Lo);
+		writel(1, &regs->Mb0Lo);
 
 		/*
 		 * Make sure no other CPUs are processing interrupts
@@ -668,28 +678,14 @@ void __exit ace_module_cleanup(void)
 			kfree(ap->skb);
 		if (root_dev->irq)
 			free_irq(root_dev->irq, root_dev);
-		iounmap(regs);
 		unregister_netdev(root_dev);
+		iounmap(regs);
 		kfree(root_dev);
 
 		root_dev = next;
 	}
 }
 
-
-#if (LINUX_VERSION_CODE < 0x02032b)
-int init_module(void)
-{
-	return ace_module_init();
-}
-
-
-void cleanup_module(void)
-{
-	ace_module_cleanup();
-}
-#endif
-#endif
 
 int __init ace_module_init(void)
 {
@@ -706,7 +702,22 @@ int __init ace_module_init(void)
 }
 
 
-#if (LINUX_VERSION_CODE >= 0x02032b)
+#if (LINUX_VERSION_CODE < 0x02032a)
+int init_module(void)
+{
+	return ace_module_init();
+}
+
+
+void cleanup_module(void)
+{
+	ace_module_cleanup();
+}
+#endif
+#endif
+
+
+#if (LINUX_VERSION_CODE >= 0x02032a)
 module_init(ace_module_init);
 module_exit(ace_module_cleanup);
 #endif
@@ -726,6 +737,7 @@ static void ace_free_descriptors(struct net_device *dev)
 		pci_free_consistent(ap->pdev, size,
 				    ap->rx_std_ring,
 				    ap->rx_ring_base_dma);
+		ap->rx_std_ring = NULL;
 		ap->rx_jumbo_ring = NULL;
 		ap->rx_mini_ring = NULL;
 		ap->rx_return_ring = NULL;
@@ -759,7 +771,7 @@ static int ace_allocate_descriptors(struct net_device *dev)
 {
 	struct ace_private *ap = dev->priv;
 	int size;
- 
+
 	size = (sizeof(struct rx_desc) *
 		(RX_STD_RING_ENTRIES +
 		 RX_JUMBO_RING_ENTRIES +
@@ -843,7 +855,7 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 	 * address the `Firmware not running' problem subsequent
 	 * to any crashes involving the NIC
 	 */
-	writel(HW_RESET, &regs->HostCtrl);
+	writel(HW_RESET | (HW_RESET << 24), &regs->HostCtrl);
 	wmb();
 
 	/*
@@ -854,7 +866,7 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 	 * This will most likely need BYTE_SWAP once we switch
 	 * to using __raw_writel()
 	 */
-	writel(((WORD_SWAP | CLR_INT) |
+	writel((WORD_SWAP | CLR_INT |
 		((WORD_SWAP | CLR_INT) << 24)),
 	       &regs->HostCtrl);
 #else
@@ -888,7 +900,7 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 		writel(readl(&regs->CpuBCtrl) | CPU_HALT, &regs->CpuBCtrl);
 		/*
 		 * The SRAM bank size does _not_ indicate the amount
-		 * of memory on the card, it controls the bank size!
+		 * of memory on the card, it controls the _bank_ size!
 		 * Ie. a 1MB AceNIC will have two banks of 512KB.
 		 */
 		writel(SRAM_BANK_512K, &regs->LocalCtrl);
@@ -909,13 +921,14 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 	 * value a second time works as well. This is what caused the
 	 * `Firmware not running' problem on the Tigon II.
 	 */
-#ifdef __LITTLE_ENDIAN
-	writel(ACE_BYTE_SWAP_DATA | ACE_WARN | ACE_FATAL |
-	       ACE_WORD_SWAP | ACE_NO_JUMBO_FRAG, &regs->ModeStat);
+#ifdef __BIG_ENDIAN
+	writel(ACE_BYTE_SWAP_DMA | ACE_WARN | ACE_FATAL | ACE_BYTE_SWAP_BD |
+	       ACE_WORD_SWAP_BD | ACE_NO_JUMBO_FRAG, &regs->ModeStat);
 #else
-	writel(ACE_BYTE_SWAP_DATA | ACE_WARN | ACE_FATAL | ACE_BYTE_SWAP |
-	       ACE_WORD_SWAP | ACE_NO_JUMBO_FRAG, &regs->ModeStat);
+	writel(ACE_BYTE_SWAP_DMA | ACE_WARN | ACE_FATAL |
+	       ACE_WORD_SWAP_BD | ACE_NO_JUMBO_FRAG, &regs->ModeStat);
 #endif
+	mb();
 
 	mac1 = 0;
 	for(i = 0; i < 4; i++) {
@@ -1301,8 +1314,10 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 	 */
 	myjif = jiffies + 3 * HZ;
 	while (time_before(jiffies, myjif) && !ap->fw_running);
+
 	if (!ap->fw_running) {
 		printk(KERN_ERR "%s: Firmware NOT running!\n", dev->name);
+
 		ace_dump_trace(ap);
 		writel(readl(&regs->CpuCtrl) | CPU_HALT, &regs->CpuCtrl);
 
@@ -1344,6 +1359,8 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 	}
 	return 0;
  init_error:
+	iounmap(ap->regs);
+	unregister_netdev(dev);
 	if (ap->skb) {
 		kfree(ap->skb);
 		ap->skb = NULL;
@@ -1634,6 +1651,7 @@ static u32 ace_handle_event(struct net_device *dev, u32 evtcsm, u32 evtprd)
 			printk(KERN_INFO "%s: Firmware up and running\n",
 			       dev->name);
 			ap->fw_running = 1;
+			wmb();
 			break;
 		case E_STATS_UPDATED:
 			break;
@@ -1757,7 +1775,6 @@ static void ace_rx_int(struct net_device *dev, u32 rxretprd, u32 rxretcsm)
 		skb = rip->skb;
 		rip->skb = NULL;
 		pci_unmap_single(ap->pdev, rip->mapping, mapsize);
-		rxdesc->size = 0;
 		skb_put(skb, retdesc->size);
 #if 0
 		/* unncessary */

@@ -57,7 +57,7 @@ int rose_rx_ip(struct sk_buff *skb, struct net_device *dev)
 	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
 
 #ifdef CONFIG_INET
-	if (!test_bit(LINK_STATE_START, &dev->state)) {
+	if (!netif_running(dev)) {
 		stats->rx_errors++;
 		return 0;
 	}
@@ -163,7 +163,7 @@ static int rose_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
 
-	if (!test_bit(LINK_STATE_START, &dev->state)) {
+	if (!netif_running(dev)) {
 		printk(KERN_ERR "ROSE: rose_xmit - called when iface is down\n");
 		return 1;
 	}

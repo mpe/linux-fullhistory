@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.29 1999/12/09 10:32:43 davem Exp $ */
+/* $Id: page.h,v 1.30 2000/02/16 07:34:54 davem Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H

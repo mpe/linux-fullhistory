@@ -2742,7 +2742,7 @@ tulip_close(struct net_device *dev)
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was %2.2x.\n",
 			   dev->name, inl(ioaddr + CSR5));
 
-	if (test_bit(LINK_STATE_START, &dev->state))
+	if (netif_device_present(dev))
 		tulip_down(dev);
 
 	free_irq(dev->irq, dev);
@@ -2774,7 +2774,7 @@ static struct net_device_stats *tulip_get_stats(struct net_device *dev)
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 
-	if (test_bit(LINK_STATE_START, &dev->state))
+	if (netif_device_present(dev))
 		tp->stats.rx_missed_errors += inl(ioaddr + CSR8) & 0xffff;
 
 	return &tp->stats;

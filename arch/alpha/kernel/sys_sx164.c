@@ -14,6 +14,8 @@
 #include <linux/sched.h>
 #include <linux/pci.h>
 #include <linux/init.h>
+#include <linux/irq.h>
+#include <linux/interrupt.h>
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
@@ -26,47 +28,83 @@
 #include <asm/core_pyxis.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
 
-static void
-sx164_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
+/* Note invert on MASK bits. */
+static unsigned long cached_irq_mask;
+
+static inline void
+sx164_change_irq_mask(unsigned long mask)
 {
-	if (irq >= 16) {
-		/* Make CERTAIN none of the bogus ints get enabled */
-		*(vulp)PYXIS_INT_MASK =
-			~((long)mask >> 16) & ~0x000000000000003bUL;
-		mb();
-		/* ... and read it back to make sure it got written.  */
-		*(vulp)PYXIS_INT_MASK;
-	}
-	else if (irq >= 8)
-		outb(mask >> 8, 0xA1);	/* ISA PIC2 */
-	else
-		outb(mask, 0x21);	/* ISA PIC1 */
+	*(vulp)PYXIS_INT_MASK = mask;
+	mb();
+	*(vulp)PYXIS_INT_MASK;
+}
+
+static inline void
+sx164_enable_irq(unsigned int irq)
+{
+	sx164_change_irq_mask(cached_irq_mask |= 1UL << (irq - 16));
 }
 
 static void
-sx164_srm_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
+sx164_disable_irq(unsigned int irq)
 {
-	if (irq >= 16) {
-		if (unmask_p)
-			cserve_ena(irq - 16);
-		else
-			cserve_dis(irq - 16);
-	}
-	else if (irq >= 8)
-		outb(mask >> 8, 0xA1);	/* ISA PIC2 */
-	else
-		outb(mask, 0x21);	/* ISA PIC1 */
+	sx164_change_irq_mask(cached_irq_mask &= ~(1UL << (irq - 16)));
 }
+
+static unsigned int
+sx164_startup_irq(unsigned int irq)
+{
+	sx164_enable_irq(irq);
+	return 0;
+}
+
+static inline void
+sx164_srm_enable_irq(unsigned int irq)
+{
+	cserve_ena(irq - 16);
+}
+
+static void
+sx164_srm_disable_irq(unsigned int irq)
+{
+	cserve_dis(irq - 16);
+}
+
+static unsigned int
+sx164_srm_startup_irq(unsigned int irq)
+{
+	sx164_srm_enable_irq(irq);
+	return 0;
+}
+
+static struct hw_interrupt_type sx164_irq_type = {
+	typename:	"SX164",
+	startup:	sx164_startup_irq,
+	shutdown:	sx164_disable_irq,
+	enable:		sx164_enable_irq,
+	disable:	sx164_disable_irq,
+	ack:		sx164_disable_irq,
+	end:		sx164_enable_irq,
+};
+
+static struct hw_interrupt_type sx164_srm_irq_type = {
+	typename:	"SX164-SRM",
+	startup:	sx164_srm_startup_irq,
+	shutdown:	sx164_srm_disable_irq,
+	enable:		sx164_srm_enable_irq,
+	disable:	sx164_srm_disable_irq,
+	ack:		sx164_srm_disable_irq,
+	end:		sx164_srm_enable_irq,
+};
 
 static void 
 sx164_device_interrupt(unsigned long vector, struct pt_regs *regs)
 {
-	unsigned long pld, tmp;
+	unsigned long pld;
 	unsigned int i;
 
 	/* Read the interrupt summary register of PYXIS */
@@ -93,35 +131,48 @@ sx164_device_interrupt(unsigned long vector, struct pt_regs *regs)
 			continue;
 		} else {
 			/* if not timer int */
-			handle_irq(16 + i, 16 + i, regs);
+			handle_irq(16 + i, regs);
 		}
-		*(vulp)PYXIS_INT_REQ = 1UL << i; mb();
-		tmp = *(vulp)PYXIS_INT_REQ;
+
+		*(vulp)PYXIS_INT_REQ = 1UL << i;
+		mb();
+		*(vulp)PYXIS_INT_REQ;
 	}
 }
 
 static void
 sx164_init_irq(void)
 {
+	struct hw_interrupt_type *ops;
+	long i;
+
 	outb(0, DMA1_RESET_REG);
 	outb(0, DMA2_RESET_REG);
 	outb(DMA_MODE_CASCADE, DMA2_MODE_REG);
 	outb(0, DMA2_MASK_REG);
 
+	init_ISA_irqs();
+	init_RTC_irq();
+
 	if (alpha_using_srm) {
-		alpha_mv.update_irq_hw = sx164_srm_update_irq_hw;
 		alpha_mv.device_interrupt = srm_device_interrupt;
+		ops = &sx164_srm_irq_type;
 	}
 	else {
-		/* Note invert on MASK bits. */
-		*(vulp)PYXIS_INT_MASK  = ~((long)alpha_irq_mask >> 16);
-		mb();
-		*(vulp)PYXIS_INT_MASK;
+		sx164_change_irq_mask(0);
+		ops = &sx164_irq_type;
 	}
 
-	enable_irq(16 + 6);	/* enable timer */
-	enable_irq(16 + 7);	/* enable ISA PIC cascade */
-	enable_irq(2);		/* enable cascade */
+	for (i = 16; i < 40; ++i) {
+		/* Make CERTAIN none of the bogus ints get enabled.  */
+		if ((0x3b0000 >> i) & 1)
+			continue;
+		irq_desc[i].status = IRQ_DISABLED;
+		irq_desc[i].handler = ops;
+	}
+
+	ops->startup(16 + 6);	/* enable timer */
+	ops->startup(16 + 7);	/* enable ISA PIC cascade */
 }
 
 /*
@@ -202,9 +253,6 @@ struct alpha_machine_vector sx164_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		40,
-	irq_probe_mask:		_PROBE_MASK(40),
-	update_irq_hw:		sx164_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	sx164_device_interrupt,
 
 	init_arch:		pyxis_init_arch,

@@ -28,16 +28,11 @@
 
 #include "sd.h"
 #include <scsi/scsicam.h>
+
 /*
  * This source file contains the symbol table used by scsi loadable
  * modules.
  */
-
-extern void print_command(unsigned char *command);
-extern void print_sense(const char *devclass, Scsi_Cmnd * SCpnt);
-
-extern const char *const scsi_device_types[];
-
 EXPORT_SYMBOL(scsi_register_module);
 EXPORT_SYMBOL(scsi_unregister_module);
 EXPORT_SYMBOL(scsi_free);
@@ -53,6 +48,7 @@ EXPORT_SYMBOL(scsi_command_size);
 EXPORT_SYMBOL(scsi_ioctl);
 EXPORT_SYMBOL(print_command);
 EXPORT_SYMBOL(print_sense);
+EXPORT_SYMBOL(print_req_sense);
 EXPORT_SYMBOL(print_msg);
 EXPORT_SYMBOL(print_status);
 EXPORT_SYMBOL(scsi_dma_free_sectors);
@@ -66,6 +62,15 @@ EXPORT_SYMBOL(scsi_ioctl_send_command);
 #if defined(CONFIG_SCSI_LOGGING)	/* { */
 EXPORT_SYMBOL(scsi_logging_level);
 #endif
+
+EXPORT_SYMBOL(scsi_allocate_request);
+EXPORT_SYMBOL(scsi_release_request);
+EXPORT_SYMBOL(scsi_wait_req);
+EXPORT_SYMBOL(scsi_do_req);
+
+EXPORT_SYMBOL(scsi_report_bus_reset);
+EXPORT_SYMBOL(scsi_block_requests);
+EXPORT_SYMBOL(scsi_unblock_requests);
 
 EXPORT_SYMBOL(scsi_get_host_dev);
 EXPORT_SYMBOL(scsi_free_host_dev);

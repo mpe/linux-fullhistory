@@ -30,8 +30,10 @@
 #include <linux/ioport.h>
 #include <linux/bootmem.h>
 
+#if 0
 #ifdef CONFIG_RTC
 #include <linux/timex.h>
+#endif
 #endif
 #ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>
@@ -453,6 +455,7 @@ setup_arch(char **cmdline_p)
 	/* Reserve standard resources.  */
 	reserve_std_resources();
 
+#if 0
 	/* Initialize the timers.  */
 	/* ??? There is some circumstantial evidence that this needs
 	   to be done now rather than later in time_init, which would
@@ -461,6 +464,7 @@ setup_arch(char **cmdline_p)
 	rtc_init_pit();
 #else
 	alpha_mv.init_pit();
+#endif
 #endif
 
 	/* 

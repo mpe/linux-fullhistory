@@ -1354,7 +1354,7 @@ static void strip_write_some_more(struct tty_struct *tty)
 
     /* First make sure we're connected. */
     if (!strip_info || strip_info->magic != STRIP_MAGIC || 
-    	!test_bit(LINK_STATE_START, &strip_info->dev.state))
+    	!netif_running(&strip_info->dev))
         return;
 
     if (strip_info->tx_left > 0)
@@ -1644,7 +1644,7 @@ static int strip_xmit(struct sk_buff *skb, struct net_device *dev)
 {
     struct strip *strip_info = (struct strip *)(dev->priv);
 
-    if (!test_bit(LINK_STATE_START, &dev->state))
+    if (!netif_running(dev))
     {
         printk(KERN_ERR "%s: xmit call when iface is down\n", dev->name);
         return(1);
@@ -2338,7 +2338,7 @@ strip_receive_buf(struct tty_struct *tty, const unsigned char *cp, char *fp, int
     const unsigned char *end = cp + count;
 
     if (!strip_info || strip_info->magic != STRIP_MAGIC 
-    	|| !test_bit(LINK_STATE_START, &strip_info->dev.state))
+    	|| !netif_running(&strip_info->dev))
         return;
 
     /* Argh! mtu change time! - costs us the packet part received at the change */

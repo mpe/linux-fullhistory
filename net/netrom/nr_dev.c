@@ -62,7 +62,7 @@ int nr_rx_ip(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
 
-	if (!test_bit(LINK_STATE_START, &dev->state)) {
+	if (!netif_running(dev)) {
 		stats->rx_errors++;
 		return 0;
 	}

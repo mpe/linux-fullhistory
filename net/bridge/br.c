@@ -88,6 +88,7 @@
 #include <net/br.h>
 #include <linux/proc_fs.h>
 #include <linux/delay.h>
+#include <net/pkt_sched.h>
 
 #ifndef min
 #define min(a, b) (((a) <= (b)) ? (a) : (b))
@@ -352,10 +353,6 @@ static void transmit_config(int port_no)	  /* (4.6.1)	 */
 		port_info[port_no].config_pending = FALSE;	/* (4.6.1.3.2(10)) */
 		start_hold_timer(port_no);	  /* (4.6.1.3.2(11)) */
 	}
-/* JRP: we want the frame to be xmitted even if no other traffic.
- *	net_bh() will do a dev_transmit() that kicks all devices
- */
-	mark_bh(NET_BH);
 }
 
 static int root_bridge(void)
@@ -1460,7 +1457,7 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 			  break;
 			if (memcmp(port_info[i].ifmac.BRIDGE_ID_ULA, dev->dev_addr, 6) != 0)
 			  break; /* Don't worry about a change of hardware broadcast address! */
-			if (dev->start) {
+			if (netif_running(dev)) {
 			  printk(KERN_CRIT "br_device_event: NETDEV_CHANGEADDR on busy device %s - FIX DRIVER!\n", 
 				 dev->name);
 			/*  return NOTIFY_BAD;  It SHOULD be this, but I want to be friendly... */
@@ -2483,8 +2480,7 @@ static int brg_open(struct net_device *dev)
 	if (memcmp(dev->dev_addr, "\x00\x00\x00\x00\x00\x00", ETH_ALEN) == 0)
 	  return -EFAULT;
 
-	dev->start = 1;
-	dev->tbusy = 0;
+	netif_start_queue(dev);
 	return 0;
 }
 
@@ -2675,8 +2671,7 @@ static int brg_close(struct net_device *dev)
 	if (br_stats.flags & BR_DEBUG)
 		printk(KERN_DEBUG "%s: Shutting down.\n", dev->name);
 
-	dev->tbusy = 1;
-	dev->start = 0;
+	netif_stop_queue(dev);
 
 	return 0;
 }

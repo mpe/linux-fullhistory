@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.88 2000/02/06 22:56:09 zaitcev Exp $ */
+/* $Id: pgtable.h,v 1.91 2000/02/16 08:44:52 anton Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -327,15 +327,16 @@ extern __inline__ pte_t pte_modify(pte_t pte, pgprot_t newprot)
 		pgprot_val(newprot));
 }
 
-BTFIXUPDEF_CALL(pgd_t *, pgd_offset, struct mm_struct *, unsigned long)
-BTFIXUPDEF_CALL(pmd_t *, pmd_offset, pgd_t *, unsigned long)
-BTFIXUPDEF_CALL(pte_t *, pte_offset, pmd_t *, unsigned long)
+#define pgd_index(address) ((address) >> PGDIR_SHIFT)
+
+/* to find an entry in a page-table-directory */
+#define pgd_offset(mm, address) ((mm)->pgd + pgd_index(address))
 
 /* to find an entry in a kernel page-table-directory */
 #define pgd_offset_k(address) pgd_offset(&init_mm, address)
 
-/* to find an entry in a page-table-directory */
-#define pgd_offset(mm,addr) BTFIXUP_CALL(pgd_offset)(mm,addr)
+BTFIXUPDEF_CALL(pmd_t *, pmd_offset, pgd_t *, unsigned long)
+BTFIXUPDEF_CALL(pte_t *, pte_offset, pmd_t *, unsigned long)
 
 /* Find an entry in the second-level page table.. */
 #define pmd_offset(dir,addr) BTFIXUP_CALL(pmd_offset)(dir,addr)
@@ -345,6 +346,8 @@ BTFIXUPDEF_CALL(pte_t *, pte_offset, pmd_t *, unsigned long)
 
 /* The permissions for pgprot_val to make a page mapped on the obio space */
 extern unsigned int pg_iobits;
+
+#define flush_icache_page(vma, pg)      do { } while(0)
 
 /* Certain architectures need to do special things when pte's
  * within a page table are directly modified.  Thus, the following

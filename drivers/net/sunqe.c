@@ -1,4 +1,4 @@
-/* $Id: sunqe.c,v 1.44 2000/02/10 21:14:25 davem Exp $
+/* $Id: sunqe.c,v 1.45 2000/02/16 10:36:20 davem Exp $
  * sunqe.c: Sparc QuadEthernet 10baseT SBUS card driver.
  *          Once again I am out to prove that every ethernet
  *          controller out there can be most efficiently programmed
@@ -481,7 +481,7 @@ static void qec_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			}
 			if (qe_status & CREG_STAT_RXIRQ)
 				qe_rx(qep);
-			if (test_bit(LINK_STATE_XOFF, &qep->dev->state) &&
+			if (netif_queue_stopped(qep->dev) &&
 			    (qe_status & CREG_STAT_TXIRQ)) {
 				spin_lock(&qep->lock);
 				qe_tx_reclaim(qep);

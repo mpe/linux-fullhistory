@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.113 2000/01/21 11:38:47 jj Exp $
+/* $Id: fault.c,v 1.114 2000/02/14 04:52:36 jj Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -342,7 +342,6 @@ asmlinkage void do_sun4c_fault(struct pt_regs *regs, int text_fault, int write,
 {
 	extern void sun4c_update_mmu_cache(struct vm_area_struct *,
 					   unsigned long,pte_t);
-	extern pgd_t *sun4c_pgd_offset(struct mm_struct *,unsigned long);
 	extern pte_t *sun4c_pte_offset(pmd_t *,unsigned long);
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
@@ -362,7 +361,7 @@ asmlinkage void do_sun4c_fault(struct pt_regs *regs, int text_fault, int write,
 		}
 	}
 
-	pgdp = sun4c_pgd_offset(mm, address);
+	pgdp = pgd_offset(mm, address);
 	ptep = sun4c_pte_offset((pmd_t *) pgdp, address);
 
 	if (pgd_val(*pgdp)) {

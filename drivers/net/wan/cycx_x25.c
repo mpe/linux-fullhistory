@@ -505,7 +505,7 @@ static int if_open (struct net_device *dev)
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
 
-	if (test_bit(LINK_STATE_START, &dev->state))
+	if (netif_running(dev))
 		return -EBUSY; /* only one open is allowed */ 
 
 	netif_start_queue(dev);
@@ -1564,7 +1564,7 @@ static void x25_dump_devs(wan_device_t *wandev)
 		x25_channel_t *chan = dev->priv;
 
 		printk(KERN_INFO "%-5.5s %-15.15s   %d     ETH_P_%s\n",
-				 chan->name, chan->addr, test_bit(LINK_STATE_XOFF, &dev->state),
+				 chan->name, chan->addr, netif_queue_stopped(dev),
 				 chan->protocol == ETH_P_IP ? "IP" : "X25");
 		dev = chan->slave;
 	}

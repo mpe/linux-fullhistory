@@ -18,18 +18,19 @@
 	outb(0, DMA1_CLR_MASK_REG);	\
 	outb(0, DMA2_CLR_MASK_REG)
 
-extern unsigned long _alpha_irq_masks[2];
-#define alpha_irq_mask _alpha_irq_masks[0]
-
 extern void common_ack_irq(unsigned long irq);
 extern void isa_device_interrupt(unsigned long vector, struct pt_regs * regs);
 extern void srm_device_interrupt(unsigned long vector, struct pt_regs * regs);
 
-extern void handle_irq(int irq, int ack, struct pt_regs * regs);
+extern void handle_irq(int irq, struct pt_regs * regs);
 
 #define RTC_IRQ    8
+#if 0 /* on Alpha we want to use only the RTC as timer for SMP issues */
 #ifdef CONFIG_RTC
 #define TIMER_IRQ  0			 /* timer is the pit */
+#else
+#define TIMER_IRQ  RTC_IRQ		 /* timer is the rtc */
+#endif
 #else
 #define TIMER_IRQ  RTC_IRQ		 /* timer is the rtc */
 #endif
@@ -71,10 +72,11 @@ extern void handle_irq(int irq, int ack, struct pt_regs * regs);
 #endif
 
 
-extern char _stext;
 static inline void alpha_do_profile (unsigned long pc)
 {
 	if (prof_buffer && current->pid) {
+		extern char _stext;
+
 		pc -= (unsigned long) &_stext;
 		pc >>= prof_shift;
 		/*
@@ -87,5 +89,10 @@ static inline void alpha_do_profile (unsigned long pc)
 		atomic_inc((atomic_t *)&prof_buffer[pc]);
 	}
 }
+
+static inline void hw_resend_irq(struct hw_interrupt_type *h, unsigned int i) {}
+extern void no_action(int cpl, void *dev_id, struct pt_regs *regs);
+extern void init_ISA_irqs(void);
+extern void init_RTC_irq(void);
 
 #endif

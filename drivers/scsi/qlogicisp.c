@@ -811,7 +811,6 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 		ds = cmd->dataseg;
 
 		sg_count = pci_map_sg(hostdata->pci_dev, sg, Cmnd->use_sg);
-		Cmnd->use_sg = sg_count;
 
 		cmd->segment_cnt = cpu_to_le16(sg_count);
 
@@ -853,7 +852,7 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 			}
 			sg_count -= n;
 		}
-	} else {
+	} else if (Cmnd->request_bufflen) {
 		Cmnd->SCp.ptr = (char *)(unsigned long)
 			pci_map_single(hostdata->pci_dev,
 				       Cmnd->request_buffer,
@@ -864,6 +863,10 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 		cmd->dataseg[0].d_count =
 			cpu_to_le32((u32)Cmnd->request_bufflen);
 		cmd->segment_cnt = cpu_to_le16(1);
+	} else {
+		cmd->dataseg[0].d_base = 0;
+		cmd->dataseg[0].d_count = 0;
+		cmd->segment_cnt = cpu_to_le16(1); /* Shouldn't this be 0? */
 	}
 
 	/* Committed, record Scsi_Cmd so we can find it later. */
@@ -975,7 +978,7 @@ void isp1020_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 			pci_unmap_sg(hostdata->pci_dev,
 				     (struct scatterlist *)Cmnd->buffer,
 				     Cmnd->use_sg);
-		else
+		else if (Cmnd->request_bufflen)
 			pci_unmap_single(hostdata->pci_dev,
 					 (u32)((long)Cmnd->SCp.ptr),
 					 Cmnd->request_bufflen);

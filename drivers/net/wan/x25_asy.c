@@ -301,7 +301,7 @@ static void x25_asy_write_wakeup(struct tty_struct *tty)
 	struct x25_asy *sl = (struct x25_asy *) tty->disc_data;
 
 	/* First make sure we're connected. */
-	if (!sl || sl->magic != X25_ASY_MAGIC || !test_bit(LINK_STATE_START, &sl->dev->state))
+	if (!sl || sl->magic != X25_ASY_MAGIC || !netif_running(sl->dev))
 		return;
 
 	if (sl->xleft <= 0)  
@@ -340,7 +340,7 @@ static int x25_asy_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct x25_asy *sl = (struct x25_asy*)(dev->priv);
 	int err;
 
-	if (!test_bit(LINK_STATE_START, &sl->dev->state))
+	if (!netif_running(sl->dev))
 	{
 		printk("%s: xmit call when iface is down\n", dev->name);
 		return 1;
@@ -406,7 +406,7 @@ static void x25_asy_data_indication(void *token, struct sk_buff *skb)
 static void x25_asy_data_transmit(void *token, struct sk_buff *skb)
 {
 	struct x25_asy *sl=token;
-	if(test_bit(LINK_STATE_XOFF, &sl->dev->state))
+	if (netif_queue_stopped(sl->dev))
 	{
 		printk(KERN_ERR "x25_asy: tbusy drop\n");
 		kfree_skb(skb);
@@ -563,7 +563,7 @@ static void x25_asy_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 {
 	struct x25_asy *sl = (struct x25_asy *) tty->disc_data;
 
-	if (!sl || sl->magic != X25_ASY_MAGIC || !test_bit(LINK_STATE_START, &sl->dev->state))
+	if (!sl || sl->magic != X25_ASY_MAGIC || !netif_running(sl->dev))
 		return;
 
 	/*
@@ -903,7 +903,7 @@ cleanup_module(void)
 				 * VSV = if dev->start==0, then device
 				 * unregistered while close proc.
 				 */
-				if (test_bit(LINK_STATE_START, &x25_asy_ctrls[i]->dev.state))
+				if (netif_running(&(x25_asy_ctrls[i]->dev)))
 					unregister_netdev(&(x25_asy_ctrls[i]->dev));
 
 				kfree(x25_asy_ctrls[i]);

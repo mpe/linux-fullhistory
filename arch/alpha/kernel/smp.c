@@ -62,6 +62,7 @@ spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 static unsigned long smp_secondary_alive;
 
 unsigned long cpu_present_mask;	/* Which cpus ids came online.  */
+static unsigned long __cpu_present_mask __initdata = 0; /* cpu reported in the hwrpb */
 
 static int max_cpus = -1;	/* Command-line limitation.  */
 int smp_boot_cpuid;		/* Which processor we booted from.  */
@@ -506,7 +507,7 @@ setup_smp(void)
 			if ((cpu->flags & 0x1cc) == 0x1cc) {
 				smp_num_probed++;
 				/* Assume here that "whami" == index */
-				cpu_present_mask |= (1L << i);
+				__cpu_present_mask |= (1L << i);
 				cpu->pal_revision = boot_cpu_palrev;
 			}
 
@@ -517,11 +518,12 @@ setup_smp(void)
 		}
 	} else {
 		smp_num_probed = 1;
-		cpu_present_mask = (1L << smp_boot_cpuid);
+		__cpu_present_mask = (1L << smp_boot_cpuid);
 	}
+	cpu_present_mask = 1L << smp_boot_cpuid;
 
 	printk(KERN_INFO "SMP: %d CPUs probed -- cpu_present_mask = %lx\n",
-	       smp_num_probed, cpu_present_mask);
+	       smp_num_probed, __cpu_present_mask);
 }
 
 /*
@@ -565,12 +567,13 @@ smp_boot_cpus(void)
 		if (i == smp_boot_cpuid)
 			continue;
 
-		if (((cpu_present_mask >> i) & 1) == 0)
+		if (((__cpu_present_mask >> i) & 1) == 0)
 			continue;
 
 		if (smp_boot_one_cpu(i, cpu_count))
 			continue;
 
+		cpu_present_mask |= 1L << i;
 		cpu_count++;
 	}
 

@@ -121,6 +121,87 @@ int scsi_insert_special_cmd(Scsi_Cmnd * SCpnt, int at_head)
 }
 
 /*
+ * Function:    scsi_insert_special_req()
+ *
+ * Purpose:     Insert pre-formed request into request queue.
+ *
+ * Arguments:   SRpnt   - request that is ready to be queued.
+ *              at_head - boolean.  True if we should insert at head
+ *                        of queue, false if we should insert at tail.
+ *
+ * Lock status: Assumed that lock is not held upon entry.
+ *
+ * Returns:     Nothing
+ *
+ * Notes:       This function is called from character device and from
+ *              ioctl types of functions where the caller knows exactly
+ *              what SCSI command needs to be issued.   The idea is that
+ *              we merely inject the command into the queue (at the head
+ *              for now), and then call the queue request function to actually
+ *              process it.
+ */
+int scsi_insert_special_req(Scsi_Request * SRpnt, int at_head)
+{
+	unsigned long flags;
+	request_queue_t *q;
+
+	ASSERT_LOCK(&io_request_lock, 0);
+
+	/*
+	 * The SCpnt already contains a request structure - we will doctor the
+	 * thing up with the appropriate values and use that in the actual
+	 * request queue.
+	 */
+	q = &SRpnt->sr_device->request_queue;
+	SRpnt->sr_request.cmd = SPECIAL;
+	SRpnt->sr_request.special = (void *) SRpnt;
+
+	/*
+	 * We have the option of inserting the head or the tail of the queue.
+	 * Typically we use the tail for new ioctls and so forth.  We use the
+	 * head of the queue for things like a QUEUE_FULL message from a
+	 * device, or a host that is unable to accept a particular command.
+	 */
+	spin_lock_irqsave(&io_request_lock, flags);
+
+	if (at_head) {
+		SRpnt->sr_request.next = q->current_request;
+		q->current_request = &SRpnt->sr_request;
+	} else {
+		/*
+		 * FIXME(eric) - we always insert at the tail of the
+		 * list.  Otherwise ioctl commands would always take
+		 * precedence over normal I/O.  An ioctl on a busy
+		 * disk might be delayed indefinitely because the
+		 * request might not float high enough in the queue
+		 * to be scheduled.
+		 */
+		SRpnt->sr_request.next = NULL;
+		if (q->current_request == NULL) {
+			q->current_request = &SRpnt->sr_request;
+		} else {
+			struct request *req;
+
+			for (req = q->current_request; req; req = req->next) {
+				if (req->next == NULL) {
+					req->next = &SRpnt->sr_request;
+					break;
+				}
+			}
+		}
+	}
+
+	/*
+	 * Now hit the requeue function for the queue.  If the host is
+	 * already busy, so be it - we have nothing special to do.  If
+	 * the host can queue it, then send it off.  
+	 */
+	q->request_fn(q);
+	spin_unlock_irqrestore(&io_request_lock, flags);
+	return 0;
+}
+
+/*
  * Function:    scsi_init_cmd_errh()
  *
  * Purpose:     Initialize SCpnt fields related to error handling.
@@ -160,6 +241,7 @@ int scsi_init_cmd_errh(Scsi_Cmnd * SCpnt)
 	 */
 	SCpnt->old_use_sg = SCpnt->use_sg;
 	SCpnt->old_cmd_len = SCpnt->cmd_len;
+	SCpnt->sc_old_data_direction = SCpnt->sc_data_direction;
 	memcpy((void *) SCpnt->data_cmnd,
 	       (const void *) SCpnt->cmnd, sizeof(SCpnt->cmnd));
 	SCpnt->buffer = SCpnt->request_buffer;
@@ -257,6 +339,7 @@ void scsi_queue_next_request(request_queue_t * q, Scsi_Cmnd * SCpnt)
 			if (((SHpnt->can_queue > 0)
 			     && (SHpnt->host_busy >= SHpnt->can_queue))
 			    || (SHpnt->host_blocked)
+			    || (SHpnt->host_self_blocked)
 			    || (SDpnt->device_blocked)) {
 				break;
 			}
@@ -278,7 +361,8 @@ void scsi_queue_next_request(request_queue_t * q, Scsi_Cmnd * SCpnt)
 		for (SDpnt = SHpnt->host_queue; SDpnt; SDpnt = SDpnt->next) {
 			request_queue_t *q;
 			if ((SHpnt->can_queue > 0 && (SHpnt->host_busy >= SHpnt->can_queue))
-			    || (SHpnt->host_blocked)) {
+			    || (SHpnt->host_blocked) 
+			    || (SHpnt->host_self_blocked)) {
 				break;
 			}
 			if (SDpnt->device_blocked || !SDpnt->starved) {
@@ -759,6 +843,7 @@ void scsi_request_fn(request_queue_t * q)
 {
 	struct request *req;
 	Scsi_Cmnd *SCpnt;
+	Scsi_Request *SRpnt;
 	Scsi_Device *SDpnt;
 	struct Scsi_Host *SHpnt;
 	struct Scsi_Device_Template *STpnt;
@@ -789,13 +874,24 @@ void scsi_request_fn(request_queue_t * q)
 	 */
 	while (1 == 1) {
 		/*
+		 * Check this again - each time we loop through we will have
+		 * released the lock and grabbed it again, so each time
+		 * we need to check to see if the queue is plugged or not.
+		 */
+		if (SHpnt->in_recovery
+		    || q->plugged) {
+			return;
+		}
+
+		/*
 		 * If the device cannot accept another request, then quit.
 		 */
 		if (SDpnt->device_blocked) {
 			break;
 		}
 		if ((SHpnt->can_queue > 0 && (SHpnt->host_busy >= SHpnt->can_queue))
-		    || (SHpnt->host_blocked)) {
+		    || (SHpnt->host_blocked) 
+		    || (SHpnt->host_self_blocked)) {
 			/*
 			 * If we are unable to process any commands at all for this
 			 * device, then we consider it to be starved.  What this means
@@ -862,6 +958,14 @@ void scsi_request_fn(request_queue_t * q)
 		if (req->cmd == SPECIAL) {
 			STpnt = NULL;
 			SCpnt = (Scsi_Cmnd *) req->special;
+			SRpnt = (Scsi_Request *) req->special;
+
+			if( SRpnt->sr_magic == SCSI_REQ_MAGIC ) {
+				SCpnt = scsi_allocate_device(SRpnt->sr_device, 
+							     FALSE, FALSE);
+				scsi_init_cmd_from_req(SCpnt, SRpnt);
+			}
+
 		} else {
 			STpnt = scsi_get_request_dev(req);
 			if (!STpnt) {
@@ -986,6 +1090,85 @@ void scsi_request_fn(request_queue_t * q)
 		 * the request queue and try to find another command.
 		 */
 		spin_lock_irq(&io_request_lock);
+	}
+}
+
+/*
+ * Function:    scsi_block_requests()
+ *
+ * Purpose:     Utility function used by low-level drivers to prevent further
+ *		commands from being queued to the device.
+ *
+ * Arguments:   SHpnt       - Host in question
+ *
+ * Returns:     Nothing
+ *
+ * Lock status: No locks are assumed held.
+ *
+ * Notes:       There is no timer nor any other means by which the requests
+ *		get unblocked other than the low-level driver calling
+ *		scsi_unblock_requests().
+ */
+void scsi_block_requests(struct Scsi_Host * SHpnt)
+{
+	SHpnt->host_self_blocked = TRUE;
+}
+
+/*
+ * Function:    scsi_unblock_requests()
+ *
+ * Purpose:     Utility function used by low-level drivers to allow further
+ *		commands from being queued to the device.
+ *
+ * Arguments:   SHpnt       - Host in question
+ *
+ * Returns:     Nothing
+ *
+ * Lock status: No locks are assumed held.
+ *
+ * Notes:       There is no timer nor any other means by which the requests
+ *		get unblocked other than the low-level driver calling
+ *		scsi_unblock_requests().
+ *
+ *		This is done as an API function so that changes to the
+ *		internals of the scsi mid-layer won't require wholesale
+ *		changes to drivers that use this feature.
+ */
+void scsi_unblock_requests(struct Scsi_Host * SHpnt)
+{
+	SHpnt->host_self_blocked = FALSE;
+}
+
+
+/*
+ * Function:    scsi_report_bus_reset()
+ *
+ * Purpose:     Utility function used by low-level drivers to report that
+ *		they have observed a bus reset on the bus being handled.
+ *
+ * Arguments:   SHpnt       - Host in question
+ *		channel     - channel on which reset was observed.
+ *
+ * Returns:     Nothing
+ *
+ * Lock status: No locks are assumed held.
+ *
+ * Notes:       This only needs to be called if the reset is one which
+ *		originates from an unknown location.  Resets originated
+ *		by the mid-level itself don't need to call this, but there
+ *		should be no harm.
+ *
+ *		The main purpose of this is to make sure that a CHECK_CONDITION
+ *		is properly treated.
+ */
+void scsi_report_bus_reset(struct Scsi_Host * SHpnt, int channel)
+{
+	Scsi_Device *SDloop;
+	for (SDloop = SHpnt->host_queue; SDloop; SDloop = SDloop->next) {
+		if (channel == SDloop->channel) {
+			SDloop->was_reset = 1;
+			SDloop->expecting_cc_ua = 1;
+		}
 	}
 }
 

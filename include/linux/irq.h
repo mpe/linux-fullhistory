@@ -11,6 +11,7 @@
 #define IRQ_REPLAY	8	/* IRQ has been replayed but not acked yet */
 #define IRQ_AUTODETECT	16	/* IRQ is being autodetected */
 #define IRQ_WAITING	32	/* IRQ not yet seen - for autodetection */
+#define IRQ_LEVEL	64	/* IRQ level triggered */
 
 /*
  * Interrupt controller descriptor. This is all we need

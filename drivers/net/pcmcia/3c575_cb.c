@@ -1845,7 +1845,7 @@ vortex_close(struct net_device *dev)
 	long ioaddr = dev->base_addr;
 	int i;
 
-	if (test_bit(LINK_STATE_START, &dev->state))
+	if (netif_device_present(dev))
 		vortex_down(dev);
 
 	if (vortex_debug > 1) {
@@ -1883,7 +1883,7 @@ static struct net_device_stats *vortex_get_stats(struct net_device *dev)
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	unsigned long flags;
 
-	if (test_bit(LINK_STATE_START, &dev->state)) {
+	if (netif_device_present(dev)) {
 		spin_lock_irqsave (&vp->lock, flags);
 		update_stats(dev->base_addr, dev);
 		spin_unlock_irqrestore (&vp->lock, flags);

@@ -309,9 +309,11 @@ static int sd_init_command(Scsi_Cmnd * SCpnt)
 			return 0;
 		}
 		SCpnt->cmnd[0] = WRITE_6;
+		SCpnt->sc_data_direction = SCSI_DATA_WRITE;
 		break;
 	case READ:
 		SCpnt->cmnd[0] = READ_6;
+		SCpnt->sc_data_direction = SCSI_DATA_READ;
 		break;
 	default:
 		panic("Unknown sd command %d\n", SCpnt->request.cmd);
@@ -695,6 +697,7 @@ static int sd_init_onedisk(int i)
 			SCpnt->cmd_len = 0;
 			SCpnt->sense_buffer[0] = 0;
 			SCpnt->sense_buffer[2] = 0;
+			SCpnt->sc_data_direction = SCSI_DATA_NONE;
 
 			scsi_wait_cmd (SCpnt, (void *) cmd, (void *) buffer,
 				0/*512*/, SD_TIMEOUT, MAX_RETRIES);
@@ -704,6 +707,22 @@ static int sd_init_onedisk(int i)
 			if (the_result == 0
 			    || SCpnt->sense_buffer[2] != UNIT_ATTENTION)
 				break;
+		}
+
+		/*
+		 * If the drive has indicated to us that it doesn't have
+		 * any media in it, don't bother with any of the rest of
+		 * this crap.
+		 */
+		if( the_result != 0
+		    && ((driver_byte(the_result) & DRIVER_SENSE) != 0)
+		    && SCpnt->sense_buffer[2] == UNIT_ATTENTION
+		    && SCpnt->sense_buffer[12] == 0x3A ) {
+			rscsi_disks[i].capacity = 0x1fffff;
+			sector_size = 512;
+			rscsi_disks[i].device->changed = 1;
+			rscsi_disks[i].ready = 0;
+			break;
 		}
 
 		/* Look for non-removable devices that return NOT_READY.
@@ -722,6 +741,7 @@ static int sd_init_onedisk(int i)
 				SCpnt->sense_buffer[0] = 0;
 				SCpnt->sense_buffer[2] = 0;
 
+				SCpnt->sc_data_direction = SCSI_DATA_NONE;
 				scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
 					    0/*512*/, SD_TIMEOUT, MAX_RETRIES);
 			}
@@ -752,6 +772,7 @@ static int sd_init_onedisk(int i)
 		SCpnt->sense_buffer[0] = 0;
 		SCpnt->sense_buffer[2] = 0;
 
+		SCpnt->sc_data_direction = SCSI_DATA_READ;
 		scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
 			    8, SD_TIMEOUT, MAX_RETRIES);
 
@@ -903,6 +924,7 @@ static int sd_init_onedisk(int i)
 		SCpnt->sense_buffer[2] = 0;
 
 		/* same code as READCAPA !! */
+		SCpnt->sc_data_direction = SCSI_DATA_READ;
 		scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
 			    512, SD_TIMEOUT, MAX_RETRIES);
 

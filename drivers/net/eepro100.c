@@ -903,7 +903,6 @@ speedo_open(struct net_device *dev)
 	/* Fire up the hardware. */
 	speedo_resume(dev);
 
-	clear_bit(LINK_STATE_RXSEM, &dev->state);
 	netif_start_queue(dev);
 
 	/* Setup the chip and configure the multicast list. */
@@ -1554,7 +1553,7 @@ speedo_get_stats(struct net_device *dev)
 		sp->stats.rx_fifo_errors += le32_to_cpu(sp->lstats->rx_overrun_errs);
 		sp->stats.rx_length_errors += le32_to_cpu(sp->lstats->rx_runt_errs);
 		sp->lstats->done_marker = 0x0000;
-		if (test_bit(LINK_STATE_START, &dev->state)) {
+		if (netif_running(dev)) {
 			wait_for_cmd_done(ioaddr + SCBCmd);
 			outw(CUDumpStats, ioaddr + SCBCmd);
 		}

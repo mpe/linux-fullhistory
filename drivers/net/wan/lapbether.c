@@ -163,7 +163,7 @@ static int lapbeth_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
 	
 	dev = lapbeth_get_x25_dev(dev);
 
-	if (dev == NULL || test_bit(LINK_STATE_START, &dev->state) == 0) {
+	if (dev == NULL || !netif_running(dev)) {
 		kfree_skb(skb);
 		return 0;
 	}
@@ -215,7 +215,7 @@ static int lapbeth_xmit(struct sk_buff *skb, struct net_device *dev)
 	 * Just to be *really* sure not to send anything if the interface
 	 * is down, the ethernet device may have gone.
 	 */
-	if (!test_bit(LINK_STATE_START, &dev->state)) {
+	if (!netif_running(dev)) {
 		lapbeth_check_devices(dev);
 		kfree_skb(skb);
 		return -ENODEV;

@@ -14,6 +14,7 @@
 #include <linux/sched.h>
 #include <linux/pci.h>
 #include <linux/init.h>
+#include <linux/irq.h>
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
@@ -36,60 +37,158 @@
  * HACK ALERT! only the boot cpu is used for interrupts.
  */
 
-static void
-dp264_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
+static void enable_tsunami_irq(unsigned int irq);
+static void disable_tsunami_irq(unsigned int irq);
+static void enable_clipper_irq(unsigned int irq);
+static void disable_clipper_irq(unsigned int irq);
+
+#define end_tsunami_irq		enable_tsunami_irq
+#define shutdown_tsunami_irq	disable_tsunami_irq
+#define mask_and_ack_tsunami_irq	disable_tsunami_irq
+
+#define end_clipper_irq		enable_clipper_irq
+#define shutdown_clipper_irq	disable_clipper_irq
+#define mask_and_ack_clipper_irq	disable_clipper_irq
+
+
+static unsigned int
+startup_tsunami_irq(unsigned int irq)
+{ 
+	enable_tsunami_irq(irq);
+	return 0; /* never anything pending */
+}
+
+static unsigned int
+startup_clipper_irq(unsigned int irq)
+{ 
+	enable_clipper_irq(irq);
+	return 0; /* never anything pending */
+}
+
+static struct hw_interrupt_type tsunami_irq_type = {
+	"TSUNAMI",
+	startup_tsunami_irq,
+	shutdown_tsunami_irq,
+	enable_tsunami_irq,
+	disable_tsunami_irq,
+	mask_and_ack_tsunami_irq,
+	end_tsunami_irq
+};
+
+static struct hw_interrupt_type clipper_irq_type = {
+	"CLIPPER",
+	startup_clipper_irq,
+	shutdown_clipper_irq,
+	enable_clipper_irq,
+	disable_clipper_irq,
+	mask_and_ack_clipper_irq,
+	end_clipper_irq
+};
+
+static unsigned long cached_irq_mask = ~0UL;
+
+#define TSUNAMI_SET_IRQ_MASK(cpu, value)	\
+do {						\
+	volatile unsigned long *csr;		\
+						\
+	csr = &TSUNAMI_cchip->dim##cpu##.csr;	\
+	*csr = (value);				\
+	mb();					\
+	*csr;					\
+} while(0)
+
+static inline void
+do_flush_irq_mask(unsigned long value)
 {
-	volatile unsigned long *csr;
-
-	if (TSUNAMI_bootcpu < 2) {
-		if (!TSUNAMI_bootcpu)
-			csr = &TSUNAMI_cchip->dim0.csr;
-		else
-			csr = &TSUNAMI_cchip->dim1.csr;
-	} else {
-		if (TSUNAMI_bootcpu == 2)
-			csr = &TSUNAMI_cchip->dim2.csr;
-		else
-			csr = &TSUNAMI_cchip->dim3.csr;
-	}
-
-	*csr = ~mask;
-	mb();
-	*csr;
-
-	if (irq < 16) {
-		if (irq >= 8)
-			outb(mask >> 8, 0xA1);	/* ISA PIC2 */
-		else
-			outb(mask, 0x21);	/* ISA PIC1 */
+	switch (TSUNAMI_bootcpu)
+	{
+	case 0:
+		TSUNAMI_SET_IRQ_MASK(0, value);
+		break;
+	case 1:
+		TSUNAMI_SET_IRQ_MASK(1, value);
+		break;
+	case 2:
+		TSUNAMI_SET_IRQ_MASK(2, value);
+		break;
+	case 3:
+		TSUNAMI_SET_IRQ_MASK(3, value);
+		break;
 	}
 }
 
-static void
-clipper_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
+#ifdef CONFIG_SMP
+static inline void
+do_flush_smp_irq_mask(unsigned long value)
 {
-	if (irq >= 16) {
-		volatile unsigned long *csr;
+	extern unsigned long cpu_present_mask;
+	unsigned long other_cpus = cpu_present_mask & ~(1L << TSUNAMI_bootcpu);
 
-		if (TSUNAMI_bootcpu < 2)
-			if (!TSUNAMI_bootcpu)
-				csr = &TSUNAMI_cchip->dim0.csr;
-			else
-				csr = &TSUNAMI_cchip->dim1.csr;
-		else
-			if (TSUNAMI_bootcpu == 2)
-				csr = &TSUNAMI_cchip->dim2.csr;
-			else
-				csr = &TSUNAMI_cchip->dim3.csr;
-		
-		*csr = (~mask >> 16) | (1UL << 55); /* master ISA enable */
-		mb();
-		*csr;
-	}
-	else if (irq >= 8)
-		outb(mask >> 8, 0xA1);	/* ISA PIC2 */
-	else
-		outb(mask, 0x21);	/* ISA PIC1 */
+	if (other_cpus & 1)
+		TSUNAMI_SET_IRQ_MASK(0, value);
+	if (other_cpus & 2)
+		TSUNAMI_SET_IRQ_MASK(1, value);
+	if (other_cpus & 4)
+		TSUNAMI_SET_IRQ_MASK(2, value);
+	if (other_cpus & 8)
+		TSUNAMI_SET_IRQ_MASK(3, value);
+}
+#endif
+
+static void
+dp264_flush_irq_mask(unsigned long mask)
+{
+	unsigned long value;
+
+#ifdef CONFIG_SMP
+	value = ~mask;
+	do_flush_smp_irq_mask(value);
+#endif
+
+	value = ~mask | (1UL << 55) | 0xffff; /* isa irqs always enabled */
+	do_flush_irq_mask(value);
+}
+
+static void
+enable_tsunami_irq(unsigned int irq)
+{
+	cached_irq_mask &= ~(1UL << irq);
+	dp264_flush_irq_mask(cached_irq_mask);
+}
+
+static void
+disable_tsunami_irq(unsigned int irq)
+{
+	cached_irq_mask |= 1UL << irq;
+	dp264_flush_irq_mask(cached_irq_mask);
+}
+
+static void
+clipper_flush_irq_mask(unsigned long mask)
+{
+	unsigned long value;
+
+#ifdef CONFIG_SMP
+	value = ~mask >> 16;
+	do_flush_smp_irq_mask(value);
+#endif
+
+	value = (~mask >> 16) | (1UL << 55); /* master ISA enable */
+	do_flush_irq_mask(value);
+}
+
+static void
+enable_clipper_irq(unsigned int irq)
+{
+	cached_irq_mask &= ~(1UL << irq);
+	clipper_flush_irq_mask(cached_irq_mask);
+}
+
+static void
+disable_clipper_irq(unsigned int irq)
+{
+	cached_irq_mask |= 1UL << irq;
+	clipper_flush_irq_mask(cached_irq_mask);
 }
 
 static void
@@ -126,9 +225,9 @@ dp264_device_interrupt(unsigned long vector, struct pt_regs * regs)
 static void 
 dp264_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
-	int irq, ack;
+	int irq;
 
-	ack = irq = (vector - 0x800) >> 4;
+	irq = (vector - 0x800) >> 4;
 
 	/*
 	 * The SRM console reports PCI interrupts with a vector calculated by:
@@ -142,17 +241,17 @@ dp264_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 	 * so we don't count them.
 	 */
 	if (irq >= 32)
-		ack = irq = irq - 16;
+		irq -= 16;
 
-	handle_irq(irq, ack, regs);
+	handle_irq(irq, regs);
 }
 
 static void 
 clipper_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
-	int irq, ack;
+	int irq;
 
-	ack = irq = (vector - 0x800) >> 4;
+	irq = (vector - 0x800) >> 4;
 
 	/*
 	 * The SRM console reports PCI interrupts with a vector calculated by:
@@ -166,7 +265,22 @@ clipper_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 	 *
 	 * Eg IRQ 24 is DRIR bit 8, etc, etc
 	 */
-	handle_irq(irq, ack, regs);
+	handle_irq(irq, regs);
+}
+
+static void __init
+init_TSUNAMI_irqs(struct hw_interrupt_type * ops)
+{
+	int i;
+
+	for (i = 0; i < NR_IRQS; i++) {
+		if (i == RTC_IRQ)
+			continue;
+		if (i < 16)
+			continue;
+		irq_desc[i].status = IRQ_DISABLED | IRQ_LEVEL;
+		irq_desc[i].handler = ops;
+	}
 }
 
 static void __init
@@ -180,10 +294,11 @@ dp264_init_irq(void)
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = dp264_srm_device_interrupt;
 
-	dp264_update_irq_hw(16, alpha_irq_mask, 0);
+	init_ISA_irqs();
+	init_RTC_irq();
+	init_TSUNAMI_irqs(&tsunami_irq_type);
 
-        enable_irq(55);     /* Enable ISA interrupt controller.  */
-	enable_irq(2);
+	dp264_flush_irq_mask(~0UL);
 }
 
 static void __init
@@ -197,10 +312,11 @@ clipper_init_irq(void)
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = clipper_srm_device_interrupt;
 
-	clipper_update_irq_hw(16, alpha_irq_mask, 0);
+	init_ISA_irqs();
+	init_RTC_irq();
+	init_TSUNAMI_irqs(&clipper_irq_type);
 
-        enable_irq(55);     /* Enable ISA interrupt controller.  */
-	enable_irq(2);
+	clipper_flush_irq_mask(~0UL);
 }
 
 
@@ -431,9 +547,6 @@ struct alpha_machine_vector dp264_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		64,
-	irq_probe_mask:		TSUNAMI_PROBE_MASK,
-	update_irq_hw:		dp264_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
 
 	init_arch:		tsunami_init_arch,
@@ -458,9 +571,6 @@ struct alpha_machine_vector monet_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		64,
-	irq_probe_mask:		TSUNAMI_PROBE_MASK,
-	update_irq_hw:		dp264_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
 
 	init_arch:		tsunami_init_arch,
@@ -484,9 +594,6 @@ struct alpha_machine_vector webbrick_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		64,
-	irq_probe_mask:		TSUNAMI_PROBE_MASK,
-	update_irq_hw:		dp264_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
 
 	init_arch:		tsunami_init_arch,
@@ -510,9 +617,6 @@ struct alpha_machine_vector clipper_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		64,
-	irq_probe_mask:		TSUNAMI_PROBE_MASK,
-	update_irq_hw:		clipper_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
 
 	init_arch:		tsunami_init_arch,

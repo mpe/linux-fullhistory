@@ -410,11 +410,13 @@ static const char *snstext[] = {
 #endif
 
 /* Print sense information */
-void print_sense(const char * devclass, Scsi_Cmnd * SCpnt)
+static 
+void print_sense_internal(const char * devclass, 
+			  const unsigned char * sense_buffer,
+			  kdev_t dev)
 {
     int i, s;
     int sense_class, valid, code;
-    unsigned char * sense_buffer = SCpnt->sense_buffer;
     const char * error = NULL;
     
     sense_class = (sense_buffer[0] >> 4) & 0x07;
@@ -423,8 +425,8 @@ void print_sense(const char * devclass, Scsi_Cmnd * SCpnt)
     
     if (sense_class == 7) {	/* extended sense data */
 	s = sense_buffer[7] + 8;
-	if(s > sizeof(SCpnt->sense_buffer))
-           s = sizeof(SCpnt->sense_buffer);
+	if(s > SCSI_SENSE_BUFFERSIZE)
+	   s = SCSI_SENSE_BUFFERSIZE;
 	
 	if (!valid)
 	    printk("[valid=0] ");
@@ -455,10 +457,10 @@ void print_sense(const char * devclass, Scsi_Cmnd * SCpnt)
 	
 #if (CONSTANTS & CONST_SENSE)
 	printk( "%s%s: sense key %s\n", devclass,
-	       kdevname(SCpnt->request.rq_dev), snstext[sense_buffer[2] & 0x0f]);
+	       kdevname(dev), snstext[sense_buffer[2] & 0x0f]);
 #else
 	printk("%s%s: sns = %2x %2x\n", devclass,
-	       kdevname(SCpnt->request.rq_dev), sense_buffer[0], sense_buffer[2]);
+	       kdevname(dev), sense_buffer[0], sense_buffer[2]);
 #endif
 	
 	/* Check to see if additional sense information is available */
@@ -495,11 +497,11 @@ void print_sense(const char * devclass, Scsi_Cmnd * SCpnt)
 #if (CONSTANTS & CONST_SENSE)
 	if (sense_buffer[0] < 15)
 	    printk("%s%s: old sense key %s\n", devclass,
-	      kdevname(SCpnt->request.rq_dev), snstext[sense_buffer[0] & 0x0f]);
+	      kdevname(dev), snstext[sense_buffer[0] & 0x0f]);
 	else
 #endif
 	    printk("%s%s: sns = %2x %2x\n", devclass,
-	      kdevname(SCpnt->request.rq_dev), sense_buffer[0], sense_buffer[2]);
+	      kdevname(dev), sense_buffer[0], sense_buffer[2]);
 	
 	printk("Non-extended sense class %d code 0x%0x ", sense_class, code);
 	s = 4;
@@ -513,6 +515,18 @@ void print_sense(const char * devclass, Scsi_Cmnd * SCpnt)
     printk("\n");
 #endif
     return;
+}
+
+void print_sense(const char * devclass, Scsi_Cmnd * SCpnt)
+{
+	print_sense_internal(devclass, SCpnt->sense_buffer,
+			     SCpnt->request.rq_dev);
+}
+
+void print_req_sense(const char * devclass, Scsi_Request * SRpnt)
+{
+	print_sense_internal(devclass, SRpnt->sr_sense_buffer,
+			     SRpnt->sr_request.rq_dev);
 }
 
 #if (CONSTANTS & CONST_MSG) 

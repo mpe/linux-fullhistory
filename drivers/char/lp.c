@@ -237,7 +237,6 @@ static ssize_t lp_write(struct file * file, const char * buf,
 	ssize_t retv = 0;
 	ssize_t written;
 	size_t copy_size = count;
-	long old_to;
 
 #ifdef LP_STATS
 	if (jiffies-lp_table[minor].lastcall > LP_TIME(minor))
@@ -263,8 +262,8 @@ static ssize_t lp_write(struct file * file, const char * buf,
 	/* Go to compatibility mode. */
 	parport_negotiate (port, IEEE1284_MODE_COMPAT);
 
-	old_to = parport_set_timeout (lp_table[minor].dev,
-				      lp_table[minor].timeout);
+	parport_set_timeout (lp_table[minor].dev,
+			     lp_table[minor].timeout);
 
 	do {
 		/* Write the data. */
@@ -309,9 +308,6 @@ static ssize_t lp_write(struct file * file, const char * buf,
 			}
 		}	
 	} while (count > 0);
-
-	/* Not really necessary, but polite. */
-	parport_set_timeout (lp_table[minor].dev, old_to);
 
  	parport_release (lp_table[minor].dev);
 
@@ -564,13 +560,12 @@ static void lp_console_write (struct console *co, const char *s,
 	struct pardevice *dev = lp_table[CONSOLE_LP].dev;
 	struct parport *port = dev->port;
 	ssize_t written;
-	signed long old_to;
 
 	if (parport_claim (dev))
 		/* Nothing we can do. */
 		return;
 
-	old_to = parport_set_timeout (dev, 0);
+	parport_set_timeout (dev, 0);
 
 	/* Go to compatibility mode. */
 	parport_negotiate (port, IEEE1284_MODE_COMPAT);
@@ -608,7 +603,6 @@ static void lp_console_write (struct console *co, const char *s,
 		}
 	} while (count > 0 && (CONSOLE_LP_STRICT || written > 0));
 
-	parport_set_timeout (dev, old_to);
 	parport_release (dev);
 }
 
@@ -804,9 +798,9 @@ int __init lp_init (void)
 
 	if (!lp_count) {
 		printk (KERN_INFO "lp: driver loaded but no devices found\n");
-#ifndef CONFIG_PARPORT_12843
+#ifndef CONFIG_PARPORT_1284
 		if (parport_nr[0] == LP_PARPORT_AUTO)
-			printk (KERN_INFO "lp: (is IEEE 1284.3 support enabled?)\n");
+			printk (KERN_INFO "lp: (is IEEE 1284 support enabled?)\n");
 #endif
 	}
 

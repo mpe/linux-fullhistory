@@ -649,7 +649,7 @@ static void yam_dotimer(unsigned long dummy)
 
 	for (i = 0; i < NR_PORTS; i++) {
 		struct net_device *dev = &yam_ports[i].dev;
-		if (test_bit(LINK_STATE_START, &dev->state))
+		if (netif_running(dev))
 			yam_arbitrate(dev);
 	}
 	yam_timer.expires = jiffies + HZ / 100;
@@ -748,7 +748,7 @@ static void yam_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		yp = &yam_ports[i];
 		dev = &yp->dev;
 
-		if (!test_bit(LINK_STATE_START, &dev->state))
+		if (!netif_running(dev))
 			continue;
 
 		while ((iir = IIR_MASK & inb(IIR(dev->base_addr))) != IIR_NOPEND) {
@@ -794,7 +794,7 @@ static int yam_net_get_info(char *buffer, char **start, off_t offset, int length
 		if (yam_ports[i].iobase == 0 || yam_ports[i].irq == 0)
 			continue;
 		len += sprintf(buffer + len, "Device %s\n", yam_ports[i].name);
-		len += sprintf(buffer + len, "  Up       %d\n", test_bit(LINK_STATE_START, &yam_ports[i].dev.state));
+		len += sprintf(buffer + len, "  Up       %d\n", netif_running(&yam_ports[i].dev));
 		len += sprintf(buffer + len, "  Speed    %u\n", yam_ports[i].bitrate);
 		len += sprintf(buffer + len, "  IoBase   0x%x\n", yam_ports[i].iobase);
 		len += sprintf(buffer + len, "  BaudRate %u\n", yam_ports[i].baudrate);
@@ -974,7 +974,7 @@ static int yam_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		return -EINVAL;			/* unused */
 
 	case SIOCYAMSMCS:
-		if (test_bit(LINK_STATE_START, &dev->state))
+		if (netif_running(dev))
 			return -EINVAL;		/* Cannot change this parameter when up */
 		ym = kmalloc(sizeof(struct yamdrv_ioctl_mcs), GFP_ATOMIC);
 		ym->bitrate = 9600;
@@ -990,13 +990,13 @@ static int yam_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		if (copy_from_user(&yi, ifr->ifr_data, sizeof(struct yamdrv_ioctl_cfg)))
 			 return -EFAULT;
 
-		if ((yi.cfg.mask & YAM_IOBASE) && test_bit(LINK_STATE_START, &dev->state))
+		if ((yi.cfg.mask & YAM_IOBASE) && netif_running(dev))
 			return -EINVAL;		/* Cannot change this parameter when up */
-		if ((yi.cfg.mask & YAM_IRQ) && test_bit(LINK_STATE_START, &dev->state))
+		if ((yi.cfg.mask & YAM_IRQ) && netif_running(dev))
 			return -EINVAL;		/* Cannot change this parameter when up */
-		if ((yi.cfg.mask & YAM_BITRATE) && test_bit(LINK_STATE_START, &dev->state))
+		if ((yi.cfg.mask & YAM_BITRATE) && netif_running(dev))
 			return -EINVAL;		/* Cannot change this parameter when up */
-		if ((yi.cfg.mask & YAM_BAUDRATE) && test_bit(LINK_STATE_START, &dev->state))
+		if ((yi.cfg.mask & YAM_BAUDRATE) && netif_running(dev))
 			return -EINVAL;		/* Cannot change this parameter when up */
 
 		if (yi.cfg.mask & YAM_IOBASE) {
@@ -1210,7 +1210,7 @@ void cleanup_module(void)
 		struct net_device *dev = &yam_ports[i].dev;
 		if (!dev->priv)
 			continue;
-		if (test_bit(LINK_STATE_START, &dev->state))
+		if (netif_running(dev))
 			yam_close(dev);
 		unregister_netdev(dev);
 	}

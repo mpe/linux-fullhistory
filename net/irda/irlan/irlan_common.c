@@ -120,7 +120,7 @@ void irlan_watchdog_timer_expired(void *data)
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
 
 	/* Check if device still configured */
-	if (test_bit(LINK_STATE_START, &self->dev.state)) {
+	if (netif_running(&self->dev)) {
 		IRDA_DEBUG(0, __FUNCTION__ 
 		      "(), notifying irmanager to stop irlan!\n");
 		mgr_event.event = EVENT_IRLAN_STOP;
@@ -363,7 +363,7 @@ void irlan_close(struct irlan_cb *self)
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
 
 	/* Check if device is still configured */
-	if (test_bit(LINK_STATE_START, &self->dev.state)) {
+	if (netif_running(&self->dev)) {
 		IRDA_DEBUG(0, __FUNCTION__ 
 		       "(), Device still configured, closing later!\n");
 
@@ -1195,7 +1195,7 @@ static int irlan_proc_read(char *buf, char **start, off_t offset, int len)
 						  buf+len);
 			
 			len += sprintf(buf+len, "tx busy: %s\n", 
-				       test_bit(LINK_STATE_XOFF, &self->dev.state) ? "TRUE" : "FALSE");
+				       netif_queue_stopped(&self->dev) ? "TRUE" : "FALSE");
 			
 			len += sprintf(buf+len, "\n");
 		}

@@ -1,4 +1,4 @@
-/* $Id: sunbmac.c,v 1.15 2000/02/10 21:14:22 davem Exp $
+/* $Id: sunbmac.c,v 1.16 2000/02/16 10:36:18 davem Exp $
  * sunbmac.c: Driver for Sparc BigMAC 100baseT ethernet adapters.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -787,7 +787,7 @@ static void bigmac_tx(struct bigmac *bp)
 	DTX((" DONE, tx_old=%d\n", elem));
 	bp->tx_old = elem;
 
-	if (test_bit(LINK_STATE_XOFF, &dev->state) &&
+	if (netif_queue_stopped(dev) &&
 	    TX_BUFFS_AVAIL(bp) > 0)
 		netif_wake_queue(bp->dev);
 

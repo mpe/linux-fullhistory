@@ -467,8 +467,7 @@ static void lance_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 		ll->rdp = LE_C0_STRT;
 	}
 
-	if (test_bit(LINK_STATE_XOFF, &dev->state) &&
-	    TX_BUFFS_AVAIL > 0)
+	if (netif_queue_stopped(dev) && TX_BUFFS_AVAIL > 0)
 		netif_wake_queue(dev);
 
 	ll->rap = LE_CSR0;
@@ -687,7 +686,7 @@ static void lance_set_multicast (struct net_device *dev)
 	volatile struct lance_init_block *ib = lp->init_block;
 	volatile struct lance_regs *ll = lp->ll;
 
-	if (!test_bit(LINK_STATE_START, &dev->state))
+	if (!netif_running(dev))
 		return;
 
 	if (lp->tx_old != lp->tx_new) {

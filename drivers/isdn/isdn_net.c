@@ -483,7 +483,7 @@
  * Instead I chose to add isdn_net_started() which gives the state of the 
  * master in case of slaves.
  * I'm still not sure if this is how it's supposed to be done this way
- * because it uses test_bit(LINK_STATE_START, &dev->state) which might be 
+ * because it uses netif_running(dev) which might be 
  * considered private to the network layer. However, it works for now.
  * Alternative: set a flag in _open() and clear it in _close() 
  *
@@ -506,7 +506,7 @@ static int __inline__ isdn_net_started(isdn_net_dev *n)
 		dev = lp->master;
 	else
 		dev = &n->dev;
-	return test_bit(LINK_STATE_START, &dev->state);
+	return netif_running(dev);
 }
 
 /*

@@ -775,7 +775,7 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 #endif
 
 			if (ep->tx_full &&
-			    test_bit(LINK_STATE_XOFF, &dev->flags) &&
+			    netif_queue_stopped(dev) &&
 			    dirty_tx > ep->cur_tx - TX_RING_SIZE + 2) {
 				/* The ring is no longer full, clear tbusy. */
 				ep->tx_full = 0;
@@ -970,7 +970,7 @@ static struct net_device_stats *epic_get_stats(struct net_device *dev)
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 
-	if (test_bit(LINK_STATE_START, &dev->state)) {
+	if (netif_running(dev)) {
 		/* Update the error counts. */
 		ep->stats.rx_missed_errors += inb(ioaddr + MPCNT);
 		ep->stats.rx_frame_errors += inb(ioaddr + ALICNT);
@@ -1058,12 +1058,12 @@ static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		data[0] = ((struct epic_private *)dev->priv)->phys[0] & 0x1f;
 		/* Fall Through */
 	case SIOCDEVPRIVATE+1:		/* Read the specified MII register. */
-		if (! test_bit(LINK_STATE_START, &dev->state)) {
+		if (! netif_running(dev)) {
 			outl(0x0200, ioaddr + GENCTL);
 			outl((inl(ioaddr + NVCTL) & ~0x003C) | 0x4800, ioaddr + NVCTL);
 		}
 		data[3] = mdio_read(ioaddr, data[0] & 0x1f, data[1] & 0x1f);
-		if (! test_bit(LINK_STATE_START, &dev->state)) {
+		if (! netif_running(dev)) {
 #ifdef notdef
 			outl(0x0008, ioaddr + GENCTL);
 			outl((inl(ioaddr + NVCTL) & ~0x483C) | 0x0000, ioaddr + NVCTL);
@@ -1073,12 +1073,12 @@ static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	case SIOCDEVPRIVATE+2:		/* Write the specified MII register */
 		if (!suser())
 			return -EPERM;
-		if (! test_bit(LINK_STATE_START, &dev->state)) {
+		if (! netif_running(dev)) {
 			outl(0x0200, ioaddr + GENCTL);
 			outl((inl(ioaddr + NVCTL) & ~0x003C) | 0x4800, ioaddr + NVCTL);
 		}
 		mdio_write(ioaddr, data[0] & 0x1f, data[1] & 0x1f, data[2]);
-		if (! test_bit(LINK_STATE_START, &dev->state)) {
+		if (! netif_running(dev)) {
 #ifdef notdef
 			outl(0x0008, ioaddr + GENCTL);
 			outl((inl(ioaddr + NVCTL) & ~0x483C) | 0x0000, ioaddr + NVCTL);

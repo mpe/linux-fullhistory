@@ -18,7 +18,7 @@ csum_ipv6_magic:
 
 	ldq	$0,0($16)	# e0    : load src & dst addr words
 	zapnot	$20,15,$20	# .. e1 : zero extend incoming csum
-	extqh	$18,7,$4	# e0    : byte swap len & proto while we wait
+	extqh	$18,1,$4	# e0    : byte swap len & proto while we wait
 	ldq	$1,8($16)	# .. e1 :
 
 	extbl	$18,1,$5	# e0	:

@@ -784,7 +784,7 @@ static int scc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
   case SIOCSSCCPARAM:
     if (!capable(CAP_NET_ADMIN)) 
     	return -EPERM;
-    if (test_bit(LINK_STATE_START, &dev->state)) 
+    if (netif_running(dev))
     	return -EAGAIN;
     if(copy_from_user(&priv->param, ifr->ifr_data, sizeof(struct scc_param)))
     	return -EFAULT;

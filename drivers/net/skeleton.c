@@ -416,7 +416,7 @@ static int net_send_packet(struct sk_buff *skb, struct net_device *dev)
 	spin_lock_irq(&np->lock);
 
 	add_to_tx_ring(np, skb, length);
-	dev->trans_start = jiffied;
+	dev->trans_start = jiffies;
 
 	/* If we just used up the very last entry in the
 	 * TX ring on this device, tell the queueing
@@ -482,8 +482,7 @@ void net_tx(struct net_device *dev)
 	 * condition, and space has now been made available,
 	 * wake up the queue.
 	 */
-	if (test_bit(LINK_STATE_XOFF, &dev->state) &&
-	    ! tx_full(dev))
+	if (netif_queue_stopped(dev) && ! tx_full(dev))
 		netif_wake_queue(dev);
 
 	spin_unlock(&np->lock);

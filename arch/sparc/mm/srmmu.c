@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.207 2000/02/14 02:51:53 davem Exp $
+/* $Id: srmmu.c,v 1.208 2000/02/14 04:52:33 jj Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -201,7 +201,7 @@ static inline pte_t srmmu_pte_modify(pte_t pte, pgprot_t newprot)
 }
 
 /* to find an entry in a top-level page table... */
-static inline pgd_t *srmmu_pgd_offset(struct mm_struct * mm, unsigned long address)
+extern inline pgd_t *srmmu_pgd_offset(struct mm_struct * mm, unsigned long address)
 {
 	return mm->pgd + (address >> SRMMU_PGDIR_SHIFT);
 }
@@ -2337,7 +2337,6 @@ void __init ld_mmu_srmmu(void)
 	BTFIXUPSET_CALL(pgd_set, srmmu_pgd_set, BTFIXUPCALL_NORM);
 	
 	BTFIXUPSET_INT(pte_modify_mask, SRMMU_CHG_MASK);
-	BTFIXUPSET_CALL(pgd_offset, srmmu_pgd_offset, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(pmd_offset, srmmu_pmd_offset, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(pte_offset, srmmu_pte_offset, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(pte_free_kernel, srmmu_pte_free, BTFIXUPCALL_NORM);

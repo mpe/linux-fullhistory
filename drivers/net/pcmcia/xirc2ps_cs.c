@@ -1340,8 +1340,7 @@ xirc2ps_event(event_t event, int priority,
       case CS_EVENT_CARD_REMOVAL:
 	  link->state &= ~DEV_PRESENT;
 	  if (link->state & DEV_CONFIG) {
-	      netif_stop_queue(dev);
-	      clear_bit(LINK_STATE_START, &dev->state);
+	      netif_device_detach(dev);
 	      link->release.expires = jiffies + HZ / 20;
 	      add_timer(&link->release);
 	  }
@@ -1356,8 +1355,7 @@ xirc2ps_event(event_t event, int priority,
       case CS_EVENT_RESET_PHYSICAL:
 	  if (link->state & DEV_CONFIG) {
 	      if (link->open) {
-		  netif_stop_queue(dev);
-		  clear_bit(LINK_STATE_START, &dev->state);
+		  netif_device_detach(dev);
 		  lp->suspended=1;
 		  do_powerdown(dev);
 	      }
@@ -1373,8 +1371,7 @@ xirc2ps_event(event_t event, int priority,
 	     if (link->open) {
 		 do_reset(dev,1);
 		 lp->suspended=0;
-		 set_bit(LINK_STATE_START, &dev->state);
-		 netif_start_queue(dev);
+		 netif_device_attach(dev);
 	     }
 	  }
 	  break;
@@ -1403,7 +1400,7 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				  */
 
     spin_lock (&lp->lock);
-    if (!test_bit(LINK_STATE_START, &dev->state))
+    if (!netif_device_present(dev))
 	return;
 
     ioaddr = dev->base_addr;

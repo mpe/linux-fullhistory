@@ -2894,16 +2894,16 @@ aic7xxx_done(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
   struct aic7xxx_scb *scbp;
   unsigned char queue_depth;
 
-  if (scb->sg_count == 1)
-    pci_unmap_single(p->pdev, le32_to_cpu(scb->sg_list[0].address),
-		     le32_to_cpu(scb->sg_list[0].length));
-  else if (scb->sg_count > 1)
+  if (cmd->use_sg > 1)
   {
     struct scatterlist *sg;
 
     sg = (struct scatterlist *)cmd->request_buffer;
     pci_unmap_sg(p->pdev, sg, cmd->use_sg);
   }
+  else if (cmd->request_bufflen)
+    pci_unmap_single(p->pdev, le32_to_cpu(scb->sg_list[0].address),
+		     le32_to_cpu(scb->sg_list[0].length));
   if (scb->flags & SCB_RECOVERY_SCB)
   {
     p->flags &= ~AHC_ABORT_PENDING;

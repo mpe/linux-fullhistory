@@ -171,7 +171,7 @@ static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct net_device *dev,
 	r->ifi_flags = dev->flags;
 	r->ifi_change = change;
 
-	if (test_bit(LINK_STATE_DOWN, &dev->state))
+	if (! netif_running(dev))
 		r->ifi_flags &= ~IFF_RUNNING;
 	else
 		r->ifi_flags |= IFF_RUNNING;

@@ -361,7 +361,7 @@ static int dlci_open(struct net_device *dev)
 	if (!*(short *)(dev->dev_addr))
 		return(-EINVAL);
 
-	if (!test_bit(LINK_STATE_START, &dlp->slave->state))
+	if (!netif_running(dlp->slave))
 		return(-ENOTCONN);
 
 	flp = dlp->slave->priv;
@@ -495,7 +495,7 @@ int dlci_del(struct dlci_add *dlci)
 	if (!master)
 		return(-ENODEV);
 
-	if (test_bit(LINK_STATE_START, &master->state))
+	if (netif_running(master))
 		return(-EBUSY);
 
 	dlp = master->priv;

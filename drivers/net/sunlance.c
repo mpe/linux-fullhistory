@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.97 2000/02/14 09:02:32 davem Exp $
+/* $Id: sunlance.c,v 1.99 2000/02/16 10:36:14 davem Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -640,11 +640,11 @@ static void lance_tx_dvma(struct net_device *dev)
 		j = TX_NEXT(j);
 	}
 	lp->tx_old = j;
-
-	if (test_bit(LINK_STATE_XOFF, &dev->state) &&
+out:
+	if (netif_queue_stopped(dev) &&
 	    TX_BUFFS_AVAIL > 0)
 		netif_wake_queue(dev);
-out:
+
 	spin_unlock(&lp->lock);
 }
 
@@ -812,7 +812,7 @@ static void lance_tx_pio(struct net_device *dev)
 	}
 	lp->tx_old = j;
 
-	if (test_bit(LINK_STATE_XOFF, &dev->state) &&
+	if (netif_queue_stopped(dev) &&
 	    TX_BUFFS_AVAIL > 0)
 		netif_wake_queue(dev);
 out:
@@ -1247,7 +1247,7 @@ static void lance_set_multicast(struct net_device *dev)
 	volatile struct lance_init_block *ib = lp->init_block;
 	u16 mode;
 
-	if (!test_bit(LINK_STATE_START, &dev->state))
+	if (!netif_running(dev))
 		return;
 
 	if (lp->tx_old != lp->tx_new) {

@@ -1,4 +1,4 @@
-/* $Id: floppy.h,v 1.26 2000/02/12 23:32:35 davem Exp $
+/* $Id: floppy.h,v 1.27 2000/02/15 02:58:40 davem Exp $
  * asm-sparc64/floppy.h: Sparc specific parts of the Floppy driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -560,12 +560,9 @@ static int sun_pci_fd_test_drive(unsigned long port, int drive)
 
 #endif /* CONFIG_PCI */
 
-static struct linux_prom_registers fd_regs[2];
-
 static unsigned long __init sun_floppy_init(void)
 {
 	char state[128];
-	int fd_node, num_regs;
 	struct sbus_bus *bus;
 	struct sbus_dev *sdev = NULL;
 	static int initialized = 0;
@@ -714,21 +711,19 @@ static unsigned long __init sun_floppy_init(void)
 		return 0;
 #endif
 	}
-	fd_node = sdev->prom_node;
-	prom_getproperty(fd_node, "status", state, sizeof(state));
+	prom_getproperty(sdev->prom_node, "status", state, sizeof(state));
 	if(!strncmp(state, "disabled", 8))
 		return 0;
-	num_regs = prom_getproperty(fd_node, "reg", (char *) fd_regs,
-				    sizeof(fd_regs));
-	num_regs = (num_regs / sizeof(fd_regs[0]));
 
 	/*
-	 * We cannot do sparc_alloc_io here: it does request_region,
+	 * We cannot do sbus_ioremap here: it does request_region,
 	 * which the generic floppy driver tries to do once again.
+	 * But we must use the sdev resource values as they have
+	 * had parent ranges applied.
 	 */
 	sun_fdc = (struct sun_flpy_controller *)
-		((unsigned long)fd_regs[0].phys_addr + 
-		 (((unsigned long)fd_regs[0].which_io) << 32UL));
+		(sdev->resource[0].start +
+		 ((sdev->resource[0].flags & 0x1ffUL) << 32UL));
 
 	/* Last minute sanity check... */
 	if(sbus_readb(&sun_fdc->status1_82077) == 0xff) {

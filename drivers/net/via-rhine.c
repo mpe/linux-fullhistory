@@ -869,7 +869,7 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 			np->tx_skbuff[entry] = 0;
 		}
 		if (np->tx_full &&
-		    test_bit(LINK_STATE_XOFF, &dev->flags) &&
+		    netif_queue_stopped(dev) &&
 		    np->cur_tx - np->dirty_tx < TX_RING_SIZE - 4) {
 			/* The ring is no longer full, clear tbusy. */
 			np->tx_full = 0;

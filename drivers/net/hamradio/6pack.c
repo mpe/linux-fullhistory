@@ -283,7 +283,8 @@ static void sixpack_write_wakeup(struct tty_struct *tty)
 	struct sixpack *sp = (struct sixpack *) tty->disc_data;
 
 	/* First make sure we're connected. */
-	if (!sp || sp->magic != SIXPACK_MAGIC || !test_bit(LINK_STATE_START, &sp->dev->state)) {
+	if (!sp || sp->magic != SIXPACK_MAGIC ||
+	    !netif_running(sp->dev)) {
 		return;
 	}
 
@@ -477,7 +478,8 @@ sixpack_receive_buf(struct tty_struct *tty, const unsigned char *cp, char *fp, i
 
 	struct sixpack *sp = (struct sixpack *) tty->disc_data;
 
-	if (!sp || sp->magic != SIXPACK_MAGIC || !test_bit(LINK_STATE_START, &sp->dev->state) || !count)
+	if (!sp || sp->magic != SIXPACK_MAGIC ||
+	    !netif_running(sp->dev) || !count)
 		return;
 
 	save_flags(flags);
@@ -750,7 +752,7 @@ static void __exit sixpack_cleanup_driver(void)
 				 * VSV = if dev->start==0, then device
 				 * unregistered while close proc.
 				 */ 
-				if (test_bit(LINK_STATE_START, &sixpack_ctrls[i]->dev.state))
+				if (netif_running(sixpack_ctrls[i]->dev))
 					unregister_netdev(&(sixpack_ctrls[i]->dev));
 
 				kfree(sixpack_ctrls[i]);

@@ -1001,7 +1001,7 @@ static inline void wv_82593_reconfig (device * dev)
 
 		lp->reconfig_82593 = FALSE;
 		wv_82593_config (dev);
-		netif_start_queue (dev);
+		netif_wake_queue (dev);
 	}
 }
 
@@ -4360,7 +4360,7 @@ wavelan_close(device *	dev)
   MOD_DEC_USE_COUNT;
 
   /* If the card is still present */
-  if (test_bit(LINK_STATE_START, &dev->state))
+  if (netif_device_present(dev))
     {
       netif_stop_queue (dev);
 
@@ -4662,8 +4662,7 @@ wavelan_event(event_t		event,		/* The event received */
 	if(link->state & DEV_CONFIG)
 	  {
 	    /* Accept no more transmissions */
-      	    netif_stop_queue (dev);
-	    clear_bit(LINK_STATE_START, &dev->state);
+      	    netif_device_detach(dev);
 
 	    /* Release the card */
 	    wv_pcmcia_release((u_long) link);
@@ -4700,10 +4699,8 @@ wavelan_event(event_t		event,		/* The event received */
     	if(link->state & DEV_CONFIG)
 	  {
       	    if(link->open)
-	      {
-	      	netif_stop_queue (dev);
-		clear_bit(LINK_STATE_START, &dev->state);
-	      }
+	      	netif_device_detach(dev);
+
       	    CardServices(ReleaseConfiguration, link->handle);
 	  }
 	break;
@@ -4718,8 +4715,7 @@ wavelan_event(event_t		event,		/* The event received */
       	    if(link->open)	/* If RESET -> True, If RESUME -> False ??? */
 	      {
 		wv_hw_reset(dev);
-		set_bit(LINK_STATE_START, &dev->state);
-		netif_start_queue (dev);
+		netif_device_attach(dev);
 	      }
 	  }
 	break;

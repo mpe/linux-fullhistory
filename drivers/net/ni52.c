@@ -858,7 +858,7 @@ static void ni52_interrupt(int irq,void *dev_id,struct pt_regs *reg_ptr)
 #ifndef NO_NOPCOMMANDS
 		if(stat & STAT_CNA)	/* CU went 'not ready' */
 		{
-			if(test_bit(LINK_STATE_START, &dev->state))
+			if(netif_running(dev))
 				printk("%s: oops! CU has left active state. stat: %04x/%02x.\n",dev->name,(int) stat,(int) p->scb->cus);
 		}
 #endif

@@ -1945,8 +1945,6 @@ generic_file_write(struct file *file,const char *buf,size_t count,loff_t *ppos)
 			count -= status;
 			pos += status;
 			buf += status;
-			if (pos > inode->i_size)
-				inode->i_size = pos;
 		}
 unlock:
 		/* Mark it unlocked again and drop the page.. */

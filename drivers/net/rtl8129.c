@@ -787,7 +787,7 @@ static void rtl8129_timer(unsigned long data)
 			rtl8129_interrupt(dev->irq, dev, 0);
 		}
 	}
-	if (test_bit(LINK_STATE_XOFF, &dev->state) &&
+	if (netif_queue_stopped(dev) &&
 		(jiffies - dev->trans_start) >= 2*TX_TIMEOUT)
 		rtl8129_tx_timeout(dev);
 
@@ -1366,7 +1366,7 @@ rtl8129_get_stats(struct net_device *dev)
 	struct rtl8129_private *tp = (struct rtl8129_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 
-	if (test_bit(LINK_STATE_START, &dev->state)) {
+	if (netif_running(dev)) {
 		tp->stats.rx_missed_errors += inl(ioaddr + RxMissed);
 		outl(0, ioaddr + RxMissed);
 	}

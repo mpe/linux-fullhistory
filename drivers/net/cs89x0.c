@@ -941,7 +941,7 @@ static void set_multicast_list(struct net_device *dev)
 static int set_mac_address(struct net_device *dev, void *addr)
 {
 	int i;
-	if (test_bit(LINK_STATE_START, &dev->state))
+	if (netif_running(dev))
 		return -EBUSY;
 	printk("%s: Setting MAC address to ", dev->name);
 	for (i = 0; i < 6; i++)

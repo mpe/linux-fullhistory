@@ -1,4 +1,4 @@
-/* $Id: sunhme.c,v 1.87 2000/02/10 21:14:22 davem Exp $
+/* $Id: sunhme.c,v 1.90 2000/02/16 10:36:16 davem Exp $
  * sunhme.c: Sparc HME/BigMac 10/100baseT half/full duplex auto switching,
  *           auto carrier detecting ethernet driver.  Also known as the
  *           "Happy Meal Ethernet" found on SunSwift SBUS cards.
@@ -152,6 +152,13 @@ static __inline__ void tx_dump_ring(struct happy_meal *hp)
 #define DEFAULT_IPG2       4 /* For all modes */
 #define DEFAULT_JAMSIZE    4 /* Toe jam */
 
+/* NOTE: In the descriptor writes one _must_ write the address
+ *	 member _first_.  The card must not be allowed to see
+ *	 the updated descriptor flags until the address is
+ *	 correct.  I've added a write memory barrier between
+ *	 the two stores so that I can sleep well at night... -DaveM
+ */
+
 #if defined(CONFIG_SBUS) && defined(CONFIG_PCI)
 static void sbus_hme_write32(unsigned long reg, u32 val)
 {
@@ -166,13 +173,15 @@ static u32 sbus_hme_read32(unsigned long reg)
 static void sbus_hme_write_rxd(struct happy_meal_rxd *rxd, u32 flags, u32 addr)
 {
 	rxd->rx_addr = addr;
+	wmb();
 	rxd->rx_flags = flags;
 }
 
 static void sbus_hme_write_txd(struct happy_meal_txd *txd, u32 flags, u32 addr)
 {
-	txd->tx_flags = flags;
 	txd->tx_addr = addr;
+	wmb();
+	txd->tx_flags = flags;
 }
 
 static u32 sbus_hme_read_desc32(u32 *p)
@@ -193,18 +202,20 @@ static u32 pci_hme_read32(unsigned long reg)
 static void pci_hme_write_rxd(struct happy_meal_rxd *rxd, u32 flags, u32 addr)
 {
 	rxd->rx_addr = cpu_to_le32(addr);
+	wmb();
 	rxd->rx_flags = cpu_to_le32(flags);
 }
 
 static void pci_hme_write_txd(struct happy_meal_txd *txd, u32 flags, u32 addr)
 {
-	txd->tx_flags = cpu_to_le32(flags);
 	txd->tx_addr = cpu_to_le32(addr);
+	wmb();
+	txd->tx_flags = cpu_to_le32(flags);
 }
 
 static u32 pci_hme_read_desc32(u32 *p)
 {
-	return cpu_to_le32(*p);
+	return cpu_to_le32p(p);
 }
 
 #define hme_write32(__hp, __reg, __val) \
@@ -232,10 +243,12 @@ static u32 pci_hme_read_desc32(u32 *p)
 	sbus_readl(__reg)
 #define hme_write_rxd(__hp, __rxd, __flags, __addr) \
 do {	(__rxd)->rx_addr = (__addr); \
+	wmb(); \
 	(__rxd)->rx_flags = (__flags); \
 } while(0)
 #define hme_write_txd(__hp, __txd, __flags, __addr) \
 do {	(__txd)->tx_addr = (__addr); \
+	wmb(); \
 	(__txd)->tx_flags = (__flags); \
 } while(0)
 #define hme_read_desc32(__hp, __p)	(*(__p))
@@ -253,13 +266,15 @@ do {	(__txd)->tx_addr = (__addr); \
 	readl(__reg)
 #define hme_write_rxd(__hp, __rxd, __flags, __addr) \
 do {	(__rxd)->rx_addr = cpu_to_le32(__addr); \
+	wmb(); \
 	(__rxd)->rx_flags = cpu_to_le32(__flags); \
 } while(0)
 #define hme_write_txd(__hp, __txd, __flags, __addr) \
 do {	(__txd)->tx_addr = cpu_to_le32(__addr); \
+	wmb(); \
 	(__txd)->tx_flags = cpu_to_le32(__flags); \
 } while(0)
-#define hme_read_desc32(__hp, __p)	cpu_to_le32(*(__p))
+#define hme_read_desc32(__hp, __p)	cpu_to_le32p(__p)
 #define hme_dma_map(__hp, __ptr, __size) \
 	pci_map_single((__hp)->happy_dev, (__ptr), (__size))
 #define hme_dma_unmap(__hp, __addr, __size) \
@@ -1907,7 +1922,7 @@ static void happy_meal_tx(struct happy_meal *hp)
 	hp->tx_old = elem;
 	TXD((">"));
 
-	if (test_bit(LINK_STATE_XOFF, &dev->state) &&
+	if (netif_queue_stopped(dev) &&
 	    TX_BUFFS_AVAIL(hp) > 0)
 		netif_wake_queue(dev);
 
@@ -2192,10 +2207,11 @@ static int happy_meal_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (TX_BUFFS_AVAIL(hp) <= 0)
 		netif_stop_queue(dev);
 
-	spin_unlock_irq(&hp->happy_lock);
-
 	/* Get it going. */
 	hme_write32(hp, hp->etxregs + ETX_PENDING, ETX_TP_DMAWAKEUP);
+
+	spin_unlock_irq(&hp->happy_lock);
+
 	dev->trans_start = jiffies;
 
 	tx_add_log(hp, TXLOG_ACTION_TXMIT, 0);

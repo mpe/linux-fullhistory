@@ -701,7 +701,7 @@ static int delete_interface (wan_device_t *wandev, char *name, int force)
 	if (dev == NULL)
 		return -ENODEV;	/* interface not found */
 
-	if (test_bit(LINK_STATE_START, &dev->state)) {
+	if (netif_running(dev)) {
 		if (force) {
 			printk(KERN_WARNING
 				"%s: deleting opened interface %s!\n",

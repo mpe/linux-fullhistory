@@ -1692,8 +1692,12 @@ int block_prepare_write(struct page *page, unsigned from, unsigned to,
 int generic_commit_write(struct file *file, struct page *page,
 		unsigned from, unsigned to)
 {
-	__block_commit_write((struct inode*)page->mapping->host,page,from,to);
+	struct inode *inode = (struct inode*)page->mapping->host;
+	loff_t pos = ((loff_t)page->index << PAGE_CACHE_SHIFT) + to;
+	__block_commit_write(inode,page,from,to);
 	kunmap(page);
+	if (pos > inode->i_size)
+		inode->i_size = pos;
 	return 0;
 }
 
@@ -2010,7 +2014,6 @@ int block_symlink(struct inode *inode, const char *symname, int len)
 	kaddr = (char*)page_address(page);
 	memcpy(kaddr, symname, len-1);
 	mapping->a_ops->commit_write(NULL, page, 0, len-1);
-	inode->i_size = len-1;
 	/*
 	 * Notice that we are _not_ going to block here - end of page is
 	 * unmapped, so this will only try to map the rest of page, see
@@ -2026,7 +2029,6 @@ int block_symlink(struct inode *inode, const char *symname, int len)
 	mark_inode_dirty(inode);
 	return 0;
 fail_map:
-	inode->i_size = len-1;
 	UnlockPage(page);
 	page_cache_release(page);
 fail:

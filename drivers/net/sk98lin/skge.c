@@ -276,7 +276,8 @@ static const char SysKonnectBuildNumber[] =
 // #define RLMT_MODE	{"CheckLink", }
 
 
-#define DEV_KFREE_SKB(skb) dev_kfree_skb(skb);
+#define DEV_KFREE_SKB(skb) dev_kfree_skb(skb)
+#define DEV_KFREE_SKB_IRQ(skb) dev_kfree_skb_irq(skb)
 
 /* function prototypes ******************************************************/
 static void	FreeResources(struct net_device *dev);
@@ -409,6 +410,21 @@ static int __init skge_probe (void)
 		dev->base_addr = 42;
 
 		pci_set_master(pdev);
+
+#ifdef __sparc__
+		/* Set the proper cache line size value, plus enable
+		 * write-invalidate and fast back-to-back on Sparc.
+		 */
+		{
+			SK_U16 pci_command;
+
+			SkPciWriteCfgByte(pAC, PCI_CACHE_LINE_SIZE, 0x10);
+
+			SkPciReadCfgWord(pAC, PCI_COMMAND, &pci_command);
+			pci_command |= (PCI_COMMAND_INVALIDATE | PCI_COMMAND_FAST_BACK);
+			SkPciWriteCfgWord(pAC, PCI_COMMAND, pci_command);
+		}
+#endif
 
 		base_address = pdev->resource[0].start;
 
@@ -1507,13 +1523,16 @@ int		Rc;	/* return code of XmitFrame */
 
 	Rc = XmitFrame(pAC, &pAC->TxPort[pAC->ActivePort][TX_PRIO_LOW], skb);
 
-	if (Rc == 0) {
-		/* transmitter out of resources */
+	/* Transmitter out of resources? */
+	if (Rc <= 0)
 		netif_stop_queue(dev);
 
-		/* give buffer ownership back to the queueing layer */
+	/* If not taken, give buffer ownership back to the
+	 * queueing layer.
+	 */
+	if (Rc < 0)
 		return (1);
-	} 
+
 	dev->trans_start = jiffies;
 	return (0);
 } /* SkGeXmit */
@@ -1539,7 +1558,7 @@ int		Rc;	/* return code of XmitFrame */
  *	> 0 - on succes: the number of bytes in the message
  *	= 0 - on resource shortage: this frame sent or dropped, now
  *        the ring is full ( -> set tbusy)
- *	< 0 - on failure: other problems (not used)
+ *	< 0 - on failure: other problems ( -> return failure to upper layers)
  */
 static int XmitFrame(
 SK_AC 		*pAC,		/* pointer to adapter context */
@@ -1566,7 +1585,7 @@ int		BytesSend;
 				SK_DBGCAT_DRV_TX_PROGRESS,
 				("XmitFrame failed\n"));
 			/* this message can not be sent now */
-			return (0);
+			return (-1);
 		}
 	}
 	/* advance head counter behind descriptor needed for this frame */
@@ -1681,7 +1700,11 @@ SK_U64	PhysAddr;	/* address of DMA mapping */
 		pci_unmap_single(&pAC->PciDev, PhysAddr,
 				 pTxd->pMBuf->len);
 
-		DEV_KFREE_SKB(pTxd->pMBuf); /* free message */
+		/* free message */
+		if (in_irq())
+			DEV_KFREE_SKB_IRQ(pTxd->pMBuf);
+		else
+			DEV_KFREE_SKB(pTxd->pMBuf); /* free message */
 		pTxPort->TxdRingFree++;
 		pTxd->TBControl &= ~TX_CTRL_SOFTWARE;
 		pTxd = pTxd->pNextTxd; /* point behind fragment with EOF */
@@ -1909,8 +1932,8 @@ rx_start:
 			/* hardware checksum */
 			Type = ntohs(*((short*)&pMsg->data[12]));
 			if (Type == 0x800) {
-				Csum1= pRxd->TcpSums & 0xffff;
-				Csum2=(pRxd->TcpSums >> 16) & 0xffff;
+				Csum1=le16_to_cpu(pRxd->TcpSums & 0xffff);
+				Csum2=le16_to_cpu((pRxd->TcpSums >> 16) & 0xffff);
 				if ((Csum1 & 0xfffe) && (Csum2 & 0xfffe)) {
 					Result = SkCsGetReceiveInfo(pAC,
 						&pMsg->data[14], 
@@ -1980,7 +2003,7 @@ rx_start:
 					SK_DBG_MSG(NULL, SK_DBGMOD_DRV, 
 						SK_DBGCAT_DRV_RX_PROGRESS,
 						("D"));
-					DEV_KFREE_SKB(pMsg);
+					DEV_KFREE_SKB_IRQ(pMsg);
 				}
 			} /* if not for rlmt */
 			else {
@@ -2016,7 +2039,7 @@ rx_start:
 					pAC->dev->last_rx = jiffies;
 				}
 				else {
-					DEV_KFREE_SKB(pMsg);
+					DEV_KFREE_SKB_IRQ(pMsg);
 				}
 
 			} /* if packet for rlmt */
@@ -2040,7 +2063,7 @@ rx_start:
 				("skge: Error in received frame, dropped!\n"
 				"Control: %x\nRxStat: %x\n",
 				Control, FrameStat));
-			DEV_KFREE_SKB(pMsg);
+			DEV_KFREE_SKB_IRQ(pMsg);
 		}
 	} /* while */
 	FillRxRing(pAC, pRxPort);
@@ -2061,7 +2084,7 @@ rx_failed:
 	pci_unmap_single(&pAC->PciDev,
 			 PhysAddr,
 			 pAC->RxBufSize - 2);
-	DEV_KFREE_SKB(pRxd->pMBuf);
+	DEV_KFREE_SKB_IRQ(pRxd->pMBuf);
 	pRxd->pMBuf = NULL;
 	pRxPort->RxdRingFree++;
 	pRxPort->pRxdRingHead = pRxd->pNextRxd;
@@ -2276,7 +2299,7 @@ unsigned int	Flags;
 	
 	SK_DBG_MSG(NULL, SK_DBGMOD_DRV, SK_DBGCAT_DRV_ENTRY,
 		("SkGeSetMacAddr starts now...\n"));
-	if(test_bit(LINK_STATE_START, &dev->state)) {
+	if(netif_running(dev)) {
 		return -EBUSY;
 	}
 	memcpy(dev->dev_addr, addr->sa_data,dev->addr_len);
@@ -3120,7 +3143,10 @@ SK_MBUF		*pNextMbuf;
 	pFreeMbuf = pMbuf;
 	do {
 		pNextMbuf = pFreeMbuf->pNext;
-		DEV_KFREE_SKB(pFreeMbuf->pOs);
+		if (in_irq())
+			DEV_KFREE_SKB_IRQ(pFreeMbuf->pOs);
+		else
+			DEV_KFREE_SKB(pFreeMbuf->pOs);
 		pFreeMbuf = pNextMbuf;
 	} while ( pFreeMbuf != NULL );
 } /* SkDrvFreeRlmtMbuf */
@@ -3489,8 +3515,9 @@ unsigned int	Flags;
 		pRlmtMbuf = (SK_MBUF*) Param.pParaPtr;
 		pMsg = (struct sk_buff*) pRlmtMbuf->pOs;
 		skb_put(pMsg, pRlmtMbuf->Length);
-		XmitFrame(pAC, &pAC->TxPort[pRlmtMbuf->PortIdx][TX_PRIO_LOW],
-			pMsg);
+		if (XmitFrame(pAC, &pAC->TxPort[pRlmtMbuf->PortIdx][TX_PRIO_LOW],
+			      pMsg) <= 0)
+			DEV_KFREE_SKB(pMsg);
 		break;
 	default:
 		break;

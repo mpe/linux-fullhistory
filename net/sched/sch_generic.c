@@ -88,7 +88,7 @@ int qdisc_restart(struct net_device *dev)
 			/* And release queue */
 			spin_unlock(&dev->queue_lock);
 
-			if (!test_bit(LINK_STATE_XOFF, &dev->state)) {
+			if (!netif_queue_stopped(dev)) {
 				if (netdev_nit)
 					dev_queue_xmit_nit(skb, dev);
 
@@ -146,7 +146,7 @@ static void dev_watchdog(unsigned long arg)
 
 	spin_lock(&dev->xmit_lock);
 	if (dev->qdisc != &noop_qdisc) {
-		if (test_bit(LINK_STATE_XOFF, &dev->state) &&
+		if (netif_queue_stopped(dev) &&
 		    (jiffies - dev->trans_start) > dev->watchdog_timeo) {
 			printk(KERN_INFO "NETDEV WATCHDOG: %s: transmit timed out\n", dev->name);
 			dev->tx_timeout(dev);
@@ -476,7 +476,7 @@ void dev_deactivate(struct net_device *dev)
 
 	dev_watchdog_down(dev);
 
-	if (test_bit(LINK_STATE_SCHED, &dev->state)) {
+	if (test_bit(__LINK_STATE_SCHED, &dev->state)) {
 		current->policy |= SCHED_YIELD;
 		schedule();
 	}

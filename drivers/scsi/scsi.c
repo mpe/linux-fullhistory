@@ -248,6 +248,73 @@ static spinlock_t device_request_lock = SPIN_LOCK_UNLOCKED;
 static spinlock_t scsi_bhqueue_lock = SPIN_LOCK_UNLOCKED;
 
 /*
+ * Function:    scsi_allocate_request
+ *
+ * Purpose:     Allocate a request descriptor.
+ *
+ * Arguments:   device    - device for which we want a request
+ *
+ * Lock status: No locks assumed to be held.  This function is SMP-safe.
+ *
+ * Returns:     Pointer to request block.
+ *
+ * Notes:       With the new queueing code, it becomes important
+ *              to track the difference between a command and a
+ *              request.  A request is a pending item in the queue that
+ *              has not yet reached the top of the queue.
+ */
+
+Scsi_Request *scsi_allocate_request(Scsi_Device * device)
+{
+  	Scsi_Request *SRpnt = NULL;
+  
+  	if (!device)
+  		panic("No device passed to scsi_allocate_request().\n");
+  
+	SRpnt = (Scsi_Request *) kmalloc(sizeof(Scsi_Request), GFP_ATOMIC);
+	if( SRpnt == NULL )
+	{
+		return NULL;
+	}
+
+	memset(SRpnt, 0, sizeof(Scsi_Request));
+	SRpnt->sr_device = device;
+	SRpnt->sr_host = device->host;
+	SRpnt->sr_magic = SCSI_REQ_MAGIC;
+	SRpnt->sr_data_direction = SCSI_DATA_UNKNOWN;
+
+	return SRpnt;
+}
+
+/*
+ * Function:    scsi_release_request
+ *
+ * Purpose:     Release a request descriptor.
+ *
+ * Arguments:   device    - device for which we want a request
+ *
+ * Lock status: No locks assumed to be held.  This function is SMP-safe.
+ *
+ * Returns:     Pointer to request block.
+ *
+ * Notes:       With the new queueing code, it becomes important
+ *              to track the difference between a command and a
+ *              request.  A request is a pending item in the queue that
+ *              has not yet reached the top of the queue.  We still need
+ *              to free a request when we are done with it, of course.
+ */
+void scsi_release_request(Scsi_Request * req)
+{
+	if( req->sr_command != NULL )
+	{
+		scsi_release_command(req->sr_command);
+		req->sr_command = NULL;
+	}
+
+	kfree(req);
+}
+
+/*
  * Function:    scsi_allocate_device
  *
  * Purpose:     Allocate a command descriptor.
@@ -269,6 +336,9 @@ static spinlock_t scsi_bhqueue_lock = SPIN_LOCK_UNLOCKED;
  *              command block, this function will interrupt and return
  *              NULL in the event that a signal arrives that needs to
  *              be handled.
+ *
+ *              This function is deprecated, and drivers should be
+ *              rewritten to use Scsi_Request instead of Scsi_Cmnd.
  */
 
 Scsi_Cmnd *scsi_allocate_device(Scsi_Device * device, int wait, 
@@ -417,6 +487,10 @@ Scsi_Cmnd *scsi_allocate_device(Scsi_Device * device, int wait,
 	SCpnt->transfersize = 0;	/* No default transfer size */
 	SCpnt->cmd_len = 0;
 
+	SCpnt->sc_data_direction = SCSI_DATA_UNKNOWN;
+	SCpnt->sc_request = NULL;
+	SCpnt->sc_magic = SCSI_CMND_MAGIC;
+
         SCpnt->result = 0;
 	SCpnt->underflow = 0;	/* Do not flag underflow conditions */
 	SCpnt->resid = 0;
@@ -451,6 +525,9 @@ Scsi_Cmnd *scsi_allocate_device(Scsi_Device * device, int wait,
  *              gets hidden in this function.  Upper level drivers don't
  *              have any chickens to wave in the air to get things to
  *              work reliably.
+ *
+ *              This function is deprecated, and drivers should be
+ *              rewritten to use Scsi_Request instead of Scsi_Cmnd.
  */
 void scsi_release_command(Scsi_Cmnd * SCpnt)
 {
@@ -645,6 +722,215 @@ devfs_handle_t scsi_devfs_handle = NULL;
  * drivers go for the same host at the same time.
  */
 
+void scsi_wait_req (Scsi_Request * SRpnt, const void *cmnd ,
+ 		  void *buffer, unsigned bufflen, 
+ 		  int timeout, int retries)
+{
+	DECLARE_MUTEX_LOCKED(sem);
+	
+	SRpnt->sr_request.sem = &sem;
+	SRpnt->sr_request.rq_status = RQ_SCSI_BUSY;
+	scsi_do_req (SRpnt, (void *) cmnd,
+		buffer, bufflen, scsi_wait_done, timeout, retries);
+	down (&sem);
+	SRpnt->sr_request.sem = NULL;
+	if( SRpnt->sr_command != NULL )
+	{
+		scsi_release_command(SRpnt->sr_command);
+		SRpnt->sr_command = NULL;
+	}
+
+}
+ 
+/*
+ * Function:    scsi_do_req
+ *
+ * Purpose:     Queue a SCSI request
+ *
+ * Arguments:   SRpnt     - command descriptor.
+ *              cmnd      - actual SCSI command to be performed.
+ *              buffer    - data buffer.
+ *              bufflen   - size of data buffer.
+ *              done      - completion function to be run.
+ *              timeout   - how long to let it run before timeout.
+ *              retries   - number of retries we allow.
+ *
+ * Lock status: With the new queueing code, this is SMP-safe, and no locks
+ *              need be held upon entry.   The old queueing code the lock was
+ *              assumed to be held upon entry.
+ *
+ * Returns:     Nothing.
+ *
+ * Notes:       Prior to the new queue code, this function was not SMP-safe.
+ *              Also, this function is now only used for queueing requests
+ *              for things like ioctls and character device requests - this
+ *              is because we essentially just inject a request into the
+ *              queue for the device. Normal block device handling manipulates
+ *              the queue directly.
+ */
+void scsi_do_req(Scsi_Request * SRpnt, const void *cmnd,
+	      void *buffer, unsigned bufflen, void (*done) (Scsi_Cmnd *),
+		 int timeout, int retries)
+{
+	Scsi_Device * SDpnt = SRpnt->sr_device;
+	struct Scsi_Host *host = SDpnt->host;
+
+	ASSERT_LOCK(&io_request_lock, 0);
+
+	SCSI_LOG_MLQUEUE(4,
+			 {
+			 int i;
+			 int target = SDpnt->id;
+			 printk("scsi_do_req (host = %d, channel = %d target = %d, "
+		    "buffer =%p, bufflen = %d, done = %p, timeout = %d, "
+				"retries = %d)\n"
+				"command : ", host->host_no, SDpnt->channel, target, buffer,
+				bufflen, done, timeout, retries);
+			 for (i = 0; i < 10; ++i)
+			 printk("%02x  ", ((unsigned char *) cmnd)[i]);
+			 printk("\n");
+			 });
+
+	if (!host) {
+		panic("Invalid or not present host.\n");
+	}
+
+	/*
+	 * If the upper level driver is reusing these things, then
+	 * we should release the low-level block now.  Another one will
+	 * be allocated later when this request is getting queued.
+	 */
+	if( SRpnt->sr_command != NULL )
+	{
+		scsi_release_command(SRpnt->sr_command);
+		SRpnt->sr_command = NULL;
+	}
+
+	/*
+	 * We must prevent reentrancy to the lowlevel host driver.  This prevents
+	 * it - we enter a loop until the host we want to talk to is not busy.
+	 * Race conditions are prevented, as interrupts are disabled in between the
+	 * time we check for the host being not busy, and the time we mark it busy
+	 * ourselves.
+	 */
+
+
+	/*
+	 * Our own function scsi_done (which marks the host as not busy, disables
+	 * the timeout counter, etc) will be called by us or by the
+	 * scsi_hosts[host].queuecommand() function needs to also call
+	 * the completion function for the high level driver.
+	 */
+
+	memcpy((void *) SRpnt->sr_cmnd, (const void *) cmnd, 
+	       sizeof(SRpnt->sr_cmnd));
+	SRpnt->sr_bufflen = bufflen;
+	SRpnt->sr_buffer = buffer;
+	SRpnt->sr_allowed = retries;
+	SRpnt->sr_done = done;
+	SRpnt->sr_timeout_per_command = timeout;
+
+	memcpy((void *) SRpnt->sr_cmnd, (const void *) cmnd, 
+	       sizeof(SRpnt->sr_cmnd));
+
+	if (SRpnt->sr_cmd_len == 0)
+		SRpnt->sr_cmd_len = COMMAND_SIZE(SRpnt->sr_cmnd[0]);
+
+	/*
+	 * At this point, we merely set up the command, stick it in the normal
+	 * request queue, and return.  Eventually that request will come to the
+	 * top of the list, and will be dispatched.
+	 */
+	scsi_insert_special_req(SRpnt, 0);
+
+	SCSI_LOG_MLQUEUE(3, printk("Leaving scsi_do_cmd()\n"));
+}
+ 
+/*
+ * Function:    scsi_init_cmd_from_req
+ *
+ * Purpose:     Queue a SCSI command
+ * Purpose:     Initialize a Scsi_Cmnd from a Scsi_Request
+ *
+ * Arguments:   SCpnt     - command descriptor.
+ *              SRpnt     - Request from the queue.
+ *
+ * Lock status: None needed.
+ *
+ * Returns:     Nothing.
+ *
+ * Notes:       Mainly transfer data from the request structure to the
+ *              command structure.  The request structure is allocated
+ *              using the normal memory allocator, and requests can pile
+ *              up to more or less any depth.  The command structure represents
+ *              a consumable resource, as these are allocated into a pool
+ *              when the SCSI subsystem initializes.  The preallocation is
+ *              required so that in low-memory situations a disk I/O request
+ *              won't cause the memory manager to try and write out a page.
+ *              The request structure is generally used by ioctls and character
+ *              devices.
+ */
+void scsi_init_cmd_from_req(Scsi_Cmnd * SCpnt, Scsi_Request * SRpnt)
+{
+	struct Scsi_Host *host = SCpnt->host;
+
+	ASSERT_LOCK(&io_request_lock, 0);
+
+	SCpnt->owner = SCSI_OWNER_MIDLEVEL;
+	SRpnt->sr_command = SCpnt;
+
+	if (!host) {
+		panic("Invalid or not present host.\n");
+	}
+
+	SCpnt->cmd_len = SRpnt->sr_cmd_len;
+	SCpnt->use_sg = SRpnt->sr_use_sg;
+
+	memcpy((void *) &SCpnt->request, (const void *) &SRpnt->sr_request,
+	       sizeof(SRpnt->sr_request));
+	memcpy((void *) SCpnt->data_cmnd, (const void *) SRpnt->sr_cmnd, 
+	       sizeof(SCpnt->data_cmnd));
+	SCpnt->reset_chain = NULL;
+	SCpnt->serial_number = 0;
+	SCpnt->serial_number_at_timeout = 0;
+	SCpnt->bufflen = SRpnt->sr_bufflen;
+	SCpnt->buffer = SRpnt->sr_buffer;
+	SCpnt->flags = 0;
+	SCpnt->retries = 0;
+	SCpnt->allowed = SRpnt->sr_allowed;
+	SCpnt->done = SRpnt->sr_done;
+	SCpnt->timeout_per_command = SRpnt->sr_timeout_per_command;
+
+	SCpnt->sc_data_direction = SRpnt->sr_data_direction;
+
+	SCpnt->sglist_len = SRpnt->sr_sglist_len;
+	SCpnt->underflow = SRpnt->sr_underflow;
+
+	SCpnt->sc_request = SRpnt;
+
+	memcpy((void *) SCpnt->cmnd, (const void *) SRpnt->sr_cmnd, 
+	       sizeof(SCpnt->cmnd));
+	/* Zero the sense buffer.  Some host adapters automatically request
+	 * sense on error.  0 is not a valid sense code.
+	 */
+	memset((void *) SCpnt->sense_buffer, 0, sizeof SCpnt->sense_buffer);
+	SCpnt->request_buffer = SRpnt->sr_buffer;
+	SCpnt->request_bufflen = SRpnt->sr_bufflen;
+	SCpnt->old_use_sg = SCpnt->use_sg;
+	if (SCpnt->cmd_len == 0)
+		SCpnt->cmd_len = COMMAND_SIZE(SCpnt->cmnd[0]);
+	SCpnt->old_cmd_len = SCpnt->cmd_len;
+	SCpnt->sc_old_data_direction = SCpnt->sc_data_direction;
+
+	/* Start the timer ticking.  */
+
+	SCpnt->internal_timeout = NORMAL_TIMEOUT;
+	SCpnt->abort_reason = 0;
+	SCpnt->result = 0;
+
+	SCSI_LOG_MLQUEUE(3, printk("Leaving scsi_do_cmd()\n"));
+}
+
 /*
  * Function:    scsi_do_cmd
  *
@@ -739,6 +1025,7 @@ void scsi_do_cmd(Scsi_Cmnd * SCpnt, const void *cmnd,
 	if (SCpnt->cmd_len == 0)
 		SCpnt->cmd_len = COMMAND_SIZE(SCpnt->cmnd[0]);
 	SCpnt->old_cmd_len = SCpnt->cmd_len;
+	SCpnt->sc_old_data_direction = SCpnt->sc_data_direction;
 
 	/* Start the timer ticking.  */
 
@@ -998,6 +1285,7 @@ int scsi_retry_command(Scsi_Cmnd * SCpnt)
 	SCpnt->request_bufflen = SCpnt->bufflen;
 	SCpnt->use_sg = SCpnt->old_use_sg;
 	SCpnt->cmd_len = SCpnt->old_cmd_len;
+	SCpnt->sc_data_direction = SCpnt->sc_old_data_direction;
 
         /*
          * Zero the sense information from the last time we tried
@@ -1019,6 +1307,7 @@ void scsi_finish_command(Scsi_Cmnd * SCpnt)
 {
 	struct Scsi_Host *host;
 	Scsi_Device *device;
+	Scsi_Request * SRpnt;
 	unsigned long flags;
 
 	ASSERT_LOCK(&io_request_lock, 0);
@@ -1063,6 +1352,20 @@ void scsi_finish_command(Scsi_Cmnd * SCpnt)
 	/* We can get here with use_sg=0, causing a panic in the upper level (DB) */
 	SCpnt->use_sg = SCpnt->old_use_sg;
 
+       /*
+	* If there is an associated request structure, copy the data over before we call the
+	* completion function.
+	*/
+	SRpnt = SCpnt->sc_request;
+	if( SRpnt != NULL ) {
+	       SRpnt->sr_result = SRpnt->sr_command->result;
+	       if( SRpnt->sr_result != 0 ) {
+		       memcpy(SRpnt->sr_sense_buffer,
+			      SRpnt->sr_command->sense_buffer,
+			      sizeof(SRpnt->sr_sense_buffer));
+	       }
+	}
+
 	SCpnt->done(SCpnt);
 }
 
@@ -1098,6 +1401,7 @@ void scsi_release_commandblocks(Scsi_Device * SDpnt)
 		kfree((char *) SCpnt);
 	}
 	SDpnt->has_cmdblocks = 0;
+	SDpnt->queue_depth = 0;
 	spin_unlock_irqrestore(&device_request_lock, flags);
 }
 
@@ -2187,11 +2491,12 @@ static void scsi_dump_status(int level)
 	printk("Dump of scsi host parameters:\n");
 	i = 0;
 	for (shpnt = scsi_hostlist; shpnt; shpnt = shpnt->next) {
-		printk(" %d %d %d : %d\n",
+		printk(" %d %d %d : %d %d\n",
 		       shpnt->host_failed,
 		       shpnt->host_busy,
 		       atomic_read(&shpnt->host_active),
-		       shpnt->host_blocked);
+		       shpnt->host_blocked,
+		       shpnt->host_self_blocked);
 
 	}
 

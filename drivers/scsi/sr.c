@@ -89,7 +89,6 @@ static int sr_open(struct cdrom_device_info *, int);
 void get_sectorsize(int);
 void get_capabilities(int);
 
-void requeue_sr_request(Scsi_Cmnd * SCpnt);
 static int sr_media_change(struct cdrom_device_info *, int);
 static int sr_packet(struct cdrom_device_info *, struct cdrom_generic_command *);
 
@@ -327,9 +326,11 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 			return 0;
 		}
 		SCpnt->cmnd[0] = WRITE_10;
+		SCpnt->sc_data_direction = SCSI_DATA_WRITE;
 		break;
 	case READ:
 		SCpnt->cmnd[0] = READ_10;
+		SCpnt->sc_data_direction = SCSI_DATA_READ;
 		break;
 	default:
 		panic("Unknown sr command %d\n", SCpnt->request.cmd);
@@ -464,36 +465,37 @@ void get_sectorsize(int i)
 	unsigned char *buffer;
 	int the_result, retries;
 	int sector_size;
-	Scsi_Cmnd *SCpnt;
+	Scsi_Request *SRpnt;
 
 	buffer = (unsigned char *) scsi_malloc(512);
 
 
-	SCpnt = scsi_allocate_device(scsi_CDs[i].device, 1, FALSE);
+	SRpnt = scsi_allocate_request(scsi_CDs[i].device);
 
 	retries = 3;
 	do {
 		cmd[0] = READ_CAPACITY;
 		cmd[1] = (scsi_CDs[i].device->lun << 5) & 0xe0;
 		memset((void *) &cmd[2], 0, 8);
-		SCpnt->request.rq_status = RQ_SCSI_BUSY;	/* Mark as really busy */
-		SCpnt->cmd_len = 0;
+		SRpnt->sr_request.rq_status = RQ_SCSI_BUSY;	/* Mark as really busy */
+		SRpnt->sr_cmd_len = 0;
 
 		memset(buffer, 0, 8);
 
 		/* Do the command and wait.. */
 
-		scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
+		SRpnt->sr_data_direction = SCSI_DATA_READ;
+		scsi_wait_req(SRpnt, (void *) cmd, (void *) buffer,
 			      512, SR_TIMEOUT, MAX_RETRIES);
 
-		the_result = SCpnt->result;
+		the_result = SRpnt->sr_result;
 		retries--;
 
 	} while (the_result && retries);
 
 
-	scsi_release_command(SCpnt);
-	SCpnt = NULL;
+	scsi_release_request(SRpnt);
+	SRpnt = NULL;
 
 	if (the_result) {
 		scsi_CDs[i].capacity = 0x1fffff;
@@ -570,7 +572,7 @@ void get_capabilities(int i)
 	cmd[2] = 0x2a;
 	cmd[4] = 128;
 	cmd[3] = cmd[5] = 0;
-	rc = sr_do_ioctl(i, cmd, buffer, 128, 1);
+	rc = sr_do_ioctl(i, cmd, buffer, 128, 1, SCSI_DATA_READ);
 
 	if (-EINVAL == rc) {
 		/* failed, drive has'nt this mode page */
@@ -635,19 +637,19 @@ void get_capabilities(int i)
  */
 static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command *cgc)
 {
-	Scsi_Cmnd *SCpnt;
+	Scsi_Request *SRpnt;
 	Scsi_Device *device = scsi_CDs[MINOR(cdi->dev)].device;
 	unsigned char *buffer = cgc->buffer;
 	int buflen;
 
 	/* get the device */
-	SCpnt = scsi_allocate_device(device, 1, FALSE);
-	if (SCpnt == NULL)
+	SRpnt = scsi_allocate_request(device);
+	if (SRpnt == NULL)
 		return -ENODEV;	/* this just doesn't seem right /axboe */
 
 	/* use buffer for ISA DMA */
 	buflen = (cgc->buflen + 511) & ~511;
-	if (cgc->buffer && SCpnt->host->unchecked_isa_dma &&
+	if (cgc->buffer && SRpnt->sr_host->unchecked_isa_dma &&
 	    (virt_to_phys(cgc->buffer) + cgc->buflen - 1 > ISA_DMA_THRESHOLD)) {
 		buffer = scsi_malloc(buflen);
 		if (buffer == NULL) {
@@ -660,20 +662,25 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 	cgc->cmd[1] |= device->lun << 5;
 
 	/* do the locking and issue the command */
-	SCpnt->request.rq_dev = cdi->dev;
+	SRpnt->sr_request.rq_dev = cdi->dev;
 	/* scsi_wait_cmd sets the command length */
-	SCpnt->cmd_len = 0;
+	SRpnt->sr_cmd_len = 0;
 
-	scsi_wait_cmd(SCpnt, (void *) cgc->cmd, (void *) buffer, cgc->buflen,
+	/*
+	 * FIXME(eric) - need to set the data direction here.
+	 */
+	SRpnt->sr_data_direction = SCSI_DATA_UNKNOWN;
+
+	scsi_wait_req(SRpnt, (void *) cgc->cmd, (void *) buffer, cgc->buflen,
 		      SR_TIMEOUT, MAX_RETRIES);
 
-	if ((cgc->stat = SCpnt->result))
-		cgc->sense = (struct request_sense *) SCpnt->sense_buffer;
+	if ((cgc->stat = SRpnt->sr_result))
+		cgc->sense = (struct request_sense *) SRpnt->sr_sense_buffer;
 
 	/* release */
-	SCpnt->request.rq_dev = MKDEV(0, 0);
-	scsi_release_command(SCpnt);
-	SCpnt = NULL;
+	SRpnt->sr_request.rq_dev = MKDEV(0, 0);
+	scsi_release_request(SRpnt);
+	SRpnt = NULL;
 
 	/* write DMA buffer back if used */
 	if (buffer && (buffer != cgc->buffer)) {

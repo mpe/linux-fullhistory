@@ -1,7 +1,7 @@
-/* $Id: ioctl32.c,v 1.79 2000/02/08 20:24:25 davem Exp $
+/* $Id: ioctl32.c,v 1.80 2000/02/17 06:45:09 jj Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
- * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997-2000  Jakub Jelinek  (jakub@redhat.com)
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
  *
  * These routines maintain argument size conversion between 32bit and 64bit
@@ -42,6 +42,7 @@
 #include <linux/netdevice.h>
 #include <linux/raw.h>
 #include <linux/smb_fs.h>
+#include <linux/blkpg.h>
 
 #include <scsi/scsi.h>
 /* Ugly hack. */
@@ -435,7 +436,7 @@ struct ifconf32 {
         __kernel_caddr_t32  ifcbuf;
 };
 
-static int dev_ifname32(unsigned int fd, unsigned long arg)
+static int dev_ifname32(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	struct net_device *dev;
 	struct ifreq32 ifr32;
@@ -454,7 +455,7 @@ static int dev_ifname32(unsigned int fd, unsigned long arg)
 	return (err ? -EFAULT : 0);
 }
 
-static inline int dev_ifconf(unsigned int fd, unsigned long arg)
+static inline int dev_ifconf(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	struct ifconf32 ifc32;
 	struct ifconf ifc;
@@ -671,7 +672,7 @@ struct hd_geometry32 {
 	u32 start;
 };
                         
-static inline int hdio_getgeo(unsigned int fd, unsigned long arg)
+static inline int hdio_getgeo(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
 	struct hd_geometry geo;
@@ -1024,8 +1025,8 @@ struct floppy_write_errors32 {
 	unsigned int	badness;
 };
 
-#define FDSETPRM32 _IOW(2, 0x42, struct floppy_struct32) 
-#define FDDEFPRM32 _IOW(2, 0x43, struct floppy_struct32) 
+#define FDSETPRM32 _IOW(2, 0x42, struct floppy_struct32)
+#define FDDEFPRM32 _IOW(2, 0x43, struct floppy_struct32)
 #define FDGETPRM32 _IOR(2, 0x04, struct floppy_struct32)
 #define FDSETDRVPRM32 _IOW(2, 0x90, struct floppy_drive_params32)
 #define FDGETDRVPRM32 _IOR(2, 0x11, struct floppy_drive_params32)
@@ -1648,7 +1649,7 @@ struct consolefontdesc32 {
 	u32 chardata;			/* font data in expanded form */
 };
 
-static int do_fontx_ioctl(struct file *file, int cmd, struct consolefontdesc32 *user_cfd)
+static int do_fontx_ioctl(unsigned int fd, int cmd, struct consolefontdesc32 *user_cfd, struct file *file)
 {
 	struct consolefontdesc cfdarg;
 	struct console_font_op op;
@@ -1657,7 +1658,7 @@ static int do_fontx_ioctl(struct file *file, int cmd, struct consolefontdesc32 *
 	perm = vt_check(file);
 	if (perm < 0) return perm;
 	
-	if (copy_from_user(&cfdarg, user_cfd, sizeof(struct consolefontdesc32))) 
+	if (copy_from_user(&cfdarg, user_cfd, sizeof(struct consolefontdesc32)))
 		return -EFAULT;
 	
 	cfdarg.chardata = (unsigned char *)A(((struct consolefontdesc32 *)&cfdarg)->chardata);
@@ -1703,7 +1704,7 @@ struct console_font_op32 {
 	u32 data;    /* font data with height fixed to 32 */
 };
                                         
-static int do_kdfontop_ioctl(struct file *file, struct console_font_op32 *fontop)
+static int do_kdfontop_ioctl(unsigned int fd, unsigned int cmd, struct console_font_op32 *fontop, struct file *file)
 {
 	struct console_font_op op;
 	int perm = vt_check(file), i;
@@ -1731,7 +1732,7 @@ struct unimapdesc32 {
 	u32 entries;
 };
 
-static int do_unimap_ioctl(struct file *file, int cmd, struct unimapdesc32 *user_ud)
+static int do_unimap_ioctl(unsigned int fd, unsigned int cmd, struct unimapdesc32 *user_ud, struct file *file)
 {
 	struct unimapdesc32 tmp;
 	int perm = vt_check(file);
@@ -1978,10 +1979,788 @@ static int do_atm_ioctl(unsigned int fd, unsigned int cmd32, unsigned long arg)
         return -EINVAL;
 }
 
+static int ret_einval(unsigned int fd, unsigned int cmd, unsigned long arg)
+{
+	return -EINVAL;
+}
+
+static int broken_blkgetsize(unsigned int fd, unsigned int cmd, unsigned long arg)
+{
+	/* The mkswap binary hard codes it to Intel value :-((( */
+	return w_long(fd, BLKGETSIZE, arg);
+}
+
+struct blkpg_ioctl_arg32 {
+	int op;
+	int flags;
+	int datalen;
+	u32 data;
+};
+                                
+static int blkpg_ioctl_trans(unsigned int fd, unsigned int cmd, struct blkpg_ioctl_arg32 *arg)
+{
+	struct blkpg_ioctl_arg a;
+	struct blkpg_partition p;
+	int err;
+	mm_segment_t old_fs = get_fs();
+	
+	err = get_user(a.op, &arg->op);
+	err |= __get_user(a.flags, &arg->flags);
+	err |= __get_user(a.datalen, &arg->datalen);
+	err |= __get_user((long)a.data, &arg->data);
+	if (err) return err;
+	switch (a.op) {
+	case BLKPG_ADD_PARTITION:
+	case BLKPG_DEL_PARTITION:
+		if (a.datalen < sizeof(struct blkpg_partition))
+			return -EINVAL;
+                if (copy_from_user(&p, a.data, sizeof(struct blkpg_partition)))
+			return -EFAULT;
+		a.data = &p;
+		set_fs (KERNEL_DS);
+		err = sys_ioctl(fd, cmd, (unsigned long)&a);
+		set_fs (old_fs);
+	default:
+		return -EINVAL;
+	}                                        
+	return err;
+}
+
+static int ioc_settimeout(unsigned int fd, unsigned int cmd, unsigned long arg)
+{
+	return rw_long(fd, AUTOFS_IOC_SETTIMEOUT, arg);
+}
+
+struct ioctl_trans {
+	unsigned int cmd;
+	unsigned int handler;
+	unsigned int next;
+};
+
+#define COMPATIBLE_IOCTL(cmd) asm volatile(".word %0, sys_ioctl, 0" : : "i" (cmd));
+#define HANDLE_IOCTL(cmd,handler) asm volatile(".word %0, %1, 0" : : "i" (cmd), "i" (handler));
+#define IOCTL_TABLE_START void ioctl32_foo(void) { asm volatile(".data\nioctl_translations:");
+#define IOCTL_TABLE_END asm volatile("\nioctl_translations_end:\n\t.previous"); }
+
+IOCTL_TABLE_START
+/* List here exlicitly which ioctl's are known to have
+ * compatable types passed or none at all...
+ */
+/* Big T */
+COMPATIBLE_IOCTL(TCGETA)
+COMPATIBLE_IOCTL(TCSETA)
+COMPATIBLE_IOCTL(TCSETAW)
+COMPATIBLE_IOCTL(TCSETAF)
+COMPATIBLE_IOCTL(TCSBRK)
+COMPATIBLE_IOCTL(TCXONC)
+COMPATIBLE_IOCTL(TCFLSH)
+COMPATIBLE_IOCTL(TCGETS)
+COMPATIBLE_IOCTL(TCSETS)
+COMPATIBLE_IOCTL(TCSETSW)
+COMPATIBLE_IOCTL(TCSETSF)
+COMPATIBLE_IOCTL(TIOCLINUX)
+/* Little t */
+COMPATIBLE_IOCTL(TIOCGETD)
+COMPATIBLE_IOCTL(TIOCSETD)
+COMPATIBLE_IOCTL(TIOCEXCL)
+COMPATIBLE_IOCTL(TIOCNXCL)
+COMPATIBLE_IOCTL(TIOCCONS)
+COMPATIBLE_IOCTL(TIOCGSOFTCAR)
+COMPATIBLE_IOCTL(TIOCSSOFTCAR)
+COMPATIBLE_IOCTL(TIOCSWINSZ)
+COMPATIBLE_IOCTL(TIOCGWINSZ)
+COMPATIBLE_IOCTL(TIOCMGET)
+COMPATIBLE_IOCTL(TIOCMBIC)
+COMPATIBLE_IOCTL(TIOCMBIS)
+COMPATIBLE_IOCTL(TIOCMSET)
+COMPATIBLE_IOCTL(TIOCPKT)
+COMPATIBLE_IOCTL(TIOCNOTTY)
+COMPATIBLE_IOCTL(TIOCSTI)
+COMPATIBLE_IOCTL(TIOCOUTQ)
+COMPATIBLE_IOCTL(TIOCSPGRP)
+COMPATIBLE_IOCTL(TIOCGPGRP)
+COMPATIBLE_IOCTL(TIOCSCTTY)
+COMPATIBLE_IOCTL(TIOCGPTN)
+COMPATIBLE_IOCTL(TIOCSPTLCK)
+COMPATIBLE_IOCTL(TIOCGSERIAL)
+COMPATIBLE_IOCTL(TIOCSSERIAL)
+COMPATIBLE_IOCTL(TIOCSERGETLSR)
+/* Big F */
+COMPATIBLE_IOCTL(FBIOGTYPE)
+COMPATIBLE_IOCTL(FBIOSATTR)
+COMPATIBLE_IOCTL(FBIOGATTR)
+COMPATIBLE_IOCTL(FBIOSVIDEO)
+COMPATIBLE_IOCTL(FBIOGVIDEO)
+COMPATIBLE_IOCTL(FBIOGCURSOR32)  /* This is not implemented yet. Later it should be converted... */
+COMPATIBLE_IOCTL(FBIOSCURPOS)
+COMPATIBLE_IOCTL(FBIOGCURPOS)
+COMPATIBLE_IOCTL(FBIOGCURMAX)
+COMPATIBLE_IOCTL(FBIOGET_VSCREENINFO)
+COMPATIBLE_IOCTL(FBIOPUT_VSCREENINFO)
+COMPATIBLE_IOCTL(FBIOPAN_DISPLAY)
+COMPATIBLE_IOCTL(FBIOGET_FCURSORINFO)
+COMPATIBLE_IOCTL(FBIOGET_VCURSORINFO)
+COMPATIBLE_IOCTL(FBIOPUT_VCURSORINFO)
+COMPATIBLE_IOCTL(FBIOGET_CURSORSTATE)
+COMPATIBLE_IOCTL(FBIOPUT_CURSORSTATE)
+COMPATIBLE_IOCTL(FBIOGET_CON2FBMAP)
+COMPATIBLE_IOCTL(FBIOPUT_CON2FBMAP)
+/* Little f */
+COMPATIBLE_IOCTL(FIOCLEX)
+COMPATIBLE_IOCTL(FIONCLEX)
+COMPATIBLE_IOCTL(FIOASYNC)
+COMPATIBLE_IOCTL(FIONBIO)
+COMPATIBLE_IOCTL(FIONREAD)  /* This is also TIOCINQ */
+/* 0x00 */
+COMPATIBLE_IOCTL(FIBMAP)
+COMPATIBLE_IOCTL(FIGETBSZ)
+/* 0x03 -- HD/IDE ioctl's used by hdparm and friends.
+ *         Some need translations, these do not.
+ */
+COMPATIBLE_IOCTL(HDIO_GET_IDENTITY)
+COMPATIBLE_IOCTL(HDIO_SET_DMA)
+COMPATIBLE_IOCTL(HDIO_SET_KEEPSETTINGS)
+COMPATIBLE_IOCTL(HDIO_SET_UNMASKINTR)
+COMPATIBLE_IOCTL(HDIO_SET_NOWERR)
+COMPATIBLE_IOCTL(HDIO_SET_32BIT)
+COMPATIBLE_IOCTL(HDIO_SET_MULTCOUNT)
+COMPATIBLE_IOCTL(HDIO_DRIVE_CMD)
+COMPATIBLE_IOCTL(HDIO_SET_PIO_MODE)
+COMPATIBLE_IOCTL(HDIO_SCAN_HWIF)
+COMPATIBLE_IOCTL(HDIO_SET_NICE)
+/* 0x02 -- Floppy ioctls */
+COMPATIBLE_IOCTL(FDMSGON)
+COMPATIBLE_IOCTL(FDMSGOFF)
+COMPATIBLE_IOCTL(FDSETEMSGTRESH)
+COMPATIBLE_IOCTL(FDFLUSH)
+COMPATIBLE_IOCTL(FDWERRORCLR)
+COMPATIBLE_IOCTL(FDSETMAXERRS)
+COMPATIBLE_IOCTL(FDGETMAXERRS)
+COMPATIBLE_IOCTL(FDGETDRVTYP)
+COMPATIBLE_IOCTL(FDEJECT)
+COMPATIBLE_IOCTL(FDCLRPRM)
+COMPATIBLE_IOCTL(FDFMTBEG)
+COMPATIBLE_IOCTL(FDFMTEND)
+COMPATIBLE_IOCTL(FDRESET)
+COMPATIBLE_IOCTL(FDTWADDLE)
+COMPATIBLE_IOCTL(FDFMTTRK)
+COMPATIBLE_IOCTL(FDRAWCMD)
+/* 0x12 */
+COMPATIBLE_IOCTL(BLKROSET)
+COMPATIBLE_IOCTL(BLKROGET)
+COMPATIBLE_IOCTL(BLKRRPART)
+COMPATIBLE_IOCTL(BLKFLSBUF)
+COMPATIBLE_IOCTL(BLKRASET)
+COMPATIBLE_IOCTL(BLKFRASET)
+COMPATIBLE_IOCTL(BLKSECTSET)
+COMPATIBLE_IOCTL(BLKSSZGET)
+
+
+#if 0	/* New RAID code is being merged, fix up to handle
+	 * new RAID ioctls when fully merged in 2.3.x -DaveM
+	 */
+/* 0x09 */
+COMPATIBLE_IOCTL(REGISTER_DEV)
+COMPATIBLE_IOCTL(REGISTER_DEV_NEW)
+COMPATIBLE_IOCTL(START_MD)
+COMPATIBLE_IOCTL(STOP_MD)
+#endif
+	
+/* Big K */
+COMPATIBLE_IOCTL(PIO_FONT)
+COMPATIBLE_IOCTL(GIO_FONT)
+COMPATIBLE_IOCTL(KDSIGACCEPT)
+COMPATIBLE_IOCTL(KDGETKEYCODE)
+COMPATIBLE_IOCTL(KDSETKEYCODE)
+COMPATIBLE_IOCTL(KIOCSOUND)
+COMPATIBLE_IOCTL(KDMKTONE)
+COMPATIBLE_IOCTL(KDGKBTYPE)
+COMPATIBLE_IOCTL(KDSETMODE)
+COMPATIBLE_IOCTL(KDGETMODE)
+COMPATIBLE_IOCTL(KDSKBMODE)
+COMPATIBLE_IOCTL(KDGKBMODE)
+COMPATIBLE_IOCTL(KDSKBMETA)
+COMPATIBLE_IOCTL(KDGKBMETA)
+COMPATIBLE_IOCTL(KDGKBENT)
+COMPATIBLE_IOCTL(KDSKBENT)
+COMPATIBLE_IOCTL(KDGKBSENT)
+COMPATIBLE_IOCTL(KDSKBSENT)
+COMPATIBLE_IOCTL(KDGKBDIACR)
+COMPATIBLE_IOCTL(KDSKBDIACR)
+COMPATIBLE_IOCTL(KDGKBLED)
+COMPATIBLE_IOCTL(KDSKBLED)
+COMPATIBLE_IOCTL(KDGETLED)
+COMPATIBLE_IOCTL(KDSETLED)
+COMPATIBLE_IOCTL(GIO_SCRNMAP)
+COMPATIBLE_IOCTL(PIO_SCRNMAP)
+COMPATIBLE_IOCTL(GIO_UNISCRNMAP)
+COMPATIBLE_IOCTL(PIO_UNISCRNMAP)
+COMPATIBLE_IOCTL(PIO_FONTRESET)
+COMPATIBLE_IOCTL(PIO_UNIMAPCLR)
+/* Little k */
+COMPATIBLE_IOCTL(KIOCTYPE)
+COMPATIBLE_IOCTL(KIOCLAYOUT)
+COMPATIBLE_IOCTL(KIOCGTRANS)
+COMPATIBLE_IOCTL(KIOCTRANS)
+COMPATIBLE_IOCTL(KIOCCMD)
+COMPATIBLE_IOCTL(KIOCSDIRECT)
+COMPATIBLE_IOCTL(KIOCSLED)
+COMPATIBLE_IOCTL(KIOCGLED)
+COMPATIBLE_IOCTL(KIOCSRATE)
+COMPATIBLE_IOCTL(KIOCGRATE)
+/* Big S */
+COMPATIBLE_IOCTL(SCSI_IOCTL_GET_IDLUN)
+COMPATIBLE_IOCTL(SCSI_IOCTL_DOORLOCK)
+COMPATIBLE_IOCTL(SCSI_IOCTL_DOORUNLOCK)
+COMPATIBLE_IOCTL(SCSI_IOCTL_TEST_UNIT_READY)
+COMPATIBLE_IOCTL(SCSI_IOCTL_TAGGED_ENABLE)
+COMPATIBLE_IOCTL(SCSI_IOCTL_TAGGED_DISABLE)
+COMPATIBLE_IOCTL(SCSI_IOCTL_GET_BUS_NUMBER)
+COMPATIBLE_IOCTL(SCSI_IOCTL_SEND_COMMAND)
+/* Big V */
+COMPATIBLE_IOCTL(VT_SETMODE)
+COMPATIBLE_IOCTL(VT_GETMODE)
+COMPATIBLE_IOCTL(VT_GETSTATE)
+COMPATIBLE_IOCTL(VT_OPENQRY)
+COMPATIBLE_IOCTL(VT_ACTIVATE)
+COMPATIBLE_IOCTL(VT_WAITACTIVE)
+COMPATIBLE_IOCTL(VT_RELDISP)
+COMPATIBLE_IOCTL(VT_DISALLOCATE)
+COMPATIBLE_IOCTL(VT_RESIZE)
+COMPATIBLE_IOCTL(VT_RESIZEX)
+COMPATIBLE_IOCTL(VT_LOCKSWITCH)
+COMPATIBLE_IOCTL(VT_UNLOCKSWITCH)
+/* Little v */
+COMPATIBLE_IOCTL(VUIDSFORMAT)
+COMPATIBLE_IOCTL(VUIDGFORMAT)
+/* Little v, the video4linux ioctls */
+COMPATIBLE_IOCTL(VIDIOCGCAP)
+COMPATIBLE_IOCTL(VIDIOCGCHAN)
+COMPATIBLE_IOCTL(VIDIOCSCHAN)
+COMPATIBLE_IOCTL(VIDIOCGPICT)
+COMPATIBLE_IOCTL(VIDIOCSPICT)
+COMPATIBLE_IOCTL(VIDIOCCAPTURE)
+COMPATIBLE_IOCTL(VIDIOCKEY)
+COMPATIBLE_IOCTL(VIDIOCGAUDIO)
+COMPATIBLE_IOCTL(VIDIOCSAUDIO)
+COMPATIBLE_IOCTL(VIDIOCSYNC)
+COMPATIBLE_IOCTL(VIDIOCMCAPTURE)
+COMPATIBLE_IOCTL(VIDIOCGMBUF)
+COMPATIBLE_IOCTL(VIDIOCGUNIT)
+COMPATIBLE_IOCTL(VIDIOCGCAPTURE)
+COMPATIBLE_IOCTL(VIDIOCSCAPTURE)
+/* BTTV specific... */
+COMPATIBLE_IOCTL(_IOW('v',  BASE_VIDIOCPRIVATE+0, char [256]))
+COMPATIBLE_IOCTL(_IOR('v',  BASE_VIDIOCPRIVATE+1, char [256]))
+COMPATIBLE_IOCTL(_IOR('v' , BASE_VIDIOCPRIVATE+2, unsigned int))
+COMPATIBLE_IOCTL(_IOW('v' , BASE_VIDIOCPRIVATE+3, char [16])) /* struct bttv_pll_info */
+COMPATIBLE_IOCTL(_IOR('v' , BASE_VIDIOCPRIVATE+4, int))
+COMPATIBLE_IOCTL(_IOR('v' , BASE_VIDIOCPRIVATE+5, int))
+COMPATIBLE_IOCTL(_IOR('v' , BASE_VIDIOCPRIVATE+6, int))
+COMPATIBLE_IOCTL(_IOR('v' , BASE_VIDIOCPRIVATE+7, int))
+/* Little p (/dev/rtc, /dev/envctrl, etc.) */
+COMPATIBLE_IOCTL(RTCGET)
+COMPATIBLE_IOCTL(RTCSET)
+COMPATIBLE_IOCTL(I2CIOCSADR)
+COMPATIBLE_IOCTL(I2CIOCGADR)
+/* Little m */
+COMPATIBLE_IOCTL(MTIOCTOP)
+/* OPENPROMIO, SunOS/Solaris only, the NetBSD one's have
+ * embedded pointers in the arg which we'd need to clean up...
+ */
+COMPATIBLE_IOCTL(OPROMGETOPT)
+COMPATIBLE_IOCTL(OPROMSETOPT)
+COMPATIBLE_IOCTL(OPROMNXTOPT)
+COMPATIBLE_IOCTL(OPROMSETOPT2)
+COMPATIBLE_IOCTL(OPROMNEXT)
+COMPATIBLE_IOCTL(OPROMCHILD)
+COMPATIBLE_IOCTL(OPROMGETPROP)
+COMPATIBLE_IOCTL(OPROMNXTPROP)
+COMPATIBLE_IOCTL(OPROMU2P)
+COMPATIBLE_IOCTL(OPROMGETCONS)
+COMPATIBLE_IOCTL(OPROMGETFBNAME)
+COMPATIBLE_IOCTL(OPROMGETBOOTARGS)
+COMPATIBLE_IOCTL(OPROMSETCUR)
+COMPATIBLE_IOCTL(OPROMPCI2NODE)
+COMPATIBLE_IOCTL(OPROMPATH2NODE)
+/* Socket level stuff */
+COMPATIBLE_IOCTL(FIOSETOWN)
+COMPATIBLE_IOCTL(SIOCSPGRP)
+COMPATIBLE_IOCTL(FIOGETOWN)
+COMPATIBLE_IOCTL(SIOCGPGRP)
+COMPATIBLE_IOCTL(SIOCATMARK)
+COMPATIBLE_IOCTL(SIOCSIFLINK)
+COMPATIBLE_IOCTL(SIOCSIFENCAP)
+COMPATIBLE_IOCTL(SIOCGIFENCAP)
+COMPATIBLE_IOCTL(SIOCSIFBR)
+COMPATIBLE_IOCTL(SIOCGIFBR)
+COMPATIBLE_IOCTL(SIOCSARP)
+COMPATIBLE_IOCTL(SIOCGARP)
+COMPATIBLE_IOCTL(SIOCDARP)
+#if 0 /* XXX No longer exist in new routing code. XXX */
+COMPATIBLE_IOCTL(OLD_SIOCSARP)
+COMPATIBLE_IOCTL(OLD_SIOCGARP)
+COMPATIBLE_IOCTL(OLD_SIOCDARP)
+#endif
+COMPATIBLE_IOCTL(SIOCSRARP)
+COMPATIBLE_IOCTL(SIOCGRARP)
+COMPATIBLE_IOCTL(SIOCDRARP)
+COMPATIBLE_IOCTL(SIOCADDDLCI)
+COMPATIBLE_IOCTL(SIOCDELDLCI)
+/* SG stuff */
+COMPATIBLE_IOCTL(SG_SET_TIMEOUT)
+COMPATIBLE_IOCTL(SG_GET_TIMEOUT)
+COMPATIBLE_IOCTL(SG_EMULATED_HOST)
+COMPATIBLE_IOCTL(SG_SET_TRANSFORM)
+COMPATIBLE_IOCTL(SG_GET_TRANSFORM)
+/* PPP stuff */
+COMPATIBLE_IOCTL(PPPIOCGFLAGS)
+COMPATIBLE_IOCTL(PPPIOCSFLAGS)
+COMPATIBLE_IOCTL(PPPIOCGASYNCMAP)
+COMPATIBLE_IOCTL(PPPIOCSASYNCMAP)
+COMPATIBLE_IOCTL(PPPIOCGUNIT)
+COMPATIBLE_IOCTL(PPPIOCGRASYNCMAP)
+COMPATIBLE_IOCTL(PPPIOCSRASYNCMAP)
+COMPATIBLE_IOCTL(PPPIOCGMRU)
+COMPATIBLE_IOCTL(PPPIOCSMRU)
+COMPATIBLE_IOCTL(PPPIOCSMAXCID)
+COMPATIBLE_IOCTL(PPPIOCGXASYNCMAP)
+COMPATIBLE_IOCTL(PPPIOCSXASYNCMAP)
+COMPATIBLE_IOCTL(PPPIOCXFERUNIT)
+COMPATIBLE_IOCTL(PPPIOCGNPMODE)
+COMPATIBLE_IOCTL(PPPIOCSNPMODE)
+COMPATIBLE_IOCTL(PPPIOCGDEBUG)
+COMPATIBLE_IOCTL(PPPIOCSDEBUG)
+COMPATIBLE_IOCTL(PPPIOCNEWUNIT)
+COMPATIBLE_IOCTL(PPPIOCATTACH)
+COMPATIBLE_IOCTL(PPPIOCDETACH)
+/* CDROM stuff */
+COMPATIBLE_IOCTL(CDROMPAUSE)
+COMPATIBLE_IOCTL(CDROMRESUME)
+COMPATIBLE_IOCTL(CDROMPLAYMSF)
+COMPATIBLE_IOCTL(CDROMPLAYTRKIND)
+COMPATIBLE_IOCTL(CDROMREADTOCHDR)
+COMPATIBLE_IOCTL(CDROMREADTOCENTRY)
+COMPATIBLE_IOCTL(CDROMSTOP)
+COMPATIBLE_IOCTL(CDROMSTART)
+COMPATIBLE_IOCTL(CDROMEJECT)
+COMPATIBLE_IOCTL(CDROMVOLCTRL)
+COMPATIBLE_IOCTL(CDROMSUBCHNL)
+COMPATIBLE_IOCTL(CDROMEJECT_SW)
+COMPATIBLE_IOCTL(CDROMMULTISESSION)
+COMPATIBLE_IOCTL(CDROM_GET_MCN)
+COMPATIBLE_IOCTL(CDROMRESET)
+COMPATIBLE_IOCTL(CDROMVOLREAD)
+COMPATIBLE_IOCTL(CDROMSEEK)
+COMPATIBLE_IOCTL(CDROMPLAYBLK)
+COMPATIBLE_IOCTL(CDROMCLOSETRAY)
+COMPATIBLE_IOCTL(CDROM_SET_OPTIONS)
+COMPATIBLE_IOCTL(CDROM_CLEAR_OPTIONS)
+COMPATIBLE_IOCTL(CDROM_SELECT_SPEED)
+COMPATIBLE_IOCTL(CDROM_SELECT_DISC)
+COMPATIBLE_IOCTL(CDROM_MEDIA_CHANGED)
+COMPATIBLE_IOCTL(CDROM_DRIVE_STATUS)
+COMPATIBLE_IOCTL(CDROM_DISC_STATUS)
+COMPATIBLE_IOCTL(CDROM_CHANGER_NSLOTS)
+COMPATIBLE_IOCTL(CDROM_LOCKDOOR)
+COMPATIBLE_IOCTL(CDROM_DEBUG)
+COMPATIBLE_IOCTL(CDROM_GET_CAPABILITY)
+/* Big L */
+COMPATIBLE_IOCTL(LOOP_SET_FD)
+COMPATIBLE_IOCTL(LOOP_CLR_FD)
+/* Big A */
+COMPATIBLE_IOCTL(AUDIO_GETINFO)
+COMPATIBLE_IOCTL(AUDIO_SETINFO)
+COMPATIBLE_IOCTL(AUDIO_DRAIN)
+COMPATIBLE_IOCTL(AUDIO_GETDEV)
+COMPATIBLE_IOCTL(AUDIO_GETDEV_SUNOS)
+COMPATIBLE_IOCTL(AUDIO_FLUSH)
+/* Big Q for sound/OSS */
+COMPATIBLE_IOCTL(SNDCTL_SEQ_RESET)
+COMPATIBLE_IOCTL(SNDCTL_SEQ_SYNC)
+COMPATIBLE_IOCTL(SNDCTL_SYNTH_INFO)
+COMPATIBLE_IOCTL(SNDCTL_SEQ_CTRLRATE)
+COMPATIBLE_IOCTL(SNDCTL_SEQ_GETOUTCOUNT)
+COMPATIBLE_IOCTL(SNDCTL_SEQ_GETINCOUNT)
+COMPATIBLE_IOCTL(SNDCTL_SEQ_PERCMODE)
+COMPATIBLE_IOCTL(SNDCTL_FM_LOAD_INSTR)
+COMPATIBLE_IOCTL(SNDCTL_SEQ_TESTMIDI)
+COMPATIBLE_IOCTL(SNDCTL_SEQ_RESETSAMPLES)
+COMPATIBLE_IOCTL(SNDCTL_SEQ_NRSYNTHS)
+COMPATIBLE_IOCTL(SNDCTL_SEQ_NRMIDIS)
+COMPATIBLE_IOCTL(SNDCTL_MIDI_INFO)
+COMPATIBLE_IOCTL(SNDCTL_SEQ_THRESHOLD)
+COMPATIBLE_IOCTL(SNDCTL_SYNTH_MEMAVL)
+COMPATIBLE_IOCTL(SNDCTL_FM_4OP_ENABLE)
+COMPATIBLE_IOCTL(SNDCTL_SEQ_PANIC)
+COMPATIBLE_IOCTL(SNDCTL_SEQ_OUTOFBAND)
+COMPATIBLE_IOCTL(SNDCTL_SEQ_GETTIME)
+COMPATIBLE_IOCTL(SNDCTL_SYNTH_ID)
+COMPATIBLE_IOCTL(SNDCTL_SYNTH_CONTROL)
+COMPATIBLE_IOCTL(SNDCTL_SYNTH_REMOVESAMPLE)
+/* Big T for sound/OSS */
+COMPATIBLE_IOCTL(SNDCTL_TMR_TIMEBASE)
+COMPATIBLE_IOCTL(SNDCTL_TMR_START)
+COMPATIBLE_IOCTL(SNDCTL_TMR_STOP)
+COMPATIBLE_IOCTL(SNDCTL_TMR_CONTINUE)
+COMPATIBLE_IOCTL(SNDCTL_TMR_TEMPO)
+COMPATIBLE_IOCTL(SNDCTL_TMR_SOURCE)
+COMPATIBLE_IOCTL(SNDCTL_TMR_METRONOME)
+COMPATIBLE_IOCTL(SNDCTL_TMR_SELECT)
+/* Little m for sound/OSS */
+COMPATIBLE_IOCTL(SNDCTL_MIDI_PRETIME)
+COMPATIBLE_IOCTL(SNDCTL_MIDI_MPUMODE)
+COMPATIBLE_IOCTL(SNDCTL_MIDI_MPUCMD)
+/* Big P for sound/OSS */
+COMPATIBLE_IOCTL(SNDCTL_DSP_RESET)
+COMPATIBLE_IOCTL(SNDCTL_DSP_SYNC)
+COMPATIBLE_IOCTL(SNDCTL_DSP_SPEED)
+COMPATIBLE_IOCTL(SNDCTL_DSP_STEREO)
+COMPATIBLE_IOCTL(SNDCTL_DSP_GETBLKSIZE)
+COMPATIBLE_IOCTL(SNDCTL_DSP_CHANNELS)
+COMPATIBLE_IOCTL(SOUND_PCM_WRITE_FILTER)
+COMPATIBLE_IOCTL(SNDCTL_DSP_POST)
+COMPATIBLE_IOCTL(SNDCTL_DSP_SUBDIVIDE)
+COMPATIBLE_IOCTL(SNDCTL_DSP_SETFRAGMENT)
+COMPATIBLE_IOCTL(SNDCTL_DSP_GETFMTS)
+COMPATIBLE_IOCTL(SNDCTL_DSP_SETFMT)
+COMPATIBLE_IOCTL(SNDCTL_DSP_GETOSPACE)
+COMPATIBLE_IOCTL(SNDCTL_DSP_GETISPACE)
+COMPATIBLE_IOCTL(SNDCTL_DSP_NONBLOCK)
+COMPATIBLE_IOCTL(SNDCTL_DSP_GETCAPS)
+COMPATIBLE_IOCTL(SNDCTL_DSP_GETTRIGGER)
+COMPATIBLE_IOCTL(SNDCTL_DSP_SETTRIGGER)
+COMPATIBLE_IOCTL(SNDCTL_DSP_GETIPTR)
+COMPATIBLE_IOCTL(SNDCTL_DSP_GETOPTR)
+/* SNDCTL_DSP_MAPINBUF,  XXX needs translation */
+/* SNDCTL_DSP_MAPOUTBUF,  XXX needs translation */
+COMPATIBLE_IOCTL(SNDCTL_DSP_SETSYNCRO)
+COMPATIBLE_IOCTL(SNDCTL_DSP_SETDUPLEX)
+COMPATIBLE_IOCTL(SNDCTL_DSP_GETODELAY)
+COMPATIBLE_IOCTL(SNDCTL_DSP_PROFILE)
+COMPATIBLE_IOCTL(SOUND_PCM_READ_RATE)
+COMPATIBLE_IOCTL(SOUND_PCM_READ_CHANNELS)
+COMPATIBLE_IOCTL(SOUND_PCM_READ_BITS)
+COMPATIBLE_IOCTL(SOUND_PCM_READ_FILTER)
+/* Big C for sound/OSS */
+COMPATIBLE_IOCTL(SNDCTL_COPR_RESET)
+COMPATIBLE_IOCTL(SNDCTL_COPR_LOAD)
+COMPATIBLE_IOCTL(SNDCTL_COPR_RDATA)
+COMPATIBLE_IOCTL(SNDCTL_COPR_RCODE)
+COMPATIBLE_IOCTL(SNDCTL_COPR_WDATA)
+COMPATIBLE_IOCTL(SNDCTL_COPR_WCODE)
+COMPATIBLE_IOCTL(SNDCTL_COPR_RUN)
+COMPATIBLE_IOCTL(SNDCTL_COPR_HALT)
+COMPATIBLE_IOCTL(SNDCTL_COPR_SENDMSG)
+COMPATIBLE_IOCTL(SNDCTL_COPR_RCVMSG)
+/* Big M for sound/OSS */
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_VOLUME)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_BASS)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_TREBLE)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_SYNTH)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_PCM)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_SPEAKER)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_LINE)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_MIC)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_CD)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_IMIX)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_ALTPCM)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_RECLEV)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_IGAIN)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_OGAIN)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_LINE1)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_LINE2)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_LINE3)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_MUTE)
+/* SOUND_MIXER_READ_ENHANCE,  same value as READ_MUTE */
+/* SOUND_MIXER_READ_LOUD,  same value as READ_MUTE */
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_RECSRC)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_DEVMASK)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_RECMASK)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_STEREODEVS)
+COMPATIBLE_IOCTL(SOUND_MIXER_READ_CAPS)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_VOLUME)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_BASS)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_TREBLE)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_SYNTH)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_PCM)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_SPEAKER)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_LINE)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_MIC)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_CD)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_IMIX)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_ALTPCM)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_RECLEV)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_IGAIN)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_OGAIN)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_LINE1)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_LINE2)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_LINE3)
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_MUTE)
+/* SOUND_MIXER_WRITE_ENHANCE,  same value as WRITE_MUTE */
+/* SOUND_MIXER_WRITE_LOUD,  same value as WRITE_MUTE */
+COMPATIBLE_IOCTL(SOUND_MIXER_WRITE_RECSRC)
+COMPATIBLE_IOCTL(SOUND_MIXER_INFO)
+COMPATIBLE_IOCTL(SOUND_OLD_MIXER_INFO)
+COMPATIBLE_IOCTL(SOUND_MIXER_ACCESS)
+COMPATIBLE_IOCTL(SOUND_MIXER_PRIVATE1)
+COMPATIBLE_IOCTL(SOUND_MIXER_PRIVATE2)
+COMPATIBLE_IOCTL(SOUND_MIXER_PRIVATE3)
+COMPATIBLE_IOCTL(SOUND_MIXER_PRIVATE4)
+COMPATIBLE_IOCTL(SOUND_MIXER_PRIVATE5)
+COMPATIBLE_IOCTL(SOUND_MIXER_GETLEVELS)
+COMPATIBLE_IOCTL(SOUND_MIXER_SETLEVELS)
+COMPATIBLE_IOCTL(OSS_GETVERSION)
+/* AUTOFS */
+COMPATIBLE_IOCTL(AUTOFS_IOC_READY)
+COMPATIBLE_IOCTL(AUTOFS_IOC_FAIL)
+COMPATIBLE_IOCTL(AUTOFS_IOC_CATATONIC)
+COMPATIBLE_IOCTL(AUTOFS_IOC_PROTOVER)
+COMPATIBLE_IOCTL(AUTOFS_IOC_EXPIRE)
+/* Raw devices */
+COMPATIBLE_IOCTL(RAW_SETBIND)
+COMPATIBLE_IOCTL(RAW_GETBIND)
+/* SMB ioctls which do not need any translations */
+COMPATIBLE_IOCTL(SMB_IOC_NEWCONN)
+/* Little a */
+COMPATIBLE_IOCTL(ATMSIGD_CTRL)
+COMPATIBLE_IOCTL(ATMARPD_CTRL)
+COMPATIBLE_IOCTL(ATMLEC_CTRL)
+COMPATIBLE_IOCTL(ATMLEC_MCAST)
+COMPATIBLE_IOCTL(ATMLEC_DATA)
+COMPATIBLE_IOCTL(ATM_SETSC)
+COMPATIBLE_IOCTL(SIOCSIFATMTCP)
+COMPATIBLE_IOCTL(SIOCMKCLIP)
+COMPATIBLE_IOCTL(ATMARP_MKIP)
+COMPATIBLE_IOCTL(ATMARP_SETENTRY)
+COMPATIBLE_IOCTL(ATMARP_ENCAP)
+COMPATIBLE_IOCTL(ATMTCP_CREATE)
+COMPATIBLE_IOCTL(ATMTCP_REMOVE)
+COMPATIBLE_IOCTL(ATMMPC_CTRL)
+COMPATIBLE_IOCTL(ATMMPC_DATA)
+/* And these ioctls need translation */
+HANDLE_IOCTL(SIOCGIFNAME, dev_ifname32)
+HANDLE_IOCTL(SIOCGIFCONF, dev_ifconf)
+HANDLE_IOCTL(SIOCGIFFLAGS, dev_ifsioc)
+HANDLE_IOCTL(SIOCSIFFLAGS, dev_ifsioc)
+HANDLE_IOCTL(SIOCGIFMETRIC, dev_ifsioc)
+HANDLE_IOCTL(SIOCSIFMETRIC, dev_ifsioc)
+HANDLE_IOCTL(SIOCGIFMTU, dev_ifsioc)
+HANDLE_IOCTL(SIOCSIFMTU, dev_ifsioc)
+HANDLE_IOCTL(SIOCGIFMEM, dev_ifsioc)
+HANDLE_IOCTL(SIOCSIFMEM, dev_ifsioc)
+HANDLE_IOCTL(SIOCGIFHWADDR, dev_ifsioc)
+HANDLE_IOCTL(SIOCSIFHWADDR, dev_ifsioc)
+HANDLE_IOCTL(SIOCADDMULTI, dev_ifsioc)
+HANDLE_IOCTL(SIOCDELMULTI, dev_ifsioc)
+HANDLE_IOCTL(SIOCGIFINDEX, dev_ifsioc)
+HANDLE_IOCTL(SIOCGIFMAP, dev_ifsioc)
+HANDLE_IOCTL(SIOCSIFMAP, dev_ifsioc)
+HANDLE_IOCTL(SIOCGIFADDR, dev_ifsioc)
+HANDLE_IOCTL(SIOCSIFADDR, dev_ifsioc)
+HANDLE_IOCTL(SIOCGIFBRDADDR, dev_ifsioc)
+HANDLE_IOCTL(SIOCSIFBRDADDR, dev_ifsioc)
+HANDLE_IOCTL(SIOCGIFDSTADDR, dev_ifsioc)
+HANDLE_IOCTL(SIOCSIFDSTADDR, dev_ifsioc)
+HANDLE_IOCTL(SIOCGIFNETMASK, dev_ifsioc)
+HANDLE_IOCTL(SIOCSIFNETMASK, dev_ifsioc)
+HANDLE_IOCTL(SIOCSIFPFLAGS, dev_ifsioc)
+HANDLE_IOCTL(SIOCGIFPFLAGS, dev_ifsioc)
+HANDLE_IOCTL(SIOCGPPPSTATS, dev_ifsioc)
+HANDLE_IOCTL(SIOCGPPPCSTATS, dev_ifsioc)
+HANDLE_IOCTL(SIOCGPPPVER, dev_ifsioc)
+HANDLE_IOCTL(SIOCGIFTXQLEN, dev_ifsioc)
+HANDLE_IOCTL(SIOCSIFTXQLEN, dev_ifsioc)
+HANDLE_IOCTL(SIOCETHTOOL, dev_ifsioc)
+HANDLE_IOCTL(SIOCADDRT, routing_ioctl)
+HANDLE_IOCTL(SIOCDELRT, routing_ioctl)
+/* Note SIOCRTMSG is no longer, so this is safe and * the user would have seen just an -EINVAL anyways. */
+HANDLE_IOCTL(SIOCRTMSG, ret_einval)
+HANDLE_IOCTL(SIOCGSTAMP, do_siocgstamp)
+HANDLE_IOCTL(HDIO_GETGEO, hdio_getgeo)
+HANDLE_IOCTL(BLKRAGET, w_long)
+HANDLE_IOCTL(BLKGETSIZE, w_long)
+HANDLE_IOCTL(0x1260, broken_blkgetsize)
+HANDLE_IOCTL(BLKFRAGET, w_long)
+HANDLE_IOCTL(BLKSECTGET, w_long)
+HANDLE_IOCTL(BLKPG, blkpg_ioctl_trans)
+HANDLE_IOCTL(FBIOPUTCMAP32, fbiogetputcmap)
+HANDLE_IOCTL(FBIOGETCMAP32, fbiogetputcmap)
+HANDLE_IOCTL(FBIOSCURSOR32, fbiogscursor)
+HANDLE_IOCTL(FBIOGET_FSCREENINFO, fb_ioctl_trans)
+HANDLE_IOCTL(FBIOGETCMAP, fb_ioctl_trans)
+HANDLE_IOCTL(FBIOPUTCMAP, fb_ioctl_trans)
+HANDLE_IOCTL(HDIO_GET_KEEPSETTINGS, hdio_ioctl_trans)
+HANDLE_IOCTL(HDIO_GET_UNMASKINTR, hdio_ioctl_trans)
+HANDLE_IOCTL(HDIO_GET_DMA, hdio_ioctl_trans)
+HANDLE_IOCTL(HDIO_GET_32BIT, hdio_ioctl_trans)
+HANDLE_IOCTL(HDIO_GET_MULTCOUNT, hdio_ioctl_trans)
+HANDLE_IOCTL(HDIO_GET_NOWERR, hdio_ioctl_trans)
+HANDLE_IOCTL(HDIO_GET_NICE, hdio_ioctl_trans)
+HANDLE_IOCTL(FDSETPRM32, fd_ioctl_trans)
+HANDLE_IOCTL(FDDEFPRM32, fd_ioctl_trans)
+HANDLE_IOCTL(FDGETPRM32, fd_ioctl_trans)
+HANDLE_IOCTL(FDSETDRVPRM32, fd_ioctl_trans)
+HANDLE_IOCTL(FDGETDRVPRM32, fd_ioctl_trans)
+HANDLE_IOCTL(FDGETDRVSTAT32, fd_ioctl_trans)
+HANDLE_IOCTL(FDPOLLDRVSTAT32, fd_ioctl_trans)
+HANDLE_IOCTL(FDGETFDCSTAT32, fd_ioctl_trans)
+HANDLE_IOCTL(FDWERRORGET32, fd_ioctl_trans)
+HANDLE_IOCTL(PPPIOCGIDLE32, ppp_ioctl_trans)
+HANDLE_IOCTL(PPPIOCSCOMPRESS32, ppp_ioctl_trans)
+HANDLE_IOCTL(MTIOCGET32, mt_ioctl_trans)
+HANDLE_IOCTL(MTIOCPOS32, mt_ioctl_trans)
+HANDLE_IOCTL(MTIOCGETCONFIG32, mt_ioctl_trans)
+HANDLE_IOCTL(MTIOCSETCONFIG32, mt_ioctl_trans)
+HANDLE_IOCTL(CDROMREADMODE2, cdrom_ioctl_trans)
+HANDLE_IOCTL(CDROMREADMODE1, cdrom_ioctl_trans)
+HANDLE_IOCTL(CDROMREADRAW, cdrom_ioctl_trans)
+HANDLE_IOCTL(CDROMREADCOOKED, cdrom_ioctl_trans)
+HANDLE_IOCTL(CDROMREADAUDIO, cdrom_ioctl_trans)
+HANDLE_IOCTL(CDROMREADALL, cdrom_ioctl_trans)
+HANDLE_IOCTL(CDROM_SEND_PACKET, cdrom_ioctl_trans)
+HANDLE_IOCTL(LOOP_SET_STATUS, loop_status)
+HANDLE_IOCTL(LOOP_GET_STATUS, loop_status)
+#define AUTOFS_IOC_SETTIMEOUT32 _IOWR(0x93,0x64,unsigned int)
+HANDLE_IOCTL(AUTOFS_IOC_SETTIMEOUT32, ioc_settimeout)
+HANDLE_IOCTL(PIO_FONTX, do_fontx_ioctl)
+HANDLE_IOCTL(GIO_FONTX, do_fontx_ioctl)
+HANDLE_IOCTL(PIO_UNIMAP, do_unimap_ioctl)
+HANDLE_IOCTL(GIO_UNIMAP, do_unimap_ioctl)
+HANDLE_IOCTL(KDFONTOP, do_kdfontop_ioctl)
+HANDLE_IOCTL(EXT2_IOC32_GETFLAGS, do_ext2_ioctl)
+HANDLE_IOCTL(EXT2_IOC32_SETFLAGS, do_ext2_ioctl)
+HANDLE_IOCTL(EXT2_IOC32_GETVERSION, do_ext2_ioctl)
+HANDLE_IOCTL(EXT2_IOC32_SETVERSION, do_ext2_ioctl)
+HANDLE_IOCTL(VIDIOCGTUNER32, do_video_ioctl)
+HANDLE_IOCTL(VIDIOCSTUNER32, do_video_ioctl)
+HANDLE_IOCTL(VIDIOCGWIN32, do_video_ioctl)
+HANDLE_IOCTL(VIDIOCSWIN32, do_video_ioctl)
+HANDLE_IOCTL(VIDIOCGFBUF32, do_video_ioctl)
+HANDLE_IOCTL(VIDIOCSFBUF32, do_video_ioctl)
+HANDLE_IOCTL(VIDIOCGFREQ32, do_video_ioctl)
+HANDLE_IOCTL(VIDIOCSFREQ32, do_video_ioctl)
+/* One SMB ioctl needs translations. */
+#define SMB_IOC_GETMOUNTUID_32 _IOR('u', 1, __kernel_uid_t32)
+HANDLE_IOCTL(SMB_IOC_GETMOUNTUID_32, do_smb_getmountuid)
+HANDLE_IOCTL(ATM_GETLINKRATE32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_GETNAMES32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_GETTYPE32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_GETESI32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_GETADDR32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_RSTADDR32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_ADDADDR32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_DELADDR32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_GETCIRANGE32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_SETCIRANGE32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_SETESI32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_SETESIF32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_GETSTAT32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_GETSTATZ32, do_atm_ioctl)
+HANDLE_IOCTL(SUNI_GETLOOP, do_atm_ioctl)
+HANDLE_IOCTL(SUNI_SETLOOP, do_atm_ioctl)
+HANDLE_IOCTL(SONET_GETSTAT, do_atm_ioctl)
+HANDLE_IOCTL(SONET_GETSTATZ, do_atm_ioctl)
+HANDLE_IOCTL(SONET_GETDIAG, do_atm_ioctl)
+HANDLE_IOCTL(SONET_SETDIAG, do_atm_ioctl)
+HANDLE_IOCTL(SONET_CLRDIAG, do_atm_ioctl)
+HANDLE_IOCTL(SONET_SETFRAMING, do_atm_ioctl)
+HANDLE_IOCTL(SONET_GETFRAMING, do_atm_ioctl)
+HANDLE_IOCTL(SONET_GETFRSENSE, do_atm_ioctl)
+IOCTL_TABLE_END
+
+unsigned int ioctl32_hash_table[1024];
+
+extern inline unsigned long ioctl32_hash(unsigned long cmd)
+{
+	return ((cmd >> 6) ^ (cmd >> 4) ^ cmd) & 0x3ff;
+}
+
+static void ioctl32_insert_translation(struct ioctl_trans *trans)
+{
+	unsigned long hash;
+	struct ioctl_trans *t;
+
+	hash = ioctl32_hash (trans->cmd);
+	if (!ioctl32_hash_table[hash])
+		ioctl32_hash_table[hash] = (u32)(long)trans;
+	else {
+		t = (struct ioctl_trans *)(long)ioctl32_hash_table[hash];
+		while (t->next)
+			t = (struct ioctl_trans *)(long)t->next;
+		trans->next = 0;
+		t->next = (u32)(long)trans;
+	}
+}
+
+static int __init init_sys32_ioctl(void)
+{
+	int i;
+	extern struct ioctl_trans ioctl_translations[], ioctl_translations_end[];
+
+	for (i = 0; &ioctl_translations[i] < &ioctl_translations_end[0]; i++)
+		ioctl32_insert_translation(&ioctl_translations[i]);
+	return 0;
+}
+
+__initcall(init_sys32_ioctl);
+
+static struct ioctl_trans *additional_ioctls;
+
+/* Always call these with kernel lock held! */
+
+int register_ioctl32_conversion(unsigned int cmd, int (*handler)(unsigned int, unsigned int, unsigned long, struct file *))
+{
+	int i;
+	if (!additional_ioctls) {
+		additional_ioctls = module_map(PAGE_SIZE);
+		if (!additional_ioctls) return -ENOMEM;
+	}
+	for (i = 0; i < PAGE_SIZE/sizeof(struct ioctl_trans); i++)
+		if (!additional_ioctls[i].cmd)
+			break;
+	if (i == PAGE_SIZE/sizeof(struct ioctl_trans))
+		return -ENOMEM;
+	additional_ioctls[i].cmd = cmd;
+	if (!handler)
+		additional_ioctls[i].handler = (u32)(long)sys_ioctl;
+	else
+		additional_ioctls[i].handler = (u32)(long)handler;
+	ioctl32_insert_translation(&additional_ioctls[i]);
+	return 0;
+}
+
+int unregister_ioctl32_conversion(unsigned int cmd)
+{
+	unsigned long hash = ioctl32_hash(cmd);
+	struct ioctl_trans *t, *t1;
+
+	t = (struct ioctl_trans *)(long)ioctl32_hash_table[hash];
+	if (!t) return -EINVAL;
+	if (t->cmd == cmd && t >= additional_ioctls &&
+	    (unsigned long)t < ((unsigned long)additional_ioctls) + PAGE_SIZE) {
+		ioctl32_hash_table[hash] = t->next;
+		t->cmd = 0;
+		return 0;
+	} else while (t->next) {
+		t1 = (struct ioctl_trans *)(long)t->next;
+		if (t1->cmd == cmd && t1 >= additional_ioctls &&
+		    (unsigned long)t1 < ((unsigned long)additional_ioctls) + PAGE_SIZE) {
+			t1->cmd = 0;
+			t->next = t1->next;
+			return 0;
+		}
+		t = t1;
+	}
+	return -EINVAL;
+}
+
 asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	struct file * filp;
 	int error = -EBADF;
+	int (*handler)(unsigned int, unsigned int, unsigned long, struct file * filp);
+	struct ioctl_trans *t;
 
 	lock_kernel();
 	filp = fget(fd);
@@ -1992,754 +2771,21 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		error = sys_ioctl (fd, cmd, arg);
 		goto out;
 	}
-	switch (cmd) {
-	case SIOCGIFNAME:
-		error = dev_ifname32(fd, arg);
-		goto out;
 
-	case SIOCGIFCONF:
-		error = dev_ifconf(fd, arg);
-		goto out;
-		
-	case SIOCGIFFLAGS:
-	case SIOCSIFFLAGS:
-	case SIOCGIFMETRIC:
-	case SIOCSIFMETRIC:
-	case SIOCGIFMTU:
-	case SIOCSIFMTU:
-	case SIOCGIFMEM:
-	case SIOCSIFMEM:
-	case SIOCGIFHWADDR:
-	case SIOCSIFHWADDR:
-	case SIOCADDMULTI:
-	case SIOCDELMULTI:
-	case SIOCGIFINDEX:
-	case SIOCGIFMAP:
-	case SIOCSIFMAP:
-	case SIOCGIFADDR:
-	case SIOCSIFADDR:
-	case SIOCGIFBRDADDR:
-	case SIOCSIFBRDADDR:
-	case SIOCGIFDSTADDR:
-	case SIOCSIFDSTADDR:
-	case SIOCGIFNETMASK:
-	case SIOCSIFNETMASK:
-	case SIOCSIFPFLAGS:
-	case SIOCGIFPFLAGS:
-	case SIOCGPPPSTATS:
-	case SIOCGPPPCSTATS:
-	case SIOCGPPPVER:
-	case SIOCGIFTXQLEN:
-	case SIOCSIFTXQLEN:
-	case SIOCETHTOOL:
-		error = dev_ifsioc(fd, cmd, arg);
-		goto out;
-		
-	case SIOCADDRT:
-	case SIOCDELRT:
-		error = routing_ioctl(fd, cmd, arg);
-		goto out;
+	t = (struct ioctl_trans *)(long)ioctl32_hash_table [ioctl32_hash (cmd)];
 
-	case SIOCRTMSG: /* Note SIOCRTMSG is no longer, so this is safe and
-			 * the user would have seen just an -EINVAL anyways.
-			 */
+	while (t && t->cmd != cmd)
+		t = (struct ioctl_trans *)(long)t->next;
+	if (t) {
+		handler = (void *)(long)t->handler;
+		error = handler(fd, cmd, arg, filp);
+	} else {
+		static int count = 0;
+		if (++count <= 20)
+			printk("sys32_ioctl: Unknown cmd fd(%d) "
+			       "cmd(%08x) arg(%08x)\n",
+			       (int)fd, (unsigned int)cmd, (unsigned int)arg);
 		error = -EINVAL;
-		goto out;
-
-	case SIOCGSTAMP:
-		/* Sorry, timeval in the kernel is different now. */
-		error = do_siocgstamp(fd, cmd, arg);
-		goto out;
-
-	case HDIO_GETGEO:
-		error = hdio_getgeo(fd, arg);
-		goto out;
-		
-	case BLKRAGET:
-	case BLKGETSIZE:
-	case 0x1260:
-		/* The mkswap binary hard codes it to Intel value :-((( */
-		if(cmd == 0x1260)
-			cmd = BLKGETSIZE;
-		error = w_long(fd, cmd, arg);
-		goto out;
-		
-	case FBIOPUTCMAP32:
-	case FBIOGETCMAP32:
-		error = fbiogetputcmap(fd, cmd, arg);
-		goto out;
-		
-	case FBIOSCURSOR32:
-		error = fbiogscursor(fd, cmd, arg);
-		goto out;
-
-	case FBIOGET_FSCREENINFO:
-	case FBIOGETCMAP:
-	case FBIOPUTCMAP:
-		error = fb_ioctl_trans(fd, cmd, arg);
-		goto out;
-
-	case HDIO_GET_KEEPSETTINGS:
-	case HDIO_GET_UNMASKINTR:
-	case HDIO_GET_DMA:
-	case HDIO_GET_32BIT:
-	case HDIO_GET_MULTCOUNT:
-	case HDIO_GET_NOWERR:
-	case HDIO_GET_NICE:
-		error = hdio_ioctl_trans(fd, cmd, arg);
-		goto out;
-
-	case FDSETPRM32:
-	case FDDEFPRM32:
-	case FDGETPRM32:
-	case FDSETDRVPRM32:
-	case FDGETDRVPRM32:
-	case FDGETDRVSTAT32:
-	case FDPOLLDRVSTAT32:
-	case FDGETFDCSTAT32:
-	case FDWERRORGET32:
-		error = fd_ioctl_trans(fd, cmd, arg);
-		goto out;
-
-	case PPPIOCGIDLE32:
-	case PPPIOCSCOMPRESS32:
-		error = ppp_ioctl_trans(fd, cmd, arg);
-		goto out;
-
-	case MTIOCGET32:
-	case MTIOCPOS32:
-	case MTIOCGETCONFIG32:
-	case MTIOCSETCONFIG32:
-		error = mt_ioctl_trans(fd, cmd, arg);
-		goto out;
-
-	case CDROMREADMODE2:
-	case CDROMREADMODE1:
-	case CDROMREADRAW:
-	case CDROMREADCOOKED:
-	case CDROMREADAUDIO:
-	case CDROMREADALL:
-	case CDROM_SEND_PACKET:
-		error = cdrom_ioctl_trans(fd, cmd, arg);
-		goto out;
-		
-	case LOOP_SET_STATUS:
-	case LOOP_GET_STATUS:
-		error = loop_status(fd, cmd, arg);
-		goto out;
-
-#define AUTOFS_IOC_SETTIMEOUT32 _IOWR(0x93,0x64,unsigned int)
-	case AUTOFS_IOC_SETTIMEOUT32:
-		error = rw_long(fd, AUTOFS_IOC_SETTIMEOUT, arg);
-		goto out;
-		
-	case PIO_FONTX:
-	case GIO_FONTX:
-		error = do_fontx_ioctl(filp, cmd, (struct consolefontdesc32 *)arg);
-		goto out;
-		
-	case PIO_UNIMAP:
-	case GIO_UNIMAP:
-		error = do_unimap_ioctl(filp, cmd, (struct unimapdesc32 *)arg);
-		goto out;
-
-	case KDFONTOP:
-		error = do_kdfontop_ioctl(filp, (struct console_font_op32 *)arg);
-		goto out;
-		
-	case EXT2_IOC32_GETFLAGS:
-	case EXT2_IOC32_SETFLAGS:
-	case EXT2_IOC32_GETVERSION:
-	case EXT2_IOC32_SETVERSION:
-		error = do_ext2_ioctl(fd, cmd, arg);
-		goto out;
-		
-	case VIDIOCGTUNER32:
-	case VIDIOCSTUNER32:
-	case VIDIOCGWIN32:
-	case VIDIOCSWIN32:
-	case VIDIOCGFBUF32:
-	case VIDIOCSFBUF32:
-	case VIDIOCGFREQ32:
-	case VIDIOCSFREQ32:
-		error = do_video_ioctl(fd, cmd, arg);
-		goto out;
-
-	/* One SMB ioctl needs translations. */
-	case _IOR('u', 1, __kernel_uid_t32): /* SMB_IOC_GETMOUNTUID */
-		error = do_smb_getmountuid(fd, cmd, arg);
-		goto out;
-
-	case ATM_GETLINKRATE32:
-	case ATM_GETNAMES32:
-	case ATM_GETTYPE32:
-        case ATM_GETESI32:
-	case ATM_GETADDR32:
-        case ATM_RSTADDR32:
-        case ATM_ADDADDR32:
-        case ATM_DELADDR32:
-        case ATM_GETCIRANGE32:
-        case ATM_SETCIRANGE32:
-	case ATM_SETESI32:
-	case ATM_SETESIF32:
-	case ATM_GETSTAT32:
-	case ATM_GETSTATZ32:
-	case SUNI_GETLOOP:
-	case SUNI_SETLOOP:
-	case SONET_GETSTAT:
-	case SONET_GETSTATZ:
-	case SONET_GETDIAG:
-	case SONET_SETDIAG:
-	case SONET_CLRDIAG:
-	case SONET_SETFRAMING:
-	case SONET_GETFRAMING:
-	case SONET_GETFRSENSE:
-                error = do_atm_ioctl(fd, cmd, arg);
-                goto out;
-		
-	/* List here exlicitly which ioctl's are known to have
-	 * compatable types passed or none at all...
-	 */
-
-	/* Big T */
-	case TCGETA:
-	case TCSETA:
-	case TCSETAW:
-	case TCSETAF:
-	case TCSBRK:
-	case TCXONC:
-	case TCFLSH:
-	case TCGETS:
-	case TCSETS:
-	case TCSETSW:
-	case TCSETSF:
-	case TIOCLINUX:
-
-	/* Little t */
-	case TIOCGETD:
-	case TIOCSETD:
-	case TIOCEXCL:
-	case TIOCNXCL:
-	case TIOCCONS:
-	case TIOCGSOFTCAR:
-	case TIOCSSOFTCAR:
-	case TIOCSWINSZ:
-	case TIOCGWINSZ:
-	case TIOCMGET:
-	case TIOCMBIC:
-	case TIOCMBIS:
-	case TIOCMSET:
-	case TIOCPKT:
-	case TIOCNOTTY:
-	case TIOCSTI:
-	case TIOCOUTQ:
-	case TIOCSPGRP:
-	case TIOCGPGRP:
-	case TIOCSCTTY:
-	case TIOCGPTN:
-	case TIOCSPTLCK:
-	case TIOCGSERIAL:
-	case TIOCSSERIAL:
-	case TIOCSERGETLSR:
-	
-	/* Big F */
-	case FBIOGTYPE:
-	case FBIOSATTR:
-	case FBIOGATTR:
-	case FBIOSVIDEO:
-	case FBIOGVIDEO:
-	case FBIOGCURSOR32: /* This is not implemented yet. Later it should be converted... */
-	case FBIOSCURPOS:
-	case FBIOGCURPOS:
-	case FBIOGCURMAX:
-
-	case FBIOGET_VSCREENINFO:
-	case FBIOPUT_VSCREENINFO:
-	case FBIOPAN_DISPLAY:
-	case FBIOGET_FCURSORINFO:
-	case FBIOGET_VCURSORINFO:
-	case FBIOPUT_VCURSORINFO:
-	case FBIOGET_CURSORSTATE:
-	case FBIOPUT_CURSORSTATE:
-	case FBIOGET_CON2FBMAP:
-	case FBIOPUT_CON2FBMAP:
-
-	/* Little f */
-	case FIOCLEX:
-	case FIONCLEX:
-	case FIOASYNC:
-	case FIONBIO:
-	case FIONREAD: /* This is also TIOCINQ */
-	
-	/* 0x00 */
-	case FIBMAP:
-	case FIGETBSZ:
-	
-	/* 0x03 -- HD/IDE ioctl's used by hdparm and friends.
-	 *         Some need translations, these do not.
-	 */
-	case HDIO_GET_IDENTITY:
-	case HDIO_SET_DMA:
-	case HDIO_SET_KEEPSETTINGS:
-	case HDIO_SET_UNMASKINTR:
-	case HDIO_SET_NOWERR:
-	case HDIO_SET_32BIT:
-	case HDIO_SET_MULTCOUNT:
-	case HDIO_DRIVE_CMD:
-	case HDIO_SET_PIO_MODE:
-	case HDIO_SCAN_HWIF:
-	case HDIO_SET_NICE:
-	case BLKROSET:
-	case BLKROGET:
-
-	/* 0x02 -- Floppy ioctls */
-	case FDMSGON:
-	case FDMSGOFF:
-	case FDSETEMSGTRESH:
-	case FDFLUSH:
-	case FDWERRORCLR:
-	case FDSETMAXERRS:
-	case FDGETMAXERRS:
-	case FDGETDRVTYP:
-	case FDEJECT:
-	case FDCLRPRM:
-	case FDFMTBEG:
-	case FDFMTEND:
-	case FDRESET:
-	case FDTWADDLE:
-	case FDFMTTRK:
-	case FDRAWCMD:
-
-	/* 0x12 */
-	case BLKRRPART:
-	case BLKFLSBUF:
-	case BLKRASET:
-
-#if 0	/* New RAID code is being merged, fix up to handle
-	 * new RAID ioctls when fully merged in 2.3.x -DaveM
-	 */
-	/* 0x09 */
-	case REGISTER_DEV:
-	case REGISTER_DEV_NEW:
-	case START_MD:
-	case STOP_MD:
-#endif
-	
-	/* Big K */
-	case PIO_FONT:
-	case GIO_FONT:
-	case KDSIGACCEPT:
-	case KDGETKEYCODE:
-	case KDSETKEYCODE:
-	case KIOCSOUND:
-	case KDMKTONE:
-	case KDGKBTYPE:
-	case KDSETMODE:
-	case KDGETMODE:
-	case KDSKBMODE:
-	case KDGKBMODE:
-	case KDSKBMETA:
-	case KDGKBMETA:
-	case KDGKBENT:
-	case KDSKBENT:
-	case KDGKBSENT:
-	case KDSKBSENT:
-	case KDGKBDIACR:
-	case KDSKBDIACR:
-	case KDGKBLED:
-	case KDSKBLED:
-	case KDGETLED:
-	case KDSETLED:
-	case GIO_SCRNMAP:
-	case PIO_SCRNMAP:
-	case GIO_UNISCRNMAP:
-	case PIO_UNISCRNMAP:
-	case PIO_FONTRESET:
-	case PIO_UNIMAPCLR:
-	
-	/* Little k */
-	case KIOCTYPE:
-	case KIOCLAYOUT:
-	case KIOCGTRANS:
-	case KIOCTRANS:
-	case KIOCCMD:
-	case KIOCSDIRECT:
-	case KIOCSLED:
-	case KIOCGLED:
-	case KIOCSRATE:
-	case KIOCGRATE:
-	
-	/* Big S */
-	case SCSI_IOCTL_GET_IDLUN:
-	case SCSI_IOCTL_DOORLOCK:
-	case SCSI_IOCTL_DOORUNLOCK:
-	case SCSI_IOCTL_TEST_UNIT_READY:
-	case SCSI_IOCTL_TAGGED_ENABLE:
-	case SCSI_IOCTL_TAGGED_DISABLE:
-	case SCSI_IOCTL_GET_BUS_NUMBER:
-	case SCSI_IOCTL_SEND_COMMAND:
-	
-	/* Big V */
-	case VT_SETMODE:
-	case VT_GETMODE:
-	case VT_GETSTATE:
-	case VT_OPENQRY:
-	case VT_ACTIVATE:
-	case VT_WAITACTIVE:
-	case VT_RELDISP:
-	case VT_DISALLOCATE:
-	case VT_RESIZE:
-	case VT_RESIZEX:
-	case VT_LOCKSWITCH:
-	case VT_UNLOCKSWITCH:
-	
-	/* Little v */
-	case VUIDSFORMAT:
-	case VUIDGFORMAT:
-
-	/* Little v, the video4linux ioctls */
-	case VIDIOCGCAP:
-	case VIDIOCGCHAN:
-	case VIDIOCSCHAN:
-	case VIDIOCGPICT:
-	case VIDIOCSPICT:
-	case VIDIOCCAPTURE:
-	case VIDIOCKEY:
-	case VIDIOCGAUDIO:
-	case VIDIOCSAUDIO:
-	case VIDIOCSYNC:
-	case VIDIOCMCAPTURE:
-	case VIDIOCGMBUF:
-	case VIDIOCGUNIT:
-	case VIDIOCGCAPTURE:
-	case VIDIOCSCAPTURE:
-
-	/* BTTV specific... */
-	case _IOW('v',  BASE_VIDIOCPRIVATE+0, char [256]):
-	case _IOR('v',  BASE_VIDIOCPRIVATE+1, char [256]):
-	case _IOR('v' , BASE_VIDIOCPRIVATE+2, unsigned int):
-	case _IOW('v' , BASE_VIDIOCPRIVATE+3, char [16]): /* struct bttv_pll_info */
-	case _IOR('v' , BASE_VIDIOCPRIVATE+4, int):
-	case _IOR('v' , BASE_VIDIOCPRIVATE+5, int):
-	case _IOR('v' , BASE_VIDIOCPRIVATE+6, int):
-	case _IOR('v' , BASE_VIDIOCPRIVATE+7, int):
-
-	/* Little p (/dev/rtc, /dev/envctrl, etc.) */
-	case RTCGET:
-	case RTCSET:
-	case I2CIOCSADR:
-	case I2CIOCGADR:
-
-	/* Little m */
-	case MTIOCTOP:
-
-	/* OPENPROMIO, SunOS/Solaris only, the NetBSD one's have
-	 * embedded pointers in the arg which we'd need to clean up...
-	 */
-	case OPROMGETOPT:
-	case OPROMSETOPT:
-	case OPROMNXTOPT:
-	case OPROMSETOPT2:
-	case OPROMNEXT:
-	case OPROMCHILD:
-	case OPROMGETPROP:
-	case OPROMNXTPROP:
-	case OPROMU2P:
-	case OPROMGETCONS:
-	case OPROMGETFBNAME:
-	case OPROMGETBOOTARGS:
-	case OPROMSETCUR:
-	case OPROMPCI2NODE:
-	case OPROMPATH2NODE:
-
-	/* Socket level stuff */
-	case FIOSETOWN:
-	case SIOCSPGRP:
-	case FIOGETOWN:
-	case SIOCGPGRP:
-	case SIOCATMARK:
-	case SIOCSIFLINK:
-	case SIOCSIFENCAP:
-	case SIOCGIFENCAP:
-	case SIOCSIFBR:
-	case SIOCGIFBR:
-	case SIOCSARP:
-	case SIOCGARP:
-	case SIOCDARP:
-#if 0 /* XXX No longer exist in new routing code. XXX */
-	case OLD_SIOCSARP:
-	case OLD_SIOCGARP:
-	case OLD_SIOCDARP:
-#endif
-	case SIOCSRARP:
-	case SIOCGRARP:
-	case SIOCDRARP:
-	case SIOCADDDLCI:
-	case SIOCDELDLCI:
-	
-	/* SG stuff */
-	case SG_SET_TIMEOUT:
-	case SG_GET_TIMEOUT:
-	case SG_EMULATED_HOST:
-	case SG_SET_TRANSFORM:
-	case SG_GET_TRANSFORM:
-
-	/* PPP stuff */
-	case PPPIOCGFLAGS:
-	case PPPIOCSFLAGS:
-	case PPPIOCGASYNCMAP:
-	case PPPIOCSASYNCMAP:
-	case PPPIOCGUNIT:
-	case PPPIOCGRASYNCMAP:
-	case PPPIOCSRASYNCMAP:
-	case PPPIOCGMRU:
-	case PPPIOCSMRU:
-	case PPPIOCSMAXCID:
-	case PPPIOCGXASYNCMAP:
-	case PPPIOCSXASYNCMAP:
-	case PPPIOCXFERUNIT:
-	case PPPIOCGNPMODE:
-	case PPPIOCSNPMODE:
-	case PPPIOCGDEBUG:
-	case PPPIOCSDEBUG:
-	case PPPIOCNEWUNIT:
-	case PPPIOCATTACH:
-	case PPPIOCDETACH:
-
-	/* CDROM stuff */
-	case CDROMPAUSE:
-	case CDROMRESUME:
-	case CDROMPLAYMSF:
-	case CDROMPLAYTRKIND:
-	case CDROMREADTOCHDR:
-	case CDROMREADTOCENTRY:
-	case CDROMSTOP:
-	case CDROMSTART:
-	case CDROMEJECT:
-	case CDROMVOLCTRL:
-	case CDROMSUBCHNL:
-	case CDROMEJECT_SW:
-	case CDROMMULTISESSION:
-	case CDROM_GET_MCN:
-	case CDROMRESET:
-	case CDROMVOLREAD:
-	case CDROMSEEK:
-	case CDROMPLAYBLK:
-	case CDROMCLOSETRAY:
-	case CDROM_SET_OPTIONS:
-	case CDROM_CLEAR_OPTIONS:
-	case CDROM_SELECT_SPEED:
-	case CDROM_SELECT_DISC:
-	case CDROM_MEDIA_CHANGED:
-	case CDROM_DRIVE_STATUS:
-	case CDROM_DISC_STATUS:
-	case CDROM_CHANGER_NSLOTS:
-	case CDROM_LOCKDOOR:
-	case CDROM_DEBUG:
-	case CDROM_GET_CAPABILITY:
-	
-	/* Big L */
-	case LOOP_SET_FD:
-	case LOOP_CLR_FD:
-	
-	/* Big A */
-	case AUDIO_GETINFO:
-	case AUDIO_SETINFO:
-	case AUDIO_DRAIN:
-	case AUDIO_GETDEV:
-	case AUDIO_GETDEV_SUNOS:
-	case AUDIO_FLUSH:
-
-	/* Big Q for sound/OSS */
-	case SNDCTL_SEQ_RESET:
-	case SNDCTL_SEQ_SYNC:
-	case SNDCTL_SYNTH_INFO:
-	case SNDCTL_SEQ_CTRLRATE:
-	case SNDCTL_SEQ_GETOUTCOUNT:
-	case SNDCTL_SEQ_GETINCOUNT:
-	case SNDCTL_SEQ_PERCMODE:
-	case SNDCTL_FM_LOAD_INSTR:
-	case SNDCTL_SEQ_TESTMIDI:
-	case SNDCTL_SEQ_RESETSAMPLES:
-	case SNDCTL_SEQ_NRSYNTHS:
-	case SNDCTL_SEQ_NRMIDIS:
-	case SNDCTL_MIDI_INFO:
-	case SNDCTL_SEQ_THRESHOLD:
-	case SNDCTL_SYNTH_MEMAVL:
-	case SNDCTL_FM_4OP_ENABLE:
-	case SNDCTL_SEQ_PANIC:
-	case SNDCTL_SEQ_OUTOFBAND:
-	case SNDCTL_SEQ_GETTIME:
-	case SNDCTL_SYNTH_ID:
-	case SNDCTL_SYNTH_CONTROL:
-	case SNDCTL_SYNTH_REMOVESAMPLE:
-
-	/* Big T for sound/OSS */
-	case SNDCTL_TMR_TIMEBASE:
-	case SNDCTL_TMR_START:
-	case SNDCTL_TMR_STOP:
-	case SNDCTL_TMR_CONTINUE:
-	case SNDCTL_TMR_TEMPO:
-	case SNDCTL_TMR_SOURCE:
-	case SNDCTL_TMR_METRONOME:
-	case SNDCTL_TMR_SELECT:
-
-	/* Little m for sound/OSS */
-	case SNDCTL_MIDI_PRETIME:
-	case SNDCTL_MIDI_MPUMODE:
-	case SNDCTL_MIDI_MPUCMD:
-
-	/* Big P for sound/OSS */
-	case SNDCTL_DSP_RESET:
-	case SNDCTL_DSP_SYNC:
-	case SNDCTL_DSP_SPEED:
-	case SNDCTL_DSP_STEREO:
-	case SNDCTL_DSP_GETBLKSIZE:
-	case SNDCTL_DSP_CHANNELS:
-	case SOUND_PCM_WRITE_FILTER:
-	case SNDCTL_DSP_POST:
-	case SNDCTL_DSP_SUBDIVIDE:
-	case SNDCTL_DSP_SETFRAGMENT:
-	case SNDCTL_DSP_GETFMTS:
-	case SNDCTL_DSP_SETFMT:
-	case SNDCTL_DSP_GETOSPACE:
-	case SNDCTL_DSP_GETISPACE:
-	case SNDCTL_DSP_NONBLOCK:
-	case SNDCTL_DSP_GETCAPS:
-	case SNDCTL_DSP_GETTRIGGER:
-	case SNDCTL_DSP_SETTRIGGER:
-	case SNDCTL_DSP_GETIPTR:
-	case SNDCTL_DSP_GETOPTR:
-	/* case SNDCTL_DSP_MAPINBUF: XXX needs translation */
-	/* case SNDCTL_DSP_MAPOUTBUF: XXX needs translation */
-	case SNDCTL_DSP_SETSYNCRO:
-	case SNDCTL_DSP_SETDUPLEX:
-	case SNDCTL_DSP_GETODELAY:
-	case SNDCTL_DSP_PROFILE:
-
-	case SOUND_PCM_READ_RATE:
-	case SOUND_PCM_READ_CHANNELS:
-	case SOUND_PCM_READ_BITS:
-	case SOUND_PCM_READ_FILTER:
-
-	/* Big C for sound/OSS */
-	case SNDCTL_COPR_RESET:
-	case SNDCTL_COPR_LOAD:
-	case SNDCTL_COPR_RDATA:
-	case SNDCTL_COPR_RCODE:
-	case SNDCTL_COPR_WDATA:
-	case SNDCTL_COPR_WCODE:
-	case SNDCTL_COPR_RUN:
-	case SNDCTL_COPR_HALT:
-	case SNDCTL_COPR_SENDMSG:
-	case SNDCTL_COPR_RCVMSG:
-
-	/* Big M for sound/OSS */
-	case SOUND_MIXER_READ_VOLUME:
-	case SOUND_MIXER_READ_BASS:
-	case SOUND_MIXER_READ_TREBLE:
-	case SOUND_MIXER_READ_SYNTH:
-	case SOUND_MIXER_READ_PCM:
-	case SOUND_MIXER_READ_SPEAKER:
-	case SOUND_MIXER_READ_LINE:
-	case SOUND_MIXER_READ_MIC:
-	case SOUND_MIXER_READ_CD:
-	case SOUND_MIXER_READ_IMIX:
-	case SOUND_MIXER_READ_ALTPCM:
-	case SOUND_MIXER_READ_RECLEV:
-	case SOUND_MIXER_READ_IGAIN:
-	case SOUND_MIXER_READ_OGAIN:
-	case SOUND_MIXER_READ_LINE1:
-	case SOUND_MIXER_READ_LINE2:
-	case SOUND_MIXER_READ_LINE3:
-	case SOUND_MIXER_READ_MUTE:
-	/* case SOUND_MIXER_READ_ENHANCE: same value as READ_MUTE */
-	/* case SOUND_MIXER_READ_LOUD: same value as READ_MUTE */
-	case SOUND_MIXER_READ_RECSRC:
-	case SOUND_MIXER_READ_DEVMASK:
-	case SOUND_MIXER_READ_RECMASK:
-	case SOUND_MIXER_READ_STEREODEVS:
-	case SOUND_MIXER_READ_CAPS:
-
-	case SOUND_MIXER_WRITE_VOLUME:
-	case SOUND_MIXER_WRITE_BASS:
-	case SOUND_MIXER_WRITE_TREBLE:
-	case SOUND_MIXER_WRITE_SYNTH:
-	case SOUND_MIXER_WRITE_PCM:
-	case SOUND_MIXER_WRITE_SPEAKER:
-	case SOUND_MIXER_WRITE_LINE:
-	case SOUND_MIXER_WRITE_MIC:
-	case SOUND_MIXER_WRITE_CD:
-	case SOUND_MIXER_WRITE_IMIX:
-	case SOUND_MIXER_WRITE_ALTPCM:
-	case SOUND_MIXER_WRITE_RECLEV:
-	case SOUND_MIXER_WRITE_IGAIN:
-	case SOUND_MIXER_WRITE_OGAIN:
-	case SOUND_MIXER_WRITE_LINE1:
-	case SOUND_MIXER_WRITE_LINE2:
-	case SOUND_MIXER_WRITE_LINE3:
-	case SOUND_MIXER_WRITE_MUTE:
-	/* case SOUND_MIXER_WRITE_ENHANCE: same value as WRITE_MUTE */
-	/* case SOUND_MIXER_WRITE_LOUD: same value as WRITE_MUTE */
-	case SOUND_MIXER_WRITE_RECSRC:
-
-	case SOUND_MIXER_INFO:
-	case SOUND_OLD_MIXER_INFO:
-	case SOUND_MIXER_ACCESS:
-	case SOUND_MIXER_PRIVATE1:
-	case SOUND_MIXER_PRIVATE2:
-	case SOUND_MIXER_PRIVATE3:
-	case SOUND_MIXER_PRIVATE4:
-	case SOUND_MIXER_PRIVATE5:
-	case SOUND_MIXER_GETLEVELS:
-	case SOUND_MIXER_SETLEVELS:
-
-	case OSS_GETVERSION:
-
-	/* AUTOFS */
-	case AUTOFS_IOC_READY:
-	case AUTOFS_IOC_FAIL:
-	case AUTOFS_IOC_CATATONIC:
-	case AUTOFS_IOC_PROTOVER:
-	case AUTOFS_IOC_EXPIRE:
-	
-	/* Raw devices */
-	case RAW_SETBIND:
-	case RAW_GETBIND:
-
-	/* SMB ioctls which do not need any translations */
-	case SMB_IOC_NEWCONN:
-
-	/* Little a */
-	case ATMSIGD_CTRL:
-	case ATMARPD_CTRL:
-	case ATMLEC_CTRL:
-	case ATMLEC_MCAST:
-	case ATMLEC_DATA:
-	case ATM_SETSC:
-        case SIOCSIFATMTCP:
-	case SIOCMKCLIP:
-        case ATMARP_MKIP:
-        case ATMARP_SETENTRY:
-        case ATMARP_ENCAP:
-        case ATMTCP_CREATE:
-        case ATMTCP_REMOVE:
-        case ATMMPC_CTRL:
-        case ATMMPC_DATA:
-	    
-		error = sys_ioctl (fd, cmd, arg);
-		goto out;
-
-	default:
-		do {
-			static int count = 0;
-			if (++count <= 20)
-				printk("sys32_ioctl: Unknown cmd fd(%d) "
-				       "cmd(%08x) arg(%08x)\n",
-				       (int)fd, (unsigned int)cmd, (unsigned int)arg);
-		} while(0);
-		error = -EINVAL;
-		break;
 	}
 out:
 	fput(filp);

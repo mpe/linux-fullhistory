@@ -1053,7 +1053,7 @@ cbq_dequeue(struct Qdisc *sch)
 
 	if (sch->q.qlen) {
 		sch->stats.overlimits++;
-		if (q->wd_expires && !test_bit(LINK_STATE_XOFF, &sch->dev->state)) {
+		if (q->wd_expires && !netif_queue_stopped(sch->dev)) {
 			long delay = PSCHED_US2JIFFIE(q->wd_expires);
 			del_timer(&q->wd_timer);
 			if (delay <= 0)

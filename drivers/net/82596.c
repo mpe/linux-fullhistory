@@ -1251,7 +1251,7 @@ static void i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		}
 
 		if ((lp->cmd_head != (struct i596_cmd *) I596_NULL) &&
-		    (test_bit(LINK_STATE_START, &dev->state)))
+		    netif_running(dev))
 			ack_cmd |= CUC_START;
 		lp->scb.cmd = WSWAPcmd(lp->cmd_head);
 	}
@@ -1260,7 +1260,7 @@ static void i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			printk("%s: i596 interrupt received a frame.\n", dev->name);
 		/* Only RX_START if stopped - RGH 07-07-96 */
 		if (status & 0x1000) {
-			if (test_bit(LINK_STATE_START, &dev->state))
+			if (netif_running(dev))
 				ack_cmd |= RX_START;
 			if (i596_debug > 1)
 				printk("%s: i596 interrupt receive unit inactive %x.\n", dev->name, status & 0x00f0);

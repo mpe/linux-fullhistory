@@ -1081,8 +1081,7 @@ static void corkscrew_interrupt(int irq, void *dev_id,
 		   other interrupt problems. */
 		if (donedidthis++ > 100) {
 			printk(KERN_ERR "%s: Bogus interrupt, bailing. Status %4.4x, start=%d.\n",
-				dev->name, status,
-				test_bit(LINK_STATE_START, &dev->state));
+				   dev->name, status, netif_running(dev));
 			free_irq(dev->irq, dev);
 		}
 	}
@@ -1426,7 +1425,7 @@ static struct enet_statistics *corkscrew_get_stats(struct net_device *dev)
 	    (struct corkscrew_private *) dev->priv;
 	unsigned long flags;
 
-	if (test_bit(LINK_STATE_START, &dev->state)) {
+	if (netif_running(dev)) {
 		save_flags(flags);
 		cli();
 		update_stats(dev->base_addr, dev);

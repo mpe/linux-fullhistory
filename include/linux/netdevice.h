@@ -174,14 +174,17 @@ struct hh_cache
 	unsigned long	hh_data[16/sizeof(unsigned long)];
 };
 
+/* These flag bits are private to the generic network queueing
+ * layer, they may not be explicitly referenced by any other
+ * code.
+ */
+
 enum netdev_state_t
 {
-	LINK_STATE_XOFF=0,
-	LINK_STATE_DOWN,
-	LINK_STATE_START,
-	LINK_STATE_RXSEM,
-	LINK_STATE_TXSEM,
-	LINK_STATE_SCHED
+	__LINK_STATE_XOFF=0,
+	__LINK_STATE_START,
+	__LINK_STATE_PRESENT,
+	__LINK_STATE_SCHED
 };
 
 
@@ -431,7 +434,7 @@ extern struct softnet_data softnet_data[NR_CPUS];
 
 extern __inline__ void __netif_schedule(struct net_device *dev)
 {
-	if (!test_and_set_bit(LINK_STATE_SCHED, &dev->state)) {
+	if (!test_and_set_bit(__LINK_STATE_SCHED, &dev->state)) {
 		unsigned long flags;
 		int cpu = smp_processor_id();
 
@@ -445,24 +448,54 @@ extern __inline__ void __netif_schedule(struct net_device *dev)
 
 extern __inline__ void netif_schedule(struct net_device *dev)
 {
-	if (!test_bit(LINK_STATE_XOFF, &dev->state))
+	if (!test_bit(__LINK_STATE_XOFF, &dev->state))
 		__netif_schedule(dev);
 }
 
 extern __inline__ void netif_start_queue(struct net_device *dev)
 {
-	clear_bit(LINK_STATE_XOFF, &dev->state);
+	clear_bit(__LINK_STATE_XOFF, &dev->state);
 }
 
 extern __inline__ void netif_wake_queue(struct net_device *dev)
 {
-	if (test_and_clear_bit(LINK_STATE_XOFF, &dev->state))
+	if (test_and_clear_bit(__LINK_STATE_XOFF, &dev->state))
 		__netif_schedule(dev);
 }
 
 extern __inline__ void netif_stop_queue(struct net_device *dev)
 {
-	set_bit(LINK_STATE_XOFF, &dev->state);
+	set_bit(__LINK_STATE_XOFF, &dev->state);
+}
+
+extern __inline__ int netif_queue_stopped(struct net_device *dev)
+{
+	return test_bit(__LINK_STATE_XOFF, &dev->state);
+}
+
+extern __inline__ int netif_running(struct net_device *dev)
+{
+	return test_bit(__LINK_STATE_START, &dev->state);
+}
+
+/* Hot-plugging. */
+extern __inline__ int netif_device_present(struct net_device *dev)
+{
+	return test_bit(__LINK_STATE_PRESENT, &dev->state);
+}
+
+extern __inline__ void netif_device_detach(struct net_device *dev)
+{
+	if (test_and_clear_bit(__LINK_STATE_PRESENT, &dev->state) &&
+	    netif_running(dev))
+		netif_stop_queue(dev);
+}
+
+extern __inline__ void netif_device_attach(struct net_device *dev)
+{
+	if (test_and_set_bit(__LINK_STATE_PRESENT, &dev->state) &&
+	    netif_running(dev))
+		netif_wake_queue(dev);
 }
 
 extern __inline__ void dev_kfree_skb_irq(struct sk_buff *skb)

@@ -248,7 +248,6 @@ void nbd_do_it(struct nbd_device *lo)
 void nbd_clear_que(struct nbd_device *lo)
 {
 	struct request *req;
-	unsigned long flags;
 
 	while (!list_empty(&lo->queue_head)) {
 		req = blkdev_entry_prev_request(&lo->queue_head);
@@ -405,8 +404,8 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 		return 0;
 #ifdef PARANOIA
 	case NBD_PRINT_DEBUG:
-		printk(KERN_INFO "NBD device %d: queue_head = %p. Global: in %d, out %d\n",
-		       dev, lo->queue_head, requests_in, requests_out);
+		printk(KERN_INFO "NBD device %d: next = %p, prev = %p. Global: in %d, out %d\n",
+		       dev, lo->queue_head.next, lo->queue_head.prev, requests_in, requests_out);
 		return 0;
 #endif
 	case BLKGETSIZE:

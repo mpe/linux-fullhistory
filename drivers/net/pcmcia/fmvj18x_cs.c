@@ -593,8 +593,7 @@ static int fmvj18x_event(event_t event, int priority,
     case CS_EVENT_CARD_REMOVAL:
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
-	    netif_stop_queue (dev);
-	    clear_bit(LINK_STATE_START, &dev->state);
+	    netif_device_detach(dev);
 	    link->release.expires = jiffies + HZ/20;
 	    add_timer(&link->release);
 	}
@@ -608,10 +607,9 @@ static int fmvj18x_event(event_t event, int priority,
 	/* Fall through... */
     case CS_EVENT_RESET_PHYSICAL:
 	if (link->state & DEV_CONFIG) {
-	    if (link->open) {
-	    	netif_stop_queue (dev);
-		clear_bit(LINK_STATE_START, &dev->state);
-	    }
+	    if (link->open)
+	    	netif_device_detach(dev);
+
 	    CardServices(ReleaseConfiguration, link->handle);
 	}
 	break;
@@ -623,8 +621,7 @@ static int fmvj18x_event(event_t event, int priority,
 	    CardServices(RequestConfiguration, link->handle, &link->conf);
 	    if (link->open) {
 		fjn_reset(dev);
-		set_bit(LINK_STATE_START, &dev->state);
-		netif_start_queue (dev);
+		netif_device_attach(dev);
 	    }
 	}
 	break;

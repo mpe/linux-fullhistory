@@ -926,8 +926,7 @@ static int ray_event(event_t event, int priority,
     switch (event) {
     case CS_EVENT_CARD_REMOVAL:
         link->state &= ~DEV_PRESENT;
-        netif_stop_queue(dev);
-        clear_bit(LINK_STATE_START, &dev->state);
+        netif_device_detach(dev);
         if (link->state & DEV_CONFIG) {
             link->release.expires = jiffies + HZ/20;
             add_timer(&link->release);
@@ -943,10 +942,9 @@ static int ray_event(event_t event, int priority,
         /* Fall through... */
     case CS_EVENT_RESET_PHYSICAL:
         if (link->state & DEV_CONFIG) {
-            if (link->open) {
-            	netif_stop_queue(dev);
-            	clear_bit(LINK_STATE_START, &dev->state);
-            }
+            if (link->open)
+            	netif_device_detach(dev);
+
             pcmcia_release_configuration(link->handle);
         }
         break;
@@ -958,8 +956,7 @@ static int ray_event(event_t event, int priority,
             pcmcia_request_configuration(link->handle, &link->conf);
             if (link->open) {
                 ray_reset(dev);
-		netif_start_queue(dev);
-		set_bit(LINK_STATE_START, &dev->state);
+		netif_device_attach(dev);
             }
         }
         break;

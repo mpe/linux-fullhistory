@@ -1275,7 +1275,7 @@ static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case HDLCDRVCTL_SETMODEMPAR:
-		if ((!suser()) || test_bit(LINK_STATE_START, &dev->state))
+		if ((!suser()) || netif_running(dev))
 			return -EACCES;
 		dev->base_addr = hi.data.mp.iobase;
 		dev->irq = /*hi.data.mp.irq*/0;
@@ -1314,7 +1314,7 @@ static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case HDLCDRVCTL_SETMODE:
-		if (!suser() || test_bit(LINK_STATE_START, &dev->state))
+		if (!suser() || netif_running(dev))
 			return -EACCES;
 		hi.data.modename[sizeof(hi.data.modename)-1] = '\0';
 		return baycom_setmode(bc, hi.data.modename);

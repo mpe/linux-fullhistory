@@ -777,6 +777,14 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     retval->max_id = 8;      
     retval->max_lun = 8;
 
+    /*
+     * All drivers right now should be able to handle 12 byte commands.
+     * Every so often there are requests for 16 byte commands, but individual
+     * low-level drivers need to certify that they actually do something
+     * sensible with such commands.
+     */
+    retval->max_cmd_len = 12;
+
     retval->unique_id = 0;
     retval->io_port = 0;
     retval->hostt = tpnt;
@@ -787,6 +795,7 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
 
 
     retval->host_blocked = FALSE;
+    retval->host_self_blocked = FALSE;
 
 #ifdef DEBUG
     printk("Register %x %x: %d\n", (int)retval, (int)retval->hostt, j);

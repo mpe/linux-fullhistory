@@ -97,14 +97,18 @@ static ssize_t rtc_read(struct file *file, char *buf,
 static int rtc_ioctl(struct inode *inode, struct file *file,
 		     unsigned int cmd, unsigned long arg);
 
+#ifndef __alpha__
 static unsigned int rtc_poll(struct file *file, poll_table *wait);
+#endif
 
 static void get_rtc_time (struct rtc_time *rtc_tm);
 static void get_rtc_alm_time (struct rtc_time *alm_tm);
+#ifndef __alpha__
 static void rtc_dropped_irq(unsigned long data);
 
 static void set_rtc_irq_bit(unsigned char bit);
 static void mask_rtc_irq_bit(unsigned char bit);
+#endif
 
 static inline unsigned char rtc_is_updating(void);
 
@@ -132,6 +136,7 @@ static unsigned long epoch = 1900;	/* year corresponding to 0x00	*/
 static const unsigned char days_in_mo[] = 
 {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
+#ifndef __alpha__
 /*
  *	A very tiny interrupt handler. It runs with SA_INTERRUPT set,
  *	so that there is no possibility of conflicting with the
@@ -162,6 +167,7 @@ static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (atomic_read(&rtc_status) & RTC_TIMER_ON)
 		mod_timer(&rtc_irq_timer, jiffies + HZ/rtc_freq + 2*HZ/100);
 }
+#endif
 
 /*
  *	Now all the various file operations that we export.
@@ -175,6 +181,9 @@ static long long rtc_llseek(struct file *file, loff_t offset, int origin)
 static ssize_t rtc_read(struct file *file, char *buf,
 			size_t count, loff_t *ppos)
 {
+#ifdef __alpha__
+	return -EIO;
+#else
 	DECLARE_WAITQUEUE(wait, current);
 	unsigned long data;
 	ssize_t retval;
@@ -206,6 +215,7 @@ static ssize_t rtc_read(struct file *file, char *buf,
 	remove_wait_queue(&rtc_wait, &wait);
 
 	return retval;
+#endif
 }
 
 static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
@@ -216,6 +226,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	struct rtc_time wtime; 
 
 	switch (cmd) {
+#ifndef __alpha__
 	case RTC_AIE_OFF:	/* Mask alarm int. enab. bit	*/
 	{
 		mask_rtc_irq_bit(RTC_AIE);
@@ -265,6 +276,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		set_rtc_irq_bit(RTC_UIE);
 		return 0;
 	}
+#endif
 	case RTC_ALM_READ:	/* Read the present alarm time */
 	{
 		/*
@@ -398,6 +410,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		spin_unlock_irqrestore(&rtc_lock, flags);
 		return 0;
 	}
+#ifndef __alpha__
 	case RTC_IRQP_READ:	/* Read the periodic IRQ rate.	*/
 	{
 		return put_user(rtc_freq, (unsigned long *)arg);
@@ -437,7 +450,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		spin_unlock_irqrestore(&rtc_lock, flags);
 		return 0;
 	}
-#ifdef __alpha__
+#else
 	case RTC_EPOCH_READ:	/* Read the epoch.	*/
 	{
 		return put_user (epoch, (unsigned long *)arg);
@@ -494,13 +507,14 @@ static int rtc_fasync (int fd, struct file *filp, int on)
 
 static int rtc_release(struct inode *inode, struct file *file)
 {
+	unsigned long flags;
+#ifndef __alpha__
 	/*
 	 * Turn off all interrupts once the device is no longer
 	 * in use, and clear the data.
 	 */
 
 	unsigned char tmp;
-	unsigned long flags;
 
 	spin_lock_irqsave(&rtc_lock, flags);
 	tmp = CMOS_READ(RTC_CONTROL);
@@ -520,6 +534,7 @@ static int rtc_release(struct inode *inode, struct file *file)
 		rtc_fasync (-1, file, 0);
 	}
 
+#endif
 	MOD_DEC_USE_COUNT;
 
 	spin_lock_irqsave (&rtc_lock, flags);
@@ -529,6 +544,7 @@ static int rtc_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+#ifndef __alpha__
 static unsigned int rtc_poll(struct file *file, poll_table *wait)
 {
 	unsigned long l, flags;
@@ -543,6 +559,7 @@ static unsigned int rtc_poll(struct file *file, poll_table *wait)
 		return POLLIN | POLLRDNORM;
 	return 0;
 }
+#endif
 
 /*
  *	The various file operations we support.
@@ -551,7 +568,9 @@ static unsigned int rtc_poll(struct file *file, poll_table *wait)
 static struct file_operations rtc_fops = {
 	llseek:		rtc_llseek,
 	read:		rtc_read,
+#ifndef __alpha__
 	poll:		rtc_poll,
+#endif
 	ioctl:		rtc_ioctl,
 	open:		rtc_open,
 	release:	rtc_release,
@@ -612,12 +631,14 @@ found:
 		return -EIO;
 	}
 
+#ifndef __alpha__
 	if(request_irq(RTC_IRQ, rtc_interrupt, SA_INTERRUPT, "rtc", NULL))
 	{
 		/* Yeah right, seeing as irq 8 doesn't even hit the bus. */
 		printk(KERN_ERR "rtc: IRQ %d is not free.\n", RTC_IRQ);
 		return -EIO;
 	}
+#endif
 
 	request_region(RTC_PORT(0), RTC_IO_EXTENT, "rtc");
 #endif /* __sparc__ vs. others */
@@ -654,12 +675,14 @@ found:
 	if (guess)
 		printk("rtc: %s epoch (%lu) detected\n", guess, epoch);
 #endif
+#ifndef __alpha__
 	init_timer(&rtc_irq_timer);
 	rtc_irq_timer.function = rtc_dropped_irq;
 	spin_lock_irqsave(&rtc_lock, flags);
 	/* Initialize periodic freq. to CMOS reset default, which is 1024Hz */
 	CMOS_WRITE(((CMOS_READ(RTC_FREQ_SELECT) & 0xF0) | 0x06), RTC_FREQ_SELECT);
 	spin_unlock_irqrestore(&rtc_lock, flags);
+#endif
 	rtc_freq = 1024;
 
 	printk(KERN_INFO "Real Time Clock Driver v" RTC_VERSION "\n");
@@ -689,6 +712,7 @@ module_init(rtc_init);
 module_exit(rtc_exit);
 EXPORT_NO_SYMBOLS;
 
+#ifndef __alpha__
 /*
  * 	At IRQ rates >= 4096Hz, an interrupt may get lost altogether.
  *	(usually during an IDE disk interrupt, with IRQ unmasking off)
@@ -714,6 +738,7 @@ static void rtc_dropped_irq(unsigned long data)
 	rtc_irq_data |= (CMOS_READ(RTC_INTR_FLAGS) & 0xF0);	/* restart */
 	spin_unlock_irqrestore(&rtc_lock, flags);
 }
+#endif
 
 /*
  *	Info exported via "/proc/driver/rtc".
@@ -902,6 +927,7 @@ static void get_rtc_alm_time(struct rtc_time *alm_tm)
 	}
 }
 
+#ifndef __alpha__
 /*
  * Used to disable/enable interrupts for any one of UIE, AIE, PIE.
  * Rumour has it that if you frob the interrupt enable/disable
@@ -939,3 +965,4 @@ static void set_rtc_irq_bit(unsigned char bit)
 	rtc_irq_data = 0;
 	spin_unlock_irqrestore(&rtc_lock, flags);
 }
+#endif

@@ -723,7 +723,7 @@ void arcnet_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 * RESET flag was enabled - if device is not running, we must clear it right
 	 * away (but nothing else).
 	 */
-	if (!test_bit(LINK_STATE_START, &dev->state)) {
+	if (!netif_running(dev)) {
 		if (ASTATUS() & RESETflag)
 			ACOMMAND(CFLAGScmd | RESETclear);
 		AINTMASK(0);

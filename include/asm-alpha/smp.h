@@ -20,6 +20,7 @@ __hard_smp_processor_id(void)
 #ifdef __SMP__
 
 #include <linux/threads.h>
+#include <asm/irq.h>
 
 struct cpuinfo_alpha {
 	unsigned long loops_per_sec;
@@ -28,6 +29,8 @@ struct cpuinfo_alpha {
 	unsigned long *pte_cache;
 	unsigned long pgtable_cache_sz;
 	unsigned long ipi_count;
+	unsigned long irq_attempt[NR_IRQS];
+	unsigned long smp_local_irq_count;
 	unsigned long prof_multiplier;
 	unsigned long prof_counter;
 	int irq_count, bh_count;

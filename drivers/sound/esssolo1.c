@@ -2193,6 +2193,7 @@ static int solo1_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data)
 static int __devinit solo1_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
 {
 	struct solo1_state *s;
+	struct pm_dev *pmdev;
 
 	if (!RSRCISIOREGION(pcidev, 0) ||
 	    !RSRCISIOREGION(pcidev, 1) ||

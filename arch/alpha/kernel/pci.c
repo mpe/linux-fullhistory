@@ -325,10 +325,10 @@ pcibios_fixup_pbus_ranges(struct pci_bus * bus,
 	ranges->mem_end -= bus->resource[1]->start;
 }
 
-int __init
+int
 pcibios_enable_device(struct pci_dev *dev)
 {
-	/* Not needed, since we enable all devices at startup.  */
+	/* Nothing to do, since we enable all devices at startup.  */
 	return 0;
 }
 

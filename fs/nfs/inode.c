@@ -683,14 +683,12 @@ printk("nfs_notify_change: revalidate failed, error=%d\n", error);
 		if (attr->ia_size != fattr.size)
 			printk("nfs_notify_change: attr=%Ld, fattr=%d??\n",
 			       (long long) attr->ia_size, fattr.size);
-		inode->i_size  = attr->ia_size;
 		inode->i_mtime = fattr.mtime.seconds;
+		vmtruncate(inode, attr->ia_size);
 	}
 	if (attr->ia_valid & ATTR_MTIME)
 		inode->i_mtime = fattr.mtime.seconds;
 	error = nfs_refresh_inode(inode, &fattr);
-	if (!error && (attr->ia_valid & ATTR_SIZE))
-		vmtruncate(inode, attr->ia_size);
 out:
 	return error;
 }

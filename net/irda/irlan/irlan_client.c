@@ -126,7 +126,7 @@ void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
 	 * is up, that means that the "user" really wants to connect. If not
 	 * we notify the user about the possibility of an IrLAN connection
 	 */
-	if (test_bit(LINK_STATE_START, &self->dev.state)) {
+	if (netif_running(&self->dev)) {
 		/* Open TSAPs */
 		irlan_client_open_ctrl_tsap(self);
  		irlan_open_data_tsap(self);

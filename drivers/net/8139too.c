@@ -1738,7 +1738,7 @@ static struct net_device_stats *rtl8139_get_stats (struct net_device *dev)
 
 	assert (tp != NULL);
 
-	if (test_bit(LINK_STATE_START, &dev->state)) {
+	if (netif_running(dev)) {
 		tp->stats.rx_missed_errors += RTL_R32 (RxMissed);
 		RTL_W32 (RxMissed, 0);
 	}

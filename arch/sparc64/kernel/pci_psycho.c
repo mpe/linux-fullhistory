@@ -1,4 +1,4 @@
-/* $Id: pci_psycho.c,v 1.11 2000/02/08 05:11:32 jj Exp $
+/* $Id: pci_psycho.c,v 1.12 2000/02/17 08:58:18 davem Exp $
  * pci_psycho.c: PSYCHO/U2P specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1344,9 +1344,7 @@ static void psycho_pbm_strbuf_init(struct pci_controller_info *p,
 				   int is_pbm_a)
 {
 	unsigned long base = p->controller_regs;
-
-	/* Currently we don't even use it. */
-	pbm->stc.strbuf_enabled = 0;
+	u64 control;
 
 	if (is_pbm_a) {
 		pbm->stc.strbuf_control  = base + PSYCHO_STRBUF_CONTROL_A;
@@ -1368,14 +1366,29 @@ static void psycho_pbm_strbuf_init(struct pci_controller_info *p,
 	pbm->stc.strbuf_flushflag_pa = (unsigned long)
 		__pa(pbm->stc.strbuf_flushflag);
 
-#if 0
-	/* And when we do enable it, these are the sorts of things
-	 * we'll do.
+	/* Enable the streaming buffer.  We have to be careful
+	 * just in case OBP left it with LRU locking enabled.
+	 *
+	 * It is possible to control if PBM will be rerun on
+	 * line misses.  Currently I just retain whatever setting
+	 * OBP left us with.  All checks so far show it having
+	 * a value of zero.
 	 */
+#undef PSYCHO_STRBUF_RERUN_ENABLE
+#undef PSYCHO_STRBUF_RERUN_DISABLE
 	control = psycho_read(pbm->stc.strbuf_control);
-	control |= PSYCHO_SBUFCTRL_SB_EN;
-	psycho_write(pbm->stc.strbuf_control, control);
+	control |= PSYCHO_STRBUF_CTRL_ENAB;
+	control &= ~(PSYCHO_STRBUF_CTRL_LENAB | PSYCHO_STRBUF_CTRL_LPTR);
+#ifdef PSYCHO_STRBUF_RERUN_ENABLE
+	control &= ~(PSYCHO_STRBUF_CTRL_RRDIS);
+#else
+#ifdef PSYCHO_STRBUF_RERUN_DISABLE
+	control |= PSYCHO_STRBUF_CTRL_RRDIS;
 #endif
+#endif
+	psycho_write(pbm->stc.strbuf_control, control);
+
+	pbm->stc.strbuf_enabled = 1;
 }
 
 #define PSYCHO_IOSPACE_A	0x002000000UL

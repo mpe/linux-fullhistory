@@ -34,20 +34,21 @@ extern void get_sectorsize(int);
    error code is.  Normally the UNIT_ATTENTION code will automatically
    clear after one error */
 
-int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflength, int quiet)
+int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflength, int quiet, int readwrite)
 {
-	Scsi_Cmnd *SCpnt;
+	Scsi_Request *SRpnt;
 	Scsi_Device *SDev;
         struct request *req;
 	int result, err = 0, retries = 0;
 	char *bounce_buffer;
 
 	SDev = scsi_CDs[target].device;
-	SCpnt = scsi_allocate_device(scsi_CDs[target].device, 1, FALSE);
+	SRpnt = scsi_allocate_request(scsi_CDs[target].device);
+	SRpnt->sr_data_direction = readwrite;
 
 	/* use ISA DMA buffer if necessary */
-	SCpnt->request.buffer = buffer;
-	if (buffer && SCpnt->host->unchecked_isa_dma &&
+	SRpnt->sr_request.buffer = buffer;
+	if (buffer && SRpnt->sr_host->unchecked_isa_dma &&
 	    (virt_to_phys(buffer) + buflength - 1 > ISA_DMA_THRESHOLD)) {
 		bounce_buffer = (char *) scsi_malloc((buflength + 511) & ~511);
 		if (bounce_buffer == NULL) {
@@ -62,21 +63,21 @@ int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflen
 		return -ENODEV;
 
 
-	scsi_wait_cmd(SCpnt, (void *) sr_cmd, (void *) buffer, buflength,
+	scsi_wait_req(SRpnt, (void *) sr_cmd, (void *) buffer, buflength,
 		      IOCTL_TIMEOUT, IOCTL_RETRIES);
 
-        req = &SCpnt->request;
-        if (SCpnt->buffer && req->buffer && SCpnt->buffer != req->buffer) {
-                memcpy(req->buffer, SCpnt->buffer, SCpnt->bufflen);
-                scsi_free(SCpnt->buffer, (SCpnt->bufflen + 511) & ~511);
-                SCpnt->buffer = req->buffer;
+	req = &SRpnt->sr_request;
+	if (SRpnt->sr_buffer && req->buffer && SRpnt->sr_buffer != req->buffer) {
+		memcpy(req->buffer, SRpnt->sr_buffer, SRpnt->sr_bufflen);
+		scsi_free(SRpnt->sr_buffer, (SRpnt->sr_bufflen + 511) & ~511);
+		SRpnt->sr_buffer = req->buffer;
         }
 
-	result = SCpnt->result;
+	result = SRpnt->sr_result;
 
 	/* Minimal error checking.  Ignore cases we know about, and report the rest. */
 	if (driver_byte(result) != 0) {
-		switch (SCpnt->sense_buffer[2] & 0xf) {
+		switch (SRpnt->sr_sense_buffer[2] & 0xf) {
 		case UNIT_ATTENTION:
 			scsi_CDs[target].device->changed = 1;
 			if (!quiet)
@@ -86,8 +87,8 @@ int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflen
 			err = -ENOMEDIUM;
 			break;
 		case NOT_READY:	/* This happens if there is no disc in drive */
-			if (SCpnt->sense_buffer[12] == 0x04 &&
-			    SCpnt->sense_buffer[13] == 0x01) {
+			if (SRpnt->sr_sense_buffer[12] == 0x04 &&
+			    SRpnt->sr_sense_buffer[13] == 0x01) {
 				/* sense: Logical unit is in process of becoming ready */
 				if (!quiet)
 					printk(KERN_INFO "sr%d: CDROM not ready yet.\n", target);
@@ -104,7 +105,7 @@ int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflen
 			if (!quiet)
 				printk(KERN_INFO "sr%d: CDROM not ready.  Make sure there is a disc in the drive.\n", target);
 #ifdef DEBUG
-			print_sense("sr", SCpnt);
+			print_req_sense("sr", SRpnt);
 #endif
 			err = -ENOMEDIUM;
 			break;
@@ -112,8 +113,8 @@ int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflen
 			if (!quiet)
 				printk(KERN_ERR "sr%d: CDROM (ioctl) reports ILLEGAL "
 				       "REQUEST.\n", target);
-			if (SCpnt->sense_buffer[12] == 0x20 &&
-			    SCpnt->sense_buffer[13] == 0x00) {
+			if (SRpnt->sr_sense_buffer[12] == 0x20 &&
+			    SRpnt->sr_sense_buffer[13] == 0x00) {
 				/* sense: Invalid command operation code */
 				err = -EDRIVE_CANT_DO_THIS;
 			} else {
@@ -121,20 +122,20 @@ int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflen
 			}
 #ifdef DEBUG
 			print_command(sr_cmd);
-			print_sense("sr", SCpnt);
+			print_req_sense("sr", SRpnt);
 #endif
 			break;
 		default:
 			printk(KERN_ERR "sr%d: CDROM (ioctl) error, command: ", target);
 			print_command(sr_cmd);
-			print_sense("sr", SCpnt);
+			print_req_sense("sr", SRpnt);
 			err = -EIO;
 		}
 	}
-	result = SCpnt->result;
+	result = SRpnt->sr_result;
 	/* Wake up a process waiting for device */
-	scsi_release_command(SCpnt);
-	SCpnt = NULL;
+	scsi_release_request(SRpnt);
+	SRpnt = NULL;
 	return err;
 }
 
@@ -148,7 +149,7 @@ static int test_unit_ready(int minor)
 	sr_cmd[0] = GPCMD_TEST_UNIT_READY;
 	sr_cmd[1] = ((scsi_CDs[minor].device->lun) << 5);
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
-	return sr_do_ioctl(minor, sr_cmd, NULL, 255, 1);
+	return sr_do_ioctl(minor, sr_cmd, NULL, 255, 1, SCSI_DATA_NONE);
 }
 
 int sr_tray_move(struct cdrom_device_info *cdi, int pos)
@@ -160,7 +161,7 @@ int sr_tray_move(struct cdrom_device_info *cdi, int pos)
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
 	sr_cmd[4] = (pos == 0) ? 0x03 /* close */ : 0x02 /* eject */ ;
 
-	return sr_do_ioctl(MINOR(cdi->dev), sr_cmd, NULL, 255, 0);
+	return sr_do_ioctl(MINOR(cdi->dev), sr_cmd, NULL, 255, 0, SCSI_DATA_NONE);
 }
 
 int sr_lock_door(struct cdrom_device_info *cdi, int lock)
@@ -237,7 +238,7 @@ int sr_get_mcn(struct cdrom_device_info *cdi, struct cdrom_mcn *mcn)
 	sr_cmd[8] = 24;
 	sr_cmd[9] = 0;
 
-	result = sr_do_ioctl(MINOR(cdi->dev), sr_cmd, buffer, 24, 0);
+	result = sr_do_ioctl(MINOR(cdi->dev), sr_cmd, buffer, 24, 0, SCSI_DATA_READ);
 
 	memcpy(mcn->medium_catalog_number, buffer + 9, 13);
 	mcn->medium_catalog_number[13] = 0;
@@ -266,7 +267,7 @@ int sr_select_speed(struct cdrom_device_info *cdi, int speed)
 	sr_cmd[2] = (speed >> 8) & 0xff;	/* MSB for speed (in kbytes/sec) */
 	sr_cmd[3] = speed & 0xff;	/* LSB */
 
-	if (sr_do_ioctl(MINOR(cdi->dev), sr_cmd, NULL, 0, 0))
+	if (sr_do_ioctl(MINOR(cdi->dev), sr_cmd, NULL, 0, 0, SCSI_DATA_NONE))
 		return -EIO;
 	return 0;
 }
@@ -296,7 +297,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void *arg)
 			sr_cmd[8] = 12;		/* LSB of length */
 			sr_cmd[9] = 0;
 
-			result = sr_do_ioctl(target, sr_cmd, buffer, 12, 1);
+			result = sr_do_ioctl(target, sr_cmd, buffer, 12, 1, SCSI_DATA_READ);
 
 			tochdr->cdth_trk0 = buffer[2];
 			tochdr->cdth_trk1 = buffer[3];
@@ -317,7 +318,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void *arg)
 			sr_cmd[8] = 12;		/* LSB of length */
 			sr_cmd[9] = 0;
 
-			result = sr_do_ioctl(target, sr_cmd, buffer, 12, 0);
+			result = sr_do_ioctl(target, sr_cmd, buffer, 12, 0, SCSI_DATA_READ);
 
 			tocentry->cdte_ctrl = buffer[5] & 0xf;
 			tocentry->cdte_adr = buffer[5] >> 4;
@@ -390,7 +391,7 @@ int sr_read_cd(int minor, unsigned char *dest, int lba, int format, int blksize)
 		cmd[9] = 0x10;
 		break;
 	}
-	return sr_do_ioctl(minor, cmd, dest, blksize, 0);
+	return sr_do_ioctl(minor, cmd, dest, blksize, 0, SCSI_DATA_READ);
 }
 
 /*
@@ -428,7 +429,7 @@ int sr_read_sector(int minor, int lba, int blksize, unsigned char *dest)
 	cmd[4] = (unsigned char) (lba >> 8) & 0xff;
 	cmd[5] = (unsigned char) lba & 0xff;
 	cmd[8] = 1;
-	rc = sr_do_ioctl(minor, cmd, dest, blksize, 0);
+	rc = sr_do_ioctl(minor, cmd, dest, blksize, 0, SCSI_DATA_READ);
 
 	return rc;
 }

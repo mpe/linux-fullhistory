@@ -105,7 +105,8 @@ void __init dvma_init(struct sbus_bus *sbus)
 		}
 
 		dma->regs = sbus_ioremap(&dma->sdev->resource[0], 0,
-					 PAGE_SIZE, "dma");
+					 dma->sdev->resource[0].end - dma->sdev->resource[0].start + 1,
+					 "dma");
 
 		dma->node = dma->sdev->prom_node;
 		

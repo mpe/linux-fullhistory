@@ -870,7 +870,7 @@ static int nmclan_event(event_t event, int priority,
     case CS_EVENT_CARD_REMOVAL:
       link->state &= ~DEV_PRESENT;
       if (link->state & DEV_CONFIG) {
-	netif_stop_queue (dev);
+	netif_device_detach(dev);
 	link->release.expires = jiffies + HZ/20;
 	add_timer(&link->release);
       }
@@ -884,9 +884,9 @@ static int nmclan_event(event_t event, int priority,
       /* Fall through... */
     case CS_EVENT_RESET_PHYSICAL:
       if (link->state & DEV_CONFIG) {
-	if (link->open) {
-	  netif_stop_queue (dev);
-	}
+	if (link->open)
+	  netif_device_detach(dev);
+
 	CardServices(ReleaseConfiguration, link->handle);
       }
       break;
@@ -898,7 +898,7 @@ static int nmclan_event(event_t event, int priority,
 	CardServices(RequestConfiguration, link->handle, &link->conf);
 	if (link->open) {
 	  nmclan_reset(dev);
-	  netif_start_queue (dev);
+	  netif_device_attach(dev);
 	}
       }
       break;
@@ -1153,7 +1153,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     return;
   }
 
-  if (!test_bit(LINK_STATE_START, &dev->state)) {
+  if (!netif_device_present(dev)) {
     DEBUG(2, "%s: interrupt from dead card\n", dev->name);
     goto exception;
   }

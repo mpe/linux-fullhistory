@@ -1043,7 +1043,7 @@ lance_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 #endif
 
 			if (lp->tx_full &&
-			    (test_bit(LINK_STATE_XOFF, &dev->flags)) &&
+			    (netif_queue_stopped(dev)) &&
 			    dirty_tx > lp->cur_tx - TX_RING_SIZE + 2) {
 				/* The ring is no longer full, clear tbusy. */
 				lp->tx_full = 0;

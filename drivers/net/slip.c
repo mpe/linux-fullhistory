@@ -449,7 +449,7 @@ static void slip_write_wakeup(struct tty_struct *tty)
 	struct slip *sl = (struct slip *) tty->disc_data;
 
 	/* First make sure we're connected. */
-	if (!sl || sl->magic != SLIP_MAGIC || !test_bit(LINK_STATE_START, &sl->dev->state)) {
+	if (!sl || sl->magic != SLIP_MAGIC || !netif_running(sl->dev)) {
 		return;
 	}
 	if (sl->xleft <= 0)  {
@@ -472,10 +472,10 @@ static void sl_tx_timeout(struct net_device *dev)
 
 	spin_lock(&sl->lock);
 
-	if (test_bit(LINK_STATE_XOFF, &dev->state)) {
+	if (netif_queue_stopped(dev)) {
 		struct slip *sl = (struct slip*)(dev->priv);
 
-		if (!test_bit(LINK_STATE_START, &dev->state))
+		if (!netif_running(dev))
 			goto out;
 
 		/* May be we must check transmitter timeout here ?
@@ -507,7 +507,7 @@ sl_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct slip *sl = (struct slip*)(dev->priv);
 
 	spin_lock(&sl->lock);
-	if (!test_bit(LINK_STATE_START, &dev->state))  {
+	if (!netif_running(dev))  {
 		spin_unlock(&sl->lock);
 		printk("%s: xmit call when iface is down\n", dev->name);
 		dev_kfree_skb(skb);
@@ -679,7 +679,7 @@ static void slip_receive_buf(struct tty_struct *tty, const unsigned char *cp, ch
 	struct slip *sl = (struct slip *) tty->disc_data;
 
 	if (!sl || sl->magic != SLIP_MAGIC ||
-	    !test_bit(LINK_STATE_START, &sl->dev->state))
+	    !netif_running(sl->dev))
 		return;
 
 	/* Read the characters out of the buffer */
@@ -1468,7 +1468,7 @@ static void sl_outfill(unsigned long sls)
 			unsigned char s = END;
 #endif
 			/* put END into tty queue. Is it right ??? */
-			if (!test_bit(LINK_STATE_XOFF, &sl->dev->state))
+			if (!netif_queue_stopped(sl->dev))
 			{
 				/* if device busy no outfill */
 				sl->tty->driver.write(sl->tty, 0, &s, 1);

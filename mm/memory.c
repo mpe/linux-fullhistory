@@ -862,6 +862,7 @@ void vmtruncate(struct inode * inode, loff_t offset)
 	struct vm_area_struct * mpnt;
 	struct address_space *mapping = inode->i_mapping;
 
+	inode->i_size = offset;
 	truncate_inode_pages(mapping, offset);
 	spin_lock(&mapping->i_shared_lock);
 	if (!mapping->i_mmap)

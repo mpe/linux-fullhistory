@@ -566,7 +566,7 @@ static int awc_event(event_t event, int priority,
 	case CS_EVENT_CARD_REMOVAL:
 		link->state &= ~DEV_PRESENT;
 		if (link->state & DEV_CONFIG) {
-			netif_stop_queue (dev);
+			netif_device_detach(dev);
 			link->release.expires = RUN_AT( HZ/20 );
 			add_timer(&link->release);
 		}
@@ -580,9 +580,9 @@ static int awc_event(event_t event, int priority,
 		/* Fall through... */
 	case CS_EVENT_RESET_PHYSICAL:
 		if (link->state & DEV_CONFIG) {
-			if (link->open) {
-				netif_stop_queue (dev);
-			}
+			if (link->open)
+				netif_device_detach(dev);
+
 			CardServices(ReleaseConfiguration, link->handle);
 		}
 		break;
@@ -594,7 +594,7 @@ static int awc_event(event_t event, int priority,
 			CardServices(RequestConfiguration, link->handle, &link->conf);
 			if (link->open) {
 				// awc_reset(dev);
-				netif_start_queue (dev);
+				netif_device_attach(dev);
 			}
 		}
 		break;

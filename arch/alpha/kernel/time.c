@@ -31,6 +31,8 @@
 #include <linux/mm.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
+#include <linux/irq.h>
+#include <linux/interrupt.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -88,13 +90,7 @@ void timer_interrupt(int irq, void *dev, struct pt_regs * regs)
 	__u32 now;
 	long nticks;
 
-#ifdef __SMP__
-	/* When SMP, do this for *all* CPUs, but only do the rest for
-           the boot CPU.  */
-	smp_percpu_timer_interrupt(regs);
-	if (smp_processor_id() != smp_boot_cpuid)
-		return;
-#else
+#ifndef __SMP__
 	/* Not SMP, do kernel PC profiling here.  */
 	if (!user_mode(regs))
 		alpha_do_profile(regs->pc);
@@ -167,6 +163,7 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 	  )*60 + sec; /* finally seconds */
 }
 
+#if 0
 /*
  * Initialize Programmable Interval Timers with standard values.  Some
  * drivers depend on them being initialized (e.g., joystick driver).
@@ -213,6 +210,7 @@ rtc_kill_pit(void)
 	sti();
 }
 #endif
+#endif
 
 void
 common_init_pit (void)
@@ -248,10 +246,15 @@ common_init_pit (void)
 void
 time_init(void)
 {
-	void (*irq_handler)(int, void *, struct pt_regs *);
 	unsigned int year, mon, day, hour, min, sec, cc1, cc2;
 	unsigned long cycle_freq, one_percent;
 	long diff;
+	static struct irqaction timer_irqaction  = { timer_interrupt,
+						     SA_INTERRUPT, 0, "timer",
+						     NULL, NULL};
+
+	/* Startup the timer source. */
+	alpha_mv.init_pit();
 
 	/*
 	 * The Linux interpretation of the CMOS clock register contents:
@@ -337,9 +340,7 @@ time_init(void)
 	state.partial_tick = 0L;
 
 	/* setup timer */ 
-	irq_handler = timer_interrupt;
-	if (request_irq(TIMER_IRQ, irq_handler, 0, "timer", NULL))
-		panic("Could not allocate timer IRQ!");
+	setup_irq(TIMER_IRQ, &timer_irqaction);
 }
 
 /*

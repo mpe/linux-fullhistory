@@ -1066,7 +1066,7 @@ static void sis900_finish_xmit (struct net_device *net_dev)
 		sis_priv->tx_ring[entry].cmdsts = 0;
 	}
 	
-	if (sis_priv->tx_full && test_bit(LINK_STATE_XOFF, &net_dev->flags) && 
+	if (sis_priv->tx_full && netif_queue_stopped(net_dev) && 
 	    sis_priv->cur_tx - sis_priv->dirty_tx < NUM_TX_DESC - 4) {
 		/* The ring is no longer full, clear tx_full and schedule more transmission
 		   by netif_wake_queue(net_dev) */

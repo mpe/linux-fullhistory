@@ -576,8 +576,7 @@ static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	/* Acknowledge the interrupt sources. */
 	ack_cmd = status & 0xf000;
 
-	if ((status & 0x0700) != 0x0200 &&
-	    (test_bit(LINK_STATE_START, &dev->state))) {
+	if ((status & 0x0700) != 0x0200 && netif_running(dev)) {
 		if (net_debug)
 			printk("%s: Command unit stopped, status %04x, restarting.\n",
 				   dev->name, status);
@@ -587,9 +586,7 @@ static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		ack_cmd |= CUC_RESUME;
 	}
 
-	if ((status & 0x0070) != 0x0040  &&
-	    (test_bit(LINK_STATE_START, &dev->state)))
-	{
+	if ((status & 0x0070) != 0x0040 && netif_running(dev)) {
 		static void init_rx_bufs(struct net_device *);
 		/* The Rx unit is not ready, it must be hung.  Restart the receiver by
 		   initializing the rx buffers, and issuing an Rx start command. */

@@ -74,7 +74,7 @@ extern void pci_free_consistent(struct pci_dev *, long, void *, dma_addr_t);
 /* Map a single buffer of the indicate size for PCI DMA in streaming
    mode.  The 32-bit PCI bus mastering address to use is returned.
    Once the device is given the dma address, the device owns this memory
-   until either pci_unmap_single or pci_sync_single is performed.  */
+   until either pci_unmap_single or pci_dma_sync_single is performed.  */
 
 extern dma_addr_t pci_map_single(struct pci_dev *, void *, long);
 
@@ -118,7 +118,7 @@ extern void pci_unmap_sg(struct pci_dev *, struct scatterlist *, int);
    again owns the buffer.  */
 
 extern inline void
-pci_sync_single(struct pci_dev *dev, dma_addr_t dma_addr, long size)
+pci_dma_sync_single(struct pci_dev *dev, dma_addr_t dma_addr, long size)
 {
 	/* Nothing to do.  */
 }
@@ -128,7 +128,7 @@ pci_sync_single(struct pci_dev *dev, dma_addr_t dma_addr, long size)
    for a scatter-gather list, same rules and usage.  */
 
 extern inline void
-pci_sync_sg(struct pci_dev *dev, struct scatterlist *sg, int size)
+pci_dma_sync_sg(struct pci_dev *dev, struct scatterlist *sg, int nents)
 {
 	/* Nothing to do.  */
 }

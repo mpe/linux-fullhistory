@@ -1177,7 +1177,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 						      DPRINTK("New ring status: %02X\n", ring_status);
 
 					      if (ring_status & LOG_OVERFLOW) {
-						      if (test_bit(LINK_STATE_XOFF, &dev->state))
+						      if (netif_queue_stopped(dev))
                                                               ti->readlog_pending = 1;
 						      else
                                                               ibmtr_readlog(dev);

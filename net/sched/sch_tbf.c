@@ -226,7 +226,7 @@ tbf_dequeue(struct Qdisc* sch)
 			return skb;
 		}
 
-		if (!test_bit(LINK_STATE_XOFF, &sch->dev->state)) {
+		if (!netif_queue_stopped(sch->dev)) {
 			long delay = PSCHED_US2JIFFIE(max(-toks, -ptoks));
 
 			if (delay == 0)

@@ -105,6 +105,7 @@ static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
                 return -EINTR;
         }
 
+	SCpnt->sc_data_direction = SCSI_DATA_NONE;
         scsi_wait_cmd(SCpnt, cmd, NULL, 0, timeout, retries);
 
 	SCSI_LOG_IOCTL(2, printk("Ioctl returned  0x%x\n", SCpnt->result));
@@ -197,6 +198,7 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 	int inlen, outlen, cmdlen;
 	int needed, buf_needed;
 	int timeout, retries, result;
+	int data_direction;
 
 	if (!sic)
 		return -EINVAL;
@@ -232,8 +234,21 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 		if (!buf)
 			return -ENOMEM;
 		memset(buf, 0, buf_needed);
-	} else
+		if( inlen == 0 ) {
+			data_direction = SCSI_DATA_WRITE;
+		} else if (outlen == 0 ) {
+			data_direction = SCSI_DATA_READ;
+		} else {
+			/*
+			 * Can this ever happen?
+			 */
+			data_direction = SCSI_DATA_UNKNOWN;
+		}
+
+	} else {
 		buf = NULL;
+		data_direction = SCSI_DATA_NONE;
+	}
 
 	/*
 	 * Obtain the command from the user's address space.
@@ -288,6 +303,7 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
                 return -EINTR;
         }
 
+	SCpnt->sc_data_direction = data_direction;
         scsi_wait_cmd(SCpnt, cmd, buf, needed, timeout, retries);
 
 	/* 

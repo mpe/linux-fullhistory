@@ -905,7 +905,8 @@ static void depca_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 	if (csr0 & TINT)	/* Tx interrupt (packet sent) */
 		depca_tx (dev);
 
-	if ((TX_BUFFS_AVAIL >= 0) && (test_bit (LINK_STATE_XOFF, &dev->flags))) {	/* any resources available? */
+	/* Any resources available? */
+	if ((TX_BUFFS_AVAIL >= 0) && netif_queue_stopped(dev)) {
 		netif_wake_queue (dev);
 
 		/* Unmask the DEPCA board interrupts and turn off the LED */

@@ -436,7 +436,7 @@ KERN_INFO
 	TRACE_CATCH(devfs_register_chrdev(QIC117_TAPE_MAJOR, "zft", &zft_cdev),);
 
 	for (i = 0; i < 4; i++) {
-		char devname[8];
+		char devname[9];
 
 		sprintf (devname, "qft%i", i);
 		devfs_register (NULL, devname, 0, DEVFS_FL_NONE,
@@ -510,7 +510,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	int i;
-	char devname[8];
+	char devname[9];
 
 	TRACE_FUN(ft_t_flow);
 

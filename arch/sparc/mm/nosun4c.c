@@ -1,4 +1,4 @@
-/* $Id: nosun4c.c,v 1.2 1999/08/31 06:54:36 davem Exp $
+/* $Id: nosun4c.c,v 1.3 2000/02/14 04:52:36 jj Exp $
  * nosun4c.c: This file is a bunch of dummies for SMP compiles, 
  *         so that it does not need sun4c and avoid ifdefs.
  *
@@ -50,11 +50,6 @@ void sun4c_unmapioaddr(unsigned long virt_addr)
 
 void sun4c_complete_all_stores(void)
 {
-}
-
-pgd_t *sun4c_pgd_offset(struct mm_struct * mm, unsigned long address)
-{
-	return NULL;
 }
 
 pte_t *sun4c_pte_offset(pmd_t * dir, unsigned long address)

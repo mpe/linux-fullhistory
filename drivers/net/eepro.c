@@ -1409,7 +1409,7 @@ hardware_send_packet(struct net_device *dev, void *buf, short length)
 		lp->tx_last = last;
 		lp->tx_end = end;
 
-		if (test_bit(LINK_STATE_XOFF, &dev->flags))
+		if (netif_queue_stopped(dev))
 			netif_wake_queue(dev);
 		
 		/* Enable RX and TX interrupts */

@@ -1081,7 +1081,7 @@ static void sbni_watchdog(unsigned long arg)
 	}
 	sti();
 	outb(csr0 | RC_CHK, dev->base_addr + CSR0);
-	if(test_bit(LINK_STATE_START, &dev->state))
+	if(netif_running(dev))
 	{
 		struct timer_list* watchdog = &lp->watchdog; 
 		init_timer(watchdog);
@@ -1171,7 +1171,7 @@ static int sbni_set_mac_address(struct net_device *dev, void *addr)
 	/* struct net_local *lp = (struct net_local *)dev->priv; */
 	struct sockaddr *saddr = addr;
 	
-	if(test_bit(LINK_STATE_START, &dev->state))
+	if(netif_running(dev))
 	{
 		/* Only possible while card isn't started */
 		return -EBUSY;

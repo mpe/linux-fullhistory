@@ -368,7 +368,7 @@ de600_close(struct net_device *dev)
 	de600_put_command(0);
 	select_prn();
 
-	if (test_bit(LINK_STATE_START, &dev->state)) { /* perhaps not needed? */
+	if (netif_running(dev)) { /* perhaps not needed? */
 		free_irq(DE600_IRQ, dev);
 		MOD_DEC_USE_COUNT;
 	}

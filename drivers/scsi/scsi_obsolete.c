@@ -231,6 +231,8 @@ static void scsi_request_sense(Scsi_Cmnd * SCpnt)
 	SCpnt->use_sg = 0;
 	SCpnt->cmd_len = COMMAND_SIZE(SCpnt->cmnd[0]);
 	SCpnt->result = 0;
+	SCpnt->sc_data_direction = SCSI_DATA_NONE;
+
         /*
          * Ugly, ugly.  The newer interfaces all assume that the lock
          * isn't held.  Mustn't disappoint, or we deadlock the system.
@@ -374,6 +376,7 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
 	if (SCpnt->flags & WAS_SENSE) {
 		SCpnt->use_sg = SCpnt->old_use_sg;
 		SCpnt->cmd_len = SCpnt->old_cmd_len;
+		SCpnt->sc_data_direction = SCpnt->sc_old_data_direction;
 	}
 	switch (host_byte(result)) {
 	case DID_OK:
@@ -633,6 +636,7 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
 			SCpnt->request_bufflen = SCpnt->bufflen;
 			SCpnt->use_sg = SCpnt->old_use_sg;
 			SCpnt->cmd_len = SCpnt->old_cmd_len;
+			SCpnt->sc_data_direction = SCpnt->sc_old_data_direction;
 			SCpnt->result = 0;
                         /*
                          * Ugly, ugly.  The newer interfaces all
@@ -658,6 +662,7 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
 		SCpnt->result = result | ((exit & 0xff) << 24);
 		SCpnt->use_sg = SCpnt->old_use_sg;
 		SCpnt->cmd_len = SCpnt->old_cmd_len;
+		SCpnt->sc_data_direction = SCpnt->sc_old_data_direction;
                 /*
                  * The upper layers assume the lock isn't held.  We mustn't
                  * disappoint them.  When the new error handling code is in
@@ -665,6 +670,16 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
                  * it isn't an issue.
                  */
                 spin_unlock_irq(&io_request_lock);
+		SRpnt = SCpnt->sc_request;
+		if( SRpnt != NULL ) {
+			SRpnt->sr_result = SRpnt->sr_command->result;
+			if( SRpnt->sr_result != 0 ) {
+				memcpy(SRpnt->sr_sense_buffer,
+				       SRpnt->sr_command->sense_buffer,
+				       sizeof(SRpnt->sr_sense_buffer));
+			}
+		}
+
 		SCpnt->done(SCpnt);
                 spin_lock_irq(&io_request_lock);
 	}

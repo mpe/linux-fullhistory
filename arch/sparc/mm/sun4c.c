@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.189 2000/02/14 02:51:55 davem Exp $
+/* $Id: sun4c.c,v 1.190 2000/02/14 04:52:34 jj Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -2185,7 +2185,7 @@ static unsigned long sun4c_pgd_page(pgd_t pgd)
 }
 
 /* to find an entry in a page-table-directory */
-pgd_t *sun4c_pgd_offset(struct mm_struct * mm, unsigned long address)
+extern inline pgd_t *sun4c_pgd_offset(struct mm_struct * mm, unsigned long address)
 {
 	return mm->pgd + (address >> SUN4C_PGDIR_SHIFT);
 }
@@ -2273,7 +2273,7 @@ extern __inline__ pgd_t *sun4c_get_pgd_fast(void)
 		
 		ret = (unsigned long *)__get_free_page(GFP_KERNEL);
 		memset (ret, 0, (KERNBASE / SUN4C_PGDIR_SIZE) * sizeof(pgd_t));
-		init = pgd_offset(&init_mm, 0);
+		init = sun4c_pgd_offset(&init_mm, 0);
 		memcpy (((pgd_t *)ret) + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
 			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
 	}
@@ -2696,7 +2696,6 @@ void __init ld_mmu_sun4c(void)
 	BTFIXUPSET_CALL(mk_pte_io, sun4c_mk_pte_io, BTFIXUPCALL_NORM);
 	
 	BTFIXUPSET_INT(pte_modify_mask, _SUN4C_PAGE_CHG_MASK);
-	BTFIXUPSET_CALL(pgd_offset, sun4c_pgd_offset, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(pmd_offset, sun4c_pmd_offset, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(pte_offset, sun4c_pte_offset, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(pte_free_kernel, sun4c_pte_free_kernel, BTFIXUPCALL_NORM);
