@@ -139,6 +139,7 @@ extern int sys_create_module();
 extern int sys_init_module();
 extern int sys_delete_module();
 extern int sys_get_kernel_syms(); /* 130 */
+extern int sys_quotactl();
 
 /*
  * These are system calls that will be removed at some time
@@ -155,6 +156,13 @@ extern int sys_get_kernel_syms(); /* 130 */
 #define sys_sgetmask	sys_old_syscall /* sys_sigprocmask */
 #define sys_ssetmask	sys_old_syscall /* sig_sigprocmask */
 #endif
+
+/*
+ * These are system calls that haven't been implemented yet
+ * but have an entry in the table for future expansion..
+ */
+
+#define sys_quotactl	sys_ni_syscall
 
 typedef int (*fn_ptr)();
 

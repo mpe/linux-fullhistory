@@ -145,7 +145,7 @@ struct tss_struct {
 	unsigned short	trace, bitmap;
 	unsigned long	io_bitmap[IO_BITMAP_SIZE+1];
 	unsigned long	tr;
-	unsigned long	cr2;
+	unsigned long	cr2, trap_no, error_code;
 	union i387_union i387;
 };
 
@@ -277,7 +277,7 @@ struct task_struct {
 	 _LDT(0),0, \
 	 0, 0x8000, \
 /* ioperm */ 	{~0, }, \
-	 _TSS(0), 0, \
+	 _TSS(0), 0, 0,0, \
 /* 387 state */	{ { 0, }, } \
 	} \
 }

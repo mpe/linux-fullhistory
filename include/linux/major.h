@@ -67,7 +67,7 @@
 #define SCSI_GENERIC_MAJOR 21
 /* unused: 22 */
 #define MITSUMI_CDROM_MAJOR 23
-#define SONY535_CDROM_MAJOR 24
+#define CDU535_CDROM_MAJOR 24
 
 /*
  * Tests for SCSI devices.

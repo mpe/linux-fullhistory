@@ -633,6 +633,8 @@ void do_wp_page(unsigned long error_code, unsigned long address,
 		if (!(page & PAGE_COW)) {
 			if (user_esp && tsk == current) {
 				current->tss.cr2 = address;
+				current->tss.error_code = error_code;
+				current->tss.trap_no = 14;
 				send_sig(SIGSEGV, tsk, 1);
 				return;
 			}
@@ -659,8 +661,6 @@ int verify_area(int type, void * addr, unsigned long size)
 	if (size > TASK_SIZE - start)
 		return -EFAULT;
 	if (wp_works_ok || type == VERIFY_READ || !size)
-		return 0;
-	if (!size)
 		return 0;
 	size--;
 	size += start & ~PAGE_MASK;
@@ -879,6 +879,8 @@ void do_no_page(unsigned long error_code, unsigned long address,
 		return;
 	}
 	tsk->tss.cr2 = address;
+	current->tss.error_code = error_code;
+	current->tss.trap_no = 14;
 	send_sig(SIGSEGV,tsk,1);
 	return;
 }

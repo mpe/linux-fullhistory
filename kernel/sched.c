@@ -103,6 +103,11 @@ struct {
 extern "C" {
 #endif
 
+int sys_ni_syscall(void)
+{
+	return -EINVAL;
+}
+
 fn_ptr sys_call_table[] = { sys_setup, sys_exit, sys_fork, sys_read,
 sys_write, sys_open, sys_close, sys_waitpid, sys_creat, sys_link,
 sys_unlink, sys_execve, sys_chdir, sys_time, sys_mknod, sys_chmod,
@@ -126,8 +131,8 @@ sys_syslog, sys_setitimer, sys_getitimer, sys_newstat, sys_newlstat,
 sys_newfstat, sys_uname, sys_iopl, sys_vhangup, sys_idle, sys_vm86,
 sys_wait4, sys_swapoff, sys_sysinfo, sys_ipc, sys_fsync, sys_sigreturn,
 sys_clone, sys_setdomainname, sys_newuname, sys_modify_ldt,
-sys_adjtimex, sys_mprotect, sys_sigprocmask,
-sys_create_module, sys_init_module, sys_delete_module, sys_get_kernel_syms };
+sys_adjtimex, sys_mprotect, sys_sigprocmask, sys_create_module,
+sys_init_module, sys_delete_module, sys_get_kernel_syms, sys_quotactl };
 
 /* So we don't have to do any more manual updating.... */
 int NR_syscalls = sizeof(sys_call_table)/sizeof(fn_ptr);

@@ -20,7 +20,7 @@ static int read_ldt(void * ptr, unsigned long bytecount)
 
 	if (!ptr)
 		return -EINVAL;
-	size = PAGE_SIZE;
+	size = LDT_ENTRIES*LDT_ENTRY_SIZE;
 	if (!address) {
 		address = &default_ldt;
 		size = sizeof(default_ldt);
@@ -49,7 +49,7 @@ static int write_ldt(void * ptr, unsigned long bytecount)
 
 	memcpy_fromfs(&ldt_info, ptr, sizeof(ldt_info));
 
-	if (ldt_info.contents == 3 || ldt_info.entry_number >= 512)
+	if (ldt_info.contents == 3 || ldt_info.entry_number >= LDT_ENTRIES)
 		return -EINVAL;
 
 	limit = ldt_info.limit;
@@ -64,16 +64,22 @@ static int write_ldt(void * ptr, unsigned long bytecount)
 	if (!current->ldt) {
 		for (i=1 ; i<NR_TASKS ; i++) {
 			if (task[i] == current) {
-				if (!(current->ldt = (struct desc_struct*) get_free_page(GFP_KERNEL)))
+				if (!(current->ldt = (struct desc_struct*) vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE)))
 					return -ENOMEM;
-				set_ldt_desc(gdt+(i<<1)+FIRST_LDT_ENTRY, current->ldt, 512);
+				set_ldt_desc(gdt+(i<<1)+FIRST_LDT_ENTRY, current->ldt, LDT_ENTRIES);
 				load_ldt(i);
 			}
 		}
 	}
 	
 	lp = (unsigned long *) &current->ldt[ldt_info.entry_number];
-   	*lp = ((ldt_info.base_addr & 0x0000ffff) << 16) |
+   	/* Allow LDTs to be cleared by the user. */
+   	if (ldt_info.base_addr == 0 && ldt_info.limit == 0) {
+		*lp = 0;
+		*(lp+1) = 0;
+		return 0;
+	}
+	*lp = ((ldt_info.base_addr & 0x0000ffff) << 16) |
 		  (ldt_info.limit & 0x0ffff);
 	*(lp+1) = (ldt_info.base_addr & 0xff000000) |
 		  ((ldt_info.base_addr & 0x00ff0000)>>16) |

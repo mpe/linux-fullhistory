@@ -385,7 +385,7 @@ fake_volatile:
 	}
 
 	if (current->ldt) {
-		free_page((unsigned long) current->ldt);
+		vfree(current->ldt);
 		current->ldt = NULL;
 		for (i=1 ; i<NR_TASKS ; i++) {
 			if (task[i] == current) {

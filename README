@@ -87,6 +87,33 @@ COMPILING the kernel:
 
  - keep a backup kernel handy in case something goes wrong. 
 
+ - In order to boot your new kernel, you'll need to copy the kernel
+   image (found in /usr/src/linux/zImage after compilation) to the place
+   where your regular bootable kernel is found. 
+
+   For some, this is on a floppy disk, in which case you can "cp
+   /usr/src/linux/zImage /dev/fd0" to make a bootable floppy. 
+
+   If you boot Linux from the hard drive, chances are you use LILO uses
+   the kernel image as specified in the file /etc/lilo/config.  The
+   kernel image file is usually /vmlinux, or /Image, or /etc/Image.  To
+   use the new kernel, copy the new image over the old one (save a
+   backup of the original!).  Then, you MUST REINSTALL LILO!! If you
+   don't, you won't be able to boot the new kernel image. 
+
+   Reinstalling LILO is usually a matter of running /etc/lilo/install. 
+   You may wish to edit /etc/lilo/config to specify an entry for your
+   old kernel image (say, /vmlinux.old) in case the new one does not
+   work.  See the LILO docs for more information. 
+
+   After reinstalling LILO, you should be all set.  Shutdown the system,
+   reboot, and enjoy!
+
+   If you ever need to change the default root device, video mode,
+   ramdisk size, etc.  in the kernel image, use the 'rdev' program (or
+   alternatively the LILO boot options when appropriate).  No need to
+   recompile the kernel to change these parameters. 
+
  - reboot with the new kernel and enjoy. 
 
 IF SOMETHING GOES WRONG:

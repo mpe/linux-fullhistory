@@ -14,10 +14,10 @@ CPP := $(CPP) -I../../net/inet
 # The point of the makefile...
 all: net.a
 
-Space.o: Space.c /usr/include/linux/autoconf.h
+Space.o: Space.c ../../include/linux/autoconf.h
 	$(CC) $(CFLAGS) $(OPTS) $(DL_OPTS) -c $< -o $@
 
-net_init.o: /usr/include/linux/autoconf.h
+net_init.o: ../../include/linux/autoconf.h
 
 ifdef CONFIG_WD80x3
 NETDRV_OBJS := $(NETDRV_OBJS) net.a(wd.o)

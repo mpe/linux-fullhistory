@@ -1,6 +1,6 @@
 VERSION = 0.99
 PATCHLEVEL = 14
-ALPHA = e
+ALPHA = f
 
 all:	Version zImage
 
@@ -44,16 +44,17 @@ ROOT_DEV = CURRENT
 # The number is the same as you would ordinarily press at bootup.
 #
 
-SVGA_MODE=	-DSVGA_MODE=3
-
-# Special options.
-#OPTS	= -pro
+SVGA_MODE=	-DSVGA_MODE=NORMAL_VGA
 
 #
 # standard CFLAGS
 #
 
-CFLAGS = -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer -pipe # -x c++
+CFLAGS = -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer -pipe
+
+ifdef CONFIG_CPP
+CFLAGS := $(CFLAGS) -x c++
+endif
 
 ifdef CONFIG_M486
 CFLAGS := $(CFLAGS) -m486
