@@ -145,11 +145,7 @@ static void cbc_process(struct crypto_tfm *tfm, u8 *dst, u8 *src,
 			cryptfn_t fn, int enc, void *info)
 {
 	u8 *iv = info;
-	
-	/* Null encryption */
-	if (!iv)
-		return;
-		
+
 	if (enc) {
 		tfm->crt_u.cipher.cit_xor_block(iv, src);
 		fn(crypto_tfm_ctx(tfm), dst, iv);
