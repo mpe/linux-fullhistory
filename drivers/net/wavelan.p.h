@@ -300,6 +300,11 @@
  *	- Add the (short) list of bit-rates in range
  *	- Developp a new sensitivity... (sens.value & sens.fixed)
  *
+ * Changes made for release in 2.2.14 & 2.3.23 :
+ * -------------------------------------------
+ *	- Fix check for root permission (break instead of exit)
+ *	- New nwid & encoding setting (Wireless Extension 9)
+ *
  * Wishes & dreams:
  * ----------------
  *	- roaming (see Pcmcia driver)
@@ -390,7 +395,7 @@
 /************************ CONSTANTS & MACROS ************************/
 
 #ifdef DEBUG_VERSION_SHOW
-static const char	*version	= "wavelan.c : v20 (wireless extensions) 29/7/99\n";
+static const char	*version	= "wavelan.c : v21 (wireless extensions) 16/10/99\n";
 #endif
 
 /* Watchdog temporisation */

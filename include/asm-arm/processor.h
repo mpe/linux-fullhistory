@@ -7,7 +7,6 @@
 #ifndef __ASM_ARM_PROCESSOR_H
 #define __ASM_ARM_PROCESSOR_H
 
-#include <linux/config.h>
 /*
  * Default implementation of macro that returns current
  * instruction pointer ("program counter").

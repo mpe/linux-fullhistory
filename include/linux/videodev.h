@@ -354,6 +354,8 @@ struct video_code
 #define VID_HARDWARE_TRUST	22	/* Trust FM Radio */
 #define VID_HARDWARE_TERRATEC	23	/* TerraTec ActiveRadio */
 #define VID_HARDWARE_CPIA	24
+#define VID_HARDWARE_ZR36120	25	/* Zoran ZR36120/ZR36125 */
+#define VID_HARDWARE_ZR36067	26	/* Zoran ZR36067/36060 */
 
 /*
  *	Initialiser list

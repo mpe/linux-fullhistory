@@ -212,7 +212,7 @@ void paging_init(void)
 		zones_size[ZONE_DMA] = high_pfn;
 	else
 	{
-		zones_size[0] = dma_pfn;
+		zones_size[ZONE_DMA] = dma_pfn;
 		zones_size[ZONE_NORMAL] = high_pfn - dma_pfn;
 	}
 
@@ -278,7 +278,7 @@ mem_init(void)
 {
 	max_mapnr = num_physpages = max_low_pfn;
 	totalram_pages += free_all_bootmem();
-	printk("Memory: %luk available\n", totalram_pages >> 10);
+	printk("Memory: %luk available\n", totalram_pages << (PAGE_SHIFT-10));
 }
 
 void

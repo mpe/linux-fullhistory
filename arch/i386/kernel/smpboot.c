@@ -708,7 +708,35 @@ int get_maxlvt(void)
 	return maxlvt;
 }
 
-void __init setup_local_APIC(void)
+void disable_local_APIC (void)
+{
+	unsigned long value;
+        int maxlvt;
+
+	/*
+	 * Disable APIC
+	 */
+ 	value = apic_read(APIC_SPIV);
+ 	value &= ~(1<<8);
+ 	apic_write(APIC_SPIV,value);
+
+	/*
+	 * Clean APIC state for other OSs:
+	 */
+ 	value = apic_read(APIC_SPIV);
+ 	value &= ~(1<<8);
+ 	apic_write(APIC_SPIV,value);
+	maxlvt = get_maxlvt();
+	apic_write_around(APIC_LVTT, 0x00010000);
+	apic_write_around(APIC_LVT0, 0x00010000);
+	apic_write_around(APIC_LVT1, 0x00010000);
+	if (maxlvt >= 3)
+		apic_write_around(APIC_LVTERR, 0x00010000);
+	if (maxlvt >= 4)
+		apic_write_around(APIC_LVTPC, 0x00010000);
+}
+
+void __init setup_local_APIC (void)
 {
 	unsigned long value, ver, maxlvt;
 
@@ -716,12 +744,25 @@ void __init setup_local_APIC(void)
 		__error_in_io_apic_c();
 
  	value = apic_read(APIC_SPIV);
-	value = 0xf;
 	/*
 	 * Enable APIC
 	 */
  	value |= (1<<8);
-#if 1
+
+	/*
+	 * Some unknown Intel IO/APIC (or APIC) errata is biting us with
+	 * certain networking cards. If high frequency interrupts are
+	 * happening on a particular IOAPIC pin, plus the IOAPIC routing
+	 * entry is masked/unmasked at a high rate as well then sooner or
+	 * later IOAPIC line gets 'stuck', no more interrupts are received
+	 * from the device. If focus CPU is disabled then the hang goes
+	 * away, oh well :-(
+	 *
+	 * [ This bug can be reproduced easily with a level-triggered
+	 *   PCI Ne2000 networking cards and PII/PIII processors, dual
+	 *   BX chipset. ]
+	 */
+#if 0
 	/* Enable focus processor (bit==0) */
  	value &= ~(1<<9);
 #else

@@ -11,8 +11,11 @@
 
 dep_tristate '  C-Media PCI (CMI8338/8378)' CONFIG_SOUND_CMPCI $CONFIG_SOUND
 if [ "$CONFIG_SOUND_CMPCI" = "y" -o "$CONFIG_SOUND_CMPCI" = "m" ]; then
-   bool '    Enable legacy FM' CONFIG_SOUND_CMPCI_FM
-   bool '    Enable legacy MPU-401' CONFIG_SOUND_CMPCI_MIDI
+    bool '    Enable S/PDIF loop for CMI8738' CONFIG_SOUND_CMPCI_SPDIFLOOP
+    bool '    Enable 4 channel mode for CMI8738' CONFIG_SOUND_CMPCI_4CH
+    if [ "$CONFIG_SOUND_CMPCI_4CH" = "y" ]; then
+        bool '    Separate rear out jack' CONFIG_SOUND_CMPCI_REAR
+    fi
 fi
 dep_tristate '  Ensoniq AudioPCI (ES1370)' CONFIG_SOUND_ES1370 $CONFIG_SOUND
 dep_tristate '  Creative Ensoniq AudioPCI 97 (ES1371)' CONFIG_SOUND_ES1371 $CONFIG_SOUND

@@ -174,6 +174,7 @@ extern volatile unsigned long smp_invalidate_needed;
 extern int pic_mode;
 extern void smp_flush_tlb(void);
 extern int get_maxlvt(void);
+extern void disable_local_APIC (void);
 extern void smp_message_irq(int cpl, void *dev_id, struct pt_regs *regs);
 extern void smp_send_reschedule(int cpu);
 extern void smp_invalidate_rcv(void);		/* Process an NMI */

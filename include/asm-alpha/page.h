@@ -106,16 +106,7 @@ typedef unsigned long pgprot_t;
 
 #endif /* STRICT_MM_TYPECHECKS */
 
-#if 0
 #define BUG()		__asm__ __volatile__("call_pal 129 # bugchk")
-#else
-/* hack to see the BUG() information in the early boot stage */
-#define BUG()								\
-do {									\
-	SRM_printf("kernel BUG at %s:%d!\n", __FILE__, __LINE__);	\
-	halt();								\
-} while(0)
-#endif
 #define PAGE_BUG(page)	BUG()
 
 #endif /* !ASSEMBLY */

@@ -1,5 +1,22 @@
 Audio driver for CM8338/CM8738 chips by Chen-Li Tien
 
+
+HARDWARE SUPPORTED
+================================================================================
+C-Media CMI8338
+C-Media CMI8738
+On-board C-Media chips
+
+
+WHAT'S NEW
+================================================================================
+
+  1. Support modem interface for 8738. (select in kernel configuration)
+  2. Enable S/PDIF-in to S/PDIF-out (S/PDIF loop).
+  3. Enable 4 channels analog duplicate mode on 3 jack or 4 jack
+     configurateion.
+
+
    Be aware: C-Media Electronics Inc. is basically an IC design house,
    and whose development of software drivers is mainly for use by its OEM
    customers in their products. C-Media Electronics Inc. itself does not
@@ -27,6 +44,23 @@ Audio driver for CM8338/CM8738 chips by Chen-Li Tien
 7. To install the driver, enter 'modprobe cmpci'.
 
 
-Bugs:
+DRIVER PARAMETERS
+================================================================================
 
-1. Real player cannot be run (the same as es1371).
+  Some functions for the cm8738 can be configured in Kernel Configuration
+  or modules parameters. Set these parameters to 1 to enable.
+
+  spdif_loop:   Enable S/PDIF loop, this route S/PDIF-in to S/PDIF-out
+                directly.
+  four_ch:      Enable 4 channels mode, rear-out or line-in will output
+                the same as line-out.
+  rear_out:     Enable this if you have independent rear-out jacket on
+                your sound card, otherwise line-in will be used as
+                rear-out.
+  modem:	You will need to set this parameter if you want to use
+		the HSP modem. You need install the pctel.o, the modem
+		driver itself.
+
+  (You will need to get the pctel driver (binary only) and the support for
+  this option from the CMI site. It is not included in the Linux kernel 
+  proper as it is non-free).

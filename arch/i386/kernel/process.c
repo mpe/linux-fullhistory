@@ -204,9 +204,11 @@ void machine_restart(char * __unused)
 {
 #if __SMP__
 	/*
-	 * turn off the IO-APIC, so we can do a clean reboot
+	 * Stop all CPUs and turn off local APICs and the IO-APIC, so
+	 * other OSs see a clean IRQ state.
 	 */
-	init_pic_mode();
+	smp_send_stop();
+	disable_IO_APIC();
 #endif
 
 	if(!reboot_thru_bios) {

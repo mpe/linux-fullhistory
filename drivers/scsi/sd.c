@@ -1247,7 +1247,7 @@ static int sd_init_onedisk(int i)
 			SCpnt->sense_buffer[2] = 0;
 
 			sd_wait_cmd (SCpnt, (void *) cmd, (void *) buffer,
-				512, sd_init_done,  SD_TIMEOUT, MAX_RETRIES);
+				0/*512*/, sd_init_done,  SD_TIMEOUT, MAX_RETRIES);
 
 			the_result = SCpnt->result;
 			retries++;

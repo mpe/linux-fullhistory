@@ -1,3 +1,4 @@
+#include <linux/config.h>
 #define acornfb_valid_pixrate(rate) (rate >= 39325 && rate <= 40119)
 
 static inline void

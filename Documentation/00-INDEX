@@ -69,12 +69,12 @@ isdn/
 	- directory with info on the Linux ISDN support, and supported cards.
 java.txt
 	- info on the in-kernel binary support for Java(tm)
-joystick.txt
-	- info on using joystick devices (and driver) with Linux.
 joystick-api.txt
 	- API specification for applications that will be using the joystick.
 joystick-parport.txt 
 	- info on how to hook joysticks/gamepads to the parallel port.
+joystick.txt
+	- info on using joystick devices (and driver) with Linux.
 kbuild/
 	- directory with info about the kernel build process
 kernel-docs.txt
@@ -127,8 +127,6 @@ pcwd-watchdog.txt
 	- info and sample code for using with the PC Watchdog reset card.
 powerpc/
 	- directory with info on using Linux with the PowerPC.
-proc.txt
-	- detailed info on Linux's /proc filesystem.
 proc_usb_info.txt
 	- info on /proc/bus/usb direcory generated for USB devices
 ramdisk.txt
@@ -177,5 +175,4 @@ watchdog.txt
 	- how to auto-reboot Linux if it has "fallen and can't get up". ;-)
 xterm-linux.xpm
 	- XPM image of penguin logo (see logo.txt) sitting on an xterm.
-
 

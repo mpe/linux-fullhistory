@@ -3035,7 +3035,7 @@ static struct video_device zoran_template =
 	BUZ_NAME,
 	VID_TYPE_CAPTURE | VID_TYPE_OVERLAY | VID_TYPE_CLIPPING | VID_TYPE_FRAMERAM |
 	VID_TYPE_SCALES | VID_TYPE_SUBCAPTURE,
-	VID_HARDWARE_BT848,	/* Not true, but the buz is not yet in the list */
+	VID_HARDWARE_ZR36067,
 	zoran_open,
 	zoran_close,
 	zoran_read,

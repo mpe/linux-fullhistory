@@ -58,8 +58,6 @@ net-modules.txt
 	- info and "insmod" parameters for all network driver modules.
 policy-routing.txt
 	- IP policy-based routing
-ppp.txt
-	- info on what software you should use to run PPP.
 pt.txt
 	- the Gracilis Packetwin AX.25 device driver
 routing.txt

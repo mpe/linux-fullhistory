@@ -15,6 +15,7 @@
  *  1997-08-09 removed extension stripping, locking cleanup
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>

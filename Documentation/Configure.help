@@ -12447,6 +12447,18 @@ CONFIG_VIDEO_BT848
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt.
 
+ZR36120/36125 Video for Linux
+CONFIG_VIDEO_ZR36120
+  Support for ZR36120/ZR36125 based frame grabber/overlay boards.
+  This includes the Victor II, WaveWatcher, Video Wonder, Maxi-TV,
+  and Buster boards. Please read the material in
+  Documentation/video4linux/zr36120.txt for more information.
+
+  This driver is also available as a module called zr36120.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
 SAA5249 Teletext processor
 CONFIG_VIDEO_SAA5249
   Support for I2C bus based teletext using the SAA5249 chip. At the

@@ -104,7 +104,7 @@ static struct hw_interrupt_type cobalt_irq_type = {
 /*
  * Not an __init, needed by the reboot code
  */
-void init_pic_mode(void)
+void disable_IO_APIC(void)
 {
 	/* Nop on Cobalt */
 } 

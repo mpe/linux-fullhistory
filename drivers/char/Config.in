@@ -141,6 +141,7 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
    fi
    if [ "$CONFIG_PCI" != "n" ]; then
       dep_tristate '  BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
+	dep_tristate 'Zoran ZR36120/36125 support' CONFIG_VIDEO_ZR36120 $CONFIG_VIDEO_DEV
    fi
    dep_tristate '  GemTek Radio Card support' CONFIG_RADIO_GEMTEK $CONFIG_VIDEO_DEV
    if [ "$CONFIG_RADIO_GEMTEK" = "y" ]; then
@@ -192,8 +193,9 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
    if [ "$CONFIG_RADIO_ZOLTRIX" = "y" ]; then
       hex '    ZOLTRIX I/O port (0x20c or 0x30c)' CONFIG_RADIO_ZOLTRIX_PORT 20c
    fi
-   dep_tristate '  Zoran ZR36057/36060 support' CONFIG_VIDEO_ZORAN $CONFIG_VIDEO_DEV
+   dep_tristate '  Zoran ZR36057/36060 support' CONFIG_VIDEO_ZORAN $CONFIG_VIDEO_DEV $CONFIG_PCI
    dep_tristate '    Include support for Iomega Buz' CONFIG_VIDEO_BUZ $CONFIG_VIDEO_ZORAN
+   dep_tristate '  Zoran ZR36120/36125 support' CONFIG_VIDEO_ZR36120 $CONFIG_VIDEO_DEV $CONFIG_PCI
 fi
 
 endmenu

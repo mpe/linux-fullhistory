@@ -940,7 +940,7 @@ void print_all_local_APICs (void)
 	print_local_APIC(NULL);
 }
 
-static void __init init_sym_mode(void)
+static void __init enable_IO_APIC(void)
 {
 	struct IO_APIC_reg_01 reg_01;
 	int i;
@@ -976,31 +976,15 @@ static void __init init_sym_mode(void)
 	clear_IO_APIC();
 }
 
-static void clear_lapic_ints (void * dummy)
-{
-	int maxlvt;
-
-	maxlvt = get_maxlvt();
-	apic_write_around(APIC_LVTT, 0x00010000);
-	apic_write_around(APIC_LVT0, 0x00010000);
-	apic_write_around(APIC_LVT1, 0x00010000);
-	if (maxlvt >= 3)
-		apic_write_around(APIC_LVTERR, 0x00010000);
-	if (maxlvt >= 4)
-		apic_write_around(APIC_LVTPC, 0x00010000);
-}
-
 /*
  * Not an __init, needed by the reboot code
  */
-void init_pic_mode(void)
+void disable_IO_APIC(void)
 {
 	/*
-	 * Clear the IO-APIC and local APICs before rebooting:
+	 * Clear the IO-APIC before rebooting:
 	 */
 	clear_IO_APIC();
-	smp_call_function(clear_lapic_ints, NULL, 1, 1);
-	clear_lapic_ints(NULL);
 
 	/*
 	 * Put it back into PIC mode (has an effect only on
@@ -1379,8 +1363,10 @@ static inline void check_timer(void)
 	}
 	printk(" failed.\n");
 
-	if (nmi_watchdog)
-		printk("timer doesnt work through the IO-APIC - cannot activate NMI Watchdog!\n");
+	if (nmi_watchdog) {
+		printk("timer doesnt work through the IO-APIC - disabling NMI Watchdog!\n");
+		nmi_watchdog = 0;
+	}
 
 	printk("...trying to set up timer as Virtual Wire IRQ...");
 
@@ -1417,7 +1403,7 @@ static inline void check_timer(void)
 
 void __init setup_IO_APIC(void)
 {
-	init_sym_mode();
+	enable_IO_APIC();
 
 	printk("ENABLING IO-APIC IRQs\n");
 	io_apic_irqs = ~PIC_IRQS;

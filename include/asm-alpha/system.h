@@ -363,17 +363,6 @@ __xchg(unsigned long x, volatile void * ptr, int size)
   ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
 #define tas(ptr) (xchg((ptr),1))
 
-/* Very dirty but nevertheless very fun hack ;). I recall the aboot printf()
-   that will in turn use the SRM  console to do the debugging of the boot
-   process. As there's no runtime symbol table, the address of printf()
-   is hardwired and is in function of the bootlx binary you have in /boot...
-   1999 Andrea Arcangeli <andrea@suse.de> */
-#if 0
-#define SRM_printf(args...) ({ int (*__SRM_printf)(const char *fmt, ...) = (int (*)(const char *fmt, ...)) 0x20000aa0; __SRM_printf(args); })
-#else
-#define SRM_printf(args...)
-#endif
-
 #endif /* __ASSEMBLY__ */
 
 #endif

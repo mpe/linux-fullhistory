@@ -189,29 +189,26 @@ reserve_std_resources(void)
 #define PFN_DOWN(x)	((x) >> PAGE_SHIFT)
 #define PFN_PHYS(x)	((x) << PAGE_SHIFT)
 #define PFN_MAX		PFN_DOWN(0x80000000)
+#define for_each_mem_cluster(memdesc, cluster, i)		\
+	for ((cluster) = (memdesc)->cluster, (i) = 0;		\
+	     (i) < (memdesc)->numclusters; (i)++, (cluster)++)
 static void __init setup_memory(void)
 {
 	struct memclust_struct * cluster;
 	struct memdesc_struct * memdesc;
-	unsigned long start_pfn, bootmap_size;
+	unsigned long start_pfn, bootmap_size, bootmap_pages, bootmap_start;
+	unsigned long start, end;
 	extern char _end[];
 	int i;
-
-	/* alloc the bootmem after the kernel */
-	start_pfn = PFN_UP(virt_to_phys(_end));
-	SRM_printf("_end %p\n", _end);
 
 	/* find free clusters, and init and free the bootmem accordingly */
 	memdesc = (struct memdesc_struct *) (hwrpb->mddt_offset + (unsigned long) hwrpb);
 
-	for (cluster = memdesc->cluster, i = memdesc->numclusters;
-	     i > 0; i--, cluster++)
+	for_each_mem_cluster(memdesc, cluster, i)
 	{
-		unsigned long end;
-
-		printk("memcluster %d, usage %02lx, start %8lu, end %8lu\n",
+		printk("memcluster %d, usage %01lx, start %8lu, end %8lu\n",
 		       i, cluster->usage, cluster->start_pfn,
-		       cluster->numpages);
+		       cluster->start_pfn + cluster->numpages);
 
 		/* Bit 0 is console/PALcode reserved.  Bit 1 is
 		   non-volatile memory -- we might want to mark
@@ -226,37 +223,88 @@ static void __init setup_memory(void)
 	/* Enforce maximum of 2GB even if there is more.  Blah.  */
 	if (max_low_pfn > PFN_MAX)
 		max_low_pfn = PFN_MAX;
-	SRM_printf("max_low_pfn %d\n", max_low_pfn);
+	printk("max_low_pfn %ld\n", max_low_pfn);
 
-	/* allocate the bootmem array after the kernel and mark
-	   the whole MM as reserved */
-	bootmap_size = init_bootmem(start_pfn, max_low_pfn);
+	/* find the end of the kernel memory */
+	start_pfn = PFN_UP(virt_to_phys(_end));
+	printk("_end %p, start_pfn %ld\n", _end, start_pfn);
 
-	for (cluster = memdesc->cluster, i = memdesc->numclusters;
-	     i > 0; i--, cluster++)
+	bootmap_start = -1;
+
+ try_again:
+	if (max_low_pfn <= start_pfn)
+		panic("not enough memory to boot");
+
+	/* we need to know how many physically contigous pages
+	   we'll need for the bootmap */
+	bootmap_pages = bootmem_bootmap_pages(max_low_pfn);
+	printk("bootmap size: %ld pages\n", bootmap_pages);
+
+	/* now find a good region where to allocate the bootmap */
+	for_each_mem_cluster(memdesc, cluster, i)
 	{
-		unsigned long end, start;
-
-		/* Bit 0 is console/PALcode reserved.  Bit 1 is
-		   non-volatile memory -- we might want to mark
-		   this for later */
 		if (cluster->usage & 3)
 			continue;
 
-		start = PFN_PHYS(cluster->start_pfn);
-		if (start < PFN_PHYS(start_pfn) + bootmap_size)
-			start = PFN_PHYS(start_pfn) + bootmap_size;
-		if (PFN_DOWN(start) >= PFN_MAX)
+		start = cluster->start_pfn;
+		end = start + cluster->numpages;
+		if (end <= start_pfn)
+			continue;
+		if (start >= max_low_pfn)
+			continue;
+		if (start < start_pfn)
+			start = start_pfn;
+		if (end > max_low_pfn)
+			end = max_low_pfn;
+		if (end - start >= bootmap_pages)
+		{
+			printk("allocating bootmap in area %ld:%ld\n",
+			       start, start+bootmap_pages);
+			bootmap_start = start;
+			break;
+		}
+	}
+
+	if (bootmap_start == -1)
+	{
+		max_low_pfn >>= 1;
+		printk("bootmap area not found now trying with %ld pages\n",
+		       max_low_pfn);
+		goto try_again;
+	}
+
+	/* allocate the bootmap and mark the whole MM as reserved */
+	bootmap_size = init_bootmem(bootmap_start, max_low_pfn);
+
+	/* mark the free regions */
+	for_each_mem_cluster(memdesc, cluster, i)
+	{
+		if (cluster->usage & 3)
 			continue;
 
-		end = PFN_PHYS(cluster->start_pfn + cluster->numpages);
-		if (PFN_DOWN(end) > PFN_MAX)
-			end = PFN_PHYS(PFN_MAX);
+		start = cluster->start_pfn;
+		if (start < start_pfn)
+			start = start_pfn;
+
+		end = cluster->start_pfn + cluster->numpages;
+		if (end > max_low_pfn)
+			end = max_low_pfn;
 
 		if (start >= end)
 			continue;
-		free_bootmem(start, end-start);
+
+		start = PFN_PHYS(start);
+		end = PFN_PHYS(end);
+
+		free_bootmem(start, end - start);
+		printk("freeing pages %ld:%ld\n",
+		       PFN_UP(start), PFN_DOWN(end));
 	}
+
+	/* reserve the bootmap memory */
+	reserve_bootmem(PFN_PHYS(bootmap_start), bootmap_size);
+	printk("reserving bootmap %ld:%ld\n", bootmap_start,
+	       bootmap_start + PFN_UP(bootmap_size));
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	initrd_start = INITRD_START;
@@ -354,10 +402,6 @@ setup_arch(char **cmdline_p)
 	   Detect the later by looking for "MILO" in the system serial nr.  */
 	alpha_using_srm = strncmp((const char *)hwrpb->ssn, "MILO", 4) != 0;
 #endif
-
-	SRM_printf("Booting on %s%s%s using machine vector %s\n",
-	       type_name, (*var_name ? " variation " : ""),
-	       var_name, alpha_mv.vector_name);
 
 	printk("Booting "
 #ifdef CONFIG_ALPHA_GENERIC

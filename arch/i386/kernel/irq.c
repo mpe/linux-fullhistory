@@ -263,7 +263,7 @@ static inline void wait_on_bh(void)
  * i thought that such things are guaranteed by design, since we use
  * the 'LOCK' prefix.
  */
-#define SUSPECTED_CPU_OR_CHIPSET_BUG_WORKAROUND 1
+#define SUSPECTED_CPU_OR_CHIPSET_BUG_WORKAROUND 0
 
 #if SUSPECTED_CPU_OR_CHIPSET_BUG_WORKAROUND
 # define SYNC_OTHER_CORES(x) udelay(x+1)

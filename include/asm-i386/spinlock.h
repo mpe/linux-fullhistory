@@ -36,7 +36,7 @@ typedef struct { unsigned long a[100]; } __dummy_lock_t;
 	".previous"
 
 #define spin_unlock_string \
-	"lock ; btrl $0,%0"
+	"movb $0,%0"
 
 #define spin_lock(lock) \
 __asm__ __volatile__( \

@@ -1468,8 +1468,10 @@ S: Victoria 3163
 S: Australia
 
 N: Pauline Middelink
-E: middelin@polyware.iaf.nl
+E: middelin@polyware.nl
 D: General low-level bug fixes, /proc fixes, identd support
+D: Author of IP masquerading
+D: Zoran ZR36120 Video For Linux driver
 S: Boterkorfhoek 34
 S: 7546 JA  Enschede
 S: Netherlands

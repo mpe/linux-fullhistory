@@ -439,9 +439,6 @@ int smp_call_function (void (*func) (void *info), void *info, int nonatomic,
 		if (down_trylock(&lock))
 			return -EBUSY;
 
-	if (call_data) // temporary debugging check
-		BUG();
-
 	call_data = &data;
 	data.func = func;
 	data.info = info;
@@ -478,7 +475,8 @@ static void stop_this_cpu (void * dummy)
 	 * Remove this CPU:
 	 */
 	clear_bit(smp_processor_id(), &cpu_online_map);
-
+	__cli();
+	disable_local_APIC();
 	if (cpu_data[smp_processor_id()].hlt_works_ok)
 		for(;;) __asm__("hlt");
 	for (;;);
@@ -490,7 +488,14 @@ static void stop_this_cpu (void * dummy)
 
 void smp_send_stop(void)
 {
+	unsigned long flags;
+
+	__save_flags(flags);
+	__cli();
         smp_call_function(stop_this_cpu, NULL, 1, 0);
+	disable_local_APIC();
+	__restore_flags(flags);
+
 }
 
 /*
@@ -539,7 +544,7 @@ asmlinkage void smp_call_function_interrupt(void)
 	 */
 	atomic_inc(&call_data->started);
 	/*
-	 * At this point the structure may be out of scope unless wait==1
+	 * At this point the info structure may be out of scope unless wait==1
 	 */
 	(*func)(info);
 	if (wait)
@@ -575,8 +580,27 @@ asmlinkage void smp_error_interrupt(void)
 	printk("... APIC ESR0: %08lx\n", v);
 
 	apic_write(APIC_ESR, 0);
-	v = apic_read(APIC_ESR);
+	v |= apic_read(APIC_ESR);
 	printk("... APIC ESR1: %08lx\n", v);
+	/*
+	 * Be a bit more verbose. (multiple bits can be set)
+	 */
+	if (v & 0x01)
+		printk("... bit 0: APIC Send CS Error (hw problem).\n");
+	if (v & 0x02)
+		printk("... bit 1: APIC Receive CS Error (hw problem).\n");
+	if (v & 0x04)
+		printk("... bit 2: APIC Send Accept Error.\n");
+	if (v & 0x08)
+		printk("... bit 3: APIC Receive Accept Error.\n");
+	if (v & 0x10)
+		printk("... bit 4: Reserved!.\n");
+	if (v & 0x20)
+		printk("... bit 5: Send Illegal Vector (kernel bug).\n");
+	if (v & 0x40)
+		printk("... bit 6: Received Illegal Vector.\n");
+	if (v & 0x80)
+		printk("... bit 7: Illegal Register Address.\n");
 
 	ack_APIC_irq();
 

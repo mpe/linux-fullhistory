@@ -348,6 +348,9 @@ else
   endif
 endif
 
+#
+# for external dependencies in arm/config.in and video/config.in
+#
 ifeq ($(CONFIG_BUS_I2C),y)
 	L_I2C=y
 else
@@ -357,12 +360,28 @@ else
 endif
 
 ifeq ($(CONFIG_VIDEO_BT848),y)
-O_OBJS += bttv.o msp3400.o tuner.o
+O_OBJS += bttv.o msp3400.o
 L_I2C=y
+L_TUNERS=y
 else
   ifeq ($(CONFIG_VIDEO_BT848),m)
-    M_OBJS += bttv.o msp3400.o tuner.o
+    M_OBJS += bttv.o msp3400.o
     M_I2C=y
+    M_TUNERS=y
+  endif
+endif
+
+ifeq ($(CONFIG_VIDEO_ZR36120),y)
+O_OBJS += zoran.o
+L_I2C=y
+L_TUNERS=y
+L_DECODERS=y
+else
+  ifeq ($(CONFIG_VIDEO_ZR36120),m)
+    M_OBJS += zoran.o
+    M_I2C=y
+    M_TUNERS=y
+    M_DECODERS=y
   endif
 endif
 
@@ -404,9 +423,13 @@ endif
 
 ifeq ($(CONFIG_VIDEO_ZORAN),y)
 O_OBJS += buz.o
+L_I2C=y
+L_DECODERS=y
 else
   ifeq ($(CONFIG_VIDEO_ZORAN),m)
     M_OBJS += buz.o
+    M_I2C=y
+    M_DECODERS=y
   endif
 endif
 
@@ -415,14 +438,6 @@ O_OBJS += bt856.o bt819.o
 else
   ifeq ($(CONFIG_VIDEO_LML33),m)
     M_OBJS += bt856.o bt819.o
-  endif
-endif
-
-ifeq ($(CONFIG_VIDEO_BUZ),y)
-O_OBJS += saa7111.o saa7185.o
-else
-  ifeq ($(CONFIG_VIDEO_BUZ),m)
-    M_OBJS += saa7111.o saa7185.o
   endif
 endif
 
@@ -578,11 +593,31 @@ else
   endif
 endif
 
+
+# set when a framegrabber supports external tuners
+ifeq ($(L_TUNERS),y)
+O_OBJS += tuner.o
+else
+  ifeq ($(M_TUNERS),y)
+    M_OBJS += tuner.o
+  endif
+endif
+
+# set when a framegrabber supports external decoders
+ifeq ($(L_DECODERS),y)
+O_OBJS += saa7110.o saa7111.o saa7185.o
+else
+  ifeq ($(M_DECODERS),y)
+    M_OBJS += saa7110.o saa7111.o saa7185.o
+  endif
+endif
+
+# set when a framegrabber implements i2c support
 ifeq ($(L_I2C),y)
 OX_OBJS += i2c.o
 else
-  ifeq ($(M_I2C),y)
-  MX_OBJS += i2c.o
+ ifeq ($(M_I2C),y)
+ MX_OBJS += i2c.o
   endif
 endif
 
@@ -615,3 +650,5 @@ consolemap_deftbl.o: consolemap_deftbl.c $(TOPDIR)/include/linux/types.h
 defkeymap.c: defkeymap.map
 	loadkeys --mktable defkeymap.map > defkeymap.c
 
+zoran.o: zr36120.o zr36120_i2c.o zr36120_mem.o
+	$(LD) $(LD_RFLAG) -r -o $@ zr36120.o zr36120_i2c.o zr36120_mem.o

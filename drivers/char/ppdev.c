@@ -43,6 +43,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/ioctl.h>
 #include <linux/parport.h>
@@ -578,11 +579,7 @@ static struct file_operations pp_fops = {
 	pp_release
 };
 
-#ifdef MODULE
-#define pp_init init_module
-#endif
-
-int pp_init (void)
+static int __init ppdev_init (void)
 {
 	if (register_chrdev (PP_MAJOR, CHRDEV, &pp_fops)) {
 		printk (KERN_WARNING CHRDEV ": unable to get major %d\n",
@@ -594,10 +591,11 @@ int pp_init (void)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module (void)
+static void __exit ppdev_cleanup (void)
 {
 	/* Clean up all parport stuff */
 	unregister_chrdev (PP_MAJOR, CHRDEV);
 }
-#endif /* MODULE */
+
+module_init(ppdev_init);
+module_exit(ppdev_cleanup);
