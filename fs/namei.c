@@ -279,7 +279,9 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name, i
 	return result;
 }
 
-static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry, unsigned int follow)
+static inline struct dentry *
+do_follow_link(struct dentry *base, struct dentry *dentry,
+		struct vfsmount **vfsmnt, unsigned int follow)
 {
 	struct inode * inode = dentry->d_inode;
 
@@ -290,7 +292,8 @@ static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry
 
 			current->link_count++;
 			/* This eats the base */
-			result = inode->i_op->follow_link(dentry, base, follow);
+			result = inode->i_op->follow_link(dentry, base,
+							vfsmnt, follow);
 			current->link_count--;
 			dput(dentry);
 			return result;
@@ -300,6 +303,52 @@ static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry
 	}
 	dput(base);
 	return dentry;
+}
+
+/* MOUNT_REWRITE: add vfmount ** when lookup_dentry will get it */
+static inline struct dentry *
+__emul_lookup_dentry(const char *name, int lookup_flags)
+{
+	struct dentry *base;
+	char *emul = __emul_prefix();
+
+	if (!emul)
+		return NULL;
+
+	if (emul[0] == '/')
+		BUG();
+
+	base = lookup_dentry (emul, 
+			      dget (current->fs->root),
+			      (LOOKUP_FOLLOW | LOOKUP_DIRECTORY));
+			
+	if (IS_ERR (base))
+		return NULL;
+	if (!base->d_inode) {
+		dput(base);
+		return NULL;
+	}
+	base = lookup_dentry (name, base, lookup_flags);
+	
+	if (IS_ERR (base)) return NULL;
+	
+	if (!base->d_inode) {
+		struct dentry *fromroot;
+		
+		fromroot = lookup_dentry(name, dget(current->fs->root),
+					 lookup_flags);
+		
+		if (IS_ERR (fromroot)) return base;
+		
+		if (fromroot->d_inode) {
+			dput(base);
+			return fromroot;
+		}
+		
+		dput(fromroot);
+	}
+	
+	return base;
 }
 
 static inline struct dentry * follow_mount(struct dentry * dentry)
@@ -324,6 +373,7 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned 
 {
 	struct dentry * dentry;
 	struct inode *inode;
+	struct vfsmount *mnt = NULL;
 
 	if (*name == '/') {
 		if (base)
@@ -331,7 +381,10 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned 
 		do {
 			name++;
 		} while (*name == '/');
-		__prefix_lookup_dentry(name, lookup_flags);
+		if (current->personality) {
+			dentry = __emul_lookup_dentry(name,lookup_flags);
+			if (dentry) return dentry;
+		}
 		base = dget(current->fs->root);
 	} else if (!base) {
 		base = dget(current->fs->pwd);
@@ -408,7 +461,7 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned 
 			dentry = follow_mount(dentry);
 		}
 
-		base = do_follow_link(base, dentry, flags);
+		base = do_follow_link(base, dentry, &mnt, flags);
 		if (IS_ERR(base))
 			goto return_base;
 
@@ -600,7 +653,7 @@ static inline int may_delete(struct inode *dir,struct dentry *victim, int isdir)
 			return -ENOTDIR;
 		if (IS_ROOT(victim))
 			return -EBUSY;
-		if (victim->d_mounts != victim->d_covers)
+		if (d_mountpoint(victim))
 			return -EBUSY;
 	} else if (S_ISDIR(victim->d_inode->i_mode))
 		return -EISDIR;
@@ -679,7 +732,8 @@ exit_lock:
  * which is a lot more logical, and also allows the "no perm" needed
  * for symlinks (where the permissions are checked later).
  */
-struct dentry * __open_namei(const char * pathname, int flag, int mode, struct dentry * dir)
+/* MOUNT_REWRITE: pass mnt to lookup_dentry */
+struct dentry * open_namei(const char * pathname, int flag, int mode, struct dentry * dir, struct vfsmount **mnt)
 {
 	int acc_mode, error;
 	struct inode *inode;
@@ -1082,13 +1136,13 @@ int vfs_unlink(struct inode *dir, struct dentry *dentry)
 	return error;
 }
 
-int do_unlink(const char * name, struct dentry * base)
+static int do_unlink(const char * name)
 {
 	int error;
 	struct dentry *dir;
 	struct dentry *dentry;
 
-	dentry = lookup_dentry(name, base, 0);
+	dentry = lookup_dentry(name, NULL, 0);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto exit;
@@ -1113,7 +1167,7 @@ asmlinkage long sys_unlink(const char * pathname)
 	if(IS_ERR(tmp))
 		return PTR_ERR(tmp);
 	lock_kernel();
-	error = do_unlink(tmp, NULL);
+	error = do_unlink(tmp);
 	unlock_kernel();
 	putname(tmp);
 
@@ -1512,9 +1566,10 @@ out:
 	return len;
 }
 
+/* MOUNT_REWRITE: pass &mnt to lookup_dentry */
 static inline struct dentry *
 __vfs_follow_link(struct dentry *dentry, struct dentry *base,
-		unsigned follow, const char *link)
+	struct vfsmount **mnt, unsigned int follow, const char *link)
 {
 	struct dentry *result;
 	UPDATE_ATIME(dentry->d_inode);
@@ -1532,9 +1587,9 @@ fail:
 
 struct dentry *
 vfs_follow_link(struct dentry *dentry, struct dentry *base,
-unsigned int follow, const char *link)
+	struct vfsmount **mnt, unsigned int follow, const char *link)
 {
-	return __vfs_follow_link(dentry,base,follow,link);
+	return __vfs_follow_link(dentry,base,mnt,follow,link);
 }
 
 /* get the link contents into pagecache */
@@ -1573,11 +1628,12 @@ int page_readlink(struct dentry *dentry, char *buffer, int buflen)
 }
 
 struct dentry *
-page_follow_link(struct dentry *dentry, struct dentry *base, unsigned int follow)
+page_follow_link(struct dentry *dentry, struct dentry *base,
+	struct vfsmount **mnt, unsigned int follow)
 {
 	struct page *page = NULL;
 	char *s = page_getlink(dentry, &page);
-	struct dentry *res = __vfs_follow_link(dentry,base,follow,s);
+	struct dentry *res = __vfs_follow_link(dentry,base,mnt,follow,s);
 	if (page) {
 		kunmap(page);
 		page_cache_release(page);

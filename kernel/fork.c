@@ -432,6 +432,8 @@ static inline int copy_fs(unsigned long clone_flags, struct task_struct * tsk)
 	tsk->fs->umask = current->fs->umask;
 	tsk->fs->root = dget(current->fs->root);
 	tsk->fs->pwd = dget(current->fs->pwd);
+	tsk->fs->rootmnt = mntget(current->fs->rootmnt);
+	tsk->fs->pwdmnt = mntget(current->fs->pwdmnt);
 	return 0;
 }
 

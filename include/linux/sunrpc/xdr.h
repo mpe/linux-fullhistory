@@ -59,6 +59,7 @@ void		xdr_init(void);
 /*
  * Miscellaneous XDR helper functions
  */
+u32 *	xdr_encode_array(u32 *p, const char *s, unsigned int len);
 u32 *	xdr_encode_string(u32 *p, const char *s);
 u32 *	xdr_decode_string(u32 *p, char **sp, int *lenp, int maxlen);
 u32 *	xdr_encode_netobj(u32 *p, const struct xdr_netobj *);
@@ -92,6 +93,9 @@ xdr_adjust_iovec(struct iovec *iov, u32 *p)
 {
 	return iov->iov_len = ((u8 *) p - (u8 *) iov->iov_base);
 }
+
+void xdr_shift_iovec(struct iovec *, int, size_t);
+void xdr_zero_iovec(struct iovec *, int, size_t);
 
 #endif /* __KERNEL__ */
 

@@ -21,11 +21,12 @@ static int autofs4_readlink(struct dentry *dentry, char *buffer, int buflen)
 
 static struct dentry * autofs4_follow_link(struct dentry *dentry,
 					  struct dentry *base,
+					  struct vfsmount *mnt,
 					  unsigned int flags)
 {
 	struct autofs_info *ino = autofs4_dentry_ino(dentry);
 
-	return vfs_follow_link(dentry, base, flags, ino->u.symlink);
+	return vfs_follow_link(dentry, base, mnt, flags, ino->u.symlink);
 }
 
 struct inode_operations autofs4_symlink_inode_operations = {

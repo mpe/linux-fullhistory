@@ -696,7 +696,7 @@ asmlinkage int irix_pause(void)
 	return -EINTR;
 }
 
-extern asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
+extern asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
 				unsigned long new_flags, void * data);
 
 /* XXX need more than this... */

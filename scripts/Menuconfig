@@ -404,7 +404,7 @@ function help () {
 		$DIALOG	--backtitle "$backtitle" \
 			--textbox help.out $ROWS $COLS
 	fi
-	rm help.out
+	rm -f help.out
 }
 
 #
@@ -1450,4 +1450,10 @@ else
 	echo Your kernel configuration changes were NOT saved.
 	echo
 fi
+
+# Remove log if empty.
+if [ ! -s .menuconfig.log ] ; then
+	rm -f .menuconfig.log
+fi
+
 exit 0

@@ -59,7 +59,26 @@ static struct super_operations nfs_sops = {
 	umount_begin:	nfs_umount_begin,
 };
 
+/*
+ * RPC cruft for NFS
+ */
 struct rpc_stat			nfs_rpcstat = { &nfs_program };
+static struct rpc_version *	nfs_version[] = {
+	NULL,
+	NULL,
+	&nfs_version2,
+#ifdef CONFIG_NFS_V3
+	&nfs_version3,
+#endif
+};
+
+struct rpc_program		nfs_program = {
+	"nfs",
+	NFS_PROGRAM,
+	sizeof(nfs_version) / sizeof(nfs_version[0]),
+	nfs_version,
+	&nfs_rpcstat,
+};
 
 static inline unsigned long
 nfs_fattr_to_ino_t(struct nfs_fattr *fattr)
@@ -161,7 +180,7 @@ nfs_block_bits(unsigned long bsize, unsigned char *nrbitsp)
 {
 	/* make sure blocksize is a power of two */
 	if ((bsize & (bsize - 1)) || nrbitsp) {
-		unsigned int	nrbits;
+		unsigned char	nrbits;
 
 		for (nrbits = 31; nrbits && !(bsize & (1 << nrbits)); nrbits--)
 			;
@@ -197,6 +216,26 @@ nfs_block_size(unsigned long bsize, unsigned char *nrbitsp)
 	return nfs_block_bits(bsize, nrbitsp);
 }
 
+/*
+ * Obtain the root inode of the file system.
+ */
+static struct inode *
+nfs_get_root(struct super_block *sb, struct nfs_fh *rootfh)
+{
+	struct nfs_server	*server = &sb->u.nfs_sb.s_server;
+	struct nfs_fattr	fattr;
+	struct inode		*inode;
+	int			error;
+
+	if ((error = server->rpc_ops->getroot(server, rootfh, &fattr)) < 0) {
+		printk(KERN_NOTICE "nfs_get_root: getattr error = %d\n", -error);
+		return NULL;
+	}
+
+	inode = __nfs_fhget(sb, &fattr);
+	return inode;
+}
+
 extern struct nfs_fh *nfs_fh_alloc(void);
 extern void nfs_fh_free(struct nfs_fh *p);
 
@@ -211,19 +250,20 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 {
 	struct nfs_mount_data	*data = (struct nfs_mount_data *) raw_data;
 	struct nfs_server	*server;
-	struct rpc_xprt		*xprt;
-	struct rpc_clnt		*clnt;
-	struct nfs_fh		*root_fh;
-	struct inode		*root_inode;
+	struct rpc_xprt		*xprt = NULL;
+	struct rpc_clnt		*clnt = NULL;
+	struct nfs_fh		*root = &data->root, *root_fh, fh;
+	struct inode		*root_inode = NULL;
 	unsigned int		authflavor;
-	int			tcp;
 	struct sockaddr_in	srvaddr;
 	struct rpc_timeout	timeparms;
-	struct nfs_fattr	fattr;
+	struct nfs_fsinfo	fsinfo;
+	int			tcp, version, maxlen;
 
 	if (!data)
 		goto out_miss_args;
 
+	memset(&fh, 0, sizeof(fh));
 	if (data->version != NFS_MOUNT_VERSION) {
 		printk("nfs warning: mount version %s than kernel\n",
 			data->version < NFS_MOUNT_VERSION ? "older" : "newer");
@@ -231,6 +271,12 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 			data->namlen = 0;
 		if (data->version < 3)
 			data->bsize  = 0;
+		if (data->version < 4) {
+			data->flags &= ~NFS_MOUNT_VER3;
+			root = &fh;
+			root->size = NFS2_FHSIZE;
+			memcpy(root->data, data->old_root.data, NFS2_FHSIZE);
+		}
 	}
 
 	/* We now require that the mount process passes the remote address */
@@ -242,11 +288,12 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 
 	sb->s_magic      = NFS_SUPER_MAGIC;
 	sb->s_op         = &nfs_sops;
+	sb->s_blocksize_bits = 0;
 	sb->s_blocksize  = nfs_block_size(data->bsize, &sb->s_blocksize_bits);
 	server           = &sb->u.nfs_sb.s_server;
-	server->dtsize	 = server->rsize = nfs_block_size(data->rsize, NULL);
+	server->rsize    = nfs_block_size(data->rsize, NULL);
 	server->wsize    = nfs_block_size(data->wsize, NULL);
-	server->flags    = data->flags;
+	server->flags    = data->flags & NFS_MOUNT_FLAGMASK;
 
 	if (data->flags & NFS_MOUNT_NOAC) {
 		data->acregmin = data->acregmax = 0;
@@ -257,10 +304,31 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	server->acdirmin = data->acdirmin*HZ;
 	server->acdirmax = data->acdirmax*HZ;
 
+	server->namelen  = data->namlen;
 	server->hostname = kmalloc(strlen(data->hostname) + 1, GFP_KERNEL);
 	if (!server->hostname)
 		goto out_unlock;
 	strcpy(server->hostname, data->hostname);
+
+ nfsv3_try_again:
+	/* Check NFS protocol revision and initialize RPC op vector
+	 * and file handle pool. */
+	if (data->flags & NFS_MOUNT_VER3) {
+#ifdef CONFIG_NFS_V3
+		server->rpc_ops = &nfs_v3_clientops;
+		version = 3;
+		if (data->version < 4) {
+			printk(KERN_NOTICE "NFS: NFSv3 not supported by mount program.\n");
+			goto out_unlock;
+		}
+#else
+		printk(KERN_NOTICE "NFS: NFSv3 not supported.\n");
+		goto out_unlock;
+#endif
+	} else {
+		server->rpc_ops = &nfs_v2_clientops;
+		version = 2;
+        }
 
 	/* Which protocol do we use? */
 	tcp   = (data->flags & NFS_MOUNT_TCP);
@@ -270,6 +338,11 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	timeparms.to_retries = data->retrans;
 	timeparms.to_maxval  = tcp? RPC_MAX_TCP_TIMEOUT : RPC_MAX_UDP_TIMEOUT;
 	timeparms.to_exponential = 1;
+
+	if (!timeparms.to_initval)
+		timeparms.to_initval = (tcp ? 600 : 11) * HZ / 10;
+	if (!timeparms.to_retries)
+		timeparms.to_retries = 5;
 
 	/* Now create transport and client */
 	xprt = xprt_create_proto(tcp? IPPROTO_TCP : IPPROTO_UDP,
@@ -285,7 +358,7 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 		authflavor = RPC_AUTH_KRB;
 
 	clnt = rpc_create_client(xprt, server->hostname, &nfs_program,
-						NFS_VERSION, authflavor);
+				 version, authflavor);
 	if (clnt == NULL)
 		goto out_no_client;
 
@@ -305,19 +378,67 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	root_fh = nfs_fh_alloc();
 	if (!root_fh)
 		goto out_no_fh;
-	*root_fh = data->root;
+	memcpy((u8*)root_fh, (u8*)root, sizeof(*root));
 
-	if (nfs_proc_getattr(server, root_fh, &fattr) != 0)
-		goto out_no_fattr;
+	/* Did getting the root inode fail? */
+	if (!(root_inode = nfs_get_root(sb, root))
+	    && (data->flags & NFS_MOUNT_VER3)) {
+		data->flags &= ~NFS_MOUNT_VER3;
+		nfs_fh_free(root_fh);
+		rpciod_down();
+		rpc_shutdown_client(server->client);
+		goto nfsv3_try_again;
+	}
 
-	root_inode = __nfs_fhget(sb, &fattr);
 	if (!root_inode)
 		goto out_no_root;
 	sb->s_root = d_alloc_root(root_inode);
 	if (!sb->s_root)
 		goto out_no_root;
+
 	sb->s_root->d_op = &nfs_dentry_operations;
 	sb->s_root->d_fsdata = root_fh;
+
+	/* Get some general file system info */
+        if (server->rpc_ops->statfs(server, root, &fsinfo) >= 0) {
+		if (server->namelen == 0)
+			server->namelen = fsinfo.namelen;
+	} else {
+		printk(KERN_NOTICE "NFS: cannot retrieve file system info.\n");
+		goto out_no_root;
+        }
+
+	/* Work out a lot of parameters */
+	if (data->rsize == 0)
+		server->rsize = nfs_block_size(fsinfo.rtpref, NULL);
+	if (data->wsize == 0)
+		server->wsize = nfs_block_size(fsinfo.wtpref, NULL);
+	server->dtsize = nfs_block_size(fsinfo.dtpref, NULL);
+	/* NFSv3: we don't have bsize, but rather rtmult and wtmult... */
+	if (!fsinfo.bsize)
+		fsinfo.bsize = (fsinfo.rtmult>fsinfo.wtmult) ? fsinfo.rtmult : fsinfo.wtmult;
+	/* Also make sure we don't go below rsize/wsize since
+	 * RPC calls are expensive */
+	if (fsinfo.bsize < server->rsize)
+		fsinfo.bsize = server->rsize;
+	if (fsinfo.bsize < server->wsize)
+		fsinfo.bsize = server->wsize;
+
+	if (data->bsize == 0)
+		sb->s_blocksize = nfs_block_bits(fsinfo.bsize, &sb->s_blocksize_bits);
+	if (server->rsize > fsinfo.rtmax)
+		server->rsize = fsinfo.rtmax;
+	if (server->rsize > PAGE_CACHE_SIZE)
+		server->rsize = PAGE_CACHE_SIZE;
+	if (server->wsize > fsinfo.wtmax)
+		server->wsize = fsinfo.wtmax;
+        if (server->wsize > NFS_WRITE_MAXIOV << PAGE_CACHE_SHIFT)
+                server->wsize = NFS_WRITE_MAXIOV << PAGE_CACHE_SHIFT;
+
+        maxlen = (version == 2) ? NFS2_MAXNAMLEN : NFS3_MAXNAMLEN;
+
+        if (server->namelen == 0 || server->namelen > maxlen)
+                server->namelen = maxlen;
 
 	/* Fire up the writeback cache */
 	if (nfs_reqlist_alloc(server) < 0) {
@@ -338,11 +459,6 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 out_no_root:
 	printk("nfs_read_super: get root inode failed\n");
 	iput(root_inode);
-	goto out_free_fh;
-
-out_no_fattr:
-	printk("nfs_read_super: get root fattr failed\n");
-out_free_fh:
 	nfs_fh_free(root_fh);
 out_no_fh:
 	rpciod_down();
@@ -382,21 +498,33 @@ out_fail:
 static int
 nfs_statfs(struct super_block *sb, struct statfs *buf)
 {
-	int error;
+	struct nfs_server *server = &sb->u.nfs_sb.s_server;
+	unsigned char blockbits;
+	unsigned long blockres;
 	struct nfs_fsinfo res;
+	int error;
 
-	error = nfs_proc_statfs(&sb->u.nfs_sb.s_server, NFS_FH(sb->s_root),
-		&res);
-	if (error) {
-		printk("nfs_statfs: statfs error = %d\n", -error);
-		res.bsize = res.blocks = res.bfree = res.bavail = -1;
-	}
+	error = server->rpc_ops->statfs(server, NFS_FH(sb->s_root), &res);
 	buf->f_type = NFS_SUPER_MAGIC;
-	buf->f_bsize = res.bsize;
-	buf->f_blocks = res.blocks;
-	buf->f_bfree = res.bfree;
-	buf->f_bavail = res.bavail;
-	buf->f_namelen = NAME_MAX;
+	if (error < 0)
+		goto out_err;
+
+	if (res.bsize == 0)
+		res.bsize = sb->s_blocksize;
+	buf->f_bsize = nfs_block_bits(res.bsize, &blockbits);
+	blockres = (1 << blockbits) - 1;
+	buf->f_blocks = (res.tbytes + blockres) >> blockbits;
+	buf->f_bfree = (res.fbytes + blockres) >> blockbits;
+	buf->f_bavail = (res.abytes + blockres) >> blockbits;
+	buf->f_files = res.tfiles;
+	buf->f_ffree = res.afiles;
+	if (res.namelen == 0 || res.namelen > server->namelen)
+		res.namelen = server->namelen;
+	buf->f_namelen = res.namelen;
+	return 0;
+ out_err:
+	printk("nfs_statfs: statfs error = %d\n", -error);
+	buf->f_bsize = buf->f_blocks = buf->f_bfree = buf->f_bavail = -1;
 	return 0;
 }
 
@@ -693,8 +821,7 @@ printk("nfs_notify_change: revalidate failed, error=%d\n", error);
 	if (error)
 		goto out;
 
-	error = nfs_proc_setattr(NFS_DSERVER(dentry), NFS_FH(dentry),
-				&fattr, attr);
+	error = NFS_PROTO(inode)->setattr(dentry, &fattr, attr);
 	if (error)
 		goto out;
 	/*
@@ -792,30 +919,32 @@ __nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 	}
 	NFS_FLAGS(inode) |= NFS_INO_REVALIDATING;
 
-	status = nfs_proc_getattr(server, NFS_FH(dentry), &fattr);
+	status = NFS_PROTO(inode)->getattr(dentry, &fattr);
 	if (status) {
+		struct dentry *dir = dentry->d_parent;
+		struct inode *dir_i = dir->d_inode;
 		int error;
 		u32 *fh;
 		struct nfs_fh fhandle;
 		dfprintk(PAGECACHE, "nfs_revalidate_inode: %s/%s getattr failed, ino=%ld, error=%d\n",
-			dentry->d_parent->d_name.name,
-			dentry->d_name.name, inode->i_ino, status);
+			 dir->d_name.name, dentry->d_name.name,
+			 inode->i_ino, status);
 		if (status != -ESTALE)
 			goto out;
 		/*
 		 * A "stale filehandle" error ... show the current fh
 		 * and find out what the filehandle should be.
 		 */
-		fh = (u32 *) NFS_FH(dentry);
+		fh = (u32 *) NFS_FH(dentry)->data;
 		dfprintk(PAGECACHE, "NFS: bad fh %08x%08x%08x%08x%08x%08x%08x%08x\n",
 			fh[0],fh[1],fh[2],fh[3],fh[4],fh[5],fh[6],fh[7]);
-		error = nfs_proc_lookup(server, NFS_FH(dentry->d_parent), 
-					dentry->d_name.name, &fhandle, &fattr);
+		error = NFS_PROTO(dir_i)->lookup(dir, &dentry->d_name,
+						 &fhandle, &fattr);
 		if (error) {
 			dfprintk(PAGECACHE, "NFS: lookup failed, error=%d\n", error);
 			goto out;
 		}
-		fh = (u32 *) &fhandle;
+		fh = (u32 *) fhandle.data;
 		dfprintk(PAGECACHE, "            %08x%08x%08x%08x%08x%08x%08x%08x\n",
 			fh[0],fh[1],fh[2],fh[3],fh[4],fh[5],fh[6],fh[7]);
 		goto out;
@@ -1013,7 +1142,9 @@ out_changed:
 static DECLARE_FSTYPE(nfs_fs_type, "nfs", nfs_read_super, 0);
 
 extern int nfs_init_fhcache(void);
+extern void nfs_destroy_fhcache(void);
 extern int nfs_init_nfspagecache(void);
+extern void nfs_destroy_nfspagecache(void);
 
 /*
  * Initialize NFS
@@ -1055,6 +1186,8 @@ init_module(void)
 void
 cleanup_module(void)
 {
+	nfs_destroy_nfspagecache();
+	nfs_destroy_fhcache();
 #ifdef CONFIG_PROC_FS
 	rpc_proc_unregister("nfs");
 #endif

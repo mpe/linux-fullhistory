@@ -1,7 +1,7 @@
 /*
  * linux/arch/arm/drivers/scsi/powertec.c
  *
- * Copyright (C) 1997-1998 Russell King
+ * Copyright (C) 1997-2000 Russell King
  *
  * This driver is based on experimentation.  Hence, it may have made
  * assumptions about the particular card that I have available, and
@@ -13,6 +13,7 @@
  *  15-04-1998	RMK	Only do PIO if FAS216 will allow it.
  *  02-05-1998	RMK	Moved DMA sg list into per-interface structure.
  *  27-06-1998	RMK	Changed asm/delay.h to linux/delay.h
+ *  02-04-2000	RMK	Updated for new error handling code.
  */
 
 #include <linux/module.h>
@@ -67,7 +68,7 @@
  */
 #define VER_MAJOR	0
 #define VER_MINOR	0
-#define VER_PATCH	2
+#define VER_PATCH	5
 
 MODULE_AUTHOR("Russell King");
 MODULE_DESCRIPTION("Powertec SCSI driver");
@@ -345,25 +346,11 @@ const char *powertecscsi_info(struct Scsi_Host *host)
 	static char string[100], *p;
 
 	p = string;
-	p += sprintf(string, "%s at port %lX ",
-		     host->hostt->name, host->io_port);
-
-	if (host->irq != NO_IRQ)
-		p += sprintf(p, "irq %d ", host->irq);
-	else
-		p += sprintf(p, "NO IRQ ");
-
-	if (host->dma_channel != NO_DMA)
-		p += sprintf(p, "dma %d ", host->dma_channel);
-	else
-		p += sprintf(p, "NO DMA ");
-
-	p += sprintf(p, "v%d.%d.%d scsi %s",
+	p += sprintf(p, "%s ", host->hostt->name);
+	p += fas216_info(&info->info, p);
+	p += sprintf(p, "v%d.%d.%d terminators o%s",
 		     VER_MAJOR, VER_MINOR, VER_PATCH,
-		     info->info.scsi.type);
-
-	p += sprintf(p, " terminators %s",
-		     info->control.terms ? "on" : "off");
+		     info->control.terms ? "n" : "ff");
 
 	return string;
 }
@@ -403,13 +390,13 @@ powertecscsi_set_proc_info(struct Scsi_Host *host, char *buffer, int length)
  *					int length, int host_no, int inout)
  * Purpose  : Return information about the driver to a user process accessing
  *	      the /proc filesystem.
- * Params   : buffer - a buffer to write information to
- *	      start  - a pointer into this buffer set by this routine to the start
- *		       of the required information.
- *	      offset - offset into information that we have read upto.
- *	      length - length of buffer
+ * Params   : buffer  - a buffer to write information to
+ *	      start   - a pointer into this buffer set by this routine to the start
+ *		        of the required information.
+ *	      offset  - offset into information that we have read upto.
+ *	      length  - length of buffer
  *	      host_no - host number to return information for
- *	      inout  - 0 for reading, 1 for writing.
+ *	      inout   - 0 for reading, 1 for writing.
  * Returns  : length of data written to buffer.
  */
 int powertecscsi_proc_info(char *buffer, char **start, off_t offset,
@@ -437,16 +424,14 @@ int powertecscsi_proc_info(char *buffer, char **start, off_t offset,
 	pos = sprintf(buffer,
 			"PowerTec SCSI driver version %d.%d.%d\n",
 			VER_MAJOR, VER_MINOR, VER_PATCH);
-	pos += sprintf(buffer + pos,
-			"Address: %08lX    IRQ : %d     DMA : %d\n"
-			"FAS    : %-10s  TERM: %-3s\n\n"
-			"Statistics:\n",
-			host->io_port, host->irq, host->dma_channel,
-			info->info.scsi.type, info->control.terms ? "on" : "off");
+
+	pos += fas216_print_host(&info->info, buffer + pos);
+	pos += sprintf(buffer + pos, "Term    : o%s\n",
+			info->control.terms ? "n" : "ff");
 
 	pos += fas216_print_stats(&info->info, buffer + pos);
 
-	pos += sprintf (buffer+pos, "\nAttached devices:\n");
+	pos += sprintf(buffer+pos, "\nAttached devices:\n");
 
 	for (scd = host->host_queue; scd; scd = scd->next) {
 		pos += fas216_print_device(&info->info, scd, buffer + pos);

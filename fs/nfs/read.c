@@ -15,7 +15,6 @@
  * within the RPC code when root squashing is suspected.
  */
 
-#define NFS_NEED_XDR_TYPES
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -52,15 +51,18 @@ struct nfs_rreq {
  */
 static inline void
 nfs_readreq_setup(struct nfs_rreq *req, struct nfs_fh *fh,
-		  unsigned long offset, void *buffer, unsigned int rsize)
+		  loff_t offset, void *buffer, unsigned int rsize)
 {
 	req->ra_args.fh     = fh;
 	req->ra_args.offset = offset;
 	req->ra_args.count  = rsize;
-	req->ra_args.buffer = buffer;
+	req->ra_args.iov[0].iov_base = (void *)buffer;
+	req->ra_args.iov[0].iov_len = rsize;
+	req->ra_args.nriov  = 1;
+	req->ra_fattr.valid = 0;
 	req->ra_res.fattr   = &req->ra_fattr;
 	req->ra_res.count   = rsize;
-	req->ra_fattr.valid = 0;
+	req->ra_res.eof     = 0;
 }
 
 
@@ -71,11 +73,12 @@ static int
 nfs_readpage_sync(struct dentry *dentry, struct inode *inode, struct page *page)
 {
 	struct nfs_rreq	rqst;
-	unsigned long	offset = page->index << PAGE_CACHE_SHIFT;
+	struct rpc_message msg;
+	loff_t		offset = page_offset(page);
 	char		*buffer;
 	int		rsize = NFS_SERVER(inode)->rsize;
 	int		result, refresh = 0;
-	int		count = PAGE_SIZE;
+	int		count = PAGE_CACHE_SIZE;
 	int		flags = IS_SWAPFILE(inode)? NFS_RPC_SWAPFLAGS : 0;
 
 	dprintk("NFS: nfs_readpage_sync(%p)\n", page);
@@ -90,15 +93,19 @@ nfs_readpage_sync(struct dentry *dentry, struct inode *inode, struct page *page)
 		if (count < rsize)
 			rsize = count;
 
-		dprintk("NFS: nfs_proc_read(%s, (%s/%s), %ld, %d, %p)\n",
+		dprintk("NFS: nfs_proc_read(%s, (%s/%s), %Ld, %d, %p)\n",
 			NFS_SERVER(inode)->hostname,
 			dentry->d_parent->d_name.name, dentry->d_name.name,
-			offset, rsize, buffer);
+			(long long)offset, rsize, buffer);
 
 		/* Set up arguments and perform rpc call */
 		nfs_readreq_setup(&rqst, NFS_FH(dentry), offset, buffer, rsize);
 		lock_kernel();
-		result = rpc_call(NFS_CLIENT(inode), NFSPROC_READ, &rqst.ra_args, &rqst.ra_res, flags);
+		msg.rpc_proc = (NFS_PROTO(inode)->version == 3) ? NFS3PROC_READ : NFSPROC_READ;
+		msg.rpc_argp = &rqst.ra_args;
+		msg.rpc_resp = &rqst.ra_res;
+		msg.rpc_cred = NULL;
+		result = rpc_call_sync(NFS_CLIENT(inode), &msg, flags);
 		unlock_kernel();
 		nfs_refresh_inode(inode, &rqst.ra_fattr);
 
@@ -138,19 +145,18 @@ nfs_readpage_result(struct rpc_task *task)
 {
 	struct nfs_rreq	*req = (struct nfs_rreq *) task->tk_calldata;
 	struct page	*page = req->ra_page;
-	unsigned long	address = page_address(page);
+	char		*address = req->ra_args.iov[0].iov_base;
 	int		result = task->tk_status;
 	static int	succ = 0, fail = 0;
 
-	dprintk("NFS: %4d received callback for page %lx, result %d\n",
+	dprintk("NFS: %4d received callback for page %p, result %d\n",
 			task->tk_pid, address, result);
 
 	nfs_refresh_inode(req->ra_inode, &req->ra_fattr);
 	if (result >= 0) {
 		result = req->ra_res.count;
-		if (result < PAGE_SIZE) {
-			memset((char *) address + result, 0, PAGE_SIZE - result);
-		}
+		if (result < PAGE_CACHE_SIZE)
+			memset(address + result, 0, PAGE_CACHE_SIZE - result);
 		SetPageUptodate(page);
 		succ++;
 	} else {
@@ -160,7 +166,7 @@ nfs_readpage_result(struct rpc_task *task)
 	}
 	kunmap(page);
 	UnlockPage(page);
-	__free_page(page);
+	page_cache_release(page);
 
 	rpc_release_task(task);
 	kfree(req);
@@ -188,15 +194,15 @@ nfs_readpage_async(struct dentry *dentry, struct inode *inode,
 	address = kmap(page);	
 	/* Initialize request */
 	/* N.B. Will the dentry remain valid for life of request? */
-	nfs_readreq_setup(req, NFS_FH(dentry), page->index << PAGE_CACHE_SHIFT,
-				(void *) address, PAGE_SIZE);
+	nfs_readreq_setup(req, NFS_FH(dentry), page_offset(page),
+				(void *) address, PAGE_CACHE_SIZE);
 	req->ra_inode = inode;
 	req->ra_page = page; /* count has been incremented by caller */
 
 	/* Start the async call */
 	dprintk("NFS: executing async READ request.\n");
 
-	msg.rpc_proc = NFSPROC_READ;
+	msg.rpc_proc = (NFS_PROTO(inode)->version == 3) ? NFS3PROC_READ : NFSPROC_READ;
 	msg.rpc_argp = &req->ra_args;
 	msg.rpc_resp = &req->ra_res;
 	msg.rpc_cred = NULL;
@@ -224,7 +230,7 @@ out_free:
  * We read the page synchronously in the following cases:
  *  -	The file is a swap file. Swap-ins are always sync operations,
  *	so there's no need bothering to make async reads 100% fail-safe.
- *  -	The NFS rsize is smaller than PAGE_SIZE. We could kludge our way
+ *  -	The NFS rsize is smaller than PAGE_CACHE_SIZE. We could kludge our way
  *	around this by creating several consecutive read requests, but
  *	that's hardly worth it.
  *  -	The error flag is set for this page. This happens only when a
@@ -239,7 +245,7 @@ nfs_readpage(struct dentry *dentry, struct page *page)
 
 	lock_kernel();
 	dprintk("NFS: nfs_readpage (%p %ld@%lu)\n",
-		page, PAGE_SIZE, page->index);
+		page, PAGE_CACHE_SIZE, page->index);
 	get_page(page);
 
 	/*
@@ -255,7 +261,7 @@ nfs_readpage(struct dentry *dentry, struct page *page)
 
 	error = -1;
 	if (!IS_SWAPFILE(inode) && !PageError(page) &&
-	    NFS_SERVER(inode)->rsize >= PAGE_SIZE)
+	    NFS_SERVER(inode)->rsize >= PAGE_CACHE_SIZE)
 		error = nfs_readpage_async(dentry, inode, page);
 	if (error >= 0)
 		goto out;
@@ -268,7 +274,7 @@ nfs_readpage(struct dentry *dentry, struct page *page)
 out_error:
 	UnlockPage(page);
 out_free:
-	__free_page(page);
+	page_cache_release(page);
 out:
 	unlock_kernel();
 	return error;

@@ -1096,7 +1096,9 @@ static inline void read_maps (void)
 		if (map->vm_file != NULL) {
 			dev = map->vm_file->f_dentry->d_inode->i_dev;
 			ino = map->vm_file->f_dentry->d_inode->i_ino;
-			line = d_path(map->vm_file->f_dentry, buffer, PAGE_SIZE);
+			line = d_path(map->vm_file->f_dentry,
+				      map->vm_file->f_vfsmnt,
+				      buffer, PAGE_SIZE);
 		}
 		printk(MAPS_LINE_FORMAT, map->vm_start, map->vm_end, str, map->vm_pgoff << PAGE_SHIFT,
 			      kdevname(dev), ino);

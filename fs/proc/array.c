@@ -574,7 +574,9 @@ ssize_t proc_pid_read_maps (struct task_struct *task, struct file * file, char *
 		if (map->vm_file != NULL) {
 			dev = map->vm_file->f_dentry->d_inode->i_dev;
 			ino = map->vm_file->f_dentry->d_inode->i_ino;
-			line = d_path(map->vm_file->f_dentry, buffer, PAGE_SIZE);
+			line = d_path(map->vm_file->f_dentry,
+				      map->vm_file->f_vfsmnt,
+				      buffer, PAGE_SIZE);
 			buffer[PAGE_SIZE-1] = '\n';
 			line -= maxlen;
 			if(line < buffer)

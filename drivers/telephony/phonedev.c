@@ -28,6 +28,7 @@
 #include <asm/system.h>
 
 #include <linux/kmod.h>
+#include <linux/sem.h>
 
 
 #define PHONE_NUM_DEVICES	256
@@ -37,6 +38,7 @@
  */
 
 static struct phone_device *phone_device[PHONE_NUM_DEVICES];
+static DECLARE_MUTEX(phone_lock);
 
 /*
  *    Open a phone device.
@@ -45,29 +47,37 @@ static struct phone_device *phone_device[PHONE_NUM_DEVICES];
 static int phone_open(struct inode *inode, struct file *file)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
-	int err;
+	int err = 0;
 	struct phone_device *p;
 
 	if (minor >= PHONE_NUM_DEVICES)
 		return -ENODEV;
 
+	down(&phone_lock);
 	p = phone_device[minor];
 	if (p == NULL) {
 		char modname[32];
 
+		up(&phone_lock);
 		sprintf(modname, "char-major-%d-%d", PHONE_MAJOR, minor);
 		request_module(modname);
+		down(&phone_lock);
 		p = phone_device[minor];
 		if (p == NULL)
-			return -ENODEV;
+		{
+			err=-ENODEV;
+			goto end;
+		}
 	}
 	if (p->open) {
 		err = p->open(p, file);	/* Tell the device it is open */
 		if (err)
-			return err;
+			goto end;
 	}
 	file->f_op = p->f_op;
-	return 0;
+end:
+	up(&phone_lock);
+	return err;
 }
 
 /*
@@ -87,14 +97,18 @@ int phone_register_device(struct phone_device *p, int unit)
 		base = unit;
 		end = unit + 1;  /* enter the loop at least one time */
 	}
+	
+	down(&phone_lock);
 	for (i = base; i < end; i++) {
 		if (phone_device[i] == NULL) {
 			phone_device[i] = p;
 			p->minor = i;
 			MOD_INC_USE_COUNT;
+			up(&phone_lock);
 			return 0;
 		}
 	}
+	up(&phone_lock);
 	return -ENFILE;
 }
 
@@ -104,9 +118,11 @@ int phone_register_device(struct phone_device *p, int unit)
 
 void phone_unregister_device(struct phone_device *pfd)
 {
+	down(&phone_lock);
 	if (phone_device[pfd->minor] != pfd)
 		panic("phone: bad unregister");
 	phone_device[pfd->minor] = NULL;
+	up(&phone_lock);
 	MOD_DEC_USE_COUNT;
 }
 

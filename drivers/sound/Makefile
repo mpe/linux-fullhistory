@@ -138,10 +138,6 @@ MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
 MI_OBJS		:= $(sort $(filter-out $(export-objs), $(int-m)))
 MIX_OBJS	:= $(sort $(filter     $(export-objs), $(int-m)))
 
-ifeq ($(CONFIG_LOWLEVEL_SOUND),y)
-    O_OBJS	+= lowlevel/lowlevel.o
-endif
-
 include $(TOPDIR)/Rules.make
 
 

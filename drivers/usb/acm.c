@@ -52,6 +52,10 @@
 #define DEBUG
 #include <linux/usb.h>
 
+void tty_register_devfs (struct tty_driver *driver, unsigned int flags,
+			unsigned minor);
+void tty_unregister_devfs (struct tty_driver *driver, unsigned minor);
+
 /*
  * CMSPAR, some architectures can't have space and mark parity.
  */
@@ -143,6 +147,7 @@ struct acm {
 };
 
 static struct usb_driver acm_driver;
+static struct tty_driver acm_tty_driver;
 static struct acm *acm_table[ACM_TTY_MINORS] = { NULL, /* .... */ };
 
 #define ACM_READY(acm)	(acm && acm->dev && acm->used)
@@ -318,6 +323,7 @@ static void acm_tty_close(struct tty_struct *tty, struct file *filp)
 		return;
 	}
 
+	tty_unregister_devfs(&acm_tty_driver, acm->minor);
 	acm_table[acm->minor] = NULL;
 	kfree(acm);
 }
@@ -572,6 +578,7 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 		usb_driver_claim_interface(&acm_driver, acm->iface + 0, acm);
 		usb_driver_claim_interface(&acm_driver, acm->iface + 1, acm);
 
+		tty_register_devfs(&acm_tty_driver, 0, minor);
 		return acm_table[minor] = acm;
 	}
 
@@ -599,6 +606,7 @@ static void acm_disconnect(struct usb_device *dev, void *ptr)
 	usb_driver_release_interface(&acm_driver, acm->iface + 1);
 
 	if (!acm->used) {
+		tty_unregister_devfs(&acm_tty_driver, acm->minor);
 		acm_table[acm->minor] = NULL;
 		kfree(acm);
 		return;
@@ -630,14 +638,14 @@ static struct termios *acm_tty_termios_locked[ACM_TTY_MINORS];
 
 static struct tty_driver acm_tty_driver = {
 	magic:			TTY_DRIVER_MAGIC,
-	driver_name:		"usb",
-	name:			"ttyACM",
+	driver_name:		"acm",
+	name:			"usb/acm/%d",
 	major:			ACM_TTY_MAJOR,
 	minor_start:		0,
 	num:			ACM_TTY_MINORS,
 	type:			TTY_DRIVER_TYPE_SERIAL,
 	subtype:		SERIAL_TYPE_NORMAL,
-	flags:			TTY_DRIVER_REAL_RAW,
+	flags:			TTY_DRIVER_REAL_RAW | TTY_DRIVER_NO_DEVFS,
 
 	refcount:		&acm_tty_refcount,
 

@@ -499,6 +499,7 @@ static int js_open(struct inode *inode, struct file *file)
 	if (MAJOR(inode->i_rdev) != JOYSTICK_MAJOR)
 		return -EINVAL;
 
+
 	spin_lock_irqsave(&js_lock, flags);
 
 	while (i > 0 && jd) {
@@ -510,32 +511,32 @@ static int js_open(struct inode *inode, struct file *file)
 
 	if (!jd) return -ENODEV;
 
-	if ((result = jd->open(jd))) return result;
+	if ((result = jd->open(jd)))
+		return result;
+
+	MOD_INC_USE_COUNT;
 
 	if ((new = kmalloc(sizeof(struct js_list), GFP_KERNEL))) {
-
-		MOD_INC_USE_COUNT;
-
-		spin_lock_irqsave(&js_lock, flags);
-
-		curl = jd->list;
-
-		jd->list = new;
-		jd->list->next = curl;
-		jd->list->dev = jd;
-		jd->list->startup = 0;
-		jd->list->tail = GOB(jd->bhead);
-		file->private_data = jd->list;
-
-		spin_unlock_irqrestore(&js_lock, flags);
-
-		if (!js_use_count++) js_do_timer(0);
-
-	} else {
-		result = -ENOMEM;
+		MOD_DEC_USE_COUNT;
+		return -ENOMEM;
 	}
 
-	return result;
+	spin_lock_irqsave(&js_lock, flags);
+
+	curl = jd->list;
+
+	jd->list = new;
+	jd->list->next = curl;
+	jd->list->dev = jd;
+	jd->list->startup = 0;
+	jd->list->tail = GOB(jd->bhead);
+	file->private_data = jd->list;
+
+	spin_unlock_irqrestore(&js_lock, flags);
+
+	if (!js_use_count++) js_do_timer(0);
+
+	return 0;
 }
 
 /*
@@ -573,9 +574,10 @@ static int js_release(struct inode *inode, struct file *file)
 	kfree(file->private_data);
 
 	if (!--js_use_count) del_timer(&js_timer);
-	MOD_DEC_USE_COUNT;
 
 	jd->close(jd);
+
+	MOD_DEC_USE_COUNT;
 
 	return 0;
 }
@@ -584,50 +586,6 @@ static int js_release(struct inode *inode, struct file *file)
  * js_dump_mem() dumps all data structures in memory.
  * It's used for debugging only.
  */
-
-#if 0
-static void js_dump_mem(void)
-{
-
-	struct js_port *curp = js_port;
-	struct js_dev *curd = js_dev;
-	int i;
-
-	printk(",--- Dumping Devices:\n");
-	printk("| js_dev = %x\n", (int) js_dev);
-
-	while (curd) {
-		printk("|  %s-device %x, next %x axes %d, buttons %d, port %x - %#x\n",
-			curd->next ? "|":"`",
-			(int) curd, (int) curd->next, curd->num_axes, curd->num_buttons, (int) curd->port, curd->port->io);
-		curd = curd->next;
-	}
-
-	printk(">--- Dumping ports:\n");
-	printk("| js_port = %x\n", (int) js_port);
-
-	while (curp) {
-		printk("|  %s-port %x, next %x, io %#x, devices %d\n",
-			curp->next ? "|":"`",
-			(int) curp, (int) curp->next, curp->io, curp->ndevs);
-		for (i = 0; i < curp->ndevs; i++) {
-			curd = curp->devs[i];
-			if (curd)
-			printk("|  %s %s-device %x, next %x axes %d, buttons %d, port %x\n",
-				curp->next ? "|":" ", (i < curp->ndevs-1) ? "|":"`",
-				(int) curd, (int) curd->next, curd->num_axes, curd->num_buttons, (int) curd->port);
-			else
-			printk("|  %s %s-device %x, not there\n",
-				curp->next ? "|":" ", (i < curp->ndevs-1) ? "|":"`", (int) curd);
-
-		}
-		curp = curp->next;
-	}
-
-	printk("`--- Done\n");
-}
-#endif
-
 
 struct js_port *js_register_port(struct js_port *port,
 				void *info, int devs, int infos, js_read_func read)

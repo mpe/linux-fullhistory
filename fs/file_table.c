@@ -122,13 +122,17 @@ int init_private_file(struct file *filp, struct dentry *dentry, int mode)
 static void __fput(struct file *filp)
 {
 	struct dentry * dentry = filp->f_dentry;
+	struct vfsmount * mnt = filp->f_vfsmnt;
 	struct inode * inode = dentry->d_inode;
 
 	if (filp->f_op && filp->f_op->release)
 		filp->f_op->release(inode, filp);
 	filp->f_dentry = NULL;
+	filp->f_vfsmnt = NULL;
 	if (filp->f_mode & FMODE_WRITE)
 		put_write_access(inode);
+	if (mnt)
+		mntput(mnt);
 	dput(dentry);
 }
 

@@ -58,6 +58,8 @@ typedef enum {
 #define FLAGS_DISPLAY_HINTS		(1 << 2)
 #define FLAGS_OVERLAY_STATS		(1 << 3)
 #define FLAGS_FORCE_TESTPATTERN		(1 << 4)
+#define FLAGS_SEPARATE_FRAMES		(1 << 5)
+#define FLAGS_CLEAN_FRAMES		(1 << 6)
 
 static int flags = 0; /* FLAGS_DISPLAY_HINTS | FLAGS_OVERLAY_STATS; */
 
@@ -2238,6 +2240,12 @@ static void ibmcam_stop_isoc(struct usb_ibmcam *ibmcam)
 	}
 }
 
+/*
+ * ibmcam_new_frame()
+ *
+ * History:
+ * 29-Mar-00 Added copying of previous frame into the current one.
+ */
 static int ibmcam_new_frame(struct usb_ibmcam *ibmcam, int framenum)
 {
 	struct ibmcam_frame *frame;
@@ -2258,10 +2266,33 @@ static int ibmcam_new_frame(struct usb_ibmcam *ibmcam, int framenum)
 	frame->scanstate = STATE_SCANNING;
 	frame->scanlength = 0;		/* Accumulated in ibmcam_parse_data() */
 	ibmcam->curframe = framenum;
-#if 0
-	/* This provides a "clean" frame but slows things down */
-	memset(frame->data, 0, MAX_FRAME_SIZE);
-#endif
+
+	/*
+	 * Normally we would want to copy previous frame into the current one
+	 * before we even start filling it with data; this allows us to stop
+	 * filling at any moment; top portion of the frame will be new and
+	 * bottom portion will stay as it was in previous frame. If we don't
+	 * do that then missing chunks of video stream will result in flickering
+	 * portions of old data whatever it was before.
+	 *
+	 * If we choose not to copy previous frame (to, for example, save few
+	 * bus cycles - the frame can be pretty large!) then we have an option
+	 * to clear the frame before using. If we experience losses in this
+	 * mode then missing picture will be black (no flickering).
+	 *
+	 * Finally, if user chooses not to clean the current frame before
+	 * filling it with data then the old data will be visible if we fail
+	 * to refill entire frame with new data.
+	 */
+	if (!(flags & FLAGS_SEPARATE_FRAMES)) {
+		/* This copies previous frame into this one to mask losses */
+		memmove(frame->data, ibmcam->frame[1-framenum].data,  MAX_FRAME_SIZE);
+	} else {
+		if (flags & FLAGS_CLEAN_FRAMES) {
+			/* This provides a "clean" frame but slows things down */
+			memset(frame->data, 0, MAX_FRAME_SIZE);
+		}
+	}
 	switch (videosize) {
 	case VIDEOSIZE_128x96:
 		frame->frmwidth = 128;

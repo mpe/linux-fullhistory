@@ -207,6 +207,8 @@ static int js_sball_ldisc_open(struct tty_struct *tty)
 	struct js_sball_info iniinfo;
 	struct js_sball_info *info = &iniinfo;
 
+	MOD_INC_USE_COUNT;
+
 	info->tty = tty;
 	info->idx = 0;
 	info->used = 1;
@@ -220,8 +222,6 @@ static int js_sball_ldisc_open(struct tty_struct *tty)
 	info->js = js_register_device(js_sball_port, 0, 6, 12, "SpaceBall 4000 FLX", js_sball_open, js_sball_close);
 
 	js_sball_init_corr(js_sball_port->corr);
-
-	MOD_INC_USE_COUNT;
 
 	return 0;
 }
@@ -312,9 +312,7 @@ static int js_sball_ldisc_room(struct tty_struct *tty)
 
 static struct tty_ldisc js_sball_ldisc = {
 	magic:		TTY_LDISC_MAGIC,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 	name:		"spaceball",
-#endif
 	open:		js_sball_ldisc_open,
 	close:		js_sball_ldisc_close,
 	receive_buf:	js_sball_ldisc_receive,

@@ -99,9 +99,6 @@
 #ifdef CONFIG_VT
 extern void con_init_devfs (void);
 #endif
-void tty_register_devfs  (struct tty_driver *driver, unsigned int flags,
-			  unsigned minor);
-void tty_unregister_devfs (struct tty_driver *driver, unsigned minor);
 
 #define CONSOLE_DEV MKDEV(TTY_MAJOR,0)
 #define TTY_DEV MKDEV(TTYAUX_MAJOR,0)

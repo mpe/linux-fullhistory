@@ -239,7 +239,6 @@ static int DecodeHeader(const int CPUNR, struct http_request *Request)
 		return 0;
 	}
 	else
-	if ((Request->filp->f_dentry!=NULL)&&(Request->filp->f_dentry->d_inode!=NULL))
 	{
 		Request->FileLength = (int)Request->filp->f_dentry->d_inode->i_size;
 		Request->Time       = Request->filp->f_dentry->d_inode->i_mtime;
@@ -262,12 +261,6 @@ static int DecodeHeader(const int CPUNR, struct http_request *Request)
 		}
 		
 	
-	} else 
-	{
-		/* Ehhh... */
-		
-		printk(KERN_CRIT "kHTTPd: Unexpected filesystem response\n");
-		return -1;	
 	}
 	
 	LeaveFunction("DecodeHeader");

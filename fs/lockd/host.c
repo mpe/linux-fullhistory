@@ -15,6 +15,7 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/svc.h>
 #include <linux/lockd/lockd.h>
+#include <linux/lockd/sm_inter.h>
 
 
 #define NLMDBG_FACILITY		NLMDBG_HOSTCACHE
@@ -105,8 +106,7 @@ nlm_lookup_host(struct svc_client *clnt, struct sockaddr_in *sin,
 				host->h_next = nlm_hosts[hash];
 				nlm_hosts[hash] = host;
 			}
-			host->h_expires = jiffies + NLM_HOST_EXPIRE;
-			host->h_count++;
+			nlm_get_host(host);
 			up(&nlm_host_sema);
 			return host;
 		}
@@ -172,9 +172,12 @@ nlm_bind_host(struct nlm_host *host)
 	down(&host->h_sema);
 
 	/* If we've already created an RPC client, check whether
-	 * RPC rebind is required */
+	 * RPC rebind is required
+	 * Note: why keep rebinding if we're on a tcp connection?
+	 */
 	if ((clnt = host->h_rpcclnt) != NULL) {
-		if (time_after_eq(jiffies, host->h_nextrebind)) {
+		xprt = clnt->cl_xprt;
+		if (!xprt->stream && time_after_eq(jiffies, host->h_nextrebind)) {
 			clnt->cl_port = 0;
 			host->h_nextrebind = jiffies + NLM_HOST_REBIND;
 			dprintk("lockd: next rebind in %ld jiffies\n",
@@ -230,13 +233,27 @@ nlm_rebind_host(struct nlm_host *host)
 }
 
 /*
+ * Increment NLM host count
+ */
+struct nlm_host * nlm_get_host(struct nlm_host *host)
+{
+	if (host) {
+		dprintk("lockd: get host %s\n", host->h_name);
+		host->h_count ++;
+		host->h_expires = jiffies + NLM_HOST_EXPIRE;
+	}
+	return host;
+}
+
+/*
  * Release NLM host after use
  */
-void
-nlm_release_host(struct nlm_host *host)
+void nlm_release_host(struct nlm_host *host)
 {
-	dprintk("lockd: release host %s\n", host->h_name);
-	host->h_count -= 1;
+	if (host && host->h_count) {
+		dprintk("lockd: release host %s\n", host->h_name);
+		host->h_count --;
+	}
 }
 
 /*
@@ -308,6 +325,8 @@ nlm_gc_hosts(void)
 			}
 			dprintk("lockd: delete host %s\n", host->h_name);
 			*q = host->h_next;
+			if (host->h_monitored)
+				nsm_unmonitor(host);
 			if ((clnt = host->h_rpcclnt) != NULL) {
 				if (clnt->cl_users) {
 					printk(KERN_WARNING

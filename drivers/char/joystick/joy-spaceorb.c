@@ -199,6 +199,8 @@ static int js_orb_ldisc_open(struct tty_struct *tty)
 	struct js_orb_info iniinfo;
 	struct js_orb_info *info = &iniinfo;
 
+	MOD_INC_USE_COUNT;
+
 	info->tty = tty;
 	info->idx = 0;
 	info->used = 1;
@@ -212,8 +214,6 @@ static int js_orb_ldisc_open(struct tty_struct *tty)
 	info->js = js_register_device(js_orb_port, 0, 6, 7, "SpaceOrb 360", js_orb_open, js_orb_close);
 
 	js_orb_init_corr(js_orb_port->corr);
-
-	MOD_INC_USE_COUNT;
 
 	return 0;
 }
@@ -270,9 +270,7 @@ static int js_orb_ldisc_room(struct tty_struct *tty)
 
 static struct tty_ldisc js_orb_ldisc = {
 	magic:		TTY_LDISC_MAGIC,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 	name:		"spaceorb",
-#endif
 	open:		js_orb_ldisc_open,
 	close:		js_orb_ldisc_close,
 	receive_buf:	js_orb_ldisc_receive,

@@ -29,10 +29,6 @@
 #define BUILDING_PTY_C 1
 #include <linux/devpts_fs.h>
 
-extern void tty_register_devfs (struct tty_driver *driver, unsigned int flags,
-				unsigned int minor);
-extern void tty_unregister_devfs (struct tty_driver *driver, unsigned minor);
-
 struct pty_struct {
 	int	magic;
 	wait_queue_head_t open_wait;

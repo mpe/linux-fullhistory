@@ -141,11 +141,8 @@ static inline long do_sys_ftruncate(unsigned int fd, loff_t length)
 	file = fget(fd);
 	if (!file)
 		goto out;
-	error = -ENOENT;
-	if (!(dentry = file->f_dentry))
-		goto out_putf;
-	if (!(inode = dentry->d_inode))
-		goto out_putf;
+	dentry = file->f_dentry;
+	inode = dentry->d_inode;
 	error = -EACCES;
 	if (S_ISDIR(inode->i_mode) || !(file->f_mode & FMODE_WRITE))
 		goto out_putf;
@@ -330,20 +327,32 @@ asmlinkage long sys_access(const char * filename, int mode)
 	return res;
 }
 
+/* MOUNT_REWRITE: pass &mnt to lookup_dentry */
 asmlinkage long sys_chdir(const char * filename)
 {
 	int error;
 	struct inode *inode;
 	struct dentry *dentry, *tmp;
+	struct vfsmount *mnt = NULL, *tmp_mnt;
+	char *name;
 
 	lock_kernel();
 	
-	dentry = namei(filename);
+	name = getname(filename);
+	error = PTR_ERR(name);
+	if (IS_ERR(name))
+		goto out;
+
+	dentry = lookup_dentry(name, NULL, 0);
+	putname(name);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto out;
 
+	error = -ENOENT;
 	inode = dentry->d_inode;
+	if (!inode)
+		goto dput_and_out;
 
 	error = -ENOTDIR;
 	if (!S_ISDIR(inode->i_mode))
@@ -355,10 +364,14 @@ asmlinkage long sys_chdir(const char * filename)
 
 	/* exchange dentries */
 	tmp = current->fs->pwd;
+	tmp_mnt = current->fs->pwdmnt;
 	current->fs->pwd = dentry;
+	current->fs->pwdmnt = mnt;
 	dentry = tmp;
+	mnt = tmp_mnt;
 
 dput_and_out:
+	mntput(mnt);
 	dput(dentry);
 out:
 	unlock_kernel();
@@ -370,6 +383,7 @@ asmlinkage long sys_fchdir(unsigned int fd)
 	struct file *file;
 	struct dentry *dentry;
 	struct inode *inode;
+	struct vfsmount *mnt;
 	int error;
 
 	error = -EBADF;
@@ -377,11 +391,9 @@ asmlinkage long sys_fchdir(unsigned int fd)
 	if (!file)
 		goto out;
 
-	error = -ENOENT;
-	if (!(dentry = file->f_dentry))
-		goto out_putf;
-	if (!(inode = dentry->d_inode))
-		goto out_putf;
+	dentry = file->f_dentry;
+	mnt = file->f_vfsmnt;
+	inode = dentry->d_inode;
 
 	error = -ENOTDIR;
 	if (!S_ISDIR(inode->i_mode))
@@ -391,7 +403,10 @@ asmlinkage long sys_fchdir(unsigned int fd)
 	error = permission(inode, MAY_EXEC);
 	if (!error) {
 		struct dentry *tmp = current->fs->pwd;
+		struct vfsmount *tmp_mnt = current->fs->pwdmnt;
 		current->fs->pwd = dget(dentry);
+		current->fs->pwdmnt = mntget(mnt);
+		mntput(tmp_mnt);
 		dput(tmp);
 	}
 	unlock_kernel();
@@ -401,20 +416,32 @@ out:
 	return error;
 }
 
+/* MOUNT_REWRITE: pass &mnt to lookup_dentry */
 asmlinkage long sys_chroot(const char * filename)
 {
 	int error;
 	struct inode *inode;
 	struct dentry *dentry, *tmp;
+	struct vfsmount *mnt = NULL, *tmp_mnt;
+	char *name;
 
 	lock_kernel();
 	
-	dentry = namei(filename);
+	name = getname(filename);
+	error = PTR_ERR(name);
+	if (IS_ERR(name))
+		goto out;
+
+	dentry = lookup_dentry(name, NULL, 0);
+	putname(name);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto out;
 
+	error = -ENOENT;
 	inode = dentry->d_inode;
+	if (!inode)
+		goto dput_and_out;
 
 	error = -ENOTDIR;
 	if (!S_ISDIR(inode->i_mode))
@@ -430,11 +457,15 @@ asmlinkage long sys_chroot(const char * filename)
 
 	/* exchange dentries */
 	tmp = current->fs->root;
+	tmp_mnt = current->fs->rootmnt;
 	current->fs->root = dentry;
+	current->fs->rootmnt = mnt;
 	dentry = tmp;
+	mnt = tmp_mnt;
 	error = 0;
 
 dput_and_out:
+	mntput(mnt);
 	dput(dentry);
 out:
 	unlock_kernel();
@@ -453,11 +484,8 @@ asmlinkage long sys_fchmod(unsigned int fd, mode_t mode)
 	if (!file)
 		goto out;
 
-	err = -ENOENT;
-	if (!(dentry = file->f_dentry))
-		goto out_putf;
-	if (!(inode = dentry->d_inode))
-		goto out_putf;
+	dentry = file->f_dentry;
+	inode = dentry->d_inode;
 
 	err = -EROFS;
 	if (IS_RDONLY(inode))
@@ -612,20 +640,16 @@ asmlinkage long sys_lchown(const char * filename, uid_t user, gid_t group)
 
 asmlinkage long sys_fchown(unsigned int fd, uid_t user, gid_t group)
 {
-	struct dentry * dentry;
 	struct file * file;
 	int error = -EBADF;
 
 	file = fget(fd);
 	if (!file)
 		goto out;
-	error = -ENOENT;
 	lock_kernel();
-	if ((dentry = file->f_dentry) != NULL)
-		error = chown_common(dentry, user, group);
+	error = chown_common(file->f_dentry, user, group);
 	unlock_kernel();
 	fput(file);
-
 out:
 	return error;
 }
@@ -644,7 +668,7 @@ out:
  * for the internal routines (ie open_namei()/follow_link() etc). 00 is
  * used by symlinks.
  */
-struct file *filp_open(const char * filename, int flags, int mode, struct dentry * base)
+struct file *__filp_open(const char * filename, int flags, int mode, struct dentry * base, struct vfsmount *mnt)
 {
 	struct dentry * dentry;
 	int flag,error;
@@ -655,15 +679,15 @@ struct file *filp_open(const char * filename, int flags, int mode, struct dentry
 	if (flag & O_TRUNC)
 		flag |= 2;
 
-	dentry = __open_namei(filename, flag, mode, base);
+	dentry = open_namei(filename, flag, mode, base, &mnt);
 	error = PTR_ERR(dentry);
 	if (!IS_ERR(dentry))
-		return dentry_open(dentry, flags);
+		return dentry_open(dentry, mnt, flags);
 
 	return ERR_PTR(error);
 }
 
-struct file *dentry_open(struct dentry *dentry, int flags)
+struct file *dentry_open(struct dentry *dentry, struct vfsmount *mnt, int flags)
 {
 	struct file * f;
 	struct inode *inode;
@@ -683,6 +707,7 @@ struct file *dentry_open(struct dentry *dentry, int flags)
 	}
 
 	f->f_dentry = dentry;
+	f->f_vfsmnt = mnt;
 	f->f_pos = 0;
 	f->f_reada = 0;
 	f->f_op = inode->i_fop;
@@ -701,8 +726,10 @@ cleanup_all:
 	if (f->f_mode & FMODE_WRITE)
 		put_write_access(inode);
 	f->f_dentry = NULL;
+	f->f_vfsmnt = NULL;
 cleanup_dentry:
 	dput(dentry);
+	mntput(mnt);
 	put_filp(f);
 	return ERR_PTR(error);
 }
@@ -793,7 +820,7 @@ asmlinkage long sys_open(const char * filename, int flags, int mode)
 		if (fd >= 0) {
 			struct file * f;
 			lock_kernel();
-			f = filp_open(tmp, flags, mode, NULL);
+			f = filp_open(tmp, flags, mode);
 			unlock_kernel();
 			error = PTR_ERR(f);
 			if (IS_ERR(f))
@@ -831,7 +858,6 @@ asmlinkage long sys_creat(const char * pathname, int mode)
 int filp_close(struct file *filp, fl_owner_t id)
 {
 	int retval;
-	struct dentry *dentry = filp->f_dentry;
 
 	if (!file_count(filp)) {
 		printk("VFS: Close: file count is 0\n");
@@ -840,8 +866,7 @@ int filp_close(struct file *filp, fl_owner_t id)
 	retval = 0;
 	if (filp->f_op && filp->f_op->flush)
 		retval = filp->f_op->flush(filp);
-	if (dentry->d_inode)
-		locks_remove_posix(filp, id);
+	locks_remove_posix(filp, id);
 	fput(filp);
 	return retval;
 }

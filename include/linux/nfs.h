@@ -9,6 +9,7 @@
 
 #include <linux/sunrpc/msg_prot.h>
 
+#define NFS_PROGRAM	100003
 #define NFS_PORT	2049
 #define NFS_MAXDATA	8192
 #define NFS_MAXPATHLEN	1024
@@ -26,7 +27,9 @@
 #define NFSMODE_SOCK	0140000
 #define NFSMODE_FIFO	0010000
 
-	
+#define NFS_MNT_PROGRAM	100005
+#define NFS_MNT_PORT	627
+
 /*
  * NFS stats. The good thing with these values is that NFSv3 errors are
  * a superset of NFSv2 errors (with the exception of NFSERR_WFLUSH which
@@ -84,38 +87,15 @@ enum nfs_ftype {
 	NFFIFO = 8
 };
 
+#if defined(__KERNEL__)
+/*
+ * This is the kernel NFS client file handle representation
+ */
+#define NFS_MAXFHSIZE		64
 struct nfs_fh {
-	char			data[NFS_FHSIZE];
+	unsigned short		size;
+	unsigned char		data[NFS_MAXFHSIZE];
 };
-
-#define NFS_PROGRAM		100003
-#define NFS_VERSION		2
-#define NFSPROC_NULL		0
-#define NFSPROC_GETATTR		1
-#define NFSPROC_SETATTR		2
-#define NFSPROC_ROOT		3
-#define NFSPROC_LOOKUP		4
-#define NFSPROC_READLINK	5
-#define NFSPROC_READ		6
-#define NFSPROC_WRITECACHE	7
-#define NFSPROC_WRITE		8
-#define NFSPROC_CREATE		9
-#define NFSPROC_REMOVE		10
-#define NFSPROC_RENAME		11
-#define NFSPROC_LINK		12
-#define NFSPROC_SYMLINK		13
-#define NFSPROC_MKDIR		14
-#define NFSPROC_RMDIR		15
-#define NFSPROC_READDIR		16
-#define NFSPROC_STATFS		17
-
-/* Mount support for NFSroot */
-#ifdef __KERNEL__
-#define NFS_MNT_PROGRAM		100005
-#define NFS_MNT_VERSION		1
-#define NFS_MNT_PORT		627
-#define NFS_MNTPROC_MNT		1
-#define NFS_MNTPROC_UMNT	3
 
 /*
  * This is really a general kernel constant, but since nothing like
@@ -123,12 +103,6 @@ struct nfs_fh {
  */
 #define NFS_OFFSET_MAX		((__s64)((~(__u64)0) >> 1))
 
-#endif /* __KERNEL__ */
-
-#if defined(__KERNEL__)
-
-extern struct rpc_program	nfs_program;
-extern struct rpc_stat		nfs_rpcstat;
 
 enum nfs3_stable_how {
 	NFS_UNSTABLE = 0,
@@ -136,6 +110,4 @@ enum nfs3_stable_how {
 	NFS_FILE_SYNC = 2
 };
 #endif /* __KERNEL__ */
-
-
-#endif
+#endif /* _LINUX_NFS_H */

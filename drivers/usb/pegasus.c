@@ -387,7 +387,7 @@ static void pegasus_set_rx_mode(struct net_device *net)
 			(net->flags & IFF_ALLMULTI)) {
 		pegasus_set_register(pegasus->usb, 0, 0xfa);
 		pegasus_set_register(pegasus->usb, 2, 0);
-		info("%s set allmulti");
+		info("%s: set allmulti", net->name);
 	} else {
 		info("%s: set Rx mode", net->name);
 	}

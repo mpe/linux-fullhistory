@@ -39,14 +39,6 @@
 #include "usb-storage.h"
 #include "usb-storage-debug.h"
 
-/*
- * This is the size of the structure Scsi_Host_Template.  We create
- * an instance of this structure in this file and this is a check
- * to see if this structure may have changed within the SCSI module.
- * This is by no means foolproof, but it does help us some.
- */
-#define SCSI_HOST_TEMPLATE_SIZE			(104)
-
 /* direction table -- this indicates the direction of the data
  * transfer for each command code -- a 1 indicates input
  */
@@ -76,7 +68,11 @@ typedef void (*proto_cmnd)(Scsi_Cmnd*, struct us_data*);
 /* we allocate one of these for every device that we remember */
 struct us_data {
 	struct us_data	        *next;	         /* next device */
+
+	/* the device we're working with */
+	spinlock_t              dev_spinlock;    /* to protect the dev ptr */
 	struct usb_device	*pusb_dev;       /* this usb_device */
+
 	unsigned int		flags;		 /* from filter initially */
 
 	/* information about the device -- only good if device is attached */
@@ -351,6 +347,7 @@ static void ATAPI_command(Scsi_Cmnd *srb, struct us_data *us)
   
 	/* send the command to the transport layer */
 	result = us->transport(srb, us);
+	US_DEBUGP("return code from transport is 0x%x\n", result);
 
 	/* If we got a short transfer, but it was for a command that
 	 * can have short transfers, we're actually okay
@@ -512,6 +509,7 @@ static void ufi_command(Scsi_Cmnd *srb, struct us_data *us)
   
 	/* send the command to the transport layer */
 	result = us->transport(srb, us);
+	US_DEBUGP("return code from transport is 0x%x\n", result);
 
 	/* If we got a short transfer, but it was for a command that
 	 * can have short transfers, we're actually okay
@@ -821,7 +819,7 @@ static int CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 	/* transfer the data payload for this command, if one exists*/
 	if (us_transfer_length(srb)) {
 		us_transfer(srb, US_DIRECTION(srb->cmnd[0]));
-		US_DEBUGP("CBI data stage result is 0x%x\n", result);
+		US_DEBUGP("CBI data stage result is 0x%x\n", srb->result);
 	}
 
 	/* STATUS STAGE */
@@ -840,8 +838,10 @@ static int CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 	
 	/* UFI gives us ASC and ASCQ, like a request sense
 	 *
-	 * REQUEST_SENSE and INQUIRY don't affect the sense data, so we
-	 * ignore the information for those commands
+	 * REQUEST_SENSE and INQUIRY don't affect the sense data on UFI
+	 * devices, so we ignore the information for those commands.  Note
+	 * that this means we could be ignoring a real error on these
+	 * commands, but that can't be helped.
 	 */
 	if (us->subclass == US_SC_UFI) {
 		if (srb->cmnd[0] == REQUEST_SENSE ||
@@ -854,11 +854,14 @@ static int CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 				return USB_STOR_TRANSPORT_GOOD;
 	}
 	
-	/* otherwise, we interpret the data normally */
-	switch (us->ip_data) {
-	case 0x0001: 
+	/* If not UFI, we interpret the data as a result code 
+	 * The first byte should always be a 0x0
+	 * The second byte & 0x0F should be 0x0 for good, otherwise error 
+	 */
+	switch ((us->ip_data & 0xFF0F)) {
+	case 0x0000: 
 		return USB_STOR_TRANSPORT_GOOD;
-	case 0x0002: 
+	case 0x0001: 
 		return USB_STOR_TRANSPORT_FAILED;
 	default: 
 		return USB_STOR_TRANSPORT_ERROR;
@@ -876,7 +879,7 @@ static int CB_transport(Scsi_Cmnd *srb, struct us_data *us)
 	int result;
 	__u8 status[2];
 
-	US_DEBUGP("CBC gets a command:\n");
+	US_DEBUGP("CB gets a command:\n");
 	US_DEBUG(us_show_command(srb));
 
 	/* COMMAND STAGE */
@@ -908,7 +911,7 @@ static int CB_transport(Scsi_Cmnd *srb, struct us_data *us)
 	/* transfer the data payload for this command, if one exists*/
 	if (us_transfer_length(srb)) {
 		us_transfer(srb, US_DIRECTION(srb->cmnd[0]));
-		US_DEBUGP("CBC data stage result is 0x%x\n", result);
+		US_DEBUGP("CB data stage result is 0x%x\n", srb->result);
 	}
 	
 	
@@ -1077,19 +1080,24 @@ static int Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
  * Host functions 
  ***********************************************************************/
 
+static const char* us_info(struct Scsi_Host *host)
+{
+	return "SCSI emulation for USB Mass Storage devices\n";
+}
+
 /* detect adapter (always true ) */
 static int us_detect(struct SHT *sht)
 {
 	/* FIXME - not nice at all, but how else ? */
 	struct us_data *us = (struct us_data *)sht->proc_dir;
-	char name[32];
+	char local_name[32];
 
-	/* set up our name */
-	sprintf(name, "usbscsi%d", us->host_number);
-	sht->name = sht->proc_name = kmalloc(strlen(name)+1, GFP_KERNEL);
+	/* set up the name of our subdirectory under /proc/scsi/ */
+	sprintf(local_name, "usb-storage-%d", us->host_number);
+	sht->proc_name = kmalloc (strlen(local_name) + 1, GFP_KERNEL);
 	if (!sht->proc_name)
 		return 0;
-	strcpy(sht->proc_name, name);
+	strcpy(sht->proc_name, local_name);
 
 	/* we start with no /proc directory entry */
 	sht->proc_dir = NULL;
@@ -1105,25 +1113,23 @@ static int us_detect(struct SHT *sht)
 	/* odd... didn't register properly.  Abort and free pointers */
 	kfree(sht->proc_name);
 	sht->proc_name = NULL;
-	sht->name = NULL;
 	return 0;
 }
 
-/* release - must be here to stop scsi
- *	from trying to release IRQ etc.
- *	Kill off our data
+/* Release all resources used by the virtual host
+ *
+ * NOTE: There is no contention here, because we're allready deregistered
+ * the driver and we're doing each virtual host in turn, not in parallel
  */
 static int us_release(struct Scsi_Host *psh)
 {
 	struct us_data *us = (struct us_data *)psh->hostdata[0];
-	unsigned long flags;
 	int result;
-
-	/* lock the data structures */
-	spin_lock_irqsave(&us_list_spinlock, flags);
 
 	US_DEBUGP("us_release() called for host %s\n", us->htmplt.name);
 
+	/* FIXME: I don't think this is necessary, becuase we've allready
+	 * deregistered, which causes us to disconnect() */
 	/* release the interrupt handler, if necessary */
 	if (us->irq_handle) {
 		US_DEBUGP("-- releasing irq\n");
@@ -1132,9 +1138,6 @@ static int us_release(struct Scsi_Host *psh)
 		US_DEBUGP("-- usb_release_irq() returned %d\n", result);
 		us->irq_handle = NULL;
 	}
-
-	/* lock the data structures */
-	spin_unlock_irqrestore(&us_list_spinlock, flags);
 
 	/* we always have a successful release */
 	return 0;
@@ -1171,22 +1174,36 @@ static int us_queuecommand( Scsi_Cmnd *srb , void (*done)(Scsi_Cmnd *))
 	return 0;
 }
 
-/* FIXME: This doesn't actually abort anything */
+/***********************************************************************
+ * Error handling functions
+ ***********************************************************************/
+
+/* Command abort
+ * Note that this is really only meaningful right now for CBI transport
+ * devices which have failed to give us the command completion interrupt
+ */
 static int us_abort( Scsi_Cmnd *srb )
 {
-	printk(KERN_CRIT "usb-storage: abort() requested but not implemented\n" );
+	struct us_data *us = (struct us_data *)srb->host->hostdata[0];
+
+	US_DEBUGP("us_abort() called\n");
+
+	/* if we're stuck waiting for an IRQ, simulate it */
+	if (us->ip_wanted) {
+		US_DEBUGP("-- simulating missing IRQ\n");
+		up(&(us->ip_waitq));
+		return SUCCESS;
+	}
 	return 0;
 }
 
 /* FIXME: this doesn't do anything right now */
 static int us_bus_reset( Scsi_Cmnd *srb )
 {
-	struct us_data *us = (struct us_data *)srb->host->hostdata[0];
+	// struct us_data *us = (struct us_data *)srb->host->hostdata[0];
 
 	printk(KERN_CRIT "usb-storage: bus_reset() requested but not implemented\n" );
 	US_DEBUGP("Bus reset requested\n");
-	if (us->ip_wanted)
-		up(&(us->ip_waitq));
 	//  us->transport_reset(us);
 	return SUCCESS;
 }
@@ -1301,7 +1318,10 @@ int usb_stor_proc_info (char *buffer, char **start, off_t offset,
  */
 
 static Scsi_Host_Template my_host_template = {
+	name:           "usb-storage",
 	proc_info:	usb_stor_proc_info,
+	info:           us_info,
+
 	detect:		us_detect,
 	release:	us_release,
 	command:	us_command,
@@ -1347,6 +1367,7 @@ static int usb_stor_control_thread(void * __us)
 {
 	struct us_data *us = (struct us_data *)__us;
 	int action;
+	unsigned long flags;
 
 	lock_kernel();
 
@@ -1356,10 +1377,11 @@ static int usb_stor_control_thread(void * __us)
 	 */
 	daemonize();
 
-	sprintf(current->comm, "usbscsi%d", us->host_number);
+	sprintf(current->comm, "usb-storage-%d", us->host_number);
 
 	unlock_kernel();
 
+	/* signal that we've started the thread */
 	up(&(us->notify));
 
 	for(;;) {
@@ -1393,6 +1415,9 @@ static int usb_stor_control_thread(void * __us)
 				break;
 			}
 
+			/* lock the device pointers */
+			spin_lock_irqsave(&(us->dev_spinlock), flags);
+
 			/* our device has gone - pretend not ready */
 			/* FIXME: we also need to handle INQUIRY here, 
 			 * probably */
@@ -1408,6 +1433,11 @@ static int usb_stor_control_thread(void * __us)
 					us->srb->result = (DID_OK << 16) | 2;
 				}
 
+				/* unlock the device pointers */
+				spin_unlock_irqrestore(&(us->dev_spinlock), 
+						       flags);
+
+				/* indicate that the command is done */
 				us->srb->scsi_done(us->srb);
 				us->srb = NULL;
 				break;
@@ -1428,6 +1458,11 @@ static int usb_stor_control_thread(void * __us)
       
 			US_DEBUGP("scsi cmd done, result=0x%x\n", 
 				  us->srb->result);
+
+			/* unlock the device pointers */
+			spin_unlock_irqrestore(&(us->dev_spinlock), flags);
+
+			/* indicate that the command is done */
 			us->srb->scsi_done(us->srb);
 			us->srb = NULL;
 			break;
@@ -1447,11 +1482,15 @@ static int usb_stor_control_thread(void * __us)
 		} /* end switch on action */
 
 		/* exit if we get a signal to exit */
-		if (action == US_ACT_EXIT)
+		if (action == US_ACT_EXIT) {
+			US_DEBUGP("-- US_ACT_EXIT command recieved\n");
 			break;
+		}
 	} /* for (;;) */
   
-	printk("usb_stor_control_thread exiting\n");
+	/* notify the exit routine that we're actually exiting now */
+	up(&(us->notify));
+
 	return 0;
 }	
 
@@ -1658,6 +1697,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		init_MUTEX_LOCKED(&(ss->sleeper));
 		init_MUTEX_LOCKED(&(ss->notify));
 		init_MUTEX(&(ss->queue_exclusion));
+		ss->dev_spinlock = SPIN_LOCK_UNLOCKED;
 
 		/* copy over the subclass and protocol data */
 		ss->subclass = subclass;
@@ -1814,6 +1854,7 @@ static void storage_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct us_data *ss = ptr;
 	int result;
+	unsigned long flags;
 
 	US_DEBUGP("storage_disconnect() called\n");
  
@@ -1822,6 +1863,9 @@ static void storage_disconnect(struct usb_device *dev, void *ptr)
 		US_DEBUGP("-- device was not in use\n");
 		return;
 	}
+
+	/* lock access to the device data structure */
+	spin_lock_irqsave(&(ss->dev_spinlock), flags);
 
 	/* release the IRQ, if we have one */
 	if (ss->irq_handle) {
@@ -1834,6 +1878,9 @@ static void storage_disconnect(struct usb_device *dev, void *ptr)
 
 	/* mark the device as gone */
 	ss->pusb_dev = NULL;
+
+	/* lock access to the device data structure */
+	spin_unlock_irqrestore(&(ss->dev_spinlock), flags);
 }
 
 
@@ -1858,10 +1905,13 @@ void __exit usb_stor_exit(void)
 	static struct us_data *next;
 	unsigned long flags;
 	
+	US_DEBUGP("usb_stor_exit() called\n");
+
 	/*
 	 * deregister the driver -- this eliminates races with probes and
 	 * disconnects 
 	 */
+	US_DEBUGP("-- calling usb_deregister()\n");
 	usb_deregister(&storage_driver) ;
 	
 	/* lock access to the data structures */
@@ -1869,14 +1919,39 @@ void __exit usb_stor_exit(void)
 	
 	/* unregister all the virtual hosts */
 	for (ptr = us_list; ptr != NULL; ptr = ptr->next)
+	{
+		US_DEBUGP("-- calling scsi_unregister_module()\n");
 		scsi_unregister_module(MODULE_SCSI_HA, &(ptr->htmplt));
+	}
 	
-	/* kill the threads */
-	/* FIXME: we can do this by sending them a signal to die */
+	/* Kill the control threads
+	 *
+	 * NOTE: there is no contention at this point, so full mutual 
+	 * exclusion is not necessary
+	 */
+	for (ptr = us_list; ptr != NULL; ptr = ptr->next)
+	{
+		US_DEBUGP("-- sending US_ACT_EXIT command to thread\n");
+
+		/* enqueue the command */
+		ptr->action = US_ACT_EXIT;
+		
+		/* wake up the process task */
+		up(&(ptr->sleeper));
+
+		/* wait for the task to confirm that it's exited */
+		down(&(ptr->notify));
+	}
+	
 
 	/* free up the data structures */
 	/* FIXME: we need to eliminate the host structure also */
+	US_DEBUGP("-- freeing data structures\n");
 	while (ptr) {
+		/* free the directory name */
+		kfree(ptr->htmplt.proc_dir);
+
+		/* free the us_data structure */
 		next = ptr->next;
 		kfree(ptr);
 		ptr = next;

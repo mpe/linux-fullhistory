@@ -314,14 +314,10 @@ int hfs_rmdir(struct inode * parent, struct dentry *dentry)
 	if (!d_unhashed(dentry))
 		goto hfs_rmdir_put;
 
-	if (/* we only have to worry about 2 and 3 for mount points */
-		(victim->sys_entry[2] &&
-		 (victim->sys_entry[2]->d_mounts !=
-		  victim->sys_entry[2]->d_covers)) ||
-		(victim->sys_entry[3] &&
-		 (victim->sys_entry[3]->d_mounts != 
-		  victim->sys_entry[3]->d_covers))
-		) 
+	/* we only have to worry about 2 and 3 for mount points */
+	if (victim->sys_entry[2] && d_mountpoint(victim->sys_entry[2]))
+		goto hfs_rmdir_put;
+	if (victim->sys_entry[3] && d_mountpoint(victim->sys_entry[3])) 
 		goto hfs_rmdir_put;
 
 	

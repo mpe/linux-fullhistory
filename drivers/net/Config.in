@@ -108,9 +108,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate '    HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS
       tristate '    HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN
       tristate '    HP 10/100VG PCLAN (ISA, EISA, PCI) support' CONFIG_HP100
-      if [ "$CONFIG_OBSOLETE" = "y" ]; then
-	 tristate '    ICL EtherTeam 16i/32 support' CONFIG_ETH16I
-      fi
+      tristate '    ICL EtherTeam 16i/32 support' CONFIG_ETH16I
       tristate '    NE2000/NE1000 support' CONFIG_NE2000
       if [ "$CONFIG_OBSOLETE" = "y" ]; then
 	 tristate '    SEEQ8005 support (EXPERIMENTAL)' CONFIG_SEEQ8005
@@ -194,7 +192,7 @@ endmenu
 
 bool 'FDDI driver support' CONFIG_FDDI
 if [ "$CONFIG_FDDI" = "y" ]; then
-   bool '  Digital DEFEA and DEFPA adapter support' CONFIG_DEFXX
+   dep_tristate '  Digital DEFEA and DEFPA adapter support' CONFIG_DEFXX $CONFIG_FDDI
    tristate '  SysKonnect FDDI PCI support' CONFIG_SKFP
 fi
 

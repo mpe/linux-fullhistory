@@ -1,7 +1,7 @@
 /*
  * PowerTec SCSI driver
  *
- * Copyright (C) 1997-1998 Russell King
+ * Copyright (C) 1997-2000 Russell King
  */
 #ifndef POWERTECSCSI_H
 #define POWERTECSCSI_H
@@ -38,28 +38,25 @@ extern int powertecscsi_proc_info (char *buffer, char **start, off_t offset,
 
 #include "fas216.h"
 
-#define POWERTECSCSI {							\
-proc_info:	powertecscsi_proc_info,					\
-name:		"PowerTec SCSI",					\
-detect:		powertecscsi_detect,	/* detect		*/	\
-release:	powertecscsi_release,	/* release		*/	\
-info:		powertecscsi_info,	/* info			*/	\
-command:	fas216_command,		/* command		*/	\
-queuecommand:	fas216_queue_command,	/* queuecommand		*/	\
-abort:		fas216_abort,		/* abort		*/	\
-reset:		fas216_reset,		/* reset		*/	\
-bios_param:	scsicam_bios_param,	/* biosparam		*/	\
-can_queue:	CAN_QUEUE,		/* can queue		*/	\
-this_id:	SCSI_ID,		/* scsi host id		*/	\
-sg_tablesize:	SG_ALL,			/* sg_tablesize		*/	\
-cmd_per_lun:	CMD_PER_LUN,		/* cmd per lun		*/	\
-use_clustering:	ENABLE_CLUSTERING,					\
-eh_strategy_handler:		NULL,					\
-eh_host_reset_handler:		fas216_eh_host_reset,			\
-eh_bus_reset_handler:		fas216_eh_bus_reset,			\
-eh_device_reset_handler:	fas216_eh_device_reset,			\
-eh_abort_handler:		fas216_eh_abort,			\
-use_new_eh_code:		0					\
+#define POWERTECSCSI {					\
+proc_info:			powertecscsi_proc_info,	\
+name:				"PowerTec SCSI",	\
+detect:				powertecscsi_detect,	\
+release:			powertecscsi_release,	\
+info:				powertecscsi_info,	\
+bios_param:			scsicam_bios_param,	\
+can_queue:			CAN_QUEUE,		\
+this_id:			SCSI_ID,		\
+sg_tablesize:			SG_ALL,			\
+cmd_per_lun:			CMD_PER_LUN,		\
+use_clustering:			ENABLE_CLUSTERING,	\
+command:			fas216_command,		\
+queuecommand:			fas216_queue_command,	\
+eh_host_reset_handler:		fas216_eh_host_reset,	\
+eh_bus_reset_handler:		fas216_eh_bus_reset,	\
+eh_device_reset_handler:	fas216_eh_device_reset,	\
+eh_abort_handler:		fas216_eh_abort,	\
+use_new_eh_code:		1			\
 	}
 
 #ifndef HOSTS_C

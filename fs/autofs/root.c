@@ -63,7 +63,7 @@ static int autofs_root_readdir(struct file *filp, void *dirent, filldir_t filldi
 		/* fall through */
 	default:
 		while ( onr = nr, ent = autofs_hash_enum(dirhash,&nr,ent) ) {
-			if ( !ent->dentry || ent->dentry->d_mounts != ent->dentry ) {
+			if ( !ent->dentry || d_mountpoint(ent->dentry) ) {
 				if (filldir(dirent,ent->name,ent->len,onr,ent->ino) < 0)
 					return 0;
 				filp->f_pos = nr;
@@ -117,7 +117,7 @@ static int try_to_fill_dentry(struct dentry *dentry, struct super_block *sb, str
 
 	/* If this is a directory that isn't a mount point, bitch at the
 	   daemon and fix it in user space */
-	if ( S_ISDIR(dentry->d_inode->i_mode) && dentry->d_mounts == dentry ) {
+	if ( S_ISDIR(dentry->d_inode->i_mode) && !d_mountpoint(dentry) ) {
 		return !autofs_wait(sbi, &dentry->d_name);
 	}
 
@@ -157,7 +157,7 @@ static int autofs_revalidate(struct dentry * dentry, int flags)
 		return (dentry->d_time - jiffies <= AUTOFS_NEGATIVE_TIMEOUT);
 		
 	/* Check for a non-mountpoint directory */
-	if ( S_ISDIR(dentry->d_inode->i_mode) && dentry->d_mounts == dentry ) {
+	if ( S_ISDIR(dentry->d_inode->i_mode) && !d_mountpoint(dentry) ) {
 		if (autofs_oz_mode(sbi))
 			return 1;
 		else

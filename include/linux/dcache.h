@@ -1,6 +1,9 @@
 #ifndef __LINUX_DCACHE_H
 #define __LINUX_DCACHE_H
 
+#include <asm/atomic.h>
+#include <linux/mount.h>
+
 #ifdef __KERNEL__
 
 /*
@@ -105,7 +108,10 @@ struct dentry_operations {
 					 * s_nfsd_free_path semaphore will be down
 					 */
 
-/*
+/**
+ * d_drop - drop a dentry
+ * @dentry: dentry to drop
+ *
  * d_drop() unhashes the entry from the parent
  * dentry hashes, so that it won't be found through
  * a VFS lookup any more. Note that this is different
@@ -118,6 +124,7 @@ struct dentry_operations {
  * to invalidate a dentry for some reason (NFS
  * timeouts or autofs deletes).
  */
+
 static __inline__ void d_drop(struct dentry * dentry)
 {
 	list_del(&dentry->d_hash);
@@ -164,10 +171,16 @@ extern int have_submounts(struct dentry *);
  * This adds the entry to the hash queues.
  */
 extern void d_rehash(struct dentry *);
-/*
+
+/**
+ * d_add - add dentry to hash queues
+ * @entry: dentry to add
+ * @inode: The inode to attach to this dentry
+ *
  * This adds the entry to the hash queues and initializes "d_inode".
  * The entry was actually filled in earlier during "d_alloc()"
  */
+ 
 static __inline__ void d_add(struct dentry * entry, struct inode * inode)
 {
 	d_rehash(entry);
@@ -183,10 +196,24 @@ extern struct dentry * d_lookup(struct dentry *, struct qstr *);
 /* validate "insecure" dentry pointer */
 extern int d_validate(struct dentry *, struct dentry *, unsigned int, unsigned int);
 
+extern char * __d_path(struct dentry *, struct vfsmount *, struct dentry *,
+	struct vfsmount *, char *, int);
 /* write full pathname into buffer and return start of pathname */
-extern char * d_path(struct dentry *, char *, int);
-
+#define d_path(dentry, vfsmnt, buffer, buflen) \
+	__d_path(dentry, vfsmnt, current->fs->root, current->fs->rootmnt, \
+	buffer, buflen)
+  
 /* Allocation counts.. */
+
+/**
+ *	dget	-	get a reference to a dentry
+ *	@dentry: dentry to get a reference too
+ *
+ *	Given a dentry or NULL pointer increment the reference count
+ *	if appropriate and return the dentry. A dentry will not be 
+ *	destroyed when it has references.
+ */
+ 
 static __inline__ struct dentry * dget(struct dentry *dentry)
 {
 	if (dentry)
@@ -194,12 +221,26 @@ static __inline__ struct dentry * dget(struct dentry *dentry)
 	return dentry;
 }
 
+/**
+ *	d_unhashed -	is dentry hashed
+ *	@dentry: entry to check
+ *
+ *	Returns true if the dentry passed is not currently hashed
+ */
+ 
 static __inline__ int d_unhashed(struct dentry *dentry)
 {
 	return list_empty(&dentry->d_hash);
 }
 
 extern void dput(struct dentry *);
+
+/* MOUNT_REWRITE: replace with the check for d_vfsmnt */
+static __inline__ int d_mountpoint(struct dentry *dentry)
+{
+	return dentry != dentry->d_mounts;
+}
+
 
 #endif /* __KERNEL__ */
 

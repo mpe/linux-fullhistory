@@ -54,11 +54,15 @@ use_init_fs_context(void)
 	our_fs = current->fs;
 	dput(our_fs->root);
 	dput(our_fs->pwd);
+	mntput(our_fs->rootmnt);
+	mntput(our_fs->pwdmnt);
 
 	init_fs = init_task.fs;
 	our_fs->umask = init_fs->umask;
 	our_fs->root = dget(init_fs->root);
 	our_fs->pwd = dget(init_fs->pwd);
+	our_fs->rootmnt = mntget(init_fs->rootmnt);
+	our_fs->pwdmnt = mntget(init_fs->pwdmnt);
 
 	unlock_kernel();
 }
@@ -119,10 +123,20 @@ static int exec_modprobe(void * module_name)
 	return ret;
 }
 
-/*
-	request_module: the function that everyone calls when they need
-	a module.
-*/
+/**
+ *	request_module - try to load a kernel module
+ *	@module_name: Name of module
+ *
+ * 	Load a module using the user mode module loader. The function returns
+ *	zero on success or a negative errno code on failure. Note that a
+ * 	successful module load does not mean the module did not then unload
+ *	and exit on an error of its own. Callers must check that the service
+ *	they requested is now available not blindly invoke it.
+ *
+ *	If module auto-loading support is disabled then this function
+ *	becomes a no-operation.
+ */
+ 
 int request_module(const char * module_name)
 {
 	int pid;

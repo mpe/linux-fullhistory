@@ -90,34 +90,21 @@ static void js_war_process_packet(struct js_war_info* info)
 			if (!info->port->devs[0]) return;
 			buttons[0][0] = ((data[3] & 0xa) >> 1) | ((data[3] & 0x5) << 1);
 			return;
-		case 2:					/* Static status (Send !S to get one) */
-#if 0
-			printk("joy-warrior: Static status:");
-			for (i = 0; i < 12; i++)
-				printk(" %02x", info->data[i]);
-			printk("\n");
-#endif
-			return;
 		case 3:					/* XY-axis info->data */
 			if (!info->port->devs[0]) return;
 			axes[0][0] = ((data[0] & 8) << 5) - (data[2] | ((data[0] & 4) << 5));
 			axes[0][1] = (data[1] | ((data[0] & 1) << 7)) - ((data[0] & 2) << 7);
 			return;
 			break;
-		case 4:					/* Dynamic status */
-#if 0
-			printk("joy-warrior: Dynamic status:");
-			for (i = 0; i < 4; i++)
-				printk(" %02x", info->data[i]);
-			printk("\n");
-#endif
-			return;
 		case 5:					/* Throttle, spinner, hat info->data */
 			if (!info->port->devs[0]) return;
 			axes[0][2] = (data[1] | ((data[0] & 1) << 7)) - ((data[0] & 2) << 7);
 			axes[0][3] = (data[3] & 2 ? 1 : 0) - (info->data[3] & 1 ? 1 : 0);
 			axes[0][4] = (data[3] & 8 ? 1 : 0) - (info->data[3] & 4 ? 1 : 0);
 			axes[0][5] = (data[2] | ((data[0] & 4) << 5)) - ((data[0] & 8) << 5);
+			return;
+		case 2:					/* Static status (Send !S to get one) */
+		case 4:					/* Dynamic status */
 			return;
 		default:
 			printk("joy-warrior: Unknown packet %d length %d:", (data[0] >> 4) & 7, info->idx);
@@ -199,6 +186,8 @@ static int js_war_ldisc_open(struct tty_struct *tty)
 	struct js_war_info iniinfo;
 	struct js_war_info *info = &iniinfo;
 
+	MOD_INC_USE_COUNT;
+
 	info->tty = tty;
 	info->idx = 0;
 	info->len = 0;
@@ -215,8 +204,6 @@ static int js_war_ldisc_open(struct tty_struct *tty)
 		tty->driver.name, MINOR(tty->device) - tty->driver.minor_start);
 
 	js_war_init_corr(js_war_port->corr);
-
-	MOD_INC_USE_COUNT;
 
 	return 0;
 }
@@ -283,9 +270,7 @@ static int js_war_ldisc_room(struct tty_struct *tty)
 
 static struct tty_ldisc js_war_ldisc = {
         magic:          TTY_LDISC_MAGIC,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
         name:           "warrior",
-#endif
 	open:		js_war_ldisc_open,
 	close:		js_war_ldisc_close,
 	receive_buf:	js_war_ldisc_receive,

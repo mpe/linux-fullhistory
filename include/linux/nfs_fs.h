@@ -18,6 +18,7 @@
 
 #include <linux/nfs.h>
 #include <linux/nfs2.h>
+#include <linux/nfs3.h>
 #include <linux/nfs_xdr.h>
 
 /*
@@ -64,6 +65,7 @@
 #define NFS_DSERVER(dentry)		(&(dentry)->d_sb->u.nfs_sb.s_server)
 #define NFS_SERVER(inode)		(&(inode)->i_sb->u.nfs_sb.s_server)
 #define NFS_CLIENT(inode)		(NFS_SERVER(inode)->client)
+#define NFS_PROTO(inode)		(NFS_SERVER(inode)->rpc_ops)
 #define NFS_REQUESTLIST(inode)		(NFS_SERVER(inode)->rw_requests)
 #define NFS_ADDR(inode)			(RPC_PEERADDR(NFS_CLIENT(inode)))
 #define NFS_CONGESTED(inode)		(RPC_CONGESTED(NFS_CLIENT(inode)))
@@ -233,6 +235,7 @@ extern int  nfs_readpage(struct dentry *, struct page *);
  * (Used only by nfsroot module)
  */
 extern int  nfs_mount(struct sockaddr_in *, char *, struct nfs_fh *);
+extern int  nfs3_mount(struct sockaddr_in *, char *, struct nfs_fh *);
 
 /*
  * inline functions

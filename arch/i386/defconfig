@@ -476,11 +476,6 @@ CONFIG_PCMCIA_SERIAL=y
 # CONFIG_PCMCIA_SERIAL_CB is not set
 
 #
-# USB support
-#
-# CONFIG_USB is not set
-
-#
 # File systems
 #
 # CONFIG_QUOTA is not set
@@ -523,6 +518,7 @@ CONFIG_EXT2_FS=y
 #
 # CONFIG_CODA_FS is not set
 CONFIG_NFS_FS=y
+# CONFIG_NFS_V3 is not set
 # CONFIG_ROOT_NFS is not set
 CONFIG_NFSD=y
 # CONFIG_NFSD_V3 is not set
@@ -558,6 +554,11 @@ CONFIG_VGA_CONSOLE=y
 # Sound
 #
 # CONFIG_SOUND is not set
+
+#
+# USB support
+#
+# CONFIG_USB is not set
 
 #
 # Kernel hacking

@@ -94,14 +94,16 @@ nlmsvc_lookup_block(struct nlm_file *file, struct nlm_lock *lock, int remove)
 	struct nlm_block	**head, *block;
 	struct file_lock	*fl;
 
-	dprintk("lockd: nlmsvc_lookup_block f=%p pd=%d %ld-%ld ty=%d\n",
-				file, lock->fl.fl_pid, lock->fl.fl_start,
-				lock->fl.fl_end, lock->fl.fl_type);
+	dprintk("lockd: nlmsvc_lookup_block f=%p pd=%d %Ld-%Ld ty=%d\n",
+				file, lock->fl.fl_pid,
+				(long long)lock->fl.fl_start,
+				(long long)lock->fl.fl_end, lock->fl.fl_type);
 	for (head = &nlm_blocked; (block = *head); head = &block->b_next) {
 		fl = &block->b_call.a_args.lock.fl;
-		dprintk("lockd: check f=%p pd=%d %ld-%ld ty=%d cookie=%x\n",
-				block->b_file, fl->fl_pid, fl->fl_start,
-				fl->fl_end, fl->fl_type,
+		dprintk("lockd: check f=%p pd=%d %Ld-%Ld ty=%d cookie=%x\n",
+				block->b_file, fl->fl_pid,
+				(long long)fl->fl_start,
+				(long long)fl->fl_end, fl->fl_type,
 				*(unsigned int*)(block->b_call.a_args.cookie.data));
 		if (block->b_file == file && nlm_compare_locks(fl, &lock->fl)) {
 			if (remove)
@@ -286,12 +288,12 @@ nlmsvc_lock(struct svc_rqst *rqstp, struct nlm_file *file,
 	struct nlm_block	*block;
 	int			error;
 
-	dprintk("lockd: nlmsvc_lock(%04x/%ld, ty=%d, pi=%d, %ld-%ld, bl=%d)\n",
+	dprintk("lockd: nlmsvc_lock(%04x/%ld, ty=%d, pi=%d, %Ld-%Ld, bl=%d)\n",
 				file->f_file.f_dentry->d_inode->i_dev,
 				file->f_file.f_dentry->d_inode->i_ino,
 				lock->fl.fl_type, lock->fl.fl_pid,
-				lock->fl.fl_start,
-				lock->fl.fl_end,
+				(long long)lock->fl.fl_start,
+				(long long)lock->fl.fl_end,
 				wait);
 
 	/* Lock file against concurrent access */
@@ -365,16 +367,17 @@ nlmsvc_testlock(struct nlm_file *file, struct nlm_lock *lock,
 {
 	struct file_lock	*fl;
 
-	dprintk("lockd: nlmsvc_testlock(%04x/%ld, ty=%d, %ld-%ld)\n",
+	dprintk("lockd: nlmsvc_testlock(%04x/%ld, ty=%d, %Ld-%Ld)\n",
 				file->f_file.f_dentry->d_inode->i_dev,
 				file->f_file.f_dentry->d_inode->i_ino,
 				lock->fl.fl_type,
-				lock->fl.fl_start,
-				lock->fl.fl_end);
+				(long long)lock->fl.fl_start,
+				(long long)lock->fl.fl_end);
 
 	if ((fl = posix_test_lock(&file->f_file, &lock->fl)) != NULL) {
-		dprintk("lockd: conflicting lock(ty=%d, %ld-%ld)\n",
-				fl->fl_type, fl->fl_start, fl->fl_end);
+		dprintk("lockd: conflicting lock(ty=%d, %Ld-%Ld)\n",
+				fl->fl_type, (long long)fl->fl_start,
+				(long long)fl->fl_end);
 		conflock->caller = "somehost";	/* FIXME */
 		conflock->oh.len = 0;		/* don't return OH info */
 		conflock->fl = *fl;
@@ -396,12 +399,12 @@ nlmsvc_unlock(struct nlm_file *file, struct nlm_lock *lock)
 {
 	int	error;
 
-	dprintk("lockd: nlmsvc_unlock(%04x/%ld, pi=%d, %ld-%ld)\n",
+	dprintk("lockd: nlmsvc_unlock(%04x/%ld, pi=%d, %Ld-%Ld)\n",
 				file->f_file.f_dentry->d_inode->i_dev,
 				file->f_file.f_dentry->d_inode->i_ino,
 				lock->fl.fl_pid,
-				lock->fl.fl_start,
-				lock->fl.fl_end);
+				(long long)lock->fl.fl_start,
+				(long long)lock->fl.fl_end);
 
 	/* First, cancel any lock that might be there */
 	nlmsvc_cancel_blocked(file, lock);
@@ -424,12 +427,12 @@ nlmsvc_cancel_blocked(struct nlm_file *file, struct nlm_lock *lock)
 {
 	struct nlm_block	*block;
 
-	dprintk("lockd: nlmsvc_cancel(%04x/%ld, pi=%d, %ld-%ld)\n",
+	dprintk("lockd: nlmsvc_cancel(%04x/%ld, pi=%d, %Ld-%Ld)\n",
 				file->f_file.f_dentry->d_inode->i_dev,
 				file->f_file.f_dentry->d_inode->i_ino,
 				lock->fl.fl_pid,
-				lock->fl.fl_start,
-				lock->fl.fl_end);
+				(long long)lock->fl.fl_start,
+				(long long)lock->fl.fl_end);
 
 	down(&file->f_sema);
 	if ((block = nlmsvc_lookup_block(file, lock, 1)) != NULL)

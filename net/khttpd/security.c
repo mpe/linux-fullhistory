@@ -115,14 +115,12 @@ struct file *OpenFileForSecurity(char *Filename)
 
 	lock_kernel();
 		
-	filp = filp_open(Filename, 0, O_RDONLY, NULL);
+	filp = filp_open(Filename, O_RDONLY, 0);
 	
 	unlock_kernel();
 	
-	if ((IS_ERR(filp))||(filp==NULL)||(filp->f_dentry==NULL))
-	{
+	if (IS_ERR(filp))
 		return NULL;
-	}
 
 #ifndef BENCHMARK		
 	permission = filp->f_dentry->d_inode->i_mode;

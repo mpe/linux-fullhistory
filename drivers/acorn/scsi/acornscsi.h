@@ -1,3 +1,8 @@
+/*
+ * Acorn SCSI driver
+ *
+ * Copyright (C) 1997 Russell King
+ */
 #ifndef ACORNSCSI_H
 #define ACORNSCSI_H
 

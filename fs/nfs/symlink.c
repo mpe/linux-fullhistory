@@ -28,16 +28,17 @@
  */
 static int nfs_symlink_filler(struct dentry *dentry, struct page *page)
 {
-	struct nfs_readlinkargs rl_args;
-	kmap(page);
+	struct inode *inode = dentry->d_inode;
+	void *buffer = (void *)kmap(page);
+	int error;
+
 	/* We place the length at the beginning of the page,
 	 * in host byte order, followed by the string.  The
 	 * XDR response verification will NULL terminate it.
 	 */
-	rl_args.fh = NFS_FH(dentry);
-	rl_args.buffer = (const void *)page_address(page);
-	if (rpc_call(NFS_CLIENT(dentry->d_inode), NFSPROC_READLINK,
-		     &rl_args, NULL, 0) < 0)
+	error = NFS_PROTO(inode)->readlink(dentry, buffer,
+					   PAGE_CACHE_SIZE - sizeof(u32)-4);
+	if (error < 0)
 		goto error;
 	SetPageUptodate(page);
 	kunmap(page);
@@ -87,10 +88,11 @@ static int nfs_readlink(struct dentry *dentry, char *buffer, int buflen)
 }
 
 static struct dentry *
-nfs_follow_link(struct dentry *dentry, struct dentry *base, unsigned int follow)
+nfs_follow_link(struct dentry *dentry, struct dentry *base,
+	struct vfsmount **mnt, unsigned int follow)
 {
 	struct page *page = NULL;
-	struct dentry *res = vfs_follow_link(dentry, base, follow,
+	struct dentry *res = vfs_follow_link(dentry, base, mnt, follow, 
 					     nfs_getlink(dentry, &page));
 	if (page) {
 		kunmap(page);

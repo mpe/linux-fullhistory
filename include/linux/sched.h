@@ -185,12 +185,13 @@ struct fs_struct {
 	atomic_t count;
 	int umask;
 	struct dentry * root, * pwd;
+	struct vfsmount * rootmnt, * pwdmnt;
 };
 
 #define INIT_FS { \
 	ATOMIC_INIT(1), \
 	0022, \
-	NULL, NULL \
+	NULL, NULL, NULL, NULL \
 }
 
 /* Maximum number of active map areas.. This is a random (large) number */

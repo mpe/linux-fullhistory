@@ -89,10 +89,3 @@ void sound_timer_syncinterval(unsigned int new_usecs);
 
 /*      From midi_synth.c       */
 void do_midi_msg (int synthno, unsigned char *msg, int mlen);
-
-#ifdef FIXED_LOWLEVEL_SOUND
-/*	From aedsp16.c */
-int InitAEDSP16_SBPRO(struct address_info *hw_config);
-int InitAEDSP16_MSS(struct address_info *hw_config);
-int InitAEDSP16_MPU401(struct address_info *hw_config);
-#endif

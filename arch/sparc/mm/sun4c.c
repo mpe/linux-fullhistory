@@ -2408,20 +2408,16 @@ static pgd_t *sun4c_pgd_alloc(void)
  */
 static void sun4c_vac_alias_fixup(struct vm_area_struct *vma, unsigned long address, pte_t pte)
 {
-	struct dentry *dentry = NULL;
-	struct inode *inode = NULL;
 	pgd_t *pgdp;
 	pte_t *ptep;
 
-	if (vma->vm_file)
-		dentry = vma->vm_file->f_dentry;
-	if(dentry)
-		inode = dentry->d_inode;
-	if(inode) {
-		struct address_space *mapping = inode->i_mapping;
+	if (vma->vm_file) {
+		struct address_space *mapping;
 		unsigned long offset = (address & PAGE_MASK) - vma->vm_start;
 		struct vm_area_struct *vmaring;
 		int alias_found = 0;
+
+		mapping = vma->vm_file->f_dentry->d_inode->i_mapping;
 		spin_lock(&mapping->i_shared_lock);
 		vmaring = mapping->i_mmap; 
 		do {

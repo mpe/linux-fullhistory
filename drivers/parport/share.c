@@ -341,17 +341,25 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 		}
 	}
 
+	/* We up our own module reference count, and that of the port
+           on which a device is to be registered, to ensure that
+           neither of us gets unloaded while we sleep in (e.g.)
+           kmalloc.  To be absolutely safe, we have to require that
+           our caller doesn't sleep in between parport_enumerate and
+           parport_register_device.. */
+	inc_parport_count();
+	port->ops->inc_use_count();
+
 	tmp = kmalloc(sizeof(struct pardevice), GFP_KERNEL);
 	if (tmp == NULL) {
 		printk(KERN_WARNING "%s: memory squeeze, couldn't register %s.\n", port->name, name);
-		return NULL;
+		goto out;
 	}
 
 	tmp->state = kmalloc(sizeof(struct parport_state), GFP_KERNEL);
 	if (tmp->state == NULL) {
 		printk(KERN_WARNING "%s: memory squeeze, couldn't register %s.\n", port->name, name);
-		kfree(tmp);
-		return NULL;
+		goto out_free_pardevice;
 	}
 
 	tmp->name = name;
@@ -376,12 +384,10 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 	if (flags & PARPORT_DEV_EXCL) {
 		if (port->physport->devices) {
 			spin_unlock (&port->physport->pardevice_lock);
-			kfree (tmp->state);
-			kfree (tmp);
 			printk (KERN_DEBUG
 				"%s: cannot grant exclusive access for "
 				"device %s\n", port->name, name);
-			return NULL;
+			goto out_free_all;
 		}
 		port->flags |= PARPORT_FLAG_EXCL;
 	}
@@ -391,9 +397,6 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 		port->physport->devices->prev = tmp;
 	port->physport->devices = tmp;
 	spin_unlock(&port->physport->pardevice_lock);
-
-	inc_parport_count();
-	port->ops->inc_use_count();
 
 	init_waitqueue_head(&tmp->wait_q);
 	tmp->timeslice = parport_default_timeslice;
@@ -406,6 +409,15 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 	port->ops->init_state(tmp, tmp->state);
 	parport_device_proc_register(tmp);
 	return tmp;
+
+ out_free_all:
+	kfree (tmp->state);
+ out_free_pardevice:
+	kfree (tmp);
+ out:
+	dec_parport_count();
+	port->ops->dec_use_count();
+	return NULL;
 }
 
 void parport_unregister_device(struct pardevice *dev)

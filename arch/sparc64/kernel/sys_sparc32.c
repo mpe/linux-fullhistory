@@ -1746,8 +1746,8 @@ static int copy_mount_stuff_to_kernel(const void *user, unsigned long *kernel)
 	return 0;
 }
 
-extern long do_sys_mount(char * dev_name, char * dir_name, unsigned long type_page,
-			 unsigned long new_flags, unsigned long data_page);
+extern long do_sys_mount(char * dev_page, char * dir_page, char * type_page,
+			 unsigned long new_flags, char * data_page);
 
 #define SMBFS_NAME	"smbfs"
 #define NCPFS_NAME	"ncpfs"
@@ -1756,6 +1756,8 @@ asmlinkage int sys32_mount(char *dev_name, char *dir_name, char *type, unsigned 
 {
 	unsigned long type_page = 0;
 	unsigned long data_page = 0;
+	unsigned long dev_page = 0;
+	unsigned long dir_page = 0;
 	int err, is_smb, is_ncp;
 
 	is_smb = is_ncp = 0;
@@ -1777,19 +1779,32 @@ asmlinkage int sys32_mount(char *dev_name, char *dir_name, char *type, unsigned 
 	if (err)
 		goto type_out;
 
+	err = copy_mount_stuff_to_kernel(dev_name, &dev_page);
+	if (err)
+		goto data_out;
+
+	err = copy_mount_stuff_to_kernel(dir_name, &dir_page);
+	if (err)
+		goto dev_out;
+
 	if (!is_smb && !is_ncp) {
-		err = do_sys_mount(dev_name, dir_name, type_page, new_flags,
-				   data_page);
+		err = do_sys_mount((char*)dev_page, (char*)dir_page,
+				(char*)type_page, new_flags, (char*)data_page);
 	} else {
 		if (is_ncp)
 			do_ncp_super_data_conv((void *)data_page);
 		else
 			do_smb_super_data_conv((void *)data_page);
 
-		err = do_sys_mount(dev_name, dir_name, type_page, new_flags,
-				   data_page);
+		err = do_sys_mount((char*)dev_page, (char*)dir_page,
+				(char*)type_page, new_flags, (char*)data_page);
 	}
+	free_page(dir_page);
 
+dev_out:
+	free_page(dev_page);
+
+data_out:
 	free_page(data_page);
 
 type_out:
@@ -4065,7 +4080,7 @@ asmlinkage long sparc32_open(const char * filename, int flags, int mode)
 		if (fd >= 0) {
 			struct file * f;
 			lock_kernel();
-			f = filp_open(tmp, flags, mode, NULL);
+			f = filp_open(tmp, flags, mode);
 			unlock_kernel();
 			error = PTR_ERR(f);
 			if (IS_ERR(f))

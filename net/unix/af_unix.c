@@ -564,39 +564,55 @@ static unix_socket *unix_find_other(struct sockaddr_un *sunname, int len,
 				    int type, unsigned hash, int *error)
 {
 	unix_socket *u;
+	struct dentry *dentry;
+	int err;
 	
-	if (sunname->sun_path[0])
-	{
-		struct dentry *dentry;
-
+	if (sunname->sun_path[0]) {
 		/* Do not believe to VFS, grab kernel lock */
 		lock_kernel();
-		dentry = __open_namei(sunname->sun_path, 2|O_NOFOLLOW, S_IFSOCK, NULL);
+		dentry = lookup_dentry(sunname->sun_path, NULL, 0);
+		err = PTR_ERR(dentry);
 		if (IS_ERR(dentry)) {
-			*error = PTR_ERR(dentry);
 			unlock_kernel();
-			return NULL;
+			goto fail;
 		}
+		err = -ENOENT;
+		if (!dentry->d_inode)
+			goto put_fail;
+	
+		err = permission(dentry->d_inode,MAY_WRITE);
+		if (err)
+			goto put_fail;
+
+		err = -ECONNREFUSED;
+		if (!S_ISSOCK(dentry->d_inode->i_mode))
+			goto put_fail;
 		u=unix_find_socket_byinode(dentry->d_inode);
+		if (!u)
+			goto put_fail;
+
 		dput(dentry);
 		unlock_kernel();
 
-		if (u && u->type != type)
-		{
-			*error=-EPROTOTYPE;
+		err=-EPROTOTYPE;
+		if (u->type != type) {
 			sock_put(u);
-			return NULL;
+			goto fail;
 		}
-	}
-	else
+	} else {
+		err = -ECONNREFUSED;
 		u=unix_find_socket_byname(sunname, len, type, hash);
-
-	if (u==NULL)
-	{
-		*error=-ECONNREFUSED;
-		return NULL;
+		if (!u)
+			goto fail;
 	}
 	return u;
+
+put_fail:
+	dput(dentry);
+	unlock_kernel();
+fail:
+	*error=err;
+	return NULL;
 }
 
 

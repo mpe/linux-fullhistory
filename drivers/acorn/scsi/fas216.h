@@ -1,11 +1,7 @@
 /*
  * FAS216 generic driver
  *
- * Copyright (C) 1997-1998 Russell King
- *
- * NOTE! This file should be viewed using a console with
- * >100 character width (since it uses 8-space tabs)
- * (it used to fit in 80-columns with 4 space)
+ * Copyright (C) 1997-2000 Russell King
  */
 #ifndef FAS216_H
 #define FAS216_H
@@ -215,6 +211,7 @@ typedef struct {
 	struct Scsi_Host	*host;			/* host					*/
 	Scsi_Cmnd		*SCpnt;			/* currently processing command		*/
 	Scsi_Cmnd		*origSCpnt;		/* original connecting command		*/
+	Scsi_Cmnd		*reqSCpnt;		/* request sense command		*/
 
 	/* driver information */
 	struct {
@@ -254,7 +251,8 @@ typedef struct {
 		unsigned int	miscs;
 		unsigned int	disconnects;
 		unsigned int	aborts;
-		unsigned int	resets;
+		unsigned int	bus_resets;
+		unsigned int	host_resets;
 	} stats;
 
 	/* configuration information */
@@ -350,6 +348,8 @@ extern void fas216_intr (struct Scsi_Host *instance);
  */
 extern int fas216_release (struct Scsi_Host *instance);
 
+extern int fas216_info(FAS216_Info *info, char *buffer);
+extern int fas216_print_host(FAS216_Info *info, char *buffer);
 extern int fas216_print_stats(FAS216_Info *info, char *buffer);
 extern int fas216_print_device(FAS216_Info *info, Scsi_Device *scd, char *buffer);
 

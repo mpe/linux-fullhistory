@@ -192,12 +192,59 @@ static unsigned int evdev_poll(struct file *file, poll_table *wait)
 	return 0;
 }
 
+static int evdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct evdev_list *list = file->private_data;
+	struct evdev *evdev = list->evdev;
+	struct input_dev *dev = evdev->handle.dev;
+
+	switch (cmd) {
+
+		case EVIOCGVERSION:
+			return put_user(EV_VERSION, (__u32 *) arg);
+		case EVIOCGID:
+			return copy_to_user(&dev->id, (void *) arg,
+						sizeof(struct input_id)) ? -EFAULT : 0;
+		default:
+
+			if (_IOC_TYPE(cmd) != 'E' || _IOC_DIR(cmd) != _IOC_READ)
+				return -EINVAL;
+
+			if ((_IOC_NR(cmd) & ~EV_MAX) == _IOC_NR(EVIOCGBIT(0,0))) {
+
+				long *bits = NULL;
+				int len = 0;
+
+				switch (_IOC_NR(cmd) & EV_MAX) {
+					case      0: bits = dev->evbit;  len = EV_MAX;  break;
+					case EV_KEY: bits = dev->keybit; len = KEY_MAX; break;
+					case EV_REL: bits = dev->relbit; len = REL_MAX; break;
+					case EV_ABS: bits = dev->absbit; len = ABS_MAX; break;
+					case EV_LED: bits = dev->ledbit; len = LED_MAX; break;
+					case EV_SND: bits = dev->sndbit; len = SND_MAX; break;
+					default: return -EINVAL;
+				}
+				len = NBITS(len) * sizeof(long);
+				if (len > _IOC_SIZE(cmd)) len = _IOC_SIZE(cmd);
+				return copy_to_user((void *) arg, bits, len) ? -EFAULT : len;
+			}
+
+			if (_IOC_NR(cmd) == _IOC_NR(EVIOCGNAME(0))) {
+				int len = strlen(dev->name) + 1;
+				if (len > _IOC_SIZE(cmd)) len = _IOC_SIZE(cmd);
+				return copy_to_user((char *) arg, dev->name, len) ? -EFAULT : len;
+			}
+	}
+	return -EINVAL;
+}
+
 static struct file_operations evdev_fops = {
 	read:		evdev_read,
 	write:		evdev_write,
 	poll:		evdev_poll,
 	open:		evdev_open,
 	release:	evdev_release,
+	ioctl:		evdev_ioctl,
 	fasync:		evdev_fasync,
 };
 

@@ -7,8 +7,7 @@ the IBM camera. However most of needed features work well.
 
 This driver was developed using logs of observed USB traffic
 which was produced by standard Windows driver (c-it98.sys).
-I did not have any input from Xirlink. Some people asked about
-data sheets, but nothing came out of that. I didn't try.
+I did not have data sheets from Xirlink.
 
 Video formats:
       128x96  [model 1]
@@ -29,14 +28,16 @@ SUPPORTED CAMERAS:
 IBM "C-It" camera, also known as "Xirlink PC Camera"
 The device uses proprietary ASIC (and compression method);
 it is manufactured by Xirlink. See http://www.xirlink.com/
-or http://www.c-itnow.com/ for details and pictures.
+http://www.ibmpccamera.com or http://www.c-itnow.com/ for
+details and pictures.
 
 The Linux driver was developed with camera with following
 model number (or FCC ID): KSX-XVP510. This camera has three
 interfaces, each with one endpoint (control, iso, iso). This
-type of cameras is referred to as "model 1".
+type of cameras is referred to as "model 1". These cameras are
+no longer manufactured.
 
-It appears that Xirlink made some changes in their cameras recently.
+Xirlink now manufactures new cameras which are somewhat different.
 In particular, following models [FCC ID] belong to that category:
 
 XVP300 [KSX-X9903]
@@ -46,29 +47,20 @@ XVP610 [KSX-X9902]
 (see http://www.xirlink.com/ibmpccamera/ for updates, they refer
 to these new cameras by Windows driver dated 12-27-99, v3005 BETA)
 These cameras have two interfaces, one endpoint in each (iso, bulk).
-Such type of cameras is referred to as "model 2". They are supported.
+Such type of cameras is referred to as "model 2". They are supported
+(with exception of 352x288 native mode).
 
 Quirks of Model 2 cameras:
 -------------------------
-
-These cameras apparently produce only 176x144 native video stream;
-the 352x288 formats are produced from 176x144 RGB stream. In fact,
-Xirlink broke perfectly good Model 1 (which used I420 on all sizes)
-and instead switched to color-separated RGB which is a terrible waste
-of bandwidth and resolution. However it probably allowed to simplify
-the camera and use less RAM. Model 2 camera works visibly worse than
-model 1 even using Xirlink's own driver on Windows. The image quality
-is better on Linux than on Windows, partly thanks to _absence_ of
-annoying automatic color corrections which Windows driver feeds into
-the camera several times per second.
 
 Model 2 does not have hardware contrast control. Corresponding V4L
 control is not used at the moment. It may be possible to implement
 contrast control in software, at cost of extra processor cycles.
 
-The bandwidth demand imposed by RGB quasi-352x288 mode (800 Kbits per
-frame) essentially limits this mode to 10 frames per second or less, in
-ideal conditions on the bus (USB is shared, after all). The frame rate
+This driver provides 352x288 mode by switching the camera into
+quasi-352x288 RGB mode (800 Kbits per frame) essentially limiting
+this mode to 10 frames per second or less, in ideal conditions on
+the bus (USB is shared, after all). The frame rate
 has to be programmed very conservatively. Additional concern is that
 frame rate depends on brightness setting; therefore the picture can
 be good at one brightness and broken at another! I did not want to fix
@@ -81,24 +73,21 @@ try to adjust brightness - brighter image is slower, so USB will be able
 to send all data. However if you regularly use Model 2 cameras you may
 prefer videosize=1 which makes perfectly good I420, with no scaling and
 lesser demands on USB (300 Kbits per second, or 26 frames per second).
-Remember that model 2 cameras never produce images with resolution
-better than "true" 176x144 - or so it seems.
 
 The camera that I had also has a hardware quirk: if disconnected,
 it needs few minutes to "relax" before it can be plugged in again
 (poorly designed USB processor reset circuit?)
 
-Finally, to say something good about Model 2: it is much simpler to program
-than Model 1. Commands are few, and they all are straightforward. This camera
-can be programmed for very high sensitivity (starlight may be enough), this
-makes it convenient for tinkering with. The driver code has enough comments
-to help a programmer to tweak the camera as s/he feels necessary.
+Model 2 camera can be programmed for very high sensitivity (even starlight
+may be enough), this makes it convenient for tinkering with. The driver
+code has enough comments to help a programmer to tweak the camera
+as s/he feels necessary.
 
 WHAT YOU NEED:
 
 - A supported IBM PC (C-it) camera (model 1 or 2)
 
-- A Linux box with USB support (2.3/2.4 or 2.2 w/backport)
+- A Linux box with USB support (2.3/2.4; 2.2 w/backport may work)
 
 - A Video4Linux compatible frame grabber program such as xawtv.
   
@@ -179,6 +168,19 @@ flags           This is a bit mask, and you can combine any number of
                 FLAGS_OVERLAY_STATS     8  Shows tiny numbers on screen,
                                            useful only for debugging.
                 FLAGS_FORCE_TESTPATTERN 16 Shows blue screen with numbers.
+                FLAGS_SEPARATE_FRAMES   32 Shows each frame separately, as
+                                           it was received from the camera.
+                                           Default (not set) is to mix the
+                                           preceding frame in to compensate
+                                           for occasional loss of Isoc data
+                                           on high frame rates.
+                FLAGS_CLEAN_FRAMES      64 Forces "cleanup" of each frame
+                                           prior to use; relevant only if
+                                           FLAGS_SEPARATE_FRAMES is set.
+                                           Default is not to clean frames,
+                                           this is a little faster but may
+                                           produce flicker if frame rate is
+                                           too high and Isoc data gets lost.
 
 framerate       This setting controls frame rate of the camera. This is
                 an approximate setting (in terms of "worst" ... "best")

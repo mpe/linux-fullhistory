@@ -651,9 +651,7 @@ char * umsdos_d_path(struct dentry *dentry, char * buffer, int len)
 	struct dentry * old_root = current->fs->root;
 	char * path;
 
-	/* N.B. not safe -- fix this soon! */
-	current->fs->root = dentry->d_sb->s_root;
-	path = d_path(dentry, buffer, len);
+	path = __d_path(dentry, NULL, dentry->d_sb->s_root, NULL, buffer, len);
 
 	if (*path == '/')
 		path++; /* skip leading '/' */
@@ -665,7 +663,6 @@ char * umsdos_d_path(struct dentry *dentry, char * buffer, int len)
 		memcpy(path, UMSDOS_PSDROOT_NAME, UMSDOS_PSDROOT_LEN);
 	}
 
-	current->fs->root = old_root;
 	return path;
 }
 

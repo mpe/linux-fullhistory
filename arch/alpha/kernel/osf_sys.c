@@ -42,7 +42,7 @@
 #include <asm/hwrpb.h>
 #include <asm/processor.h>
 
-extern int do_mount(struct block_device *, const char *, const char *, char *, int, void *);
+extern long do_sys_mount(char *, char *, char *, int, void *);
 extern int do_pipe(int *);
 
 extern asmlinkage int sys_swapon(const char *specialfile, int swap_flags);
@@ -319,20 +319,16 @@ asmlinkage int osf_statfs(char *path, struct osf_statfs *buffer, unsigned long b
 asmlinkage int osf_fstatfs(unsigned long fd, struct osf_statfs *buffer, unsigned long bufsiz)
 {
 	struct file *file;
-	struct dentry *dentry;
 	int retval;
 
-	lock_kernel();
 	retval = -EBADF;
 	file = fget(fd);
-	if (!file)
-		goto out;
-	dentry = file->f_dentry;
-	if (dentry)
-		retval = do_osf_statfs(dentry, buffer, bufsiz);
-	fput(file);
-out:
-	unlock_kernel();
+	if (file) {
+		lock_kernel();
+		retval = do_osf_statfs(file->f_dentry, buffer, bufsiz);
+		unlock_kernel();
+		fput(file);
+	}
 	return retval;
 }
 
@@ -363,32 +359,6 @@ struct procfs_args {
 	uid_t exroot;
 };
 
-static struct dentry *getdev(const char *name, int rdonly)
-{
-	struct dentry *dentry;
-	struct inode *inode;
-	int retval;
-
-	dentry = namei(name);
-	retval = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
-		return dentry;
-
-	retval = -ENOTBLK;
-	inode = dentry->d_inode;
-	if (!S_ISBLK(inode->i_mode))
-		goto out_dput;
-
-	retval = -EACCES;
-	if (IS_NODEV(inode))
-		goto out_dput;
-	return dentry;
-
-out_dput:
-	dput(dentry);
-	return ERR_PTR(retval);
-}
-
 /*
  * We can't actually handle ufs yet, so we translate UFS mounts to
  * ext2fs mounts. I wouldn't mind a UFS filesystem, but the UFS
@@ -400,20 +370,18 @@ out_dput:
 static int osf_ufs_mount(char *dirname, struct ufs_args *args, int flags)
 {
 	int retval;
-	struct dentry *dentry;
 	struct cdfs_args tmp;
+	char *devname;
 
 	retval = -EFAULT;
 	if (copy_from_user(&tmp, args, sizeof(tmp)))
 		goto out;
-
-	dentry = getdev(tmp.devname, 0);
-	retval = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	devname = getname(tmp.devname);
+	retval = PTR_ERR(devname);
+	if (IS_ERR(devname))
 		goto out;
-	retval = do_mount(dentry->d_inode->i_bdev, tmp.devname, dirname, 
-				"ext2", flags, NULL);
-	dput(dentry);
+	retval = do_sys_mount(devname, dirname, "ext2", flags, NULL);
+	putname(devname);
 out:
 	return retval;
 }
@@ -421,20 +389,18 @@ out:
 static int osf_cdfs_mount(char *dirname, struct cdfs_args *args, int flags)
 {
 	int retval;
-	struct dentry * dentry;
 	struct cdfs_args tmp;
+	char *devname;
 
 	retval = -EFAULT;
 	if (copy_from_user(&tmp, args, sizeof(tmp)))
 		goto out;
-
-	dentry = getdev(tmp.devname, 1);
-	retval = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	devname = getname(tmp.devname);
+	retval = PTR_ERR(devname);
+	if (IS_ERR(devname))
 		goto out;
-	retval = do_mount(dentry->d_inode->i_bdev, tmp.devname, dirname, 
-				"iso9660", flags, NULL);
-	dput(dentry);
+	retval = do_sys_mount(devname, dirname, "iso9660", flags, NULL);
+	putname(devname);
 out:
 	return retval;
 }
@@ -445,27 +411,36 @@ static int osf_procfs_mount(char *dirname, struct procfs_args *args, int flags)
 
 	if (copy_from_user(&tmp, args, sizeof(tmp)))
 		return -EFAULT;
-	return do_mount(NULL, "", dirname, "proc", flags, NULL);
+
+	return do_sys_mount("", dirname, "proc", flags, NULL);
 }
 
 asmlinkage int osf_mount(unsigned long typenr, char *path, int flag, void *data)
 {
 	int retval = -EINVAL;
+	char *name;
 
 	lock_kernel();
+
+	name = getname(path);
+	retval = PTR_ERR(name);
+	if (IS_ERR(name))
+		goto out;
 	switch (typenr) {
 	case 1:
-		retval = osf_ufs_mount(path, (struct ufs_args *) data, flag);
+		retval = osf_ufs_mount(name, (struct ufs_args *) data, flag);
 		break;
 	case 6:
-		retval = osf_cdfs_mount(path, (struct cdfs_args *) data, flag);
+		retval = osf_cdfs_mount(name, (struct cdfs_args *) data, flag);
 		break;
 	case 9:
-		retval = osf_procfs_mount(path, (struct procfs_args *) data, flag);
+		retval = osf_procfs_mount(name, (struct procfs_args *) data, flag);
 		break;
 	default:
 		printk("osf_mount(%ld, %x)\n", typenr, flag);
 	}
+	putname(name);
+out:
 	unlock_kernel();
 	return retval;
 }

@@ -18,8 +18,9 @@
  * 1) It only can handle one directory.
  * 2) Because the directory is represented by the SYSV shm array it
  *    can only be mounted one time.
- * 3) Read and write are not implemented (should they?)
- * 4) No special nodes are supported
+ * 3) Private writeable mappings are not supported
+ * 4) Read and write are not implemented (should they?)
+ * 5) No special nodes are supported
  *
  * There are the following mount options:
  * - nr_blocks (^= shmall) is the number of blocks of size PAGE_SIZE
@@ -117,7 +118,7 @@ static struct ipc_ids shm_ids;
 	ipc_buildid(&shm_ids, id, seq)
 
 static int newseg (key_t key, const char *name, int namelen, int shmflg, size_t size);
-static void killseg_core(struct shmid_kernel *shp, int doacc);
+static void seg_free(struct shmid_kernel *shp, int doacc);
 static void shm_open (struct vm_area_struct *shmd);
 static void shm_close (struct vm_area_struct *shmd);
 static int shm_remove_name(int id);
@@ -348,7 +349,7 @@ static void shm_put_super(struct super_block *sb)
 			printk(KERN_DEBUG "shm_nattch = %ld\n", shp->shm_nattch);
 		shp = shm_rmid(i);
 		shm_unlock(i);
-		killseg_core(shp, 1);
+		seg_free(shp, 1);
 	}
 	dput (sb->s_root);
 	up(&shm_ids.sem);
@@ -542,7 +543,7 @@ static int shm_unlink (struct inode *dir, struct dentry *dent)
 
 #define SHM_ENTRY(shp, index) (shp)->shm_dir[(index)/PTRS_PER_PTE][(index)%PTRS_PER_PTE]
 
-static pte_t **shm_alloc(unsigned long pages)
+static pte_t **shm_alloc(unsigned long pages, int doacc)
 {
 	unsigned short dir  = pages / PTRS_PER_PTE;
 	unsigned short last = pages % PTRS_PER_PTE;
@@ -572,6 +573,12 @@ static pte_t **shm_alloc(unsigned long pages)
 		for (pte = *ptr; pte < *ptr + last; pte++)
 			pte_clear (pte);
 	}
+	if (doacc) {
+		shm_lockall();
+		shm_tot += pages;
+		used_segs++;
+		shm_unlockall();
+	}
 	return ret;
 
 free:
@@ -584,12 +591,27 @@ nomem:
 	return ERR_PTR(-ENOMEM);
 }
 
-static void shm_free(pte_t** dir, unsigned long pages)
+static void shm_free(pte_t** dir, unsigned long pages, int doacc)
 {
+	int i, rss, swp;
 	pte_t **ptr = dir+pages/PTRS_PER_PTE;
 
 	if (!dir)
 		return;
+
+	for (i = 0, rss = 0, swp = 0; i < pages ; i++) {
+		pte_t pte;
+		pte = dir[i/PTRS_PER_PTE][i%PTRS_PER_PTE];
+		if (pte_none(pte))
+			continue;
+		if (pte_present(pte)) {
+			__free_page (pte_page(pte));
+			rss++;
+		} else {
+			swap_free(pte_to_swp_entry(pte));
+			swp++;
+		}
+	}
 
 	/* first the last page */
 	if (pages%PTRS_PER_PTE)
@@ -601,6 +623,15 @@ static void shm_free(pte_t** dir, unsigned long pages)
 
 	/* Now the indirect block */
 	kfree (dir);
+
+	if (doacc) {
+		shm_lockall();
+		shm_rss -= rss;
+		shm_swp -= swp;
+		shm_tot -= pages;
+		used_segs--;
+		shm_unlockall();
+	}
 }
 
 static 	int shm_setattr (struct dentry *dentry, struct iattr *attr)
@@ -611,7 +642,8 @@ static 	int shm_setattr (struct dentry *dentry, struct iattr *attr)
 	unsigned long new_pages, old_pages;
 	pte_t **new_dir, **old_dir;
 
-	if ((error = inode_change_ok(inode, attr)))
+	error = inode_change_ok(inode, attr);
+	if (error)
 		return error;
 	if (!(attr->ia_valid & ATTR_SIZE))
 		goto set_attr;
@@ -620,15 +652,19 @@ static 	int shm_setattr (struct dentry *dentry, struct iattr *attr)
 
 	/* We set old_pages and old_dir for easier cleanup */
 	old_pages = new_pages = (attr->ia_size  + PAGE_SIZE - 1) >> PAGE_SHIFT;
-	if (shm_tot + new_pages >= shm_ctlall)
-		return -ENOSPC;
-	if (IS_ERR(old_dir = new_dir = shm_alloc(new_pages)))
+	old_dir = new_dir = shm_alloc(new_pages, 1);
+	if (IS_ERR(new_dir))
 		return PTR_ERR(new_dir);
 
 	if (!(shp = shm_lock(inode->i_ino)))
 		BUG();
+	error = -ENOSPC;
+	if (shm_tot - shp->shm_npages >= shm_ctlall)
+		goto out;
+	error = 0;
 	if (shp->shm_segsz == attr->ia_size)
 		goto out;
+	/* Now we set them to the real values */
 	old_dir = shp->shm_dir;
 	old_pages = shp->shm_npages;
 	if (old_dir){
@@ -650,16 +686,13 @@ static 	int shm_setattr (struct dentry *dentry, struct iattr *attr)
 	shp->shm_segsz = attr->ia_size;
 out:
 	shm_unlock(inode->i_ino);
-	shm_lockall();
-	shm_tot += new_pages - old_pages;
-	shm_unlockall();
-	shm_free (old_dir, old_pages);
+	shm_free (old_dir, old_pages, 1);
 set_attr:
 	inode_setattr(inode, attr);
-	return 0;
+	return error;
 }
 
-static inline struct shmid_kernel *newseg_alloc(int numpages, size_t namelen)
+static struct shmid_kernel *seg_alloc(int numpages, size_t namelen)
 {
 	struct shmid_kernel *shp;
 	pte_t		   **dir;
@@ -668,7 +701,7 @@ static inline struct shmid_kernel *newseg_alloc(int numpages, size_t namelen)
 	if (!shp)
 		return ERR_PTR(-ENOMEM);
 
-	dir = shm_alloc (numpages);
+	dir = shm_alloc (numpages, namelen);
 	if (IS_ERR(dir)) {
 		kfree(shp);
 		return ERR_PTR(PTR_ERR(dir));
@@ -678,6 +711,12 @@ static inline struct shmid_kernel *newseg_alloc(int numpages, size_t namelen)
 	shp->shm_nattch = 0;
 	shp->shm_namelen = namelen;
 	return(shp);
+}
+
+static void seg_free(struct shmid_kernel *shp, int doacc)
+{
+	shm_free (shp->shm_dir, shp->shm_npages, doacc);
+	kfree(shp);
 }
 
 static int newseg (key_t key, const char *name, int namelen,
@@ -696,12 +735,11 @@ static int newseg (key_t key, const char *name, int namelen,
 	if (shm_tot + numpages >= shm_ctlall)
 		return -ENOSPC;
 
-	if (!(shp = newseg_alloc(numpages, namelen ? namelen : SHM_FMT_LEN + 1)))
+	if (!(shp = seg_alloc(numpages, namelen ? namelen : SHM_FMT_LEN + 1)))
 		return -ENOMEM;
 	id = shm_addid(shp);
 	if(id == -1) {
-		shm_free(shp->shm_dir,numpages);
-		kfree(shp);
+		seg_free(shp, 1);
 		return -ENOSPC;
 	}
 	shp->shm_perm.key = key;
@@ -719,9 +757,6 @@ static int newseg (key_t key, const char *name, int namelen,
 	} else {
 		shp->shm_namelen = sprintf (shp->shm_name, SHM_FMT, shp->id);
 	}
-
-	shm_tot += numpages;
-	used_segs++;
 	shm_unlock(id);
 	
 	return shp->id;
@@ -768,36 +803,6 @@ asmlinkage long sys_shmget (key_t key, size_t size, int shmflg)
 	return err;
 }
 
-static void killseg_core(struct shmid_kernel *shp, int doacc)
-{
-	int i, numpages, rss, swp;
-
-	numpages = shp->shm_npages;
-	for (i = 0, rss = 0, swp = 0; i < numpages ; i++) {
-		pte_t pte;
-		pte = SHM_ENTRY (shp,i);
-		if (pte_none(pte))
-			continue;
-		if (pte_present(pte)) {
-			__free_page (pte_page(pte));
-			rss++;
-		} else {
-			swap_free(pte_to_swp_entry(pte));
-			swp++;
-		}
-	}
-	shm_free (shp->shm_dir, numpages);
-	kfree(shp);
-	if (doacc) {
-		shm_lockall();
-		shm_rss -= rss;
-		shm_swp -= swp;
-		shm_tot -= numpages;
-		used_segs--;
-		shm_unlockall();
-	}
-}
-
 static void shm_delete (struct inode *ino)
 {
 	int shmid = ino->i_ino;
@@ -811,7 +816,7 @@ static void shm_delete (struct inode *ino)
 	shp = shm_rmid(shmid);
 	shm_unlock(shmid);
 	up(&shm_ids.sem);
-	killseg_core(shp, 1);
+	seg_free(shp, 1);
 	clear_inode(ino);
 }
 
@@ -1146,6 +1151,7 @@ static int shm_mmap(struct file * file, struct vm_area_struct * vma)
 /*
  * Fix shmaddr, allocate descriptor, map shm, add attach descriptor to lists.
  */
+/* MOUNT_REWRITE: kernel vfsmnt of shmfs should be passed to __filp_open() */
 asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 {
 	unsigned long addr;
@@ -1181,7 +1187,7 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	sprintf (name, SHM_FMT, shmid);
 
 	lock_kernel();
-	file = filp_open(name, o_flags, 0, dget(shm_sb->s_root));
+	file = __filp_open(name, o_flags, 0, dget(shm_sb->s_root), NULL);
 	if (IS_ERR (file))
 		goto bad_file;
 	*raddr = do_mmap (file, addr, file->f_dentry->d_inode->i_size,
@@ -1213,13 +1219,23 @@ static void shm_open (struct vm_area_struct *shmd)
  
 static int shm_remove_name(int id)
 {
-	int err;
+	struct dentry *dir;
+	struct dentry *dentry;
+	int error;
 	char name[SHM_FMT_LEN+1];
+
 	sprintf (name, SHM_FMT, id);
 	lock_kernel();
-	err = do_unlink (name, dget(shm_sb->s_root));
+	dir = lock_parent(shm_sb->s_root);
+	dentry = lookup_one(name, dir);
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		error = vfs_unlink(dir->d_inode, dentry);
+		dput(dentry);
+	}
+	unlock_dir(dir);
 	unlock_kernel();
-	return err;
+	return error;
 }
 
 /*
@@ -1637,6 +1653,7 @@ static struct vm_operations_struct shmzero_vm_ops = {
  * on the pseudo-file. This is possible because the open/close calls
  * are bracketed by the file count update calls.
  */
+/* MOUNT_REWRITE: set ->f_vfsmnt to shmfs one */
 static struct file *file_setup(struct file *fzero, struct shmid_kernel *shp)
 {
 	struct file *filp;
@@ -1654,6 +1671,7 @@ static struct file *file_setup(struct file *fzero, struct shmid_kernel *shp)
 		put_filp(filp);
 		return(0);
 	}
+	filp->f_vfsmnt = NULL;
 	d_instantiate(filp->f_dentry, inp);
 
 	/*
@@ -1674,10 +1692,10 @@ int map_zero_setup(struct vm_area_struct *vma)
 
 	if (!vm_enough_memory((vma->vm_end - vma->vm_start) >> PAGE_SHIFT))
 		return -ENOMEM;
-	if (IS_ERR(shp = newseg_alloc((vma->vm_end - vma->vm_start) / PAGE_SIZE, 0)))
+	if (IS_ERR(shp = seg_alloc((vma->vm_end - vma->vm_start) / PAGE_SIZE, 0)))
 		return PTR_ERR(shp);
 	if ((filp = file_setup(vma->vm_file, shp)) == 0) {
-		killseg_core(shp, 0);
+		seg_free(shp, 0);
 		return -ENOMEM;
 	}
 	vma->vm_file = filp;
@@ -1719,7 +1737,7 @@ static void shmzero_close(struct vm_area_struct *shmd)
 						struct shmid_kernel, zero_list);
 		list_del(&shp->zero_list);
 		spin_unlock(&zmap_list_lock);
-		killseg_core(shp, 0);
+		seg_free(shp, 0);
 	}
 }
 

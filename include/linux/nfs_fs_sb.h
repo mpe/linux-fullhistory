@@ -6,6 +6,7 @@
  */
 struct nfs_server {
 	struct rpc_clnt *	client;		/* RPC client handle */
+	struct nfs_rpc_ops *	rpc_ops;	/* NFS protocol vector */
 	int			flags;		/* various flags */
 	unsigned int		rsize;		/* read size */
 	unsigned int		wsize;		/* write size */
@@ -15,6 +16,7 @@ struct nfs_server {
 	unsigned int		acregmax;
 	unsigned int		acdirmin;
 	unsigned int		acdirmax;
+	unsigned int		namelen;
 	char *			hostname;	/* remote hostname */
 	struct nfs_reqlist *	rw_requests;	/* async read/write requests */
 };

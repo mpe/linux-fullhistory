@@ -133,9 +133,6 @@ struct dma_buffparms
 	char	neutral_byte;
 	int	dma;		/* DMA channel */
 
-#ifdef OS_DMA_PARMS
-	OS_DMA_PARMS
-#endif
 	int     applic_profile;	/* Application profile (APF_*) */
 	/* Interrupt callback stuff */
 	void (*audio_callback) (int dev, int parm);
@@ -347,7 +344,6 @@ struct sound_timer_operations
 };
 
 #ifdef _DEV_TABLE_C_   
-
 struct audio_operations *audio_devs[MAX_AUDIO_DEV] = {NULL};
 int num_audiodevs = 0;
 struct mixer_operations *mixer_devs[MAX_MIXER_DEV] = {NULL};
@@ -356,20 +352,12 @@ struct synth_operations *synth_devs[MAX_SYNTH_DEV+MAX_MIDI_DEV] = {NULL};
 int num_synths = 0;
 struct midi_operations *midi_devs[MAX_MIDI_DEV] = {NULL};
 int num_midis = 0;
-#ifndef EXCLUDE_TIMERS
+
 extern struct sound_timer_operations default_sound_timer;
 struct sound_timer_operations *sound_timer_devs[MAX_TIMER_DEV] = {
 	&default_sound_timer, NULL
 }; 
 int num_sound_timers = 1;
-#else
-struct sound_timer_operations *sound_timer_devs[MAX_TIMER_DEV] = {
-	NULL
-};
-int num_sound_timers = 0;
-#endif
-
-
 #else
 extern struct audio_operations *audio_devs[MAX_AUDIO_DEV];
 extern int num_audiodevs;
@@ -384,8 +372,6 @@ extern int num_sound_timers;
 #endif	/* _DEV_TABLE_C_ */
 
 extern int sound_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc *info);
-int sndtable_probe (int unit, struct address_info *hw_config);
-int sndtable_start_card (int unit, struct address_info *hw_config);
 void sound_timer_init (struct sound_lowlev_timer *t, char *name);
 void sound_dma_intr (int dev, struct dma_buffparms *dmap, int chan);
 

@@ -503,10 +503,14 @@ nlmsvc_callback(struct svc_rqst *rqstp, u32 proc, struct nlm_res *resp)
 	call->a_host  = host;
 	memcpy(&call->a_args, resp, sizeof(*resp));
 
-	if (nlmclnt_async_call(call, proc, nlmsvc_callback_exit) < 0)
-		return rpc_system_err;
+	if (nlmsvc_async_call(call, proc, nlmsvc_callback_exit) < 0)
+		goto error;
 
 	return rpc_success;
+ error:
+	nlm_release_host(host);
+	kfree(call);
+	return rpc_system_err;
 }
 
 static void

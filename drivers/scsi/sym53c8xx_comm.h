@@ -2497,16 +2497,6 @@ sym53c8xx_pci_init(Scsi_Host_Template *tpnt, pcidev_t pdev, ncr_device *device)
 #endif
 #endif	/* __powerpc__ */
 
-#ifdef __sparc__
-	/*
-	**    Fix-ups for sparc.
-	*/
-	if (!cache_line_size)
-		suggested_cache_line_size = 16;
-
-	driver_setup.pci_fix_up |= 0x7;
-#endif	/* __sparc__ */
-
 #if defined(__i386__) && !defined(MODULE)
 	if (!cache_line_size) {
 #if LINUX_VERSION_CODE < LinuxVersionCode(2,1,75)

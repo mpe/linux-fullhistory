@@ -1756,6 +1756,7 @@ typedef struct DFX_board_tag
 	/* Store device, bus-specific, and parameter information for this adapter */
 
 	struct net_device			*dev;							/* pointer to device structure */
+	struct net_device			*next;
 	u32						bus_type;						/* bus type (0 == PCI, 1 == EISA) */
 	u16						base_addr;						/* base I/O address (same as dev->base_addr) */
 	struct pci_dev *				pci_dev;

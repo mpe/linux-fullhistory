@@ -47,6 +47,32 @@ struct input_event {
 };
 
 /*
+ * The device ID structure;
+ */
+
+struct input_id {
+	__u16 bus;
+	__u16 vendor;
+	__u16 product;
+};
+
+/*
+ * Protocol version.
+ */
+
+#define EV_VERSION		0x010000
+
+/*
+ * IOCTLs (0x00 - 0x7f)
+ */
+
+#define EVIOCGVERSION		_IOR('E', 0x01, __u32)                  /* get driver version */
+#define EVIOCGID		_IOR('E', 0x02, struct input_id)	/* get device ID */
+#define EVIOCGNAME(len)		_IOC(_IOC_READ, 'E', 0x03, len)		/* get device name */
+#define EVIOCGBIT(ev,len)	_IOC(_IOC_READ, 'E', 0x20 + ev, len)	/* get event bits */
+#define EVIOCGABSLIM(num)	_IOR('E', 0x40 + num, 4 * sizeof(int))	/* get abs event limits */ 
+
+/*
  * Event types
  */
 
@@ -394,6 +420,8 @@ struct input_dev {
 	void *private;
 
 	int number;
+	char *name;
+	struct input_id id;
 
 	unsigned long evbit[NBITS(EV_MAX)];
 	unsigned long keybit[NBITS(KEY_MAX)];

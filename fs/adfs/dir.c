@@ -30,7 +30,7 @@ static int
 adfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct inode *inode = filp->f_dentry->d_inode;
-	struct super_block *sb = filp->f_dentry->d_sb;
+	struct super_block *sb = inode->i_sb;
 	struct adfs_dir_ops *ops = sb->u.adfs_sb.s_dir;
 	struct object_info obj;
 	struct adfs_dir dir;

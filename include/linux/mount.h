@@ -11,20 +11,6 @@
 #ifndef _LINUX_MOUNT_H
 #define _LINUX_MOUNT_H
 
-#define DQUOT_USR_ENABLED	0x01		/* User diskquotas enabled */
-#define DQUOT_GRP_ENABLED	0x02		/* Group diskquotas enabled */
-
-struct quota_mount_options
-{
-	unsigned int flags;			/* Flags for diskquotas on this device */
-	struct semaphore dqio_sem;		/* lock device while I/O in progress */
-	struct semaphore dqoff_sem;		/* serialize quota_off() and quota_on() on device */
-	struct file *files[MAXQUOTAS];		/* fp's to quotafiles */
-	time_t inode_expire[MAXQUOTAS];		/* expiretime for inode-quota */
-	time_t block_expire[MAXQUOTAS];		/* expiretime for block-quota */
-	char rsquash[MAXQUOTAS];		/* for quotas threat root as any other user */
-};
-
 struct vfsmount
 {
   kdev_t mnt_dev;			/* Device this applies to */
@@ -34,10 +20,14 @@ struct vfsmount
   struct vfsmount *mnt_next;		/* pointer to next in linkedlist */
 };
 
-/*
- *	Umount options
- */
- 
-#define MNT_FORCE	0x00000001	/* Attempt to forcibily umount */
+/* MOUNT_REWRITE: fill these */
+static inline struct vfsmount *mntget(struct vfsmount *mnt)
+{
+	return mnt;
+}
+
+static inline void mntput(struct vfsmount *mnt)
+{
+}
 
 #endif /* _LINUX_MOUNT_H */

@@ -3093,6 +3093,7 @@ static int devfs_readlink (struct dentry *dentry, char *buffer, int buflen)
 
 static struct dentry *devfs_follow_link (struct dentry *dentry,
 					 struct dentry *base,
+					 struct vfsmount **mnt,
 					 unsigned int follow)
 {
 	struct devfs_inode *di=get_devfs_inode_from_vfs_inode(dentry->d_inode);
@@ -3100,7 +3101,7 @@ static struct dentry *devfs_follow_link (struct dentry *dentry,
 
 	if (di && di->de->registered)
 		name = di->de->u.symlink.linkname;
-	return vfs_follow_link(dentry, base, follow, name);
+	return vfs_follow_link(dentry, base, mnt, follow, name);
 }   /*  End Function devfs_follow_link  */
 
 static struct inode_operations devfs_iops =
@@ -3393,12 +3394,11 @@ int __init init_devfs_fs (void)
 void __init mount_devfs_fs (void)
 {
     int err;
-    extern int do_mount (struct block_device *bdev, const char *dev_name,
-			 const char *dir_name, const char * type, int flags,
-			 void * data);
+    extern long do_sys_mount (char *dev_name, char *dir_name,
+				char * type, int flags, void * data);
 
     if ( (boot_options & OPTION_NOMOUNT) ) return;
-    err = do_mount (NULL, "none", "/dev", "devfs", 0, "");
+    err = do_sys_mount ("none", "/dev", "devfs", 0, "");
     if (err == 0) printk ("Mounted devfs on /dev\n");
     else printk ("Warning: unable to mount devfs, err: %d\n", err);
 }   /*  End Function mount_devfs_fs  */

@@ -36,12 +36,46 @@ struct nfs_fattr {
 #define NFS_ATTR_FATTR		0x0002		/* post-op attributes */
 #define NFS_ATTR_FATTR_V3	0x0004		/* NFSv3 attributes */
 
+/*
+ * Info on the file system
+ */
 struct nfs_fsinfo {
-	__u32			tsize;
-	__u32			bsize;
-	__u32			blocks;
-	__u32			bfree;
-	__u32			bavail;
+	__u32			rtmax;	/* max.  read transfer size */
+	__u32			rtpref;	/* pref. read transfer size */
+	__u32			rtmult;	/* reads should be multiple of this */
+	__u32			wtmax;	/* max.  write transfer size */
+	__u32			wtpref;	/* pref. write transfer size */
+	__u32			wtmult;	/* writes should be multiple of this */
+	__u32			dtpref;	/* pref. readdir transfer size */
+	__u64			maxfilesize;
+	__u64			bsize;	/* block size */
+	__u64			tbytes;	/* total size in bytes */
+	__u64			fbytes;	/* # of free bytes */
+	__u64			abytes;	/* # of bytes available to user */
+	__u64			tfiles;	/* # of files */
+	__u64			ffiles;	/* # of free files */
+	__u64			afiles;	/* # of files available to user */
+	__u32			linkmax;/* max # of hard links */
+	__u32			namelen;/* max name length */
+};
+
+/* Arguments to the read call.
+ * Note that NFS_READ_MAXIOV must be <= (MAX_IOVEC-2) from sunrpc/xprt.h
+ */
+#define NFS_READ_MAXIOV 8
+
+struct nfs_readargs {
+	struct nfs_fh *		fh;
+	__u64			offset;
+	__u32			count;
+	unsigned int            nriov;
+	struct iovec            iov[NFS_READ_MAXIOV];
+};
+
+struct nfs_readres {
+	struct nfs_fattr *	fattr;
+	unsigned int		count;
+	int                     eof;
 };
 
 /* Arguments to the write call.
@@ -66,18 +100,6 @@ struct nfs_writeres {
 	struct nfs_fattr *	fattr;
 	struct nfs_writeverf *	verf;
 	__u32			count;
-};
-
-struct nfs_readargs {
-	struct nfs_fh *		fh;
-	__u32			offset;
-	__u32			count;
-	void *			buffer;
-};
-
-struct nfs_readres {
-	struct nfs_fattr *	fattr;
-	unsigned int		count;
 };
 
 /*
@@ -108,31 +130,38 @@ struct nfs_sattrargs {
 struct nfs_diropargs {
 	struct nfs_fh *		fh;
 	const char *		name;
+	unsigned int		len;
 };
 
 struct nfs_createargs {
 	struct nfs_fh *		fh;
 	const char *		name;
+	unsigned int		len;
 	struct iattr *		sattr;
 };
 
 struct nfs_renameargs {
 	struct nfs_fh *		fromfh;
 	const char *		fromname;
+	unsigned int		fromlen;
 	struct nfs_fh *		tofh;
 	const char *		toname;
+	unsigned int		tolen;
 };
 
 struct nfs_linkargs {
 	struct nfs_fh *		fromfh;
 	struct nfs_fh *		tofh;
 	const char *		toname;
+	unsigned int		tolen;
 };
 
 struct nfs_symlinkargs {
 	struct nfs_fh *		fromfh;
 	const char *		fromname;
+	unsigned int		fromlen;
 	const char *		topath;
+	unsigned int		tolen;
 	struct iattr *		sattr;
 };
 
@@ -150,7 +179,13 @@ struct nfs_diropok {
 
 struct nfs_readlinkargs {
 	struct nfs_fh *		fh;
-	const void *		buffer;
+	void *			buffer;
+	unsigned int		bufsiz;
+};
+
+struct nfs_readlinkres {
+	void *			buffer;
+	unsigned int		bufsiz;
 };
 
 struct nfs_readdirres {
@@ -158,44 +193,182 @@ struct nfs_readdirres {
 	unsigned int		bufsiz;
 };
 
+struct nfs3_sattrargs {
+	struct nfs_fh *		fh;
+	struct iattr *		sattr;
+	unsigned int		guard;
+	__u64			guardtime;
+};
+
+struct nfs3_diropargs {
+	struct nfs_fh *		fh;
+	const char *		name;
+	unsigned int		len;
+};
+
+struct nfs3_accessargs {
+	struct nfs_fh *		fh;
+	__u32			access;
+};
+
+struct nfs3_createargs {
+	struct nfs_fh *		fh;
+	const char *		name;
+	unsigned int		len;
+	struct iattr *		sattr;
+	enum nfs3_createmode	createmode;
+	__u32			verifier[2];
+};
+
+struct nfs3_mkdirargs {
+	struct nfs_fh *		fh;
+	const char *		name;
+	unsigned int		len;
+	struct iattr *		sattr;
+};
+
+struct nfs3_symlinkargs {
+	struct nfs_fh *		fromfh;
+	const char *		fromname;
+	unsigned int		fromlen;
+	const char *		topath;
+	unsigned int		tolen;
+	struct iattr *		sattr;
+};
+
+struct nfs3_mknodargs {
+	struct nfs_fh *		fh;
+	const char *		name;
+	unsigned int		len;
+	enum nfs3_ftype		type;
+	struct iattr *		sattr;
+	dev_t			rdev;
+};
+
+struct nfs3_renameargs {
+	struct nfs_fh *		fromfh;
+	const char *		fromname;
+	unsigned int		fromlen;
+	struct nfs_fh *		tofh;
+	const char *		toname;
+	unsigned int		tolen;
+};
+
+struct nfs3_linkargs {
+	struct nfs_fh *		fromfh;
+	struct nfs_fh *		tofh;
+	const char *		toname;
+	unsigned int		tolen;
+};
+
+struct nfs3_readdirargs {
+	struct nfs_fh *		fh;
+	__u64			cookie;
+	__u32			verf[2];
+	void *			buffer;
+	unsigned int		bufsiz;
+	int			plus;
+};
+
+struct nfs3_diropres {
+	struct nfs_fattr *	dir_attr;
+	struct nfs_fh *		fh;
+	struct nfs_fattr *	fattr;
+};
+
+struct nfs3_accessres {
+	struct nfs_fattr *	fattr;
+	__u32			access;
+};
+
+struct nfs3_readlinkargs {
+	struct nfs_fh *		fh;
+	void *			buffer;
+	unsigned int		bufsiz;
+};
+
+struct nfs3_readlinkres {
+	struct nfs_fattr *	fattr;
+	void *			buffer;
+	unsigned int		bufsiz;
+};
+
+struct nfs3_renameres {
+	struct nfs_fattr *	fromattr;
+	struct nfs_fattr *	toattr;
+};
+
+struct nfs3_linkres {
+	struct nfs_fattr *	dir_attr;
+	struct nfs_fattr *	fattr;
+};
+
+struct nfs3_readdirres {
+	struct nfs_fattr *	dir_attr;
+	__u32 *			verf;
+	void *			buffer;
+	unsigned int		bufsiz;
+	int			plus;
+};
+
 /*
- * linux/fs/nfs/proc.c
+ * RPC procedure vector for NFSv2/NFSv3 demuxing
  */
-extern int nfs_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
-			struct nfs_fattr *fattr);
-extern int nfs_proc_setattr(struct nfs_server *server, struct nfs_fh *fhandle,
-			struct nfs_fattr *fattr, struct iattr *sattr);
-extern int nfs_proc_lookup(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name, struct nfs_fh *fhandle,
-			struct nfs_fattr *fattr);
-extern int nfs_proc_read(struct nfs_server *server, struct nfs_fh *fhandle,
-			int swap, unsigned long offset, unsigned int count,
-			void *buffer, struct nfs_fattr *fattr);
-extern int nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle,
-			int swap, unsigned long offset, unsigned int count,
-			const void *buffer, struct nfs_fattr *fattr);
-extern int nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name, struct iattr *sattr,
-			struct nfs_fh *fhandle, struct nfs_fattr *fattr);
-extern int nfs_proc_remove(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name);
-extern int nfs_proc_rename(struct nfs_server *server,
-			struct nfs_fh *old_dir, const char *old_name,
-			struct nfs_fh *new_dir, const char *new_name);
-extern int nfs_proc_link(struct nfs_server *server, struct nfs_fh *fhandle,
-			struct nfs_fh *dir, const char *name);
-extern int nfs_proc_symlink(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name, const char *path,
-			struct iattr *sattr);
-extern int nfs_proc_mkdir(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name, struct iattr *sattr,
-			struct nfs_fh *fhandle, struct nfs_fattr *fattr);
-extern int nfs_proc_rmdir(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name);
-extern int nfs_proc_readdir(struct dentry *, struct nfs_fattr *,
-			    u64 cookie, void *, unsigned int size, int plus);
-extern int nfs_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
-			struct nfs_fsinfo *res);
-extern u32 * nfs_decode_dirent(u32 *p, struct nfs_entry *entry, int plus);
+struct nfs_rpc_ops {
+	int	version;		/* Protocol version */
+
+	int	(*getroot) (struct nfs_server *, struct nfs_fh *,
+			    struct nfs_fattr *);
+	int	(*getattr) (struct dentry *, struct nfs_fattr *);
+	int	(*setattr) (struct dentry *, struct nfs_fattr *,
+			    struct iattr *);
+	int	(*lookup)  (struct dentry *, struct qstr *,
+			    struct nfs_fh *, struct nfs_fattr *);
+	int	(*access)  (struct dentry *, int , int);
+	int	(*readlink)(struct dentry *, void *, unsigned int);
+	int	(*read)    (struct dentry *, struct nfs_fattr *,
+			    int, loff_t, unsigned int,
+			    void *buffer, int *eofp);
+	int	(*write)   (struct dentry *, struct nfs_fattr *,
+			    int, loff_t, unsigned int,
+			    void *buffer, struct nfs_writeverf *verfp);
+	int	(*commit)  (struct dentry *, struct nfs_fattr *,
+			    unsigned long, unsigned int);
+	int	(*create)  (struct dentry *, struct qstr *, struct iattr *,
+			    int, struct nfs_fh *, struct nfs_fattr *);
+	int	(*remove)  (struct dentry *, struct qstr *);
+	int	(*rename)  (struct dentry *, struct qstr *,
+			    struct dentry *, struct qstr *);
+	int	(*link)    (struct dentry *, struct dentry *, struct qstr *);
+	int	(*symlink) (struct dentry *, struct qstr *, struct qstr *,
+			    struct iattr *, struct nfs_fh *,
+			    struct nfs_fattr *);
+	int	(*mkdir)   (struct dentry *, struct qstr *, struct iattr *,
+			    struct nfs_fh *, struct nfs_fattr *);
+	int	(*rmdir)   (struct dentry *, struct qstr *);
+	int	(*readdir) (struct dentry *, u64 cookie, void *, unsigned int,
+			    int);
+	int	(*mknod)   (struct dentry *, struct qstr *, struct iattr *,
+			    dev_t, struct nfs_fh *, struct nfs_fattr *);
+	int	(*statfs)  (struct nfs_server *, struct nfs_fh *,
+			    struct nfs_fsinfo *);
+	u32 *	(*decode_dirent)(u32 *, struct nfs_entry *, int plus);
+};
+
+/*
+ * 	NFS_CALL(getattr, inode, (fattr));
+ * into
+ *	NFS_PROTO(inode)->getattr(fattr);
+ */
+#define NFS_CALL(op, inode, args)	NFS_PROTO(inode)->op args
+
+/*
+ * Function vectors etc. for the NFS client
+ */
+extern struct nfs_rpc_ops	nfs_v2_clientops;
+extern struct nfs_rpc_ops	nfs_v3_clientops;
+extern struct rpc_version	nfs_version2;
+extern struct rpc_version	nfs_version3;
+extern struct rpc_program	nfs_program;
 
 #endif

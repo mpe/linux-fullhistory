@@ -1,3 +1,11 @@
+Sat Apr 1  12:00 2000 Gerard Roudier (groudier@club-internet.fr)
+	* revision 1.5l
+	- Tiny change for __sparc__ appeared in 2.3.99-pre4.1 that 
+	  applies to cache line size (? Probably from David S Miller).
+	- Make sure no data transfer will happen for Scsi_Cmnd requests 
+	  that supply SCSI_DATA_NONE direction (this avoids some BUG() 
+	  statement in the PCI code when a data buffer is also supplied).
+
 Mon Mar  6 23:30 2000 Gerard Roudier (groudier@club-internet.fr)
 	* version sym53c8xx-1.5k
 	- Test against expected data transfer direction from SCRIPTS.

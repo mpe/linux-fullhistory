@@ -97,7 +97,6 @@ static struct tunertype tuners[] = {
 	{ "Temic NTSC", TEMIC, NTSC,
 	  16*157.25,16*463.25,0x02,0x04,0x01,0x8e,732},
 	{ "Temic PAL_I", TEMIC, PAL_I,
-	  // 16*170.00,16*450.00,0xa0,0x90,0x30,0x8e,623}, 
 	  16*170.00,16*450.00,0x02,0x04,0x01,0x8e,623},
  	{ "Temic 4036 FY5 NTSC", TEMIC, NTSC,
 	  16*157.25,16*463.25,0xa0,0x90,0x30,0x8e,732},
@@ -111,6 +110,8 @@ static struct tunertype tuners[] = {
 	  16*133.25,16*351.25,0x01,0x02,0x08,0x8e,622},
         { "Alps TSBC5", Alps, PAL, /* untested - data sheet guess. Only IF differs. */
 	  16*133.25,16*351.25,0x01,0x02,0x08,0x8e,608},
+	{ "Temic 4006FH5", TEMIC, PAL_I,
+	  16*170.00,16*450.00,0xa0,0x90,0x30,0x8e,623}, 
 };
 #define TUNERS (sizeof(tuners)/sizeof(struct tunertype))
 

@@ -1,7 +1,7 @@
 /*
  * msgqueue.h: message queue handling
  *
- * (c) 1997 Russell King
+ * Copyright (C) 1997 Russell King
  */
 #ifndef MSGQUEUE_H
 #define MSGQUEUE_H

@@ -100,6 +100,8 @@ void __free_pages_ok (struct page *page, unsigned long order)
 
 	if (page->buffers)
 		BUG();
+	if (page->mapping)
+		BUG();
 	if (page-mem_map >= max_mapnr)
 		BUG();
 	if (PageSwapCache(page))

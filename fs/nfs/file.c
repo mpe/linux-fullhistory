@@ -216,10 +216,10 @@ nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
 	struct inode * inode = filp->f_dentry->d_inode;
 	int	status = 0;
 
-	dprintk("NFS: nfs_lock(f=%4x/%ld, t=%x, fl=%x, r=%ld:%ld)\n",
+	dprintk("NFS: nfs_lock(f=%4x/%ld, t=%x, fl=%x, r=%Ld:%Ld)\n",
 			inode->i_dev, inode->i_ino,
 			fl->fl_type, fl->fl_flags,
-			fl->fl_start, fl->fl_end);
+			(long long)fl->fl_start, (long long)fl->fl_end);
 
 	if (!inode)
 		return -EINVAL;

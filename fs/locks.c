@@ -111,8 +111,6 @@
 
 #include <asm/uaccess.h>
 
-#define OFFSET_MAX	((off_t)LONG_MAX)	/* FIXME: move elsewhere? */
-
 static int flock_make_lock(struct file *filp, struct file_lock *fl,
 			       unsigned int cmd);
 static int posix_make_lock(struct file *filp, struct file_lock *fl,
@@ -195,9 +193,9 @@ static void locks_insert_block(struct file_lock *blocker,
 
 	if (waiter->fl_prevblock) {
 		printk(KERN_ERR "locks_insert_block: remove duplicated lock "
-			"(pid=%d %ld-%ld type=%d)\n",
-			waiter->fl_pid, waiter->fl_start,
-			waiter->fl_end, waiter->fl_type);
+			"(pid=%d %Ld-%Ld type=%d)\n",
+			waiter->fl_pid, (long long)waiter->fl_start,
+			(long long)waiter->fl_end, waiter->fl_type);
 		locks_delete_block(waiter->fl_prevblock, waiter);
 	}
 
@@ -338,10 +336,6 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 	if (!filp)
 		goto out;
 
-	error = -EINVAL;
-	if (!filp->f_dentry || !filp->f_dentry->d_inode)
-		goto out_putf;
-
 	if (!posix_make_lock(filp, &file_lock, &flock))
 		goto out_putf;
 
@@ -385,7 +379,6 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	struct file *filp;
 	struct file_lock file_lock;
 	struct flock flock;
-	struct dentry * dentry;
 	struct inode *inode;
 	int error;
 
@@ -405,10 +398,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		goto out;
 
 	error = -EINVAL;
-	if (!(dentry = filp->f_dentry))
-		goto out_putf;
-	if (!(inode = dentry->d_inode))
-		goto out_putf;
+	inode = filp->f_dentry->d_inode;
 
 	/* Don't allow mandatory locks on files that may be memory mapped
 	 * and shared.
@@ -616,7 +606,7 @@ repeat:
 		/* Block for writes against a "read" lock,
 		 * and both reads and writes against a "write" lock.
 		 */
-		if (posix_locks_conflict(fl, &tfl)) {
+		if (posix_locks_conflict(&tfl, fl)) {
 			error = -EAGAIN;
 			if (filp && (filp->f_flags & O_NONBLOCK))
 				break;
@@ -650,7 +640,7 @@ repeat:
 static int posix_make_lock(struct file *filp, struct file_lock *fl,
 			   struct flock *l)
 {
-	off_t start;
+	loff_t start;
 
 	memset(fl, 0, sizeof(*fl));
 	
@@ -683,8 +673,11 @@ static int posix_make_lock(struct file *filp, struct file_lock *fl,
 
 	if (((start += l->l_start) < 0) || (l->l_len < 0))
 		return (0);
+	fl->fl_end = start + l->l_len - 1;
+	if (l->l_len > 0 && fl->fl_end < 0)
+		return (0);
 	fl->fl_start = start;	/* we record the absolute position */
-	if ((l->l_len == 0) || ((fl->fl_end = start + l->l_len - 1) < 0))
+	if (l->l_len == 0)
 		fl->fl_end = OFFSET_MAX;
 	
 	fl->fl_file = filp;
@@ -703,8 +696,6 @@ static int flock_make_lock(struct file *filp, struct file_lock *fl,
 	memset(fl, 0, sizeof(*fl));
 
 	init_waitqueue_head(&fl->fl_wait);
-	if (!filp->f_dentry)	/* just in case */
-		return (0);
 
 	switch (cmd & ~LOCK_NB) {
 	case LOCK_SH:
@@ -1128,6 +1119,8 @@ static struct file_lock *locks_init_lock(struct file_lock *new,
 		new->fl_start = fl->fl_start;
 		new->fl_end = fl->fl_end;
 		new->fl_notify = fl->fl_notify;
+		new->fl_insert = fl->fl_insert;
+		new->fl_remove = fl->fl_remove;
 		new->fl_u = fl->fl_u;
 	}
 	return new;
@@ -1145,6 +1138,9 @@ static void locks_insert_lock(struct file_lock **pos, struct file_lock *fl)
 	file_lock_table = fl;
 	fl->fl_next = *pos;	/* insert into file's list */
 	*pos = fl;
+
+	if (fl->fl_insert)
+		fl->fl_insert(fl);
 
 	return;
 }
@@ -1173,6 +1169,9 @@ static void locks_delete_lock(struct file_lock **thisfl_p, unsigned int wait)
 		prevfl->fl_nextlink = nextfl;
 	else
 		file_lock_table = nextfl;
+
+	if (thisfl->fl_remove)
+		thisfl->fl_remove(thisfl);
 	
 	locks_wake_up_blocks(thisfl, wait);
 	locks_free_lock(thisfl);
@@ -1201,10 +1200,10 @@ static char *lock_get_status(struct file_lock *fl, int id, char *pfx)
 		p += sprintf(p, "FLOCK  ADVISORY  ");
 	}
 	p += sprintf(p, "%s ", (fl->fl_type == F_RDLCK) ? "READ " : "WRITE");
-	p += sprintf(p, "%d %s:%ld %ld %ld ",
+	p += sprintf(p, "%d %s:%ld %Ld %Ld ",
 		     fl->fl_pid,
-		     kdevname(inode->i_dev), inode->i_ino, fl->fl_start,
-		     fl->fl_end);
+		     kdevname(inode->i_dev), inode->i_ino,
+		     (long long)fl->fl_start, (long long)fl->fl_end);
 	sprintf(p, "%08lx %08lx %08lx %08lx %08lx\n",
 		(long)fl, (long)fl->fl_prevlink, (long)fl->fl_nextlink,
 		(long)fl->fl_next, (long)fl->fl_nextblock);
@@ -1212,7 +1211,7 @@ static char *lock_get_status(struct file_lock *fl, int id, char *pfx)
 }
 
 static inline int copy_lock_status(char *p, char **q, off_t pos, int len,
-				   off_t offset, off_t length)
+				   off_t offset, int length)
 {
 	off_t i;
 
@@ -1236,7 +1235,7 @@ static inline int copy_lock_status(char *p, char **q, off_t pos, int len,
 	return (1);
 }
 
-int get_locks_status(char *buffer, char **start, off_t offset, off_t length)
+int get_locks_status(char *buffer, char **start, off_t offset, int length)
 {
 	struct file_lock *fl;
 	struct file_lock *bfl;

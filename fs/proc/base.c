@@ -38,14 +38,18 @@ int proc_pid_status(struct task_struct*,char*);
 int proc_pid_statm(struct task_struct*,char*);
 int proc_pid_cpu(struct task_struct*,char*);
 
-static struct dentry *proc_fd_link(struct inode *inode)
+static struct dentry *proc_fd_link(struct inode *inode, struct vfsmount **mnt)
 {
-	if (inode->u.proc_i.file)
+	if (inode->u.proc_i.file) {
+		if (inode->u.proc_i.file->f_vfsmnt) {
+			*mnt = mntget(inode->u.proc_i.file->f_vfsmnt);
+		}
 		return dget(inode->u.proc_i.file->f_dentry);
+	}
 	return NULL;
 }
 
-static struct dentry *proc_exe_link(struct inode *inode)
+static struct dentry *proc_exe_link(struct inode *inode, struct vfsmount **mnt)
 {
 	struct mm_struct * mm;
 	struct vm_area_struct * vma;
@@ -62,6 +66,7 @@ static struct dentry *proc_exe_link(struct inode *inode)
 	while (vma) {
 		if ((vma->vm_flags & VM_EXECUTABLE) && 
 		    vma->vm_file) {
+			*mnt = mntget(vma->vm_file->f_vfsmnt);
 			result = dget(vma->vm_file->f_dentry);
 			break;
 		}
@@ -73,25 +78,29 @@ out:
 	return result;
 }
 
-static struct dentry *proc_cwd_link(struct inode *inode)
+static struct dentry *proc_cwd_link(struct inode *inode, struct vfsmount **mnt)
 {
 	struct dentry *result = NULL;
 	if (task_lock(inode->u.proc_i.task)) {
 		struct fs_struct *fs = inode->u.proc_i.task->fs;
-		if (fs)
+		if (fs) {
+			*mnt = mntget(fs->pwdmnt);
 			result = dget(fs->pwd);
+		}
 		task_unlock(inode->u.proc_i.task);
 	}
 	return result;
 }
 
-static struct dentry *proc_root_link(struct inode *inode)
+static struct dentry *proc_root_link(struct inode *inode, struct vfsmount **mnt)
 {
 	struct dentry *result = NULL;
 	if (task_lock(inode->u.proc_i.task)) {
 		struct fs_struct *fs = inode->u.proc_i.task->fs;
-		if (fs)
+		if (fs) {
+			*mnt = mntget(fs->rootmnt);
 			result = dget(fs->root);
+		}
 		task_unlock(inode->u.proc_i.task);
 	}
 	return result;
@@ -160,16 +169,19 @@ static int proc_permission(struct inode *inode, int mask)
 {
 	struct dentry *de, *base, *root;
 	struct super_block *our_sb, *sb, *below;
+	struct vfsmount *our_vfsmnt, *vfsmnt, *mnt;
 
 	if (standard_permission(inode, mask) != 0)
 		return -EACCES;
 
 	base = current->fs->root;
-	de = root = proc_root_link(inode); /* Ewww... */
+	our_vfsmnt = current->fs->rootmnt;
+	de = root = proc_root_link(inode, &vfsmnt); /* Ewww... */
 
 	if (!de)
 		return -ENOENT;
 
+	mnt = vfsmnt;
 	our_sb = base->d_inode->i_sb;
 	sb = de->d_inode->i_sb;
 	while (sb != our_sb) {
@@ -184,9 +196,11 @@ static int proc_permission(struct inode *inode, int mask)
 		goto out;
 
 	dput(root);
+	mntput(mnt);
 	return 0;
 out:
 	dput(root);
+	mntput(mnt);
 	return -EACCES;
 }
 
@@ -347,6 +361,7 @@ static struct inode_operations proc_mem_inode_operations = {
 
 static struct dentry * proc_pid_follow_link(struct dentry *dentry,
 					struct dentry *base,
+					struct vfsmount **vfsmnt,
 					unsigned int follow)
 {
 	struct inode *inode = dentry->d_inode;
@@ -355,20 +370,22 @@ static struct dentry * proc_pid_follow_link(struct dentry *dentry,
 
 	/* We don't need a base pointer in the /proc filesystem */
 	dput(base);
+	mntput(*vfsmnt);
 
 	error = proc_permission(inode, MAY_EXEC);
 	result = ERR_PTR(error);
 	if (error)
 		goto out;
 
-	result = inode->u.proc_i.op.proc_get_link(inode);
+	result = inode->u.proc_i.op.proc_get_link(inode, vfsmnt);
 out:
 	if (!result)
 		result = ERR_PTR(-ENOENT);
 	return result;
 }
 
-static int do_proc_readlink(struct dentry *dentry, char * buffer, int buflen)
+static int do_proc_readlink(struct dentry *dentry, struct vfsmount *mnt,
+			    char * buffer, int buflen)
 {
 	struct inode * inode;
 	char * tmp = (char*)__get_free_page(GFP_KERNEL), *path, *pattern;
@@ -391,7 +408,7 @@ static int do_proc_readlink(struct dentry *dentry, char * buffer, int buflen)
 		len = sprintf(tmp, pattern, inode->i_ino);
 		path = tmp;
 	} else {
-		path = d_path(dentry, tmp, PAGE_SIZE);
+		path = d_path(dentry, mnt, tmp, PAGE_SIZE);
 		len = tmp + PAGE_SIZE - 1 - path;
 	}
 
@@ -406,12 +423,13 @@ static int proc_pid_readlink(struct dentry * dentry, char * buffer, int buflen)
 {
 	int error;
 	struct inode *inode = dentry->d_inode;
+	struct vfsmount *mnt;
 
 	error = proc_permission(inode, MAY_EXEC);
 	if (error)
 		goto out;
 
-	dentry = inode->u.proc_i.op.proc_get_link(inode);
+	dentry = inode->u.proc_i.op.proc_get_link(inode, &mnt);
 	error = -ENOENT;
 	if (!dentry)
 		goto out;
@@ -420,8 +438,9 @@ static int proc_pid_readlink(struct dentry * dentry, char * buffer, int buflen)
 	if (IS_ERR(dentry))
 		goto out;
 
-	error = do_proc_readlink(dentry, buffer, buflen);
+	error = do_proc_readlink(dentry, mnt, buffer, buflen);
 	dput(dentry);
+	mntput(mnt);
 out:
 	return error;
 }

@@ -455,6 +455,7 @@ struct fown_struct {
 struct file {
 	struct list_head	f_list;
 	struct dentry		*f_dentry;
+	struct vfsmount         *f_vfsmnt;
 	struct file_operations	*f_op;
 	atomic_t		f_count;
 	unsigned int 		f_flags;
@@ -506,15 +507,23 @@ struct file_lock {
 	struct file *fl_file;
 	unsigned char fl_flags;
 	unsigned char fl_type;
-	off_t fl_start;
-	off_t fl_end;
+	loff_t fl_start;
+	loff_t fl_end;
 
 	void (*fl_notify)(struct file_lock *);	/* unblock callback */
+	void (*fl_insert)(struct file_lock *);	/* lock insertion callback */
+	void (*fl_remove)(struct file_lock *);	/* lock removal callback */
 
 	union {
 		struct nfs_lock_info	nfs_fl;
 	} fl_u;
 };
+
+/* The following constant reflects the upper bound of the file/locking space */
+#ifndef OFFSET_MAX
+#define INT_LIMIT(x)	(~((x)1 << (sizeof(x)*8 - 1)))
+#define OFFSET_MAX	INT_LIMIT(loff_t)
+#endif
 
 extern struct file_lock			*file_lock_table;
 
@@ -541,6 +550,26 @@ struct fasync_struct {
 #define FASYNC_MAGIC 0x4601
 
 extern int fasync_helper(int, struct file *, int, struct fasync_struct **);
+
+#define DQUOT_USR_ENABLED	0x01		/* User diskquotas enabled */
+#define DQUOT_GRP_ENABLED	0x02		/* Group diskquotas enabled */
+
+struct quota_mount_options
+{
+	unsigned int flags;			/* Flags for diskquotas on this device */
+	struct semaphore dqio_sem;		/* lock device while I/O in progress */
+	struct semaphore dqoff_sem;		/* serialize quota_off() and quota_on() on device */
+	struct file *files[MAXQUOTAS];		/* fp's to quotafiles */
+	time_t inode_expire[MAXQUOTAS];		/* expiretime for inode-quota */
+	time_t block_expire[MAXQUOTAS];		/* expiretime for block-quota */
+	char rsquash[MAXQUOTAS];		/* for quotas threat root as any other user */
+};
+
+/*
+ *	Umount options
+ */
+
+#define MNT_FORCE	0x00000001	/* Attempt to forcibily umount */
 
 #include <linux/minix_fs_sb.h>
 #include <linux/ext2_fs_sb.h>
@@ -684,7 +713,7 @@ struct inode_operations {
 	int (*rename) (struct inode *, struct dentry *,
 			struct inode *, struct dentry *);
 	int (*readlink) (struct dentry *, char *,int);
-	struct dentry * (*follow_link) (struct dentry *, struct dentry *, unsigned int);
+	struct dentry * (*follow_link) (struct dentry *, struct dentry *, struct vfsmount **, unsigned int);
 	void (*truncate) (struct inode *);
 	int (*permission) (struct inode *, int);
 	int (*revalidate) (struct dentry *);
@@ -808,10 +837,13 @@ extern int do_truncate(struct dentry *, loff_t start);
 extern int get_unused_fd(void);
 extern void put_unused_fd(unsigned int);
 
-extern struct file *filp_open(const char *, int, int, struct dentry *);
-extern struct file *dentry_open(struct dentry *, int);
+extern struct file *__filp_open(const char *, int, int, struct dentry *, struct vfsmount *);
+extern struct file * dentry_open(struct dentry *, struct vfsmount *, int);
+static inline struct file *filp_open(const char *name, int flags, int mode)
+{
+	return __filp_open(name, flags, mode, NULL, NULL);
+}
 extern int filp_close(struct file *, fl_owner_t id);
-
 extern char * getname(const char *);
 #define __getname()	((char *) __get_free_page(GFP_KERNEL))
 #define putname(name)	free_page((unsigned long)(name))
@@ -926,13 +958,8 @@ extern int get_write_access(struct inode *);
 extern void put_write_access(struct inode *);
 extern struct dentry * do_mknod(const char *, int, dev_t);
 extern int do_pipe(int *);
-extern int do_unlink(const char * name, struct dentry *);
-extern struct dentry * __open_namei(const char *, int, int, struct dentry *);
 
-static inline struct dentry * open_namei(const char *pathname)
-{
-	return __open_namei(pathname, 0, 0, NULL);
-}
+extern struct dentry * open_namei(const char *, int, int, struct dentry *, struct vfsmount **);
 
 extern int kernel_read(struct file *, unsigned long, char *, unsigned long);
 extern struct file * open_exec(const char *);
@@ -1058,9 +1085,9 @@ extern ssize_t generic_read_dir(struct file *, char *, size_t, loff_t *);
 extern struct file_operations generic_ro_fops;
 
 extern int vfs_readlink(struct dentry *, char *, int, const char *);
-extern struct dentry *vfs_follow_link(struct dentry *, struct dentry *, unsigned, const char *);
+extern struct dentry *vfs_follow_link(struct dentry *, struct dentry *, struct vfsmount **, unsigned, const char *);
 extern int page_readlink(struct dentry *, char *, int);
-extern struct dentry *page_follow_link(struct dentry *, struct dentry *, unsigned);
+extern struct dentry *page_follow_link(struct dentry *, struct dentry *, struct vfsmount **, unsigned);
 extern struct inode_operations page_symlink_inode_operations;
 
 extern int vfs_readdir(struct file *, filldir_t, void *);

@@ -64,17 +64,11 @@ asmlinkage off_t sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 {
 	off_t retval;
 	struct file * file;
-	struct dentry * dentry;
-	struct inode * inode;
 
 	retval = -EBADF;
 	file = fget(fd);
 	if (!file)
 		goto bad;
-	/* N.B. Shouldn't this be ENOENT?? */
-	if (!(dentry = file->f_dentry) ||
-	    !(inode = dentry->d_inode))
-		goto out_putf;
 	retval = -EINVAL;
 	if (origin <= 2) {
 		loff_t res = llseek(file, offset, origin);
@@ -82,7 +76,6 @@ asmlinkage off_t sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 		if (res != (loff_t)retval)
 			retval = -EOVERFLOW;	/* LFS: should only happen on 32 bit platforms */
 	}
-out_putf:
 	fput(file);
 bad:
 	return retval;
@@ -95,18 +88,12 @@ asmlinkage long sys_llseek(unsigned int fd, unsigned long offset_high,
 {
 	int retval;
 	struct file * file;
-	struct dentry * dentry;
-	struct inode * inode;
 	loff_t offset;
 
 	retval = -EBADF;
 	file = fget(fd);
 	if (!file)
 		goto bad;
-	/* N.B. Shouldn't this be ENOENT?? */
-	if (!(dentry = file->f_dentry) ||
-	    !(inode = dentry->d_inode))
-		goto out_putf;
 	retval = -EINVAL;
 	if (origin > 2)
 		goto out_putf;

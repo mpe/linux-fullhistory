@@ -2298,7 +2298,9 @@ copy_mount_stuff_to_kernel(const void *user, unsigned long *kernel)
 	return 0;
 }
 
-extern asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
+extern asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
+				unsigned long new_flags, void *data);
+extern long do_sys_mount(char * dev_name, char * dir_name, char * type,
 				unsigned long new_flags, void *data);
 
 #define SMBFS_NAME	"smbfs"
@@ -2328,7 +2330,6 @@ sys32_mount(char *dev_name, char *dir_name, char *type,
 				 (void *)AA(data));
 	} else {
 		unsigned long dev_page, dir_page, data_page;
-		mm_segment_t old_fs;
 
 		err = copy_mount_stuff_to_kernel((const void *)dev_name,
 						 &dev_page);
@@ -2348,13 +2349,9 @@ sys32_mount(char *dev_name, char *dir_name, char *type,
 			do_smb_super_data_conv((void *)data_page);
 		else
 			panic("The problem is here...");
-		old_fs = get_fs();
-		set_fs(KERNEL_DS);
-		err = sys_mount((char *)dev_page, (char *)dir_page,
+		err = do_sys_mount((char *)dev_page, (char *)dir_page,
 				(char *)type_page, new_flags,
 				(void *)data_page);
-		set_fs(old_fs);
-
 		if(data_page)
 			free_page(data_page);
 	dir_out:

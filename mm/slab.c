@@ -127,7 +127,7 @@
  * SLAB_SELFTEST	- 1 to perform a few tests, mainly for development.
  */
 #define		SLAB_MGMT_CHECKS	1
-#define		SLAB_DEBUG_SUPPORT	0
+#define		SLAB_DEBUG_SUPPORT	1
 #define		SLAB_STATS		0
 #define		SLAB_SELFTEST		0
 

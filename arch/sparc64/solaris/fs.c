@@ -495,26 +495,18 @@ asmlinkage int solaris_statvfs(u32 path, u32 buf)
 
 asmlinkage int solaris_fstatvfs(unsigned int fd, u32 buf)
 {
-	struct inode * inode;
-	struct dentry * dentry;
 	struct file * file;
 	int error;
 
-	lock_kernel();
 	error = -EBADF;
 	file = fget(fd);
-	if (!file)
-		goto out;
-
-	if (!(dentry = file->f_dentry))
-		error = -ENOENT;
-	else if (!(inode = dentry->d_inode))
-		error = -ENOENT;
-	else
-		error = report_statvfs(inode, buf);
-	fput(file);
+	if (file) {
+		lock_kernel();
+		error = report_statvfs(file->f_dentry->d_inode, buf);
+		unlock_kernel();
+		fput(file);
+	}
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -538,26 +530,17 @@ asmlinkage int solaris_statvfs64(u32 path, u32 buf)
 
 asmlinkage int solaris_fstatvfs64(unsigned int fd, u32 buf)
 {
-	struct inode * inode;
-	struct dentry * dentry;
 	struct file * file;
 	int error;
 
-	lock_kernel();
 	error = -EBADF;
 	file = fget(fd);
-	if (!file)
-		goto out;
-
-	if (!(dentry = file->f_dentry))
-		error = -ENOENT;
-	else if (!(inode = dentry->d_inode))
-		error = -ENOENT;
-	else
-		error = report_statvfs64(inode, buf);
-	fput(file);
-out:
-	unlock_kernel();
+	if (file) {
+		lock_kernel();
+		error = report_statvfs64(file->f_dentry->d_inode, buf);
+		unlock_kernel();
+		fput(file);
+	}
 	return error;
 }
 

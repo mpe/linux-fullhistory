@@ -18,12 +18,12 @@
  * mount-to-kernel version compatibility.  Some of these aren't used yet
  * but here they are anyway.
  */
-#define NFS_MOUNT_VERSION	3
+#define NFS_MOUNT_VERSION	4
 
 struct nfs_mount_data {
 	int		version;		/* 1 */
 	int		fd;			/* 1 */
-	struct nfs_fh	root;			/* 1 */
+	struct nfs2_fh	old_root;		/* 1 */
 	int		flags;			/* 1 */
 	int		rsize;			/* 1 */
 	int		wsize;			/* 1 */
@@ -37,6 +37,7 @@ struct nfs_mount_data {
 	char		hostname[256];		/* 1 */
 	int		namlen;			/* 2 */
 	unsigned int	bsize;			/* 3 */
+	struct nfs_fh	root;			/* 4 */
 };
 
 /* bits in the flags field */

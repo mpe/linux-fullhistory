@@ -490,7 +490,8 @@ static int init_bttv_i2c(struct bttv *btv)
 	bttv_bit_setscl(btv,1);
 	bttv_bit_setsda(btv,1);
 
-	return i2c_bit_add_bus(&btv->i2c_adap);
+	btv->i2c_ok = i2c_bit_add_bus(&btv->i2c_adap);
+	return btv->i2c_ok;
 }
 
 /* read I2C */
@@ -498,6 +499,8 @@ static int I2CRead(struct bttv *btv, unsigned char addr, char *probe_for)
 {
         unsigned char buffer = 0;
 
+	if (0 != btv->i2c_ok)
+		return -1;
 	if (verbose && NULL != probe_for)
 		printk(KERN_INFO "bttv%d: i2c: checking for %s @ 0x%02x... ",
 		       btv->nr,probe_for,addr);
@@ -523,11 +526,13 @@ static int I2CWrite(struct bttv *btv, unsigned char addr, unsigned char b1,
         unsigned char buffer[2];
         int bytes = both ? 2 : 1;
 
+	if (0 != btv->i2c_ok)
+		return -1;
         btv->i2c_client.addr = addr >> 1;
         buffer[0] = b1;
         buffer[1] = b2;
         if (bytes != i2c_master_send(&btv->i2c_client, buffer, bytes))
-                return -1;
+		return -1;
         return 0;
 }
 
@@ -702,42 +707,25 @@ static void init_PXC200(struct bttv *btv)
 
 /* ----------------------------------------------------------------------- */
 
-/* for some vendors it is just the PCI ID */
-static struct VENDOR {
-	int id;
-	char *name;
-} vendors[] = {
-	{ 0x0001, "ATI Technologies Inc" },
-	{ 0x10b4, "STB Systems Inc" },
-	{ 0x1118, "Terratec" },
-	{ 0x13eb, "Hauppauge Computer Works Inc" },
-	{ 0x1461, "Avermedia" },
-	{ 0x1850, "Chronos" },
-	{ 0x1852, "Typhoon" },
-	{ 0x3000, "Askey" },
-	{ 0x3002, "Askey" },
-	{ 0x6606, "Leadtek" },
-	{ -1, NULL }
-};
-
 static struct CARD {
-	int vid;
-	int id;
+	unsigned id;
 	int cardnr;
 	char *name;
 } cards[] = {
-	{ 0x0001, 0x1002, BTTV_HAUPPAUGE878,  "TV Wonder" },
-	{ 0x10b4, 0x2636, BTTV_HAUPPAUGE878,  "???" },
-	{ 0x1118, 0x153b, BTTV_TERRATVALUE,   "TV Value" },
-	{ 0x13eb, 0x0070, BTTV_HAUPPAUGE878,  "WinTV" },
-	{ 0x1461, 0x0002, BTTV_AVERMEDIA98,   "TVCapture 98" },
-	{ 0x1850, 0x1851, BTTV_CHRONOS_VS2,   "Video Shuttle II" },
-	{ 0x1852, 0x1852, BTTV_TYPHOON_TVIEW, "TView TV/FM Tuner" },
-	{ 0x3000, 0x14ff, BTTV_MAGICTVIEW061, "TView 99"  },
-	{ 0x3002, 0x144f, BTTV_MAGICTVIEW061, "Magic TView"  },
-	{ 0x3002, 0x14ff, BTTV_PHOEBE_TVMAS,  "TV Master"  },
-	{ 0x6606, 0x217d, BTTV_WINFAST2000,   "WinFast TV 2000" },
-	{ -1, -1, -1, NULL }
+	{ 0x00011002, BTTV_HAUPPAUGE878,  "ATI TV Wonder" },
+	{ 0x00031461, BTTV_AVERMEDIA98,   "AVerMedia TVPhone98" },
+	{ 0x10b42636, BTTV_HAUPPAUGE878,  "STB ???" },
+	{ 0x1118153b, BTTV_TERRATVALUE,   "Terratec TV Value" },
+	{ 0x13eb0070, BTTV_HAUPPAUGE878,  "Hauppauge WinTV" },
+	{ 0x14610002, BTTV_AVERMEDIA98,   "Avermedia TVCapture 98" },
+	{ 0x18501851, BTTV_CHRONOS_VS2,   "Chronos Video Shuttle II" },
+	{ 0x18521852, BTTV_TYPHOON_TVIEW, "Typhoon TView TV/FM Tuner" },
+	{ 0x3000144f, BTTV_MAGICTVIEW063, "TView 99 (CPH063)" },
+	{ 0x300014ff, BTTV_MAGICTVIEW061, "TView 99 (CPH061)" },
+	{ 0x3002144f, BTTV_MAGICTVIEW061, "Askey Magic TView" },
+	{ 0x300214ff, BTTV_PHOEBE_TVMAS,  "Phoebe TV Master" },
+	{ 0x6606217d, BTTV_WINFAST2000,   "Leadtek WinFast TV 2000" },
+	{ 0, -1, NULL }
 };
 
 struct tvcard
@@ -869,7 +857,7 @@ static struct tvcard tvcards[] =
 	  1,1,1,1,0 },
         { "FlyVideo 98",
           3, 1, 0, 2, 0x8dff00, {2, 3, 1, 1}, 
-          { 0, 0x8dff00, 0x800, 0x400, 0x8dff00, 0 },0,
+          { 0, 0x8dff00, 0x8df700, 0x8de700, 0x8dff00, 0 },0,
 	  1,1,1,1,0 },
         { "iProTV",
 	  3, 1, 0, 2, 1, { 2, 3, 1, 1}, { 1, 0, 0, 0, 0 },0,
@@ -893,9 +881,12 @@ static struct tvcard tvcards[] =
 	{ "Typhoon TView TV/FM Tuner",
 	  3, 3, 0, 2, 0x1800, { 2, 3, 1, 1}, { 0, 0x800, 0, 0, 0x1800, 0 },0,
 	  1,1,1,1,0 },
-	{ "PixelView PlayTV pro",                                                               
-          3, 1, 0, 2, 0xff, { 2, 3, 1, 1 },                                                     
-          { 0x21, 0x20, 0x24, 0x2c, 0x29, 0x29 }, 0 }
+	{ "PixelView PlayTV pro",
+          3, 1, 0, 2, 0xff, { 2, 3, 1, 1 },
+          { 0x21, 0x20, 0x24, 0x2c, 0x29, 0x29 }, 0 },
+	{ "TView99 CPH063",
+	  3, 1, 0, 2, 0x551e00, { 2, 0, 1, 1},
+	  { 0x551400, 0x551200, 0, 0, 0x551200 }, 0,1,1,1,1,0 },
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(struct tvcard))
 
@@ -920,39 +911,35 @@ dump_eeprom(struct bttv *btv,int addr)
 static int
 idcard_eeprom(struct bttv *btv)
 {
-	int i,id1,id2,n1,n2;
+	unsigned id;
+	int i,n;
 
-	id1 = (eeprom_data[254] << 8) | (eeprom_data[255]);
-	id2 = (eeprom_data[252] << 8) | (eeprom_data[253]);
-	if (id1 == 0 || id1 == 0xffff ||
-	    id2 == 0 || id2 == 0xffff)
-		return -1;
+	id = (eeprom_data[252] << 24) |
+		(eeprom_data[253] << 16) |
+		(eeprom_data[254] << 8)  |
+		(eeprom_data[255]);
+	if (id == 0 || id == 0xffffffff)
+	    return -1;
 
 	/* look for the card */
-	n1 = -1; n2 = -1;
-	for (i = 0; vendors[i].id != -1; i++)
-		if (vendors[i].id == id2)
-			n2 = i;
-	for (i = 0; cards[i].id != -1; i++)
-		if (cards[i].id  == id1 &&
-		    cards[i].vid == id2)
-			n1 = i;
+	for (n = -1, i = 0; cards[i].id != 0; i++)
+		if (cards[i].id  == id)
+			n = i;
 
-	if (n1 != -1 && n2 != -1) {
+	if (n != -1) {
 		/* found it */
-		printk(KERN_INFO "bttv%d: id: %s (0x%04x), vendor: %s (0x%04x)\n",
-		       btv->nr,cards[n1].name,id1,vendors[n2].name,id2);
+		printk(KERN_INFO "bttv%d: id: %s (0x%08x)\n",
+		       btv->nr,cards[n].name,id);
 		if (verbose)
 			printk(KERN_INFO "bttv%d:   => card=%d (%s)\n",
-			       btv->nr,cards[n1].cardnr,
-			       tvcards[cards[n1].cardnr].name);
-		return cards[n1].cardnr;
+			       btv->nr,cards[n].cardnr,
+			       tvcards[cards[n].cardnr].name);
+		return cards[n].cardnr;
 	} else {
 		/* 404 */
-		printk(KERN_INFO "bttv%d: id: %s (0x%04x), vendor: %s (0x%04x)\n",
-		       btv->nr, "unknown", id1,
-		       (n2 != -1) ? vendors[n2].name : "unknown", id2);
-		printk(KERN_INFO "please mail id + vendor, board name and "
+		printk(KERN_INFO "bttv%d: id: unknown (0x%08x)\n",
+		       btv->nr, id);
+		printk(KERN_INFO "please mail id, board name and "
 		       "the correct card= insmod option to "
 		       "kraxel@goldbach.in-berlin.de\n");
 		return -1;
@@ -1670,30 +1657,48 @@ static void make_clip_tab(struct bttv *btv, struct video_clip *cr, int ncr)
  *	www.brooktree.com - nicely done those folks.
  */
  
-/* set geometry for even/odd frames 
-   just if you are wondering:
-   handling of even and odd frames will be separated, e.g. for grabbing
-   the even ones as RGB into videomem and the others as YUV in main memory for 
-   compressing and sending to the video conferencing partner.
-
-*/
-static inline void bt848_set_eogeo(struct bttv *btv, int odd, u8 vtc, 
-				   u16 hscale, u16 vscale,
-				   u16 hactive, u16 vactive,
-				   u16 hdelay, u16 vdelay,
-				   u8 crop)
+static inline void bt848_set_eogeo(struct bttv *btv, struct tvnorm *tvn,
+				   int odd, int width, int height)
 {
+        u16 vscale, hscale;
+	u32 xsf, sr;
+	u16 hdelay;
+	u8 crop, vtc;
+	int inter = (height>tvn->sheight/2) ? 0 : 1;
         int off = odd ? 0x80 : 0x00;
-  
+
+	xsf = (width*tvn->scaledtwidth)/tvn->swidth;
+	hscale = ((tvn->totalwidth*4096UL)/xsf-4096);
+	hdelay =  tvn->hdelayx1;
+	hdelay =  (hdelay*width)/tvn->swidth;
+	hdelay &= 0x3fe;
+	sr=((tvn->sheight>>inter)*512)/height-512;
+	vscale=(0x10000UL-sr)&0x1fff;
+	crop=((width>>8)&0x03)|((hdelay>>6)&0x0c)|
+		((tvn->sheight>>4)&0x30)|((tvn->vdelay>>2)&0xc0);
+	vscale |= inter ? (BT848_VSCALE_INT<<8) : 0;
+
+#if 0
+	/* Some people say interpolation looks bad ... */
+	vtc = (width < 193) ? 2 : ((width < 385) ? 1 : 0);
+	if (width < 767)
+		btor(BT848_VSCALE_COMB, BT848_E_VSCALE_HI+off);
+	else
+		btand(~BT848_VSCALE_COMB, BT848_E_VSCALE_HI+off);
+#else
+	vtc = 0;
+	btand(~BT848_VSCALE_COMB, BT848_E_VSCALE_HI+off);
+#endif
+
 	btwrite(vtc, BT848_E_VTC+off);
 	btwrite(hscale>>8, BT848_E_HSCALE_HI+off);
 	btwrite(hscale&0xff, BT848_E_HSCALE_LO+off);
 	btaor((vscale>>8), 0xe0, BT848_E_VSCALE_HI+off);
 	btwrite(vscale&0xff, BT848_E_VSCALE_LO+off);
-	btwrite(hactive&0xff, BT848_E_HACTIVE_LO+off);
+	btwrite(width&0xff, BT848_E_HACTIVE_LO+off);
 	btwrite(hdelay&0xff, BT848_E_HDELAY_LO+off);
-	btwrite(vactive&0xff, BT848_E_VACTIVE_LO+off);
-	btwrite(vdelay&0xff, BT848_E_VDELAY_LO+off);
+	btwrite(tvn->sheight&0xff, BT848_E_VACTIVE_LO+off);
+	btwrite(tvn->vdelay&0xff, BT848_E_VDELAY_LO+off);
 	btwrite(crop, BT848_E_CROP+off);
 }
 
@@ -1701,14 +1706,8 @@ static inline void bt848_set_eogeo(struct bttv *btv, int odd, u8 vtc,
 static void bt848_set_geo(struct bttv *btv,
 			  int no_irq_context)
 {
-        u16 vscale, hscale;
-	u32 xsf, sr;
 	u16 ewidth, eheight, owidth, oheight;
 	u16 format, bswap;
-	u16 hdelay;
-	u16 hactive;
-	u16 inter;
-	u8 crop, vtc;  
 	struct tvnorm *tvn;
 	unsigned long flags;
  	
@@ -1727,10 +1726,6 @@ static void bt848_set_geo(struct bttv *btv,
 	if (no_irq_context)
 		set_pll(btv);
 
-        vtc=0;
-	/* Some people say interpolation looks bad ... */
-	/* vtc = (hactive < 193) ? 2 : ((hactive < 385) ? 1 : 0); */
-     
 	btv->win.interlace = (btv->win.height>tvn->sheight/2) ? 1 : 0;
 
 	if (0 == btv->risc_cap_odd &&
@@ -1762,40 +1757,11 @@ static void bt848_set_geo(struct bttv *btv,
 		eheight = btv->gbuf[btv->gq_grab].height;
 		format  = btv->gbuf[btv->gq_grab].fmt;
 		bswap   = 0;
-		inter   = (btv->win.height>tvn->sheight/2) ? 0 : 1;
 	}
 
-	inter = (oheight>tvn->sheight/2) ? 0 : 1;
-
-	/* odd field */
-	hactive=owidth;
-	xsf = (hactive*tvn->scaledtwidth)/tvn->swidth;
-	hscale = ((tvn->totalwidth*4096UL)/xsf-4096);
-	hdelay =  tvn->hdelayx1;
-	hdelay =  (hdelay*hactive)/tvn->swidth;
-	hdelay &= 0x3fe;
-	sr=((tvn->sheight>>inter)*512)/oheight-512;
-	vscale=(0x10000UL-sr)&0x1fff;
-	crop=((hactive>>8)&0x03)|((hdelay>>6)&0x0c)|
-		((tvn->sheight>>4)&0x30)|((tvn->vdelay>>2)&0xc0);
-	vscale |= btv->win.interlace ? (BT848_VSCALE_INT<<8) : 0;
-	bt848_set_eogeo(btv, 1, vtc, hscale, vscale, hactive, tvn->sheight,
-			hdelay, tvn->vdelay, crop);
-
-	/* even field */
-	hactive=ewidth;
-	xsf = (hactive*tvn->scaledtwidth)/tvn->swidth;
-	hscale = ((tvn->totalwidth*4096UL)/xsf-4096);
-	hdelay =  tvn->hdelayx1;
-	hdelay =  (hdelay*hactive)/tvn->swidth;
-	hdelay &= 0x3fe;
-	sr=((tvn->sheight>>inter)*512)/eheight-512;
-	vscale=(0x10000UL-sr)&0x1fff;
-	crop=((hactive>>8)&0x03)|((hdelay>>6)&0x0c)|
-		((tvn->sheight>>4)&0x30)|((tvn->vdelay>>2)&0xc0);
-	vscale |= btv->win.interlace ? (BT848_VSCALE_INT<<8) : 0;
-	bt848_set_eogeo(btv, 0, vtc, hscale, vscale, hactive, tvn->sheight,
-			hdelay, tvn->vdelay, crop);
+	/* program odd + even fields */
+	bt848_set_eogeo(btv, tvn, 1, owidth, oheight);
+	bt848_set_eogeo(btv, tvn, 0, ewidth, eheight);
 
 	btwrite(format, BT848_COLOR_FMT);
 	btwrite(bswap | BT848_COLOR_CTL_GAMMA, BT848_COLOR_CTL);
@@ -1897,8 +1863,8 @@ static int vgrab(struct bttv *btv, struct video_mmap *mp)
         make_vrisctab(btv, ro, re, vbuf, mp->width, mp->height, mp->format);
 
 	if (debug)
-		printk("bttv%d: cap vgrab: queue %d (%dx%d)\n",
-		       btv->nr,mp->frame,mp->width,mp->height);
+		printk("bttv%d: cap vgrab: queue %d (%d:%dx%d)\n",
+		       btv->nr,mp->frame,mp->format,mp->width,mp->height);
         cli();
         btv->gbuf[mp->frame].stat    = GBUFFER_GRABBING;
 	btv->gbuf[mp->frame].fmt     = palette2fmt[mp->format];
@@ -1914,10 +1880,6 @@ static int vgrab(struct bttv *btv, struct video_mmap *mp)
 #endif
 
 	if (btv->gq_in == btv->gq_out) {
-		if(mp->format>=VIDEO_PALETTE_COMPONENT) {
-			btor(BT848_VSCALE_COMB, BT848_E_VSCALE_HI);
-			btor(BT848_VSCALE_COMB, BT848_O_VSCALE_HI);
-		}
 		btv->risc_jmp[12]=cpu_to_le32(BT848_RISC_JUMP|(0x8<<16)|BT848_RISC_IRQ);
         }
 	btv->gqueue[btv->gq_in++] = mp->frame;
@@ -2317,7 +2279,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		btv->win.height=vw.height;
 
 		bt848_set_risc_jmps(btv,0);
-		
+
 		bt848_set_winsize(btv);
 		up(&btv->lock);
 
@@ -2573,10 +2535,8 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				if (debug)
 					printk("bttv%d: cap sync: sleep on %d\n",btv->nr,i);
 				interruptible_sleep_on(&btv->capq);
-				if(signal_pending(current)) {
-					ret = -EINTR;
-					break;
-				}
+				if(signal_pending(current))
+					return -EINTR;
 			}
 			/* fall throuth */
 		case GBUFFER_DONE:
@@ -2649,9 +2609,6 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		else
 			vu.radio=VIDEO_NO_UNIT;
 		vu.audio=VIDEO_NO_UNIT;
-#if 0
-		AUDIO(AUDC_GET_UNIT, &vu.audio);
-#endif
 		vu.teletext=VIDEO_NO_UNIT;
 		if(copy_to_user((void *)arg, (void *)&vu, sizeof(vu)))
 			return -EFAULT;
@@ -3054,17 +3011,6 @@ static void handle_chipset(void)
 	}
 }
 
-#if 0
-#warning please use tda8425.c instead
-static void init_tda8425(struct bttv *btv) 
-{
-        I2CWrite(btv, I2C_TDA8425, TDA8425_VL, 0xFC, 1); /* volume left 0dB  */
-        I2CWrite(btv, I2C_TDA8425, TDA8425_VR, 0xFC, 1); /* volume right 0dB */
-        I2CWrite(btv, I2C_TDA8425, TDA8425_BA, 0xF6, 1); /* bass 0dB         */
-        I2CWrite(btv, I2C_TDA8425, TDA8425_TR, 0xF6, 1); /* treble 0dB       */
-        I2CWrite(btv, I2C_TDA8425, TDA8425_S1, 0xCE, 1); /* mute off         */
-}
-#endif
 
 /* can tda9855.c handle this too maybe? */
 static void init_tda9840(struct bttv *btv)
@@ -3164,6 +3110,7 @@ static void idcard(int i)
 	    btv->type == BTTV_PIXVIEWPLAYTV	||
 	    btv->type == BTTV_AVERMEDIA98	||
 	    btv->type == BTTV_MAGICTVIEW061	||
+	    btv->type == BTTV_MAGICTVIEW063	||
 	    btv->type == BTTV_CHRONOS_VS2	||
 	    btv->type == BTTV_TYPHOON_TVIEW	||
 	    btv->type == BTTV_PXELVWPLTVPRO     ||
@@ -3600,8 +3547,6 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
                                         btv->risc_cap_odd  = 0;
 					btv->risc_cap_even = 0;
 					bt848_set_risc_jmps(btv,-1);
-					btand(~BT848_VSCALE_COMB, BT848_E_VSCALE_HI);
-					btand(~BT848_VSCALE_COMB, BT848_O_VSCALE_HI);
                                         bt848_set_geo(btv,0);
 					btwrite(btv->fb_color_ctl | BT848_COLOR_CTL_GAMMA,
 						BT848_COLOR_CTL);

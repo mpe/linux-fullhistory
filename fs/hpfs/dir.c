@@ -23,7 +23,7 @@ loff_t hpfs_dir_lseek(struct file *filp, loff_t off, int whence)
 	loff_t pos;
 	struct quad_buffer_head qbh;
 	struct inode *i = filp->f_dentry->d_inode;
-	struct super_block *s = filp->f_dentry->d_sb;
+	struct super_block *s = i->i_sb;
 	/*printk("dir lseek\n");*/
 	if (new_off == 0 || new_off == 1 || new_off == 11 || new_off == 12 || new_off == 13) goto ok;
 	hpfs_lock_inode(i);

@@ -88,6 +88,9 @@
  *      to support windowing into on adapter shared ram.
  *      i.e. Use LANAID to setup a PnP configuration with 16K RAM. Paging
  *      will shift this 16K window over the entire available shared RAM.
+ *
+ *      Changes by Peter De Schrijver (p2@mind.be) :
+ *      + fixed a problem with PCMCIA card removal
  */
 
 /* change the define of IBMTR_DEBUG_MESSAGES to a nonzero value 
@@ -95,15 +98,7 @@ in the event that chatty debug messages are desired - jjs 12/30/98 */
 
 #define IBMTR_DEBUG_MESSAGES 0
 
-#ifdef PCMCIA
-#define MODULE
-#endif
-
 #include <linux/module.h>
-
-#ifdef PCMCIA
-#undef MODULE
-#endif
 
 #define NO_AUTODETECT 1
 #undef NO_AUTODETECT
@@ -161,13 +156,13 @@ static char mcchannelid[] = {
 #include <linux/stddef.h>
 #include <linux/init.h>
 #include <linux/spinlock.h>
+#include <linux/ibmtr.h>
 #include <net/checksum.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 
-#include "ibmtr.h"
 
 
 #define DPRINTK(format, args...) printk("%s: " format, dev->name , ## args)
@@ -814,6 +809,9 @@ static void tok_set_multicast_list(struct net_device *dev)
 
 	int i;
 
+	if(ti->open_status==CLOSED)
+		return;
+
 	address[0] = address[1] = address[2] = address[3] = 0;
 
 	mclist = dev->mc_list;
@@ -870,26 +868,28 @@ static int tok_close(struct net_device *dev)
 
 	struct tok_info *ti=(struct tok_info *) dev->priv;
 
-	netif_stop_queue(dev);
-	SET_PAGE(ti->srb_page);	
-	isa_writeb(DIR_CLOSE_ADAPTER,
-	       ti->srb + offsetof(struct srb_close_adapter, command));
-	isa_writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+	if(ti->open_status!=CLOSED) {
+		netif_stop_queue(dev);
+		SET_PAGE(ti->srb_page);	
+		isa_writeb(DIR_CLOSE_ADAPTER,
+	       	ti->srb + offsetof(struct srb_close_adapter, command));
+		isa_writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 
-	ti->open_status=CLOSED;
+		ti->open_status=CLOSED;
 
-	sleep_on(&ti->wait_for_tok_int);
+		sleep_on(&ti->wait_for_tok_int);
 
-	SET_PAGE(ti->srb_page);
-	if (isa_readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)))
-		DPRINTK("close adapter failed: %02X\n",
-			(int)isa_readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)));
+		SET_PAGE(ti->srb_page);
+		if (isa_readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)))
+			DPRINTK("close adapter failed: %02X\n",
+				(int)isa_readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)));
 
 #ifdef PCMCIA
-	ti->sram = 0 ;
+		ti->sram = 0 ;
 #endif
-	DPRINTK("Adapter closed.\n");
-	MOD_DEC_USE_COUNT;
+		DPRINTK("Adapter closed.\n");
+		MOD_DEC_USE_COUNT;
+	}
 
 	return 0;
 }
@@ -937,6 +937,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
     		if (status == 0xFF)
        		{
 		          DPRINTK("PCMCIA card removed.\n");
+                          ti->open_status=CLOSED;
 			  goto return_point ; 
        		}
 
@@ -944,6 +945,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
       	        if ( isa_readb (ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN) == 0xFF)
     	        {
          		 DPRINTK("PCMCIA card removed.\n");
+                         ti->open_status=CLOSED;
 			 goto return_point ; 
       		}
 #endif
@@ -1851,6 +1853,7 @@ int ibmtr_change_mtu(struct net_device *dev, int mtu) {
 	return 0;
 }
 
+#ifndef PCMCIA
 #ifdef MODULE
 
 /* 3COM 3C619C supports 8 interrupts, 32 I/O ports */
@@ -1908,3 +1911,4 @@ void cleanup_module(void)
                 }
 }
 #endif /* MODULE */
+#endif

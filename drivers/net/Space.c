@@ -119,7 +119,7 @@ extern int de600_probe(struct net_device *);
 extern int de620_probe(struct net_device *);
 
 /* FDDI adapters */
-extern int dfx_probe(struct net_device *dev);
+extern int dfx_probe(void);
 extern int apfddi_init(struct net_device *dev);
 extern int skfp_probe(struct net_device *dev);
 
@@ -184,6 +184,9 @@ struct devprobe eisa_probes[] __initdata = {
 #endif
 #ifdef CONFIG_NE3210
 	{ne3210_probe, 0},
+#endif
+#ifdef CONFIG_DEFXX
+	{dfx_probe, 0}.
 #endif
 	{NULL, 0},
 };
@@ -469,9 +472,6 @@ static int __init fddiif_probe(struct net_device *dev)
 	    return 1;		/* ENXIO */
 
     if (1
-#ifdef CONFIG_DEFXX
-	&& dfx_probe(dev)
-#endif
 #ifdef CONFIG_APFDDI
 	&& apfddi_init(dev)
 #endif

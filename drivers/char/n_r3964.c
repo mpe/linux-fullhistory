@@ -12,7 +12,10 @@
  * Author:
  * L. Haag
  *
- * $Log: r3964.c,v $
+ * $Log: n_r3964.c,v $
+ * Revision 1.8  2000/03/23 14:14:54  dwmw2
+ * Fix race in sleeping in r3964_read()
+ *
  * Revision 1.7  1999/28/08 11:41:50  dwmw2
  * Port to 2.3 kernel
  *
@@ -38,7 +41,6 @@
  *
  *
  */
-#define R3964_VERSION "1.7"
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -224,7 +226,7 @@ static int __init r3964_init(void)
 {
    int status;
    
-   printk ("r3964: Philips r3964 Driver V%s\n", R3964_VERSION);
+   printk ("r3964: Philips r3964 Driver $Revision: 1.8 $\n");
 
    /*
     * Register the tty line discipline
@@ -1280,8 +1282,8 @@ static int r3964_read(struct tty_struct *tty, struct file *file,
          /* block until there is a message: */
          add_wait_queue(&pInfo->read_wait, &wait);
 repeat:
-         pMsg = remove_msg(pInfo, pClient);
          current->state = TASK_INTERRUPTIBLE;
+         pMsg = remove_msg(pInfo, pClient);
 	 if (!pMsg && !signal_pending(current))
 		 {
             schedule();

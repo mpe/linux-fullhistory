@@ -2115,6 +2115,15 @@ S: 301/222 City Walk
 S: Canberra ACT 2601
 S: Australia
 
+N: Bill Ryder
+E: bryder@sgi.com
+D: FTDI_SIO usb/serial converter driver
+W: http://reality.sgi.com/bryder_wellington/ftdi_sio
+S: I/3 Walter St
+S: Wellington
+S: New Zealand
+
+
 N: Sampo Saaristo
 E: sambo@cs.tut.fi
 D: Co-author of Multi-Protocol Over ATM (MPOA)

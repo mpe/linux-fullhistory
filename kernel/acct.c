@@ -36,8 +36,7 @@
  *  but this one obviously doesn't introduce deadlocks. Later. BTW, found
  *  one race (and leak) in BSD implementation.
  *  OK, that's better. ANOTHER race and leak in BSD variant. There always
- *  is one more bug... TODO: move filp_open into open.c and make
- *  parameters sysctl-controllable. 10/11/98, AV.
+ *  is one more bug... 10/11/98, AV.
  */
 
 #include <linux/config.h>
@@ -154,7 +153,7 @@ asmlinkage long sys_acct(const char *name)
 		if (IS_ERR(tmp))
 			goto out;
 		/* Difference from BSD - they don't do O_APPEND */
-		file = filp_open(tmp, O_WRONLY|O_APPEND, 0, NULL);
+		file = filp_open(tmp, O_WRONLY|O_APPEND, 0);
 		putname(tmp);
 		if (IS_ERR(file)) {
 			error = PTR_ERR(file);

@@ -838,11 +838,19 @@ extern void sklist_insert_socket(struct sock **list, struct sock *sk);
 extern void sklist_destroy_socket(struct sock **list, struct sock *sk);
 
 #ifdef CONFIG_FILTER
-/*
+
+/**
+ *	sk_filter - run a packet through a socket filter
+ *	@skb: buffer to filter
+ *	@filter: filter to apply
+ *
  * Run the filter code and then cut skb->data to correct size returned by
  * sk_run_filter. If pkt_len is 0 we toss packet. If skb->len is smaller
- * than pkt_len we keep whole skb->data.
+ * than pkt_len we keep whole skb->data. This is the socket level
+ * wrapper to sk_run_filter. It returns 0 if the packet should
+ * be accepted or 1 if the packet should be tossed.
  */
+ 
 extern __inline__ int sk_filter(struct sk_buff *skb, struct sk_filter *filter)
 {
 	int pkt_len;
@@ -856,6 +864,14 @@ extern __inline__ int sk_filter(struct sk_buff *skb, struct sk_filter *filter)
 	return 0;
 }
 
+/**
+ *	sk_filter_release: Release a socket filter
+ *	@sk: socket
+ *	@fp: filter to remove
+ *
+ *	Remove a filter from a socket and release its resources.
+ */
+ 
 extern __inline__ void sk_filter_release(struct sock *sk, struct sk_filter *fp)
 {
 	unsigned int size = sk_filter_len(fp);

@@ -1059,7 +1059,7 @@ static void __init xd_override_init_drive (u_char drive)
 }
 
 /* xd_setup: initialise controler from command line parameters */
-void __init xd_setup (char *command,int *integers)
+void __init do_xd_setup (int *integers)
 {
 	switch (integers[0]) {
 		case 4: if (integers[4] < 0)
@@ -1078,21 +1078,6 @@ void __init xd_setup (char *command,int *integers)
 	}
 	xd_maxsectors = 0x01;
 }
-
-#ifndef MODULE
-/* xd_manual_geo_init: initialise drive geometry from command line parameters
-   (used only for WD drives) */
-void __init xd_manual_geo_init (char *command,int *integers)
-{
-	int i;
-	if (integers[0]%3 != 0) {
-		printk("xd: incorrect number of parameters for xd_geo\n");
-		return;
-	}
-	for (i = 0; (i < integers[0]) && (i < 3*XD_MAXDRIVES); i++)
-		xd_geo[i] = integers[i+1];
-}
-#endif /* MODULE */
 
 /* xd_setparam: set the drive characteristics */
 static void __init xd_setparam (u_char command,u_char drive,u_char heads,u_short cylinders,u_short rwrite,u_short wprecomp,u_char ecc)
@@ -1149,7 +1134,7 @@ int init_module(void)
 		if(((xd[i] = xd[i-1]) >= 0) && !count)
 			count = i;
 	if((xd[0] = count))
-		xd_setup(NULL, xd);
+		do_xd_setup(xd);
 
 	if (error = xd_init())
 		return error;
@@ -1190,6 +1175,30 @@ void cleanup_module(void)
 	}
 }
 #else
+
+static int __init xd_setup (char *str)
+{
+	int ints[5];
+	get_options (str, ARRAY_SIZE (ints), ints);
+	do_xd_setup (ints);
+	return 1;
+}
+
+/* xd_manual_geo_init: initialise drive geometry from command line parameters
+   (used only for WD drives) */
+static int __init xd_manual_geo_init (char *str)
+{
+	int i, integers[1 + 3*XD_MAXDRIVES];
+
+	get_options (str, ARRAY_SIZE (ints), ints);
+	if (integers[0]%3 != 0) {
+		printk("xd: incorrect number of parameters for xd_geo\n");
+		return 1;
+	}
+	for (i = 0; (i < integers[0]) && (i < 3*XD_MAXDRIVES); i++)
+		xd_geo[i] = integers[i+1];
+	return 1;
+}
 
 __setup ("xd=", xd_setup);
 __setup ("xd_geo=", xd_manual_geo_init);

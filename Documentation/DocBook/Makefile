@@ -43,6 +43,8 @@ kernel-api.sgml: kernel-api.tmpl
 		$(TOPDIR)/drivers/net/wan/syncppp.c \
 		$(TOPDIR)/drivers/net/wan/z85230.c \
 		$(TOPDIR)/kernel/pm.c \
+		$(TOPDIR)/kernel/ksyms.c \
+		$(TOPDIR)/net/netsyms.c \
 		<kernel-api.tmpl >kernel-api.sgml
 
 DVI	:=	$(patsubst %.sgml, %.dvi, $(BOOKS))

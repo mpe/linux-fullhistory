@@ -1,7 +1,7 @@
 /*
  * EESOX SCSI driver
  *
- * Copyright (C) 1997-1998 Russell King
+ * Copyright (C) 1997-2000 Russell King
  */
 #ifndef EESOXSCSI_H
 #define EESOXSCSI_H
@@ -38,22 +38,25 @@ extern int eesoxscsi_proc_info (char *buffer, char **start, off_t offset,
 
 #include "fas216.h"
 
-#define EESOXSCSI {							\
-proc_info:	eesoxscsi_proc_info,					\
-name:		"EESOX SCSI",						\
-detect:		eesoxscsi_detect,	/* detect		*/	\
-release:	eesoxscsi_release,	/* release		*/	\
-info:		eesoxscsi_info,		/* info			*/	\
-command:	fas216_command,		/* command		*/	\
-queuecommand:	fas216_queue_command,	/* queuecommand		*/	\
-abort:		fas216_abort,		/* abort		*/	\
-reset:		fas216_reset,		/* reset		*/	\
-bios_param:	scsicam_bios_param,	/* biosparam		*/	\
-can_queue:	CAN_QUEUE,		/* can queue		*/	\
-this_id:	SCSI_ID,		/* scsi host id		*/	\
-sg_tablesize:	SG_ALL,			/* sg_tablesize		*/	\
-cmd_per_lun:	CAN_QUEUE,		/* cmd per lun		*/	\
-use_clustering:	DISABLE_CLUSTERING					\
+#define EESOXSCSI {					\
+proc_info:			eesoxscsi_proc_info,	\
+name:				"EESOX SCSI",		\
+detect:				eesoxscsi_detect,	\
+release:			eesoxscsi_release,	\
+info:				eesoxscsi_info,		\
+bios_param:			scsicam_bios_param,	\
+can_queue:			CAN_QUEUE,		\
+this_id:			SCSI_ID,		\
+sg_tablesize:			SG_ALL,			\
+cmd_per_lun:			CAN_QUEUE,		\
+use_clustering:			DISABLE_CLUSTERING,	\
+command:			fas216_command,		\
+queuecommand:			fas216_queue_command,	\
+eh_host_reset_handler:		fas216_eh_host_reset,	\
+eh_bus_reset_handler:		fas216_eh_bus_reset,	\
+eh_device_reset_handler:	fas216_eh_device_reset,	\
+eh_abort_handler:		fas216_eh_abort,	\
+use_new_eh_code:		1			\
 	}
 
 #ifndef HOSTS_C

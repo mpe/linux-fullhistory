@@ -190,10 +190,12 @@ static int
 nfs_writepage_sync(struct dentry *dentry, struct inode *inode,
 		struct page *page, unsigned long offset, unsigned int count)
 {
+	loff_t		base;
 	unsigned int	wsize = NFS_SERVER(inode)->wsize;
-	int		result, refresh = 0, written = 0;
+	int		result, refresh = 0, written = 0, flags;
 	u8		*buffer;
 	struct nfs_fattr fattr;
+	struct nfs_writeverf verf;
 
 	lock_kernel();
 	dprintk("NFS:      nfs_writepage_sync(%s/%s %d@%lu/%ld)\n",
@@ -201,15 +203,16 @@ nfs_writepage_sync(struct dentry *dentry, struct inode *inode,
 		count, page->index, offset);
 
 	buffer = (u8 *) kmap(page) + offset;
-	offset += page->index << PAGE_CACHE_SHIFT;
+	base = page_offset(page) + offset;
+
+	flags = ((IS_SWAPFILE(inode)) ? NFS_RW_SWAP : 0) | NFS_RW_SYNC;
 
 	do {
 		if (count < wsize && !IS_SWAPFILE(inode))
 			wsize = count;
 
-		result = nfs_proc_write(NFS_DSERVER(dentry), NFS_FH(dentry),
-					IS_SWAPFILE(inode), offset, wsize,
-					buffer, &fattr);
+		result = NFS_PROTO(inode)->write(dentry, &fattr, flags,
+						 base, wsize, buffer, &verf);
 		nfs_write_attributes(inode, &fattr);
 
 		if (result < 0) {
@@ -222,15 +225,15 @@ nfs_writepage_sync(struct dentry *dentry, struct inode *inode,
 			wsize, result);
 		refresh = 1;
 		buffer  += wsize;
-		offset  += wsize;
+	        base    += wsize;
 		written += wsize;
 		count   -= wsize;
 		/*
 		 * If we've extended the file, update the inode
 		 * now so we don't invalidate the cache.
 		 */
-		if (offset > inode->i_size)
-			inode->i_size = offset;
+		if (base > inode->i_size)
+			inode->i_size = base;
 	} while (count);
 
 io_error:
@@ -1427,11 +1430,11 @@ nfs_commit_done(struct rpc_task *task)
 		req = nfs_list_entry(data->pages.next);
 		nfs_list_remove_request(req);
 
-		dprintk("NFS: commit (%s/%s %d@%ld)",
+		dprintk("NFS: commit (%s/%s %d@%Ld)",
 			req->wb_file->f_dentry->d_parent->d_name.name,
 			req->wb_file->f_dentry->d_name.name,
 			req->wb_bytes,
-			page_offset(req->wb_page) + req->wb_offset);
+			(long long)(page_offset(req->wb_page) + req->wb_offset));
 		if (task->tk_status < 0) {
 			req->wb_file->f_error = task->tk_status;
 			nfs_inode_remove_request(req);

@@ -61,6 +61,9 @@
  *	Martin Mares	:	Use root_server_addr appropriately during setup.
  *	Martin Mares	:	Rewrote parameter parsing, now hopefully giving
  *				correct overriding.
+ *	Trond Myklebust :	Add in preliminary support for NFSv3 and TCP.
+ *				Fix bug in root_nfs_addr(). nfs_data.namlen
+ *				is NOT for the length of the hostname.
  */
 
 #include <linux/types.h>
@@ -147,6 +150,12 @@ static struct nfs_bool_opts {
 	{ "noac",	~NFS_MOUNT_NOAC,	NFS_MOUNT_NOAC },
 	{ "lock",	~NFS_MOUNT_NONLM,	0 },
 	{ "nolock",	~NFS_MOUNT_NONLM,	NFS_MOUNT_NONLM },
+#ifdef CONFIG_NFS_V3
+	{ "v2",		~NFS_MOUNT_VER3,	0 },
+	{ "v3",		~NFS_MOUNT_VER3,	NFS_MOUNT_VER3 },
+#endif
+	{ "udp",	~NFS_MOUNT_TCP,		0 },
+	{ "tcp",	~NFS_MOUNT_TCP,		NFS_MOUNT_TCP },
 	{ NULL,		0,			0 }
 };
 
@@ -271,7 +280,6 @@ static int __init root_nfs_addr(void)
 	}
 
 	strncpy(nfs_data.hostname, in_ntoa(servaddr), sizeof(nfs_data.hostname)-1);
-	nfs_data.namlen = strlen(nfs_data.hostname);
 	return 0;
 }
 
@@ -360,14 +368,14 @@ set_sockaddr(struct sockaddr_in *sin, __u32 addr, __u16 port)
 /*
  *  Query server portmapper for the port of a daemon program.
  */
-static int __init root_nfs_getport(int program, int version)
+static int __init root_nfs_getport(int program, int version, int proto)
 {
 	struct sockaddr_in sin;
 
 	printk(KERN_NOTICE "Looking up port of RPC %d/%d on %s\n",
 		program, version, in_ntoa(servaddr));
 	set_sockaddr(&sin, servaddr, 0);
-	return rpc_getport_external(&sin, program, version, IPPROTO_UDP);
+	return rpc_getport_external(&sin, program, version, proto);
 }
 
 
@@ -379,22 +387,39 @@ static int __init root_nfs_getport(int program, int version)
 static int __init root_nfs_ports(void)
 {
 	int port;
+	int nfsd_ver, mountd_ver;
+	int nfsd_port, mountd_port;
+	int proto;
+
+	if (nfs_data.flags & NFS_MOUNT_VER3) {
+		nfsd_ver = NFS3_VERSION;
+		mountd_ver = NFS_MNT3_VERSION;
+		nfsd_port = NFS_PORT;
+		mountd_port = NFS_MNT_PORT;
+	} else {
+		nfsd_ver = NFS2_VERSION;
+		mountd_ver = NFS_MNT_VERSION;
+		nfsd_port = NFS_PORT;
+		mountd_port = NFS_MNT_PORT;
+	}
+
+	proto = (nfs_data.flags & NFS_MOUNT_TCP) ? IPPROTO_TCP : IPPROTO_UDP;
 
 	if (nfs_port < 0) {
-		if ((port = root_nfs_getport(NFS_PROGRAM, NFS_VERSION)) < 0) {
+		if ((port = root_nfs_getport(NFS_PROGRAM, nfsd_ver, proto)) < 0) {
 			printk(KERN_ERR "Root-NFS: Unable to get nfsd port "
 					"number from server, using default\n");
-			port = NFS_PORT;
+			port = nfsd_port;
 		}
 		nfs_port = htons(port);
 		dprintk("Root-NFS: Portmapper on server returned %d "
 			"as nfsd port\n", port);
 	}
 
-	if ((port = root_nfs_getport(NFS_MNT_PROGRAM, NFS_MNT_VERSION)) < 0) {
+	if ((port = root_nfs_getport(NFS_MNT_PROGRAM, nfsd_ver, proto)) < 0) {
 		printk(KERN_ERR "Root-NFS: Unable to get mountd port "
 				"number from server, using default\n");
-		port = NFS_MNT_PORT;
+		port = mountd_port;
 	}
 	mount_port = htons(port);
 	dprintk("Root-NFS: mountd port is %d\n", port);
@@ -413,7 +438,10 @@ static int __init root_nfs_get_handle(void)
 	int status;
 
 	set_sockaddr(&sin, servaddr, mount_port);
-	status = nfs_mount(&sin, nfs_path, &nfs_data.root);
+	if (nfs_data.flags & NFS_MOUNT_VER3)
+		status = nfs3_mount(&sin, nfs_path, &nfs_data.root);
+	else
+		status = nfs_mount(&sin, nfs_path, &nfs_data.root);
 	if (status < 0)
 		printk(KERN_ERR "Root-NFS: Server returned error %d "
 				"while mounting %s\n", status, nfs_path);

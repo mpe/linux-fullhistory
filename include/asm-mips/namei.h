@@ -13,42 +13,18 @@
 /* Only one at this time. */
 #define IRIX32_EMUL "usr/gnemul/irix/"
 
-static inline struct dentry *
-__mips_lookup_dentry(const char *name, int lookup_flags)
-{
-	struct dentry *base;
-
-	if (current->personality != PER_IRIX32)
-		return ERR_PTR(-ENOENT);
-
-	base = lookup_dentry (IRIX32_EMUL,
-			dget (current->fs->root), 
-			(LOOKUP_FOLLOW | LOOKUP_DIRECTORY));
-			
-	if (IS_ERR (base)) return base;
-	
-	base = lookup_dentry (name, base, lookup_flags);
-
-	if (IS_ERR (base)) return base;
-
-	if (!base->d_inode) {
-		dput(base);
-		return ERR_PTR(-ENOENT);
-	}
-        
-        return base;
-}
-
 #ifdef CONFIG_BINFMT_IRIX
 
-#define __prefix_lookup_dentry(name, lookup_flags)				\
-	dentry = __mips_lookup_dentry (name, lookup_flags);			\
-	if (!IS_ERR (dentry)) return dentry;
+static inline char *__emul_prefix(void)
+{
+	if (current->personality != PER_IRIX32)
+		return NULL;
+	return IRIX32_EMUL;
+}
 
 #else /* !defined(CONFIG_BINFMT_IRIX) */
 
-#define __prefix_lookup_dentry(name, lookup_flags) \
-        do {} while (0)
+#define __emul_prefix() NULL
 
 #endif /* !defined(CONFIG_BINFMT_IRIX) */
 

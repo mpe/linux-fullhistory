@@ -21,7 +21,7 @@
 #ifndef _BTTV_H_
 #define _BTTV_H_
 
-#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,24) 
+#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,25) 
 
 #include <linux/types.h>
 #include <linux/wait.h>
@@ -138,7 +138,7 @@ struct bttv {
 	struct i2c_adapter         i2c_adap;
 	struct i2c_algo_bit_data   i2c_algo;
 	struct i2c_client          i2c_client;
-	int                        i2c_state;
+	int                        i2c_state, i2c_ok;
 	struct i2c_client         *i2c_clients[I2C_CLIENTS_MAX];
 
         int tuner_type;
@@ -270,6 +270,7 @@ extern __inline__ void io_st_le32(volatile unsigned *addr, unsigned val)
 #define BTTV_CHRONOS_VS2   0x23
 #define BTTV_TYPHOON_TVIEW 0x24
 #define BTTV_PXELVWPLTVPRO 0x25
+#define BTTV_MAGICTVIEW063 0x26
 
 
 #define AUDIO_TUNER        0x00

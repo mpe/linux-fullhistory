@@ -121,8 +121,6 @@ struct consw *conswitchp = NULL;
 #define DEFAULT_BELL_PITCH	750
 #define DEFAULT_BELL_DURATION	(HZ/8)
 
-extern int tty_register_devfs (struct tty_driver *driver, unsigned int flags,
-			       unsigned int minor);
 extern void vcs_make_devfs (unsigned int index, int unregister);
 
 #ifndef MIN

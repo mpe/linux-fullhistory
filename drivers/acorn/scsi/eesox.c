@@ -1,20 +1,22 @@
 /*
  * linux/arch/arm/drivers/scsi/eesox.c
  *
- * Copyright (C) 1997-1998 Russell King
+ * Copyright (C) 1997-2000 Russell King
  *
  * This driver is based on experimentation.  Hence, it may have made
  * assumptions about the particular card that I have available, and
  * may not be reliable!
  *
  * Changelog:
- *  01-10-1997	RMK	Created, READONLY version
- *  15-02-1998	RMK	READ/WRITE version
- *			added DMA support and hardware definitions
- *  14-03-1998	RMK	Updated DMA support
- *			Added terminator control
- *  15-04-1998	RMK	Only do PIO if FAS216 will allow it.
- *  27-06-1998	RMK	Changed asm/delay.h to linux/delay.h
+ *  01-10-1997	RMK		Created, READONLY version
+ *  15-02-1998	RMK		READ/WRITE version
+ *				added DMA support and hardware definitions
+ *  14-03-1998	RMK		Updated DMA support
+ *				Added terminator control
+ *  15-04-1998	RMK		Only do PIO if FAS216 will allow it.
+ *  27-06-1998	RMK		Changed asm/delay.h to linux/delay.h
+ *  02-04-2000	RMK	0.0.3	Fixed NO_IRQ/NO_DMA problem, updated for new
+ *				error handling code.
  */
 
 #include <linux/module.h>
@@ -67,7 +69,7 @@
  */
 #define VER_MAJOR	0
 #define VER_MINOR	0
-#define VER_PATCH	2
+#define VER_PATCH	3
 
 static struct expansion_card *ecs[MAX_ECARDS];
 
@@ -382,14 +384,16 @@ eesoxscsi_detect(Scsi_Host_Template *tpnt)
 		request_region(host->io_port + EESOX_FAS216_OFFSET,
 				16 << EESOX_FAS216_SHIFT, "eesox2-fas");
 
-		if (request_irq(host->irq, eesoxscsi_intr,
+		if (host->irq != NO_IRQ &&
+		    request_irq(host->irq, eesoxscsi_intr,
 				SA_INTERRUPT, "eesox", host)) {
 			printk("scsi%d: IRQ%d not free, interrupts disabled\n",
 			       host->host_no, host->irq);
 			host->irq = NO_IRQ;
 		}
 
-		if (request_dma(host->dma_channel, "eesox")) {
+		if (host->dma_channel != NO_DMA &&
+		    request_dma(host->dma_channel, "eesox")) {
 			printk("scsi%d: DMA%d not free, DMA disabled\n",
 			       host->host_no, host->dma_channel);
 			host->dma_channel = NO_DMA;
@@ -435,24 +439,11 @@ const char *eesoxscsi_info(struct Scsi_Host *host)
 	static char string[100], *p;
 
 	p = string;
-	p += sprintf(string, "%s at port %lX ",
-		     host->hostt->name, host->io_port);
-
-	if (host->irq != NO_IRQ)
-		p += sprintf(p, "irq %d ", host->irq);
-	else
-		p += sprintf(p, "NO IRQ ");
-
-	if (host->dma_channel != NO_DMA)
-		p += sprintf(p, "dma %d ", host->dma_channel);
-	else
-		p += sprintf(p, "NO DMA ");
-
-	p += sprintf(p, "v%d.%d.%d scsi %s", VER_MAJOR, VER_MINOR, VER_PATCH,
-		  info->info.scsi.type);
-
-	p += sprintf(p, " terminators %s",
-		  info->control.control & EESOX_TERM_ENABLE ? "on" : "off");
+	p += sprintf(p, "%s ", host->hostt->name);
+	p += fas216_info(&info->info, p);
+	p += sprintf(p, "v%d.%d.%d terminators o%s",
+		     VER_MAJOR, VER_MINOR, VER_PATCH,
+		     info->control.control & EESOX_TERM_ENABLE ? "n" : "ff");
 
 	return string;
 }
@@ -526,26 +517,13 @@ int eesoxscsi_proc_info(char *buffer, char **start, off_t offset,
 	pos = sprintf(buffer,
 			"EESOX SCSI driver version %d.%d.%d\n",
 			VER_MAJOR, VER_MINOR, VER_PATCH);
-	pos += sprintf(buffer + pos,
-			"Address: %08lX    IRQ : %d     DMA : %d\n"
-			"FAS    : %-10s  TERM: %-3s\n\n"
-			"Statistics:\n",
-			host->io_port, host->irq, host->dma_channel,
-			info->info.scsi.type, info->control.control & EESOX_TERM_ENABLE ? "on" : "off");
+	pos += fas216_print_host(&info->info, buffer + pos);
+	pos += sprintf(buffer + pos, "Term    : o%s\n",
+			info->control.control & EESOX_TERM_ENABLE ? "n" : "ff");
 
-	pos += sprintf(buffer+pos,
-			"Queued commands: %-10u   Issued commands: %-10u\n"
-			"Done commands  : %-10u   Reads          : %-10u\n"
-			"Writes         : %-10u   Others         : %-10u\n"
-			"Disconnects    : %-10u   Aborts         : %-10u\n"
-			"Resets         : %-10u\n",
-			info->info.stats.queues,      info->info.stats.removes,
-			info->info.stats.fins,        info->info.stats.reads,
-			info->info.stats.writes,      info->info.stats.miscs,
-			info->info.stats.disconnects, info->info.stats.aborts,
-			info->info.stats.resets);
+	pos += fas216_print_stats(&info->info, buffer + pos);
 
-	pos += sprintf (buffer+pos, "\nAttached devices:%s\n", host->host_queue ? "" : " none");
+	pos += sprintf (buffer+pos, "\nAttached devices:\n");
 
 	for (scd = host->host_queue; scd; scd = scd->next) {
 		int len;

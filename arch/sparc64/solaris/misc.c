@@ -72,7 +72,7 @@ static u32 do_solaris_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u64 o
  		file = fget(fd);
 		if (!file)
 			goto out;
-		if (file->f_dentry && file->f_dentry->d_inode) {
+		else {
 			struct inode * inode = file->f_dentry->d_inode;
 			if(MAJOR(inode->i_rdev) == MEM_MAJOR &&
 			   MINOR(inode->i_rdev) == 5) {

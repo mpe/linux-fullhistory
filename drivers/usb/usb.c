@@ -1423,32 +1423,28 @@ int usb_set_idle(struct usb_device *dev, int ifnum, int duration, int report_id)
 
 static void usb_set_maxpacket(struct usb_device *dev)
 {
-	int i, j, b;
-	struct usb_interface *ifp;
+	int i, b;
 
 	for (i=0; i<dev->actconfig->bNumInterfaces; i++) {
-		ifp = dev->actconfig->interface + i;
+		struct usb_interface *ifp = dev->actconfig->interface + i;
+		struct usb_interface_descriptor *as = ifp->altsetting + ifp->act_altsetting;
+		struct usb_endpoint_descriptor *ep = as->endpoint;
+		int e;
 
-		for (j = 0; j < ifp->num_altsetting; j++) {
-			struct usb_interface_descriptor *as = ifp->altsetting + j;
-			struct usb_endpoint_descriptor *ep = as->endpoint;
-			int e;
-
-			for (e=0; e<as->bNumEndpoints; e++) {
-				b = ep[e].bEndpointAddress & USB_ENDPOINT_NUMBER_MASK;
-				if ((ep[e].bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) ==
-					USB_ENDPOINT_XFER_CONTROL) {	/* Control => bidirectional */
+		for (e=0; e<as->bNumEndpoints; e++) {
+			b = ep[e].bEndpointAddress & USB_ENDPOINT_NUMBER_MASK;
+			if ((ep[e].bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) ==
+				USB_ENDPOINT_XFER_CONTROL) {	/* Control => bidirectional */
+				dev->epmaxpacketout[b] = ep[e].wMaxPacketSize;
+				dev->epmaxpacketin [b] = ep[e].wMaxPacketSize;
+				}
+			else if (usb_endpoint_out(ep[e].bEndpointAddress)) {
+				if (ep[e].wMaxPacketSize > dev->epmaxpacketout[b])
 					dev->epmaxpacketout[b] = ep[e].wMaxPacketSize;
+			}
+			else {
+				if (ep[e].wMaxPacketSize > dev->epmaxpacketin [b])
 					dev->epmaxpacketin [b] = ep[e].wMaxPacketSize;
-					}
-				else if (usb_endpoint_out(ep[e].bEndpointAddress)) {
-					if (ep[e].wMaxPacketSize > dev->epmaxpacketout[b])
-						dev->epmaxpacketout[b] = ep[e].wMaxPacketSize;
-				}
-				else {
-					if (ep[e].wMaxPacketSize > dev->epmaxpacketin [b])
-						dev->epmaxpacketin [b] = ep[e].wMaxPacketSize;
-				}
 			}
 		}
 	}

@@ -78,8 +78,7 @@ struct autofs_dir_ent *autofs_expire(struct super_block *sb,
 
 		/* Make sure entry is mounted and unused; note that dentry will
 		   point to the mounted-on-top root. */
-		if ( !S_ISDIR(dentry->d_inode->i_mode)
-		     || dentry->d_mounts == dentry ) {
+		if (!S_ISDIR(dentry->d_inode->i_mode)||!d_mountpoint(dentry)) {
 			DPRINTK(("autofs: not expirable (not a mounted directory): %s\n", ent->name));
 			continue;
 		}

@@ -104,7 +104,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"ncr53c8xx - version 3.2g"
+#define SCSI_NCR_DRIVER_NAME	"ncr53c8xx - version 3.2h"
 
 #define SCSI_NCR_DEBUG_FLAGS	(0)
 
@@ -1120,7 +1120,7 @@ struct ncb {
 	u_char		revision_id;	/* PCI device revision id	*/
 	u_char		bus;		/* PCI BUS number		*/
 	u_char		device_fn;	/* PCI BUS device and function	*/
-	u_long		port;		/* IO space base address	*/
+	u_long		base_io;	/* IO space base address	*/
 	u_int		irq;		/* IRQ level			*/
 	u_int		features;	/* Chip features map		*/
 	u_char		myaddr;		/* SCSI id of the adapter	*/
@@ -3734,7 +3734,7 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 	*/
 
 	request_region(device->slot.io_port, 128, "ncr53c8xx");
-	np->port = device->slot.io_port;
+	np->base_io = device->slot.io_port;
 
 #ifdef SCSI_NCR_NVRAM_SUPPORT
 	if (nvram) {
@@ -3951,11 +3951,11 @@ attach_error:
 		unmap_pci_mem((vm_offset_t) np->vaddr, (u_long) 128);
 	}
 #endif /* !NCR_IOMAPPED */
-	if (np->port) {
+	if (np->base_io) {
 #ifdef DEBUG_NCR53C8XX
-		printk(KERN_DEBUG "%s: releasing IO region %x[%d]\n", ncr_name(np), np->port, 128);
+		printk(KERN_DEBUG "%s: releasing IO region %x[%d]\n", ncr_name(np), np->base_io, 128);
 #endif
-		release_region(np->port, 128);
+		release_region(np->base_io, 128);
 	}
 	if (np->irq) {
 #ifdef DEBUG_NCR53C8XX
@@ -4260,11 +4260,17 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	**----------------------------------------------------
 	*/
 
-	segments = ncr_scatter (np, cp, cp->cmd);
-
-	if (segments < 0) {
-		ncr_free_ccb(np, cp);
-		return(DID_ERROR);
+	direction = scsi_data_direction(cmd);
+	if (direction != SCSI_DATA_NONE) {
+		segments = ncr_scatter (np, cp, cp->cmd);
+		if (segments < 0) {
+			ncr_free_ccb(np, cp);
+			return(DID_ERROR);
+		}
+	}
+	else {
+		cp->data_len = 0;
+		segments = 0;
 	}
 
 	/*----------------------------------------------------
@@ -4275,8 +4281,6 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	*/
 	if (!cp->data_len)
 		direction = SCSI_DATA_NONE;
-	else
-		direction = scsi_data_direction(cmd);
 
 	/*
 	**	If data direction is UNKNOWN, speculate DATA_READ 
@@ -4796,9 +4800,9 @@ static int ncr_detach(ncb_p np)
 #endif /* !NCR_IOMAPPED */
 
 #ifdef DEBUG_NCR53C8XX
-	printk("%s: releasing IO region %x[%d]\n", ncr_name(np), np->port, 128);
+	printk("%s: releasing IO region %x[%d]\n", ncr_name(np), np->base_io, 128);
 #endif
-	release_region(np->port, 128);
+	release_region(np->base_io, 128);
 
 	/*
 	**	Free allocated ccb(s)

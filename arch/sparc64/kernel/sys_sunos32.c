@@ -79,19 +79,17 @@ asmlinkage u32 sunos_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u32 of
 	}
 	retval = -EBADF;
 	if(!(flags & MAP_ANONYMOUS)) {
+		struct inode * inode;
 		if(fd >= SUNOS_NR_OPEN)
 			goto out;
  		file = fget(fd);
 		if (!file)
 			goto out;
-		if (file->f_dentry && file->f_dentry->d_inode) {
-			struct inode * inode = file->f_dentry->d_inode;
-			if(MAJOR(inode->i_rdev) == MEM_MAJOR &&
-			   MINOR(inode->i_rdev) == 5) {
-				flags |= MAP_ANONYMOUS;
-				fput(file);
-				file = NULL;
-			}
+		inode = file->f_dentry->d_inode;
+		if(MAJOR(inode->i_rdev)==MEM_MAJOR && MINOR(inode->i_rdev)==5) {
+			flags |= MAP_ANONYMOUS;
+			fput(file);
+			file = NULL;
 		}
 	}
 
@@ -601,7 +599,7 @@ struct sunos_nfs_mount_args {
 	char       *netname;   /* server's netname */
 };
 
-extern int do_mount(struct block_device *, const char *, const char *, char *, int, void *);
+extern long do_sys_mount(const char *, const char *, char *, int, void *);
 extern dev_t get_unnamed_dev(void);
 extern void put_unnamed_dev(dev_t);
 extern asmlinkage int sys_mount(char *, char *, char *, unsigned long, void *);
@@ -627,17 +625,12 @@ sunos_nfs_get_server_fd (int fd, struct sockaddr_in *addr)
 	struct inode  *inode;
 	struct file   *file;
 
-	file = fcheck(fd);
+	file = fget(fd);
 	if(!file)
 		return 0;
 
 	dentry = file->f_dentry;
-	if(!dentry)
-		return 0;
-
 	inode = dentry->d_inode;
-	if(!inode)
-		return 0;
 
 	socket = &inode->u.socket_i;
 	local.sin_family = AF_INET;
@@ -651,8 +644,10 @@ sunos_nfs_get_server_fd (int fd, struct sockaddr_in *addr)
 					sizeof(local));
 	} while (ret && try_port > (1024 / 2));
 
-	if (ret)
+	if (ret) {
+		fput(file);
 		return 0;
+	}
 
 	server.sin_family = AF_INET;
 	server.sin_addr = addr->sin_addr;
@@ -661,6 +656,7 @@ sunos_nfs_get_server_fd (int fd, struct sockaddr_in *addr)
 	/* Call sys_connect */
 	ret = socket->ops->connect (socket, (struct sockaddr *) &server,
 				    sizeof (server), file->f_flags);
+	fput(file);
 	if (ret < 0)
 		return 0;
 	return 1;
@@ -681,7 +677,7 @@ static int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 	int  server_fd;
 	char *the_name;
 	struct nfs_mount_data linux_nfs_mount;
-	struct sunos_nfs_mount_args *sunos_mount = data;
+	struct sunos_nfs_mount_args sunos_mount;
 
 	/* Ok, here comes the fun part: Linux's nfs mount needs a
 	 * socket connection to the server, but SunOS mount does not
@@ -689,41 +685,50 @@ static int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 	 * address to create a socket and bind it to a reserved
 	 * port on this system
 	 */
+	if (copy_from_user(&sunos_mount, data, sizeof(sunos_mount))
+		return -EFAULT;
+
 	server_fd = sys_socket (AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if (server_fd < 0)
 		return -ENXIO;
 
-	if (!sunos_nfs_get_server_fd (server_fd, sunos_mount->addr)){
+	if (copy_from_user(&linux_nfs_mount.addr,sunos_mount.addr,
+				sizeof(*sunos_mount.addr)) ||
+	    copy_from_user(&linux_nfs_mount.root,sunos_mount.fh,
+				sizeof(*sunos_mount.fh))) {
+		sys_close (server_fd);
+		return -EFAULT;
+	}
+
+	if (!sunos_nfs_get_server_fd (server_fd, &linux_nfs_mount.addr)){
 		sys_close (server_fd);
 		return -ENXIO;
 	}
 
 	/* Now, bind it to a locally reserved port */
 	linux_nfs_mount.version  = NFS_MOUNT_VERSION;
-	linux_nfs_mount.flags    = sunos_mount->flags;
-	linux_nfs_mount.addr     = *sunos_mount->addr;
-	linux_nfs_mount.root     = *sunos_mount->fh;
+	linux_nfs_mount.flags    = sunos_mount.flags;
 	linux_nfs_mount.fd       = server_fd;
 	
-	linux_nfs_mount.rsize    = get_default (sunos_mount->rsize, 8192);
-	linux_nfs_mount.wsize    = get_default (sunos_mount->wsize, 8192);
-	linux_nfs_mount.timeo    = get_default (sunos_mount->timeo, 10);
-	linux_nfs_mount.retrans  = sunos_mount->retrans;
+	linux_nfs_mount.rsize    = get_default (sunos_mount.rsize, 8192);
+	linux_nfs_mount.wsize    = get_default (sunos_mount.wsize, 8192);
+	linux_nfs_mount.timeo    = get_default (sunos_mount.timeo, 10);
+	linux_nfs_mount.retrans  = sunos_mount.retrans;
 	
-	linux_nfs_mount.acregmin = sunos_mount->acregmin;
-	linux_nfs_mount.acregmax = sunos_mount->acregmax;
-	linux_nfs_mount.acdirmin = sunos_mount->acdirmin;
-	linux_nfs_mount.acdirmax = sunos_mount->acdirmax;
+	linux_nfs_mount.acregmin = sunos_mount.acregmin;
+	linux_nfs_mount.acregmax = sunos_mount.acregmax;
+	linux_nfs_mount.acdirmin = sunos_mount.acdirmin;
+	linux_nfs_mount.acdirmax = sunos_mount.acdirmax;
 
-	the_name = getname(sunos_mount->hostname);
+	the_name = getname(sunos_mount.hostname);
 	if(IS_ERR(the_name))
-		return -EFAULT;
+		return PTR_ERR(the_name);
 
 	strncpy (linux_nfs_mount.hostname, the_name, 254);
 	linux_nfs_mount.hostname [255] = 0;
 	putname (the_name);
-
-	return do_mount (NULL, "", dir_name, "nfs", linux_flags, &linux_nfs_mount);
+	
+	return do_sys_mount ("", dir_name, "nfs", linux_flags, &linux_nfs_mount);
 }
 
 /* XXXXXXXXXXXXXXXXXXXX */
@@ -733,6 +738,7 @@ sunos_mount(char *type, char *dir, int flags, void *data)
 	int linux_flags = MS_MGC_MSK; /* new semantics */
 	int ret = -EINVAL;
 	char *dev_fname = 0;
+	char *dir_page, *type_page;
 
 	if (!capable (CAP_SYS_ADMIN))
 		return -EPERM;
@@ -751,24 +757,44 @@ sunos_mount(char *type, char *dir, int flags, void *data)
 		linux_flags |= MS_RDONLY;
 	if(flags & SMNT_NOSUID)
 		linux_flags |= MS_NOSUID;
-	if(strcmp(type, "ext2") == 0) {
-		dev_fname = (char *) data;
-	} else if(strcmp(type, "iso9660") == 0) {
-		dev_fname = (char *) data;
-	} else if(strcmp(type, "minix") == 0) {
-		dev_fname = (char *) data;
-	} else if(strcmp(type, "nfs") == 0) {
-		ret = sunos_nfs_mount (dir, flags, data);
+
+	dir_page = getname(dir);
+	ret = PTR_ERR(dir_page);
+	if (IS_ERR(dir_page))
 		goto out;
-        } else if(strcmp(type, "ufs") == 0) {
+
+	type_page = getname(type);
+	ret = PTR_ERR(type_page);
+	if (IS_ERR(type_page))
+		goto out1;
+
+	if(strcmp(type_page, "ext2") == 0) {
+		dev_fname = getname(data);
+	} else if(strcmp(type_page, "iso9660") == 0) {
+		dev_fname = getname(data);
+	} else if(strcmp(type_page, "minix") == 0) {
+		dev_fname = getname(data);
+	} else if(strcmp(type_page, "nfs") == 0) {
+		ret = sunos_nfs_mount (dir_page, flags, data);
+		goto out2
+        } else if(strcmp(type_page, "ufs") == 0) {
 		printk("Warning: UFS filesystem mounts unsupported.\n");
 		ret = -ENODEV;
-		goto out;
-	} else if(strcmp(type, "proc")) {
+		goto out2
+	} else if(strcmp(type_page, "proc")) {
 		ret = -ENODEV;
-		goto out;
+		goto out2
 	}
-	ret = sys_mount(dev_fname, dir, type, linux_flags, NULL);
+	ret = PTR_ERR(dev_fname);
+	if (IS_ERR(dev_fname))
+		goto out2;
+	ret = do_sys_mount(dev_fname, dir_page, type_page, linux_flags, NULL);
+	if (dev_fname)
+		putname(dev_fname);
+out2:
+	putname(type_page);
+out1:
+	putname(dir_page);
 out:
 	unlock_kernel();
 	return ret;

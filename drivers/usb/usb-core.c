@@ -32,6 +32,7 @@ int usb_audio_init(void);
 int usb_ibmcam_init(void);
 int dabusb_init(void);
 int plusb_init(void);
+int dsbr100_init(void);
 
 /*
  * HCI drivers

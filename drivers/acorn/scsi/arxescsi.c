@@ -1,7 +1,7 @@
 /*
- * linux/arch/arm/drivers/scsi/cumana_2.c
+ * linux/arch/arm/drivers/scsi/arxescsi.c
  *
- * Copyright (C) 1997,1998 Russell King
+ * Copyright (C) 1997-2000 Russell King
  *
  * This driver is based on experimentation.  Hence, it may have made
  * assumptions about the particular card that I have available, and
@@ -13,6 +13,7 @@
  *  15-04-1998	RMK	0.0.1	Only do PIO if FAS216 will allow it.
  *  11-06-1998 		0.0.2   Changed to support ARXE 16-bit SCSI card, enabled writing
  *  				by Stefan Hanske
+ *  02-04-2000	RMK	0.0.3	Updated for new error handling code.
  */
 
 #include <linux/module.h>
@@ -54,7 +55,7 @@
  */
 #define VER_MAJOR	0
 #define VER_MINOR	0
-#define VER_PATCH	2
+#define VER_PATCH	3
 
 static struct expansion_card *ecs[MAX_ECARDS];
 
@@ -308,10 +309,9 @@ const char *arxescsi_info(struct Scsi_Host *host)
 	static char string[100], *p;
 
 	p = string;
-	p += sprintf(string, "%s at port %lX irq %d v%d.%d.%d scsi %s",
-		     host->hostt->name, host->io_port, host->irq,
-		     VER_MAJOR, VER_MINOR, VER_PATCH,
-		     info->info.scsi.type);
+	p += sprintf(p, "%s ", host->hostt->name);
+	p += fas216_info(&info->info, p);
+	p += sprintf(p, "v%d.%d.%d", VER_MAJOR, VER_MINOR, VER_PATCH);
 
 	return string;
 }
@@ -354,12 +354,7 @@ int arxescsi_proc_info(char *buffer, char **start, off_t offset,
 	pos = sprintf(buffer,
 			"ARXE 16-bit SCSI driver version %d.%d.%d\n",
 			VER_MAJOR, VER_MINOR, VER_PATCH);
-	pos += sprintf(buffer + pos,
-			"Address: %08lX          IRQ : %d\n"
-			"FAS    : %s\n\n"
-			"Statistics:\n",
-			host->io_port, host->irq, info->info.scsi.type);
-
+	pos += fas216_print_host(&info->info, buffer + pos);
 	pos += fas216_print_stats(&info->info, buffer + pos);
 
 	pos += sprintf (buffer+pos, "\nAttached devices:\n");

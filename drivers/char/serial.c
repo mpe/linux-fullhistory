@@ -220,10 +220,6 @@ static char *serial_revdate = "2000-03-20";
 #define _INLINE_
 #endif
 
-extern void tty_register_devfs  (struct tty_driver *driver, unsigned int flags,
-				 unsigned int minor);
-extern void tty_unregister_devfs (struct tty_driver *driver, unsigned minor);
-
 static char *serial_name = "Serial driver";
 
 static DECLARE_TASK_QUEUE(tq_serial);

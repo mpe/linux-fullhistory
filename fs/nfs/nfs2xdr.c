@@ -1,13 +1,13 @@
 /*
- * linux/fs/nfs/xdr.c
+ * linux/fs/nfs/nfs2xdr.c
  *
  * XDR functions to encode/decode NFS RPC arguments and results.
  *
  * Copyright (C) 1992, 1993, 1994  Rick Sladkey
  * Copyright (C) 1996 Olaf Kirch
+ * 04 Aug 1998  Ion Badulescu <ionut@cs.columbia.edu>
+ * 		FIFO's need special handling in NFSv2
  */
-
-#define NFS_NEED_XDR_TYPES
 
 #include <linux/param.h>
 #include <linux/sched.h>
@@ -30,8 +30,7 @@
 #define NFSDBG_FACILITY		NFSDBG_XDR
 /* #define NFS_PARANOIA 1 */
 
-#define QUADLEN(len)		(((len) + 3) >> 2)
-static int			nfs_stat_to_errno(int stat);
+extern int			nfs_stat_to_errno(int stat);
 
 /* Mapping from NFS error code to "errno" error code. */
 #define errno_NFSERR_IO		EIO
@@ -42,8 +41,8 @@ static int			nfs_stat_to_errno(int stat);
  */
 #define NFS_fhandle_sz		8
 #define NFS_sattr_sz		8
-#define NFS_filename_sz		1+(NFS_MAXNAMLEN>>2)
-#define NFS_path_sz		1+(NFS_MAXPATHLEN>>2)
+#define NFS_filename_sz		1+(NFS2_MAXNAMLEN>>2)
+#define NFS_path_sz		1+(NFS2_MAXPATHLEN>>2)
 #define NFS_fattr_sz		17
 #define NFS_info_sz		5
 #define NFS_entry_sz		NFS_filename_sz+3
@@ -51,6 +50,7 @@ static int			nfs_stat_to_errno(int stat);
 #define NFS_enc_void_sz		0
 #define NFS_diropargs_sz	NFS_fhandle_sz+NFS_filename_sz
 #define NFS_sattrargs_sz	NFS_fhandle_sz+NFS_sattr_sz
+#define NFS_readlinkargs_sz	NFS_fhandle_sz
 #define NFS_readargs_sz		NFS_fhandle_sz+3
 #define NFS_writeargs_sz	NFS_fhandle_sz+4
 #define NFS_createargs_sz	NFS_diropargs_sz+NFS_sattr_sz
@@ -58,14 +58,13 @@ static int			nfs_stat_to_errno(int stat);
 #define NFS_linkargs_sz		NFS_fhandle_sz+NFS_diropargs_sz
 #define NFS_symlinkargs_sz	NFS_diropargs_sz+NFS_path_sz+NFS_sattr_sz
 #define NFS_readdirargs_sz	NFS_fhandle_sz+2
-#define NFS_readlinkargs_sz	NFS_fhandle_sz
 
 #define NFS_dec_void_sz		0
 #define NFS_attrstat_sz		1+NFS_fattr_sz
 #define NFS_diropres_sz		1+NFS_fhandle_sz+NFS_fattr_sz
 #define NFS_readlinkres_sz	1
 #define NFS_readres_sz		1+NFS_fattr_sz+1
-#define NFS_writeres_sz		NFS_attrstat_sz
+#define NFS_writeres_sz         NFS_attrstat_sz
 #define NFS_stat_sz		1
 #define NFS_readdirres_sz	1
 #define NFS_statfsres_sz	1+NFS_info_sz
@@ -76,15 +75,19 @@ static int			nfs_stat_to_errno(int stat);
 static inline u32 *
 xdr_encode_fhandle(u32 *p, struct nfs_fh *fhandle)
 {
-	*((struct nfs_fh *) p) = *fhandle;
-	return p + QUADLEN(sizeof(*fhandle));
+	memcpy(p, fhandle->data, NFS2_FHSIZE);
+	return p + XDR_QUADLEN(NFS2_FHSIZE);
 }
 
 static inline u32 *
 xdr_decode_fhandle(u32 *p, struct nfs_fh *fhandle)
 {
-	*fhandle = *((struct nfs_fh *) p);
-	return p + QUADLEN(sizeof(*fhandle));
+	/* Zero handle first to allow comparisons */
+	memset(fhandle, 0, sizeof(*fhandle));
+	/* NFSv2 handles have a fixed length */
+	fhandle->size = NFS2_FHSIZE;
+	memcpy(fhandle->data, p, NFS2_FHSIZE);
+	return p + XDR_QUADLEN(NFS2_FHSIZE);
 }
 
 static inline u32 *
@@ -95,7 +98,7 @@ xdr_decode_string2(u32 *p, char **string, unsigned int *len,
 	if (*len > maxlen)
 		return NULL;
 	*string = (char *) p;
-	return p + QUADLEN(*len);
+	return p + XDR_QUADLEN(*len);
 }
 
 static inline u32*
@@ -123,14 +126,13 @@ xdr_decode_fattr(u32 *p, struct nfs_fattr *fattr)
 	p = xdr_decode_time(p, &fattr->mtime);
 	p = xdr_decode_time(p, &fattr->ctime);
 	fattr->valid |= NFS_ATTR_FATTR;
-	if (fattr->type == NFCHR && fattr->rdev == NFS_FIFO_DEV) {
+	if (fattr->type == NFCHR && fattr->rdev == NFS2_FIFO_DEV) {
 		fattr->type = NFFIFO;
 		fattr->mode = (fattr->mode & ~S_IFMT) | S_IFIFO;
 		fattr->rdev = 0;
 	}
 	return p;
 }
-
 
 #define SATTR(p, attr, flag, field) \
         *p++ = (attr->ia_valid & flag) ? htonl(attr->field) : ~(u32) 0
@@ -206,7 +208,7 @@ static int
 nfs_xdr_diropargs(struct rpc_rqst *req, u32 *p, struct nfs_diropargs *args)
 {
 	p = xdr_encode_fhandle(p, args->fh);
-	p = xdr_encode_string(p, args->name);
+	p = xdr_encode_array(p, args->name, args->len);
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
 	return 0;
 }
@@ -220,7 +222,8 @@ static int
 nfs_xdr_readargs(struct rpc_rqst *req, u32 *p, struct nfs_readargs *args)
 {
 	struct rpc_auth	*auth = req->rq_task->tk_auth;
-	int		replen, buflen;
+	int		buflen, replen;
+	unsigned int	nr;
 
 	p = xdr_encode_fhandle(p, args->fh);
 	*p++ = htonl(args->offset);
@@ -228,16 +231,25 @@ nfs_xdr_readargs(struct rpc_rqst *req, u32 *p, struct nfs_readargs *args)
 	*p++ = htonl(args->count);
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
 
+	/* Get the number of buffers in the receive iovec */
+        nr = args->nriov;
+
+        if (nr+2 > MAX_IOVEC) {
+                printk(KERN_ERR "NFS: Bad number of iov's in xdr_readargs\n");
+                return -EINVAL;
+        }
+
 	/* set up reply iovec */
 	replen = (RPC_REPHDRSIZE + auth->au_rslack + NFS_readres_sz) << 2;
 	buflen = req->rq_rvec[0].iov_len;
 	req->rq_rvec[0].iov_len  = replen;
-	req->rq_rvec[1].iov_base = args->buffer;
-	req->rq_rvec[1].iov_len  = args->count;
-	req->rq_rvec[2].iov_base = (u8 *) req->rq_rvec[0].iov_base + replen;
-	req->rq_rvec[2].iov_len  = buflen - replen;
+        /* Copy the iovec */
+        memcpy(req->rq_rvec + 1, args->iov, nr * sizeof(struct iovec));
+
+	req->rq_rvec[nr+1].iov_base = (u8 *) req->rq_rvec[0].iov_base + replen;
+	req->rq_rvec[nr+1].iov_len  = buflen - replen;
 	req->rq_rlen = args->count + buflen;
-	req->rq_rnr = 3;
+	req->rq_rnr += nr+1;
 
 	return 0;
 }
@@ -251,7 +263,6 @@ nfs_xdr_readres(struct rpc_rqst *req, u32 *p, struct nfs_readres *res)
 	struct iovec *iov = req->rq_rvec;
 	int	status, count, recvd, hdrlen;
 
-	dprintk("RPC:      readres OK status %lx\n", (long)ntohl(*p));
 	if ((status = ntohl(*p++)))
 		return -nfs_stat_to_errno(status);
 	p = xdr_decode_fattr(p, res->fattr);
@@ -259,22 +270,26 @@ nfs_xdr_readres(struct rpc_rqst *req, u32 *p, struct nfs_readres *res)
 	count = ntohl(*p++);
 	hdrlen = (u8 *) p - (u8 *) iov->iov_base;
 	recvd = req->rq_rlen - hdrlen;
-	if (p != iov[2].iov_base) {
+	if (p != iov[req->rq_rnr-1].iov_base) {
 		/* Unexpected reply header size. Punt.
 		 * XXX: Move iovec contents to align data on page
 		 * boundary and adjust RPC header size guess */
-		printk("NFS: Odd RPC header size in read reply: %d\n", hdrlen);
+		printk(KERN_WARNING "NFS: Odd RPC header size in read reply: %d\n", hdrlen);
 		return -errno_NFSERR_IO;
 	}
 	if (count > recvd) {
-		printk("NFS: server cheating in read reply: "
+		printk(KERN_WARNING "NFS: server cheating in read reply: "
 			"count %d > recvd %d\n", count, recvd);
 		count = recvd;
 	}
 
 	dprintk("RPC:      readres OK count %d\n", count);
-	if (count < res->count)
-		memset((u8 *)(iov[1].iov_base+count), 0, res->count-count);
+	if (count < res->count) {
+		xdr_zero_iovec(iov+1, req->rq_rnr-2, res->count - count);
+		res->count = count;
+		res->eof = 1;  /* Silly NFSv3ism which can't be helped */
+	} else
+		res->eof = 0;
 
 	return count;
 }
@@ -300,13 +315,13 @@ nfs_xdr_writeargs(struct rpc_rqst *req, u32 *p, struct nfs_writeargs *args)
 	nr = args->nriov;
 
 	if (nr+2 > MAX_IOVEC) {
-		printk(KERN_ERR "NFS: Bad number of iov's in xdr_writeargs "
-			"(nr %d max %d)\n", nr, MAX_IOVEC);
-		return -EINVAL;
-	}
+                printk(KERN_ERR "NFS: Bad number of iov's in xdr_writeargs "
+                        "(nr %d max %d)\n", nr, MAX_IOVEC);
+                return -EINVAL;
+        }
 
 	/* Copy the iovec */
-	memcpy(req->rq_svec + 1, args->iov, nr * sizeof(struct iovec));
+        memcpy(req->rq_svec + 1, args->iov, nr * sizeof(struct iovec));
 
 #ifdef NFS_PAD_WRITES
 	/*
@@ -337,7 +352,7 @@ static int
 nfs_xdr_createargs(struct rpc_rqst *req, u32 *p, struct nfs_createargs *args)
 {
 	p = xdr_encode_fhandle(p, args->fh);
-	p = xdr_encode_string(p, args->name);
+	p = xdr_encode_array(p, args->name, args->len);
 	p = xdr_encode_sattr(p, args->sattr);
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
 	return 0;
@@ -350,9 +365,9 @@ static int
 nfs_xdr_renameargs(struct rpc_rqst *req, u32 *p, struct nfs_renameargs *args)
 {
 	p = xdr_encode_fhandle(p, args->fromfh);
-	p = xdr_encode_string(p, args->fromname);
+	p = xdr_encode_array(p, args->fromname, args->fromlen);
 	p = xdr_encode_fhandle(p, args->tofh);
-	p = xdr_encode_string(p, args->toname);
+	p = xdr_encode_array(p, args->toname, args->tolen);
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
 	return 0;
 }
@@ -365,7 +380,7 @@ nfs_xdr_linkargs(struct rpc_rqst *req, u32 *p, struct nfs_linkargs *args)
 {
 	p = xdr_encode_fhandle(p, args->fromfh);
 	p = xdr_encode_fhandle(p, args->tofh);
-	p = xdr_encode_string(p, args->toname);
+	p = xdr_encode_array(p, args->toname, args->tolen);
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
 	return 0;
 }
@@ -377,8 +392,8 @@ static int
 nfs_xdr_symlinkargs(struct rpc_rqst *req, u32 *p, struct nfs_symlinkargs *args)
 {
 	p = xdr_encode_fhandle(p, args->fromfh);
-	p = xdr_encode_string(p, args->fromname);
-	p = xdr_encode_string(p, args->topath);
+	p = xdr_encode_array(p, args->fromname, args->fromlen);
+	p = xdr_encode_array(p, args->topath, args->tolen);
 	p = xdr_encode_sattr(p, args->sattr);
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
 	return 0;
@@ -392,20 +407,19 @@ nfs_xdr_readdirargs(struct rpc_rqst *req, u32 *p, struct nfs_readdirargs *args)
 {
 	struct rpc_task	*task = req->rq_task;
 	struct rpc_auth	*auth = task->tk_auth;
-	int		bufsiz = args->bufsiz;
+	u32		bufsiz = args->bufsiz;
 	int		buflen, replen;
 
-	p = xdr_encode_fhandle(p, args->fh);
-	*p++ = htonl(args->cookie);
-
-	/* Some servers (e.g. HP OS 9.5) seem to expect the buffer size
+	/*
+	 * Some servers (e.g. HP OS 9.5) seem to expect the buffer size
 	 * to be in longwords ... check whether to convert the size.
 	 */
 	if (task->tk_client->cl_flags & NFS_CLNTF_BUFSIZE)
-		*p++ = htonl(bufsiz >> 2);
-	else
-		*p++ = htonl(bufsiz);
+		bufsiz = bufsiz >> 2;
 
+	p = xdr_encode_fhandle(p, args->fh);
+	*p++ = htonl(args->cookie);
+	*p++ = htonl(bufsiz); /* see above */
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
 
 	/* set up reply iovec */
@@ -413,10 +427,10 @@ nfs_xdr_readdirargs(struct rpc_rqst *req, u32 *p, struct nfs_readdirargs *args)
 	buflen = req->rq_rvec[0].iov_len;
 	req->rq_rvec[0].iov_len  = replen;
 	req->rq_rvec[1].iov_base = args->buffer;
-	req->rq_rvec[1].iov_len  = bufsiz;
+	req->rq_rvec[1].iov_len  = args->bufsiz;
 	req->rq_rvec[2].iov_base = (u8 *) req->rq_rvec[0].iov_base + replen;
 	req->rq_rvec[2].iov_len  = buflen - replen;
-	req->rq_rlen = buflen + bufsiz;
+	req->rq_rlen = buflen + args->bufsiz;
 	req->rq_rnr += 2;
 
 	return 0;
@@ -536,13 +550,9 @@ nfs_xdr_attrstat(struct rpc_rqst *req, u32 *p, struct nfs_fattr *fattr)
 {
 	int	status;
 
-	dprintk("RPC:      attrstat status %lx\n", (long)ntohl(*p));
 	if ((status = ntohl(*p++)))
 		return -nfs_stat_to_errno(status);
 	xdr_decode_fattr(p, fattr);
-	dprintk("RPC:      attrstat OK type %d mode %o dev %Lx ino %Lx\n",
-		fattr->type, fattr->mode,
-		(long long)fattr->fsid, (long long)fattr->fileid);
 	return 0;
 }
 
@@ -555,36 +565,34 @@ nfs_xdr_diropres(struct rpc_rqst *req, u32 *p, struct nfs_diropok *res)
 {
 	int	status;
 
-	dprintk("RPC:      diropres status %lx\n", (long)ntohl(*p));
 	if ((status = ntohl(*p++)))
 		return -nfs_stat_to_errno(status);
 	p = xdr_decode_fhandle(p, res->fh);
 	xdr_decode_fattr(p, res->fattr);
-	dprintk("RPC:      diropres OK type %x mode %o dev %Lx ino %Lx\n",
-		res->fattr->type, res->fattr->mode,
-		(long long)res->fattr->fsid, (long long)res->fattr->fileid);
 	return 0;
 }
 
 /*
- * Encode arguments to readlink call
+ * Encode READLINK args
  */
-static int nfs_xdr_readlinkargs(struct rpc_rqst *req, u32 *p, struct nfs_readlinkargs *args)
+static int
+nfs_xdr_readlinkargs(struct rpc_rqst *req, u32 *p, struct nfs_readlinkargs *args)
 {
 	struct rpc_task *task = req->rq_task;
 	struct rpc_auth *auth = task->tk_auth;
-	int bufsiz = NFS_MAXPATHLEN;
-	int replen;
+	int		buflen, replen;
 
 	p = xdr_encode_fhandle(p, args->fh);
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
 	replen = (RPC_REPHDRSIZE + auth->au_rslack + NFS_readlinkres_sz) << 2;
-	req->rq_rvec[0].iov_len = replen;
-	req->rq_rvec[1].iov_base = (void *) args->buffer;
-	req->rq_rvec[1].iov_len = bufsiz;
-	req->rq_rlen = replen + bufsiz;
-	req->rq_rnr = 2;
-
+	buflen = req->rq_rvec[0].iov_len;
+	req->rq_rvec[0].iov_len  = replen;
+	req->rq_rvec[1].iov_base = args->buffer;
+	req->rq_rvec[1].iov_len  = args->bufsiz;
+	req->rq_rvec[2].iov_base = (u8 *) req->rq_rvec[0].iov_base + replen;
+	req->rq_rvec[2].iov_len  = buflen - replen;
+	req->rq_rlen = buflen + args->bufsiz;
+	req->rq_rnr += 2;
 	return 0;
 }
 
@@ -592,31 +600,24 @@ static int nfs_xdr_readlinkargs(struct rpc_rqst *req, u32 *p, struct nfs_readlin
  * Decode READLINK reply
  */
 static int
-nfs_xdr_readlinkres(struct rpc_rqst *req, u32 *p, void *dummy)
+nfs_xdr_readlinkres(struct rpc_rqst *req, u32 *p, struct nfs_readlinkres *res)
 {
-	struct iovec	*iov = req->rq_rvec;
-	int		status,	len;
-	char		*name;
+	u32	*strlen;
+	char	*string;
+	int	status;
+	unsigned int len;
 
-	/* Verify OK status. */
-	if ((status = ntohl(*p++)) != 0)
+	if ((status = ntohl(*p++)))
 		return -nfs_stat_to_errno(status);
-
-	/* Verify OK response length. */
-	if ((__u8 *)p != ((u8 *) iov->iov_base + iov->iov_len))
-		return -errno_NFSERR_IO;
-
-	/* Convert and verify that string length is in range. */
-	p = iov[1].iov_base;
-	len = *p = ntohl(*p);
-	p++;
-	if (len > iov[1].iov_len)
-		return -errno_NFSERR_IO;
-
-	/* NULL terminate the string we got. */
-	name = (char *) p;
-	name[len] = 0;
-
+	strlen = (u32*)res->buffer;
+	/* Convert length of symlink */
+	len = ntohl(*strlen);
+	if (len > res->bufsiz - 5)
+		len = res->bufsiz - 5;
+	*strlen = len;
+	/* NULL terminate the string we got */
+	string = (char *)(strlen + 1);
+	string[len] = 0;
 	return 0;
 }
 
@@ -637,14 +638,34 @@ static int
 nfs_xdr_statfsres(struct rpc_rqst *req, u32 *p, struct nfs_fsinfo *res)
 {
 	int	status;
+	u32	xfer_size;
 
 	if ((status = ntohl(*p++)))
 		return -nfs_stat_to_errno(status);
-	res->tsize = ntohl(*p++);
-	res->bsize = ntohl(*p++);
-	res->blocks = ntohl(*p++);
-	res->bfree = ntohl(*p++);
-	res->bavail = ntohl(*p++);
+
+	/* For NFSv2, we more or less have to guess the preferred
+	 * read/write/readdir sizes from the single 'transfer size'
+	 * value.
+	 */
+	xfer_size = ntohl(*p++);	/* tsize */
+	res->rtmax  = 8 * 1024;
+	res->rtpref = xfer_size;
+	res->rtmult = xfer_size;
+	res->wtmax  = 8 * 1024;
+	res->wtpref = xfer_size;
+	res->wtmult = xfer_size;
+	res->dtpref = PAGE_CACHE_SIZE;
+	res->maxfilesize = 0x7FFFFFFF;	/* just a guess */
+	res->bsize  = ntohl(*p++);
+
+	res->tbytes = ntohl(*p++) * res->bsize;
+	res->fbytes = ntohl(*p++) * res->bsize;
+	res->abytes = ntohl(*p++) * res->bsize;
+	res->tfiles = 0;
+	res->ffiles = 0;
+	res->afiles = 0;
+	res->namelen = 0;
+
 	return 0;
 }
 
@@ -661,7 +682,7 @@ static struct {
 	{ NFSERR_NOENT,		ENOENT		},
 	{ NFSERR_IO,		errno_NFSERR_IO	},
 	{ NFSERR_NXIO,		ENXIO		},
-	{ NFSERR_EAGAIN,	EAGAIN		},
+/*	{ NFSERR_EAGAIN,	EAGAIN		}, */
 	{ NFSERR_ACCES,		EACCES		},
 	{ NFSERR_EXIST,		EEXIST		},
 	{ NFSERR_XDEV,		EXDEV		},
@@ -672,18 +693,31 @@ static struct {
 	{ NFSERR_FBIG,		EFBIG		},
 	{ NFSERR_NOSPC,		ENOSPC		},
 	{ NFSERR_ROFS,		EROFS		},
-	{ NFSERR_OPNOTSUPP,	EOPNOTSUPP	},
+	{ NFSERR_MLINK,		EMLINK		},
 	{ NFSERR_NAMETOOLONG,	ENAMETOOLONG	},
 	{ NFSERR_NOTEMPTY,	ENOTEMPTY	},
 	{ NFSERR_DQUOT,		EDQUOT		},
 	{ NFSERR_STALE,		ESTALE		},
+	{ NFSERR_REMOTE,	EREMOTE		},
 #ifdef EWFLUSH
 	{ NFSERR_WFLUSH,	EWFLUSH		},
 #endif
+	{ NFSERR_BADHANDLE,	EBADHANDLE	},
+	{ NFSERR_NOT_SYNC,	ENOTSYNC	},
+	{ NFSERR_BAD_COOKIE,	EBADCOOKIE	},
+	{ NFSERR_NOTSUPP,	ENOTSUPP	},
+	{ NFSERR_TOOSMALL,	ETOOSMALL	},
+	{ NFSERR_SERVERFAULT,	ESERVERFAULT	},
+	{ NFSERR_BADTYPE,	EBADTYPE	},
+	{ NFSERR_JUKEBOX,	EJUKEBOX	},
 	{ -1,			EIO		}
 };
 
-static int
+/*
+ * Convert an NFS error code to a local one.
+ * This one is used jointly by NFSv2 and NFSv3.
+ */
+int
 nfs_stat_to_errno(int stat)
 {
 	int i;
@@ -692,7 +726,7 @@ nfs_stat_to_errno(int stat)
 		if (nfs_errtbl[i].stat == stat)
 			return nfs_errtbl[i].errno;
 	}
-	printk("nfs_stat_to_errno: bad nfs status return value: %d\n", stat);
+	printk(KERN_ERR "nfs_stat_to_errno: bad nfs status return value: %d\n", stat);
 	return nfs_errtbl[i].errno;
 }
 
@@ -704,7 +738,8 @@ nfs_stat_to_errno(int stat)
     { "nfs_" #proc,					\
       (kxdrproc_t) nfs_xdr_##argtype,			\
       (kxdrproc_t) nfs_xdr_##restype,			\
-      MAX(NFS_##argtype##_sz,NFS_##restype##_sz) << 2	\
+      MAX(NFS_##argtype##_sz,NFS_##restype##_sz) << 2,	\
+      0							\
     }
 
 static struct rpc_procinfo	nfs_procedures[18] = {
@@ -728,22 +763,8 @@ static struct rpc_procinfo	nfs_procedures[18] = {
     PROC(statfs,	fhandle,	statfsres),
 };
 
-static struct rpc_version	nfs_version2 = {
+struct rpc_version		nfs_version2 = {
 	2,
 	sizeof(nfs_procedures)/sizeof(nfs_procedures[0]),
 	nfs_procedures
-};
-
-static struct rpc_version *	nfs_version[] = {
-	NULL,
-	NULL,
-	&nfs_version2
-};
-
-struct rpc_program	nfs_program = {
-	"nfs",
-	NFS_PROGRAM,
-	sizeof(nfs_version) / sizeof(nfs_version[0]),
-	nfs_version,
-	&nfs_rpcstat,
 };

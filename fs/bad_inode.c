@@ -15,7 +15,7 @@
  * so that a bad root inode can at least be unmounted. To do this
  * we must dput() the base and return the dentry with a dget().
  */
-static struct dentry * bad_follow_link(struct dentry *dent, struct dentry *base, unsigned int follow)
+static struct dentry * bad_follow_link(struct dentry *dent, struct dentry *base, struct vfsmount **mnt, unsigned int follow)
 {
 	dput(base);
 	return dget(dent);
@@ -64,7 +64,7 @@ struct inode_operations bad_inode_ops =
 };
 
 
-/* 
+/*
  * When a filesystem is unable to read an inode due to an I/O error in
  * its read_inode() function, it can call make_bad_inode() to return a
  * set of stubs which will return EIO errors as required. 
@@ -72,6 +72,16 @@ struct inode_operations bad_inode_ops =
  * We only need to do limited initialisation: all other fields are
  * preinitialised to zero automatically.
  */
+ 
+/**
+ *	make_bad_inode - mark an inode bad due to an I/O error
+ *	@inode: Inode to mark bad
+ *
+ *	When an inode cannot be read due to a media or remote network
+ *	failure this function makes the inode 'bad' and causes I/O operations
+ *	on it to fail from this point on
+ */
+ 
 void make_bad_inode(struct inode * inode) 
 {
 	inode->i_mode = S_IFREG;
@@ -85,6 +95,14 @@ void make_bad_inode(struct inode * inode)
  * &bad_inode_ops to cover the case of invalidated inodes as well as
  * those created by make_bad_inode() above.
  */
+ 
+/**
+ *	is_bad_inode - is an inode errored
+ *	@inode: inode to test
+ *
+ *	Returns true if the inode in question has been marked as bad
+ */
+ 
 int is_bad_inode(struct inode * inode) 
 {
 	return (inode->i_op == &bad_inode_ops);	

@@ -112,7 +112,7 @@ asmlinkage long sys_uselib(const char * library)
 		goto out;
 	file = fget(fd);
 	retval = -ENOEXEC;
-	if (file && file->f_dentry && file->f_op && file->f_op->read) {
+	if (file && file->f_op && file->f_op->read) {
 		spin_lock(&binfmt_lock);
 		for (fmt = formats ; fmt ; fmt = fmt->next) {
 			if (!fmt->load_shlib)
@@ -315,9 +315,11 @@ int setup_arg_pages(struct linux_binprm *bprm)
 	return 0;
 }
 
+/* MOUNT_REWRITE: &mnt should be passed to lookup_dentry */
 struct file *open_exec(const char *name)
 {
 	struct dentry *dentry;
+	struct vfsmount *mnt = NULL;
 	struct file *file;
 
 	lock_kernel();
@@ -329,13 +331,14 @@ struct file *open_exec(const char *name)
 			int err = permission(dentry->d_inode, MAY_EXEC);
 			file = ERR_PTR(err);
 			if (!err) {
-				file = dentry_open(dentry, O_RDONLY);
+				file = dentry_open(dentry, mnt, O_RDONLY);
 out:
 				unlock_kernel();
 				return file;
 			}
 		}
 		dput(dentry);
+		mntput(mnt);
 	}
 	goto out;
 }
@@ -860,7 +863,6 @@ int do_coredump(long signr, struct pt_regs * regs)
 	struct linux_binfmt * binfmt;
 	char corename[6+sizeof(current->comm)];
 	struct file * file;
-	struct dentry * dentry;
 	struct inode * inode;
 
 	lock_kernel();
@@ -879,17 +881,16 @@ int do_coredump(long signr, struct pt_regs * regs)
 #else
 	corename[4] = '\0';
 #endif
-	file = filp_open(corename, O_CREAT | 2 | O_TRUNC | O_NOFOLLOW, 0600, NULL);
+	file = filp_open(corename, O_CREAT | 2 | O_TRUNC | O_NOFOLLOW, 0600);
 	if (IS_ERR(file))
 		goto fail;
-	dentry = file->f_dentry;
-	inode = dentry->d_inode;
+	inode = file->f_dentry->d_inode;
 	if (inode->i_nlink > 1)
 		goto close_fail;	/* multiple links - don't dump */
 
 	if (!S_ISREG(inode->i_mode))
 		goto close_fail;
-	if (!inode->i_fop)
+	if (!file->f_op)
 		goto close_fail;
 	if (!file->f_op->write)
 		goto close_fail;

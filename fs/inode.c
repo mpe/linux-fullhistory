@@ -111,6 +111,14 @@ static void init_once(void * foo, kmem_cache_t * cachep, unsigned long flags)
  * In short, make sure you hash any inodes _before_
  * you start marking them dirty..
  */
+ 
+/**
+ *	__mark_inode_dirty -	internal function
+ *	@inode: inode to mark
+ *
+ *	Mark an inode as dirty. Callers should use mark_inode_dirty
+ */
+ 
 void __mark_inode_dirty(struct inode *inode)
 {
 	struct super_block * sb = inode->i_sb;
@@ -202,10 +210,14 @@ static inline void sync_list(struct list_head *head)
 		sync_one(list_entry(tmp, struct inode, i_list));
 }
 
-/*
- * "sync_inodes()" goes through the super block's dirty list, 
- * writes them out, and puts them back on the normal list.
+/**
+ *	sync_inodes
+ *	@dev: device to sync the inodes from.
+ *
+ *	sync_inodes goes through the super block's dirty list, 
+ *	writes them out, and puts them back on the normal list.
  */
+ 
 void sync_inodes(kdev_t dev)
 {
 	struct super_block * sb = sb_entry(super_blocks.next);
@@ -241,9 +253,14 @@ static void sync_all_inodes(void)
 	}
 }
 
-/*
- * Needed by knfsd
+/**
+ *	write_inode_now	-	write an inode to disk
+ *	@inode: inode to write to disk
+ *
+ *	This function commits an inode to disk immediately if it is
+ *	dirty. This is primarily needed by knfsd.
  */
+ 
 void write_inode_now(struct inode *inode)
 {
 	struct super_block * sb = inode->i_sb;
@@ -258,11 +275,15 @@ void write_inode_now(struct inode *inode)
 		printk("write_inode_now: no super block\n");
 }
 
-/*
+/**
+ * clear_inode - clear an inode
+ * @inode: inode to clear
+ *
  * This is called by the filesystem to tell us
  * that the inode is no longer useful. We just
  * terminate it with extreme prejudice.
  */
+ 
 void clear_inode(struct inode *inode)
 {
 	if (inode->i_data.nrpages)
@@ -346,6 +367,16 @@ static int invalidate_list(struct list_head *head, struct super_block * sb, stru
  * is because we don't want to sleep while messing
  * with the global lists..
  */
+ 
+/**
+ *	invalidate_inodes	- discard the inodes on a device
+ *	@sb: superblock
+ *
+ *	Discard all of the inodes for a given superblock. If the discard
+ *	fails because there are busy inodes then a non zero value is returned.
+ *	If the discard is successful all the inodes are dicarded.
+ */
+ 
 int invalidate_inodes(struct super_block * sb)
 {
 	int busy;
@@ -490,12 +521,19 @@ static void clean_inode(struct inode *inode)
 	inode->i_mapping = &inode->i_data;
 }
 
-/*
+/**
+ * get_empty_inode 	- obtain an inode
+ *
  * This is called by things like the networking layer
  * etc that want to get an inode without any inode
  * number, or filesystems that allocate new inodes with
  * no pre-existing information.
+ *
+ * On a successful return the inode pointer is returned. On a failure
+ * a NULL pointer is returned. The returned inode is not on any superblock
+ * lists.
  */
+ 
 struct inode * get_empty_inode(void)
 {
 	static unsigned long last_ino = 0;
@@ -585,6 +623,22 @@ static inline unsigned long hash(struct super_block *sb, unsigned long i_ino)
 }
 
 /* Yeah, I know about quadratic hash. Maybe, later. */
+
+/**
+ *	iunique - get a unique inode number
+ *	@sb: superblock
+ *	@max_reserved: highest reserved inode number
+ *
+ *	Obtain an inode number that is unique on the system for a given
+ *	superblock. This is used by file systems that have no natural
+ *	permanent inode numbering system. An inode number is returned that
+ *	is higher than the reserved limit but unique.
+ *
+ *	BUGS:
+ *	With a large number of inodes live on the file system this function
+ *	currently becomes quite slow.
+ */
+ 
 ino_t iunique(struct super_block *sb, ino_t max_reserved)
 {
 	static ino_t counter = 0;
@@ -625,6 +679,7 @@ struct inode *igrab(struct inode *inode)
 	return inode;
 }
 
+
 struct inode *iget4(struct super_block *sb, unsigned long ino, find_inode_t find_actor, void *opaque)
 {
 	struct list_head * head = inode_hashtable + hash(sb,ino);
@@ -647,6 +702,14 @@ struct inode *iget4(struct super_block *sb, unsigned long ino, find_inode_t find
 	return get_new_inode(sb, ino, head, find_actor, opaque);
 }
 
+/**
+ *	insert_inode_hash - hash an inode
+ *	@inode: unhashed inode
+ *
+ *	Add an inode to the inode hash for this superblock. If the inode
+ *	has no superblock it is added to a seperate anonymous chain
+ */
+ 
 void insert_inode_hash(struct inode *inode)
 {
 	struct list_head *head = &anon_hash_chain;
@@ -657,6 +720,13 @@ void insert_inode_hash(struct inode *inode)
 	spin_unlock(&inode_lock);
 }
 
+/**
+ *	remove_inode_hash - remove an inode from the hash
+ *	@inode: inode to unhash
+ *
+ *	Remove an inode from the superblock or anonymous hash
+ */
+ 
 void remove_inode_hash(struct inode *inode)
 {
 	spin_lock(&inode_lock);
@@ -665,6 +735,14 @@ void remove_inode_hash(struct inode *inode)
 	spin_unlock(&inode_lock);
 }
 
+/**
+ *	iput	- put an inode 
+ *	@inode: inode to put
+ *
+ *	Puts an inode, dropping its usage count. If the inode use count hits
+ *	zero the inode is also then freed and may be destroyed.
+ */
+ 
 void iput(struct inode *inode)
 {
 	if (inode) {
@@ -744,6 +822,18 @@ kdevname(inode->i_dev), inode->i_ino, atomic_read(&inode->i_sem.count));
 	}
 }
 
+/**
+ *	bmap	- find a block number in a file
+ *	@inode: inode of file
+ *	@block: block to find
+ *
+ *	Returns the block number on the device holding the inode that
+ *	is the disk block number for the block of the file requested.
+ *	That is asked for block 4 of inode 1 the function will return the
+ *	disk block relative to the disk start that holds that block of the 
+ *	file
+ */
+ 
 int bmap(struct inode * inode, int block)
 {
 	int res = 0;
@@ -775,13 +865,22 @@ void __init inode_init(void)
 		panic("cannot create inode slab cache");
 }
 
+/**
+ *	update_atime	-	update the access time
+ *	@inode: inode accessed
+ *
+ *	Update the accessed time on an inode and mark it for  writeback.
+ *	This function automatically handles read only file systems and media,
+ *	as well as the noatime flag and inode specific noatime markers
+ */
+ 
 void update_atime (struct inode *inode)
 {
-    if ( IS_NOATIME (inode) ) return;
-    if ( IS_NODIRATIME (inode) && S_ISDIR (inode->i_mode) ) return;
-    if ( IS_RDONLY (inode) ) return;
-    inode->i_atime = CURRENT_TIME;
-    mark_inode_dirty (inode);
+	if ( IS_NOATIME (inode) ) return;
+	if ( IS_NODIRATIME (inode) && S_ISDIR (inode->i_mode) ) return;
+	if ( IS_RDONLY (inode) ) return;
+	inode->i_atime = CURRENT_TIME;
+	mark_inode_dirty (inode);
 }   /*  End Function update_atime  */
 
 

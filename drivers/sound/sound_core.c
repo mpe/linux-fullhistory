@@ -218,7 +218,7 @@ static void sound_remove_unit(struct sound_unit **list, int unit)
 static struct sound_unit *chains[16];
 
 /**
- *	register_sound_special
+ *	register_sound_special - register a special sound node
  *	@fops: File operations for the driver
  *	@unit: Unit number to allocate
  *
@@ -288,7 +288,7 @@ int register_sound_special(struct file_operations *fops, int unit)
 EXPORT_SYMBOL(register_sound_special);
 
 /**
- *	register_sound_mixer
+ *	register_sound_mixer - register a mixer device
  *	@fops: File operations for the driver
  *	@dev: Unit number to allocate
  *
@@ -306,7 +306,7 @@ int register_sound_mixer(struct file_operations *fops, int dev)
 EXPORT_SYMBOL(register_sound_mixer);
 
 /**
- *	register_sound_midi
+ *	register_sound_midi - register a midi device
  *	@fops: File operations for the driver
  *	@dev: Unit number to allocate
  *
@@ -329,7 +329,7 @@ EXPORT_SYMBOL(register_sound_midi);
  */
  
 /**
- *	register_sound_dsp
+ *	register_sound_dsp - register a DSP device
  *	@fops: File operations for the driver
  *	@dev: Unit number to allocate
  *
@@ -350,7 +350,7 @@ int register_sound_dsp(struct file_operations *fops, int dev)
 EXPORT_SYMBOL(register_sound_dsp);
 
 /**
- *	register_sound_synth
+ *	register_sound_synth - register a synth device
  *	@fops: File operations for the driver
  *	@dev: Unit number to allocate
  *
@@ -369,7 +369,7 @@ int register_sound_synth(struct file_operations *fops, int dev)
 EXPORT_SYMBOL(register_sound_synth);
 
 /**
- *	unregister_sound_special
+ *	unregister_sound_special - unregister a special sound device
  *	@unit: Unit number to allocate
  *
  *	Release a sound device that was allocated with register_sound_special.
@@ -385,7 +385,7 @@ void unregister_sound_special(int unit)
 EXPORT_SYMBOL(unregister_sound_special);
 
 /**
- *	unregister_sound_mixer
+ *	unregister_sound_mixer - unregister a mixer
  *	@unit: Unit number to allocate
  *
  *	Release a sound device that was allocated with register_sound_mixer.
@@ -400,7 +400,7 @@ void unregister_sound_mixer(int unit)
 EXPORT_SYMBOL(unregister_sound_mixer);
 
 /**
- *	unregister_sound_midi
+ *	unregister_sound_midi - unregister a midi device
  *	@unit: Unit number to allocate
  *
  *	Release a sound device that was allocated with register_sound_midi.
@@ -415,7 +415,7 @@ void unregister_sound_midi(int unit)
 EXPORT_SYMBOL(unregister_sound_midi);
 
 /**
- *	unregister_sound_dsp
+ *	unregister_sound_dsp - unregister a DSP device
  *	@unit: Unit number to allocate
  *
  *	Release a sound device that was allocated with register_sound_dsp.
@@ -433,7 +433,7 @@ void unregister_sound_dsp(int unit)
 EXPORT_SYMBOL(unregister_sound_dsp);
 
 /**
- *	unregister_sound_synth
+ *	unregister_sound_synth - unregister a synth device
  *	@unit: Unit number to allocate
  *
  *	Release a sound device that was allocated with register_sound_synth.

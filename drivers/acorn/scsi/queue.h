@@ -1,7 +1,7 @@
 /*
  * queue.h: queue handling
  *
- * (c) 1997 Russell King
+ * Copyright (C) 1997 Russell King
  */
 #ifndef QUEUE_H
 #define QUEUE_H

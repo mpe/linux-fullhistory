@@ -37,6 +37,7 @@ bttv.o
   card=35 - Chronos Video Shuttle II
   card=36 - Typhoon TView TV/FM Tuner
   card=37 - PixelView PlayTV pro
+  card=38 - TView99 CPH063
 
 tuner.o
   type=0 - Temic PAL
@@ -53,3 +54,4 @@ tuner.o
   type=11 - Alps TSBB5
   type=12 - Alps TSBE5
   type=13 - Alps TSBC5
+  type=14 - Temic 4006FH5

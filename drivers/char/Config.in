@@ -110,6 +110,7 @@ bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
 if [ "$CONFIG_WATCHDOG" != "n" ]; then
    bool '  Disable watchdog shutdown on close' CONFIG_WATCHDOG_NOWAYOUT
    tristate '  WDT Watchdog timer' CONFIG_WDT
+   tristate '  WDT PCI Watchdog timer' CONFIG_WDTPCI
    if [ "$CONFIG_WDT" != "n" ]; then
       bool '    WDT501 features' CONFIG_WDT_501
       if [ "$CONFIG_WDT_501" = "y" ]; then

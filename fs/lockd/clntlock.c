@@ -152,7 +152,7 @@ nlmclnt_recovery(struct nlm_host *host, u32 newstate)
 		host->h_monitored = 0;
 		host->h_nsmstate = newstate;
 		host->h_state++;
-		host->h_count++;
+		nlm_get_host(host);
 		kernel_thread(reclaimer, host, 0);
 	}
 }

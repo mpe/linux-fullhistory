@@ -81,6 +81,7 @@ struct nfs_inode_info {
 struct nfs_lock_info {
 	u32		state;
 	u32		flags;
+	struct nlm_host	*host;
 };
 
 /*

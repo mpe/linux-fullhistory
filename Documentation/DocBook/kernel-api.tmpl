@@ -34,13 +34,71 @@
  </bookinfo>
 
 <toc></toc>
-  <chapter id="intfuncs">
-     <title>Interrupt Handling</title>
-!Iarch/i386/kernel/irq.c
+  <chapter id="vfs">
+     <title>The Linux VFS</title>
+     <sect1><title>The Directory Cache</title>
+!Efs/dcache.c
+!Iinclude/linux/dcache.h
+     </sect1>
+     <sect1><title>Inode Handling</title>
+!Efs/inode.c
+!Efs/bad_inode.c
+     </sect1>
+     <sect1><title>Registration and Superblocks</title>
+!Efs/super.c
+     </sect1>
   </chapter>
-  <chapter id="mtrrfuncs">
-     <title>MTRR Handling</title>
+
+  <chapter id="netcore">
+     <title>Linux Networking</title>
+     <sect1><title>Socket Buffer Functions</title>
+!Iinclude/linux/skbuff.h
+!Enet/core/skbuff.c
+     </sect1>
+     <sect1><title>Socket Filter</title>
+!Enet/core/filter.c
+     </sect1>
+  </chapter>
+
+  <chapter id="netdev">
+     <title>Network device support</title>
+     <sect1><title>Driver Support</title>
+!Edrivers/net/net_init.c
+!Enet/core/dev.c
+     </sect1>
+     <sect1><title>8390 Based Network Cards</title>
+!Edrivers/net/8390.c
+     </sect1>
+     <sect1><title>Synchronous PPP</title>
+!Edrivers/net/wan/syncppp.c
+     </sect1>
+  </chapter>
+
+  <chapter id="modload">
+     <title>Module Loading</title>
+!Ekernel/kmod.c
+  </chapter>
+
+  <chapter id="hardware">
+     <title>Hardware Interfaces</title>
+     <sect1><title>Interrupt Handling</title>
+!Iarch/i386/kernel/irq.c
+     </sect1>
+
+     <sect1><title>MTRR Handling</title>
 !Earch/i386/kernel/mtrr.c
+     </sect1>
+     <sect1><title>PCI Support Library</title>
+!Edrivers/pci/pci.c
+     </sect1>
+     <sect1><title>MCA Architecture</title>
+	<sect2><title>MCA Device Functions</title>
+!Earch/i386/kernel/mca.c
+	</sect2>
+	<sect2><title>MCA Bus DMA</title>
+!Iinclude/asm-i386/mca_dma.h
+	</sect2>
+     </sect1>
   </chapter>
 
   <chapter id="pmfuncs">
@@ -58,34 +116,14 @@
 !Edrivers/char/videodev.c
   </chapter>
 
-  <chapter id="netdev">
-     <title>Network devices</title>
-!Idrivers/net/net_init.c
-!Edrivers/net/8390.c
-  </chapter>
-
   <chapter id="snddev">
      <title>Sound Devices</title>
 !Edrivers/sound/sound_core.c
 !Idrivers/sound/sound_firmware.c
   </chapter>
 
-  <chapter id="mcabus">
-     <title>MCA Architecture</title>
-	<sect1><title>MCA Device Functions</title>
-!Earch/i386/kernel/mca.c
-	</sect1>
-	<sect1><title>MCA Bus DMA</title>
-!Iinclude/asm-i386/mca_dma.h
-	</sect1>
-  </chapter>
 
-  <chapter id="syncppp">
-     <title>Synchronous PPP</title>
-!Edrivers/net/wan/syncppp.c
-  </chapter>
-
-  <chapter id="16x50">
+  <chapter id="uart16x50">
      <title>16x50 UART Driver</title>
 !Edrivers/char/serial.c
   </chapter>
@@ -95,9 +133,5 @@
 !Edrivers/net/wan/z85230.c
   </chapter>
 
-  <chapter id="pcilib">
-     <title>PCI Support Library</title>
-!Edrivers/pci/pci.c
-  </chapter>
 
 </book>

@@ -84,7 +84,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.5k"
+#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.5l"
 
 /* #define DEBUG_896R1 */
 #define SCSI_NCR_OPTIMIZE_896
@@ -6303,7 +6303,6 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	lcb_p lp		      = ncr_lp(np, tp, cmd->lun);
 	ccb_p cp;
 
-	int	segments;
 	u_char	idmsg, *msgptr;
 	u_int   msglen;
 	int	direction;
@@ -6452,11 +6451,17 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	**----------------------------------------------------
 	*/
 
-	cp->segments = segments = np->scatter (np, cp, cp->cmd);
-
-	if (segments < 0) {
-		ncr_free_ccb(np, cp);
-		return(DID_ERROR);
+	direction = scsi_data_direction(cmd);
+	if (direction != SCSI_DATA_NONE) {
+		cp->segments = np->scatter (np, cp, cp->cmd);
+		if (cp->segments < 0) {
+			ncr_free_ccb(np, cp);
+			return(DID_ERROR);
+		}
+	}
+	else {
+		cp->data_len = 0;
+		cp->segments = 0;
 	}
 
 	/*----------------------------------------------------
@@ -6467,8 +6472,6 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	*/
 	if (!cp->data_len)
 		direction = SCSI_DATA_NONE;
-	else
-		direction = scsi_data_direction(cmd);
 
 	/*
 	**	If data direction is UNKNOWN, speculate DATA_READ 
@@ -6480,7 +6483,7 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	case SCSI_DATA_UNKNOWN:
 	case SCSI_DATA_WRITE:
 		goalp = NCB_SCRIPT_PHYS (np, data_out2) + 8;
-		lastp = goalp - 8 - (segments * (SCR_SG_SIZE*4));
+		lastp = goalp - 8 - (cp->segments * (SCR_SG_SIZE*4));
 		if (direction != SCSI_DATA_UNKNOWN)
 			break;
 		cp->phys.header.wgoalp	= cpu_to_scr(goalp);
@@ -6489,7 +6492,7 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	case SCSI_DATA_READ:
 		cp->host_flags |= HF_DATA_IN;
 		goalp = NCB_SCRIPT_PHYS (np, data_in2) + 8;
-		lastp = goalp - 8 - (segments * (SCR_SG_SIZE*4));
+		lastp = goalp - 8 - (cp->segments * (SCR_SG_SIZE*4));
 		break;
 	default:
 	case SCSI_DATA_NONE:

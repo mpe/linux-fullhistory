@@ -1,3 +1,13 @@
+Sat Apr 1  12:00 2000 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.2h
+	- Fix a compilation problem on Alpha introduced in version 3.2g.
+          (`port' changed to `base_io').
+	- Move from `sym' to this driver a tiny change for __sparc__ that 
+	  applies to cache line size (? Probably from David S Miller).
+	- Make sure no data transfer will happen for Scsi_Cmnd requests 
+	  that supply SCSI_DATA_NONE direction (this avoids some BUG() 
+	  statement in the PCI code when a data buffer is also supplied).
+
 Mon March 6  23:15 2000 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.2g
 	- Add the file sym53c8xx_comm.h that collects code that should 

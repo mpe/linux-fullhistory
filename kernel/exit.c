@@ -216,7 +216,9 @@ static inline void __exit_fs(struct task_struct *tsk)
 		tsk->fs = NULL;
 		if (atomic_dec_and_test(&fs->count)) {
 			dput(fs->root);
+			mntput(fs->rootmnt);
 			dput(fs->pwd);
+			mntput(fs->pwdmnt);
 			kfree(fs);
 		}
 	}
@@ -414,12 +416,12 @@ fake_volatile:
 #ifdef CONFIG_BSD_PROCESS_ACCT
 	acct_process(code);
 #endif
-	task_lock(tsk);
 	sem_exit();
 	__exit_mm(tsk);
 	__exit_files(tsk);
 	__exit_fs(tsk);
 	__exit_sighand(tsk);
+	task_lock(tsk);
 	exit_thread();
 	tsk->state = TASK_ZOMBIE;
 	tsk->exit_code = code;

@@ -12,11 +12,8 @@
 #include <linux/config.h>
 
 /* Maximum file offset in file_lock.fl_end */
-#ifdef OFFSET_MAX
-# define NLM_OFFSET_MAX		OFFSET_MAX
-#else
-# define NLM_OFFSET_MAX		((off_t) 0x7fffffff)
-#endif
+# define NLM_OFFSET_MAX		((s32) 0x7fffffff)
+# define NLM4_OFFSET_MAX	((s64) ((~(u64)0) >> 1))
 
 /* Return states for NLM */
 enum {

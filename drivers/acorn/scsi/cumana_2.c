@@ -1,7 +1,7 @@
 /*
  * linux/arch/arm/drivers/scsi/cumana_2.c
  *
- * Copyright (C) 1997-1998 Russell King
+ * Copyright (C) 1997-2000 Russell King
  *
  * Changelog:
  *  30-08-1997	RMK	0.0.0	Created, READONLY version.
@@ -10,6 +10,7 @@
  *  02-05-1998	RMK	0.0.2	Updated & added DMA support.
  *  27-06-1998	RMK		Changed asm/delay.h to linux/delay.h
  *  18-08-1998	RMK	0.0.3	Fixed synchronous transfer depth.
+ *  02-04-2000	RMK	0.0.4	Updated for new error handling code.
  */
 
 #include <linux/module.h>
@@ -70,7 +71,7 @@
  */
 #define VER_MAJOR	0
 #define VER_MINOR	0
-#define VER_PATCH	3
+#define VER_PATCH	4
 
 static struct expansion_card *ecs[MAX_ECARDS];
 
@@ -433,25 +434,11 @@ const char *cumanascsi_2_info(struct Scsi_Host *host)
 	static char string[100], *p;
 
 	p = string;
-	p += sprintf(string, "%s at port %lX ",
-		     host->hostt->name, host->io_port);
-
-	if (host->irq != NO_IRQ)
-		p += sprintf(p, "irq %d ", host->irq);
-	else
-		p += sprintf(p, "NO IRQ ");
-
-	if (host->dma_channel != NO_DMA)
-		p += sprintf(p, "dma %d ", host->dma_channel);
-	else
-		p += sprintf(p, "NO DMA ");
-
-	p += sprintf(p, "v%d.%d.%d scsi %s",
+	p += sprintf(p, "%s ", host->hostt->name);
+	p += fas216_info(&info->info, p);
+	p += sprintf(p, "v%d.%d.%d terminators o%s",
 		     VER_MAJOR, VER_MINOR, VER_PATCH,
-		     info->info.scsi.type);
-
-	p += sprintf(p, " terminators %s",
-		     info->terms ? "on" : "off");
+		     info->terms ? "n" : "ff");
 
 	return string;
 }
@@ -525,26 +512,14 @@ int cumanascsi_2_proc_info (char *buffer, char **start, off_t offset,
 	pos = sprintf(buffer,
 			"Cumana SCSI II driver version %d.%d.%d\n",
 			VER_MAJOR, VER_MINOR, VER_PATCH);
-	pos += sprintf(buffer + pos,
-			"Address: %08lX    IRQ : %d     DMA : %d\n"
-			"FAS    : %-10s  TERM: %-3s\n\n"
-			"Statistics:\n",
-			host->io_port, host->irq, host->dma_channel,
-			info->info.scsi.type, info->terms ? "on" : "off");
 
-	pos += sprintf(buffer+pos,
-			"Queued commands: %-10u   Issued commands: %-10u\n"
-			"Done commands  : %-10u   Reads          : %-10u\n"
-			"Writes         : %-10u   Others         : %-10u\n"
-			"Disconnects    : %-10u   Aborts         : %-10u\n"
-			"Resets         : %-10u\n",
-			info->info.stats.queues,      info->info.stats.removes,
-			info->info.stats.fins,        info->info.stats.reads,
-			info->info.stats.writes,      info->info.stats.miscs,
-			info->info.stats.disconnects, info->info.stats.aborts,
-			info->info.stats.resets);
+	pos += fas216_print_host(&info->info, buffer + pos);
+	pos += sprintf(buffer + pos, "Term    : o%s\n",
+			info->terms ? "n" : "ff");
 
-	pos += sprintf(buffer+pos, "\nAttached devices:%s\n", host->host_queue ? "" : " none");
+	pos += fas216_print_stats(&info->info, buffer + pos);
+
+	pos += sprintf(buffer+pos, "\nAttached devices:\n");
 
 	for (scd = host->host_queue; scd; scd = scd->next) {
 		int len;

@@ -181,7 +181,7 @@ static int try_to_fill_dentry(struct dentry *dentry,
 	/* If this is an unused directory that isn't a mount point,
 	   bitch at the daemon and fix it in user space */
 	if (S_ISDIR(dentry->d_inode->i_mode) &&
-	    dentry->d_mounts == dentry && 
+	    !d_mountpoint(dentry) && 
 	    list_empty(&dentry->d_subdirs)) {
 		DPRINTK(("try_to_fill_entry: mounting existing dir\n"));
 		return autofs4_wait(sbi, &dentry->d_name, NFY_MOUNT) == 0;
@@ -226,7 +226,7 @@ static int autofs4_root_revalidate(struct dentry * dentry, int flags)
 
 	/* Check for a non-mountpoint directory with no contents */
 	if (S_ISDIR(dentry->d_inode->i_mode) &&
-	    dentry->d_mounts == dentry && 
+	    !d_mountpoint(dentry) && 
 	    list_empty(&dentry->d_subdirs)) {
 		DPRINTK(("autofs_root_revalidate: dentry=%p %.*s, emptydir\n",
 			 dentry, dentry->d_name.len, dentry->d_name.name));

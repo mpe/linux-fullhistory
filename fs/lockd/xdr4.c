@@ -20,14 +20,25 @@
 #include <linux/lockd/sm_inter.h>
 
 #define NLMDBG_FACILITY		NLMDBG_XDR
-#define OFFSET_MAX		((off_t)LONG_MAX)
 
-
-static inline off_t
-size_to_off_t(__s64 size)
+static inline loff_t
+s64_to_loff_t(__s64 offset)
 {
-        size = (size > (__s64)LONG_MAX) ? (off_t)LONG_MAX : (off_t) size;
-        return (size < (__s64)-LONG_MAX) ? (off_t)-LONG_MAX : (off_t) size;
+	return (loff_t)offset;
+}
+
+
+static inline s64
+loff_t_to_s64(loff_t offset)
+{
+	s64 res;
+	if (offset > NLM4_OFFSET_MAX)
+		res = NLM4_OFFSET_MAX;
+	else if (offset < -NLM4_OFFSET_MAX)
+		res = -NLM4_OFFSET_MAX;
+	else
+		res = offset;
+	return res;
 }
 
 /*
@@ -141,11 +152,12 @@ nlm4_decode_lock(u32 *p, struct nlm_lock *lock)
 	p = xdr_decode_hyper(p, &len);
 	end = start + len - 1;
 
-	fl->fl_start = size_to_off_t(start);
-	fl->fl_end = size_to_off_t(end);
+	fl->fl_start = s64_to_loff_t(start);
 
-	if (len == 0 || fl->fl_end < 0)
+	if (len == 0 || end < 0)
 		fl->fl_end = OFFSET_MAX;
+	else
+		fl->fl_end = s64_to_loff_t(end);
 	return p;
 }
 
@@ -156,18 +168,26 @@ static u32 *
 nlm4_encode_lock(u32 *p, struct nlm_lock *lock)
 {
 	struct file_lock	*fl = &lock->fl;
+	__s64			start, len;
 
 	if (!(p = xdr_encode_string(p, lock->caller))
 	 || !(p = nlm4_encode_fh(p, &lock->fh))
 	 || !(p = nlm4_encode_oh(p, &lock->oh)))
 		return NULL;
 
-	*p++ = htonl(fl->fl_pid);
-	p = xdr_encode_hyper(p, fl->fl_start);
+	if (fl->fl_start > NLM4_OFFSET_MAX
+	 || (fl->fl_end > NLM4_OFFSET_MAX && fl->fl_end != OFFSET_MAX))
+		return NULL;
+
+	start = loff_t_to_s64(fl->fl_start);
 	if (fl->fl_end == OFFSET_MAX)
-		p = xdr_encode_hyper(p, 0);
+		len = 0;
 	else
-		p = xdr_encode_hyper(p, fl->fl_end - fl->fl_start + 1);
+		len = loff_t_to_s64(fl->fl_end - fl->fl_start + 1);
+
+	*p++ = htonl(fl->fl_pid);
+	p = xdr_encode_hyper(p, start);
+	p = xdr_encode_hyper(p, len);
 
 	return p;
 }
@@ -178,6 +198,8 @@ nlm4_encode_lock(u32 *p, struct nlm_lock *lock)
 static u32 *
 nlm4_encode_testres(u32 *p, struct nlm_res *resp)
 {
+	s64		start, len;
+
 	dprintk("xdr: before encode_testres (p %p resp %p)\n", p, resp);
 	if (!(p = nlm4_encode_cookie(p, &resp->cookie)))
 		return 0;
@@ -193,12 +215,17 @@ nlm4_encode_testres(u32 *p, struct nlm_res *resp)
 		if (!(p = xdr_encode_netobj(p, &resp->lock.oh)))
 			return 0;
 
-		p = xdr_encode_hyper(p, fl->fl_start);
+		start = loff_t_to_s64(fl->fl_start);
 		if (fl->fl_end == OFFSET_MAX)
-			p = xdr_encode_hyper(p, 0);
+			len = 0;
 		else
-			p = xdr_encode_hyper(p, fl->fl_end - fl->fl_start + 1);
-		dprintk("xdr: encode_testres (status %d pid %d type %d start %ld end %ld)\n", resp->status, fl->fl_pid, fl->fl_type, fl->fl_start,  fl->fl_end);
+			len = loff_t_to_s64(fl->fl_end - fl->fl_start + 1);
+		
+		p = xdr_encode_hyper(p, start);
+		p = xdr_encode_hyper(p, len);
+		dprintk("xdr: encode_testres (status %d pid %d type %d start %Ld end %Ld)\n",
+			resp->status, fl->fl_pid, fl->fl_type,
+			(long long)fl->fl_start,  (long long)fl->fl_end);
 	}
 
 	dprintk("xdr: after encode_testres (p %p resp %p)\n", p, resp);
@@ -434,10 +461,11 @@ nlm4clt_decode_testres(struct rpc_rqst *req, u32 *p, struct nlm_res *resp)
 		p = xdr_decode_hyper(p, &len);
 		end = start + len - 1;
 
-		fl->fl_start = size_to_off_t(start);
-		fl->fl_end = size_to_off_t(end);
-		if (len == 0 || fl->fl_end < 0)
+		fl->fl_start = s64_to_loff_t(start);
+		if (len == 0 || end < 0)
 			fl->fl_end = OFFSET_MAX;
+		else
+			fl->fl_end = s64_to_loff_t(end);
 	}
 	return 0;
 }
