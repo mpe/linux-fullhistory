@@ -266,7 +266,7 @@ static struct super_block *minix_read_super(struct super_block *s, void *data,
 	if (errmsg)
 		goto out_bad_root;
 
-	s->s_root = d_alloc_root(root_inode, NULL);
+	s->s_root = d_alloc_root(root_inode);
 	if (!s->s_root)
 		goto out_iput;
 

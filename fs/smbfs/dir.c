@@ -318,7 +318,7 @@ smb_renew_times(struct dentry * dentry)
 	for (;;)
 	{
 		dentry->d_time = jiffies;
-		if (dentry == dentry->d_parent)
+		if (IS_ROOT(dentry))
 			break;
 		dentry = dentry->d_parent;
 	}

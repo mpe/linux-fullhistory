@@ -466,7 +466,7 @@ struct super_block *hfs_read_super(struct super_block *s, void *data,
 	if (!root_inode) 
 		goto bail_no_root;
 	  
-	s->s_root = d_alloc_root(root_inode, NULL);
+	s->s_root = d_alloc_root(root_inode);
 	if (!s->s_root) 
 		goto bail_no_root;
 

@@ -41,7 +41,7 @@
 
 #include <net/irda/ircomm_common.h>
 
-static char *revision_date = "Sun Apr 18 00:40:19 1999";
+static char *revision_date = "Tue May 18 03:11:39 1999";
 
 
 static void ircomm_state_idle(struct ircomm_cb *self, IRCOMM_EVENT event, 
@@ -205,15 +205,17 @@ __initfunc(int ircomm_init(void))
 		ircomm[i]->enq_char = 0x05;
 		ircomm[i]->ack_char = 0x06;  
 
-		ircomm[i]->max_txbuff_size = COMM_DEFAULT_DATA_SIZE;   /* 64 */
-		ircomm[i]->max_sdu_size = SAR_DISABLE;  
-		ircomm[i]->ctrl_skb = dev_alloc_skb(COMM_DEFAULT_DATA_SIZE);
+		ircomm[i]->max_header_size = COMM_MAX_HEADER_SIZE;
+		ircomm[i]->tx_max_sdu_size = COMM_DEFAULT_SDU_SIZE;
+		ircomm[i]->rx_max_sdu_size = SAR_DISABLE;  
+		ircomm[i]->ctrl_skb = dev_alloc_skb(COMM_DEFAULT_SDU_SIZE
+						    + COMM_MAX_HEADER_SIZE);
 		if (ircomm[i]->ctrl_skb == NULL){
 			DEBUG(0,"ircomm:init_module:alloc_skb failed!\n");
 			return -ENOMEM;
 		}
 
-		skb_reserve(ircomm[i]->ctrl_skb,COMM_HEADER_SIZE);
+		skb_reserve(ircomm[i]->ctrl_skb,COMM_MAX_HEADER_SIZE);
 
 	}
 
@@ -302,14 +304,16 @@ static void ircomm_accept_connect_confirm(void *instance, void *sap,
 	DEBUG(0,__FUNCTION__"(): got connected!\n");
 
 	if (max_sdu_size == SAR_DISABLE)
-		self->max_txbuff_size = qos->data_size.value - max_header_size;
+		self->tx_max_sdu_size =(qos->data_size.value - max_header_size
+					- COMM_HEADER_SIZE);
 	else {
-		ASSERT(max_sdu_size >= COMM_DEFAULT_DATA_SIZE, return;);
-		self->max_txbuff_size = max_sdu_size; /* use fragmentation */
+		ASSERT(max_sdu_size >= COMM_DEFAULT_SDU_SIZE, return;);
+		/* use fragmentation */
+		self->tx_max_sdu_size = max_sdu_size - COMM_HEADER_SIZE;
 	}
 
 	self->qos = qos;
-	self->max_header_size = max_header_size;
+	self->max_header_size = max_header_size + COMM_HEADER_SIZE;
 	self->null_modem_mode = 0;         /* disable null modem emulation */
 
 	ircomm_do_event(self, TTP_CONNECT_CONFIRM, skb);
@@ -331,12 +335,13 @@ static void ircomm_accept_connect_indication(void *instance, void *sap,
 	DEBUG(0,__FUNCTION__"()\n");
 
 	if (max_sdu_size == SAR_DISABLE)
-		self->max_txbuff_size = qos->data_size.value - max_header_size;
+		self->tx_max_sdu_size =(qos->data_size.value - max_header_size
+					- COMM_HEADER_SIZE);
 	else
-		self->max_txbuff_size = max_sdu_size;
+		self->tx_max_sdu_size = max_sdu_size - COMM_HEADER_SIZE;
 
 	self->qos = qos;
-	self->max_header_size = max_header_size;
+	self->max_header_size = max_header_size + COMM_HEADER_SIZE;
 
 	ircomm_do_event( self, TTP_CONNECT_INDICATION, skb);
 
@@ -558,7 +563,7 @@ static void issue_connect_request(struct ircomm_cb *self,
 
 		irttp_connect_request(self->tsap, self->dlsap, 
 				      self->saddr, self->daddr, 
-				      NULL, self->max_sdu_size, userdata); 
+				      NULL, self->rx_max_sdu_size, userdata); 
 		break;
 
 	default:
@@ -592,7 +597,8 @@ static void connect_indication(struct ircomm_cb *self, struct qos_info *qos,
 
 	if (self->notify.connect_indication)
 		self->notify.connect_indication(self->notify.instance, self, 
-						qos, 0, 0, skb);
+						qos, self->tx_max_sdu_size,
+						self->max_header_size, skb);
 }
     
 #if 0
@@ -611,7 +617,8 @@ static void connect_confirm(struct ircomm_cb *self, struct sk_buff *skb)
 	/* give a connect_confirm to the client */
 	if( self->notify.connect_confirm )
 		self->notify.connect_confirm(self->notify.instance,
-					     self, NULL, SAR_DISABLE, 0, skb);
+					     self, NULL, self->tx_max_sdu_size,
+					     self->max_header_size, skb);
 }
 
 static void issue_connect_response(struct ircomm_cb *self,
@@ -623,7 +630,7 @@ static void issue_connect_response(struct ircomm_cb *self,
 		DEBUG(0,__FUNCTION__"():THREE_WIRE_RAW is not implemented yet\n");
 		/* irlmp_connect_rsp(); */
 	} else
-		irttp_connect_response(self->tsap, self->max_sdu_size, skb);
+		irttp_connect_response(self->tsap, self->rx_max_sdu_size, skb);
 }
 
 static void issue_disconnect_request(struct ircomm_cb *self,
@@ -1054,7 +1061,7 @@ static void start_discovering(struct ircomm_cb *self)
 
 	hints = irlmp_service_to_hint(S_COMM);
 
-	DEBUG(0,__FUNCTION__"():start discovering..\n");
+	DEBUG(1,__FUNCTION__"():start discovering..\n");
 	switch (ircomm_cs) {
 	case 0:
 		MOD_INC_USE_COUNT;
@@ -1155,12 +1162,12 @@ void ircomm_connect_request(struct ircomm_cb *self, __u8 servicetype)
 	ASSERT( self->magic == IRCOMM_MAGIC, return;);
 
 
-	DEBUG(0, __FUNCTION__"():sending connect_request...\n");
+	DEBUG(1, __FUNCTION__"():sending connect_request...\n");
 
 	self->servicetype= servicetype;
 	/* ircomm_control_request(self, SERVICETYPE); */ /*servictype*/
 
-	self->max_sdu_size = SAR_DISABLE;
+	self->rx_max_sdu_size = SAR_DISABLE;
 	ircomm_do_event(self, IRCOMM_CONNECT_REQUEST, NULL);
 }
 
@@ -1181,20 +1188,18 @@ void ircomm_connect_response(struct ircomm_cb *self, struct sk_buff *userdata,
 
 	if (!userdata){
 		/* FIXME: check for errors and initialize? DB */
-		userdata = dev_alloc_skb(COMM_DEFAULT_DATA_SIZE);
+		userdata = dev_alloc_skb(COMM_DEFAULT_SDU_SIZE + COMM_MAX_HEADER_SIZE);
 		if (userdata == NULL)
 			return;
 
-		skb_reserve(userdata,COMM_HEADER_SIZE);
+		skb_reserve(userdata,COMM_MAX_HEADER_SIZE);
 	}
 
 	/* enable null-modem emulation (i.e. server mode )*/
 	self->null_modem_mode = 1;
 
-	self->max_sdu_size = max_sdu_size;
-	if (max_sdu_size != SAR_DISABLE)
-		self->max_txbuff_size = max_sdu_size;
-
+	self->rx_max_sdu_size = max_sdu_size;
+	
 	ircomm_do_event(self, IRCOMM_CONNECT_RESPONSE, userdata);
 }	
 
@@ -1307,10 +1312,10 @@ static void ircomm_tx_controlchannel(struct ircomm_cb *self )
 	ircomm_do_event(self, IRCOMM_CONTROL_REQUEST, skb);
 	self->control_ch_pending = 0;
 
-	skb = dev_alloc_skb(COMM_DEFAULT_DATA_SIZE);
+	skb = dev_alloc_skb(COMM_DEFAULT_SDU_SIZE + COMM_MAX_HEADER_SIZE);
 	ASSERT(skb != NULL, return ;);
 
-	skb_reserve(skb,COMM_HEADER_SIZE);
+	skb_reserve(skb,COMM_MAX_HEADER_SIZE);
 	self->ctrl_skb = skb;
 }
 

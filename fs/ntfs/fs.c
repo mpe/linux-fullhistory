@@ -978,7 +978,7 @@ struct super_block * ntfs_read_super(struct super_block *sb,
 
 	ntfs_debug(DEBUG_OTHER, "Getting RootDir\n");
 	/* Get the root directory */
-	if(!(sb->s_root=d_alloc_root(iget(sb,FILE_ROOT),NULL))){
+	if(!(sb->s_root=d_alloc_root(iget(sb,FILE_ROOT)))){
 		ntfs_error("Could not get root dir inode\n");
 		goto ntfs_read_super_mft;
 	}

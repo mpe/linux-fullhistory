@@ -204,7 +204,7 @@ struct super_block *efs_read_super(struct super_block *s, void *d, int silent) {
 	}
 	s->s_op   = &efs_superblock_operations;
 	s->s_dev  = dev;
-	s->s_root = d_alloc_root(iget(s, EFS_ROOTINODE), NULL);
+	s->s_root = d_alloc_root(iget(s, EFS_ROOTINODE));
 	unlock_super(s);
  
 	if (!(s->s_root)) {

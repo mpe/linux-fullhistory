@@ -33,6 +33,10 @@ if [ "$CONFIG_M686" = "y" ]; then
   define_bool CONFIG_X86_GOOD_APIC y
 fi
 
+choice 'Maximum Physical Memory' \
+	"1GB		CONFIG_1GB \
+	 2GB		CONFIG_2GB" 1GB
+
 bool 'Math emulation' CONFIG_MATH_EMULATION
 bool 'MTRR (Memory Type Range Register) support' CONFIG_MTRR
 bool 'Symmetric multi-processing support' CONFIG_SMP

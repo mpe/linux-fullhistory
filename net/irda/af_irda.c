@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 31 10:12:43 1998
- * Modified at:   Tue May 11 12:42:26 1999
+ * Modified at:   Wed May 19 16:12:06 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       af_netroom.c, af_ax25.c, af_rose.c, af_x25.c etc.
  * 
@@ -145,7 +145,7 @@ static void irda_connect_confirm(void *instance, void *sap,
 	else
 		self->max_data_size = max_sdu_size;
 
-	DEBUG(0, __FUNCTION__ "(), max_data_size=%d\n", self->max_data_size);
+	DEBUG(1, __FUNCTION__ "(), max_data_size=%d\n", self->max_data_size);
 
 	memcpy(&self->qos_tx, qos, sizeof(struct qos_info));
 
@@ -189,7 +189,7 @@ static void irda_connect_indication(void *instance, void *sap,
 	else
 		self->max_data_size = max_sdu_size;
 
-	DEBUG(0, __FUNCTION__ "(), max_data_size=%d\n", self->max_data_size);
+	DEBUG(1, __FUNCTION__ "(), max_data_size=%d\n", self->max_data_size);
 
 	memcpy(&self->qos_tx, qos, sizeof(struct qos_info));
 
@@ -250,12 +250,12 @@ static void irda_flow_indication(void *instance, void *sap, LOCAL_FLOW flow)
 	
 	switch (flow) {
 	case FLOW_STOP:
-		DEBUG( 0, __FUNCTION__ "(), IrTTP wants us to slow down\n");
+		DEBUG(1, __FUNCTION__ "(), IrTTP wants us to slow down\n");
 		self->tx_flow = flow;
 		break;
 	case FLOW_START:
 		self->tx_flow = flow;
-		DEBUG(0, __FUNCTION__ "(), IrTTP wants us to start again\n");
+		DEBUG(1, __FUNCTION__ "(), IrTTP wants us to start again\n");
 		wake_up_interruptible(sk->sleep);
 		break;
 	default:
@@ -703,7 +703,11 @@ static int irda_create(struct socket *sock, int protocol)
 
 	sock_init_data(sock, sk);
 
-	sock->ops    = &irda_stream_ops;
+	if (sock->type == SOCK_STREAM)
+		sock->ops = &irda_stream_ops;
+	else
+		sock->ops = &irda_dgram_ops;
+
 	sk->protocol = protocol;
 
 	/* Register as a client with IrLMP */
@@ -1123,7 +1127,7 @@ static int irda_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	struct sock *sk = sock->sk;
 
-	DEBUG(0, __FUNCTION__ "(), cmd=%#x\n", cmd);
+	DEBUG(4, __FUNCTION__ "(), cmd=%#x\n", cmd);
 	
 	switch (cmd) {
 	case TIOCOUTQ: {
@@ -1170,7 +1174,7 @@ static int irda_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		return -EINVAL;
 		
 	default:
-		DEBUG(0, __FUNCTION__ "(), doing device ioctl!\n");
+		DEBUG(1, __FUNCTION__ "(), doing device ioctl!\n");
 		return dev_ioctl(cmd, (void *) arg);
 	}
 

@@ -71,60 +71,84 @@ static struct timer_list ohci_timer;	/* timer for root hub polling */
 
 static spinlock_t ohci_edtd_lock = SPIN_LOCK_UNLOCKED;
 
+#define FIELDS_OF_ED(e)	le32_to_cpup(&e->status), le32_to_cpup(&e->tail_td), \
+			le32_to_cpup(&e->_head_td), le32_to_cpup(&e->next_ed)
+#define FIELDS_OF_TD(t)	le32_to_cpup(&t->info), le32_to_cpup(&t->cur_buf), \
+			le32_to_cpup(&t->next_td), le32_to_cpup(&t->buf_end)
+
+static const char *cc_names[16] = {
+	"no error",
+	"CRC error",
+	"bit stuff error",
+	"data toggle mismatch",
+	"stall",
+	"device not responding",
+	"PID check failed",
+	"unexpected PID",
+	"data overrun",
+	"data underrun",
+	"reserved (10)",
+	"reserved (11)",
+	"buffer overrun",
+	"buffer underrun",
+	"not accessed (14)",
+	"not accessed"
+};
+
 /*
- * Add a TD to the end of the TD list on a given ED.  This function
- * does NOT advance the ED's tail_td pointer beyond the given TD.  To
- * add multiple TDs, call this function once for each TD.  Do not
- * "simply" update tail_td yourself... This function does more than
- * that.
- * 
- * If this ED is on the controller, you MUST set its SKIP flag before
- * calling this function.
+ * Add a chain of TDs to the end of the TD list on a given ED.
  *
- * Important!  This function needs locking and atomicity as it works
- * in parallel with the HC's DMA.  Locking ohci_edtd_lock while using
- * the function is a must.
+ * This function uses the first TD of the chain as the new dummy TD
+ * for the ED, and uses the old dummy TD instead of the first TD
+ * of the chain.  The reason for this is that this makes it possible
+ * to update the TD chain without needing any locking between the
+ * CPU and the OHCI controller.
+ *
+ * The return value is the pointer to the new first TD (the old
+ * dummy TD).
+ *
+ * Important!  This function is not re-entrant w.r.t. each ED.
+ * Locking ohci_edtd_lock while using the function is a must
+ * if there is any possibility of another CPU or an interrupt routine
+ * calling this function with the same ED.
  *
  * This function can be called by the interrupt handler.
  */
-static void ohci_add_td_to_ed(struct ohci_td *td, struct ohci_ed *ed)
+static struct ohci_td *ohci_add_td_to_ed(struct ohci_td *td,
+				struct ohci_td *last_td, struct ohci_ed *ed)
 {
-	struct ohci_td *dummy_td, *prev_td;
+	struct ohci_td *t, *dummy_td;
+	u32 new_dummy;
 
 	if (ed->tail_td == 0) {
 		printk("eek! an ED without a dummy_td\n");
+		return td;
 	}
 
-	/* The ED's tail_td is constant, always pointing to the
-	 * dummy_td.  The reason the ED never processes the dummy is
-	 * that it stops processing TDs as soon as head_td == tail_td.
-	 * When it advances to this last dummy TD it conveniently stops. */
-	dummy_td = bus_to_virt(ed->tail_td);
+	/* Get a pointer to the current dummy TD. */
+	dummy_td = bus_to_virt(ed_tail_td(ed));
 
-	/* Dummy's data pointer is used to point to the previous TD */
-	if (ed_head_td(ed) != ed->tail_td) {
-		prev_td = (struct ohci_td *) dummy_td->data;
-	} else {
-		/* if the ED is empty, previous is meaningless */
-		/* We'll be inserting into the head of the list */
-		prev_td = NULL;
+	for (t = td; ; t = bus_to_virt(le32_to_cpup(&t->next_td))) {
+		t->ed = ed;
+		if (t == last_td)
+			break;
 	}
 
-	/* Store the new back pointer and set up this TD's next */
-	dummy_td->data = td;
-	td->next_td = ed->tail_td;
+	/* Make the last TD point back to the first, since it
+	 * will become the new dummy TD. */
+	new_dummy = cpu_to_le32(virt_to_bus(td));
+	last_td->next_td = new_dummy;
 
-	/* Store the TD pointer back to the ED */
-	td->ed = ed;
+	/* Copy the contents of the first TD into the dummy */
+	*dummy_td = *td;
 
-	if (!prev_td) { /* No previous TD? then insert us at the head */
-		if (ed_head_td(ed) != ed->tail_td)
-			printk(KERN_DEBUG "Suspicious ED...\n");
-		set_ed_head_td(ed, virt_to_bus(td));	/* put it on the ED */
-	} else {
-		/* add the TD to the end */
-		prev_td->next_td = virt_to_bus(td);
-	}
+	/* Turn the first TD into a dummy */
+	make_dumb_td(td);
+
+	/* Set the HC's tail pointer to the new dummy */
+	ed->tail_td = new_dummy;
+
+	return dummy_td;	/* replacement head of chain */
 } /* ohci_add_td_to_ed() */
 
 
@@ -169,9 +193,7 @@ static void ohci_add_ed_to_hw(struct ohci_ed *ed, void* hw_listhead_p)
 
 	/* if the list is not empty, insert this ED at the front */
 	/* XXX should they go on the end? */
-	if (listhead) {
-		ed->next_ed = listhead;
-	}
+	ed->next_ed = cpu_to_le32(listhead);
 
 	/* update the hardware listhead pointer */
 	writel(virt_to_bus(ed), hw_listhead_p);
@@ -221,7 +243,7 @@ void ohci_add_periodic_ed(struct ohci *ohci, struct ohci_ed *ed, int period)
 	 * Insert this ED at the front of the list.
 	 */
 	ed->next_ed = int_ed->next_ed;
-	int_ed->next_ed = virt_to_bus(ed);
+	int_ed->next_ed = cpu_to_le32(virt_to_bus(ed));
 
 	spin_unlock_irqrestore(&ohci_edtd_lock, flags);
 
@@ -249,21 +271,21 @@ DECLARE_WAIT_QUEUE_HEAD(start_of_frame_wakeup);
  */
 void ohci_wait_for_ed_safe(struct ohci_regs *regs, struct ohci_ed *ed, int ed_type)
 {
-	__u32 hw_listcurrent;
+	__u32 *hw_listcurrent;
 
 	/* tell the controller to skip this ED */
-	ed->status |= OHCI_ED_SKIP;
+	ed->status |= cpu_to_le32(OHCI_ED_SKIP);
 
 	switch (ed_type) {
 	case HCD_ED_CONTROL:
-		hw_listcurrent = readl(regs->ed_controlcurrent);
+		hw_listcurrent = &regs->ed_controlcurrent;
 		break;
 	case HCD_ED_BULK:
-		hw_listcurrent = readl(regs->ed_bulkcurrent);
+		hw_listcurrent = &regs->ed_bulkcurrent;
 		break;
 	case HCD_ED_ISOC:
 	case HCD_ED_INT:
-		hw_listcurrent = readl(regs->ed_periodcurrent);
+		hw_listcurrent = &regs->ed_periodcurrent;
 		break;
 	default:
 		return;
@@ -273,11 +295,11 @@ void ohci_wait_for_ed_safe(struct ohci_regs *regs, struct ohci_ed *ed, int ed_ty
 	 * If the HC is processing this ED we need to wait until the
 	 * at least the next frame.
 	 */
-	if (virt_to_bus(ed) == hw_listcurrent) {
+	if (virt_to_bus(ed) == readl(hw_listcurrent)) {
 		DECLARE_WAITQUEUE(wait, current);
 
 #ifdef OHCI_DEBUG
-		printk("Waiting a frame for OHC to finish with ED %p\n", ed);
+		printk("Waiting a frame for OHC to finish with ED %p [%x %x %x %x]\n", ed, FIELDS_OF_ED(ed));
 #endif
 
 		add_wait_queue(&start_of_frame_wakeup, &wait);
@@ -349,7 +371,7 @@ void ohci_remove_norm_ed_from_hw(struct ohci *ohci, struct ohci_ed *ed, int ed_t
 		/* walk the list and unlink the ED if found */
 		do {
 			prev = cur;
-			cur = bus_to_virt(cur->next_ed);
+			cur = bus_to_virt(le32_to_cpup(&cur->next_ed));
 
 			if (virt_to_bus(cur) == bus_ed) {
 				/* unlink from the list */
@@ -401,7 +423,7 @@ static void ohci_remove_td_from_ed(struct ohci_td *td, struct ohci_ed *ed)
 		return;
 
 	/* set the "skip me bit" in this ED */
-	ed->status |= OHCI_ED_SKIP;
+	ed->status |= cpu_to_le32(OHCI_ED_SKIP);
 
 	/* XXX Assuming this list will never be circular */
 
@@ -415,7 +437,7 @@ static void ohci_remove_td_from_ed(struct ohci_td *td, struct ohci_ed *ed)
 		/* FIXME: collapse this into a nice simple loop :) */
 		if (head_td->next_td != 0) {
 			prev_td = head_td;
-			cur_td = bus_to_virt(head_td->next_td);
+			cur_td = bus_to_virt(le32_to_cpup(&head_td->next_td));
 			for (;;) {
 				if (td == cur_td) {
 					/* remove it */
@@ -425,7 +447,7 @@ static void ohci_remove_td_from_ed(struct ohci_td *td, struct ohci_ed *ed)
 				if (cur_td->next_td == 0)
 					break;
 				prev_td = cur_td;
-				cur_td = bus_to_virt(cur_td->next_td);
+				cur_td = bus_to_virt(le32_to_cpup(&cur_td->next_td));
 			}
 		}
 	}
@@ -437,7 +459,7 @@ static void ohci_remove_td_from_ed(struct ohci_td *td, struct ohci_ed *ed)
 	ohci_free_td(td);
 
 	/* unset the "skip me bit" in this ED */
-	ed->status &= ~OHCI_ED_SKIP;
+	ed->status &= cpu_to_le32(~OHCI_ED_SKIP);
 
 	spin_unlock_irqrestore(&ohci_edtd_lock, flags);
 } /* ohci_remove_td_from_ed() */
@@ -465,7 +487,7 @@ static struct ohci_td *ohci_get_free_td(struct ohci_device *dev)
 			/* zero out the TD */
 			memset(new_td, 0, sizeof(*new_td));
 			/* mark the new TDs as unaccessed */
-			new_td->info = OHCI_TD_CC_NEW;
+			new_td->info = cpu_to_le32(OHCI_TD_CC_NEW);
 			/* mark it as allocated */
 			allocate_td(new_td);
 			return new_td;
@@ -492,7 +514,7 @@ static struct ohci_ed *ohci_get_free_ed(struct ohci_device *dev)
 			/* zero out the ED */
 			memset(new_ed, 0, sizeof(*new_ed));
 			/* all new EDs start with the SKIP bit set */
-			new_ed->status |= OHCI_ED_SKIP;
+			new_ed->status |= cpu_to_le32(OHCI_ED_SKIP);
 			/* mark it as allocated */
 			allocate_ed(new_ed);
 			return new_ed;
@@ -509,12 +531,21 @@ void ohci_free_ed(struct ohci_ed *ed)
 	if (!ed)
 		return;
 
-	if (ed->tail_td == 0) {
-		printk("yikes! an ED without a dummy_td\n");
-	} else
-		ohci_free_td((struct ohci_td *)bus_to_virt(ed->tail_td));
+	if (ed_head_td(ed) != 0) {
+		struct ohci_td *td, *tail_td, *next_td;
 
-	ed->status &= ~(__u32)ED_ALLOCATED;
+		td = bus_to_virt(ed_head_td(ed));
+		tail_td = bus_to_virt(ed_tail_td(ed));
+		for (;;) {
+			next_td = bus_to_virt(le32_to_cpup(&td->next_td));
+			ohci_free_td(td);
+			if (td == tail_td)
+				break;
+			td = next_td;
+		}
+	}
+
+	ed->status &= cpu_to_le32(~(__u32)ED_ALLOCATED);
 } /* ohci_free_ed() */
 
 
@@ -527,12 +558,13 @@ void ohci_free_ed(struct ohci_ed *ed)
 inline struct ohci_td *ohci_fill_new_td(struct ohci_td *td, int dir, int toggle, __u32 flags, void *data, __u32 len, void *dev_id, usb_device_irq completed)
 {
 	/* hardware fields */
-	td->info = OHCI_TD_CC_NEW |
-		(dir & OHCI_TD_D) |
-		(toggle & OHCI_TD_DT) |
-		flags;
-	td->cur_buf = (data == NULL) ? 0 : virt_to_bus(data);
-	td->buf_end = (len == 0) ? 0 : td->cur_buf + len - 1;
+	td->info = cpu_to_le32(OHCI_TD_CC_NEW |
+			       (dir & OHCI_TD_D) |
+			       (toggle & OHCI_TD_DT) |
+			       flags);
+	td->cur_buf = (data == NULL) ? 0 : cpu_to_le32(virt_to_bus(data));
+	td->buf_end = (len == 0) ? 0 :
+		cpu_to_le32(le32_to_cpup(&td->cur_buf) + len - 1);
 
 	/* driver fields */
 	td->data = data;
@@ -555,11 +587,13 @@ inline struct ohci_td *ohci_fill_new_td(struct ohci_td *td, int dir, int toggle,
  *  not be any!).  This assumes that the ED is Allocated and will
  *  force the Allocated bit on.
  */
-struct ohci_ed *ohci_fill_ed(struct ohci_device *dev, struct ohci_ed *ed, int maxpacketsize, int lowspeed, int endp_id, int isoc_tds)
+struct ohci_ed *ohci_fill_ed(struct ohci_device *dev, struct ohci_ed *ed,
+			     int maxpacketsize, int lowspeed, int endp_id,
+			     int isoc_tds)
 {
 	struct ohci_td *dummy_td;
 
-	if (ed_head_td(ed) != ed->tail_td)
+	if (ed_head_td(ed) != ed_tail_td(ed))
 		printk("Reusing a non-empty ED %p!\n", ed);
 
 	if (!ed->tail_td) {
@@ -569,9 +603,9 @@ struct ohci_ed *ohci_fill_ed(struct ohci_device *dev, struct ohci_ed *ed, int ma
 			return NULL;	/* no dummy available! */
 		}
 		make_dumb_td(dummy_td);	/* flag it as a dummy */
-		ed->tail_td = virt_to_bus(dummy_td);
+		ed->tail_td = cpu_to_le32(virt_to_bus(dummy_td));
 	} else {
-		dummy_td = bus_to_virt(ed->tail_td);
+		dummy_td = bus_to_virt(ed_tail_td(ed));
 		if (!td_dummy(*dummy_td))
 			printk("ED %p's dummy %p is screwy\n", ed, dummy_td);
 	}
@@ -579,11 +613,11 @@ struct ohci_ed *ohci_fill_ed(struct ohci_device *dev, struct ohci_ed *ed, int ma
 	/* set the head TD to the dummy and clear the Carry & Halted bits */
 	ed->_head_td = ed->tail_td;
 
-	ed->status = \
+	ed->status = cpu_to_le32(
 		ed_set_maxpacket(maxpacketsize) |
 		ed_set_speed(lowspeed) |
 		(endp_id & 0x7ff) |
-		((isoc_tds == 0) ? OHCI_ED_F_NORM : OHCI_ED_F_ISOC);
+		((isoc_tds == 0) ? OHCI_ED_F_NORM : OHCI_ED_F_ISOC));
 	allocate_ed(ed);
 	ed->next_ed = 0;
 
@@ -611,6 +645,7 @@ static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	struct ohci_device *dev = usb_to_ohci(usb);
 	struct ohci_td *td;
 	struct ohci_ed *interrupt_ed;	/* endpoint descriptor for this irq */
+	int maxps = usb_maxpacket(usb, pipe);
 
 	/* Get an ED and TD */
 	interrupt_ed = ohci_get_free_ed(dev);
@@ -630,14 +665,16 @@ static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	 * Set the max packet size, device speed, endpoint number, usb
 	 * device number (function address), and type of TD.
 	 */
-	ohci_fill_ed(dev, interrupt_ed, usb_maxpacket(usb,pipe), usb_pipeslow(pipe),
-		usb_pipe_endpdev(pipe), 0 /* normal TDs */);
+	ohci_fill_ed(dev, interrupt_ed, maxps, usb_pipeslow(pipe),
+		     usb_pipe_endpdev(pipe), 0 /* normal TDs */);
 
 	/* Fill in the TD */
+	if (maxps > sizeof(dev->data))
+		maxps = sizeof(dev->data);
 	ohci_fill_new_td(td, td_set_dir_out(usb_pipeout(pipe)),
 			TOGGLE_AUTO,
 			OHCI_TD_ROUND,
-			&dev->data, DATA_BUF_LEN,
+			dev->data, maxps,
 			dev_id, handler);
 	/*
 	 * TODO: be aware of how the OHCI controller deals with DMA
@@ -647,12 +684,12 @@ static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	/*
 	 *  Put the TD onto our ED and make sure its ready to run
 	 */
-	ohci_add_td_to_ed(td, interrupt_ed);
-	interrupt_ed->status &= ~OHCI_ED_SKIP;
+	td = ohci_add_td_to_ed(td, td, interrupt_ed);
+	interrupt_ed->status &= cpu_to_le32(~OHCI_ED_SKIP);
 	ohci_unhalt_ed(interrupt_ed);
 
-	/* Linus did this. see asm/system.h; scary concept... I don't
-	 * know if its needed here or not but it won't hurt. */
+	/* Make sure all the stores above get done before
+	 * the store which tells the OHCI about the new ed. */
 	wmb();
 
 	/* Assimilate the new ED into the collective */
@@ -700,7 +737,8 @@ static int ohci_control_completed(int stats, void *buffer, void *dev_id)
  *
  * This function can NOT be called from an interrupt.
  */
-static int ohci_control_msg(struct usb_device *usb, unsigned int pipe, void *cmd, void *data, int len)
+static int ohci_control_msg(struct usb_device *usb, unsigned int pipe,
+			    devrequest *cmd, void *data, int len)
 {
 	struct ohci_device *dev = usb_to_ohci(usb);
 	struct ohci_ed *control_ed = ohci_get_free_ed(dev);
@@ -708,8 +746,16 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe, void *cmd
 	DECLARE_WAITQUEUE(wait, current);
 	unsigned long flags;
 	int completion_status = -1;
+	devrequest our_cmd;
 
-#ifdef OHCI_DEBUG 
+	/* byte-swap fields of cmd if necessary */
+	our_cmd = *cmd;
+	cpu_to_le16s(&our_cmd.value);
+	cpu_to_le16s(&our_cmd.index);
+	cpu_to_le16s(&our_cmd.length);
+
+#ifdef OHCI_DEBUG
+	if (MegaDebug)
 	printk(KERN_DEBUG "ohci_control_msg %p (ohci_dev: %p) pipe %x, cmd %p, data %p, len %d\n", usb, dev, pipe, cmd, data, len);
 #endif
 	if (!control_ed) {
@@ -743,12 +789,11 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe, void *cmd
 	 * uses a DATA0 packet.
 	 *
 	 * The setup packet contains a devrequest (usb.h) which
-	 * will always be 8 bytes long.  FIXME: the cmd parameter
-	 * should be a pointer to one of these instead of a void* !!!
+	 * will always be 8 bytes long.
 	 */
 	ohci_fill_new_td(setup_td, OHCI_TD_D_SETUP, TOGGLE_DATA0,
 			OHCI_TD_IOC_OFF,
-			cmd, 8,		/* cmd is always 8 bytes long */
+			&our_cmd, 8,	/* cmd is always 8 bytes long */
 			NULL, NULL);
 
 	/* allocate the next TD */
@@ -761,7 +806,7 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe, void *cmd
 	}
 
 	/* link to the next TD */
-	setup_td->next_td = virt_to_bus(data_td);
+	setup_td->next_td = cpu_to_le32(virt_to_bus(data_td));
 
 	if (len > 0) {
 
@@ -795,7 +840,7 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe, void *cmd
 			return -1;
 		}
 
-		data_td->next_td = virt_to_bus(status_td);
+		data_td->next_td = cpu_to_le32(virt_to_bus(status_td));
 	} else {
 		status_td = data_td; /* no data_td, use it for status */
 	}
@@ -815,13 +860,7 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe, void *cmd
 	 * Add the chain of 2-3 control TDs to the control ED's TD list
 	 */
 	spin_lock_irqsave(&ohci_edtd_lock, flags);
-	control_ed->status |= OHCI_ED_SKIP;
-	ohci_add_td_to_ed(setup_td, control_ed);
-	if (data_td != status_td)
-		ohci_add_td_to_ed(data_td, control_ed);
-	ohci_add_td_to_ed(status_td, control_ed);
-	control_ed->status &= ~OHCI_ED_SKIP;
-	ohci_unhalt_ed(control_ed);
+	setup_td = ohci_add_td_to_ed(setup_td, status_td, control_ed);
 	spin_unlock_irqrestore(&ohci_edtd_lock, flags);
 
 #ifdef OHCI_DEBUG
@@ -873,17 +912,28 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe, void *cmd
 	}
 #endif
 
-	/* clean up */
-	ohci_free_td(setup_td);
-	if (data_td != status_td)
-		ohci_free_td(data_td);
-	ohci_free_td(status_td);
 	/* remove the control ED from the HC */
 	ohci_remove_control_ed(dev->ohci, control_ed);
 	ohci_free_ed(control_ed);	 /* return it to the pool */
 
-#if 0
-	printk(KERN_DEBUG "leaving ohci_control_msg\n");
+#ifdef OHCI_DEBUG
+	if (completion_status != 0) {
+		printk(KERN_ERR "ohci_control_msg: %s on cmd %x %x %x %x %x\n",
+		       cc_names[completion_status & 0xf], cmd->requesttype,
+		       cmd->request, cmd->value, cmd->index, cmd->length);
+	} else if (!usb_pipeout(pipe)) {
+		unsigned char *q = data;
+		int i;
+		printk(KERN_DEBUG "ctrl msg %x %x %x %x %x returned:",
+		       cmd->requesttype, cmd->request, cmd->value, cmd->index,
+		       cmd->length);
+		for (i = 0; i < len; ++i) {
+			if (i % 16 == 0)
+				printk("\n" KERN_DEBUG);
+			printk(" %x", q[i]);
+		}
+		printk("\n");
+	}
 #endif
 	return completion_status;
 } /* ohci_control_msg() */
@@ -921,7 +971,7 @@ static struct usb_device *ohci_usb_allocate(struct usb_device *parent)
 	/* Initialize all EDs in a new device with the skip flag so that
 	 * they are ignored by the controller until set otherwise. */
 	for (idx = 0; idx < NUM_EDS; ++idx) {
-		dev->ed[idx].status |= OHCI_ED_SKIP;
+		dev->ed[idx].status = cpu_to_le32(OHCI_ED_SKIP);
 	}
 
 	/*
@@ -1221,20 +1271,20 @@ static void ohci_check_configuration(struct ohci *ohci)
  */
 static void ohci_root_hub_events(struct ohci *ohci)
 {
-		int num = 0;
+	int num = 0;
 	struct ohci_device *root_hub=usb_to_ohci(ohci->bus->root_hub);
 	int maxport = root_hub->usb->maxchild;
 
 	if (!waitqueue_active(&ohci_configure))
 		return;
-		do {
-			__u32 *portstatus_p = &ohci->regs->roothub.portstatus[num];
-			if (readl(portstatus_p) & PORT_CSC) {
-				if (waitqueue_active(&ohci_configure))
-					wake_up(&ohci_configure);
-				return;
-			}
-		} while (++num < maxport);
+	do {
+		__u32 *portstatus_p = &ohci->regs->roothub.portstatus[num];
+		if (readl(portstatus_p) & PORT_CSC) {
+			if (waitqueue_active(&ohci_configure))
+				wake_up(&ohci_configure);
+			return;
+		}
+	} while (++num < maxport);
 	
 } /* ohci_root_hub_events() */
 
@@ -1255,16 +1305,15 @@ static struct ohci_td * ohci_reverse_donelist(struct ohci * ohci)
 	struct ohci_hcca *hcca = root_hub->hcca;
 	struct ohci_td *td_list = NULL;
 	struct ohci_td *td_rev = NULL;
-  	
-	td_list_hc = hcca->donehead & 0xfffffff0;
+
+	td_list_hc = le32_to_cpup(&hcca->donehead) & 0xfffffff0;
 	hcca->donehead = 0;
 
  	while(td_list_hc) {
 		td_list = (struct ohci_td *) bus_to_virt(td_list_hc);
 		td_list->next_dl_td = td_rev;
-			
 		td_rev = td_list;
-		td_list_hc = td_list->next_td & 0xfffffff0;
+		td_list_hc = le32_to_cpup(&td_list->next_td) & 0xfffffff0;
 	}
 
 	return td_list;
@@ -1288,28 +1337,66 @@ static void ohci_reap_donelist(struct ohci *ohci)
 
 	while (td != NULL) {
 		struct ohci_td *next_td = td->next_dl_td;
+		int cc = OHCI_TD_CC_GET(le32_to_cpup(&td->info));
 
 		if (td_dummy(*td))
 			printk("yikes! reaping a dummy TD\n");
 
 		/* FIXME: munge td->info into a future standard status format */
+
+		if (cc != 0 && ohci_ed_halted(td->ed) && td->completed == 0) {
+			/*
+			 * There was an error on this TD and the ED
+			 * is halted, and this was not the last TD
+			 * of the transaction, so there will be TDs
+			 * to clean off the ED.
+			 * (We assume that a TD with a non-NULL completed
+			 * field is the last one of a transaction.
+			 * Ultimately we should have a flag in the TD
+			 * to say that it is the last one.)
+			 */
+			struct ohci_ed *ed = td->ed;
+			struct ohci_td *tail_td = bus_to_virt(ed_tail_td(ed));
+			struct ohci_td *ntd;
+
+			ohci_free_td(td);
+			td = ntd = bus_to_virt(ed_head_td(ed));
+			while (td != tail_td) {
+				ntd = bus_to_virt(le32_to_cpup(&td->next_td));
+				if (td->completed != 0)
+					break;
+				ohci_free_td(td);
+				td = ntd;
+			}
+			/* Set the ED head past the ones we cleaned
+			   off, and clear the halted flag */
+			set_ed_head_td(ed, virt_to_bus(ntd));
+			ohci_unhalt_ed(ed);
+			/* If we didn't find a TD with a completion
+			   routine, give up */
+			if (td == tail_td) {
+				td = next_td;
+				continue;
+			}
+		}
+
 		/* Check if TD should be re-queued */
 		if ((td->completed != NULL) &&
-		    (td->completed(OHCI_TD_CC_GET(td->info), td->data, td->dev_id)))
-		{
+		    (td->completed(cc, td->data, td->dev_id))) {
 			/* Mark the TD as active again:
 			 * Set the not accessed condition code
 			 * Reset the Error count
-			 * [FIXME: report errors to the device's driver]
 			 */
-			td->info |= OHCI_TD_CC_NEW;
+			td->info |= cpu_to_le32(OHCI_TD_CC_NEW);
 			clear_td_errorcount(td);
+			/* reset the toggle field to TOGGLE_AUTO (0) */
+			td->info &= cpu_to_le32(~OHCI_TD_DT);
 
 			/* point it back to the start of the data buffer */
-			td->cur_buf = virt_to_bus(td->data);
+			td->cur_buf = cpu_to_le32(virt_to_bus(td->data));
 
 			/* insert it back on its ED */
-			ohci_add_td_to_ed(td, td->ed);
+			ohci_add_td_to_ed(td, td, td->ed);
 		} else {
 			/* return it to the pool of free TDs */
 			ohci_free_td(td);
@@ -1341,7 +1428,7 @@ static void ohci_interrupt(int irq, void *__ohci, struct pt_regs *r)
 	/* make context = the interrupt status bits that we care about */
 	if (hcca->donehead != 0) {
 		context = OHCI_INTR_WDH;   /* hcca donehead needs processing */
-		if (hcca->donehead & 1) {
+		if (hcca->donehead & cpu_to_le32(1)) {
 			context |= status;  /* other status change to check */
 		}
 	} else {
@@ -1352,7 +1439,7 @@ static void ohci_interrupt(int irq, void *__ohci, struct pt_regs *r)
 		}
 	}
 
-	/* Disable HC interrupts */
+	/* Disable HC interrupts */ /* why? - paulus */
 	writel(OHCI_INTR_MIE, &regs->intrdisable);
 
 	/* Process the done list */
@@ -1361,7 +1448,7 @@ static void ohci_interrupt(int irq, void *__ohci, struct pt_regs *r)
 		ohci_reap_donelist(ohci);
 
 		/* reset the done queue and tell the controller */
-		hcca->donehead = 0;
+		hcca->donehead = 0;	/* XXX already done in ohci_reverse_donelist */
 		writel(OHCI_INTR_WDH, &regs->intrstatus);
 
 		context &= ~OHCI_INTR_WDH;  /* mark this as checked */
@@ -1499,7 +1586,8 @@ static struct ohci *alloc_ohci(void* mem_base)
 	 * page as that's guaranteed to have a nice boundary.
 	 */
 	dev->hcca = (struct ohci_hcca *) __get_free_page(GFP_KERNEL);
-
+	memset(dev->hcca, 0, sizeof(struct ohci_hcca));
+ 
 	/* Tell the controller where the HCCA is */
 	writel(virt_to_bus(dev->hcca), &ohci->regs->hcca);
 
@@ -1523,11 +1611,11 @@ static struct ohci *alloc_ohci(void* mem_base)
 	 * Initialize the ED polling "tree" (for simplicity's sake in
 	 * this driver many nodes in the tree will be identical)
 	 */
-	dev->ed[ED_INT_32].next_ed = virt_to_bus(&dev->ed[ED_INT_16]);
-	dev->ed[ED_INT_16].next_ed = virt_to_bus(&dev->ed[ED_INT_8]);
-	dev->ed[ED_INT_8].next_ed = virt_to_bus(&dev->ed[ED_INT_4]);
-	dev->ed[ED_INT_4].next_ed = virt_to_bus(&dev->ed[ED_INT_2]);
-	dev->ed[ED_INT_2].next_ed = virt_to_bus(&dev->ed[ED_INT_1]);
+	dev->ed[ED_INT_32].next_ed = cpu_to_le32(virt_to_bus(&dev->ed[ED_INT_16]));
+	dev->ed[ED_INT_16].next_ed = cpu_to_le32(virt_to_bus(&dev->ed[ED_INT_8]));
+	dev->ed[ED_INT_8].next_ed = cpu_to_le32(virt_to_bus(&dev->ed[ED_INT_4]));
+	dev->ed[ED_INT_4].next_ed = cpu_to_le32(virt_to_bus(&dev->ed[ED_INT_2]));
+	dev->ed[ED_INT_2].next_ed = cpu_to_le32(virt_to_bus(&dev->ed[ED_INT_1]));
 
 	/*
 	 * Initialize the polling table to call interrupts at the
@@ -1535,23 +1623,23 @@ static struct ohci *alloc_ohci(void* mem_base)
 	 * placeholders.  They have their SKIP bit set and are used as
 	 * list heads to insert real EDs onto.
 	 */
-	dev->hcca->int_table[0] = virt_to_bus(&dev->ed[ED_INT_1]);
+	dev->hcca->int_table[0] = cpu_to_le32(virt_to_bus(&dev->ed[ED_INT_1]));
 	for (i = 1; i < NUM_INTS; i++) {
 		if (i & 16)
 			dev->hcca->int_table[i] =
-				virt_to_bus(&dev->ed[ED_INT_32]);
+				cpu_to_le32(virt_to_bus(&dev->ed[ED_INT_32]));
 		if (i & 8)
 			dev->hcca->int_table[i] =
-				virt_to_bus(&dev->ed[ED_INT_16]);
+				cpu_to_le32(virt_to_bus(&dev->ed[ED_INT_16]));
 		if (i & 4)
 			dev->hcca->int_table[i] =
-				virt_to_bus(&dev->ed[ED_INT_8]);
+				cpu_to_le32(virt_to_bus(&dev->ed[ED_INT_8]));
 		if (i & 2)
 			dev->hcca->int_table[i] =
-				virt_to_bus(&dev->ed[ED_INT_4]);
+				cpu_to_le32(virt_to_bus(&dev->ed[ED_INT_4]));
 		if (i & 1)
 			dev->hcca->int_table[i] =
-				virt_to_bus(&dev->ed[ED_INT_2]);
+				cpu_to_le32(virt_to_bus(&dev->ed[ED_INT_2]));
 	}
 
 	/*
@@ -1569,6 +1657,7 @@ static struct ohci *alloc_ohci(void* mem_base)
 #if 0
 	printk(KERN_DEBUG "leaving alloc_ohci %p\n", ohci);
 #endif
+printk("alloc_ohci done\n");
 
 	return ohci;
 } /* alloc_ohci() */

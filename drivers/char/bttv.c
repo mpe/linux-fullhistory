@@ -1,3 +1,4 @@
+
 /* 
     bttv - Bt848 frame grabber driver
 
@@ -545,6 +546,8 @@ static struct tvcard tvcards[] =
         { 3, 4, 0, 2, 0x01e000, { 2, 0, 1, 1}, {0x01c000, 0, 0x018000, 0x014000, 0x002000, 0 }},
         /* "Leadtek WinView 601", */
         { 3, 1, 0, 2, 0x8300f8, { 2, 3, 1, 1,0}, {0x4fa007,0xcfa007,0xcfa007,0xcfa007,0xcfa007,0xcfa007}},
+        /* AVEC Intercapture */
+        { 3, 1, 9, 2, 0, { 2, 3, 1, 1}, { 0, 0, 0, 0, 0}},
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(tvcard))
 
@@ -2900,6 +2903,18 @@ static void init_tea6300(struct i2c_bus *bus)
         I2CWrite(bus, I2C_TEA6300, TEA6300_SW, 0x01, 1); /* mute off input A */
 }
 
+static void init_tea6320(struct i2c_bus *bus)
+{
+  I2CWrite(bus, I2C_TEA6300, TEA6320_V, 0x28, 1); /* master volume */
+  I2CWrite(bus, I2C_TEA6300, TEA6320_FFL, 0x28, 1); /* volume left 0dB  */
+  I2CWrite(bus, I2C_TEA6300, TEA6320_FFR, 0x28, 1); /* volume right 0dB */
+  I2CWrite(bus, I2C_TEA6300, TEA6320_FRL, 0x28, 1); /* volume rear left 0dB  */
+  I2CWrite(bus, I2C_TEA6300, TEA6320_FRR, 0x28, 1); /* volume rear right 0dB */
+  I2CWrite(bus, I2C_TEA6300, TEA6320_BA, 0x11, 1); /* bass 0dB         */
+  I2CWrite(bus, I2C_TEA6300, TEA6320_TR, 0x11, 1); /* treble 0dB       */
+  I2CWrite(bus, I2C_TEA6300, TEA6320_S, TEA6320_S_GMU, 1); /* mute off input A */
+}
+
 static void init_tda8425(struct i2c_bus *bus) 
 {
         I2CWrite(bus, I2C_TDA8425, TDA8425_VL, 0xFC, 1); /* volume left 0dB  */
@@ -3027,9 +3042,16 @@ static void idcard(int i)
         
         if (I2CRead(&(btv->i2c), I2C_TEA6300) >=0)
         {
+          if(btv->type==BTTV_AVEC_INTERCAP)
+            {
+                printk(KERN_INFO "bttv%d: fader chip: TEA6320\n",btv->nr);
+                btv->audio_chip = TEA6320;
+                init_tea6320(&(btv->i2c));
+            } else {
 		printk(KERN_INFO "bttv%d: fader chip: TEA6300\n",btv->nr);
 		btv->audio_chip = TEA6300;
 		init_tea6300(&(btv->i2c));
+            }
         } else
 		printk(KERN_INFO "bttv%d: NO fader chip: TEA6300\n",btv->nr);
 
@@ -3073,6 +3095,9 @@ static void idcard(int i)
 	        case BTTV_WINVIEW_601:
 			strcpy(btv->video_dev.name,"BT848(Leadtek WinView 601)");
  			break;	   
+                case BTTV_AVEC_INTERCAP:
+                        strcpy(btv->video_dev.name,"(AVEC Intercapture)");
+                        break;
 	}
 	printk("%s\n",btv->video_dev.name);
 	audio(btv, AUDIO_MUTE);

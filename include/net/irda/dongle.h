@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 22:47:12 1998
- * Modified at:   Mon May 10 14:51:06 1999
+ * Modified at:   Sun May 16 13:40:03 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -35,15 +35,15 @@ typedef enum {
 	ACTISYS_PLUS_DONGLE,
 	GIRBIL_DONGLE,
 	LITELINK_DONGLE,
-} DONGLE_T;
+} IRDA_DONGLE;
 
 struct irda_device;
 
 struct dongle {
-	DONGLE_T type;
+	IRDA_DONGLE type;
 	void (*open)(struct irda_device *, int type);
 	void (*close)(struct irda_device *);
-	void (*reset)( struct irda_device *, int unused);
+	void (*reset)( struct irda_device *);
 	void (*change_speed)( struct irda_device *, int baudrate);
 	void (*qos_init)( struct irda_device *, struct qos_info *);
 };

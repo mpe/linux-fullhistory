@@ -402,7 +402,7 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	if (!root_inode)
 		goto out_no_root;
 
-	sb->s_root = d_alloc_root(root_inode, NULL);
+	sb->s_root = d_alloc_root(root_inode);
 	if (!sb->s_root)
 		goto out_no_root;
 

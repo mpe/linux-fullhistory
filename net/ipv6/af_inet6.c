@@ -103,7 +103,7 @@ static int inet6_create(struct socket *sock, int protocol)
 		if (protocol && protocol != IPPROTO_UDP) 
 			goto free_and_noproto;
 		protocol = IPPROTO_UDP;
-		sk->no_check = UDP_NO_CHECK;
+		sk->no_check = UDP_CSUM_DEFAULT;
 		prot=&udpv6_prot;
 		sock->ops = &inet6_dgram_ops;
 	} else if(sock->type == SOCK_RAW) {

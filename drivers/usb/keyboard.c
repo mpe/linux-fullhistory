@@ -56,10 +56,12 @@ usb_kbd_handle_key(unsigned char key, int down)
     int scancode = (int) usb_kbd_map[key];
     if(scancode)
     {
+#ifndef CONFIG_MAC_KEYBOARD
         if(scancode & PCKBD_NEEDS_E0)
         {
             handle_scancode(0xe0, 1);
         }
+#endif /* CONFIG_MAC_KEYBOARD */
         handle_scancode((scancode & ~PCKBD_NEEDS_E0), down);
     }
 }
@@ -170,6 +172,9 @@ usb_kbd_probe(struct usb_device *dev)
     struct usb_interface_descriptor *interface;
     struct usb_endpoint_descriptor *endpoint;
     struct usb_keyboard *kbd;
+
+    if (dev->descriptor.bNumConfigurations < 1)
+	return -1;
 
     interface = &dev->config[0].altsetting[0].interface[0];
     endpoint = &interface->endpoint[0];

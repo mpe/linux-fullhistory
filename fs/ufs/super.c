@@ -746,7 +746,7 @@ magic_found:
 	sb->u.ufs_sb.s_flags = flags;
 	sb->u.ufs_sb.s_swab = swab;
 	 	                                                          
-	sb->s_root = d_alloc_root(iget(sb, UFS_ROOTINO), NULL);
+	sb->s_root = d_alloc_root(iget(sb, UFS_ROOTINO));
 
 
 	/*

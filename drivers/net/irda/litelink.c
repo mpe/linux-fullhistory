@@ -6,7 +6,7 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri May  7 12:50:33 1999
- * Modified at:   Mon May 10 15:12:18 1999
+ * Modified at:   Wed May 19 07:25:15 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -33,19 +33,19 @@
 #include <linux/tty.h>
 #include <linux/sched.h>
 #include <linux/init.h>
-#include <asm/ioctls.h>
-#include <asm/uaccess.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irmod.h>
 #include <net/irda/irda_device.h>
 #include <net/irda/dongle.h>
 
-static void litelink_reset(struct irda_device *dev, int unused);
+#define MIN_DELAY 25      /* 15 us, but wait a little more to be sure */
+#define MAX_DELAY 10000   /* 1 ms */
+
 static void litelink_open(struct irda_device *idev, int type);
 static void litelink_close(struct irda_device *dev);
-static void litelink_change_speed( struct irda_device *dev, int baudrate);
-static void litelink_reset(struct irda_device *dev, int unused);
+static void litelink_change_speed(struct irda_device *dev, int baudrate);
+static void litelink_reset(struct irda_device *dev);
 static void litelink_init_qos(struct irda_device *idev, struct qos_info *qos);
 
 /* These are the baudrates supported */
@@ -105,13 +105,13 @@ static void litelink_change_speed(struct irda_device *idev, int baudrate)
 	irda_device_set_dtr_rts(idev, TRUE, FALSE);
 
 	/* Sleep a minimum of 15 us */
-	udelay(15);
+	udelay(MIN_DELAY);
 
 	/* Go back to normal mode */
 	irda_device_set_dtr_rts(idev, TRUE, TRUE);
 	
 	/* Sleep a minimum of 15 us */
-	udelay(15);
+	udelay(MIN_DELAY);
 	
 	/* Cycle through avaiable baudrates until we reach the correct one */
 	for (i=0; i<5 && baud_rates[i] != baudrate; i++) {
@@ -120,13 +120,13 @@ static void litelink_change_speed(struct irda_device *idev, int baudrate)
 		irda_device_set_dtr_rts(idev, FALSE, TRUE);
 		
 		/* Sleep a minimum of 15 us */
-		udelay(15);
+		udelay(MIN_DELAY);
 		
 		/* Set DTR, Set RTS */
 		irda_device_set_dtr_rts(idev, TRUE, TRUE);
 		
 		/* Sleep a minimum of 15 us */
-		udelay(15);
+		udelay(MIN_DELAY);
         }
 }
 
@@ -137,11 +137,8 @@ static void litelink_change_speed(struct irda_device *idev, int baudrate)
  *      called with a process context!
  *
  */
-static void litelink_reset(struct irda_device *idev, int unused)
+static void litelink_reset(struct irda_device *idev)
 {
-	struct irtty_cb *self;
-        struct tty_struct *tty;
-
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
 	
@@ -149,19 +146,19 @@ static void litelink_reset(struct irda_device *idev, int unused)
 	irda_device_set_dtr_rts(idev, TRUE, TRUE);
 
 	/* Sleep a minimum of 15 us */
-	udelay(15);
+	udelay(MIN_DELAY);
 
 	/* Clear RTS to reset dongle */
 	irda_device_set_dtr_rts(idev, TRUE, FALSE);
 
 	/* Sleep a minimum of 15 us */
-	udelay(15);
+	udelay(MIN_DELAY);
 
 	/* Go back to normal mode */
 	irda_device_set_dtr_rts(idev, TRUE, TRUE);
 	
 	/* Sleep a minimum of 15 us */
-	udelay(15);
+	udelay(MIN_DELAY);
 
 	/* This dongles speed defaults to 115200 bps */
 	idev->qos.baud_rate.value = 115200;
@@ -173,7 +170,7 @@ static void litelink_reset(struct irda_device *idev, int unused)
  *    Initialize QoS capabilities
  *
  */
-static void litelink_init_qos( struct irda_device *idev, struct qos_info *qos)
+static void litelink_init_qos(struct irda_device *idev, struct qos_info *qos)
 {
 	qos->baud_rate.bits &= IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
 	qos->min_turn_time.bits &= 0x40; /* Needs 0.01 ms */

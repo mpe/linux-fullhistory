@@ -67,7 +67,7 @@ void show_ohci_status(struct ohci *ohci)
 
 void show_ohci_ed(struct ohci_ed *ed)
 {
-	int stat = ed->status;
+	int stat = le32_to_cpup(&ed->status);
 	int skip = (stat & OHCI_ED_SKIP);
 	int mps = (stat & OHCI_ED_MPS) >> 16;
 	int isoc = (stat & OHCI_ED_F_ISOC);
@@ -75,8 +75,8 @@ void show_ohci_ed(struct ohci_ed *ed)
 	int dir = (stat & OHCI_ED_D);
 	int endnum = (stat & OHCI_ED_EN) >> 7;
 	int funcaddr = (stat & OHCI_ED_FA);
-	int halted = (ed->_head_td & 1);
-	int toggle = (ed->_head_td & 2) >> 1;
+	int halted = (le32_to_cpup(&ed->_head_td) & 1);
+	int toggle = (le32_to_cpup(&ed->_head_td) & 2) >> 1;
 
 	printk(KERN_DEBUG "   ohci ED:\n");
 	printk(KERN_DEBUG "     status     =  0x%x\n", stat);
@@ -92,23 +92,24 @@ void show_ohci_ed(struct ohci_ed *ed)
 			endnum,
 			funcaddr,
 			(stat & ED_ALLOCATED) ? " Allocated" : "");
-	printk(KERN_DEBUG "     tail_td    =  0x%x\n", ed->tail_td);
+	printk(KERN_DEBUG "     tail_td    =  0x%x\n", ed_tail_td(ed));
 	printk(KERN_DEBUG "     head_td    =  0x%x\n", ed_head_td(ed));
-	printk(KERN_DEBUG "     next_ed    =  0x%x\n", ed->next_ed);
+	printk(KERN_DEBUG "     next_ed    =  0x%x\n", le32_to_cpup(&ed->next_ed));
 } /* show_ohci_ed() */
 
 
 void show_ohci_td(struct ohci_td *td)
 {
-	int td_round = td->info & OHCI_TD_ROUND;
-	int td_dir = td->info & OHCI_TD_D;
-	int td_int_delay = (td->info & OHCI_TD_IOC_DELAY) >> 21;
-	int td_toggle = (td->info & OHCI_TD_DT) >> 24;
+	int info = le32_to_cpup(&td->info);
+	int td_round = info & OHCI_TD_ROUND;
+	int td_dir = info & OHCI_TD_D;
+	int td_int_delay = (info & OHCI_TD_IOC_DELAY) >> 21;
+	int td_toggle = (info & OHCI_TD_DT) >> 24;
 	int td_errcnt = td_errorcount(*td);
-	int td_cc = OHCI_TD_CC_GET(td->info);
+	int td_cc = OHCI_TD_CC_GET(info);
 
 	printk(KERN_DEBUG "   ohci TD hardware fields:\n");
-	printk(KERN_DEBUG "      info     =  0x%x\n", td->info);
+	printk(KERN_DEBUG "      info     =  0x%x\n", info);
 	printk(KERN_DEBUG "        %s%s%s%d %s %s%d\n",
 		td_round ? "Rounding " : "",
 		(td_dir == OHCI_TD_D_IN) ? "Input " :
@@ -125,9 +126,9 @@ void show_ohci_td(struct ohci_td *td)
 
 	printk(KERN_DEBUG "        %s\n", td_allocated(*td) ? "Allocated" : "Free");
 
-	printk(KERN_DEBUG "      cur_buf  =  0x%x\n", td->cur_buf);
-	printk(KERN_DEBUG "      next_td  =  0x%x\n", td->next_td);
-	printk(KERN_DEBUG "      buf_end  =  0x%x\n", td->buf_end);
+	printk(KERN_DEBUG "      cur_buf  =  0x%x\n", le32_to_cpup(&td->cur_buf));
+	printk(KERN_DEBUG "      next_td  =  0x%x\n", le32_to_cpup(&td->next_td));
+	printk(KERN_DEBUG "      buf_end  =  0x%x\n", le32_to_cpup(&td->buf_end));
 	printk(KERN_DEBUG "   ohci TD driver fields:\n");
 	printk(KERN_DEBUG "      data     =  %p\n", td->data);
 	printk(KERN_DEBUG "      dev_id   =  %p\n", td->dev_id);
@@ -169,11 +170,14 @@ void show_ohci_hcca(struct ohci_hcca *hcca)
 	printk(KERN_DEBUG "  ohci_hcca\n");
 
 	for (idx=0; idx<NUM_INTS; idx++) {
-		printk(KERN_DEBUG "    int_table[%2d]  == %p\n", idx, hcca->int_table +idx);
+		printk(KERN_DEBUG "    int_table[%2d]  == %x\n", idx,
+		       le32_to_cpup(hcca->int_table + idx));
 	}
 
-	printk(KERN_DEBUG "    frame_no          == %d\n", hcca->frame_no);
-	printk(KERN_DEBUG "    donehead          == 0x%08x\n", hcca->donehead);
+	printk(KERN_DEBUG "    frame_no          == %d\n",
+	       le16_to_cpup(&hcca->frame_no));
+	printk(KERN_DEBUG "    donehead          == 0x%08x\n",
+	       le32_to_cpup(&hcca->donehead));
 } /* show_ohci_hcca() */
 
 

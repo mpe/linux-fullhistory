@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Jun  9 13:26:50 1998
- * Modified at:   Thu Feb 25 20:34:21 1999
+ * Modified at:   Tue May 25 07:54:41 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (C) 1998, Aage Kvalnes <aage@cs.uit.no>
@@ -29,8 +29,6 @@
 
 #include <linux/types.h>
 #include <asm/spinlock.h>
-
-/* #include <net/irda/irda.h> */
 
 #ifndef QUEUE_H
 #define QUEUE_H

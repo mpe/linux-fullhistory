@@ -4,7 +4,7 @@
  * This is an extension to the Linux operating system, and is covered by the
  * same Gnu Public License that covers that work.
  *
- * copyrights (c) 1994 by Michael Hipp (mhipp@student.uni-tuebingen.de)
+ * copyrights (c) 1994 by Michael Hipp (hippm@informatik.uni-tuebingen.de)
  *
  * I have done a look in the following sources:
  *   crynwr-packet-driver by Russ Nelson

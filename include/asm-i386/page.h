@@ -79,7 +79,10 @@ typedef unsigned long pgprot_t;
  *
  * which has the same constant encoded..
  */
-#define __PAGE_OFFSET		(0xC0000000)
+
+#include <asm/page_offset.h>
+
+#define __PAGE_OFFSET		(PAGE_OFFSET_RAW)
 
 #define PAGE_OFFSET		((unsigned long)__PAGE_OFFSET)
 #define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)

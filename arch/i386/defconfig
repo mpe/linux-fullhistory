@@ -21,6 +21,8 @@ CONFIG_X86_BSWAP=y
 CONFIG_X86_POPAD_OK=y
 CONFIG_X86_TSC=y
 CONFIG_X86_GOOD_APIC=y
+CONFIG_1GB=y
+# CONFIG_2GB is not set
 # CONFIG_MATH_EMULATION is not set
 # CONFIG_MTRR is not set
 CONFIG_SMP=y
@@ -253,6 +255,11 @@ CONFIG_EEXPRESS_PRO100=y
 # CONFIG_HAMRADIO is not set
 
 #
+# IrDA subsystem support
+#
+# CONFIG_IRDA is not set
+
+#
 # ISDN subsystem
 #
 # CONFIG_ISDN is not set
@@ -318,6 +325,7 @@ CONFIG_USB_KBD=y
 # CONFIG_USB_AUDIO is not set
 # CONFIG_USB_ACM is not set
 # CONFIG_USB_PRINTER is not set
+# CONFIG_USB_SCSI is not set
 
 #
 # Filesystems

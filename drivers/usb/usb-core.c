@@ -61,6 +61,9 @@ int usb_init(void)
 #	ifdef CONFIG_USB_HUB
 		usb_hub_init();
 #	endif
+#	ifdef CONFIG_USB_SCSI
+		usb_scsi_init();
+#	endif
 #endif
 	return 0;
 }

@@ -28,6 +28,7 @@ static inline unsigned long page_address(struct page * page)
 #define PAGE_CACHE_SHIFT	PAGE_SHIFT
 #define PAGE_CACHE_SIZE		PAGE_SIZE
 #define PAGE_CACHE_MASK		PAGE_MASK
+#define PAGE_CACHE_ALIGN(addr)	(((addr)+PAGE_CACHE_SIZE-1)&PAGE_CACHE_MASK)
 
 #define page_cache_alloc()	__get_free_page(GFP_USER)
 #define page_cache_free(x)	free_page(x)

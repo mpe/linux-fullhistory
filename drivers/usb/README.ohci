@@ -1,3 +1,9 @@
+June 08, 1999 01:23:34
+
+Paul Mackerras went through the OHCI (& USB code) to fix most of the
+endianness issues so that the code now works on Linux-PPC.  He also
+simplified add_td_to_ed to be simpler & atomic to the hardware.
+
 May 16, 1999 16:20:54
 
 EDs are now allocated dynamically from their device's pool.  Root hub

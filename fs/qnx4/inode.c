@@ -338,7 +338,7 @@ static struct super_block *qnx4_read_super(struct super_block *s,
 	s->u.qnx4_sb.sb_buf = bh;
 	s->u.qnx4_sb.sb = (struct qnx4_super_block *) bh->b_data;
 	s->s_root =
-	    d_alloc_root(iget(s, QNX4_ROOT_INO * QNX4_INODES_PER_BLOCK), NULL);
+	    d_alloc_root(iget(s, QNX4_ROOT_INO * QNX4_INODES_PER_BLOCK));
 	if (s->s_root == NULL) {
 		printk("qnx4: get inode failed\n");
 		goto out;

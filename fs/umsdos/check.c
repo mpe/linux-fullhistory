@@ -212,7 +212,7 @@ void check_dentry_path (struct dentry *dentry, const char *desc)
 	
 	while (dentry && count < 10) {
 		check_dent_int (dentry, count++);
-		if (dentry == dentry->d_parent) {
+		if (IS_ROOT(dentry)) {
 			printk (KERN_DEBUG "*** end checking dentry (root reached ok)\n");
 			break;
 		}

@@ -319,7 +319,7 @@ struct super_block *proc_read_super(struct super_block *s,void *data,
 	root_inode = proc_get_inode(s, PROC_ROOT_INO, &proc_root);
 	if (!root_inode)
 		goto out_no_root;
-	s->s_root = d_alloc_root(root_inode, NULL);
+	s->s_root = d_alloc_root(root_inode);
 	if (!s->s_root)
 		goto out_no_root;
 	parse_options(data, &root_inode->i_uid, &root_inode->i_gid);

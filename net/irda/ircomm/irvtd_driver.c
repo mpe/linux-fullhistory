@@ -51,7 +51,7 @@ struct termios *irvtd_termios_locked[COMM_MAX_TTY];
 static int irvtd_refcount;
 struct irvtd_cb **irvtd = NULL;
 
-static char *revision_date = "Sun Apr 18 17:31:53 1999";
+static char *revision_date = "Wed May 26 00:49:11 1999";
 
 
 /*
@@ -83,8 +83,10 @@ static void irvtd_break(struct tty_struct *tty, int break_state);
 static void irvtd_send_xchar(struct tty_struct *tty, char ch);
 static void irvtd_wait_until_sent(struct tty_struct *tty, int timeout);
 
-static void irvtd_start_timer( struct irvtd_cb *driver);
-static void irvtd_timer_expired(unsigned long data);
+static void irvtd_start_tx_timer( struct irvtd_cb *driver, int timeout);
+static void irvtd_tx_timer_expired(unsigned long data);
+static void irvtd_start_rx_timer( struct irvtd_cb *driver, int timeout);
+static void irvtd_rx_timer_expired(unsigned long data);
 
 static int line_info(char *buf, struct irvtd_cb *driver);
 static int irvtd_read_proc(char *buf, char **start, off_t offset, int len,
@@ -118,7 +120,7 @@ static void irvtd_write_to_tty( struct irvtd_cb *driver)
 	if(driver->rx_disable)
 		return;
 
-	skb = skb_dequeue(&driver->rxbuff);
+ 	skb = skb_dequeue(&driver->rxbuff);
 	if(skb == NULL)
 		return; /* there's nothing */
 
@@ -211,8 +213,13 @@ static void irvtd_write_to_tty( struct irvtd_cb *driver)
 	
 	if(skb_queue_len(&driver->rxbuff)< IRVTD_RX_QUEUE_LOW &&
 	   driver->ttp_stoprx){
-		irttp_flow_request(driver->comm->tsap, FLOW_START);
+		DEBUG(1, __FUNCTION__"():FLOW_START\n");
+		/* 
+		 * next 2 lines must follow this order since irttp_flow_request()
+		 * will run its rx queue
+		 */
 		driver->ttp_stoprx = 0;
+		irttp_flow_request(driver->comm->tsap, FLOW_START);
 	}
 
 	if(skb_queue_empty(&driver->rxbuff) && driver->disconnect_pend){
@@ -236,10 +243,14 @@ static int irvtd_receive_data(void *instance, void *sap, struct sk_buff *skb)
 	skb_queue_tail( &driver->rxbuff, skb );
 
 	if(skb_queue_len(&driver->rxbuff) > IRVTD_RX_QUEUE_HIGH){
+		DEBUG(1, __FUNCTION__"():FLOW_STOP\n");
 		irttp_flow_request(driver->comm->tsap, FLOW_STOP);
 		driver->ttp_stoprx = 1;
 	}
 	irvtd_write_to_tty(driver);
+
+	if(!skb_queue_empty(&driver->rxbuff))
+		irvtd_start_rx_timer(driver,0);
 	return 0;
 }
 
@@ -255,22 +266,36 @@ static int irvtd_receive_data(void *instance, void *sap, struct sk_buff *skb)
  */
 
 
-static void irvtd_start_timer( struct irvtd_cb *driver)
+static void irvtd_start_tx_timer( struct irvtd_cb *driver, int timeout)
 {
 	ASSERT( driver != NULL, return;);
 	ASSERT( driver->magic == IRVTD_MAGIC, return;);
 
-	del_timer( &driver->timer);
+	del_timer( &driver->tx_timer);
 	
-	driver->timer.data     = (unsigned long) driver;
-	driver->timer.function = &irvtd_timer_expired;
-	driver->timer.expires  = jiffies + (HZ / 5);  /* 200msec */
+	driver->tx_timer.data     = (unsigned long) driver;
+	driver->tx_timer.function = &irvtd_tx_timer_expired;
+	driver->tx_timer.expires  = jiffies + timeout;
 	
-	add_timer( &driver->timer);
+	add_timer( &driver->tx_timer);
+}
+
+static void irvtd_start_rx_timer( struct irvtd_cb *driver, int timeout)
+{
+	ASSERT( driver != NULL, return;);
+	ASSERT( driver->magic == IRVTD_MAGIC, return;);
+
+	del_timer( &driver->rx_timer);
+	
+	driver->rx_timer.data     = (unsigned long) driver;
+	driver->rx_timer.function = &irvtd_rx_timer_expired;
+	driver->rx_timer.expires  = jiffies + timeout;
+	
+	add_timer( &driver->rx_timer);
 }
 
 
-static void irvtd_timer_expired(unsigned long data)
+static void irvtd_tx_timer_expired(unsigned long data)
 {
 	struct irvtd_cb *driver = (struct irvtd_cb *)data;
 
@@ -279,11 +304,26 @@ static void irvtd_timer_expired(unsigned long data)
 	DEBUG(4, __FUNCTION__"()\n");
 
 	irvtd_send_data_request(driver);
+}
 
-	irvtd_write_to_tty(driver);
+static void irvtd_rx_timer_expired(unsigned long data)
+{
+	struct irvtd_cb *driver = (struct irvtd_cb *)data;
 
-	/* start our timer again and again */
-	irvtd_start_timer(driver);
+	ASSERT(driver != NULL,return;);
+	ASSERT(driver->magic == IRVTD_MAGIC,return;);
+	DEBUG(4, __FUNCTION__"()\n");
+
+	while(TTY_FLIPBUF_SIZE - driver->tty->flip.count
+	      && !skb_queue_empty(&driver->rxbuff))
+		irvtd_write_to_tty(driver);
+
+	DEBUG(1, __FUNCTION__"(): room in flip_buffer = %d\n",
+	      TTY_FLIPBUF_SIZE - driver->tty->flip.count);
+	
+	if(!skb_queue_empty(&driver->rxbuff))
+		/* handle it later */
+		irvtd_start_rx_timer(driver, 1);
 }
 
 
@@ -310,21 +350,23 @@ static void irvtd_send_data_request(struct irvtd_cb *driver)
 	}
 #endif
 
-	DEBUG(1, __FUNCTION__"():sending %d octets\n",(int)skb->len );
+	DEBUG(1, __FUNCTION__"():len = %d, room = %d\n",(int)skb->len,
+	      skb_tailroom(skb));
 	driver->icount.tx += skb->len;
 	err = ircomm_data_request(driver->comm, driver->txbuff);
 	if (err){
 		ASSERT(err == 0,;);
-		DEBUG(0,"%d chars are lost\n",(int)skb->len);
+		DEBUG(1,"%d chars are lost\n",(int)skb->len);
 		skb_trim(skb, 0);
 	}
 
 	/* allocate a new frame */
-	skb = driver->txbuff = dev_alloc_skb(driver->comm->max_txbuff_size);
+	skb = driver->txbuff 
+		= dev_alloc_skb(driver->tx_max_sdu_size + driver->max_header_size);
 	if (skb == NULL){
 		printk(__FUNCTION__"():alloc_skb failed!\n");
 	} else {
-		skb_reserve(skb, COMM_HEADER_SIZE);
+		skb_reserve(skb, driver->max_header_size);
 	}
 
 	wake_up_interruptible(&driver->tty->write_wait);
@@ -355,6 +397,9 @@ void irvtd_connect_confirm(void *instance, void *sap, struct qos_info *qos,
 	ASSERT(driver != NULL, return;);
 	ASSERT(driver->magic == IRVTD_MAGIC, return;);
 
+
+	driver->tx_max_sdu_size = max_sdu_size;
+	driver->max_header_size = max_header_size;
 	/*
 	 * set default value
 	 */
@@ -408,6 +453,8 @@ void irvtd_connect_indication(void *instance, void *sap, struct qos_info *qos,
 	ASSERT(comm != NULL, return;);
 	ASSERT(comm->magic == IRCOMM_MAGIC, return;);
 
+	driver->tx_max_sdu_size = max_sdu_size;
+	driver->max_header_size = max_header_size;
 	DEBUG(4, __FUNCTION__ "():sending connect_response...\n");
 
 	ircomm_connect_response(comm, NULL, SAR_DISABLE );
@@ -481,11 +528,12 @@ void irvtd_control_indication(void *instance, void *sap, IRCOMM_CMD cmd)
 	if(cmd == TX_READY){
 		driver->ttp_stoptx = 0;
 		driver->tty->hw_stopped = driver->cts_stoptx;
-		irvtd_start_timer( driver);
 
 		if(driver->cts_stoptx)
 			return;
 
+		/* push tx queue so that client can send at least 1 octet */
+		irvtd_send_data_request(driver);
 		/* 
 		 * driver->tty->write_wait will keep asleep if
 		 * our txbuff is full.
@@ -500,7 +548,7 @@ void irvtd_control_indication(void *instance, void *sap, IRCOMM_CMD cmd)
 
 	if(cmd == TX_BUSY){
 		driver->ttp_stoptx = driver->tty->hw_stopped = 1;
-		del_timer( &driver->timer);
+		del_timer( &driver->tx_timer);
 		return;
 	}
 
@@ -681,7 +729,7 @@ static int irvtd_block_til_ready(struct tty_struct *tty, struct file * filp,
 
 	driver->blocked_open--;
 
-	DEBUG(0, __FUNCTION__"():after blocking\n");
+	DEBUG(1, __FUNCTION__"():after blocking\n");
 
 	if (retval)
 		return retval;
@@ -768,7 +816,7 @@ static int irvtd_startup(struct irvtd_cb *driver)
 	struct notify_t irvtd_notify;
 
 	/* FIXME: it should not be hard coded */
-	__u8 oct_seq[6] = { 0,1,4,1,1,1 }; 
+	__u8 oct_seq[6] = { 0,1,6,1,1,1 }; 
 
 	DEBUG(4,__FUNCTION__"()\n" );
 	if(driver->flags & ASYNC_INITIALIZED)
@@ -779,12 +827,12 @@ static int irvtd_startup(struct irvtd_cb *driver)
 	 */
 
 	skb_queue_head_init(&driver->rxbuff);
-	driver->txbuff = dev_alloc_skb(COMM_DEFAULT_DATA_SIZE); 
+	driver->txbuff = dev_alloc_skb(COMM_DEFAULT_SDU_SIZE + COMM_MAX_HEADER_SIZE); 
 	if (!driver->txbuff){
 		DEBUG(0,__FUNCTION__"(), alloc_skb failed!\n");
 		return -ENOMEM;
 	}
-	skb_reserve(driver->txbuff, COMM_HEADER_SIZE);
+	skb_reserve(driver->txbuff, COMM_MAX_HEADER_SIZE);
 
 	irda_notify_init(&irvtd_notify);
 	irvtd_notify.data_indication = irvtd_receive_data;
@@ -813,22 +861,20 @@ static int irvtd_startup(struct irvtd_cb *driver)
 
 	driver->flags |= ASYNC_INITIALIZED;
 
-	/*
-	 * discover a peer device
-	 *	   TODO: other servicetype(i.e. 3wire,3wireraw) support
-	 */
-	ircomm_connect_request(driver->comm, NINE_WIRE);
-	
-	/*
-	 * TODO:we have to initialize control-channel here!
-	 *   i.e.set something into RTS,CTS and so on....
-	 */
-
 	if (driver->tty)
 		clear_bit(TTY_IO_ERROR, &driver->tty->flags);
 
 	change_speed(driver);
-	irvtd_start_timer( driver);
+
+	/*
+	 * discover a peer device
+	 */
+	if(driver->tty->termios->c_cflag & CRTSCTS)
+	  ircomm_connect_request(driver->comm, NINE_WIRE);
+	else
+	  ircomm_connect_request(driver->comm, THREE_WIRE);
+
+	/* irvtd_start_timer( driver); */
 
 	driver->rx_disable = 0;
 	driver->tx_disable = 1;
@@ -991,7 +1037,8 @@ static void irvtd_shutdown(struct irvtd_cb * driver)
 	if (driver->tty)
 		set_bit(TTY_IO_ERROR, &driver->tty->flags);
 	
-	del_timer( &driver->timer);
+	del_timer( &driver->tx_timer);
+	del_timer( &driver->rx_timer);
 
 	irias_delete_object("IrDA:IrCOMM");
 
@@ -1146,13 +1193,21 @@ int irvtd_write(struct tty_struct * tty, int from_user,
 	DEBUG(4, __FUNCTION__"()\n");
 
 	save_flags(flags);
-	while(1){
+	while(count > 0){
 		cli();
 		skb = driver->txbuff;
 		ASSERT(skb != NULL, break;);
 		c = MIN(count, (skb_tailroom(skb)));
 		if (c <= 0)
-			break;
+		{
+			if(!driver->ttp_stoptx)
+			{
+				irvtd_send_data_request(driver);
+				continue;
+			}
+			else
+				break;
+		}
 
 		/* write to the frame */
 
@@ -1166,9 +1221,9 @@ int irvtd_write(struct tty_struct * tty, int from_user,
 		wrote += c;
 		count -= c;
 		buf += c;
-		irvtd_send_data_request(driver);
 	}
 	restore_flags(flags);
+	irvtd_send_data_request(driver);
 	return (wrote);
 }
 
@@ -1201,19 +1256,27 @@ void irvtd_put_char(struct tty_struct *tty, unsigned char ch)
 	DEBUG(4, __FUNCTION__"()\n");
 
 
+ again:
 	save_flags(flags);cli();
 	skb = driver->txbuff;
 	ASSERT(skb != NULL,return;);
+	if(!skb_tailroom(skb))
+	{
+		restore_flags(flags);
+		irvtd_send_data_request(driver);
+		goto again;
+	}
 	ASSERT(skb_tailroom(skb) > 0, return;);
-	DEBUG(4, "irvtd_put_char(0x%02x) skb_len(%d) MAX(%d):\n",
+	DEBUG(4, "irvtd_put_char(0x%02x) skb_len(%d) room(%d):\n",
 	      (int)ch ,(int)skb->len,
-	      driver->comm->max_txbuff_size - COMM_HEADER_SIZE);
+	      skb_tailroom(skb));
 
 	/* append a character  */
 	frame = skb_put(skb,1);
 	frame[0] = ch;
 
 	restore_flags(flags);
+	irvtd_start_tx_timer(driver,20);
 	return;
 }
 
@@ -1637,6 +1700,7 @@ void irvtd_throttle(struct tty_struct *tty){
 	driver->comm->dte = driver->mcr;
 	ircomm_control_request(driver->comm, DTELINE_STATE );
 
+	DEBUG(1, __FUNCTION__"():FLOW_STOP\n");
         irttp_flow_request(driver->comm->tsap, FLOW_STOP);
 }
 
@@ -1651,6 +1715,7 @@ void irvtd_unthrottle(struct tty_struct *tty){
 	driver->comm->dte = driver->mcr;
 	ircomm_control_request(driver->comm, DTELINE_STATE );
 
+	DEBUG(1, __FUNCTION__"():FLOW_START\n");
         irttp_flow_request(driver->comm->tsap, FLOW_START);
 }
 
@@ -1860,6 +1925,12 @@ static int line_info(char *buf, struct irvtd_cb *driver)
                 ret += sprintf(buf+ret, "|CD");
 	if (driver->msr & MSR_RI) 
 		ret += sprintf(buf+ret, "|RI");
+
+	ret += sprintf(buf+ret, "\n");
+	ret += sprintf(buf+ret, "rx queue:%d",
+		       skb_queue_len( &driver->rxbuff));
+	ret += sprintf(buf+ret, "ttp_stoprx:%s",
+		       driver->ttp_stoprx?"TRUE":"FALSE");
 
  exit:
 	ret += sprintf(buf+ret, "\n");

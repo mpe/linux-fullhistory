@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 02:09:59 1997
- * Modified at:   Sun May  9 21:00:05 1999
+ * Modified at:   Mon May 31 09:53:16 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -134,17 +134,17 @@ void irlmp_link_data_indication(struct lap_cb *self, int reliable,
 				       self->lsaps);
 	
 	if (lsap == NULL) {
-		DEBUG(0, "IrLMP, Sorry, no LSAP for received frame!\n");
-		DEBUG(0, __FUNCTION__ 
+		DEBUG(2, "IrLMP, Sorry, no LSAP for received frame!\n");
+		DEBUG(2, __FUNCTION__ 
 		      "(), slsap_sel = %02x, dlsap_sel = %02x\n", slsap_sel, 
 		      dlsap_sel);
 		if (fp[0] & CONTROL_BIT) {
-			DEBUG(0, __FUNCTION__ 
+			DEBUG(2, __FUNCTION__ 
 			      "(), received control frame %02x\n", fp[2]);
 		} else {
-			DEBUG(0, __FUNCTION__ "(), received data frame\n");
+			DEBUG(2, __FUNCTION__ "(), received data frame\n");
 		}
-		dev_kfree_skb( skb);
+		dev_kfree_skb(skb);
 		return;
 	}
 

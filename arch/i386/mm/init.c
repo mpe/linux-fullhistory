@@ -390,6 +390,7 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	int datapages = 0;
 	int initpages = 0;
 	unsigned long tmp;
+	unsigned long endbase;
 
 	end_mem &= PAGE_MASK;
 	high_memory = (void *) end_mem;
@@ -417,8 +418,10 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	 * IBM messed up *AGAIN* in their thinkpad: 0xA0000 -> 0x9F000.
 	 * They seem to have done something stupid with the floppy
 	 * controller as well..
+	 * The amount of available base memory is in WORD 40:13.
 	 */
-	while (start_low_mem < 0x9f000+PAGE_OFFSET) {
+	endbase = PAGE_OFFSET + ((*(unsigned short *)__va(0x413) * 1024) & PAGE_MASK);
+	while (start_low_mem < endbase) {
 		clear_bit(PG_reserved, &mem_map[MAP_NR(start_low_mem)].flags);
 		start_low_mem += PAGE_SIZE;
 	}

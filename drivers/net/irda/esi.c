@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Thomas Davis, <ratbert@radiks.net>
  * Created at:    Sat Feb 21 18:54:38 1998
- * Modified at:   Mon May 10 15:13:12 1999
+ * Modified at:   Sun May 16 14:35:21 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:	  esi.c
  *
@@ -31,10 +31,6 @@
 #include <linux/sched.h>
 #include <linux/init.h>
 
-#include <asm/ioctls.h>
-#include <asm/segment.h>
-#include <asm/uaccess.h>
-
 #include <net/irda/irda.h>
 #include <net/irda/irmod.h>
 #include <net/irda/irda_device.h>
@@ -44,7 +40,7 @@
 static void esi_open(struct irda_device *idev, int type);
 static void esi_close(struct irda_device *driver);
 static void esi_change_speed(struct irda_device *idev, int baud);
-static void esi_reset(struct irda_device *idev, int unused);
+static void esi_reset(struct irda_device *idev);
 static void esi_qos_init(struct irda_device *idev, struct qos_info *qos);
 
 static struct dongle dongle = {
@@ -116,7 +112,7 @@ static void esi_change_speed(struct irda_device *idev, int baud)
 	irda_device_set_dtr_rts(idev, dtr, rts);
 }
 
-static void esi_reset( struct irda_device *idev, int unused)
+static void esi_reset( struct irda_device *idev)
 {
 	/* Empty */
 }

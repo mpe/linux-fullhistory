@@ -835,7 +835,7 @@ root_found:
 	if (!inode->i_op)
 		goto out_bad_root;
 	/* get the root dentry */
-	s->s_root = d_alloc_root(inode, NULL);
+	s->s_root = d_alloc_root(inode);
 	if (!(s->s_root))
 		goto out_no_root;
 

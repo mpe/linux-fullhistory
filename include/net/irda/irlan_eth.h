@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct 15 08:36:58 1998
- * Modified at:   Thu Apr 22 14:09:37 1999
+ * Modified at:   Fri May 14 23:29:00 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -32,6 +32,7 @@ int  irlan_eth_receive(void *instance, void *sap, struct sk_buff *skb);
 int  irlan_eth_xmit(struct sk_buff *skb, struct device *dev);
 
 void irlan_eth_flow_indication( void *instance, void *sap, LOCAL_FLOW flow);
+void irlan_eth_send_gratuitous_arp(struct device *dev);
 
 void irlan_eth_set_multicast_list( struct device *dev);
 struct enet_statistics *irlan_eth_get_stats(struct device *dev);

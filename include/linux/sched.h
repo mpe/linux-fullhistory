@@ -163,9 +163,9 @@ struct fs_struct {
 #define AVL_MIN_MAP_COUNT	32
 
 struct mm_struct {
-	struct vm_area_struct *mmap;		/* list of VMAs */
-	struct vm_area_struct *mmap_avl;	/* tree of VMAs */
-	struct vm_area_struct *mmap_cache;	/* last find_vma result */
+	struct vm_area_struct * mmap;		/* list of VMAs */
+	struct vm_area_struct * mmap_avl;	/* tree of VMAs */
+	struct vm_area_struct * mmap_cache;	/* last find_vma result */
 	pgd_t * pgd;
 	atomic_t count;
 	int map_count;				/* number of VMAs */
@@ -453,8 +453,8 @@ extern __inline__ struct task_struct *find_task_by_pid(int pid)
 }
 
 /* per-UID process charging. */
-extern int alloc_uid(struct task_struct *p);
-void free_uid(struct task_struct *p);
+extern int alloc_uid(struct task_struct *);
+void free_uid(struct task_struct *);
 
 #include <asm/current.h>
 
@@ -482,26 +482,25 @@ extern void FASTCALL(wake_up_process(struct task_struct * tsk));
 #define wake_up(x)			__wake_up((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE)
 #define wake_up_interruptible(x)	__wake_up((x),TASK_INTERRUPTIBLE)
 
-extern int in_group_p(gid_t grp);
+extern int in_group_p(gid_t);
 
 extern void flush_signals(struct task_struct *);
 extern void flush_signal_handlers(struct task_struct *);
-extern int dequeue_signal(sigset_t *block, siginfo_t *);
-extern int send_sig_info(int, struct siginfo *info, struct task_struct *);
-extern int force_sig_info(int, struct siginfo *info, struct task_struct *);
-extern int kill_pg_info(int, struct siginfo *info, pid_t);
-extern int kill_sl_info(int, struct siginfo *info, pid_t);
-extern int kill_proc_info(int, struct siginfo *info, pid_t);
-extern int kill_something_info(int, struct siginfo *info, int);
-extern void notify_parent(struct task_struct * tsk, int);
-extern void force_sig(int sig, struct task_struct * p);
-extern int send_sig(int sig, struct task_struct * p, int priv);
+extern int dequeue_signal(sigset_t *, siginfo_t *);
+extern int send_sig_info(int, struct siginfo *, struct task_struct *);
+extern int force_sig_info(int, struct siginfo *, struct task_struct *);
+extern int kill_pg_info(int, struct siginfo *, pid_t);
+extern int kill_sl_info(int, struct siginfo *, pid_t);
+extern int kill_proc_info(int, struct siginfo *, pid_t);
+extern int kill_something_info(int, struct siginfo *, int);
+extern void notify_parent(struct task_struct *, int);
+extern void force_sig(int, struct task_struct *);
+extern int send_sig(int, struct task_struct *, int);
 extern int kill_pg(pid_t, int, int);
 extern int kill_sl(pid_t, int, int);
 extern int kill_proc(pid_t, int, int);
-extern int do_sigaction(int sig, const struct k_sigaction *act,
-			struct k_sigaction *oact);
-extern int do_sigaltstack(const stack_t *ss, stack_t *oss, unsigned long sp);
+extern int do_sigaction(int, const struct k_sigaction *, struct k_sigaction *);
+extern int do_sigaltstack(const stack_t *, stack_t *, unsigned long);
 
 extern inline int signal_pending(struct task_struct *p)
 {
@@ -552,12 +551,10 @@ static inline int sas_ss_flags(unsigned long sp)
 		: on_sig_stack(sp) ? SS_ONSTACK : 0);
 }
 
-extern int request_irq(unsigned int irq,
+extern int request_irq(unsigned int,
 		       void (*handler)(int, void *, struct pt_regs *),
-		       unsigned long flags, 
-		       const char *device,
-		       void *dev_id);
-extern void free_irq(unsigned int irq, void *dev_id);
+		       unsigned long, const char *, void *);
+extern void free_irq(unsigned int, void *);
 
 /*
  * This has now become a routine instead of a macro, it sets a flag if

@@ -34,8 +34,14 @@ extern struct sock *udp_hash[UDP_HTABLE_SIZE];
 
 extern unsigned short udp_good_socknum(void);
 
-#define UDP_NO_CHECK	0
+/* Note: this must match 'valbool' in sock_setsockopt */
+#define UDP_CSUM_NOXMIT		1
 
+/* Used by SunRPC/xprt layer. */
+#define UDP_CSUM_NORCV		2
+
+/* Default, as per the RFC, is to always do csums. */
+#define UDP_CSUM_DEFAULT	0
 
 extern struct proto udp_prot;
 

@@ -44,7 +44,7 @@ extern inline struct file * fget(unsigned int fd)
 /*
  * Install a file pointer in the fd array.
  */
-extern inline void fd_install(unsigned int fd, struct file *file)
+extern inline void fd_install(unsigned int fd, struct file * file)
 {
 	current->files->fd[fd] = file;
 }
@@ -65,7 +65,7 @@ extern inline void fd_install(unsigned int fd, struct file *file)
  * I suspect there are many other similar "optimizations" across the
  * kernel...
  */
-extern void fput(struct file *file); 
-extern void put_filp(struct file *file);
+extern void fput(struct file *); 
+extern void put_filp(struct file *);
 
-#endif
+#endif /* __LINUX_FILE_H */

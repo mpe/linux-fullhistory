@@ -146,7 +146,7 @@ static int do_proc_readlink(struct dentry *dentry, char * buffer, int buflen)
 	/* Check for special dentries.. */
 	pattern = NULL;
 	inode = dentry->d_inode;
-	if (inode && dentry->d_parent == dentry) {
+	if (inode && IS_ROOT(dentry)) {
 		if (S_ISSOCK(inode->i_mode))
 			pattern = "socket:[%lu]";
 		if (S_ISFIFO(inode->i_mode))

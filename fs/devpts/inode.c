@@ -163,7 +163,7 @@ struct super_block *devpts_read_super(struct super_block *s, void *data,
 	 * Get the root inode and dentry, but defer checking for errors.
 	 */
 	root_inode = iget(s, 1); /* inode 1 == root directory */
-	root = d_alloc_root(root_inode, NULL);
+	root = d_alloc_root(root_inode);
 
 	/*
 	 * Check whether somebody else completed the super block.

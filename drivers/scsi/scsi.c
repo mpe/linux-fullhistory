@@ -670,8 +670,8 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
     SCpnt->request.rq_status = RQ_SCSI_BUSY;
     spin_lock_irq(&io_request_lock);
     scsi_do_cmd (SCpnt, (void *) scsi_cmd,
-                 (void *) scsi_result,
-                 256, scan_scsis_done, SCSI_TIMEOUT + 4 * HZ, 5);
+                 (void *) NULL,
+                 0, scan_scsis_done, SCSI_TIMEOUT + 4 * HZ, 5);
     spin_unlock_irq(&io_request_lock);
     down (&sem);
     SCpnt->request.sem = NULL;

@@ -56,11 +56,12 @@ static int			nfs_stat_to_errno(int stat);
 #define NFS_linkargs_sz		NFS_fhandle_sz+NFS_diropargs_sz
 #define NFS_symlinkargs_sz	NFS_diropargs_sz+NFS_path_sz+NFS_sattr_sz
 #define NFS_readdirargs_sz	NFS_fhandle_sz+2
+#define NFS_readlinkargs_sz	NFS_fhandle_sz
 
 #define NFS_dec_void_sz		0
 #define NFS_attrstat_sz		1+NFS_fattr_sz
 #define NFS_diropres_sz		1+NFS_fhandle_sz+NFS_fattr_sz
-#define NFS_readlinkres_sz	1+NFS_path_sz
+#define NFS_readlinkres_sz	1
 #define NFS_readres_sz		1+NFS_fattr_sz+1
 #define NFS_stat_sz		1
 #define NFS_readdirres_sz	1
@@ -198,7 +199,6 @@ nfs_xdr_readargs(struct rpc_rqst *req, u32 *p, struct nfs_readargs *args)
 	*p++ = htonl(args->count);
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
 
-#if 1
 	/* set up reply iovec */
 	replen = (RPC_REPHDRSIZE + auth->au_rslack + NFS_readres_sz) << 2;
 	buflen = req->rq_rvec[0].iov_len;
@@ -209,10 +209,6 @@ nfs_xdr_readargs(struct rpc_rqst *req, u32 *p, struct nfs_readargs *args)
 	req->rq_rvec[2].iov_len  = buflen - replen;
 	req->rq_rlen = args->count + buflen;
 	req->rq_rnr = 3;
-#else
-	replen = (RPC_REPHDRSIZE + auth->au_rslack + NFS_readres_sz) << 2;
-	req->rq_rvec[0].iov_len  = replen;
-#endif
 
 	return 0;
 }
@@ -359,133 +355,107 @@ nfs_xdr_readdirargs(struct rpc_rqst *req, u32 *p, struct nfs_readdirargs *args)
 {
 	struct rpc_task	*task = req->rq_task;
 	struct rpc_auth	*auth = task->tk_auth;
-	u32		bufsiz = args->bufsiz;
+	int		bufsiz = args->bufsiz;
 	int		replen;
-
-	/*
-	 * Some servers (e.g. HP OS 9.5) seem to expect the buffer size
-	 * to be in longwords ... check whether to convert the size.
-	 */
-	if (task->tk_client->cl_flags & NFS_CLNTF_BUFSIZE)
-		bufsiz = bufsiz >> 2;
 
 	p = xdr_encode_fhandle(p, args->fh);
 	*p++ = htonl(args->cookie);
-	*p++ = htonl(bufsiz); /* see above */
+
+	/* Some servers (e.g. HP OS 9.5) seem to expect the buffer size
+	 * to be in longwords ... check whether to convert the size.
+	 */
+	if (task->tk_client->cl_flags & NFS_CLNTF_BUFSIZE)
+		*p++ = htonl(bufsiz >> 2);
+	else
+		*p++ = htonl(bufsiz);
+
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
 
 	/* set up reply iovec */
 	replen = (RPC_REPHDRSIZE + auth->au_rslack + NFS_readdirres_sz) << 2;
-	/*
-	dprintk("RPC: readdirargs: slack is 4 * (%d + %d + %d) = %d\n",
-		RPC_REPHDRSIZE, auth->au_rslack, NFS_readdirres_sz, replen);
-	 */
 	req->rq_rvec[0].iov_len  = replen;
 	req->rq_rvec[1].iov_base = args->buffer;
-	req->rq_rvec[1].iov_len  = args->bufsiz;
-	req->rq_rlen = replen + args->bufsiz;
+	req->rq_rvec[1].iov_len  = bufsiz;
+	req->rq_rlen = replen + bufsiz;
 	req->rq_rnr = 2;
-
-	/*
-	dprintk("RPC:      readdirargs set up reply vec:\n");
-	dprintk("          rvec[0] = %p/%d\n",
-			req->rq_rvec[0].iov_base,
-			req->rq_rvec[0].iov_len);
-	dprintk("          rvec[1] = %p/%d\n",
-			req->rq_rvec[1].iov_base,
-			req->rq_rvec[1].iov_len);
-	 */
 
 	return 0;
 }
 
 /*
- * Decode the result of a readdir call. We decode the result in place
- * to avoid a malloc of NFS_MAXNAMLEN+1 for each file name.
- * After decoding, the layout in memory looks like this:
- *	entry1 entry2 ... entryN <space> stringN ... string2 string1
- * Each entry consists of three __u32 values, the same space as NFS uses.
- * Note that the strings are not null-terminated so that the entire number
- * of entries returned by the server should fit into the buffer.
+ * Decode the result of a readdir call.
  */
+#define NFS_DIRENT_MAXLEN	(5 * sizeof(u32) + (NFS_MAXNAMLEN + 1))
 static int
 nfs_xdr_readdirres(struct rpc_rqst *req, u32 *p, struct nfs_readdirres *res)
 {
 	struct iovec		*iov = req->rq_rvec;
 	int			 status, nr;
-	char			*string, *start;
-	u32			*end, *entry, len, fileid, cookie;
+	u32			*end;
+	u32			last_cookie = res->cookie;
 
-	if ((status = ntohl(*p++)))
-		return -nfs_stat_to_errno(status);
+	status = ntohl(*p++);
+	if (status) {
+		nr = -nfs_stat_to_errno(status);
+		goto error;
+	}
 	if ((void *) p != ((u8 *) iov->iov_base+iov->iov_len)) {
 		/* Unexpected reply header size. Punt. */
 		printk("NFS: Odd RPC header size in readdirres reply\n");
-		return -errno_NFSERR_IO;
+		nr = -errno_NFSERR_IO;
+		goto error;
 	}
 
-	/* Get start and end address of XDR data */
+	/* Get start and end address of XDR readdir response. */
 	p   = (u32 *) iov[1].iov_base;
 	end = (u32 *) ((u8 *) p + iov[1].iov_len);
-
-	/* Get start and end of dirent buffer */
-	entry  = (u32 *) res->buffer;
-	start  = (char *) res->buffer;
-	string = (char *) res->buffer + res->bufsiz;
 	for (nr = 0; *p++; nr++) {
-		fileid = ntohl(*p++);
+		__u32 len;
 
-		len = ntohl(*p++);
-		/*
-		 * Check whether the server has exceeded our reply buffer,
-		 * and set a flag to convert the size to longwords.
-		 */
+		/* Convert fileid. */
+		*p = ntohl(*p);
+		p++;
+
+		/* Convert and capture len */
+		len = *p = ntohl(*p);
+		p++;
+
 		if ((p + QUADLEN(len) + 3) > end) {
 			struct rpc_clnt *clnt = req->rq_task->tk_client;
-			printk(KERN_WARNING
-				"NFS: server %s, readdir reply truncated\n",
-				clnt->cl_server);
-			printk(KERN_WARNING "NFS: nr=%d, slots=%d, len=%d\n",
-				nr, (end - p), len);
+
 			clnt->cl_flags |= NFS_CLNTF_BUFSIZE;
+			p -= 2;
+			p[-1] = 0;
+			p[0] = 0;
 			break;
 		}
 		if (len > NFS_MAXNAMLEN) {
-			printk("NFS: giant filename in readdir (len %x)!\n",
-						len);
-			return -errno_NFSERR_IO;
+			nr = -errno_NFSERR_IO;
+			goto error;
 		}
-		string -= len;
-		if ((void *) (entry+3) > (void *) string) {
-			/* 
-			 * This error is impossible as long as the temp
-			 * buffer is no larger than the user buffer. The 
-			 * current packing algorithm uses the same amount
-			 * of space in the user buffer as in the XDR data,
-			 * so it's guaranteed to fit.
-			 */
-			printk("NFS: incorrect buffer size in %s!\n",
-				__FUNCTION__);
-			break;
-		}
-
-		memmove(string, p, len);
 		p += QUADLEN(len);
-		cookie = ntohl(*p++);
-		/*
-		 * To make everything fit, we encode the length, offset,
-		 * and eof flag into 32 bits. This works for filenames
-		 * up to 32K and PAGE_SIZE up to 64K.
-		 */
-		status = !p[0] && p[1] ? (1 << 15) : 0; /* eof flag */
-		*entry++ = fileid;
-		*entry++ = cookie;
-		*entry++ = ((string - start) << 16) | status | (len & 0x7FFF);
+
+		/* Convert and capture cookie. */
+		last_cookie = *p = ntohl(*p);
+		p++;
 	}
-#ifdef NFS_PARANOIA
-printk("nfs_xdr_readdirres: %d entries, ent sp=%d, str sp=%d\n",
-nr, ((char *) entry - start), (start + res->bufsiz - string));
-#endif
+	p -= 1;
+	status = ((end - p) << 2);
+	if (!p[1] && (status >= NFS_DIRENT_MAXLEN)) {
+		status = ((__u8 *)p - (__u8 *)iov[1].iov_base);
+		res->buffer += status;
+		res->bufsiz -= status;
+	} else if (p[1]) {
+		status = (int)((long)p & ~PAGE_CACHE_MASK);
+		res->bufsiz = -status;
+	} else {
+		res->bufsiz = 0;
+	}
+	res->cookie = last_cookie;
+	return nr;
+
+error:
+	res->bufsiz = 0;
 	return nr;
 }
 
@@ -553,20 +523,56 @@ nfs_xdr_diropres(struct rpc_rqst *req, u32 *p, struct nfs_diropok *res)
 }
 
 /*
+ * Encode arguments to readlink call
+ */
+static int nfs_xdr_readlinkargs(struct rpc_rqst *req, u32 *p, struct nfs_readlinkargs *args)
+{
+	struct rpc_task *task = req->rq_task;
+	struct rpc_auth *auth = task->tk_auth;
+	int bufsiz = NFS_MAXPATHLEN;
+	int replen;
+
+	p = xdr_encode_fhandle(p, args->fh);
+	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
+	replen = (RPC_REPHDRSIZE + auth->au_rslack + NFS_readlinkres_sz) << 2;
+	req->rq_rvec[0].iov_len = replen;
+	req->rq_rvec[1].iov_base = (void *) args->buffer;
+	req->rq_rvec[1].iov_len = bufsiz;
+	req->rq_rlen = replen + bufsiz;
+	req->rq_rnr = 2;
+
+	return 0;
+}
+
+/*
  * Decode READLINK reply
  */
 static int
-nfs_xdr_readlinkres(struct rpc_rqst *req, u32 *p, struct nfs_readlinkres *res)
+nfs_xdr_readlinkres(struct rpc_rqst *req, u32 *p, void *dummy)
 {
-	int	status;
+	struct iovec	*iov = req->rq_rvec;
+	int		status,	len;
+	char		*name;
 
-	if ((status = ntohl(*p++)))
+	/* Verify OK status. */
+	if ((status = ntohl(*p++)) != 0)
 		return -nfs_stat_to_errno(status);
-	xdr_decode_string2(p, res->string, res->lenp, res->maxlen);
 
-	/* Caller takes over the buffer here to avoid extra copy */
-	res->buffer = req->rq_task->tk_buffer;
-	req->rq_task->tk_buffer = NULL;
+	/* Verify OK response length. */
+	if ((__u8 *)p != ((u8 *) iov->iov_base + iov->iov_len))
+		return -errno_NFSERR_IO;
+
+	/* Convert and verify that string length is in range. */
+	p = iov[1].iov_base;
+	len = *p = ntohl(*p);
+	p++;
+	if (len > iov[1].iov_len)
+		return -errno_NFSERR_IO;
+
+	/* NULL terminate the string we got. */
+	name = (char *) p;
+	name[len] = 0;
+
 	return 0;
 }
 
@@ -653,7 +659,7 @@ static struct rpc_procinfo	nfs_procedures[18] = {
     PROC(setattr,	sattrargs,	attrstat),
     PROC(root,		enc_void,	dec_void),
     PROC(lookup,	diropargs,	diropres),
-    PROC(readlink,	fhandle,	readlinkres),
+    PROC(readlink,	readlinkargs,	readlinkres),
     PROC(read,		readargs,	readres),
     PROC(writecache,	enc_void,	dec_void),
     PROC(write,		writeargs,	attrstat),

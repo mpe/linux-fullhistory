@@ -89,9 +89,10 @@ struct uhci_td {
 	usb_device_irq completed;	/* Completion handler routine */
 	unsigned int *backptr;		/* Where to remove this from.. */
 	void *dev_id;
-	int inuse;			/* Inuse? */
+	int inuse;			/* Inuse? (b0) Remove (b1)*/
 	struct uhci_qh *qh;
 	struct uhci_td *first;
+	struct usb_device *dev;		/* the owning device */
 } __attribute__((aligned(32)));
 
 struct uhci_iso_td {

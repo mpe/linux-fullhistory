@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Feb  6 21:02:33 1999
- * Modified at:   Mon May 10 16:01:33 1999
+ * Modified at:   Tue Jun  1 08:47:41 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -28,17 +28,13 @@
 #include <linux/sched.h>
 #include <linux/init.h>
 
-#include <asm/ioctls.h>
-#include <asm/segment.h>
-#include <asm/uaccess.h>
-
 #include <net/irda/irda.h>
 #include <net/irda/irmod.h>
 #include <net/irda/irda_device.h>
 #include <net/irda/irtty.h>
 #include <net/irda/dongle.h>
 
-static void girbil_reset(struct irda_device *dev, int unused);
+static void girbil_reset(struct irda_device *dev);
 static void girbil_open(struct irda_device *dev, int type);
 static void girbil_close(struct irda_device *dev);
 static void girbil_change_speed(struct irda_device *dev, int baud);
@@ -165,7 +161,7 @@ static void girbil_change_speed(struct irda_device *idev, int speed)
  *    	  0. set RTS, and wait at least 5 ms 
  *        1. clear RTS 
  */
-void girbil_reset(struct irda_device *idev, int unused)
+void girbil_reset(struct irda_device *idev)
 {
 	__u8 control = GIRBIL_TXEN | GIRBIL_RXEN;
 
@@ -177,22 +173,26 @@ void girbil_reset(struct irda_device *idev, int unused)
 
 	/* Sleep at least 5 ms */
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(2);
+	schedule_timeout(MSECS_TO_JIFFIES(20));
 	
 	/* Set DTR and clear RTS to enter command mode */
 	irda_device_set_dtr_rts(idev, FALSE, TRUE);
 
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(2);
+	schedule_timeout(MSECS_TO_JIFFIES(20));
 
 	/* Write control byte */
 	irda_device_raw_write(idev, &control, 1);
 
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(2);
+	schedule_timeout(MSECS_TO_JIFFIES(20));
 
 	/* Go back to normal mode */
 	irda_device_set_dtr_rts(idev, TRUE, TRUE);
+
+       	/* Make sure the IrDA chip also goes to defalt speed */
+	if (idev->change_speed)
+		idev->change_speed(idev, 9600);
 }
 
 /*
@@ -204,7 +204,7 @@ void girbil_reset(struct irda_device *idev, int unused)
 static void girbil_init_qos(struct irda_device *idev, struct qos_info *qos)
 {
 	qos->baud_rate.bits &= IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
-	qos->min_turn_time.bits &= 0xfe; /* All except 0 ms */
+	qos->min_turn_time.bits &= 0x03;
 }
 
 #ifdef MODULE

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr  6 15:33:50 1999
- * Modified at:   Sun May  9 22:40:43 1999
+ * Modified at:   Fri May 28 20:46:38 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Modified at:   Fri May 28  3:11 CST 1999
  * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
@@ -227,10 +227,12 @@ int discovery_proc_read(char *buf, char **start, off_t offset, int len,
 	
 	discovery = (discovery_t *) hashbin_get_first(cachelog);
 	while ( discovery != NULL) {
-		len += sprintf( buf+len, "  name: %s,", 
-				discovery->info);
+		len += sprintf(buf+len, "name: %s,", discovery->info);
 		
-		len += sprintf( buf+len, " hint: ");
+		len += sprintf(buf+len, " hint: 0x%02x%02x", 
+			       discovery->hints.byte[0], 
+			       discovery->hints.byte[1]);
+#if 0
 		if ( discovery->hints.byte[0] & HINT_PNP)
 			len += sprintf( buf+len, "PnP Compatible ");
 		if ( discovery->hints.byte[0] & HINT_PDA)
@@ -254,14 +256,14 @@ int discovery_proc_read(char *buf, char **start, off_t offset, int len,
 			len += sprintf( buf+len, "IrCOMM ");
 		if ( discovery->hints.byte[1] & HINT_OBEX)
 			len += sprintf( buf+len, "IrOBEX ");
-		
+#endif		
 		len += sprintf(buf+len, ", saddr: 0x%08x", 
 			       discovery->saddr);
 
 		len += sprintf(buf+len, ", daddr: 0x%08x\n", 
 			       discovery->daddr);
 		
-		len += sprintf( buf+len, "\n");
+		len += sprintf(buf+len, "\n");
 		
 		discovery = (discovery_t *) hashbin_get_next(cachelog);
 	}

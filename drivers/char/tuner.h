@@ -31,6 +31,7 @@
 #define TUNER_TEMIC_NTSC    6
 #define TUNER_TEMIC_PAL_I   7
 #define TUNER_TEMIC_4036FY5_NTSC	8
+#define TUNER_ALPS_TSBH1_NTSC 9
 
 #define NOTUNER 0
 #define PAL     1

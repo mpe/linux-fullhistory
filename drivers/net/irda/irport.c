@@ -1,43 +1,38 @@
 /*********************************************************************
- *		  
+ * 
  * Filename:	  irport.c
- * Version:	  0.9
- * Description:   Serial driver for IrDA. 
+ * Version:	  1.0
+ * Description:   Half duplex serial port SIR driver for IrDA. 
  * Status:	  Experimental.
  * Author:	  Dag Brattli <dagb@cs.uit.no>
  * Created at:	  Sun Aug  3 13:49:59 1997
- * Modified at:   Sat May 23 23:15:20 1998
+ * Modified at:   Tue Jun  1 10:02:42 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:	  serial.c by Linus Torvalds 
  * 
- *     Copyright (c) 1997,1998 Dag Brattli <dagb@cs.uit.no>
- *     All Rights Reserved.
+ *     Copyright (c) 1997, 1998, 1999 Dag Brattli, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
  *     published by the Free Software Foundation; either version 2 of 
  *     the License, or (at your option) any later version.
- *
- *     Neither Dag Brattli nor University of Tromsø admit liability nor
- *     provide warranty for any of this software. This material is 
- *     provided "AS-IS" and at no charge.
- *
- *     NOTICE:
+ * 
+ *     This program is distributed in the hope that it will be useful,
+ *     but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *     GNU General Public License for more details.
+ * 
+ *     You should have received a copy of the GNU General Public License 
+ *     along with this program; if not, write to the Free Software 
+ *     Foundation, Inc., 59 Temple Place, Suite 330, Boston, 
+ *     MA 02111-1307 USA
  *
  *     This driver is ment to be a small half duplex serial driver to be
- *     used for IR-chipsets that has a UART (16550) compatibility mode. If
- *     your chipset is is UART only, you should probably use IrTTY instead
- *     since the Linux serial driver is probably more robust and optimized.
- *
- *     The functions in this file may be used by FIR drivers, but this
- *     driver knows nothing about FIR drivers so don't ever insert such
- *     code into this file. Instead you should code your FIR driver in a
- *     separate file, and then call the functions in this file if
- *     necessary. This is becase it is difficult to use the Linux serial
- *     driver with a FIR driver becase they must share interrupts etc. Most
- *     FIR chipsets can function in advanced SIR mode, and you should
- *     probably use that mode instead of the UART compatibility mode (and
- *     then just forget about this file)
+ *     used for IR-chipsets that has a UART (16550) compatibility mode. 
+ *     Eventually it will replace irtty, because of irtty has some 
+ *     problems that is hard to get around when we don't have control
+ *     over the serial driver. This driver may also be used by FIR 
+ *     drivers to handle SIR mode for them.
  *
  ********************************************************************/
 
@@ -48,14 +43,15 @@
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
-#include <asm/system.h>
-#include <asm/bitops.h>
-#include <asm/io.h>
+#include <linux/skbuff.h>
+#include <linux/serial_reg.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 
-#include <linux/skbuff.h>
-#include <linux/serial_reg.h>
+#include <asm/system.h>
+#include <asm/bitops.h>
+#include <asm/io.h>
+#include <asm/spinlock.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irmod.h>
@@ -86,7 +82,6 @@ static void irport_receive(struct irda_device *idev);
 static int  irport_net_init(struct device *dev);
 static int  irport_net_open(struct device *dev);
 static int  irport_net_close(struct device *dev);
-static void irport_wait_until_sent(struct irda_device *idev);
 static int  irport_is_receiving(struct irda_device *idev);
 static void irport_set_dtr_rts(struct irda_device *idev, int dtr, int rts);
 static int  irport_raw_write(struct irda_device *idev, __u8 *buf, int len);
@@ -158,12 +153,15 @@ static int irport_open(int i, unsigned int iobase, unsigned int irq)
         idev->io.io_ext    = IO_EXTENT;
         idev->io.fifo_size = 16;
 
+	idev->netdev.base_addr = iobase;
+	idev->netdev.irq = irq;
+
 	/* Lock the port that we need */
 	ret = check_region(idev->io.iobase2, idev->io.io_ext);
 	if (ret < 0) { 
-		DEBUG( 0, __FUNCTION__ "(), can't get iobase of 0x%03x\n",
-		       idev->io.iobase2);
-		/* w83977af_cleanup( self->idev);  */
+		DEBUG(0, __FUNCTION__ "(), can't get iobase of 0x%03x\n",
+		      idev->io.iobase2);
+		/* irport_cleanup(self->idev);  */
 		return -ENODEV;
 	}
 	request_region(idev->io.iobase2, idev->io.io_ext, idev->name);
@@ -207,12 +205,10 @@ static int irport_open(int i, unsigned int iobase, unsigned int irq)
 
 static int irport_close(struct irda_device *idev)
 {
-	DEBUG(0, __FUNCTION__ "()\n");
-
 	ASSERT(idev != NULL, return -1;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return -1;);
 
-	/* Release the PORT that this driver is using */
+	/* Release the IO-port that this driver is using */
 	DEBUG(0 , __FUNCTION__ "(), Releasing Region %03x\n", 
 	      idev->io.iobase2);
 	release_region(idev->io.iobase2, idev->io.io_ext);
@@ -224,24 +220,37 @@ static int irport_close(struct irda_device *idev)
 	return 0;
 }
 
-void irport_start(int iobase)
+void irport_start(struct irda_device *idev, int iobase)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&idev->lock, flags);
+
+	irport_stop(idev, iobase);
+
 	/* Initialize UART */
 	outb(UART_LCR_WLEN8, iobase+UART_LCR);  /* Reset DLAB */
 	outb((UART_MCR_DTR | UART_MCR_RTS | UART_MCR_OUT2), iobase+UART_MCR);
 	
 	/* Turn on interrups */
-	outb((UART_IER_RLSI | UART_IER_RDI), iobase+UART_IER);
+	outb(UART_IER_RLSI | UART_IER_RDI |UART_IER_THRI, iobase+UART_IER);
 
+	spin_unlock_irqrestore(&idev->lock, flags);
 }
 
-void irport_stop(int iobase)
+void irport_stop(struct irda_device *idev, int iobase)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&idev->lock, flags);
+
 	/* Reset UART */
 	outb(0, iobase+UART_MCR);
 	
 	/* Turn off interrupts */
 	outb(0, iobase+UART_IER);
+
+	spin_unlock_irqrestore(&idev->lock, flags);
 }
 
 /*
@@ -254,24 +263,24 @@ int irport_probe(int iobase)
 {
 	DEBUG(4, __FUNCTION__ "(), iobase=%#x\n", iobase);
 
-
 	return 0;
 }
 
 /*
  * Function irport_change_speed (idev, speed)
  *
- *    Set speed of port to specified baudrate
+ *    Set speed of IrDA port to specified baudrate
  *
  */
 void irport_change_speed(struct irda_device *idev, int speed)
 {
+	unsigned long flags;
 	int iobase; 
 	int fcr;    /* FIFO control reg */
 	int lcr;    /* Line control reg */
 	int divisor;
 
-	DEBUG( 0, __FUNCTION__ "(), Setting speed to: %d\n", speed);
+	DEBUG(0, __FUNCTION__ "(), Setting speed to: %d\n", speed);
 
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -281,12 +290,24 @@ void irport_change_speed(struct irda_device *idev, int speed)
 	/* Update accounting for new speed */
 	idev->io.baudrate = speed;
 
+	spin_lock_irqsave(&idev->lock, flags);
+
 	/* Turn off interrupts */
 	outb(0, iobase+UART_IER); 
 
 	divisor = SPEED_MAX/speed;
 	
-	fcr = UART_FCR_ENABLE_FIFO | UART_FCR_TRIGGER_14;
+	fcr = UART_FCR_ENABLE_FIFO;
+
+	/* 
+	 * Use trigger level 1 to avoid 3 ms. timeout delay at 9600 bps, and
+	 * almost 1,7 ms at 19200 bps. At speeds above that we can just forget
+	 * about this timeout since it will always be fast enough. 
+	 */
+	if (idev->io.baudrate < 38400)
+		fcr |= UART_FCR_TRIGGER_1;
+	else 
+		fcr |= UART_FCR_TRIGGER_14;
         
 	/* IrDA ports use 8N1 */
 	lcr = UART_LCR_WLEN8;
@@ -297,8 +318,10 @@ void irport_change_speed(struct irda_device *idev, int speed)
 	outb(lcr,		  iobase+UART_LCR); /* Set 8N1	*/
 	outb(fcr,		  iobase+UART_FCR); /* Enable FIFO's */
 
-	/* Turn on receive interrups */
-	outb(UART_IER_RLSI|UART_IER_RDI, iobase+UART_IER); 
+	/* Turn on interrups */
+	outb(UART_IER_RLSI|UART_IER_RDI|UART_IER_THRI, iobase+UART_IER);
+
+	spin_unlock_irqrestore(&self->lock, flags);
 }
 
 /*
@@ -312,9 +335,12 @@ static void irport_write_wakeup(struct irda_device *idev)
 {
 	int actual = 0;
 	int iobase;
+	int fcr;
 
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
+
+	DEBUG(4, __FUNCTION__ "()\n");
 
 	/* Finished with frame?  */
 	if (idev->tx_buff.len > 0)  {
@@ -335,9 +361,18 @@ static void irport_write_wakeup(struct irda_device *idev)
 		/* Schedule network layer, so we can get some more frames */
 		mark_bh(NET_BH);
 
-		outb(UART_FCR_ENABLE_FIFO | 
-		     UART_FCR_TRIGGER_14  |
-		     UART_FCR_CLEAR_RCVR, iobase+UART_FCR); /* Enable FIFO's */
+		fcr = UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RCVR;
+
+		if (idev->io.baudrate < 38400)
+			fcr |= UART_FCR_TRIGGER_1;
+		else 
+			fcr |= UART_FCR_TRIGGER_14;
+
+		/* 
+		 * Reset Rx FIFO to make sure that all reflected transmit data
+		 * will be discarded
+		 */
+		outb(fcr, iobase+UART_FCR);
 
 		/* Turn on receive interrupts */
 		outb(UART_IER_RLSI|UART_IER_RDI, iobase+UART_IER); 
@@ -347,7 +382,7 @@ static void irport_write_wakeup(struct irda_device *idev)
 /*
  * Function irport_write (driver)
  *
- *    
+ *    Fill Tx FIFO with transmit data
  *
  */
 static int irport_write(int iobase, int fifo_size, __u8 *buf, int len)
@@ -356,21 +391,18 @@ static int irport_write(int iobase, int fifo_size, __u8 *buf, int len)
 
 	/* Tx FIFO should be empty! */
 	if (!(inb(iobase+UART_LSR) & UART_LSR_THRE)) {
-		DEBUG( 0, __FUNCTION__ "(), failed, fifo not empty!\n");
+		DEBUG(0, __FUNCTION__ "(), failed, fifo not empty!\n");
 		return -1;
 	}
         
 	/* Fill FIFO with current frame */
-	while (( fifo_size-- > 0) && (actual < len)) {
+	while ((fifo_size-- > 0) && (actual < len)) {
 		/* Transmit next byte */
-		outb( buf[actual], iobase+UART_TX);
+		outb(buf[actual], iobase+UART_TX);
 
 		actual++;
 	}
         
-	DEBUG(4, __FUNCTION__ "(), fifo_size %d ; %d sent of %d\n", 
-	      fifo_size, actual, len);
-
 	return actual;
 }
 
@@ -384,10 +416,9 @@ static int irport_write(int iobase, int fifo_size, __u8 *buf, int len)
 int irport_hard_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct irda_device *idev;
+	unsigned long flags;
 	int actual = 0;
 	int iobase;
-
-	DEBUG(5, __FUNCTION__ "(), dev=%p\n", dev);
 
 	ASSERT(dev != NULL, return 0;);
 	
@@ -399,8 +430,19 @@ int irport_hard_xmit(struct sk_buff *skb, struct device *dev)
 	iobase = idev->io.iobase2;
 
 	/* Lock transmit buffer */
-	if (irda_lock((void *) &dev->tbusy) == FALSE)
-		return -EBUSY;
+	if (irda_lock((void *) &dev->tbusy) == FALSE) {
+		int tickssofar = jiffies - dev->trans_start;
+		if (tickssofar < 5)
+			return -EBUSY;
+
+		WARNING("%s: transmit timed out\n", dev->name);
+		irport_start(idev, iobase);
+		irport_change_speed(idev, idev->io.baudrate);
+
+		dev->trans_start = jiffies;
+	}
+
+	spin_lock_irqsave(&idev->lock, flags);
 	
 	/* Init tx buffer */
 	idev->tx_buff.data = idev->tx_buff.head;
@@ -414,6 +456,8 @@ int irport_hard_xmit(struct sk_buff *skb, struct device *dev)
 
 	/* Turn on transmit finished interrupt. Will fire immediately!  */
 	outb(UART_IER_THRI, iobase+UART_IER); 
+
+	spin_unlock_irqrestore(&idev->lock, flags);
 
 	dev_kfree_skb(skb);
 	
@@ -431,10 +475,7 @@ static void irport_receive(struct irda_device *idev)
 	int iobase;
 	int boguscount = 0;
 
-	if (!idev)
-		return;
-
-	DEBUG(4, __FUNCTION__ "()\n");
+	ASSERT(idev != NULL, return;);
 
 	iobase = idev->io.iobase2;
 
@@ -466,27 +507,42 @@ void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	int boguscount = 0;
 
 	if (!idev) {
-		printk(KERN_WARNING __FUNCTION__ 
-		       "() irq %d for unknown device.\n", irq);
+		WARNING(__FUNCTION__ "() irq %d for unknown device.\n", irq);
 		return;
 	}
+
+	spin_lock(&idev->lock);
 
 	idev->netdev.interrupt = 1;
 
 	iobase = idev->io.iobase2;
 
-	iir = inb(iobase + UART_IIR) & UART_IIR_ID;
+	iir = inb(iobase+UART_IIR) & UART_IIR_ID;
 	while (iir) {
 		/* Clear interrupt */
 		lsr = inb(iobase+UART_LSR);
 
-		if ((iir & UART_IIR_THRI) && (lsr & UART_LSR_THRE)) {
-			/* Transmitter ready for data */
-			irport_write_wakeup(idev);
-		} else if ((iir & UART_IIR_RDI) && (lsr & UART_LSR_DR)) {
-	       		/* Receive interrupt */
-			irport_receive(idev);
-		}
+		DEBUG(4, __FUNCTION__ "(), iir=%02x, lsr=%02x, iobase=%#x\n", 
+		      iir, lsr, iobase);
+
+		switch (iir) {
+		case UART_IIR_RLSI:
+			DEBUG(0, __FUNCTION__ "(), RLSI\n");
+			break;
+		case UART_IIR_RDI:
+			if (lsr & UART_LSR_DR)
+				/* Receive interrupt */
+				irport_receive(idev);
+			break;
+		case UART_IIR_THRI:
+			if (lsr & UART_LSR_THRE)
+				/* Transmitter ready for data */
+				irport_write_wakeup(idev);
+			break;
+		default:
+			DEBUG(0, __FUNCTION__ "(), unhandled IIR=%#x\n", iir);
+			break;
+		} 
 		
 		/* Make sure we don't stay here to long */
 		if (boguscount++ > 32)
@@ -495,6 +551,8 @@ void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  	        iir = inb(iobase + UART_IIR) & UART_IIR_ID;
 	}
 	idev->netdev.interrupt = 0;
+
+	spin_unlock(&idev->lock);
 }
 
 static int irport_net_init(struct device *dev)
@@ -524,18 +582,21 @@ static int irport_net_open(struct device *dev)
 	iobase = idev->io.iobase2;
 
 	if (request_irq(idev->io.irq2, irport_interrupt, 0, idev->name, 
-			(void *) idev)) {
+			(void *) idev))
 		return -EAGAIN;
-	}
+
+	irport_start(idev, iobase);
+
+	MOD_INC_USE_COUNT;
 
 	/* Ready to play! */
 	dev->tbusy = 0;
 	dev->interrupt = 0;
 	dev->start = 1;
 
-	MOD_INC_USE_COUNT;
-
-	irport_start(iobase);
+	/* Change speed to make sure dongles follow us again */
+	if (idev->change_speed)
+		idev->change_speed(idev, 9600);
 
 	return 0;
 }
@@ -558,11 +619,11 @@ static int irport_net_close(struct device *dev)
 
 	iobase = idev->io.iobase2;
 
-	irport_stop(iobase);
-
 	/* Stop device */
 	dev->tbusy = 1;
 	dev->start = 0;
+
+	irport_stop(idev, iobase);
 
 	free_irq(idev->io.irq2, idev);
 
@@ -571,12 +632,32 @@ static int irport_net_close(struct device *dev)
 	return 0;
 }
 
-static void irport_wait_until_sent(struct irda_device *idev)
+/*
+ * Function irport_wait_until_sent (idev)
+ *
+ *    Delay exectution until finished transmitting
+ *
+ */
+void irport_wait_until_sent(struct irda_device *idev)
 {
-	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(60*HZ/1000);
+	int iobase;
+
+	iobase = idev->io.iobase2;
+
+	/* Wait until Tx FIFO is empty */
+	while (!(inb(iobase+UART_LSR) & UART_LSR_THRE)) {
+		DEBUG(2, __FUNCTION__ "(), waiting!\n");
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(MSECS_TO_JIFFIES(60));
+	}
 }
 
+/*
+ * Function irport_is_receiving (idev)
+ *
+ *    Returns true is we are currently receiving data
+ *
+ */
 static int irport_is_receiving(struct irda_device *idev)
 {
 	return (idev->rx_buff.state != OUTSIDE_FRAME);
@@ -635,6 +716,9 @@ static int irport_raw_write(struct irda_device *idev, __u8 *buf, int len)
 
 MODULE_PARM(io, "1-4i");
 MODULE_PARM(irq, "1-4i");
+
+MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
+MODULE_DESCRIPTION("Half duplex serial driver for IrDA SIR mode");
 
 /*
  * Function cleanup_module (void)

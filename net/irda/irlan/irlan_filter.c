@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Jan 29 11:16:38 1999
- * Modified at:   Sat May  8 15:25:23 1999
+ * Modified at:   Fri May 14 23:11:01 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -23,6 +23,7 @@
  ********************************************************************/
 
 #include <linux/skbuff.h>
+#include <linux/random.h>
 
 #include <net/irda/irlan_common.h>
 

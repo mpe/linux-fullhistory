@@ -204,7 +204,7 @@ static int get_fd(struct inode *inode)
 			return -ENFILE;
 		}
 
-		file->f_dentry = d_alloc_root(inode, NULL);
+		file->f_dentry = d_alloc_root(inode);
 		if (!file->f_dentry) {
 			put_filp(file);
 			put_unused_fd(fd);

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Tue May 11 00:22:39 1999
+ * Modified at:   Mon May 31 14:19:34 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane, <loz@holmes.demon.co.uk>
@@ -213,7 +213,7 @@ static int irlan_client_ctrl_data_indication(void *instance, void *sap,
 {
 	struct irlan_cb *self;
 	
-	DEBUG(4, __FUNCTION__ "()\n");
+	DEBUG(2, __FUNCTION__ "()\n");
 	
 	self = (struct irlan_cb *) instance;
 	
@@ -222,6 +222,12 @@ static int irlan_client_ctrl_data_indication(void *instance, void *sap,
 	ASSERT(skb != NULL, return -1;);
 	
 	irlan_do_client_event(self, IRLAN_DATA_INDICATION, skb); 
+
+	/* Ready for a new command */
+	self->client.tx_busy = FALSE;
+
+	/* Check if we have some queued commands waiting to be sent */
+	irlan_run_ctrl_tx_queue(self);
 
 	return 0;
 }

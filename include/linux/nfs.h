@@ -158,6 +158,11 @@ struct nfs_diropargs {
 	const char *		name;
 };
 
+struct nfs_readlinkargs {
+	struct nfs_fh *		fh;
+	const void *		buffer;
+};
+
 struct nfs_readargs {
 	struct nfs_fh *		fh;
 	__u32			offset;
@@ -195,7 +200,7 @@ struct nfs_readdirargs {
 	struct nfs_fh *		fh;
 	__u32			cookie;
 	void *			buffer;
-	unsigned int		bufsiz;
+	int			bufsiz;
 };
 
 struct nfs_diropok {
@@ -208,16 +213,10 @@ struct nfs_readres {
 	unsigned int		count;
 };
 
-struct nfs_readlinkres {
-	char **			string;
-	unsigned int *		lenp;
-	unsigned int		maxlen;
-	void *			buffer;
-};
-
 struct nfs_readdirres {
 	void *			buffer;
-	unsigned int		bufsiz;
+	int			bufsiz;
+	u32			cookie;
 };
 
 #endif /* NFS_NEED_XDR_TYPES */

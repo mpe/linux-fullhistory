@@ -250,11 +250,24 @@ update_write_request(struct nfs_wreq *req, unsigned int first,
 	return 1;
 }
 
+static kmem_cache_t *nfs_wreq_cachep;
+
+int nfs_init_wreqcache(void)
+{
+	nfs_wreq_cachep = kmem_cache_create("nfs_wreq",
+					    sizeof(struct nfs_wreq),
+					    0, SLAB_HWCACHE_ALIGN,
+					    NULL, NULL);
+	if (nfs_wreq_cachep == NULL)
+		return -ENOMEM;
+	return 0;
+}
+
 static inline void
 free_write_request(struct nfs_wreq * req)
 {
 	if (!--req->wb_count)
-		kfree(req);
+		kmem_cache_free(nfs_wreq_cachep, req);
 }
 
 /*
@@ -274,7 +287,7 @@ create_write_request(struct file * file, struct page *page, unsigned int offset,
 		page->offset + offset, bytes);
 
 	/* FIXME: Enforce hard limit on number of concurrent writes? */
-	wreq = (struct nfs_wreq *) kmalloc(sizeof(*wreq), GFP_KERNEL);
+	wreq = kmem_cache_alloc(nfs_wreq_cachep, SLAB_KERNEL);
 	if (!wreq)
 		goto out_fail;
 	memset(wreq, 0, sizeof(*wreq));
@@ -306,7 +319,7 @@ create_write_request(struct file * file, struct page *page, unsigned int offset,
 
 out_req:
 	rpc_release_task(task);
-	kfree(wreq);
+	kmem_cache_free(nfs_wreq_cachep, wreq);
 out_fail:
 	return NULL;
 }

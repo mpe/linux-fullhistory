@@ -179,13 +179,14 @@ static ssize_t write_printer(struct file * file,
 			}
 			result = p->pusb_dev->bus->op->bulk_msg(p->pusb_dev,
 					 usb_sndbulkpipe(p->pusb_dev, 1), obuf, thistime, &partial);
-			if (result & 0x08) {	/* NAK - so hold for a while */
-				obuf += partial;
-				thistime -= partial;
+			if (result == USB_ST_TIMEOUT) {	/* NAK - so hold for a while */
 				if(!maxretry--)
 					return -ETIME;
                                 interruptible_sleep_on_timeout(&p->wait_q, NAK_TIMEOUT);
 				continue;
+			} else if (!result & partial) {
+				obuf += partial;
+				thistime -= partial;
 			} else
 				break;
 		};
@@ -230,7 +231,7 @@ static ssize_t read_printer(struct file * file,
 			  usb_rcvbulkpipe(p->pusb_dev, 2), buf, this_read, &partial);
 
 		/* unlike writes, we don't retry a NAK, just stop now */
-		if (result & 0x08)
+		if (!result & partial)
 			count = this_read = partial;
 		else if (result)
 			return -EIO;

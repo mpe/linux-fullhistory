@@ -42,6 +42,7 @@
 #define __KERNEL_SYSCALLS__
 
 #include <linux/version.h>
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/malloc.h>
 #include <linux/sched.h>
@@ -56,6 +57,8 @@
 #include <linux/file.h>
 
 #include <net/sock.h>
+#include <net/checksum.h>
+#include <net/udp.h>
 
 #include <asm/uaccess.h>
 
@@ -356,6 +359,7 @@ xprt_close(struct rpc_xprt *xprt)
 	sk->user_data    = NULL;
 #endif
 	sk->data_ready   = xprt->old_data_ready;
+	sk->no_check 	 = 0;
 	sk->state_change = xprt->old_state_change;
 	sk->write_space  = xprt->old_write_space;
 
@@ -563,18 +567,61 @@ xprt_complete_rqst(struct rpc_xprt *xprt, struct rpc_rqst *req, int copied)
 	return;
 }
 
-/*
- * Input handler for RPC replies. Called from a bottom half and hence
+/* We have set things up such that we perform the checksum of the UDP
+ * packet in parallel with the copies into the RPC client iovec.  -DaveM
+ */
+static int csum_partial_copy_to_page_cache(struct iovec *iov,
+					   struct sk_buff *skb,
+					   int copied)
+{
+	__u8 *pkt_data = skb->data + sizeof(struct udphdr);
+	__u8 *cur_ptr = iov->iov_base;
+	__kernel_size_t cur_len = iov->iov_len;
+	unsigned int csum = skb->csum;
+	int need_csum = (skb->ip_summed != CHECKSUM_UNNECESSARY);
+	int slack = skb->len - copied - sizeof(struct udphdr);
+
+	if (need_csum)
+		csum = csum_partial(skb->h.raw, sizeof(struct udphdr), csum);
+	while (copied > 0) {
+		if (cur_len) {
+			int to_move = cur_len;
+			if (to_move > copied)
+				to_move = copied;
+			if (need_csum)
+				csum = csum_partial_copy_nocheck(pkt_data, cur_ptr,
+								 to_move, csum);
+			else
+				memcpy(cur_ptr, pkt_data, to_move);
+			pkt_data += to_move;
+			copied -= to_move;
+			cur_ptr += to_move;
+			cur_len -= to_move;
+		}
+		if (cur_len <= 0) {
+			iov++;
+			cur_len = iov->iov_len;
+			cur_ptr = iov->iov_base;
+		}
+	}
+	if (need_csum) {
+		if (slack > 0)
+			csum = csum_partial(pkt_data, slack, csum);
+		if ((unsigned short)csum_fold(csum))
+			return -1;
+	}
+	return 0;
+}
+
+/* Input handler for RPC replies. Called from a bottom half and hence
  * atomic.
  */
 static inline void
 udp_data_ready(struct sock *sk, int len)
 {
-	struct rpc_task	*task;
 	struct rpc_xprt	*xprt;
 	struct rpc_rqst *rovr;
 	struct sk_buff	*skb;
-	struct iovec	iov[MAX_IOVEC];
 	int		err, repsize, copied;
 
 	dprintk("RPC:      udp_data_ready...\n");
@@ -584,28 +631,31 @@ udp_data_ready(struct sock *sk, int len)
 
 	if ((skb = skb_recv_datagram(sk, 0, 1, &err)) == NULL)
 		return;
-	repsize = skb->len - 8;	/* don't account for UDP header */
 
+	repsize = skb->len - sizeof(struct udphdr);
 	if (repsize < 4) {
 		printk("RPC: impossible RPC reply size %d!\n", repsize);
 		goto dropit;
 	}
 
 	/* Look up the request corresponding to the given XID */
-	if (!(rovr = xprt_lookup_rqst(xprt, *(u32 *) (skb->h.raw + 8))))
+	if (!(rovr = xprt_lookup_rqst(xprt,
+				      *(u32 *) (skb->h.raw + sizeof(struct udphdr)))))
 		goto dropit;
-	task = rovr->rq_task;
 
-	dprintk("RPC: %4d received reply\n", task->tk_pid);
-	xprt_pktdump("packet data:", (u32 *) (skb->h.raw+8), repsize);
+	dprintk("RPC: %4d received reply\n", rovr->rq_task->tk_pid);
+	xprt_pktdump("packet data:",
+		     (u32 *) (skb->h.raw + sizeof(struct udphdr)), repsize);
 
 	if ((copied = rovr->rq_rlen) > repsize)
 		copied = repsize;
 
-	/* Okay, we have it. Copy datagram... */
-	memcpy(iov, rovr->rq_rvec, rovr->rq_rnr * sizeof(iov[0]));
-	/* This needs to stay tied with the usermode skb_copy_dagram... */
-	memcpy_tokerneliovec(iov, skb->data+8, copied);
+	/* Suck it into the iovec, verify checksum if not done by hw. */
+	if (csum_partial_copy_to_page_cache(rovr->rq_rvec, skb, copied))
+		goto dropit;
+
+	/* Something worked... */
+	dst_confirm(skb->dst);
 
 	xprt_complete_rqst(xprt, rovr, copied);
 
@@ -1341,6 +1391,7 @@ xprt_setup(struct socket *sock, int proto,
 	xprt->old_write_space = inet->write_space;
 	if (proto == IPPROTO_UDP) {
 		inet->data_ready = udp_data_ready;
+		inet->no_check = UDP_CSUM_NORCV;
 	} else {
 		inet->data_ready = tcp_data_ready;
 		inet->state_change = tcp_state_change;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Sun May  9 11:45:33 1999
+ * Modified at:   Mon May 31 13:54:20 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -124,6 +124,9 @@ struct irlan_client_cb {
 	int unicast_open;
 	int broadcast_open;
 
+	int tx_busy;
+	struct sk_buff_head txq; /* Transmit control queue */
+
 	struct timer_list kick_timer;
 };
 
@@ -163,7 +166,7 @@ struct irlan_cb {
 	struct device dev;        /* Ethernet device structure*/
 	struct enet_statistics stats;
 
-	__u32 saddr;              /* Source devcie address */
+	__u32 saddr;              /* Source device address */
 	__u32 daddr;              /* Destination device address */
 	int   netdev_registered;
 	int   notify_irmanager;
@@ -200,6 +203,8 @@ void irlan_ias_register(struct irlan_cb *self, __u8 tsap_sel);
 void irlan_start_watchdog_timer(struct irlan_cb *self, int timeout);
 
 void irlan_open_data_tsap(struct irlan_cb *self);
+
+int irlan_run_ctrl_tx_queue(struct irlan_cb *self);
 
 void irlan_get_provider_info(struct irlan_cb *self);
 void irlan_get_unicast_addr(struct irlan_cb *self);

@@ -140,7 +140,7 @@ static struct buffer_head *V1_minix_clear_inode(struct inode *inode)
 	if (!ino || ino > inode->i_sb->u.minix_sb.s_ninodes) {
 		printk("Bad inode number on dev %s: %d is out of range\n",
 		       kdevname(inode->i_dev), ino);
-		return 0;
+		return NULL;
 	}
 	block = (2 + inode->i_sb->u.minix_sb.s_imap_blocks +
 		 inode->i_sb->u.minix_sb.s_zmap_blocks +
@@ -148,7 +148,7 @@ static struct buffer_head *V1_minix_clear_inode(struct inode *inode)
 	bh = bread(inode->i_dev, block, BLOCK_SIZE);
 	if (!bh) {
 		printk("unable to read i-node block\n");
-		return 0;
+		return NULL;
 	}
 	raw_inode = ((struct minix_inode *)bh->b_data +
 		     (ino - 1) % MINIX_INODES_PER_BLOCK);
@@ -168,7 +168,7 @@ static struct buffer_head *V2_minix_clear_inode(struct inode *inode)
 	if (!ino || ino > inode->i_sb->u.minix_sb.s_ninodes) {
 		printk("Bad inode number on dev %s: %d is out of range\n",
 		       kdevname(inode->i_dev), ino);
-		return 0;
+		return NULL;
 	}
 	block = (2 + inode->i_sb->u.minix_sb.s_imap_blocks +
 		 inode->i_sb->u.minix_sb.s_zmap_blocks +
@@ -176,7 +176,7 @@ static struct buffer_head *V2_minix_clear_inode(struct inode *inode)
 	bh = bread(inode->i_dev, block, BLOCK_SIZE);
 	if (!bh) {
 		printk("unable to read i-node block\n");
-		return 0;
+		return NULL;
 	}
 	raw_inode = ((struct minix2_inode *) bh->b_data +
 		     (ino - 1) % MINIX2_INODES_PER_BLOCK);

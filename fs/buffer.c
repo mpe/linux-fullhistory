@@ -90,7 +90,7 @@ int buffermem = 0;
 /* The dummy values in this structure are left in there for compatibility
  * with old programs that play with the /proc entries.
  */
-union bdflush_param{
+union bdflush_param {
 	struct {
 		int nfract;  /* Percentage of buffer cache dirty to 
 				activate bdflush */

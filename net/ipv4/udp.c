@@ -763,7 +763,10 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	/* 4.1.3.4. It's configurable by the application via setsockopt() */
 	/* (MAY) and it defaults to on (MUST). */
 
-	err = ip_build_xmit(sk,sk->no_check ? udp_getfrag_nosum : udp_getfrag,
+	err = ip_build_xmit(sk,
+			    (sk->no_check == UDP_CSUM_NOXMIT ?
+			     udp_getfrag_nosum :
+			     udp_getfrag),
 			    &ufh, ulen, &ipc, rt, msg->msg_flags);
 
 out:
@@ -1093,6 +1096,33 @@ int udp_chkaddr(struct sk_buff *skb)
 }
 #endif
 
+static int udp_checksum_verify(struct sk_buff *skb, struct udphdr *uh,
+			       unsigned short ulen, u32 saddr, u32 daddr,
+			       int full_csum_deferred)
+{
+	if (!full_csum_deferred) {
+		if (uh->check) {
+			if (skb->ip_summed == CHECKSUM_HW &&
+			    udp_check(uh, ulen, saddr, daddr, skb->csum))
+				return -1;
+			if (skb->ip_summed == CHECKSUM_NONE &&
+			    udp_check(uh, ulen, saddr, daddr,
+				      csum_partial((char *)uh, ulen, 0)))
+				return -1;
+		}
+	} else {
+		if (uh->check == 0)
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+		else if (skb->ip_summed == CHECKSUM_HW) {
+			if (udp_check(uh, ulen, saddr, daddr, skb->csum))
+				return -1;
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+		} else if (skb->ip_summed != CHECKSUM_UNNECESSARY)
+			skb->csum = csum_tcpudp_nofold(saddr, daddr, ulen, IPPROTO_UDP, 0);
+	}
+	return 0;
+}
+
 /*
  *	All we need to do is get the socket, and then do a checksum. 
  */
@@ -1134,25 +1164,18 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 	}
 	skb_trim(skb, ulen);
 
-#ifndef CONFIG_UDP_DELAY_CSUM
-	if (uh->check &&
-	    (((skb->ip_summed==CHECKSUM_HW)&&udp_check(uh,ulen,saddr,daddr,skb->csum)) ||
-	     ((skb->ip_summed==CHECKSUM_NONE) &&
-	      (udp_check(uh,ulen,saddr,daddr, csum_partial((char*)uh, ulen, 0)))))) 
-		goto csum_error;
-#else
-	if (uh->check==0)
-		skb->ip_summed = CHECKSUM_UNNECESSARY;
-	else if (skb->ip_summed==CHECKSUM_HW) {
-		if (udp_check(uh,ulen,saddr,daddr,skb->csum)) 
-			goto csum_error;
-		skb->ip_summed = CHECKSUM_UNNECESSARY;
-	} else if (skb->ip_summed != CHECKSUM_UNNECESSARY)
-		skb->csum = csum_tcpudp_nofold(saddr, daddr, ulen, IPPROTO_UDP, 0);
-#endif
+	if(rt->rt_flags & (RTCF_BROADCAST|RTCF_MULTICAST)) {
+		int defer;
 
-	if(rt->rt_flags & (RTCF_BROADCAST|RTCF_MULTICAST))
+#ifdef CONFIG_UDP_DELAY_CSUM
+		defer = 1;
+#else
+		defer = 0;
+#endif
+		if (udp_checksum_verify(skb, uh, ulen, saddr, daddr, defer))
+			goto csum_error;
 		return udp_v4_mcast_deliver(skb, uh, saddr, daddr);
+	}
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	if (IPCB(skb)->redirport)
@@ -1179,6 +1202,15 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 		kfree_skb(skb);
 		return(0);
   	}
+	if (udp_checksum_verify(skb, uh, ulen, saddr, daddr,
+#ifdef CONFIG_UDP_DELAY_CSUM
+				1
+#else
+				(sk->no_check & UDP_CSUM_NORCV) != 0
+#endif
+		))
+		goto csum_error;
+
 	udp_deliver(sk, skb);
 	return 0;
 

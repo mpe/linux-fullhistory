@@ -300,7 +300,7 @@ struct super_block *adfs_read_super(struct super_block *sb, void *data, int sile
 	 */
 	sb->s_op = &adfs_sops;
 	sb->u.adfs_sb.s_root = adfs_inode_generate(dr->root, 0);
-	sb->s_root = d_alloc_root(iget(sb, sb->u.adfs_sb.s_root), NULL);
+	sb->s_root = d_alloc_root(iget(sb, sb->u.adfs_sb.s_root));
 
 	if (!sb->s_root) {
 		for (i = 0; i < sb->u.adfs_sb.s_map_size; i++)
@@ -312,8 +312,7 @@ struct super_block *adfs_read_super(struct super_block *sb, void *data, int sile
 	return sb;
 
 error_free_bh:
-	if (bh)
-		brelse(bh);
+	brelse(bh);
 error_unlock:
 	unlock_super(sb);
 error_dec_use:

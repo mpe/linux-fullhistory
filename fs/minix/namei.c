@@ -184,12 +184,7 @@ static int minix_add_entry(struct inode * dir,
 			dir->i_size = block*bh->b_size + offset;
 			mark_inode_dirty(dir);
 		}
-		if (de->inode) {
-			if (namecompare(namelen, info->s_namelen, name, de->name)) {
-				brelse(bh);
-				return -EEXIST;
-			}
-		} else {
+		if (!de->inode) {
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
 			mark_inode_dirty(dir);
 			for (i = 0; i < info->s_namelen ; i++)

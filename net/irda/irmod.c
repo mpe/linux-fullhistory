@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:55:39 1997
- * Modified at:   Mon May 10 15:28:49 1999
+ * Modified at:   Fri May 14 13:46:02 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
@@ -45,7 +45,7 @@
 #include <net/irda/wrapper.h>
 #include <net/irda/timer.h>
 
-extern struct proc_dir_entry proc_irda;
+extern struct proc_dir_entry *proc_irda;
 
 struct irda_cb irda; /* One global instance */
 

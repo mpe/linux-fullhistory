@@ -503,7 +503,7 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	sb->s_dev = dev;
 	sb->s_op = &sysv_sops;
 	root_inode = iget(sb,SYSV_ROOT_INO);
-	sb->s_root = d_alloc_root(root_inode, NULL);
+	sb->s_root = d_alloc_root(root_inode);
 	if (!sb->s_root) {
 		printk("SysV FS: get root inode failed\n");
 		sysv_put_super(sb);

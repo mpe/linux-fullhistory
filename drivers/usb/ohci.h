@@ -60,14 +60,14 @@ struct ohci_td {
 #define TOGGLE_DATA1	(3 << 24)	/* force Data1 */
 #define td_force_toggle(b)	(((b) | 2) << 24)
 #define OHCI_TD_ERRCNT	(3 << 26)	/* error count */
-#define td_errorcount(td)	(((td).info >> 26) & 3)
-#define clear_td_errorcount(td)	((td)->info &= ~(__u32)OHCI_TD_ERRCNT)
+#define td_errorcount(td)	((le32_to_cpup(&(td).info) >> 26) & 3)
+#define clear_td_errorcount(td)	((td)->info &= cpu_to_le32(~(__u32)OHCI_TD_ERRCNT))
 #define OHCI_TD_CC	(0xf << 28)	/* condition code */
 #define OHCI_TD_CC_GET(td_i) (((td_i) >> 28) & 0xf)
 #define OHCI_TD_CC_NEW	(OHCI_TD_CC)	/* set this on all unaccessed TDs! */
-#define td_cc_notaccessed(td)	(((td).info >> 29) == 7)
-#define td_cc_accessed(td)	(((td).info >> 29) != 7)
-#define td_cc_noerror(td)	((((td).info) & OHCI_TD_CC) == 0)
+#define td_cc_notaccessed(td)	((le32_to_cpup(&(td).info) >> 29) == 7)
+#define td_cc_accessed(td)	((le32_to_cpup(&(td).info) >> 29) != 7)
+#define td_cc_noerror(td)	(((le32_to_cpup(&(td).info)) & OHCI_TD_CC) == 0)
 #define td_active(td)	(!td_cc_noerror((td)) && (td_errorcount((td)) < 3))
 #define td_done(td)	(td_cc_noerror((td)) || (td_errorcount((td)) == 3))
 
@@ -95,15 +95,17 @@ struct ohci_ed {
 } __attribute((aligned(16)));
 
 /* get the head_td */
-#define ed_head_td(ed)	((ed)->_head_td & 0xfffffff0)
+#define ed_head_td(ed)	(le32_to_cpup(&(ed)->_head_td) & 0xfffffff0)
+#define ed_tail_td(ed)	(le32_to_cpup(&(ed)->tail_td))
 
 /* save the carry & halted flag while setting the head_td */
-#define set_ed_head_td(ed, td)	((ed)->_head_td = (td) | ((ed)->_head_td & 3))
+#define set_ed_head_td(ed, td)	((ed)->_head_td = cpu_to_le32((td)) \
+				 | ((ed)->_head_td & cpu_to_le32(3)))
 
 /* Control the ED's halted flag */
-#define ohci_halt_ed(ed)	((ed)->_head_td |= 1)
-#define ohci_unhalt_ed(ed)	((ed)->_head_td &= ~(__u32)1)
-#define ohci_ed_halted(ed)	((ed)->_head_td & 1)
+#define ohci_halt_ed(ed)	((ed)->_head_td |= cpu_to_le32(1))
+#define ohci_unhalt_ed(ed)	((ed)->_head_td &= cpu_to_le32(~(__u32)1))
+#define ohci_ed_halted(ed)	((ed)->_head_td & cpu_to_le32(1))
 
 #define OHCI_ED_SKIP	(1 << 14)
 #define OHCI_ED_MPS	(0x7ff << 16)
@@ -130,8 +132,8 @@ struct ohci_ed {
  * driver or not.  If the bit is set, it is being used.
  */
 #define ED_ALLOCATED	(1 << 31)
-#define ed_allocated(ed)	((ed).status & ED_ALLOCATED)
-#define allocate_ed(ed)		((ed)->status |= ED_ALLOCATED)
+#define ed_allocated(ed)	(le32_to_cpup(&(ed).status) & ED_ALLOCATED)
+#define allocate_ed(ed)		((ed)->status |= cpu_to_le32(ED_ALLOCATED))
 
 /*
  * The HCCA (Host Controller Communications Area) is a 256 byte

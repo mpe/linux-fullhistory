@@ -5,7 +5,7 @@
  * same Gnu Public License that covers that work.
  *
  * Alphacode 0.82 (96/09/29) for Linux 2.0.0 (or later)
- * Copyrights (c) 1994,1995,1996 by M.Hipp (Michael.Hipp@student.uni-tuebingen.de)
+ * Copyrights (c) 1994,1995,1996 by M.Hipp (hippm@informatik.uni-tuebingen.de)
  *    [feel free to mail ....]
  *
  * when using as module: (no autoprobing!)

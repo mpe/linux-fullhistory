@@ -371,7 +371,7 @@ static int inet_create(struct socket *sock, int protocol)
 		if (protocol && protocol != IPPROTO_UDP)
 			goto free_and_noproto;
 		protocol = IPPROTO_UDP;
-		sk->no_check = UDP_NO_CHECK;
+		sk->no_check = UDP_CSUM_DEFAULT;
 		sk->ip_pmtudisc = IP_PMTUDISC_DONT;
 		prot=&udp_prot;
 		sock->ops = &inet_dgram_ops;

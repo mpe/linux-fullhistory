@@ -528,7 +528,7 @@ struct super_block *hpfs_read_super(struct super_block *s, void *options,
 	brelse(bh0);
 
 	hpfs_lock_iget(s, 1);
-	s->s_root = d_alloc_root(iget(s, s->s_hpfs_root), NULL);
+	s->s_root = d_alloc_root(iget(s, s->s_hpfs_root));
 	hpfs_unlock_iget(s);
 	unlock_super(s);
 	if (!s->s_root || !s->s_root->d_inode) {

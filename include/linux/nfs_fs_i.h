@@ -47,6 +47,10 @@ struct nfs_inode_info {
 	 * pages.
 	 */
 	struct nfs_wreq *	writeback;
+
+	/* Readdir caching information. */
+	void *cookies;
+	u32 direof;
 };
 
 /*

@@ -16,7 +16,7 @@
  *
  * comments/bugs/suggestions can be sent to:
  *   Michael Hipp
- *   email: Michael.Hipp@student.uni-tuebingen.de
+ *   email: hippm@informatik.uni-tuebingen.de
  *
  * sources:
  *   some things are from the 'ni6510-packet-driver for dos by Russ Nelson'
@@ -45,6 +45,7 @@
  */
 
 /*
+ * 99.Jun.8: added support for /proc/net/dev byte count for xosview (HK)
  * 96.Sept.29: virt_to_bus stuff added for new memory modell
  * 96.April.29: Added Harald Koenig's Patches (MH)
  * 96.April.13: enhanced error handling .. more tests (MH)
@@ -966,8 +967,10 @@ static void ni65_xmit_intr(struct device *dev,int csr0)
 				p->stats.tx_errors++;
 			tmdp->status2 = 0;
 		}
-		else
+		else {
+			p->stats.tx_bytes -= (short)(tmdp->blen);
 			p->stats.tx_packets++;
+		}
 
 #ifdef XMT_VIA_SKB
 		if(p->tmd_skb[p->tmdlast]) {
@@ -1054,6 +1057,7 @@ static void ni65_recv_intr(struct device *dev,int csr0)
 				eth_copy_and_sum(skb, (unsigned char *) p->recvbounce[p->rmdnum],len,0);
 #endif
 				p->stats.rx_packets++;
+				p->stats.rx_bytes += len;
 				skb->protocol=eth_type_trans(skb,dev);
 				netif_rx(skb);
 			}

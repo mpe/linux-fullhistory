@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Paul VanderSpek
  * Created at:    Wed Nov  4 11:46:16 1998
- * Modified at:   Thu May 13 08:03:27 1999
+ * Modified at:   Fri May 21 22:18:19 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -80,8 +80,6 @@ static unsigned int dma[] =
 
 static struct w83977af_ir *dev_self[] = { NULL, NULL, NULL, NULL};
 
-static struct st_fifo_entry prev;
-
 /* Some prototypes */
 static int  w83977af_open(int i, unsigned int iobase, unsigned int irq, 
                           unsigned int dma);
@@ -112,8 +110,6 @@ __initfunc(int w83977af_init(void))
         int i;
 
 	DEBUG(0, __FUNCTION__ "()\n");
-
-	prev.status = 0;
 
 	for (i=0; (io[i] < 2000) && (i < 4); i++) { 
 		int ioaddr = io[i];

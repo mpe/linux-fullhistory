@@ -6,7 +6,7 @@
  * Status:        Stable.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 17 20:54:32 1997
- * Modified at:   Sun May  9 22:45:06 1999
+ * Modified at:   Mon May 31 21:49:41 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -451,17 +451,16 @@ void irlmp_connect_indication(struct lsap_cb *self, struct sk_buff *skb)
 	ASSERT(skb != NULL, return;);
 	ASSERT(self->lap != NULL, return;);
 
-	DEBUG(0, __FUNCTION__ "(), slsap_sel=%02x, dlsap_sel=%02x\n", 
+	DEBUG(2, __FUNCTION__ "(), slsap_sel=%02x, dlsap_sel=%02x\n", 
 	      self->slsap_sel, self->dlsap_sel);
 
 	self->qos = *self->lap->qos;
 
-	lap_header_size = irlap_get_header_size(self->lap->irlap);
-
-	max_seg_size = self->lap->qos->data_size.value-LMP_HEADER-
-		lap_header_size;
+	max_seg_size = self->lap->qos->data_size.value-LMP_HEADER;
 	DEBUG(2, __FUNCTION__ "(), max_seg_size=%d\n", max_seg_size);
 	
+	lap_header_size = irlap_get_header_size(self->lap->irlap);
+
 	max_header_size = LMP_HEADER + lap_header_size;
 
 	DEBUG(2, __FUNCTION__ "(), max_header_size=%d\n", max_header_size);
@@ -519,11 +518,10 @@ void irlmp_connect_confirm(struct lsap_cb *self, struct sk_buff *skb)
 	ASSERT(self->lap != NULL, return;);
 	self->qos = *self->lap->qos;
 
-	lap_header_size = irlap_get_header_size(self->lap->irlap);
-
-	max_seg_size = self->lap->qos->data_size.value-LMP_HEADER-
-		lap_header_size;
+	max_seg_size = self->lap->qos->data_size.value-LMP_HEADER;
 	DEBUG(2, __FUNCTION__ "(), max_seg_size=%d\n", max_seg_size);
+
+	lap_header_size = irlap_get_header_size(self->lap->irlap);
 	
 	max_header_size = LMP_HEADER + lap_header_size;
 

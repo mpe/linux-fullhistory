@@ -109,6 +109,13 @@ ifeq ($(CONFIG_USB_CPIA),m)
   MIX_OBJS += cpia.o
 endif
 
+ifeq ($(CONFIG_USB_SCSI),y)
+  L_OBJS += usb_scsi.o
+  ifeq ($(CONFIG_USB_SCSI_DEBUG),y)
+    L_OBJS += usb_scsi_debug.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 keymap.o: keymap.c
@@ -116,8 +123,17 @@ keymap.o: keymap.c
 keymap.c: maps/serial.map maps/usb.map maps/fixup.map
 	./mkmap > $@
 
+keymap-mac.o: keymap-mac.c
+keymap-mac.c: maps/mac.map maps/usb.map
+	./mkmap.adb > $@
+
+ifneq ($(CONFIG_MAC_KEYBOARD),y)
 usb-keyboard.o: keymap.o keyboard.o
 	$(LD) $(LD_RFLAG) -r -o $@  keymap.o keyboard.o 
+else
+usb-keyboard.o: keymap-mac.o keyboard.o
+	$(LD) $(LD_RFLAG) -r -o $@  keymap-mac.o keyboard.o 
+endif
 
 usb-uhci.o: uhci.o uhci-debug.o 
 	$(LD) $(LD_RFLAG) -r -o $@  uhci.o uhci-debug.o 

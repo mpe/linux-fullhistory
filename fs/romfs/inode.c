@@ -132,7 +132,7 @@ romfs_read_super(struct super_block *s, void *data, int silent)
 	brelse(bh);
 
 	s->s_op	= &romfs_ops;
-	s->s_root = d_alloc_root(iget(s, sz), NULL);
+	s->s_root = d_alloc_root(iget(s, sz));
 
 	if (!s->s_root)
 		goto outnobh;

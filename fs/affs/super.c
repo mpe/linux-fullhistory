@@ -543,7 +543,7 @@ nobitmap:
 	root_inode = iget(s,root_block);
 	if (!root_inode)
 		goto out_no_root;
-	s->s_root  = d_alloc_root(root_inode, NULL);
+	s->s_root  = d_alloc_root(root_inode);
 	if (!s->s_root)
 		goto out_no_root;
 	s->s_root->d_op = &affs_dentry_operations;

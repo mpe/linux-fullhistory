@@ -650,7 +650,7 @@ fat_read_super(struct super_block *sb, void *data, int silent,
 	root_inode->i_ino = MSDOS_ROOT_INO;
 	fat_read_root(root_inode);
 	insert_inode_hash(root_inode);
-	sb->s_root = d_alloc_root(root_inode, NULL);
+	sb->s_root = d_alloc_root(root_inode);
 	if (!sb->s_root)
 		goto out_no_root;
 	if(i>=0) {

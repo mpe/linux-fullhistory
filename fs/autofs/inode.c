@@ -176,7 +176,7 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
 	 * Get the root inode and dentry, but defer checking for errors.
 	 */
 	root_inode = iget(s, AUTOFS_ROOT_INO);
-	root = d_alloc_root(root_inode, NULL);
+	root = d_alloc_root(root_inode);
 	pipe = NULL;
 
 	/*

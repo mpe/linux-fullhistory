@@ -176,6 +176,7 @@ source drivers/video/Config.in
 endmenu
 
 source drivers/char/Config.in
+source drivers/usb/Config.in
 source fs/Config.in
 
 mainmenu_option next_comment

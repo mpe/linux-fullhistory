@@ -169,20 +169,20 @@ static void remove_vfsmnt(kdev_t dev)
 
 int register_filesystem(struct file_system_type * fs)
 {
-        struct file_system_type ** tmp;
+	struct file_system_type ** tmp;
 
-        if (!fs)
-                return -EINVAL;
-        if (fs->next)
-                return -EBUSY;
-        tmp = &file_systems;
-        while (*tmp) {
-                if (strcmp((*tmp)->name, fs->name) == 0)
-                        return -EBUSY;
-                tmp = &(*tmp)->next;
-        }
-        *tmp = fs;
-        return 0;
+	if (!fs)
+		return -EINVAL;
+	if (fs->next)
+		return -EBUSY;
+	tmp = &file_systems;
+	while (*tmp) {
+		if (strcmp((*tmp)->name, fs->name) == 0)
+			return -EBUSY;
+		tmp = &(*tmp)->next;
+	}
+	*tmp = fs;
+	return 0;
 }
 
 #ifdef CONFIG_MODULES

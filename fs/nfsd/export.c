@@ -168,9 +168,8 @@ else
 					}
 				} while (NULL != (exp = exp->ex_next));
 		} while (nfsd_parentdev(&xdev));
-		if (xdentry == xdentry->d_parent) {
+		if (IS_ROOT(xdentry))
 			break;
-		}
 	} while ((xdentry = xdentry->d_parent));
 	exp = NULL;
 out:
@@ -204,7 +203,7 @@ dprintk("nfsd: exp_child mount under submount.\n");
 #endif
 						goto out;
 					}
-					if (ndentry == ndentry->d_parent)
+					if (IS_ROOT(ndentry))
 						break;
 				}
 		} while (NULL != (exp = exp->ex_next));

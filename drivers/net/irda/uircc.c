@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Dec 26 10:59:03 1998
- * Modified at:   Mon May 10 22:11:09 1999
+ * Modified at:   Wed May 19 15:29:56 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -216,7 +216,7 @@ static int uircc_open(int i, unsigned int iobase, unsigned int iobase2,
 	idev->netdev.open            = uircc_net_open;
 	idev->netdev.stop            = uircc_net_close;
 
-	irport_start(iobase2);
+	irport_start(idev, iobase2);
 
 	/* Open the IrDA device */
 	irda_device_open(idev, driver_name, self);
@@ -251,7 +251,7 @@ static int uircc_close(struct irda_device *idev)
 	/* Disable modem */
 	outb(0x00, iobase+UIRCC_CR10);
 
-	irport_stop(idev->io.iobase2);
+	irport_stop(idev, idev->io.iobase2);
 
 	/* Release the PORT that this driver is using */
 	DEBUG(4, __FUNCTION__ "(), Releasing Region %03x\n", idev->io.iobase);
@@ -350,7 +350,7 @@ static void uircc_change_speed(struct irda_device *idev, int speed)
 	case 37600:
 	case 57600:
 	case 115200:
- 		irport_start(idev->io.iobase2);
+ 		irport_start(idev, idev->io.iobase2);
 		irport_change_speed(idev, speed);
 
 		/* Some magic to disable FIR and enable SIR */
@@ -367,7 +367,7 @@ static void uircc_change_speed(struct irda_device *idev, int speed)
 		DEBUG(0, __FUNCTION__ "(), handling baud of 1152000\n");
 		break;
 	case 4000000:
-		irport_stop(idev->io.iobase2);
+		irport_stop(idev, idev->io.iobase2);
 
 		/* Some magic to disable SIR and enable FIR */
 		uircc_toshiba_cmd(&status, 0xffff, 0x001b, 0x0001);

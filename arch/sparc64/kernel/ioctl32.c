@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.62 1999/05/01 09:17:44 davem Exp $
+/* $Id: ioctl32.c,v 1.62.2.1 1999/06/09 04:53:03 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -37,6 +37,7 @@
 #include <linux/fb.h>
 #include <linux/ext2_fs.h>
 #include <linux/videodev.h>
+#include <linux/netdevice.h>
 
 #include <scsi/scsi.h>
 /* Ugly hack. */
@@ -416,6 +417,23 @@ struct ifconf32 {
         int     ifc_len;                        /* size of buffer       */
         __kernel_caddr_t32  ifcbuf;
 };
+
+static int dev_ifname32(unsigned int fd, unsigned long arg)
+{
+	struct device *dev;
+	struct ifreq32 ifr32;
+	int err;
+
+	if (copy_from_user(&ifr32, (struct ifreq32 *)arg, sizeof(struct ifreq32)))
+		return -EFAULT;
+
+	dev = dev_get_by_index(ifr32.ifr_ifindex);
+	if (!dev)
+		return -ENODEV;
+
+	err = copy_to_user((struct ifreq32 *)arg, &ifr32, sizeof(struct ifreq32));
+	return (err ? -EFAULT : 0);
+}
 
 static inline int dev_ifconf(unsigned int fd, unsigned long arg)
 {
@@ -1687,6 +1705,10 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		goto out;
 	}
 	switch (cmd) {
+	case SIOCGIFNAME:
+		error = dev_ifname32(fd, arg);
+		goto out;
+
 	case SIOCGIFCONF:
 		error = dev_ifconf(fd, arg);
 		goto out;

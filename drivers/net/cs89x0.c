@@ -739,7 +739,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		if (tickssofar < 5)
 			return 1;
 		if (net_debug > 0) printk("%s: transmit timed out, %s?\n", dev->name,
-			   tx_done(dev) ? "IRQ conflict" : "network cable problem");
+			   tx_done(dev) ? "IRQ conflict ?" : "network cable problem");
 		/* Try to restart the adaptor. */
 		dev->tbusy=0;
 		dev->trans_start = jiffies;

@@ -5,6 +5,7 @@
  *  Swap reorganised 29.12.95, Stephen Tweedie
  */
 
+#include <linux/config.h>
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
 #include <linux/kernel_stat.h>
@@ -573,7 +574,7 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	} else if (S_ISREG(swap_dentry->d_inode->i_mode)) {
 		error = -EBUSY;
 		for (i = 0 ; i < nr_swapfiles ; i++) {
-			if (i == type)
+			if (i == type || !swap_info[i].swap_file)
 				continue;
 			if (swap_dentry->d_inode == swap_info[i].swap_file->d_inode)
 				goto bad_swap;

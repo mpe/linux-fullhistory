@@ -137,10 +137,6 @@ nfs_put_super(struct super_block *sb)
 	if (!(server->flags & NFS_MOUNT_NONLM))
 		lockd_down();	/* release rpc.lockd */
 	rpciod_down();		/* release rpciod */
-	/*
-	 * Invalidate the dircache for this superblock.
-	 */
-	nfs_invalidate_dircache_sb(sb);
 
 	kfree(server->hostname);
 
@@ -184,6 +180,9 @@ nfs_block_size(unsigned int bsize, unsigned char *nrbitsp)
 
 	return bsize;
 }
+
+extern struct nfs_fh *nfs_fh_alloc(void);
+extern void nfs_fh_free(struct nfs_fh *p);
 
 /*
  * The way this works is that the mount process passes a structure
@@ -291,7 +290,7 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	 * Keep the super block locked while we try to get 
 	 * the root fh attributes.
 	 */
-	root_fh = kmalloc(sizeof(struct nfs_fh), GFP_KERNEL);
+	root_fh = nfs_fh_alloc();
 	if (!root_fh)
 		goto out_no_fh;
 	*root_fh = data->root;
@@ -302,7 +301,7 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	root_inode = __nfs_fhget(sb, &fattr);
 	if (!root_inode)
 		goto out_no_root;
-	sb->s_root = d_alloc_root(root_inode, NULL);
+	sb->s_root = d_alloc_root(root_inode);
 	if (!sb->s_root)
 		goto out_no_root;
 	sb->s_root->d_op = &nfs_dentry_operations;
@@ -325,7 +324,7 @@ out_no_root:
 out_no_fattr:
 	printk("nfs_read_super: get root fattr failed\n");
 out_free_fh:
-	kfree(root_fh);
+	nfs_fh_free(root_fh);
 out_no_fh:
 	rpciod_down();
 	goto out_shutdown;
@@ -432,10 +431,9 @@ nfs_zap_caches(struct inode *inode)
 	NFS_ATTRTIMEO(inode) = NFS_MINATTRTIMEO(inode);
 	NFS_CACHEINV(inode);
 
+	invalidate_inode_pages(inode);
 	if (S_ISDIR(inode->i_mode))
 		nfs_invalidate_dircache(inode);
-	else
-		invalidate_inode_pages(inode);
 }
 
 /*
@@ -479,6 +477,8 @@ nfs_fill_inode(struct inode *inode, struct nfs_fattr *fattr)
 		inode->i_size  = fattr->size;
 		inode->i_mtime = fattr->mtime.seconds;
 		NFS_OLDMTIME(inode) = fattr->mtime.seconds;
+		NFS_COOKIES(inode) = NULL;
+		NFS_WRITEBACK(inode) = NULL;
 	}
 	nfs_refresh_inode(inode, fattr);
 }
@@ -881,12 +881,25 @@ static struct file_system_type nfs_fs_type = {
 	NULL
 };
 
+extern int nfs_init_fhcache(void);
+extern int nfs_init_wreqcache(void);
+
 /*
  * Initialize NFS
  */
 int
 init_nfs_fs(void)
 {
+	int err;
+
+	err = nfs_init_fhcache();
+	if (err)
+		return err;
+
+	err = nfs_init_wreqcache();
+	if (err)
+		return err;
+
 #ifdef CONFIG_PROC_FS
 	rpc_register_sysctl();
 	rpc_proc_init();
@@ -917,6 +930,5 @@ cleanup_module(void)
 	rpc_proc_unregister("nfs");
 #endif
 	unregister_filesystem(&nfs_fs_type);
-	nfs_free_dircache();
 }
 #endif

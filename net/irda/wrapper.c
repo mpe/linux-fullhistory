@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Sun May  2 21:58:00 1999
+ * Modified at:   Fri May 28 20:30:24 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Modified at:   Fri May 28  3:11 CST 1999
  * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
@@ -219,7 +219,7 @@ static void state_outside_frame(struct irda_device *idev, __u8 byte)
 /*
  * Function state_begin_frame (idev, byte)
  *
- *    
+ *    Begin of frame detected
  *
  */
 static void state_begin_frame(struct irda_device *idev, __u8 byte)
@@ -231,6 +231,10 @@ static void state_begin_frame(struct irda_device *idev, __u8 byte)
 	case CE:
 		/* Stuffed byte */
 		idev->rx_buff.state = LINK_ESCAPE;
+
+		/* Time to initialize receive buffer */
+		idev->rx_buff.data = idev->rx_buff.head;
+		idev->rx_buff.len = 0;
 		break;
 	case EOF:
 		/* Abort frame */
@@ -239,11 +243,11 @@ static void state_begin_frame(struct irda_device *idev, __u8 byte)
 		idev->stats.rx_errors++;
 		idev->stats.rx_frame_errors++;
 		break;
-	default:
-		/* Got first byte of frame */
+	default:	
+		/* Time to initialize receive buffer */
 		idev->rx_buff.data = idev->rx_buff.head;
 		idev->rx_buff.len = 0;
-		
+
 		idev->rx_buff.data[idev->rx_buff.len++] = byte;
 		
 		idev->rx_buff.fcs = irda_fcs(INIT_FCS, byte);
@@ -293,7 +297,7 @@ static void state_link_escape(struct irda_device *idev, __u8 byte)
 /*
  * Function state_inside_frame (idev, byte)
  *
- *    
+ *    Handle bytes received within a frame
  *
  */
 static void state_inside_frame(struct irda_device *idev, __u8 byte)

@@ -11,6 +11,7 @@
 #include <linux/unistd.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
+#include <linux/sched.h>
 
 #include <asm/uaccess.h>
 
@@ -324,7 +325,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 
 		if (nr_queued_signals < max_queued_signals) {
 			q = (struct signal_queue *)
-			    kmem_cache_alloc(signal_queue_cachep, GFP_KERNEL);
+			    kmem_cache_alloc(signal_queue_cachep, GFP_ATOMIC);
 		}
 		
 		if (q) {
@@ -417,6 +418,7 @@ force_sig_info(int sig, struct siginfo *info, struct task_struct *t)
 	if (t->sig->action[sig-1].sa.sa_handler == SIG_IGN)
 		t->sig->action[sig-1].sa.sa_handler = SIG_DFL;
 	sigdelset(&t->blocked, sig);
+	recalc_sigpending(t);
 	spin_unlock_irqrestore(&t->sigmask_lock, flags);
 
 	return send_sig_info(sig, info, t);

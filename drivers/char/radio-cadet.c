@@ -1,7 +1,7 @@
 /* cadet.c - A video4linux driver for the ADS Cadet AM/FM Radio Card 
  *
  * by Fred Gleason <fredg@wava.com>
- * Version 0.3.1
+ * Version 0.3.2
  *
  * (Loosely) based on code for the Aztech radio card by
  *
@@ -557,7 +557,7 @@ __initfunc(int cadet_init(struct video_init *v))
 		return -EINVAL;
 		
 	request_region(io,2,"cadet");
-	printk(KERN_INFO "ADS Cadet Radio Card at %x\n",io);
+	printk(KERN_INFO "ADS Cadet Radio Card at 0x%x\n",io);
 	return 0;
 }
 
@@ -570,12 +570,11 @@ static int cadet_probe(void)
 
 	for(i=0;i<8;i++) {
 	        io=iovals[i];
-	        if(check_region(io,2)) {
-	                return -1;
-		}  
-		cadet_setfreq(1410);
-		if(cadet_getfreq()==1410) {
-		        return io;
+	        if(check_region(io,2)>=0) {
+		        cadet_setfreq(1410);
+			if(cadet_getfreq()==1410) {
+			        return io;
+			}
 		}
 	}
 	return -1;

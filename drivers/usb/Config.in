@@ -29,7 +29,11 @@ if [ ! "$CONFIG_USB" = "n" ]; then
   dep_tristate 'USB keyboard support' CONFIG_USB_KBD $CONFIG_USB
   dep_tristate 'USB audio parsing support' CONFIG_USB_AUDIO $CONFIG_USB
   dep_tristate 'USB Abstract Control Model support' CONFIG_USB_ACM $CONFIG_USB
-  dep_tristate 'Preliminary USB Printer support' CONFIG_USB_PRINTER $CONFIG_USB
+  dep_tristate 'USB Printer support' CONFIG_USB_PRINTER $CONFIG_USB
+  dep_tristate 'USB SCSI Support' CONFIG_USB_SCSI $CONFIG_USB
+  if [ "$CONFIG_USB_SCSI" != "n" ]; then
+	  dep_tristate '  USB SCSI verbose debug' CONFIG_USB_SCSI_DEBUG $CONFIG_USB_SCSI
+  fi
 fi
 
 endmenu

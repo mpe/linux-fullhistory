@@ -546,7 +546,7 @@ void d_instantiate(struct dentry *entry, struct inode * inode)
 	entry->d_inode = inode;
 }
 
-struct dentry * d_alloc_root(struct inode * root_inode, struct dentry *old_root)
+struct dentry * d_alloc_root(struct inode * root_inode)
 {
 	struct dentry *res = NULL;
 

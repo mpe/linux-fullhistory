@@ -241,8 +241,8 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 		return;
 	}
 
-	portstatus = *((unsigned short *)buf + 0);
-	portchange = *((unsigned short *)buf + 1);
+	portstatus = le16_to_cpup((unsigned short *)buf + 0);
+	portchange = le16_to_cpup((unsigned short *)buf + 1);
 
 	if ((!(portstatus & USB_PORT_STAT_CONNECTION)) &&
 		(!(portstatus & USB_PORT_STAT_ENABLE))) {
@@ -294,8 +294,8 @@ static void usb_hub_events(void)
 				continue;
 			}
 
-			portstatus = *((unsigned short *)buf + 0);
-			portchange = *((unsigned short *)buf + 1);
+			portstatus = le16_to_cpup((unsigned short *)buf + 0);
+			portchange = le16_to_cpup((unsigned short *)buf + 1);
 
 			if (portchange & USB_PORT_STAT_C_CONNECTION) {
 				printk("hub: port %d connection change\n", i + 1);

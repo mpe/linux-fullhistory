@@ -629,7 +629,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	 */
 	sb->s_dev = dev;
 	sb->s_op = &ext2_sops;
-	sb->s_root = d_alloc_root(iget(sb, EXT2_ROOT_INO), NULL);
+	sb->s_root = d_alloc_root(iget(sb, EXT2_ROOT_INO));
 	if (!sb->s_root) {
 		sb->s_dev = 0;
 		for (i = 0; i < db_count; i++)

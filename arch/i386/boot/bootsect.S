@@ -58,12 +58,12 @@ _main:
 	mov	ds,ax
 	mov	ax,#INITSEG
 	mov	es,ax
-	mov	cx,#256
+	mov	cx,#128
 	sub	si,si
 	sub	di,di
 	cld
 	rep
-	movsw
+	movsd
 	jmpi	go,INITSEG
 
 ! ax and es already contain INITSEG

@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      tekram.c
- * Version:       1.1
+ * Version:       1.2
  * Description:   Implementation of the Tekram IrMate IR-210B dongle
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 20:02:35 1998
- * Modified at:   Mon May 10 16:10:17 1999
+ * Modified at:   Sun May 16 14:33:42 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -28,16 +28,12 @@
 #include <linux/sched.h>
 #include <linux/init.h>
 
-#include <asm/ioctls.h>
-#include <asm/segment.h>
-#include <asm/uaccess.h>
-
 #include <net/irda/irda.h>
 #include <net/irda/irda_device.h>
 #include <net/irda/irtty.h>
 #include <net/irda/dongle.h>
 
-static void tekram_reset(struct irda_device *dev, int unused);
+static void tekram_reset(struct irda_device *dev);
 static void tekram_open(struct irda_device *dev, int type);
 static void tekram_close(struct irda_device *dev);
 static void tekram_change_speed(struct irda_device *dev, int baud);
@@ -49,7 +45,7 @@ static void tekram_init_qos(struct irda_device *idev, struct qos_info *qos);
 #define TEKRAM_19200  0x03
 #define TEKRAM_9600   0x04
 
-#define TEKRAM_PW 0x10 /* Pulse select bit */
+#define TEKRAM_PW     0x10 /* Pulse select bit */
 
 static struct dongle dongle = {
 	TEKRAM_DONGLE,
@@ -112,7 +108,7 @@ static void tekram_change_speed(struct irda_device *idev, int baud)
 
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
-	
+
 	switch (baud) {
 	default:
 	case 9600:
@@ -121,7 +117,7 @@ static void tekram_change_speed(struct irda_device *idev, int baud)
 	case 19200:
 		byte = TEKRAM_PW|TEKRAM_19200;
 		break;
-	case 34800:
+	case 38400:
 		byte = TEKRAM_PW|TEKRAM_38400;
 		break;
 	case 57600:
@@ -132,6 +128,9 @@ static void tekram_change_speed(struct irda_device *idev, int baud)
 		break;
 	}
 
+	/* Need to reset the dongle and go to 9600 bps before programming */
+	tekram_reset(idev);
+	
 	/* Set DTR, Clear RTS */
 	irda_device_set_dtr_rts(idev, TRUE, FALSE);
 	
@@ -162,7 +161,7 @@ static void tekram_change_speed(struct irda_device *idev, int baud)
  *        3. clear DTR to SPACE state, wait at least 50 us for further 
  *         operation
  */
-void tekram_reset(struct irda_device *idev, int unused)
+void tekram_reset(struct irda_device *idev)
 {
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -185,8 +184,10 @@ void tekram_reset(struct irda_device *idev, int unused)
 	irda_device_set_dtr_rts(idev, TRUE, TRUE);
 	
 	udelay(50);
-
-	/* Finished! */
+	
+	/* Make sure the IrDA chip also goes to defalt speed */
+	if (idev->change_speed)
+		idev->change_speed(idev, 9600);
 }
 
 /*

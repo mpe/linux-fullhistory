@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 20:02:35 1998
- * Modified at:   Mon May 10 15:12:54 1999
+ * Modified at:   Sun May 16 14:35:11 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -29,20 +29,15 @@
 #include <linux/sched.h>
 #include <linux/init.h>
 
-#include <asm/ioctls.h>
-#include <asm/segment.h>
-#include <asm/uaccess.h>
-
 #include <net/irda/irda.h>
 #include <net/irda/irmod.h>
 #include <net/irda/irda_device.h>
 #include <net/irda/dongle.h>
 
-static void actisys_reset(struct irda_device *dev, int unused);
+static void actisys_reset(struct irda_device *dev);
 static void actisys_open(struct irda_device *idev, int type);
 static void actisys_close(struct irda_device *dev);
 static void actisys_change_speed( struct irda_device *dev, int baudrate);
-static void actisys_reset(struct irda_device *dev, int unused);
 static void actisys_init_qos(struct irda_device *idev, struct qos_info *qos);
 
 /* These are the baudrates supported */
@@ -169,7 +164,7 @@ static void actisys_change_speed(struct irda_device *idev, int baudrate)
  *    	1. Clear DTR for a few ms.
  *
  */
-static void actisys_reset(struct irda_device *idev, int unused)
+static void actisys_reset(struct irda_device *idev)
 {
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);

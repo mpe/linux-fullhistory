@@ -77,9 +77,9 @@ typedef enum {
 
 #define IRCOMM_MAGIC            0x434f4d4d
 #define COMM_INIT_CTRL_PARAM    3          /* length of initial control parameters */
-#define COMM_HEADER             1          /* length of clen field */
-#define COMM_HEADER_SIZE        (TTP_MAX_HEADER+COMM_HEADER)
-#define COMM_DEFAULT_DATA_SIZE  64
+#define COMM_HEADER_SIZE        1          /* length of clen field */
+#define COMM_MAX_HEADER_SIZE    (TTP_MAX_HEADER+COMM_HEADER_SIZE)
+#define COMM_DEFAULT_SDU_SIZE   (64 - COMM_HEADER_SIZE)
 #define IRCOMM_MAX_CONNECTION   1          /* Don't change for now */
 
 
@@ -177,8 +177,8 @@ struct ircomm_cb {
 	int null_modem_mode;     /* switch for null modem emulation */
 	int ttp_stop;
 
-	int max_txbuff_size;          
-	__u32 max_sdu_size;
+	__u32 tx_max_sdu_size;          
+	__u32 rx_max_sdu_size;
 	__u8 max_header_size;
 
  	__u32 daddr;        /* Device address of the peer device */ 

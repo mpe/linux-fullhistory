@@ -486,7 +486,7 @@ int do_pipe(int *fd)
 	j = error;
 
 	error = -ENOMEM;
-	f1->f_dentry = f2->f_dentry = dget(d_alloc_root(inode, NULL));
+	f1->f_dentry = f2->f_dentry = dget(d_alloc_root(inode));
 	if (!f1->f_dentry)
 		goto close_f12_inode_i_j;
 

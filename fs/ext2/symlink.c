@@ -68,7 +68,6 @@ static struct dentry * ext2_follow_link(struct dentry * dentry,
 		}
 		link = bh->b_data;
 	}
-	UPDATE_ATIME(inode);
 	base = lookup_dentry(link, base, follow);
 	if (bh)
 		brelse(bh);

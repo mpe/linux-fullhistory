@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr 14 12:41:42 1998
- * Modified at:   Mon May 10 15:46:02 1999
+ * Modified at:   Wed May 19 08:44:48 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -124,14 +124,14 @@ struct irda_device {
 
 	struct dongle *dongle; /* Dongle driver */
 
-	/* spinlock_t lock; */ /* For serializing operations */
+	spinlock_t lock;       /* For serializing operations */
 	
 	/* Media busy stuff */
 	int media_busy;
 	struct timer_list media_busy_timer;
 
 	/* Callbacks for driver specific implementation */
-        void (*change_speed)(struct irda_device *driver, int baud);
+        void (*change_speed)(struct irda_device *idev, int baud);
  	int  (*is_receiving)(struct irda_device *);    /* receiving? */
 	void (*set_dtr_rts)(struct irda_device *idev, int dtr, int rts);
 	int  (*raw_write)(struct irda_device *idev, __u8 *buf, int len);
