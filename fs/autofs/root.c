@@ -104,19 +104,27 @@ static int try_to_fill_dentry(struct dentry *dentry, struct super_block *sb, str
 {
 	struct inode * inode;
 	struct autofs_dir_ent *ent;
+	int status = 0;
 
-	while (!(ent = autofs_hash_lookup(&sbi->dirhash, &dentry->d_name))) {
-		int status = autofs_wait(sbi, &dentry->d_name);
+	if ( !(ent = autofs_hash_lookup(&sbi->dirhash, &dentry->d_name)) ) {
+		do {
+			if ( status && dentry->d_inode ) {
+				printk("autofs: lookup failure on existing dentry, status = %d, name = %s\n", status, dentry->d_name.name);
+				printk("autofs: trying to recover, but prepare for Armageddon\n");
+				break;
+			}
 
-		/* Turn this into a real negative dentry? */
-		if (status == -ENOENT) {
-			dentry->d_time = jiffies + AUTOFS_NEGATIVE_TIMEOUT;
-			dentry->d_flags &= ~DCACHE_AUTOFS_PENDING;
-			return 1;
-		} else if (status) {
-			/* Return a negative dentry, but leave it "pending" */
-			return 1;
-		}
+			/* Turn this into a real negative dentry? */
+			if (status == -ENOENT) {
+				dentry->d_time = jiffies + AUTOFS_NEGATIVE_TIMEOUT;
+				dentry->d_flags &= ~DCACHE_AUTOFS_PENDING;
+				return 1;
+			} else if (status) {
+				/* Return a negative dentry, but leave it "pending" */
+				return 1;
+			}
+			status = autofs_wait(sbi, &dentry->d_name);
+		} while (!(ent = autofs_hash_lookup(&sbi->dirhash, &dentry->d_name)) );
 	}
 
 	/* Abuse this field as a pointer to the directory entry, used to

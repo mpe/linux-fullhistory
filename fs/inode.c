@@ -759,3 +759,12 @@ int fs_may_remount_ro(struct super_block *sb)
 	}
 	return 1; /* Tis' cool bro. */
 }
+
+void update_atime (struct inode *inode)
+{
+    if ( IS_NOATIME (inode) ) return;
+    if ( IS_NODIRATIME (inode) && S_ISDIR (inode->i_mode) ) return;
+    if ( IS_RDONLY (inode) ) return;
+    inode->i_atime = CURRENT_TIME;
+    mark_inode_dirty (inode);
+}   /*  End Function update_atime  */

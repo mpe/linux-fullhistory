@@ -751,7 +751,7 @@ page_read_error:
 	filp->f_reada = 1;
 	if (page_cache)
 		free_page(page_cache);
-	UPDATE_ATIME(inode)
+	UPDATE_ATIME(inode);
 	if (!read)
 		read = error;
 	return read;

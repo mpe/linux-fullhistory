@@ -17,6 +17,7 @@
 #include <linux/ioctl.h>
 #include <linux/list.h>
 #include <linux/dcache.h>
+#include <linux/stat.h>
 
 #include <asm/atomic.h>
 #include <asm/bitops.h>
@@ -90,11 +91,12 @@ extern int max_files, nr_files, nr_free_files;
 #define S_APPEND	256	/* Append-only file */
 #define S_IMMUTABLE	512	/* Immutable file */
 #define MS_NOATIME	1024	/* Do not update access times. */
+#define MS_NODIRATIME   2048    /* Do not update directory access times */
 
 /*
  * Flags that can be altered by MS_REMOUNT
  */
-#define MS_RMT_MASK (MS_RDONLY|MS_NOSUID|MS_NODEV|MS_NOEXEC|MS_SYNCHRONOUS|MS_MANDLOCK|MS_NOATIME)
+#define MS_RMT_MASK (MS_RDONLY|MS_NOSUID|MS_NODEV|MS_NOEXEC|MS_SYNCHRONOUS|MS_MANDLOCK|MS_NOATIME|MS_NODIRATIME)
 
 /*
  * Magic mount flag number. Has to be or-ed to the flag values.
@@ -121,12 +123,10 @@ extern int max_files, nr_files, nr_free_files;
 #define IS_APPEND(inode) ((inode)->i_flags & S_APPEND)
 #define IS_IMMUTABLE(inode) ((inode)->i_flags & S_IMMUTABLE)
 #define IS_NOATIME(inode) ((inode)->i_flags & MS_NOATIME)
+#define IS_NODIRATIME(inode) ((inode)->i_flags & MS_NODIRATIME)
 
-#define UPDATE_ATIME(inode) \
-	if (!IS_NOATIME(inode) && !IS_RDONLY(inode)) { \
-		inode->i_atime = CURRENT_TIME; \
-		mark_inode_dirty(inode); \
-	}
+extern void update_atime (struct inode *inode);
+#define UPDATE_ATIME(inode) update_atime (inode)
 
 /* the read-only stuff doesn't really belong here, but any other place is
    probably as bad and I don't want to create yet another include file. */
@@ -313,6 +313,7 @@ struct iattr {
 #define ATTR_FLAG_NOATIME	2 	/* Don't update atime */
 #define ATTR_FLAG_APPEND	4 	/* Append-only file */
 #define ATTR_FLAG_IMMUTABLE	8 	/* Immutable file */
+#define ATTR_FLAG_NODIRATIME	16 	/* Don't update atime for directory */
 
 #include <linux/quota.h>
 
