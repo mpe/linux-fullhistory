@@ -71,6 +71,10 @@ void binfmt_setup(void)
 	init_elf_binfmt();
 #endif
 
+#ifdef CONFIG_BINFMT_ELF32
+	init_elf32_binfmt();
+#endif
+
 #ifdef CONFIG_BINFMT_AOUT
 	init_aout_binfmt();
 #endif

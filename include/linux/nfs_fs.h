@@ -190,6 +190,12 @@ extern int  nfs_readpage(struct inode *, struct page *);
 extern int  nfs_readpage_sync(struct inode *, struct page *);
 
 /*
+ * linux/fs/mount_clnt.c
+ * (Used only by nfsroot module)
+ */
+extern int  nfs_mount(struct sockaddr_in *, char *, struct nfs_fh *);
+
+/*
  * inline functions
  */
 static inline int
@@ -232,6 +238,7 @@ extern char nfs_root_addrs[];
 #define NFSDBG_PROC		0x0010
 #define NFSDBG_XDR		0x0020
 #define NFSDBG_FILE		0x0040
+#define NFSDBG_ROOT		0x0080
 #define NFSDBG_ALL		0xFFFF
 
 #ifdef __KERNEL__

@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.43 1997/01/25 04:42:51 davem Exp $
+/* $Id: bitops.h,v 1.46 1997/04/13 06:38:24 davem Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -99,7 +99,6 @@ extern __inline__ unsigned long set_bit(unsigned long nr, __SMPVOL void *addr)
 {
 	register unsigned long mask asm("g2");
 	register unsigned long *ADDR asm("g1");
-
 	ADDR = ((unsigned long *) addr) + (nr >> 5);
 	mask = 1 << (nr & 31);
 	__asm__ __volatile__("
@@ -108,7 +107,7 @@ extern __inline__ unsigned long set_bit(unsigned long nr, __SMPVOL void *addr)
 	 add	%%o7, 8, %%o7
 "	: "=&r" (mask)
 	: "0" (mask), "r" (ADDR)
-	: "g3", "g4", "g5", "g7");
+	: "g3", "g4", "g5", "g7", "cc");
 
 	return mask;
 }
@@ -126,7 +125,7 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, __SMPVOL void *addr)
 	 add	%%o7, 8, %%o7
 "	: "=&r" (mask)
 	: "0" (mask), "r" (ADDR)
-	: "g3", "g4", "g5", "g7");
+	: "g3", "g4", "g5", "g7", "cc");
 
 	return mask;
 }
@@ -144,7 +143,7 @@ extern __inline__ unsigned long change_bit(unsigned long nr, __SMPVOL void *addr
 	 add	%%o7, 8, %%o7
 "	: "=&r" (mask)
 	: "0" (mask), "r" (ADDR)
-	: "g3", "g4", "g5", "g7");
+	: "g3", "g4", "g5", "g7", "cc");
 
 	return mask;
 }
@@ -276,7 +275,7 @@ extern __inline__ int set_le_bit(int nr,void * addr)
 	 add	%%o7, 8, %%o7
 "	: "=&r" (mask)
 	: "0" (mask), "r" (ADDR)
-	: "g3", "g4", "g5", "g7");
+	: "g3", "g4", "g5", "g7", "cc");
 
 	return mask;
 }
@@ -294,7 +293,7 @@ extern __inline__ int clear_le_bit(int nr, void * addr)
 	 add	%%o7, 8, %%o7
 "	: "=&r" (mask)
 	: "0" (mask), "r" (ADDR)
-	: "g3", "g4", "g5", "g7");
+	: "g3", "g4", "g5", "g7", "cc");
 
 	return mask;
 }

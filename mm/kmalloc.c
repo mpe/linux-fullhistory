@@ -266,8 +266,8 @@ void *kmalloc(size_t size, int priority)
 	priority &= GFP_LEVEL_MASK;
 
 /* Sanity check... */
-#if 0	/* no longer valid */
-	if (intr_count && priority != GFP_ATOMIC) {
+
+	if (in_interrupt() && priority != GFP_ATOMIC) {
 		static int count = 0;
 		if (++count < 5) {
 			printk("kmalloc called nonatomically from interrupt %p\n",
@@ -275,7 +275,7 @@ void *kmalloc(size_t size, int priority)
 			priority = GFP_ATOMIC;
 		}
 	}
-#endif
+
 	save_flags(flags);
 	cli();
 	page = *pg;

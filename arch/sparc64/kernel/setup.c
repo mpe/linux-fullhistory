@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.1 1997/03/11 17:37:04 jj Exp $
+/*  $Id: setup.c,v 1.5 1997/04/04 00:49:52 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -96,7 +96,7 @@ void prom_sync_me(long *args)
 
 extern void rs_kgdb_hook(int tty_num); /* sparc/serial.c */
 
-unsigned int boot_flags;
+unsigned int boot_flags = 0;
 #define BOOTME_DEBUG  0x1
 #define BOOTME_SINGLE 0x2
 #define BOOTME_KGDB   0x4
@@ -109,10 +109,12 @@ static unsigned long memory_size = 0;
 
 void kernel_enter_debugger(void)
 {
+#if 0
 	if (boot_flags & BOOTME_KGDB) {
 		printk("KGDB: Entered\n");
 		breakpoint();
 	}
+#endif
 }
 
 int obp_system_intr(void)
@@ -205,7 +207,7 @@ __initfunc(static void boot_flags_init(char *commands))
 #endif
 			if (!strncmp(commands, "mem=", 4)) {
 				/*
-				 * "mem=XXX[kKmM] overrides the PROM-reported
+				 * "mem=XXX[kKmM]" overrides the PROM-reported
 				 * memory size.
 				 */
 				memory_size = simple_strtoul(commands + 4,
@@ -245,9 +247,14 @@ extern void register_console(void (*proc)(const char *));
 char saved_command_line[256];
 char reboot_command[256];
 
+unsigned long phys_base;
+
+static struct pt_regs fake_swapper_regs = { { 0, }, 0, 0, 0, 0 };
+
 __initfunc(void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
+	unsigned long lowest_paddr;
 	int total, i;
 
 	/* Initialize PROM console and command line. */
@@ -271,11 +278,12 @@ __initfunc(void setup_arch(char **cmdline_p,
 #endif	
 
 	idprom_init();
-	load_mmu();
 	total = prom_probe_memory();
-	*memory_start_p = (((unsigned long) &end));
 
+	lowest_paddr = 0xffffffffffffffffUL;
 	for(i=0; sp_banks[i].num_bytes != 0; i++) {
+		if(sp_banks[i].base_addr < lowest_paddr)
+			lowest_paddr = sp_banks[i].base_addr;
 		end_of_phys_memory = sp_banks[i].base_addr +
 			sp_banks[i].num_bytes;
 		if (memory_size) {
@@ -290,7 +298,19 @@ __initfunc(void setup_arch(char **cmdline_p,
 	}
 	prom_setsync(prom_sync_me);
 
-	*memory_end_p = (end_of_phys_memory + KERNBASE);
+	/* In paging_init() we tip off this value to see if we need
+	 * to change init_mm.pgd to point to the real alias mapping.
+	 */
+	phys_base = lowest_paddr;
+
+	*memory_start_p = PAGE_ALIGN(((unsigned long) &end));
+	*memory_end_p = (end_of_phys_memory + PAGE_OFFSET);
+
+#ifndef NO_DAVEM_DEBUGGING
+	prom_printf("phys_base[%016lx] memory_start[%016lx] memory_end[%016lx]\n",
+		    phys_base, *memory_start_p, *memory_end_p);
+#endif
+
 	if (!root_flags)
 		root_mountflags &= ~MS_RDONLY;
 	ROOT_DEV = to_kdev_t(root_dev);
@@ -302,7 +322,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (ramdisk_image) {
 		initrd_start = ramdisk_image;
-		if (initrd_start < KERNBASE) initrd_start += KERNBASE;
+		if (initrd_start < PAGE_OFFSET) initrd_start += PAGE_OFFSET;
 		initrd_end = initrd_start + ramdisk_size;
 		if (initrd_end > *memory_end_p) {
 			printk(KERN_CRIT "initrd extends beyond end of memory "
@@ -318,12 +338,11 @@ __initfunc(void setup_arch(char **cmdline_p,
 #endif	
 
 	/* Due to stack alignment restrictions and assumptions... */
-#if 0	
 	init_task.mm->mmap->vm_page_prot = PAGE_SHARED;
-	init_task.mm->mmap->vm_start = KERNBASE;
+	init_task.mm->mmap->vm_start = PAGE_OFFSET;
 	init_task.mm->mmap->vm_end = *memory_end_p;
 	init_task.mm->context = (unsigned long) NO_CONTEXT;
-#endif	
+	init_task.tss.kregs = &fake_swapper_regs;
 
 #ifdef CONFIG_SUN_SERIAL
 	*memory_start_p = sun_serial_setup(*memory_start_p); /* set this up ASAP */
@@ -334,7 +353,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 		serial_console = 0;
 #else
 		switch (console_fb) {
-		case 0: /* Let get our io devices from prom */
+		case 0: /* Let's get our io devices from prom */
 			{
 				int idev = prom_query_input_device();
 				int odev = prom_query_output_device();

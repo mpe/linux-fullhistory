@@ -357,7 +357,8 @@ void rose_destroy_socket(struct sock *sk)	/* Not static as it's used by the time
 		kfree_skb(skb, FREE_READ);
 	}
 
-	if (sk->wmem_alloc != 0 || sk->rmem_alloc != 0) {	/* Defer: outstanding buffers */
+	if (atomic_read(&sk->wmem_alloc) != 0 || atomic_read(&sk->rmem_alloc) != 0) {
+		/* Defer: outstanding buffers */
 		init_timer(&sk->timer);
 		sk->timer.expires  = jiffies + 10 * HZ;
 		sk->timer.function = rose_destroy_timer;
@@ -1184,7 +1185,7 @@ static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case TIOCOUTQ:
 			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned int))) != 0)
 				return err;
-			amount = sk->sndbuf - sk->wmem_alloc;
+			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if (amount < 0)
 				amount = 0;
 			put_user(amount, (unsigned int *)arg);
@@ -1290,7 +1291,7 @@ static int rose_get_info(char *buffer, char **start, off_t offset, int length, i
 			s->protinfo.rose->t2    / ROSE_SLOWHZ,
 			s->protinfo.rose->t3    / ROSE_SLOWHZ,
 			s->protinfo.rose->hb    / ROSE_SLOWHZ,
-			s->wmem_alloc, s->rmem_alloc);
+			atomic_read(&s->wmem_alloc), atomic_read(&s->rmem_alloc));
 
 		pos = begin + len;
 

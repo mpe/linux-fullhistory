@@ -7,6 +7,7 @@
  * occurs and we were called as clear_user.
  */
 
+#include <asm/asi.h>
 #include <asm/ptrace.h>
 
 #define EX(x,y,a,b,z) 				\
@@ -32,29 +33,29 @@
  * in the .fixup section below as well.
  * Store 64 bytes at (BASE + OFFSET) using value SOURCE. */
 #define ZERO_BIG_BLOCK(base, offset, source)    \
-	stx	source, [base + offset + 0x00]; \
-	stx	source, [base + offset + 0x08]; \
-	stx	source, [base + offset + 0x10]; \
-	stx	source, [base + offset + 0x18]; \
-	stx	source, [base + offset + 0x20]; \
-	stx	source, [base + offset + 0x28]; \
-	stx	source, [base + offset + 0x30]; \
-	stx	source, [base + offset + 0x38];
+	stxa	source, [base + offset + 0x00] %asi; \
+	stxa	source, [base + offset + 0x08] %asi; \
+	stxa	source, [base + offset + 0x10] %asi; \
+	stxa	source, [base + offset + 0x18] %asi; \
+	stxa	source, [base + offset + 0x20] %asi; \
+	stxa	source, [base + offset + 0x28] %asi; \
+	stxa	source, [base + offset + 0x30] %asi; \
+	stxa	source, [base + offset + 0x38] %asi;
 
 #define ZERO_LAST_BLOCKS(base, offset, source)	\
-	stx	source, [base - offset - 0x38]; \
-	stx	source, [base - offset - 0x30]; \
-	stx	source, [base - offset - 0x28]; \
-	stx	source, [base - offset - 0x20]; \
-	stx	source, [base - offset - 0x18]; \
-	stx	source, [base - offset - 0x10]; \
-	stx	source, [base - offset - 0x08]; \
-	stx	source, [base - offset - 0x00];
+	stxa	source, [base - offset - 0x38] %asi; \
+	stxa	source, [base - offset - 0x30] %asi; \
+	stxa	source, [base - offset - 0x28] %asi; \
+	stxa	source, [base - offset - 0x20] %asi; \
+	stxa	source, [base - offset - 0x18] %asi; \
+	stxa	source, [base - offset - 0x10] %asi; \
+	stxa	source, [base - offset - 0x08] %asi; \
+	stxa	source, [base - offset - 0x00] %asi;
 
 	.text
 	.align 4
 
-	.globl	__bzero, __memset
+	.globl	__bzero, __memset, __bzero_noasi
 	.globl	memset, __memset_start, __memset_end
 __memset_start:
 __memset:
@@ -65,10 +66,13 @@ memset:
 	sll	%g3, 16, %g2
 	or	%g3, %g2, %g3
 	mov	%o2, %o1
+	wr	%g0, ASI_P, %asi
 	sllx	%g3, 32, %g2
 	ba,pt	%xcc, 1f
 	 or	%g3, %g2, %g3
 __bzero:
+	wr	%g0, ASI_P, %asi
+__bzero_noasi:
 	mov	%g0, %g3
 1:
 	cmp	%o1, 7
@@ -80,13 +84,13 @@ __bzero:
 
 	cmp	%o2, 3
 	be,pn	%icc, 2f
-	 EX(stb	%g3, [%o0], sub %o1, 0,#)
+	 EX(stba	%g3, [%o0] %asi, sub %o1, 0,#)
 
 	cmp	%o2, 2
 	be,pt	%icc, 2f
-	 EX(stb	%g3, [%o0 + 0x01], sub %o1, 1,#)
+	 EX(stba	%g3, [%o0 + 0x01] %asi, sub %o1, 1,#)
 
-	EX(stb	%g3, [%o0 + 0x02], sub %o1, 2,#)
+	EX(stba	%g3, [%o0 + 0x02] %asi, sub %o1, 2,#)
 2:
 	sub	%o2, 4, %o2
 	sub	%o0, %o2, %o0
@@ -96,7 +100,7 @@ __bzero:
 	be,a,pt	%icc, 2f
 	 andncc	%o1, 0x7f, %o3
 
-	EX(st	%g3, [%o0], sub %o1, 0,#)
+	EX(sta	%g3, [%o0] %asi, sub %o1, 0,#)
 	sub	%o1, 4, %o1
 	add	%o0, 4, %o0
 	andncc	%o1, 0x7f, %o3		! Now everything is 8 aligned and o1 is len to run
@@ -132,17 +136,17 @@ __bzero:
 	be,pn	%icc, 1f
 	 andcc	%o1, 2, %g0
 
-	EX(st	%g3, [%o0], and %o1, 7,#)
+	EX(sta	%g3, [%o0] %asi, and %o1, 7,#)
 	add	%o0, 4, %o0
 1:
 	be,pn	%icc, 1f
 	 andcc	%o1, 1, %g0
 
-	EX(sth	%g3, [%o0], and %o1, 3,#)
+	EX(stha	%g3, [%o0] %asi, and %o1, 3,#)
 	add	%o0, 2, %o0
 1:
 	bne,a,pn %icc, 8f
-	 EX(stb	%g3, [%o0], and %o1, 1,#)
+	 EX(stba	%g3, [%o0] %asi, and %o1, 1,#)
 8:
 	retl
 	 clr	%o0
@@ -155,7 +159,7 @@ __bzero:
 	 add	%o0, 1, %o0
 	subcc	%o1, 1, %o1
 	bne,a,pt %icc, 8b
-	 EX(stb	%g3, [%o0 - 1], add %o1, 1,#)
+	 EX(stba	%g3, [%o0 - 1] %asi, add %o1, 1,#)
 0:
 	retl
 	 clr	%o0

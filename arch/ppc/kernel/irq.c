@@ -161,7 +161,7 @@ inline void
 process_IRQ(int irq, int _irq, struct pt_regs *regs)
 {
   struct irq_action *action;
-  intr_count++;
+  atomic_inc(&intr_count);
   if (irq < 16)
   {
     /* Mask interrupt */
@@ -242,7 +242,7 @@ process_IRQ(int irq, int _irq, struct pt_regs *regs)
   {
     BeBox_enable_irq(irq);
   }
-  intr_count--;
+  atomic_dec(&intr_count);
 }
 
 asmlinkage inline void handle_IRQ(struct pt_regs *regs)

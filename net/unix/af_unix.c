@@ -228,7 +228,7 @@ static unix_socket *unix_find_socket_byinode(struct inode *i)
 static void unix_destroy_timer(unsigned long data)
 {
 	unix_socket *sk=(unix_socket *)data;
-	if(!unix_locked(sk) && sk->wmem_alloc==0)
+	if(!unix_locked(sk) && atomic_read(&sk->wmem_alloc) == 0)
 	{
 		unix_release_addr(sk->protinfo.af_unix.addr);
 		sk_free(sk);
@@ -281,7 +281,7 @@ static void unix_destroy_socket(unix_socket *sk)
 		sk->protinfo.af_unix.inode=NULL;
 	}
 	
-	if(!unix_unlock(sk) && sk->wmem_alloc==0)
+	if(!unix_unlock(sk) && atomic_read(&sk->wmem_alloc) == 0)
 	{
 		unix_release_addr(sk->protinfo.af_unix.addr);
 		sk_free(sk);
@@ -348,7 +348,7 @@ static int unix_create(struct socket *sock, int protocol)
 	
 	sk->protinfo.af_unix.family=AF_UNIX;
 	sk->protinfo.af_unix.inode=NULL;
-	sk->sock_readers=1;				/* Us */
+	sk->sock_readers=1;			/* Us */
 	sk->protinfo.af_unix.readsem=MUTEX;	/* single task reading lock */
 	sk->mtu=4096;
 	sk->protinfo.af_unix.list=&unix_sockets_unbound;
@@ -418,7 +418,7 @@ static int unix_autobind(struct socket *sock)
 	}
 	memset(addr, 0, sizeof(*addr) + sizeof(short) + 16);
 	addr->name->sun_family = AF_UNIX;
-	addr->refcnt = 1;
+	atomic_set(&addr->refcnt, 1);
 
 retry:
 	addr->len = sprintf(addr->name->sun_path+1, "%08x", ordernum) + 1 + sizeof(short);
@@ -504,7 +504,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if (!addr)
 		return -ENOBUFS;
 
-	/* We sleeped; recheck ... */
+	/* We slept; recheck ... */
 
 	if (sk->protinfo.af_unix.addr || sk->protinfo.af_unix.inode)
 	{
@@ -515,7 +515,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	memcpy(addr->name, sunaddr, addr_len);
 	addr->len = addr_len;
 	addr->hash = hash;
-	addr->refcnt = 1;
+	atomic_set(&addr->refcnt, 1);
 
 	if (!sunaddr->sun_path[0])
 	{
@@ -1105,26 +1105,16 @@ static int unix_dgram_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	struct sock *sk = sock->sk;
 	int noblock = flags & MSG_DONTWAIT;
 	struct sk_buff *skb;
+	int err;
 
 	if (flags&MSG_OOB)
 		return -EOPNOTSUPP;
 
 	msg->msg_namelen = 0;
 
-retry:
-	skb=skb_dequeue(&sk->receive_queue);
-
-	if (skb==NULL)
-	{
-		if (sk->shutdown & RCV_SHUTDOWN)
-			return 0;
-		if (noblock)
-			return -EAGAIN;
-		unix_data_wait(sk);
-		if (current->signal & ~current->blocked)
-			return -ERESTARTSYS;
-		goto retry;
-	}
+	skb=skb_recv_datagram(sk, flags, noblock, &err);
+	if(skb==NULL)
+		return err;
 
 	if (msg->msg_name)
 	{
@@ -1143,10 +1133,8 @@ retry:
 	else if (size < skb->len)
 		msg->msg_flags |= MSG_TRUNC;
 
-	if (memcpy_toiovec(msg->msg_iov, skb->data, size)) {
-		skb_queue_head(&sk->receive_queue, skb);
+	if (skb_copy_datagram_iovec(skb, 0, msg->msg_iov, size))
 		return -EFAULT;
-	}
 
 	scm->creds = *UNIXCREDS(skb);
 
@@ -1154,9 +1142,9 @@ retry:
 	{
 		if (UNIXCB(skb).fp)
 			unix_detach_fds(scm, skb);
-		kfree_skb(skb, FREE_WRITE);
-		return size;
-	} else 
+	}
+	else 
+	{
 		/* It is questionable: on PEEK we could:
 		   - do not return fds - good, but too simple 8)
 		   - return fds, and do not return them on read (old strategy,
@@ -1171,8 +1159,8 @@ retry:
 		*/
 		if (UNIXCB(skb).fp)
 			scm->fp = scm_fp_dup(UNIXCB(skb).fp);
-
-	skb_queue_head(&sk->receive_queue, skb);
+	}
+	skb_free_datagram(sk,skb);
 	return size;
 }
 
@@ -1342,7 +1330,7 @@ static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	{
 	
 		case TIOCOUTQ:
-			amount=sk->sndbuf-sk->wmem_alloc;
+			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if(amount<0)
 				amount=0;
 			return put_user(amount, (int *)arg);
@@ -1475,7 +1463,7 @@ void unix_proto_init(struct net_proto *pro)
 	struct sk_buff *dummy_skb;
 	struct proc_dir_entry *ent;
 	
-	printk(KERN_INFO "NET3: Unix domain sockets 0.15 for Linux NET3.038.\n");
+	printk(KERN_INFO "NET3: Unix domain sockets 0.16 for Linux NET3.038.\n");
 	if (sizeof(struct unix_skb_parms) > sizeof(dummy_skb->cb))
 	{
 		printk(KERN_CRIT "unix_proto_init: panic\n");

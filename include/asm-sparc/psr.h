@@ -1,4 +1,4 @@
-/* $Id: psr.h,v 1.13 1996/12/10 06:06:36 davem Exp $
+/* $Id: psr.h,v 1.14 1997/04/11 00:42:19 davem Exp $
  * psr.h: This file holds the macros for masking off various parts of
  *        the processor status register on the Sparc. This is valid
  *        for Version 8. On the V9 this is renamed to the PSTATE
@@ -62,7 +62,7 @@ extern __inline__ void put_psr(unsigned int new_psr)
 		nop
 "	: /* no outputs */
 	: "r" (new_psr)
-	: "memory");
+	: "memory", "cc");
 }
 
 /* Get the %fsr register.  Be careful, make sure the floating point

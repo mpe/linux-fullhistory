@@ -199,7 +199,7 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte, int cow)
 		pte = pte_mkdirty(pte);
 	set_pte(new_pte, pte_mkold(pte));
 	set_pte(old_pte, pte);
-	mem_map[page_nr].count++;
+	atomic_inc(&mem_map[page_nr].count);
 }
 
 static inline int copy_pte_range(pmd_t *dst_pmd, pmd_t *src_pmd, unsigned long address, unsigned long size, int cow)
@@ -546,7 +546,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 
 	if (MAP_NR(page) >= max_mapnr)
 		printk("put_dirty_page: trying to put page %08lx at %08lx\n",page,address);
-	if (mem_map[MAP_NR(page)].count != 1)
+	if (atomic_read(&mem_map[MAP_NR(page)].count) != 1)
 		printk("mem_map disagrees with %08lx at %08lx\n",page,address);
 	pgd = pgd_offset(tsk->mm,address);
 	pmd = pmd_alloc(pgd, address);
@@ -621,7 +621,7 @@ void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	/*
 	 * Do we need to copy?
 	 */
-	if (mem_map[MAP_NR(old_page)].count != 1) {
+	if (atomic_read(&mem_map[MAP_NR(old_page)].count) != 1) {
 		if (new_page) {
 			if (PageReserved(mem_map + MAP_NR(old_page)))
 				++vma->vm_mm->rss;
@@ -766,7 +766,8 @@ static inline void do_swap_page(struct task_struct * tsk,
 		free_page(pte_page(page));
 		return;
 	}
-	if (mem_map[MAP_NR(pte_page(page))].count > 1 && !(vma->vm_flags & VM_SHARED))
+	if (atomic_read(&mem_map[MAP_NR(pte_page(page))].count) > 1 &&
+	    !(vma->vm_flags & VM_SHARED))
 		page = pte_wrprotect(page);
 	++vma->vm_mm->rss;
 	++tsk->maj_flt;
@@ -833,7 +834,8 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	entry = mk_pte(page, vma->vm_page_prot);
 	if (write_access) {
 		entry = pte_mkwrite(pte_mkdirty(entry));
-	} else if (mem_map[MAP_NR(page)].count > 1 && !(vma->vm_flags & VM_SHARED))
+	} else if (atomic_read(&mem_map[MAP_NR(page)].count) > 1 &&
+		   !(vma->vm_flags & VM_SHARED))
 		entry = pte_wrprotect(entry);
 	put_page(page_table, entry);
 	/* no need to invalidate: a not-present page shouldn't be cached */

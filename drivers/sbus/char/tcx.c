@@ -1,4 +1,4 @@
-/* $Id: tcx.c,v 1.9 1996/12/23 10:16:17 ecd Exp $
+/* $Id: tcx.c,v 1.11 1997/04/10 03:02:43 davem Exp $
  * tcx.c: SUNW,tcx 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -272,7 +272,7 @@ tcx_reset (fbinfo_t *fb)
 	tcx->bt->control |= 0x03 << 24;
 }
 
-__initfunc(void tcx_setup (fbinfo_t *fb, int slot, int node, uint tcx, struct linux_sbus_device *sbdp))
+__initfunc(void tcx_setup (fbinfo_t *fb, int slot, int node, unsigned long tcx, struct linux_sbus_device *sbdp))
 {
 	struct tcx_info *tcxinfo;
 	int i;
@@ -299,15 +299,16 @@ __initfunc(void tcx_setup (fbinfo_t *fb, int slot, int node, uint tcx, struct li
 		tcxinfo->tcx_offsets [i] = (long)(sbdp->reg_addrs [i].phys_addr);
 		
 	/* Map the hardware registers */
-	tcxinfo->bt = sparc_alloc_io ((void *) tcxinfo->tcx_offsets [TCX_BROOKTREE_OFFSET], 0,
+	tcxinfo->bt = sparc_alloc_io((u32)tcxinfo->tcx_offsets [TCX_BROOKTREE_OFFSET], 0,
 		 sizeof (struct bt_regs),"tcx_dac", fb->space, 0);
-	tcxinfo->thc = sparc_alloc_io ((void *) tcxinfo->tcx_offsets [TCX_THC_OFFSET], 0,
+	tcxinfo->thc = sparc_alloc_io((u32)tcxinfo->tcx_offsets [TCX_THC_OFFSET], 0,
 		 sizeof (struct tcx_thc), "tcx_thc", fb->space, 0);
-	tcxinfo->tec = sparc_alloc_io ((void *) tcxinfo->tcx_offsets [TCX_TEC_OFFSET], 0,
+	tcxinfo->tec = sparc_alloc_io((u32)tcxinfo->tcx_offsets [TCX_TEC_OFFSET], 0,
 		 sizeof (struct tcx_tec), "tcx_tec", fb->space, 0);
 	if (!fb->base){
-		fb->base = (uint) sparc_alloc_io ((void *) tcxinfo->tcx_offsets [TCX_RAM8BIT_OFFSET], 0,
-                    fb->type.fb_size, "tcx_ram", fb->space, 0);
+		fb->base = (uint)
+			sparc_alloc_io((u32)tcxinfo->tcx_offsets [TCX_RAM8BIT_OFFSET], 0,
+				       fb->type.fb_size, "tcx_ram", fb->space, 0);
 	}
 	
 	if (prom_getbool (node, "hw-cursor")) {
@@ -336,8 +337,10 @@ __initfunc(void tcx_setup (fbinfo_t *fb, int slot, int node, uint tcx, struct li
 		tcxinfo->tcx_sizes[5] = i << 3;
 		tcxinfo->tcx_sizes[6] = i << 3;
 		fb->type.fb_depth = 24;
-		tcxinfo->tcx_cplane = sparc_alloc_io ((void *) tcxinfo->tcx_offsets [TCX_CONTROLPLANE_OFFSET], 0,
-		 	tcxinfo->tcx_sizes [TCX_CONTROLPLANE_OFFSET], "tcx_cplane", fb->space, 0);
+		tcxinfo->tcx_cplane =
+		   sparc_alloc_io((u32)tcxinfo->tcx_offsets[TCX_CONTROLPLANE_OFFSET], 0,
+				  tcxinfo->tcx_sizes [TCX_CONTROLPLANE_OFFSET],
+				  "tcx_cplane", fb->space, 0);
 	}
 	
 	/* Initialize Brooktree DAC */

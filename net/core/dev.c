@@ -122,7 +122,7 @@ struct packet_type *ptype_all = NULL;		/* Taps */
  *	Device list lock
  */
  
-atomic_t dev_lockct=0;
+atomic_t dev_lockct = ATOMIC_INIT;
  
 /*
  *	Our notifier list

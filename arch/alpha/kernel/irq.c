@@ -53,7 +53,6 @@ extern void timer_interrupt(struct pt_regs * regs);
  */
 static unsigned long irq_mask = ~0UL;
 
-
 /*
  * Update the hardware with the irq mask passed in MASK.  The function
  * exploits the fact that it is known that only bit IRQ has changed.
@@ -274,6 +273,16 @@ static inline void handle_nmi(struct pt_regs * regs)
 	printk("61=%02x, 461=%02x\n", inb(0x61), inb(0x461));
 }
 
+unsigned int local_irq_count[NR_CPUS];
+atomic_t __alpha_bh_counter;
+
+#ifdef __SMP__
+#error Me no hablo Alpha SMP
+#else
+#define irq_enter(cpu, irq)	(++local_irq_count[cpu])
+#define irq_exit(cpu, irq)	(--local_irq_count[cpu])
+#endif
+
 static void unexpected_irq(int irq, struct pt_regs * regs)
 {
 	struct irqaction *action;
@@ -302,16 +311,19 @@ static void unexpected_irq(int irq, struct pt_regs * regs)
 static inline void handle_irq(int irq, struct pt_regs * regs)
 {
 	struct irqaction * action = irq_action[irq];
+	int cpu = smp_processor_id();
 
+	irq_enter(cpu, irq);
 	kstat.interrupts[irq]++;
 	if (!action) {
 		unexpected_irq(irq, regs);
-		return;
+	} else {
+		do {
+			action->handler(irq, action->dev_id, regs);
+			action = action->next;
+		} while (action);
 	}
-	do {
-		action->handler(irq, action->dev_id, regs);
-		action = action->next;
-	} while (action);
+	irq_exit(cpu, irq);
 }
 
 static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
@@ -323,6 +335,7 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 		return;
 	}
 
+	irq_enter(cpu, irq);
 	kstat.interrupts[irq]++;
 	action = irq_action[irq];
 	/*
@@ -336,15 +349,16 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 	 */
 	mask_irq(ack);
 	ack_irq(ack);
-	if (!action)
-		return;
-	if (action->flags & SA_SAMPLE_RANDOM)
-		add_interrupt_randomness(irq);
-	do {
-		action->handler(irq, action->dev_id, regs);
-		action = action->next;
-	} while (action);
-	unmask_irq(ack);
+	if (action) {
+		if (action->flags & SA_SAMPLE_RANDOM)
+			add_interrupt_randomness(irq);
+		do {
+			action->handler(irq, action->dev_id, regs);
+			action = action->next;
+		} while (action);
+		unmask_irq(ack);
+	}
+	irq_exit(cpu, irq);
 }
 
 #ifdef CONFIG_PCI

@@ -20,6 +20,7 @@
 
 #include <linux/config.h>
 #include <linux/tcp.h>
+#include <linux/slab.h>
 #include <net/checksum.h>
 
 /* This is for all connections with a full identity, no wildcards. */
@@ -188,21 +189,7 @@ struct or_calltable {
 	void (*destructor)	(struct open_request *req);
 };
 
-struct open_request {
-	struct open_request	*dl_next;
-	struct open_request	*dl_prev;
-	__u32			rcv_isn;
-	__u32			snt_isn;
-	__u16			mss;
-	__u16			rmt_port;
-	unsigned long		expires;
-	int			retrans;
-	struct or_calltable	*class;
-	struct sock		*sk;
-};
-
 struct tcp_v4_open_req {
-	struct open_request	req;
 	__u32			loc_addr;
 	__u32			rmt_addr;
 	struct ip_options	*opt;
@@ -210,13 +197,37 @@ struct tcp_v4_open_req {
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
 struct tcp_v6_open_req {
-	struct open_request	req;
 	struct in6_addr		loc_addr;
 	struct in6_addr		rmt_addr;
 	struct ipv6_options	*opt;
 	struct device		*dev;
 };
 #endif
+
+struct open_request {
+	struct open_request	*dl_next;
+	struct open_request	*dl_prev;
+	__u32			rcv_isn;
+	__u32			snt_isn;
+	__u16			rmt_port;
+	__u16			mss;
+	unsigned long		expires;
+	int			retrans;
+	struct or_calltable	*class;
+	struct sock		*sk;
+	union {
+		struct tcp_v4_open_req v4_req;
+#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
+		struct tcp_v6_open_req v6_req;
+#endif
+	} af;
+};
+
+/* SLAB cache for open requests. */
+extern kmem_cache_t *tcp_openreq_cachep;
+
+#define tcp_openreq_alloc()	kmem_cache_alloc(tcp_openreq_cachep, SLAB_ATOMIC)
+#define tcp_openreq_free(req)	kmem_cache_free(tcp_openreq_cachep, req)
 
 /*
  *	Pointers to address related TCP functions
@@ -560,7 +571,7 @@ extern __inline__ void tcp_inc_slow_timer(int timer)
 {
 	struct tcp_sl_timer *slt = &tcp_slt_array[timer];
 	
-	if (slt->count == 0)
+	if (atomic_read(&slt->count) == 0)
 	{
 		__tcp_inc_slow_timer(slt);
 	}

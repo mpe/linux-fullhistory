@@ -9,6 +9,7 @@
  *  Some code moved for less code duplication - Andi Kleen - Mar 1997
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/sched.h>

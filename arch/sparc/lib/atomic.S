@@ -10,10 +10,6 @@
 	.text
 	.align	4
 
-	/* XXX At boot time patch this with swap [x], y; retl; if
-	 * XXX processor is found to have that instruction.
-	 */
-
 	.globl	___xchg32
 ___xchg32:
 	rd	%psr, %g3
@@ -34,51 +30,47 @@ ___xchg32:
 	jmpl	%o7, %g0		/* Note, not + 0x8, see call in system.h */
 	 mov	%g4, %o7
 
-	.globl	___xchg32_hw
-___xchg32_hw:
-	swap	[%g1], %g2
-	jmpl	%o7, %g0		/* Note, not + 0x8, see call in system.h */
-	 mov	%g4, %o7
-
-	/* Atomic add/sub routines.  Returns the final value whether you
-	 * want it or not for even _better_ cache hit rates.
+	/* Read asm-sparc/atomic.h carefully to understand how this works for SMP.
+	 * Really, some things here for SMP are overly clever, go read the header.
 	 */
 	.globl	___atomic_add
 ___atomic_add:
-	rd	%psr, %g3
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 nop
-	wr	%g3, PSR_PIL, %psr
-	nop; nop; nop;
-1:
-	ld	[%g1], %g7
-	andcc	%g3, PSR_PIL, %g0
-	add	%g7, %g2, %g2
-	bne	1f
-	 st	%g2, [%g1]
-	wr	%g3, 0x0, %psr
-	nop; nop; nop;
-1:
-	jmpl	%o7, %g0		/* NOTE: not + 8, see callers in atomic.h */
-	 mov	%g4, %o7
+	rd	%psr, %g3		! Keep the code small, old way was stupid
+	or	%g3, PSR_PIL, %g7	! Disable interrupts
+	wr	%g7, 0x0, %psr		! Set %psr
+	nop; nop; nop;			! Let the bits set
+#ifdef __SMP__
+1:	ldstub	[%g1 + 3], %g7		! Spin on the byte lock for SMP.
+	orcc	%g7, 0x0, %g0		! Did we get it?
+	bne	1b			! Nope...
+#endif
+	 ld	[%g1], %g7		! Load locked atomic_t
+	sra	%g7, 8, %g7		! Get signed 24-bit integer
+	add	%g7, %g2, %g2		! Add in argument
+	sll	%g2, 8, %g7		! Transpose back to atomic_t
+	st	%g7, [%g1]		! Clever: This releases the lock as well.
+	wr	%g3, 0x0, %psr		! Restore original PSR_PIL
+	nop; nop; nop;			! Let the bits set
+	jmpl	%o7, %g0		! NOTE: not + 8, see callers in atomic.h
+	 mov	%g4, %o7		! Restore %o7
 
 	.globl	___atomic_sub
 ___atomic_sub:
-	rd	%psr, %g3
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 nop
-	wr	%g3, PSR_PIL, %psr
-	nop; nop; nop;
-1:
-	ld	[%g1], %g7
-	andcc	%g3, PSR_PIL, %g0
-	sub	%g7, %g2, %g2
-	bne	1f
-	 st	%g2, [%g1]
-	wr	%g3, 0x0, %psr
-	nop; nop; nop;
-1:
-	jmpl	%o7, %g0		/* NOTE: not + 8, see callers in atomic.h */
-	 mov	%g4, %o7
+	rd	%psr, %g3		! Keep the code small, old way was stupid
+	or	%g3, PSR_PIL, %g7	! Disable interrupts
+	wr	%g7, 0x0, %psr		! Set %psr
+	nop; nop; nop;			! Let the bits set
+#ifdef __SMP__
+1:	ldstub	[%g1 + 3], %g7		! Spin on the byte lock for SMP.
+	orcc	%g7, 0x0, %g0		! Did we get it?
+	bne	1b			! Nope...
+#endif
+	 ld	[%g1], %g7		! Load locked atomic_t
+	sra	%g7, 8, %g7		! Get signed 24-bit integer
+	sub	%g7, %g2, %g2		! Subtract argument
+	sll	%g2, 8, %g7		! Transpose back to atomic_t
+	st	%g7, [%g1]		! Clever: This releases the lock as well
+	wr	%g3, 0x0, %psr		! Restore original PSR_PIL
+	nop; nop; nop;			! Let the bits set
+	jmpl	%o7, %g0		! NOTE: not + 8, see callers in atomic.h
+	 mov	%g4, %o7		! Restore %o7

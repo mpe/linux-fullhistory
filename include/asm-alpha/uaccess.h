@@ -352,10 +352,27 @@ __asm__ __volatile__("1: stb %r2,%1\n"				\
  * Complex access routines
  */
 
+#define __copy_to_user(to,from,n)   __copy_tofrom_user_nocheck((to),(from),(n))
+#define __copy_from_user(to,from,n) __copy_tofrom_user_nocheck((to),(from),(n))
+
 #define copy_to_user(to,from,n)   __copy_tofrom_user((to),(from),(n),__cu_to)
 #define copy_from_user(to,from,n) __copy_tofrom_user((to),(from),(n),__cu_from)
 
 extern void __copy_user(void);
+
+#define __copy_tofrom_user_nocheck(to,from,n)				\
+({									\
+	register void * __cu_to __asm__("$6") = (to);			\
+	register const void * __cu_from __asm__("$7") = (from);		\
+	register long __cu_len __asm__("$0") = (n);			\
+	__asm__ __volatile__(						\
+		"jsr $28,(%3),__copy_user"				\
+		: "=r" (__cu_len), "=r" (__cu_from), "=r" (__cu_to)	\
+		: "r" (__copy_user), "0" (__cu_len),			\
+		  "1" (__cu_from), "2" (__cu_to)			\
+		: "$1","$2","$3","$4","$5","$28","memory");		\
+	__cu_len;							\
+})
 
 #define __copy_tofrom_user(to,from,n,v)					    \
 ({									    \

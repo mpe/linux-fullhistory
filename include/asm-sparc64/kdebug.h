@@ -1,4 +1,4 @@
-/* $Id: kdebug.h,v 1.1 1997/03/14 21:05:34 jj Exp $
+/* $Id: kdebug.h,v 1.2 1997/04/04 00:50:21 davem Exp $
  * kdebug.h:  Defines and definitions for debugging the Linux kernel
  *            under various kernel debuggers.
  *
@@ -8,6 +8,8 @@
 #define _SPARC64_KDEBUG_H
 
 #include <asm/openprom.h>
+
+/* XXX This needs to all be fixed for Ultra/V9 -DaveM */
 
 /* The debugger lives in 1MB of virtual address space right underneath
  * the boot prom.

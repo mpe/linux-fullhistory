@@ -1,7 +1,8 @@
-/* $Id: leo.c,v 1.11 1997/02/02 02:12:44 ecd Exp $
+/* $Id: leo.c,v 1.14 1997/04/10 17:06:09 jj Exp $
  * leo.c: SUNW,leo 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997 Michal Rehacek (Michal.Rehacek@st.mff.cuni.cz)
  */
  
 #include <linux/kd.h>
@@ -508,7 +509,7 @@ __initfunc(static unsigned long leo_postsetup (fbinfo_t *fb, unsigned long memor
 	return memory_start + (256*4*3) + 256 + 256*3;
 }
 
-__initfunc(void leo_setup (fbinfo_t *fb, int slot, uint leo, int leo_io))
+__initfunc(void leo_setup (fbinfo_t *fb, int slot, unsigned long leo, int leo_io))
 {
 	struct leo_info *leoinfo;
 	int i;
@@ -542,25 +543,25 @@ __initfunc(void leo_setup (fbinfo_t *fb, int slot, uint leo, int leo_io))
 
 	leoinfo->offset = leo;
 	/* Map the hardware registers */
-	leoinfo->lc_ss0_krn = sparc_alloc_io ((void *) leo + LEO_OFF_LC_SS0_KRN, 0,
+	leoinfo->lc_ss0_krn = sparc_alloc_io((u32)(leo + LEO_OFF_LC_SS0_KRN), 0,
 		 PAGE_SIZE,"leo_lc_ss0_krn", fb->space, 0);
-	leoinfo->lc_ss0_usr = sparc_alloc_io ((void *) leo + LEO_OFF_LC_SS0_USR, 0,
+	leoinfo->lc_ss0_usr = sparc_alloc_io((u32)(leo + LEO_OFF_LC_SS0_USR), 0,
 		 PAGE_SIZE,"leo_lc_ss0_usr", fb->space, 0);
-	leoinfo->lc_ss1_krn = sparc_alloc_io ((void *) leo + LEO_OFF_LC_SS1_KRN, 0,
+	leoinfo->lc_ss1_krn = sparc_alloc_io((u32)(leo + LEO_OFF_LC_SS1_KRN), 0,
 		 PAGE_SIZE,"leo_lc_ss1_krn", fb->space, 0);
-	leoinfo->lc_ss1_usr = sparc_alloc_io ((void *) leo + LEO_OFF_LC_SS1_USR, 0,
+	leoinfo->lc_ss1_usr = sparc_alloc_io((u32)(leo + LEO_OFF_LC_SS1_USR), 0,
 		 PAGE_SIZE,"leo_lc_ss1_usr", fb->space, 0);
-	leoinfo->ld_ss0 = sparc_alloc_io ((void *) leo + LEO_OFF_LD_SS0, 0,
+	leoinfo->ld_ss0 = sparc_alloc_io((u32)(leo + LEO_OFF_LD_SS0), 0,
 		 PAGE_SIZE,"leo_ld_ss0", fb->space, 0);
-	leoinfo->ld_ss1 = sparc_alloc_io ((void *) leo + LEO_OFF_LD_SS1, 0,
+	leoinfo->ld_ss1 = sparc_alloc_io((u32)(leo + LEO_OFF_LD_SS1), 0,
 		 PAGE_SIZE,"leo_ld_ss1", fb->space, 0);
-	leoinfo->ld_gbl = sparc_alloc_io ((void *) leo + LEO_OFF_LD_GBL, 0,
+	leoinfo->ld_gbl = sparc_alloc_io((u32)(leo + LEO_OFF_LD_GBL), 0,
 		 PAGE_SIZE,"leo_ld_gbl", fb->space, 0);
-	leoinfo->lx_krn = sparc_alloc_io ((void *) leo + LEO_OFF_LX_KRN, 0,
+	leoinfo->lx_krn = sparc_alloc_io((u32)(leo + LEO_OFF_LX_KRN), 0,
 		 PAGE_SIZE,"leo_lx_krn", fb->space, 0);
-	leoinfo->cursor = sparc_alloc_io ((void *) leo + LEO_OFF_LX_CURSOR, 0,
+	leoinfo->cursor = sparc_alloc_io((u32)(leo + LEO_OFF_LX_CURSOR), 0,
 		 sizeof(struct leo_cursor),"leo_lx_crsr", fb->space, 0);
-	fb->base = (long)sparc_alloc_io ((void *) leo + LEO_OFF_SS0, 0,
+	fb->base = (long)sparc_alloc_io((u32)(leo + LEO_OFF_SS0), 0,
 		 0x800000,"leo_ss0", fb->space, 0);
 	
 	leoinfo->ld_ss0->unk = 0xffff;
@@ -617,24 +618,16 @@ extern unsigned char vga_font [];
 		do { \
 			i = us->csr; \
 		} while (i & 0x20000000); \
-		ss->fg = (attr >> 4)<<24; \
-		ss->planemask = 0xff000000; \
+		ss->fg = (attr & 0xf) << 24; \
+		ss->bg = (attr >> 4) << 24; \
 		ss->rop = 0x310040; \
-		us->extent = (count*8-1) | (15<<11); \
-		i = us->attrs; \
-		us->fill = (x) | ((y) << 11) | ((i & 3) << 29) | ((i & 8) ? 0x80000000 : 0); \
-		do { \
-			i = us->csr; \
-		} while (i & 0x20000000); \
-		ss->fg = (attr & 0xf)<<24; \
-		us->fontc2 = ~(0); \
+		ss->planemask = 0xff000000; \
+		us->fontc2 = 0xFFFFFFFE; \
 		us->attrs = 4; \
-		us->fontc = ~(0); \
-		us->extent = ((u16)x) | (y << 16); \
-		us->src = ((u16)(x + (count << 3))) | ((y + 16) << 16);
+		us->fontc = 0xFF000000;
 #define GX_BLITC_END \
 	}
-	
+
 static void leo_blitc(unsigned short charattr, int xoff, int yoff)
 {
 	unsigned char attrib = CHARATTR_TO_SUNCOLOR(charattr);

@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.133 1997/03/04 16:26:22 jj Exp $
+/* $Id: entry.S,v 1.137 1997/04/14 05:38:17 davem Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -288,28 +288,11 @@ real_irq_entry:
 	SAVE_ALL
 
 #ifdef __SMP__
-	cmp	%l7, 13
-	bne	1f
+	cmp	%l7, 12
+	bgu	maybe_smp_msg
 	 nop
-
-	/* This is where we catch the level 13 reschedule soft-IRQ. */
-	GET_PROCESSOR_MID(o3, o2)
-	set	C_LABEL(sun4m_interrupts), %l5
-	ld	[%l5], %o5
-	sethi	%hi(0x20000000), %o4
-	sll	%o3, 12, %o3
-	add	%o5, %o3, %o5
-	ld	[%o5], %o1		! read processor irq pending reg
-	andcc	%o1, %o4, %g0
-	be	1f
-	 nop
-
-	b,a	linux_trap_ipi13_sun4m
-
-1:	
-
 #endif
-
+real_irq_continue:
 	or	%l0, PSR_PIL, %g2
 	wr	%g2, 0x0, %psr
 	WRITE_PAUSE
@@ -318,10 +301,102 @@ real_irq_entry:
 	mov	%l7, %o0		! irq level
 	call	C_LABEL(handler_irq)
 	 add	%sp, REGWIN_SZ, %o1	! pt_regs ptr
+
+#if 1 /* ndef __SMP__ */ /* You don't want to know... -DaveM */
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
+#endif
 
 	RESTORE_ALL
+
+#ifdef __SMP__
+	/* Here is where we check for possible SMP IPI passed to us
+	 * on some level other than 15 which is the NMI and only used
+	 * for cross calls.  That has a seperate entry point below.
+	 */
+maybe_smp_msg:
+	GET_PROCESSOR_MID(o3, o2)
+	set	C_LABEL(sun4m_interrupts), %l5
+	ld	[%l5], %o5
+	sethi	%hi(0x60000000), %o4
+	sll	%o3, 12, %o3
+	ld	[%o5 + %o3], %o1
+	andcc	%o1, %o4, %g0
+	be	real_irq_continue
+	 cmp	%l7, 13
+	add	%o5, %o3, %o5
+	bne,a	1f
+	 sethi	%hi(0x40000000), %o2
+	sethi	%hi(0x20000000), %o2
+1:
+	st	%o2, [%o5 + 0x4]
+	WRITE_PAUSE
+	ld	[%o5], %g0
+	WRITE_PAUSE
+	or	%l0, PSR_PIL, %l4
+	wr	%l4, 0x0, %psr
+	WRITE_PAUSE
+	wr	%l4, PSR_ET, %psr
+	WRITE_PAUSE
+	cmp	%l7, 13
+	bne	2f
+	 nop
+	call	C_LABEL(smp_reschedule_irq)
+	 add	%o7, 8, %o7
+2:
+	call	C_LABEL(smp_stop_cpu_irq)
+	 nop
+	RESTORE_ALL
+
+	.align	4
+	.globl	linux_trap_ipi15_sun4m
+linux_trap_ipi15_sun4m:
+	SAVE_ALL
+	sethi	%hi(0x80000000), %o2
+	GET_PROCESSOR_MID(o0, o1)
+	set	C_LABEL(sun4m_interrupts), %l5
+	ld	[%l5], %o5
+	sll	%o0, 12, %o0
+	add	%o5, %o0, %o5
+	ld	[%o5], %o3
+	andcc	%o3, %o2, %g0
+	be	1f			! Must be an NMI async memory error
+	 st	%o2, [%o5 + 4]
+	WRITE_PAUSE
+	ld	[%o5], %g0
+	WRITE_PAUSE
+	or	%l0, PSR_PIL, %l4
+	wr	%l4, 0x0, %psr
+	WRITE_PAUSE
+	wr	%l4, PSR_ET, %psr
+	WRITE_PAUSE
+	call	C_LABEL(smp_cross_call_irq)
+	 nop
+	b	ret_trap_lockless_ipi
+	 clr	%l6
+1:
+	/* NMI async memory error handling. */
+	sethi	%hi(0x80000000), %l4
+	sethi	%hi(0x4000), %o3
+	sub	%o5, %o0, %o5
+	add	%o5, %o3, %l5
+	st	%l4, [%l5 + 0xc]
+	WRITE_PAUSE
+	ld	[%l5], %g0
+	WRITE_PAUSE
+	or	%l0, PSR_PIL, %l4
+	wr	%l4, 0x0, %psr
+	WRITE_PAUSE
+	wr	%l4, PSR_ET, %psr
+	WRITE_PAUSE
+	call	C_LABEL(sun4m_nmi)
+	 nop
+	st	%l4, [%l5 + 0x8]
+	WRITE_PAUSE
+	ld	[%l5], %g0
+	WRITE_PAUSE
+	RESTORE_ALL
+#endif /* __SMP__ */
 
 	/* This routine handles illegal instructions and privileged
 	 * instruction attempts from user code.
@@ -671,107 +746,6 @@ linux_trap_nmi_sun4c:
 
 	RESTORE_ALL
 
-#ifdef __SMP__
-	.align	4
-	.globl	linux_trap_ipi13_sun4m
-linux_trap_ipi13_sun4m:
-	sethi	%hi(0x20000000), %o2
-	GET_PROCESSOR_MID(o0, o1)
-	set	C_LABEL(sun4m_interrupts), %l5
-	ld	[%l5], %o5
-	sll	%o0, 12, %o0
-	add	%o5, %o0, %o5
-	st	%o2, [%o5 + 4]
-	WRITE_PAUSE
-
-	ld	[%o5], %g0
-	WRITE_PAUSE
-
-	/* IRQ's off else we deadlock. */
-	or	%l0, PSR_PIL, %l4
-	wr	%l4, 0x0, %psr
-	WRITE_PAUSE
-
-	wr	%l4, PSR_ET, %psr
-	WRITE_PAUSE
-
-	call	C_LABEL(smp_reschedule_irq)
-	 nop
-
-	RESTORE_ALL
-
-	.align	4
-	.globl	linux_trap_ipi15_sun4m
-linux_trap_ipi15_sun4m:
-	SAVE_ALL
-
-	/* First check for hard NMI memory error. */
-	sethi	%hi(0xf0000000), %o2
-	set	C_LABEL(sun4m_interrupts), %l5
-	set	0x4000, %o3
-	ld	[%l5], %l5
-	add	%l5, %o3, %l5
-	ld	[%l5], %l6
-	andcc	%o2, %l6, %o2
-	be	1f
-	 nop
-
-	/* Asynchronous fault, why you little ?!#&%@... */
-	sethi	%hi(0x80000000), %o2
-	st	%o2, [%l5 + 0xc]
-	WRITE_PAUSE
-	ld	[%l5], %g0
-	WRITE_PAUSE
-
-	/* All interrupts are off... now safe to enable traps
-	 * and call C-code.
-	 */	
-	or	%l0, PSR_PIL, %l4	! I am very paranoid...
-	wr	%l4, 0x0, %psr
-	WRITE_PAUSE
-	wr	%l4, PSR_ET, %psr
-	WRITE_PAUSE
-	call	C_LABEL(sun4m_nmi)
-	 nop
-
-	sethi	%hi(0x80000000), %o2
-	st	%o2, [%l5 + 0x8]
-	WRITE_PAUSE
-	ld	[%l5], %g0
-	WRITE_PAUSE
-
-	RESTORE_ALL
-
-1:
-	sethi	%hi(0x80000000), %o2
-	GET_PROCESSOR_MID(o0, o1)
-	set	C_LABEL(sun4m_interrupts), %l5
-	ld	[%l5], %o5
-	sll	%o0, 12, %o0
-	add	%o5, %o0, %o5
-	st	%o2, [%o5 + 4]
-	WRITE_PAUSE
-
-	ld	[%o5], %g0
-	WRITE_PAUSE
-
-	/* IRQ's off else we deadlock. */
-	or	%l0, PSR_PIL, %l4
-	wr	%l4, 0x0, %psr
-	WRITE_PAUSE
-
-	wr	%l4, PSR_ET, %psr
-	WRITE_PAUSE
-
-	call	C_LABEL(smp_message_irq)
-	 nop
-
-	b	ret_trap_lockless_ipi
-	 clr	%l6
-
-#endif
-
-
 	.align	4
 	.globl	C_LABEL(invalid_segment_patch1_ff)
 	.globl	C_LABEL(invalid_segment_patch2_ff)
@@ -839,7 +813,22 @@ sun4c_fault:
 	be	sun4c_fault_fromuser
 	 and	%l5, %l4, %l5
 
-	lduba	[%l5] ASI_SEGMAP, %l4
+	/* Test for NULL pte_t * in vmalloc area. */
+	sethi   %hi(SUN4C_VMALLOC_START), %l4
+	cmp     %l5, %l4
+	blu,a   C_LABEL(invalid_segment_patch1)
+	 lduba  [%l5] ASI_SEGMAP, %l4
+
+	srl     %l5, SUN4C_PGDIR_SHIFT, %l6
+	sethi   %hi(C_LABEL(swapper_pg_dir)), %l4
+	or      %l4, %lo(C_LABEL(swapper_pg_dir)), %l4
+	sll     %l6, 2, %l6
+	ld      [%l4 + %l6], %l4
+	andcc   %l4, PAGE_MASK, %g0
+
+	be      sun4c_fault_fromuser
+	 lduba  [%l5] ASI_SEGMAP, %l4
+
 C_LABEL(invalid_segment_patch1):
 	cmp	%l4, 0x7f
 	bne	1f
@@ -1268,11 +1257,9 @@ C_LABEL(ret_from_syscall):
 #ifdef __SMP__
 	.globl	C_LABEL(ret_from_smpfork)
 C_LABEL(ret_from_smpfork):
-	mov	NO_PROC_ID, %o5
-	sethi	%hi(C_LABEL(klock_info)), %o4
-	or	%o4, %lo(C_LABEL(klock_info)), %o4
-	stb	%o5, [%o4 + 1]
-	stb	%g0, [%o4 + 0]
+	/* Nowadays all we need to do is drop the scheduler lock. */
+	sethi	%hi(C_LABEL(scheduler_lock)), %o4
+	stb	%g0, [%o4 + %lo(C_LABEL(scheduler_lock))]
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
 	b	C_LABEL(ret_sys_call)
@@ -1605,6 +1592,7 @@ C_LABEL(udelay):
 #else
 	GET_PROCESSOR_OFFSET(o4)
 	set	C_LABEL(cpu_data), %o3
+	sll	%o4, 1, %o4
 	call	.umul
 	 ld	[%o3 + %o4], %o1
 #endif

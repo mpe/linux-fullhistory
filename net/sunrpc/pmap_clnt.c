@@ -32,7 +32,8 @@ static void			pmap_getport_done(struct rpc_task *);
 extern struct rpc_program	pmap_program;
 
 /*
- * Obtain the port for a given RPC service on a given host
+ * Obtain the port for a given RPC service on a given host. This one can
+ * be called for an ongoing RPC request.
  */
 void
 rpc_getport(struct rpc_task *task, struct rpc_clnt *clnt)
@@ -75,6 +76,34 @@ bailout:
 	task->tk_status = -EIO;
 	task->tk_action = NULL;
 }
+
+#ifdef CONFIG_ROOT_NFS
+int
+rpc_getport_external(struct sockaddr_in *sin, __u32 prog, __u32 vers, int prot)
+{
+	struct rpc_portmap map = { prog, vers, prot, 0 };
+	struct rpc_clnt	*pmap_clnt;
+	char		hostname[32];
+	int		status;
+
+	dprintk("RPC:      rpc_getport_external(%s, %d, %d, %d)\n",
+			in_ntoa(sin->sin_addr.s_addr), prog, vers, prot);
+
+	strcpy(hostname, in_ntoa(sin->sin_addr.s_addr));
+	if (!(pmap_clnt = pmap_create(hostname, sin, prot)))
+		return -EACCES;
+
+	/* Setup the call info struct */
+	status = rpc_call(pmap_clnt, PMAP_GETPORT, &map, &map.pm_port, 0);
+
+	if (status >= 0) {
+		if (map.pm_port != 0)
+			return map.pm_port;
+		status = -EACCES;
+	}
+	return status;
+}
+#endif
 
 static void
 pmap_getport_done(struct rpc_task *task)

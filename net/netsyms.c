@@ -237,6 +237,7 @@ EXPORT_SYMBOL(net_reset_timer);
 EXPORT_SYMBOL(net_delete_timer);
 EXPORT_SYMBOL(udp_prot);
 EXPORT_SYMBOL(tcp_prot);
+EXPORT_SYMBOL(tcp_openreq_cachep);
 EXPORT_SYMBOL(ipv4_specific);
 #endif
 
@@ -260,6 +261,7 @@ EXPORT_SYMBOL(tr_type_trans);
 EXPORT_SYMBOL(register_trdev);
 EXPORT_SYMBOL(unregister_trdev);
 EXPORT_SYMBOL(init_trdev);
+EXPORT_SYMBOL(tr_freedev);
 #endif
                   
 #ifdef CONFIG_NET_ALIAS

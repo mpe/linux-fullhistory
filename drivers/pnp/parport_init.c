@@ -9,10 +9,12 @@
  *              and Philip Blundell <Philip.Blundell@pobox.com>
  */
 
+#include <linux/config.h>
+#include <linux/module.h>
+#include <linux/tasks.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 
-#include <linux/module.h>
 #include <linux/parport.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
@@ -761,8 +763,10 @@ int pnp_parport_init(void)
 #undef PORT
 	}
 
+#ifdef CONFIG_PNP_PARPORT_AUTOPROBE
 	for (pb = parport_enumerate(); pb; pb = pb->next)
 		parport_probe_one(pb);
+#endif
 
 	return 0;
 }

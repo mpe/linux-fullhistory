@@ -804,8 +804,8 @@ de600_rspace(struct sock *sk)
   	sk->max_unacked = DE600_MAX_WINDOW - DE600_TCP_WINDOW_DIFF;
  */
 
-	if (sk->rmem_alloc >= sk->rcvbuf-2*DE600_MIN_WINDOW) return(0);
-	amt = min((sk->rcvbuf-sk->rmem_alloc)/2/*-DE600_MIN_WINDOW*/, DE600_MAX_WINDOW);
+	if (atomic_read(&sk->rmem_alloc) >= sk->rcvbuf-2*DE600_MIN_WINDOW) return(0);
+	amt = min((sk->rcvbuf-atomic_read(&sk->rmem_alloc))/2/*-DE600_MIN_WINDOW*/, DE600_MAX_WINDOW);
 	if (amt < 0) return(0);
 	return(amt);
   }

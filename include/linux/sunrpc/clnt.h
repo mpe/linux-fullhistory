@@ -126,5 +126,12 @@ rpc_set_timeout(struct rpc_clnt *clnt, unsigned int retr, unsigned long incr)
 	xprt_set_timeout(&clnt->cl_timeout, retr, incr);
 }
 
+/*
+ * Helper function for NFSroot support
+ */
+#ifdef CONFIG_ROOT_NFS
+int		rpc_getport_external(struct sockaddr_in *, __u32, __u32, int);
+#endif
+
 #endif /* __KERNEL__ */
 #endif /* _LINUX_SUNRPC_CLNT_H */

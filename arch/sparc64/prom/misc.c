@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.4 1997/03/04 16:27:11 jj Exp $
+/* $Id: misc.c,v 1.6 1997/04/10 05:13:05 davem Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -40,6 +40,7 @@ extern int serial_console;
 /* Drop into the prom, with the chance to continue with the 'go'
  * prom command.
  */
+/* XXX Fix the pre and post calls as it locks up my Ultra at the moment -DaveM */
 void
 prom_cmdline(void)
 {
@@ -48,19 +49,23 @@ prom_cmdline(void)
 	extern void install_linux_ticker(void);
 	unsigned long flags;
     
-	kernel_enter_debugger();
+	/* kernel_enter_debugger(); */
 #ifdef CONFIG_SUN_CONSOLE
+#if 0
 	if(!serial_console)
 		console_restore_palette ();
 #endif
-	install_obp_ticker();
+#endif
+	/* install_obp_ticker(); */
 	save_flags(flags); cli();
 	p1275_cmd ("enter", P1275_INOUT(0,0));
 	restore_flags(flags);
-	install_linux_ticker();
+	/* install_linux_ticker(); */
 #ifdef CONFIG_SUN_CONSOLE
+#if 0
 	if(!serial_console)
 		set_palette ();
+#endif
 #endif
 }
 
@@ -70,7 +75,9 @@ prom_cmdline(void)
 void
 prom_halt(void)
 {
+again:
 	p1275_cmd ("exit", P1275_INOUT(0,0));
+	goto again; /* PROM is out to get me -DaveM */
 }
 
 /* Set prom sync handler to call function 'funcp'. */
@@ -118,4 +125,10 @@ int
 prom_getprev(void)
 {
 	return prom_prev;
+}
+
+/* Install Linux trap table so PROM uses that instead of it's own. */
+void prom_set_trap_table(unsigned long tba)
+{
+	p1275_cmd("SUNW,set-trap-table", P1275_INOUT(1, 0), tba);
 }

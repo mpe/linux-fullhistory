@@ -23,9 +23,9 @@ extern void release_region(unsigned long from, unsigned long extent);
 extern int get_ioport_list(char *);
 
 #ifdef __sparc__
-extern unsigned int occupy_region(unsigned long base, unsigned long end,
-				  unsigned long num, unsigned int align,
-				  const char *name);
+extern unsigned long occupy_region(unsigned long base, unsigned long end,
+				   unsigned long num, unsigned int align,
+				   const char *name);
 #endif
 
 #define HAVE_AUTOIRQ

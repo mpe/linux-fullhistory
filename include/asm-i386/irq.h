@@ -72,6 +72,24 @@ extern void enable_irq(unsigned int);
 	"iret"
 
 /*
+ * Some fast irq handlers might want to access saved registers (mostly
+ * cs or flags)
+ */
+
+struct fast_irq_regs {
+	long ecx;
+	long edx;
+	long eax;
+	int  xds;
+	int  xes;
+	long eip;
+	int  xcs;
+	long eflags;
+	long esp;
+	int  xss;
+};
+
+/*
  * The "inb" instructions are not needed, but seem to change the timings
  * a bit - without them it seems that the harddisk driver won't work on
  * all hardware. Arghh.
@@ -161,12 +179,13 @@ asmlinkage void x(struct pt_regs * regs); \
 __asm__( \
 "\n"__ALIGN_STR"\n" \
 SYMBOL_NAME_STR(x) ":\n\t" \
-	SAVE_MOST \
-	"movl %esp,%eax\n\t" \
-	"pushl %eax\n\t" \
+	"pushl $-1\n\t" \
+        SAVE_ALL \
+        "movl %esp,%eax\n\t" \
+        "pushl %eax\n\t" \
 	"call "SYMBOL_NAME_STR(smp_##x)"\n\t" \
-	"addl $4,%esp\n\t" \
-	RESTORE_MOST);
+        "addl $4,%esp\n\t" \
+	"jmp ret_from_intr\n");
 
 #endif /* __SMP__ */
 

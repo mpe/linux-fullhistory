@@ -1676,7 +1676,7 @@ void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		} while ((ST0 & 0x83) != UNIT(current_drive) && inr == 2);
 	}
 	if (handler) {
-		if(intr_count >= 2)
+		if (in_interrupt())
 			schedule_bh( (void *)(void *) handler);
 		else
 			handler();

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.50 1997/03/16 03:25:59 davem Exp $
+ * Version:	$Id: tcp.c,v 1.55 1997/04/13 10:31:45 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -198,6 +198,8 @@
  *	Willy Konynenberg	:	Transparent proxying support.
  *		Keith Owens	:	Do proper meging with partial SKB's in
  *					tcp_do_sendmsg to avoid burstiness.
+ *		Eric Schenk	:	Fix fast close down bug with
+ *					shutdown() followed by close().
  *					
  * To Fix:
  *		Fast path the code. Two things here - fix the window calculation
@@ -431,7 +433,7 @@
 unsigned long seq_offset;
 struct tcp_mib	tcp_statistics;
 
-
+kmem_cache_t *tcp_openreq_cachep;
 
 /*
  *	Find someone to 'accept'. Must be called with
@@ -440,25 +442,16 @@ struct tcp_mib	tcp_statistics;
 
 static struct open_request *tcp_find_established(struct tcp_opt *tp)
 {
-	struct open_request *req;
-
-	req = tp->syn_wait_queue;
+	struct open_request *req = tp->syn_wait_queue;
 
 	if (!req)
 		return NULL;
-	
 	do {
 		if (req->sk && 
 		    (req->sk->state == TCP_ESTABLISHED ||
 		     req->sk->state >= TCP_FIN_WAIT1))
-		{
 			return req;
-		}
-
-		req = req->dl_next;
-
-	} while (req != tp->syn_wait_queue);
-	
+	} while ((req = req->dl_next) != tp->syn_wait_queue);
 	return NULL;
 }
 
@@ -471,13 +464,10 @@ static struct open_request *tcp_find_established(struct tcp_opt *tp)
 static void tcp_close_pending (struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	struct open_request *req;
-
-	req = tp->syn_wait_queue;
+	struct open_request *req = tp->syn_wait_queue;
 
 	if (!req)
 		return;
-	
 	do {
 		struct open_request *iter;
 		
@@ -490,12 +480,10 @@ static void tcp_close_pending (struct sock *sk)
 		(*iter->class->destructor)(iter);
 		tcp_dec_slow_timer(TCP_SLT_SYNACK);
 		sk->ack_backlog--;
-		kfree(iter);
-
+		tcp_openreq_free(iter);
 	} while (req != tp->syn_wait_queue);
 
 	tp->syn_wait_queue = NULL;
-	return;
 }
 
 /*
@@ -729,7 +717,7 @@ static void wait_for_tcp_connect(struct sock * sk)
 
 static inline int tcp_memory_free(struct sock *sk)
 {
-	return sk->wmem_alloc < sk->sndbuf;
+	return atomic_read(&sk->wmem_alloc) < sk->sndbuf;
 }
 
 /*
@@ -961,7 +949,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 			tmp = MAX_HEADER + sk->prot->max_header + 
 				sizeof(struct sk_buff) + 15;
 			if (copy < min(sk->mss, sk->max_window >> 1) && 
-			    !(flags & MSG_OOB) && sk->packets_out)
+			    !(flags & MSG_OOB) && atomic_read(&sk->packets_out))
 			{
 				tmp += min(sk->mss, sk->max_window);
 			}
@@ -1177,7 +1165,7 @@ static void cleanup_rbuf(struct sock *sk)
 	 */
 
 	while ((skb=skb_peek(&sk->receive_queue)) != NULL) {
-		if (!skb->used || skb->users>1)
+		if (!skb->used || atomic_read(&skb->users)>1)
 			break;
 		tcp_eat_skb(sk, skb);
 	}
@@ -1439,7 +1427,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		if (flags & MSG_PEEK)
 			continue;
 		skb->used = 1;
-		if (skb->users == 1)
+		if (atomic_read(&skb->users) == 1)
 			tcp_eat_skb(sk, skb);
 		continue;
 
@@ -1505,6 +1493,7 @@ static int tcp_close_state(struct sock *sk, int dead)
 		case TCP_CLOSE:
 		case TCP_LISTEN:
 			break;
+		case TCP_LAST_ACK:	/* Could have shutdown() then close() */
 		case TCP_CLOSE_WAIT:	/* They have FIN'd us. We send our FIN and
 					   wait only for the ACK */
 			ns=TCP_LAST_ACK;
@@ -1681,8 +1670,8 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 			tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_FIN_TIMEOUT);
 	}
 
-	release_sock(sk);
 	sk->dead = 1;
+	release_sock(sk);
 
 	if(sk->state == TCP_CLOSE)
 		sk->prot->unhash(sk);
@@ -1728,11 +1717,9 @@ struct sock *tcp_accept(struct sock *sk, int flags)
 	struct sock *newsk = NULL;
 	int error;
 
-  /*
-   * We need to make sure that this socket is listening,
-   * and that it has something pending.
-   */
-
+	/* We need to make sure that this socket is listening,
+	 * and that it has something pending.
+	 */
 	error = EINVAL;
 	if (sk->state != TCP_LISTEN)
 		goto no_listen;
@@ -1744,7 +1731,7 @@ struct sock *tcp_accept(struct sock *sk, int flags)
 got_new_connect:
 		tcp_synq_unlink(tp, req);
 		newsk = req->sk;
-		kfree(req);
+		tcp_openreq_free(req);
 		sk->ack_backlog--;
 		error = 0;
 out:
@@ -1852,4 +1839,14 @@ void tcp_set_keepalive(struct sock *sk, int val)
 	{
 		tcp_dec_slow_timer(TCP_SLT_KEEPALIVE);
 	}
+}
+
+void tcp_init(void)
+{
+	tcp_openreq_cachep = kmem_cache_create("tcp_open_request",
+					       sizeof(struct open_request),
+					       sizeof(long)*8, SLAB_HWCACHE_ALIGN,
+					       NULL, NULL);
+	if(!tcp_openreq_cachep)
+		panic("tcp_init: Cannot alloc open_request cache.");
 }

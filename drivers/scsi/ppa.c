@@ -1193,7 +1193,7 @@ int ppa_detect(Scsi_Host_Template * host)
 		hreg->n_io_port = ports;
 		hreg->dma_channel = -1;
 		hreg->unique_id = i;
-		ppa_hosts[i]..host = hreg->host_no;
+		ppa_hosts[i].host = hreg->host_no;
 		nhosts++;
 	}
 	if (nhosts == 0)

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.23 1997/03/17 04:49:38 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.30 1997/04/13 10:31:44 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -581,11 +581,11 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	tcp_init_xmit_timers(sk);
 
 	/* Now works the right way instead of a hacked initial setting */
-	sk->retransmits = 0;
+	atomic_set(&sk->retransmits, 0);
 
 	skb_queue_tail(&sk->write_queue, buff);
 
-	sk->packets_out++;
+	atomic_inc(&sk->packets_out);
 	buff->when = jiffies;
 
 	skb1 = skb_clone(buff, GFP_KERNEL);
@@ -663,8 +663,8 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp)
 	{
 		struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
-		sk->ssthresh = max(sk->cong_window >> 1, 2);
-		sk->cong_window = sk->ssthresh + 3;
+		sk->ssthresh = max(tp->snd_cwnd >> 1, 2);
+		tp->snd_cwnd = sk->ssthresh + 3;
 		tp->high_seq = tp->snd_nxt;
 
 		return;
@@ -800,56 +800,41 @@ int tcp_chkaddr(struct sk_buff *skb)
 
 static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 {
-	struct tcp_v4_open_req *af_req = (struct tcp_v4_open_req *) req;
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	struct sk_buff * skb;
 	struct tcphdr *th;
 	unsigned char *ptr;
 	int mss;
-	int tmp;
 
 	skb = sock_wmalloc(sk, MAX_SYN_SIZE, 1, GFP_ATOMIC);
-
 	if (skb == NULL)
-	{
 		return;
-	}
 
-	tmp = ip_build_pkt(skb, sk, af_req->loc_addr, af_req->rmt_addr,
-			   af_req->opt);
-
-	if (tmp < 0)
-	{
+	if(ip_build_pkt(skb, sk, req->af.v4_req.loc_addr,
+			req->af.v4_req.rmt_addr, req->af.v4_req.opt) < 0) {
 		kfree_skb(skb, FREE_WRITE);
 		return;
 	}
 
-	mss = skb->dst->pmtu;
-
-	mss -= sizeof(struct iphdr) + sizeof(struct tcphdr);
-
+	mss = (skb->dst->pmtu - sizeof(struct iphdr) + sizeof(struct tcphdr));
 	if (sk->user_mss)
 		mss = min(mss, sk->user_mss);
+	skb->h.th = th = (struct tcphdr *) skb_put(skb, sizeof(struct tcphdr));
 
-	th =(struct tcphdr *) skb_put(skb, sizeof(struct tcphdr));
-	skb->h.th = th;
+	/* Yuck, make this header setup more efficient... -DaveM */
 	memset(th, 0, sizeof(struct tcphdr));
-
 	th->syn = 1;
 	th->ack = 1;
-
 	th->source = sk->dummy_th.source;
 	th->dest = req->rmt_port;
-
 	skb->seq = req->snt_isn;
 	skb->end_seq = skb->seq + 1;
-
 	th->seq = ntohl(skb->seq);
 	th->ack_seq = htonl(req->rcv_isn + 1);
 	th->doff = sizeof(*th)/4 + 1;
-
 	th->window = ntohs(tp->rcv_wnd);
 
+	/* FIXME: csum_partial() of a four byte quantity is itself! -DaveM */
 	ptr = skb_put(skb, TCPOLEN_MSS);
 	ptr[0] = TCPOPT_MSS;
 	ptr[1] = TCPOLEN_MSS;
@@ -858,8 +843,7 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 	skb->csum = csum_partial(ptr, TCPOLEN_MSS, 0);
 
 	th->check = tcp_v4_check(th, sizeof(*th) + TCPOLEN_MSS,
-				 af_req->loc_addr,
-				 af_req->rmt_addr,
+				 req->af.v4_req.loc_addr, req->af.v4_req.rmt_addr,
 				 csum_partial((char *)th, sizeof(*th), skb->csum));
 
 	ip_queue_xmit(skb);
@@ -868,13 +852,9 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 
 static void tcp_v4_or_free(struct open_request *req)
 {
-	struct tcp_v4_open_req *af_req = (struct tcp_v4_open_req *) req;
-
-	if (af_req->req.sk)
-		return;
-
-	if (af_req->opt)
-		kfree_s(af_req->opt, sizeof(struct options) + af_req->opt->optlen);
+	if(!req->sk && req->af.v4_req.opt)
+		kfree_s(req->af.v4_req.opt,
+			sizeof(struct options) + req->af.v4_req.opt->optlen);
 }
 
 static struct or_calltable or_ipv4 = {
@@ -890,11 +870,11 @@ static int tcp_v4_syn_filter(struct sock *sk, struct sk_buff *skb, __u32 saddr)
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, __u32 isn)
 {
 	struct ip_options *opt = (struct ip_options *) ptr;
-	struct tcp_v4_open_req *af_req;
 	struct open_request *req;
 	struct tcphdr *th = skb->h.th;
 	__u32 saddr = skb->nh.iph->saddr;
 	__u32 daddr = skb->nh.iph->daddr;
+	__u16 req_mss;
 
 	/* If the socket is dead, don't accept the connection.	*/
 	if (sk->dead)
@@ -916,55 +896,40 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, __u32 i
 		goto exit;
 	}
 
-	af_req = kmalloc(sizeof(struct tcp_v4_open_req), GFP_ATOMIC);
-
-	if (af_req == NULL)
-	{
+	req = tcp_openreq_alloc();
+	if (req == NULL) {
 		tcp_statistics.TcpAttemptFails++;
 		goto exit;
 	}
 
 	sk->ack_backlog++;
-	req = (struct open_request *) af_req;
-
-	memset(af_req, 0, sizeof(struct tcp_v4_open_req));
 
 	req->rcv_isn = skb->seq;
 	req->snt_isn = isn;
-
-	/* mss */
-	req->mss = tcp_parse_options(th);
-
-	if (!req->mss)
-	{
-		req->mss = 536;
-	}
-
+	req_mss = tcp_parse_options(th);
+	if (!req_mss)
+		req_mss = 536;
+	req->mss = req_mss;
 	req->rmt_port = th->source;
+	req->af.v4_req.loc_addr = daddr;
+	req->af.v4_req.rmt_addr = saddr;
 
-	af_req->loc_addr = daddr;
-	af_req->rmt_addr = saddr;
+	/* IPv4 options */
+	req->af.v4_req.opt = NULL;
+	if (opt && opt->optlen) {
+		int opt_size = sizeof(struct ip_options) + opt->optlen;
 
-	/*
-	 *	options
-	 */
-
-	if (opt && opt->optlen)
-	{
-		af_req->opt = (struct ip_options*) kmalloc(sizeof(struct ip_options) +
-							   opt->optlen, GFP_ATOMIC);
-		if (af_req->opt)
-		{
-			if (ip_options_echo(af_req->opt, skb))
-			{
-				kfree_s(af_req->opt, sizeof(struct options) +
-					opt->optlen);
-				af_req->opt = NULL;
+		req->af.v4_req.opt = kmalloc(opt_size, GFP_ATOMIC);
+		if (req->af.v4_req.opt) {
+			if (ip_options_echo(req->af.v4_req.opt, skb)) {
+				kfree_s(req->af.v4_req.opt, opt_size);
+				req->af.v4_req.opt = NULL;
 			}
 		}
 	}
-
 	req->class = &or_ipv4;
+	req->retrans = 0;
+	req->sk = NULL;
 
 	tcp_v4_send_synack(sk, req);
 
@@ -973,7 +938,8 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, __u32 i
 	tcp_synq_queue(&sk->tp_pinfo.af_tcp, req);
 
 	sk->data_ready(sk, 0);
-  exit:
+
+exit:
 	kfree_skb(skb, FREE_READ);
 	return 0;
 }
@@ -981,7 +947,6 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, __u32 i
 struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 				   struct open_request *req)
 {
-	struct tcp_v4_open_req *af_req = (struct tcp_v4_open_req *) req;
 	struct tcp_opt *newtp;
 	struct sock *newsk;
 	struct rtable *rt;
@@ -989,9 +954,7 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 
 	newsk = sk_alloc(GFP_ATOMIC);
 	if (newsk == NULL)
-	{
 		return NULL;
-	}
 
 	memcpy(newsk, sk, sizeof(*newsk));
 
@@ -1022,15 +985,17 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	newsk->prot->init(newsk);
 
 	newsk->cong_count = 0;
+#if 0 /* Don't mess up the initialization we did in the init routine! */
 	newsk->ssthresh = 0;
+#endif
 	newtp->backoff = 0;
 	newsk->intr = 0;
 	newsk->proc = 0;
 	newsk->done = 0;
 	newsk->partial = NULL;
 	newsk->pair = NULL;
-	newsk->wmem_alloc = 0;
-	newsk->rmem_alloc = 0;
+	atomic_set(&newsk->wmem_alloc, 0);
+	atomic_set(&newsk->rmem_alloc, 0);
 	newsk->localroute = sk->localroute;
 
 	newsk->max_unacked = MAX_WINDOW - TCP_WINDOW_DIFF;
@@ -1055,8 +1020,8 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	newtp->snd_nxt = newsk->write_seq;
 
 	newsk->urg_data = 0;
-	newsk->packets_out = 0;
-	newsk->retransmits = 0;
+	atomic_set(&newsk->packets_out, 0);
+	atomic_set(&newsk->retransmits, 0);
 	newsk->linger=0;
 	newsk->destroy = 0;
 	init_timer(&newsk->timer);
@@ -1075,15 +1040,14 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 
 	newsk->socket = NULL;
 
-	newsk->daddr = af_req->rmt_addr;
-	newsk->saddr = af_req->loc_addr;
-	newsk->rcv_saddr = af_req->loc_addr;
+	newsk->daddr = req->af.v4_req.rmt_addr;
+	newsk->saddr = req->af.v4_req.loc_addr;
+	newsk->rcv_saddr = req->af.v4_req.loc_addr;
 
 	/*
 	 *	options / mss / route_cache
 	 */
-	newsk->opt = af_req->opt;
-
+	newsk->opt = req->af.v4_req.opt;
 	if (ip_route_output(&rt,
 			    newsk->opt && newsk->opt->srr ? newsk->opt->faddr : newsk->daddr,
 			    newsk->saddr, newsk->ip_tos, NULL)) {
@@ -1099,16 +1063,11 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	newsk->mtu = snd_mss;
 	/* sanity check */
 	if (newsk->mtu < 64)
-	{
 		newsk->mtu = 64;
-	}
 
 	snd_mss -= sizeof(struct iphdr) + sizeof(struct tcphdr);
-
 	if (sk->user_mss)
-	{
 		snd_mss = min(snd_mss, sk->user_mss);
-	}
 
 	newsk->mss = min(req->mss, snd_mss);
 
@@ -1120,77 +1079,50 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 struct sock *tcp_v4_check_req(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	struct open_request *req;
+	struct open_request *req = tp->syn_wait_queue;
 
-	/*
-	 *	assumption: the socket is not in use.
+	/*	assumption: the socket is not in use.
 	 *	as we checked the user count on tcp_rcv and we're
 	 *	running from a soft interrupt.
 	 */
-
-	req = tp->syn_wait_queue;
-
 	if (!req)
-	{
 		return sk;
-	}
 
 	do {
-		struct tcp_v4_open_req *af_req;
-
-		af_req = (struct tcp_v4_open_req *) req;
-
-		if (af_req->rmt_addr == skb->nh.iph->saddr &&
-		    af_req->loc_addr == skb->nh.iph->daddr &&
-		    req->rmt_port == skb->h.th->source)
-		{
+		if (req->af.v4_req.rmt_addr == skb->nh.iph->saddr &&
+		    req->af.v4_req.loc_addr == skb->nh.iph->daddr &&
+		    req->rmt_port == skb->h.th->source) {
 			u32 flg;
 
-			if (req->sk)
-			{
-				/*
-				 *	socket already created but not
+			if (req->sk) {
+				/*	socket already created but not
 				 *	yet accepted()...
 				 */
-
 				sk = req->sk;
 				break;
 			}
 
-			/* match */
-
-			/*
-			 *	Check for syn retransmission
-			 */
+			/* Check for syn retransmission */
 			flg = *(((u32 *)skb->h.th) + 3);
 			flg &= __constant_htonl(0x002f0000);
-
 			if ((flg == __constant_htonl(0x00020000)) &&
-			    (!after(skb->seq, req->rcv_isn)))
-			{
-				/*
-				 *	retransmited syn
+			    (!after(skb->seq, req->rcv_isn))) {
+				/*	retransmited syn
 				 *	FIXME: must send an ack
 				 */
 				return NULL;
 			}
 
 			sk = tp->af_specific->syn_recv_sock(sk, skb, req);
-
 			tcp_dec_slow_timer(TCP_SLT_SYNACK);
-
 			if (sk == NULL)
-			{
 				return NULL;
-			}
 
 			req->expires = 0UL;
 			req->sk = sk;
 			break;
 		}
-
-		req = req->dl_next;
-	} while (req != tp->syn_wait_queue);
+	} while ((req = req->dl_next) != tp->syn_wait_queue);
 
 	skb_orphan(skb);
 	skb_set_owner_r(skb, sk);
@@ -1422,8 +1354,8 @@ static int tcp_v4_init_sock(struct sock *sk)
 	 * See draft-stevens-tcpca-spec-01 for discussion of the
 	 * initialization of these values.
 	 */
-	sk->cong_window = 1;
-	sk->ssthresh = 0x7fffffff;
+	tp->snd_cwnd = 1;
+	sk->ssthresh = 0x7fffffff;	/* Infinity */
 
 	sk->priority = 1;
 	sk->state = TCP_CLOSE;

@@ -5,6 +5,7 @@
  *             Philip Blundell <Philip.Blundell@pobox.com>
  */
 
+#include <linux/tasks.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 
@@ -20,7 +21,6 @@
 #include <linux/lp.h>
 
 #include <asm/uaccess.h>
-
 #undef DEBUG_PROBE
 
 static inline int read_nibble(struct parport *port) 

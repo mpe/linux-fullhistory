@@ -15,6 +15,7 @@
 
 #include <asm/errno.h>
 #include <asm/head.h>
+#include <asm/ptrace.h>
 
 #define CSUM_BIGCHUNK(buf, offset, sum, t0, t1, t2, t3, t4, t5)	\
 	ldd	[buf + offset + 0x00], t0;			\
@@ -78,8 +79,8 @@ csum_partial_fix_alignment:
 	/* The common case is to get called with a nicely aligned
 	 * buffer of size 0x20.  Follow the code path for that case.
 	 */
-	.globl	C_LABEL(csum_partial)
-C_LABEL(csum_partial):			/* %o0=buf, %o1=len, %o2=sum */
+	.globl	csum_partial
+csum_partial:						/* %o0=buf, %o1=len, %o2=sum */
 	andcc	%o0, 0x7, %g0				! alignment problems?
 	be,pt	%icc, csum_partial_fix_aligned		! yep, handle it
 	 andn	%o1, 0x7f, %o3				! num loop iterations
@@ -140,8 +141,8 @@ cpte:	brnz,pn	%o3, csum_partial_end_cruft		! yep, handle it
 	retl						! get outta here
 	 sllx	%g4, 32, %g4				! give gfp back
 
-	.globl C_LABEL(__csum_partial_copy_start), C_LABEL(__csum_partial_copy_end)
-C_LABEL(__csum_partial_copy_start):
+	.globl __csum_partial_copy_start, __csum_partial_copy_end
+__csum_partial_copy_start:
 
 #define EX(x,y,a,b,z)                           \
 98:     x,y;                                    \
@@ -288,8 +289,8 @@ cc_end_cruft:
 	 * out of you, game over, lights out.
 	 */
 	.align	8
-	.globl	C_LABEL(__csum_partial_copy_sparc_generic)
-C_LABEL(__csum_partial_copy_sparc_generic):
+	.globl	__csum_partial_copy_sparc_generic
+__csum_partial_copy_sparc_generic:
 					/* %o0=src, %o1=dest, %g1=len, %g7=sum */
 	xor	%o0, %o1, %o4		! get changing bits
 	andcc	%o4, 3, %g0		! check for mismatched alignment
@@ -460,7 +461,7 @@ ccslow:	mov	0, %g5
 4:	addcc	%g7, %g5, %g7
 	retl	
 	 addc	%g0, %g7, %o0
-C_LABEL(__csum_partial_copy_end):
+__csum_partial_copy_end:
 
         .section .fixup,#alloc,#execinstr
         .align  4
@@ -514,7 +515,7 @@ C_LABEL(__csum_partial_copy_end):
 	sub	%o1, 0x70, %o1
 	add	%o3, 0x70, %o3
 	clr	%o2
-	movne	%g2, 8, %o2
+	movrnz	%g2, 8, %o2
 	ba,pt	%xcc, 31f
 	 sub	%o3, %o2, %o3
 96:
@@ -538,7 +539,7 @@ C_LABEL(__csum_partial_copy_end):
         mov     %i5, %o0
         mov     %i7, %o1
         mov	%i4, %o2
-        call    C_LABEL(lookup_fault)
+        call    lookup_fault
 	 mov	%g7, %i4
 	cmp	%o0, 2
 	bne,pn	%icc, 1f
@@ -547,17 +548,17 @@ C_LABEL(__csum_partial_copy_end):
 	 mov	%i0, %o1
 	mov	%i1, %o0
 5:
-	call	C_LABEL(__memcpy)
+	call	__memcpy
 	 mov	%i2, %o2
 	brnz,a,pn %o0, 2f
 	 add	%i3, %i2, %i3
 	add	%i1, %i2, %i1
 2:
 	mov	%i1, %o0
-	call	C_LABEL(__bzero)
+	call	__bzero
 	 mov	%i3, %o1
 1:
-	ldx	[%sp + 264], %o2		! struct_ptr of parent
+	ldx	[%sp + STACK_BIAS + 264], %o2		! struct_ptr of parent
 	st	%i5, [%o2]
 	ret
 	 restore

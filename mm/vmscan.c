@@ -7,7 +7,7 @@
  *  kswapd added: 7.1.96  sct
  *  Removed kswapd_ctl limits, and swap out as many pages as needed
  *  to bring the system back to free_pages_high: 2.4.97, Rik van Riel.
- *  Version: $Id: vmscan.c,v 1.21 1997/01/06 06:54:03 davem Exp $
+ *  Version: $Id: vmscan.c,v 1.23 1997/04/12 04:31:05 davem Exp $
  */
 
 #include <linux/mm.h>
@@ -103,7 +103,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 			if (vma->vm_ops->swapout(vma, address - vma->vm_start + vma->vm_offset, page_table))
 				kill_proc(pid, SIGBUS, 1);
 		} else {
-			if (page_map->count != 1)
+			if (atomic_read(&page_map->count) != 1)
 				return 0;
 			if (!(entry = get_swap_page()))
 				return 0;
@@ -118,7 +118,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 		return 1;	/* we slept: the process may not exist any more */
 	}
         if ((entry = find_in_swap_cache(MAP_NR(page))))  {
-		if (page_map->count != 1) {
+		if (atomic_read(&page_map->count) != 1) {
 			set_pte(page_table, pte_mkdirty(pte));
 			printk("Aiee.. duplicated cached swap-cache entry\n");
 			return 0;
@@ -369,7 +369,7 @@ int try_to_free_page(int priority, int dma, int wait)
 int kswapd(void *unused)
 {
 	int i;
-	char *revision="$Revision: 1.21 $", *s, *e;
+	char *revision="$Revision: 1.23 $", *s, *e;
 	
 	current->session = 1;
 	current->pgrp = 1;
@@ -412,9 +412,9 @@ int kswapd(void *unused)
 		 */
 		while(nr_free_pages < min_free_pages)
 			try_to_free_page(GFP_KERNEL, 0, 1);
-		while((nr_free_pages + nr_async_pages) < free_pages_low)
+		while((nr_free_pages + atomic_read(&nr_async_pages)) < free_pages_low)
 			try_to_free_page(GFP_KERNEL, 0, 1);
-		while((nr_free_pages + nr_async_pages) < free_pages_high)
+		while((nr_free_pages + atomic_read(&nr_async_pages)) < free_pages_high)
 			try_to_free_page(GFP_KERNEL, 0, 0);
 	}
 }
@@ -428,13 +428,13 @@ void swap_tick(void)
 	int	want_wakeup = 0;
 	static int	last_wakeup_low = 0;
 
-	if ((nr_free_pages + nr_async_pages) < free_pages_low) {
+	if ((nr_free_pages + atomic_read(&nr_async_pages)) < free_pages_low) {
 		if (last_wakeup_low)
 			want_wakeup = jiffies >= next_swap_jiffies;
 		else
 			last_wakeup_low = want_wakeup = 1;
 	}
-	else if (((nr_free_pages + nr_async_pages) < free_pages_high) && 
+	else if (((nr_free_pages + atomic_read(&nr_async_pages)) < free_pages_high) && 
 	         jiffies >= next_swap_jiffies) {
 		last_wakeup_low = 0;
 		want_wakeup = 1;

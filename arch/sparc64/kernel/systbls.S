@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.2 1997/03/18 17:59:03 jj Exp $
+/* $Id: systbls.S,v 1.5 1997/04/09 08:25:16 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -16,63 +16,64 @@
 
 	.globl sys_call_table32
 sys_call_table32:
-/*0*/	.xword sys_setup, sys_exit, sys_fork, sys_read, sys_write
-/*5*/	.xword sys_open, sys_close, sys_wait4, sys_creat, sys_link
-/*10*/  .xword sys_unlink, sunos_execv, sys_chdir, sys_nis_syscall, sys_mknod
-/*15*/	.xword sys_chmod, sys_chown, sparc_brk, sys_nis_syscall, sys_lseek
+/*0*/	.xword sys_setup, sys_exit, sys_fork, sys32_read, sys32_write
+/*5*/	.xword sys32_open, sys_close, sys32_wait4, sys32_creat, sys32_link
+/*10*/  .xword sys32_unlink, sunos_execv, sys32_chdir, sys_nis_syscall, sys32_mknod
+/*15*/	.xword sys32_chmod, sys32_chown, sparc32_brk, sys_nis_syscall, sys32_lseek
 /*20*/	.xword sys_getpid, sys_nis_syscall, sys_nis_syscall, sys_setuid, sys_getuid
-/*25*/	.xword sys_time, sys_ptrace, sys_alarm, sys_nis_syscall, sys_pause
-/*30*/	.xword sys_utime, sys_stty, sys_gtty, sys_access, sys_nice
-	.xword sys_ftime, sys_sync, sys_kill, sys_newstat, sys_nis_syscall
-/*40*/	.xword sys_newlstat, sys_dup, sys_pipe, sys_times, sys_profil
-	.xword sys_nis_syscall, sys_setgid, sys_getgid, sys_signal, sys_geteuid
-/*50*/	.xword sys_getegid, sys_acct, sys_nis_syscall, sys_nis_syscall, sys_ioctl
-	.xword sys_reboot, sys_nis_syscall, sys_symlink, sys_readlink, sys_execve
-/*60*/	.xword sys_umask, sys_chroot, sys_newfstat, sys_nis_syscall, sys_getpagesize
+/*25*/	.xword sys32_time, sys32_ptrace, sys_alarm, sys_nis_syscall, sys_pause
+/*30*/	.xword sys32_utime, sys_stty, sys_gtty, sys32_access, sys_nice
+	.xword sys_ftime, sys_sync, sys_kill, sys32_newstat, sys_nis_syscall
+/*40*/	.xword sys32_newlstat, sys_dup, sys_pipe, sys32_times, sys_profil
+	.xword sys_nis_syscall, sys_setgid, sys_getgid, sys32_signal, sys_geteuid
+/*50*/	.xword sys_getegid, sys32_acct, sys_nis_syscall, sys_nis_syscall, sys32_ioctl
+	.xword sys32_reboot, sys_nis_syscall, sys32_symlink, sys32_readlink, sys_execve
+/*60*/	.xword sys_umask, sys32_chroot, sys32_newfstat, sys_nis_syscall, sys_getpagesize
 	.xword sys_nis_syscall, sys_vfork, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-/*70*/	.xword sys_nis_syscall, sys_mmap, sys_nis_syscall, sys_munmap, sys_mprotect
-	.xword sys_nis_syscall, sys_vhangup, sys_nis_syscall, sys_nis_syscall, sys_getgroups
-/*80*/	.xword sys_setgroups, sys_getpgrp, sys_nis_syscall, sys_setitimer, sys_nis_syscall
-	.xword sys_swapon, sys_getitimer, sys_nis_syscall, sys_sethostname, sys_nis_syscall
-/*90*/	.xword sys_dup2, sys_nis_syscall, sys_fcntl, sys_select, sys_nis_syscall
+/*70*/	.xword sys_nis_syscall, sys32_mmap, sys_nis_syscall, sys32_munmap, sys32_mprotect
+	.xword sys_nis_syscall, sys_vhangup, sys_nis_syscall, sys_nis_syscall, sys32_getgroups
+/*80*/	.xword sys32_setgroups, sys_getpgrp, sys_nis_syscall, sys32_setitimer, sys_nis_syscall
+	.xword sys32_swapon, sys32_getitimer, sys_nis_syscall, sys32_sethostname, sys_nis_syscall
+/*90*/	.xword sys_dup2, sys_nis_syscall, sys32_fcntl, sys32_select, sys_nis_syscall
 	.xword sys_fsync, sys_setpriority, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 /*100*/	.xword sys_getpriority, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 /*110*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-	.xword sys_nis_syscall, sys_gettimeofday, sys_getrusage, sys_nis_syscall, sys_nis_syscall
-/*120*/	.xword sys_readv, sys_writev, sys_settimeofday, sys_fchown, sys_fchmod
-	.xword sys_nis_syscall, sys_setreuid, sys_setregid, sys_rename, sys_truncate
-/*130*/	.xword sys_ftruncate, sys_flock, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-	.xword sys_nis_syscall, sys_mkdir, sys_rmdir, sys_nis_syscall, sys_nis_syscall
-/*140*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getrlimit
-	.xword sys_setrlimit, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+	.xword sys_nis_syscall, sys32_gettimeofday, sys32_getrusage, sys_nis_syscall, sys_nis_syscall
+/*120*/	.xword sys32_readv, sys32_writev, sys32_settimeofday, sys_fchown, sys_fchmod
+	.xword sys_nis_syscall, sys_setreuid, sys_setregid, sys32_rename, sys32_truncate
+/*130*/	.xword sys32_ftruncate, sys_flock, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+	.xword sys_nis_syscall, sys32_mkdir, sys32_rmdir, sys_nis_syscall, sys_nis_syscall
+/*140*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_getrlimit
+	.xword sys32_setrlimit, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 /*150*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-	.xword sys_nis_syscall, sys_nis_syscall, sys_statfs, sys_fstatfs, sys_umount
-/*160*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_setdomainname, sys_nis_syscall
-	.xword sys_quotactl, sys_nis_syscall, sys_mount, sys_ustat, sys_nis_syscall
-/*170*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getdents
+	.xword sys_nis_syscall, sys_nis_syscall, sys32_statfs, sys32_fstatfs, sys32_umount
+/*160*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_setdomainname, sys_nis_syscall
+	.xword sys32_quotactl, sys_nis_syscall, sys32_mount, sys32_ustat, sys_nis_syscall
+/*170*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_getdents
 	.xword sys_setsid, sys_fchdir, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-/*180*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_sigpending, sys_nis_syscall
-	.xword sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_newuname
-/*190*/	.xword sys_init_module, sys_personality, sys_prof, sys_break, sys_lock
-	.xword sys_mpx, sys_ulimit, sys_getppid, sparc_sigaction, sys_sgetmask
-/*200*/	.xword sys_ssetmask, sys_sigsuspend, sys_newlstat, sys_uselib, old_readdir
-	.xword sys_nis_syscall, sys_socketcall, sys_syslog, sys_olduname, sys_nis_syscall
-/*210*/	.xword sys_idle, sys_nis_syscall, sys_waitpid, sys_swapoff, sys_sysinfo
-	.xword sys_ipc, sys_sigreturn, sys_clone, sys_nis_syscall, sys_adjtimex
-/*220*/	.xword sys_sigprocmask, sys_create_module, sys_delete_module, sys_get_kernel_syms, sys_getpgid
-	.xword sys_bdflush, sys_sysfs, sys_nis_syscall, sys_setfsuid, sys_setfsgid
-/*230*/	.xword sys_llseek, sys_time, sys_nis_syscall, sys_stime, sys_nis_syscall
-	.xword sys_nis_syscall, sys_llseek, sys_mlock, sys_munlock, sys_mlockall
-/*240*/	.xword sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_nis_syscall, sys_nis_syscall
-	.xword sys_nis_syscall, sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, sys_nanosleep
-/*250*/	.xword sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nis_syscall
+/*180*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_sigpending, sys_nis_syscall
+	.xword sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_newuname
+/*190*/	.xword sys_nis_syscall, sys32_personality, sys_prof, sys_break, sys_lock
+	.xword sys_mpx, sys_ulimit, sys_getppid, sparc32_sigaction, sys_sgetmask
+/*200*/	.xword sys_ssetmask, sys_sigsuspend, sys32_newlstat, sys32_uselib, old_readdir
+	.xword sys_nis_syscall, sys32_socketcall, sys32_syslog, sys32_olduname, sys_nis_syscall
+/*210*/	.xword sys_idle, sys_nis_syscall, sys32_waitpid, sys32_swapoff, sys32_sysinfo
+	.xword sys32_ipc, sys_sigreturn, sys_clone, sys_nis_syscall, sys32_adjtimex
+/*220*/	.xword sys_sigprocmask, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getpgid
+	.xword sys32_bdflush, sys32_sysfs, sys_nis_syscall, sys_setfsuid, sys_setfsgid
+/*230*/	.xword sys32_llseek, sys32_time, sys_nis_syscall, sys_stime, sys_nis_syscall
+	.xword sys_nis_syscall, sys32_llseek, sys32_mlock, sys32_munlock, sys_mlockall
+/*240*/	.xword sys_munlockall, sys32_sched_setparam, sys32_sched_getparam, sys_nis_syscall, sys_nis_syscall
+	.xword sys_nis_syscall, sys_sched_get_priority_max, sys_sched_get_priority_min, sys32_sched_rr_get_interval, sys_nanosleep
+/*250*/	.xword sys32_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nis_syscall
 	.xword sys_aplib, sys_nis_syscall
 
 	/* Now the 64-bit native Linux syscall table. */
 
-	.globl sys_call_table64
+	.globl sys_call_table64, sys_call_table
 sys_call_table64:
+sys_call_table:
 /*0*/	.xword sys_setup, sys_exit, sys_fork, sys_read, sys_write
 /*5*/	.xword sys_open, sys_close, sys_wait4, sys_creat, sys_link
 /*10*/  .xword sys_unlink, sunos_execv, sys_chdir, sys_nis_syscall, sys_mknod

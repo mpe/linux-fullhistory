@@ -1,4 +1,4 @@
-/* $Id: delay.h,v 1.3 1996/12/12 15:53:48 davem Exp $
+/* $Id: delay.h,v 1.4 1997/04/10 23:32:44 davem Exp $
  * delay.h: Linux delay routines on the V9.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu).
@@ -17,7 +17,8 @@ extern __inline__ void __delay(unsigned long loops)
 	bne,pt	%%xcc, 1b
 	 subcc	%0, 1, %0
 "	: "=&r" (loops)
-	: "0" (loops));
+	: "0" (loops)
+	: "cc");
 }
 
 extern __inline__ void udelay(unsigned long usecs)

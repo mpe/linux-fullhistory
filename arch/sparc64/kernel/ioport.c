@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.2 1997/03/18 17:59:31 jj Exp $
+/* $Id: ioport.c,v 1.7 1997/04/10 05:13:01 davem Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995,1996 David S. Miller (davem@caip.rutgers.edu)
@@ -22,6 +22,8 @@
 static unsigned long dvma_next_free   = DVMA_VADDR;
 unsigned long sparc_iobase_vaddr = IOBASE_VADDR;
 
+extern void mmu_map_dma_area(unsigned long addr, int len, __u32 *dvma_addr);
+
 /*
  * sparc_alloc_io:
  * Map and allocates an obio device.
@@ -39,8 +41,8 @@ unsigned long sparc_iobase_vaddr = IOBASE_VADDR;
  *  The virtual address where the mapping actually took place.
  */
 
-void *sparc_alloc_io (void *address, void *virtual, int len, char *name,
-		      unsigned bus_type, int rdonly)
+void *sparc_alloc_io (u32 address, void *virtual, int len, char *name,
+		      u32 bus_type, int rdonly)
 {
 	unsigned long vaddr, base_address;
 	unsigned long addr = ((unsigned long) address) + (((unsigned long) bus_type) << 32);
@@ -74,7 +76,7 @@ void *sparc_alloc_io (void *address, void *virtual, int len, char *name,
 	base_address = vaddr;
 	/* Do the actual mapping */
 	for (; len > 0; len -= PAGE_SIZE) {
-		mapioaddr(addr, vaddr, rdonly);
+		mapioaddr(addr, vaddr, bus_type, rdonly);
 		vaddr += PAGE_SIZE;
 		addr += PAGE_SIZE;
 	}
@@ -103,8 +105,11 @@ void sparc_free_io (void *virtual, int len)
  * at addresses above DVMA_VADDR it will grab them, this way it does not
  * now have to know the peculiarities of where to read the Lance data
  * from. (for example)
+ *
+ * Returns CPU visible address for the buffer returned, dvma_addr is
+ * set to the DVMA visible address.
  */
-void *sparc_dvma_malloc (int len, char *name)
+void *sparc_dvma_malloc (int len, char *name, __u32 *dvma_addr)
 {
 	unsigned long vaddr, base_address;
 
@@ -123,7 +128,8 @@ void *sparc_dvma_malloc (int len, char *name)
 	 * pages are now mapped dynamically to save space.
 	 */
 	base_address = vaddr;
-	mmu_map_dma_area(base_address, len);
+	mmu_map_dma_area(base_address, len, dvma_addr);
+
 	/* Assign the memory area. */
 	dvma_next_free = PAGE_ALIGN(dvma_next_free+len);
 

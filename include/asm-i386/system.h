@@ -73,7 +73,6 @@ __asm__("str %%ax\n\t" \
 		__asm__ __volatile__("fwait"); \
 		prev->flags&=~PF_USEDFPU;	 \
 	} \
-	prev->processor = NO_PROC_ID; \
 	current_set[this_cpu] = next; \
 __asm__("ljmp %0\n\t" \
 	: /* no output */ \

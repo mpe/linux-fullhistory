@@ -1,4 +1,4 @@
-/* $Id: mostek.h,v 1.1 1996/12/26 13:25:22 davem Exp $
+/* $Id: mostek.h,v 1.2 1997/03/25 03:58:30 davem Exp $
  * mostek.h:  Describes the various Mostek time of day clock registers.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -114,7 +114,13 @@ struct mostek48t08 {
 };
 extern struct mostek48t08 *mstk48t08_regs;
 
-enum sparc_clock_type {	MSTK48T02, MSTK48T08, MSTK_INVALID };
-extern enum sparc_clock_type sp_clock_typ;
+/* SUN5 systems usually have 48t59 model clock chipsets.  But we keep the older
+ * clock chip definitions around just in case.
+ */
+struct mostek48t59 {
+	char offset[6*1024];
+	struct mostek48t02 regs;
+};
+extern struct mostek48t59 *mstk48t59_regs;
 
 #endif /* !(_SPARC64_MOSTEK_H) */

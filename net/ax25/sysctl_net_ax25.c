@@ -7,6 +7,7 @@
 
 #include <linux/mm.h>
 #include <linux/sysctl.h>
+#include <linux/config.h>
 #include <net/ax25.h>
 
 static int min_ipdefmode[] = {0},	max_ipdefmode[] = {1};

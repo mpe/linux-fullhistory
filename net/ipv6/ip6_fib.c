@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fib.c,v 1.6 1997/03/18 18:24:33 davem Exp $
+ *	$Id: ip6_fib.c,v 1.7 1997/04/12 04:32:46 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -795,7 +795,7 @@ static int fib6_gc_node(struct fib6_node *fn, int timeout)
 	back = &fn->leaf;
 
 	for (rt = fn->leaf; rt;) {
-		if ((rt->rt6i_flags & RTF_CACHE) && rt->rt6i_use == 0) {
+		if ((rt->rt6i_flags & RTF_CACHE) && atomic_read(&rt->rt6i_use) == 0) {
 			if (now - rt->rt6i_tstamp > timeout) {
 				struct rt6_info *old;
 

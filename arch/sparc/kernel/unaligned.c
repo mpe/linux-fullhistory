@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.16 1997/03/18 17:53:44 jj Exp $
+/* $Id: unaligned.c,v 1.17 1997/04/11 00:42:08 davem Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -204,7 +204,7 @@ __asm__ __volatile__ (								\
 	".word	16b, " #errh "\n\n\t"						\
 	".previous\n\t"								\
 	: : "r" (dest_reg), "r" (size), "r" (saddr), "r" (is_signed)		\
-	: "l1", "l2", "g7", "g1");						\
+	: "l1", "l2", "g7", "g1", "cc");					\
 })
 	
 #define store_common(dst_addr, size, src_val, errh) ({				\
@@ -258,7 +258,7 @@ __asm__ __volatile__ (								\
 	".word	17b, " #errh "\n\n\t"						\
 	".previous\n\t"								\
 	: : "r" (dst_addr), "r" (size), "r" (src_val)				\
-	: "l1", "l2", "g7", "g1");						\
+	: "l1", "l2", "g7", "g1", "cc");					\
 })
 
 #define do_integer_store(reg_num, size, dst_addr, regs, errh) ({		\
@@ -343,8 +343,10 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 		"mov	%0, %%o0\n\t"
 		"call	kernel_mna_trap_fault\n\t"
 		" mov	%1, %%o1\n\t"
-		: : "r" (regs), "r" (insn)
-		: "o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g4", "g5", "g7");
+		:
+		: "r" (regs), "r" (insn)
+		: "o0", "o1", "o2", "o3", "o4", "o5", "o7",
+		  "g1", "g2", "g3", "g4", "g5", "g7", "cc");
 	} else {
 		unsigned long addr = compute_effective_address(regs, insn);
 
@@ -476,8 +478,10 @@ asmlinkage void user_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 			"mov	%0, %%o0\n\t"
 			"call	user_mna_trap_fault\n\t"
 			" mov	%1, %%o1\n\t"
-			: : "r" (regs), "r" (insn)
-			: "o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g4", "g5", "g7");
+			:
+			: "r" (regs), "r" (insn)
+			: "o0", "o1", "o2", "o3", "o4", "o5", "o7",
+			  "g1", "g2", "g3", "g4", "g5", "g7", "cc");
 			goto out;
 		}
 		advance(regs);

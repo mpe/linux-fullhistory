@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.5 1997/02/25 20:00:36 jj Exp $ */
+/* $Id: page.h,v 1.8 1997/03/26 12:24:21 davem Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
@@ -7,7 +7,13 @@
 
 #ifdef __KERNEL__
 
+#ifndef __ASSEMBLY__
+/* I have my suspicions... -DaveM */
+#define PAGE_SIZE    (1UL << PAGE_SHIFT)
+#else
 #define PAGE_SIZE    (1 << PAGE_SHIFT)
+#endif
+
 #define PAGE_MASK    (~(PAGE_SIZE-1))
 
 #ifndef __ASSEMBLY__
@@ -73,12 +79,21 @@ typedef unsigned long iopgprot_t;
 
 #endif /* !(__ASSEMBLY__) */
 
+#ifndef __ASSEMBLY__
+#define TASK_UNMAPPED_BASE	0x0000000070000000UL
+#else
 #define TASK_UNMAPPED_BASE	0x0000000070000000
+#endif
 
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
+#ifndef __ASSEMBLY__
+#define PAGE_OFFSET		0xFFFFF80000000000UL
+#else
 #define PAGE_OFFSET		0xFFFFF80000000000
+#endif
+
 #define __pa(x)			((unsigned long)(x) - PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long) (x) + PAGE_OFFSET))
 #define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)

@@ -130,6 +130,38 @@ static void sun4m_enable_irq(unsigned int irq_nr)
 	}
 }
 
+static unsigned long cpu_pil_to_imask[16] = {
+/*0*/	0x00000000,
+/*1*/	0x00000000,
+/*2*/	SUN4M_INT_SBUS(0) | SUN4M_INT_VME(0),
+/*3*/	SUN4M_INT_SBUS(1) | SUN4M_INT_VME(1),
+/*4*/	SUN4M_INT_SCSI,
+/*5*/	SUN4M_INT_SBUS(2) | SUN4M_INT_VME(2),
+/*6*/	SUN4M_INT_ETHERNET,
+/*7*/	SUN4M_INT_SBUS(3) | SUN4M_INT_VME(3),
+/*8*/	SUN4M_INT_VIDEO,
+/*9*/	SUN4M_INT_SBUS(4) | SUN4M_INT_VME(4) | SUN4M_INT_MODULE_ERR,
+/*10*/	SUN4M_INT_REALTIME,
+/*11*/	SUN4M_INT_SBUS(5) | SUN4M_INT_VME(5) | SUN4M_INT_FLOPPY,
+/*12*/	SUN4M_INT_SERIAL | SUN4M_INT_KBDMS,
+/*13*/	SUN4M_INT_AUDIO,
+/*14*/	0x00000000,
+/*15*/	0x00000000
+};
+
+/* We assume the caller is local cli()'d when these are called, or else
+ * very bizarre behavior will result.
+ */
+static void sun4m_disable_pil_irq(unsigned int pil)
+{
+	sun4m_interrupts->set = cpu_pil_to_imask[pil];
+}
+
+static void sun4m_enable_pil_irq(unsigned int pil)
+{
+	sun4m_interrupts->clear = cpu_pil_to_imask[pil];
+}
+
 void sun4m_send_ipi(int cpu, int level)
 {
 	unsigned long mask;
@@ -272,7 +304,7 @@ __initfunc(void sun4m_init_IRQ(void))
 	struct linux_prom_registers int_regs[PROMREG_MAX];
 	int num_regs;
     
-	cli();
+	__cli();
 	if((ie_node = prom_searchsiblings(prom_getchild(prom_root_node), "obio")) == 0 ||
 	   (ie_node = prom_getchild (ie_node)) == 0 ||
 	   (ie_node = prom_searchsiblings (ie_node, "interrupt")) == 0) {
@@ -327,6 +359,8 @@ __initfunc(void sun4m_init_IRQ(void))
 	}
 	enable_irq = sun4m_enable_irq;
 	disable_irq = sun4m_disable_irq;
+	enable_pil_irq = sun4m_enable_pil_irq;
+	disable_pil_irq = sun4m_disable_pil_irq;
 	clear_clock_irq = sun4m_clear_clock_irq;
 	clear_profile_irq = sun4m_clear_profile_irq;
 	load_profile_irq = sun4m_load_profile_irq;
@@ -336,5 +370,5 @@ __initfunc(void sun4m_init_IRQ(void))
 	clear_cpu_int = (void (*) (int, int))sun4m_clear_ipi;
 	set_irq_udt = (void (*) (int))sun4m_set_udt;
 #endif
-	sti();
+	/* Cannot enable interrupts until OBP ticker is disabled. */
 }

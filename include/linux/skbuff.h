@@ -196,12 +196,12 @@ extern __inline__ void kfree_skb(struct sk_buff *skb, int rw)
 
 extern __inline__ int skb_cloned(struct sk_buff *skb)
 {
-	return (skb->data_skb->count != 1);
+	return (atomic_read(&skb->data_skb->count) != 1);
 }
 
 extern __inline__ int skb_shared(struct sk_buff *skb)
 {
-	return (skb->users != 1);
+	return (atomic_read(&skb->users) != 1);
 }
 
 /*

@@ -1,8 +1,13 @@
-/* $Id: ioctls.h,v 1.1 1996/12/02 00:05:36 davem Exp $ */
+/* $Id: ioctls.h,v 1.2 1997/04/04 00:50:18 davem Exp $ */
 #ifndef _ASM_SPARC64_IOCTLS_H
 #define _ASM_SPARC64_IOCTLS_H
 
 #include <asm/ioctl.h>
+
+/* XXX 32-bit binary compatability issues, I am sure that
+ * XXX only IOCTL's which reference structures will be of
+ * XXX concern and these are easily fabricated using wrappers.
+ */
 
 /* Big T */
 #define TCGETA		_IOR('T', 1, struct termio)

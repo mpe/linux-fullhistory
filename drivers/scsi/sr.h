@@ -56,6 +56,8 @@ int sr_dev_ioctl(struct cdrom_device_info*, unsigned int, unsigned long);
 #ifdef CONFIG_BLK_DEV_SR_VENDOR
 void sr_vendor_init(int minor);
 int sr_cd_check(struct cdrom_device_info*);
+int sr_read_sector(int minor, int lba, int blksize, unsigned char *dest);
+
 #endif
 
 #endif

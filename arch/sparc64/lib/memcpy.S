@@ -394,21 +394,21 @@ FUNC(memcpy)	/* %o0=dst %o1=src %o2=len */
 	lduw		[%o1], %o3
 	add		%o0, -8, %o0
 	lduw		[%o1 + 4], %o4
-	b		8f
+	ba,pt		%xcc, 8f
 	 add		%g3, 1, %g3
 2:
 	lduw		[%o1], %o4
 	add		%o0, -12, %o0
 	lduw		[%o1 + 4], %o5
 	add		%g3, 2, %g3
-	b		9f
+	ba,pt		%xcc, 9f
 	 add		%o1, -4, %o1
 3:
 	lduw		[%o1], %g1
 	add		%o0, -4, %o0
 	lduw		[%o1 + 4], %o3
 	srl		%o2, 2, %g3
-	b		7f
+	ba,pt		%xcc, 7f
 	 add		%o1, 4, %o1
 4:
 	lduw		[%o1], %o5
@@ -522,5 +522,5 @@ FUNC(memcpy)	/* %o0=dst %o1=src %o2=len */
 	stw		%g3, [%o0 + 0x04]
 	add		%o0, 8, %o0
 1:
-	b		81b
+	ba,pt		%xcc, 81b
 	 mov		%o2, %g1

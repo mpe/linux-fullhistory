@@ -1620,7 +1620,7 @@ set_rx_mode(struct device *dev)
 			printk("%s: Allocating a setup frame of size %d.\n",
 				   dev->name, sp->mc_setup_frm_len);
 			sp->mc_setup_frm = kmalloc(sp->mc_setup_frm_len,
-									   intr_count ? GFP_ATOMIC : GFP_KERNEL);
+									   in_interrupt() ? GFP_ATOMIC : GFP_KERNEL);
 			if (sp->mc_setup_frm == NULL) {
 			  printk("%s: Failed to allocate a setup frame.\n", dev->name);
 				sp->rx_mode = -1; /* We failed, try again. */

@@ -146,7 +146,7 @@ void ax25_ds_timer(ax25_cb *ax25)
 			 * Check the state of the receive buffer.
 			 */
 			if (ax25->sk != NULL) {
-				if (ax25->sk->rmem_alloc < (ax25->sk->rcvbuf / 2) && (ax25->condition & AX25_COND_OWN_RX_BUSY)) {
+				if (atomic_read(&ax25->sk->rmem_alloc) < (ax25->sk->rcvbuf / 2) && (ax25->condition & AX25_COND_OWN_RX_BUSY)) {
 					ax25->condition &= ~AX25_COND_OWN_RX_BUSY;
 					break;
 				}

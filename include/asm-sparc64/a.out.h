@@ -1,4 +1,4 @@
-/* $Id: a.out.h,v 1.2 1996/12/28 18:39:49 davem Exp $ */
+/* $Id: a.out.h,v 1.3 1997/04/07 18:57:14 jj Exp $ */
 #ifndef __SPARC64_A_OUT_H__
 #define __SPARC64_A_OUT_H__
 
@@ -32,14 +32,14 @@ struct exec {
                          (x).a_drsize)
 
 /* Where does text segment go in memory after being loaded? */
-#define N_TXTADDR(x)    (((N_MAGIC(x) == ZMAGIC) &&        \
-	                 ((x).a_entry < SPARC_PGSIZE)) ?   \
+#define N_TXTADDR(x)    (unsigned long)(((N_MAGIC(x) == ZMAGIC) &&      \
+	                 ((x).a_entry < SPARC_PGSIZE)) ?   		\
                           0 : SPARC_PGSIZE)
 
 /* And same for the data segment.. */
 #define N_DATADDR(x) (N_MAGIC(x)==OMAGIC ?         \
                       (N_TXTADDR(x) + (x).a_text)  \
-                       : (_N_SEGMENT_ROUND (_N_TXTENDADDR(x))))
+                       : (unsigned long)(_N_SEGMENT_ROUND (_N_TXTENDADDR(x))))
 
 #define N_TRSIZE(a)	((a).a_trsize)
 #define N_DRSIZE(a)	((a).a_drsize)

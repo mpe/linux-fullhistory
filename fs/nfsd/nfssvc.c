@@ -35,7 +35,8 @@
 
 #define NFSDDBG_FACILITY	NFSDDBG_SVC
 #define NFSD_BUFSIZE		(1024 + NFSSVC_MAXBLKSIZE)
-#define BLOCKABLE_SIGS		(~(_S(SIGKILL - 1) | _S(SIGSTOP - 1)))
+#define BLOCKABLE_SIGS		(~(_S(SIGKILL) | _S(SIGSTOP)))
+#define SHUTDOWN_SIGS		(_S(SIGKILL)|_S(SIGINT)|_S(SIGTERM))
 #define _S(sig)			(1 << ((sig) - 1))
 
 extern struct svc_program	nfsd_program;
@@ -107,6 +108,7 @@ nfsd(struct svc_rqst *rqstp)
 	sprintf(current->comm, "nfsd");
 
 	oldumask = current->fs->umask;		/* Set umask to 0.  */
+	current->blocked |= ~SHUTDOWN_SIGS;
 	current->fs->umask = 0;
 	nfssvc_boot = xtime;			/* record boot time */
 	lockd_up();				/* start lockd */
@@ -150,8 +152,16 @@ nfsd(struct svc_rqst *rqstp)
 		exp_unlock();
 	} while (err >= 0);
 
-	if (err != -EINTR)
+	if (err != -EINTR) {
 		printk(KERN_WARNING "nfsd: terminating on error %d\n", -err);
+	} else {
+		unsigned int	signo;
+
+		for (signo = 0; signo < 32; signo++)
+			if (current->signal & current->blocked & (1<<signo))
+				break;
+		printk(KERN_WARNING "nfsd: terminating on signal %d\n", signo);
+	}
 
 	/* Release lockd */
 	lockd_down();

@@ -1,4 +1,4 @@
-/* $Id: cgthree.c,v 1.12 1997/03/11 23:44:24 ecd Exp $
+/* $Id: cgthree.c,v 1.16 1997/04/10 03:02:41 davem Exp $
  * cgtree.c: cg3 frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -25,6 +25,16 @@
 #include "cg_common.h"
 
 
+/* Control Register Constants */
+#define CG3_CR_ENABLE_INTS	0x80
+#define CG3_CR_ENABLE_VIDEO	0x40
+#define CG3_CR_ENABLE_TIMING	0x20
+#define CG3_CR_ENABLE_CURCMP	0x10
+#define CG3_CR_XTAL_MASK	0x0c
+#define CG3_CR_DIVISOR_MASK	0x03
+
+/* Status Register Constants */
+#define CG3_SR_PENDING_INT	0x80
 #define CG3_SR_RES_MASK		0x70
 #define CG3_SR_1152_900_76_A	0x40
 #define CG3_SR_1152_900_76_B	0x60
@@ -125,6 +135,19 @@ cg3_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
         return 0;
 }
 
+static void
+cg3_blank (fbinfo_t *fb)
+{
+	fb->info.cg3.regs->control &= ~CG3_CR_ENABLE_VIDEO;
+}
+
+static void
+cg3_unblank (fbinfo_t *fb)
+{
+        fb->info.cg3.regs->control |= CG3_CR_ENABLE_VIDEO;
+}
+
+
 static u8 cg3regvals_66hz[] __initdata = {	/* 1152 x 900, 66 Hz */
 	0x14, 0xbb,	0x15, 0x2b,	0x16, 0x04,	0x17, 0x14,
 	0x18, 0xae,	0x19, 0x03,	0x1a, 0xa8,	0x1b, 0x24,
@@ -155,7 +178,7 @@ static u_char cg3_dacvals[] __initdata = {
 };
 
 
-__initfunc(void cg3_setup (fbinfo_t *fb, int slot, uint cg3, int cg3_io,
+__initfunc(void cg3_setup (fbinfo_t *fb, int slot, unsigned long cg3, int cg3_io,
 			   struct linux_sbus_device *sbdp))
 {
 	struct cg3_info *cg3info = (struct cg3_info *) &fb->info.cg3;
@@ -177,10 +200,10 @@ __initfunc(void cg3_setup (fbinfo_t *fb, int slot, uint cg3, int cg3_io,
 				}
 			}
 		}
-		printk ("cgRDI%d at 0x%8.8x\n", slot, cg3);
+		printk ("cgRDI%d at 0x%8.8x\n", slot, (uint)cg3);
 		cg3info->cgrdi = 1;
 	} else {
-		printk ("cgthree%d at 0x%8.8x\n", slot, cg3);
+		printk ("cgthree%d at 0x%8.8x\n", slot, (uint)cg3);
 		cg3info->cgrdi = 0;
 	}
 	
@@ -191,9 +214,11 @@ __initfunc(void cg3_setup (fbinfo_t *fb, int slot, uint cg3, int cg3_io,
 	fb->postsetup = sun_cg_postsetup;
 	fb->ioctl = 0; /* no special ioctls */
 	fb->reset = 0;
+	fb->blank = cg3_blank;
+	fb->unblank = cg3_unblank;
 
 	/* Map the card registers */
-	cg3info->regs = sparc_alloc_io ((void *) cg3+CG3_REGS, 0,
+	cg3info->regs = sparc_alloc_io ((u32)(cg3+CG3_REGS), 0,
 		 sizeof (struct cg3_regs),"cg3_regs", cg3_io, 0);
 
 	if (!prom_getbool(sbdp->prom_node, "width")) {
@@ -233,7 +258,7 @@ __initfunc(void cg3_setup (fbinfo_t *fb, int slot, uint cg3, int cg3_io,
 	}
 
 	if (!fb->base){
-		fb->base=(uint) sparc_alloc_io ((void*) cg3+CG3_RAM, 0,
+		fb->base=(uint) sparc_alloc_io ((u32)(cg3+CG3_RAM), 0,
 				    fb->type.fb_size, "cg3_ram", cg3_io, 0);
 	}
 }

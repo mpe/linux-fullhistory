@@ -47,8 +47,9 @@
 # 090397 Axel Boldt (boldt@math.ucsb.edu) - avoid ? and + in regular 
 # expressions for GNU expr since version 1.15 and up use \? and \+.
 #
-# 300397 Phil Blundell (pjb27@cam.ac.uk) - added support for "limint", 
-# allow dep_tristate to take a list of dependencies rather than just one.
+# 300397 Phil Blundell (pjb27@cam.ac.uk) - added support for min/max 
+# arguments to "int", allow dep_tristate to take a list of dependencies
+# rather than just one.
 
 #
 # Make sure we're really running bash.
@@ -311,7 +312,7 @@ function int () {
 	if [ $# -gt 3 ]; then
 	  min=$4
 	else
-	  min=1
+	  min=-10000000    # !!
 	fi
 	if [ $# -gt 4 ]; then
 	  max=$5

@@ -25,13 +25,17 @@ struct cpu_fp_info {
  * machine type value into consideration too.  I will fix this.
  */
 struct cpu_fp_info linux_sparc_fpu[] = {
-  { 0x17, 0x10, 0, "FIXME: UltraSparc I FPU"},
+  { 0x17, 0x10, 0, "UltraSparc I integrated FPU"},
+  { 0x17, 0x11, 0, "UltraSparc II integrated FPU"},
+  { 0x17, 0x12, 0, "UltraSparc III integrated FPU"},
 };
 
 #define NSPARCFPU  (sizeof(linux_sparc_fpu)/sizeof(struct cpu_fp_info))
 
 struct cpu_iu_info linux_sparc_chips[] = {
-  { 0x17, 0x10, "FIXME: UltraSparc I"},
+  { 0x17, 0x10, "TI UltraSparc I   (SpitFire)"},
+  { 0x17, 0x11, "TI UltraSparc II  (BlackBird)"},
+  { 0x17, 0x12, "TI UltraSparc III (Cheetah)"},  /* A guess... */
 };
 
 #define NSPARCCHIPS  (sizeof(linux_sparc_chips)/sizeof(struct cpu_iu_info))

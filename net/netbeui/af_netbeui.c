@@ -513,7 +513,7 @@ static int netbeui_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg
 		 *	Protocol layer
 		 */
 		case TIOCOUTQ:
-			amount=sk->sndbuf-sk->wmem_alloc;
+			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if(amount<0)
 				amount=0;
 			break;

@@ -397,5 +397,5 @@ void init_IRQ(void)
 		bh_base[i].data = NULL;
 	}
 	bh_active = 0;
-	intr_count = 0;
+	atomic_set(&intr_count, 0);
 }

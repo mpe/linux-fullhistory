@@ -1,4 +1,4 @@
-/* $Id: sunserial.c,v 1.27 1997/03/04 19:33:55 davem Exp $
+/* $Id: sunserial.c,v 1.37 1997/04/12 23:33:14 ecd Exp $
  * serial.c: Serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -39,6 +39,8 @@ static int num_serial = 2; /* sun4/sun4c/sun4m - Two chips on board. */
 #define KEYBOARD_LINE 0x2
 #define MOUSE_LINE    0x3
 
+extern struct wait_queue * keypress_wait;
+
 struct sun_zslayout **zs_chips;
 struct sun_zschannel **zs_channels;
 struct sun_zschannel *zs_conschan;
@@ -66,8 +68,8 @@ struct sun_serial *zs_consinfo = 0;
 #define SUNKBD_UP      0x80
 #define SUNKBD_A       0x4d
 
-extern void sunkbd_inchar(unsigned char ch, unsigned char status, struct pt_regs *regs);
-extern void sun_mouse_inbyte(unsigned char byte, unsigned char status);
+extern void sunkbd_inchar(unsigned char ch, struct pt_regs *regs);
+extern void sun_mouse_inbyte(unsigned char byte);
 
 static unsigned char kgdb_regs[16] = {
 	0, 0, 0,                     /* write 0, 1, 2 */
@@ -173,7 +175,7 @@ static inline int serial_paranoia_check(struct sun_serial *info,
  */
 static int baud_table[] = {
 	0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800,
-	9600, 19200, 38400, 57600, 115200, 0 };
+	9600, 19200, 38400, 76800, 0 };
 
 /* 
  * Reading and writing Zilog8530 registers.  The delays are to make this
@@ -206,9 +208,20 @@ static inline void load_zsregs(struct sun_serial *info, unsigned char *regs)
 {
 	unsigned long flags;
 	struct sun_zschannel *channel = info->zs_channel;
+	unsigned char stat;
+	int i;
 
+	for (i = 0; i < 1000; i++) {
+		stat = read_zsreg(channel, R1);
+		if (stat & ALL_SNT)
+			break;
+		udelay(100);
+	}
+	write_zsreg(channel, R3, 0);
+	ZS_CLEARSTAT(channel);
 	ZS_CLEARERR(channel);
 	ZS_CLEARFIFO(channel);
+
 	/* Load 'em up */
 	save_flags(flags); cli();
 	if (info->channelA)
@@ -231,7 +244,7 @@ static inline void load_zsregs(struct sun_serial *info, unsigned char *regs)
 	write_zsreg(channel, R5, regs[R5]);
 	write_zsreg(channel, R15, regs[R15]);
 	write_zsreg(channel, R0, RES_EXT_INT);
-	write_zsreg(channel, R0, RES_EXT_INT);
+	write_zsreg(channel, R0, ERR_RES);
 	write_zsreg(channel, R1, regs[R1]);
 	write_zsreg(channel, R9, regs[R9]);
 	restore_flags(flags);
@@ -349,18 +362,6 @@ static void batten_down_hatches(void)
 	return;
 }
 
-/* On receive, this clears errors and the receiver interrupts */
-static inline void rs_recv_clear(struct sun_zschannel *zsc)
-{
-	unsigned long flags;
-
-	save_flags(flags); cli();
-	zsc->control = ERR_RES;
-	udelay(5);
-	zsc->control = RES_H_IUS;
-	udelay(5);
-	restore_flags(flags);
-}
 
 /*
  * ----------------------------------------------------------------------
@@ -391,7 +392,7 @@ static _INLINE_ void rs_sched_event(struct sun_serial *info,
 				  int event)
 {
 	info->event |= 1 << event;
-	queue_task_irq_off(&info->tqueue, &tq_serial);
+	queue_task(&info->tqueue, &tq_serial);
 	mark_bh(SERIAL_BH);
 }
 
@@ -402,90 +403,86 @@ static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs
 	struct tty_struct *tty = info->tty;
 	unsigned char ch, stat;
 
-	ch = (info->zs_channel->data) & info->parity_mask;
-	udelay(5);
-	stat = read_zsreg(info->zs_channel, R1);
-	udelay(5);
+	do {
+		ch = (info->zs_channel->data) & info->parity_mask;
+		udelay(5);
 
-	/* If this is the console keyboard, we need to handle
-	 * L1-A's here.
-	 */
-	if(info->cons_keyb) {
-		if(ch == SUNKBD_RESET) {
-			l1a_state.kbd_id = 1;
-			l1a_state.l1_down = 0;
-		} else if(l1a_state.kbd_id) {
-			l1a_state.kbd_id = 0;
-		} else if(ch == SUNKBD_L1) {
-			l1a_state.l1_down = 1;
-		} else if(ch == (SUNKBD_L1|SUNKBD_UP)) {
-			l1a_state.l1_down = 0;
-		} else if(ch == SUNKBD_A && l1a_state.l1_down) {
-			/* whee... */
-			batten_down_hatches();
-			/* Clear the line and continue execution... */
-			rs_recv_clear(info->zs_channel);
-			l1a_state.l1_down = 0;
-			l1a_state.kbd_id = 0;
+		/* If this is the console keyboard, we need to handle
+		 * L1-A's here.
+		 */
+		if(info->cons_keyb) {
+			if(ch == SUNKBD_RESET) {
+				l1a_state.kbd_id = 1;
+				l1a_state.l1_down = 0;
+			} else if(l1a_state.kbd_id) {
+				l1a_state.kbd_id = 0;
+			} else if(ch == SUNKBD_L1) {
+				l1a_state.l1_down = 1;
+			} else if(ch == (SUNKBD_L1|SUNKBD_UP)) {
+				l1a_state.l1_down = 0;
+			} else if(ch == SUNKBD_A && l1a_state.l1_down) {
+				/* whee... */
+				batten_down_hatches();
+				/* Continue execution... */
+				l1a_state.l1_down = 0;
+				l1a_state.kbd_id = 0;
+				return;
+			}
+			sunkbd_inchar(ch, regs);
 			return;
 		}
-		rs_recv_clear(info->zs_channel);
-		sunkbd_inchar(ch, stat, regs);
-
-		return;
-	}
-	if(info->cons_mouse) {
-		rs_recv_clear(info->zs_channel);
-		sun_mouse_inbyte(ch, stat);
-		return;
-	}
-	if(info->is_cons) {
-		if(ch==0) { /* whee, break received */
-			batten_down_hatches();
-			rs_recv_clear(info->zs_channel);
+		if(info->cons_mouse) {
+			sun_mouse_inbyte(ch);
 			return;
+		}
+		if(info->is_cons) {
+			if(ch==0) {
+				/* whee, break received */
+				batten_down_hatches();
+				/* Continue execution... */
+				return;
 #if 0
-		} else if (ch == 1) {
-			show_state();
-			return;
-		} else if (ch == 2) {
-			show_buffers();
-			return;
+			} else if (ch == 1) {
+				show_state();
+				return;
+			} else if (ch == 2) {
+				show_buffers();
+				return;
 #endif
+			}
+			/* It is a 'keyboard interrupt' ;-) */
+			wake_up(&keypress_wait);
 		}
-		/* It is a 'keyboard interrupt' ;-) */
-		wake_up(&keypress_wait);
-	}
-	/* Look for kgdb 'stop' character, consult the gdb documentation
-	 * for remote target debugging and arch/sparc/kernel/sparc-stub.c
-	 * to see how all this works.
-	 */
-	if((info->kgdb_channel) && (ch =='\003')) {
-		breakpoint();
-		goto clear_and_exit;
-	}
+		/* Look for kgdb 'stop' character, consult the gdb
+		 * documentation for remote target debugging and
+		 * arch/sparc/kernel/sparc-stub.c to see how all this works.
+		 */
+		if((info->kgdb_channel) && (ch =='\003')) {
+			breakpoint();
+			return;
+		}
 
-	if(!tty)
-		goto clear_and_exit;
+		if(!tty)
+			return;
 
-	if (tty->flip.count >= TTY_FLIPBUF_SIZE)
-		queue_task_irq_off(&tty->flip.tqueue, &tq_timer);
-	tty->flip.count++;
-	if(stat & PAR_ERR)
-		*tty->flip.flag_buf_ptr++ = TTY_PARITY;
-	else if(stat & Rx_OVR)
-		*tty->flip.flag_buf_ptr++ = TTY_OVERRUN;
-	else if(stat & CRC_ERR)
-		*tty->flip.flag_buf_ptr++ = TTY_FRAME;
-	else
-		*tty->flip.flag_buf_ptr++ = 0; /* XXX */
-	*tty->flip.char_buf_ptr++ = ch;
+		if (tty->flip.count >= TTY_FLIPBUF_SIZE)
+			break;
 
-	queue_task_irq_off(&tty->flip.tqueue, &tq_timer);
+		tty->flip.count++;
+		*tty->flip.flag_buf_ptr++ = 0;
+		*tty->flip.char_buf_ptr++ = ch;
 
-clear_and_exit:
-	rs_recv_clear(info->zs_channel);
-	return;
+		/* Check if we have another character... */
+		stat = info->zs_channel->control;
+		udelay(5);
+		if (!(stat & Rx_CH_AV))
+			break;
+
+		/* ... and see if it is clean. */
+		stat = read_zsreg(info->zs_channel, R1);
+	} while (!(stat & (PAR_ERR | Rx_OVR | CRC_ERR)));
+
+	queue_task(&tty->flip.tqueue, &tq_timer);
 }
 
 static _INLINE_ void transmit_chars(struct sun_serial *info)
@@ -496,14 +493,14 @@ static _INLINE_ void transmit_chars(struct sun_serial *info)
 		/* Send next char */
 		zs_put_char(info->zs_channel, info->x_char);
 		info->x_char = 0;
-		goto clear_and_return;
+		return;
 	}
 
 	if((info->xmit_cnt <= 0) || (tty != 0 && tty->stopped)) {
 		/* That's peculiar... */
 		info->zs_channel->control = RES_Tx_P;
 		udelay(5);
-		goto clear_and_return;
+		return;
 	}
 
 	/* Send char */
@@ -517,14 +514,7 @@ static _INLINE_ void transmit_chars(struct sun_serial *info)
 	if(info->xmit_cnt <= 0) {
 		info->zs_channel->control = RES_Tx_P;
 		udelay(5);
-		goto clear_and_return;
 	}
-
-clear_and_return:
-	/* Clear interrupt */
-	info->zs_channel->control = RES_H_IUS;
-	udelay(5);
-	return;
 }
 
 static _INLINE_ void status_handle(struct sun_serial *info)
@@ -536,9 +526,6 @@ static _INLINE_ void status_handle(struct sun_serial *info)
 	udelay(5);
 	/* Clear status condition... */
 	info->zs_channel->control = RES_EXT_INT;
-	udelay(5);
-	/* Clear the interrupt */
-	info->zs_channel->control = RES_H_IUS;
 	udelay(5);
 
 #if 0
@@ -568,50 +555,106 @@ static _INLINE_ void status_handle(struct sun_serial *info)
 	return;
 }
 
+static _INLINE_ void special_receive(struct sun_serial *info)
+{
+	struct tty_struct *tty = info->tty;
+	unsigned char ch, stat;
+
+	stat = read_zsreg(info->zs_channel, R1);
+	if (stat & (PAR_ERR | Rx_OVR | CRC_ERR)) {
+		ch = info->zs_channel->data;
+		udelay(5);
+	}
+
+	if (!tty)
+		goto clear;
+
+	if (tty->flip.count >= TTY_FLIPBUF_SIZE)
+		goto done;
+
+	tty->flip.count++;
+	if(stat & PAR_ERR)
+		*tty->flip.flag_buf_ptr++ = TTY_PARITY;
+	else if(stat & Rx_OVR)
+		*tty->flip.flag_buf_ptr++ = TTY_OVERRUN;
+	else if(stat & CRC_ERR)
+		*tty->flip.flag_buf_ptr++ = TTY_FRAME;
+
+done:
+	queue_task(&tty->flip.tqueue, &tq_timer);
+clear:
+	info->zs_channel->control = ERR_RES;
+	udelay(5);
+}
+
+
 /*
  * This is the serial driver's generic interrupt routine
  */
 void rs_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct sun_serial * info = (struct sun_serial *)dev_id;
+	struct sun_serial *info;
 	unsigned char zs_intreg;
 	int i;
 
+	info = (struct sun_serial *)dev_id;
 	for (i = 0; i < NUM_SERIAL; i++) {
-		zs_intreg = read_zsreg(info->zs_channel, 3);
+		zs_intreg = read_zsreg(info->zs_next->zs_channel, 2);
+		zs_intreg &= STATUS_MASK;
 
-		/* NOTE: The read register 3, which holds the irq status,
+		/* NOTE: The read register 2, which holds the irq status,
 		 *       does so for both channels on each chip.  Although
-		 *       the status value itself must be read from the A
-		 *       channel and is only valid when read from channel A.
-		 *       Yes... broken hardware...
+		 *       the status value itself must be read from the B
+		 *       channel and is only valid when read from channel B.
+		 *       When read from channel A, read register 2 contains
+		 *       the value written to write register 2.
 		 */
-#define CHAN_A_IRQMASK (CHARxIP | CHATxIP | CHAEXT)
-#define CHAN_B_IRQMASK (CHBRxIP | CHBTxIP | CHBEXT)
 
 		/* Channel A -- /dev/ttya or /dev/kbd, could be the console */
-		if(zs_intreg & CHAN_A_IRQMASK) {
-			if (zs_intreg & CHARxIP)
-				receive_chars(info, regs);
-			if (zs_intreg & CHATxIP)
-				transmit_chars(info);
-			if (zs_intreg & CHAEXT)
-				status_handle(info);
+		if (zs_intreg == CHA_Rx_AVAIL) {
+			receive_chars(info, regs);
+			return;
 		}
-
-		info=info->zs_next;
+		if(zs_intreg == CHA_Tx_EMPTY) {
+			transmit_chars(info);
+			return;
+		}
+		if (zs_intreg == CHA_EXT_STAT) {
+			status_handle(info);
+			return;
+		}
+		if (zs_intreg == CHA_SPECIAL) {
+			special_receive(info);
+			return;
+		}
 
 		/* Channel B -- /dev/ttyb or /dev/mouse, could be the console */
-		if(zs_intreg & CHAN_B_IRQMASK) {
-			if (zs_intreg & CHBRxIP)
-				receive_chars(info, regs);
-			if (zs_intreg & CHBTxIP)
-				transmit_chars(info);
-			if (zs_intreg & CHBEXT)
-				status_handle(info);
+		if(zs_intreg == CHB_Rx_AVAIL) {
+			receive_chars(info->zs_next, regs);
+			return;
+		}
+		if(zs_intreg == CHB_Tx_EMPTY) {
+			transmit_chars(info->zs_next);
+			return;
+		}
+		if (zs_intreg == CHB_EXT_STAT) {
+			status_handle(info->zs_next);
+			return;
 		}
 
-		info = info->zs_next;
+		/* NOTE: The default value for the IRQ status in read register
+		 *       2 in channel B is CHB_SPECIAL, so we need to look at
+		 *       read register 3 in channel A to check if this is a
+		 *       real interrupt, or just the default value.
+		 *       Yes... broken hardware...
+		 */
+
+		zs_intreg = read_zsreg(info->zs_channel, 3);
+		if (zs_intreg & CHBRxIP) {
+			special_receive(info->zs_next);
+			return;
+		}
+		info = info->zs_next->zs_next;
 	}
 }
 
@@ -811,6 +854,7 @@ static void change_speed(struct sun_serial *info)
 {
 	unsigned short port;
 	unsigned cflag;
+	int	quot = 0;
 	int	i;
 	int	brg;
 
@@ -821,13 +865,30 @@ static void change_speed(struct sun_serial *info)
 		return;
 	i = cflag & CBAUD;
 	if (cflag & CBAUDEX) {
-		/* XXX CBAUDEX is not obeyed.
-		 * It is impossible at a 32bits SPARC.
-		 * But we have to report this to user ... someday.
-		 */
-		i = B9600;
+		i &= ~CBAUDEX;
+		if (i != 1)
+			info->tty->termios->c_cflag &= ~CBAUDEX;
+		else
+			i += 15;
 	}
-	if (baud_table[i]) {
+	if (i == 15) {
+		if ((info->flags & ZILOG_SPD_MASK) == ZILOG_SPD_HI)
+			i += 1;
+		if ((info->flags & ZILOG_SPD_MASK) == ZILOG_SPD_CUST)
+			quot = info->custom_divisor;
+	}
+	if (quot) {
+		info->zs_baud = info->baud_base / quot;
+		info->clk_divisor = 16;
+
+		info->curregs[4] = X16CLK;
+		info->curregs[11] = TCBR | RCBR;
+		brg = BPS_TO_BRG(info->zs_baud, ZS_CLOCK/info->clk_divisor);
+		info->curregs[12] = (brg & 255);
+		info->curregs[13] = ((brg >> 8) & 255);
+		info->curregs[14] = BRSRC | BRENAB;
+		zs_rtsdtr(info, 1);
+	} else if (baud_table[i]) {
 		info->zs_baud = baud_table[i];
 		info->clk_divisor = 16;
 
@@ -837,8 +898,10 @@ static void change_speed(struct sun_serial *info)
 		info->curregs[12] = (brg & 255);
 		info->curregs[13] = ((brg >> 8) & 255);
 		info->curregs[14] = BRSRC | BRENAB;
-	/* } else { */
-	/* XXX */
+		zs_rtsdtr(info, 1);
+	} else {
+		zs_rtsdtr(info, 0);
+		return;
 	}
 
 	/* byte size and parity */
@@ -902,7 +965,7 @@ static void change_speed(struct sun_serial *info)
 void kbd_put_char(unsigned char ch)
 {
 	struct sun_zschannel *chan = zs_kbdchan;
-	int flags;
+	unsigned long flags;
 
 	if(!chan)
 		return;
@@ -915,7 +978,7 @@ void kbd_put_char(unsigned char ch)
 void mouse_put_char(char ch)
 {
 	struct sun_zschannel *chan = zs_mousechan;
-	int flags;
+	unsigned long flags;
 
 	if(!chan)
 		return;
@@ -930,7 +993,7 @@ void mouse_put_char(char ch)
 static void rs_put_char(char ch)
 {
 	struct sun_zschannel *chan = zs_conschan;
-	int flags;
+	unsigned long flags;
 
 	if(!chan)
 		return;
@@ -984,7 +1047,7 @@ static void rs_fair_output(void)
 
 		rs_put_char(c);
 
-		save_flags(flags);  cli();
+		cli();
 		left = MIN(info->xmit_cnt, left-1);
 	}
 
@@ -1262,6 +1325,7 @@ static int set_serial_info(struct sun_serial * info,
 	info->baud_base = new_serial.baud_base;
 	info->flags = ((info->flags & ~ZILOG_FLAGS) |
 			(new_serial.flags & ZILOG_FLAGS));
+	info->custom_divisor = new_serial.custom_divisor;
 	info->type = new_serial.type;
 	info->close_delay = new_serial.close_delay;
 	info->closing_wait = new_serial.closing_wait;
@@ -1289,6 +1353,56 @@ static int get_lsr_info(struct sun_serial * info, unsigned int *value)
 	status = info->zs_channel->control;
 	sti();
 	put_user_ret(status,value, -EFAULT);
+	return 0;
+}
+
+static int get_modem_info(struct sun_serial * info, unsigned int *value)
+{
+	unsigned char status;
+	unsigned int result;
+
+	cli();
+	status = info->zs_channel->control;
+	sti();
+	result =  ((info->curregs[5] & RTS) ? TIOCM_RTS : 0)
+		| ((info->curregs[5] & DTR) ? TIOCM_DTR : 0)
+		| ((status  & DCD) ? TIOCM_CAR : 0)
+		| ((status  & SYNC) ? TIOCM_DSR : 0)
+		| ((status  & CTS) ? TIOCM_CTS : 0);
+	put_user_ret(result, value, -EFAULT);
+	return 0;
+}
+
+static int set_modem_info(struct sun_serial * info, unsigned int cmd,
+			  unsigned int *value)
+{
+	unsigned int arg;
+
+	get_user_ret(arg, value, -EFAULT);
+	switch (cmd) {
+	case TIOCMBIS: 
+		if (arg & TIOCM_RTS)
+			info->curregs[5] |= RTS;
+		if (arg & TIOCM_DTR)
+			info->curregs[5] |= DTR;
+		break;
+	case TIOCMBIC:
+		if (arg & TIOCM_RTS)
+			info->curregs[5] &= ~RTS;
+		if (arg & TIOCM_DTR)
+			info->curregs[5] &= ~DTR;
+		break;
+	case TIOCMSET:
+		info->curregs[5] = ((info->curregs[5] & ~(RTS | DTR))
+			     | ((arg & TIOCM_RTS) ? RTS : 0)
+			     | ((arg & TIOCM_DTR) ? DTR : 0));
+		break;
+	default:
+		return -EINVAL;
+	}
+	cli();
+	write_zsreg(info->zs_channel, 5, info->curregs[5]);
+	sti();
 	return 0;
 }
 
@@ -1341,7 +1455,8 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			send_break(info, arg ? arg*(HZ/10) : HZ/4);
 			return 0;
 		case TIOCGSOFTCAR:
-			put_user_ret(C_CLOCAL(tty) ? 1 : 0, (unsigned long *) arg, -EFAULT);
+			put_user_ret(C_CLOCAL(tty) ? 1 : 0,
+				     (unsigned long *) arg, -EFAULT);
 			return 0;
 		case TIOCSSOFTCAR:
 			get_user_ret(arg, (unsigned long *) arg, -EFAULT);
@@ -1349,6 +1464,12 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 				((tty->termios->c_cflag & ~CLOCAL) |
 				 (arg ? CLOCAL : 0));
 			return 0;
+		case TIOCMGET:
+			return get_modem_info(info, (unsigned int *) arg);
+		case TIOCMBIS:
+		case TIOCMBIC:
+		case TIOCMSET:
+			return set_modem_info(info, cmd, (unsigned int *) arg);
 		case TIOCGSERIAL:
 			return get_serial_info(info,
 					       (struct serial_struct *) arg);
@@ -1736,7 +1857,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.27 $";
+	char *revision = "$Revision: 1.37 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -1752,12 +1873,12 @@ static void show_serial_version(void)
  *       Zilogs, what the second does, I don't know. It does work
  *       with using only the first number of each property.
  */
-static inline struct sun_zslayout *get_zs(int chip)
+static struct sun_zslayout *get_zs(int chip)
 {
 	struct linux_prom_irqs tmp_irq[2];
-	unsigned long paddr = 0;
-	unsigned long vaddr[2] = { 0, 0 };
-	int zsnode, tmpnode, iospace, slave, len;
+	unsigned int paddr = 0;
+	unsigned int vaddr[2] = { 0, 0 };
+	int zsnode, tmpnode, iospace, slave, len, seen, sun4u_irq;
 	static int irq = 0;
 
 #if CONFIG_AP1000
@@ -1784,7 +1905,7 @@ static inline struct sun_zslayout *get_zs(int chip)
 		if(!irq)
 			zilog_irq = irq = 12;
 		vaddr[0] = (unsigned long)
-				sparc_alloc_io((char *) paddr, 0, 8,
+				sparc_alloc_io(paddr, 0, 8,
 					       "Zilog Serial", iospace, 0);
 	} else {
 		/* Can use the prom for other machine types */
@@ -1806,6 +1927,10 @@ static inline struct sun_zslayout *get_zs(int chip)
 			}
 			if (!tmpnode)
 				panic ("get_zs: couldn't find board%d's bootbus\n", chip >> 1);
+		} else if (sparc_cpu_model == sun4u) {
+			tmpnode = prom_searchsiblings(zsnode, "sbus");
+			if(tmpnode)
+				zsnode = prom_getchild(tmpnode);
 		} else {
 			tmpnode = prom_searchsiblings(zsnode, "obio");
 			if(tmpnode)
@@ -1813,35 +1938,42 @@ static inline struct sun_zslayout *get_zs(int chip)
 		}
 		if(!zsnode)
 			panic("get_zs no zs serial prom node");
+		seen = 0;
 		while(zsnode) {
 			zsnode = prom_searchsiblings(zsnode, "zs");
 			slave = prom_getintdefault(zsnode, "slave", -1);
-			if(slave==chip) {
+			if((slave == chip) ||
+			   (sparc_cpu_model == sun4u && seen == chip)) {
 				/* The one we want */
 				len = prom_getproperty(zsnode, "address",
 						       (void *) vaddr,
 						       sizeof(vaddr));
-        			if (len % sizeof(unsigned long)) {
+        			if (len % sizeof(unsigned int)) {
 					prom_printf("WHOOPS:  proplen for %s "
 						"was %d, need multiple of "
 						"%d\n", "address", len,
-						sizeof(unsigned long));
+						sizeof(unsigned int));
 					panic("zilog: address property");
 				}
 				zs_nodes[chip] = zsnode;
-				len = prom_getproperty(zsnode, "intr",
-						       (char *) tmp_irq,
-						       sizeof(tmp_irq));
-        			if (len % sizeof(struct linux_prom_irqs)) {
-					prom_printf("WHOOPS:  proplen for %s "
-						"was %d, need multiple of "
-						"%d\n", "address", len,
-						sizeof(struct linux_prom_irqs));
-					panic("zilog: address property");
+				if(sparc_cpu_model == sun4u) {
+					len = prom_getproperty(zsnode, "interrupts",
+							       (char *) &sun4u_irq,
+							       sizeof(tmp_irq));
+					tmp_irq[0].pri = sun4u_irq;
+				} else {
+					len = prom_getproperty(zsnode, "intr",
+							       (char *) tmp_irq,
+							       sizeof(tmp_irq));
+					if (len % sizeof(struct linux_prom_irqs)) {
+						prom_printf(
+						      "WHOOPS:  proplen for %s "
+						      "was %d, need multiple of "
+						      "%d\n", "address", len,
+						      sizeof(struct linux_prom_irqs));
+						panic("zilog: address property");
+					}
 				}
-#ifdef OLD_STYLE_IRQ
-				tmp_irq[0].pri &= 0xf;
-#endif
 				if(!irq) {
 					irq = zilog_irq = tmp_irq[0].pri;
 				} else {
@@ -1851,6 +1983,7 @@ static inline struct sun_zslayout *get_zs(int chip)
 				break;
 			}
 			zsnode = prom_getsibling(zsnode);
+			seen++;
 		}
 		if(!zsnode)
 			panic("get_zs whee chip not found");
@@ -2037,8 +2170,8 @@ static inline void
 rs_cons_check(struct sun_serial *ss, int channel)
 {
 	int i, o, io;
-	static consout_registered = 0;
-	static msg_printed = 0;
+	static int consout_registered = 0;
+	static int msg_printed = 0;
 
 	i = o = io = 0;
 
@@ -2144,7 +2277,8 @@ __initfunc(unsigned long sun_serial_setup (unsigned long memory_start))
 
 __initfunc(int rs_init(void))
 {
-	int chip, channel, brg, i, flags;
+	int chip, channel, brg, i;
+	unsigned long flags;
 	struct sun_serial *info;
 	char dummy;
 

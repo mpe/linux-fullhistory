@@ -4,7 +4,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: ipv6.h,v 1.5 1997/03/18 18:24:10 davem Exp $
+ *	$Id: ipv6.h,v 1.6 1997/04/01 02:22:58 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -16,6 +16,7 @@
 #define _NET_IPV6_H
 
 #include <linux/ipv6.h>
+#include <asm/hardirq.h>
 #include <net/ndisc.h>
 #include <net/flow.h>
 
@@ -199,7 +200,7 @@ extern __inline__ int ipv6_addr_any(struct in6_addr *a)
 extern __inline__ int gfp_any(void)
 {
 	int pri = GFP_KERNEL;
-	if (intr_count)
+	if (in_interrupt())
 		pri = GFP_ATOMIC;
 	return pri;
 }

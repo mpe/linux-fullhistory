@@ -1,4 +1,4 @@
-/* $Id: muldiv.c,v 1.3 1996/11/26 10:00:28 jj Exp $
+/* $Id: muldiv.c,v 1.4 1997/04/11 00:42:08 davem Exp $
  * muldiv.c: Hardware multiply/division illegal instruction trap
  *		for sun4c/sun4 (which do not have those instructions)
  *
@@ -120,7 +120,10 @@ int do_user_muldiv(struct pt_regs *regs, unsigned long pc)
 			"call	.umul\n\t"
 			" mov	%1, %%o1\n\t"
 			"mov	%%o0, %0\n\t"
-			"mov	%%o1, %1\n\t" : "=r" (rs1), "=r" (rs2) : : "o0", "o1", "o2", "o3", "o4", "o5", "o7");
+			"mov	%%o1, %1\n\t"
+			: "=r" (rs1), "=r" (rs2)
+		        :
+			: "o0", "o1", "o2", "o3", "o4", "o5", "o7", "cc");
 #ifdef DEBUG_MULDIV
 		printk ("0x%x%08x\n", rs2, rs1);
 #endif
@@ -138,7 +141,10 @@ int do_user_muldiv(struct pt_regs *regs, unsigned long pc)
 			"call	.mul\n\t"
 			" mov	%1, %%o1\n\t"
 			"mov	%%o0, %0\n\t"
-			"mov	%%o1, %1\n\t" : "=r" (rs1), "=r" (rs2) : : "o0", "o1", "o2", "o3", "o4", "o5", "o7");
+			"mov	%%o1, %1\n\t"
+			: "=r" (rs1), "=r" (rs2)
+			:
+			: "o0", "o1", "o2", "o3", "o4", "o5", "o7", "cc");
 #ifdef DEBUG_MULDIV
 		printk ("0x%x%08x\n", rs2, rs1);
 #endif
@@ -165,7 +171,11 @@ int do_user_muldiv(struct pt_regs *regs, unsigned long pc)
 			"call	__udivdi3\n\t"
 			" mov	%1, %%o3\n\t"
 			"mov	%%o1, %0\n\t"
-			"mov	%%o0, %1\n\t" : "=r" (rs1), "=r" (rs2) : "r" (regs->y) : "o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3");
+			"mov	%%o0, %1\n\t"
+			: "=r" (rs1), "=r" (rs2)
+			: "r" (regs->y)
+			: "o0", "o1", "o2", "o3", "o4", "o5", "o7",
+			  "g1", "g2", "g3", "cc");
 #ifdef DEBUG_MULDIV
 		printk ("0x%x\n", rs1);
 #endif
@@ -190,7 +200,11 @@ int do_user_muldiv(struct pt_regs *regs, unsigned long pc)
 			"call	__divdi3\n\t"
 			" mov	%1, %%o3\n\t"
 			"mov	%%o1, %0\n\t"
-			"mov	%%o0, %1\n\t" : "=r" (rs1), "=r" (rs2) : "r" (regs->y) : "o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3");
+			"mov	%%o0, %1\n\t"
+			: "=r" (rs1), "=r" (rs2)
+			: "r" (regs->y)
+			: "o0", "o1", "o2", "o3", "o4", "o5", "o7",
+			  "g1", "g2", "g3", "cc");
 #ifdef DEBUG_MULDIV
 		printk ("0x%x\n", rs1);
 #endif

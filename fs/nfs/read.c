@@ -189,7 +189,7 @@ nfs_readpage_async(struct inode *inode, struct page *page)
 
 	if (result >= 0) {
 		inode->i_count++;
-		page->count++;
+		atomic_inc(&page->count);
 		return 0;
 	}
 
@@ -219,7 +219,7 @@ nfs_readpage(struct inode *inode, struct page *page)
 	dprintk("NFS: nfs_readpage %08lx\n", page_address(page));
 	set_bit(PG_locked, &page->flags);
 	address = page_address(page);
-	page->count++;
+	atomic_inc(&page->count);
 	if (!IS_SWAPFILE(inode) && !PageError(page)
 	 && NFS_SERVER(inode)->rsize >= PAGE_SIZE)
 		error = nfs_readpage_async(inode, page);

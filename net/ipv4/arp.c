@@ -230,9 +230,9 @@ int sysctl_arp_max_pings = ARP_MAX_PINGS;
 
 int sysctl_arp_dead_res_time = ARP_DEAD_RES_TIME;
 
-
+/* This should be completely nuked... -DaveM */
 #if RT_CACHE_DEBUG >= 1
-#define ASSERT_BH() if (!intr_count) printk(KERN_CRIT __FUNCTION__ " called from SPL=0\n");
+#define ASSERT_BH() if (!in_interrupt()) printk(KERN_CRIT __FUNCTION__ " called from SPL=0\n");
 #else
 #define ASSERT_BH()
 #endif
@@ -251,8 +251,8 @@ struct neigh_ops arp_neigh_ops = {
 };
 
 
-static atomic_t arp_size = 0;
-static atomic_t arp_unres_size = 0;
+static atomic_t arp_size = ATOMIC_INIT;
+static atomic_t arp_unres_size = ATOMIC_INIT;
 
 #ifdef CONFIG_ARPD
 static int arpd_not_running;
@@ -424,7 +424,7 @@ static void arpd_send(int req, u32 addr, struct device * dev, char *ha,
 	arpreq->stamp = arpd_stamp;
 	arpreq->updated = updated;
 	if (ha)
-		memcpy(arpreq->u.neigh.ha, ha, sizeof(arpreq->u.neigh.ha));
+		memcpy(arpreq->ha, ha, sizeof(arpreq->ha));
 
 	retval = netlink_post(NETLINK_ARPD, skb);
 	if (retval)
@@ -503,7 +503,7 @@ static int arpd_callback(int minor, struct sk_buff *skb)
 	else
 	{
 		start_bh_atomic();
-		arp_update(retreq->ip, retreq->u.neigh.ha, dev, retreq->updated, 0);
+		arp_update(retreq->ip, retreq->ha, dev, retreq->updated, 0);
 		end_bh_atomic();
 	}
 
@@ -541,7 +541,7 @@ static int arp_force_expire(void)
 	unsigned long now = jiffies;
 	int result = 0;
 
-	static last_index;
+	static int last_index;
 
 	if (last_index >= ARP_TABLE_SIZE)
 		last_index = 0;
@@ -554,7 +554,7 @@ static int arp_force_expire(void)
 		{
 			if (!(entry->flags & ATF_PERM))
 			{
-				if (!entry->u.neigh.refcnt &&
+				if (!atomic_read(&entry->u.neigh.refcnt) &&
 				    now - entry->u.neigh.lastused > sysctl_arp_timeout)
 				{
 #if RT_CACHE_DEBUG >= 2
@@ -562,11 +562,11 @@ static int arp_force_expire(void)
 #endif
 					arp_free(pentry);
 					result++;
-					if (arp_size < ARP_MAXSIZE)
+					if (atomic_read(&arp_size) < ARP_MAXSIZE)
 						goto done;
 					continue;
 				}
-				if (!entry->u.neigh.refcnt &&
+				if (!atomic_read(&entry->u.neigh.refcnt) &&
 				    entry->u.neigh.lastused < oldest_used)
 				{
 					oldest_entry = pentry;
@@ -602,7 +602,7 @@ static void arp_unres_expire(void)
 			    (entry->retries < sysctl_arp_max_tries ||
 			     entry->timer.expires - now <
 			     sysctl_arp_res_time - sysctl_arp_res_time/32)) {
-				if (!entry->u.neigh.refcnt) {
+				if (!atomic_read(&entry->u.neigh.refcnt)) {
 #if RT_CACHE_DEBUG >= 2
 					printk("arp_unres_expire: %08x discarded\n", entry->ip);
 #endif
@@ -653,7 +653,7 @@ static void arp_check_expire(unsigned long dummy)
 				continue;
 			}
 
-			if (!entry->u.neigh.refcnt &&
+			if (!atomic_read(&entry->u.neigh.refcnt) &&
 			    now - entry->u.neigh.lastused > sysctl_arp_timeout)
 			{
 #if RT_CACHE_DEBUG >= 2
@@ -735,7 +735,7 @@ static void arp_expire_request (unsigned long arg)
 
 	arp_purge_send_q(entry);
 
-	if (entry->u.neigh.refcnt)
+	if (atomic_read(&entry->u.neigh.refcnt))
 	{
 		/*
 		 *	The host is dead, but someone refers to it.
@@ -797,19 +797,20 @@ static struct arp_table * arp_alloc(int how)
 {
 	struct arp_table * entry;
 
-	if (how && arp_size >= ARP_MAXSIZE)
+	if (how && atomic_read(&arp_size) >= ARP_MAXSIZE)
 		arp_force_expire();
-	if (how > 1 && arp_unres_size >= ARP_MAX_UNRES) {
+	if (how > 1 && atomic_read(&arp_unres_size) >= ARP_MAX_UNRES) {
 		arp_unres_expire();
-		if (arp_unres_size >= ARP_MAX_UNRES) {
-			printk(KERN_DEBUG "arp_unres_size=%d\n", arp_unres_size);
+		if (atomic_read(&arp_unres_size) >= ARP_MAX_UNRES) {
+			printk(KERN_DEBUG "arp_unres_size=%d\n",
+			       atomic_read(&arp_unres_size));
 			return NULL;
 		}
 	}
 
 	entry = (struct arp_table *)neigh_alloc(sizeof(struct arp_table),
 						&arp_neigh_ops);
-	entry->u.neigh.refcnt = 1;
+	atomic_set(&entry->u.neigh.refcnt, 1);
 
 	if (entry != NULL)
 	{
@@ -1780,7 +1781,7 @@ int arp_req_delete(struct arpreq *r, struct device * dev)
 		    && (entry->u.neigh.dev == dev || (!(r->arp_flags&ATF_PUBL) && !dev))
 		    && (!(r->arp_flags&ATF_MAGIC) || r->arp_flags == entry->flags))
 		{
-			if (!entry->u.neigh.refcnt)
+			if (!atomic_read(&entry->u.neigh.refcnt))
 			{
 				arp_free(entryp);
 				retval = 0;
@@ -1935,8 +1936,8 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 				 entry->mask==DEF_ARP_NETMASK ?
 				 "*" : in_ntoa(entry->mask),
 				 entry->u.neigh.dev ? entry->u.neigh.dev->name : "*", 
-				 entry->u.neigh.refcnt,
-				 entry->u.neigh.hh ? entry->u.neigh.hh->hh_refcnt : -1,
+				 atomic_read(&entry->u.neigh.refcnt),
+				 entry->u.neigh.hh ? atomic_read(&entry->u.neigh.hh->hh_refcnt) : -1,
 				 entry->u.neigh.hh ? entry->u.neigh.hh->hh_uptodate : 0);
 #endif
 	

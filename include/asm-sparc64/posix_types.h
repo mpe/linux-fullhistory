@@ -9,25 +9,25 @@
 
 typedef unsigned long long     __kernel_size_t;
 
-typedef int                    __kernel_ssize_t;
-typedef unsigned long long int __kernel_ptrdiff_t;
+typedef long long              __kernel_ssize_t;
+typedef long                   __kernel_ptrdiff_t;
 typedef long                   __kernel_time_t;
 typedef long                   __kernel_clock_t;
 typedef int                    __kernel_pid_t;
-typedef unsigned short         __kernel_ipc_pid_t;
-typedef unsigned short         __kernel_uid_t;
-typedef unsigned short         __kernel_gid_t;
-typedef unsigned short         __kernel_dev_t;
-typedef unsigned long          __kernel_ino_t;
-typedef unsigned short         __kernel_mode_t;
+typedef int                    __kernel_ipc_pid_t;
+typedef unsigned int           __kernel_uid_t;
+typedef unsigned int           __kernel_gid_t;
+typedef unsigned int           __kernel_dev_t;
+typedef unsigned int           __kernel_ino_t;
+typedef unsigned int           __kernel_mode_t;
 typedef unsigned short         __kernel_umode_t;
-typedef short                  __kernel_nlink_t;
-typedef long                   __kernel_daddr_t;
+typedef unsigned int           __kernel_nlink_t;
+typedef int                    __kernel_daddr_t;
 typedef long                   __kernel_off_t;
 typedef char *                 __kernel_caddr_t;
 
 #ifdef __GNUC__
-typedef long long	__kernel_loff_t;
+typedef long long              __kernel_loff_t;
 #endif
 
 typedef struct {

@@ -74,7 +74,7 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	 *	instead are lobbed from tx queue to rx queue 
 	 */
 
-	if(skb->users != 1)
+	if(atomic_read(&skb->users) != 1)
 	{
 	  	struct sk_buff *skb2=skb;
 	  	skb=skb_clone(skb, GFP_ATOMIC);		/* Clone the buffer */

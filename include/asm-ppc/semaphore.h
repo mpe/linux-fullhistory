@@ -18,6 +18,23 @@ extern void __up(struct semaphore * sem);
 extern void atomic_add(int c, int *v);
 extern void atomic_sub(int c, int *v);
 
+#define sema_init(sem, val)	atomic_set(&((sem)->count), val)
+
+static inline int waking_non_zero(struct semaphore *sem)
+{
+	unsigned long flags;
+	int ret = 0;
+
+	save_flags(flags);
+	cli();
+	if (atomic_read(&sem->waking) > 0) {
+		atomic_dec(&sem->waking);
+		ret = 1;
+	}
+	restore_flags(flags);
+	return ret;
+}
+
 extern inline void down(struct semaphore * sem)
 {
   for (;;)

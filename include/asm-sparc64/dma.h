@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.3 1997/03/14 21:05:36 jj Exp $
+/* $Id: dma.h,v 1.7 1997/04/10 05:13:28 davem Exp $
  * include/asm-sparc64/dma.h
  *
  * Copyright 1996 (C) David S. Miller (davem@caip.rutgers.edu)
@@ -8,6 +8,7 @@
 #define _ASM_SPARC64_DMA_H
 
 #include <linux/kernel.h>
+#include <linux/types.h>
 
 #include <asm/sbus.h>
 #include <asm/delay.h>
@@ -17,7 +18,7 @@
  * things can compile.
  */
 #define MAX_DMA_CHANNELS 8
-#define MAX_DMA_ADDRESS  ((0x100000000) + PAGE_OFFSET)
+#define MAX_DMA_ADDRESS  ((0xf0000000) + PAGE_OFFSET)
 #define DMA_MODE_READ    1
 #define DMA_MODE_WRITE   2
 
@@ -27,10 +28,10 @@
 
 /* Structure to describe the current status of DMA registers on the Sparc */
 struct sparc_dma_registers {
-  __volatile__ unsigned int cond_reg;   /* DMA condition register */
-  __volatile__ char * st_addr;          /* Start address of this transfer */
-  __volatile__ unsigned int cnt;        /* How many bytes to transfer */
-  __volatile__ unsigned int dma_test;   /* DMA test register */
+  __volatile__ __u32 cond_reg;	/* DMA condition register */
+  __volatile__ __u32 st_addr;	/* Start address of this transfer */
+  __volatile__ __u32 cnt;	/* How many bytes to transfer */
+  __volatile__ __u32 dma_test;	/* DMA test register */
 };
 
 /* DVMA chip revisions */

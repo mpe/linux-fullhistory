@@ -360,7 +360,9 @@ void ax25_send_to_raw(struct sock *sk, struct sk_buff *skb, int proto)
 	struct sk_buff *copy;
 
 	while (sk != NULL) {
-		if (sk->type == SOCK_RAW && sk->protocol == proto && sk->rmem_alloc <= sk->rcvbuf) {
+		if (sk->type == SOCK_RAW &&
+		    sk->protocol == proto &&
+		    atomic_read(&sk->rmem_alloc) <= sk->rcvbuf) {
 			if ((copy = skb_clone(skb, GFP_ATOMIC)) == NULL)
 				return;
 
@@ -417,7 +419,9 @@ void ax25_destroy_socket(ax25_cb *ax25)	/* Not static as it's used by the timer 
 	}
 
 	if (ax25->sk != NULL) {
-		if (ax25->sk->wmem_alloc != 0 || ax25->sk->rmem_alloc != 0) {	/* Defer: outstanding buffers */
+		if (atomic_read(&ax25->sk->wmem_alloc) != 0 ||
+		    atomic_read(&ax25->sk->rmem_alloc) != 0) {
+			/* Defer: outstanding buffers */
 			init_timer(&ax25->timer);
 			ax25->timer.expires  = jiffies + 10 * HZ;
 			ax25->timer.function = ax25_destroy_timer;
@@ -1532,7 +1536,7 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case TIOCOUTQ:
 			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(int))) != 0)
 				return err;
-			amount = sk->sndbuf - sk->wmem_alloc;
+			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if (amount < 0)
 				amount = 0;
 			put_user(amount, (int *)arg);
@@ -1607,8 +1611,8 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			ax25_info.idletimer = sk->protinfo.ax25->idletimer;
 			ax25_info.n2count   = sk->protinfo.ax25->n2count;
 			ax25_info.state     = sk->protinfo.ax25->state;
-			ax25_info.rcv_q     = sk->rmem_alloc;
-			ax25_info.snd_q     = sk->wmem_alloc;
+			ax25_info.rcv_q     = atomic_read(&sk->rmem_alloc);
+			ax25_info.snd_q     = atomic_read(&sk->wmem_alloc);
 			copy_to_user((void *)arg, &ax25_info, sizeof(ax25_info));
 			return 0;
 
@@ -1682,8 +1686,8 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 
 		if (ax25->sk != NULL) {
 			len += sprintf(buffer + len, " %5d %5d\n",
-				ax25->sk->wmem_alloc,
-				ax25->sk->rmem_alloc);
+				atomic_read(&ax25->sk->wmem_alloc),
+				atomic_read(&ax25->sk->rmem_alloc));
 		} else {
 			len += sprintf(buffer + len, "\n");
 		}

@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.23 1997/01/26 04:28:34 davem Exp $
+/* $Id: time.c,v 1.27 1997/04/14 05:38:31 davem Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -54,6 +54,11 @@ void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	    last_rtc_update = xtime.tv_sec;
 	  else
 	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
+
+#ifdef __SMP__
+	/* I really think it should not be done this way... -DaveM */
+	smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 0);
+#endif
 }
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
@@ -198,7 +203,7 @@ __initfunc(static void clock_probe(void))
 			prom_apply_obio_ranges(clk_reg, 1);
 		/* Map the clock register io area read-only */
 		mstk48t02_regs = (struct mostek48t02 *) 
-			sparc_alloc_io((void *) clk_reg[0].phys_addr,
+			sparc_alloc_io(clk_reg[0].phys_addr,
 				       (void *) 0, sizeof(*mstk48t02_regs),
 				       "clock", clk_reg[0].which_io, 0x0);
 		mstk48t08_regs = 0;  /* To catch weirdness */
@@ -215,7 +220,7 @@ __initfunc(static void clock_probe(void))
 			prom_apply_obio_ranges(clk_reg, 1);
 		/* Map the clock register io area read-only */
 		mstk48t08_regs = (struct mostek48t08 *)
-			sparc_alloc_io((void *) clk_reg[0].phys_addr,
+			sparc_alloc_io(clk_reg[0].phys_addr,
 				       (void *) 0, sizeof(*mstk48t08_regs),
 				       "clock", clk_reg[0].which_io, 0x0);
 
@@ -265,7 +270,9 @@ __initfunc(void time_init(void))
 	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
 	xtime.tv_usec = 0;
 	mregs->creg &= ~MSTK_CREG_READ;
-	return;
+
+	/* Now that OBP ticker has been silenced, it is safe to enable IRQ. */
+	__sti();
 }
 
 static __inline__ unsigned long do_gettimeoffset(void)
@@ -283,21 +290,49 @@ static __inline__ unsigned long do_gettimeoffset(void)
 
 void do_gettimeofday(struct timeval *tv)
 {
+#if CONFIG_AP1000
 	unsigned long flags;
 
 	save_and_cli(flags);
-#if CONFIG_AP1000
 	ap_gettimeofday(&xtime);
-#endif
 	*tv = xtime;
-#if !CONFIG_AP1000
-	tv->tv_usec += do_gettimeoffset();
-	if(tv->tv_usec >= 1000000) {
-		tv->tv_usec -= 1000000;
-		tv->tv_sec++;
-	}
-#endif
 	restore_flags(flags);
+#else /* !(CONFIG_AP1000) */
+	/* Load doubles must be used on xtime so that what we get
+	 * is guarenteed to be atomic, this is why we can run this
+	 * with interrupts on full blast.  Don't touch this... -DaveM
+	 */
+	__asm__ __volatile__("
+	sethi	%hi(master_l10_counter), %o1
+	ld	[%o1 + %lo(master_l10_counter)], %g3
+	sethi	%hi(xtime), %g2
+1:	ldd	[%g2 + %lo(xtime)], %o4
+	ld	[%g3], %o1
+	ldd	[%g2 + %lo(xtime)], %o2
+	xor	%o4, %o2, %o2
+	xor	%o5, %o3, %o3
+	orcc	%o2, %o3, %g0
+	bne	1b
+	 subcc	%o1, 0x0, %g0
+	bpos	1f
+	 srl	%o1, 0xa, %o1
+	sethi	%hi(0x2710), %o3
+	or	%o3, %lo(0x2710), %o3
+	sethi	%hi(0x1fffff), %o2
+	or	%o2, %lo(0x1fffff), %o2
+	add	%o5, %o3, %o5
+	and	%o1, %o2, %o1
+1:	add	%o5, %o1, %o5
+	sethi	%hi(1000000), %o2
+	or	%o2, %lo(1000000), %o2
+	cmp	%o5, %o2
+	bl,a	1f
+	 st	%o4, [%o0 + 0x0]
+	add	%o4, 0x1, %o4
+	sub	%o5, %o2, %o5
+	st	%o4, [%o0 + 0x0]
+1:	st	%o5, [%o0 + 0x4]");
+#endif
 }
 
 void do_settimeofday(struct timeval *tv)

@@ -60,9 +60,9 @@
  *	Resource tracking variables
  */
 
-atomic_t net_skbcount = 0;
-atomic_t net_allocs = 0;
-atomic_t net_fails  = 0;
+static atomic_t net_skbcount = ATOMIC_INIT;
+static atomic_t net_allocs = ATOMIC_INIT;
+static atomic_t net_fails  = ATOMIC_INIT;
 
 extern atomic_t ip_frag_mem;
 
@@ -75,11 +75,15 @@ char *skb_put_errstr ="skput:over: %p:%d";
 
 void show_net_buffers(void)
 {
-	printk(KERN_INFO "Networking buffers in use          : %u\n",net_skbcount);
-	printk(KERN_INFO "Total network buffer allocations   : %u\n",net_allocs);
-	printk(KERN_INFO "Total failed network buffer allocs : %u\n",net_fails);
+	printk(KERN_INFO "Networking buffers in use          : %u\n",
+	       atomic_read(&net_skbcount));
+	printk(KERN_INFO "Total network buffer allocations   : %u\n",
+	       atomic_read(&net_allocs));
+	printk(KERN_INFO "Total failed network buffer allocs : %u\n",
+	       atomic_read(&net_fails));
 #ifdef CONFIG_INET
-	printk(KERN_INFO "IP fragment buffer size            : %u\n",ip_frag_mem);
+	printk(KERN_INFO "IP fragment buffer size            : %u\n",
+	       atomic_read(&ip_frag_mem));
 #endif	
 }
 
@@ -606,7 +610,7 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	int len;
 	unsigned char *bptr;
 
-	if (0 && intr_count && priority!=GFP_ATOMIC) 
+	if (in_interrupt() && priority!=GFP_ATOMIC) 
 	{
 		static int count = 0;
 		if (++count < 5) {
@@ -633,7 +637,7 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	bptr=(unsigned char *)kmalloc(size,priority);
 	if (bptr == NULL)
 	{
-		net_fails++;
+		atomic_inc(&net_fails);
 		return NULL;
 	}
 #ifdef PARANOID_BUGHUNT_MODE
@@ -647,12 +651,12 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	 *	by doing the following. Which is to deliberately put the
 	 *	skb at the _end_ not the start of the memory block.
 	 */
-	net_allocs++;
+	atomic_inc(&net_allocs);
 	
 	skb=(struct sk_buff *)(bptr+size)-1;
 
-	skb->count = 1;		/* only one reference to this */
-	skb->data_skb = skb;	/* and we're our own data skb */
+	atomic_set(&skb->count, 1);		/* only one reference to this */
+	skb->data_skb = skb;			/* and we're our own data skb */
 
 	skb->pkt_type = PACKET_HOST;	/* Default type */
 	skb->pkt_bridged = 0;		/* Not bridged */
@@ -667,11 +671,11 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	skb->destructor = NULL;
 	memset(skb->cb, 0, sizeof(skb->cb));
 	skb->priority = SOPRI_NORMAL;
-	net_skbcount++;
+	atomic_inc(&net_skbcount);
 #if CONFIG_SKB_CHECK
 	skb->magic_debug_cookie = SK_GOOD_SKB;
 #endif
-	skb->users = 1;
+	atomic_set(&skb->users, 1);
 	/* Load the data pointers */
 	skb->head=bptr;
 	skb->data=bptr;
@@ -741,7 +745,7 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 			return NULL;
 	}
 	memcpy(n, skb, sizeof(*n));
-	n->count = 1;
+	atomic_set(&n->count, 1);
 	skb = skb->data_skb;
 	atomic_inc(&skb->count);
 	atomic_inc(&net_allocs);
@@ -752,7 +756,7 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	n->list = NULL;
 	n->sk = NULL;
 	n->tries = 0;
-	n->users = 1;
+	atomic_set(&n->users, 1);
 	n->inclone = inbuff;
 	n->destructor = NULL;
 	return n;
@@ -807,7 +811,7 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int priority)
 	n->used=skb->used;
 	n->arp=skb->arp;
 	n->tries=0;
-	n->users=1;
+	atomic_set(&n->users, 1);
 	n->pkt_type=skb->pkt_type;
 	n->stamp=skb->stamp;
 	n->destructor = NULL;
@@ -862,7 +866,7 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 	n->used=skb->used;
 	n->arp=skb->arp;
 	n->tries=0;
-	n->users=1;
+	atomic_set(&n->users, 1);
 	n->pkt_type=skb->pkt_type;
 	n->stamp=skb->stamp;
 	n->destructor = NULL;

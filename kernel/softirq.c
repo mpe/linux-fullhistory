@@ -23,16 +23,13 @@
 #include <asm/irq.h>
 #include <asm/bitops.h>
 #include <asm/atomic.h>
-#include <asm/hardirq.h>
-#include <asm/softirq.h>
 
-atomic_t intr_count = 0;
+/* intr_count died a painless death... -DaveM */
 
 int bh_mask_count[32];
 unsigned long bh_active = 0;
 unsigned long bh_mask = 0;
 void (*bh_base[32])(void);
-
 
 /*
  * This needs to make sure that only one bottom half handler

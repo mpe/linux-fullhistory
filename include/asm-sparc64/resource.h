@@ -1,4 +1,4 @@
-/* $Id: resource.h,v 1.1 1996/12/26 14:22:34 davem Exp $
+/* $Id: resource.h,v 1.2 1997/04/04 00:50:27 davem Exp $
  * resource.h: Resource definitions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -25,7 +25,7 @@
 #define RLIM_NLIMITS	10
 
 #ifdef __KERNEL__
-
+/* XXX 32-bit binary compatability... */
 #define INIT_RLIMITS							\
 {									\
     {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},				\

@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.1 1996/12/27 17:28:19 davem Exp $
+# $Id: config.in,v 1.5 1997/04/10 17:06:08 jj Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -51,7 +51,8 @@ bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'Sysctl support' CONFIG_SYSCTL
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
-tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
+tristate 'Kernel support for 64-bit ELF binaries' CONFIG_BINFMT_ELF
+tristate 'Kernel support for 32-bit ELF binaries' CONFIG_BINFMT_ELF32
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
 fi

@@ -6,6 +6,7 @@
  *
  * See arch/sparc64/kernel/sys_sparc.c for ugly details..
  */
+/* XXX 32-bit binary compatability... */
 struct ipc_kludge {
 	struct msgbuf *msgp;
 	long msgtyp;

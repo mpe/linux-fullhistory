@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.90 1997/01/31 23:26:16 tdyas Exp $
+/*  $Id: process.c,v 1.93 1997/04/11 08:55:40 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -57,6 +57,7 @@ asmlinkage int sys_idle(void)
 		goto out;
 
 	/* endless idle loop with no priority at all */
+	current->priority = -100;
 	current->counter = -100;
 	for (;;) {
 		if (sparc_cpu_model == sun4c) {
@@ -99,51 +100,33 @@ out:
 
 #else
 
-/*
- * the idle loop on a SparcMultiPenguin...
- */
-asmlinkage int sys_idle(void)
-{
-	int ret = -EPERM;
-
-	lock_kernel();
-	if (current->pid != 0)
-		goto out;
-
-	/* endless idle loop with no priority at all */
-	current->counter = -100;
-	schedule();
-	ret = 0;
-out:
-	unlock_kernel();
-	return ret;
-}
-
 /* This is being executed in task 0 'user space'. */
 int cpu_idle(void *unused)
 {
-	volatile int *spap = &smp_process_available;
-	volatile int cval;
-
+	current->priority = -100;
 	while(1) {
-		if(0==*spap)
-			continue;
-		cli();
-		/* Acquire exclusive access. */
-		while((cval = smp_swap(spap, -1)) == -1)
-			while(*spap == -1)
-				;
-                if (0==cval) {
-			/* ho hum, release it. */
-			*spap = 0;
-			sti();
-                        continue;
-                }
-		/* Something interesting happened, whee... */
-		*spap = (cval - 1);
-		sti();
-		idle();
+		/*
+		 * tq_scheduler currently assumes we're running in a process
+		 * context (ie that we hold the kernel lock..)
+		 */
+		if (tq_scheduler) {
+			lock_kernel();
+			run_task_queue(&tq_scheduler);
+			unlock_kernel();
+		}
+		/* endless idle loop with no priority at all */
+		current->counter = -100;
+		schedule();
 	}
+}
+
+asmlinkage int sys_idle(void)
+{
+	if(current->pid != 0)
+		return -EPERM;
+
+	cpu_idle(NULL);
+	return 0;
 }
 
 #endif

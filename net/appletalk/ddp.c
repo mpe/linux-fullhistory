@@ -198,7 +198,9 @@ int atalk_get_info(char *buffer, char **start, off_t offset, int length, int dum
 			ntohs(s->protinfo.af_at.dest_net),
 			s->protinfo.af_at.dest_node,
 			s->protinfo.af_at.dest_port);
-		len += sprintf (buffer+len,"%08X:%08X ", s->wmem_alloc, s->rmem_alloc);
+		len += sprintf (buffer+len,"%08X:%08X ",
+				atomic_read(&s->wmem_alloc),
+				atomic_read(&s->rmem_alloc));
 		len += sprintf (buffer+len,"%02X %d\n", s->state, SOCK_INODE(s->socket)->i_uid);
 
 		/* Are we still dumping unwanted data then discard the record */
@@ -1891,7 +1893,7 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 		 *	Protocol layer
 		 */
 		case TIOCOUTQ:
-			amount=sk->sndbuf-sk->wmem_alloc;
+			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if(amount<0)
 				amount=0;
 			break;

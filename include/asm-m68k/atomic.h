@@ -10,14 +10,18 @@
  * We do not have SMP m68k systems, so we don't have to deal with that.
  */
 
-typedef int atomic_t;
+typedef struct { int counter; } atomic_t;
+#define ATOMIC_INIT	{ 0 }
 
-static __inline__ void atomic_add(atomic_t i, atomic_t *v)
+#define atomic_read(v)		((v)->counter)
+#define atomic_set(v)		(((v)->counter) = i)
+
+static __inline__ void atomic_add(int i, atomic_t *v)
 {
 	__asm__ __volatile__("addl %1,%0" : : "m" (*v), "id" (i));
 }
 
-static __inline__ void atomic_sub(atomic_t i, atomic_t *v)
+static __inline__ void atomic_sub(int i, atomic_t *v)
 {
 	__asm__ __volatile__("subl %1,%0" : : "m" (*v), "id" (i));
 }

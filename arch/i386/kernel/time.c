@@ -364,6 +364,29 @@ static int set_rtc_mmss(unsigned long nowtime)
 /* last time the cmos clock got updated */
 static long last_rtc_update = 0;
 
+
+/*
+ * Move this to a header file - right now it shows
+ * up both here and in smp.c
+ */
+inline void x86_do_profile (unsigned long eip)
+{
+	if (prof_buffer && current->pid) {
+		extern int _stext;
+		eip -= (unsigned long) &_stext;
+		eip >>= prof_shift;
+		if (eip < prof_len)
+			atomic_inc(&prof_buffer[eip]);
+		else
+		/*
+		 * Dont ignore out-of-bounds EIP values silently,
+		 * put them into the last histogram slot, so if
+		 * present, they will show up as a sharp peak.
+		 */
+			atomic_inc(&prof_buffer[prof_len-1]);
+	}
+}
+
 /*
  * timer_interrupt() needs to keep up the real-time clock,
  * as well as call the "do_timer()" routine every clocktick
@@ -371,6 +394,14 @@ static long last_rtc_update = 0;
 static inline void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	do_timer(regs);
+/*
+ * In the SMP case we use the local APIC timer interrupt to do the
+ * profiling.
+ */
+#ifndef __SMP__
+	if (!user_mode(regs))
+		x86_do_profile(regs->eip);
+#endif
 
 	/*
 	 * If we have an externally synchronized Linux clock, then update
@@ -495,6 +526,7 @@ unsigned long get_cmos_time(void)
 }
 
 static struct irqaction irq0  = { timer_interrupt, 0, 0, "timer", NULL, NULL};
+
 
 void time_init(void)
 {

@@ -314,6 +314,8 @@ static int ipmr_cache_report(struct sk_buff *pkt, vifi_t vifi, int assert)
 		kfree_skb(skb, FREE_READ);
 		return ret;
 	}
+
+	return ret;
 }
 
 /*
@@ -357,7 +359,7 @@ static void ipmr_cache_unresolved(struct mfc_cache *cache, vifi_t vifi, struct s
 			/* If the report failed throw the cache entry 
 			   out - Brad Parker */
 			if(ipmr_cache_report(skb, vifi, 0)<0)
-				impr_cache_delete(cache);
+				ipmr_cache_delete(cache);
 		}
 	}
 	/*

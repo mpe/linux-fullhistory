@@ -197,7 +197,7 @@ $(TOPDIR)/include/linux/modversions.h:
 endif # CONFIG_MODVERSIONS
 
 ifneq "$(strip $(SYMTAB_OBJS))" ""
-$(SYMTAB_OBJS): $(TOPDIR)/include/linux/modversions.h
+$(SYMTAB_OBJS): $(TOPDIR)/include/linux/modversions.h $(SYMTAB_OBJS:.o=.c)
 	$(CC) $(CFLAGS) -DEXPORT_SYMTAB -c $(@:.o=.c)
 endif
 

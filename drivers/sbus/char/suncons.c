@@ -1,4 +1,4 @@
-/* $Id: suncons.c,v 1.53 1997/03/15 07:47:50 davem Exp $
+/* $Id: suncons.c,v 1.58 1997/04/04 00:50:04 davem Exp $
  *
  * suncons.c: Sun SparcStation console support.
  *
@@ -257,10 +257,10 @@ hide_cursor(void)
 		return; /* Don't paint anything on fb which is not ours,
 			   but turn off the hw cursor in such case */
 	
-	save_and_cli(flags);
+	__save_and_cli(flags);
 
 	if(cursor_pos == -1) {
-		restore_flags (flags);
+		__restore_flags (flags);
 		return;
 	}
 	switch (con_depth){
@@ -287,7 +287,7 @@ hide_cursor(void)
 		break;
 	}
 	cursor_pos = -1;
-	restore_flags(flags);
+	__restore_flags(flags);
 }
 
 void
@@ -316,13 +316,13 @@ set_cursor(int currcons)
 		return;
 	}
 
-	save_and_cli(flags);
+	__save_and_cli(flags);
 
 	idx = (pos - video_mem_base) >> 1;
 	oldpos = cursor_pos;
 	if (!deccm) {
 		hide_cursor ();
-		restore_flags (flags);
+		__restore_flags (flags);
 		return;
 	}
 	cursor_pos = idx;
@@ -366,7 +366,7 @@ set_cursor(int currcons)
 	}
 	default:
 	}
-	restore_flags(flags);
+	__restore_flags(flags);
 }
 
 /*
@@ -434,7 +434,12 @@ __initfunc(void con_type_init_finish(void))
 	putconsxy(0, q);
 	ush = (unsigned short *) video_mem_base + video_num_columns * 2 + 20 + 11 * (linux_num_cpus - 1);
 
-	for (p = "Linux/SPARC version " UTS_RELEASE; *p; p++, ush++) {
+#ifdef __sparc_v9__
+	p = "Linux/UltraSPARC version " UTS_RELEASE;
+#else
+	p = "Linux/SPARC version " UTS_RELEASE;
+#endif
+	for (; *p; p++, ush++) {
 		*ush = (attr << 8) + *p;
 		sun_blitc (*ush, (unsigned long) ush);
 	}
@@ -846,7 +851,7 @@ __initfunc(static int cg14_present(void))
 __initfunc(static void
 	   sparc_framebuffer_setup(int primary, int con_node,
 				   int type, struct linux_sbus_device *sbdp, 
-				   uint base, uint con_base, int prom_fb,
+				   uint base, unsigned long con_base, int prom_fb,
 				   int parent_node))
 {
 	static int frame_buffers = 1;
@@ -865,7 +870,8 @@ __initfunc(static void
 	
 	if (prom_fb) sun_prom_console_id = n;
 		
-	if (sbdp) io = sbdp->reg_addrs [0].which_io;
+	if (sbdp)
+		io = sbdp->reg_addrs [0].which_io;
 
 	/* Fill in common fb information */
 	fbinfo [n].type.fb_type   = type;
@@ -880,7 +886,10 @@ __initfunc(static void
 	fbinfo [n].type.fb_size   = PAGE_ALIGN((linebytes) * (fbinfo [n].type.fb_height));
 	fbinfo [n].space = io;
 	fbinfo [n].blanked = 0;
-	fbinfo [n].base = con_base;
+	if (con_base >= PAGE_OFFSET)
+		fbinfo [n].base = con_base;
+	else
+		fbinfo [n].base = 0;
 	fbinfo [n].cursor.hwsize.fbx = 32;
 	fbinfo [n].cursor.hwsize.fby = 32;
 	fbinfo [n].proc_entry.node = parent_node;
@@ -1016,7 +1025,8 @@ __initfunc(static int sparc_console_probe(void))
 	int cg14 = 0;
 	char prom_name[40];	
 	int type;
-	uint con_base;
+	unsigned long con_base;
+	u32 tmp;
 	u32 prom_console_node = 0;
 
 	for (i = 0; i < FRAME_BUFFERS; i++)
@@ -1115,7 +1125,8 @@ __initfunc(static int sparc_console_probe(void))
 			prom_apply_sbus_ranges (sbdp->my_bus, &sbdp->reg_addrs [0],
 						sbdp->num_registers, sbdp);
 
-			propl = prom_getproperty(con_node, "address", (char *) &con_base, 4);
+			propl = prom_getproperty(con_node, "address", (char *) &tmp, 4);
+			con_base = tmp;
 			if (propl != 4) con_base = 0;
 			propl = prom_getproperty(con_node, "emulation", prom_name, sizeof (prom_name));
 			if (propl < 0 || propl >= sizeof (prom_name)) {
@@ -1277,7 +1288,7 @@ sun_blitc(uint charattr, unsigned long addr)
 		
 		dst = (unsigned char *)(((unsigned long)con_fb_base) + FBUF_OFFSET(idx));
 
-		save_and_cli(flags);
+		__save_and_cli(flags);
 		if ((!(charattr & 0xf000)) ^ (idx == cursor_pos)) {
 			for(j = 0; j < CHAR_HEIGHT; j++, font_row++, dst+=CHARS_PER_LINE)
 				*dst = ~(*font_row);
@@ -1285,7 +1296,7 @@ sun_blitc(uint charattr, unsigned long addr)
 			for(j = 0; j < CHAR_HEIGHT; j++, font_row++, dst+=CHARS_PER_LINE)
 				*dst = *font_row;
 		}
-		restore_flags(flags);
+		__restore_flags(flags);
 		break;
 	}
 	case 8: {
@@ -1329,12 +1340,12 @@ sun_blitc(uint charattr, unsigned long addr)
 				BLITC_SPACE
 				BLITC_SPACE
 					: : "r" (cpl), "r" (x3), "r" (x1), "r" (x2));
-			save_and_cli (flags);
+			__save_and_cli (flags);
 			if (idx != cursor_pos)
 				__asm__ __volatile__ (BLITC_SPC : : "r" (x1), "r" (dst), "r" (cpl));
 			else
 				__asm__ __volatile__ (BLITC_SPC : : "r" (x1), "r" (under_cursor), "i" (8));
-			restore_flags (flags);
+			__restore_flags (flags);
 #else
 			bgmask = attrib >> 4;
 			bgmask |= bgmask << 8;
@@ -1345,7 +1356,7 @@ sun_blitc(uint charattr, unsigned long addr)
         	                *(dst+1) = bgmask;
                 	}
                 	/* Prevent cursor spots left on the screen */
-			save_and_cli(flags);
+			__save_and_cli(flags);
 			if (idx != cursor_pos) {
 	                	*dst = bgmask;
         	        	*(dst+1) = bgmask;
@@ -1358,7 +1369,7 @@ sun_blitc(uint charattr, unsigned long addr)
                 		under_cursor [2] = bgmask;
 	                	under_cursor [3] = bgmask;
         	        }
-	                restore_flags(flags);
+	                __restore_flags(flags);
 #endif
 		} else /* non-space */ {
 			fgmask = attrib & 0x0f;
@@ -1430,12 +1441,12 @@ sun_blitc(uint charattr, unsigned long addr)
 			/* Prepare the data the bottom line (and put it into g2,g3) */
 			__asm__ __volatile__ (BLITC_BODYEND : : "r" (fontm_bits), "r" (fgmask), "r" (bgmask),
 								"r" (x3), "r" (x4));
-			save_and_cli(flags);
+			__save_and_cli(flags);
 			if (idx != cursor_pos)
 				__asm__ __volatile__ (BLITC_STORE : : "r" (dst), "r" (cpl));
 			else
 				__asm__ __volatile__ (BLITC_STORE : : "r" (under_cursor), "i" (8));
-			restore_flags (flags);
+			__restore_flags (flags);
 #else
 	                for(j = 0; j < CHAR_HEIGHT - 2; j++, font_row++, dst += ipl) {
         	                rowbits = *font_row;
@@ -1458,7 +1469,7 @@ sun_blitc(uint charattr, unsigned long addr)
 	                data4 = (data4 & fgmask) | (~data4 & bgmask);
         	        
                 	/* Prevent cursor spots left on the screen */
-			save_and_cli(flags);
+			__save_and_cli(flags);
 			
 			if (idx != cursor_pos) {
 	                	*dst = data;
@@ -1473,7 +1484,7 @@ sun_blitc(uint charattr, unsigned long addr)
 	                	under_cursor [3] = data4;
         	        }
                 	
-	                restore_flags(flags);
+	                __restore_flags(flags);
 #endif
 		}
 		break;

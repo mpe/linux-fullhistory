@@ -10,6 +10,7 @@
  * This module exports the console io support for DEC's TGA
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/interrupt.h>

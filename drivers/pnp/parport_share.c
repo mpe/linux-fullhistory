@@ -9,6 +9,7 @@
  *              and Philip Blundell <Philip.Blundell@pobox.com>
  */
 
+#include <linux/tasks.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 
@@ -64,7 +65,7 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma)
 	if (new.dma >= 0) {
 		if (request_dma(new.dma, new.name)) {
 			printk(KERN_INFO "%s: unable to claim DMA %d\n", 
-			       new.name, new..dma);
+			       new.name, new.dma);
 			release_region(new.base, new.size);
 			if( new.modes & PARPORT_MODE_ECR )
 				release_region(new.base+0x400, 3);

@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.26 1997/03/14 07:54:47 davem Exp $ */
+/* $Id: checksum.h,v 1.27 1997/04/11 00:42:18 davem Exp $ */
 #ifndef __SPARC_CHECKSUM_H
 #define __SPARC_CHECKSUM_H
 
@@ -154,7 +154,7 @@ extern __inline__ unsigned short ip_fast_csum(__const__ unsigned char *iph,
 			     "xnor\t%%g0, %0, %0"
 			     : "=r" (sum), "=&r" (iph)
 			     : "r" (ihl), "1" (iph)
-			     : "g2", "g3", "g4");
+			     : "g2", "g3", "g4", "cc");
 	return sum;
 }
 
@@ -178,7 +178,8 @@ extern __inline__ unsigned short csum_tcpudp_magic(unsigned long saddr,
 			     "xnor\t%%g0, %0, %0"
 			     : "=r" (sum), "=r" (saddr)
 			     : "r" (daddr), "r" ((proto<<16)+len), "0" (sum),
-			     "1" (saddr));
+			       "1" (saddr)
+			     : "cc");
 	return sum;
 }
 
@@ -192,7 +193,8 @@ extern __inline__ unsigned int csum_fold(unsigned int sum)
 			     "addx\t%1, %%g0, %1\n\t"
 			     "xnor\t%%g0, %1, %0"
 			     : "=&r" (sum), "=r" (tmp)
-			     : "0" (sum), "1" (sum<<16));
+			     : "0" (sum), "1" (sum<<16)
+			     : "cc");
 	return sum;
 }
 
@@ -228,7 +230,7 @@ static __inline__ unsigned short int csum_ipv6_magic(struct in6_addr *saddr,
 		: "=&r" (sum)
 		: "r" (saddr), "r" (daddr), 
 		  "r"(htonl((__u32) (len))), "r"(htonl(proto)), "r"(sum)
-		: "g2", "g3", "g4");
+		: "g2", "g3", "g4", "cc");
 
 	return csum_fold(sum);
 }

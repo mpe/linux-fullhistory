@@ -46,7 +46,7 @@
 
 static struct ipq *ipqueue = NULL;		/* IP fragment queue	*/
 
-atomic_t ip_frag_mem = 0;			/* Memory used for fragments */
+atomic_t ip_frag_mem = ATOMIC_INIT;		/* Memory used for fragments */
 
 char *in_ntoa(unsigned long in);
 
@@ -105,7 +105,7 @@ static struct ipfrag *ip_frag_create(int offset, int end, struct sk_buff *skb, u
 	 
 	save_flags(flags);
 	cli();
-	ip_frag_mem+=skb->truesize;
+	atomic_add(skb->truesize, &ip_frag_mem);
 	restore_flags(flags);
 
 	return(fp);
@@ -226,7 +226,7 @@ static void ip_expire(unsigned long arg)
  
 static void ip_evictor(void)
 {
-	while(ip_frag_mem>IPFRAG_LOW_THRESH)
+	while(atomic_read(&ip_frag_mem)>IPFRAG_LOW_THRESH)
 	{
 		if(!ipqueue)
 			panic("ip_evictor: memcount");
@@ -422,7 +422,7 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 	 *	Start by cleaning up the memory
 	 */
 
-	if(ip_frag_mem>IPFRAG_HIGH_THRESH)
+	if(atomic_read(&ip_frag_mem)>IPFRAG_HIGH_THRESH)
 		ip_evictor();
 	/* 
 	 *	Find the entry of this IP datagram in the "incomplete datagrams" queue. 

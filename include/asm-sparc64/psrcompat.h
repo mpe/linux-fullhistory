@@ -1,4 +1,4 @@
-/* $Id: psrcompat.h,v 1.1 1996/12/26 10:02:30 davem Exp $ */
+/* $Id: psrcompat.h,v 1.2 1997/04/07 18:57:17 jj Exp $ */
 #ifndef _SPARC64_PSRCOMPAT_H
 #define _SPARC64_PSRCOMPAT_H
 
@@ -36,7 +36,7 @@ extern inline unsigned int tstate_to_psr(unsigned long tstate)
 	psr |= ((tstate & TSTATE_ICC) >> 12);
 
 	/* This is completely arbitrary. */
-	__asm__ __volatile__("rdpr	%vers, %0" : "=r" (vers));
+	__asm__ __volatile__("rdpr	%%ver, %0" : "=r" (vers));
 	psr |= ((vers << 8) >> 32) & PSR_IMPL;
 	psr |= ((vers << 24) >> 36) & PSR_VERS;
 

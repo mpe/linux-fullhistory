@@ -529,7 +529,7 @@ found_good:
 	best->i_count = 1;
 	best->i_nlink = 1;
 	best->i_version = ++event;
-	best->i_sem.count = 1;
+	sema_init(&best->i_sem, 1);
 	best->i_ino = ++ino;
 	best->i_dev = 0;
 	nr_free_inodes--;

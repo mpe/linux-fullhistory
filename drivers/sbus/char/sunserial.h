@@ -1,4 +1,4 @@
-/* $Id: sunserial.h,v 1.5 1996/10/16 13:13:41 zaitcev Exp $
+/* $Id: sunserial.h,v 1.9 1997/04/12 23:33:12 ecd Exp $
  * serial.h: Definitions for the Sparc Zilog serial driver.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -68,9 +68,7 @@ struct serial_struct {
 #define ZILOG_SPLIT_TERMIOS 0x0008 /* Separate termios for dialin/callout */
 
 #define ZILOG_SPD_MASK	0x0030
-#define ZILOG_SPD_HI	0x0010	/* Use 56000 instead of 38400 bps */
-
-#define ZILOG_SPD_VHI	0x0020  /* Use 115200 instead of 38400 bps */
+#define ZILOG_SPD_HI	0x0010	/* Use 76800 instead of 38400 bps */
 #define ZILOG_SPD_CUST	0x0030  /* Use user-specified divisor */
 
 #define ZILOG_SKIP_TEST	0x0040 /* Skip UART test during autoconfiguration */
@@ -366,7 +364,7 @@ struct sun_serial {
 #define	ZCOUNT		0x2	/* Zero count */
 #define	Tx_BUF_EMP	0x4	/* Tx Buffer empty */
 #define	DCD		0x8	/* DCD */
-#define	SYNC_HUNT	0x10	/* Sync/hunt */
+#define	SYNC		0x10	/* Sync/hunt */
 #define	CTS		0x20	/* CTS */
 #define	TxEOM		0x40	/* Tx underrun */
 #define	BRK_ABRT	0x80	/* Break/Abort */
@@ -389,6 +387,15 @@ struct sun_serial {
 #define	END_FR		0x80	/* End of Frame (SDLC) */
 
 /* Read Register 2 (channel b only) - Interrupt vector */
+#define CHB_Tx_EMPTY	0x00
+#define CHB_EXT_STAT	0x02
+#define CHB_Rx_AVAIL	0x04
+#define CHB_SPECIAL	0x06
+#define CHA_Tx_EMPTY	0x08
+#define CHA_EXT_STAT	0x0a
+#define CHA_Rx_AVAIL	0x0c
+#define CHA_SPECIAL	0x0e
+#define STATUS_MASK	0x0e
 
 /* Read Register 3 (interrupt pending register) ch a only */
 #define	CHBEXT	0x1		/* Channel B Ext/Stat IP */
@@ -414,6 +421,9 @@ struct sun_serial {
 
 /* Misc macros */
 #define ZS_CLEARERR(channel)    do { channel->control = ERR_RES; \
+				     udelay(5); } while(0)
+
+#define ZS_CLEARSTAT(channel)   do { channel->control = RES_EXT_INT; \
 				     udelay(5); } while(0)
 
 #define ZS_CLEARFIFO(channel)   do { volatile unsigned char garbage; \

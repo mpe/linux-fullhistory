@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.58 1996/12/30 06:17:03 davem Exp $ */
+/* $Id: pgtable.h,v 1.59 1997/04/10 05:13:23 davem Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -39,11 +39,11 @@ struct mmu_sglist {
 	char *addr;
 	char *__dont_touch;
 	unsigned int len;
-	char *dvma_addr;
+	__u32 dvma_addr;
 };
-extern char *(*mmu_get_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
+extern __u32 (*mmu_get_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
 extern void  (*mmu_get_scsi_sgl)(struct mmu_sglist *, int, struct linux_sbus *sbus);
-extern void  (*mmu_release_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
+extern void  (*mmu_release_scsi_one)(__u32, unsigned long, struct linux_sbus *sbus);
 extern void  (*mmu_release_scsi_sgl)(struct mmu_sglist *, int, struct linux_sbus *sbus);
 
 extern void  (*mmu_map_dma_area)(unsigned long addr, int len);

@@ -1026,7 +1026,7 @@ int NCR5380_queue_command (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
      * If we're not in an interrupt, we can call NCR5380_main()
      * unconditionally, because it cannot be already running.
      */
-    if (intr_count > 0 || ((flags >> 8) & 7) >= 6)
+    if (in_interrupt() || ((flags >> 8) & 7) >= 6)
 	queue_main();
     else
 	NCR5380_main();

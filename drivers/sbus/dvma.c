@@ -110,7 +110,8 @@ dvma_init(struct linux_sbus *sbus, unsigned long memory_start))
 			printk("Revision 1 PLUS ");
 			break;
 		default:
-			printk("unknown dma version");
+			printk("unknown dma version %x",
+			       (dma->regs->cond_reg)&DMA_DEVICE_ID);
 			dma->allocated = 1;
 			break;
 		}

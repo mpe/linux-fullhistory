@@ -105,7 +105,6 @@ static void sparcaudio_output_done_task(void * arg)
 	struct sparcaudio_driver *drv = (struct sparcaudio_driver *)arg;
 	unsigned long flags;
 
-	printk(KERN_DEBUG "sparcaudio: next buffer (of=%d)\n",drv->output_front);
 	save_and_cli(flags);
 	drv->ops->start_output(drv,
 			       drv->output_buffers[drv->output_front],
@@ -123,7 +122,6 @@ void sparcaudio_output_done(struct sparcaudio_driver * drv)
 	/* If the output queue is empty, shutdown the driver. */
 	if (drv->output_count == 0) {
 		/* Stop the lowlevel driver from outputing. */
-		printk("sparcaudio: lowlevel driver shutdown\n");
 		drv->ops->stop_output(drv);
 		drv->output_active = 0;
 
@@ -184,7 +182,6 @@ static int sparcaudio_write(struct inode * inode, struct file * file,
 	while (count > 0) {
 		/* Check to make sure that an output buffer is available. */
 		if (driver->output_count == driver->num_output_buffers) {
-			printk(KERN_DEBUG "sparcaudio: waiting for free buffer\n");
 			interruptible_sleep_on(&driver->output_write_wait);
 			if (current->signal & ~current->blocked)
 				return bytes_written > 0 ? bytes_written : -EINTR;
@@ -198,9 +195,6 @@ static int sparcaudio_write(struct inode * inode, struct file * file,
 		copy_from_user_ret(driver->output_buffers[driver->output_rear],
 			       buf, bytes_to_copy, -EFAULT);
 
-		printk(KERN_DEBUG "Stuffing %d in %d\n",
-			 bytes_to_copy, driver->output_rear);
-
 		/* Update the queue pointers. */
 		buf += bytes_to_copy;
 		count -= bytes_to_copy;
@@ -212,7 +206,6 @@ static int sparcaudio_write(struct inode * inode, struct file * file,
 		/* If the low-level driver is not active, activate it. */
 		save_and_cli(flags);
 		if (! driver->output_active) {
-			printk(KERN_DEBUG "sparcaudio: activating lowlevel driver\n");
 			driver->ops->start_output(driver, driver->output_buffers[driver->output_front],
 						  driver->output_sizes[driver->output_front]);
 			driver->output_active = 1;

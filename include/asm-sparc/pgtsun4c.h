@@ -1,4 +1,4 @@
-/* $Id: pgtsun4c.h,v 1.33 1996/12/20 07:55:04 davem Exp $
+/* $Id: pgtsun4c.h,v 1.34 1997/03/23 03:47:08 davem Exp $
  * pgtsun4c.h:  Sun4c specific pgtable.h defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -112,8 +112,6 @@ extern __inline__ void sun4c_put_segmap(unsigned long addr, unsigned long entry)
   __asm__ __volatile__("\n\tstba %1, [%0] %2; nop; nop; nop;\n\t" : :
 		       "r" (addr), "r" (entry),
 		       "i" (ASI_SEGMAP));
-
-  return;
 }
 
 extern __inline__ unsigned long sun4c_get_pte(unsigned long addr)
@@ -131,8 +129,6 @@ extern __inline__ void sun4c_put_pte(unsigned long addr, unsigned long entry)
   __asm__ __volatile__("\n\tsta %1, [%0] %2; nop; nop; nop;\n\t" : :
 		       "r" (addr), 
 		       "r" ((entry & ~(_SUN4C_PAGE_PRESENT))), "i" (ASI_PTE));
-
-  return;
 }
 
 extern __inline__ int sun4c_get_context(void)

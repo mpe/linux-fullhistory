@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.1 1997/03/18 17:59:12 jj Exp $
+/* $Id: traps.c,v 1.5 1997/04/14 06:56:55 davem Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -42,6 +42,53 @@ void syscall_trace_entry(struct pt_regs *regs)
 
 void syscall_trace_exit(struct pt_regs *regs)
 {
+}
+
+void sparc64_dtlb_fault_handler (void)
+{
+	printk ("sparc64_dtlb_fault_handler\n");
+	while (1);
+	/* Die for now... */
+}
+
+void sparc64_dtlb_refbit_handler (struct pt_regs *regs)
+{
+	printk ("sparc64_dtlb_refbit_handler[%016lx]\n", regs->tpc);
+	while (1);
+	/* Die for now... */
+}
+
+void sparc64_itlb_refbit_handler (void)
+{
+	printk ("sparc64_itlb_refbit_handler\n");
+	while (1);
+	/* Die for now... */
+}
+
+void bad_trap (struct pt_regs *regs, long lvl)
+{
+	printk ("Bad trap %d (tstate %016lx tpc %016lx tnpc %016lx)\n", lvl, regs->tstate, regs->tpc, regs->tnpc);
+	while (1);
+	/* Die for now... */
+}
+
+void bad_trap_tl1 (struct pt_regs *regs, long lvl)
+{
+	printk ("Bad trap %d at tl1+ (tstate %016lx tpc %016lx tnpc %016lx)\n", lvl, regs->tstate, regs->tpc, regs->tnpc);
+	while (1);
+	/* Die for now... */
+}
+
+void data_access_exception (struct pt_regs *regs)
+{
+	printk ("Unhandled data access exception sfsr %016lx sfar %016lx\n", spitfire_get_dsfsr(), spitfire_get_sfar());
+	die_if_kernel("Data access exception", regs);
+}
+
+void instruction_access_exception (struct pt_regs *regs)
+{
+	printk ("Unhandled instruction access exception sfsr %016lx\n", spitfire_get_isfsr());
+	die_if_kernel("Instruction access exception", regs);
 }
 
 void instruction_dump (unsigned int *pc)

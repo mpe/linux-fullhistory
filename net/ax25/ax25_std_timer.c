@@ -66,7 +66,8 @@ void ax25_std_timer(ax25_cb *ax25)
 			 * Check the state of the receive buffer.
 			 */
 			if (ax25->sk != NULL) {
-				if (ax25->sk->rmem_alloc < (ax25->sk->rcvbuf / 2) && (ax25->condition & AX25_COND_OWN_RX_BUSY)) {
+				if (atomic_read(&ax25->sk->rmem_alloc) < (ax25->sk->rcvbuf / 2) &&
+				    (ax25->condition & AX25_COND_OWN_RX_BUSY)) {
 					ax25->condition &= ~AX25_COND_OWN_RX_BUSY;
 					ax25->condition &= ~AX25_COND_ACK_PENDING;
 					ax25_send_control(ax25, AX25_RR, AX25_POLLOFF, AX25_RESPONSE);

@@ -36,7 +36,7 @@
 #include <asm/pgtable.h>
 
 #ifdef __SMP_PROF__
-extern volatile unsigned long smp_apic_timer_ticks[1+NR_CPUS];
+extern volatile unsigned long smp_local_timer_ticks[1+NR_CPUS];
 #endif
 
 #define CR0_NE 32
@@ -45,6 +45,11 @@ static unsigned char cache_21 = 0xff;
 static unsigned char cache_A1 = 0xff;
 
 unsigned int local_irq_count[NR_CPUS];
+#ifdef __SMP__
+atomic_t __intel_bh_counter;
+#else
+int __intel_bh_counter;
+#endif
 
 #ifdef __SMP_PROF__
 static unsigned int int_count[NR_CPUS][NR_IRQS] = {{0},};
@@ -252,6 +257,9 @@ int get_irq_list(char *buf)
 
 #ifdef __SMP_PROF__
 
+extern unsigned int prof_multiplier[NR_CPUS];
+extern unsigned int prof_counter[NR_CPUS];
+
 int get_smp_prof_list(char *buf) {
 	int i,j, len = 0;
 	struct irqaction * action;
@@ -259,7 +267,7 @@ int get_smp_prof_list(char *buf) {
 	unsigned long sum_spins_syscall = 0;
 	unsigned long sum_spins_sys_idle = 0;
 	unsigned long sum_smp_idle_count = 0;
-	unsigned long sum_apic_timer_ticks = 0;
+	unsigned long sum_local_timer_ticks = 0;
 
 	for (i=0;i<smp_num_cpus;i++) {
 		int cpunum = cpu_logical_map[i];
@@ -267,7 +275,7 @@ int get_smp_prof_list(char *buf) {
 		sum_spins_syscall+=smp_spins_syscall[cpunum];
 		sum_spins_sys_idle+=smp_spins_sys_idle[cpunum];
 		sum_smp_idle_count+=smp_idle_count[cpunum];
-		sum_apic_timer_ticks+=smp_apic_timer_ticks[cpunum];
+		sum_local_timer_ticks+=smp_local_timer_ticks[cpunum];
 	}
 
 	len += sprintf(buf+len,"CPUS: %10i \n", smp_num_cpus);
@@ -324,11 +332,22 @@ int get_smp_prof_list(char *buf) {
 
 	len +=sprintf(buf+len,"   idle ticks\n");
 
-	len+=sprintf(buf+len,"TICK %10lu",sum_apic_timer_ticks);
+	len+=sprintf(buf+len,"TICK %10lu",sum_local_timer_ticks);
 	for (i=0;i<smp_num_cpus;i++)
-		len+=sprintf(buf+len," %10lu",smp_apic_timer_ticks[cpu_logical_map[i]]);
+		len+=sprintf(buf+len," %10lu",smp_local_timer_ticks[cpu_logical_map[i]]);
 
 	len +=sprintf(buf+len,"   local APIC timer ticks\n");
+
+	len+=sprintf(buf+len,"MULT:          ");
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10u",prof_multiplier[cpu_logical_map[i]]);
+	len +=sprintf(buf+len,"   profiling multiplier\n");
+
+	len+=sprintf(buf+len,"COUNT:         ");
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10u",prof_counter[cpu_logical_map[i]]);
+
+	len +=sprintf(buf+len,"   profiling counter\n");
 
 	len+=sprintf(buf+len, "IPI: %10lu   received\n",
 		ipi_count);
@@ -345,7 +364,7 @@ int get_smp_prof_list(char *buf) {
 #ifdef __SMP__
 unsigned char global_irq_holder = NO_PROC_ID;
 unsigned volatile int global_irq_lock;
-unsigned volatile int global_irq_count;
+atomic_t global_irq_count;
 
 #define irq_active(cpu) \
 	(global_irq_count != local_irq_count[cpu])
@@ -373,7 +392,7 @@ static unsigned long previous_irqholder;
 
 #undef STUCK
 #define STUCK \
-if (!--stuck) {printk("wait_on_irq CPU#%d stuck at %08lx, waiting for %08lx (local=%d, global=%d)\n", cpu, where, previous_irqholder, local_count, global_irq_count); stuck = INIT_STUCK; }
+if (!--stuck) {printk("wait_on_irq CPU#%d stuck at %08lx, waiting for %08lx (local=%d, global=%d)\n", cpu, where, previous_irqholder, local_count, atomic_read(&global_irq_count)); stuck = INIT_STUCK; }
 
 static inline void wait_on_irq(int cpu, unsigned long where)
 {
@@ -381,7 +400,7 @@ static inline void wait_on_irq(int cpu, unsigned long where)
 	int local_count = local_irq_count[cpu];
 
 	/* Are we the only one in an interrupt context? */
-	while (local_count != global_irq_count) {
+	while (local_count != atomic_read(&global_irq_count)) {
 		/*
 		 * No such luck. Now we need to release the lock,
 		 * _and_ release our interrupt context, because
@@ -398,7 +417,7 @@ static inline void wait_on_irq(int cpu, unsigned long where)
 		for (;;) {
 			STUCK;
 			check_smp_invalidate(cpu);
-			if (global_irq_count)
+			if (atomic_read(&global_irq_count))
 				continue;
 			if (global_irq_lock)
 				continue;
@@ -424,7 +443,7 @@ void synchronize_irq(void)
 	int local_count = local_irq_count[cpu];
 
 	/* Do we need to wait? */
-	if (local_count != global_irq_count) {
+	if (local_count != atomic_read(&global_irq_count)) {
 		/* The stupid way to do this */
 		cli();
 		sti();
@@ -512,7 +531,7 @@ void __global_restore_flags(unsigned long flags)
 #define STUCK \
 if (!--stuck) {printk("irq_enter stuck (irq=%d, cpu=%d, global=%d)\n",irq,cpu,global_irq_holder); stuck = INIT_STUCK;}
 
-static inline void irq_enter(int cpu, int irq)
+inline void irq_enter(int cpu, int irq)
 {
 	int stuck = INIT_STUCK;
 
@@ -525,21 +544,19 @@ static inline void irq_enter(int cpu, int irq)
 		STUCK;
 		/* nothing */;
 	}
-	atomic_inc(&intr_count);
 }
 
-static inline void irq_exit(int cpu, int irq)
+inline void irq_exit(int cpu, int irq)
 {
 	__cli();
-	atomic_dec(&intr_count);
 	hardirq_exit(cpu);
 	release_irqlock(cpu);
 }
 
 #else
 
-#define irq_enter(cpu, irq)	(++intr_count)
-#define irq_exit(cpu, irq)	(--intr_count)
+#define irq_enter(cpu, irq)	(++local_irq_count[cpu])
+#define irq_exit(cpu, irq)	(--local_irq_count[cpu])
 
 #endif
 

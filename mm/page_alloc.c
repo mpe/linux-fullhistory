@@ -190,7 +190,7 @@ do { unsigned long size = 1 << high; \
 		index += size; \
 		map += size; \
 	} \
-	map->count = 1; \
+	atomic_set(&map->count, 1); \
 	map->age = PAGE_INITIAL_AGE; \
 } while (0)
 
@@ -201,8 +201,8 @@ unsigned long __get_free_pages(int priority, unsigned long order, int dma)
 
 	if (order >= NR_MEM_LISTS)
 		return 0;
-#if 0
-	if (intr_count && priority != GFP_ATOMIC) {
+
+	if (in_interrupt() && priority != GFP_ATOMIC) {
 		static int count = 0;
 		if (++count < 5) {
 			printk("gfp called nonatomically from interrupt %p\n",
@@ -210,7 +210,7 @@ unsigned long __get_free_pages(int priority, unsigned long order, int dma)
 			priority = GFP_ATOMIC;
 		}
 	}
-#endif
+
 	reserved_pages = 5;
 	if (priority != GFP_NFS)
 		reserved_pages = min_free_pages;
@@ -288,6 +288,7 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 	memset(mem_map, 0, start_mem - (unsigned long) mem_map);
 	do {
 		--p;
+		atomic_set(&p->count, 0);
 		p->flags = (1 << PG_DMA) | (1 << PG_reserved);
 		p->map_nr = p - mem_map;
 	} while (p > mem_map);

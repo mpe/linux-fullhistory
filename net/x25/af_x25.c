@@ -328,7 +328,8 @@ void x25_destroy_socket(struct sock *sk)	/* Not static as it's used by the timer
 		kfree_skb(skb, FREE_READ);
 	}
 
-	if (sk->wmem_alloc != 0 || sk->rmem_alloc != 0) {	/* Defer: outstanding buffers */
+	if (atomic_read(&sk->wmem_alloc) != 0 || atomic_read(&sk->rmem_alloc) != 0) {
+		/* Defer: outstanding buffers */
 		init_timer(&sk->timer);
 		sk->timer.expires  = jiffies + 10 * HZ;
 		sk->timer.function = x25_destroy_timer;
@@ -1057,7 +1058,7 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case TIOCOUTQ:
 			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned long))) != 0)
 				return err;
-			amount = sk->sndbuf - sk->wmem_alloc;
+			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if (amount < 0)
 				amount = 0;
 			put_user(amount, (unsigned long *)arg);
@@ -1198,7 +1199,7 @@ static int x25_get_info(char *buffer, char **start, off_t offset, int length, in
 			s->protinfo.x25->t21   / X25_SLOWHZ,
 			s->protinfo.x25->t22   / X25_SLOWHZ,
 			s->protinfo.x25->t23   / X25_SLOWHZ,
-			s->wmem_alloc, s->rmem_alloc);
+			atomic_read(&s->wmem_alloc), atomic_read(&s->rmem_alloc));
 
 		pos = begin + len;
 

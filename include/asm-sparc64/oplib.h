@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.6 1997/03/18 18:01:30 jj Exp $
+/* $Id: oplib.h,v 1.7 1997/04/03 09:29:25 davem Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -271,6 +271,9 @@ extern int prom_setprop(int node, char *prop_name, char *prop_value,
 			
 extern int prom_pathtoinode(char *path);
 extern int prom_inst2pkg(int);
+
+/* Client interface level routines. */
+extern void prom_set_trap_table(unsigned long tba);
 
 /* Dorking with Bus ranges... */
 

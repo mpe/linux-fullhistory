@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.39 1997/03/17 04:49:35 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.42 1997/04/12 04:32:24 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -37,6 +37,8 @@
  *		Eric Schenk	:	Delayed ACK bug fixes.
  *		Eric Schenk	:	Floyd style fast retrans war avoidance.
  *		David S. Miller	:	Don't allow zero congestion window.
+ *		Eric Schenk	:	Fix retransmitter so that it sends
+ *					next packet on ack of previous packet.
  */
 
 #include <linux/config.h>
@@ -149,11 +151,19 @@ extern __inline__ void tcp_rtt_estimator(struct tcp_opt *tp, __u32 mrtt)
 	 */
 			 
 	tp->rto = (tp->srtt >> 3) + tp->mdev;
+	tp->rto += (tp->rto >> 2) + (tp->rto >> (tp->snd_cwnd-1));
+
 
 	if (tp->rto > 120*HZ)
 		tp->rto = 120*HZ;
 
-	/* Was 1*HZ - keep .2 as minimum cos of the BSD delayed acks */
+	/* Was 1*HZ - keep .2 as minimum cos of the BSD delayed acks 
+	 * FIXME: It's not entirely clear this lower bound is the best
+	 * way to avoid the problem. Is it possible to drop the lower
+	 * bound and still avoid trouble with BSD stacks? Perhaps
+	 * some modification to the RTO calculation that takes delayed
+	 * ack bais into account? This needs serious thought. -- erics
+	 */
 	if (tp->rto < HZ/5)
 		tp->rto = HZ/5;
 
@@ -302,6 +312,15 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 {
 	struct tcp_opt *tp=&(sk->tp_pinfo.af_tcp);
 
+	/* FIXME: if we are already retransmitting should this code
+	 * be skipped? [Floyd high_seq check sort of does this]
+	 * The case I'm worried about is falling into a fast
+	 * retransmit on a link with a congestion window of 1 or 2.
+	 * There was some evidence in 2.0.x that this was problem
+	 * on really slow links (1200 or 2400 baud). I need to
+	 * try this situation again and see what happens.
+	 */
+
 	/*
 	 * An ACK is a duplicate if:
 	 * (1) it has the same sequence number as the largest number we've 
@@ -313,7 +332,7 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 	 *     The packet acked data after high_seq;
 	 */
 
-	if (ack == tp->snd_una && sk->packets_out && (not_dup == 0))
+	if (ack == tp->snd_una && atomic_read(&sk->packets_out) && (not_dup == 0))
 	{
 		/*
 		 * 1. When the third duplicate ack is received, set ssthresh 
@@ -327,9 +346,14 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 
 			if (sk->dup_acks == 3)
 			{
-				sk->ssthresh = max(sk->cong_window >> 1, 2);
-				sk->cong_window = sk->ssthresh + 3;
+				sk->ssthresh = max(tp->snd_cwnd >> 1, 2);
+				tp->snd_cwnd = sk->ssthresh + 3;
 				tcp_do_retransmit(sk, 0);
+				/* careful not to timeout just after fast
+				 * retransmit!
+				 */
+				tcp_reset_xmit_timer(sk, TIME_RETRANS,
+						     tp->rto);
 			}
 		}
 
@@ -344,7 +368,7 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 		if (sk->dup_acks >= 3)
 		{
 			sk->dup_acks++;
-			sk->cong_window++;
+			tp->snd_cwnd++;
 		}
 	}
 	else
@@ -357,8 +381,8 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 		if (sk->dup_acks >= 3)
 		{
 			tp->retrans_head = NULL;
-			sk->cong_window = max(sk->ssthresh, 1);
-			sk->retransmits = 0;
+			tp->snd_cwnd = max(sk->ssthresh, 1);
+			atomic_set(&sk->retransmits, 0);
 		}
 		sk->dup_acks = 0;
 		tp->high_seq = 0;
@@ -425,7 +449,7 @@ static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
 	 *      Slow Start
 	 */
 	
-	if (sk->cong_window < sk->ssthresh &&
+	if (tp->snd_cwnd < sk->ssthresh &&
 	    (seq == tp->snd_nxt ||
 	     (expected - actual <= TCP_VEGAS_GAMMA * inv_basebd)))
 	{
@@ -436,7 +460,7 @@ static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
 			
 		if (sk->cong_count++)
 		{
-			sk->cong_window++;
+			tp->snd_cwnd++;
 			sk->cong_count = 0;
 		}
 	}
@@ -450,9 +474,9 @@ static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
 		{
 			/* Increase Linearly */
 				
-			if (sk->cong_count++ >= sk->cong_window)
+			if (sk->cong_count++ >= tp->snd_cwnd)
 			{
-				sk->cong_window++;
+				tp->snd_cwnd++;
 				sk->cong_count = 0;
 			}
 		}
@@ -461,21 +485,22 @@ static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
 		{
 			/* Decrease Linearly */
 
-			if (sk->cong_count++ >= sk->cong_window)
+			if (sk->cong_count++ >= tp->snd_cwnd)
 			{
-				sk->cong_window--;
+				tp->snd_cwnd--;
 				sk->cong_count = 0;
 			}
 
 			/* Never less than 2 segments */
-			if (sk->cong_window < 2)
-				sk->cong_window = 2;
+			if (tp->snd_cwnd < 2)
+				tp->snd_cwnd = 2;
 		}
 	}
 }
 
 static void tcp_cong_avoid_vanj(struct sock *sk, u32 seq, u32 ack, u32 seq_rtt)
 {
+	struct tcp_opt *tp=&(sk->tp_pinfo.af_tcp);
 	
         /* 
          * This is Jacobson's slow start and congestion avoidance. 
@@ -483,27 +508,38 @@ static void tcp_cong_avoid_vanj(struct sock *sk, u32 seq, u32 ack, u32 seq_rtt)
          * integral mss's, we can't do cwnd += 1 / cwnd.  
          * Instead, maintain a counter and increment it once every 
          * cwnd times.  
+	 * FIXME: Check to be sure the mathematics works out right
+	 * on this trick when we have to reduce the congestion window.
+	 * The cong_count has to be reset properly when reduction events
+	 * happen.
+	 * FIXME: What happens when the congestion window gets larger
+	 * than the maximum receiver window by some large factor
+	 * Suppose the pipeline never looses packets for a long
+	 * period of time, then traffic increases causing packet loss.
+	 * The congestion window should be reduced, but what it should
+	 * be reduced to is not clear, since 1/2 the old window may
+	 * still be larger than the maximum sending rate we ever achieved.
          */
 
-        if (sk->cong_window <= sk->ssthresh)  
+        if (tp->snd_cwnd <= sk->ssthresh)  
 	{
                 /* 
                  *	In "safe" area, increase
                  */
 
-                sk->cong_window++;
+                tp->snd_cwnd++;
 	}
         else 
 	{
                 /*
                  *	In dangerous area, increase slowly.  
                  *      In theory this is
-                 *  	sk->cong_window += 1 / sk->cong_window
+                 *  	tp->snd_cwnd += 1 / tp->snd_cwnd
                  */
 
-                if (sk->cong_count >= sk->cong_window) {
+                if (sk->cong_count >= tp->snd_cwnd) {
 			
-                        sk->cong_window++;
+                        tp->snd_cwnd++;
                         sk->cong_count = 0;
                 }
                 else 
@@ -551,6 +587,10 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack, __u32 *seq,
 
 		acked = FLAG_DATA_ACKED;
 		
+		/* FIXME: packet counting may break if we have to
+		 * do packet "repackaging" for stacks that don't
+		 * like overlapping packets.
+		 */
 		atomic_dec(&sk->packets_out);
 
 		*seq = skb->seq;
@@ -702,10 +742,10 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 	 *	if we where retransmiting don't count rtt estimate
 	 */
 
-	if (sk->retransmits)
+	if (atomic_read(&sk->retransmits))
 	{
-		if (sk->packets_out == 0)
-			sk->retransmits = 0;
+		if (atomic_read(&sk->packets_out) == 0)
+			atomic_set(&sk->retransmits, 0);
 	}
 	else
 	{
@@ -729,17 +769,30 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 		}
 	}
 
-	if (sk->packets_out)
+	if (atomic_read(&sk->packets_out))
 	{
 		if (flag & FLAG_DATA_ACKED)
 		{
 			long when;
 
 			skb = skb_peek(&sk->write_queue);
-
 			when = tp->rto - (jiffies - skb->when);
 
-			if (when <= 0)
+			/*
+			 * FIXME: This assumes that when we are retransmitting
+			 * we should only ever respond with one packet.
+			 * This means congestion windows should not grow
+			 * during recovery. In 2.0.X we allow the congestion
+			 * window to grow. It is not clear to me which
+			 * decision is correct. The RFCs should be double
+			 * checked as should the behavior of other stacks.
+			 * Also note that if we do want to allow the
+			 * congestion window to grow during retransmits
+			 * we have to fix the call to congestion window
+			 * updates so that it works during retransmission.
+			 */
+
+			if (atomic_read(&sk->retransmits))
 			{
 				tp->retrans_head = NULL;
 				/* 
@@ -758,6 +811,10 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 		tcp_clear_xmit_timer(sk, TIME_RETRANS);
 
 
+	/* FIXME: danger, if we just did a timeout and got the third
+	 * ack on this packet, then this is going to send it again!
+	 * [No. Floyd retransmit war check keeps this from happening. -- erics]
+	 */
 	tcp_fast_retrans(sk, ack, (flag & (FLAG_DATA|FLAG_WIN_UPDATE)));
 
 	/*
@@ -1095,21 +1152,27 @@ static void tcp_data_snd_check(struct sock *sk)
 	if ((skb = tp->send_head))
 	{
 		if (!after(skb->end_seq, tp->snd_una + tp->snd_wnd) &&
-		    sk->packets_out < sk->cong_window )
+		    atomic_read(&sk->packets_out) < tp->snd_cwnd )
 		{
 			/*
 			 *	Add more data to the send queue.
+			 */
+			/* FIXME: the congestion window is checked
+			 * again in tcp_write_xmit anyway?!
 			 */
 
 			tcp_write_xmit(sk);
 			if(!sk->dead)
 				sk->write_space(sk);
 		}
-		else if (sk->packets_out == 0 && !tp->pending)
+		else if (atomic_read(&sk->packets_out) == 0 && !tp->pending)
  		{
  			/*
  			 *	Data to queue but no room.
  			 */
+			/* FIXME: Is it right to do a zero window probe into
+			 * a congestion window limited window???
+			 */
  			tcp_reset_xmit_timer(sk, TIME_PROBE0, tp->rto);
  		}
 	}
@@ -1384,7 +1447,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	 *	If our receive queue has grown past its limits,
 	 *	try to prune away duplicates etc..
 	 */
-	if (sk->rmem_alloc > sk->rcvbuf)
+	if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf)
 		prune_queue(sk);
 
 	/*

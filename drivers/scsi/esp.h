@@ -108,7 +108,8 @@ struct Sparc_ESP {
    * of the command types ESP doesn't understand, esp_scmdp keeps track of
    * which byte we are sending, esp_scmdleft says how many bytes to go.
    */
-  volatile unchar *esp_command;           /* Location of command */
+  volatile unchar *esp_command;           /* Location of command (CPU view)  */
+  __u32            esp_command_dvma;      /* Location of command (DVMA view) */
   unsigned char esp_clen;                 /* Length of this command */
   unsigned char esp_slowcmd;
   unsigned char *esp_scmdp;

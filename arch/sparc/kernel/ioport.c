@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.22 1996/10/11 00:59:46 davem Exp $
+/* $Id: ioport.c,v 1.24 1997/04/10 03:02:32 davem Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -45,8 +45,8 @@ unsigned long sparc_iobase_vaddr = IOBASE_VADDR;
  *  The virtual address where the mapping actually took place.
  */
 
-void *sparc_alloc_io (void *address, void *virtual, int len, char *name,
-		      int bus_type, int rdonly)
+void *sparc_alloc_io (u32 address, void *virtual, int len, char *name,
+		      u32 bus_type, int rdonly)
 {
 	unsigned long vaddr, base_address;
 	unsigned long addr = (unsigned long) address;
@@ -110,7 +110,7 @@ void sparc_free_io (void *virtual, int len)
  * now have to know the peculiarities of where to read the Lance data
  * from. (for example)
  */
-void *sparc_dvma_malloc (int len, char *name)
+void *_sparc_dvma_malloc (int len, char *name)
 {
 	unsigned long vaddr, base_address;
 

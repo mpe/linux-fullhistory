@@ -64,10 +64,10 @@ void show_mem(void)
 		total++;
 		if (PageReserved(mem_map+i))
 			reserved++;
-		else if (!mem_map[i].count)
+		else if (!atomic_read(&mem_map[i].count))
 			free++;
 		else
-			shared += mem_map[i].count-1;
+			shared += atomic_read(&mem_map[i].count) - 1;
 	}
 	printk("%d pages of RAM\n",total);
 	printk("%d free pages\n",free);
@@ -163,7 +163,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 			clear_bit(PG_DMA, &mem_map[MAP_NR(tmp)].flags);
 		if (PageReserved(mem_map+MAP_NR(tmp)))
 			continue;
-		mem_map[MAP_NR(tmp)].count = 1;
+		atomic_set(&mem_map[MAP_NR(tmp)].count, 1);
 		free_page(tmp);
 	}
 	tmp = nr_free_pages << PAGE_SHIFT;
@@ -189,9 +189,9 @@ void si_meminfo(struct sysinfo *val)
 		if (PageReserved(mem_map+i))
 			continue;
 		val->totalram++;
-		if (!mem_map[i].count)
+		if (!atomic_read(&mem_map[i].count))
 			continue;
-		val->sharedram += mem_map[i].count-1;
+		val->sharedram += atomic_read(&mem_map[i].count) - 1;
 	}
 	val->totalram <<= PAGE_SHIFT;
 	val->sharedram <<= PAGE_SHIFT;

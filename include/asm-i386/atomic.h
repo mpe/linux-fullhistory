@@ -19,9 +19,18 @@
  */
 #define __atomic_fool_gcc(x) (*(struct { int a[100]; } *)x)
 
-typedef int atomic_t;
+#ifdef __SMP__
+typedef struct { volatile int counter; } atomic_t;
+#else
+typedef struct { int counter; } atomic_t;
+#endif
 
-static __inline__ void atomic_add(atomic_t i, volatile atomic_t *v)
+#define ATOMIC_INIT	{ 0 }
+
+#define atomic_read(v)		((v)->counter)
+#define atomic_set(v,i)		(((v)->counter) = (i))
+
+static __inline__ void atomic_add(int i, volatile atomic_t *v)
 {
 	__asm__ __volatile__(
 		LOCK "addl %1,%0"
@@ -29,7 +38,7 @@ static __inline__ void atomic_add(atomic_t i, volatile atomic_t *v)
 		:"ir" (i), "m" (__atomic_fool_gcc(v)));
 }
 
-static __inline__ void atomic_sub(atomic_t i, volatile atomic_t *v)
+static __inline__ void atomic_sub(int i, volatile atomic_t *v)
 {
 	__asm__ __volatile__(
 		LOCK "subl %1,%0"

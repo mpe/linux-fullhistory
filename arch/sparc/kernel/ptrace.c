@@ -592,6 +592,9 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		unsigned long tmp;
 		int res;
 
+		/* XXX Find out what is really going on. */
+		flush_cache_all();
+
 		/* Non-word alignment _not_ allowed on Sparc. */
 		if(addr & (sizeof(unsigned long) - 1)) {
 			pt_error_return(regs, EINVAL);

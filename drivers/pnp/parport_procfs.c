@@ -8,10 +8,12 @@
  *              and Philip Blundell <Philip.Blundell@pobox.com>
  */
 
+#include <linux/tasks.h>
 #include <asm/ptrace.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 
+#include <linux/config.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>

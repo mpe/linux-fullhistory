@@ -1,4 +1,4 @@
-/* $Id: pstate.h,v 1.2 1996/12/26 09:56:16 davem Exp $ */
+/* $Id: pstate.h,v 1.3 1997/03/25 03:58:31 davem Exp $ */
 #ifndef _SPARC64_PSTATE_H
 #define _SPARC64_PSTATE_H
 
@@ -21,10 +21,10 @@
 #define PSTATE_IE	0x0000000000000002	/* Interrupt Enable.		*/
 #define PSTATE_AG	0x0000000000000001	/* Alternate Globals.		*/
 
-/* The V9 TSTATE Register (with SpitFire extensions).
+/* The V9 TSTATE Register (with SpitFire and Linux extensions).
  *
  * ---------------------------------------------------------------
- * |  Resv  |  CCR  |  ASI  |  Resv  |  PSTATE  |  Resv  |  CWP  |
+ * |  Resv  |  CCR  |  ASI  |  %pil  |  PSTATE  |  Resv  |  CWP  |
  * ---------------------------------------------------------------
  *  63    40 39   32 31   24 23    20 19       8 7      5 4     0
  */
@@ -40,6 +40,7 @@
 #define TSTATE_IOVFL	0x0000000200000000	/* %icc Overflow.		*/
 #define TSTATE_ICARRY	0x0000000100000000	/* %icc Carry.			*/
 #define TSTATE_ASI	0x00000000ff000000	/* Address Space Identifier.	*/
+#define TSTATE_PIL	0x0000000000f00000	/* %pil (Linux traps set this)  */
 #define TSTATE_PSTATE	0x00000000000fff00	/* PSTATE.			*/
 #define TSTATE_IG	0x0000000000080000	/* Interrupt Globals.		*/
 #define TSTATE_MG	0x0000000000040000	/* MMU Globals.			*/

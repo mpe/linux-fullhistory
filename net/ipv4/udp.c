@@ -768,7 +768,6 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 				amount = skb->len-sizeof(struct udphdr);
 			}
 			return put_user(amount, (int *)arg);
-			return(0);
 		}
 
 		default:
@@ -923,8 +922,9 @@ static void udp_close(struct sock *sk, unsigned long timeout)
 	sk->state = TCP_CLOSE;
 	if(uh_cache_sk == sk)
 		uh_cache_sk = NULL;
-	release_sock(sk);
 	sk->dead = 1;
+	release_sock(sk);
+	udp_v4_unhash(sk);
 	destroy_sock(sk);
 }
 

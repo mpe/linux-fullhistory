@@ -12,6 +12,7 @@
 
 #include <linux/mm.h>
 #include <linux/sysctl.h>
+#include <linux/config.h>
 
 ctl_table e802_table[] = {
 	{0}

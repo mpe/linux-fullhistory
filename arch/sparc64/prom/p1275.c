@@ -1,4 +1,4 @@
-/* $Id: p1275.c,v 1.7 1997/03/18 17:59:55 jj Exp $
+/* $Id: p1275.c,v 1.8 1997/04/03 09:29:21 davem Exp $
  * p1275.c: Sun IEEE 1275 PROM low level interface routines
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -10,8 +10,8 @@
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
-#include <asm/spitfire.h>
 #include <asm/system.h>
+#include <asm/spitfire.h>
 #include <asm/pstate.h>
 
 /* If you change layout of this structure, please change the prom_doit

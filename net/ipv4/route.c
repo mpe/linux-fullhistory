@@ -111,7 +111,7 @@ struct dst_ops ipv4_dst_ops =
  * Route cache.
  */
 
-static atomic_t		 rt_cache_size;
+static atomic_t		 rt_cache_size = ATOMIC_INIT;
 static struct rtable 	*rt_hash_table[RT_HASH_DIVISOR];
 
 static struct rtable * rt_intern_hash(unsigned hash, struct rtable * rth, u16 protocol);
@@ -160,12 +160,12 @@ static int rt_cache_get_info(char *buffer, char **start, off_t offset, int lengt
 				r->u.dst.dev ? r->u.dst.dev->name : "*",
 				(unsigned long)r->rt_dst,
 				(unsigned long)r->rt_gateway,
-				r->rt_flags, r->u.dst.refcnt,
-				r->u.dst.use, 0,
+				r->rt_flags, atomic_read(&r->u.dst.refcnt),
+				atomic_read(&r->u.dst.use), 0,
 				(unsigned long)r->rt_src, (int)r->u.dst.pmtu,
 				r->u.dst.window,
 				(int)r->u.dst.rtt, r->key.tos,
-				r->u.dst.hh ? r->u.dst.hh->hh_refcnt : -1,
+				r->u.dst.hh ? atomic_read(&r->u.dst.hh->hh_refcnt) : -1,
 				r->u.dst.hh ? r->u.dst.hh->hh_uptodate : 0,
 				r->rt_spec_dst,
 				i);
@@ -213,7 +213,8 @@ void ip_rt_check_expire()
 			 * Cleanup aged off entries.
 			 */
 
-			if (!rth->u.dst.use && now - rth->u.dst.lastuse > RT_CACHE_TIMEOUT) {
+			if (!atomic_read(&rth->u.dst.use) &&
+			    (now - rth->u.dst.lastuse > RT_CACHE_TIMEOUT)) {
 				*rthp = rth_next;
 				atomic_dec(&rt_cache_size);
 #if RT_CACHE_DEBUG >= 2
@@ -235,7 +236,7 @@ void ip_rt_check_expire()
 
 			if ( rth_next->u.dst.lastuse - rth->u.dst.lastuse > RT_CACHE_BUBBLE_THRESHOLD ||
 			    (rth->u.dst.lastuse - rth_next->u.dst.lastuse < 0 &&
-			     rth->u.dst.use < rth_next->u.dst.use)) {
+			     atomic_read(&rth->u.dst.use) < atomic_read(&rth_next->u.dst.use))) {
 #if RT_CACHE_DEBUG >= 2
 				printk("rt_check_expire bubbled %02x@%08x<->%08x\n", rover, rth->rt_dst, rth_next->rt_dst);
 #endif
@@ -338,7 +339,8 @@ static void rt_garbage_collect(void)
 		if (!rt_hash_table[i])
 			continue;
 		for (rthp=&rt_hash_table[i]; (rth=*rthp); rthp=&rth->u.rt_next)	{
-			if (rth->u.dst.use || now - rth->u.dst.lastuse > expire)
+			if (atomic_read(&rth->u.dst.use) ||
+			    (now - rth->u.dst.lastuse > expire))
 				continue;
 			atomic_dec(&rt_cache_size);
 			*rthp = rth->u.rt_next;
@@ -349,7 +351,7 @@ static void rt_garbage_collect(void)
 	}
 
 	last_gc = now;
-	if (rt_cache_size < RT_CACHE_MAX_SIZE)
+	if (atomic_read(&rt_cache_size) < RT_CACHE_MAX_SIZE)
 		expire = RT_CACHE_TIMEOUT>>1;
 	else
 		expire >>= 1;
@@ -380,7 +382,7 @@ static int rt_ll_bind(struct rtable *rt)
 #endif
 			memset(hh, 0, sizeof(struct hh_cache));
 			hh->hh_type = ETH_P_IP;
-			hh->hh_refcnt = 0;
+			atomic_set(&hh->hh_refcnt, 0);
 			hh->hh_next = NULL;
 			if (rt->u.dst.dev->hard_header_cache(&rt->u.dst, neigh, hh)) {
 				kfree(hh);
@@ -435,7 +437,7 @@ static struct rtable *rt_intern_hash(unsigned hash, struct rtable * rt, u16 prot
 		rthp = &rth->u.rt_next;
 	}
 
-	if (rt_cache_size >= RT_CACHE_MAX_SIZE)
+	if (atomic_read(&rt_cache_size) >= RT_CACHE_MAX_SIZE)
 		rt_garbage_collect();
 
 	rt->u.rt_next = rt_hash_table[hash];
@@ -519,14 +521,14 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 			/*
 			 * Copy all the information.
 			 */
-			rt->u.dst.refcnt = 1;
+			atomic_set(&rt->u.dst.refcnt, 1);
 			rt->u.dst.dev = dev;
 			rt->u.dst.input = rth->u.dst.input;
 			rt->u.dst.output = rth->u.dst.output;
 			rt->u.dst.pmtu = dev->mtu;
 			rt->u.dst.rtt = TCP_TIMEOUT_INIT;
 			rt->u.dst.window = 0;
-			rt->u.dst.use = 1;
+			atomic_set(&rt->u.dst.use, 1);
 			rt->u.dst.lastuse = jiffies;
 
 			rt->rt_flags = rth->rt_flags|RTF_DYNAMIC|RTF_MODIFIED;
@@ -946,7 +948,7 @@ make_route:
 
 	rth->u.dst.output= ip_rt_bug;
 
-	rth->u.dst.use	= 1;
+	atomic_set(&rth->u.dst.use, 1);
 	rth->key.dst	= dst_key;
 	rth->rt_dst	= dst_key;
 	rth->rt_dst_map	= daddr;
@@ -1259,7 +1261,7 @@ make_route:
 	if (!rth)
 		return -ENOBUFS;
 
-	rth->u.dst.use	= 1;
+	atomic_set(&rth->u.dst.use, 1);
 	rth->key.dst	= dst_key;
 	rth->key.tos	= tos;
 	rth->key.src	= src_key;

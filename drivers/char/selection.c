@@ -32,6 +32,8 @@
 /* Don't take this from <ctype.h>: 011-015 on the screen aren't spaces */
 #define isspace(c)	((c) == ' ')
 
+extern void poke_blanked_console(void);
+
 /* Variables for selection control. */
 /* Use a dynamic buffer, instead of static (Dec 1994) */
        int sel_cons = 0;		/* must not be disallocated */
@@ -118,7 +120,7 @@ int set_selection(const unsigned long arg, struct tty_struct *tty, int user)
 	int sel_mode, new_sel_start, new_sel_end, spc;
 	char *bp, *obp;
 	int i, ps, pe;
-	
+
 	do_unblank_screen();
 	poke_blanked_console();
 
@@ -289,7 +291,7 @@ int paste_selection(struct tty_struct *tty)
 	int	c = sel_buffer_lth;
 	int	l;
 	struct vt_struct *vt = (struct vt_struct *) tty->driver_data;
-	
+
 	if (!bp || !c)
 		return 0;
 	poke_blanked_console();

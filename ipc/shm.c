@@ -721,7 +721,7 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 
 done:	/* pte_val(pte) == shp->shm_pages[idx] */
 	current->min_flt++;
-	mem_map[MAP_NR(pte_page(pte))].count++;
+	atomic_inc(&mem_map[MAP_NR(pte_page(pte))].count);
 	return pte_modify(pte, shmd->vm_page_prot);
 }
 
@@ -821,7 +821,7 @@ int shm_swap (int prio, int dma)
 		flush_cache_page(shmd, tmp);
 		set_pte(page_table,
 		  __pte(shmd->vm_pte + SWP_ENTRY(0, idx << SHM_IDX_SHIFT)));
-		mem_map[MAP_NR(pte_page(pte))].count--;
+		atomic_dec(&mem_map[MAP_NR(pte_page(pte))].count);
 		if (shmd->vm_mm->rss > 0)
 			shmd->vm_mm->rss--;
 		flush_tlb_page(shmd, tmp);
@@ -831,7 +831,7 @@ int shm_swap (int prio, int dma)
 		break;
 	}
 
-	if (mem_map[MAP_NR(pte_page(page))].count != 1)
+	if (atomic_read(&mem_map[MAP_NR(pte_page(page))].count) != 1)
 		goto check_table;
 	shp->shm_pages[idx] = swap_nr;
 	write_swap_page (swap_nr, (char *) pte_page(page));

@@ -373,7 +373,7 @@ romfs_readpage(struct inode * inode, struct page * page)
 	int result = -EIO;
 
 	buf = page_address(page);
-	page->count++;
+	atomic_inc(&page->count);
 	offset = page->offset;
 	if (offset < inode->i_size) {
 		avail = inode->i_size-offset;

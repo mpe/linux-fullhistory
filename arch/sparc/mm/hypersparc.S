@@ -1,4 +1,4 @@
-/* $Id: hypersparc.S,v 1.1 1997/03/10 09:16:52 davem Exp $
+/* $Id: hypersparc.S,v 1.3 1997/04/13 06:38:13 davem Exp $
  * hypersparc.S: High speed Hypersparc mmu/cache operations.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -31,7 +31,6 @@
 	.globl	hypersparc_flush_tlb_all, hypersparc_flush_tlb_mm
 	.globl	hypersparc_flush_tlb_range, hypersparc_flush_tlb_page
 
-	/* Verified... */
 hypersparc_flush_cache_all:
 	WINDOW_FLUSH(%g4, %g5)
 	sethi	%hi(vac_cache_size), %g4
@@ -46,7 +45,6 @@ hypersparc_flush_cache_all:
 	 sta	%g0, [%g0] ASI_M_FLUSH_IWHOLE	! hyper_flush_whole_icache
 
 	/* We expand the window flush to get maximum performance. */
-	/* Verified... */
 hypersparc_flush_cache_mm:
 #ifndef __SMP__
 	ld	[%o0 + AOFF_mm_context], %g1
@@ -84,7 +82,6 @@ hypersparc_flush_cache_mm_out:
 	 sta	%g0, [%g0 + %g0] ASI_M_FLUSH_IWHOLE	! hyper_flush_whole_icache
 
 	/* The things we do for performance... */
-	/* Verified... */
 hypersparc_flush_cache_range:
 #ifndef __SMP__
 	ld	[%o0 + AOFF_mm_context], %g1
@@ -174,12 +171,12 @@ hypersparc_flush_cache_range_out:
 	/* HyperSparc requires a valid mapping where we are about to flush
 	 * in order to check for a physical tag match during the flush.
 	 */
-	/* Verified... */
+	/* Verified, my ass... */
 hypersparc_flush_cache_page:
 	ld	[%o0 + 0x0], %o0		/* XXX vma->vm_mm, GROSS XXX */
+	ld	[%o0 + AOFF_mm_context], %g2
 #ifndef __SMP__
-	ld	[%o0 + AOFF_mm_context], %g1
-	cmp	%g1, -1
+	cmp	%g2, -1
 	be	hypersparc_flush_cache_page_out
 #endif
 	WINDOW_FLUSH(%g4, %g5)
@@ -189,7 +186,7 @@ hypersparc_flush_cache_page:
 	mov	SRMMU_CTX_REG, %o3
 	andn	%o1, (PAGE_SIZE - 1), %o1
 	lda	[%o3] ASI_M_MMUREGS, %o2
-	sta	%g1, [%o3] ASI_M_MMUREGS
+	sta	%g2, [%o3] ASI_M_MMUREGS
 	or	%o1, 0x400, %o5
 	lda	[%o5] ASI_M_FLUSH_PROBE, %g1
 	orcc	%g0, %g1, %g0
@@ -223,12 +220,15 @@ hypersparc_flush_cache_page:
 	lda	[%g7] ASI_M_MMUREGS, %g0
 	sta	%o2, [%g4] ASI_M_MMUREGS
 hypersparc_flush_cache_page_out:
-hypersparc_flush_sig_insns:		/* This is "neat"... */
 	retl
 	 sta	%g0, [%g0 + %g0] ASI_M_FLUSH_IWHOLE
 
+hypersparc_flush_sig_insns:
+	flush	%o2
+	retl
+	 flush	%o2 + 4
+
 	/* HyperSparc is copy-back. */
-	/* Verified... */
 hypersparc_flush_page_to_ram:
 hypersparc_flush_chunk:
 	sethi	%hi(vac_line_size), %g1
@@ -271,13 +271,11 @@ hypersparc_flush_page_for_dma:
 	retl
 	 nop
 
-	/* Verified... */
 hypersparc_flush_tlb_all:
 	mov	0x400, %g1
 	retl
 	 sta	%g0, [%g1] ASI_M_FLUSH_PROBE
 
-	/* Verified... */
 hypersparc_flush_tlb_mm:
 	mov	SRMMU_CTX_REG, %g1
 	ld	[%o0 + AOFF_mm_context], %o1
@@ -293,7 +291,6 @@ hypersparc_flush_tlb_mm_out:
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS
 
-	/* Verified... */
 hypersparc_flush_tlb_range:
 	mov	SRMMU_CTX_REG, %g1
 	ld	[%o0 + AOFF_mm_context], %o3
@@ -317,7 +314,6 @@ hypersparc_flush_tlb_range_out:
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS
 
-	/* Verified... */
 hypersparc_flush_tlb_page:
 	ld	[%o0 + 0x00], %o0	/* XXX vma->vm_mm GROSS XXX */
 	mov	SRMMU_CTX_REG, %g1

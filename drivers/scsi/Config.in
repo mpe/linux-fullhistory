@@ -71,7 +71,7 @@ if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
   fi
 fi
 if [ "$CONFIG_MCA" = "y" ]; then
-  bool 'IBMMCA SCSI support' CONFIG_SCSI_IBMMCA
+  dep_tristate 'IBMMCA SCSI support' CONFIG_SCSI_IBMMCA $CONFIG_SCSI
 fi
 if [ "$CONFIG_PNP_PARPORT" != "n" ]; then
   dep_tristate 'IOMEGA Parallel Port ZIP drive SCSI support' CONFIG_SCSI_PPA $CONFIG_SCSI $CONFIG_PNP_PARPORT
@@ -79,7 +79,6 @@ if [ "$CONFIG_PNP_PARPORT" != "n" ]; then
     int  '  Pedantic EPP-checking'   CONFIG_SCSI_PPA_HAVE_PEDANTIC 2 0 3
     int  '  EPP timeout'             CONFIG_SCSI_PPA_EPP_TIME 128
   fi
-  dep_tristate 'IBMMCA SCSI support' CONFIG_SCSI_IBMMCA $CONFIG_SCSI
 fi
 dep_tristate 'PAS16 SCSI support' CONFIG_SCSI_PAS16 $CONFIG_SCSI
 dep_tristate 'Qlogic FAS SCSI support' CONFIG_SCSI_QLOGIC_FAS $CONFIG_SCSI

@@ -450,7 +450,9 @@ static int send_pcb(struct device *dev, pcb_struct * pcb)
 			return TRUE;
 			break;
 		case ASF_PCB_NAK:
-			printk("%s: send_pcb got NAK\n", dev->name);
+#ifdef ELP_DEBUG
+			printk(KERN_DEBUG "%s: send_pcb got NAK\n", dev->name);
+#endif
 			goto abort;
 			break;
 		}

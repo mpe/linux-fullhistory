@@ -1,12 +1,14 @@
 #ifndef __ASM_HARDIRQ_H
 #define __ASM_HARDIRQ_H
 
+#include <linux/tasks.h>
+
 extern unsigned int local_irq_count[NR_CPUS];
 #define in_interrupt()	(local_irq_count[smp_processor_id()] != 0)
 
 #ifndef __SMP__
 
-#define hardirq_trylock(cpu)	((cpu)==0)	/* always true */
+#define hardirq_trylock(cpu)	(local_irq_count[cpu] == 0)
 #define hardirq_endlock(cpu)	do { } while (0)
 
 #define hardirq_enter(cpu)	(local_irq_count[cpu]++)
@@ -16,9 +18,11 @@ extern unsigned int local_irq_count[NR_CPUS];
 
 #else
 
+#include <asm/atomic.h>
+
 extern unsigned char global_irq_holder;
 extern unsigned volatile int global_irq_lock;
-extern unsigned volatile int global_irq_count;
+extern atomic_t global_irq_count;
 
 static inline void release_irqlock(int cpu)
 {
@@ -48,7 +52,7 @@ static inline int hardirq_trylock(int cpu)
 	__save_flags(flags);
 	__cli();
 	atomic_inc(&global_irq_count);
-	if (global_irq_count != 1 || test_bit(0,&global_irq_lock)) {
+	if (atomic_read(&global_irq_count) != 1 || test_bit(0,&global_irq_lock)) {
 		atomic_dec(&global_irq_count);
 		__restore_flags(flags);
 		return 0;

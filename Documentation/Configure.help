@@ -539,6 +539,12 @@ CONFIG_NET_SECURITY
   any security protocols currently and that this option only really supports
   security on IPv4 links at the moment.
 
+Socket Security API Support (EXPERIMENTAL)
+CONFIG_NET_SECURITY
+  Enable use of the socket security API. Note that Linux does not include
+  any security protocols currently and that this option only really supports
+  security on IPv4 links at the moment.
+
 Sun floppy controller support
 CONFIG_BLK_DEV_SUNFD
   This is support for floppy drives on Sun Sparc workstations. Say Y
@@ -1530,9 +1536,10 @@ CONFIG_BLK_DEV_SR
 Enable vendor-specific extensions (for SCSI CDROM)
 CONFIG_BLK_DEV_SR_VENDOR
   This enables the usage of vendor specific SCSI commands. This is
-  required for some stuff which is newer than the SCSI-II standard,
-  most important is the MultiSession CD support. You'll probably want
-  to say Y here, unless you have a _real old_ CD-ROM drive.
+  required for some stuff which is newer than the SCSI-II standard:
+  MultiSession CD support and some ioctls for reading Mode 2 Form 2
+  sectors. You'll probably want to say Y here, unless you have a
+  _real old_ CD-ROM drive.
 
 SCSI generic support
 CONFIG_CHR_DEV_SG

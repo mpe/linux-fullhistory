@@ -393,7 +393,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	if(    (blocksize != 0)
 	    && (orig_zonesize < blocksize) )
 	  {
-	      printk("Logical zone size(%ld) < hardware blocksize(%ld)\n", 
+	      printk("Logical zone size(%d) < hardware blocksize(%u)\n",
 		     orig_zonesize, blocksize);
 	      goto out;
 
@@ -549,12 +549,12 @@ int isofs_bmap(struct inode * inode,int block)
 	     * the page with useless information without generating any
 	     * I/O errors.
 	     */
-	    max_legal_read_offset = (inode->i_size + PAGE_SIZE - 1) 
+	    max_legal_read_offset = (inode->i_size + PAGE_SIZE - 1)
 	      & ~(PAGE_SIZE - 1);
 	    if( (block << ISOFS_BUFFER_BITS(inode)) >= max_legal_read_offset )
 	      {
 
-		printk("_isofs_bmap: block>= EOF(%d, %d)\n", block, 
+		printk("_isofs_bmap: block>= EOF(%d, %ld)\n", block,
 		       inode->i_size);
 	      }
 	    return 0;

@@ -1,4 +1,4 @@
-/* $Id: ranges.c,v 1.2 1997/03/18 17:59:57 jj Exp $
+/* $Id: ranges.c,v 1.3 1997/03/21 12:33:36 jj Exp $
  * ranges.c: Handle ranges in newer proms for obio/sbus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -66,7 +66,7 @@ __initfunc(void prom_ranges_init(void))
 {
 }
 
-__initfunc(void prom_sbus_ranges_init(struct linux_sbus *sbus))
+__initfunc(void prom_sbus_ranges_init(int iommund, struct linux_sbus *sbus))
 {
 	int success;
 	

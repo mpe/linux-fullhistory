@@ -45,7 +45,10 @@ struct  fbtype {
 };
 #define FBIOGTYPE _IOR('F', 0, struct fbtype)
 
-/* Used by FBIOPUTCMAP */
+/* Used by FBIOPUTCMAP
+ *
+ * XXX 32-bit binary compatability item... -DaveM
+ */
 struct  fbcmap {
         int             index;          /* first element (0 origin) */
         int             count;
@@ -98,6 +101,7 @@ struct fbcurpos {
 #define FB_CUR_SETSHAPE 0x10	/* set shape */
 #define FB_CUR_SETALL   0x1F	/* all of the above */
 
+/* XXX 32-bit binary compatability item... -DaveM */
 struct fbcursor {
         short set;              /* what to set, choose from the list above */
         short enable;           /* cursor on/off */
@@ -136,6 +140,7 @@ struct fb_wid_item {
 	__u32	wi_attrs;
 	__u32	wi_values[32];
 };
+/* XXX 32-bit binary compatability item... -DaveM */
 struct fb_wid_list {
 	__u32	wl_flags;
 	__u32	wl_count;
@@ -178,6 +183,7 @@ struct leo_clut_alloc {
  	__u32	index;
 };
 
+/* XXX 32-bit binary compatability item... -DaveM */
 struct leo_clut {
 #define LEO_CLUT_WAIT	0x00000001	/* Not yet implemented */
  	__u32	flag;

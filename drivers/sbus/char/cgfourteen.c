@@ -1,4 +1,4 @@
-/* $Id: cgfourteen.c,v 1.17 1996/12/23 10:16:00 ecd Exp $
+/* $Id: cgfourteen.c,v 1.18 1997/03/24 17:44:27 jj Exp $
  * cgfourteen.c: Sun SparcStation console support.
  *
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -424,7 +424,7 @@ cg14_reset (fbinfo_t *fb)
 	*mcr = (*mcr & ~(CG14_MCR_PIXMODE_MASK));
 }
 
-__initfunc(void cg14_setup (fbinfo_t *fb, int slot, int con_node, uint cg14, int cg14_io))
+__initfunc(void cg14_setup (fbinfo_t *fb, int slot, int con_node, unsigned long cg14, int cg14_io))
 {
 	struct cg14_info *cg14info;
 	uint bases [2];
@@ -468,5 +468,5 @@ __initfunc(void cg14_setup (fbinfo_t *fb, int slot, int con_node, uint cg14, int
 	/* If the bit is turned on, the card has 8 mb of ram, otherwise just 4 */
 	cg14info->ramsize = (regs->vca & CG14_VCA_8MB_MASK ? 8 : 4) * 1024 * 1024;
 	printk ("cgfourteen%d at 0x%8.8x with %d megs of RAM rev=%d, impl=%d\n",
-		slot, cg14, cg14info->ramsize/(1024*1024), regs->rev >> 4, regs->rev & 0xf);
+		slot, (uint)cg14, cg14info->ramsize/(1024*1024), regs->rev >> 4, regs->rev & 0xf);
 }

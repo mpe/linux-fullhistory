@@ -27,6 +27,8 @@
 #ifndef AM53C974_H
 #define AM53C974_H
 
+#include <scsi/scsicam.h>
+
 struct AM53C974_hostdata {
     volatile unsigned       in_reset:1;          /* flag, says bus reset pending */
     volatile unsigned       aborted:1;           /* flag, says aborted */

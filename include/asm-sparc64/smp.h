@@ -19,14 +19,13 @@ struct prom_cpuinfo {
 };
 
 extern int linux_num_cpus;	/* number of CPUs probed  */
+extern struct prom_cpuinfo linux_cpus[NCPUS];
 
 #endif /* !(__ASSEMBLY__) */
 
 #ifdef __SMP__
 
 #ifndef __ASSEMBLY__
-
-extern struct prom_cpuinfo linux_cpus[NCPUS];
 
 /* Per processor Sparc parameters we need. */
 
@@ -71,8 +70,6 @@ extern void smp_boot_cpus(void);
 extern void smp_store_cpu_info(int id);
 extern void smp_cross_call(smpfunc_t func, unsigned long arg1, unsigned long arg2,
 			   unsigned long arg3, unsigned long arg4, unsigned long arg5);
-extern void smp_capture(void);
-extern void smp_release(void);
 
 extern __inline__ void xc0(smpfunc_t func) { smp_cross_call(func, 0, 0, 0, 0, 0); }
 extern __inline__ void xc1(smpfunc_t func, unsigned long arg1)
@@ -126,7 +123,8 @@ extern __inline__ __volatile__ void inc_smp_counter(volatile int *ctr)
 2:
 	membar		#StoreStore | #StoreLoad
 " 	: "=&r" (temp0), "=&r" (temp1), "=r" (ctr)
-	: "ir" (i), "r" (ctr));
+	: "ir" (i), "r" (ctr)
+	: "cc");
 }
 
 extern __inline__ __volatile__ void dec_smp_counter(volatile int *ctr)
@@ -144,7 +142,8 @@ extern __inline__ __volatile__ void dec_smp_counter(volatile int *ctr)
 2:
 	membar		#StoreStore | #StoreLoad
 " 	: "=&r" (temp0), "=&r" (temp1), "=r" (ctr)
-	: "ir" (i), "r" (ctr));
+	: "ir" (i), "r" (ctr)
+	: "cc");
 }
 
 extern __inline__ __volatile__ int read_smp_counter(volatile int *ctr)
@@ -155,7 +154,6 @@ extern __inline__ __volatile__ int read_smp_counter(volatile int *ctr)
 #endif /* !(__ASSEMBLY__) */
 
 /* Sparc specific messages. */
-#define MSG_CAPTURE            0x0004       /* Park a processor. */
 #define MSG_CROSS_CALL         0x0005       /* run func on cpus */
 
 /* Empirical PROM processor mailbox constants.  If the per-cpu mailbox

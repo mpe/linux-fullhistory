@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: datagram.c,v 1.8 1997/03/18 18:24:28 davem Exp $
+ *	$Id: datagram.c,v 1.10 1997/04/14 05:39:42 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License

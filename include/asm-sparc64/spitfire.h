@@ -1,4 +1,4 @@
-/* $Id: spitfire.h,v 1.2 1996/12/28 18:39:55 davem Exp $
+/* $Id: spitfire.h,v 1.7 1997/04/04 00:50:29 davem Exp $
  * spitfire.h: SpitFire/BlackBird/Cheetah inline MMU operations.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -29,6 +29,48 @@
 
 #ifndef __ASSEMBLY__
 
+extern __inline__ unsigned long spitfire_get_isfsr(void)
+{
+	unsigned long ret;
+
+	__asm__ __volatile__("ldxa	[%1] %2, %0"
+			     : "=r" (ret)
+			     : "r" (TLB_SFSR), "i" (ASI_IMMU));
+	return ret;
+}
+
+extern __inline__ unsigned long spitfire_get_dsfsr(void)
+{
+	unsigned long ret;
+
+	__asm__ __volatile__("ldxa	[%1] %2, %0"
+			     : "=r" (ret)
+			     : "r" (TLB_SFSR), "i" (ASI_DMMU));
+	return ret;
+}
+
+extern __inline__ unsigned long spitfire_get_sfar(void)
+{
+	unsigned long ret;
+
+	__asm__ __volatile__("ldxa	[%1] %2, %0"
+			     : "=r" (ret)
+			     : "r" (DMMU_SFAR), "i" (ASI_DMMU));
+	return ret;
+}
+
+extern __inline__ void spitfire_put_isfsr(unsigned long sfsr)
+{
+	__asm__ __volatile__("stxa	%0, [%1] %2" :
+			     : "r" (sfsr), "r" (TLB_SFSR), "i" (ASI_IMMU));
+}
+
+extern __inline__ void spitfire_put_dsfsr(unsigned long sfsr)
+{
+	__asm__ __volatile__("stxa	%0, [%1] %2" :
+			     : "r" (sfsr), "r" (TLB_SFSR), "i" (ASI_DMMU));
+}
+
 extern __inline__ unsigned long spitfire_get_primary_context(void)
 {
 	unsigned long ctx;
@@ -36,12 +78,16 @@ extern __inline__ unsigned long spitfire_get_primary_context(void)
 	__asm__ __volatile__("ldxa	[%1] %2, %0"
 			     : "=r" (ctx)
 			     : "r" (PRIMARY_CONTEXT), "i" (ASI_DMMU));
+	return ctx;
 }
 
-extern __inline__ unsigned long spitfire_set_primary_context(unsigned long ctx)
+extern __inline__ void spitfire_set_primary_context(unsigned long ctx)
 {
 	__asm__ __volatile__("stxa	%0, [%1] %2"
-			     : : "r" (ctx), "r" (PRIMARY_CONTEXT), "i" (ASI_DMMU));
+			     : /* No outputs */
+			     : "r" (ctx & 0x1fff),
+			       "r" (PRIMARY_CONTEXT), "i" (ASI_DMMU));
+	membar("#Sync");
 }
 
 extern __inline__ unsigned long spitfire_get_secondary_context(void)
@@ -51,12 +97,16 @@ extern __inline__ unsigned long spitfire_get_secondary_context(void)
 	__asm__ __volatile__("ldxa	[%1] %2, %0"
 			     : "=r" (ctx)
 			     : "r" (SECONDARY_CONTEXT), "i" (ASI_DMMU));
+	return ctx;
 }
 
-extern __inline__ unsigned long spitfire_set_secondary_context(unsigned long ctx)
+extern __inline__ void spitfire_set_secondary_context(unsigned long ctx)
 {
 	__asm__ __volatile__("stxa	%0, [%1] %2"
-			     : : "r" (ctx), "r" (SECONDARY_CONTEXT), "i" (ASI_DMMU));
+			     : /* No outputs */
+			     : "r" (ctx & 0x1fff),
+			       "r" (SECONDARY_CONTEXT), "i" (ASI_DMMU));
+	membar("#Sync");
 }
 
 /* The data cache is write through, so this just invalidates the
@@ -92,11 +142,22 @@ extern __inline__ unsigned long spitfire_get_dtlb_data(int entry)
 	return data;
 }
 
-extern __inline__ unsigned long spitfire_put_dtlb_data(int entry, unsigned long data)
+extern __inline__ unsigned long spitfire_get_dtlb_tag(int entry)
+{
+	unsigned long tag;
+
+	__asm__ __volatile__("ldxa	[%1] %2, %0"
+			     : "=r" (tag)
+			     : "r" (entry << 3), "i" (ASI_DTLB_TAG_READ));
+	return tag;
+}
+
+extern __inline__ void spitfire_put_dtlb_data(int entry, unsigned long data)
 {
 	__asm__ __volatile__("stxa	%0, [%1] %2"
-			     : : "r" (data), "r" (entry << 3),
-			         "i" (ASI_DTLB_DATA_ACCESS));
+			     : /* No outputs */
+			     : "r" (data), "r" (entry << 3),
+			       "i" (ASI_DTLB_DATA_ACCESS));
 }
 
 extern __inline__ unsigned long spitfire_get_itlb_data(int entry)
@@ -109,11 +170,22 @@ extern __inline__ unsigned long spitfire_get_itlb_data(int entry)
 	return data;
 }
 
-extern __inline__ unsigned long spitfire_put_itlb_data(int entry, unsigned long data)
+extern __inline__ unsigned long spitfire_get_itlb_tag(int entry)
+{
+	unsigned long tag;
+
+	__asm__ __volatile__("ldxa	[%1] %2, %0"
+			     : "=r" (tag)
+			     : "r" (entry << 3), "i" (ASI_ITLB_TAG_READ));
+	return tag;
+}
+
+extern __inline__ void spitfire_put_itlb_data(int entry, unsigned long data)
 {
 	__asm__ __volatile__("stxa	%0, [%1] %2"
-			     : : "r" (data), "r" (entry << 3),
-			         "i" (ASI_ITLB_DATA_ACCESS));
+			     : /* No outputs */
+			     : "r" (data), "r" (entry << 3),
+			       "i" (ASI_ITLB_DATA_ACCESS));
 }
 
 /* Spitfire hardware assisted TLB flushes. */
@@ -122,74 +194,86 @@ extern __inline__ unsigned long spitfire_put_itlb_data(int entry, unsigned long 
 extern __inline__ void spitfire_flush_dtlb_primary_context(void)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
-			     : : "r" (0x40), "i" (ASI_DMMU_DEMAP));
+			     : /* No outputs */
+			     : "r" (0x40), "i" (ASI_DMMU_DEMAP));
 }
 
 extern __inline__ void spitfire_flush_itlb_primary_context(void)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
-			     : : "r" (0x40), "i" (ASI_IMMU_DEMAP));
+			     : /* No outputs */
+			     : "r" (0x40), "i" (ASI_IMMU_DEMAP));
 }
 
 extern __inline__ void spitfire_flush_dtlb_secondary_context(void)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
-			     : : "r" (0x41), "i" (ASI_DMMU_DEMAP));
+			     : /* No outputs */
+			     : "r" (0x41), "i" (ASI_DMMU_DEMAP));
 }
 
 extern __inline__ void spitfire_flush_itlb_secondary_context(void)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
-			     : : "r" (0x41), "i" (ASI_IMMU_DEMAP));
+			     : /* No outputs */
+			     : "r" (0x41), "i" (ASI_IMMU_DEMAP));
 }
 
 extern __inline__ void spitfire_flush_dtlb_nucleus_context(void)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
-			     : : "r" (0x42), "i" (ASI_DMMU_DEMAP));
+			     : /* No outputs */
+			     : "r" (0x42), "i" (ASI_DMMU_DEMAP));
 }
 
 extern __inline__ void spitfire_flush_itlb_nucleus_context(void)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
-			     : : "r" (0x42), "i" (ASI_IMMU_DEMAP));
+			     : /* No outputs */
+			     : "r" (0x42), "i" (ASI_IMMU_DEMAP));
 }
 
 /* Page level flushes. */
 extern __inline__ void spitfire_flush_dtlb_primary_page(unsigned long page)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
-			     : : "r" (page), "i" (ASI_DMMU_DEMAP));
+			     : /* No outputs */
+			     : "r" (page), "i" (ASI_DMMU_DEMAP));
 }
 
 extern __inline__ void spitfire_flush_itlb_primary_page(unsigned long page)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
-			     : : "r" (page), "i" (ASI_IMMU_DEMAP));
+			     : /* No outputs */
+			     : "r" (page), "i" (ASI_IMMU_DEMAP));
 }
 
 extern __inline__ void spitfire_flush_dtlb_secondary_page(unsigned long page)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
-			     : : "r" (page | 0x10), "i" (ASI_DMMU_DEMAP));
+			     : /* No outputs */
+			     : "r" (page | 0x10), "i" (ASI_DMMU_DEMAP));
 }
 
 extern __inline__ void spitfire_flush_itlb_secondary_page(unsigned long page)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
-			     : : "r" (page | 0x10), "i" (ASI_IMMU_DEMAP));
+			     : /* No outputs */
+			     : "r" (page | 0x10), "i" (ASI_IMMU_DEMAP));
 }
 
 extern __inline__ void spitfire_flush_dtlb_nucleus_page(unsigned long page)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
-			     : : "r" (page | 0x20), "i" (ASI_DMMU_DEMAP));
+			     : /* No outputs */
+			     : "r" (page | 0x20), "i" (ASI_DMMU_DEMAP));
 }
 
 extern __inline__ void spitfire_flush_itlb_nucleus_page(unsigned long page)
 {
 	__asm__ __volatile__("stxa	%%g0, [%0] %1"
-			     : : "r" (page | 0x20), "i" (ASI_IMMU_DEMAP));
+			     : /* No outputs */
+			     : "r" (page | 0x20), "i" (ASI_IMMU_DEMAP));
 }
 
 #endif /* !(__ASSEMBLY__) */

@@ -172,7 +172,7 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 			 * entries should terminate with a null size
 			 * or end exactly at the end of the sector.
 			 */
-		        printk("next_offset (%x) > bufsize (%x)\n",
+		        printk("next_offset (%x) > bufsize (%lx)\n",
 			       offset,bufsize);
 			break;
 		}

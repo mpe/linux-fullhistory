@@ -128,7 +128,7 @@ __initfunc(static void sun4c_init_timers(void (*counter_fn)(int, void *, struct 
 	/* Map the Timer chip, this is implemented in hardware inside
 	 * the cache chip on the sun4c.
 	 */
-	sun4c_timers = sparc_alloc_io ((void *) SUN4C_TIMER_PHYSADDR, 0,
+	sun4c_timers = sparc_alloc_io (SUN4C_TIMER_PHYSADDR, 0,
 				       sizeof(struct sun4c_timer_info),
 				       "timer", 0x0, 0x0);
     
@@ -174,6 +174,8 @@ __initfunc(void sun4c_init_IRQ(void))
 						   int_regs[0].which_io, 0x0);
 	enable_irq = sun4c_enable_irq;
 	disable_irq = sun4c_disable_irq;
+	enable_pil_irq = sun4c_enable_irq;
+	disable_pil_irq = sun4c_disable_irq;
 	clear_clock_irq = sun4c_clear_clock_irq;
 	clear_profile_irq = sun4c_clear_profile_irq;
 	load_profile_irq = sun4c_load_profile_irq;
@@ -184,5 +186,5 @@ __initfunc(void sun4c_init_IRQ(void))
 	set_irq_udt = (void (*) (int))sun4c_nop;
 #endif
 	*interrupt_enable = (SUN4C_INT_ENABLE);
-	sti();
+	/* Cannot enable interrupts until OBP ticker is disabled. */
 }

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.31 1997/03/16 07:03:07 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.34 1997/04/12 04:32:33 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -79,14 +79,14 @@ static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
 		
 	len = skb->end_seq - skb->seq;
 
-	if (!sk->nonagle && len < (sk->mss >> 1) && sk->packets_out)
+	if (!sk->nonagle && len < (sk->mss >> 1) && atomic_read(&sk->packets_out))
 	{
 		nagle_check = 0;
 	}
 
-	return (nagle_check && sk->packets_out < sk->cong_window &&
+	return (nagle_check && atomic_read(&sk->packets_out) < tp->snd_cwnd &&
 		!after(skb->end_seq, tp->snd_una + tp->snd_wnd) &&
-		sk->retransmits == 0);
+		atomic_read(&sk->retransmits) == 0);
 }
 
 /*
@@ -189,7 +189,7 @@ queue:
 	if (tp->send_head == NULL)
 		tp->send_head = skb;
 
-	if (sk->packets_out == 0 && !tp->pending)
+	if (atomic_read(&sk->packets_out) == 0 && !tp->pending)
 	{
 		tp->pending = TIME_PROBE0;
 		tcp_reset_xmit_timer(sk, TIME_PROBE0, tp->rto);
@@ -309,7 +309,7 @@ static void tcp_wrxmit_prob(struct sock *sk, struct sk_buff *skb)
 	 *	cannot currently occur.
 	 */
 
-	sk->retransmits = 0;
+	atomic_set(&sk->retransmits, 0);
 
 	printk(KERN_DEBUG "tcp_write_xmit: bug skb in write queue\n");
 
@@ -720,7 +720,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		 */
 		 
 		ct++;
-		sk->prot->retransmits ++;
+		sk->prot->retransmits++; /* ???: atomic_t necessary here? -DaveM */
 		tcp_statistics.TcpRetransSegs++;
 
 		tp->high_seq = tp->snd_nxt;
@@ -736,7 +736,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		 *	This should cut it off before we send too many packets.
 		 */
 
-		if (ct >= sk->cong_window)
+		if (ct >= tp->snd_cwnd)
 			break;
 
 		/*

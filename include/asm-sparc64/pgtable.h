@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.13 1997/03/13 16:25:05 jj Exp $
+/* $Id: pgtable.h,v 1.27 1997/04/10 23:32:46 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -20,6 +20,7 @@
 #include <asm/system.h>
 
 #ifndef __ASSEMBLY__
+#include <asm/sbus.h>
 
 /* Certain architectures need to do special things when pte's
  * within a page table are directly modified.  Thus, the following
@@ -42,10 +43,15 @@
 #define PTRS_PER_PMD	(1UL << (PAGE_SHIFT-3))
 #define PTRS_PER_PGD	(1UL << (PAGE_SHIFT-3))
 
+#define PTE_TABLE_SIZE	0x2000	/* 1024 entries 8 bytes each */
+#define PMD_TABLE_SIZE	0x2000	/* 1024 entries 8 bytes each */
+#define PGD_TABLE_SIZE	0x2000	/* 1024 entries 8 bytes each */
+
 /* the no. of pointers that fit on a page */
 #define PTRS_PER_PAGE	(1UL << (PAGE_SHIFT-3))
 
-#define VMALLOC_START		0xFFFFFE0000000000UL
+/* NOTE: TLB miss handlers depend heavily upon where this is. */
+#define VMALLOC_START		0xFFFFFc0000000000UL
 #define VMALLOC_VMADDR(x)	((unsigned long)(x))
 
 #endif /* !(__ASSEMBLY__) */
@@ -77,26 +83,36 @@
 #define _PAGE_ACCESSED	0x0000000000000400	/* Accessed Page (ie. referenced)     */
 #define _PAGE_READ	0x0000000000000200	/* Readable SW Bit                    */
 #define _PAGE_WRITE	0x0000000000000100	/* Writable SW Bit                    */
+#define _PAGE_PRIV	0x0000000000000080	/* Software privilege bit	      */
 
 #define _PAGE_CACHE	(_PAGE_CP | _PAGE_CV)
 
 #define __DIRTY_BITS	(_PAGE_MODIFIED | _PAGE_WRITE | _PAGE_W)
 #define __ACCESS_BITS	(_PAGE_ACCESSED | _PAGE_READ | _PAGE_R)
+#define __PRIV_BITS	(_PAGE_P | _PAGE_PRIV)
 
-/* David: Please FIXME these. I just define them somehow to get it compile. jj */
-#define PAGE_NONE	__pgprot (_PAGE_VALID | _PAGE_CACHE | _PAGE_P | _PAGE_G | __ACCESS_BITS)
-#define PAGE_SHARED	__pgprot (_PAGE_VALID | _PAGE_CACHE | _PAGE_G | __ACCESS_BITS | _PAGE_W | _PAGE_WRITE)
-#define PAGE_COPY	__pgprot (_PAGE_VALID | _PAGE_CACHE | __ACCESS_BITS)
-#define PAGE_READONLY	__pgprot (_PAGE_VALID | _PAGE_CACHE | __ACCESS_BITS)
-#define PAGE_KERNEL	__pgprot (_PAGE_VALID | _PAGE_CACHE | _PAGE_P | __ACCESS_BITS | __DIRTY_BITS)
+#define PAGE_NONE	__pgprot (_PAGE_PRESENT | _PAGE_VALID | _PAGE_CACHE | \
+				  __PRIV_BITS | __ACCESS_BITS)
+
+#define PAGE_SHARED	__pgprot (_PAGE_PRESENT | _PAGE_VALID | _PAGE_CACHE | \
+				  __ACCESS_BITS | _PAGE_W | _PAGE_WRITE)
+
+#define PAGE_COPY	__pgprot (_PAGE_PRESENT | _PAGE_VALID | _PAGE_CACHE | \
+				  __ACCESS_BITS)
+
+#define PAGE_READONLY	__pgprot (_PAGE_PRESENT | _PAGE_VALID | _PAGE_CACHE | \
+				  __ACCESS_BITS)
+
+#define PAGE_KERNEL	__pgprot (_PAGE_PRESENT | _PAGE_VALID | _PAGE_CACHE | \
+				  __PRIV_BITS | __ACCESS_BITS | __DIRTY_BITS)
+
 #define PAGE_INVALID	__pgprot (0)
 
 #define _PFN_MASK	_PAGE_PADDR
 
-#define _PAGE_CHG_MASK	(_PFN_MASK | _PAGE_MODIFIED | _PAGE_ACCESSED)
+#define _PAGE_CHG_MASK	(_PFN_MASK | _PAGE_MODIFIED | _PAGE_ACCESSED | _PAGE_PRESENT)
 
-/* FIXME: Define this correctly to io page protection. Has to include side effects. */
-#define pg_iobits (_PAGE_VALID | _PAGE_P | __ACCESS_BITS | _PAGE_E)
+#define pg_iobits (_PAGE_VALID | __PRIV_BITS | __ACCESS_BITS | _PAGE_E)
 
 #define __P000	PAGE_NONE
 #define __P001	PAGE_READONLY
@@ -119,13 +135,28 @@
 #ifndef __ASSEMBLY__
 
 extern pte_t __bad_page(void);
-extern pmd_t *__bad_pagetable(void);
-extern unsigned long __zero_page(void);
+extern pmd_t *__bad_pmd(void);
+extern pte_t *__bad_pte(void);
 
-#define BAD_PAGETABLE	__bad_pagetable()
+#define BAD_PMD		__bad_pmd()
+#define BAD_PTE		__bad_pte()
 #define BAD_PAGE	__bad_page()
 
-#define ZERO_PAGE	PAGE_OFFSET
+/* First phsical page can be anywhere, the following is needed so that
+ * va-->pa and vice versa conversions work properly without performance
+ * hit for all __pa()/__va() operations.
+ */
+extern unsigned long phys_base;
+
+#define ZERO_PAGE	(PAGE_OFFSET + phys_base)
+
+/* This is for making TLB miss faster to process. */
+extern unsigned long null_pmd_table;
+extern unsigned long null_pte_table;
+
+/* Allocate a block of RAM which is aligned to its size.
+   This procedure can be used until the call to mem_init(). */
+extern void *sparc_init_alloc(unsigned long *kbrk, unsigned long size);
 
 /* Cache and TLB flush operations. */
 
@@ -164,7 +195,8 @@ extern __inline__ void spitfire_flush_icache_page(unsigned long page)
 	bge,pt		%%icc, 1b
 	 add		%2, %1, %0
 "	: "=&r" (page), "=&r" (temp)
-	: "r" (page), "0" (page + PAGE_SIZE - 0x40), "1" (PAGE_SIZE - 0x40));
+	: "r" (page), "0" (page + PAGE_SIZE - 0x40), "1" (PAGE_SIZE - 0x40)
+	: "cc");
 }
 
 extern __inline__ void flush_cache_all(void)
@@ -173,7 +205,6 @@ extern __inline__ void flush_cache_all(void)
 
 	flushw_all();
 	for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32) {
-		spitfire_put_dcache_tag(addr, 0x0UL);
 		spitfire_put_icache_tag(addr, 0x0UL);
 		membar("#Sync");
 	}
@@ -189,14 +220,13 @@ extern __inline__ void flush_cache_mm(struct mm_struct *mm)
 
 		flushw_user();
 		for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32) {
-			spitfire_put_dcache_tag(addr, 0x0UL);
 			spitfire_put_icache_tag(addr, 0x0UL);
 			membar("#Sync");
 		}
-	}
 
-	/* Kill the pipeline. */
-	flushi(PAGE_OFFSET);
+		/* Kill the pipeline. */
+		flushi(PAGE_OFFSET);
+	}
 }
 
 extern __inline__ void flush_cache_range(struct mm_struct *mm, unsigned long start,
@@ -220,14 +250,17 @@ extern __inline__ void flush_cache_page(struct vm_area_struct *vma, unsigned lon
 {
 	struct mm_struct *mm = vma->vm_mm;
 
-	if(mm->context != NO_CONTEXT && (vma->vm_flags & VM_EXEC)) {
-		int ctx;
+	if(mm->context != NO_CONTEXT) {
+		unsigned long addr;
 
-		ctx = spitfire_get_primary_context();
 		flushw_user();
-		spitfire_set_primary_context(mm->context);
-		spitfire_flush_icache_page(page & PAGE_MASK);
-		spitfire_set_primary_context(ctx);
+		for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32) {
+			spitfire_put_icache_tag(addr, 0x0UL);
+			membar("#Sync");
+		}
+
+		/* Kill the pipeline. */
+		flushi(PAGE_OFFSET);
 	}
 }
 
@@ -236,27 +269,36 @@ extern __inline__ void flush_cache_page(struct vm_area_struct *vma, unsigned lon
 
 extern __inline__ void flush_tlb_all(void)
 {
+	unsigned long flags;
 	int entry;
 
 	/* Invalidate all non-locked TTE's in both the dtlb and itlb. */
-	for(entry = 0; entry < 64; entry++) {
-		unsigned long dtag, itag;
-
-		dtag = spitfire_get_dtlb_data(entry);
-		itag = spitfire_get_itlb_data(entry);
-		if(!(dtag & _PAGE_L))
-			spitfire_put_dtlb_data(entry, 0x0UL);
-		if(!(itag & _PAGE_L))
-			spitfire_put_itlb_data(entry, 0x0UL);
+	save_and_cli(flags);
+	__asm__ __volatile__("stxa	%%g0, [%0] %1\n\t"
+			     "stxa	%%g0, [%0] %2"
+			     : /* No outputs */
+			     : "r" (TLB_TAG_ACCESS), "i" (ASI_IMMU), "i" (ASI_DMMU));
+	for(entry = 0; entry < 62; entry++) {
+		spitfire_put_dtlb_data(entry, 0x0UL);
+		spitfire_put_itlb_data(entry, 0x0UL);
 	}
+	membar("#Sync");
+	flushi(PAGE_OFFSET);
+	restore_flags(flags);
 }
 
 extern __inline__ void flush_tlb_mm(struct mm_struct *mm)
 {
 	if(mm->context != NO_CONTEXT) {
+		unsigned long orig_ctx = spitfire_get_secondary_context();
+		unsigned long flags;
+
+		save_and_cli(flags);
 		spitfire_set_secondary_context(mm->context);
 		spitfire_flush_dtlb_secondary_context();
 		spitfire_flush_itlb_secondary_context();
+		spitfire_set_secondary_context(orig_ctx);
+		restore_flags(flags);
 	}
 }
 
@@ -264,13 +306,19 @@ extern __inline__ void flush_tlb_range(struct mm_struct *mm, unsigned long start
 				       unsigned long end)
 {
 	if(mm->context != NO_CONTEXT) {
+		unsigned long old_ctx = spitfire_get_secondary_context();
+		unsigned long flags;
+
 		start &= PAGE_MASK;
+		save_and_cli(flags);
 		spitfire_set_secondary_context(mm->context);
 		while(start < end) {
 			spitfire_flush_dtlb_secondary_page(start);
 			spitfire_flush_itlb_secondary_page(start);
 			start += PAGE_SIZE;
 		}
+		spitfire_set_secondary_context(old_ctx);
+		restore_flags(flags);
 	}
 }
 
@@ -279,16 +327,22 @@ extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 	struct mm_struct *mm = vma->vm_mm;
 
 	if(mm->context != NO_CONTEXT) {
+		unsigned long old_ctx = spitfire_get_secondary_context();
+		unsigned long flags;
+
 		page &= PAGE_MASK;
+		save_and_cli(flags);
 		spitfire_set_secondary_context(mm->context);
 		if(vma->vm_flags & VM_EXEC)
 			spitfire_flush_itlb_secondary_page(page);
 		spitfire_flush_dtlb_secondary_page(page);
+		spitfire_set_secondary_context(old_ctx);
+		restore_flags(flags);
 	}
 }
 
 extern inline pte_t mk_pte(unsigned long page, pgprot_t pgprot)
-{ return __pte((page - PAGE_OFFSET) | pgprot_val(pgprot)); }
+{ return __pte(__pa(page) | pgprot_val(pgprot)); }
 
 extern inline pte_t mk_pte_phys(unsigned long physpage, pgprot_t pgprot)
 { return __pte(physpage | pgprot_val(pgprot)); }
@@ -297,33 +351,33 @@ extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }
 
 extern inline void pmd_set(pmd_t *pmdp, pte_t *ptep)
-{ pmd_val(*pmdp) = ((unsigned long) ptep) - PAGE_OFFSET; }
+{ pmd_val(*pmdp) = __pa((unsigned long) ptep); }
 
 extern inline void pgd_set(pgd_t *pgdp, pmd_t *pmdp)
-{ pgd_val(*pgdp) = ((unsigned long) pmdp) - PAGE_OFFSET; }
+{ pgd_val(*pgdp) = __pa((unsigned long) pmdp); }
 
 extern inline unsigned long pte_page(pte_t pte)
-{ return PAGE_OFFSET + (pte_val(pte) & _PFN_MASK); }
+{ return (unsigned long) __va((pte_val(pte) & _PFN_MASK)); }
 
 extern inline unsigned long pmd_page(pmd_t pmd)
-{ return (pmd_val(pmd) + PAGE_OFFSET); }
+{ return (unsigned long) __va(pmd_val(pmd)); }
 
 extern inline unsigned long pgd_page(pgd_t pgd)
-{ return (pgd_val(pgd) + PAGE_OFFSET); }
+{ return (unsigned long) __va(pgd_val(pgd)); }
 
 extern inline int pte_none(pte_t pte) 		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
 extern inline void pte_clear(pte_t *pte)	{ pte_val(*pte) = 0; }
 
-extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
+extern inline int pmd_none(pmd_t pmd)		{ return pmd_val(pmd)==null_pte_table; }
 extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~PAGE_MASK); }
-extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd); }
-extern inline void pmd_clear(pmd_t *pmdp)	{ pmd_val(*pmdp) = 0; }
+extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd)!=null_pte_table; }
+extern inline void pmd_clear(pmd_t *pmdp)	{ pmd_val(*pmdp) = null_pte_table; }
 
-extern inline int pgd_none(pgd_t pgd)		{ return !pgd_val(pgd); }
+extern inline int pgd_none(pgd_t pgd)		{ return pgd_val(pgd)==null_pmd_table; }
 extern inline int pgd_bad(pgd_t pgd)		{ return (pgd_val(pgd) & ~PAGE_MASK); }
-extern inline int pgd_present(pgd_t pgd)	{ return pgd_val(pgd); }
-extern inline void pgd_clear(pgd_t *pgdp)	{ pgd_val(*pgdp) = 0; }
+extern inline int pgd_present(pgd_t pgd)	{ return pgd_val(pgd)!=null_pmd_table; }
+extern inline void pgd_clear(pgd_t *pgdp)	{ pgd_val(*pgdp) = null_pmd_table; }
 
 /* The following only work if pte_present() is true.
  * Undefined behaviour if not..
@@ -358,7 +412,7 @@ extern inline pte_t pte_mkdirty(pte_t pte)
 	if(pte_val(pte) & _PAGE_WRITE)
 		return __pte(pte_val(pte) | (_PAGE_MODIFIED | _PAGE_W));
 	else
-		return __pte(pte_val(pte) | _PAGE_MODIFIED);
+		return __pte(pte_val(pte) | (_PAGE_MODIFIED));
 }
 
 extern inline pte_t pte_mkyoung(pte_t pte)
@@ -366,14 +420,14 @@ extern inline pte_t pte_mkyoung(pte_t pte)
 	if(pte_val(pte) & _PAGE_READ)
 		return __pte(pte_val(pte) | (_PAGE_ACCESSED | _PAGE_R));
 	else
-		return __pte(pte_val(pte) | _PAGE_ACCESSED);
+		return __pte(pte_val(pte) | (_PAGE_ACCESSED));
 }
 
 extern inline void SET_PAGE_DIR(struct task_struct *tsk, pgd_t *pgdir)
 {
 	register unsigned long paddr asm("o5");
 
-	paddr = ((unsigned long) pgdir) - PAGE_OFFSET;
+	paddr = __pa(pgdir);
 
 	if(tsk->mm == current->mm) {
 		__asm__ __volatile__ ("
@@ -381,7 +435,8 @@ extern inline void SET_PAGE_DIR(struct task_struct *tsk, pgd_t *pgdir)
 			wrpr		%%o4, %1, %%pstate
 			mov		%0, %%g7
 			wrpr		%%o4, 0x0, %%pstate
-		" : : "r" (paddr), "i" (PSTATE_MG|PSTATE_IE)
+		" : /* No outputs */
+		  : "r" (paddr), "i" (PSTATE_MG|PSTATE_IE)
 		  : "o4");
 	}
 }
@@ -401,6 +456,13 @@ extern inline pmd_t *pmd_offset(pgd_t *dir, unsigned long address)
 extern inline pte_t *pte_offset(pmd_t *dir, unsigned long address)
 { return (pte_t *) pmd_page(*dir) + ((address >> PAGE_SHIFT) & (PTRS_PER_PAGE - 1)); }
 
+extern __inline__ void __init_pmd(pmd_t *pmdp)
+{
+	extern void __bfill64(void *, unsigned long);
+	
+	__bfill64((void *)pmdp, null_pte_table);
+}
+
 /* Allocate and free page tables. The xxx_kernel() versions are
  * used to allocate a kernel page table - this turns on supervisor
  * bits if any.
@@ -418,14 +480,14 @@ extern inline pte_t * pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 				pmd_set(pmd, page);
 				return page + address;
 			}
-			pmd_set(pmd, (pte_t *) BAD_PAGETABLE);
+			pmd_set(pmd, BAD_PTE);
 			return NULL;
 		}
 		free_page((unsigned long) page);
 	}
 	if (pmd_bad(*pmd)) {
 		printk("Bad pmd in pte_alloc_kernel: %08lx\n", pmd_val(*pmd));
-		pmd_set(pmd, (pte_t *) BAD_PAGETABLE);
+		pmd_set(pmd, BAD_PTE);
 		return NULL;
 	}
 	return (pte_t *) pmd_page(*pmd) + address;
@@ -441,17 +503,18 @@ extern inline pmd_t * pmd_alloc_kernel(pgd_t *pgd, unsigned long address)
 		pmd_t *page = (pmd_t *) get_free_page(GFP_KERNEL);
 		if (pgd_none(*pgd)) {
 			if (page) {
+				__init_pmd(page);
 				pgd_set(pgd, page);
 				return page + address;
 			}
-			pgd_set(pgd, BAD_PAGETABLE);
+			pgd_set(pgd, BAD_PMD);
 			return NULL;
 		}
 		free_page((unsigned long) page);
 	}
 	if (pgd_bad(*pgd)) {
 		printk("Bad pgd in pmd_alloc_kernel: %08lx\n", pgd_val(*pgd));
-		pgd_set(pgd, BAD_PAGETABLE);
+		pgd_set(pgd, BAD_PMD);
 		return NULL;
 	}
 	return (pmd_t *) pgd_page(*pgd) + address;
@@ -470,14 +533,14 @@ extern inline pte_t * pte_alloc(pmd_t *pmd, unsigned long address)
 				pmd_set(pmd, page);
 				return page + address;
 			}
-			pmd_set(pmd, (pte_t *) BAD_PAGETABLE);
+			pmd_set(pmd, BAD_PTE);
 			return NULL;
 		}
 		free_page((unsigned long) page);
 	}
 	if (pmd_bad(*pmd)) {
 		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		pmd_set(pmd, (pte_t *) BAD_PAGETABLE);
+		pmd_set(pmd, BAD_PTE);
 		return NULL;
 	}
 	return (pte_t *) pmd_page(*pmd) + address;
@@ -493,17 +556,18 @@ extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
 		pmd_t *page = (pmd_t *) get_free_page(GFP_KERNEL);
 		if (pgd_none(*pgd)) {
 			if (page) {
+				__init_pmd(page);
 				pgd_set(pgd, page);
 				return page + address;
 			}
-			pgd_set(pgd, BAD_PAGETABLE);
+			pgd_set(pgd, BAD_PMD);
 			return NULL;
 		}
 		free_page((unsigned long) page);
 	}
 	if (pgd_bad(*pgd)) {
 		printk("Bad pgd in pmd_alloc: %08lx\n", pgd_val(*pgd));
-		pgd_set(pgd, BAD_PAGETABLE);
+		pgd_set(pgd, BAD_PMD);
 		return NULL;
 	}
 	return (pmd_t *) pgd_page(*pgd) + address;
@@ -513,9 +577,33 @@ extern inline void pgd_free(pgd_t * pgd)
 { free_page((unsigned long)pgd); }
 
 extern inline pgd_t * pgd_alloc(void)
-{ return (pgd_t *) get_free_page(GFP_KERNEL); }
+{
+	extern void __bfill64(void *, unsigned long);
+	pgd_t *pgd = (pgd_t *) __get_free_page(GFP_KERNEL);
+	
+	if (pgd)
+		__bfill64((void *)pgd, null_pmd_table);
+	return pgd;
+}
 
 extern pgd_t swapper_pg_dir[1024];
+
+/* Routines for getting a dvma scsi buffer. */
+struct mmu_sglist {
+	char *addr;
+	char *__dont_touch;
+	unsigned int len;
+	__u32 dvma_addr;
+};
+
+extern __u32 mmu_get_scsi_one(char *, unsigned long, struct linux_sbus *sbus);
+extern void  mmu_get_scsi_sgl(struct mmu_sglist *, int, struct linux_sbus *sbus);
+
+/* These do nothing with the way I have things setup. */
+#define mmu_release_scsi_one(vaddr, len, sbus)	do { } while(0)
+#define mmu_release_scsi_sgl(sg, sz, sbus)	do { } while(0)
+#define mmu_lockarea(vaddr, len)		(vaddr)
+#define mmu_unlockarea(vaddr, len)		do { } while(0)
 
 extern inline void update_mmu_cache(struct vm_area_struct * vma,
 	unsigned long address, pte_t pte)
@@ -576,44 +664,14 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 
 /* Make a non-present pseudo-TTE. */
 extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
-{ pte_t pte; pte_val(pte) = (type) | (offset << 8); return pte; }
+{ pte_t pte; pte_val(pte) = (type<<PAGE_SHIFT)|(offset<<(PAGE_SHIFT+8)); return pte; }
 
 extern inline pte_t mk_pte_io(unsigned long page, pgprot_t prot, int space)
-/* FIXME. How is space added to the address??? */
 { pte_t pte; pte_val(pte) = (page) | pgprot_val(prot); return pte; }
 
-
-#define SWP_TYPE(entry)		(((entry) & 0xff))
-#define SWP_OFFSET(entry)	((entry) >> 8)
+#define SWP_TYPE(entry)		(((entry>>PAGE_SHIFT) & 0xff))
+#define SWP_OFFSET(entry)	((entry) >> (PAGE_SHIFT+8))
 #define SWP_ENTRY(type,offset)	pte_val(mk_swap_pte((type),(offset)))
-
-struct ctx_list {
-	struct ctx_list *next;
-	struct ctx_list *prev;
-	unsigned int ctx_number;
-	struct mm_struct *ctx_mm;
-};
-
-extern struct ctx_list *ctx_list_pool;  /* Dynamically allocated */
-extern struct ctx_list ctx_free;        /* Head of free list */
-extern struct ctx_list ctx_used;        /* Head of used contexts list */
-
-#define NO_CONTEXT     -1
-
-extern __inline__ void remove_from_ctx_list(struct ctx_list *entry)
-{
-	entry->next->prev = entry->prev;
-	entry->prev->next = entry->next;
-}
-
-extern __inline__ void add_to_ctx_list(struct ctx_list *head, struct ctx_list *entry)
-{
-	entry->next = head;
-	(entry->prev = head->prev)->next = entry;
-	head->prev = entry;
-}
-#define add_to_free_ctxlist(entry) add_to_ctx_list(&ctx_free, entry)
-#define add_to_used_ctxlist(entry) add_to_ctx_list(&ctx_used, entry)
 
 #endif /* !(__ASSEMBLY__) */
 

@@ -116,7 +116,7 @@ extern void __dst_free(struct dst_entry * dst);
 static __inline__
 void dst_free(struct dst_entry * dst)
 {
-	if (!dst->use) {
+	if (!atomic_read(&dst->use)) {
 		dst_destroy(dst);
 		return;
 	}

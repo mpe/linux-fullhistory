@@ -34,8 +34,8 @@ struct timer_list	tcp_slow_timer = {
 
 
 struct tcp_sl_timer tcp_slt_array[TCP_SLT_MAX] = {
-	{0, TCP_SYNACK_PERIOD, 0, tcp_syn_recv_timer},		/* SYNACK	*/
-	{0, TCP_KEEPALIVE_PERIOD, 0, tcp_keepalive}		/* KEEPALIVE	*/
+	{ATOMIC_INIT, TCP_SYNACK_PERIOD, 0, tcp_syn_recv_timer},/* SYNACK	*/
+	{ATOMIC_INIT, TCP_KEEPALIVE_PERIOD, 0, tcp_keepalive}	/* KEEPALIVE	*/
 };
 
 /*
@@ -165,8 +165,11 @@ static int tcp_write_timeout(struct sock *sk)
 	/*
 	 *	Look for a 'soft' timeout.
 	 */
-	if ((sk->state == TCP_ESTABLISHED && sk->retransmits && !(sk->retransmits & 7))
-		|| (sk->state != TCP_ESTABLISHED && sk->retransmits > TCP_RETR1)) 
+	if ((sk->state == TCP_ESTABLISHED &&
+	     atomic_read(&sk->retransmits) &&
+	     !(atomic_read(&sk->retransmits) & 7)) ||
+	    (sk->state != TCP_ESTABLISHED &&
+	     atomic_read(&sk->retransmits) > TCP_RETR1)) 
 	{
 		/*
 		 *	Attempt to recover if arp has changed (unlikely!) or
@@ -179,7 +182,7 @@ static int tcp_write_timeout(struct sock *sk)
 	 *	Have we tried to SYN too many times (repent repent 8))
 	 */
 	 
-	if(sk->retransmits > TCP_SYN_RETRIES && sk->state==TCP_SYN_SENT)
+	if(atomic_read(&sk->retransmits) > TCP_SYN_RETRIES && sk->state==TCP_SYN_SENT)
 	{
 		if(sk->err_soft)
 			sk->err=sk->err_soft;
@@ -199,7 +202,7 @@ static int tcp_write_timeout(struct sock *sk)
 	/*
 	 *	Has it gone just too far ?
 	 */
-	if (sk->retransmits > TCP_RETR2) 
+	if (atomic_read(&sk->retransmits) > TCP_RETR2) 
 	{
 		if(sk->err_soft)
 			sk->err = sk->err_soft;
@@ -415,16 +418,16 @@ void tcp_retransmit_timer(unsigned long data)
 
 	tp->retrans_head = NULL;
 
-	if (sk->retransmits == 0)
+	if (atomic_read(&sk->retransmits) == 0)
 	{
 		/*
 		 * remember window where we lost
 		 * "one half of the current window but at least 2 segments"
 		 */
 
-		sk->ssthresh = max(sk->cong_window >> 1, 2);
+		sk->ssthresh = max(tp->snd_cwnd >> 1, 2);
 		sk->cong_count = 0;
-		sk->cong_window = 1;
+		tp->snd_cwnd = 1;
 	}
 
 	atomic_inc(&sk->retransmits);
@@ -476,9 +479,7 @@ static void tcp_syn_recv_timer(unsigned long data)
 			
 			/* TCP_LISTEN is implied. */
 			if (!sk->sock_readers && tp->syn_wait_queue) {
-				struct open_request *req;
-
-				req = tp->syn_wait_queue;
+				struct open_request *req = tp->syn_wait_queue;
 				do {
 					struct open_request *conn;
 				  
@@ -500,7 +501,7 @@ static void tcp_syn_recv_timer(unsigned long data)
 						(*conn->class->destructor)(conn);
 						tcp_dec_slow_timer(TCP_SLT_SYNACK);
 						sk->ack_backlog--;
-						kfree(conn);
+						tcp_openreq_free(conn);
 
 						if (!tp->syn_wait_queue)
 							break;
@@ -536,7 +537,7 @@ void tcp_sltimer_handler(unsigned long data)
 
 	for (i=0; i < TCP_SLT_MAX; i++, slt++)
 	{
-		if (slt->count)
+		if (atomic_read(&slt->count))
 		{
 			long trigger;
 

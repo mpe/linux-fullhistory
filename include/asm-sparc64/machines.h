@@ -1,4 +1,4 @@
-/* $Id: machines.h,v 1.1 1997/03/14 21:05:37 jj Exp $
+/* $Id: machines.h,v 1.2 1997/04/04 00:50:23 davem Exp $
  * machines.h:  Defines for taking apart the machine type value in the
  *              idprom and determining the kind of machine we are on.
  *
@@ -6,6 +6,8 @@
  */
 #ifndef _SPARC64_MACHINES_H
 #define _SPARC64_MACHINES_H
+
+/* XXX This should disappear. -DaveM */
 
 struct Sun_Machine_Models {
 	char *name;

@@ -456,8 +456,10 @@ struct qlogicpti {
 	struct qlogicpti_regs    *qregs;                /* Adapter registers          */
 	u_int	                  req_in_ptr;		/* index of next request slot */
 	u_int	                  res_out_ptr;		/* index of next result slot  */
-	struct pti_queue_entry   *res;                  /* Pointer to RESPONSE dvma   */
-	struct pti_queue_entry   *req;                  /* Pointer to REQUEST dvma    */
+	struct pti_queue_entry   *res_cpu;              /* Ptr to RESPONSE bufs (CPU) */
+	__u32                     res_dvma;             /* Ptr to RESPONSE bufs (DVMA)*/
+	struct pti_queue_entry   *req_cpu;              /* Ptr to REQUEST bufs (CPU)  */
+	__u32                     req_dvma;             /* Ptr to REQUEST bufs (DVMA) */
 	int                       cmd_count[MAX_TARGETS];
 	unsigned long             tag_ages[MAX_TARGETS];
 	long	                  send_marker;		/* must we send a marker?     */

@@ -1,4 +1,4 @@
-/* $Id: cgsix.c,v 1.22 1997/02/02 02:12:41 ecd Exp $
+/* $Id: cgsix.c,v 1.26 1997/04/10 03:02:40 davem Exp $
  * cgsix.c: cgsix frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -246,38 +246,38 @@ cg6_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		switch (vma->vm_offset+page){
 		case CG6_TEC:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.cg6.tec);
+			map_offset = get_phys ((unsigned long)fb->info.cg6.tec);
 			break;
 		case CG6_FBC:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.cg6.fbc);
+			map_offset = get_phys ((unsigned long)fb->info.cg6.fbc);
 			break;
 		case CG6_FHC:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.cg6.fhc);
+			map_offset = get_phys ((unsigned long)fb->info.cg6.fhc);
 			break;
 		case CG6_THC:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.cg6.thc);
+			map_offset = get_phys ((unsigned long)fb->info.cg6.thc);
 			break;
 		case CG6_BTREGS:
 			map_size = PAGE_SIZE;
-			map_offset = get_phys ((uint)fb->info.cg6.bt);
+			map_offset = get_phys ((unsigned long)fb->info.cg6.bt);
 			break;
 			
 		case CG6_DHC:
 			map_size = PAGE_SIZE * 40;
-			map_offset = get_phys ((uint)fb->info.cg6.dhc);
+			map_offset = get_phys ((unsigned long)fb->info.cg6.dhc);
 			break;
 			
 		case CG6_ROM:
 			map_size = PAGE_SIZE * 16;
-			map_offset = get_phys ((uint)fb->info.cg6.rom);
+			map_offset = get_phys ((unsigned long)fb->info.cg6.rom);
 			break;
 
 		case CG6_RAM:
 			map_size = size-page;
-			map_offset = get_phys ((uint) fb->base);
+			map_offset = get_phys ((unsigned long) fb->base);
 			if (map_size < fb->type.fb_size)
 				map_size = fb->type.fb_size;
 			break;
@@ -422,7 +422,7 @@ cg6_reset (fbinfo_t *fb)
 	cg6->bt->control |= 0x03 << 24;
 }
 
-__initfunc(void cg6_setup (fbinfo_t *fb, int slot, uint cg6, int cg6_io))
+__initfunc(void cg6_setup (fbinfo_t *fb, int slot, unsigned long cg6, int cg6_io))
 {
 	struct cg6_info *cg6info;
 	unsigned int rev, cpu, conf;
@@ -447,23 +447,24 @@ __initfunc(void cg6_setup (fbinfo_t *fb, int slot, uint cg6, int cg6_io))
 	cg6info = (struct cg6_info *) &fb->info.cg6;
 
 	/* Map the hardware registers */
-	cg6info->bt = sparc_alloc_io ((void *) cg6+CG6_BROOKTREE_OFFSET, 0,
+	cg6info->bt = sparc_alloc_io ((u32)(cg6+CG6_BROOKTREE_OFFSET), 0,
 		 sizeof (struct bt_regs), "cgsix_dac", cg6_io, 0);
-	cg6info->fhc = sparc_alloc_io ((void *) cg6+CG6_FHC_OFFSET, 0,
+	cg6info->fhc = sparc_alloc_io ((u32)(cg6+CG6_FHC_OFFSET), 0,
 		 sizeof (int), "cgsix_fhc", cg6_io, 0);
-	cg6info->thc = sparc_alloc_io ((void *) cg6+CG6_THC_OFFSET, 0,
+	cg6info->thc = sparc_alloc_io ((u32)(cg6+CG6_THC_OFFSET), 0,
 		 sizeof (struct cg6_thc), "cgsix_thc", cg6_io, 0);
-	cg6info->tec = sparc_alloc_io ((void *) cg6+CG6_TEC_OFFSET, 0,
+	cg6info->tec = sparc_alloc_io ((u32)(cg6+CG6_TEC_OFFSET), 0,
 		 sizeof (struct cg6_tec), "cgsix_tec", cg6_io, 0);
-	cg6info->dhc = sparc_alloc_io ((void *) cg6+CG6_DHC_OFFSET, 0,
+	cg6info->dhc = sparc_alloc_io ((u32)(cg6+CG6_DHC_OFFSET), 0,
 		 0x40000, "cgsix_dhc", cg6_io, 0);
-	cg6info->fbc = sparc_alloc_io ((void *) cg6+CG6_FBC_OFFSET, 0,
+	cg6info->fbc = sparc_alloc_io ((u32)(cg6+CG6_FBC_OFFSET), 0,
 		 0x1000, "cgsix_fbc", cg6_io, 0);
-	cg6info->rom = sparc_alloc_io ((void *) cg6+CG6_ROM_OFFSET, 0,
+	cg6info->rom = sparc_alloc_io ((u32)(cg6+CG6_ROM_OFFSET), 0,
 		 0x10000, "cgsix_rom", cg6_io, 0);
-	if (!fb->base){
-		fb->base = (uint) sparc_alloc_io ((void *) cg6+CG6_RAM_OFFSET, 0,
-                    fb->type.fb_size, "cgsix_ram", cg6_io, 0);
+	if (!fb->base) {
+		fb->base = (unsigned long)
+			sparc_alloc_io ((u32)(cg6+CG6_RAM_OFFSET), 0,
+					fb->type.fb_size, "cgsix_ram", cg6_io, 0);
 	}
 	if (slot == sun_prom_console_id)
 		fb_restore_palette = cg6_restore_palette;
@@ -481,7 +482,7 @@ __initfunc(void cg6_setup (fbinfo_t *fb, int slot, uint cg6, int cg6_io))
 	printk("TEC Rev %x ",
 		(cg6info->thc->thc_misc >> CG6_THC_MISC_REV_SHIFT) &
 		CG6_THC_MISC_REV_MASK);
-
+		
 	/* Get FHC Revision */
 	conf = *(cg6info->fhc);
 
@@ -497,16 +498,18 @@ __initfunc(void cg6_setup (fbinfo_t *fb, int slot, uint cg6, int cg6_io))
 	rev = conf >> CG6_FHC_REV_SHIFT & CG6_FHC_REV_MASK;
 	printk("Rev %x\n", rev);
 
-	if (slot && sun_prom_console_id == slot) return;
-	
+	if (slot && sun_prom_console_id == slot)
+		return;
+
 	/* Reset the cg6 */
 	cg6_reset(fb);
 	
-	if (!slot)
-	/* Enable Video */
+	if (!slot) {
+		/* Enable Video */
 		cg6_unblank(fb);
-	else
+	} else {
 		cg6_blank(fb);
+	}
 }
 
 extern unsigned char vga_font[];

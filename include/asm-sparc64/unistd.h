@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.2 1997/03/18 18:00:26 jj Exp $ */
+/* $Id: unistd.h,v 1.3 1997/04/10 23:32:51 davem Exp $ */
 #ifndef _SPARC64_UNISTD_H
 #define _SPARC64_UNISTD_H
 
@@ -283,7 +283,7 @@ __asm__ __volatile__ ("mov %0, %%g1\n\t" \
 		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res)\
 		      : "0" (__NR_##name) \
-		      : "g1", "o0"); \
+		      : "g1", "o0", "cc"); \
 if (__res >= 0) \
     return (type) __res; \
 errno = -__res; \
@@ -301,7 +301,7 @@ __asm__ __volatile__ ("mov %0, %%g1\n\t" \
 		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)) \
 		      : "0" (__NR_##name),"1" ((long)(arg1)) \
-		      : "g1", "o0"); \
+		      : "g1", "o0", "cc"); \
 if (__res >= 0) \
 	return (type) __res; \
 errno = -__res; \
@@ -320,7 +320,7 @@ __asm__ __volatile__ ("mov %0, %%g1\n\t" \
 		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)) \
 		      : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)) \
-		      : "g1", "o0", "o1"); \
+		      : "g1", "o0", "o1", "cc"); \
 if (__res >= 0) \
 	return (type) __res; \
 errno = -__res; \
@@ -342,7 +342,7 @@ __asm__ __volatile__ ("mov %0, %%g1\n\t" \
 		        "=r" ((long)(arg3)) \
 		      : "0" (__NR_##name), "1" ((long)(arg1)), "2" ((long)(arg2)), \
 		        "3" ((long)(arg3)) \
-		      : "g1", "o0", "o1", "o2"); \
+		      : "g1", "o0", "o1", "o2", "cc"); \
 if (__res>=0) \
 	return (type) __res; \
 errno = -__res; \
@@ -365,7 +365,7 @@ __asm__ __volatile__ ("mov %0, %%g1\n\t" \
 		        "=r" ((long)(arg3)), "=r" ((long)(arg4)) \
 		      : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)), \
 		        "3" ((long)(arg3)),"4" ((long)(arg4)) \
-		      : "g1", "o0", "o1", "o2", "o3"); \
+		      : "g1", "o0", "o1", "o2", "o3", "cc"); \
 if (__res>=0) \
 	return (type) __res; \
 errno = -__res; \
@@ -391,7 +391,7 @@ __asm__ __volatile__ ("mov %1, %%o0\n\t" \
 		      : "r" ((long)(arg1)),"r" ((long)(arg2)), \
 		        "r" ((long)(arg3)),"r" ((long)(arg4)),"r" ((long)(arg5)), \
 		        "i" (__NR_##name)  \
-		      : "g1", "o0", "o1", "o2", "o3", "o4"); \
+		      : "g1", "o0", "o1", "o2", "o3", "o4", "cc"); \
 if (__res>=0) \
 	return (type) __res; \
 errno = -__res; \
@@ -461,7 +461,7 @@ static __inline__ pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned lo
 			   "=r" (retval) :
 			   "i" (__NR_clone), "r" (flags | CLONE_VM),
 			   "i" (__NR_exit),  "r" (fn), "r" (arg) :
-			   "g1", "g2", "g3", "o0", "o1", "memory");
+			   "g1", "g2", "g3", "o0", "o1", "memory", "cc");
 	return retval;
 }
 

@@ -69,16 +69,7 @@ int sr_do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned bufl
 	    printk("CDROM (ioctl) reports ILLEGAL REQUEST.\n");
 	    break;
 	default:
-	    printk("SCSI CD error: host %d id %d lun %d return code = %03x\n", 
-		   scsi_CDs[target].device->host->host_no, 
-		   scsi_CDs[target].device->id,
-		   scsi_CDs[target].device->lun,
-		   result);
-	    printk("\tSense class %x, sense error %x, extended sense %x\n",
-		   sense_class(SCpnt->sense_buffer[0]), 
-		   sense_error(SCpnt->sense_buffer[0]),
-		   SCpnt->sense_buffer[2] & 0xf);
-	    
+	    print_sense("sr", SCpnt);
 	};
     
     result = SCpnt->result;
@@ -94,7 +85,7 @@ int sr_do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned bufl
 int sr_tray_move(struct cdrom_device_info *cdi, int pos)
 {
         u_char  sr_cmd[10];
-        
+
         sr_cmd[0] = START_STOP;
         sr_cmd[1] = ((scsi_CDs[MINOR(cdi->dev)].device -> lun) << 5);
         sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
@@ -121,11 +112,11 @@ int sr_drive_status(struct cdrom_device_info *cdi, int slot)
                         SCSI_IOCTL_TEST_UNIT_READY,0))
                 return CDS_DISC_OK;
 
-#if 0
-        /* Enable this if you want to try auto-close. Is'nt enabled by
-         * default because it does'nt work perfectly (no way to
-         * difference between "tray open" and "tray closed, no disk"),
-         * and for caddy drives this is useless anyway. */
+#if 1
+	/* Tell tray is open if the drive is not ready.  Seems there is
+	 * no way to check whenever the tray is really open, but this way
+	 * we get auto-close-on-open work. And it seems to have no ill
+         * effects with caddy drives... */
         return CDS_TRAY_OPEN;
 #else
         return CDS_NO_DISC;
@@ -168,7 +159,8 @@ int sr_get_last_session(struct cdrom_device_info *cdi,
                         struct cdrom_multisession* ms_info)
 {
         ms_info->addr.lba=scsi_CDs[MINOR(cdi->dev)].ms_offset;
-        ms_info->xa_flag=scsi_CDs[MINOR(cdi->dev)].xa_flag;
+        ms_info->xa_flag=scsi_CDs[MINOR(cdi->dev)].xa_flag ||
+            scsi_CDs[MINOR(cdi->dev)].ms_offset > 0;
 
 	return 0;
 }
@@ -516,8 +508,10 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
         return -EINVAL;
     }
 
+#if 0
     if (result)
         printk("DEBUG: sr_audio: result for ioctl %x: %x\n",cmd,result);
+#endif
     
     return result;
 }
@@ -530,10 +524,44 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
     target = MINOR(cdi->dev);
     
     switch (cmd) {
-    case CDROMREADMODE2:
-	return -EINVAL;
+    /* these are compatible with the ide-cd driver */
+    case CDROMREADRAW:
     case CDROMREADMODE1:
-	return -EINVAL;	
+    case CDROMREADMODE2:
+
+#if CONFIG_BLK_DEV_SR_VENDOR 
+    {
+	unsigned char      *raw;
+        struct cdrom_msf   msf;
+        int                blocksize, lba, rc;
+
+        if (cmd == CDROMREADMODE1)
+                blocksize = CD_FRAMESIZE;       /* 2048 */
+        else if (cmd == CDROMREADMODE2)
+                blocksize = CD_FRAMESIZE_RAW0;  /* 2336 */
+        else
+		/* some SCSI drives do not allow this one */
+                blocksize = CD_FRAMESIZE_RAW;   /* 2352 */
+
+	if (copy_from_user(&msf,(void*)arg,sizeof(msf)))
+		return -EFAULT;
+	if (!(raw = scsi_malloc(2048+512)))
+        	return -ENOMEM;
+
+	lba = (((msf.cdmsf_min0 * CD_SECS) + msf.cdmsf_sec0)
+			* CD_FRAMES + msf.cdmsf_frame0) - CD_BLOCK_OFFSET;
+	rc = sr_read_sector(target, lba, blocksize, raw);
+	if (!rc)
+		if (copy_to_user((void*)arg, raw, blocksize))
+			rc = -EFAULT;
+
+	scsi_free(raw,2048+512);
+	return rc;
+    }
+#else
+	return -EINVAL;
+#endif
+
 	
     case BLKRAGET:
 	if (!arg)

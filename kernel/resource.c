@@ -123,8 +123,8 @@ int check_region(unsigned long from, unsigned long num)
 /*
  * This is for architectures with MMU-managed ports (sparc).
  */
-unsigned int occupy_region(unsigned long base, unsigned long end,
-			unsigned long num, unsigned int align, const char *name)
+unsigned long occupy_region(unsigned long base, unsigned long end,
+			    unsigned long num, unsigned int align, const char *name)
 {
 	unsigned long from = 0, till;
 	unsigned long flags;
@@ -148,14 +148,14 @@ unsigned int occupy_region(unsigned long base, unsigned long end,
 
 	save_flags(flags);
 	cli();
-	/* printk("occupy: search in %08x[%x] ", base, end - base); */
+	/* printk("occupy: search in %08lx[%08lx] ", base, end - base); */
 	s = NULL;
 	for (p = &iolist; p != NULL; p = p1) {
 		p1 = p->next;
 		/* Find window in list */
-		from = (p->from+p->num + align-1) & ~(align-1);
-		till = (p1 == NULL)? (unsigned) (0 - align): p1->from;
-		/* printk(" %08x:%08x", from, till); */
+		from = (p->from+p->num + align-1) & ~((unsigned long)align-1);
+		till = (p1 == NULL)? (unsigned long) (0 - (unsigned long)align): p1->from;
+		/* printk(" %08lx:%08lx", from, till); */
 		/* Clip window with base and end */
 		if (from < base) from = base;
 		if (till > end) till = end;

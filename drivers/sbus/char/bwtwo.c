@@ -1,4 +1,4 @@
-/* $Id: bwtwo.c,v 1.10 1997/03/12 23:25:15 ecd Exp $
+/* $Id: bwtwo.c,v 1.12 1997/04/10 03:02:40 davem Exp $
  * bwtwo.c: bwtwo console driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -143,10 +143,10 @@ static u8 bw2regs_66hz[] __initdata = {
 	0x10, 0x20,	0
 };
 
-__initfunc(void bwtwo_setup (fbinfo_t *fb, int slot, uint bwtwo, int bw2_io,
+__initfunc(void bwtwo_setup (fbinfo_t *fb, int slot, unsigned long bwtwo, int bw2_io,
 			     struct linux_sbus_device *sbdp))
 {
-	printk ("bwtwo%d at 0x%8.8x\n", slot, bwtwo);
+	printk ("bwtwo%d at 0x%8.8x\n", slot, (uint)bwtwo);
 	fb->type.fb_cmsize = 0;
 	fb->mmap = bwtwo_mmap;
 	fb->loadcmap = 0;
@@ -155,8 +155,9 @@ __initfunc(void bwtwo_setup (fbinfo_t *fb, int slot, uint bwtwo, int bw2_io,
 	fb->blank = bwtwo_blank;
 	fb->unblank = bwtwo_unblank;
 
-	fb->info.bwtwo.regs = sparc_alloc_io ((void *)bwtwo +
-		BWTWO_REGISTER_OFFSET, 0, sizeof (struct bwtwo_regs),
+	fb->info.bwtwo.regs =
+		sparc_alloc_io ((u32)(bwtwo + BWTWO_REGISTER_OFFSET),
+				0, sizeof (struct bwtwo_regs),
 		"bwtwo_regs", bw2_io, 0);
 
 	if (!prom_getbool(sbdp->prom_node, "width")) {
@@ -200,7 +201,7 @@ __initfunc(void bwtwo_setup (fbinfo_t *fb, int slot, uint bwtwo, int bw2_io,
 	}
 
 	if(!fb->base)
-		fb->base = (unsigned long) sparc_alloc_io((void *)bwtwo, 0,
+		fb->base = (unsigned long) sparc_alloc_io((u32)bwtwo, 0,
 		  ((fb->type.fb_depth*fb->type.fb_height*fb->type.fb_width)/8),
 		  "bwtwo_fbase", bw2_io, 0);
 

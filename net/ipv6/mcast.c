@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.7 1997/03/18 18:24:39 davem Exp $
+ *	$Id: mcast.c,v 1.8 1997/04/12 04:32:48 davem Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -208,7 +208,7 @@ int ipv6_dev_mc_inc(struct device *dev, struct in6_addr *addr)
 
 	memcpy(&mc->mca_addr, addr, sizeof(struct in6_addr));
 	mc->dev = dev;
-	mc->mca_users = 1;
+	atomic_set(&mc->mca_users, 1);
 
 	mc->next = inet6_mcast_lst[hash];
 	inet6_mcast_lst[hash] = mc;

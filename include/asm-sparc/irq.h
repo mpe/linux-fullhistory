@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.14 1996/08/29 09:48:18 davem Exp $
+/* $Id: irq.h,v 1.15 1997/04/14 05:39:28 davem Exp $
  * irq.h: IRQ registers on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -20,6 +20,8 @@
  */
 extern void (*disable_irq)(unsigned int);
 extern void (*enable_irq)(unsigned int);
+extern void (*disable_pil_irq)(unsigned int);
+extern void (*enable_pil_irq)(unsigned int);
 extern void (*clear_clock_irq)( void );
 extern void (*clear_profile_irq)( void );
 extern void (*load_profile_irq)( unsigned int timeout );
@@ -122,5 +124,6 @@ extern struct sun4m_intregs *sun4m_interrupts;
 #define	SUN4M_INT_SBUSBITS	0x00003F80	  /* sbus int bits */
 
 #define SUN4M_INT_SBUS(x)	(1 << (x+7))
+#define SUN4M_INT_VME(x)	(1 << (x))
 
 #endif

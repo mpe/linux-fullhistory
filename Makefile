@@ -1,8 +1,8 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 33
+SUBLEVEL = 34
 
-ARCH = i386
+ARCH := $(shell uname -m | sed s/i.86/i386/)
 
 #
 # For SMP kernels, set this. We don't want to have this in the config file
@@ -14,7 +14,7 @@ ARCH = i386
 SMP = 1
 #
 # SMP profiling options
-SMP_PROF = 1
+# SMP_PROF = 1
 
 .EXPORT_ALL_VARIABLES:
 

@@ -29,6 +29,8 @@ extern struct prom_cpuinfo linux_cpus[NCPUS];
 
 struct cpuinfo_sparc {
 	unsigned long udelay_val; /* that's it */
+	unsigned short next;
+	unsigned short mid;
 };
 
 extern struct cpuinfo_sparc cpu_data[NR_CPUS];
@@ -36,7 +38,6 @@ extern struct cpuinfo_sparc cpu_data[NR_CPUS];
 struct klock_info {
 	unsigned char kernel_flag;
 	unsigned char akp;
-	unsigned char irq_udt;
 };
 
 extern struct klock_info klock_info;
@@ -51,11 +52,6 @@ extern struct klock_info klock_info;
 extern int smp_found_cpus;
 extern unsigned char boot_cpu_id;
 extern unsigned long cpu_present_map;
-extern __volatile__ unsigned long smp_invalidate_needed[NR_CPUS];
-extern void smp_message_irq(void);
-extern unsigned long ipi_count;
-
-extern void print_lock_state(void);
 
 typedef void (*smpfunc_t)(unsigned long, unsigned long, unsigned long,
 		       unsigned long, unsigned long);
@@ -69,8 +65,6 @@ extern void smp_boot_cpus(void);
 extern void smp_store_cpu_info(int id);
 extern void smp_cross_call(smpfunc_t func, unsigned long arg1, unsigned long arg2,
 			   unsigned long arg3, unsigned long arg4, unsigned long arg5);
-extern void smp_capture(void);
-extern void smp_release(void);
 
 extern __inline__ void xc0(smpfunc_t func) { smp_cross_call(func, 0, 0, 0, 0, 0); }
 extern __inline__ void xc1(smpfunc_t func, unsigned long arg1)
@@ -89,6 +83,7 @@ extern __inline__ void xc5(smpfunc_t func, unsigned long arg1, unsigned long arg
 
 extern __volatile__ int cpu_number_map[NR_CPUS];
 extern __volatile__ int cpu_logical_map[NR_CPUS];
+extern unsigned long smp_proc_in_lock[NR_CPUS];
 
 extern __inline__ int smp_processor_id(void)
 {
@@ -101,8 +96,6 @@ extern __inline__ int smp_processor_id(void)
 	return cpuid;
 }
 
-
-extern __volatile__ unsigned long smp_proc_in_lock[NR_CPUS]; /* for computing process time */
 extern __volatile__ int smp_process_available;
 
 extern __inline__ int smp_swap(volatile int *addr, int value)
@@ -148,7 +141,6 @@ extern __inline__ __volatile__ int read_smp_counter(volatile int *ctr)
 #endif /* !(__ASSEMBLY__) */
 
 /* Sparc specific messages. */
-#define MSG_CAPTURE            0x0004       /* Park a processor. */
 #define MSG_CROSS_CALL         0x0005       /* run func on cpus */
 
 /* Empirical PROM processor mailbox constants.  If the per-cpu mailbox
@@ -162,7 +154,6 @@ extern __inline__ __volatile__ int read_smp_counter(volatile int *ctr)
 #define MBOX_IDLECPU2         0xFD
 #define MBOX_STOPCPU2         0xFE
 
-
 #define NO_PROC_ID            0xFF
 
 #define PROC_CHANGE_PENALTY     20
@@ -170,11 +161,6 @@ extern __inline__ __volatile__ int read_smp_counter(volatile int *ctr)
 #define SMP_FROM_INT		1
 #define SMP_FROM_SYSCALL	2
 
-#else /* !(__SMP__) */
-
-#define smp_capture()		do { } while(0)
-#define smp_release()		do { } while(0)
- 
 #endif /* !(__SMP__) */
 
 #endif /* !(_SPARC_SMP_H) */

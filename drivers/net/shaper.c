@@ -87,7 +87,7 @@ static int shaper_lock(struct shaper *sh)
 	/*
 	 *	Lock in an interrupt may fail
 	 */
-	if(sh->locked && intr_count)
+	if(sh->locked && in_interrupt())
 	{
 		restore_flags(flags);
 		return 0;
@@ -438,7 +438,7 @@ static int shaper_rebuild_header(struct sk_buff *skb)
 	return sh->rebuild_header(skb);
 }
 
-static int shaper_cache(struct dst_entry *dst, struct dst_entry *neigh, struct hh_cache *hh)
+static int shaper_cache(struct dst_entry *dst, struct neighbour *neigh, struct hh_cache *hh)
 {
 	struct shaper *sh=dst->dev->priv;
 	struct device *tmp;

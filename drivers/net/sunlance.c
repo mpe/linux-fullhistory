@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.56 1997/03/14 21:04:45 jj Exp $
+/* $Id: sunlance.c,v 1.61 1997/04/10 06:40:54 davem Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -212,10 +212,17 @@ struct lance_init_block {
 	char   rx_buf [RX_RING_SIZE][RX_BUFF_SIZE];
 };
 
+#define libdesc_offset(rt, elem) \
+((__u32)(((unsigned long)(&(((struct lance_init_block *)0)->rt[elem])))))
+
+#define libbuff_offset(rt, elem) \
+((__u32)(((unsigned long)(&(((struct lance_init_block *)0)->rt[elem][0])))))
+
 struct lance_private {
 	char *name;
 	volatile struct lance_regs *ll;
 	volatile struct lance_init_block *init_block;
+	__u32 init_block_dvma;
     
 	int rx_new, tx_new;
 	int rx_old, tx_old;
@@ -265,13 +272,14 @@ static struct lance_private *root_lance_dev = NULL;
 static void load_csrs (struct lance_private *lp)
 {
 	volatile struct lance_regs *ll = lp->ll;
-	volatile struct lance_init_block *ib = lp->init_block;
+	__u32 ib_dvma = lp->init_block_dvma;
 	int leptr;
 
-	if(lp->pio_buffer)
-		leptr = 0;
-	else
-		leptr = LANCE_ADDR (ib);
+	/* This is right now because when we are using a PIO buffered
+	 * init block, init_block_dvma is set to zero. -DaveM
+	 */
+	leptr = LANCE_ADDR (ib_dvma);
+
 	ll->rap = LE_CSR1;
 	ll->rdp = (leptr & 0xFFFF);
 	ll->rap = LE_CSR2;
@@ -291,14 +299,15 @@ static void lance_init_ring (struct device *dev)
 {
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 	volatile struct lance_init_block *ib = lp->init_block;
-	volatile struct lance_init_block *aib; /* for LANCE_ADDR computations */
+	__u32 ib_dvma = lp->init_block_dvma;
+	__u32 aib; /* for LANCE_ADDR computations */
 	int leptr;
 	int i;
     
-	if(lp->pio_buffer)
-		aib = 0;
-	else
-		aib = ib;
+	/* This is right now because when we are using a PIO buffered
+	 * init block, init_block_dvma is set to zero. -DaveM
+	 */
+	aib = ib_dvma;
 
 	/* Lock out other processes while setting up hardware */
 	dev->tbusy = 1;
@@ -309,6 +318,7 @@ static void lance_init_ring (struct device *dev)
 
 	/* Copy the ethernet address to the lance init block
 	 * Note that on the sparc you need to swap the ethernet address.
+	 * Note also we want the CPU ptr of the init_block here.
 	 */
 	ib->phys_addr [0] = dev->dev_addr [1];
 	ib->phys_addr [1] = dev->dev_addr [0];
@@ -322,7 +332,7 @@ static void lance_init_ring (struct device *dev)
     
 	/* Setup the Tx ring entries */
 	for (i = 0; i <= TX_RING_SIZE; i++) {
-		leptr = LANCE_ADDR(&aib->tx_buf[i][0]);
+		leptr = LANCE_ADDR(aib + libbuff_offset(tx_buf, i));
 		ib->btx_ring [i].tmd0      = leptr;
 		ib->btx_ring [i].tmd1_hadr = leptr >> 16;
 		ib->btx_ring [i].tmd1_bits = 0;
@@ -336,7 +346,7 @@ static void lance_init_ring (struct device *dev)
 	if (ZERO)
 		printk ("RX rings:\n");
 	for (i = 0; i < RX_RING_SIZE; i++) {
-		leptr = LANCE_ADDR(&aib->rx_buf[i][0]);
+		leptr = LANCE_ADDR(aib + libbuff_offset(rx_buf, i));
 
 		ib->brx_ring [i].rmd0      = leptr;
 		ib->brx_ring [i].rmd1_hadr = leptr >> 16;
@@ -350,14 +360,14 @@ static void lance_init_ring (struct device *dev)
 	/* Setup the initialization block */
     
 	/* Setup rx descriptor pointer */
-	leptr = LANCE_ADDR(&aib->brx_ring);
+	leptr = LANCE_ADDR(aib + libdesc_offset(brx_ring, 0));
 	ib->rx_len = (LANCE_LOG_RX_BUFFERS << 13) | (leptr >> 16);
 	ib->rx_ptr = leptr;
 	if (ZERO)
 		printk ("RX ptr: %8.8x\n", leptr);
     
 	/* Setup tx descriptor pointer */
-	leptr = LANCE_ADDR(&aib->btx_ring);
+	leptr = LANCE_ADDR(aib + libdesc_offset(btx_ring, 0));
 	ib->tx_len = (LANCE_LOG_TX_BUFFERS << 13) | (leptr >> 16);
 	ib->tx_ptr = leptr;
 	if (ZERO)
@@ -662,7 +672,7 @@ static int lance_open (struct device *dev)
 
 	/* On the 4m, setup the ledma to provide the upper bits for buffers */
 	if (lp->ledma)
-		lp->ledma->regs->dma_test = ((unsigned int) lp->init_block)
+		lp->ledma->regs->dma_test = ((unsigned long) lp->init_block)
 						& 0xff000000;
 
 	lance_init_ring (dev);
@@ -747,7 +757,7 @@ static inline int lance_reset (struct device *dev)
 		lp->ledma->regs->cond_reg |= DMA_RST_ENET;
 		udelay (200);
 		lp->ledma->regs->cond_reg &= ~DMA_RST_ENET;
-		lp->ledma->regs->dma_test = ((unsigned int) lp->init_block)
+		lp->ledma->regs->dma_test = ((unsigned long) lp->init_block)
 						& 0xff000000;
 	}
 	lance_init_ring (dev);
@@ -966,23 +976,25 @@ int sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 			     sdev->reg_addrs[0].which_io, 0x0);
 
 	/* Make certain the data structures used by the LANCE are aligned. */
-	dev->priv = (void *)(((int)dev->priv + 7) & ~7);
+	dev->priv = (void *)(((unsigned long)dev->priv + 7) & ~7);
 	lp = (struct lance_private *) dev->priv;
-
 	if (lebuffer){
 		prom_apply_sbus_ranges (lebuffer->my_bus,
 					&lebuffer->reg_addrs [0],
 					lebuffer->num_registers,
 					lebuffer);
+
 		lp->init_block = (void *)
 			sparc_alloc_io (lebuffer->reg_addrs [0].phys_addr, 0,
 				sizeof (struct lance_init_block), "lebuffer", 
 				lebuffer->reg_addrs [0].which_io, 0);
+		lp->init_block_dvma = 0;
+
 		lp->pio_buffer = 1;
 	} else {
 		lp->init_block = (void *)
 			sparc_dvma_malloc (sizeof (struct lance_init_block),
-				   lancedma);
+					   lancedma, &lp->init_block_dvma);
 		lp->pio_buffer = 0;
 	}
 	lp->busmaster_regval = prom_getintdefault(sdev->prom_node,
@@ -1059,7 +1071,7 @@ no_link_test:
 	}
 
 	/* This should never happen. */
-	if ((int)(lp->init_block->brx_ring) & 0x07) {
+	if ((unsigned long)(lp->init_block->brx_ring) & 0x07) {
 		printk("%s: ERROR: Rx and Tx rings not on even boundary.\n",
 		       dev->name);
 		return ENODEV;

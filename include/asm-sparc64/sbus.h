@@ -1,4 +1,4 @@
-/* $Id: sbus.h,v 1.2 1997/02/25 20:00:35 jj Exp $
+/* $Id: sbus.h,v 1.3 1997/03/21 17:57:24 jj Exp $
  * sbus.h:  Defines for the Sun SBus.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -19,8 +19,8 @@
  */
 
 /* The base address at which to calculate device OBIO addresses. */
-#define SUN_SBUS_BVADDR        0xf8000000
-#define SBUS_OFF_MASK          0x01ffffff
+#define SUN_SBUS_BVADDR        0x00000000
+#define SBUS_OFF_MASK          0x0fffffff
 
 /* These routines are used to calculate device address from slot
  * numbers + offsets, and vice versa.
@@ -28,12 +28,12 @@
 
 extern __inline__ unsigned long sbus_devaddr(int slotnum, unsigned long offset)
 {
-  return (unsigned long) (SUN_SBUS_BVADDR+((slotnum)<<25)+(offset));
+  return (unsigned long) (SUN_SBUS_BVADDR+((slotnum)<<28)+(offset));
 }
 
 extern __inline__ int sbus_dev_slot(unsigned long dev_addr)
 {
-  return (int) (((dev_addr)-SUN_SBUS_BVADDR)>>25);
+  return (int) (((dev_addr)-SUN_SBUS_BVADDR)>>28);
 }
 
 extern __inline__ unsigned long sbus_dev_offset(unsigned long dev_addr)

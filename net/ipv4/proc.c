@@ -92,18 +92,27 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 		destp = sp->dummy_th.dest;
 		srcp  = sp->dummy_th.source;
 
+		/* FIXME: The fact that retransmit_timer occurs as a field
+		 * in two different parts of the socket structure is,
+	 	 * to say the least, confusing. This code now uses the
+		 * right retransmit_timer variable, but I'm not sure
+		 * the rest of the timer stuff is still correct.
+		 * In particular I'm not sure what the timeout value
+		 * is suppose to reflect (as opposed to tm->when). -- erics
+		 */
+
 		/* Since we are Little Endian we need to swap the bytes :-( */
 		destp = ntohs(destp);
 		srcp  = ntohs(srcp);
-		timer_active1 = del_timer(&sp->retransmit_timer);
+		timer_active1 = del_timer(&tp->retransmit_timer);
 		timer_active2 = del_timer(&sp->timer);
-		if (!timer_active1) sp->retransmit_timer.expires=0;
+		if (!timer_active1) tp->retransmit_timer.expires=0;
 		if (!timer_active2) sp->timer.expires=0;
 		timer_active=0;
 		timer_expires=(unsigned)-1;
-		if (timer_active1 && sp->retransmit_timer.expires < timer_expires) {
+		if (timer_active1 && tp->retransmit_timer.expires < timer_expires) {
 			timer_active=timer_active1;
-			timer_expires=sp->retransmit_timer.expires;
+			timer_expires=tp->retransmit_timer.expires;
 		}
 		if (timer_active2 && sp->timer.expires < timer_expires) {
 			timer_active=timer_active2;
@@ -112,14 +121,15 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 		sprintf(tmpbuf, "%4d: %08lX:%04X %08lX:%04X"
 			" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
 			i, src, srcp, dest, destp, sp->state, 
-			format==0?sp->write_seq-tp->snd_una:sp->wmem_alloc, 
-			format==0?tp->rcv_nxt-sp->copied_seq:sp->rmem_alloc,
-			timer_active, timer_expires-jiffies, (unsigned) sp->retransmits,
+			format==0?sp->write_seq-tp->snd_una:atomic_read(&sp->wmem_alloc), 
+			format==0?tp->rcv_nxt-sp->copied_seq:atomic_read(&sp->rmem_alloc),
+			timer_active, timer_expires-jiffies,
+			(unsigned) atomic_read(&sp->retransmits),
 			sp->socket ? sp->socket->inode->i_uid:0,
 			timer_active?sp->timeout:0,
 			sp->socket ? sp->socket->inode->i_ino:0);
 
-		if (timer_active1) add_timer(&sp->retransmit_timer);
+		if (timer_active1) add_timer(&tp->retransmit_timer);
 		if (timer_active2) add_timer(&sp->timer);
 		len += sprintf(buffer+len, "%-127s\n", tmpbuf);
 		if(len >= length)

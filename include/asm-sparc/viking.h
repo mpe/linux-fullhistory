@@ -1,4 +1,4 @@
-/* $Id: viking.h,v 1.17 1996/11/24 17:11:51 ecd Exp $
+/* $Id: viking.h,v 1.18 1997/04/11 00:42:23 davem Exp $
  * viking.h:  Defines specific to the GNU/Viking MBUS module.
  *            This is SRMMU stuff.
  *
@@ -191,7 +191,7 @@ extern __inline__ void viking_mxcc_turn_off_parity(unsigned long *mregp,
 			      "1:\n\t" : :
 			      "r" (mreg), "r" (mxcc_creg),
 			      "r" (MXCC_CREG), "i" (ASI_M_MMUREGS),
-			      "i" (ASI_M_MXCC) : "g2");
+			      "i" (ASI_M_MXCC) : "g2", "cc");
 	*mregp = mreg;
 	*mxcc_cregp = mxcc_creg;
 }

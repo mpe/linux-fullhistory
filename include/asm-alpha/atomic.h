@@ -9,7 +9,16 @@
  * than regular operations.
  */
 
-typedef int atomic_t;
+#ifdef __SMP__
+typedef struct { volatile int counter; } atomic_t;
+#else
+typedef struct { int counter; } atomic_t;
+#endif
+
+#define ATOMIC_INIT	{ 0 }
+
+#define atomic_read(v)		((v)->counter)
+#define atomic_set(v)		(((v)->counter) = i)
 
 /*
  * Make sure gcc doesn't try to be clever and move things around
@@ -24,7 +33,7 @@ typedef int atomic_t;
  * branch back to restart the operation.
  */
 
-extern __inline__ void atomic_add(atomic_t i, atomic_t * v)
+extern __inline__ void atomic_add(int i, atomic_t * v)
 {
 	unsigned long temp;
 	__asm__ __volatile__(
@@ -39,7 +48,7 @@ extern __inline__ void atomic_add(atomic_t i, atomic_t * v)
 	:"Ir" (i), "m" (__atomic_fool_gcc(v)));
 }
 
-extern __inline__ void atomic_sub(atomic_t i, atomic_t * v)
+extern __inline__ void atomic_sub(int i, atomic_t * v)
 {
 	unsigned long temp;
 	__asm__ __volatile__(
@@ -57,7 +66,7 @@ extern __inline__ void atomic_sub(atomic_t i, atomic_t * v)
 /*
  * Same as above, but return the result value
  */
-extern __inline__ long atomic_add_return(atomic_t i, atomic_t * v)
+extern __inline__ long atomic_add_return(int i, atomic_t * v)
 {
 	long temp, result;
 	__asm__ __volatile__(
@@ -74,7 +83,7 @@ extern __inline__ long atomic_add_return(atomic_t i, atomic_t * v)
 	return result;
 }
 
-extern __inline__ long atomic_sub_return(atomic_t i, atomic_t * v)
+extern __inline__ long atomic_sub_return(int i, atomic_t * v)
 {
 	long temp, result;
 	__asm__ __volatile__(

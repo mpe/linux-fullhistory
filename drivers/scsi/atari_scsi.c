@@ -549,11 +549,11 @@ static void falcon_get_lock( void )
 	save_flags(oldflags);
 	cli();
 
-	while( intr_count == 0 && falcon_got_lock && stdma_others_waiting() )
+	while( !in_interrupt() && falcon_got_lock && stdma_others_waiting() )
 		sleep_on( &falcon_fairness_wait );
 
 	while (!falcon_got_lock) {
-		if (intr_count > 0)
+		if (in_interrupt())
 			panic( "Falcon SCSI hasn't ST-DMA lock in interrupt" );
 		if (!falcon_trying_lock) {
 			falcon_trying_lock = 1;

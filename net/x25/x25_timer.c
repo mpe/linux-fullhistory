@@ -84,7 +84,8 @@ static void x25_timer(unsigned long param)
 			/*
 			 * Check for the state of the receive buffer.
 			 */
-			if (sk->rmem_alloc < (sk->rcvbuf / 2) && (sk->protinfo.x25->condition & X25_COND_OWN_RX_BUSY)) {
+			if (atomic_read(&sk->rmem_alloc) < (sk->rcvbuf / 2) &&
+			    (sk->protinfo.x25->condition & X25_COND_OWN_RX_BUSY)) {
 				sk->protinfo.x25->condition &= ~X25_COND_OWN_RX_BUSY;
 				sk->protinfo.x25->condition &= ~X25_COND_ACK_PENDING;
 				sk->protinfo.x25->vl         = sk->protinfo.x25->vr;

@@ -137,7 +137,7 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 				return -EAGAIN;
 			if (current->signal & ~current->blocked)
 				return -EINTR;
-			if (intr_count) {
+			if (in_interrupt()) {
 				/* Very unlikely, but better safe than sorry */
 				printk(KERN_WARNING "Ouch, kerneld:msgsnd buffers full!\n");
 				return -EINTR;
@@ -774,7 +774,7 @@ int kerneld_send(int msgtype, int ret_size, int msgsz,
 		return -ENODEV;
 
 	/* Do not wait for an answer at interrupt-time! */
-	if (intr_count)
+	if (in_interrupt())
 		ret_size &= ~KERNELD_WAIT;
 #ifdef NEW_KERNELD_PROTOCOL
 	else

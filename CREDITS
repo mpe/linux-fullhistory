@@ -257,14 +257,12 @@ S: Australia
 
 N: Alan Cox
 E: alan@lxorguk.ukuu.org.uk (linux related - except big patches)
-E: iialan@www.linux.org.uk (linux.org.uk/big patches)
+E: iialan@www.uk.linux.org (linux.org.uk/big patches)
 E: alan@cymru.net (commercial CymruNET stuff)
-E: gw4pts@gw4pts.ampr.org (amateur radio stuff)
-E: GW4PTS@GB7SWN (packet radio)
-E: Please don't use iialan@iifeak.swan.ac.uk for Linux stuff
-S: c/o 3Com/I^2IT Limited
+E: Alan.Cox@linux.org (if others fail)
+S: CymruNet Limited
 S: The Innovation Centre
-S: University Of Wales
+S: Singleton Park
 S: Swansea, SA2 8PP
 S: Wales, UK
 D: NET2Debugged/NET3 author

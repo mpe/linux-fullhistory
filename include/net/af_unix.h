@@ -16,7 +16,7 @@ extern unix_socket *unix_socket_table[UNIX_HASH_SIZE+1];
 
 struct unix_address
 {
-	int		refcnt;
+	atomic_t	refcnt;
 	int		len;
 	unsigned	hash;
 	struct sockaddr_un name[0];

@@ -1,4 +1,4 @@
-/* $Id: weitek.c,v 1.7 1996/12/23 10:16:18 ecd Exp $
+/* $Id: weitek.c,v 1.8 1997/03/24 17:44:26 jj Exp $
  * weitek.c: Tadpole P9100/P9000 console driver
  *
  * Copyright (C) 1996 David Redman (djhr@tadpole.co.uk)
@@ -95,11 +95,11 @@ weitek_loadcmap (void *fbinfo, int index, int count)
 }
 #endif
 
-__initfunc(void weitek_setup(fbinfo_t *fb, int slot, uint addr, int io))
+__initfunc(void weitek_setup(fbinfo_t *fb, int slot, unsigned long addr, int io))
 {
 	extern struct screen_info screen_info;
 	
-	printk ("weitek%d at 0x%8.8x\n", slot, addr);
+	printk ("weitek%d at 0x%8.8x\n", slot, (uint)addr);
 	
 	/* Fill in parameters we left out */
 	fb->type.fb_type	= FBTYPE_NOTSUN1;
@@ -114,4 +114,3 @@ __initfunc(void weitek_setup(fbinfo_t *fb, int slot, uint addr, int io))
 	    prom_printf ("Missing mapping routine and no address found\n");
 	}
 }
-

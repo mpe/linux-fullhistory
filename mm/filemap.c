@@ -168,7 +168,7 @@ int shrink_mmap(int priority, int dma)
 		   buffer cache; we'd have to modify the following
 		   test to allow for that case. */
 
-		switch (page->count) {
+		switch (atomic_read(&page->count)) {
 			case 1:
 				/* If it has been referenced recently, don't free it */
 				if (clear_bit(PG_referenced, &page->flags))
@@ -214,7 +214,7 @@ next:
 unsigned long page_unuse(unsigned long page)
 {
 	struct page * p = mem_map + MAP_NR(page);
-	int count = p->count;
+	int count = atomic_read(&p->count);
 
 	if (count != 2)
 		return count;
@@ -260,7 +260,7 @@ static inline void add_to_page_cache(struct page * page,
 	struct inode * inode, unsigned long offset,
 	struct page **hash)
 {
-	page->count++;
+	atomic_inc(&page->count);
 	page->flags &= ~((1 << PG_uptodate) | (1 << PG_error));
 	page->offset = offset;
 	add_page_to_inode_queue(inode, page);
@@ -1000,7 +1000,7 @@ static pte_t filemap_swapin(struct vm_area_struct * vma,
 {
 	unsigned long page = SWP_OFFSET(entry);
 
-	mem_map[page].count++;
+	atomic_inc(&mem_map[page].count);
 	page = (page << PAGE_SHIFT) + PAGE_OFFSET;
 	return mk_pte(page,vma->vm_page_prot);
 }
@@ -1023,7 +1023,7 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 		set_pte(ptep, pte_mkclean(pte));
 		flush_tlb_page(vma, address);
 		page = pte_page(pte);
-		mem_map[MAP_NR(page)].count++;
+		atomic_inc(&mem_map[MAP_NR(page)].count);
 	} else {
 		if (pte_none(pte))
 			return 0;

@@ -1,4 +1,4 @@
-/* $Id: openprom.h,v 1.3 1997/03/18 18:03:20 jj Exp $ */
+/* $Id: openprom.h,v 1.4 1997/03/24 06:42:08 davem Exp $ */
 #ifndef __SPARC64_OPENPROM_H
 #define __SPARC64_OPENPROM_H
 
@@ -186,9 +186,9 @@ struct linux_nodeops {
 #define PROMINTR_MAX    15
 
 struct linux_prom_registers {
-	unsigned which_io;         /* hi part of physical address */
-	unsigned phys_addr;   /* The physical address of this register */
-	int reg_size;         /* How many bytes does this register take up? */
+	unsigned which_io;	/* hi part of physical address			*/
+	unsigned phys_addr;	/* The physical address of this register	*/
+	int reg_size;		/* How many bytes does this register take up?	*/
 };
 
 struct linux_prom64_registers {

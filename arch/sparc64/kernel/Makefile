@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.7 1997/03/18 17:59:15 jj Exp $
+# $Id: Makefile,v 1.15 1997/04/10 07:53:30 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -16,10 +16,16 @@
 all: kernel.o head.o
 
 O_TARGET := kernel.o
-O_OBJS   := etrap.o rtrap.o hack.o process.o setup.o cpu.o idprom.o systbls.o traps.o entry.o devices.o auxio.o ioport.o # signal32.o
+O_OBJS   := etrap.o rtrap.o hack.o process.o setup.o cpu.o idprom.o \
+	    systbls.o traps.o entry.o devices.o auxio.o ioport.o \
+	    irq.o time.o sys_sparc.o sys_sparc32.o signal32.o
 OX_OBJS  := sparc64_ksyms.o
 
-head.o: head.S
+ifdef CONFIG_BINFMT_ELF32
+  O_OBJS += sparcelf32.o
+endif
+
+head.o: head.S ttable.S itlb_miss.S dtlb_miss.S dtlb_prot.S
 	$(CC) -D__ASSEMBLY__ -ansi -c $*.S -o $*.o
 
 check_asm: dummy

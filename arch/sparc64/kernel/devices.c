@@ -11,8 +11,8 @@
 
 #include <asm/page.h>
 #include <asm/oplib.h>
-#include <asm/smp.h>
 #include <asm/system.h>
+#include <asm/smp.h>
 
 struct prom_cpuinfo linux_cpus[NCPUS];
 int linux_num_cpus;
@@ -31,6 +31,8 @@ device_scan(unsigned long mem_start))
 
 	if(strcmp(node_str, "cpu") == 0) {
 		cpu_nds[0] = prom_root_node;
+		linux_cpus[0].prom_node = prom_root_node;
+		linux_cpus[0].mid = 0;
 		cpu_ctr++;
 	} else {
 		int scan;

@@ -19,7 +19,7 @@
  */
 extern char wait_available;		/* only available on R4[26]00 */
 
-extern unsigned long intr_count;
+extern atomic_t intr_count;
 extern unsigned long event;
 
 /*

@@ -99,7 +99,7 @@ struct vfsmount *add_vfsmnt(kdev_t dev, const char *dev_name, const char *dir_na
 	memset(lptr, 0, sizeof(struct vfsmount));
 
 	lptr->mnt_dev = dev;
-	lptr->mnt_sem.count = 1;
+	sema_init(&lptr->mnt_sem, 1);
 	if (dev_name && !getname(dev_name, &tmp)) {
 		if ((lptr->mnt_devname =
 		    (char *) kmalloc(strlen(tmp)+1, GFP_KERNEL)) != (char *)NULL)

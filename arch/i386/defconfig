@@ -30,6 +30,12 @@ CONFIG_BINFMT_ELF=y
 # CONFIG_M586 is not set
 CONFIG_M686=y
 # CONFIG_VIDEO_SELECT is not set
+# CONFIG_PNP_PARPORT is not set
+
+#
+# Plug and Play support
+#
+# CONFIG_PNP is not set
 
 #
 # Floppy, IDE, and other block devices
@@ -131,7 +137,6 @@ CONFIG_SCSI_OMIT_FLASHPOINT=y
 # CONFIG_SCSI_NCR53C406A is not set
 # CONFIG_SCSI_NCR53C7xx is not set
 # CONFIG_SCSI_NCR53C8XX is not set
-# CONFIG_SCSI_PPA is not set
 # CONFIG_SCSI_PAS16 is not set
 # CONFIG_SCSI_QLOGIC_FAS is not set
 # CONFIG_SCSI_QLOGIC_ISP is not set
@@ -163,7 +168,6 @@ CONFIG_EEXPRESS_PRO100=y
 # CONFIG_NET_POCKET is not set
 # CONFIG_FDDI is not set
 # CONFIG_DLCI is not set
-# CONFIG_PLIP is not set
 # CONFIG_PPP is not set
 # CONFIG_NET_RADIO is not set
 # CONFIG_SLIP is not set
@@ -214,7 +218,6 @@ CONFIG_VT_CONSOLE=y
 CONFIG_SERIAL=y
 # CONFIG_SERIAL_EXTENDED is not set
 # CONFIG_SERIAL_NONSTANDARD is not set
-# CONFIG_PRINTER is not set
 CONFIG_MOUSE=y
 # CONFIG_ATIXL_BUSMOUSE is not set
 # CONFIG_BUSMOUSE is not set

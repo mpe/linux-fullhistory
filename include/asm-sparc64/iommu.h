@@ -6,6 +6,7 @@
 #define _SPARC64_IOMMU_H
 
 #include <asm/page.h>
+#include <asm/sysio.h>
 
 /* The iommu handles all virtual to physical address translations
  * that occur between the SYSIO and physical memory.  Access by
@@ -17,21 +18,6 @@
  */
 
 /* The IOMMU register set. */
-struct iommu_regs {
-	volatile unsigned long		csr;
-	volatile unsigned long		tsb_base;
-	volatile unsigned long		flush;
-	unsigned char _unused0[PAGE_SIZE - 0x18];
-
-	volatile unsigned long		va_diag;
-	volatile unsigned long		tag_compare;
-	unsigned char _unused1[0x100 - 0x10];
-
-	volatile unsigned long		lru_diag[0x80  / 8];
-	volatile unsigned long		tag_diag[0x80  / 8];
-	volatile unsigned long		ram_diag[0x100 / 8];
-};
-
 #define IOMMU_CTRL_IMPL     0xf000000000000000 /* Implementation                */
 #define IOMMU_CTRL_VERS     0x0f00000000000000 /* Version                       */
 #define IOMMU_CTRL_TSBSZ    0x0000000000070000 /* TSB Size                      */
@@ -57,17 +43,12 @@ struct iommu_regs {
 #define IOPTE_WRITE         0x0000000000000002 /* Writeable                        */
 
 struct iommu_struct {
-	struct iommu_regs *regs;
+	struct sysio_regs *sysio_regs;
 	iopte_t *page_table;
 
 	/* For convenience */
 	unsigned long start; /* First managed virtual address */
 	unsigned long end;   /* Last managed virtual address */
 };
-
-extern __inline__ void iommu_invalidate_page(struct iommu_regs *regs, unsigned long page)
-{
-	regs->flush = (page & (PAGE_MASK << 3));
-}
 
 #endif /* !(_SPARC_IOMMU_H) */

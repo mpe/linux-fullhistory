@@ -262,7 +262,7 @@ static void myri_init_rings(struct myri_eth *mp, int from_irq)
 	int gfp_flags = GFP_KERNEL;
 	int i;
 
-	if(from_irq || intr_count)
+	if(from_irq || in_interrupt())
 		gfp_flags = GFP_ATOMIC;
 
 	myri_clean_rings(mp);
@@ -534,7 +534,7 @@ static int myri_open(struct device *dev)
 {
 	struct myri_eth *mp = (struct myri_eth *) dev->priv;
 
-	return myri_init(mp, intr_count);
+	return myri_init(mp, in_interrupt());
 }
 
 static int myri_close(struct device *dev)
@@ -570,7 +570,7 @@ static int myri_start_xmit(struct sk_buff *skb, struct device *dev)
 			DTX(("resetting, return 0\n"));
 			printk("%s: transmit timed out, resetting\n", dev->name);
 			mp->enet_stats.tx_errors++;
-			myri_init(mp, intr_count);
+			myri_init(mp, in_interrupt());
 			dev->tbusy = 0;
 			dev->trans_start = jiffies;
 			return 0;

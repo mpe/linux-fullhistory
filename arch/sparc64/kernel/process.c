@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.3 1997/03/04 16:26:56 jj Exp $
+/*  $Id: process.c,v 1.6 1997/04/07 18:57:07 jj Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -35,8 +35,7 @@
 #include <asm/processor.h>
 #include <asm/pstate.h>
 #include <asm/elf.h>
-
-extern void fpsave(unsigned long *, unsigned long *, void *, unsigned long *);
+#include <asm/fpumacro.h>
 
 #ifndef __SMP__
 
@@ -149,13 +148,13 @@ void machine_power_off(void)
 
 void show_regwindow(struct reg_window *rw)
 {
-	printk("l0: %016lx l1: %016lx l2: %016lx l3: %016lx\n"
-	       "l4: %016lx l5: %016lx l6: %016lx l7: %016lx\n",
-	       rw->locals[0], rw->locals[1], rw->locals[2], rw->locals[3],
+	printk("l0: %016lx l1: %016lx l2: %016lx l3: %016lx\n",
+	       rw->locals[0], rw->locals[1], rw->locals[2], rw->locals[3]);
+	printk("l4: %016lx l5: %016lx l6: %016lx l7: %016lx\n",
 	       rw->locals[4], rw->locals[5], rw->locals[6], rw->locals[7]);
-	printk("i0: %016lx i1: %016lx i2: %016lx i3: %016lx\n"
-	       "i4: %016lx i5: %016lx i6: %016lx i7: %016lx\n",
-	       rw->ins[0], rw->ins[1], rw->ins[2], rw->ins[3],
+	printk("i0: %016lx i1: %016lx i2: %016lx i3: %016lx\n",
+	       rw->ins[0], rw->ins[1], rw->ins[2], rw->ins[3]);
+	printk("i4: %016lx i5: %016lx i6: %016lx i7: %016lx\n",
 	       rw->ins[4], rw->ins[5], rw->ins[6], rw->ins[7]);
 }
 
@@ -205,13 +204,13 @@ void show_stackframe32(struct sparc_stackf32 *sf)
 	unsigned *stk;
 	int i;
 
-	printk("l0: %08x l1: %08x l2: %08x l3: %08x\n"
-	       "l4: %08x l5: %08x l6: %08x l7: %08x\n",
-	       sf->locals[0], sf->locals[1], sf->locals[2], sf->locals[3],
+	printk("l0: %08x l1: %08x l2: %08x l3: %08x\n",
+	       sf->locals[0], sf->locals[1], sf->locals[2], sf->locals[3]);
+	printk("l4: %08x l5: %08x l6: %08x l7: %08x\n",
 	       sf->locals[4], sf->locals[5], sf->locals[6], sf->locals[7]);
-	printk("i0: %08x i1: %08x i2: %08x i3: %08x\n"
-	       "i4: %08x i5: %08x fp: %08x ret_pc: %08x\n",
-	       sf->ins[0], sf->ins[1], sf->ins[2], sf->ins[3],
+	printk("i0: %08x i1: %08x i2: %08x i3: %08x\n",
+	       sf->ins[0], sf->ins[1], sf->ins[2], sf->ins[3]);
+	printk("i4: %08x i5: %08x fp: %08x ret_pc: %08x\n",
 	       sf->ins[4], sf->ins[5], sf->fp, sf->callers_pc);
 	printk("sp: %08x x0: %08x x1: %08x x2: %08x\n"
 	       "x3: %08x x4: %08x x5: %08x xx: %08x\n",
@@ -246,7 +245,9 @@ void show_regs(struct pt_regs * regs)
 	printk("o4: %016lx o5: %016lx sp: %016lx ret_pc: %016lx\n",
 	       regs->u_regs[12], regs->u_regs[13], regs->u_regs[14],
 	       regs->u_regs[15]);
-	show_regwindow((struct reg_window *)regs->u_regs[14]);
+#if 0
+	show_regwindow((struct reg_window *)(regs->u_regs[14] + STACK_BIAS));
+#endif
 }
 
 void show_regs32(struct pt_regs32 *regs)
@@ -295,8 +296,6 @@ void show_thread(struct thread_struct *tss)
 
 	/* XXX missing: float_regs */
 	printk("fsr:               0x%016lx\n", tss->fsr);
-	printk("fpqdepth:          0x%016lx\n", tss->fpqdepth);
-	/* XXX missing: fpqueue */
 
 	printk("sstk_info.stack:   0x%016lx\n",
 	        (unsigned long)tss->sstk_info.the_stack);
@@ -313,33 +312,22 @@ void show_thread(struct thread_struct *tss)
  */
 void exit_thread(void)
 {
-#if 0
-	kill_user_windows();
 #ifndef __SMP__
 	if(last_task_used_math == current) {
 #else
 	if(current->flags & PF_USEDFPU) {
 #endif
-		/* Keep process from leaving FPU in a bogon state. */
-		put_psr(get_psr() | PSR_EF);
-		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
-		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
 #ifndef __SMP__
 		last_task_used_math = NULL;
 #else
 		current->flags &= ~PF_USEDFPU;
 #endif
 	}
-	mmu_exit_hook();
-#endif	
 }
 
 void flush_thread(void)
 {
-#if 0
-	kill_user_windows();
 	current->tss.w_saved = 0;
-	current->tss.uwinmask = 0;
 	current->tss.sstk_info.cur_status = 0;
 	current->tss.sstk_info.the_stack = 0;
 
@@ -350,18 +338,13 @@ void flush_thread(void)
 #else
 	if(current->flags & PF_USEDFPU) {
 #endif
-		/* Clean the fpu. */
-		put_psr(get_psr() | PSR_EF);
-		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
-		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
 #ifndef __SMP__
 		last_task_used_math = NULL;
 #else
 		current->flags &= ~PF_USEDFPU;
 #endif
 	}
-	mmu_flush_hook();
-#endif
+	
 	/* Now, this task is no longer a kernel thread. */
 	current->tss.flags &= ~SPARC_FLAG_KTHREAD;
 	current->tss.current_ds = USER_DS;
@@ -418,10 +401,10 @@ static __inline__ void copy_regwin(struct reg_window *dst, struct reg_window *sr
 static __inline__ struct sparc_stackf *
 clone_stackframe(struct sparc_stackf *dst, struct sparc_stackf *src)
 {
-	unsigned long size;
 	struct sparc_stackf *sp;
 
 #if 0
+	unsigned long size;
 	size = ((unsigned long)src->fp) - ((unsigned long)src);
 	sp = (struct sparc_stackf *)(((unsigned long)dst) - size); 
 
@@ -452,7 +435,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		struct task_struct *p, struct pt_regs *regs)
 {
 	struct pt_regs *childregs;
-	struct reg_window *new_stack;
+	struct reg_window *new_stack, *old_stack;
 	unsigned long stack_offset;
 
 #if 0
@@ -462,8 +445,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	if(current->flags & PF_USEDFPU) {
 #endif
 		put_psr(get_psr() | PSR_EF);
-		fpsave(&p->tss.float_regs[0], &p->tss.fsr,
-		       &p->tss.fpqueue[0], &p->tss.fpqdepth);
+		fpsave(&p->tss.float_regs[0], &p->tss.fsr);
 #ifdef __SMP__
 		current->flags &= ~PF_USEDFPU;
 #endif
@@ -471,27 +453,28 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 #endif	
 
 	/* Calculate offset to stack_frame & pt_regs */
-	stack_offset = ((PAGE_SIZE<<1) - TRACEREG_SZ);
+	stack_offset = (PAGE_SIZE - TRACEREG_SZ);
 
-#if 0
-	if(regs->psr & PSR_PS)
+	if(regs->tstate & TSTATE_PRIV)
 		stack_offset -= REGWIN_SZ;
-#endif		
+
 	childregs = ((struct pt_regs *) (p->kernel_stack_page + stack_offset));
-	copy_regs(childregs, regs);
+	*childregs = *regs;
 	new_stack = (((struct reg_window *) childregs) - 1);
-	copy_regwin(new_stack, (((struct reg_window *) regs) - 1));
+	old_stack = (((struct reg_window *) regs) - 1);
+	*new_stack = *old_stack;
 
-#if 0
-	p->tss.ksp = p->saved_kernel_stack = (unsigned long) new_stack;
-	p->tss.kpc = (((unsigned long) ret_from_syscall) - 0x8);
-	p->tss.kpsr = current->tss.fork_kpsr;
-	p->tss.kwim = current->tss.fork_kwim;
+	p->saved_kernel_stack = ((unsigned long) new_stack);
+	p->tss.ksp = p->saved_kernel_stack - STACK_BIAS;
+	p->tss.kpc = ((unsigned long) ret_from_syscall) - 0x8;
 	p->tss.kregs = childregs;
-#endif	
 
-#if 0
-	if(regs->psr & PSR_PS) {
+	/* Don't look... */
+	p->tss.cwp = regs->u_regs[UREG_G0];
+
+	/* tss.wstate was copied by do_fork() */
+
+	if(regs->tstate & TSTATE_PRIV) {
 		childregs->u_regs[UREG_FP] = p->tss.ksp;
 		p->tss.flags |= SPARC_FLAG_KTHREAD;
 		p->tss.current_ds = KERNEL_DS;
@@ -501,6 +484,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		p->tss.flags &= ~SPARC_FLAG_KTHREAD;
 		p->tss.current_ds = USER_DS;
 
+#if 0
 		if (sp != current->tss.kregs->u_regs[UREG_FP]) {
 			struct sparc_stackf *childstack;
 			struct sparc_stackf *parentstack;
@@ -529,8 +513,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 
 			childregs->u_regs[UREG_FP] = (unsigned long)childstack;
 		}
+#endif
 	}
-#endif	
 
 	/* Set the return value for the child. */
 	childregs->u_regs[UREG_I0] = current->pid;
@@ -538,6 +522,13 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 
 	/* Set the return value for the parent. */
 	regs->u_regs[UREG_I1] = 0;
+#if 0
+	printk("CHILD register dump\n");
+	show_regs(childregs);
+	show_regwindow(new_stack);
+	while(1)
+		barrier();
+#endif
 	return 0;
 }
 
@@ -546,8 +537,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
  */
 void dump_thread(struct pt_regs * regs, struct user * dump)
 {
-	unsigned long first_stack_page;
 #if 0
+	unsigned long first_stack_page;
 	dump->magic = SUNOS_CORE_MAGIC;
 	dump->len = sizeof(struct user);
 	dump->regs.psr = regs->psr;
@@ -567,9 +558,6 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	memcpy(&dump->fpu.fpstatus.fregs.regs[0], &current->tss.float_regs[0], (sizeof(unsigned long) * 32));
 	dump->fpu.fpstatus.fsr = current->tss.fsr;
 	dump->fpu.fpstatus.flags = dump->fpu.fpstatus.extra = 0;
-	dump->fpu.fpstatus.fpq_count = current->tss.fpqdepth;
-	memcpy(&dump->fpu.fpstatus.fpq[0], &current->tss.fpqueue[0],
-	       ((sizeof(unsigned long) * 2) * 16));
 	dump->sigcode = current->tss.sig_desc;
 #endif	
 }

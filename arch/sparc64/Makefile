@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.9 1997/03/14 21:04:39 jj Exp $
+# $Id: Makefile,v 1.14 1997/04/10 23:32:33 davem Exp $
 # sparc64/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -17,13 +17,15 @@ LD		= sparc64-linux-ld
 NM		= sparc64-linux-nm
 AR		= sparc64-linux-ar
 RANLIB		= sparc64-linux-ranlib
+ELF2AOUT64	= elf2aout64
 
 #
 # Uncomment the first CFLAGS if you are doing kgdb source level
 # debugging of the kernel to get the proper debugging information.
 
 #CFLAGS := $(CFLAGS) -g -pipe -fcall-used-g5 -fcall-used-g7 
-CFLAGS := $(CFLAGS) -pipe -fcall-used-g5 -fcall-used-g7
+CFLAGS := $(CFLAGS) -pipe -fno-sibling-call \
+          -fcall-used-g5 -fcall-used-g7 -Wno-sign-compare
 
 LINKFLAGS = -T arch/sparc64/vmlinux.lds
 
@@ -37,7 +39,11 @@ CORE_FILES := arch/sparc64/kernel/kernel.o arch/sparc64/mm/mm.o $(CORE_FILES)
 LIBS := $(TOPDIR)/lib/lib.a $(LIBS) $(TOPDIR)/arch/sparc64/prom/promlib.a \
 	$(TOPDIR)/arch/sparc64/lib/lib.a
 
+vmlinux.aout: vmlinux
+	$(ELF2AOUT64) -o $(TOPDIR)/vmlinux.aout $(TOPDIR)/vmlinux
+
 archclean:
+	rm -f $(TOPDIR)/vmlinux.aout
 
 archdep:
 

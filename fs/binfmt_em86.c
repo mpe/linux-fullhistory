@@ -20,13 +20,13 @@
 
 static int do_load_em86(struct linux_binprm *bprm,struct pt_regs *regs)
 {
-	char *cp, *interp, *i_name, *i_arg;
+	char *interp, *i_name, *i_arg;
 	int retval;
 	struct elfhdr	elf_ex;
 
 	/* Make sure this is a Linux/Intel ELF executable... */
 	elf_ex = *((struct elfhdr *)bprm->buf);
-	
+
         if (elf_ex.e_ident[0] != 0x7f ||
             strncmp(&elf_ex.e_ident[1], "ELF",3) != 0) {
                 return  -ENOEXEC;

@@ -1,4 +1,4 @@
-/* $Id: fb.h,v 1.23 1997/03/12 23:25:16 ecd Exp $
+/* $Id: fb.h,v 1.24 1997/03/24 17:44:15 jj Exp $
  * fb.h: contains the definitions of the structures that various sun
  *       frame buffer can use to do console driver stuff.
  *
@@ -197,12 +197,12 @@ extern unsigned long sun_cg_postsetup(fbinfo_t *, unsigned long);
 
 #define FB_DEV(x) (MINOR(x) / 32)
 
-extern void cg3_setup (fbinfo_t *, int, uint, int, struct linux_sbus_device *);
-extern void cg6_setup (fbinfo_t *, int, uint, int);
-extern void cg14_setup (fbinfo_t *, int, int, uint, int);
-extern void bwtwo_setup (fbinfo_t *, int, uint, int,
+extern void cg3_setup (fbinfo_t *, int, unsigned long, int, struct linux_sbus_device *);
+extern void cg6_setup (fbinfo_t *, int, unsigned long, int);
+extern void cg14_setup (fbinfo_t *, int, int, unsigned long, int);
+extern void bwtwo_setup (fbinfo_t *, int, unsigned long, int,
 			 struct linux_sbus_device *);
-extern void leo_setup (fbinfo_t *, int, uint, int);
-extern void tcx_setup (fbinfo_t *, int, int, uint, struct linux_sbus_device *);
+extern void leo_setup (fbinfo_t *, int, unsigned long, int);
+extern void tcx_setup (fbinfo_t *, int, int, unsigned long, struct linux_sbus_device *);
 
 #endif __SPARC_FB_H_

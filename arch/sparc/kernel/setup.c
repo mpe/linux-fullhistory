@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.82 1997/03/08 08:27:04 ecd Exp $
+/*  $Id: setup.c,v 1.83 1997/04/01 02:21:49 davem Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -24,6 +24,7 @@
 #include <linux/string.h>
 #include <linux/blk.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -38,6 +39,9 @@
 #include <asm/kdebug.h>
 #include <asm/mbus.h>
 #include <asm/idprom.h>
+#include <asm/spinlock.h>
+#include <asm/softirq.h>
+#include <asm/hardirq.h>
 
 struct screen_info screen_info = {
 	0, 0,			/* orig-x, orig-y */
@@ -75,8 +79,13 @@ asmlinkage void sys_sync(void);	/* it's really int */
 void prom_sync_me(void)
 {
 	unsigned long prom_tbr, flags;
+	int cpu = smp_processor_id();
 
-	save_and_cli(flags);
+#ifdef __SMP__
+	global_irq_holder = NO_PROC_ID;
+	global_irq_lock = global_bh_lock = 0;
+#endif
+	__save_and_cli(flags);
 	__asm__ __volatile__("rd %%tbr, %0\n\t" : "=r" (prom_tbr));
 	__asm__ __volatile__("wr %0, 0x0, %%tbr\n\t"
 			     "nop\n\t"
@@ -89,9 +98,9 @@ void prom_sync_me(void)
 	prom_printf("PROM SYNC COMMAND...\n");
 	show_free_areas();
 	if(current->pid != 0) {
-		sti();
+		__sti();
 		sys_sync();
-		cli();
+		__cli();
 	}
 	prom_printf("Returning to prom\n");
 
@@ -99,7 +108,7 @@ void prom_sync_me(void)
 			     "nop\n\t"
 			     "nop\n\t"
 			     "nop\n\t" : : "r" (prom_tbr));
-	restore_flags(flags);
+	__restore_flags(flags);
 
 	return;
 }

@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.11 1997/02/06 18:57:10 jj Exp $
+/* $Id: uaccess.h,v 1.13 1997/04/11 00:42:22 davem Exp $
  * uaccess.h: User space memore access functions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -157,7 +157,7 @@ default: if (__put_user_bad()) return retval; break; \
 #define __put_user_asm(x,size,addr,ret)					\
 __asm__ __volatile__(							\
 	"/* Put user asm, inline. */\n"					\
-"1:\t"	"st"#size " %1, [%2]\n\t"					\
+"1:\t"	"st"#size " %1, %2\n\t"						\
 	"clr	%0\n"							\
 "2:\n\n\t"								\
 	".section .fixup,#alloc,#execinstr\n\t"				\
@@ -170,23 +170,23 @@ __asm__ __volatile__(							\
 	".align	4\n\t"							\
 	".word	1b, 3b\n\t"						\
 	".previous\n\n\t"						\
-       : "=&r" (ret) : "r" (x), "r" (__m(addr)),			\
+       : "=&r" (ret) : "r" (x), "m" (*__m(addr)),			\
 	 "i" (-EFAULT))
 
 #define __put_user_asm_ret(x,size,addr,ret,foo)				\
 if (__builtin_constant_p(ret) && ret == -EFAULT)			\
 __asm__ __volatile__(							\
 	"/* Put user asm ret, inline. */\n"				\
-"1:\t"	"st"#size " %1, [%2]\n\n\t"					\
+"1:\t"	"st"#size " %1, %2\n\n\t"					\
 	".section __ex_table,#alloc\n\t"				\
 	".align	4\n\t"							\
 	".word	1b, __ret_efault\n\n\t"					\
 	".previous\n\n\t"						\
-       : "=r" (foo) : "r" (x), "r" (__m(addr)));			\
+       : "=r" (foo) : "r" (x), "m" (*__m(addr)));			\
 else									\
 __asm__ __volatile(							\
 	"/* Put user asm ret, inline. */\n"				\
-"1:\t"	"st"#size " %1, [%2]\n\n\t"					\
+"1:\t"	"st"#size " %1, %2\n\n\t"					\
 	".section .fixup,#alloc,#execinstr\n\t"				\
 	".align	4\n"							\
 "3:\n\t"								\
@@ -197,7 +197,7 @@ __asm__ __volatile(							\
 	".align	4\n\t"							\
 	".word	1b, 3b\n\n\t"						\
 	".previous\n\n\t"						\
-       : "=r" (foo) : "r" (x), "r" (__m(addr)), "i" (ret))
+       : "=r" (foo) : "r" (x), "m" (*__m(addr)), "i" (ret))
 
 extern int __put_user_bad(void);
 
@@ -244,7 +244,7 @@ default: if (__get_user_bad()) return retval; \
 #define __get_user_asm(x,size,addr,ret)					\
 __asm__ __volatile__(							\
 	"/* Get user asm, inline. */\n"					\
-"1:\t"	"ld"#size " [%2], %1\n\t"					\
+"1:\t"	"ld"#size " %2, %1\n\t"						\
 	"clr	%0\n"							\
 "2:\n\n\t"								\
 	".section .fixup,#alloc,#execinstr\n\t"				\
@@ -258,23 +258,23 @@ __asm__ __volatile__(							\
 	".align	4\n\t"							\
 	".word	1b, 3b\n\n\t"						\
 	".previous\n\t"							\
-       : "=&r" (ret), "=&r" (x) : "r" (__m(addr)),			\
+       : "=&r" (ret), "=&r" (x) : "m" (*__m(addr)),			\
 	 "i" (-EFAULT))
 
 #define __get_user_asm_ret(x,size,addr,retval)				\
 if (__builtin_constant_p(retval) && retval == -EFAULT)			\
 __asm__ __volatile__(							\
 	"/* Get user asm ret, inline. */\n"				\
-"1:\t"	"ld"#size " [%1], %0\n\n\t"					\
+"1:\t"	"ld"#size " %1, %0\n\n\t"					\
 	".section __ex_table,#alloc\n\t"				\
 	".align	4\n\t"							\
 	".word	1b,__ret_efault\n\n\t"					\
 	".previous\n\t"							\
-       : "=&r" (x) : "r" (__m(addr)));					\
+       : "=&r" (x) : "m" (*__m(addr)));					\
 else									\
 __asm__ __volatile__(							\
 	"/* Get user asm ret, inline. */\n"				\
-"1:\t"	"ld"#size " [%1], %0\n\n\t"					\
+"1:\t"	"ld"#size " %1, %0\n\n\t"					\
 	".section .fixup,#alloc,#execinstr\n\t"				\
 	".align	4\n"							\
 "3:\n\t"								\
@@ -285,7 +285,7 @@ __asm__ __volatile__(							\
 	".align	4\n\t"							\
 	".word	1b, 3b\n\n\t"						\
 	".previous\n\t"							\
-       : "=&r" (x) : "r" (__m(addr)), "i" (retval))
+       : "=&r" (x) : "m" (*__m(addr)), "i" (retval))
 
 extern int __get_user_bad(void);
 
@@ -351,7 +351,8 @@ extern __inline__ __kernel_size_t __clear_user(void *addr, __kernel_size_t size)
 	 mov %1, %%o0
 	mov %%o0, %0 
 	" : "=r" (ret) : "r" (addr), "r" (size) :
-	"o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g4", "g5", "g7");
+	"o0", "o1", "o2", "o3", "o4", "o5", "o7",
+	"g1", "g2", "g3", "g4", "g5", "g7", "cc");
   return ret;
 }
 

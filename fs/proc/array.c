@@ -123,7 +123,6 @@ struct inode_operations proc_kcore_inode_operations = {
 	&proc_kcore_operations, 
 };
 
-
 /*
  * This function accesses profiling information. The returned data is
  * binary: the sampling step and the actual contents of the profile
@@ -155,16 +154,38 @@ static long read_profile(struct inode *inode, struct file *file,
 	return read;
 }
 
-/* Writing to /proc/profile resets the counters */
+#ifdef __SMP__
+
+extern int setup_profiling_timer (unsigned int multiplier);
+
+/*
+ * Writing to /proc/profile resets the counters
+ *
+ * Writing a 'profiling multiplier' value into it also re-sets the profiling
+ * interrupt frequency, on architectures that support this.
+ */
 static long write_profile(struct inode * inode, struct file * file,
 	const char * buf, unsigned long count)
 {
-    int i=prof_len;
+	int i=prof_len;
 
-    while (i--)
-	    prof_buffer[i]=0UL;
-    return count;
+	if (count==sizeof(int)) {
+		unsigned int multiplier;
+
+		if (copy_from_user(&multiplier, buf, sizeof(int)))
+			return -EFAULT;
+
+		if (setup_profiling_timer(multiplier))
+			return -EINVAL;
+	}
+  
+	while (i--)
+		prof_buffer[i]=0UL;
+	return count;
 }
+#else
+#define write_profile NULL
+#endif
 
 static struct file_operations proc_profile_operations = {
 	NULL,           /* lseek */
@@ -801,7 +822,7 @@ static inline void statm_pte_range(pmd_t * pmd, unsigned long address, unsigned 
 			++*dirty;
 		if (MAP_NR(pte_page(page)) >= max_mapnr)
 			continue;
-		if (mem_map[MAP_NR(pte_page(page))].count > 1)
+		if (atomic_read(&mem_map[MAP_NR(pte_page(page))].count) > 1)
 			++*shared;
 	} while (address < end);
 }

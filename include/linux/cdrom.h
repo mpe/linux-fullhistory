@@ -368,7 +368,8 @@ struct ccs_modesel_head
 	u_char	number_blocks_lo;
 	u_char	_r3;
 	u_char	block_length_hi; /* block length for blocks in this desc */
-	u_short	block_length;
+	u_char	block_length_med;
+	u_char	block_length_lo;
 };
 
 /*

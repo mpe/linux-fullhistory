@@ -1636,7 +1636,8 @@ static int ipx_get_info(char *buffer, char **start, off_t offset,
 					htons(s->protinfo.af_ipx.dest_addr.sock));
 			}
 			len += sprintf (buffer+len,"%08X  %08X  ",
-				s->wmem_alloc, s->rmem_alloc);
+				atomic_read(&s->wmem_alloc),
+					atomic_read(&s->rmem_alloc));
 			len += sprintf (buffer+len,"%02X     %03d\n",
 				s->state, SOCK_INODE(s->socket)->i_uid);
 
@@ -2254,7 +2255,7 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 	switch(cmd)
 	{
 		case TIOCOUTQ:
-			amount=sk->sndbuf-sk->wmem_alloc;
+			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if(amount<0)
 				amount=0;
 			return put_user(amount, (int *)arg);

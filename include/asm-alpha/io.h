@@ -38,7 +38,8 @@ extern struct hae {
  */
 extern inline void set_hae(unsigned long new_hae)
 {
-	unsigned long ipl = swpipl(7);
+	unsigned long ipl;
+	swpipl(ipl,7);
 	hae.cache = new_hae;
 	*hae.reg = new_hae;
 	mb();

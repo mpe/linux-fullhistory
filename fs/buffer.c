@@ -583,7 +583,7 @@ static inline int can_reclaim(struct buffer_head *bh, int size)
 	    buffer_protected(bh) || buffer_locked(bh))
 		return 0;
 			 
-	if (mem_map[MAP_NR((unsigned long) bh->b_data)].count != 1 ||
+	if (atomic_read(&mem_map[MAP_NR((unsigned long) bh->b_data)].count) != 1 ||
 	    buffer_dirty(bh)) {
 		refile_buffer(bh);
 		return 0;
@@ -1304,7 +1304,7 @@ int generic_readpage(struct inode * inode, struct page * page)
 	int *p, nr[PAGE_SIZE/512];
 	int i;
 
-	page->count++;
+	atomic_inc(&page->count);
 	set_bit(PG_locked, &page->flags);
 	set_bit(PG_free_after, &page->flags);
 	
@@ -1426,7 +1426,7 @@ int try_to_free_buffer(struct buffer_head * bh, struct buffer_head ** bhp,
 	buffermem -= PAGE_SIZE;
 	mem_map[MAP_NR(page)].buffers = NULL;
 	free_page(page);
-	return !mem_map[MAP_NR(page)].count;
+	return !atomic_read(&mem_map[MAP_NR(page)].count);
 }
 
 /* ================== Debugging =================== */
@@ -1536,7 +1536,7 @@ asmlinkage int sync_old_buffers(void)
 		ndirty = 0;
 		nwritten = 0;
 	repeat:
-	
+
 		bh = lru_list[nlist];
 		if(bh) 
 			 for (i = nr_buffers_type[nlist]; i-- > 0; bh = next) {
@@ -1678,7 +1678,7 @@ int bdflush(void * unused)
 			 ndirty = 0;
 			 refilled = 0;
 		 repeat:
-		 	
+
 			 bh = lru_list[nlist];
 			 if(bh) 
 				  for (i = nr_buffers_type[nlist]; i-- > 0 && ndirty < bdf_prm.b_un.ndirty; 

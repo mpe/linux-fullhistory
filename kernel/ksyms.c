@@ -183,14 +183,6 @@ EXPORT_SYMBOL(tty_register_driver);
 EXPORT_SYMBOL(tty_unregister_driver);
 EXPORT_SYMBOL(tty_std_termios);
 
-#if defined(CONFIG_BLK_DEV_IDECD) || \
-    defined(CONFIG_BLK_DEV_SR) || \
-    defined(CONFIG_CM206)
-EXPORT_SYMBOL(register_cdrom);
-EXPORT_SYMBOL(unregister_cdrom);
-EXPORT_SYMBOL(cdrom_fops);
-#endif
-
 /* block device driver support */
 EXPORT_SYMBOL(block_read);
 EXPORT_SYMBOL(block_write);
@@ -266,7 +258,9 @@ EXPORT_SYMBOL(tq_immediate);
 EXPORT_SYMBOL(tq_scheduler);
 EXPORT_SYMBOL(timer_active);
 EXPORT_SYMBOL(timer_table);
-EXPORT_SYMBOL(intr_count);
+#ifdef __SMP__
+EXPORT_SYMBOL(waitqueue_lock);
+#endif
 
 /* autoirq from  drivers/net/auto_irq.c */
 EXPORT_SYMBOL(autoirq_setup);

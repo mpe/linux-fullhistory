@@ -10,6 +10,7 @@ L_TARGET := scsi.a
 L_OBJS   := 
 M_OBJS   := 
 MX_OBJS  := 
+MIX_OBJS :=
 MOD_LIST_NAME := SCSI_MODULES
 SCSI_SRCS = $(wildcard $(L_OBJS:%.o=%.c))
 
@@ -45,7 +46,7 @@ ifeq ($(CONFIG_SCSI),y)
   endif
 else
   ifeq ($(CONFIG_SCSI),m)
-    MX_OBJS += scsi_syms.o
+    MIX_OBJS += scsi_syms.o
     M_OBJS += scsi_mod.o
   endif
 endif
@@ -412,9 +413,9 @@ seagate.o: seagate.c
 ncr53c8xx.o : ncr53c8xx.c
 	$(CC) $(CFLAGS) -c ncr53c8xx.c
 
-scsi_mod.o: $(MX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
+scsi_mod.o: $(MIX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
 		scsicam.o scsi_proc.o
-	$(LD) $(LD_RFLAG) -r -o $@ $(MX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
+	$(LD) $(LD_RFLAG) -r -o $@ $(MIX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
 
 sr_mod.o: sr.o sr_ioctl.o $(SR_VENDOR)
 	$(LD) $(LD_RFLAG) -r -o $@ sr.o sr_ioctl.o $(SR_VENDOR)

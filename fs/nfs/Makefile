@@ -12,7 +12,7 @@ O_OBJS   := inode.o file.o read.o write.o dir.o symlink.o proc.o \
 	    nfs2xdr.o
 
 ifdef CONFIG_ROOT_NFS
-  O_OBJS += nfsroot.o
+  O_OBJS += nfsroot.o mount_clnt.o
 endif
 
 M_OBJS   := $(O_TARGET)

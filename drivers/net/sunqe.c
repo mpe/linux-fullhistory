@@ -131,7 +131,7 @@ static void qe_init_rings(struct sunqe *qep, int from_irq)
 	struct device *dev = qep->dev;
 	int i, gfp_flags = GFP_KERNEL;
 
-	if(from_irq || intr_count)
+	if(from_irq || in_interrupt())
 		gfp_flags = GFP_ATOMIC;
 
 	qep->rx_new = qep->rx_old = qep->tx_new = qep->tx_old = 0;
@@ -150,6 +150,8 @@ static void qe_init_rings(struct sunqe *qep, int from_irq)
 
 		skb_put(skb, ETH_FRAME_LEN);
 		skb_reserve(skb, 34);
+
+		/* FIX FOR ULTRA */
 		qb->qe_rxd[i].rx_addr = (unsigned int) skb->data;
 		qb->qe_rxd[i].rx_flags =
 			(RXD_OWN | ((RX_BUF_ALLOC_SIZE - 34) & RXD_LENGTH));
@@ -163,6 +165,7 @@ static void sun4c_qe_init_rings(struct sunqe *qep)
 {
 	struct qe_init_block *qb = qep->qe_block;
 	struct sunqe_buffers *qbufs = qep->sun4c_buffers;
+	__u32 qbufs_dvma = qep->s4c_buf_dvma;
 	int i;
 
 	qep->rx_new = qep->rx_old = qep->tx_new = qep->tx_old = 0;
@@ -173,7 +176,7 @@ static void sun4c_qe_init_rings(struct sunqe *qep)
 		qb->qe_rxd[i].rx_flags = qb->qe_rxd[i].rx_addr = 0;
 
 	for(i = 0; i < SUN4C_RX_RING_SIZE; i++) {
-		qb->qe_rxd[i].rx_addr = (unsigned int) &qbufs->rx_buf[i][0];
+		qb->qe_rxd[i].rx_addr = qbufs_dvma + qebuf_offset(rx_buf, i);
 		qb->qe_rxd[i].rx_flags =
 			(RXD_OWN | ((SUN4C_RX_BUFF_SIZE) & RXD_LENGTH));
 	}
@@ -197,8 +200,8 @@ static int qe_init(struct sunqe *qep, int from_irq)
 		return -EAGAIN;
 
 	/* Setup initial rx/tx init block pointers. */
-	cregs->rxds = (unsigned int) &qep->qe_block->qe_rxd[0];
-	cregs->txds = (unsigned int) &qep->qe_block->qe_txd[0];
+	cregs->rxds = qep->qblock_dvma + qib_offset(qe_rxd, 0);
+	cregs->txds = qep->qblock_dvma + qib_offset(qe_txd, 0);
 
 	/* Enable the various irq's. */
 	cregs->rimask = 0;
@@ -507,6 +510,8 @@ static inline void qe_rx(struct sunqe *qep)
 			new_skb->dev = qep->dev;
 			skb_put(new_skb, ETH_FRAME_LEN);
 			skb_reserve(new_skb, 34);
+
+			/* FIX FOR ULTRA */
 			rxbase[elem].rx_addr = (unsigned int) new_skb->data;
 			rxbase[elem].rx_flags =
 				(RXD_OWN | ((RX_BUF_ALLOC_SIZE - 34) & RXD_LENGTH));
@@ -552,6 +557,7 @@ static inline void sun4c_qe_rx(struct sunqe *qep)
 	struct qe_rxd *rxbase = &qep->qe_block->qe_rxd[0];
 	struct qe_rxd *this;
 	struct sunqe_buffers *qbufs = qep->sun4c_buffers;
+	__u32 qbufs_dvma = qep->s4c_buf_dvma;
 	int elem = qep->rx_new, drops = 0;
 
 	this = &rxbase[elem];
@@ -559,6 +565,8 @@ static inline void sun4c_qe_rx(struct sunqe *qep)
 		struct sk_buff *skb;
 		unsigned char *this_qbuf =
 			qbufs->rx_buf[elem & (SUN4C_RX_RING_SIZE - 1)];
+		__u32 this_qbuf_dvma = qbufs_dvma +
+			qebuf_offset(rx_buf, (elem & (SUN4C_RX_RING_SIZE - 1)));
 		struct qe_rxd *end_rxd =
 			&rxbase[(elem+SUN4C_RX_RING_SIZE)&(RX_RING_SIZE-1)];
 		unsigned int flags = this->rx_flags;
@@ -585,7 +593,7 @@ static inline void sun4c_qe_rx(struct sunqe *qep)
 				qep->net_stats.rx_packets++;
 			}
 		}
-		end_rxd->rx_addr = (unsigned int) this_qbuf;
+		end_rxd->rx_addr = this_qbuf_dvma;
 		end_rxd->rx_flags = (RXD_OWN | (SUN4C_RX_BUFF_SIZE & RXD_LENGTH));
 		
 		elem = NEXT_RX(elem);
@@ -727,6 +735,7 @@ static int qe_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	qep->tx_skbs[entry] = skb;
 
+	/* FIX FOR ULTRA */
 	qep->qe_block->qe_txd[entry].tx_addr = (unsigned long) skb->data;
 	qep->qe_block->qe_txd[entry].tx_flags =
 		(TXD_OWN | TXD_SOP | TXD_EOP | (len & TXD_LENGTH));
@@ -745,6 +754,7 @@ static int sun4c_qe_start_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct sunqe *qep = (struct sunqe *) dev->priv;
 	struct sunqe_buffers *qbufs = qep->sun4c_buffers;
+	__u32 txbuf_dvma, qbufs_dvma = qep->s4c_buf_dvma;
 	unsigned char *txbuf;
 	int len, entry;
 
@@ -763,13 +773,15 @@ static int sun4c_qe_start_xmit(struct sk_buff *skb, struct device *dev)
 	entry = qep->tx_new;
 
 	txbuf = &qbufs->tx_buf[entry & (SUN4C_TX_RING_SIZE - 1)][0];
+	txbuf_dvma = qbufs_dvma +
+		qebuf_offset(tx_buf, (entry & (SUN4C_TX_RING_SIZE - 1)));
 
 	/* Avoid a race... */
 	qep->qe_block->qe_txd[entry].tx_flags = TXD_UPDATE;
 
 	memcpy(txbuf, skb->data, len);
 
-	qep->qe_block->qe_txd[entry].tx_addr = (unsigned int) txbuf;
+	qep->qe_block->qe_txd[entry].tx_addr = txbuf_dvma;
 	qep->qe_block->qe_txd[entry].tx_flags =
 		(TXD_OWN | TXD_SOP | TXD_EOP | (len & TXD_LENGTH));
 	qep->tx_new = NEXT_TX(entry);
@@ -1054,12 +1066,14 @@ static int qec_ether_init(struct device *dev, struct linux_sbus_device *sdev)
 		}
 
 		qeps[i]->qe_block = (struct qe_init_block *)
-			sparc_dvma_malloc(PAGE_SIZE, "QE Init Block");
+			sparc_dvma_malloc(PAGE_SIZE, "QE Init Block",
+					  &qeps[i]->qblock_dvma);
 
 		if(sparc_cpu_model == sun4c)
 			qeps[i]->sun4c_buffers = (struct sunqe_buffers *)
 				sparc_dvma_malloc(sizeof(struct sunqe_buffers),
-						  "QE RX/TX Buffers");
+						  "QE RX/TX Buffers",
+						  &qeps[i]->s4c_buf_dvma);
 		else
 			qeps[i]->sun4c_buffers = 0;
 

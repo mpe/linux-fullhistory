@@ -1,8 +1,6 @@
 #ifndef _ASM_IO_H
 #define _ASM_IO_H
 
-#include <linux/vmalloc.h>
-
 /*
  * This file contains the definitions for the x86 IO instructions
  * inb/inw/inl/outb/outw/outl and the "string versions" of the same
@@ -168,6 +166,7 @@ __OUTS(l)
 
 #ifdef __KERNEL__
 
+#include <linux/vmalloc.h>
 #include <asm/page.h>
 
 #define __io_virt(x)		((void *)(PAGE_OFFSET | (unsigned long)(x)))

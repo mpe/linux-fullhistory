@@ -7,7 +7,7 @@
  *		PROC file system.  This is very similar to the IPv4 version,
  *		except it reports the sockets in the INET6 address family.
  *
- * Version:	$Id: proc.c,v 1.1 1997/03/16 08:47:18 davem Exp $
+ * Version:	$Id: proc.c,v 1.2 1997/04/12 04:32:55 davem Exp $
  *
  * Authors:	David S. Miller (davem@caip.rutgers.edu)
  *
@@ -83,9 +83,10 @@ static int get__netinfo6(struct proto *pro, char *buffer, int format, char **sta
 			dest->s6_addr32[0], dest->s6_addr32[1],
 			dest->s6_addr32[2], dest->s6_addr32[3], destp,
 			sp->state,
-			format==0?sp->write_seq-tp->snd_una:sp->wmem_alloc,
-			format==0?tp->rcv_nxt-sp->copied_seq:sp->rmem_alloc,
-			timer_active, timer_expires-jiffies, (unsigned) sp->retransmits,
+			format==0?sp->write_seq-tp->snd_una:atomic_read(&sp->wmem_alloc),
+			format==0?tp->rcv_nxt-sp->copied_seq:atomic_read(&sp->rmem_alloc),
+			timer_active, timer_expires-jiffies,
+			(unsigned) atomic_read(&sp->retransmits),
 			sp->socket ? sp->socket->inode->i_uid:0,
 			timer_active?sp->timeout:0,
 			sp->socket ? sp->socket->inode->i_ino:0);

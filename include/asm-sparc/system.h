@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.53 1997/03/19 14:53:43 davem Exp $ */
+/* $Id: system.h,v 1.56 1997/04/14 05:39:30 davem Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
@@ -11,10 +11,10 @@
 #include <asm/oplib.h>
 #include <asm/psr.h>
 #include <asm/ptrace.h>
-#endif
 
 #define EMPTY_PGT       (&empty_bad_page)
 #define EMPTY_PGE	(&empty_bad_page_table)
+#endif /* __KERNEL__ */
 
 #ifndef __ASSEMBLY__
 
@@ -31,6 +31,9 @@ enum sparc_cpu {
   sun_unknown = 0x06,
   ap1000      = 0x07, /* almost a sun4m */
 };
+
+/* Really, userland should not be looking at any of this... */
+#ifdef __KERNEL__
 
 extern enum sparc_cpu sparc_cpu_model;
 
@@ -54,7 +57,6 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 
 #ifdef __SMP__
 #define SWITCH_ENTER \
-	cli(); \
 	if(prev->flags & PF_USEDFPU) { \
 		put_psr(get_psr() | PSR_EF); \
 		fpsave(&prev->tss.float_regs[0], &prev->tss.fsr, \
@@ -63,11 +65,9 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 		prev->tss.kregs->psr &= ~PSR_EF; \
 	}
 
-#define SWITCH_EXIT sti();
 #define SWITCH_DO_LAZY_FPU
 #else
 #define SWITCH_ENTER
-#define SWITCH_EXIT
 #define SWITCH_DO_LAZY_FPU if(last_task_used_math != next) next->tss.kregs->psr&=~PSR_EF;
 #endif
 
@@ -93,7 +93,9 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	"rd	%%wim, %%g5\n\t"							\
 	"wr	%%g4, 0x20, %%psr\n\t"							\
 	"nop\n\t"									\
+	"mov	%5, %%g7\n\t"								\
 	"std	%%g4, [%%g6 + %2]\n\t"							\
+	"st	%%g7, [%%g6 + %6]\n\t"							\
 	"ldd	[%1 + %2], %%g4\n\t"							\
 	"mov	%1, %%g6\n\t"								\
 	"st	%1, [%0]\n\t"								\
@@ -109,12 +111,14 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	"nop\n\t"									\
 	"jmpl	%%o7 + 0x8, %%g0\n\t"							\
 	" nop\n\t" : : "r" (&(current_set[smp_processor_id()])), "r" (next),		\
-	"i" ((const unsigned long)(&((struct task_struct *)0)->tss.kpsr)),		\
-	"i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),		\
-	"r" (task_pc) : "g1", "g2", "g3", "g4", "g5", "g7", "l2", "l3",			\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.kpsr)),		\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),		\
+	  "r" (task_pc), "i" (255),							\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->processor))		\
+	: "g1", "g2", "g3", "g4", "g5", "g7", "l2", "l3",				\
 	"l4", "l5", "l6", "l7", "i0", "i1", "i2", "i3", "i4", "i5", "o0", "o1", "o2",	\
 	"o3");										\
-here: SWITCH_EXIT } while(0)
+here:  } while(0)
 
 /* Changing the IRQ level on the Sparc.   We now avoid writing the psr
  * whenever possible.
@@ -128,10 +132,10 @@ extern __inline__ void setipl(unsigned long __orig_psr)
 		nop
 "		: /* no outputs */
 		: "r" (__orig_psr)
-		: "memory");
+		: "memory", "cc");
 }
 
-extern __inline__ void cli(void)
+extern __inline__ void __cli(void)
 {
 	unsigned long tmp;
 
@@ -150,7 +154,7 @@ extern __inline__ void cli(void)
 		: "memory");
 }
 
-extern __inline__ void sti(void)
+extern __inline__ void __sti(void)
 {
 	unsigned long tmp;
 
@@ -195,7 +199,7 @@ extern __inline__ unsigned long swap_pil(unsigned long __new_psr)
 1:
 "		: "=r" (retval), "=r" (tmp1), "=r" (tmp2)
 		: "r" (__new_psr), "i" (PSR_PIL)
-		: "memory");
+		: "memory", "cc");
 
 	return retval;
 }
@@ -223,9 +227,31 @@ extern __inline__ unsigned long read_psr_and_cli(void)
 
 extern char spdeb_buf[256];
 
-#define save_flags(flags)	((flags) = getipl())
-#define save_and_cli(flags)	((flags) = read_psr_and_cli())
-#define restore_flags(flags)	setipl((flags))
+#define __save_flags(flags)	((flags) = getipl())
+#define __save_and_cli(flags)	((flags) = read_psr_and_cli())
+#define __restore_flags(flags)	setipl((flags))
+
+#ifdef __SMP__
+
+extern void __global_cli(void);
+extern void __global_sti(void);
+extern unsigned long __global_save_flags(void);
+extern void __global_restore_flags(unsigned long);
+#define cli() __global_cli()
+#define sti() __global_sti()
+#define save_flags(x)	  ((x)=__global_save_flags())
+#define restore_flags(x)  __global_restore_flags(x)
+#define save_and_cli(x)   do { (x)=__global_save_flags(); __global_cli(); } while(0)
+
+#else
+
+#define cli() __cli()
+#define sti() __sti()
+#define save_flags(x) __save_flags(x)
+#define restore_flags(x) __restore_flags(x)
+#define save_and_cli(x) __save_and_cli(x)
+
+#endif
 
 /* XXX Change this if we ever use a PSO mode kernel. */
 #define mb()  __asm__ __volatile__ ("" : : : "memory")
@@ -246,7 +272,7 @@ extern __inline__ unsigned long xchg_u32(__volatile__ unsigned long *m, unsigned
 	 add	%%o7, 8, %%o7
 "	: "=&r" (ret)
 	: "0" (ret), "r" (ptr)
-	: "g3", "g4", "g7", "memory");
+	: "g3", "g4", "g7", "memory", "cc");
 
 	return ret;
 }
@@ -267,6 +293,8 @@ static __inline__ unsigned long __xchg(unsigned long x, __volatile__ void * ptr,
 }
 
 extern void die_if_kernel(char *str, struct pt_regs *regs) __attribute__ ((noreturn));
+
+#endif /* __KERNEL__ */
 
 #endif /* __ASSEMBLY__ */
 

@@ -28,6 +28,8 @@
 #include <linux/if.h>
 #include <linux/if_ether.h>
 
+#include <asm/atomic.h>
+
 /*
  *	For future expansion when we will have different priorities. 
  */
@@ -86,7 +88,7 @@ struct dev_mc_list
 struct hh_cache
 {
 	struct hh_cache *hh_next;	/* Next entry			     */
-	int		hh_refcnt;	/* number of users                   */
+	atomic_t	hh_refcnt;	/* number of users                   */
 	unsigned short  hh_type;	/* protocol identifier, f.e ETH_P_IP */
 	char		hh_uptodate;	/* hh_data is valid                  */
 	/* cached hardware header; allow for machine alignment needs.        */
@@ -354,7 +356,7 @@ extern __inline__ void  dev_unlock_list(void)
  
 extern __inline__ void dev_lock_wait(void)
 {
-	while(dev_lockct)
+	while(atomic_read(&dev_lockct))
 		schedule();
 }
 

@@ -383,7 +383,7 @@ int getkeycode(unsigned int scancode)
 	    e0_keys[scancode - 128];
 }
 
-void sunkbd_inchar(unsigned char ch, unsigned char status, struct pt_regs *regs);
+void sunkbd_inchar(unsigned char ch, struct pt_regs *regs);
 static void keyboard_timer (unsigned long ignored);
 
 static struct timer_list
@@ -400,7 +400,7 @@ keyboard_timer (unsigned long ignored)
 	save_flags(flags); cli();
 
 	/* Auto repeat: send regs = 0 to indicate autorepeat */
-	sunkbd_inchar (last_keycode, 0, 0);
+	sunkbd_inchar (last_keycode, 0);
 	del_timer (&auto_repeat_timer);
 	if (kbd_rate_ticks) {
 		auto_repeat_timer.expires = jiffies + kbd_rate_ticks;
@@ -411,7 +411,7 @@ keyboard_timer (unsigned long ignored)
 
 /* #define SKBD_DEBUG */
 /* This is our keyboard 'interrupt' routine. */
-void sunkbd_inchar(unsigned char ch, unsigned char status, struct pt_regs *regs)
+void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 {
 	unsigned char keycode;
 	char up_flag;                          /* 0 or SUNKBD_UBIT */
@@ -1393,7 +1393,7 @@ static int
 kbd_close (struct inode *i, struct file *f)
 {
 	if (--kbd_active)
-		return;
+		return 0;
 
 	if (kbd_redirected)
 		kbd_table [kbd_opened-1].kbdmode = VC_XLATE;

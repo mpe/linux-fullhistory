@@ -475,6 +475,9 @@ struct hmeal_init_block {
 	struct happy_meal_txd happy_meal_txd[TX_RING_MAXSIZE];
 };
 
+#define hblock_offset(mem, elem) \
+((__u32)((unsigned long)(&(((struct hmeal_init_block *)0)->mem[elem]))))
+
 #define SUN4C_PKT_BUF_SZ	1546
 #define SUN4C_RX_BUFF_SIZE	SUN4C_PKT_BUF_SZ
 #define SUN4C_TX_BUFF_SIZE	SUN4C_PKT_BUF_SZ
@@ -483,6 +486,9 @@ struct hmeal_buffers {
 	char	tx_buf[TX_RING_SIZE][SUN4C_TX_BUFF_SIZE];
 	char	rx_buf[RX_RING_SIZE][SUN4C_RX_BUFF_SIZE];
 };
+
+#define hbuf_offset(mem, elem) \
+((__u32)((unsigned long)(&(((struct hmeal_buffers *)0)->mem[elem][0]))))
 
 /* Now software state stuff. */
 enum happy_transceiver {
@@ -507,14 +513,17 @@ struct happy_meal {
 	struct hmeal_bigmacregs  *bigmacregs;     /* I said NO SOLARIS with my bigmac! */
 	struct hmeal_tcvregs     *tcvregs;        /* MIF transceiver regs              */
 
-	struct hmeal_init_block  *happy_block;    /* RX and TX descriptors             */
+	struct hmeal_init_block  *happy_block;    /* RX and TX descriptors (CPU addr)  */
+	__u32                     hblock_dvma;    /* DVMA visible address happy block  */
 
 	struct sk_buff           *rx_skbs[RX_RING_SIZE];
 	struct sk_buff           *tx_skbs[TX_RING_SIZE];
 
 	int rx_new, tx_new, rx_old, tx_old;
 
-	struct hmeal_buffers     *sun4c_buffers;
+	/* We may use this for Ultra as well, will have to see, maybe not. */
+	struct hmeal_buffers     *sun4c_buffers;  /* CPU visible address.              */
+	__u32                     s4c_buf_dvma;   /* DVMA visible address.             */
 
 	unsigned int              happy_flags;    /* Driver state flags                */
 	enum happy_transceiver    tcvr_type;      /* Kind of transceiver in use        */

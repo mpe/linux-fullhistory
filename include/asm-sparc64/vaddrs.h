@@ -1,8 +1,6 @@
-/* $Id: vaddrs.h,v 1.1 1997/03/18 18:03:43 jj Exp $ */
+/* $Id: vaddrs.h,v 1.6 1997/04/04 00:50:31 davem Exp $ */
 #ifndef _SPARC64_VADDRS_H
 #define _SPARC64_VADDRS_H
-
-#include <asm/head.h>
 
 /* asm-sparc64/vaddrs.h:  Here will be define the virtual addresses at
  *                      which important I/O addresses will be mapped.

@@ -73,5 +73,15 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SUN_VIDEOPIX),y)
+O_OBJS += vfc.o
+else
+  ifeq ($(CONFIG_SUN_VIDEOPIX),m)
+  M_OBJS += vfc.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
+vfc.o: vfc_dev.o vfc_i2c.o
+	$(LD) -r -o vfc.o vfc_dev.o vfc_i2c.o

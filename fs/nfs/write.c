@@ -339,7 +339,7 @@ create_write_request(struct inode *inode, struct page *page,
 	wreq->wb_offset = offset;
 	wreq->wb_bytes  = bytes;
 	inode->i_count++;
-	page->count++;
+	atomic_inc(&page->count);
 
 	append_write_request(&NFS_WRITEBACK(inode), wreq);
 
@@ -399,7 +399,7 @@ wait_on_write_request(struct nfs_wreq *req)
 	struct page		*page = req->wb_page;
 
 	add_wait_queue(&page->wait, &wait);
-	page->count++;
+	atomic_inc(&page->count);
 repeat:
 	current->state = TASK_INTERRUPTIBLE;
 	if (PageLocked(page)) {

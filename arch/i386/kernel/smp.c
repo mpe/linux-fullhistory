@@ -141,7 +141,7 @@ volatile unsigned long smp_spins_sys_idle[NR_CPUS]={0}; /* Count spins for sys_i
 volatile unsigned long smp_idle_count[1+NR_CPUS]={0,};	/* Count idle ticks					*/
 
 /* Count local APIC timer ticks */
-volatile unsigned long smp_apic_timer_ticks[1+NR_CPUS]={0,};
+volatile unsigned long smp_local_timer_ticks[1+NR_CPUS]={0,};
 
 #endif
 #if defined (__SMP_PROF__)
@@ -178,6 +178,16 @@ void smp_setup(char *str, int *ints)
 		max_cpus = 0;
 }
 
+static inline void ack_APIC_irq (void)
+{
+	/* Clear the IPI */
+
+	/* Dummy read */
+	apic_read(APIC_SPIV);
+
+	/* Docs say use 0 for future compatibility */
+	apic_write(APIC_EOI, 0);
+}
 
 /* 
  *	Checksum an MP configuration block.
@@ -628,12 +638,10 @@ void smp_callin(void)
  	l|=(1<<8);		/* Enable */
  	apic_write(APIC_SPIV,l);
 
-#ifdef __SMP_PROF__
 	/*
 	 * Set up our APIC timer. 
 	 */
 	setup_APIC_clock ();
-#endif
 
  	sti();
 	/*
@@ -782,12 +790,10 @@ void smp_boot_cpus(void)
 
 	udelay(10);
 
-#ifdef __SMP_PROF__
 	/*
 	 * Set up our local APIC timer:
 	 */			
 	setup_APIC_clock ();
-#endif
 
 	/*
 	 *	Now scan the cpu present map and fire up the other CPUs.
@@ -1162,8 +1168,10 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 *	Just pray... there is nothing more we can do
 	 */
 	 
-	if(ct==1000)
+	if(ct==1000) {
 		printk("CPU #%d: previous IPI still not cleared after 10mS", p);
+		ack_APIC_irq ();
+	}
 		
 	/*
 	 *	Program the APIC to deliver the IPI
@@ -1298,10 +1306,7 @@ void smp_flush_tlb(void)
 asmlinkage void smp_reschedule_interrupt(void)
 {
 	need_resched=1;
-
-	/* Clear the IPI */
-	apic_read(APIC_SPIV);		/* Dummy read */
-	apic_write(APIC_EOI, 0);	/* Docs say use 0 for future compatibility */
+	ack_APIC_irq();
 }
 
 /*
@@ -1312,9 +1317,7 @@ asmlinkage void smp_invalidate_interrupt(void)
 	if (clear_bit(smp_processor_id(), &smp_invalidate_needed))
 		local_flush_tlb();
 
-	/* Clear the IPI */
-	apic_read(APIC_SPIV);		/* Dummy read */
-	apic_write(APIC_EOI, 0);	/* Docs say use 0 for future compatibility */
+	ack_APIC_irq ();
 }	
 
 /*
@@ -1327,45 +1330,143 @@ asmlinkage void smp_stop_cpu_interrupt(void)
 	for  (;;) ;
 }
 
-#ifdef __SMP_PROF__
+/*
+ * Platform specific profiling function.
+ * it builds a 'prof_shift' resolution EIP distribution histogram
+ *
+ * it's SMP safe.
+ */
 
-extern void (*do_profile)(struct pt_regs *);
-static void (*default_do_profile)(struct pt_regs *) = NULL;
+inline void x86_do_profile (unsigned long eip)
+{
+	if (prof_buffer && current->pid) {
+		extern int _stext;
+		eip -= (unsigned long) &_stext;
+		eip >>= prof_shift;
+		if (eip < prof_len)
+			atomic_inc(&prof_buffer[eip]);
+		else
+		/*
+		 * Dont ignore out-of-bounds EIP values silently,
+		 * put them into the last histogram slot, so if
+		 * present, they will show up as a sharp peak.
+		 */
+			atomic_inc(&prof_buffer[prof_len-1]);
+	}
+}
+
+unsigned int prof_multiplier[NR_CPUS];
+unsigned int prof_counter[NR_CPUS];
+
+extern void update_one_process(	struct task_struct *p,
+				unsigned long ticks, unsigned long user,
+				unsigned long system);
+/*
+ * Local timer interrupt handler. It does both profiling and
+ * process statistics/rescheduling.
+ *
+ * We do profiling in every local tick, statistics/rescheduling
+ * happen only every 'profiling multiplier' ticks. The default
+ * multiplier is 1 and it can be changed by writing a 4 bytes multiplier
+ * value into /proc/profile.
+ */
+static inline void smp_local_timer_interrupt(struct pt_regs * regs)
+{
+	int cpu = smp_processor_id();
+	/*
+	 * Both the profiling function and the statistics
+	 * counters are SMP safe. We leave the APIC irq
+	 * unacked while updating the profiling info, thus
+	 * we cannot be interrupted by the same APIC interrupt.
+	 */
+	if (!user_mode(regs))
+		x86_do_profile (regs->eip);
+
+	if (!--prof_counter[cpu]) {
+		int user=0,system=0;
+		struct task_struct * p = current;
+
+		/*
+		 * We mess around with thread statistics, but
+		 * since we are the CPU running it, we dont
+		 * have to lock it. We assume that switch_to()
+		 * protects 'current' against local irqs via __cli.
+		 *
+		 * kernel statistics counters are updated via atomic
+		 * operations.
+		 *
+		 * update_one_process() might send signals, thus
+		 * we have to get the irq lock for that one.
+		 */
+
+		if (user_mode(regs))
+			user=1;
+		else
+			system=1;
+
+		if (p->pid) {
+			unsigned long flags;
+	
+			save_flags(flags);
+			cli();
+			update_one_process(current, 1, user, system);
+			restore_flags(flags);
+
+			p->counter -= 1;
+			if (p->counter < 0) {
+				p->counter = 0;
+				need_resched = 1;
+			}
+			if (p->priority < DEF_PRIORITY)
+				atomic_add (user, &kstat.cpu_nice);
+			else
+				atomic_add (user, &kstat.cpu_user);
+
+			atomic_add (system, &kstat.cpu_system);
+		
+		} else {
+#ifdef __SMP_PROF__
+			if (test_bit(cpu,&smp_idle_map))
+				smp_idle_count[cpu]++;
+#endif
+			/*
+			 * This is a hack until we have need_resched[]
+			 */
+			if (read_smp_counter(&smp_process_available))
+				need_resched=1;
+		}
+
+		prof_counter[cpu]=prof_multiplier[cpu];
+	}
+
+#ifdef __SMP_PROF__
+	smp_local_timer_ticks[cpu]++;
+#endif
+	/*
+	 * We take the 'long' return path, and there every subsystem
+	 * grabs the apropriate locks (kernel lock/ irq lock).
+	 *
+	 * FIXME: we want to decouple profiling from the 'long path'.
+	 *
+	 * Currently this isnt too much of an issue (performancewise),
+	 * we can take more than 100K local irqs per second on a 100 MHz P5.
+	 * [ although we notice need_resched too early, thus the way we
+	 *   schedule (deliver signals and handle bhs) changes. ]
+	 *
+	 * Possibly we could solve these problems with 'smart irqs'.
+	 */
+}
 
 /*
- *	APIC timer interrupt
+ * Local APIC timer interrupt. This is the most natural way for doing
+ * local interrupts, but local timer interrupts can be emulated by
+ * broadcast interrupts too. [in case the hw doesnt support APIC timers]
  */
 void smp_apic_timer_interrupt(struct pt_regs * regs)
 {
-	int cpu = smp_processor_id();
+	smp_local_timer_interrupt(regs);
 
-	if (!user_mode(regs)) {
-		unsigned long flags;
-
-		/*
-		 * local timer interrupt is not NMI yet, so
-		 * it's simple, we just aquire the global cli
-		 * lock to mess around with profiling info.
-		 *
-		 * later, in the NMI version, we have to build
-		 * our own 'current' pointer (as we could have
-		 * interrupted code that just changes "current")
-		 * and have to lock profiling info between NMI
-		 * interrupts properly.
-		 */
-		save_flags(flags);
-		cli();
-		default_do_profile(regs);
-		restore_flags(flags);
-	}
-
-	/*
-	 * this is safe outside the lock.
-	 */ 
-	smp_apic_timer_ticks[cpu]++;
-
-	apic_read (APIC_SPIV);
-	apic_write (APIC_EOI, 0);
+	ack_APIC_irq ();
 }
 
 /*
@@ -1373,9 +1474,8 @@ void smp_apic_timer_interrupt(struct pt_regs * regs)
  * per second. We assume that the caller has already set up the local
  * APIC at apic_addr.
  *
- * Later we might want to split HZ into two parts: introduce
- * PROFILING_HZ and scheduling HZ. The APIC timer is not exactly
- * sync with the external timer chip, it closely follows bus clocks.
+ * The APIC timer is not exactly sync with the external timer chip, it
+ * closely follows bus clocks.
  */
 
 #define RTDSC(x)	__asm__ __volatile__ (  ".byte 0x0f,0x31" \
@@ -1407,14 +1507,12 @@ unsigned int get_8254_timer_count (void)
  *
  * We are strictly in irqs off mode here, as we do not want to
  * get an APIC interrupt go off accidentally.
+ *
+ * We do reads before writes even if unnecessary, to get around the
+ * APIC double write bug.
  */
 
 #define APIC_DIVISOR 16
-
-/*
- * We do reads before writes even if unnecessary, to get around the
- * APIC double write 'bug'.
- */
 
 void setup_APIC_timer (unsigned int clocks)
 {
@@ -1462,14 +1560,14 @@ void wait_8254_wraparound (void)
 	 * chipset timer can cause.
 	 */
 
-	} while (delta<1000);
+	} while (delta<300);
 }
 
 /*
  * In this function we calibrate APIC bus clocks to the external
- * timer here. Unfortunately we cannot use jiffies and
- * the timer irq to calibrate, since some later bootup
- * code depends on getting the first irq? Ugh.
+ * timer. Unfortunately we cannot use jiffies and the timer irq
+ * to calibrate, since some later bootup code depends on getting
+ * the first irq? Ugh.
  *
  * We want to do the calibration only once since we
  * want to have local timer irqs syncron. CPUs connected
@@ -1481,8 +1579,7 @@ void wait_8254_wraparound (void)
 int calibrate_APIC_clock (void)
 {
 	unsigned long long t1,t2;
-	unsigned long tt1,tt2;
-	unsigned int prev_count, curr_count;
+	long tt1,tt2;
 	long calibration_result;
 
 	printk("calibrating APIC timer ... ");
@@ -1518,15 +1615,13 @@ int calibrate_APIC_clock (void)
 
 	/*
 	 * The APIC bus clock counter is 32 bits only, it
-	 * might have overflown:
+	 * might have overflown, but note that we use signed
+	 * longs, thus no extra care needed.
+	 *
+	 * underflown to be exact, as the timer counts down ;)
 	 */
-	if (tt2<tt1) {
-		unsigned long tmp = tt2;
-		tt2=tt1;
-		tt1=tmp;
-	}
 
-	calibration_result = (tt2-tt1)*APIC_DIVISOR;
+	calibration_result = (tt1-tt2)*APIC_DIVISOR;
 
 	printk("\n..... %ld CPU clocks in 1 timer chip tick.\n",
 			 (unsigned long)(t2-t1));
@@ -1546,31 +1641,26 @@ int calibrate_APIC_clock (void)
 	return calibration_result;
 }
 
+static unsigned int calibration_result;
+
 void setup_APIC_clock (void)
 {
+	int cpu = smp_processor_id();
 	unsigned long flags; 
 
 	static volatile int calibration_lock;
-	static unsigned int calibration_result;
 
-	return;
 	save_flags(flags);
 	cli();
 
 	printk("setup_APIC_clock() called.\n");
 
 	/*
-	 * We use a private profiling function. (This is preparation
-	 * for NMI local timer interrupts.)
-	 *
 	 * [ setup_APIC_clock() is called from all CPUs, but we want
 	 *   to do this part of the setup only once ... and it fits
 	 *   here best ]
 	 */
 	if (!set_bit(0,&calibration_lock)) {
-
-		default_do_profile = do_profile;
-		do_profile = NULL;
 
 		calibration_result=calibrate_APIC_clock();
 		/*
@@ -1587,13 +1677,58 @@ void setup_APIC_clock (void)
 		printk("done, continuing.\n");
 	}
 
+/*
+ * Now set up the timer for real. Profiling multiplier is 1.
+ */
 	setup_APIC_timer (calibration_result);
 
+	prof_counter[cpu] = prof_multiplier[cpu] = 1;
+
+	/*
+	 * FIXME: i sporadically see booting problems (keyboard irq is
+	 * lost, looks like the  timer irq isnt working or some irq
+	 * lock is messed up). Once we reboot the bug doesnt showu
+	 * up anymore.
+	 *
+	 * i'm quite certain it's a timing problem/race condition in
+	 * the bootup logic, not a hw bug. It might have been gone
+	 * meanwhile, tell me if you see it.
+	 */
+
+	ack_APIC_irq ();
+
 	restore_flags(flags);
+}
+
+/*
+ * the frequency of the profiling timer can be changed
+ * by writing 4 bytes into /proc/profile.
+ *
+ * usually you want to run this on all CPUs ;)
+ */
+int setup_profiling_timer (unsigned int multiplier)
+{
+	int cpu = smp_processor_id();
+	unsigned long flags;
+
+	/*
+	 * Sanity check. [at least 500 APIC cycles should be
+	 * between APIC interrupts as a rule of thumb, rather be
+	 * careful as irq flooding renders the system unusable]
+	 */
+	if ( (!multiplier) || (calibration_result/multiplier < 500))
+		return -EINVAL;
+
+	save_flags(flags);
+	cli();
+	setup_APIC_timer (calibration_result/multiplier);
+	prof_multiplier[cpu]=multiplier;
+	restore_flags(flags);
+
+	return 0;
 }
 
 #undef APIC_DIVISOR
 #undef RTDSC
 
-#endif
 

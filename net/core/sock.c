@@ -512,7 +512,7 @@ void sock_rfree(struct sk_buff *skb)
 
 struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
-	if (force || sk->wmem_alloc < sk->sndbuf) {
+	if (force || atomic_read(&sk->wmem_alloc) < sk->sndbuf) {
 		struct sk_buff * skb = alloc_skb(size, priority);
 		if (skb) {
 			atomic_add(skb->truesize, &sk->wmem_alloc);
@@ -526,7 +526,7 @@ struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int
 
 struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
-	if (force || sk->rmem_alloc < sk->rcvbuf) {
+	if (force || atomic_read(&sk->rmem_alloc) < sk->rcvbuf) {
 		struct sk_buff *skb = alloc_skb(size, priority);
 		if (skb) {
 			atomic_add(skb->truesize, &sk->rmem_alloc);
@@ -545,9 +545,9 @@ unsigned long sock_rspace(struct sock *sk)
 
 	if (sk != NULL) 
 	{
-		if (sk->rmem_alloc >= sk->rcvbuf-2*MIN_WINDOW) 
+		if (atomic_read(&sk->rmem_alloc) >= sk->rcvbuf-2*MIN_WINDOW) 
 			return(0);
-		amt = min((sk->rcvbuf-sk->rmem_alloc)/2-MIN_WINDOW, MAX_WINDOW);
+		amt = min((sk->rcvbuf-atomic_read(&sk->rmem_alloc))/2-MIN_WINDOW, MAX_WINDOW);
 		if (amt < 0) 
 			return(0);
 		return(amt);
@@ -562,9 +562,9 @@ unsigned long sock_wspace(struct sock *sk)
 	{
 		if (sk->shutdown & SEND_SHUTDOWN)
 			return(0);
-		if (sk->wmem_alloc >= sk->sndbuf)
+		if (atomic_read(&sk->wmem_alloc) >= sk->sndbuf)
 			return(0);
-		return sk->sndbuf - sk->wmem_alloc;
+		return sk->sndbuf - atomic_read(&sk->wmem_alloc);
 	}
 	return(0);
 }
@@ -627,7 +627,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 				*errcode=-EPIPE;
 				return NULL;
 			}
-			tmp = sk->wmem_alloc;
+			tmp = atomic_read(&sk->wmem_alloc);
 			cli();
 			if(sk->shutdown&SEND_SHUTDOWN)
 			{
@@ -637,7 +637,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 			}
 			
 #if 1
-			if( tmp <= sk->wmem_alloc)
+			if( tmp <= atomic_read(&sk->wmem_alloc))
 #else
 			/* ANK: Line above seems either incorrect
 			 *	or useless. sk->wmem_alloc has a tiny chance to change
@@ -647,7 +647,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 			 *	In any case I'd delete this check at all, or
 			 *	change it to:
 			 */
-			if (sk->wmem_alloc + size >= sk->sndbuf) 
+			if (atomic_read(&sk->wmem_alloc) + size >= sk->sndbuf) 
 #endif
 			{
 				sk->socket->flags &= ~SO_NOSPACE;
@@ -765,7 +765,9 @@ void sklist_destroy_socket(struct sock **list,struct sock *sk)
 		kfree_skb(skb,FREE_READ);
 	}
 
-	if(sk->wmem_alloc == 0 && sk->rmem_alloc == 0 && sk->dead)
+	if(atomic_read(&sk->wmem_alloc) == 0 &&
+	   atomic_read(&sk->rmem_alloc) == 0 &&
+	   sk->dead)
 	{
 		sk_free(sk);
 	}

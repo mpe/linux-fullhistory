@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.47 1997/01/02 14:14:28 jj Exp $
+/*  $Id: init.c,v 1.48 1997/04/12 04:28:37 davem Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -72,10 +72,10 @@ void show_mem(void)
 		total++;
 		if (PageReserved(mem_map + i))
 			reserved++;
-		else if (!mem_map[i].count)
+		else if (!atomic_read(&mem_map[i].count))
 			free++;
 		else
-			shared += mem_map[i].count-1;
+			shared += atomic_read(&mem_map[i].count) - 1;
 	}
 	printk("%d pages of RAM\n",total);
 	printk("%d free pages\n",free);
@@ -241,7 +241,7 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 				datapages++;
 			continue;
 		}
-		mem_map[MAP_NR(addr)].count = 1;
+		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
 		num_physpages++;
 #ifdef CONFIG_BLK_DEV_INITRD
 		if (!initrd_start ||
@@ -272,7 +272,7 @@ void free_initmem (void)
 	addr = (unsigned long)(&__init_begin);
 	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
 		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
-		mem_map[MAP_NR(addr)].count = 1;
+		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
 		free_page(addr);
 	}
 	printk ("Freeing unused kernel memory: %dk freed\n", (&__init_end - &__init_begin) >> 10);
@@ -291,9 +291,9 @@ void si_meminfo(struct sysinfo *val)
 		if (PageReserved(mem_map + i))
 			continue;
 		val->totalram++;
-		if (!mem_map[i].count)
+		if (!atomic_read(&mem_map[i].count))
 			continue;
-		val->sharedram += mem_map[i].count-1;
+		val->sharedram += atomic_read(&mem_map[i].count) - 1;
 	}
 	val->totalram <<= PAGE_SHIFT;
 	val->sharedram <<= PAGE_SHIFT;

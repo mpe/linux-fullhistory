@@ -13,12 +13,29 @@ struct semaphore {
 	struct wait_queue * wait;
 };
 
-#define MUTEX ((struct semaphore) { 1, 0, NULL })
-#define MUTEX_LOCKED ((struct semaphore) { 0, 0, NULL })
+#define MUTEX ((struct semaphore) { { (1 << 8) }, { 0 }, NULL })
+#define MUTEX_LOCKED ((struct semaphore) { { 0 }, { 0 }, NULL })
 
 extern void __down(struct semaphore * sem);
 extern int __down_interruptible(struct semaphore * sem);
 extern void __up(struct semaphore * sem);
+
+#define sema_init(sem, val)	atomic_set(&((sem)->count), val)
+
+static inline int waking_non_zero(struct semaphore *sem)
+{
+	unsigned long flags;
+	int ret = 0;
+
+	save_flags(flags);
+	cli();
+	if (atomic_read(&sem->waking) > 0) {
+		atomic_dec(&sem->waking);
+		ret = 1;
+	}
+	restore_flags(flags);
+	return ret;
+}
 
 /* This isn't quite as clever as the x86 side, I'll be fixing this
  * soon enough.

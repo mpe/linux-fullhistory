@@ -1,6 +1,6 @@
-/* smp_lock.h: SMP locking primitives on Sparc.
+/* smp_lock.h: 32-bit Sparc SMP master lock primitives.
  *
- * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
 #ifndef __SPARC_SMPLOCK_H
@@ -10,25 +10,45 @@
 #include <asm/ptrace.h>
 
 #ifndef __SMP__
-#define lock_kernel()		do { } while(0)
-#define unlock_kernel()		do { } while(0)
 
-typedef struct { } spinlock_t;
-#define SPIN_LOCK_UNLOCKED
+#define lock_kernel()				do { } while(0)
+#define unlock_kernel()				do { } while(0)
+#define release_kernel_lock(task, cpu, depth)	((depth) = 1)
+#define reaquire_kernel_lock(task, cpu, depth)	do { } while(0)
 
-#define spin_lock_init(lock)	do { } while(0)
-#define spin_lock(lock)		do { } while(0)
-#define spin_trylock(lock)	do { } while(0)
-#define spin_unlock(lock)	do { } while(0)
-
-#define spin_lock_cli(lock)		\
-({	unsigned long flags;		\
-	save_flags(flags); cli();	\
-	return flags;			\
-})
-
-#define spin_unlock_restore(lock, flags)	restore_flags(flags)
 #else
+
+#include <asm/hardirq.h>
+
+/* Release global kernel lock and global interrupt lock */
+#define release_kernel_lock(task, cpu, depth)		\
+do {							\
+	if((depth = (task)->lock_depth) != 0) {		\
+		__cli();				\
+		(task)->lock_depth = 0;			\
+		klock_info.akp = NO_PROC_ID;		\
+		klock_info.kernel_flag = 0;		\
+	}						\
+	release_irqlock(cpu);				\
+	__sti();					\
+} while(0)
+
+/* Do not fuck with this without consulting arch/sparc/lib/locks.S first! */
+#define reaquire_kernel_lock(task, cpu, depth)					\
+do {										\
+	if(depth) {								\
+		register struct klock_info *klip asm("g1");			\
+		register int proc asm("g5");					\
+		klip = &klock_info;						\
+		proc = cpu;							\
+		__asm__ __volatile__("mov	%%o7, %%g4\n\t"			\
+				     "call	___lock_reaquire_kernel\n\t"	\
+				     " mov	%2, %%g2"			\
+				     : /* No outputs. */			\
+				     : "r" (klip), "r" (proc), "r" (depth)	\
+				     : "g2", "g3", "g4", "g7", "memory", "cc");	\
+	}									\
+} while(0)
 
 /* The following acquire and release the master kernel global lock,
  * the idea is that the usage of this mechanmism becomes less and less
@@ -41,13 +61,27 @@ extern __inline__ void lock_kernel(void)
 {
 	register struct klock_info *klip asm("g1");
 	register int proc asm("g5");
-	klip = &klock_info; proc = smp_processor_id();
+	klip = &klock_info;
+	proc = smp_processor_id();
+
+#if 1 /* Debugging */
+	if(local_irq_count[proc]) {
+		__label__ l1;
+l1:		printk("lock from interrupt context at %p\n", &&l1);
+	}
+	if(proc == global_irq_holder) {
+		__label__ l2;
+l2:		printk("Ugh at %p\n", &&l2);
+		sti();
+	}
+#endif
+
 	__asm__ __volatile__("
 	mov	%%o7, %%g4
 	call	___lock_kernel
 	 ld	[%%g6 + %0], %%g2
 "	: : "i" (AOFF_task_lock_depth), "r" (klip), "r" (proc)
-	: "g2", "g3", "g4", "g7", "memory");
+	: "g2", "g3", "g4", "g7", "memory", "cc");
 }
 
 /* Release kernel global lock. */
@@ -60,89 +94,7 @@ extern __inline__ void unlock_kernel(void)
 	call	___unlock_kernel
 	 ld	[%%g6 + %0], %%g2
 "	: : "i" (AOFF_task_lock_depth), "r" (klip)
-	: "g2", "g3", "g4", "memory");
-}
-
-/* Simple spin lock operations.  There are two variants, one clears IRQ's
- * on the local processor, one does not.
- */
-
-typedef unsigned char spinlock_t;
-#define SPIN_LOCK_UNLOCKED	0
-
-extern __inline__ void spin_lock_init(spinlock_t *lock)
-{
-	*lock = 0;
-}
-
-extern __inline__ void spin_lock(spinlock_t *lock)
-{
-	register spinlock_t *lp asm("g1");
-	lp = lock;
-	__asm__ __volatile__("
-	ldstub	[%%g1], %%g2
-	orcc	%%g2, 0x0, %%g0
-	be	1f
-	 mov	%%o7, %%g4
-	call	___spinlock_waitfor
-	 ldub	[%%g1], %%g2
-1:"	: /* no outputs */
-	: "r" (lp)
-	: "g2", "g4", "memory");
-}
-
-extern __inline__ int spin_trylock(spinlock_t *lock)
-{
-	unsigned int result;
-
-	__asm__ __volatile__("
-	ldstub	[%1], %0
-"	: "=r" (result) : "r" (lock) : "memory");
-
-	return (result == 0);
-}
-
-extern __inline__ void spin_unlock(spinlock_t *lock)
-{
-	__asm__ __volatile__("stb	%%g0, [%0]" : : "r" (lock) : "memory");
-}
-
-/* These variants clear interrupts and return save_flags() style flags
- * to the caller when acquiring a lock.  To release the lock you must
- * pass the lock pointer as well as the flags returned from the acquisition
- * routine when releasing the lock.
- */
-extern __inline__ unsigned long spin_lock_cli(spinlock_t *lock)
-{
-	register spinlock_t *lp asm("g1");
-	register unsigned long flags asm("g3");
-	lp = lock;
-	__asm__ __volatile__("
-	rd	%%psr, %%g3
-	or	%%g3, %1, %%g4
-	wr	%%g4, 0, %%psr
-	nop; nop; nop;
-	ldstub	[%%g1], %%g2
-	orcc	%%g2, 0x0, %%g0
-	be	1f
-	 mov	%%o7, %%g4
-	call	___spinlock_waitfor
-	 ldub	[%%g1], %%g2
-1:"	: "=r" (flags)
-	: "i" (PSR_PIL), "r" (lp)
-	: "g2", "g4", "memory");
-	return flags;
-}
-
-extern __inline__ void spin_unlock_restore(spinlock_t *lock, unsigned long flags)
-{
-	__asm__ __volatile__("
-	stb	%%g0, [%0]
-	wr	%1, 0, %%psr
-	nop; nop; nop;
-"	: /* no outputs */
-	: "r" (lock), "r" (flags)
-	: "memory");
+	: "g2", "g3", "g4", "memory", "cc");
 }
 
 #endif /* !(__SPARC_SMPLOCK_H) */

@@ -188,7 +188,7 @@ void mouse_baud_detection(unsigned char c)
  * the Mouse zs8530 channel.
  */
 void
-sun_mouse_inbyte(unsigned char byte, unsigned char status)
+sun_mouse_inbyte(unsigned char byte)
 {
 	signed char mvalue;
 	int d;
@@ -204,8 +204,6 @@ sun_mouse_inbyte(unsigned char byte, unsigned char status)
 		push_char (byte);
 		return;
 	}
-	/* Check for framing errors and parity errors */
-	/* XXX TODO XXX */
 
 	/* If the mouse sends us a byte from 0x80 to 0x87
 	 * we are starting at byte zero in the transaction

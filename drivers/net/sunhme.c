@@ -921,7 +921,7 @@ static void happy_meal_init_rings(struct happy_meal *hp, int from_irq)
 	struct device *dev = hp->dev;
 	int i, gfp_flags = GFP_KERNEL;
 
-	if(from_irq || intr_count)
+	if(from_irq || in_interrupt())
 		gfp_flags = GFP_ATOMIC;
 
 	HMD(("happy_meal_init_rings: counters to zero, "));
@@ -960,7 +960,7 @@ static void happy_meal_init_rings(struct happy_meal *hp, int from_irq)
 static void sun4c_happy_meal_init_rings(struct happy_meal *hp)
 {
 	struct hmeal_init_block *hb = hp->happy_block;
-	struct hmeal_buffers *hbufs = hp->sun4c_buffers;
+	__u32 hbufs = hp->s4c_buf_dvma;
 	int i;
 
 	HMD(("happy_meal_init_rings: counters to zero, "));
@@ -968,9 +968,7 @@ static void sun4c_happy_meal_init_rings(struct happy_meal *hp)
 
 	HMD(("init rxring, "));
 	for(i = 0; i < RX_RING_SIZE; i++) {
-		unsigned char *this_buf = &hbufs->rx_buf[i][0];
-
-		hb->happy_meal_rxd[i].rx_addr = (unsigned int) this_buf;
+		hb->happy_meal_rxd[i].rx_addr = hbufs + hbuf_offset(rx_buf, i);
 		hb->happy_meal_rxd[i].rx_flags =
 			(RXFLAG_OWN | ((SUN4C_RX_BUFF_SIZE - RX_OFFSET) << 16));
 	}
@@ -1190,8 +1188,8 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 
 	/* Set the RX and TX ring ptrs. */
 	HMD(("ring ptrs\n"));
-	erxregs->rx_ring = (unsigned long) &hp->happy_block->happy_meal_rxd[0];
-	etxregs->tx_ring = (unsigned long) &hp->happy_block->happy_meal_txd[0];
+	erxregs->rx_ring = hp->hblock_dvma + hblock_offset(happy_meal_rxd, 0);
+	etxregs->tx_ring = hp->hblock_dvma + hblock_offset(happy_meal_txd, 0);
 
 	/* Set the supported SBUS burst sizes. */
 	HMD(("happy_meal_init: bursts<"));
@@ -1690,6 +1688,7 @@ static inline void sun4c_happy_meal_rx(struct happy_meal *hp, struct device *dev
 	struct happy_meal_rxd *rxbase = &hp->happy_block->happy_meal_rxd[0];
 	struct happy_meal_rxd *this;
 	struct hmeal_buffers *hbufs = hp->sun4c_buffers;
+	__u32 hbufs_dvma = hp->s4c_buf_dvma;
 	int elem = hp->rx_new, drops = 0;
 
 	RXD(("RX<"));
@@ -1698,6 +1697,7 @@ static inline void sun4c_happy_meal_rx(struct happy_meal *hp, struct device *dev
 		struct sk_buff *skb;
 		unsigned int flags = this->rx_flags;
 		unsigned char *thisbuf = &hbufs->rx_buf[elem][0];
+		__u32 thisbuf_dvma = hbufs_dvma + hbuf_offset(rx_buf, elem);
 		int len = flags >> 16;
 
 		RXD(("[%d ", elem));
@@ -1731,7 +1731,7 @@ static inline void sun4c_happy_meal_rx(struct happy_meal *hp, struct device *dev
 			}
 		}
 		/* Return the buffer to the Happy Meal. */
-		this->rx_addr = (unsigned int) thisbuf;
+		this->rx_addr = thisbuf_dvma;
 		this->rx_flags =
 			(RXFLAG_OWN | ((SUN4C_RX_BUFF_SIZE - RX_OFFSET) << 16));
 
@@ -1929,6 +1929,7 @@ static int sun4c_happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct happy_meal *hp = (struct happy_meal *) dev->priv;
 	struct hmeal_buffers *hbufs = hp->sun4c_buffers;
+	__u32 txbuf_dvma, hbufs_dvma = hp->s4c_buf_dvma;
 	unsigned char *txbuf;
 	int len, entry;
 
@@ -1968,7 +1969,8 @@ static int sun4c_happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 	memcpy(txbuf, skb->data, len);
 
 	SXD(("SX<l[%d]e[%d]>", len, entry));
-	hp->happy_block->happy_meal_txd[entry].tx_addr = (unsigned int) txbuf;
+	txbuf_dvma = hbufs_dvma + hbuf_offset(tx_buf, entry);
+	hp->happy_block->happy_meal_txd[entry].tx_addr = txbuf_dvma;
 	hp->happy_block->happy_meal_txd[entry].tx_flags =
 		(TXFLAG_OWN | TXFLAG_SOP | TXFLAG_EOP | (len & TXFLAG_SIZE));
 	hp->tx_new = NEXT_TX(entry);
@@ -2153,11 +2155,13 @@ static int happy_meal_ether_init(struct device *dev, struct linux_sbus_device *s
 					      "burst-sizes", 0x00);
 
 	hp->happy_block = (struct hmeal_init_block *)
-		sparc_dvma_malloc(PAGE_SIZE, "Happy Meal Init Block");
+		sparc_dvma_malloc(PAGE_SIZE, "Happy Meal Init Block",
+				  &hp->hblock_dvma);
 
 	if(sparc_cpu_model == sun4c)
 		hp->sun4c_buffers = (struct hmeal_buffers *)
-		    sparc_dvma_malloc(sizeof(struct hmeal_buffers), "Happy Meal Bufs");
+		    sparc_dvma_malloc(sizeof(struct hmeal_buffers), "Happy Meal Bufs",
+				      &hp->s4c_buf_dvma);
 	else
 		hp->sun4c_buffers = 0;
 

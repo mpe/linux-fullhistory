@@ -1,8 +1,13 @@
-/* $Id: sigcontext.h,v 1.3 1997/03/03 16:51:55 jj Exp $ */
+/* $Id: sigcontext.h,v 1.4 1997/04/04 00:50:28 davem Exp $ */
 #ifndef __SPARC64_SIGCONTEXT_H
 #define __SPARC64_SIGCONTEXT_H
 
 #include <asm/ptrace.h>
+
+/* XXX This gets exported to userland as well as kernel, it is probably
+ * XXX riddled with many hard to find 32-bit binary compatability issues.
+ * XXX Signals and this file need to be investigated heavily. -DaveM
+ */
 
 #define SUNOS_MAXWIN   31
 

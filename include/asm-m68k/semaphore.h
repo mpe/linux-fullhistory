@@ -26,6 +26,23 @@ asmlinkage void __up_wakeup(void /* special register calling convention */);
 extern void __down(struct semaphore * sem);
 extern void __up(struct semaphore * sem);
 
+#define sema_init(sem, val)	((sem)->count = val)
+
+static inline int waking_non_zero(struct semaphore *sem)
+{
+	unsigned long flags;
+	int ret = 0;
+
+	save_flags(flags);
+	cli();
+	if (atomic_read(&sem->waking) > 0) {
+		atomic_dec(&sem->waking);
+		ret = 1;
+	}
+	restore_flags(flags);
+	return ret;
+}
+
 /*
  * This is ugly, but we want the default case to fall through.
  * "down_failed" is a special asm handler that calls the C

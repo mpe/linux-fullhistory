@@ -258,6 +258,9 @@ void fat_date_unix2dos(int unix_date,unsigned short *time,
 {
 	int day,year,nl_day,month;
 
+	if (sys_tz.tz_dsttime) {
+		unix_date += 3600;
+	}
 	unix_date -= sys_tz.tz_minuteswest*60;
 	*time = (unix_date % 60)/2+(((unix_date/60) % 60) << 5)+
 	    (((unix_date/3600) % 24) << 11);

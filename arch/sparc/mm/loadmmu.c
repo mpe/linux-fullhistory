@@ -1,4 +1,4 @@
-/* $Id: loadmmu.c,v 1.45 1996/12/30 06:16:28 davem Exp $
+/* $Id: loadmmu.c,v 1.46 1997/04/10 05:12:51 davem Exp $
  * loadmmu.c:  This code loads up all the mm function pointers once the
  *             machine type has been determined.  It also sets the static
  *             mmu values such as PAGE_NONE, etc.
@@ -41,9 +41,9 @@ unsigned long (*mmu_p2v)(unsigned long);
 char *(*mmu_lockarea)(char *, unsigned long);
 void  (*mmu_unlockarea)(char *, unsigned long);
 
-char *(*mmu_get_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
+__u32 (*mmu_get_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
 void  (*mmu_get_scsi_sgl)(struct mmu_sglist *, int, struct linux_sbus *sbus);
-void  (*mmu_release_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
+void  (*mmu_release_scsi_one)(__u32, unsigned long, struct linux_sbus *sbus);
 void  (*mmu_release_scsi_sgl)(struct mmu_sglist *, int, struct linux_sbus *sbus);
 
 void  (*mmu_map_dma_area)(unsigned long addr, int len);

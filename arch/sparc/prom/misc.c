@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.12 1996/12/18 06:46:55 tridge Exp $
+/* $Id: misc.c,v 1.13 1997/04/10 05:12:59 davem Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -92,6 +92,7 @@ void
 prom_halt(void)
 {
 	unsigned long flags;
+again:
 	save_flags(flags); cli();
 	(*(romvec->pv_halt))();
 	/* Never get here. */
@@ -99,6 +100,7 @@ prom_halt(void)
 			     "r" (&current_set[smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
+	goto again; /* PROM is out to get me -DaveM */
 }
 
 typedef void (*sfunc_t)(void);

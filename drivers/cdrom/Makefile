@@ -153,10 +153,10 @@ else
 endif #CONFIG_BLK_DEV_IDECD
 
 ifdef USE_GENERIC_CD
-L_OBJS += cdrom.o
+LX_OBJS += cdrom.o
 else
   ifdef USE_MODULAR_GENERIC_CD
-  M_OBJS += cdrom.o
+  MX_OBJS += cdrom.o
   endif
 endif #The Makefile configuration for the generic cdrom interface
   

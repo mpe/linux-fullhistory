@@ -1,5 +1,5 @@
-/* $Id: trampoline.S,v 1.5 1996/09/22 06:43:10 davem Exp $
- * mp.S:  Multiprocessor low-level routines on the Sparc.
+/* $Id: trampoline.S,v 1.6 1997/04/14 05:38:33 davem Exp $
+ * trampoline.S: SMP cpu boot-up trampoline code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */

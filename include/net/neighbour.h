@@ -116,7 +116,7 @@ static __inline__ void neigh_insert(struct neigh_table *tbl,
 				    struct neighbour *neigh)
 {
 	start_bh_atomic();
-	if (tbl->tbl_lock == 1)
+	if (atomic_read(&tbl->tbl_lock) == 1)
 	{
 		neigh_table_ins(tbl, neigh);
 	}

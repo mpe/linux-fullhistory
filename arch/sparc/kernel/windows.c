@@ -33,7 +33,7 @@ void flush_user_windows(void)
 	: "=&r" (ctr)
 	: "0" (ctr),
 	  "i" ((const unsigned long)(&(((struct task_struct *)0)->tss.uwinmask)))
-	: "g4");
+	: "g4", "cc");
 }
 
 static inline void shift_window_buffer(int first_win, int last_win, struct thread_struct *tp)

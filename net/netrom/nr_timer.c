@@ -85,7 +85,8 @@ static void nr_timer(unsigned long param)
 			/*
 			 * Check for the state of the receive buffer.
 			 */
-			if (sk->rmem_alloc < (sk->rcvbuf / 2) && (sk->protinfo.nr->condition & NR_COND_OWN_RX_BUSY)) {
+			if (atomic_read(&sk->rmem_alloc) < (sk->rcvbuf / 2) &&
+			    (sk->protinfo.nr->condition & NR_COND_OWN_RX_BUSY)) {
 				sk->protinfo.nr->condition &= ~NR_COND_OWN_RX_BUSY;
 				sk->protinfo.nr->condition &= ~NR_COND_ACK_PENDING;
 				sk->protinfo.nr->vl         = sk->protinfo.nr->vr;

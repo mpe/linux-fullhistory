@@ -317,6 +317,9 @@ struct qe_init_block {
 	struct qe_txd qe_txd[TX_RING_MAXSIZE];
 };
 
+#define qib_offset(mem, elem) \
+((__u32)((unsigned long)(&(((struct qe_init_block *)0)->mem[elem]))))
+
 struct sunqe;
 
 struct sunqec {
@@ -341,6 +344,9 @@ struct sunqe_buffers {
 	char	rx_buf[SUN4C_RX_RING_SIZE][SUN4C_RX_BUFF_SIZE];
 };
 
+#define qebuf_offset(mem, elem) \
+((__u32)((unsigned long)(&(((struct sunqe_buffers *)0)->mem[elem][0]))))
+
 #define SUN4C_NEXT_RX(num)	(((num) + 1) & (SUN4C_RX_RING_SIZE - 1))
 #define SUN4C_NEXT_TX(num)	(((num) + 1) & (SUN4C_TX_RING_SIZE - 1))
 #define SUN4C_PREV_RX(num)	(((num) - 1) & (SUN4C_RX_RING_SIZE - 1))
@@ -350,17 +356,19 @@ struct sunqe {
 	struct qe_creg            *qcregs;           /* QEC per-channel Registers      */
 	struct qe_mregs           *mregs;            /* Per-channel MACE Registers     */
 	struct qe_init_block      *qe_block;         /* RX and TX descriptors          */
+	__u32                      qblock_dvma;      /* RX and TX descriptors          */
 
 	struct sk_buff            *rx_skbs[RX_RING_SIZE];
 	struct sk_buff            *tx_skbs[TX_RING_SIZE];
 
 	int                        rx_new, tx_new, rx_old, tx_old;
 
-	struct sunqe_buffers      *sun4c_buffers;
+	struct sunqe_buffers      *sun4c_buffers; /* CPU visible address.  */
+	__u32                      s4c_buf_dvma;  /* DVMA visible address. */
 
 	struct sunqec             *parent;
 
-	struct net_device_stats   net_stats;   /* Statistical counters               */
+	struct net_device_stats   net_stats;     /* Statistical counters               */
 	struct linux_sbus_device  *qe_sbusdev;   /* QE's SBUS device struct            */
 	struct device             *dev;          /* QE's netdevice struct              */
 	int                        channel;      /* Who am I?                          */

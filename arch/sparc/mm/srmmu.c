@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.132 1997/03/18 17:56:47 jj Exp $
+/* $Id: srmmu.c,v 1.135 1997/04/14 05:38:49 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -674,7 +674,7 @@ static void srmmu_set_pte_nocache_hyper(pte_t *ptep, pte_t pteval)
 	: "r" (page | 0x400), "r" (page), "i" (ASI_M_FLUSH_PROBE),
 	  "i" (ASI_M_FLUSH_PAGE), "r" (SRMMU_FAULT_STATUS), "i" (ASI_M_MMUREGS),
 	  "r" (vac_line_size), "i" (PAGE_SIZE)
-	: "g4", "g5");
+	: "g4", "g5", "cc");
 }
 
 static void srmmu_set_pte_nocache_cypress(pte_t *ptep, pte_t pteval)
@@ -1155,7 +1155,7 @@ static void viking_mxcc_flush_page(unsigned long page)
 			      "r" (MXCC_SRCSTREAM),
 			      "r" (MXCC_DESSTREAM),
 			      "r" (MXCC_STREAM_SIZE),
-			      "i" (ASI_M_MXCC) : "g2", "g3");
+			      "i" (ASI_M_MXCC) : "g2", "g3", "cc");
 
 	/* This was handcoded after a look at the gcc output from
 	 *
@@ -1234,7 +1234,7 @@ static void viking_flush_tlb_all(void)
 	2:	subcc	%0, 1, %0
 		bne	2b
 		 restore %%g0, %%g0, %%g0"
-	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4");
+	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4", "cc");
 	srmmu_flush_whole_tlb();
 	module_stats.invall++;
 }
@@ -1262,7 +1262,7 @@ static void viking_flush_tlb_mm(struct mm_struct *mm)
 	: "r" (SRMMU_CTX_REG), "r" (0x300), "r" (mm->context),
 	  "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PROBE), "0" (ctr),
 	  "i" (UWINMASK_OFFSET)
-	: "g4");
+	: "g4", "cc");
 	module_stats.invmm++;
 	FLUSH_END
 }
@@ -1283,7 +1283,7 @@ static void viking_flush_tlb_range(struct mm_struct *mm, unsigned long start, un
 	2:	subcc	%0, 1, %0
 		bne	2b
 		 restore %%g0, %%g0, %%g0"
-	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4");
+	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4", "cc");
 	start &= SRMMU_PGDIR_MASK;
 	size = SRMMU_PGDIR_ALIGN(end) - start;
 	__asm__ __volatile__("
@@ -1297,7 +1297,7 @@ static void viking_flush_tlb_range(struct mm_struct *mm, unsigned long start, un
 	: "r" (SRMMU_CTX_REG), "r" (mm->context), "r" (start | 0x200),
 	  "r" (size), "r" (SRMMU_PGDIR_SIZE), "i" (ASI_M_MMUREGS),
 	  "i" (ASI_M_FLUSH_PROBE)
-	: "g5");
+	: "g5", "cc");
 	module_stats.invrnge++;
 	FLUSH_END
 }
@@ -1318,7 +1318,7 @@ static void viking_flush_tlb_page(struct vm_area_struct *vma, unsigned long page
 	2:	subcc	%0, 1, %0
 		bne	2b
 		 restore %%g0, %%g0, %%g0"
-	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4");
+	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4", "cc");
 	__asm__ __volatile__("
 	lda	[%0] %3, %%g5
 	sta	%1, [%0] %3
@@ -1553,7 +1553,7 @@ static void cypress_flush_tlb_range(struct mm_struct *mm, unsigned long start, u
 	: "r" (SRMMU_CTX_REG), "r" (mm->context), "r" (start | 0x200),
 	  "r" (size), "r" (SRMMU_PGDIR_SIZE), "i" (ASI_M_MMUREGS),
 	  "i" (ASI_M_FLUSH_PROBE)
-	: "g5");
+	: "g5", "cc");
 	module_stats.invrnge++;
 	FLUSH_END
 }
@@ -1822,7 +1822,7 @@ void iommu_sun4d_init(int sbi_node, struct linux_sbus *sbus)
 	sbus->iommu = (struct iommu_struct *)iommu;
 }
 
-static char *srmmu_get_scsi_one(char *vaddr, unsigned long len, struct linux_sbus *sbus)
+static __u32 srmmu_get_scsi_one(char *vaddr, unsigned long len, struct linux_sbus *sbus)
 {
 	unsigned long page = ((unsigned long) vaddr) & PAGE_MASK;
 
@@ -1830,7 +1830,7 @@ static char *srmmu_get_scsi_one(char *vaddr, unsigned long len, struct linux_sbu
 		flush_page_for_dma(page);
 		page += PAGE_SIZE;
 	}
-	return vaddr;
+	return (__u32)vaddr;
 }
 
 static void srmmu_get_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
@@ -1843,12 +1843,12 @@ static void srmmu_get_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus 
 			flush_page_for_dma(page);
 			page += PAGE_SIZE;
 		}
-		sg[sz].dvma_addr = (char *) (sg[sz].addr);
+		sg[sz].dvma_addr = (__u32) (sg[sz].addr);
 		sz--;
 	}
 }
 
-static void srmmu_release_scsi_one(char *vaddr, unsigned long len, struct linux_sbus *sbus)
+static void srmmu_release_scsi_one(__u32 vaddr, unsigned long len, struct linux_sbus *sbus)
 {
 }
 
@@ -2666,7 +2666,10 @@ static void poke_hypersparc(void)
 	mreg |= (HYPERSPARC_CMODE);
 
 	srmmu_set_mmureg(mreg);
+
+#if 0 /* I think this is bad news... -DaveM */
 	hyper_clear_all_tags();
+#endif
 
 	put_ross_icr(HYPERSPARC_ICCR_FTD | HYPERSPARC_ICCR_ICE);
 	hyper_flush_whole_icache();

@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.45 1997/03/04 16:26:27 jj Exp $
+/* $Id: rtrap.S,v 1.46 1997/04/01 02:21:48 davem Exp $
  * rtrap.S: Return from Sparc trap low-level code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -48,13 +48,8 @@ rtrap_7win_patch5:	and	%g1, 0x7f, %g1
 	.globl	rtrap_patch3, rtrap_patch4, rtrap_patch5
 	.globl	C_LABEL(ret_trap_lockless_ipi)
 ret_trap_entry:
-	sethi	%hi(C_LABEL(intr_count)), %g4
-	ld	[%g4 + %lo(C_LABEL(intr_count))], %g5
-	orcc	%g5, 0x0, %g0
 	sethi	%hi(C_LABEL(bh_active)), %l3
-	bne	C_LABEL(ret_trap_lockless_ipi)
-	 sethi	%hi(C_LABEL(bh_mask)), %l4
-9:
+	sethi	%hi(C_LABEL(bh_mask)), %l4
 	ld	[%l4 + %lo(C_LABEL(bh_mask))], %g5
 	ld	[%l3 + %lo(C_LABEL(bh_active))], %g4
 	andcc	%g4, %g5, %g0
@@ -62,7 +57,6 @@ ret_trap_entry:
 	 nop
 	call	C_LABEL(do_bottom_half)
 	 nop
-	b,a	9b
 
 C_LABEL(ret_trap_lockless_ipi):
 	andcc	%t_psr, PSR_PS, %g0

@@ -29,7 +29,7 @@
 #include <linux/in.h>
 #include <linux/unistd.h>
 #include <linux/malloc.h>
-#include <netinet/in.h>
+#include <linux/in.h>
 
 #include <linux/sunrpc/svc.h>
 #include <linux/nfsd/nfsd.h>
@@ -837,7 +837,7 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 		return 0;
 
 	if ((err = nfsd_open(rqstp, fhp, S_IFDIR, OPEN_READ, &file)) != 0)
-		return nfserrno(-err);
+		return err;
 
 	if (!file.f_op->readdir) {
 		nfsd_close(&file);

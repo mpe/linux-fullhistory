@@ -16,6 +16,7 @@
  * current-task
  */
 
+#include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
@@ -49,7 +50,7 @@
 int securelevel = 0;			/* system security level */
 
 long tick = (1000000 + HZ/2) / HZ;	/* timer interrupt period */
-volatile struct timeval xtime;		/* The current time */
+volatile struct timeval xtime __attribute__ ((aligned (8)));	/* The current time */
 int tickadj = 500/HZ;			/* microsecs */
 
 DECLARE_TASK_QUEUE(tq_timer);
@@ -362,6 +363,9 @@ asmlinkage void schedule(void)
 		 * the scheduler lock
 		 */
 		spin_unlock_irq(&runqueue_lock);
+#ifdef __SMP__
+		prev->processor = NO_PROC_ID;
+#endif
 	
 /*
  * Note! there may appear new tasks on the run-queue during this, as
@@ -510,27 +514,9 @@ void wake_up_interruptible(struct wait_queue **q)
  * needs to do something only if count was negative before
  * the increment operation.
  *
- * This routine must execute atomically.
- */
-static inline int waking_non_zero(struct semaphore *sem)
-{
-	int ret;
-	long flags;
-
-	save_flags(flags);
-	cli();
-
-	ret = 0;
-	if (sem->waking > 0) {
-		sem->waking--;
-		ret = 1;
-	}
-
-	restore_flags(flags);
-	return ret;
-}
-
-/*
+ * waking_non_zero() (from asm/semaphore.h) must execute
+ * atomically.
+ *
  * When __up() is called, the count was negative before
  * incrementing it, and we need to wake up somebody.
  *
@@ -548,7 +534,7 @@ static inline int waking_non_zero(struct semaphore *sem)
  */
 void __up(struct semaphore *sem)
 {
-	atomic_inc(&sem->waking);
+	wake_one_more(sem);
 	wake_up(&sem->wait);
 }
 
@@ -1131,7 +1117,7 @@ static inline void do_it_prof(struct task_struct * p, unsigned long ticks)
 	}
 }
 
-static __inline__ void update_one_process(struct task_struct *p,
+void update_one_process(struct task_struct *p,
 	unsigned long ticks, unsigned long user, unsigned long system)
 {
 	do_process_times(p, user, system);
@@ -1141,6 +1127,9 @@ static __inline__ void update_one_process(struct task_struct *p,
 
 static void update_process_times(unsigned long ticks, unsigned long system)
 {
+/*
+ * SMP does this on a per-CPU basis elsewhere
+ */
 #ifndef  __SMP__
 	struct task_struct * p = current;
 	unsigned long user = ticks - system;
@@ -1157,63 +1146,6 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 		kstat.cpu_system += system;
 	}
 	update_one_process(p, ticks, user, system);
-#else
-	int cpu,j;
-	cpu = smp_processor_id();
-	for (j=0;j<smp_num_cpus;j++)
-	{
-		int i = cpu_logical_map[j];
-		struct task_struct *p;
-		
-#ifdef __SMP_PROF__
-		if (test_bit(i,&smp_idle_map)) 
-			smp_idle_count[i]++;
-#endif
-		p = current_set[i];
-		/*
-		 * Do we have a real process?
-		 */
-		if (p->pid) {
-			/* assume user-mode process */
-			unsigned long utime = ticks;
-			unsigned long stime = 0;
-			if (cpu == i) {
-				utime = ticks-system;
-				stime = system;
-			} else if (smp_proc_in_lock[j]) {
-				utime = 0;
-				stime = ticks;
-			}
-
-			update_one_process(p, ticks, utime, stime);
-
-			if (p->priority < DEF_PRIORITY)
-				kstat.cpu_nice += utime;
-			else
-				kstat.cpu_user += utime;
-			kstat.cpu_system += stime;
-
-			p->counter -= ticks;
-			if (p->counter >= 0)
-				continue;
-			p->counter = 0;
-		} else {
-			/*
-			 * Idle processor found, do we have anything
-			 * we could run?
-			 */
-			if (!(read_smp_counter(&smp_process_available)))
-				continue;
-		}
-		/* Ok, we should reschedule, do the magic */
-		cli();
-		if (i==cpu) {
-			need_resched = 1;
-		} else {
-			smp_message_pass(i, MSG_RESCHEDULE, 0L, 0);
-		}
-		sti();
-	}
 #endif
 }
 
@@ -1252,37 +1184,13 @@ static void timer_bh(void)
 	run_timer_list();
 }
 
-/*
- * It is up to the platform where it does the profiling: in the
- * global timer interrupt, or in a special interrupt handler.
- *
- * by default it's done in the global timer interrupt.
- */
-
-static void default_do_profile (struct pt_regs * regs)
-{
-	if (prof_buffer && current->pid) {
-		extern int _stext;
-		unsigned long ip = instruction_pointer(regs);
-		ip -= (unsigned long) &_stext;
-		ip >>= prof_shift;
-		if (ip < prof_len)
-			prof_buffer[ip]++;
-	}
-}
-
-void (*do_profile)(struct pt_regs *) = default_do_profile;
-
 void do_timer(struct pt_regs * regs)
 {
 	(*(unsigned long *)&jiffies)++;
 	lost_ticks++;
 	mark_bh(TIMER_BH);
-	if (!user_mode(regs)) {
+	if (!user_mode(regs))
 		lost_ticks_system++;
-		if (do_profile)
-			do_profile(regs);
-	}
 	if (tq_timer)
 		mark_bh(TQUEUE_BH);
 }
@@ -1667,7 +1575,7 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 
 
 	if (t.tv_sec == 0 && t.tv_nsec <= 2000000L &&
-	    current->policy != SCHED_OTHER) 
+	    current->policy != SCHED_OTHER)
 	{
 		/*
 		 * Short delay requests up to 2 ms will be handled with

@@ -794,7 +794,7 @@ extern __inline__ void skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 
 extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
-	if (sk->rmem_alloc + skb->truesize >= sk->rcvbuf)
+	if (atomic_read(&sk->rmem_alloc) + skb->truesize >= sk->rcvbuf)
 		return -ENOMEM;
 	skb_set_owner_r(skb, sk);
 	skb_queue_tail(&sk->receive_queue,skb);
@@ -805,7 +805,7 @@ extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 
 extern __inline__ int __sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
-	if (sk->rmem_alloc + skb->truesize >= sk->rcvbuf)
+	if (atomic_read(&sk->rmem_alloc) + skb->truesize >= sk->rcvbuf)
 		return -ENOMEM;
 	skb_set_owner_r(skb, sk);
 	__skb_queue_tail(&sk->receive_queue,skb);
@@ -816,7 +816,7 @@ extern __inline__ int __sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 
 extern __inline__ int sock_queue_err_skb(struct sock *sk, struct sk_buff *skb)
 {
-	if (sk->rmem_alloc + skb->truesize >= sk->rcvbuf)
+	if (atomic_read(&sk->rmem_alloc) + skb->truesize >= sk->rcvbuf)
 		return -ENOMEM;
 	skb_set_owner_r(skb, sk);
 	__skb_queue_tail(&sk->error_queue,skb);

@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.49 1997/03/15 07:47:45 davem Exp $
+/* $Id: sparc_ksyms.c,v 1.54 1997/04/14 05:38:25 davem Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/string.h>
+#include <linux/interrupt.h>
 #include <linux/in6.h>
 
 #include <asm/oplib.h>
@@ -26,6 +27,9 @@
 #include <asm/smp.h>
 #include <asm/mostek.h>
 #include <asm/ptrace.h>
+#include <asm/spinlock.h>
+#include <asm/softirq.h>
+#include <asm/hardirq.h>
 #include <asm/user.h>
 #include <asm/uaccess.h>
 #include <asm/checksum.h>
@@ -82,6 +86,8 @@ EXPORT_SYMBOL(klock_info);
 #endif
 EXPORT_SYMBOL_PRIVATE(_lock_kernel);
 EXPORT_SYMBOL_PRIVATE(_unlock_kernel);
+EXPORT_SYMBOL_PRIVATE(_spinlock_waitfor);
+EXPORT_SYMBOL(__sparc_bh_counter);
 EXPORT_SYMBOL(page_offset);
 EXPORT_SYMBOL(stack_top);
 
@@ -96,6 +102,20 @@ EXPORT_SYMBOL_PRIVATE(_clear_bit);
 EXPORT_SYMBOL_PRIVATE(_change_bit);
 EXPORT_SYMBOL_PRIVATE(_set_le_bit);
 EXPORT_SYMBOL_PRIVATE(_clear_le_bit);
+
+/* IRQ implementation. */
+EXPORT_SYMBOL(local_irq_count);
+#ifdef __SMP__
+EXPORT_SYMBOL(global_irq_holder);
+EXPORT_SYMBOL(global_irq_lock);
+EXPORT_SYMBOL(global_bh_lock);
+EXPORT_SYMBOL(global_irq_count);
+EXPORT_SYMBOL(__global_cli);
+EXPORT_SYMBOL(__global_sti);
+EXPORT_SYMBOL(__global_save_flags);
+EXPORT_SYMBOL(__global_restore_flags);
+EXPORT_SYMBOL(synchronize_irq);
+#endif
 
 EXPORT_SYMBOL(udelay);
 EXPORT_SYMBOL(mstk48t02_regs);
@@ -113,7 +133,7 @@ EXPORT_SYMBOL(mmu_get_scsi_sgl);
 EXPORT_SYMBOL(mmu_get_scsi_one);
 EXPORT_SYMBOL(mmu_release_scsi_sgl);
 EXPORT_SYMBOL(mmu_release_scsi_one);
-EXPORT_SYMBOL(sparc_dvma_malloc);
+EXPORT_SYMBOL(_sparc_dvma_malloc);
 EXPORT_SYMBOL(sun4c_unmapioaddr);
 EXPORT_SYMBOL(srmmu_unmapioaddr);
 #if CONFIG_SBUS

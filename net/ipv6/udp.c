@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.12 1997/03/18 18:24:59 davem Exp $
+ *	$Id: udp.c,v 1.16 1997/04/11 22:22:57 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -290,7 +290,7 @@ static void udpv6_close(struct sock *sk, unsigned long timeout)
 		dst_release(np->dst);
 
 	ipv6_sock_mc_close(sk);
-
+	udp_v6_unhash(sk);
 	release_sock(sk);
 	destroy_sock(sk);
 }
@@ -382,7 +382,7 @@ void udpv6_err(int type, int code, unsigned char *buff, __u32 info,
 	sk = udp_v6_lookup(daddr, uh->dest, saddr, uh->source);
    
 	if (sk == NULL) {
-		printk(KERN_DEBUG "icmp for unkown sock\n");
+		printk(KERN_DEBUG "icmp for unknown sock\n");
 		return;
 	}
 

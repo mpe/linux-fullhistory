@@ -325,7 +325,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 			case AX25_P_TEXT:
 				/* Now find a suitable dgram socket */
 				if ((sk = ax25_find_socket(&dest, &src, SOCK_DGRAM)) != NULL) {
-					if (sk->rmem_alloc >= sk->rcvbuf) {
+					if (atomic_read(&sk->rmem_alloc) >= sk->rcvbuf) {
 						kfree_skb(skb, FREE_READ);
 					} else {
 						/*

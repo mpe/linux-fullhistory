@@ -1,8 +1,9 @@
-/* $Id: io.h,v 1.11 1996/11/19 11:26:14 davem Exp $ */
+/* $Id: io.h,v 1.14 1997/04/10 05:13:22 davem Exp $ */
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
 
 #include <linux/kernel.h>
+#include <linux/types.h>
 
 #include <asm/page.h>      /* IO address mapping routines need this */
 #include <asm/system.h>
@@ -135,9 +136,19 @@ extern __inline__ void unmapioaddr(unsigned long virt_addr)
 	return;
 }
 
-extern void *sparc_alloc_io (void *, void *, int, char *, int, int);
-extern void sparc_free_io (void *, int);
-extern void *sparc_dvma_malloc (int, char *);
+extern void *sparc_alloc_io (u32 pa, void *va, int sz, char *name, u32 io, int rdonly);
+extern void sparc_free_io (void *vaddr, int sz);
+extern void *_sparc_dvma_malloc (int sz, char *name);
+
+/* Returns CPU visible address, dvmaaddr_p is a pointer to where
+ * the DVMA visible (ie. SBUS/PSYCO+PCI) address should be stored.
+ */
+static __inline__ void *sparc_dvma_malloc(int size, char *name, __u32 *dvmaaddr_p)
+{
+	void *cpuaddr = _sparc_dvma_malloc(size, name);
+	*dvmaaddr_p = (__u32) cpuaddr;
+	return cpuaddr;
+}
 
 #define virt_to_phys(x) __pa((unsigned long)(x))
 #define phys_to_virt(x) __va((unsigned long)(x))

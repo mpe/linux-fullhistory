@@ -1,4 +1,4 @@
-/* $Id: tree.c,v 1.4 1997/03/04 16:27:14 jj Exp $
+/* $Id: tree.c,v 1.5 1997/03/24 17:44:01 jj Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
@@ -18,12 +18,18 @@
  * direct descendent.
  */
 __inline__ int
+__prom_getchild(int node)
+{
+	return p1275_cmd ("child", P1275_INOUT(1, 1), node);
+}
+
+__inline__ int
 prom_getchild(int node)
 {
 	long cnode;
 
 	if(node == -1) return 0;
-	cnode = p1275_cmd ("child", P1275_INOUT(1, 1), node);
+	cnode = __prom_getchild(node);
 	if(cnode == -1) return 0;
 	return (int)cnode;
 }
@@ -43,12 +49,18 @@ prom_getparent(int node)
  * at this level of depth in the tree.
  */
 __inline__ int
+__prom_getsibling(int node)
+{
+	return p1275_cmd ("peer", P1275_INOUT(1, 1), node);
+}
+
+__inline__ int
 prom_getsibling(int node)
 {
 	long sibnode;
 
 	if(node == -1) return 0;
-	sibnode = p1275_cmd ("peer", P1275_INOUT(1, 1), node);
+	sibnode = __prom_getsibling(node);
 	if(sibnode == -1) return 0;
 	return (int)sibnode;
 }

@@ -962,6 +962,6 @@ svc_delete_socket(struct svc_sock *svsk)
 		kfree(svsk);
 	} else {
 		printk(KERN_NOTICE "svc: server socket destroy delayed\n");
-		svsk->sk_server = NULL;
+		/* svsk->sk_server = NULL; */
 	}
 }

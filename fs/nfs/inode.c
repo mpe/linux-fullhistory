@@ -83,12 +83,14 @@ nfs_put_inode(struct inode * inode)
 void
 nfs_put_super(struct super_block *sb)
 {
+	struct nfs_server *server = &sb->u.nfs_sb.s_server;
 	struct rpc_clnt	*rpc;
 
-	if ((rpc = sb->u.nfs_sb.s_server.client) != NULL)
+	if ((rpc = server->client) != NULL)
 		rpc_shutdown_client(rpc);
 
-	lockd_down();		/* release rpc.lockd */
+	if (!(server->flags & NFS_MOUNT_NONLM))
+		lockd_down();	/* release rpc.lockd */
 	rpciod_down();		/* release rpciod */
 	lock_super(sb);
 	sb->s_dev = 0;
@@ -230,7 +232,8 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 
 	if ((sb->s_mounted = nfs_fhget(sb, &data->root, NULL)) != NULL) {
 		/* We're airborne */
-		lockd_up();
+		if (!(server->flags & NFS_MOUNT_NONLM))
+			lockd_up();
 		return sb;
 	}
 

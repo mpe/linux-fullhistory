@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.29 1997/02/04 07:14:17 miguel Exp $ */
+/* $Id: unistd.h,v 1.32 1997/04/11 00:42:23 davem Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -113,35 +113,35 @@
 #define __NR_setdopt             94 /* SunOS Specific                              */
 #define __NR_fsync               95 /* Common                                      */
 #define __NR_setpriority         96 /* Common                                      */
-#define __NR_socket              97 /* SunOS Specific                              */
-#define __NR_connect             98 /* SunOS Specific                              */
-#define __NR_accept              99 /* SunOS Specific                              */
+#define __NR_socket              97 /* Common                                      */
+#define __NR_connect             98 /* Common                                      */
+#define __NR_accept              99 /* Common                                      */
 #define __NR_getpriority        100 /* Common                                      */
-#define __NR_send               101 /* SunOS Specific                              */
-#define __NR_recv               102 /* SunOS Specific                              */
+#define __NR_send               101 /* Common                                      */
+#define __NR_recv               102 /* Common                                      */
 /* #define __NR_ni_syscall      103    ENOSYS under SunOS                          */
-#define __NR_bind               104 /* SunOS Specific                              */
-#define __NR_setsockopt         105 /* SunOS Specific                              */
-#define __NR_listen             106 /* SunOS Specific                              */
+#define __NR_bind               104 /* Common                                      */
+#define __NR_setsockopt         105 /* Common                                      */
+#define __NR_listen             106 /* Common                                      */
 /* #define __NR_ni_syscall      107    ENOSYS under SunOS                          */
 #define __NR_sigvec             108 /* SunOS Specific                              */
 #define __NR_sigblock           109 /* SunOS Specific                              */
 #define __NR_sigsetmask         110 /* SunOS Specific                              */
 #define __NR_sigpause           111 /* SunOS Specific                              */
 #define __NR_sigstack           112 /* SunOS Specific                              */
-#define __NR_recvmsg            113 /* SunOS Specific                              */
-#define __NR_sendmsg            114 /* SunOS Specific                              */
+#define __NR_recvmsg            113 /* Common                                      */
+#define __NR_sendmsg            114 /* Common                                      */
 #define __NR_vtrace             115 /* SunOS Specific                              */
 #define __NR_gettimeofday       116 /* Common                                      */
 #define __NR_getrusage          117 /* Common                                      */
-#define __NR_getsockopt         118 /* SunOS Specific                              */
+#define __NR_getsockopt         118 /* Common                                      */
 /* #define __NR_ni_syscall      119    ENOSYS under SunOS                          */
 #define __NR_readv              120 /* Common                                      */
 #define __NR_writev             121 /* Common                                      */
 #define __NR_settimeofday       122 /* Common                                      */
 #define __NR_fchown             123 /* Common                                      */
 #define __NR_fchmod             124 /* Common                                      */
-#define __NR_recvfrom           125 /* SunOS Specific                              */
+#define __NR_recvfrom           125 /* Common                                      */
 #define __NR_setreuid           126 /* Common                                      */
 #define __NR_setregid           127 /* Common                                      */
 #define __NR_rename             128 /* Common                                      */
@@ -149,15 +149,15 @@
 #define __NR_ftruncate          130 /* Common                                      */
 #define __NR_flock              131 /* Common                                      */
 /* #define __NR_ni_syscall      132    ENOSYS under SunOS                          */
-#define __NR_sendto             133 /* SunOS Specific                              */
-#define __NR_shutdown           134 /* SunOS Specific                              */
-#define __NR_socketpair         135 /* SunOS Specific                              */
+#define __NR_sendto             133 /* Common                                      */
+#define __NR_shutdown           134 /* Common                                      */
+#define __NR_socketpair         135 /* Common                                      */
 #define __NR_mkdir              136 /* Common                                      */
 #define __NR_rmdir              137 /* Common                                      */
 #define __NR_utimes             138 /* SunOS Specific                              */
 /* #define __NR_ni_syscall      139    ENOSYS under SunOS                          */
 #define __NR_adjtime            140 /* SunOS Specific                              */
-#define __NR_getpeername        141 /* SunOS Specific                              */
+#define __NR_getpeername        141 /* Common                                      */
 #define __NR_gethostid          142 /* SunOS Specific                              */
 /* #define __NR_ni_syscall      143    ENOSYS under SunOS                          */
 #define __NR_getrlimit          144 /* Common                                      */
@@ -166,7 +166,7 @@
 /* #define __NR_ni_syscall      147    ENOSYS under SunOS                          */
 /* #define __NR_ni_syscall      148    ENOSYS under SunOS                          */
 /* #define __NR_ni_syscall      149    ENOSYS under SunOS                          */
-#define __NR_getsockname        150 /* SunOS Specific                              */
+#define __NR_getsockname        150 /* Common                                      */
 #define __NR_getmsg             151 /* SunOS Specific                              */
 #define __NR_putmsg             152 /* SunOS Specific                              */
 #define __NR_poll               153 /* Common                                      */
@@ -285,7 +285,7 @@ __asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
 		      "1:\n\t" \
 		      : "=r" (__res)\
 		      : "0" (__NR_##name) \
-		      : "g1", "o0"); \
+		      : "g1", "o0", "cc"); \
 if (__res < -255 || __res >= 0) \
     return (type) __res; \
 errno = -__res; \
@@ -305,7 +305,7 @@ __asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
 		      "1:\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)) \
 		      : "0" (__NR_##name),"1" ((long)(arg1)) \
-		      : "g1", "o0"); \
+		      : "g1", "o0", "cc"); \
 if (__res < -255 || __res >= 0) \
 	return (type) __res; \
 errno = -__res; \
@@ -326,7 +326,7 @@ __asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
 		      "1:\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)) \
 		      : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)) \
-		      : "g1", "o0", "o1"); \
+		      : "g1", "o0", "o1", "cc"); \
 if (__res < -255 || __res >= 0) \
 	return (type) __res; \
 errno = -__res; \
@@ -350,7 +350,7 @@ __asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
 		        "=r" ((long)(arg3)) \
 		      : "0" (__NR_##name), "1" ((long)(arg1)), "2" ((long)(arg2)), \
 		        "3" ((long)(arg3)) \
-		      : "g1", "o0", "o1", "o2"); \
+		      : "g1", "o0", "o1", "o2", "cc"); \
 if (__res < -255 || __res>=0) \
 	return (type) __res; \
 errno = -__res; \
@@ -375,7 +375,7 @@ __asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
 		        "=r" ((long)(arg3)), "=r" ((long)(arg4)) \
 		      : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)), \
 		        "3" ((long)(arg3)),"4" ((long)(arg4)) \
-		      : "g1", "o0", "o1", "o2", "o3"); \
+		      : "g1", "o0", "o1", "o2", "o3", "cc"); \
 if (__res < -255 || __res>=0) \
 	return (type) __res; \
 errno = -__res; \
@@ -403,7 +403,7 @@ __asm__ __volatile__ ("or %%g0, %1, %%o0\n\t" \
 		      : "r" ((long)(arg1)),"r" ((long)(arg2)), \
 		        "r" ((long)(arg3)),"r" ((long)(arg4)),"r" ((long)(arg5)), \
 		        "i" (__NR_##name)  \
-		      : "g1", "o0", "o1", "o2", "o3", "o4"); \
+		      : "g1", "o0", "o1", "o2", "o3", "o4", "cc"); \
 if (__res < -255 || __res>=0) \
 	return (type) __res; \
 errno = -__res; \
@@ -474,7 +474,7 @@ static __inline__ pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned lo
 			   "=r" (retval) :
 			   "i" (__NR_clone), "r" (flags | CLONE_VM),
 			   "i" (__NR_exit),  "r" (fn), "r" (arg) :
-			   "g1", "g2", "g3", "o0", "o1", "memory");
+			   "g1", "g2", "g3", "o0", "o1", "memory", "cc");
 	return retval;
 }
 

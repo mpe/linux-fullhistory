@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Mike Shaver		<shaver@ingenia.com>
  *
- *	$Id: ndisc.c,v 1.13 1997/03/18 18:24:41 davem Exp $
+ *	$Id: ndisc.c,v 1.14 1997/04/12 04:32:51 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -157,7 +157,7 @@ static void ndisc_periodic_timer(unsigned long arg)
 	neigh_table_lock(&nd_tbl);
 
 	start_bh_atomic();
-	if (nd_tbl.tbl_lock == 1) {
+	if (atomic_read(&nd_tbl.tbl_lock) == 1) {
 		ntbl_walk_table(&nd_tbl, ndisc_gc_func, 0, 0, NULL);
 		ndisc_gc_timer.expires = now + nd_gc_interval;
 	} else {
@@ -178,7 +178,7 @@ static int ndisc_gc_func(struct neighbour *neigh, void *arg)
 	struct nd_neigh *ndn = (struct nd_neigh *) neigh;
         unsigned long now = jiffies;
 
-	if (ndn->ndn_refcnt == 0) {
+	if (atomic_read(&ndn->ndn_refcnt) == 0) {
 		switch (ndn->ndn_nud_state) {
 		
 		case NUD_REACHABLE:
@@ -262,7 +262,7 @@ static int ndisc_forced_gc(struct neighbour *neigh, void *arg)
 {
 	struct nd_neigh *ndn = (struct nd_neigh *) neigh;
 
-	if (ndn->ndn_refcnt == 0) {
+	if (atomic_read(&ndn->ndn_refcnt) == 0) {
 		if (ndn->ndn_nud_state & NUD_IN_TIMER)
 			ndisc_del_timer(ndn);
 		
@@ -295,7 +295,7 @@ static struct nd_neigh * ndisc_new_neigh(struct device *dev,
 #endif
 
 		start_bh_atomic();
-		if (nd_tbl.tbl_lock == 1) {
+		if (atomic_read(&nd_tbl.tbl_lock) == 1) {
 #if ND_DEBUG >= 2
 			printk(KERN_DEBUG "ndisc_alloc: forcing gc\n");
 #endif
@@ -1608,7 +1608,7 @@ int ndisc_get_info(char *buffer, char **start, off_t offset, int length,
 				       now - ndn->ndn_tstamp,
 				       nd_reachable_time,
 				       nd_gc_staletime,
-				       ndn->ndn_refcnt,
+				       atomic_read(&ndn->ndn_refcnt),
 				       ndn->ndn_flags,
 				       ndn->ndn_dev ? ndn->ndn_dev->name : "NULLDEV");
 

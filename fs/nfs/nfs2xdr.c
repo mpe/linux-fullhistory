@@ -416,6 +416,7 @@ nfs_xdr_readdirres(struct rpc_rqst *req, u32 *p, struct nfs_readdirres *res)
 		if ((void *) (entry+1) > (void *) string) {
 			printk(KERN_NOTICE "NFS: should not happen in %s!\n",
 					__FUNCTION__);
+			printk(KERN_NOTICE "NFS: len = %d, entry+1=%p, string=%p\n", len, entry+1, string);
 			break;
 		}
 

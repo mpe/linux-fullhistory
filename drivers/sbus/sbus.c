@@ -35,6 +35,7 @@ extern void prom_sbus_ranges_init (int, struct linux_sbus *);
  */
 
 /* #define DEBUG_FILL */
+
 __initfunc(static void
 fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev))
 {
@@ -63,7 +64,9 @@ fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev))
 	sbus_dev->ranges_applied = 0;
 
 	base = (unsigned long) sbus_dev->reg_addrs[0].phys_addr;
-	if(base>=SUN_SBUS_BVADDR || sparc_cpu_model == sun4m) {
+	if(base>=SUN_SBUS_BVADDR ||
+	   sparc_cpu_model == sun4m ||
+	   sparc_cpu_model == sun4u) {
 		/* Ahh, we can determine the slot and offset */
 		sbus_dev->slot = sbus_dev_slot(base);
 		sbus_dev->offset = sbus_dev_offset(base);
@@ -80,7 +83,6 @@ fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev))
 		/* That surely sucked */
 	}
 	sbus_dev->sbus_addr = (unsigned long) sbus_dev->reg_addrs[0].phys_addr;
-
 	if(len>(sizeof(struct linux_prom_registers)*PROMREG_MAX)) {
 		prom_printf("WHOOPS:  I got too many register addresses for %s  len=%d\n",
 		       sbus_dev->prom_name, len);
@@ -98,39 +100,58 @@ no_regs:
 	}
 	sbus_dev->num_vaddrs = (len/4);
   
-	len = prom_getproperty(nd, "intr", (void *)sbus_dev->irqs,
-			       sizeof(sbus_dev->irqs));
-	if (len == -1) len=0;
-	if (len&7) {
-		prom_printf("Grrr, I didn't get a multiple of 8 proplen for "
-		       "device %s got %d\n", sbus_dev->prom_name, len);
-		len=0;
+	if(sparc_cpu_model == sun4u) {
+		len = prom_getproperty(nd, "interrupts", (void *)&sbus_dev->irqs[0].pri,
+				       sizeof(sbus_dev->irqs[0].pri));
+		if((len == -1) || (len == 0)) {
+			sbus_dev->irqs[0].pri = 0;
+			sbus_dev->num_irqs = 0;
+		} else {
+			sbus_dev->num_irqs = 1;
+		}
+	} else {
+		len = prom_getproperty(nd, "intr", (void *)sbus_dev->irqs,
+				       sizeof(sbus_dev->irqs));
+		if (len == -1) len=0;
+		if (len&7) {
+			prom_printf("Grrr, I didn't get a multiple of 8 proplen for "
+				    "device %s got %d\n", sbus_dev->prom_name, len);
+			len=0;
+		}
+		sbus_dev->num_irqs=(len/8);
+		if(sbus_dev->num_irqs == 0)
+			sbus_dev->irqs[0].pri=0;
 	}
-	sbus_dev->num_irqs=(len/8);
-#if OLD_STYLE_IRQ
-	/* Grrr, V3 prom tries to be efficient */
-	for(len=0; len<sbus_dev->num_irqs; len++) {
-		sbus_dev->irqs[len].pri &= 0xf;
-	}
-#endif
-	if(sbus_dev->num_irqs == 0) sbus_dev->irqs[0].pri=0;
-
 #ifdef DEBUG_FILL
+#ifdef __sparc_v9__
+	prom_printf("Found %s at SBUS slot %x offset %016lx irq-level %d\n",
+	       sbus_dev->prom_name, sbus_dev->slot, sbus_dev->offset,
+	       sbus_dev->irqs[0].pri);
+	prom_printf("Base address %016lx\n", sbus_dev->sbus_addr);
+#else
 	prom_printf("Found %s at SBUS slot %x offset %08lx irq-level %d\n",
 	       sbus_dev->prom_name, sbus_dev->slot, sbus_dev->offset,
 	       sbus_dev->irqs[0].pri);
 	prom_printf("Base address %08lx\n", sbus_dev->sbus_addr);
+#endif
 	prom_printf("REGISTERS: Probed %d register(s)\n", sbus_dev->num_registers);
 	for(len=0; len<sbus_dev->num_registers; len++)
+#ifdef __sparc_v9__
 		prom_printf("Regs<%d> at address<%08lx> IO-space<%d> size<%d "
 		       "bytes, %d words>\n", (int) len,
 		       (unsigned long) sbus_dev->reg_addrs[len].phys_addr,
 		       sbus_dev->reg_addrs[len].which_io,
 		       sbus_dev->reg_addrs[len].reg_size,
 		       (sbus_dev->reg_addrs[len].reg_size/4));
+#else
+		prom_printf("Regs<%d> at address<%016lx> IO-space<%d> size<%d "
+		       "bytes, %d words>\n", (int) len,
+		       (unsigned long) sbus_dev->reg_addrs[len].phys_addr,
+		       sbus_dev->reg_addrs[len].which_io,
+		       sbus_dev->reg_addrs[len].reg_size,
+		       (sbus_dev->reg_addrs[len].reg_size/4));
 #endif
-
-	return;
+#endif
 }
 
 /* This routine gets called from whoever needs the sbus first, to scan
@@ -148,6 +169,12 @@ extern int openprom_init(void);
 #endif
 #ifdef CONFIG_SUN_MOSTEK_RTC
 extern int rtc_init(void);
+#endif
+#ifdef CONFIG_SPARCAUDIO
+extern int sparcaudio_init(void);
+#endif
+#ifdef CONFIG_SUN_AUXIO
+extern void auxio_probe(void);
 #endif
 
 __initfunc(static unsigned long 
@@ -200,7 +227,14 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 
 	/* Finding the first sbus is a special case... */
 	iommund = 0;
-	if (sparc_cpu_model == sun4d) {
+	if(sparc_cpu_model == sun4u) {
+		/* IOMMU "hides" inside SBUS/SYSIO node. */
+		iommund = nd = prom_searchsiblings(topnd, "sbus");
+		if(nd == 0) {
+			prom_printf("YEEE, UltraSparc sbus not found\n");
+			prom_halt();
+		}
+	} else if(sparc_cpu_model == sun4d) {
 		if((iommund = prom_searchsiblings(topnd, "io-unit")) == 0 ||
 		   (nd = prom_getchild(iommund)) == 0 ||
 		   (nd = prom_searchsiblings(nd, "sbi")) == 0) {
@@ -309,7 +343,12 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 		memory_start = dvma_init(sbus, memory_start);
 
 		num_sbus++;
-		if (sparc_cpu_model == sun4d) {
+		if(sparc_cpu_model == sun4u) {
+			this_sbus = prom_getsibling(this_sbus);
+			if(!this_sbus)
+				break;
+			this_sbus = prom_searchsiblings(this_sbus, "sbus");
+		} else if(sparc_cpu_model == sun4d) {
 			iommund = prom_getsibling(iommund);
 			if(!iommund) break;
 			iommund = prom_searchsiblings(iommund, "io-unit");
@@ -336,8 +375,15 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 #ifdef CONFIG_SUN_MOSTEK_RTC
 	rtc_init();
 #endif
+#ifdef CONFIG_SPARCAUDIO
+	sparcaudio_init();
+#endif
 #ifdef CONFIG_SUN_BPP
 	bpp_init();
+#endif
+#ifdef CONFIG_SUN_AUXIO
+	if (sparc_cpu_model == sun4u)
+		auxio_probe ();
 #endif
 	return memory_start;
 }

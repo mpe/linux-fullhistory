@@ -283,8 +283,8 @@ static int qlogicpti_reset_hardware(struct Scsi_Host *host)
 
 	param[0] = MBOX_INIT_RES_QUEUE;
 	param[1] = RES_QUEUE_LEN + 1;
-	param[2] = (u_short) (((u_int) qpti->res)>>16);
-	param[3] = (u_short) (((u_int) qpti->res) & 0xffff);
+	param[2] = (u_short) (qpti->res_dvma >> 16);
+	param[3] = (u_short) (qpti->res_dvma & 0xffff);
 	param[4] = param[5] = 0;
 	if(qlogicpti_mbox_command(qpti, param, 1)) {
 		printk(KERN_EMERG "qlogicpti%d: Cannot init response queue.\n",
@@ -295,8 +295,8 @@ static int qlogicpti_reset_hardware(struct Scsi_Host *host)
 
 	param[0] = MBOX_INIT_REQ_QUEUE;
 	param[1] = QLOGICISP_REQ_QUEUE_LEN + 1;
-	param[2] = (u_short) (((u_int) qpti->req)>>16);
-	param[3] = (u_short) (((u_int) qpti->req) & 0xffff);
+	param[2] = (u_short) (qpti->req_dvma >> 16);
+	param[3] = (u_short) (qpti->req_dvma & 0xffff);
 	param[4] = param[5] = 0;
 	if(qlogicpti_mbox_command(qpti, param, 1)) {
 		printk(KERN_EMERG "qlogicpti%d: Cannot init request queue.\n",
@@ -417,6 +417,7 @@ static int qlogicpti_load_firmware(struct qlogicpti *qpti)
 
 	/* Load the firmware. */
 #ifndef MODULE
+	/* XXX THIS SHIT DOES NOT WORK ON ULTRA... FIXME -DaveM */
 	dvma_addr = (unsigned long) mmu_lockarea((char *)&risc_code01[0],
 						 (sizeof(u_short) * risc_code_length01));
 	param[0] = MBOX_LOAD_RAM;
@@ -431,6 +432,7 @@ static int qlogicpti_load_firmware(struct qlogicpti *qpti)
 		restore_flags(flags);
 		return 1;
 	}
+	/* XXX THIS SHIT DOES NOT WORK ON ULTRA... FIXME -DaveM */
 	mmu_unlockarea((char *)dvma_addr, (sizeof(u_short) * risc_code_length01));
 #else
 	for(i = 0; i < risc_code_length01; i++) {
@@ -698,10 +700,12 @@ qpti_irq_acquired:
 
 #define QSIZE(entries)	(((entries) + 1) * QUEUE_ENTRY_LEN)
 
-			qpti->res = sparc_dvma_malloc(QSIZE(RES_QUEUE_LEN),
-						      "PTISP Response Queue");
-			qpti->req = sparc_dvma_malloc(QSIZE(QLOGICISP_REQ_QUEUE_LEN),
-						      "PTISP Request Queue");
+			qpti->res_cpu = sparc_dvma_malloc(QSIZE(RES_QUEUE_LEN),
+							  "PTISP Response Queue",
+							  &qpti->res_dvma);
+			qpti->req_cpu = sparc_dvma_malloc(QSIZE(QLOGICISP_REQ_QUEUE_LEN),
+							  "PTISP Request Queue",
+							  &qpti->req_dvma);
 
 #undef QSIZE
 
@@ -834,7 +838,7 @@ static inline u_int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
 			struct Continuation_Entry *cont;
 
 			++cmd->hdr.entry_cnt;
-			cont = (struct Continuation_Entry *) &qpti->req[in_ptr];
+			cont = (struct Continuation_Entry *) &qpti->req_cpu[in_ptr];
 			in_ptr = NEXT_REQ_PTR(in_ptr);
 			if(in_ptr == out_ptr) {
 				printk(KERN_EMERG "qlogicpti: Unexpected request queue overflow\n");
@@ -856,9 +860,13 @@ static inline u_int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
 			sg_count -= n;
 		}
 	} else {
-		Cmnd->SCp.ptr = mmu_get_scsi_one((char *)Cmnd->request_buffer,
-						 Cmnd->request_bufflen,
-						 qpti->qdev->my_bus);
+		/* XXX Casts are extremely gross, but with 64-bit cpu addresses
+		 * XXX and 32-bit SBUS DVMA addresses what am I to do? -DaveM
+		 */
+		Cmnd->SCp.ptr = (char *)((unsigned long)
+					 mmu_get_scsi_one((char *)Cmnd->request_buffer,
+							  Cmnd->request_bufflen,
+							  qpti->qdev->my_bus));
 
 		cmd->dataseg[0].d_base = (u_int) Cmnd->SCp.ptr;
 		cmd->dataseg[0].d_count = Cmnd->request_bufflen;
@@ -892,7 +900,7 @@ int qlogicpti_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 	struct qlogicpti_regs *qregs = qpti->qregs;
 	u_int in_ptr = qpti->req_in_ptr;
 	u_int out_ptr = qregs->mbox4;
-	struct Command_Entry *cmd = (struct Command_Entry *) &qpti->req[in_ptr];
+	struct Command_Entry *cmd = (struct Command_Entry *) &qpti->req_cpu[in_ptr];
 
 	Cmnd->scsi_done = done;
 	in_ptr = NEXT_REQ_PTR(in_ptr);
@@ -909,7 +917,7 @@ int qlogicpti_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 			printk(KERN_EMERG "qlogicpti%d: request queue overflow\n", qpti->qpti_id);
 			return 1;
 		}
-		cmd = (struct Command_Entry *) &qpti->req[in_ptr];
+		cmd = (struct Command_Entry *) &qpti->req_cpu[in_ptr];
 		in_ptr = NEXT_REQ_PTR(in_ptr);
 	}
 	cmd_frob(cmd, Cmnd, qpti);
@@ -1029,7 +1037,7 @@ repeat:
 			/* This looks like a network driver! */
 			out_ptr = qpti->res_out_ptr;
 			while(out_ptr != in_ptr) {
-				sts = (struct Status_Entry *) &qpti->res[out_ptr];
+				sts = (struct Status_Entry *) &qpti->res_cpu[out_ptr];
 				out_ptr = NEXT_RES_PTR(out_ptr);
 				Cmnd = (Scsi_Cmnd *) sts->handle; /* but_to_virt?!?! */
 				if(sts->completion_status == CS_RESET_OCCURRED ||
@@ -1052,8 +1060,7 @@ repeat:
 							     Cmnd->use_sg - 1,
 							     qpti->qdev->my_bus);
 				else
-					mmu_release_scsi_one((char *)
-							     Cmnd->SCp.ptr,
+					mmu_release_scsi_one((__u32)Cmnd->SCp.ptr,
 							     Cmnd->request_bufflen,
 							     qpti->qdev->my_bus);
 

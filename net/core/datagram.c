@@ -123,7 +123,7 @@ restart:
 			goto no_packet;
 
 		wait_for_packet(sk);
-	  }
+	}
 
 	/* Again only user level code calls this function, so nothing interrupt level
 	   will suddenly eat the receive_queue */
@@ -228,7 +228,7 @@ unsigned int datagram_poll(struct socket *sock, poll_table *wait)
 			if (sock_wspace(sk) >= MIN_WRITE_SPACE)
 				mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
 		} else {
-			if (sk->sndbuf-sk->wmem_alloc >= MIN_WRITE_SPACE)
+			if (sk->sndbuf - atomic_read(&sk->wmem_alloc) >= MIN_WRITE_SPACE)
 				mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
 		}
 	}

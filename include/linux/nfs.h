@@ -84,6 +84,15 @@ struct nfs_fh {
 #define NFSPROC_READDIR		16
 #define NFSPROC_STATFS		17
 
+/* Mount support for NFSroot */
+#ifdef __KERNEL__
+#define NFS_MNT_PROGRAM		100005
+#define NFS_MNT_VERSION		1
+#define NFS_MNT_PORT		627
+#define NFS_MNTPROC_MNT		1
+#define NFS_MNTPROC_UMNT	3
+#endif
+
 #if defined(__KERNEL__) || defined(NFS_NEED_KERNEL_TYPES)
 
 extern struct rpc_program	nfs_program;
@@ -123,9 +132,9 @@ struct nfs_sattr {
 struct nfs_entry {
 	__u32			fileid;
 	char *			name;
-	unsigned int		length;
+	unsigned int		length:31,
+				eof:1;
 	__u32			cookie;
-	__u32			eof;
 };
 
 struct nfs_fsinfo {

@@ -479,7 +479,7 @@ static __inline__ void ide_get_lock (int *ide_lock, void (*handler)(int, void *,
 #ifdef CONFIG_ATARI
 	if (MACH_IS_ATARI) {
 		if (*ide_lock == 0) {
-			if (intr_count > 0)
+			if (in_interrupt() > 0)
 				panic( "Falcon IDE hasn't ST-DMA lock in interrupt" );
 			stdma_lock(handler, data);
 			*ide_lock = 1;
@@ -506,12 +506,12 @@ static __inline__ void ide_get_lock (int *ide_lock, void (*handler)(int, void *,
 #if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA)
 #define	ide_sti()					\
     do {						\
-	if (!intr_count) sti();				\
+	if (!in_interrupt()) sti();			\
     } while(0)
 #elif defined(CONFIG_ATARI)
-#define	ide_sti()					\
-    do {						\
-	if (!MACH_IS_ATARI || !intr_count) sti();	\
+#define	ide_sti()						\
+    do {							\
+	if (!MACH_IS_ATARI || !in_interrupt()) sti();		\
     } while(0)
 #else /* !defined(CONFIG_ATARI) */
 #define	ide_sti()	sti()

@@ -7,6 +7,7 @@
 
 #include <linux/mm.h>
 #include <linux/sysctl.h>
+#include <linux/config.h>
 #include <net/snmp.h>
 #include <net/ip.h>
 #include <net/route.h>

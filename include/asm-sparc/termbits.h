@@ -115,44 +115,40 @@ struct termios {
 #define WRAP    0x00020000  /* SUNOS specific */
 
 /* c_cflag bit meaning */
-#define CBAUD	0x0000000f
-#define  B0	0x00000000   /* hang up */
-#define  B50	0x00000001
-#define  B75	0x00000002
-#define  B110	0x00000003
-#define  B134	0x00000004
-#define  B150	0x00000005
-#define  B200	0x00000006
-#define  B300	0x00000007
-#define  B600	0x00000008
-#define  B1200	0x00000009
-#define  B1800	0x0000000a
-#define  B2400	0x0000000b
-#define  B4800	0x0000000c
-#define  B9600	0x0000000d
-#define  B19200	0x0000000e
-#define  B38400	0x0000000f
-#define EXTA    B19200
-#define EXTB    B38400
-#define  CSIZE  0x00000030
-#define   CS5	0x00000000
-#define   CS6	0x00000010
-#define   CS7	0x00000020
-#define   CS8	0x00000030
-#define CSTOPB	0x00000040
-#define CREAD	0x00000080
-#define PARENB	0x00000100
-#define PARODD	0x00000200
-#define HUPCL	0x00000400
-#define CLOCAL	0x00000800
-/* We'll never see these speeds with the Zilogs' but for completeness... */
-#define CBAUDEX 0x00010000
-#define  B57600  0x00010001
-#define  B115200 0x00010002
-#define  B230400 0x00010003
-#define  B460800 0x00010004
-#define CIBAUD	  0x000f0000  /* input baud rate (not used) */
-#define CMSPAR	  010000000000		/* mark or space (stick) parity */
+#define CBAUD	  0x0000100f
+#define  B0	  0x00000000   /* hang up */
+#define  B50	  0x00000001
+#define  B75	  0x00000002
+#define  B110	  0x00000003
+#define  B134	  0x00000004
+#define  B150	  0x00000005
+#define  B200	  0x00000006
+#define  B300	  0x00000007
+#define  B600	  0x00000008
+#define  B1200	  0x00000009
+#define  B1800	  0x0000000a
+#define  B2400	  0x0000000b
+#define  B4800	  0x0000000c
+#define  B9600	  0x0000000d
+#define  B19200	  0x0000000e
+#define  B38400	  0x0000000f
+#define EXTA      B19200
+#define EXTB      B38400
+#define  CSIZE    0x00000030
+#define   CS5	  0x00000000
+#define   CS6	  0x00000010
+#define   CS7	  0x00000020
+#define   CS8	  0x00000030
+#define CSTOPB	  0x00000040
+#define CREAD	  0x00000080
+#define PARENB	  0x00000100
+#define PARODD	  0x00000200
+#define HUPCL	  0x00000400
+#define CLOCAL	  0x00000800
+#define CBAUDEX   0x00001000
+#define  B76800   0x00001001
+#define CIBAUD	  0x100f0000  /* input baud rate (not used) */
+#define CMSPAR	  0x40000000  /* mark or space (stick) parity */
 #define CRTSCTS	  0x80000000  /* flow control */
 
 /* c_lflag bits */

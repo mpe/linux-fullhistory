@@ -1,11 +1,12 @@
-# $Id: Makefile,v 1.5 1997/03/14 21:04:27 jj Exp $
+# $Id: Makefile,v 1.7 1997/04/07 18:57:05 jj Exp $
 # Makefile for Sparc library files..
 #
 
 CFLAGS := $(CFLAGS) -ansi
 
 OBJS  = memset.o blockops.o locks.o memcpy.o strlen.o strncmp.o \
-	memscan.o strncpy_from_user.o strlen_user.o memcmp.o
+	memscan.o strncpy_from_user.o strlen_user.o memcmp.o checksum.o \
+	copy_to_user.o copy_from_user.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)
@@ -16,6 +17,12 @@ blockops.o: blockops.S
 
 memset.o: memset.S
 	$(CC) -D__ASSEMBLY__ -ansi -c -o memset.o memset.S
+
+copy_to_user.o: copy_to_user.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o copy_to_user.o copy_to_user.S
+
+copy_from_user.o: copy_from_user.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o copy_from_user.o copy_from_user.S
 
 memcpy.o: memcpy.S
 	$(CC) -D__ASSEMBLY__ -ansi -c -o memcpy.o memcpy.S
@@ -31,6 +38,9 @@ memcmp.o: memcmp.S
 
 locks.o: locks.S
 	$(CC) -D__ASSEMBLY__ -ansi -c -o locks.o locks.S
+
+checksum.o: checksum.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o checksum.o checksum.S
 
 memscan.o: memscan.S
 	$(CC) -D__ASSEMBLY__ -ansi -c -o memscan.o memscan.S

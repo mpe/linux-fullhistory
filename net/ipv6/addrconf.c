@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.15 1997/03/18 18:24:23 davem Exp $
+ *	$Id: addrconf.c,v 1.16 1997/04/12 04:32:44 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -20,6 +20,7 @@
  *	<chexum@bankinf.banki.hu>
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -68,7 +69,7 @@ struct ifmcaddr6		*inet6_mcast_lst[IN6_ADDR_HSIZE];
  */
 struct inet6_dev		*inet6_dev_lst[IN6_ADDR_HSIZE];
 
-atomic_t			addr_list_lock = 0;
+static atomic_t			addr_list_lock = ATOMIC_INIT;
 
 void addrconf_verify(unsigned long);
 
@@ -241,7 +242,7 @@ void ipv6_del_addr(struct inet6_ifaddr *ifp)
 	struct inet6_ifaddr *iter, **back;
 	int hash;
 
-	if (addr_list_lock) {
+	if (atomic_read(&addr_list_lock)) {
 		ifp->flags |= ADDR_INVALID;
 		return;
 	}

@@ -1,4 +1,4 @@
-/* $Id: sunfb.c,v 1.21 1997/03/14 21:04:53 jj Exp $
+/* $Id: sunfb.c,v 1.22 1997/04/03 08:47:56 davem Exp $
  * sunfb.c: Sun generic frame buffer support.
  *
  * Copyright (C) 1995, 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)

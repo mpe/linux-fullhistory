@@ -23,6 +23,7 @@
 
 #include <linux/random.h>
 
+#include <asm/hardirq.h>
 
 /*
  * Some defs, in case these are not defined elsewhere.

@@ -19,7 +19,7 @@
 #include <asm/uaccess.h>
 #include <asm/processor.h>
 #include <asm/checksum.h>
-
+#include <asm/softirq.h>
 
 extern void bcopy (const char *src, char *dst, int len);
 extern struct hwrpb_struct *hwrpb;
@@ -37,6 +37,7 @@ extern void __remlu (void);
 extern void __divqu (void);
 extern void __remqu (void);
 
+EXPORT_SYMBOL(__alpha_bh_counter);
 
 /* platform dependent support */
 EXPORT_SYMBOL(_inb);

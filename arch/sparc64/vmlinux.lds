@@ -1,12 +1,12 @@
 /* ld script to make UltraLinux kernel */
 OUTPUT_FORMAT("elf64-sparc", "elf64-sparc", "elf64-sparc")
-OUTPUT_ARCH(sparc:v9)
+OUTPUT_ARCH(sparc:v9a)
 ENTRY(_start)
 
 SECTIONS
 {
   empty_zero_page = 0xfffff80000000000;
-  empty_bad_page =  0xfffff80000002000;
+  swapper_pg_dir =  0xfffff80000002000;
   . = 0x4000;
   .text 0xfffff80000004000 :
   {
@@ -53,7 +53,15 @@ SECTIONS
    *(.bss)
    *(COMMON)
    . = ALIGN(8192);
-   empty_bad_page_table = .;
+   empty_bad_pmd_table = .;
+   . += 8192;
+   empty_bad_pte_table = .;
+   . += 8192;
+   empty_null_pmd_table = .;
+   . += 8192;
+   empty_null_pte_table = .;
+   . += 8192;
+   empty_bad_page = .;
    . += 8192;
   }
   _end = . ;

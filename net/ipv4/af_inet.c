@@ -184,7 +184,7 @@ static __inline__ void kill_sk_later(struct sock *sk)
 	 */
 		  
 	printk(KERN_DEBUG "Socket destroy delayed (r=%d w=%d)\n",
-	       sk->rmem_alloc, sk->wmem_alloc);
+	       atomic_read(&sk->rmem_alloc), atomic_read(&sk->wmem_alloc));
 
 	sk->destroy = 1;
 	sk->ack_backlog = 0;
@@ -216,7 +216,7 @@ void destroy_sock(struct sock *sk)
 	 * structure, otherwise we need to keep it around until
 	 * everything is gone.
 	 */
-	if (sk->rmem_alloc == 0 && sk->wmem_alloc == 0)
+	if (atomic_read(&sk->rmem_alloc) == 0 && atomic_read(&sk->wmem_alloc) == 0)
 		kill_sk_now(sk);
 	else
 		kill_sk_later(sk);
@@ -1057,6 +1057,7 @@ static struct proc_dir_entry proc_net_udp = {
 };
 #endif		/* CONFIG_PROC_FS */
 
+extern void tcp_init(void);
 
 /*
  *	Called by socket.c on kernel startup.  
@@ -1107,6 +1108,9 @@ void inet_proto_init(struct net_proto *pro)
   	 */
 
 	ip_init();
+
+	/* Setup TCP slab cache for open requests. */
+	tcp_init();
 
 	/*
 	 *	Set the ICMP layer up
