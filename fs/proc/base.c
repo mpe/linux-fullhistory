@@ -513,7 +513,7 @@ static struct pid_entry base_stuff[] = {
   E(PROC_PID_CMDLINE,	"cmdline",	S_IFREG|S_IRUGO),
   E(PROC_PID_STAT,	"stat",		S_IFREG|S_IRUGO),
   E(PROC_PID_STATM,	"statm",	S_IFREG|S_IRUGO),
-#ifdef SMP
+#ifdef __SMP__
   E(PROC_PID_CPU,	"cpu",		S_IFREG|S_IRUGO),
 #endif
 #if CONFIG_AP1000
@@ -865,7 +865,7 @@ static struct dentry *proc_base_lookup(struct inode *dir, struct dentry *dentry)
 		case PROC_PID_MAPS:
 			inode->i_op = &proc_maps_inode_operations;
 			break;
-#ifdef SMP
+#ifdef __SMP__
 		case PROC_PID_CPU:
 			inode->i_op = &proc_info_inode_operations;
 			inode->u.proc_i.op.proc_read = proc_pid_cpu;

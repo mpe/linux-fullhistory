@@ -4,6 +4,4 @@
 mainmenu_option next_comment
 comment 'Misc devices'
 
-bool 'ACPI support' CONFIG_ACPI
-
 endmenu

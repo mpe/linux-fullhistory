@@ -299,6 +299,7 @@ struct pci_dev {
 	int ro;				/* Read/Only */
 
 	struct pci_bus	*bus;		/* bus this device is on */
+	struct pci_bus	*subordinate;	/* bus this device bridges to */
 	struct pci_dev	*sibling;	/* next device on this bus */
 	struct pci_dev	*next;		/* chain of all devices */
 

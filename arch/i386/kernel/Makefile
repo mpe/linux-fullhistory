@@ -39,6 +39,10 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ACPI),y)
+  OX_OBJS += acpi.o
+endif
+
 ifeq ($(CONFIG_APM),y)
 OX_OBJS += apm.o
 else

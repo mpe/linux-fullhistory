@@ -7,6 +7,7 @@
 #include <linux/pci.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
+#include <linux/delay.h>
 
 #include <pcmcia/ss.h>
 
@@ -19,19 +20,9 @@
 #define to_cycles(ns)	((ns)/120)
 #define to_ns(cycles)	((cycles)*120)
 
-/* Fixme! */
 static int yenta_inquire(pci_socket_t *socket, socket_cap_t *cap)
 {
-	cap->features = SS_CAP_PAGE_REGS | SS_CAP_PCCARD | SS_CAP_CARDBUS;
-	cap->irq_mask = 0xdeb8;		/* irq 15,14,12,11,10,9,7,5,4,3 */
-	cap->map_size = 0x1000;
-	cap->pci_irq = socket->irq;
-	cap->cardbus = 0;
-	cap->cb_bus = NULL;
-	cap->bus = NULL;
-
-printk("yenta_inquire()\n");
-
+	*cap = socket->cap;
 	return 0;
 }
 
@@ -92,7 +83,7 @@ static int yenta_get_socket(pci_socket_t *socket, socket_state_t *state)
 
 	state->Vcc = yenta_Vcc_power(control);
 	state->Vpp = yenta_Vpp_power(control);
-	state->io_irq = socket->irq;
+	state->io_irq = socket->io_irq;
 
 	reg = exca_readb(socket, I365_POWER);
 	state->flags = (reg & I365_PWR_AUTO) ? SS_PWR_AUTO : 0;
@@ -129,14 +120,37 @@ printk("yenta_set_socket(%p, %d, %d, %x)\n", socket, state->Vcc, state->Vpp, sta
 	bridge &= ~CB_BRIDGE_CRST;
 	bridge |= (state->flags & SS_RESET) ? CB_BRIDGE_CRST : 0;
 	config_writew(socket, CB_BRIDGE_CONTROL, bridge);
-	
-	reg = socket->irq;
+
+	/* Set the IO interrupt and socket state */
+	reg = state->io_irq;
 	reg |= (state->flags & SS_RESET) ? 0 : I365_PC_RESET;
 	reg |= (state->flags & SS_IOCARD) ? I365_PC_IOCARD : 0;
 	exca_writeb(socket, I365_INTCTL, reg);
 
+	/* Set host interrupt and CSC mask state */
+	reg = socket->cb_irq << 4;
+	reg |= (state->csc_mask & SS_DETECT) ? I365_CSC_DETECT : 0;
+	if (state->flags & SS_IOCARD) {
+		reg |= (state->csc_mask & SS_STSCHG) ? I365_CSC_STSCHG : 0;
+	} else {
+		reg |= (state->csc_mask & SS_BATDEAD) ? I365_CSC_BVD1 : 0;
+		reg |= (state->csc_mask & SS_BATWARN) ? I365_CSC_BVD2 : 0;
+		reg |= (state->csc_mask & SS_READY) ? I365_CSC_READY : 0;
+	}
+	exca_writeb(socket, I365_CSCINT, reg);
+	exca_readb(socket, I365_CSC);
+
+	/*
+	 * Set power state..
+	 *
+	 * I wonder if we could do the Vcc/Vpp part through the
+	 * CB interface only..
+	 */
 	reg = I365_PWR_NORESET;
-	control = 0;	/* CB_STOPCLK ? Better power management */
+	reg |= (state->flags & SS_PWR_AUTO) ? I365_PWR_AUTO : 0;
+	reg |= (state->flags & SS_OUTPUT_ENA) ? I365_PWR_OUT : 0;
+
+	control = CB_STOPCLK;
 	switch (state->Vcc) {
 	case 33:
 		control |= CB_PWR3V << CB_VCCCTRL;
@@ -161,24 +175,8 @@ printk("yenta_set_socket(%p, %d, %d, %x)\n", socket, state->Vcc, state->Vpp, sta
 		reg |= I365_VPP1_12V;
 		break;
 	}
-	cb_writel(socket, CB_SOCKET_CONTROL, control);
-
-	reg |= (state->flags & SS_PWR_AUTO) ? I365_PWR_AUTO : 0;
-	reg |= (state->flags & SS_OUTPUT_ENA) ? I365_PWR_OUT : 0;
-	if (state->flags & SS_PWR_AUTO) reg |= I365_PWR_AUTO;
 	exca_writeb(socket, I365_POWER, reg);
-
-	reg = socket->irq;
-	reg |= (state->csc_mask & SS_DETECT) ? I365_CSC_DETECT : 0;
-	if (state->flags & SS_IOCARD) {
-		reg |= (state->csc_mask & SS_STSCHG) ? I365_CSC_STSCHG : 0;
-	} else {
-		reg |= (state->csc_mask & SS_BATDEAD) ? I365_CSC_BVD1 : 0;
-		reg |= (state->csc_mask & SS_BATWARN) ? I365_CSC_BVD2 : 0;
-		reg |= (state->csc_mask & SS_READY) ? I365_CSC_READY : 0;
-	}
-	exca_writeb(socket, I365_CSCINT, reg);
-	exca_readb(socket, I365_CSC);
+	cb_writel(socket, CB_SOCKET_CONTROL, control);
 
 	return 0;
 }
@@ -329,6 +327,8 @@ printk("yenta_set_map(%d, %x, %x, %x)\n", map, start, stop, card_start);
 		word |= I365_MEM_REG;
 	exca_writew(socket, I365_MEM(map) + I365_W_OFF, word);
 
+	exca_writeb(socket, CB_MEM_PAGE(map), start >> 24);
+
 	if (mem->flags & MAP_ACTIVE)
 		exca_writeb(socket, I365_ADDRWIN, addr | enable);
 	return 0;
@@ -336,14 +336,65 @@ printk("yenta_set_map(%d, %x, %x, %x)\n", map, start, stop, card_start);
 
 static int yenta_get_bridge(pci_socket_t *socket, struct cb_bridge_map *m)
 {
-	printk("yenta_get_bridge() called\n");
-	return -EINVAL;
+	unsigned map;
+	
+	map = m->map;
+	if (map > 1)
+		return -EINVAL;
+
+	m->flags &= MAP_IOSPACE;
+	map += (m->flags & MAP_IOSPACE) ? 2 : 0;
+	m->start = config_readl(socket, CB_BRIDGE_BASE(map));
+	m->stop = config_readl(socket, CB_BRIDGE_LIMIT(map));
+	if (m->start || m->stop) {
+		m->flags |= MAP_ACTIVE;
+		m->stop |= (map > 1) ? 3 : 0x0fff;
+	}
+
+	/* Get prefetch state for memory mappings */
+	if (map < 2) {
+		u16 ctrl, prefetch_mask = CB_BRIDGE_PREFETCH0 << map;
+
+		ctrl = config_readw(socket, CB_BRIDGE_CONTROL);
+		m->flags |= (ctrl & prefetch_mask) ? MAP_PREFETCH : 0;
+	}
+	return 0;
 }
 
 static int yenta_set_bridge(pci_socket_t *socket, struct cb_bridge_map *m)
 {
-	printk("yenta_set_bridge() called\n");
-	return -EINVAL;
+	unsigned map;
+	u32 start, end;
+	
+	map = m->map;
+	if (map > 1 || m->stop < m->start)
+		return -EINVAL;
+
+	if (m->flags & MAP_IOSPACE) {
+		if ((m->stop > 0xffff) || (m->start & 3) ||
+		    ((m->stop & 3) != 3))
+			return -EINVAL;
+		map += 2;
+	} else {
+		u16 ctrl, prefetch_mask = CB_BRIDGE_PREFETCH0 << map;
+
+		if ((m->start & 0x0fff) || ((m->stop & 0x0fff) != 0x0fff))
+			return -EINVAL;
+		ctrl = config_readw(socket, CB_BRIDGE_CONTROL);
+		ctrl &= ~prefetch_mask;
+		ctrl |= (m->flags & MAP_PREFETCH) ? prefetch_mask : 0;
+		config_writew(socket, CB_BRIDGE_CONTROL, ctrl);
+	}
+
+	start = 0;
+	end = 0;
+	if (m->flags & MAP_ACTIVE) {
+		start = m->start;
+		end = m->stop;
+	}
+	config_writel(socket, CB_BRIDGE_BASE(map), start);
+	config_writel(socket, CB_BRIDGE_LIMIT(map), end);
+	return 0;
 }
 
 static void yenta_proc_setup(pci_socket_t *socket, struct proc_dir_entry *base)
@@ -380,6 +431,39 @@ static void yenta_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		socket->handler(socket->info, events);
 }
 
+static unsigned int yenta_probe_irq(pci_socket_t *socket)
+{
+	int i;
+	unsigned long val;
+
+	cb_writel(socket, CB_SOCKET_EVENT, -1);
+	cb_writel(socket, CB_SOCKET_MASK, CB_CSTSMASK);
+	val = probe_irq_on();
+	for (i = 1; i < 16; i++) {
+		exca_writeb(socket, I365_CSCINT, I365_CSC_STSCHG | (i << 4));
+		cb_writel(socket, CB_SOCKET_FORCE, CB_FCARDSTS);
+		udelay(100);
+		cb_writel(socket, CB_SOCKET_EVENT, -1);
+	}
+	cb_writel(socket, CB_SOCKET_MASK, 0);
+	return probe_irq_mask(val);
+}
+
+static void yenta_get_socket_capabilities(pci_socket_t *socket)
+{
+	socket->cap.features = SS_CAP_PAGE_REGS | SS_CAP_PCCARD | SS_CAP_CARDBUS;
+	socket->cap.irq_mask = yenta_probe_irq(socket);
+	if (socket->cb_irq && socket->cb_irq < 16)
+		socket->cap.irq_mask |= 1 << socket->cb_irq;
+	socket->cap.map_size = 0x1000;
+	socket->cap.pci_irq = socket->cb_irq;
+	socket->cap.cardbus = config_readb(socket, PCI_CB_CARD_BUS);
+	socket->cap.cb_bus = socket->dev->subordinate;
+	socket->cap.bus = NULL;
+
+	printk("Yenta IRQ list %04x\n", socket->cap.irq_mask);
+}
+
 /*
  * Initialize a cardbus controller. Make sure we have a usable
  * interrupt, and that we can map the cardbus area. Fill in the
@@ -396,10 +480,6 @@ static int yenta_open(pci_socket_t *socket)
 		printk("Unable to enable device\n");
 		return -1;
 	}
-	if (!dev->irq) {
-		printk("No cardbus irq!\n");
-		return -1;
-	}
 	if (!dev->resource[0].start) {
 		printk("No cardbus resource!\n");
 		return -1;
@@ -412,9 +492,12 @@ static int yenta_open(pci_socket_t *socket)
 	socket->base = ioremap(dev->resource[0].start, 0x1000);
 	if (!socket->base)
 		return -1;
-	if (request_irq(dev->irq, yenta_interrupt, SA_SHIRQ, dev->name, socket))
-		return -1;
-	socket->irq = dev->irq;
+
+	if (dev->irq && !request_irq(dev->irq, yenta_interrupt, SA_SHIRQ, dev->name, socket))
+		socket->cb_irq = dev->irq;
+
+	/* Figure out what the dang thing can do.. */
+	yenta_get_socket_capabilities(socket);
 
 	/* Enable all events */
 	writel(0x0f, socket->base + 4);
@@ -428,8 +511,8 @@ static int yenta_open(pci_socket_t *socket)
  */
 static void yenta_close(pci_socket_t *sock)
 {
-	if (sock->irq)
-		free_irq(sock->irq, sock);
+	if (sock->cb_irq)
+		free_irq(sock->cb_irq, sock);
 	if (sock->base)
 		iounmap(sock->base);
 }

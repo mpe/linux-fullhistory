@@ -821,12 +821,14 @@ void scsi_request_fn(request_queue_t * q)
 			 * get those allocated here.  
 			 */
 			if (!SDpnt->scsi_init_io_fn(SCpnt)) {
+				spin_lock_irq(&io_request_lock);
 				continue;
 			}
 			/*
 			 * Initialize the actual SCSI command for this request.
 			 */
 			if (!STpnt->init_command(SCpnt)) {
+				spin_lock_irq(&io_request_lock);
 				continue;
 			}
 		}

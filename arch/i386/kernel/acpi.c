@@ -110,6 +110,8 @@ static spinlock_t acpi_devs_lock = SPIN_LOCK_UNLOCKED;
 static LIST_HEAD(acpi_devs);
 
 /* Make it impossible to enter C2/C3 until after we've initialized */
+static unsigned long acpi_enter_lvl2_lat = ACPI_INFINITE_LAT;
+static unsigned long acpi_enter_lvl3_lat = ACPI_INFINITE_LAT;
 static unsigned long acpi_p_lvl2_lat = ACPI_INFINITE_LAT;
 static unsigned long acpi_p_lvl3_lat = ACPI_INFINITE_LAT;
 
@@ -636,87 +638,143 @@ static int acpi_disable(struct acpi_facp *facp)
 	return 0;
 }
 
+static inline int bm_activity(void)
+{
+	return 0 && acpi_read_pm1_status(acpi_facp) & ACPI_BM;
+}
+
+static inline void clear_bm_activity(void)
+{
+	acpi_write_pm1_status(acpi_facp, ACPI_BM);
+}
+
+static void sleep_on_busmaster(void)
+{
+	u32 pm1_cntr = acpi_read_pm1_control(acpi_facp);
+	if (pm1_cntr & ACPI_BM_RLD) {
+		pm1_cntr &= ~ACPI_BM_RLD;
+		acpi_write_pm1_control(acpi_facp, pm1_cntr);
+	}
+}
+
+static void wake_on_busmaster(void)
+{
+	u32 pm1_cntr = acpi_read_pm1_control(acpi_facp);
+	if (!(pm1_cntr & ACPI_BM_RLD)) {
+		pm1_cntr |= ACPI_BM_RLD;
+		acpi_write_pm1_control(acpi_facp, pm1_cntr);
+	}
+	clear_bm_activity();
+}
+
 /*
  * Idle loop (uniprocessor only)
  */
 static void acpi_idle_handler(void)
 {
 	static int sleep_level = 1;
-	u32 pm1_cnt, timer, pm2_cnt, bm_active;
-	unsigned long time;
 
-	// return to C0 on bus master request (necessary for C3 only)
-	pm1_cnt = acpi_read_pm1_control(acpi_facp);
-	if (sleep_level == 3) {
-		if (!(pm1_cnt & ACPI_BM_RLD)) {
-			pm1_cnt |= ACPI_BM_RLD;
-			acpi_write_pm1_control(acpi_facp, pm1_cnt);
-		}
-	}
-	else {
-		if (pm1_cnt & ACPI_BM_RLD) {
-			pm1_cnt &= ~ACPI_BM_RLD;
-			acpi_write_pm1_control(acpi_facp, pm1_cnt);
-		}
-	}
+	if (!acpi_facp->pm_tmr || !acpi_p_blk)
+		goto not_initialized;
 
-	// clear bus master activity flag
-	acpi_write_pm1_status(acpi_facp, ACPI_BM);
-
-	// get current time
-	timer = acpi_facp->pm_tmr;
-	time = inl(timer);
-
-	// sleep
-	switch (sleep_level) {
-	case 1:
-		__asm__ __volatile__("sti ; hlt": : :"memory");
-		break;
-	case 2:
-		inb(acpi_p_blk + ACPI_P_LVL2);
-		break;
-	case 3:
-		pm2_cnt = acpi_facp->pm2_cnt;
-		if (pm2_cnt) {
-			/* Disable PCI arbitration while sleeping,
-			   to avoid DMA corruption? */
-			cli();
-			outb(inb(pm2_cnt) | ACPI_ARB_DIS, pm2_cnt);
-			inb(acpi_p_blk + ACPI_P_LVL3);
-			outb(inb(pm2_cnt) & ~ACPI_ARB_DIS, pm2_cnt);
-			sti();
-		}
-		else {
-			inb(acpi_p_blk + ACPI_P_LVL3);
-		}
-		break;
-	}
-
-	// calculate time spent sleeping
-	time = (inl(timer) - time) & ACPI_TMR_MASK;
-
-	// check for bus master activity
-	bm_active = (acpi_read_pm1_status(acpi_facp) & ACPI_BM);
-
-	// record working C2/C3
-	if (sleep_level == 2 && !acpi_p_lvl2_tested) {
-		acpi_p_lvl2_tested = 1;
-		printk(KERN_INFO "ACPI: C2 works\n");
-	}
-	else if (sleep_level == 3 && !acpi_p_lvl3_tested) {
+	/*
+	 * start from the previous sleep level..
+	 */
+	if (sleep_level == 1)
+		goto sleep1;
+	if (sleep_level == 2 || bm_activity())
+		goto sleep2;
+sleep3:
+	sleep_level = 3;
+	if (!acpi_p_lvl3_tested) {
+		printk("ACPI C3 works\n");
 		acpi_p_lvl3_tested = 1;
-		printk(KERN_INFO "ACPI: C3 works\n");
+	}
+	wake_on_busmaster();
+	if (acpi_facp->pm2_cnt)
+		goto sleep3_with_arbiter;
+
+	for (;;) {
+		unsigned long time;
+		__cli();
+		if (current->need_resched)
+			goto out;
+		time = inl(acpi_facp->pm_tmr);
+		inb(acpi_p_blk + ACPI_P_LVL3);
+		time = inl(acpi_facp->pm_tmr) - time;
+		__sti();
+		if (time > acpi_p_lvl3_lat || bm_activity())
+			goto sleep2;
 	}
 
-	// pick next C-state based on time spent sleeping,
-	// C-state latencies, and bus master activity
-	sleep_level = 1;
-	if (acpi_p_blk) {
-		if (time > acpi_p_lvl3_lat && !bm_active)
-			sleep_level = 3;
-		else if (time > acpi_p_lvl2_lat)
-			sleep_level = 2;
+sleep3_with_arbiter:
+	for (;;) {
+		unsigned long time;
+		unsigned int pm2_cntr = acpi_facp->pm2_cnt;
+		__cli();
+		if (current->need_resched)
+			goto out;
+		time = inl(acpi_facp->pm_tmr);
+		outb(inb(pm2_cntr) | ACPI_ARB_DIS, pm2_cntr);
+		inb(acpi_p_blk + ACPI_P_LVL3);
+		outb(inb(pm2_cntr) & ~ACPI_ARB_DIS, pm2_cntr);
+		time = inl(acpi_facp->pm_tmr) - time;
+		__sti();
+		if (time > acpi_p_lvl3_lat || bm_activity())
+			goto sleep2;
 	}
+
+sleep2:
+	sleep_level = 2;
+	if (!acpi_p_lvl2_tested) {
+		printk("ACPI C2 works\n");
+		acpi_p_lvl2_tested = 1;
+	}
+	wake_on_busmaster();	/* Required to track BM activity.. */
+	for (;;) {
+		unsigned long time;
+		__cli();
+		if (current->need_resched)
+			goto out;
+		time = inl(acpi_facp->pm_tmr);
+		inb(acpi_p_blk + ACPI_P_LVL2);
+		time = inl(acpi_facp->pm_tmr) - time;
+		__sti();
+		if (time > acpi_p_lvl2_lat)
+			goto sleep1;
+		if (bm_activity()) {
+			clear_bm_activity();
+			continue;
+		}
+		if (time < acpi_enter_lvl3_lat)
+			goto sleep3;
+	}
+
+sleep1:
+	sleep_level = 1;
+	sleep_on_busmaster();
+	for (;;) {
+		unsigned long time;
+		__cli();
+		if (current->need_resched)
+			goto out;
+		time = inl(acpi_facp->pm_tmr);
+		__asm__ __volatile__("sti ; hlt": : :"memory");
+		time = inl(acpi_facp->pm_tmr) - time;
+		if (time < acpi_enter_lvl2_lat)
+			goto sleep2;
+	}
+
+not_initialized:
+	for (;;) {
+		__cli();
+		if (current->need_resched)
+			goto out;
+		__asm__ __volatile__("sti ; hlt": : :"memory");
+	}
+
+out:
+	__sti();
 }
 
 /*
@@ -1119,10 +1177,12 @@ static int __init acpi_init(void)
 	if (acpi_facp->p_lvl2_lat
 	    && acpi_facp->p_lvl2_lat <= ACPI_MAX_P_LVL2_LAT) {
 		acpi_p_lvl2_lat = acpi_facp->p_lvl2_lat;
+		acpi_enter_lvl2_lat = ACPI_TMR_HZ / 1000;
 	}
 	if (acpi_facp->p_lvl3_lat
 	    && acpi_facp->p_lvl3_lat <= ACPI_MAX_P_LVL3_LAT) {
 		acpi_p_lvl3_lat = acpi_facp->p_lvl3_lat;
+		acpi_enter_lvl3_lat = acpi_facp->p_lvl3_lat * 5;
 	}
 
 	if (acpi_facp->sci_int

@@ -1,6 +1,6 @@
 /* sis900.c: A SiS 900/7016 PCI Fast Ethernet driver for Linux.
-   Silicon Integrated System Corporation 
-   Revision:	1.05	Aug 7 1999
+   Copyright 1999 Silicon Integrated System Corporation 
+   Revision:	1.06.03	Dec 23 1999
    
    Modified from the driver which is originally written by Donald Becker. 
    
@@ -18,6 +18,9 @@
    preliminary Rev. 1.0 Jan. 18, 1998
    http://www.sis.com.tw/support/databook.htm
    
+   Rev 1.06.03 Dec. 23 1999 Ollie Lho Third release
+   Rev 1.06.02 Nov. 23 1999 Ollie Lho bug in mac probing fixed 
+   Rev 1.06.01 Nov. 16 1999 Ollie Lho CRC calculation provide by Joseph Zbiciak (im14u2c@primenet.com)
    Rev 1.06 Nov. 4 1999 Ollie Lho (ollie@sis.com.tw) Second release
    Rev 1.05.05 Oct. 29 1999 Ollie Lho (ollie@sis.com.tw) Single buffer Tx/Rx  
    Chin-Shan Li (lcs@sis.com.tw) Added AMD Am79c901 HomePNA PHY support
@@ -47,7 +50,7 @@
 #include "sis900.h"
 
 static const char *version =
-"sis900.c: v1.06  11/04/99\n";
+"sis900.c: v1.06.03  12/23/99\n";
 
 static int max_interrupt_work = 20;
 #define sis900_debug debug
@@ -221,6 +224,8 @@ static struct net_device * sis900_mac_probe (struct mac_chip_info * mac, struct 
 	if (did_version++ == 0)
 		printk(KERN_INFO "%s", version);
 
+	if ((net_dev = init_etherdev(net_dev, 0)) == NULL)
+		return NULL;
 	/* check to see if we have sane EEPROM */
 	signature = (u16) read_eeprom(ioaddr, EEPROMSignature);    
 	if (signature == 0xffff || signature == 0x0000) {
@@ -228,9 +233,6 @@ static struct net_device * sis900_mac_probe (struct mac_chip_info * mac, struct 
 			net_dev->name, signature);
 		return NULL;
 	}
-
-	if ((net_dev = init_etherdev(net_dev, 0)) == NULL)
-		return NULL;
 
 	printk(KERN_INFO "%s: %s at %#lx, IRQ %d, ", net_dev->name, mac->name,
 	       ioaddr, irq);
@@ -509,7 +511,7 @@ sis900_open(struct net_device *net_dev)
 	net_dev->start = 1;
 
 	/* Enable all known interrupts by setting the interrupt mask. */
-	outl((RxSOVR|RxORN|RxERR|RxOK|TxURN|TxERR|TxOK), ioaddr + imr);
+	outl((RxSOVR|RxORN|RxERR|RxOK|TxURN|TxERR|TxIDLE), ioaddr + imr);
 	outl(RxENA, ioaddr + cr);
 	outl(IE, ioaddr + ier);
 
@@ -787,6 +789,7 @@ static void sis900_tx_timeout(struct net_device *net_dev)
 {
 	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;
 	long ioaddr = net_dev->base_addr;
+	int i;
 
 	printk(KERN_INFO "%s: Transmit timeout, status %8.8x %8.8x \n",
 	       net_dev->name, inl(ioaddr + cr), inl(ioaddr + isr));
@@ -794,14 +797,26 @@ static void sis900_tx_timeout(struct net_device *net_dev)
 	/* Disable interrupts by clearing the interrupt mask. */
 	outl(0x0000, ioaddr + imr);
 
-	sis_priv->cur_rx = 0;
+	/* discard unsent packets, should this code section be protected by
+	   cli(), sti() ?? */
+	sis_priv->dirty_tx = sis_priv->cur_tx = 0;
+	for (i = 0; i < NUM_TX_DESC; i++) {
+		if (sis_priv->tx_skbuff[i] != NULL) {
+			dev_kfree_skb(sis_priv->tx_skbuff[i]);
+			sis_priv->tx_skbuff[i] = 0;
+			sis_priv->tx_ring[i].cmdsts = 0;
+			sis_priv->tx_ring[i].bufptr = 0;
+			sis_priv->stats.tx_dropped++;
+		}
+	}
+
 	net_dev->trans_start = jiffies;
-	sis_priv->stats.tx_errors++;
+	net_dev->tbusy = sis_priv->tx_full = 0;
 
 	/* FIXME: Should we restart the transmission thread here  ?? */
 
 	/* Enable all known interrupts by setting the interrupt mask. */
-	outl((RxSOVR|RxORN|RxERR|RxOK|TxURN|TxERR|TxOK), ioaddr + imr);
+	outl((RxSOVR|RxORN|RxERR|RxOK|TxURN|TxERR|TxIDLE), ioaddr + imr);
 	return;
 }
 
@@ -876,13 +891,7 @@ static void sis900_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	do {
 		status = inl(ioaddr + isr);
 		
-		if (sis900_debug > 3)
-			printk(KERN_INFO "%s: entering interrupt, "
-			       "original status = %#8.8x, "
-			       "new status = %#8.8x.\n",
-			       net_dev->name, status, inl(ioaddr + isr));
-
-		if ((status & (HIBERR|TxURN|TxERR|TxOK|RxORN|RxERR|RxOK)) == 0)
+		if ((status & (HIBERR|TxURN|TxERR|TxIDLE|RxORN|RxERR|RxOK)) == 0)
 			/* nothing intresting happened */
 			break;
 
@@ -891,7 +900,7 @@ static void sis900_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			/* Rx interrupt */
 			sis900_rx(net_dev);
 
-		if (status & (TxURN | TxERR | TxOK))
+		if (status & (TxURN | TxERR | TxIDLE))
 			/* Tx interrupt */
 			sis900_finish_xmit(net_dev);
 
@@ -961,6 +970,9 @@ static int sis900_rx(struct net_device *net_dev)
 		} else {
 			struct sk_buff * skb;
 			
+			/* This situation should never happen, but due to
+			   some unknow bugs, it is possible that
+			   we are working on NULL sk_buff :-( */			
 			if (sis_priv->rx_skbuff[entry] == NULL) {
 				printk(KERN_INFO "%s: NULL pointer " 
 				       "encountered in Rx ring, skipping\n",
@@ -1033,7 +1045,9 @@ static void sis900_finish_xmit (struct net_device *net_dev)
 		tx_status = sis_priv->tx_ring[entry].cmdsts;
 		
 		if (tx_status & OWN) {
-			/* The packet is not transmited yet (owned by hardware) ! */
+			/* The packet is not transmited yet (owned by hardware) !
+			   Note: the interrupt is generated only when Tx Machine
+			   is idle, so this is an almost impossible case */
 			break;
 		}
 		
@@ -1054,8 +1068,6 @@ static void sis900_finish_xmit (struct net_device *net_dev)
 				sis_priv->stats.tx_window_errors++;
 		} else {
 			/* packet successfully transmited */
-			if (sis900_debug > 3)
-				printk(KERN_INFO "Tx Transmit OK\n");
 			sis_priv->stats.collisions += (tx_status & COLCNT) >> 16;
 			sis_priv->stats.tx_bytes += tx_status & DSIZE;
 			sis_priv->stats.tx_packets++;
@@ -1069,8 +1081,8 @@ static void sis900_finish_xmit (struct net_device *net_dev)
 	
 	if (sis_priv->tx_full && net_dev->tbusy && 
 	    sis_priv->cur_tx - sis_priv->dirty_tx < NUM_TX_DESC - 4) {
-		/* The ring is no longer full, clear tbusy, tx_full and schedule 
-		   more transmission by marking NET_BH */
+		/* The ring is no longer full, clear tbusy, tx_full and
+		   schedule more transmission by marking NET_BH */
 		sis_priv->tx_full = 0;
 		clear_bit(0, (void *)&net_dev->tbusy);
 		mark_bh(NET_BH);
@@ -1153,11 +1165,13 @@ static u16 sis900_compute_hashtable_index(u8 *addr)
 {
 
 /* what is the correct value of the POLYNOMIAL ??
-   Donald Becker use 0x04C11DB7U */
-#define POLYNOMIAL 0x04C11DB6L
+   Donald Becker use 0x04C11DB7U
+   Joseph Zbiciak im14u2c@primenet.com gives me the
+   correct answer, thank you Joe !! */
+#define POLYNOMIAL 0x04C11DB7L
 	u32 crc = 0xffffffff, msb;
 	int  i, j;
-	u8  byte;
+	u32  byte;
 
 	for (i = 0; i < 6; i++) {
 		byte = *addr++;
@@ -1166,7 +1180,6 @@ static u16 sis900_compute_hashtable_index(u8 *addr)
 			crc <<= 1;
 			if (msb ^ (byte & 1)) {
 				crc ^= POLYNOMIAL;
-				crc |= 1;
 			}
 			byte >>= 1;
 		}
@@ -1208,7 +1221,7 @@ static void set_rx_mode(struct net_device *net_dev)
 
 	/* update Multicast Hash Table in Receive Filter */
 	for (i = 0; i < 8; i++) {
-		/* why plus 0x04 ??, I don't know, UNDOCUMENT FEATURE ?? */
++               /* why plus 0x04 ??, That makes the correct value for hash table. */
 		outl((u32)(0x00000004+i) << RFADDR_shift, ioaddr + rfcr);
 		outl(mc_filter[i], ioaddr + rfdr);
 	}

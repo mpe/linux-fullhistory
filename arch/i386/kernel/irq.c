@@ -772,6 +772,41 @@ unsigned long probe_irq_on(void)
 	return 0x12345678;
 }
 
+/*
+ * Return a mask of triggered interrupts (this
+ * can handle only legacy ISA interrupts).
+ */
+unsigned int probe_irq_mask(unsigned long unused)
+{
+	int i;
+	unsigned int mask;
+
+	if (unused != 0x12345678)
+		printk("Bad IRQ probe from %lx\n", (&unused)[-1]);
+
+	mask = 0;
+	spin_lock_irq(&irq_controller_lock);
+	for (i = 0; i < 16; i++) {
+		unsigned int status = irq_desc[i].status;
+
+		if (!(status & IRQ_AUTODETECT))
+			continue;
+
+		if (!(status & IRQ_WAITING))
+			mask |= 1 << i;
+
+		irq_desc[i].status = status & ~IRQ_AUTODETECT;
+		irq_desc[i].handler->shutdown(i);
+	}
+	spin_unlock_irq(&irq_controller_lock);
+
+	return mask;
+}
+
+/*
+ * Return the one interrupt that triggered (this can
+ * handle any interrupt source)
+ */
 int probe_irq_off(unsigned long unused)
 {
 	int i, irq_found, nr_irqs;

@@ -1,6 +1,6 @@
   SiS 900/7016 Fast Ethernet Device Driver
   by Ollie Lho (ollie@sis.com.tw)
-  November 4, 1999. Document Revision: 0.1
+  November 4, 1999. Document Revision: 0.2
 
   This document gives some information on installation and usage of SiS
   900/7016 device driver under Linux.
@@ -17,7 +17,7 @@
 
   4. Tested Environment
 
-  5. Files in This Rackage
+  5. Files in This Package
 
   6. Installation
 
@@ -111,9 +111,11 @@
 
   9. Names of variables were changed to be more consistent.
 
- 10. Clean up of auo-negotiation and timer code.
+  10.
+     Clean up of auo-negotiation and timer code.
 
- 11. Automatic detection and change of PHY on the fly.
+  11.
+     Automatic detection and change of PHY on the fly.
 
 
   4.  Tested Environment
@@ -137,7 +139,7 @@
   o  Samba version 2.0.3
 
 
-  5.  Files in This Rackage
+  5.  Files in This Package
 
   In the package you can find these files:
 
@@ -157,10 +159,16 @@
 
   6.  Installation
 
-  Before trying to install the driver, be sure to get the latest
-  revision from SiS' Home Page.  If you have no prior experience in
-  networking under Linux, please read Ethernet HOWTO and Networking
-  HOWTO available from Linux Documentation Project (LDP).
+  Silicon Integrated System Corp. is cooperating closely with core Linux
+  Kernel developers. The revisions of SiS 900 driver are distributed by
+  the usuall channels for kernel tar files and patches. Those kernel tar
+  files for official kernel and patches for kernel pre-release can be
+  download at official kernel ftp site
+  <http://ftp.kernel.org/pub/linux/kernel/> and its mirrors.  The 1.06
+  revision can be found in kernel version later than 2.3.15 and
+  pre-2.2.14.  If you have no prior experience in networking under
+  Linux, please read Ethernet HOWTO and Networking HOWTO available from
+  Linux Documentation Project (LDP).
 
   The installation procedure are different according to your kernel
   versions.
@@ -244,6 +252,7 @@
        sis900.c: v1.06  11/04/99
        eth0: SiS 900 PCI Fast Ethernet at 0xd000, IRQ 10, 00:00:e8:83:7f:a4.
        eth0: SiS 900 Internal MII PHY transceiver found at address 1.
+       eth0: Using SiS 900 Internal MII PHY as default
 
 
 
@@ -269,7 +278,6 @@
 
 
 
-       eth0: Using SiS 900 Internal MII PHY as default
        eth0: Media Link On 100mbps full-duplex
 
 

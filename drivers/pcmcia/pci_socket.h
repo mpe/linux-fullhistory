@@ -8,11 +8,12 @@ struct pci_socket_ops;
 
 typedef struct pci_socket {
 	struct pci_dev *dev;
-	int irq;
+	int cb_irq, io_irq;
 	void *base;
 	void (*handler)(void *, unsigned int);
 	void *info;
 	struct pci_socket_ops *op;
+	socket_cap_t cap;
 } pci_socket_t;
 
 struct pci_socket_ops {

@@ -71,6 +71,7 @@ CONFIG_BINFMT_AOUT=y
 CONFIG_BINFMT_ELF=y
 CONFIG_BINFMT_MISC=y
 # CONFIG_PARPORT is not set
+CONFIG_ACPI=y
 # CONFIG_APM is not set
 
 #
@@ -405,7 +406,6 @@ CONFIG_DRM_TDFX=y
 #
 # Misc devices
 #
-CONFIG_ACPI=y
 
 #
 # Filesystems

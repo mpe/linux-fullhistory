@@ -484,6 +484,7 @@ asmlinkage void __init start_kernel(void)
 	kmem_cache_init();
 	sti();
 	calibrate_delay();
+#if 0000
 #ifdef CONFIG_BLK_DEV_INITRD
 	// FIXME, use the bootmem.h interface.
 	if (initrd_start && !initrd_below_start_ok && initrd_start < memory_start) {
@@ -492,6 +493,7 @@ asmlinkage void __init start_kernel(void)
 		initrd_start = 0;
 	}
 #endif
+#endif /* 0000 */
 	mem_init();
 	kmem_cache_sizes_init();
 #ifdef CONFIG_PROC_FS

@@ -102,6 +102,8 @@
 /*
  * Cardbus configuration space
  */
+#define CB_BRIDGE_BASE(m)	(0x1c + 8*(m))
+#define CB_BRIDGE_LIMIT(m)	(0x20 + 8*(m))
 #define CB_BRIDGE_CONTROL	0x3e
 #define   CB_BRIDGE_CPERREN	0x00000001
 #define   CB_BRIDGE_CSERREN	0x00000002

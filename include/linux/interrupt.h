@@ -80,5 +80,6 @@ enum {
  */
 extern unsigned long probe_irq_on(void);	/* returns 0 on failure */
 extern int probe_irq_off(unsigned long);	/* returns 0 or negative on failure */
+extern unsigned int probe_irq_mask(unsigned long);	/* returns mask of ISA interrupts */
 
 #endif

@@ -119,6 +119,7 @@ tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
 source drivers/parport/Config.in
 
+bool 'ACPI support' CONFIG_ACPI
 bool 'Advanced Power Management BIOS support' CONFIG_APM
 if [ "$CONFIG_APM" != "n" ]; then
    bool '  Ignore USER SUSPEND' CONFIG_APM_IGNORE_USER_SUSPEND

@@ -18,10 +18,6 @@ M_OBJS   :=
 O_OBJS   :=
 OX_OBJS  :=
 
-ifeq ($(CONFIG_ACPI),y)
-  OX_OBJS += acpi.o
-endif
-
 include $(TOPDIR)/Rules.make
 
 fastdep:

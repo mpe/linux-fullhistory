@@ -1,9 +1,11 @@
 /*
  * USB Abstract Control Model based on Brad Keryan's USB busmouse driver
  *
- * (C) Copyright 1999 Armin Fuerst <armin.please@put.your.email.here.!!!!>
+ * (C) Copyright 1999 Armin Fuerst <fuerst@in.tum.de>
  * (C) Copyright 1999 Pavel Machek <pavel@suse.cz>
  * (C) Copyright 1999 Johannes Erdfelt <jerdfelt@valinux.com>
+ *
+ * version 0.9: Johanness Erdfelt converted this to urb interface.
  *
  * version 0.8: Fixed endianity bug, some cleanups. I really hate to have
  * half of driver in form if (...) { info("x"); return y; }
@@ -92,13 +94,12 @@ struct acm_state {
 	char active;					//someone has this acm's device open
 	unsigned int ctrlstate;				//Status of the serial control lines  (handshake,...)
 	unsigned int linecoding;			//Status of the line coding (Bits, Stop, Parity)
-	int writesize, readsize;			//size of the usb buffers
-	char *writebuffer, *readbuffer;			//the usb buffers
-	void *readtransfer, *writetransfer;
-	void *ctrltransfer;				//ptr to HC internal transfer struct
+	int writesize, readsize, ctrlsize;		//size of the usb buffers
+	char *writebuffer, *readbuffer, *ctrlbuffer;	//the usb buffers
 	char writing, reading;				//flag if transfer is running
 	unsigned int readendp,writeendp,ctrlendp;	//endpoints and
 	unsigned int readpipe,writepipe,ctrlpipe;	//pipes (are one of these obsolete?)
+	urb_t *readurb, *writeurb, *ctrlurb;
 	unsigned ctrlinterval;				//interval to poll from device
 };
 
@@ -135,31 +136,30 @@ void Set_Line_Coding(unsigned int coding, struct acm_state *acm)
 }
 
 //Interrupt handler for various usb events
-static int acm_irq(int state, void *__buffer, int count, void *dev_id)
+static void acm_irq(urb_t *urb)
 {
-	unsigned char *data;
-	struct acm_state *acm = (struct acm_state *)dev_id;
-	devrequest *dr;
+	struct acm_state *acm = (struct acm_state *)urb->context;
+	unsigned char *data = urb->transfer_buffer;
+        devrequest *dr;
 
 	info("ACM_USB_IRQ\n");
 
-	if (state) {
-		printk(KERN_DEBUG "acm_irq: strange state received: %x\n", state);
-		return 0;
+	if (urb->status < 0) {
+		printk(KERN_DEBUG "acm_irq: strange status received: %d\n", urb->status);
+		return;
 	}
 
 	if (!acm->present)
-		return 0;
+		return;
 	if (!acm->active)
-		return 1;
+		return;
 
-	dr = __buffer;
-	data = __buffer;
+        dr = (devrequest *)data;
 	data += sizeof(dr);
  
 #if 0
-	printk("reqtype: %02X\n",dr->requesttype);
-	printk("request: %02X\n",dr->request);
+        printk("reqtype: %02X\n",dr->requesttype);
+        printk("request: %02X\n",dr->request);
 	printk("wValue: %02X\n",dr->value);
 	printk("wIndex: %02X\n",dr->index);
 	printk("wLength: %02X\n",dr->length);
@@ -179,55 +179,56 @@ static int acm_irq(int state, void *__buffer, int count, void *dev_id)
 	case 0x20: /* Set serial line state */
 		printk(KERN_DEBUG "acm.c: Set serial control line state\n");
 		if ((dr->index==1) && (dr->length==2)) {
-			acm->ctrlstate= data[0] || (data[1] << 16);
-			printk(KERN_DEBUG "Serstate: %02X\n",acm->ctrlstate);
+			acm->ctrlstate = data[0] || (data[1] << 16);
+			printk(KERN_DEBUG "Serstate: %02X\n", acm->ctrlstate);
 		}
 		break;
 	}
 
-	return 1; /* Continue transfer */
+	return;
 }
 
-static int acm_read_irq(int state, void *__buffer, int count, void *dev_id)
+static void acm_read_irq(urb_t *urb)
 {
-	struct acm_state *acm = (struct acm_state *) dev_id; 
+	struct acm_state *acm = (struct acm_state *)urb->context; 
        	struct tty_struct *tty = acm->tty; 
-       	unsigned char* data=__buffer;
+       	unsigned char *data = acm->readbuffer;
 	int i;
 
-	info("ACM_READ_IRQ: state %d, %d bytes\n", state, count);
-	if (state) {
-		printk( "acm_read_irq: strange state received: %x\n", state );
-		return 1;
+	info("ACM_READ_IRQ: state %d, %d bytes\n", urb->status, urb->actual_length);
+	if (urb->status) {
+		printk("acm_read_irq: strange state received: %d\n", urb->status);
+		return;
 	}
 	
 	if (!ACM_READY)
-		return 0;	/* stop transfer */
+		return;
 
-	for (i=0;i<count;i++)
+	for (i=0;i<urb->actual_length;i++)
 		tty_insert_flip_char(tty,data[i],0);
   	tty_flip_buffer_push(tty);
 
-	return 1;
+	usb_submit_urb(urb);
+
+	return;
 }
 
-static int acm_write_irq(int state, void *__buffer, int count, void *dev_id)
+static void acm_write_irq(urb_t *urb)
 {
-	struct acm_state *acm = (struct acm_state *) dev_id;
+	struct acm_state *acm = (struct acm_state *)urb->context;
        	struct tty_struct *tty = acm->tty;
 
 	info("ACM_WRITE_IRQ\n");
 
 	if (!ACM_READY)
-		return 0; /* stop transfer */
+		return;
 
-	usb_terminate_bulk(acm->dev, acm->writetransfer);
 	acm->writing = 0;
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
 	wake_up_interruptible(&tty->write_wait);
 
-	return 0; /* stop tranfer */
+	return;
 }
 
 /*TTY STUFF*/
@@ -251,13 +252,21 @@ static int rs_open(struct tty_struct *tty, struct file *filp)
 	MOD_INC_USE_COUNT;
 
 	/* Start reading from the device */
-	ret = usb_request_irq(acm->dev, acm->ctrlpipe, acm_irq,
-		acm->ctrlinterval, acm, &acm->ctrltransfer);
+	FILL_INT_URB(acm->ctrlurb, acm->dev, acm->ctrlpipe,
+		acm->ctrlbuffer, acm->ctrlsize,
+		acm_irq, acm, acm->ctrlinterval);
+	ret = usb_submit_urb(acm->ctrlurb);
 	if (ret)
-		printk(KERN_ERR "usb-acm: usb_request_irq failed (0x%x)\n", ret);
+		printk(KERN_ERR "acm: usb_submit_urb(INT) failed (%d)\n", ret);
 	acm->reading = 1;
-	acm->readtransfer = usb_request_bulk(acm->dev, acm->readpipe,
-		acm_read_irq, acm->readbuffer, acm->readsize, acm);
+
+	FILL_BULK_URB(acm->readurb, acm->dev, acm->readpipe, acm->readbuffer,
+		acm->readsize, acm_read_irq, acm);
+	ret = usb_submit_urb(acm->readurb);
+		
+	if (ret)
+		printk(KERN_ERR "acm: usb_submit_urb(READ) failed (%d)\n", ret);
+	acm->reading = 1;
 
 	Set_Control_Line_Status(CTRL_STAT_DTR | CTRL_STAT_RTS, acm);
 
@@ -266,7 +275,7 @@ static int rs_open(struct tty_struct *tty, struct file *filp)
 
 static void rs_close(struct tty_struct *tty, struct file *filp)
 {
-	struct acm_state *acm = (struct acm_state *) tty->driver_data;
+	struct acm_state *acm = (struct acm_state *)tty->driver_data;
 
 	info("rs_close\n");
 
@@ -274,20 +283,22 @@ static void rs_close(struct tty_struct *tty, struct file *filp)
 		return;
 
 	if (--acm->active)
-		return;
+		goto early;
 
 	Set_Control_Line_Status(0, acm);
 
 	if (acm->writing) {
-		usb_terminate_bulk(acm->dev, acm->writetransfer);
+		if (acm->writeurb)
+			usb_unlink_urb(acm->writeurb);
 		acm->writing = 0;
 	}
 	if (acm->reading) {
-		usb_terminate_bulk(acm->dev, acm->readtransfer);
+		if (acm->readurb)
+			usb_unlink_urb(acm->readurb);
 		acm->reading = 0;
 	}
-//	usb_release_irq(acm->dev, acm->ctrltransfer, acm->ctrlpipe);
 
+early:
 	MOD_DEC_USE_COUNT;
 }
 
@@ -295,7 +306,7 @@ static int rs_write(struct tty_struct *tty, int from_user,
 		    const unsigned char *buf, int count)
 {
 	struct acm_state *acm = (struct acm_state *)tty->driver_data;
-	int written;
+	int written, ret;
 
 	info("rs_write\n");
 
@@ -316,8 +327,12 @@ static int rs_write(struct tty_struct *tty, int from_user,
 
 	//start the transfer
 	acm->writing = 1;
-	acm->writetransfer = usb_request_bulk(acm->dev, acm->writepipe,
-		acm_write_irq, acm->writebuffer, written, acm);
+
+	FILL_BULK_URB(acm->writeurb, acm->dev, acm->writepipe, acm->writebuffer,
+		written, acm_write_irq, acm);
+	ret = usb_submit_urb(acm->writeurb);
+	if (ret)
+		printk("acm: usb_submit_urb(WRITE) failed: %d\n", ret);
 
 	return written;
 } 
@@ -330,7 +345,7 @@ static void rs_put_char(struct tty_struct *tty, unsigned char ch)
 
 static int rs_write_room(struct tty_struct *tty)
 {
-	struct acm_state *acm = (struct acm_state *) tty->driver_data;
+	struct acm_state *acm = (struct acm_state *)tty->driver_data;
 
 	info("rs_write_room\n");
 
@@ -342,7 +357,7 @@ static int rs_write_room(struct tty_struct *tty)
 
 static int rs_chars_in_buffer(struct tty_struct *tty)
 {
-	struct acm_state *acm = (struct acm_state *) tty->driver_data;
+	struct acm_state *acm = (struct acm_state *)tty->driver_data;
 
 //	info("rs_chars_in_buffer\n");
 
@@ -354,7 +369,7 @@ static int rs_chars_in_buffer(struct tty_struct *tty)
 
 static void rs_throttle(struct tty_struct *tty)
 {
-	struct acm_state *acm = (struct acm_state *) tty->driver_data;
+	struct acm_state *acm = (struct acm_state *)tty->driver_data;
 
 	info("rs_throttle\n");
 
@@ -414,7 +429,7 @@ static void * acm_probe(struct usb_device *dev, unsigned int ifnum)
 	/* Only use CDC */
 	if (dev->descriptor.bDeviceClass != 2 ||
 	    dev->descriptor.bDeviceSubClass != 0 ||
-	    dev->descriptor.bDeviceProtocol != 0)
+            dev->descriptor.bDeviceProtocol != 0)
 		return NULL;
 
 #define IFCLASS(if) ((if->bInterfaceClass << 24) | (if->bInterfaceSubClass << 16) | (if->bInterfaceProtocol << 8) | (if->bNumEndpoints))
@@ -422,6 +437,8 @@ static void * acm_probe(struct usb_device *dev, unsigned int ifnum)
 	/* FIXME: should the driver really be doing the configuration
 	 * selecting or should the usbcore?  [different configurations
 	 * can have different bandwidth requirements] -greg */
+
+	printk("Acm: found device with right class...\n" );
 
 	/* Now scan all configs for a ACM configuration */
 	for (cfgnum=0;cfgnum<dev->descriptor.bNumConfigurations;cfgnum++) {
@@ -465,7 +482,7 @@ static void * acm_probe(struct usb_device *dev, unsigned int ifnum)
 		    (endpoint->bmAttributes & 3) != 2)
 			continue;
 
-		printk("USB ACM %d found\n",acmno);
+		printk("USB ACM %d found on config %d\n", acmno, cfgnum);
 		usb_set_configuration(dev, dev->config[cfgnum].bConfigurationValue);
 
 		acm->dev=dev;
@@ -478,6 +495,11 @@ static void * acm_probe(struct usb_device *dev, unsigned int ifnum)
 			printk("ACM: Couldn't allocate readbuffer\n");
 			return NULL;
 		}
+		acm->readurb = usb_alloc_urb(0);
+		if (!acm->readurb) {
+			printk("acm: couldn't allocate read urb\n");
+			return NULL;
+		}
 
 		acm->writeendp=dev->config[cfgnum].interface[1].altsetting[0].endpoint[1^swapped].bEndpointAddress;
 		acm->writepipe=usb_sndbulkpipe(dev,acm->writeendp);
@@ -488,10 +510,25 @@ static void * acm_probe(struct usb_device *dev, unsigned int ifnum)
 			kfree(acm->readbuffer);
 			return NULL;
 		}
+		acm->writeurb = usb_alloc_urb(0);
+		if (!acm->writeurb) {
+			printk("acm: couldn't allocate write urb\n");
+			return NULL;
+		}
 
+		acm->ctrlbuffer=kmalloc(acm->ctrlsize=dev->config[cfgnum].interface[0].altsetting[0].endpoint[0].wMaxPacketSize, GFP_KERNEL);
 		acm->ctrlendp=dev->config[cfgnum].interface[0].altsetting[0].endpoint[0].bEndpointAddress;
-		acm->ctrlpipe=usb_rcvctrlpipe(acm->dev,acm->ctrlendp);
+		acm->ctrlpipe=usb_rcvintpipe(acm->dev,acm->ctrlendp);
 		acm->ctrlinterval=dev->config[cfgnum].interface[0].altsetting[0].endpoint[0].bInterval;
+		if (!acm->ctrlbuffer) {
+			printk("acm: couldn't allocate ctrlbuffer\n");
+			return NULL;
+		}
+		acm->ctrlurb = usb_alloc_urb(0);
+		if (!acm->ctrlurb) {
+			printk("acm: couldn't allocate write urb\n");
+			return NULL;
+		}
 
 		acm->cfgnum = cfgnum;
 		acm->present=1;				
@@ -517,18 +554,30 @@ static void acm_disconnect(struct usb_device *dev, void *ptr)
 
 	acm->active=0;
 	acm->present=0;
-	if (acm->writing){
-		usb_terminate_bulk(acm->dev, acm->writetransfer);
+	if (acm->writing)
 		acm->writing=0;
-	}
-	if (acm->reading){
-		usb_terminate_bulk(acm->dev, acm->readtransfer);
+	if (acm->reading)
 		acm->reading=0;
+
+	if (acm->ctrlurb) {
+		usb_unlink_urb(acm->ctrlurb);
+		usb_free_urb(acm->ctrlurb);
+		acm->ctrlurb = NULL;
 	}
-	usb_release_irq(acm->dev,acm->ctrltransfer, acm->ctrlpipe);
+	if (acm->readurb) {
+		usb_unlink_urb(acm->readurb);
+		usb_free_urb(acm->readurb);
+		acm->readurb = NULL;
+	}
+	if (acm->writeurb) {
+		usb_unlink_urb(acm->writeurb);
+		usb_free_urb(acm->writeurb);
+		acm->writeurb = NULL;
+	}
 	//BUG: What to do if a device is open?? Notify process or not allow cleanup?
 	kfree(acm->writebuffer);
 	kfree(acm->readbuffer);
+	kfree(acm->ctrlbuffer);
 
 	/* release the interfaces so that other drivers can have at them */
 	usb_driver_release_interface(&acm_driver,

@@ -92,8 +92,8 @@ enum sis900_transmit_config_register_bits {
 
 /* recevie FIFO thresholds */
 #define RxDRNT_shift     1
-#define RxDRNT_100	24	/* 3/4 FIFO size */
-#define RxDRNT_10		16 	/* 1/2 FIFO size */
+#define RxDRNT_100	16	/* 1/2 FIFO size */
+#define RxDRNT_10		24 	/* 3/4 FIFO size */
 
 enum sis900_reveive_config_register_bits {
 	RxAEP  = 0x80000000, RxARP = 0x40000000, RxATX = 0x10000000,

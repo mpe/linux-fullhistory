@@ -709,7 +709,7 @@ void __init setup_arch(char **cmdline_p)
 #endif
 
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (LOADER_TYPE) {
+	if (LOADER_TYPE && INITRD_START) {
 		if (INITRD_START + INITRD_SIZE < (max_low_pfn << PAGE_SHIFT)) {
 			reserve_bootmem(INITRD_START, INITRD_SIZE);
 			initrd_start =
