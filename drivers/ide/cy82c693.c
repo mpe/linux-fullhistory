@@ -49,6 +49,7 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/ide.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 
@@ -140,9 +141,8 @@ static int calc_clk (int time, int bus_speed)
 static void compute_clocks (byte pio, pio_clocks_t *p_pclk)
 {
 	int clk1, clk2;
-	int bus_speed;
+	int bus_speed = system_bus_clock();	/* get speed of PCI bus */
 
-	bus_speed = ide_system_bus_speed();	/* get speed of PCI bus */
 	/* we don't check against CY82C693's min and max speed,
 	 * so you can play with the idebus=xx parameter
 	 */

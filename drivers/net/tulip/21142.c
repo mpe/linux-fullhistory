@@ -88,8 +88,10 @@ void t21142_timer(unsigned long data)
 		next_tick = 3*HZ;
 	}
 
-	tp->timer.expires = RUN_AT(next_tick);
-	add_timer(&tp->timer);
+	/* mod_timer synchronizes us with potential add_timer calls
+	 * from interrupts.
+	 */
+	mod_timer(&tp->timer, RUN_AT(next_tick));
 }
 
 
@@ -108,7 +110,10 @@ void t21142_start_nway(struct net_device *dev)
 			   dev->name, csr14);
 	outl(0x0001, ioaddr + CSR13);
 	outl(csr14, ioaddr + CSR14);
-	tp->csr6 = 0x82420000 | (tp->to_advertise & 0x0040 ? 0x0200 : 0);
+	if (tp->chip_id == PNIC2)
+	  tp->csr6 = 0x01a80000 | (tp->to_advertise & 0x0040 ? 0x0200 : 0);
+	else 
+	  tp->csr6 = 0x82420000 | (tp->to_advertise & 0x0040 ? 0x0200 : 0);
 	tulip_outl_CSR6(tp, tp->csr6);
 	if (tp->mtable  &&  tp->mtable->csr15dir) {
 		outl(tp->mtable->csr15dir, ioaddr + CSR15);

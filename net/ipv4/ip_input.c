@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.46 2000/02/22 23:54:26 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.47 2000/04/13 01:11:59 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -162,7 +162,13 @@ int ip_call_ra_chain(struct sk_buff *skb)
 	read_lock(&ip_ra_lock);
 	for (ra = ip_ra_chain; ra; ra = ra->next) {
 		struct sock *sk = ra->sk;
-		if (sk && sk->num == protocol) {
+
+		/* If socket is bound to an interface, only report
+		 * the packet if it came  from that interface.
+		 */
+		if (sk && sk->num == protocol 
+		    && ((sk->bound_dev_if == 0) 
+			|| (sk->bound_dev_if == skb->dev->ifindex))) {
 			if (skb->nh.iph->frag_off & htons(IP_MF|IP_OFFSET)) {
 				skb = ip_defrag(skb);
 				if (skb == NULL) {
@@ -349,7 +355,7 @@ static inline int ip_rcv_finish(struct sk_buff *skb)
 			if (in_dev) {
 				if (!IN_DEV_SOURCE_ROUTE(in_dev)) {
 					if (IN_DEV_LOG_MARTIANS(in_dev) && net_ratelimit())
-						printk(KERN_INFO "source route option %d.%d.%d.%d -> %d.%d.%d.%d\n",
+						printk(KERN_INFO "source route option %u.%u.%u.%u -> %u.%u.%u.%u\n",
 						       NIPQUAD(iph->saddr), NIPQUAD(iph->daddr));
 					in_dev_put(in_dev);
 					goto drop;

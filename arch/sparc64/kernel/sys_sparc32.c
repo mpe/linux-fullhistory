@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.144 2000/04/08 02:11:47 davem Exp $
+/* $Id: sys_sparc32.c,v 1.145 2000/04/13 07:30:34 jj Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -3980,18 +3980,6 @@ asmlinkage int sys32_prctl(int option, u32 arg2, u32 arg3, u32 arg4, u32 arg5)
 }
 
 
-extern asmlinkage int sys_newuname(struct new_utsname * name);
-
-asmlinkage int sys32_newuname(struct new_utsname * name)
-{
-	int ret = sys_newuname(name);
-	
-	if (current->personality == PER_LINUX32 && !ret) {
-		ret = copy_to_user(name->machine, "sparc\0\0", 8);
-	}
-	return ret;
-}
-
 extern asmlinkage ssize_t sys_pread(unsigned int fd, char * buf,
 				    size_t count, loff_t pos);
 
@@ -4012,21 +4000,6 @@ asmlinkage ssize_t32 sys32_pwrite(unsigned int fd, char *ubuf,
 	return sys_pwrite(fd, ubuf, count, ((loff_t)AA(poshi) << 32) | AA(poslo));
 }
 
-
-extern asmlinkage long sys_personality(unsigned long);
-
-asmlinkage int sys32_personality(unsigned long personality)
-{
-	int ret;
-	lock_kernel();
-	if (current->personality == PER_LINUX32 && personality == PER_LINUX)
-		personality = PER_LINUX32;
-	ret = sys_personality(personality);
-	unlock_kernel();
-	if (ret == PER_LINUX32)
-		ret = PER_LINUX;
-	return ret;
-}
 
 extern asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t count);
 

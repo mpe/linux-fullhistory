@@ -39,7 +39,7 @@ static void atm_pop_raw(struct atm_vcc *vcc,struct sk_buff *skb)
 	DPRINTK("APopR (%d) %d -= %d\n",vcc->vci,vcc->tx_inuse,skb->truesize);
 	atomic_sub(skb->truesize+ATM_PDU_OVHD,&vcc->tx_inuse);
 	dev_kfree_skb_any(skb);
-	wake_up(&vcc->wsleep);
+	wake_up(&vcc->sleep);
 }
 
 

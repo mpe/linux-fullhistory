@@ -10,6 +10,9 @@
 	.text
 	.align	4
 
+	.globl  __atomic_begin
+__atomic_begin:
+
 #ifndef __SMP__
 	.globl	___xchg32_sun4c
 ___xchg32_sun4c:
@@ -92,3 +95,6 @@ ___atomic_sub:
 	nop; nop; nop;			! Let the bits set
 	jmpl	%o7, %g0		! NOTE: not + 8, see callers in atomic.h
 	 mov	%g4, %o7		! Restore %o7
+
+	.globl  __atomic_end
+__atomic_end:

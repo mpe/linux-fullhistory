@@ -19,7 +19,7 @@
  * PPP driver, written by Michael Callahan and Al Longyear, and
  * subsequently hacked by Paul Mackerras.
  *
- * ==FILEVERSION 20000406==
+ * ==FILEVERSION 20000412==
  */
 
 #include <linux/config.h>
@@ -206,7 +206,7 @@ static ssize_t ppp_file_write(struct ppp_file *pf, const char *buf,
 			      size_t count);
 static int ppp_unattached_ioctl(struct ppp_file *pf, struct file *file,
 				unsigned int cmd, unsigned long arg);
-static void ppp_xmit_process(struct ppp *ppp, int wakeup);
+static void ppp_xmit_process(struct ppp *ppp);
 static void ppp_send_frame(struct ppp *ppp, struct sk_buff *skb);
 static void ppp_push(struct ppp *ppp);
 static void ppp_channel_push(struct channel *pch);
@@ -427,7 +427,7 @@ static ssize_t ppp_file_write(struct ppp_file *pf, const char *buf,
 
 	switch (pf->kind) {
 	case INTERFACE:
-		ppp_xmit_process(PF_TO_PPP(pf), 0);
+		ppp_xmit_process(PF_TO_PPP(pf));
 		break;
 	case CHANNEL:
 		ppp_channel_push(PF_TO_CHANNEL(pf));
@@ -774,7 +774,7 @@ ppp_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	netif_stop_queue(dev);
 	skb_queue_tail(&ppp->file.xq, skb);
-	ppp_xmit_process(ppp, 0);
+	ppp_xmit_process(ppp);
 	return 0;
 
  outf:
@@ -860,13 +860,12 @@ ppp_net_init(struct net_device *dev)
  * that can now be done.
  */
 static void
-ppp_xmit_process(struct ppp *ppp, int wakeup)
+ppp_xmit_process(struct ppp *ppp)
 {
 	struct sk_buff *skb;
 
 	ppp_xmit_lock(ppp);
-	if (wakeup)
-		ppp_push(ppp);
+	ppp_push(ppp);
 	while (ppp->xmit_pending == 0
 	       && (skb = skb_dequeue(&ppp->file.xq)) != 0)
 		ppp_send_frame(ppp, skb);
@@ -1018,14 +1017,12 @@ ppp_push(struct ppp *ppp)
 		spin_lock_bh(&pch->downl);
 		if (pch->chan) {
 			if (pch->chan->ops->start_xmit(pch->chan, skb))
-				skb = 0;
+				ppp->xmit_pending = 0;
 		} else {
 			/* channel got unregistered */
 			kfree_skb(skb);
-			skb = 0;
-		}
-		if (skb_queue_len(&pch->file.xq) == 0 && skb == 0)
 			ppp->xmit_pending = 0;
+		}
 		spin_unlock_bh(&pch->downl);
 		return;
 	}
@@ -1196,6 +1193,7 @@ static void
 ppp_channel_push(struct channel *pch)
 {
 	struct sk_buff *skb;
+	struct ppp *ppp;
 
 	spin_lock_bh(&pch->downl);
 	if (pch->chan != 0) {
@@ -1212,6 +1210,14 @@ ppp_channel_push(struct channel *pch)
 		skb_queue_purge(&pch->file.xq);
 	}
 	spin_unlock_bh(&pch->downl);
+	/* see if there is anything from the attached unit to be sent */
+	if (skb_queue_len(&pch->file.xq) == 0) {
+		read_lock_bh(&pch->upl);
+		ppp = pch->ppp;
+		if (ppp != 0)
+			ppp_xmit_process(ppp);
+		read_unlock_bh(&pch->upl);
+	}
 }
 
 /*
@@ -1792,18 +1798,10 @@ void
 ppp_output_wakeup(struct ppp_channel *chan)
 {
 	struct channel *pch = chan->ppp;
-	struct ppp *ppp;
 
 	if (pch == 0)
 		return;
 	ppp_channel_push(pch);
-	if (skb_queue_len(&pch->file.xq) == 0) {
-		read_lock_bh(&pch->upl);
-		ppp = pch->ppp;
-		if (ppp != 0)
-			ppp_xmit_process(ppp, 1);
-		read_unlock_bh(&pch->upl);
-	}
 }
 
 /*

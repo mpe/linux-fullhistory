@@ -1,5 +1,5 @@
 /*
- *  $Id: ipconfig.c,v 1.27 2000/02/21 15:51:41 davem Exp $
+ *  $Id: ipconfig.c,v 1.29 2000/04/13 01:16:17 davem Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.
@@ -77,7 +77,7 @@ u8 root_server_path[256] __initdata = { 0, };		/* Path to mount as root */
 
 #define CONFIG_IP_PNP_DYNAMIC
 
-static int ic_proto_enabled __initdata = 0			/* Protocols enabled */
+int ic_proto_enabled __initdata = 0			/* Protocols enabled */
 #ifdef CONFIG_IP_PNP_BOOTP
 			| IC_BOOTP
 #endif
@@ -227,17 +227,20 @@ static int __init ic_setup_if(void)
 	strcpy(ir.ifr_ifrn.ifrn_name, ic_dev->name);
 	set_sockaddr(sin, ic_myaddr, 0);
 	if ((err = ic_dev_ioctl(SIOCSIFADDR, &ir)) < 0) {
-		printk(KERN_ERR "IP-Config: Unable to set interface address (%d).\n", err);
+		printk(KERN_ERR "IP-Config: Unable to set interface address (%u.%u.%u.%u).\n",
+			NIPQUAD(err));
 		return -1;
 	}
 	set_sockaddr(sin, ic_netmask, 0);
 	if ((err = ic_dev_ioctl(SIOCSIFNETMASK, &ir)) < 0) {
-		printk(KERN_ERR "IP-Config: Unable to set interface netmask (%d).\n", err);
+		printk(KERN_ERR "IP-Config: Unable to set interface netmask (%u.%u.%u.%u).\n",
+			NIPQUAD(err));
 		return -1;
 	}
 	set_sockaddr(sin, ic_myaddr | ~ic_netmask, 0);
 	if ((err = ic_dev_ioctl(SIOCSIFBRDADDR, &ir)) < 0) {
-		printk(KERN_ERR "IP-Config: Unable to set interface broadcast address (%d).\n", err);
+		printk(KERN_ERR "IP-Config: Unable to set interface broadcast address (%u.%u.%u.%u).\n",
+			NIPQUAD(err));
 		return -1;
 	}
 	return 0;
@@ -261,7 +264,8 @@ static int __init ic_setup_routes(void)
 		set_sockaddr((struct sockaddr_in *) &rm.rt_gateway, ic_gateway, 0);
 		rm.rt_flags = RTF_UP | RTF_GATEWAY;
 		if ((err = ic_route_ioctl(SIOCADDRT, &rm)) < 0) {
-			printk(KERN_ERR "IP-Config: Cannot add default route (%d).\n", err);
+			printk(KERN_ERR "IP-Config: Cannot add default route (%u.%u.%u.%u).\n",
+				NIPQUAD(err));
 			return -1;
 		}
 	}
@@ -294,10 +298,11 @@ static int __init ic_defaults(void)
 		else if (IN_CLASSC(ntohl(ic_myaddr)))
 			ic_netmask = htonl(IN_CLASSC_NET);
 		else {
-			printk(KERN_ERR "IP-Config: Unable to guess netmask for address %08x\n", ic_myaddr);
+			printk(KERN_ERR "IP-Config: Unable to guess netmask for address %u.%u.%u.%u\n",
+				NIPQUAD(ic_myaddr));
 			return -1;
 		}
-		printk("IP-Config: Guessing netmask %s\n", in_ntoa(ic_netmask));
+		printk("IP-Config: Guessing netmask %u.%u.%u.%u\n", NIPQUAD(ic_netmask));
 	}
 
 	return 0;
@@ -807,10 +812,10 @@ static int __init ic_dynamic(void)
 	if (!ic_got_reply)
 		return -1;
 
-	printk("IP-Config: Got %s answer from %s, ",
+	printk("IP-Config: Got %s answer from %u.%u.%u.%u, ",
 		(ic_got_reply & IC_BOOTP) ? "BOOTP" : "RARP",
-		in_ntoa(ic_servaddr));
-	printk("my address is %s\n", in_ntoa(ic_myaddr));
+		NIPQUAD(ic_servaddr));
+	printk("my address is %u.%u.%u.%u\n", NIPQUAD(ic_myaddr));
 
 	return 0;
 }

@@ -166,6 +166,37 @@ static int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, 
 				return -EFAULT;
 			return 0;
 		}
+		case HDIO_GETGEO_BIG:
+		{
+			struct hd_big_geometry *loc = (struct hd_big_geometry *) arg;
+
+			if(!loc)
+				return -EINVAL;
+
+			host = rscsi_disks[DEVICE_NR(dev)].device->host;
+
+			/* default to most commonly used values */
+
+			diskinfo[0] = 0x40;
+			diskinfo[1] = 0x20;
+			diskinfo[2] = rscsi_disks[DEVICE_NR(dev)].capacity >> 11;
+
+			/* override with calculated, extended default, or driver values */
+
+			if(host->hostt->bios_param != NULL)
+				host->hostt->bios_param(&rscsi_disks[DEVICE_NR(dev)],
+					    dev,
+					    &diskinfo[0]);
+			else scsicam_bios_param(&rscsi_disks[DEVICE_NR(dev)],
+					dev, &diskinfo[0]);
+
+			if (put_user(diskinfo[0], &loc->heads) ||
+				put_user(diskinfo[1], &loc->sectors) ||
+				put_user(diskinfo[2], (unsigned int *) &loc->cylinders) ||
+				put_user(sd[SD_PARTITION(inode->i_rdev)].start_sect, &loc->start))
+				return -EFAULT;
+			return 0;
+		}
 		case BLKGETSIZE:   /* Return device size */
 			if (!arg)
 				return -EINVAL;

@@ -242,6 +242,8 @@ static inline int dup_mmap(struct mm_struct * mm)
 		struct file *file;
 
 		retval = -ENOMEM;
+		if(mpnt->vm_flags & VM_DONTCOPY)
+			continue;
 		tmp = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 		if (!tmp)
 			goto fail_nomem;

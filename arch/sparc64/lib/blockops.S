@@ -1,4 +1,4 @@
-/* $Id: blockops.S,v 1.24 2000/03/27 10:38:41 davem Exp $
+/* $Id: blockops.S,v 1.25 2000/04/13 04:45:58 davem Exp $
  * blockops.S: UltraSparc block zero optimized routines.
  *
  * Copyright (C) 1996, 1998, 1999, 2000 David S. Miller (davem@redhat.com)
@@ -26,9 +26,9 @@
 	.text
 
 	.align		32
-	.globl		copy_page
-	.type		copy_page,@function
-copy_page: /* %o0=dest, %o1=src */
+	.globl		_copy_page
+	.type		_copy_page,@function
+_copy_page: /* %o0=dest, %o1=src */
 	VISEntry
 	membar		#LoadStore | #StoreStore | #StoreLoad
 	ldda		[%o1] ASI_BLK_P, %f0
@@ -205,9 +205,9 @@ copy_page_using_blkcommit:
 	 stda		%f16, [%o0] ASI_BLK_COMMIT_P
 
 	.align		32
-	.globl		clear_page
-	.type		clear_page,@function
-clear_page:	/* %o0=dest */
+	.globl		_clear_page
+	.type		_clear_page,@function
+_clear_page:	/* %o0=dest */
 	VISEntryHalf
 	ba,pt		%xcc, clear_page_common
 	 clr		%o4

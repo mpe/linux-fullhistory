@@ -266,7 +266,7 @@ static void tr_source_route(struct sk_buff *skb,struct trh_hdr *trh,struct net_d
 		if(entry) 
 		{
 #if TR_SR_DEBUG
-printk("source routing for %02X %02X %02X %02X %02X %02X\n",trh->daddr[0],
+printk("source routing for %02X:%02X:%02X:%02X:%02X:%02X\n",trh->daddr[0],
 		  trh->daddr[1],trh->daddr[2],trh->daddr[3],trh->daddr[4],trh->daddr[5]);
 #endif
 			if(!entry->local_ring && (ntohs(entry->rcf) & TR_RCF_LEN_MASK) >> 8)

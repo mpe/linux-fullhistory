@@ -20,6 +20,7 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/ide.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 

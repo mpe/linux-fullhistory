@@ -298,7 +298,8 @@ int fib_lookup(const struct rt_key *key, struct fib_result *res)
 	u32 daddr = key->dst;
 	u32 saddr = key->src;
 
-FRprintk("Lookup: %08x <- %08x ", key->dst, key->src);
+FRprintk("Lookup: %u.%u.%u.%u <- %u.%u.%u.%u ",
+	NIPQUAD(key->dst), NIPQUAD(key->src));
 	read_lock(&fib_rules_lock);
 	for (r = fib_rules; r; r=r->r_next) {
 		if (((saddr^r->r_src) & r->r_srcmask) ||

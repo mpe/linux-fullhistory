@@ -48,9 +48,10 @@ static int established(struct ip_conntrack *conntrack,
 }
 
 /* Called when a new connection for this protocol found. */
-static int new(struct ip_conntrack *conntrack, struct iphdr *iph, size_t len)
+static unsigned long
+new(struct ip_conntrack *conntrack, struct iphdr *iph, size_t len)
 {
-	return 1;
+	return GENERIC_TIMEOUT;
 }
 
 struct ip_conntrack_protocol ip_conntrack_generic_protocol

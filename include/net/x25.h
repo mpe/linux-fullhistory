@@ -1,7 +1,10 @@
 /*
  *	Declarations of X.25 Packet Layer type objects.
  *
- *	Jonathan Naylor		17/11/96
+ * 	History
+ *	nov/17/96	Jonathan Naylor	  Initial version.		
+ *	mar/20/00	Daniela Squassoni Disabling/enabling of facilities 
+ *					  negotiation.
  */
 
 #ifndef _X25_H
@@ -113,6 +116,7 @@ struct x25_neigh {
 	struct sk_buff_head	queue;
 	unsigned long		t20;
 	struct timer_list	t20timer;
+	unsigned long		global_facil_mask;
 };
 
 typedef struct {
@@ -132,6 +136,7 @@ typedef struct {
 	struct x25_causediag	causediag;
 	struct x25_facilities	facilities;
 	struct x25_calluserdata	calluserdata;
+	unsigned long 		vc_facil_mask;	/* inc_call facilities mask */
 } x25_cb;
 
 /* af_x25.c */
@@ -159,8 +164,8 @@ extern void x25_establish_link(struct x25_neigh *);
 extern void x25_terminate_link(struct x25_neigh *);
 
 /* x25_facilities.c */
-extern int  x25_parse_facilities(struct sk_buff *, struct x25_facilities *);
-extern int  x25_create_facilities(unsigned char *, struct x25_facilities *);
+extern int  x25_parse_facilities(struct sk_buff *, struct x25_facilities *, unsigned long *);
+extern int  x25_create_facilities(unsigned char *, struct x25_facilities *, unsigned long);
 extern int  x25_negotiate_facilities(struct sk_buff *, struct sock *, struct x25_facilities *);
 extern void x25_limit_facilities(struct x25_facilities *, struct x25_neigh *);
 

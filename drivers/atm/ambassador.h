@@ -631,7 +631,7 @@ struct amb_dev {
   u32              iobase;
   u32 *            membase;
 
-#if 0  
+#ifdef FILL_RX_POOLS_IN_BH
   struct tq_struct bh;
 #endif
   

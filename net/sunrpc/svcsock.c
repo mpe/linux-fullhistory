@@ -544,14 +544,14 @@ svc_tcp_accept(struct svc_sock *svsk)
 	if (ntohs(sin.sin_port) >= 1024) {
 		if (net_ratelimit())
 			printk(KERN_WARNING
-				   "%s: connect from unprivileged port: %s:%d",
+				   "%s: connect from unprivileged port: %u.%u.%u.%u:%d",
 				   serv->sv_name, 
-				   in_ntoa(sin.sin_addr.s_addr), ntohs(sin.sin_port));
+				   NIPQUAD(sin.sin_addr.s_addr), ntohs(sin.sin_port));
 		goto failed;
 	}
 
-	dprintk("%s: connect from %s:%04x\n", serv->sv_name,
-			in_ntoa(sin.sin_addr.s_addr), ntohs(sin.sin_port));
+	dprintk("%s: connect from %u.%u.%u.%u:%04x\n", serv->sv_name,
+			NIPQUAD(sin.sin_addr.s_addr), ntohs(sin.sin_port));
 
 	if (!(newsvsk = svc_setup_socket(serv, newsock, &err, 0)))
 		goto failed;
@@ -915,9 +915,9 @@ svc_create_socket(struct svc_serv *serv, int protocol, struct sockaddr_in *sin)
 	int		error;
 	int		type;
 
-	dprintk("svc: svc_create_socket(%s, %d, %08x:%d)\n",
+	dprintk("svc: svc_create_socket(%s, %d, %u.%u.%u.%u:%d)\n",
 				serv->sv_program->pg_name, protocol,
-				ntohl(sin->sin_addr.s_addr),
+				NIPQUAD(sin->sin_addr.s_addr),
 				ntohs(sin->sin_port));
 
 	if (protocol != IPPROTO_UDP && protocol != IPPROTO_TCP) {

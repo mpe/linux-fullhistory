@@ -86,10 +86,10 @@ extern inline int timer_pending(const struct timer_list * timer)
 #define timer_synchronize(t) while (timer_is_running(t)) barrier()
 extern int del_timer_sync(struct timer_list * timer);
 #else
-#define timer_exit(t) do { } while (0)
-#define timer_set_running(t) do { } while (0)
+#define timer_exit(t) (void)(t)
+#define timer_set_running(t) (void)(t)
 #define timer_is_running(t) (0)
-#define timer_synchronize(t) barrier()
+#define timer_synchronize(t) do { (void)(t); barrier(); } while(0)
 #define del_timer_sync(t) del_timer(t)
 #endif
 

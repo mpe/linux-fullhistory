@@ -512,7 +512,7 @@ static int gred_dump(struct Qdisc *sch, struct sk_buff *skb)
 	opt=kmalloc(sizeof(struct tc_gred_qopt)*MAX_DPs, GFP_KERNEL);
 
 	if (opt  == NULL) {
-		DPRINTK("gred_dump:failed to malloc for %d\n",
+		DPRINTK("gred_dump:failed to malloc for %Zd\n",
 		    sizeof(struct tc_gred_qopt)*MAX_DPs);
 		goto rtattr_failure;
 	}

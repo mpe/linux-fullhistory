@@ -1,4 +1,4 @@
-/* $Id: power.c,v 1.5 1999/12/19 23:28:00 davem Exp $
+/* $Id: power.c,v 1.6 2000/04/13 00:59:59 davem Exp $
  * power.c: Power management driver.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -55,8 +55,7 @@ static int powerd(void *__unused)
 	static char *envp[] = { "HOME=/", "TERM=linux", "PATH=/sbin:/usr/sbin:/bin:/usr/bin", NULL };
 	char *argv[] = { "/usr/bin/shutdown", "-h", "now", NULL };
 
-	current->session = 1;
-	current->pgrp = 1;
+	daemonize();
 	sprintf(current->comm, "powerd");
 
 again:

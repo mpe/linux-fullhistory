@@ -1131,7 +1131,7 @@ void __exit econet_proto_exit(void)
 #endif
 }
 
-int __init econet_proto_init(struct net_proto *pro)
+int __init econet_proto_init(void)
 {
 	extern void econet_sysctl_register(void);
 	sock_register(&econet_family_ops);

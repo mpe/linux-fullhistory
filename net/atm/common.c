@@ -114,7 +114,6 @@ int atm_create(struct socket *sock,int protocol,int family)
 	vcc->atm_options = vcc->aal_options = 0;
 	vcc->timestamp.tv_sec = vcc->timestamp.tv_usec = 0;
 	init_waitqueue_head(&vcc->sleep);
-	init_waitqueue_head(&vcc->wsleep);
 	skb_queue_head_init(&vcc->recvq);
 	skb_queue_head_init(&vcc->listenq);
 	sock->sk = sk;
@@ -412,7 +411,7 @@ int atm_sendmsg(struct socket *sock,struct msghdr *m,int total_len,
 	if (!size) return 0;
 	/* verify_area is done by net/socket.c */
 	eff = (size+3) & ~3; /* align to word boundary */
-	add_wait_queue(&vcc->wsleep,&wait);
+	add_wait_queue(&vcc->sleep,&wait);
 	set_current_state(TASK_INTERRUPTIBLE);
 	error = 0;
 	while (!(skb = vcc->alloc_tx(vcc,eff))) {
@@ -437,7 +436,7 @@ int atm_sendmsg(struct socket *sock,struct msghdr *m,int total_len,
 		}
 	}
 	set_current_state(TASK_RUNNING);
-	remove_wait_queue(&vcc->wsleep,&wait);
+	remove_wait_queue(&vcc->sleep,&wait);
 	if (error) return error;
 	skb->dev = NULL; /* for paths shared with net_device interfaces */
 	ATM_SKB(skb)->iovcnt = 0;
@@ -459,7 +458,6 @@ unsigned int atm_poll(struct file *file,struct socket *sock,poll_table *wait)
 
 	vcc = ATM_SD(sock);
 	poll_wait(file,&vcc->sleep,wait);
-	poll_wait(file,&vcc->wsleep,wait);
 	mask = 0;
 	if (skb_peek(&vcc->recvq) || skb_peek(&vcc->listenq))
 		mask |= POLLIN | POLLRDNORM;

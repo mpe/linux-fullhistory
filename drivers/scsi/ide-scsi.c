@@ -547,6 +547,7 @@ static ide_driver_t idescsi_driver = {
 	idescsi_open,		/* open */
 	idescsi_ide_release,	/* release */
 	NULL,			/* media_change */
+	NULL,			/* revalidate */
 	NULL,			/* pre_reset */
 	NULL,			/* capacity */
 	NULL,			/* special */

@@ -169,13 +169,27 @@ static unsigned int ip_refrag(unsigned int hooknum,
 	   interface.  We degfragment them at LOCAL_OUT, however,
 	   so we have to refragment them here. */
 	if ((*pskb)->len > rt->u.dst.pmtu) {
-		DEBUGP("ip_conntrack: refragm %p (size %u) to %u (okfn %p)\n",
-		       *pskb, (*pskb)->len, rt->u.dst.pmtu, okfn);
 		/* No hook can be after us, so this should be OK. */
 		ip_fragment(*pskb, okfn);
 		return NF_STOLEN;
 	}
 	return NF_ACCEPT;
+}
+
+static unsigned int ip_conntrack_local(unsigned int hooknum,
+				       struct sk_buff **pskb,
+				       const struct net_device *in,
+				       const struct net_device *out,
+				       int (*okfn)(struct sk_buff *))
+{
+	/* root is playing with raw sockets. */
+	if ((*pskb)->len < sizeof(struct iphdr)
+	    || (*pskb)->nh.iph->ihl * 4 < sizeof(struct iphdr)) {
+		if (net_ratelimit())
+			printk("ipt_hook: happy cracking.\n");
+		return NF_ACCEPT;
+	}
+	return ip_conntrack_in(hooknum, pskb, in, out, okfn);
 }
 
 /* Connection tracking may drop packets, but never alters them, so
@@ -184,7 +198,7 @@ static struct nf_hook_ops ip_conntrack_in_ops
 = { { NULL, NULL }, ip_conntrack_in, PF_INET, NF_IP_PRE_ROUTING,
 	NF_IP_PRI_CONNTRACK };
 static struct nf_hook_ops ip_conntrack_local_out_ops
-= { { NULL, NULL }, ip_conntrack_in, PF_INET, NF_IP_LOCAL_OUT,
+= { { NULL, NULL }, ip_conntrack_local, PF_INET, NF_IP_LOCAL_OUT,
 	NF_IP_PRI_CONNTRACK };
 /* Refragmenter; last chance. */
 static struct nf_hook_ops ip_conntrack_out_ops

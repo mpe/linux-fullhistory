@@ -153,11 +153,11 @@ extern __inline__ pgd_t *get_pgd_fast(void)
                 ret = (struct page *)(__page_address(ret) + off);
                 pgd_cache_size--;
         } else {
-		ret = (struct page *) __get_free_page(GFP_KERNEL);
-		if(ret) {
-			struct page *page = mem_map + MAP_NR(ret);
-			
-			memset(ret, 0, PAGE_SIZE);
+		struct page *page = alloc_page(GFP_KERNEL);
+
+		if (page) {
+			ret = (struct page *)page_address(page);
+			clear_page(ret);
 			(unsigned long)page->pprev_hash = 2;
 			(unsigned long *)page->next_hash = pgd_quicklist;
 			pgd_quicklist = (unsigned long *)page;

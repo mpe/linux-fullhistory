@@ -35,8 +35,8 @@ if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
 	    define_bool CONFIG_IDEDMA_PCI_EXPERIMENTAL $CONFIG_EXPERIMENTAL
 	    dep_bool '      ATA Work(s) In Progress (EXPERIMENTAL)' CONFIG_IDEDMA_PCI_WIP $CONFIG_BLK_DEV_IDEDMA_PCI $CONFIG_EXPERIMENTAL
 	    dep_bool '      Good-Bad DMA Model-Firmware (WIP)' CONFIG_IDEDMA_NEW_DRIVE_LISTINGS $CONFIG_IDEDMA_PCI_WIP
-	    dep_bool '    AEC6210 chipset support' CONFIG_BLK_DEV_AEC6210 $CONFIG_BLK_DEV_IDEDMA_PCI
-	    dep_mbool '      AEC6210 Tuning support (WIP)' CONFIG_AEC6210_TUNING $CONFIG_BLK_DEV_AEC6210 $CONFIG_IDEDMA_PCI_WIP
+	    dep_bool '    AEC62XX chipset support' CONFIG_BLK_DEV_AEC62XX $CONFIG_BLK_DEV_IDEDMA_PCI
+	    dep_mbool '      AEC62XX Tuning support (WIP)' CONFIG_AEC62XX_TUNING $CONFIG_BLK_DEV_AEC62XX $CONFIG_IDEDMA_PCI_WIP
 	    dep_bool '    ALI M15x3 chipset support' CONFIG_BLK_DEV_ALI15X3 $CONFIG_BLK_DEV_IDEDMA_PCI
 	    dep_mbool '      ALI M15x3 WDC support (DANGEROUS)' CONFIG_WDC_ALI15X3 $CONFIG_BLK_DEV_ALI15X3
 	    dep_bool '    AMD Viper support' CONFIG_BLK_DEV_AMD7409 $CONFIG_BLK_DEV_IDEDMA_PCI
@@ -62,6 +62,7 @@ if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
 	    dep_bool '    SiS5513 chipset support' CONFIG_BLK_DEV_SIS5513 $CONFIG_BLK_DEV_IDEDMA_PCI $CONFIG_X86
 	    dep_bool '    Tekram TRM290 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_TRM290 $CONFIG_BLK_DEV_IDEDMA_PCI
 	    dep_bool '    VIA82CXXX chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_VIA82CXXX $CONFIG_BLK_DEV_IDEDMA_PCI
+	    dep_mbool '      VIA82CXXX Tuning support (WIP)' CONFIG_VIA82CXXX_TUNING $CONFIG_BLK_DEV_VIA82CXXX $CONFIG_IDEDMA_PCI_WIP
          fi
 	 if [ "$CONFIG_PPC" = "y" -o "$CONFIG_ARM" = "y" ]; then
 	    bool '    Winbond SL82c105 support' CONFIG_BLK_DEV_SL82C105
@@ -122,7 +123,7 @@ else
 fi
 
 if [ "$CONFIG_IDE_CHIPSETS" = "y" -o \
-     "$CONFIG_BLK_DEV_AEC6210" = "y" -o \
+     "$CONFIG_BLK_DEV_AEC62XX" = "y" -o \
      "$CONFIG_BLK_DEV_ALI15X3" = "y" -o \
      "$CONFIG_BLK_DEV_AMD7409" = "y" -o \
      "$CONFIG_BLK_DEV_CMD640" = "y" -o \
@@ -136,7 +137,8 @@ if [ "$CONFIG_IDE_CHIPSETS" = "y" -o \
      "$CONFIG_BLK_DEV_PDC202XX" = "y" -o \
      "$CONFIG_BLK_DEV_PIIX" = "y" -o \
      "$CONFIG_BLK_DEV_SIS5513" = "y" -o \
-     "$CONFIG_BLK_DEV_SL82C105" = "y" ]; then
+     "$CONFIG_BLK_DEV_SL82C105" = "y" -o \
+     "$CONFIG_BLK_DEV_VIA82CXXX" = "y" ]; then
    define_bool CONFIG_BLK_DEV_IDE_MODES y
 else
    define_bool CONFIG_BLK_DEV_IDE_MODES n

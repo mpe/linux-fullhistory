@@ -1,5 +1,5 @@
 /*
- * $Id: io.h,v 1.26 2000/03/30 01:43:26 davem Exp $
+ * $Id: io.h,v 1.27 2000/04/13 04:45:59 davem Exp $
  */
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
@@ -169,6 +169,7 @@ static inline void *sbus_memset_io(void *__dst, int c, __kernel_size_t n)
  * This is why we have no bus number argument to ioremap().
  */
 extern void *ioremap(unsigned long offset, unsigned long size);
+#define ioremap_nocache(X,Y)	ioremap((X),(Y))
 extern void iounmap(void *addr);
 
 /* P3: talk davem into dropping "name" argument in favor of res->name */

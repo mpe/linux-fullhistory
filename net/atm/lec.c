@@ -34,7 +34,7 @@
 #if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
 #include <linux/if_bridge.h>
 #include "../bridge/br_private.h"
-unsigned char bridge_ula[] = {0x01, 0x80, 0xc2, 0x00, 0x00};
+static unsigned char bridge_ula[] = {0x01, 0x80, 0xc2, 0x00, 0x00};
 #endif
 
 /* Modular too */
@@ -472,11 +472,8 @@ lec_atm_send(struct atm_vcc *vcc, struct sk_buff *skb)
                         mesg->content.proxy.mac_addr[2], mesg->content.proxy.mac_addr[3],
                         mesg->content.proxy.mac_addr[4], mesg->content.proxy.mac_addr[5]);
 
-                read_lock(&lane_bridge_hook_lock);
-                if (br_fdb_get_hook == NULL || dev->br_port == NULL) {
-                        read_unlock(&lane_bridge_hook_lock);
+                if (br_fdb_get_hook == NULL || dev->br_port == NULL)
                         break;
-                }
 
                 f = br_fdb_get_hook(dev->br_port->br, mesg->content.proxy.mac_addr);
                 if (f != NULL &&
@@ -489,7 +486,6 @@ lec_atm_send(struct atm_vcc *vcc, struct sk_buff *skb)
                         skb2 = alloc_skb(sizeof(struct atmlec_msg), GFP_ATOMIC);
                         if (skb2 == NULL) {
                                 br_fdb_put_hook(f);
-                                read_unlock(&lane_bridge_hook_lock);
                                 break;
                         }
                         skb2->len = sizeof(struct atmlec_msg);
@@ -499,7 +495,6 @@ lec_atm_send(struct atm_vcc *vcc, struct sk_buff *skb)
                         wake_up(&priv->lecd->sleep);
                 }
                 if (f != NULL) br_fdb_put_hook(f);
-                read_unlock(&lane_bridge_hook_lock);
 #endif /* defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE) */
                 }
                 break;
@@ -696,7 +691,6 @@ lec_push(struct atm_vcc *vcc, struct sk_buff *skb)
                         lec_arp_check_empties(priv, vcc, skb);
                 }
                 skb->dev = dev;
-		skb->rx_dev = NULL;
                 skb->data += 2; /* skip lec_id */
 #ifdef CONFIG_TR
                 if (priv->is_trdev) skb->protocol = tr_type_trans(skb, dev);
@@ -1079,8 +1073,8 @@ lec_arp_clear_vccs(struct lec_arp_table *entry)
         if (entry->recv_vcc) {
                 entry->recv_vcc->push = entry->old_recv_push;
 #if 0
-                set_bit(ATM_VF_RELEASED,&entry->vcc->flags);
-		clear_bit(ATM_VF_READY,&entry->vcc->flags);
+                set_bit(ATM_VF_RELEASED,&entry->recv_vcc->flags);
+		clear_bit(ATM_VF_READY,&entry->recv_vcc->flags);
                 entry->recv_vcc->push(entry->recv_vcc, NULL);
 #endif
 		atm_async_release_vcc(entry->recv_vcc, -EPIPE);

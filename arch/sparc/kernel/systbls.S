@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.96 2000/03/15 02:43:32 davem Exp $
+/* $Id: systbls.S,v 1.97 2000/04/13 00:55:49 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *

@@ -73,10 +73,10 @@
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
-#ifdef CONFIG_BLK_DEV_AEC6210
-extern byte aec6210_proc;
-int (*aec6210_display_info)(char *, char **, off_t, int) = NULL;
-#endif /* CONFIG_BLK_DEV_AEC6210 */
+#ifdef CONFIG_BLK_DEV_AEC62XX
+extern byte aec62xx_proc;
+int (*aec62xx_display_info)(char *, char **, off_t, int) = NULL;
+#endif /* CONFIG_BLK_DEV_AEC62XX */
 #ifdef CONFIG_BLK_DEV_ALI15X3
 extern byte ali_proc;
 int (*ali_display_info)(char *, char **, off_t, int) = NULL;
@@ -801,10 +801,10 @@ void proc_ide_create(void)
 	create_proc_read_entry("drivers", 0, proc_ide_root,
 				proc_ide_read_drivers, NULL);
 
-#ifdef CONFIG_BLK_DEV_AEC6210
-	if ((aec6210_display_info) && (aec6210_proc))
-		create_proc_info_entry("aec6210", 0, proc_ide_root, aec6210_display_info);
-#endif /* CONFIG_BLK_DEV_AEC6210 */
+#ifdef CONFIG_BLK_DEV_AEC62XX
+	if ((aec62xx_display_info) && (aec62xx_proc))
+		create_proc_info_entry("aec62xx", 0, proc_ide_root, aec62xx_display_info);
+#endif /* CONFIG_BLK_DEV_AEC62XX */
 #ifdef CONFIG_BLK_DEV_ALI15X3
 	if ((ali_display_info) && (ali_proc))
 		create_proc_info_entry("ali", 0, proc_ide_root, ali_display_info);
@@ -853,10 +853,10 @@ void proc_ide_destroy(void)
 	 * Mmmm.. does this free up all resources,
 	 * or do we need to do a more proper cleanup here ??
 	 */
-#ifdef CONFIG_BLK_DEV_AEC6210
-	if ((aec6210_display_info) && (aec6210_proc))
-		remove_proc_entry("ide/aec6210",0);
-#endif /* CONFIG_BLK_DEV_AEC6210 */
+#ifdef CONFIG_BLK_DEV_AEC62XX
+	if ((aec62xx_display_info) && (aec62xx_proc))
+		remove_proc_entry("ide/aec62xx",0);
+#endif /* CONFIG_BLK_DEV_AEC62XX */
 #ifdef CONFIG_BLK_DEV_ALI15X3
 	if ((ali_display_info) && (ali_proc))
 		remove_proc_entry("ide/ali",0);

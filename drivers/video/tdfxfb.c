@@ -583,7 +583,9 @@ static int  noaccel = 0;
 static int  nopan   = 0;
 static int  nowrap  = 1;      // not implemented (yet)
 static int  inverse = 0;
+#ifdef CONFIG_MTRR
 static int  nomtrr = 0;
+#endif
 static int  nohwcursor = 0;
 static char __initdata fontname[40] = { 0 };
 static const char *mode_option __initdata = NULL;
@@ -1987,7 +1989,7 @@ int __init tdfxfb_init(void) {
       fb_info.regbase_phys = pdev->base_address[0] & PCI_BASE_ADDRESS_MEM_MASK;
       fb_info.regbase_size = 1 << 24;
       fb_info.regbase_virt = 
-	(u32)ioremap_nocache(fb_info.regbase_phys, 1 << 24);
+	(unsigned long)ioremap_nocache(fb_info.regbase_phys, 1 << 24);
       if(!fb_info.regbase_virt) {
 	printk("fb: Can't remap %s register area.\n", name);
 	return;
@@ -2000,7 +2002,7 @@ int __init tdfxfb_init(void) {
 	return;
       }
       fb_info.bufbase_virt    = 
-	(u32)ioremap_nocache(fb_info.bufbase_phys, fb_info.bufbase_size);
+	(unsigned long)ioremap_nocache(fb_info.bufbase_phys, fb_info.bufbase_size);
       if(!fb_info.regbase_virt) {
 	printk("fb: Can't remap %s framebuffer.\n", name);
 	iounmap((void*)fb_info.regbase_virt);
@@ -2012,7 +2014,7 @@ int __init tdfxfb_init(void) {
       fb_info.regbase_phys = pdev->resource[0].start;
       fb_info.regbase_size = 1 << 24;
       fb_info.regbase_virt = 
-	(u32)ioremap_nocache(fb_info.regbase_phys, 1 << 24);
+	(unsigned long)ioremap_nocache(fb_info.regbase_phys, 1 << 24);
       if(!fb_info.regbase_virt) {
 	printk("fb: Can't remap %s register area.\n", name);
 	return -ENXIO;
@@ -2025,7 +2027,7 @@ int __init tdfxfb_init(void) {
 	return -ENXIO;
       }
       fb_info.bufbase_virt    = 
-	(u32)ioremap_nocache(fb_info.bufbase_phys, fb_info.bufbase_size);
+	(unsigned long)ioremap_nocache(fb_info.bufbase_phys, fb_info.bufbase_size);
       if(!fb_info.regbase_virt) {
 	printk("fb: Can't remap %s framebuffer.\n", name);
 	iounmap((void*)fb_info.regbase_virt);

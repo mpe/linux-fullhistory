@@ -17,7 +17,10 @@
 #include <linux/fb.h>
 
 #include <asm/byteorder.h>
+
+#ifdef __mc68000__
 #include <asm/setup.h>
+#endif
 
 #include <video/fbcon.h>
 #include <video/fbcon-iplan2p4.h>

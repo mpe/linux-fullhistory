@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.124 2000/03/27 10:38:56 davem Exp $
+/* $Id: pgtable.h,v 1.125 2000/04/12 08:10:26 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -152,16 +152,13 @@ extern pte_t __bad_page(void);
 
 #define BAD_PAGE	__bad_page()
 
-/* First physical page can be anywhere, the following is needed so that
- * va-->pa and vice versa conversions work properly without performance
- * hit for all __pa()/__va() operations.
- */
 extern unsigned long phys_base;
-#define ZERO_PAGE(vaddr)	(mem_map + (phys_base>>PAGE_SHIFT))
+
+#define ZERO_PAGE(vaddr)	(mem_map)
 
 /* Warning: These take pointers to page structs now... */
 #define mk_pte(page, pgprot)		\
-	__pte(((page - mem_map) << PAGE_SHIFT) | pgprot_val(pgprot))
+	__pte((((page - mem_map) << PAGE_SHIFT)+phys_base) | pgprot_val(pgprot))
 #define page_pte_prot(page, prot)	mk_pte(page, prot)
 #define page_pte(page)			page_pte_prot(page, __pgprot(0))
 
@@ -180,7 +177,7 @@ extern inline pte_t pte_modify(pte_t orig_pte, pgprot_t new_prot)
 	(pmd_val(*(pmdp)) = (__pa((unsigned long) (ptep)) >> 11UL))
 #define pgd_set(pgdp, pmdp)	\
 	(pgd_val(*(pgdp)) = (__pa((unsigned long) (pmdp)) >> 11UL))
-#define pte_pagenr(pte)   ((unsigned long) ((pte_val(pte)&~PAGE_OFFSET)>>PAGE_SHIFT))
+#define pte_pagenr(pte)   (((unsigned long) ((pte_val(pte)&~PAGE_OFFSET)-phys_base)>>PAGE_SHIFT))
 #define pmd_page(pmd)			((unsigned long) __va((pmd_val(pmd)<<11UL)))
 #define pgd_page(pgd)			((unsigned long) __va((pgd_val(pgd)<<11UL)))
 #define pte_none(pte) 			(!pte_val(pte))

@@ -2490,10 +2490,15 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
     return -EINVAL;
   }
   
+  // prevent module unload while sleeping (kmalloc)
+  // doing this any earlier would complicate more error return paths
+  MOD_INC_USE_COUNT;
+  
   // get space for our vcc stuff and copy parameters into it
   vccp = kmalloc (sizeof(hrz_vcc), GFP_KERNEL);
   if (!vccp) {
     PRINTK (KERN_ERR, "out of memory!");
+    MOD_DEC_USE_COUNT;
     return -ENOMEM;
   }
   *vccp = vcc;
@@ -2525,6 +2530,7 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
   if (error) {
     PRINTD (DBG_QOS|DBG_VCC, "insufficient cell rate resources");
     kfree (vccp);
+    MOD_DEC_USE_COUNT;
     return error;
   }
   
@@ -2537,11 +2543,13 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
   if (rxtp->traffic_class != ATM_NONE) {
     if (dev->rxer[channel]) {
       PRINTD (DBG_ERR|DBG_VCC, "VC already open for RX");
-      return -EBUSY;
+      error = -EBUSY;
     }
-    error = hrz_open_rx (dev, channel);
+    if (!error)
+      error = hrz_open_rx (dev, channel);
     if (error) {
       kfree (vccp);
+      MOD_DEC_USE_COUNT;
       return error;
     }
     // this link allows RX frames through
@@ -2556,7 +2564,6 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
   // indicate readiness
   set_bit(ATM_VF_READY,&atm_vcc->flags);
   
-  MOD_INC_USE_COUNT;
   return 0;
 }
 

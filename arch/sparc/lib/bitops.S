@@ -10,6 +10,9 @@
 	.text
 	.align	4
 
+	.globl  __bitops_begin
+__bitops_begin:
+
 	/* Take bits in %g2 and set them in word at %g1,
 	 * return whether bits were set in original value
 	 * in %g2.  %g4 holds value to restore into %o7
@@ -159,3 +162,6 @@ ___clear_le_bit:
 	nop; nop; nop
 	jmpl	%o7, %g0
 	 mov	%g4, %o7
+
+	.globl  __bitops_end
+__bitops_end:

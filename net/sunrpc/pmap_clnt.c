@@ -91,8 +91,8 @@ rpc_getport_external(struct sockaddr_in *sin, __u32 prog, __u32 vers, int prot)
 	char		hostname[32];
 	int		status;
 
-	dprintk("RPC:      rpc_getport_external(%s, %d, %d, %d)\n",
-			in_ntoa(sin->sin_addr.s_addr), prog, vers, prot);
+	dprintk("RPC:      rpc_getport_external(%u.%u.%u.%u, %d, %d, %d)\n",
+			NIPQUAD(sin->sin_addr.s_addr), prog, vers, prot);
 
 	strcpy(hostname, in_ntoa(sin->sin_addr.s_addr));
 	if (!(pmap_clnt = pmap_create(hostname, sin, prot)))

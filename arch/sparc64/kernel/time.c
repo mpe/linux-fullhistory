@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.24 2000/03/02 02:00:25 davem Exp $
+/* $Id: time.c,v 1.25 2000/04/13 05:29:44 davem Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -67,6 +67,34 @@ static __inline__ void timer_check_rtc(void)
 	}
 }
 
+void sparc64_do_profile(unsigned long pc, unsigned long o7)
+{
+	if (prof_buffer && current->pid) {
+		extern int _stext;
+		extern int rwlock_impl_begin, rwlock_impl_end;
+		extern int atomic_impl_begin, atomic_impl_end;
+		extern int __memcpy_begin, __memcpy_end;
+		extern int __bitops_begin, __bitops_end;
+
+		if ((pc >= (unsigned long) &atomic_impl_begin &&
+		     pc < (unsigned long) &atomic_impl_end) ||
+		    (pc >= (unsigned long) &rwlock_impl_begin &&
+		     pc < (unsigned long) &rwlock_impl_end) ||
+		    (pc >= (unsigned long) &__memcpy_begin &&
+		     pc < (unsigned long) &__memcpy_end) ||
+		    (pc >= (unsigned long) &__bitops_begin &&
+		     pc < (unsigned long) &__bitops_end))
+			pc = o7;
+
+		pc -= (unsigned long) &_stext;
+		pc >>= prof_shift;
+
+		if(pc >= prof_len)
+			pc = prof_len - 1;
+		atomic_inc((atomic_t *)&prof_buffer[pc]);
+	}
+}
+
 static void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	unsigned long ticks, pstate;
@@ -74,6 +102,10 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	write_lock(&xtime_lock);
 
 	do {
+#ifndef __SMP__
+		if ((regs->tstate & TSTATE_PRIV) != 0)
+			sparc64_do_profile(regs->tpc, regs->u_regs[UREG_RETPC]);
+#endif
 		do_timer(regs);
 
 		/* Guarentee that the following sequences execute

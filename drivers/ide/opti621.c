@@ -215,8 +215,9 @@ typedef struct pio_clocks_s {
 static void compute_clocks(int pio, pio_clocks_t *clks)
 {
         if (pio != PIO_NOT_EXIST) {
-        	int adr_setup, data_pls, bus_speed;
-        	bus_speed = ide_system_bus_speed();
+        	int adr_setup, data_pls;
+		int bus_speed = system_bus_clock();
+
  	       	adr_setup = ide_pio_timings[pio].setup_time;
   	      	data_pls = ide_pio_timings[pio].active_time;
 	  	clks->address_time = cmpt_clk(adr_setup, bus_speed);

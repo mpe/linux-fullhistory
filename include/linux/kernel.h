@@ -83,6 +83,12 @@ asmlinkage int printk(const char * fmt, ...)
 	((unsigned char *)&addr)[2], \
 	((unsigned char *)&addr)[3]
 
+#define HIPQUAD(addr) \
+	((unsigned char *)&addr)[3], \
+	((unsigned char *)&addr)[2], \
+	((unsigned char *)&addr)[1], \
+	((unsigned char *)&addr)[0]
+
 #endif /* __KERNEL__ */
 
 #define SI_LOAD_SHIFT	16

@@ -474,9 +474,11 @@ S:      Supported
 
 IDE DRIVER [GENERAL]
 P:	Andre Hedrick
+M:	andre@linux-ide.org
 M:	andre@suse.com
 L:	linux-kernel@vger.rutgers.edu
-W:	http://linux.kernel.org/pub/linux/kernel/people/hedrick/
+W:	http://www.kernel.org/pub/linux/kernel/people/hedrick/
+W:	http://www.linux-ide.org/
 S:	Supported
 
 IDE/ATAPI CDROM DRIVER
@@ -611,9 +613,8 @@ S:	Maintained
 
 MAESTRO PCI SOUND DRIVER
 P:	Zach Brown
-M:	zab@redhat.com
-W:	http://people.redhat.com/zab/maestro/
-S:	Supported
+M:	zab@zabbo.net
+S:	Odd Fixes
 
 M68K
 P:	Jes Sorensen

@@ -7,6 +7,8 @@
 #ifndef _LINUX_ASM_VGA_H_
 #define _LINUX_ASM_VGA_H_
 
+#include <asm/types.h>
+
 #define VT_BUF_HAVE_RW
 
 static inline void scr_writew(u16 val, u16 *addr)

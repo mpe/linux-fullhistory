@@ -17,6 +17,8 @@
  */
 
 #include <linux/ide.h>
+#include <linux/init.h>
+
 #include <linux/isapnp.h>
 
 #ifndef PREPARE_FUNC

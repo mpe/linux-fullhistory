@@ -96,6 +96,8 @@
 #define SMART_AUTOSAVE		0xd2
 #define SMART_SAVE		0xd3
 #define SMART_IMMEDIATE_OFFLINE	0xd4
+#define SMART_READ_LOG_SECTOR	0xd5
+#define SMART_WRITE_LOG_SECTOR	0xd6
 #define SMART_ENABLE		0xd8
 #define SMART_DISABLE		0xd9
 #define SMART_STATUS		0xda

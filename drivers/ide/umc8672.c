@@ -48,6 +48,7 @@
 #include <linux/blkdev.h>
 #include <linux/hdreg.h>
 #include <linux/ide.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 

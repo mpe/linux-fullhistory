@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.34 2000/03/30 01:40:54 davem Exp $ */
+/* $Id: io.h,v 1.35 2000/04/13 04:45:59 davem Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -367,6 +367,7 @@ out:
  * using physically addressed loads and stores, so this does nothing.
  */
 #define ioremap(__offset, __size)	((void *)(__offset))
+#define ioremap_nocache(X,Y)		ioremap((X),(Y))
 #define iounmap(__addr)			do { } while(0)
 
 /* Similarly for SBUS. */

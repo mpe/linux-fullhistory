@@ -1,5 +1,5 @@
 /*
- * linux/drivers/ide/via82cxxx.c	Version 0.08	Mar. 18, 2000
+ * linux/drivers/ide/via82cxxx.c	Version 0.09	Apr. 02, 2000
  *
  *  Copyright (C) 1998-99	Michel Aubry, Maintainer
  *  Copyright (C) 1999		Jeff Garzik, MVP4 Support
@@ -93,27 +93,127 @@
 
 #include <asm/io.h>
 
+#include "ide_modes.h"
+
 static struct pci_dev *host_dev = NULL;
 static struct pci_dev *isa_dev = NULL;
 
+struct chipset_bus_clock_list_entry {
+	byte	xfer_speed;
+
+	byte	chipset_settings_25;
+	byte	ultra_settings_25;
+	byte	chipset_settings_33;
+	byte	ultra_settings_33;
+	byte	chipset_settings_37;
+	byte	ultra_settings_37;
+	byte	chipset_settings_41;
+	byte	ultra_settings_41;
+};
+
+static struct chipset_bus_clock_list_entry * via82cxxx_table = NULL;
+
+struct chipset_bus_clock_list_entry via82cxxx_type_one [] = {
+		/* speed */	/* 25 */	/* 33 */	/* 37.5 */	/* 41.5 */	
+	{	XFER_UDMA_4,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
+	{	XFER_UDMA_3,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
+	{	XFER_UDMA_2,	0x60,	0x20,	0x60,	0x20,	0x60,	0x21,	0x00,	0x00	},
+	{	XFER_UDMA_1,	0x61,	0x20,	0x61,	0x20,	0x61,	0x21,	0x00,	0x00	},
+	{	XFER_UDMA_0,	0x62,	0x20,	0x62,	0x20,	0x62,	0x21,	0x00,	0x00	},
+
+	{	XFER_MW_DMA_2,	0x03,	0x20,	0x03,	0x20,	0x03,	0x21,	0x00,	0x00	},
+	{	XFER_MW_DMA_1,	0x03,	0x31,	0x03,	0x31,	0x03,	0x32,	0x00,	0x00	},
+	{	XFER_MW_DMA_0,	0x03,	0x31,	0x03,	0x31,	0x03,	0x32,	0x00,	0x00	},
+
+	{	XFER_PIO_4,	0x03,	0x20,	0x03,	0x20,	0x03,	0x21,	0x00,	0x00	},
+	{	XFER_PIO_3,	0x03,	0x31,	0x03,	0x31,	0x03,	0x32,	0x00,	0x00	},
+	{	XFER_PIO_2,	0x03,	0x65,	0x03,	0x65,	0x03,	0x76,	0x00,	0x00	},
+	{	XFER_PIO_1,	0x03,	0x65,	0x03,	0x65,	0x03,	0x76,	0x00,	0x00	},
+	{	XFER_PIO_0,	0x03,	0xA8,	0x03,	0xA8,	0x03,	0xA9,	0x00,	0x00	},
+	{	0,		0x03,	0xA8,	0x03,	0xA8,	0x03,	0xA9,	0x00,	0x00	}
+};
+
+struct chipset_bus_clock_list_entry via82cxxx_type_two [] = {
+		/* speed */	/* 25 */	/* 33 */	/* 37.5 */	/* 41.5 */
+	{	XFER_UDMA_4,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
+	{	XFER_UDMA_3,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
+	{	XFER_UDMA_2,	0xE0,	0x20,	0xE0,	0x20,	0xE1,	0x31,	0xE1,	0x32	},
+	{	XFER_UDMA_1,	0xE1,	0x20,	0xE1,	0x20,	0xE2,	0x31,	0xE2,	0x32	},
+	{	XFER_UDMA_0,	0xE2,	0x20,	0xE2,	0x20,	0xE2,	0x31,	0xE2,	0x32	},
+
+	{	XFER_MW_DMA_2,	0x03,	0x20,	0x03,	0x20,	0x03,	0x31,	0x03,	0x32	},
+	{	XFER_MW_DMA_1,	0x03,	0x31,	0x03,	0x31,	0x03,	0x42,	0x03,	0x53	},
+	{	XFER_MW_DMA_0,	0x03,	0x31,	0x03,	0x31,	0x03,	0x42,	0x03,	0x53	},
+
+	{	XFER_PIO_4,	0x03,	0x20,	0x03,	0x20,	0x03,	0x31,	0x03,	0x32	},
+	{	XFER_PIO_3,	0x03,	0x31,	0x03,	0x31,	0x03,	0x42,	0x03,	0x53	},
+	{	XFER_PIO_2,	0x03,	0x65,	0x03,	0x65,	0x03,	0x87,	0x03,	0xA8	},
+	{	XFER_PIO_1,	0x03,	0x65,	0x03,	0x65,	0x03,	0x87,	0x03,	0xA8	},
+	{	XFER_PIO_0,	0x03,	0xA8,	0x03,	0xA8,	0x03,	0xDB,	0x03,	0xFE	},
+	{	0,		0x03,	0xA8,	0x03,	0xA8,	0x03,	0xDB,	0x03,	0xFE	}
+};
+
+struct chipset_bus_clock_list_entry via82cxxx_type_three [] = {
+		/* speed */	/* 25 */	/* 33 */	/* 37.5 */	/* 41.5 */
+	{	XFER_UDMA_4,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
+	{	XFER_UDMA_3,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
+	{	XFER_UDMA_2,	0xE0,	0x20,	0xE0,	0x20,	0xE1,	0x31,	0xE1,	0x32	},
+	{	XFER_UDMA_1,	0xE1,	0x20,	0xE1,	0x20,	0xE2,	0x31,	0xE2,	0x32	},
+	{	XFER_UDMA_0,	0xE2,	0x20,	0xE2,	0x20,	0xE2,	0x31,	0xE2,	0x32	},
+
+	{	XFER_MW_DMA_2,	0x03,	0x20,	0x03,	0x20,	0x03,	0x31,	0x03,	0x32	},
+	{	XFER_MW_DMA_1,	0x03,	0x31,	0x03,	0x31,	0x03,	0x42,	0x03,	0x53	},
+	{	XFER_MW_DMA_0,	0x03,	0x31,	0x03,	0x31,	0x03,	0x42,	0x03,	0x53	},
+
+	{	XFER_PIO_4,	0x03,	0x20,	0x03,	0x20,	0x03,	0x31,	0x03,	0x32	},
+	{	XFER_PIO_3,	0x03,	0x31,	0x03,	0x31,	0x03,	0x42,	0x03,	0x53	},
+	{	XFER_PIO_2,	0x03,	0x65,	0x03,	0x65,	0x03,	0x87,	0x03,	0xA8	},
+	{	XFER_PIO_1,	0x03,	0x65,	0x03,	0x65,	0x03,	0x87,	0x03,	0xA8	},
+	{	XFER_PIO_0,	0x03,	0xA8,	0x03,	0xA8,	0x03,	0xDB,	0x03,	0xFE	},
+	{	0,		0x03,	0xA8,	0x03,	0xA8,	0x03,	0xDB,	0x03,	0xFE	}
+};
+
+struct chipset_bus_clock_list_entry via82cxxx_type_four [] = {
+		/* speed */	/* 25 */	/* 33 */	/* 37.5 */	/* 41.5 */
+	{	XFER_UDMA_4,	0x00,	0x00,	0xE0,	0x20,	0xE1,	0x31,	0x00,	0x00	},
+	{	XFER_UDMA_3,	0x00,	0x00,	0xE1,	0x20,	0xE2,	0x31,	0x00,	0x00	},
+	{	XFER_UDMA_2,	0x00,	0x00,	0xE2,	0x20,	0xE4,	0x31,	0x00,	0x00	},
+	{	XFER_UDMA_1,	0x00,	0x00,	0xE4,	0x20,	0xE6,	0x31,	0x00,	0x00	},
+	{	XFER_UDMA_0,	0x00,	0x00,	0xE6,	0x20,	0xE6,	0x31,	0x00,	0x00	},
+
+	{	XFER_MW_DMA_2,	0x00,	0x00,	0x03,	0x20,	0x03,	0x31,	0x00,	0x00	},
+	{	XFER_MW_DMA_1,	0x00,	0x00,	0x03,	0x31,	0x03,	0x42,	0x00,	0x00	},
+	{	XFER_MW_DMA_0,	0x00,	0x00,	0x03,	0x31,	0x03,	0x42,	0x00,	0x00	},
+
+	{	XFER_PIO_4,	0x00,	0x00,	0x03,	0x20,	0x03,	0x31,	0x00,	0x00	},
+	{	XFER_PIO_3,	0x00,	0x00,	0x03,	0x31,	0x03,	0x42,	0x00,	0x00	},
+	{	XFER_PIO_2,	0x00,	0x00,	0x03,	0x65,	0x03,	0x87,	0x00,	0x00	},
+	{	XFER_PIO_1,	0x00,	0x00,	0x03,	0x65,	0x03,	0x87,	0x00,	0x00	},
+	{	XFER_PIO_0,	0x00,	0x00,	0x03,	0xA8,	0x03,	0xDB,	0x00,	0x00	},
+	{	0,		0x00,	0x00,	0x03,	0xA8,	0x03,	0xDB,	0x00,	0x00	}
+};
+
 static const struct {
 	const char *name;
+	unsigned short vendor_id;
 	unsigned short host_id;
 } ApolloHostChipInfo[] = {
-	{ "VT 82C585 Apollo VP1/VPX",	PCI_DEVICE_ID_VIA_82C585, },
-	{ "VT 82C595 Apollo VP2",	PCI_DEVICE_ID_VIA_82C595, },
-	{ "VT 82C597 Apollo VP3",	PCI_DEVICE_ID_VIA_82C597_0, },
-	{ "VT 82C598 Apollo MVP3",	PCI_DEVICE_ID_VIA_82C598_0, },
-	{ "VT 82C598 Apollo MVP3",	PCI_DEVICE_ID_VIA_82C598_0, },
-	{ "VT 82C680 Apollo P6",	PCI_DEVICE_ID_VIA_82C680, },
-	{ "VT 82C691 Apollo Pro",	PCI_DEVICE_ID_VIA_82C691, },
-	{ "VT 82C693 Apollo Pro Plus",	PCI_DEVICE_ID_VIA_82C693, },
-	{ "Apollo MVP4",		PCI_DEVICE_ID_VIA_8501_0, },
-	{ "VT 8371",			PCI_DEVICE_ID_VIA_8371_0, },
-	{ "VT 8601",			PCI_DEVICE_ID_VIA_8601_0, },
+	{ "VT 82C585 Apollo VP1/VPX",	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C585, },
+	{ "VT 82C595 Apollo VP2",	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C595, },
+	{ "VT 82C597 Apollo VP3",	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C597_0, },
+	{ "VT 82C598 Apollo MVP3",	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C598_0, },
+	{ "VT 82C598 Apollo MVP3",	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C598_0, },
+	{ "VT 82C680 Apollo P6",	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C680, },
+	{ "VT 82C691 Apollo Pro",	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C691, },
+	{ "VT 82C693 Apollo Pro Plus",	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C693, },
+	{ "Apollo MVP4",		PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8501_0, },
+	{ "VT 8371",			PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8371_0, },
+	{ "VT 8601",			PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8601_0, },
+	{ "AMD IronGate",		PCI_VENDOR_ID_AMD,	PCI_DEVICE_ID_AMD_FE_GATE_7006, },
 };
 
 #define NUM_APOLLO_ISA_CHIP_DEVICES	2
+#define VIA_FLAG_NULL			0x00000000
 #define VIA_FLAG_CHECK_REV		0x00000001
 #define VIA_FLAG_ATA_66			0x00000002
 
@@ -121,18 +221,20 @@ static const struct {
 	unsigned short host_id;
 	unsigned short isa_id;
 	unsigned int flags;
+	struct chipset_bus_clock_list_entry * chipset_table;
 } ApolloISAChipInfo[] = {
-	{ PCI_DEVICE_ID_VIA_82C585,	PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV },
-	{ PCI_DEVICE_ID_VIA_82C595,	PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV },
-	{ PCI_DEVICE_ID_VIA_82C597_0,	PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV },
-	{ PCI_DEVICE_ID_VIA_82C598_0,	PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV },
-	{ PCI_DEVICE_ID_VIA_82C598_0,	PCI_DEVICE_ID_VIA_82C596,	0 },
-	{ PCI_DEVICE_ID_VIA_82C680,	PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV },
-	{ PCI_DEVICE_ID_VIA_82C691,	PCI_DEVICE_ID_VIA_82C596,	VIA_FLAG_ATA_66 },
-	{ PCI_DEVICE_ID_VIA_82C693,	PCI_DEVICE_ID_VIA_82C596,	0 },
-	{ PCI_DEVICE_ID_VIA_8501_0,	PCI_DEVICE_ID_VIA_82C686,	VIA_FLAG_ATA_66 },
-	{ PCI_DEVICE_ID_VIA_8371_0,	PCI_DEVICE_ID_VIA_82C686,	VIA_FLAG_ATA_66 },
-	{ PCI_DEVICE_ID_VIA_8601_0,	PCI_DEVICE_ID_VIA_8231,		VIA_FLAG_ATA_66 },
+	{ PCI_DEVICE_ID_VIA_82C585,		PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV,	via82cxxx_type_one	},
+	{ PCI_DEVICE_ID_VIA_82C595,		PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV,	via82cxxx_type_one	},
+	{ PCI_DEVICE_ID_VIA_82C597_0,		PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV,	via82cxxx_type_one	},
+	{ PCI_DEVICE_ID_VIA_82C598_0,		PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV,	via82cxxx_type_one	},
+	{ PCI_DEVICE_ID_VIA_82C598_0,		PCI_DEVICE_ID_VIA_82C596,	VIA_FLAG_NULL,		via82cxxx_type_one	},
+	{ PCI_DEVICE_ID_VIA_82C680,		PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV,	via82cxxx_type_one	},
+	{ PCI_DEVICE_ID_VIA_82C691,		PCI_DEVICE_ID_VIA_82C596,	VIA_FLAG_ATA_66,	via82cxxx_type_two	},
+	{ PCI_DEVICE_ID_VIA_82C693,		PCI_DEVICE_ID_VIA_82C596,	VIA_FLAG_NULL,		via82cxxx_type_one	},
+	{ PCI_DEVICE_ID_VIA_8501_0,		PCI_DEVICE_ID_VIA_82C686,	VIA_FLAG_ATA_66,	via82cxxx_type_two	},
+	{ PCI_DEVICE_ID_VIA_8371_0,		PCI_DEVICE_ID_VIA_82C686,	VIA_FLAG_ATA_66,	via82cxxx_type_two	},
+	{ PCI_DEVICE_ID_VIA_8601_0,		PCI_DEVICE_ID_VIA_8231,		VIA_FLAG_ATA_66,	via82cxxx_type_two	},
+	{ PCI_DEVICE_ID_AMD_FE_GATE_7006,	PCI_DEVICE_ID_VIA_82C686,	VIA_FLAG_ATA_66,	via82cxxx_type_two	},
 };
 
 #define arraysize(x)	(sizeof(x)/sizeof(*(x)))
@@ -515,69 +617,40 @@ static int via_set_fifoconfig(ide_hwif_t *hwif)
 }
 
 #ifdef CONFIG_VIA82CXXX_TUNING
-
-struct chipset_bus_clock_list_entry {
-	unsigned short	bus_speed;
-	byte		xfer_speed;
-	byte		chipset_settings;
-};
-
-PCI_DEVICE_ID_VIA_82C586_1
-PCI_DEVICE_ID_VIA_82C596
-PCI_DEVICE_ID_VIA_82C686
-PCI_DEVICE_ID_VIA_8231
-
-PCI_DEVICE_ID_VIA_82C586_1	TYPE_1
-PCI_DEVICE_ID_VIA_82C596	TYPE_2
-PCI_DEVICE_ID_VIA_82C686	TYPE_2
-PCI_DEVICE_ID_VIA_82C596	TYPE_3
-PCI_DEVICE_ID_VIA_82C686	TYPE_3
-PCI_DEVICE_ID_VIA_8231		TYPE_4
-
-struct chipset_bus_clock_list_entry ultra_33_base [] = {
-{ TYPE_1,25,0x00,0x00,0x60,0x61,0x62,0x03,0x20,0x31,0x65,0x65,0xA8 },
-{ TYPE_1,33,0x00,0x00,0x60,0x61,0x62,0x03,0x20,0x31,0x65,0x65,0xA8 },
-{ TYPE_1,37,0x00,0x00,0x60,0x61,0x62,0x03,0x21,0x32,0x76,0x76,0xA9 },
-{ TYPE_2,25,0x00,0x00,0xE0,0xE1,0xE2,0x03,0x20,0x31,0x65,0x65,0xA8 },
-{ TYPE_2,33,0x00,0x00,0xE0,0xE1,0xE2,0x03,0x20,0x31,0x65,0x65,0xA8 },
-{ TYPE_2,37,0x00,0x00,0xE1,0xE2,0xE2,0x03,0x31,0x42,0x87,0x87,0xDB },
-{ TYPE_2,41,0x00,0x00,0xE1,0xE2,0xE2,0x03,0x32,0x53,0xA8,0xA8,0xFE },
-{ TYPE_3,25,0x00,0x00,0xE0,0xE1,0xE2,0x03,0x20,0x31,0x65,0x65,0xA8 },
-{ TYPE_3,33,0x00,0x00,0xE0,0xE1,0xE2,0x03,0x20,0x31,0x65,0x65,0xA8 },
-{ TYPE_3,37,0x00,0x00,0xE1,0xE2,0xE2,0x03,0x31,0x42,0x87,0x87,0xDB },
-{ TYPE_3,41,0x00,0x00,0xE1,0xE2,0xE2,0x03,0x32,0x53,0xA8,0xA8,0xFE },
-{ TYPE_4,0,0,0,0,0,0,0,0,0,0,0,0 },
-{ 0,0,0,0,0,0,0,0,0,0,0,0,0 }
-};
-
-struct chipset_bus_clock_list_entry timing_66_base [] = {
-	{ 37,	XFER_PIO_4,	0x21 },
-	{ 37,	XFER_PIO_3,	0x32 },
-	{ 37,	XFER_PIO_2,	0x76 },
-	{ 37,	XFER_PIO_1,	0x76 },
-	{ 37,	XFER_PIO_0,	0xA9 },
-	{ ANY,	XFER_PIO_4,	0x20 },
-	{ ANY,	XFER_PIO_3,	0x31 },
-	{ ANY,	XFER_PIO_2,	0x65 },
-	{ ANY,	XFER_PIO_1,	0x65 },
-	{ ANY,	XFER_PIO_0,	0xA8 },
-};
-
-static byte pci_bus_clock_list (byte speed, struct chipset_bus_clock_list_entry * chipset_table)
+static byte pci_bus_clock_list (byte speed, int ide_clock, struct chipset_bus_clock_list_entry * chipset_table)
 {
 	for ( ; chipset_table->xfer_speed ; chipset_table++)
 		if (chipset_table->xfer_speed == speed) {
-			return chipset_table->chipset_settings;
+			switch(ide_clock) {
+				case 25: return chipset_table->chipset_settings_25;
+				case 33: return chipset_table->chipset_settings_33;
+				case 37: return chipset_table->chipset_settings_37;
+				case 41: return chipset_table->chipset_settings_41;
+				default: break;
+			}
 		}
-	return 0x01208585;
+	return 0x00;
+}
+
+static byte pci_bus_clock_list_ultra (byte speed, int ide_clock, struct chipset_bus_clock_list_entry * chipset_table)
+{
+	for ( ; chipset_table->xfer_speed ; chipset_table++)
+		if (chipset_table->xfer_speed == speed) {
+			switch(ide_clock) {
+				case 25: return chipset_table->ultra_settings_25;
+				case 33: return chipset_table->ultra_settings_33;
+				case 37: return chipset_table->ultra_settings_37;
+				case 41: return chipset_table->ultra_settings_41;
+				default: break;
+			}
+		}
+	return 0x00;
 }
 
 static int via82cxxx_tune_chipset (ide_drive_t *drive, byte speed)
 {
-	struct hd_driveid *id	= drive->id;
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
-	unsigned long dma_base	= hwif->dma_base;
 	byte unit		= (drive->select.b.unit & 0x01);
 	int drive_number	= ((hwif->channel ? 2 : 0) + unit);
 
@@ -587,43 +660,23 @@ static int via82cxxx_tune_chipset (ide_drive_t *drive, byte speed)
 	byte ultra		= 0x00;
 	int			err;
 
-	int bus_speed		= ide_system_bus_speed();
+	int bus_speed		= system_bus_clock();
 
 	switch(drive_number) {
-		case 0: ata2_pci = 0x48; ata3_pci = 0x50; break;
-		case 1: ata2_pci = 0x49; ata3_pci = 0x51; break;
-		case 2: ata2_pci = 0x4a; ata3_pci = 0x52; break;
-		case 3: ata2_pci = 0x4b; ata3_pci = 0x53; break;
+		case 0: ata2_pci = 0x4b; ata3_pci = 0x53; break;
+		case 1: ata2_pci = 0x4a; ata3_pci = 0x52; break;
+		case 2: ata2_pci = 0x49; ata3_pci = 0x51; break;
+		case 3: ata2_pci = 0x48; ata3_pci = 0x50; break;
 		default:
 			return -1;
 	}
 
 	pci_read_config_byte(dev, ata2_pci, &timing);
-	pci_read_config_byte(dev, ata3_pci, &ultra);
-
-	switch(speed) {
-		case XFER_UDMA_4:
-		case XFER_UDMA_3:
-		case XFER_UDMA_2:
-		case XFER_UDMA_1:
-		case XFER_UDMA_0:
-		case XFER_MW_DMA_2:
-		case XFER_MW_DMA_1:
-		case XFER_MW_DMA_0:
-		case XFER_SW_DMA_2:
-		case XFER_SW_DMA_1:
-		case XFER_SW_DMA_0:
-		case XFER_PIO_4:
-		case XFER_PIO_3:
-		case XFER_PIO_2:
-		case XFER_PIO_1:
-		case XFER_PIO_0:
-		case XFER_PIO_SLOW:
-		default:
-			break;
-	}
-
+	timing = pci_bus_clock_list(speed, bus_speed, via82cxxx_table);
 	pci_write_config_byte(dev, ata2_pci, timing);
+
+	pci_read_config_byte(dev, ata3_pci, &ultra);
+	ultra = pci_bus_clock_list_ultra(speed, bus_speed, via82cxxx_table);
 	pci_write_config_byte(dev, ata3_pci, ultra);
 
 	err = ide_config_drive_speed(drive, speed);
@@ -830,6 +883,8 @@ unsigned int __init pci_init_via82cxxx (struct pci_dev *dev, const char *name)
 
 			if (ata33 | ata66)
 				printk(" Chipset Core ATA-%s", ata66 ? "66" : "33");
+
+			via82cxxx_table = ApolloISAChipInfo[j].chipset_table;
 		}
 		printk("\n");
 	}
@@ -847,8 +902,11 @@ unsigned int __init pci_init_via82cxxx (struct pci_dev *dev, const char *name)
 
 unsigned int __init ata66_via82cxxx (ide_hwif_t *hwif)
 {
-	/* (Jeff Garzik) FIXME!!! for MVP4 */
-	return 0;
+	byte ata66	= 0;
+	byte ata66reg	= hwif->channel ? 0x50 : 0x52;
+	pci_read_config_byte(hwif->pci_dev, ata66reg, &ata66);
+
+	return ((ata66 & 0x04) ? 1 : 0);
 }
 
 void __init ide_init_via82cxxx (ide_hwif_t *hwif)

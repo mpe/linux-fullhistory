@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br.c,v 1.41 2000/03/24 01:33:36 davem Exp $
+ *	$Id: br.c,v 1.42 2000/04/14 10:10:34 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -45,10 +45,8 @@ static int __init br_init(void)
 	br_handle_frame_hook = br_handle_frame;
 	br_ioctl_hook = br_ioctl_deviceless_stub;
 #if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
-	write_lock(&lane_bridge_hook_lock);
 	br_fdb_get_hook = br_fdb_get;
 	br_fdb_put_hook = br_fdb_put;
-	write_unlock(&lane_bridge_hook_lock);
 #endif
 	register_netdevice_notifier(&br_device_notifier);
 
@@ -71,10 +69,8 @@ static void __exit br_deinit(void)
 	br_call_ioctl_atomic(__br_clear_ioctl_hook);
 	net_call_rx_atomic(__br_clear_frame_hook);
 #if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
-	write_lock(&lane_bridge_hook_lock);
 	br_fdb_get_hook = NULL;
 	br_fdb_put_hook = NULL;
-	write_unlock(&lane_bridge_hook_lock);
 #endif
 }
 

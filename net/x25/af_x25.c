@@ -17,6 +17,9 @@
  *	X.25 002	Jonathan Naylor	Centralised disconnect handling.
  *					New timer architecture.
  *	2000-11-03	Henner Eisen	MSG_EOR handling more POSIX compliant.
+ *	2000-22-03	Daniela Squassoni Allowed disabling/enabling of 
+ *					  facilities negotiation and increased 
+ *					  the throughput upper limit.
  */
 
 #include <linux/config.h>
@@ -811,6 +814,7 @@ int x25_rx_call_request(struct sk_buff *skb, struct x25_neigh *neigh, unsigned i
 	make->protinfo.x25->source_addr   = source_addr;
 	make->protinfo.x25->neighbour     = neigh;
 	make->protinfo.x25->facilities    = facilities;
+	make->protinfo.x25->vc_facil_mask = sk->protinfo.x25->vc_facil_mask;
 
 	x25_write_internal(make, X25_CALL_ACCEPTED);
 
@@ -1133,7 +1137,7 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 				return -EINVAL;
 			if (facilities.winsize_in < 1 || facilities.winsize_in > 127)
 				return -EINVAL;
-			if (facilities.throughput < 0x03 || facilities.throughput > 0x2C)
+			if (facilities.throughput < 0x03 || facilities.throughput > 0xDD)
 				return -EINVAL;
 			if (facilities.reverse != 0 && facilities.reverse != 1)
 				return -EINVAL;

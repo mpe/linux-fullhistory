@@ -941,17 +941,13 @@ E: ajh@primag.co.uk
 D: Selection mechanism
 
 N: Andre Hedrick
+E: andre@linux-ide.org
 E: andre@suse.com
 D: Random SMP kernel hacker...
 D: Uniform Multi-Platform E-IDE driver
-D: AEC6210UF Ultra33
-D: Aladdin 1533/1543(C) chipset
-D: Active-Chipset maddness..........
-D: HighPoint HPT343/5 Ultra/33 & HPT366 Ultra/66 chipsets
-D: Intel PIIX chipset
-D: Promise PDC20246/20247 & PDC20262 chipsets
-D: SiS5513 Ultra/66/33 chipsets
-D: VIA 82C586/596/686 chipsets
+D: Active-ATA-Chipset maddness..........
+D: Ultra DMA 66/33
+D: ATA-Smart Kernel Daemon
 S: 580 Second Street, Suite 2
 S: Oakland, CA
 S: USA
@@ -1173,6 +1169,7 @@ E: djones2@glam.ac.uk
 W: http://linux.powertweak.com
 D: Moved PCI bridge tuning to userspace (Powertweak).
 D: Centaur/IDT Winchip/Winchip 2 tweaks.
+D: AFFS fixes for 2.3.x
 D: Misc clean ups and other random hacking.
 S: 28, Laura Street,
 S: Treforest, Pontypridd,

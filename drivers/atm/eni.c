@@ -879,14 +879,13 @@ static void close_rx(struct atm_vcc *vcc)
 			set_current_state(TASK_UNINTERRUPTIBLE);
 		}
 		for (;;) {
-			unsigned long flags;
 			int at_end;
 			u32 tmp;
 
-			spin_lock_irqsave(&eni_dev->lock,flags);
+			tasklet_disable(&eni_dev->task);
 			tmp = readl(eni_dev->vci+vcc->vci*16+4) & MID_VCI_READ;
 			at_end = eni_vcc->rx_pos == tmp >> MID_VCI_READ_SHIFT;
-			spin_unlock_irqrestore(&eni_dev->lock,flags);
+			tasklet_enable(&eni_dev->task);
 			if (at_end) break;
 			EVENT("drain discard (host 0x%lx, nic 0x%lx)\n",
 			    eni_vcc->rx_pos,tmp);
@@ -972,8 +971,8 @@ static inline void put_dma(int chan,u32 *dma,int *j,dma_addr_t paddr,
 	}
 #ifdef CONFIG_ATM_ENI_BURST_TX_16W /* may work with some PCI chipsets ... */
 	if (words & ~15) {
-		DPRINTK("put_dma: %lx DMA: %d*16/%d words\n",paddr,words >> 4,
-		    words);
+		DPRINTK("put_dma: %lx DMA: %d*16/%d words\n",
+		    (unsigned long) paddr,words >> 4,words);
 		dma[(*j)++] = MID_DT_16W | ((words >> 4) << MID_DMA_COUNT_SHIFT)
 		    | (chan << MID_DMA_CHAN_SHIFT);
 		dma[(*j)++] = paddr;
@@ -994,8 +993,8 @@ static inline void put_dma(int chan,u32 *dma,int *j,dma_addr_t paddr,
 #endif
 #ifdef CONFIG_ATM_ENI_BURST_TX_4W /* probably useless if TX_8W or TX_16W */
 	if (words & ~3) {
-		DPRINTK("put_dma: %lx DMA: %d*4/%d words\n",paddr,words >> 2,
-		    words);
+		DPRINTK("put_dma: %lx DMA: %d*4/%d words\n",
+		    (unsigned long) paddr,words >> 2,words);
 		dma[(*j)++] = MID_DT_4W | ((words >> 2) << MID_DMA_COUNT_SHIFT)
 		    | (chan << MID_DMA_CHAN_SHIFT);
 		dma[(*j)++] = paddr;
@@ -1005,8 +1004,8 @@ static inline void put_dma(int chan,u32 *dma,int *j,dma_addr_t paddr,
 #endif
 #ifdef CONFIG_ATM_ENI_BURST_TX_2W /* probably useless if TX_4W, TX_8W, ... */
 	if (words & ~1) {
-		DPRINTK("put_dma: %lx DMA: %d*2/%d words\n",paddr,words >> 1,
-		    words);
+		DPRINTK("put_dma: %lx DMA: %d*2/%d words\n",
+		    (unsigned long) paddr,words >> 1,words);
 		dma[(*j)++] = MID_DT_2W | ((words >> 1) << MID_DMA_COUNT_SHIFT)
 		    | (chan << MID_DMA_CHAN_SHIFT);
 		dma[(*j)++] = paddr;
@@ -1188,7 +1187,7 @@ static void poll_tx(struct atm_dev *dev)
 		if (tx->send)
 			while ((skb = skb_dequeue(&tx->backlog))) {
 				res = do_tx(skb);
-				if (res == enq_ok) tx->backlog_len--;
+				if (res == enq_ok) atomic_dec(&tx->backlog_len);
 				else {
 					DPRINTK("re-queuing TX PDU\n");
 					skb_queue_head(&tx->backlog,skb);
@@ -1327,7 +1326,7 @@ static int reserve_or_set_tx(struct atm_vcc *vcc,struct atm_trafprm *txtp,
 		tx->send = mem;
 		tx->words = size >> 2;
 		skb_queue_head_init(&tx->backlog);
-		tx->backlog_len = 0;
+		atomic_set(&tx->backlog_len,0);
 		for (order = 0; size > (1 << (order+10)); order++);
 		eni_out((order << MID_SIZE_SHIFT) |
 		    ((tx->send-eni_dev->ram) >> (MID_LOC_SKIP+2)),
@@ -1399,12 +1398,11 @@ static void close_tx(struct atm_vcc *vcc)
 	add_wait_queue(&eni_dev->tx_wait,&wait);
 	set_current_state(TASK_UNINTERRUPTIBLE);
 	for (;;) {
-		unsigned long flags;
 		int txing;
 
-		spin_lock_irqsave(&eni_dev->lock,flags);
+		tasklet_disable(&eni_dev->task);
 		txing = skb_peek(&eni_vcc->tx->backlog) || eni_vcc->txing;
-		spin_unlock_irqrestore(&eni_dev->lock,flags);
+		tasklet_enable(&eni_dev->task);
 		if (!txing) break;
 		DPRINTK("%d TX left\n",eni_vcc->txing);
 		schedule();
@@ -1468,12 +1466,44 @@ if (eni_boards) printk(KERN_INFO "loss: %ld\n",ENI_DEV(eni_boards)->lost);
 #endif
 
 
-static void misc_int(struct atm_dev *dev,unsigned long reason)
+static void bug_int(struct atm_dev *dev,unsigned long reason)
 {
 	struct eni_dev *eni_dev;
 
-	DPRINTK(">misc_int\n");
+	DPRINTK(">bug_int\n");
 	eni_dev = ENI_DEV(dev);
+	if (reason & MID_DMA_ERR_ACK)
+		printk(KERN_CRIT DEV_LABEL "(itf %d): driver error - DMA "
+		    "error\n",dev->number);
+	if (reason & MID_TX_IDENT_MISM)
+		printk(KERN_CRIT DEV_LABEL "(itf %d): driver error - ident "
+		    "mismatch\n",dev->number);
+	if (reason & MID_TX_DMA_OVFL)
+		printk(KERN_CRIT DEV_LABEL "(itf %d): driver error - DMA "
+		    "overflow\n",dev->number);
+	EVENT("---dump ends here---\n",0,0);
+	printk(KERN_NOTICE "---recent events---\n");
+	event_dump();
+}
+
+
+static void eni_int(int irq,void *dev_id,struct pt_regs *regs)
+{
+	struct atm_dev *dev;
+	struct eni_dev *eni_dev;
+	u32 reason;
+
+	DPRINTK(">eni_int\n");
+	dev = dev_id;
+	eni_dev = ENI_DEV(dev);
+	reason = eni_in(MID_ISA);
+	DPRINTK(DEV_LABEL ": int 0x%lx\n",(unsigned long) reason);
+	/*
+	 * Must handle these two right now, because reading ISA doesn't clear
+	 * them, so they re-occur and we never make it to the tasklet. Since
+	 * they're rare, we don't mind the occasional invocation of eni_tasklet
+	 * with eni_dev->events == 0.
+	 */
 	if (reason & MID_STAT_OVFL) {
 		EVENT("stat overflow\n",0,0);
 		eni_dev->lost += eni_in(MID_STAT) & MID_OVFL_TRASH;
@@ -1485,82 +1515,54 @@ static void misc_int(struct atm_dev *dev,unsigned long reason)
 		foo();
 #endif
 	}
-	if (reason & MID_DMA_ERR_ACK) {
-		printk(KERN_CRIT DEV_LABEL "(itf %d): driver error - DMA "
-		    "error\n",dev->number);
-		EVENT("---dump ends here---\n",0,0);
-		printk(KERN_NOTICE "---recent events---\n");
-		event_dump();
-	}
-	if (reason & MID_TX_IDENT_MISM) {
-		printk(KERN_CRIT DEV_LABEL "(itf %d): driver error - ident "
-		    "mismatch\n",dev->number);
-		EVENT("---dump ends here---\n",0,0);
-		printk(KERN_NOTICE "---recent events---\n");
-		event_dump();
-	}
-	if (reason & MID_TX_DMA_OVFL) {
-		printk(KERN_CRIT DEV_LABEL "(itf %d): driver error - DMA "
-		    "overflow\n",dev->number);
-		EVENT("---dump ends here---\n",0,0);
-		printk(KERN_NOTICE "---recent events---\n");
-		event_dump();
-	}
+	spin_lock(&eni_dev->lock);
+	eni_dev->events |= reason;
+	spin_unlock(&eni_dev->lock);
+	tasklet_schedule(&eni_dev->task);
 }
 
 
-static void eni_int(int irq,void *dev_id,struct pt_regs *regs)
+static void eni_tasklet(unsigned long data)
 {
-	struct atm_dev *dev;
-	struct eni_dev *eni_dev;
-	unsigned long reason;
+	struct atm_dev *dev = (struct atm_dev *) data;
+	struct eni_dev *eni_dev = ENI_DEV(dev);
+	unsigned long flags;
+	u32 events;
 
-	DPRINTK(">eni_int\n");
-	dev = dev_id;
-	eni_dev = ENI_DEV(dev);
-	while ((reason = eni_in(MID_ISA))) {
-		DPRINTK(DEV_LABEL ": int 0x%lx\n",reason);
-		if (reason & MID_RX_DMA_COMPLETE) {
-			EVENT("INT: RX DMA complete, starting dequeue_rx\n",
-			    0,0);
-			spin_lock(&eni_dev->lock);
-			dequeue_rx(dev);
-			EVENT("dequeue_rx done, starting poll_rx\n",0,0);
-			poll_rx(dev);
-			spin_unlock(&eni_dev->lock);
-			EVENT("poll_rx done\n",0,0);
-			/* poll_tx ? */
-		}
-		if (reason & MID_SERVICE) {
-			EVENT("INT: service, starting get_service\n",0,0);
-			spin_lock(&eni_dev->lock);
-			get_service(dev);
-			EVENT("get_service done, starting poll_rx\n",0,0);
-			poll_rx(dev);
-			spin_unlock(&eni_dev->lock);
-			EVENT("poll_rx done\n",0,0);
-		}
- 		if (reason & MID_TX_DMA_COMPLETE) {
-			EVENT("INT: TX DMA COMPLETE\n",0,0);
-			spin_lock(&eni_dev->lock);
-			dequeue_tx(dev);
-			spin_unlock(&eni_dev->lock);
-		}
-		if (reason & MID_TX_COMPLETE) {
-			EVENT("INT: TX COMPLETE\n",0,0);
-tx_complete++;
-			spin_lock(&eni_dev->lock);
-			poll_tx(dev);
-			spin_unlock(&eni_dev->lock);
-			wake_up(&eni_dev->tx_wait);
-			/* poll_rx ? */
-		}
-		if (reason & (MID_STAT_OVFL | MID_SUNI_INT | MID_DMA_ERR_ACK |
-		    MID_TX_IDENT_MISM | MID_TX_DMA_OVFL)) {
-			EVENT("misc interrupt\n",0,0);
-			misc_int(dev,reason);
-		}
+	DPRINTK("eni_tasklet (dev %p)\n",dev);
+	spin_lock_irqsave(&eni_dev->lock,flags);
+	events = xchg(&eni_dev->events,0);
+	spin_unlock_irqrestore(&eni_dev->lock,flags);
+	if (events & MID_RX_DMA_COMPLETE) {
+		EVENT("INT: RX DMA complete, starting dequeue_rx\n",0,0);
+		dequeue_rx(dev);
+		EVENT("dequeue_rx done, starting poll_rx\n",0,0);
+		poll_rx(dev);
+		EVENT("poll_rx done\n",0,0);
+		/* poll_tx ? */
 	}
+	if (events & MID_SERVICE) {
+		EVENT("INT: service, starting get_service\n",0,0);
+		get_service(dev);
+		EVENT("get_service done, starting poll_rx\n",0,0);
+		poll_rx(dev);
+		EVENT("poll_rx done\n",0,0);
+	}
+ 	if (events & MID_TX_DMA_COMPLETE) {
+		EVENT("INT: TX DMA COMPLETE\n",0,0);
+		dequeue_tx(dev);
+	}
+	if (events & MID_TX_COMPLETE) {
+		EVENT("INT: TX COMPLETE\n",0,0);
+tx_complete++;
+		wake_up(&eni_dev->tx_wait);
+		/* poll_rx ? */
+	}
+	if (events & (MID_DMA_ERR_ACK | MID_TX_IDENT_MISM | MID_TX_DMA_OVFL)) {
+		EVENT("bug interrupt\n",0,0);
+		bug_int(dev,events);
+	}
+	poll_tx(dev);
 }
 
 
@@ -1824,6 +1826,8 @@ static int __devinit eni_start(struct atm_dev *dev)
 	     eni_dev->vci,eni_dev->rx_dma,eni_dev->tx_dma,
 	     eni_dev->service,buf);
 	spin_lock_init(&eni_dev->lock);
+	tasklet_init(&eni_dev->task,eni_tasklet,(unsigned long) dev);
+	eni_dev->events = 0;
 	/* initialize memory management */
 	buffer_mem = eni_dev->mem-(buf-eni_dev->ram);
 	eni_dev->free_list_size = buffer_mem/MID_MIN_BUF_SIZE/2;
@@ -1969,7 +1973,6 @@ static int eni_change_qos(struct atm_vcc *vcc,struct atm_qos *qos,int flgs)
 	struct eni_dev *eni_dev = ENI_DEV(vcc->dev);
 	struct eni_tx *tx = ENI_VCC(vcc)->tx;
 	struct sk_buff *skb;
-	unsigned long flags;
 	int error,rate,rsv,shp;
 
 	if (qos->txtp.traffic_class == ATM_NONE) return 0;
@@ -1989,7 +1992,7 @@ static int eni_change_qos(struct atm_vcc *vcc,struct atm_qos *qos,int flgs)
 	 * Walk through the send buffer and patch the rate information in all
 	 * segmentation buffer descriptors of this VCC.
 	 */
-	spin_lock_irqsave(&eni_dev->lock,flags);
+	tasklet_disable(&eni_dev->task);
 	for (skb = eni_dev->tx_queue.next; skb !=
 	    (struct sk_buff *) &eni_dev->tx_queue; skb = skb->next) {
 		unsigned long dsc;
@@ -2000,7 +2003,7 @@ static int eni_change_qos(struct atm_vcc *vcc,struct atm_qos *qos,int flgs)
 		    (tx->prescaler << MID_SEG_PR_SHIFT) |
 		    (tx->resolution << MID_SEG_RATE_SHIFT), dsc);
 	}
-	spin_unlock_irqrestore(&eni_dev->lock,flags);
+	tasklet_enable(&eni_dev->task);
 	return 0;
 }
 
@@ -2061,8 +2064,6 @@ static int eni_setsockopt(struct atm_vcc *vcc,int level,int optname,
 
 static int eni_send(struct atm_vcc *vcc,struct sk_buff *skb)
 {
-	unsigned long flags;
-
 	DPRINTK(">eni_send\n");
 	if (!ENI_VCC(vcc)->tx) {
 		if (vcc->pop) vcc->pop(vcc,skb);
@@ -2084,13 +2085,10 @@ static int eni_send(struct atm_vcc *vcc,struct sk_buff *skb)
 	}
 submitted++;
 	ATM_SKB(skb)->vcc = vcc;
-	spin_lock_irqsave(&ENI_DEV(vcc->dev)->lock,flags); /* brute force */
-	if (skb_peek(&ENI_VCC(vcc)->tx->backlog) || do_tx(skb)) {
-		skb_queue_tail(&ENI_VCC(vcc)->tx->backlog,skb);
-		ENI_VCC(vcc)->tx->backlog_len++;
+	skb_queue_tail(&ENI_VCC(vcc)->tx->backlog,skb);
+	atomic_inc(&ENI_VCC(vcc)->tx->backlog_len);
 backlogged++;
-	}
-	spin_unlock_irqrestore(&ENI_DEV(vcc->dev)->lock,flags);
+	tasklet_schedule(&ENI_DEV(vcc->dev)->task);
 	return 0;
 }
 
@@ -2189,7 +2187,7 @@ static int eni_proc_read(struct atm_dev *dev,loff_t *pos,char *page)
 		}
 		if (--left) continue;
 		return sprintf(page,"%10sbacklog %d bytes\n","",
-		    tx->backlog_len);
+		    atomic_read(&tx->backlog_len));
 	}
 	for (vcc = dev->vccs; vcc; vcc = vcc->next) {
 		struct eni_vcc *eni_vcc = ENI_VCC(vcc);

@@ -13,9 +13,11 @@
  *		2 of the License, or (at your option) any later version.
  *
  *	History
- *	X.25 001	Jonathan Naylor	Started coding.
- *	X.25 002	Jonathan Naylor	Centralised disconnection code.
- *					New timer architecture.
+ *	X.25 001	Jonathan Naylor	  Started coding.
+ *	X.25 002	Jonathan Naylor	  Centralised disconnection code.
+ *					  New timer architecture.
+ *	mar/20/00	Daniela Squassoni Disabling/enabling of facilities 
+ *					  negotiation.
  */
 
 #include <linux/config.h>
@@ -111,7 +113,7 @@ static int x25_state1_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			 */
 			skb_pull(skb, X25_STD_MIN_LEN);
 			skb_pull(skb, x25_addr_ntoa(skb->data, &source_addr, &dest_addr));
-			skb_pull(skb, x25_parse_facilities(skb, &sk->protinfo.x25->facilities));
+			skb_pull(skb, x25_parse_facilities(skb, &sk->protinfo.x25->facilities, &sk->protinfo.x25->vc_facil_mask));
 			/*
 			 *	Copy any Call User Data.
 			 */

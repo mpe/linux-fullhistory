@@ -512,6 +512,13 @@ static int idedisk_media_change (ide_drive_t *drive)
 	return drive->removable;	/* if removable, always assume it was changed */
 }
 
+static void idedisk_revalidate (ide_drive_t *drive)
+{
+	grok_partitions(HWIF(drive)->gd, drive->select.b.unit,
+			1<<PARTN_BITS,
+			current_capacity(drive));
+}
+
 /*
  * Compute drive->capacity, the full capacity of the drive
  * Called with drive->id != NULL.
@@ -726,6 +733,7 @@ static ide_driver_t idedisk_driver = {
 	idedisk_open,		/* open */
 	idedisk_release,	/* release */
 	idedisk_media_change,	/* media_change */
+	idedisk_revalidate,	/* revalidate */
 	idedisk_pre_reset,	/* pre_reset */
 	idedisk_capacity,	/* capacity */
 	idedisk_special,	/* special */

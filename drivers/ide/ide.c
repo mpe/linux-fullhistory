@@ -343,7 +343,7 @@ int ide_system_bus_speed (void)
 			system_bus_speed = idebus_parameter;	/* user supplied value */
 #ifdef CONFIG_PCI
 		else if (pci_present())
-			system_bus_speed = 40;	/* safe default value for PCI */
+			system_bus_speed = 33;	/* safe default value for PCI */
 #endif /* CONFIG_PCI */
 		else
 			system_bus_speed = 50;	/* safe default value for VESA and PCI */
@@ -1091,11 +1091,9 @@ static ide_startstop_t start_request (ide_drive_t *drive)
 #endif
 	block    = rq->sector;
 	blockend = block + rq->nr_sectors;
-#if 0
+
 	if ((rq->cmd == READ || rq->cmd == WRITE) &&
-	    (drive->media == ide_disk || drive->media == ide_floppy))
-#endif
-	{
+	    (drive->media == ide_disk || drive->media == ide_floppy)) {
 		if ((blockend < block) || (blockend > drive->part[minor&PARTN_MASK].nr_sects)) {
 			printk("%s%c: bad access: block=%ld, count=%ld\n", drive->name,
 			 (minor&PARTN_MASK)?'0'+(minor&PARTN_MASK):' ', block, rq->nr_sectors);
@@ -1777,10 +1775,7 @@ int ide_revalidate_disk (kdev_t i_rdev)
 		drive->part[p].nr_sects   = 0;
 	};
 
-	grok_partitions(HWIF(drive)->gd, drive->select.b.unit,
-			(drive->media != ide_disk &&
-			 drive->media != ide_floppy) ? 1 : 1<<PARTN_BITS,
-				current_capacity(drive));
+	DRIVER(drive)->revalidate(drive);
 
 	drive->busy = 0;
 	wake_up(&drive->wqueue);
@@ -2095,7 +2090,9 @@ void ide_unregister (unsigned int index)
 	hwif->config_data	= old_hwif.config_data;
 	hwif->select_data	= old_hwif.select_data;
 	hwif->proc		= old_hwif.proc;
+#ifndef CONFIG_BLK_DEV_IDECS
 	hwif->irq		= old_hwif.irq;
+#endif /* CONFIG_BLK_DEV_IDECS */
 	hwif->major		= old_hwif.major;
 	hwif->chipset		= old_hwif.chipset;
 	hwif->autodma		= old_hwif.autodma;
@@ -2447,8 +2444,18 @@ int ide_wait_cmd (ide_drive_t *drive, int cmd, int nsect, int feature, int secto
  */
 void ide_delay_50ms (void)
 {
+#if 0
 	unsigned long timeout = jiffies + ((HZ + 19)/20) + 1;
 	while (0 < (signed long)(timeout - jiffies));
+#else
+	__set_current_state(TASK_UNINTERRUPTIBLE);
+	schedule_timeout(HZ/20);
+#endif
+}
+
+int system_bus_clock (void)
+{
+	return((int) ((!system_bus_speed) ? ide_system_bus_speed() : system_bus_speed ));
 }
 
 static int ide_ioctl (struct inode *inode, struct file *file,
@@ -3350,7 +3357,7 @@ static void default_pre_reset (ide_drive_t *drive)
 
 static unsigned long default_capacity (ide_drive_t *drive)
 {
-	return 0x7fffffff;	/* cdrom or tape */
+	return 0x7fffffff;
 }
 
 static ide_startstop_t default_special (ide_drive_t *drive)
@@ -3578,6 +3585,8 @@ EXPORT_SYMBOL(hwif_unregister);
 EXPORT_SYMBOL(get_info_ptr);
 EXPORT_SYMBOL(current_capacity);
 
+EXPORT_SYMBOL(system_bus_clock);
+
 /*
  * This is gets invoked once during initialization, to set *everything* up
  */
@@ -3589,7 +3598,7 @@ int __init ide_init (void)
 	if (!banner_printed) {
 		printk(KERN_INFO "Uniform Multi-Platform E-IDE driver " REVISION "\n");
 		ide_devfs_handle = devfs_mk_dir (NULL, "ide", 3, NULL);
-		(void) ide_system_bus_speed();
+		system_bus_speed = ide_system_bus_speed();
 		banner_printed = 1;
 	}
 

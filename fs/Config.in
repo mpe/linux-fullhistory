@@ -12,7 +12,7 @@ tristate 'Kernel automounter version 4 support (also supports v3)' CONFIG_AUTOFS
 dep_tristate 'ADFS file system support' CONFIG_ADFS_FS $CONFIG_EXPERIMENTAL
 dep_mbool '  ADFS write support (DANGEROUS)' CONFIG_ADFS_FS_RW $CONFIG_ADFS_FS $CONFIG_EXPERIMENTAL
 
-tristate 'Amiga FFS file system support' CONFIG_AFFS_FS
+dep_tristate 'Amiga FFS file system support (EXPERIMENTAL)' CONFIG_AFFS_FS $CONFIG_EXPERIMENTAL
 
 dep_tristate 'Apple Macintosh file system support (EXPERIMENTAL)' CONFIG_HFS_FS $CONFIG_EXPERIMENTAL
 

@@ -1,3 +1,4 @@
+/* $Id: fore200e.h,v 1.4 2000/04/14 10:10:34 davem Exp $ */
 #ifndef _FORE200E_H
 #define _FORE200E_H
 
@@ -827,14 +828,18 @@ typedef struct fore200e_bus {
 #    else
        /* in that case, we'll need to add an extra indirection, e.g.
 	  fore200e->bus->dma_direction[ fore200e_dma_direction ] */
-#      error PCI and SBUS DMA direction flags differ!
+#      error PCI and SBUS DMA direction flags have different values!
 #    endif
 #  else
-#    define FORE200E_DMA_BIDIRECTIONAL SBA_DMA_BIDIRECTIONAL
-#    define FORE200E_DMA_TODEVICE      SBA_DMA_TODEVICE
-#    define FORE200E_DMA_FROMDEVICE    SBA_DMA_FROMDEVICE
+#    define FORE200E_DMA_BIDIRECTIONAL SBUS_DMA_BIDIRECTIONAL
+#    define FORE200E_DMA_TODEVICE      SBUS_DMA_TODEVICE
+#    define FORE200E_DMA_FROMDEVICE    SBUS_DMA_FROMDEVICE
 #  endif
 #else
+#  ifndef CONFIG_ATM_FORE200E_PCA
+#    warning compiling the fore200e driver without any hardware support enabled!
+#    include <linux/pci.h>
+#  endif
 #  define FORE200E_DMA_BIDIRECTIONAL PCI_DMA_BIDIRECTIONAL
 #  define FORE200E_DMA_TODEVICE      PCI_DMA_TODEVICE
 #  define FORE200E_DMA_FROMDEVICE    PCI_DMA_FROMDEVICE
@@ -874,7 +879,7 @@ typedef struct fore200e {
     struct stats*              stats;                  /* last snapshot of the stats         */
     
     struct semaphore           rate_sf;                /* protects rate reservation ops      */
-    spinlock_t                 tx_lock;                /* protects tx ops                    */
+    struct tasklet_struct      tasklet;                /* performs interrupt work            */
 
 } fore200e_t;
 

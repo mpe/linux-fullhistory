@@ -171,8 +171,10 @@ void tulip_timer(unsigned long data)
 	}
 	break;
 	}
-	tp->timer.expires = RUN_AT(next_tick);
-	add_timer(&tp->timer);
+	/* mod_timer synchronizes us with potential add_timer calls
+	 * from interrupts.
+	 */
+	mod_timer(&tp->timer, RUN_AT(next_tick));
 }
 
 
@@ -188,8 +190,7 @@ void mxic_timer(unsigned long data)
 			   inl(ioaddr + CSR12));
 	}
 	if (next_tick) {
-		tp->timer.expires = RUN_AT(next_tick);
-		add_timer(&tp->timer);
+		mod_timer(&tp->timer, RUN_AT(next_tick));
 	}
 }
 
@@ -205,7 +206,9 @@ void comet_timer(unsigned long data)
 		printk(KERN_DEBUG "%s: Comet link status %4.4x partner capability "
 			   "%4.4x.\n",
 			   dev->name, inl(ioaddr + 0xB8), inl(ioaddr + 0xC8));
-	tp->timer.expires = RUN_AT(next_tick);
-	add_timer(&tp->timer);
+	/* mod_timer synchronizes us with potential add_timer calls
+	 * from interrupts.
+	 */
+	mod_timer(&tp->timer, RUN_AT(next_tick));
 }
 

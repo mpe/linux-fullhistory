@@ -43,6 +43,8 @@
 #define SECTOR_BUFFER_SIZE	(CD_FRAMESIZE * 32)
 #define SECTORS_BUFFER		(SECTOR_BUFFER_SIZE / SECTOR_SIZE)
 
+#define BLOCKS_PER_FRAME	(CD_FRAMESIZE / BLOCK_SIZE)
+
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 
 /* special command codes for strategy routine. */
@@ -103,7 +105,7 @@ struct packet_command {
 	char *buffer;
 	int buflen;
 	int stat;
-	struct request_sense *sense_data;
+	struct request_sense *sense;
 	unsigned char c[12];
 };
 

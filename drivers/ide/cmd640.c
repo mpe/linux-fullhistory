@@ -111,6 +111,7 @@
 #include <linux/blkdev.h>
 #include <linux/hdreg.h>
 #include <linux/ide.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 
@@ -595,7 +596,7 @@ static void cmd640_set_mode (unsigned int index, byte pio_mode, unsigned int cyc
 {
 	int setup_time, active_time, recovery_time, clock_time;
 	byte setup_count, active_count, recovery_count, recovery_count2, cycle_count;
-	int bus_speed = ide_system_bus_speed();
+	int bus_speed = system_bus_clock();
 
 	if (pio_mode > 5)
 		pio_mode = 5;

@@ -180,7 +180,7 @@ static unsigned int initdepth __initdata = 8;
 #ifndef MODULE
 static const char *mode_option __initdata = NULL;
 #endif
-#ifndef CONFIG_PPC
+#if !defined(CONFIG_PPC) && !defined(__sparc__)
 static void *bios_seg = NULL;
 #endif
 
@@ -336,7 +336,7 @@ static int aty128_pci_register(struct pci_dev *pdev,
 static struct fb_info_aty128 *aty128_board_list_add(struct fb_info_aty128
 				*board_list, struct fb_info_aty128 *new_node);
 static int aty128find_ROM(struct fb_info_aty128 *info);
-#ifndef CONFIG_PPC
+#if !defined(CONFIG_PPC) && !defined(__sparc__)
 static void aty128_get_pllinfo(struct fb_info_aty128 *info);
 #endif
 static void aty128_timings(struct fb_info_aty128 *info);
@@ -1940,7 +1940,7 @@ aty128_pci_register(struct pci_dev *pdev,
         printk(KERN_INFO "aty128fb: Rage128 BIOS not located. Guessing...\n");
         aty128_timings(info);
     }
-#ifndef CONFIG_PPC
+#if !defined(CONFIG_PPC) && !defined(__sparc__)
  else
         aty128_get_pllinfo(info);
 
@@ -1981,12 +1981,12 @@ unmap_out:
 #endif /* CONFIG_PCI */
 
 
-/* PPC cannot read video ROM, so we fail by default */
+/* PPC and Sparc cannot read video ROM, so we fail by default */
 static int __init
 aty128find_ROM(struct fb_info_aty128 *info)
 {
     int  flag = 0;
-#ifndef CONFIG_PPC
+#if !defined(CONFIG_PPC) && !defined(__sparc__)
     u32  segstart;
     char *rom_base;
     char *rom;
@@ -2048,7 +2048,7 @@ aty128find_ROM(struct fb_info_aty128 *info)
 }
 
 
-#ifndef CONFIG_PPC
+#if !defined(CONFIG_PPC) && !defined(__sparc__)
 static void __init
 aty128_get_pllinfo(struct fb_info_aty128 *info)
 {   

@@ -28,6 +28,12 @@ Known bugs:
 
 Please direct bug reports to: hjw@zvw.de
 
+Version 3.11
+------------
+
+- Converted to use 2.3.x page cache [Dave Jones <dave@powertweak.com>]
+- Corruption in truncate() bugfix [Ken Tyler <kent@werple.net.au>]
+
 Version 3.10
 ------------
 

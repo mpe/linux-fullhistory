@@ -300,13 +300,6 @@ typedef struct ide_drive_s {
 	struct proc_dir_entry *proc;	/* /proc/ide/ directory entry */
 	void		*settings;	/* /proc/ide/ drive settings */
 	char		driver_req[10];	/* requests specific driver */
-#if 1
-	struct thresholds_s	*smart_thresholds;
-	struct values_s		*smart_values;
-#else
-	thresholds_t		smart_thresholds;
-	values_t		smart_values;
-#endif
 	int		last_lun;	/* last logical unit */
 	int		forced_lun;	/* if hdxlun was given at boot */
 } ide_drive_t;
@@ -385,7 +378,7 @@ typedef struct hwif_s {
 	ide_resetproc_t	*resetproc;	/* routine to reset controller after a disk reset */
 	ide_dmaproc_t	*dmaproc;	/* dma read/write/abort routine */
 	unsigned int	*dmatable_cpu;	/* dma physical region descriptor table (cpu view) */
-	u32		dmatable_dma;	/* dma physical region descriptor table (dma view) */
+	dma_addr_t	dmatable_dma;	/* dma physical region descriptor table (dma view) */
 	struct scatterlist *sg_table;	/* Scatter-gather list used to build the above */
 	int sg_nents;			/* Current number of entries in it */
 	int sg_dma_direction;		/* dma transfer direction */
@@ -538,6 +531,7 @@ typedef int		(ide_ioctl_proc)(ide_drive_t *, struct inode *, struct file *, unsi
 typedef int		(ide_open_proc)(struct inode *, struct file *, ide_drive_t *);
 typedef void		(ide_release_proc)(struct inode *, struct file *, ide_drive_t *);
 typedef int		(ide_check_media_change_proc)(ide_drive_t *);
+typedef void		(ide_revalidate_proc)(ide_drive_t *);
 typedef void		(ide_pre_reset_proc)(ide_drive_t *);
 typedef unsigned long	(ide_capacity_proc)(ide_drive_t *);
 typedef ide_startstop_t	(ide_special_proc)(ide_drive_t *);
@@ -557,6 +551,7 @@ typedef struct ide_driver_s {
 	ide_open_proc			*open;
 	ide_release_proc		*release;
 	ide_check_media_change_proc	*media_change;
+	ide_revalidate_proc		*revalidate;
 	ide_pre_reset_proc		*pre_reset;
 	ide_capacity_proc		*capacity;
 	ide_special_proc		*special;
@@ -735,6 +730,7 @@ void ide_end_drive_cmd (ide_drive_t *drive, byte stat, byte err);
 int ide_wait_cmd (ide_drive_t *drive, int cmd, int nsect, int feature, int sectors, byte *buf);
 
 void ide_delay_50ms (void);
+int system_bus_clock(void);
 
 int ide_driveid_update (ide_drive_t *drive);
 int ide_ata66_check (ide_drive_t *drive, int cmd, int nsect, int feature);

@@ -130,6 +130,11 @@ ip_nat_out(unsigned int hooknum,
 	   const struct net_device *out,
 	   int (*okfn)(struct sk_buff *))
 {
+	/* root is playing with raw sockets. */
+	if ((*pskb)->len < sizeof(struct iphdr)
+	    || (*pskb)->nh.iph->ihl * 4 < sizeof(struct iphdr))
+		return NF_ACCEPT;
+
 	/* We can hit fragment here; forwarded packets get
 	   defragmented by connection tracking coming in, then
 	   fragmented (grr) by the forward code.
@@ -150,6 +155,21 @@ ip_nat_out(unsigned int hooknum,
 	return ip_nat_fn(hooknum, pskb, in, out, okfn);
 }
 
+static unsigned int
+ip_nat_local_fn(unsigned int hooknum,
+		struct sk_buff **pskb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+	/* root is playing with raw sockets. */
+	if ((*pskb)->len < sizeof(struct iphdr)
+	    || (*pskb)->nh.iph->ihl * 4 < sizeof(struct iphdr))
+		return NF_ACCEPT;
+
+	return ip_nat_fn(hooknum, pskb, in, out, okfn);
+}
+
 /* We must be after connection tracking and before packet filtering. */
 
 /* Before packet filtering, change destination */
@@ -160,7 +180,7 @@ static struct nf_hook_ops ip_nat_out_ops
 = { { NULL, NULL }, ip_nat_out, PF_INET, NF_IP_POST_ROUTING, NF_IP_PRI_NAT_SRC};
 /* Before packet filtering, change destination */
 static struct nf_hook_ops ip_nat_local_out_ops
-= { { NULL, NULL }, ip_nat_fn, PF_INET, NF_IP_LOCAL_OUT, NF_IP_PRI_NAT_DST };
+= { { NULL, NULL }, ip_nat_local_fn, PF_INET, NF_IP_LOCAL_OUT, NF_IP_PRI_NAT_DST };
 
 /* Protocol registration. */
 int ip_nat_protocol_register(struct ip_nat_protocol *proto)

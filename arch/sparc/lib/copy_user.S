@@ -112,6 +112,9 @@
 	.text
 	.align	4
 
+	.globl  __copy_user_begin
+__copy_user_begin:
+
 	.globl	C_LABEL(__copy_user)
 dword_align:
 	andcc	%o1, 1, %g0
@@ -482,3 +485,6 @@ fixupretl:
 	sub	%o0, %g3, %o0
 	ba	fixupretl
 	 add	%g3, %o2, %g3
+
+	.globl  __copy_user_end
+__copy_user_end:

@@ -1,5 +1,9 @@
 /*
  * These are the public elements of the Linux kernel X.25 implementation.
+ *
+ * 	History
+ *	mar/20/00	Daniela Squassoni Disabling/enabling of facilities 
+ *					  negotiation.
  */
 
 #ifndef	X25_KERNEL_H
@@ -49,11 +53,26 @@ struct sockaddr_x25 {
 
 /*
  *	DTE/DCE subscription options.
+ *
+ *      As this is missing lots of options, user should expect major
+ *	changes of this structure in 2.5.x which might break compatibilty.
+ *      The somewhat ugly dimension 200-sizeof() is needed to maintain
+ *	backward compatibility.
  */
 struct x25_subscrip_struct {
-	char device[200];
+	char device[200-sizeof(unsigned long)];
+	unsigned long	global_facil_mask;	/* 0 to disable negotiation */
 	unsigned int	extended;
 };
+
+/* values for above global_facil_mask */
+
+#define	X25_MASK_REVERSE	0x01	
+#define	X25_MASK_THROUGHPUT	0x02
+#define	X25_MASK_PACKET_SIZE	0x04
+#define	X25_MASK_WINDOW_SIZE	0x08
+
+
 
 /*
  *	Routing table control structure.

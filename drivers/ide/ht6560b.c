@@ -47,6 +47,7 @@
 #include <linux/blkdev.h>
 #include <linux/hdreg.h>
 #include <linux/ide.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 
@@ -203,9 +204,10 @@ static int __init try_to_init_ht6560b(void)
 
 static byte ht_pio2timings(ide_drive_t *drive, byte pio)
 {
-	int bus_speed, active_time, recovery_time;
+	int active_time, recovery_time;
 	int active_cycles, recovery_cycles;
 	ide_pio_data_t d;
+	int bus_speed = system_bus_clock();
 	
         if (pio) {
 		pio = ide_get_best_pio_mode(drive, pio, 5, &d);
@@ -215,7 +217,6 @@ static byte ht_pio2timings(ide_drive_t *drive, byte pio)
 		 *  actual cycle time for recovery and activity
 		 *  according system bus speed.
 		 */
-		bus_speed = ide_system_bus_speed();
 		active_time = ide_pio_timings[pio].active_time;
 		recovery_time = d.cycle_time 
 			- active_time

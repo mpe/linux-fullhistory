@@ -439,7 +439,7 @@ static int __devinit rtl8139_init_pci (struct pci_dev *pdev, void **ioaddr_out)
 	u8 tmp8;
 	int rc;
 	u32 pio_start, pio_end, pio_flags, pio_len;
-	u32 mmio_start, mmio_end, mmio_flags, mmio_len;
+	unsigned long mmio_start, mmio_end, mmio_flags, mmio_len;
 
 	DPRINTK ("ENTER\n");
 

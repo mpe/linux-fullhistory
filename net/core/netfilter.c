@@ -186,18 +186,10 @@ void nf_dump_skb(int pf, struct sk_buff *skb)
 			dst_port = ntohs(tcp->dest);
 		}
 	
-		printk("PROTO=%d %d.%d.%d.%d:%hu %d.%d.%d.%d:%hu"
+		printk("PROTO=%d %u.%u.%u.%u:%hu %u.%u.%u.%u:%hu"
 		       " L=%hu S=0x%2.2hX I=%hu F=0x%4.4hX T=%hu",
-		       ip->protocol,
-		       (ntohl(ip->saddr)>>24)&0xFF,
-		       (ntohl(ip->saddr)>>16)&0xFF,
-		       (ntohl(ip->saddr)>>8)&0xFF,
-		       (ntohl(ip->saddr))&0xFF,
-		       src_port,
-		       (ntohl(ip->daddr)>>24)&0xFF,
-		       (ntohl(ip->daddr)>>16)&0xFF,
-		       (ntohl(ip->daddr)>>8)&0xFF,
-		       (ntohl(ip->daddr))&0xFF,
+		       ip->protocol, NIPQUAD(ip->saddr),
+		       src_port, NIPQUAD(ip->daddr),
 		       dst_port,
 		       ntohs(ip->tot_len), ip->tos, ntohs(ip->id),
 		       ntohs(ip->frag_off), ip->ttl);

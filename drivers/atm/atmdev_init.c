@@ -1,20 +1,14 @@
 /* drivers/atm/atmdev_init.c - ATM device driver initialization */
  
-/* Written 1995-1997 by Werner Almesberger, EPFL LRC */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
  
 
 #include <linux/config.h>
 #include <linux/init.h>
 
 
-#ifdef CONFIG_ATM_ENI
-extern int eni_detect(void);
-#endif
 #ifdef CONFIG_ATM_ZATM
 extern int zatm_detect(void);
-#endif
-#ifdef CONFIG_ATM_TNETA1570
-extern int tneta1570_detect(void);
 #endif
 #ifdef CONFIG_ATM_NICSTAR
 extern int nicstar_detect(void);
@@ -33,19 +27,19 @@ extern int fore200e_detect(void);
 #endif
 
 
+/*
+ * For historical reasons, atmdev_init returns the number of devices found.
+ * Note that some detections may not go via atmdev_init (e.g. eni.c), so this
+ * number is meaningless.
+ */
+
 int __init atmdev_init(void)
 {
 	int devs;
 
 	devs = 0;
-#ifdef CONFIG_ATM_ENI
-//	devs += eni_detect();
-#endif
 #ifdef CONFIG_ATM_ZATM
 	devs += zatm_detect();
-#endif
-#ifdef CONFIG_ATM_TNETA1570
-	devs += tneta1570_detect();
 #endif
 #ifdef CONFIG_ATM_NICSTAR
 	devs += nicstar_detect();

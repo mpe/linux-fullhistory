@@ -24,6 +24,7 @@
 #include <linux/delay.h>
 #include <linux/hdreg.h>
 #include <linux/ide.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 
@@ -249,7 +250,7 @@ static void ali15x3_tune_drive (ide_drive_t *drive, byte pio)
 	int s_time, a_time, c_time;
 	byte s_clc, a_clc, r_clc;
 	unsigned long flags;
-	int bus_speed = ide_system_bus_speed();
+	int bus_speed = system_bus_clock();
 	int port = hwif->index ? 0x5c : 0x58;
 	int portFIFO = hwif->channel ? 0x55 : 0x54;
 	byte cd_dma_fifo = 0;
@@ -409,14 +410,14 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra33)
 
 static byte ali15x3_can_ultra (ide_drive_t *drive)
 {
-#ifdef CONFIG_WDC_ALI15X3
+#ifndef CONFIG_WDC_ALI15X3
 	struct hd_driveid *id	= drive->id;
 #endif /* CONFIG_WDC_ALI15X3 */
 
 	if (m5229_revision <= 0x20) {
 		return 0;
 	} else if ((m5229_revision < 0xC2) &&
-#ifdef CONFIG_WDC_ALI15X3
+#ifndef CONFIG_WDC_ALI15X3
 		   ((chip_is_1543c_e && strstr(id->model, "WDC ")) ||
 		    (drive->media!=ide_disk))) {
 #else /* CONFIG_WDC_ALI15X3 */

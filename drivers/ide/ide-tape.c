@@ -5900,6 +5900,7 @@ static ide_driver_t idetape_driver = {
 	idetape_blkdev_open,	/* open */
 	idetape_blkdev_release,	/* release */
 	NULL,			/* media_change */
+	NULL,			/* revalidate */
 	idetape_pre_reset,	/* pre_reset */
 	NULL,			/* capacity */
 	NULL,			/* special */

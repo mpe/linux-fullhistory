@@ -509,7 +509,7 @@ static int ipq_get_info(char *buffer, char **start, off_t offset, int length)
 	              "Peer pid            : %d\n"
 	              "Peer died           : %d\n"
 	              "Peer copy mode      : %d\n"
-	              "Peer copy range     : %d\n"
+	              "Peer copy range     : %Zu\n"
 	              "Queue length        : %d\n"
 	              "Queue max. length   : %d\n"
 	              "Queue flushing      : %d\n"

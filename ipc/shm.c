@@ -370,7 +370,7 @@ static void shm_put_super(struct super_block *sb)
 
 static int shm_statfs(struct super_block *sb, struct statfs *buf)
 {
-	buf->f_type = 0;
+	buf->f_type = SHM_FS_MAGIC;
 	buf->f_bsize = PAGE_SIZE;
 	buf->f_blocks = shm_ctlall;
 	buf->f_bavail = buf->f_bfree = shm_ctlall - shm_tot;

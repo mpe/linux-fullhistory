@@ -13,8 +13,10 @@
  *		2 of the License, or (at your option) any later version.
  *
  *	History
- *	X.25 001	Jonathan Naylor	Started coding.
- *	X.25 002	Jonathan Naylor	Centralised disconnection processing.
+ *	X.25 001	Jonathan Naylor	  Started coding.
+ *	X.25 002	Jonathan Naylor	  Centralised disconnection processing.
+ *	mar/20/00	Daniela Squassoni Disabling/enabling of facilities 
+ *					  negotiation.
  */
 
 #include <linux/config.h>
@@ -206,7 +208,7 @@ void x25_write_internal(struct sock *sk, int frametype)
 			len     = x25_addr_aton(addresses, &sk->protinfo.x25->dest_addr, &sk->protinfo.x25->source_addr);
 			dptr    = skb_put(skb, len);
 			memcpy(dptr, addresses, len);
-			len     = x25_create_facilities(facilities, &sk->protinfo.x25->facilities);
+			len     = x25_create_facilities(facilities, &sk->protinfo.x25->facilities, sk->protinfo.x25->neighbour->global_facil_mask);
 			dptr    = skb_put(skb, len);
 			memcpy(dptr, facilities, len);
 			dptr = skb_put(skb, sk->protinfo.x25->calluserdata.cudlength);
@@ -218,7 +220,7 @@ void x25_write_internal(struct sock *sk, int frametype)
 			dptr    = skb_put(skb, 2);
 			*dptr++ = X25_CALL_ACCEPTED;
 			*dptr++ = 0x00;		/* Address lengths */
-			len     = x25_create_facilities(facilities, &sk->protinfo.x25->facilities);
+			len     = x25_create_facilities(facilities, &sk->protinfo.x25->facilities, sk->protinfo.x25->vc_facil_mask);
 			dptr    = skb_put(skb, len);
 			memcpy(dptr, facilities, len);
 			dptr = skb_put(skb, sk->protinfo.x25->calluserdata.cudlength);

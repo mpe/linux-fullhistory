@@ -817,7 +817,7 @@ extern int                      sock_no_sendmsg(struct socket *,
 						struct msghdr *, int,
 						struct scm_cookie *);
 extern int                      sock_no_recvmsg(struct socket *,
-						struct msghdr *, int,
+						struct msghdr *, int, int,
 						struct scm_cookie *);
 extern int			sock_no_mmap(struct file *file,
 					     struct socket *sock,

@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.87 2000/03/30 02:09:07 davem Exp $
+/* $Id: ioctl32.c,v 1.88 2000/04/14 10:10:34 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997-2000  Jakub Jelinek  (jakub@redhat.com)
@@ -1816,6 +1816,7 @@ struct atm_iobuf32 {
 #define ATM_GETSTATZ32    _IOW('a', ATMIOC_SARCOM+1, struct atmif_sioc32)
 #define ATM_GETLOOP32	  _IOW('a', ATMIOC_SARCOM+2, struct atmif_sioc32)
 #define ATM_SETLOOP32	  _IOW('a', ATMIOC_SARCOM+3, struct atmif_sioc32)
+#define ATM_QUERYLOOP32	  _IOW('a', ATMIOC_SARCOM+4, struct atmif_sioc32)
 
 static struct {
         unsigned int cmd32;
@@ -1836,7 +1837,8 @@ static struct {
 	{ ATM_GETSTAT32,     ATM_GETSTAT },
 	{ ATM_GETSTATZ32,    ATM_GETSTATZ },
 	{ ATM_GETLOOP32,     ATM_GETLOOP },
-	{ ATM_SETLOOP32,     ATM_SETLOOP }
+	{ ATM_SETLOOP32,     ATM_SETLOOP },
+	{ ATM_QUERYLOOP32,   ATM_QUERYLOOP }
 };
 
 #define NR_ATM_IOCTL (sizeof(atm_ioctl_map)/sizeof(atm_ioctl_map[0]))
@@ -1996,6 +1998,7 @@ static int do_atm_ioctl(unsigned int fd, unsigned int cmd32, unsigned long arg)
 	case ATM_GETSTATZ:
 	case ATM_GETLOOP:
 	case ATM_SETLOOP:
+	case ATM_QUERYLOOP:
                 return do_atmif_sioc(fd, cmd, arg);
         }
 
@@ -3110,6 +3113,7 @@ HANDLE_IOCTL(ATM_GETSTAT32, do_atm_ioctl)
 HANDLE_IOCTL(ATM_GETSTATZ32, do_atm_ioctl)
 HANDLE_IOCTL(ATM_GETLOOP32, do_atm_ioctl)
 HANDLE_IOCTL(ATM_SETLOOP32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_QUERYLOOP32, do_atm_ioctl)
 HANDLE_IOCTL(SONET_GETSTAT, do_atm_ioctl)
 HANDLE_IOCTL(SONET_GETSTATZ, do_atm_ioctl)
 HANDLE_IOCTL(SONET_GETDIAG, do_atm_ioctl)

@@ -25,7 +25,7 @@ do_revalidate(struct dentry *dentry)
 }
 
 
-#if !defined(__alpha__) && !defined(__sparc__) && !defined(__ia64__)
+#if !defined(__alpha__) && !defined(__sparc__) && !defined(__ia64__) && !defined(__s390__)
 
 /*
  * For backward compatibility?  Maybe this should be moved
@@ -115,7 +115,7 @@ static int cp_new_stat(struct inode * inode, struct stat * statbuf)
 }
 
 
-#if !defined(__alpha__) && !defined(__sparc__) && !defined(__ia64__)
+#if !defined(__alpha__) && !defined(__sparc__) && !defined(__ia64__) && !defined(__s390__)
 /*
  * For backward compatibility?  Maybe this should be moved
  * into arch/i386 instead?
@@ -161,7 +161,7 @@ asmlinkage long sys_newstat(char * filename, struct stat * statbuf)
 	return error;
 }
 
-#if !defined(__alpha__) && !defined(__sparc__) && !defined(__ia64__)
+#if !defined(__alpha__) && !defined(__sparc__) && !defined(__ia64__) && !defined(__s390__)
 
 /*
  * For backward compatibility?  Maybe this should be moved
@@ -209,7 +209,7 @@ asmlinkage long sys_newlstat(char * filename, struct stat * statbuf)
 	return error;
 }
 
-#if !defined(__alpha__) && !defined(__sparc__) && !defined(__ia64__)
+#if !defined(__alpha__) && !defined(__sparc__) && !defined(__ia64__) && !defined(__s390__)
 
 /*
  * For backward compatibility?  Maybe this should be moved

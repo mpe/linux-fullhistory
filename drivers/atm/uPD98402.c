@@ -141,7 +141,7 @@ static int uPD98402_ioctl(struct atm_dev *dev,unsigned int cmd,void *arg)
 			return fetch_stats(dev,(struct sonet_stats *) arg,
 			    cmd == SONET_GETSTATZ);
 		case SONET_SETFRAMING:
-			return set_framing(dev,(int) arg);
+			return set_framing(dev,(int) (long) arg);
 		case SONET_GETFRAMING:
 			return put_user(PRIV(dev)->framing,(int *) arg) ?
 			    -EFAULT : 0;

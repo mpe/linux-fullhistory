@@ -627,33 +627,7 @@ void smp_promstop_others(void)
 		smp_cross_call(&xcall_promstop, 0, 0, 0);
 }
 
-static inline void sparc64_do_profile(unsigned long pc, unsigned long o7)
-{
-	if (prof_buffer && current->pid) {
-		extern int _stext;
-		extern int rwlock_impl_begin, rwlock_impl_end;
-		extern int atomic_impl_begin, atomic_impl_end;
-		extern int __memcpy_begin, __memcpy_end;
-		extern int __bitops_begin, __bitops_end;
-
-		if ((pc >= (unsigned long) &atomic_impl_begin &&
-		     pc < (unsigned long) &atomic_impl_end) ||
-		    (pc >= (unsigned long) &rwlock_impl_begin &&
-		     pc < (unsigned long) &rwlock_impl_end) ||
-		    (pc >= (unsigned long) &__memcpy_begin &&
-		     pc < (unsigned long) &__memcpy_end) ||
-		    (pc >= (unsigned long) &__bitops_begin &&
-		     pc < (unsigned long) &__bitops_end))
-			pc = o7;
-
-		pc -= (unsigned long) &_stext;
-		pc >>= prof_shift;
-
-		if(pc >= prof_len)
-			pc = prof_len - 1;
-		atomic_inc((atomic_t *)&prof_buffer[pc]);
-	}
-}
+extern void sparc64_do_profile(unsigned long pc, unsigned long o7);
 
 static unsigned long current_tick_offset;
 
@@ -862,7 +836,7 @@ cycles_t cacheflush_time;
 
 static void __init smp_tune_scheduling (void)
 {
-	unsigned long flush_base, flags, *p;
+	unsigned long orig_flush_base, flush_base, flags, *p;
 	unsigned int ecache_size, order;
 	cycles_t tick1, tick2, raw;
 
@@ -881,7 +855,8 @@ static void __init smp_tune_scheduling (void)
 					 "ecache-size", (512 * 1024));
 	if (ecache_size > (4 * 1024 * 1024))
 		ecache_size = (4 * 1024 * 1024);
-	flush_base = __get_free_pages(GFP_KERNEL, order = get_order(ecache_size));
+	orig_flush_base = flush_base =
+		__get_free_pages(GFP_KERNEL, order = get_order(ecache_size));
 
 	if (flush_base != 0UL) {
 		__save_and_cli(flags);
@@ -923,7 +898,7 @@ static void __init smp_tune_scheduling (void)
 		 */
 		cacheflush_time = (raw - (raw >> 2));
 
-		free_pages(flush_base, order);
+		free_pages(orig_flush_base, order);
 	} else {
 		cacheflush_time = ((ecache_size << 2) +
 				   (ecache_size << 1));

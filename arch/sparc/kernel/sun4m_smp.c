@@ -440,33 +440,14 @@ void smp4m_cross_call_irq(void)
 	ccall_info.processors_out[i] = 1;
 }
 
-/* Protects counters touched during level14 ticker */
-static spinlock_t ticker_lock = SPIN_LOCK_UNLOCKED;
-
-/* 32-bit Sparc specific profiling function. */
-static inline void sparc_do_profile(unsigned long pc)
-{
-	if(prof_buffer && current->pid) {
-		extern int _stext;
-
-		pc -= (unsigned long) &_stext;
-		pc >>= prof_shift;
-
-		spin_lock(&ticker_lock);
-		if(pc < prof_len)
-			prof_buffer[pc]++;
-		else
-			prof_buffer[prof_len - 1]++;
-		spin_unlock(&ticker_lock);
-	}
-}
-
 extern unsigned int prof_multiplier[NR_CPUS];
 extern unsigned int prof_counter[NR_CPUS];
 
 extern void update_one_process(struct task_struct *p, unsigned long ticks,
 			       unsigned long user, unsigned long system,
 			       int cpu);
+
+extern void sparc_do_profile(unsigned long pc, unsigned long o7);
 
 void smp4m_percpu_timer_interrupt(struct pt_regs *regs)
 {
@@ -475,7 +456,7 @@ void smp4m_percpu_timer_interrupt(struct pt_regs *regs)
 	clear_profile_irq(mid_xlate[cpu]);
 
 	if(!user_mode(regs))
-		sparc_do_profile(regs->pc);
+		sparc_do_profile(regs->pc, regs->u_regs[UREG_RETPC]);
 
 	if(!--prof_counter[cpu]) {
 		int user = user_mode(regs);

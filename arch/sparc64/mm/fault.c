@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.45 2000/03/27 10:38:51 davem Exp $
+/* $Id: fault.c,v 1.46 2000/04/12 08:10:23 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -110,7 +110,8 @@ static unsigned int get_user_insn(unsigned long tpc)
 	if(!pte_present(pte))
 		goto out;
 
-	pa = (pte_pagenr(pte) << PAGE_SHIFT) + (tpc & ~PAGE_MASK);
+	pa  = phys_base + (pte_pagenr(pte) << PAGE_SHIFT);
+	pa += (tpc & ~PAGE_MASK);
 
 	/* Use phys bypass so we don't pollute dtlb/dcache. */
 	__asm__ __volatile__("lduwa [%1] %2, %0"

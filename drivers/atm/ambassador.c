@@ -1251,10 +1251,15 @@ static int amb_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
     }
   }
   
+  // prevent module unload while sleeping (kmalloc/down)
+  // doing this any earlier would complicate more error return paths
+  MOD_INC_USE_COUNT;
+  
   // get space for our vcc stuff
   vcc = kmalloc (sizeof(amb_vcc), GFP_KERNEL);
   if (!vcc) {
     PRINTK (KERN_ERR, "out of memory!");
+    MOD_DEC_USE_COUNT;
     return -ENOMEM;
   }
   atm_vcc->dev_data = (void *) vcc;
@@ -1340,7 +1345,6 @@ static int amb_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
   // indicate readiness
   set_bit(ATM_VF_READY,&atm_vcc->flags);
   
-  MOD_INC_USE_COUNT;
   return 0;
 }
 
@@ -1420,7 +1424,9 @@ static void amb_close (struct atm_vcc * atm_vcc) {
   
   // say the VPI/VCI is free again
   clear_bit(ATM_VF_ADDR,&atm_vcc->flags);
+
   MOD_DEC_USE_COUNT;
+  return;
 }
 
 /********** DebugIoctl **********/

@@ -19,7 +19,7 @@
 
 */
 
-static const char version[] = "Linux Tulip driver version 0.9.4.2 (Mar 21, 2000)\n";
+static const char version[] = "Linux Tulip driver version 0.9.4.3 (Apr 14, 2000)\n";
 
 #include <linux/module.h>
 #include "tulip.h"

@@ -17,6 +17,7 @@
 #include <linux/hdreg.h>
 
 #include <linux/interrupt.h>
+#include <linux/init.h>
 #include <linux/pci.h>
 #include <linux/ide.h>
 

@@ -1,4 +1,4 @@
-/* $Id: sab82532.c,v 1.41 2000/03/13 03:54:17 davem Exp $
+/* $Id: sab82532.c,v 1.42 2000/04/13 07:22:35 ecd Exp $
  * sab82532.c: ASYNC Driver for the SIEMENS SAB82532 DUSCC.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -176,12 +176,22 @@ static struct ebrg_struct ebrg_table[] = {
 
 #define NR_EBRG_VALUES	(sizeof(ebrg_table)/sizeof(struct ebrg_struct))
 
-#define SAB82532_MAX_TEC_DELAY	2000	/* 2 ms */
+#define SAB82532_MAX_TEC_TIMEOUT 200000	/* 1 character time (at 50 baud) */
+#define SAB82532_MAX_CEC_TIMEOUT  50000	/* 2.5 TX CLKs (at 50 baud) */
 
 static __inline__ void sab82532_tec_wait(struct sab82532 *info)
 {
-	int count = SAB82532_MAX_TEC_DELAY;
-	while ((readb(&info->regs->r.star) & SAB82532_STAR_TEC) && --count)
+	int timeout = info->tec_timeout;
+
+	while ((readb(&info->regs->r.star) & SAB82532_STAR_TEC) && --timeout)
+		udelay(1);
+}
+
+static __inline__ void sab82532_cec_wait(struct sab82532 *info)
+{
+	int timeout = info->cec_timeout;
+
+	while ((readb(&info->regs->r.star) & SAB82532_STAR_CEC) && --timeout)
 		udelay(1);
 }
 
@@ -209,8 +219,7 @@ static __inline__ void sab82532_start_tx(struct sab82532 *info)
 	}
 
 	/* Issue a Transmit Frame command. */
-	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
-		udelay(1);
+	sab82532_cec_wait(info);
 	writeb(SAB82532_CMDR_XF, &info->regs->w.cmdr);
 
 out:
@@ -277,8 +286,7 @@ static void batten_down_hatches(struct sab82532 *info)
 	tmp = readb(&info->regs->rw.rfc);
 	tmp &= ~(SAB82532_RFC_RFDF);
 	writeb(tmp, &info->regs->rw.rfc);
-	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
-		udelay(1);
+	sab82532_cec_wait(info);
 	writeb(SAB82532_CMDR_RRES, &info->regs->w.cmdr);
 
 #ifndef __sparc_v9__
@@ -293,8 +301,7 @@ static void batten_down_hatches(struct sab82532 *info)
 	 * Reset FIFO to character + status mode.
 	 */
 	writeb(saved_rfc, &info->regs->w.rfc);
-	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
-		udelay(1);
+	sab82532_cec_wait(info);
 	writeb(SAB82532_CMDR_RRES, &info->regs->w.cmdr);
 }
 
@@ -345,16 +352,19 @@ static inline void receive_chars(struct sab82532 *info,
 		free_fifo++;
 	}
 
-	if (stat->sreg.isr0 & SAB82532_ISR0_TCD) {
-		count = readb(&info->regs->r.rbcl) & (info->recv_fifo_size - 1);
-		free_fifo++;
-	}
-
 	/* Issue a FIFO read command in case we where idle. */
 	if (stat->sreg.isr0 & SAB82532_ISR0_TIME) {
-		if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
-			udelay(1);
+		sab82532_cec_wait(info);
 		writeb(SAB82532_CMDR_RFRD, &info->regs->w.cmdr);
+		/* Wait for command execution, to catch the TCD below. */
+		sab82532_cec_wait(info);
+	}
+
+	if (stat->sreg.isr0 & SAB82532_ISR0_TCD) {
+		count = readb(&info->regs->r.rbcl) & (info->recv_fifo_size - 1);
+		if (count == 0)
+			count = info->recv_fifo_size;
+		free_fifo++;
 	}
 
 	if (stat->sreg.isr0 & SAB82532_ISR0_RFO) {
@@ -370,8 +380,7 @@ static inline void receive_chars(struct sab82532 *info,
 
 	/* Issue Receive Message Complete command. */
 	if (free_fifo) {
-		if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
-			udelay(1);
+		sab82532_cec_wait(info);
 		writeb(SAB82532_CMDR_RMC, &info->regs->w.cmdr);
 	}
 
@@ -451,8 +460,7 @@ static inline void transmit_chars(struct sab82532 *info,
 	}
 
 	/* Issue a Transmit Frame command. */
-	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
-		udelay(1);
+	sab82532_cec_wait(info);
 	writeb(SAB82532_CMDR_XF, &info->regs->w.cmdr);
 
 	if (info->xmit_cnt < WAKEUP_CHARS)
@@ -709,18 +717,14 @@ sab82532_init_line(struct sab82532 *info)
 	/*
 	 * Wait for any commands or immediate characters
 	 */
-	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
-		udelay(1);
+	sab82532_cec_wait(info);
 	sab82532_tec_wait(info);
 
 	/*
 	 * Clear the FIFO buffers.
 	 */
-	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
-		udelay(1);
 	writeb(SAB82532_CMDR_RRES, &info->regs->w.cmdr);
-	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
-		udelay(1);
+	sab82532_cec_wait(info);
 	writeb(SAB82532_CMDR_XRES, &info->regs->w.cmdr);
 
 	/*
@@ -997,10 +1001,15 @@ static void change_speed(struct sab82532 *info)
 	ebrg |= (ebrg_table[i].m << 6);
 
 	info->baud = ebrg_table[i].baud;
-	if (info->baud)
+	if (info->baud) {
 		info->timeout = (info->xmit_fifo_size * HZ * bits) / info->baud;
-	else
+		info->tec_timeout = (10 * 1000000) / info->baud;
+		info->cec_timeout = info->tec_timeout >> 2;
+	} else {
 		info->timeout = 0;
+		info->tec_timeout = SAB82532_MAX_TEC_TIMEOUT;
+		info->cec_timeout = SAB82532_MAX_CEC_TIMEOUT;
+	}
 	info->timeout += HZ / 50;		/* Add .02 seconds of slop */
 
 	/* CTS flow control flags */
@@ -1037,8 +1046,7 @@ static void change_speed(struct sab82532 *info)
 					    SAB82532_ISR0_TIME;
 
 	save_flags(flags); cli();
-	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
-		udelay(1);
+	sab82532_cec_wait(info);
 	sab82532_tec_wait(info);
 	writeb(dafo, &info->regs->w.dafo);
 	writeb(ebrg & 0xff, &info->regs->w.bgr);
@@ -2163,7 +2171,7 @@ static void __init sab82532_kgdb_hook(int line)
 
 static inline void __init show_serial_version(void)
 {
-	char *revision = "$Revision: 1.41 $";
+	char *revision = "$Revision: 1.42 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2267,6 +2275,8 @@ int __init sab82532_init(void)
 		info->custom_divisor = 16;
 		info->close_delay = 5*HZ/10;
 		info->closing_wait = 30*HZ;
+		info->tec_timeout = SAB82532_MAX_TEC_TIMEOUT;
+		info->cec_timeout = SAB82532_MAX_CEC_TIMEOUT;
 		info->x_char = 0;
 		info->event = 0;	
 		info->blocked_open = 0;
@@ -2550,8 +2560,7 @@ sab82532_console_setup(struct console *con, char *options)
 		info->flags |= ASYNC_CHECK_CD;
 
 	save_flags(flags); cli();
-	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
-		udelay(1);
+	sab82532_cec_wait(info);
 	sab82532_tec_wait(info);
 	writeb(dafo, &info->regs->w.dafo);
 	writeb(ebrg & 0xff, &info->regs->w.bgr);

@@ -1,4 +1,4 @@
-/* $Id: delay.h,v 1.7 1997/11/07 18:24:31 mj Exp $
+/* $Id: delay.h,v 1.8 2000/04/13 04:45:59 davem Exp $
  * delay.h: Linux delay routines on the V9.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu).
@@ -8,6 +8,7 @@
 #define __SPARC64_DELAY_H
 
 #ifdef __SMP__
+#include <linux/sched.h>
 #include <asm/smp.h>
 #endif 
 

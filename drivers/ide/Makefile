@@ -25,8 +25,8 @@ MOD_LIST_NAME := IDE_MODULES
 LX_OBJS :=
 MX_OBJS :=
 
-ifeq ($(CONFIG_BLK_DEV_AEC6210),y)
-IDE_OBJS += aec6210.o
+ifeq ($(CONFIG_BLK_DEV_AEC62XX),y)
+IDE_OBJS += aec62xx.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_ALI14XX),y)

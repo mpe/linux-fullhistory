@@ -368,7 +368,13 @@ int report_drive_dmaing (ide_drive_t *drive)
 		}
 	} else if ((id->field_valid & 4) &&
 		   (id->dma_ultra & (id->dma_ultra >> 8) & 7)) {
-		printk(", UDMA(33)");	/* UDMA BIOS-enabled! */
+		if ((id->dma_ultra >> 10) & 1) {
+			printk(", UDMA(33)");	/* UDMA BIOS-enabled! */
+		} else if ((id->dma_ultra >> 9) & 1) {
+			printk(", UDMA(25)");	/* UDMA BIOS-enabled! */
+		} else {
+			printk(", UDMA(16)");	/* UDMA BIOS-enabled! */
+		}
 	} else if (id->field_valid & 4) {
 		printk(", (U)DMA");	/* Can be BIOS-enabled! */
 	} else {

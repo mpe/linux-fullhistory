@@ -143,10 +143,7 @@
 #define dprintf4(a1,a2,a3,a4)
 #endif
 
-#define print_ip(a)	 printk("%d.%d.%d.%d",(ntohl(a)>>24)&0xFF,\
-					      (ntohl(a)>>16)&0xFF,\
-					      (ntohl(a)>>8)&0xFF,\
-					      (ntohl(a))&0xFF);
+#define print_ip(a)	 printk("%u.%u.%u.%u", NIPQUAD(a));
 
 #ifdef DEBUG_IP_FIREWALL
 #define dprint_ip(a)	print_ip(a)

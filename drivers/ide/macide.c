@@ -18,6 +18,7 @@
 #include <linux/hdreg.h>
 #include <linux/delay.h>
 #include <linux/ide.h>
+#include <linux/init.h>
 
 #include <asm/machw.h>
 #include <asm/macintosh.h>

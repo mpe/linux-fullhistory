@@ -5,7 +5,7 @@
  *
  *		The IP fragmentation functionality.
  *		
- * Version:	$Id: ip_fragment.c,v 1.47 2000/02/09 21:11:33 davem Exp $
+ * Version:	$Id: ip_fragment.c,v 1.48 2000/04/13 01:05:33 davem Exp $
  *
  * Authors:	Fred N. van Kempen <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox <Alan.Cox@linux.org>
@@ -387,8 +387,13 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	*/
 	skb->security = qp->fragments->skb->security;
 
+#ifdef CONFIG_NETFILTER
+	/* Connection association is same as fragment (if any). */
+	skb->nfct = qp->fragments->skb->nfct;
+	nf_conntrack_get(skb->nfct);
 #ifdef CONFIG_NETFILTER_DEBUG
 	skb->nf_debug = qp->fragments->skb->nf_debug;
+#endif
 #endif
 
 	/* Done with all fragments. Fixup the new IP header. */
@@ -594,7 +599,7 @@ out:
 	 */
 out_oversize:
 	if (net_ratelimit())
-		printk(KERN_INFO "Oversized packet received from %d.%d.%d.%d\n",
+		printk(KERN_INFO "Oversized packet received from %u.%u.%u.%u\n",
 			NIPQUAD(iph->saddr));
 	/* the skb isn't in a fragment, so fall through to free it */
 out_freeskb:

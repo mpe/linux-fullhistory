@@ -13,8 +13,10 @@
  *		2 of the License, or (at your option) any later version.
  *
  *	History
- *	X.25 001	Jonathan Naylor	Started coding.
- *	X.25 002	Jonathan Naylor	New timer architecture.
+ *	X.25 001	Jonathan Naylor	  Started coding.
+ *	X.25 002	Jonathan Naylor	  New timer architecture.
+ *	mar/20/00	Daniela Squassoni Disabling/enabling of facilities 
+ *					  negotiation.
  */
 
 #include <linux/config.h>
@@ -293,6 +295,7 @@ void x25_link_device_up(struct net_device *dev)
 	x25_neigh->dev      = dev;
 	x25_neigh->state    = X25_LINK_STATE_0;
 	x25_neigh->extended = 0;
+	x25_neigh->global_facil_mask = (X25_MASK_REVERSE | X25_MASK_THROUGHPUT | X25_MASK_PACKET_SIZE | X25_MASK_WINDOW_SIZE); /* enables negotiation */
 	x25_neigh->t20      = sysctl_x25_restart_request_timeout;
 
 	save_flags(flags); cli();
@@ -377,6 +380,8 @@ int x25_subscr_ioctl(unsigned int cmd, void *arg)
 	switch (cmd) {
 
 		case SIOCX25GSUBSCRIP:
+			if (copy_from_user(&x25_subscr, arg, sizeof(struct x25_subscrip_struct)))
+				return -EFAULT;
 			if ((dev = x25_dev_get(x25_subscr.device)) == NULL)
 				return -EINVAL;
 			if ((x25_neigh = x25_get_neigh(dev)) == NULL) {
@@ -385,6 +390,7 @@ int x25_subscr_ioctl(unsigned int cmd, void *arg)
 			}
 			dev_put(dev);
 			x25_subscr.extended = x25_neigh->extended;
+			x25_subscr.global_facil_mask = x25_neigh->global_facil_mask;
 			if (copy_to_user(arg, &x25_subscr, sizeof(struct x25_subscrip_struct)))
 				return -EFAULT;
 			break;
@@ -402,6 +408,7 @@ int x25_subscr_ioctl(unsigned int cmd, void *arg)
 			if (x25_subscr.extended != 0 && x25_subscr.extended != 1)
 				return -EINVAL;
 			x25_neigh->extended = x25_subscr.extended;
+			x25_neigh->global_facil_mask = x25_subscr.global_facil_mask;
 			break;
 
 		default:

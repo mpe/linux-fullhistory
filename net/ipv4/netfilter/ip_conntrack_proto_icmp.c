@@ -86,8 +86,8 @@ static int icmp_packet(struct ip_conntrack *ct,
 }
 
 /* Called when a new connection for this protocol found. */
-static int icmp_new(struct ip_conntrack *conntrack,
-		     struct iphdr *iph, size_t len)
+static unsigned long icmp_new(struct ip_conntrack *conntrack,
+			      struct iphdr *iph, size_t len)
 {
 	static u_int8_t valid_new[]
 		= { [ICMP_ECHO] = 1,
@@ -103,7 +103,7 @@ static int icmp_new(struct ip_conntrack *conntrack,
 		DUMP_TUPLE(&conntrack->tuplehash[0].tuple);
 		return 0;
 	}
-	return 1;
+	return ICMP_TIMEOUT;
 }
 
 struct ip_conntrack_protocol ip_conntrack_protocol_icmp

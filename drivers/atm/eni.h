@@ -13,6 +13,7 @@
 #include <linux/time.h>
 #include <linux/pci.h>
 #include <linux/spinlock.h>
+#include <asm/atomic.h>
 
 #include "midway.h"
 
@@ -46,7 +47,7 @@ struct eni_tx {
 	int reserved;			/* reserved peak cell rate */
 	int shaping;			/* shaped peak cell rate */
 	struct sk_buff_head backlog;	/* queue of waiting TX buffers */
-	int backlog_len;		/* length of backlog in bytes */
+	atomic_t backlog_len;		/* length of backlog in bytes */
 };
 
 struct eni_vcc {
@@ -68,6 +69,8 @@ struct eni_vcc {
 struct eni_dev {
 	/*-------------------------------- spinlock */
 	spinlock_t lock;		/* sync with interrupt */
+	struct tasklet_struct task;	/* tasklet for interrupt work */
+	u32 events;			/* pending events */
 	/*-------------------------------- base pointers into Midway address
 					   space */
 	unsigned long phy;		/* PHY interface chip registers */

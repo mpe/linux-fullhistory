@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.53 2000/02/09 21:11:04 davem Exp $
+/* $Id: time.c,v 1.54 2000/04/13 08:14:30 anton Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -70,6 +70,37 @@ struct intersil *intersil_clock;
 
 #endif
 
+static spinlock_t ticker_lock = SPIN_LOCK_UNLOCKED;
+
+/* 32-bit Sparc specific profiling function. */
+void sparc_do_profile(unsigned long pc, unsigned long o7)
+{
+	if(prof_buffer && current->pid) {
+		extern int _stext;
+		extern int __copy_user_begin, __copy_user_end;
+		extern int __atomic_begin, __atomic_end;
+		extern int __bitops_begin, __bitops_end;
+
+		if ((pc >= (unsigned long) &__copy_user_begin &&
+		     pc < (unsigned long) &__copy_user_end) ||
+		    (pc >= (unsigned long) &__atomic_begin &&
+		     pc < (unsigned long) &__atomic_end) ||
+		    (pc >= (unsigned long) &__bitops_begin &&
+		     pc < (unsigned long) &__bitops_end))
+			pc = o7;
+
+		pc -= (unsigned long) &_stext;
+		pc >>= prof_shift;
+
+		spin_lock(&ticker_lock);
+		if(pc < prof_len)
+			prof_buffer[pc]++;
+		else
+			prof_buffer[prof_len - 1]++;
+		spin_unlock(&ticker_lock);
+	}
+}
+
 __volatile__ unsigned int *master_l10_counter;
 __volatile__ unsigned int *master_l10_limit;
 
@@ -81,6 +112,11 @@ void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	/* last time the cmos clock got updated */
 	static long last_rtc_update=0;
+
+#ifndef __SMP__
+	if(!user_mode(regs))
+		sparc_do_profile(regs->pc, regs->u_regs[UREG_RETPC]);
+#endif
 
 #ifdef CONFIG_SUN4
 	if((idprom->id_machtype == (SM_SUN4 | SM_4_260)) ||

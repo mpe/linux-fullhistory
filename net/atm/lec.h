@@ -16,7 +16,6 @@
 
 #if defined (CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
 #include <linux/if_bridge.h>
-extern rwlock_t lane_bridge_hook_lock;
 struct net_bridge_fdb_entry *(*br_fdb_get_hook)(struct net_bridge *br,
                                                 unsigned char *addr);
 void (*br_fdb_put_hook)(struct net_bridge_fdb_entry *ent);

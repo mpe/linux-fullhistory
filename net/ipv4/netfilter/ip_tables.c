@@ -39,7 +39,7 @@
 #define IP_NF_ASSERT(x)						\
 do {								\
 	if (!(x))						\
-		printk("IPT_ASSERT: %s:%s:%u\n",		\
+		printk("IP_NF_ASSERT: %s:%s:%u\n",		\
 		       __FUNCTION__, __FILE__, __LINE__);	\
 } while(0)
 #else
@@ -683,7 +683,6 @@ check_entry(struct ipt_entry *e, const char *name, unsigned int size,
 	target = find_target_lock(t->u.name, &ret, &ipt_mutex);
 	if (!target) {
 		duprintf("check_entry: `%s' not found\n", t->u.name);
-		up(&ipt_mutex);
 		return ret;
 	}
 	if (target->me)
@@ -1283,17 +1282,16 @@ ipt_register_target(struct ipt_target *target)
 {
 	int ret;
 
+	MOD_INC_USE_COUNT;
 	ret = down_interruptible(&ipt_mutex);
 	if (ret != 0)
 		return ret;
 
-	if (list_named_insert(&ipt_target, target)) {
-		MOD_INC_USE_COUNT;
-		ret = 0;
-	} else {
+	if (!list_named_insert(&ipt_target, target)) {
 		duprintf("ipt_register_target: `%s' already in list!\n",
 			 target->name);
 		ret = -EINVAL;
+		MOD_DEC_USE_COUNT;
 	}
 	up(&ipt_mutex);
 	return ret;
@@ -1313,16 +1311,18 @@ ipt_register_match(struct ipt_match *match)
 {
 	int ret;
 
+	MOD_INC_USE_COUNT;
 	ret = down_interruptible(&ipt_mutex);
-	if (ret != 0)
+	if (ret != 0) {
+		MOD_DEC_USE_COUNT;
 		return ret;
-
+	}
 	if (list_named_insert(&ipt_match, match)) {
-		MOD_INC_USE_COUNT;
 		ret = 0;
 	} else {
 		duprintf("ipt_register_match: `%s' already in list!\n",
 			 match->name);
+		MOD_DEC_USE_COUNT;
 		ret = -EINVAL;
 	}
 	up(&ipt_mutex);
@@ -1346,10 +1346,12 @@ int ipt_register_table(struct ipt_table *table)
 	static struct ipt_table_info bootstrap
 		= { 0, 0, { 0 }, { 0 }, { }, { } };
 
+	MOD_INC_USE_COUNT;
 	newinfo = vmalloc(sizeof(struct ipt_table_info)
 			  + SMP_ALIGN(table->table->size) * smp_num_cpus);
 	if (!newinfo) {
 		ret = -ENOMEM;
+		MOD_DEC_USE_COUNT;
 		return ret;
 	}
 	memcpy(newinfo->entries, table->table->entries, table->table->size);
@@ -1361,12 +1363,14 @@ int ipt_register_table(struct ipt_table *table)
 			      table->table->underflow);
 	if (ret != 0) {
 		vfree(newinfo);
+		MOD_DEC_USE_COUNT;
 		return ret;
 	}
 
 	ret = down_interruptible(&ipt_mutex);
 	if (ret != 0) {
 		vfree(newinfo);
+		MOD_DEC_USE_COUNT;
 		return ret;
 	}
 
@@ -1386,7 +1390,6 @@ int ipt_register_table(struct ipt_table *table)
 
 	table->lock = RW_LOCK_UNLOCKED;
 	list_prepend(&ipt_tables, table);
-	MOD_INC_USE_COUNT;
 
  unlock:
 	up(&ipt_mutex);
@@ -1394,6 +1397,7 @@ int ipt_register_table(struct ipt_table *table)
 
  free_unlock:
 	vfree(newinfo);
+	MOD_DEC_USE_COUNT;
 	goto unlock;
 }
 

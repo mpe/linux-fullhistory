@@ -36,7 +36,7 @@
  * 26-03-2000 Fixed acer, esstype and sm_games module options.
  *  Alessandro Zummo <azummo@ita.flashnet.it>
  *
- * 27-03-2000 ISAPnP multiple card detection, cleanup, and reorg.
+ * 12-04-2000 ISAPnP cleanup, reorg, fixes, and multiple card support.
  *  Thanks to Gaël Quéri and Alessandro Zummo for testing and fixes.
  *  Paul E. Laufer <pelaufer@csupomona.edu>
  *
@@ -177,7 +177,8 @@ static struct address_info cfg[SB_CARDS_MAX];
 static struct address_info cfg_mpu[SB_CARDS_MAX];
 
 struct pci_dev 	*sb_dev[SB_CARDS_MAX] 	= {NULL}, 
-		*mpu_dev[SB_CARDS_MAX]	= {NULL};
+		*mpu_dev[SB_CARDS_MAX]	= {NULL},
+		*opl_dev[SB_CARDS_MAX]	= {NULL};
 
 
 #if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
@@ -189,6 +190,7 @@ static int uart401	= 0;
 
 static int audio_activated[SB_CARDS_MAX] = {0};
 static int mpu_activated[SB_CARDS_MAX]   = {0};
+static int opl_activated[SB_CARDS_MAX]   = {0};
 #else
 static int isapnp	= 0;
 static int multiple	= 1;
@@ -234,193 +236,204 @@ MODULE_PARM_DESC(acer,		"Set this to detect cards in some ACER notebooks");
 /* Please add new entries at the end of the table */
 static struct {
 	char *name; 
-	unsigned short card_vendor, card_device, audio_vendor, audio_function, mpu_vendor, mpu_function;
+	unsigned short	card_vendor, card_device, 
+			audio_vendor, audio_function,
+			mpu_vendor, mpu_function,
+			opl_vendor, opl_function;
 	short dma, dma2, mpu_io, mpu_irq; /* see sb_init() */
 } sb_isapnp_list[] __initdata = {
 	{"Sound Blaster 16", 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0024),
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster 16", 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0026), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster 16", 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0027), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster 16", 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0029), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster 16", 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x002b), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster Vibra16S", 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0051), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0001),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster Vibra16C", 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0070), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0001),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster Vibra16CL", 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0080), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0041),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster Vibra16X", 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x00F0), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0043),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 32", 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0039), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 32",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0042), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 32",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0043), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 32",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0044),
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 32",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0048), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 32",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0054), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 32",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x009C), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0041),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 64",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x009D), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0042),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 64 Gold",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x009E), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0044),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 64",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x00C1), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0042),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 64",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x00C3), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 64",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x00C5), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 64",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x00C7), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster AWE 64",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x00E4), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045),
-		0,0,
+		0,0,0,0,
 		0,1,1,-1},
 	{"ESS 1868",
 		ISAPNP_VENDOR('E','S','S'), ISAPNP_DEVICE(0x1868), 
 		ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1868),
-		0,0,
+		0,0,0,0,
 		0,1,2,-1},
 	{"ESS 1868",
 		ISAPNP_VENDOR('E','S','S'), ISAPNP_DEVICE(0x1868), 
 		ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x8611),
-		0,0,
+		0,0,0,0,
 		0,1,2,-1},
 	{"ESS 1869 PnP AudioDrive", 
 		ISAPNP_VENDOR('E','S','S'), ISAPNP_DEVICE(0x0003), 
 		ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1869),
-		0,0,
+		0,0,0,0,
 		0,1,2,-1},
 	{"ESS 1869",
 		ISAPNP_VENDOR('E','S','S'), ISAPNP_DEVICE(0x1869), 
 		ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1869),
-		0,0,
+		0,0,0,0,
 		0,1,2,-1},
 	{"ESS 1878",
 		ISAPNP_VENDOR('E','S','S'), ISAPNP_DEVICE(0x1878), 
 		ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1878),
-		0,0,
+		0,0,0,0,
 		0,1,2,-1},
 	{"ESS 1879",
 		ISAPNP_VENDOR('E','S','S'), ISAPNP_DEVICE(0x1879), 
 		ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1879),
-		0,0,
+		0,0,0,0,
 		0,1,2,-1},
 	{"CMI 8330 SoundPRO",
 		ISAPNP_VENDOR('C','M','I'), ISAPNP_DEVICE(0x0001), 
 		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001),
 		ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001),
+		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0001),
 		0,1,0,-1},
 	{"Diamond DT0197H",
 		ISAPNP_VENDOR('R','W','B'), ISAPNP_DEVICE(0x1688), 
 		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0001),
 		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001),
+		ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001),
 		0,-1,0,0},
 	{"ALS007",
 		ISAPNP_VENDOR('A','L','S'), ISAPNP_DEVICE(0x0007),
 		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0001),
 		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001),
+		ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001),
 		0,-1,0,0},
 	{"ALS100",
 	       	ISAPNP_VENDOR('A','L','S'), ISAPNP_DEVICE(0x0001), 
 		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0001),
 		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001),
+		ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001),
 		1,0,0,0},
 	{"ALS110",
 		ISAPNP_VENDOR('A','L','S'), ISAPNP_DEVICE(0x0110),
 		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x1001),
 		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x1001),
+		ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001),
 		1,0,0,0},
 	{"ALS120",
 		ISAPNP_VENDOR('A','L','S'), ISAPNP_DEVICE(0x0120),
 		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x2001),
 		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x2001),
+		ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001),
 		1,0,0,0},
 	{"ALS200",
 		ISAPNP_VENDOR('A','L','S'), ISAPNP_DEVICE(0x0200),
 		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0020),
 		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0020),
+		ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001),
 		1,0,0,0},
 	{"RTL3000",
 		ISAPNP_VENDOR('R','T','L'), ISAPNP_DEVICE(0x3000),
 		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x2001),
 		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x2001),
+		ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001),
 		1,0,0,0},
 	{0}
 };
@@ -478,13 +491,37 @@ static struct pci_dev *sb_init(struct pci_bus *bus, struct address_info *hw_conf
 	} else
 		return(NULL);
 
+	/* Cards with separate OPL3 device (ALS, CMI, etc.)
+	 * This is just to activate the device... */
+	if(sb_isapnp_list[slot].opl_vendor || sb_isapnp_list[slot].opl_function) {
+		if((opl_dev[card] = isapnp_find_dev(bus, sb_isapnp_list[slot].opl_vendor, sb_isapnp_list[slot].opl_function, NULL))) {
+			int ret = opl_dev[card]->prepare(opl_dev[card]);
+			/* If device is active, assume configured with
+			 * /proc/isapnp and use anyway */
+			if(ret && ret != -EBUSY) {
+				printk(KERN_ERR "sb: OPL device could not be autoconfigured.\n");
+				return(sb_dev[card]);
+			}
+			if(ret == -EBUSY)
+				opl_activated[card] = 1;
+
+			/* Some have irq and dma for opl. the opl3 driver wont
+			 * use 'em so don't configure 'em and hope it works -PEL */
+			opl_dev[card]->irq_resource[0].flags = 0;
+			opl_dev[card]->dma_resource[0].flags = 0;
+
+			opl_dev[card] = activate_dev(sb_isapnp_list[slot].name, "opl3", opl_dev[card]);
+		} else
+			printk(KERN_ERR "sb: %s isapnp panic: opl3 device not found\n", sb_isapnp_list[slot].name);
+	}
+
 	/* Cards with MPU as part of Audio device (CTL and ESS) */
 	if(!sb_isapnp_list[slot].mpu_vendor) {
 		mpu_config->io_base	= sb_dev[card]->resource[sb_isapnp_list[slot].mpu_io].start;
 		return(sb_dev[card]);
 	}
-
-	/* Cards with separate MPU device (ALS, CMI, etc */
+	
+	/* Cards with separate MPU device (ALS, CMI, etc.) */
 	if(!uart401)
 		return(sb_dev[card]);
 	if((mpu_dev[card] = isapnp_find_dev(bus, sb_isapnp_list[slot].mpu_vendor, sb_isapnp_list[slot].mpu_function, NULL)))
@@ -499,7 +536,7 @@ static struct pci_dev *sb_init(struct pci_bus *bus, struct address_info *hw_conf
 		if(ret == -EBUSY)
 			mpu_activated[card] = 1;
 		
-		/* Some mpus use audio device irq? Need to test... -PEL */
+		/* Some cards ask for irq but don't need them - azummo */
 		if(sb_isapnp_list[slot].mpu_irq == -1)
 			mpu_dev[card]->irq_resource[0].flags = 0;
 		
@@ -510,7 +547,7 @@ static struct pci_dev *sb_init(struct pci_bus *bus, struct address_info *hw_conf
 		}
 	}
 	else
-		printk(KERN_ERR "sb: %s panic: mpu not found\n", sb_isapnp_list[slot].name);
+		printk(KERN_ERR "sb: %s isapnp panic: mpu not found\n", sb_isapnp_list[slot].name);
 	
 	return(sb_dev[card]);
 }
@@ -584,8 +621,9 @@ static int __init init_sb(void)
 	
 	for(card = 0; card < max; card++, sb_cards_num++) {
 #if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
-		/* Please remember that even with CONFIG_ISAPNP defined one should still be
-		   able to disable PNP support for this single driver! */
+		/* Please remember that even with CONFIG_ISAPNP defined one
+		 * should still be able to disable PNP support for this 
+		 * single driver! */
 		if(isapnp && (sb_isapnp_probe(&cfg[card], &cfg_mpu[card], card) < 0) ) {
 			if(!sb_cards_num) {
 				printk(KERN_NOTICE "sb: No ISAPnP cards found, trying standard ones...\n");
@@ -646,6 +684,8 @@ static void __exit cleanup_sb(void)
 			sb_dev[i]->deactivate(sb_dev[i]);
 		if(!mpu_activated[i] && mpu_dev[i])
 			mpu_dev[i]->deactivate(mpu_dev[i]);
+		if(!opl_activated[i] && opl_dev[i])
+			opl_dev[i]->deactivate(opl_dev[i]);
 #endif
 	}
 	SOUND_LOCK_END;	
@@ -657,7 +697,7 @@ module_exit(cleanup_sb);
 #ifndef MODULE
 static int __init setup_sb(char *str)
 {
-	/* io, irq, dma, dma2 */
+	/* io, irq, dma, dma2 - just the basics */
 	int ints[5];
 	
 	str = get_options(str, ARRAY_SIZE(ints), ints);

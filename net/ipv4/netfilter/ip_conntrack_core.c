@@ -343,6 +343,7 @@ init_conntrack(const struct ip_conntrack_tuple *tuple,
 	size_t hash, repl_hash;
 	struct ip_conntrack_expect *expected;
 	enum ip_conntrack_info ctinfo;
+	unsigned long extra_jiffies;
 	int i;
 
 	if (!invert_tuple(&repl_tuple, tuple, protocol)) {
@@ -366,19 +367,24 @@ init_conntrack(const struct ip_conntrack_tuple *tuple,
 	repl_hash = hash_conntrack(&repl_tuple);
 
 	memset(conntrack, 0, sizeof(struct ip_conntrack));
-	atomic_set(&conntrack->ct_general.use, 1);
+	atomic_set(&conntrack->ct_general.use, 2);
 	conntrack->ct_general.destroy = destroy_conntrack;
 	conntrack->tuplehash[IP_CT_DIR_ORIGINAL].tuple = *tuple;
 	conntrack->tuplehash[IP_CT_DIR_ORIGINAL].ctrack = conntrack;
 	conntrack->tuplehash[IP_CT_DIR_REPLY].tuple = repl_tuple;
 	conntrack->tuplehash[IP_CT_DIR_REPLY].ctrack = conntrack;
-	for(i=0; i < IP_CT_NUMBER; i++)
+	for (i=0; i < IP_CT_NUMBER; i++)
 		conntrack->infos[i].master = &conntrack->ct_general;
 
-	if (!protocol->new(conntrack, skb->nh.iph, skb->len)) {
+	extra_jiffies = protocol->new(conntrack, skb->nh.iph, skb->len);
+	if (!extra_jiffies) {
 		kmem_cache_free(ip_conntrack_cachep, conntrack);
 		return 1;
 	}
+	conntrack->timeout.data = (unsigned long)conntrack;
+	conntrack->timeout.function = death_by_timeout;
+	conntrack->timeout.expires = jiffies + extra_jiffies;
+	add_timer(&conntrack->timeout);
 
 	/* Sew in at head of hash list. */
 	WRITE_LOCK(&ip_conntrack_lock);
@@ -421,7 +427,7 @@ init_conntrack(const struct ip_conntrack_tuple *tuple,
 }
 
 static void
-resolve_normal_ct(struct sk_buff *skb)
+resolve_normal_ct(struct sk_buff *skb, int create)
 {
 	struct ip_conntrack_tuple tuple;
 	struct ip_conntrack_tuple_hash *h;
@@ -436,7 +442,7 @@ resolve_normal_ct(struct sk_buff *skb)
 	do {
 		/* look for tuple match */
 		h = ip_conntrack_find_get(&tuple, NULL);
-		if (!h && init_conntrack(&tuple, proto, skb))
+		if (!h && (!create || init_conntrack(&tuple, proto, skb)))
 			return;
 	} while (!h);
 
@@ -464,13 +470,15 @@ resolve_normal_ct(struct sk_buff *skb)
 }
 
 /* Return conntrack and conntrack_info a given skb */
-struct ip_conntrack *
-ip_conntrack_get(struct sk_buff *skb, enum ip_conntrack_info *ctinfo)
+static struct ip_conntrack *
+__ip_conntrack_get(struct sk_buff *skb,
+		   enum ip_conntrack_info *ctinfo,
+		   int create)
 {
 	if (!skb->nfct) {
 		/* It may be an icmp error... */
 		if (!icmp_error_track(skb))
-			resolve_normal_ct(skb);
+			resolve_normal_ct(skb, create);
 	}
 
 	if (skb->nfct) {
@@ -483,6 +491,12 @@ ip_conntrack_get(struct sk_buff *skb, enum ip_conntrack_info *ctinfo)
 		return ct;
 	}
 	return NULL;
+}
+
+struct ip_conntrack *
+ip_conntrack_get(struct sk_buff *skb, enum ip_conntrack_info *ctinfo)
+{
+	return __ip_conntrack_get(skb, ctinfo, 0);
 }
 
 /* Netfilter hook itself. */
@@ -512,13 +526,13 @@ unsigned int ip_conntrack_in(unsigned int hooknum,
 			return NF_STOLEN;
 	}
 
-	ct = ip_conntrack_get(*pskb, &ctinfo);
-	if (!ct)
+	ct = __ip_conntrack_get(*pskb, &ctinfo, 1);
+	if (!ct) {
 		/* Not valid part of a connection */
 		return NF_ACCEPT;
+	}
 
 	proto = find_proto((*pskb)->nh.iph->protocol);
-	/* If this is new, this is first time timer will be set */
 	ret = proto->packet(ct, (*pskb)->nh.iph, (*pskb)->len, ctinfo);
 
 	if (ret == -1) {
@@ -645,24 +659,16 @@ void ip_conntrack_helper_unregister(struct ip_conntrack_helper *me)
 	MOD_DEC_USE_COUNT;
 }
 
-/* Refresh conntrack for this many jiffies: if noone calls this,
-   conntrack will vanish with current skb. */
+/* Refresh conntrack for this many jiffies. */
 void ip_ct_refresh(struct ip_conntrack *ct, unsigned long extra_jiffies)
 {
+	IP_NF_ASSERT(ct->timeout.data == (unsigned long)ct);
+
 	WRITE_LOCK(&ip_conntrack_lock);
-	/* If this hasn't had a timer before, it's still being set up */
-	if (ct->timeout.data == 0) {
-		ct->timeout.data = (unsigned long)ct;
-		ct->timeout.function = death_by_timeout;
+	/* Need del_timer for race avoidance (may already be dying). */
+	if (del_timer(&ct->timeout)) {
 		ct->timeout.expires = jiffies + extra_jiffies;
-		atomic_inc(&ct->ct_general.use);
 		add_timer(&ct->timeout);
-	} else {
-		/* Need del_timer for race avoidance (may already be dying). */
-		if (del_timer(&ct->timeout)) {
-			ct->timeout.expires = jiffies + extra_jiffies;
-			add_timer(&ct->timeout);
-		}
 	}
 	WRITE_UNLOCK(&ip_conntrack_lock);
 }

@@ -54,10 +54,10 @@ static int udp_packet(struct ip_conntrack *conntrack,
 }
 
 /* Called when a new connection for this protocol found. */
-static int udp_new(struct ip_conntrack *conntrack,
-		    struct iphdr *iph, size_t len)
+static unsigned long udp_new(struct ip_conntrack *conntrack,
+			     struct iphdr *iph, size_t len)
 {
-	return 1;
+	return UDP_TIMEOUT;
 }
 
 struct ip_conntrack_protocol ip_conntrack_protocol_udp

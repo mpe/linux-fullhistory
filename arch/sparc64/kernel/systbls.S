@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.71 2000/03/15 02:43:36 davem Exp $
+/* $Id: systbls.S,v 1.72 2000/04/13 07:30:34 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -56,8 +56,8 @@ sys_call_table32:
 /*170*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_getdents
 	.word sys_setsid, sys_fchdir, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 /*180*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_sigpending, sys32_query_module
-	.word sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_newuname
-/*190*/	.word sys32_init_module, sys32_personality, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+	.word sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sparc64_newuname
+/*190*/	.word sys32_init_module, sparc64_personality, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 	.word sys_nis_syscall, sys_nis_syscall, sys_getppid, sys32_sigaction, sys_sgetmask
 /*200*/	.word sys_ssetmask, sys_sigsuspend, sys32_newlstat, sys_uselib, old32_readdir
 	.word sys_nis_syscall, sys32_socketcall, sys_syslog, sys_nis_syscall, sys_nis_syscall
@@ -115,8 +115,8 @@ sys_call_table:
 /*170*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getdents
 	.word sys_setsid, sys_fchdir, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 /*180*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_query_module
-	.word sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_newuname
-/*190*/	.word sys_init_module, sys_personality, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+	.word sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sparc64_newuname
+/*190*/	.word sys_init_module, sparc64_personality, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 	.word sys_nis_syscall, sys_nis_syscall, sys_getppid, sys_nis_syscall, sys_sgetmask
 /*200*/	.word sys_ssetmask, sys_nis_syscall, sys_newlstat, sys_uselib, sys_nis_syscall
 	.word sys_nis_syscall, sys_socketcall, sys_syslog, sys_nis_syscall, sys_nis_syscall

@@ -2358,7 +2358,7 @@ static struct inode *get_vfs_inode (struct super_block *sb,
 
 /*  File operations for device entries follow  */
 
-static int devfs_read (struct file *file, char *buf, size_t len, loff_t *ppos)
+static ssize_t devfs_read (struct file *file, char *buf, size_t len, loff_t *ppos)
 {
     if ( S_ISDIR (file->f_dentry->d_inode->i_mode) ) return -EISDIR;
     return -EINVAL;

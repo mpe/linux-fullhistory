@@ -14,6 +14,8 @@
  *
  *	History
  *	X.25 001	Split from x25_subr.c
+ *	mar/20/00	Daniela Squassoni Disabling/enabling of facilities 
+ *					  negotiation.
  */
 
 #include <linux/config.h>
@@ -43,12 +45,13 @@
  *	Parse a set of facilities into the facilities structure. Unrecognised
  *	facilities are written to the debug log file.
  */
-int x25_parse_facilities(struct sk_buff *skb, struct x25_facilities *facilities)
+int x25_parse_facilities(struct sk_buff *skb, struct x25_facilities *facilities, unsigned long *vc_fac_mask)
 {
 	unsigned int len;
 	unsigned char *p = skb->data;
 
 	len = *p++;
+	*vc_fac_mask = 0;
 
 	while (len > 0) {
 		switch (*p & X25_FAC_CLASS_MASK) {
@@ -56,9 +59,11 @@ int x25_parse_facilities(struct sk_buff *skb, struct x25_facilities *facilities)
 				switch (*p) {
 					case X25_FAC_REVERSE:
 						facilities->reverse = (p[1] & 0x01);
+						*vc_fac_mask |= X25_MASK_REVERSE;
 						break;
 					case X25_FAC_THROUGHPUT:
 						facilities->throughput = p[1];
+						*vc_fac_mask |= X25_MASK_THROUGHPUT;
 						break;
 					default:
 						printk(KERN_DEBUG "X.25: unknown facility %02X, value %02X\n", p[0], p[1]);
@@ -73,10 +78,12 @@ int x25_parse_facilities(struct sk_buff *skb, struct x25_facilities *facilities)
 					case X25_FAC_PACKET_SIZE:
 						facilities->pacsize_in  = p[1];
 						facilities->pacsize_out = p[2];
+						*vc_fac_mask |= X25_MASK_PACKET_SIZE;
 						break;
 					case X25_FAC_WINDOW_SIZE:
 						facilities->winsize_in  = p[1];
 						facilities->winsize_out = p[2];
+						*vc_fac_mask |= X25_MASK_WINDOW_SIZE;
 						break;
 					default:
 						printk(KERN_DEBUG "X.25: unknown facility %02X, values %02X, %02X\n", p[0], p[1], p[2]);
@@ -106,28 +113,34 @@ int x25_parse_facilities(struct sk_buff *skb, struct x25_facilities *facilities)
 /*
  *	Create a set of facilities.
  */
-int x25_create_facilities(unsigned char *buffer, struct x25_facilities *facilities)
+int x25_create_facilities(unsigned char *buffer, struct x25_facilities *facilities, unsigned long facil_mask)
 {
 	unsigned char *p = buffer + 1;
 	int len;
 
-	if (facilities->reverse != 0) {
+	if (facil_mask == 0) {
+		buffer [0] = 0; /* length of the facilities field in call_req or call_accept packets */
+		len = 1; /* 1 byte for the length field */
+		return len;
+	}
+
+	if ((facilities->reverse != 0) && (facil_mask & X25_MASK_REVERSE)) {
 		*p++ = X25_FAC_REVERSE;
 		*p++ = (facilities->reverse) ? 0x01 : 0x00;
 	}
 
-	if (facilities->throughput != 0) {
+	if ((facilities->throughput != 0) && (facil_mask & X25_MASK_THROUGHPUT)) {
 		*p++ = X25_FAC_THROUGHPUT;
 		*p++ = facilities->throughput;
 	}
 
-	if (facilities->pacsize_in != 0 || facilities->pacsize_out != 0) {
+	if ((facilities->pacsize_in != 0 || facilities->pacsize_out != 0) && (facil_mask & X25_MASK_PACKET_SIZE)) {
 		*p++ = X25_FAC_PACKET_SIZE;
 		*p++ = (facilities->pacsize_in  == 0) ? facilities->pacsize_out : facilities->pacsize_in;
 		*p++ = (facilities->pacsize_out == 0) ? facilities->pacsize_in  : facilities->pacsize_out;
 	}
 
-	if (facilities->winsize_in != 0 || facilities->winsize_out != 0) {
+	if ((facilities->winsize_in != 0 || facilities->winsize_out != 0) && (facil_mask & X25_MASK_WINDOW_SIZE)) {
 		*p++ = X25_FAC_WINDOW_SIZE;
 		*p++ = (facilities->winsize_in  == 0) ? facilities->winsize_out : facilities->winsize_in;
 		*p++ = (facilities->winsize_out == 0) ? facilities->winsize_in  : facilities->winsize_out;
@@ -156,7 +169,7 @@ int x25_negotiate_facilities(struct sk_buff *skb, struct sock *sk, struct x25_fa
 
 	*new = *ours;
 
-	len = x25_parse_facilities(skb, &theirs);
+	len = x25_parse_facilities(skb, &theirs, &sk->protinfo.x25->vc_facil_mask);
 
 	/*
 	 *	They want reverse charging, we won't accept it.

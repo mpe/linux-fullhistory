@@ -1021,7 +1021,6 @@ static int arp_get_info(char *buffer, char **start, off_t offset, int length)
 	char hbuffer[HBUFFERLEN];
 	int i,j,k;
 	const char hexbuf[] =  "0123456789ABCDEF";
-	char abuf[16];
 
 	size = sprintf(buffer,"IP address       HW type     Flags       HW address            Mask     Device\n");
 
@@ -1061,8 +1060,8 @@ static int arp_get_info(char *buffer, char **start, off_t offset, int length)
 #endif
 
 			size = sprintf(buffer+len,
-				"%-17s0x%-10x0x%-10x%s",
-				in_ntoa2(*(u32*)n->primary_key, abuf),
+				"%u.%u.%u.%u0x%-10x0x%-10x%s",
+				NIPQUAD(*(u32*)n->primary_key),
 				hatype,
 				arp_state_to_flags(n), 
 				hbuffer);
@@ -1091,8 +1090,8 @@ static int arp_get_info(char *buffer, char **start, off_t offset, int length)
 			int hatype = dev ? dev->type : 0;
 
 			size = sprintf(buffer+len,
-				"%-17s0x%-10x0x%-10x%s",
-				in_ntoa2(*(u32*)n->key, abuf),
+				"%u.%u.%u.%u0x%-10x0x%-10x%s",
+				NIPQUAD(*(u32*)n->key),
 				hatype,
  				ATF_PUBL|ATF_PERM,
 				"00:00:00:00:00:00");

@@ -1,6 +1,6 @@
 /* net/atm/common.h - ATM sockets (common part for PVC and SVC) */
  
-/* Written 1995-1998 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #ifndef NET_ATM_COMMON_H
@@ -27,9 +27,6 @@ int atm_getsockopt(struct socket *sock,int level,int optname,char *optval,
 int atm_connect_vcc(struct atm_vcc *vcc,int itf,short vpi,int vci);
 void atm_release_vcc_sk(struct sock *sk,int free_sk);
 int atm_change_qos(struct atm_vcc *vcc,struct atm_qos *qos);
-/* -- now in atmdev.h:
-void atm_async_release_vcc(struct atm_vcc *vcc,int reply);
-*/
 void atm_shutdown_dev(struct atm_dev *dev);
 
 int atm_proc_init(void);

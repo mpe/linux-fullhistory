@@ -1376,6 +1376,16 @@ static int idefloppy_media_change (ide_drive_t *drive)
 }
 
 /*
+ *	Revalidate the new media. Should set blk_size[]
+ */
+static void idefloppy_revalidate (ide_drive_t *drive)
+{
+	grok_partitions(HWIF(drive)->gd, drive->select.b.unit,
+			1<<PARTN_BITS,
+			current_capacity(drive));
+}
+
+/*
  *	Return the current floppy capacity to ide.c.
  */
 static unsigned long idefloppy_capacity (ide_drive_t *drive)
@@ -1604,6 +1614,7 @@ static ide_driver_t idefloppy_driver = {
 	idefloppy_open,		/* open */
 	idefloppy_release,	/* release */
 	idefloppy_media_change,	/* media_change */
+	idefloppy_revalidate,	/* media_change */
 	NULL,			/* pre_reset */
 	idefloppy_capacity,	/* capacity */
 	NULL,			/* special */

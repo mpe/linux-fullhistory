@@ -1,4 +1,4 @@
-/* $Id: sbus.c,v 1.10 2000/03/10 07:52:08 davem Exp $
+/* $Id: sbus.c,v 1.11 2000/04/14 09:13:04 davem Exp $
  * sbus.c: UltraSparc SBUS controller support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -315,7 +315,7 @@ void sbus_free_consistent(struct sbus_dev *sdev, size_t size, void *cpu, dma_add
 dma_addr_t sbus_map_single(struct sbus_dev *sdev, void *ptr, size_t size, int dir)
 {
 	struct sbus_iommu *iommu = sdev->bus->iommu;
-	unsigned long npages, phys_base, flags;
+	unsigned long npages, pbase, flags;
 	iopte_t *iopte;
 	u32 dma_base, offset;
 	unsigned long iopte_bits;
@@ -323,10 +323,10 @@ dma_addr_t sbus_map_single(struct sbus_dev *sdev, void *ptr, size_t size, int di
 	if (dir == SBUS_DMA_NONE)
 		BUG();
 
-	phys_base = (unsigned long) ptr;
-	offset = (u32) (phys_base & ~PAGE_MASK);
-	size = (PAGE_ALIGN(phys_base + size) - (phys_base & PAGE_MASK));
-	phys_base = (unsigned long) __pa(phys_base & PAGE_MASK);
+	pbase = (unsigned long) ptr;
+	offset = (u32) (pbase & ~PAGE_MASK);
+	size = (PAGE_ALIGN(pbase + size) - (pbase & PAGE_MASK));
+	pbase = (unsigned long) __pa(pbase & PAGE_MASK);
 
 	spin_lock_irqsave(&iommu->lock, flags);
 	npages = size >> PAGE_SHIFT;
@@ -337,8 +337,8 @@ dma_addr_t sbus_map_single(struct sbus_dev *sdev, void *ptr, size_t size, int di
 	if (dir != SBUS_DMA_TODEVICE)
 		iopte_bits |= IOPTE_WRITE;
 	while (npages--) {
-		*iopte++ = __iopte(iopte_bits | (phys_base & IOPTE_PAGE));
-		phys_base += PAGE_SIZE;
+		*iopte++ = __iopte(iopte_bits | (pbase & IOPTE_PAGE));
+		pbase += PAGE_SIZE;
 	}
 	npages = size >> PAGE_SHIFT;
 	spin_unlock_irqrestore(&iommu->lock, flags);

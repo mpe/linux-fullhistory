@@ -257,7 +257,7 @@ enum {
 #define ATM_ATMOPT_CLP	1	/* set CLP bit */
 
 
-typedef struct { unsigned short bits; } atm_vcc_flags_t;
+typedef struct { unsigned int bits; } atm_vcc_flags_t;
 
 
 struct atm_vcc {
@@ -286,7 +286,6 @@ struct atm_vcc {
 	struct sk_buff_head recvq;	/* receive queue */
 	struct k_atm_aal_stats *stats;	/* pointer to AAL stats group */
 	wait_queue_head_t sleep;	/* if socket is busy */
-	wait_queue_head_t wsleep;	/* if waiting for write buffer space */
 	struct sock	*sk;		/* socket backpointer */
 	struct atm_vcc	*prev,*next;
 	/* SVC part --- may move later ------------------------------------- */

@@ -1,8 +1,8 @@
 /*
-  $Id: fore200e.c,v 1.2 2000/03/21 21:19:24 davem Exp $
+  $Id: fore200e.c,v 1.5 2000/04/14 10:10:34 davem Exp $
 
   A FORE Systems 200E-series driver for ATM on Linux.
-  Christophe Lizzi (lizzi@cnam.fr), October 1999-February 2000.
+  Christophe Lizzi (lizzi@cnam.fr), October 1999-March 2000.
 
   Based on the PCA-200E driver from Uwe Dannowski (Uwe.Dannowski@inf.tu-dresden.de).
 
@@ -32,10 +32,11 @@
 #include <linux/init.h>
 #include <linux/capability.h>
 #include <linux/sched.h>
+#include <linux/interrupt.h>
+#include <linux/bitops.h>
 #include <linux/atmdev.h>
 #include <linux/sonet.h>
 #include <linux/atm_suni.h>
-#include <linux/bitops.h>
 #include <asm/io.h>
 #include <asm/string.h>
 #include <asm/segment.h>
@@ -66,7 +67,7 @@
 #define FORE200E_52BYTE_AAL0_SDU
 #endif
 
-#define FORE200E_VERSION "0.2b"
+#define FORE200E_VERSION "0.2d"
 
 
 #define FORE200E         "fore200e: "
@@ -444,6 +445,7 @@ fore200e_shutdown(struct fore200e* fore200e)
 }
 
 
+
 #ifdef CONFIG_ATM_FORE200E_PCA
 
 static u32 fore200e_pca_read(volatile u32* addr)
@@ -477,7 +479,8 @@ fore200e_pca_dma_map(struct fore200e* fore200e, void* virt_addr, int size, int d
 static void
 fore200e_pca_dma_unmap(struct fore200e* fore200e, u32 dma_addr, int size, int direction)
 {
-    DPRINTK(3, "PCI DVMA unmapping: dma_addr = 0x%08x, size = %d, direction = %d\n", dma_addr, size, direction);
+    DPRINTK(3, "PCI DVMA unmapping: dma_addr = 0x%08x, size = %d, direction = %d\n",
+	    dma_addr, size, direction);
 
     pci_unmap_single((struct pci_dev*)fore200e->bus_dev, dma_addr, size, direction);
 }
@@ -496,7 +499,8 @@ fore200e_pca_dma_sync(struct fore200e* fore200e, u32 dma_addr, int size, int dir
    (to hold descriptors, status, queues, etc.) shared by the driver and the adapter */
 
 static int
-fore200e_pca_dma_chunk_alloc(struct fore200e* fore200e, struct chunk* chunk, int size, int nbr, int alignment)
+fore200e_pca_dma_chunk_alloc(struct fore200e* fore200e, struct chunk* chunk,
+			     int size, int nbr, int alignment)
 {
 #if defined(__sparc_v9__)
     /* returned chunks are page-aligned */
@@ -659,6 +663,7 @@ fore200e_pca_detect(const struct fore200e_bus* bus, int index)
 
     sprintf(fore200e->name, "%s-%d", bus->model_name, index - 1);
 
+    pci_enable_device(pci_dev);
     pci_set_master(pci_dev);
 
     return fore200e;
@@ -756,7 +761,8 @@ fore200e_sba_dma_map(struct fore200e* fore200e, void* virt_addr, int size, int d
 static void
 fore200e_sba_dma_unmap(struct fore200e* fore200e, u32 dma_addr, int size, int direction)
 {
-    DPRINTK(3, "SBUS DVMA unmapping: dma_addr = 0x%08x, size = %d, direction = %d,\n", dma_addr, size, direction);
+    DPRINTK(3, "SBUS DVMA unmapping: dma_addr = 0x%08x, size = %d, direction = %d,\n",
+	    dma_addr, size, direction);
 
     sbus_unmap_single((struct sbus_dev*)fore200e->bus_dev, dma_addr, size, direction);
 }
@@ -775,7 +781,8 @@ fore200e_sba_dma_sync(struct fore200e* fore200e, u32 dma_addr, int size, int dir
    (to hold descriptors, status, queues, etc.) shared by the driver and the adapter */
 
 static int
-fore200e_sba_dma_chunk_alloc(struct fore200e* fore200e, struct chunk* chunk, int size, int nbr, int alignment)
+fore200e_sba_dma_chunk_alloc(struct fore200e* fore200e, struct chunk* chunk,
+			     int size, int nbr, int alignment)
 {
     chunk->alloc_size = chunk->align_size = size * nbr;
 
@@ -1234,13 +1241,23 @@ fore200e_interrupt(int irq, void* dev, struct pt_regs* regs)
     }
     DPRINTK(3, "valid interrupt on device %c\n", fore200e->name[9]);
 
-    fore200e_irq_rx(fore200e);
-
-    if (fore200e->host_txq.txing)
-	fore200e_irq_tx(fore200e);
+    tasklet_schedule(&fore200e->tasklet);
     
     fore200e->bus->irq_ack(fore200e);
 }
+
+
+static void
+fore200e_tasklet(unsigned long data)
+{
+    struct fore200e* fore200e = (struct fore200e*) data;
+
+    fore200e_irq_rx(fore200e);
+    
+    if (fore200e->host_txq.txing)
+	fore200e_irq_tx(fore200e);
+}
+
 
 
 static int
@@ -1400,7 +1417,7 @@ fore200e_open(struct atm_vcc *vcc, short vpi, int vci)
     if (vci == ATM_VCI_UNSPEC || vpi == ATM_VPI_UNSPEC)
 	return 0;
 
-    set_bit(ATM_VF_ADDR,&vcc->flags);
+    set_bit(ATM_VF_ADDR, &vcc->flags);
     vcc->itf    = vcc->dev->number;
 
     DPRINTK(2, "opening %d.%d.%d:%d QoS = (tx: cl=%s, pcr=%d-%d, cdv=%d, max_sdu=%d; "
@@ -1463,7 +1480,7 @@ fore200e_open(struct atm_vcc *vcc, short vpi, int vci)
     fore200e_vcc->tx_min_pdu = fore200e_vcc->rx_min_pdu = 65536;
     fore200e_vcc->tx_max_pdu = fore200e_vcc->rx_max_pdu = 0;
     
-    clear_bit(ATM_VF_READY,&vcc->flags);
+    set_bit(ATM_VF_READY, &vcc->flags);
     return 0;
 }
 
@@ -1489,6 +1506,8 @@ fore200e_close(struct atm_vcc* vcc)
 	fore200e->available_cell_rate += vcc->qos.txtp.max_pcr;
 	up(&fore200e->rate_sf);
     }
+
+    clear_bit(ATM_VF_READY, &vcc->flags);
 }
 
 
@@ -1506,7 +1525,7 @@ fore200e_send(struct atm_vcc *vcc, struct sk_buff *skb)
     struct host_txq_entry* entry;
     struct tpd*            tpd;
     struct tpd_haddr       tpd_haddr;
-    unsigned long          flags;
+    //unsigned long          flags;
     int                    retry        = CONFIG_ATM_FORE200E_TX_RETRY;
     int                    tx_copy      = 0;
     int                    tx_len       = skb->len;
@@ -1531,7 +1550,7 @@ fore200e_send(struct atm_vcc *vcc, struct sk_buff *skb)
     
   retry_here:
     
-    spin_lock_irqsave(&fore200e->tx_lock, flags);
+    tasklet_disable(&fore200e->tasklet);
 
     entry = &txq->host_entry[ txq->head ];
     
@@ -1542,7 +1561,7 @@ fore200e_send(struct atm_vcc *vcc, struct sk_buff *skb)
 	
 	if (*entry->status != STATUS_FREE) {
 	    
-	    spin_unlock_irqrestore(&fore200e->tx_lock, flags);
+	    tasklet_enable(&fore200e->tasklet);
 
 	    /* retry once again? */
 	    if(--retry > 0)
@@ -1582,7 +1601,7 @@ fore200e_send(struct atm_vcc *vcc, struct sk_buff *skb)
 	entry->data = kmalloc(tx_len, GFP_ATOMIC | GFP_DMA);
 	if (entry->data == NULL) {
 	    
-	    spin_unlock_irqrestore(&fore200e->tx_lock, flags);
+	    tasklet_enable(&fore200e->tasklet);
 	    if (vcc->pop)
 		vcc->pop(vcc, skb);
 	    else
@@ -1606,10 +1625,10 @@ fore200e_send(struct atm_vcc *vcc, struct sk_buff *skb)
     FORE200E_NEXT_ENTRY(txq->head, QUEUE_SIZE_TX);
     txq->txing++;
 
-    spin_unlock_irqrestore(&fore200e->tx_lock, flags);
-    
+    tasklet_enable(&fore200e->tasklet);
+
     /* ensure DMA synchronisation */
-	fore200e->bus->dma_sync(fore200e, tpd->tsd[ 0 ].buffer, tpd->tsd[ 0 ].length, FORE200E_DMA_TODEVICE);
+    fore200e->bus->dma_sync(fore200e, tpd->tsd[ 0 ].buffer, tpd->tsd[ 0 ].length, FORE200E_DMA_TODEVICE);
     
     DPRINTK(3, "tx on %d.%d.%d:%d, len = %u (%u)\n", 
 	    vcc->itf, vcc->vpi, vcc->vci, fore200e_atm2fore_aal(vcc->qos.aal),
@@ -1934,8 +1953,7 @@ fore200e_ioctl(struct atm_dev* dev, unsigned int cmd, void* arg)
 	return put_user(fore200e->loop_mode, (int*)arg) ? -EFAULT : 0;
 
     case ATM_QUERYLOOP:
-	return put_user(ATM_LM_LOC_PHY | ATM_LM_RMT_PHY, (int*)arg) ?
-	    -EFAULT : 0;
+	return put_user(ATM_LM_LOC_PHY | ATM_LM_RMT_PHY, (int*)arg) ? -EFAULT : 0;
     }
 
     return -ENOSYS; /* not implemented */
@@ -1976,7 +1994,7 @@ fore200e_change_qos(struct atm_vcc* vcc,struct atm_qos* qos, int flags)
 	/* update rate control parameters */
 	fore200e_rate_ctrl(qos, &fore200e_vcc->rate);
 
-	set_bit(ATM_VF_HASQOS,&vcc->flags);
+	set_bit(ATM_VF_HASQOS, &vcc->flags);
 	return 0;
     }
     
@@ -1996,6 +2014,8 @@ fore200e_irq_request(struct fore200e* fore200e)
 
     printk(FORE200E "IRQ %s reserved for device %s\n",
 	   fore200e_irq_itoa(fore200e->irq), fore200e->name);
+
+    tasklet_init(&fore200e->tasklet, fore200e_tasklet, (unsigned long)fore200e);
 
     fore200e->state = FORE200E_STATE_IRQ;
     return 0;
@@ -2338,7 +2358,6 @@ fore200e_initialize(struct fore200e* fore200e)
 
     DPRINTK(2, "device %s being initialized\n", fore200e->name);
 
-    spin_lock_init(&fore200e->tx_lock);
     init_MUTEX(&fore200e->rate_sf);
     
     cpq = fore200e->cp_queues = (struct cp_queues*) (fore200e->virt_base + FORE200E_CP_QUEUES_OFFSET);
@@ -2714,7 +2733,7 @@ fore200e_proc_read(struct atm_dev *dev,loff_t* pos,char* page)
 	if (media_index < 0 || media_index > 4)
 	    media_index = 5;
 	
-	switch(fore200e->loop_mode) {
+	switch (fore200e->loop_mode) {
 	    case ATM_LM_NONE:    oc3_index = 0;
 		                 break;
 	    case ATM_LM_LOC_PHY: oc3_index = 1;
@@ -2900,21 +2919,24 @@ fore200e_proc_read(struct atm_dev *dev,loff_t* pos,char* page)
 
 
 #ifdef MODULE
-unsigned int
-init_module(void)
+static unsigned int __init
+fore200e_module_init(void)
 {
     DPRINTK(1, "module loaded\n");
     return fore200e_detect() == 0;
 }
 
-void
-cleanup_module(void)
+static void __exit
+fore200e_module_cleanup(void)
 {
     while (fore200e_boards) {
 	fore200e_cleanup(&fore200e_boards);
     }
     DPRINTK(1, "module being removed\n");
 }
+
+module_init(fore200e_module_init);
+module_exit(fore200e_module_cleanup);
 #endif
 
 

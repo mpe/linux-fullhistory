@@ -62,7 +62,7 @@ running, the suggested command should tell you.
 - Bash                   1.14.7                  ; bash -version
 - Ncpfs                  2.2.0                   ; ncpmount -v
 - Pcmcia-cs              3.1.2                   ; cardmgr -V
-- PPP                    2.3.11                  ; pppd --version
+- PPP                    2.4.0b1                 ; pppd --version
 - Util-linux             2.9i                    ; chsh -v
 - isdn4k-utils           v3.1beta7               ; isdnctrl 2>&1|grep version
 
@@ -391,22 +391,33 @@ support utils to the latest release of pcmcia-cs.
 PPP
 ===
 
-   Due to changes in the PPP driver and routing code, those of you
+   The PPP driver has been restructured to support multilink and
+to enable it to operate over diverse kinds of media.  Those of you
 using PPP networking will need to upgrade your pppd to at least
-version 2.3.11. See ftp://cs.anu.edu.au/pub/software/ppp/ for newest
-versions.
+version 2.4.0b1.  See ftp://linuxcare.com.au/pub/ppp/ for the latest
+version.
 
-   You must make sure that the special device file /dev/ppp exists.
-It can be made by executing this command as root:
+   If you are not using devfs, you must make sure that the special
+device file /dev/ppp exists.  It can be made by executing this command
+as root:
 
 	mknod /dev/ppp c 108 0
 
    If you have built ppp support as modules, you should put the lines
-below in your /etc/modules.conf file. I assume you want asynchronous
-ppp; replace ppp_async by ppp_synctty if you want synchronous ppp.
+below in your /etc/modules.conf file.
 
-	alias char-major-108 ppp_generic
-	alias tty-ldisc-3 ppp_async
+	alias char-major-108	ppp_generic
+	alias /dev/ppp		ppp_generic
+	alias tty-ldisc-3	ppp_async
+	alias tty-ldisc-14	ppp_synctty
+	alias ppp-compress-21	bsd_comp
+	alias ppp-compress-24	ppp_deflate
+	alias ppp-compress-26	ppp_deflate
+
+If you are using devfsd and you have ppp_generic as a module, put the
+following line in your /etc/devfsd.conf:
+
+	LOOKUP		ppp		MODLOAD
 
 iBCS
 ====
@@ -723,8 +734,8 @@ ftp://metalab.unc.edu/pub/Linux/system/serial/setserial-2.15.tar.gz
 PPP
 ===
 
-The 2.3.11 release:
-ftp://cs.anu.edu.au/pub/software/ppp/ppp-2.3.11.tar.gz
+The 2.4.0b1 release:
+ftp://linuxcare.com.au/pub/ppp/ppp-2.4.0b1.tar.gz
 
 IP Chains
 =========

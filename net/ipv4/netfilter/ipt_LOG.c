@@ -38,14 +38,7 @@ static void dump_packet(const struct ipt_log_info *info,
 	 * TOS, len, DF/MF, fragment offset, TTL, src, dst, options. */
 	/* Max length: 40 "SRC=255.255.255.255 DST=255.255.255.255 " */
 	printk("SRC=%u.%u.%u.%u DST=%u.%u.%u.%u ",
-	       (ntohl(iph->saddr)>>24)&0xFF,
-	       (ntohl(iph->saddr)>>16)&0xFF,
-	       (ntohl(iph->saddr)>>8)&0xFF,
-	       (ntohl(iph->saddr))&0xFF,
-	       (ntohl(iph->daddr)>>24)&0xFF,
-	       (ntohl(iph->daddr)>>16)&0xFF,
-	       (ntohl(iph->daddr)>>8)&0xFF,
-	       (ntohl(iph->daddr))&0xFF);
+	       NIPQUAD(iph->saddr), NIPQUAD(iph->daddr));
 
 	/* Max length: 46 "LEN=65535 TOS=0xFF PREC=0xFF TTL=255 ID=65535 " */
 	printk("LEN=%u TOS=0x%02X PREC=0x%02X TTL=%u ID=%u ",
@@ -210,11 +203,7 @@ static void dump_packet(const struct ipt_log_info *info,
 			break;
 		case ICMP_REDIRECT:
 			/* Max length: 24 "GATEWAY=255.255.255.255 " */
-			printk("GATEWAY=%u.%u.%u.%u ",
-			       (ntohl(icmph->un.gateway)>>24)&0xFF,
-			       (ntohl(icmph->un.gateway)>>16)&0xFF,
-			       (ntohl(icmph->un.gateway)>>8)&0xFF,
-			       (ntohl(icmph->un.gateway))&0xFF);
+			printk("GATEWAY=%u.%u.%u.%u ", NIPQUAD(icmph->un.gateway));
 			/* Fall through */
 		case ICMP_DEST_UNREACH:
 		case ICMP_SOURCE_QUENCH:

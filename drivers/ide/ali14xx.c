@@ -48,6 +48,7 @@
 #include <linux/blkdev.h>
 #include <linux/hdreg.h>
 #include <linux/ide.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 
@@ -118,7 +119,7 @@ static void ali14xx_tune_drive (ide_drive_t *drive, byte pio)
 	byte param1, param2, param3, param4;
 	unsigned long flags;
 	ide_pio_data_t d;
-	int bus_speed = ide_system_bus_speed();
+	int bus_speed = system_bus_clock();
 
 	pio = ide_get_best_pio_mode(drive, pio, ALI_MAX_PIO, &d);
 

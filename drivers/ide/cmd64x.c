@@ -19,8 +19,10 @@
 #include <linux/delay.h>
 #include <linux/hdreg.h>
 #include <linux/ide.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
+
 #include "ide_modes.h"
 
 #ifndef SPLIT_BYTE
@@ -271,7 +273,7 @@ static void cmd64x_tuneproc (ide_drive_t *drive, byte mode_wanted)
 	int setup_time, active_time, recovery_time, clock_time, pio_mode, cycle_time;
 	byte recovery_count2, cycle_count;
 	int setup_count, active_count, recovery_count;
-	int bus_speed = ide_system_bus_speed();
+	int bus_speed = system_bus_clock();
 	/*byte b;*/
 	ide_pio_data_t  d;
 
@@ -645,6 +647,9 @@ unsigned int __init pci_init_cmd64x (struct pci_dev *dev, const char *name)
 #endif
 	(void) pci_write_config_byte(dev, DRWTIM23, 0x3f);
 	(void) pci_write_config_byte(dev, DRWTIM3,  0x3f);
+#ifdef CONFIG_PPC
+	(void) pci_write_config_byte(dev, UDIDETCR0, 0xf0);
+#endif /* CONFIG_PPC */
 
 #if defined(DISPLAY_CMD64X_TIMINGS) && defined(CONFIG_PROC_FS)
 	if (!cmd64x_proc) {

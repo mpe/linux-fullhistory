@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.167 2000/04/08 07:21:18 davem Exp $
+ * Version:	$Id: tcp.c,v 1.168 2000/04/13 01:13:06 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -583,9 +583,13 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			answ = 0;
 		else if (sk->urginline || !tp->urg_data ||
 			 before(tp->urg_seq,tp->copied_seq) ||
-			 !before(tp->urg_seq,tp->rcv_nxt))
+			 !before(tp->urg_seq,tp->rcv_nxt)) {
 			answ = tp->rcv_nxt - tp->copied_seq;
-		else
+
+			/* Subtract 1, if FIN is in queue. */
+			if (answ && !skb_queue_empty(&sk->receive_queue))
+				answ -= ((struct sk_buff*)sk->receive_queue.prev)->h.th->fin;
+		} else
 			answ = tp->urg_seq - tp->copied_seq;
 		release_sock(sk);
 		break;

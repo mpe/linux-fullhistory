@@ -158,6 +158,8 @@ calc_key(struct inode *inode, int *ext)
 
 	for (index = 0; index < 4; index++) {
 		kc = &inode->u.affs_i.i_ec->kc[index];
+		if (kc->kc_last == -1)
+			continue;	/* don't look in cache if invalid. */
 		if (*ext == kc->kc_this_seq) {
 			return kc->kc_this_key;
 		} else if (*ext == kc->kc_this_seq + 1) {
@@ -773,7 +775,7 @@ out_truncate:
 	/* Invalidate cache */
 	if (inode->u.affs_i.i_ec) {
 		inode->u.affs_i.i_ec->max_ext = 0;
-		for (key = 0; key < 3; key++) {
+		for (key = 0; key < 4; key++) {
 			inode->u.affs_i.i_ec->kc[key].kc_next_key = 0;
 			inode->u.affs_i.i_ec->kc[key].kc_last     = -1;
 		}

@@ -172,7 +172,7 @@ static int clip_arp_rcv(struct sk_buff *skb)
 	DPRINTK("clip_arp_rcv\n");
 	vcc = ATM_SKB(skb)->vcc;
 	if (!vcc || !atm_charge(vcc,skb->truesize)) {
-		kfree_skb(skb);
+		dev_kfree_skb_any(skb);
 		return 0;
 	}
 	DPRINTK("pushing to %p\n",vcc);
@@ -197,9 +197,8 @@ void clip_push(struct atm_vcc *vcc,struct sk_buff *skb)
 	atm_return(vcc,skb->truesize);
 	skb->dev = clip_vcc->entry ? clip_vcc->entry->neigh->dev : clip_devs;
 		/* clip_vcc->entry == NULL if we don't have an IP address yet */
-	skb->rx_dev = NULL;
 	if (!skb->dev) {
-		kfree_skb(skb);
+		dev_kfree_skb_any(skb);
 		return;
 	}
 	ATM_SKB(skb)->vcc = vcc;
@@ -232,18 +231,20 @@ void clip_push(struct atm_vcc *vcc,struct sk_buff *skb)
 static void clip_pop(struct atm_vcc *vcc,struct sk_buff *skb)
 {
 	struct clip_vcc *clip_vcc = CLIP_VCC(vcc);
+	struct net_device *dev = skb->dev;
 	int old;
+	unsigned long flags;
 
 	DPRINTK("clip_pop(vcc %p)\n",vcc);
 	clip_vcc->old_pop(vcc,skb);
 	/* skb->dev == NULL in outbound ARP packets */
-	if (!skb->dev) return;
-	spin_lock(&PRIV(skb->dev)->xoff_lock);
+	if (!dev) return;
+	spin_lock_irqsave(&PRIV(dev)->xoff_lock,flags);
 	if (atm_may_send(vcc,0)) {
 		old = xchg(&clip_vcc->xoff,0);
-		if (old) netif_wake_queue(skb->dev);
+		if (old) netif_wake_queue(dev);
 	}
-	spin_unlock(&PRIV(skb->dev)->xoff_lock);
+	spin_unlock_irqrestore(&PRIV(dev)->xoff_lock,flags);
 }
 
 
@@ -377,6 +378,7 @@ static int clip_start_xmit(struct sk_buff *skb,struct net_device *dev)
 	struct atmarp_entry *entry;
 	struct atm_vcc *vcc;
 	int old;
+	unsigned long flags;
 
 	DPRINTK("clip_start_xmit (skb %p)\n",skb);
 	if (!skb->dst) {
@@ -439,7 +441,7 @@ return 0;
 		return 0;
 	}
 	if (old) return 0;
-	spin_lock(&clip_priv->xoff_lock);
+	spin_lock_irqsave(&clip_priv->xoff_lock,flags);
 	netif_stop_queue(dev); /* XOFF -> throttle immediately */
 	barrier();
 	if (!entry->vccs->xoff)
@@ -448,7 +450,7 @@ return 0;
 		   good enough, because nothing should really be asleep because
 		   of the brief netif_stop_queue. If this isn't true or if it
 		   changes, use netif_wake_queue instead. */
-	spin_unlock(&clip_priv->xoff_lock);
+	spin_unlock_irqrestore(&clip_priv->xoff_lock,flags);
 	return 0;
 }
 

@@ -19,6 +19,7 @@
 #include <linux/errno.h>
 #include <linux/hdreg.h>
 #include <linux/ide.h>
+#include <linux/init.h>
 
 #include <asm/dma.h>
 #include <asm/ecard.h>

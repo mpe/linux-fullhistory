@@ -1384,7 +1384,8 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 		    peer->v4daddr == saddr) {
 			if (xtime.tv_sec < peer->tcp_ts_stamp + TCP_PAWS_MSL &&
 			    (s32)(peer->tcp_ts - req->ts_recent) > TCP_PAWS_WINDOW) {
-				NETDEBUG(printk(KERN_DEBUG "TW_REC: reject openreq %u/%u %08x/%u\n", peer->tcp_ts, req->ts_recent, saddr, ntohs(skb->h.th->source)));
+				NETDEBUG(printk(KERN_DEBUG "TW_REC: reject openreq %u/%u %u.%u.%u.%u/%u\n", \
+					peer->tcp_ts, req->ts_recent, NIPQUAD(saddr), ntohs(skb->h.th->source)));
 				NET_INC_STATS_BH(PAWSPassiveRejected);
 				dst_release(dst);
 				goto drop_and_free;
@@ -1402,7 +1403,9 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 			 * to destinations, already remembered
 			 * to the moment of synflood.
 			 */
-			NETDEBUG(if (net_ratelimit()) printk(KERN_DEBUG "TCP: drop open request from %08x/%u\n", saddr, ntohs(skb->h.th->source)));
+			NETDEBUG(if (net_ratelimit()) \
+				printk(KERN_DEBUG "TCP: drop open request from %u.%u.%u.%u/%u\n", \
+					NIPQUAD(saddr), ntohs(skb->h.th->source)));
 			TCP_INC_STATS_BH(TcpAttemptFails);
 			dst_release(dst);
 			goto drop_and_free;

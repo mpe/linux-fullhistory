@@ -373,7 +373,7 @@ register_irq_proc (unsigned int irq)
 
 #ifdef CONFIG_SMP
 	/* create /proc/irq/1234/smp_affinity */
-	entry = create_proc_entry("smp_affinity", 0700, irq_dir[irq]);
+	entry = create_proc_entry("smp_affinity", 0600, irq_dir[irq]);
 
 	entry->nlink = 1;
 	entry->data = (void *)(long)irq;
@@ -397,7 +397,7 @@ init_irq_proc (void)
 
 #ifdef CONFIG_SMP
 	/* create /proc/irq/prof_cpu_mask */
-	entry = create_proc_entry("prof_cpu_mask", 0700, root_irq_dir);
+	entry = create_proc_entry("prof_cpu_mask", 0600, root_irq_dir);
 
 	entry->nlink = 1;
 	entry->data = (void *)&prof_cpu_mask;

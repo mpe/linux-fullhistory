@@ -189,14 +189,13 @@ static int tcp_packet(struct ip_conntrack *conntrack,
 	conntrack->proto.tcp_state = newconntrack;
 	WRITE_UNLOCK(&tcp_lock);
 
-	/* Refresh: need write lock to write to conntrack. */
 	ip_ct_refresh(conntrack, tcp_timeouts[conntrack->proto.tcp_state]);
 	return NF_ACCEPT;
 }
 
 /* Called when a new connection for this protocol found. */
-static int tcp_new(struct ip_conntrack *conntrack,
-		   struct iphdr *iph, size_t len)
+static unsigned long tcp_new(struct ip_conntrack *conntrack,
+			     struct iphdr *iph, size_t len)
 {
 	enum tcp_conntrack newconntrack;
 	struct tcphdr *tcph = (struct tcphdr *)((u_int32_t *)iph + iph->ihl);
@@ -210,11 +209,10 @@ static int tcp_new(struct ip_conntrack *conntrack,
 	if (newconntrack == TCP_CONNTRACK_MAX) {
 		DEBUGP("ip_conntrack_tcp: invalid new deleting.\n");
 		return 0;
-	} else {
-		conntrack->proto.tcp_state = newconntrack;
-		ip_ct_refresh(conntrack, tcp_timeouts[conntrack->proto.tcp_state]);
 	}
-	return 1;
+
+	conntrack->proto.tcp_state = newconntrack;
+	return tcp_timeouts[conntrack->proto.tcp_state];
 }
 
 struct ip_conntrack_protocol ip_conntrack_protocol_tcp

@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.92 2000/04/08 07:21:15 davem Exp $
+ * Version:	$Id: sock.c,v 1.93 2000/04/13 03:13:29 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1068,7 +1068,7 @@ int sock_no_sendmsg(struct socket *sock, struct msghdr *m, int flags,
 	return -EOPNOTSUPP;
 }
 
-int sock_no_recvmsg(struct socket *sock, struct msghdr *m, int flags,
+int sock_no_recvmsg(struct socket *sock, struct msghdr *m, int len, int flags,
 		    struct scm_cookie *scm)
 {
 	return -EOPNOTSUPP;

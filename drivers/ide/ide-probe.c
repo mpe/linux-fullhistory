@@ -204,6 +204,10 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 		hd_status = IDE_STATUS_REG;
 	}
 
+	/* set features register for atapi identify command to be sure of reply */
+	if ((cmd == WIN_PIDENTIFY))
+		OUT_BYTE(0,IDE_FEATURE_REG);	/* disable dma & overlap */
+
 #if CONFIG_BLK_DEV_PDC4030
 	if (HWIF(drive)->chipset == ide_pdc4030) {
 		/* DC4030 hosted drives need their own identify... */

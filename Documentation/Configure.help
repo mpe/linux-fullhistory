@@ -718,21 +718,25 @@ CONFIG_BLK_DEV_3W_XXXX_RAID
 
   Please read the comments at the top of drivers/scsi/3w-xxxx.c  
 
-AEC6210 chipset support
-CONFIG_BLK_DEV_AEC6210
+AEC62XX chipset support
+CONFIG_BLK_DEV_AEC62XX
   This driver adds up to 4 more EIDE devices sharing a single
   interrupt. This add-on card is a bootable PCI UDMA controller. In
   order to get this card to initialize correctly in some cases, you
   should say Y here, and preferably also to "Use DMA by default when
   available".
 
-  Please read the comments at the top of drivers/ide/aec6210.c If
-  you say Y here, then say Y to "Use DMA by default when available" as
+  The ATP850U/UF is an UltraDMA 33 chipset base.
+  The ATP860 is an UltraDMA 66 chipset base.
+  The ATP860M(acintosh) version is an UltraDMA 66 chipset base.
+
+  Please read the comments at the top of drivers/ide/aec62xx.c
+  If you say Y here, then say Y to "Use DMA by default when available" as
   well.
 
-AEC6210 Tuning support (WIP)
-CONFIG_AEC6210_TUNING
-  Please read the comments at the top of drivers/ide/aec6210.c  
+AEC62XX Tuning support (WIP)
+CONFIG_AEC62XX_TUNING
+  Please read the comments at the top of drivers/ide/aec62xx.c  
   If unsure, say N.
 
 ALI M15x3 chipset support
@@ -969,6 +973,12 @@ CONFIG_BLK_DEV_VIA82CXXX
 
   If you say Y here, then say Y to "Use DMA by default when available"
   as well.
+
+  If unsure, say N.
+
+VIA82CXXX Tuning support (WIP)
+CONFIG_VIA82CXXX_TUNING
+  Please read the comments at the top of drivers/ide/via82cxxx.c
 
   If unsure, say N.
 
@@ -4844,12 +4854,16 @@ CONFIG_PHONE_IXJ
   say N here.
 
 FORE Systems 200E-series
-CONFIG_ATM_FORE200E
+CONFIG_ATM_FORE200E_MAYBE
   This is a driver for the FORE Systems 200E-series ATM adapter
   cards. It simultaneously supports PCA-200E and SBA-200E models
   on PCI and SBUS hosts. Say Y (or M to compile as a module
   named fore_200e.o) here if you have one of these ATM adapters.
  
+  Note that the driver will actually be compiled only if you
+  additionally enable the support for PCA-200E and/or SBA-200E
+  cards.
+
   See the file Documentation/networking/fore200e.txt for further
   details.
  
