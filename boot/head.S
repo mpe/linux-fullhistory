@@ -14,10 +14,12 @@
 .globl _empty_bad_page
 .globl _empty_bad_page_table
 .globl _empty_zero_page
-.globl _tmp_floppy_area,_floppy_track_buffer
+.globl _floppy_track_buffer
 
 #include <linux/tasks.h>
 #include <linux/segment.h>
+#define ASSEMBLER
+#include <linux/fd.h>
 
 #define CL_MAGIC_ADDR	0x90020
 #define CL_MAGIC	0xA33F
@@ -276,20 +278,13 @@ _empty_zero_page:
 
 .org 0x6000
 /*
- * tmp_floppy_area is used by the floppy-driver when DMA cannot
- * reach to a buffer-block. It needs to be aligned, so that it isn't
- * on a 64kB border.
- */
-_tmp_floppy_area:
-	.fill 1024,1,0
-/*
  * floppy_track_buffer is used to buffer one track of floppy data: it
  * has to be separate from the tmp_floppy area, as otherwise a single-
  * sector read/write can mess it up. It can contain one full cylinder (sic) of
  * data (36*2*512 bytes).
  */
 _floppy_track_buffer:
-	.fill 512*2*36,1,0
+	.fill 512*2*MAX_BUFFER_SECTORS,1,0
 
 /* This is the default interrupt "handler" :-) */
 int_msg:

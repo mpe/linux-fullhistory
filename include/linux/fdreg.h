@@ -6,12 +6,29 @@
  * Handbook", Sanches and Canton.
  */
 
+#ifdef FDPATCHES
 /* Fd controller regs. S&C, about page 340 */
+#define FD_STATUS	(4 + fdc_state[fdc].address )
+#define FD_DATA		(5 + fdc_state[fdc].address )
+
+/* Digital Output Register */
+#define FD_DOR		(2 + fdc_state[fdc].address )
+
+/* Digital Input Register (read) */
+#define FD_DIR		(7 + fdc_state[fdc].address )
+
+/* Diskette Control Register (write)*/
+#define FD_DCR		(7 + fdc_state[fdc].address )
+
+#else
+
 #define FD_STATUS	0x3f4
 #define FD_DATA		0x3f5
 #define FD_DOR		0x3f2		/* Digital Output Register */
 #define FD_DIR		0x3f7		/* Digital Input Register (read) */
 #define FD_DCR		0x3f7		/* Diskette Control Register (write)*/
+
+#endif
 
 /* Bits of main status register */
 #define STATUS_BUSYMASK	0x0F		/* drive busy mask */
@@ -65,13 +82,23 @@
 #define FD_CONFIGURE		0x13	/* configure FIFO operation */
 #define FD_PERPENDICULAR	0x12	/* perpendicular r/w mode */
 #define FD_GETSTATUS		0x04	/* read ST3 */
+#define FD_DUMPREGS		0x0E	/* dump the contents of the fdc regs */
+#define FD_READID		0xEA	/* prints the header of a sector */
+#define FD_UNLOCK		0x14	/* Fifo config unlock */
+#define FD_LOCK			0x94	/* Fifo config lock */
 
 /* DMA commands */
 #define DMA_READ	0x46
 #define DMA_WRITE	0x4A
 
 /* FDC version return types */
-#define FDC_TYPE_STD	0x80	/* normal 8272A clone FDC */
-#define FDC_TYPE_82077	0x90	/* FIFO + perpendicular support */
+#define FDC_NONE	0x00
+#define FDC_UNKNOWN	0x10
+#define FDC_8272A	0x20	/* Intel 8272a, NEC 765 */
+#define FDC_765ED	0x30	/* Non-Intel 1MB-compatible FDC, can't detect */
+#define FDC_82072	0x40	/* Intel 82072; 8272a + FIFO + DUMPREGS */
+#define FDC_82077_ORIG	0x50	/* Original version of 82077AA, sans LOCK */
+#define FDC_82077	0x52	/* 82077AA-1 */
 
+#define FD_RESET_DELAY 20
 #endif

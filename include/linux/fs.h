@@ -422,6 +422,7 @@ extern inline void mark_buffer_dirty(struct buffer_head * bh, int flag)
 extern int check_disk_change(dev_t dev);
 extern void invalidate_inodes(dev_t dev);
 extern void invalidate_buffers(dev_t dev);
+extern int floppy_is_wp(int minor);
 extern void sync_inodes(dev_t dev);
 extern void sync_dev(dev_t dev);
 extern int fsync_dev(dev_t dev);
@@ -446,6 +447,7 @@ extern struct buffer_head * getblk(dev_t dev, int block, int size);
 extern void ll_rw_block(int rw, int nr, struct buffer_head * bh[]);
 extern void ll_rw_page(int rw, int dev, int nr, char * buffer);
 extern void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buffer);
+extern int is_read_only(int dev);
 extern void brelse(struct buffer_head * buf);
 extern void set_blocksize(dev_t dev, int size);
 extern struct buffer_head * bread(dev_t dev, int block, int size);

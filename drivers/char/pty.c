@@ -200,7 +200,7 @@ long pty_init(long kmem_start)
 	pty_driver.init_termios = tty_std_termios;
 	pty_driver.init_termios.c_iflag = 0;
 	pty_driver.init_termios.c_oflag = 0;
-	pty_driver.init_termios.c_cflag = B9600 | CS8 | CREAD;
+	pty_driver.init_termios.c_cflag = B38400 | CS8 | CREAD;
 	pty_driver.init_termios.c_lflag = 0;
 	pty_driver.flags = TTY_DRIVER_RESET_TERMIOS | TTY_DRIVER_REAL_RAW;
 	pty_driver.refcount = &pty_refcount;
@@ -221,6 +221,7 @@ long pty_init(long kmem_start)
 	pty_slave_driver.subtype = PTY_TYPE_SLAVE;
 	pty_slave_driver.minor_start = 192;
 	pty_slave_driver.init_termios = tty_std_termios;
+	pty_slave_driver.init_termios.c_cflag = B38400 | CS8 | CREAD;
 	pty_slave_driver.table = ttyp_table;
 	pty_slave_driver.termios = ttyp_termios;
 	pty_slave_driver.termios_locked = ttyp_termios_locked;

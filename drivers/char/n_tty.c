@@ -111,7 +111,7 @@ static int opost(unsigned char c, struct tty_struct *tty)
 			if (O_ONLCR(tty)) {
 				if (space < 2)
 					return -1;
-				tty->driver.write(tty, 0, "\r", 1);
+				tty->driver.put_char(tty, '\r');
 				tty->column = 0;
 			}
 			tty->canon_column = tty->column;

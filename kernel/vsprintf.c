@@ -57,61 +57,76 @@ static int skip_atoi(const char **s)
 #define SPACE	8		/* space if plus */
 #define LEFT	16		/* left justified */
 #define SPECIAL	32		/* 0x */
-#define SMALL	64		/* use 'abcdef' instead of 'ABCDEF' */
+#define LARGE	64		/* use 'ABCDEF' instead of 'abcdef' */
 
 #define do_div(n,base) ({ \
 int __res; \
-__asm__("divl %4":"=a" (n),"=d" (__res):"0" (n),"1" (0),"r" (base)); \
+__res = ((unsigned long) n) % (unsigned) base; \
+n = ((unsigned long) n) / (unsigned) base; \
 __res; })
 
-static char * number(char * str, int num, int base, int size, int precision
+static char * number(char * str, long num, int base, int size, int precision
 	,int type)
 {
 	char c,sign,tmp[36];
-	const char *digits="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	const char *digits="0123456789abcdefghijklmnopqrstuvwxyz";
 	int i;
 
-	if (type&SMALL) digits="0123456789abcdefghijklmnopqrstuvwxyz";
-	if (type&LEFT) type &= ~ZEROPAD;
-	if (base<2 || base>36)
+	if (type & LARGE)
+		digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	if (type & LEFT)
+		type &= ~ZEROPAD;
+	if (base < 2 || base > 36)
 		return 0;
-	c = (type & ZEROPAD) ? '0' : ' ' ;
-	if (type&SIGN && num<0) {
-		sign='-';
-		num = -num;
-	} else
-		sign=(type&PLUS) ? '+' : ((type&SPACE) ? ' ' : 0);
-	if (sign) size--;
-	if (type&SPECIAL)
-		if (base==16) size -= 2;
-		else if (base==8) size--;
-	i=0;
-	if (num==0)
+	c = (type & ZEROPAD) ? '0' : ' ';
+	sign = 0;
+	if (type & SIGN) {
+		if (num < 0) {
+			sign = '-';
+			num = -num;
+			size--;
+		} else if (type & PLUS) {
+			sign = '+';
+			size--;
+		} else if (type & SPACE) {
+			sign = ' ';
+			size--;
+		}
+	}
+	if (type & SPECIAL) {
+		if (base == 16)
+			size -= 2;
+		else if (base == 8)
+			size--;
+	}
+	i = 0;
+	if (num == 0)
 		tmp[i++]='0';
-	else while (num!=0)
-		tmp[i++]=digits[do_div(num,base)];
-	if (i>precision) precision=i;
+	else while (num != 0)
+		tmp[i++] = digits[do_div(num,base)];
+	if (i > precision)
+		precision = i;
 	size -= precision;
 	if (!(type&(ZEROPAD+LEFT)))
 		while(size-->0)
 			*str++ = ' ';
 	if (sign)
 		*str++ = sign;
-	if (type&SPECIAL)
+	if (type & SPECIAL)
 		if (base==8)
 			*str++ = '0';
 		else if (base==16) {
 			*str++ = '0';
 			*str++ = digits[33];
 		}
-	if (!(type&LEFT))
-		while(size-->0)
+	if (!(type & LEFT))
+		while (size-- > 0)
 			*str++ = c;
-	while(i<precision--)
+	while (i < precision--)
 		*str++ = '0';
-	while(i-->0)
+	while (i-- > 0)
 		*str++ = tmp[i];
-	while(size-->0)
+	while (size-- > 0)
 		*str++ = ' ';
 	return str;
 }
@@ -119,10 +134,10 @@ static char * number(char * str, int num, int base, int size, int precision
 int vsprintf(char *buf, const char *fmt, va_list args)
 {
 	int len;
-	int i;
+	unsigned long num;
+	int i, base;
 	char * str;
 	char *s;
-	int *ip;
 
 	int flags;		/* flags to number() */
 
@@ -183,6 +198,9 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 			++fmt;
 		}
 
+		/* default base */
+		base = 10;
+
 		switch (*fmt) {
 		case 'c':
 			if (!(flags & LEFT))
@@ -191,7 +209,7 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 			*str++ = (unsigned char) va_arg(args, int);
 			while (--field_width > 0)
 				*str++ = ' ';
-			break;
+			continue;
 
 		case 's':
 			s = va_arg(args, char *);
@@ -210,12 +228,7 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 				*str++ = *s++;
 			while (len < field_width--)
 				*str++ = ' ';
-			break;
-
-		case 'o':
-			str = number(str, va_arg(args, unsigned long), 8,
-				field_width, precision, flags);
-			break;
+			continue;
 
 		case 'p':
 			if (field_width == -1) {
@@ -225,26 +238,34 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 			str = number(str,
 				(unsigned long) va_arg(args, void *), 16,
 				field_width, precision, flags);
+			continue;
+
+
+		case 'n':
+			if (qualifier == 'l') {
+				long * ip = va_arg(args, long *);
+				*ip = (str - buf);
+			} else {
+				int * ip = va_arg(args, int *);
+				*ip = (str - buf);
+			}
+			continue;
+
+		/* integer number formats - set up the flags and "break" */
+		case 'o':
+			base = 8;
 			break;
 
-		case 'x':
-			flags |= SMALL;
 		case 'X':
-			str = number(str, va_arg(args, unsigned long), 16,
-				field_width, precision, flags);
+			flags |= LARGE;
+		case 'x':
+			base = 16;
 			break;
 
 		case 'd':
 		case 'i':
 			flags |= SIGN;
 		case 'u':
-			str = number(str, va_arg(args, unsigned long), 10,
-				field_width, precision, flags);
-			break;
-
-		case 'n':
-			ip = va_arg(args, int *);
-			*ip = (str - buf);
 			break;
 
 		default:
@@ -254,8 +275,20 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 				*str++ = *fmt;
 			else
 				--fmt;
-			break;
+			continue;
 		}
+		if (qualifier == 'l')
+			num = va_arg(args, unsigned long);
+		else if (qualifier == 'h')
+			if (flags & SIGN)
+				num = va_arg(args, short);
+			else
+				num = va_arg(args, unsigned short);
+		else if (flags & SIGN)
+			num = va_arg(args, int);
+		else
+			num = va_arg(args, unsigned int);
+		str = number(str, num, base, field_width, precision, flags);
 	}
 	*str = '\0';
 	return str-buf;

@@ -31,6 +31,13 @@
 # define	PRINTK(x)	/**/
 #endif
 
+/*
+ * Internal flag options for termios setting behavior
+ */
+#define TERMIOS_FLUSH	1
+#define TERMIOS_WAIT	2
+#define TERMIOS_TERMIO	4
+
 void wait_until_sent(struct tty_struct * tty, int timeout)
 {
 	struct wait_queue wait = { current, NULL };
@@ -79,13 +86,41 @@ static void unset_locked_termios(struct termios *termios,
 			old->c_cc[i] : termios->c_cc[i];
 }
 
-static int set_termios_2(struct tty_struct * tty, struct termios * termios)
+static int set_termios(struct tty_struct * tty, unsigned long arg, int opt)
 {
+	struct termio tmp_termio;
+	struct termios tmp_termios;
 	struct termios old_termios = *tty->termios;
-	int canon_change;
+	int retval, canon_change;
+
+	retval = tty_check_change(tty);
+	if (retval)
+		return retval;
+
+	if (opt & TERMIOS_TERMIO) {
+		tmp_termios = *tty->termios;
+		memcpy_fromfs(&tmp_termio, (struct termio *) arg,
+			      sizeof (struct termio));
+
+#define SET_LOW_BITS(x,y)	((x) = (0xffff0000 & (x)) | (y))
+		SET_LOW_BITS(tmp_termios.c_iflag, tmp_termio.c_iflag);
+		SET_LOW_BITS(tmp_termios.c_oflag, tmp_termio.c_oflag);
+		SET_LOW_BITS(tmp_termios.c_cflag, tmp_termio.c_cflag);
+		SET_LOW_BITS(tmp_termios.c_lflag, tmp_termio.c_lflag);
+		memcpy(&tmp_termios.c_cc, &tmp_termio.c_cc, NCC);
+#undef SET_LOW_BITS
+	} else
+		memcpy_fromfs(&tmp_termios, (struct termios *) arg,
+			      sizeof (struct termios));
+
+	if ((opt & TERMIOS_FLUSH) && tty->ldisc.flush_buffer)
+		tty->ldisc.flush_buffer(tty);
+
+	if (opt & TERMIOS_WAIT)
+		wait_until_sent(tty, 0);
 
 	cli();
-	*tty->termios = *termios;
+	*tty->termios = tmp_termios;
 	unset_locked_termios(tty->termios, &old_termios, tty->termios_locked);
 	canon_change = (old_termios.c_lflag ^ tty->termios->c_lflag) & ICANON;
 	if (canon_change) {
@@ -127,14 +162,6 @@ static int set_termios_2(struct tty_struct * tty, struct termios * termios)
 	return 0;
 }
 
-static int set_termios(struct tty_struct * tty, struct termios * termios)
-{
-	struct termios tmp_termios;
-
-	memcpy_fromfs(&tmp_termios, termios, sizeof (struct termios));
-	return set_termios_2(tty, &tmp_termios);
-}
-
 static int get_termio(struct tty_struct * tty, struct termio * termio)
 {
 	int i;
@@ -152,27 +179,6 @@ static int get_termio(struct tty_struct * tty, struct termio * termio)
 		tmp_termio.c_cc[i] = tty->termios->c_cc[i];
 	memcpy_tofs(termio, &tmp_termio, sizeof (struct termio));
 	return 0;
-}
-
-static int set_termio(struct tty_struct * tty, struct termio * termio)
-{
-	struct termio tmp_termio;
-	struct termios tmp_termios;
-
-	tmp_termios = *tty->termios;
-	memcpy_fromfs(&tmp_termio, termio, sizeof (struct termio));
-
-#define SET_LOW_BITS(x,y)	((x) = (0xffff0000 & (x)) | (y))
-
-	SET_LOW_BITS(tmp_termios.c_iflag, tmp_termio.c_iflag);
-	SET_LOW_BITS(tmp_termios.c_oflag, tmp_termio.c_oflag);
-	SET_LOW_BITS(tmp_termios.c_cflag, tmp_termio.c_cflag);
-	SET_LOW_BITS(tmp_termios.c_lflag, tmp_termio.c_lflag);
-	memcpy(&tmp_termios.c_cc, &tmp_termio.c_cc, NCC);
-
-#undef SET_LOW_BITS
-
-	return set_termios_2(tty, &tmp_termios);
 }
 
 static unsigned long inq_canon(struct tty_struct * tty)
@@ -199,6 +205,7 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 {
 	struct tty_struct * real_tty;
 	int retval;
+	int opt = 0;
 
 	if (tty->driver.type == TTY_DRIVER_TYPE_PTY &&
 	    tty->driver.subtype == PTY_TYPE_MASTER)
@@ -217,34 +224,19 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 				    sizeof (struct termios));
 			return 0;
 		case TCSETSF:
+			opt |= TERMIOS_FLUSH;
 		case TCSETSW:
+			opt |= TERMIOS_WAIT;
 		case TCSETS:
-			retval = tty_check_change(real_tty);
-			if (retval)
-				return retval;
-			if (cmd == TCSETSF || cmd == TCSETSW) {
-				if (cmd == TCSETSF &&
-				    real_tty->ldisc.flush_buffer)
-					real_tty->ldisc.flush_buffer(real_tty);
-				wait_until_sent(real_tty, 0);
-			}
-			return set_termios(real_tty,
-					   (struct termios *) arg);
+			return set_termios(real_tty, arg, opt);
 		case TCGETA:
 			return get_termio(real_tty,(struct termio *) arg);
 		case TCSETAF:
+			opt |= TERMIOS_FLUSH;
 		case TCSETAW:
+			opt |= TERMIOS_WAIT;
 		case TCSETA:
-			retval = tty_check_change(real_tty);
-			if (retval)
-				return retval;
-			if (cmd == TCSETAF || cmd == TCSETAW) {
-				if (cmd == TCSETAF &&
-				    real_tty->ldisc.flush_buffer)
-					real_tty->ldisc.flush_buffer(real_tty);
-				wait_until_sent(real_tty, 0);
-			}
-			return set_termio(real_tty, (struct termio *) arg);
+			return set_termios(real_tty, arg, opt|TERMIOS_TERMIO);
 		case TCXONC:
 			retval = tty_check_change(tty);
 			if (retval)

@@ -125,6 +125,7 @@ int is_read_only(int dev)
 
 	major = MAJOR(dev);
 	minor = MINOR(dev);
+	if ( major == FLOPPY_MAJOR && floppy_is_wp( minor) ) return 1;
 	if (major < 0 || major >= MAX_BLKDEV) return 0;
 	return ro_bits[major][minor >> 5] & (1 << (minor & 31));
 }
@@ -225,6 +226,7 @@ repeat:
  * to add links to the top entry for scsi devices.
  */
 	if ((major == HD_MAJOR
+	     || major == FLOPPY_MAJOR
 	     || major == SCSI_DISK_MAJOR
 	     || major == SCSI_CDROM_MAJOR)
 	    && (req = blk_dev[major].current_request))

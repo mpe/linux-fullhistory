@@ -69,6 +69,7 @@ static int serial_refcount;
 
 #undef SERIAL_DEBUG_INTR
 #undef SERIAL_DEBUG_OPEN
+#undef SERIAL_DEBUG_FLOW
 
 #define _INLINE_ inline
   
@@ -186,6 +187,18 @@ static struct termios *serial_termios_locked[NR_PORTS];
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
 #endif
 
+/*
+ * tmp_buf is used as a temporary buffer by serial_write.  We need to
+ * lock it in case the memcpy_fromfs blocks while swapping in a page,
+ * and some other program tries to do a serial write at the same time.
+ * Since the lock will only come under contention when the system is
+ * swapping and available memory is low, it makes sense to share one
+ * buffer across all the serial ports, since it significantly saves
+ * memory if large numbers of serial ports are open.
+ */
+static unsigned char *tmp_buf = 0;
+static struct semaphore tmp_buf_sem = MUTEX;
+
 static inline int serial_paranoia_check(struct async_struct *info,
 					dev_t device, const char *routine)
 {
@@ -283,12 +296,6 @@ static void rs_stop(struct tty_struct *tty)
 	if (serial_paranoia_check(info, tty->device, "rs_stop"))
 		return;
 	
-	if (info->flags & ASYNC_CLOSING) {
-		tty->stopped = 0;
-		tty->hw_stopped = 0;
-		return;
-	}
-
 	save_flags(flags); cli();
 	if (info->IER & UART_IER_THRI) {
 		info->IER &= ~UART_IER_THRI;
@@ -405,7 +412,8 @@ static _INLINE_ void transmit_chars(struct async_struct *info, int *intr_done)
 			*intr_done = 0;
 		return;
 	}
-	if (!info->xmit_cnt || info->tty->stopped || info->tty->hw_stopped) {
+	if ((info->xmit_cnt <= 0) || info->tty->stopped ||
+	    info->tty->hw_stopped) {
 		info->IER &= ~UART_IER_THRI;
 #ifdef CONFIG_SERIAL_NEW_ISR
 		serial_out(info, UART_IER, info->IER);
@@ -417,7 +425,7 @@ static _INLINE_ void transmit_chars(struct async_struct *info, int *intr_done)
 	do {
 		serial_out(info, UART_TX, info->xmit_buf[info->xmit_tail++]);
 		info->xmit_tail = info->xmit_tail & (SERIAL_XMIT_SIZE-1);
-		if (--info->xmit_cnt == 0)
+		if (--info->xmit_cnt <= 0)
 			break;
 	} while (--count > 0);
 	
@@ -430,7 +438,7 @@ static _INLINE_ void transmit_chars(struct async_struct *info, int *intr_done)
 	if (intr_done)
 		*intr_done = 0;
 
-	if (info->xmit_cnt == 0) {
+	if (info->xmit_cnt <= 0) {
 		info->IER &= ~UART_IER_THRI;
 #ifdef CONFIG_SERIAL_NEW_ISR
 		serial_out(info, UART_IER, info->IER);
@@ -462,7 +470,7 @@ static _INLINE_ void check_modem_status(struct async_struct *info)
 	if (info->flags & ASYNC_CTS_FLOW) {
 		if (info->tty->hw_stopped) {
 			if (status & UART_MSR_CTS) {
-#ifdef SERIAL_DEBUG_INTR
+#if (defined(SERIAL_DEBUG_INTR) || defined(SERIAL_DEBUG_FLOW))
 				printk("CTS tx start...");
 #endif
 				info->tty->hw_stopped = 0;
@@ -475,7 +483,7 @@ static _INLINE_ void check_modem_status(struct async_struct *info)
 			}
 		} else {
 			if (!(status & UART_MSR_CTS)) {
-#ifdef SERIAL_DEBUG_INTR
+#if (defined(SERIAL_DEBUG_INTR) || defined(SERIAL_DEBUG_FLOW))
 				printk("CTS tx stop...");
 #endif
 				info->tty->hw_stopped = 1;
@@ -926,6 +934,8 @@ static int startup(struct async_struct * info)
 		info->MCR = UART_MCR_DTR | UART_MCR_RTS | UART_MCR_OUT2;
 		info->MCR_noint = UART_MCR_DTR | UART_MCR_RTS;
 	}
+	if (info->irq == 0)
+		info->MCR = info->MCR_noint;
 	serial_outp(info, UART_MCR, info->MCR);
 	
 	/*
@@ -1035,7 +1045,7 @@ static void shutdown(struct async_struct * info)
 		free_page((unsigned long) info->xmit_buf);
 		info->xmit_buf = 0;
 	}
-			
+
 	info->IER = 0;
 	serial_outp(info, UART_IER, 0x00);	/* disable all intrs */
 	if (info->flags & ASYNC_FOURPORT) {
@@ -1190,6 +1200,7 @@ static void change_speed(struct async_struct *info)
 static void rs_put_char(struct tty_struct *tty, unsigned char ch)
 {
 	struct async_struct *info = tty->driver_data;
+	unsigned long flags;
 
 	if (serial_paranoia_check(info, tty->device, "rs_put_char"))
 		return;
@@ -1197,12 +1208,16 @@ static void rs_put_char(struct tty_struct *tty, unsigned char ch)
 	if (!tty || tty->stopped || tty->hw_stopped || !info->xmit_buf)
 		return;
 
-	if (info->xmit_cnt >= SERIAL_XMIT_SIZE - 1)
+	save_flags(flags); cli();
+	if (info->xmit_cnt >= SERIAL_XMIT_SIZE - 1) {
+		restore_flags(flags);
 		return;
+	}
 
 	info->xmit_buf[info->xmit_head++] = ch;
 	info->xmit_head &= SERIAL_XMIT_SIZE-1;
 	info->xmit_cnt++;
+	restore_flags(flags);
 }
 
 static void rs_flush_chars(struct tty_struct *tty)
@@ -1213,7 +1228,7 @@ static void rs_flush_chars(struct tty_struct *tty)
 	if (serial_paranoia_check(info, tty->device, "rs_flush_chars"))
 		return;
 
-	if (info->xmit_cnt == 0 || tty->stopped || tty->hw_stopped ||
+	if (info->xmit_cnt <= 0 || tty->stopped || tty->hw_stopped ||
 	    !info->xmit_buf)
 		return;
 
@@ -1233,29 +1248,33 @@ static int rs_write(struct tty_struct * tty, int from_user,
 	if (serial_paranoia_check(info, tty->device, "rs_write"))
 		return 0;
 
-	if (!tty || !info->xmit_buf)
+	if (!tty || !info->xmit_buf || !tmp_buf)
 		return 0;
 	    
+	save_flags(flags);
 	while (1) {
+		cli();		
 		c = MIN(count, MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
 				   SERIAL_XMIT_SIZE - info->xmit_head));
-		if (!c)
+		if (c <= 0)
 			break;
 
-		if (from_user)
-			memcpy_fromfs(info->xmit_buf + info->xmit_head,
-				      buf, c);
-		else
+		if (from_user) {
+			down(&tmp_buf_sem);
+			memcpy_fromfs(tmp_buf, buf, c);
+			c = MIN(c, MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
+				       SERIAL_XMIT_SIZE - info->xmit_head));
+			memcpy(info->xmit_buf + info->xmit_head, tmp_buf, c);
+			up(&tmp_buf_sem);
+		} else
 			memcpy(info->xmit_buf + info->xmit_head, buf, c);
 		info->xmit_head = (info->xmit_head + c) & (SERIAL_XMIT_SIZE-1);
-		cli();
 		info->xmit_cnt += c;
-		sti();
+		restore_flags(flags);
 		buf += c;
 		count -= c;
 		total += c;
 	}
-	save_flags(flags); cli();
 	if (info->xmit_cnt && !tty->stopped && !tty->hw_stopped &&
 	    !(info->IER & UART_IER_THRI)) {
 		info->IER |= UART_IER_THRI;
@@ -1268,10 +1287,14 @@ static int rs_write(struct tty_struct * tty, int from_user,
 static int rs_write_room(struct tty_struct *tty)
 {
 	struct async_struct *info = tty->driver_data;
+	int	ret;
 				
 	if (serial_paranoia_check(info, tty->device, "rs_write_room"))
 		return 0;
-	return SERIAL_XMIT_SIZE - info->xmit_cnt - 1;
+	ret = SERIAL_XMIT_SIZE - info->xmit_cnt - 1;
+	if (ret < 0)
+		ret = 0;
+	return ret;
 }
 
 static int rs_chars_in_buffer(struct tty_struct *tty)
@@ -1770,7 +1793,6 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	if (info->count)
 		return;
 	info->flags |= ASYNC_CLOSING;
-	info->flags &= ~ASYNC_CTS_FLOW;
 	/*
 	 * Save the termios structure, since this port may have
 	 * separate termios for callout and dialin.
@@ -1779,12 +1801,8 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		info->normal_termios = *tty->termios;
 	if (info->flags & ASYNC_CALLOUT_ACTIVE)
 		info->callout_termios = *tty->termios;
-	tty->stopped = 0;		/* Force flush to succeed */
-	tty->hw_stopped = 0;
-	if (info->flags & ASYNC_INITIALIZED) {
-		rs_start(tty);
-		wait_until_sent(tty, 6000); /* 60 seconds timeout */
-	}
+	if (info->flags & ASYNC_INITIALIZED)
+		wait_until_sent(tty, 3000); /* 30 seconds timeout */
 	shutdown(info);
 	if (tty->driver.flush_buffer)
 		tty->driver.flush_buffer(tty);
@@ -1971,7 +1989,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 	info = rs_table + line;
 	if (serial_paranoia_check(info, tty->device, "rs_open"))
 		return -ENODEV;
-	
+
 #ifdef SERIAL_DEBUG_OPEN
 	printk("rs_open %s%d, count = %d\n", tty->driver.name, info->line,
 	       info->count);
@@ -1979,6 +1997,12 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 	info->count++;
 	tty->driver_data = info;
 	info->tty = tty;
+
+	if (!tmp_buf) {
+		tmp_buf = (unsigned char *) get_free_page(GFP_KERNEL);
+		if (!tmp_buf)
+			return -ENOMEM;
+	}
 	
 	if ((info->count == 1) && (info->flags & ASYNC_SPLIT_TERMIOS)) {
 		if (tty->driver.subtype == SERIAL_TYPE_NORMAL)

@@ -73,10 +73,6 @@ static struct wait_queue * busy_wait = NULL;
 static int reset = 0;
 static int hd_error = 0;
 
-#if (HD_DELAY > 0)
-unsigned long last_req, read_timer();
-#endif
-
 /*
  *  This struct defines the HD's and their types.
  */
@@ -100,17 +96,20 @@ static int hd_sizes[MAX_HD<<6] = {0, };
 static int hd_blocksizes[MAX_HD<<6] = {0, };
 
 #if (HD_DELAY > 0)
+unsigned long last_req;
+
 unsigned long read_timer(void)
 {
-	unsigned long t;
+	unsigned long t, flags;
 	int i;
 
+	save_flags(flags);
 	cli();
 	t = jiffies * 11932;
     	outb_p(0, 0x43);
 	i = inb_p(0x40);
 	i |= inb(0x40) << 8;
-	sti();
+	restore_flags(flags);
 	return(t - i);
 }
 #endif
@@ -287,6 +286,9 @@ static void identify_intr(void)
 		insw(HD_DATA,(char *)&id,sizeof(id)/2);
 		insw(HD_DATA,(char *)&id,sizeof(id)/2);
 	}
+#if (HD_DELAY > 0)
+	last_req = read_timer();
+#endif
 	hd_request();
 	return;
 }
@@ -307,6 +309,9 @@ static void set_multmode_intr(void)
 		else
 			printk ("  hd%c: disabled multiple mode\n", dev+'a');
 	}
+#if (HD_DELAY > 0)
+	last_req = read_timer();
+#endif
 	hd_request();
 	return;
 }
@@ -425,7 +430,6 @@ static void read_intr(void)
 
 	if (unmask_intr[dev])
 		sti();			/* permit other IRQs during xfer */
-read_next:
 	do {
 		i = (unsigned) inb_p(HD_STATUS);
 		if (i & BUSY_STAT)
@@ -442,7 +446,6 @@ read_next:
 		printk("hd%c: read_intr: error = 0x%02x\n",dev+'a',hd_error);
 	}
 	bad_rw_intr();
-	cli();
 	hd_request();
 	return;
 ok_to_read:
@@ -467,7 +470,7 @@ ok_to_read:
 		end_request(1);
 	if (i > 0) {
 		if (msect)
-			goto read_next;
+			goto ok_to_read;
 		SET_INTR(&read_intr);
 		return;
 	}
@@ -535,7 +538,6 @@ static void multwrite_intr(void)
 		printk("hd:%c multwrite_intr: error = 0x%02x\n",dev+'a',hd_error);
 	}
 	bad_rw_intr();
-	cli();
 	hd_request();
 }
 
@@ -544,6 +546,8 @@ static void write_intr(void)
 	int i;
 	int retries = 100000;
 
+	if (unmask_intr[DEVICE_NR(WCURRENT.dev)])
+		sti();
 	do {
 		i = (unsigned) inb_p(HD_STATUS);
 		if (i & BUSY_STAT)
@@ -560,7 +564,6 @@ static void write_intr(void)
 		printk("HD: write_intr: error = 0x%02x\n",hd_error);
 	}
 	bad_rw_intr();
-	cli();
 	hd_request();
 	return;
 ok_to_write:
@@ -587,6 +590,9 @@ static void recal_intr(void)
 {
 	if (win_result())
 		bad_rw_intr();
+#if (HD_DELAY > 0)
+	last_req = read_timer();
+#endif
 	hd_request();
 }
 
@@ -1067,17 +1073,19 @@ static int revalidate_hddisk(int dev, int maxusage)
 	int max_p;
 	int start;
 	int i;
+	long flags;
 
 	target =  DEVICE_NR(MINOR(dev));
 	gdev = &GENDISK_STRUCT;
 
+	save_flags(flags);
 	cli();
 	if (DEVICE_BUSY || USAGE > maxusage) {
-		sti();
+		restore_flags(flags);
 		return -EBUSY;
 	};
 	DEVICE_BUSY = 1;
-	sti();
+	restore_flags(flags);
 
 	max_p = gdev->max_p;
 	start = target << gdev->minor_shift;

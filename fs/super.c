@@ -479,6 +479,9 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
 {
 	int retval;
 	
+	if (!(flags & MS_RDONLY ) && sb->s_dev && is_read_only(sb->s_dev))
+		return -EACCES;
+		/*flags |= MS_RDONLY;*/
 	/* If we are remounting RDONLY, make sure there are no rw files open */
 	if ((flags & MS_RDONLY) && !(sb->s_flags & MS_RDONLY))
 		if (!fs_may_remount_ro(sb->s_dev))

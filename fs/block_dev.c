@@ -32,6 +32,8 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 	register char * p;
 
 	dev = inode->i_rdev;
+	if ( is_read_only( inode->i_rdev ))
+		return -EPERM;
 	blocksize = BLOCK_SIZE;
 	if (blksize_size[MAJOR(dev)] && blksize_size[MAJOR(dev)][MINOR(dev)])
 		blocksize = blksize_size[MAJOR(dev)][MINOR(dev)];
