@@ -109,10 +109,15 @@ void inline invalidate_buffers(int dev)
 void check_disk_change(int dev)
 {
 	int i;
+	struct buffer_head * bh;
 
 	if (MAJOR(dev) != 2)
 		return;
-	if (!floppy_change(dev & 0x03))
+	if (!(bh = getblk(dev,0)))
+		return;
+	i = floppy_change(bh);
+	brelse(bh);
+	if (!i)
 		return;
 	for (i=0 ; i<NR_SUPER ; i++)
 		if (super_block[i].s_dev == dev)

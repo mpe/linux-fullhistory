@@ -11,6 +11,9 @@
  * sleep. Special care is recommended.
  * 
  *  modified by Drew Eckhardt to check nr of hd's from the CMOS.
+ *
+ *  Thanks to Branko Lankester, lankeste@fwi.uva.nl, who found a bug
+ *  in the early extended-partition checks and added DM partitions
  */
 
 #include <linux/config.h>
@@ -26,10 +29,11 @@
 #define MAJOR_NR 3
 #include "blk.h"
 
-#define CMOS_READ(addr) ({ \
-outb_p(0x80|addr,0x70); \
-inb_p(0x71); \
-})
+static inline unsigned char CMOS_READ(unsigned char addr)
+{
+	outb_p(0x80|addr,0x70);
+	return inb_p(0x71);
+}
 
 /* Max read/write errors/sector */
 #define MAX_ERRORS	7
@@ -39,7 +43,7 @@ static void recal_intr(void);
 static void bad_rw_intr(void);
 
 static int recalibrate = 0;
-static int reset = 0;
+static int reset = 1;
 
 /*
  *  This struct defines the HD's and their types.
@@ -87,12 +91,30 @@ static void check_partition(unsigned int dev)
 	if (*(unsigned short *) (bh->b_data+510) == 0xAA55) {
 		p = 0x1BE + (void *)bh->b_data;
 		for (i=0 ; i<4 ; i++,p++) {
+			if (!(hd[i+minor].nr_sects = p->nr_sects))
+				continue;
 			hd[i+minor].start_sect = p->start_sect;
-			hd[i+minor].nr_sects = p->nr_sects;
+			if ((current_minor & 0x3f) >= 60)
+				continue;
+			if (p->sys_ind == EXTENDED_PARTITION) {
+				current_minor += 4;
+				check_partition(0x0300 | (i+minor));
+			}
 		}
-		if (p->nr_sects && p->sys_ind == EXTENDED_PARTITION) {
-			current_minor += 4;
-			check_partition(i+minor);
+		/*
+		 * check for Disk Manager partition table
+		 */
+		if (*(unsigned short *) (bh->b_data+0xfc) == 0x55AA) {
+			p = 0x1BE + (void *)bh->b_data;
+			for (i=4; i<16; i++) {
+				p--;
+				if ((current_minor & 0x3f) >= 60)
+					break;
+				if (!(hd[current_minor+4].start_sect = p->start_sect))
+					continue;
+				hd[current_minor+4].nr_sects = p->nr_sects;
+				current_minor++;
+			}
 		}
 	} else
 		printk("Bad partition table on dev %04x\n",dev);
@@ -196,7 +218,8 @@ static int win_result(void)
 	if ((i & (BUSY_STAT | READY_STAT | WRERR_STAT | SEEK_STAT | ERR_STAT))
 		== (READY_STAT | SEEK_STAT))
 		return(0); /* ok */
-	if (i&1) i=inb(HD_ERROR);
+	if (i&1)
+		i=inb(HD_ERROR);
 	return (1);
 }
 
@@ -289,11 +312,15 @@ static void bad_rw_intr(void)
 		end_request(0);
 	if (CURRENT->errors > MAX_ERRORS/2)
 		reset = 1;
+	else
+		recalibrate = 1;
 }
 
 static void read_intr(void)
 {
+	SET_INTR(&read_intr);
 	if (win_result()) {
+		SET_INTR(NULL);
 		bad_rw_intr();
 		do_hd_request();
 		return;
@@ -302,10 +329,9 @@ static void read_intr(void)
 	CURRENT->errors = 0;
 	CURRENT->buffer += 512;
 	CURRENT->sector++;
-	if (--CURRENT->nr_sectors) {
-		SET_INTR(&read_intr);
+	if (--CURRENT->nr_sectors)
 		return;
-	}
+	SET_INTR(NULL);
 	end_request(1);
 	do_hd_request();
 }
@@ -336,14 +362,14 @@ static void recal_intr(void)
 }
 
 static void hd_times_out(void)
-{
+{	
+	do_hd = NULL;
+	reset = 1;
 	if (!CURRENT)
 		return;
 	printk("HD timeout");
 	if (++CURRENT->errors >= MAX_ERRORS)
 		end_request(0);
-	SET_INTR(NULL);
-	reset = 1;
 	do_hd_request();
 }
 
@@ -357,7 +383,8 @@ void do_hd_request(void)
 	INIT_REQUEST;
 	dev = MINOR(CURRENT->dev);
 	block = CURRENT->sector;
-	if (dev >= (NR_HD<<6) || block+2 > hd[dev].nr_sects) {
+	nsect = CURRENT->nr_sectors;
+	if (dev >= (NR_HD<<6) || block+nsect > hd[dev].nr_sects) {
 		end_request(0);
 		goto repeat;
 	}
@@ -368,7 +395,6 @@ void do_hd_request(void)
 	head = block % hd_info[dev].head;
 	cyl = block / hd_info[dev].head;
 	sec++;
-	nsect = CURRENT->nr_sectors;
 	if (reset) {
 		recalibrate = 1;
 		reset_hd();
@@ -376,7 +402,7 @@ void do_hd_request(void)
 	}
 	if (recalibrate) {
 		recalibrate = 0;
-		hd_out(dev,hd_info[CURRENT_DEV].sect,0,0,0,
+		hd_out(dev,hd_info[dev].sect,0,0,0,
 			WIN_RESTORE,&recal_intr);
 		if (reset)
 			goto repeat;
@@ -404,7 +430,7 @@ void do_hd_request(void)
 void hd_init(void)
 {
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-	set_trap_gate(0x2E,&hd_interrupt);
+	set_intr_gate(0x2E,&hd_interrupt);
 	outb_p(inb_p(0x21)&0xfb,0x21);
 	outb(inb_p(0xA1)&0xbf,0xA1);
 	timer_table[HD_TIMER].fn = hd_times_out;

@@ -213,7 +213,13 @@ static unsigned long put_page(unsigned long page,unsigned long address)
 		*page_table = tmp | 7;
 		page_table = (unsigned long *) tmp;
 	}
-	page_table[(address>>12) & 0x3ff] = page | 7;
+	page_table += (address>>12) & 0x3ff;
+	if (*page_table) {
+		printk("put_page: page already exists\n");
+		*page_table = 0;
+		invalidate();
+	}
+	*page_table = page | 7;
 /* no need for invalidate */
 	return page;
 }
@@ -243,7 +249,13 @@ unsigned long put_dirty_page(unsigned long page, unsigned long address)
 		*page_table = tmp|7;
 		page_table = (unsigned long *) tmp;
 	}
-	page_table[(address>>12) & 0x3ff] = page | (PAGE_DIRTY | 7);
+	page_table += (address>>12) & 0x3ff;
+	if (*page_table) {
+		printk("put_dirty_page: page already exists\n");
+		*page_table = 0;
+		invalidate();
+	}
+	*page_table = page | (PAGE_DIRTY | 7);
 /* no need for invalidate */
 	return page;
 }
@@ -296,8 +308,10 @@ repeat:
  */
 void do_wp_page(unsigned long error_code,unsigned long address)
 {
-	if (address < TASK_SIZE)
+	if (address < TASK_SIZE) {
 		printk("\n\rBAD! KERNEL MEMORY WP-ERR!\n\r");
+		do_exit(SIGSEGV);
+	}
 	if (address - current->start_code >= TASK_SIZE) {
 		printk("Bad things happen: page error in do_wp_page\n\r");
 		do_exit(SIGSEGV);
@@ -305,7 +319,6 @@ void do_wp_page(unsigned long error_code,unsigned long address)
 	un_wp_page((unsigned long *)
 		(((address>>10) & 0xffc) + (0xfffff000 &
 		*((unsigned long *) ((address>>20) &0xffc)))));
-
 }
 
 void write_verify(unsigned long address)
@@ -436,8 +449,10 @@ void do_no_page(unsigned long error_code,
 	if (last_checked >= CHECK_LAST_NR)
 		last_checked = 0;
 	last_pages[last_checked] = address & 0xfffff000;
-	if (address < TASK_SIZE)
+	if (address < TASK_SIZE) {
 		printk("\n\rBAD!! KERNEL PAGE MISSING\n\r");
+		do_exit(SIGSEGV);
+	}
 	if (address - tsk->start_code >= TASK_SIZE) {
 		printk("Bad things happen: nonexistent page error in do_no_page\n\r");
 		do_exit(SIGSEGV);
@@ -567,12 +582,12 @@ void show_mem(void)
 /* This routine handles page faults.  It determines the address,
    and the problem then passes it off to one of the appropriate
    routines. */
-void do_page_fault (unsigned long *esp, unsigned long error_code)
+void do_page_fault(unsigned long *esp, unsigned long error_code)
 {
 	unsigned long address;
 	/* get the address */
 
-	__asm__ ("movl %%cr2,%0":"=r" (address));
+	__asm__("movl %%cr2,%0":"=r" (address));
 	if (!(error_code & 1)) {
 		do_no_page(error_code, address, current);
 		return;

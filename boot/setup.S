@@ -43,6 +43,12 @@ start:
 	int	0x15
 	mov	[2],ax
 
+! set the keyboard repeat rate to the max
+
+	mov	ax,#0x0305
+	mov	bx,#0x0000
+	int	0x16
+
 ! check for EGA/VGA and some config parameters
 
 	mov	ah,#0x12
@@ -498,8 +504,25 @@ nozero:	sub	al,#0x80
 	lodsw
 	pop	ds
 	ret
-novid7:	pop	ds	! Here could be code to support standard 80x50,80x30
-	mov	ax,#0x5019	
+novid7:
+	mov	ax,#0x1112
+	mov	bl,#0
+	int	0x10		! use 8x8 font set (50 lines on VGA)
+
+	mov	ax,#0x1200
+	mov	bl,#0x20
+	int	0x10		! use alternate print screen
+
+	mov	ax,#0x1201
+	mov	bl,#0x34
+	int	0x10		! turn off cursor emulation
+
+	mov	ah,#0x01
+	mov	cx,#0x0607
+	int	0x10		! turn on cursor (scan lines 6 to 7)
+
+	pop	ds
+	mov	ax,#0x5032	! return 80x50
 	ret
 
 ! Routine that 'tabs' to next col.

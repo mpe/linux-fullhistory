@@ -32,7 +32,7 @@
 /*
  * these are for the keyboard read functions
  */
-size	= 1024		/* must be a power of two ! And MUST be the same
+size	= 2048		/* must be a power of two ! And MUST be the same
 			   as in tty_io.c !!!! */
 head = 4
 tail = 8
@@ -434,7 +434,7 @@ key_map:
 
 shift_map:
 	.byte 0,27
-	.ascii "!\"#$%%&*()_+"
+	.ascii "!\"#$%^&*()_+"
 	.byte 127,9
 	.ascii "QWERTYUIOP{}"
 	.byte 13,0
@@ -626,7 +626,7 @@ do_self:
 	testb $0x20,_kmode		/* alt-gr */
 	jne 1f
 	lea shift_map,%ebx
-	testb $0x03,_kmode
+	testb $0x0f,_kmode
 	jne 1f
 	lea key_map,%ebx
 1:	movb (%ebx,%eax),%al
@@ -641,11 +641,7 @@ do_self:
 	subb $32,%al
 2:	testb $0x0c,_kmode		/* ctrl */
 	je 3f
-	cmpb $64,%al
-	jb 3f
-	cmpb $64+32,%al
-	jae 3f
-	subb $64,%al
+	andb $0x1f,%al
 3:	testb $0x10,_kmode		/* left alt */
 	je 4f
 	orb $0x80,%al

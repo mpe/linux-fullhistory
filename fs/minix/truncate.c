@@ -135,6 +135,8 @@ static int check_char_dev(struct inode * inode, struct file * filp)
 			tty->session= current->session;
 			tty->pgrp = current->pgrp;
 		}
+		if (IS_A_SERIAL(min))
+			serial_open(min-64);
 	}
 	return 0;
 }

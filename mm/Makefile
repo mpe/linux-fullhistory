@@ -17,8 +17,6 @@ CPP	=gcc -E -nostdinc -I../include
 
 OBJS	= memory.o swap.o
 
-all: mm.o
-
 mm.o: $(OBJS)
 	$(LD) -r -o mm.o $(OBJS)
 

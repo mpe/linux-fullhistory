@@ -73,8 +73,10 @@ void invalidate_inodes(int dev)
 	for(i=0 ; i<NR_INODE ; i++,inode++) {
 		wait_on_inode(inode);
 		if (inode->i_dev == dev) {
-			if (inode->i_count)
+			if (inode->i_count) {
 				printk("inode in use on removed disk\n\r");
+				continue;
+			}
 			inode->i_dev = inode->i_dirt = 0;
 		}
 	}

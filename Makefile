@@ -61,28 +61,28 @@ tools/system:	boot/head.o init/main.o \
 	$(LIBS) \
 	-o tools/system > System.map
 
-kernel/math/math.a:
+kernel/math/math.a: dummy
 	(cd kernel/math; make)
 
-kernel/blk_drv/blk_drv.a:
+kernel/blk_drv/blk_drv.a: dummy
 	(cd kernel/blk_drv; make)
 
-kernel/chr_drv/chr_drv.a:
+kernel/chr_drv/chr_drv.a: dummy
 	(cd kernel/chr_drv; make)
 
-kernel/kernel.o:
+kernel/kernel.o: dummy
 	(cd kernel; make)
 
-mm/mm.o:
+mm/mm.o: dummy
 	(cd mm; make)
 
-fs/fs.o:
+fs/fs.o: dummy
 	(cd fs; make)
 
-fs/minix/minix.o:
+fs/minix/minix.o: dummy
 	(cd fs/minix; make)
 
-lib/lib.a:
+lib/lib.a: dummy
 	(cd lib; make)
 
 boot/setup: boot/setup.s
@@ -119,6 +119,8 @@ dep:
 	(cd fs; make dep)
 	(cd kernel; make dep)
 	(cd mm; make dep)
+
+dummy:
 
 ### Dependencies:
 init/main.o : init/main.c include/unistd.h include/sys/stat.h \

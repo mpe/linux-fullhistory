@@ -43,6 +43,8 @@
 #define MAJOR_NR 2
 #include "blk.h"
 
+unsigned int changed_floppies = 0;
+
 static int recalibrate = 0;
 static int reset = 0;
 static int seek = 0;
@@ -56,8 +58,8 @@ __asm__("outb %0,%1\n\tjmp 1f\n1:\tjmp 1f\n1:"::"a" ((char) (val)),"i" (port))
 #define DRIVE(x) ((x)&0x03)
 /*
  * Note that MAX_ERRORS=X doesn't imply that we retry every bad read
- * max X times - some types of errors increase the errorcount by 2,
- * so we might actually retry only X/2 times before giving up.
+ * max X times - some types of errors increase the errorcount by 2 or
+ * even 3, so we might actually retry only X/2 times before giving up.
  */
 #define MAX_ERRORS 12
 
@@ -115,18 +117,20 @@ extern char floppy_track_buffer[512*2*18];
  * information to interrupts. They are the data used for the current
  * request.
  */
+#define NO_TRACK 255
+
 static int read_track = 0;	/* flag to indicate if we want to read all track */
 static int buffer_track = -1;
 static int buffer_drive = -1;
 static int cur_spec1 = -1;
 static int cur_rate = -1;
 static struct floppy_struct * floppy = floppy_type;
-static unsigned char current_drive = 0;
+static unsigned char current_drive = 255;
 static unsigned char sector = 0;
 static unsigned char head = 0;
 static unsigned char track = 0;
 static unsigned char seek_track = 0;
-static unsigned char current_track = 255;
+static unsigned char current_track = NO_TRACK;
 static unsigned char command = 0;
 unsigned char selected = 0;
 struct task_struct * wait_on_floppy_select = NULL;
@@ -145,20 +149,37 @@ void floppy_deselect(unsigned int nr)
  * to the desired drive, but it will probably not survive the sleep if
  * several floppies are used at the same time: thus the loop.
  */
-int floppy_change(unsigned int nr)
+int floppy_change(struct buffer_head * bh)
 {
-repeat:
-	floppy_on(nr);
-	while ((current_DOR & 3) != nr && selected)
-		sleep_on(&wait_on_floppy_select);
-	if ((current_DOR & 3) != nr)
-		goto repeat;
-	if (inb(FD_DIR) & 0x80) {
-		floppy_off(nr);
-		buffer_track = -1;
+	unsigned int mask = 1 << (bh->b_dev & 0x03);
+
+	if (MAJOR(bh->b_dev) != 2) {
+		printk("floppy_changed: not a floppy\n");
+		return 0;
+	}
+	if (changed_floppies & mask) {
+		changed_floppies &= ~mask;
+		recalibrate = 1;
 		return 1;
 	}
-	floppy_off(nr);
+	if (!bh)
+		return 0;
+	if (bh->b_dirt)
+		ll_rw_block(WRITE,bh);
+	else {
+		buffer_track = -1;
+		bh->b_uptodate = 0;
+		ll_rw_block(READ,bh);
+	}
+	cli();
+	while (bh->b_lock)
+		sleep_on(&bh->b_wait);
+	sti();
+	if (changed_floppies & mask) {
+		changed_floppies &= ~mask;
+		recalibrate = 1;
+		return 1;
+	}	
 	return 0;
 }
 
@@ -223,6 +244,7 @@ static void output_byte(char byte)
 			return;
 		}
 	}
+	current_track = NO_TRACK;
 	reset = 1;
 	printk("Unable to send byte to FDC\n\r");
 }
@@ -244,13 +266,14 @@ static int result(void)
 		}
 	}
 	reset = 1;
+	current_track = NO_TRACK;
 	printk("Getstatus times out\n\r");
 	return -1;
 }
 
 static void bad_flp_intr(void)
 {
-	current_track = -1;
+	current_track = NO_TRACK;
 	CURRENT->errors++;
 	if (CURRENT->errors > MAX_ERRORS) {
 		floppy_deselect(current_drive);
@@ -258,6 +281,8 @@ static void bad_flp_intr(void)
 	}
 	if (CURRENT->errors > MAX_ERRORS/2)
 		reset = 1;
+	else
+		recalibrate = 1;
 }	
 
 /*
@@ -383,15 +408,15 @@ static void transfer(void)
 static void recal_interrupt(void)
 {
 	output_byte(FD_SENSEI);
+	current_track = NO_TRACK;
 	if (result()!=2 || (ST0 & 0xE0) == 0x60)
 		reset = 1;
-	else
-		recalibrate = 0;
 	do_fd_request();
 }
 
 void unexpected_floppy_interrupt(void)
 {
+	current_track = NO_TRACK;
 	output_byte(FD_SENSEI);
 	if (result()!=2 || (ST0 & 0xE0) == 0x60)
 		reset = 1;
@@ -427,15 +452,16 @@ static void reset_floppy(void)
 {
 	int i;
 
+	do_floppy = reset_interrupt;
 	reset = 0;
+	current_track = NO_TRACK;
 	cur_spec1 = -1;
 	cur_rate = -1;
 	recalibrate = 1;
 	printk("Reset-floppy called\n\r");
 	cli();
-	do_floppy = reset_interrupt;
 	outb_p(current_DOR & ~0x04,FD_DOR);
-	for (i=0 ; i<100 ; i++)
+	for (i=0 ; i<1000 ; i++)
 		__asm__("nop");
 	outb(current_DOR,FD_DOR);
 	sti();
@@ -443,6 +469,18 @@ static void reset_floppy(void)
 
 static void floppy_on_interrupt(void)
 {
+	if (inb(FD_DIR) & 0x80) {
+		changed_floppies |= 1<<current_drive;
+		buffer_track = -1;
+	}
+	if (reset) {
+		reset_floppy();
+		return;
+	}
+	if (recalibrate) {
+		recalibrate_floppy();
+		return;
+	}
 /* We cannot do a floppy-select, as that might sleep. We just force it */
 	selected = 1;
 	if (current_drive != (current_DOR & 3)) {
@@ -459,19 +497,11 @@ void do_fd_request(void)
 	unsigned int block;
 	char * buffer_area;
 
-	seek = 0;
-	if (reset) {
-		reset_floppy();
-		return;
-	}
-	if (recalibrate) {
-		recalibrate_floppy();
-		return;
-	}
 	INIT_REQUEST;
+	seek = 0;
 	floppy = (MINOR(CURRENT->dev)>>2) + floppy_type;
 	if (current_drive != CURRENT_DEV)
-		seek = 1;
+		current_track = NO_TRACK;
 	current_drive = CURRENT_DEV;
 	block = CURRENT->sector;
 	if (block+2 > floppy->size) {

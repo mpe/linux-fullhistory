@@ -53,7 +53,12 @@ static void flush(struct tty_queue * queue)
 
 static void wait_until_sent(struct tty_struct * tty)
 {
-	/* do nothing - not implemented */
+	cli();
+	while (!(current->signal & ~current->blocked) && !EMPTY(tty->write_q)) {
+		current->counter = 0;
+		interruptible_sleep_on(&tty->write_q->proc_list);
+	}
+	sti();
 }
 
 static void send_break(struct tty_struct * tty)
@@ -137,7 +142,7 @@ static int get_termio(struct tty_struct * tty, struct termio * termio)
 }
 
 /*
- * This only works as the 386 is low-byt-first
+ * This only works as the 386 is low-byte-first
  */
 static int set_termio(struct tty_struct * tty, struct termio * termio,
 			int channel)
@@ -255,11 +260,11 @@ int tty_ioctl(int dev, int cmd, int arg)
 			switch (arg) {
 			case TCOOFF:
 				tty->stopped = 1;
-				tty->write(tty);
+				TTY_WRITE(tty);
 				return 0;
 			case TCOON:
 				tty->stopped = 0;
-				tty->write(tty);
+				TTY_WRITE(tty);
 				return 0;
 			case TCIOFF:
 				if (STOP_CHAR(tty))

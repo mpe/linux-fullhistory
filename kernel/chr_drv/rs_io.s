@@ -13,7 +13,7 @@
 .text
 .globl _rs1_interrupt,_rs2_interrupt
 
-size	= 1024				/* must be power of two !
+size	= 2048				/* must be power of two !
 					   and must match the value
 					   in tty_io.c!!! */
 
@@ -29,16 +29,21 @@ startup	= 256		/* chars left in write queue when we restart it */
 /*
  * These are the actual interrupt routines. They look where
  * the interrupt is coming from, and take appropriate action.
+ *
+ * rs1_interrupt (IRQ 4) takes care of com1 and com3
+ * rs2_interrupt (IRQ 3) takes care of com2 and com4
  */
 .align 2
 _rs1_interrupt:
 	pushl $_table_list+8
+	pushl $_table_list+24
 	jmp rs_int
+
 .align 2
 _rs2_interrupt:
 	pushl $_table_list+16
-rs_int:
-	cld
+	pushl $_table_list+32
+rs_int:	cld
 	pushl %edx
 	pushl %ecx
 	pushl %ebx
@@ -50,23 +55,10 @@ rs_int:
 	pushl $0x10
 	pop %es
 	movl 24(%esp),%edx
-	movl (%edx),%edx
-	movl rs_addr(%edx),%edx
-	addl $2,%edx		/* interrupt ident. reg */
-rep_int:
-	xorl %eax,%eax
-	inb %dx,%al
-	testb $1,%al
-	jne end
-	cmpb $6,%al		/* this shouldn't happen, but ... */
-	ja end
-	movl 24(%esp),%ecx
-	pushl %edx
-	subl $2,%edx
-	call jmp_table(,%eax,2)		/* NOTE! not *4, bit0 is 0 already */
-	popl %edx
-	jmp rep_int
-end:	movb $0x20,%al
+	call do_rs_intr
+	movl 28(%esp),%edx
+	call do_rs_intr
+	movb $0x20,%al
 	outb %al,$0x20		/* EOI */
 	pop %ds
 	pop %es
@@ -74,8 +66,28 @@ end:	movb $0x20,%al
 	popl %ebx
 	popl %ecx
 	popl %edx
-	addl $4,%esp		# jump over _table_list entry
+	addl $8,%esp		# jump over the _table_list entries
 	iret
+
+do_rs_intr:
+	pushl %edx
+	movl (%edx),%edx
+	movl rs_addr(%edx),%edx
+	addl $2,%edx		/* interrupt ident. reg */
+1:	xorl %eax,%eax
+	inb %dx,%al
+	testb $1,%al
+	jne 2f
+	cmpb $6,%al		/* this shouldn't happen, but ... */
+	ja 2f
+	movl (%esp),%ecx
+	pushl %edx
+	subl $2,%edx
+	call jmp_table(,%eax,2)		/* NOTE! not *4, bit0 is 0 already */
+	popl %edx
+	jmp 1b
+2:	popl %edx
+	ret
 
 jmp_table:
 	.long modem_status,write_char,read_char,line_status
@@ -112,7 +124,7 @@ read_char:
 
 .align 2
 mask_table:
-	.long 0,4,8
+	.long 0,4,8,16,32
 
 .align 2
 write_char:
@@ -136,6 +148,7 @@ write_char:
 	cmpl head(%ecx),%ebx
 	je write_buffer_empty
 	ret
+
 .align 2
 write_buffer_empty:
 	movl proc_list(%ecx),%ebx	# wake up sleeping process
@@ -146,6 +159,6 @@ write_buffer_empty:
 	inb %dx,%al
 	jmp 1f
 1:	jmp 1f
-1:	andb $0xd,%al		/* disable transmit interrupt */
+1:	andb $0xd,%al			# disable transmit interrupt
 	outb %al,%dx
 	ret

@@ -359,9 +359,9 @@ volatile void do_exit(long code)
 
 		if (current->tty >= 0) {
 			tty = TTY_TABLE(current->tty);
-			if (tty->pgrp>0)
+			if (tty->pgrp > 0)
 				kill_pg(tty->pgrp, SIGHUP, 1);
-			tty->pgrp = 0;
+			tty->pgrp = -1;
 			tty->session = 0;
 		}
 	 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)

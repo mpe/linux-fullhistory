@@ -47,8 +47,9 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 		filp->f_pos += chars;
 		written += chars;
 		count -= chars;
-		while (chars-->0)
-			*(p++) = get_fs_byte(buf++);
+		memcpy_fromfs(p,buf,chars);
+		p += chars;
+		buf += chars;
 		bh->b_dirt = 1;
 		brelse(bh);
 	}
@@ -85,8 +86,9 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 		filp->f_pos += chars;
 		read += chars;
 		count -= chars;
-		while (chars-->0)
-			put_fs_byte(*(p++),buf++);
+		memcpy_tofs(buf,p,chars);
+		p += chars;
+		buf += chars;
 		brelse(bh);
 	}
 	return read;

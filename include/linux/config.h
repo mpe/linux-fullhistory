@@ -16,7 +16,7 @@
 #define UTS_SYSNAME "Linux"
 #define UTS_NODENAME "(none)"	/* set by sethostname() */
 #define UTS_RELEASE "0"		/* patchlevel */
-#define UTS_VERSION "0.12"
+#define UTS_VERSION "0.95a"
 #define UTS_MACHINE "i386"	/* hardware type */
 
 /* Don't touch these, unless you really know what your doing. */

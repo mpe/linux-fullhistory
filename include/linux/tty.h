@@ -10,14 +10,14 @@
 #define _TTY_H
 
 #define MAX_CONSOLES	8
-#define NR_SERIALS	2
+#define NR_SERIALS	4
 #define NR_PTYS		4
 
 extern int NR_CONSOLES;
 
 #include <termios.h>
 
-#define TTY_BUF_SIZE 1024
+#define TTY_BUF_SIZE 2048
 
 struct tty_queue {
 	unsigned long data;
@@ -60,12 +60,25 @@ struct tty_struct {
 	int pgrp;
 	int session;
 	int stopped;
+	int busy;
 	struct winsize winsize;
 	void (*write)(struct tty_struct * tty);
 	struct tty_queue *read_q;
 	struct tty_queue *write_q;
 	struct tty_queue *secondary;
 	};
+
+#define TTY_WRITE(tty) \
+do { \
+	cli(); \
+	if (!(tty)->busy) { \
+		(tty)->busy = 1; \
+		sti(); \
+		(tty)->write((tty)); \
+		(tty)->busy = 0; \
+	} else \
+		sti(); \
+} while (0)
 
 extern struct tty_struct tty_table[];
 extern int fg_console;
@@ -95,6 +108,8 @@ void con_write(struct tty_struct * tty);
 void rs_write(struct tty_struct * tty);
 void mpty_write(struct tty_struct * tty);
 void spty_write(struct tty_struct * tty);
+
+extern void serial_open(unsigned int line);
 
 void copy_to_cooked(struct tty_struct * tty);
 

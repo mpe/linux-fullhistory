@@ -39,9 +39,8 @@ int minix_file_read(struct inode * inode, struct file * filp, char * buf, int co
 		left -= chars;
 		read += chars;
 		if (bh) {
-			char * p = nr + bh->b_data;
-			while (chars-->0)
-				put_fs_byte(*(p++),buf++);
+			memcpy_tofs(buf,nr+bh->b_data,chars);
+			buf += chars;
 			brelse(bh);
 		} else {
 			while (chars-->0)
@@ -81,7 +80,6 @@ int minix_file_write(struct inode * inode, struct file * filp, char * buf, int c
 		}
 		c = pos % BLOCK_SIZE;
 		p = c + bh->b_data;
-		bh->b_dirt = 1;
 		c = BLOCK_SIZE-c;
 		if (c > count-written)
 			c = count-written;
@@ -91,8 +89,9 @@ int minix_file_write(struct inode * inode, struct file * filp, char * buf, int c
 			inode->i_dirt = 1;
 		}
 		written += c;
-		while (c-->0)
-			*(p++) = get_fs_byte(buf++);
+		memcpy_fromfs(p,buf,c);
+		buf += c;
+		bh->b_dirt = 1;
 		brelse(bh);
 	}
 	inode->i_mtime = CURRENT_TIME;

@@ -155,37 +155,38 @@ int swap_out(void)
 	static int dir_entry = 1024;
 	static int page_entry = -1;
 	int counter = VM_PAGES;
-	int pg_table = 0;
+	int pg_table;
 
-repeat:
-	while (counter > 0) {
+check_dir:
+	if (counter < 0)
+		goto no_swap;
+	if (dir_entry >= 1024)
+		dir_entry = FIRST_VM_PAGE>>10;
+	if (!(1 & (pg_table = pg_dir[dir_entry]))) {
+		if (pg_table) {
+			printk("bad page-table at pg_dir[%d]: %08x\n\r",
+				dir_entry,pg_table);
+			pg_dir[dir_entry] = 0;
+		}
 		counter -= 1024;
 		dir_entry++;
-		if (dir_entry >= 1024)
-			dir_entry = FIRST_VM_PAGE>>10;
-		if (pg_table = pg_dir[dir_entry])
-			break;
-	}
-	if (counter <= 0) {
-		printk("Out of swap-memory\n");
-		return 0;
-	}
-	if (!(pg_table & 1)) {
-		printk("bad page-table at pg_dir[%d]: %08x\n\r",dir_entry,
-			pg_table);
-		return 0;
+		goto check_dir;
 	}
 	pg_table &= 0xfffff000;
-	while (counter > 0) {
-		counter--;
-		page_entry++;
-		if (page_entry >= 1024) {
-			page_entry = -1;
-			goto repeat;
-		}
-		if (try_to_swap_out(page_entry + (unsigned long *) pg_table))
-			return 1;
+check_table:
+	if (counter < 0)
+		goto no_swap;
+	counter--;
+	page_entry++;
+	if (page_entry >= 1024) {
+		page_entry = -1;
+		dir_entry++;
+		goto check_dir;
 	}
+	if (try_to_swap_out(page_entry + (unsigned long *) pg_table))
+		return 1;
+	goto check_table;
+no_swap:
 	printk("Out of swap-memory\n\r");
 	return 0;
 }

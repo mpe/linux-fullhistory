@@ -165,7 +165,7 @@ extern struct buffer_head * start_buffer;
 extern int nr_buffers;
 
 extern void check_disk_change(int dev);
-extern int floppy_change(unsigned int nr);
+extern int floppy_change(struct buffer_head * first_block);
 extern int ticks_to_floppy_on(unsigned int dev);
 extern void floppy_on(unsigned int dev);
 extern void floppy_off(unsigned int dev);
