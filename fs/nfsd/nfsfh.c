@@ -150,7 +150,7 @@ static struct dentry *nfsd_iget(struct super_block *sb, unsigned long ino, __u32
 	 */
 	for (lp = inode->i_dentry.next; lp != &inode->i_dentry ; lp=lp->next) {
 		result = list_entry(lp,struct dentry, d_alias);
-		if (! IS_ROOT(result) || inode->i_sb->s_root == result) {
+		if (! (result->d_flags & DCACHE_NFSD_DISCONNECTED)) {
 			dget(result);
 			iput(inode);
 			return result;
@@ -161,6 +161,7 @@ static struct dentry *nfsd_iget(struct super_block *sb, unsigned long ino, __u32
 		iput(inode);
 		return ERR_PTR(-ENOMEM);
 	}
+	result->d_flags |= DCACHE_NFSD_DISCONNECTED;
 	d_rehash(result); /* so a dput won't loose it */
 	return result;
 }
@@ -175,6 +176,8 @@ int d_splice(struct dentry *target, struct dentry *parent, struct qstr *name)
 #ifdef NFSD_PARANOIA
 	if (!IS_ROOT(target))
 		printk("nfsd: d_splice with no-root target: %s/%s\n", parent->d_name.name, name->name);
+	if (!(target->d_flags & DCACHE_NFSD_DISCONNECTED))
+		printk("nfsd: d_splice with non-DISCONNECTED target: %s/%s\n", parent->d_name.name, name->name);
 #endif
 	name->hash = full_name_hash(name->name, name->len);
 	tdentry = d_alloc(parent, name);
@@ -189,6 +192,29 @@ int d_splice(struct dentry *target, struct dentry *parent, struct qstr *name)
 	tdentry->d_parent = tdentry;
 	d_rehash(target);
 	dput(tdentry);
+
+	/* if parent is properly connected, then we can assert that
+	 * the children are connected, but it must be a singluar (non-forking)
+	 * branch
+	 */
+	if (!(parent->d_flags & DCACHE_NFSD_DISCONNECTED)) {
+		while (target) {
+			target->d_flags &= ~DCACHE_NFSD_DISCONNECTED;
+			parent = target;
+			if (list_empty(&parent->d_subdirs))
+				target = NULL;
+			else {
+				target = list_entry(parent->d_subdirs.next, struct dentry, d_child);
+#ifdef NFSD_PARANOIA
+				/* must be only child */
+				if (target->d_child.next != &parent->d_subdirs
+				    || target->d_child.prev != &parent->d_subdirs)
+					printk("nfsd: d_splice found non-singular disconnected branch: %s/%s\n",
+					       parent->d_name.name, target->d_name.name);
+#endif
+			}
+		}
+	}
 	return 0;
 }
 
@@ -227,7 +253,10 @@ struct dentry *nfsd_findparent(struct dentry *child)
 		}
 		if (pdentry == NULL) {
 			pdentry = d_alloc_root(igrab(tdentry->d_inode));
-			if (pdentry) d_rehash(pdentry);
+			if (pdentry) {
+				pdentry->d_flags |= DCACHE_NFSD_DISCONNECTED;
+				d_rehash(pdentry);
+			}
 		}
 		if (pdentry == NULL)
 			pdentry = ERR_PTR(-ENOMEM);
@@ -302,13 +331,13 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 	struct dentry *tmp;
 	int  found =0;
 	int err;
-	/* This semaphore is needed to make sure that only one unconnected (free)
+	/* the sb->s_nfsd_free_path_sem semaphore is needed to make sure that only one unconnected (free)
 	 * dcache path ever exists, as otherwise two partial paths might get
 	 * joined together, which would be very confusing.
 	 * If there is ever an unconnected non-root directory, then this lock
-	 * must be held.  This could sensibly be per-filesystem.
+	 * must be held.
 	 */
-	static DECLARE_MUTEX(free_path_sem);
+
 
 	nfsdstats.fh_lookup++;
 	/*
@@ -324,7 +353,7 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 		dprintk("find_fh_dentry: No inode found.\n");
 		goto err_out;
 	}
-	if (!IS_ROOT(result) || result->d_inode->i_sb->s_root ==result)
+	if (! (result->d_flags & DCACHE_NFSD_DISCONNECTED))
 		return result;
 
 	/* result is now an anonymous dentry, which may be adequate as it stands, or else
@@ -339,7 +368,15 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 	 * location in the tree.
 	 */
 	dprintk("nfs_fh: need to look harder for %d/%d\n",sb->s_dev,fh->fh_ino);
-	down(&free_path_sem);
+	down(&sb->s_nfsd_free_path_sem);
+
+	/* claiming the semaphore might have allow things to get fixed up */
+	if (! (result->d_flags & DCACHE_NFSD_DISCONNECTED)) {
+		up(&sb->s_nfsd_free_path_sem);
+		return result;
+	}
+
+
 	found = 0;
 	if (!S_ISDIR(result->d_inode->i_mode)) {
 		nfsdstats.fh_nocache_nondir++;
@@ -356,7 +393,7 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 			    || !S_ISDIR(dentry->d_inode->i_mode)) {
 				goto err_dentry;
 			}
-			if (!IS_ROOT(dentry) || dentry->d_inode->i_sb->s_root ==dentry)
+			if ((!dentry->d_flags & DCACHE_NFSD_DISCONNECTED))
 				found = 1;
 			tmp = splice(result, dentry);
 			err = PTR_ERR(tmp);
@@ -393,10 +430,8 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 			dput(pdentry);
 			goto err_dentry;
 		}
-		/* I'm not sure that this is the best test for
-		 *  "is it not a floating dentry?"
-		 */
-		if (!IS_ROOT(pdentry) || parent->i_sb->s_root == pdentry)
+
+		if (!(dentry->d_flags & DCACHE_NFSD_DISCONNECTED))
 			found = 1;
 
 		tmp = splice(dentry, pdentry);
@@ -419,21 +454,21 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 			dput(tmp);
 			dput(dentry);
 			dput(result);	/* this will discard the whole free path, so we can up the semaphore */
-			up(&free_path_sem);
+			up(&sb->s_nfsd_free_path_sem);
 			goto retry;
 		}
 		dput(dentry);
 		dentry = pdentry;
 	}
 	dput(dentry);
-	up(&free_path_sem);
+	up(&sb->s_nfsd_free_path_sem);
 	return result;
 
 err_dentry:
 	dput(dentry);
 err_result:
 	dput(result);
-	up(&free_path_sem);
+	up(&sb->s_nfsd_free_path_sem);
 err_out:
 	if (err == -ESTALE)
 		nfsdstats.fh_stale++;
@@ -515,6 +550,13 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 			error = nfserrno(-PTR_ERR(dentry));
 			goto out;
 		}
+#ifdef NFSD_PARANOIA
+		if (S_ISDIR(dentry->d_inode->i_mode) &&
+		    (dentry->d_flags & DCACHE_NFSD_DISCONNECTED)) {
+			printk("nfsd: find_fh_dentry returned a DISCONNECTED directory: %s/%s\n",
+			       dentry->d_parent->d_name.name, dentry->d_name.name);
+		}
+#endif
 
 		fhp->fh_dentry = dentry;
 		fhp->fh_export = exp;

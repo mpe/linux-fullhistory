@@ -646,17 +646,13 @@ static struct tty_driver acm_tty_driver = {
  * Init / cleanup.
  */
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit usb_acm_cleanup(void)
 {
 	usb_deregister(&acm_driver);
 	tty_unregister_driver(&acm_tty_driver);
 }
 
-int init_module(void)
-#else
-int usb_acm_init(void)
-#endif
+static int __init usb_acm_init(void)
 {
 	acm_tty_driver.init_termios =		tty_std_termios;
 	acm_tty_driver.init_termios.c_cflag =	B9600 | CS8 | CREAD | HUPCL | CLOCAL;
@@ -672,4 +668,5 @@ int usb_acm_init(void)
 	return 0;
 }
 
-__initcall(usb_acm_init);
+module_init(usb_acm_init);
+module_exit(usb_acm_cleanup);

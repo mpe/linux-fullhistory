@@ -37,7 +37,9 @@
 #include "../scsi/sd.h"
 
 #include "usb.h"
-#include "usb_storage.h"
+#include "usb-storage.h"
+#include "usb-storage-debug.h"
+
 
 /*
  * This is the size of the structure Scsi_Host_Template.  We create
@@ -892,7 +894,7 @@ static int CB_transport(Scsi_Cmnd *srb, struct us_data *us)
 static int pop_CB_status(Scsi_Cmnd *srb)
 {
 	struct us_data *us = (struct us_data *)srb->host_scribble;
-	int result;
+	int result = 0;
 	__u8 status[2];
 	int retry = 5;
 

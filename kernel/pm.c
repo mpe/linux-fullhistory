@@ -168,3 +168,4 @@ EXPORT_SYMBOL(pm_unregister);
 EXPORT_SYMBOL(pm_unregister_all);
 EXPORT_SYMBOL(pm_send_request);
 EXPORT_SYMBOL(pm_find);
+EXPORT_SYMBOL(pm_active);

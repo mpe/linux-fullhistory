@@ -15,6 +15,7 @@
 #include <linux/limits.h>
 #define __NO_VERSION__
 #include <linux/module.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -34,6 +35,7 @@ struct proc_dir_entry * de_get(struct proc_dir_entry *de)
 void de_put(struct proc_dir_entry *de)
 {
 	if (de) {
+		lock_kernel(); /* FIXME: count should be atomic_t */
 		if (!de->count) {
 			printk("de_put: entry %s already free!\n", de->name);
 			return;
@@ -46,6 +48,7 @@ void de_put(struct proc_dir_entry *de)
 				free_proc_entry(de);
 			}
 		}
+		unlock_kernel();
 	}
 }
 
@@ -65,6 +68,8 @@ static void proc_put_inode(struct inode *inode)
 static void proc_delete_inode(struct inode *inode)
 {
 	struct proc_dir_entry *de = inode->u.generic_ip;
+
+	inode->i_state = I_CLEAR;
 
 	if (PROC_INODE_PROPER(inode)) {
 		proc_pid_delete_inode(inode);

@@ -1,28 +1,10 @@
+#ifdef CONFIG_USB_STORAGE_DEBUG
 
-/* Driver for USB mass storage (scsi-like) devices
+/* Debug output for Driver for USB mass storage (scsi-like) devices
  * 
  * (C) Michael Gee (michael@linuxspecific.com) 1999
  *
  */
-
-#include <linux/kernel.h>
-#include <linux/sched.h>
-#include <linux/signal.h>
-#include <linux/errno.h>
-#include <linux/miscdevice.h>
-#include <linux/random.h>
-#include <linux/poll.h>
-#include <linux/init.h>
-#include <linux/malloc.h>
-#include <linux/spinlock.h>
-
-#include <linux/blk.h>
-#include "../scsi/scsi.h"
-#include "../scsi/hosts.h"
-#include "../scsi/sd.h"
-
-#include "usb.h"
-#include "usb_storage.h"
 
 void us_show_command(Scsi_Cmnd *srb)
 {
@@ -102,3 +84,5 @@ void us_show_command(Scsi_Cmnd *srb)
 	       srb->cmnd[0], srb->cmnd[1], srb->cmnd[2], srb->cmnd[3], srb->cmnd[4], srb->cmnd[5], 
 	       srb->cmnd[6], srb->cmnd[7], srb->cmnd[8], srb->cmnd[9]);
 }
+
+#endif

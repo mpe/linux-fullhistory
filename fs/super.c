@@ -565,6 +565,7 @@ static struct super_block * read_super(kdev_t dev, struct block_device *bdev,
 	s->s_flags = flags;
 	s->s_dirt = 0;
 	sema_init(&s->s_vfs_rename_sem,1);
+	sema_init(&s->s_nfsd_free_path_sem,1);
 	/* N.B. Should lock superblock now ... */
 	if (!type->read_super(s, data, silent))
 		goto out_fail;
@@ -1142,6 +1143,7 @@ void __init mount_root(void)
 			sb->s_bdev = NULL;
 			sb->s_flags = root_mountflags;
 			sema_init(&sb->s_vfs_rename_sem,1);
+			sema_init(&s->s_nfsd_free_path_sem,1);
 			vfsmnt = add_vfsmnt(sb, "/dev/root", "/");
 			if (vfsmnt) {
 				if (nfs_root_mount(sb) >= 0) {

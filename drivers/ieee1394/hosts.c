@@ -23,31 +23,6 @@
 static struct hpsb_host_template *templates = NULL;
 spinlock_t templates_lock = SPIN_LOCK_UNLOCKED;
 
-
-/*
- * The following function is exported for module usage.  It will
- * be called from high-level drivers such as the raw driver.
- */
-int hpsb_get_host_list(struct hpsb_host *list[], int list_size)
-{
-    struct hpsb_host *host, **ptr;
-    struct hpsb_host_template *tmpl;
-    int count=0;
-
-    ptr = list;
-
-    for (tmpl = templates ; tmpl != NULL; tmpl = tmpl->next) {
-        for (host = tmpl->hosts; (host != NULL) && (count < list_size); 
-             host = host->next) {
-            *ptr = host;
-            ptr++;
-            count++;
-        }
-    }
-
-    return count;
-}
-
 /*
  * This function calls the add_host/remove_host hooks for every host currently
  * registered.  Init == TRUE means add_host.
@@ -131,7 +106,7 @@ struct hpsb_host *hpsb_get_host(struct hpsb_host_template *tmpl,
         h->timeout_tq.data = h;
 
         h->topology_map = h->csr.topology_map + 3;
-        h->speed_map = h->csr.speed_map + 2;
+        h->speed_map = (u8 *)(h->csr.speed_map + 2);
 
         h->template = tmpl;
         if (hd_size) {

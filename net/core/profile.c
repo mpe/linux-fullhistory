@@ -271,12 +271,6 @@ int __init net_profile_init(void)
 	register_netdevice(&whitehole_dev);
 
 	printk("Evaluating net profiler cost ...");
-#if CPU == 586 || CPU == 686
-	if (!(boot_cpu_data.x86_capability & X86_FEATURE_TSC)) {
-		printk(KERN_ERR "Sorry, your CPU does not support TSC. Net profiler disabled.\n");
-		return -1;
-	}
-#endif
 #ifdef __alpha__
 	alpha_tick(0);
 #endif

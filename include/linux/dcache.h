@@ -98,6 +98,12 @@ struct dentry_operations {
 					 * renamed" and has to be
 					 * deleted on the last dput()
 					 */
+#define	DCACHE_NFSD_DISCONNECTED 0x0004	/* This dentry is not currently connected to the
+					 * dcache tree. Its parent will either be itself,
+					 * or will have this flag as well.
+					 * If this dentry points to a directory, then
+					 * s_nfsd_free_path semaphore will be down
+					 */
 
 /*
  * d_drop() unhashes the entry from the parent

@@ -69,7 +69,7 @@ nlmclnt_setgrantargs(struct nlm_rqst *call, struct nlm_lock *lock)
 	call->a_args.lock    = *lock;
 	call->a_args.lock.caller = system_utsname.nodename;
 
-	init_waitqueue_head(&lock->fl.fl_wait);
+	init_waitqueue_head(&call->a_args.lock.fl.fl_wait);
 	/* set default data area */
 	call->a_args.lock.oh.data = call->a_owner;
 

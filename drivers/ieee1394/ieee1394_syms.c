@@ -19,7 +19,6 @@
 EXPORT_SYMBOL(hpsb_register_lowlevel);
 EXPORT_SYMBOL(hpsb_unregister_lowlevel);
 EXPORT_SYMBOL(hpsb_get_host);
-EXPORT_SYMBOL(hpsb_get_host_list);
 EXPORT_SYMBOL(hpsb_inc_host_usage);
 EXPORT_SYMBOL(hpsb_dec_host_usage);
 
@@ -53,8 +52,3 @@ EXPORT_SYMBOL(highlevel_read);
 EXPORT_SYMBOL(highlevel_write);
 EXPORT_SYMBOL(highlevel_lock);
 EXPORT_SYMBOL(highlevel_lock64);
-
-/*
-EXPORT_SYMBOL(hpsb_dispatch_event);
-EXPORT_SYMBOL(hpsb_reg_event_handler);
-*/

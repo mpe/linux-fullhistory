@@ -913,7 +913,7 @@ Changes for patch v104
 Changes for patch v105
 
 - Unregister SCSI host from <scsi_host_no_list> in <scsi_unregister>
-  Thanks to Zoltan BOSZORMENYI <zboszor@mol.hu>
+  Thanks to Zoltán Böszörményi <zboszor@mail.externet.hu>
 
 - Don't save /dev/log in rc.devfs
 
@@ -1450,3 +1450,16 @@ Work sponsored by SGI
 
 - Moved device registration from <lp_init> to <lp_register>
   Thanks to Tim Waugh <twaugh@redhat.com>
+===============================================================================
+Changes for patch v160
+
+Work sponsored by SGI
+
+- Fixed drivers/char/joystick/joystick.c
+  Thanks to Vojtech Pavlik <vojtech@suse.cz>
+
+- Documentation updates
+
+- Fixed arch/i386/kernel/mtrr.c if procfs and devfs not enabled
+
+- Fixed drivers/char/stallion.c

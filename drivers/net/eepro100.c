@@ -1775,7 +1775,7 @@ static void eepro100_suspend (struct pci_dev *pdev)
 	struct net_device *dev = pdev->driver_data;
 	long ioaddr = dev->base_addr;
 
-	netif_stop_queue (dev);
+	netif_device_detach(dev);
 	outl(PortPartialReset, ioaddr + SCBPort);
 	
 	/* XXX call pci_set_power_state ()? */
@@ -1787,6 +1787,7 @@ static void eepro100_resume (struct pci_dev *pdev)
 	struct net_device *dev = pdev->driver_data;
 	struct speedo_private *np = (struct speedo_private *)dev->priv;
 
+	netif_device_attach(dev);
 	speedo_resume(dev);
 	np->rx_mode = -1;
 	np->flow_ctrl = np->partner = 0;
@@ -1811,6 +1812,10 @@ static void __devexit eepro100_remove_one (struct pci_dev *pdev)
 #endif
 
 	pci_set_power_state (pdev, sp->acpi_pwr);
+
+	pci_free_consistent(pdev, TX_RING_SIZE * sizeof(struct TxFD)
+				  + sizeof(struct speedo_stats),
+			    sp->tx_ring, sp->tx_ring_dma);
 
 	kfree (dev);
 }

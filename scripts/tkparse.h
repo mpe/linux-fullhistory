@@ -19,6 +19,7 @@ enum e_token
     token_define_string,
     token_define_tristate,
     token_dep_bool,
+    token_dep_mbool,
     token_dep_tristate,
     token_else, 
     token_endmenu,
@@ -77,7 +78,7 @@ struct condition
 };
 
 /*
- * Dependency list for dep_bool, dep_tristate
+ * Dependency list for dep_bool, dep_mbool, dep_tristate
  */
 
 struct dependency

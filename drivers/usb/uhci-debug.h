@@ -193,7 +193,7 @@ static const char *qh_names[] = { "control", "bulk" };
 
 void uhci_show_queues(struct uhci *uhci)
 {
-	int i, isqh;
+	int i, isqh = 0;
 	struct uhci_qh *qh;
 	struct uhci_td *td;
 

@@ -574,7 +574,39 @@ unsigned int ss_vendor, unsigned int ss_device, const struct pci_dev *from)
 { return NULL; }
 
 extern inline void pci_set_master(struct pci_dev *dev) { }
-extern inline int pci_enable_device(struct pci_dev *dev) { return 0; }
+extern inline int pci_enable_device(struct pci_dev *dev) { return -EIO; }
+extern inline int pci_module_init(struct pci_driver *drv) { return -ENODEV; }
+
+#else
+
+/*
+ * a helper function which helps ensure correct pci_driver
+ * setup and cleanup for commonly-encountered hotplug/modular cases
+ *
+ * This MUST stay in a header, as it checks for -DMODULE
+ */
+extern inline int pci_module_init(struct pci_driver *drv)
+{
+	int rc = pci_register_driver (drv);
+
+	if (rc > 0)
+		return 0;
+
+	/* iff CONFIG_HOTPLUG and built into kernel, we should
+	 * leave the driver around for future hotplug events.
+	 * For the module case, a hotplug daemon of some sort
+	 * should load a module in response to an insert event. */
+#if defined(CONFIG_HOTPLUG) && !defined(MODULE)
+	if (rc == 0)
+		return 0;
+#endif
+
+	/* if we get here, we need to clean up pci driver instance
+	 * and return some sort of error */
+	pci_unregister_driver (drv);
+	
+	return -ENODEV;
+}
 
 #endif /* !CONFIG_PCI */
 

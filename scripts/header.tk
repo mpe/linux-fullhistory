@@ -249,17 +249,19 @@ proc sync_tristate { var dep } {
 	return $var
 }
 
-proc sync_bool { var dep } {
+proc sync_bool { var dep modset } {
 	set var [sync_tristate $var $dep]
-	if {$dep == 2} then {
-		set var 0
+	if {$dep == 2 && $var == 2} then {
+		set var $modset
 	}
 	return $var
 }
 
-proc write_tristate { file1 file2 varname variable deplist } {
+proc write_tristate { file1 file2 varname variable deplist modset } {
 	set variable [sync_tristate $variable [effective_dep $deplist]]
-	if { $variable == 1 }\
+	if { $variable == 2 } \
+		then { set variable $modset }
+	if { $variable == 1 } \
 		then { puts $file1 "$varname=y"; \
 		       puts $file2 "#define $varname 1" } \
 	elseif { $variable == 2 } \

@@ -857,11 +857,15 @@ void tcp_send_fin(struct sock *sk)
 		}
 	} else {
 		/* Socket is locked, keep trying until memory is available. */
-		do {
+		for (;;) {
 			skb = sock_wmalloc(sk,
 					   MAX_TCP_HEADER + 15,
 					   1, GFP_KERNEL);
-		} while (skb == NULL);
+			if (skb)
+				break;
+			current->policy |= SCHED_YIELD;
+			schedule();
+		}
 
 		/* Reserve space for headers and prepare control bits. */
 		skb_reserve(skb, MAX_TCP_HEADER);

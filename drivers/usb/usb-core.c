@@ -33,8 +33,6 @@ int usb_audio_init(void);
 int usb_cpia_init(void);
 int usb_ibmcam_init(void);
 int usb_ov511_init(void);
-int usb_dc2xx_init(void);
-int usb_scanner_init(void);
 int usb_stor_init(void);
 int dabusb_init(void);
 int plusb_init(void);
@@ -76,9 +74,6 @@ int usb_init(void)
 	usb_hub_init();
 
 #ifndef CONFIG_USB_MODULE
-#ifdef CONFIG_USB_SCANNER
-	usb_scanner_init();
-#endif
 #ifdef CONFIG_USB_AUDIO
 	usb_audio_init();
 #endif
@@ -90,9 +85,6 @@ int usb_init(void)
 #endif
 #ifdef CONFIG_USB_OV511
 	usb_ov511_init();
-#endif
-#ifdef CONFIG_USB_DC2XX
-	usb_dc2xx_init();
 #endif
 #ifdef CONFIG_USB_STORAGE
 	usb_stor_init();

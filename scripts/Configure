@@ -311,6 +311,26 @@ function dep_bool () {
 	bool "$ques" "$var"
 }
 
+function dep_mbool () {
+	ques=$1
+	var=$2
+	shift 2
+	while [ $# -gt 0 ]; do
+	  case "$1" in
+	    n)
+	      define_bool "$var" "n"
+	      return
+	      ;;
+	    m)
+	      eval "$var=y"
+	      ;;
+	  esac
+	  shift
+	done
+
+	bool "$ques" "$var"
+}
+
 #
 # define_int sets the value of a integer argument
 #

@@ -203,7 +203,8 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size,
 				}
 				n = 0;
 				timeout = init_timeout;
-				init_timeout <<= 1;
+				if (init_timeout < max_timeout)
+					init_timeout <<= 1;
 				if (!major_timeout_seen) {
 					printk(KERN_WARNING "NCP server not responding\n");
 				}

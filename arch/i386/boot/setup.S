@@ -436,7 +436,7 @@ no_mca:
 	movw	$0xAA, (0x1ff)			# device present
 no_psmouse:
 
-#ifdef CONFIG_APM
+#if defined(CONFIG_APM) || defined(CONFIG_APM_MODULE)
 # Then check for an APM BIOS...
 						# %ds points to the bootsector
 	movw	$0, 0x40			# version = 0 means no APM BIOS
@@ -455,7 +455,11 @@ no_psmouse:
 	xorw	%bx, %bx
 	int	$0x15				# ignore return code
 	movw	$0x05303, %ax			# 32 bit connect
-	xorw	%bx, %bx
+	xorl	%ebx, %ebx
+	xorw	%cx, %cx			# paranoia :-)
+	xorw	%dx, %dx			#   ...
+	xorl	%esi, %esi			#   ...
+	xorw	%di, %di			#   ...
 	int	$0x15
 	jc	no_32_apm_bios			# Ack, error. 
 
@@ -463,12 +467,13 @@ no_psmouse:
 	movl	%ebx, (68)			# BIOS entry point offset
 	movw	%cx,  (72)			# BIOS 16 bit code segment
 	movw	%dx,  (74)			# BIOS data segment
-	movl	%esi, (78)			# BIOS code segment length
+	movl	%esi, (78)			# BIOS code segment lengths
 	movw	%di,  (82)			# BIOS data segment length
 # Redo the installation check as the 32 bit connect
 # modifies the flags returned on some BIOSs
 	movw	$0x05300, %ax			# APM BIOS installation check
 	xorw	%bx, %bx
+	xorw	%cx, %cx			# paranoia
 	int	$0x15
 	jc	apm_disconnect			# error -> shouldn't happen
 

@@ -2143,9 +2143,5 @@ int __init net_dev_init(void)
 	 
 	net_device_init();
 
-#ifdef CONFIG_IP_PNP
-	ip_auto_config();
-#endif
-
 	return 0;
 }

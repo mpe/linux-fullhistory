@@ -35,7 +35,9 @@ static int ext2_update_inode(struct inode * inode, int do_sync);
  */
 void ext2_put_inode (struct inode * inode)
 {
+	lock_kernel();
 	ext2_discard_prealloc (inode);
+	unlock_kernel();
 }
 
 /*
@@ -43,6 +45,8 @@ void ext2_put_inode (struct inode * inode)
  */
 void ext2_delete_inode (struct inode * inode)
 {
+	lock_kernel();
+
 	if (is_bad_inode(inode) ||
 	    inode->i_ino == EXT2_ACL_IDX_INO ||
 	    inode->i_ino == EXT2_ACL_DATA_INO)
@@ -54,6 +58,8 @@ void ext2_delete_inode (struct inode * inode)
 	if (inode->i_blocks)
 		ext2_truncate (inode);
 	ext2_free_inode (inode);
+
+	unlock_kernel();
 }
 
 #define inode_bmap(inode, nr) (le32_to_cpu((inode)->u.ext2_i.i_data[(nr)]))
@@ -893,7 +899,9 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 
 void ext2_write_inode (struct inode * inode)
 {
+	lock_kernel();
 	ext2_update_inode (inode, 0);
+	unlock_kernel();
 }
 
 int ext2_sync_inode (struct inode *inode)

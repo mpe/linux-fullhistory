@@ -1262,26 +1262,27 @@ CONFIG_PARIDE_ON26
 
 Logical Volume Manager (LVM) support
 CONFIG_BLK_DEV_LVM
-  This driver lets you combine several hard disks, hard disk partitions,
-  multiple devices or even loop devices (for evaluation purposes) into
-  a volume group. Imagine a volume group as a kind of virtual disk.
-  Logical volumes, which can be thought of as virtual partitions,
-  can be created in the volume group.  You can resize volume groups and
-  logical volumes after creation time, corresponding to new capacity needs.
-  Logical volumes are accessed as block devices named
-  /dev/VolumeGroupName/LogicalVolumeName.
+  This driver lets you combine several hard disks, hard disk
+  partitions, multiple devices or even loop devices (for evaluation
+  purposes) into a volume group.  Imagine a volume group as a kind of
+  virtual disk. Logical volumes, which can be thought of as virtual
+  partitions, can be created in the volume group.  You can resize
+  volume groups and logical volumes after creation time, corresponding
+  to new capacity needs.  Logical volumes are accessed as block
+  devices named /dev/VolumeGroupName/LogicalVolumeName.
 
   For details see /usr/src/linux/Documentaion/LVM-HOWTO.
 
   To get the newest software see <http://linux.msede.com/lvm>.
 
-Logical Volume Manager proc filesystem information
+Logical Volume Manager /proc file system information
 CONFIG_LVM_PROC_FS
-  If you say Y here, you are able to access overall Logical Volume Manager,
-  Volume Group, Logical and Physical Volume information in /proc/lvm.
+  If you say Y here, you are able to access overall Logical Volume
+  Manager, Volume Group, Logical and Physical Volume information in
+  /proc/lvm.
 
-  To use this option, you have to check, that the "proc filesystem support"
-  (CONFIG_PROC_FS) is enabled too.
+  To use this option, you have to check, that the "/proc file system
+  support" (CONFIG_PROC_FS) is enabled too.
 
 Multiple devices driver support
 CONFIG_BLK_DEV_MD
@@ -1565,12 +1566,12 @@ CONFIG_SYN_COOKIES
   them off.
 
   If you say Y here, note that SYN cookies aren't enabled by default;
-  you can enable them by saying Y to "/proc file-system support" and
+  you can enable them by saying Y to "/proc file system support" and
   "Sysctl support" below and executing the command
 
     echo 1 >/proc/sys/net/ipv4/tcp_syncookies 
 
-  at boot time after the proc file-system has been mounted.
+  at boot time after the /proc file system has been mounted.
   
   If unsure, say Y.
 
@@ -2092,7 +2093,7 @@ CONFIG_BINFMT_MISC
   Documentation/java.txt for information about how to include Java
   support.
 
-  You must say Y to "proc file system support" (CONFIG_PROC_FS) to
+  You must say Y to "/proc file system support" (CONFIG_PROC_FS) to
   use this part of the kernel.
 
   You may say M here for module support and later load the module when
@@ -4475,7 +4476,7 @@ CONFIG_AIC7XXX_PROC_STATS
   small amount of overhead to each and every SCSI command the aic7xxx
   driver handles, so if you aren't really interested in this
   information, it is best to leave it disabled. This will only work if
-  you also say Y to "/proc file systems support", below. 
+  you also say Y to "/proc file system support", below. 
 
   If unsure, say N.
 
@@ -5732,7 +5733,7 @@ CONFIG_AIRONET4500
 	slave=1		Adhoc slave(btw, it is still forming own net 
 			sometimes)
 	channel=1..? 	meaningful in adhoc mode
-  all other parameters can be set via proc interface
+  all other parameters can be set via /proc interface
   These parameters belong to .._card module, but alas, they are here
   if you have problems with screwing up card, both_bap_lock=1 is conservative
   value (performance hit 15%)
@@ -6210,9 +6211,9 @@ CONFIG_NET_SCHED
   That package also contains some documentation; for more, check out
   http://snafu.freedom.org/linux2.2/iproute-notes.html .
 
-  If you say Y here and to "/proc file systems" below, you will be able
-  to read status information about packet schedulers from the file
-  /proc/net/psched.
+  If you say Y here and to "/proc file system support" below, you will
+  be able to read status information about packet schedulers from the
+  file /proc/net/psched.
   
   The available schedulers are listed in the following questions; you
   can say Y to as many as you like. If unsure, say N now.
@@ -6415,7 +6416,7 @@ CONFIG_NET_CLS_RSVP6
 
 Network code profiler
 CONFIG_NET_PROFILE
-  If you say Y here and to "/proc file systems support" below, some
+  If you say Y here and to "/proc file system support" below, some
   obscure and undocumented information about the network code's
   performance will be written to /proc/net/profile. If you don't know
   what it is about, you don't need it: say N.
@@ -6770,17 +6771,29 @@ CONFIG_NI65
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
-RealTek 8129/8139 (not 8019/8029!) support
-CONFIG_RTL8139
+RealTek 8129 (not 8019/8029!) support (EXPERIMENTAL)
+CONFIG_RTL8129
   This is a driver for the Fast Ethernet PCI network cards based on
-  the RTL8129 and RTL8139 chips. If you have one of those, say Y and
+  the RTL8129 chip. If you have one of those, say Y and
   read the Ethernet-HOWTO, available from
   http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. This is recommended.
-  The module will be called rtl8139.o.
+  The module will be called rtl8129.o.
+
+RealTek RTL-8139 PCI Fast Ethernet Adapter support
+CONFIG_8139TOO
+  This is a driver for the Fast Ethernet PCI network cards based on
+  the RTL8139 chip. If you have one of those, say Y and
+  read the Ethernet-HOWTO, available from
+  http://www.linuxdoc.org/docs.html#howto .
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. This is recommended.
+  The module will be called 8139too.o.
 
 SiS 900 PCI Fast Ethernet Adapter support
 CONFIG_SIS900
@@ -7330,7 +7343,7 @@ CONFIG_SKMC
   Documentation/networking/net-modules.txt.
 
 EISA, VLB, PCI and on board controllers
-CONFIG_NET_EISA
+CONFIG_NET_PCI
   This is another class of network cards which attach directly to the
   bus. If you have one of those, say Y and read the Ethernet-HOWTO,
   available from http://www.linuxdoc.org/docs.html#howto .
@@ -7451,7 +7464,7 @@ CONFIG_DGRS
   Documentation/networking/net-modules.txt.
 
 EtherExpress PRO/100 support
-CONFIG_EEXPRESS_PRO100
+CONFIG_EEPRO100
   If you have an Intel EtherExpress PRO/100 PCI network (Ethernet)
   card, say Y and read the Ethernet-HOWTO, available from
   http://www.linuxdoc.org/docs.html#howto .
@@ -8528,9 +8541,9 @@ CONFIG_EXT2_FS
   compiled as a module, and so this could be dangerous. Most everyone
   wants to say Y here.
 
-SCO UnixWare BFS Support
+BFS file system support (EXPERIMENTAL)
 CONFIG_BFS_FS
-  Boot Filesystem (BFS) is a file system used under SCO UnixWare to
+  Boot File System (BFS) is a file system used under SCO UnixWare to
   allow bootloader access the kernel image and other important files
   during the boot process. It is usually mounted under /stand and
   corresponds to the slice marked as "STAND" in the UnixWare
@@ -8548,7 +8561,7 @@ CONFIG_BFS_FS
 ISO 9660 CDROM file system support
 CONFIG_ISO9660_FS
   This is the standard file system used on CDROMs. It was previously
-  known as "High Sierra Filesystem" and is called "hsfs" on other Unix
+  known as "High Sierra File System" and is called "hsfs" on other Unix
   systems. The so-called Rock-Ridge extensions which allow for long
   Unix filenames and symbolic links are also supported by this driver.
   If you have a CDROM drive and want to do more with it than just
@@ -8571,7 +8584,7 @@ CONFIG_JOLIET
   http://www.unicode.org for more information). Say Y here if you want
   to be able to read Joliet CDROMs under Linux.
 
-UDF Filesystem support (read only)
+UDF file system support (read only)
 CONFIG_UDF_FS
   This is the new file system used by some CDROMS and DVD drivers. Say
   Y if you intend to mount DVD discs or CDRW's written in packet mode,
@@ -8677,7 +8690,7 @@ CONFIG_VFAT_FS
   say M here and read Documentation/modules.txt. The module will be
   called vfat.o.
 
-UMSDOS: Unix-like file system on top of standard MSDOS file system
+UMSDOS: Unix-like file system on top of standard MSDOS fs
 CONFIG_UMSDOS_FS
   Say Y here if you want to run Linux from within an existing DOS
   partition of your hard drive. The advantage of this is that you can
@@ -8719,32 +8732,34 @@ CONFIG_PROC_FS
   often a source of trouble if two devices are mistakenly configured
   to use the same IRQ). 
 
-  The /proc filesystem is explained in the file
+  The /proc file system is explained in the file
   Documentation/filesystems/proc.txt and on the proc(5) manpage ("man
   5 proc").
 
   This option will enlarge your kernel by about 67 KB. Several
   programs depend on this, so everyone should say Y here.
 
-/dev filesystem support (EXPERIMENTAL)
+/dev file system support (EXPERIMENTAL)
 CONFIG_DEVFS_FS
-  This is another virtual filesystem (like /proc) which provides the
-  filesystem interface to device drivers, normally found in /dev.
+  This is another virtual file system (like /proc) which provides the
+  file system interface to device drivers, normally found in /dev.
   Devfs does not depend on major and minor number allocations. Device
   drivers register entries in /dev which appear automagically. Without
   devfs you need to populate /dev with hundreds, even thousands of
   inodes.
   This is work in progress. If you want to use this you *must* read
   Documentation/filesystems/devfs/README
+  In particular, make sure you install devfsd. If you don't, expect to
+  spend time patching broken code and updating configuration files.
 
-Enable devfs debugging output
+Debug devfs
 CONFIG_DEVFS_DEBUG
   This option appears if you have CONFIG_DEVFS_FS enabled. Setting
   this to 'Y' enables devfs debugging output. See the file
   Documentation/filesystems/devfs/boot-options for more details.
   The default is 'N'.
 
-NFS filesystem support
+NFS file system support
 CONFIG_NFS_FS
   If you are connected to some other (usually local) Unix computer
   (using SLIP, PLIP, PPP or Ethernet) and want to mount files residing
@@ -8834,7 +8849,7 @@ CONFIG_HPFS_FS
   The module is called hpfs.o. If you want to compile it as a module,
   say M here and read Documentation/modules.txt. If unsure, say N.
 
-Windows NT NTFS support (read only)
+NTFS file system support (read only)
 CONFIG_NTFS_FS
   NTFS is the file system of Microsoft Windows NT. Say Y if you want
   to get read access to files on NTFS partitions of your hard drive.
@@ -8989,7 +9004,7 @@ CONFIG_AUTOFS_FS
   If you want to use the newer version of autofs with more features,
   say N here and select automounter v4.
 
-Kernel automounter v4 support
+Kernel automounter version 4 support (also supports v3)
 CONFIG_AUTOFS4_FS
   The automounter is a tool to automatically mount remote file systems
   on demand. This implementation is partially kernel-based to reduce
@@ -9170,8 +9185,9 @@ CONFIG_UNIXWARE_DISKLABEL
   partition (VTOC - Virtual Table of Contents). Its format is
   incompatible with all other OSes. Saying Y here allows you to read
   VTOC and further mount UnixWare partitions read-only from within
-  Linux if you have also said Y to "UFS file system support" or "System
-  V and Coherent file system support", above.
+  Linux if you have also said Y to "UFS file system support", "System
+  V and Coherent file system support" or "BFS file system support",
+  above.
 
   This is mainly used to carry data from a UnixWare box to your
   Linux box via a removable medium like magneto-optical, ZIP or
@@ -10291,7 +10307,7 @@ CONFIG_FT_NR_BUFFERS
 Procfs entry for ftape
 CONFIG_FT_PROC_FS
   Optional. Saying Y will result in creation of a directory
-  `/proc/ftape' under the proc file system. The files can be viewed
+  `/proc/ftape' under the /proc file system. The files can be viewed
   with your favorite pager (i.e. use "more /proc/ftape/history" or
   "less /proc/ftape/history" or simply "cat /proc/ftape/history"). The
   file will contain some status information about the inserted
@@ -10301,9 +10317,10 @@ CONFIG_FT_PROC_FS
   by approximately 2 KB.
 
   WARNING: When compiling ftape as a module (i.e. saying M to
-  "Floppy tape drive") it is dangerous to use ftape's proc file system
-  interface. Accessing `/proc/ftape' while the module is unloaded will
-  result in a kernel Oops. This cannot be fixed from inside ftape.
+  "Floppy tape drive") it is dangerous to use ftape's /proc file
+  system interface. Accessing `/proc/ftape' while the module is
+  unloaded will result in a kernel Oops. This cannot be fixed from
+  inside ftape.
 
 Controlling the amount of debugging output of ftape
 CONFIG_FT_NORMAL_DEBUG
@@ -10632,6 +10649,11 @@ CONFIG_APM
    11) exchange RAM chips 
    12) exchange the motherboard.
 
+  To compile this driver as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt. The module will be called
+  apm.o.
+
 Ignore USER SUSPEND
 CONFIG_APM_IGNORE_USER_SUSPEND
   This option will ignore USER SUSPEND requests. On machines with a
@@ -10712,14 +10734,6 @@ CONFIG_APM_ALLOW_INTS
   needs to.  Unfortunately, some BIOSes do not - especially those in
   many of the newer IBM Thinkpads.  If you experience hangs when you
   suspend, try setting this to Y.  Otherwise, say N.
-
-Entry point offset fix (some Acer laptops)
-CONFIG_APM_BAD_ENTRY_OFFSET
-  Some implementations of the APM BIOS provide the driver with a bad
-  entry point offset.  If you set this option to Y, then the upper
-  sixteen bits of the offset will be set to zero.  This is usually
-  unnecessary but harmless.  This is required for the Acer Travelmate
-  510DX, Travelmate 510T and Extensa 503T.  For others, say N.
 
 Use real mode APM BIOS call to power off
 CONFIG_APM_REAL_MODE_POWER_OFF

@@ -502,7 +502,7 @@ static void *plusb_probe (struct usb_device *usbdev, unsigned int ifnum)
 	dbg("plusb: probe: vendor id 0x%x, device id 0x%x ifnum:%d",
 	  usbdev->descriptor.idVendor, usbdev->descriptor.idProduct, ifnum);
 
-	if (usbdev->descriptor.idVendor != 0x067b || usbdev->descriptor.idProduct != 0x1)
+	if (usbdev->descriptor.idVendor != 0x067b || usbdev->descriptor.idProduct > 0x1)
 		return NULL;
 
 	/* We don't handle multiple configurations */

@@ -48,7 +48,7 @@
 
 #define QUEUE_FIRST(head, listnam) (head)->DLIST_NEXT(listnam)
 #define QUEUE_LAST(head, listnam) (head)->DLIST_PREV(listnam)
-#define QUEUE_EMPTY(head, listnam) \
+#define QUEUE_IS_EMPTY(head, listnam) \
 	((QUEUE_FIRST(head, listnam) == QUEUE_LAST(head, listnam)) && \
 	 ((u_long)QUEUE_FIRST(head, listnam) == (u_long)head)) 
 

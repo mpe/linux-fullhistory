@@ -4,7 +4,7 @@
  * Core support: hpsb_packet management, packet handling and forwarding to
  *               csr or lowlevel code
  *
- * Copyright (C) 1999 Andreas E. Bombe
+ * Copyright (C) 1999, 2000 Andreas E. Bombe
  */
 
 #include <linux/kernel.h>
@@ -191,6 +191,74 @@ static int check_selfids(struct hpsb_host *host, unsigned int num_of_selfids)
         return nodeid + 1;
 }
 
+static void build_speed_map(struct hpsb_host *host, int nodecount)
+{
+        char speedcap[nodecount];
+        char cldcnt[nodecount];
+        u8 *map = host->speed_map;
+        quadlet_t *sidp;
+        int i, j, n;
+
+        for (i = 0; i < (nodecount * 64); i += 64) {
+                for (j = 0; j < nodecount; j++) {
+                        map[i+j] = SPEED_400;
+                }
+        }
+
+        for (i = 0; i < nodecount; i++) {
+                cldcnt[i] = 0;
+        }
+
+        /* find direct children count and speed */
+        for (sidp = &host->topology_map[host->selfid_count-1],
+                     n = nodecount - 1;
+             sidp >= host->topology_map; sidp--) {
+                if (*sidp & 0x00800000 /* extended */) {
+                        for (i = 2; i < 18; i += 2) {
+                                if ((*sidp & (0x3 << i)) == (0x3 << i)) {
+                                        cldcnt[n]++;
+                                }
+                        }
+                } else {
+                        for (i = 2; i < 8; i += 2) {
+                                if ((*sidp & (0x3 << i)) == (0x3 << i)) {
+                                        cldcnt[n]++;
+                                }
+                        }
+                        speedcap[n] = (*sidp >> 14) & 0x3;
+                        n--;
+                }
+        }
+
+        /* set self mapping */
+        for (i = nodecount - 1; i; i--) {
+                map[64*i + i] = speedcap[i];
+        }
+
+        /* fix up direct children count to total children count;
+         * also fix up speedcaps for sibling and parent communication */
+        for (i = 1; i < nodecount; i++) {
+                for (j = cldcnt[i], n = i - 1; j > 0; j--) {
+                        cldcnt[i] += cldcnt[n];
+                        speedcap[n] = MIN(speedcap[n], speedcap[i]);
+                        n -= cldcnt[n] + 1;
+                }
+        }
+
+        for (n = 0; n < nodecount; n++) {
+                for (i = n - cldcnt[n]; i <= n; i++) {
+                        for (j = 0; j < (n - cldcnt[n]); j++) {
+                                map[j*64 + i] = map[i*64 + j] =
+                                        MIN(map[i*64 + j], speedcap[n]);
+                        }
+                        for (j = n + 1; j < nodecount; j++) {
+                                map[j*64 + i] = map[i*64 + j] =
+                                        MIN(map[i*64 + j], speedcap[n]);
+                        }
+                }
+        }
+}
+
 void hpsb_selfid_received(struct hpsb_host *host, quadlet_t sid)
 {
         if (host->in_bus_reset) {
@@ -204,8 +272,6 @@ void hpsb_selfid_received(struct hpsb_host *host, quadlet_t sid)
 
 void hpsb_selfid_complete(struct hpsb_host *host, int phyid, int isroot)
 {
-        
-
         host->node_id = 0xffc0 | phyid;
         host->in_bus_reset = 0;
         host->is_root = isroot;
@@ -219,9 +285,11 @@ void hpsb_selfid_complete(struct hpsb_host *host, int phyid, int isroot)
                         return;
                 } else {
                         HPSB_NOTICE("stopping out-of-control reset loop");
-                        HPSB_NOTICE("warning - topology map will therefore not "
-                                    "be valid");
+                        HPSB_NOTICE("warning - topology map and speed map will "
+                                    "therefore not be valid");
                 }
+        } else {
+                build_speed_map(host, host->node_count);
         }
 
         /* irm_id is kept up to date by check_selfids() */
@@ -275,8 +343,22 @@ int hpsb_send_packet(struct hpsb_packet *packet)
         }
 
         packet->state = queued;
+        packet->speed_code = host->speed_map[(host->node_id & NODE_MASK) * 64
+                                            + (packet->node_id & NODE_MASK)];
 
-        dump_packet("send packet:", packet->header, packet->header_size);
+        switch (packet->speed_code) {
+        case 2:
+                dump_packet("send packet 400:", packet->header,
+                            packet->header_size);
+                break;
+        case 1:
+                dump_packet("send packet 200:", packet->header,
+                            packet->header_size);
+                break;
+        default:
+                dump_packet("send packet 100:", packet->header,
+                            packet->header_size);
+        }
 
         return host->template->transmit_packet(host, packet);
 }

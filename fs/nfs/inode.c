@@ -28,6 +28,7 @@
 #include <linux/sunrpc/stats.h>
 #include <linux/nfs_fs.h>
 #include <linux/lockd/bind.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -102,6 +103,7 @@ nfs_delete_inode(struct inode * inode)
 
 	dprintk("NFS: delete_inode(%x/%ld)\n", inode->i_dev, inode->i_ino);
 
+	lock_kernel();
 	if (S_ISDIR(inode->i_mode)) {
 		nfs_free_dircache(inode);
 	} else {
@@ -129,6 +131,8 @@ printk("nfs_delete_inode: inode %ld has pending RPC requests\n", inode->i_ino);
 	if (failed)
 		printk("NFS: inode %ld had %d failed requests\n",
 			inode->i_ino, failed);
+	unlock_kernel();
+
 	clear_inode(inode);
 }
 

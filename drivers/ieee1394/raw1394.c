@@ -3,7 +3,7 @@
  *
  * Raw interface to the bus
  *
- * Copyright (C) 1999 Andreas E. Bombe
+ * Copyright (C) 1999, 2000 Andreas E. Bombe
  */
 
 #include <linux/kernel.h>
@@ -29,6 +29,9 @@ static int host_count = 0;
 spinlock_t host_info_lock = SPIN_LOCK_UNLOCKED;
 
 static struct hpsb_highlevel *hl_handle = NULL;
+
+static atomic_t iso_buffer_size;
+static const int iso_buffer_max = 4 * 1024 * 1024; /* 4 MB */
 
 static void queue_complete_cb(struct pending_request *req);
 
@@ -56,6 +59,7 @@ static void free_pending_request(struct pending_request *req)
 {
         if (req->ibs) {
                 if (atomic_dec_and_test(&req->ibs->refcount)) {
+                        atomic_sub((req->data[0] >> 16) + 4, &iso_buffer_size);
                         kfree(req->ibs);
                 }
         } else if (req->free_data) {
@@ -210,6 +214,10 @@ static void iso_receive(struct hpsb_host *host, int channel, quadlet_t *data,
         struct iso_block_store *ibs = NULL;
         LIST_HEAD(reqs);
 
+        if ((atomic_read(&iso_buffer_size) + length) > iso_buffer_max) {
+                return;
+        }
+
         spin_lock_irqsave(&host_info_lock, flags);
         hi = find_host_info(host);
 
@@ -227,6 +235,7 @@ static void iso_receive(struct hpsb_host *host, int channel, quadlet_t *data,
                                               + length, SLAB_ATOMIC);
                                 if (!ibs) break;
 
+                                atomic_add(length, &iso_buffer_size);
                                 atomic_set(&ibs->refcount, 0);
                                 memcpy(ibs->data, data, length);
                         }

@@ -1139,11 +1139,6 @@ int __init psched_calibrate_clock(void)
 	long rdelay;
 	unsigned long stop;
 
-#if CPU == 586 || CPU == 686
-	if (!(boot_cpu_data.x86_capability & X86_FEATURE_TSC))
-		return -1;
-#endif
-
 #ifdef PSCHED_WATCHER
 	psched_tick(0);
 #endif

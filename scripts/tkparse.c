@@ -386,6 +386,7 @@ static void tokenize_line( const char * pnt )
 	match_token( token_define_string, "define_string" );
 	match_token( token_define_tristate, "define_tristate" );
 	match_token( token_dep_bool, "dep_bool" );
+	match_token( token_dep_mbool, "dep_mbool" );
 	match_token( token_dep_tristate, "dep_tristate" );
 	break;
 
@@ -549,6 +550,7 @@ static void tokenize_line( const char * pnt )
 	break;
 
     case token_dep_bool:
+    case token_dep_mbool:
     case token_dep_tristate:
 	pnt = get_qstring ( pnt, &cfg->label );
 	pnt = get_string  ( pnt, &buffer );
@@ -585,7 +587,7 @@ static void tokenize_line( const char * pnt )
 	    }
 	    else
 	    {
-		syntax_error( "can't handle dep_bool/dep_tristate condition" );
+		syntax_error( "can't handle dep_bool/dep_mbool/dep_tristate condition" );
 	    }
 	    dep_ptr = &(*dep_ptr)->next;
 	    while ( *pnt == ' ' || *pnt == '\t' )
@@ -623,12 +625,12 @@ static void tokenize_line( const char * pnt )
 		*cond_ptr = malloc( sizeof(struct condition) );
 		memset( *cond_ptr, 0, sizeof(struct condition) );
 		(*cond_ptr)->op = op_lparen;
-		if ( token == token_dep_tristate )
-		    sprintf( fake_if, "[ \"$%s\" = \"y\" -o \"$%s\" = \"m\" -o \"$%s\" = \"\" ]; then",
-			dep->name, dep->name, dep->name );
-		else
+		if ( token == token_dep_bool )
 		    sprintf( fake_if, "[ \"$%s\" = \"y\" -o \"$%s\" = \"\" ]; then",
 			dep->name, dep->name );
+		else
+		    sprintf( fake_if, "[ \"$%s\" = \"y\" -o \"$%s\" = \"m\" -o \"$%s\" = \"\" ]; then",
+			dep->name, dep->name, dep->name );
 		(*cond_ptr)->next = tokenize_if( fake_if );
 		while ( *cond_ptr )
 		    cond_ptr = &(*cond_ptr)->next;

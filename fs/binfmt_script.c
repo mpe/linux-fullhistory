@@ -47,7 +47,7 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	i_name = cp;
 	i_arg = 0;
 	for ( ; *cp && (*cp != ' ') && (*cp != '\t'); cp++)
-		/* nothing */
+		/* nothing */ ;
 	while ((*cp == ' ') || (*cp == '\t'))
 		*cp++ = '\0';
 	if (*cp)

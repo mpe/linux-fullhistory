@@ -82,13 +82,14 @@ static const char *version =
 #else
 #define CB_OPT ""
 #endif
-#if defined(CONFIG_APM) || defined(CONFIG_ACPI)
+#if defined(CONFIG_APM) || defined(CONFIG_APM_MODULE) || defined(CONFIG_ACPI)
 #define APM_OPT " [apm]"
 #else
 #define APM_OPT ""
 #endif
 #if !defined(CONFIG_CARDBUS) && !defined(CONFIG_PCI) && \
-    !defined(CONFIG_APM) && !defined(CONFIG_ACPI)
+    !defined(CONFIG_APM) && !defined(CONFIG_APM_MODULE) && \
+    !defined(CONFIG_ACPI)
 #define OPTIONS " none"
 #else
 #define OPTIONS PCI_OPT CB_OPT APM_OPT
@@ -124,7 +125,7 @@ static int cis_speed		= 300;	/* ns */
 static int io_speed		= 0;	/* ns */
 
 /* Optional features */
-#if defined(CONFIG_APM) || defined(CONFIG_ACPI)
+#if defined(CONFIG_APM) || defined(CONFIG_APM_MODULE) || defined(CONFIG_ACPI)
 static int do_apm		= 1;
 MODULE_PARM(do_apm, "i");
 #else

@@ -38,6 +38,7 @@
 #include <linux/console.h>
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
+#include <asm/unaligned.h>
 
 #undef attr
 #undef org
@@ -176,71 +177,58 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 				con_buf0[1] = (char) video_num_columns;
 				getconsxy(currcons, con_buf0 + 2);
 
-				tmp_count = HEADER_SIZE - p;
+				con_buf_start += p;
+				this_round += p;
+				if (this_round > CON_BUF_SIZE) {
+					this_round = CON_BUF_SIZE;
+					orig_count = this_round - p;
+				}
+
+				tmp_count = HEADER_SIZE;
 				if (tmp_count > this_round)
 					tmp_count = this_round;
 
 				/* Advance state pointers and move on. */
 				this_round -= tmp_count;
-				con_buf_start += p;
-				orig_count -= p;
-				p += tmp_count;
-				con_buf0 = con_buf + p;
+				p = HEADER_SIZE;
+				con_buf0 = con_buf + HEADER_SIZE;
+				/* If this_round >= 0, then p is even... */
+			} else if (p & 1) {
+				/* Skip first byte for output if start address is odd
+				 * Update region sizes up/down depending on free
+				 * space in buffer.
+				 */
+				con_buf_start++;
+				if (this_round < CON_BUF_SIZE)
+					this_round++;
+				else
+					orig_count--;
 			}
-			p -= HEADER_SIZE;
-			col = (p/2) % maxcol;
 			if (this_round > 0) {
-				char tmp_byte;
-
-				org = screen_pos(currcons, p/2, viewed);
-				if ((p & 1) && this_round > 0) {
-#ifdef __BIG_ENDIAN
-					tmp_byte = vcs_scr_readw(currcons, org++) & 0xff;
-#else
-					tmp_byte = vcs_scr_readw(currcons, org++) >> 8;
-#endif
-
-					*con_buf0++ = tmp_byte;
-
-					this_round--;   
-					p++;
-					if (++col == maxcol) {
-						org = screen_pos(currcons, p/2, viewed);
-						col = 0;
-					}
-				}
-				p /= 2;
-				p += maxcol - col;
-			}
-
-			if (this_round > 1) {
-				size_t tmp_count = this_round;
 				unsigned short *tmp_buf = (unsigned short *)con_buf0;
 
-				while (tmp_count > 1) {
+				p -= HEADER_SIZE;
+				p /= 2;
+				col = p % maxcol;
+
+				org = screen_pos(currcons, p, viewed);
+				p += maxcol - col;
+
+				/* Buffer has even length, so we can always copy
+				 * character + attribute. We do not copy last byte
+				 * to userspace if this_round is odd.
+				 */
+				this_round = (this_round + 1) >> 1;
+
+				while (this_round) {
 					*tmp_buf++ = vcs_scr_readw(currcons, org++);
-					tmp_count -= 2;
+					this_round --;
 					if (++col == maxcol) {
 						org = screen_pos(currcons, p, viewed);
 						col = 0;
 						p += maxcol;
 					}
 				}
-
-				/* Advance pointers, and move on. */
-				this_round = tmp_count;
-				con_buf0 = (char*)tmp_buf;
-			}
-			if (this_round > 0) {
-				char tmp_byte;
-
-#ifdef __BIG_ENDIAN
-				tmp_byte = vcs_scr_readw(currcons, org) >> 8;
-#else
-				tmp_byte = vcs_scr_readw(currcons, org) & 0xff;
-#endif
-
-				*con_buf0++ = tmp_byte;
 			}
 		}
 
@@ -416,7 +404,7 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 			while (this_round > 1) {
 				unsigned short w;
 
-				w = *((const unsigned short *)con_buf0);
+				w = get_unaligned(((const unsigned short *)con_buf0));
 				vcs_scr_writew(currcons, w, org++);
 				con_buf0 += 2;
 				this_round -= 2;

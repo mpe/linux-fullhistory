@@ -27,7 +27,8 @@ struct hpsb_host {
         wait_queue_head_t tlabel_wait;
 
         int reset_retries;
-        quadlet_t *topology_map, *speed_map;
+        quadlet_t *topology_map;
+        u8 *speed_map;
         struct csr_control csr;
 
         unsigned char iso_listen_count[64];
@@ -172,14 +173,6 @@ void hpsb_unregister_lowlevel(struct hpsb_host_template *tmpl);
  */
 struct hpsb_host *hpsb_get_host(struct hpsb_host_template *tmpl, 
                                 size_t hostdata_size);
-
-/*
- * Write pointers to all available hpsb_hosts into list.
- * Return number of host adapters (i.e. elements in list).
- *
- * DEPRECATED - register with highlevel instead.
- */
-int hpsb_get_host_list(struct hpsb_host *list[], int max_list_size);
 
 /*
  * Increase / decrease host usage counter.  Increase function will return true

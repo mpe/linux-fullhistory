@@ -343,12 +343,16 @@ void generate_if( struct kconfig * cfg, struct condition * ocond,
      */
     if ( line_num >= -1 )
     {
+	int modtoyes = 0;
+
 	switch ( cfg->token )
 	{
 	default:
 	    printf( " }\n" );
 	    break;
 
+	case token_dep_mbool:
+	    modtoyes = 1;
 	case token_dep_bool:
 	    printf( "\n" );
 	    for ( tmp = cfg->depend; tmp; tmp = tmp->next )
@@ -359,10 +363,13 @@ void generate_if( struct kconfig * cfg, struct condition * ocond,
 	    printf( "\tset tmpvar_dep [effective_dep [list" );
 	    for ( tmp = cfg->depend; tmp; tmp = tmp->next )
 		printf( " $%s", tmp->name );
-	    printf( "]];set %s [sync_bool $%s $tmpvar_dep];",
-		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
-	    printf( "if {$tmpvar_dep != 1} then {" );
-	    printf( "configure_entry .menu%d.config.f.x%d disabled {y};",
+	    printf( "]];set %s [sync_bool $%s $tmpvar_dep %d];",
+		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name,
+		modtoyes );
+	    printf( "if {$tmpvar_dep != 1" );
+	    if (modtoyes)
+		printf( " && $tmpvar_dep != 2" );
+	    printf( "} then {configure_entry .menu%d.config.f.x%d disabled {y};",
 		menu_num, line_num );
 	    printf( "} else {" );
 	    printf( "configure_entry .menu%d.config.f.x%d normal {y};",
@@ -474,12 +481,16 @@ void generate_if( struct kconfig * cfg, struct condition * ocond,
     }
     else
     {
+	int modtoyes = 0;
+
 	switch ( cfg->token )
 	{
 	default:
 	    printf( " }\n" );
 	    break;
 
+	case token_dep_mbool:
+	    modtoyes = 1;
 	case token_dep_bool:
 	    printf( "\n" );
 	    for ( tmp = cfg->depend; tmp; tmp = tmp->next )
@@ -490,8 +501,9 @@ void generate_if( struct kconfig * cfg, struct condition * ocond,
 	    printf( "\tset tmpvar_dep [effective_dep [list" );
 	    for ( tmp = cfg->depend; tmp; tmp = tmp->next )
 		printf( " $%s", tmp->name );
-	    printf( "]];set %s [sync_bool $%s $tmpvar_dep];",
-		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
+	    printf( "]];set %s [sync_bool $%s $tmpvar_dep %d];",
+		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name,
+		modtoyes );
 	case token_bool:
 	    if ( cfg->token == token_bool )
 		printf( "\n\t" );
@@ -604,6 +616,7 @@ void generate_writeconfig( struct kconfig * cfg )
 {
     struct condition * cond;
     struct dependency * tmp;
+    int depmod = 2;
     
     /*
      * Generate global declaration for this symbol.
@@ -705,7 +718,7 @@ void generate_writeconfig( struct kconfig * cfg )
 
     case token_bool:
     case token_tristate:
-	printf( "write_tristate $cfg $autocfg %s $%s [list $notmod]", 
+	printf( "write_tristate $cfg $autocfg %s $%s [list $notmod] 2", 
 	    vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
 	if ( cfg->cond != NULL )
 	    printf( " }" );
@@ -724,7 +737,7 @@ void generate_writeconfig( struct kconfig * cfg )
 		  cfg1 != NULL && cfg1->token == token_choice_item;
 		  cfg1  = cfg1->next )
 	    {
-		printf("\n\tif { $tmpvar_%d == \"%s\" } then { write_tristate $cfg $autocfg %s 1 [list $notmod] } else { write_tristate $cfg $autocfg %s 0 [list $notmod] }",
+		printf("\n\tif { $tmpvar_%d == \"%s\" } then { write_tristate $cfg $autocfg %s 1 [list $notmod] 2 } else { write_tristate $cfg $autocfg %s 0 [list $notmod] 2 }",
 		    -(cfg->nameindex), cfg1->label,
 		    vartable[cfg1->nameindex].name,
 		    vartable[cfg1->nameindex].name );
@@ -751,23 +764,25 @@ void generate_writeconfig( struct kconfig * cfg )
     case token_define_tristate:
 	if ( cfg->cond == NULL )
 	{
-	    printf( "write_tristate $cfg $autocfg %s $%s [list $notmod]\n",
+	    printf( "write_tristate $cfg $autocfg %s $%s [list $notmod] 2\n",
 		vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
 	}
 	else
 	{
-	    printf( "write_tristate $cfg $autocfg %s $%s [list $notmod] }\n",
+	    printf( "write_tristate $cfg $autocfg %s $%s [list $notmod] 2 }\n",
 		vartable[cfg->nameindex].name, cfg->value );
 	}
 	break;
 
+    case token_dep_mbool:
+	depmod = 1;
     case token_dep_bool:
     case token_dep_tristate:
 	printf( "write_tristate $cfg $autocfg %s $%s [list",
 	    vartable[cfg->nameindex].name, vartable[cfg->nameindex].name );
 	for ( tmp = cfg->depend; tmp; tmp = tmp->next )
 	    printf( " $%s", tmp->name );
-	printf( "]" );
+	printf( "] %d", depmod );
 	if ( cfg->cond != NULL )
 	    printf( " }" );
 	printf( "\n" );
@@ -887,6 +902,7 @@ static void generate_update_var( struct kconfig * scfg, int menu_num )
 	    case token_define_string:
 	    case token_dep_bool:
 	    case token_dep_tristate:
+	    case token_dep_mbool:
 	    case token_int:
 	    case token_hex:
 	    case token_mainmenu_option:
@@ -1121,6 +1137,7 @@ void dump_tk_script( struct kconfig * scfg )
 	case token_choice_item:
 	case token_dep_bool:
 	case token_dep_tristate:
+	case token_dep_mbool:
 	case token_hex:
 	case token_int:
 	case token_string:
@@ -1222,6 +1239,7 @@ void dump_tk_script( struct kconfig * scfg )
 		break;
 
 	    case token_dep_bool:
+	    case token_dep_mbool:
 		cfg->menu_line = menu_line++;
 		printf( "\tdep_bool $w.config.f %d %d \"%s\" %s\n",
 		    cfg->menu_number, cfg->menu_line, cfg->label,
@@ -1300,6 +1318,7 @@ void dump_tk_script( struct kconfig * scfg )
 	case token_choice_item:
 	case token_dep_bool:
 	case token_dep_tristate:
+	case token_dep_mbool:
 	case token_tristate:
 	    if ( ! vartable[cfg->nameindex].global_written )
 	    {
@@ -1376,6 +1395,7 @@ void dump_tk_script( struct kconfig * scfg )
 	case token_define_tristate:
 	case token_dep_bool:
 	case token_dep_tristate:
+	case token_dep_mbool:
 	case token_hex:
 	case token_int:
 	case token_string:

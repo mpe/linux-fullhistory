@@ -226,9 +226,9 @@ if [ "$CONFIG_NET" = "y" ]; then
       if [ "$CONFIG_PCI" = "y" ]; then
 	 tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
 	 tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
-	 tristate 'RealTek 8129/8139 (not 8019/8029!) support' CONFIG_RTL8139
+	 tristate 'RealTek RTL-8139 support' CONFIG_8139TOO
 	 tristate 'PCI NE2000 support' CONFIG_NE2K_PCI
-	 tristate 'EtherExpressPro/100 support' CONFIG_EEXPRESS_PRO100
+	 tristate 'EtherExpressPro/100 support' CONFIG_EEPRO100
 	 tristate 'Adaptec Starfire support' CONFIG_ADAPTEC_STARFIRE
       fi
       endmenu

@@ -19,9 +19,9 @@ typedef struct {
 	int buffer_bytes;
 	int read_pointer;
 	int writing;
-	int last_result;
-	int last_result_fatal;
-	Scsi_Cmnd *last_SCpnt;
+	int midlevel_result;
+	int syscall_result;
+	Scsi_Request *last_SRpnt;
 	unsigned char *b_data;
 	unsigned short use_sg;	/* zero or number of segments for this adapter */
 	unsigned short sg_segs;	/* total number of allocated segments */

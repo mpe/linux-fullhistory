@@ -2466,6 +2466,10 @@ static int __devinit es1370_probe(struct pci_dev *pcidev, const struct pci_devic
 		return -1;
 	if (pcidev->irq == 0) 
 		return -1;
+	if (!pci_dma_supported(pcidev, 0xffffffff)) {
+		printk(KERN_WARNING "es1370: architecture does not support 32bit PCI busmaster DMA\n");
+		return -1;
+	}
 	if (!(s = kmalloc(sizeof(struct es1370_state), GFP_KERNEL))) {
 		printk(KERN_WARNING "es1370: out of memory\n");
 		return -1;
@@ -2589,7 +2593,7 @@ static void __devinit es1370_remove(struct pci_dev *dev)
        dev->driver_data = NULL;
 }
 
-static const struct pci_device_id id_table[] __devinitdata = {
+static struct pci_device_id id_table[] __devinitdata = {
 	{ PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, PCI_ANY_ID, PCI_ANY_ID, 0, 0 },
 	{ 0, 0, 0, 0, 0, 0 }
 };

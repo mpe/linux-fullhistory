@@ -377,13 +377,13 @@ done:
 	spin_lock_irq(&io_request_lock);
 	current_request->sector += current_request->current_nr_sectors;
 	current_request->nr_sectors -= current_request->current_nr_sectors;
-	list_add(&current_request->queue, &current_request->q->queue_head);
+	list_add(&current_request->queue, &q->queue_head);
 	end_request(1);
 	goto repeat;
 error_out_lock:
 	spin_lock_irq(&io_request_lock);
 error_out:
-	list_add(&current_request->queue, &current_request->q->queue_head);
+	list_add(&current_request->queue, &q->queue_head);
 	end_request(0);
 	goto repeat;
 }

@@ -348,8 +348,8 @@ struct ti_pcl {
         struct {
                 u32 control;
                 u32 pointer;
-        } buffer[13];
-};
+        } buffer[13] __attribute__ ((packed));
+} __attribute__ ((packed));
 
 #include <linux/stddef.h>
 #define pcloffs(MEMBER) (offsetof(struct ti_pcl, MEMBER))
@@ -383,7 +383,11 @@ inline static void get_pcl(const struct ti_lynx *lynx, pcl_t pclid,
 
 inline static u32 pcl_bus(const struct ti_lynx *lynx, pcl_t pclid)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,13)
+        return lynx->dev->base_address[1] + pclid * sizeof(struct ti_pcl);
+#else
         return lynx->dev->resource[1].start + pclid * sizeof(struct ti_pcl);
+#endif
 }
 
 #else /* CONFIG_IEEE1394_PCILYNX_LOCALRAM */

@@ -36,7 +36,7 @@ obj-y	 += tty_io.o n_tty.o tty_ioctl.o mem.o raw.o pty.o misc.o random.o
 # All of the (potential) objects that export symbols.
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
 
-export-objs     :=	busmouse.o console.o i2c-old.o keyboard.o \
+export-objs     :=	busmouse.o console.o i2c-old.o keyboard.o sysrq.o \
 			misc.o pty.o random.o selection.o serial.o videodev.o \
 			tty_io.o
 
@@ -144,13 +144,14 @@ obj-$(CONFIG_ACQUIRE_WDT) += acquirewdt.o
 obj-$(CONFIG_MIXCOMWD) += mixcomwd.o
 obj-$(CONFIG_AMIGAMOUSE) += amigamouse.o
 obj-$(CONFIG_ATARIMOUSE) += atarimouse.o
-obj-$(CONFIG_ADBMOUSE) += adbmouse.o
+obj-$(CONFIG_ADBMOUSE) += adbmouse.o busmouse.o
 obj-$(CONFIG_PC110_PAD) += pc110pad.o
 obj-$(CONFIG_WDT) += wdt.o
 obj-$(CONFIG_RTC) += rtc.o
 ifeq ($(CONFIG_PPC),)
   obj-$(CONFIG_NVRAM) += nvram.o
 endif
+obj-$(CONFIG_I810_RNG) += i810_rng.o
 
 obj-$(CONFIG_VIDEO_DEV) += videodev.o
 

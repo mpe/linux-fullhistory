@@ -10,6 +10,7 @@
 #include <linux/smp_lock.h>
 #include <linux/pm.h>
 #include <linux/pci.h>
+#include <linux/apm_bios.h>
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
@@ -20,6 +21,7 @@
 #include <asm/delay.h>
 #include <asm/irq.h>
 #include <asm/mmx.h>
+#include <asm/desc.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
@@ -33,6 +35,8 @@ extern void FASTCALL( __read_lock_failed(rwlock_t *rw));
 extern struct drive_info_struct drive_info;
 EXPORT_SYMBOL(drive_info);
 #endif
+
+extern unsigned long get_cmos_time(void);
 
 /* platform dependent support */
 EXPORT_SYMBOL(boot_cpu_data);
@@ -51,6 +55,9 @@ EXPORT_SYMBOL(probe_irq_mask);
 EXPORT_SYMBOL(kernel_thread);
 EXPORT_SYMBOL(pm_idle);
 EXPORT_SYMBOL(pm_power_off);
+EXPORT_SYMBOL(get_cmos_time);
+EXPORT_SYMBOL(apm_bios_info);
+EXPORT_SYMBOL(gdt);
 
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);

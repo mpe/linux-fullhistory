@@ -596,11 +596,18 @@ static struct rpc_version	nlm_version3 = {
 	3, 24, nlm_procedures,
 };
 
+#ifdef 	CONFIG_LOCKD_V4
+extern struct rpc_version nlm_version4;
+#endif
+
 static struct rpc_version *	nlm_versions[] = {
 	NULL,
 	&nlm_version1,
 	NULL,
 	&nlm_version3,
+#ifdef 	CONFIG_LOCKD_V4
+	&nlm_version4,
+#endif
 };
 
 static struct rpc_stat		nlm_stats;

@@ -141,7 +141,7 @@ static inline int goodness(struct task_struct * p, int this_cpu, struct mm_struc
 #endif
 
 	/* .. and a slight advantage to the current MM */
-	if (p->mm == this_mm)
+	if (p->mm == this_mm || !p->mm)
 		weight += 1;
 	weight += p->priority;
 
@@ -173,7 +173,7 @@ static inline int prev_goodness(struct task_struct * p, int this_cpu, struct mm_
  */
 static inline int preemption_goodness(struct task_struct * prev, struct task_struct * p, int cpu)
 {
-	return goodness(p, cpu, prev->mm) - goodness(prev, cpu, prev->mm);
+	return goodness(p, cpu, prev->active_mm) - goodness(prev, cpu, prev->active_mm);
 }
 
 /*

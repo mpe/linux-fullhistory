@@ -48,16 +48,6 @@ asmlinkage void ret_from_fork(void) __asm__("ret_from_fork");
 
 int hlt_counter=0;
 
-void disable_hlt(void)
-{
-	hlt_counter++;
-}
-
-void enable_hlt(void)
-{
-	hlt_counter--;
-}
-
 /*
  * Powermanagement idle function, if any..
  */
@@ -67,6 +57,16 @@ void (*pm_idle)(void) = NULL;
  * Power off function, if any
  */
 void (*pm_power_off)(void) = NULL;
+
+void disable_hlt(void)
+{
+	hlt_counter++;
+}
+
+void enable_hlt(void)
+{
+	hlt_counter--;
+}
 
 /*
  * We use this if we don't have any better
@@ -293,7 +293,7 @@ void machine_real_restart(unsigned char *code, int length)
 
 void machine_restart(char * __unused)
 {
-#if __SMP__
+#if CONFIG_SMP
 	/*
 	 * Stop all CPUs and turn off local APICs and the IO-APIC, so
 	 * other OSs see a clean IRQ state.

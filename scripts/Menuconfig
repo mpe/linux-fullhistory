@@ -258,6 +258,26 @@ function dep_bool () {
 	fi
 }
 
+function dep_mbool () {
+	ques="$1"
+	var="$2"
+	dep=y
+	shift 2
+	while [ $# -gt 0 ]; do
+		if [ "$1" = y -o "$1" = m ]; then
+			shift
+		else
+			dep=n
+			shift $#
+		fi
+	done
+	if [ "$dep" = y ]; then
+	    bool "$ques" "$var"
+	else 
+	    define_bool "$var" n
+	fi
+}
+
 #
 # Add a menu item which will call our local int function.
 # 
@@ -1075,6 +1095,20 @@ save_configuration () {
 		shift 2
 		while [ $# -gt 0 ]; do
 			if   [ "$1" = y ]; then
+				shift
+			else 
+				x=n; shift $#
+			fi
+		done
+		define_bool "$var" "$x"
+	}
+
+	function dep_mbool () {
+		set_x_info "$2" "n"
+		var="$2"
+		shift 2
+		while [ $# -gt 0 ]; do
+			if   [ "$1" = y -o "$1" = m ]; then
 				shift
 			else 
 				x=n; shift $#

@@ -2447,6 +2447,10 @@ static int __devinit sv_probe(struct pci_dev *pcidev, const struct pci_device_id
 		return -1;
 	if (pcidev->irq == 0)
 		return -1;
+	if (!pci_dma_supported(pcidev, 0x00ffffff)) {
+		printk(KERN_WARNING "sonicvibes: architecture does not support 24bit PCI busmaster DMA\n");
+		return -1;
+	}
 	/* try to allocate a DDMA resource if not already available */
 	if (!RSRCISIOREGION(pcidev, RESOURCE_DDMA)) {
 		pcidev->resource[RESOURCE_DDMA].start = 0;
@@ -2625,7 +2629,7 @@ static void __devinit sv_remove(struct pci_dev *dev)
        dev->driver_data = NULL;
 }
 
-static const struct pci_device_id id_table[] __devinitdata = {
+static struct pci_device_id id_table[] __devinitdata = {
        { PCI_VENDOR_ID_S3, PCI_DEVICE_ID_S3_SONICVIBES, PCI_ANY_ID, PCI_ANY_ID, 0, 0 },
        { 0, 0, 0, 0, 0, 0 }
 };

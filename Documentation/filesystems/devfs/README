@@ -472,6 +472,29 @@ it to maintain compatibility entries. It is almost certain that you
 will require this. Note that the kernel creates a compatibility entry
 for the root device, so you don't need initrd.
 
+Note that you no longer need to mount devpts if you use Unix98 PTYs,
+as devfs can manage /dev/pts itself. This saves you some RAM, as you
+don't need to compile and install devpts. Note that some versions of
+glibc have a bug with Unix98 pty handling on devfs systems. Contact
+the glibc maintainers for a fix.
+
+Note also that apart from editing /etc/fstab, other things will need
+to be changed if you *don't* install devfsd. Some software (like the X
+server) hard-wire device names in their source. It really is much
+easier to install devfsd so that compatibility entries are created.
+You can then slowly migrate your system to using the new device names
+(for example, by starting with /etc/fstab), and then limiting the
+compatibility entries that devfsd creates.
+MAKE SURE YOU INSTALL DEVFSD BEFORE YOU BOOT A DEVFS-ENABLED KERNEL!
+
+Now that devfs has gone into the 2.3.46 kernel, I'm getting a lot of
+reports back. Many of these are because people are trying to run
+without devfsd, and hence some things break. Please just run devfsd if
+things break. I want to concentrate on real bugs rather than
+misconfiguration problems at the moment. If people are willing to fix
+bugs/false assumptions in other code (i.e. glibc, X server) and submit
+that to the respective maintainers, that would be great.
+
 Fail-safe Approach with real /dev inodes                           <subsection>
 ----------------------------------------
 This method involves more work, and is no longer recommended now that
@@ -614,25 +637,25 @@ Device drivers currently ported                                       <section>
 - TTY devices (console, serial ports, terminals and pseudo-terminals)
   Thanks to C. Scott Ananian <cananian@alumni.princeton.edu>
 
-- SCSI tapes (/dev/st*)
+- SCSI tapes (/dev/scsi and /dev/tapes)
 
-- SCSI CD-ROMs (/dev/sr*)
+- SCSI CD-ROMs (/dev/scsi and /dev/cdroms)
 
-- SCSI generic devices (/dev/sg*)
+- SCSI generic devices (/dev/scsi)
 
 - RAMDISCS (/dev/ram?)
 
 - Meta Devices (/dev/md*)
 
-- Floppy discs (/dev/fd?*)
+- Floppy discs (/dev/floppy)
 
-- Parallel port printers (/dev/lp*)
+- Parallel port printers (/dev/printers)
 
-- Sound devices
+- Sound devices (/dev/sound)
   Thanks to Eric Dumas <dumas@linux.eu.org> and
   C. Scott Ananian <cananian@alumni.princeton.edu>
 
-- Joysticks (/dev/js*)
+- Joysticks (/dev/joysticks)
 
 - Sparc keyboard (/dev/kbd)
 
@@ -642,12 +665,12 @@ Device drivers currently ported                                       <section>
 
 - Coda network file system (/dev/cfs*)
 
-- Virtual console capture devices (/dev/vcs*)
+- Virtual console capture devices (/dev/vcc)
   Thanks to Dennis Hou <smilax@mindmeld.yi.org>
 
-- Frame buffer devices (/dev/fb*)
+- Frame buffer devices (/dev/fb)
 
-- Video capture devices (/dev/video? /dev/vbi?)
+- Video capture devices (/dev/v4l)
 
 
 Naming Scheme                                                         <section>
@@ -751,6 +774,7 @@ The tty devices now appear as:
   /dev/tts/{0,1,...}         /dev/ttyS{0,1,...}         Serial ports
   /dev/cua/{0,1,...}         /dev/cua{0,1,...}          Call out devices
   /dev/vc/{0,1,...}          /dev/tty{1...63}           Virtual consoles
+  /dev/vcc/{0,1,...}         /dev/vcs{1...63}           Virtual consoles
   /dev/pty/m{0,1,...}        /dev/ptyp??                PTY masters
   /dev/pty/s{0,1,...}        /dev/ttyp??                PTY slaves
 
@@ -848,6 +872,13 @@ currently limited to 256 pseudo-ttys (this limits the total number of
 simultaneous xterms and remote logins).  Note that the device number
 is limited to the range 36864-61439 (majors 144-239), in order to
 avoid any possible conflicts with existing official allocations.
+
+Please note that using dynamically allocated block device numbers may
+break the NFS daemons (both user and kernel mode), which expect dev_t
+for a given device to be constant over reboots. A simple reboot, with
+no change in your hardware layout, would result in the same device
+numbers being allocated, and hence will not cause a problem for NFS
+daemons.
 
 A final note on this scheme: since it doesn't increase the size of
 device numbers, there are no compatibility issues with userspace.

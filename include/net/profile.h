@@ -9,6 +9,10 @@
 #include <linux/kernel.h>
 #include <asm/system.h>
 
+#ifdef CONFIG_X86_TSC
+#include <asm/msr.h>
+#endif
+
 struct net_profile_slot
 {
 	char   id[16];
@@ -25,14 +29,11 @@ extern atomic_t net_profile_active;
 extern struct timeval net_profile_adjust;
 extern void net_profile_irq_adjust(struct timeval *entered, struct timeval* leaved);
 
-#if CPU == 586 || CPU == 686
-
+#ifdef CONFIG_X86_TSC
 
 extern __inline__ void  net_profile_stamp(struct timeval *pstamp)
 {
-	__asm__ __volatile__ (".byte 0x0f,0x31"
-		:"=a" (pstamp->tv_usec),
-		"=d" (pstamp->tv_sec));
+	rdtsc(pstamp->tv_usec, pstamp->tv_sec);
 }
 
 extern __inline__ void  net_profile_accumulate(struct timeval *entered,

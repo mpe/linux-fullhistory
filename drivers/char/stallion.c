@@ -751,6 +751,8 @@ static struct file_operations	stl_fsiomem = {
 
 /*****************************************************************************/
 
+static devfs_handle_t devfs_handle = NULL;
+
 #ifdef MODULE
 
 /*
@@ -774,8 +776,6 @@ int init_module()
 }
 
 /*****************************************************************************/
-
-static devfs_handle_t devfs_handle = NULL;
 
 void cleanup_module()
 {

@@ -159,8 +159,10 @@ static inline void write_inode(struct inode *inode)
 static inline void sync_one(struct inode *inode)
 {
 	if (inode->i_state & I_LOCK) {
+		__iget(inode);
 		spin_unlock(&inode_lock);
 		__wait_on_inode(inode);
+		iput(inode);
 		spin_lock(&inode_lock);
 	} else {
 		list_del(&inode->i_list);
@@ -253,6 +255,8 @@ void clear_inode(struct inode *inode)
 		BUG();
 	if (!(inode->i_state & I_FREEING))
 		BUG();
+	if (inode->i_state & I_CLEAR)
+		BUG();
 	wait_on_inode(inode);
 	if (IS_QUOTAINIT(inode))
 		DQUOT_DROP(inode);
@@ -262,7 +266,7 @@ void clear_inode(struct inode *inode)
 		bdput(inode->i_bdev);
 		inode->i_bdev = NULL;
 	}
-	inode->i_state = 0;
+	inode->i_state = I_CLEAR;
 }
 
 /*
@@ -377,6 +381,8 @@ void prune_icache(int goal)
 
 		entry = entry->prev;
 		inode = INODE(tmp);
+		if (inode->i_state & (I_FREEING|I_CLEAR))
+			BUG();
 		if (!CAN_UNUSE(inode))
 			continue;
 		if (inode->i_count)
@@ -603,6 +609,11 @@ struct inode *igrab(struct inode *inode)
 	if (!(inode->i_state & I_FREEING))
 		__iget(inode);
 	else
+		/*
+		 * Handle the case where s_op->clear_inode is not been
+		 * called yet, and somebody is calling igrab
+		 * while the inode is getting freed.
+		 */
 		inode = NULL;
 	spin_unlock(&inode_lock);
 	if (inode)
@@ -669,32 +680,39 @@ void iput(struct inode *inode)
 				list_del(&inode->i_list);
 				INIT_LIST_HEAD(&inode->i_list);
 				inode->i_state|=I_FREEING;
+				spin_unlock(&inode_lock);
+
+				destroy = 1;
 				if (op && op->delete_inode) {
 					void (*delete)(struct inode *) = op->delete_inode;
-					spin_unlock(&inode_lock);
 					if (inode->i_data.nrpages)
 						truncate_inode_pages(&inode->i_data, 0);
+					/* s_op->delete_inode internally recalls clear_inode() */
 					delete(inode);
+				} else
+					clear_inode(inode);
+				if (inode->i_state != I_CLEAR)
+					BUG();
+
+				spin_lock(&inode_lock);
+			} else {
+				if (!list_empty(&inode->i_hash)) {
+					if (!(inode->i_state & I_DIRTY)) {
+						list_del(&inode->i_list);
+						list_add(&inode->i_list,
+							 &inode_unused);
+					}
+					inodes_stat.nr_unused++;
+				} else {
+					/* magic nfs path */
+					list_del(&inode->i_list);
+					INIT_LIST_HEAD(&inode->i_list);
+					inode->i_state|=I_FREEING;
+					spin_unlock(&inode_lock);
+					clear_inode(inode);
+					destroy = 1;
 					spin_lock(&inode_lock);
 				}
-			}
-			if (list_empty(&inode->i_hash)) {
-				list_del(&inode->i_list);
-				INIT_LIST_HEAD(&inode->i_list);
-				inode->i_state|=I_FREEING;
-				spin_unlock(&inode_lock);
-				clear_inode(inode);
-				destroy = 1;
-				spin_lock(&inode_lock);
-			}
-			else
-			{
-				if (!(inode->i_state & I_DIRTY)) {
-					list_del(&inode->i_list);
-					list_add(&inode->i_list,
-						 &inode_unused);
-				}
-				inodes_stat.nr_unused++;
 			}
 #ifdef INODE_PARANOIA
 if (inode->i_flock)

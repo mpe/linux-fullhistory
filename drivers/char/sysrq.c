@@ -21,6 +21,7 @@
 #include <linux/kbd_kern.h>
 #include <linux/quotaops.h>
 #include <linux/smp_lock.h>
+#include <linux/module.h>
 
 #include <asm/ptrace.h>
 
@@ -31,6 +32,8 @@ extern struct vfsmount *vfsmntlist;
 
 /* Machine specific power off function */
 void (*sysrq_power_off)(void) = NULL;
+
+EXPORT_SYMBOL(sysrq_power_off);
 
 /* Send a signal to all user processes */
 

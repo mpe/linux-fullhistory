@@ -821,7 +821,7 @@ static int __init ic_dynamic(void)
  *	IP Autoconfig dispatcher.
  */
 
-int __init ip_auto_config(void)
+static int __init ip_auto_config(void)
 {
 	if (!ic_enable)
 		return 0;
@@ -878,6 +878,9 @@ int __init ip_auto_config(void)
 	    system_utsname.domainname, root_server_path));
 	return 0;
 }
+
+module_init(ip_auto_config);
+
 
 /*
  *  Decode any IP configuration options in the "ip=" or "nfsaddrs=" kernel

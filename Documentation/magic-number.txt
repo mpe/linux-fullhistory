@@ -48,7 +48,7 @@ Magic Name            Number      Structure            File
 PG_MAGIC	      'P'	  pg_{read,write}_hdr include/linux/pg.h
 MKISS_DRIVER_MAGIC    0x04bf      mkiss_channel     drivers/net/mkiss.h
 RISCOM8_MAGIC         0x0907      riscom_port       drivers/char/riscom8.h
-APM_BIOS_MAGIC        0x4101      apm_bios_struct   include/linux/apm_bios.h
+APM_BIOS_MAGIC        0x4101      apm_user          arch/i386/kernel/apm.c
 CYCLADES_MAGIC        0x4359      cyclades_port     include/linux/cyclades.h
 FASYNC_MAGIC          0x4601      fasync_struct     include/linux/fs.h
 PTY_MAGIC	      0x5001	  (none at the moment)

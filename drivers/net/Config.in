@@ -136,8 +136,11 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
          tristate '    DM9102 PCI Fast Ethernet Adapter support (EXPERIMENTAL)' CONFIG_DM9102
       fi
-      tristate '    EtherExpressPro/100 support' CONFIG_EEXPRESS_PRO100
+      tristate '    EtherExpressPro/100 support' CONFIG_EEPRO100
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+         if [ "$CONFIG_EEPRO100" = "y" -o "$CONFIG_EEPRO100" = "m" ]; then
+	    bool '      Enable Power Management (EXPERIMENTAL)' CONFIG_EEPRO100_PM
+	 fi
 	 tristate '    Mylex EISA LNE390A/B support (EXPERIMENTAL)' CONFIG_LNE390
 	 tristate '    Novell/Eagle/Microdyne NE3210 EISA support (EXPERIMENTAL)' CONFIG_NE3210
       fi

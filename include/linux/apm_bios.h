@@ -3,7 +3,7 @@
 
 /*
  * Include file for the interface to an APM BIOS
- * Copyright 1994-1999 Stephen Rothwell (sfr@linuxcare.com)
+ * Copyright 1994-2000 Stephen Rothwell (sfr@linuxcare.com)
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -89,32 +89,6 @@ struct apm_bios_info {
 #define	APM_FUNC_TIMER_DISABLE	0
 #define	APM_FUNC_TIMER_ENABLE	1
 #define	APM_FUNC_TIMER_GET	2
-
-/*
- * Maximum number of events stored
- */
-#define APM_MAX_EVENTS		20
-
-/*
- * The per-file APM data
- */
-struct apm_bios_struct {
-	int		magic;
-	struct apm_bios_struct *	next;
-	int		suser;
-	int		suspends_pending;
-	int		standbys_pending;
-	int		suspends_read;
-	int		standbys_read;
-	int		event_head;
-	int		event_tail;
-	apm_event_t	events[APM_MAX_EVENTS];
-};
-
-/*
- * The magic number in apm_bios_struct
- */
-#define APM_BIOS_MAGIC		0x4101
 
 /*
  * in init/main.c

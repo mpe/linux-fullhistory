@@ -53,6 +53,7 @@ static void mark_variables( struct kconfig * scfg )
 	||   cfg->token == token_define_string
 	||   cfg->token == token_define_tristate
 	||   cfg->token == token_dep_bool
+	||   cfg->token == token_dep_mbool
 	||   cfg->token == token_dep_tristate
 	||   cfg->token == token_hex
 	||   cfg->token == token_int
@@ -517,6 +518,7 @@ void fix_conditionals( struct kconfig * scfg )
 		break;
 
 	    case token_dep_bool:
+	    case token_dep_mbool:
 	    case token_dep_tristate:
 		/*
 		 * Same as the other simple statements, plus an additional

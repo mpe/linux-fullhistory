@@ -275,7 +275,7 @@ unsigned long do_mremap(unsigned long addr,
 	ret = -ENOMEM;
 	if (flags & MREMAP_MAYMOVE) {
 		if (!(flags & MREMAP_FIXED)) {
-			new_addr = get_unmapped_area(addr, new_len);
+			new_addr = get_unmapped_area(0, new_len);
 			if (!new_addr)
 				goto out;
 		}

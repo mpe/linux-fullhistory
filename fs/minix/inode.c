@@ -35,9 +35,13 @@ static int minix_remount (struct super_block * sb, int * flags, char * data);
 
 static void minix_delete_inode(struct inode *inode)
 {
+	lock_kernel();
+
 	inode->i_size = 0;
 	minix_truncate(inode);
 	minix_free_inode(inode);
+
+	unlock_kernel();
 }
 
 static void minix_commit_super(struct super_block * sb)
@@ -1243,7 +1247,9 @@ static void minix_write_inode(struct inode * inode)
 {
 	struct buffer_head *bh;
 
+	lock_kernel();
 	bh = minix_update_inode(inode);
+	unlock_kernel();
 	brelse(bh);
 }
 

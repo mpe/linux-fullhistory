@@ -435,6 +435,7 @@ struct inode {
 #define I_DIRTY		1
 #define I_LOCK		2
 #define I_FREEING	4
+#define I_CLEAR		8
 
 extern void __mark_inode_dirty(struct inode *);
 static inline void mark_inode_dirty(struct inode *inode)
@@ -614,6 +615,15 @@ struct super_block {
 	 * even looking at it. You had been warned.
 	 */
 	struct semaphore s_vfs_rename_sem;	/* Kludge */
+
+	/* The next field is used by knfsd when converting a (inode number based)
+	 * file handle into a dentry. As it builds a path in the dcache tree from
+	 * the bottom up, there may for a time be a subpath of dentrys which is not
+	 * connected to the main tree.  This semaphore ensure that there is only ever
+	 * one such free path per filesystem.  Note that unconnected files (or other
+	 * non-directories) are allowed, but not unconnected diretories.
+	 */
+	struct semaphore s_nfsd_free_path_sem;
 };
 
 /*
@@ -676,6 +686,10 @@ struct inode_operations {
 	int (*revalidate) (struct dentry *);
 };
 
+/*
+ * NOTE: write_inode, delete_inode, clear_inode, put_inode can be called
+ * without the big kernel lock held in all filesystems.
+ */
 struct super_operations {
 	void (*read_inode) (struct inode *);
 	void (*write_inode) (struct inode *);

@@ -67,7 +67,7 @@
  *                       Tim Janik's BSE (Bedevilled Sound Engine) found this
  *                       Integrated (aka redid 8-)) APM support patch by Zach Brown
  *    07.02.2000   0.13  Use pci_alloc_consistent and pci_register_driver
- *
+ *    19.02.2000   0.14  Use pci_dma_supported to determine if recording should be disabled
  */
 
 /*****************************************************************************/
@@ -412,7 +412,7 @@ extern inline void dealloc_dmabuf(struct solo1_state *s, struct dmabuf *db)
 	db->mapped = db->ready = 0;
 }
 
-static int prog_dmabuf(struct solo1_state *s, struct dmabuf *db, unsigned long dmamask)
+static int prog_dmabuf(struct solo1_state *s, struct dmabuf *db)
 {
 	int order;
 	unsigned bytespersec;
@@ -422,7 +422,6 @@ static int prog_dmabuf(struct solo1_state *s, struct dmabuf *db, unsigned long d
 	db->hwptr = db->swptr = db->total_bytes = db->count = db->error = db->endcleared = 0;
 	if (!db->rawbuf) {
 		db->ready = db->mapped = 0;
-		s->dev->dma_mask = dmamask;
                 for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER; order--)
 			if ((db->rawbuf = pci_alloc_consistent(s->dev, PAGE_SIZE << order, &db->dmaaddr)))
 				break;
@@ -469,7 +468,10 @@ extern inline int prog_dmabuf_adc(struct solo1_state *s)
 	int c;
 
 	stop_adc(s);
-	if ((c = prog_dmabuf(s, &s->dma_adc, 0xffffff)))
+	/* check if PCI implementation supports 24bit busmaster DMA */
+	if (s->dev->dma_mask > 0xffffff)
+		return -EIO;
+	if ((c = prog_dmabuf(s, &s->dma_adc)))
 		return c;
 	va = s->dma_adc.dmaaddr;
 	if ((va & ~((1<<24)-1)))
@@ -494,7 +496,7 @@ extern inline int prog_dmabuf_dac(struct solo1_state *s)
 	int c;
 
 	stop_dac(s);
-	if ((c = prog_dmabuf(s, &s->dma_dac, 0xffffffff)))
+	if ((c = prog_dmabuf(s, &s->dma_dac)))
 		return c;
 	memset(s->dma_dac.rawbuf, (s->fmt & (AFMT_U8 | AFMT_U16_LE)) ? 0 : 0x80, s->dma_dac.dmasize); /* almost correct for U16 */
 	va = s->dma_dac.dmaaddr;
@@ -2194,6 +2196,7 @@ static int __devinit solo1_probe(struct pci_dev *pcidev, const struct pci_device
 {
 	struct solo1_state *s;
 	struct pm_dev *pmdev;
+	dma_addr_t dma_mask;
 
 	if (!RSRCISIOREGION(pcidev, 0) ||
 	    !RSRCISIOREGION(pcidev, 1) ||
@@ -2202,6 +2205,14 @@ static int __devinit solo1_probe(struct pci_dev *pcidev, const struct pci_device
 		return -1;
 	if (pcidev->irq == 0)
 		return -1;
+	if (pci_dma_supported(pcidev, 0x00ffffff)) {
+		dma_mask = 0x00ffffff; /* this enables playback and recording */
+	} else if (pci_dma_supported(pcidev, 0xffffffff)) {
+		dma_mask = 0xffffffff; /* this enables only playback, as the recording BMDMA can handle only 24bits  */
+	} else {
+		printk(KERN_WARNING "solo1: architecture does not support 24bit or 32bit PCI busmaster DMA\n");
+		return -1;
+	}
 	if (!(s = kmalloc(sizeof(struct solo1_state), GFP_KERNEL))) {
 		printk(KERN_WARNING "solo1: out of memory\n");
 		return -1;
@@ -2259,7 +2270,7 @@ static int __devinit solo1_probe(struct pci_dev *pcidev, const struct pci_device
 		goto err;
 	/* store it in the driver field */
 	pcidev->driver_data = s;
-	pcidev->dma_mask = 0xffffff;  /* pessimistic; play can handle 32bit addrs */
+	pcidev->dma_mask = dma_mask;
 	/* put it into driver list */
 	list_add_tail(&s->devs, &devs);
 
@@ -2319,7 +2330,7 @@ static void __devinit solo1_remove(struct pci_dev *dev)
 	dev->driver_data = NULL;
 }
 
-static const struct pci_device_id id_table[] __devinitdata = {
+static struct pci_device_id id_table[] __devinitdata = {
 	{ PCI_VENDOR_ID_ESS, PCI_DEVICE_ID_ESS_SOLO1, PCI_ANY_ID, PCI_ANY_ID, 0, 0 },
 	{ 0, 0, 0, 0, 0, 0 }
 };
@@ -2338,7 +2349,7 @@ static int __init init_solo1(void)
 {
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "solo1: version v0.13 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "solo1: version v0.14 time " __TIME__ " " __DATE__ "\n");
 	if (!pci_register_driver(&solo1_driver)) {
 		pci_unregister_driver(&solo1_driver);
                 return -ENODEV;

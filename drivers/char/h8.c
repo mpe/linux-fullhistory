@@ -260,7 +260,7 @@ static void h8_intr(int irq, void *dev_id, struct pt_regs *regs)
 	        return;
 	    } else if (data_reg == H8_SYNC_BYTE) {
 	        h8_state = H8_IDLE;
-		if (!QUEUE_EMPTY(&h8_actq, link))
+		if (!QUEUE_IS_EMPTY(&h8_actq, link))
 		    h8_send_next_cmd_byte();
 	    } else {
 	        Dprintk ("h8_intr: resync unknown data 0x%x \n", data_reg);
@@ -279,7 +279,7 @@ static void h8_intr(int irq, void *dev_id, struct pt_regs *regs)
 		    QUEUE_REMOVE(&h8_actq, qp, link);
 		    h8_cmd_done (qp);
 		    /* More commands to send over? */
-		    if (!QUEUE_EMPTY(&h8_cmdq, link))
+		    if (!QUEUE_IS_EMPTY(&h8_cmdq, link))
 		        h8_start_new_cmd();
 		}
 		return;
@@ -458,7 +458,7 @@ h8_q_cmd(u_char *cmd, int cmd_size, int resp_size)
 
         /* get cmd buf */
 	save_flags(flags); cli();
-        while (QUEUE_EMPTY(&h8_freeq, link)) {
+        while (QUEUE_IS_EMPTY(&h8_freeq, link)) {
                 Dprintk("H8: need to allocate more cmd buffers\n");
                 restore_flags(flags);
                 h8_alloc_queues();
@@ -500,13 +500,13 @@ h8_start_new_cmd(void)
                 return;
         }
 
-        if (!QUEUE_EMPTY(&h8_actq, link)) {
+        if (!QUEUE_IS_EMPTY(&h8_actq, link)) {
                 Dprintk("h8_start_new_cmd: inconsistency: IDLE with non-empty active queue!\n");
                 restore_flags(flags);
                 return;
         }
 
-        if (QUEUE_EMPTY(&h8_cmdq, link)) {
+        if (QUEUE_IS_EMPTY(&h8_cmdq, link)) {
                 Dprintk("h8_start_new_cmd: no command to dequeue\n");
                 restore_flags(flags);
                 return;

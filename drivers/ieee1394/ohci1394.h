@@ -4,6 +4,8 @@
 
 #include "ieee1394_types.h"
 
+#define OHCI1394_DEBUG 1
+
 #define OHCI1394_DRIVER_NAME      "ohci1394"
 
 #ifndef PCI_DEVICE_ID_TI_OHCI1394
@@ -18,27 +20,84 @@
 #define PCI_DEVICE_ID_VIA_OHCI1394 0x3044
 #endif
 
+#ifndef PCI_VENDOR_ID_SONY
+#define PCI_VENDOR_ID_SONY 0x104d
+#endif
+
+#ifndef PCI_DEVICE_ID_SONY_CXD3222
+#define PCI_DEVICE_ID_SONY_CXD3222 0x8039
+#endif
+
 #define MAX_OHCI1394_CARDS        4
 
-#define OHCI1394_MAX_AT_REQ_RETRIES       1
-#define OHCI1394_MAX_AT_RESP_RETRIES      1
-#define OHCI1394_MAX_PHYS_RESP_RETRIES    4
+#define OHCI1394_MAX_AT_REQ_RETRIES       0x2
+#define OHCI1394_MAX_AT_RESP_RETRIES      0x2
+#define OHCI1394_MAX_PHYS_RESP_RETRIES    0x8
+
+#define AR_REQ_NUM_DESC                   4 /* number of AR req descriptors */
+#define AR_REQ_BUF_SIZE                4096 /* size of AR req buffers */
+#define AR_REQ_SPLIT_BUF_SIZE          4096 /* split packet buffer */
 
 #define AR_RESP_NUM_DESC                  4 /* number of AR resp descriptors */
 #define AR_RESP_BUF_SIZE               4096 /* size of AR resp buffers */
-#define AR_RESP_SPLIT_PACKET_BUF_SIZE   256 /* split packet buffer */
-#define AR_RESP_TOTAL_BUF_SIZE         (AR_RESP_BUF_SIZE * AR_RESP_NUM_DESC)
-#define AT_REQ_PRG_SIZE                256
+#define AR_RESP_SPLIT_BUF_SIZE         4096 /* split packet buffer */
 
-#define IR_RECV_BUF_SIZE          4096 /* 4096 bytes/buffer */
-#define IR_SPLIT_PACKET_BUF_SIZE  8192 /* size of buffer for split packets */
-#define IR_NUM_DESC               16   /* number of ISO recv descriptors */
+#define IR_NUM_DESC                      16 /* number of IR descriptors */
+#define IR_BUF_SIZE                    6480 /* 6480 bytes/buffer */
+#define IR_SPLIT_BUF_SIZE              8192 /* split packet buffer */
+
+#define AT_REQ_NUM_DESC                  32 /* number of AT req descriptors */
+#define AT_RESP_NUM_DESC                 32 /* number of AT resp descriptors */
 
 struct dma_cmd {
         u32 control;
         u32 address;
         u32 branchAddress;
         u32 status;
+};
+
+struct at_dma_prg {
+	struct dma_cmd begin;
+	quadlet_t data[4];
+	struct dma_cmd end;
+};
+
+/* DMA receive context */
+struct dma_rcv_ctx {
+	void *ohci;
+	int ctx;
+	unsigned int num_desc;
+	unsigned int buf_size;
+	unsigned int split_buf_size;
+        struct dma_cmd **prg;
+        quadlet_t **buf;
+        unsigned int buf_ind;
+        unsigned int buf_offset;
+        quadlet_t *spb;
+        spinlock_t lock;
+        struct tq_struct task;
+	int ctrlClear;
+	int ctrlSet;
+	int cmdPtr;
+};
+
+/* DMA transmit context */	
+struct dma_trm_ctx {
+	void *ohci;
+	int ctx;
+	unsigned int num_desc;
+        struct at_dma_prg *prg;
+        unsigned int prg_ind;
+        unsigned int sent_ind;
+	int free_prgs;
+        quadlet_t *branchAddrPtr;
+        struct hpsb_packet *first;
+        struct hpsb_packet *last;
+        spinlock_t lock;
+        struct tq_struct task;
+	int ctrlClear;
+	int ctrlSet;
+	int cmdPtr;
 };
 
 struct ti_ohci {
@@ -54,42 +113,18 @@ struct ti_ohci {
         quadlet_t *self_id_buffer; /* dma buffer for self-id packets */
         quadlet_t *csr_config_rom; /* buffer for csr config rom */
 
-        /* asynchronous receive */
-        struct dma_cmd **AR_resp_prg;
-        quadlet_t **AR_resp_buf;
-        unsigned int AR_resp_buf_bh_ind;
-        unsigned int AR_resp_buf_bh_offset;
-        unsigned int AR_resp_buf_th_ind;
-        unsigned int AR_resp_buf_th_offset;
-	int AR_resp_bytes_left;
-        quadlet_t *AR_resp_spb;
-        spinlock_t AR_resp_lock;
+        /* async receive */
+	struct dma_rcv_ctx *ar_resp_context;
+	struct dma_rcv_ctx *ar_req_context;
 
-        /* async receive task */
-        struct tq_struct AR_resp_pdl_task;
+	/* async transmit */
+	struct dma_trm_ctx *at_resp_context;
+	struct dma_trm_ctx *at_req_context;
 
-        /* asynchronous transmit */
-        struct dma_cmd *AT_req_prg;
-
-        /* isochronous receive */
-        struct dma_cmd **IR_recv_prg;
-        quadlet_t **IR_recv_buf;
-        unsigned int IR_buf_used;
-        unsigned int IR_buf_last_ind;
-        unsigned int IR_buf_next_ind;
-        spinlock_t IR_recv_lock;
-
-        /* iso recv split packet handling */
-        quadlet_t *IR_spb;
-        unsigned int IR_sp_bytes_left;
-        unsigned int IR_spb_bytes_used;
-
-        /* iso receive channel usage */
-        spinlock_t IR_channel_lock;
+        /* iso receive */
+	struct dma_rcv_ctx *ir_context;
         u64 IR_channel_usage;
-
-        /* iso receive task */
-        struct tq_struct IR_pdl_task;
+        spinlock_t IR_channel_lock;
 
         /* IEEE-1394 part follows */
         struct hpsb_host *host;
@@ -98,15 +133,8 @@ struct ti_ohci {
 
         spinlock_t phy_reg_lock;
 
-        struct hpsb_packet *async_queue;
-        spinlock_t async_queue_lock;
-
-        int AR_resp_active;
         int NumBusResets;
-        int TxRdy;
-        int NumInterrupts;
 };
-
 
 /*
  * Register read and write helper functions.
@@ -129,9 +157,9 @@ quadlet_t ohci_csr_rom[] = {
         /* bus info block */
         0x04040000, /* info/CRC length, CRC */
         0x31333934, /* 1394 magic number */
-        0xf064a000, /* misc. settings - FIXME */
-        0x08002856, /* vendor ID, chip ID high */
-        0x0000083E, /* chip ID low */
+        0xf07da002, /* cyc_clk_acc = 125us, max_rec = 1024 */
+        0x00000000, /* vendor ID, chip ID high (written from card info) */
+        0x00000000, /* chip ID low (written from card info) */
         /* root directory - FIXME */
         0x00090000, /* CRC length, CRC */
         0x03080028, /* vendor ID (Texas Instr.) */
