@@ -388,7 +388,7 @@ struct pci_vendor_type {
 	{PCI_VENDOR_ID_CONTAQ,		"Contaq"}, \
 	{PCI_VENDOR_ID_NS,		"NS"}, \
 	{PCI_VENDOR_ID_VIA,		"VIA Technologies"}, \
-	{PCI_VENDOR_ID_SI,		"Silicon Integrated"}, \
+	{PCI_VENDOR_ID_SI,		"Silicon Integrated Systems"}, \
 	{PCI_VENDOR_ID_LEADTEK,		"Leadtek Research"}, \
 	{PCI_VENDOR_ID_IMS,		"IMS"}, \
 	{PCI_VENDOR_ID_ZEINET,		"ZeiNet"}, \

@@ -45,13 +45,15 @@ void enable_hlt(void)
 asmlinkage int sys_idle(void)
 {
 	int i;
+	pmd_t * pmd;
 
 	if (current->pid != 0)
 		return -EPERM;
 
 	/* Map out the low memory: it's no longer needed */
+	pmd = pmd_offset(swapper_pg_dir, 0);
 	for (i = 0 ; i < 768 ; i++)
-		pgd_clear(swapper_pg_dir + i);
+		pmd_clear(pmd++);
 
 	/* endless idle loop with no priority at all */
 	current->counter = -100;

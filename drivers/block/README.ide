@@ -21,16 +21,34 @@ Major features of ide.c & ide-cd.c:
 	- support for interrupt unmasking during I/O (better than hd.c)
 	- improved handshaking and error detection/recovery
 	- can co-exist with hd.c to control only the secondary interface
+NEW!	- support for reliable operation of buggy CMD-640 interfaces
+		- use kernel command line option:   hda=serialize
+NEW!	- experimental support for DTC-2278D interfaces
+		- use kernel command line option:  hda=dtc2278
+NEW!	- run-time selectible 32bit interface support (using hdparm-2.3)
 
 Under construction:
 
+	- improved CMD support:  tech info is supposedly "in the mail"
 	- support for interface speed selection on jumperless interfaces
 	- improved detection of non-standard IDE ATAPI cdrom drives
 	- support for non-standard 3rd/4th drive interface on Promise cards
 
+***
+
+IMPORTANT NOTICE:  "CMD" EIDE Interfaces will not (by default) work *reliably*
+when drives are attached to the second interface.  To "fix" this, supply the
+special kernel "command line" parameter to LILO:    hda=serialize
+Failure to do so can cause severe data corruption!
+
+***
+
 To access devices on the second interface, device entries must first be
 created in /dev for them.  To create such entries, simply run the included
 shell script:   MAKEDEV.ide1
+
+Apparently the early releases of Slackware 2.2 have incorrect entries
+in /dev for hdc* and hdd* -- this can also be corrected by running MAKEDEV.ide1
 
 ide.c automatically probes for the primary and secondary interfaces,
 for the drives/geometries attached to those interfaces, and for the

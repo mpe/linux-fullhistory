@@ -45,6 +45,18 @@ extern inline void enable_bh(int nr)
 	set_bit(nr, &bh_mask);
 }
 
+extern inline void start_bh_atomic(void)
+{
+	intr_count++;
+}
+
+extern inline void end_bh_atomic(void)
+{
+	if (intr_count == 1 && (bh_active & bh_mask))
+		do_bottom_half();
+	intr_count--;
+}
+
 /*
  * Autoprobing for irqs:
  *

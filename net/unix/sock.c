@@ -481,7 +481,7 @@ static int unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 	fname[sockaddr_len-UN_PATH_OFFSET] = '\0';
 	old_fs = get_fs();
 	set_fs(get_ds());
-	i = open_namei(fname, 0, S_IFSOCK, &inode, NULL);
+	i = open_namei(fname, 2, S_IFSOCK, &inode, NULL);
 	set_fs(old_fs);
 	if (i < 0) 
 	{

@@ -1,5 +1,5 @@
 static char rcsid[] =
-"$Revision: 1.36.1.3 $$Date: 1995/03/23 22:15:35 $";
+"$Revision: 1.36.1.4 $$Date: 1995/03/29 06:14:14 $";
 /*
  *  linux/kernel/cyclades.c
  *
@@ -18,6 +18,9 @@ static char rcsid[] =
  *   int  cy_open(struct tty_struct *tty, struct file *filp);
  *
  * $Log: cyclades.c,v $
+ * Revision 1.36.1.4  1995/03/29  06:14:14  bentson
+ * disambiguate between Cyclom-16Y and Cyclom-32Ye;
+ *
  * Revision 1.36.1.3  1995/03/23  22:15:35  bentson
  * add missing break in modem control block in ioctl switch statement
  * (discovered by Michael Edward Chastain <mec@jobe.shell.portal.com>);
@@ -2637,6 +2640,17 @@ cy_init_card(unsigned char *true_base_addr)
 
         base_addr[CyGFRCR] = 0;
         udelay(10L);
+
+        /* The Cyclom-16Y does not decode address bit 9 and therefore
+           cannot distinguish between references to chip 0 and a non-
+           existent chip 4.  If the preceeding clearing of the supposed
+           chip 4 GFRCR register appears at chip 0, there is no chip 4
+           and this must be a Cyclom-16Y, not a Cyclom-32Ye.
+        */
+        if (chip_number == 4
+        && *(true_base_addr + cy_chip_offset[0] + CyGFRCR) == 0){
+	    return chip_number;
+        }
 
         base_addr[CyCCR] = CyCHIP_RESET;
         udelay(1000L);

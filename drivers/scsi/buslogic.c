@@ -1555,7 +1555,7 @@ void buslogic_setup(char *str, int *ints)
 	    bases[setup_idx] = 0;
 	    return;
 	}
-    buslogic_printk("invalid base 0x%X specified.\n", ints[i]);
+    buslogic_printk("invalid base 0x%X specified.\n", ints[1]);
 }
 
 #ifdef MODULE

@@ -745,7 +745,7 @@ register_symtab(struct symbol_table *intab)
 		link && (link != &kernel_module);
 		link = link->next) {
 
-		if (link->ref->module == mp)
+		if (link->ref && (link->ref->module == mp))
 			link->ref = newref++;
 	}
 

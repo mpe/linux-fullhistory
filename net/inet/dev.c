@@ -337,7 +337,9 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 		 *	Make sure we haven't missed an interrupt. 
 		 */
 		printk("dev_queue_xmit: worked around a missed interrupt\n");
+		start_bh_atomic();
 		dev->hard_start_xmit(NULL, dev);
+		end_bh_atomic();
 		return;
   	}
 
@@ -409,12 +411,15 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 			}
 		}
 	}
+	start_bh_atomic();
 	if (dev->hard_start_xmit(skb, dev) == 0) {
+		end_bh_atomic();
 		/*
 		 *	Packet is now solely the responsibility of the driver
 		 */
 		return;
 	}
+	end_bh_atomic();
 
 	/*
 	 *	Transmission failed, put skb back into a list. Once on the list it's safe and

@@ -2,7 +2,7 @@ Wed Apr 12 15:25:52 1995  Eric Youngdale  (eric@andante)
 
 	* Linux 1.2.5 released.
 
-	* buslogic.c: Update to version 1.15 (From Dave G, I expect).
+	* buslogic.c: Update to version 1.15 (From Leonard N. Zubkoff).
 	Fixed interrupt routine to avoid races when handling multiple
 	complete commands per interrupt.  Seems to come up with faster
 	cards.

@@ -1,4 +1,3 @@
-#define THREE_LEVEL
 /*
  *  linux/fs/proc/array.c
  *

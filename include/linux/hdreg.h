@@ -78,12 +78,14 @@ struct hd_geometry {
 #define HDIO_GET_MULTCOUNT	0x304	/* get current IDE blockmode setting */
 #define HDIO_GET_IDENTITY 	0x307	/* get IDE identification info */
 #define HDIO_GET_KEEPSETTINGS 	0x308	/* get keep-settings-on-reset flag */
+#define HDIO_GET_CHIPSET	0x309	/* get current interface type setting */
 #define HDIO_DRIVE_CMD		0x31f	/* execute a special drive command */
 
 /* hd/ide ctl's that pass (arg) non-ptr values are numbered 0x32n/0x33n */
 #define HDIO_SET_MULTCOUNT	0x321	/* set IDE blockmode */
 #define HDIO_SET_UNMASKINTR	0x322	/* permit other irqs during I/O */
 #define HDIO_SET_KEEPSETTINGS	0x323	/* keep ioctl settings on reset */
+#define HDIO_SET_CHIPSET	0x324	/* optimise driver for interface type */
 
 /* structure returned by HDIO_GET_IDENTITY, as per ANSI ATA2 rev.2f spec */
 struct hd_driveid {

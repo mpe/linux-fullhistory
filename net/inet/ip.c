@@ -1489,7 +1489,8 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *	(4.	We ought to check for IP multicast addresses and undefined types.. does this matter ?)
 	 */
 
-	if (skb->len<sizeof(struct iphdr) || iph->ihl<5 || iph->version != 4 || ip_fast_csum((unsigned char *)iph, iph->ihl) !=0)
+	if (skb->len<sizeof(struct iphdr) || iph->ihl<5 || iph->version != 4 ||
+		skb->len<ntohs(iph->tot_len) || ip_fast_csum((unsigned char *)iph, iph->ihl) !=0)
 	{
 		ip_statistics.IpInHdrErrors++;
 		kfree_skb(skb, FREE_WRITE);
@@ -2090,8 +2091,6 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			unsigned char ucval;
 
 			ucval=get_fs_byte((unsigned char *)optval);
-			if(ucval<1||ucval>255)
-                                return -EINVAL;
 			sk->ip_mc_ttl=(int)ucval;
 	                return 0;
 		}

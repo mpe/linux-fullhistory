@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 3.14  March 7, 1995
+ *  linux/drivers/block/ide.c	Version 3.16  May 30, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -107,8 +107,22 @@
  *  Version 3.14	fix ide_error() handling of BUSY_STAT
  *			fix byte-swapped cdrom strings (again.. arghh!)
  *			ignore INDEX bit when checking the ALTSTATUS reg
+ *  Version 3.15	add SINGLE_THREADED flag for use with dual-CMD i/f
+ *			ignore WRERR_STAT for non-write operations
+ *			added VLB_SYNC support for DC-2000A & others,
+ *			 (incl. some Promise chips), courtesy of Frank Gockel
+ *  Version 3.16	convert VLB_32BIT and VLB_SYNC into runtime flags
+ *			add ioctls to get/set VLB flags (HDIO_[SG]ET_CHIPSET)
+ *			rename SINGLE_THREADED to SUPPORT_SERIALIZE,
+ *			add boot flag to "serialize" operation for CMD i/f
+ *			add optional support for DTC2278 interfaces,
+ *			 courtesy of andy@cercle.cts.com (Dyan Wile).
+ *			add boot flag to enable "dtc2278" probe
+ *			add probe to avoid EATA (SCSI) interfaces,
+ *			 courtesy of neuffer@goofy.zdv.uni-mainz.de.
  *
  *  To do:
+ *	- improved CMD support:  tech info is supposedly "in the mail"
  *	- special 32-bit controller-type detection & support
  *	- figure out how to support oddball "intelligent" caching cards
  *	- reverse-engineer 3/4 drive support on fancy "Promise" cards
@@ -142,12 +156,15 @@
 #include <asm/io.h>
 
 #undef	REALLY_FAST_IO			/* define if ide ports are perfect */
-#define INITIAL_MULT_COUNT	0	/* use zero to disable block mode */
-#ifndef VLB_32BIT_IDE			/* 0 for safety, 1 for 32-bit chipset:*/
-#define VLB_32BIT_IDE		0	/*   Winbond 83759F or OPTi 82C621 */
+#define INITIAL_MULT_COUNT	0	/* off=0; on=2,4,8,16,32, etc.. */
+#ifndef SUPPORT_VLB_32BIT		/* 1 to support 32bit I/O on VLB */
+#define SUPPORT_VLB_32BIT	1	/* 0 to reduce kernel size */
 #endif
-#ifndef DISK_RECOVERY_TIME		/* min. delay between IO for hardware */
-#define DISK_RECOVERY_TIME	0	/*  that needs it. */
+#ifndef SUPPORT_VLB_SYNC		/* 1 to support weird 32-bit chips */
+#define SUPPORT_VLB_SYNC	1	/* 0 to reduce kernel size */
+#endif
+#ifndef DISK_RECOVERY_TIME		/* off=0; on=access_delay_time */
+#define DISK_RECOVERY_TIME	0	/*  for hardware that needs it */
 #endif
 #ifndef OK_TO_RESET_CONTROLLER		/* 1 needed for good error recovery */
 #define OK_TO_RESET_CONTROLLER	1	/* 0 for use with AH2372A/B interface */
@@ -158,8 +175,14 @@
 #ifndef OPTIMIZE_IRQS			/* 1 for slightly faster code */
 #define OPTIMIZE_IRQS		1	/* 0 to reduce kernel size */
 #endif
+#ifndef SUPPORT_SERIALIZE		/* 1 to support CMD dual interfaces */
+#define SUPPORT_SERIALIZE	1	/* 0 to reduce kernel size */
+#endif
 #ifndef SUPPORT_SHARING_IRQ		/* 1 to allow two IDE i/f on one IRQ */
 #define SUPPORT_SHARING_IRQ	1	/* 0 to reduce kernel size */
+#endif
+#ifndef SUPPORT_DTC2278			/* 1 to support DTC2278 chipset */
+#define SUPPORT_DTC2278		1	/* 0 to reduce kernel size */
 #endif
 #ifndef FANCY_STATUS_DUMPS		/* 1 for human-readable drive errors */
 #define FANCY_STATUS_DUMPS	1	/* 0 to reduce kernel size */
@@ -194,10 +217,17 @@
 #undef  SUPPORT_TWO_INTERFACES
 #define SUPPORT_TWO_INTERFACES	0
 #endif	/* CONFIG_BLK_DEV_HD */
+
 #if SUPPORT_TWO_INTERFACES
 #define HWIF			hwif
 #define DEV_HWIF		(dev->hwif)
+#if SUPPORT_SERIALIZE
+#undef	SUPPORT_SHARING_IRQ
+#define	SUPPORT_SHARING_IRQ	1
+#endif
 #else
+#undef	SUPPORT_SERIALIZE
+#define SUPPORT_SERIALIZE		0
 #undef	OPTIMIZE_IRQS
 #define OPTIMIZE_IRQS		0
 #undef	SUPPORT_SHARING_IRQ
@@ -224,19 +254,22 @@ typedef unsigned char		byte;	/* used everywhere */
 #define IN_BYTE(p,hwif)		(byte)inb_p(IDE_PORT(p,hwif))
 #endif /* REALLY_FAST_IO */
 
-#if VLB_32BIT_IDE
-#define OUT_SECTORS(b,n)	outsl(IDE_PORT(HD_DATA,DEV_HWIF),(b),(n)<<7)
-#define IN_SECTORS(b,n)		insl(IDE_PORT(HD_DATA,DEV_HWIF),(b),(n)<<7)
-#else
-#define OUT_SECTORS(b,n)	outsw(IDE_PORT(HD_DATA,DEV_HWIF),(b),(n)<<8)
-#define IN_SECTORS(b,n)		insw(IDE_PORT(HD_DATA,DEV_HWIF),(b),(n)<<8)
-#endif	/* VLB_32BIT_IDE */
+#if SUPPORT_VLB_32BIT
+#if SUPPORT_VLB_SYNC
+#define VLB_SYNC __asm__ __volatile__ ("pusha\n movl $0x01f2,%edx\n inb (%dx),%al\n inb (%dx),%al\n inb (%dx),%al\n popa\n")
+#endif	/* SUPPORT_VLB_SYNC */
+#endif	/* SUPPORT_VLB_32BIT */
+
+#if SUPPORT_DTC2278
+static uint probe_dtc2278 = 0;
+#endif
 
 #define GET_ERR(hwif)		IN_BYTE(HD_ERROR,hwif)
 #define GET_STAT(hwif)		IN_BYTE(HD_STATUS,hwif)
 #define OK_STAT(stat,good,bad)	(((stat)&((good)|(bad)))==(good))
-#define BAD_RW_STAT		(BUSY_STAT   | ERR_STAT  | WRERR_STAT)
-#define BAD_STAT		(BAD_RW_STAT | DRQ_STAT)
+#define BAD_R_STAT		(BUSY_STAT   | ERR_STAT)
+#define BAD_W_STAT		(BUSY_STAT   | ERR_STAT | WRERR_STAT)
+#define BAD_STAT		(BAD_R_STAT  | DRQ_STAT)
 #define DRIVE_READY		(READY_STAT  | SEEK_STAT)
 #define DATA_READY		(DRIVE_READY | DRQ_STAT)
 
@@ -248,6 +281,7 @@ typedef unsigned char		byte;	/* used everywhere */
 #define PARTN_BITS	6	/* number of minor dev bits for partitions */
 #define PARTN_MASK	((1<<PARTN_BITS)-1)	/* a useful bit mask */
 #define MAX_DRIVES	2	/* per interface; 2 assumed by lots of code */
+#define SECTOR_WORDS	(512 / 4)	/* number of 32bit words per sector */
 
 /*
  * Timeouts for various operations:
@@ -296,10 +330,12 @@ typedef struct {
 	unsigned dont_probe 	: 1;	/* from:  hdx=noprobe */
 	unsigned keep_settings  : 1;	/* restore settings after drive reset */
 	unsigned busy		: 1;	/* mutex for ide_open, revalidate_.. */
-	unsigned reserved0	: 3;	/* unused */
+	unsigned vlb_32bit	: 1;	/* use 32bit in/out for data */
+	unsigned vlb_sync	: 1;	/* needed for some 32bit chip sets */
+	unsigned reserved0	: 1;	/* unused */
 	special_t special;		/* special action flags */
 	select_t  select;		/* basic drive/head select reg value */
-	byte mult_count, reserved1, reserved2;
+	byte mult_count, chipset, reserved2;
 	byte usage, mult_req, wpcom, ctl;
 	byte head, sect, bios_head, bios_sect;
 	unsigned short cyl, bios_cyl;
@@ -329,9 +365,10 @@ static const char	*ide_devname [2][MAX_DRIVES] = /* for printk()'s */
 	{{HD_NAME "a", HD_NAME "b"}, {HD_NAME "c", HD_NAME "d"}};
 static const char	*unsupported = " not supported by this kernel\n";
 
+static byte		single_threaded    = 0;
 #if SUPPORT_SHARING_IRQ
 static byte		sharing_single_irq = 0;	/* for two i/f on one IRQ */
-static volatile byte 	current_hwif = 0;	/* for two i/f on one IRQ */
+static volatile byte 	current_hwif = 0;	/* for single_threaded==1 */
 #endif /* SUPPORT_SHARING_IRQ */
 
 /*
@@ -426,6 +463,50 @@ static void do_request (byte hwif);
 		ide_error(dev, msg " error", stat);			\
 		goto label;						\
 	}								\
+}
+
+/*
+ * This is used for all data transfers *from* the IDE interface
+ */
+void input_ide_data (ide_dev_t *dev, void *buffer, uint wcount)
+{
+#if SUPPORT_VLB_32BIT
+	if (dev->vlb_32bit) {
+#if SUPPORT_VLB_SYNC
+		if (dev->vlb_sync) {
+			cli();
+			VLB_SYNC;
+			insl(IDE_PORT(HD_DATA,DEV_HWIF), buffer, wcount);
+			if (dev->unmask)
+				sti();
+		} else
+#endif /* SUPPORT_VLB_SYNC */
+			insl(IDE_PORT(HD_DATA,DEV_HWIF), buffer, wcount);
+	} else
+#endif /* SUPPORT_VLB_32BIT */
+		insw(IDE_PORT(HD_DATA,DEV_HWIF), buffer, wcount<<1);
+}
+
+/*
+ * This is used for all data transfers *to* the IDE interface
+ */
+void output_ide_data (ide_dev_t *dev, void *buffer, uint wcount)
+{
+#if SUPPORT_VLB_32BIT
+	if (dev->vlb_32bit) {
+#if SUPPORT_VLB_SYNC
+		if (dev->vlb_sync) {
+			cli();
+			VLB_SYNC;
+			outsl(IDE_PORT(HD_DATA,DEV_HWIF), buffer, wcount);
+			if (dev->unmask)
+				sti();
+		} else
+			outsl(IDE_PORT(HD_DATA,DEV_HWIF), buffer, wcount);
+#endif /* SUPPORT_VLB_SYNC */
+	} else
+#endif /* SUPPORT_VLB_32BIT */
+		outsw(IDE_PORT(HD_DATA,DEV_HWIF), buffer, wcount<<1);
 }
 
 /*
@@ -652,7 +733,7 @@ static void read_intr (ide_dev_t *dev)
 	unsigned int msect, nsect;
 	struct request *rq;
 
-	if (!OK_STAT(stat=GET_STAT(DEV_HWIF),DATA_READY,BAD_RW_STAT)) {
+	if (!OK_STAT(stat=GET_STAT(DEV_HWIF),DATA_READY,BAD_R_STAT)) {
 		sti();
 		ide_error(dev, "read_intr", stat);
 		DO_REQUEST;
@@ -667,7 +748,7 @@ read_next:
 		msect -= nsect;
 	} else
 		nsect = 1;
-	IN_SECTORS(rq->buffer,nsect);
+	input_ide_data(dev, rq->buffer, nsect * SECTOR_WORDS);
 #ifdef DEBUG
 	printk("%s:  read: sectors(%ld-%ld), buffer=0x%08lx, remaining=%ld\n",
 		dev->name, rq->sector, rq->sector+nsect-1,
@@ -695,7 +776,7 @@ static void write_intr (ide_dev_t *dev)
 	int i;
 	struct request *rq = ide_cur_rq[DEV_HWIF];
 
-	if (OK_STAT(stat=GET_STAT(DEV_HWIF),DRIVE_READY,BAD_RW_STAT)) {
+	if (OK_STAT(stat=GET_STAT(DEV_HWIF),DRIVE_READY,BAD_W_STAT)) {
 #ifdef DEBUG
 		printk("%s: write: sector %ld, buffer=0x%08lx, remaining=%ld\n",
 			dev->name, rq->sector, (unsigned long) rq->buffer,
@@ -711,7 +792,7 @@ static void write_intr (ide_dev_t *dev)
 				end_request(1, DEV_HWIF);
 			if (i > 0) {
 				ide_handler[DEV_HWIF] = &write_intr;
-				OUT_SECTORS(rq->buffer,1);
+				output_ide_data(dev, rq->buffer, SECTOR_WORDS);
 				return;
 			}
 			DO_REQUEST;
@@ -734,7 +815,7 @@ static void multwrite (ide_dev_t *dev)
 			nsect = mcount;
 		mcount -= nsect;
 
-		OUT_SECTORS(rq->buffer,nsect);
+		output_ide_data(dev, rq->buffer, nsect<<7);
 #ifdef DEBUG
 		printk("%s: multwrite: sector %ld, buffer=0x%08lx, count=%d, remaining=%ld\n",
 			dev->name, rq->sector, (unsigned long) rq->buffer,
@@ -762,7 +843,7 @@ static void multwrite_intr (ide_dev_t *dev)
 	int i;
 	struct request *rq = &ide_write_rq[DEV_HWIF];
 
-	if (OK_STAT(stat=GET_STAT(DEV_HWIF),DRIVE_READY,BAD_RW_STAT)) {
+	if (OK_STAT(stat=GET_STAT(DEV_HWIF),DRIVE_READY,BAD_W_STAT)) {
 		if (stat & DRQ_STAT) {
 			if (rq->nr_sectors) {
 				if (dev->mult_count)
@@ -814,7 +895,7 @@ static void set_multmode_intr (ide_dev_t *dev)
 			printk ("  %s: enabled %d-sector multiple mode\n",
 				dev->name, dev->mult_count);
 		else
-			printk ("  %s: disabled multiple mode\n", dev->name);
+			printk ("  %s: multiple mode turned off\n", dev->name);
 	}
 	DO_REQUEST;
 }
@@ -865,16 +946,24 @@ static void timer_expiry (byte hwif)
 	} else {
 		ide_handler[HWIF] = NULL;
 		disable_irq(ide_irq[HWIF]);
+#if SUPPORT_SERIALIZE
+		if (single_threaded && ide_irq[HWIF] != ide_irq[HWIF^1])
+			disable_irq(ide_irq[HWIF^1]);
+#endif /* SUPPORT_SERIALIZE */
 		sti();
 		ide_error(ide_cur_dev[HWIF], "timeout", GET_STAT(HWIF));
 		do_request(HWIF);
 #if SUPPORT_SHARING_IRQ
-		if (sharing_single_irq)	/* this line is indeed necessary */
+		if (single_threaded)	/* this line is indeed necessary */
 			hwif = current_hwif;
 #endif /* SUPPORT_SHARING_IRQ */
 		cli();
 		start_ide_timer(HWIF);
 		enable_irq(ide_irq[HWIF]);
+#if SUPPORT_SERIALIZE
+		if (single_threaded && ide_irq[HWIF] != ide_irq[HWIF^1])
+			enable_irq(ide_irq[HWIF^1]);
+#endif /* SUPPORT_SERIALIZE */
 	}
 	restore_flags(flags);
 }
@@ -983,7 +1072,7 @@ static inline int do_rw_disk (ide_dev_t *dev, struct request *rq, unsigned long 
 	if (rq->cmd == WRITE) {
 		OUT_BYTE(dev->wpcom,HD_PRECOMP);	/* for ancient drives */
 		OUT_BYTE(dev->mult_count ? WIN_MULTWRITE : WIN_WRITE, HD_COMMAND);
-		WAIT_STAT(dev, DATA_READY, BAD_RW_STAT, WAIT_DRQ, "DRQ", error);
+		WAIT_STAT(dev, DATA_READY, BAD_W_STAT, WAIT_DRQ, "DRQ", error);
 		if (!dev->unmask)
 			cli();
 		if (dev->mult_count) {
@@ -991,7 +1080,7 @@ static inline int do_rw_disk (ide_dev_t *dev, struct request *rq, unsigned long 
 			multwrite(dev);
 			ide_handler[DEV_HWIF] = &multwrite_intr;
 		} else {
-			OUT_SECTORS(rq->buffer,1);
+			output_ide_data(dev, rq->buffer, SECTOR_WORDS);
 			ide_handler[DEV_HWIF] = &write_intr;
 		}
 		return 0;
@@ -1040,14 +1129,14 @@ static void do_request (byte hwif)
 repeat:
 	sti();
 #if SUPPORT_SHARING_IRQ
-	current_hwif = hwif;	/* used *only* when sharing_single_irq==1 */
+	current_hwif = hwif;	/* used *only* when single_threaded==1 */
 #endif /* SUPPORT_SHARING_IRQ */
 	if ((rq = ide_cur_rq[HWIF]) == NULL) {
 		rq = blk_dev[ide_major[HWIF]].current_request;
 		if ((rq == NULL) || (rq->dev < 0)) {
 #if SUPPORT_SHARING_IRQ
-			if (sharing_single_irq) {
-				if ((dev = ide_cur_dev[hwif])) /* disable irq */
+			if (single_threaded) {
+				if (sharing_single_irq && (dev = ide_cur_dev[hwif])) /* disable irq */
 					OUT_BYTE(dev->ctl|2,HD_CMD);
 				rq = blk_dev[ide_major[hwif^=1]].current_request;
 				if ((rq != NULL) && (rq->dev >= 0))
@@ -1121,10 +1210,14 @@ repeat:
 {						\
 	if (ide_handler[hwif] == NULL) {	\
 		disable_irq(ide_irq[hwif]);	\
+		if (single_threaded && ide_irq[hwif] != ide_irq[hwif^1]) \
+			disable_irq(ide_irq[hwif^1]); \
 		do_request(hwif);		\
 		cli();				\
 		start_ide_timer(hwif);		\
 		enable_irq(ide_irq[hwif]);	\
+		if (single_threaded && ide_irq[hwif] != ide_irq[hwif^1]) \
+			enable_irq(ide_irq[hwif^1]); \
 	}					\
 }
 
@@ -1169,10 +1262,12 @@ static void unexpected_intr (byte hwif)
 
 	if (!OK_STAT(stat=GET_STAT(HWIF), DRIVE_READY, BAD_STAT))
 		(void) dump_status(HWIF, "unexpected_intr", stat);
+	outb_p(2,IDE_PORT(HD_CMD,hwif));	/* disable device irq */
 #if SUPPORT_SHARING_IRQ
-	if (sharing_single_irq) {
+	if (single_threaded && ide_irq[hwif] == ide_irq[hwif^1]) {
 		if (!OK_STAT(stat=GET_STAT(hwif^1), DRIVE_READY, BAD_STAT))
 			(void) dump_status(hwif^1, "unexpected_intr", stat);
+		outb_p(2,IDE_PORT(HD_CMD,hwif^1));	/* disable device irq */
 	}
 #endif /* SUPPORT_SHARING_IRQ */
 }
@@ -1197,21 +1292,32 @@ static void unexpected_intr (byte hwif)
 	} else						\
 		unexpected_intr(hwif);			\
 	cli();						\
-	start_ide_timer(hwif);				\
 }
+
+#if SUPPORT_SERIALIZE
+/* entry point for all interrupts when single_threaded==1 */
+static void ide_seq_intr (int irq, struct pt_regs *regs)
+{
+	byte hwif = (irq != ide_irq[0]);
+	IDE_INTR(HWIF);
+	start_ide_timer(current_hwif);
+}
+#endif /* SUPPORT_SERIALIZE */
 
 #if OPTIMIZE_IRQS
 
-/* entry point for all interrupts on ide0 when sharing_single_irq==0 */
+/* entry point for all interrupts on ide0 when single_threaded==0 */
 static void ide0_intr (int irq, struct pt_regs *regs)
 {
 	IDE_INTR(0);
+	start_ide_timer(0);
 }
 
-/* entry point for all interrupts on ide1 when sharing_single_irq==0 */
+/* entry point for all interrupts on ide1 when single_threaded==0 */
 static void ide1_intr (int irq, struct pt_regs *regs)
 {
 	IDE_INTR(1);
+	start_ide_timer(1);
 }
 
 #else	/* OPTIMIZE_IRQS */
@@ -1219,13 +1325,14 @@ static void ide1_intr (int irq, struct pt_regs *regs)
 #define ide0_intr	ide_intr
 #define ide1_intr	ide_intr
 
-/* entry point for all interrupts when sharing_single_irq==0 */
+/* entry point for all interrupts when single_threaded==0 */
 static void ide_intr (int irq, struct pt_regs *regs)
 {
 #if SUPPORT_TWO_INTERFACES
 	byte hwif = (irq != ide_irq[0]);
 #endif	/* SUPPORT_TWO_INTERFACES */
 	IDE_INTR(HWIF);
+	start_ide_timer(HWIF);
 }
 
 #endif	/* OPTIMIZE_IRQS */
@@ -1235,6 +1342,7 @@ static void ide_intr (int irq, struct pt_regs *regs)
 static void ide_shared_intr (int irq, struct pt_regs * regs)
 {
 	IDE_INTR(current_hwif);
+	start_ide_timer(current_hwif);
 }
 #endif /* SUPPORT_SHARING_IRQ */
 
@@ -1454,6 +1562,9 @@ static int ide_ioctl (struct inode *inode, struct file *file,
                 case HDIO_GET_UNMASKINTR:
 			return write_fs_long(arg, dev->unmask);
 
+                case HDIO_GET_CHIPSET:
+			return write_fs_long(arg, dev->chipset);
+
                 case HDIO_GET_MULTCOUNT:
 			return write_fs_long(arg, dev->mult_count);
 
@@ -1468,22 +1579,28 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			return 0;
 
 		case HDIO_SET_KEEPSETTINGS:
-			if (!suser()) return -EACCES;
-			if ((arg > 1) || (MINOR(inode->i_rdev) & PARTN_MASK))
-				return -EINVAL;
-			save_flags(flags);
-			cli();
-			dev->keep_settings = arg;
-			restore_flags(flags);
-			return 0;
-
 		case HDIO_SET_UNMASKINTR:
 			if (!suser()) return -EACCES;
 			if ((arg > 1) || (MINOR(inode->i_rdev) & PARTN_MASK))
 				return -EINVAL;
 			save_flags(flags);
 			cli();
-			dev->unmask = arg;
+			if (cmd == HDIO_SET_KEEPSETTINGS)
+				dev->keep_settings = arg;
+			else
+				dev->unmask = arg;
+			restore_flags(flags);
+			return 0;
+
+		case HDIO_SET_CHIPSET:
+			if (!suser()) return -EACCES;
+			if ((arg > 3) || (MINOR(inode->i_rdev) & PARTN_MASK))
+				return -EINVAL;
+			save_flags(flags);
+			cli();
+			dev->chipset   = arg;
+			dev->vlb_sync  = (arg & 2) >> 1;
+			dev->vlb_32bit = (arg & 1);
 			restore_flags(flags);
 			return 0;
 
@@ -1614,8 +1731,18 @@ static void do_identify (ide_dev_t *dev, byte cmd)
 
 	id = dev->id = (struct hd_driveid *) probe_mem_start; /* kmalloc() */
 	probe_mem_start += 512;
-	IN_SECTORS(id,1);	/* read 512 bytes of id info */
+	input_ide_data(dev, id, SECTOR_WORDS);	/* read 512 bytes of id info */
 	sti();
+
+	/*
+	 * EATA SCSI controllers do a hardware ATA emulation:  ignore them
+	 */
+	if ((id->model[0] == 'P' && id->model[1] == 'M')
+	 || (id->model[0] == 'S' && id->model[1] == 'K')) {
+		printk("%s: EATA SCSI HBA %.10s\n", dev->name, id->model);
+		dev->present = 0;
+		return;
+	}
 
 	/*
 	 *  WIN_IDENTIFY returns little-endian info,
@@ -1769,7 +1896,7 @@ static int try_to_identify (ide_dev_t *dev, byte cmd)
 		delay_10ms();		/* give drive a breather */
 	} while (IN_BYTE(hd_status,DEV_HWIF) & BUSY_STAT);
 	delay_10ms();		/* wait for IRQ and DRQ_STAT */
-	if (OK_STAT(GET_STAT(DEV_HWIF),DRQ_STAT,BAD_RW_STAT)) {
+	if (OK_STAT(GET_STAT(DEV_HWIF),DRQ_STAT,BAD_R_STAT)) {
 		cli();			/* some systems need this */
 		do_identify(dev, cmd);	/* drive returned ID */
 		rc = 0;			/* success */
@@ -1957,8 +2084,22 @@ void ide_setup(char *str, int *ints)
 	if (dev->present)
 		printk("(redefined) ");
 	if (ints[0] == 0) {
+#if SUPPORT_DTC2278
+		if (!strcmp(str,"dtc2278")) {
+			printk("%s\n",str);
+			probe_dtc2278 = 1;	/* try to init DTC-2278 at boot */
+			return;
+		}
+#endif /* SUPPORT_DTC2278 */
+#if SUPPORT_SERIALIZE
+		if (!strcmp(str,"serialize") || !strcmp(str,"cmd")) {
+			printk("%s\n",str);
+			single_threaded = 1;	/* serialize all drive access */
+			return;
+		}
+#endif /* SUPPORT_SERIALIZE */
 		if (!strcmp(str,"noprobe")) {
-			printk("noprobe\n");
+			printk("%s\n",str);
 			dev->dont_probe = 1;	/* don't probe for this drive */
 			return;
 		}
@@ -2070,6 +2211,8 @@ static void init_ide_data (byte hwif)
 		dev->mult_count			= 0; /* set by do_identify() */
 		dev->mult_req			= 0; /* set by do_identify() */
 		dev->usage			= 0;
+		dev->vlb_32bit			= 0;
+		dev->vlb_sync			= 0;
 		dev->id				= NULL;
 		dev->ctl			= 0x08;
 		dev->wqueue			= NULL;
@@ -2103,6 +2246,13 @@ static byte setup_irq (byte hwif)
 		}
 		handler = &ide_shared_intr;
 	}
+#if SUPPORT_SERIALIZE
+	else if (single_threaded) {
+		handler = &ide_seq_intr;
+		if (HWIF != 0)
+			msg = " (single-threaded with ide0)";
+	}
+#endif /* SUPPORT_SERIALIZE */
 #endif /* SUPPORT_SHARING_IRQ */
 	save_flags(flags);
 	cli();
@@ -2160,6 +2310,54 @@ static struct file_operations ide_fops = {
 #endif CONFIG_BLK_DEV_IDECD
 };
 
+
+#if SUPPORT_DTC2278
+/*
+ * From: andy@cercle.cts.com (Dyan Wile)
+ *
+ * Below is a patch for DTC-2278 - alike software-programmable controllers
+ * The code enables the secondary IDE controller and the PIO4 (3?) timings on
+ * the primary (EIDE). You may probably have to enable the 32-bit support to
+ * get the full speed. You better get the disk interrupts disabled ( hdparm -u0 
+ * /dev/hd.. ) for the drives connected to the EIDE interface. (I get my 
+ * filesystem  corrupted with -u 1, but under heavy disk load only :-)  
+ */
+
+static void sub22 (char b, char c)
+{
+	int i;
+
+	for(i = 0; i < 3; i++) {
+		__inb(0x3f6);
+		outb_p(b,0xb0);
+		__inb(0x3f6);
+		outb_p(c,0xb4);
+		__inb(0x3f6);
+		if(__inb(0xb4) == c) {
+			outb_p(7,0xb0);
+			__inb(0x3f6);
+			return;	/* success */
+		}
+	}
+}
+
+static void try_to_init_dtc2278 (void)
+{
+/* This (presumably) enables PIO mode4 (3?) on the first interface */
+	cli();
+	sub22(1,0xc3);
+	sub22(0,0xa0);
+	sti();
+
+/* This enables the second interface */
+
+	outb_p(4,0xb0);
+	__inb(0x3f6);
+	outb_p(0x20,0xb4);
+	__inb(0x3f6);
+}
+#endif /* SUPPORT_DTC2278 */
+
 /*
  * This is gets invoked once during initialization, to set *everything* up
  */
@@ -2167,6 +2365,11 @@ unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
 {
 	byte hwif;
 
+#if SUPPORT_DTC2278
+	if (probe_dtc2278)
+		try_to_init_dtc2278();
+#endif /* SUPPORT_DTC2278 */
+	/* single_threaded = 0; */	/* zero by default, override at boot */
 	for (hwif = 0; hwif < 2; hwif++) {
 		init_ide_data (hwif);
 		if (SUPPORT_TWO_INTERFACES || hwif == HWIF) {
@@ -2191,6 +2394,7 @@ unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
 		} else {
 #if SUPPORT_SHARING_IRQ
 			sharing_single_irq = 1;
+			single_threaded = 1;
 #else /* SUPPORT_SHARING_IRQ */
 			printk("%s: ide irq-sharing%s", ide_name[1], unsupported);
 			return mem_start;
@@ -2218,7 +2422,7 @@ unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
 				timer_table[ide_timer[HWIF]].fn
 					= HWIF ? ide1_timer_expiry : ide0_timer_expiry;
 #if SUPPORT_SHARING_IRQ
-				if (sharing_single_irq)
+				if (single_threaded)
 					blk_dev[major].request_fn = &do_shared_request;
 				else
 #endif /* SUPPORT_SHARING_IRQ */

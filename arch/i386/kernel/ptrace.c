@@ -1,4 +1,3 @@
-#define THREE_LEVEL
 /* ptrace.c */
 /* By Ross Biro 1/23/92 */
 /* edited by Linus Torvalds */

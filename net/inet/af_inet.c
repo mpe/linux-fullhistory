@@ -815,8 +815,8 @@ static int inet_release(struct socket *sock, struct socket *peer)
 	sk->inuse = 1;
 
 	/* This will destroy it. */
-	release_sock(sk);
 	sock->data = NULL;
+	release_sock(sk);
 	sk->socket = NULL;
 	return(0);
 }
@@ -939,8 +939,12 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 		return 0;	/* Rock and roll */
 	}
 
-	if (sock->state == SS_CONNECTING && sk->protocol == IPPROTO_TCP && (flags & O_NONBLOCK))
-		return -EALREADY;	/* Connecting is currently in progress */
+	if (sock->state == SS_CONNECTING && sk->protocol == IPPROTO_TCP && (flags & O_NONBLOCK)) {
+		if (sk->err != 0)
+			return -sk->err;	/* Connection must have failed */
+		else
+			return -EALREADY;	/* Connecting is currently in progress */
+	}
   	
 	if (sock->state != SS_CONNECTING) 
 	{

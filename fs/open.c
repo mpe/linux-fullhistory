@@ -277,6 +277,8 @@ asmlinkage int sys_fchmod(unsigned int fd, mode_t mode)
 		return -ENOENT;
 	if (IS_RDONLY(inode))
 		return -EROFS;
+	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
+		return -EPERM;
 	if (mode == (mode_t) -1)
 		mode = inode->i_mode;
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
@@ -298,6 +300,10 @@ asmlinkage int sys_chmod(const char * filename, mode_t mode)
 	if (IS_RDONLY(inode)) {
 		iput(inode);
 		return -EROFS;
+	}
+	if (IS_IMMUTABLE(inode) || IS_APPEND(inode)) {
+		iput(inode);
+		return -EPERM;
 	}
 	if (mode == (mode_t) -1)
 		mode = inode->i_mode;
@@ -322,6 +328,8 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 		return -ENOENT;
 	if (IS_RDONLY(inode))
 		return -EROFS;
+	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
+		return -EPERM;
 	if (user == (uid_t) -1)
 		user = inode->i_uid;
 	if (group == (gid_t) -1)
@@ -361,6 +369,10 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 	if (IS_RDONLY(inode)) {
 		iput(inode);
 		return -EROFS;
+	}
+	if (IS_IMMUTABLE(inode) || IS_APPEND(inode)) {
+		iput(inode);
+		return -EPERM;
 	}
 	if (user == (uid_t) -1)
 		user = inode->i_uid;

@@ -11,11 +11,14 @@ TOPINCL := $(TOPDIR)/include/linux
 .SUFFIXES: .ver
 
 .c.ver:
-	$(CC) $(CFLAGS) -E -D__GENKSYMS__ $< | genksyms -w $(TOPINCL)/modules
+	@if [ ! -x /sbin/genksyms ]; then echo "Please read: README.modules"; fi
+	$(CC) $(CFLAGS) -E -DCONFIG_MODVERSIONS -D__GENKSYMS__ $< | /sbin/genksyms -w $(TOPINCL)/modules
 	@ln -sf $(TOPINCL)/modules/$@ .
 
 $(SYMTAB_OBJS):
 	$(CC) $(CFLAGS) -DEXPORT_SYMTAB -c $(@:.o=.c)
+
+$(SYMTAB_OBJS:.o=.ver): $(TOPINCL)/autoconf.h
 
 $(TOPINCL)/modversions.h: $(SYMTAB_OBJS:.o=.ver)
 	@echo updating $(TOPINCL)/modversions.h

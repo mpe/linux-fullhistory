@@ -21,12 +21,6 @@ extern char ignore_irq13;
 extern char wp_works_ok;		/* doesn't work on a 386 */
 extern char hlt_works_ok;	/* problems on some 486Dx4's and old 386's */
 
-#define start_bh_atomic() \
-__asm__ __volatile__("incl _intr_count")
-
-#define end_bh_atomic() \
-__asm__ __volatile__("decl _intr_count")
-
 /*
  * Bus types (default is ISA, but people can check others with these..)
  * MCA_bus hardcoded to 0 for now.

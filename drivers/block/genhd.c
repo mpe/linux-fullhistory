@@ -90,6 +90,7 @@ static void extended_partition(struct gendisk *hd, int dev)
 			    !(hd->part[current_minor].nr_sects = p->nr_sects))
 				goto done;  /* no more logicals in this partition */
 			hd->part[current_minor].start_sect = first_sector + p->start_sect;
+			hd->sizes[current_minor] = p->nr_sects >> (BLOCK_SIZE_BITS - 9);
 			this_sector = first_sector + p->start_sect;
 			dev = ((hd->major) << 8) | current_minor;
 			brelse(bh);

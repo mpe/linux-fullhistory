@@ -124,22 +124,22 @@ st_chk_result(Scsi_Cmnd * SCpnt)
 	   SCpnt->request_bufflen);
     if (driver_byte(result) & DRIVER_SENSE)
       print_sense("st", SCpnt);
-  } else
+  }
 #endif
-    scode = sense[2] & 0x0f;
-    if (!(driver_byte(result) & DRIVER_SENSE) ||
-	((sense[0] & 0x70) == 0x70 &&
-	 scode != NO_SENSE &&
-	 scode != RECOVERED_ERROR &&
-	 scode != UNIT_ATTENTION &&
-	 scode != BLANK_CHECK &&
-	 scode != VOLUME_OVERFLOW)) {  /* Abnormal conditions for tape */
-      printk("st%d: Error %x. ", dev, result);
-      if (driver_byte(result) & DRIVER_SENSE)
-	print_sense("st", SCpnt);
-      else
-	printk("\n");
-    }
+  scode = sense[2] & 0x0f;
+  if (!(driver_byte(result) & DRIVER_SENSE) ||
+      ((sense[0] & 0x70) == 0x70 &&
+       scode != NO_SENSE &&
+       scode != RECOVERED_ERROR &&
+       scode != UNIT_ATTENTION &&
+       scode != BLANK_CHECK &&
+       scode != VOLUME_OVERFLOW)) {  /* Abnormal conditions for tape */
+    printk("st%d: Error %x. ", dev, result);
+    if (driver_byte(result) & DRIVER_SENSE)
+      print_sense("st", SCpnt);
+    else
+      printk("\n");
+  }
 
   if ((sense[0] & 0x70) == 0x70 &&
       scode == RECOVERED_ERROR

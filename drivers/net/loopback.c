@@ -71,12 +71,6 @@ loopback_xmit(struct sk_buff *skb, struct device *dev)
 
   dev->tbusy = 0;
 
-  if (!intr_count && (bh_active & bh_mask)) {
-	start_bh_atomic();
-	do_bottom_half();
-	end_bh_atomic();
-  }
-
   return(0);
 }
 

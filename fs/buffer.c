@@ -973,7 +973,7 @@ static void read_buffers(struct buffer_head * bh[], int nrbuf)
 	}
 	if (bhnum)
 		ll_rw_block(READ, bhnum, bhr);
-	for (i = 0 ; i < nrbuf ; i++) {
+	for (i = nrbuf ; --i >= 0 ; ) {
 		if (bh[i]) {
 			wait_on_buffer(bh[i]);
 		}

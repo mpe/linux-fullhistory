@@ -1,28 +1,3 @@
-NOTE!
-
-	This is an ALPHA TEST VERSION (pre 3.0). The latest
-	released version of this driver is now part of
-	Linux kernel distribution. For other operating systems
-	use the snd-driv-2.5.tar.gz package.
-
-	This particular version contains lots of new features
-	BUT THERE ARE NO APPLICATIONS WHICH USE THEM. So there
-	is no need to install this version as long as you are
-	not developing the driver or applications which use it.
-	All new features are in the /dev/sequencer and /dev/midi
-	parts of the driver.
-
-	
-	This version is little bit incomplete. Some features have
-	not been implemented for each soundcards yet. All features
-	of v2.4 should work OK.
-
-CAUTION!
-	This version of driver works with applications written and
-	compiled for v2.*. The problem is that APPLICATIONS COMPILED
-	WITH soundcard.h OF THIS VERSION WILL NOT WORK WITH OLDER DRIVER.
-	Be careful when distributing applications compiled with this
-	version (just the apps using /dev/sequencer are incompatible).
 
 	*********************************************************
 	* IF YOU HAVE ANY PROBLEMS WITH THE SOUND DRIVER,	*
@@ -30,5 +5,3 @@ CAUTION!
 	* NEAREST LINUX FTP SITE AND CONTAINS ANSWER TO YOUR	*
 	* PROBLEM.						*
 	*********************************************************
-
-Hannu

@@ -934,6 +934,8 @@ static int tcp_select(struct sock *sk, int sel_type, select_table *wait)
 		break;
 
 	case SEL_OUT:
+		if (sk->err)
+			return 1;
 		if (sk->shutdown & SEND_SHUTDOWN) 
 			return 0;
 		if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV)
@@ -948,7 +950,7 @@ static int tcp_select(struct sock *sk, int sel_type, select_table *wait)
 		return 1;
 
 	case SEL_EX:
-		if (sk->err || sk->urg_data)
+		if (sk->urg_data)
 			return 1;
 		break;
 	}

@@ -24,7 +24,7 @@
  *                       Thanks to Nick Saw <cwsaw@pts7.pts.mot.com> for
  *                       help in figuring this out.  Ditto for Acer and
  *                       Aztech drives, which seem to have the same problem.
- *                       
+ * 2.04b May 30, 1995 -- Fix to match changes in ide.c version 3.16 -ml
  *
  * ATAPI cd-rom driver.  To be used with ide.c.
  *
@@ -41,8 +41,13 @@
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 
+#if 1	/* "old" method */
 #define OUT_WORDS(b,n)  outsw (IDE_PORT (HD_DATA, dev->hwif), (b), (n))
 #define IN_WORDS(b,n)   insw  (IDE_PORT (HD_DATA, dev->hwif), (b), (n))
+#else	/* "new" method -- should really fix each instance instead of this */
+#define OUT_WORDS(b,n)	output_ide_data(dev,b,(n)/2)
+#define IN_WORDS(b,n)	input_ide_data(dev,b,(n)/2)
+#endif
 
 /* special command codes for strategy routine. */
 #define PACKET_COMMAND 4315
@@ -196,7 +201,7 @@ static int cdrom_decode_status (ide_dev_t *dev, int good_stat, int *stat_ret)
   stat = GET_STAT (dev->hwif);
   *stat_ret = stat;
 
-  if (OK_STAT (stat, good_stat, BAD_RW_STAT))
+  if (OK_STAT (stat, good_stat, BAD_R_STAT))
     return 0;
 
   /* Got an error. */

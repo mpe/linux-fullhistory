@@ -1,4 +1,3 @@
-#define THREE_LEVEL
 /*
  *	linux/mm/mprotect.c
  *
