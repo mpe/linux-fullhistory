@@ -2257,7 +2257,7 @@ static int setup_solo1(struct solo1_state *s)
 }
 
 static int
-solo1_suspend(struct pci_dev *pci_dev, u32 state) {
+solo1_suspend(struct pci_dev *pci_dev, pm_message_t state) {
 	struct solo1_state *s = (struct solo1_state*)pci_get_drvdata(pci_dev);
 	if (!s)
 		return 1;
