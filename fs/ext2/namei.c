@@ -201,7 +201,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 
 	*err = -EINVAL;
 	*res_dir = NULL;
-	if (!dir)
+	if (!dir || !dir->i_nlink)
 		return NULL;
 	sb = dir->i_sb;
 
@@ -351,10 +351,13 @@ int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
 	struct inode * inode;
 	struct buffer_head * bh;
 	struct ext2_dir_entry * de;
-	int err;
+	int err = -EIO;
 
 	if (!dir)
 		return -ENOENT;
+	/*
+	 * N.B. Several error exits in ext2_new_inode don't set err.
+	 */
 	inode = ext2_new_inode (dir, mode, &err);
 	if (!inode)
 		return err;
@@ -386,7 +389,7 @@ int ext2_mknod (struct inode * dir, struct dentry *dentry, int mode, int rdev)
 	struct inode * inode;
 	struct buffer_head * bh;
 	struct ext2_dir_entry * de;
-	int err;
+	int err = -EIO;
 
 	if (!dir)
 		return -ENOENT;
@@ -443,7 +446,7 @@ int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	struct inode * inode;
 	struct buffer_head * bh, * dir_block;
 	struct ext2_dir_entry * de;
-	int err;
+	int err = -EIO;
 
 	if (dentry->d_name.len > EXT2_NAME_LEN)
 		return -ENAMETOOLONG;
@@ -714,8 +717,7 @@ int ext2_symlink (struct inode * dir, struct dentry *dentry, const char * symnam
 	struct inode * inode = NULL;
 	struct buffer_head * bh = NULL, * name_block = NULL;
 	char * link;
-	int i, err;
-	int l;
+	int i, l, err = -EIO;
 	char c;
 
 	if (!(inode = ext2_new_inode (dir, S_IFLNK, &err))) {
@@ -975,8 +977,7 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 	}
 
 	/* Update the dcache */
-	d_move(old_dentry, new_dentry->d_parent, &new_dentry->d_name);
-	d_delete(new_dentry);
+	d_move(old_dentry, new_dentry);
 	retval = 0;
 end_rename:
 	brelse (dir_bh);

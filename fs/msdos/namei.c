@@ -555,8 +555,7 @@ static int rename_same_dir(struct inode *old_dir,char *old_name,
 	}
 	memcpy(old_de->name,new_name,MSDOS_NAME);
 	/* Update the dcache */
-	d_move(old_dentry, new_dentry->d_parent, &new_dentry->d_name);
-	d_delete(new_dentry);
+	d_move(old_dentry, new_dentry);
 set_hid:
 	old_de->attr = is_hid
 		? (old_de->attr | ATTR_HIDDEN)
@@ -583,7 +582,7 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 	struct inode *old_inode,*new_inode,*free_inode,*dotdot_inode;
 	struct dentry *walk;
 	int new_ino,free_ino,dotdot_ino;
-	int error,exists,ino;
+	int error,exists;
 
 	if (old_dir->i_dev != new_dir->i_dev) return -EINVAL;
 	if (old_ino == new_dir->i_ino) return -EINVAL;
@@ -684,8 +683,7 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 		fat_brelse(sb, dotdot_bh);
 	}
 	/* Update the dcache */
-	d_move(old_dentry, new_dentry->d_parent, &new_dentry->d_name);
-	d_delete(new_dentry);
+	d_move(old_dentry, new_dentry);
 	error = 0;
 rename_done:
 	fat_brelse(sb, free_bh);

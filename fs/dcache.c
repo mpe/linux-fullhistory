@@ -1,3 +1,4 @@
+
 /*
  * fs/dcache.c
  *
@@ -270,18 +271,6 @@ found_it:
 		(dentry->d_name.len == len);
 }
 
-static inline void d_insert_to_parent(struct dentry * entry, struct dentry * parent)
-{
-	list_add(&entry->d_hash, d_hash(dget(parent), entry->d_name.hash));
-}
-
-static inline void d_remove_from_parent(struct dentry * dentry, struct dentry * parent)
-{
-	list_del(&dentry->d_hash);
-	dput(parent);
-}
-
-
 /*
  * When a file is deleted, we have two options:
  * - turn this dentry into a negative dentry
@@ -317,42 +306,55 @@ void d_delete(struct dentry * dentry)
 
 void d_add(struct dentry * entry, struct inode * inode)
 {
-	d_insert_to_parent(entry, entry->d_parent);
+	struct dentry * parent = dget(entry->d_parent);
+
+	list_add(&entry->d_hash, d_hash(parent, entry->d_name.hash));
 	d_instantiate(entry, inode);
 }
 
-static inline void alloc_new_name(struct dentry * entry, struct qstr *newname)
-{
-	int len = newname->len;
-	int hash = newname->hash;
-	char *name = (char *) entry->d_name.name;
+#define switch(x,y) do { \
+	__typeof__ (x) __tmp = x; \
+	x = y; y = __tmp; } while (0)
 
-	if (NAME_ALLOC_LEN(len) != NAME_ALLOC_LEN(entry->d_name.len)) {
-		name = kmalloc(NAME_ALLOC_LEN(len), GFP_KERNEL);
-		if (!name)
-			printk("out of memory for dcache\n");
-		kfree(entry->d_name.name);
-		entry->d_name.name = name;
-	}
-	memcpy(name, newname->name, len);
-	name[len] = 0;
-	entry->d_name.len = len;
-	entry->d_name.hash = hash;
-}
-
-void d_move(struct dentry * dentry, struct dentry * newdir, struct qstr * newname)
+/*
+ * We cannibalize "newdentry" when moving dentry on top of it,
+ * because it's going to be thrown away anyway. We could be more
+ * polite about it, though.
+ *
+ * This forceful removal will result in ugly /proc output if
+ * somebody holds a file open that got deleted due to a rename.
+ * We could be nicer about the deleted file, and let it show
+ * up under the name it got deleted rather than the name that
+ * deleted it.
+ *
+ * Careful with the hash switch. The hash switch depends on
+ * the fact that any list-entry can be a head of the list.
+ * Think about it.
+ */
+void d_move(struct dentry * dentry, struct dentry * target)
 {
-	if (!dentry)
-		return;
+	struct list_head * oldhead;
 
 	if (!dentry->d_inode)
 		printk("VFS: moving negative dcache entry\n");
 
-	d_remove_from_parent(dentry, dentry->d_parent);
-	alloc_new_name(dentry, newname);
-	dentry->d_parent = newdir;
-	d_insert_to_parent(dentry, newdir);
+	/* Switch the hashes.. */
+	oldhead = dentry->d_hash.prev;
+	list_del(&dentry->d_hash);
+	list_add(&dentry->d_hash, &target->d_hash);
+	list_del(&target->d_hash);
+	list_add(&target->d_hash, oldhead);
+
+	/* Switch the parents and the names.. */
+	switch(dentry->d_parent, target->d_parent);
+	switch(dentry->d_name.name, target->d_name.name);
+	switch(dentry->d_name.len, target->d_name.len);
+	switch(dentry->d_name.hash, target->d_name.hash);
+
+	/* Mark the (now overwritten) target deleted. */
+	d_delete(target);
 }
+
 /*
  * "buflen" should be PAGE_SIZE or more.
  */

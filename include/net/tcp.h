@@ -566,7 +566,7 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 	default:
 		if (oldstate==TCP_ESTABLISHED)
 			tcp_statistics.TcpCurrEstab--;
-		if (state == TCP_TIME_WAIT)
+		if (state == TCP_TIME_WAIT || state == TCP_CLOSE)
 			sk->prot->rehash(sk);
 	}
 }

@@ -700,7 +700,7 @@ isdn_ppp_poll(struct file *file, poll_table * wait)
 	is = file->private_data;
 
 	if (is->debug & 0x2)
-		printk(KERN_DEBUG "isdn_ppp_poll: minor: %d\n", MINOR(file->f_inode->i_rdev));
+		printk(KERN_DEBUG "isdn_ppp_poll: minor: %d\n", MINOR(file->f_dentry->d_inode->i_rdev));
 
 	poll_wait(&is->wq, wait);
 

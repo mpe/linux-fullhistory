@@ -678,6 +678,7 @@ static const unsigned char wdtr_message[] = {
  * Returns : NULL on failure, pointer to host structure on success.
  */
 
+#if 0
 static struct Scsi_Host *
 find_host (int host) {
     struct Scsi_Host *h;
@@ -767,6 +768,7 @@ request_disconnect (int host, int on_or_off) {
 	hostdata->options &= ~OPTION_DISCONNECT;
     return 0;
 }
+#endif
 
 /*
  * Function : static void NCR53c7x0_driver_init (struct Scsi_Host *host)
@@ -5468,6 +5470,7 @@ print_insn (struct Scsi_Host *host, const u32 *insn,
  * Returns : char * representation of state, "unknown" on error.
  */
 
+#if 0
 static const char *
 ncr_state (int state) {
     switch (state) {
@@ -5479,6 +5482,7 @@ ncr_state (int state) {
     default: return "unknown";
     }
 }
+#endif
 
 /*
  * Function : int NCR53c7xx_abort (Scsi_Cmnd *cmd)

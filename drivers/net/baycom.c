@@ -68,7 +68,8 @@
  *  History:
  *   0.1  26.06.96  Adapted from baycom.c and made network driver interface
  *        18.10.96  Changed to new user space access routines (copy_{to,from}_user)
- *   0.3  26.04.96  init code/data tagged
+ *   0.3  26.04.97  init code/data tagged
+ *   0.4  08.07.97  alternative ser12 decoding algorithm (uses delta CTS ints)
  */
 
 /*****************************************************************************/
@@ -149,12 +150,13 @@ extern inline int copy_to_user(void *to, const void *from, unsigned long n)
  * modem options; bit mask
  */
 #define BAYCOM_OPTIONS_SOFTDCD  1
+#define BAYCOM_ALT_SER12
 
 /* --------------------------------------------------------------------- */
 
 static const char bc_drvname[] = "baycom";
 static const char bc_drvinfo[] = KERN_INFO "baycom: (C) 1996 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "baycom: version 0.3 compiled " __TIME__ " " __DATE__ "\n";
+KERN_INFO "baycom: version 0.4 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
@@ -214,14 +216,20 @@ struct baycom_state {
 		unsigned char flags;
 		unsigned int shreg;
 		struct modem_state_ser12 {
-			unsigned char last_sample;
-			unsigned char interm_sample;
-			unsigned int bit_pll;
-			unsigned int dcd_shreg;
-			int dcd_sum0, dcd_sum1, dcd_sum2;
-			unsigned int dcd_time;
-			unsigned char last_rxbit;
 			unsigned char tx_bit;
+			int dcd_sum0, dcd_sum1, dcd_sum2;
+			unsigned char last_sample;
+			unsigned char last_rxbit;
+			unsigned int dcd_shreg;
+			unsigned int dcd_time;
+			unsigned int bit_pll;
+#ifdef BAYCOM_ALT_SER12
+			unsigned long last_jiffies;
+			unsigned int pll_time;
+			unsigned int txshreg;
+#else /* BAYCOM_ALT_SER12 */
+			unsigned char interm_sample;
+#endif /* BAYCOM_ALT_SER12 */
 		} ser12;
 		struct modem_state_par96 {
 			int dcd_count;
@@ -271,6 +279,183 @@ static void inline baycom_int_freq(struct baycom_state *bc)
 /*
  * ===================== SER12 specific routines =========================
  */
+
+#ifdef BAYCOM_ALT_SER12
+
+#define SER12_BAUD 1200
+
+/* --------------------------------------------------------------------- */
+
+extern inline unsigned int hweight16(unsigned short w)
+        __attribute__ ((unused));
+extern inline unsigned int hweight8(unsigned char w)
+        __attribute__ ((unused));
+
+extern inline unsigned int hweight16(unsigned short w)
+{
+        unsigned short res = (w & 0x5555) + ((w >> 1) & 0x5555);
+        res = (res & 0x3333) + ((res >> 2) & 0x3333);
+        res = (res & 0x0F0F) + ((res >> 4) & 0x0F0F);
+        return (res & 0x00FF) + ((res >> 8) & 0x00FF);
+}
+
+extern inline unsigned int hweight8(unsigned char w)
+{
+        unsigned short res = (w & 0x55) + ((w >> 1) & 0x55);
+        res = (res & 0x33) + ((res >> 2) & 0x33);
+        return (res & 0x0F) + ((res >> 4) & 0x0F);
+}
+
+/* --------------------------------------------------------------------- */
+
+static __inline__ void ser12_rxsample(struct device *dev, struct baycom_state *bc, unsigned char news)
+{
+	bc->modem.ser12.dcd_shreg <<= 1;
+	bc->modem.ser12.bit_pll += 0x2000;
+	if (bc->modem.ser12.last_sample != news) {
+		bc->modem.ser12.last_sample = news;
+		bc->modem.ser12.dcd_shreg |= 1;
+		if (bc->modem.ser12.bit_pll < 0x9000)
+			bc->modem.ser12.bit_pll += 0x1000;
+		else
+			bc->modem.ser12.bit_pll -= 0x1000;
+		bc->modem.ser12.dcd_sum0 += 4 * hweight8(bc->modem.ser12.dcd_shreg & 0x38)
+			- hweight16(bc->modem.ser12.dcd_shreg & 0x7c0);
+	}
+	hdlcdrv_channelbit(&bc->hdrv, !!bc->modem.ser12.last_sample);
+	if ((--bc->modem.ser12.dcd_time) <= 0) {
+		hdlcdrv_setdcd(&bc->hdrv, (bc->modem.ser12.dcd_sum0 + 
+					   bc->modem.ser12.dcd_sum1 + 
+					   bc->modem.ser12.dcd_sum2) < 0);
+		bc->modem.ser12.dcd_sum2 = bc->modem.ser12.dcd_sum1;
+		bc->modem.ser12.dcd_sum1 = bc->modem.ser12.dcd_sum0;
+		bc->modem.ser12.dcd_sum0 = 2; /* slight bias */
+		bc->modem.ser12.dcd_time = 120;
+	}
+	if (bc->modem.ser12.bit_pll >= 0x10000) {
+		bc->modem.ser12.bit_pll &= 0xffff;
+		bc->modem.shreg >>= 1;
+		if (bc->modem.ser12.last_rxbit == bc->modem.ser12.last_sample)
+			bc->modem.shreg |=  0x10000;
+		bc->modem.ser12.last_rxbit = bc->modem.ser12.last_sample;
+		if (bc->modem.shreg & 1) {
+			hdlcdrv_putbits(&bc->hdrv, bc->modem.shreg >> 1);
+			bc->modem.shreg = 0x10000;
+		}
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static __inline__ void ser12_rx(struct device *dev, struct baycom_state *bc, unsigned char curs)
+{
+	unsigned long curjiff;
+	struct timeval tv;
+	unsigned int timediff;
+
+	/*
+	 * get current time
+	 */
+	curjiff = jiffies;
+	do_gettimeofday(&tv);
+	if ((signed)(curjiff - bc->modem.ser12.last_jiffies) >= HZ/4) {
+		/* long inactivity; clear HDLC and DCD */
+		bc->modem.ser12.dcd_sum1 = 0;
+		bc->modem.ser12.dcd_sum2 = 0;
+		bc->modem.ser12.dcd_sum0 = 2;
+		bc->modem.ser12.dcd_time = 120;
+		hdlcdrv_setdcd(&bc->hdrv, 0);
+		hdlcdrv_putbits(&bc->hdrv, 0xffff);
+		bc->modem.ser12.last_jiffies = curjiff;
+		bc->modem.ser12.pll_time = tv.tv_usec;
+	}
+	bc->modem.ser12.last_jiffies = curjiff;
+	timediff = tv.tv_usec + 1000000 - bc->modem.ser12.pll_time;
+	timediff %= 1000000;
+	timediff /= 125000/SER12_BAUD;
+	bc->modem.ser12.pll_time = (bc->modem.ser12.pll_time + timediff * (125000/SER12_BAUD)) % 1000000;
+	for (; timediff > 1; timediff--)
+		ser12_rxsample(dev, bc, bc->modem.ser12.last_sample);
+	if (timediff >= 1)
+		ser12_rxsample(dev, bc, curs);
+}
+
+/* --------------------------------------------------------------------- */
+
+static void ser12_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+	struct device *dev = (struct device *)dev_id;
+	struct baycom_state *bc = (struct baycom_state *)dev->priv;
+	unsigned char iir, msr = 0;
+	unsigned int txcount = 0;
+	unsigned int rxcount = 0;
+
+	if (!dev || !bc || bc->hdrv.magic != HDLCDRV_MAGIC)
+		return;
+	
+	for (;;) {
+		iir = inb(IIR(dev->base_addr));
+		if (iir & 1)
+			break;
+		switch (iir & 6) {
+		case 6:
+			inb(LSR(dev->base_addr));
+			continue;
+			
+		case 4:
+			inb(RBR(dev->base_addr));
+			continue;
+			
+		case 2:
+			/*
+			 * make sure the next interrupt is generated;
+			 * 0 must be used to power the modem; the modem draws its
+			 * power from the TxD line
+			 */
+			outb(0x00, THR(dev->base_addr));
+			bc->modem.arb_divider--;
+			baycom_int_freq(bc);
+			if (hdlcdrv_ptt(&bc->hdrv)) {
+				/*
+				 * first output the last bit (!) then call HDLC transmitter,
+				 * since this may take quite long
+				 */
+				outb(0x0e | (!!bc->modem.ser12.tx_bit), MCR(dev->base_addr));
+				txcount++;
+			} else
+				outb(0x0d, MCR(dev->base_addr));       /* transmitter off */
+			continue;
+			
+		default:
+			msr = inb(MSR(dev->base_addr));
+			if (msr & 1)  /* delta CTS interrupt */
+				rxcount++;
+			continue;
+		}
+	}
+	if (rxcount)
+		ser12_rx(dev, bc, msr & 0x10);
+	if (txcount) {
+#ifdef BAYCOM_DEBUG
+		if (bc->debug_vals.cur_pllcorr < txcount)
+			bc->debug_vals.cur_pllcorr = txcount;
+#endif /* BAYCOM_DEBUG */
+		if (bc->modem.ser12.txshreg <= 1)
+			bc->modem.ser12.txshreg = 0x10000 | hdlcdrv_getbits(&bc->hdrv);
+		bc->modem.ser12.tx_bit = !(bc->modem.ser12.tx_bit ^ (bc->modem.ser12.txshreg & 1));
+		bc->modem.ser12.txshreg >>= 1;
+	}
+	sti();
+	if (bc->modem.arb_divider <= 0) {
+		bc->modem.arb_divider = SER12_BAUD/100;
+		hdlcdrv_arbitrate(dev, &bc->hdrv);
+	}
+	hdlcdrv_transmitter(dev, &bc->hdrv);
+	hdlcdrv_receiver(dev, &bc->hdrv);
+}
+
+/* --------------------------------------------------------------------- */
+#else /* BAYCOM_ALT_SER12 */
 
 static void inline ser12_set_divisor(struct device *dev,
 				     unsigned char divisor)
@@ -503,13 +688,15 @@ static void ser12_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	hdlcdrv_transmitter(dev, &bc->hdrv);
 	hdlcdrv_receiver(dev, &bc->hdrv);
 }
+#endif /* BAYCOM_ALT_SER12 */
 
 /* --------------------------------------------------------------------- */
 
 enum uart { c_uart_unknown, c_uart_8250,
-	c_uart_16450, c_uart_16550, c_uart_16550A};
-static const char *uart_str[] =
-	{ "unknown", "8250", "16450", "16550", "16550A" };
+	    c_uart_16450, c_uart_16550, c_uart_16550A};
+static const char *uart_str[] = { 
+	"unknown", "8250", "16450", "16550", "16550A" 
+};
 
 static enum uart ser12_check_uart(unsigned int iobase)
 {
@@ -568,6 +755,30 @@ static int ser12_open(struct device *dev)
 			"baycom_ser12", dev))
 		return -EBUSY;
 	request_region(dev->base_addr, SER12_EXTENT, "baycom_ser12");
+#ifdef BAYCOM_ALT_SER12
+	bc->hdrv.par.bitrate = SER12_BAUD;
+	/*
+	 * set the SIO to 6 Bits/character and 19600 baud, so that
+	 * we get exactly (hopefully) one interrupt per radio symbol
+	 */
+	outb(0x81, LCR(dev->base_addr));	/* DLAB = 1 */
+	outb(115200/8/SER12_BAUD, DLL(dev->base_addr));
+	outb(0, DLM(dev->base_addr));
+	outb(0x01, LCR(dev->base_addr));	/* word length = 6 */
+	/*
+	 * enable transmitter empty interrupt and modem status interrupt
+	 */
+	outb(0x0a, IER(dev->base_addr));
+	/*
+	 * make sure the next interrupt is generated;
+	 * 0 must be used to power the modem; the modem draws its
+	 * power from the TxD line
+	 */
+	outb(0x00, THR(dev->base_addr));
+	printk(KERN_INFO "%s: ser12(alt modem) at iobase 0x%lx irq %u options "
+	       "0x%x uart %s\n", bc_drvname, dev->base_addr, dev->irq,
+	       bc->options, uart_str[u]);
+#else /* BAYCOM_ALT_SER12 */
 	/*
 	 * enable transmitter empty interrupt
 	 */
@@ -581,6 +792,7 @@ static int ser12_open(struct device *dev)
 	printk(KERN_INFO "%s: ser12 at iobase 0x%lx irq %u options "
 	       "0x%x uart %s\n", bc_drvname, dev->base_addr, dev->irq,
 	       bc->options, uart_str[u]);
+#endif /* BAYCOM_ALT_SER12 */
 	MOD_INC_USE_COUNT;
 	return 0;
 }

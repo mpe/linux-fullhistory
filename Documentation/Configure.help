@@ -1967,20 +1967,44 @@ CONFIG_SCSI_NCR53C8XX_MAX_TAGS
   possible.  The default value is 4. Minimum is 2, maximum is 12.  The
   normal answer therefore is the default one.
 
+detect and read serial NVRAM
+CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
+  Enable support for reading the serial NVRAM data on Symbios and
+  some Symbios compatible cards, and Tekram DC390W/U/F cards. Useful for
+  systems with more than one Symbios compatible controller where at least
+  one has a serial NVRAM, or for a system with a mixture of Symbios and
+  Tekram cards. Enables setting the boot order of host adaptors
+  to something other than the default order or "reverse probe" order. 
+  Also enables Symbios and Tekram cards to be distinguished so
+  CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT may be set in a system with a
+  mixture of Symbios and Tekram cards so the Symbios cards can make use of
+  the full range of Symbios features, differential, led pin, without
+  causing problems for the Tekram card(s).
+      (added by Richard Waltham: dormouse@farsrobt.demon.co.uk)
+  Also enables setting host and targets SCSI features as defined in the 
+  user setup for each host using a serial NVRAM (added by the maintainer).
+  The default answer is N, the normal answer should be Y.
+  Read drivers/scsi/README.ncr53c8xx for more information.
+
 assume boards are SYMBIOS compatible
 CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
-  This option allows you to enable some features depending on GPIO wiring.
-  These general purpose input/output pins can be used for vendor specific 
-  features or implementation of the standard SYMBIOS features.
-  Genuine SYMBIOS boards use GPIO0 in output for controller LED and GPIO3 
-  bit as a flag indicating singled-ended/differential interface.
+  This option allows you to enable some features depending on GPIO
+  wiring.  These General Purpose Input/Output pins can be used for
+  vendor specific features or implementation of the standard SYMBIOS
+  features.  Genuine SYMBIOS boards use GPIO0 in output for controller
+  LED and GPIO3 bit as a flag indicating singled-ended/differential
+  interface.
   If all the boards of your system are genuine SYMBIOS boards or use
-  BIOS and drivers from SYMBIOS, you would want to enable this option,
-  obviously at your own risks.
+  BIOS and drivers from SYMBIOS, you would want to enable this option.
   The driver behaves correctly on my system with this option enabled.
-  (SDMS 4.0 + Promise SCSI ULTRA 875 rev 0x3 + ASUS SC200 810A rev 0x12).
-  This option must be set to N if your system has at least one 53C8XX based  
-  scsi board with a vendor-specific BIOS (example: Tekram DC-390/U/W/F).
+  (SDMS 4.0 + Promise SCSI ULTRA 875 rev 0x3 + ASUS SC200 810A rev
+  0x12).  This option must be set to N if your system has at least one
+  53C8XX based scsi board with a vendor-specific BIOS (example: Tekram
+  DC-390/U/W/F).  If unsure, say N.
+  However, if all your non Symbios compatible boards have NvRAM, setting 
+  option CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT allows the driver to 
+  distinguish Symbios compatible boards from other ones.
+  So, you can answer Y if all non Symbios compatible boards have NVRAM.
 
 assume boards are SYMBIOS compatible
 CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
@@ -2518,6 +2542,26 @@ CONFIG_SOUNDMODEM_FSK9600
   both 1200 baud AFSK and 9600 baud FSK if you want (but obviously you
   can only use one protocol at a time, depending on what the other end
   can understand).
+
+Shortwave radio modem driver
+CONFIG_HFMODEM
+  This experimental driver is used by a package (to be released)
+  that implements the shortwave radio protocols RTTY, Sitor (Amtor),
+  Pactor 1 and GTOR using a standard PC soundcard. If unsure,
+  say N.
+
+Shortwave radio modem driver support for SoundBlaster and compatible cards
+CONFIG_HFMODEM_SBC
+  This option enables the hfmodem driver to use SoundBlaster and
+  compatible cards. It requires a 16bit capable card, i.e.
+  SB16 or better, or ESS1688 or newer.
+
+Shortwave radio modem driver support for WSS and Crystal cards
+CONFIG_HFMODEM_WSS
+  This option enables the hfmodem driver to use WindowsSoundSystem
+  compatible cards. These cards feature a codec chip from either
+  Analog Devices (such as AD1848, AD1845) or Crystal
+  Semiconductors (such as CS4248, CS423x).
 
 Serial port KISS driver for AX.25
 CONFIG_MKISS

@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-9 May 1997
+19 June 1997
 ===============================================================================
 
 1.  Introduction
@@ -28,6 +28,8 @@ Written by Gerard Roudier <groudier@club-internet.fr>
       10.1 Syntax
       10.2 Available arguments
       10.3 Advised boot setup commands
+      10.4 PCI configuration fix-up boot option
+      10.5 Serial NVRAM support boot option
 11. Some constants and flags of the ncr53c8xx.h header file
 12. Installation
       12.1 Provided files
@@ -40,6 +42,10 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 16. Synchonous transfer negotiation tables
       16.1 Synchronous timings for 53C875 and 53C860 Ultra-SCSI controllers
       16.2 Synchronous timings for fast SCSI-2 53C8XX controllers
+17. Serial NVRAM support (by Richard Waltham)
+      17.1 Features
+      17.2 Symbios NVRAM layout
+      17.3 Tekram  NVRAM layout
 
 ===============================================================================
 
@@ -124,6 +130,7 @@ Chip   SDMS BIOS   Wide   Ultra SCSI   the driver      the driver
 	Scatter / gather
 	Shared interrupt
         Boot setup commands
+        Serial NVRAM:          Symbios and Tekram formats
 
 
 4. Memory mapped I/O versus normal I/O
@@ -412,35 +419,6 @@ Available commands:
     If you select an error type, it will be triggered by the driver every 
     30 seconds.
 
-8.9 PCI configuration fix-up
-
-    pcifix <option bits>
-
-    Available option bits:
-        0x1:     Set PCI cache-line size register if not set.
-        0x2:     Set write and invalidate bit in PCI command register.
-
-    Use 'pcifix:3' in order to allow the driver to fix both PCI features.
-
-    These options only apply to new SYMBIOS chips 810A, 825A, 860 and 875 
-    and are only supported for Pentium and 486 class processors.
-    Recent SYMBIOS 53C8XX scsi processors are able to use PCI read multiple 
-    and PCI write and invalidate commands. These features require the 
-    cache line size register to be properly set in the PCI configuration 
-    space of the chips. On the other hand, chips will use PCI write and 
-    invalidate commands only if the corresponding bit is set to 1 in the 
-    PCI command register.
-
-    Not all PCI bioses set the PCI cache line register and the PCI write and 
-    invalidate bit in the PCI configuration space of 53C8XX chips.
-    Optimized PCI accesses may be broken for some PCI/memory controllers or 
-    make problems with some PCI boards.
-
-    This fix-up works flawlessly on my system.
-    (MB Triton HX / 53C875 / 53C810A)
-    I use these options at my own risks as you will do if you decide to 
-    use them too.
-
 9. Configuration parameters
 
 If the firmware of all your devices is perfect enough, all the
@@ -489,6 +467,18 @@ CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
     GPIO wiring. So, this option must not be enabled if your system has 
     such a board installed.
 
+CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
+    Enable support for reading the serial NVRAM data on Symbios and
+    some Symbios compatible cards, and Tekram DC390W/U/F cards. Useful for
+    systems with more than one Symbios compatible controller where at least
+    one has a serial NVRAM, or for a system with a mixture of Symbios and
+    Tekram cards. Enables setting the boot order of host adaptors
+    to something other than the default order or "reverse probe" order. 
+    Also enables Symbios and Tekram cards to be distinguished so
+    CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT may be set in a system with a
+    mixture of Symbios and Tekram cards so the Symbios cards can make use of
+    the full range of Symbios features, differential, led pin, without
+    causing problems for the Tekram card(s).
 
 10. Boot setup commands
 
@@ -628,6 +618,20 @@ Reverse probe
                 810, 815, 820, 860, 875, 885, 895, 896
     revprob:y   probe chip ids in the reverse order.
 
+Fix up PCI configuration space
+    pcifix:<option bits>
+
+    Available option bits:
+        0x1:   Set PCI cache-line size register if not set.
+        0x2:   Set write and invalidate bit in PCI command register.
+        0x4:   Increase if necessary PCI latency timer according to burst max.
+
+    Use 'pcifix:7' in order to allow the driver to fix up all PCI features.
+
+Serial NVRAM
+    nvram:n     do not look for serial NVRAM
+    nvram:y     test controllers for onboard serial NVRAM
+
 Boot fail safe
     safe:y	load the following assumed fail safe initial setup
 
@@ -638,6 +642,8 @@ Boot fail safe
   ultra scsi			disabled		ultra:n
   force sync negotiation	disabled		fsn:n
   reverse probe			disabled		revprob:n
+  PCI fix up                    disabled                pcifix:0
+  serial NVRAM                  enabled                 nvram:y
   verbosity level		2			verb:2
   tagged command queuing	disabled		tags:0
   synchronous negotiation	disabled		sync:255
@@ -674,6 +680,83 @@ The driver prints its actual setup when verbosity level is 2. You can try
 "ncr53c8xx=verb:2" to get the "static" setup of the driver, or add "verb:2" 
 to your boot setup command in order to check the actual setup the driver is 
 using.
+
+10.4 PCI configuration fix-up boot option
+
+pcifix:<option bits>
+
+Available option bits:
+    0x1:     Set PCI cache-line size register if not set.
+    0x2:     Set write and invalidate bit in PCI command register.
+
+Use 'pcifix:3' in order to allow the driver to fix both PCI features.
+
+These options only apply to new SYMBIOS chips 810A, 825A, 860 and 875 
+and are only supported for Pentium and 486 class processors.
+Recent SYMBIOS 53C8XX scsi processors are able to use PCI read multiple 
+and PCI write and invalidate commands. These features require the 
+cache line size register to be properly set in the PCI configuration 
+space of the chips. On the other hand, chips will use PCI write and 
+invalidate commands only if the corresponding bit is set to 1 in the 
+PCI command register.
+
+Not all PCI bioses set the PCI cache line register and the PCI write and 
+invalidate bit in the PCI configuration space of 53C8XX chips.
+Optimized PCI accesses may be broken for some PCI/memory controllers or 
+make problems with some PCI boards.
+
+This fix-up works flawlessly on my system.
+(MB Triton HX / 53C875 / 53C810A)
+I use these options at my own risks as you will do if you decide to 
+use them too.
+
+
+10.5 Serial NVRAM support boot option
+
+nvram:n     do not look for serial NVRAM
+nvram:y     test controllers for onboard serial NVRAM
+
+This option is described below (see 17. Serial NVRAM support).
+When this option is enabled, the driver tries to detect all boards using 
+a Serial NVRAM. This memory is used to hold user set up parameters.
+
+The parameters the driver is able to get from the NVRAM depend on the 
+data format used, as follow:
+
+                                 Tekram format      Symbios format
+General and host parameters
+    Boot order                         N                   Y
+    Host SCSI ID                       Y                   Y
+    SCSI parity checking               Y                   Y
+    Verbose boot messages              N                   Y
+SCSI devices parameters
+    Synchronous transfer speed         Y                   Y
+    Wide 16 / Narrow                   Y                   Y
+    Tagged Command Queuing enabled     Y                   Y
+    Disconnections enabled             Y                   Y
+    Scan at boot time                  N                   Y
+
+In order to speed up the system boot, for each device configured without 
+the "scan at boot time" option, the driver forces an error on the 
+first TEST UNIT READY command received for this device.
+
+Some SDMS BIOS revisions seem to be unable to boot cleanly with very fast 
+hard disks. In such a situation you cannot configure the NVRAM with 
+optimized parameters value.
+
+The 'nvram' boot option can be entered in hexadecimal form in order 
+to ignore some options configured in the NVRAM, as follow:
+
+mvram=<bits options>
+      0x01   look for NVRAM  (equivalent to nvram=y)
+      0x02   ignore NVRAM "Synchronous negotiation" parameters for all devices
+      0x04   ignore NVRAM "Wide negotiation"  parameter for all devices
+      0x08   ignore NVRAM "Scan at boot time" parameter for all devices
+
+My Atlas Wide only boots cleanly in 8 bits asynchronous data transfer 
+mode. However, it works flawlessly at 20 MB/second with the driver.
+Using "nvram=0x7" allows me to boot in 8 bits/async and to let the driver 
+use its setup for synchronous and wide negotiations.
 
 
 11. Some constants and flags of the ncr53c8xx.h header file
@@ -766,6 +849,7 @@ SCSI_NCR_SG_TABLESIZE		(default: SCSI_NCR_MAX_SCATTER-1)
 SCSI_NCR_MAX_LUN	(default: 8)
 	Max number of LUNs per target.
 
+
 12. Installation
 
 12.1 Provided files
@@ -787,9 +871,9 @@ Driver and common files:
 
 You must untar the distribution with the following command:
 
-	tar zxvf ncrBsd2Linux-2.1b-src.tar.gz
+	tar zxvf ncrBsd2Linux-2.2b-src.tar.gz
 
-The sub-directory ncr53c8xx-2.1b will be created. Change to this directory.
+The sub-directory ncr53c8xx-2.2b will be created. Change to this directory.
 
 
 12.2 Installation procedure
@@ -851,12 +935,11 @@ When you add a new NCR53C8XX chip based controller to a system that already
 has one or more controllers of this family, it may happen that the order 
 the driver registers them to the kernel causes problems due to device 
 name changes.
-SDMS BIOS version 4 allows you to define the order the BIOS will scan the 
-scsi boards and stores this information for next reboots. Unfortunately, the 
-driver is not currently able to read this information and so may register 
-controllers in a different order.
+When at least one controller uses NvRAM, SDMS BIOS version 4 allows you to 
+define the order the BIOS will scan the scsi boards. The driver attaches 
+controllers according to BIOS information if NvRAM detect option is set.
 
-If you have such a problem, you can:
+If your controllers do not have NvRAM, you can:
 
 - Ask the driver to probe chip ids in reverse order from the boot command
   line: ncr53c8xx=revprob:y
@@ -1003,6 +1086,350 @@ Wide16 SCSI.
  47      188        5.319      200        5.000
  48      192        5.208      200        5.000
  49      196        5.102      200        5.000
+
+
+17. Serial NVRAM (added by Richard Waltham: dormouse@farsrobt.demon.co.uk)
+
+17.1 Features
+
+Enabling serial NVRAM support enables detection of the serial NVRAM included
+on Symbios and some Symbios compatible host adaptors, and Tekram boards. The 
+serial NVRAM is used by Symbios and Tekram to hold set up parameters for the 
+host adaptor and it's attached drives.
+
+The Symbios NVRAM also holds data on the boot order of host adaptors in a
+system with more than one host adaptor. This enables the order of scanning
+the cards for drives to be changed from the default used during host adaptor
+detection.
+
+This can be done to a limited extent at the moment using "reverse probe" but
+this only changes the order of detection of different types of cards. The
+NVRAM boot order settings can do this as well as change the order the same
+types of cards are scanned in, something "reverse probe" cannot do.
+
+Tekram boards using Symbios chips, DC390W/F/U, which have NVRAM are detected
+and this is used to distinguish between Symbios compatible and Tekram host 
+adaptors. This is used to disable the Symbios compatible "diff" setting
+incorrectly set on Tekram boards if the CONFIG_SCSI_53C8XX_SYMBIOS_COMPAT 
+configuration parameter is set enabling both Symbios and Tekram boards to be 
+used together with the Symbios cards using all their features, including
+"diff" support. ("led pin" support for Symbios compatible cards can remain
+enabled when using Tekram cards. It does nothing useful for Tekram host
+adaptors but does not cause problems either.)
+
+
+17.2 Symbios NVRAM layout
+
+typical data at NVRAM address 0x100 (53c810a NVRAM)
+-----------------------------------------------------------
+00 00
+64 01
+8e 0b
+
+00 30 00 00 00 00 07 00 00 00 00 00 00 00 07 04 10 04 00 00 
+
+04 00 0f 00 00 10 00 50 00 00 01 00 00 62 
+04 00 03 00 00 10 00 58 00 00 01 00 00 63 
+04 00 01 00 00 10 00 48 00 00 01 00 00 61 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+0f 00 08 08 64 00 0a 00
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 
+
+fe fe
+00 00
+00 00
+-----------------------------------------------------------
+NVRAM layout details
+
+NVRAM Address 0x000-0x0ff not used
+              0x100-0x26f initialised data
+              0x270-0x7ff not used
+
+general layout
+
+        header  -   6 bytes,
+        data    - 356 bytes (checksum is byte sum of this data)
+        trailer -   6 bytes
+                  ---
+        total     368 bytes
+
+data area layout
+
+        controller set up  -  20 bytes
+        boot configuration -  56 bytes (4x14 bytes)
+        device set up      - 128 bytes (16x8 bytes)
+        unused (spare?)    - 152 bytes (19x8 bytes)
+                             ---
+        total                356 bytes
+
+-----------------------------------------------------------
+header
+
+00 00   - ?? start marker
+64 01   - byte count (lsb/msb excludes header/trailer)
+8e 0b   - checksum (lsb/msb excludes header/trailer)
+-----------------------------------------------------------
+controller set up
+
+00 30 00 00 00 00 07 00 00 00 00 00 00 00 07 04 10 04 00 00
+                   |     |                 |
+                   |     |                  -- host ID
+                   |      --flag bits 2
+                   |        0x00000001= scan order hi->low
+                   |            (default 0x00 - scan low->hi)
+                    --flag bits 1
+                       0x00000001 scam enable
+                       0x00000010 parity enable
+                       0x00000100 verbose boot msgs
+
+remaining bytes unknown - they do not appear to change in my
+current set up for any of the controllers.
+
+default set up is identical for 53c810a and 53c875 NVRAM
+-----------------------------------------------------------
+boot configuration
+
+boot order set by order of the devices in this table
+
+04 00 0f 00 00 10 00 50 00 00 01 00 00 62 -- 1st controller
+04 00 03 00 00 10 00 58 00 00 01 00 00 63    2nd controller
+04 00 01 00 00 10 00 48 00 00 01 00 00 61    3rd controller
+00 00 00 00 00 00 00 00 00 00 00 00 00 00    4th controller
+       |  |  |  |     |        |     |  |
+       |  |  |  |     |        |      ---- PCI io port adr
+       |  |  |  |     |         --0x01 init/scan at boot time
+       |  |  |  |      --PCI device/function number (0xdddddfff)
+       |  |   ----- ?? PCI vendor ID (lsb/msb)
+        ----PCI device ID (lsb/msb)
+
+?? use of this data is a guess but seems reasonable
+
+remaining bytes unknown - they do not appear to change in my
+current set up
+
+default set up is identical for 53c810a and 53c875 NVRAM
+-----------------------------------------------------------
+device set up (up to 16 devices - includes controller)
+
+0f 00 08 08 64 00 0a 00 - id 0
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 
+0f 00 08 08 64 00 0a 00 - id 15
+ |     |  |  |     |  |
+ |     |  |  |      ----timeout (lsb/msb)
+ |     |  |   --synch period (0x?? 40 Mtrans/sec- fast 40) (probably 0x28)
+ |     |  |                  (0x30 20 Mtrans/sec- fast 20)
+ |     |  |                  (0x64 10 Mtrans/sec- fast )
+ |     |  |                  (0xc8  5 Mtrans/sec)
+ |     |  |                  (0x00  asynchronous)
+ |     |   -- ?? max sync offset (0x08 in NVRAM on 53c810a) 
+ |     |                         (0x10 in NVRAM on 53c875)
+ |      --device bus width (0x08 narrow)
+ |                         (0x10 16 bit wide)
+  --flag bits
+    0x00000001 - disconnect enabled
+    0x00000010 - scan at boot time
+    0x00000100 - scan luns
+    0x00001000 - queue tags enabled
+
+remaining bytes unknown - they do not appear to change in my
+current set up
+
+?? use of this data is a guess but seems reasonable 
+(but it could be max bus width)
+
+default set up for 53c810a NVRAM
+default set up for 53c875 NVRAM - bus width     - 0x10
+                                - sync offset ? - 0x10
+                                - sync period   - 0x30
+-----------------------------------------------------------
+?? spare device space (32 bit bus ??)
+
+00 00 00 00 00 00 00 00  (19x8bytes)
+.
+.
+00 00 00 00 00 00 00 00
+
+default set up is identical for 53c810a and 53c875 NVRAM
+-----------------------------------------------------------
+trailer
+
+fe fe   - ? end marker ?
+00 00
+00 00
+
+default set up is identical for 53c810a and 53c875 NVRAM
+-----------------------------------------------------------
+
+
+
+17.3 Tekram NVRAM layout
+
+nvram 64x16 (1024 bit)
+
+Drive settings
+
+Drive ID 0-15 (addr 0x0yyyy0 = device setup, yyyy = ID)
+              (addr 0x0yyyy1 = 0x0000)
+
+    x x x x  x x x x  x x x x  x x x x
+               | | |      | |  | | | |
+               | | |      | |  | | |  ----- parity check   0 - off
+               | | |      | |  | | |                       1 - on
+               | | |      | |  | | |
+               | | |      | |  | |  ------- sync neg       0 - off
+               | | |      | |  | |                         1 - on
+               | | |      | |  | |
+               | | |      | |  |  --------- disconnect     0 - off
+               | | |      | |  |                           1 - on
+               | | |      | |  |
+               | | |      | |   ----------- start cmd      0 - off
+               | | |      | |                              1 - on
+               | | |      | |
+               | | |      |  -------------- tagged cmds    0 - off
+               | | |      |                                1 - on
+               | | |      | 
+               | | |       ---------------- wide neg       0 - off
+               | | |                                       1 - on
+               | | |
+                --------------------------- sync rate      0 - 10.0 Mtrans/sec
+                                                           1 -  8.0
+                                                           2 -  6.6
+                                                           3 -  5.7
+                                                           4 -  5.0
+                                                           5 -  4.0
+                                                           6 -  3.0
+                                                           7 -  2.0
+                                                           7 -  2.0
+                                                           8 - 20.0
+                                                           9 - 16.7
+                                                           a - 13.9
+                                                           b - 11.9
+
+Global settings
+
+Host flags 0 (addr 0x100000, 32) 
+
+    x x x x  x x x x  x x x x  x x x x
+    | | | |  | | | |           | | | |
+    | | | |  | | | |            ----------- host ID    0x00 - 0x0f
+    | | | |  | | | |
+    | | | |  | | |  ----------------------- support for    0 - off
+    | | | |  | | |                          > 2 drives     1 - on
+    | | | |  | | | 
+    | | | |  | |  ------------------------- support drives 0 - off
+    | | | |  | |                            > 1Gbytes      1 - on
+    | | | |  | |
+    | | | |  |  --------------------------- bus reset on   0 - off
+    | | | |  |                                power on     1 - on
+    | | | |  |
+    | | | |   ----------------------------- active neg     0 - off
+    | | | |                                                1 - on
+    | | | |
+    | | |  -------------------------------- imm seek       0 - off
+    | | |                                                  1 - on
+    | | |
+    | |  ---------------------------------- scan luns      0 - off
+    | |                                                    1 - on
+    | |
+     -------------------------------------- removable      0 - disable
+                                            as BIOS dev    1 - boot device
+                                                           2 - all
+
+Host flags 1 (addr 0x100001, 33)
+
+    x x x x  x x x x  x x x x  x x x x
+               | | |             | | | 
+               | | |              --------- boot delay     0 -   3 sec
+               | | |                                       1 -   5
+               | | |                                       2 -  10
+               | | |                                       3 -  20
+               | | |                                       4 -  30
+               | | |                                       5 -  60
+               | | |                                       6 - 120
+               | | |
+                --------------------------- max tag cmds   0 -  2
+                                                           1 -  4
+                                                           2 -  8
+                                                           3 - 16
+                                                           4 - 32
+
+Host flags 2 (addr 0x100010, 34)
+
+    x x x x  x x x x  x x x x  x x x x
+                                     |
+                                      ----- F2/F6 enable   0 - off ???
+                                                           1 - on  ???
+
+checksum (addr 0x111111)
+
+checksum = 0x1234 - (sum addr 0-63)
+
+----------------------------------------------------------------------------
+
+default nvram data:
+
+0x0037 0x0000 0x0037 0x0000 0x0037 0x0000 0x0037 0x0000
+0x0037 0x0000 0x0037 0x0000 0x0037 0x0000 0x0037 0x0000
+0x0037 0x0000 0x0037 0x0000 0x0037 0x0000 0x0037 0x0000
+0x0037 0x0000 0x0037 0x0000 0x0037 0x0000 0x0037 0x0000 
+
+0x0f07 0x0400 0x0001 0x0000 0x0000 0x0000 0x0000 0x0000
+0x0000 0x0000 0x0000 0x0000 0x0000 0x0000 0x0000 0x0000
+0x0000 0x0000 0x0000 0x0000 0x0000 0x0000 0x0000 0x0000
+0x0000 0x0000 0x0000 0x0000 0x0000 0x0000 0x0000 0xfbbc
+
 ===============================================================================
 End of NCR53C8XX driver README file
 

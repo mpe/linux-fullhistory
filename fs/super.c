@@ -1067,7 +1067,16 @@ __initfunc(static void do_mount_root(void))
 
 __initfunc(void mount_root(void))
 {
+	struct super_block * sb = super_blocks;
+	int i;
+
 	memset(super_blocks, 0, sizeof(super_blocks));
+	/*
+	 * Initialize the dirty inode list headers for the super blocks
+	 */
+	for (i = NR_SUPER ; i-- ; sb++)
+		INIT_LIST_HEAD(&sb->s_dirty);
+
 	do_mount_root();
 }
 

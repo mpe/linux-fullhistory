@@ -692,6 +692,7 @@ endif
 ifeq ($(CONFIG_SOUNDMODEM),y)
 ALL_SUB_DIRS += soundmodem
 SUB_DIRS += soundmodem
+L_OBJS += soundmodem/soundmodem.o
 CONFIG_HDLCDRV_BUILTIN = y
 else
   ifeq ($(CONFIG_SOUNDMODEM),m)

@@ -1274,7 +1274,7 @@ D: the gpm mouse server and kernel support for it
 N: Thomas Sailer
 E: sailer@ife.ee.ethz.ch
 E: HB9JNX@HB9W.CHE.EU (packet radio)
-D: Baycom and Soundcard radio modem driver
+D: hfmodem, Baycom and Soundcard radio modem driver
 S: Weinbergstrasse 76
 S: 8408 Winterthur
 S: Switzerland

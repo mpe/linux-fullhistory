@@ -613,6 +613,7 @@ void isofs_read_inode(struct inode * inode)
 	inode->i_uid = inode->i_sb->u.isofs_sb.s_uid;
 	inode->i_gid = inode->i_sb->u.isofs_sb.s_gid;
 	inode->i_size = isonum_733 (raw_inode->size);
+	inode->i_blocks = inode->i_blksize = 0;
 
 	/* There are defective discs out there - we do this to protect
 	   ourselves.  A cdrom will never contain more than 800Mb */
@@ -736,6 +737,7 @@ void isofs_read_inode(struct inode * inode)
 	inode->i_mtime = inode->i_atime = inode->i_ctime = 0;
 	inode->u.isofs_i.i_first_extent = 0;
 	inode->i_size = 0;
+	inode->i_blocks = inode->i_blksize = 0;
 	inode->i_nlink = 1;
 	inode->i_uid = inode->i_gid = 0;
 	inode->i_mode = S_IFREG;  /*Regular file, no one gets to read*/

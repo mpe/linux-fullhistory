@@ -97,7 +97,7 @@ extern struct dentry * d_alloc_root(struct inode * root_inode, struct dentry * o
 extern void d_add(struct dentry * entry, struct inode * inode);
 
 /* used for rename() and baskets */
-extern void d_move(struct dentry * entry, struct dentry * newparent, struct qstr * newname);
+extern void d_move(struct dentry * entry, struct dentry * newdentry);
 
 /* appendix may either be NULL or be used for transname suffixes */
 extern struct dentry * d_lookup(struct dentry * dir, struct qstr * name);

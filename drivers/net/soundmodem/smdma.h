@@ -37,6 +37,13 @@
 #define DMA_MODE_AUTOINIT      0x10
 #define NUM_FRAGMENTS          4
 
+/*
+ * NOTE: make sure that hdlcdrv_hdlcbuffer contains enough space
+ * for the modulator to fill the whole DMA buffer without underrun
+ * at the highest possible baud rate, otherwise the TX state machine will
+ * not work correctly. That is (9k6 FSK): HDLCDRV_HDLCBUFFER > 6*NUM_FRAGMENTS
+ */ 
+
 /* --------------------------------------------------------------------- */
 /*
  * ===================== DMA buffer management ===========================

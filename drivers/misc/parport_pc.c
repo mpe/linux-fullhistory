@@ -44,10 +44,12 @@ static void pc_null_intr_func(int irq, void *dev_id, struct pt_regs *regs)
 	return;
 }
 
+#if 0
 static void pc_write_epp(struct parport *p, unsigned int d)
 {
 	outb(d, p->base+EPPREG);
 }
+#endif
 
 static unsigned int pc_read_epp(struct parport *p)
 {
@@ -320,6 +322,7 @@ static int programmable_dma_support(struct parport *pb)
 		return dma;
 }
 
+#if 0
 /* Only called if port supports ECP mode.
  *
  * The only restriction on DMA channels is that it has to be
@@ -385,6 +388,8 @@ static int parport_dma_probe(struct parport *pb)
 	
 	return retv;
 }
+#endif
+
 /******************************************************
  *  MODE detection section:
  */

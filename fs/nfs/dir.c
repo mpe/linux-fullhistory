@@ -663,8 +663,7 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	nfs_invalidate_dircache(new_dir);
 
 	/* Update the dcache */
-	d_move(old_dentry, new_dentry->d_parent, &new_dentry->d_name);
-	d_delete(new_dentry);
+	d_move(old_dentry, new_dentry);
 	return 0;
 }
 

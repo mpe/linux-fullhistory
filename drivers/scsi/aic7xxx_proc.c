@@ -76,7 +76,6 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
 {
   struct Scsi_Host *HBAptr;
   struct aic7xxx_host *p;
-  static u8 buff[512];
   int   i;
   int   found = FALSE;
   int   size = 0;
@@ -129,11 +128,6 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
     return (aic7xxx_set_info(buffer, length, HBAptr));
   }
 
-  if (offset == 0)
-  {
-    memset(buff, 0, sizeof(buff));
-  }
-
   p = (struct aic7xxx_host *) HBAptr->hostdata;
 
   size += sprintf(BLS, "Adaptec AIC7xxx driver version: ");
@@ -142,7 +136,14 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
 #if 0
   size += sprintf(BLS, "%s\n", rcs_version(AIC7XXX_SEQ_VER));
 #endif
+  if (size > 512)
+    printk(KERN_CRIT "aic7xxx: possible overflow at first position\n");
   len += size; pos = begin + len; size = 0;
+  if (pos < offset)
+  {
+    begin = pos;
+    len = 0;
+  }
 
   size += sprintf(BLS, "\n");
   size += sprintf(BLS, "Compile Options:\n");
@@ -167,7 +168,16 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
 #else
   size += sprintf(BLS, "  AIC7XXX_PROC_STATS     : Disabled\n");
 #endif
+  if (size > 512)
+    printk(KERN_CRIT "aic7xxx: possible overflow at second position\n");
   len += size; pos = begin + len; size = 0;
+  if (pos < offset)
+  {
+    begin = pos;
+    len = 0;
+  }
+  else if (pos >= offset + length)
+    goto stop_output;
 
   size += sprintf(BLS, "\n");
   size += sprintf(BLS, "Adapter Configuration:\n");
@@ -201,7 +211,16 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
       (p->flags & ULTRA_ENABLED) ? "En" : "Dis");
   size += sprintf(BLS, "     Target Disconnect: %sabled\n",
       p->discenable ? "En" : "Dis");
+  if (size > 512)
+    printk(KERN_CRIT "aic7xxx: possible overflow at third position\n");
   len += size; pos = begin + len; size = 0;
+  if (pos < offset)
+  {
+    begin = pos;
+    len = 0;
+  }
+  else if (pos >= offset + length)
+    goto stop_output;
 
 #ifdef AIC7XXX_PROC_STATS
   {
@@ -210,6 +229,7 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
 
     /*
      * XXX: Need to fix this to avoid overflow...
+     * Fixed - gordo.
      */
     size += sprintf(BLS, "\n");
     size += sprintf(BLS, "Statistics:\n");
@@ -247,9 +267,18 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
               sp->w_bins[9]);
           size += sprintf(BLS, "\n");
         }
+	if (size > 512)
+	  printk(KERN_CRIT "aic7xxx: possible overflow at loop %d:%d\n", target, lun);
+        len += size; pos = begin + len; size = 0;
+	if (pos < offset)
+	{
+	  begin = pos;
+	  len = 0;
+	}
+	else if (pos >= offset + length)
+	  goto stop_output;
       }
     }
-    len += size; pos = begin + len; size = 0;
   }
 #endif /* AIC7XXX_PROC_STATS */
 
@@ -257,7 +286,11 @@ stop_output:
   proc_debug("2pos: %ld offset: %ld len: %d\n", pos, offset, len);
   *start = buffer + (offset - begin);   /* Start of wanted data */
   len -= (offset - begin);      /* Start slop */
-  if (len > length)
+  if (len < 0)
+  {
+    len = 0;			/* off end of file */
+  }
+  else if (len > length)
   {
     len = length;               /* Ending slop */
   }

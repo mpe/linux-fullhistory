@@ -479,7 +479,3 @@ inline u32 TLan_HashFunc( u8 *a )
 
 } 
 
-
-
-
-#endif

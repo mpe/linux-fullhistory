@@ -65,6 +65,7 @@ fi
 if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
   dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
   if [ "$CONFIG_SCSI_NCR53C8XX" != "n" ]; then
+    bool '  detect and read serial NVRAMs' CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
     bool '  enable tagged command queueing' CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
     bool '  use normal IO' CONFIG_SCSI_NCR53C8XX_IOMAPPED
     int  '  maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 4

@@ -246,6 +246,9 @@ __initfunc(int misc_init(void))
 #ifdef CONFIG_NVRAM
 	nvram_init();
 #endif
+#ifdef CONFIG_HFMODEM
+	hfmodem_init();
+#endif
 #endif /* !MODULE */
 	if (register_chrdev(MISC_MAJOR,"misc",&misc_fops)) {
 		printk("unable to get major %d for misc devices\n",

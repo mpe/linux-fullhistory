@@ -245,7 +245,9 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
 	if (!result) {
 		int error;
 		result = d_alloc(parent, name);
+		result->d_count++;
 		error = dir->i_op->lookup(dir, result);
+		result->d_count--;
 		if (error) {
 			d_free(result);
 			result = ERR_PTR(error);
@@ -1057,21 +1059,6 @@ static inline void double_up(struct semaphore *s1, struct semaphore *s2)
 		up(s2);
 }
 
-static inline int is_reserved(struct dentry *dentry)
-{
-	if (dentry->d_name.name[0] == '.') {
-		switch (dentry->d_name.len) {
-		case 2:
-			if (dentry->d_name.name[1] != '.')
-				break;
-			/* fallthrough */
-		case 1:
-			return 1;
-		}
-	}
-	return 0;
-}
-
 static inline int do_rename(const char * oldname, const char * newname)
 {
 	int error;
@@ -1106,11 +1093,10 @@ static inline int do_rename(const char * oldname, const char * newname)
 	if (error)
 		goto exit_lock;
 
-	error = -EPERM;
-	if (is_reserved(new_dentry) || is_reserved(old_dentry))
-		goto exit_lock;
-
-	/* Disallow moves of mountpoints. */
+	/*
+	 * Disallow moves of mountpoints.  There is no technical 
+	 * reason for this, but user level stuff gets too confused.
+	 */
 	error = -EBUSY;
 	if (old_dentry->d_covers != old_dentry)
 		goto exit_lock;

@@ -425,7 +425,7 @@ __initfunc(static int ne_probe1(struct device *dev, int ioaddr))
     /* Snarf the interrupt now.  There's no point in waiting since we cannot
        share and the board will usually be enabled. */
     {
-	int irqval = request_irq(dev->irq, ei_interrupt, 0, name, NULL);
+	int irqval = request_irq(dev->irq, ei_interrupt, SA_INTERRUPT, name, NULL);
 	if (irqval) {
 	    printk (" unable to get IRQ %d (irqval=%d).\n", dev->irq, irqval);
 	    return EAGAIN;

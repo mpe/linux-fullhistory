@@ -33,6 +33,8 @@
  *   0.2  21.11.96  various small changes
  *   0.3  03.03.97  fixed (hopefully) IP not working with ax.25 as a module
  *   0.4  16.04.97  init code/data tagged
+ *   0.5  30.07.97  made HDLC buffers bigger (solves a problem with the
+ *                  soundmodem driver)
  */
 
 /*****************************************************************************/
@@ -1019,7 +1021,7 @@ MODULE_DESCRIPTION("Packet Radio network interface HDLC encoder/decoder");
 __initfunc(int init_module(void))
 {
 	printk(KERN_INFO "hdlcdrv: (C) 1996 Thomas Sailer HB9JNX/AE4WA\n");
-	printk(KERN_INFO "hdlcdrv: version 0.4 compiled " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "hdlcdrv: version 0.5 compiled " __TIME__ " " __DATE__ "\n");
 #if LINUX_VERSION_CODE < 0x20115
         register_symtab(&hdlcdrv_syms);
 #endif

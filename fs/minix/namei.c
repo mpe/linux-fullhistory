@@ -754,8 +754,7 @@ start_up:
 		}
 	}
 	/* Update the dcache */
-	d_move(old_dentry, new_dentry->d_parent, &new_dentry->d_name);
-	d_delete(new_dentry);
+	d_move(old_dentry, new_dentry);
 	retval = 0;
 end_rename:
 	brelse(dir_bh);

@@ -1012,7 +1012,7 @@ static unsigned int
 isdn_poll(struct file *file, poll_table * wait)
 {
 	unsigned int mask = 0;
-	unsigned int minor = MINOR(file->f_inode->i_rdev);
+	unsigned int minor = MINOR(file->f_dentry->d_inode->i_rdev);
 	int drvidx = isdn_minor2drv(minor - ISDN_MINOR_CTRL);
 
 	if (minor == ISDN_MINOR_STATUS) {

@@ -117,7 +117,7 @@ struct hdlcdrv_ioctl {
 
 #define HDLCDRV_MAGIC      0x5ac6e778
 #define HDLCDRV_IFNAMELEN    6
-#define HDLCDRV_HDLCBUFFER  16 /* should be a power of 2 for speed reasons */
+#define HDLCDRV_HDLCBUFFER  32 /* should be a power of 2 for speed reasons */
 #define HDLCDRV_BITBUFFER  256 /* should be a power of 2 for speed reasons */
 #undef HDLCDRV_LOOPBACK  /* define for HDLC debugging purposes */
 #define HDLCDRV_DEBUG

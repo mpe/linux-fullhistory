@@ -721,7 +721,7 @@ dss1up(struct PStack *st, int pr, void *arg)
 
 	if (skb->data[0] != PROTO_DIS_EURO) {
 		if (st->l3.debug & L3_DEB_PROTERR) {
-			sprintf(tmp, "dss1up%sunexpected discriminator %x message len %ld state %d",
+			sprintf(tmp, "dss1up%sunexpected discriminator %x message len %d state %d",
 				(pr == DL_DATA) ? " " : "(broadcast) ",
 				skb->data[0], skb->len, st->l3.state);
 			l3_debug(st, tmp);

@@ -253,7 +253,7 @@ static unsigned int
 capi_poll(struct file *file, poll_table * wait)
 {
 	unsigned int mask = 0;
-	unsigned int minor = MINOR(file->f_inode->i_rdev);
+	unsigned int minor = MINOR(file->f_dentry->d_inode->i_rdev);
 	struct capidev *cdev;
 
 	if (!minor || minor > CAPI_MAXMINOR || !capidevs[minor].is_registered)

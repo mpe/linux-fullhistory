@@ -112,8 +112,7 @@ union nfsctl_res {
  * Kernel syscall implementation.
  */
 #if defined(CONFIG_NFSD) || defined(CONFIG_NFSD_MODULE)
-extern asmlinkage int	sys_nfsservctl(int, struct nfsctl_arg *,
-					    union nfsctl_res *);
+extern asmlinkage int	sys_nfsservctl(int, void *, void *);
 #else
 #define sys_nfsservctl		sys_ni_syscall
 #endif

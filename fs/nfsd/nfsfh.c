@@ -31,7 +31,7 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 	if(fhp->fh_dverified)
 		return 0;
 
-	dprintk("nfsd: fh_lookup(exp %x/%d fh %p)\n",
+	dprintk("nfsd: fh_lookup(exp %x/%ld fh %p)\n",
 			fh->fh_xdev, fh->fh_xino, fh->fh_dentry);
 
 	/* Look up the export entry. */
@@ -93,7 +93,7 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 void
 fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry)
 {
-	dprintk("nfsd: fh_compose(exp %x/%d dentry %p)\n",
+	dprintk("nfsd: fh_compose(exp %x/%ld dentry %p)\n",
 			exp->ex_dev, exp->ex_ino, dentry);
 
 	fh_init(fhp);			/* initialize empty fh */

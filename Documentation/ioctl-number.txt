@@ -1,5 +1,5 @@
 Ioctl Numbers
-25 Jul 1997
+7 Aug 1997
 Michael Chastain
 <mec@shout.net>
 
@@ -119,5 +119,7 @@ Code	Seq#	Include File		Comments
 					<mailto:b.kohl@ipn-b.comlink.apc.org>
 0xA0	all	Small Device Project	in development:
 					<mailto:khollis@northwest.com>
+0xA3	80-8F	Port ACL		in development:
+					<mailto:tlewis@mindspring.com>
 0xA3	90-9F	DoubleTalk driver	in development:
 					<mailto:jrv@vanzandt.mv.com>

@@ -312,15 +312,16 @@ ignore_int:
 	pushl %eax
 	pushl %ecx
 	pushl %edx
+	push %es
 	push %ds
 	movl $(KERNEL_DS),%eax
 	mov %ax,%ds
 	mov %ax,%es
-	mov %ax,%fs
 	pushl $int_msg
 	call SYMBOL_NAME(printk)
 	popl %eax
 	pop %ds
+	pop %es
 	popl %edx
 	popl %ecx
 	popl %eax

@@ -39,6 +39,7 @@
  *   0.4  21.01.97  Separately compileable soundcard/modem modules
  *   0.5  03.03.97  fixed LPT probing (check_lpt result was interpreted the wrong way round)
  *   0.6  16.04.97  init code/data tagged
+ *   0.7  30.07.97  fixed halfduplex interrupt handlers/hotfix for CS423X
  */
 
 /*****************************************************************************/
@@ -113,7 +114,7 @@ extern inline int copy_to_user(void *to, const void *from, unsigned long n)
 
 /*static*/ const char sm_drvname[] = "soundmodem";
 static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996-1997 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "soundmodem: version 0.6 compiled " __TIME__ " " __DATE__ "\n";
+KERN_INFO "soundmodem: version 0.7 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 

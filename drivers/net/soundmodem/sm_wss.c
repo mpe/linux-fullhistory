@@ -98,6 +98,8 @@ struct sc_state_wss {
 
 #define WSS_EXTENT   8
 
+#define CS423X_HOTFIX
+
 /* --------------------------------------------------------------------- */
 
 static void write_codec(struct device *dev, unsigned char idx,
@@ -170,6 +172,8 @@ static int wss_set_codec_fmt(struct device *dev, struct sm_state *sm, unsigned c
 		/* MCE and interface config reg */
 		write_codec(dev, 0x49, fdx ? 0x8 : 0xc);
 	outb(0xb, WSS_CODEC_IA(dev->base_addr)); /* leave MCE */
+	if (SCSTATE->crystal && !fullcalib)
+		return 0;
 	/*
 	 * wait for ACI start
 	 */
@@ -361,15 +365,16 @@ static void setup_dma_wss(struct device *dev, struct sm_state *sm, int send)
 		abrt = 0;
 		while ((read_codec(dev, 11) & 0x10) || ((++abrt) >= 0x10000));
 	}
+#ifdef CS423X_HOTFIX
+	if (read_codec(dev, 0x8) != fmt || SCSTATE->crystal)
+		wss_set_codec_fmt(dev, sm, fmt, fmt, 0, 0);
+#else /* CS423X_HOTFIX */
 	if (read_codec(dev, 0x8) != fmt)
 		wss_set_codec_fmt(dev, sm, fmt, fmt, 0, 0);
+#endif /* CS423X_HOTFIX */
 	numsamps = dma_setup(sm, send, dev->dma) - 1;
 	write_codec(dev, 15, numsamps & 0xff);
 	write_codec(dev, 14, numsamps >> 8);
-	if (SCSTATE->crystal) {
-		write_codec(dev, 31, numsamps & 0xff);
-		write_codec(dev, 30, numsamps >> 8);
-	}
 	write_codec(dev, 9, codecmode[send]);
         restore_flags(flags);
 }
@@ -393,10 +398,6 @@ static void wss_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	nums = dma_ptr(sm, sm->dma.ptt_cnt > 0, dev->dma, &curfrag) - 1;
 	write_codec(dev, 15, nums  & 0xff);
 	write_codec(dev, 14, nums >> 8);
-	if (SCSTATE->crystal) {
-		write_codec(dev, 31, nums & 0xff);
-		write_codec(dev, 30, nums >> 8);
-	}
 	enable_dma(dev->dma);
 	sm_int_freq(sm);
 	sti();
@@ -406,6 +407,7 @@ static void wss_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		if (hdlcdrv_ptt(&sm->hdrv)) {
 			/* starting to transmit */
 			disable_dma(dev->dma);
+			hdlcdrv_transmitter(dev, &sm->hdrv); /* prefill HDLC buffer */
 			dma_start_transmit(sm);
 			setup_dma_wss(dev, sm, 1);
 			dma_transmit(sm);
@@ -413,7 +415,6 @@ static void wss_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	} else if (dma_end_transmit(sm, curfrag)) {
 		/* stopping transmission */
 		disable_dma(dev->dma);
-		sti();
 		dma_init_receive(sm);
 		setup_dma_wss(dev, sm, 0);
         } else
@@ -451,11 +452,7 @@ static int wss_open(struct device *dev, struct sm_state *sm)
 	 */
 	dma_init_receive(sm);
 	dmasz = (NUM_FRAGMENTS + 1) * sm->dma.ifragsz;
-	if (sm->dma.i16bit)
-		dmasz <<= 1;
 	u = NUM_FRAGMENTS * sm->dma.ofragsz;
-	if (sm->dma.o16bit)
-		u <<= 1;
 	if (u > dmasz)
 		dmasz = u;
 	if (!(sm->dma.ibuf = sm->dma.obuf = kmalloc(dmasz, GFP_KERNEL | GFP_DMA)))

@@ -145,7 +145,7 @@ exp_export(struct nfsctl_export *nxp)
 	    !exp_verify_string(nxp->ex_client, NFSCLNT_IDMAX))
 		return -EINVAL;
 
-	dprintk("exp_export called for %s:%s (%x/%d fl %x).\n",
+	dprintk("exp_export called for %s:%s (%x/%ld fl %x).\n",
 			nxp->ex_client, nxp->ex_path,
 			nxp->ex_dev, nxp->ex_ino, nxp->ex_flags);
 	dev = nxp->ex_dev;
@@ -360,7 +360,7 @@ exp_rootfh(struct svc_client *clp, dev_t dev, ino_t ino, struct knfs_fh *f)
 	struct dentry		*dentry;
 	struct inode		*inode;
 
-	dprintk("nfsd: exp_rootfh(%s:%x/%d)\n", clp->cl_ident, dev, ino);
+	dprintk("nfsd: exp_rootfh(%s:%x/%ld)\n", clp->cl_ident, dev, ino);
 
 	if (!(exp = exp_get(clp, dev, ino)))
 		return -EPERM;
@@ -373,7 +373,7 @@ exp_rootfh(struct svc_client *clp, dev_t dev, ino_t ino, struct knfs_fh *f)
 	}
 	if(inode->i_dev != dev || inode->i_ino != ino) {
 		printk("exp_rootfh: Aieee, ino/dev mismatch\n");
-		printk("exp_rootfh: arg[dev(%x):ino(%d)] inode[dev(%x):ino(%ld)]\n",
+		printk("exp_rootfh: arg[dev(%x):ino(%ld)] inode[dev(%x):ino(%ld)]\n",
 		       dev, ino, inode->i_dev, inode->i_ino);
 	}
 

@@ -150,7 +150,7 @@ static struct net_device_stats *plip_get_stats(struct device *dev);
 static int plip_config(struct device *dev, struct ifmap *map);
 static int plip_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
 static int plip_preempt(void *handle);
-static int plip_wakeup(void *handle);
+static void plip_wakeup(void *handle);
 
 enum plip_connection_state {
 	PLIP_CN_NONE=0,

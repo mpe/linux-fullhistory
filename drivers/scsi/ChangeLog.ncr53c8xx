@@ -1,3 +1,73 @@
+Sat July 26 18:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 2.4
+	Several clean-ups:
+	  - Asynchronous pre-scaler calculation.
+	    Synchronous divisor calculation.
+	  - Use FE_ as feature identifier prefix instead of _F_.
+	  - Change 'ns_sync' identifier to "minsync".
+	  - Some others.
+	Apply some SPI2-R12 recommendations.
+	  - Use Slow, Fast-10, Fast-20, Fast-40 SCSI instead of SCSI-2, 
+	    FAST SCSI-2, ULTRA, ULTRA-2. 
+	  - Reset the SCSI on bus mode change.
+
+Wed July 02 22:58 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 2.3c
+	- Add define SCSI_NCR_PCI_FIX_UP_SUPPORT for conditionnal compilation 
+	  of the corresponding pci fix-up code when a small driver is needed.
+	- Use "ncr53c8xx" as driver name for both request_irq() and 
+          request_region(). Using different names confused 'lsdev'.
+          (Suggestion sent by Henrik Storner).
+
+Wed June 24 22:08 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 2.3b
+	- Print an error message on unexpected boot command line option.
+	- Switch to asynchronous data transfer mode after SCSI wide 
+	  negotiation.
+
+Wed June 14 22:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 2.3a
+	- Add PCI LATENCY TIMER fixup code.
+	  Increase it if necessary according to burst size.
+	  Boot option bit : 'pcifix:4'
+	- On phase mismatch, calculate residual data size for all OUTPUT 
+	  phases. That's only required for interrupted DATA OUT phase, but 
+	  this information is usefull for problem solving.
+	- Add KERN_INFO to some messages printed to the log.
+	  (Patch sent by Wolfram Kleff).
+
+Tue June 02 22:30 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 2.3
+	- NvRAM support code slightly improved (I think):
+	  Use IO or MMIO according to driver setup for reading the NvRAM.
+	  Use structures for NvRAM data instead of raw data.
+	- Prevent from queuing more than 1 command to the scsi SCRIPT with 
+	  negotiation attached when tagged command queueing is enabled.
+	- Fix-up for old 53C8XX chips that support PCI READ LINE but not 
+	  CACHE LINE SIZE. If the cache line size is unknown, set burst 
+	  to 8 dwords and disable READ LINE, otherwise set burst max to 
+	  the cache line size value.
+
+Sat May 24 12:30 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 2.2c (for linux-2.1.40)
+	- Remove reference to 'x86' symbol when MODULE is defined, since this 
+	  symbol is not exported for module loading.
+	  The value of 'x86' is used for fixing up the PCI CACHE LINE SIZE 
+	  configuration register.
+	- Bytes/words read one bit at a time from the serial NVRAM were'nt 
+          initialized with zero.
+	- Some comments added. Minor cosmetic changes.
+
+Mon May 19 20:30 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 2.2b
+	- Patch for NVRAM support by Richard Waltham applied.
+	  The code detects Symbios NVRAM format and Tekram NVRAM format. 
+	  This enhancement allows to get hosts and devices user set up 
+	  from the NVRAM.
+	- Use the NVRAM contents when present to initialize user definable 
+	  target parameters.
+	- Update the README file. 
+
 Sun May 11 22:30 1997 Gerard Roudier (groudier@club-internet.fr)
 	* revision 2.1b
 	- Cosmetic changes.

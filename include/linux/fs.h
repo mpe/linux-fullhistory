@@ -501,6 +501,7 @@ struct super_block {
 	struct inode		*s_ibasket;
 	short int		s_ibasket_count;
 	short int		s_ibasket_max;
+	struct list_head	s_dirty;	/* dirty inodes */
 
 	union {
 		struct minix_sb_info	minix_sb;

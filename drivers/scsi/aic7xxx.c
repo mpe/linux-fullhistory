@@ -4638,9 +4638,9 @@ configure_termination(struct aic7xxx_host *p, unsigned char *sxfrctl1,
     {
       old_verbose = aic7xxx_verbose;
       printk(KERN_INFO "aic7xxx: Warning - detected auto-termination.  Please "
-                       "verify driver");
+                       "verify driver\n");
       printk(KERN_INFO "         detected settings and use manual termination "
-                       "if necessary."); 
+                       "if necessary.\n"); 
 
       /* Configure auto termination. */
       outb(SEECS | SEEMS, p->base + SEECTL);

@@ -113,7 +113,7 @@ union bdflush_param{
 int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   100,   100, 1, 1};
 int bdflush_max[N_PARAM] = {100,5000, 2000, 2000,100, 60000, 60000, 2047, 5};
 
-void wakeup_bdflush(int);
+static void wakeup_bdflush(int);
 
 /*
  * Rewrote the wait-routines to use the "new" wait-queue functionality,
@@ -540,9 +540,10 @@ static inline struct buffer_head * find_buffer(kdev_t dev, int block, int size)
 		next = tmp->b_next;
 		if (tmp->b_blocknr != block || tmp->b_size != size || tmp->b_dev != dev)
 			continue;
-		return tmp;
+		next = tmp;
+		break;
 	}
-	return NULL;
+	return next;
 }
 
 /*
@@ -559,7 +560,7 @@ struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
 
 		bh=find_buffer(dev,block,size);
 		if (!bh)
-			return NULL;
+			return bh;
 		bh->b_count++;
 		bh->b_lru_time = jiffies;
 		wait_on_buffer(bh);
@@ -1658,11 +1659,11 @@ void buffer_init(void)
  * response to dirty buffers.  Once this process is activated, we write back
  * a limited number of buffers to the disks and then go back to sleep again.
  */
-struct wait_queue * bdflush_wait = NULL;
-struct wait_queue * bdflush_done = NULL;
+static struct wait_queue * bdflush_wait = NULL;
+static struct wait_queue * bdflush_done = NULL;
 struct task_struct *bdflush_tsk = 0;
 
-void wakeup_bdflush(int wait)
+static void wakeup_bdflush(int wait)
 {
 	if (current == bdflush_tsk)
 		return;

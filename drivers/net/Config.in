@@ -161,6 +161,11 @@ if [ "$CONFIG_NET_RADIO" != "n" ]; then
 #        bool 'Soundmodem support for 4800 baud PSK modulation' CONFIG_SOUNDMODEM_PSK4800
 #      fi
     fi
+    tristate 'Shortwave radio modem driver' CONFIG_HFMODEM
+    if [ "$CONFIG_HFMODEM" != "n" ]; then
+      bool 'HFmodem support for Soundblaster and compatible cards' CONFIG_HFMODEM_SBC
+      bool 'HFmodem support for WSS and Crystal cards' CONFIG_HFMODEM_WSS
+    fi
   fi
   tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
   tristate 'AT&T WaveLAN & DEC RoamAbout DS support' CONFIG_WAVELAN
