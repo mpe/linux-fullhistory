@@ -72,6 +72,7 @@ detect_arch_type:
 		mov	pc, lr
 
 detect_proc_type:
+		mov	ip, lr
 		mov	r2, #0xea000000		@ Point undef instr to continuation
 		adr	r0, continue - 12
 		orr	r0, r2, r0, lsr #2
@@ -80,8 +81,9 @@ detect_proc_type:
 		ldr	r0, arm2_id
 		swp	r2, r2, [r1]		@ check for swp (ARM2 can't)
 		ldr	r0, arm250_id
-		mrc	15, 0, r0, c0, c0	@ check for CP#15 (ARM250 can't)
+		mrc	15, 0, r3, c0, c0	@ check for CP#15 (ARM250 can't)
+		mov	r0, r3
 continue:	mov	r2, #0xeb000000		@ Make undef vector loop
 		sub	r2, r2, #2
 		str	r2, [r1, #4]
-		mov	pc, lr
+		mov	pc, ip

@@ -79,9 +79,10 @@ SECTIONS
 
 
 	.bss : {
-		  __bss_start = .;	/* BSS				*/
+		__bss_start = .;	/* BSS				*/
 		*(.bss)
-		  _end = . ;
+		*(COMMON)
+		_end = . ;
 	}
 
 					/* Stabs debugging sections.	*/

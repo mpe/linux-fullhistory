@@ -10,15 +10,13 @@
 #include <linux/pci.h>
 #include <linux/init.h>
 
+#include <asm/page.h> /* for BUG() */
 #include <asm/irq.h>
 #include <asm/mach-types.h>
-
-#include "bios32.h"
+#include <asm/mach/pci.h>
 
 static int debug_pci;
 int have_isa_bridge;
-
-extern void hw_init(void);
 
 void pcibios_report_status(u_int status_mask, int warn)
 {
@@ -157,6 +155,14 @@ static void __init pci_fixup_ide_bases(struct pci_dev *dev)
 	}
 }
 
+/*
+ * Put the DEC21142 to sleep
+ */
+static void __init pci_fixup_dec21142(struct pci_dev *dev)
+{
+	pci_write_config_dword(dev, 0x40, 0x80000000);
+}
+
 struct pci_fixup pcibios_fixups[] = {
 	{
 		PCI_FIXUP_HEADER,
@@ -174,6 +180,10 @@ struct pci_fixup pcibios_fixups[] = {
 		PCI_FIXUP_HEADER,
 		PCI_ANY_ID,		PCI_ANY_ID,
 		pci_fixup_ide_bases
+	}, {
+		PCI_FIXUP_HEADER,
+		PCI_VENDOR_ID_DEC,	PCI_DEVICE_ID_DEC_21142,
+		pci_fixup_dec21142
 	}, { 0 }
 };
 
@@ -277,12 +287,11 @@ void __init pcibios_fixup_bus(struct pci_bus *bus)
 		 * SERR and PERR reporting - this chip doesn't drive the
 		 * parity line correctly.
 		 */
-#if 1 /* !testing */
 		if (dev->vendor == PCI_VENDOR_ID_INTERG &&
 		    dev->device == PCI_DEVICE_ID_INTERG_2000)
 			busdata->features &= ~(PCI_COMMAND_SERR |
 					       PCI_COMMAND_PARITY);
-#endif
+
 		/*
 		 * Calculate the maximum devsel latency.
 		 */
@@ -317,18 +326,6 @@ void __init pcibios_fixup_bus(struct pci_bus *bus)
 		struct pci_dev *dev = pci_dev_b(walk);
 		u16 cmd;
 		u8 min_gnt, latency;
-
-		/*
-		 * architecture specific hacks. I don't really want
-		 * this here, but I don't see any other place for it
-		 * to live.  Shame the device doesn't support
-		 * capabilities
-		 */
-		if (machine_is_netwinder() &&
-		    dev->vendor == PCI_VENDOR_ID_DEC &&
-		    dev->device == PCI_DEVICE_ID_DEC_21142)
-			/* Put the chip to sleep in case the driver isn't loaded */
-			pci_write_config_dword(dev, 0x40, 0x80000000);
 
 		/*
 		 * Calculate this masters latency timer value.
@@ -372,184 +369,23 @@ pcibios_fixup_pbus_ranges(struct pci_bus *bus, struct pbus_set_ranges_data *rang
 	ranges->mem_end -= bus->resource[1]->start;
 }
 
-static u8 __init no_swizzle(struct pci_dev *dev, u8 *pin)
+u8 __init no_swizzle(struct pci_dev *dev, u8 *pin)
 {
 	return 0;
 }
 
-/* ebsa285 host-specific stuff */
-
-#ifdef CONFIG_ARCH_EBSA285
-static int irqmap_ebsa285[] __initdata = { IRQ_IN3, IRQ_IN1, IRQ_IN0, IRQ_PCI };
-
-static u8 __init ebsa285_swizzle(struct pci_dev *dev, u8 *pin)
-{
-	return PCI_SLOT(dev->devfn);
-}
-
-static int __init ebsa285_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
-{
-	if (dev->vendor == PCI_VENDOR_ID_CONTAQ &&
-	    dev->device == PCI_DEVICE_ID_CONTAQ_82C693)
-		switch (PCI_FUNC(dev->devfn)) {
-			case 1:	return 14;
-			case 2:	return 15;
-			case 3:	return 12;
-		}
-
-	return irqmap_ebsa285[(slot + pin) & 3];
-}
-
-static struct hw_pci ebsa285_pci __initdata = {
-	dc21285_init,
-	0x9000,
-	0x00100000,
-	ebsa285_swizzle,
-	ebsa285_map_irq
-};
-#endif
-
-#ifdef CONFIG_ARCH_CATS
-/* cats host-specific stuff */
-static int irqmap_cats[] __initdata = { IRQ_PCI, IRQ_IN0, IRQ_IN1, IRQ_IN3 };
-
-static int __init cats_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
-{
-	if (dev->irq >= 128)
-		return dev->irq & 0x1f;
-
-	if (dev->irq >= 1 && dev->irq <= 4)
-		return irqmap_cats[dev->irq - 1];
-
-	if (dev->irq != 0)
-		printk("PCI: device %02x:%02x has unknown irq line %x\n",
-		       dev->bus->number, dev->devfn, dev->irq);
-
-	return -1;
-}
-
-static struct hw_pci cats_pci __initdata = {
-	dc21285_init,
-	0x9000,
-	0x00100000,
-	no_swizzle,
-	cats_map_irq
-};
-#endif
-
-#ifdef CONFIG_ARCH_NETWINDER
-/* netwinder host-specific stuff */
-static int __init netwinder_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
-{
-#define DEV(v,d) ((v)<<16|(d))
-	switch (DEV(dev->vendor, dev->device)) {
-	case DEV(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_21142):
-	case DEV(PCI_VENDOR_ID_NCR, PCI_DEVICE_ID_NCR_53C885):
-	case DEV(PCI_VENDOR_ID_NCR, PCI_DEVICE_ID_NCR_YELLOWFIN):
-		return IRQ_NETWINDER_ETHER100;
-
-	case DEV(PCI_VENDOR_ID_WINBOND2, 0x5a5a):
-		return IRQ_NETWINDER_ETHER10;
-
-	case DEV(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_83C553):
-		return 0;
-
-	case DEV(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105):
-		return IRQ_ISA_HARDDISK1;
-
-	case DEV(PCI_VENDOR_ID_INTERG, PCI_DEVICE_ID_INTERG_2000):
-	case DEV(PCI_VENDOR_ID_INTERG, PCI_DEVICE_ID_INTERG_2010):
-	case DEV(PCI_VENDOR_ID_INTERG, PCI_DEVICE_ID_INTERG_5000):
-		return IRQ_NETWINDER_VGA;
-
-	case DEV(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_21285):
-		return 0;
-
-	default:
-		printk(KERN_ERR "PCI: %02X:%02X [%04X:%04X] unknown device\n",
-			dev->bus->number, dev->devfn,
-			dev->vendor, dev->device);
-		return 0;
-	}
-}
-
-static struct hw_pci netwinder_pci __initdata = {
-	dc21285_init,
-	0x9000,
-	0x00100000,
-	no_swizzle,
-	netwinder_map_irq
-};
-#endif
-
-#ifdef CONFIG_ARCH_PERSONAL_SERVER
-static int irqmap_personal_server[] __initdata = {
-	IRQ_IN0, IRQ_IN1, IRQ_IN2, IRQ_IN3, 0, 0, 0,
-	IRQ_DOORBELLHOST, IRQ_DMA1, IRQ_DMA2, IRQ_PCI
-};
-
-static int __init personal_server_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
-{
-	unsigned char line;
-
-	pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &line);
-
-	if (line > 0x40 && line <= 0x5f) {
-		/* line corresponds to the bit controlling this interrupt
-		 * in the footbridge.  Ignore the first 8 interrupt bits,
-		 * look up the rest in the map.  IN0 is bit number 8
-		 */
-		return irqmap_personal_server[(line & 0x1f) - 8];
-	} else if (line == 0) {
-		/* no interrupt */
-		return 0;
-	} else
-		return irqmap_personal_server[(line - 1) & 3];
-}
-
-static struct hw_pci personal_server_pci __initdata = {
-	dc21285_init,
-	0x9000,
-	0x00100000,
-	no_swizzle,
-	personal_server_map_irq
-};
-
-#endif
-
-#ifdef CONFIG_ARCH_NEXUSPCI
-/*
- * Owing to a PCB cockup, issue A backplanes are wired thus:
- *
- * Slot 1    2    3    4    5   Bridge
- * IRQ  D    C    B    A    A
- *      A    D    C    B    B
- *      B    A    D    C    C
- *      C    B    A    D    D
- *
- * ID A31  A30  A29  A28  A27   A26
- */
-
-static int irqmap_ftv[] __initdata = { IRQ_PCI_A, IRQ_PCI_B, IRQ_PCI_C, IRQ_PCI_D };
-
-static int __init ftv_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
-{
-	return irqmap_ftv[(slot + pin) & 3];
-}
-
-/* ftv host-specific stuff */
-static struct hw_pci ftv_pci __initdata = {
-	plx90x0_init,
-	0x9000,
-	0x00100000,
-	no_swizzle,
-	ftv_map_irq
-};
-#endif
+extern struct hw_pci ebsa285_pci;
+extern struct hw_pci cats_pci;
+extern struct hw_pci netwinder_pci;
+extern struct hw_pci personal_server_pci;
+extern struct hw_pci ftv_pci;
+extern struct hw_pci integrator_pci;
 
 void __init pcibios_init(void)
 {
 	struct hw_pci *hw_pci = NULL;
+	struct arm_pci_sysdata sysdata;
+	int i;
 
 	do {
 #ifdef CONFIG_ARCH_EBSA285
@@ -582,15 +418,28 @@ void __init pcibios_init(void)
 			break;
 		}
 #endif
-	} while (0);			
+#ifdef CONFIG_ARCH_INTEGRATOR
+		if (machine_is_integrator()) {
+			hw_pci = &integrator_pci;
+			break;
+		}
+#endif
+	} while (0);
 
 	if (hw_pci == NULL)
 		return;
 
+	for (i = 0; i < MAX_NR_BUS; i++) {
+		sysdata.bus[i].features  = PCI_COMMAND_FAST_BACK |
+					   PCI_COMMAND_SERR |
+					   PCI_COMMAND_PARITY;
+		sysdata.bus[i].maxdevsel = PCI_STATUS_DEVSEL_FAST;
+	}
+
 	/*
 	 * Set up the host bridge, and scan the bus.
 	 */
-	hw_pci->init();
+	hw_pci->init(&sysdata);
 
 	/*
 	 * Other architectures don't seem to do this... should we?
@@ -598,8 +447,7 @@ void __init pcibios_init(void)
 	pcibios_claim_resources();
 
 	/*
-	 * Assign any unassigned resources.  Note that we really ought to
-	 * have min/max stuff here - max mem address is 0x0fffffff
+	 * Assign any unassigned resources.
 	 */
 	pci_assign_unassigned_resources();
 	pci_fixup_irqs(hw_pci->swizzle, hw_pci->map_irq);

@@ -32,21 +32,21 @@ endif
 GZFLAGS		= -9
 
 # Ensure this is ld "2.9.4" or later
-NEW_LINKER	:= $(shell if $(LD) --gc-sections --version >/dev/null 2>&1; then echo y; else echo n; fi)
+NEW_LINKER	:= $(shell $(LD) --gc-sections --version >/dev/null 2>&1; echo $$?)
 
-ifneq ($(NEW_LINKER),y)
+ifneq ($(NEW_LINKER),0)
 dummy:;		@echo '*** ${VERSION}.${PATCHLEVEL} kernels no longer build correctly with old versions of binutils.'
 		@echo '*** Please upgrade your binutils to 2.9.5.'
 		@false
 endif
 
 # GCC 2.7 uses different options to later compilers; sort out which we have
-NEW_GCC		:= $(shell if $(CC) --version 2>&1 | grep '^2\.7' > /dev/null; then echo n; else echo y; fi)
+NEW_GCC		:= $(shell $(CC) --version 2>&1 | grep '^2\.7' > /dev/null; echo $$?)
 
 #
 # select flags depending on the compiler
 #
-ifeq ($(NEW_GCC),y)
+ifneq ($(NEW_GCC),0)
 CFLAGS			+= -mshort-load-bytes
 CFLAGS_PROC_CPU_26	:= -mcpu=arm3 -mapcs-26 -Os
 CFLAGS_PROC_CPU_32v3	:= -march=armv3
@@ -54,6 +54,7 @@ CFLAGS_PROC_CPU_32v4	:= -march=armv4
 CFLAGS_ARM6		:= -mtune=arm6
 CFLAGS_ARM7		:= -mtune=arm7
 CFLAGS_ARM720		:= -mtune=arm7tdmi
+CFLAGS_ARM920		:= -mtune=arm9tdmi
 CFLAGS_SA110		:= -mtune=strongarm110
 else
 CFLAGS			+= -DNO_TEXT_SECTIONS
@@ -63,6 +64,7 @@ CFLAGS_PROC_CPU_32v4	:=
 CFLAGS_ARM6		:= -m6
 CFLAGS_ARM7		:= -m6
 CFLAGS_ARM720		:= -m6
+CFLAGS_ARM920		:= -m6
 CFLAGS_SA110		:= -m6
 endif
 
@@ -98,11 +100,15 @@ ifeq ($(CONFIG_CPU_32),y)
  ifeq ($(CONFIG_CPU_ARM720),y)
   CFLAGS	+= $(CFLAGS_ARM720)
  else
+ ifeq ($(CONFIG_CPU_ARM920),y)
+  CFLAGS	+= $(CFLAGS_ARM920)
+ else
  ifeq ($(CONFIG_CPU_SA110),y)
   CFLAGS	+= $(CFLAGS_SA110)
  else
  ifeq ($(CONFIG_CPU_SA1100),y)
   CFLAGS	+= $(CFLAGS_SA110)
+ endif
  endif
  endif
  endif
@@ -116,51 +122,60 @@ export	LIBGCC MACHINE PROCESSOR TEXTADDR GZFLAGS
 
 ifeq ($(CONFIG_ARCH_ARCA5K),y)
 MACHINE		 = arc
-ARCHDIR		 = arc
 endif
 
 ifeq ($(CONFIG_ARCH_RPC),y)
 MACHINE		 = rpc
-ARCHDIR		 = rpc
 endif
 
 ifeq ($(CONFIG_ARCH_EBSA110),y)
 MACHINE		 = ebsa110
-ARCHDIR		 = ebsa110
 endif
 
 ifeq ($(CONFIG_ARCH_CLPS7500),y)
 MACHINE		 = clps7500
-ARCHDIR		 = cl7500
+INCDIR		 = cl7500
 endif
 
 ifeq ($(CONFIG_FOOTBRIDGE),y)
 MACHINE		 = footbridge
-ARCHDIR		 = ebsa285
+INCDIR		 = ebsa285
 endif
 
 ifeq ($(CONFIG_ARCH_CO285),y)
 TEXTADDR	 = 0x60008000
+MACHINE		 = footbridge
+INCDIR		 = ebsa285
 endif
 
 ifeq ($(CONFIG_ARCH_NEXUSPCI),y)
 MACHINE		 = nexuspci
-ARCHDIR		 = nexuspci
 endif
 
 ifeq ($(CONFIG_ARCH_SHARK),y)
 MACHINE		 = shark
-ARCHDIR		 = shark
 endif
 
 ifeq ($(CONFIG_ARCH_SA1100),y)
 MACHINE		 = sa1100
-ARCHDIR		 = sa1100
 endif
 
 ifeq ($(CONFIG_ARCH_L7200),y)
 MACHINE		 = l7200
-ARCHDIR		 = l7200
+endif
+
+ifeq ($(CONFIG_ARCH_INTEGRATOR),y)
+MACHINE		 = integrator
+endif
+
+# Only set INCDIR if its not already defined above
+INCDIR		?= $(MACHINE)
+
+# If we have a machine-specific directory, then include it in the build.
+MACHDIR		:= arch/arm/mach-$(MACHINE)
+ifeq ($(MACHDIR),$(wildcard $(MACHDIR)))
+SUBDIRS		+= $(MACHDIR)
+CORE_FILES	:= $(MACHDIR)/$(MACHINE).o $(CORE_FILES)
 endif
 
 HEAD		:= arch/arm/kernel/head-$(PROCESSOR).o \
@@ -193,36 +208,30 @@ MAKEBOOT	 = $(MAKE) -C arch/$(ARCH)/boot
 # to date before starting compilation
 
 $(patsubst %, _dir_%, $(SUBDIRS)) init/main.o init/version.o : \
-	constants \
 	include/asm-arm/mach-types.h
 
-include/asm-arm/mach-types.h: \
-	arch/arm/tools/mach-types \
-	arch/arm/tools/gen-mach-types
+$(patsubst %, _dir_%, $(SUBDIRS)) : constants
+
+include/asm-arm/mach-types.h: arch/arm/tools/mach-types  \
+			      arch/arm/tools/gen-mach-types
 	@awk -f arch/arm/tools/gen-mach-types arch/arm/tools/mach-types > $@
 
-constants: $(TOPDIR)/include/asm-arm/proc-fns.h dummy
+constants: dummy
 	@$(MAKE) -C arch/arm/lib constants.h
 
 symlinks: archsymlinks
 
 archsymlinks:
 	$(RM) include/asm-arm/arch include/asm-arm/proc
-	(cd include/asm-arm; ln -sf arch-$(ARCHDIR) arch; ln -sf proc-$(PROCESSOR) proc)
+	(cd include/asm-arm; ln -sf arch-$(INCDIR) arch; ln -sf proc-$(PROCESSOR) proc)
 
 vmlinux: arch/arm/vmlinux.lds
 
 arch/arm/vmlinux.lds: arch/arm/vmlinux-$(PROCESSOR).lds.in dummy
 	@sed 's/TEXTADDR/$(TEXTADDR)/' <$< >$@
 
-arch/arm/kernel: dummy
-	$(MAKE) linuxsubdirs SUBDIRS=arch/arm/kernel
-
-arch/arm/mm: dummy
-	$(MAKE) linuxsubdirs SUBDIRS=arch/arm/mm
-
-arch/arm/lib: dummy
-	$(MAKE) linuxsubdirs SUBDIRS=arch/arm/lib
+arch/arm/kernel arch/arm/mm arch/arm/lib: dummy
+	$(MAKE) CFLAGS="$(CFLAGS) $(CFLAGS_KERNEL)" $(subst $@, _dir_$@, $@)
 
 bzImage zImage zinstall Image bootpImage install: vmlinux
 	@$(MAKEBOOT) $@
@@ -235,7 +244,7 @@ archclean:
 	$(RM) arch/arm/lib/constants.h arch/arm/vmlinux.lds
 	$(RM) include/asm-arm/mach-types.h
 
-archdep: symlinks
+archdep: archsymlinks
 	@$(MAKEBOOT) dep
 
 # My testing targets (that short circuit a few dependencies)
@@ -252,7 +261,7 @@ CFGS=	a5k_config		ebsa110_config		\
 	brutus_config		victor_config		\
 	empeg_config		thinclient_config	\
 	assabet_config		lart_config		\
-	cerf_config 
+	cerf_config		lusl7200_config 
 
 $(CFGS):
 	@( \
@@ -266,7 +275,3 @@ $(CFGS):
 	  echo "$$CFG does not exist"; \
 	fi; \
 	)
-
-l7200_config:
-	$(RM) arch/arm/defconfig
-	cp arch/arm/def-configs/lusl7200 arch/arm/defconfig

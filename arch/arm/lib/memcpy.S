@@ -4,7 +4,6 @@
  * Copyright (C) 1995-1999 Russell King
  *
  * ASM optimised string functions
- *
  */
 #include <linux/linkage.h>
 #include <asm/assembler.h>
@@ -314,5 +313,3 @@ ENTRY(memmove)
 		b	24b
 
 		.align
-
-

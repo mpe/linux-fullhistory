@@ -152,21 +152,22 @@ static __inline__ void irq_init_irq(void)
 			irq_desc[irq].unmask   = rpc_unmask_irq_b;
 			break;
 
-		case 16 ... 22:
+		case 16 ... 21:
 			irq_desc[irq].valid    = 1;
+			irq_desc[irq].noautoenable = 1;
 			irq_desc[irq].mask_ack = rpc_mask_irq_dma;
 			irq_desc[irq].mask     = rpc_mask_irq_dma;
 			irq_desc[irq].unmask   = rpc_unmask_irq_dma;
 			break;
 
-		case 32 ... 40:
+		case 32 ... 39:
 			irq_desc[irq].valid    = 1;
 			irq_desc[irq].mask_ack = ecard_disableirq;
 			irq_desc[irq].mask     = ecard_disableirq;
 			irq_desc[irq].unmask   = ecard_enableirq;
 			break;
 
-		case 64 ... 72:
+		case 64 ... 71:
 			irq_desc[irq].valid    = 1;
 			irq_desc[irq].mask_ack = rpc_mask_irq_fiq;
 			irq_desc[irq].mask     = rpc_mask_irq_fiq;
@@ -174,6 +175,8 @@ static __inline__ void irq_init_irq(void)
 			break;
 		}
 	}
+
+	irq_desc[IRQ_KEYBOARDTX].noautoenable = 1;
 
 	init_FIQ();
 }

@@ -75,7 +75,7 @@ typedef struct { unsigned long pgprot; } pgprot_t;
  * amount of physical memory you can use to about 950MB. 
  *
  * If you want more physical memory than this then see the CONFIG_HIGHMEM4G
- * amd CONFIG_HIGHMEM64G options in the kernel configuration.
+ * and CONFIG_HIGHMEM64G options in the kernel configuration.
  */
 
 #define __PAGE_OFFSET		(0xC0000000)

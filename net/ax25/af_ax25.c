@@ -1598,8 +1598,8 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			if (sk != NULL) {
 				if (sk->stamp.tv_sec == 0)
 					return -ENOENT;
-				return copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)) : -EFAULT : 0;
-			}
+				return copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)) ? -EFAULT : 0;
+	 		}
 			return -EINVAL;
 
 		case SIOCAX25ADDUID:	/* Add a uid to the uid/call map table */

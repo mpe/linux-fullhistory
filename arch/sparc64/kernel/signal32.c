@@ -1420,7 +1420,7 @@ asmlinkage int do_signal32(sigset_t *oldset, struct pt_regs * regs,
 #endif
 				/* fall through */
 			default:
-				sigaddset(&current->signal, signr);
+				sigaddset(&current->pending.signal, signr);
 				recalc_sigpending(current);
 				current->flags |= PF_SIGNALED;
 				do_exit(exit_code);

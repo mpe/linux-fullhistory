@@ -11,13 +11,6 @@
 
 		.text
 
-#define USER(x...)					\
-9999:		x;					\
-		.section __ex_table,"a";		\
-		.align	3;				\
-		.long	9999b,9001f;			\
-		.previous
-
 		.globl	SYMBOL_NAME(uaccess_user)
 SYMBOL_NAME(uaccess_user):
 		.word	uaccess_user_put_byte

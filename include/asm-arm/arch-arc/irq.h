@@ -168,5 +168,7 @@ static __inline__ void irq_init_irq(void)
 		}
 	}
 
+	irq_mask[IRQ_KEYBOARDTX].noautoenable = 1;
+
 	init_FIQ();
 }

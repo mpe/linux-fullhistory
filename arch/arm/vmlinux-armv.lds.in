@@ -42,8 +42,8 @@ SECTIONS
 			*(.text.lock)	/* out-of-line lock text */
 			*(.rodata)
 			*(.kstrtab)
-		. = ALIGN(16);		/* Exception table		*/
-		__start___ex_table = .;
+		. = ALIGN(16);
+		__start___ex_table = .;	/* Exception table		*/
 			*(__ex_table)
 		__stop___ex_table = .;
 

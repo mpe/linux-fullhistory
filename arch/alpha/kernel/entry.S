@@ -833,7 +833,7 @@ sys_call_table:
 	.quad alpha_ni_syscall
 	.quad alpha_ni_syscall			/* 50 */
 	.quad sys_acct
-	.quad osf_sigpending
+	.quad sys_sigpending
 	.quad alpha_ni_syscall
 	.quad sys_ioctl
 	.quad alpha_ni_syscall			/* 55 */

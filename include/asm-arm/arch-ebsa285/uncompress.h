@@ -3,6 +3,7 @@
  *
  * Copyright (C) 1996-1999 Russell King
  */
+#include <asm/mach-types.h>
 
 /*
  * Note! This could cause problems on the NetWinder

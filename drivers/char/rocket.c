@@ -218,7 +218,7 @@ int copy_to_user(void *to_user, const void *from, unsigned long len)
 
 static inline int signal_pending(struct task_struct *p)
 {
-	return (p->signal & (~p->blocked != 0));
+	return (p->signal & ~p->blocked) != 0;
 }
 
 #else

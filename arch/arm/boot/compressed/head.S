@@ -85,7 +85,7 @@ start:
 		.word	0x016f2818		@ Magic numbers to help the loader
 		.word	start	
 1:		mov	r7, r1			@ save architecture ID
-		mov	r8, r0			@ save r0
+		mov	r8, #0			@ save r0
 #ifdef CONFIG_ANGELBOOT
 		/*
 		 * Booting from Angel - need to enter SVC mode and disable
@@ -198,9 +198,10 @@ cache_on:	ldr	r1, proc_sa110_type
 1:
 		sub	r3, r4, #16384		@ Page directory size
 		bic	r3, r3, #0xff		@ Align the pointer
-		bic	r3, r3, #0x3f
+		bic	r3, r3, #0x3f00
 /*
- * Initialise the page tables
+ * Initialise the page tables, turning on the cacheable and bufferable
+ * bits for the RAM area only.
  */
 		mov	r0, r3
 		mov	r8, r0, lsr #18
@@ -217,6 +218,20 @@ cache_on:	ldr	r1, proc_sa110_type
 		add	r1, r1, #1048576
 		teq	r0, r2
 		bne	1b
+/*
+ * If ever we are running from Flash, then we surely want the cache
+ * to be enabled also for our execution instance...  We map 2MB of it
+ * so there is no map overlap problem for up to 1 MB compressed kernel.
+ * If the execution is in RAM then we would only be duplicating the above.
+ */
+		mov	r1, #0x1e
+		orr	r1, r1, #3 << 10
+		mov	r2, pc, lsr #20
+		orr	r1, r1, r2, lsl #20
+		add	r0, r3, r2, lsl #2
+		str	r1, [r0], #4
+		add	r1, r1, #1048576
+		str	r1, [r0]
 
 		mov	r0, #0
 		mcr	p15, 0, r0, c7, c10, 4	@ drain write buffer

@@ -634,8 +634,8 @@ static inline unsigned long coda_waitfor_upcall(struct upc_req *vmp)
 
 		if ( !coda_hard && vmp->uc_opcode != CODA_CLOSE && signal_pending(current) ) {
 			/* if this process really wants to die, let it go */
-			if ( sigismember(&(current->signal), SIGKILL) ||
-			     sigismember(&(current->signal), SIGINT) )
+			if ( sigismember(&(current->pending.signal), SIGKILL) ||
+			     sigismember(&(current->pending.signal), SIGINT) )
 				break;
 			/* signal is present: after timeout always return 
 			   really smart idea, probably useless ... */

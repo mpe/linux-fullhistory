@@ -9,9 +9,9 @@ USE_STANDARD_AS_RULE := true
 L_TARGET := lib.a
 L_OBJS   := changebit.o csumipv6.o csumpartial.o csumpartialcopy.o \
 	    csumpartialcopyuser.o clearbit.o copy_page.o findbit.o \
-	    memchr.o memcpy.o memset.o memzero.o setbit.o strchr.o \
-	    strrchr.o testchangebit.o testclearbit.o testsetbit.o  \
-	    uaccess.o
+	    memchr.o memcpy.o memset.o memzero.o setbit.o          \
+	    strncpy_from_user.o strnlen_user.o strchr.o strrchr.o  \
+	    testchangebit.o testclearbit.o testsetbit.o uaccess.o
 
 O_TARGET := lib.o
 O_OBJS   := backtrace.o delay.o

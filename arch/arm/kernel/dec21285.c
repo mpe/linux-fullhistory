@@ -17,7 +17,7 @@
 #include <asm/irq.h>
 #include <asm/system.h>
 
-#include "bios32.h"
+#include <asm/mach/pci.h>
 
 #define MAX_SLOTS		21
 
@@ -252,7 +252,7 @@ static void dc21285_parity_irq(int irq, void *dev_id, struct pt_regs *regs)
 	add_timer(timer);
 }
 
-void __init dc21285_init(void)
+void __init dc21285_init(struct arm_pci_sysdata *sysdata)
 {
 	unsigned long cntl;
 	unsigned int mem_size;
@@ -279,19 +279,26 @@ void __init dc21285_init(void)
 		"central function" : "addin");
 
 	if (cfn_mode) {
-		static struct resource csrmem, csrio;
-		struct arm_pci_sysdata sysdata;
-		int i;
+		static struct resource csrmem, csrio, busmem, busmempf;
+		struct pci_bus *bus;
 
 		csrio.flags = IORESOURCE_IO;
-		csrio.name  = "DC21285";
+		csrio.name  = "Footbridge";
 		csrmem.flags = IORESOURCE_MEM;
-		csrmem.name  = "DC21285";
+		csrmem.name  = "Footbridge";
+		busmem.flags = IORESOURCE_MEM;
+		busmem.name  = "Footbridge non-prefetch";
+		busmempf.flags = IORESOURCE_MEM | IORESOURCE_PREFETCH;
+		busmempf.name  = "Footbridge prefetch";
 
 		allocate_resource(&ioport_resource, &csrio, 128,
 				  0xff00, 0xffff, 128, NULL, NULL);
 		allocate_resource(&iomem_resource, &csrmem, 128,
 				  0xf4000000, 0xf8000000, 128, NULL, NULL);
+		allocate_resource(&iomem_resource, &busmempf, 0x20000000,
+				  0x00000000, 0x80000000, 0x20000000, NULL, NULL);
+		allocate_resource(&iomem_resource, &busmem, 0x40000000,
+				  0x00000000, 0x80000000, 0x40000000, NULL, NULL);
 
 		/*
 		 * Map our SDRAM at a known address in PCI space, just in case
@@ -302,24 +309,24 @@ void __init dc21285_init(void)
 		*CSR_PCICACHELINESIZE = 0x00002008;
 		*CSR_PCICSRBASE       = csrmem.start;
 		*CSR_PCICSRIOBASE     = csrio.start;
-		*CSR_PCISDRAMBASE     = virt_to_bus((void *)PAGE_OFFSET);
+		*CSR_PCISDRAMBASE     = __virt_to_bus(PAGE_OFFSET);
 		*CSR_PCIROMBASE       = 0;
 		*CSR_PCICMD           = pci_cmd |
 				(1 << 31) | (1 << 29) | (1 << 28) | (1 << 24);
 
-		for (i = 0; i < MAX_NR_BUS; i++) {
-			sysdata.bus[i].features  = PCI_COMMAND_FAST_BACK |
-						   PCI_COMMAND_SERR |
-						   PCI_COMMAND_PARITY;
-			sysdata.bus[i].maxdevsel = PCI_STATUS_DEVSEL_FAST;
-		}
+		bus = pci_scan_bus(0, &dc21285_ops, sysdata);
+		/*
+		 * bus->resource[0] is the IO resource for this bus
+		 * bus->resource[1] is the mem resource for this bus
+		 * bus->resource[2] is the prefetch mem resource for this bus
+		 */
+		bus->resource[1] = &busmem;
+		bus->resource[2] = &busmempf;
 
-		pci_scan_bus(0, &dc21285_ops, &sysdata);
-
-		pci_cmd |= sysdata.bus[0].features;
+		pci_cmd |= sysdata->bus[0].features;
 
 		printk("PCI: Fast back to back transfers %sabled\n",
-		       (sysdata.bus[0].features & PCI_COMMAND_FAST_BACK) ?
+		       (sysdata->bus[0].features & PCI_COMMAND_FAST_BACK) ?
 			"en" : "dis");
 
 		/*

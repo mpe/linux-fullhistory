@@ -99,6 +99,11 @@ static int putreg(struct task_struct *child,
 		case EFL:
 			value &= FLAG_MASK;
 			value |= get_stack_long(child, EFL_OFFSET) & ~FLAG_MASK;
+			break;
+		case EIP:
+			/* Mark us as not being in a system call, so that no restart issues happen */ 
+			put_stack_long(child, 4*ORIG_EAX - sizeof(struct pt_regs), -1);
+			break;
 	}
 	if (regno > GS*4)
 		regno -= 2*4;

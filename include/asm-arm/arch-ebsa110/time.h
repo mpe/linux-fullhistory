@@ -46,6 +46,7 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #endif
 	do_leds();
 	do_timer(regs);
+	do_profile(regs);
 }
 
 /*

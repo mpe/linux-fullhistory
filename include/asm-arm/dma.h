@@ -7,6 +7,7 @@ typedef unsigned int dmach_t;
 #include <linux/spinlock.h>
 #include <asm/system.h>
 #include <asm/memory.h>
+#include <asm/scatterlist.h>
 #include <asm/arch/dma.h>
 
 /*

@@ -40,4 +40,3 @@ ENTRY(__delay)
 		subs	r0, r0, #1
 		bcs	SYMBOL_NAME(__delay)
 		RETINSTR(mov,pc,lr)
-

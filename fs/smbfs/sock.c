@@ -641,7 +641,7 @@ smb_request(struct smb_sb_info *server)
 	DEBUG1("len = %d cmd = 0x%X\n", len, buffer[8]);
 
 	spin_lock_irqsave(&current->sigmask_lock, flags);
-	sigpipe = sigismember(&current->signal, SIGPIPE);
+	sigpipe = sigismember(&current->pending.signal, SIGPIPE);
 	old_set = current->blocked;
 	siginitsetinv(&current->blocked, sigmask(SIGKILL)|sigmask(SIGSTOP));
 	recalc_sigpending(current);
@@ -659,7 +659,7 @@ smb_request(struct smb_sb_info *server)
 	/* read/write errors are handled by errno */
 	spin_lock_irqsave(&current->sigmask_lock, flags);
 	if (result == -EPIPE && !sigpipe)
-		sigdelset(&current->signal, SIGPIPE);
+		sigdelset(&current->pending.signal, SIGPIPE);
 	current->blocked = old_set;
 	recalc_sigpending(current);
 	spin_unlock_irqrestore(&current->sigmask_lock, flags);
@@ -821,7 +821,7 @@ smb_trans2_request(struct smb_sb_info *server, __u16 trans2_command,
 		goto bad_conn;
 
 	spin_lock_irqsave(&current->sigmask_lock, flags);
-	sigpipe = sigismember(&current->signal, SIGPIPE);
+	sigpipe = sigismember(&current->pending.signal, SIGPIPE);
 	old_set = current->blocked;
 	siginitsetinv(&current->blocked, sigmask(SIGKILL)|sigmask(SIGSTOP));
 	recalc_sigpending(current);
@@ -841,7 +841,7 @@ smb_trans2_request(struct smb_sb_info *server, __u16 trans2_command,
 	/* read/write errors are handled by errno */
 	spin_lock_irqsave(&current->sigmask_lock, flags);
 	if (result == -EPIPE && !sigpipe)
-		sigdelset(&current->signal, SIGPIPE);
+		sigdelset(&current->pending.signal, SIGPIPE);
 	current->blocked = old_set;
 	recalc_sigpending(current);
 	spin_unlock_irqrestore(&current->sigmask_lock, flags);

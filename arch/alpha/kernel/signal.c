@@ -170,18 +170,6 @@ sys_rt_sigaction(int sig, const struct sigaction *act, struct sigaction *oact,
 	return ret;
 }
 
-asmlinkage int
-osf_sigpending(old_sigset_t *set)
-{
-        sigset_t pending;
-
-        spin_lock_irq(&current->sigmask_lock);
-        sigandsets(&pending, &current->blocked, &current->signal);
-        spin_unlock_irq(&current->sigmask_lock);
-
-        return copy_to_user(set, &pending, sizeof(*set));
-}
-
 /*
  * Atomically swap in the new signal mask, and wait for a signal.
  */
@@ -729,7 +717,7 @@ do_signal(sigset_t *oldset, struct pt_regs * regs, struct switch_stack * sw,
 
 			default:
 				lock_kernel();
-				sigaddset(&current->signal, signr);
+				sigaddset(&current->pending.signal, signr);
 				current->flags |= PF_SIGNALED;
 				do_exit(exit_code);
 				/* NOTREACHED */

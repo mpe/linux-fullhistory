@@ -22,8 +22,11 @@ void _ll_write_char(char c)
  */
 static void puts(const char *s)
 {
-	while (*s)
+	while (*s) {
+		if (*s == '\n')
+			_ll_write_char('\r');
 		_ll_write_char(*(s++));
+	}
 }
 
 /*

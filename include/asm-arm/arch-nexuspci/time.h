@@ -46,6 +46,7 @@ extern __inline__ void setup_timer(void)
 	__raw_writeb(0x10, DUART_BASE + 0x14);
 
 	timer_irq.handler = timer_interrupt;
+	timer_irq.flags = SA_SHIRQ;
 
 	setup_arm_irq(IRQ_TIMER, &timer_irq);
 }

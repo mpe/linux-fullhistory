@@ -773,7 +773,7 @@ printk("%s: delivering signal.\n", current->comm);
 				/* FALLTHRU */
 
 			default:
-				sigaddset(&current->signal, signr);
+				sigaddset(&current->pending.signal, signr);
 				recalc_sigpending(current);
 				current->flags |= PF_SIGNALED;
 				do_exit(exit_code);

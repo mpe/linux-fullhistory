@@ -1721,6 +1721,54 @@ int generic_commit_write(struct file *file, struct page *page,
 	return 0;
 }
 
+/*
+ * If it would be '74 that would go into libc...
+ */
+int mem_is_zero(char *p, unsigned len)
+{
+	while (len--)
+		if (*p++)
+			return 0;
+	return 1;
+}
+
+int block_zero_page(struct address_space *mapping, loff_t from, unsigned length)
+{
+	unsigned long index = from >> PAGE_CACHE_SHIFT;
+	unsigned offset = from & (PAGE_CACHE_SIZE-1);
+	struct inode *inode = (struct inode *)mapping->host;
+	struct page *page;
+	char *kaddr;
+	int err;
+
+	if (!length)
+		return 0;
+
+	page = read_cache_page(mapping, index,
+				(filler_t *)mapping->a_ops->readpage, NULL);
+	err = PTR_ERR(page);
+	if (ERR_PTR(page))
+		goto out;
+	lock_page(page);
+	err = -EIO;
+	if (!Page_Uptodate(page))
+		goto unlock;
+	kaddr = (char*)kmap(page);
+	err = 0;
+	if (mem_is_zero(kaddr+offset, length))
+		goto unmap;
+	memset(kaddr+offset, 0, length);
+	flush_dcache_page(page);
+	__block_commit_write(inode, page, offset, offset+length);
+unmap:
+	kunmap(page);
+unlock:
+	UnlockPage(page);
+	page_cache_release(page);
+out:
+	return err;
+}
+
 int block_write_full_page(struct page *page, get_block_t *get_block)
 {
 	struct inode *inode = (struct inode*)page->mapping->host;

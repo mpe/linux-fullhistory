@@ -109,6 +109,36 @@ extern unsigned long cr_alignment;	/* defined in entry-armv.S */
 	})
 
 /*
+ * Enable FIQs
+ */
+#define __stf()							\
+	({							\
+		unsigned long temp;				\
+	__asm__ __volatile__(					\
+	"mrs	%0, cpsr		@ stf\n"		\
+"	bic	%0, %0, #64\n"					\
+"	msr	cpsr_c, %0"					\
+	: "=r" (temp)						\
+	:							\
+	: "memory");						\
+	})
+
+/*
+ * Disable FIQs
+ */
+#define __clf()							\
+	({							\
+		unsigned long temp;				\
+	__asm__ __volatile__(					\
+	"mrs	%0, cpsr		@ clf\n"		\
+"	orr	%0, %0, #64\n"					\
+"	msr	cpsr_c, %0"					\
+	: "=r" (temp)						\
+	:							\
+	: "memory");						\
+	})
+
+/*
  * save current IRQ & FIQ state
  */
 #define __save_flags(x)						\

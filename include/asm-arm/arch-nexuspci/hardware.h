@@ -63,4 +63,6 @@
 #define INTCONT_LED		0x1a
 #define INTCONT_PCI_RESET	0x1c
 
+#define UNCACHEABLE_ADDR	STATUS_BASE
+
 #endif

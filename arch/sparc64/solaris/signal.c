@@ -311,7 +311,7 @@ asmlinkage int solaris_sigpending(int which, u32 set)
 	switch (which) {
 	case 1: /* sigpending */
 		spin_lock_irq(&current->sigmask_lock);
-		sigandsets(&s, &current->blocked, &current->signal);
+		sigandsets(&s, &current->blocked, &current->pending.signal);
 		recalc_sigpending(current);
 		spin_unlock_irq(&current->sigmask_lock);
 		break;

@@ -13,11 +13,10 @@
  */
 #include <asm/proc/cache.h>
 
-extern __inline__ void flush_tlb_pgtables(struct mm_struct *mm,
-					  unsigned long start,
-					  unsigned long end)
-{
-}
+/*
+ * ARM processors do not cache TLB tables in RAM.
+ */
+#define flush_tlb_pgtables(mm,start,end)	do { } while (0)
 
 /*
  * Page table cache stuff

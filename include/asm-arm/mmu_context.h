@@ -17,9 +17,19 @@
 #define destroy_context(mm)		do { } while(0)
 #define init_new_context(tsk,mm)	0
 
+/*
+ * This is called when "tsk" is about to enter lazy TLB mode.
+ *
+ * mm:  describes the currently active mm context
+ * tsk: task which is entering lazy tlb
+ * cpu: cpu number which is entering lazy tlb
+ *
+ * tsk->mm will be NULL
+ */
 static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
 {
 }
+
 /*
  * This is the actual mm switch as far as the scheduler
  * is concerned.  No registers are touched.

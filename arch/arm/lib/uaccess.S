@@ -13,13 +13,6 @@
 
 		.text
 
-#define USER(x...)					\
-9999:		x;					\
-		.section __ex_table,"a";		\
-		.align	3;				\
-		.long	9999b,9001f;			\
-		.previous
-
 #define PAGE_SHIFT 12
 
 /* Prototype: int __arch_copy_to_user(void *to, const char *from, size_t n)
@@ -589,63 +582,4 @@ USER(		strnebt	r2, [r0], #1)
 		.align	0
 9001:		LOADREGS(fd,sp!, {r0, pc})
 		.previous
-
-/* Prototype: unsigned long __arch_strnlen_user(const char *str, long n)
- * Purpose  : get length of a string in user memory
- * Params   : str - address of string in user memory
- * Returns  : length of string *including terminator*
- *	      or zero on exception, or n + 1 if too long
- */
-ENTRY(__arch_strnlen_user)
-		str	lr, [sp, #-4]!
-		mov	r2, r0
-1:
-USER(		ldrbt	r3, [r0], #1)
-		teq	r3, #0
-		beq	2f
-		subs	r1, r1, #1
-		bne	1b
-		add	r0, r0, #1
-2:		sub	r0, r0, r2
-		LOADREGS(fd,sp!, {pc})
-
-		.section .fixup,"ax"
-		.align	0
-9001:		mov	r0, #0
-		LOADREGS(fd,sp!,{pc})
-		.previous
-
-/* Prototype: size_t __arch_strncpy_from_user(char *dst, char *src, size_t len)
- * Purpose  : copy a string from user memory to kernel memory
- * Params   : dst - kernel memory destination
- *          : src - user memory source
- *          : len - maximum length of string
- * Returns  : number of characters copied
- */
-ENTRY(__arch_strncpy_from_user)
-		str	lr, [sp, #-4]!
-		add	ip, r1, #1
-1:		subs	r2, r2, #1
-		bmi	2f
-USER(		ldrbt	r3, [r1], #1)
-		strb	r3, [r0], #1
-		teq	r3, #0
-		bne	1b
-		sub	r0, r1, ip
-		LOADREGS(fd, sp!, {pc})
-2:		sub	ip, ip, #1
-		sub	r0, r1, ip
-		LOADREGS(fd, sp!, {pc})
-
-		.section .fixup,"ax"
-		.align	0
-9001:		mov	ip, #0
-1:		strb	ip, [r0], #1
-		subs	r2, r2, #1
-		bpl	1b
-		mov	r0, #-EFAULT
-		LOADREGS(fd, sp!, {pc})
-		.previous
-
-		.align
 

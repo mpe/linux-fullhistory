@@ -51,6 +51,12 @@ SCR_loc:	.long	SYMBOL_NAME(SCR_value)
  * This is called from decompress_kernel() with the arch_decomp_setup() macro.
  */
 
+/*
+ * void sa1100_setup( int arch_id );
+ *
+ * This is called from decompress_kernel() with the arch_decomp_setup() macro.
+ */
+
 ENTRY(sa1100_setup)
 		mov	r3, r0			@ keep machine type in r3
 
@@ -138,7 +144,7 @@ skip_uart:
 		@ The machine type is passed in r0
 		mov	r0, r3
 #ifdef CONFIG_SA1100_NANOENGINE
-		teq	r0, #32			@ MACH_TYPE_NANOENGINE
+		teq	r0, #MACH_TYPE_NANOENGINE
 		beq	SYMBOL_NAME(bse_setup)
 #endif
 

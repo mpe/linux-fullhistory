@@ -264,7 +264,7 @@ asmlinkage int do_irix_signal(sigset_t *oldset, struct pt_regs *regs)
 				/* FALLTHRU */
 
 			default:
-				sigaddset(&current->signal, signr);
+				sigaddset(&current->pending.signal, signr);
 				recalc_sigpending(current);
 				current->flags |= PF_SIGNALED;
 				do_exit(exit_code);
@@ -429,24 +429,7 @@ irix_sigaction(int sig, const struct sigaction *act,
 
 asmlinkage int irix_sigpending(irix_sigset_t *set)
 {
-	int err;
-
-	if (verify_area(VERIFY_WRITE, set, sizeof(*set)) < 0)
-		return -EFAULT;
-
-	/* fill in "set" with signals pending but blocked. */
-	spin_lock_irq(&current->sigmask_lock);
-	err = __put_user(current->blocked.sig[0] & current->signal.sig[0],
-	                 &set->sig[0]);
-	err |= __put_user(current->blocked.sig[1] & current->signal.sig[1],
-	                 &set->sig[1]);
-	err |= __put_user(current->blocked.sig[2] & current->signal.sig[2],
-	                 &set->sig[2]);
-	err |= __put_user(current->blocked.sig[3] & current->signal.sig[3],
-	                 &set->sig[3]);
-	spin_unlock_irq(&current->sigmask_lock);
-
-	return err;
+	return do_sigpending(set, sizeof(*set));
 }
 
 asmlinkage int irix_sigprocmask(int how, irix_sigset_t *new, irix_sigset_t *old)
@@ -605,7 +588,7 @@ asmlinkage int irix_sigpoll_sys(unsigned long *set, struct irix5_siginfo *info,
 		expire = schedule_timeout(expire);
 
 		for (i=0; i<=4; i++)
-			tmp |= (current->signal.sig[i] & kset.sig[i]);
+			tmp |= (current->pending.signal.sig[i] & kset.sig[i]);
 
 		if (tmp)
 			break;
@@ -622,7 +605,7 @@ asmlinkage int irix_sigpoll_sys(unsigned long *set, struct irix5_siginfo *info,
 	for(sig = 1; i <= 65 /* IRIX_NSIG */; sig++) {
 		if (sigismember (&kset, sig))
 			continue;
-		if (sigismember (&current->signal, sig)) {
+		if (sigismember (&current->pending.signal, sig)) {
 			/* XXX need more than this... */
 			if (info)
 				info->sig = sig;

@@ -234,7 +234,6 @@ struct mm_struct {
 struct signal_struct {
 	atomic_t		count;
 	struct k_sigaction	action[_NSIG];
-	struct sigpending	pending;
 	spinlock_t		siglock;
 };
 
@@ -242,7 +241,6 @@ struct signal_struct {
 #define INIT_SIGNALS { \
 		ATOMIC_INIT(1), \
 		{ {{0,}}, }, \
-		{ NULL, &init_signals.pending.head, }, \
 		SPIN_LOCK_UNLOCKED }
 
 /*
@@ -582,7 +580,7 @@ static inline int signal_pending(struct task_struct *p)
  * Re-calculate pending state from the set of locally pending
  * signals, globally pending signals, and blocked signals.
  */
-static inline int has_pending_signals(sigset_t *p1, sigset_t *p2, sigset_t *blocked)
+static inline int has_pending_signals(sigset_t *signal, sigset_t *blocked)
 {
 	unsigned long ready;
 	long i;
@@ -590,20 +588,20 @@ static inline int has_pending_signals(sigset_t *p1, sigset_t *p2, sigset_t *bloc
 	switch (_NSIG_WORDS) {
 	default:
 		for (i = _NSIG_WORDS, ready = 0; --i >= 0 ;)
-			ready |= (p1->sig[i] | p2->sig[i]) &~ blocked->sig[i];
+			ready |= signal->sig[i] &~ blocked->sig[i];
 		break;
 
-	case 4: ready  = (p1->sig[3] | p2->sig[3]) &~ blocked->sig[3];
-		ready |= (p1->sig[2] | p2->sig[2]) &~ blocked->sig[2];
-		ready |= (p1->sig[1] | p2->sig[1]) &~ blocked->sig[1];
-		ready |= (p1->sig[0] | p2->sig[0]) &~ blocked->sig[0];
+	case 4: ready  = signal->sig[3] &~ blocked->sig[3];
+		ready |= signal->sig[2] &~ blocked->sig[2];
+		ready |= signal->sig[1] &~ blocked->sig[1];
+		ready |= signal->sig[0] &~ blocked->sig[0];
 		break;
 
-	case 2: ready  = (p1->sig[1] | p2->sig[1]) &~ blocked->sig[1];
-		ready |= (p1->sig[0] | p2->sig[0]) &~ blocked->sig[0];
+	case 2: ready  = signal->sig[1] &~ blocked->sig[1];
+		ready |= signal->sig[0] &~ blocked->sig[0];
 		break;
 
-	case 1: ready  = (p1->sig[0] | p2->sig[0]) &~ blocked->sig[0];
+	case 1: ready  = signal->sig[0] &~ blocked->sig[0];
 	}
 	return ready !=	0;
 }
@@ -614,7 +612,7 @@ static inline int has_pending_signals(sigset_t *p1, sigset_t *p2, sigset_t *bloc
 
 static inline void recalc_sigpending(struct task_struct *t)
 {
-	t->sigpending = has_pending_signals(&t->pending.signal, &t->sig->pending.signal, &t->blocked);
+	t->sigpending = has_pending_signals(&t->pending.signal, &t->blocked);
 }
 
 /* True if we are on the alternate signal stack.  */

@@ -512,9 +512,6 @@ static inline int copy_sighand(unsigned long clone_flags, struct task_struct * t
 		return -1;
 	spin_lock_init(&sig->siglock);
 	atomic_set(&sig->count, 1);
-
-	init_sigpending(&sig->pending);
-
 	memcpy(tsk->sig->action, current->sig->action, sizeof(tsk->sig->action));
 	return 0;
 }

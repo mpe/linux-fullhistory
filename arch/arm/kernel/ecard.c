@@ -318,7 +318,7 @@ ecard_task(void * unused)
 	 * We don't want /any/ signals, not even SIGKILL
 	 */
 	sigfillset(&tsk->blocked);
-	sigemptyset(&tsk->signal);
+	sigemptyset(&tsk->pending.signal);
 	recalc_sigpending(tsk);
 
 	strcpy(tsk->comm, "kecardd");
@@ -335,7 +335,7 @@ ecard_task(void * unused)
 			req = xchg(&ecard_req, NULL);
 
 			if (req == NULL) {
-				sigemptyset(&tsk->signal);
+				sigemptyset(&tsk->pending.signal);
 				interruptible_sleep_on(&ecard_wait);
 			}
 		} while (req == NULL);

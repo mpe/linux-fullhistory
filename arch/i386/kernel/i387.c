@@ -279,6 +279,7 @@ static inline int save_i387_fsave( struct _fpstate *buf )
 {
 	struct task_struct *tsk = current;
 
+	unlazy_fpu( tsk );
 	tsk->thread.i387.fsave.status = tsk->thread.i387.fsave.swd;
 	if ( __copy_to_user( buf, &tsk->thread.i387.fsave,
 			     sizeof(struct i387_fsave_struct) ) )
@@ -290,6 +291,8 @@ static inline int save_i387_fxsave( struct _fpstate *buf )
 {
 	struct task_struct *tsk = current;
 	int err = 0;
+
+	unlazy_fpu( tsk );
 
 	if ( convert_fxsr_to_user( buf, &tsk->thread.i387.fxsave ) )
 		return -1;

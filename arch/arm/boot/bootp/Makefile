@@ -23,4 +23,4 @@ initrd.o:	$(INITRD)
 
 .PHONY:		$(INITRD) $(ZSYSTEM)
 
-clean:;		$(RM) bootp bootp.lds
+clean:;		$(RM) bootp

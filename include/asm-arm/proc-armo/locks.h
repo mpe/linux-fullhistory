@@ -15,20 +15,20 @@
 	({					\
 	__asm__ __volatile__ (			\
 	"@ atomic down operation\n"		\
-"	mov	r0, pc\n"			\
-"	orr	lr, r0, #0x08000000\n"		\
+"	mov	ip, pc\n"			\
+"	orr	lr, ip, #0x08000000\n"		\
 "	teqp	lr, #0\n"			\
 "	ldr	lr, [%0]\n"			\
-"	and	r0, r0, #0x0c000003\n"		\
+"	and	ip, ip, #0x0c000003\n"		\
 "	subs	lr, lr, #1\n"			\
 "	str	lr, [%0]\n"			\
-"	orrmi	r0, r0, #0x80000000	@ set N\n" \
-"	teqp	r0, #0\n"			\
-"	movmi	r0, %0\n"			\
+"	orrmi	ip, ip, #0x80000000	@ set N\n" \
+"	teqp	ip, #0\n"			\
+"	movmi	ip, %0\n"			\
 "	blmi	" SYMBOL_NAME_STR(fail)		\
 	:					\
 	: "r" (ptr)				\
-	: "r0", "lr", "cc");			\
+	: "ip", "lr", "cc");			\
 	})
 
 #define __down_op_ret(ptr,fail)			\
@@ -36,22 +36,22 @@
 		unsigned int result;		\
 	__asm__ __volatile__ (			\
 "	@ down_op_ret\n"			\
-"	mov	r0, pc\n"			\
-"	orr	lr, r0, #0x08000000\n"		\
+"	mov	ip, pc\n"			\
+"	orr	lr, ip, #0x08000000\n"		\
 "	teqp	lr, #0\n"			\
 "	ldr	lr, [%1]\n"			\
-"	and	r0, r0, #0x0c000003\n"		\
+"	and	ip, ip, #0x0c000003\n"		\
 "	subs	lr, lr, #1\n"			\
 "	str	lr, [%1]\n"			\
-"	orrmi	r0, r0, #0x80000000	@ set N\n" \
-"	teqp	r0, #0\n"			\
-"	movmi	r0, %1\n"			\
-"	movpl	r0, #0\n"			\
+"	orrmi	ip, ip, #0x80000000	@ set N\n" \
+"	teqp	ip, #0\n"			\
+"	movmi	ip, %1\n"			\
+"	movpl	ip, #0\n"			\
 "	blmi	" SYMBOL_NAME_STR(fail) "\n"	\
-"	mov	%0, r0"				\
+"	mov	%0, ip"				\
 	: "=&r" (result)			\
 	: "r" (ptr)				\
-	: "r0", "lr", "cc");			\
+	: "ip", "lr", "cc");			\
 	result;					\
 	})
 
@@ -59,20 +59,20 @@
 	({					\
 	__asm__ __volatile__ (			\
 	"@ up_op\n"				\
-"	mov	r0, pc\n"			\
-"	orr	lr, r0, #0x08000000\n"		\
+"	mov	ip, pc\n"			\
+"	orr	lr, ip, #0x08000000\n"		\
 "	teqp	lr, #0\n"			\
 "	ldr	lr, [%0]\n"			\
-"	and	r0, r0, #0x0c000003\n"		\
+"	and	ip, ip, #0x0c000003\n"		\
 "	adds	lr, lr, #1\n"			\
 "	str	lr, [%0]\n"			\
-"	orrle	r0, r0, #0x80000000	@ set N - should this be mi ??? DAG ! \n" \
-"	teqp	r0, #0\n"			\
-"	movmi	r0, %0\n"			\
+"	orrle	ip, ip, #0x80000000	@ set N - should this be mi ??? DAG ! \n" \
+"	teqp	ip, #0\n"			\
+"	movmi	ip, %0\n"			\
 "	blmi	" SYMBOL_NAME_STR(wake)		\
 	:					\
 	: "r" (ptr)				\
-	: "r0", "lr", "cc");			\
+	: "ip", "lr", "cc");			\
 	})
 
 /*
@@ -89,22 +89,22 @@
 	({					\
 	__asm__ __volatile__(			\
 	"@ down_op_write\n"			\
-"	mov	r0, pc\n"			\
-"	orr	lr, r0, #0x08000000\n"		\
+"	mov	ip, pc\n"			\
+"	orr	lr, ip, #0x08000000\n"		\
 "	teqp	lr, #0\n"			\
-"	and	r0, r0, #0x0c000003\n"		\
+"	and	ip, ip, #0x0c000003\n"		\
 \
 "	ldr	lr, [%0]\n"			\
 "	subs	lr, lr, %1\n"			\
 "	str	lr, [%0]\n"			\
 \
-" orreq r0, r0, #0x40000000 @ set Z \n"\
-"	teqp	r0, #0\n"			\
-"	movne	r0, %0\n"			\
+" orreq ip, ip, #0x40000000 @ set Z \n"\
+"	teqp	ip, #0\n"			\
+"	movne	ip, %0\n"			\
 "	blne	" SYMBOL_NAME_STR(fail)		\
 	:					\
 	: "r" (ptr), "I" (RW_LOCK_BIAS)		\
-	: "r0", "lr", "cc");			\
+	: "ip", "lr", "cc");			\
 	})
 
 /* Increments by RW_LOCK_BIAS, wakes if value >= 0 */
@@ -112,22 +112,22 @@
 	({					\
 	__asm__ __volatile__(			\
 	"@ up_op_read\n"			\
-"	mov	r0, pc\n"			\
-"	orr	lr, r0, #0x08000000\n"		\
+"	mov	ip, pc\n"			\
+"	orr	lr, ip, #0x08000000\n"		\
 "	teqp	lr, #0\n"			\
 \
 "	ldr	lr, [%0]\n"			\
-"	and	r0, r0, #0x0c000003\n"		\
+"	and	ip, ip, #0x0c000003\n"		\
 "	adds	lr, lr, %1\n"			\
 "	str	lr, [%0]\n"			\
 \
-" orrcs r0, r0, #0x20000000 @ set C\n" \
-"	teqp	r0, #0\n"			\
-"	movcs	r0, %0\n"			\
+" orrcs ip, ip, #0x20000000 @ set C\n" \
+"	teqp	ip, #0\n"			\
+"	movcs	ip, %0\n"			\
 "	blcs	" SYMBOL_NAME_STR(wake)		\
 	:					\
 	: "r" (ptr), "I" (RW_LOCK_BIAS)		\
-	: "r0", "lr", "cc");			\
+	: "ip", "lr", "cc");			\
 	})
 
 #define __down_op_read(ptr,fail)		\
@@ -137,22 +137,22 @@
 	({					\
 	__asm__ __volatile__(			\
 	"@ up_op_read\n"			\
-"	mov	r0, pc\n"			\
-"	orr	lr, r0, #0x08000000\n"		\
+"	mov	ip, pc\n"			\
+"	orr	lr, ip, #0x08000000\n"		\
 "	teqp	lr, #0\n"			\
 \
 "	ldr	lr, [%0]\n"			\
-"	and	r0, r0, #0x0c000003\n"		\
+"	and	ip, ip, #0x0c000003\n"		\
 "	adds	lr, lr, %1\n"			\
 "	str	lr, [%0]\n"			\
 \
-" orreq r0, r0, #0x40000000 @ Set Z \n" \
-"	teqp	r0, #0\n"			\
-"	moveq	r0, %0\n"			\
+" orreq ip, ip, #0x40000000 @ Set Z \n" \
+"	teqp	ip, #0\n"			\
+"	moveq	ip, %0\n"			\
 "	bleq	" SYMBOL_NAME_STR(wake)		\
 	:					\
 	: "r" (ptr), "I" (1)			\
-	: "r0", "lr", "cc");			\
+	: "ip", "lr", "cc");			\
 	})
 
 #endif
