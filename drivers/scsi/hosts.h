@@ -313,7 +313,7 @@ struct Scsi_Host
                                           host. */
     unsigned int            eh_active:1; /* Indicates the eh thread is awake and active if
                                           this is true. */
-    struct wait_queue     * host_wait;
+    wait_queue_head_t       host_wait;
     Scsi_Host_Template    * hostt;
     atomic_t                host_active; /* commands checked out */
     volatile unsigned short host_busy;   /* commands actually active on low-level */

@@ -562,7 +562,7 @@ void ext2_read_inode (struct inode * inode)
 			<< 32;
 #endif
 	}
-	inode->u.ext2_i.i_version = le32_to_cpu(raw_inode->i_version);
+	inode->i_generation = le32_to_cpu(raw_inode->i_generation);
 	inode->u.ext2_i.i_block_group = block_group;
 	inode->u.ext2_i.i_next_alloc_block = 0;
 	inode->u.ext2_i.i_next_alloc_goal = 0;
@@ -692,7 +692,7 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 		raw_inode->i_size_high = cpu_to_le32(inode->i_size >> 32);
 #endif
 	}
-	raw_inode->i_version = cpu_to_le32(inode->u.ext2_i.i_version);
+	raw_inode->i_generation = cpu_to_le32(inode->i_generation);
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		raw_inode->i_block[0] = cpu_to_le32(kdev_t_to_nr(inode->i_rdev));
 	else if (S_ISLNK(inode->i_mode) && !inode->i_blocks)

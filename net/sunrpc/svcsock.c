@@ -738,7 +738,7 @@ svc_recv(struct svc_serv *serv, struct svc_rqst *rqstp, long timeout)
 {
 	struct svc_sock		*svsk;
 	int			len;
-	struct wait_queue	wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 
 	dprintk("svc: server %p waiting for data (to = %ld)\n",
 		rqstp, timeout);

@@ -18,7 +18,7 @@
 
 #include <asm/pgtable.h>
 
-static struct wait_queue * lock_queue = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(lock_queue);
 
 /*
  * Reads or writes a swap page.

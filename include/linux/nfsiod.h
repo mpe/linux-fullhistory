@@ -26,7 +26,7 @@ typedef int	(*nfsiod_callback_t)(int result, struct nfsiod_req *);
 struct nfsiod_req {
 	struct nfsiod_req *	rq_next;
 	struct nfsiod_req *	rq_prev;
-	struct wait_queue *	rq_wait;
+	wait_queue_head_t	rq_wait;
 	struct rpc_ioreq	rq_rpcreq;
 	nfsiod_callback_t	rq_callback;
 	struct nfs_server *	rq_server;

@@ -417,7 +417,7 @@ struct scsi_device {
      */
     struct scsi_device * next;      /* Used for linked list */
     struct scsi_device * prev;      /* Used for linked list */
-    struct wait_queue  * device_wait;/* Used to wait if
+    wait_queue_head_t device_wait;/* Used to wait if
                                                       device is busy */
     struct Scsi_Host   * host;
     volatile unsigned short device_busy;   /* commands actually active on low-level */
@@ -711,7 +711,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 
 #define SCSI_SLEEP(QUEUE, CONDITION) {		    \
     if (CONDITION) {			            \
-	struct wait_queue wait = { current, NULL};  \
+	DECLARE_WAITQUEUE(wait, current);	    \
 	add_wait_queue(QUEUE, &wait);		    \
 	for(;;) {			            \
 	current->state = TASK_UNINTERRUPTIBLE;	    \

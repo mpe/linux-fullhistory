@@ -31,7 +31,7 @@ static int shm_tot = 0; /* total number of shared memory pages */
 static int shm_rss = 0; /* number of shared memory pages that are in memory */
 static int shm_swp = 0; /* number of shared memory pages that are in swap */
 static int max_shmid = 0; /* every used id is <= max_shmid */
-static struct wait_queue *shm_lock = NULL; /* calling findkey() may need to wait */
+static DECLARE_WAIT_QUEUE_HEAD(shm_lock); /* calling findkey() may need to wait */
 static struct shmid_kernel *shm_segs[SHMMNI];
 
 static unsigned short shm_seq = 0; /* incremented, for recognizing stale ids */
@@ -48,7 +48,7 @@ void __init shm_init (void)
 	for (id = 0; id < SHMMNI; id++)
 		shm_segs[id] = (struct shmid_kernel *) IPC_UNUSED;
 	shm_tot = shm_rss = shm_seq = max_shmid = used_segs = 0;
-	shm_lock = NULL;
+	init_waitqueue_head(&shm_lock);
 	return;
 }
 

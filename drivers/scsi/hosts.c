@@ -665,7 +665,7 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     retval->host_no = max_scsi_hosts++; /* never reuse host_no (DB) */
     next_scsi_host++;
     retval->host_queue = NULL;
-    retval->host_wait = NULL;
+    init_waitqueue_head(&retval->host_wait);
     retval->resetting = 0;
     retval->last_reset = 0;
     retval->irq = 0;
@@ -738,7 +738,7 @@ scsi_register_device(struct Scsi_Device_Template * sdpnt)
  */
 static void launch_error_handler_thread(struct Scsi_Host * shpnt)
 {
-            struct semaphore sem = MUTEX_LOCKED;
+            DECLARE_MUTEX_LOCKED(sem);
             
             shpnt->eh_notify = &sem;
 

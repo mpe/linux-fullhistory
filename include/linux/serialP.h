@@ -80,9 +80,9 @@ struct async_struct {
 	int			xmit_tail;
 	int			xmit_cnt;
 	struct tq_struct	tqueue;
-	struct wait_queue	*open_wait;
-	struct wait_queue	*close_wait;
-	struct wait_queue	*delta_msr_wait;
+	wait_queue_head_t	open_wait;
+	wait_queue_head_t	close_wait;
+	wait_queue_head_t	delta_msr_wait;
 	struct async_struct	*next_port; /* For the linked list */
 	struct async_struct	*prev_port;
 };

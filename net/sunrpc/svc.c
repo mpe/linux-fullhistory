@@ -123,6 +123,8 @@ svc_create_thread(svc_thread_fn func, struct svc_serv *serv)
 		goto out;
 
 	memset(rqstp, 0, sizeof(*rqstp));
+	init_waitqueue_head(&rqstp->rq_wait);
+
 	if (!(rqstp->rq_argp = (u32 *) kmalloc(serv->sv_xdrsize, GFP_KERNEL))
 	 || !(rqstp->rq_resp = (u32 *) kmalloc(serv->sv_xdrsize, GFP_KERNEL))
 	 || !svc_init_buffer(&rqstp->rq_defbuf, serv->sv_bufsz))

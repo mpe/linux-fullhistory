@@ -42,7 +42,7 @@
 
 void tty_wait_until_sent(struct tty_struct * tty, long timeout)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 
 #ifdef TTY_DEBUG_WAIT_UNTIL_SENT
 	char buf[64];

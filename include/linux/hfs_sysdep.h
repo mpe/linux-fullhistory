@@ -93,10 +93,10 @@ extern inline hfs_u32 hfs_time(void) {
 /*
  * hfs_wait_queue 
  */
-typedef struct wait_queue *hfs_wait_queue;
+typedef wait_queue_head_t hfs_wait_queue;
 
 extern inline void hfs_init_waitqueue(hfs_wait_queue *queue) {
-        init_waitqueue(queue);
+        init_waitqueue_head(queue);
 }
 
 extern inline void hfs_sleep_on(hfs_wait_queue *queue) {

@@ -132,6 +132,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_FB_CYBER2000),y)
+L_OBJS += cyber2000fb.o
+else
+  ifeq ($(CONFIG_FB_CYBER2000),m)
+  M_OBJS += cyber2000fb.o
+  endif
+endif
+
 ifeq ($(CONFIG_FB_SGIVW),y)
 L_OBJS += sgivwfb.o
 else

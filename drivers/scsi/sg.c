@@ -135,7 +135,7 @@ typedef struct sg_fd /* holds the state of a file descriptor */
 {
     struct sg_fd * nextfp; /* NULL when last opened fd on this device */
     struct sg_device * parentdp;     /* owning device */
-    struct wait_queue * read_wait;   /* queue read until command done */
+    wait_queue_head_t read_wait;   /* queue read until command done */
     int timeout;                     /* defaults to SG_DEFAULT_TIMEOUT */
     char * fst_buf;     /* try to grab SG_SCATTER_SZ sized buffer on open */
     int fb_size;        /* actual size of allocated fst_buf */
@@ -153,7 +153,7 @@ typedef struct sg_fd /* holds the state of a file descriptor */
 typedef struct sg_device /* holds the state of each scsi generic device */
 {
     Scsi_Device * device;
-    struct wait_queue * generic_wait;/* queue open if O_EXCL on prev. open */
+    wait_queue_head_t generic_wait;/* queue open if O_EXCL on prev. open */
     int sg_tablesize;   /* adapter's max scatter-gather table size */
     Sg_fd * headfp;     /* first open fd belonging to this device */
     kdev_t i_rdev;      /* holds device major+minor number */
@@ -988,7 +988,7 @@ static int sg_attach(Scsi_Device * scsidp)
 
     SCSI_LOG_TIMEOUT(3, printk("sg_attach: dev=%d \n", k));
     sdp->device = scsidp;
-    sdp->generic_wait = NULL;
+    init_waitqueue_head(&sdp->generic_wait);
     sdp->headfp= NULL;
     sdp->exclude = 0;
     sdp->merge_fd = 0;  /* Cope with SG_DEF_MERGE_FD on open */

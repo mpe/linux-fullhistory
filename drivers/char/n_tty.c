@@ -605,7 +605,7 @@ send_signal:
 			tty->canon_data++;
 			if (tty->fasync)
 				kill_fasync(tty->fasync, SIGIO);
-			if (tty->read_wait)
+			if (waitqueue_active(&tty->read_wait))
 				wake_up_interruptible(&tty->read_wait);
 			return;
 		}
@@ -707,7 +707,7 @@ static void n_tty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 	if (!tty->icanon && (tty->read_cnt >= tty->minimum_to_wake)) {
 		if (tty->fasync)
 			kill_fasync(tty->fasync, SIGIO);
-		if (tty->read_wait)
+		if (waitqueue_active(&tty->read_wait))
 			wake_up_interruptible(&tty->read_wait);
 	}
 
@@ -868,7 +868,7 @@ static ssize_t read_chan(struct tty_struct *tty, struct file *file,
 			 unsigned char *buf, size_t nr)
 {
 	unsigned char *b = buf;
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	int c;
 	int minimum, time;
 	ssize_t retval = 0;
@@ -1058,7 +1058,7 @@ static ssize_t write_chan(struct tty_struct * tty, struct file * file,
 			  const unsigned char * buf, size_t nr)
 {
 	const unsigned char *b = buf;
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	int c;
 	ssize_t retval = 0;
 

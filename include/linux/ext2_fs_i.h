@@ -29,7 +29,7 @@ struct ext2_inode_info {
 	__u32	i_file_acl;
 	__u32	i_dir_acl;
 	__u32	i_dtime;
-	__u32	i_version;
+	__u32	not_used_1;	/* FIX: not used/ 2.2 placeholder */
 	__u32	i_block_group;
 	__u32	i_next_alloc_block;
 	__u32	i_next_alloc_goal;

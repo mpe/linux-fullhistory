@@ -497,9 +497,9 @@ static void atari_scsi_fetch_restbytes( void )
 
 
 static int falcon_got_lock = 0;
-static struct wait_queue	*falcon_fairness_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(falcon_fairness_wait);
 static int falcon_trying_lock = 0;
-static struct wait_queue	*falcon_try_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(falcon_try_wait);
 static int falcon_dont_release = 0;
 
 /* This function releases the lock on the DMA chip if there is no

@@ -51,7 +51,7 @@
 #include <net/pkt_sched.h>
 
 atomic_t rtnl_rlockct;
-struct wait_queue *rtnl_wait;
+DECLARE_WAIT_QUEUE_HEAD(rtnl_wait);
 
 
 void rtnl_lock()

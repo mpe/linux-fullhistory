@@ -15,7 +15,7 @@
 #include <asm/io.h>
 
 extern unsigned long log_size;
-extern struct wait_queue * log_wait;
+extern wait_queue_head_t log_wait;
 
 extern int do_syslog(int type, char * bug, int count);
 

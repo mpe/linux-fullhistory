@@ -473,6 +473,8 @@ static void scan_scsis (struct Scsi_Host *shpnt,
   SDpnt->host = shpnt;
   SDpnt->online = TRUE;
 
+  init_waitqueue_head(&SDpnt->device_wait);
+
   /*
    * Next, hook the device to the host in question.
    */
@@ -660,7 +662,7 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
   SCpnt->lun = SDpnt->lun;
   SCpnt->channel = SDpnt->channel;
   {
-    struct semaphore sem = MUTEX_LOCKED;
+    DECLARE_MUTEX_LOCKED(sem);
     SCpnt->request.sem = &sem;
     SCpnt->request.rq_status = RQ_SCSI_BUSY;
     spin_lock_irq(&io_request_lock);
@@ -703,7 +705,7 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
   scsi_cmd[5] = 0;
   SCpnt->cmd_len = 0;
   {
-    struct semaphore sem = MUTEX_LOCKED;
+    DECLARE_MUTEX_LOCKED(sem);
     SCpnt->request.sem = &sem;
     SCpnt->request.rq_status = RQ_SCSI_BUSY;
     spin_lock_irq(&io_request_lock);
@@ -849,7 +851,7 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
     scsi_cmd[5] = 0;
     SCpnt->cmd_len = 0;
     {
-      struct semaphore sem = MUTEX_LOCKED;
+      DECLARE_MUTEX_LOCKED(sem);
       SCpnt->request.rq_status = RQ_SCSI_BUSY;
       SCpnt->request.sem = &sem;
       spin_lock_irq(&io_request_lock);
@@ -889,6 +891,8 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
    */
   SDpnt->device_queue = SCpnt;
   SDpnt->online = TRUE;
+
+  init_waitqueue_head(&SDpnt->device_wait);
 
   /*
    * Since we just found one device, there had damn well better be one in the list
@@ -2639,7 +2643,7 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
         {
             if( shpnt->hostt == tpnt && shpnt->hostt->use_new_eh_code )
             {
-                struct semaphore sem = MUTEX_LOCKED;
+      		DECLARE_MUTEX_LOCKED(sem);
                 
                 shpnt->eh_notify = &sem;
                 kernel_thread((int (*)(void *))scsi_error_handler, 
@@ -2876,7 +2880,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
               && shpnt->hostt->use_new_eh_code
               && shpnt->ehandler != NULL )
         {
-            struct semaphore sem = MUTEX_LOCKED;
+            DECLARE_MUTEX_LOCKED(sem);
             
             shpnt->eh_notify = &sem;
             send_sig(SIGKILL, shpnt->ehandler, 1);

@@ -114,8 +114,8 @@ int sysctl_unix_max_dgram_qlen = 10;
 
 unix_socket *unix_socket_table[UNIX_HASH_SIZE+1];
 static atomic_t unix_nr_socks = ATOMIC_INIT(0);
-static struct wait_queue * unix_ack_wqueue = NULL;
-static struct wait_queue * unix_dgram_wqueue = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(unix_ack_wqueue);
+static DECLARE_WAIT_QUEUE_HEAD(unix_dgram_wqueue);
 
 #define unix_sockets_unbound	(unix_socket_table[UNIX_HASH_SIZE])
 
@@ -433,7 +433,7 @@ static struct sock * unix_create1(struct socket *sock, int stream)
 	sk->destruct = unix_destruct_addr;
 	sk->protinfo.af_unix.family=PF_UNIX;
 	sk->protinfo.af_unix.dentry=NULL;
-	sk->protinfo.af_unix.readsem=MUTEX;	/* single task reading lock */
+	init_MUTEX(&sk->protinfo.af_unix.readsem);/* single task reading lock */
 	sk->protinfo.af_unix.list=&unix_sockets_unbound;
 	unix_insert_socket(sk);
 

@@ -12,6 +12,7 @@
 #include <linux/timer.h>
 #include <linux/tqueue.h>
 #include <linux/sunrpc/types.h>
+#include <linux/wait.h>
 
 /*
  * Define this if you want to test the fast scheduler for async calls.
@@ -63,7 +64,7 @@ struct rpc_task {
 	 * you have a pathological interest in kernel oopses.
 	 */
 	struct timer_list	tk_timer;	/* kernel timer */
-	struct wait_queue *	tk_wait;	/* sync: sleep on this q */
+	wait_queue_head_t	tk_wait;	/* sync: sleep on this q */
 	unsigned long		tk_timeout;	/* timeout for rpc_sleep() */
 	unsigned short		tk_flags;	/* misc flags */
 #ifdef RPC_DEBUG

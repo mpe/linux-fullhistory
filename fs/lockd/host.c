@@ -30,7 +30,7 @@
 static struct nlm_host *	nlm_hosts[NLM_HOST_NRHASH];
 static unsigned long		next_gc = 0;
 static int			nrhosts = 0;
-static struct semaphore		nlm_host_sema = MUTEX;
+static DECLARE_MUTEX(nlm_host_sema);
 
 
 static void			nlm_gc_hosts(void);
@@ -136,7 +136,7 @@ nlm_lookup_host(struct svc_client *clnt, struct sockaddr_in *sin,
 	host->h_proto      = proto;
 	host->h_authflavor = RPC_AUTH_UNIX;
 	host->h_rpcclnt    = NULL;
-	host->h_sema	   = MUTEX;
+	init_MUTEX(&host->h_sema);
 	host->h_nextrebind = jiffies + NLM_HOST_REBIND;
 	host->h_expires    = jiffies + NLM_HOST_EXPIRE;
 	host->h_count      = 1;

@@ -272,8 +272,8 @@ struct tty_struct {
 	struct tty_flip_buffer flip;
 	int max_flip_cnt;
 	int alt_speed;		/* For magic substitution of 38400 bps */
-	struct wait_queue *write_wait;
-	struct wait_queue *read_wait;
+	wait_queue_head_t write_wait;
+	wait_queue_head_t read_wait;
 	struct tq_struct tq_hangup;
 	void *disc_data;
 	void *driver_data;

@@ -822,7 +822,7 @@ struct md_thread *md_register_thread (void (*run) (void *), void *data)
 	if (!thread) return NULL;
 	
 	memset(thread, 0, sizeof(struct md_thread));
-	init_waitqueue(&thread->wqueue);
+	init_waitqueue_head(&thread->wqueue);
 	
 	thread->sem = &sem;
 	thread->run = run;

@@ -303,7 +303,7 @@ struct mm_struct * mm_alloc(void)
 		atomic_set(&mm->count, 1);
 		mm->map_count = 0;
 		mm->def_flags = 0;
-		mm->mmap_sem = MUTEX_LOCKED;
+		init_MUTEX_LOCKED(&mm->mmap_sem);
 		/*
 		 * Leave mm->pgd set to the parent's pgd
 		 * so that pgd_offset() is always valid.
@@ -536,7 +536,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	int nr;
 	int retval = -ENOMEM;
 	struct task_struct *p;
-	struct semaphore sem = MUTEX_LOCKED;
+	DECLARE_MUTEX_LOCKED(sem);
 
 	current->vfork_sem = &sem;
 
@@ -589,7 +589,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 
 	p->p_pptr = p->p_opptr = current;
 	p->p_cptr = NULL;
-	init_waitqueue(&p->wait_chldexit);
+	init_waitqueue_head(&p->wait_chldexit);
 	p->vfork_sem = NULL;
 
 	p->sigpending = 0;

@@ -213,7 +213,7 @@ struct buffer_head {
 	unsigned int b_list;		/* List that this buffer appears */
 	unsigned long b_flushtime;      /* Time when this (dirty) buffer
 					 * should be written */
-	struct wait_queue * b_wait;
+	wait_queue_head_t b_wait;
 	struct buffer_head ** b_pprev;		/* doubly linked list of hash-queue */
 	struct buffer_head * b_prev_free;	/* doubly linked list of buffers */
 	struct buffer_head * b_reqnext;		/* request queue */
@@ -353,7 +353,7 @@ struct inode {
 	struct semaphore	i_atomic_write;
 	struct inode_operations	*i_op;
 	struct super_block	*i_sb;
-	struct wait_queue	*i_wait;
+	wait_queue_head_t	i_wait;
 	struct file_lock	*i_flock;
 	struct vm_area_struct	*i_mmap;
 	struct page		*i_pages;
@@ -453,7 +453,7 @@ struct file_lock {
 	struct file_lock *fl_prevblock;
 	fl_owner_t fl_owner;
 	unsigned int fl_pid;
-	struct wait_queue *fl_wait;
+	wait_queue_head_t fl_wait;
 	struct file *fl_file;
 	unsigned char fl_flags;
 	unsigned char fl_type;
@@ -529,7 +529,7 @@ struct super_block {
 	unsigned long		s_magic;
 	unsigned long		s_time;
 	struct dentry		*s_root;
-	struct wait_queue	*s_wait;
+	wait_queue_head_t	s_wait;
 
 	struct inode		*s_ibasket;
 	short int		s_ibasket_count;

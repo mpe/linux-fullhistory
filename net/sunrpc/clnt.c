@@ -39,7 +39,7 @@
 # define RPCDBG_FACILITY	RPCDBG_CALL
 #endif
 
-static struct wait_queue *	destroy_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(destroy_wait);
 
 
 static void	call_bind(struct rpc_task *task);

@@ -60,9 +60,9 @@ static struct rpc_task *	all_tasks = NULL;
 /*
  * rpciod-related stuff
  */
-static struct wait_queue *	rpciod_idle = NULL;
-static struct wait_queue *	rpciod_killer = NULL;
-static struct semaphore		rpciod_sema = MUTEX;
+static DECLARE_WAIT_QUEUE_HEAD(rpciod_idle);
+static DECLARE_WAIT_QUEUE_HEAD(rpciod_killer);
+static DECLARE_MUTEX(rpciod_sema);
 static unsigned int		rpciod_users = 0;
 static pid_t			rpciod_pid = 0;
 static int			rpc_inhibit = 0;
@@ -616,6 +616,7 @@ rpc_init_task(struct rpc_task *task, struct rpc_clnt *clnt,
 	task->tk_client = clnt;
 	task->tk_flags  = RPC_TASK_RUNNING | flags;
 	task->tk_exit   = callback;
+	init_waitqueue_head(&task->tk_wait);
 	if (current->uid != current->fsuid || current->gid != current->fsgid)
 		task->tk_flags |= RPC_TASK_SETUID;
 
@@ -800,7 +801,7 @@ rpc_killall_tasks(struct rpc_clnt *clnt)
 	rpc_inhibit--;
 }
 
-static struct semaphore rpciod_running = MUTEX_LOCKED;
+static DECLARE_MUTEX_LOCKED(rpciod_running);
 
 /*
  * This is the rpciod kernel thread
@@ -808,7 +809,7 @@ static struct semaphore rpciod_running = MUTEX_LOCKED;
 static int
 rpciod(void *ptr)
 {
-	struct wait_queue **assassin = (struct wait_queue **) ptr;
+	wait_queue_head_t *assassin = (wait_queue_head_t*) ptr;
 	unsigned long	oldflags;
 	int		rounds = 0;
 

@@ -79,8 +79,8 @@ static struct dquot *dquot_hash[NR_DQHASH];
 static int dquot_updating[NR_DQHASH];
 
 static struct dqstats dqstats;
-static struct wait_queue *dquot_wait = (struct wait_queue *)NULL,
-                         *update_wait = (struct wait_queue *)NULL;
+static DECLARE_WAIT_QUEUE_HEAD(dquot_wait);
+static DECLARE_WAIT_QUEUE_HEAD(update_wait);
 
 static inline char is_enabled(struct vfsmount *vfsmnt, short type)
 {

@@ -63,7 +63,7 @@ static void freeary (int id);
 
 static struct semid_ds *semary[SEMMNI];
 static int used_sems = 0, used_semids = 0;
-static struct wait_queue *sem_lock = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(sem_lock);
 static int max_semid = 0;
 
 static unsigned short sem_seq = 0;
@@ -72,7 +72,7 @@ void __init sem_init (void)
 {
 	int i;
 
-	sem_lock = NULL;
+	init_waitqueue_head(&sem_lock);
 	used_sems = used_semids = max_semid = sem_seq = 0;
 	for (i = 0; i < SEMMNI; i++)
 		semary[i] = (struct semid_ds *) IPC_UNUSED;
@@ -690,7 +690,7 @@ asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 
         for (;;) {
                 queue.status = -EINTR;
-                queue.sleeper = NULL;
+                init_waitqueue_head(&queue.sleeper);
                 interruptible_sleep_on(&queue.sleeper);
 
                 /*

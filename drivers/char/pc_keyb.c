@@ -864,7 +864,7 @@ static int open_aux(struct inode * inode, struct file * file)
 static ssize_t read_aux(struct file * file, char * buffer,
 			size_t count, loff_t *ppos)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t i = count;
 	unsigned char c;
 
@@ -964,7 +964,7 @@ static int __init psaux_init(void)
 	queue = (struct aux_queue *) kmalloc(sizeof(*queue), GFP_KERNEL);
 	memset(queue, 0, sizeof(*queue));
 	queue->head = queue->tail = 0;
-	queue->proc_list = NULL;
+	init_waitqueue_head(&queue->proc_list);
 
 #ifdef INITIALIZE_MOUSE
 	kbd_write(KBD_CNTL_REG, KBD_CCMD_MOUSE_ENABLE);	/* Enable Aux. */

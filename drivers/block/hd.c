@@ -68,7 +68,7 @@ static char recalibrate[MAX_HD] = { 0, };
 static char special_op[MAX_HD] = { 0, };
 static int access_count[MAX_HD] = {0, };
 static char busy[MAX_HD] = {0, };
-static struct wait_queue * busy_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(busy_wait);
 
 static int reset = 0;
 static int hd_error = 0;

@@ -26,7 +26,7 @@
 #define FILE_NRHASH		32
 #define FILE_HASH_BITS		5
 static struct nlm_file *	nlm_files[FILE_NRHASH];
-static struct semaphore		nlm_file_sema = MUTEX;
+static DECLARE_MUTEX(nlm_file_sema);
 
 static unsigned int file_hash(dev_t dev, ino_t ino)
 {
@@ -76,7 +76,7 @@ nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 
 	memset(file, 0, sizeof(*file));
 	file->f_handle = *fh;
-	file->f_sema   = MUTEX;
+	init_MUTEX(&file->f_sema);
 
 	/* Open the file. Note that this must not sleep for too long, else
 	 * we would lock up lockd:-) So no NFS re-exports, folks.

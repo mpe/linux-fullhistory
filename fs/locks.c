@@ -597,6 +597,7 @@ int locks_mandatory_area(int read_write, struct inode *inode,
 	tfl.fl_flags = FL_POSIX | FL_ACCESS;
 	tfl.fl_owner = current->files;
 	tfl.fl_pid = current->pid;
+	init_waitqueue_head(&tfl.fl_wait);
 	tfl.fl_type = (read_write == FLOCK_VERIFY_WRITE) ? F_WRLCK : F_RDLCK;
 	tfl.fl_start = offset;
 	tfl.fl_end = offset + count - 1;
@@ -646,6 +647,7 @@ static int posix_make_lock(struct file *filp, struct file_lock *fl,
 
 	memset(fl, 0, sizeof(*fl));
 	
+	init_waitqueue_head(&fl->fl_wait);
 	fl->fl_flags = FL_POSIX;
 
 	switch (l->l_type) {
@@ -693,6 +695,7 @@ static int flock_make_lock(struct file *filp, struct file_lock *fl,
 {
 	memset(fl, 0, sizeof(*fl));
 
+	init_waitqueue_head(&fl->fl_wait);
 	if (!filp->f_dentry)	/* just in case */
 		return (0);
 
@@ -1111,6 +1114,7 @@ static struct file_lock *locks_init_lock(struct file_lock *new,
 		memset(new, 0, sizeof(*new));
 		new->fl_owner = fl->fl_owner;
 		new->fl_pid = fl->fl_pid;
+		init_waitqueue_head(&new->fl_wait);
 		new->fl_file = fl->fl_file;
 		new->fl_flags = fl->fl_flags;
 		new->fl_type = fl->fl_type;

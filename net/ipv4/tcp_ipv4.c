@@ -1944,6 +1944,8 @@ __initfunc(void tcp_v4_init(struct net_proto_family *ops))
 	tcp_inode.i_sock = 1;
 	tcp_inode.i_uid = 0;
 	tcp_inode.i_gid = 0;
+	init_waitqueue_head(&tcp_inode.i_wait);
+	init_waitqueue_head(&tcp_inode.u.socket_i.wait);
 
 	tcp_socket->inode = &tcp_inode;
 	tcp_socket->state = SS_UNCONNECTED;

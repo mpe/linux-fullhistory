@@ -279,7 +279,7 @@ st_do_scsi(Scsi_Cmnd *SCpnt, Scsi_Tape *STp, unsigned char *cmd, int bytes,
     }
 
   cmd[1] |= (SCpnt->lun << 5) & 0xe0;
-  STp->sem = MUTEX_LOCKED;
+  init_MUTEX_LOCKED(&STp->sem);
   SCpnt->use_sg = (bytes > (STp->buffer)->sg[0].length) ?
       (STp->buffer)->use_sg : 0;
   if (SCpnt->use_sg) {

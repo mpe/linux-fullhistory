@@ -482,6 +482,7 @@ __initfunc(static void rd_load_image(kdev_t device, int offset, int unit))
 	memset(&inode, 0, sizeof(inode));
 	memset(&in_dentry, 0, sizeof(in_dentry));
 	inode.i_rdev = device;
+	init_waitqueue_head(&inode.i_wait);
 	infile.f_mode = 1; /* read only */
 	infile.f_dentry = &in_dentry;
 	in_dentry.d_inode = &inode;
@@ -490,6 +491,7 @@ __initfunc(static void rd_load_image(kdev_t device, int offset, int unit))
 	memset(&out_inode, 0, sizeof(out_inode));
 	memset(&out_dentry, 0, sizeof(out_dentry));
 	out_inode.i_rdev = ram_device;
+	init_waitqueue_head(&out_inode.i_wait);
 	outfile.f_mode = 3; /* read/write */
 	outfile.f_dentry = &out_dentry;
 	out_dentry.d_inode = &out_inode;

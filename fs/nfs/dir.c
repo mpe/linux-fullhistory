@@ -45,7 +45,7 @@ struct nfs_dirent {
 	unsigned int		size;		/* # of entries */
 	unsigned long		age;		/* last used */
 	unsigned long		mtime;		/* last attr stamp */
-	struct wait_queue *	wait;
+	wait_queue_head_t	wait;
 	__u32 *			entry;		/* three __u32's per entry */
 };
 
@@ -124,8 +124,8 @@ static int nfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct dentry 		*dentry = filp->f_dentry;
 	struct inode 		*inode = dentry->d_inode;
-	static struct wait_queue *readdir_wait = NULL;
-	struct wait_queue	**waitp = NULL;
+	static DECLARE_WAIT_QUEUE_HEAD(readdir_wait);
+	wait_queue_head_t	*waitp = NULL;
 	struct nfs_dirent	*cache, *free;
 	unsigned long		age, dead;
 	u32			cookie;
@@ -231,6 +231,7 @@ again:
 		cache->valid  = 0;
 		cache->dev    = inode->i_dev;
 		cache->ino    = inode->i_ino;
+		init_waitqueue_head(&cache->wait);
 		if (!cache->entry) {
 			result = -ENOMEM;
 			cache->entry = (__u32 *) get_free_page(GFP_KERNEL);

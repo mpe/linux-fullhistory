@@ -560,7 +560,7 @@ void scsi_sleep_done (struct semaphore * sem)
 
 void scsi_sleep (int timeout)
 {
-    struct semaphore sem = MUTEX_LOCKED;
+    DECLARE_MUTEX_LOCKED(sem);
     struct timer_list timer;
 
     init_timer(&timer);
@@ -603,7 +603,7 @@ retry:
 
     if (host->can_queue)
     {
-        struct semaphore sem = MUTEX_LOCKED;
+        DECLARE_MUTEX_LOCKED(sem);
 
         SCpnt->eh_state = SCSI_STATE_QUEUED;
 
@@ -1924,7 +1924,7 @@ scsi_error_handler(void * data)
 {
 	struct Scsi_Host     * host = (struct Scsi_Host *) data;
 	int	               rtn;
-	struct semaphore sem = MUTEX_LOCKED;
+        DECLARE_MUTEX_LOCKED(sem);
         unsigned long flags;
 
 	lock_kernel();

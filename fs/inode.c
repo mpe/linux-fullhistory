@@ -99,7 +99,7 @@ void __mark_inode_dirty(struct inode *inode)
 
 static void __wait_on_inode(struct inode * inode)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 
 	add_wait_queue(&inode->i_wait, &wait);
 repeat:
@@ -126,7 +126,7 @@ static inline void wait_on_inode(struct inode *inode)
 static inline void init_once(struct inode * inode)
 {
 	memset(inode, 0, sizeof(*inode));
-	init_waitqueue(&inode->i_wait);
+	init_waitqueue_head(&inode->i_wait);
 	INIT_LIST_HEAD(&inode->i_hash);
 	INIT_LIST_HEAD(&inode->i_dentry);
 	sema_init(&inode->i_sem, 1);

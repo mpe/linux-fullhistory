@@ -53,7 +53,7 @@ spinlock_t io_request_lock = SPIN_LOCK_UNLOCKED;
 /*
  * used to wait on when there are no free requests
  */
-struct wait_queue * wait_for_request = NULL;
+DECLARE_WAIT_QUEUE_HEAD(wait_for_request);
 
 /* This specifies how many sectors to read ahead on the disk.  */
 
@@ -208,7 +208,7 @@ static inline struct request * get_request(int n, kdev_t dev)
 static struct request * __get_request_wait(int n, kdev_t dev)
 {
 	register struct request *req;
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	unsigned long flags;
 
 	add_wait_queue(&wait_for_request, &wait);

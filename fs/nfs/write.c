@@ -292,6 +292,7 @@ create_write_request(struct file * file, struct page *page, unsigned int offset,
 	wreq->wb_file = file;
 	wreq->wb_pid    = current->pid;
 	wreq->wb_page   = page;
+	init_waitqueue_head(&wreq->wb_wait);
 	wreq->wb_offset = offset;
 	wreq->wb_bytes  = bytes;
 	wreq->wb_count	= 2;		/* One for the IO, one for us */
@@ -363,7 +364,7 @@ wait_on_write_request(struct nfs_wreq *req)
 	struct dentry		*dentry = file->f_dentry;
 	struct inode		*inode = dentry->d_inode;
 	struct rpc_clnt		*clnt = NFS_CLIENT(inode);
-	struct wait_queue	wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	sigset_t		oldmask;
 	int retval;
 

@@ -126,7 +126,7 @@ typedef struct page {
 	struct page *next_hash;
 	atomic_t count;
 	unsigned long flags;	/* atomic flags, some possibly updated asynchronously */
-	struct wait_queue *wait;
+	wait_queue_head_t wait;
 	struct page **pprev_hash;
 	struct buffer_head * buffers;
 } mem_map_t;

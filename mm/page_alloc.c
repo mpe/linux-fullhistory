@@ -323,6 +323,7 @@ unsigned long __init free_area_init(unsigned long start_mem, unsigned long end_m
 		--p;
 		atomic_set(&p->count, 0);
 		p->flags = (1 << PG_DMA) | (1 << PG_reserved);
+		init_waitqueue_head(&p->wait);
 	} while (p > mem_map);
 
 	for (i = 0 ; i < NR_MEM_LISTS ; i++) {

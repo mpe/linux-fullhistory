@@ -131,7 +131,7 @@ int autofs_wait(struct autofs_sb_info *sbi, struct qstr *name)
 			return -ENOMEM;
 		}
 		wq->wait_queue_token = autofs_next_wait_queue++;
-		init_waitqueue(&wq->queue);
+		init_waitqueue_head(&wq->queue);
 		wq->hash = name->hash;
 		wq->len = name->len;
 		wq->status = -EINTR; /* Status return if interrupted */

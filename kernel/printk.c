@@ -32,7 +32,7 @@ static char buf[1024];
 #define DEFAULT_CONSOLE_LOGLEVEL 7 /* anything MORE serious than KERN_DEBUG */
 
 unsigned long log_size = 0;
-struct wait_queue * log_wait = NULL;
+DECLARE_WAIT_QUEUE_HEAD(log_wait);
 
 /* Keep together for sysctl support */
 int console_loglevel = DEFAULT_CONSOLE_LOGLEVEL;

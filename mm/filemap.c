@@ -48,7 +48,7 @@ struct pio_request
 };
 static struct pio_request *pio_first = NULL, **pio_last = &pio_first;
 static kmem_cache_t *pio_request_cache;
-static struct wait_queue *pio_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(pio_wait);
 
 static inline void 
 make_pio_request(struct file *, unsigned long, unsigned long);
@@ -300,9 +300,8 @@ static unsigned long try_to_read_ahead(struct file * file,
 void __wait_on_page(struct page *page)
 {
 	struct task_struct *tsk = current;
-	struct wait_queue wait;
+	DECLARE_WAITQUEUE(wait, tsk);
 
-	wait.task = tsk;
 	add_wait_queue(&page->wait, &wait);
 repeat:
 	tsk->state = TASK_UNINTERRUPTIBLE;
@@ -1677,7 +1676,7 @@ static inline void make_pio_request(struct file *file,
 int kpiod(void * unused)
 {
 	struct task_struct *tsk = current;
-	struct wait_queue wait = { tsk, };
+	DECLARE_WAITQUEUE(wait, tsk);
 	struct inode * inode;
 	struct dentry * dentry;
 	struct pio_request * p;
@@ -1686,7 +1685,6 @@ int kpiod(void * unused)
 	tsk->pgrp = 1;
 	strcpy(tsk->comm, "kpiod");
 	sigfillset(&tsk->blocked);
-	init_waitqueue(&pio_wait);
 	/*
 	 * Mark this task as a memory allocator - we don't want to get caught
 	 * up in the regular mm freeing frenzy if we have to allocate memory

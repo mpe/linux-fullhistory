@@ -1490,7 +1490,7 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 	unsigned int major = HWIF(drive)->major;
 	struct request *cur_rq;
-	struct semaphore sem = MUTEX_LOCKED;
+	DECLARE_MUTEX_LOCKED(sem);
 
 	if (IS_PDC4030_DRIVE && rq->buffer != NULL)
 		return -ENOSYS;  /* special drive cmds not supported */

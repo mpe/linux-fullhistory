@@ -282,7 +282,6 @@ EXPORT_SYMBOL(timer_table);
 #ifdef __SMP__
 /* Various random spinlocks we want to export */
 EXPORT_SYMBOL(tqueue_lock);
-EXPORT_SYMBOL(waitqueue_lock);
 #endif
 
 /* autoirq from  drivers/net/auto_irq.c */

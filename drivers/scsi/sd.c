@@ -1183,7 +1183,7 @@ static int sd_init_onedisk(int i)
 		SCpnt->sense_buffer[2] = 0;
 
 		{
-		    struct semaphore sem = MUTEX_LOCKED;
+		    DECLARE_MUTEX_LOCKED(sem);
 		    /* Mark as really busy again */
 		    SCpnt->request.rq_status = RQ_SCSI_BUSY;
 		    SCpnt->request.sem = &sem;
@@ -1221,7 +1221,7 @@ static int sd_init_onedisk(int i)
 		    SCpnt->sense_buffer[2] = 0;
 
 		    {
-		    	struct semaphore sem = MUTEX_LOCKED;
+		        DECLARE_MUTEX_LOCKED(sem);
 			/* Mark as really busy again */
 			SCpnt->request.rq_status = RQ_SCSI_BUSY;
 		    	SCpnt->request.sem = &sem;
@@ -1263,7 +1263,7 @@ static int sd_init_onedisk(int i)
 	SCpnt->sense_buffer[2] = 0;
 
 	{
-	    struct semaphore sem = MUTEX_LOCKED;
+            DECLARE_MUTEX_LOCKED(sem);
 	    /* Mark as really busy again */
 	    SCpnt->request.rq_status = RQ_SCSI_BUSY;
 	    SCpnt->request.sem = &sem;
@@ -1444,7 +1444,7 @@ static int sd_init_onedisk(int i)
 
 	/* same code as READCAPA !! */
 	{
-	    struct semaphore sem = MUTEX_LOCKED;
+            DECLARE_MUTEX_LOCKED(sem);
 	    SCpnt->request.rq_status = RQ_SCSI_BUSY;  /* Mark as really busy again */
 	    SCpnt->request.sem = &sem;
 	    scsi_do_cmd (SCpnt,

@@ -113,7 +113,7 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd,
     SCSI_LOG_IOCTL(1, printk("Trying ioctl with scsi command %d\n", cmd[0]));
     SCpnt = scsi_allocate_device(NULL, dev, 1);
     {
-	struct semaphore sem = MUTEX_LOCKED;
+	DECLARE_MUTEX_LOCKED(sem);
 	SCpnt->request.sem = &sem;
 	scsi_do_cmd(SCpnt,  cmd, NULL,  0, scsi_ioctl_done,  timeout, retries);
 	spin_unlock_irqrestore(&io_request_lock, flags);
@@ -289,7 +289,7 @@ int scsi_ioctl_send_command(Scsi_Device *dev, Scsi_Ioctl_Command *sic)
     SCpnt = scsi_allocate_device(NULL, dev, 1);
 
     {
-	struct semaphore sem = MUTEX_LOCKED;
+	DECLARE_MUTEX_LOCKED(sem);
 	SCpnt->request.sem = &sem;
 	scsi_do_cmd(SCpnt,  cmd,  buf, needed,  scsi_ioctl_done,
 		    timeout, retries);

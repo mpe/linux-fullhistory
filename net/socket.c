@@ -283,7 +283,7 @@ struct socket *sock_alloc(void)
 	inode->i_gid = current->fsgid;
 
 	sock->inode = inode;
-	init_waitqueue(&sock->wait);
+	init_waitqueue_head(&sock->wait);
 	sock->fasync_list = NULL;
 	sock->state = SS_UNCONNECTED;
 	sock->flags = 0;

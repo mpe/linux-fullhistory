@@ -578,7 +578,7 @@ int inet_dgram_connect(struct socket *sock, struct sockaddr * uaddr,
 
 static void inet_wait_for_connect(struct sock *sk)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 
 	add_wait_queue(sk->sleep, &wait);
 	current->state = TASK_INTERRUPTIBLE;

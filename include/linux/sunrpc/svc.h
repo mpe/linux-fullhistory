@@ -116,7 +116,7 @@ struct svc_rqst {
 	struct svc_client *	rq_client;	/* RPC peer info */
 	struct svc_cacherep *	rq_cacherep;	/* cache info */
 
-	struct wait_queue *	rq_wait;	/* synchronozation */
+	wait_queue_head_t	rq_wait;	/* synchronozation */
 };
 
 /*

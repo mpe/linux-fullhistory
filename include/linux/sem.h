@@ -85,7 +85,7 @@ struct sem {
 struct sem_queue {
 	struct sem_queue *	next;	 /* next entry in the queue */
 	struct sem_queue **	prev;	 /* previous entry in the queue, *(q->prev) == q */
-	struct wait_queue *	sleeper; /* sleeping process */
+	wait_queue_head_t	sleeper; /* sleeping process */
 	struct sem_undo *	undo;	 /* undo structure */
 	int    			pid;	 /* process id of requesting process */
 	int    			status;	 /* completion status of operation */

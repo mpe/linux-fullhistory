@@ -423,6 +423,7 @@ static unsigned int isofs_get_last_session(kdev_t dev)
        */
       mm_segment_t old_fs=get_fs();
       inode_fake.i_rdev=dev;
+      init_waitqueue_head(&inode_fake.i_wait);
       ms_info.addr_format=CDROM_LBA;
       set_fs(KERNEL_DS);
       i=get_blkfops(MAJOR(dev))->ioctl(&inode_fake,

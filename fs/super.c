@@ -42,7 +42,7 @@
  * unmounting a filesystem and re-mounting it (or something
  * else).
  */
-static struct semaphore mount_sem = MUTEX;
+static DECLARE_MUTEX(mount_sem);
 
 extern void wait_for_keypress(void);
 extern struct file_operations * get_blkfops(unsigned int major);
@@ -413,7 +413,7 @@ struct file_system_type *get_fs_type(const char *name)
 
 void __wait_on_super(struct super_block * sb)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 
 	add_wait_queue(&sb->s_wait, &wait);
 repeat:
@@ -530,6 +530,7 @@ static struct super_block *get_empty_super(void)
 		memset(s, 0, sizeof(struct super_block));
 		INIT_LIST_HEAD(&s->s_dirty);
 		list_add (&s->s_list, super_blocks.prev);
+		init_waitqueue_head(&s->s_wait);
 	}
 	return s;
 }

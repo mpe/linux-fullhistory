@@ -55,7 +55,7 @@
 struct qp_queue {
 	unsigned long head;
 	unsigned long tail;
-	struct wait_queue *proc_list;
+	wait_queue_head_t proc_list;
 	struct fasync_struct *fasync;
 	unsigned char buf[QP_BUF_SIZE];
 };
@@ -258,7 +258,7 @@ static int poll_qp_status(void)
 static ssize_t read_qp(struct file * file, char * buffer,
 			size_t count, loff_t *ppos)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t i = count;
 	unsigned char c;
 
@@ -354,7 +354,7 @@ int __init qpmouse_init(void)
 	queue = (struct qp_queue *) kmalloc(sizeof(*queue), GFP_KERNEL);
 	memset(queue, 0, sizeof(*queue));
 	queue->head = queue->tail = 0;
-	queue->proc_list = NULL;
+	init_waitqueue_head(&queue->proc_list);
 
 	return 0;
 }

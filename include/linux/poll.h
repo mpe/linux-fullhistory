@@ -13,8 +13,8 @@
 
 struct poll_table_entry {
 	struct file * filp;
-	struct wait_queue wait;
-	struct wait_queue ** wait_address;
+	wait_queue_t wait;
+	wait_queue_head_t * wait_address;
 };
 
 typedef struct poll_table_struct {
@@ -25,9 +25,9 @@ typedef struct poll_table_struct {
 
 #define __MAX_POLL_TABLE_ENTRIES ((PAGE_SIZE - sizeof (poll_table)) / sizeof (struct poll_table_entry))
 
-extern void __pollwait(struct file * filp, struct wait_queue ** wait_address, poll_table *p);
+extern void __pollwait(struct file * filp, wait_queue_head_t * wait_address, poll_table *p);
 
-extern inline void poll_wait(struct file * filp, struct wait_queue ** wait_address, poll_table *p)
+extern inline void poll_wait(struct file * filp, wait_queue_head_t * wait_address, poll_table *p)
 {
 	if (p && wait_address)
 		__pollwait(filp, wait_address, p);

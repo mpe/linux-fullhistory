@@ -19,8 +19,8 @@ struct msqid_ds {
 	__kernel_time_t msg_stime;	/* last msgsnd time */
 	__kernel_time_t msg_rtime;	/* last msgrcv time */
 	__kernel_time_t msg_ctime;	/* last change time */
-	struct wait_queue *wwait;
-	struct wait_queue *rwait;
+	wait_queue_head_t wwait;
+	wait_queue_head_t rwait;
 	unsigned short msg_cbytes;	/* current number of bytes on queue */
 	unsigned short msg_qnum;	/* number of messages in queue */
 	unsigned short msg_qbytes;	/* max number of bytes on queue */

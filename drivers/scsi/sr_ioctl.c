@@ -64,7 +64,7 @@ retry:
     if( !scsi_block_when_processing_errors(SDev) )
         return -ENODEV;
     {
-	struct semaphore sem = MUTEX_LOCKED;
+	DECLARE_MUTEX_LOCKED(sem);
 	SCpnt->request.sem = &sem;
 	spin_lock_irqsave(&io_request_lock, flags);
 	scsi_do_cmd(SCpnt,

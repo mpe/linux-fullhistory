@@ -895,7 +895,7 @@ void get_sectorsize(int i){
 
 	/* Do the command and wait.. */
 	{
-	    struct semaphore sem = MUTEX_LOCKED;
+	    DECLARE_MUTEX_LOCKED(sem);
 	    SCpnt->request.sem = &sem;
 	    spin_lock_irqsave(&io_request_lock, flags);
 	    scsi_do_cmd (SCpnt,

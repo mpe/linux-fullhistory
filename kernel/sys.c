@@ -11,6 +11,7 @@
 #include <linux/notifier.h>
 #include <linux/reboot.h>
 #include <linux/prctl.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -812,7 +813,7 @@ out:
  * rather than a semaphore. Anybody want to implement
  * one?
  */
-struct semaphore uts_sem = MUTEX;
+DECLARE_MUTEX(uts_sem);
 
 asmlinkage int sys_newuname(struct new_utsname * name)
 {

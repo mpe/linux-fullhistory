@@ -1522,7 +1522,7 @@ int megaraid_queue (Scsi_Cmnd * SCpnt, void (*pktComp) (Scsi_Cmnd *))
  *----------------------------------------------------------------------*/
 volatile static int internal_done_flag = 0;
 volatile static int internal_done_errcode = 0;
-static struct wait_queue *internal_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(internal_wait);
 
 static void internal_done (Scsi_Cmnd * SCpnt)
 {

@@ -511,7 +511,7 @@ enum
 #ifdef __KERNEL__
 
 extern atomic_t rtnl_rlockct;
-extern struct wait_queue *rtnl_wait;
+extern wait_queue_head_t rtnl_wait;
 
 extern __inline__ int rtattr_strcmp(struct rtattr *rta, char *str)
 {

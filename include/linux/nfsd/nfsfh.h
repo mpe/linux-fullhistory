@@ -33,6 +33,7 @@ struct nfs_fhbase {
 	__u32		fb_dev;		/* our device */
 	__u32		fb_xdev;
 	__u32		fb_xino;
+	__u32		fb_generation;
 };
 
 #define NFS_FH_PADDING		(NFS_FHSIZE - sizeof(struct nfs_fhbase))
@@ -47,6 +48,7 @@ struct knfs_fh {
 #define fh_dev			fh_base.fb_dev
 #define fh_xdev			fh_base.fb_xdev
 #define fh_xino			fh_base.fb_xino
+#define fh_generation		fh_base.fb_generation
 
 #ifdef __KERNEL__
 

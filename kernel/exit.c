@@ -406,7 +406,7 @@ asmlinkage int sys_exit(int error_code)
 asmlinkage int sys_wait4(pid_t pid,unsigned int * stat_addr, int options, struct rusage * ru)
 {
 	int flag, retval;
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	struct task_struct *p;
 
 	if (options & ~(WNOHANG|WUNTRACED|__WCLONE))

@@ -384,7 +384,7 @@ struct sock {
 	atomic_t		sock_readers;	/* User count				*/
 	int			rcvbuf;		/* Size of receive buffer in bytes	*/
 
-	struct wait_queue	**sleep;	/* Sock wait queue			*/
+	wait_queue_head_t	*sleep;	/* Sock wait queue			*/
 	struct dst_entry	*dst_cache;	/* Destination cache			*/
 	atomic_t		rmem_alloc;	/* Receive queue bytes committed	*/
 	struct sk_buff_head	receive_queue;	/* Incoming packets			*/

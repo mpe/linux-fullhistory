@@ -268,21 +268,6 @@ error_return:
 }
 
 /*
- * This function increments the inode version number
- *
- * This may be used one day by the NFS server
- */
-static void inc_inode_version (struct inode * inode,
-			       struct ext2_group_desc *gdp,
-			       int mode)
-{
-	inode->u.ext2_i.i_version++;
-	mark_inode_dirty(inode);
-
-	return;
-}
-
-/*
  * There are two policies for allocating an inode.  If the new inode is
  * a directory, then a forward search is made for a block group with both
  * free space and a low directory-to-inode ratio; if that fails, then of
@@ -493,8 +478,8 @@ repeat:
 	if (inode->u.ext2_i.i_flags & EXT2_SYNC_FL)
 		inode->i_flags |= MS_SYNCHRONOUS;
 	insert_inode_hash(inode);
+	inode->i_generation++;
 	mark_inode_dirty(inode);
-	inc_inode_version (inode, gdp, mode);
 
 	unlock_super (sb);
 	if(DQUOT_ALLOC_INODE(sb, inode)) {

@@ -660,7 +660,7 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 static int wait_for_tcp_connect(struct sock * sk, int flags)
 {
 	struct task_struct *tsk = current;
-	struct wait_queue wait = { tsk, NULL };
+	DECLARE_WAITQUEUE(wait, tsk);
 
 	while((1 << sk->state) & ~(TCPF_ESTABLISHED | TCPF_CLOSE_WAIT)) {
 		if(sk->err)
@@ -703,7 +703,7 @@ static void wait_for_tcp_memory(struct sock * sk)
 {
 	release_sock(sk);
 	if (!tcp_memory_free(sk)) {
-		struct wait_queue wait = { current, NULL };
+		DECLARE_WAITQUEUE(wait, current);
 
 		sk->socket->flags &= ~SO_NOSPACE;
 		add_wait_queue(sk->sleep, &wait);
@@ -1117,7 +1117,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		int len, int nonblock, int flags, int *addr_len)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	int copied = 0;
 	u32 peek_seq;
 	volatile u32 *seq;	/* So gcc doesn't overoptimise */
@@ -1534,7 +1534,7 @@ void tcp_close(struct sock *sk, long timeout)
 
 	if (timeout) {
 		struct task_struct *tsk = current;
-		struct wait_queue wait = { tsk, NULL };
+		DECLARE_WAITQUEUE(wait, current);
 
 		add_wait_queue(sk->sleep, &wait);
 		release_sock(sk);
@@ -1570,12 +1570,18 @@ void tcp_close(struct sock *sk, long timeout)
 static struct open_request * wait_for_connect(struct sock * sk,
 					      struct open_request **pprev)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	struct open_request *req;
 
-	add_wait_queue(sk->sleep, &wait);
+	/*
+	 * True wake-one mechanism for incoming connections: only
+	 * one process gets woken up, not the 'whole herd'.
+	 * Since we do not 'race & poll' for established sockets
+	 * anymore, the common case will execute the loop only once.
+	 */
 	for (;;) {
-		current->state = TASK_INTERRUPTIBLE;
+		add_wait_queue_exclusive(sk->sleep, &wait);
+		current->state = TASK_EXCLUSIVE | TASK_INTERRUPTIBLE;
 		release_sock(sk);
 		schedule();
 		lock_sock(sk);
@@ -1586,7 +1592,18 @@ static struct open_request * wait_for_connect(struct sock * sk,
 			break;
 	}
 	current->state = TASK_RUNNING;
-	remove_wait_queue(sk->sleep, &wait);
+#if WAITQUEUE_DEBUG
+	/*
+	 * hm, gotta do something about 'mixed mode' waitqueues. Eg.
+	 * if we get a signal above then we are not removed from the
+	 * waitqueue... Maybe wake_up_process() could leave the
+	 * TASK_EXCLUSIVE flag intact if it was a true wake-one?
+	 */
+	if (wait.task_list.next) {
+		printk("<%08x>", wait.__waker);
+		remove_wait_queue(sk->sleep, &wait);
+	}
+#endif
 	return req;
 }
 

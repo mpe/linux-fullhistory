@@ -76,12 +76,33 @@ unsigned int adfs_val (unsigned char *p, int len)
 	return val;
 }
 
+static unsigned int adfs_filetype (unsigned int load)
+{
+	if ((load & 0xfff00000) != 0xfff00000)
+		return (unsigned int) -1;
+	return (load >> 8) & 0xfff;
+}
+
 static unsigned int adfs_time (unsigned int load, unsigned int exec)
 {
 	unsigned int high, low;
 
-	high = ((load << 24) | (exec >> 8)) - 0x336e996a;
+	/* Check for unstamped files.  */
+	if ((load & 0xfff00000) != 0xfff00000)
+		return 0;
+
+	high = ((load << 24) | (exec >> 8));
 	low  =  exec & 255;
+
+	/* Files dated pre 1970.  */
+	if (high < 0x336e996a)
+		return 0;
+
+	high -= 0x336e996a;
+
+	/* Files dated post 2038 ish.  */
+	if (high > 0x31ffffff)
+		return 0x7fffffff;
 
 	/* 65537 = h256,l1
 	 * (h256 % 100) = 56         h256 / 100 = 2
@@ -204,6 +225,18 @@ void adfs_dir_free (struct buffer_head **bhp, int buffers)
 		brelse (bhp[i]);
 }
 
+/* convert a disk-based directory entry to a Linux ADFS directory entry */
+static inline void
+adfs_dirent_to_idirent(struct adfs_idir_entry *ide, struct adfs_direntry *de)
+{
+	ide->name_len =	adfs_readname(ide->name, de->dirobname, ADFS_NAME_LEN);
+	ide->file_id  = adfs_val(de->dirinddiscadd, 3);
+	ide->size     = adfs_val(de->dirlen, 4);
+	ide->mode     = de->newdiratts;
+	ide->mtime    = adfs_time(adfs_val(de->dirload, 4), adfs_val(de->direxec, 4));
+	ide->filetype = adfs_filetype(adfs_val(de->dirload, 4));
+}
+
 int adfs_dir_get (struct super_block *sb, struct buffer_head **bhp,
 		  int buffers, int pos, unsigned long parent_object_id,
 		  struct adfs_idir_entry *ide)
@@ -228,13 +261,8 @@ int adfs_dir_get (struct super_block *sb, struct buffer_head **bhp,
 	if (!de.dirobname[0])
 		return 0;
 
-	ide->name_len =	adfs_readname (ide->name, de.dirobname, ADFS_NAME_LEN);
 	ide->inode_no = adfs_inode_generate (parent_object_id, pos);
-	ide->file_id  = adfs_val (de.dirinddiscadd, 3);
-	ide->size     = adfs_val (de.dirlen, 4);
-	ide->mode     = de.newdiratts;
-	ide->mtime    = adfs_time (adfs_val (de.dirload, 4), adfs_val (de.direxec, 4));
-	ide->filetype = (adfs_val (de.dirload, 4) >> 8) & 0xfff;
+	adfs_dirent_to_idirent(ide, &de);
 	return 1;
 }
 
@@ -262,12 +290,7 @@ int adfs_dir_find_entry (struct super_block *sb, struct buffer_head **bhp,
 	if (!de.dirobname[0])
 		return 0;
 
-	ide->name_len =	adfs_readname (ide->name, de.dirobname, ADFS_NAME_LEN);
-	ide->size     = adfs_val (de.dirlen, 4);
-	ide->mode     = de.newdiratts;
-	ide->file_id  = adfs_val (de.dirinddiscadd, 3);
-	ide->mtime    = adfs_time (adfs_val (de.dirload, 4), adfs_val (de.direxec, 4));
-	ide->filetype = (adfs_val (de.dirload, 4) >> 8) & 0xfff;
+	adfs_dirent_to_idirent(ide, &de);
 	return 1;
 }	
 

@@ -428,7 +428,7 @@ long __init kmem_cache_init(long start, long end)
 #undef	kmem_slab_offset
 #undef	kmem_slab_diff
 
-	cache_chain_sem = MUTEX;
+	init_MUTEX(&cache_chain_sem);
 
 	size = cache_cache.c_offset + sizeof(kmem_bufctl_t);
 	size += (L1_CACHE_BYTES-1);

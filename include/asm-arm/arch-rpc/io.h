@@ -28,18 +28,43 @@
  * Dynamic IO functions - let the compiler
  * optimize the expressions
  */
-#define DECLARE_DYN_OUT(fnsuffix,instr)						\
-extern __inline__ void __out##fnsuffix (unsigned int value, unsigned int port)	\
-{										\
-	unsigned long temp;							\
-	__asm__ __volatile__(							\
-	"tst	%2, #0x80000000\n\t"						\
-	"mov	%0, %4\n\t"							\
-	"addeq	%0, %0, %3\n\t"							\
-	"str" ##instr## "	%1, [%0, %2, lsl #2]	@ out"###fnsuffix	\
-	: "=&r" (temp)								\
-	: "r" (value), "r" (port), "Ir" (PCIO_BASE - IO_BASE), "Ir" (IO_BASE)	\
-	: "cc");								\
+extern __inline__ void __outb (unsigned int value, unsigned int port)
+{
+	unsigned long temp;
+	__asm__ __volatile__(
+	"tst	%2, #0x80000000\n\t"
+	"mov	%0, %4\n\t"
+	"addeq	%0, %0, %3\n\t"
+	"strb	%1, [%0, %2, lsl #2]	@ outb"
+	: "=&r" (temp)
+	: "r" (value), "r" (port), "Ir" (PCIO_BASE - IO_BASE), "Ir" (IO_BASE)
+	: "cc");
+}
+
+extern __inline__ void __outw (unsigned int value, unsigned int port)
+{
+	unsigned long temp;
+	__asm__ __volatile__(
+	"tst	%2, #0x80000000\n\t"
+	"mov	%0, %4\n\t"
+	"addeq	%0, %0, %3\n\t"
+	"str	%1, [%0, %2, lsl #2]	@ outw"
+	: "=&r" (temp)
+	: "r" (value|value<<16), "r" (port), "Ir" (PCIO_BASE - IO_BASE), "Ir" (IO_BASE)
+	: "cc");
+}
+
+extern __inline__ void __outl (unsigned int value, unsigned int port)
+{
+	unsigned long temp;
+	__asm__ __volatile__(
+	"tst	%2, #0x80000000\n\t"
+	"mov	%0, %4\n\t"
+	"addeq	%0, %0, %3\n\t"
+	"str	%1, [%0, %2, lsl #2]	@ outl"
+	: "=&r" (temp)
+	: "r" (value), "r" (port), "Ir" (PCIO_BASE - IO_BASE), "Ir" (IO_BASE)
+	: "cc");
 }
 
 #define DECLARE_DYN_IN(sz,fnsuffix,instr)					\
@@ -66,7 +91,6 @@ extern __inline__ unsigned int __ioaddr (unsigned int port)			\
 }
 
 #define DECLARE_IO(sz,fnsuffix,instr)	\
-	DECLARE_DYN_OUT(fnsuffix,instr)	\
 	DECLARE_DYN_IN(sz,fnsuffix,instr)
 
 DECLARE_IO(char,b,"b")
@@ -74,7 +98,6 @@ DECLARE_IO(short,w,"")
 DECLARE_IO(long,l,"")
 
 #undef DECLARE_IO
-#undef DECLARE_DYN_OUT
 #undef DECLARE_DYN_IN
 
 /*

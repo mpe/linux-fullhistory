@@ -567,7 +567,7 @@ static unsigned long get_wchan(struct task_struct *p)
 			}
 		} while (count++ < 16);
 	}
-#elif defined (CONFIG_ARM)
+#elif defined(__arm__)
 	{
 		unsigned long fp, lr;
 		unsigned long stack_page;
@@ -623,7 +623,7 @@ static unsigned long get_wchan(struct task_struct *p)
 # define KSTK_EIP(tsk) \
     (*(unsigned long *)(PT_REG(pc) + PAGE_SIZE + (unsigned long)(tsk)))
 # define KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->tss.usp)
-#elif defined(CONFIG_ARM)
+#elif defined(__arm__)
 # define KSTK_EIP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1022])
 # define KSTK_ESP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1020])
 #elif defined(__mc68000__)

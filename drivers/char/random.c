@@ -424,8 +424,8 @@ static struct timer_rand_state mouse_timer_state;
 static struct timer_rand_state extract_timer_state;
 static struct timer_rand_state *irq_timer_state[NR_IRQS];
 static struct timer_rand_state *blkdev_timer_state[MAX_BLKDEV];
-static struct wait_queue *random_read_wait;
-static struct wait_queue *random_write_wait;
+static DECLARE_WAIT_QUEUE_HEAD(random_read_wait);
+static DECLARE_WAIT_QUEUE_HEAD(random_write_wait);
 
 static ssize_t random_read(struct file * file, char * buf,
 			   size_t nbytes, loff_t *ppos);
@@ -555,8 +555,6 @@ __initfunc(void rand_initialize(void))
 	initialize_benchmark(&timer_benchmark, "timer", 0);
 #endif
 	extract_timer_state.dont_count_entropy = 1;
-	random_read_wait = NULL;
-	random_write_wait = NULL;
 }
 
 void rand_initialize_irq(int irq)
@@ -1303,7 +1301,7 @@ void get_random_bytes(void *buf, int nbytes)
 static ssize_t
 random_read(struct file * file, char * buf, size_t nbytes, loff_t *ppos)
 {
-	struct wait_queue 	wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t			n, retval = 0, count = 0;
 	
 	if (nbytes == 0)

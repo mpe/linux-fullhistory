@@ -30,7 +30,7 @@
 
 struct pty_struct {
 	int	magic;
-	struct wait_queue * open_wait;
+	wait_queue_head_t open_wait;
 };
 
 #define PTY_MAGIC 0x5001
@@ -336,13 +336,13 @@ static void pty_set_termios(struct tty_struct *tty, struct termios *old_termios)
 
 __initfunc(int pty_init(void))
 {
-#ifdef CONFIG_UNIX98_PTYS
 	int i;
-#endif
 
 	/* Traditional BSD devices */
 
 	memset(&pty_state, 0, sizeof(pty_state));
+	for (i = 0; i < NR_PTYS; i++)
+		init_waitqueue_head(&pty_state[i].open_wait);
 	memset(&pty_driver, 0, sizeof(struct tty_driver));
 	pty_driver.magic = TTY_DRIVER_MAGIC;
 	pty_driver.driver_name = "pty_master";

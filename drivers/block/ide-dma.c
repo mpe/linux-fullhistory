@@ -425,7 +425,7 @@ __initfunc(unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, c
 	} else {
 		dma_base = dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
 		if (!dma_base || dma_base == PCI_BASE_ADDRESS_IO_MASK) {
-			printk("%s: dma_base is invalid (0x%04lx, BIOS problem), please report to <mj@ucw.cz>\n", name, dma_base);
+			printk("%s: dma_base is invalid (0x%04lx)\n", name, dma_base);
 			dma_base = 0;
 		}
 	}

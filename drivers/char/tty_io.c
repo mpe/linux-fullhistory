@@ -729,7 +729,7 @@ static ssize_t tty_write(struct file * file, const char * buf, size_t count,
 }
 
 /* Semaphore to protect creating and releasing a tty */
-static struct semaphore tty_sem = MUTEX;
+static DECLARE_MUTEX(tty_sem);
 
 static void down_tty_sem(int index)
 {
@@ -1930,7 +1930,9 @@ static void initialize_tty_struct(struct tty_struct *tty)
 	tty->flip.flag_buf_ptr = tty->flip.flag_buf;
 	tty->flip.tqueue.routine = flush_to_ldisc;
 	tty->flip.tqueue.data = tty;
-	tty->flip.pty_sem = MUTEX;
+	init_MUTEX(&tty->flip.pty_sem);
+	init_waitqueue_head(&tty->write_wait);
+	init_waitqueue_head(&tty->read_wait);
 	tty->tq_hangup.routine = do_tty_hangup;
 	tty->tq_hangup.data = tty;
 	sema_init(&tty->atomic_read, 1);

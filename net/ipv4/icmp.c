@@ -1142,6 +1142,8 @@ __initfunc(void icmp_init(struct net_proto_family *ops))
 	icmp_inode.i_sock = 1;
 	icmp_inode.i_uid = 0;
 	icmp_inode.i_gid = 0;
+	init_waitqueue_head(&icmp_inode.i_wait);
+	init_waitqueue_head(&icmp_inode.u.socket_i.wait);
 
 	icmp_socket->inode = &icmp_inode;
 	icmp_socket->state = SS_UNCONNECTED;

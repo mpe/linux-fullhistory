@@ -387,7 +387,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 
 out:
 	spin_unlock_irqrestore(&t->sigmask_lock, flags);
-        if (t->state == TASK_INTERRUPTIBLE && signal_pending(t))
+        if ((t->state & TASK_INTERRUPTIBLE) && signal_pending(t))
                 wake_up_process(t);
 
 out_nolock:

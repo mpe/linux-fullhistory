@@ -1,6 +1,8 @@
 #ifndef __LINUX_KEYBOARD_H
 #define __LINUX_KEYBOARD_H
 
+#include <linux/wait.h>
+
 #define KG_SHIFT	0
 #define KG_CTRL		2
 #define KG_ALT		3
@@ -24,7 +26,7 @@ extern const int NR_TYPES;
 extern const int max_vals[];
 extern unsigned short *key_maps[MAX_NR_KEYMAPS];
 extern unsigned short plain_map[NR_KEYS];
-extern struct wait_queue * keypress_wait;
+extern wait_queue_head_t keypress_wait;
 extern unsigned char keyboard_type;
 #endif
 
