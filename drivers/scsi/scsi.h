@@ -50,6 +50,7 @@
 #define SEND_DIAGNOSTIC		0x1d
 #define ALLOW_MEDIUM_REMOVAL	0x1e
 
+#define SET_WINDOW              0x24
 #define READ_CAPACITY		0x25
 #define READ_10			0x28
 #define WRITE_10		0x2a
@@ -65,16 +66,26 @@
 #define SYNCHRONIZE_CACHE	0x35
 #define LOCK_UNLOCK_CACHE	0x36
 #define READ_DEFECT_DATA	0x37
+#define MEDIUM_SCAN             0x38
 #define COMPARE			0x39
 #define COPY_VERIFY		0x3a
 #define WRITE_BUFFER		0x3b
 #define READ_BUFFER		0x3c
+#define UPDATE_BLOCK            0x3d
 #define READ_LONG		0x3e
+#define WRITE_LONG              0x3f
 #define CHANGE_DEFINITION	0x40
+#define WRITE_SAME             0x41
 #define LOG_SELECT		0x4c
 #define LOG_SENSE		0x4d
 #define MODE_SELECT_10		0x55
 #define MODE_SENSE_10		0x5a
+#define WRITE_12                0xaa
+#define WRITE_VERIFY_12         0xae
+#define SEARCH_HIGH_12          0xb0
+#define SEARCH_EQUAL_12         0xb1
+#define SEARCH_LOW_12           0xb2
+#define SEND_VOLUME_TAG         0xb6
 
 extern void scsi_make_blocked_list(void);
 extern volatile int in_scan_scsis;

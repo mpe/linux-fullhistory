@@ -387,7 +387,8 @@ void scan_scsis (struct Scsi_Host * shpnt)
 
 
 	  if(SCpnt->result) {
-	    if ((driver_byte(SCpnt->result)  & DRIVER_SENSE) &&
+	    if (((driver_byte(SCpnt->result) & DRIVER_SENSE) ||
+		 (status_byte(SCpnt->result) & CHECK_CONDITION)) &&
 		((SCpnt->sense_buffer[0] & 0x70) >> 4) == 7) {
 	      if (SCpnt->sense_buffer[2] &0xe0)
 		continue; /* No devices here... */

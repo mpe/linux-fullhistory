@@ -913,7 +913,7 @@ lance_rx(struct device *dev)
 			lp->rx_ring[entry].base &= 0x03ffffff;
 		} else {
 			/* Malloc up new buffer, compatible with net-2e. */
-			short pkt_len = lp->rx_ring[entry].msg_length;
+			short pkt_len = (lp->rx_ring[entry].msg_length & 0xfff)-4;
 			struct sk_buff *skb;
 
 			skb = alloc_skb(pkt_len, GFP_ATOMIC);

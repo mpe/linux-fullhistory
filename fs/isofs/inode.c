@@ -79,7 +79,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
 	popt->rock = 'y';
 	popt->cruft = 'n';
 	popt->unhide = 'n';
-	popt->conversion = 'a';
+	popt->conversion = 'b';		/* default: no conversion */
 	popt->blocksize = 1024;
 	popt->mode = S_IRUGO;
 	popt->gid = 0;

@@ -358,8 +358,8 @@ static void do_sd_request (void)
   unsigned long flags;
   int flag = 0;
 
+  save_flags(flags);
   while (1==1){
-    save_flags(flags);
     cli();
     if (CURRENT != NULL && CURRENT->dev == -1) {
       restore_flags(flags);
@@ -387,12 +387,10 @@ static void do_sd_request (void)
 
     /*
      * The following restore_flags leads to latency problems.  FIXME.
+     * Using a "sti()" gets rid of the latency problems but causes
+     * race conditions and crashes.
      */
-#if 0
     restore_flags(flags);
-#else
-    sti();
-#endif
 
 /* This is a performance enhancement.  We dig down into the request list and
    try and find a queueable request (i.e. device not busy, and host able to
@@ -404,7 +402,6 @@ static void do_sd_request (void)
     if (!SCpnt && sd_template.nr_dev > 1){
       struct request *req1;
       req1 = NULL;
-      save_flags(flags);
       cli();
       req = CURRENT;
       while(req){

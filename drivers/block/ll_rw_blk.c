@@ -169,18 +169,38 @@ static inline struct request * get_request(int n, int dev)
 
 /*
  * wait until a free request in the first N entries is available.
- * NOTE: interrupts must be disabled on the way in, and will still
- *       be disabled on the way out.
  */
+static struct request * __get_request_wait(int n, int dev)
+{
+	register struct request *req;
+	struct wait_queue wait = { current, NULL };
+
+	add_wait_queue(&wait_for_request, &wait);
+	for (;;) {
+		unplug_device(MAJOR(dev)+blk_dev);
+		current->state = TASK_UNINTERRUPTIBLE;
+		cli();
+		req = get_request(n, dev);
+		sti();
+		if (req)
+			break;
+		schedule();
+	}
+	remove_wait_queue(&wait_for_request, &wait);
+	current->state = TASK_RUNNING;
+	return req;
+}
+
 static inline struct request * get_request_wait(int n, int dev)
 {
 	register struct request *req;
 
-	while ((req = get_request(n, dev)) == NULL) {
-		unplug_device(MAJOR(dev)+blk_dev);
-		sleep_on(&wait_for_request);
-	}
-	return req;
+	cli();
+	req = get_request(n, dev);
+	sti();
+	if (req)
+		return req;
+	return __get_request_wait(n, dev);
 }
 
 /* RO fail safe mechanism */
@@ -303,9 +323,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
  */
 	max_req = (rw == READ) ? NR_REQUEST : ((NR_REQUEST*2)/3);
 
-/* big loop: look for a free request. */
-
-repeat:
+/* look for a free request. */
 	cli();
 
 /* The scsi disk drivers and the IDE driver completely remove the request
@@ -363,22 +381,16 @@ repeat:
 
 /* find an unused request. */
 	req = get_request(max_req, bh->b_dev);
+	sti();
 
-/* if no request available: if rw_ahead, forget it; otherwise try again. */
-	if (! req) {
+/* if no request available: if rw_ahead, forget it; otherwise try again blocking.. */
+	if (!req) {
 		if (rw_ahead) {
-			sti();
 			unlock_buffer(bh);
 			return;
 		}
-		unplug_device(major+blk_dev);
-		sleep_on(&wait_for_request);
-		sti();
-		goto repeat;
+		req = __get_request_wait(max_req, bh->b_dev);
 	}
-
-/* we found a request. */
-	sti();
 
 /* fill up the request-info, and add it to the queue */
 	req->cmd = rw;
@@ -410,9 +422,7 @@ void ll_rw_page(int rw, int dev, int page, char * buffer)
 		printk("Can't page to read-only device 0x%X\n",dev);
 		return;
 	}
-	cli();
 	req = get_request_wait(NR_REQUEST, dev);
-	sti();
 /* fill up the request-info, and add it to the queue */
 	req->cmd = rw;
 	req->errors = 0;
@@ -533,9 +543,7 @@ void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 
 	for (i=0; i<nb; i++, buf += buffersize)
 	{
-		cli();
 		req = get_request_wait(NR_REQUEST, dev);
-		sti();
 		req->cmd = rw;
 		req->errors = 0;
 		req->sector = (b[i] * buffersize) >> 9;

@@ -1063,8 +1063,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	SCpnt->request.dev = dev;
 	scsi_do_cmd (SCpnt,
 		     (void *) cmd, (STp->buffer)->b_data,
-		     (STp->buffer)->buffer_size,
-		     st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
+		     bytes, st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
 
 
 	/* this must be done with interrupts off */

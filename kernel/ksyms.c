@@ -41,7 +41,9 @@
 #include <linux/tcp.h>
 #include "../net/inet/protocol.h"
 #include "../net/inet/arp.h"
+#if defined(CONFIG_PPP) || defined(CONFIG_SLIP)
 #include "../drivers/net/slhc.h"
+#endif
 #endif
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
@@ -209,6 +211,7 @@ struct symbol_table symbol_table = {
 	X(del_timer),
 	X(tq_timer),
 	X(tq_immediate),
+	X(tq_scheduler),
 	X(tq_last),
 	X(timer_active),
 	X(timer_table),
@@ -273,11 +276,13 @@ struct symbol_table symbol_table = {
 #ifdef CONFIG_INET	
 	X(inet_add_protocol),
 	X(inet_del_protocol),
+#if defined(CONFIG_PPP) || defined(CONFIG_SLIP)
 	X(slhc_init),
 	X(slhc_free),
 	X(slhc_remember),
 	X(slhc_compress),
 	X(slhc_uncompress),
+#endif
 #endif
 	/* Device callback registration */
 	X(register_netdevice_notifier),
@@ -323,6 +328,8 @@ struct symbol_table symbol_table = {
 	X(scsi_register),
 	X(scsi_unregister),
 	X(scsicam_bios_param),
+        X(scsi_init_malloc),
+        X(scsi_init_free),
 	X(print_command),
 #endif
 	/* Added to make file system as module */

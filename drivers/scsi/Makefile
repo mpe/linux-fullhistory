@@ -86,9 +86,11 @@ SCSI_OBJS := $(SCSI_OBJS) buslogic.o
 SCSI_SRCS := $(SCSI_SRCS) buslogic.c
 endif
 
+SCSI_SRCS := $(SCSI_SRCS) eata_dma.c
 ifdef CONFIG_SCSI_EATA_DMA
 SCSI_OBJS := $(SCSI_OBJS) eata_dma.o
-SCSI_SRCS := $(SCSI_SRCS) eata_dma.c
+else
+SCSI_MODULE_OBJS := $(SCSI_MODULE_OBJS) eata_dma.o
 endif
 
 ifdef CONFIG_SCSI_U14_34F

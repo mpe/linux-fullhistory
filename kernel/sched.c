@@ -45,6 +45,7 @@ int tickadj = 500/HZ;			/* microsecs */
 
 DECLARE_TASK_QUEUE(tq_timer);
 DECLARE_TASK_QUEUE(tq_immediate);
+DECLARE_TASK_QUEUE(tq_scheduler);
 
 /*
  * phase-lock loop variables
@@ -119,6 +120,7 @@ asmlinkage void schedule(void)
 		printk("Aiee: scheduling in interrupt\n");
 		intr_count = 0;
 	}
+	run_task_queue(&tq_scheduler);
 	cli();
 	ticks = itimer_ticks;
 	itimer_ticks = 0;

@@ -140,6 +140,7 @@ struct async_struct {
 	int			xmit_tail;
 	int			xmit_cnt;
 	struct tq_struct	tqueue;
+	struct tq_struct	tqueue_hangup;
 	struct termios		normal_termios;
 	struct termios		callout_termios;
 	struct wait_queue	*open_wait;
@@ -160,7 +161,6 @@ struct async_struct {
  * time, instead of at rs interrupt time.
  */
 #define RS_EVENT_WRITE_WAKEUP	0
-#define RS_EVENT_HANGUP		1
 
 /*
  * Multiport serial configuration structure --- internal structure

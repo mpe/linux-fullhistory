@@ -2,7 +2,7 @@
 * Header file for eata_dma.c Linux EATA-DMA SCSI driver *
 * (c) 1993,94,95 Michael Neuffer                        *
 *********************************************************
-* last change: 95/02/13                                 *
+* last change: 95/04/10                                 *
 ********************************************************/
 
 
@@ -11,7 +11,7 @@
 
 #define VER_MAJOR 2
 #define VER_MINOR 3
-#define VER_SUB   "1a"
+#define VER_SUB   "5r"
 
 /************************************************************************
  * Here you can configure your drives that are using a non-standard     *
@@ -61,6 +61,7 @@
 #define DBG_QUEUE	0	/* Trace command queueing. 		*/
 #define DBG_INTR	0       /* Trace interrupt service routine. 	*/
 #define DBG_INTR2	0       /* Trace interrupt service routine. 	*/
+#define DBG_INTR3       0       /* Trace interrupt service routine.     */
 #define DBG_PROC        0       /* Debug proc-fs related statistics     */
 #define DBG_REGISTER    0       /* */
 #define DBG_ABNORM	1	/* Debug abnormal actions (reset, abort)*/
@@ -125,13 +126,15 @@ int eata_release(struct Scsi_Host *);
 
 #define SG_SIZE           64 
 
-#define C_P_L_CURRENT_MAX 10  /* Until this limit in the mm is removed    
+#define C_P_L_CURRENT_MAX 16  /* Until this limit in the mm is removed    
 			       * Kernels < 1.1.86 died horrible deaths
 			       * if you used values >2. The memory management
 			       * since pl1.1.86 seems to cope with up to 10
 			       * queued commands per device. 
+                               * Since 1.2.0 the memory management seems to 
+                               * have no more problems......
 			       */
-#define C_P_L_DIV          4  /* 1 <= C_P_L_DIV <= 8            
+#define C_P_L_DIV          3  /* 1 <= C_P_L_DIV <= 8            
 			       * You can use this parameter to fine-tune
 			       * the driver. Depending on the number of 
 			       * devices and their speed and ability to queue 
@@ -200,6 +203,24 @@ int eata_release(struct Scsi_Host *);
 #define HA_SREADY   0x40        /* drive ready               */
 #define HA_SBUSY    0x80        /* drive busy                */
 #define HA_SDRDY    HA_SSC+HA_SREADY+HA_SDRQ 
+
+#define HA_NO_ERROR      0x00
+#define HA_ERR_SEL_TO    0x01
+#define HA_ERR_CMD_TO    0x02
+#define HA_ERR_RESET     0x03
+#define HA_INIT_POWERUP  0x04
+#define HA_UNX_BUSPHASE  0x05
+#define HA_UNX_BUS_FREE  0x06
+#define HA_BUS_PARITY    0x07
+#define HA_SCSI_HUNG     0x08
+#define HA_UNX_MSGRJCT   0x09
+#define HA_RESET_STUCK   0x0a
+#define HA_RSENSE_FAIL   0x0b
+#define HA_PARITY_ERR    0x0c
+#define HA_CP_ABORT_NA   0x0d
+#define HA_CP_ABORTED    0x0e
+#define HA_CP_RESET_NA   0x0f
+#define HA_CP_RESET      0x10
 
 /**********************************************
  * Message definitions                        *

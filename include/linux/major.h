@@ -7,8 +7,8 @@
 
 /* limits */
 
-#define MAX_CHRDEV 32
-#define MAX_BLKDEV 32
+#define MAX_CHRDEV 64
+#define MAX_BLKDEV 64
 
 /*
  * assignments
