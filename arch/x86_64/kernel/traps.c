@@ -124,10 +124,10 @@ unsigned long *in_exception_stack(int cpu, unsigned long stack)
 	int k;
 	for (k = 0; k < N_EXCEPTION_STACKS; k++) {
 		struct tss_struct *tss = &per_cpu(init_tss, cpu);
-		unsigned long end = tss->ist[k] + EXCEPTION_STKSZ;
+		unsigned long start = tss->ist[k] - EXCEPTION_STKSZ;
 
-		if (stack >= tss->ist[k]  && stack <= end)
-			return (unsigned long *)end;
+		if (stack >= start && stack < tss->ist[k])
+			return (unsigned long *)tss->ist[k];
 	}
 	return NULL;
 } 
