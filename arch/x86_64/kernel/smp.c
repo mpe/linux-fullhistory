@@ -25,6 +25,7 @@
 #include <asm/pgalloc.h>
 #include <asm/tlbflush.h>
 #include <asm/mach_apic.h>
+#include <asm/mmu_context.h>
 #include <asm/proto.h>
 
 /*
@@ -52,7 +53,7 @@ static inline void leave_mm (unsigned long cpu)
 	if (read_pda(mmu_state) == TLBSTATE_OK)
 		BUG();
 	clear_bit(cpu, &read_pda(active_mm)->cpu_vm_mask);
-	__flush_tlb();
+	load_cr3(swapper_pg_dir);
 }
 
 /*
