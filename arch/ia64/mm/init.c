@@ -76,7 +76,7 @@ check_pgt_cache (void)
 }
 
 void
-update_mmu_cache (struct vm_area_struct *vma, unsigned long vaddr, pte_t pte)
+lazy_mmu_prot_update (pte_t pte)
 {
 	unsigned long addr;
 	struct page *page;
@@ -85,7 +85,6 @@ update_mmu_cache (struct vm_area_struct *vma, unsigned long vaddr, pte_t pte)
 		return;				/* not an executable page... */
 
 	page = pte_page(pte);
-	/* don't use VADDR: it may not be mapped on this CPU (or may have just been flushed): */
 	addr = (unsigned long) page_address(page);
 
 	if (test_bit(PG_arch_1, &page->flags))

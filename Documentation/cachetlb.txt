@@ -142,6 +142,11 @@ changes occur:
 	The ia64 sn2 platform is one example of a platform
 	that uses this interface.
 
+8) void lazy_mmu_prot_update(pte_t pte)
+	This interface is called whenever the protection on
+	any user PTEs change.  This interface provides a notification
+	to architecture specific code to take appropiate action.
+
 
 Next, we have the cache flushing interfaces.  In general, when Linux
 is changing an existing virtual-->physical mapping to a new value,

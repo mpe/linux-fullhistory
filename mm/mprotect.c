@@ -39,8 +39,9 @@ static void change_pte_range(struct mm_struct *mm, pmd_t *pmd,
 			 * bits by wiping the pte and then setting the new pte
 			 * into place.
 			 */
-			ptent = ptep_get_and_clear(mm, addr, pte);
-			set_pte_at(mm, addr, pte, pte_modify(ptent, newprot));
+			ptent = pte_modify(ptep_get_and_clear(mm, addr, pte), newprot);
+			set_pte_at(mm, addr, pte, ptent);
+			lazy_mmu_prot_update(ptent);
 		}
 	} while (pte++, addr += PAGE_SIZE, addr != end);
 	pte_unmap(pte - 1);
