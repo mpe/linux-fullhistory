@@ -31,6 +31,18 @@
 
 /*
  * $Log: NCR5380.c,v $
+
+ * Revision 1.9  1997/7/27	Ronald van Cuijlenborg
+ *				(ronald.van.cuijlenborg@tip.nl or nutty@dds.nl)
+ * (hopefully) fixed and enhanced USLEEP
+ * added support for DTC3181E card (for Mustek scanner)
+ *
+
+ * Revision 1.8			Ingmar Baumgart
+ *				(ingmar@gonzo.schwaben.de)
+ * added support for NCR53C400a card
+ *
+
  * Revision 1.7  1996/3/2       Ray Van Tassle (rayvt@comm.mot.com)
  * added proc_info
  * added support needed for DTC 3180/3280
@@ -84,7 +96,6 @@
 
 #ifndef notyet
 #undef LINKED
-#undef USLEEP
 #undef REAL_DMA
 #endif
 
@@ -239,9 +250,6 @@
  *      bus, we will go to sleep so that the CPU can get real work done 
  *      when we run a command that won't complete immediately.
  *
- * Note that if USLEEP is defined, NCR5380_TIMER *must* also be
- * defined.
- *
  * Defaults for these will be provided if USLEEP is defined, although
  * the user may want to adjust these to allocate CPU resources to 
  * the SCSI driver or "real" code.
@@ -308,6 +316,10 @@ static int do_abort(struct Scsi_Host *host);
 static void do_reset(struct Scsi_Host *host);
 static struct Scsi_Host *first_instance = NULL;
 static Scsi_Host_Template *the_template = NULL;
+
+#ifdef USLEEP
+struct timer_list usleep_timer;
+#endif
 
 /*
  * Function : void initialize_SCp(Scsi_Cmnd *cmd)
@@ -560,9 +572,6 @@ static __inline__ void run_main(void)
 }
 
 #ifdef USLEEP
-#ifndef NCR5380_TIMER
-#error "NCR5380_TIMER must be defined so that this type of NCR5380 driver gets a unique timer."
-#endif
 
 /*
  * These need tweaking, and would probably work best as per-device 
@@ -581,6 +590,10 @@ static __inline__ void run_main(void)
 /* 300 RPM (floppy speed) */
 #ifndef USLEEP_POLL
 #define USLEEP_POLL (200*HZ/1000)
+#endif
+#ifndef USLEEP_WAITLONG
+/* RvC: (reasonable time to wait on select error) */
+#define USLEEP_WAITLONG USLEEP_SLEEP
 #endif
 
 static struct Scsi_Host *expires_first = NULL;
@@ -638,48 +651,48 @@ static int NCR5380_set_timer(struct Scsi_Host *instance)
 
 	save_flags(flags);
 	cli();
-	if (((struct NCR5380_hostdata *) (instance->host_data))->next_timer) {
+	if (((struct NCR5380_hostdata *) (instance->hostdata))->next_timer) {
 		restore_flags(flags);
 		return -1;
 	}
 	for (prev = &expires_first, tmp = expires_first; tmp;
-	     prev = &(((struct NCR5380_hostdata *) tmp->host_data)->next_timer),
-	  tmp = ((struct NCR5380_hostdata *) tmp->host_data)->next_timer)
-		if (instance->time_expires < tmp->time_expires)
+		prev = &(((struct NCR5380_hostdata *) tmp->hostdata)->next_timer), 
+		tmp = ((struct NCR5380_hostdata *) tmp->hostdata)->next_timer)
+		if (((struct NCR5380_hostdata *)instance->hostdata)->time_expires < 
+			((struct NCR5380_hostdata *)tmp->hostdata)->time_expires) 
 			break;
 
-	instance->next_timer = tmp;
+	((struct NCR5380_hostdata *) instance->hostdata)->next_timer = tmp;
 	*prev = instance;
-	timer_table[NCR5380_TIMER].expires = expires_first->time_expires;
-	timer_active |= 1 << NCR5380_TIMER;
+   
+	del_timer(&usleep_timer);
+	usleep_timer.expires = ((struct NCR5380_hostdata *) expires_first->hostdata)->time_expires;
+	add_timer(&usleep_timer);
 	restore_flags(flags);
 	return 0;
 }
 
 /* Doing something about unwanted reentrancy here might be useful */
-void NCR5380_timer_fn(void)
+void NCR5380_timer_fn(unsigned long surplus_to_requirements)
 {
 	unsigned long flags;
 	struct Scsi_Host *instance;
 	save_flags(flags);
 	cli();
-	for (; expires_first && expires_first->time_expires >= jiffies;) {
-		instance = ((NCR5380_hostdata *) expires_first->host_data)->
-		    expires_next;
-		((NCR5380_hostdata *) expires_first->host_data)->expires_next =
-		    NULL;
-		((NCR5380_hostdata *) expires_first->host_data)->time_expires =
-		    0;
+	for (; expires_first &&
+		((struct NCR5380_hostdata *)expires_first->hostdata)->time_expires <= jiffies; ) 
+	{
+		instance = ((struct NCR5380_hostdata *) expires_first->hostdata)->next_timer;
+		((struct NCR5380_hostdata *) expires_first->hostdata)->next_timer = NULL;
+		((struct NCR5380_hostdata *) expires_first->hostdata)->time_expires = 0;
 		expires_first = instance;
 	}
 
-	if (expires_first) {
-		timer_table[NCR5380_TIMER].expires = ((NCR5380_hostdata *)
-				 expires_first->host_data)->time_expires;
-		timer_active |= (1 << NCR5380_TIMER);
-	} else {
-		timer_table[NCR5380_TIMER].expires = 0;
-		timer_active &= ~(1 << MCR5380_TIMER);
+	del_timer(&usleep_timer);
+	if (expires_first) 
+	{
+		usleep_timer.expires = ((struct NCR5380_hostdata *)expires_first->hostdata)->time_expires;
+		add_timer(&usleep_timer);
 	}
 	restore_flags(flags);
 
@@ -696,8 +709,8 @@ static inline void NCR5380_all_init(void)
 #endif
 		done = 1;
 #ifdef USLEEP
-		timer_table[NCR5380_TIMER].expires = 0;
-		timer_table[NCR5380_TIMER].fn = NCR5380_timer_fn;
+		init_timer(&usleep_timer);
+		usleep_timer.function = NCR5380_timer_fn;
 #endif
 	}
 }
@@ -1269,7 +1282,11 @@ static void NCR5380_main(void) {
 			 hostdata = (struct NCR5380_hostdata *) instance->hostdata;
 			 save_flags(flags);
 			 cli();
+#ifdef USLEEP
+			if (!hostdata->connected && !hostdata->selecting) {
+#else
 			if (!hostdata->connected) {
+#endif			
 #if (NDEBUG & NDEBUG_MAIN)
 				printk("scsi%d : not connected\n", instance->host_no);
 #endif
@@ -1326,6 +1343,10 @@ static void NCR5380_main(void) {
 						 * and see if we can do an information transfer,
 						 * with failures we will restart.
 						 */
+#ifdef USLEEP
+						hostdata->selecting = 0; /* RvC: have to preset this
+							to indicate a new command is being performed */
+#endif
 
 						if (!NCR5380_select(instance, tmp,
 						/* 
@@ -1355,12 +1376,42 @@ static void NCR5380_main(void) {
 					}	/* if target/lun is not busy */
 				}	/* for */
 			}	/* if (!hostdata->connected) */
+#ifdef USLEEP
+			if (hostdata->selecting) 
+			{
+				tmp = (Scsi_Cmnd *)hostdata->selecting;
+				if (!NCR5380_select(instance, tmp, 
+					(tmp->cmnd[0] == REQUEST_SENSE) ? TAG_NONE : TAG_NEXT)) 
+				{
+					/* Ok ?? */
+				}
+				else
+				{
+					unsigned long flags;
+					/* RvC: device failed, so we wait a long time
+					this is needed for Mustek scanners, that
+					do not respond to commands immediately
+					after a scan */
+					printk(KERN_DEBUG "scsi%d: device %d did not respond in time\n",
+						instance->host_no, tmp->target);
+					save_flags(flags);
+					cli();
+					LIST(tmp, hostdata->issue_queue);
+					tmp->host_scribble = (unsigned char *) hostdata->issue_queue;
+					hostdata->issue_queue = tmp;
+					restore_flags(flags);
+
+					hostdata->time_expires = jiffies + USLEEP_WAITLONG;
+					NCR5380_set_timer (instance);
+				}
+			} /* if hostdata->selecting */
+#endif
 			if (hostdata->connected
 #ifdef REAL_DMA
 			    && !hostdata->dmalen
 #endif
 #ifdef USLEEP
-			    && (!hostdata->time_expires || hostdata->time_expires >= jiffies)
+			    && (!hostdata->time_expires || hostdata->time_expires <= jiffies)
 #endif
 			    ) {
 				restore_flags(flags);
@@ -1377,6 +1428,7 @@ static void NCR5380_main(void) {
 				break;
 		}		/* for instance */
 	} while (!done);
+	cli();
 	main_running = 0;
 }
 
@@ -1567,12 +1619,20 @@ static int NCR5380_select(struct Scsi_Host *instance, Scsi_Cmnd * cmd, int tag) 
 	NCR5380_local_declare();
 	struct NCR5380_hostdata *hostdata = (struct NCR5380_hostdata *) instance->hostdata;
 	unsigned char tmp[3], phase;
-	unsigned char *data;
+	unsigned char *data, value;
 	int len;
 	unsigned long timeout;
 	unsigned long flags;
 
 	 NCR5380_setup(instance);
+
+#ifdef USLEEP
+	if (hostdata->selecting) 
+	{
+		goto part2;	/* RvC: sorry prof. Dijkstra, but it keeps the
+				   rest of the code nearly the same */
+	}
+#endif
 
 	 hostdata->restart_select = 0;
 #if defined (NDEBUG) && (NDEBUG & NDEBUG_ARBITRATION)
@@ -1646,7 +1706,13 @@ static int NCR5380_select(struct Scsi_Host *instance, Scsi_Cmnd * cmd, int tag) 
 	}
 	NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE | ICR_ASSERT_SEL);
 
-	if (NCR5380_read(INITIATOR_COMMAND_REG) & ICR_ARBITRATION_LOST) {
+	if (!(hostdata->flags & FLAG_DTC3181E) &&
+		/* RvC: DTC3181E has some trouble with this
+		 *	so we simply removed it. Seems to work with
+		 *	only Mustek scanner attached
+		 */
+		(NCR5380_read(INITIATOR_COMMAND_REG) & ICR_ARBITRATION_LOST)) 
+	{
 		NCR5380_write(MODE_REG, MR_BASE);
 		NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE);
 #if (NDEBUG & NDEBUG_ARBITRATION)
@@ -1736,9 +1802,32 @@ static int NCR5380_select(struct Scsi_Host *instance, Scsi_Cmnd * cmd, int tag) 
 	 * and it's detecting as true.  Sigh.
 	 */
 
+#ifdef USLEEP
+	hostdata->select_time = 0; /* we count the clock ticks at which we polled */
+	hostdata->selecting = cmd;
+
+part2:
+    	/* RvC: here we enter after a sleeping period, or immediately after
+		execution of part 1
+		we poll only once ech clock tick */
+	value = NCR5380_read(STATUS_REG) & (SR_BSY | SR_IO);
+
+	if (!value && (hostdata->select_time < 25)) 
+	{
+		/* RvC: we still must wait for a device response */
+		hostdata->select_time++; /* after 25 ticks the device has failed */
+		hostdata->time_expires = jiffies + 1;
+		NCR5380_set_timer(instance);
+		return 0;	/* RvC: we return here with hostdata->selecting set,
+				   to go to sleep */
+	}
+
+	hostdata->selecting = 0; /* clear this pointer, because we passed the
+				waiting period */
+#else
 	while ((jiffies < timeout) && !(NCR5380_read(STATUS_REG) &
 					(SR_BSY | SR_IO)));
-
+#endif
 	if ((NCR5380_read(STATUS_REG) & (SR_SEL | SR_IO)) ==
 	    (SR_SEL | SR_IO)) {
 		NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE);
@@ -1764,7 +1853,7 @@ static int NCR5380_select(struct Scsi_Host *instance, Scsi_Cmnd * cmd, int tag) 
 			printk("scsi%d : weirdness\n", instance->host_no);
 			if (hostdata->restart_select)
 				printk("\trestart select\n");
-#ifdef NDEBUG
+#if (NDEBUG & NDEBUG_SELECTION)
 			NCR5380_print(instance);
 #endif
 			NCR5380_write(SELECT_ENABLE_REG, hostdata->id_mask);
@@ -1896,7 +1985,14 @@ static int NCR5380_transfer_pio(struct Scsi_Host *instance,
 	register unsigned char p = *phase, tmp;
 	register int c = *count;
 	register unsigned char *d = *data;
-	 NCR5380_setup(instance);
+#ifdef USLEEP
+	/*
+	 *	RvC: some administrative data to process polling time
+	 */
+	int break_allowed = 0;
+	struct NCR5380_hostdata *hostdata = (struct NCR5380_hostdata *) instance->hostdata;
+#endif
+	NCR5380_setup(instance);
 
 #if (NDEBUG & NDEBUG_PIO)
 	if (!(p & SR_IO))
@@ -1913,12 +2009,41 @@ static int NCR5380_transfer_pio(struct Scsi_Host *instance,
 
 	 NCR5380_write(TARGET_COMMAND_REG, PHASE_SR_TO_TCR(p));
 
+#ifdef USLEEP
+	/* RvC: don't know if this is necessary, but other SCSI I/O is short
+	 *	so breaks are not necessary there
+	 */
+	if ((p == PHASE_DATAIN) || (p == PHASE_DATAOUT)) 
+	{
+		break_allowed = 1;
+	}
+#endif
+
+
 	do {
 		/* 
 		 * Wait for assertion of REQ, after which the phase bits will be 
 		 * valid 
 		 */
-		while (!((tmp = NCR5380_read(STATUS_REG)) & SR_REQ));
+
+#ifdef USLEEP
+		/* RvC: we simply poll once, after that we stop temporarily
+		 *	and let the device buffer fill up
+		 *	if breaking is not allowed, we keep polling as long as needed
+		 */
+
+		while ( !((tmp = NCR5380_read(STATUS_REG)) & SR_REQ) &&
+			!break_allowed );
+		if (!(tmp & SR_REQ)) 
+		{
+			/* timeout condition */
+			hostdata->time_expires = jiffies + USLEEP_SLEEP;
+			NCR5380_set_timer (instance);
+			break;
+		}
+#else
+		while ( !((tmp = NCR5380_read(STATUS_REG)) & SR_REQ) ); 
+#endif
 
 #if (NDEBUG & NDEBUG_HANDSHAKE)
 		printk("scsi%d : REQ detected\n", instance->host_no);
@@ -2468,7 +2593,12 @@ static void NCR5380_information_transfer(struct Scsi_Host *instance) {
 	unsigned char *data;
 	unsigned char phase, tmp, extended_msg[10], old_phase = 0xff;
 	Scsi_Cmnd *cmd = (Scsi_Cmnd *) hostdata->connected;
-	 NCR5380_setup(instance);
+#ifdef USLEEP
+	/* RvC: we need to set the end of the polling time */
+	unsigned long poll_time = jiffies + USLEEP_POLL;
+#endif
+
+	NCR5380_setup(instance);
 
 	while (1) {
 		tmp = NCR5380_read(STATUS_REG);
@@ -2899,7 +3029,9 @@ static void NCR5380_information_transfer(struct Scsi_Host *instance) {
 				NCR5380_transfer_pio(instance, &phase, &len,
 						     &data);
 #ifdef USLEEP
-				if (!disconnect && should_disconnect(cmd->cmnd[0])) {
+				if (!cmd->device->disconnect &&
+					should_disconnect(cmd->cmnd[0])) 
+				{
 					hostdata->time_expires = jiffies + USLEEP_SLEEP;
 #if (NDEBUG & NDEBUG_USLEEP)
 					printk("scsi%d : issued command, sleeping until %ul\n", instance->host_no,
@@ -2924,9 +3056,12 @@ static void NCR5380_information_transfer(struct Scsi_Host *instance) {
 			}	/* switch(phase) */
 		}		/* if (tmp * SR_REQ) */
 #ifdef USLEEP
-		else {
-			if (!disconnect && hostdata->time_expires && jiffies >
-			    hostdata->time_expires) {
+		else 
+		{
+			/* RvC: go to sleep if polling time expired
+			 */
+			if (!cmd->device->disconnect && jiffies >= poll_time) 
+			{
 				hostdata->time_expires = jiffies + USLEEP_SLEEP;
 #if (NDEBUG & NDEBUG_USLEEP)
 				printk("scsi%d : poll timed out, sleeping until %ul\n", instance->host_no,

@@ -10,17 +10,13 @@
 
 NM := nm -B
 
-#LINKFLAGS = -static -T arch/alpha/vmlinux.lds
-#CFLAGS := $(CFLAGS) -pipe -mno-fp-regs -ffixed-8
-
 ifdef CONFIG_CROSSCOMPILE
 # enable this for linking under OSF/1:
 LINKFLAGS = -non_shared -T 0xfffffc0000310000 -N
 else
  elf=$(shell if $(LD) --help | grep elf64alpha >/dev/null; then echo yes; fi)
  ifeq ($(elf),yes)
-#   LINKFLAGS = -static -Ttext 0xfffffc0000310000 -N
-LINKFLAGS = -static -T arch/alpha/vmlinux.lds
+   LINKFLAGS = -static -T arch/alpha/vmlinux.lds
  else
    LINKFLAGS = -static -T arch/alpha/vmlinux.lds -N
  endif
@@ -28,16 +24,13 @@ LINKFLAGS = -static -T arch/alpha/vmlinux.lds
 CFLAGS := $(CFLAGS) -pipe
 endif
 
-CFLAGS := $(CFLAGS) -mno-fp-regs -ffixed-8 -Wno-uninitialized
+CFLAGS := $(CFLAGS) -mno-fp-regs -ffixed-8
 
 # determine if we can use the BWX instructions with GAS
-$(shell rm -f ./GAS_VER)
-$(shell $(AS) --version >& ./GAS_VER)
-OLD_GAS := $(shell if cat ./GAS_VER | grep 'version 2.7' > /dev/null; then echo yes; else echo no; fi)
-$(shell rm -f ./GAS_VER)
+OLD_GAS := $(shell if $(AS) --version 2>&1 | grep 'version 2.7' > /dev/null; then echo y; else echo n; fi)
 
-ifneq ($(OLD_GAS),yes)
 # if PYXIS, then enable use of BWIO space
+ifneq ($(OLD_GAS),y)
  ifeq ($(CONFIG_ALPHA_PYXIS),y)
   CFLAGS := $(CFLAGS) -Wa,-m21164a -DBWX_USABLE -DBWIO_ENABLED
  endif

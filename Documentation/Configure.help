@@ -7511,15 +7511,21 @@ CONFIG_SOUND
   Kernel patches and programs to do that are in the pcsndrv package on
   sunsite.unc.edu:/pub/Linux/kernel/patches/console/.
 
+Support for Aztech Sound Galaxy (non-Pnp) cards
+CONFIG_SOUND_SGALAXY
+  This module initialises the older non Plug and Play sound galaxy cards
+  from Aztech. It supports the Waverider Pro 32 - 3D and the Galaxy
+  Washington 16.
+
 ProAudioSpectrum 16 support
-CONFIG_PAS
+CONFIG_SOUND_PAS
   Answer Y only if you have a Pro Audio Spectrum 16, ProAudio Studio
   16 or Logitech SoundMan 16 sound card.  Don't answer Y if you have
   some other card made by Media Vision or Logitech since they are not
   PAS16 compatible.
 
 100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support
-CONFIG_SB
+CONFIG_SOUND_SB
   Answer Y if you have an original SoundBlaster card made by
   Creative Labs or a 100% hardware compatible clone (like the
   Thunderboard or SM Games). If your card was in the list of supported
@@ -7534,36 +7540,28 @@ CONFIG_SB
   Y here and to "Additional lowlevel drivers" and to "SB32/AWE
   support" below.
 
-Are you using the IBM Mwave "emulation" of SB ?
-CONFIG_SB_MWAVE
-  The IBM Mwave can do what's loosely describable as emulation of an
-  8bit SoundBlaster card if you load the right firmware from DOS warm
-  boot and pray and your machine happens to like you. Say Y if you are
-  doing this as the IRQ test normally fails on the Mwave emulation.
-  Please read Documentation/sound/mwave.
-
 Generic OPL2/OPL3 FM synthesizer support
-CONFIG_ADLIB
+CONFIG_SOUND_ADLIB
   Answer Y if your card has a FM chip made by Yamaha (OPL2/OPL3/OPL4).
   Answering Y is usually a safe and recommended choice, however some
   cards may have software (TSR) FM emulation. Enabling FM support with
   these cards may cause trouble (I don't currently know of any such
   cards, however). If unsure, say Y.
 
-#Loopback MIDI device support
-#CONFIG_VMIDI
+Loopback MIDI device support
+CONFIG_VMIDI
 ###
 ### somebody please fill this in.
 ###
-#
+
 Gravis Ultrasound support
-CONFIG_GUS
+CONFIG_SOUND_GUS
   Say Y here for any type of Gravis Ultrasound card, including
-  the GUS or GUS MAX. Please read Documentation/sound/ultrasound for
-  more information.
+  the GUS or GUS MAX. See also Documentation/sound/ultrasound for
+  more information on configuring this card with modules.
 
 MPU-401 support (NOT for SB16)
-CONFIG_MPU401
+CONFIG_SOUND_MPU401
   Be careful with this question. The MPU401 interface is supported by
   all sound cards. However, some natively supported cards have their
   own driver for MPU401. Enabling this MPU401 option with these cards
@@ -7574,35 +7572,38 @@ CONFIG_MPU401
   answer Y if you have a true MPU401 MIDI interface card.
 
 6850 UART Midi support
-CONFIG_UART6850
+CONFIG_SOUND_UART6850
   This option enables support for MIDI interfaces based on the 6850
   UART chip. This interface is rarely found on sound cards.  It's safe
   to answer N to this question.
 
 PSS (AD1848, ADSP-2115, ESC614) support
-CONFIG_PSS
+CONFIG_SOUND_PSS
   Answer Y only if you have Orchid SW32, Cardinal DSP16 or some other
   card based on the PSS chipset (AD1848 codec + ADSP-2115 DSP chip +
   Echo ESC614 ASIC CHIP).
 
-#Enable PSS mixer (Beethoven ADSP-16 and other compatible)
-#CONFIG_PSS_MIXER
-###
-### Don't know what this is
-###
-#
+Have DSPxxx.LD firmware file
+CONFIG_PSS_HAVE_BOOT
+  If you want to emulate the Sound Blaster card and you have a DSPxxx.LD
+  file, then answer Y here to include this file.
+
+Full pathname of DSPxxx.LD firmware file
+CONFIG_PSS_BOOT_FILE
+  Enter the full pathname of your DSPxxx.LD file, starting from /.
+
 16 bit sampling option of GUS (_NOT_ GUS MAX)
-CONFIG_GUS16
+CONFIG_SOUND_GUS16
   Answer Y if you have installed the 16 bit sampling daughtercard on
   your GUS.  Answer N if you have a GUS MAX, since saying Y here
   disables GUS MAX support.
 
 GUS MAX support
-CONFIG_GUSMAX
+CONFIG_SOUND_GUSMAX
   Answer Y only if you have a Gravis Ultrasound MAX.
 
 Microsoft Sound System support
-CONFIG_MSS
+CONFIG_SOUND_MSS
   Again think carefully before answering Y to this question.  It's
   safe to answer Y if you have the original Windows Sound System card
   made by Microsoft or Aztech SG 16 Pro (or NX16 Pro).  Also you may
@@ -7628,60 +7629,81 @@ CONFIG_MSS
   conflict.
 
 Ensoniq Soundscape support
-CONFIG_SSCAPE
+CONFIG_SOUND_SSCAPE
   Answer Y if you have a sound card based on the Ensoniq SoundScape
   chipset. Such cards are being manufactured at least by Ensoniq, Spea
   and Reveal (Reveal makes also other cards).
 
 MediaTriX AudioTriX Pro support
-CONFIG_TRIX
+CONFIG_SOUND_TRIX
   Answer Y if you have the AudioTriX Pro sound card manufactured
   by MediaTrix.
 
+Have TRXPRO.HEX firmware file
+CONFIG_TRIX_HAVE_BOOT
+  The MediaTrix AudioTrix Pro has an on-board microcontroller which
+  needs to be initialized by downloading the code from the file
+  TRXPRO.HEX in the DOS driver directory. If you don't have the
+  TRXPRO.HEX file handy you may skip this step. However, the SB and
+  MPU-401 modes of AudioTrix Pro will not work without this file!
+
+Full pathname of TRXPRO.HEX firmware file
+CONFIG_TRIX_BOOT_FILE
+  Enter the full pathname of your TRXPRO.HEX file, starting from /.
+
 Support for OPTi MAD16 and/or Mozart based cards
-CONFIG_MAD16
+CONFIG_SOUND_MAD16
   Answer Y if your card has a Mozart (OAK OTI-601) or MAD16 (OPTi
-  82C928 or 82C929 or 82C931) audio interface chip. Please read
-  Documentation/sound/MAD16. Please read Documentation/sound/Opti. For
-  the 82C931, additional information is in drivers/sound/README.C931.
-  These chips are currently quite common so it's possible that many
-  no-name cards have one of them. In addition the MAD16 chip is used
-  in some cards made by known manufacturers such as Turtle Beach
-  (Tropez), Reveal (some models) and Diamond (latest ones).
+  82C928 or 82C929 or 82C931) audio interface chip. For the 82C931,
+  please read drivers/sound/README.C931. These chips are currently
+  quite common so it's possible that many no-name cards have one of
+  them. In addition the MAD16 chip is used in some cards made by known
+  manufacturers such as Turtle Beach (Tropez), Reveal (some models)
+  and Diamond (latest ones). See also Documentation/sound/Opti for
+  more information on setting these cards up as modules.
 
 Support MIDI in older MAD16 based cards (requires SB)
 CONFIG_MAD16_OLDCARD
-  Answer Y (or M) if you have an older card based on the C928 or
-  Mozart chipset and you want to have MIDI support. If you enable this
-  option you also need to enable support for SoundBlaster.
+  Answer Y (or M) if you have an older card based on the C928
+  or Mozart chipset and you want to have  MIDI support. If you
+  enable this option you also need to enable support for SoundBlaster.
 
 Support for Crystal CS4232 based (PnP) cards
-CONFIG_CS4232
+CONFIG_SOUND_CS4232
   Say Y here if you have a card based on the Crystal CS4232 chip set,
-  which use the Plug and Play protocol. Please read
-  Documentation/sound/CS4232 for more info.
+  which use its own Plug and Play protocol. See Documentation/sound/CS4232
+  for more information on configuring this card.
 
 Support for Turtle Beach Wave Front (Maui, Tropez) synthesizers
-CONFIG_MAUI
+CONFIG_SOUND_MAUI
   Say Y here if you have a Turtle Beach Wave Front, Maui, or 
   Tropez sound card.
 
+Have OSWF.MOT firmware file
+CONFIG_MAUI_HAVE_BOOT
+  Turtle Beach Maui and Tropez sound cards have a microcontroller which
+  needs to be initialized prior to use.  OSWF.MOT is a file distributed
+  with the card's DOS/Windows drivers.  Answer Y if you have this file.
+
+Full pathname of OSWF.MOT firmware file
+CONFIG_MAUI_BOOT_FILE
+  Enter the full pathname of your OSWF.MOT file, starting from /.
+
 /dev/dsp and /dev/audio support
-CONFIG_AUDIO
+CONFIG_SOUND_AUDIO
   Answering N disables /dev/dsp and /dev/audio, the A/D and D/A
   converter devices.  Answer N only if you know you will not need
   the option.  They are usually required.  Answer Y.
 
 MIDI interface support
-CONFIG_MIDI
+CONFIG_SOUND_MIDI
   Answering N disables /dev/midixx devices and access to any MIDI
   ports using /dev/sequencer and /dev/music. This option also affects
   any MPU401 and/or General MIDI compatible devices.  Answer Y.
 
 FM synthesizer (YM3812/OPL-3) support
-CONFIG_YM3812
-  Answer Y here, unless you know you will not need the option. For
-  OPL-3 cards, you may want to read Documentation/sound/OPL3.
+CONFIG_SOUND_YM3812
+  Answer Y here, unless you know you will not need the option.
 
 Sun Audio support
 CONFIG_SUN_AUDIO
@@ -7694,6 +7716,11 @@ CONFIG_LOWLEVEL_SOUND
   appeared, say Y. The answer to this question does not directly
   affect the kernel; saying Y will simply cause this configure script
   to present you with more options. If unsure, say Y.
+
+SB32/AWE support
+CONFIG_AWE32_SYNTH
+  Say Y here if you have a SB32 or SB AWE soundcard. See
+  drivers/sound/lowlevel/README.awe for more info.
 
 ACI mixer (miroPCM12)
 CONFIG_ACI_MIXER

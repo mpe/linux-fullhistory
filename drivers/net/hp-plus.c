@@ -159,6 +159,9 @@ __initfunc(int hpp_probe1(struct device *dev, int ioaddr))
 		|| (inw(ioaddr + HP_PAGING) & 0xfff0) != 0x5300)
 		return ENODEV;
 
+	if (load_8390_module("hp-plus.c"))
+		return -ENOSYS;
+
 	/* We should have a "dev" from Space.c or the static module table. */
 	if (dev == NULL) {
 		printk("hp-plus.c: Passed a NULL device.\n");
@@ -260,7 +263,7 @@ hpp_open(struct device *dev)
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	int option_reg;
 
-	if (request_irq(dev->irq, &ei_interrupt, 0, "hp-plus", dev)) {
+	if (request_irq(dev->irq, ei_interrupt, 0, "hp-plus", dev)) {
 	    return -EAGAIN;
 	}
 
@@ -447,12 +450,15 @@ init_module(void)
 		}
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "hp-plus.c: No HP-Plus card found (i/o = 0x%x).\n", io[this_dev]);
-			if (found != 0) return 0;	/* Got at least one. */
+			if (found != 0) {	/* Got at least one. */
+				lock_8390_module();
+				return 0;
+			}
 			return -ENXIO;
 		}
 		found++;
 	}
-
+	lock_8390_module();
 	return 0;
 }
 
@@ -464,14 +470,16 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_HPP_CARDS; this_dev++) {
 		struct device *dev = &dev_hpp[this_dev];
 		if (dev->priv != NULL) {
-			/* NB: hpp_close() handles free_irq */
 			int ioaddr = dev->base_addr - NIC_OFFSET;
-			unregister_netdev(dev);
-			kfree(dev->priv);
-			dev->priv = NULL;
+			void *priv = dev->priv;
+			/* NB: hpp_close() handles free_irq */
 			release_region(ioaddr, HP_IO_EXTENT);
+			dev->priv = NULL;
+			unregister_netdev(dev);
+			kfree(priv);
 		}
 	}
+	unlock_8390_module();
 }
 #endif /* MODULE */
 

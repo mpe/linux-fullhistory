@@ -17,11 +17,24 @@
 extern void bad_unaligned_access_length(void);
 
 /*
+ * EGCS 1.1 knows about arbitrary unaligned loads.  Define some
+ * packed structures to talk about such things with.
+ */
+
+struct __una_u64 { __u64 x __attribute__((packed)); };
+struct __una_u32 { __u32 x __attribute__((packed)); };
+struct __una_u16 { __u16 x __attribute__((packed)); };
+
+/*
  * Elemental unaligned loads 
  */
 
 extern inline unsigned long __uldq(const unsigned long * r11)
 {
+#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+	const struct __una_u64 *ptr = (const struct __una_u64 *) r11;
+	return ptr->x;
+#else
 	unsigned long r1,r2;
 	__asm__("ldq_u %0,%3\n\t"
 		"ldq_u %1,%4\n\t"
@@ -32,10 +45,15 @@ extern inline unsigned long __uldq(const unsigned long * r11)
 		 "m" (*r11),
 		 "m" (*(const unsigned long *)(7+(char *) r11)));
 	return r1 | r2;
+#endif
 }
 
 extern inline unsigned long __uldl(const unsigned int * r11)
 {
+#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+	const struct __una_u32 *ptr = (const struct __una_u32 *) r11;
+	return ptr->x;
+#else
 	unsigned long r1,r2;
 	__asm__("ldq_u %0,%3\n\t"
 		"ldq_u %1,%4\n\t"
@@ -46,10 +64,15 @@ extern inline unsigned long __uldl(const unsigned int * r11)
 		 "m" (*r11),
 		 "m" (*(const unsigned long *)(3+(char *) r11)));
 	return r1 | r2;
+#endif
 }
 
 extern inline unsigned long __uldw(const unsigned short * r11)
 {
+#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+	const struct __una_u16 *ptr = (const struct __una_u16 *) r11;
+	return ptr->x;
+#else
 	unsigned long r1,r2;
 	__asm__("ldq_u %0,%3\n\t"
 		"ldq_u %1,%4\n\t"
@@ -60,6 +83,7 @@ extern inline unsigned long __uldw(const unsigned short * r11)
 		 "m" (*r11),
 		 "m" (*(const unsigned long *)(1+(char *) r11)));
 	return r1 | r2;
+#endif
 }
 
 /*
@@ -68,6 +92,10 @@ extern inline unsigned long __uldw(const unsigned short * r11)
 
 extern inline void __ustq(unsigned long r5, unsigned long * r11)
 {
+#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+	struct __una_u64 *ptr = (struct __una_u64 *) r11;
+	ptr->x = r5;
+#else
 	unsigned long r1,r2,r3,r4;
 
 	__asm__("ldq_u %3,%1\n\t"
@@ -84,10 +112,15 @@ extern inline void __ustq(unsigned long r5, unsigned long * r11)
 		 "=m" (*(unsigned long *)(7+(char *) r11)),
 		 "=&r" (r1), "=&r" (r2), "=&r" (r3), "=&r" (r4)
 		:"r" (r5), "r" (r11));
+#endif
 }
 
 extern inline void __ustl(unsigned long r5, unsigned int * r11)
 {
+#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+	struct __una_u32 *ptr = (struct __una_u32 *) r11;
+	ptr->x = r5;
+#else
 	unsigned long r1,r2,r3,r4;
 
 	__asm__("ldq_u %3,%1\n\t"
@@ -104,10 +137,15 @@ extern inline void __ustl(unsigned long r5, unsigned int * r11)
 		 "=m" (*(unsigned long *)(3+(char *) r11)),
 		 "=&r" (r1), "=&r" (r2), "=&r" (r3), "=&r" (r4)
 		:"r" (r5), "r" (r11));
+#endif
 }
 
 extern inline void __ustw(unsigned long r5, unsigned short * r11)
 {
+#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+	struct __una_u16 *ptr = (struct __una_u16 *) r11;
+	ptr->x = r5;
+#else
 	unsigned long r1,r2,r3,r4;
 
 	__asm__("ldq_u %3,%1\n\t"
@@ -124,6 +162,7 @@ extern inline void __ustw(unsigned long r5, unsigned short * r11)
 		 "=m" (*(unsigned long *)(1+(char *) r11)),
 		 "=&r" (r1), "=&r" (r2), "=&r" (r3), "=&r" (r4)
 		:"r" (r5), "r" (r11));
+#endif
 }
 
 extern inline unsigned long __get_unaligned(const void *ptr, size_t size)

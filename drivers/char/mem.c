@@ -536,7 +536,10 @@ __initfunc(int chr_dev_init(void))
 	misc_init();
 #endif
 #ifdef CONFIG_SOUND
+	soundcore_init();
+#ifdef CONFIG_SOUND_OSS	
 	soundcard_init();
+#endif	
 #endif
 #ifdef CONFIG_JOYSTICK
 	/*

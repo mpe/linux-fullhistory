@@ -405,13 +405,17 @@ static int init_c930(struct address_info *hw_config)
 	/* MC2 is CD configuration. Don't touch it. */
 
 	mad_write(MC3_PORT, 0);	/* Disable SB mode IRQ and DMA */
+
+	/* bit 2 of MC4 reverses it's meaning between the C930
+	   and the C931. */
+	cfg = c931_detected ? 0x04 : 0x00;
 #ifdef MAD16_CDSEL
 	if(MAD16_CDSEL & 0x20)
-		mad_write(MC4_PORT, 0x62);	/* opl4 */
+		mad_write(MC4_PORT, 0x62|cfg);	/* opl4 */
 	else
-		mad_write(MC4_PORT, 0x52);	/* opl3 */
+		mad_write(MC4_PORT, 0x52|cfg);	/* opl3 */
 #else
-	mad_write(MC4_PORT, 0x52);
+	mad_write(MC4_PORT, 0x52|cfg);
 #endif
 	mad_write(MC5_PORT, 0x3C);	/* Init it into mode2 */
 	mad_write(MC6_PORT, 0x02);	/* Enable WSS, Disable MPU and SB */

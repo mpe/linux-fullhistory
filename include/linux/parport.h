@@ -1,4 +1,4 @@
-/* $Id: parport.h,v 1.6 1997/12/29 12:31:05 phil Exp $ */
+/* $Id: parport.h,v 1.1 1998/05/17 10:57:52 andrea Exp andrea $ */
 
 #ifndef _PARPORT_H_
 #define _PARPORT_H_
@@ -112,6 +112,7 @@ struct parport_operations {
 	int (*ecp_write_block)(struct parport *, void *, size_t, void (*fn)(struct parport *, void *, size_t), void *);
 	int (*ecp_read_block)(struct parport *, void *, size_t, void (*fn)(struct parport *, void *, size_t), void *);
 
+	void (*init_state)(struct parport_state *);
 	void (*save_state)(struct parport *, struct parport_state *);
 	void (*restore_state)(struct parport *, struct parport_state *);
 

@@ -53,7 +53,7 @@ first_rule: sub_dirs
 %.o: %.c
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -c -o $@ $<
 	@ ( \
-	    echo 'ifeq ($(strip $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@)),$$(strip $$(CFLAGS) $$(EXTRA_CFLAGS) $$(CFLAGS_$@)))' ; \
+	    echo 'ifeq ($(strip $(subst $(comma),:,$(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@))),$$(strip $$(subst $$(comma),:,$$(CFLAGS) $$(EXTRA_CFLAGS) $$(CFLAGS_$@))))' ; \
 	    echo 'FILES_FLAGS_UP_TO_DATE += $@' ; \
 	    echo 'endif' \
 	) > $(dir $@)/.$(notdir $@).flags
@@ -79,7 +79,7 @@ else
 	$(AR) rcs $@
 endif
 	@ ( \
-	    echo 'ifeq ($(strip $(EXTRA_LDFLAGS) $(ALL_O)),$$(strip $$(EXTRA_LDFLAGS) $$(ALL_O)))' ; \
+	    echo 'ifeq ($(strip $(subst $(comma),:,$(EXTRA_LDFLAGS) $(ALL_O))),$$(strip $$(subst $$(comma),:,$$(EXTRA_LDFLAGS) $$(ALL_O))))' ; \
 	    echo 'FILES_FLAGS_UP_TO_DATE += $@' ; \
 	    echo 'endif' \
 	) > $(dir $@)/.$(notdir $@).flags
@@ -93,7 +93,7 @@ $(L_TARGET): $(LX_OBJS) $(L_OBJS)
 	rm -f $@
 	$(AR) $(EXTRA_ARFLAGS) rcs $@ $(LX_OBJS) $(L_OBJS)
 	@ ( \
-	    echo 'ifeq ($(strip $(EXTRA_ARFLAGS) $(LX_OBJS) $(L_OBJS)),$$(strip $$(EXTRA_ARFLAGS) $$(LX_OBJS) $$(L_OBJS)))' ; \
+	    echo 'ifeq ($(strip $(subst $(comma),:,$(EXTRA_ARFLAGS) $(LX_OBJS) $(L_OBJS))),$$(strip $$(subst $$(comma),:,$$(EXTRA_ARFLAGS) $$(LX_OBJS) $$(L_OBJS))))' ; \
 	    echo 'FILES_FLAGS_UP_TO_DATE += $@' ; \
 	    echo 'endif' \
 	) > $(dir $@)/.$(notdir $@).flags
@@ -227,7 +227,7 @@ ifneq "$(strip $(SYMTAB_OBJS))" ""
 $(SYMTAB_OBJS): $(TOPDIR)/include/linux/modversions.h $(SYMTAB_OBJS:.o=.c)
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -DEXPORT_SYMTAB -c $(@:.o=.c)
 	@ ( \
-	    echo 'ifeq ($(strip $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -DEXPORT_SYMTAB),$$(strip $$(CFLAGS) $$(EXTRA_CFLAGS) $$(CFLAGS_$@) -DEXPORT_SYMTAB))' ; \
+	    echo 'ifeq ($(strip $(subst $(comma),:,$(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -DEXPORT_SYMTAB)),$$(strip $$(subst $$(comma),:,$$(CFLAGS) $$(EXTRA_CFLAGS) $$(CFLAGS_$@) -DEXPORT_SYMTAB)))' ; \
 	    echo 'FILES_FLAGS_UP_TO_DATE += $@' ; \
 	    echo 'endif' \
 	) > $(dir $@)/.$(notdir $@).flags
@@ -253,6 +253,9 @@ endif
 #   every file is forced, except those whose flags are positively up-to-date.
 #
 FILES_FLAGS_UP_TO_DATE :=
+
+# For use in expunging commas from flags, which mung our checking.
+comma = ,
 
 FILES_FLAGS_EXIST := $(wildcard .*.flags)
 ifneq ($(FILES_FLAGS_EXIST),)

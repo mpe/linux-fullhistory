@@ -3,7 +3,7 @@
 /*
  *	sm.c  -- soundcard radio modem driver.
  *
- *	Copyright (C) 1996  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	Copyright (C) 1996-1998  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -40,6 +40,7 @@
  *   0.5  03.03.97  fixed LPT probing (check_lpt result was interpreted the wrong way round)
  *   0.6  16.04.97  init code/data tagged
  *   0.7  30.07.97  fixed halfduplex interrupt handlers/hotfix for CS423X
+ *   0.8  14.04.98  cleanups
  */
 
 /*****************************************************************************/
@@ -53,6 +54,8 @@
 #include <linux/net.h>
 #include <linux/in.h>
 #include <linux/string.h>
+#include <linux/init.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/bitops.h>
@@ -62,59 +65,9 @@
 
 /* --------------------------------------------------------------------- */
 
-/*
- * currently this module is supposed to support both module styles, i.e.
- * the old one present up to about 2.1.9, and the new one functioning
- * starting with 2.1.21. The reason is I have a kit allowing to compile
- * this module also under 2.0.x which was requested by several people.
- * This will go in 2.2
- */
-#include <linux/version.h>
-
-#if LINUX_VERSION_CODE >= 0x20100
-#include <asm/uaccess.h>
-#else
-#include <asm/segment.h>
-#include <linux/mm.h>
-
-#undef put_user
-#undef get_user
-
-#define put_user(x,ptr) ({ __put_user((unsigned long)(x),(ptr),sizeof(*(ptr))); 0; })
-#define get_user(x,ptr) ({ x = ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr)))); 0; })
-
-extern inline int copy_from_user(void *to, const void *from, unsigned long n)
-{
-        int i = verify_area(VERIFY_READ, from, n);
-        if (i)
-                return i;
-        memcpy_fromfs(to, from, n);
-        return 0;
-}
-
-extern inline int copy_to_user(void *to, const void *from, unsigned long n)
-{
-        int i = verify_area(VERIFY_WRITE, to, n);
-        if (i)
-                return i;
-        memcpy_tofs(to, from, n);
-        return 0;
-}
-#endif
-
-#if LINUX_VERSION_CODE >= 0x20123
-#include <linux/init.h>
-#else
-#define __init
-#define __initdata
-#define __initfunc(x) x
-#endif
-
-/* --------------------------------------------------------------------- */
-
 /*static*/ const char sm_drvname[] = "soundmodem";
-static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996-1997 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "soundmodem: version 0.7 compiled " __TIME__ " " __DATE__ "\n";
+static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996-1998 Thomas Sailer, HB9JNX/AE4WA\n"
+KERN_INFO "soundmodem: version 0.8 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
@@ -685,51 +638,6 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 
 /* --------------------------------------------------------------------- */
 
-#ifdef __i386__
-
-int sm_x86_capability = 0;
-
-__initfunc(static void i386_capability(void))
-{
-	unsigned long flags;
-	unsigned long fl1;
-	union {
-		struct {
-			unsigned int ebx, edx, ecx;
-		} r;
-		unsigned char s[13];
-	} id;
-	unsigned int eax;
-
-	save_flags(flags);
-	flags |= 0x200000;
-	restore_flags(flags);
-	save_flags(flags);
-	fl1 = flags;
-	flags &= ~0x200000;
-	restore_flags(flags);
-	save_flags(flags);
-	if (!(fl1 & 0x200000) || (flags & 0x200000)) {
-		printk(KERN_WARNING "%s: cpu does not support CPUID\n", sm_drvname);
-		return;
-	}
-	__asm__ ("cpuid" : "=a" (eax), "=b" (id.r.ebx), "=c" (id.r.ecx), "=d" (id.r.edx) :
-		 "0" (0));
-	id.s[12] = 0;
-	if (eax < 1) {
-		printk(KERN_WARNING "%s: cpu (vendor string %s) does not support capability "
-		       "list\n", sm_drvname, id.s);
-		return;
-	}
-	printk(KERN_INFO "%s: cpu: vendor string %s ", sm_drvname, id.s);
-	__asm__ ("cpuid" : "=a" (eax), "=d" (sm_x86_capability) : "0" (1) : "ebx", "ecx");
-	printk("fam %d mdl %d step %d cap 0x%x\n", (eax >> 8) & 15, (eax >> 4) & 15,
-	       eax & 15, sm_x86_capability);
-}	
-#endif /* __i386__ */	
-
-/* --------------------------------------------------------------------- */
-
 #ifdef MODULE
 __initfunc(static int sm_init(void))
 #else /* MODULE */
@@ -742,9 +650,6 @@ __initfunc(int sm_init(void))
 	char ifname[HDLCDRV_IFNAMELEN];
 
 	printk(sm_drvinfo);
-#ifdef __i386__
-	i386_capability();
-#endif /* __i386__ */	
 	/*
 	 * register net devices
 	 */

@@ -48,6 +48,7 @@
  *   0.3  26.04.97  init code/data tagged
  *   0.4  08.07.97  alternative ser12 decoding algorithm (uses delta CTS ints)
  *   0.5  11.11.97  ser12/par96 split into separate files
+ *   0.6  14.04.98  cleanups
  */
 
 /*****************************************************************************/
@@ -61,6 +62,8 @@
 #include <linux/ioport.h>
 #include <linux/in.h>
 #include <linux/string.h>
+#include <linux/init.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -69,56 +72,6 @@
 #include <linux/netdevice.h>
 #include <linux/hdlcdrv.h>
 #include <linux/baycom.h>
-
-/* --------------------------------------------------------------------- */
-
-/*
- * currently this module is supposed to support both module styles, i.e.
- * the old one present up to about 2.1.9, and the new one functioning
- * starting with 2.1.21. The reason is I have a kit allowing to compile
- * this module also under 2.0.x which was requested by several people.
- * This will go in 2.2
- */
-#include <linux/version.h>
-
-#if LINUX_VERSION_CODE >= 0x20100
-#include <asm/uaccess.h>
-#else
-#include <asm/segment.h>
-#include <linux/mm.h>
-
-#undef put_user
-#undef get_user
-
-#define put_user(x,ptr) ({ __put_user((unsigned long)(x),(ptr),sizeof(*(ptr))); 0; })
-#define get_user(x,ptr) ({ x = ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr)))); 0; })
-
-extern inline int copy_from_user(void *to, const void *from, unsigned long n)
-{
-        int i = verify_area(VERIFY_READ, from, n);
-        if (i)
-                return i;
-        memcpy_fromfs(to, from, n);
-        return 0;
-}
-
-extern inline int copy_to_user(void *to, const void *from, unsigned long n)
-{
-        int i = verify_area(VERIFY_WRITE, to, n);
-        if (i)
-                return i;
-        memcpy_tofs(to, from, n);
-        return 0;
-}
-#endif
-
-#if LINUX_VERSION_CODE >= 0x20123
-#include <linux/init.h>
-#else
-#define __init
-#define __initdata
-#define __initfunc(x) x
-#endif
 
 /* --------------------------------------------------------------------- */
 
@@ -132,8 +85,8 @@ extern inline int copy_to_user(void *to, const void *from, unsigned long n)
 /* --------------------------------------------------------------------- */
 
 static const char bc_drvname[] = "baycom_ser_hdx";
-static const char bc_drvinfo[] = KERN_INFO "baycom_ser_hdx: (C) 1997 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "baycom_ser_hdx: version 0.5 compiled " __TIME__ " " __DATE__ "\n";
+static const char bc_drvinfo[] = KERN_INFO "baycom_ser_hdx: (C) 1997-1998 Thomas Sailer, HB9JNX/AE4WA\n"
+KERN_INFO "baycom_ser_hdx: version 0.6 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
@@ -439,27 +392,52 @@ static void ser12_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)dev_id;
 	struct baycom_state *bc = (struct baycom_state *)dev->priv;
+	unsigned char iir;
 
 	if (!dev || !bc || bc->hdrv.magic != HDLCDRV_MAGIC)
 		return;
-
+	/* fast way out */
+	if ((iir = inb(IIR(dev->base_addr))) & 1)
+		return;
 	baycom_int_freq(bc);
-	/*
-	 * check if transmitter active
-	 */
-	if (hdlcdrv_ptt(&bc->hdrv))
-		ser12_tx(dev, bc);
-	else {
-		ser12_rx(dev, bc);
-		if (--bc->modem.arb_divider <= 0) {
-			bc->modem.arb_divider = SER12_ARB_DIVIDER(bc);
-			sti();
-			hdlcdrv_arbitrate(dev, &bc->hdrv);
+	do {
+		switch (iir & 6) {
+		case 6:
+			inb(LSR(dev->base_addr));
+			break;
+			
+		case 4:
+			inb(RBR(dev->base_addr));
+			break;
+			
+		case 2:
+			/*
+			 * check if transmitter active
+			 */
+			if (hdlcdrv_ptt(&bc->hdrv))
+				ser12_tx(dev, bc);
+			else {
+				ser12_rx(dev, bc);
+				bc->modem.arb_divider--;
+			}
+			outb(0x00, THR(dev->base_addr));
+			break;
+			
+		default:
+			inb(MSR(dev->base_addr));
+			break;
 		}
+		iir = inb(IIR(dev->base_addr));
+	} while (!(iir & 1));
+	if (bc->modem.arb_divider <= 0) {
+		bc->modem.arb_divider = SER12_ARB_DIVIDER(bc);
+		__sti();
+		hdlcdrv_arbitrate(dev, &bc->hdrv);
 	}
-	sti();
+	__sti();
 	hdlcdrv_transmitter(dev, &bc->hdrv);
 	hdlcdrv_receiver(dev, &bc->hdrv);
+	__cli();
 }
 
 /* --------------------------------------------------------------------- */
@@ -521,9 +499,8 @@ static int ser12_open(struct device *dev)
 		return -EIO;
 	outb(0, FCR(dev->base_addr));  /* disable FIFOs */
 	outb(0x0d, MCR(dev->base_addr));
-	outb(0x0d, MCR(dev->base_addr));
 	outb(0, IER(dev->base_addr));
-	if (request_irq(dev->irq, ser12_interrupt, SA_INTERRUPT,
+	if (request_irq(dev->irq, ser12_interrupt, SA_INTERRUPT | SA_SHIRQ,
 			"baycom_ser12", dev))
 		return -EBUSY;
 	request_region(dev->base_addr, SER12_EXTENT, "baycom_ser12");

@@ -515,39 +515,32 @@ int sound_install_mixer(int vers, char *name, struct mixer_operations *driver,
 void sound_unload_audiodev(int dev)
 {
 	if (dev != -1)
+	{
 		audio_devs[dev] = NULL;
+		unregister_sound_dsp((dev<<4)+3);
+	}
 }
 
 int sound_alloc_audiodev(void)
-{
-	int i;
-
-	for (i = 0; i < MAX_AUDIO_DEV; i++)
-	{
-		if (audio_devs[i] == NULL)
-		{
-			if (i >= num_audiodevs)
-				num_audiodevs = i + 1;
-			return i;
-		}
-	}
-	return -1;
+{ 
+	int i = register_sound_dsp(&oss_sound_fops);
+	if(i==-1)
+		return i;
+	i>>=4;
+	if(i>=num_audiodevs)
+		num_audiodevs = i + 1;
+	return i;
 }
 
 int sound_alloc_mididev(void)
 {
-	int i;
-
-	for (i = 0; i < MAX_MIDI_DEV; i++)
-	{
-		if (midi_devs[i] == NULL)
-		{
-			if (i >= num_midis)
-				num_midis++;
-			return i;
-		}
-	}
-	return -1;
+	int i = register_sound_midi(&oss_sound_fops);
+	if(i==-1)
+		return i;
+	i>>=4;
+	if(i>=num_midis)
+		num_midis = i + 1;
+	return i;
 }
 
 int sound_alloc_synthdev(void)
@@ -568,18 +561,13 @@ int sound_alloc_synthdev(void)
 
 int sound_alloc_mixerdev(void)
 {
-	int i;
-
-	for (i = 0; i < MAX_MIXER_DEV; i++)
-	{
-		if (mixer_devs[i] == NULL)
-		{
-			if (i >= num_mixers)
-				num_mixers++;
-			return i;
-		}
-	}
-	return -1;
+	int i = register_sound_mixer(&oss_sound_fops);
+	if(i==-1)
+		return -1;
+	i>>=4;
+	if(i>=num_mixers)
+		num_mixers = i + 1;
+	return i;
 }
 
 int sound_alloc_timerdev(void)
@@ -601,14 +589,20 @@ int sound_alloc_timerdev(void)
 void sound_unload_mixerdev(int dev)
 {
 	if (dev != -1)
+	{
 		mixer_devs[dev] = NULL;
+		unregister_sound_mixer(dev<<4);
+	}
 }
 
 void sound_unload_mididev(int dev)
 {
 #ifdef CONFIG_MIDI
 	if (dev != -1)
+	{
 		midi_devs[dev] = NULL;
+		unregister_sound_midi((dev<<4)+2);
+	}
 #endif
 }
 

@@ -88,6 +88,7 @@ static struct parport_operations parport_arc_ops =
 	NULL, /* ecp_write_block */
 	NULL, /* epp_write_block */
 	
+	arc_init_state,
 	arc_save_state,
 	arc_restore_state,
 

@@ -48,6 +48,15 @@ extern int init_colour_qcams(struct video_init *);
 #ifdef CONFIG_VIDEO_BWQCAM
 extern int init_bw_qcams(struct video_init *);
 #endif
+#ifdef CONFIG_RADIO_AZTECH
+extern int aztech_init(struct video_init *);
+#endif
+#ifdef CONFIG_RADIO_RTRACK
+extern int rtrack_init(struct video_init *);
+#endif
+#ifdef CONFIG_RADIO_SF16FMI
+extern int fmi_init(struct video_init *);
+#endif
 
 static struct video_init video_init_list[]={
 #ifdef CONFIG_VIDEO_BT848
@@ -65,6 +74,15 @@ static struct video_init video_init_list[]={
 #ifdef CONFIG_VIDEO_PMS
 	{"PMS", init_pms_cards}, 
 #endif	
+#ifdef CONFIG_RADIO_AZTECH
+	{"Aztech", aztech_init}, 
+#endif	
+#ifdef CONFIG_RADIO_RTRACK
+	{"RTrack", rtrack_init}, 
+#endif	
+#ifdef CONFIG_RADIO_SF16FMI
+	{"SF16FMI", fmi_init}, 
+#endif	
 	{"end", NULL}
 };
 
@@ -77,7 +95,10 @@ static ssize_t video_read(struct file *file,
 	char *buf, size_t count, loff_t *ppos)
 {
 	struct video_device *vfl=video_device[MINOR(file->f_dentry->d_inode->i_rdev)];
-	return vfl->read(vfl, buf, count, file->f_flags&O_NONBLOCK);
+	if(vfl->read)
+		return vfl->read(vfl, buf, count, file->f_flags&O_NONBLOCK);
+	else
+		return -EINVAL;
 }
 
 
@@ -91,7 +112,10 @@ static ssize_t video_write(struct file *file, const char *buf,
 	size_t count, loff_t *ppos)
 {
 	struct video_device *vfl=video_device[MINOR(file->f_dentry->d_inode->i_rdev)];
-	return vfl->write(vfl, buf, count, file->f_flags&O_NONBLOCK);
+	if(vfl->write)
+		return vfl->write(vfl, buf, count, file->f_flags&O_NONBLOCK);
+	else
+		return 0;
 }
 
 /*
@@ -223,12 +247,15 @@ int video_register_device(struct video_device *vfd, int type)
 			/* The init call may sleep so we book the slot out
 			   then call */
 			MOD_INC_USE_COUNT;
-			err=vfd->initialize(vfd);
-			if(err<0)
+			if(vfd->initialize)
 			{
-				video_device[i]=NULL;
-				MOD_DEC_USE_COUNT;
-				return err;
+				err=vfd->initialize(vfd);
+				if(err<0)
+				{
+					video_device[i]=NULL;
+					MOD_DEC_USE_COUNT;
+					return err;
+				}
 			}
 			return 0;
 		}

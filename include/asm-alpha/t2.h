@@ -151,7 +151,7 @@ extern inline void __outb(unsigned char b, unsigned long addr)
 {
 	unsigned int w;
 
-	asm ("insbl %2,%1,%0" : "r="(w) : "ri"(addr & 0x3), "r"(b));
+	w = __kernel_insbl(b, addr & 3);
 	*(vuip) ((addr << 5) + T2_IO + 0x00) = w;
 	mb();
 }
@@ -167,7 +167,7 @@ extern inline void __outw(unsigned short b, unsigned long addr)
 {
 	unsigned int w;
 
-	asm ("inswl %2,%1,%0" : "r="(w) : "ri"(addr & 0x3), "r"(b));
+	w = __kernel_inswl(b, addr & 3);
 	*(vuip) ((addr << 5) + T2_IO + 0x08) = w;
 	mb();
 }

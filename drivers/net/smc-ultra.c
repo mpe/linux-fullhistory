@@ -152,6 +152,9 @@ __initfunc(int ultra_probe1(struct device *dev, int ioaddr))
 	if ((checksum & 0xff) != 0xFF)
 		return ENODEV;
 
+	if (load_8390_module("smc-ultra.c"))
+		return -ENOSYS;
+
 	/* We should have a "dev" from Space.c or the static module table. */
 	if (dev == NULL) {
 		printk("smc-ultra.c: Passed a NULL device.\n");
@@ -456,12 +459,15 @@ init_module(void)
 		}
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "smc-ultra.c: No SMC Ultra card found (i/o = 0x%x).\n", io[this_dev]);
-			if (found != 0) return 0;	/* Got at least one. */
+			if (found != 0) {	/* Got at least one. */
+				lock_8390_module();
+				return 0;
+			}
 			return -ENXIO;
 		}
 		found++;
 	}
-
+	lock_8390_module();
 	return 0;
 }
 
@@ -473,14 +479,16 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_ULTRA_CARDS; this_dev++) {
 		struct device *dev = &dev_ultra[this_dev];
 		if (dev->priv != NULL) {
-			/* NB: ultra_close_card() does free_irq */
 			int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET;
-			unregister_netdev(dev);
-			kfree(dev->priv);
-			dev->priv = NULL;
+			void *priv = dev->priv;
+			/* NB: ultra_close_card() does free_irq */
 			release_region(ioaddr, ULTRA_IO_EXTENT);
+			dev->priv = NULL;
+			unregister_netdev(dev);
+			kfree(priv);
 		}
 	}
+	unlock_8390_module();
 }
 #endif /* MODULE */
 

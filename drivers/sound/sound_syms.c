@@ -46,9 +46,6 @@ EXPORT_SYMBOL(load_mixer_volumes);
 EXPORT_SYMBOL(conf_printf);
 EXPORT_SYMBOL(conf_printf2);
 
-#include "sound_firmware.h"
-EXPORT_SYMBOL(mod_firmware_load);
-
 extern int softoss_dev;
 EXPORT_SYMBOL(softoss_dev);
 

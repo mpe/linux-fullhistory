@@ -329,9 +329,7 @@ static __inline__ void par96_rx(struct device *dev, struct baycom_state *bc)
 
 static void par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct parport *pp = (struct parport *)dev_id;
-	struct pardevice *pd = pp->cad;
-	struct device *dev = (struct device *)pd->private;
+	struct device *dev = (struct device *)dev_id;
 	struct baycom_state *bc = (struct baycom_state *)dev->priv;
 
 	if (!dev || !bc || bc->hdrv.magic != HDLCDRV_MAGIC)
@@ -347,13 +345,14 @@ static void par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		par96_rx(dev, bc);
 		if (--bc->modem.arb_divider <= 0) {
 			bc->modem.arb_divider = 6;
-			sti();
+			__sti();
 			hdlcdrv_arbitrate(dev, &bc->hdrv);
 		}
 	}
-	sti();
+	__sti();
 	hdlcdrv_transmitter(dev, &bc->hdrv);
 	hdlcdrv_receiver(dev, &bc->hdrv);
+        __cli();
 }
 
 /* --------------------------------------------------------------------- */
@@ -409,6 +408,7 @@ static int par96_open(struct device *dev)
 	}
 	dev->irq = pp->irq;
 	/* bc->pdev->port->ops->change_mode(bc->pdev->port, PARPORT_MODE_PCSPP);  not yet implemented */
+        bc->hdrv.par.bitrate = 9600;
 	/* switch off PTT */
 	outb(PAR96_PTT | PAR97_POWER, LPT_DATA(dev));
 	/*bc->pdev->port->ops->enable_irq(bc->pdev->port);  not yet implemented */

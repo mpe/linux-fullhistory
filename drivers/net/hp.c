@@ -131,6 +131,9 @@ __initfunc(int hp_probe1(struct device *dev, int ioaddr))
 		wordmode = 0;
 	}
 
+	if (load_8390_module("hp.c"))
+		return -ENOSYS;
+
 	/* We should have a "dev" from Space.c or the static module table. */
 	if (dev == NULL) {
 		printk("hp.c: Passed a NULL device.\n");
@@ -139,6 +142,12 @@ __initfunc(int hp_probe1(struct device *dev, int ioaddr))
 
 	if (ei_debug  &&  version_printed++ == 0)
 		printk(version);
+
+	/* Allocate dev->priv and fill in 8390 specific dev fields. */
+	if (ethdev_init(dev)) {
+		printk (" unable to get memory for dev->priv.\n");
+		return -ENOMEM;
+	}
 
 	printk("%s: %s (ID %02x) at %#3x,", dev->name, name, board_id, ioaddr);
 
@@ -158,7 +167,7 @@ __initfunc(int hp_probe1(struct device *dev, int ioaddr))
 				outb_p(irqmap[irq] | HP_RUN, ioaddr + HP_CONFIGURE);
 				outb_p( 0x00 | HP_RUN, ioaddr + HP_CONFIGURE);
 				if (irq == autoirq_report(0)		 /* It's a good IRQ line! */
-					&& request_irq (irq, &ei_interrupt, 0, "hp", dev) == 0) {
+					&& request_irq (irq, ei_interrupt, 0, "hp", dev) == 0) {
 					printk(" selecting IRQ %d.\n", irq);
 					dev->irq = *irqp;
 					break;
@@ -167,6 +176,8 @@ __initfunc(int hp_probe1(struct device *dev, int ioaddr))
 		} while (*++irqp);
 		if (*irqp == 0) {
 			printk(" no free IRQ lines.\n");
+			kfree(dev->priv);
+			dev->priv = NULL;
 			return EBUSY;
 		}
 	} else {
@@ -174,15 +185,10 @@ __initfunc(int hp_probe1(struct device *dev, int ioaddr))
 			dev->irq = 9;
 		if (request_irq(dev->irq, ei_interrupt, 0, "hp", dev)) {
 			printk (" unable to get IRQ %d.\n", dev->irq);
+			kfree(dev->priv);
+			dev->priv = NULL;
 			return EBUSY;
 		}
-	}
-
-	/* Allocate dev->priv and fill in 8390 specific dev fields. */
-	if (ethdev_init(dev)) {
-		printk (" unable to get memory for dev->priv.\n");
-		free_irq(dev->irq, dev);
-		return -ENOMEM;
 	}
 
 	/* Grab the region so we can find another board if something fails. */
@@ -415,12 +421,15 @@ init_module(void)
 		}
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "hp.c: No HP card found (i/o = 0x%x).\n", io[this_dev]);
-			if (found != 0) return 0;	/* Got at least one. */
+			if (found != 0) {	/* Got at least one. */
+				lock_8390_module();
+				return 0;
+			}
 			return -ENXIO;
 		}
 		found++;
 	}
-
+	lock_8390_module();
 	return 0;
 }
 
@@ -433,13 +442,15 @@ cleanup_module(void)
 		struct device *dev = &dev_hp[this_dev];
 		if (dev->priv != NULL) {
 			int ioaddr = dev->base_addr - NIC_OFFSET;
-			unregister_netdev(dev);
-			kfree(dev->priv);
-			dev->priv = NULL;
+			void *priv = dev->priv;
 			free_irq(dev->irq, dev);
 			release_region(ioaddr, HP_IO_EXTENT);
+			dev->priv = NULL;
+			unregister_netdev(dev);
+			kfree(priv);
 		}
 	}
+	unlock_8390_module();
 }
 #endif /* MODULE */
 

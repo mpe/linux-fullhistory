@@ -1,9 +1,41 @@
-		    LINUX DRIVER FOR BAYCOM MODEMS
+		    LINUX DRIVERS FOR BAYCOM MODEMS
 
        Thomas M. Sailer, HB9JNX/AE4WA, <sailer@ife.ee.ethz.ch>
 
-This document describes the Linux Kernel Driver for simple Baycom style
-amateur radio modems. The driver supports the following modems:
+!!NEW!! (04/98) The drivers for the baycom modems have been split into
+separate drivers as they did not share any code, and the driver
+and device names have changed.
+
+This document describes the Linux Kernel Drivers for simple Baycom style
+amateur radio modems. 
+
+The following drivers are available:
+
+baycom_ser_fdx:
+  This driver supports the SER12 modems either full or half duplex.
+  Its baud rate may be changed via the `baud' module parameter,
+  therefore it supports just about every bit bang modem on a
+  serial port. Its devices are called bcsf0 through bcsf3.
+  This is the recommended driver for SER12 type modems,
+  however if you have a broken UART clone that does not have working
+  delta status bits, you may try baycom_ser_hdx. 
+
+baycom_ser_hdx: 
+  This is an alternative driver for SER12 type modems.
+  It only supports half duplex, and only 1200 baud. Its devices
+  are called bcsh0 through bcsh3. Use this driver only if baycom_ser_fdx
+  does not work with your UART.
+
+baycom_par:
+  This driver supports the par96 and picpar modems.
+  Its devices are called bcp0 through bcp3.
+
+baycom_epp:
+  This driver supports the epp modem.
+  Its devices are called bce0 through bce3.
+  This driver is work-in-progress.
+
+The following modems are supported:
 
 ser12:  This is a very simple 1200 baud AFSK modem. The modem consists only
         of a modulator/demodulator chip, usually a TI TCM3105. The computer
@@ -28,6 +60,13 @@ picpar: This is a redesign of the par96 modem by Henning Rech, DF9IC. The modem
         an additional power supply. Furthermore, it incorporates a carrier
         detect circuitry.
 
+epp:    This is a high speed modem adaptor that connects to an enhanced parallel port.
+        Its target audience is users working over a high speed hub (76.8kbit/s).
+
+eppfpga: This is a redesign of the epp adaptor.
+
+
+
 All of the above modems only support half duplex communications. However,
 the driver supports the KISS (see below) fullduplex command. It then simply
 starts to send as soon as there's a packet to transmit and does not care
@@ -36,11 +75,11 @@ This command is required by some implementations of the DAMA channel
 access protocol.
 
 
-The Interface of the driver
+The Interface of the drivers
 
-Unlike previous drivers, the driver is no longer a character device,
-but it is now a true kernel network interface. Installation is therefore
-simple. Once installed, four interfaces named bc[0-3] are available.
+Unlike previous drivers, these drivers are no longer character devices,
+but they are now true kernel network interfaces. Installation is therefore
+simple. Once installed, four interfaces named bc{sf,sh,p,e}[0-3] are available.
 sethdlc from the ax25 utilities may be used to set driver states etc.
 Users of userland AX.25 stacks may use the net2kiss utility (also available
 in the ax25 utilities package) to convert packets of a network interface
@@ -50,27 +89,27 @@ me for WAMPES which allows attaching a kernel network interface directly.
 
 Configuring the driver
 
-Every time the driver is inserted into the kernel, it has to know which
+Every time a driver is inserted into the kernel, it has to know which
 modems it should access at which ports. This can be done with the setbaycom
 utility. If you are only using one modem, you can also configure the
 driver from the insmod command line (or by means of an option line in
 /etc/conf.modules).
 
 Examples:
-  insmod baycom modem=1 iobase=0x3f8 irq=4 options=1
-  sethdlc -i bc0 -p type ser12 io 0x3f8 irq 4 options 1
+  insmod baycom_ser_fdx mode="ser12*" iobase=0x3f8 irq=4
+  sethdlc -i bcsf0 -p mode "ser12*" io 0x3f8 irq 4
 
 Both lines configure the first port to drive a ser12 modem at the first
-serial port (COM1 under DOS). options=1 instructs the driver to use
+serial port (COM1 under DOS). The * in the mode parameter instructs the driver to use
 the software DCD algorithm (see below).
 
-  insmod baycom modem=2 iobase=0x378 irq=7 options=1
-  sethdlc -i bc0 -p type par96 io 0x378 irq 7 options 1
+  insmod baycom_par mode="picpar" iobase=0x378
+  sethdlc -i bcp0 -p mode "picpar" io 0x378
 
-Both lines configure the first port to drive a par96 or par97 modem at the
-first parallel port (LPT1 under DOS). options=1 instructs the driver to use
-the software DCD algorithm (see below).
-  
+Both lines configure the first port to drive a picpar modem at the
+first parallel port (LPT1 under DOS). (Note: picpar implies
+hardware DCD, par96 implies software DCD).
+
 The channel access parameters can be set with sethdlc -a or kissparms.
 Note that both utilities interpret the values slightly differently.
 
@@ -93,25 +132,26 @@ par96:  the software DCD algorithm for this type of modem is rather poor.
         feeds the DCD input of the PAR96 modem, the use of the hardware
         DCD circuitry is recommended.
 
-picpar: the picpar modem features builtin DCD hardware, which is highly
+picpar: the picpar modem features a builtin DCD hardware, which is highly
         recommended.
 
 
 
 Compatibility with the rest of the Linux kernel
 
-The serial driver, the line printer (lp) driver and the baycom driver compete
+The serial driver and the baycom serial drivers compete
 for the same hardware resources. Of course only one driver can access a given
 interface at a time. The serial driver grabs all interfaces it can find at
-startup time. Therefore the baycom driver subsequently won't be able to
+startup time. Therefore the baycom drivers subsequently won't be able to
 access a serial port. You might therefore find it necessary to release
 a port owned by the serial driver with 'setserial /dev/ttyS# uart none', where
-# is the number of the interface. The baycom driver does not reserve any
-port at startup, unless one is specified on the 'insmod' command line. Another
-method to solve the problem is to compile all three drivers as modules and
-leave it to kerneld to load the correct driver depending on the application.
+# is the number of the interface. The baycom drivers do not reserve any
+ports at startup, unless one is specified on the 'insmod' command line. Another
+method to solve the problem is to compile all drivers as modules and
+leave it to kmod to load the correct driver depending on the application.
 
-
+The parallel port drivers (baycom_par, baycom_epp) now use the parport subsystem
+to arbitrate the ports between different client drivers.
 
 vy 73s de
 Tom Sailer, sailer@ife.ee.ethz.ch

@@ -94,7 +94,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   fi
   bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA
   if [ "$CONFIG_NET_EISA" = "y" ]; then
-    bool 'AMD PCnet32 (VLB and PCI) support' CONFIG_PCNET32
+    tristate 'AMD PCnet32 (VLB and PCI) support' CONFIG_PCNET32
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
     fi
@@ -107,6 +107,9 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     tristate 'EtherExpressPro/100 support' CONFIG_EEXPRESS_PRO100
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'Mylex EISA LNE390A/B support (EXPERIMENTAL)' CONFIG_LNE390
+    fi
+    tristate 'PCI NE2000 support' CONFIG_NE2K_PCI
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'Racal-Interlan EISA ES3210 support (EXPERIMENTAL)' CONFIG_ES3210
       tristate 'SMC EtherPower II (EXPERIMENTAL)' CONFIG_EPIC100
       tristate 'TI ThunderLAN support (EXPERIMENTAL)' CONFIG_TLAN
@@ -177,6 +180,7 @@ fi
 bool 'Token Ring driver support' CONFIG_TR
 if [ "$CONFIG_TR" = "y" ]; then
   tristate 'IBM Tropic chipset based adaptor support' CONFIG_IBMTR
+#  tristate 'IBM Lanstreamer PCI adaptor support' CONFIG_IBMLS
 fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

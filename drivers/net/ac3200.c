@@ -7,11 +7,16 @@
 	incorporated herein by reference.
 
 	The author may be reached as becker@cesdis.gsfc.nasa.gov, or
-    C/O Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
+	C/O Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
 	This is driver for the Ansel Communications Model 3200 EISA Ethernet LAN
 	Adapter.  The programming information is from the users manual, as related
 	by glee@ardnassak.math.clemson.edu.
+
+	Changelog:
+
+	Paul Gortmaker 05/98	: add support for shared mem above 1MB.
+
   */
 
 static const char *version =
@@ -29,23 +34,24 @@ static const char *version =
 
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/irq.h>
 
 #include "8390.h"
 
 /* Offsets from the base address. */
-#define AC_NIC_BASE		0x00
-#define AC_SA_PROM		0x16			/* The station address PROM. */
-#define  AC_ADDR0		 0x00			/* Prefix station address values. */
-#define  AC_ADDR1		 0x40			/* !!!!These are just guesses!!!! */
-#define  AC_ADDR2		 0x90
-#define AC_ID_PORT		0xC80
-#define AC_EISA_ID		 0x0110d305
+#define AC_NIC_BASE	0x00
+#define AC_SA_PROM	0x16			/* The station address PROM. */
+#define AC_ADDR0	0x00			/* Prefix station address values. */
+#define AC_ADDR1	0x40			
+#define AC_ADDR2	0x90
+#define AC_ID_PORT	0xC80
+#define AC_EISA_ID	0x0110d305
 #define AC_RESET_PORT	0xC84
-#define  AC_RESET		 0x00
-#define  AC_ENABLE		 0x01
-#define AC_CONFIG		0xC90	/* The configuration port. */
+#define AC_RESET	0x00
+#define AC_ENABLE	0x01
+#define AC_CONFIG	0xC90	/* The configuration port. */
 
-#define AC_IO_EXTENT 0x10		/* IS THIS REALLY TRUE ??? */
+#define AC_IO_EXTENT 0x20
                                 /* Actually accessed is:
 								 * AC_NIC_BASE (0-15)
 								 * AC_SA_PROM (0-5)
@@ -98,7 +104,6 @@ __initfunc(int ac3200_probe(struct device *dev))
 	else if (ioaddr > 0)		/* Don't probe at all. */
 		return ENXIO;
 
-	/* If you have a pre 0.99pl15 machine you should delete this line. */
 	if ( ! EISA_bus)
 		return ENXIO;
 
@@ -116,32 +121,19 @@ __initfunc(static int ac_probe1(int ioaddr, struct device *dev))
 {
 	int i;
 
+	if (inb_p(ioaddr + AC_ID_PORT) == 0xff) 
+		return -ENODEV;
+
+	if (inl(ioaddr + AC_ID_PORT) != AC_EISA_ID)
+		return -ENODEV;
+
+
 #ifndef final_version
-	printk("AC3200 ethercard probe at %#3x:", ioaddr);
-
-	for(i = 0; i < 6; i++)
-		printk(" %02x", inb(ioaddr + AC_SA_PROM + i));
+	printk(KERN_DEBUG "AC3200 ethercard configuration register is %#02x,"
+		   " EISA ID %02x %02x %02x %02x.\n", inb(ioaddr + AC_CONFIG),
+		   inb(ioaddr + AC_ID_PORT + 0), inb(ioaddr + AC_ID_PORT + 1),
+		   inb(ioaddr + AC_ID_PORT + 2), inb(ioaddr + AC_ID_PORT + 3));
 #endif
-
-	/* !!!!The values of AC_ADDRn (see above) should be corrected when we
-	   find out the correct station address prefix!!!! */
-	if (inb(ioaddr + AC_SA_PROM + 0) != AC_ADDR0
-		|| inb(ioaddr + AC_SA_PROM + 1) != AC_ADDR1
-		|| inb(ioaddr + AC_SA_PROM + 2) != AC_ADDR2 ) {
-#ifndef final_version
-		printk(" not found (invalid prefix).\n");
-#endif
-		return ENODEV;
-	}
-
-	/* The correct probe method is to check the EISA ID. */
-	for (i = 0; i < 4; i++)
-		if (inl(ioaddr + AC_ID_PORT) != AC_EISA_ID) {
-			printk("EISA ID mismatch, %8x vs %8x.\n",
-				   inl(ioaddr + AC_ID_PORT), AC_EISA_ID);
-			return ENODEV;
-		}
-
 
 	/* We should have a "dev" from Space.c or the static module table. */
 	if (dev == NULL) {
@@ -149,33 +141,43 @@ __initfunc(static int ac_probe1(int ioaddr, struct device *dev))
 		dev = init_etherdev(0, 0);
 	}
 
-	for(i = 0; i < ETHER_ADDR_LEN; i++)
-		dev->dev_addr[i] = inb(ioaddr + AC_SA_PROM + i);
+	printk("AC3200 in EISA slot %d, node", ioaddr/0x1000);
+	for(i = 0; i < 6; i++)
+		printk(" %02x", dev->dev_addr[i] = inb(ioaddr + AC_SA_PROM + i));
 
-#ifndef final_version
-	printk("\nAC3200 ethercard configuration register is %#02x,"
-		   " EISA ID %02x %02x %02x %02x.\n", inb(ioaddr + AC_CONFIG),
-		   inb(ioaddr + AC_ID_PORT + 0), inb(ioaddr + AC_ID_PORT + 1),
-		   inb(ioaddr + AC_ID_PORT + 2), inb(ioaddr + AC_ID_PORT + 3));
-#endif
-
-	/* Assign and allocate the interrupt now. */
-	if (dev->irq == 0)
-		dev->irq = config2irq(inb(ioaddr + AC_CONFIG));
-	else if (dev->irq == 2)
-		dev->irq = 9;
-
-	if (request_irq(dev->irq, ei_interrupt, 0, "ac3200", dev)) {
-		printk (" unable to get IRQ %d.\n", dev->irq);
-		return EAGAIN;
+#if 0
+	/* Check the vendor ID/prefix. Redundant after checking the EISA ID */
+	if (inb(ioaddr + AC_SA_PROM + 0) != AC_ADDR0
+		|| inb(ioaddr + AC_SA_PROM + 1) != AC_ADDR1
+		|| inb(ioaddr + AC_SA_PROM + 2) != AC_ADDR2 ) {
+		printk(", not found (invalid prefix).\n");
+		return ENODEV;
 	}
+#endif
 
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
-		printk (" unable to allocate memory for dev->priv.\n");
-		free_irq(dev->irq, dev);
+		printk (", unable to allocate memory for dev->priv.\n");
 		return -ENOMEM;
 	}
+
+	/* Assign and allocate the interrupt now. */
+	if (dev->irq == 0) {
+		dev->irq = config2irq(inb(ioaddr + AC_CONFIG));
+		printk(", using");
+	} else {
+		dev->irq = irq_cannonicalize(dev->irq);
+		printk(", assigning");
+	}
+
+	if (request_irq(dev->irq, ei_interrupt, 0, "ac3200", dev)) {
+		printk (" nothing! Unable to get IRQ %d.\n", dev->irq);
+		kfree(dev->priv);
+		dev->priv = NULL;
+		return EAGAIN;
+	}
+
+	printk(" IRQ %d, %s port\n", dev->irq, port_name[dev->if_port]);
 
 	request_region(ioaddr, AC_IO_EXTENT, "ac3200");
 
@@ -194,6 +196,39 @@ __initfunc(static int ac_probe1(int ioaddr, struct device *dev))
 
 	dev->if_port = inb(ioaddr + AC_CONFIG) >> 6;
 	dev->mem_start = config2mem(inb(ioaddr + AC_CONFIG));
+
+	printk("%s: AC3200 at %#3x with %dkB memory at physical address %#lx.\n", 
+			dev->name, ioaddr, AC_STOP_PG/4, dev->mem_start);
+
+	/*
+	 *  BEWARE!! Some dain-bramaged EISA SCUs will allow you to put
+	 *  the card mem within the region covered by `normal' RAM  !!!
+	 */
+	if (dev->mem_start > 1024*1024) {	/* phys addr > 1MB */
+		if (dev->mem_start < (unsigned long)high_memory) {
+			printk(KERN_CRIT "ac3200.c: Card RAM overlaps with normal memory!!!\n");
+			printk(KERN_CRIT "ac3200.c: Use EISA SCU to set card memory below 1MB,\n");
+			printk(KERN_CRIT "ac3200.c: or to an address above %p.\n", high_memory);
+			printk(KERN_CRIT "ac3200.c: Driver NOT installed.\n");
+			free_irq(dev->irq, dev);
+			kfree(dev->priv);
+			dev->priv = NULL;
+			return EINVAL;
+		}
+		dev->mem_start = (unsigned long)ioremap(dev->mem_start, AC_STOP_PG*0x100);
+		if (dev->mem_start == 0) {
+			printk(KERN_ERR "ac3200.c: Unable to remap card memory above 1MB !!\n");
+			printk(KERN_ERR "ac3200.c: Try using EISA SCU to set memory below 1MB.\n");
+			printk(KERN_ERR "ac3200.c: Driver NOT installed.\n");
+			free_irq(dev->irq, dev);
+			kfree(dev->priv);
+			dev->priv = NULL;
+			return EAGAIN;
+		}
+		printk("ac3200.c: remapped %dkB card memory to virtual address %#lx\n",
+				AC_STOP_PG/4, dev->mem_start);
+	}
+
 	dev->rmem_start = dev->mem_start + TX_PAGES*256;
 	dev->mem_end = dev->rmem_end = dev->mem_start
 		+ (AC_STOP_PG - AC_START_PG)*256;
@@ -203,10 +238,6 @@ __initfunc(static int ac_probe1(int ioaddr, struct device *dev))
 	ei_status.rx_start_page = AC_START_PG + TX_PAGES;
 	ei_status.stop_page = AC_STOP_PG;
 	ei_status.word16 = 1;
-
-	printk("\n%s: AC3200 at %#x, IRQ %d, %s port, shared memory %#lx-%#lx.\n",
-		   dev->name, ioaddr, dev->irq, port_name[dev->if_port],
-		   dev->mem_start, dev->mem_end-1);
 
 	if (ei_debug > 0)
 		printk(version);
@@ -349,12 +380,15 @@ init_module(void)
 		if (io[this_dev] == 0 && this_dev != 0) break;
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "ac3200.c: No ac3200 card found (i/o = 0x%x).\n", io[this_dev]);
-			if (found != 0) return 0;	/* Got at least one. */
+			if (found != 0) {	/* Got at least one. */
+				lock_8390_module();
+				return 0;
+			}
 			return -ENXIO;
 		}
 		found++;
 	}
-
+	lock_8390_module();
 	return 0;
 }
 
@@ -366,14 +400,16 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_AC32_CARDS; this_dev++) {
 		struct device *dev = &dev_ac32[this_dev];
 		if (dev->priv != NULL) {
-			unregister_netdev(dev);
-			kfree(dev->priv);
-			dev->priv = NULL;
+			void *priv = dev->priv;
 			/* Someday free_irq may be in ac_close_card() */
 			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, AC_IO_EXTENT);
+			dev->priv = NULL;
+			unregister_netdev(dev);
+			kfree(priv);
 		}
 	}
+	unlock_8390_module();
 }
 #endif /* MODULE */
 

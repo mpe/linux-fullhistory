@@ -107,6 +107,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_BAYCOM_EPP),y)
+L_OBJS += baycom_epp.o
+CONFIG_HDLCDRV_BUILTIN = y
+else
+  ifeq ($(CONFIG_BAYCOM_EPP),m)
+  CONFIG_HDLCDRV_MODULE = y
+  M_OBJS += baycom_epp.o
+  endif
+endif
+
 ifeq ($(CONFIG_SOUNDMODEM),y)
 ALL_SUB_DIRS += soundmodem
 SUB_DIRS += soundmodem

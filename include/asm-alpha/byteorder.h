@@ -3,7 +3,11 @@
 
 #include <asm/types.h>
 
-#ifdef __GNUC__
+/* EGCS 1.1 can, without scheduling, do just as good as we do here
+   with the standard macros.  And since it can schedule, it does even
+   better in the end.  */
+
+#if defined(__GNUC__) && __GNUC_MINOR__ < 91
 
 static __inline__ __const__ __u32 ___arch__swab32(__u32 x)
 {

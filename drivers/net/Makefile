@@ -51,6 +51,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_IBMLS),y)
+L_OBJS += lanstreamer.o
+else
+  ifeq ($(CONFIG_IBMLS),m)
+  M_OBJS += lanstreamer.o
+  endif
+endif
+
 ifeq ($(CONFIG_ETHERTAP),y)
 L_OBJS += ethertap.o
 else
@@ -121,6 +129,16 @@ else
   ifeq ($(CONFIG_EL2),m)
   CONFIG_8390_MODULE = y
   M_OBJS += 3c503.o
+  endif
+endif
+
+ifeq ($(CONFIG_NE2K_PCI),y)
+L_OBJS += ne2k-pci.o
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_NE2K_PCI),m)
+  CONFIG_8390_MODULE = y
+  M_OBJS += ne2k-pci.o
   endif
 endif
 
@@ -305,6 +323,10 @@ endif
 
 ifeq ($(CONFIG_PCNET32),y)
 L_OBJS += pcnet32.o
+else
+  ifeq ($(CONFIG_PCNET32),m)
+  M_OBJS += pcnet32.o
+  endif
 endif
 
 ifeq ($(CONFIG_DEFXX),y)

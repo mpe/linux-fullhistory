@@ -40,6 +40,7 @@
 #define BT848_DSTATUS_FIELD    (1<<5)
 #define BT848_DSTATUS_NUML     (1<<4)
 #define BT848_DSTATUS_CSEL     (1<<3)
+#define BT848_DSTATUS_PLOCK    (1<<2)
 #define BT848_DSTATUS_LOF      (1<<1)
 #define BT848_DSTATUS_COF      (1<<0)
 
@@ -55,10 +56,12 @@
 #define BT848_IFORM_XTAUTO     (3<<3)
 #define BT848_IFORM_XTBOTH     (3<<3)
 #define BT848_IFORM_NTSC       1
+#define BT848_IFORM_NTSC_J     2
 #define BT848_IFORM_PAL_BDGHI  3
 #define BT848_IFORM_PAL_M      4
 #define BT848_IFORM_PAL_N      5
 #define BT848_IFORM_SECAM      6
+#define BT848_IFORM_PAL_NC     7
 #define BT848_IFORM_AUTO       0
 #define BT848_IFORM_NORM       7
 
@@ -113,6 +116,12 @@
 #define BT848_SCLOOP_HFILT_CIF  (1<<3)
 #define BT848_SCLOOP_HFILT_QCIF (2<<3)
 #define BT848_SCLOOP_HFILT_ICON (3<<3)
+
+#define BT848_SCLOOP_PEAK       (1<<7)
+#define BT848_SCLOOP_HFILT_MINP (1<<3)
+#define BT848_SCLOOP_HFILT_MEDP (2<<3)
+#define BT848_SCLOOP_HFILT_MAXP (3<<3)
+
 
 #define BT848_OFORM            0x048
 #define BT848_OFORM_RANGE      (1<<7)
@@ -212,6 +221,7 @@
 #define BT848_VBI_PACK_DEL_VBI_HDELAY 0xfc
 #define BT848_VBI_PACK_DEL_EXT_FRAME  2
 #define BT848_VBI_PACK_DEL_VBI_PKT_HI 1
+
 
 #define BT848_INT_STAT         0x100
 #define BT848_INT_MASK         0x104
@@ -317,5 +327,16 @@
 #define BT848_RISC_WRITE123    (0x09<<28)
 #define BT848_RISC_SKIP123     (0x0a<<28)
 #define BT848_RISC_WRITE1S23   (0x0b<<28)
+
+
+
+/* Bt848A and Bt849 only !! */
+#define BT848_TGLB             0x080
+#define BT848_TGCTRL           0x084
+#define BT848_FCAP             0x0E8
+#define BT848_PLL_F_LO         0x0F0
+#define BT848_PLL_F_HI         0x0F4
+#define BT848_PLL_XCI          0x0F8
+
 
 #endif

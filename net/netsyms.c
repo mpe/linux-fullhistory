@@ -363,7 +363,6 @@ EXPORT_SYMBOL(sock_rmalloc);
 /* If 8390 NIC support is built in, we will need these. */
 EXPORT_SYMBOL(ei_open);
 EXPORT_SYMBOL(ei_close);
-EXPORT_SYMBOL(ei_debug);
 EXPORT_SYMBOL(ei_interrupt);
 EXPORT_SYMBOL(ethdev_init);
 EXPORT_SYMBOL(NS8390_init);

@@ -76,6 +76,25 @@ extern void _sethae (unsigned long addr);	/* cached version */
 #endif /* !__KERNEL__ */
 
 /*
+ * EGCS 1.1 does a good job of using insxl.  Expose this bit of
+ * the I/O process to the compiler.
+ */
+
+#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+# define __kernel_insbl(val, shift)  (((val) & 0xfful) << ((shift) * 8))
+# define __kernel_inswl(val, shift)  (((val) & 0xfffful) << ((shift) * 8))
+#else
+# define __kernel_insbl(val, shift)					\
+  ({ unsigned long __kir;						\
+     __asm__("insbl %2,%1,%0" : "=r"(__kir) : "ri"(shift), "r"(val));	\
+     __kir; })
+# define __kernel_inswl(val, shift)					\
+  ({ unsigned long __kir;						\
+     __asm__("inswl %2,%1,%0" : "=r"(__kir) : "ri"(shift), "r"(val));	\
+     __kir; })
+#endif
+	
+/*
  * There are different chipsets to interface the Alpha CPUs to the world.
  */
 #if defined(CONFIG_ALPHA_LCA)

@@ -66,8 +66,15 @@ static int exec_modprobe(void * module_name)
 	    if (current->files->fd[i]) close(i);
 	}
 
-	set_fs(KERNEL_DS);	/* Allow execve args to be in kernel space. */
+	/* Give kmod all privileges.. */
 	current->uid = current->euid = current->fsuid = 0;
+	cap_set_full(current->cap_inheritable);
+	cap_set_full(current->cap_effective);
+
+	/* Allow execve args to be in kernel space. */
+	set_fs(KERNEL_DS);
+
+	/* Go, go, go... */
 	if (execve(modprobe_path, argv, envp) < 0) {
 		printk(KERN_ERR
 		       "kmod: failed to exec %s -s -k %s, errno = %d\n",

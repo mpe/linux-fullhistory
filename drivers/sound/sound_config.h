@@ -16,6 +16,7 @@
 
 #include <linux/config.h>
 #include <linux/fs.h>
+#include <linux/sound.h>
 
 #include "legacy.h"
 #include "os.h"

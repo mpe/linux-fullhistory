@@ -18,6 +18,13 @@
 
 	**********************
 
+	v3.02 (98/06/07)
+	  - Use register_netdevice() instead of register_netdev() to create
+	    new devices for RFC1051 and Ethernet encapsulation in arcnet_open.
+	    Likewise for unregistering them later. This avoids the deadlock 
+	    encountered because the original routines call rtnl_lock() when
+	    it's already locked. [dw]
+
 	v3.01 (98/04/17)
 	  - Interrupt handler now also checks dev->[se]dev are non-NULL
 	    to avoid crashes in interrupts during card init. [dw]
@@ -174,7 +181,7 @@
 */
 
 static const char *version =
- "arcnet.c: v3.01 98/04/24 Avery Pennarun <apenwarr@bond.net> et al.\n";
+ "arcnet.c: v3.02 98/06/07 Avery Pennarun <apenwarr@bond.net> et al.\n";
 
 #include <linux/module.h>
 #include <linux/config.h>
@@ -462,7 +469,7 @@ arcnet_open(struct device *dev)
   }
   sprintf(lp->edev->name,"%se",dev->name);
   lp->edev->init=arcnetE_init;
-  register_netdev(lp->edev);
+  register_netdevice(lp->edev);
 #endif
 
 #ifdef CONFIG_ARCNET_1051
@@ -472,7 +479,7 @@ arcnet_open(struct device *dev)
   lp->sdev->name=(char *)kmalloc(10,GFP_KERNEL);
   sprintf(lp->sdev->name,"%ss",dev->name);
   lp->sdev->init=arcnetS_init;
-  register_netdev(lp->sdev);
+  register_netdevice(lp->sdev);
 #endif
 
   /* Enable TX if we need to */
@@ -548,7 +555,7 @@ arcnet_close(struct device *dev)
 #ifdef CONFIG_ARCNET_ETH
   /* free the ethernet-encap protocol device */
   lp->edev->priv=NULL;
-  unregister_netdev(lp->edev);
+  unregister_netdevice(lp->edev);
   kfree(lp->edev->name);
   kfree(lp->edev);
   lp->edev=NULL;
@@ -557,7 +564,7 @@ arcnet_close(struct device *dev)
 #ifdef CONFIG_ARCNET_1051
   /* free the RFC1051-encap protocol device */
   lp->sdev->priv=NULL;
-  unregister_netdev(lp->sdev);
+  unregister_netdevice(lp->sdev);
   kfree(lp->sdev->name);
   kfree(lp->sdev);
   lp->sdev=NULL;

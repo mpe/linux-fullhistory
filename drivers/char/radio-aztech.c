@@ -1,0 +1,322 @@
+/* aztech.c - Aztech radio card driver for Linux 2.1 by Russell Kroll
+ *
+ * Heavily modified to support the new 2.1 radio card interfaces by
+ * Russell Kroll (rkroll@exploits.org)
+ *
+ * Based on code by
+ *
+ * Quay Ly
+ * Donald Song
+ * Jason Lewis      (jlewis@twilight.vtc.vsc.edu) 
+ * Scott McGrath    (smcgrath@twilight.vtc.vsc.edu)
+ * William McGrath  (wmcgrath@twilight.vtc.vsc.edu)
+ *
+ * The basis for this code may be found at http://bigbang.vtc.vsc.edu/fmradio/
+ * along with more information on the card itself.
+ *
+ * Notable changes from the original source:
+ * - includes stripped down to the essentials
+ * - for loops used as delays replaced with udelay()
+ * - #defines removed, changed to static values
+ * - tuning structure changed - no more character arrays, other changes
+*/
+
+#include <linux/module.h>	/* Modules 			*/
+#include <linux/init.h>		/* Initdata			*/
+#include <linux/ioport.h>	/* check_region, request_region	*/
+#include <linux/delay.h>	/* udelay			*/
+#include <asm/io.h>		/* outb, outb_p			*/
+#include <asm/uaccess.h>	/* copy to/from user		*/
+#include <linux/videodev.h>	/* kernel radio structs		*/
+#include <linux/config.h>	/* CONFIG_RADIO_AZTECH_PORT 	*/
+
+/* acceptable ports: 0x350 (JP3 shorted), 0x358 (JP3 open) */
+
+#ifndef CONFIG_RADIO_AZTECH_PORT
+#define CONFIG_RADIO_AZTECH_PORT -1
+#endif
+
+static int io = CONFIG_RADIO_AZTECH_PORT; 
+static int radio_wait_time = 1000;
+static int users = 0;
+
+struct az_device
+{
+	int curvol;
+	unsigned long curfreq;
+	int stereo;
+};
+
+static int volconvert(int level)
+{
+	level>>=14;	 	/* Map 16bits down to 2 bit */
+ 	level&=3;
+	
+	/* convert to card-friendly values */
+	switch (level) 
+	{
+		case 0: 
+			return 0;
+		case 1: 
+			return 1;
+		case 2:
+			return 4;
+		case 3:
+			return 5;
+	}
+	return 0;	/* Quieten gcc */
+}
+
+static void send_0_byte (struct az_device *dev)
+{
+	udelay(radio_wait_time);
+	outb_p(2+volconvert(dev->curvol), io);
+	outb_p(64+2+volconvert(dev->curvol), io);
+}
+
+static void send_1_byte (struct az_device *dev)
+{
+	udelay (radio_wait_time);
+	outb_p(128+2+volconvert(dev->curvol), io);
+	outb_p(128+64+2+volconvert(dev->curvol), io);
+}
+
+static int az_setvol(struct az_device *dev, int vol)
+{
+	outb (volconvert(vol), io);
+	return 0;
+}
+
+/* thanks to Michael Dwyer for giving me a dose of clues in
+ * the signal strength department..
+ *
+ * This card has a stereo bit - bit 0 set = mono, not set = stereo
+ * It also has a "signal" bit - bit 1 set = bad signal, not set = good
+ *
+ */
+
+static int az_getsigstr(struct az_device *dev)
+{
+	if (inb(io) & 2)	/* bit set = no signal present */
+		return 0;
+	return 1;		/* signal present */
+}
+
+static int az_getstereo(struct az_device *dev)
+{
+	if (inb(io) & 1) 	/* bit set = mono */
+		return 0;
+	return 1;		/* stereo */
+}
+
+static int az_setfreq(struct az_device *dev, unsigned long frequency)
+{
+	int  i;
+
+	frequency = (frequency / 16.0) * 100;	/* massage data a bit */
+  
+	frequency += 1070;		/* tuning needs 24 data bits  */
+	frequency /= 5;
+					
+	send_0_byte (dev);		/*  0: LSB of frequency       */
+
+	for (i = 0; i < 13; i++)	/*   : frequency bits (1-13)  */
+		if (frequency & (1 << i))
+			send_1_byte (dev);
+		else
+			send_0_byte (dev);
+
+	send_0_byte (dev);		/* 14: test bit - always 0    */
+	send_0_byte (dev);		/* 15: test bit - always 0    */
+	send_0_byte (dev);		/* 16: band data 0 - always 0 */
+	if (dev->stereo)		/* 17: stereo (1 to enable)   */
+		send_1_byte (dev);
+	else
+		send_0_byte (dev);
+
+	send_1_byte (dev);		/* 18: band data 1 - unknown  */
+	send_0_byte (dev);		/* 19: time base - always 0   */
+	send_0_byte (dev);		/* 20: spacing (0 = 25 kHz)   */
+	send_1_byte (dev);		/* 21: spacing (1 = 25 kHz)   */
+	send_0_byte (dev);		/* 22: spacing (0 = 25 kHz)   */
+	send_1_byte (dev);		/* 23: AM/FM (FM = 1, always) */
+
+	/* latch frequency */
+
+	udelay (radio_wait_time);
+	outb_p(128+64+volconvert(dev->curvol), io);
+
+	return 0;
+}
+
+static int az_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
+{
+	struct az_device *az=dev->priv;
+	
+	switch(cmd)
+	{
+		case VIDIOCGCAP:
+		{
+			struct video_capability v;
+			v.type=VID_TYPE_TUNER;
+			v.channels=1;
+			v.audios=1;
+			/* No we don't do pictures */
+			v.maxwidth=0;
+			v.maxheight=0;
+			v.minwidth=0;
+			v.minheight=0;
+			if(copy_to_user(arg,&v,sizeof(v)))
+				return -EFAULT;
+			return 0;
+		}
+		case VIDIOCGTUNER:
+		{
+			struct video_tuner v;
+			if(copy_from_user(&v, arg,sizeof(v))!=0) 
+				return -EFAULT;
+			if(v.tuner)	/* Only 1 tuner */ 
+				return -EINVAL;
+			v.rangelow=(int)(87.9*16);
+			v.rangehigh=(int)(107.8*16);
+			v.flags=0;
+			v.mode=VIDEO_MODE_AUTO;
+			v.signal=0xFFFF*az_getsigstr(az);
+			if(az_getstereo(az))
+				v.flags|=VIDEO_TUNER_STEREO_ON;
+			if(copy_to_user(arg,&v, sizeof(v)))
+				return -EFAULT;
+			return 0;
+		}
+		case VIDIOCSTUNER:
+		{
+			struct video_tuner v;
+			if(copy_from_user(&v, arg, sizeof(v)))
+				return -EFAULT;
+			if(v.tuner!=0)
+				return -EINVAL;
+			/* Only 1 tuner so no setting needed ! */
+			return 0;
+		}
+		case VIDIOCGFREQ:
+			if(copy_to_user(arg, &az->curfreq, sizeof(az->curfreq)))
+				return -EFAULT;
+			return 0;
+		case VIDIOCSFREQ:
+			if(copy_from_user(&az->curfreq, arg,sizeof(az->curfreq)))
+				return -EFAULT;
+			az_setfreq(az, az->curfreq);
+			return 0;
+		case VIDIOCGAUDIO:
+		{	
+			struct video_audio v;
+			memset(&v,0, sizeof(v));
+			v.flags|=VIDEO_AUDIO_MUTABLE|VIDEO_AUDIO_VOLUME;
+			if(az->stereo)
+				v.mode=VIDEO_SOUND_STEREO;
+			else
+				v.mode=VIDEO_SOUND_MONO;
+			v.volume=az->curvol;
+			strcpy(v.name, "Radio");
+			if(copy_to_user(arg,&v, sizeof(v)))
+				return -EFAULT;
+			return 0;			
+		}
+		case VIDIOCSAUDIO:
+		{
+			struct video_audio v;
+			if(copy_from_user(&v, arg, sizeof(v))) 
+				return -EFAULT;	
+			if(v.audio) 
+				return -EINVAL;
+			az->curvol=v.volume;
+
+			az->stereo=(v.mode&VIDEO_SOUND_STEREO)?1:0;
+			if(v.flags&VIDEO_AUDIO_MUTE) 
+				az_setvol(az,0);
+			else
+				az_setvol(az,az->curvol);								
+			return 0;
+		}
+		default:
+			return -ENOIOCTLCMD;
+	}
+}
+
+static int az_open(struct video_device *dev, int flags)
+{
+	if(users)
+		return -EBUSY;
+	users++;
+	MOD_INC_USE_COUNT;
+	return 0;
+}
+
+static void az_close(struct video_device *dev)
+{
+	users--;
+	MOD_DEC_USE_COUNT;
+}
+
+static struct az_device aztech_unit;
+
+static struct video_device aztech_radio=
+{
+	"Aztech radio",
+	VID_TYPE_TUNER,
+	VID_HARDWARE_AZTECH,
+	az_open,
+	az_close,
+	NULL,	/* Can't read  (no capture ability) */
+	NULL,	/* Can't write */
+	az_ioctl,
+	NULL,
+	NULL
+};
+
+__initfunc(int aztech_init(struct video_init *v))
+{
+	if (check_region(io, 2)) 
+	{
+		printk(KERN_ERR "aztech: port 0x%x already in use\n", io);
+		return -EBUSY;
+	}
+
+	aztech_radio.priv=&aztech_unit;
+	
+	if(video_register_device(&aztech_radio, VFL_TYPE_RADIO)==-1)
+		return -EINVAL;
+		
+	request_region(io, 2, "aztech");
+	printk(KERN_INFO "Aztech radio card driver v0.40/19980422 rkroll@exploits.org\n");
+	/* mute card - prevents noisy bootups */
+	outb (0, io);
+	return 0;
+}
+
+#ifdef MODULE
+
+MODULE_AUTHOR("Russell Kroll, Quay Lu, Donald Song, Jason Lewis, Scott McGrath, William McGrath");
+MODULE_DESCRIPTION("A driver for the Aztech radio card.");
+MODULE_PARM(io, "i");
+MODULE_PARM_DESC(io, "I/O address of the Aztech card (0x350 or 0x358)");
+
+EXPORT_NO_SYMBOLS;
+
+int init_module(void)
+{
+	if(io==-1)
+	{
+		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
+		return -EINVAL;
+	}
+	return aztech_init(NULL);
+}
+
+void cleanup_module(void)
+{
+	video_unregister_device(&aztech_radio);
+	release_region(io,2);
+}
+
+#endif

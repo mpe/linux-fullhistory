@@ -1,25 +1,20 @@
+SMP on x86/Linux is now an official feature and is not exprtimental.
+Experimental SMP support for other architectures is underway.
+
+Please view linux/Documentation/smp for more information about enabling SMP.
+
 SMP support for Linux with up to 16 processors using the Intel MP
 specification. 
 
-WARNING:
-	This is experimental. Back up your disks first. Experience is that
-it is basically stable in its current (inefficient form).
-
 To fix:
 
-o	Fix sys_idle to exit/enter kernel state and do hlt's.
-o	Fix scheduler decisions to reschedule. Per cpu reschedule ?
-o	Clean up message pass.
-o	Test for B stepping processors.
 o	Clean up processor specific/independent split.
 o	Document it all.	[PARTLY DONE]
 o	Halt other CPU's on reset/panic doesn't always work.
 o	Don't waste page at 4K - don't need it now.(watch the GDT code).
 o	Dump bootup pages once booted somehow.
 o	Clean up warnings/volatiles.
-o	Fix load_TR() for non contiguous processor ids
-o	Iterate over the slave timer requests if one is lost (keep a count per cpu)
-o	Distribute IRQs (locking present just needs the 82489 to be asked
-	nicely).
 o	486 startup code.
 o	How to handle mixed FPU/non FPU processors.
+o	Test IO-APIC on various hardware.
+o	Seperate IO-APIC from SMP.

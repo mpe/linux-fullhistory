@@ -3,7 +3,7 @@
 /*
  *	hdlcdrv.c  -- HDLC packet radio network driver.
  *
- *	Copyright (C) 1996  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	Copyright (C) 1996-1998  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -35,6 +35,7 @@
  *   0.4  16.04.97  init code/data tagged
  *   0.5  30.07.97  made HDLC buffers bigger (solves a problem with the
  *                  soundmodem driver)
+ *   0.6  05.04.98  add spinlocks
  */
 
 /*****************************************************************************/
@@ -47,7 +48,9 @@
 #include <linux/if.h>
 #include <linux/malloc.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 #include <asm/bitops.h>
+#include <asm/uaccess.h>
 
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
@@ -63,78 +66,6 @@
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <linux/tcp.h>
-
-/* --------------------------------------------------------------------- */
-
-/*
- * currently this module is supposed to support both module styles, i.e.
- * the old one present up to about 2.1.9, and the new one functioning
- * starting with 2.1.21. The reason is I have a kit allowing to compile
- * this module also under 2.0.x which was requested by several people.
- * This will go in 2.2
- */
-#include <linux/version.h>
-
-#if LINUX_VERSION_CODE >= 0x20100
-#include <asm/uaccess.h>
-#else
-#include <asm/segment.h>
-#include <linux/mm.h>
-
-#undef put_user
-#undef get_user
-
-#define put_user(x,ptr) ({ __put_user((unsigned long)(x),(ptr),sizeof(*(ptr))); 0; })
-#define get_user(x,ptr) ({ x = ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr)))); 0; })
-
-extern inline int copy_from_user(void *to, const void *from, unsigned long n)
-{
-        int i = verify_area(VERIFY_READ, from, n);
-        if (i)
-                return i;
-        memcpy_fromfs(to, from, n);
-        return 0;
-}
-
-extern inline int copy_to_user(void *to, const void *from, unsigned long n)
-{
-        int i = verify_area(VERIFY_WRITE, to, n);
-        if (i)
-                return i;
-        memcpy_tofs(to, from, n);
-        return 0;
-}
-#endif
-
-/* --------------------------------------------------------------------- */
-
-#if LINUX_VERSION_CODE < 0x20115
-extern __inline__ void dev_init_buffers(struct device *dev)
-{
-        int i;
-        for(i=0;i<DEV_NUMBUFFS;i++)
-        {
-                skb_queue_head_init(&dev->buffs[i]);
-        }
-}
-#endif
-
-/* --------------------------------------------------------------------- */
-
-#if LINUX_VERSION_CODE >= 0x20123
-#include <linux/init.h>
-#else
-#define __init
-#define __initdata
-#define __initfunc(x) x
-#endif
-
-/* --------------------------------------------------------------------- */
-
-#if LINUX_VERSION_CODE < 0x20125
-#define test_and_set_bit set_bit
-#define test_and_clear_bit clear_bit
-#endif
 
 /* --------------------------------------------------------------------- */
 
@@ -844,10 +775,12 @@ static int hdlcdrv_probe(struct device *dev)
 	s->ch_params = dflt_ch_params;
 	s->ptt_keyed = 0;
 
+	spin_lock_init(&s->hdlcrx.hbuf.lock);
 	s->hdlcrx.hbuf.rd = s->hdlcrx.hbuf.wr = 0;
 	s->hdlcrx.in_hdlc_rx = 0;
 	s->hdlcrx.rx_state = 0;
 	
+	spin_lock_init(&s->hdlctx.hbuf.lock);
 	s->hdlctx.hbuf.rd = s->hdlctx.hbuf.wr = 0;
 	s->hdlctx.in_hdlc_tx = 0;
 	s->hdlctx.tx_state = 1;
@@ -1006,7 +939,7 @@ MODULE_DESCRIPTION("Packet Radio network interface HDLC encoder/decoder");
 __initfunc(int init_module(void))
 {
 	printk(KERN_INFO "hdlcdrv: (C) 1996 Thomas Sailer HB9JNX/AE4WA\n");
-	printk(KERN_INFO "hdlcdrv: version 0.5 compiled " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "hdlcdrv: version 0.6 compiled " __TIME__ " " __DATE__ "\n");
 #if LINUX_VERSION_CODE < 0x20115
         register_symtab(&hdlcdrv_syms);
 #endif

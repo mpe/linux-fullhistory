@@ -225,6 +225,7 @@ __initfunc(static int ne_probe_pci(struct device *dev))
 		printk("ne.c: PCI BIOS reports %s at i/o %#x, irq %d.\n",
 				pci_clone_list[i].name,
 				pci_ioaddr, pci_irq_line);
+		printk("*\n* Use of the PCI-NE2000 driver with this card is recommended!\n*\n");
 		if (ne_probe1(dev, pci_ioaddr) != 0) {	/* Shouldn't happen. */
 			printk(KERN_ERR "ne.c: Probe of PCI card at %#x failed.\n", pci_ioaddr);
 			pci_irq_line = 0;
@@ -264,6 +265,9 @@ __initfunc(static int ne_probe1(struct device *dev, int ioaddr))
 	    return ENODEV;
 	}
     }
+
+    if (load_8390_module("ne.c"))
+	return -ENOSYS;
 
     /* We should have a "dev" from Space.c or the static module table. */
     if (dev == NULL) {
@@ -434,6 +438,7 @@ __initfunc(static int ne_probe1(struct device *dev, int ioaddr))
 	    printk (" unable to get IRQ %d (irqval=%d).\n", dev->irq, irqval);
 
             kfree(dev->priv);
+	    dev->priv = NULL;
 	    return EAGAIN;
 	}
     }
@@ -755,15 +760,17 @@ init_module(void)
 			found++;
 			continue;
 		}
-		if (found != 0) 	/* Got at least one. */
+		if (found != 0) { 	/* Got at least one. */
+			lock_8390_module();
 			return 0;
+		}
 		if (io[this_dev] != 0)
 			printk(KERN_WARNING "ne.c: No NE*000 card found at i/o = %#x\n", io[this_dev]);
 		else
 			printk(KERN_NOTICE "ne.c: No PCI cards found. Use \"io=0xNNN\" value(s) for ISA cards.\n");
 		return -ENXIO;
 	}
-
+	lock_8390_module();
 	return 0;
 }
 
@@ -775,13 +782,15 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_NE_CARDS; this_dev++) {
 		struct device *dev = &dev_ne[this_dev];
 		if (dev->priv != NULL) {
+			void *priv = dev->priv;
 			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, NE_IO_EXTENT);
-			unregister_netdev(dev);
-			kfree(dev->priv);
 			dev->priv = NULL;
+			unregister_netdev(dev);
+			kfree(priv);
 		}
 	}
+	unlock_8390_module();
 }
 #endif /* MODULE */
 

@@ -63,3 +63,4 @@ sound_unload_lowlevel_drivers(void)
 
 EXPORT_SYMBOL(sound_init_lowlevel_drivers);
 EXPORT_SYMBOL(sound_unload_lowlevel_drivers);
+EXPORT_SYMBOL(sound_preinit_lowlevel_drivers);

@@ -186,6 +186,9 @@ el2_probe1(struct device *dev, int ioaddr))
 	return ENODEV;
     }
 
+    if (load_8390_module("3c503.c"))
+	return -ENOSYS;
+
     /* We should have a "dev" from Space.c or the static module table. */
     if (dev == NULL) {
 	printk("3c503.c: Passed a NULL device.\n");
@@ -346,7 +349,7 @@ el2_open(struct device *dev)
 		outb_p(0x04 << ((*irqp == 9) ? 2 : *irqp), E33G_IDCFR);
 		outb_p(0x00, E33G_IDCFR);
 		if (*irqp == autoirq_report(0)	 /* It's a good IRQ line! */
-		    && request_irq (dev->irq = *irqp, &ei_interrupt, 0, ei_status.name, dev) == 0)
+		    && request_irq (dev->irq = *irqp, ei_interrupt, 0, ei_status.name, dev) == 0)
 		    break;
 	    }
 	} while (*++irqp);
@@ -355,7 +358,7 @@ el2_open(struct device *dev)
 	    return -EAGAIN;
 	}
     } else {
-	if (request_irq(dev->irq, &ei_interrupt, 0, ei_status.name, dev)) {
+	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name, dev)) {
 	    return -EAGAIN;
 	}
     }
@@ -658,11 +661,15 @@ init_module(void)
 		}
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "3c503.c: No 3c503 card found (i/o = 0x%x).\n", io[this_dev]);
-			if (found != 0) return 0;	/* Got at least one. */
+			if (found != 0) {	/* Got at least one. */
+				lock_8390_module();
+				return 0;
+			}
 			return -ENXIO;
 		}
 		found++;
 	}
+	lock_8390_module();
 	return 0;
 }
 
@@ -674,13 +681,15 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_EL2_CARDS; this_dev++) {
 		struct device *dev = &dev_el2[this_dev];
 		if (dev->priv != NULL) {
+			void *priv = dev->priv;
 			/* NB: el2_close() handles free_irq */
-			unregister_netdev(dev);
-			kfree(dev->priv);
-			dev->priv = NULL;
 			release_region(dev->base_addr, EL2_IO_EXTENT);
+			dev->priv = NULL;
+			unregister_netdev(dev);
+			kfree(priv);
 		}
 	}
+	unlock_8390_module();
 }
 #endif /* MODULE */
 

@@ -165,6 +165,8 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 
 #define BOARD_NCR5380	0
 #define BOARD_NCR53C400	1
+#define BOARD_NCR53C400A 2
+#define BOARD_DTC3181E	3
 
 #endif /* else def HOSTS_C */
 #endif /* ndef ASM */

@@ -3,7 +3,7 @@
 /*
  *	sm.h  --  soundcard radio modem driver internal header.
  *
- *	Copyright (C) 1996  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	Copyright (C) 1996-1998  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -32,6 +32,7 @@
 
 #include <linux/hdlcdrv.h>
 #include <linux/soundmodem.h>
+#include <linux/bitops.h>
 
 #define SM_DEBUG
 
@@ -71,7 +72,7 @@ struct sm_state {
 	 * state of the modem code
 	 */
 	union {
-		long m[32/sizeof(long)];
+		long m[48/sizeof(long)];
 	} m;
 	union {
 		long d[256/sizeof(long)];
@@ -228,6 +229,7 @@ static inline void diag_add_constellation(struct sm_state *sm, int vali, int val
  * ===================== utility functions ===============================
  */
 
+#if 0
 extern inline unsigned int hweight32(unsigned int w)
 	__attribute__ ((unused));
 extern inline unsigned int hweight16(unsigned short w)
@@ -258,6 +260,8 @@ extern inline unsigned int hweight8(unsigned char w)
         res = (res & 0x33) + ((res >> 2) & 0x33);
         return (res & 0x0F) + ((res >> 4) & 0x0F);
 }
+
+#endif
 
 extern inline unsigned int gcd(unsigned int x, unsigned int y)
 	__attribute__ ((unused));
@@ -291,13 +295,13 @@ extern inline unsigned int lcm(unsigned int x, unsigned int y)
 
 #ifdef __i386__
 
-extern int sm_x86_capability;
+#include <asm/processor.h>
 
-#define HAS_RDTSC (sm_x86_capability & 0x10)
+#define HAS_RDTSC (current_cpu_data.x86_capability & 0x10)
 
 /*
- * only do 32bit cycle counter arithmetic; we hope we won't overflow :-)
- * in fact, overflowing modems would require over 2THz clock speeds :-)
+ * only do 32bit cycle counter arithmetic; we hope we won't overflow.
+ * in fact, overflowing modems would require over 2THz CPU clock speeds :-)
  */
 
 #define time_exec(var,cmd)                                              \

@@ -163,6 +163,9 @@ __initfunc(int e21_probe1(struct device *dev, int ioaddr))
 	inb(ioaddr + E21_MEDIA); 		/* Point to media selection. */
 	outb(0, ioaddr + E21_ASIC); 	/* and disable the secondary interface. */
 
+	if (load_8390_module("e2100.c"))
+		return -ENOSYS;
+
 	if (ei_debug  &&  version_printed++ == 0)
 		printk(version);
 
@@ -175,6 +178,12 @@ __initfunc(int e21_probe1(struct device *dev, int ioaddr))
 	printk("%s: E21** at %#3x,", dev->name, ioaddr);
 	for (i = 0; i < 6; i++)
 		printk(" %02X", station_addr[i]);
+
+	/* Allocate dev->priv and fill in 8390 specific dev fields. */
+	if (ethdev_init(dev)) {
+		printk (" unable to get memory for dev->priv.\n");
+		return -ENOMEM;
+	}
 
 	if (dev->irq < 2) {
 		int irqlist[] = {15,11,10,12,5,9,3,4}, i;
@@ -189,12 +198,6 @@ __initfunc(int e21_probe1(struct device *dev, int ioaddr))
 		}
 	} else if (dev->irq == 2)	/* Fixup luser bogosity: IRQ2 is really IRQ9 */
 		dev->irq = 9;
-
-	/* Allocate dev->priv and fill in 8390 specific dev fields. */
-	if (ethdev_init(dev)) {
-		printk (" unable to get memory for dev->priv.\n");
-		return -ENOMEM;
-	}
 
 	/* Grab the region so we can find a different board if IRQ select fails. */
 	request_region(ioaddr, E21_IO_EXTENT, "e2100");
@@ -423,12 +426,15 @@ init_module(void)
 		}
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "e2100.c: No E2100 card found (i/o = 0x%x).\n", io[this_dev]);
-			if (found != 0) return 0;	/* Got at least one. */
+			if (found != 0) {	/* Got at least one. */
+				lock_8390_module();
+				return 0;
+			}
 			return -ENXIO;
 		}
 		found++;
 	}
-
+	lock_8390_module();
 	return 0;
 }
 
@@ -440,13 +446,15 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_E21_CARDS; this_dev++) {
 		struct device *dev = &dev_e21[this_dev];
 		if (dev->priv != NULL) {
+			void *priv = dev->priv;
 			/* NB: e21_close() handles free_irq */
-			unregister_netdev(dev);
-			kfree(dev->priv);
-			dev->priv = NULL;
 			release_region(dev->base_addr, E21_IO_EXTENT);
+			dev->priv = NULL;
+			unregister_netdev(dev);
+			kfree(priv);
 		}
 	}
+	unlock_8390_module();
 }
 #endif /* MODULE */
 

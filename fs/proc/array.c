@@ -960,7 +960,7 @@ static void statm_pgd_range(pgd_t * pgd, unsigned long address, unsigned long en
 
 static int get_statm(int pid, char * buffer)
 {
-	struct task_struct *tsk = find_task_by_pid(pid);
+	struct task_struct *tsk;
 	int size=0, resident=0, share=0, trs=0, lrs=0, drs=0, dt=0;
 
 	read_lock(&tasklist_lock);

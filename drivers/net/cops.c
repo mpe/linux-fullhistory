@@ -24,10 +24,13 @@
  *					Hooks for cops_setup routine
  *					(not yet implemented).
  *	19971101	Jay Schulist	Fixes for multiple lt* devices.
+ *	19980507	Steven Hirsch	Fixed the badly broken support
+ *					for Tangent type cards. (COPS
+ *					LT-1 and the like)
  */
 
 static const char *version =
-	"cops.c:v0.02 3/17/97 Jay Schulist <Jay.Schulist@spacs.k12.wi.us>\n";
+	"cops.c:v0.03 3/17/97 Jay Schulist <Jay.Schulist@spacs.k12.wi.us>\n";
 /*
  *  Sources:
  *      COPS Localtalk SDK. This provides almost all of the information
@@ -118,12 +121,13 @@ static int irq = 0;		/* Default IRQ */
  *
  *      This driver should support:
  *      TANGENT driver mode:
- *              Tangent ATB-II, Novell NL-1000, Daystar Digital LT-200
+ *              Tangent ATB-II, Novell NL-1000, Daystar Digital LT-200,
+ *		COPS LT-1
  *      DAYNA driver mode:
  *              Dayna DL2000/DaynaTalk PC (Half Length), COPS LT-95, 
  *		Farallon PhoneNET PC III, Farallon PhoneNET PC II
  *	Other cards possibly supported mode unkown though:
- *		Dayna DL2000 (Full length)
+ *		Dayna DL2000 (Full length), COPS LT/M (Micro-Channel)
  *
  *	Cards NOT supported by this driver but supported by the ltpc.c
  *	driver written by Bradford W. Johnson <johns393@maroon.tc.umn.edu>
@@ -148,6 +152,8 @@ static unsigned int cops_portlist[] = {
 static int cops_irqlist[] = {
 	5, 4, 3, 0 
 };
+
+static struct timer_list cops_timer;
 
 /* use 0 for production, 1 for verification, 2 for debug, 3 for very verbose debug */
 #ifndef COPS_DEBUG
@@ -181,6 +187,7 @@ static void cops_load (struct device *dev);
 static int  cops_nodeid (struct device *dev, int nodeid);
 
 static void cops_interrupt (int irq, void *dev_id, struct pt_regs *regs);
+static void cops_poll (unsigned long ltdev);
 static void cops_rx (struct device *dev);
 static int  cops_send_packet (struct sk_buff *skb, struct device *dev);
 static void set_multicast_list (struct device *dev);
@@ -193,10 +200,10 @@ static struct enet_statistics *cops_get_stats (struct device *dev);
 
 
 /*
- *      Check for a network adaptor of this type, and return '0' iff one exists. 
+ *      Check for a network adaptor of this type, and return '0' iff one exists.
  *      If dev->base_addr == 0, probe all likely locations.
  *      If dev->base_addr == 1, always return failure.
- *      If dev->base_addr == 2, allocate space for the device and return success 
+ *      If dev->base_addr == 2, allocate space for the device and return success
  *      (detachable devices only).
  */
 __initfunc(int cops_probe(struct device *dev))
@@ -313,13 +320,22 @@ __initfunc(static int cops_probe1(struct device *dev, int ioaddr))
 	dev->set_multicast_list = &set_multicast_list;
         dev->mc_list            = NULL;
 
+	if(board==TANGENT)	/* Poll 20 times per second */
+	{
+		init_timer(&cops_timer);
+		cops_timer.function 	= cops_poll;
+		cops_timer.data 	= (unsigned long)dev;
+		cops_timer.expires 	= jiffies + 5;
+		add_timer(&cops_timer);
+	}
+
         return 0;
 }
 
 __initfunc(static int cops_irq (int ioaddr, int board))
 {       /*
          * This does not use the IRQ to determine where the IRQ is. We just
-         * assume that when we get a correct status response that is the IRQ then.
+         * assume that when we get a correct status response that its the IRQ.
          * This really just verifies the IO port but since we only have access
          * to such a small number of IRQs (5, 4, 3) this is not bad.
          * This will probably not work for more than one card.
@@ -397,7 +413,7 @@ static int cops_jumpstart(struct device *dev)
          *      Once the card has the firmware loaded and has acquired
          *      the nodeid, if it is reset it will lose it all.
          */
-        cops_reset(dev,1);    /* Need to reset card before load firmware. */
+        cops_reset(dev,1);	/* Need to reset card before load firmware. */
         cops_load(dev);		/* Load the firmware. */
 
 	/*
@@ -414,10 +430,14 @@ static int cops_jumpstart(struct device *dev)
 
 static int tangent_wait_reset(int ioaddr)
 {
-        int timeout=0;
+	long snapt=jiffies;
 
-        while(timeout < 5000 && (inb(ioaddr+TANG_CARD_STATUS)&TANG_TX_READY)==0)
-		mdelay(1);   /* Wait 1000 useconds */
+	while(jiffies-snapt<5*HZ)
+	{
+		if((inb(ioaddr+TANG_CARD_STATUS)&TANG_RX_READY)==0)
+			break;
+		schedule();
+	}
 
 	return 0;
 }
@@ -575,9 +595,9 @@ static int cops_nodeid (struct device *dev, int nodeid)
         	/* Empty any pending adapter responses. */
                 while((inb(ioaddr+DAYNA_CARD_STATUS)&DAYNA_TX_READY)==0)
                 {
-			outb(0, ioaddr+COPS_CLEAR_INT);	/* Clear any interrupt. */
+			outb(0, ioaddr+COPS_CLEAR_INT);	/* Clear interrupts. */
         		if((inb(ioaddr+DAYNA_CARD_STATUS)&0x03)==DAYNA_RX_REQUEST)
-                		cops_rx(dev);	/* Kick out any packet waiting. */
+                		cops_rx(dev);	/* Kick any packets waiting. */
 			schedule();
                 }
 
@@ -634,6 +654,44 @@ static int cops_nodeid (struct device *dev, int nodeid)
 }
 
 /*
+ *	Poll the Tangent type cards to see if we have work.
+ */
+static void cops_poll(unsigned long ltdev)
+{
+	struct cops_local *lp;
+	int ioaddr, status;
+	int boguscount = 0;
+
+	struct device *dev = (struct device *)ltdev;
+
+	del_timer(&cops_timer);
+
+	if(dev == NULL)
+		return;	/* We've been downed */
+
+	ioaddr = dev->base_addr;
+
+	/* Clear any interrupt. */
+	outb(0, ioaddr + COPS_CLEAR_INT);
+	dev->interrupt = 0;
+
+	lp = (struct cops_local *)dev->priv;
+	do {
+		status=inb(ioaddr+TANG_CARD_STATUS);
+		if(status & TANG_RX_READY)
+			cops_rx(dev);
+		if(status & TANG_TX_READY)
+			dev->tbusy = 0;
+		status = inb(ioaddr+TANG_CARD_STATUS);
+	} while((++boguscount < 20) && (status&(TANG_RX_READY|TANG_TX_READY)));
+
+	cops_timer.expires = jiffies+5;
+	add_timer(&cops_timer);
+
+	return;
+}
+
+/*
  *      The typical workload of the driver:
  *      Handle the network interface interrupts.
  */
@@ -654,29 +712,31 @@ static void cops_interrupt(int irq, void *dev_id, struct pt_regs * regs)
         ioaddr = dev->base_addr;
         lp = (struct cops_local *)dev->priv;
 
-        do
-        {
-                /* Clear any interrupt. */
-                outb(0, ioaddr + COPS_CLEAR_INT);
+	if(lp->board==DAYNA)
+	{
+		do {
+			outb(0, ioaddr + COPS_CLEAR_INT);
+                       	status=inb(ioaddr+DAYNA_CARD_STATUS);
+                       	if((status&0x03)==DAYNA_RX_REQUEST)
+                       	        cops_rx(dev);
+			dev->tbusy = 0;
+			mark_bh(NET_BH);
+		} while(++boguscount < 20);
+	}
+	else
+	{
+		do {
+                       	status=inb(ioaddr+TANG_CARD_STATUS);
+			if(status & TANG_RX_READY)
+				cops_rx(dev);
+			if(status & TANG_TX_READY)
+				dev->tbusy = 0;
+			status=inb(ioaddr+TANG_CARD_STATUS);
+		} while((++boguscount < 20) &&
+				(status&(TANG_RX_READY|TANG_TX_READY)));
+	}
 
-                if(lp->board==DAYNA)
-                {
-                        status=inb(ioaddr+DAYNA_CARD_STATUS);
-                        if((status&0x03)==DAYNA_RX_REQUEST)
-                                cops_rx(dev);
-                }
-                else
-                {
-                        status=inb(ioaddr+TANG_CARD_STATUS);
-                        if(status&TANG_RX_READY)
-                                cops_rx(dev);
-                }
-
-                dev->tbusy = 0;
-                mark_bh(NET_BH);
-        } while (++boguscount < 20 );
         dev->interrupt = 0;
-
         return;
 }
 
@@ -715,7 +775,10 @@ static void cops_rx(struct device *dev)
         }
 
         /* Get response length. */
-        pkt_len = inb(ioaddr) & 0xFF;
+	if(lp->board==DAYNA)
+        	pkt_len = inb(ioaddr) & 0xFF;
+	else
+		pkt_len = inb(ioaddr) & 0x00FF;
         pkt_len |= (inb(ioaddr) << 8);
         /* Input IO code. */
         rsp_type=inb(ioaddr);
@@ -769,7 +832,7 @@ static void cops_rx(struct device *dev)
 
         skb->mac.raw    = skb->data;    /* Point to entire packet. */
         skb_pull(skb,3);
-        skb->h.raw      = skb->data;    /* Point to just the data (Skip header). */
+        skb->h.raw      = skb->data;    /* Point to data (Skip header). */
 
         /* Update the counters. */
         lp->stats.rx_packets++;
@@ -819,22 +882,17 @@ static int cops_send_packet(struct sk_buff *skb, struct device *dev)
         else
         {
 		cli();	/* Disable interrupts. */
-		if(lp->board == DAYNA)		/* Wait for adapter transmit buffer. */
+		if(lp->board == DAYNA)	 /* Wait for adapter transmit buffer. */
 			while((inb(ioaddr+DAYNA_CARD_STATUS)&DAYNA_TX_READY)==0);
-		if(lp->board == TANGENT)	/* Wait for adapter transmit buffer. */
+		if(lp->board == TANGENT) /* Wait for adapter transmit buffer. */
 			while((inb(ioaddr+TANG_CARD_STATUS)&TANG_TX_READY)==0);
 
 		/* Output IO length. */
+		outb(skb->len, ioaddr);
 		if(lp->board == DAYNA)
-		{
-                	outb(skb->len, ioaddr);
                 	outb(skb->len >> 8, ioaddr);
-		}
 		else
-		{
-			outb(skb->len&0x0FF, ioaddr);
 			outb((skb->len >> 8)&0x0FF, ioaddr);
-		}
 
 		/* Output IO code. */
                 outb(LAP_WRITE, ioaddr);

@@ -118,6 +118,9 @@ __initfunc(int ultramca_probe(struct device *dev))
 	reg4 = inb(ioaddr + 4) & 0x7f;
 	outb(reg4, ioaddr + 4);
 
+	if (load_8390_module("wd.c"))
+		return -ENOSYS;
+
 	printk("%s: SMC Ultra MCA at %#3x,", dev->name, ioaddr);
 
 	for (i = 0; i < 6; i++)
@@ -347,12 +350,15 @@ int init_module(void)
 		if (register_netdev(dev) != 0)
 		{
 			printk(KERN_WARNING "smc-mca.c: No SMC Ultra card found (i/o = 0x%x).\n", io[this_dev]);
-			if (found != 0)
-				return 0;   /* Got at least one. */
+			if (found != 0) {	/* Got at least one. */
+				lock_8390_module();
+				return 0;
+			}
 			return -ENXIO;
 		}
 		found++;
 	}
+	lock_8390_module();
 	return 0;
 }
 
@@ -365,14 +371,16 @@ void cleanup_module(void)
 		struct device *dev = &dev_ultra[this_dev];
         	if (dev->priv != NULL)
         	{
+			void *priv = dev->priv;
 			/* NB: ultra_close_card() does free_irq */
 			int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET;
-			unregister_netdev(dev);
-			kfree(dev->priv);
-			dev->priv = NULL;
 			release_region(ioaddr, ULTRA_IO_EXTENT);
+			dev->priv = NULL;
+			unregister_netdev(dev);
+			kfree(priv);
 		}
 	}
+	unlock_8390_module();
 }
 #endif /* MODULE */
 

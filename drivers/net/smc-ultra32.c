@@ -148,6 +148,9 @@ __initfunc(int ultra32_probe1(struct device *dev, int ioaddr))
 	if ((checksum & 0xff) != 0xff)
 		return ENODEV;
 
+	if (load_8390_module("smc-ultra32.c"))
+		return -ENOSYS;
+
 	/* We should have a "dev" from Space.c or the static module table. */
 	if (dev == NULL) {
 		printk("smc-ultra32.c: Passed a NULL device.\n");
@@ -386,13 +389,16 @@ int init_module(void)
 		dev->name = namelist+(NAMELEN*this_dev);
 		dev->init = ultra32_probe;
 		if (register_netdev(dev) != 0) {
-			if (found > 0) return 0; /* Got at least one. */
+			if (found > 0) { /* Got at least one. */
+				lock_8390_module();
+				return 0;
+			}
 			printk(KERN_WARNING "smc-ultra32.c: No SMC Ultra32 found.\n");
 			return -ENXIO;
 		}
 		found++;
 	}
-
+	lock_8390_module();
 	return 0;
 }
 
@@ -403,13 +409,15 @@ void cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_ULTRA32_CARDS; this_dev++) {
 		struct device *dev = &dev_ultra[this_dev];
 		if (dev->priv != NULL) {
-			/* NB: ultra32_close_card() does free_irq + irq2dev */
 			int ioaddr = dev->base_addr - ULTRA32_NIC_OFFSET;
-			kfree(dev->priv);
-			dev->priv = NULL;
+			void *priv = dev->priv;
+			/* NB: ultra32_close_card() does free_irq */
 			release_region(ioaddr, ULTRA32_IO_EXTENT);
+			dev->priv = NULL;
 			unregister_netdev(dev);
+			kfree(priv);
 		}
 	}
+	unlock_8390_module();
 }
 #endif /* MODULE */

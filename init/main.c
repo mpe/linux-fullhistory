@@ -136,6 +136,8 @@ extern void t128_setup(char *str, int *ints);
 extern void pas16_setup(char *str, int *ints);
 extern void generic_NCR5380_setup(char *str, int *intr);
 extern void generic_NCR53C400_setup(char *str, int *intr);
+extern void generic_NCR53C400A_setup(char *str, int *intr);
+extern void generic_DTC3181E_setup(char *str, int *intr);
 extern void aha152x_setup(char *str, int *ints);
 extern void aha1542_setup(char *str, int *ints);
 extern void gdth_setup(char *str, int *ints);
@@ -576,6 +578,8 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_SCSI_GENERIC_NCR5380
 	{ "ncr5380=", generic_NCR5380_setup },
 	{ "ncr53c400=", generic_NCR53C400_setup },
+	{ "ncr53c400a=", generic_NCR53C400A_setup },
+	{ "dtc3181e=", generic_DTC3181E_setup },
 #endif
 #ifdef CONFIG_SCSI_AHA152X
 	{ "aha152x=", aha152x_setup},

@@ -7,9 +7,9 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-SUB_DIRS     := block char net misc #streams
+SUB_DIRS     := block char net misc sound
 MOD_SUB_DIRS := $(SUB_DIRS) sbus
-ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sbus sound cdrom isdn pnp macintosh
+ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sbus cdrom isdn pnp macintosh
 
 ifdef CONFIG_PCI
 SUB_DIRS += pci
@@ -32,14 +32,6 @@ MOD_SUB_DIRS += scsi
 else
   ifeq ($(CONFIG_SCSI),m)
   MOD_SUB_DIRS += scsi
-  endif
-endif
-
-ifeq ($(CONFIG_SOUND),y)
-SUB_DIRS += sound
-else
-  ifeq ($(CONFIG_SOUND),m)
-  MOD_SUB_DIRS += sound
   endif
 endif
 

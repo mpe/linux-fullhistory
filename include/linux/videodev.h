@@ -80,11 +80,14 @@ struct video_tuner
 #define VIDEO_TUNER_PAL		1
 #define VIDEO_TUNER_NTSC	2
 #define VIDEO_TUNER_SECAM	4
+#define VIDEO_TUNER_LOW		8	/* Uses KHz not MHz */
+#define VIDEO_TUNER_STEREO_ON	128	/* Tuner is seeing stereo */
 	__u16 mode;			/* PAL/NTSC/SECAM/OTHER */
 #define VIDEO_MODE_PAL		0
 #define VIDEO_MODE_NTSC		1
 #define VIDEO_MODE_SECAM	2
 #define VIDEO_MODE_AUTO		3
+	__u16 signal;			/* Signal strength 16bit scale */
 };
 
 struct video_picture
@@ -102,6 +105,7 @@ struct video_picture
 #define VIDEO_PALETTE_RGB24	4	/* 24bit RGB */
 #define VIDEO_PALETTE_RGB32	5	/* 32bit RGB */	
 #define VIDEO_PALETTE_RGB555	6	/* 555 15bit RGB */
+#define VIDEO_PALETTE_YUV422	7	/* YUV422 capture */
 };
 
 struct video_audio
@@ -192,6 +196,9 @@ struct video_key
 #define VID_HARDWARE_QCAM_C	4
 #define VID_HARDWARE_PSEUDO	5
 #define VID_HARDWARE_SAA5249	6
+#define VID_HARDWARE_AZTECH	7
+#define VID_HARDWARE_SF16MI	8
+#define VID_HARDWARE_RTRACK	9
 
 /*
  *	Initialiser list

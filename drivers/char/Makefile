@@ -303,26 +303,30 @@ else
 endif
 
 ifeq ($(CONFIG_BUS_I2C),y)
-	LX_OBJS += i2c.o
+	L_I2C=y
 else
   ifeq ($(CONFIG_BUS_I2C),m)
-	MX_OBJS += i2c.o
+	M_I2C=y
   endif
 endif
 
 ifeq ($(CONFIG_VIDEO_BT848),y)
 L_OBJS += bttv.o msp3400.o tuner.o
+L_I2C=y
 else
   ifeq ($(CONFIG_VIDEO_BT848),m)
     M_OBJS += bttv.o msp3400.o tuner.o
+    M_I2C=y
   endif
 endif
 
 ifeq ($(CONFIG_VIDEO_SAA5249),y)
 L_OBJS += saa5249.o
+L_I2C=y
 else
   ifeq ($(CONFIG_VIDEO_SAA5249),m)
     M_OBJS += saa5249.o
+    M_I2C=y
   endif
 endif
 
@@ -349,6 +353,30 @@ else
   M_OBJS += pms.o
   endif
 endif
+
+ifeq ($(CONFIG_RADIO_AZTECH),y)
+L_OBJS += radio-aztech.o
+else
+  ifeq ($(CONFIG_RADIO_AZTECH),m)
+  M_OBJS += radio-aztech.o
+  endif
+endif                                             
+
+ifeq ($(CONFIG_RADIO_SF16FMI),y)
+L_OBJS += radio-sf16fmi.o
+else
+  ifeq ($(CONFIG_RADIO_SF16FMI),m)
+  M_OBJS += radio-sf16fmi.o
+  endif
+endif                                             
+
+ifeq ($(CONFIG_RADIO_RTRACK),y)
+L_OBJS += radio-aimslab.o
+else
+  ifeq ($(CONFIG_RADIO_RTRACK),m)
+  M_OBJS += radio-aimslab.o
+  endif
+endif                                             
 
 ifeq ($(CONFIG_MISC_RADIO),y)
 L_OBJS += radio.o
@@ -392,6 +420,14 @@ LX_OBJS += misc.o
 else
   ifdef MM
   MX_OBJS += misc.o
+  endif
+endif
+
+ifeq ($(L_I2C),y)
+LX_OBJS += i2c.o
+else
+  ifeq ($(M_I2C),y)
+  MX_OBJS += i2c.o
   endif
 endif
 

@@ -47,6 +47,7 @@ extern int ultra32_probe(struct device *dev);
 extern int ultramca_probe(struct device *dev);
 extern int wd_probe(struct device *dev);
 extern int el2_probe(struct device *dev);
+extern int ne2k_pci_probe(struct device *dev);
 extern int ne_probe(struct device *dev);
 extern int hp_probe(struct device *dev);
 extern int hp_plus_probe(struct device *dev);
@@ -179,7 +180,10 @@ __initfunc(static int ethif_probe(struct device *dev))
 #ifdef CONFIG_E2100		/* Cabletron E21xx series. */
 	&& e2100_probe(dev)
 #endif
-#if defined(CONFIG_NE2000) || defined(NE2000)
+#if defined(CONFIG_NE2K_PCI)
+	&& ne2k_pci_probe(dev)
+#endif
+#if defined(CONFIG_NE2000)
 	&& ne_probe(dev)
 #endif
 #ifdef CONFIG_AT1500

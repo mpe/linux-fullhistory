@@ -15,4 +15,9 @@
 
 #define MSP_GET_DC         _IOW('m',8,int)
 
+#define MSP_GET_BASS       _IOR('m', 9,int)
+#define MSP_SET_BASS       _IOW('m',10,int)
+#define MSP_GET_TREBLE     _IOR('m',11,int)
+#define MSP_SET_TREBLE     _IOW('m',12,int)
+
 #endif /* MSP3400_H */

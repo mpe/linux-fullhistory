@@ -208,6 +208,13 @@ parport_ax_claim_resources(struct parport *p)
 }
 
 void
+parport_ax_init_state(struct parport_state *s)
+{
+	s->u.pc.ctr = 0xc;
+	s->u.pc.ecr = 0x0;
+}
+
+void
 parport_ax_save_state(struct parport *p, struct parport_state *s)
 {
 	s->u.pc.ctr = parport_ax_read_control(p);
@@ -301,6 +308,7 @@ static struct parport_operations parport_ax_ops =
 	parport_ax_ecp_write_block,
 	parport_ax_ecp_read_block,
 	
+	parport_ax_init_state,
 	parport_ax_save_state,
 	parport_ax_restore_state,
 

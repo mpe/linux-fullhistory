@@ -11,17 +11,20 @@ if [ "$CONFIG_SCC" != "n" ]; then
   bool '   support for TRX that feedback the tx signal to rx' CONFIG_SCC_TRXECHO
 fi
     
-dep_tristate 'BAYCOM ser12 fullduplex driver for AX.25' CONFIG_BAYCOM_SER_FDX $CONFIG_AX25
-dep_tristate 'BAYCOM ser12 halfduplex driver for AX.25' CONFIG_BAYCOM_SER_HDX $CONFIG_AX25
-dep_tristate 'BAYCOM picpar and par96 driver for AX.25' CONFIG_BAYCOM_PAR $CONFIG_AX25
+tristate 'BAYCOM ser12 fullduplex driver for AX.25' CONFIG_BAYCOM_SER_FDX
+tristate 'BAYCOM ser12 halfduplex driver for AX.25' CONFIG_BAYCOM_SER_HDX
+tristate 'BAYCOM picpar and par96 driver for AX.25' CONFIG_BAYCOM_PAR
+tristate 'BAYCOM epp driver for AX.25' CONFIG_BAYCOM_EPP
 
-dep_tristate 'Soundcard modem driver' CONFIG_SOUNDMODEM $CONFIG_AX25
+tristate 'Soundcard modem driver' CONFIG_SOUNDMODEM
 if [ "$CONFIG_SOUNDMODEM" != "n" ]; then
   bool '   soundmodem support for Soundblaster and compatible cards' CONFIG_SOUNDMODEM_SBC
   bool '   soundmodem support for WSS and Crystal cards' CONFIG_SOUNDMODEM_WSS
   bool '   soundmodem support for 1200 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK1200
   bool '   soundmodem support for 2400 baud AFSK modulation (7.3728MHz crystal)' CONFIG_SOUNDMODEM_AFSK2400_7
   bool '   soundmodem support for 2400 baud AFSK modulation (8MHz crystal)' CONFIG_SOUNDMODEM_AFSK2400_8
+  bool '   soundmodem support for 2666 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK2666
   bool '   soundmodem support for 4800 baud HAPN-1 modulation' CONFIG_SOUNDMODEM_HAPN4800
+  bool '   soundmodem support for 4800 baud PSK modulation' CONFIG_SOUNDMODEM_PSK4800
   bool '   soundmodem support for 9600 baud FSK G3RUH modulation' CONFIG_SOUNDMODEM_FSK9600
 fi

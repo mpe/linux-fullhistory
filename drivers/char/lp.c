@@ -112,7 +112,7 @@ struct lp_struct lp_table[LP_NO] =
 #ifdef LP_STATS
 			   0, 0, {0},
 #endif
-			   NULL, 0, 0}
+			   NULL, 0, 0, 0}
 };
 
 /* Test if printer is ready (and optionally has no error conditions) */

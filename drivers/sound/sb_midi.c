@@ -179,7 +179,7 @@ void sb_dsp_midi_init(sb_devc * devc)
 
 	if (dev == -1)
 	{
-		printk("Sound: Too many midi devices detected\n");
+		printk(KERN_ERR "sb_midi: Too many midi devices detected\n");
 		return;
 	}
 	std_midi_synth.midi_dev = dev;

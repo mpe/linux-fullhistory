@@ -1,6 +1,6 @@
 /* pcnet32.c: An AMD PCnet32 ethernet driver for linux. */
 /*
- *      Copyright 1996,97 Thomas Bogendoerfer
+ *      Copyright 1996,97,98 Thomas Bogendoerfer
  * 
  * 	Derived from the lance driver written 1993,1994,1995 by Donald Becker.
  * 
@@ -13,9 +13,14 @@
  * 	This driver is for PCnet32 and PCnetPCI based ethercards
  */
 
-static const char *version = "pcnet32.c:v0.23 8.2.97 tsbogend@alpha.franken.de\n";
+static const char *version = "pcnet32.c:v1.00 30.5.98 tsbogend@alpha.franken.de\n";
 
 #include <linux/config.h>
+#include <linux/module.h>
+#ifdef MODVERSIONS
+#include <linux/modversions.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -25,6 +30,7 @@ static const char *version = "pcnet32.c:v0.23 8.2.97 tsbogend@alpha.franken.de\n
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
+#include <linux/delay.h>
 #include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -36,11 +42,14 @@ static const char *version = "pcnet32.c:v0.23 8.2.97 tsbogend@alpha.franken.de\n
 
 static unsigned int pcnet32_portlist[] __initdata = {0x300, 0x320, 0x340, 0x360, 0};
 
-#ifdef PCNET32_DEBUG
-static int pcnet32_debug = PCNET32_DEBUG;
-#else
 static int pcnet32_debug = 1;
+
+#ifdef MODULE
+static struct device *pcnet32_dev = NULL;
 #endif
+
+static const int max_interrupt_work = 20;
+static const int rx_copybreak = 200;
 
 /*
  * 				Theory of Operation
@@ -58,7 +67,7 @@ static int pcnet32_debug = 1;
  *         only tested on Alpha Noname Board
  * v0.02:  changed IRQ handling for new interrupt scheme (dev_id)
  *         tested on a ASUS SP3G
- * v0.10:  fixed an odd problem with the 79C794 in a Compaq Deskpro XL
+ * v0.10:  fixed an odd problem with the 79C974 in a Compaq Deskpro XL
  *         looks like the 974 doesn't like stopping and restarting in a
  *         short period of time; now we do a reinit of the lance; the
  *         bug was triggered by doing ifconfig eth0 <ip> broadcast <addr>
@@ -77,7 +86,18 @@ static int pcnet32_debug = 1;
  *	   in arch/i386/bios32.c
  * v0.21:  added endian conversion for ppc, from work by cort@cs.nmt.edu
  * v0.22:  added printing of status to ring dump
- * v0.23:  changed enet_statistics to net_device_stats
+ * v0.23:  changed enet_statistics to net_devive_stats
+ * v0.90:  added multicast filter
+ *         added module support
+ *         changed irq probe to new style
+ *         added PCnetFast chip id
+ *         added fix for receive stalls with Intel saturn chipsets
+ *         added in-place rx skbs like in the tulip driver
+ *         minor cleanups
+ * v0.91:  added PCnetFast+ chip id
+ *         back port to 2.0.x
+ * v1.00:  added some stuff from Donald Becker's 2.0.34 version
+ *         added support for byte counters in net_dev_stats
  */
 
 
@@ -107,6 +127,8 @@ static int pcnet32_debug = 1;
 #define PCNET32_RESET 0x14
 #define PCNET32_BUS_IF 0x16
 #define PCNET32_TOTAL_SIZE 0x18
+
+#define CRC_POLYNOMIAL_LE 0xedb88320UL  /* Ethernet CRC, little endian */
 
 /* The PCNET32 Rx and Tx ring descriptors. */
 struct pcnet32_rx_head {
@@ -145,14 +167,17 @@ struct pcnet32_private {
 	struct pcnet32_init_block	init_block;
 	const char *name;
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
-	struct sk_buff* tx_skbuff[TX_RING_SIZE];
-	unsigned long rx_buffs;			/* Address of Rx and Tx buffers. */
+	struct sk_buff *tx_skbuff[TX_RING_SIZE];
+        struct sk_buff *rx_skbuff[RX_RING_SIZE];
 	int cur_rx, cur_tx;			/* The next free ring entry */
 	int dirty_rx, dirty_tx;		        /* The ring entries to be free()ed. */
 	struct net_device_stats stats;
 	char tx_full;
 	unsigned long lock;
         char shared_irq;                         /* shared irq possible */
+#ifdef MODULE
+        struct device *next;
+#endif    
 };
 
 int  pcnet32_probe(struct device *dev);
@@ -204,9 +229,6 @@ __initfunc(int pcnet32_probe (struct device *dev))
 		pci_command |= PCI_COMMAND_MASTER|PCI_COMMAND_IO;
 		pci_write_config_word(pdev, PCI_COMMAND, pci_command);
 	    }
-#ifdef __powerpc__
-	    irq_line = 15;
-#endif
 	    
 	    printk("Found PCnet/PCI at %#x, irq %d.\n",
 		   ioaddr, irq_line);
@@ -275,17 +297,20 @@ __initfunc(static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, un
 	 case 0x2621:
 	    chipname = "PCnet/PCI II 79C970A";
 	    break;
+	 case 0x2623:
+	    chipname = "PCnet/FAST 79C971";
+	    break;
+	 case 0x2624:
+	    chipname = "PCnet/FAST+ 79C972";
+	    break;
 	 default:
 	    printk("pcnet32: PCnet version %#x, no PCnet32 chip.\n",chip_version);
 	    return ENODEV;
 	}
     }
     
-    /* We should have a "dev" from Space.c or the static module table. */
-    if (dev == NULL) {
-	printk(KERN_ERR "pcnet32.c: Passed a NULL device.\n");
+    if (dev == NULL)
 	dev = init_etherdev(0, 0);
-    }
 
     printk("%s: %s at %#3x,", dev->name, chipname, ioaddr);
 
@@ -304,7 +329,6 @@ __initfunc(static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, un
     dev->priv = lp;
     lp->name = chipname;
     lp->shared_irq = shared;
-    lp->rx_buffs = (unsigned long) kmalloc(PKT_BUF_SZ*RX_RING_SIZE, GFP_DMA | GFP_KERNEL);
 
     lp->init_block.mode = le16_to_cpu(0x0003);	/* Disable Rx and Tx. */
     lp->init_block.tlen_rlen = le16_to_cpu(TX_RING_LEN_BITS | RX_RING_LEN_BITS); 
@@ -335,17 +359,18 @@ __initfunc(static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, un
     if (dev->irq >= 2)
       printk(" assigned IRQ %d.\n", dev->irq);
     else {
+	unsigned long irq_mask = probe_irq_on();
+	
 	/*
 	 * To auto-IRQ we enable the initialization-done and DMA error
 	 * interrupts. For ISA boards we get a DMA error, but VLB and PCI
 	 * boards will work.
 	 */
-	autoirq_setup(0);
-	
 	/* Trigger an initialization just for the interrupt. */
 	outw(0x0041, ioaddr+PCNET32_DATA);
-
-	dev->irq = autoirq_report(1);
+	mdelay (1);
+	
+	dev->irq = probe_irq_off (irq_mask);
 	if (dev->irq)
 	  printk(", probed IRQ %d.\n", dev->irq);
 	else {
@@ -368,6 +393,11 @@ __initfunc(static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, un
     dev->stop = &pcnet32_close;
     dev->get_stats = &pcnet32_get_stats;
     dev->set_multicast_list = &pcnet32_set_multicast_list;
+    
+#ifdef MODULE
+    lp->next = pcnet32_dev;
+    pcnet32_dev = dev;
+#endif	
 
     /* Fill in the generic fields of the device structure. */
     ether_setup(dev);
@@ -441,6 +471,8 @@ pcnet32_open(struct device *dev)
 		printk("%s: PCNET32 open after %d ticks, init block %#x csr0 %4.4x.\n",
 			   dev->name, i, (u32) virt_to_bus(&lp->init_block), inw(ioaddr+PCNET32_DATA));
 
+        MOD_INC_USE_COUNT;
+    
 	return 0;					/* Always succeed */
 }
 
@@ -478,15 +510,23 @@ pcnet32_init_ring(struct device *dev)
 {
 	struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
 	int i;
+        struct sk_buff *skb;
 
 	lp->lock = 0, lp->tx_full = 0;
 	lp->cur_rx = lp->cur_tx = 0;
 	lp->dirty_rx = lp->dirty_tx = 0;
 
 	for (i = 0; i < RX_RING_SIZE; i++) {
-		lp->rx_ring[i].base = (u32)le32_to_cpu(virt_to_bus((char *)lp->rx_buffs + i*PKT_BUF_SZ));
+	    skb = dev_alloc_skb (PKT_BUF_SZ);
+	    if (skb) {
+		lp->rx_skbuff[i] = skb;
+		skb_reserve (skb, 2);
+		lp->rx_ring[i].base = (u32)le32_to_cpu(virt_to_bus(skb->tail));
 		lp->rx_ring[i].buf_length = le16_to_cpu(-PKT_BUF_SZ);
-	        lp->rx_ring[i].status = le16_to_cpu(0x8000);	    
+	        lp->rx_ring[i].status = le16_to_cpu(0x8000);
+	    }
+	    else
+		break;
 	}
 	/* The Tx buffer address is filled in as needed, but we do need to clear
 	   the upper ownership bit. */
@@ -503,7 +543,7 @@ pcnet32_init_ring(struct device *dev)
 }
 
 static void
-pcnet32_restart(struct device *dev, unsigned int csr0_bits, int must_reinit)
+pcnet32_restart(struct device *dev, unsigned int csr0_bits)
 {
         int i;
 	unsigned int ioaddr = dev->base_addr;
@@ -557,9 +597,9 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 			printk("\n");
 		}
 #endif
-		pcnet32_restart(dev, 0x0042, 1);
+		pcnet32_restart(dev, 0x0042);
 
-		dev->tbusy=0;
+		dev->tbusy = 0;
 		dev->trans_start = jiffies;
 
 		return 0;
@@ -603,6 +643,7 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
         lp->tx_ring[entry].status = le16_to_cpu(0x8300);
 
 	lp->cur_tx++;
+        lp->stats.tx_bytes += skb->len;
 
 	/* Trigger an immediate send poll. */
 	outw(0x0000, ioaddr+PCNET32_ADDR);
@@ -614,7 +655,7 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 	cli();
 	lp->lock = 0;
 	if (lp->tx_ring[(entry+1) & TX_RING_MOD_MASK].base == 0)
-		dev->tbusy=0;
+		clear_bit (0, (void *)&dev->tbusy);
 	else
 		lp->tx_full = 1;
 	restore_flags(flags);
@@ -629,8 +670,7 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	struct device *dev = (struct device *)dev_id;
 	struct pcnet32_private *lp;
 	unsigned int csr0, ioaddr;
-	int boguscnt=10;
-	int must_restart;
+	int boguscnt =  max_interrupt_work;
 
 	if (dev == NULL) {
 		printk ("pcnet32_interrupt(): irq %d for unknown device.\n", irq);
@@ -645,12 +685,9 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	dev->interrupt = 1;
 
 	outw(0x00, dev->base_addr + PCNET32_ADDR);
-	while ((csr0 = inw(dev->base_addr + PCNET32_DATA)) & 0x8600
-		   && --boguscnt >= 0) {
+	while ((csr0 = inw(dev->base_addr + PCNET32_DATA)) & 0x8600 && --boguscnt >= 0) {
 		/* Acknowledge all of the current interrupt sources ASAP. */
 		outw(csr0 & ~0x004f, dev->base_addr + PCNET32_DATA);
-
-		must_restart = 0;
 
 		if (pcnet32_debug > 5)
 			printk("%s: interrupt  csr0=%#2.2x new csr=%#2.2x.\n",
@@ -684,8 +721,10 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 						/* Remove this verbosity later! */
 						printk("%s: Tx FIFO error! Status %4.4x.\n",
 							   dev->name, csr0);
-						/* Restart the chip. */
-						must_restart = 1;
+					        /* stop the chip to clear the error condition, then restart */
+					        outw(0x0000, dev->base_addr + PCNET32_ADDR);
+					        outw(0x0004, dev->base_addr + PCNET32_DATA);
+					        pcnet32_restart(dev, 0x0002);
 					}
 				} else {
 					if (status & 0x1800)
@@ -713,28 +752,31 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 				&& dirty_tx > lp->cur_tx - TX_RING_SIZE + 2) {
 				/* The ring is no longer full, clear tbusy. */
 				lp->tx_full = 0;
-				dev->tbusy = 0;
+				clear_bit(0, (void *)&dev->tbusy);
 				mark_bh(NET_BH);
 			}
-
 			lp->dirty_tx = dirty_tx;
 		}
 
 		/* Log misc errors. */
 		if (csr0 & 0x4000) lp->stats.tx_errors++; /* Tx babble. */
-		if (csr0 & 0x1000) lp->stats.rx_errors++; /* Missed a Rx frame. */
+		if (csr0 & 0x1000) {
+		    /*
+		     * this happens when our receive ring is full. This shouldn't
+		     * be a problem as we will see normal rx interrupts for the frames
+		     * in the receive ring. But there are some PCI chipsets (I can reproduce
+		     * this on SP3G with Intel saturn chipset) which have sometimes problems
+		     * and will fill up the receive ring with error descriptors. In this
+		     * situation we don't get a rx interrupt, but a missed frame interrupt sooner
+		     * or later. So we try to clean up our receive ring here.
+		     */
+		    pcnet32_rx(dev);
+		    lp->stats.rx_errors++; /* Missed a Rx frame. */
+		}
 		if (csr0 & 0x0800) {
 			printk("%s: Bus master arbitration failure, status %4.4x.\n",
 				   dev->name, csr0);
-			/* Restart the chip. */
-			must_restart = 1;
-		}
-
-		if (must_restart) {
-			/* stop the chip to clear the error condition, then restart */
-			outw(0x0000, dev->base_addr + PCNET32_ADDR);
-			outw(0x0004, dev->base_addr + PCNET32_DATA);
-			pcnet32_restart(dev, 0x0002, 0);
+		        /* unlike for the lance, there is no restart needed */
 		}
 	}
 
@@ -757,7 +799,7 @@ pcnet32_rx(struct device *dev)
 	struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
 	int entry = lp->cur_rx & RX_RING_MOD_MASK;
 	int i;
-		
+
 	/* If we own the next entry, it's a new packet. Send it up. */
 	while ((short)le16_to_cpu(lp->rx_ring[entry].status) >= 0) {
 		int status = (short)le16_to_cpu(lp->rx_ring[entry].status) >> 8;
@@ -781,38 +823,53 @@ pcnet32_rx(struct device *dev)
 			short pkt_len = (le32_to_cpu(lp->rx_ring[entry].msg_length) & 0xfff)-4;
 			struct sk_buff *skb;
 			
-			if(pkt_len<60)
-			{
+			if(pkt_len < 60) {
 				printk("%s: Runt packet!\n",dev->name);
 				lp->stats.rx_errors++;
-			}
-			else
-			{
+			} else {
+			    int rx_in_place = 0;
+			    
+			    if (pkt_len > rx_copybreak) {
+				struct sk_buff *newskb;
+				
+				if ((newskb = dev_alloc_skb (PKT_BUF_SZ))) {
+				    skb_reserve (newskb, 2);
+				    skb = lp->rx_skbuff[entry];
+				    skb_put (skb, pkt_len);
+				    lp->rx_skbuff[entry] = newskb;
+				    newskb->dev = dev;
+				    lp->rx_ring[entry].base = le32_to_cpu(virt_to_bus(newskb->tail));
+				    rx_in_place = 1;
+				} else
+				    skb = NULL;
+			    } else
 				skb = dev_alloc_skb(pkt_len+2);
-				if (skb == NULL) 
-				{
-					printk("%s: Memory squeeze, deferring packet.\n", dev->name);
-					for (i=0; i < RX_RING_SIZE; i++)
-						if ((short)le16_to_cpu(lp->rx_ring[(entry+i) & RX_RING_MOD_MASK].status) < 0)
-							break;
-
-					if (i > RX_RING_SIZE -2) 
-					{
-						lp->stats.rx_dropped++;
-						lp->rx_ring[entry].status |= le16_to_cpu(0x8000);
-						lp->cur_rx++;
-					}
+			    
+			    if (skb == NULL) {
+				printk("%s: Memory squeeze, deferring packet.\n", dev->name);
+				for (i=0; i < RX_RING_SIZE; i++)
+				    if ((short)le16_to_cpu(lp->rx_ring[(entry+i) & RX_RING_MOD_MASK].status) < 0)
 					break;
+
+				if (i > RX_RING_SIZE -2) {
+				    lp->stats.rx_dropped++;
+				    lp->rx_ring[entry].status |= le16_to_cpu(0x8000);
+				    lp->cur_rx++;
 				}
-				skb->dev = dev;
+				break;
+			    }
+			    skb->dev = dev;
+			    if (!rx_in_place) {
 				skb_reserve(skb,2);	/* 16 byte align */
 				skb_put(skb,pkt_len);	/* Make room */
 				eth_copy_and_sum(skb,
 					(unsigned char *)bus_to_virt(le32_to_cpu(lp->rx_ring[entry].base)),
 					pkt_len,0);
-				skb->protocol=eth_type_trans(skb,dev);
-				netif_rx(skb);
-				lp->stats.rx_packets++;
+			    }
+			    lp->stats.rx_bytes += skb->len;
+			    skb->protocol=eth_type_trans(skb,dev);
+			    netif_rx(skb);
+			    lp->stats.rx_packets++;
 			}
 		}
 		/* The docs say that the buffer length isn't touched, but Andrew Boyd
@@ -833,9 +890,10 @@ pcnet32_close(struct device *dev)
 {
 	unsigned int ioaddr = dev->base_addr;
 	struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
+        int i;
 
 	dev->start = 0;
-	dev->tbusy = 1;
+	set_bit (0, (void *)&dev->tbusy);
 
 	outw(112, ioaddr+PCNET32_ADDR);
 	lp->stats.rx_missed_errors = inw(ioaddr+PCNET32_DATA);
@@ -851,6 +909,22 @@ pcnet32_close(struct device *dev)
 	outw(0x0004, ioaddr+PCNET32_DATA);
 
 	free_irq(dev->irq, dev);
+    
+        /* free all allocated skbuffs */
+        for (i = 0; i < RX_RING_SIZE; i++) {
+	    lp->rx_ring[i].status = 0;	    	    	    
+	    if (lp->rx_skbuff[i])
+		dev_kfree_skb(lp->rx_skbuff[i]);
+	    lp->rx_skbuff[i] = NULL;
+	}
+    
+        for (i = 0; i < TX_RING_SIZE; i++) {
+	    if (lp->tx_skbuff[i])
+		dev_kfree_skb(lp->tx_skbuff[i]);
+	    lp->rx_skbuff[i] = NULL;
+	}
+    
+        MOD_DEC_USE_COUNT;
 
 	return 0;
 }
@@ -874,6 +948,57 @@ pcnet32_get_stats(struct device *dev)
 	return &lp->stats;
 }
 
+
+/* taken from the sunlance driver, which it took from the depca driver */
+static void pcnet32_load_multicast (struct device *dev)
+{
+    struct pcnet32_private *lp = (struct pcnet32_private *) dev->priv;
+    volatile struct pcnet32_init_block *ib = &lp->init_block;
+    volatile u16 *mcast_table = (u16 *)&ib->filter;
+    struct dev_mc_list *dmi=dev->mc_list;
+    char *addrs;
+    int i, j, bit, byte;
+    u32 crc, poly = CRC_POLYNOMIAL_LE;
+	
+    /* set all multicast bits */
+    if (dev->flags & IFF_ALLMULTI){ 
+	ib->filter [0] = 0xffffffff;
+	ib->filter [1] = 0xffffffff;
+	return;
+    }
+    /* clear the multicast filter */
+    ib->filter [0] = 0;
+    ib->filter [1] = 0;
+
+    /* Add addresses */
+    for (i = 0; i < dev->mc_count; i++){
+	addrs = dmi->dmi_addr;
+	dmi   = dmi->next;
+	
+	/* multicast address? */
+	if (!(*addrs & 1))
+	    continue;
+	
+	crc = 0xffffffff;
+	for (byte = 0; byte < 6; byte++)
+	    for (bit = *addrs++, j = 0; j < 8; j++, bit >>= 1) {
+		int test;
+		
+		test = ((bit ^ crc) & 0x01);
+		crc >>= 1;
+		
+		if (test) {
+		    crc = crc ^ poly;
+		}
+	    }
+	
+	crc = crc >> 26;
+	mcast_table [crc >> 4] |= 1 << (crc & 0xf);
+    }
+    return;
+}
+
+
 /* Set or clear the multicast filter for this adaptor.
  */
 
@@ -885,22 +1010,53 @@ static void pcnet32_set_multicast_list(struct device *dev)
 	if (dev->flags&IFF_PROMISC) {
 		/* Log any net taps. */
 		printk("%s: Promiscuous mode enabled.\n", dev->name);
-	        lp->init_block.mode = 0x8000;
+	        lp->init_block.mode = le16_to_cpu(0x8000);
 	} else {
-		int num_addrs=dev->mc_count;
-		if(dev->flags&IFF_ALLMULTI)
-			num_addrs=1;
-		/* FIXIT: We don't use the multicast table, but rely on upper-layer filtering. */
-		memset(lp->init_block.filter , (num_addrs == 0) ? 0 : -1, sizeof(lp->init_block.filter));
-	        lp->init_block.mode = 0x0000;	        
+	        lp->init_block.mode = 0x0000;
+	        pcnet32_load_multicast (dev);
 	}
     
 	outw(0, ioaddr+PCNET32_ADDR);
 	outw(0x0004, ioaddr+PCNET32_DATA); /* Temporarily stop the lance.	 */
 
-	pcnet32_restart(dev, 0x0042, 0); /*  Resume normal operation */
-
+	pcnet32_restart(dev, 0x0042); /*  Resume normal operation */
 }
+
+#ifdef MODULE
+MODULE_PARM(debug, "i");
+MODULE_PARM(max_interrupt_work, "i");
+MODULE_PARM(rx_copybreak, "i");
+
+/* An additional parameter that may be passed in... */
+static int debug = -1;
+
+int
+init_module(void)
+{
+        if (debug > 0)
+	        pcnet32_debug = debug;
+    
+	pcnet32_dev = NULL;
+	return pcnet32_probe(NULL);
+}
+
+void
+cleanup_module(void)
+{
+	struct device *next_dev;
+
+	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
+	while (pcnet32_dev) {
+		next_dev = ((struct pcnet32_private *) pcnet32_dev->priv)->next;
+		unregister_netdev(pcnet32_dev);
+		release_region(pcnet32_dev->base_addr, PCNET32_TOTAL_SIZE);
+	        kfree(pcnet32_dev->priv);
+		kfree(pcnet32_dev);
+		pcnet32_dev = next_dev;
+	}
+}
+#endif /* MODULE */
+
 
 
 /*

@@ -162,10 +162,19 @@ __initfunc(int lne390_probe1(struct device *dev, int ioaddr))
 	}
 #endif
 
+	if (load_8390_module("lne390.c"))
+		return -ENOSYS;
+
 	/* We should have a "dev" from Space.c or the static module table. */
 	if (dev == NULL) {
 		printk("lne390.c: Passed a NULL device.\n");
 		dev = init_etherdev(0, 0);
+	}
+
+	/* Allocate dev->priv and fill in 8390 specific dev fields. */
+	if (ethdev_init(dev)) {
+		printk ("lne390.c: unable to allocate memory for dev->priv!\n");
+		return -ENOMEM;
 	}
 
 	printk("lne390.c: LNE390%X in EISA slot %d, address", 0xa+revision, ioaddr/0x1000);
@@ -187,6 +196,8 @@ __initfunc(int lne390_probe1(struct device *dev, int ioaddr))
 
 	if (request_irq(dev->irq, ei_interrupt, 0, "lne390", NULL)) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
+		kfree(dev->priv);
+		dev->priv = NULL;
 		return EAGAIN;
 	}
 
@@ -218,6 +229,8 @@ __initfunc(int lne390_probe1(struct device *dev, int ioaddr))
 			printk(KERN_CRIT "lne390.c: or to an address above %p.\n", high_memory);
 			printk(KERN_CRIT "lne390.c: Driver NOT installed.\n");
 			free_irq(dev->irq, dev);
+			kfree(dev->priv);
+			dev->priv = NULL;
 			return EINVAL;
 		}
 		dev->mem_start = (unsigned long)ioremap(dev->mem_start, LNE390_STOP_PG*0x100);
@@ -226,6 +239,8 @@ __initfunc(int lne390_probe1(struct device *dev, int ioaddr))
 			printk(KERN_ERR "lne390.c: Try using EISA SCU to set memory below 1MB.\n");
 			printk(KERN_ERR "lne390.c: Driver NOT installed.\n");
 			free_irq(dev->irq, dev);
+			kfree(dev->priv);
+			dev->priv = NULL;
 			return EAGAIN;
 		}
 		printk("lne390.c: remapped %dkB card memory to virtual address %#lx\n",
@@ -235,13 +250,6 @@ __initfunc(int lne390_probe1(struct device *dev, int ioaddr))
 	dev->mem_end = dev->rmem_end = dev->mem_start
 		+ (LNE390_STOP_PG - LNE390_START_PG)*256;
 	dev->rmem_start = dev->mem_start + TX_PAGES*256;
-
-	/* Allocate dev->priv and fill in 8390 specific dev fields. */
-	if (ethdev_init(dev)) {
-		printk ("lne390.c: unable to allocate memory for dev->priv!\n");
-		free_irq(dev->irq, dev);
-		return -ENOMEM;
-	}
 
 	/* The 8390 offset is zero for the LNE390 */
 	dev->base_addr = ioaddr;
@@ -397,12 +405,15 @@ int init_module(void)
 		if (io[this_dev] == 0 && this_dev != 0) break;
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "lne390.c: No LNE390 card found (i/o = 0x%x).\n", io[this_dev]);
-			if (found != 0) return 0;	/* Got at least one. */
+			if (found != 0) {	/* Got at least one. */
+				lock_8390_module();
+				return 0;
+			}
 			return -ENXIO;
 		}
 		found++;
 	}
-
+	lock_8390_module();
 	return 0;
 }
 
@@ -413,13 +424,15 @@ void cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_LNE_CARDS; this_dev++) {
 		struct device *dev = &dev_lne[this_dev];
 		if (dev->priv != NULL) {
-			kfree(dev->priv);
-			dev->priv = NULL;
+			void *priv = dev->priv;
 			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, LNE390_IO_EXTENT);
+			dev->priv = NULL;
 			unregister_netdev(dev);
+			kfree(priv);
 		}
 	}
+	unlock_8390_module();
 }
 #endif /* MODULE */
 

@@ -1,5 +1,6 @@
 #include "os.h"
 #define __KERNEL_SYSCALLS__
+#include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
@@ -57,3 +58,4 @@ int mod_firmware_load(const char *fn, char **fp)
 	return r;
 }
 
+EXPORT_SYMBOL(mod_firmware_load);

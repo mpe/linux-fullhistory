@@ -22,8 +22,9 @@ endif
 # All of the (potential) objects that export symbols.
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
 
-export-objs	:= ad1848.o mpu401.o opl3.o sb_card.o uart401.o		\
-		   audio_syms.o midi_syms.o sequencer_syms.o sound_syms.o
+export-objs	:=  ad1848.o audio_syms.o midi_syms.o mpu401.o \
+		    opl3.o sb_card.o sequencer_syms.o sound_core.o \
+		    sound_firmware.o sound_syms.o uart401.o
 
 
 
@@ -44,7 +45,8 @@ obj-$(CONFIG_DMASOUND)		+= dmasound.o
 
 else
 
-obj-$(CONFIG_SOUND)		+= sound.o
+obj-$(CONFIG_SOUND)		+= soundcore.o
+obj-$(CONFIG_SOUND_OSS)		+= sound.o
 obj-$(CONFIG_SOUND_ADLIB)	+= adlib_card.o opl3.o
 obj-$(CONFIG_SOUND_CS4232)	+= cs4232.o ad1848.o uart401.o
 obj-$(CONFIG_SOUND_GUS)		+= gus.o ad1848.o
@@ -71,13 +73,15 @@ endif
 
 # Declare multi-part drivers.
 
-list-multi	:= sound.o gus.o pas2.o sb.o softoss2.o vidc_mod.o
+list-multi	:= sound.o gus.o pas2.o sb.o softoss2.o vidc_mod.o soundcore.o
 
 sound-objs	:= 							\
-    dev_table.o soundcard.o sound_firmware.o sound_syms.o		\
+    dev_table.o soundcard.o sound_syms.o		\
     audio.o audio_syms.o dmabuf.o					\
     midi_syms.o midi_synth.o midibuf.o					\
     sequencer.o sequencer_syms.o sound_timer.o sys_timer.o
+
+soundcore-objs	:= sound_core.o sound_firmware.o
 
 gus-objs	:= gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o
 pas2-objs	:= pas2_card.o pas2_midi.o pas2_mixer.o pas2_pcm.o
@@ -126,7 +130,8 @@ obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
 # Translate to Rules.make lists.
 
 L_TARGET	:= sound.a
-MOD_LIST_NAME	:= SOUND_MODULES
+# This is a nice idea but needs depmod altering
+#MOD_LIST_NAME	:= SOUND_MODULES
 
 L_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-y)))
 LX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-y)))
@@ -147,6 +152,9 @@ include $(TOPDIR)/Rules.make
 
 sound.o: $(sound-objs)
 	$(LD) -r -o $@ $(sound-objs)
+
+soundcore.o: $(soundcore-objs)
+	$(LD) -r -o $@ $(soundcore-objs)
 
 gus.o: $(gus-objs)
 	$(LD) -r -o $@ $(gus-objs)

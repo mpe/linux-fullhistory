@@ -961,7 +961,8 @@ get_module_symbol(char *modname, char *symname)
 
 	for (mp = module_list; mp; mp = mp->next) {
 		if (((modname == NULL) || (strcmp(mp->name, modname) == 0)) &&
-			(mp->flags == MOD_RUNNING) && (mp->nsyms > 0)) {
+			(mp->flags & (MOD_RUNNING | MOD_DELETED)) == MOD_RUNNING &&
+			(mp->nsyms > 0)) {
 			for (i = mp->nsyms, sym = mp->syms;
 				i > 0; --i, ++sym) {
 

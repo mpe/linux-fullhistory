@@ -326,7 +326,8 @@ static void shaper_kick(struct shaper *shaper)
 			 */
 			 
 			skb_unlink(skb);
-			shaper->recovery=jiffies+skb->shapelen;
+			if (shaper->recovery < skb->shapeclock + skb->shapelen)
+				shaper->recovery = skb->shapeclock + skb->shapelen;
 			restore_flags(flags);
 
 			/*

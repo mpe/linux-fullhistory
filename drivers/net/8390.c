@@ -35,6 +35,8 @@
   Paul Gortmaker	: update packet statistics for v2.1.x
   Alan Cox		: support arbitary stupid port mappings on the
   			  68K Macintosh. Support >16bit I/O spaces
+  Paul Gortmaker	: add kmod support for auto-loading of the 8390
+			  module by all drivers that require it.
 
 
   Sources:
@@ -67,6 +69,7 @@ static const char *version =
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 
+#define NS8390_CORE
 #include "8390.h"
 
 /* These are the operational function interfaces to board-specific
@@ -93,9 +96,7 @@ static const char *version =
 #define ei_get_8390_hdr (ei_local->get_8390_hdr)
 
 /* use 0 for production, 1 for verification, >2 for debug */
-#ifdef EI_DEBUG
-int ei_debug = EI_DEBUG;
-#else
+#ifndef ei_debug
 int ei_debug = 1;
 #endif
 
@@ -819,6 +820,11 @@ static void set_multicast_list(struct device *dev)
 	 * ensure multicast mode is off prior to loading up the new hash
 	 * table. If this proves to be not enough, we can always resort
 	 * to stopping the NIC, loading the table and then restarting.
+	 *
+	 * Bug Alert!  The MC regs on the SMC 83C690 (SMC Elite and SMC 
+	 * Elite16) appear to be write-only. The NS 8390 data sheet lists
+	 * them as r/w so this is a bug.  The SMC 83C790 (SMC Ultra and
+	 * Ultra32 EISA) appears to have this bug fixed.
 	 */
 	if (dev->start)
 		outb_p(E8390_RXCONFIG, e8390_base + EN0_RXCR);
@@ -828,8 +834,10 @@ static void set_multicast_list(struct device *dev)
 	for(i = 0; i < 8; i++) 
 	{
 		outb_p(ei_local->mcfilter[i], e8390_base + EN1_MULT_SHIFT(i));
+#ifdef NOT_83C690
 		if(inb_p(e8390_base + EN1_MULT_SHIFT(i))!=ei_local->mcfilter[i])
 			printk(KERN_ERR "Multicast filter read/write mismap %d\n",i);
+#endif
 	}
 	outb_p(E8390_NODMA + E8390_PAGE0, e8390_base + E8390_CMD);
 	restore_flags(flags);
@@ -898,7 +906,7 @@ void NS8390_init(struct device *dev, int startp)
 	outb_p(ei_local->rx_start_page, e8390_base + EN0_STARTPG);
 	outb_p(ei_local->stop_page-1, e8390_base + EN0_BOUNDARY);	/* 3c503 says 0x3f,NS0x26*/
 	ei_local->current_page = ei_local->rx_start_page;		/* assert boundary+1 */
-	outb_p(ei_local->stop_page,	  e8390_base + EN0_STOPPG);
+	outb_p(ei_local->stop_page, e8390_base + EN0_STOPPG);
 	/* Clear the pending interrupts and mask. */
 	outb_p(0xFF, e8390_base + EN0_ISR);
 	outb_p(0x00,  e8390_base + EN0_IMR);
@@ -929,7 +937,7 @@ void NS8390_init(struct device *dev, int startp)
 		outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, e8390_base+E8390_CMD);
 		outb_p(E8390_TXCONFIG, e8390_base + EN0_TXCR); /* xmit on. */
 		/* 3c503 TechMan says rxconfig only after the NIC is started. */
-		outb_p(E8390_RXCONFIG,	e8390_base + EN0_RXCR); /* rx on,  */
+		outb_p(E8390_RXCONFIG, e8390_base + EN0_RXCR); /* rx on,  */
 		set_multicast_list(dev);	/* (re)load the mcast table */
 	}
 	return;
@@ -939,7 +947,6 @@ void NS8390_init(struct device *dev, int startp)
 static void NS8390_trigger_send(struct device *dev, unsigned int length,
 								int start_page)
 {
-	struct ei_device *ei_local = (struct ei_device *) dev->priv;
 	int e8390_base = dev->base_addr;
     
 	outb_p(E8390_NODMA+E8390_PAGE0, e8390_base+E8390_CMD);
@@ -958,13 +965,17 @@ static void NS8390_trigger_send(struct device *dev, unsigned int length,
 
 #ifdef MODULE
 
+struct module *NS8390_module = NULL;
+
 int init_module(void)
 {
+	NS8390_module = &__this_module;
 	return 0;
 }
 
 void cleanup_module(void)
 {
+	NS8390_module = NULL;
 }
 
 #endif /* MODULE */

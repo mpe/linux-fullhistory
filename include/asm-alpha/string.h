@@ -5,7 +5,7 @@
 
 /*
  * GCC of any recent vintage doesn't do stupid things with bcopy.
- * EGCS-devel knows all about expanding memcpy inline, others don't.
+ * EGCS 1.1 knows all about expanding memcpy inline, others don't.
  *
  * Similarly for a memset with data = 0.
  */

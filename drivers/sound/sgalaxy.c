@@ -121,7 +121,9 @@ void attach_sgalaxy( struct address_info *ai )
 	
 	request_region( ai->ai_sgbase, 0x10, "SoundGalaxy SB" );
  
-	n=attach_ms_sound( ai );
+	attach_ms_sound( ai );
+	n=ai->slots[0];
+	
 	if (n!=-1 && audio_devs[n]->mixer_dev != -1 )
 	{
 		AD1848_REROUTE( SOUND_MIXER_LINE1, SOUND_MIXER_LINE );   /* Line-in */

@@ -235,11 +235,13 @@
 #define DMA_NONE	255
 #define IRQ_AUTO	254
 #define DMA_AUTO	254
+#define PORT_AUTO	0xffff		/* autoprobe io port for 53c400a */
 
 #define FLAG_HAS_LAST_BYTE_SENT		1	/* NCR53c81 or better */
 #define FLAG_CHECK_LAST_BYTE_SENT	2	/* Only test once */
 #define FLAG_NCR53C400			4	/* NCR53c400 */
 #define FLAG_NO_PSEUDO_DMA		8	/* Inhibit DMA */
+#define FLAG_DTC3181E			16	/* DTC3181E */
 
 #ifndef ASM
 struct NCR5380_hostdata {
@@ -264,6 +266,8 @@ struct NCR5380_hostdata {
 #ifdef USLEEP
     unsigned long time_expires;			/* in jiffies, set prior to sleeping */
     struct Scsi_Host *next_timer;
+    int select_time;				/* timer in select for target response */
+    volatile Scsi_Cmnd *selecting;
 #endif
 #ifdef NCR5380_STATS
     unsigned timebase;				/* Base for time calcs */

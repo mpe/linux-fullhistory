@@ -616,7 +616,7 @@ __initfunc(void setup_ExtINT_pin (unsigned int pin))
 	entry.delivery_mode = dest_ExtINT;
 	entry.dest_mode = 1;				/* logical delivery */
 	entry.mask = 0;					/* unmask IRQ now */
-	entry.dest.logical.logical_dest = 0xff;		/* all CPUs */
+	entry.dest.logical.logical_dest = 0x01;		/* all CPUs */
 
 	entry.vector = IO_APIC_VECTOR(pin);		/* it's ignored */
 

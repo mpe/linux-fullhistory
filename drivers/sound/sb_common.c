@@ -699,7 +699,7 @@ void sb_dsp_init(struct address_info *hw_config)
 	sb_devc *devc;
 	char name[100];
 	extern int sb_be_quiet;
-	int	mixer3c, mixer4c;
+	int	mixer22, mixer30;
 	
 /*
  * Check if we had detected a SB device earlier
@@ -723,12 +723,7 @@ void sb_dsp_init(struct address_info *hw_config)
 	/*
 	 * Now continue initialization of the device
 	 */
-	devc->dev = sound_alloc_audiodev();
-	if (devc->dev == -1)
-	{
-		printk(KERN_WARNING "sb: too many audio devices.\n");
-		return;
-	}
+
 	devc->caps = hw_config->driver_use_1;
 
 	if (!(devc->caps & SB_NO_AUDIO && devc->caps & SB_NO_MIDI) && hw_config->irq > 0)
@@ -736,7 +731,6 @@ void sb_dsp_init(struct address_info *hw_config)
 		if (request_irq(hw_config->irq, sbintr, 0, "soundblaster", devc) < 0)
 		{
 			printk(KERN_ERR "SB: Can't allocate IRQ%d\n", hw_config->irq);
-			sound_unload_audiodev(devc->dev);
 			return;
 		}
 		devc->irq_ok = 0;
@@ -745,7 +739,6 @@ void sb_dsp_init(struct address_info *hw_config)
 			if (!sb16_set_irq_hw(devc, devc->irq))	/* Unsupported IRQ */
 			{
 				free_irq(devc->irq, devc);
-				sound_unload_audiodev(devc->dev);
 				return;
 			}
 		if ((devc->type == 0 || devc->type == MDL_ESS) &&
@@ -817,21 +810,35 @@ void sb_dsp_init(struct address_info *hw_config)
 
 		case 4:
 			devc->model = hw_config->card_subtype = MDL_SB16;
-			/*
-			 *	The ALS007 seems to return DSP version 4.2.  In addition it has 2
-			 *	output control registers (at 0x3c and 0x4c).  Both of these should
-			 *	be !=0 after a reset which forms the basis of the ALS007 test
-			 *	since a "standard" SoundBlaster does not have a register at 0x4c.
+			/* 
+			 * ALS007 and ALS100 return DSP version 4.2 and have 2 post-reset !=0
+			 * registers at 0x3c and 0x4c (output ctrl registers on ALS007) whereas
+			 * a "standard" SB16 doesn't have a register at 0x4c.  ALS100 actively
+			 * updates register 0x22 whenever 0x30 changes, as per the SB16 spec.
+			 * Since ALS007 doesn't, this can be used to differentiate the 2 cards.
 			 */
-			mixer3c = sb_getmixer(devc,0x3c);
-			mixer4c = sb_getmixer(devc,0x4c);
-			if ((devc->minor == 2) && (mixer3c != 0) && (mixer4c != 0)) 
+			if ((devc->minor == 2) && sb_getmixer(devc,0x3c) && sb_getmixer(devc,0x4c)) 
 			{
-				sb_setmixer(devc,0x3c,0x1f);   /* Enable all inputs */
-				sb_setmixer(devc,0x4c,0x1f);
-				devc->submodel = SUBMDL_ALS007;
-				if (hw_config->name == NULL)
-					hw_config->name = "Sound Blaster (ALS-007)";
+				mixer30 = sb_getmixer(devc,0x30);
+				sb_setmixer(devc,0x22,(mixer22=sb_getmixer(devc,0x22)) & 0x0f);
+				sb_setmixer(devc,0x30,0xff);
+				/* ALS100 will force 0x30 to 0xf8 like SB16; ALS007 will allow 0xff. */
+				/* Register 0x22 & 0xf0 on ALS100 == 0xf0; on ALS007 it == 0x10.     */
+				if ((sb_getmixer(devc,0x30) != 0xff) || ((sb_getmixer(devc,0x22) & 0xf0) != 0x10)) 
+				{
+					if (hw_config->name == NULL)
+						hw_config->name = "Sound Blaster 16 (ALS-100)";
+        			}
+        			else
+        			{
+        				sb_setmixer(devc,0x3c,0x1f);    /* Enable all inputs */
+					sb_setmixer(devc,0x4c,0x1f);
+					sb_setmixer(devc,0x22,mixer22); /* Restore 0x22 to original value */
+					devc->submodel = SUBMDL_ALS007;
+					if (hw_config->name == NULL)
+						hw_config->name = "Sound Blaster 16 (ALS-007)";
+				}
+				sb_setmixer(devc,0x30,mixer30);
 			}
 			else if (hw_config->name == NULL)
 				hw_config->name = "Sound Blaster 16";
@@ -904,6 +911,7 @@ void sb_dsp_init(struct address_info *hw_config)
 				printk(KERN_WARNING "soundblaster: Can't allocate 16 bit DMA channel %d\n", devc->dma16);
 		}
 		sb_audio_init(devc, name);
+		hw_config->slots[0]=devc->dev;
 	}
 	else
 	{

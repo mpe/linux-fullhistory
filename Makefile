@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 104
+SUBLEVEL = 105
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 
@@ -318,6 +318,7 @@ modules_install:
 	if [ -f NLS_MODULES   ]; then inst_mod NLS_MODULES   fs;    fi; \
 	if [ -f CDROM_MODULES ]; then inst_mod CDROM_MODULES cdrom; fi; \
 	if [ -f HAM_MODULES   ]; then inst_mod HAM_MODULES   net;   fi; \
+	if [ -f SOUND_MODULES ]; then inst_mod SOUND_MODULES sound; fi; \
 	\
 	ls *.o > .allmods; \
 	echo $$MODULES | tr ' ' '\n' | sort | comm -23 .allmods - > .misc; \

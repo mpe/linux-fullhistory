@@ -210,7 +210,7 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 	tmp->private = handle;
 	tmp->flags = flags;
 	tmp->irq_func = irq_func;
-	port->ops->save_state(port, tmp->state);
+	port->ops->init_state(tmp->state);
 	tmp->waiting = 0;
 
 	/* Chain this onto the list */

@@ -106,6 +106,7 @@ struct hdlcdrv_ioctl {
 
 #include <linux/netdevice.h>
 #include <linux/if.h>
+#include <asm/spinlock.h>
 
 #define HDLCDRV_MAGIC      0x5ac6e778
 #define HDLCDRV_IFNAMELEN    6
@@ -119,6 +120,7 @@ struct hdlcdrv_ioctl {
 
 
 struct hdlcdrv_hdlcbuffer {
+	spinlock_t lock;
 	unsigned rd, wr;
 	unsigned short buf[HDLCDRV_HDLCBUFFER];
 };
@@ -256,33 +258,45 @@ struct hdlcdrv_state {
 
 extern inline int hdlcdrv_hbuf_full(struct hdlcdrv_hdlcbuffer *hb) 
 {
-	return !((HDLCDRV_HDLCBUFFER - 1 + hb->rd - hb->wr) 
-		 % HDLCDRV_HDLCBUFFER);
+	unsigned long flags;
+	int ret;
+	
+	spin_lock_irqsave(&hb->lock, flags);
+	ret = !((HDLCDRV_HDLCBUFFER - 1 + hb->rd - hb->wr) % HDLCDRV_HDLCBUFFER);
+	spin_unlock_irqrestore(&hb->lock, flags);
+	return ret;
 }
 
 /* -------------------------------------------------------------------- */
 
 extern inline int hdlcdrv_hbuf_empty(struct hdlcdrv_hdlcbuffer *hb)
 {
-	return hb->rd == hb->wr;
+	unsigned long flags;
+	int ret;
+	
+	spin_lock_irqsave(&hb->lock, flags);
+	ret = (hb->rd == hb->wr);
+	spin_unlock_irqrestore(&hb->lock, flags);
+	return ret;
 }
 
 /* -------------------------------------------------------------------- */
 
 extern inline unsigned short hdlcdrv_hbuf_get(struct hdlcdrv_hdlcbuffer *hb)
 {
-	unsigned newr;
-	unsigned short val;
 	unsigned long flags;
+	unsigned short val;
+	unsigned newr;
 
+	spin_lock_irqsave(&hb->lock, flags);
 	if (hb->rd == hb->wr)
-		return 0;
-	save_flags(flags);
-	cli();
-	newr = (hb->rd+1) % HDLCDRV_HDLCBUFFER;
-	val = hb->buf[hb->rd];
-	hb->rd = newr;
-	restore_flags(flags);
+		val = 0;
+	else {
+		newr = (hb->rd+1) % HDLCDRV_HDLCBUFFER;
+		val = hb->buf[hb->rd];
+		hb->rd = newr;
+	}
+	spin_unlock_irqrestore(&hb->lock, flags);
 	return val;
 }
 
@@ -293,15 +307,14 @@ extern inline void hdlcdrv_hbuf_put(struct hdlcdrv_hdlcbuffer *hb,
 {
 	unsigned newp;
 	unsigned long flags;
-
-	save_flags(flags);
-	cli();
+	
+	spin_lock_irqsave(&hb->lock, flags);
 	newp = (hb->wr+1) % HDLCDRV_HDLCBUFFER;
 	if (newp != hb->rd) { 
 		hb->buf[hb->wr] = val & 0xffff;
 		hb->wr = newp;
 	}
-	restore_flags(flags);
+	spin_unlock_irqrestore(&hb->lock, flags);
 }
 
 /* -------------------------------------------------------------------- */
