@@ -224,6 +224,10 @@ fi
 #
 dep_tristate 'Comtrol Hostess SV-11 support' CONFIG_HOSTESS_SV11 m
 #
+# The COSA/SRP driver has not been tested as non-modular yet.
+#
+dep_tristate 'COSA/SRP sync serial boards support' CONFIG_COSA m
+#
 if [ "$CONFIG_WAN_ROUTER" != "n" ]; then
   bool 'WAN drivers' CONFIG_WAN_DRIVERS
   if [ "$CONFIG_WAN_DRIVERS" = "y" ]; then

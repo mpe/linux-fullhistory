@@ -13,6 +13,25 @@
  *
  *
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ * Rolf Fokkens    : ES18XX recording level support
+ */
+
+/*
+ * About ES18XX support:
+ *
+ * The standard ES688 support doesn't take care of the ES18XX recording
+ * levels very well. Whenever a device is selected (recmask) for recording
+ * it's recording level is loud, and it cannot be changed.
+ *
+ * The ES18XX has separate registers to controll the recording levels. The
+ * ES18XX specific software makes these level the same as their corresponding
+ * playback levels, unless recmask says they aren't recorded. In tha latter
+ * case the recording volumens are 0.
+ *
+ * Now recording levels of inputs can be controlled, by changing the playback
+ * levels.
+ * Futhermore several devices can be recorded together (which is not possible
+ * with the ES688.
  */
 
 #include <linux/config.h>
@@ -78,22 +97,62 @@ void smw_mixer_init(sb_devc * devc)
 	sb_mixer_reset(devc);
 }
 
-static int smw_mixer_set(sb_devc * devc, int dev, int value)
+static int common_mixer_set(sb_devc * devc, int dev, int left, int right)
 {
-	int left = value & 0x000000ff;
-	int right = (value & 0x0000ff00) >> 8;
+	int regoffs;
+	unsigned char val;
+
+	regoffs = (*devc->iomap)[dev][LEFT_CHN].regno;
+
+	if (regoffs == 0)
+		return -EINVAL;
+
+	val = sb_getmixer(devc, regoffs);
+	change_bits(devc, &val, dev, LEFT_CHN, left);
+
+	devc->levels[dev] = left | (left << 8);
+
+	if ((*devc->iomap)[dev][RIGHT_CHN].regno != regoffs)	/*
+								 * Change register
+								 */
+	{
+		sb_setmixer(devc, regoffs, val);	/*
+							 * Save the old one
+							 */
+		regoffs = (*devc->iomap)[dev][RIGHT_CHN].regno;
+
+		if (regoffs == 0)
+			return left | (left << 8);	/*
+							 * Just left channel present
+							 */
+
+		val = sb_getmixer(devc, regoffs);	/*
+							 * Read the new one
+							 */
+	}
+	change_bits(devc, &val, dev, RIGHT_CHN, right);
+
+	sb_setmixer(devc, regoffs, val);
+
+	devc->levels[dev] = left | (right << 8);
+	return left | (right << 8);
+}
+
+/*
+ * Changing input levels at ES18XX means having to take care of recording
+ * levels of recorded inputs too!
+ */
+static int es18XX_mixer_set(sb_devc * devc, int dev, int left, int right)
+{
+	if (devc->recmask & (1 << dev)) {
+		common_mixer_set(devc, dev + ES18XX_MIXER_RECDIFF, left, right);
+	}
+	return common_mixer_set(devc, dev, left, right);
+}
+
+static int smw_mixer_set(sb_devc * devc, int dev, int left, int right)
+{
 	int reg, val;
-
-	if (left > 100)
-		left = 100;
-	if (right > 100)
-		right = 100;
-
-	if (dev > 31)
-		return -EINVAL;
-
-	if (!(devc->supported_devices & (1 << dev)))	/* Not supported */
-		return -EINVAL;
 
 	switch (dev)
 	{
@@ -134,12 +193,6 @@ static int sb_mixer_set(sb_devc * devc, int dev, int value)
 	int left = value & 0x000000ff;
 	int right = (value & 0x0000ff00) >> 8;
 
-	int regoffs;
-	unsigned char   val;
-
-	if (devc->model == MDL_SMW)
-		return smw_mixer_set(devc, dev, value);
-
 	if (left > 100)
 		left = 100;
 	if (right > 100)
@@ -153,45 +206,58 @@ static int sb_mixer_set(sb_devc * devc, int dev, int value)
 							 */
 		return -EINVAL;
 
-	regoffs = (*devc->iomap)[dev][LEFT_CHN].regno;
-
-	if (regoffs == 0)
-		return -EINVAL;
-
-	val = sb_getmixer(devc, regoffs);
-	change_bits(devc, &val, dev, LEFT_CHN, left);
-
-	devc->levels[dev] = left | (left << 8);
-
-	if ((*devc->iomap)[dev][RIGHT_CHN].regno != regoffs)	/*
-								 * Change register
-								 */
-	{
-		sb_setmixer(devc, regoffs, val);	/*
-							 * Save the old one
-							 */
-		regoffs = (*devc->iomap)[dev][RIGHT_CHN].regno;
-
-		if (regoffs == 0)
-			return left | (left << 8);	/*
-							 * Just left channel present
-							 */
-
-		val = sb_getmixer(devc, regoffs);	/*
-							 * Read the new one
-							 */
+	/* Differentiate dependong on the chipsets */
+	switch (devc->model) {
+	case MDL_SMW:
+		return smw_mixer_set(devc, dev, left, right);
+		break;
+	case MDL_ESS:
+		if (devc->submodel == SUBMDL_ES18XX) {
+			return es18XX_mixer_set(devc, dev, left, right);
+		}
+		break;
 	}
-	change_bits(devc, &val, dev, RIGHT_CHN, right);
 
-	sb_setmixer(devc, regoffs, val);
-
-	devc->levels[dev] = left | (right << 8);
-	return left | (right << 8);
+	return common_mixer_set(devc, dev, left, right);
 }
 
+/*
+ * set_recsrc doesn't apply to ES18XX
+ */
 static void set_recsrc(sb_devc * devc, int src)
 {
 	sb_setmixer(devc, RECORD_SRC, (sb_getmixer(devc, RECORD_SRC) & ~7) | (src & 0x7));
+}
+
+/*
+ * Changing the recmask on a ES18XX means:
+ * (1) Find the differences
+ * (2) For "turned-on"  inputs: make the recording level the playback level
+ * (3) For "turned-off" inputs: make the recording level zero
+ */
+static int es18XX_set_recmask(sb_devc * devc, int mask)
+{
+	int i, i_mask, cur_mask, diff_mask;
+	int value, left, right;
+
+	cur_mask  = devc->recmask;
+	diff_mask = (cur_mask ^ mask);
+
+	for (i = 0; i < 32; i++) {
+		i_mask = (1 << i);
+		if (diff_mask & i_mask) {
+			if (mask & i_mask) {	/* Turn it on (2) */
+				value = devc->levels[i];
+				left  = value & 0x000000ff;
+    				right = (value & 0x0000ff00) >> 8;
+			} else {		/* Turn it off (3) */
+				left  = 0;
+				right = 0;
+			}
+			common_mixer_set(devc, i + ES18XX_MIXER_RECDIFF, left, right);
+		}
+	}
+	return mask;
 }
 
 static int set_recmask(sb_devc * devc, int mask)
@@ -203,8 +269,12 @@ static int set_recmask(sb_devc * devc, int mask)
 
 	switch (devc->model)
 	{
+		case MDL_ESS:	/* ES18XX needs a separate approach */
+			if (devc->submodel == SUBMDL_ES18XX) {
+				devmask = es18XX_set_recmask(devc, devmask);
+				break;
+			};
 		case MDL_SBPRO:
-		case MDL_ESS:
 		case MDL_JAZZ:
 		case MDL_SMW:
 
@@ -423,7 +493,7 @@ static struct mixer_operations als007_mixer_operations =
 static void sb_mixer_reset(sb_devc * devc)
 {
 	char name[32];
-	int i;
+	int i, regval;
 	extern int sm_games;
 
 	sprintf(name, "SB_%d", devc->sbmixnum);
@@ -435,6 +505,24 @@ static void sb_mixer_reset(sb_devc * devc)
 
 	for (i = 0; i < SOUND_MIXER_NRDEVICES; i++)
 		sb_mixer_set(devc, i, devc->levels[i]);
+
+	/*
+	 * Separate actions for ES18XX:
+	 * Change registers 7a and 1c to make the record mixer the input for
+	 *
+	 * Then call set_recmask twice to do extra ES18XX initializations
+	 */
+	if (devc->model == MDL_ESS && devc->submodel == SUBMDL_ES18XX) {
+	        regval = sb_getmixer(devc, 0x7a);
+		regval = (regval & 0xe7) | 0x08;
+	        sb_setmixer(devc, 0x7a, regval);
+		regval = sb_getmixer(devc, 0x1c);
+		regval = (regval & 0xf8) | 0x07;
+		sb_setmixer(devc, 0x1c, regval);
+
+		set_recmask(devc, ES18XX_RECORDING_DEVICES);
+		set_recmask(devc, 0);
+	}
 	set_recmask(devc, SOUND_MASK_MIC);
 }
 
@@ -464,9 +552,26 @@ int sb_mixer_init(sb_devc * devc)
 
 		case MDL_ESS:
 			devc->mixer_caps = SOUND_CAP_EXCL_INPUT;
-			devc->supported_devices = ES688_MIXER_DEVICES;
-			devc->supported_rec_devices = ES688_RECORDING_DEVICES;
-			devc->iomap = &es688_mix;
+
+			/*
+			 * Take care of ES18XX specifics...
+			 */
+			switch (devc->submodel) {
+			case SUBMDL_ES18XX:
+				devc->supported_devices
+					= ES18XX_MIXER_DEVICES;
+				devc->supported_rec_devices
+					= ES18XX_RECORDING_DEVICES;
+				devc->iomap = &es18XX_mix;
+				break;
+			default:
+				devc->supported_devices
+					= ES688_MIXER_DEVICES;
+				devc->supported_rec_devices
+					= ES688_RECORDING_DEVICES;
+				devc->iomap = &es688_mix;
+			}
+
 			break;
 
 		case MDL_SMW:

@@ -615,7 +615,8 @@ static void do_all_cpus (void (*handler) (struct set_mtrr_context *ctxt,
     smp_message_pass (MSG_ALL_BUT_SELF, MSG_MTRR_CHANGE, 0, 0);
     /*  Wait for it to be done  */
     timeout = jiffies + JIFFIE_TIMEOUT;
-    while ( (atomic_read (&undone_count) > 0) && (jiffies < timeout) )
+    while ( (atomic_read (&undone_count) > 0) &&
+	    time_before(jiffies, timeout) )
 	barrier ();
     if (atomic_read (&undone_count) > 0)
     {

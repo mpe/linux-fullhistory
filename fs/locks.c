@@ -154,10 +154,10 @@ static inline struct file_lock *locks_alloc_lock(struct file_lock *fl)
 static inline void locks_free_lock(struct file_lock *fl)
 {
 	if (waitqueue_active(&fl->fl_wait))
-		panic("Aarggh: attempting to free lock with active wait queue - shoot Andy");
+		panic("Attempting to free lock with active wait queue");
 
 	if (fl->fl_nextblock != NULL || fl->fl_prevblock != NULL)
-		panic("Aarggh: attempting to free lock with active block list - shoot Andy");
+		panic("Attempting to free lock with active block list");
 		
 	kfree(fl);
 	return;

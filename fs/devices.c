@@ -210,11 +210,11 @@ int check_disk_change(kdev_t dev)
 		return 0;
 
 	printk(KERN_DEBUG "VFS: Disk change detected on device %s\n",
-		kdevname(dev));
+		bdevname(dev));
 
 	sb = get_super(dev);
 	if (sb && invalidate_inodes(sb))
-		printk("VFS: busy inodes on changed media..\n");
+		printk("VFS: busy inodes on changed media.\n");
 
 	invalidate_buffers(dev);
 
@@ -338,13 +338,35 @@ struct inode_operations chrdev_inode_operations = {
 };
 
 /*
- * Print device name (in decimal, hexadecimal or symbolic) -
- * at present hexadecimal only.
+ * Print device name (in decimal, hexadecimal or symbolic)
  * Note: returns pointer to static data!
  */
 char * kdevname(kdev_t dev)
 {
 	static char buffer[32];
 	sprintf(buffer, "%02x:%02x", MAJOR(dev), MINOR(dev));
+	return buffer;
+}
+
+char * bdevname(kdev_t dev)
+{
+	static char buffer[32];
+	const char * name = blkdevs[MAJOR(dev)].name;
+
+	if (!name)
+		name = "unknown-block";
+
+	sprintf(buffer, "%s(%d,%d)", name, MAJOR(dev), MINOR(dev));
+	return buffer;
+}
+
+char * cdevname(kdev_t dev)
+{
+	static char buffer[32];
+	const char * name = chrdevs[MAJOR(dev)].name;
+
+	if (!name)
+		name = "unknown-char";
+	sprintf(buffer, "%s(%d,%d)", name, MAJOR(dev), MINOR(dev));
 	return buffer;
 }

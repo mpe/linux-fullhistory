@@ -5,6 +5,7 @@
 #include <linux/vmalloc.h>
 #include <linux/smp_lock.h>
 #include <asm/pgtable.h>
+#include <linux/init.h>
 
 /*
  * Originally by Anonymous (as far as I know...)
@@ -30,7 +31,7 @@ static struct module kernel_module =
 	NULL,			/* next */
 	"",			/* name */
 	0,			/* size */
-	1,			/* usecount */
+	{ATOMIC_INIT(1)},	/* usecount */
 	MOD_RUNNING,		/* flags */
 	0,			/* nsyms -- to filled in in init_modules */
 	0,			/* ndeps */
@@ -56,7 +57,7 @@ static void free_module(struct module *, int tag_freed);
  * Called at boot time
  */
 
-void init_modules(void)
+__initfunc(void init_modules(void))
 {
 	kernel_module.nsyms = __stop___ksymtab - __start___ksymtab;
 
@@ -328,13 +329,13 @@ sys_init_module(const char *name_user, struct module *mod_user)
 	put_mod_name(name);
 
 	/* Initialize the module.  */
-	mod->usecount = 1;
+	atomic_set(&mod->uc.usecount,1);
 	if (mod->init && mod->init() != 0) {
-		mod->usecount = 0;
+		atomic_set(&mod->uc.usecount,0);
 		error = -EBUSY;
 		goto err0;
 	}
-	mod->usecount--;
+	atomic_dec(&mod->uc.usecount);
 
 	/* And set it running.  */
 	mod->flags |= MOD_RUNNING;
@@ -614,7 +615,7 @@ qm_info(struct module *mod, char *buf, size_t bufsize, size_t *ret)
 		info.size = mod->size;
 		info.flags = mod->flags;
 		info.usecount = (mod_member_present(mod, can_unload)
-				 && mod->can_unload ? -1 : mod->usecount);
+				 && mod->can_unload ? -1 : atomic_read(&mod->uc.usecount));
 
 		if (copy_to_user(buf, &info, sizeof(struct module_info)))
 			return -EFAULT;
@@ -853,7 +854,7 @@ int get_module_list(char *p)
 			len = sprintf(tmpstr, "%4ld",
 				      (mod_member_present(mod, can_unload)
 				       && mod->can_unload
-				       ? -1 : mod->usecount));
+				       ? -1L : (long)atomic_read(&mod->uc.usecount)));
 			safe_copy_str(tmpstr, len);
 		}
 

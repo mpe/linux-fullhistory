@@ -1836,7 +1836,8 @@ asmlinkage int sync_old_buffers(void)
 				 if (buffer_locked(bh) || !buffer_dirty(bh))
 					  continue;
 				 ndirty++;
-				 if(bh->b_flushtime > jiffies) continue;
+				 if(time_before(jiffies, bh->b_flushtime))
+					continue;
 				 nwritten++;
 				 next->b_count++;
 				 bh->b_count++;

@@ -260,7 +260,7 @@ smb_revalidate_inode(struct dentry *dentry)
 	/*
 	 * Check whether we've recently refreshed the inode.
 	 */
-	if (jiffies < inode->u.smbfs_i.oldmtime + HZ/10)
+	if (time_before(jiffies, inode->u.smbfs_i.oldmtime + HZ/10))
 	{
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_revalidate_inode: up-to-date, jiffies=%lu, oldtime=%lu\n",

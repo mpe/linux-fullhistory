@@ -354,7 +354,7 @@ static void delete_extent(struct hfs_fork *fork, struct hfs_extent *ext)
  *   hfs_u16 ablock: the number of allocation blocks in 'fork'.
  *   hfs_u16 start: first allocation block to add to 'fork'.
  *   hfs_u16 len: the number of allocation blocks to add to 'fork'.
- *   hfs_u16 ablksz: number of sectors in an allocation block.
+ *   hfs_u32 ablksz: number of sectors in an allocation block.
  * Output Variable(s):
  *   NONE
  * Returns:
@@ -471,7 +471,7 @@ static void shrink_fork(struct hfs_fork *fork, int ablocks)
 	struct hfs_mdb *mdb = fork->entry->mdb;
 	struct hfs_extent *ext;
 	int i, error, next, count;
-	hfs_u16 ablksz = mdb->alloc_blksz;
+	hfs_u32 ablksz = mdb->alloc_blksz;
 
 	next =  (fork->psize / ablksz) - 1;
 	ext = find_ext(fork, next);
@@ -530,7 +530,7 @@ static void grow_fork(struct hfs_fork *fork, int ablocks)
 	struct hfs_extent *ext;
 	int i, start, err;
 	hfs_u16 need, len=0;
-	hfs_u16 ablksz = mdb->alloc_blksz;
+	hfs_u32 ablksz = mdb->alloc_blksz;
 	hfs_u32 blocks, clumpablks;
 
 	blocks = fork->psize;
@@ -681,8 +681,7 @@ int hfs_ext_compare(const struct hfs_ext_key *key1,
 void hfs_extent_adj(struct hfs_fork *fork)
 {
 	if (fork) {
-		hfs_u32 blks, ablocks;
-		hfs_u16 ablksz;
+		hfs_u32 blks, ablocks, ablksz;
 
 		if (fork->lsize > HFS_FORK_MAX) {
 			fork->lsize = HFS_FORK_MAX;

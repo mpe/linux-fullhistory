@@ -1,3 +1,24 @@
+1998-12-20  a sun  <asun@hecate.darksunrising.blah>
+
+	* bdelete.c (del_root): assign bthLNode and bthFNode only if the
+	root node becomes a leaf node. Disk First Aid no longer
+	complains. Norton Utilities, of course, has decided that it
+	doesn't like the root node number. bleah. i think that it might be
+	due to Norton Utilities not expecting the root node to have moved.
+
+1998-12-16  a sun  <asun@hecate.darksunrising.blah>
+
+	* sysdep.c (hfs_revalidate_dentry): fix inode dates when there's a
+	timezone change.
+
+1998-12-15  root  <root@hecate.darksunrising.blah>
+
+	* extent.c (new_extent): expand block size variables to handle
+	u32. 
+
+	* mdb.c (hfs_mdb_get): AlBlkSiz shouldn't be capped at 65535. we
+	should be able to handle much larger volumes now.
+
 1998-11-21  a sun  <asun@hecate.darksunrising.blah>
 
 	* hfs_sysdep.h, hfs_fs.h: added hfs_from_utc/to_utc to deal with

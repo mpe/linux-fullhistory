@@ -215,7 +215,8 @@ static ssize_t do_readv_writev(int type, struct file *file,
 		tot_len += iov[i].iov_len;
 
 	inode = file->f_dentry->d_inode;
-	ret = locks_verify_area((type == VERIFY_READ
+	/* VERIFY_WRITE actually means a read, as we write to user space */
+	ret = locks_verify_area((type == VERIFY_WRITE
 				 ? FLOCK_VERIFY_READ : FLOCK_VERIFY_WRITE),
 				inode, file, file->f_pos, tot_len);
 	if (ret) goto out;

@@ -234,7 +234,7 @@ static void tul_do_pause(unsigned amount)
 	 */
 	spin_lock_irq(&io_request_lock);
 #else
-	while (jiffies < the_time);
+	while (time_before(jiffies, the_time));
 #endif
 }
 

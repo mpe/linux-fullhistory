@@ -539,7 +539,7 @@ __initfunc(int elmc_probe(struct device *dev))
 	}
 	dev->mem_end = dev->mem_start + size;	/* set mem_end showed by 'ifconfig' */
 
-	((struct priv *) (dev->priv))->base = phys_to_virt(dev->mem_start + size - 0x01000000);
+	((struct priv *) (dev->priv))->base = (unsigned long)phys_to_virt(dev->mem_start + size - 0x01000000);
 	alloc586(dev);
 
 	elmc_id_reset586();	/* make sure it doesn't generate spurious ints */

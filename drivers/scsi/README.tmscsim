@@ -17,6 +17,7 @@ The tmscsim driver supports PCI SCSI Host Adapters based on the AM53C974
 chip. AM53C974 based SCSI adapters include: 
  Tekram DC390, DC390T
  Dawicontrol 2974
+ QLogic Fast! PCI Basic
  some on-board adapters
 (This is most probably not a complete list)
 
@@ -44,7 +45,8 @@ The numbering scheme isn't consistent. The first versions went from 1.00 to
 1.12, then 1.20a to 1.20t. Finally I decided to use the ncr53c8xx scheme. So
 the next revisions will be 2.0a to 2.0X (stable), 2.1a to 2.1X (experimental),
 2.2a to 2.2X (stable, again) etc. (X = anything between a and z.) If I send
-fixes to people for testing, those will have a digit appended, e.g. 2.0a1.
+fixes to people for testing, I create intermediate versions with a digit 
+appended, e.g. 2.0c3.
 
 
 2. Installation
@@ -55,32 +57,36 @@ driver. Of course you have to choose to compile SCSI support and DC390(T)
 support into your kernel or as module when configuring your kernel for
 compiling.
 
-If you got an older kernel with an old version of this driver included, you
-should copy the files (dc390.h, tmscsim.h, tmscsim.c, scsiiom.c and
-README.tmscsim) from this directory to linux/drivers/scsi. You have to
-recompile your kernel/module of course.
+ If you got an old kernel (pre 2.1.127, pre 2.0.37p1) with an old version of
+ this driver: Get dc390-21125-20b.diff.gz or dc390-2036p21-20b1.diff.gz from
+ my website and apply the patch. 
 
-You should apply the three patches included in dc390-20-kernel.diff
-(Applying them: cd /usr/src; patch -p0 <~/dc390-20-kernel.diff)
-The patches are against 2.1.103, so you might have to manually resolve
-rejections when applying to another kernel version.
+ If you want to do it manually, you should copy the files (dc390.h,
+ tmscsim.h, tmscsim.c, scsiiom.c and README.tmscsim) from this directory to
+ linux/drivers/scsi. You have to recompile your kernel/module of course.
 
-The patches will update the kernel startup code to allow boot parameters to
-be passed to the driver, update the Documentation and finally offer you the
-possibility to omit the non-DC390 parts of the driver.
-(By selecting "Omit support for non DC390" you basically disable the
-emulation of a DC390 EEPROM for non DC390 adapters. This saves a few bytes
-of memory.)
+ You should apply the three patches included in dc390-120-kernel.diff
+ (Applying them: cd /usr/src; patch -p0 <~/dc390-120-kernel.diff)
+ The patches are against 2.1.125, so you might have to manually resolve
+ rejections when applying to another kernel version.
+
+ The patches will update the kernel startup code to allow boot parameters to
+ be passed to the driver, update the Documentation and finally offer you the
+ possibility to omit the non-DC390 parts of the driver.
+ (By selecting "Omit support for non DC390" you basically disable the
+ emulation of a DC390 EEPROM for non DC390 adapters. This saves a few bytes
+ of memory.)
 
 If you got a very old kernel without the tmscsim driver (pre 2.0.31)
 I recommend upgrading your kernel. However, if you don't want to, please
 contact me to get the appropriate patches.
 
-Testing a SCSI driver is always a delicate thing to do. The 2.0 driver has
+
+Upgrading a SCSI driver is always a delicate thing to do. The 2.0 driver has
 proven stable on many systems, but it's still a good idea to take some
 precautions. In an ideal world you would have a full backup of your disks.
 The world isn't ideal and most people don't have full backups (me neither).
-So take at least the following two measures:
+So take at least the following measures:
 * make your kernel remount the FS read-only on detecting an error:
   tune2fs -e remount-ro /dev/sd??
 * have copies of your SCSI disk's partition tables on some safe location:
@@ -103,18 +109,19 @@ SA_SHIRQ | SA_INTERRUPT.
 3.Features
 ----------
 - SCSI
- * Tagged queueing
+ * Tagged command queueing
  * Sync speed up to 10 MHz
  * Disconnection
  * Multiple LUNs
 
 - General / Linux interface
- * Support for up to 4 adapters.
+ * Support for up to 4 AM53C974 adapters.
  * DC390 EEPROM usage or boot/module params
  * Information via cat /proc/scsi/tmscsim/?
  * Dynamically configurable by writing to /proc/scsi/tmscsim/?
  * Dynamic allocation of resources
- * SMP support: Adapter specific locks (Linux 2.1.x)
+ * SMP support: Locking on io_request lock (Linux 2.1/2.2) or adapter 
+    specific locks (Linux 2.3)
  * Uniform source code for Linux-2.x.y
  * Support for dyn. addition/removal of devices via add/remove-single-device
    (Try: echo "scsi add-single-device H C I L" >/proc/scsi/scsi 
@@ -336,9 +343,7 @@ to further improve its usability:
 
 Further investigation on these problems:
 
-* TagQ and Disconnection (Resel: SRB Tag Seleection)
-* Problems with IRQ sharing (IO-APIC on SMP Systems) (??)
-* Driver crashes with readcdda (xcdroast)
+* Driver hangs with sync readcdda (xcdroast) (most probably VIA PCI error)
 
 Known problems:
 
@@ -362,12 +367,9 @@ Known problems:
   Richard Waltham <dormouse@farsrobt.demon.co.uk> or Doug Ledford
   <dledford@dialnet.net>, if you want to help further debugging it.
 * 2.0.35: CD changers (e.g. NAKAMICHI MBR-7.{0,2}) have problems because
-  the mid-level code doesn't handle BLIST_SINGLELUN correctly. Apply
-  the patch 2035-scsi-singlelun.diff. Thanks to Chiaki Ishikawa.
-  I was told that this fix will be in 2.0.36, so you don't need it for
-  2.0.36. 
-[The patch file is contained in the dc390-XXX.tar.gz files which can be found
-on the ftp server. See below.]
+  the mid-level code doesn't handle BLIST_SINGLELUN correctly. There used
+  to be a patch included here to fix this, but I was told that it is fixed
+  in 2.0.36.
 
 
 7. Bug reports, debugging and updates
@@ -379,7 +381,7 @@ If you find something, which you believe to be a bug, please report it to me.
 Please append the output of /proc/scsi/scsi, /proc/scsi/tmscsim/? and
 maybe the DC390 log messages to the report. 
 
-Bug reports should be send to me (Kurt Garloff <K.Garloff@ping.de>) as well
+Bug reports should be send to me (Kurt Garloff <dc390@garloff.de>) as well
 as to the linux-scsi list (<linux-scsi@vger.rutgers.edu>), as sometimes bugs
 are caused by the SCSI mid-level code.
 
@@ -391,7 +393,10 @@ AM53C974, the logging might produce log output again, and you might end
 having your box spending most of its time doing the logging.
 
 The latest version of the driver can be found at:
-ftp://student.physik.uni-dortmund.de/pub/linux/kernel/dc390/
+ http://www.garloff.de/kurt/linux/dc390/
+and
+ ftp://student.physik.uni-dortmund.de/pub/linux/kernel/dc390/
+(The latter might shut down some day.)
 
 
 8. Acknowledgements
@@ -408,6 +413,6 @@ doing this during early revisions).
 
 
 -------------------------------------------------------------------------
-Written by Kurt Garloff <K.Garloff@ping.de> 1998/06/11
-Last updated 1998/10/15, driver revision 2.0b
-$Id: README.tmscsim,v 2.4 1998/10/24 08:45:02 garloff Exp $
+Written by Kurt Garloff <kurt@garloff.de> 1998/06/11
+Last updated 1998/12/25, driver revision 2.0d
+$Id: README.tmscsim,v 2.9 1998/12/25 18:04:20 garloff Exp $

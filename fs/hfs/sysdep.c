@@ -18,12 +18,13 @@
 #include <linux/hfs_fs_i.h>
 #include <linux/hfs_fs.h>
 
+static int hfs_revalidate_dentry(struct dentry *);
 static int hfs_hash_dentry(struct dentry *, struct qstr *);
 static int hfs_compare_dentry(struct dentry *, struct qstr *, struct qstr *);
 static void hfs_dentry_iput(struct dentry *, struct inode *);
 struct dentry_operations hfs_dentry_operations =
 {
-	NULL,	                /* d_validate(struct dentry *) */
+	hfs_revalidate_dentry,	/* d_revalidate(struct dentry *) */
 	hfs_hash_dentry,	/* d_hash */
 	hfs_compare_dentry,    	/* d_compare */
 	NULL,	                /* d_delete(struct dentry *) */
@@ -86,4 +87,20 @@ static void hfs_dentry_iput(struct dentry *dentry, struct inode *inode)
 
 	entry->sys_entry[HFS_ITYPE_TO_INT(HFS_ITYPE(inode->i_ino))] = NULL;
 	iput(inode);
+}
+
+static int hfs_revalidate_dentry(struct dentry *dentry)
+{
+	struct inode *inode = dentry->d_inode;
+	int diff;
+
+	/* fix up inode on a timezone change */
+	if (inode && 
+	    (diff = (hfs_to_utc(0) - HFS_I(inode)->tz_secondswest))) {
+		inode->i_ctime += diff;
+		inode->i_atime += diff;
+		inode->i_mtime += diff;
+		HFS_I(inode)->tz_secondswest += diff;
+	}
+	return 1;
 }

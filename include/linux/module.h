@@ -20,6 +20,7 @@
 # endif
 #endif /* __GENKSYMS__ */
 
+#include <asm/atomic.h>
 
 /* Don't need to bring in all of uaccess.h just for this decl.  */
 struct exception_table_entry;
@@ -54,7 +55,12 @@ struct module
 	const char *name;
 	unsigned long size;
 
-	long usecount;
+	union
+	{
+		atomic_t usecount;
+		long pad;
+	} uc;				/* Needs to keep its size - so says rth */
+
 	unsigned long flags;		/* AUTOCLEAN et al */
 
 	unsigned nsyms;
@@ -80,10 +86,10 @@ struct module
 
 struct module_info
 {
-  unsigned long addr;
-  unsigned long size;
-  unsigned long flags;
-	   long usecount;
+	unsigned long addr;
+	unsigned long size;
+	unsigned long flags;
+	long usecount;
 };
 
 /* Bits of module.flags.  */
@@ -114,17 +120,17 @@ struct module_info
 
 /* Backwards compatibility definition.  */
 
-#define GET_USE_COUNT(module)	((module)->usecount)
+#define GET_USE_COUNT(module)	(atomic_read(&(module)->uc.usecount))
 
 /* Poke the use count of a module.  */
 
 #define __MOD_INC_USE_COUNT(mod)					\
-	((mod)->usecount++, (mod)->flags |= MOD_VISITED|MOD_USED_ONCE)
+	(atomic_inc(&(mod)->uc.usecount), (mod)->flags |= MOD_VISITED|MOD_USED_ONCE)
 #define __MOD_DEC_USE_COUNT(mod)					\
-	((mod)->usecount--, (mod)->flags |= MOD_VISITED)
+	(atomic_dec(&(mod)->uc.usecount), (mod)->flags |= MOD_VISITED)
 #define __MOD_IN_USE(mod)						\
 	(mod_member_present((mod), can_unload) && (mod)->can_unload	\
-	 ? (mod)->can_unload() : (mod)->usecount)
+	 ? (mod)->can_unload() : atomic_read(&(mod)->uc.usecount))
 
 /* Indirect stringification.  */
 

@@ -1182,14 +1182,14 @@ STATIC  int scsi_check_sense (Scsi_Cmnd * SCpnt)
       }
 
     if (SCpnt->sense_buffer[2] & 0xe0)
-	return FAILED;
+	return SUCCESS;
 
     switch (SCpnt->sense_buffer[2] & 0xf)
     {
     case NO_SENSE:
 	return SUCCESS;
     case RECOVERED_ERROR:
-	return SOFT_ERROR;
+	return /* SOFT_ERROR */ SUCCESS;
 
     case ABORTED_COMMAND:
 	return NEEDS_RETRY;
@@ -1212,18 +1212,17 @@ STATIC  int scsi_check_sense (Scsi_Cmnd * SCpnt)
     case COPY_ABORTED:
     case VOLUME_OVERFLOW:
     case MISCOMPARE:
+        return SUCCESS;
 
     case MEDIUM_ERROR:
-	return FAILED;
+	return NEEDS_RETRY;
 
     case ILLEGAL_REQUEST:
-	return SUCCESS;
-
     case BLANK_CHECK:
     case DATA_PROTECT:
     case HARDWARE_ERROR:
     default:
-	return FAILED;
+	return SUCCESS;
     }
 }
 

@@ -94,15 +94,23 @@ L:	linux-net@vger.rutgers.edu
 S:	Maintained
 W:	http://rsphy1.anu.edu.au/~gpg109/ne2000.html
 
-AEDSP16 DRIVER
-P:	Riccardo Facchetti
-M:	fizban@tin.it
+AD1816 SOUND DRIVER
+P:	Thorsten Knabe
+M:	Thorsten Knabe <tek@rbg.informatik.tu-darmstadt.de>
+M:	Thorsten Knabe <tek01@hrzpub.tu-darmstadt.de>
+W:	http://www.student.informatik.tu-darmstadt.de/~tek/projects/linux.html
+W:	http://www.tu-darmstadt.de/~tek01/projects/linux.html
 S:	Maintained
 
 ADVANSYS SCSI DRIVER
 P:	Bob Frey
 M:	Bob Frey <bobf@advansys.com>
 W:	http://www.advansys.com/linux
+S:	Maintained
+
+AEDSP16 DRIVER
+P:	Riccardo Facchetti
+M:	fizban@tin.it
 S:	Maintained
 
 AHA152X SCSI DRIVER
@@ -167,14 +175,26 @@ P:	Axel Boldt
 M:	boldt@math.ucsb.edu
 S:	Maintained
 
+COSA/SRP SYNC SERIAL DRIVER
+P:	Jan "Yenya" Kasprzak
+M:	kas@fi.muni.cz
+W:	http://www.fi.muni.cz/~kas/cosa/
+S:	Maintained
+
+COSA/SRP SYNC SERIAL DRIVER
+P:	Jan "Yenya" Kasprzak
+M:	kas@fi.muni.cz
+W:	http://www.fi.muni.cz/~kas/cosa/
+S:	Maintained
+
 CREDITS FILE
 P:	John A. Martin
 M:	jam@acm.org
 S:	Maintained
 
 CYCLADES ASYNC MUX DRIVER
-P:	Marcio Saito
-M:	Marcio Saito <marcio@cyclades.com>
+P:	Ivan Passos
+M:	Ivan Passos <ivan@cyclades.com>
 W:	http://www.cyclades.com/
 S:	Supported
 
@@ -188,13 +208,15 @@ S:	Maintained
 
 DC390/AM53C974 SCSI driver
 P:	Kurt Garloff
-M:	K.Garloff@ping.de
-W:	ftp://student.physik.uni-dortmund.de/pub/linux/kernel/dc390/
+M:	kurt@garloff.de
+W:	http://www.garloff.de/kurt/linux/dc390/
 S:	Maintained
 
 DECnet NETWORK LAYER
 P:	Steven Whitehouse
 M:	SteveW@ACM.org
+W:	http://www.sucs.swan.ac.uk/~rohan/
+W:	http://www-sigproc.eng.cam.ac.uk/~sjw44/
 L:	netdev@roxanne.nuclecu.unam.mx
 S:	Maintained
 
@@ -350,7 +372,7 @@ S:	Maintained
 IP FIREWALL
 P:	Paul Russell
 M:	Paul.Russell@rustcorp.com.au
-W:	http://www.adelaide.net.au/~rustcorp/ipfwchains/ipfwchains.html
+W:	http://www.rustcorp.com/linux/ipchains
 S:	Supported
 
 IPX/SPX NETWORK LAYER
@@ -358,6 +380,13 @@ P:	Jay Schulist
 M:	Jay Schulist <Jay.Schulist@spacs.k12.wi.us>
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
+
+IRDA SUBSYSTEM
+P:      Dag Brattli
+M:      Dag Brattli <dagb@cs.uit.no>
+L:      linux-irda@list.uit.no
+W:      http://www.cs.uit.no/~dagb/irda/
+S:      Maintained
 
 ISDN SUBSYSTEM
 P:	Fritz Elfert
@@ -448,6 +477,13 @@ M:	rubini@ipvvis.unipv.it
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+MTRR AND SIMILAR SUPPORT [i386]
+P:	Richard Gooch
+M:	rgooch@atnf.csiro.au
+L:	linux-kernel@vger.rutgers.edu
+W:	http://www.atnf.csiro.au/~rgooch/linux/kernel-patches.html
+S:	Maintained
+
 MULTISOUND SOUND DRIVER
 P:	Andrew Veliath
 M:	andrewtv@usa.net
@@ -457,7 +493,7 @@ NCP FILESYSTEM
 P:	Petr Vandrovec
 M:	vandrove@vc.cvut.cz
 P:	Volker Lendecke
-M:	lendecke@Math.Uni-Goettingen.de
+M:	vl@kki.org
 L:	linware@sh.cvut.cz
 S:	Maintained
 
@@ -500,6 +536,12 @@ NON-IDE/NON-SCSI CDROM DRIVERS [GENERAL] (come on, crew - mark your responsibili
 P:	Eberhard Moenkeberg
 M:	emoenke@gwdg.de
 L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
+OPL3-SA2, SA3, and SAx DRIVER
+P:	Scott Murray
+M:	scottm@interlog.com
+L:	linux-sound@vger.rutgers.edu
 S:	Maintained
 
 PARALLEL PORT SUPPORT
@@ -596,7 +638,7 @@ S:	Maintained
 
 SMB FILESYSTEM
 P:	Volker Lendecke
-M:	lendecke@Math.Uni-Goettingen.de
+M:	vl@kki.org
 L:	samba@listproc.anu.edu.au
 S:	Maintained
 

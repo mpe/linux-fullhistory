@@ -1,4 +1,3 @@
-#define VERBOSE_IDE_CD_ERRORS	1
 /*
  * linux/drivers/block/ide-cd.c
  * Copyright (C) 1994, 1995, 1996  scott snyder  <snyder@fnald0.fnal.gov>
@@ -28,7 +27,6 @@
  *   This will allow us to get automagically notified when the media changes
  *   on ATAPI drives (something the stock ATAPI spec is lacking).  Looks
  *   very cool.  I discovered its existance the other day at work...
- * -Fix ide_cdrom_reset so that it works (it does nothing right now)
  * -Query the drive to find what features are available before trying to
  *   use them (like trying to close the tray in drives that can't).
  * -Make it so that Pioneer CD DR-A24X and friends don't get screwed up on
@@ -36,9 +34,6 @@
  * -Handle older drives that can't report their speed. (i.e. check if they
  *   support a version of ATAPI where they can report their speed before
  *   checking their speed and believing what they return).
- * -It seems we do not always honor it when Uniform gets a request to change 
- *   the cdi->options.  We should _always_ check the options before doing stuff.
- *   This must be fixed.
  *
  *
  * ----------------------------------
@@ -226,9 +221,16 @@
  *                         Jens Axboe <axboe@image.dk>
  *                         Chris Zwilling <chris@cloudnet.com>
  *
+ * 4.51  Dec 23, 1998  -- Jens Axboe <axboe@image.dk>
+ *                      - ide_cdrom_reset enabled since the ide subsystem
+ *                         handles resets fine now. <axboe@image.dk>
+ *                      - Transfer size fix for Samsung CD-ROMs, thanks to
+ *                        "Ville Hallik" <ville.hallik@mail.ee>.
+ *                      - other minor stuff.
+ *
  *************************************************************************/
 
-#define IDECD_VERSION "4.50"
+#define IDECD_VERSION "4.51"
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -456,7 +458,7 @@ static void cdrom_queue_request_sense (ide_drive_t *drive,
 	len *= 4;
 
 	pc->c[0] = REQUEST_SENSE;
-	pc->c[4] = len;
+	pc->c[4] = (unsigned char) len;
 	pc->buffer = (char *)reqbuf;
 	pc->buflen = len;
 	pc->sense_data = (struct atapi_request_sense *)failed_command;
@@ -856,7 +858,12 @@ static void cdrom_read_intr (ide_drive_t *drive)
 	if ((len % SECTOR_SIZE) != 0) {
 		printk ("%s: cdrom_read_intr: Bad transfer size %d\n",
 			drive->name, len);
-		printk ("  This drive is not supported by this version of the driver\n");
+		if (CDROM_CONFIG_FLAGS (drive)->limit_nframes)
+			printk ("  This drive is not supported by this version of the driver\n");
+		else {
+			printk ("  Trying to limit transfer sizes\n");
+			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;
+		}
 		cdrom_end_request (0, drive);
 		return;
 	}
@@ -992,7 +999,6 @@ static void cdrom_start_read_continuation (ide_drive_t *drive)
 {
 	struct packet_command pc;
 	struct request *rq = HWGROUP(drive)->rq;
-
 	int nsect, sector, nframes, frame, nskip;
 
 	/* Number of sectors to transfer. */
@@ -1029,8 +1035,10 @@ static void cdrom_start_read_continuation (ide_drive_t *drive)
 	nframes = (nsect + SECTORS_PER_FRAME-1) / SECTORS_PER_FRAME;
 	frame = sector / SECTORS_PER_FRAME;
 
-	/* Largest number of frames was can transfer at once is 64k-1. */
-	nframes = MIN (nframes, 65535);
+	/* Largest number of frames was can transfer at once is 64k-1. For
+	   some drives we need to limit this even more. */
+	nframes = MIN (nframes, (CDROM_CONFIG_FLAGS (drive)->limit_nframes) ?
+		(65534 / CD_FRAMESIZE) : 65535);
 
 	/* Set up the command */
 	memset (&pc.c, 0, sizeof (pc.c));
@@ -1328,7 +1336,7 @@ int cdrom_queue_packet_command (ide_drive_t *drive, struct packet_command *pc)
 			struct atapi_request_sense *reqbuf = pc->sense_data;
 
 			if (reqbuf->sense_key == UNIT_ATTENTION)
-				;
+				cdrom_saw_media_change (drive);
 			else if (reqbuf->sense_key == NOT_READY &&
 				 reqbuf->asc == 4) {
 				/* The drive is in the process of loading
@@ -2477,19 +2485,12 @@ static
 int ide_cdrom_reset (struct cdrom_device_info *cdi)
 {
 
-/* This doesn't work reliably yet, and so it is currently just a stub. */
-
-#if 0 
 	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
 	struct request req;
+
 	ide_init_drive_cmd (&req);
 	req.cmd = RESET_DRIVE_COMMAND;
 	return ide_do_drive_cmd (drive, &req, ide_wait);
-#endif
-
-/* For now, just return 0, as if things had worked...	*/
-	return 0;
-
 
 }
 
@@ -2916,10 +2917,10 @@ static void ide_cdrom_add_settings(ide_drive_t *drive)
 	int major = HWIF(drive)->major;
 	int minor = drive->select.b.unit << PARTN_BITS;
 
-	ide_add_setting(drive,	"breada_readahead",	SETTING_RW,					BLKRAGET,		BLKRASET,		TYPE_INT,	0,	255,				1,	2,	&read_ahead[major],		NULL);
-	ide_add_setting(drive,	"file_readahead",	SETTING_RW,					BLKFRAGET,		BLKFRASET,		TYPE_INTA,	0,	INT_MAX,			1,	1024,	&max_readahead[major][minor],	NULL);
-	ide_add_setting(drive,	"max_kb_per_request",	SETTING_RW,					BLKSECTGET,		BLKSECTSET,		TYPE_INTA,	1,	255,				1,	2,	&max_sectors[major][minor],	NULL);
-	ide_add_setting(drive,	"dsc_overlap",		SETTING_RW,					-1,			-1,			TYPE_BYTE,	0,	1,				1,	1,	&drive->dsc_overlap,		NULL);
+	ide_add_setting(drive,	"breada_readahead",	SETTING_RW, BLKRAGET, BLKRASET, TYPE_INT, 0, 255, 1, 2, &read_ahead[major], NULL);
+	ide_add_setting(drive,	"file_readahead",	SETTING_RW, BLKFRAGET, BLKFRASET, TYPE_INTA, 0, INT_MAX, 1, 1024, &max_readahead[major][minor],	NULL);
+	ide_add_setting(drive,	"max_kb_per_request",	SETTING_RW, BLKSECTGET, BLKSECTSET, TYPE_INTA, 1, 255, 1, 2, &max_sectors[major][minor], NULL);
+	ide_add_setting(drive,	"dsc_overlap",		SETTING_RW, -1, -1, TYPE_BYTE, 0, 1, 1,	1, &drive->dsc_overlap, NULL);
 }
 
 static
@@ -2959,6 +2960,13 @@ int ide_cdrom_setup (ide_drive_t *drive)
 	CDROM_CONFIG_FLAGS (drive)->cd_rw = 0;
 	CDROM_CONFIG_FLAGS (drive)->no_eject = 1;
 	CDROM_CONFIG_FLAGS (drive)->supp_disc_present = 0;
+	
+	/* limit transfer size per interrupt. currently only one Samsung
+	   drive needs this. */
+	CDROM_CONFIG_FLAGS (drive)->limit_nframes = 0;
+	if (drive->id != NULL)
+		if (strcmp (drive->id->model, "SAMSUNG CD-ROM SCR-2432") == 0)
+			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;
 
 #if ! STANDARD_ATAPI
 	/* by default Sanyo 3 CD changer support is turned off and

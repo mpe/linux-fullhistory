@@ -571,7 +571,7 @@ static int wait_for_ready(time_t timeout)
 	timeout -= spin_t;
 	spin_t += jiffies;
 
-	while (((stat = inb_p(QIC02_STAT_PORT) & QIC02_STAT_MASK) == QIC02_STAT_MASK) && (jiffies<spin_t))
+	while (((stat = inb_p(QIC02_STAT_PORT) & QIC02_STAT_MASK) == QIC02_STAT_MASK) && time_before(jiffies, spin_t))
 		schedule();		/* don't waste all the CPU time */
 	if ((stat & QIC02_STAT_READY) == 0)
 		return TE_OK;
@@ -586,7 +586,7 @@ static int wait_for_ready(time_t timeout)
 	TPQDEB({printk("wait_for_ready: additional timeout: %d\n", spin_t);})
 
 		/* not ready and no exception && timeout not expired yet */
-	while (((stat = inb_p(QIC02_STAT_PORT) & QIC02_STAT_MASK) == QIC02_STAT_MASK) && (jiffies<spin_t)) {
+	while (((stat = inb_p(QIC02_STAT_PORT) & QIC02_STAT_MASK) == QIC02_STAT_MASK) && time_before(jiffies, spin_t)) {
 		/* be `nice` to other processes on long operations... */
 		current->state = TASK_INTERRUPTIBLE;
 		/* nap 0.30 sec between checks, */

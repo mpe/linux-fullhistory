@@ -14,7 +14,7 @@
  *
  * it's best to have buff aligned on a 32-bit boundary
  */
-unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum);
+asmlinkage unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum);
 
 /*
  * the same as csum_partial, but copies from src while it
@@ -24,8 +24,8 @@ unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
  * better 64-bit) boundary
  */
 
-unsigned int csum_partial_copy_generic( const char *src, char *dst, int len, int sum,
-					int *src_err_ptr, int *dst_err_ptr);
+asmlinkage unsigned int csum_partial_copy_generic( const char *src, char *dst, int len, int sum,
+						   int *src_err_ptr, int *dst_err_ptr);
 
 /*
  *	Note: when you get a NULL pointer exception here this means someone

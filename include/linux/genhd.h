@@ -108,12 +108,19 @@ struct solaris_x86_vtoc {
 #ifdef CONFIG_BSD_DISKLABEL
 /*
  * BSD disklabel support by Yossi Gottlieb <yogo@math.tau.ac.il>
+ * updated by Marc Espie <Marc.Espie@openbsd.org>
  */
 
-#define BSD_PARTITION		0xa5	/* Partition ID */
+#define FREEBSD_PARTITION	0xa5    /* FreeBSD Partition ID */
+#define OPENBSD_PARTITION	0xa6    /* OpenBSD Partition ID */
+#define NETBSD_PARTITION	0xa9    /* NetBSD Partition ID */
+#define BSDI_PARTITION		0xb7    /* BSDI Partition ID */
+
+/* check against BSD src/sys/sys/disklabel.h for consistency */
 
 #define BSD_DISKMAGIC	(0x82564557UL)	/* The disk magic number */
 #define BSD_MAXPARTITIONS	8
+#define OPENBSD_MAXPARTITIONS	16
 #define BSD_FS_UNUSED		0	/* disklabel unused partition entry ID */
 struct bsd_disklabel {
 	__u32	d_magic;		/* the magic number */
@@ -159,6 +166,62 @@ struct bsd_disklabel {
 };
 
 #endif	/* CONFIG_BSD_DISKLABEL */
+
+#ifdef CONFIG_UNIXWARE_DISKLABEL
+/*
+ * Unixware slices support by Andrzej Krzysztofowicz <ankry@mif.pg.gda.pl>
+ * and Krzysztof G. Baranowski <kgb@knm.org.pl>
+ */
+
+#define UNIXWARE_PARTITION     0x63		/* Partition ID, same as */
+						/* GNU_HURD and SCO Unix */
+#define UNIXWARE_DISKMAGIC     (0xCA5E600DUL)	/* The disk magic number */
+#define UNIXWARE_DISKMAGIC2    (0x600DDEEEUL)	/* The slice table magic nr */
+#define UNIXWARE_NUMSLICE      16
+#define UNIXWARE_FS_UNUSED     0		/* Unused slice entry ID */
+
+struct unixware_slice {
+	__u16   s_label;	/* label */
+	__u16   s_flags;	/* permission flags */
+	__u32   start_sect;	/* starting sector */
+	__u32   nr_sects;	/* number of sectors in slice */
+};
+
+struct unixware_disklabel {
+	__u32   d_type;               	/* drive type */
+	__u32   d_magic;                /* the magic number */
+	__u32   d_version;              /* version number */
+	char    d_serial[12];           /* serial number of the device */
+	__u32   d_ncylinders;           /* # of data cylinders per device */
+	__u32   d_ntracks;              /* # of tracks per cylinder */
+	__u32   d_nsectors;             /* # of data sectors per track */
+	__u32   d_secsize;              /* # of bytes per sector */
+	__u32   d_part_start;           /* # of first sector of this partition */
+	__u32   d_unknown1[12];         /* ? */
+ 	__u32	d_alt_tbl;              /* byte offset of alternate table */
+ 	__u32	d_alt_len;              /* byte length of alternate table */
+ 	__u32	d_phys_cyl;             /* # of physical cylinders per device */
+ 	__u32	d_phys_trk;             /* # of physical tracks per cylinder */
+ 	__u32	d_phys_sec;             /* # of physical sectors per track */
+ 	__u32	d_phys_bytes;           /* # of physical bytes per sector */
+ 	__u32	d_unknown2;             /* ? */
+	__u32   d_unknown3;             /* ? */
+	__u32	d_pad[8];               /* pad */
+
+	struct unixware_vtoc {
+		__u32	v_magic;		/* the magic number */
+		__u32	v_version;		/* version number */
+		char	v_name[8];		/* volume name */
+		__u16	v_nslices;		/* # of slices */
+		__u16	v_unknown1;		/* ? */
+		__u32	v_reserved[10];		/* reserved */
+		struct unixware_slice
+			v_slice[UNIXWARE_NUMSLICE];	/* slice headers */
+	} vtoc;
+
+};  /* 408 */
+
+#endif /* CONFIG_UNIXWARE_DISKLABEL */
 
 extern struct gendisk *gendisk_head;	/* linked list of disks */
 

@@ -287,7 +287,7 @@ unsigned long probe_irq_on (void)
 	}
 
 	/* wait for spurious interrupts to mask themselves out again */
-	for (delay = jiffies + HZ/10; delay > jiffies; )
+	for (delay = jiffies + HZ/10; time_before(jiffies, delay); )
 		/* about 100ms delay */;
 
 	/* now filter out any obviously spurious interrupts */

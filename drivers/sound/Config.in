@@ -131,7 +131,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       int 'PSS MIDI IRQ 3, 4, 5, 7, 9, 10, 11, 12' CONFIG_PSS_MPU_IRQ 9
       bool '  Have DSPxxx.LD firmware file' CONFIG_PSS_HAVE_BOOT
       if [ "$CONFIG_PSS_HAVE_BOOT" = "y" ]; then
-         string '  Full pathname of DSPxxx.LD firmware file' CONFIG_PSS_BOOT_FILE
+         string '  Full pathname of DSPxxx.LD firmware file' CONFIG_PSS_BOOT_FILE /etc/sound/dsp001.ld
       fi
   fi
   if [ "$CONFIG_SOUND_PSS" = "y" -o "$CONFIG_SOUND_PSS" = "m" ]; then
@@ -168,7 +168,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       int 'TRIX SB DMA 1 or 3' CONFIG_TRIX_SB_DMA 1
       bool '  Have TRXPRO.HEX firmware file' CONFIG_TRIX_HAVE_BOOT
       if [ "$CONFIG_TRIX_HAVE_BOOT" = "y" ]; then
-  	string '  Full pathname of TRXPRO.HEX firmware file' CONFIG_TRIX_BOOT_FILE
+  	string '  Full pathname of TRXPRO.HEX firmware file' CONFIG_TRIX_BOOT_FILE /etc/sound/trxpro.hex
       fi
   fi
   
@@ -185,7 +185,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       int 'MAD16 MIDI IRQ 5, 7, 9 or 10' CONFIG_MAD16_MPU_IRQ 9
   fi
   
-  dep_tristate 'Full support for Turtle Beach WaveFront (Tropez Plus, Tropez, Maui) synth/soundcards' CONFIG_SOUND_WAVEFRONT $CONFIG_SOUND_OSS
+  dep_tristate 'Full support for Turtle Beach WaveFront (Tropez Plus, Tropez, Maui) synth/soundcards' CONFIG_SOUND_WAVEFRONT $CONFIG_SOUND_OSS m
   if [ "$CONFIG_SOUND_WAVEFRONT" = "y" ]; then
       hex 'I/O base for WaveFront 210, 230, 260, 290, 300, 320, 338 or 330' CONFIG_WAVEFRONT_BASE 330
       int 'WaveFront IRQ 5, 9, 12 or 15' CONFIG_WAVEFRONT_IRQ 9
@@ -218,7 +218,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       int 'Maui IRQ 5, 9, 12 or 15' CONFIG_MAUI_IRQ 9
       bool '  Have OSWF.MOT firmware file' CONFIG_MAUI_HAVE_BOOT
       if [ "$CONFIG_MAUI_HAVE_BOOT" = "y" ]; then
-  	string '  Full pathname of OSWF.MOT firmware file' CONFIG_MAUI_BOOT_FILE
+  	string '  Full pathname of OSWF.MOT firmware file' CONFIG_MAUI_BOOT_FILE /etc/sound/oswf.mot
       fi
   fi
 

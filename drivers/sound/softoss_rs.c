@@ -49,7 +49,7 @@ void softsynth_resample_loop(short *buf, int loops)
 #endif
 				/* Interpolation (resolution of 512 steps) */
 				{
-					int fract = v->ptr & 0x1f;	/* 9 bits */
+					int fract = v->ptr & 0x1ff;	/* 9 bits */
 
 					/* This method works with less arithmetic operations */
 					register int v1 = v->wave[ix];

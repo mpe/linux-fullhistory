@@ -7,6 +7,11 @@
  *  1996-12-23  Modified by Dave Grothe to fix bugs in semaphores and
  *              make semaphores SMP safe
  *  1997-01-28  Modified by Finn Arne Gangstad to make timers scale better.
+ *  1998-11-19	Implemented schedule_timeout() and related stuff
+ *		by Andrea Arcangeli
+ *  1998-12-24	Fixed a xtime SMP race (we need the xtime_lock rw spinlock to
+ *		serialize accesses to xtime/lost_ticks).
+ *				Copyright (C) 1998  Andrea Arcangeli
  */
 
 /*
@@ -149,6 +154,7 @@ static inline void add_to_runqueue(struct task_struct * p)
 	init_task.next_run = p;
 	p->next_run = next;
 	next->prev_run = p;
+	nr_running++;
 }
 
 static inline void del_from_runqueue(struct task_struct * p)
@@ -227,7 +233,6 @@ void wake_up_process(struct task_struct * p)
 	if (!p->next_run) {
 		add_to_runqueue(p);
 		reschedule_idle(p);
-		nr_running++;
 	}
 	spin_unlock_irqrestore(&runqueue_lock, flags);
 }
@@ -437,23 +442,6 @@ signed long schedule_timeout(signed long timeout)
 	struct timer_list timer;
 	unsigned long expire;
 
-	/*
-	 * PARANOID.
-	 */
-	if (current->state == TASK_UNINTERRUPTIBLE)
-	{
-		printk(KERN_WARNING "schedule_timeout: task not interrutible "
-		       "from %p\n", __builtin_return_address(0));
-		/*
-		 * We don' t want to interrupt a not interruptible task
-		 * risking to cause corruption. Better a a deadlock ;-).
-		 */
-		timeout = MAX_SCHEDULE_TIMEOUT;
-	}
-
-	/*
-	 * Here we start for real.
-	 */
 	switch (timeout)
 	{
 	case MAX_SCHEDULE_TIMEOUT:
@@ -594,10 +582,12 @@ asmlinkage void schedule(void)
 
 #ifdef __SMP__
 	next->has_cpu = 1;
-	next->processor = this_cpu;
 #endif
 
 	if (prev != next) {
+#ifdef __SMP__
+		next->processor = this_cpu;
+#endif
 		kstat.context_swtch++;
 		get_mmu_context(next);
 		switch_to(prev,next);
@@ -1189,13 +1179,21 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 volatile unsigned long lost_ticks = 0;
 static unsigned long lost_ticks_system = 0;
 
+/*
+ * This spinlock protect us from races in SMP while playing with xtime. -arca
+ */
+rwlock_t xtime_lock = RW_LOCK_UNLOCKED;
+
 static inline void update_times(void)
 {
 	unsigned long ticks;
-	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	/*
+	 * update_times() is run from the raw timer_bh handler so we
+	 * just know that the irqs are locally enabled and so we don't
+	 * need to save/restore the flags of the local CPU here. -arca
+	 */
+	write_lock_irq(&xtime_lock);
 
 	ticks = lost_ticks;
 	lost_ticks = 0;
@@ -1206,12 +1204,12 @@ static inline void update_times(void)
 
 		calc_load(ticks);
 		update_wall_time(ticks);
-		restore_flags(flags);
+		write_unlock_irq(&xtime_lock);
 		
 		update_process_times(ticks, system);
 
 	} else
-		restore_flags(flags);
+		write_unlock_irq(&xtime_lock);
 }
 
 static void timer_bh(void)

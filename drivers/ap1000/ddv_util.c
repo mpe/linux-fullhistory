@@ -92,7 +92,7 @@ int ddv_restart_cpu(void)
 		return(-1);
 	}
 	for (timeout=jiffies + 10; 
-	     (jiffies < timeout) || (OPT_IO(PBUF0) == 0);
+	     time_before(jiffies, timeout) || (OPT_IO(PBUF0) == 0);
 	     ) /* wait */ ;
 	if (OPT_IO(PBUF0) == 0) {
 		printk("WARNING: option kernel didn't startup\n");

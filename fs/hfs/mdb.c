@@ -118,7 +118,7 @@ struct hfs_mdb *hfs_mdb_get(hfs_sysmdb sys_mdb, int readonly,
 	mdb->buf = buf;
 	
 	bs = hfs_get_hl(raw->drAlBlkSiz);
-	if (!bs || bs > HFS_USHRT_MAX || (bs & (HFS_SECTOR_SIZE-1))) {
+	if (!bs || (bs & (HFS_SECTOR_SIZE-1))) {
 		hfs_warn("hfs_fs: bad allocation block size %d != 512\n", bs);
 		hfs_buffer_put(buf);
 		HFS_DELETE(mdb);

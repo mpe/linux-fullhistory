@@ -92,7 +92,7 @@ nlm_lookup_host(struct svc_client *clnt, struct sockaddr_in *sin,
 	/* Lock hash table */
 	down(&nlm_host_sema);
 
-	if (next_gc < jiffies)
+	if (time_after(jiffies, next_gc))
 		nlm_gc_hosts();
 
 	for (hp = &nlm_hosts[hash]; (host = *hp); hp = &host->h_next) {
@@ -173,7 +173,7 @@ nlm_bind_host(struct nlm_host *host)
 	/* If we've already created an RPC client, check whether
 	 * RPC rebind is required */
 	if ((clnt = host->h_rpcclnt) != NULL) {
-		if (host->h_nextrebind < jiffies) {
+		if (time_after(jiffies, host->h_nextrebind)) {
 			clnt->cl_port = 0;
 			host->h_nextrebind = jiffies + NLM_HOST_REBIND;
 			dprintk("lockd: next rebind in %ld jiffies\n",
@@ -219,7 +219,7 @@ void
 nlm_rebind_host(struct nlm_host *host)
 {
 	dprintk("lockd: rebind host %s\n", host->h_name);
-	if (host->h_rpcclnt && host->h_nextrebind < jiffies) {
+	if (host->h_rpcclnt && time_after(jiffies, host->h_nextrebind)) {
 		host->h_rpcclnt->cl_port = 0;
 		host->h_nextrebind = jiffies + NLM_HOST_REBIND;
 	}
@@ -298,7 +298,7 @@ nlm_gc_hosts(void)
 		q = &nlm_hosts[i];
 		while ((host = *q) != NULL) {
 			if (host->h_count || host->h_inuse
-			 || host->h_expires >= jiffies) {
+			 || time_before_eq(jiffies, host->h_expires)) {
 				q = &host->h_next;
 				continue;
 			}

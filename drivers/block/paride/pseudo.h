@@ -47,7 +47,7 @@ static int ps_timer_active = 0;
 static int ps_tq_active = 0;
 static int ps_nice = 0;
 
-static spinlock_t ps_spinlock = SPIN_LOCK_UNLOCKED;
+static spinlock_t ps_spinlock __attribute__((unused)) = SPIN_LOCK_UNLOCKED;
 
 static struct timer_list ps_timer = {0,0,0,0,ps_timer_int};
 static struct tq_struct ps_tq = {0,0,ps_tq_int,NULL};

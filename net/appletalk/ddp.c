@@ -31,12 +31,19 @@
  *						AppleTalk drivers, cleaned it.
  *		Rob Newberry		:	Added proxy AARP and AARP proc fs, 
  *						moved probing to AARP module.
+ *              Adrian Sun/ 
+ *              Michael Zuelsdorff      :       fix for net.0 packets. don't 
+ *                                              allow illegal ether/tokentalk
+ *                                              port assignment. we lose a 
+ *                                              valid localtalk port as a 
+ *                                              result.
+ *              
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
- *
+ * 
  */
 
 #include <linux/config.h>
@@ -141,7 +148,7 @@ static struct sock *atalk_search_socket(struct sockaddr_at *to, struct atalk_ifa
 			continue;
 	   	}
 
-	    	if(to->sat_addr.s_net == 0
+	    	if(to->sat_addr.s_net == ATADDR_ANYNET
 			&& to->sat_addr.s_node == ATADDR_BCAST
 			&& s->protinfo.af_at.src_net == atif->address.s_net)
 		{
@@ -156,7 +163,14 @@ static struct sock *atalk_search_socket(struct sockaddr_at *to, struct atalk_ifa
 			break;
 	   	}
 
-	    	/* XXXX.0 */
+	    	/* XXXX.0 -- we got a request for this router. make sure
+		 * that the node is appropriately set. */
+		if (to->sat_addr.s_node == ATADDR_ANYNODE &&
+		    to->sat_addr.s_net != ATADDR_ANYNET &&
+		    atif->address.s_node == s->protinfo.af_at.src_node) {
+			to->sat_addr.s_node = atif->address.s_node;
+			break; 
+		}
 	}
 
 	return (s);
@@ -502,6 +516,12 @@ static struct atalk_iface *atalk_find_interface(int net, int node)
 			&& iface->address.s_net==net 
 			&& !(iface->status & ATIF_PROBE))
 			return (iface);
+
+		/* XXXX.0 -- net.0 returns the iface associated with net */
+		if ((node==ATADDR_ANYNODE) && (net != ATADDR_ANYNET) &&
+		    (ntohs(iface->nets.nr_firstnet) <= ntohs(net)) &&
+		    (ntohs(net) <= ntohs(iface->nets.nr_lastnet)))
+		        return (iface);
 	}
 
 	return (NULL);

@@ -323,7 +323,7 @@ acornscsi_csdelay (unsigned int cs)
     save_flags (flags);
     sti ();
 
-    while (jiffies < target_jiffies) barrier();
+    while (time_before(jiffies, target_jiffies)) barrier();
 
     restore_flags (flags);
 }

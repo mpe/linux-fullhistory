@@ -21,6 +21,11 @@ struct ipc_perm
 #define IPC_EXCL   00002000   /* fail if key exists */
 #define IPC_NOWAIT 00004000   /* return error on wait */
 
+/* these fields are used by the DIPC package so the kernel as standard
+   should avoid using them if possible */
+   
+#define IPC_DIPC 00010000  /* make it distributed */
+#define IPC_OWN  00020000  /* this machine is the DIPC owner */
 
 /* 
  * Control commands used with semctl, msgctl and shmctl 

@@ -128,6 +128,11 @@ struct ipx_opt {
 	unsigned char           node[IPX_NODE_LEN];
 #endif
 	unsigned short		type;
+/* 
+ * To handle special ncp connection-handling sockets for mars_nwe,
+ * the connection number must be stored in the socket.
+ */
+	unsigned short		ipx_ncp_conn;
 };
 #endif
 

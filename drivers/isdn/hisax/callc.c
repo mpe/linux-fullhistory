@@ -62,7 +62,7 @@
 #include "hisax.h"
 
 #ifdef MODULE
-#define MOD_USE_COUNT ((&__this_module)->usecount)
+#define MOD_USE_COUNT ( GET_USE_COUNT (&__this_module))
 #endif				/* MODULE */
 
 const char *lli_revision = "$Revision: 2.13 $";
@@ -2055,7 +2055,7 @@ HiSax_command(isdn_ctrl * ic)
 			if (csta->channel[0].debug & 0x400) {
 				jiftime(tmp, jiffies);
 				i = strlen(tmp);
-				sprintf(tmp + i, "   LOCK modcnt %lx\n", MOD_USE_COUNT);
+				sprintf(tmp + i, "   LOCK modcnt %d\n", MOD_USE_COUNT);
 				HiSax_putstatus(csta, tmp);
 			}
 #endif				/* MODULE */
@@ -2066,7 +2066,7 @@ HiSax_command(isdn_ctrl * ic)
 			if (csta->channel[0].debug & 0x400) {
 				jiftime(tmp, jiffies);
 				i = strlen(tmp);
-				sprintf(tmp + i, " UNLOCK modcnt %lx\n", MOD_USE_COUNT);
+				sprintf(tmp + i, " UNLOCK modcnt %d\n", MOD_USE_COUNT);
 				HiSax_putstatus(csta, tmp);
 			}
 #endif				/* MODULE */
@@ -2128,7 +2128,8 @@ HiSax_command(isdn_ctrl * ic)
 					break;
 #ifdef MODULE
 				case (55):
-					MOD_USE_COUNT = 0;
+					while ( MOD_USE_COUNT > 0)
+                                           MOD_DEC_USE_COUNT;
 					HiSax_mod_inc_use_count();
 					break;
 #endif				/* MODULE */

@@ -51,7 +51,7 @@ extern __inline__ void unlock_kernel(void)
 {
 	__asm__ __volatile__(
 		"decl %1\n\t"
-		"jns 9f\n"
+		"jns 9f\n\t"
 		spin_unlock_string
 		"\n9:"
 		:"=m" (__dummy_lock(&kernel_flag)),

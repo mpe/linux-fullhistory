@@ -33,6 +33,9 @@ struct hfs_inode_info {
 	const struct hfs_hdr_layout	*default_layout;
 	struct hfs_hdr_layout		*layout;
 
+	/* to deal with localtime ugliness */
+	int                             tz_secondswest;
+
         /* for dentry cleanup */
         void (*d_drop_op)(struct dentry *, const ino_t);
 };

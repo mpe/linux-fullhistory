@@ -894,7 +894,7 @@ int powerbook_sleep(void)
 		pmu_enable_backlight(0);
 
 	/* Give the disks a little time to actually finish writing */
-	for (wait = jiffies + (HZ/4); jiffies < wait; )
+	for (wait = jiffies + (HZ/4); time_before(jiffies, wait); )
 		mb();
 
 	/* Disable all interrupts except pmu */

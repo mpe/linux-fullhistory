@@ -48,6 +48,7 @@
  *                     "OSS documented" and "OSS actual" behaviour
  *    31.08.98   0.7   Fix realplayer problems - dac.count issues
  *    10.12.98   0.8   Fix drain_dac trying to wait on not yet initialized DMA
+ *    16.12.98   0.9   Fix a few f_file & FMODE_ bugs
  *
  */
 
@@ -764,17 +765,14 @@ static void sv_update_ptr(struct sv_state *s)
 		s->dma_adc.hwptr = hwptr;
 		s->dma_adc.total_bytes += diff;
 		s->dma_adc.count += diff;
-		if (s->dma_adc.mapped) {
-			if (s->dma_adc.count >= (signed)s->dma_adc.fragsize) 
-				wake_up(&s->dma_adc.wait);
-		} else {
+		if (s->dma_adc.count >= (signed)s->dma_adc.fragsize) 
+			wake_up(&s->dma_adc.wait);
+		if (!s->dma_adc.mapped) {
 			if (s->dma_adc.count > (signed)(s->dma_adc.dmasize - ((3 * s->dma_adc.fragsize) >> 1))) {
 				s->enable &= ~SV_CENABLE_RE;
 				wrindir(s, SV_CIENABLE, s->enable);
 				s->dma_adc.error++;
 			}
-			if (s->dma_adc.count > 0)
-				wake_up(&s->dma_adc.wait);
 		}
 	}
 	/* update DAC pointer */
@@ -797,7 +795,7 @@ static void sv_update_ptr(struct sv_state *s)
 				clear_advance(s);
 				s->dma_dac.endcleared = 1;
 			}
-			if (s->dma_dac.count < (signed)s->dma_dac.dmasize)
+			if (s->dma_dac.count + (signed)s->dma_dac.fragsize <= (signed)s->dma_dac.dmasize)
 				wake_up(&s->dma_dac.wait);
 		}
 	}
@@ -1382,27 +1380,22 @@ static unsigned int sv_poll(struct file *file, struct poll_table_struct *wait)
 	unsigned int mask = 0;
 
 	VALIDATE_STATE(s);
-	if (file->f_flags & FMODE_WRITE)
+	if (file->f_mode & FMODE_WRITE)
 		poll_wait(file, &s->dma_dac.wait, wait);
-	if (file->f_flags & FMODE_READ)
+	if (file->f_mode & FMODE_READ)
 		poll_wait(file, &s->dma_adc.wait, wait);
 	spin_lock_irqsave(&s->lock, flags);
 	sv_update_ptr(s);
-	if (file->f_flags & FMODE_READ) {
-		if (s->dma_adc.mapped) {
-			if (s->dma_adc.count >= (signed)s->dma_adc.fragsize)
-				mask |= POLLIN | POLLRDNORM;
-		} else {
-			if (s->dma_adc.count > 0)
-				mask |= POLLIN | POLLRDNORM;
-		}
+	if (file->f_mode & FMODE_READ) {
+		if (s->dma_adc.count >= (signed)s->dma_adc.fragsize)
+			mask |= POLLIN | POLLRDNORM;
 	}
-	if (file->f_flags & FMODE_WRITE) {
+	if (file->f_mode & FMODE_WRITE) {
 		if (s->dma_dac.mapped) {
 			if (s->dma_dac.count >= (signed)s->dma_dac.fragsize) 
 				mask |= POLLOUT | POLLWRNORM;
 		} else {
-			if ((signed)s->dma_dac.dmasize > s->dma_dac.count)
+			if ((signed)s->dma_dac.dmasize >= s->dma_dac.count + (signed)s->dma_dac.fragsize)
 				mask |= POLLOUT | POLLWRNORM;
 		}
 	}
@@ -1786,11 +1779,11 @@ static int sv_release(struct inode *inode, struct file *file)
 	if (file->f_mode & FMODE_WRITE)
 		drain_dac(s, file->f_flags & O_NONBLOCK);
 	down(&s->open_sem);
-	if (file->f_flags & FMODE_WRITE) {
+	if (file->f_mode & FMODE_WRITE) {
 		stop_dac(s);
 		dealloc_dmabuf(&s->dma_dac);
 	}
-	if (file->f_flags & FMODE_READ) {
+	if (file->f_mode & FMODE_READ) {
 		stop_adc(s);
 		dealloc_dmabuf(&s->dma_adc);
 	}
@@ -1923,16 +1916,16 @@ static unsigned int sv_midi_poll(struct file *file, struct poll_table_struct *wa
 	unsigned int mask = 0;
 
 	VALIDATE_STATE(s);
-	if (file->f_flags & FMODE_WRITE)
+	if (file->f_mode & FMODE_WRITE)
 		poll_wait(file, &s->midi.owait, wait);
-	if (file->f_flags & FMODE_READ)
+	if (file->f_mode & FMODE_READ)
 		poll_wait(file, &s->midi.iwait, wait);
 	spin_lock_irqsave(&s->lock, flags);
-	if (file->f_flags & FMODE_READ) {
+	if (file->f_mode & FMODE_READ) {
 		if (s->midi.icnt > 0)
 			mask |= POLLIN | POLLRDNORM;
 	}
-	if (file->f_flags & FMODE_WRITE) {
+	if (file->f_mode & FMODE_WRITE) {
 		if (s->midi.ocnt < MIDIOUTBUF)
 			mask |= POLLOUT | POLLWRNORM;
 	}
@@ -2278,7 +2271,7 @@ __initfunc(int init_sonicvibes(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.8 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.9 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");

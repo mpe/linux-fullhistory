@@ -95,18 +95,6 @@
  * [10-Sep-98 Alan Modra] Another symlink change.
  */
 
-static inline char * get_page(void)
-{
-	char * res;
-	res = (char*)__get_free_page(GFP_KERNEL);
-	return res;
-}
-
-inline void putname(char * name)
-{
-	free_page((unsigned long) name); 
-}
-
 /* In order to reduce some races, while at the same time doing additional
  * checking and hopefully speeding things up, we copy filenames to the
  * kernel data space before using them..
@@ -139,7 +127,7 @@ char * getname(const char * filename)
 	char *tmp, *result;
 
 	result = ERR_PTR(-ENOMEM);
-	tmp = get_page();
+	tmp = __getname();
 	if (tmp)  {
 		int retval = do_getname(filename, tmp);
 

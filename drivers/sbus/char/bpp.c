@@ -337,8 +337,8 @@ static int wait_for(unsigned short set, unsigned short clr,
        * responds real good. The first while loop guesses an expire
        * time accounting for possible wraparound of jiffies.
        */
-      while (extime <= jiffies) extime = jiffies + 1;
-      while ( (jiffies < extime)
+      while (time_after_eq(jiffies, extime) extime = jiffies + 1;
+      while ( (time_before(jiffies, extime))
               && (((pins & set) != set) || ((pins & clr) != 0)) ) {
             pins = get_pins(minor);
       }

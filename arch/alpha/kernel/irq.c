@@ -824,7 +824,7 @@ probe_irq_on(void)
 	 * Wait about 100ms for spurious interrupts to mask themselves
 	 * out again...
 	 */
-	for (delay = jiffies + HZ/10; delay > jiffies; )
+	for (delay = jiffies + HZ/10; time_before(jiffies, delay); )
 		barrier();
 
 	/* Now filter out any obviously spurious interrupts.  */

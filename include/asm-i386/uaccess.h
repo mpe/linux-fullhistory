@@ -250,13 +250,15 @@ do {									\
 
 /* Generic arbitrary sized copy.  */
 #define __copy_user(to,from,size)					\
+do {									\
+	int __d0, __d1;							\
 	__asm__ __volatile__(						\
 		"0:	rep; movsl\n"					\
-		"	movl %1,%0\n"					\
+		"	movl %3,%0\n"					\
 		"1:	rep; movsb\n"					\
 		"2:\n"							\
 		".section .fixup,\"ax\"\n"				\
-		"3:	lea 0(%1,%0,4),%0\n"				\
+		"3:	lea 0(%3,%0,4),%0\n"				\
 		"	jmp 2b\n"					\
 		".previous\n"						\
 		".section __ex_table,\"a\"\n"				\
@@ -264,18 +266,21 @@ do {									\
 		"	.long 0b,3b\n"					\
 		"	.long 1b,2b\n"					\
 		".previous"						\
-		: "=&c"(size)						\
-		: "r"(size & 3), "0"(size / 4), "D"(to), "S"(from)	\
-		: "di", "si", "memory")
+		: "=&c"(size), "=&D" (__d0), "=&S" (__d1)		\
+		: "r"(size & 3), "0"(size / 4), "1"(to), "2"(from)	\
+		: "memory");						\
+} while (0)
 
 #define __copy_user_zeroing(to,from,size)				\
+do {									\
+	int __d0, __d1;							\
 	__asm__ __volatile__(						\
 		"0:	rep; movsl\n"					\
-		"	movl %1,%0\n"					\
+		"	movl %3,%0\n"					\
 		"1:	rep; movsb\n"					\
 		"2:\n"							\
 		".section .fixup,\"ax\"\n"				\
-		"3:	lea 0(%1,%0,4),%0\n"				\
+		"3:	lea 0(%3,%0,4),%0\n"				\
 		"4:	pushl %0\n"					\
 		"	pushl %%eax\n"					\
 		"	xorl %%eax,%%eax\n"				\
@@ -289,9 +294,10 @@ do {									\
 		"	.long 0b,3b\n"					\
 		"	.long 1b,4b\n"					\
 		".previous"						\
-		: "=&c"(size)						\
-		: "r"(size & 3), "0"(size / 4), "D"(to), "S"(from)	\
-		: "di", "si", "memory");
+		: "=&c"(size), "=&D" (__d0), "=&S" (__d1)		\
+		: "r"(size & 3), "0"(size / 4), "1"(to), "2"(from)	\
+		: "memory");						\
+} while (0)
 
 /* We let the __ versions of copy_from/to_user inline, because they're often
  * used in fast paths and have only a small space overhead.
@@ -314,6 +320,7 @@ __generic_copy_to_user_nocheck(void *to, const void *from, unsigned long n)
 /* Optimize just a little bit when we know the size of the move. */
 #define __constant_copy_user(to, from, size)			\
 do {								\
+	int __d0, __d1;						\
 	switch (size & 3) {					\
 	default:						\
 		__asm__ __volatile__(				\
@@ -327,9 +334,9 @@ do {								\
 			"	.align 4\n"			\
 			"	.long 0b,2b\n"			\
 			".previous"				\
-			: "=c"(size)				\
-			: "S"(from), "D"(to), "0"(size/4)	\
-			: "di", "si", "memory");		\
+			: "=c"(size), "=&S" (__d0), "=&D" (__d1)\
+			: "1"(from), "2"(to), "0"(size/4)	\
+			: "memory");				\
 		break;						\
 	case 1:							\
 		__asm__ __volatile__(				\
@@ -346,9 +353,9 @@ do {								\
 			"	.long 0b,3b\n"			\
 			"	.long 1b,4b\n"			\
 			".previous"				\
-			: "=c"(size)				\
-			: "S"(from), "D"(to), "0"(size/4)	\
-			: "di", "si", "memory");		\
+			: "=c"(size), "=&S" (__d0), "=&D" (__d1)\
+			: "1"(from), "2"(to), "0"(size/4)	\
+			: "memory");				\
 		break;						\
 	case 2:							\
 		__asm__ __volatile__(				\
@@ -365,9 +372,9 @@ do {								\
 			"	.long 0b,3b\n"			\
 			"	.long 1b,4b\n"			\
 			".previous"				\
-			: "=c"(size)				\
-			: "S"(from), "D"(to), "0"(size/4)	\
-			: "di", "si", "memory");		\
+			: "=c"(size), "=&S" (__d0), "=&D" (__d1)\
+			: "1"(from), "2"(to), "0"(size/4)	\
+			: "memory");				\
 		break;						\
 	case 3:							\
 		__asm__ __volatile__(				\
@@ -387,9 +394,9 @@ do {								\
 			"	.long 1b,5b\n"			\
 			"	.long 2b,6b\n"			\
 			".previous"				\
-			: "=c"(size)				\
-			: "S"(from), "D"(to), "0"(size/4)	\
-			: "di", "si", "memory");		\
+			: "=c"(size), "=&S" (__d0), "=&D" (__d1)\
+			: "1"(from), "2"(to), "0"(size/4)	\
+			: "memory");				\
 		break;						\
 	}							\
 } while (0)
@@ -397,6 +404,7 @@ do {								\
 /* Optimize just a little bit when we know the size of the move. */
 #define __constant_copy_user_zeroing(to, from, size)		\
 do {								\
+	int __d0, __d1;						\
 	switch (size & 3) {					\
 	default:						\
 		__asm__ __volatile__(				\
@@ -416,9 +424,9 @@ do {								\
 			"	.align 4\n"			\
 			"	.long 0b,2b\n"			\
 			".previous"				\
-			: "=c"(size)				\
-			: "S"(from), "D"(to), "0"(size/4)	\
-			: "di", "si", "memory");		\
+			: "=c"(size), "=&S" (__d0), "=&D" (__d1)\
+			: "1"(from), "2"(to), "0"(size/4)	\
+			: "memory");				\
 		break;						\
 	case 1:							\
 		__asm__ __volatile__(				\
@@ -448,9 +456,9 @@ do {								\
 			"	.long 0b,3b\n"			\
 			"	.long 1b,4b\n"			\
 			".previous"				\
-			: "=c"(size)				\
-			: "S"(from), "D"(to), "0"(size/4)	\
-			: "di", "si", "memory");		\
+			: "=c"(size), "=&S" (__d0), "=&D" (__d1)\
+			: "1"(from), "2"(to), "0"(size/4)	\
+			: "memory");				\
 		break;						\
 	case 2:							\
 		__asm__ __volatile__(				\
@@ -480,9 +488,9 @@ do {								\
 			"	.long 0b,3b\n"			\
 			"	.long 1b,4b\n"			\
 			".previous"				\
-			: "=c"(size)				\
-			: "S"(from), "D"(to), "0"(size/4)	\
-			: "di", "si", "memory");		\
+			: "=c"(size), "=&S" (__d0), "=&D" (__d1)\
+			: "1"(from), "2"(to), "0"(size/4)	\
+			: "memory");				\
 		break;						\
 	case 3:							\
 		__asm__ __volatile__(				\
@@ -522,9 +530,9 @@ do {								\
 			"	.long 1b,5b\n"			\
 			"	.long 2b,6b\n"			\
 			".previous"				\
-			: "=c"(size)				\
-			: "S"(from), "D"(to), "0"(size/4)	\
-			: "di", "si", "memory");		\
+			: "=c"(size), "=&S" (__d0), "=&D" (__d1)\
+			: "1"(from), "2"(to), "0"(size/4)	\
+			: "memory");				\
 		break;						\
 	}							\
 } while (0)

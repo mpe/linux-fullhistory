@@ -441,6 +441,7 @@ static __inline__ void *mymemset(void *s, size_t count)
 
 static __inline__ void fast_memmove(void *d, const void *s, size_t count)
 {
+  int d0, d1, d2, d3;
     if (d < s) {
 __asm__ __volatile__ (
 	"cld\n\t"
@@ -452,9 +453,9 @@ __asm__ __volatile__ (
 	"movsw\n"
 	"2:\trep\n\t"
 	"movsl"
-	: /* no output */
-	:"c"(count),"D"((long)d),"S"((long)s)
-	:"cx","di","si","memory");
+	: "=&c" (d0), "=&D" (d1), "=&S" (d2)
+	:"0"(count),"1"((long)d),"2"((long)s)
+	:"memory");
     } else {
 __asm__ __volatile__ (
 	"std\n\t"
@@ -475,9 +476,9 @@ __asm__ __volatile__ (
 	"2:\trep\n\t"
 	"movsl\n\t"
 	"cld"
-	: /* no output */
-	:"c"(count),"D"(count-4+(long)d),"S"(count-4+(long)s)
-	:"ax","cx","di","si","memory");
+	: "=&c" (d0), "=&D" (d1), "=&S" (d2), "=&a" (d3)
+	:"0"(count),"1"(count-4+(long)d),"2"(count-4+(long)s)
+	:"memory");
     }
 }
 

@@ -71,6 +71,7 @@ typedef struct
 #define MD_4232		5
 #define MD_C930		6
 #define MD_IWAVE	7
+#define MD_4235         8 /* Crystal Audio CS4235 */
 
 	/* Mixer parameters */
 	int             recmask;
@@ -111,7 +112,7 @@ static int timer_installed = -1;
 
 #endif
 
-static int ad_format_mask[8 /*devc->model */ ] =
+static int ad_format_mask[9 /*devc->model */ ] =
 {
 	0,
 	AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW,
@@ -120,7 +121,8 @@ static int ad_format_mask[8 /*devc->model */ ] =
 	AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW,	/* AD1845 */
 	AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_S16_BE | AFMT_IMA_ADPCM,
 	AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_S16_BE | AFMT_IMA_ADPCM,
-	AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_S16_BE | AFMT_IMA_ADPCM
+	AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_S16_BE | AFMT_IMA_ADPCM,
+	AFMT_U8 | AFMT_S16_LE /* CS4235 */
 };
 
 static ad1848_info adev_info[MAX_AUDIO_DEV];
@@ -1594,103 +1596,107 @@ int ad1848_detect(int io_base, int *ad_flags, int *osp)
 			ad_write(devc, 25, ~tmp1);	/* Invert all bits */
 			if ((ad_read(devc, 25) & 0xe7) == (tmp1 & 0xe7))
 			{
-				int id, full_id;
+				int id;
 
 				/*
 				 *      It's at least CS4231
 				 */
 				
-				devc->chip_name = "CS4231";
-				devc->model = MD_4231;
-
 				/*
 				 * It could be an AD1845 or CS4231A as well.
 				 * CS4231 and AD1845 report the same revision info in I25
 				 * while the CS4231A reports different.
 				 */
 
-				id = ad_read(devc, 25) & 0xe7;
-				full_id = ad_read(devc, 25);
-				if (id == 0x80)	/* Device busy??? */
-					id = ad_read(devc, 25) & 0xe7;
-				if (id == 0x80)	/* Device still busy??? */
-					id = ad_read(devc, 25) & 0xe7;
+				id = ad_read(devc, 25);
+				if ((id & 0xe7) == 0x80)	/* Device busy??? */
+					id = ad_read(devc, 25);
+				if ((id & 0xe7) == 0x80)	/* Device still busy??? */
+					id = ad_read(devc, 25);
 				DDB(printk("ad1848_detect() - step J (%02x/%02x)\n", id, ad_read(devc, 25)));
 
-				switch (id)
-				{
+                                if ((id & 0xe7) == 0x80) {
+					/* 
+					 * It must be a CS4231 or AD1845. The register I23 of
+					 * CS4231 is undefined and it appears to be read only.
+					 * AD1845 uses I23 for setting sample rate. Assume
+					 * the chip is AD1845 if I23 is changeable.
+					 */
 
-					case 0xa0:
-						devc->chip_name = "CS4231A";
-						devc->model = MD_4231A;
+					unsigned char   tmp = ad_read(devc, 23);
+					ad_write(devc, 23, ~tmp);
+
+					if (interwave)
+					{
+						devc->model = MD_IWAVE;
+						devc->chip_name = "IWave";
+					}
+					else if (ad_read(devc, 23) != tmp)	/* AD1845 ? */
+					{
+						devc->chip_name = "AD1845";
+						devc->model = MD_1845;
+					}
+					else if (cs4248_flag)
+					{
+						if (ad_flags)
+							  *ad_flags |= AD_F_CS4248;
+						devc->chip_name = "CS4248";
+						devc->model = MD_1848;
+						ad_write(devc, 12, ad_read(devc, 12) & ~0x40);	/* Mode2 off */
+					}
+					ad_write(devc, 23, tmp);	/* Restore */
+				}
+				else
+				{
+					switch (id & 0x1f) {
+					case 3: /* CS4236/CS4235 */
+						{
+							int xid;
+							ad_write(devc, 12, ad_read(devc, 12) | 0x60); /* switch to mode 3 */
+							ad_write(devc, 23, 0x9c); /* select extended register 25 */
+							xid = inb(io_Indexed_Data(devc));
+							ad_write(devc, 12, ad_read(devc, 12) & ~0x60); /* back to mode 0 */
+							if ((xid & 0x1f) == 0x1d) {
+								devc->chip_name = "CS4235";
+								devc->model = MD_4235;
+							} else {
+								devc->chip_name = "CS4236";
+								devc->model = MD_4232;
+							}
+						}
 						break;
 
-					case 0xa2:
+					case 2: /* CS4232/CS4232A */
 						devc->chip_name = "CS4232";
 						devc->model = MD_4232;
 						break;
-
-					case 0xb2:
-						devc->chip_name = "CS4232A";
-						devc->model = MD_4232;
-						break;
-
-					case 0x03:
-					case 0x83:
-						devc->chip_name = "CS4236";
-						devc->model = MD_4232;
-						break;
-
-					case 0x41:
-						devc->chip_name = "CS4236B";
-						devc->model = MD_4232;
-						break;
-
-					case 0x80:
+				
+					case 0:
+						if ((id & 0xe0) == 0xa0)
 						{
-							/* 
-							 * It must be a CS4231 or AD1845. The register I23 of
-							 * CS4231 is undefined and it appears to be read only.
-							 * AD1845 uses I23 for setting sample rate. Assume
-							 * the chip is AD1845 if I23 is changeable.
-							 */
-
-							unsigned char   tmp = ad_read(devc, 23);
-							ad_write(devc, 23, ~tmp);
-
-							if (interwave)
-							{
-								devc->model = MD_IWAVE;
-								devc->chip_name = "IWave";
-							}
-							else if (ad_read(devc, 23) != tmp)	/* AD1845 ? */
-							{
-								devc->chip_name = "AD1845";
-								devc->model = MD_1845;
-							}
-							else if (cs4248_flag)
-							{
-								if (ad_flags)
-									  *ad_flags |= AD_F_CS4248;
-								devc->chip_name = "CS4248";
-								devc->model = MD_1848;
-								ad_write(devc, 12, ad_read(devc, 12) & ~0x40);	/* Mode2 off */
-							}
-							ad_write(devc, 23, tmp);	/* Restore */
-						}
-						break;
-
-					default:	/* Assume CS4231 or OPTi 82C930 */
-						DDB(printk("ad1848: I25 = %02x/%02x\n", ad_read(devc, 25), ad_read(devc, 25) & 0xe7));
-						if (optiC930)
-						{
-							devc->chip_name = "82C930";
-							devc->model = MD_C930;
+							devc->chip_name = "CS4231A";
+							devc->model = MD_4231A;
 						}
 						else
 						{
+							devc->chip_name = "CS4321";
 							devc->model = MD_4231;
 						}
+						break;
+
+					default: /* maybe */
+						DDB(printk("ad1848: I25 = %02x/%02x\n", ad_read(devc, 25), ad_read(devc, 25) & 0xe7));
+                                                if (optiC930)
+                                                {
+                                                        devc->chip_name = "82C930";
+                                                        devc->model = MD_C930;
+                                                }
+						else
+						{
+							devc->chip_name = "CS4231";
+							devc->model = MD_4231;
+						}
+					}
 				}
 			}
 			ad_write(devc, 25, tmp1);	/* Restore bits */

@@ -293,7 +293,7 @@ xprt_adjust_cwnd(struct rpc_xprt *xprt, int result)
 	if (xprt->nocong)
 		return;
 	if (result >= 0) {
-		if (xprt->cong < cwnd || jiffies < xprt->congtime)
+		if (xprt->cong < cwnd || time_before(jiffies, xprt->congtime))
 			return;
 		/* The (cwnd >> 1) term makes sure
 		 * the result gets rounded properly. */
@@ -543,7 +543,7 @@ xprt_complete_rqst(struct rpc_xprt *xprt, struct rpc_rqst *req, int copied)
 		pkt_cnt++;
 		pkt_len += req->rq_slen + copied;
 		pkt_rtt += jiffies - req->rq_xtime;
-		if (nextstat < jiffies) {
+		if (time_after(jiffies, nextstat)) {
 			printk("RPC: %lu %ld cwnd\n", jiffies, xprt->cwnd);
 			printk("RPC: %ld %ld %ld %ld stat\n",
 					jiffies, pkt_cnt, pkt_len, pkt_rtt);

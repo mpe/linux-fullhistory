@@ -1539,7 +1539,7 @@ static inline int mcast_quench(struct fdb *f)
 		f->mcast_timer = jiffies;
 	else {
 		if(f->mcast_count > max_mcast_per_period) {
-			if(jiffies > (f->mcast_timer + mcast_hold_time))
+			if(time_after(jiffies, f->mcast_timer + mcast_hold_time))
 				f->mcast_count = 0;
 			else	return 1;
 		}

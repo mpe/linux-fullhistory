@@ -20,7 +20,7 @@ int max_files = NR_FILE;/* tunable */
 /* Free list management, if you are here you must have f_count == 0 */
 static struct file * free_filps = NULL;
 
-void insert_file_free(struct file *file)
+static void insert_file_free(struct file *file)
 {
 	if((file->f_next = free_filps) != NULL)
 		free_filps->f_pprev = &file->f_next;
@@ -39,6 +39,15 @@ static inline void put_inuse(struct file *file)
 	inuse_filps = file;
 	file->f_pprev = &inuse_filps;
 }
+
+/* It does not matter which list it is on. */
+static inline void remove_filp(struct file *file)
+{
+	if(file->f_next)
+		file->f_next->f_pprev = file->f_pprev;
+	*file->f_pprev = file->f_next;
+}
+
 
 void __init file_table_init(void)
 {
@@ -115,4 +124,26 @@ int init_private_file(struct file *filp, struct dentry *dentry, int mode)
 		return filp->f_op->open(dentry->d_inode, filp);
 	else
 		return 0;
+}
+
+void fput(struct file *file)
+{
+	int count = file->f_count-1;
+
+	if (!count) {
+		locks_remove_flock(file);
+		__fput(file);
+		file->f_count = 0;
+		remove_filp(file);
+		insert_file_free(file);
+	} else
+		file->f_count = count;
+}
+
+void put_filp(struct file *file)
+{
+	if(--file->f_count == 0) {
+		remove_filp(file);
+		insert_file_free(file);
+	}
 }

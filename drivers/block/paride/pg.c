@@ -367,21 +367,21 @@ static int pg_wait( int unit, int go, int stop, int tmo, char * msg )
 	PG.status = 0;
 
 	j = 0;
-	while ((((r=RR(1,6))&go)||(stop&&(!(r&stop))))&&(jiffies<tmo)) {
+	while ((((r=RR(1,6))&go)||(stop&&(!(r&stop))))&&(time_before(jiffies,tmo))) {
 		if (j++ < PG_SPIN) udelay(PG_SPIN_DEL);
 		else pg_sleep(1);
 	}
 
-	if ((r&(STAT_ERR&stop))||(jiffies>=tmo)) {
+	if ((r&(STAT_ERR&stop))||time_after_eq(jiffies, tmo)) {
 	   s = RR(0,7);
 	   e = RR(0,1);
 	   p = RR(0,2);
 	   if (verbose > 1)
 	     printk("%s: %s: stat=0x%x err=0x%x phase=%d%s\n",
-		   PG.name,msg,s,e,p,(jiffies>=tmo)?" timeout":"");
+		   PG.name,msg,s,e,p,time_after_eq(jiffies, tmo)?" timeout":"");
 
 
-	   if (jiffies>=tmo) e |= 0x100;
+	   if (time_after_eq(jiffies, tmo)) e |= 0x100;
 	   PG.status = (e >> 4) & 0xff;
 	   return -1;
 	}

@@ -886,7 +886,7 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 		if (len + 40 > size) {
 			return -1;
 		}
-		len += sprintf(buf + len, "IRQ %x.  ", dev->irq);
+		len += sprintf(buf + len, "IRQ %d.  ", dev->irq);
 	}
 
 	if (dev->master) {

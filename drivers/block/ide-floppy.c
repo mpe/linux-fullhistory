@@ -633,6 +633,9 @@ static void idefloppy_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 	}
 	if (error)
 		floppy->failed_pc = NULL;
+	/* Why does this happen? */
+	if (!rq)
+		return;
 	if (!IDEFLOPPY_RQ_CMD (rq->cmd)) {
 		ide_end_request (uptodate, hwgroup);
 		return;

@@ -466,7 +466,7 @@ struct file_lock {
 	} fl_u;
 };
 
-extern struct file_lock		*file_lock_table;
+extern struct file_lock			*file_lock_table;
 
 #include <linux/fcntl.h>
 
@@ -692,7 +692,8 @@ extern int close_fp(struct file *, fl_owner_t id);
 extern struct file *filp_open(const char *, int, int);
 
 extern char * getname(const char * filename);
-extern void putname(char * name);
+#define __getname()	((char *) __get_free_page(GFP_KERNEL))
+#define putname(name)	free_page((unsigned long)(name))
 
 extern void kill_fasync(struct fasync_struct *fa, int sig);
 extern int register_blkdev(unsigned int, const char *, struct file_operations *);
@@ -702,11 +703,16 @@ extern int blkdev_release (struct inode * inode);
 extern struct file_operations def_blk_fops;
 extern struct inode_operations blkdev_inode_operations;
 
+/* fs/devices.c */
 extern int register_chrdev(unsigned int, const char *, struct file_operations *);
 extern int unregister_chrdev(unsigned int major, const char * name);
 extern int chrdev_open(struct inode * inode, struct file * filp);
 extern struct file_operations def_chr_fops;
 extern struct inode_operations chrdev_inode_operations;
+extern char * bdevname(kdev_t dev);
+extern char * cdevname(kdev_t dev);
+extern char * kdevname(kdev_t dev);
+
 
 extern void init_fifo(struct inode * inode);
 extern struct inode_operations fifo_inode_operations;
@@ -815,8 +821,6 @@ extern struct buffer_head * get_hash_table(kdev_t, int, int);
 extern struct buffer_head * getblk(kdev_t, int, int);
 extern struct buffer_head * find_buffer(kdev_t dev, int block, int size);
 extern void ll_rw_block(int, int, struct buffer_head * bh[]);
-extern void ll_rw_page(int, kdev_t, unsigned long, char *);
-extern void ll_rw_swap_file(int, kdev_t, unsigned int *, int, char *);
 extern int is_read_only(kdev_t);
 extern void __brelse(struct buffer_head *);
 extern inline void brelse(struct buffer_head *buf)

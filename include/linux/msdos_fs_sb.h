@@ -35,9 +35,11 @@ struct vfat_unicode {
 struct msdos_sb_info {
 	unsigned short cluster_size; /* sectors/cluster */
 	unsigned char fats,fat_bits; /* number of FATs, FAT bits (12 or 16) */
-	unsigned short fat_start,fat_length; /* FAT start & length (sec.) */
-	unsigned short dir_start,dir_entries; /* root dir start & entries */
-	unsigned short data_start;   /* first data sector */
+	unsigned short fat_start;
+	unsigned long fat_length;    /* FAT start & length (sec.) */
+	unsigned long dir_start;
+	unsigned short dir_entries;  /* root dir start & entries */
+	unsigned long data_start;    /* first data sector */
 	unsigned long clusters;      /* number of clusters */
 	unsigned long root_cluster;  /* first cluster of the root directory */
 	unsigned long fsinfo_offset; /* FAT32 fsinfo offset from start of disk */

@@ -268,7 +268,7 @@ static ulong act_ints=0, act_ios=0, act_stats=0, act_rq=0;
 #endif
 
 #define PTR2USHORT(a)   (ushort)(ulong)(a)
-#define JIFFYWAIT(a)    {ulong gdtjf;gdtjf=jiffies+(a);while(gdtjf>jiffies);}
+#define JIFFYWAIT(a)    {ulong gdtjf;gdtjf=jiffies+(a);while(time_before(jiffies,gdtjf));}
 #define GDTOFFSOF(a,b)  (size_t)&(((a*)0)->b)   
 #define INDEX_OK(i,t)   ((i)<sizeof(t)/sizeof((t)[0]))
 

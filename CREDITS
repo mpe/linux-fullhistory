@@ -84,6 +84,14 @@ S: 20 Ames Street
 S: Cambridge, Massachusetts 02139
 S: USA
 
+N: Jens Axboe
+E: axboe@image.dk
+D: Linux CD-ROM maintainer
+D: jiffies wrap fixes + schedule timeouts depending on HZ == 100
+S: Peter Bangs Vej 258, 2TH
+S: 2500 Valby
+S: Denmark
+
 N: John Aycock
 E: aycock@cpsc.ucalgary.ca
 D: Adaptec 274x driver

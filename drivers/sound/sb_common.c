@@ -13,6 +13,8 @@
 /*
  * Daniel J. Rodriksson: Modified sbintr to handle 8 and 16 bit interrupts
  *                       for full duplex support ( only sb16 by now )
+ * Rolf Fokkens:	 Added (BETA?) support for ES18XX chips.
+ *			 Which means: you can adjust the recording levels.
  */
 #include <linux/config.h>
 #include <linux/delay.h>
@@ -484,6 +486,24 @@ static void relocate_ess1688(sb_devc * devc)
 #endif
 }
 
+/*
+ * ESS technology describes a detection scheme in their docs. It involves
+ * fiddling with the bits in certain mixer registers. ess_probe is supposed
+ * to help.
+ */
+static int ess_probe (sb_devc * devc, int reg, int xorval)
+{
+	int  val1, val2, val3;
+
+	val1 = sb_getmixer (devc, reg);
+	val2 = val1 ^ xorval;
+	sb_setmixer (devc, reg, val2);
+	val3 = sb_getmixer (devc, reg); 
+	sb_setmixer (devc, reg, val1);
+
+	return (val2 == val3);
+}
+
 static int ess_init(sb_devc * devc, struct address_info *hw_config)
 {
 	unsigned char cfg, irq_bits = 0, dma_bits = 0;
@@ -522,12 +542,30 @@ static int ess_init(sb_devc * devc, struct address_info *hw_config)
 		devc->model = MDL_SBPRO;
 		return 1;
 	}
-	else if (ess_major == 0x68 && (ess_minor & 0xf0) == 0x80)
+
+	/*
+	 * This the detection heuristic of ESS technology, though somewhat
+	 * changed to actually make it work :-)
+	 * This is the most BETA part of the software: Will it work?
+	 */
+	devc->model = MDL_ESS;
+	devc->submodel = ess_minor & 0x0f;
+
+	if (ess_major == 0x68 && (ess_minor & 0xf0) == 0x80)
 	{
 		char *chip = "ES688";
 
-		if ((ess_minor & 0x0f) >= 8)
-			chip = "ES1688";
+		if ((ess_minor & 0x0f) >= 8) {
+			if (  !ess_probe (devc, 0x64, (1 << 3))
+			    && ess_probe (devc, 0x70, 0x7f)) {
+				chip = "ES18XX";
+				devc->submodel = SUBMDL_ES18XX;
+			} else {
+				chip = "ES1688";
+			};
+		} else {
+			chip = "ES688";
+		};
 
 		sprintf(name,"ESS %s AudioDrive (rev %d)",
 			chip, ess_minor & 0x0f);
@@ -535,8 +573,6 @@ static int ess_init(sb_devc * devc, struct address_info *hw_config)
 	else
 		strcpy(name, "Jazz16");
 
-	devc->model = MDL_ESS;
-	devc->submodel = ess_minor & 0x0f;
 	hw_config->name = name;
 	sb_dsp_reset(devc);	/* Turn on extended mode */
 
@@ -998,19 +1034,28 @@ void sb_dsp_unload(struct address_info *hw_config, int sbmpu)
 
 /*
  *	Mixer access routines
+ *
+ *	ES18XX modifications: some mixer registers reside in the
+ *	range above 0xa0. These must be accessed in another way.
  */
 
 void sb_setmixer(sb_devc * devc, unsigned int port, unsigned int value)
 {
 	unsigned long flags;
 
+	/* MDB(printk("ESS: write port %x: %x\n", port, value)); */
+
 	save_flags(flags);
 	cli();
-	outb(((unsigned char) (port & 0xff)), MIXER_ADDR);
+	if (devc->model == MDL_ESS && port >= 0xa0 && port <= 0xbf) {
+		ess_write (devc, port, value);
+	} else {
+		outb(((unsigned char) (port & 0xff)), MIXER_ADDR);
 
-	udelay(20);
-	outb(((unsigned char) (value & 0xff)), MIXER_DATA);
-	udelay(20);
+		udelay(20);
+		outb(((unsigned char) (value & 0xff)), MIXER_DATA);
+		udelay(20);
+	};
 	restore_flags(flags);
 }
 

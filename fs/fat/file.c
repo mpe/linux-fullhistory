@@ -375,6 +375,12 @@ ssize_t fat_file_write(
 		*ppos = inode->i_size;
 	if (count == 0)
 		return 0;
+	if (*ppos + count > 0x7FFFFFFFLL) {
+		count = 0x7FFFFFFFLL-*ppos;
+		if (!count)
+			return -EFBIG;
+	}
+
 	error = carry = 0;
 	for (start = buf; count || carry; count -= size) {
 		while (!(sector = fat_smap(inode,*ppos >> SECTOR_BITS)))

@@ -59,10 +59,14 @@ typedef struct {
 
 #undef	__FD_ZERO
 #define __FD_ZERO(fdsetp) \
-		__asm__ __volatile__("cld ; rep ; stosl" \
-			:"=m" (*(__kernel_fd_set *) (fdsetp)) \
-			:"a" (0), "c" (__FDSET_LONGS), \
-			"D" ((__kernel_fd_set *) (fdsetp)) :"cx","di")
+do { \
+	int __d0, __d1; \
+	__asm__ __volatile__("cld ; rep ; stosl" \
+			:"=m" (*(__kernel_fd_set *) (fdsetp)), \
+			  "=&c" (__d0), "=&D" (__d1) \
+			:"a" (0), "1" (__FDSET_LONGS), \
+			"2" ((__kernel_fd_set *) (fdsetp)) : "memory"); \
+} while (0)
 
 #endif /* defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2) */
 

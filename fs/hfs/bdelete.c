@@ -135,11 +135,16 @@ static int del_root(struct hfs_bnode_ref *root)
 
 		tree->bthRoot = child.bn->node;
 		tree->root = child.bn;
+
+		/* re-assign bthFNode and bthLNode if the new root is
+                   a leaf node. */
+		if (child.bn->ndType == ndLeafNode) {
+			tree->bthFNode = node;
+			tree->bthLNode = node;
+		}
 		hfs_bnode_relse(&child);
 
 		tree->bthRoot = node;
-		tree->bthFNode = node;
-		tree->bthLNode = node;
 		--tree->bthDepth;
 		tree->dirt = 1;
 		if (!tree->bthDepth) {

@@ -5785,8 +5785,8 @@ advansys_reset(Scsi_Cmnd *scp, unsigned int reset_flags)
         }
         scp->result = HOST_BYTE(DID_ERROR);
         ret = SCSI_RESET_ERROR;
-    } else if (jiffies >= boardp->last_reset &&
-               jiffies < (boardp->last_reset + (10 * HZ))) {
+    } else if (time_after_eq(jiffies, boardp->last_reset) &&
+               time_before(jiffies, boardp->last_reset + (10 * HZ))) {
         /*
          * Don't allow a reset to be attempted within 10 seconds
          * of the last reset.

@@ -14,6 +14,7 @@ CONFIG_6xx=y
 CONFIG_ALL_PPC=y
 # CONFIG_APUS is not set
 # CONFIG_MBX is not set
+# CONFIG_SMP is not set
 
 #
 # General setup

@@ -1001,7 +1001,7 @@ out:
 	 * Perform any needed housekeeping ...
 	 * N.B. move this into one of the daemons ...
 	 */
-	if (jiffies >= nfsd_next_expire) {
+	if (time_after_eq(jiffies, nfsd_next_expire)) {
 		expire_old(NFSD_FILE_CACHE,  5*HZ);
 		expire_old(NFSD_DIR_CACHE , 60*HZ);
 		nfsd_next_expire = jiffies + 5*HZ;

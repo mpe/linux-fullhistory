@@ -47,6 +47,16 @@
 #
 # 090398 Axel Boldt (boldt@math.ucsb.edu) - allow for empty lines in help
 # texts.
+#
+# 12 Dec 1998, Michael Elizabeth Chastain (mec@shout.net)
+# Remove a /tmp security hole in get_def (also makes it faster).
+# Give uninitialized variables canonical values rather than null value.
+# Change a lot of places to call set_x_info uniformly.
+# Take out message about preparing version (old sound driver cruft).
+#
+# 13 Dec 1998, Riley H Williams (rhw@bigfoot.com)
+# When an error occurs, actually display the error message as well as
+# our comments thereon.
 
 
 #
@@ -65,20 +75,24 @@ single_menu_mode=
 #
 set -h +o posix
 
-#
-# Converts "# xxx is not..." to xxx=n
-#
-parse_config () {
-	sed -e 's/# \(.*\) is not.*/\1=n/'
-}
 
+
+# Given a configuration variable, set the global variable $x to its value,
+# and the global variable $info to the string " (NEW)" if this is a new
+# variable.
 #
-# Parses the defconfig file to set the default for a new parameter.
-#
-function get_def () {
-	parse_config < arch/$ARCH/defconfig | grep "^$1=" > /tmp/conf.$$
-	. /tmp/conf.$$
-	rm /tmp/conf.$$
+# This function looks for: (1) the current value, or (2) the default value
+# from the arch-dependent defconfig file, or (3) a default passed by the caller.
+
+function set_x_info () {
+    eval x=\$$1
+    if [ -z "$x" ]; then
+	eval `sed -n -e 's/# \(.*\) is not set.*/\1=n/' -e "/^$1=/p" arch/$ARCH/defconfig`
+	eval x=\${$1:-"$2"}
+	eval $1=$x
+	eval INFO_$1="' (NEW)'"
+    fi
+    eval info="\$INFO_$1"
 }
 
 #
@@ -91,19 +105,6 @@ function get_def () {
 # Thank the heavens bash supports nesting function definitions.
 #
 load_functions () {
-
-#
-# Macro for setting the x and info varibles. get's default from defconfig
-# file if it's a new parameter.
-#
-function set_x () {
-	eval x=\$$1
-	if [ -z "$x" ]; then
-		get_def "$1"
-		eval x=\${$1:-'n'} INFO_$1="' (NEW)'"
-	fi
-	eval info="\$INFO_$1"
-}
 
 #
 # Additional comments
@@ -125,7 +126,7 @@ function define_bool () {
 # which calls our local bool function.
 #
 function bool () {
-	set_x "$2"
+	set_x_info "$2" "n"
 
 	case $x in
 	y|m)	flag="*" ;;
@@ -148,7 +149,7 @@ function tristate () {
 	then
 		bool "$1" "$2"
 	else
-		set_x "$2"
+		set_x_info "$2" "n"
 	
 		case $x in
 		y) flag="*" ;;
@@ -193,9 +194,9 @@ function dep_tristate () {
 # Add a menu item which will call our local int function.
 # 
 function int () {
-	eval $2=\${$2:-"$3"} x=\$$2
+	set_x_info "$2" "$3"
 
-	echo -ne "'$2' '($x) $1' " >>MCmenu
+	echo -ne "'$2' '($x) $1$info' " >>MCmenu
 
 	echo -e "function $2 () { l_int '$1' '$2' '$3' '$x' ;}" >>MCradiolists
 }
@@ -204,9 +205,10 @@ function int () {
 # Add a menu item which will call our local hex function.
 # 
 function hex () {
-	eval $2=\${$2:-"$3"} x=\${$2##*[x,X]}
+	set_x_info "$2" "$3"
+	x=${x##*[x,X]}
 
-	echo -ne "'$2' '($x) $1' " >>MCmenu
+	echo -ne "'$2' '($x) $1$info' " >>MCmenu
 
 	echo -e "function $2 () { l_hex '$1' '$2' '$3' '$x' ;}" >>MCradiolists
 }
@@ -215,9 +217,9 @@ function hex () {
 # Add a menu item which will call our local string function.
 # 
 function string () {
-	eval $2=\${$2:-"$3"} x=\$$2
+	set_x_info "$2" "$3"
 
-	echo -ne "'$2' '     $1: \"$x\"' " >>MCmenu
+	echo -ne "'$2' '     $1: \"$x\"$info' " >>MCmenu
 
 	echo -e "function $2 () { l_string '$1' '$2' '$3' '$x' ;}" >>MCradiolists
 }
@@ -370,7 +372,7 @@ function l_bool () {
 # Same as bool() except options are (Module/No)
 #
 function mod_bool () {
-	set_x "$2"
+	set_x_info "$2" "n"
 
 	case $x in
 	y|m) flag='M' ;;
@@ -722,14 +724,20 @@ function activate_menu () {
 	do
 		comment_ctr=0		#So comment lines get unique tags
 
-		$1 "$default"		#Create the lxdialog menu & functions
+		$1 "$default" 2> MCerror #Create the lxdialog menu & functions
 
 		if [ "$?" != "0" ]
 		then
 			clear
 			cat <<EOM
+
 Menuconfig has encountered a possible error in one of the kernel's
-configuration files and is unable to continue.
+configuration files and is unable to continue.  Here is the error
+report:
+
+EOM
+			sed 's/^/ Q> /' MCerror
+			cat <<EOM
 
 Please report this to the maintainer <mec@shout.net>.  You may also
 send a problem report to <linux-kernel@vger.rutgers.edu>.
@@ -741,6 +749,7 @@ EOM
 			cleanup
 			exit 1
 		fi
+		rm -f MCerror
 
 		. ./MCradiolists		#Source the menu's functions
 
@@ -778,6 +787,7 @@ EOM
 			stty sane
 			clear
 			cat <<EOM
+
 There seems to be a problem with the lxdialog companion utility which is
 built prior to running Menuconfig.  Usually this is an indicator that you
 have upgraded/downgraded your ncurses libraries and did not remove the 
@@ -954,61 +964,41 @@ save_configuration () {
 	echo -n "Saving your kernel configuration."
 
 	#
-	# Macro for setting the newval varible. get's default from defconfig
-	# file if it's a new parameter and it has not been shown yet.
-	#
-	function set_newval () {
-		eval newval=\$$1
-		if [ -z "$newval" ]; then
-			get_def "$1"
-			eval newval=\${$1:-'n'}
-		fi
-	}
-
-	#
 	# Now, let's redefine the configuration functions for final
 	# output to the config files.
 	#
 	# Nested function definitions, YIPEE!
 	#
 	function bool () {
-		set_newval "$2"
-		eval define_bool "$2" "$newval"
+		set_x_info "$2" "n"
+		eval define_bool "$2" "$x"
 	}
 
 	function tristate () {
-		set_newval "$2"
-		eval define_bool "$2" "$newval"
+		set_x_info "$2" "n"
+		eval define_bool "$2" "$x"
 	}
 
 	function dep_tristate () {
-		set_newval "$2"
-
-		if eval [ "_$3" = "_m" ]
-		then
-			if [ "$newval" = "y" ]
-			then
-				newval="m"
-			fi
-		fi
-
-		define_bool "$2" "$newval"
+		set_x_info "$2" "n"
+		if [ "$3" = "m" -a "$x" = "y" ]; then x="m"; fi
+		define_bool "$2" "$x"
 	}
 
 	function int () {
-		eval x=\${$2:-"$3"}
+		set_x_info "$2" "$3"
 		echo "$2=$x" 		>>$CONFIG
 		echo "#define $2 ($x)"	>>$CONFIG_H
 	}
 
 	function hex () {
-		eval x=\${$2:-"$3"}
+		set_x_info "$2" "$3"
 		echo "$2=$x" 			 >>$CONFIG
 		echo "#define $2 0x${x##*[x,X]}" >>$CONFIG_H
 	}
 
 	function string () {
-		eval x=\${$2:-"$3"}
+		set_x_info "$2" "$3"
 		echo "$2=\"$x\"" 			 >>$CONFIG
 		echo "#define $2 \"$x\""	>>$CONFIG_H
 	}
@@ -1250,10 +1240,8 @@ fi
 # Fresh new log.
 >.menuconfig.log
 
-echo -n "Preparing configuration scripts: version" 
-
 # Load the functions used by the config.in files.
-echo -n ", functions"
+echo -n "Preparing scripts: functions" 
 load_functions
 
 if [ ! -e $CONFIG_IN ]

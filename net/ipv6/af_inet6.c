@@ -477,7 +477,7 @@ int ipv6_unload(void)
 {
 	if (!unloadable) return 1;
 	/* We keep internally 3 raw sockets */
-	return __this_module.usecount - 3;
+	return atomic_read(&(__this_module.uc.usecount)) - 3;
 }
 #endif
 

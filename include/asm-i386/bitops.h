@@ -127,6 +127,7 @@ extern __inline__ int __test_bit(int nr, volatile void * addr)
  */
 extern __inline__ int find_first_zero_bit(void * addr, unsigned size)
 {
+	int d0, d1, d2;
 	int res;
 
 	if (!size)
@@ -142,9 +143,8 @@ extern __inline__ int find_first_zero_bit(void * addr, unsigned size)
 		"1:\tsubl %%ebx,%%edi\n\t"
 		"shll $3,%%edi\n\t"
 		"addl %%edi,%%edx"
-		:"=d" (res)
-		:"c" ((size + 31) >> 5), "D" (addr), "b" (addr)
-		:"ax", "cx", "di");
+		:"=d" (res), "=&c" (d0), "=&D" (d1), "=&a" (d2)
+		:"1" ((size + 31) >> 5), "2" (addr), "b" (addr));
 	return res;
 }
 

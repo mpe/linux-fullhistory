@@ -260,6 +260,7 @@ struct inode *hfs_iget(struct hfs_cat_entry *entry, ino_t type,
 		memset(HFS_I(inode), 0, sizeof(struct hfs_inode_info));
 		HFS_I(inode)->magic = HFS_INO_MAGIC;
 		HFS_I(inode)->entry = entry;
+		HFS_I(inode)->tz_secondswest = hfs_to_utc(0);
 
 		hsb->s_ifill(inode, type);
 		if (!hsb->s_afpd && (entry->type == HFS_CDR_FIL) &&

@@ -380,6 +380,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_RADIO_GEMTEK),y)
+L_OBJS += radio-gemtek.o
+else
+  ifeq ($(CONFIG_RADIO_GEMTEK),m)
+  M_OBJS += radio-gemtek.o
+  endif
+endif                                             
+
 ifeq ($(CONFIG_QIC02_TAPE),y)
 L_OBJS += tpqic02.o
 else

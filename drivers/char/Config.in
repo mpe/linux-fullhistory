@@ -56,12 +56,15 @@ fi
 
 bool 'Mouse Support (not serial mice)' CONFIG_MOUSE
 if [ "$CONFIG_MOUSE" = "y" ]; then
+	mainmenu_option next_comment
+	comment 'Mice'
 	tristate 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE
 	tristate 'Logitech busmouse support' CONFIG_BUSMOUSE
 	tristate 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE
 	bool 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE
 	tristate 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE
 	tristate 'PC110 digitizer pad support' CONFIG_PC110_PAD
+	endmenu
 fi
 
 tristate 'QIC-02 tape support' CONFIG_QIC02_TAPE
@@ -72,12 +75,14 @@ if [ "$CONFIG_QIC02_TAPE" != "n" ]; then
   else
     comment '   Setting runtime QIC-02 configuration is done with qic02conf'
     comment '   from the tpqic02-support package.  It is available at'
-    comment '   sunsite.unc.edu or ftp://titus.cfw.com/pub/Linux/util/'
+    comment '   metalab.unc.edu or ftp://titus.cfw.com/pub/Linux/util/'
   fi
 fi
 
 bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
 if [ "$CONFIG_WATCHDOG" != "n" ]; then
+  mainmenu_option next_comment
+  comment 'Watchdog Cards'
   bool '   Disable watchdog shutdown on close' CONFIG_WATCHDOG_NOWAYOUT
   tristate '   WDT Watchdog timer' CONFIG_WDT
   if [ "$CONFIG_WDT" != "n" ]; then
@@ -89,11 +94,18 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
   tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
   tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
   tristate '   Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
+  endmenu
 fi
+
+
+tristate '/dev/nvram support' CONFIG_NVRAM
 bool 'Enhanced Real Time Clock Support' CONFIG_RTC
 if [ "$CONFIG_ALPHA_BOOK1" = "y" ]; then
   bool 'Tadpole ANA H8 Support'  CONFIG_H8
 fi
+
+mainmenu_option next_comment
+comment 'Video For Linux'
 
 tristate 'Video For Linux' CONFIG_VIDEO_DEV
 if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
@@ -110,6 +122,10 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
     hex '  Aztech/Packard Bell I/O port (0x350 or 0x358)' CONFIG_RADIO_AZTECH_PORT 350
   fi
   dep_tristate 'Miro PCM20 Radio' CONFIG_RADIO_MIROPCM20 $CONFIG_VIDEO_DEV
+  dep_tristate 'GemTek Radio Card support' CONFIG_RADIO_GEMTEK $CONFIG_VIDEO_DEV
+  if [ "$CONFIG_RADIO_GEMTEK" = "y" ]; then
+    hex '  GemTek i/o port (0x20c, 0x30c, 0x24c or 0x34c)' CONFIG_RADIO_GEMTEK_PORT 34c
+  fi
   if [ "$CONFIG_PCI" != "n" ]; then
     dep_tristate 'BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
   fi
@@ -128,11 +144,18 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
     hex '  ZOLTRIX I/O port (0x20c or 0x30c)' CONFIG_RADIO_ZOLTRIX_PORT 20c
   fi
 fi
-tristate '/dev/nvram support' CONFIG_NVRAM
+
+endmenu
+
+mainmenu_option next_comment
+comment 'Joystick support'
+
 tristate 'Joystick support' CONFIG_JOYSTICK
 if [ "$CONFIG_JOYSTICK" != "n" ]; then
   source drivers/char/joystick/Config.in
 fi
+endmenu
+
 mainmenu_option next_comment
 comment 'Ftape, the floppy tape device driver'
 tristate 'Ftape (QIC-80/Travan) support' CONFIG_FTAPE

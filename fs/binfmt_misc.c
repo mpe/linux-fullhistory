@@ -15,6 +15,7 @@
  *  1997-08-09 removed extension stripping, locking cleanup
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>
@@ -451,7 +452,9 @@ static int proc_write_status(struct file *file, const char *buffer,
  */
 static void entry_proc_cleanup(struct binfmt_entry *e)
 {
+#ifdef CONFIG_PROC_FS
 	remove_proc_entry(e->proc_name, bm_dir);
+#endif
 }
 
 /*
@@ -459,6 +462,7 @@ static void entry_proc_cleanup(struct binfmt_entry *e)
  */
 static int entry_proc_setup(struct binfmt_entry *e)
 {
+#ifdef CONFIG_PROC_FS
 	if (!(e->proc_dir = create_proc_entry(e->proc_name,
 			 	S_IFREG | S_IRUGO | S_IWUSR, bm_dir)))
 		return -ENOMEM;
@@ -466,7 +470,7 @@ static int entry_proc_setup(struct binfmt_entry *e)
 	e->proc_dir->data = (void *) (e->id);
 	e->proc_dir->read_proc = proc_read_status;
 	e->proc_dir->write_proc = proc_write_status;
-
+#endif
 	return 0;
 }
 
@@ -490,8 +494,9 @@ static void bm_modcount(struct inode *inode, int fill)
 
 int __init init_misc_binfmt(void)
 {
-	struct proc_dir_entry *status = NULL, *reg;
 	int error = -ENOMEM;
+#ifdef CONFIG_PROC_FS
+	struct proc_dir_entry *status = NULL, *reg;
 
 	bm_dir = create_proc_entry("sys/fs/binfmt_misc", S_IFDIR, NULL);
 	if (!bm_dir)
@@ -511,6 +516,7 @@ int __init init_misc_binfmt(void)
 	if (!reg)
 		goto cleanup_status;
 	reg->write_proc = proc_write_register;
+#endif /* CONFIG_PROC_FS */
 
 	error = register_binfmt(&misc_format);
 out:

@@ -136,7 +136,7 @@ lockd(struct svc_rqst *rqstp)
 		 */
 		if (!nlmsvc_grace_period) {
 			timeout = nlmsvc_retry_blocked();
-		} else if (nlmsvc_grace_period < jiffies)
+		} else if (time_after(jiffies, nlmsvc_grace_period))
 			nlmsvc_grace_period = 0;
 
 		/*

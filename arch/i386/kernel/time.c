@@ -22,8 +22,10 @@
  *	ported from 2.0.35 Jumbo-9 by Michael Krause <m.krause@tu-harburg.de>).
  * 1998-12-16    Andrea Arcangeli
  *	Fixed Jumbo-9 code in 2.1.131: do_gettimeofday was missing 1 jiffy
- *	because was not accounting lost_ticks. I also removed some ugly
- *	not needed global cli() and where needed I used a disable_irq(0).
+ *	because was not accounting lost_ticks.
+ * 1998-12-24 Copyright (C) 1998  Andrea Arcangeli
+ *	Fixed a xtime SMP race (we need the xtime_lock rw spinlock to
+ *	serialize accesses to xtime/lost_ticks).
  */
 
 /* What about the "updated NTP code" stuff in 2.0 time.c? It's not in
@@ -81,6 +83,8 @@ static unsigned long last_tsc_low; /* lsb 32 bits of Time Stamp Counter */
  * Initialized in time_init.
  */
 static unsigned long fast_gettimeoffset_quotient=0;
+
+extern rwlock_t xtime_lock;
 
 static unsigned long do_fast_gettimeoffset(void)
 {
@@ -237,12 +241,12 @@ void do_gettimeofday(struct timeval *tv)
 	extern volatile unsigned long lost_ticks;
 	unsigned long flags;
 
-	save_flags(flags); cli();
+	read_lock_irqsave(&xtime_lock, flags);
 	*tv = xtime;
 	tv->tv_usec += do_gettimeoffset();
 	if (lost_ticks)
 		tv->tv_usec += lost_ticks * (1000000/HZ);
-	restore_flags(flags);
+	read_unlock_irqrestore(&xtime_lock, flags);
 	while (tv->tv_usec >= 1000000) {
 		tv->tv_usec -= 1000000;
 		tv->tv_sec++;
@@ -251,7 +255,7 @@ void do_gettimeofday(struct timeval *tv)
 
 void do_settimeofday(struct timeval *tv)
 {
-	cli();
+	write_lock_irq(&xtime_lock);
 	/* This is revolting. We need to set the xtime.tv_usec
 	 * correctly. However, the value in this location is
 	 * is value at the last tick.
@@ -269,7 +273,7 @@ void do_settimeofday(struct timeval *tv)
 	time_state = TIME_BAD;
 	time_maxerror = MAXPHASE;
 	time_esterror = MAXPHASE;
-	sti();
+	write_unlock_irq(&xtime_lock);
 }
 
 /*
@@ -344,7 +348,7 @@ static long last_rtc_update = 0;
  * timer_interrupt() needs to keep up the real-time clock,
  * as well as call the "do_timer()" routine every clocktick
  */
-static inline void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+static inline void do_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	do_timer(regs);
 /*
@@ -398,37 +402,56 @@ static inline void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #endif
 }
 
+static int use_tsc = 0;
+
 /*
  * This is the same as the above, except we _also_ save the current
  * Time Stamp Counter value at the time of the timer interrupt, so that
  * we later on can estimate the time of day more exactly.
  */
-static void pentium_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	int count;
 
-	/* It is important that these two operations happen almost at the
-	 * same time. We do the RDTSC stuff first, since it's faster. To
-         * avoid any inconsistencies, we need interrupts disabled locally.
-         */
-
 	/*
-	 * Interrupts are just disabled locally since the timer irq has the
-	 * SA_INTERRUPT flag set. -arca
+	 * Here we are in the timer irq handler. We just have irqs locally
+	 * disabled but we don't know if the timer_bh is running on the other
+	 * CPU. We need to avoid to SMP race with it. NOTE: we don' t need
+	 * the irq version of write_lock because as just said we have irq
+	 * locally disabled. -arca
 	 */
+	write_lock(&xtime_lock);
+
+	if (use_tsc)
+	{
+		/*
+		 * It is important that these two operations happen almost at
+		 * the same time. We do the RDTSC stuff first, since it's
+		 * faster. To avoid any inconsistencies, we need interrupts
+		 * disabled locally.
+		 */
+
+		/*
+		 * Interrupts are just disabled locally since the timer irq
+		 * has the SA_INTERRUPT flag set. -arca
+		 */
 	
-	/* read Pentium cycle counter */
-	__asm__("rdtsc" : "=a" (last_tsc_low) : : "edx");
+		/* read Pentium cycle counter */
+		__asm__("rdtsc" : "=a" (last_tsc_low) : : "edx");
 
-	outb_p(0x00, 0x43);     /* latch the count ASAP */
+		outb_p(0x00, 0x43);     /* latch the count ASAP */
 
-	count = inb_p(0x40);    /* read the latched count */
-	count |= inb(0x40) << 8;
+		count = inb_p(0x40);    /* read the latched count */
+		count |= inb(0x40) << 8;
 
-	count = ((LATCH-1) - count) * TICK_SIZE;
-	delay_at_last_interrupt = (count + LATCH/2) / LATCH;
+		count = ((LATCH-1) - count) * TICK_SIZE;
+		delay_at_last_interrupt = (count + LATCH/2) / LATCH;
+	}
  
-	timer_interrupt(irq, NULL, regs);
+	do_timer_interrupt(irq, NULL, regs);
+
+	write_unlock(&xtime_lock);
+
 }
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
@@ -601,7 +624,7 @@ __initfunc(void time_init(void))
 	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC) {
 		do_gettimeoffset = do_fast_gettimeoffset;
 		do_get_fast_time = do_gettimeofday;
-		irq0.handler = pentium_timer_interrupt;
+		use_tsc = 1;
 		fast_gettimeoffset_quotient = calibrate_tsc();
 		
 		/* report CPU clock rate in Hz.

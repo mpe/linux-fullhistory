@@ -14,7 +14,7 @@
    memory, though. */
 
 #ifndef VERBOSE_IDE_CD_ERRORS
-#define VERBOSE_IDE_CD_ERRORS 0
+#define VERBOSE_IDE_CD_ERRORS 1
 #endif
 
 
@@ -130,6 +130,9 @@ struct ide_cd_config_flags {
 	__u8 cd_rw            : 1; /* Drive can write to CD-R/W media . */
 	__u8 supp_disc_present: 1; /* Changer can report exact contents
 				      of slots. */
+	__u8 limit_nframes    : 1; /* Drive does not provide data in
+				      multiples of SECTOR_SIZE when more
+				      than one interrupt is needed. */
 	__u8 seeking          : 1; /* Seeking in progress */
 	__u8 reserved         : 6;
 	byte max_speed; 	   /* Max speed of the drive */

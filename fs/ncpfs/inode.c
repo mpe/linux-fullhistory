@@ -382,7 +382,12 @@ out_free_server:
 out_no_server:
 	printk(KERN_ERR "ncp_read_super: could not alloc ncp_server\n");
 out_unlock:
-	put_filp(ncp_filp);
+	/* 23/12/1998 Marcin Dalecki <dalecki@cs.net.pl>:
+	 * 
+	 * The previously used put_filp(ncp_filp); was bogous, since
+	 * it doesn't proper unlocking.
+	 */
+	fput(ncp_filp);
 	unlock_super(sb);
 	goto out;
 

@@ -19,23 +19,23 @@
 
 void __delay(unsigned long loops)
 {
+	int d0;
 	__asm__ __volatile__(
 		"\tjmp 1f\n"
 		".align 16\n"
 		"1:\tjmp 2f\n"
 		".align 16\n"
 		"2:\tdecl %0\n\tjns 2b"
-		:/* no outputs */
-		:"a" (loops)
-		:"ax");
+		:"=&a" (d0)
+		:"0" (loops));
 }
 
 inline void __const_udelay(unsigned long xloops)
 {
+	int d0;
 	__asm__("mull %0"
-		:"=d" (xloops)
-		:"a" (xloops),"0" (current_cpu_data.loops_per_sec)
-		:"ax");
+		:"=d" (xloops), "=&a" (d0)
+		:"1" (xloops),"0" (current_cpu_data.loops_per_sec));
         __delay(xloops);
 }
 

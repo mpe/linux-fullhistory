@@ -11,7 +11,7 @@
   Copyright 1992 - 1998 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Sun Sep  6 09:34:49 1998 by root@home
+  Last modified: Thu Dec  3 20:27:46 1998 by makisara@home
   Some small formal changes - aeb, 950809
 */
 
@@ -707,7 +707,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       STp->density = 0;   	/* Clear the erroneous "residue" */
       STp->write_prot = 0;
       STp->block_size = 0;
-      STp->ps[0].drv_file = STp->ps[0].drv_block = 0;
+      STp->ps[0].drv_file = STp->ps[0].drv_block = (-1);
       STp->partition = STp->new_partition = 0;
       STp->door_locked = ST_UNLOCKED;
       STp->in_use = 1;
@@ -785,6 +785,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	  !enlarge_buffer(STp->buffer, STp->block_size, STp->restr_dma)) {
 	printk(KERN_NOTICE "st%d: Blocksize %d too large for buffer.\n", dev,
 	       STp->block_size);
+	scsi_release_command(SCpnt);
 	(STp->buffer)->in_use = 0;
 	STp->buffer = NULL;
 	if (scsi_tapes[dev].device->host->hostt->module)
@@ -3414,8 +3415,8 @@ static int st_attach(Scsi_Device * SDp){
      STps->eof = ST_NOEOF;
      STps->at_sm = 0;
      STps->last_block_valid = FALSE;
-     STps->drv_block = 0;
-     STps->drv_file = 0;
+     STps->drv_block = (-1);
+     STps->drv_file = (-1);
    }
 
    tpnt->current_mode = 0;

@@ -294,7 +294,7 @@ static void aarp_expire_timer(struct aarp_entry **n)
 	while((*n)!=NULL)
 	{
 		/* Expired ? */
-		if((*n)->expires_at < jiffies)
+		if(time_after(jiffies, (*n)->expires_at))
 		{
 			t= *n;
 			*n=(*n)->next;

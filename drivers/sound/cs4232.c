@@ -369,9 +369,6 @@ int init_module(void)
 	cfg.dma = dma;
 	cfg.dma2 = dma2;
 
-	if (probe_cs4232(&cfg) == 0)
-		return -ENODEV;
-
 	mpu_cfg.io_base = -1;
 	mpu_cfg.irq = -1;
 
@@ -380,6 +377,9 @@ int init_module(void)
 		mpu_cfg.irq = mpuirq;
 		probe_cs4232_mpu(&mpu_cfg); /* Bug always returns 0 not OK -- AC */
 	}
+
+	if (probe_cs4232(&cfg) == 0)
+		return -ENODEV;
 
 	attach_cs4232(&cfg);
 

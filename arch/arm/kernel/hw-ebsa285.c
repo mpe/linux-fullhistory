@@ -123,7 +123,7 @@ static void irq_pci_err(int irq, void *dev_id, struct pt_regs *regs)
 		err = "system";
 		break;
 	}
-	if (next_warn[idx] <= jiffies) {
+	if (time_after_eq(jiffies, next_warn[idx])) {
 		next_warn[idx] = jiffies + 3 * HZ / 100;
 		printk(KERN_ERR "PCI %s error detected\n", err);
 	}

@@ -291,7 +291,7 @@ static int do_probe (ide_drive_t *drive, byte cmd)
 			delay_50ms();
 			OUT_BYTE(WIN_SRST, IDE_COMMAND_REG);
 			timeout = jiffies;
-			while ((GET_STAT() & BUSY_STAT) && jiffies < timeout + WAIT_WORSTCASE)
+			while ((GET_STAT() & BUSY_STAT) && time_before(jiffies, timeout + WAIT_WORSTCASE))
 				delay_50ms();
 			rc = try_to_identify(drive, cmd);
 		}

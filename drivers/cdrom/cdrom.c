@@ -87,15 +87,20 @@
   Thanks to Grant R. Guenther <grant@torque.net> for spotting this bug.
   -- Made a few things more pedanticly correct.
 
- 2.50  Oct 19, 1998 - Jens Axboe <axboe@image.dk>
+2.50 Oct 19, 1998 - Jens Axboe <axboe@image.dk>
   -- New maintainers! Erik was too busy to continue the work on the driver,
   so now Chris Zwilling <chris@cloudnet.com> and Jens Axboe <axboe@image.dk>
   will do their best to follow in his footsteps
+  
+  2.51 Dec 20, 1998 - Jens Axboe <axboe@image.dk>
+  -- Check if drive is capable of doing what we ask before blindly changing
+  cdi->options in various ioctl.
+  -- Added version to proc entry.
 
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 2.50"
-#define VERSION "Id: cdrom.c 2.50 1998/10/19"
+#define REVISION "Revision: 2.51"
+#define VERSION "Id: cdrom.c 2.51 1998/12/20"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -211,6 +216,8 @@ int register_cdrom(struct cdrom_device_info *cdi)
         struct cdrom_device_ops *cdo = cdi->ops;
         int *change_capability = (int *)&cdo->capability; /* hack */
 
+	cdinfo(CD_OPEN, "entering register_cdrom\n"); 
+
 	if (major < 0 || major >= MAX_BLKDEV)
 		return -1;
 	if (cdo->open == NULL || cdo->release == NULL)
@@ -236,9 +243,10 @@ int register_cdrom(struct cdrom_device_info *cdi)
 	cdi->mc_flags = 0;
 	cdo->n_minors = 0;
         cdi->options = CDO_USE_FFLAGS;
-	if (autoclose==1)
+	
+	if (autoclose==1 && cdo->capability & ~cdi->mask & CDC_OPEN_TRAY)
 		cdi->options |= (int) CDO_AUTO_CLOSE;
-	if (autoeject==1)
+	if (autoeject==1 && cdo->capability & ~cdi->mask & CDC_OPEN_TRAY)
 		cdi->options |= (int) CDO_AUTO_EJECT;
 	if (lockdoor==1)
 		cdi->options |= (int) CDO_LOCK;
@@ -256,6 +264,8 @@ int unregister_cdrom(struct cdrom_device_info *unreg)
 {
 	struct cdrom_device_info *cdi, *prev;
 	int major = MAJOR (unreg->dev);
+
+	cdinfo(CD_OPEN, "entering unregister_cdrom\n"); 
 
 	if (major < 0 || major >= MAX_BLKDEV)
 		return -1;
@@ -713,6 +723,8 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 
 	case CDROMEJECT_SW:
 		cdinfo(CD_DO_IOCTL, "entering CDROMEJECT_SW\n"); 
+		if (!(cdo->capability & ~cdi->mask & CDC_OPEN_TRAY))
+			return -ENOSYS;
 		cdi->options &= ~(CDO_AUTO_CLOSE | CDO_AUTO_EJECT);
 		if (arg)
 			cdi->options |= CDO_AUTO_CLOSE | CDO_AUTO_EJECT;
@@ -733,6 +745,8 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 
 	case CDROM_SET_OPTIONS:
 		cdinfo(CD_DO_IOCTL, "entering CDROM_SET_OPTIONS\n"); 
+		if (cdo->capability & arg & ~cdi->mask)
+			return -ENOSYS;
 		cdi->options |= (int) arg;
 		return cdi->options;
 
@@ -984,7 +998,7 @@ int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
         int retv,pos;
 	struct cdrom_device_info *cdi;
 
-        pos = sprintf(cdrom_drive_info, "CD-ROM information\n");
+	pos = sprintf(cdrom_drive_info, "CD-ROM information, " VERSION "\n");
 	
 	pos += sprintf(cdrom_drive_info+pos, "\ndrive name:\t");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)

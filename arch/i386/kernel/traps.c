@@ -499,15 +499,18 @@ __initfunc(void trap_init_f00f_bug(void))
 }
 
 #define _set_gate(gate_addr,type,dpl,addr) \
-__asm__ __volatile__ ("movw %%dx,%%ax\n\t" \
-	"movw %2,%%dx\n\t" \
+do { \
+  int __d0, __d1; \
+  __asm__ __volatile__ ("movw %%dx,%%ax\n\t" \
+	"movw %4,%%dx\n\t" \
 	"movl %%eax,%0\n\t" \
 	"movl %%edx,%1" \
 	:"=m" (*((long *) (gate_addr))), \
-	 "=m" (*(1+(long *) (gate_addr))) \
+	 "=m" (*(1+(long *) (gate_addr))), "=&a" (__d0), "=&d" (__d1) \
 	:"i" ((short) (0x8000+(dpl<<13)+(type<<8))), \
-	 "d" ((char *) (addr)),"a" (__KERNEL_CS << 16) \
-	:"ax","dx")
+	 "3" ((char *) (addr)),"2" (__KERNEL_CS << 16)); \
+} while (0)
+
 
 /*
  * This needs to use 'idt_table' rather than 'idt', and

@@ -252,7 +252,7 @@ struct hfs_mdb {
 	hfs_u16			free_ablocks;	/* The number of unused
 						   allocation blocks
 						   in the filesystem */
-	hfs_u16			alloc_blksz;	/* The number of
+	hfs_u32			alloc_blksz;	/* The number of
 						   512-byte blocks per
 						   "allocation block" */
 	hfs_u16			attrib;		/* Attribute word */

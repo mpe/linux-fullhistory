@@ -29,6 +29,25 @@
  *   see a clean way to get the old behavior with the new design.
  *   The POSIX standard and SVID should be consulted to determine
  *   what behavior is mandated.
+ *
+ * Further notes on refinement (Christoph Rohland, December 1998):
+ * - The POSIX standard says, that the undo adjustments simply should
+ *   redo. So the current implementation is o.K.
+ * - The previous code had two flaws:
+ *   1) It actively gave the semaphore to the next waiting process
+ *      sleeping on the semaphore. Since this process did not have the
+ *      cpu this led to many unnecessary context switches and bad
+ *      performance. Now we only check which process should be able to
+ *      get the semaphore and if this process wants to reduce some
+ *      semaphore value we simply wake it up without doing the
+ *      operation. So it has to try to get it later. Thus e.g. the
+ *      running process may reaquire the semaphore during the current
+ *      time slice. If it only waits for zero or increases the semaphore,
+ *      we do the operation in advance and wake it up.
+ *   2) It did not wake up all zero waiting processes. We try to do
+ *      better but only get the semops right which only wait for zero or
+ *      increase. If there are decrement operations in the operations
+ *      array we do the same as before.
  */
 
 #include <linux/malloc.h>
@@ -158,12 +177,26 @@ out:
 /* Manage the doubly linked list sma->sem_pending as a FIFO:
  * insert new queue elements at the tail sma->sem_pending_last.
  */
-static inline void insert_into_queue (struct semid_ds * sma, struct sem_queue * q)
+static inline void append_to_queue (struct semid_ds * sma,
+                                    struct sem_queue * q)
 {
 	*(q->prev = sma->sem_pending_last) = q;
 	*(sma->sem_pending_last = &q->next) = NULL;
 }
-static inline void remove_from_queue (struct semid_ds * sma, struct sem_queue * q)
+
+static inline void prepend_to_queue (struct semid_ds * sma,
+                                     struct sem_queue * q)
+{
+        q->next = sma->sem_pending;
+        *(q->prev = &sma->sem_pending) = q;
+        if (q->next)
+                q->next->prev = &q->next;
+        else /* sma->sem_pending_last == &sma->sem_pending */
+                sma->sem_pending_last = &q->next;
+}
+
+static inline void remove_from_queue (struct semid_ds * sma,
+                                      struct sem_queue * q)
 {
 	*(q->prev) = q->next;
 	if (q->next)
@@ -173,112 +206,100 @@ static inline void remove_from_queue (struct semid_ds * sma, struct sem_queue * 
 	q->prev = NULL; /* mark as removed */
 }
 
-/* Determine whether a sequence of semaphore operations would succeed
+/*
+ * Determine whether a sequence of semaphore operations would succeed
  * all at once. Return 0 if yes, 1 if need to sleep, else return error code.
  */
-static int try_semop (struct semid_ds * sma, struct sembuf * sops, int nsops)
-{
-	int result = 0;
-	int i = 0;
 
-	while (i < nsops) {
-		struct sembuf * sop = &sops[i];
-		struct sem * curr = &sma->sem_base[sop->sem_num];
-		if (sop->sem_op + curr->semval > SEMVMX) {
-			result = -ERANGE;
-			break;
-		}
-		if (!sop->sem_op && curr->semval) {
-			if (sop->sem_flg & IPC_NOWAIT)
-				result = -EAGAIN;
-			else
-				result = 1;
-			break;
-		}
-		i++;
-		curr->semval += sop->sem_op;
-		if (curr->semval < 0) {
-			if (sop->sem_flg & IPC_NOWAIT)
-				result = -EAGAIN;
-			else
-				result = 1;
-			break;
-		}
+static int try_atomic_semop (struct semid_ds * sma, struct sembuf * sops,
+                             int nsops, struct sem_undo *un, int pid,
+                             int do_undo)
+{
+	int result, sem_op;
+	struct sembuf *sop;
+	struct sem * curr;
+
+	for (sop = sops; sop < sops + nsops; sop++) {
+		curr = sma->sem_base + sop->sem_num;
+		sem_op = sop->sem_op;
+
+		if (!sem_op && curr->semval)
+			goto would_block;
+
+		curr->sempid = (curr->sempid << 16) | pid;
+		curr->semval += sem_op;
+		if (sop->sem_flg & SEM_UNDO)
+			un->semadj[sop->sem_num] -= sem_op;
+
+		if (curr->semval < 0)
+			goto would_block;
+		if (curr->semval > SEMVMX)
+			goto out_of_range;
 	}
-	while (--i >= 0) {
-		struct sembuf * sop = &sops[i];
-		struct sem * curr = &sma->sem_base[sop->sem_num];
+
+        if (do_undo)
+        {
+                sop--;
+                result = 0;
+                goto undo;
+        }
+
+	sma->sem_otime = CURRENT_TIME;
+	return 0;
+
+out_of_range:
+	result = -ERANGE;
+	goto undo;
+
+would_block:
+	if (sop->sem_flg & IPC_NOWAIT)
+		result = -EAGAIN;
+	else
+		result = 1;
+
+undo:
+        while (sop >= sops) {
+		curr = sma->sem_base + sop->sem_num;
 		curr->semval -= sop->sem_op;
+		curr->sempid >>= 16;
+
+		if (sop->sem_flg & SEM_UNDO)
+			un->semadj[sop->sem_num] += sop->sem_op;
+		sop--;
 	}
+
 	return result;
 }
 
-/* Actually perform a sequence of semaphore operations. Atomically. */
-/* This assumes that try_semop() already returned 0. */
-static int do_semop (struct semid_ds * sma, struct sembuf * sops, int nsops,
-		     struct sem_undo * un, int pid)
-{
-	int i;
-
-	for (i = 0; i < nsops; i++) {
-		struct sembuf * sop = &sops[i];
-		struct sem * curr = &sma->sem_base[sop->sem_num];
-		if (sop->sem_op + curr->semval > SEMVMX) {
-			printk("do_semop: race\n");
-			break;
-		}
-		if (!sop->sem_op) {
-			if (curr->semval) {
-				printk("do_semop: race\n");
-				break;
-			}
-		} else {
-			curr->semval += sop->sem_op;
-			if (curr->semval < 0) {
-				printk("do_semop: race\n");
-				break;
-			}
-			if (sop->sem_flg & SEM_UNDO)
-				un->semadj[sop->sem_num] -= sop->sem_op;
-		}
-		curr->sempid = pid;
-	}
-	sma->sem_otime = CURRENT_TIME;
-
-	/* Previous implementation returned the last semaphore's semval.
-	 * This is wrong because we may not have checked read permission,
-	 * only write permission.
-	 */
-	return 0;
-}
-
 /* Go through the pending queue for the indicated semaphore
- * looking for tasks that can be completed. Keep cycling through
- * the queue until a pass is made in which no process is woken up.
+ * looking for tasks that can be completed.
  */
 static void update_queue (struct semid_ds * sma)
 {
-	int wokeup, error;
+	int error;
 	struct sem_queue * q;
 
-	do {
-		wokeup = 0;
-		for (q = sma->sem_pending; q; q = q->next) {
-			error = try_semop(sma, q->sops, q->nsops);
-			/* Does q->sleeper still need to sleep? */
-			if (error > 0)
-				continue;
-			/* Perform the operations the sleeper was waiting for */
-			if (!error)
-				error = do_semop(sma, q->sops, q->nsops, q->undo, q->pid);
-			q->status = error;
-			/* Remove it from the queue */
-			remove_from_queue(sma,q);
-			/* Wake it up */
-			wake_up_interruptible(&q->sleeper); /* doesn't sleep! */
-			wokeup++;
-		}
-	} while (wokeup);
+        for (q = sma->sem_pending; q; q = q->next) {
+                        
+                if (q->status == 1)
+                        return; /* wait for other process */
+
+                error = try_atomic_semop(sma, q->sops, q->nsops,
+                                         q->undo, q->pid, q->alter);
+
+                /* Does q->sleeper still need to sleep? */
+                if (error <= 0) {
+                                /* Found one, wake it up */
+                        wake_up_interruptible(&q->sleeper);
+                        if (error == 0 && q->alter) {
+                                /* if q-> alter let it self try */
+                                q->status = 1;
+                                return;
+                        }
+                        q->status = error;
+                        remove_from_queue(sma,q);
+                }
+        }
 }
 
 /* The following counts are associated to each semaphore:
@@ -460,7 +481,7 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 			goto out;
 		switch (cmd) {
 		case GETVAL : err = curr->semval; goto out;
-		case GETPID : err = curr->sempid; goto out;
+		case GETPID : err = curr->sempid & 0xffff; goto out;
 		case GETNCNT: err = count_semncnt(sma,semnum); goto out;
 		case GETZCNT: err = count_semzcnt(sma,semnum); goto out;
 		case GETALL:
@@ -582,11 +603,12 @@ out:
 
 asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 {
-	int i, id, size, error = -EINVAL;
+	int id, size, error = -EINVAL;
 	struct semid_ds *sma;
 	struct sembuf sops[SEMOPM], *sop;
 	struct sem_undo *un;
-	int undos = 0, alter = 0;
+	int undos = 0, decrease = 0, alter = 0;
+	struct sem_queue queue;
 
 	lock_kernel();
 	if (nsops < 1 || semid < 0)
@@ -595,8 +617,6 @@ asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 	if (nsops > SEMOPM)
 		goto out;
 	error = -EFAULT;
-	if (!tsops)
-		goto out;
 	if (copy_from_user (sops, tsops, nsops * sizeof(*tsops)))
 		goto out;
 	id = (unsigned int) semid % SEMMNI;
@@ -606,21 +626,22 @@ asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 	error = -EIDRM;
 	if (sma->sem_perm.seq != (unsigned int) semid / SEMMNI)
 		goto out;
-	for (i = 0; i < nsops; i++) {
-		sop = &sops[i];
+
 		error = -EFBIG;
+	for (sop = sops; sop < sops + nsops; sop++) {
 		if (sop->sem_num >= sma->sem_nsems)
 			goto out;
 		if (sop->sem_flg & SEM_UNDO)
 			undos++;
-		if (sop->sem_op)
-			alter++;
+		if (sop->sem_op < 0)
+			decrease = 1;
+                if (sop->sem_op > 0)
+                        alter = 1;
 	}
+        alter |= decrease;
+
 	error = -EACCES;
 	if (ipcperms(&sma->sem_perm, alter ? S_IWUGO : S_IRUGO))
-		goto out;
-	error = try_semop(sma, sops, nsops);
-	if (error < 0)
 		goto out;
 	if (undos) {
 		/* Make sure we have an undo structure
@@ -646,40 +667,59 @@ asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 		}
 	} else
 		un = NULL;
-	if (error == 0) {
-		/* the operations go through immediately */
-		error = do_semop(sma, sops, nsops, un, current->pid);
-		/* maybe some queued-up processes were waiting for this */
-		update_queue(sma);
-		goto out;
-	} else {
-		/* We need to sleep on this operation, so we put the current
-		 * task into the pending queue and go to sleep.
-		 */
-		struct sem_queue queue;
 
-		queue.sma = sma;
-		queue.sops = sops;
-		queue.nsops = nsops;
-		queue.undo = un;
-		queue.pid = current->pid;
-		queue.status = 0;
-		insert_into_queue(sma,&queue);
-		queue.sleeper = NULL;
-		current->semsleeping = &queue;
-		interruptible_sleep_on(&queue.sleeper);
-		current->semsleeping = NULL;
-		/* When we wake up, either the operation is finished,
-		 * or some kind of error happened.
-		 */
-		if (!queue.prev) {
-			/* operation is finished, update_queue() removed us */
-			error = queue.status;
-		} else {
-			remove_from_queue(sma,&queue);
-			error = -EINTR;
-		}
-	}
+	error = try_atomic_semop (sma, sops, nsops, un, current->pid, 0);
+	if (error <= 0)
+                goto update;
+
+        /* We need to sleep on this operation, so we put the current
+         * task into the pending queue and go to sleep.
+         */
+                
+        queue.sma = sma;
+        queue.sops = sops;
+        queue.nsops = nsops;
+        queue.undo = un;
+        queue.pid = current->pid;
+        queue.alter = decrease;
+        current->semsleeping = &queue;
+        if (alter)
+                append_to_queue(sma ,&queue);
+        else
+                prepend_to_queue(sma ,&queue);
+
+        for (;;) {
+                queue.status = -EINTR;
+                queue.sleeper = NULL;
+                interruptible_sleep_on(&queue.sleeper);
+
+                /*
+                 * If queue.status == 1 we where woken up and
+                 * have to retry else we simply return.
+                 * If an interrupt occured we have to clean up the
+                 * queue
+                 *
+                 */
+                if (queue.status == 1)
+                {
+                        error = try_atomic_semop (sma, sops, nsops, un,
+                                                  current->pid,0);
+                        if (error <= 0) 
+                                break;
+                } else {
+                        error = queue.status;;
+                        if (queue.prev) /* got Interrupt */
+                                break;
+                        /* Everything done by update_queue */
+                        current->semsleeping = NULL;
+                        goto out;
+                }
+        }
+        current->semsleeping = NULL;
+        remove_from_queue(sma,&queue);
+update:
+        if (alter)
+                update_queue (sma);
 out:
 	unlock_kernel();
 	return error;

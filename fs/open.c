@@ -6,14 +6,11 @@
 
 #include <linux/mm.h>
 #include <linux/utime.h>
-#include <linux/fcntl.h>
-#include <linux/stat.h>
 #include <linux/file.h>
 #include <linux/smp_lock.h>
 #include <linux/quotaops.h>
 
 #include <asm/uaccess.h>
-#include <asm/bitops.h>
 
 asmlinkage int sys_statfs(const char * path, struct statfs * buf)
 {
@@ -671,18 +668,6 @@ out:
 	return ERR_PTR(error);
 }
 
-/* should probably go into sys_open() */
-static int do_open(const char * filename, int flags, int mode, int fd)
-{
-	struct file * f;
-
-	f = filp_open(filename, flags, mode);
-	if (IS_ERR(f))
-		return PTR_ERR(f);
-	fd_install(fd, f);
-	return 0;
-}
-
 /*
  * Find an empty file descriptor entry, and mark it busy.
  */
@@ -727,24 +712,25 @@ asmlinkage int sys_open(const char * filename, int flags, int mode)
 	char * tmp;
 	int fd, error;
 
-	lock_kernel();
-	fd = get_unused_fd();
-	if (fd < 0)
-		goto out;
-
 	tmp = getname(filename);
-	error = PTR_ERR(tmp);
-	if (IS_ERR(tmp))
-		goto out_fail;
-	error = do_open(tmp, flags, mode, fd);
-	putname(tmp);
-	if (error)
-		goto out_fail;
+	fd = PTR_ERR(tmp);
+	if (!IS_ERR(tmp)) {
+		lock_kernel();
+		fd = get_unused_fd();
+		if (fd >= 0) {
+			struct file * f = filp_open(tmp, flags, mode);
+			error = PTR_ERR(f);
+			if (IS_ERR(f))
+				goto out_error;
+			fd_install(fd, f);
+		}
 out:
-	unlock_kernel();
+		unlock_kernel();
+		putname(tmp);
+	}
 	return fd;
 
-out_fail:
+out_error:
 	put_unused_fd(fd);
 	fd = error;
 	goto out;

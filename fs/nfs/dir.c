@@ -571,11 +571,6 @@ show_dentry(&inode->i_dentry);
 			error = 0;
 		}
 	}
-#ifdef NFS_PARANOIA
-if (error)
-printk("nfs_lookup: %s/%s failed, error=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, error);
-#endif
 out:
 	return error;
 }

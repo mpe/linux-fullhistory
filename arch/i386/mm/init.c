@@ -119,24 +119,28 @@ int do_check_pgt_cache(int low, int high)
 pte_t * __bad_pagetable(void)
 {
 	extern char empty_bad_page_table[PAGE_SIZE];
+	int d0, d1;
 
-	__asm__ __volatile__("cld ; rep ; stosl":
-		:"a" (pte_val(BAD_PAGE)),
-		 "D" ((long) empty_bad_page_table),
-		 "c" (PAGE_SIZE/4)
-		:"di","cx");
+	__asm__ __volatile__("cld ; rep ; stosl"
+			     : "=&D" (d0), "=&c" (d1)
+			     : "a" (pte_val(BAD_PAGE)),
+			     "0" ((long) empty_bad_page_table),
+			     "1" (PAGE_SIZE/4)
+			     : "memory");
 	return (pte_t *) empty_bad_page_table;
 }
 
 pte_t __bad_page(void)
 {
 	extern char empty_bad_page[PAGE_SIZE];
+	int d0, d1;
 
-	__asm__ __volatile__("cld ; rep ; stosl":
-		:"a" (0),
-		 "D" ((long) empty_bad_page),
-		 "c" (PAGE_SIZE/4)
-		:"di","cx");
+	__asm__ __volatile__("cld ; rep ; stosl"
+			     : "=&D" (d0), "=&c" (d1)
+			     : "a" (0),
+			     "0" ((long) empty_bad_page),
+			     "1" (PAGE_SIZE/4)
+			     : "memory");
 	return pte_mkdirty(mk_pte((unsigned long) empty_bad_page, PAGE_SHARED));
 }
 
@@ -298,7 +302,8 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 		 * NOTE! There are Linux loaders that will corrupt the EBDA
 		 * area, and as such this kind of SMP config may be less
 		 * trustworthy, simply because the SMP table may have been
-		 * stomped on during early boot.
+		 * stomped on during early boot. These loaders are buggy and
+		 * should be fixed.
 		 */
 		address = *(unsigned short *)phys_to_virt(0x40E);
 		address<<=4;

@@ -26,6 +26,7 @@
 #ifdef CONFIG_TRIX
 
 #ifdef INCLUDE_TRIX_BOOT
+#include <linux/init.h>
 #include "trix_boot.h"
 #else
 static unsigned char *trix_boot = NULL;

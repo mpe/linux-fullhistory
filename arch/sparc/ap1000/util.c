@@ -393,7 +393,7 @@ void ap_nfs_hook(unsigned long server)
     unsigned end = jiffies + 20*HZ;
     /* we are booting from another cell */
     printk("waiting for the master cell\n");
-    while (jiffies < end) ;
+    while (time_before(jiffies, end)) ;
     printk("continuing\n");
   }
 }

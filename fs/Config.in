@@ -5,23 +5,53 @@ mainmenu_option next_comment
 comment 'Filesystems'
 
 bool	 'Quota support' CONFIG_QUOTA
+tristate 'Kernel automounter support' CONFIG_AUTOFS_FS
 
-tristate 'Minix fs support' CONFIG_MINIX_FS
-tristate 'Second extended fs support' CONFIG_EXT2_FS
+
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'ADFS filesystem support (read only) (EXPERIMENTAL)' CONFIG_ADFS_FS
+fi
+tristate 'Amiga FFS filesystem support' CONFIG_AFFS_FS
+tristate 'Apple Macintosh filesystem support (experimental)' CONFIG_HFS_FS
+# msdos filesystems
+tristate 'DOS FAT fs support' CONFIG_FAT_FS
+dep_tristate '  MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
+dep_tristate '  UMSDOS: Unix-like filesystem on top of standard MSDOS filesystem' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
+dep_tristate '  VFAT (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
 
 tristate 'ISO 9660 CDROM filesystem support' CONFIG_ISO9660_FS
 if [ "$CONFIG_ISO9660_FS" != "n" ]; then
   bool 'Microsoft Joliet CDROM extensions' CONFIG_JOLIET
 fi
 
-# msdos filesystems
-tristate 'DOS FAT fs support' CONFIG_FAT_FS
-dep_tristate 'MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
-dep_tristate 'UMSDOS: Unix-like filesystem on top of standard MSDOS filesystem' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
-dep_tristate 'VFAT (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
-
+tristate 'Minix fs support' CONFIG_MINIX_FS
+tristate 'NTFS filesystem support (read only)' CONFIG_NTFS_FS
+if [ "$CONFIG_NTFS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool '   NTFS read-write support (experimental)' CONFIG_NTFS_RW
+fi
+tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
 bool '/proc filesystem support' CONFIG_PROC_FS
+if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
+  tristate '/dev/pts filesystem for Unix98 PTYs' CONFIG_DEVPTS_FS
+fi
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'QNX filesystem support (EXPERIMENTAL)' CONFIG_QNX4FS_FS
+  if [ "$CONFIG_QNX4FS_FS" != "n" ]; then
+    bool '   QNXFS read-write support (FOR TESTING ONLY)' CONFIG_QNX4FS_RW
+  fi    
+fi
+tristate 'ROM filesystem support' CONFIG_ROMFS_FS
+tristate 'Second extended fs support' CONFIG_EXT2_FS
+tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
+tristate 'UFS filesystem support' CONFIG_UFS_FS
+
+
+
+mainmenu_option next_comment
+comment 'Network File Systems'
+
 if [ "$CONFIG_INET" = "y" ]; then
+  tristate 'Coda filesystem support (advanced network fs)' CONFIG_CODA_FS
   tristate 'NFS filesystem support' CONFIG_NFS_FS
   if [ "$CONFIG_NFS_FS" = "y" -a "$CONFIG_IP_PNP" = "y" ]; then
     bool '   Root file system on NFS' CONFIG_ROOT_NFS
@@ -42,7 +72,6 @@ if [ "$CONFIG_INET" = "y" ]; then
       define_bool CONFIG_LOCKD n
     fi
   fi
-  tristate 'Coda filesystem support (advanced network fs)' CONFIG_CODA_FS
   tristate 'SMB filesystem support (to mount WfW shares etc.)' CONFIG_SMB_FS
   if [ "$CONFIG_SMB_FS" != "n" ]; then
     bool 'SMB Win95 bug work-around' CONFIG_SMB_WIN95
@@ -54,34 +83,23 @@ if [ "$CONFIG_IPX" != "n" -o "$CONFIG_INET" != "n" ]; then
     source fs/ncpfs/Config.in
   fi
 fi
-tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
 
-tristate 'NTFS filesystem support (read only)' CONFIG_NTFS_FS
-if [ "$CONFIG_NTFS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  bool '   NTFS read-write support (experimental)' CONFIG_NTFS_RW
-fi
+endmenu
 
-tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
-tristate 'Amiga FFS filesystem support' CONFIG_AFFS_FS
-tristate 'Apple Macintosh filesystem support (experimental)' CONFIG_HFS_FS
-tristate 'ROM filesystem support' CONFIG_ROMFS_FS
-tristate 'Kernel automounter support' CONFIG_AUTOFS_FS
 if [ "$CONFIG_AFFS_FS" != "n" ]; then
   define_bool CONFIG_AMIGA_PARTITION y
 fi
-tristate 'UFS filesystem support' CONFIG_UFS_FS
+
+mainmenu_option next_comment
+comment 'Partition Types'
+
 bool 'BSD disklabel (BSD partition tables) support' CONFIG_BSD_DISKLABEL
+bool 'Macintosh partition map support' CONFIG_MAC_PARTITION
 bool 'SMD disklabel (Sun partition tables) support' CONFIG_SMD_DISKLABEL
 bool 'Solaris (x86) partition table support' CONFIG_SOLARIS_X86_PARTITION
-if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
-  tristate '/dev/pts filesystem for Unix98 PTYs' CONFIG_DEVPTS_FS
-fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'ADFS filesystem support (read only) (EXPERIMENTAL)' CONFIG_ADFS_FS
-  tristate 'QNX filesystem support (EXPERIMENTAL)' CONFIG_QNX4FS_FS
-  if [ "$CONFIG_QNX4FS_FS" != "n" ]; then
-    bool '   QNXFS read-write support (FOR TESTING ONLY)' CONFIG_QNX4FS_RW
-  fi    
+  bool 'Unixware slices support (EXPERIMENTAL)' CONFIG_UNIXWARE_DISKLABEL
 fi
-bool 'Macintosh partition map support' CONFIG_MAC_PARTITION
+endmenu
+
 endmenu
