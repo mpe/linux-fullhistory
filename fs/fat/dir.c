@@ -10,6 +10,7 @@
  *  VFAT extensions by Gordon Chaffee <chaffee@plateau.cs.berkeley.edu>
  *  Merged with msdos fs by Henrik Storner <storner@osiris.ping.dk>
  *  Rewritten for constant inumbers. Plugged buffer overrun in readdir(). AV
+ *  Short name translation 1999 by Wolfram Pienkoss <wp@bsz.shk.th.schule.de>
  */
 
 #define ASC_LINUX_VERSION(V, P, S)	(((V) * 65536) + ((P) * 256) + (S))
@@ -55,22 +56,21 @@ struct file_operations fat_dir_operations = {
 
 /*
  * Convert Unicode 16 to UTF8, translated Unicode, or ASCII.
- * If uni_xlate is enabled and we
- * can't get a 1:1 conversion, use a colon as an escape character since
- * it is normally invalid on the vfat filesystem.  The following three
- * characters are a sort of uuencoded 16 bit Unicode value.  This lets
- * us do a full dump and restore of Unicode filenames.  We could get
- * into some trouble with long Unicode names, but ignore that right now.
+ * If uni_xlate is enabled and we can't get a 1:1 conversion, use a
+ * colon as an escape character since it is normally invalid on the vfat
+ * filesystem. The following four characters are the hexadecimal digits
+ * of Unicode value. This lets us do a full dump and restore of Unicode
+ * filenames. We could get into some trouble with long Unicode names,
+ * but ignore that right now.
  * Ahem... Stack smashing in ring 0 isn't fun. Fixed.
  */
 static int
 uni16_to_x8(unsigned char *ascii, unsigned char *uni, int uni_xlate,
 	    struct nls_table *nls)
 {
-	unsigned char *ip, *op;
-	unsigned char ch, cl;
-	unsigned char *uni_page;
-	unsigned short val;
+	unsigned char *ip, *op, *uni_page, ch, cl, nc;
+	unsigned int ec;
+	int k;
 
 	ip = uni;
 	op = ascii;
@@ -84,14 +84,15 @@ uni16_to_x8(unsigned char *ascii, unsigned char *uni, int uni_xlate,
 			*op++ = uni_page[cl];
 		} else {
 			if (uni_xlate == 1) {
-				*op++ = ':';
-				val = (cl << 8) + ch;
-				op[2] = fat_uni2esc[val & 0x3f];
-				val >>= 6;
-				op[1] = fat_uni2esc[val & 0x3f];
-				val >>= 6;
-				*op = fat_uni2esc[val & 0x3f];
-				op += 3;
+				*op = ':';
+				ec = (ch << 8) + cl;
+				for (k = 4; k > 0; k--) {
+					nc = ec & 0xF;
+					op[k] = nc > 9	? nc + ('a' - 10)
+							: nc + '0';
+					ec >>= 4;
+				}
+				op += 5;
 			} else {
 				*op++ = '?';
 			}
@@ -119,8 +120,31 @@ static void dump_de(struct msdos_dir_entry *de)
 	printk("]\n");
 }
 #endif
-static int memicmp(const char *s1, const char *s2, int len) {
-	while(len--) if (tolower(*s1++)!=tolower(*s2++)) return 1;
+
+static inline unsigned char
+fat_tolower(struct nls_table *t, unsigned char c)
+{
+	unsigned char nc = t->charset2lower[c];
+
+	return nc ? nc : c;
+}
+
+static inline struct nls_unicode
+fat_short2lower_uni(struct nls_table *t, unsigned char c)
+{
+	unsigned char nc = t->charset2lower[c];
+
+	return nc ? t->charset2uni[nc] : t->charset2uni[c];
+}
+
+static int
+fat_strnicmp(struct nls_table *t, const unsigned char *s1,
+					const unsigned char *s2, int len)
+{
+	while(len--)
+		if (fat_tolower(t, *s1++) != fat_tolower(t, *s2++))
+			return 1;
+
 	return 0;
 }
 
@@ -128,23 +152,21 @@ static int memicmp(const char *s1, const char *s2, int len) {
  * Return values: negative -> error, 0 -> not found, positive -> found,
  * value is the total amount of slots, including the shortname entry.
  */
-int fat_search_long(
-	struct inode *inode, const char *name, int name_len, int anycase,
-	loff_t *spos, loff_t *lpos)
+int fat_search_long(struct inode *inode, const char *name, int name_len,
+			int anycase, loff_t *spos, loff_t *lpos)
 {
 	struct super_block *sb = inode->i_sb;
-	int ino,i,i2,last;
-	char c;
 	struct buffer_head *bh = NULL;
 	struct msdos_dir_entry *de;
-	loff_t cpos = 0;
-	char bufname[14];
-	unsigned char long_slots;
+	struct nls_table *nls_io = MSDOS_SB(sb)->nls_io;
+	struct nls_table *nls_disk = MSDOS_SB(sb)->nls_disk;
+	struct nls_unicode bufuname[14];
+	unsigned char xlate_len, long_slots, *unicode = NULL;
+	char c, bufname[260];	/* 256 + 4 */
 	int uni_xlate = MSDOS_SB(sb)->options.unicode_xlate;
 	int utf8 = MSDOS_SB(sb)->options.utf8;
-	unsigned char *unicode = NULL;
-	struct nls_table *nls = MSDOS_SB(sb)->nls_io;
-	int res = 0;
+	int ino, i, i2, last, res = 0;
+	loff_t cpos = 0;
 
 	while(1) {
 		if (fat_get_entry(inode,&cpos,&bh,&de,&ino) == -1)
@@ -157,7 +179,7 @@ parse_record:
 			continue;
 		if (de->attr != ATTR_EXT && IS_FREE(de->name))
 			continue;
-		if (de->attr ==  ATTR_EXT) {
+		if (de->attr == ATTR_EXT) {
 			struct msdos_dir_slot *ds;
 			int offset;
 			unsigned char id;
@@ -226,36 +248,42 @@ parse_long:
 
 		for (i = 0, last = 0; i < 8;) {
 			if (!(c = de->name[i])) break;
-			if (c >= 'A' && c <= 'Z') c += 32;
 			if (c == 0x05) c = 0xE5;
-			if ((bufname[i++] = c) != ' ')
+			bufuname[i++] = fat_short2lower_uni(nls_disk, c);
+			if (c != ' ')
 				last = i;
 		}
 		i = last;
-		bufname[i++] = '.';
+		bufuname[i++] = fat_short2lower_uni(nls_disk, '.');
 		for (i2 = 0; i2 < 3; i2++) {
 			if (!(c = de->ext[i2])) break;
-			if (c >= 'A' && c <= 'Z') c += 32;
-			if ((bufname[i++] = c) != ' ')
+			bufuname[i++] = fat_short2lower_uni(nls_disk, c);
+			if (c != ' ')
 				last = i;
 		}
 		if (!last)
 			continue;
 
-		if (last==name_len)
-			if ((!anycase && !memcmp(name, bufname, last)) ||
-			    (anycase && !memicmp(name, bufname, last)))
-			goto Found;
+		memset(&bufuname[last], 0, sizeof(struct nls_unicode));
+		xlate_len = utf8
+			?utf8_wcstombs(bufname, (__u16 *) &bufuname, 260)
+			:uni16_to_x8(bufname, (unsigned char *) &bufuname,
+							uni_xlate, nls_io);
+		if (xlate_len == name_len)
+			if ((!anycase && !memcmp(name, bufname, xlate_len)) ||
+			    (anycase && !fat_strnicmp(nls_io, name, bufname,
+								xlate_len)))
+				goto Found;
+
 		if (long_slots) {
-			char longname[260];	/* 256 + 4 */
-			unsigned char long_len;
-			long_len = utf8
-				?utf8_wcstombs(longname, (__u16 *) unicode, 260)
-				:uni16_to_x8(longname, unicode, uni_xlate, nls);
-			if (long_len != name_len)
+			xlate_len = utf8
+				?utf8_wcstombs(bufname, (__u16 *) unicode, 260)
+				:uni16_to_x8(bufname, unicode, uni_xlate, nls_io);
+			if (xlate_len != name_len)
 				continue;
-			if ((!anycase && !memcmp(name, longname, long_len)) ||
-			    (anycase && !memicmp(name, longname, long_len)))
+			if ((!anycase && !memcmp(name, bufname, xlate_len)) ||
+			    (anycase && !fat_strnicmp(nls_io, name, bufname,
+								xlate_len)))
 				goto Found;
 		}
 	}
@@ -272,31 +300,23 @@ EODir:
 	return res;
 }
 
-static int fat_readdirx(
-	struct inode *inode,
-	struct file *filp,
-	void *dirent,
-	filldir_t filldir,
-	int shortnames,
-	int both)
+static int fat_readdirx(struct inode *inode, struct file *filp, void *dirent,
+			filldir_t filldir, int shortnames, int both)
 {
 	struct super_block *sb = inode->i_sb;
-	int ino,inum,i,i2,last;
-	char c;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
-	unsigned long lpos;
-	loff_t cpos;
-	unsigned char long_slots;
+	struct nls_table *nls_io = MSDOS_SB(sb)->nls_io;
+	struct nls_table *nls_disk = MSDOS_SB(sb)->nls_disk;
+	struct nls_unicode bufuname[14], *ptuname = &bufuname[0];
+	unsigned char long_slots, *unicode = NULL;
+	char c, bufname[56], *ptname = bufname;
+	unsigned long lpos, dummy, *furrfu = &lpos;
 	int uni_xlate = MSDOS_SB(sb)->options.unicode_xlate;
+	int isvfat = MSDOS_SB(sb)->options.isvfat;
 	int utf8 = MSDOS_SB(sb)->options.utf8;
-	unsigned char *unicode = NULL;
-	struct nls_table *nls = MSDOS_SB(sb)->nls_io;
-	char bufname[14];
-	char *ptname = bufname;
-	int dotoffset = 0;
-	unsigned long *furrfu = &lpos;
-	unsigned long dummy;
+	int ino,inum,i,i2,last, dotoffset = 0;
+	loff_t cpos;
 
 	cpos = filp->f_pos;
 /* Fake . and .. for the root directory. */
@@ -322,7 +342,7 @@ GetNew:
 	if (fat_get_entry(inode,&cpos,&bh,&de,&ino) == -1)
 		goto EODir;
 	/* Check for long filename entry */
-	if (MSDOS_SB(sb)->options.isvfat) {
+	if (isvfat) {
 		if (de->name[0] == (__s8) DELETED_FLAG)
 			goto RecEnd;
 		if (de->attr != ATTR_EXT && (de->attr & ATTR_VOLUME))
@@ -334,7 +354,7 @@ GetNew:
 			goto RecEnd;
 	}
 
-	if (MSDOS_SB(sb)->options.isvfat && de->attr ==  ATTR_EXT) {
+	if (isvfat && de->attr == ATTR_EXT) {
 		struct msdos_dir_slot *ds;
 		int offset;
 		unsigned char id;
@@ -403,23 +423,27 @@ ParseLong:
 	}
 
 	if ((de->attr & ATTR_HIDDEN) && MSDOS_SB(sb)->options.dotsOK) {
+		*ptuname = fat_short2lower_uni(nls_disk, '.');
 		*ptname++ = '.';
 		dotoffset = 1;
 	}
 	for (i = 0, last = 0; i < 8;) {
 		if (!(c = de->name[i])) break;
-		if (c >= 'A' && c <= 'Z') c += 32;
 		/* see namei.c, msdos_format_name */
 		if (c == 0x05) c = 0xE5;
-		if ((ptname[i++] = c) != ' ')
+		ptuname[i] = fat_short2lower_uni(nls_disk, c);
+		ptname[i++] = (c>='A' && c<='Z') ? c+32 : c;
+		if (c != ' ')
 			last = i;
 	}
 	i = last;
+	ptuname[i] = fat_short2lower_uni(nls_disk, '.');
 	ptname[i++] = '.';
 	for (i2 = 0; i2 < 3; i2++) {
 		if (!(c = de->ext[i2])) break;
-		if (c >= 'A' && c <= 'Z') c += 32;
-		if ((ptname[i++] = c) != ' ')
+		ptuname[i] = fat_short2lower_uni(nls_disk, c);
+		ptname[i++] = (c>='A' && c<='Z') ? c+32 : c;
+		if (c != ' ')
 			last = i;
 	}
 	if (!last)
@@ -442,6 +466,13 @@ ParseLong:
 			inum = iunique(sb, MSDOS_ROOT_INO);
 	}
 
+	if (isvfat) {
+		memset(&bufuname[i], 0, sizeof(struct nls_unicode));
+		i = utf8 ? utf8_wcstombs(bufname, (__u16 *) &bufuname, 56)
+			 : uni16_to_x8(bufname, (unsigned char *) &bufuname,
+							uni_xlate, nls_io);
+	}
+
 	if (!long_slots||shortnames) {
 		if (both)
 			bufname[i] = '\0';
@@ -451,7 +482,7 @@ ParseLong:
 		char longname[275];
 		unsigned char long_len = utf8
 			? utf8_wcstombs(longname, (__u16 *) unicode, 275)
-			: uni16_to_x8(longname, unicode, uni_xlate, nls);
+			: uni16_to_x8(longname, unicode, uni_xlate, nls_io);
 		if (both) {
 			memcpy(&longname[long_len+1], bufname, i);
 			long_len += i;

@@ -5551,6 +5551,9 @@ CONFIG_AIRONET4500
 	channel=1..? 	meaningful in adhoc mode
   all other parameters can be set via proc interface
   These parameters belong to .._card module, but alas, they are here
+  if you have problems with screwin up card, both_bap_lock=1 is conservative
+  value (performance hit 15%)
+  for any other configuration options look at ..._proc module
 
 Aironet 4500/4800 ISA/PCI/PNP/365 support
 CONFIG_AIRONET4500_NONCS
@@ -5606,7 +5609,8 @@ CONFIG_AIRONET4500_PROC
 	NOTE: it takes lot of memory. Compile it as module and remove
 	after configuration
 	module: aironet4500_proc
-
+	additional info: look into drivers/net/aironet4500_rids.c
+	this is quite human-readable(no need to know C)
 
 
  
@@ -10174,11 +10178,6 @@ CONFIG_APM
    11) exchange RAM chips 
    12) exchange the motherboard.
 
-  This driver is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  If you want to compile it as a module, say M here and read
-  Documentation/modules.txt. The module will be called apm.o.
-
 Ignore USER SUSPEND
 CONFIG_APM_IGNORE_USER_SUSPEND
   This option will ignore USER SUSPEND requests. On machines with a
@@ -10223,17 +10222,6 @@ CONFIG_APM_DISPLAY_BLANK
   backlight at all, or it might print a lot of errors to the console,
   especially if you are using gpm.
 
-Power off on shutdown 
-CONFIG_APM_POWER_OFF
-  Enable the ability to power off the computer after the Linux kernel
-  is halted. You will need software (e.g., a suitable version of the
-  halt(8) command ("man 8 halt")) to cause the computer to power down.
-  Recent versions of the sysvinit package available from
-  ftp://metalab.unc.edu/pub/Linux/system/daemons/init/ contain support
-  for this ("halt -p" shuts down Linux and powers off the computer, if
-  executed from runlevel 0). As with the other APM options, this
-  option may not work reliably with some APM BIOS implementations.
-
 Ignore multiple suspend/standby events
 CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
   This option is necessary on the IBM Thinkpad 560, but should work on
@@ -10270,6 +10258,20 @@ CONFIG_APM_ALLOW_INTS
   needs to.  Unfortunately, some BIOSes do not - especially those in
   many of the newer IBM Thinkpads.  If you experience hangs when you
   suspend, try setting this to Y.  Otherwise, say N.
+
+Entry point offset fix (some Acer laptops)
+CONFIG_APM_BAD_ENTRY_OFFSET
+  Some implementations of the APM BIOS provide the driver with a bad
+  entry point offset.  If you set this option to Y, then the upper
+  sixteen bits of the offset will be set to zero.  This is usually
+  unnecessary but harmless.  This is required for the Acer Travelmate
+  510DX, Travelmate 510T and Extensa 503T.  For others, say N.
+
+Use real mode APM BIOS call to power off
+CONFIG_APM_REAL_MODE_POWER_OFF
+  Use real mode APM BIOS calls to switch off the computer. This is
+  a work-around for a number of buggy BIOSes. Switch this option on if
+  your computer crashes instead of powering off properly.
 
 Watchdog Timer Support 
 CONFIG_WATCHDOG
@@ -13144,6 +13146,58 @@ CONFIG_KHTTPD
 
   The kHTTPd is experimental. Be careful when using it on a production
   machine. Also note that kHTTPd doesn't support virtual servers yet.
+
+I2C support
+CONFIG_I2C
+  I2C (pronounce: I-square-C) is a slow bus protocol developed by
+  Philips. SMBus, or System Management Bus is a sub-protocol of I2C.
+
+  Both I2C and SMBus are supported here. You will need this for 
+  hardware sensors support, and in the future for Video for Linux
+  support.
+
+  Beside this option, you will also need to select specific drivers 
+  for your bus adapter(s). 
+
+I2C bit-banging interfaces
+CONFIG_I2C_ALGOBIT
+  This allows you to use a range of I2C adapters called bit-banging
+  adapters. Why they are called so is rather technical and uninteresting;
+  but you need to select this if you own one of the adapters listed
+  under it.
+
+Philips style parallel port adapter
+CONFIG_I2C_PHILIPSPAR
+  This supports parallel-port I2C adapters made by Philips. Unless you
+  own such an adapter, you do not need to select this.
+
+ELV adapter
+CONFIG_I2C_ELV
+  This supports parallel-port I2C adapters called ELV. Unless you 
+  own such an adapter, you do not need to select this.
+
+Velleman K9000 adapter
+CONFIG_I2C_VELLEMAN
+  This supports the Velleman K9000 parallel-port I2C adapter. Unless
+  you own such an adapter, you do not need to select this.
+
+I2C PCF 8584 interfaces
+CONFIG_I2C_ALGOPCF
+  This allows you to use a range of I2C adapters called PCF
+  adapters. Why they are called so is rather technical and uninteresting;
+  but you need to select this if you own one of the adapters listed
+  under it.
+
+Elektor ISA card
+CONFIG_I2C_ELEKTOR
+  This supports the PCF8584 ISA bus I2C adapter. Unless you own such
+  an adapter, you do not need to select this.
+
+I2C device interface
+CONFIG_I2C_CHARDEV
+  Here you find the drivers which allow you to use the i2c-* device 
+  files, usually found in the /dev directory on your system. They
+  make it possible to have user-space programs use the I2C bus.
 
 #
 # A couple of things I keep forgetting:

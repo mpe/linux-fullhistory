@@ -10,7 +10,7 @@ PARANOID = -DPARANOID
 CFLAGS	:= $(CFLAGS) $(PARANOID) $(DEBUG) -fno-builtin $(MATH_EMULATION)
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(PARANOID) -c $<
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) $(PARANOID) -c $<
 
 # From 'C' language sources:
 C_OBJS =fpu_entry.o errors.o \

@@ -47,8 +47,7 @@ extern unsigned char us_direction[256/8];
 
 #define US_PR_CB	1		/* Control/Bulk w/o interrupt */
 #define US_PR_CBI	0		/* Control/Bulk/Interrupt */
-#define US_PR_ZIP	0x50		/* bulk only */
-/* #define US_PR_BULK	?? */
+#define US_PR_BULK	0x50		/* bulk only */
 
 /*
  * Bulk only data structures (Zip 100, for example)

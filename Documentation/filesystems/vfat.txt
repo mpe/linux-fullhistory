@@ -52,11 +52,6 @@ check=s|r|n   -- Case sensitivity checking setting.
 
 TODO
 ----------------------------------------------------------------------
-* When only shortnames exist, translate them from the codepage character
-  set to the iocharset.  Currently, translations only occur when longnames
-  exist.  To translate, first convert from codepage to Unicode and then
-  to the output character set.
-
 * Need to get rid of the raw scanning stuff.  Instead, always use
   a get next directory entry approach.  The only thing left that uses
   raw scanning is the directory renaming code.

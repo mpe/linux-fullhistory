@@ -1814,7 +1814,7 @@ int pcmcia_request_irq(client_handle_t handle, irq_req_t *req)
 
 ======================================================================*/
 
-int pcmcia_request_window(client_handle_t *handle, win_req_t *req)
+int pcmcia_request_window(client_handle_t *handle, win_req_t *req, window_handle_t *wh)
 {
     socket_info_t *s;
     window_t *win;
@@ -1876,7 +1876,7 @@ int pcmcia_request_window(client_handle_t *handle, win_req_t *req)
     s->state |= SOCKET_WIN_REQ(w);
 
     /* Return window handle */
-    *handle = (client_handle_t)win;
+    *wh = win;
     
     return CS_SUCCESS;
 } /* request_window */
@@ -2141,7 +2141,14 @@ int CardServices(int func, void *a1, void *a2, void *a3)
     case ModifyWindow:
 	return pcmcia_modify_window(a1, a2); break;
     case OpenMemory:
-	return pcmcia_open_memory(a1, a2);
+/*	return pcmcia_open_memory(a1, a2); */
+    {
+	memory_handle_t m;
+        int ret = pcmcia_open_memory(a1, a2, &m);
+        (memory_handle_t *)a1 = m;
+	return  ret;
+    }
+        break;
     case ParseTuple:
 	return pcmcia_parse_tuple(a1, a2, a3); break;
     case ReadMemory:
@@ -2149,8 +2156,15 @@ int CardServices(int func, void *a1, void *a2, void *a3)
     case RegisterClient:
 	return pcmcia_register_client(a1, a2); break;
     case RegisterEraseQueue:
-	return pcmcia_register_erase_queue(a1, a2); break;
-    case RegisterMTD:
+    {
+	eraseq_handle_t w;
+        int ret = pcmcia_register_erase_queue(a1, a2, &w);
+        (eraseq_handle_t *)a1 = w;
+	return  ret;
+    }
+        break;
+/*	return pcmcia_register_erase_queue(a1, a2); break; */
+
 	return pcmcia_register_mtd(a1, a2); break;
     case ReleaseConfiguration:
 	return pcmcia_release_configuration(a1); break;
@@ -2167,7 +2181,13 @@ int CardServices(int func, void *a1, void *a2, void *a3)
     case RequestIRQ:
 	return pcmcia_request_irq(a1, a2); break;
     case RequestWindow:
-	return pcmcia_request_window(a1, a2); break;
+    {
+	window_handle_t w;
+        int ret = pcmcia_request_window(a1, a2, &w);
+        (window_handle_t *)a1 = w;
+	return  ret;
+    }
+        break;
     case ResetCard:
 	return pcmcia_reset_card(a1, a2); break;
     case SetEventMask:

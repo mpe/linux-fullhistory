@@ -111,7 +111,12 @@ static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
 
 
 	SCSI_LOG_IOCTL(1, printk("Trying ioctl with scsi command %d\n", cmd[0]));
-	SCpnt = scsi_allocate_device(dev, 1);
+	SCpnt = scsi_allocate_device(dev, TRUE, TRUE);
+        if( SCpnt == NULL )
+        {
+                return -EINTR;
+        }
+
 	{
 		DECLARE_MUTEX_LOCKED(sem);
 		SCpnt->request.sem = &sem;
@@ -163,8 +168,6 @@ static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
 	scsi_release_command(SCpnt);
 	SCpnt = NULL;
 
-
-	wake_up(&SDpnt->device_wait);
 	return result;
 }
 
@@ -297,7 +300,11 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 #ifndef DEBUG_NO_CMD
 
 
-	SCpnt = scsi_allocate_device(dev, 1);
+	SCpnt = scsi_allocate_device(dev, TRUE, TRUE);
+        if( SCpnt == NULL )
+        {
+                return -EINTR;
+        }
 
 	{
 		DECLARE_MUTEX_LOCKED(sem);
@@ -328,7 +335,6 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 	result = SCpnt->result;
 
 
-	wake_up(&SCpnt->device->device_wait);
 	SDpnt = SCpnt->device;
 	scsi_release_command(SCpnt);
 	SCpnt = NULL;

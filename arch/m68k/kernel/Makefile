@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c $< -o $*.o
 
 ifndef CONFIG_SUN3
 all: head.o kernel.o

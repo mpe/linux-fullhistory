@@ -55,11 +55,13 @@ check_asm: dummy
 	@echo "#ifndef CONFIG_SMP" >> asm_offsets.h
 	@echo "" >> asm_offsets.h
 	@echo "#include <linux/config.h>" > tmp.c
+	@echo "#undef __SMP__" >> tmp.c
 	@echo "#undef CONFIG_SMP" >> tmp.c
 	@echo "#include <linux/sched.h>" >> tmp.c
-	$(CC) -E tmp.c -o tmp.i
+	$(CC) $(CPPFLAGS) -E tmp.c -o tmp.i
 	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
 	@echo "#include <linux/config.h>" >> check_asm.c
+	@echo "#undef __SMP__" >> check_asm.c
 	@echo "#undef CONFIG_SMP" >> check_asm.c
 	@echo "#include <linux/sched.h>" >> check_asm.c
 	@echo 'struct task_struct _task;' >> check_asm.c
@@ -71,7 +73,7 @@ check_asm: dummy
 	$(SH) ./check_asm.sh thread tmp.i check_asm.c
 	@echo 'return 0; }' >> check_asm.c
 	@rm -f tmp.[ci]
-	$(CC) -o check_asm check_asm.c
+	$(CC) $(CFLAGS) -o check_asm check_asm.c
 	./check_asm >> asm_offsets.h
 	@rm -f check_asm check_asm.c
 	@echo "" >> asm_offsets.h
@@ -81,7 +83,7 @@ check_asm: dummy
 	@echo "#undef CONFIG_SMP" >> tmp.c
 	@echo "#define CONFIG_SMP 1" >> tmp.c
 	@echo "#include <linux/sched.h>" >> tmp.c
-	$(CC) -D__SMP__ -E tmp.c -o tmp.i
+	$(CC) $(CPPFLAGS) -D__SMP__ -E tmp.c -o tmp.i
 	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
 	@echo "#include <linux/config.h>" >> check_asm.c
 	@echo "#undef CONFIG_SMP" >> check_asm.c
@@ -96,7 +98,7 @@ check_asm: dummy
 	$(SH) ./check_asm.sh thread tmp.i check_asm.c
 	@echo 'return 0; }' >> check_asm.c
 	@rm -f tmp.[ci]
-	$(CC) -D__SMP__ -o check_asm check_asm.c
+	$(CC) $(CFLAGS) -D__SMP__ -o check_asm check_asm.c
 	./check_asm >> asm_offsets.h
 	@rm -f check_asm check_asm.c
 	@echo "" >> asm_offsets.h

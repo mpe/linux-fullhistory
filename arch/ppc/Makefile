@@ -20,8 +20,8 @@ endif
 
 ASFLAGS		=
 LINKFLAGS	= -T arch/ppc/vmlinux.lds -Ttext $(KERNELLOAD) -Bstatic
-CFLAGSINC	= -D__KERNEL__ -I$(TOPDIR)/include -D__powerpc__
-CFLAGS		:= $(CFLAGS) -I$(HPATH) -D__powerpc__ -fsigned-char \
+CPPFLAGS	:= $(CPPFLAGS) -D__powerpc__
+CFLAGS		:= $(CFLAGS) -D__powerpc__ -fsigned-char \
 		-msoft-float -pipe -fno-builtin -ffixed-r2 -Wno-uninitialized \
 		-mmultiple -mstring
 CPP		= $(CC) -E $(CFLAGS)

@@ -12,16 +12,10 @@
 # line...
 SHELL  =/bin/bash
 
-CC		:= sparc64-linux-gcc -D__KERNEL__ -I$(TOPDIR)/include
+CC		:= sparc64-linux-gcc
 
-CC_HAS_ARGS := $(shell if echo "$(CC)" | grep '\(__KERNEL__\| 	\)' > /dev/null; then echo y; else echo n; fi)
 IS_EGCS := $(shell if $(CC) -m64 -mcmodel=medlow -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo y; else echo n; fi; )
 NEW_GAS := $(shell if $(LD) --version 2>&1 | grep 'elf64_sparc' > /dev/null; then echo y; else echo n; fi)
-
-ifneq ($(CC_HAS_ARGS),y)
-MAKEOVERRIDES	:= $(shell echo "$(MAKEOVERRIDES)" | sed 's CC=$(CC) CC=$(CC)\\\ -D__KERNEL__\\\ -I$(TOPDIR)/include ')
-override CC	:= $(CC) -D__KERNEL__ -I$(TOPDIR)/include
-endif
 
 ifneq ($(NEW_GAS),y)
 AS		= sparc64-linux-as

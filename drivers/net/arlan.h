@@ -29,7 +29,7 @@
 #include <linux/etherdevice.h>
 
 
-#define DEBUG 1
+//#define ARLAN_DEBUGING 1
 
 #define ARLAN_PROC_INTERFACE
 #define MAX_ARLANS 4 /* not more than 4 ! */
@@ -46,13 +46,14 @@ extern int 	init_arlan_proc(void);
 #endif
 
 extern struct net_device *arlan_device[MAX_ARLANS];
-static int	arlan_debug;
-static char *	siteName;
-static int	arlan_entry_debug;
-static int	arlan_exit_debug;
-static int	arlan_entry_and_exit_debug;
-static int	testMemory;
-static const char* arlan_version;
+extern int	arlan_debug;
+extern char *	siteName;
+extern int	arlan_entry_debug;
+extern int	arlan_exit_debug;
+extern int	arlan_entry_and_exit_debug;
+extern int	testMemory;
+extern const char* arlan_version;
+extern int     arlan_command(struct net_device * dev, int command);
  
 #define SIDUNKNOWN -1
 #define radioNodeIdUNKNOWN -1
@@ -75,7 +76,8 @@ static const char* arlan_version;
 #define IFDEBUG( L ) if ( (L) & arlan_debug ) 
 #define ARLAN_FAKE_HDR_LEN 12 
 
-#ifdef DEBUG
+#ifdef ARLAN_DEBUGING
+	#define DEBUG 1
 	#define ARLAN_ENTRY_EXIT_DEBUGING 1
 	#define ARLAN_DEBUG(a,b) printk(KERN_DEBUG a, b)
 #else
@@ -532,26 +534,27 @@ struct arlan_private {
 
 
 
-#define ARLAN_COMMAND_RX		0x00001
-#define ARLAN_COMMAND_NOOP		0x00002
-#define ARLAN_COMMAND_NOOPINT		0x00004
-#define ARLAN_COMMAND_TX		0x00008
-#define ARLAN_COMMAND_CONF		0x00010
-#define ARLAN_COMMAND_RESET		0x00020
-#define ARLAN_COMMAND_TX_ABORT		0x00040
-#define ARLAN_COMMAND_RX_ABORT		0x00080
-#define ARLAN_COMMAND_POWERDOWN		0x00100
-#define ARLAN_COMMAND_POWERUP		0x00200
-#define ARLAN_COMMAND_SLOW_POLL 	0x00400
-#define ARLAN_COMMAND_ACTIVATE 		0x00800
-#define ARLAN_COMMAND_INT_ACK		0x01000
-#define ARLAN_COMMAND_INT_ENABLE	0x02000
-#define ARLAN_COMMAND_WAIT_NOW		0x04000
-#define ARLAN_COMMAND_LONG_WAIT_NOW	0x08000
-#define ARLAN_COMMAND_STANDBY		0x10000
-#define ARLAN_COMMAND_INT_RACK		0x20000
-#define ARLAN_COMMAND_INT_RENABLE	0x40000
-#define ARLAN_COMMAND_CONF_WAIT		0x80000
+#define ARLAN_COMMAND_RX		0x000001
+#define ARLAN_COMMAND_NOOP		0x000002
+#define ARLAN_COMMAND_NOOPINT		0x000004
+#define ARLAN_COMMAND_TX		0x000008
+#define ARLAN_COMMAND_CONF		0x000010
+#define ARLAN_COMMAND_RESET		0x000020
+#define ARLAN_COMMAND_TX_ABORT		0x000040
+#define ARLAN_COMMAND_RX_ABORT		0x000080
+#define ARLAN_COMMAND_POWERDOWN		0x000100
+#define ARLAN_COMMAND_POWERUP		0x000200
+#define ARLAN_COMMAND_SLOW_POLL 	0x000400
+#define ARLAN_COMMAND_ACTIVATE 		0x000800
+#define ARLAN_COMMAND_INT_ACK		0x001000
+#define ARLAN_COMMAND_INT_ENABLE	0x002000
+#define ARLAN_COMMAND_WAIT_NOW		0x004000
+#define ARLAN_COMMAND_LONG_WAIT_NOW	0x008000
+#define ARLAN_COMMAND_STANDBY		0x010000
+#define ARLAN_COMMAND_INT_RACK		0x020000
+#define ARLAN_COMMAND_INT_RENABLE	0x040000
+#define ARLAN_COMMAND_CONF_WAIT		0x080000
+#define ARLAN_COMMAND_TBUSY_CLEAR	0x100000
 #define ARLAN_COMMAND_CLEAN_AND_CONF	(ARLAN_COMMAND_TX_ABORT\
 					| ARLAN_COMMAND_RX_ABORT\
 					| ARLAN_COMMAND_CONF)

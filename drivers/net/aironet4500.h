@@ -2,7 +2,7 @@
  *	 Aironet 4500 Pcmcia driver
  *
  *		Elmer Joandi, Januar 1999
- *	Copyright Elmer Joandi, all rights restricted
+ *	Copyright:	GPL
  *	
  *
  *	Revision 0.1 ,started  30.12.1998
@@ -15,12 +15,14 @@
 #define	AIRONET4500_H
 // redefined to avoid PCMCIA includes
 
-#include <linux/version.h>
-#include <linux/module.h>
-#include <linux/kernel.h>
-
-#if (LINUX_VERSION_CODE < 0x2030e)
+ #include <linux/version.h>
+/*#include <linux/module.h>
+ #include <linux/kernel.h>
+*/
+#if LINUX_VERSION_CODE < 0x2030E
 #define NET_DEVICE device 
+#error bad kernel version code
+
 #else 
 #define NET_DEVICE net_device
 #endif                         
@@ -28,12 +30,13 @@
 #if LINUX_VERSION_CODE < 0x20300
 #define init_MUTEX(a)  *(a) = MUTEX;
 #endif
-
+/*
 #include <linux/types.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/delay.h>
 #include <linux/time.h>
+*/
 #include <linux/802_11.h>
 
 //damn idiot PCMCIA stuff
@@ -53,40 +56,11 @@ typedef struct pcmcia_junkdev_node_t dev_node_t;
 
 
 
-#if LINUX_VERSION_CODE <= 0x20100
-
-typedef struct  { volatile int lock ;} my_spinlock_t;
-
-#define my_spin_lock_irqsave(a,b) {\
-	save_flags(b);\
-	cli();\
-	(a)->lock++;while(0);\
-	if ((a)->lock != 1 )\
-		printk("awc_spinlock high at locking \n");\
-}
-
-#define my_spin_unlock_irqrestore(a,b) {\
-	cli(); (a)->lock--;while(0);\
-	if ((a)->lock != 0 )\
-		printk("awc_spinlock !=0  at unlocking \n");\
-	restore_flags(b);\
-}
-	
-
-#else
-#if LINUX_VERSION_CODE < 0x20300
-#include <asm/spinlock.h>
-#else
 #include <linux/spinlock.h>
-#endif
-#ifndef __SMP__ 
-// #warning non-SMP 2.2 kernel
-#endif
 typedef spinlock_t 			my_spinlock_t	;
+#define my_spin_lock_init(a)		spin_lock_init(a)
 #define my_spin_lock_irqsave(a,b) 	spin_lock_irqsave(a,b)
 #define my_spin_unlock_irqrestore(a,b) 	spin_unlock_irqrestore(a,b)
-
-#endif //kernel version
 
 
 #if LINUX_VERSION_CODE <= 0x20100
@@ -193,11 +167,17 @@ struct awc_command {
 /*	if (!in_interrupt())\
 	printk("bap lock under cli but not in int\n");\
 */
+
+#define AWC_LOCK_COMMAND_ISSUING(a) my_spin_lock_irqsave(&a->command_issuing_spinlock,a->command_issuing_spinlock_flags);
+#define AWC_UNLOCK_COMMAND_ISSUING(a) my_spin_unlock_irqrestore(&a->command_issuing_spinlock,a->command_issuing_spinlock_flags);
+
 #define AWC_BAP_LOCK_UNDER_CLI_REAL(cmd) \
  	if (!cmd.priv) {\
 		printk(KERN_CRIT "awc4500: no priv present in command !");\
 	}\
 	cmd.bap = &(cmd.priv->bap1);\
+	if (both_bap_lock)\
+	my_spin_lock_irqsave(&cmd.priv->both_bap_spinlock,cmd.priv->both_bap_spinlock_flags);\
 	if (cmd.bap){\
 		my_spin_lock_irqsave(&(cmd.bap->spinlock),cmd.bap->flags);\
 		cmd.bap->lock++;\
@@ -213,6 +193,8 @@ struct awc_command {
 		printk(KERN_CRIT "awc4500: no priv present in command,lockup follows !");\
 	}\
 	cmd.bap = &(cmd.priv->bap0);\
+	if (both_bap_lock)\
+		my_spin_lock_irqsave(&cmd.priv->both_bap_spinlock,cmd.priv->both_bap_spinlock_flags);\
 	my_spin_lock_irqsave(&(cmd.bap->spinlock),cmd.bap->flags);\
 	DOWN(&(cmd.priv->bap0.sem));\
 	cmd.bap->lock++;\
@@ -223,6 +205,8 @@ struct awc_command {
 
 #define AWC_BAP_LOCK_NOT_CLI_CLI_REAL(cmd) {\
 	cmd.bap = &(cmd.priv->bap0);\
+	if (both_bap_lock)\
+		my_spin_lock_irqsave(&cmd.priv->both_bap_spinlock,cmd.priv->both_bap_spinlock_flags);\
 	my_spin_lock_irqsave(&(cmd.bap->spinlock),cmd.bap->flags);\
 	cmd.bap->lock++;\
 	if (cmd.bap->lock > 1)\
@@ -292,6 +276,8 @@ struct awc_command {
 			 my_spin_unlock_irqrestore(&(cmd.bap->spinlock),cmd.bap->flags);\
 		}\
 	}\
+	if (both_bap_lock)\
+		my_spin_unlock_irqrestore(&cmd.priv->both_bap_spinlock,cmd.priv->both_bap_spinlock_flags);\
 }
 
 #define AWC_RELEASE_COMMAND(com) {\
@@ -475,7 +461,7 @@ struct awc_fid_queue {
 	struct awc_fid * head;
 	struct awc_fid * tail;
 	int	size;
-	my_spinlock_t lock;
+	my_spinlock_t spinlock;
 };
 
 
@@ -483,16 +469,13 @@ extern inline void
 awc_fid_queue_init(struct awc_fid_queue * queue){
 
 	unsigned long flags;
-#ifdef __SMP__
-	queue->lock.lock = 0;	
-#endif
 	memset(queue,0, sizeof(struct awc_fid_queue));	
-	
-	my_spin_lock_irqsave(&queue->lock,flags);
+	my_spin_lock_init(&queue->spinlock);
+	my_spin_lock_irqsave(&queue->spinlock,flags);
 	queue->head = NULL;
 	queue->tail = NULL;
 	queue->size = 0;
-	my_spin_unlock_irqrestore(&queue->lock,flags);	
+	my_spin_unlock_irqrestore(&queue->spinlock,flags);	
 };
 
 extern inline void
@@ -501,7 +484,7 @@ awc_fid_queue_push_tail(	struct awc_fid_queue * 	queue,
 
 	unsigned long flags;
 
-	my_spin_lock_irqsave(&queue->lock,flags);	
+	my_spin_lock_irqsave(&queue->spinlock,flags);	
 	
 	fid->prev = queue->tail;
 	fid->next = NULL;
@@ -515,7 +498,7 @@ awc_fid_queue_push_tail(	struct awc_fid_queue * 	queue,
 		queue->head = fid;
 	queue->size++;
 
-	my_spin_unlock_irqrestore(&queue->lock,flags);
+	my_spin_unlock_irqrestore(&queue->spinlock,flags);
 		
 };
 
@@ -526,7 +509,7 @@ awc_fid_queue_push_head(	struct awc_fid_queue * 	queue,
 
 	unsigned long flags;
 
-	my_spin_lock_irqsave(&queue->lock,flags);	
+	my_spin_lock_irqsave(&queue->spinlock,flags);	
 	
 	fid->prev = NULL;
 	fid->next = queue->head;
@@ -541,7 +524,7 @@ awc_fid_queue_push_head(	struct awc_fid_queue * 	queue,
 	queue->size++;
 	
 	
-	my_spin_unlock_irqrestore(&queue->lock,flags);
+	my_spin_unlock_irqrestore(&queue->spinlock,flags);
 	
 };
 
@@ -579,11 +562,11 @@ extern inline void
 awc_fid_queue_remove(		struct awc_fid_queue * 	queue,
 				struct awc_fid *	fid){
 	unsigned long flags;
-	my_spin_lock_irqsave(&queue->lock,flags);	
+	my_spin_lock_irqsave(&queue->spinlock,flags);	
 	
 	awc_fid_queue_rm(queue,fid);
 	
-	my_spin_unlock_irqrestore(&queue->lock,flags);
+	my_spin_unlock_irqrestore(&queue->spinlock,flags);
 	
 };
 
@@ -595,14 +578,14 @@ awc_fid_queue_pop_head(		struct awc_fid_queue * 	queue){
 	unsigned long flags;
 	struct awc_fid * fid;
 	
-	my_spin_lock_irqsave(&queue->lock,flags);	
+	my_spin_lock_irqsave(&queue->spinlock,flags);	
 
 	fid = queue->head;
 	if (fid)
 		awc_fid_queue_rm(queue,fid);
 		
 	
-	my_spin_unlock_irqrestore(&queue->lock,flags);
+	my_spin_unlock_irqrestore(&queue->spinlock,flags);
 	
 	return fid;
 };
@@ -616,13 +599,13 @@ awc_fid_queue_pop_tail(		struct awc_fid_queue * 	queue){
 	unsigned long flags;
 	struct awc_fid * fid;
 	
-	my_spin_lock_irqsave(&queue->lock,flags);	
+	my_spin_lock_irqsave(&queue->spinlock,flags);	
 
 	fid = queue->tail;
 	if (fid)
 			awc_fid_queue_rm(queue,fid);
 	
-	my_spin_unlock_irqrestore(&queue->lock,flags);
+	my_spin_unlock_irqrestore(&queue->spinlock,flags);
 	
 	return fid;
 };
@@ -630,7 +613,7 @@ awc_fid_queue_pop_tail(		struct awc_fid_queue * 	queue){
 
 
 #define AWC_TX_HEAD_SIZE		0x44
-#define AWC_TX_ALLOC_SMALL_SIZE 	150
+#define AWC_TX_ALLOC_SMALL_SIZE 	200
 #define AWC_RX_BUFFS			50
 
 
@@ -1522,7 +1505,13 @@ struct awc_private {
 	volatile int		interrupt_count;
 	
 	// Command serialize stuff
-        struct semaphore 	command_semaphore;
+//changed to spinlock        struct semaphore 	command_semaphore;
+	my_spinlock_t		both_bap_spinlock;
+	unsigned long		both_bap_spinlock_flags;
+	my_spinlock_t		bap_setup_spinlock;
+	unsigned long		bap_setup_spinlock_flags;
+	my_spinlock_t		command_issuing_spinlock;
+	unsigned long		command_issuing_spinlock_flags;
         volatile int		unlock_command_postponed;
         struct awc_command	cmd;
         long long		async_command_start;
@@ -1607,6 +1596,8 @@ extern int bap_sleep_after_setup ;
 extern int sleep_before_command  ;
 extern int bap_sleep_before_write;
 extern int sleep_in_command    ;
+extern int both_bap_lock;
+extern int bap_setup_spinlock;
 extern int tx_queue_len ;
 extern int tx_rate;
 extern int awc_full_stats;
@@ -1614,6 +1605,7 @@ extern int awc_full_stats;
 #define MAX_AWCS	4
 extern struct NET_DEVICE * aironet4500_devices[MAX_AWCS];
 
+#define AWC_DEBUG 1
 
 #ifdef AWC_DEBUG
 	#define DEBUG(a,args...) if (awc_debug & a) printk( args)

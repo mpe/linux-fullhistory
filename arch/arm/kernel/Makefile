@@ -75,7 +75,7 @@ else
 endif
 
 $(HEAD_OBJ): $(HEAD_OBJ:.o=.S)
-	$(CC) -D__ASSEMBLY__ -DTEXTADDR=$(TEXTADDR) -traditional -c $(HEAD_OBJ:.o=.S) -o $@
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -DTEXTADDR=$(TEXTADDR) -traditional -c $(HEAD_OBJ:.o=.S) -o $@
 
 include $(TOPDIR)/Rules.make
 

@@ -129,6 +129,8 @@ if [ "$CONFIG_APM" != "n" ]; then
    bool '  Ignore multiple suspend/resume cycles' CONFIG_APM_IGNORE_SUSPEND_BOUNCE
    bool '  RTC stores time in GMT' CONFIG_APM_RTC_IS_GMT
    bool '  Allow interrupts during APM BIOS calls' CONFIG_APM_ALLOW_INTS
+   bool '  Entry point offset fix (some Acer laptops)' CONFIG_APM_BAD_ENTRY_OFFSET
+   bool '  Use real mode APM BIOS call to power off' CONFIG_APM_REAL_MODE_POWER_OFF
 fi
 
 endmenu

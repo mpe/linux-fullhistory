@@ -11,6 +11,7 @@ The format of this option is:
 	device:		tty0 for the foreground virtual console
 			ttyX for any other virtual console
 			ttySx for a serial port
+			lp0 for the first parallel port
 
 	options:	depend on the driver. For the serial port this
 			defines the baudrate/parity/bits of the port,

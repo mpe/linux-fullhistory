@@ -108,7 +108,6 @@ int scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason)
 			}
 		}
 		host->host_blocked = TRUE;
-		cmd->host_wait = TRUE;
 	} else {
 		/*
 		 * Protect against race conditions.  If the device isn't busy,
@@ -124,7 +123,6 @@ int scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason)
 			}
 		}
 		cmd->device->device_blocked = TRUE;
-		cmd->device_wait = TRUE;
 	}
 
 	/*

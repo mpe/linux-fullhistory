@@ -11,9 +11,9 @@
 LINKFLAGS = -static -T bootloader.lds #-N -relax
 
 .S.s:
-	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.o $<
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -E -o $*.o $<
 .S.o:
-	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
 
 OBJECTS = head.o main.o
 BPOBJECTS = head.o bootp.o

@@ -25,11 +25,6 @@
 #include <asm/types.h>
 #include <linux/netdevice.h>
 
-#if LINUX_VERSION_CODE <= 0x20100
-#define net_device_stats	enet_statistics
-#endif
-
-
 
 
 	/*****************************************************************

@@ -407,6 +407,7 @@ extern void recount_segments(Scsi_Cmnd * SCpnt);
  */
 extern void initialize_merge_fn(Scsi_Device * SDpnt);
 extern void scsi_request_fn(request_queue_t * q);
+extern void scsi_queue_next_request(request_queue_t * q, Scsi_Cmnd * SCpnt);
 
 extern int scsi_insert_special_cmd(Scsi_Cmnd * SCpnt, int);
 extern int scsi_dispatch_cmd(Scsi_Cmnd * SCpnt);
@@ -427,7 +428,7 @@ extern void scsi_wait_cmd(Scsi_Cmnd *, const void *cmnd,
 			  void (*done) (struct scsi_cmnd *),
 			  int timeout, int retries);
 
-extern Scsi_Cmnd *scsi_allocate_device(Scsi_Device *, int);
+extern Scsi_Cmnd *scsi_allocate_device(Scsi_Device *, int, int);
 
 extern Scsi_Cmnd *scsi_request_queueable(struct request *, Scsi_Device *);
 
@@ -456,7 +457,7 @@ struct scsi_device {
 	 */
 	struct scsi_device *next;	/* Used for linked list */
 	struct scsi_device *prev;	/* Used for linked list */
-	wait_queue_head_t device_wait;	/* Used to wait if
+	wait_queue_head_t   scpnt_wait;	/* Used to wait if
 					   device is busy */
 	struct Scsi_Host *host;
 	request_queue_t request_queue;
@@ -636,16 +637,6 @@ struct scsi_cmnd {
 	 * timeout handler is already running.
 	 */
 	unsigned done_late:1;
-
-	/*
-	 * These two flags are used to track commands that are in the
-	 * mid-level queue.  The idea is that a command can be there for
-	 * one of two reasons - either the host is busy or the device is
-	 * busy.  Thus when a command on the host finishes, we only try
-	 * and requeue commands that we might expect to be queueable.
-	 */
-	unsigned host_wait:1;
-	unsigned device_wait:1;
 
 	/* Low-level done function - can be used by low-level driver to point
 	 *        to completion function.  Not used by mid/upper level code. */

@@ -679,7 +679,7 @@ include $(TOPDIR)/Rules.make
 
 53c8xx_d.h: 53c7,8xx.scr script_asm.pl
 	ln -sf 53c7,8xx.scr fake8.c
-	$(CPP) -traditional -DCHIP=810 fake8.c | grep -v '^#' | perl script_asm.pl 
+	$(CPP) $(CPPFLAGS) -traditional -DCHIP=810 fake8.c | grep -v '^#' | perl script_asm.pl 
 	mv script.h 53c8xx_d.h
 	mv scriptu.h 53c8xx_u.h
 	rm fake8.c
@@ -688,7 +688,7 @@ include $(TOPDIR)/Rules.make
 
 53c7xx_d.h: 53c7xx.scr script_asm.pl
 	ln -sf 53c7xx.scr fake7.c
-	$(CPP) -traditional -DCHIP=710 fake7.c | grep -v '^#' | perl -s script_asm.pl -ncr7x0_family
+	$(CPP) $(CPPFLAGS) -traditional -DCHIP=710 fake7.c | grep -v '^#' | perl -s script_asm.pl -ncr7x0_family
 	mv script.h 53c7xx_d.h
 	mv scriptu.h 53c7xx_u.h
 	rm fake7.c
@@ -699,7 +699,7 @@ include $(TOPDIR)/Rules.make
 
 sim710_d.h: sim710.scr script_asm.pl
 	ln -sf sim710.scr fake7.c
-	$(CPP) -traditional -DCHIP=710 fake7.c | grep -v '^#' | perl -s script_asm.pl -ncr7x0_family
+	$(CPP) $(CPPFLAGS) -traditional -DCHIP=710 fake7.c | grep -v '^#' | perl -s script_asm.pl -ncr7x0_family
 	mv script.h sim710_d.h
 	mv scriptu.h sim710_u.h
 	rm fake7.c

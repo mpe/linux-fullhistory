@@ -65,6 +65,7 @@
 #include <scsi/scsi_ioctl.h>
 #include <scsi/sg.h>
 
+static spinlock_t sg_request_lock = SPIN_LOCK_UNLOCKED;
 
 int sg_big_buff = SG_DEF_RESERVED_SIZE; /* sg_big_buff is ro through sysctl */
 /* N.B. This global is here to keep existing software happy. It now holds
@@ -432,9 +433,13 @@ static ssize_t sg_write(struct file * filp, const char * buf,
     }
 /*  SCSI_LOG_TIMEOUT(7, printk("sg_write: allocating device\n")); */
     if (! (SCpnt = scsi_allocate_device(sdp->device, 
-                                        !(filp->f_flags & O_NONBLOCK)))) 
-    {
+                                        !(filp->f_flags & O_NONBLOCK), 
+					TRUE))) {
         sg_finish_rem_req(srp, NULL, 0);
+        if( signal_pending(current) )
+        {
+                return -EINTR;
+        }
         return -EAGAIN;   /* No available command blocks at the moment */
     }
 /*  SCSI_LOG_TIMEOUT(7, printk("sg_write: device allocated\n")); */
@@ -1043,7 +1048,7 @@ static void sg_detach(Scsi_Device * scsidp)
             continue;   /* dirty but lowers nesting */
         if (sdp->headfp) {
 /* Need to stop sg_command_done() playing with this list during this loop */
-            spin_lock_irqsave(&io_request_lock, flags);
+            spin_lock_irqsave(&sg_request_lock, flags);
             sfp = sdp->headfp;
             while (sfp) {
                 srp = sfp->headrp;
@@ -1054,7 +1059,7 @@ static void sg_detach(Scsi_Device * scsidp)
                 }
                 sfp = sfp->nextfp;
             }
-            spin_unlock_irqrestore(&io_request_lock, flags);
+            spin_unlock_irqrestore(&sg_request_lock, flags);
     SCSI_LOG_TIMEOUT(3, printk("sg_detach: dev=%d, dirty, sleep(3)\n", k));
             scsi_sleep(3); /* sleep 3 jiffies, hoping for timeout to go off */
         }
@@ -1114,9 +1119,9 @@ static void sg_shorten_timeout(Scsi_Cmnd * scpnt)
         scsi_add_timer(scpnt, scpnt->timeout_per_command,
                        scsi_old_times_out);
 #else
-    spin_unlock_irq(&io_request_lock);
+    spin_unlock_irq(&sg_request_lock);
     scsi_sleep(HZ); /* just sleep 1 second and hope ... */
-    spin_lock_irq(&io_request_lock);
+    spin_lock_irq(&sg_request_lock);
 #endif
 }
 

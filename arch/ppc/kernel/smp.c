@@ -108,34 +108,8 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 	}
 }
 
-/*
- * Dirty hack to get smp message passing working.
- *
- * As it is now, if we're sending two message at the same time
- * we have race conditions.  The PowerSurge doesn't easily
- * allow us to send IPI messages so we put the messages in
- * smp_message[].
- *
- * This is because don't have several IPI's on the PowerSurge even though
- * we do on the chrp.  It would be nice to use the actual IPI's on the chrp
- * rather than this but having two methods of doing IPI isn't a good idea
- * right now.
- *  -- Cort
- */
-int smp_message[NR_CPUS];
-void smp_message_recv(void)
+void smp_message_recv(int msg)
 {
-	int msg = smp_message[smp_processor_id()];
-
-	if ( _machine == _MACH_Pmac )
-	{
-		/* clear interrupt */
-		out_be32(PSURGE_INTR, ~0);
-	}
-	
-	/* make sure msg is for us */
-	if ( msg == -1 ) return;
-
 	ipi_count++;
 	
 	switch( msg )
@@ -147,15 +121,54 @@ void smp_message_recv(void)
 	case MSG_RESCHEDULE: 
 		current->need_resched = 1;
 		break;
-	case 0xf0f0: /* syncing time bases - just return */
+	case MSG_INVALIDATE_TLB:
+		_tlbia();
+	case 0xf0f0: /* pmac syncing time bases - just return */
 		break;
 	default:
 		printk("SMP %d: smp_message_recv(): unknown msg %d\n",
 		       smp_processor_id(), msg);
 		break;
 	}
-	/* reset message */
-	smp_message[smp_processor_id()] = -1;
+}
+
+/*
+ * As it is now, if we're sending two message at the same time
+ * we have race conditions on Pmac.  The PowerSurge doesn't easily
+ * allow us to send IPI messages so we put the messages in
+ * smp_message[].
+ *
+ * This is because don't have several IPI's on the PowerSurge even though
+ * we do on the chrp.  It would be nice to use actual IPI's such as with openpic
+ * rather than this.
+ *  -- Cort
+ */
+int pmac_smp_message[NR_CPUS];
+void pmac_smp_message_recv(void)
+{
+	int msg = pmac_smp_message[smp_processor_id()];
+	
+	/* clear interrupt */
+	out_be32(PSURGE_INTR, ~0);
+	
+	/* make sure msg is for us */
+	if ( msg == -1 ) return;
+
+	smp_message_recv(msg);
+	
+ 	/* reset message */
+	pmac_smp_message[smp_processor_id()] = -1;
+}
+
+/*
+ * 750's don't broadcast tlb invalidates so
+ * we have to emulate that behavior.
+ *   -- Cort
+ */
+void smp_send_tlb_invalidate(int cpu)
+{
+	if ( (_get_PVR()>>16) == 8 )
+		smp_message_pass(MSG_ALL_BUT_SELF, MSG_INVALIDATE_TLB, 0, 0);
 }
 
 void smp_send_reschedule(int cpu)
@@ -169,6 +182,8 @@ void smp_send_reschedule(int cpu)
 	 * as the timer).
 	 *  -- Cort
 	 */
+	/* This is only used if `cpu' is running an idle task,
+	   so it will reschedule itself anyway... */
 	smp_message_pass(cpu, MSG_RESCHEDULE, 0, 0);
 }
 
@@ -177,38 +192,39 @@ void smp_send_stop(void)
 	smp_message_pass(MSG_ALL_BUT_SELF, MSG_STOP_CPU, 0, 0);
 }
 
-spinlock_t mesg_pass_lock = SPIN_LOCK_UNLOCKED;
 void smp_message_pass(int target, int msg, unsigned long data, int wait)
 {
 	int i;
-	if ( !(_machine & (_MACH_Pmac|_MACH_chrp|_MACH_gemini)) )
+	
+	if ( !(_machine & (_MACH_Pmac|_MACH_chrp|_MACH_prep|_MACH_gemini)) )
 		return;
 
-	spin_lock(&mesg_pass_lock);
-
-	/*
-	 * We assume here that the msg is not -1.  If it is,
-	 * the recipient won't know the message was destined
-	 * for it. -- Cort
-	 */
-	
-	switch( target )
-	{
-	case MSG_ALL:
-		smp_message[smp_processor_id()] = msg;
-		/* fall through */
-	case MSG_ALL_BUT_SELF:
-		for ( i = 0 ; i < smp_num_cpus ; i++ )
-			if ( i != smp_processor_id () )
-				smp_message[i] = msg;
-		break;
-	default:
-		smp_message[target] = msg;
-		break;
-	}
-	
-	if ( _machine == _MACH_Pmac )
-	{
+	switch (_machine) {
+	case _MACH_Pmac:
+		/*
+		 * IPI's on the Pmac are a hack but without reasonable
+		 * IPI hardware SMP on Pmac is a hack.
+		 *
+		 * We assume here that the msg is not -1.  If it is,
+		 * the recipient won't know the message was destined
+		 * for it. -- Cort
+		 */
+		for ( i = 0; i <= smp_num_cpus ; i++ )
+			pmac_smp_message[i] = -1;
+		switch( target )
+		{
+		case MSG_ALL:
+			pmac_smp_message[smp_processor_id()] = msg;
+			/* fall through */
+		case MSG_ALL_BUT_SELF:
+			for ( i = 0 ; i < smp_num_cpus ; i++ )
+				if ( i != smp_processor_id () )
+					pmac_smp_message[i] = msg;
+			break;
+		default:
+			pmac_smp_message[target] = msg;
+			break;
+		}
 		/* interrupt secondary processor */
 		out_be32(PSURGE_INTR, ~0);
 		out_be32(PSURGE_INTR, 0);
@@ -218,40 +234,28 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 		 */
 		/* interrupt primary */
 		/**(volatile unsigned long *)(0xf3019000);*/
-	}
-	
-	if ( _machine == _MACH_chrp )
-	{
-		/*
-		 * There has to be some way of doing this better -
-		 * perhaps a send-to-all or send-to-all-but-self
-		 * in the openpic.  This gets us going for now, though.
-		 * -- Cort
-		 */
+		break;
+	case _MACH_chrp:
+	case _MACH_prep:
+	case _MACH_gemini:
+		/* make sure we're sending something that translates to an IPI */
+		if ( msg > 0x3 )
+			break;
 		switch ( target )
 		{
 		case MSG_ALL:
-			openpic_cause_IPI(smp_processor_id(), 0, 0x0 );
-			openpic_cause_IPI(smp_processor_id(), 0, 0xffffffff );
+			openpic_cause_IPI(smp_processor_id(), msg, 0xffffffff);
 			break;
 		case MSG_ALL_BUT_SELF:
-			for ( i = 0 ; i < smp_num_cpus ; i++ )
-				if ( i != smp_processor_id () )
-				{
-					openpic_cause_IPI(smp_processor_id(), 0,
-							  0x0 );
-					openpic_cause_IPI(smp_processor_id(), 0,
+			openpic_cause_IPI(smp_processor_id(), msg,
 					  0xffffffff & ~(1 << smp_processor_id()));
-				}
 			break;
 		default:
-			openpic_cause_IPI(smp_processor_id(), 0, 0x0 );
-			openpic_cause_IPI(target, 0, 1U << target );
+			openpic_cause_IPI(smp_processor_id(), msg, 1<<target);
 			break;
 		}
+		break;
 	}
-	
-	spin_unlock(&mesg_pass_lock);
 }
 
 void __init smp_boot_cpus(void)
@@ -387,6 +391,9 @@ void __init smp_boot_cpus(void)
 		}
 	}
 	
+	if ( _machine & (_MACH_gemini|_MACH_chrp|_MACH_prep) )
+		do_openpic_setup_cpu();
+	
 	if ( _machine == _MACH_Pmac )
 	{
 		/* reset the entry point so if we get another intr we won't
@@ -432,6 +439,13 @@ void __init smp_callin(void)
 	current->mm->mmap->vm_end = init_mm.mmap->vm_end;
 #endif
 	cpu_callin_map[current->processor] = 1;
+	/*
+	 * Each processor has to do this and this is the best
+	 * place to stick it for now.
+	 *  -- Cort
+	 */
+	if ( _machine & (_MACH_gemini|_MACH_chrp|_MACH_prep) )
+		do_openpic_setup_cpu();
 	while(!smp_commenced)
 		barrier();
 	__sti();

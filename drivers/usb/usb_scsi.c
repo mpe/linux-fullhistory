@@ -242,10 +242,13 @@ static int pop_CBI_irq(int state, void *buffer, int len, void *dev_id)
 {
 	struct us_data *us = (struct us_data *)dev_id;
 
+	US_DEBUGP("pop_CBI_irq() called!!\n");
+
 	if (state != USB_ST_REMOVED) {
 		us->ip_data = le16_to_cpup((__u16 *)buffer);
-		/* US_DEBUGP("Interrupt Status %x\n", us->ip_data); */
+		US_DEBUGP("Interrupt Status %x\n", us->ip_data);
 	}
+  
 	if (us->ip_wanted) {
 		us->ip_wanted = 0;
 		wake_up(&us->ip_waitq);
@@ -289,13 +292,13 @@ static int pop_CB_command(Scsi_Cmnd *srb)
 	int retry = 5;
 	int done_start = 0;
 
+	/* we'll try this up to 5 times? */
 	while (retry--) {
-
 		if (us->flags & US_FL_FIXED_COMMAND) {
 			memset(cmd, 0, us->fixedlength);
-
+      
 			/* fix some commands */
-
+      
 			switch (srb->cmnd[0]) {
 			case WRITE_6:
 			case READ_6:
@@ -321,37 +324,52 @@ static int pop_CB_command(Scsi_Cmnd *srb)
 				us->mode_xlate = 0;
 				memcpy(cmd, srb->cmnd, srb->cmd_len);
 				break;
-			}
+			} /* switch */
+
 			result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0),
 						 US_CBI_ADSC, USB_TYPE_CLASS | USB_RT_INTERFACE,
 						 0, us->ifnum,
 						 cmd, us->fixedlength, HZ*5);
-			if (!done_start && (us->subclass == US_SC_UFI /*|| us->subclass == US_SC_8070*/)
-			    && cmd[0] == TEST_UNIT_READY && result) {
+			US_DEBUGP("First usb_control_msg returns %d\n", result);
+
+			/* For UFI, if this is the first time we've sent this TEST_UNIT_READY 
+			 * command, we can try again
+			 */
+			if (!done_start && (us->subclass == US_SC_UFI)
+			    && (cmd[0] == TEST_UNIT_READY) && (result < 0)) {
+
 				/* as per spec try a start command, wait and retry */
+				wait_ms(100);
 
 				done_start++;
 				memset(cmd, 0, sizeof(cmd));
 				cmd[0] = START_STOP;
 				cmd[4] = 1;		/* start */
+
 				result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0),
-							 US_CBI_ADSC, USB_TYPE_CLASS | USB_RT_INTERFACE,
+							 US_CBI_ADSC, 
+							 USB_TYPE_CLASS | USB_RT_INTERFACE,
 							 0, us->ifnum,
 							 cmd, us->fixedlength, HZ*5);
-				wait_ms(100);
+				US_DEBUGP("Next usb_control_msg returns %d\n", result);
+
+				/* allow another retry */
 				retry++;
 				continue;
 			}
-		} else {
+		} else { /* !US_FL_FIXED_COMMAND */
 			result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0),
 						 US_CBI_ADSC, USB_TYPE_CLASS | USB_RT_INTERFACE,
 						 0, us->ifnum,
 						 srb->cmnd, srb->cmd_len, HZ*5);
 		}
+    
+		/* return an answer if we've got one */
 		if (/*result != USB_ST_STALL &&*/ result != USB_ST_TIMEOUT)
 			return result;
 	}
 
+	/* all done -- return our status */
 	return result;
 }
 
@@ -396,20 +414,14 @@ static int pop_CB_status(Scsi_Cmnd *srb)
 
 		/* add interrupt transfer, marked for removal */
 		us->ip_wanted = 1;
-		us->irqpipe = usb_rcvintpipe(us->pusb_dev, us->ep_int);
-		result = usb_request_irq(us->pusb_dev, us->irqpipe, pop_CBI_irq,
-					 IRQ_PERIOD, (void *)us, &us->irq_handle);
-		if (result) {
-			US_DEBUGP("usb_request_irq failed (0x%x), No interrupt for CBI\n",
-				  result);
-			return DID_ABORT << 16;
-		}
 
+		/* go to sleep until we get this interrup */
 		sleep_on(&us->ip_waitq);
-#ifdef REWRITE_PROJECT
-		usb_release_irq(us->pusb_dev, us->irq_handle, us->irqpipe);
-		us->irq_handle = NULL;
-#endif
+
+		/* NO! We don't release this IRQ.  We just re-use the handler 
+		   usb_release_irq(us->pusb_dev, us->irq_handle, us->irqpipe);
+		   us->irq_handle = NULL;
+		*/
 
 		if (us->ip_wanted) {
 			US_DEBUGP("Did not get interrupt on CBI\n");
@@ -445,10 +457,12 @@ static int pop_CBI(Scsi_Cmnd *srb)
 {
 	int result;
 
-	/* run the command */
+	US_DEBUGP("CBI gets a command:\n");
+	us_show_command(srb);
 
-	if ((result = pop_CB_command(srb))) {
-		US_DEBUGP("CBI command %x\n", result);
+	/* run the command */
+	if ((result = pop_CB_command(srb)) < 0) {
+		US_DEBUGP("Call to pop_CB_command returned %d\n", result);
 		if (result == USB_ST_STALL || result == USB_ST_TIMEOUT) {
 			return (DID_OK << 16) | 2;
 		}
@@ -456,11 +470,12 @@ static int pop_CBI(Scsi_Cmnd *srb)
 	}
 
 	/* transfer the data */
-
 	if (us_transfer_length(srb)) {
 		result = us_transfer(srb, US_DIRECTION(srb->cmnd[0]));
-		if (result && result != USB_ST_DATAUNDERRUN && result != USB_ST_STALL) {
-			US_DEBUGP("CBI transfer %x\n", result);
+		if ((result < 0) && 
+		    (result != USB_ST_DATAUNDERRUN) && 
+		    (result != USB_ST_STALL)) {
+			US_DEBUGP("CBI attempted to transfer data, result is %x\n", result);
 			return DID_ERROR << 16;
 		}
 #if 0
@@ -625,7 +640,8 @@ static int us_detect(struct SHT *sht)
 
 	/* odd... didn't register properly.  Abort and free pointers */
 	kfree(sht->proc_name);
-	sht->proc_name = sht->name = NULL;
+	sht->proc_name = NULL;
+	sht->name = NULL;
 	return 0;
 }
 
@@ -702,55 +718,80 @@ static int us_host_reset( Scsi_Cmnd *srb )
 	return 0;
 }
 
-#undef SPRINTF
-#define SPRINTF(args...) { if (pos < (buffer + length)) pos += sprintf (pos, ## args); }
+/***********************************************************************
+ * /proc/scsi/ functions
+ ***********************************************************************/
 
-int usb_scsi_proc_info (char *buffer, char **start, off_t offset, int length, int hostno, int inout)
+/* we use this macro to help us write into the buffer */
+#undef SPRINTF
+#define SPRINTF(args...) do { if (pos < (buffer + length)) pos += sprintf (pos, ## args); } while (0)
+
+int usb_scsi_proc_info (char *buffer, char **start, off_t offset, 
+			int length, int hostno, int inout)
 {
 	struct us_data *us = us_list;
 	char *pos = buffer;
-	char *vendor;
-	char *product;
-	char *style = "";
+	char *tmp_ptr;
 
 	/* find our data from hostno */
-
 	while (us) {
 		if (us->host_no == hostno)
 			break;
 		us = us->next;
 	}
 
+	/* if we couldn't find it, we return an error */
 	if (!us)
 		return -ESRCH;
 
-	/* null on outward */
-
+	/* if someone is sending us data, just throw it away */
 	if (inout)
 		return length;
 
-	if (!us->pusb_dev || !(vendor = usb_string(us->pusb_dev, us->pusb_dev->descriptor.iManufacturer)))
-		vendor = "?";
-	if (!us->pusb_dev || !(product = usb_string(us->pusb_dev, us->pusb_dev->descriptor.iProduct)))
-		product = "?";
+	/* print the controler name */
+	SPRINTF ("Host scsi%d: usb-scsi\n", hostno);
 
+	/* print product and vendor strings */
+	if (!us->pusb_dev) {
+		SPRINTF("Vendor: Unknown Vendor\n");
+		SPRINTF("Product: Unknown Product\n");
+	} else {
+		SPRINTF("Vendor: ");
+		tmp_ptr = usb_string(us->pusb_dev, us->pusb_dev->descriptor.iManufacturer);
+		if (!tmp_ptr)
+			SPRINTF("Unknown Vendor\n");
+		else
+			SPRINTF("%s\n", tmp_ptr);
+    
+		SPRINTF("Product: ");
+		tmp_ptr = usb_string(us->pusb_dev, us->pusb_dev->descriptor.iProduct);
+		if (!tmp_ptr)
+			SPRINTF("Unknown Vendor\n");
+		else
+			SPRINTF("%s\n", tmp_ptr);
+	}
+
+	SPRINTF("Protocol: ");
 	switch (us->protocol) {
 	case US_PR_CB:
-		style = "Control/Bulk";
+		SPRINTF("Control/Bulk\n");
 		break;
-
+    
 	case US_PR_CBI:
-		style = "Control/Bulk/Interrupt";
+		SPRINTF("Control/Bulk/Interrupt\n");
 		break;
-
-	case US_PR_ZIP:
-		style = "Bulk only";
+    
+	case US_PR_BULK:
+		SPRINTF("Bulk only\n");
 		break;
-
+    
+	default:
+		SPRINTF("Unknown Protocol\n");
+		break;
 	}
-	SPRINTF ("Host scsi%d: usb-scsi\n", hostno);
-	SPRINTF ("Device: %s %s - GUID " GUID_FORMAT "\n", vendor, product, GUID_ARGS(us->guid) );
-	SPRINTF ("Style: %s\n", style);
+
+	/* show the GUID of the device */
+	SPRINTF("GUID: " GUID_FORMAT "\n", GUID_ARGS(us->guid));
 
 	/*
 	 * Calculate start of next buffer, and return value.
@@ -824,7 +865,6 @@ static int usbscsi_control_thread(void * __us)
 {
 	struct us_data *us = (struct us_data *)__us;
 	int action;
-	int i;
 
 	lock_kernel();
 
@@ -1038,6 +1078,10 @@ static int usbscsi_control_thread(void * __us)
 						us->srb->request_bufflen = savelen;
 						switch (us->srb->cmnd[0]) {
 						case INQUIRY:
+							if ((((unsigned char*)us->srb->request_buffer)[2] & 0x7) == 0) { 
+								US_DEBUGP("Fixing INQUIRY data, setting SCSI rev to 2\n");
+								((unsigned char*)us->srb->request_buffer)[2] |= 2;
+							}
 							/* FALL THROUGH */
 						case REQUEST_SENSE:
 						case MODE_SENSE:
@@ -1126,7 +1170,7 @@ static int usbscsi_control_thread(void * __us)
 		}
 	}
 
-	MOD_DEC_USE_COUNT;
+	//  MOD_DEC_USE_COUNT;
 
 	printk("usbscsi_control_thread exiting\n");
 
@@ -1257,7 +1301,7 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 	}
 
 	/* set the handler pointers based on the protocol */
-	US_DEBUGP("Protocol ");
+	US_DEBUGP("Protocol: ");
 	switch (ss->protocol) {
 	case US_PR_CB:
 		US_DEBUGPX("Control/Bulk\n");
@@ -1271,14 +1315,14 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 		ss->pop_reset = pop_CB_reset;
 		break;
 
-	case US_PR_ZIP:
+	case US_PR_BULK:
 		US_DEBUGPX("Bulk\n");
 		ss->pop = pop_Bulk;
 		ss->pop_reset = pop_Bulk_reset;
 		break;
 
 	default:
-		US_DEBUGPX("Oh Crap! I don't understand this protocol!");    
+		US_DEBUGPX("Unknown\n");    
 		kfree(ss);
 		return NULL;
 		break;
@@ -1327,15 +1371,6 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 		return NULL;
 	}
 
-	/* If there are configuration or interface strings, let's show them */
-	if (dev->actconfig->iConfiguration && 
-	    usb_string(dev, dev->actconfig->iConfiguration))
-		US_DEBUGP("Configuration %s\n",
-			  usb_string(dev, dev->actconfig->iConfiguration));
-	if (interface->iInterface && usb_string(dev, interface->iInterface))
-		US_DEBUGP("Interface %s\n",
-			  usb_string(dev, interface->iInterface));
-
 	/* If this is a new device (i.e. we haven't seen it before), we need to
 	 * generate a scsi host definition, and register with scsi above us 
 	 */
@@ -1345,7 +1380,7 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 		memcpy(ss->guid, guid, sizeof(guid));
 
 		/* set class specific stuff */
-		US_DEBUGP("SubClass ");
+		US_DEBUGP("SubClass: ");
 		switch (ss->subclass) {
 		case US_SC_RBC:
 			US_DEBUGPX("Reduced Block Commands\n");
@@ -1370,13 +1405,13 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 			break;
 
 		case US_SC_UFI:
-			US_DEBUGPX(" UFF\n");
+			US_DEBUGPX("UFI\n");
 			ss->flags |= US_FL_FIXED_COMMAND;
 			ss->fixedlength = 12;
 			break;
 
 		default:
-			US_DEBUGPX(" Unknown\n");
+			US_DEBUGPX("Unknown\n");
 			break;
 		}
 
@@ -1430,7 +1465,22 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 #endif
 
 		} else if (ss->protocol == US_PR_CBI)
+		{
+			int result; 
+
 			init_waitqueue_head(&ss->ip_waitq);
+
+			/* set up the IRQ pipe and handler */
+			/* FIXME: This needs to get the period from the device */
+			ss->irqpipe = usb_rcvintpipe(ss->pusb_dev, ss->ep_int);
+			result = usb_request_irq(ss->pusb_dev, ss->irqpipe, pop_CBI_irq,
+						 255, (void *)ss, &ss->irq_handle);
+			if (result) {
+				US_DEBUGP("usb_request_irq failed (0x%x), No interrupt for CBI\n",
+					  result);
+			}
+		}
+    
 
 		/* start up our thread */
 		{
@@ -1482,7 +1532,7 @@ static void scsi_disconnect(struct usb_device *dev, void *ptr)
 	if (ss->filter)
 		ss->filter->release(ss->fdata);
 	ss->pusb_dev = NULL;
-	MOD_DEC_USE_COUNT;
+	//  MOD_DEC_USE_COUNT;
 }
 
 
@@ -1492,7 +1542,7 @@ static void scsi_disconnect(struct usb_device *dev, void *ptr)
 
 int usb_scsi_init(void)
 {
-	MOD_INC_USE_COUNT;
+	//  MOD_INC_USE_COUNT;
 
 	if (usb_register(&scsi_driver) < 0)
 		return -1;

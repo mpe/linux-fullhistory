@@ -51,18 +51,16 @@
 #include <pcmcia/ds.h>
 #include <pcmcia/mem_op.h>
 
-#ifdef HAS_WIRELESS_EXTENSIONS
+#ifdef CONFIG_NET_PCMCIA_RADIO
 #include <linux/wireless.h>
-#if WIRELESS_EXT < 8
-#warning "Wireless extension v8 or newer required"
-#endif	/* WIRELESS_EXT < 8 */
+
 /* Warning : these stuff will slow down the driver... */
 #define WIRELESS_SPY		/* Enable spying addresses */
 /* Definitions we need for spy */
 typedef struct iw_statistics	iw_stats;
 typedef struct iw_quality	iw_qual;
 typedef u_char	mac_addr[ETH_ALEN];	/* Hardware address */
-#endif	/* HAS_WIRELESS_EXTENSIONS */
+#endif	/* CONFIG_NET_PCMCIA_RADIO */
 
 #include "rayctl.h"
 #include "ray_cs.h"
@@ -109,7 +107,7 @@ static void ray_build_header(ray_dev_t *local, struct tx_msg *ptx, UCHAR msg_typ
                 unsigned char *data);
 static void untranslate(ray_dev_t *local, struct sk_buff *skb, int len);
 #if WIRELESS_EXT > 7	/* If wireless extension exist in the kernel */
-static iw_stats * ray_get_wireless_stats(struct device *	dev);
+static iw_stats * ray_get_wireless_stats(struct net_device *	dev);
 #endif	/* WIRELESS_EXT > 7 */
 
 /***** Prototypes for raylink functions **************************************/
@@ -213,7 +211,7 @@ static dev_link_t *dev_list = NULL;
    'priv' pointer in a dev_link_t structure can be used to point to
    a device-specific private data structure, like this.
 */
-static unsigned int ray_mem_speed = 0x2A;
+static unsigned int ray_mem_speed = 500;
 
 MODULE_AUTHOR("Corey Thomas <corey@world.std.com>");
 MODULE_DESCRIPTION("Raylink/WebGear wireless LAN driver");
@@ -543,8 +541,7 @@ static void ray_config(dev_link_t *link)
     req.Base = 0;
     req.Size = 0x8000;
     req.AccessSpeed = ray_mem_speed;
-    link->win = (window_handle_t)link->handle;
-    CS_CHECK(pcmcia_request_window, &link->win, &req);
+    CS_CHECK(pcmcia_request_window, &link->handle, &req, &link->win);
     mem.CardOffset = 0x0000; mem.Page = 0;
     CS_CHECK(pcmcia_map_mem_page, link->win, &mem);
     local->sram = (UCHAR *)(ioremap(req.Base,req.Size));
@@ -554,8 +551,7 @@ static void ray_config(dev_link_t *link)
     req.Base = 0;
     req.Size = 0x4000;
     req.AccessSpeed = ray_mem_speed;
-    local->rmem_handle = (window_handle_t)link->handle;
-    CS_CHECK(pcmcia_request_window, &local->rmem_handle, &req);
+    CS_CHECK(pcmcia_request_window, &link->handle, &req, &local->rmem_handle);
     mem.CardOffset = 0x8000; mem.Page = 0;
     CS_CHECK(pcmcia_map_mem_page, local->rmem_handle, &mem);
     local->rmem = (UCHAR *)(ioremap(req.Base,req.Size));
@@ -565,8 +561,7 @@ static void ray_config(dev_link_t *link)
     req.Base = 0;
     req.Size = 0x1000;
     req.AccessSpeed = ray_mem_speed;
-    local->amem_handle = (window_handle_t)link->handle;
-    CS_CHECK(pcmcia_request_window, &local->amem_handle, &req);
+    CS_CHECK(pcmcia_request_window, &link->handle, &req, &local->amem_handle);
     mem.CardOffset = 0x0000; mem.Page = 0;
     CS_CHECK(pcmcia_map_mem_page, local->amem_handle, &mem);
     local->amem = (UCHAR *)(ioremap(req.Base,req.Size));
@@ -1471,7 +1466,7 @@ static int ray_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 } /* end ray_dev_ioctl */
 /*===========================================================================*/
 #if WIRELESS_EXT > 7	/* If wireless extension exist in the kernel */
-static iw_stats * ray_get_wireless_stats(struct device *	dev)
+static iw_stats * ray_get_wireless_stats(struct net_device *	dev)
 {
   ray_dev_t *	local = (ray_dev_t *) dev->priv;
   dev_link_t *link = local->finder;
@@ -1848,7 +1843,7 @@ static void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
     UCHAR cmd;
     UCHAR status;
 
-    if ((dev == NULL) || !dev->start)
+    if (dev == NULL) /* Note that we want interrupts with dev->start == 0 */
     return;
 
     DEBUG(4,"ray_cs: interrupt for *dev=%p\n",dev);
@@ -2094,7 +2089,7 @@ static void rx_data(struct net_device *dev, struct rcs *prcs, unsigned int pkt_a
     int total_len;
     int tmp;
 #ifdef WIRELESS_SPY
-    int siglev = prcs->var.rx_packet.rx_sig_lev;
+    int siglev = local->last_rsl;
     u_char linksrcaddr[ETH_ALEN];	/* Other end of the wireless link */
 #endif
 

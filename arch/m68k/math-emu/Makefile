@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 .S.o:
-	$(CC) $(EXTRA_CFLAGS) -D__ASSEMBLY__ -traditional -c $< -o $*.o
+	$(CC) $(EXTRA_CFLAGS) -D__ASSEMBLY__ $(AFLAGS) -traditional -c $< -o $*.o
 
 #EXTRA_CFLAGS=-DFPU_EMU_DEBUG
 

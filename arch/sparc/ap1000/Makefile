@@ -6,9 +6,9 @@
 #
 
 .S.s:
-	$(CPP) -D__ASSEMBLY__ -ansi $< -o $*.s
+	$(CPP) -D__ASSEMBLY__ $(AFLAGS) -ansi $< -o $*.s
 .S.o:
-	$(CC) -D__ASSEMBLY__ -ansi -c $< -o $*.o
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c $< -o $*.o
 
 all: ap1000lib.o
 

@@ -72,8 +72,8 @@
 #define ALLOW_SERIAL_NUMBER
 
 static char *format_topo =
-/* T:  Lev=dd Prnt=dd Port=dd Cnt=dd Dev#=ddd Spd=ddd MxCh=dd */
-  "T:  Lev=%2.2d Prnt=%2.2d Port=%2.2d Cnt=%2.2d Dev#=%3d Spd=%3s MxCh=%2d\n";
+/* T:  Bus=dd Lev=dd Prnt=dd Port=dd Cnt=dd Dev#=ddd Spd=ddd MxCh=dd */
+  "T:  Bus=%2.2d Lev=%2.2d Prnt=%2.2d Port=%2.2d Cnt=%2.2d Dev#=%3d Spd=%3s MxCh=%2d\n";
 
 static char *format_string_manufacturer =
 /* S:  Manufacturer=xxxx */
@@ -396,7 +396,7 @@ static char *usb_dump_string(char *start, char *end, const struct usb_device *de
 /*****************************************************************/
 
 static char *usb_device_dump(char *start, char *end, const struct usb_device *usbdev,
-			     int level, int index, int count)
+			     int bus, int level, int index, int count)
 {
 	int chix;
 	int cnt = 0;
@@ -410,7 +410,7 @@ static char *usb_device_dump(char *start, char *end, const struct usb_device *us
 	 * So the root hub's parent is 0 and any device that is
 	 * plugged into the root hub has a parent of 0.
 	 */
-	start += sprintf(start, format_topo, level, parent_devnum, index, count,
+	start += sprintf(start, format_topo, bus, level, parent_devnum, index, count,
 			 usbdev->devnum, usbdev->slow ? "1.5" : "12 ", usbdev->maxchild);
 	/*
 	 * level = topology-tier level;
@@ -428,7 +428,7 @@ static char *usb_device_dump(char *start, char *end, const struct usb_device *us
 		if (start > end)
 			return start;
 		if (usbdev->children[chix])
-			start = usb_device_dump(start, end, usbdev->children[chix], level + 1, chix, ++cnt);
+			start = usb_device_dump(start, end, usbdev->children[chix], bus, level + 1, chix, ++cnt);
 	}
 	return start;
 }
@@ -440,6 +440,7 @@ static ssize_t usb_device_read(struct file *file, char *buf, size_t nbytes, loff
 	char *page, *end;
 	ssize_t ret = 0;
 	unsigned int pos, len;
+	int busnum = 0;
 
 	if (*ppos < 0)
 		return -EINVAL;
@@ -452,13 +453,13 @@ static ssize_t usb_device_read(struct file *file, char *buf, size_t nbytes, loff
 	pos = *ppos;
 	usb_bus_list = usb_bus_get_list();
 	/* enumerate busses */
-	for (buslist = usb_bus_list->next; buslist != usb_bus_list; buslist = buslist->next) {
+	for (buslist = usb_bus_list->next; buslist != usb_bus_list; buslist = buslist->next, ++busnum) {
 		/* print bandwidth allocation */
 		bus = list_entry(buslist, struct usb_bus, bus_list);
 		len = sprintf(page, format_bandwidth, bus->bandwidth_allocated, FRAME_TIME_MAX_USECS_ALLOC,
 			      (100 * bus->bandwidth_allocated + FRAME_TIME_MAX_USECS_ALLOC / 2) / FRAME_TIME_MAX_USECS_ALLOC,
 			      bus->bandwidth_int_reqs, bus->bandwidth_isoc_reqs);
-		end = usb_device_dump(page + len, page + (PAGE_SIZE - 100), bus->root_hub, 0, 0, 0);
+		end = usb_device_dump(page + len, page + (PAGE_SIZE - 100), bus->root_hub, busnum, 0, 0, 0);
 		len = end - page;
 		if (len > pos) {
 			len -= pos;

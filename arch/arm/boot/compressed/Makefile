@@ -6,7 +6,7 @@
 HEAD		 = head.o
 OBJS		 = misc.o
 SYSTEM		 = $(TOPDIR)/vmlinux
-CFLAGS		 = -O2 -DSTDC_HEADERS $(CFLAGS_PROC)
+CFLAGS		 = $(CPPFLAGS) -O2 -DSTDC_HEADERS $(CFLAGS_PROC)
 FONTC		 = $(TOPDIR)/drivers/video/font_acorn_8x8.c
 ZLDFLAGS	 = -p -X -T vmlinux.lds
 
@@ -77,7 +77,7 @@ vmlinux:	$(HEAD) $(OBJS) piggy.o vmlinux.lds
 		$(LD) $(ZLDFLAGS) $(HEAD) $(OBJS) piggy.o $(GCCLIB) -o vmlinux
 
 $(HEAD): 	$(HEAD:.o=.S)
-		$(CC) -traditional -c $(HEAD:.o=.S)
+		$(CC) $(AFLAGS) -traditional -c $(HEAD:.o=.S)
 
 piggy.o:	$(SYSTEM)
 		$(OBJCOPY) $(SYSTEM) piggy
@@ -86,7 +86,7 @@ piggy.o:	$(SYSTEM)
 		rm -f piggy piggy.gz
 
 font.o:		$(FONTC)
-		$(CC) -Dstatic= -c -o $@ $(FONTC)
+		$(CC) $(CFLAGS) -Dstatic= -c -o $@ $(FONTC)
 
 vmlinux.lds:	vmlinux.lds.in
 		@sed "$(SEDFLAGS)" < vmlinux.lds.in > $@

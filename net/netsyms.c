@@ -543,6 +543,7 @@ EXPORT_SYMBOL(qdisc_head);
 EXPORT_SYMBOL(qdisc_create_dflt);
 EXPORT_SYMBOL(noop_qdisc);
 EXPORT_SYMBOL(qdisc_tree_lock);
+EXPORT_SYMBOL(qdisc_runqueue_lock);
 #ifdef CONFIG_NET_SCHED
 PSCHED_EXPORTLIST;
 EXPORT_SYMBOL(pfifo_qdisc_ops);

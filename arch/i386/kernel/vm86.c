@@ -260,7 +260,7 @@ static void do_sys_vm86(struct kernel_vm86_struct *info, struct task_struct *tsk
 		mark_screen_rdonly(tsk);
 	unlock_kernel();
 	__asm__ __volatile__(
-		"xorl %%eax,%%eax; movl %%ax,%%fs; movl %%ax,%%gs\n\t"
+		"xorl %%eax,%%eax; movl %%eax,%%fs; movl %%eax,%%gs\n\t"
 		"movl %0,%%esp\n\t"
 		"jmp ret_from_sys_call"
 		: /* no outputs */

@@ -464,7 +464,7 @@ int pcmcia_release_window(window_handle_t win);
 int pcmcia_request_configuration(client_handle_t handle, config_req_t *req);
 int pcmcia_request_io(client_handle_t handle, io_req_t *req);
 int pcmcia_request_irq(client_handle_t handle, irq_req_t *req);
-int pcmcia_request_window(client_handle_t *handle, win_req_t *req);
+int pcmcia_request_window(client_handle_t *handle, win_req_t *req, window_handle_t *wh);
 int pcmcia_reset_card(client_handle_t handle, client_req_t *req);
 int pcmcia_suspend_card(client_handle_t handle, client_req_t *req);
 int pcmcia_resume_card(client_handle_t handle, client_req_t *req);

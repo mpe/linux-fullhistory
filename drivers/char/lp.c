@@ -679,7 +679,7 @@ static kdev_t lp_console_device (struct console *c)
 }
 
 static struct console lpcons = {
-	"lp",
+	"lp0",
 	lp_console_write,
 	NULL,
 	lp_console_device,

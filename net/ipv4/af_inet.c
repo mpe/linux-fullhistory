@@ -109,9 +109,9 @@
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
-#ifdef CONFIG_NET_RADIO
-#include <linux/wireless.h>
-#endif	/* CONFIG_NET_RADIO */
+#if defined(CONFIG_NET_RADIO) || defined(CONFIG_NET_PCMCIA_RADIO)
+#include <linux/wireless.h>		/* Note : will define WIRELESS_EXT */
+#endif	/* CONFIG_NET_RADIO || CONFIG_NET_PCMCIA_RADIO */
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
@@ -887,10 +887,10 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			    (cmd <= (SIOCDEVPRIVATE + 15)))
 				return(dev_ioctl(cmd,(void *) arg));
 
-#ifdef CONFIG_NET_RADIO
+#ifdef WIRELESS_EXT
 			if((cmd >= SIOCIWFIRST) && (cmd <= SIOCIWLAST))
 				return(dev_ioctl(cmd,(void *) arg));
-#endif
+#endif	/* WIRELESS_EXT */
 
 			if (sk->prot->ioctl==NULL || (err=sk->prot->ioctl(sk, cmd, arg))==-ENOIOCTLCMD)
 				return(dev_ioctl(cmd,(void *) arg));		

@@ -187,7 +187,7 @@ static void sppp_clear_timeout(struct sppp *p)
 void sppp_input (struct net_device *dev, struct sk_buff *skb)
 {
 	struct ppp_header *h;
-	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
+	struct sppp *sp = (struct sppp *)sppp_of(dev);
 	
 	skb->dev=dev;
 	skb->mac.raw=skb->data;
@@ -316,7 +316,7 @@ EXPORT_SYMBOL(sppp_input);
 static int sppp_hard_header(struct sk_buff *skb, struct net_device *dev, __u16 type,
 		void *daddr, void *saddr, unsigned int len)
 {
-	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
+	struct sppp *sp = (struct sppp *)sppp_of(dev);
 	struct ppp_header *h;
 	skb_push(skb,sizeof(struct ppp_header));
 	h=(struct ppp_header *)skb->data;
@@ -826,7 +826,7 @@ static void sppp_cisco_send (struct sppp *sp, int type, long par1, long par2)
 
 int sppp_close (struct net_device *dev)
 {
-	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
+	struct sppp *sp = (struct sppp *)sppp_of(dev);
 	dev->flags &= ~IFF_RUNNING;
 	sp->lcp.state = LCP_STATE_CLOSED;
 	sp->ipcp.state = IPCP_STATE_CLOSED;
@@ -839,7 +839,7 @@ EXPORT_SYMBOL(sppp_close);
 
 int sppp_open (struct net_device *dev)
 {
-	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
+	struct sppp *sp = (struct sppp *)sppp_of(dev);
 	sppp_close(dev);
 	dev->flags |= IFF_RUNNING;
 	if (!(sp->pp_flags & PP_CISCO))
@@ -851,7 +851,7 @@ EXPORT_SYMBOL(sppp_open);
 
 int sppp_reopen (struct net_device *dev)
 {
-	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
+	struct sppp *sp = (struct sppp *)sppp_of(dev);
 	sppp_close(dev);
 	dev->flags |= IFF_RUNNING;
 	if (!(sp->pp_flags & PP_CISCO))
@@ -880,7 +880,7 @@ EXPORT_SYMBOL(sppp_change_mtu);
 
 int sppp_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
-	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
+	struct sppp *sp = (struct sppp *)sppp_of(dev);
 
 	if(dev->flags&IFF_UP)
 		return -EBUSY;
@@ -913,7 +913,7 @@ EXPORT_SYMBOL(sppp_do_ioctl);
 
 void sppp_attach(struct ppp_device *pd)
 {
-	struct net_device *dev=&pd->dev;
+	struct net_device *dev = pd->dev;
 	struct sppp *sp = &pd->sppp;
 	
 	/* Initialize keepalive handler. */
@@ -970,8 +970,7 @@ EXPORT_SYMBOL(sppp_attach);
 
 void sppp_detach (struct net_device *dev)
 {
-	struct sppp **q, *p, *sp = &((struct ppp_device *)dev)->sppp;
-
+	struct sppp **q, *p, *sp = (struct sppp *)sppp_of(dev);
 
 	/* Remove the entry from the keepalive list. */
 	for (q = &spppq; (p = *q); q = &p->pp_next)
@@ -1296,6 +1295,8 @@ void sync_ppp_init(void)
 	sppp_packet_type.type=htons(ETH_P_WAN_PPP);	
 	dev_add_pack(&sppp_packet_type);
 }
+
+EXPORT_SYMBOL(sync_ppp_init);
 
 #ifdef MODULE
 

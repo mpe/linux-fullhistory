@@ -42,14 +42,6 @@
 #include <linux/kmod.h>
 #endif
 
-/*
- * Here are the actual binaries that will be accepted:
- * add more with "register_binfmt()" if using modules...
- *
- * These are defined again for the 'real' modules if you are using a
- * module definition for these routines.
- */
-
 static struct linux_binfmt *formats = (struct linux_binfmt *) NULL;
 
 int register_binfmt(struct linux_binfmt * fmt)

@@ -59,7 +59,7 @@ int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflen
 	char *bounce_buffer;
 
 	SDev = scsi_CDs[target].device;
-	SCpnt = scsi_allocate_device(scsi_CDs[target].device, 1);
+	SCpnt = scsi_allocate_device(scsi_CDs[target].device, 1, FALSE);
 
 	/* use ISA DMA buffer if necessary */
 	SCpnt->request.buffer = buffer;
@@ -142,7 +142,6 @@ int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflen
 	}
 	result = SCpnt->result;
 	/* Wake up a process waiting for device */
-	wake_up(&SCpnt->device->device_wait);
 	scsi_release_command(SCpnt);
 	SCpnt = NULL;
 	return err;

@@ -92,8 +92,8 @@ ENOSYS = 38
 	pushl %ecx; \
 	pushl %ebx; \
 	movl $(__KERNEL_DS),%edx; \
-	movl %dx,%ds; \
-	movl %dx,%es;
+	movl %edx,%ds; \
+	movl %edx,%es;
 
 #define RESTORE_ALL	\
 	popl %ebx;	\
@@ -288,15 +288,15 @@ error_code:
 	pushl %ecx
 	pushl %ebx
 	cld
-	movl %es,%cx
+	movl %es,%ecx
 	xchgl %eax, ORIG_EAX(%esp)	# orig_eax (get the error code. )
 	movl %esp,%edx
 	xchgl %ecx, ES(%esp)		# get the address and save es.
 	pushl %eax			# push the error code
 	pushl %edx
 	movl $(__KERNEL_DS),%edx
-	movl %dx,%ds
-	movl %dx,%es
+	movl %edx,%ds
+	movl %edx,%es
 	GET_CURRENT(%ebx)
 	call *%ecx
 	addl $8,%esp

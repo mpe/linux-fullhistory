@@ -124,8 +124,8 @@ extern int mp_bus_id_to_pci_bus [MAX_MP_BUSSES];
 	"pushl %ecx\n\t" \
 	"pushl %ebx\n\t" \
 	"movl $" STR(__KERNEL_DS) ",%edx\n\t" \
-	"movl %dx,%ds\n\t" \
-	"movl %dx,%es\n\t"
+	"movl %edx,%ds\n\t" \
+	"movl %edx,%es\n\t"
 
 #define IRQ_NAME2(nr) nr##_interrupt(void)
 #define IRQ_NAME(nr) IRQ_NAME2(IRQ##nr)

@@ -34,6 +34,11 @@
  *      
  *	Torben Mathiasen <torben.mathiasen@compaq.com> New Maintainer!
  *
+ *	v1.1 Dec 20 --	Removed linux version checking(patch from 
+ *			Tigran Aivazian). v1.1 includes Alan's SMP
+ *			opdates. We still have problems on SMP though,
+ *			but I'm looking into that. 
+ *
  ********************************************************************/
 
 
@@ -76,7 +81,7 @@ static	int		bbuf = 0;
 static	u8		*TLanPadBuffer;
 static	char		TLanSignature[] = "TLAN";
 static	int		TLanVersionMajor = 1;
-static	int		TLanVersionMinor = 0;
+static	int		TLanVersionMinor = 1;
 
 
 static	TLanAdapterEntry TLanAdapterList[] = {
@@ -1136,9 +1141,7 @@ u32 TLan_HandleTxEOF( struct net_device *dev, u16 host_int )
 		printk( "TLAN:  Received interrupt for uncompleted TX frame.\n" );
 	}
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,0)
 	priv->stats.tx_bytes += head_list->frameSize;
-#endif
 
 	head_list->cStat = TLAN_CSTAT_UNUSED;
 	dev->tbusy = 0;
@@ -1256,9 +1259,7 @@ u32 TLan_HandleRxEOF( struct net_device *dev, u16 host_int )
 			skb_reserve( skb, 2 );
 			t = (void *) skb_put( skb, head_list->frameSize );
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,0)
 			priv->stats.rx_bytes += head_list->frameSize;
-#endif
 
 			memcpy( t, head_buffer, head_list->frameSize );
 			skb->protocol = eth_type_trans( skb, dev );
@@ -1280,9 +1281,8 @@ u32 TLan_HandleRxEOF( struct net_device *dev, u16 host_int )
 			skb = (struct sk_buff *) head_list->buffer[9].address;
 			head_list->buffer[9].address = 0;
 			skb_trim( skb, head_list->frameSize );
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,0)
+
 			priv->stats.rx_bytes += head_list->frameSize;
-#endif
 
 			skb->protocol = eth_type_trans( skb, dev );
 			netif_rx( skb );
@@ -2447,7 +2447,6 @@ int TLan_MiiReadReg( struct net_device *dev, u16 phy, u16 reg, u16 *val )
 	int	err;
 	int	minten;
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
-	int	irq;
 	unsigned long flags;
 
 	err = FALSE;

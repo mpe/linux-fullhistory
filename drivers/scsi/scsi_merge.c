@@ -66,7 +66,6 @@
  * Enable a bunch of additional consistency checking.   Turn this off
  * if you are benchmarking.
  */
-
 static int dump_stats(struct request *req,
 		      int use_clustering,
 		      int dma_host,
@@ -108,6 +107,40 @@ here:									\
 #else
 #define SANITY_CHECK(req, _CLUSTER, _DMA)
 #endif
+
+static void dma_exhausted(Scsi_Cmnd * SCpnt, int i)
+{
+	int jj;
+	struct scatterlist *sgpnt;
+	int consumed = 0;
+
+	sgpnt = (struct scatterlist *) SCpnt->request_buffer;
+
+	/*
+	 * Now print out a bunch of stats.  First, start with the request
+	 * size.
+	 */
+	printk("dma_free_sectors:%d\n", scsi_dma_free_sectors);
+	printk("use_sg:%d\ti:%d\n", SCpnt->use_sg, i);
+	printk("request_bufflen:%d\n", SCpnt->request_bufflen);
+	/*
+	 * Now dump the scatter-gather table, up to the point of failure.
+	 */
+	for(jj=0; jj < SCpnt->use_sg; jj++)
+	{
+		printk("[%d]\tlen:%d\taddr:%p\talt:%p\n",
+		       jj,
+		       sgpnt[jj].length,
+		       sgpnt[jj].address,
+		       sgpnt[jj].alt_address);		       
+		if( sgpnt[jj].alt_address != NULL )
+		{
+			consumed = (sgpnt[jj].length >> 9);
+		}
+	}
+	printk("Total %d sectors consumed\n", consumed);
+	panic("DMA pool exhausted");
+}
 
 /*
  * FIXME(eric) - the original disk code disabled clustering for MOD
@@ -516,14 +549,15 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 			      int use_clustering,
 			      int dma_host)
 {
-	struct buffer_head *bh;
-	struct buffer_head *bhprev;
-	char *buff;
-	int count;
-	int i;
-	struct request *req;
-	struct scatterlist *sgpnt;
-	int this_count;
+	struct buffer_head * bh;
+	struct buffer_head * bhprev;
+	char		   * buff;
+	int		     count;
+	int		     i;
+	struct request     * req;
+	int		     sectors;
+	struct scatterlist * sgpnt;
+	int		     this_count;
 
 	/*
 	 * FIXME(eric) - don't inline this - it doesn't depend on the
@@ -647,21 +681,23 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 	 */
 	SCpnt->request_bufflen = 0;
 	for (i = 0; i < count; i++) {
+		sectors = (sgpnt[i].length >> 9);
 		SCpnt->request_bufflen += sgpnt[i].length;
 		if (virt_to_phys(sgpnt[i].address) + sgpnt[i].length - 1 >
 		    ISA_DMA_THRESHOLD) {
-			if( scsi_dma_free_sectors <= 10 ) {
+			if( scsi_dma_free_sectors - sectors <= 10  ) {
 				/*
-				 * If the DMA pool is nearly empty, then
-				 * let's stop here.  Don't make this request
-				 * any larger.  This is kind of a safety valve
-				 * that we use - we could get screwed later on
-				 * if we run out completely.
+				 * If this would nearly drain the DMA
+				 * pool, mpty, then let's stop here.
+				 * Don't make this request any larger.
+				 * This is kind of a safety valve that
+				 * we use - we could get screwed later
+				 * on if we run out completely.  
 				 */
 				SCpnt->request_bufflen -= sgpnt[i].length;
 				SCpnt->use_sg = i;
 				if (i == 0) {
-					panic("DMA pool exhausted");
+					goto big_trouble;
 				}
 				break;
 			}
@@ -678,7 +714,7 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 				SCpnt->request_bufflen -= sgpnt[i].length;
 				SCpnt->use_sg = i;
 				if (i == 0) {
-					panic("DMA pool exhausted");
+					goto big_trouble;
 				}
 				break;
 			}
@@ -690,6 +726,63 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 	}
 	return 1;
 
+      big_trouble:
+	/*
+	 * We come here in the event that we get one humongous
+	 * request, where we need a bounce buffer, and the buffer is
+	 * more than we can allocate in a single call to
+	 * scsi_malloc().  In addition, we only come here when it is
+	 * the 0th element of the scatter-gather table that gets us
+	 * into this trouble.  As a fallback, we fall back to
+	 * non-scatter-gather, and ask for a single segment.  We make
+	 * a half-hearted attempt to pick a reasonably large request
+	 * size mainly so that we don't thrash the thing with
+	 * iddy-biddy requests.
+	 */
+
+	/*
+	 * The original number of sectors in the 0th element of the
+	 * scatter-gather table.  
+	 */
+	sectors = sgpnt[0].length >> 9;
+
+	/* 
+	 * Free up the original scatter-gather table.  Note that since
+	 * it was the 0th element that got us here, we don't have to
+	 * go in and free up memory from the other slots.  
+	 */
+	SCpnt->request_bufflen = 0;
+	SCpnt->use_sg = 0;
+	scsi_free(SCpnt->request_buffer, SCpnt->sglist_len);
+
+	/*
+	 * Make an attempt to pick up as much as we reasonably can.
+	 * Just keep adding sectors until the pool starts running kind of
+	 * low.  The limit of 30 is somewhat arbitrary - the point is that
+	 * it would kind of suck if we dropped down and limited ourselves to
+	 * single-block requests if we had hundreds of free sectors.
+	 */
+	if( scsi_dma_free_sectors > 30 ) {
+		for (this_count = 0, bh = SCpnt->request.bh;
+		     bh; bh = bh->b_reqnext) {
+			if( scsi_dma_free_sectors < 30 || this_count == sectors )
+			{
+				break;
+			}
+			this_count += bh->b_size >> 9;
+		}
+
+	} else {
+		/*
+		 * Yow!   Take the absolute minimum here.
+		 */
+		this_count = SCpnt->request.current_nr_sectors;
+	}
+
+	/*
+	 * Now drop through into the single-segment case.
+	 */
+	
       single_segment:
 	/*
 	 * Come here if for any reason we choose to do this as a single
@@ -713,7 +806,7 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 				this_count = SCpnt->request.current_nr_sectors;
 				buff = (char *) scsi_malloc(this_count << 9);
 				if (!buff) {
-					panic("Unable to allocate DMA buffer\n");
+					dma_exhausted(SCpnt, 0);
 				}
 			}
 			if (SCpnt->request.cmd == WRITE)

@@ -549,8 +549,8 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	down(&current->mm->mmap_sem);
 	err = -EINVAL;
 	shp = shm_lock(shmid);
-	if(shp == NULL)
-		goto out_unlock_up;
+	if (!shp)
+		goto out_up;
 
 	err = -EACCES;
 	if (ipcperms(&shp->u.shm_perm, flg))

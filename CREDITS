@@ -621,7 +621,7 @@ S: 1131 Budapest
 S: Hungary
 
 N: Jürgen Fischer
-E: fischer@et-inf.fho-emden.de (=?iso-8859-1?q?J=FCrgen?= Fischer)
+E: fischer@norbit.de (=?iso-8859-1?q?J=FCrgen?= Fischer)
 D: Author of Adaptec AHA-152x SCSI driver
 S: Schulstraße 18
 S: 26506 Norden
@@ -1082,12 +1082,13 @@ S: 1403 ND  BUSSUM
 S: The Netherlands
 
 N: Karl Keyte
-E: kkeyte@koft.rhein-main.de
-E: kkeyte@esoc.esa.de
+E: karl@koft.com
 D: Disk usage statistics and modifications to line printer driver
-S: Erbacher Strasse 6
-S: D-64283 Darmstadt
-S: Germany
+S: 26a Sheen Road
+S: Richmond
+S: Surrey
+S: TW9 1AE
+S: United Kingdom
 
 N: Russell King
 E: rmk@arm.uk.linux.org
@@ -2383,6 +2384,13 @@ E: qx@math.columbia.edu
 D: Xiafs filesystem [defunct]
 S: 542 West 112th Street, 5N
 S: New York, New York 10025
+S: USA
+
+N: Victor Yodaiken
+E: yodaiken@fsmlabs.com
+D: RTLinux (RealTime Linux)
+S: POB 1822 
+S: Socorro NM, 87801
 S: USA
 
 N: Eric Youngdale

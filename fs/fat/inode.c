@@ -653,13 +653,13 @@ fat_read_super(struct super_block *sb, void *data, int silent,
 	if (sbi->options.isvfat && !opts.utf8) {
 		p = opts.iocharset ? opts.iocharset : "iso8859-1";
 		sbi->nls_io = load_nls(p);
-		if (! sbi->nls_io) {
+		if (! sbi->nls_io)
 			/* Fail only if explicit charset specified */
 			if (opts.iocharset)
 				goto out_unload_nls;
-			sbi->nls_io = load_nls_default();
-		}
 	}
+	if (! sbi->nls_io)
+		sbi->nls_io = load_nls_default();
 
 	root_inode=get_empty_inode();
 	if (!root_inode)
@@ -681,8 +681,7 @@ fat_read_super(struct super_block *sb, void *data, int silent,
 out_no_root:
 	printk("get root inode failed\n");
 	iput(root_inode);
-	if (sbi->nls_io)
-		unload_nls(sbi->nls_io);
+	unload_nls(sbi->nls_io);
 out_unload_nls:
 	unload_nls(sbi->nls_disk);
 	goto out_fail;

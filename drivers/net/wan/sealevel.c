@@ -32,6 +32,7 @@
 
 struct slvl_device
 {
+	void *if_ptr;	/* General purpose pointer (used by SPPP) */
 	struct z8530_channel *chan;
 	struct ppp_device netdev;
 	char name[16];
@@ -243,8 +244,19 @@ static struct slvl_board *slvl_init(int iobase, int irq, int txdma, int rxdma, i
 	memset(b, 0, sizeof(*sv));
 
 	b->dev[0].chan = &b->board.chanA;	
+	b->dev[0].if_ptr = &b->dev[0].netdev;
+	b->dev[0].netdev.dev=(struct net_device *)
+		kmalloc(sizeof(struct net_device), GFP_KERNEL);
+	if(!b->dev[0].netdev.dev)
+		goto fail2;
+
 	b->dev[1].chan = &b->board.chanB;
-	
+	b->dev[1].if_ptr = &b->dev[1].netdev;
+	b->dev[1].netdev.dev=(struct net_device *)
+		kmalloc(sizeof(struct net_device), GFP_KERNEL);
+	if(!b->dev[1].netdev.dev)
+		goto fail1_0;
+
 	dev=&b->board;
 	
 	/*
@@ -283,14 +295,14 @@ static struct slvl_board *slvl_init(int iobase, int irq, int txdma, int rxdma, i
 	if(request_irq(irq, &z8530_interrupt, SA_INTERRUPT, "SeaLevel", dev)<0)
 	{
 		printk(KERN_WARNING "sealevel: IRQ %d already in use.\n", irq);
-		goto fail2;
+		goto fail1_1;
 	}
 	
 	dev->irq=irq;
 	dev->chanA.private=&b->dev[0];
 	dev->chanB.private=&b->dev[1];
-	dev->chanA.netdevice=&b->dev[0].netdev.dev;
-	dev->chanB.netdevice=&b->dev[1].netdev.dev;
+	dev->chanA.netdevice=b->dev[0].netdev.dev;
+	dev->chanB.netdevice=b->dev[1].netdev.dev;
 	dev->chanA.dev=dev;
 	dev->chanB.dev=dev;
 	dev->name=b->dev[0].name;
@@ -399,6 +411,10 @@ dmafail:
 	free_dma(dev->chanA.txdma);
 fail:
 	free_irq(irq, dev);
+fail1_1:
+	kfree(b->dev[1].netdev.dev);
+fail1_0:
+	kfree(b->dev[0].netdev.dev);
 fail2:
 	kfree(b);
 fail3:
@@ -414,8 +430,8 @@ static void slvl_shutdown(struct slvl_board *b)
 	
 	for(u=0; u<2; u++)
 	{
-		sppp_detach(&b->dev[u].netdev.dev);
-		unregister_netdev(&b->dev[u].netdev.dev);
+		sppp_detach(b->dev[u].netdev.dev);
+		unregister_netdev(b->dev[u].netdev.dev);
 	}
 	
 	free_irq(b->board.irq, &b->board);

@@ -2,7 +2,7 @@
  *	 Aironet 4500 Pcmcia driver
  *
  *		Elmer Joandi, Januar 1999
- *	Copyright Elmer Joandi, all rights restricted
+ *	Copyright GPL
  *	
  *
  *	Revision 0.1 ,started  30.12.1998
@@ -379,6 +379,8 @@ ctl_table awc_driver_proc_table[] = {
         {4, "sleep_before_command"	, &sleep_before_command, sizeof(sleep_before_command), 0600,NULL, proc_dointvec},
         {5, "bap_sleep_before_write"	, &bap_sleep_before_write, sizeof(bap_sleep_before_write), 0600,NULL, proc_dointvec},
         {6, "sleep_in_command"		, &sleep_in_command	, sizeof(sleep_in_command), 0600,NULL, proc_dointvec},
+        {7, "both_bap_lock"		, &both_bap_lock	, sizeof(both_bap_lock), 0600,NULL, proc_dointvec},
+        {8, "bap_setup_spinlock"	, &bap_setup_spinlock	, sizeof(bap_setup_spinlock), 0600,NULL, proc_dointvec},
         {0}
 };
 

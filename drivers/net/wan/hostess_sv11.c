@@ -41,6 +41,7 @@ static int dma;
 
 struct sv11_device
 {
+	void *if_ptr;	/* General purpose pointer (used by SPPP) */
 	struct z8530_dev sync;
 	struct ppp_device netdev;
 	char name[16];
@@ -240,7 +241,12 @@ static struct sv11_device *sv11_init(int iobase, int irq)
 		goto fail3;
 			
 	memset(sv, 0, sizeof(*sv));
+	sv->if_ptr=&sv->netdev;
 	
+	sv->netdev.dev=(struct net_device *)kmalloc(sizeof(struct net_device), GFP_KERNEL);
+	if(!sv->netdev.dev)
+		goto fail2;
+
 	dev=&sv->sync;
 	
 	/*
@@ -264,12 +270,12 @@ static struct sv11_device *sv11_init(int iobase, int irq)
 	if(request_irq(irq, &z8530_interrupt, SA_INTERRUPT, "Hostess SV/11", dev)<0)
 	{
 		printk(KERN_WARNING "hostess: IRQ %d already in use.\n", irq);
-		goto fail2;
+		goto fail1;
 	}
 	
 	dev->irq=irq;
 	dev->chanA.private=sv;
-	dev->chanA.netdevice=&sv->netdev.dev;
+	dev->chanA.netdevice=sv->netdev.dev;
 	dev->chanA.dev=dev;
 	dev->chanB.dev=dev;
 	dev->name=sv->name;
@@ -374,6 +380,8 @@ dmafail:
 		free_dma(dev->chanA.txdma);
 fail:
 	free_irq(irq, dev);
+fail1:
+	kfree(sv->netdev.dev);
 fail2:
 	kfree(sv);
 fail3:
@@ -383,9 +391,9 @@ fail3:
 
 static void sv11_shutdown(struct sv11_device *dev)
 {
-	sppp_detach(&dev->netdev.dev);
+	sppp_detach(dev->netdev.dev);
 	z8530_shutdown(&dev->sync);
-	unregister_netdev(&dev->netdev.dev);
+	unregister_netdev(dev->netdev.dev);
 	free_irq(dev->sync.irq, dev);
 	if(dma)
 	{

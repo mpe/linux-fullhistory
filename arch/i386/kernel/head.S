@@ -47,10 +47,10 @@ startup_32:
  */
 	cld
 	movl $(__KERNEL_DS),%eax
-	movl %ax,%ds
-	movl %ax,%es
-	movl %ax,%fs
-	movl %ax,%gs
+	movl %eax,%ds
+	movl %eax,%es
+	movl %eax,%fs
+	movl %eax,%gs
 #ifdef __SMP__
 	orw %bx,%bx
 	jz 1f
@@ -231,13 +231,13 @@ is386:	pushl %ecx		# restore original EFLAGS
 	lidt idt_descr
 	ljmp $(__KERNEL_CS),$1f
 1:	movl $(__KERNEL_DS),%eax	# reload all the segment registers
-	movl %ax,%ds		# after changing gdt.
-	movl %ax,%es
-	movl %ax,%fs
-	movl %ax,%gs
+	movl %eax,%ds		# after changing gdt.
+	movl %eax,%es
+	movl %eax,%fs
+	movl %eax,%gs
 #ifdef __SMP__
 	movl $(__KERNEL_DS), %eax
-	mov  %ax,%ss		# Reload the stack pointer (segment only)
+	movl %eax,%ss		# Reload the stack pointer (segment only)
 #else
 	lss stack_start,%esp	# Load processor stack
 #endif
@@ -323,8 +323,8 @@ ignore_int:
 	pushl %es
 	pushl %ds
 	movl $(__KERNEL_DS),%eax
-	movl %ax,%ds
-	movl %ax,%es
+	movl %eax,%ds
+	movl %eax,%es
 	pushl $int_msg
 	call SYMBOL_NAME(printk)
 	popl %eax

@@ -11,7 +11,6 @@
 /* void enableReceive(struct net_device* dev);
 */
 
-static  int	arlan_command(struct net_device * dev, int command);
 
 
 #define ARLAN_STR_SIZE 	0x2ff0
@@ -186,7 +185,7 @@ static const char *arlan_hardware_type_string(struct net_device *dev)
 			return "type A672T";
 	}
 }
-
+#ifdef ARLAN_DEBUGING
 static void arlan_print_diagnostic_info(struct net_device *dev)
 {
 	int i;
@@ -320,7 +319,6 @@ static int arlan_hw_test_memory(struct net_device *dev)
 	return 0;
 }
 
-
 static int arlan_setup_card_by_book(struct net_device *dev)
 {
 	u_char irqLevel, configuredStatusFlag;
@@ -396,7 +394,7 @@ static int arlan_setup_card_by_book(struct net_device *dev)
 
 	return 0;		/* no errors */
 }
-
+#endif
 
 #ifdef ARLAN_PROC_INTERFACE
 #ifdef ARLAN_PROC_SHM_DUMP
@@ -820,7 +818,15 @@ int arlan_sysctl_reset(ctl_table * ctl, int write, struct file *filp,
 #define CTBLN(num,card,nam) \
         {num , #nam, &(arlan_conf[card].nam), \
          sizeof(int), 0600, NULL, &proc_dointvec}
+#ifdef ARLAN_DEBUGING
 
+#define ARLAN_PROC_DEBUG_ENTRIES	{48, "entry_exit_debug", &arlan_entry_and_exit_debug, \
+                sizeof(int), 0600, NULL, &proc_dointvec},\
+	{49, "debug", &arlan_debug, \
+                sizeof(int), 0600, NULL, &proc_dointvec},
+#else 
+#define ARLAN_PROC_DEBUG_ENTRIES
+#endif
 
 #define ARLAN_SYSCTL_TABLE_TOTAL(cardNo)\
 	CTBLN(1,cardNo,spreadingCode),\
@@ -871,10 +877,7 @@ int arlan_sysctl_reset(ctl_table * ctl, int write, struct file *filp,
 	CTBLN(45,cardNo,radioType),\
 	CTBLN(46,cardNo,writeEEPROM),\
 	CTBLN(47,cardNo,writeRadioType),\
-	{48, "entry_exit_debug", &arlan_entry_and_exit_debug, \
-                sizeof(int), 0600, NULL, &proc_dointvec},\
-	{49, "debug", &arlan_debug, \
-                sizeof(int), 0600, NULL, &proc_dointvec},\
+	ARLAN_PROC_DEBUG_ENTRIES\
 	CTBLN(50,cardNo,in_speed),\
 	CTBLN(51,cardNo,out_speed),\
 	CTBLN(52,cardNo,in_speed10),\
@@ -1010,7 +1013,8 @@ static ctl_table arlan_table[MAX_ARLANS + 1] =
 };
 #endif
 
-static int mmtu = 1234;
+
+// static int mmtu = 1234;
 
 static ctl_table arlan_root_table[] =
 {
@@ -1019,11 +1023,11 @@ static ctl_table arlan_root_table[] =
 };
 
 /* Make sure that /proc/sys/dev is there */
-static ctl_table arlan_device_root_table[] =
-{
-	{CTL_DEV, "dev", NULL, 0, 0555, arlan_root_table},
-	{0}
-};
+//static ctl_table arlan_device_root_table[] =
+//{
+//	{CTL_DEV, "dev", NULL, 0, 0555, arlan_root_table},
+//	{0}
+//};
 
 
 

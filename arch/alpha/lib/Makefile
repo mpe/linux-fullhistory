@@ -14,16 +14,16 @@ lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)
 
 __divqu.o: divide.S
-	$(CC) -DDIV -c -o __divqu.o divide.S
+	$(CC) $(AFLAGS) -DDIV -c -o __divqu.o divide.S
 
 __remqu.o: divide.S
-	$(CC) -DREM -c -o __remqu.o divide.S
+	$(CC) $(AFLAGS) -DREM -c -o __remqu.o divide.S
 
 __divlu.o: divide.S
-	$(CC) -DDIV -DINTSIZE -c -o __divlu.o divide.S
+	$(CC) $(AFLAGS) -DDIV -DINTSIZE -c -o __divlu.o divide.S
 
 __remlu.o: divide.S
-	$(CC) -DREM -DINTSIZE -c -o __remlu.o divide.S
+	$(CC) $(AFLAGS) -DREM -DINTSIZE -c -o __remlu.o divide.S
 
 dep:
 

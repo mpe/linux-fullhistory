@@ -47,19 +47,16 @@
 #include <asm/irq.h>
 #include <asm/system.h>
 
-#define DEBUG
+// #define DEBUG
 
 #include "usb.h"
 #include "ohci-hcd.h"
 
 
 #ifdef DEBUG
-	#define dbg printk
+	#define dbg(format, arg...) printk(format, ## arg)
 #else
-	#define dbg __xxx
-static void __xxx (const char *format, ...) 
-{
-}
+	#define dbg(format, arg...)
 #endif
 
 #ifdef CONFIG_APM
@@ -589,6 +586,7 @@ static int ep_link (ohci_t * ohci, ed_t * edi)
 		
 	case ISO:
 		ed->hwNextED = 0;
+		ed->int_interval = 1;
 		if (ohci->ed_isotail != NULL) {
 			ohci->ed_isotail->hwNextED = cpu_to_le32 (virt_to_bus (ed));
 			ed->ed_prev = ohci->ed_isotail;
@@ -803,7 +801,7 @@ static void td_fill (unsigned int info, void * data, int len, urb_t * urb, int t
 	urb_priv_t * urb_priv = urb->hcpriv;
 
 	if (index >= urb_priv->length) {
-		printk(KERN_ERR MODSTR "internal OHCI error: TD index > length\n");
+		printk (KERN_ERR MODSTR "internal OHCI error: TD index > length\n");
 		return;
 	}
 	
@@ -930,7 +928,7 @@ static td_t * dl_reverse_done_list (ohci_t * ohci)
 					td_list->ed->hwHeadP = 
 						(urb_priv->td[urb_priv->length - 1]->hwNextTD & cpu_to_le32 (0xfffffff0)) |
 									(td_list->ed->hwHeadP & cpu_to_le32 (0x2));
-					urb_priv->td_cnt = urb_priv->length - 1;
+					urb_priv->td_cnt += urb_priv->length - td_list->index - 1;
 				} else 
 					td_list->ed->hwHeadP &= cpu_to_le32 (0xfffffff2);
 			}
@@ -1072,7 +1070,7 @@ static void dl_done_list (ohci_t * ohci, td_t * td_list)
   		if (!(urb->transfer_flags & USB_DISABLE_SPD) && (cc == TD_DATAUNDERRUN))
 						cc = TD_CC_NOERROR;
   		if (++(urb_priv->td_cnt) == urb_priv->length) {
-  			if (urb_priv->state != URB_DEL) { 
+  			if (urb_priv->state != URB_DEL && !(ed->state & ED_DEL) && ed->state != ED_NEW) { 
   				urb->status = cc_to_error[cc];
   				sohci_return_urb (urb);
   			} else {
@@ -1136,7 +1134,7 @@ static __u8 root_hub_config_des[] =
 	0x01,       /*  __u8  bConfigurationValue; */
 	0x00,       /*  __u8  iConfiguration; */
 	0x40,       /*  __u8  bmAttributes; 
-		 Bit 7: Bus-powered, 6: Self-powered, 5 Remote-wakwup, 4..0: resvd */
+                 Bit 7: Bus-powered, 6: Self-powered, 5 Remote-wakwup, 4..0: resvd */
 	0x00,       /*  __u8  MaxPower; */
       
 	/* interface */	  

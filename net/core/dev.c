@@ -87,9 +87,9 @@
 #include <net/profile.h>
 #include <linux/init.h>
 #include <linux/kmod.h>
-#ifdef CONFIG_NET_RADIO
-#include <linux/wireless.h>
-#endif	/* CONFIG_NET_RADIO */
+#if defined(CONFIG_NET_RADIO) || defined(CONFIG_NET_PCMCIA_RADIO)
+#include <linux/wireless.h>		/* Note : will define WIRELESS_EXT */
+#endif	/* CONFIG_NET_RADIO || CONFIG_NET_PCMCIA_RADIO */
 #ifdef CONFIG_PLIP
 extern int plip_init(void);
 #endif
@@ -1307,7 +1307,7 @@ static int dev_proc_stats(char *buffer, char **start, off_t offset,
 #endif	/* CONFIG_PROC_FS */
 
 
-#ifdef CONFIG_NET_RADIO
+#ifdef WIRELESS_EXT
 #ifdef CONFIG_PROC_FS
 
 /*
@@ -1392,7 +1392,7 @@ static int dev_get_wireless_info(char * buffer, char **start, off_t offset,
 	return len;
 }
 #endif	/* CONFIG_PROC_FS */
-#endif	/* CONFIG_NET_RADIO */
+#endif	/* WIRELESS_EXT */
 
 void dev_set_promiscuity(struct net_device *dev, int inc)
 {
@@ -1624,13 +1624,13 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 				return -EOPNOTSUPP;
 			}
 
-#ifdef CONFIG_NET_RADIO
+#ifdef WIRELESS_EXT
 			if(cmd >= SIOCIWFIRST && cmd <= SIOCIWLAST) {
 				if (dev->do_ioctl)
 					return dev->do_ioctl(dev, ifr, cmd);
 				return -EOPNOTSUPP;
 			}
-#endif	/* CONFIG_NET_RADIO */
+#endif	/* WIRELESS_EXT */
 
 	}
 	return -EINVAL;
@@ -1754,7 +1754,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 					return -EFAULT;
 				return ret;
 			}
-#ifdef CONFIG_NET_RADIO
+#ifdef WIRELESS_EXT
 			if (cmd >= SIOCIWFIRST && cmd <= SIOCIWLAST) {
 				dev_load(ifr.ifr_name);
 				if (IW_IS_SET(cmd)) {
@@ -1769,7 +1769,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 					return -EFAULT;
 				return ret;
 			}
-#endif	/* CONFIG_NET_RADIO */
+#endif	/* WIRELESS_EXT */
 			return -EINVAL;
 	}
 }
@@ -2083,9 +2083,9 @@ int __init net_dev_init(void)
 #ifdef CONFIG_PROC_FS
 	proc_net_create("dev", 0, dev_get_info);
 	create_proc_read_entry("net/dev_stat", 0, 0, dev_proc_stats, NULL);
-#ifdef CONFIG_NET_RADIO
+#ifdef WIRELESS_EXT
 	proc_net_create("wireless", 0, dev_get_wireless_info);
-#endif	/* CONFIG_NET_RADIO */
+#endif	/* WIRELESS_EXT */
 #endif	/* CONFIG_PROC_FS */
 
 	init_bh(NET_BH, net_bh);

@@ -18,6 +18,6 @@ arclib.a: $(OBJS)
 	sync
 
 dep:
-	$(CPP) -M *.c > .depend
+	$(CPP) $(CPPFLAGS) -M *.c > .depend
 
 include $(TOPDIR)/Rules.make

@@ -335,7 +335,14 @@ void __init gemini_init_IRQ(void)
 		irq_desc[i].ctl = &open_pic;
 	openpic_init(1);
 #ifdef __SMP__
-	request_irq(OPENPIC_VEC_IPI, openpic_ipi_action, 0, "IPI0", 0);
+ 	request_irq(OPENPIC_VEC_IPI, openpic_ipi_action,
+ 		    0, "IPI0", 0);
+ 	request_irq(OPENPIC_VEC_IPI+1, openpic_ipi_action,
+ 		    0, "IPI1 (invalidate TLB)", 0);
+ 	request_irq(OPENPIC_VEC_IPI+2, openpic_ipi_action,
+ 		    0, "IPI2 (stop CPU)", 0);
+ 	request_irq(OPENPIC_VEC_IPI+3, openpic_ipi_action,
+ 		    0, "IPI3 (reschedule)", 0);
 #endif	/* __SMP__ */
 }
 

@@ -2,7 +2,7 @@
  *	 Aironet 4500 PCI-ISA-i365 driver
  *
  *		Elmer Joandi, Januar 1999
- *	Copyright Elmer Joandi, all rights restricted
+ *	Copyright GPL
  *	
  *
  *	Revision 0.1 ,started  30.12.1998
@@ -35,7 +35,7 @@ static const char *awc_version =
 #include <linux/skbuff.h>
 #include <linux/if_arp.h>
 #include <linux/ioport.h>
-
+#include <linux/delay.h>
 #if LINUX_VERSION_CODE < 0x20100
 #include <linux/bios32.h>
 #endif

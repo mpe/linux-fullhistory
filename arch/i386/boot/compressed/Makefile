@@ -9,7 +9,7 @@ SYSTEM = $(TOPDIR)/vmlinux
 
 OBJECTS = $(HEAD) misc.o
 
-CFLAGS = -O2 -DSTDC_HEADERS
+CFLAGS = $(CPPFLAGS) -O2 -DSTDC_HEADERS
 ZLDFLAGS = -e startup_32
 
 #

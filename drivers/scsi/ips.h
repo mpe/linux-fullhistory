@@ -77,102 +77,102 @@
    #define UDELAY udelay
    #define MDELAY mdelay
 
-   #define verify_area_20(t,a,sz)               (0) /* success */
-   #define PUT_USER                             put_user
-   #define __PUT_USER                           __put_user
-   #define PUT_USER_RET                         put_user_ret
-   #define GET_USER                             get_user
-   #define __GET_USER                           __get_user
-   #define GET_USER_RET                         get_user_ret
+   #define verify_area_20(t,a,sz)       (0) /* success */
+   #define PUT_USER                     put_user
+   #define __PUT_USER                   __put_user
+   #define PUT_USER_RET                 put_user_ret
+   #define GET_USER                     get_user
+   #define __GET_USER                   __get_user
+   #define GET_USER_RET                 get_user_ret
 
 /*
  * Adapter address map equates
  */
-   #define HISR                 0x08    /* Host Interrupt Status Reg   */
-   #define CCSAR                0x10    /* Cmd Channel System Addr Reg */
-   #define CCCR                 0x14    /* Cmd Channel Control Reg     */
-   #define SQHR                 0x20    /* Status Q Head Reg           */
-   #define SQTR                 0x24    /* Status Q Tail Reg           */
-   #define SQER                 0x28    /* Status Q End Reg            */
-   #define SQSR                 0x2C    /* Status Q Start Reg          */
-   #define SCPR                 0x05    /* Subsystem control port reg  */
-   #define ISPR                 0x06    /* interrupt status port reg   */
-   #define CBSP                 0x07    /* CBSP register               */
+   #define HISR                         0x08    /* Host Interrupt Status Reg   */
+   #define CCSAR                        0x10    /* Cmd Channel System Addr Reg */
+   #define CCCR                         0x14    /* Cmd Channel Control Reg     */
+   #define SQHR                         0x20    /* Status Q Head Reg           */
+   #define SQTR                         0x24    /* Status Q Tail Reg           */
+   #define SQER                         0x28    /* Status Q End Reg            */
+   #define SQSR                         0x2C    /* Status Q Start Reg          */
+   #define SCPR                         0x05    /* Subsystem control port reg  */
+   #define ISPR                         0x06    /* interrupt status port reg   */
+   #define CBSP                         0x07    /* CBSP register               */
 
 /*
  * Adapter register bit equates
  */
-   #define GHI                  0x04    /* HISR General Host Interrupt */
-   #define SQO                  0x02    /* HISR Status Q Overflow      */
-   #define SCE                  0x01    /* HISR Status Channel Enqueue */
-   #define SEMAPHORE            0x08    /* CCCR Semaphore Bit          */
-   #define ILE                  0x10    /* CCCR ILE Bit                */
-   #define START_COMMAND        0x101A  /* CCCR Start Command Channel  */
-   #define START_STOP_BIT       0x0002  /* CCCR Start/Stop Bit         */
-   #define RST                  0x80    /* SCPR Reset Bit              */
-   #define EBM                  0x02    /* SCPR Enable Bus Master      */
-   #define EI                   0x80    /* HISR Enable Interrupts      */
-   #define OP                   0x01    /* OP bit in CBSP              */
+   #define GHI                          0x04    /* HISR General Host Interrupt */
+   #define SQO                          0x02    /* HISR Status Q Overflow      */
+   #define SCE                          0x01    /* HISR Status Channel Enqueue */
+   #define SEMAPHORE                    0x08    /* CCCR Semaphore Bit          */
+   #define ILE                          0x10    /* CCCR ILE Bit                */
+   #define START_COMMAND                0x101A  /* CCCR Start Command Channel  */
+   #define START_STOP_BIT               0x0002  /* CCCR Start/Stop Bit         */
+   #define RST                          0x80    /* SCPR Reset Bit              */
+   #define EBM                          0x02    /* SCPR Enable Bus Master      */
+   #define EI                           0x80    /* HISR Enable Interrupts      */
+   #define OP                           0x01    /* OP bit in CBSP              */
 
 /*
  * Adapter Command ID Equates
  */
-   #define GET_LOGICAL_DRIVE_INFO               0x19
-   #define GET_SUBSYS_PARAM                     0x40
-   #define READ_NVRAM_CONFIGURATION             0x38
-   #define RW_NVRAM_PAGE                        0xBC
-   #define IPS_READ                             0x02
-   #define IPS_WRITE                            0x03
-   #define ENQUIRY                              0x05
-   #define FLUSH_CACHE                          0x0A
-   #define NORM_STATE                           0x00
-   #define READ_SCATTER_GATHER                  0x82
-   #define WRITE_SCATTER_GATHER                 0x83
-   #define DIRECT_CDB                           0x04
-   #define DIRECT_CDB_SCATTER_GATHER            0x84
-   #define CONFIG_SYNC                          0x58
-   #define POCL                                 0x30
-   #define GET_ERASE_ERROR_TABLE                0x17
-   #define RESET_CHANNEL                        0x1A
-   #define CSL                                  0xFF
-   #define ADAPT_RESET                          0xFF
+   #define GET_LOGICAL_DRIVE_INFO       0x19
+   #define GET_SUBSYS_PARAM             0x40
+   #define READ_NVRAM_CONFIGURATION     0x38
+   #define RW_NVRAM_PAGE                0xBC
+   #define IPS_READ                     0x02
+   #define IPS_WRITE                    0x03
+   #define ENQUIRY                      0x05
+   #define FLUSH_CACHE                  0x0A
+   #define NORM_STATE                   0x00
+   #define READ_SCATTER_GATHER          0x82
+   #define WRITE_SCATTER_GATHER         0x83
+   #define DIRECT_CDB                   0x04
+   #define DIRECT_CDB_SCATTER_GATHER    0x84
+   #define CONFIG_SYNC                  0x58
+   #define POCL                         0x30
+   #define GET_ERASE_ERROR_TABLE        0x17
+   #define RESET_CHANNEL                0x1A
+   #define CSL                          0xFF
+   #define ADAPT_RESET                  0xFF
 
 /*
  * Adapter Equates
  */
-   #define IPS_MAX_ADAPTERS                     16
-   #define IPS_MAX_IOCTL                        1
-   #define IPS_MAX_IOCTL_QUEUE                  8
-   #define IPS_MAX_QUEUE                        128
-   #define IPS_BLKSIZE                          512
-   #define MAX_SG_ELEMENTS                      17
-   #define MAX_LOGICAL_DRIVES                   8
-   #define MAX_CHANNELS                         3
-   #define MAX_TARGETS                          15
-   #define MAX_CHUNKS                           16
-   #define MAX_CMDS                             64
-   #define IPS_MAX_XFER                         0x10000
-   #define COMP_MODE_HEADS                      128
-   #define COMP_MODE_SECTORS                    32
-   #define NORM_MODE_HEADS                      254
-   #define NORM_MODE_SECTORS                    63
-   #define NVRAM_PAGE5_SIGNATURE                0xFFDDBB99
-   #define MAX_POST_BYTES                       0x02
-   #define MAX_CONFIG_BYTES                     0x02
-   #define GOOD_POST_BASIC_STATUS               0x80
-   #define SEMAPHORE_TIMEOUT                    2000
-   #define IPS_INTR_OFF                         0
-   #define IPS_INTR_ON                          1
-   #define IPS_ADAPTER_ID                       0xF
-   #define IPS_VENDORID                         0x1014
-   #define IPS_DEVICEID                         0x002E
-   #define TIMEOUT_10                           0x10
-   #define TIMEOUT_60                           0x20
-   #define TIMEOUT_20M                          0x30
-   #define STATUS_SIZE                          4
-   #define STATUS_Q_SIZE                        (MAX_CMDS+1) * STATUS_SIZE
-   #define ONE_MSEC                             1
-   #define ONE_SEC                              1000
+   #define IPS_MAX_ADAPTERS             16
+   #define IPS_MAX_IOCTL                1
+   #define IPS_MAX_IOCTL_QUEUE          8
+   #define IPS_MAX_QUEUE                128
+   #define IPS_BLKSIZE                  512
+   #define MAX_SG_ELEMENTS              17
+   #define MAX_LOGICAL_DRIVES           8
+   #define MAX_CHANNELS                 3
+   #define MAX_TARGETS                  15
+   #define MAX_CHUNKS                   16
+   #define MAX_CMDS                     128
+   #define IPS_MAX_XFER                 0x10000
+   #define COMP_MODE_HEADS              128
+   #define COMP_MODE_SECTORS            32
+   #define NORM_MODE_HEADS              254
+   #define NORM_MODE_SECTORS            63
+   #define NVRAM_PAGE5_SIGNATURE        0xFFDDBB99
+   #define MAX_POST_BYTES               0x02
+   #define MAX_CONFIG_BYTES             0x02
+   #define GOOD_POST_BASIC_STATUS       0x80
+   #define SEMAPHORE_TIMEOUT            2000
+   #define IPS_INTR_OFF                 0
+   #define IPS_INTR_ON                  1
+   #define IPS_ADAPTER_ID               0xF
+   #define IPS_VENDORID                 0x1014
+   #define IPS_DEVICEID                 0x002E
+   #define TIMEOUT_10                   0x10
+   #define TIMEOUT_60                   0x20
+   #define TIMEOUT_20M                  0x30
+   #define STATUS_SIZE                  4
+   #define STATUS_Q_SIZE                (MAX_CMDS+1) * STATUS_SIZE
+   #define ONE_MSEC                     1
+   #define ONE_SEC                      1000
 
 /*
  * Adapter Basic Status Codes
@@ -196,24 +196,24 @@
 /*
  * Adapter Extended Status Equates
  */
-   #define SELECTION_TIMEOUT                    0xF0
-   #define DATA_OVER_UNDER_RUN                  0xF2
-   #define EXT_HOST_RESET                       0xF7
-   #define EXT_DEVICE_RESET                     0xF8
-   #define EXT_RECOVERY                         0xFC
-   #define EXT_CHECK_CONDITION                  0xFF
+   #define SELECTION_TIMEOUT            0xF0
+   #define DATA_OVER_UNDER_RUN          0xF2
+   #define EXT_HOST_RESET               0xF7
+   #define EXT_DEVICE_RESET             0xF8
+   #define EXT_RECOVERY                 0xFC
+   #define EXT_CHECK_CONDITION          0xFF
 
 /*
  * Operating System Defines
  */
-   #define OS_WINDOWS_NT                        0x01
-   #define OS_NETWARE                           0x02
-   #define OS_OPENSERVER                        0x03
-   #define OS_UNIXWARE                          0x04
-   #define OS_SOLARIS                           0x05
-   #define OS_OS2                               0x06
-   #define OS_LINUX                             0x07
-   #define OS_FREEBSD                           0x08
+   #define OS_WINDOWS_NT                0x01
+   #define OS_NETWARE                   0x02
+   #define OS_OPENSERVER                0x03
+   #define OS_UNIXWARE                  0x04
+   #define OS_SOLARIS                   0x05
+   #define OS_OS2                       0x06
+   #define OS_LINUX                     0x07
+   #define OS_FREEBSD                   0x08
 
 /*
  * Adapter Command/Status Packet Definitions
@@ -225,11 +225,11 @@
 /*
  * Logical Drive Equates
  */
-   #define OFF_LINE             0x02
-   #define OKAY                 0x03
-   #define FREE                 0x00
-   #define SYS                  0x06
-   #define CRS                  0x24
+   #define OFF_LINE                     0x02
+   #define OKAY                         0x03
+   #define FREE                         0x00
+   #define SYS                          0x06
+   #define CRS                          0x24
 
 /*
  * DCDB Table Equates
@@ -237,6 +237,8 @@
    #define NO_DISCONNECT                0x00
    #define DISCONNECT_ALLOWED           0x80
    #define NO_AUTO_REQUEST_SENSE        0x40
+   #define IPS_DATA_NONE		0x00
+   #define IPS_DATA_UNK			0x00
    #define IPS_DATA_IN                  0x01
    #define IPS_DATA_OUT                 0x02
    #define TRANSFER_64K                 0x08
@@ -734,6 +736,7 @@ typedef struct ips_wait_queue {
 
 typedef struct ips_ha {
    u8                 ha_id[MAX_CHANNELS+1];
+   u32                dcdb_active[MAX_CHANNELS];
    u32                io_addr;            /* Base I/O address           */
    u8                 irq;                /* IRQ for adapter            */
    u8                 ntargets;           /* Number of targets          */

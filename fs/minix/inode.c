@@ -177,6 +177,7 @@ static struct super_block *minix_read_super(struct super_block *s, void *data,
 	kdev_t dev = s->s_dev;
 	const char * errmsg;
 	struct inode *root_inode;
+	unsigned int hblock;
 	
 	/* N.B. These should be compile-time tests.
 	   Unfortunately that is impossible. */
@@ -186,6 +187,11 @@ static struct super_block *minix_read_super(struct super_block *s, void *data,
 		panic("bad V2 i-node size");
 
 	MOD_INC_USE_COUNT;
+
+	hblock = get_hardblocksize(dev);
+	if (hblock && hblock > BLOCK_SIZE)
+		goto out_bad_hblock;
+
 	lock_super(s);
 	set_blocksize(dev, BLOCK_SIZE);
 	if (!(bh = bread(dev,1,BLOCK_SIZE)))
@@ -322,11 +328,16 @@ out_no_fs:
 	brelse(bh);
 	goto out_unlock;
 
+out_bad_hblock:
+	printk("MINIX-fs: blocksize too small for device.\n");
+	goto out;
+
 out_bad_sb:
 	printk("MINIX-fs: unable to read superblock\n");
     out_unlock:
-	s->s_dev = 0;
 	unlock_super(s);
+ out:
+	s->s_dev = 0;
 	MOD_DEC_USE_COUNT;
 	return NULL;
 }

@@ -187,7 +187,10 @@ static unsigned char real_mode_switch [] =
 	0x74, 0x02,				/*    jz    f                */
 	0x0f, 0x08,				/*    invd                   */
 	0x24, 0x10,				/* f: andb  $0x10,al         */
-	0x66, 0x0f, 0x22, 0xc0,			/*    movl  %eax,%cr0        */
+	0x66, 0x0f, 0x22, 0xc0			/*    movl  %eax,%cr0        */
+};
+static unsigned char jump_to_bios [] =
+{
 	0xea, 0x00, 0x00, 0xff, 0xff		/*    ljmp  $0xffff,$0x0000  */
 };
 
@@ -200,34 +203,13 @@ static inline void kb_wait(void)
 			break;
 }
 
-void machine_restart(char * __unused)
+/*
+ * Switch to real mode and then execute the code
+ * specified by the code and length parameters.
+ * We assume that length will aways be less that 100!
+ */
+void machine_real_restart(unsigned char *code, int length)
 {
-#if __SMP__
-	/*
-	 * Stop all CPUs and turn off local APICs and the IO-APIC, so
-	 * other OSs see a clean IRQ state.
-	 */
-	smp_send_stop();
-	disable_IO_APIC();
-#endif
-
-	if(!reboot_thru_bios) {
-		/* rebooting needs to touch the page at absolute addr 0 */
-		*((unsigned short *)__va(0x472)) = reboot_mode;
-		for (;;) {
-			int i;
-			for (i=0; i<100; i++) {
-				kb_wait();
-				udelay(50);
-				outb(0xfe,0x64);         /* pulse reset low */
-				udelay(50);
-			}
-			/* That didn't work - force a triple fault.. */
-			__asm__ __volatile__("lidt %0": :"m" (no_idt));
-			__asm__ __volatile__("int3");
-		}
-	}
-
 	cli();
 
 	/* Write zero to CMOS register number 0x0f, which the BIOS POST
@@ -273,8 +255,9 @@ void machine_restart(char * __unused)
 	   off paging.  Copy it near the end of the first page, out of the way
 	   of BIOS variables. */
 
-	memcpy ((void *) (0x1000 - sizeof (real_mode_switch)),
+	memcpy ((void *) (0x1000 - sizeof (real_mode_switch) - 100),
 		real_mode_switch, sizeof (real_mode_switch));
+	memcpy ((void *) (0x1000 - 100), code, length);
 
 	/* Set up the IDT for real mode. */
 
@@ -293,11 +276,11 @@ void machine_restart(char * __unused)
 	   the values are consistent for real mode operation already. */
 
 	__asm__ __volatile__ ("movl $0x0010,%%eax\n"
-				"\tmovl %%ax,%%ds\n"
-				"\tmovl %%ax,%%es\n"
-				"\tmovl %%ax,%%fs\n"
-				"\tmovl %%ax,%%gs\n"
-				"\tmovl %%ax,%%ss" : : : "eax");
+				"\tmovl %%eax,%%ds\n"
+				"\tmovl %%eax,%%es\n"
+				"\tmovl %%eax,%%fs\n"
+				"\tmovl %%eax,%%gs\n"
+				"\tmovl %%eax,%%ss" : : : "eax");
 
 	/* Jump to the 16-bit code that we copied earlier.  It disables paging
 	   and the cache, switches to real mode, and jumps to the BIOS reset
@@ -305,7 +288,38 @@ void machine_restart(char * __unused)
 
 	__asm__ __volatile__ ("ljmp $0x0008,%0"
 				:
-				: "i" ((void *) (0x1000 - sizeof (real_mode_switch))));
+				: "i" ((void *) (0x1000 - sizeof (real_mode_switch) - 100)));
+}
+
+void machine_restart(char * __unused)
+{
+#if __SMP__
+	/*
+	 * Stop all CPUs and turn off local APICs and the IO-APIC, so
+	 * other OSs see a clean IRQ state.
+	 */
+	smp_send_stop();
+	disable_IO_APIC();
+#endif
+
+	if(!reboot_thru_bios) {
+		/* rebooting needs to touch the page at absolute addr 0 */
+		*((unsigned short *)__va(0x472)) = reboot_mode;
+		for (;;) {
+			int i;
+			for (i=0; i<100; i++) {
+				kb_wait();
+				udelay(50);
+				outb(0xfe,0x64);         /* pulse reset low */
+				udelay(50);
+			}
+			/* That didn't work - force a triple fault.. */
+			__asm__ __volatile__("lidt %0": :"m" (no_idt));
+			__asm__ __volatile__("int3");
+		}
+	}
+
+	machine_real_restart(jump_to_bios, sizeof(jump_to_bios));
 }
 
 void machine_halt(void)

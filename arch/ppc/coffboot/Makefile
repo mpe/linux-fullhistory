@@ -7,7 +7,7 @@ HOSTCFLAGS = -O -I$(TOPDIR)/include
 
 CC	= $(CROSS_COMPILE)gcc
 LD	= $(CROSS_COMPILE)ld
-CFLAGS	= -O -fno-builtin -I$(TOPDIR)/include
+CFLAGS	= $(CPPFLAGS) -O -fno-builtin
 OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJCOPY_ARGS = -O aixcoff-rs6000 -R .stab -R .stabstr -R .comment
 COFF_LD_ARGS = -e _start -T ld.script -Ttext 500000 -Tdata 510000 -Bstatic

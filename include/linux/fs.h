@@ -250,7 +250,7 @@ void init_buffer(struct buffer_head *, bh_end_io_t *, void *);
 
 #define bh_offset(bh)		((unsigned long)(bh)->b_data & ~PAGE_MASK)
 
-extern void set_bh_page(struct buffer_head *bh, struct page *page, unsigned int offset);
+extern void set_bh_page(struct buffer_head *bh, struct page *page, unsigned long offset);
 
 #define touch_buffer(bh)	set_bit(PG_referenced, &bh->b_page->flags)
 

@@ -204,15 +204,6 @@ _switch_to(struct task_struct *prev, struct task_struct *new,
 	if ( (prev->thread.regs && (prev->thread.regs->msr & MSR_VEC)) &&
 	     prev->thread.vrsave )
 		giveup_altivec(prev);
-	/*
-	 * The 750 doesn't broadcast invalidates with tlbie's
-	 * so flush every processor switch.
-	 *  -- Cort
-	 */
-	if ( ((_get_PVR()>>16) == 8) &&
-	     (new->last_processor != NO_PROC_ID) &&
-	     (new->last_processor != new->processor) && new->mm )
-	     flush_tlb_mm(new->mm);
 	prev->last_processor = prev->processor;
 	current_set[smp_processor_id()] = new;
 #endif /* __SMP__ */

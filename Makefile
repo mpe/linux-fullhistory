@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 3
-SUBLEVEL = 33
+SUBLEVEL = 34
 EXTRAVERSION =
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
@@ -22,7 +22,7 @@ CROSS_COMPILE 	=
 
 AS	=$(CROSS_COMPILE)as
 LD	=$(CROSS_COMPILE)ld
-CC	=$(CROSS_COMPILE)gcc -D__KERNEL__ -I$(HPATH)
+CC	=$(CROSS_COMPILE)gcc
 CPP	=$(CC) -E
 AR	=$(CROSS_COMPILE)ar
 NM	=$(CROSS_COMPILE)nm
@@ -86,15 +86,17 @@ SVGA_MODE=	-DSVGA_MODE=NORMAL_VGA
 # standard CFLAGS
 #
 
-CFLAGS = -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
+CPPFLAGS := -D__KERNEL__ -I$(HPATH)
+
+ifdef CONFIG_SMP
+CPPFLAGS += -D__SMP__
+endif
+
+CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
+AFLAGS := $(CPPFLAGS)
 
 # use '-fno-strict-aliasing', but only if the compiler can take it
 CFLAGS += $(shell if $(CC) -fno-strict-aliasing -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strict-aliasing"; fi)
-
-ifdef CONFIG_SMP
-CFLAGS += -D__SMP__
-AFLAGS += -D__SMP__
-endif
 
 #
 # if you want the RAM disk device, define this to be the

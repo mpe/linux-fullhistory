@@ -1,6 +1,6 @@
 /proc/bus/usb filesystem output
 ===============================
-(version 19990722)
+(version 19991218)
 
 
 The /proc filesystem for USB devices generates
@@ -22,9 +22,11 @@ different topo/connections and it looked possible.)
 Each line is tagged with a one-character ID for that line:
 
 T = Topology (etc.)
+B = Bandwidth
 D = Device descriptor info.
 P = Product ID info. (from Device descriptor, but they won't fit
     together on one line)
+S = String info
 C = Configuration descriptor info. (* = active configuration)
 I = Interface descriptor info.
 E = Endpoint descriptor info.
@@ -41,17 +43,24 @@ Legend:
 
 Topology info:
 
-T:  Lev=dd Prnt=dd Port=dd Cnt=dd Dev#=ddd Spd=ddd If#=ddd MxCh=dd Driver=%s
-|   |      |       |       |      |        |       |       |       |__DriverName
-|   |      |       |       |      |        |       |       |__MaxChildren
-|   |      |       |       |      |        |       |__Configured InterfaceNumber
-|   |      |       |       |      |        |__Device Speed in Mbps
-|   |      |       |       |      |__DeviceNumber
-|   |      |       |       |__Count of devices at this level
-|   |      |       |__Connector/Port on Parent for this device
-|   |      |__Parent DeviceNumber
-|   |__Level in topology
+T:  Bus=dd Lev=dd Prnt=dd Port=dd Cnt=dd Dev#=ddd Spd=ddd MxCh=dd
+|   |      |      |       |       |      |        |       |__MaxChildren
+|   |      |      |       |       |      |        |__Device Speed in Mbps
+|   |      |      |       |       |      |__DeviceNumber
+|   |      |      |       |       |__Count of devices at this level
+|   |      |      |       |__Connector/Port on Parent for this device
+|   |      |      |__Parent DeviceNumber
+|   |      |__Level in topology for this bus
+|   |__Bus number
 |__Topology info tag
+
+
+Bandwidth info:
+B:  Alloc=ddd/ddd us (xx%), #Int=ddd, #Iso=ddd
+|   |                       |         |__Number if isochronous requests
+|   |                       |__Number of interrupt requests
+|   |__Total Bandwidth allocated to this bus
+|__Bandwidth info tag
 
 
 Device descriptor info & Product ID info:
@@ -77,6 +86,17 @@ P:  Vendor=xxxx ProdID=xxxx Rev=xx.xx
 |__Device info tag #2
 
 
+String descriptor info:
+
+S:  Manufacturer=ssss
+|   |__Manufacturer of this device as read from the device.
+|__String info tag
+
+S:  Product=ssss
+|   |__Product description of this device as read from the device.
+|__String info tag
+
+
 Configuration descriptor info:
 
 C:  #Ifs=dd Cfg#=dd Atr=xx MPwr=dddmA
@@ -89,7 +109,8 @@ C:  #Ifs=dd Cfg#=dd Atr=xx MPwr=dddmA
 
 Interface descriptor info (can be multiple per Config):
 
-I:  If#=dd Alt=dd #EPs=dd Cls=xx(sssss) Sub=xx Prot=xx
+I:  If#=dd Alt=dd #EPs=dd Cls=xx(sssss) Sub=xx Prot=xx Driver=ssss
+|   |      |      |       |             |      |       |__Driver name
 |   |      |      |       |             |      |__InterfaceProtocol
 |   |      |      |       |             |__InterfaceSubClass
 |   |      |      |       |__InterfaceClass
@@ -103,8 +124,8 @@ Endpoint descriptor info (can be multiple per Interface):
 
 E:  Ad=xx(s) Atr=xx(ssss) MxPS=dddd Ivl=dddms
 E:  Ad=xx(s) Atr=xx(ssss) MxPS=dddd Ivl=dddms
-|   |        |         |         |__Interval
-|   |        |         |__EndpointMaxPacketSize
+|   |        |            |         |__Interval
+|   |        |            |__EndpointMaxPacketSize
 |   |        |__Attributes(EndpointType)
 |   |__EndpointAddress(I=In,O=Out)
 |__Endpoint info tag

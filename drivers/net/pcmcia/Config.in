@@ -22,9 +22,12 @@ if [ "$CONFIG_NET_PCMCIA" = "y" ]; then
       dep_tristate '  SMC EPIC CardBus support' CONFIG_PCMCIA_EPIC100 m
    fi
 
-   dep_tristate '  Aviator/Raytheon 2.4MHz wireless support' CONFIG_PCMCIA_RAYCS $CONFIG_PCMCIA
-   dep_tristate '  Xircom Netwave AirSurfer wireless support' CONFIG_PCMCIA_NETWAVE $CONFIG_PCMCIA
-   dep_tristate '  AT&T/Lucent Wavelan wireless support' CONFIG_PCMCIA_WAVELAN $CONFIG_PCMCIA
+   bool 'Pcmcia Wireless LAN' CONFIG_NET_PCMCIA_RADIO
+   if [ "$CONFIG_NET_PCMCIA_RADIO" = "y" ]; then
+      dep_tristate '  Aviator/Raytheon 2.4MHz wireless support' CONFIG_PCMCIA_RAYCS $CONFIG_PCMCIA
+      dep_tristate '  Xircom Netwave AirSurfer wireless support' CONFIG_PCMCIA_NETWAVE $CONFIG_PCMCIA
+      dep_tristate '  AT&T/Lucent Wavelan wireless support' CONFIG_PCMCIA_WAVELAN $CONFIG_PCMCIA
+   fi
 fi
 
 if [ "$CONFIG_PCMCIA_3C589" = "y" -o "$CONFIG_PCMCIA_3C574" = "y" -o \

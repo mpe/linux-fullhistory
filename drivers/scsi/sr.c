@@ -486,7 +486,7 @@ void get_sectorsize(int i)
 	buffer = (unsigned char *) scsi_malloc(512);
 
 
-	SCpnt = scsi_allocate_device(scsi_CDs[i].device, 1);
+	SCpnt = scsi_allocate_device(scsi_CDs[i].device, 1, FALSE);
 
 	retries = 3;
 	do {
@@ -509,7 +509,6 @@ void get_sectorsize(int i)
 	} while (the_result && retries);
 
 
-	wake_up(&SCpnt->device->device_wait);
 	scsi_release_command(SCpnt);
 	SCpnt = NULL;
 
@@ -659,7 +658,7 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 	int buflen;
 
 	/* get the device */
-	SCpnt = scsi_allocate_device(device, 1);
+	SCpnt = scsi_allocate_device(device, 1, FALSE);
 	if (SCpnt == NULL)
 		return -ENODEV;	/* this just doesn't seem right /axboe */
 
@@ -864,7 +863,7 @@ void cleanup_module(void)
 		sr_hardsizes = NULL;
 	}
 	blksize_size[MAJOR_NR] = NULL;
-        hardsect_size[MAJOR_NR] = sr_hardsizes;
+        hardsect_size[MAJOR_NR] = NULL;
 	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 	blk_size[MAJOR_NR] = NULL;
 	read_ahead[MAJOR_NR] = 0;

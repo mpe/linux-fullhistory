@@ -705,7 +705,7 @@ static int sd_init_onedisk(int i)
 	 * just after a scsi bus reset.
 	 */
 
-	SCpnt = scsi_allocate_device(rscsi_disks[i].device, 1);
+	SCpnt = scsi_allocate_device(rscsi_disks[i].device, 1, FALSE);
 
 	buffer = (unsigned char *) scsi_malloc(512);
 
@@ -950,7 +950,6 @@ static int sd_init_onedisk(int i)
 	SCpnt->device->remap = 1;
 	SCpnt->device->sector_size = sector_size;
 	/* Wake up a process waiting for device */
-	wake_up(&SCpnt->device->device_wait);
 	scsi_release_command(SCpnt);
 	SCpnt = NULL;
 

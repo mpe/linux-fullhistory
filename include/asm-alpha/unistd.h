@@ -310,6 +310,7 @@
 #define __NR_sendfile			370
 #define __NR_setresgid			371
 #define __NR_getresgid			372
+#define __NR_dipc			373
 
 #if defined(__LIBRARY__) && defined(__GNUC__)
 

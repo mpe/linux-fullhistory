@@ -60,6 +60,12 @@
 /* 0.99.05  - Fix an oops when we get certain passthru commands              */
 /* 1.00.00  - Initial Public Release                                         */
 /*            Functionally equivalent to 0.99.05                             */
+/* 3.60.00  - Bump max commands to 128 for use with ServeRAID firmware 3.60  */
+/*          - Change version to 3.60 to coincide with ServeRAID release      */
+/*            numbering.                                                     */
+/* 3.60.01  - Remove bogus error check in passthru routine                   */
+/* 3.60.02  - Make DCDB direction based on lookup table                      */
+/*          - Only allow one DCDB command to a SCSI ID at a time             */
 /*                                                                           */
 /*****************************************************************************/
 
@@ -110,8 +116,8 @@
 /*
  * DRIVER_VER
  */
-#define IPS_VERSION_HIGH        "1.00"  /* MUST be 4 chars */
-#define IPS_VERSION_LOW         ".00 "  /* MUST be 4 chars */
+#define IPS_VERSION_HIGH        "3.60"  /* MUST be 4 chars */
+#define IPS_VERSION_LOW         ".02 "  /* MUST be 4 chars */
 
 #if !defined(__i386__)
    #error "This driver has only been tested on the x86 platform"
@@ -152,6 +158,63 @@ static char ips_adapter_name[][30] = {
    "ServeRAID on motherboard",
    "ServeRAID 3H",
    "ServeRAID 3L"
+};
+
+/*
+ * Direction table
+ */
+static char ips_command_direction[] = {
+IPS_DATA_NONE, IPS_DATA_NONE, IPS_DATA_IN, IPS_DATA_IN, IPS_DATA_OUT,
+IPS_DATA_IN, IPS_DATA_IN, IPS_DATA_OUT, IPS_DATA_IN, IPS_DATA_UNK,
+IPS_DATA_OUT, IPS_DATA_OUT, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_IN, IPS_DATA_NONE, IPS_DATA_IN, IPS_DATA_IN, IPS_DATA_OUT,
+IPS_DATA_IN, IPS_DATA_OUT, IPS_DATA_NONE, IPS_DATA_NONE, IPS_DATA_OUT,
+IPS_DATA_NONE, IPS_DATA_IN, IPS_DATA_NONE, IPS_DATA_IN, IPS_DATA_OUT,
+IPS_DATA_NONE, IPS_DATA_UNK, IPS_DATA_IN, IPS_DATA_UNK, IPS_DATA_IN,
+IPS_DATA_UNK, IPS_DATA_OUT, IPS_DATA_IN, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_IN, IPS_DATA_IN, IPS_DATA_OUT, IPS_DATA_NONE, IPS_DATA_UNK,
+IPS_DATA_IN, IPS_DATA_OUT, IPS_DATA_OUT, IPS_DATA_OUT, IPS_DATA_OUT,
+IPS_DATA_OUT, IPS_DATA_NONE, IPS_DATA_IN, IPS_DATA_NONE, IPS_DATA_NONE,
+IPS_DATA_IN, IPS_DATA_OUT, IPS_DATA_OUT, IPS_DATA_OUT, IPS_DATA_OUT,
+IPS_DATA_IN, IPS_DATA_OUT, IPS_DATA_IN, IPS_DATA_OUT, IPS_DATA_OUT,
+IPS_DATA_OUT, IPS_DATA_IN, IPS_DATA_IN, IPS_DATA_IN, IPS_DATA_NONE,
+IPS_DATA_UNK, IPS_DATA_NONE, IPS_DATA_NONE, IPS_DATA_NONE, IPS_DATA_UNK,
+IPS_DATA_NONE, IPS_DATA_OUT, IPS_DATA_IN, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_OUT, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_IN, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_NONE, IPS_DATA_NONE, IPS_DATA_UNK, IPS_DATA_IN, IPS_DATA_NONE,
+IPS_DATA_OUT, IPS_DATA_UNK, IPS_DATA_NONE, IPS_DATA_UNK, IPS_DATA_OUT,
+IPS_DATA_OUT, IPS_DATA_OUT, IPS_DATA_OUT, IPS_DATA_OUT, IPS_DATA_NONE,
+IPS_DATA_UNK, IPS_DATA_IN, IPS_DATA_OUT, IPS_DATA_IN, IPS_DATA_IN,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_OUT,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK,
+IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK, IPS_DATA_UNK
 };
 
 /*
@@ -1333,7 +1396,7 @@ ips_usrcmd(ips_ha_t *ha, ips_passthru_t *pt, ips_scb_t *scb) {
        (scb->cmd.basic_io.op_code == DIRECT_CDB_SCATTER_GATHER))
       return (0);
 
-   if (pt->CmdBSize && pt->CmdBuffer) {
+   if (pt->CmdBSize) {
       scb->data_busaddr = VIRT_TO_BUS(scb->scsi_cmd->request_buffer + sizeof(ips_passthru_t));
    } else {
       scb->data_busaddr = 0L;
@@ -1657,8 +1720,10 @@ ips_hainit(ips_ha_t *ha) {
 
    /* set controller IDs */
    ha->ha_id[0] = IPS_ADAPTER_ID;
-   for (i = 1; i < ha->nbus; i++)
+   for (i = 1; i < ha->nbus; i++) {
       ha->ha_id[i] = ha->conf->init_id[i-1] & 0x1f;
+      ha->dcdb_active[i-1] = 0;
+   }
 
    return (1);
 }
@@ -1678,6 +1743,7 @@ static void
 ips_next(ips_ha_t *ha) {
    ips_scb_t    *scb;
    Scsi_Cmnd    *SC;
+   Scsi_Cmnd    *p;
    int           ret;
 
    DBG("ips_next");
@@ -1750,9 +1816,15 @@ ips_next(ips_ha_t *ha) {
    /*
     * Send "Normal" I/O commands
     */
-   while ((ha->scb_waitlist.head) &&
-          (scb = ips_getscb(ha))) {
-      SC = ips_removeq_wait_head(&ha->scb_waitlist);
+   p = ha->scb_waitlist.head;
+   while ((p) && (scb = ips_getscb(ha))) {
+      if ((p->channel > 0) && (ha->dcdb_active[p->channel-1] & (1 << p->target))) {
+         ips_freescb(ha, scb);
+         p = (Scsi_Cmnd *) p->host_scribble;
+         continue;
+      }
+
+      SC = ips_removeq_wait(&ha->scb_waitlist, p);
 
       SC->result = DID_OK;
       SC->host_scribble = NULL;
@@ -1767,7 +1839,7 @@ ips_next(ips_ha_t *ha) {
       scb->data_len = 0;
       scb->callback = ipsintr_done;
       scb->timeout = ips_cmd_timeout;
-      memset(&scb->cmd, 0, 4);
+      memset(&scb->cmd, 0, 16);
 
       /* copy in the CDB */
       memcpy(scb->cdb, SC->cmnd, SC->cmd_len);
@@ -1825,11 +1897,11 @@ ips_next(ips_ha_t *ha) {
 
       }
 
-      if ((scb->scsi_cmd->request.cmd == READ) && (SC->request_bufflen))
-         scb->dcdb.cmd_attribute |= IPS_DATA_IN;
+      scb->dcdb.cmd_attribute |=
+         ips_command_direction[scb->scsi_cmd->cmnd[0]];
 
-      if ((scb->scsi_cmd->request.cmd == WRITE) && (SC->request_bufflen))
-         scb->dcdb.cmd_attribute |= IPS_DATA_OUT;
+      if (!scb->dcdb.cmd_attribute & 0x3)
+         scb->dcdb.transfer_length = 0;
 
       if (scb->data_len >= IPS_MAX_XFER) {
          scb->dcdb.cmd_attribute |= TRANSFER_64K;
@@ -1848,16 +1920,25 @@ ips_next(ips_ha_t *ha) {
             scb->scsi_cmd->scsi_done(scb->scsi_cmd);
          }
 
+         if (scb->bus)
+            ha->dcdb_active[scb->bus-1] &= ~(1 << scb->target_id);
+
          ips_freescb(ha, scb);
          break;
       case IPS_SUCCESS_IMM:
          if (scb->scsi_cmd)
             scb->scsi_cmd->scsi_done(scb->scsi_cmd);
+
+         if (scb->bus)
+            ha->dcdb_active[scb->bus-1] &= ~(1 << scb->target_id);
+
          ips_freescb(ha, scb);
          break;
       default:
          break;
       } /* end case */
+
+      p = (Scsi_Cmnd *) p->host_scribble;
    } /* end while */
 }
 
@@ -2259,12 +2340,11 @@ ips_done(ips_ha_t *ha, ips_scb_t *scb) {
             scb->sg_len = 0;
          }
 
-         if ((scb->scsi_cmd->request.cmd == READ) && (scb->data_len))
-            scb->dcdb.cmd_attribute |= IPS_DATA_IN;
-
-         if ((scb->scsi_cmd->request.cmd == WRITE) && (scb->data_len))
-            scb->dcdb.cmd_attribute |= IPS_DATA_OUT;
-
+         scb->dcdb.cmd_attribute |=
+            ips_command_direction[scb->scsi_cmd->cmnd[0]];
+  
+         if (!scb->dcdb.cmd_attribute & 0x3)
+            scb->dcdb.transfer_length = 0;
          if (scb->data_len >= IPS_MAX_XFER) {
             scb->dcdb.cmd_attribute |= TRANSFER_64K;
             scb->dcdb.transfer_length = 0;
@@ -2299,6 +2379,9 @@ ips_done(ips_ha_t *ha, ips_scb_t *scb) {
    } /* end if passthru */
 #endif
 
+   if (scb->bus)
+      ha->dcdb_active[scb->bus-1] &= ~(1 << scb->target_id);
+
    /* call back to SCSI layer */
    scb->scsi_cmd->scsi_done(scb->scsi_cmd);
    ips_freescb(ha, scb);
@@ -2323,6 +2406,16 @@ ips_map_status(ips_scb_t *scb, ips_stat_t *sp) {
    DBG("ips_map_status");
 
    if (scb->bus) {
+#if IPS_DEBUG >= 10
+      printk(KERN_NOTICE "(%s) Physical device error: %x %x, Sense Key: %x, ASC: %x, ASCQ: %x\n",
+             ips_name,
+             scb->basic_status,
+             scb->extended_status,
+             scb->dcdb.sense_info[2] & 0xf,
+             scb->dcdb.sense_info[12],
+             scb->dcdb.sense_info[13]);
+#endif
+
       /* copy SCSI status and sense data for DCDB commands */
       memcpy(scb->scsi_cmd->sense_buffer, scb->dcdb.sense_info,
              sizeof(scb->scsi_cmd->sense_buffer));
@@ -2669,6 +2762,7 @@ ips_send_cmd(ips_ha_t *ha, ips_scb_t *scb) {
       else
          scb->cmd.dcdb.op_code = DIRECT_CDB_SCATTER_GATHER;
 
+      ha->dcdb_active[scb->bus-1] |= (1 << scb->target_id);
       scb->cmd.dcdb.command_id = IPS_COMMAND_ID(ha, scb);
       scb->cmd.dcdb.dcdb_address = VIRT_TO_BUS(&scb->dcdb);
       scb->cmd.dcdb.reserved = 0;

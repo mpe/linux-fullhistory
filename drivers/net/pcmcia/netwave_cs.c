@@ -61,9 +61,9 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-#ifdef CONFIG_NET_RADIO
+#ifdef CONFIG_NET_PCMCIA_RADIO
 #include <linux/wireless.h>
-#endif
+#endif	/* CONFIG_NET_PCMCIA_RADIO */
 
 #include <pcmcia/version.h>
 #include <pcmcia/cs_types.h>

@@ -289,7 +289,7 @@ static Scsi_Cmnd *
 	unsigned char *bp;
 
 	if (SCpnt == NULL)
-		SCpnt = scsi_allocate_device(STp->device, 1);
+		SCpnt = scsi_allocate_device(STp->device, 1, FALSE);
 		if (SCpnt == NULL) {
 			printk(KERN_ERR "st%d: Can't get SCSI request.\n",
                                TAPE_NR(STp->devt));

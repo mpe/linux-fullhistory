@@ -49,7 +49,7 @@ bootsect.o: bootsect.s
 	$(AS) -o $@ $<
 
 bootsect.s: bootsect.S Makefile $(BOOT_INCL)
-	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
+	$(CPP) $(CPPFLAGS) -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
 
 bbootsect: bbootsect.o
 	$(LD) -Ttext 0x0 -s -oformat binary $< -o $@
@@ -58,7 +58,7 @@ bbootsect.o: bbootsect.s
 	$(AS) -o $@ $<
 
 bbootsect.s: bootsect.S Makefile $(BOOT_INCL)
-	$(CPP) -D__BIG_KERNEL__ -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
+	$(CPP) $(CPPFLAGS) -D__BIG_KERNEL__ -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
 
 setup: setup.o
 	$(LD) -Ttext 0x0 -s -oformat binary -e begtext -o $@ $<
@@ -67,7 +67,7 @@ setup.o: setup.s
 	$(AS) -o $@ $<
 
 setup.s: setup.S video.S Makefile $(BOOT_INCL) $(TOPDIR)/include/linux/version.h $(TOPDIR)/include/linux/compile.h
-	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
+	$(CPP) $(CPPFLAGS) -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
 
 bsetup: bsetup.o
 	$(LD) -Ttext 0x0 -s -oformat binary -e begtext -o $@ $<
@@ -76,7 +76,7 @@ bsetup.o: bsetup.s
 	$(AS) -o $@ $<
 
 bsetup.s: setup.S video.S Makefile $(BOOT_INCL) $(TOPDIR)/include/linux/version.h $(TOPDIR)/include/linux/compile.h
-	$(CPP) -D__BIG_KERNEL__ -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
+	$(CPP) $(CPPFLAGS) -D__BIG_KERNEL__ -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
 
 dep:
 

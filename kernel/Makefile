@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 .S.s:
-	$(CPP) -traditional $< -o $*.s
+	$(CPP) $(CPPFLAGS) -traditional $< -o $*.s
 
 O_TARGET := kernel.o
 O_OBJS    = sched.o dma.o fork.o exec_domain.o panic.o printk.o sys.o \

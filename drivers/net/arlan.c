@@ -17,28 +17,32 @@ static int SID = SIDUNKNOWN;
 static int radioNodeId = radioNodeIdUNKNOWN;
 static char encryptionKey[12] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
 static char *siteName = siteNameUNKNOWN;
-static int irq = irqUNKNOWN;
 static int mem = memUNKNOWN;
-static int arlan_debug = debugUNKNOWN;
+int arlan_debug = debugUNKNOWN;
 static int probe = probeUNKNOWN;
 static int numDevices = numDevicesUNKNOWN;
-static int testMemory = testMemoryUNKNOWN;
 static int spreadingCode = spreadingCodeUNKNOWN;
 static int channelNumber = channelNumberUNKNOWN;
 static int channelSet = channelSetUNKNOWN;
 static int systemId = systemIdUNKNOWN;
 static int registrationMode = registrationModeUNKNOWN;
-static int txScrambled = 1;
 static int keyStart = 0;
-static int mdebug = 0;
 static int tx_delay_ms = 0;
 static int retries = 5;
 static int async = 1;
 static int tx_queue_len = 1;
+static int arlan_EEPROM_bad = 0;
+int arlan_entry_and_exit_debug = 0;
+
+#ifdef ARLAN_DEBUGING
+
 static int arlan_entry_debug = 0;
 static int arlan_exit_debug = 0;
-static int arlan_entry_and_exit_debug = 0;
-static int arlan_EEPROM_bad = 0;
+static int testMemory = testMemoryUNKNOWN;
+static int irq = irqUNKNOWN;
+static int txScrambled = 1;
+static int mdebug = 0;
+#endif
 
 #if LINUX_VERSION_CODE > 0x20100
 MODULE_PARM(irq, "i");
@@ -336,11 +340,15 @@ int arlan_command(struct net_device *dev, int command_p)
 	}
 	else if (priv->waiting_command_mask & ARLAN_COMMAND_RESET)
 	{
+		priv->under_reset=1;
+		dev->tbusy = 1;
+
 		arlan_drop_tx(dev);
 		if (priv->tx_command_given || priv->rx_command_given)
 		{
 			printk(KERN_ERR "%s: Reset under tx or rx command \n", dev->name);
 		};
+		dev->tbusy = 1;
 		if (arlan_debug & ARLAN_DEBUG_RESET)
 			printk(KERN_ERR "%s: Doing chip reset\n", dev->name);
 		priv->lastReset = jiffies;
@@ -398,15 +406,10 @@ int arlan_command(struct net_device *dev, int command_p)
 		{
 			priv->waiting_command_mask &= ~ARLAN_COMMAND_CONF_WAIT;
 			priv->waiting_command_mask |= ARLAN_COMMAND_RX;
+			priv->waiting_command_mask |= ARLAN_COMMAND_TBUSY_CLEAR;
 			priv->card_polling_interval = HZ / 10;
 			priv->tx_command_given = 0;
 			priv->under_config = 0;
-			if (dev->tbusy || !dev->start)
-			{
-				dev->tbusy = 0;
-				dev->start = 1;
-				mark_bh(NET_BH);
-			};
 		}
 		else
 		{
@@ -424,13 +427,24 @@ int arlan_command(struct net_device *dev, int command_p)
 			WRITESHMB(arlan->commandByte, ARLAN_COM_INT | ARLAN_COM_RX_ENABLE);
 			WRITESHMB(arlan->commandParameter[0], conf->rxParameter);
 			arlan_interrupt_lancpu(dev);
-			priv->rx_command_given;
+			priv->rx_command_given = 0; // mnjah, bad
 			priv->last_rx_time = arlan_time();
 			priv->waiting_command_mask &= ~ARLAN_COMMAND_RX;
 			priv->card_polling_interval = 1;
 		}
 		else
 			priv->card_polling_interval = 2;
+	}
+	else if (priv->waiting_command_mask & ARLAN_COMMAND_TBUSY_CLEAR)
+	{
+		if ( !registrationBad(dev) && (dev->tbusy || !dev->start) )
+			{
+				priv->waiting_command_mask &= ~ARLAN_COMMAND_TBUSY_CLEAR;
+
+				dev->tbusy = 0;
+				dev->start = 1;
+				mark_bh(NET_BH);
+			};
 	}
 	else if (priv->waiting_command_mask & ARLAN_COMMAND_TX)
 	{
@@ -692,7 +706,7 @@ static void arlan_registration_timer(unsigned long data)
 }
 
 
-
+#ifdef ARLAN_DEBUGING
 
 static void arlan_print_registers(struct net_device *dev, int line)
 {
@@ -718,6 +732,7 @@ static void arlan_print_registers(struct net_device *dev, int line)
 
 	ARLAN_DEBUG_EXIT("arlan_print_registers");
 }
+#endif
 
 
 static int arlan_hw_tx(struct net_device *dev, char *buf, int length)
@@ -1039,12 +1054,18 @@ static int __init arlan_check_fingerprint(int memaddr)
 	volatile struct arlan_shmem *arlan = (struct arlan_shmem *) memaddr;
 
 	ARLAN_DEBUG_ENTRY("arlan_check_fingerprint");
+	if (check_mem_region(virt_to_phys((void *)memaddr),0x2000 )){
+		// printk(KERN_WARNING "arlan: memory region %lx excluded from probing \n",virt_to_phys((void*)memaddr));
+		return -ENODEV;
+	};
 	memcpy_fromio(tempBuf, arlan->textRegion, 29);
 	tempBuf[30] = 0;
 
 	/* check for card at this address */
-	if (0 != strncmp(tempBuf, probeText, 29))
+	if (0 != strncmp(tempBuf, probeText, 29)){
+// not 		release_mem_region(virt_to_phys((void*)memaddr),0x2000);
 		return -ENODEV;
+	}
 
 //   printk(KERN_INFO "arlan found at 0x%x \n",memaddr);
 	ARLAN_DEBUG_EXIT("arlan_check_fingerprint");
@@ -1063,17 +1084,17 @@ int __init arlan_probe_everywhere(struct net_device *dev)
 	ARLAN_DEBUG_ENTRY("arlan_probe_everywhere");
 	if (mem != 0 && numDevices == 1)	/* Check a single specified location. */
 	{
-		if (arlan_probe_here(dev, mem) == 0)
+		if (arlan_probe_here(dev, (int) phys_to_virt(  mem) ) == 0)
 			return 0;
 		else
 			return -ENODEV;
 	}
-	for (m = lastFoundAt + 0x2000; m <= 0xDE000; m += 0x2000)
+	for (m = (int)phys_to_virt(lastFoundAt) + 0x2000; m <= (int)phys_to_virt(0xDE000); m += 0x2000)
 	{
 		if (arlan_probe_here(dev, m) == 0)
 		{
 			found++;
-			lastFoundAt = m;
+			lastFoundAt = (int)virt_to_phys((void*)m);
 			break;
 		}
 		probed++;
@@ -1100,7 +1121,7 @@ int __init arlan_find_devices(void)
 	ARLAN_DEBUG_ENTRY("arlan_find_devices");
 	if (mem != 0 && numDevices == 1)	/* Check a single specified location. */
 		return 1;
-	for (m = 0xc000; m <= 0xDE000; m += 0x2000)
+	for (m =(int) phys_to_virt(0xc0000); m <=(int) phys_to_virt(0xDE000); m += 0x2000)
 	{
 		if (arlan_check_fingerprint(m) == 0)
 			found++;
@@ -1172,6 +1193,9 @@ static int __init
 		printk(KERN_CRIT "init_etherdev failed ");
 		return 0;
 	}
+
+	memset(dev->priv,0,sizeof(struct arlan_private));
+
 	((struct arlan_private *) dev->priv)->conf =
 	    kmalloc(sizeof(struct arlan_shmem), GFP_KERNEL);
 
@@ -1199,6 +1223,9 @@ static int __init
 	dev->set_multicast_list = arlan_set_multicast;
 	dev->change_mtu = arlan_change_mtu;
 	dev->set_mac_address = arlan_mac_addr;
+	dev->tbusy = 1;
+	dev->start = 0;
+	
 	((struct arlan_private *) dev->priv)->irq_test_done = 0;
 	arlan_device[num] = dev;
 	((struct arlan_private *) arlan_device[num]->priv)->Conf = &(arlan_conf[num]);
@@ -1221,7 +1248,7 @@ int __init arlan_probe_here(struct net_device *dev, int memaddr)
 	if (arlan_check_fingerprint(memaddr))
 		return -ENODEV;
 
-	printk(KERN_NOTICE "%s: Arlan found at %#5x, \n ", dev->name, memaddr);
+	printk(KERN_NOTICE "%s: Arlan found at %x, \n ", dev->name, (int) virt_to_phys((void*)memaddr));
 
 	if (!arlan_allocate_device(arlans_found, dev))
 		return -1;
@@ -1261,14 +1288,13 @@ static int arlan_open(struct net_device *dev)
 		return ret;
 
 	arlan = ((struct arlan_private *) dev->priv)->card;
-
 	if (request_irq(dev->irq, &arlan_interrupt, 0, dev->name, dev))
 	{
 		printk(KERN_ERR "%s: unable to get IRQ %d .\n",
 			dev->name, dev->irq);
 		return -EAGAIN;
 	}
-	arlan_command(dev, ARLAN_COMMAND_POWERUP | ARLAN_COMMAND_LONG_WAIT_NOW);
+
 
 	priv->bad = 0;
 	priv->lastReset = 0;
@@ -1279,15 +1305,10 @@ static int arlan_open(struct net_device *dev)
 	dev->tbusy = 1;
 	priv->txOffset = 0;
 	dev->interrupt = 0;
-	dev->start = 1;
+	dev->start = 0;
 	dev->tx_queue_len = tx_queue_len;
-	init_timer(&priv->timer);
-	priv->timer.expires = jiffies + HZ / 10;
-	priv->timer.data = (unsigned long) dev;
-	priv->timer.function = &arlan_registration_timer;	/* timer handler */
 	priv->interrupt_processing_active = 0;
 	priv->command_lock = 0;
-	add_timer(&priv->timer);
 
 	init_MUTEX(&priv->card_lock);
 	myATOMIC_INIT(priv->card_users, 1);	/* damn 2.0.33 */
@@ -1295,7 +1316,8 @@ static int arlan_open(struct net_device *dev)
 	priv->registrationLastSeen = jiffies;
 	priv->txLast = 0;
 	priv->tx_command_given = 0;
-
+	priv->rx_command_given = 0;
+	
 	priv->reRegisterExp = 1;
 	priv->nof_tx = 0;
 	priv->nof_tx_ack = 0;
@@ -1306,6 +1328,16 @@ static int arlan_open(struct net_device *dev)
 	priv->Conf->registrationInterrupts = 1;
 
 	dev->tbusy = 0;
+	init_timer(&priv->timer);
+	priv->timer.expires = jiffies + HZ / 10;
+	priv->timer.data = (unsigned long) dev;
+	priv->timer.function = &arlan_registration_timer;	/* timer handler */
+
+	arlan_command(dev, ARLAN_COMMAND_POWERUP | ARLAN_COMMAND_LONG_WAIT_NOW);
+	udelay(200000);
+	dev->tbusy = 0;
+	dev->start = 1;
+	add_timer(&priv->timer);
 
 	MOD_INC_USE_COUNT;
 #ifdef CONFIG_PROC_FS
@@ -1898,29 +1930,31 @@ static int arlan_close(struct net_device *dev)
 	}
 	ARLAN_DEBUG_ENTRY("arlan_close");
 
+	del_timer(&priv->timer);
+
+	arlan_command(dev, ARLAN_COMMAND_POWERDOWN);
+
 	IFDEBUG(ARLAN_DEBUG_STARTUP)
 		printk(KERN_NOTICE "%s: Closing device\n", dev->name);
 
 	priv->open_time = 0;
 	dev->tbusy = 1;
 	dev->start = 0;
-	del_timer(&priv->timer);
 	free_irq(dev->irq, dev);
-
 	MOD_DEC_USE_COUNT;
 
 	ARLAN_DEBUG_EXIT("arlan_close");
 	return 0;
 }
 
-
+#ifdef ARLAN_DEBUGING
 static long alignLong(volatile u_char * ptr)
 {
 	long ret;
 	memcpy_fromio(&ret, (void *) ptr, 4);
 	return ret;
 }
-
+#endif
 
 /*
  * Get the current statistics.
@@ -2041,6 +2075,7 @@ int init_module(void)
 		}
 		if (probe)
 			arlan_probe_everywhere(arlan_device[i]);
+//		arlan_command(arlan_device[i], ARLAN_COMMAND_POWERDOWN );
 	}
 	printk(KERN_INFO "Arlan driver %s\n", arlan_version);
 	ARLAN_DEBUG_EXIT("init_module");
@@ -2060,6 +2095,9 @@ void cleanup_module(void)
 	{
 		if (arlan_device[i])
 		{
+			arlan_command(arlan_device[i], ARLAN_COMMAND_POWERDOWN );
+
+//			release_mem_region(virt_to_phys(arlan_device[i]->mem_start), 0x2000 );
 			unregister_netdev(arlan_device[i]);
 			if (arlan_device[i]->priv)
 			{

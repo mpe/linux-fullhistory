@@ -40,8 +40,14 @@
  * the host drivers that we are using may be loaded as modules, and
  * when we unload these,  we need to ensure that the error handler thread
  * can be shut down.
+ *
+ * Note - when we unload a module, we send a SIGHUP.  We mustn't
+ * enable SIGTERM, as this is how the init shuts things down when you
+ * go to single-user mode.  For that matter, init also sends SIGKILL,
+ * so we mustn't enable that one either.  We use SIGHUP instead.  Other
+ * options would be SIGPWR, I suppose.
  */
-#define SHUTDOWN_SIGS	(sigmask(SIGKILL)|sigmask(SIGINT)|sigmask(SIGTERM))
+#define SHUTDOWN_SIGS	(sigmask(SIGHUP))
 
 #ifdef DEBUG
 #define SENSE_TIMEOUT SCSI_TIMEOUT

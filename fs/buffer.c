@@ -727,8 +727,7 @@ static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
 	atomic_dec(&bh->b_count);
 	tmp = bh->b_this_page;
 	while (tmp != bh) {
-		if (atomic_read(&tmp->b_count) &&
-		    (tmp->b_end_io == end_buffer_io_async))
+		if (tmp->b_end_io == end_buffer_io_async && buffer_locked(tmp))
 			goto still_busy;
 		tmp = tmp->b_this_page;
 	}
@@ -1089,7 +1088,7 @@ static struct buffer_head * get_unused_buffer_head(int async)
 	return NULL;
 }
 
-void set_bh_page (struct buffer_head *bh, struct page *page, unsigned int offset)
+void set_bh_page (struct buffer_head *bh, struct page *page, unsigned long offset)
 {
 	bh->b_page = page;
 	if (offset >= PAGE_SIZE)

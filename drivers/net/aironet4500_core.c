@@ -1,13 +1,20 @@
 /*
- *	 Aironet 4500 Pcmcia driver
+ *	 Aironet 4500/4800 driver core
  *
  *		Elmer Joandi, Januar 1999
- *	Copyright Elmer Joandi, all rights restricted
+ *		Copyright: 	GPL
  *	
  *
  *	Revision 0.1 ,started  30.12.1998
  *
  *
+ */
+ /* CHANGELOG:
+ 	march 99, stable version 2.0
+ 	august 99, stable version 2.2
+ 	november 99, integration with 2.3
+	17.12.99: finally, got SMP near-correct. 
+		timing issues remain- on SMP box its 15% slower on tcp	
  */
 
 #include <linux/module.h>
@@ -34,12 +41,16 @@ int bap_sleep_after_setup = 1;
 int sleep_before_command  = 1;
 int bap_sleep_before_write= 1;
 int sleep_in_command	  = 1;
+int both_bap_lock	 =0;	/* activated at awc_init in this */
+int bap_setup_spinlock   =0;	/* file if numcpu >1 */
 
 EXPORT_SYMBOL(bap_sleep);
 EXPORT_SYMBOL(bap_sleep_after_setup);
 EXPORT_SYMBOL(sleep_before_command);
 EXPORT_SYMBOL(bap_sleep_before_write);
 EXPORT_SYMBOL(sleep_in_command);
+EXPORT_SYMBOL(both_bap_lock);
+EXPORT_SYMBOL(bap_setup_spinlock);
 
 struct awc_strings awc_status_error_codes[]=awc_reply_error_strings;
 struct awc_strings awc_command_names[]=awc_command_name_strings;
@@ -160,10 +171,7 @@ awc_issue_command_and_block(struct awc_command * cmd){
 
   AWC_ENTRY_EXIT_DEBUG(" entry awc_issue_command_and_block ");
                
-     DOWN(&cmd->priv->command_semaphore);
-
-//     save_flags(flags);
-//    cli();
+     AWC_LOCK_COMMAND_ISSUING(cmd->priv);
 
      if (awc_command_busy_clear_wait(cmd->dev)) 		goto final;
 
@@ -232,14 +240,12 @@ awc_issue_command_and_block(struct awc_command * cmd){
   	goto final;   	 
      }	
 
- //    restore_flags(flags);   
-     UP(&cmd->priv->command_semaphore);
+     AWC_UNLOCK_COMMAND_ISSUING(cmd->priv);
      AWC_ENTRY_EXIT_DEBUG(" exit \n"); 
     udelay(1);
      return 0;
 final: 
-//     restore_flags(flags);
-     UP(&cmd->priv->command_semaphore);
+     AWC_UNLOCK_COMMAND_ISSUING(cmd->priv);
      AWC_ENTRY_EXIT_DEBUG("  BAD exit \n");
      return -1; ;
 };
@@ -268,7 +274,7 @@ awc_issue_command(struct awc_command * cmd){
      
      }
 
-     DOWN(&cmd->priv->command_semaphore);	
+     AWC_LOCK_COMMAND_ISSUING(cmd->priv);	
 
      if(awc_command_busy_clear_wait(cmd->dev))		goto final;               	
 
@@ -304,7 +310,7 @@ awc_issue_command(struct awc_command * cmd){
      AWC_ENTRY_EXIT_DEBUG(" exit \n"); 
      return 0;
  final:
-     UP(&cmd->priv->command_semaphore);
+     AWC_UNLOCK_COMMAND_ISSUING(cmd->priv);
      AWC_ENTRY_EXIT_DEBUG("  BAD exit \n");
 	   return -1; ;
 
@@ -323,7 +329,7 @@ awc_issue_command_no_ack(struct NET_DEVICE * dev,
      AWC_ENTRY_EXIT_DEBUG(" entry awc_issue_command_no_ack ");
      
                
-     DOWN(&priv->command_semaphore);	
+     AWC_LOCK_COMMAND_ISSUING(priv);	
 
      if (awc_command_busy_clear_wait(dev)) {
 		printk("aironet4x00 no_ack command (reset) with stuck card \n");
@@ -351,11 +357,11 @@ awc_issue_command_no_ack(struct NET_DEVICE * dev,
      if (awc_command_busy(dev->base_addr)) 
      	awc_event_ack_ClrStckCmdBsy(dev->base_addr);
 
-     UP(&priv->command_semaphore);
+     AWC_UNLOCK_COMMAND_ISSUING(priv);
      AWC_ENTRY_EXIT_DEBUG(" exit \n"); 
  return 0;
 final: 
-     UP(&priv->command_semaphore);
+     AWC_UNLOCK_COMMAND_ISSUING(priv);
      AWC_ENTRY_EXIT_DEBUG("  BAD exit \n");
 	   return -1; ;
 };
@@ -383,7 +389,8 @@ int awc_bap_setup(struct awc_command * cmd) {
      if (!cmd->bap || !(cmd->lock_state & (AWC_BAP_SEMALOCKED |AWC_BAP_LOCKED)))
      	DEBUG(1,"no bap or bap not locked cmd %d !!", cmd->command);
 
-	  
+	if (bap_setup_spinlock)
+		my_spin_lock_irqsave(&cmd->priv->bap_setup_spinlock,cmd->priv->bap_setup_spinlock_flags);	  
 	  status = AWC_IN(cmd->bap->offset);
 	  
 	  if (status & ~0x2000 ){
@@ -412,14 +419,14 @@ int awc_bap_setup(struct awc_command * cmd) {
 	  	//	AWC_OUT(cmd->bap->offset, 0x800);
 	  }
 
-//	  save_flags(flags);
-//	  cli();
+	  save_flags(flags);
+	  cli();
 	    
           AWC_OUT(cmd->bap->select, cmd->rid);
 	  WAIT61x3;
           AWC_OUT(cmd->bap->offset, cmd->offset);
  
-//          restore_flags(flags);
+          restore_flags(flags);
 
 	  WAIT61x3;          
           
@@ -431,11 +438,11 @@ int awc_bap_setup(struct awc_command * cmd) {
               if ( cmd->priv->sleeping_bap)
               		udelay(bap_sleep);
               if (cmd->priv->ejected)
-			return -1;
+			goto ejected_unlock;
 	      udelay(1);
 	      if (cycles > 10000) {
 			printk(KERN_CRIT "deadlock in bap\n");
-			return AWC_ERROR;
+			goto return_AWC_ERROR;
 	      };
               status = AWC_IN(cmd->bap->offset);
               if (status & AWC_BAP_BUSY) {
@@ -464,7 +471,7 @@ int awc_bap_setup(struct awc_command * cmd) {
                   if (jiffies - jiff > 1 ) {
                   	AWC_ENTRY_EXIT_DEBUG(" BAD BUSY  exit \n");
                   	awc_dump_registers(cmd->dev);
-                  	return AWC_ERROR;
+                  	goto return_AWC_ERROR;
                   }
                   continue;
               }
@@ -478,7 +485,7 @@ int awc_bap_setup(struct awc_command * cmd) {
                   	udelay(bap_sleep_after_setup); 
                    
                   // success
-                  return AWC_SUCCESS;
+                  goto return_AWC_SUCCESS;
               }
 
               if (status & AWC_BAP_ERR) {
@@ -486,7 +493,7 @@ int awc_bap_setup(struct awc_command * cmd) {
                   // invalid rid or offset
                   printk(KERN_ERR "bap setup error bit set for rid %x offset %x \n",cmd->rid,cmd->offset);
                   awc_dump_registers(cmd->dev);
-                  return AWC_ERROR;
+                  goto return_AWC_ERROR;
               }
               if ( cmd->priv->sleeping_bap)
          		udelay(bap_sleep);
@@ -505,13 +512,31 @@ int awc_bap_setup(struct awc_command * cmd) {
 	      if (! (status &(AWC_BAP_ERR |AWC_BAP_DONE |AWC_BAP_BUSY))){
 		printk("aironet4500: bap setup lock without any status bits set");
 		awc_dump_registers(cmd->dev);
-                return AWC_ERROR;
+                goto return_AWC_ERROR;
 
 	      };
          
           }
-          
+
      AWC_ENTRY_EXIT_DEBUG(" WE MUST NOT BE HERE exit \n");
+
+ejected_unlock:
+     if (bap_setup_spinlock)
+	my_spin_unlock_irqrestore(&cmd->priv->bap_setup_spinlock,cmd->priv->bap_setup_spinlock_flags);	  
+     AWC_ENTRY_EXIT_DEBUG(" ejected_unlock_exit \n");	
+     return -1;
+
+return_AWC_ERROR:
+     if (bap_setup_spinlock)
+	my_spin_unlock_irqrestore(&cmd->priv->bap_setup_spinlock,cmd->priv->bap_setup_spinlock_flags);	  
+     AWC_ENTRY_EXIT_DEBUG(" AWC_ERROR_exit \n");
+     return AWC_ERROR;          
+
+return_AWC_SUCCESS:
+     if (bap_setup_spinlock)
+	my_spin_unlock_irqrestore(&cmd->priv->bap_setup_spinlock,cmd->priv->bap_setup_spinlock_flags);	  
+     AWC_ENTRY_EXIT_DEBUG(" exit \n");
+     return AWC_SUCCESS;          
 }
 
 
@@ -683,15 +708,13 @@ awc_readrid(struct NET_DEVICE * dev, struct aironet4500_RID * rid, void *pBuf ){
 	  sleep_state = cmd.priv->sleeping_bap ;
 	  cmd.priv->sleeping_bap = 1;
 	  udelay(500);
-	  if (awc_issue_command_and_block(&cmd))	goto final;
 	  AWC_BAP_LOCK_NOT_CLI(cmd);
+	  if (awc_issue_command_and_block(&cmd))	goto final;
 	  udelay(1);
           if (awc_bap_setup(&cmd))			goto final;
           udelay(1);
           if (awc_bap_read(&cmd))			goto final;
           cmd.priv->sleeping_bap = sleep_state;
-	  AWC_BAP_UNLOCK(cmd);
-
 
 	  AWC_RELEASE_COMMAND(cmd);
           AWC_ENTRY_EXIT_DEBUG(" exit \n"); 
@@ -728,8 +751,8 @@ awc_writerid(struct NET_DEVICE * dev, struct aironet4500_RID * rid, void *pBuf){
           udelay(10);	
           cmd.command=0x121;
 	  if (awc_issue_command_and_block(&cmd))	goto final;
-          AWC_BAP_UNLOCK(cmd);
           cmd.priv->sleeping_bap = sleep_state;
+
 	  AWC_RELEASE_COMMAND(cmd);
           AWC_ENTRY_EXIT_DEBUG(" exit \n"); 
  	  return 0;
@@ -755,15 +778,13 @@ awc_readrid_dir(struct NET_DEVICE * dev, struct awc_rid_dir * rid ){
 	  cmd.priv->sleeping_bap = 1;
 
 	  udelay(500);
-	  if (awc_issue_command_and_block(&cmd))	goto final;
 
 	  AWC_BAP_LOCK_NOT_CLI(cmd);
+	  if (awc_issue_command_and_block(&cmd))	goto final;
 	  
           if (awc_bap_setup(&cmd))			goto final;
           if (awc_bap_read(&cmd))			goto final;
           cmd.priv->sleeping_bap = sleep_state;
-	  AWC_BAP_UNLOCK(cmd);
-	  
 
 	  AWC_RELEASE_COMMAND(cmd);
           AWC_ENTRY_EXIT_DEBUG(" exit \n"); 
@@ -793,13 +814,13 @@ awc_writerid_dir(struct NET_DEVICE * dev, struct awc_rid_dir * rid){
 	  cmd.priv->sleeping_bap = 1;
 
 	  udelay(500);
-	  if (awc_issue_command_and_block(&cmd))	goto final;
 
 	  AWC_BAP_LOCK_NOT_CLI(cmd);
+
+	  if (awc_issue_command_and_block(&cmd))	goto final;
           if (awc_bap_setup(&cmd))			goto final;
           if (awc_bap_write(&cmd))			goto final;
           cmd.priv->sleeping_bap = sleep_state;
-	  AWC_BAP_UNLOCK(cmd);
 	            
           cmd.command=0x121;
           udelay(500);
@@ -833,7 +854,9 @@ awc_issue_blocking_command(struct NET_DEVICE * dev,u16 comm){
      AWC_ENTRY_EXIT_DEBUG(" entry awc_issue_blocking_command ");
      
           AWC_INIT_COMMAND(AWC_NOT_CLI,cmd,dev,comm,0, 0, 0, 0 ,0 );
-          
+
+          AWC_BAP_LOCK_NOT_CLI(cmd);
+
           if (awc_issue_command_and_block(&cmd))
           	goto final;
 
@@ -1005,6 +1028,8 @@ int  awc_tx_alloc(struct NET_DEVICE * dev) {
 	  DEBUG(32,"in %x large buffers ",cmd.priv->large_buff_mem / (dev->mtu + AWC_TX_HEAD_SIZE + 8) );
 	  	
 	  k=0;tot=0;
+	  AWC_BAP_LOCK_NOT_CLI(cmd);
+
 	  while (k < cmd.priv->large_buff_mem / (dev->mtu + AWC_TX_HEAD_SIZE + 8) ) {
 	  	
 	  	fid = kmalloc(sizeof(struct awc_fid),GFP_KERNEL );
@@ -1096,6 +1121,8 @@ awc_tx_dealloc_fid(struct NET_DEVICE * dev,struct awc_fid * fid){
 	  int fid_handle = 0;
 	  
           AWC_INIT_COMMAND(AWC_NOT_CLI,cmd,dev,0x0C,0, 0,0,0,NULL);
+
+	  AWC_BAP_LOCK_NOT_CLI(cmd);
 
 	  if (fid->u.tx.fid){
 	  		fid_handle = cmd.par0 = fid->u.tx.fid;
@@ -1959,7 +1986,7 @@ awc_receive_packet(struct NET_DEVICE * dev){
 		DEBUG(128, "rx payload read %x \n",rx_buff->u.rx.ieee_802_3.payload_length);
 	};
 	
-	AWC_BAP_UNLOCK(cmd);
+	AWC_RELEASE_COMMAND(cmd);
 
         DEBUG(128,"\n payload hdr %x ",rx_buff->u.rx.ieee_802_3.status );
         if (awc_debug && rx_buff->u.rx.payload)
@@ -1968,8 +1995,6 @@ awc_receive_packet(struct NET_DEVICE * dev){
 
 	awc_802_11_router_rx(dev,rx_buff);
 
-	AWC_RELEASE_COMMAND(cmd);
-//	awc_event_ack_Rx(dev->base_addr);
 	AWC_ENTRY_EXIT_DEBUG(" exit \n"); 
  	return 0;
      final:
@@ -1977,7 +2002,6 @@ awc_receive_packet(struct NET_DEVICE * dev){
         awc_802_11_failed_rx_copy(dev,rx_buff);
      	// if (skb) dev_kfree_skb(skb, FREE_WRITE);
      	AWC_RELEASE_COMMAND(cmd);
-//	awc_event_ack_Rx(dev->base_addr);
      	AWC_ENTRY_EXIT_DEBUG("  BAD exit \n");
 	return -1; ;
      	
@@ -2089,27 +2113,31 @@ awc_transmit_packet(struct NET_DEVICE * dev, struct awc_fid * tx_buff) {
        	cmd.len =	tx_buff->pkt_len;
 
        	if (awc_bap_write(&cmd))			goto final;
+	AWC_RELEASE_COMMAND(cmd);
+// locking probs,  these two lines below and above, swithc order 
+	if (awc_issue_command_and_block(&cmd))		goto final_unlocked;      
 
-      
-        AWC_BAP_UNLOCK(cmd);
 
-	if (awc_issue_command_and_block(&cmd))		goto final;
-//	if (awc_issue_command(&cmd))		goto final;
 	tx_buff->transmit_start_time = jiffies;
 	awc_802_11_after_tx_packet_to_card_write(dev,tx_buff);         		
            // issue the transmit command
 
 
-	AWC_RELEASE_COMMAND(cmd);
         AWC_ENTRY_EXIT_DEBUG(" exit \n"); 
 	return 0;
      final:
-	awc_802_11_after_failed_tx_packet_to_card_write(dev,tx_buff);
-     	        
+	awc_802_11_after_failed_tx_packet_to_card_write(dev,tx_buff);     	        
      	printk(KERN_CRIT "%s awc tx command failed \n",dev->name);
      	AWC_RELEASE_COMMAND(cmd);
      	AWC_ENTRY_EXIT_DEBUG("  BAD exit \n");
 	return -1; ;
+
+     final_unlocked:
+	awc_802_11_after_failed_tx_packet_to_card_write(dev,tx_buff);     	        
+     	printk(KERN_CRIT "%s awc tx command failed \n",dev->name);
+     	AWC_ENTRY_EXIT_DEBUG("  BAD exit \n");
+	return -1; ;
+
 }
 
 
@@ -2141,12 +2169,11 @@ awc_tx_complete_check(struct NET_DEVICE * dev){
 	AWC_BAP_LOCK_NOT_CLI(cmd);
         if (awc_bap_setup(&cmd))		goto final;
         if (awc_bap_read(&cmd))			goto final;
-        AWC_BAP_UNLOCK(cmd);
+	AWC_RELEASE_COMMAND(cmd);
         
 	awc_802_11_after_tx_complete(dev,fid);         		
 
 	
-	AWC_RELEASE_COMMAND(cmd);
         AWC_ENTRY_EXIT_DEBUG(" exit \n"); 
  	return 0;
         
@@ -2202,7 +2229,7 @@ start:
 		dev->start = 0;
 		if (priv->command_semaphore_on){
 			priv->command_semaphore_on--;
-			UP(&priv->command_semaphore);
+			AWC_UNLOCK_COMMAND_ISSUING(priv);
 		}
 		priv->tx_chain_active =0;
 		goto bad_end;
@@ -2219,7 +2246,7 @@ start:
      		if (priv->command_semaphore_on){
      		
      			priv->command_semaphore_on--;
-		        UP(&priv->command_semaphore);
+		        AWC_UNLOCK_COMMAND_ISSUING(priv);
 		}
      	    }
      	};
@@ -2269,10 +2296,10 @@ awc_interrupt_process(struct NET_DEVICE * dev){
 //	u16	ints_to_ack =0;
 	struct awc_fid	* fid = NULL;
 //	int interrupt_reenter = 0;
-	unsigned long flags;	
+//	unsigned long flags;	
 
-	save_flags(flags);
-	cli();
+//	save_flags(flags);
+//	cli();
 //	disable_irq(dev->irq);
 
 	DEBUG(2," entering interrupt handler %s ",dev->name);
@@ -2420,6 +2447,7 @@ start:
 			printk(KERN_ERR "No tx fid when tx int active\n");
 			
 		fid = awc_tx_fid_lookup_and_remove(dev, tx_fid);
+
 		if (fid) {
 			if (priv->process_tx_results) {
 				awc_fid_queue_push_tail(&priv->tx_post_process,fid);
@@ -2491,21 +2519,21 @@ start:
 //end_here:
 
 //	enable_irq(dev->irq);
-  	restore_flags(flags);
+//  	restore_flags(flags);
 
         return 0;
 reenter_end_here:
 
         AWC_ENTRY_EXIT_DEBUG(" reenter-bad end exit \n"); 
 //	enable_irq(dev->irq);
-  	restore_flags(flags);
+//  	restore_flags(flags);
         return 0;
 
 bad_end:
 	dev->interrupt = 0;
         AWC_ENTRY_EXIT_DEBUG(" bad_end exit \n"); 	
 //	enable_irq(dev->irq);
-	restore_flags(flags);
+//	restore_flags(flags);
 	return -1;
 
 
@@ -2516,7 +2544,7 @@ static const char *aironet4500_core_version =
 
 struct NET_DEVICE * aironet4500_devices[MAX_AWCS]  = {NULL,NULL,NULL,NULL};
 
-static int awc_debug = 0; // 0xffffff;
+static int awc_debug = 0; //  0xffffff;
 static int p802_11_send  =  0; // 1
 
 static int awc_process_tx_results = 0;
@@ -2632,8 +2660,15 @@ char name[] = "ElmerLinux";
  
 	DEBUG(2, "%s: awc_init \n",  dev->name);
 
-
-
+	/* both_bap_lock decreases performance about 15% 
+	 * but without it card gets screwed up 
+	 */ 
+#ifdef CONFIG_SMP
+	if(smp_num_cpus > 1){
+		both_bap_lock = 1;
+		bap_setup_spinlock = 1;
+	}
+#endif
 	//awc_dump_registers(dev);
 
 	if (adhoc & !max_mtu)
@@ -2749,7 +2784,7 @@ char name[] = "ElmerLinux";
 	// here we go, bad aironet
 	memset(&priv->SSIDs,0,sizeof(priv->SSIDs));
 
-	memset(&priv->queues_lock,0,sizeof(priv->queues_lock));
+	my_spin_lock_init(&priv->queues_lock);
 
         priv->SSIDs.ridLen		=0;
         if (!SSID) {
@@ -2807,21 +2842,29 @@ int awc_private_init(struct NET_DEVICE * dev){
 	
 	memset(priv, 0, sizeof(struct awc_private)); 
 	
+	my_spin_lock_init(&priv->queues_lock);
+	
 	priv->bap0.select 	= dev->base_addr + awc_Select0_register;
 	priv->bap0.offset 	= dev->base_addr + awc_Offset0_register;
 	priv->bap0.data		= dev->base_addr + awc_Data0_register;
 	priv->bap0.lock 	= 0;
 	priv->bap0.status	= 0;
+	my_spin_lock_init(&priv->bap0.spinlock);
 	init_MUTEX(&priv->bap0.sem);
 	priv->bap1.select 	= dev->base_addr + awc_Select1_register;
 	priv->bap1.offset 	= dev->base_addr + awc_Offset1_register;
 	priv->bap1.data		= dev->base_addr + awc_Data1_register;
 	priv->bap1.lock 	= 0;
 	priv->bap1.status	= 0;
+	my_spin_lock_init(&priv->bap1.spinlock);
 	init_MUTEX(&priv->bap1.sem);
 	priv->sleeping_bap	= 1;
 	
-	init_MUTEX(&priv->command_semaphore);
+//spinlock now	init_MUTEX(&priv->command_semaphore);
+	my_spin_lock_init(&priv->command_issuing_spinlock);
+	my_spin_lock_init(&priv->both_bap_spinlock);
+	my_spin_lock_init(&priv->bap_setup_spinlock);
+	
 	priv->command_semaphore_on = 0;
 	priv->unlock_command_postponed = 0;
 	priv->immediate_bh.next 	= NULL;
@@ -2927,11 +2970,11 @@ int awc_private_init(struct NET_DEVICE * dev){
 	
 	udelay(10000);
 	
-	DOWN(&priv->command_semaphore);
+	AWC_LOCK_COMMAND_ISSUING(priv);
 
 	MOD_DEC_USE_COUNT;
 
-	UP(&priv->command_semaphore);
+	AWC_UNLOCK_COMMAND_ISSUING(priv);
 	 
 	return 0;
 }
@@ -2965,7 +3008,7 @@ int direction = 1;
 
 	struct awc_private *priv = (struct awc_private *)dev->priv;
 	int retval = 0;
-	unsigned long flags;
+//	unsigned long flags;
 	struct awc_fid * fid = NULL;
 	int cnt=0;
 
@@ -2980,8 +3023,8 @@ int direction = 1;
 	/* Transmitter timeout, serious problems. */
 	if (test_and_set_bit( 0, (void *) &dev->tbusy) ) {
 		if (jiffies - dev->trans_start > 3* HZ ){
-			save_flags(flags);
-        		cli();
+			// save_flags(flags);
+        		// cli();
         		fid = priv->tx_in_transmit.head;
         		cnt = 0;
 			while (fid){
@@ -2998,12 +3041,12 @@ int direction = 1;
 				fid = fid->next;
                 		if (cnt++ > 200) {
                         		printk("bbb in awc_fid_queue\n");
-                        		restore_flags(flags);
+                        //		restore_flags(flags);
                         		return -1;
                 		};
 
 			}
-			restore_flags(flags);
+			//restore_flags(flags);
 			//debug =0x8;
 		};
 		if (jiffies - dev->trans_start >= (5* HZ) ) {
@@ -3092,7 +3135,7 @@ int awc_rx(struct NET_DEVICE *dev, struct awc_fid * rx_fid) {
  struct enet_statistics *awc_get_stats(struct NET_DEVICE *dev)
 {
 	struct awc_private *priv = (struct awc_private *)dev->priv;
-        unsigned long flags;
+//        unsigned long flags;
 //	int cnt = 0;
 //	int unlocked_stats_in_interrupt=0;
 	
@@ -3101,11 +3144,11 @@ int awc_rx(struct NET_DEVICE *dev, struct awc_fid * rx_fid) {
 	if (!dev->start) {
 		return 0;			
 	}
-	save_flags(flags);
-	cli();
+//	save_flags(flags);
+//	cli();
 	if (awc_full_stats)
 		awc_readrid_dir(dev, &priv->rid_dir[9]);
-	restore_flags(flags);
+//	restore_flags(flags);
 
 	// the very following is the very wrong very probably
 	if (awc_full_stats){
@@ -3134,7 +3177,7 @@ int awc_rx(struct NET_DEVICE *dev, struct awc_fid * rx_fid) {
 int awc_change_mtu(struct NET_DEVICE *dev, int new_mtu){
 
 //	struct awc_private *priv = (struct awc_private *)dev->priv;
-        unsigned long flags;
+//        unsigned long flags;
 
        if ((new_mtu < 256 ) || (new_mtu > 2312) || (max_mtu && new_mtu > max_mtu) )
                 return -EINVAL;
@@ -3144,14 +3187,14 @@ int awc_change_mtu(struct NET_DEVICE *dev, int new_mtu){
 
 	};
 	if (dev->mtu != new_mtu) {
-		save_flags(flags);
-		cli();
+//		save_flags(flags);
+//		cli();
 		awc_disable_MAC(dev);
 		awc_tx_dealloc(dev);
 		dev->mtu = new_mtu;
 		awc_tx_alloc(dev);
 		awc_enable_MAC(dev);
-		restore_flags(flags);
+//		restore_flags(flags);
 
 		printk("%s mtu has been changed to %d \n ",dev->name,dev->mtu);
 
@@ -3208,7 +3251,7 @@ int init_module(void)
 {
 //	unsigned long flags;
 
-//	debug =  awc_debug;
+		
 	printk(KERN_INFO"%s", aironet4500_core_version);
 	return 0;
 	

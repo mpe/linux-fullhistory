@@ -927,7 +927,8 @@ static int isofs_statfs (struct super_block *sb, struct statfs *buf, int bufsiz)
 int isofs_get_block(struct inode *inode, long iblock,
 		    struct buffer_head *bh_result, int create)
 {
-	off_t b_off, offset, sect_size;
+	unsigned long b_off;
+	unsigned offset, sect_size;
 	unsigned int firstext;
 	unsigned long nextino;
 	int i, err;
@@ -942,30 +943,21 @@ int isofs_get_block(struct inode *inode, long iblock,
 	if (iblock < 0)
 		goto abort_negative;
 
-	b_off = iblock << ISOFS_BUFFER_BITS(inode);
+	b_off = iblock;
 
-	/* If we are beyond the end of this file, don't give out any
-	 * blocks.
+	/* If we are *way* beyond the end of the file, print a message.
+	 * Access beyond the end of the file up to the next page boundary
+	 * is normal, however because of the way the page cache works.
+	 * In this case, we just return 0 so that we can properly fill
+	 * the page with useless information without generating any
+	 * I/O errors.
 	 */
-	if (b_off > inode->i_size) {
-		off_t max_legal_read_offset;
-
-		/* If we are *way* beyond the end of the file, print a message.
-		 * Access beyond the end of the file up to the next page boundary
-		 * is normal, however because of the way the page cache works.
-		 * In this case, we just return 0 so that we can properly fill
-		 * the page with useless information without generating any
-		 * I/O errors.
-		 */
-		max_legal_read_offset = (inode->i_size + PAGE_SIZE - 1)
-			& ~(PAGE_SIZE - 1);
-		if (b_off >= max_legal_read_offset)
-			goto abort_beyond_end;
-	}
+	if (b_off > ((inode->i_size + PAGE_SIZE - 1) >> ISOFS_BUFFER_BITS(inode)))
+		goto abort_beyond_end;
 
 	offset    = 0;
 	firstext  = inode->u.isofs_i.i_first_extent;
-	sect_size = inode->u.isofs_i.i_section_size;
+	sect_size = inode->u.isofs_i.i_section_size >> ISOFS_BUFFER_BITS(inode);
 	nextino   = inode->u.isofs_i.i_next_section_ino;
 
 	i = 0;
@@ -990,8 +982,7 @@ int isofs_get_block(struct inode *inode, long iblock,
 	}
 
 	bh_result->b_dev = inode->i_dev;
-	bh_result->b_blocknr = firstext +
-		((b_off - offset) >> ISOFS_BUFFER_BITS(inode));
+	bh_result->b_blocknr = firstext + b_off - offset;
 	bh_result->b_state |= (1UL << BH_Mapped);
 	err = 0;
 

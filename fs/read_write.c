@@ -39,11 +39,15 @@ loff_t default_llseek(struct file *file, loff_t offset, int origin)
 static inline loff_t llseek(struct file *file, loff_t offset, int origin)
 {
 	loff_t (*fn)(struct file *, loff_t, int);
+	loff_t retval;
 
 	fn = default_llseek;
 	if (file->f_op && file->f_op->llseek)
 		fn = file->f_op->llseek;
-	return fn(file, offset, origin);
+	lock_kernel();
+	retval = fn(file, offset, origin);
+	unlock_kernel();
+	return retval;
 }
 
 asmlinkage off_t sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
@@ -53,7 +57,6 @@ asmlinkage off_t sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 	struct dentry * dentry;
 	struct inode * inode;
 
-	lock_kernel();
 	retval = -EBADF;
 	file = fget(fd);
 	if (!file)
@@ -72,7 +75,6 @@ asmlinkage off_t sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 out_putf:
 	fput(file);
 bad:
-	unlock_kernel();
 	return retval;
 }
 
@@ -87,7 +89,6 @@ asmlinkage long sys_llseek(unsigned int fd, unsigned long offset_high,
 	struct inode * inode;
 	loff_t offset;
 
-	lock_kernel();
 	retval = -EBADF;
 	file = fget(fd);
 	if (!file)
@@ -112,7 +113,6 @@ asmlinkage long sys_llseek(unsigned int fd, unsigned long offset_high,
 out_putf:
 	fput(file);
 bad:
-	unlock_kernel();
 	return retval;
 }
 #endif
@@ -264,7 +264,6 @@ asmlinkage ssize_t sys_readv(unsigned long fd, const struct iovec * vector,
 	struct file * file;
 	ssize_t ret;
 
-	lock_kernel();
 
 	ret = -EBADF;
 	file = fget(fd);
@@ -275,7 +274,6 @@ asmlinkage ssize_t sys_readv(unsigned long fd, const struct iovec * vector,
 	fput(file);
 
 bad_file:
-	unlock_kernel();
 	return ret;
 }
 
@@ -285,19 +283,16 @@ asmlinkage ssize_t sys_writev(unsigned long fd, const struct iovec * vector,
 	struct file * file;
 	ssize_t ret;
 
-	lock_kernel();
 
 	ret = -EBADF;
 	file = fget(fd);
 	if (!file)
 		goto bad_file;
-	if (file->f_op && file->f_op->write && (file->f_mode & FMODE_WRITE)) {
+	if (file->f_op && file->f_op->write && (file->f_mode & FMODE_WRITE))
 		ret = do_readv_writev(VERIFY_READ, file, vector, count);
-	}
 	fput(file);
 
 bad_file:
-	unlock_kernel();
 	return ret;
 }
 
@@ -311,8 +306,6 @@ asmlinkage ssize_t sys_pread(unsigned int fd, char * buf,
 	ssize_t ret;
 	struct file * file;
 	ssize_t (*read)(struct file *, char *, size_t, loff_t *);
-
-	lock_kernel();
 
 	ret = -EBADF;
 	file = fget(fd);
@@ -333,7 +326,6 @@ asmlinkage ssize_t sys_pread(unsigned int fd, char * buf,
 out:
 	fput(file);
 bad_file:
-	unlock_kernel();
 	return ret;
 }
 
@@ -343,8 +335,6 @@ asmlinkage ssize_t sys_pwrite(unsigned int fd, const char * buf,
 	ssize_t ret;
 	struct file * file;
 	ssize_t (*write)(struct file *, const char *, size_t, loff_t *);
-
-	lock_kernel();
 
 	ret = -EBADF;
 	file = fget(fd);
@@ -366,6 +356,5 @@ asmlinkage ssize_t sys_pwrite(unsigned int fd, const char * buf,
 out:
 	fput(file);
 bad_file:
-	unlock_kernel();
 	return ret;
 }

@@ -382,9 +382,9 @@
 #include <linux/ioport.h>
 #include <linux/fcntl.h>
 
-#ifdef CONFIG_NET_RADIO
+#ifdef CONFIG_NET_PCMCIA_RADIO
 #include <linux/wireless.h>		/* Wireless extensions */
-#endif
+#endif	/* CONFIG_NET_PCMCIA_RADIO */
 
 /* Pcmcia headers that we need */
 #include <pcmcia/cs_types.h>

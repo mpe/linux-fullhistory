@@ -12,11 +12,11 @@
 .c.o:
 	$(CC) $(CFLAGS) -DKERNELBASE=$(KERNELBASE) -c -o $*.o $<
 .S.s:
-	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.o $<
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -E -o $*.o $<
 .S.o:
-	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
 
-CFLAGS	= -O -fno-builtin -DSTDC_HEADERS -I$(TOPDIR)/include
+CFLAGS	= $(CPPFLAGS) -O -fno-builtin -DSTDC_HEADERS
 LD_ARGS = -Ttext 0x00400000
 OBJCOPY = $(CROSS_COMPILE)objcopy
 
@@ -102,5 +102,5 @@ fastdep:
 	$(TOPDIR)/scripts/mkdep *.[Sch] > .depend
 
 dep:
-	$(CPP) -M *.S *.c > .depend
+	$(CPP) $(CPPFLAGS) -M *.S *.c > .depend
 

@@ -28,6 +28,6 @@ sgikern.a: $(OBJS)
 indyIRQ.o: indyIRQ.S
 
 dep:
-	$(CPP) -M *.c > .depend
+	$(CPP) $(CPPFLAGS) -M *.c > .depend
 
 include $(TOPDIR)/Rules.make

@@ -16,9 +16,9 @@
 .c.o:
 	$(CC) $(CFLAGS)  -DINITRD_OFFSET=$(IOFF) -DINITRD_SIZE=$(ISZ) -DZIMAGE_OFFSET=$(ZOFF) -DZIMAGE_SIZE=$(ZSZ) -c -o $*.o $<
 .S.s:
-	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.o $<
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -E -o $*.o $<
 .S.o:
-	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
 
 ZOFF = 0
 ZSZ = 0
@@ -30,7 +30,7 @@ ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00100000
 GZIP_FLAGS = -v9
 
 OBJECTS := head.o misc.o ../coffboot/zlib.o m8xx_tty.o
-CFLAGS = -O2 -DSTDC_HEADERS -fno-builtin -I$(TOPDIR)/include -DCONFIG_8xx
+CFLAGS = $(CPPFLAGS) -O2 -DSTDC_HEADERS -fno-builtin -DCONFIG_8xx
 OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJCOPY_ARGS = -O elf32-powerpc
 
@@ -109,7 +109,7 @@ fastdep:
 	$(TOPDIR)/scripts/mkdep *.[Sch] > .depend
 
 dep:
-	$(CPP) -M *.S *.c > .depend
+	$(CPP) $(CPPFLAGS) -M *.S *.c > .depend
 
 # just here to match coffboot/Makefile
 vmlinux.coff:

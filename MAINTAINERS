@@ -122,13 +122,13 @@ S:	Maintained
 
 AHA152X SCSI DRIVER
 P:	Juergen E. Fischer
-M:	Juergen Fischer <fischer@et-inf.fho-emden.de>
+M:	Juergen Fischer <fischer@norbit.de>
 L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
 APM DRIVER
 P:	Stephen Rothwell
-M:	sfr@linuxcare.com
+M:	apm@linuxcare.com.au
 L:	linux-laptop@vger.rutgers.edu
 W:	http://linuxcare.com.au/apm/
 S:	Supported
@@ -958,6 +958,13 @@ L:	linux-usb@suse.com
 S:	Maintained (not yet usable)
 W:	http://suitenine.com/usb/
 
+USB SERIAL DRIVER
+P:	Greg Kroah-Hartman
+M:	greg@kroah.com
+L:	linux-usb@suse.com
+S:	Maintained
+W:	http://www.kroah.com/linux-usb/
+
 USB UHCI DRIVER
 P:	Georg Acher
 M:	usb@in.tum.de
@@ -1006,6 +1013,13 @@ X.25 NETWORK LAYER
 P:	Henner Eisen
 M:	eis@baty.hanse.de
 L:	linux-x25@vger.rutgers.edu
+S:	Maintained
+
+RTLINUX  REALTIME  LINUX
+P:	Victor Yodaiken
+M:	yodaiken@fsmlabs.com
+L:	rtl@rtlinux.org
+W:	www.rtlinux.org
 S:	Maintained
 
 Z85230 SYNCHRONOUS DRIVER

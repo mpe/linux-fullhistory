@@ -34,6 +34,7 @@
  * Jan 1999, Version 1.8
  * Jan 1999, Version 1.9
  * Oct 1999, Version 1.10
+ * Nov 1999, Version 1.11
  *
  * History:
  *    0.6b: first version in official kernel, Linux 1.3.46
@@ -101,6 +102,14 @@
  *         configurable (default on).
  *         Make debug only a boot time parameter (remove APM_DEBUG).
  *         Try to blank all devices on any error.
+ *   1.11: Remove APM dependencies in drivers/char/console.c
+ *         Check nr_running to detect if we are idle (from
+ *         Borislav Deianov <borislav@lix.polytechnique.fr>)
+ *         Fix for bioses that don't zero the top part of the
+ *         entrypoint offset (Mario Sitta <sitta@al.unipmn.it>)
+ *         (reported by Panos Katsaloulis <teras@writeme.com>).
+ *         Real mode power off patch (Walter Hofmann
+ *         <Walter.Hofmann@physik.stud.uni-erlangen.de>).
  *
  * APM 1.1 Reference:
  *
@@ -135,6 +144,7 @@
 #include <linux/miscdevice.h>
 #include <linux/apm_bios.h>
 #include <linux/init.h>
+#include <linux/sched.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -149,8 +159,14 @@ EXPORT_SYMBOL(apm_register_callback);
 EXPORT_SYMBOL(apm_unregister_callback);
 
 extern unsigned long get_cmos_time(void);
+extern void machine_real_restart(unsigned char *, int);
 
+#ifdef CONFIG_MAGIC_SYSRQ
 extern void (*sysrq_power_off)(void);
+#endif
+#if defined(CONFIG_APM_DISPLAY_BLANK) && defined(CONFIG_VT)
+extern int (*console_blank_hook)(int);
+#endif
 
 /*
  * The apm_bios device is one of the misc char devices.
@@ -269,7 +285,7 @@ static int			power_off_enabled = 1;
 static DECLARE_WAIT_QUEUE_HEAD(apm_waitqueue);
 static struct apm_bios_struct *	user_list = NULL;
 
-static char			driver_version[] = "1.10";	/* no spaces */
+static char			driver_version[] = "1.11";	/* no spaces */
 
 static char *	apm_event_name[] = {
 	"system standby",
@@ -380,7 +396,7 @@ static u8 apm_bios_call(u32 func, u32 ebx_in, u32 ecx_in,
 	__asm__ __volatile__(APM_DO_ZERO_SEGS
 		"pushl %%edi\n\t"
 		"pushl %%ebp\n\t"
-		"lcall %%cs:" SYMBOL_NAME_STR(apm_bios_entry) "; cld\n\t"
+		"lcall %%cs:" SYMBOL_NAME_STR(apm_bios_entry) "\n\t"
 		"setc %%al\n\t"
 		"popl %%ebp\n\t"
 		"popl %%edi\n\t"
@@ -413,7 +429,7 @@ static u8 apm_bios_call_simple(u32 func, u32 ebx_in, u32 ecx_in, u32 *eax)
 		__asm__ __volatile__(APM_DO_ZERO_SEGS
 			"pushl %%edi\n\t"
 			"pushl %%ebp\n\t"
-			"lcall %%cs:" SYMBOL_NAME_STR(apm_bios_entry)"; cld\n\t"
+			"lcall %%cs:" SYMBOL_NAME_STR(apm_bios_entry)"\n\t"
 			"setc %%bl\n\t"
 			"popl %%ebp\n\t"
 			"popl %%edi\n\t"
@@ -551,24 +567,24 @@ static void apm_power_off(void)
 	 * they are doing because they booted with the smp-power-off
 	 * kernel option.
 	 */
-	if (apm_enabled || (smp_hack == 2))
+	if (apm_enabled || (smp_hack == 2)) {
+#ifdef CONFIG_APM_REAL_MODE_POWER_OFF
+		unsigned char	po_bios_call[] = {
+			0xb8, 0x00, 0x10,	/* movw  $0x1000,ax  */
+			0x8e, 0xd0,		/* movw  ax,ss       */
+			0xbc, 0x00, 0xf0,	/* movw  $0xf000,sp  */
+			0xb8, 0x07, 0x53,	/* movw  $0x5307,ax  */
+			0xbb, 0x01, 0x00,	/* movw  $0x0001,bx  */
+			0xb9, 0x03, 0x00,	/* movw  $0x0003,cx  */
+			0xcd, 0x15		/* int   $0x15       */
+		};
+
+		machine_real_restart(po_bios_call, sizeof(po_bios_call));
+#else
 		(void) apm_set_power_state(APM_STATE_OFF);
-}
-
-#ifdef CONFIG_APM_DISPLAY_BLANK
-/* Called by apm_display_blank and apm_display_unblank when apm_enabled. */
-static int apm_set_display_power_state(u_short state)
-{
-	int	error;
-
-	/* Blank the first display device */
-	error = set_power_state(0x0100, state);
-	if (error != APM_SUCCESS)
-		/* try to blank them all instead */
-		error = set_power_state(0x01ff, state);
-	return error;
-}
 #endif
+	}
+}
 
 #ifdef CONFIG_APM_DO_ENABLE
 static int __init apm_enable_power_management(void)
@@ -651,33 +667,25 @@ static void apm_error(char *str, int err)
 			str, err);
 }
 
+#if defined(CONFIG_APM_DISPLAY_BLANK) && defined(CONFIG_VT)
 /* Called from console driver -- must make sure apm_enabled. */
-int apm_display_blank(void)
+static int apm_console_blank(int blank)
 {
-#ifdef CONFIG_APM_DISPLAY_BLANK
-	if (apm_enabled) {
-		int error = apm_set_display_power_state(APM_STATE_STANDBY);
-		if ((error == APM_SUCCESS) || (error == APM_NO_ERROR))
-			return 1;
-		apm_error("set display standby", error);
-	}
-#endif
-	return 0;
-}
+	int	error;
+	u_short	state;
 
-/* Called from console driver -- must make sure apm_enabled. */
-int apm_display_unblank(void)
-{
-#ifdef CONFIG_APM_DISPLAY_BLANK
-	if (apm_enabled) {
-		int error = apm_set_display_power_state(APM_STATE_READY);
-		if ((error == APM_SUCCESS) || (error == APM_NO_ERROR))
-			return 1;
-		apm_error("set display ready", error);
-	}
-#endif
+	state = blank ? APM_STATE_STANDBY : APM_STATE_READY;
+	/* Blank the first display device */
+	error = set_power_state(0x100, state);
+	if (error != APM_SUCCESS)
+		/* try to blank them all instead */
+		error = set_power_state(0x1ff, state);
+	if ((error == APM_SUCCESS) || (error == APM_NO_ERROR))
+		return 1;
+	apm_error("set display", error);
 	return 0;
 }
+#endif
 
 int apm_register_callback(int (*callback)(apm_event_t))
 {
@@ -884,12 +892,15 @@ static void check_events(void)
 		case APM_USER_STANDBY:
 #ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
 			if (waiting_for_resume)
-				return;
-			waiting_for_resume = 1;
+				break;
 #endif
-			if (send_event(event, APM_STANDBY_RESUME, NULL)
-			    && (standbys_pending <= 0))
-				standby();
+			if (send_event(event, APM_STANDBY_RESUME, NULL)) {
+#ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
+				waiting_for_resume = 1;
+#endif
+				if (standbys_pending <= 0)
+					standby();
+			}
 			break;
 
 		case APM_USER_SUSPEND:
@@ -905,12 +916,15 @@ static void check_events(void)
 #endif
 #ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
 			if (waiting_for_resume)
-				return;
-			waiting_for_resume = 1;
+				break;
 #endif
-			if (send_event(event, APM_NORMAL_RESUME, NULL)
-			    && (suspends_pending <= 0))
-				suspend();
+			if (send_event(event, APM_NORMAL_RESUME, NULL)) {
+#ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
+				waiting_for_resume = 1;
+#endif
+				if (suspends_pending <= 0)
+					suspend();
+			}
 			break;
 
 		case APM_NORMAL_RESUME:
@@ -947,21 +961,18 @@ static void check_events(void)
 static void apm_event_handler(void)
 {
 	static int	pending_count = 0;
+	int		err;
 
-	if (((standbys_pending > 0) || (suspends_pending > 0))
-	    && (apm_bios_info.version > 0x100)) {
-		if (pending_count-- <= 0) {
-			int	err;
-
+	if ((standbys_pending > 0) || (suspends_pending > 0)) {
+		if ((apm_bios_info.version > 0x100) && (pending_count-- <= 0)) {
 			pending_count = 4;
 			err = apm_set_power_state(APM_STATE_BUSY);
 			if (err)
 				apm_error("busy", err);
 		}
-	} else {
+	} else
 		pending_count = 0;
-		check_events();
-	}
+	check_events();
 }
 
 /*
@@ -970,12 +981,8 @@ static void apm_event_handler(void)
  * Check whether we're the only running process to
  * decide if we should just power down.
  *
- * Do this by checking the runqueue: if we're the
- * only one, then the current process run_list will
- * have both prev and next pointing to the same
- * entry (the true idle process)
  */
-#define system_idle() (current->run_list.next == current->run_list.prev)
+#define system_idle() (nr_running == 1)
 
 static void apm_mainloop(void)
 {
@@ -1367,10 +1374,13 @@ static int apm(void *unused)
 	/* Install our power off handler.. */
 	if (power_off_enabled)
 		acpi_power_off = apm_power_off;
-
 #ifdef CONFIG_MAGIC_SYSRQ
 	sysrq_power_off = apm_power_off;
 #endif
+#if defined(CONFIG_APM_DISPLAY_BLANK) && defined(CONFIG_VT)
+	console_blank_hook = apm_console_blank;
+#endif
+
 	apm_mainloop();
 	return 0;
 }
@@ -1492,6 +1502,9 @@ static int __init apm_init(void)
 	_set_limit((char *)&gdt[APM_40 >> 3], 4095 - (0x40 << 4));
 
 	apm_bios_entry.offset = apm_bios_info.offset;
+#ifdef CONFIG_APM_BAD_ENTRY_OFFSET
+	apm_bios_entry.offset &= 0xffff;
+#endif
 	apm_bios_entry.segment = APM_CS;
 	set_base(gdt[APM_CS >> 3],
 		 __va((unsigned long)apm_bios_info.cseg << 4));
