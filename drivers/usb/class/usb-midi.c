@@ -1451,8 +1451,6 @@ static struct usb_midi_device *parse_descriptor( struct usb_device *d, unsigned 
 			} else {
 				if ( oep < 15 ) {
 					pins = oep+1;
-					if ( pins > 16 )
-						pins = 16;
 					u->out[oep].endpoint = p1[2];
 					u->out[oep].cableId = ( 1 << pins ) - 1;
 					if ( u->out[oep].cableId )
