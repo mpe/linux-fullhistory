@@ -258,7 +258,9 @@ _IRQ3_interrupt:
 	SAVE_ALL
 	ACK_FIRST(0x08)
 	sti
-	call _do_IRQ3
+	pushl $3
+	call _do_IRQ
+	addl $4,%esp
 	cli
 	UNBLK_FIRST(0x08)
 	jmp ret_from_sys_call
@@ -269,7 +271,9 @@ _IRQ4_interrupt:
 	SAVE_ALL
 	ACK_FIRST(0x10)
 	sti
-	call _do_IRQ4
+	pushl $4
+	call _do_IRQ
+	addl $4,%esp
 	cli
 	UNBLK_FIRST(0x10)
 	jmp ret_from_sys_call
@@ -280,7 +284,9 @@ _IRQ5_interrupt:
 	SAVE_ALL
 	ACK_FIRST(0x20)
 	sti
-	call _do_IRQ5
+	pushl $5
+	call _do_IRQ
+	addl $4,%esp
 	cli
 	UNBLK_FIRST(0x20)
 	jmp ret_from_sys_call
@@ -291,7 +297,9 @@ _IRQ9_interrupt:
 	SAVE_ALL
 	ACK_SECOND(0x02)
 	sti
-	call _do_IRQ9
+	pushl $9
+	call _do_IRQ
+	addl $4,%esp
 	cli
 	UNBLK_SECOND(0x02)
 	jmp ret_from_sys_call

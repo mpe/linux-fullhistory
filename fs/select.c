@@ -120,6 +120,8 @@ static int check_in(select_table * wait, struct inode * inode)
 	if (tty = get_tty(inode))
 		if (!EMPTY(tty->secondary))
 			return 1;
+		else if (tty->link && !tty->link->count)
+			return 1;
 		else
 			add_wait(&tty->secondary->proc_list, wait);
 	else if (inode->i_pipe)

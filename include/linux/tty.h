@@ -69,24 +69,28 @@ struct serial_struct {
 static inline void PUTCH(char c, struct tty_queue * queue)
 {
 	int head;
+	unsigned long flags;
 
-	cli();
+	__asm__("pushfl ; popl %0 ; cli":"=r" (flags));
 	head = (queue->head + 1) & (TTY_BUF_SIZE-1);
 	if (head != queue->tail) {
 		queue->buf[queue->head] = c;
 		queue->head = head;
 	}
-	sti();
+	__asm__("pushl %0 ; popfl"::"r" (flags));
 }
 
 static inline int GETCH(struct tty_queue * queue)
 {
 	int result = -1;
+	unsigned long flags;
 
+	__asm__("pushfl ; popl %0 ; cli":"=r" (flags));
 	if (queue->tail != queue->head) {
 		result = 0xff & queue->buf[queue->tail];
 		queue->tail = (queue->tail + 1) & (TTY_BUF_SIZE-1);
 	}
+	__asm__("pushl %0 ; popfl"::"r" (flags));
 	return result;
 }
 	
@@ -138,6 +142,7 @@ struct tty_struct {
 	int count;
 	struct winsize winsize;
 	void (*write)(struct tty_struct * tty);
+	struct tty_struct *link;
 	struct tty_queue *read_q;
 	struct tty_queue *write_q;
 	struct tty_queue *secondary;
@@ -202,28 +207,40 @@ extern long con_init(long);
 extern long tty_init(long);
 
 extern void flush_input(struct tty_struct * tty);
+extern void flush_output(struct tty_struct * tty);
+extern void copy_to_cooked(struct tty_struct * tty);
 
 extern int tty_ioctl(struct inode *, struct file *, unsigned int, unsigned int);
 extern int is_orphaned_pgrp(int pgrp);
 extern int is_ignored(int sig);
 extern int tty_signal(int sig, struct tty_struct *tty);
+extern int kill_pg(int pgrp, int sig, int priv);
+
+/* tty write functions */
 
 extern void rs_write(struct tty_struct * tty);
 extern void con_write(struct tty_struct * tty);
 extern void mpty_write(struct tty_struct * tty);
 extern void spty_write(struct tty_struct * tty);
 
+/* serial.c */
+
 extern int  serial_open(unsigned int line, struct file * filp);
 extern void serial_close(unsigned int line, struct file * filp);
+extern void change_speed(unsigned int line);
+extern void send_break(unsigned int line);
 extern int get_serial_info(unsigned int, struct serial_struct *);
 extern int set_serial_info(unsigned int, struct serial_struct *);
 
-void copy_to_cooked(struct tty_struct * tty);
+/* pty.c */
+
+extern int  pty_open(unsigned int dev, struct file * filp);
+extern void pty_close(unsigned int dev, struct file * filp);
+
+/* console.c */
 
 void update_screen(int new_console);
 void blank_screen(void);
 void unblank_screen(void);
 
-int kill_pg(int pgrp, int sig, int priv);
-   
 #endif

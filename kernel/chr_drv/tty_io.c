@@ -93,15 +93,11 @@ void copy_to_cooked(struct tty_struct * tty)
 		return;
 	}
 	while (1) {
-		if (EMPTY(tty->read_q))
+		if (FULL(tty->secondary))
 			break;
-		if (FULL(tty->secondary)) {
-			if (tty->secondary->proc_list)
-				if (tty->secondary->proc_list != current)
-					current->counter = 0;
-			break;
-		}
 		c = GETCH(tty->read_q);
+		if (c < 0)
+			break;
 		if (I_STRP(tty))
 			c &= 0x7f;
 		if (c==13) {
@@ -238,11 +234,7 @@ int is_ignored(int sig)
 int tty_signal(int sig, struct tty_struct *tty)
 {
 	(void) kill_pg(current->pgrp,sig,1);
-	if (current->sigaction[sig-1].sa_handler)
-		return -EINTR;		/* We _will_ be interrupted :-) */
-	else
-		return -ERESTARTSYS;	/* We _will_ be interrupted :-) */
-					/* (but restart after we continue) */
+	return -ERESTARTSYS;
 }
 
 static int read_chan(unsigned int channel, struct file * file, char * buf, int nr)
@@ -297,6 +289,8 @@ static int read_chan(unsigned int channel, struct file * file, char * buf, int n
 			if (current->signal & ~current->blocked) 
 				break;
 			if (IS_A_PTY_SLAVE(channel) && C_HUP(other_tty))
+				break;
+			if (other_tty && !other_tty->count)
 				break;
 			interruptible_sleep_on(&tty->secondary->proc_list);
 			sti();
@@ -461,7 +455,7 @@ static int tty_lseek(struct inode * inode, struct file * file, off_t offset, int
 static int tty_open(struct inode * inode, struct file * filp)
 {
 	struct tty_struct *tty;
-	int dev;
+	int dev, retval;
 
 	dev = inode->i_rdev;
 	if (MAJOR(dev) == 5)
@@ -475,7 +469,12 @@ static int tty_open(struct inode * inode, struct file * filp)
 		if (tty->count)
 			return -EAGAIN;
 	}
+	if (!tty->count && (!tty->link || !tty->link->count)) {
+		flush_input(tty);
+		flush_output(tty);
+	}
 	tty->count++;
+	retval = 0;
 	if (!(filp->f_flags & O_NOCTTY) &&
 	    current->leader &&
 	    current->tty<0 &&
@@ -485,14 +484,18 @@ static int tty_open(struct inode * inode, struct file * filp)
 		tty->pgrp = current->pgrp;
 	}
 	if (IS_A_SERIAL(dev))
-		return serial_open(dev-64,filp);
-	return 0;
+		retval = serial_open(dev-64,filp);
+	else if (IS_A_PTY(dev))
+		retval = pty_open(dev,filp);
+	if (retval)
+		tty->count--;
+	return retval;
 }
 
 static void tty_release(struct inode * inode, struct file * filp)
 {
 	int dev;
-	struct tty_struct * tty, * slave;
+	struct tty_struct * tty;
 
 	dev = inode->i_rdev;
 	if (MAJOR(dev) == 5)
@@ -508,11 +511,8 @@ static void tty_release(struct inode * inode, struct file * filp)
 		redirect = NULL;
 	if (IS_A_SERIAL(dev))
 		serial_close(dev-64,filp);
-	else if (IS_A_PTY_MASTER(dev)) {
-		slave = tty_table + PTY_OTHER(dev);
-		if (slave->pgrp > 0)
-			kill_pg(slave->pgrp,SIGHUP,1);
-	}
+	else if (IS_A_PTY(dev))
+		pty_close(dev,filp);
 }
 
 static struct file_operations tty_fops = {
@@ -553,7 +553,7 @@ long tty_init(long kmem_start)
 		tty_table[i] =  (struct tty_struct) {
 		 	{0, 0, 0, 0, 0, INIT_C_CC},
 			-1, 0, 0, 0, 0, {0,0,0,0},
-			NULL, NULL, NULL, NULL
+			NULL, NULL, NULL, NULL, NULL
 		};
 	}
 	kmem_start = con_init(kmem_start);
@@ -572,6 +572,7 @@ long tty_init(long kmem_start)
 			0,			/* initial count */
 			{video_num_lines,video_num_columns,0,0},
 			con_write,
+			NULL,		/* other-tty */
 			con_queues+0+i*3,con_queues+1+i*3,con_queues+2+i*3
 		};
 	}
@@ -590,6 +591,7 @@ long tty_init(long kmem_start)
 			0,
 			{25,80,0,0},
 			rs_write,
+			NULL,		/* other-tty */
 			rs_queues+0+i*3,rs_queues+1+i*3,rs_queues+2+i*3
 		};
 	}
@@ -608,6 +610,7 @@ long tty_init(long kmem_start)
 			0,
 			{25,80,0,0},
 			mpty_write,
+			spty_table+i,
 			mpty_queues+0+i*3,mpty_queues+1+i*3,mpty_queues+2+i*3
 		};
 		spty_table[i] = (struct tty_struct) {
@@ -624,6 +627,7 @@ long tty_init(long kmem_start)
 			0,
 			{25,80,0,0},
 			spty_write,
+			mpty_table+i,
 			spty_queues+0+i*3,spty_queues+1+i*3,spty_queues+2+i*3
 		};
 	}

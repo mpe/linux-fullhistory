@@ -21,27 +21,6 @@ extern int do_screendump(int arg);
 extern int kill_pg(int pgrp, int sig, int priv);
 extern int vt_ioctl(struct tty_struct *tty, int dev, int cmd, int arg);
 
-static unsigned short quotient[] = {
-	0, 2304, 1536, 1047, 857,
-	768, 576, 384, 192, 96,
-	64, 48, 24, 12, 6, 3
-};
-
-static void change_speed(struct serial_struct * info)
-{
-	unsigned short port,quot;
-
-	if (!(port = info->port))
-		return;
-	quot = quotient[info->tty->termios.c_cflag & CBAUD];
-	cli();
-	outb_p(0x80,port+3);		/* set DLAB */
-	outb_p(quot & 0xff,port);	/* LS of divisor */
-	outb_p(quot >> 8,port+1);	/* MS of divisor */
-	outb(0x03,port+3);		/* reset DLAB */
-	sti();
-}
-
 static void flush(struct tty_queue * queue)
 {
 	if (queue) {
@@ -58,6 +37,22 @@ void flush_input(struct tty_struct * tty)
 	flush(tty->secondary);
 	tty->secondary->data = 0;
 	wake_up(&tty->read_q->proc_list);
+	if (tty = tty->link) {
+		flush(tty->write_q);
+		wake_up(&tty->write_q->proc_list);
+	}
+}
+
+void flush_output(struct tty_struct * tty)
+{
+	flush(tty->write_q);
+	wake_up(&tty->write_q->proc_list);
+	if (tty = tty->link) {
+		flush(tty->read_q);
+		flush(tty->secondary);
+		tty->secondary->data = 0;
+		wake_up(&tty->read_q->proc_list);
+	}
 }
 
 static void wait_until_sent(struct tty_struct * tty)
@@ -73,20 +68,6 @@ static void wait_until_sent(struct tty_struct * tty)
 		sti();
 	}
 	sti();
-}
-
-static void send_break(struct serial_struct * info)
-{
-	unsigned short port;
-
-	if (!(port = info->port))
-		return;
-	port += 3;
-	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + 25;
-	outb_p(inb_p(port) | 0x40,port);
-	schedule();
-	outb_p(inb_p(port) & 0xbf,port);
 }
 
 static int do_get_ps_info(int arg)
@@ -145,7 +126,7 @@ static int set_termios(struct tty_struct * tty, struct termios * termios,
 	for (i=0 ; i< (sizeof (*termios)) ; i++)
 		((char *)&tty->termios)[i]=get_fs_byte(i+(char *)termios);
 	if (IS_A_SERIAL(channel))
-		change_speed(serial_table+channel-64);
+		change_speed(channel-64);
 	return 0;
 }
 
@@ -194,7 +175,7 @@ static int set_termio(struct tty_struct * tty, struct termio * termio,
 	for(i=0 ; i < NCC ; i++)
 		tty->termios.c_cc[i] = tmp_termio.c_cc[i];
 	if (IS_A_SERIAL(channel))
-		change_speed(serial_table+channel-64);
+		change_speed(channel-64);
 	return 0;
 }
 
@@ -261,8 +242,6 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			return get_termios(tty,(struct termios *) arg);
 		case TCSETSF:
 			flush_input(tty);
-			if (other_tty)
-				flush(other_tty->write_q);
 		/* fallthrough */
 		case TCSETSW:
 			wait_until_sent(tty);
@@ -273,8 +252,6 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			return get_termio(tty,(struct termio *) arg);
 		case TCSETAF:
 			flush_input(tty);
-			if (other_tty)
-				flush(other_tty->write_q);
 		/* fallthrough */
 		case TCSETAW:
 			wait_until_sent(tty); /* fallthrough */
@@ -285,7 +262,7 @@ int tty_ioctl(struct inode * inode, struct file * file,
 				return -EINVAL;
 			wait_until_sent(tty);
 			if (!arg)
-				send_break(serial_table+dev-64);
+				send_break(dev-64);
 			return 0;
 		case TCXONC:
 			switch (arg) {
@@ -308,17 +285,13 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			}
 			return -EINVAL; /* not implemented */
 		case TCFLSH:
-			if (arg==0) {
+			if (arg==0)
 				flush_input(tty);
-				if (other_tty)
-					flush(other_tty->write_q);
-			} else if (arg==1)
-				flush(tty->write_q);
+			else if (arg==1)
+				flush_output(tty);
 			else if (arg==2) {
 				flush_input(tty);
-				flush(tty->write_q);
-				if (other_tty)
-					flush(other_tty->write_q);
+				flush_output(tty);
 			} else
 				return -EINVAL;
 			return 0;

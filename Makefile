@@ -90,7 +90,7 @@ all:	Version Image
 
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.96a-`cat .version`\" > include/linux/config_rel.h
+	@echo \#define UTS_RELEASE \"0.96b.pl2-`cat .version`\" > include/linux/config_rel.h
 	@echo \#define UTS_VERSION \"`date +%D`\" > include/linux/config_ver.h
 	touch include/linux/config.h
 

@@ -59,6 +59,24 @@ static void modem_status_intr(struct serial_struct * info)
 #endif
 }
 
+void send_break(unsigned int line)
+{
+	unsigned short port;
+	struct serial_struct * info;
+
+	if (line >= NR_SERIALS)
+		return;
+	info = serial_table + line;
+	if (!(port = info->port))
+		return;
+	port += 3;
+	current->state = TASK_INTERRUPTIBLE;
+	current->timeout = jiffies + 25;
+	outb_p(inb_p(port) | 0x40,port);
+	schedule();
+	outb_p(inb_p(port) & 0xbf,port);
+}
+
 /*
  * There are several races here: we avoid most of them by disabling timer_active
  * for the crucial part of the process.. That's a good idea anyway.
@@ -94,8 +112,9 @@ static void receive_intr(struct serial_struct * info)
 	unsigned short port = info->port;
 	struct tty_queue * queue = info->tty->read_q;
 
-	while (inb(port+5) & 1)
+	do {
 		PUTCH(inb(port),queue);
+	} while (inb(port+5) & 1);
 	timer_active |= (1<<SER1_TIMER)<<info->line;
 }
 
@@ -130,30 +149,9 @@ static void check_tty(struct serial_struct * info)
 	}
 }
 
-/*
- * IRQ3 normally handles com2 and com4
- */
-void do_IRQ3(void)
+void do_IRQ(int irq)
 {
-	check_tty(irq_info[3]);
-}
-
-/*
- * IRQ4 normally handles com1 and com3
- */
-void do_IRQ4(void)
-{
-	check_tty(irq_info[4]);
-}
-
-void do_IRQ5(void)
-{
-	check_tty(irq_info[5]);
-}
-
-void do_IRQ9(void)
-{
-	check_tty(irq_info[9]);
+	check_tty(irq_info[irq]);
 }
 
 static void com1_timer(void)
@@ -296,6 +294,44 @@ static void startup(unsigned short port)
 	inb_p(port+0);
 	inb_p(port+6);
 	inb(port+2);
+}
+
+void change_speed(unsigned int line)
+{
+	struct serial_struct * info;
+	unsigned short port,quot;
+	unsigned cflag;
+	static unsigned short quotient[] = {
+		0, 2304, 1536, 1047, 857,
+		768, 576, 384, 192, 96,
+		64, 48, 24, 12, 6, 3
+	};
+
+	if (line >= NR_SERIALS)
+		return;
+	info = serial_table + line;
+	cflag = info->tty->termios.c_cflag;
+	if (!(port = info->port))
+		return;
+	quot = quotient[cflag & CBAUD];
+	if (!quot)
+		outb(0x00,port+4);
+	else if (!inb(port+4))
+		startup(port);
+	cli();
+	outb_p(0x80,port+3);		/* set DLAB */
+	outb_p(quot & 0xff,port);	/* LS of divisor */
+	outb_p(quot >> 8,port+1);	/* MS of divisor */
+	outb(0x03,port+3);		/* reset DLAB */
+	sti();
+/* set byte size and parity */
+	quot = cflag & (CSIZE | CSTOPB);
+	quot >>= 4;
+	if (cflag & PARENB)
+		quot |= 8;
+	if (!(cflag & PARODD))
+		quot |= 16;
+	outb(quot,port+3);
 }
 
 /*

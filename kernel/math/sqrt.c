@@ -55,7 +55,7 @@ void fsqrt(const temp_real * s, temp_real * d)
 	src[3] = s->b;
 	d->exponent = 0;
 	d->a = d->b = 0;
-	if (exponent)		/* fsqrt(0.0) = 0.0 */
+	if (!exponent)		/* fsqrt(0.0) = 0.0 */
 		return;
 	if (!src[2] && !src[3])
 		return;

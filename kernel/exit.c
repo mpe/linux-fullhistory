@@ -353,7 +353,7 @@ volatile void do_exit(long code)
 		p->p_osptr->p_ysptr = p;
 		p->p_pptr->p_cptr = p;
 		if (p->state == TASK_ZOMBIE)
-			p->p_pptr->signal |= (1<<(SIGCHLD-1));
+			send_sig(SIGCHLD,p->p_pptr,1);
 		/*
 		 * process group orphan check
 		 * Case ii: Our child is in a different pgrp 

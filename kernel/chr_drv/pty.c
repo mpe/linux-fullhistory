@@ -18,6 +18,42 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
+#include<errno.h>
+#include<fcntl.h>
+
+int pty_open(unsigned int dev, struct file * filp)
+{
+	struct tty_struct * tty;
+
+	tty = tty_table + dev;
+	if (!tty->link)
+		return -ENODEV;
+	wake_up(&tty->read_q->proc_list);
+	if (filp->f_flags & O_NDELAY)
+		return 0;
+	if (IS_A_PTY_MASTER(dev))
+		return 0;
+#if 0
+	while (!tty->link->count && !(current->signal & ~current->blocked))
+		interruptible_sleep_on(&tty->link->read_q->proc_list);
+	if (!tty->link->count)
+		return -ERESTARTSYS;
+#endif
+	return 0;
+}
+
+void pty_close(unsigned int dev, struct file * filp)
+{
+	struct tty_struct * tty;
+
+	tty = tty_table + dev;
+	wake_up(&tty->read_q->proc_list);
+	if (IS_A_PTY_MASTER(dev)) {
+		if (tty->link->pgrp > 0)
+			kill_pg(tty->link->pgrp,SIGHUP,1);
+	}
+}
+
 static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 {
 	int c;
@@ -45,20 +81,12 @@ static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
  */
 void mpty_write(struct tty_struct * tty)
 {
-	int nr = tty - tty_table;
-
-	if ((nr >> 6) != 2)
-		printk("bad mpty\n\r");
-	else
-		pty_copy(tty,tty+64);
+	if (tty->link)
+		pty_copy(tty,tty->link);
 }
 
 void spty_write(struct tty_struct * tty)
 {
-	int nr = tty - tty_table;
-
-	if ((nr >> 6) != 3)
-		printk("bad spty\n\r");
-	else
-		pty_copy(tty,tty-64);
+	if (tty->link)
+		pty_copy(tty,tty->link);
 }
