@@ -104,11 +104,11 @@ if [ "$CONFIG_APUS" = "y" -o "$CONFIG_4xx" = "y" -o \
      "$CONFIG_8260" = "y" ]; then
    define_bool CONFIG_PCI n
 else
-   if [ "$CONFIG_6xx" = "y" -o "$CONFIG_PPC64BRIDGE" = "y" ]; then
-      define_bool CONFIG_PCI y
+   if [ "$CONFIG_8xx" = "y" ]; then
+      bool 'QSpan PCI' CONFIG_PCI_QSPAN
+      define_bool CONFIG_PCI $CONFIG_PCI_QSPAN
    else
-   # CONFIG_8xx
-      bool 'QSpan PCI' CONFIG_PCI
+      define_bool CONFIG_PCI y
    fi
 fi
 
@@ -151,7 +151,7 @@ if [ "$CONFIG_4xx" != "y" -a "$CONFIG_8xx" != "y" ]; then
 fi
 
 if [ "$CONFIG_PREP" = "y" -o "$CONFIG_ALL_PPC" = "y" ]; then
-  bool 'PReP bootloader kernel arguments' CONFIG_CMDLINE_BOOL y
+  bool 'PReP bootloader kernel arguments' CONFIG_CMDLINE_BOOL
   if [ "$CONFIG_CMDLINE_BOOL" = "y" ] ; then
     string 'Initial kernel command string' CONFIG_CMDLINE "console=ttyS0,9600 console=tty0 root=/dev/sda2"
   fi

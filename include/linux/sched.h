@@ -254,7 +254,7 @@ struct user_struct {
 
 	/* Hash table maintenance information */
 	struct user_struct *next, **pprev;
-	unsigned int uid;
+	uid_t uid;
 };
 
 #define get_current_user() ({ 				\

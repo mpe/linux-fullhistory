@@ -225,13 +225,16 @@ struct inode * minix_new_inode(const struct inode * dir, int * error)
 	int i,j;
 
 	inode = get_empty_inode();
-	if (!inode)
+	if (!inode) {
+		*error = -ENOMEM;
 		return NULL;
+	}
 	sb = dir->i_sb;
 	inode->i_sb = sb;
 	inode->i_flags = 0;
 	j = 8192;
 	bh = NULL;
+	*error = -ENOSPC;
 	lock_super(sb);
 	for (i = 0; i < sb->u.minix_sb.s_imap_blocks; i++) {
 		bh = inode->i_sb->u.minix_sb.s_imap[i];

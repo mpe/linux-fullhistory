@@ -1,5 +1,5 @@
 /*
- * $Id: via82cxxx.c,v 2.1d 2000/10/01 10:01:00 vojtech Exp $
+ * $Id: via82cxxx.c,v 2.1e 2000/10/03 10:01:00 vojtech Exp $
  *
  *  Copyright (c) 2000 Vojtech Pavlik
  *
@@ -192,7 +192,7 @@ static int via_get_info(char *buffer, char **addr, off_t offset, int count)
 
 	via_print("----------VIA BusMastering IDE Configuration----------------");
 
-	via_print("Driver Version:                     2.1d");
+	via_print("Driver Version:                     2.1e");
 
 	pci_read_config_byte(isa_dev, PCI_REVISION_ID, &t);
 	via_print("South Bridge:                       VIA %s rev %#x", via_isa_bridges[via_config].name, t);
@@ -334,8 +334,8 @@ static int via_set_speed(ide_drive_t *drive, byte speed)
  */
 
 	switch(via_isa_bridges[via_config].speed) {
-		case XFER_UDMA_2: t = via_timing[i].udma ? (0xe0 | (FIT(via_timing[i].udma, 2, 5) - 2)) : 0x03; break;
-		case XFER_UDMA_4: t = via_timing[i].udma ? (0xe8 | (FIT(via_timing[i].udma, 2, 9) - 2)) : 0x0f; break;
+		case XFER_UDMA_2: t = via_timing[i].udma ? (0xe0 | (FIT(ENOUGH(via_timing[i].udma, T), 2, 5) - 2)) : 0x03; break;
+		case XFER_UDMA_4: t = via_timing[i].udma ? (0xe8 | (FIT(ENOUGH(via_timing[i].udma, T/2), 2, 9) - 2)) : 0x0f; break;
         }
 
 	if (via_isa_bridges[via_config].speed != XFER_MW_DMA_2)

@@ -11,6 +11,11 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  *
+ * (10/05/2000) gkh
+ *	Added interrupt_in_endpointAddress and bulk_in_endpointAddress to help
+ *	fix bug with urb->dev not being set properly, now that the usb core
+ *	needs it.
+ * 
  * (09/11/2000) gkh
  *	Added usb_serial_debug_data function to help get rid of #DEBUG in the
  *	drivers.
@@ -57,9 +62,11 @@ struct usb_serial_port {
 
 	unsigned char *		interrupt_in_buffer;
 	struct urb *		interrupt_in_urb;
+	__u8			interrupt_in_endpointAddress;
 
 	unsigned char *		bulk_in_buffer;
 	struct urb *		read_urb;
+	__u8			bulk_in_endpointAddress;
 
 	unsigned char *		bulk_out_buffer;
 	int			bulk_out_size;

@@ -210,10 +210,8 @@ static int minix_create(struct inode * dir, struct dentry *dentry, int mode)
 	struct minix_dir_entry * de;
 
 	inode = minix_new_inode(dir, &error);
-	if (error)
-		return error;
 	if (!inode)
-		return -ENOSPC;
+		return error;
 	inode->i_op = &minix_file_inode_operations;
 	inode->i_fop = &minix_file_operations;
 	inode->i_mapping->a_ops = &minix_aops;
@@ -242,10 +240,8 @@ static int minix_mknod(struct inode * dir, struct dentry *dentry, int mode, int 
 	struct minix_dir_entry * de;
 
 	inode = minix_new_inode(dir, &error);
-	if (error)
-		return error;
 	if (!inode)
-		return -ENOSPC;
+		return error;
 	inode->i_uid = current->fsuid;
 	init_special_inode(inode, mode, rdev);
 	mark_inode_dirty(inode);
@@ -275,10 +271,8 @@ static int minix_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 	if (dir->i_nlink >= info->s_link_max)
 		return -EMLINK;
 	inode = minix_new_inode(dir, &error);
-	if (error)
-		return error;
 	if (!inode)
-		return -ENOSPC;
+		return error;
 	inode->i_op = &minix_dir_inode_operations;
 	inode->i_fop = &minix_dir_operations;
 	inode->i_size = 2 * info->s_dirsize;
@@ -461,9 +455,6 @@ static int minix_symlink(struct inode * dir, struct dentry *dentry,
 	if (i>1024)
 		goto out;
 	inode = minix_new_inode(dir, &err);
-	if (err)
-		goto out;
-	err = -ENOSPC;
 	if (!inode)
 		goto out;
 

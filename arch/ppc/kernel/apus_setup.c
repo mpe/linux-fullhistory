@@ -82,13 +82,13 @@ char debug_device[6] __apusdata = "";
 
 extern void amiga_init_IRQ(void);
 
-void (*mach_sched_init) (void (*handler)(int, void *, struct pt_regs *)) __initdata;
+void (*mach_sched_init) (void (*handler)(int, void *, struct pt_regs *)) __initdata = NULL;
 /* machine dependent keyboard functions */
-int (*mach_keyb_init) (void) __initdata;
+int (*mach_keyb_init) (void) __initdata = NULL;
 int (*mach_kbdrate) (struct kbd_repeat *) __apusdata = NULL;
 void (*mach_kbd_leds) (unsigned int) __apusdata = NULL;
 /* machine dependent irq functions */
-void (*mach_init_IRQ) (void) __initdata;
+void (*mach_init_IRQ) (void) __initdata = NULL;
 void (*(*mach_default_handler)[]) (int, void *, struct pt_regs *) __apusdata = NULL;
 void (*mach_get_model) (char *model) __apusdata = NULL;
 int (*mach_get_hardware_list) (char *buffer) __apusdata = NULL;

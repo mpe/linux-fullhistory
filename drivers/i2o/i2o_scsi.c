@@ -902,12 +902,8 @@ int i2o_scsi_bios_param(Disk * disk, kdev_t dev, int *ip)
 	return 0;
 }
 
-/* Loadable module support */
-#ifdef MODULE
-
 MODULE_AUTHOR("Red Hat Software");
 
-Scsi_Host_Template driver_template = I2OSCSI;
+static Scsi_Host_Template driver_template = I2OSCSI;
 
 #include "../scsi/scsi_module.c"
-#endif

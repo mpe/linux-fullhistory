@@ -17,11 +17,15 @@
  * UID task count cache, to get fast user lookup in "alloc_uid"
  * when changing user ID's (ie setuid() and friends).
  */
-#define UIDHASH_SZ	(256)
+#define UIDHASH_BITS		8
+#define UIDHASH_SZ		(1 << UIDHASH_BITS)
+#define UIDHASH_MASK		(UIDHASH_SZ - 1)
+#define __uidhashfn(uid)	(((uid >> UIDHASH_BITS) ^ uid) & UIDHASH_MASK)
+#define uidhashentry(uid)	(uidhash_table + __uidhashfn(uid))
 
-static struct user_struct *uidhash[UIDHASH_SZ];
-
-spinlock_t uidhash_lock = SPIN_LOCK_UNLOCKED;
+static kmem_cache_t *uid_cachep;
+static struct user_struct *uidhash_table[UIDHASH_SZ];
+static spinlock_t uidhash_lock = SPIN_LOCK_UNLOCKED;
 
 struct user_struct root_user = {
 	__count:	ATOMIC_INIT(1),
@@ -29,44 +33,45 @@ struct user_struct root_user = {
 	files:		ATOMIC_INIT(0)
 };
 
-static kmem_cache_t *uid_cachep;
-
-#define uidhashfn(uid)	(((uid >> 8) ^ uid) & (UIDHASH_SZ - 1))
-
 /*
  * These routines must be called with the uidhash spinlock held!
  */
-static inline void uid_hash_insert(struct user_struct *up, unsigned int hashent)
+static inline void uid_hash_insert(struct user_struct *up, struct user_struct **hashent)
 {
-	if((up->next = uidhash[hashent]) != NULL)
-		uidhash[hashent]->pprev = &up->next;
-	up->pprev = &uidhash[hashent];
-	uidhash[hashent] = up;
+	struct user_struct *next = *hashent;
+
+	up->next = next;
+	if (next)
+		next->pprev = &up->next;
+	up->pprev = hashent;
+	*hashent = up;
 }
 
 static inline void uid_hash_remove(struct user_struct *up)
 {
-	if(up->next)
-		up->next->pprev = up->pprev;
-	*up->pprev = up->next;
+	struct user_struct *next = up->next;
+	struct user_struct **pprev = up->pprev;
+
+	if (next)
+		next->pprev = pprev;
+	*pprev = next;
 }
 
-static inline struct user_struct *uid_hash_find(unsigned short uid, unsigned int hashent)
+static inline struct user_struct *uid_hash_find(uid_t uid, struct user_struct **hashent)
 {
-	struct user_struct *up, *next;
+	struct user_struct *next;
 
-	next = uidhash[hashent];
+	next = *hashent;
 	for (;;) {
-		up = next;
+		struct user_struct *up = next;
 		if (next) {
 			next = up->next;
 			if (up->uid != uid)
 				continue;
 			atomic_inc(&up->__count);
 		}
-		break;
+		return up;
 	}
-	return up;
 }
 
 /*
@@ -97,7 +102,7 @@ void free_uid(struct user_struct *up)
 
 struct user_struct * alloc_uid(uid_t uid)
 {
-	unsigned int hashent = uidhashfn(uid);
+	struct user_struct **hashent = uidhashentry(uid);
 	struct user_struct *up;
 
 	spin_lock(&uidhash_lock);
@@ -136,19 +141,14 @@ struct user_struct * alloc_uid(uid_t uid)
 
 static int __init uid_cache_init(void)
 {
-	int i;
-
 	uid_cachep = kmem_cache_create("uid_cache", sizeof(struct user_struct),
 				       0,
 				       SLAB_HWCACHE_ALIGN, NULL, NULL);
 	if(!uid_cachep)
 		panic("Cannot create uid taskcount SLAB cache\n");
 
-	for(i = 0; i < UIDHASH_SZ; i++)
-		uidhash[i] = 0;
-
 	/* Insert the root user immediately - init already runs with this */
-	uid_hash_insert(&root_user, uidhashfn(0));
+	uid_hash_insert(&root_user, uidhashentry(0));
 	return 0;
 }
 

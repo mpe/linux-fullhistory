@@ -89,9 +89,9 @@ bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
 dep_tristate 'Network block device support' CONFIG_BLK_DEV_NBD $CONFIG_NET
 
-#tristate 'Logical volume manager (LVM) support' CONFIG_BLK_DEV_LVM N
+#tristate 'Logical volume manager (LVM) support' CONFIG_BLK_DEV_LVM
 #if [ "$CONFIG_BLK_DEV_LVM" != "n" ]; then
-#   bool '   LVM information in proc filesystem' CONFIG_LVM_PROC_FS Y
+#   bool '   LVM information in proc filesystem' CONFIG_LVM_PROC_FS
 #fi
 
 include drivers/md/Config.in
@@ -166,7 +166,7 @@ if [ "$CONFIG_SCSI" != "n" ]; then
    if [ "$CONFIG_PCI" != "n" ]; then
       dep_tristate 'Adaptec AIC7xxx support' CONFIG_SCSI_AIC7XXX $CONFIG_SCSI
       if [ "$CONFIG_SCSI_AIC7XXX" != "n" ]; then
-	 bool '  Enable tagged command queueing (TCQ) by default' CONFIG_AIC7XXX_TAGGED_QUEUEING Y
+	 bool '  Enable tagged command queueing (TCQ) by default' CONFIG_AIC7XXX_TAGGED_QUEUEING
 	 int  '  Maximum number of TCQ commands per device' CONFIG_AIC7XXX_CMDS_PER_DEVICE 8
   	 bool '  Collect statistics to report in /proc' CONFIG_AIC7XXX_PROC_STATS N
 	 int  '  Delay in seconds after SCSI bus reset' CONFIG_AIC7XXX_RESET_DELAY 5

@@ -408,7 +408,7 @@ static char version[] __initdata =
 
 static struct net_device *root_dev;
 
-static int probed __initdata;
+static int probed __initdata = 0;
 
 
 #ifdef NEW_NETINIT

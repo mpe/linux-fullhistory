@@ -20,6 +20,8 @@
  *  Changelog:
  *  2000-01-01	Added quirks handling for buggy hardware
  *		Peter Denison <peterd@pnd-pc.demon.co.uk>
+ *  2000-06-14	Added isapnp_probe_devs() and isapnp_activate_dev()
+ *		Christoph Hellwig <hch@caldera.de>
  */
 
 #include <linux/config.h>
@@ -244,14 +246,15 @@ static void __init isapnp_peek(unsigned char *data, int bytes)
 	unsigned char d=0;
 
 	for (i = 1; i <= bytes; i++) {
-		for (j = 0; j < 10; j++) {
+		for (j = 0; j < 20; j++) {
 			d = isapnp_read_byte(0x05);
 			if (d & 1)
 				break;
 			udelay(100);
 		}
 		if (!(d & 1)) {
-			*data++ = 0xff;
+			if (data != NULL)
+				*data++ = 0xff;
 			continue;
 		}
 		d = isapnp_read_byte(0x04);	/* PRESDI */
@@ -1219,9 +1222,9 @@ isapnp_match_card(const struct isapnp_card_id *ids, struct pci_bus *card)
 {
 	int idx;
 
-	while (ids->vendor || ids->device) {
-		if ((ids->vendor == ISAPNP_ANY_ID || ids->vendor == card->vendor) &&
-		    (ids->device == ISAPNP_ANY_ID || ids->device == card->device)) {
+	while (ids->card_vendor || ids->card_device) {
+		if ((ids->card_vendor == ISAPNP_ANY_ID || ids->card_vendor == card->vendor) &&
+		    (ids->card_device == ISAPNP_ANY_ID || ids->card_device == card->device)) {
 			for (idx = 0; idx < ISAPNP_CARD_DEVS; idx++) {
 				if (ids->devs[idx].vendor == 0 &&
 				    ids->devs[idx].function == 0)
@@ -1256,6 +1259,56 @@ int isapnp_probe_cards(const struct isapnp_card_id *ids,
 			count++;
 	}
 	return count;
+}
+
+static const struct isapnp_device_id *
+isapnp_match_dev(const struct isapnp_device_id *ids, struct pci_dev *dev)
+{
+	while (ids->card_vendor || ids->card_device) {
+		if ((ids->card_vendor == ISAPNP_ANY_ID || ids->card_vendor == dev->bus->vendor) &&
+		    (ids->card_device == ISAPNP_ANY_ID || ids->card_device == dev->bus->device) &&
+                    (ids->vendor == ISAPNP_ANY_ID || ids->vendor == dev->vendor) &&
+                    (ids->function == ISAPNP_ANY_ID || ids->function == dev->device))
+			return ids;
+		ids++;
+	}
+	return NULL;
+}
+
+int isapnp_probe_devs(const struct isapnp_device_id *ids,
+		      int (*probe)(struct pci_dev *dev,
+		                   const struct isapnp_device_id *id))
+{
+	
+	struct pci_dev *dev;
+	const struct isapnp_device_id *id;
+	int count = 0;
+
+	if (ids == NULL || probe == NULL)
+		return -EINVAL;
+	isapnp_for_each_dev(dev) {
+		id = isapnp_match_dev(ids, dev);
+		if (id != NULL && probe(dev, id) >= 0)
+			count++;
+	}
+	return count;
+}
+
+int isapnp_activate_dev(struct pci_dev *dev, const char *name)
+{
+	int err;
+	
+	/* Device already active? Let's use it and inform the caller */
+	if (dev->active)
+		return -EBUSY;
+
+	if ((err = dev->activate(dev)) < 0) {
+		printk(KERN_ERR "isapnp: config of %s failed (out of resources?)[%d]\n", name, err);
+		dev->deactivate(dev);
+		return err;
+	}
+
+	return 0;
 }
 
 static unsigned int isapnp_dma_resource_flags(struct isapnp_dma *dma)
@@ -2104,6 +2157,8 @@ EXPORT_SYMBOL(isapnp_deactivate);
 EXPORT_SYMBOL(isapnp_find_card);
 EXPORT_SYMBOL(isapnp_find_dev);
 EXPORT_SYMBOL(isapnp_probe_cards);
+EXPORT_SYMBOL(isapnp_probe_devs);
+EXPORT_SYMBOL(isapnp_activate_dev);
 EXPORT_SYMBOL(isapnp_resource_change);
 
 int __init isapnp_init(void)

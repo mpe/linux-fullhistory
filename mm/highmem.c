@@ -310,7 +310,7 @@ struct buffer_head * create_bounce(int rw, struct buffer_head * bh_orig)
 repeat_bh:
 	bh = kmem_cache_alloc(bh_cachep, SLAB_BUFFER);
 	if (!bh) {
-		wakeup_bdflush(1);
+		wakeup_bdflush(1);  /* Sets task->state to TASK_RUNNING */
 		current->policy |= SCHED_YIELD;
 		schedule();
 		goto repeat_bh;
@@ -324,7 +324,7 @@ repeat_bh:
 repeat_page:
 	page = alloc_page(GFP_BUFFER);
 	if (!page) {
-		wakeup_bdflush(1);
+		wakeup_bdflush(1);  /* Sets task->state to TASK_RUNNING */
 		current->policy |= SCHED_YIELD;
 		schedule();
 		goto repeat_page;

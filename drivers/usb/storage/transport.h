@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * Transport Functions Header File
  *
- * $Id: transport.h,v 1.12 2000/09/08 21:20:06 mdharm Exp $
+ * $Id: transport.h,v 1.13 2000/10/03 01:06:07 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -136,8 +136,11 @@ extern int usb_stor_Bulk_transport(Scsi_Cmnd*, struct us_data*);
 extern int usb_stor_Bulk_max_lun(struct us_data*);
 extern int usb_stor_Bulk_reset(struct us_data*);
 
-void usb_stor_invoke_transport(Scsi_Cmnd *, struct us_data *);
-
-extern int dpcm_transport(Scsi_Cmnd *srb, struct us_data *us);
-
+extern unsigned int usb_stor_transfer_length(Scsi_Cmnd*);
+extern void usb_stor_invoke_transport(Scsi_Cmnd*, struct us_data*);
+extern int usb_stor_transfer_partial(struct us_data*, char*, int);
+extern int usb_stor_bulk_msg(struct us_data*, void*, int, unsigned int,
+		unsigned int*);
+extern int usb_stor_control_msg(struct us_data*, unsigned int, u8, u8,
+		u16, u16, void*, u16);
 #endif

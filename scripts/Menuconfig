@@ -634,6 +634,7 @@ function l_choice () {
 	title="$1"
 	choices="$2"
 	current="$3"
+        chosen=
 
 	#
 	# Scan current value of choices and set radiolist switches.
@@ -644,7 +645,12 @@ function l_choice () {
 	while [ -n "$2" ]
 	do
 		case "$1" in
-		"$current")	list="$list $2 $1 ON "  ;;
+		"$current"*)	if [ -z "$chosen" ]; then
+					list="$list $2 $1 ON "
+					chosen=1
+				else
+					list="$list $2 $1 OFF "
+				fi  ;;
 		*)		list="$list $2 $1 OFF " ;;
 		esac
 			
@@ -722,13 +728,13 @@ function parser(ifile,menu) {
 
 			parser(ifile, newmenu)
 		}
+		else if ($0 ~ /^#|\$MAKE|mainmenu_name/) {
+			printf("") >>menu
+		}
 		else if ($1 ~ "endmenu") {
 			printf("}\n") >>menu
 			return
 		} 
-		else if ($0 ~ /^#|\$MAKE|mainmenu_name/) {
-			printf("") >>menu
-		}
 		else if ($1 == "source") {
 			parser($2,menu)
 		}
@@ -751,12 +757,12 @@ BEGIN {
 function parser(ifile,menu) {
 
 	while (getline <ifile) {
-		if ($1 ~ /mainmenu_option|endmenu/) {
-			printf("") >>menu
-		} 
-		else if ($0 ~ /^#|$MAKE|mainmenu_name/) {
+		if ($0 ~ /^#|$MAKE|mainmenu_name/) {
 			printf("") >>menu
 		}
+		else if ($1 ~ /mainmenu_option|endmenu/) {
+			printf("") >>menu
+		} 
 		else if ($1 == "source") {
 			parser($2,menu)
 		}
@@ -1192,6 +1198,7 @@ save_configuration () {
 		choices="$2"
 		default="$3"
 		current=
+		chosen=
 
 		set -- $choices
 		while [ -n "$2" ]
@@ -1215,12 +1222,15 @@ save_configuration () {
 		set -- $choices
 		while [ -n "$2" ]
 		do
-			if eval [ "$1" = "$current" ]
-			then
-			    define_bool "$2" "y"
-			else
-			    define_bool "$2" "n"
-			fi
+			case "$1" in
+			"$current"*)	if [ -z "$chosen" ]; then
+						define_bool "$2" "y"
+						chosen=1
+					else
+						define_bool "$2" "n"
+					fi ;;
+			*)		define_bool "$2" "n" ;;
+			esac
 			shift ; shift
 		done
 	}

@@ -326,6 +326,7 @@ static struct condition * tokenize_if( const char * pnt )
 static const char * tokenize_choices( struct kconfig * cfg_choose,
     const char * pnt )
 {
+    int default_checked = 0;
     for ( ; ; )
     {
 	struct kconfig * cfg;
@@ -349,12 +350,20 @@ static const char * tokenize_choices( struct kconfig * cfg_choose,
 	cfg->token      = token_choice_item;
 	cfg->cfg_parent = cfg_choose;
 	pnt = get_string( pnt, &cfg->label );
+	if ( ! default_checked &&
+	     ! strncmp( cfg->label, cfg_choose->value, strlen( cfg_choose->value ) ) )
+	{
+	    default_checked = 1;
+	    free( cfg_choose->value );
+	    cfg_choose->value = cfg->label;
+	}
 	while ( *pnt == ' ' || *pnt == '\t' )
 	    pnt++;
 	pnt = get_string( pnt, &buffer );
 	cfg->nameindex = get_varnum( buffer );
     }
-
+    if ( ! default_checked )
+	syntax_error( "bad 'choice' default value" );
     return pnt;
 }
 
@@ -515,7 +524,6 @@ static void tokenize_line( const char * pnt )
 	    pnt = get_qstring ( pnt, &cfg->label  );
 	    pnt = get_qstring ( pnt, &choice_list );
 	    pnt = get_string  ( pnt, &cfg->value  );
-
 	    cfg->nameindex = -(choose_number++);
 	    tokenize_choices( cfg, choice_list );
 	    free( choice_list );

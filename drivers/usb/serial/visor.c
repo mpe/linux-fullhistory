@@ -11,6 +11,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (10/05/2000) gkh
+ *	Fixed bug with urb->dev not being set properly, now that the usb
+ *	core needs it.
+ * 
  * (09/11/2000) gkh
  *	Got rid of always calling kmalloc for every urb we wrote out to the
  *	device.
@@ -138,7 +142,9 @@ static int		bytes_out;
  ******************************************************************************/
 static int visor_open (struct usb_serial_port *port, struct file *filp)
 {
+	struct usb_serial *serial = port->serial;
 	unsigned long flags;
+	int result;
 
 	if (port_paranoia_check (port, __FUNCTION__))
 		return -ENODEV;
@@ -155,9 +161,14 @@ static int visor_open (struct usb_serial_port *port, struct file *filp)
 		bytes_in = 0;
 		bytes_out = 0;
 
-		/*Start reading from the device*/
-		if (usb_submit_urb(port->read_urb))
-			dbg(__FUNCTION__  " - usb_submit_urb(read bulk) failed");
+		/* Start reading from the device */
+		FILL_BULK_URB(port->read_urb, serial->dev, 
+			      usb_rcvbulkpipe(serial->dev, port->bulk_in_endpointAddress),
+			      port->read_urb->transfer_buffer, port->read_urb->transfer_buffer_length,
+			      visor_read_bulk_callback, port);
+		result = usb_submit_urb(port->read_urb);
+		if (result)
+			err(__FUNCTION__ " - failed submitting read urb, error %d", result);
 	}
 	
 	spin_unlock_irqrestore (&port->port_lock, flags);
@@ -301,14 +312,21 @@ static void visor_write_bulk_callback (struct urb *urb)
 static void visor_read_bulk_callback (struct urb *urb)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *)urb->context;
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
 	struct tty_struct *tty;
 	unsigned char *data = urb->transfer_buffer;
 	int i;
+	int result;
 
 	if (port_paranoia_check (port, __FUNCTION__))
 		return;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
+
+	if (!serial) {
+		dbg(__FUNCTION__ " - bad serial pointer, exiting");
+		return;
+	}
 
 	if (urb->status) {
 		dbg(__FUNCTION__ " - nonzero read bulk status received: %d", urb->status);
@@ -327,8 +345,13 @@ static void visor_read_bulk_callback (struct urb *urb)
 	}
 
 	/* Continue trying to always read  */
-	if (usb_submit_urb(urb))
-		dbg(__FUNCTION__ " - failed resubmitting read urb");
+	FILL_BULK_URB(port->read_urb, serial->dev, 
+		      usb_rcvbulkpipe(serial->dev, port->bulk_in_endpointAddress),
+		      port->read_urb->transfer_buffer, port->read_urb->transfer_buffer_length,
+		      visor_read_bulk_callback, port);
+	result = usb_submit_urb(port->read_urb);
+	if (result)
+		err(__FUNCTION__ " - failed resubmitting read urb, error %d", result);
 	return;
 }
 
@@ -352,13 +375,16 @@ static void visor_throttle (struct usb_serial_port *port)
 static void visor_unthrottle (struct usb_serial_port *port)
 {
 	unsigned long flags;
+	int result;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
 	spin_lock_irqsave (&port->port_lock, flags);
 
-	if (usb_submit_urb (port->read_urb))
-		dbg(__FUNCTION__ " - usb_submit_urb(read bulk) failed");
+	port->read_urb->dev = port->serial->dev;
+	result = usb_submit_urb(port->read_urb);
+	if (result)
+		err(__FUNCTION__ " - failed submitting read urb, error %d", result);
 
 	spin_unlock_irqrestore (&port->port_lock, flags);
 

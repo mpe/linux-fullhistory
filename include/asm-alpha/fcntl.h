@@ -48,7 +48,7 @@
 #define F_EXLCK		16	/* or 3 */
 #define F_SHLCK		32	/* or 4 */
 
-#define F_INPROGRESS   16
+#define F_INPROGRESS	64
 
 /* operations for bsd flock(), also used by the kernel implementation */
 #define LOCK_SH		1	/* shared lock */

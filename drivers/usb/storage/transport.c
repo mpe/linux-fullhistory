@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: transport.c,v 1.27 2000/09/28 21:54:30 mdharm Exp $
+ * $Id: transport.c,v 1.28 2000/10/03 01:06:07 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -61,7 +61,7 @@
 /* Calculate the length of the data transfer (not the command) for any
  * given SCSI command
  */
-static unsigned int us_transfer_length(Scsi_Cmnd *srb)
+unsigned int usb_stor_transfer_length(Scsi_Cmnd *srb)
 {
       	int i;
 	int doDefault = 0;
@@ -506,7 +506,7 @@ int usb_stor_bulk_msg(struct us_data *us, void *data, int pipe,
  * timeout limit.  Thus we don't have to worry about it for individual
  * packets.
  */
-static int us_transfer_partial(struct us_data *us, char *buf, int length)
+int usb_stor_transfer_partial(struct us_data *us, char *buf, int length)
 {
 	int result;
 	int partial;
@@ -519,7 +519,7 @@ static int us_transfer_partial(struct us_data *us, char *buf, int length)
 		pipe = usb_sndbulkpipe(us->pusb_dev, us->ep_out);
 
 	/* transfer the data */
-	US_DEBUGP("us_transfer_partial(): xfer %d bytes\n", length);
+	US_DEBUGP("usb_stor_transfer_partial(): xfer %d bytes\n", length);
 	result = usb_stor_bulk_msg(us, buf, pipe, length, &partial);
 	US_DEBUGP("usb_stor_bulk_msg() returned %d xferred %d/%d\n",
 		  result, partial, length);
@@ -532,7 +532,7 @@ static int us_transfer_partial(struct us_data *us, char *buf, int length)
 	
 	/* did we send all the data? */
 	if (partial == length) {
-		US_DEBUGP("us_transfer_partial(): transfer complete\n");
+		US_DEBUGP("usb_stor_transfer_partial(): transfer complete\n");
 		return US_BULK_TRANSFER_GOOD;
 	}
 
@@ -540,18 +540,18 @@ static int us_transfer_partial(struct us_data *us, char *buf, int length)
 	if (result) {
 		/* NAK - that means we've retried a few times allready */
 		if (result == -ETIMEDOUT) {
-			US_DEBUGP("us_transfer_partial(): device NAKed\n");
+			US_DEBUGP("usb_stor_transfer_partial(): device NAKed\n");
 			return US_BULK_TRANSFER_FAILED;
 		}
 
 		/* -ENOENT -- we canceled this transfer */
 		if (result == -ENOENT) {
-			US_DEBUGP("us_transfer_partial(): transfer aborted\n");
+			US_DEBUGP("usb_stor_transfer_partial(): transfer aborted\n");
 			return US_BULK_TRANSFER_ABORTED;
 		}
 
 		/* the catch-all case */
-		US_DEBUGP("us_transfer_partial(): unknown error\n");
+		US_DEBUGP("usb_stor_transfer_partial(): unknown error\n");
 		return US_BULK_TRANSFER_FAILED;
 	}
 
@@ -564,7 +564,7 @@ static int us_transfer_partial(struct us_data *us, char *buf, int length)
  * Transfer an entire SCSI command's worth of data payload over the bulk
  * pipe.
  *
- * Note that this uses us_transfer_partial to achieve it's goals -- this
+ * Note that this uses usb_stor_transfer_partial to achieve it's goals -- this
  * function simply determines if we're going to use scatter-gather or not,
  * and acts appropriately.  For now, it also re-interprets the error codes.
  */
@@ -577,7 +577,7 @@ static void us_transfer(Scsi_Cmnd *srb, struct us_data* us)
 	unsigned int transfer_amount;
 
 	/* calculate how much we want to transfer */
-	transfer_amount = us_transfer_length(srb);
+	transfer_amount = usb_stor_transfer_length(srb);
 
 	/* was someone foolish enough to request more data than available
 	 * buffer space? */
@@ -597,11 +597,12 @@ static void us_transfer(Scsi_Cmnd *srb, struct us_data* us)
 			 * remaining data */
 			if (transfer_amount - total_transferred >= 
 					sg[i].length) {
-				result = us_transfer_partial(us, sg[i].address, 
-						sg[i].length);
+				result = usb_stor_transfer_partial(us,
+						sg[i].address, sg[i].length);
 				total_transferred += sg[i].length;
 			} else
-				result = us_transfer_partial(us, sg[i].address,
+				result = usb_stor_transfer_partial(us,
+						sg[i].address,
 						transfer_amount - total_transferred);
 
 			/* if we get an error, end the loop here */
@@ -611,7 +612,7 @@ static void us_transfer(Scsi_Cmnd *srb, struct us_data* us)
 	}
 	else
 		/* no scatter-gather, just make the request */
-		result = us_transfer_partial(us, srb->request_buffer, 
+		result = usb_stor_transfer_partial(us, srb->request_buffer, 
 					     transfer_amount);
 
 	/* return the result in the data structure itself */
@@ -873,7 +874,7 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 
 	/* DATA STAGE */
 	/* transfer the data payload for this command, if one exists*/
-	if (us_transfer_length(srb)) {
+	if (usb_stor_transfer_length(srb)) {
 		us_transfer(srb, us);
 		US_DEBUGP("CBI data stage result is 0x%x\n", srb->result);
 
@@ -978,7 +979,7 @@ int usb_stor_CB_transport(Scsi_Cmnd *srb, struct us_data *us)
 
 	/* DATA STAGE */
 	/* transfer the data payload for this command, if one exists*/
-	if (us_transfer_length(srb)) {
+	if (usb_stor_transfer_length(srb)) {
 		us_transfer(srb, us);
 		US_DEBUGP("CB data stage result is 0x%x\n", srb->result);
 
@@ -1042,7 +1043,7 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	
 	/* set up the command wrapper */
 	bcb.Signature = cpu_to_le32(US_BULK_CB_SIGN);
-	bcb.DataTransferLength = cpu_to_le32(us_transfer_length(srb));
+	bcb.DataTransferLength = cpu_to_le32(usb_stor_transfer_length(srb));
 	bcb.Flags = srb->sc_data_direction == SCSI_DATA_READ ? 1 << 7 : 0;
 	bcb.Tag = srb->serial_number;
 	bcb.Lun = srb->cmnd[1] >> 5;

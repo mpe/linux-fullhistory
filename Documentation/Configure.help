@@ -2376,6 +2376,30 @@ CONFIG_PCI
   information about which PCI hardware does work under Linux and which
   doesn't.
 
+PCI support
+CONFIG_PCI_INTEGRATOR
+  Find out whether you have a PCI motherboard. PCI is the name of a
+  bus system, i.e. the way the CPU talks to the other stuff inside
+  your box. Other bus systems are ISA, EISA, Microchannel (MCA) or
+  VESA. If you have PCI, say Y, otherwise N. 
+
+  The PCI-HOWTO, available from
+  http://www.linuxdoc.org/docs.html#howto , contains valuable
+  information about which PCI hardware does work under Linux and which
+  doesn't.
+
+QSpan PCI
+CONFIG_PCI_QSPAN
+  Find out whether you have a PCI motherboard. PCI is the name of a
+  bus system, i.e. the way the CPU talks to the other stuff inside
+  your box. Other bus systems are ISA, EISA, Microchannel (MCA) or
+  VESA. If you have PCI, say Y, otherwise N. 
+
+  The PCI-HOWTO, available from
+  http://www.linuxdoc.org/docs.html#howto , contains valuable
+  information about which PCI hardware does work under Linux and which
+  doesn't.
+
 PCI access mode
 CONFIG_PCI_GOBIOS
   On PCI systems, the BIOS can be used to detect the PCI devices and

@@ -142,9 +142,9 @@ static DECLARE_WAIT_QUEUE_HEAD(xd_wait_int);
 static DECLARE_WAIT_QUEUE_HEAD(xd_wait_open);
 static u_char xd_valid[XD_MAXDRIVES] = { 0,0 };
 static u_char xd_drives, xd_irq = 5, xd_dma = 3, xd_maxsectors;
-static u_char xd_override __initdata, xd_type __initdata;
+static u_char xd_override __initdata = 0, xd_type __initdata = 0;
 static u_short xd_iobase = 0x320;
-static int xd_geo[XD_MAXDRIVES*3] __initdata;
+static int xd_geo[XD_MAXDRIVES*3] __initdata = { 0, };
 
 static volatile int xdc_busy;
 static DECLARE_WAIT_QUEUE_HEAD(xdc_wait);

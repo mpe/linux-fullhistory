@@ -206,9 +206,15 @@ __attribute__((section(".modinfo"))) =		\
  * The following is a list of known device types (arg 1),
  * and the C types which are to be passed as arg 2.
  * pci - struct pci_device_id - List of PCI ids supported by this module
+ * isapnp - struct isapnp_device_id - List of ISA PnP ids supported by this module
  */
-#define MODULE_DEVICE_TABLE(type,name)	\
-const struct type##_device_id * __module_##type##_device_table = name
+#define MODULE_GENERIC_TABLE(gtype,name)	\
+static const unsigned long __module_##gtype##_size \
+  __attribute__ ((unused)) = sizeof(struct gtype##_id); \
+static const struct gtype##_id * __module_##gtype##_table \
+  __attribute__ ((unused)) = name
+#define MODULE_DEVICE_TABLE(type,name)		\
+  MODULE_GENERIC_TABLE(type##_device,name)
 /* not put to .modinfo section to avoid section type conflicts */
 
 /* The attributes of a section are set the first time the section is
@@ -239,6 +245,7 @@ static const char __module_using_checksums[] __attribute__((section(".modinfo"))
 #define MODULE_SUPPORTED_DEVICE(name)
 #define MODULE_PARM(var,type)
 #define MODULE_PARM_DESC(var,desc)
+#define MODULE_GENERIC_TABLE(gtype,name)
 #define MODULE_DEVICE_TABLE(type,name)
 
 #ifndef __GENKSYMS__

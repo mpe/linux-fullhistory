@@ -49,8 +49,8 @@ extern struct cpuinfo_ia64 cpu_data[NR_CPUS];	     /* Duh... */
 
 spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
-struct smp_boot_data __initdata smp;
-char __initdata no_int_routing = 0;
+struct smp_boot_data smp __initdata = { 0, };
+char no_int_routing __initdata = 0;
 
 unsigned char smp_int_redirect;			/* are INT and IPI redirectable by the chipset? */
 volatile int __cpu_number_map[NR_CPUS] = { -1, };    /* SAPIC ID -> Logical ID */

@@ -837,8 +837,9 @@ int free_shortage(void)
 		for(i = 0; i < MAX_NR_ZONES; i++) {
 			zone_t *zone = pgdat->node_zones+ i;
 			if (zone->size && (zone->inactive_clean_pages +
-					zone->free_pages < zone->pages_min)) {
-				sum += zone->pages_min;
+					zone->free_pages < zone->pages_min+1)) {
+				/* + 1 to have overlap with alloc_pages() !! */
+				sum += zone->pages_min + 1;
 				sum -= zone->free_pages;
 				sum -= zone->inactive_clean_pages;
 			}
@@ -1095,12 +1096,20 @@ int kswapd(void *unused)
 		 * We go to sleep for one second, but if it's needed
 		 * we'll be woken up earlier...
 		 */
-		if (!free_shortage() || !inactive_shortage())
+		if (!free_shortage() || !inactive_shortage()) {
 			interruptible_sleep_on_timeout(&kswapd_wait, HZ);
 		/*
-		 * TODO: insert out of memory check & oom killer
-		 * invocation in an else branch here.
+		 * If we couldn't free enough memory, we see if it was
+		 * due to the system just not having enough memory.
+		 * If that is the case, the only solution is to kill
+		 * a process (the alternative is enternal deadlock).
+		 *
+		 * If there still is enough memory around, we just loop
+		 * and try free some more memory...
 		 */
+		} else if (out_of_memory()) {
+			oom_kill();
+		}
 	}
 }
 

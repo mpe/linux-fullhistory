@@ -706,7 +706,7 @@ void set_blocksize(kdev_t dev, int size)
 static void refill_freelist(int size)
 {
 	if (!grow_buffers(size)) {
-		wakeup_bdflush(1);
+		wakeup_bdflush(1);  /* Sets task->state to TASK_RUNNING */
 		current->policy |= SCHED_YIELD;
 		schedule();
 	}
@@ -2060,7 +2060,7 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
            buffer_heads and exit. */
 	spin_lock(&unused_list_lock);
 	for (i = bhind; --i >= 0; ) {
-		__put_unused_buffer_head(bh[bhind]);
+		__put_unused_buffer_head(bh[i]);
 	}
 	spin_unlock(&unused_list_lock);
 	goto finished;

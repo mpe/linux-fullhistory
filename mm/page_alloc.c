@@ -268,7 +268,7 @@ static struct page * __alloc_pages_limit(zonelist_t *zonelist,
 				water_mark = z->pages_high;
 		}
 
-		if (z->free_pages + z->inactive_clean_pages > water_mark) {
+		if (z->free_pages + z->inactive_clean_pages >= water_mark) {
 			struct page *page = NULL;
 			/* If possible, reclaim a page directly. */
 			if (direct_reclaim && z->free_pages < z->pages_min + 8)
@@ -329,7 +329,7 @@ struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 	 * wake up bdflush.
 	 */
 	else if (free_shortage() && nr_inactive_dirty_pages > free_shortage()
-			&& nr_inactive_dirty_pages > freepages.high)
+			&& nr_inactive_dirty_pages >= freepages.high)
 		wakeup_bdflush(0);
 
 try_again:
@@ -347,7 +347,7 @@ try_again:
 		if (!z->size)
 			BUG();
 
-		if (z->free_pages > z->pages_low) {
+		if (z->free_pages >= z->pages_low) {
 			page = rmqueue(z, order);
 			if (page)
 				return page;
@@ -795,21 +795,6 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 			
 	printk("On node %d totalpages: %lu\n", nid, realtotalpages);
 
-	/*
-	 * Select nr of pages we try to keep free for important stuff
-	 * with a minimum of 10 pages and a maximum of 256 pages, so
-	 * that we don't waste too much memory on large systems.
-	 * This is fairly arbitrary, but based on some behaviour
-	 * analysis.
-	 */
-	i = realtotalpages >> 7;
-	if (i < 10)
-		i = 10;
-	if (i > 256)
-		i = 256;
-	freepages.min += i;
-	freepages.low += i * 2;
-	freepages.high += i * 3;
 	memlist_init(&active_list);
 	memlist_init(&inactive_dirty_list);
 
@@ -875,6 +860,20 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 		zone->pages_min = mask;
 		zone->pages_low = mask*2;
 		zone->pages_high = mask*3;
+		/*
+		 * Add these free targets to the global free target;
+		 * we have to be SURE that freepages.high is higher
+		 * than SUM [zone->pages_min] for all zones, otherwise
+		 * we may have bad bad problems.
+		 *
+		 * This means we cannot make the freepages array writable
+		 * in /proc, but have to add a separate extra_free_target
+		 * for people who require it to catch load spikes in eg.
+		 * gigabit ethernet routing...
+		 */
+		freepages.min += mask;
+		freepages.low += mask*2;
+		freepages.high += mask*3;
 		zone->zone_mem_map = mem_map + offset;
 		zone->zone_start_mapnr = offset;
 		zone->zone_start_paddr = zone_start_paddr;

@@ -126,6 +126,10 @@ extern struct page * lookup_swap_cache(swp_entry_t);
 extern struct page * read_swap_cache_async(swp_entry_t, int);
 #define read_swap_cache(entry) read_swap_cache_async(entry, 1);
 
+/* linux/mm/oom_kill.c */
+extern int out_of_memory(void);
+extern void oom_kill(void);
+
 /*
  * Make these inline later once they are working properly.
  */

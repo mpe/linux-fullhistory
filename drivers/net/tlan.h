@@ -50,7 +50,9 @@
 #define TLAN_DEBUG_TX		0x0002
 #define TLAN_DEBUG_RX		0x0004 
 #define TLAN_DEBUG_LIST		0x0008
+#define TLAN_DEBUG_PROBE	0x0010
 
+#define TX_TIMEOUT		(10*HZ)	 /* We need time for auto-neg */
 
 
 
@@ -101,6 +103,24 @@ typedef struct tlan_adapter_entry {
 #define TLAN_DUPLEX_HALF	1
 #define TLAN_DUPLEX_FULL	2
 
+
+
+	/*****************************************************************
+	 * EISA Definitions
+	 *
+	 ****************************************************************/
+
+#define EISA_ID      0xc80   /* EISA ID Registers */ 
+#define EISA_ID0     0xc80   /* EISA ID Register 0 */ 
+#define EISA_ID1     0xc81   /* EISA ID Register 1 */ 
+#define EISA_ID2     0xc82   /* EISA ID Register 2 */ 
+#define EISA_ID3     0xc83   /* EISA ID Register 3 */ 
+#define EISA_CR      0xc84   /* EISA Control Register */
+#define EISA_REG0    0xc88   /* EISA Configuration Register 0 */
+#define EISA_REG1    0xc89   /* EISA Configuration Register 1 */
+#define EISA_REG2    0xc8a   /* EISA Configuration Register 2 */
+#define EISA_REG3    0xc8f   /* EISA Configuration Register 3 */
+#define EISA_APROM   0xc90   /* Ethernet Address PROM */
 
 
 
@@ -156,7 +176,7 @@ typedef u8 TLanBuffer[TLAN_MAX_FRAME_SIZE];
 	 ****************************************************************/
 
 typedef struct tlan_private_tag {
-	struct net_device           *nextDevice;
+	struct net_device       *nextDevice;
 	void			*dmaStorage;
 	u8			*padBuffer;
 	TLanList                *rxList;
@@ -175,7 +195,7 @@ typedef struct tlan_private_tag {
 	u32			timerType;
 	struct timer_list	timer;
 	struct net_device_stats	stats;
-	TLanAdapterEntry	*adapter;
+	struct board		*adapter;
 	u32			adapterRev;
 	u32			aui;
 	u32			debug;
@@ -188,6 +208,7 @@ typedef struct tlan_private_tag {
 	char                    devName[8];
 	spinlock_t		lock;
 	u8			link;
+	u8			is_eisa;
 } TLanPrivateInfo;
 
 
@@ -382,9 +403,9 @@ typedef struct tlan_private_tag {
 #define 	MII_GIL_OUI		0xFC00
 #define 	MII_GIL_MODEL		0x03F0
 #define 	MII_GIL_REVISION	0x000F
-#define MII_AN_ADV			0x0004
-#define MII_AN_LPA			0x0005
-#define MII_AN_EXP			0x0006
+#define MII_AN_ADV			0x04
+#define MII_AN_LPA			0x05
+#define MII_AN_EXP			0x06
 
 /* ThunderLAN Specific MII/PHY Registers */
 
@@ -410,6 +431,12 @@ typedef struct tlan_private_tag {
 #define		TLAN_PHY_SPEED_100	0x0040
 #define		TLAN_PHY_DUPLEX_FULL	0x0080
 #define		TLAN_PHY_AN_EN_STAT     0x0400
+
+/* National Sem. & Level1 PHY id's */
+#define NAT_SEM_ID1			0x2000
+#define NAT_SEM_ID2			0x5C01
+#define LEVEL1_ID1			0x7810
+#define LEVEL1_ID2			0x0000
 
 #define CIRC_INC( a, b ) if ( ++a >= b ) a = 0
 

@@ -27,6 +27,8 @@
  * - check copy*user return
  * - get rid of check_region
  * - get rid of verify_area
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 2000/09/28
+ * - do proper release on failure in acpi_claim_ioports and acpi_init
  */
 
 #include <linux/config.h>
@@ -81,6 +83,7 @@ static int acpi_do_sleep(ctl_table *ctl,
 			 struct file *file,
 			 void *buffer,
 			 size_t *len);
+static void acpi_release(unsigned long start, unsigned long size);
 
 static struct ctl_table_header *acpi_sysctl = NULL;
 
@@ -1300,15 +1303,28 @@ static int acpi_claim(unsigned long start, unsigned long size)
 static int acpi_claim_ioports(struct acpi_facp *facp)
 {
 	// we don't get a guarantee of contiguity for any of the ACPI registers
-	if (acpi_claim(facp->pm1a_evt, facp->pm1_evt_len)
-	    || acpi_claim(facp->pm1b_evt, facp->pm1_evt_len)
-	    || acpi_claim(facp->pm1a_cnt, facp->pm1_cnt_len)
-	    || acpi_claim(facp->pm1b_cnt, facp->pm1_cnt_len)
-	    || acpi_claim(facp->pm_tmr, facp->pm_tm_len)
-	    || acpi_claim(facp->gpe0, facp->gpe0_len)
-	    || acpi_claim(facp->gpe1, facp->gpe1_len))
-		return -EBUSY;
+	if (acpi_claim(facp->pm1a_evt, facp->pm1_evt_len))
+		goto return_ebusy;
+	if (acpi_claim(facp->pm1b_evt, facp->pm1_evt_len))
+		goto release_pm1a_evt;
+	if (acpi_claim(facp->pm1a_cnt, facp->pm1_cnt_len))
+		goto release_pm1b_evt;
+	if (acpi_claim(facp->pm1b_cnt, facp->pm1_cnt_len))
+		goto release_pm1a_cnt;
+	if (acpi_claim(facp->pm_tmr, facp->pm_tm_len))
+		goto release_pm1b_cnt;
+	if (acpi_claim(facp->gpe0, facp->gpe0_len))
+		goto release_pm_tmr;
+	if (acpi_claim(facp->gpe1, facp->gpe1_len))
+		goto release_gpe0;
 	return 0;
+release_gpe0:		acpi_release(facp->gpe0, facp->gpe0_len);
+release_pm_tmr:		acpi_release(facp->pm_tmr, facp->pm_tm_len);
+release_pm1b_cnt:	acpi_release(facp->pm1b_cnt, facp->pm1_cnt_len);
+release_pm1a_cnt:	acpi_release(facp->pm1a_cnt, facp->pm1_cnt_len);
+release_pm1b_evt:	acpi_release(facp->pm1b_evt, facp->pm1_evt_len);
+release_pm1a_evt:	acpi_release(facp->pm1a_evt, facp->pm1_evt_len);
+return_ebusy:		return -EBUSY;
 }
 
 /*
@@ -1523,8 +1539,10 @@ static int acpi_do_table(ctl_table *ctl,
 				error = -ENOMEM;
 		}
 		if (data)
-			if (copy_from_user(data, buffer, size))
+			if (copy_from_user(data, buffer, size)) {
+				acpi_destroy_table(info);
 				error = -EFAULT;
+			}
 		
 		write_unlock(&acpi_do_table_lock);
 	}
@@ -1838,7 +1856,7 @@ int __init acpi_init(void)
 			   &acpi_facp)) {
 		printk(KERN_ERR "ACPI: SCI (IRQ%d) allocation failed\n",
 		       facp->sci_int);
-		goto err_out;
+		goto cleanup_ioports;
 	}
 
 #ifndef CONFIG_ACPI_S1_SLEEP
@@ -1846,6 +1864,8 @@ int __init acpi_init(void)
 #endif
 
 	acpi_sysctl = register_sysctl_table(acpi_dir_table, 1);
+	if (!acpi_sysctl)
+		goto cleanup_irq;
 
 	pm_power_off = acpi_power_off;
 
@@ -1863,7 +1883,10 @@ int __init acpi_init(void)
 		pm_idle = acpi_idle;
 
 	return 0;
-
+cleanup_irq:
+    free_irq(facp->sci_int, &acpi_facp);
+cleanup_ioports:
+    acpi_release_ioports(facp);
 err_out:
 	if (pci_driver_registered)
 		pci_unregister_driver(&acpi_driver);

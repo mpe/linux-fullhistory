@@ -1595,20 +1595,20 @@ static int write_ndelay __initdata =	-1;
 static int cfg __initdata =		-1;
 
 /* Extra Peripheral Configuration */
-static int reset __initdata;
-static int mpu_io __initdata;
-static int mpu_irq __initdata;
-static int ide_io0 __initdata;
-static int ide_io1 __initdata;
-static int ide_irq __initdata;
-static int joystick_io __initdata;
+static int reset __initdata = 0;
+static int mpu_io __initdata = 0;
+static int mpu_irq __initdata = 0;
+static int ide_io0 __initdata = 0;
+static int ide_io1 __initdata = 0;
+static int ide_irq __initdata = 0;
+static int joystick_io __initdata = 0;
 
 /* If we have the digital daugherboard... */
-static int digital __initdata;
+static int digital __initdata = 0;
 #endif
 
 static int fifosize __initdata =	DEFFIFOSIZE;
-static int calibrate_signal __initdata;
+static int calibrate_signal __initdata = 0;
 
 #else /* not a module */
 

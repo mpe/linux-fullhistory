@@ -12,6 +12,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (10/05/2000) gkh
+ *	Fixed bug with urb->dev not being set properly, now that the usb
+ *	core needs it.
+ * 
  * (08/28/2000) gkh
  *	Added locks for SMP safeness.
  *	Fixed MOD_INC and MOD_DEC logic and the ability to open a port more 
@@ -212,6 +216,7 @@ static void keyspan_pda_rx_unthrottle (struct usb_serial_port *port)
 {
 	/* just restart the receive interrupt URB */
 	dbg("keyspan_pda_rx_unthrottle port %d", port->number);
+	port->interrupt_in_urb->dev = port->serial->dev;
 	if (usb_submit_urb(port->interrupt_in_urb))
 		dbg(" usb_submit_urb(read urb) failed");
 	return;
@@ -506,6 +511,7 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 		
 		priv->tx_room -= count;
 
+		port->write_urb->dev = port->serial->dev;
 		if (usb_submit_urb(port->write_urb)) {
 			dbg(" usb_submit_urb(write bulk) failed");
 			spin_unlock_irqrestore (&port->port_lock, flags);
@@ -627,6 +633,7 @@ static int keyspan_pda_open (struct usb_serial_port *port, struct file *filp)
 			keyspan_pda_set_modem_info(serial, 0);
 
 		/*Start reading from the device*/
+		port->interrupt_in_urb->dev = serial->dev;
 		if (usb_submit_urb(port->interrupt_in_urb))
 			dbg(__FUNCTION__" - usb_submit_urb(read int) failed");
 	} else {

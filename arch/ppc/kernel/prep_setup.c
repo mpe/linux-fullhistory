@@ -384,8 +384,8 @@ void __init prep_res_calibrate_decr(void)
  * 2 following ones measure the interval. The precision of the method
  * is still doubtful due to the short interval sampled.
  */
-static __initdata volatile int calibrate_steps = 3;
-static __initdata unsigned tbstamp;
+static volatile int calibrate_steps __initdata = 3;
+static unsigned tbstamp __initdata = 0;
 
 void __init
 prep_calibrate_decr_handler(int            irq,

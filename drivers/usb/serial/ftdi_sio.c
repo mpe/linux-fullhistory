@@ -12,6 +12,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  *
+ * (10/05/2000) gkh
+ *	Fixed bug with urb->dev not being set properly, now that the usb
+ *	core needs it.
+ * 
  * (09/11/2000) gkh
  *	Removed DEBUG #ifdefs with call to usb_serial_debug_data
  *
@@ -166,6 +170,7 @@ static int  ftdi_sio_open (struct usb_serial_port *port, struct file *filp)
 { /* ftdi_sio_open */
 	struct termios tmp_termios;
 	struct usb_serial *serial = port->serial;
+	int result;
 	char buf[1]; /* Needed for the usb_control_msg I think */
 
 	dbg("ftdi_sio_open port %d", port->number);
@@ -216,9 +221,14 @@ static int  ftdi_sio_open (struct usb_serial_port *port, struct file *filp)
 		err("Error from RTS HIGH urb");
 	}
 	
-	/*Start reading from the device*/
-	if (usb_submit_urb(port->read_urb))
-		err("usb_submit_urb(read bulk) failed");
+	/* Start reading from the device */
+	FILL_BULK_URB(port->read_urb, serial->dev, 
+		      usb_rcvbulkpipe(serial->dev, port->bulk_in_endpointAddress),
+		      port->read_urb->transfer_buffer, port->read_urb->transfer_buffer_length,
+		      ftdi_sio_read_bulk_callback, port);
+	result = usb_submit_urb(port->read_urb);
+	if (result)
+		err(__FUNCTION__ " - failed submitting read urb, error %d", result);
 
 	return (0);
 } /* ftdi_sio_open */
@@ -279,6 +289,7 @@ static int ftdi_sio_write (struct usb_serial_port *port, int from_user,
 	struct usb_serial *serial = port->serial;
 	const int data_offset = 1;
 	int rc; 
+	int result;
 	DECLARE_WAITQUEUE(wait, current);
 	
 	dbg("ftdi_sio_serial_write port %d, %d bytes", port->number, count);
@@ -338,10 +349,16 @@ static int ftdi_sio_write (struct usb_serial_port *port, int from_user,
 		usb_serial_debug_data (__FILE__, __FUNCTION__, count, first_byte);
 		
 		/* send the data out the bulk port */
-		port->write_urb->transfer_buffer_length = count;
-
-		if (usb_submit_urb(port->write_urb))
-			err("usb_submit_urb(write bulk) failed");
+		FILL_BULK_URB(port->write_urb, serial->dev, 
+			      usb_sndbulkpipe(serial->dev, port->bulk_out_endpointAddress),
+			      port->write_urb->transfer_buffer, count,
+			      ftdi_sio_write_bulk_callback, port);
+		
+		result = usb_submit_urb(port->write_urb);
+		if (result) {
+			err(__FUNCTION__ " - failed submitting write urb, error %d", result);
+			return 0;
+		}
 
 		dbg("write returning: %d", count - data_offset);
 		return (count - data_offset);
@@ -393,6 +410,7 @@ static void ftdi_sio_read_bulk_callback (struct urb *urb)
 
 	const int data_offset = 2;
 	int i;
+	int result;
 
 	dbg("ftdi_sio read callback");
 
@@ -429,8 +447,14 @@ static void ftdi_sio_read_bulk_callback (struct urb *urb)
 	}
 
 	/* Continue trying to always read  */
-	if (usb_submit_urb(urb))
-		err("failed resubmitting read urb");
+	FILL_BULK_URB(urb, serial->dev, 
+		      usb_rcvbulkpipe(serial->dev, port->bulk_in_endpointAddress),
+		      urb->transfer_buffer, urb->transfer_buffer_length,
+		      ftdi_sio_read_bulk_callback, port);
+
+	result = usb_submit_urb(urb);
+	if (result)
+		err(__FUNCTION__ " - failed resubmitting read urb, error %d", result);
 
 	return;
 } /* ftdi_sio_serial_read_bulk_callback */

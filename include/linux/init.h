@@ -33,6 +33,8 @@
  *
  * For initialized data not at file scope, i.e. within a function,
  * you should use __initlocaldata instead, due to a bug in GCC 2.7.
+ * Don't forget to initialize the data, as gcc otherwise puts the
+ * data into the bss section and not into the init section.
  */
 
 #ifndef MODULE

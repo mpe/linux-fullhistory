@@ -14,6 +14,10 @@
 *  Peter Berger (pberger@brimson.com)
 *  Al Borchers (borchers@steinerpoint.com)
 *
+* (10/05/2000) gkh
+*    -- Fixed bug with urb->dev not being set properly, now that the usb
+*	core needs it.
+* 
 *  (8/8/2000) pberger and borchers
 *    -- Fixed close so that 
 *       - it can timeout while waiting for transmit idle, if needed;
@@ -642,7 +646,8 @@ dbg( "digi_write_oob_command: TOP: port=%d, count=%d", oob_priv->dp_port_num, co
 
 		memcpy( oob_port->write_urb->transfer_buffer, buf, len );
 		oob_port->write_urb->transfer_buffer_length = len;
-
+		oob_port->write_urb->dev = port->serial->dev;
+		
 		if( (ret=usb_submit_urb(oob_port->write_urb)) == 0 ) {
 			count -= len;
 			buf += len;
@@ -728,6 +733,7 @@ count );
 			memcpy( data, buf, len );
 			port->write_urb->transfer_buffer_length = len;
 		}
+		port->write_urb->dev = port->serial->dev;
 
 		if( (ret=usb_submit_urb(port->write_urb)) == 0 ) {
 			priv->dp_out_buf_len = 0;
@@ -802,6 +808,7 @@ port_priv->dp_port_num, modem_signals );
 	data[7] = 0;
 
 	oob_port->write_urb->transfer_buffer_length = 8;
+	oob_port->write_urb->dev = port->serial->dev;
 
 	if( (ret=usb_submit_urb(oob_port->write_urb)) == 0 ) {
 		port_priv->dp_modem_signals =
@@ -921,8 +928,10 @@ dbg( "digi_rx_unthrottle: TOP: port=%d", priv->dp_port_num );
 	}
 
 	/* restart read chain */
-	if( priv->dp_throttle_restart )
+	if( priv->dp_throttle_restart ) {
+		port->read_urb->dev = port->serial->dev;
 		ret = usb_submit_urb( port->read_urb );
+	}
 
 	/* turn throttle off */
 	priv->dp_throttled = 0;
@@ -1270,6 +1279,7 @@ priv->dp_port_num, count, from_user, in_interrupt() );
 	}
 
 	port->write_urb->transfer_buffer_length = data_len+2;
+	port->write_urb->dev = port->serial->dev;
 
 	*data++ = DIGI_CMD_SEND_DATA;
 	*data++ = data_len;
@@ -1349,6 +1359,7 @@ dbg( "digi_write_bulk_callback: TOP, urb->status=%d", urb->status );
 
 		port->write_urb->transfer_buffer_length
 			= priv->dp_out_buf_len+2;
+		port->write_urb->dev = serial->dev;
 
 		memcpy( port->write_urb->transfer_buffer+2, priv->dp_out_buf,
 			priv->dp_out_buf_len );
@@ -1631,6 +1642,7 @@ static int digi_startup_device( struct usb_serial *serial )
 		port = &serial->port[i];
 
 		port->write_urb->transfer_flags |= USB_DISABLE_SPD;
+		port->write_urb->dev = port->serial->dev;
 
 		if( (ret=usb_submit_urb(port->read_urb)) != 0 ) {
 			err(
@@ -1794,6 +1806,7 @@ dbg( "digi_read_bulk_callback: TOP" );
 	}
 
 	/* continue read */
+	urb->dev = port->serial->dev;
 	if( (ret=usb_submit_urb(urb)) != 0 ) {
 		err( __FUNCTION__ ": failed resubmitting urb, ret=%d, port=%d",
 			ret, priv->dp_port_num );

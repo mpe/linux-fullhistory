@@ -12,7 +12,7 @@
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Randy Dunlap
  *
- * $Id: usb-uhci.c,v 1.239 2000/09/19 20:15:12 acher Exp $
+ * $Id: usb-uhci.c,v 1.242 2000/10/05 21:19:49 acher Exp $
  */
 
 #include <linux/config.h>
@@ -48,7 +48,7 @@
 /* This enables an extra UHCI slab for memory debugging */
 #define DEBUG_SLAB
 
-#define VERSTR "$Revision: 1.239 $ time " __TIME__ " " __DATE__
+#define VERSTR "$Revision: 1.242 $ time " __TIME__ " " __DATE__
 
 #include <linux/usb.h>
 #include "usb-uhci.h"
@@ -2563,6 +2563,8 @@ _static int process_urb (uhci_t *s, struct list_head *p)
 					uhci_submit_urb (urb);
 				}
 			}
+			else if (!urb->complete)
+				urb->dev = NULL;
 
 			if (proceed && urb->next) {
 				// if there are linked urbs - handle submitting of them right now.
@@ -2580,9 +2582,10 @@ _static int process_urb (uhci_t *s, struct list_head *p)
 					urb->dev=NULL;
 					urb->complete ((struct urb *) urb);
 				}
+				else
+					urb->dev=NULL;
 			}
 			
-			urb->dev=NULL; // Just in case no completion was called
 			usb_dec_dev_use (usb_dev);
 			spin_unlock(&urb->lock);		
 			spin_lock(&s->urb_list_lock);

@@ -1,14 +1,8 @@
 #
 # Makefile for the kernel ata, atapi, and ide block device drivers.
 #
-# Note! Dependencies are done automagically by 'make dep', which also
-# removes any old dependencies. DON'T put your own dependencies here
-# unless it's something special (ie not a .c file).
-#
-# Note 2! The CFLAGS definition is now inherited from the
-# parent makefile.
-#
-
+# 12 September 2000, Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
+# Rewritten to use lists instead of if-statements.
 #
 # Note : at this point, these files are compiled on all systems.
 # In the future, some of these should be built conditionally.
@@ -19,219 +13,83 @@ MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS)
 
 O_TARGET := idedriver.o
-O_OBJS   := ide-geometry.o
-M_OBJS   :=
-OX_OBJS :=
-MX_OBJS :=
 
-ifeq ($(CONFIG_BLK_DEV_AEC62XX),y)
-IDE_OBJS += aec62xx.o
-endif
+obj-y		:=
+obj-m		:=
+ide-obj-y	:=
 
-ifeq ($(CONFIG_BLK_DEV_ALI14XX),y)
-IDE_OBJS += ali14xx.o
-endif
+ide-obj-$(CONFIG_BLK_DEV_AEC62XX)	+= aec62xx.o
+ide-obj-$(CONFIG_BLK_DEV_ALI14XX)	+= ali14xx.o
+ide-obj-$(CONFIG_BLK_DEV_ALI15X3)	+= alim15x3.o
+ide-obj-$(CONFIG_BLK_DEV_AMD7409)	+= amd7409.o
+ide-obj-$(CONFIG_BLK_DEV_BUDDHA)	+= buddha.o
+ide-obj-$(CONFIG_BLK_DEV_CMD640)	+= cmd640.o
+ide-obj-$(CONFIG_BLK_DEV_CMD64X)	+= cmd64x.o
+ide-obj-$(CONFIG_BLK_DEV_CS5530)	+= cs5530.o
+ide-obj-$(CONFIG_BLK_DEV_CY82C693)	+= cy82c693.o
+ide-obj-$(CONFIG_BLK_DEV_DTC2278)	+= dtc2278.o
+ide-obj-$(CONFIG_BLK_DEV_FALCON_IDE)	+= falconide.o
+ide-obj-$(CONFIG_BLK_DEV_GAYLE)		+= gayle.o
+ide-obj-$(CONFIG_BLK_DEV_Q40IDE)	+= q40ide.o
+ide-obj-$(CONFIG_BLK_DEV_HD)		+= hd.o
+ide-obj-$(CONFIG_BLK_DEV_HPT34X)	+= hpt34x.o
+ide-obj-$(CONFIG_BLK_DEV_HPT366)	+= hpt366.o
+ide-obj-$(CONFIG_BLK_DEV_HT6560B)	+= ht6560b.o
+ide-obj-$(CONFIG_BLK_DEV_IDE_ICSIDE)	+= icside.o
+ide-obj-$(CONFIG_BLK_DEV_IDEDMA)	+= ide-dma.o
+ide-obj-$(CONFIG_BLK_DEV_IDEPCI)	+= ide-pci.o
+ide-obj-$(CONFIG_BLK_DEV_ISAPNP)	+= ide-pnp.o
+ide-obj-$(CONFIG_BLK_DEV_IDE_PMAC)	+= ide-pmac.o
+ide-obj-$(CONFIG_BLK_DEV_MAC_IDE)	+= macide.o
+ide-obj-$(CONFIG_BLK_DEV_NS87415)	+= ns87415.o
+ide-obj-$(CONFIG_BLK_DEV_OPTI621)	+= opti621.o
+ide-obj-$(CONFIG_BLK_DEV_PDC202XX)	+= pdc202xx.o
+ide-obj-$(CONFIG_BLK_DEV_PDC4030)	+= pdc4030.o
+ide-obj-$(CONFIG_BLK_DEV_PIIX)		+= piix.o
+ide-obj-$(CONFIG_BLK_DEV_QD6580)	+= qd6580.o
+ide-obj-$(CONFIG_BLK_DEV_IDE_RAPIDE)	+= rapide.o
+ide-obj-$(CONFIG_BLK_DEV_RZ1000)	+= rz1000.o
+ide-obj-$(CONFIG_BLK_DEV_SIS5513)	+= sis5513.o
+ide-obj-$(CONFIG_BLK_DEV_SL82C105)	+= sl82c105.o
+ide-obj-$(CONFIG_BLK_DEV_TRM290)	+= trm290.o
+ide-obj-$(CONFIG_BLK_DEV_UMC8672)	+= umc8672.o
+ide-obj-$(CONFIG_BLK_DEV_VIA82CXXX)	+= via82cxxx.o
 
-ifeq ($(CONFIG_BLK_DEV_ALI15X3),y)
-IDE_OBJS += alim15x3.o
-endif
+ide-obj-$(CONFIG_PROC_FS)		+= ide-proc.o
 
-ifeq ($(CONFIG_BLK_DEV_AMD7409),y)
-IDE_OBJS += amd7409.o
-endif
+export-objs		:= ide.o ide-features.o
+list-multi		:= ide-mod.o ide-probe-mod.o
+ide-mod-objs		:= $(export-objs) $(ide-obj-y)
+ide-probe-mod-objs	:= ide-probe.o ide-geometry.o
 
-ifeq ($(CONFIG_BLK_DEV_BUDDHA),y)
-IDE_OBJS += buddha.o
-endif
+obj-$(CONFIG_BLK_DEV_IDE)	+= ide-mod.o ide-probe-mod.o
+obj-$(CONFIG_BLK_DEV_IDECS)	+= ide-cs.o
+obj-$(CONFIG_BLK_DEV_IDEDISK)	+= ide-disk.o
+obj-$(CONFIG_BLK_DEV_IDECD)	+= ide-cd.o
+obj-$(CONFIG_BLK_DEV_IDETAPE)	+= ide-tape.o
+obj-$(CONFIG_BLK_DEV_IDEFLOPPY)	+= ide-floppy.o
 
-ifeq ($(CONFIG_BLK_DEV_CMD640),y)
-IDE_OBJS += cmd640.o
-endif
+# Extract lists of the multi-part drivers.
+# The 'int-*' lists are the intermediate files used to build the multi's.
+multi-y		:= $(filter $(list-multi), $(obj-y))
+multi-m		:= $(filter $(list-multi), $(obj-m))
+int-y		:= $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
+int-m		:= $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
 
-ifeq ($(CONFIG_BLK_DEV_CMD64X),y)
-IDE_OBJS += cmd64x.o
-endif
+# Take multi-part drivers out of obj-y and put components in.
+obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
 
-ifeq ($(CONFIG_BLK_DEV_CS5530),y)
-IDE_OBJS += cs5530.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_CY82C693),y)
-IDE_OBJS += cy82c693.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_DTC2278),y)
-IDE_OBJS += dtc2278.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_FALCON_IDE),y)
-IDE_OBJS += falconide.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_GAYLE),y)
-IDE_OBJS += gayle.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_Q40IDE),y)
-IDE_OBJS += q40ide.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_HD),y)
-O_OBJS += hd.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_HPT34X),y)
-IDE_OBJS += hpt34x.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_HPT366),y)
-IDE_OBJS += hpt366.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_HT6560B),y)
-IDE_OBJS += ht6560b.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDE_ICSIDE),y)
-IDE_OBJS += icside.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDEDMA),y)
-IDE_OBJS += ide-dma.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDEPCI),y)
-IDE_OBJS += ide-pci.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_ISAPNP),y)
-IDE_OBJS += ide-pnp.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDE_PMAC),y)
-IDE_OBJS += ide-pmac.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_MAC_IDE),y)
-IDE_OBJS += macide.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_NS87415),y)
-IDE_OBJS += ns87415.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_OPTI621),y)
-IDE_OBJS += opti621.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_PDC202XX),y)
-IDE_OBJS += pdc202xx.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_PDC4030),y)
-IDE_OBJS += pdc4030.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_PIIX),y)
-IDE_OBJS += piix.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_QD6580),y)
-IDE_OBJS += qd6580.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDE_RAPIDE),y)
-IDE_OBJS += rapide.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_RZ1000),y)
-IDE_OBJS += rz1000.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_SIS5513),y)
-IDE_OBJS += sis5513.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_SL82C105),y)
-IDE_OBJS += sl82c105.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_TRM290),y)
-IDE_OBJS += trm290.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_UMC8672),y)
-IDE_OBJS += umc8672.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_VIA82CXXX),y)
-IDE_OBJS += via82cxxx.o
-endif
-
-### if CONFIG_BLK_DEV_IDE is n, IDE_OBJS will be ignored
-
-ifeq ($(CONFIG_PROC_FS),y)
-IDE_OBJS += ide-proc.o
-endif
-  
-###Collect
-
-ifeq ($(CONFIG_BLK_DEV_IDE),y)
-  OX_OBJS += ide.o ide-features.o
-  O_OBJS += ide-probe.o $(IDE_OBJS)
-else
-  ifeq ($(CONFIG_BLK_DEV_IDE),m)
-  MIX_OBJS += ide.o ide-features.o $(IDE_OBJS)
-  M_OBJS += ide-mod.o ide-probe-mod.o
-  endif
-endif
-
-############
-
-ifeq ($(CONFIG_BLK_DEV_IDECS),y)
-O_OBJS += ide-cs.o
-else
-  ifeq ($(CONFIG_BLK_DEV_IDECS),m)
-  M_OBJS += ide-cs.o
-  endif
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDEDISK),y)
-O_OBJS += ide-disk.o
-else
-  ifeq ($(CONFIG_BLK_DEV_IDEDISK),m)
-  M_OBJS += ide-disk.o
-  endif
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDECD),y)
-O_OBJS += ide-cd.o
-else
-  ifeq ($(CONFIG_BLK_DEV_IDECD),m)
-  M_OBJS += ide-cd.o
-  endif
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDETAPE),y)
-O_OBJS += ide-tape.o
-else
-  ifeq ($(CONFIG_BLK_DEV_IDETAPE),m)
-  M_OBJS += ide-tape.o
-  endif
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDEFLOPPY),y)
-O_OBJS += ide-floppy.o
-else
-  ifeq ($(CONFIG_BLK_DEV_IDEFLOPPY),m)
-  M_OBJS += ide-floppy.o
-  endif
-endif
+# Translate to Rules.make lists.
+O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
+OX_OBJS		:= $(filter	$(export-objs), $(obj-y))
+M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
+MI_OBJS		:= $(sort $(filter-out	$(export-objs), $(int-m)))
+MIX_OBJS	:= $(sort $(filter	$(export-objs), $(int-m)))
 
 include $(TOPDIR)/Rules.make
 
-ide-mod.o: ide.o ide-features.o $(IDE_OBJS)
-	$(LD) $(LD_RFLAG) -r -o $@ ide.o ide-features.o $(IDE_OBJS)
+ide-mod.o: $(ide-mod-objs)
+	$(LD) -r -o $@ $(ide-mod-objs)
 
-ide-probe-mod.o: ide-probe.o ide-geometry.o
-	$(LD) $(LD_RFLAG) -r -o $@ ide-probe.o ide-geometry.o
+ide-probe-mod.o: $(ide-probe-mod-objs)
+	$(LD) -r -o $@ $(ide-probe-mod-objs)

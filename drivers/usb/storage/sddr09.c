@@ -1,6 +1,6 @@
 /* Driver for SanDisk SDDR-09 SmartMedia reader
  *
- * $Id: sddr09.c,v 1.10 2000/08/25 00:13:51 mdharm Exp $
+ * $Id: sddr09.c,v 1.12 2000/10/03 01:06:07 mdharm Exp $
  *
  * SDDR09 driver v0.1:
  *
@@ -39,12 +39,6 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
-
-extern int usb_stor_control_msg(struct us_data *us, unsigned int pipe,
-	u8 request, u8 requesttype, u16 value, u16 index,
-	void *data, u16 size);
-extern int usb_stor_bulk_msg(struct us_data *us, void *data, int pipe,
-	unsigned int len, unsigned int *act_len);
 
 #define short_pack(lsb,msb) ( ((u16)(lsb)) | ( ((u16)(msb))<<8 ) )
 #define LSB_of(s) ((s)&0xFF)
@@ -418,7 +412,7 @@ int sddr09_read_control(struct us_data *us,
 		MSB_of(blocks), LSB_of(blocks)
 	};
 
-	US_DEBUGP("Read control address %08X blocks %04X\n",
+	US_DEBUGP("Read control address %08lX blocks %04X\n",
 		address, blocks);
 
 	result = sddr09_send_control(us,
@@ -814,8 +808,8 @@ int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us)
 	unsigned char inquiry_response[36] = {
 		0x00, 0x80, 0x00, 0x02, 0x1F, 0x00, 0x00, 0x00
 	};
-	unsigned char mode_page_01[12] = {
-		0x01, 0x0a, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	unsigned char mode_page_01[4] = { // write-protected for now
+		0x03, 0x00, 0x80, 0x00
 	};
 	unsigned char *ptr;
 	unsigned long capacity;
@@ -887,14 +881,14 @@ int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us)
 	}
 
 	if (srb->cmnd[0] == MODE_SENSE) {
-	
+
 			// Read-write error recovery page: there needs to
 			// be a check for write-protect here
 
 		if ( (srb->cmnd[2] & 0x3F) == 0x01 ) {
-			if (ptr==NULL || srb->request_bufflen<12)
+			if (ptr==NULL || srb->request_bufflen<4)
 				return USB_STOR_TRANSPORT_ERROR;
-			memcpy(ptr, mode_page_01, 12);
+			memcpy(ptr, mode_page_01, sizeof(mode_page_01));
 			return USB_STOR_TRANSPORT_GOOD;
 		}
 

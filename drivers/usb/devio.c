@@ -1035,12 +1035,14 @@ static int proc_ioctl (struct dev_state *ps, void *arg)
 	if ((size = _IOC_SIZE (ctrl.ioctl_code)) > 0) {
 		if ((buf = kmalloc (size, GFP_KERNEL)) == 0)
 			return -ENOMEM;
-		if ((_IOC_DIR (ctrl.ioctl_code) & _IOC_WRITE) != 0
-				&& copy_from_user (buf, ctrl.data, size) != 0) {
-			kfree (buf);
-			return -EFAULT;
-		} else
+		if ((_IOC_DIR(ctrl.ioctl_code) & _IOC_WRITE)) {
+			if (copy_from_user (buf, ctrl.data, size)) {
+				kfree (buf);
+				return -EFAULT;
+			}
+		} else {
 			memset (buf, 0, size);
+		}
 	}
 
 	/* ioctl to device */

@@ -46,6 +46,9 @@
 **   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 **
 **
+** 1.57 -> 1.57b - Jean II
+**   - fix spinlocks, SMP is now working !
+**
 ** 1.56 -> 1.57
 **   - updates for new PCI interface for 2.1 kernels
 **
@@ -701,7 +704,7 @@ static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, 
 
   lp = (struct hp100_private *)dev->priv;
   memset( lp, 0, sizeof( struct hp100_private ) );
-  lp->lock = SPIN_LOCK_UNLOCKED;
+  spin_lock_init(&lp->lock);
   lp->id = eid;
   lp->chip = chip;
   lp->mode = local_mode;
@@ -1585,9 +1588,11 @@ static int hp100_start_xmit_bm( struct sk_buff *skb, struct net_device *dev )
 	}
       else
 	{
-	  hp100_ints_off();
+	  spin_lock_irqsave (&lp->lock, flags);
+	  hp100_ints_off();	/* Useful ? Jean II */
 	  i = hp100_sense_lan( dev );
 	  hp100_ints_on();
+	  spin_unlock_irqrestore (&lp->lock, flags);
 	  if ( i == HP100_LAN_ERR )
 	    printk( "hp100: %s: link down detected\n", dev->name );
 	  else
@@ -1703,6 +1708,7 @@ static void hp100_clean_txring( struct net_device *dev )
 /* tx function for slave modes */
 static int hp100_start_xmit( struct sk_buff *skb, struct net_device *dev )
 {
+  unsigned long flags;
   int i, ok_flag;
   int ioaddr = dev->base_addr;
   u_short val;
@@ -1759,9 +1765,11 @@ static int hp100_start_xmit( struct sk_buff *skb, struct net_device *dev )
         }
       else
         {
-          hp100_ints_off();
+	  spin_lock_irqsave (&lp->lock, flags);
+          hp100_ints_off();	/* Useful ? Jean II */
           i = hp100_sense_lan( dev );
           hp100_ints_on();
+	  spin_unlock_irqrestore (&lp->lock, flags);
           if ( i == HP100_LAN_ERR )
             printk( "hp100: %s: link down detected\n", dev->name );
 	  else
@@ -1796,6 +1804,7 @@ static int hp100_start_xmit( struct sk_buff *skb, struct net_device *dev )
 #endif
     }
 	
+  spin_lock_irqsave (&lp->lock, flags);
   hp100_ints_off();
   val = hp100_inw( IRQ_STATUS );
   /* Ack / clear the interrupt TX_COMPLETE interrupt - this interrupt is set
@@ -1842,6 +1851,7 @@ static int hp100_start_xmit( struct sk_buff *skb, struct net_device *dev )
   lp->stats.tx_bytes += skb->len;
   dev->trans_start=jiffies;
   hp100_ints_on();
+  spin_unlock_irqrestore (&lp->lock, flags);
 	
   dev_kfree_skb_any( skb );
 	
@@ -2104,16 +2114,20 @@ static void hp100_rx_bm( struct net_device *dev )
  */
 static hp100_stats_t *hp100_get_stats( struct net_device *dev )
 {
+  unsigned long flags;
   int ioaddr = dev->base_addr;
+  struct hp100_private *lp = (struct hp100_private *)dev->priv;
 
 #ifdef HP100_DEBUG_B
   hp100_outw( 0x4215, TRACE );
 #endif
 
-  hp100_ints_off();
+  spin_lock_irqsave (&lp->lock, flags);
+  hp100_ints_off();	/* Useful ? Jean II */
   hp100_update_stats( dev );
   hp100_ints_on();
-  return &((struct hp100_private *)dev->priv)->stats;
+  spin_unlock_irqrestore (&lp->lock, flags);
+  return &(lp->stats);
 }
 
 static void hp100_update_stats( struct net_device *dev )
@@ -2535,10 +2549,12 @@ static void hp100_start_interface( struct net_device *dev )
                   HP100_TX_ERROR   | HP100_SET_LB , IRQ_MASK );
     }
 	
+  /* Note : before hp100_set_multicast_list(), because it will play with
+   * spinlock itself... Jean II */
+  spin_unlock_irqrestore (&lp->lock, flags);
+
   /* Enable MAC Tx and RX, set MAC modes, ... */
   hp100_set_multicast_list( dev );
-
-  spin_unlock_irqrestore (&lp->lock, flags);
 }
 
 

@@ -305,16 +305,18 @@ error_code:
 	pushl %ebx
 	cld
 	movl %es,%ecx
-	xchgl %eax, ORIG_EAX(%esp)	# orig_eax (get the error code. )
+	movl ORIG_EAX(%esp), %esi	# get the error code
+	movl ES(%esp), %edi		# get the function address
+	movl %eax, ORIG_EAX(%esp)
+	movl %ecx, ES(%esp)
 	movl %esp,%edx
-	xchgl %ecx, ES(%esp)		# get the address and save es.
-	pushl %eax			# push the error code
-	pushl %edx
+	pushl %esi			# push the error code
+	pushl %edx			# push the pt_regs pointer
 	movl $(__KERNEL_DS),%edx
 	movl %edx,%ds
 	movl %edx,%es
 	GET_CURRENT(%ebx)
-	call *%ecx
+	call *%edi
 	addl $8,%esp
 	jmp ret_from_exception
 

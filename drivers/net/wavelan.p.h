@@ -36,9 +36,9 @@
  *
  * SMP
  * ---
- *	We now *should* be SMP compliant.
- *	I don't have a SMP box to verify that (my Pentium 90 is not), so
- *	someone has to certify that from me.
+ *	We now are SMP compliant (I eventually fixed the remaining bugs).
+ *	The driver has been tested on a dual P6-150 and survived my usual
+ *	set of torture tests.
  *	Anyway, I spent enough time chasing interrupt re-entrancy during
  *	errors or reconfigure, and I designed the locked/unlocked sections
  *	of the driver with great care, and with the recent addition of
@@ -340,6 +340,11 @@
  *	- Fixup a potential gotcha when reconfiguring and thighten a bit
  *		the interactions with Tx queue.
  *
+ * Changes made for release in 2.4.0 :
+ * ---------------------------------
+ *	- Fix spinlock stupid bugs that I left in. The driver is now SMP
+ *		compliant and doesn't lockup at startup.
+ *
  * Wishes & dreams:
  * ----------------
  *	- roaming (see Pcmcia driver)
@@ -430,7 +435,7 @@
 /************************ CONSTANTS & MACROS ************************/
 
 #ifdef DEBUG_VERSION_SHOW
-static const char	*version	= "wavelan.c : v22 (wireless extensions) 21/02/00\n";
+static const char	*version	= "wavelan.c : v23 (SMP + wireless extensions) 05/10/00\n";
 #endif
 
 /* Watchdog temporisation */

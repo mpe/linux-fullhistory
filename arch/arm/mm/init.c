@@ -56,7 +56,7 @@ extern char _stext, _text, _etext, _end, __init_begin, __init_end;
  * The sole use of this is to pass memory configuration
  * data from paging_init to mem_init.
  */
-static struct meminfo __initdata meminfo;
+static struct meminfo meminfo __initdata = { 0, };
 
 /*
  * empty_bad_page is the page that is used for page faults when

@@ -15,6 +15,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (10/05/2000) gkh
+ *	Fixed bug with urb->dev not being set properly, now that the usb
+ *	core needs it.
+ * 
  * (09/11/2000) gkh
  *	Removed DEBUG #ifdefs with call to usb_serial_debug_data
  *
@@ -693,6 +697,7 @@ static int generic_open (struct usb_serial_port *port, struct file *filp)
 {
 	struct usb_serial *serial = port->serial;
 	unsigned long flags;
+	int result;
 
 	if (port_paranoia_check (port, __FUNCTION__))
 		return -ENODEV;
@@ -709,9 +714,17 @@ static int generic_open (struct usb_serial_port *port, struct file *filp)
 
 		/* if we have a bulk interrupt, start reading from it */
 		if (serial->num_bulk_in) {
-			/*Start reading from the device*/
-			if (usb_submit_urb(port->read_urb))
-				dbg(__FUNCTION__ " - usb_submit_urb(read bulk) failed");
+			/* Start reading from the device */
+			FILL_BULK_URB(port->read_urb, serial->dev, 
+				      usb_rcvbulkpipe(serial->dev, port->bulk_in_endpointAddress),
+				      port->read_urb->transfer_buffer, port->read_urb->transfer_buffer_length,
+				      ((serial->type->read_bulk_callback) ?
+				       serial->type->read_bulk_callback :
+				       generic_read_bulk_callback), 
+				      port);
+			result = usb_submit_urb(port->read_urb);
+			if (result)
+				err(__FUNCTION__ " - failed resubmitting read urb, error %d", result);
 		}
 	}
 	
@@ -751,6 +764,7 @@ static int generic_write (struct usb_serial_port *port, int from_user, const uns
 {
 	struct usb_serial *serial = port->serial;
 	unsigned long flags;
+	int result;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
@@ -778,11 +792,19 @@ static int generic_write (struct usb_serial_port *port, int from_user, const uns
 			memcpy (port->write_urb->transfer_buffer, buf, count);
 		}  
 
-		/* send the data out the bulk port */
-		port->write_urb->transfer_buffer_length = count;
+		/* set up our urb */
+		FILL_BULK_URB(port->write_urb, serial->dev, 
+			      usb_sndbulkpipe(serial->dev, port->bulk_out_endpointAddress),
+			      port->write_urb->transfer_buffer, count,
+			      ((serial->type->write_bulk_callback) ? 
+			       serial->type->write_bulk_callback : 
+			       generic_write_bulk_callback), 
+			      port);
 
-		if (usb_submit_urb(port->write_urb)) {
-			dbg(__FUNCTION__ " - usb_submit_urb(write bulk) failed");
+		/* send the data out the bulk port */
+		result = usb_submit_urb(port->write_urb);
+		if (result) {
+			err(__FUNCTION__ " - failed submitting write urb, error %d", result);
 			spin_unlock_irqrestore (&port->port_lock, flags);
 			return 0;
 		}
@@ -835,6 +857,7 @@ static void generic_read_bulk_callback (struct urb *urb)
 	struct tty_struct *tty;
 	unsigned char *data = urb->transfer_buffer;
 	int i;
+	int result;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 	
@@ -859,10 +882,16 @@ static void generic_read_bulk_callback (struct urb *urb)
 	}
 
 	/* Continue trying to always read  */
-	if (usb_submit_urb(urb))
-		dbg(__FUNCTION__ " - failed resubmitting read urb");
-
-	return;
+	FILL_BULK_URB(port->read_urb, serial->dev, 
+		      usb_rcvbulkpipe(serial->dev, port->bulk_in_endpointAddress),
+		      port->read_urb->transfer_buffer, port->read_urb->transfer_buffer_length,
+		      ((serial->type->read_bulk_callback) ?
+		       serial->type->read_bulk_callback :
+		       generic_read_bulk_callback), 
+		      port);
+	result = usb_submit_urb(port->read_urb);
+	if (result)
+		err(__FUNCTION__ " - failed resubmitting read urb, error %d", result);
 }
 
 
@@ -1071,6 +1100,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 			goto probe_error;
 		}
 		buffer_size = endpoint->wMaxPacketSize;
+		port->bulk_in_endpointAddress = endpoint->bEndpointAddress;
 		port->bulk_in_buffer = kmalloc (buffer_size, GFP_KERNEL);
 		if (!port->bulk_in_buffer) {
 			err("Couldn't allocate bulk_in_buffer");
@@ -1119,6 +1149,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 			goto probe_error;
 		}
 		buffer_size = endpoint->wMaxPacketSize;
+		port->interrupt_in_endpointAddress = endpoint->bEndpointAddress;
 		port->interrupt_in_buffer = kmalloc (buffer_size, GFP_KERNEL);
 		if (!port->interrupt_in_buffer) {
 			err("Couldn't allocate interrupt_in_buffer");
@@ -1136,6 +1167,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	/* we don't use num_ports here cauz some devices have more endpoint pairs than ports */
 	max_endpoints = MAX(num_bulk_in, num_bulk_out);
 	max_endpoints = MAX(max_endpoints, num_interrupt_in);
+	dbg (__FUNCTION__ " - setting up %d port structures for this device", max_endpoints);
 	for (i = 0; i < max_endpoints; ++i) {
 		port = &serial->port[i];
 		port->number = i + serial->minor;

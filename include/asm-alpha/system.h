@@ -36,6 +36,7 @@
 #define START_ADDR	(PAGE_OFFSET+KERNEL_START_PHYS+0x10000)
 
 #ifndef __ASSEMBLY__
+#include <linux/kernel.h>
 
 /*
  * This is the logout header that should be common to all platforms

@@ -2032,7 +2032,7 @@ void md_setup_drive(void) md__init;
  * at boot time.
  */
 #ifdef CONFIG_AUTODETECT_RAID
-static int detected_devices[128] md__initdata;
+static int detected_devices[128] md__initdata = { 0, };
 static int dev_cnt=0;
 void md_autodetect_dev(kdev_t dev)
 {
@@ -3640,7 +3640,7 @@ struct {
 	int pers[MAX_MD_BOOT_DEVS];
 	int chunk[MAX_MD_BOOT_DEVS];
 	kdev_t devices[MAX_MD_BOOT_DEVS][MAX_REAL];
-} md_setup_args md__initdata;
+} md_setup_args md__initdata = { 0, };
 
 /*
  * Parse the command-line parameters given our kernel, but do not

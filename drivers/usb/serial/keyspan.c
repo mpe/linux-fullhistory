@@ -22,6 +22,10 @@
   Tip 'o the hat to Linuxcare for supporting staff in their work on
   open source projects.
 
+ (10/05/2000) gkh
+	Fixed bug with urb->dev not being set properly, now that the usb
+	core needs it.
+
   Wed Jul 19 14:00:42 EST 2000 gkh
 	Added module_init and module_exit functions to handle the fact that this
 	driver is a loadable module now.
@@ -202,6 +206,7 @@ static int keyspan_write(struct usb_serial_port *port, int from_user,
 
 		/* send the data out the bulk port */
 		s_priv->out_urbs[current_urb]->transfer_buffer_length = count + 1;
+		s_priv->out_urbs[current_urb]->dev = serial->dev;
 
 		if (usb_submit_urb(s_priv->out_urbs[current_urb])) {
 			dbg("usb_submit_urb(write bulk) failed");
@@ -234,12 +239,25 @@ static void keyspan_write_bulk_callback (struct urb *urb)
 
 static void keyspan_read_bulk_callback (struct urb *urb)
 {
+	struct usb_serial	*serial = (struct usb_serial *)urb->context;
+	struct usb_serial_port	*port;
 	int			i;
 	int			endpoint;
-	struct usb_serial	*serial;
-	struct usb_serial_port	*port;
 	struct tty_struct	*tty;
 	unsigned char 		*data = urb->transfer_buffer;
+
+	if (serial_paranoia_check (serial, __FUNCTION__))
+		return;
+	port = &serial->port[0];
+	if (port_paranoia_check (port, __FUNCTION__))
+		return;
+
+	if (urb->status) {
+		dbg(__FUNCTION__ " - nonzero read bulk status received: %d", urb->status);
+		return;
+	}
+
+	usb_serial_debug_data (__FILE__, __FUNCTION__, urb->actual_length, data);
 
 	endpoint = usb_pipeendpoint(urb->pipe);
 
@@ -255,8 +273,7 @@ static void keyspan_read_bulk_callback (struct urb *urb)
 			/* If this is one of the data endpoints, stuff it's
 		   	   contents into the tty flip_buffer. */
 		case 1:
-		case 2: serial = (struct usb_serial *) urb->context;
-			port = &serial->port[0];
+		case 2:
 			tty = port->tty;
 			if (urb->actual_length) {
 				for (i = 0; i < urb->actual_length ; ++i) {
@@ -279,7 +296,8 @@ static void keyspan_read_bulk_callback (struct urb *urb)
 			break;
 	}
 				
-		/* Resubmit urb so we continue receiving */
+	/* Resubmit urb so we continue receiving */
+	urb->dev = serial->dev;
 	if (usb_submit_urb(urb)) {
 		dbg(__FUNCTION__ "resubmit read urb failed.\n");
 	}
@@ -326,6 +344,7 @@ static int keyspan_open (struct usb_serial_port *port, struct file *filp)
 		/* Start reading from port */
 	for (i = 0; i < 4; i++) {
 		if (s_priv->in_urbs[i]) {
+			s_priv->in_urbs[i]->dev = serial->dev;
 			if (usb_submit_urb(s_priv->in_urbs[i])) {
 				dbg(__FUNCTION__ " submit in urb %d failed", i);
 			}
@@ -578,8 +597,9 @@ static int keyspan_usa19_send_setup(struct usb_serial *serial, struct usb_serial
 		}
 		memcpy (s_priv->out_urbs[2]->transfer_buffer, &msg, sizeof(msg));
 	
-			/* send the data out the device on control endpoint */
+		/* send the data out the device on control endpoint */
 		s_priv->out_urbs[2]->transfer_buffer_length = sizeof(msg);
+		s_priv->out_urbs[2]->dev = serial->dev;
 
 		if (usb_submit_urb(s_priv->out_urbs[2])) {
 			dbg(__FUNCTION__ " usb_submit_urb(setup) failed\n");

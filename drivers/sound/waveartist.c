@@ -1762,10 +1762,10 @@ static struct address_info cfg;
 
 static int attached;
 
-static int __initdata io;
-static int __initdata irq;
-static int __initdata dma;
-static int __initdata dma2;
+static int __initdata io = 0;
+static int __initdata irq = 0;
+static int __initdata dma = 0;
+static int __initdata dma2 = 0;
 
 
 MODULE_PARM(io, "i");		/* IO base */

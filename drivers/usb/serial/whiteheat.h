@@ -37,6 +37,7 @@
 #define WHITEHEAT_ECHO			14	/* send data to the indicated IN endpoint */
 #define WHITEHEAT_DO_TEST		15	/* perform the specified test */
 #define WHITEHEAT_CMD_COMPLETE		16	/* reply for certain commands */
+#define WHITEHEAT_CMD_FAILURE		17	/* reply for failed commands */
 
 /* Data for the WHITEHEAT_SETUP_PORT command */
 #define WHITEHEAT_CTS_FLOW		0x08
@@ -64,7 +65,7 @@ struct whiteheat_port_settings {
 				 *	RTS (0x80) (RTS off/on when receiver fills/empties)
 				 *	DTR (0x02) (DTR off/on when receiver fills/empties) */
 	__u8	lloop;		/* local loopback 0 or 1, default 0 */
-};
+} __attribute__ ((packed));
 
 /* data for WHITEHEAT_SET_RTS, WHITEHEAT_SET_DTR, and WHITEHEAT_SET_BREAK commands */
 struct whiteheat_rdb_set {

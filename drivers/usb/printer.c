@@ -192,6 +192,7 @@ static int usblp_open(struct inode *inode, struct file *file)
 
 	if (usblp->bidir) {
 		usblp->readcount = 0;
+		usblp->readurb.dev = usblp->dev;
 		usb_submit_urb(&usblp->readurb);
 	}
 out:
@@ -301,6 +302,7 @@ static ssize_t usblp_write(struct file *file, const char *buffer, size_t count, 
 		if (copy_from_user(usblp->writeurb.transfer_buffer, buffer + writecount,
 				usblp->writeurb.transfer_buffer_length)) return -EFAULT;
 
+		usblp->writeurb.dev = usblp->dev;
 		usb_submit_urb(&usblp->writeurb);
 	}
 
@@ -332,6 +334,7 @@ static ssize_t usblp_read(struct file *file, char *buffer, size_t count, loff_t 
 	if (usblp->readurb.status) {
 		err("usblp%d: error %d reading from printer",
 			usblp->minor, usblp->readurb.status);
+		usblp->readurb.dev = usblp->dev;
 		usb_submit_urb(&usblp->readurb);
 		return -EIO;
 	}
@@ -342,8 +345,10 @@ static ssize_t usblp_read(struct file *file, char *buffer, size_t count, loff_t 
 	if (copy_to_user(buffer, usblp->readurb.transfer_buffer + usblp->readcount, count))
 		return -EFAULT;
 
-	if ((usblp->readcount += count) == usblp->readurb.actual_length)
+	if ((usblp->readcount += count) == usblp->readurb.actual_length) {
+		usblp->readurb.dev = usblp->dev;
 		usb_submit_urb(&usblp->readurb);
+	}
 
 	return count;
 }

@@ -1,5 +1,5 @@
 ISA Plug & Play support by Jaroslav Kysela <perex@suse.cz>
-=========================================================
+==========================================================
 
 Interface /proc/isapnp
 ======================
@@ -13,7 +13,7 @@ Write commands:
 ---------------
 
 With the write interface you can simply activate or modify the configuration
-for ISA Plug & Play devices. It is mainly useable for drivers which don't
+for ISA Plug & Play devices. It is mainly useable for drivers which has not
 use the ISA Plug & Play kernel support yet.
 
 card <idx> <vendor>	- select PnP device by vendor identification
@@ -33,8 +33,8 @@ poked <reg> <value>	- poke configuration dword to selected register
 Explanation:
 	- variable <idx> begins with zero
 	- variable <CSN> begins with one
-	- <vendor> is in form 'PNP0000'
-	- <logdev> is in form 'PNP0000'
+	- <vendor> is in format 'PNP0000'
+	- <logdev> is in format 'PNP0000'
 
 Example:
 
@@ -53,6 +53,7 @@ logdev 0 CSC0001
 port 0 0x240
 activate
 EOF
+
 
 Information for developers
 ==========================
@@ -92,7 +93,7 @@ callback with appropriate information.
 
 Example for ids parameter initialization:
 
-static struct isapnp_card_id ids[] __devinitdata = {
+static struct isapnp_card_id card_ids[] __devinitdata = {
 	{
         	ISAPNP_CARD_ID('A','D','V', 0x550a),
                 devs: {
@@ -105,6 +106,25 @@ static struct isapnp_card_id ids[] __devinitdata = {
 		ISAPNP_CARD_END,
 	}
 };
+ISAPNP_CARD_TABLE(card_ids);
+
+extern int isapnp_probe_devs(const struct isapnp_device_id *ids,
+			     int (*probe)(struct pci_bus *card,
+					  const struct isapnp_device_id *id));
+
+
+This function is a helper for drivers which requires to use one
+device from an ISA PnP card. For each matched devices is called the probe
+callback with appropriate information.
+
+Example for ids parameter initialization:
+
+static struct isapnp_device_id device_ids[] __devinitdata = {
+	{ ISAPNP_DEVICE_SINGLE('E','S','S', 0x0968, 'E','S','S', 0x0968), }
+	{ ISAPNP_DEVICE_SINGLE_END, }
+};
+MODULE_DEVICE_TABLE(isapnp, &device_ids);
+
 
 ISA PnP configuration
 =====================
@@ -157,6 +177,8 @@ Example (game port initialization)
 			      NULL);
 	if (!dev)
 		return -ENODEV;
+	if (dev->active)
+		return -EBUSY;
 	if (dev->prepare(dev)<0)
 		return -EAGAIN;
 	if (!(dev->resource[0].flags & IORESOURCE_IO))

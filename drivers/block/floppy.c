@@ -3435,6 +3435,7 @@ static int get_floppy_geometry(int drive, int type, struct floppy_struct **g)
 static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		    unsigned long param)
 {
+#define FD_IOCTL_ALLOWED ((filp) && (filp)->private_data)
 #define OUT(c,x) case c: outparam = (const char *) (x); break
 #define IN(c,x,tag) case c: *(x) = inparam. tag ; return 0
 
@@ -3502,7 +3503,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		return -EINVAL;
 
 	/* permission checks */
-	if (((cmd & 0x40) && !(filp->f_mode & 2)) ||
+	if (((cmd & 0x40) && !FD_IOCTL_ALLOWED) ||
 	    ((cmd & 0x80) && !capable(CAP_SYS_ADMIN)))
 		return -EPERM;
 
@@ -3708,6 +3709,8 @@ static int floppy_open(struct inode * inode, struct file * filp)
 		return -EIO;
 	}
 
+	filp->private_data = (void*) 0;
+
 	drive = DRIVE(inode->i_rdev);
 	if (drive >= N_DRIVE ||
 	    !(allowed_drive_mask & (1 << drive)) ||
@@ -3774,6 +3777,13 @@ static int floppy_open(struct inode * inode, struct file * filp)
 			buffer_track = -1;
 		invalidate_buffers(MKDEV(FLOPPY_MAJOR,old_dev));
 	}
+
+	/* Allow ioctls if we have write-permissions even if read-only open.
+	 * Needed so that programs such as fdrawcmd still can work on write
+	 * protected disks */
+	if ((filp->f_mode & 2) || 
+	    (inode->i_sb && (permission(inode,2) == 0)))
+	    filp->private_data = (void*) 8;
 
 	if (UFDCS->rawcmd == 1)
 		UFDCS->rawcmd = 2;

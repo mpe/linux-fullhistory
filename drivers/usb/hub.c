@@ -539,8 +539,6 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port,
 
 	tempstr = kmalloc(1024, GFP_KERNEL);
 	portstr = kmalloc(1024, GFP_KERNEL);
-	if (portstr)
-		portstr[0] = 0;
 
 	for (i = 0; i < HUB_PROBE_TRIES; i++) {
 		struct usb_device *pdev, *cdev;
@@ -567,6 +565,7 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port,
 		cdev = dev;
 		pdev = dev->parent;
 		if (portstr && tempstr) {
+			portstr[0] = 0;
 			while (pdev) {
 				int port;
 
@@ -583,25 +582,15 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port,
 				cdev = pdev;
 				pdev = pdev->parent;
 			}
-		}
-
-		if (portstr)
 			info("USB new device connect on bus%d/%s, assigned device number %d",
 				dev->bus->busnum, portstr, dev->devnum);
-		else
+		} else
 			info("USB new device connect on bus%d, assigned device number %d",
 				dev->bus->busnum, dev->devnum);
 
-		if (portstr)
-			kfree(portstr);
-		if (tempstr)
-			kfree(tempstr);
-
 		/* Run it through the hoops (find a driver, etc) */
-		if (!usb_new_device(dev)) {
-			up(&usb_address0_sem);
-			return;
-		}
+		if (!usb_new_device(dev))
+			goto done;
 
 		/* Free the configuration if there was an error */
 		usb_free_dev(dev);
@@ -612,7 +601,12 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port,
 
 	hub->children[port] = NULL;
 	usb_hub_port_disable(hub, port);
+done:
 	up(&usb_address0_sem);
+	if (portstr)
+		kfree(portstr);
+	if (tempstr)
+		kfree(tempstr);
 }
 
 static void usb_hub_events(void)
