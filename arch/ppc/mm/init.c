@@ -204,9 +204,8 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
         if (pmd_none(*pmd)) {
 		if (!mem_init_done)
 			pte = (pte_t *) MMU_get_page();
-		else if ((pte = (pte_t *) get_zero_page_fast()) == NULL)
-			if ((pte = (pte_t *) __get_free_page(GFP_KERNEL)))
-				clear_page(pte);
+		else if ((pte = (pte_t *) __get_free_page(GFP_KERNEL)))
+			clear_page(pte);
                 if (pte) {
                         pmd_val(*pmd) = (unsigned long)pte;
                         return pte + offset;
@@ -1156,8 +1155,7 @@ void __init do_init_bootmem(void)
 				    __pa(end_of_DRAM) >> PAGE_SHIFT);
 
 	/* remove the bootmem bitmap from the available memory */
-	remove_mem_piece(&phys_avail, start, start + boot_mapsize, 1);
-
+	remove_mem_piece(&phys_avail, start, boot_mapsize, 1);
 	/* add everything in phys_avail into the bootmem map */
 	for (i = 0; i < phys_avail.n_regions; ++i)
 		free_bootmem(phys_avail.regions[i].address,

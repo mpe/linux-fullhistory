@@ -99,17 +99,20 @@ extern unsigned long ISA_DMA_THRESHOLD;
 
 /* used in nasty hack for sound - see prep_setup_arch() -- Cort */
 extern long ppc_cs4232_dma, ppc_cs4232_dma2;
-#ifdef CONFIG_CS4232
+#if defined(CONFIG_CS4232)
+#if defined(CONFIG_PREP) || defined(CONFIG_ALL_PPC)
 #define SND_DMA1 ppc_cs4232_dma
 #define SND_DMA2 ppc_cs4232_dma2
-#else
-#ifdef CONFIG_MSS
+#else /* !CONFIG_PREP && !CONFIG_ALL_PPC */
+#define SND_DMA1 -1
+#define SND_DMA2 -1
+#endif /* !CONFIG_PREP */
+#elif defined(CONFIG_MSS)
 #define SND_DMA1 CONFIG_MSS_DMA
 #define SND_DMA2 CONFIG_MSS_DMA2
 #else
 #define SND_DMA1 -1
 #define SND_DMA2 -1
-#endif
 #endif
 
 /* 8237 DMA controllers */
@@ -203,6 +206,7 @@ static __inline__ void enable_dma(unsigned int dmanr)
 	 */
 	unsigned char ucDmaCmd=0x00;
 
+#if defined(CONFIG_PREP) || defined(CONFIG_ALL_PPC)
 	if(_prep_type==_PREP_Radstone)
 	{
 		switch(ucSystemType)
@@ -227,6 +231,7 @@ static __inline__ void enable_dma(unsigned int dmanr)
 			}
 		}
 	}
+#endif /* CONFIG_PREP || CONFIG_ALL_PPC */
 
 	if (dmanr != 4)
 	{

@@ -84,9 +84,7 @@ extern int console_loglevel;
  * see^H^H^Hhear bugs in early bootup as well!
  */
 #define BUG() do { \
-	__asm__ __volatile__ ("movb $0x3,%al; outb %al,$0x61"); \
 	printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); \
-	console_loglevel = 0; \
 	__asm__ __volatile__(".byte 0x0f,0x0b"); \
 } while (0)
 

@@ -85,6 +85,7 @@ static void no_action(int ir1, void *dev, struct pt_regs *regs)
 #ifdef __SMP__
 void openpic_ipi_action(int cpl, void *dev_id, struct pt_regs *regs)
 {
+printk("openpic_ipi_action\n");	
 	smp_message_recv();
 }
 #endif /* __SMP__ */

@@ -423,10 +423,10 @@ extern struct pgtable_cache_struct {
 #define pgtable_cache_size 	(quicklists.pgtable_cache_sz)
 
 extern unsigned long *zero_cache;    /* head linked list of pre-zero'd pages */
-extern unsigned long zero_sz;	     /* # currently pre-zero'd pages */
-extern unsigned long zeropage_hits;  /* # zero'd pages request that we've done */
-extern unsigned long zeropage_calls; /* # zero'd pages request that've been made */
-extern unsigned long zerototal;      /* # pages zero'd over time */
+extern atomic_t zero_sz;	     /* # currently pre-zero'd pages */
+extern atomic_t zeropage_hits;	     /* # zero'd pages request that we've done */
+extern atomic_t zeropage_calls;      /* # zero'd pages request that've been made */
+extern atomic_t zerototal;	     /* # pages zero'd over time */
 
 #define zero_quicklist     	(zero_cache)
 #define zero_cache_sz  	 	(zero_sz)
@@ -440,12 +440,9 @@ extern unsigned long get_zero_page_fast(void);
 extern __inline__ pgd_t *get_pgd_slow(void)
 {
 	pgd_t *ret, *init;
-
-	if ( (ret = (pgd_t *)get_zero_page_fast()) == NULL )
-	{
-		if ( (ret = (pgd_t *)__get_free_page(GFP_KERNEL)) != NULL )
-			memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
-	}
+	/*if ( (ret = (pgd_t *)get_zero_page_fast()) == NULL )*/
+	if ( (ret = (pgd_t *)__get_free_page(GFP_KERNEL)) != NULL )
+		memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
 	if (ret) {
 		init = pgd_offset(&init_mm, 0);
 		memcpy (ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
@@ -489,7 +486,7 @@ extern __inline__ pte_t *get_pte_fast(void)
                 pte_quicklist = (unsigned long *)(*ret);
                 ret[0] = ret[1];
                 pgtable_cache_size--;
-         }
+	}
         return (pte_t *)ret;
 }
 

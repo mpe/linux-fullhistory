@@ -311,18 +311,16 @@ int get_cpuinfo(char *buffer)
 	/*
 	 * Ooh's and aah's info about zero'd pages in idle task
 	 */ 
-	{
-		len += sprintf(buffer+len,"zero pages\t: total %lu (%luKb) "
-			       "current: %lu (%luKb) hits: %lu/%lu (%lu%%)\n",
-			       zero_cache_total,
-			       (zero_cache_total*PAGE_SIZE)>>10,
-			       zero_cache_sz,
-			       (zero_cache_sz*PAGE_SIZE)>>10,
-			       zero_cache_hits,zero_cache_calls,
-			       /* : 1 below is so we don't div by zero */
-			       (zero_cache_hits*100) /
-			       ((zero_cache_calls)?zero_cache_calls:1));
-	}
+	len += sprintf(buffer+len,"zero pages\t: total: %u (%luKb) "
+		       "current: %u (%luKb) hits: %u/%u (%u%%)\n",
+		       atomic_read(&zero_cache_total),
+		       (atomic_read(&zero_cache_total)*PAGE_SIZE)>>10,
+		       atomic_read(&zero_cache_sz),
+		       (atomic_read(&zero_cache_sz)*PAGE_SIZE)>>10,
+		       atomic_read(&zero_cache_hits),atomic_read(&zero_cache_calls),
+		       /* : 1 below is so we don't div by zero */
+		       (atomic_read(&zero_cache_hits)*100) /
+		       ((atomic_read(&zero_cache_calls))?atomic_read(&zero_cache_calls):1));
 
 	if (ppc_md.get_cpuinfo != NULL)
 	{

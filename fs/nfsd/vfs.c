@@ -556,7 +556,6 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	if ((stable || (stable = EX_ISSYNC(exp))) && !EX_WGATHER(exp))
 		file.f_flags |= O_SYNC;
 
-	fh_lock(fhp);			/* lock inode */
 	file.f_pos = offset;		/* set write offset */
 
 	/* Write the data. */
@@ -587,8 +586,6 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 		if (current->fsuid != 0)
 			current->cap_effective = saved_cap;
 	}
-
-	fh_unlock(fhp);			/* unlock inode */
 
 	if (err >= 0 && stable) {
 		static unsigned long	last_ino = 0;

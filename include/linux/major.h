@@ -117,6 +117,7 @@
 
 #define AURORA_MAJOR 79
 
+#define RTF_MAJOR	150
 #define RAW_MAJOR	162
 
 #define UNIX98_PTY_MASTER_MAJOR	128

@@ -16,7 +16,6 @@
 #include <asm/hydra.h>
 #include <asm/prom.h>
 #include <asm/gg2.h>
-#include <asm/ide.h>
 #include <asm/machdep.h>
 
 #include "pci.h"

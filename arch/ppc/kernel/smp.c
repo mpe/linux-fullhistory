@@ -159,6 +159,12 @@ void smp_message_recv(void)
 
 void smp_send_reschedule(int cpu)
 {
+	/*
+	 * This isn't the case anymore since the other CPU could be
+	 * sleeping and won't reschedule until the next interrupt (such
+	 * as the timer).
+	 *  -- Cort
+	 */
 	/* This is only used if `cpu' is running an idle task,
 	   so it will reschedule itself anyway... */
 	/*smp_message_pass(cpu, MSG_RESCHEDULE, 0, 0);*/
@@ -173,7 +179,7 @@ spinlock_t mesg_pass_lock = SPIN_LOCK_UNLOCKED;
 void smp_message_pass(int target, int msg, unsigned long data, int wait)
 {
 	int i;
-	if ( !(_machine & (_MACH_Pmac|_MACH_chrp)) )
+	if ( !(_machine & (_MACH_Pmac|_MACH_chrp|_MACH_gemini)) )
 		return;
 
 	spin_lock(&mesg_pass_lock);
@@ -216,24 +222,29 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	{
 		/*
 		 * There has to be some way of doing this better -
-		 * perhaps a sent-to-all or send-to-all-but-self
+		 * perhaps a send-to-all or send-to-all-but-self
 		 * in the openpic.  This gets us going for now, though.
 		 * -- Cort
 		 */
 		switch ( target )
 		{
 		case MSG_ALL:
-			for ( i = 0 ; i < smp_num_cpus ; i++ )
-				openpic_cause_IPI(i, 0, 0xffffffff );
+			openpic_cause_IPI(smp_processor_id(), 0, 0x0 );
+			openpic_cause_IPI(smp_processor_id(), 0, 0xffffffff );
 			break;
 		case MSG_ALL_BUT_SELF:
 			for ( i = 0 ; i < smp_num_cpus ; i++ )
 				if ( i != smp_processor_id () )
-					openpic_cause_IPI(i, 0,
-			  0xffffffff & ~(1 << smp_processor_id()));
+				{
+					openpic_cause_IPI(smp_processor_id(), 0,
+							  0x0 );
+					openpic_cause_IPI(smp_processor_id(), 0,
+					  0xffffffff & ~(1 << smp_processor_id()));
+				}
 			break;
 		default:
-			openpic_cause_IPI(target, 0, 1U << target);
+			openpic_cause_IPI(smp_processor_id(), 0, 0x0 );
+			openpic_cause_IPI(target, 0, 1U << target );
 			break;
 		}
 	}
@@ -251,8 +262,7 @@ void __init smp_boot_cpus(void)
 	struct task_struct *p;
 	unsigned long a;
 
-        printk("Entering SMP Mode...\n");
-	/* let other processors know to not do certain initialization */
+	printk("Entering SMP Mode...\n");
 	smp_num_cpus = 1;
         smp_store_cpu_info(0);
 
@@ -290,15 +300,13 @@ void __init smp_boot_cpus(void)
 		cpu_nr = 2; 
 		break;
 	case _MACH_chrp:
-		/* openpic doesn't report # of cpus, just # possible -- Cort */
-#if 0		
-		cpu_nr = ((openpic_read(&OpenPIC->Global.Feature_Reporting0)
-				 & OPENPIC_FEATURE_LAST_PROCESSOR_MASK) >>
-				OPENPIC_FEATURE_LAST_PROCESSOR_SHIFT)+1;
-#endif
+		for ( i = 0; i < 4 ; i++ )
+			openpic_enable_IPI(i);
 		cpu_nr = smp_chrp_cpu_nr;
 		break;
 	case _MACH_gemini:
+		for ( i = 0; i < 4 ; i++ )
+			openpic_enable_IPI(i);
                 cpu_nr = (readb(GEMINI_CPUSTAT) & GEMINI_CPU_COUNT_MASK)>>2;
                 cpu_nr = (cpu_nr == 0) ? 4 : cpu_nr;
 		break;
@@ -350,19 +358,6 @@ void __init smp_boot_cpus(void)
 		case _MACH_chrp:
 			*(unsigned long *)KERNELBASE = i;
 			asm volatile("dcbf 0,%0"::"r"(KERNELBASE):"memory");
-#if 0
-			device = find_type_devices("cpu");
-			/* assume cpu device list is in order, find the ith cpu */
-			for ( a = i; device && a; device = device->next, a-- )
-				;
-			if ( !device )
-				break;
-			printk( "Starting %s (%lu): ", device->full_name,
-				*(ulong *)get_property(device, "reg", NULL) );
-			call_rtas( "start-cpu", 3, 1, NULL,
-				   *(ulong *)get_property(device, "reg", NULL),
-				   __pa(__secondary_start_chrp), i);
-#endif			
 			break;
 		case _MACH_gemini:
 			openpic_init_processor( 1<<i );
@@ -428,6 +423,7 @@ void __init smp_callin(void)
         smp_store_cpu_info(current->processor);
 	set_dec(decrementer_count);
 	
+	init_idle();
 #if 0
 	current->mm->mmap->vm_page_prot = PAGE_SHARED;
 	current->mm->mmap->vm_start = PAGE_OFFSET;

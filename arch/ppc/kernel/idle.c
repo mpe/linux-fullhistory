@@ -40,10 +40,10 @@ unsigned long zero_paged_on = 0;
 unsigned long powersave_nap = 0;
 
 unsigned long *zero_cache;    /* head linked list of pre-zero'd pages */
-unsigned long zero_sz;	      /* # currently pre-zero'd pages */
-unsigned long zeropage_hits;  /* # zero'd pages request that we've done */
-unsigned long zeropage_calls; /* # zero'd pages request that've been made */
-unsigned long zerototal;      /* # pages zero'd over time */
+atomic_t zerototal;      /* # pages zero'd over time */
+atomic_t zeropage_hits;  /* # zero'd pages request that we've done */
+atomic_t zero_sz;	      /* # currently pre-zero'd pages */
+atomic_t zeropage_calls; /* # zero'd pages request that've been made */
 
 int idled(void)
 {
@@ -57,7 +57,7 @@ int idled(void)
 		
 		check_pgt_cache();
 
-		if ( !current->need_resched && zero_paged_on ) zero_paged();
+		/*if ( !current->need_resched && zero_paged_on ) zero_paged();*/
 		if ( !current->need_resched && htab_reclaim_on ) htab_reclaim();
 		if ( !current->need_resched ) power_save();
 
@@ -141,6 +141,7 @@ out:
 #endif /* CONFIG_8xx */
 }
 
+#if 0
 /*
  * Returns a pre-zero'd page from the list otherwise returns
  * NULL.
@@ -149,7 +150,7 @@ unsigned long get_zero_page_fast(void)
 {
 	unsigned long page = 0;
 
-	atomic_inc((atomic_t *)&zero_cache_calls);
+	atomic_inc(&zero_cache_calls);
 	if ( zero_quicklist )
 	{
 		/* atomically remove this page from the list */
@@ -194,9 +195,9 @@ void zero_paged(void)
 	unsigned long bytecount = 0;  
 	pte_t *pte;
 
-	if ( zero_cache_sz >= zero_cache_water[0] )
+	if ( atomic_read(&zero_cache_sz) >= zero_cache_water[0] )
 		return;
-	while ( (zero_cache_sz < zero_cache_water[1]) && (!current->need_resched) )
+	while ( (atomic_read(&zero_cache_sz) < zero_cache_water[1]) && (!current->need_resched) )
 	{
 		/*
 		 * Mark a page as reserved so we can mess with it
@@ -272,6 +273,7 @@ void zero_paged(void)
 		atomic_inc((atomic_t *)&zero_cache_total);
 	}
 }
+#endif
 
 void power_save(void)
 {

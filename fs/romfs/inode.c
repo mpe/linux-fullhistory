@@ -404,9 +404,6 @@ romfs_readpage(struct file * file, struct page * page)
 	get_page(page);
 	buf = page_address(page);
 
-	/* hack? */
-	page->owner = current;
-
 	offset = page->offset;
 	if (offset < inode->i_size) {
 		avail = inode->i_size-offset;

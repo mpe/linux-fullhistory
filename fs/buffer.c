@@ -1292,15 +1292,16 @@ static void create_empty_buffers(struct page *page, struct inode *inode, unsigne
 
 static void unmap_underlying_metadata(struct buffer_head * bh)
 {
+#if 0
 	bh = get_hash_table(bh->b_dev, bh->b_blocknr, bh->b_size);
-	if (bh)
-	{
+	if (bh) {
 		unmap_buffer(bh);
 		/* Here we could run brelse or bforget. We use
 		   bforget because it will try to put the buffer
 		   in the freelist. */
 		__bforget(bh);
 	}
+#endif
 }
 
 /*
@@ -2192,11 +2193,13 @@ busy_buffer_page:
 
 void show_buffers(void)
 {
+#ifdef __SMP__
 	struct buffer_head * bh;
 	int found = 0, locked = 0, dirty = 0, used = 0, lastused = 0;
 	int protected = 0;
 	int nlist;
 	static char *buf_types[NR_LIST] = { "CLEAN", "LOCKED", "DIRTY" };
+#endif
 
 	printk("Buffer memory:   %6dkB\n",
 			atomic_read(&buffermem_pages) << (PAGE_SHIFT-10));
