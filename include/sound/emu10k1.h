@@ -1035,6 +1035,23 @@ typedef struct {
 	void (*interrupt)(emu10k1_t *emu, unsigned int status);
 } emu10k1_midi_t;
 
+typedef struct {
+	u32 vendor;
+	u32 device;
+	u32 subsystem;
+	u32 emu10k1_chip; /* Original SB Live. Not SB Live 24bit. */
+	u32 emu10k2_chip; /* Audigy 1 or Audigy 2. */
+	u32 ca0102_chip;  /* Audigy 1 or Audigy 2. Not SB Audigy 2 Value. */
+	u32 ca0108_chip;  /* Audigy 2 Value */
+	u32 ca0151_chip;  /* P16V */
+	u32 spk71;        /* Has 7.1 speakers */
+	u32 spdif_bug;    /* Has Spdif phasing bug */
+	u32 ac97_chip;    /* Has an AC97 chip */
+	u32 ecard;        /* APS EEPROM */
+	char * driver;
+	char * name;
+} emu_chip_details_t;
+
 struct _snd_emu10k1 {
 	int irq;
 
@@ -1044,6 +1061,7 @@ struct _snd_emu10k1 {
 	    tos_link: 1,			/* tos link detected */
 	    rear_ac97: 1,			/* rear channels are on AC'97 */
 	    spk71:1;				/* 7.1 configuration (Audigy 2 ZS) */
+	emu_chip_details_t *card_capabilities;	/* Contains profile of card capabilities */
 	unsigned int audigy;			/* is Audigy? */
 	unsigned int revision;			/* chip revision */
 	unsigned int serial;			/* serial number */
