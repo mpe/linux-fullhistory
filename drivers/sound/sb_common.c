@@ -18,7 +18,7 @@
 #include "sound_config.h"
 #include "sound_firmware.h"
 
-#if defined(CONFIG_SBDSP) || defined(MODULE)
+#ifdef CONFIG_SBDSP
 
 #ifndef CONFIG_AUDIO
 #error You will need to configure the sound driver with CONFIG_AUDIO option.
@@ -57,6 +57,7 @@ static int      smw_ucodeLen = 0;
 
 #endif
 
+sb_devc *last_sb = NULL;		/* Last sb loaded */
 
 int sb_dsp_command(sb_devc * devc, unsigned char val)
 {
@@ -131,9 +132,9 @@ static void sbintr(int irq, void *dev_id, struct pt_regs *dummy)
 	{
 		src = sb_getmixer(devc, IRQ_STAT);	/* Interrupt source register */
 
-#if defined(CONFIG_MIDI)&& (defined(CONFIG_UART401)||defined(CONFIG_UART401_MODULE))
+#if defined(CONFIG_MIDI)&& defined(CONFIG_UART401)
 		if (src & 4)
-			uart401intr(devc->irq, NULL, NULL);	/* MPU401 interrupt */
+			uart401intr(devc->irq, devc->midi_irq_cookie, NULL);	/* MPU401 interrupt */
 #endif
 
 		if (!(src & 3))
@@ -155,7 +156,7 @@ static void sbintr(int irq, void *dev_id, struct pt_regs *dummy)
 				break;
 
 			case IMODE_MIDI:
-#if  defined(CONFIG_MIDI)
+#ifdef CONFIG_MIDI
 				sb_midi_interrupt(devc);
 #endif
 				break;
@@ -790,6 +791,8 @@ void sb_dsp_init(struct address_info *hw_config)
 	}			/* IRQ setup */
 	request_region(hw_config->io_base, 16, "soundblaster");
 
+	last_sb = devc;
+	
 	switch (devc->major)
 	{
 		case 1:		/* SB 1.0 or 1.5 */
@@ -851,7 +854,7 @@ void sb_dsp_init(struct address_info *hw_config)
 		if (devc->major == 3 || devc->major == 4)
 			sb_mixer_init(devc);
 
-#if defined(CONFIG_MIDI)
+#ifdef CONFIG_MIDI
 	if (!(devc->caps & SB_NO_MIDI))
 		sb_dsp_midi_init(devc);
 #endif
@@ -936,7 +939,9 @@ void sb_dsp_unload(struct address_info *hw_config)
 		{
 			free_irq(devc->irq, devc);
 			sound_unload_mixerdev(devc->my_mixerdev);
-			sound_unload_mididev(devc->my_mididev);
+			/* We don't have to do this bit any more the UART401 is its own
+				master  -- Krzystof Halasa */
+			/* sound_unload_mididev(devc->my_mididev); */
 			sound_unload_audiodev(devc->my_dev);
 		}
 		kfree(devc);
@@ -982,7 +987,7 @@ unsigned int sb_getmixer(sb_devc * devc, unsigned int port)
 	return val;
 }
 
-#if defined(CONFIG_MIDI)
+#ifdef CONFIG_MIDI
 
 /*
  *	MPU401 MIDI initialization.
@@ -1247,14 +1252,15 @@ static int init_Jazz16_midi(sb_devc * devc, struct address_info *hw_config)
 
 void attach_sbmpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_MIDI) && (defined(CONFIG_UART401)||defined(CONFIG_UART401_MODULE))
+#if defined(CONFIG_MIDI) && defined(CONFIG_UART401)
 	attach_uart401(hw_config);
+	last_sb->midi_irq_cookie=midi_devs[hw_config->slots[4]];
 #endif
 }
 
 int probe_sbmpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_MIDI) && (defined(CONFIG_UART401)||defined(CONFIG_UART401_MODULE))
+#if defined(CONFIG_MIDI) && defined(CONFIG_UART401)
 	sb_devc *devc = last_devc;
 
 	if (last_devc == NULL)
@@ -1312,7 +1318,7 @@ int probe_sbmpu(struct address_info *hw_config)
 
 void unload_sbmpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_MIDI) && (defined(CONFIG_UART401)||defined(CONFIG_UART401_MODULE))
+#if defined(CONFIG_MIDI) && defined(CONFIG_UART401)
 	unload_uart401(hw_config);
 #endif
 }

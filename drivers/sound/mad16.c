@@ -74,7 +74,7 @@ static int      mad16_cdsel;
 
 #endif
 
-#if defined(CONFIG_MAD16) || defined(MODULE)
+#ifdef CONFIG_MAD16
 
 #include "sb.h"
 
@@ -407,11 +407,11 @@ static int init_c930(struct address_info *hw_config)
 	mad_write(MC3_PORT, 0);	/* Disable SB mode IRQ and DMA */
 #ifdef MAD16_CDSEL
 	if(MAD16_CDSEL & 0x20)
-		mad_write(MC4_PORT, 0x66);	/* opl4 */
+		mad_write(MC4_PORT, 0x62);	/* opl4 */
 	else
-		mad_write(MC4_PORT, 0x56);	/* opl3 */
+		mad_write(MC4_PORT, 0x52);	/* opl3 */
 #else
-	mad_write(MC4_PORT, 0x56);
+	mad_write(MC4_PORT, 0x52);
 #endif
 	mad_write(MC5_PORT, 0x3C);	/* Init it into mode2 */
 	mad_write(MC6_PORT, 0x02);	/* Enable WSS, Disable MPU and SB */

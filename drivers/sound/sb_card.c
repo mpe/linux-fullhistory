@@ -17,7 +17,7 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#if defined(CONFIG_SBDSP) || defined (MODULE)
+#ifdef CONFIG_SBDSP
 
 #include "sb_mixer.h"
 #include "sb.h"
@@ -142,7 +142,6 @@ int             acer = 1;
 int             acer = 0;
 #endif
 #endif
-#endif
 
 EXPORT_SYMBOL(sb_dsp_init);
 EXPORT_SYMBOL(sb_dsp_detect);
@@ -152,3 +151,5 @@ EXPORT_SYMBOL(attach_sb_card);
 EXPORT_SYMBOL(probe_sb);
 EXPORT_SYMBOL(unload_sb);
 EXPORT_SYMBOL(sb_be_quiet);
+
+#endif

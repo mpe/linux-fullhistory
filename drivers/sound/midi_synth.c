@@ -20,7 +20,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_MIDI) || defined (MODULE)
+#ifdef CONFIG_MIDI
 
 #define _MIDI_SYNTH_C_
 
@@ -31,7 +31,7 @@ static int      sysex_state[MAX_MIDI_DEV] =
 {0};
 static unsigned char prev_out_status[MAX_MIDI_DEV];
 
-#if !defined(CONFIG_SEQUENCER) && !defined(MODULE)
+#ifndef CONFIG_SEQUENCER
 #define STORE(cmd)
 #else
 #define STORE(cmd) \

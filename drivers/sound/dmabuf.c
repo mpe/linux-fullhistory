@@ -1131,6 +1131,12 @@ void DMAbuf_init(int dev, int dma1, int dma2)
 	 * NOTE! This routine could be called several times.
 	 */
 
+	/* drag in audio_syms.o */
+	{
+		extern char audio_syms_symbol;
+		audio_syms_symbol = 0;
+	}
+
 	if (adev && adev->dmap_out == NULL) {
 		if (adev->d == NULL)
 			panic("OSS: audio_devs[%d]->d == NULL\n", dev);

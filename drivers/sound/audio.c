@@ -25,7 +25,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_AUDIO) || defined(MODULE)
+#ifdef CONFIG_AUDIO
 #include "ulaw.h"
 #include "coproc.h"
 

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fib.c,v 1.13 1998/04/28 06:22:03 davem Exp $
+ *	$Id: ip6_fib.c,v 1.14 1998/05/07 15:43:03 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -1077,3 +1077,10 @@ void fib6_run_gc(unsigned long dummy)
 		ip6_fib_timer.expires = 0;
 	}
 }
+
+#ifdef MODULE
+void fib6_gc_cleanup(void)
+{
+	del_timer(&ip6_fib_timer);
+}
+#endif

@@ -49,12 +49,12 @@
 	CBQ presents a flexible universal algorithm for packet scheduling,
 	but it has pretty poor delay characteristics.
 	Round-robin scheduling and link-sharing goals
-	apparently contradict to minimization of network delay and jitter.
+	apparently contradict minimization of network delay and jitter.
 	Moreover, correct handling of predictive flows seems to be
 	impossible in CBQ.
 
-	CSZ presents more precise but less flexible and less efficient
-	approach. As I understand, the main idea is to create
+	CSZ presents a more precise but less flexible and less efficient
+	approach. As I understand it, the main idea is to create
 	WFQ flows for each guaranteed service and to allocate
 	the rest of bandwith to dummy flow-0. Flow-0 comprises
 	the predictive services and the best effort traffic;
@@ -62,22 +62,23 @@
 	priority band allocated	for predictive services, and the rest ---
 	to the best effort packets.
 
-	Note, that in CSZ flows are NOT limited to their bandwidth.
-	It is supposed, that flow passed admission control at the edge
-	of QoS network and it more need no shaping. Any attempt to improve
-	the flow or to shape it to a token bucket at intermediate hops
-	will introduce undesired delays and raise jitter.
+	Note that in CSZ flows are NOT limited to their bandwidth.  It
+	is supposed that the flow passed admission control at the edge
+	of the QoS network and it doesn't need further shaping. Any
+	attempt to improve the flow or to shape it to a token bucket
+	at intermediate hops will introduce undesired delays and raise
+	jitter.
 
 	At the moment CSZ is the only scheduler that provides
 	true guaranteed service. Another schemes (including CBQ)
 	do not provide guaranteed delay and randomize jitter.
-	There exists the statement (Sally Floyd), that delay
-	can be estimated by a IntServ compliant formulae.
+	There is a proof (Sally Floyd), that delay
+	can be estimated by a IntServ compliant formula.
 	This result is true formally, but it is wrong in principle.
 	It takes into account only round-robin delays,
 	ignoring delays introduced by link sharing i.e. overlimiting.
-	Note, that temporary overlimits are inevitable because
-	real links are not ideal, and true algorithm must take it
+	Note that temporary overlimits are inevitable because
+	real links are not ideal, and the real algorithm must take this
 	into account.
 
         ALGORITHM.
@@ -92,14 +93,14 @@
 
 	--- Flow model.
 
-	Let $m_a$ is number of backlogged bits in flow $a$.
-	The flow is {\em active }, if $m_a > 0$.
-	This number is discontinuous function of time;
+	Let $m_a$ is the number of backlogged bits in flow $a$.
+	The flow is {\em active}, if $m_a > 0$.
+	This number is a discontinuous function of time;
 	when a packet $i$ arrives:
 	\[
 	m_a(t_i+0) - m_a(t_i-0) = L^i,
 	\]
-	where $L^i$ is the length of arrived packet.
+	where $L^i$ is the length of the arrived packet.
 	The flow queue is drained continuously until $m_a == 0$:
 	\[
 	{d m_a \over dt} = - { B r_a \over \sum_{b \in A} r_b}.
@@ -112,23 +113,23 @@
 	{d m_a \over dt} = - B r_a .
 	\]
 	More complicated hierarchical bandwidth allocation
-	policies are possible, but, unfortunately, basic
-	flows equation have simple solution only for proportional
+	policies are possible, but unfortunately, the basic
+	flow equations have a simple solution only for proportional
 	scaling.
 
 	--- Departure times.
 
-	We calculate time until the last bit of packet will be sent:
+	We calculate the time until the last bit of packet is sent:
 	\[
 	E_a^i(t) = { m_a(t_i) - \delta_a(t) \over r_a },
 	\]
 	where $\delta_a(t)$ is number of bits drained since $t_i$.
 	We have to evaluate $E_a^i$ for all queued packets,
-	then find packet with minimal $E_a^i$ and send it.
+	then find the packet with minimal $E_a^i$ and send it.
 
-	It sounds good, but direct implementation of the algorithm
+	This sounds good, but direct implementation of the algorithm
 	is absolutely infeasible. Luckily, if flow rates
-	are scaled proportionally, the equations have simple solution.
+	are scaled proportionally, the equations have a simple solution.
 	
 	The differential equation for $E_a^i$ is
 	\[
@@ -149,7 +150,7 @@
 	$B \sum_{a \in A} r_a$ bits per round, that takes
 	$\sum_{a \in A} r_a$ seconds.
 	
-	Hence, $R(t)$ (round number) is monotonically increasing
+	Hence, $R(t)$ (round number) is a monotonically increasing
 	linear function	of time when $A$ is not changed
 	\[
 	{ d R(t) \over dt } = { 1 \over \sum_{a \in A} r_a }
@@ -160,17 +161,17 @@
 	$F_a^i = R(t) + E_a^i(t)/B$ does not depend on time at all!
 	$R(t)$ does not depend on flow, so that $F_a^i$ can be
 	calculated only once on packet arrival, and we need not
-	recalculation of $E$ numbers and resorting queues.
-	Number $F_a^i$ is called finish number of the packet.
-	It is just value of $R(t)$, when the last bit of packet
-	will be sent out.
+	recalculate $E$ numbers and resorting queues.
+	The number $F_a^i$ is called finish number of the packet.
+	It is just the value of $R(t)$ when the last bit of packet
+	is sent out.
 
 	Maximal finish number on flow is called finish number of flow
 	and minimal one is "start number of flow".
 	Apparently, flow is active if and only if $F_a \leq R$.
 
-	When packet of length $L_i$ bit arrives to flow $a$ at time $t_i$,
-	we calculate number $F_a^i$ as:
+	When a packet of length $L_i$ bit arrives to flow $a$ at time $t_i$,
+	we calculate $F_a^i$ as:
 
 	If flow was inactive ($F_a < R$):
 	$F_a^i = R(t) + {L_i \over B r_a}$
@@ -179,31 +180,30 @@
 
 	These equations complete the algorithm specification.
 
-	It looks pretty hairy, but there exists a simple
+	It looks pretty hairy, but there is a simple
 	procedure for solving these equations.
 	See procedure csz_update(), that is a generalization of
-	algorithm from S. Keshav's thesis Chapter 3
+	the algorithm from S. Keshav's thesis Chapter 3
 	"Efficient Implementation of Fair Queeing".
 
 	NOTES.
 
 	* We implement only the simplest variant of CSZ,
-	when flow-0 is explicit 4band priority fifo.
-	It is bad, but we need "peek" operation in addition
+	when flow-0 is a explicit 4band priority fifo.
+	This is bad, but we need a "peek" operation in addition
 	to "dequeue" to implement complete CSZ.
-	I do not want to make it, until it is not absolutely
+	I do not want to do that, unless it is absolutely
 	necessary.
 	
 	* A primitive support for token bucket filtering
-	presents too. It directly contradicts to CSZ, but
-	though the Internet is on the globe ... :-)
-	yet "the edges of the network" really exist.
+	presents itself too. It directly contradicts CSZ, but
+	even though the Internet is on the globe ... :-)
+	"the edges of the network" really exist.
 	
 	BUGS.
 
 	* Fixed point arithmetic is overcomplicated, suboptimal and even
-	wrong. Check it later.
-*/
+	wrong. Check it later.  */
 
 
 /* This number is arbitrary */

@@ -21,13 +21,10 @@
 #include <linux/config.h>
 #include <linux/module.h>
 
-
+#ifdef CONFIG_VMIDI
 
 #include "sound_config.h"
 #include "soundmodule.h"
-
-#if defined(CONFIG_VMIDI) || defined(MODULE)
-
 #include "v_midi.h"
 
 static vmidi_devc *v_devc[2] = { NULL, NULL};

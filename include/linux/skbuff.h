@@ -96,7 +96,9 @@ struct sk_buff {
 	unsigned char	*tail;			/* Tail pointer					*/
 	unsigned char 	*end;			/* End pointer					*/
 	void 		(*destructor)(struct sk_buff *);	/* Destruct function		*/
-	
+#ifdef CONFIG_IP_FIREWALL
+        __u32           fwmark;                 /* Label made by fwchains, used by pktsched	*/
+#endif
 #if defined(CONFIG_SHAPER) || defined(CONFIG_SHAPER_MODULE)
 	__u32		shapelatency;		/* Latency on frame */
 	__u32		shapeclock;		/* Time it should go out */

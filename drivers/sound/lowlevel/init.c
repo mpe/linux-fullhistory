@@ -4,9 +4,8 @@
 
 #include "lowlevel.h"
 #include <linux/config.h>
+#include <linux/module.h>
 #include "../soundvers.h"
-
-#ifdef CONFIG_LOWLEVEL_SOUND
 
 #ifdef LOWLEVEL_MODULE
 char *lowlevel_version = SOUND_VERSION_STRING;
@@ -61,4 +60,6 @@ sound_unload_lowlevel_drivers(void)
 #endif
 
 }
-#endif
+
+EXPORT_SYMBOL(sound_init_lowlevel_drivers);
+EXPORT_SYMBOL(sound_unload_lowlevel_drivers);

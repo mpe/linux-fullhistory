@@ -23,15 +23,9 @@
 #include "sb.h"
 #include "sound_firmware.h"
 
-#if defined(CONFIG_TRIX) || defined (MODULE)
+#ifdef CONFIG_TRIX
 
-#if defined(CONFIG_UART401) || defined(CONFIG_UART401_MODULE)
-#if defined(CONFIG_MIDI)
-#define DO_MIDI
-#endif
-#endif
-
-#ifdef CONFIG_TRIX_HAVE_BOOT
+#ifdef INCLUDE_TRIX_BOOT
 #include "trix_boot.h"
 #else
 static unsigned char *trix_boot = NULL;
@@ -360,7 +354,7 @@ void attach_trix_mpu(struct address_info *hw_config)
 
 int probe_trix_mpu(struct address_info *hw_config)
 {
-#ifdef DO_MIDI
+#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	unsigned char conf;
 	static char irq_bits[] = {
 		-1, -1, -1, 1, 2, 3, -1, 4, -1, 5
@@ -443,7 +437,7 @@ void unload_trix_wss(struct address_info *hw_config)
 
 void unload_trix_mpu(struct address_info *hw_config)
 {
-#ifdef DO_MIDI
+#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	unload_uart401(hw_config);
 #endif
 }

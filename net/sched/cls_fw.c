@@ -38,7 +38,6 @@
 static int fw_classify(struct sk_buff *skb, struct tcf_proto *tp,
 			  struct tcf_result *res)
 {
-#if 0 /* XXX skb->fwmark, where is it? -DaveM */
 	u32 clid = skb->fwmark;
 
 	if (clid && (TC_H_MAJ(clid) == 0 ||
@@ -47,7 +46,6 @@ static int fw_classify(struct sk_buff *skb, struct tcf_proto *tp,
 		res->class = 0;
 		return 0;
 	}
-#endif
 	return -1;
 }
 
@@ -81,7 +79,7 @@ static int fw_change(struct tcf_proto *tp, u32 handle,
 	return handle ? -EINVAL : 0;
 }
 
-struct tcf_proto_ops fw_cls_ops = {
+struct tcf_proto_ops cls_fw_ops = {
 	NULL,
 	"fw",
 	fw_classify,

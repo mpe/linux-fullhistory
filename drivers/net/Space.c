@@ -71,6 +71,7 @@ extern int elmc_probe(struct device *);
 extern int elplus_probe(struct device *);
 extern int ac3200_probe(struct device *);
 extern int es_probe(struct device *);
+extern int lne390_probe(struct device *);
 extern int e2100_probe(struct device *);
 extern int ni5010_probe(struct device *);
 extern int ni52_probe(struct device *);
@@ -171,6 +172,9 @@ __initfunc(static int ethif_probe(struct device *dev))
 #endif
 #ifdef CONFIG_ES3210
 	&& es_probe(dev)
+#endif
+#ifdef CONFIG_LNE390
+	&& lne390_probe(dev)
 #endif
 #ifdef CONFIG_E2100		/* Cabletron E21xx series. */
 	&& e2100_probe(dev)

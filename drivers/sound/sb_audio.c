@@ -20,7 +20,7 @@
 #include <linux/config.h>
 #include "sound_config.h"
 
-#if defined(CONFIG_SBDSP) || defined(MODULE)
+#ifdef CONFIG_SBDSP
 
 #include "sb_mixer.h"
 #include "sb.h"

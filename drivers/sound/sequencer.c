@@ -24,7 +24,7 @@
 #define SEQUENCER_C
 #include "sound_config.h"
 
-#if defined(CONFIG_SEQUENCER) || defined(MODULE)
+#ifdef CONFIG_SEQUENCER
 #include "softoss.h"
 int             (*softsynthp) (int cmd, int parm1, int parm2, unsigned long parm3) = NULL;
 
@@ -1694,6 +1694,12 @@ unsigned long compute_finetune(unsigned long base_freq, int bend, int range,
 
 void sequencer_init(void)
 {
+	/* drag in sequencer_syms.o */
+	{
+		extern char sequencer_syms_symbol;
+		sequencer_syms_symbol = 0;
+	}
+
 	if (sequencer_ok)
 		return;
 #ifdef CONFIG_MIDI

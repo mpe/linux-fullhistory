@@ -636,9 +636,16 @@ __initfunc(void enable_local_APIC(void))
  	value = apic_read(APIC_SPIV);
  	value |= (1<<8);		/* Enable APIC (bit==1) */
  	value &= ~(1<<9);		/* Enable focus processor (bit==0) */
+	value |= 0xff;			/* Set spurious IRQ vector to 0xff */
  	apic_write(APIC_SPIV,value);
 
+ 	value = apic_read(APIC_TASKPRI);
+ 	value &= ~APIC_TPRI_MASK;	/* Set Task Priority to 'accept all' */
+ 	apic_write(APIC_TASKPRI,value);
+
 	udelay(100);			/* B safe */
+	ack_APIC_irq();
+	udelay(100);
 }
 
 __initfunc(void smp_callin(void))
@@ -1152,12 +1159,6 @@ void send_IPI (int dest, int vector)
 	__restore_flags(flags);
 }
 
-void funny (void)
-{
-	send_IPI(APIC_DEST_ALLBUT,0x30 /*IO_APIC_VECTOR(11)*/);
-	for(;;)__cli();
-}
-
 /*
  * A non wait message cannot pass data or cpu source info. This current setup
  * is only safe because the kernel lock owner is the only person who can send
@@ -1474,19 +1475,18 @@ void smp_apic_timer_interrupt(struct pt_regs * regs)
 }
 
 /*
- *	Reschedule call back
+ * Reschedule call back (not used currently)
  */
+
 asmlinkage void smp_reschedule_interrupt(void)
 {
 	int cpu = smp_processor_id();
 
 	ack_APIC_irq();
-	for (;;) __cli();
 	/*
 	 * This looks silly, but we actually do need to wait
 	 * for the global interrupt lock.
 	 */
-	printk("huh, this is used, where???\n");
 	irq_enter(cpu, 0);
 	need_resched = 1;
 	irq_exit(cpu, 0);
@@ -1519,6 +1519,15 @@ asmlinkage void smp_mtrr_interrupt(void)
 {
 	ack_APIC_irq ();
 	if (mtrr_hook) (*mtrr_hook) ();
+}
+
+/*
+ * This interrupt should _never_ happen with our APIC/SMP architecture
+ */
+asmlinkage void smp_spurious_interrupt(void)
+{
+	ack_APIC_irq ();
+	printk("spurious APIC interrupt, ayiee, should never happen.\n");
 }
 
 /*

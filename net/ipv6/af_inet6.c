@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.31 1998/05/03 14:31:06 alan Exp $
+ *	$Id: af_inet6.c,v 1.33 1998/05/08 21:06:32 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -412,7 +412,8 @@ static struct proc_dir_entry proc_net_sockstat6 = {
 #ifdef MODULE
 int ipv6_unload(void)
 {
-	return 0;
+	/* We keep internally 3 raw sockets */
+	return __this_module.usecount - 3;
 }
 #endif
 
@@ -423,6 +424,7 @@ __initfunc(void inet6_proto_init(struct net_proto *pro))
 #endif
 {
 	struct sk_buff *dummy_skb;
+	int err;
 
 #ifdef MODULE
 	if (!mod_member_present(&__this_module, can_unload))
@@ -443,8 +445,6 @@ __initfunc(void inet6_proto_init(struct net_proto *pro))
 #endif
 	}
 
-  	(void) sock_register(&inet6_family_ops);
-	
 	/*
 	 *	ipngwg API draft makes clear that the correct semantics
 	 *	for TCP and UDP is to consider one TCP and UDP instance
@@ -452,19 +452,26 @@ __initfunc(void inet6_proto_init(struct net_proto *pro))
 	 *	able to communicate via both network protocols.
 	 */
 
-	ipv6_init();
+#if defined(MODULE) && defined(CONFIG_SYSCTL)
+	ipv6_sysctl_register();
+#endif
+	err = icmpv6_init(&inet6_family_ops);
+	if (err)
+		goto icmp_fail;
+	err = ndisc_init(&inet6_family_ops);
+	if (err)
+		goto ndisc_fail;
+	err = igmp6_init(&inet6_family_ops);
+	if (err)
+		goto igmp_fail;
+	ipv6_netdev_notif_init();
+	ipv6_packet_init();
+	ip6_route_init();
+	addrconf_init();
+	sit_init();
 
-	icmpv6_init(&inet6_family_ops);
-
-        addrconf_init();
- 
-        sit_init();
-
-	/* init v6 transport protocols */
-
+	/* Init v6 transport protocols. */
 	udpv6_init();
-	/* add /proc entries here */
-
 	tcpv6_init();
 
 	/* Create /proc/foo6 entries. */
@@ -475,22 +482,52 @@ __initfunc(void inet6_proto_init(struct net_proto *pro))
 	proc_net_register(&proc_net_sockstat6);
 #endif
 
+	/* Now the userspace is allowed to create INET6 sockets. */
+	(void) sock_register(&inet6_family_ops);
+	
 #ifdef MODULE
 	return 0;
+#else
+	return;
+#endif
+
+igmp_fail:
+	ndisc_cleanup();
+ndisc_fail:
+	icmpv6_cleanup();
+icmp_fail:
+#if defined(MODULE) && defined(CONFIG_SYSCTL)
+	ipv6_sysctl_unregister();
+#endif
+#ifdef MODULE
+	return err;
+#else
+	return;
 #endif
 }
 
 #ifdef MODULE
 void cleanup_module(void)
 {
-	sit_cleanup();
-	ipv6_cleanup();
-	sock_unregister(PF_INET6);
+	/* First of all disallow new sockets creation. */
+	sock_unregister(AF_INET6);
 #ifdef CONFIG_PROC_FS
 	proc_net_unregister(proc_net_raw6.low_ino);
 	proc_net_unregister(proc_net_tcp6.low_ino);
 	proc_net_unregister(proc_net_udp6.low_ino);
 	proc_net_unregister(proc_net_sockstat6.low_ino);
+#endif
+	/* Cleanup code parts. */
+	sit_cleanup();
+	ipv6_netdev_notif_cleanup();
+	addrconf_cleanup();
+	ip6_route_cleanup();
+	ipv6_packet_cleanup();
+	igmp6_cleanup();
+	ndisc_cleanup();
+	icmpv6_cleanup();
+#ifdef CONFIG_SYSCTL
+	ipv6_sysctl_unregister();	
 #endif
 }
 #endif	/* MODULE */

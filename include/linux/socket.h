@@ -156,6 +156,7 @@ struct ucred {
 #define AF_ASH		18	/* Ash				*/
 #define AF_ECONET	19	/* Acorn Econet			*/
 #define AF_ATMSVC	20	/* ATM SVCs			*/
+#define AF_SNA		22	/* Linux SNA Project (nutters!) */
 #define AF_MAX		32	/* For now.. */
 
 /* Protocol families, same as address families. */
@@ -181,6 +182,7 @@ struct ucred {
 #define PF_PACKET	AF_PACKET
 #define PF_ASH		AF_ASH
 #define PF_ATMSVC	AF_ATMSVC
+#define PF_SNA		AF_SNA
 
 #define PF_MAX		AF_MAX
 

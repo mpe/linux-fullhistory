@@ -55,9 +55,9 @@
 	Queuing using Deficit Round Robin", Proc. SIGCOMM 95.
 
 
-	It is not the thing that usually called (W)FQ nowadays. It does not
-	use any timestamp mechanism, but instead processes queues
-	in round-robin order.
+	This is not the thing that is usually called (W)FQ nowadays. 
+	It does not use any timestamp mechanism, but instead
+	processes queues in round-robin order.
 
 	ADVANTAGE:
 
@@ -66,10 +66,10 @@
 	DRAWBACKS:
 
 	- "Stochastic" -> It is not 100% fair. 
-	When hash collisions occur, several flows are considred as one.
+	When hash collisions occur, several flows are considered as one.
 
 	- "Round-robin" -> It introduces larger delays than virtual clock
-	based schemes, and should not be used for isolation interactive
+	based schemes, and should not be used for isolating interactive
 	traffic	from non-interactive. It means, that this scheduler
 	should be used as leaf of CBQ or P3, which put interactive traffic
 	to higher priority band.
@@ -82,13 +82,12 @@
 	This implementation limits maximal queue length to 128;
 	maximal mtu to 2^15-1; number of hash buckets to 1024.
 	The only goal of this restrictions was that all data
-	fitted to one 4K page :-). Struct sfq_sched_data is
-	organized in anti-cache manner: all the data for bucket
-	scattered over different locations. It is not good,
-	but it allowed to put it into 4K.
+	fit into one 4K page :-). Struct sfq_sched_data is
+	organized in anti-cache manner: all the data for a bucket
+	are scattered over different locations. This is not good,
+	but it allowed me to put it into 4K.
 
-	It is easy to increase these values, but not in flight.
-*/
+	It is easy to increase these values, but not in flight.  */
 
 #define SFQ_DEPTH		128
 #define SFQ_HASH_DIVISOR	1024

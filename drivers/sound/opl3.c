@@ -32,7 +32,7 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#if defined(CONFIG_YM3812) || defined(MODULE)
+#ifdef CONFIG_YM3812
 
 #include "opl3.h"
 
@@ -1209,11 +1209,10 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#else
-
-#endif
 #endif
 
 EXPORT_SYMBOL(opl3_init);
 EXPORT_SYMBOL(opl3_detect);
 MODULE_PARM(io, "i");
+
+#endif

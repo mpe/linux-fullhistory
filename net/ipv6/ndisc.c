@@ -74,8 +74,7 @@
 #include <net/checksum.h>
 #include <linux/proc_fs.h>
 
-static struct inode ndisc_inode;
-static struct socket *ndisc_socket=&ndisc_inode.u.socket_i;
+static struct socket *ndisc_socket;
 
 static int ndisc_constructor(struct neighbour *neigh);
 static void ndisc_solicit(struct neighbour *neigh, struct sk_buff *skb);
@@ -1134,23 +1133,29 @@ struct proc_dir_entry ndisc_proc_entry =
 
 
 
-__initfunc(void ndisc_init(struct net_proto_family *ops))
+__initfunc(int ndisc_init(struct net_proto_family *ops))
 {
 	struct sock *sk;
         int err;
 
-        ndisc_inode.i_mode = S_IFSOCK;
-        ndisc_inode.i_sock = 1;
-        ndisc_inode.i_uid = 0;
-        ndisc_inode.i_gid = 0;
-
-        ndisc_socket->inode = &ndisc_inode;
-        ndisc_socket->state = SS_UNCONNECTED;
-        ndisc_socket->type  = SOCK_RAW;
-
-	if((err=ops->create(ndisc_socket, IPPROTO_ICMPV6))<0)
-		printk(KERN_DEBUG 
+	ndisc_socket = sock_alloc();
+	if (ndisc_socket == NULL) {
+		printk(KERN_ERR
 		       "Failed to create the NDISC control socket.\n");
+		return -1;
+	}
+	ndisc_socket->inode->i_uid = 0;
+	ndisc_socket->inode->i_gid = 0;
+	ndisc_socket->type = SOCK_RAW;
+
+	if((err = ops->create(ndisc_socket, IPPROTO_ICMPV6)) < 0) {
+		printk(KERN_DEBUG 
+		       "Failed to initializee the NDISC control socket (err %d).\n",
+		       err);
+		sock_release(ndisc_socket);
+		ndisc_socket = NULL; /* For safety. */
+		return err;
+	}
 
 	sk = ndisc_socket->sk;
 	sk->allocation = GFP_ATOMIC;
@@ -1174,9 +1179,10 @@ __initfunc(void ndisc_init(struct net_proto_family *ops))
 #ifdef CONFIG_SYSCTL
 	neigh_sysctl_register(NULL, &nd_tbl.parms, NET_IPV6, NET_IPV6_NEIGH, "ipv6");
 #endif
+
+	return 0;
 }
 
-#ifdef MODULE
 void ndisc_cleanup(void)
 {
 #ifdef CONFIG_PROC_FS
@@ -1185,5 +1191,6 @@ void ndisc_cleanup(void)
 #endif
 #endif
 	neigh_table_clear(&nd_tbl);
+	sock_release(ndisc_socket);
+	ndisc_socket = NULL; /* For safety. */
 }
-#endif

@@ -24,11 +24,11 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI) || defined(MODULE)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 #include "coproc.h"
 
 
-#if defined(CONFIG_SEQUENCER) || defined(MODULE)
+#ifdef CONFIG_SEQUENCER
 static int      timer_mode = TMR_INTERNAL, timer_caps = TMR_INTERNAL;
 
 #endif
@@ -159,7 +159,7 @@ static unsigned char len_tab[] =	/* # of data bytes following a status
 	0			/* Fx */
 };
 
-#if !defined(CONFIG_SEQUENCER) && !defined(MODULE)
+#ifndef CONFIG_SEQUENCER
 #define STORE(cmd)
 #else
 #define STORE(cmd) \
@@ -1216,7 +1216,7 @@ void unload_mpu401(struct address_info *hw_config)
  *      Timer stuff
  ****************************************************/
 
-#if defined(CONFIG_SEQUENCER) || defined(MODULE)
+#if defined(CONFIG_SEQUENCER)
 
 static volatile int timer_initialized = 0, timer_open = 0, tmr_running = 0;
 static volatile int curr_tempo, curr_timebase, hw_timebase;

@@ -19,7 +19,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_SEQUENCER) || defined(MODULE)
+#ifdef CONFIG_SEQUENCER
 
 static volatile int opened = 0, tmr_running = 0;
 static volatile time_t tmr_offs, tmr_ctr;

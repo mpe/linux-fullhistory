@@ -4,7 +4,7 @@ Maintainers and developers for networking code sections
 Code Section		Bug Report Contact
 -------------------+-------------------------------------------
 802 [other	]	alan@lxorguk.ukuu.org.uk	
-    [token ring	]	pnorton@cts.com
+    [token ring	]	p.norton@computer.org
 appletalk		Jay.Schulist@spacs.k12.wi.us
 ax25			g4klx@g4klx.demon.co.uk
 core			alan@lxorguk.ukuu.org.uk

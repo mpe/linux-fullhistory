@@ -12,7 +12,7 @@
 #include <linux/config.h>
 
 #include "sound_config.h"
-#if defined(CONFIG_GUS) || defined(MODULE)
+#ifdef CONFIG_GUS
 #include "gus_linearvol.h"
 
 #define GUS_VOLUME	gus_wave_volume

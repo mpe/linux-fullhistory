@@ -27,17 +27,17 @@ NEWS for user.
 - New interface addressing paradigm.
   Assignment of address ranges to interface,
   multiple prefixes etc. etc.
-  Do not bother, it is compatible with old one. Moreover:
-- You more need not do "route add aaa.bbb.ccc... eth0",
+  Do not bother, it is compatible with the old one. Moreover:
+- You don't need to do "route add aaa.bbb.ccc... eth0" anymore,
   it is done automatically.
 - "Abstract" UNIX sockets and security enhancements.
-  It is necessary to use TIRPC and TLI emulation library.
+  This is necessary to use TIRPC and TLI emulation library.
 
 NEWS for hacker.
 
 - New destination cache. Flexible, robust and just beautiful.
 - Network stack is reordered, simplified, optimized, a lot of bugs fixed.
-  (well, and new bugs are introduced, but I haven't seen them yet 8))
+  (well, and new bugs were introduced, but I haven't seen them yet 8))
   It is difficult to describe all the changes, look into source.
 
 If you see this file, then this patch works 8)

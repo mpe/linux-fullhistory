@@ -18,7 +18,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_SOFTOSS) || defined(MODULE)
+#ifdef CONFIG_SOFTOSS
 #include "softoss.h"
 
 void softsynth_resample_loop(short *buf, int loops)

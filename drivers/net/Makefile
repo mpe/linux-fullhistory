@@ -204,6 +204,15 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_LNE390),y)
+L_OBJS += lne390.o
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_LNE390),m)
+  CONFIG_8390_MODULE = y
+  M_OBJS += lne390.o
+  endif
+endif
 
 ifeq ($(CONFIG_PLIP),y)
 L_OBJS += plip.o

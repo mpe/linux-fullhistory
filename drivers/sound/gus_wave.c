@@ -25,7 +25,7 @@
 #include <linux/ultrasound.h>
 #include "gus_hw.h"
 
-#if defined(CONFIG_GUS) || defined(MODULE)
+#ifdef CONFIG_GUS
 
 #define GUS_BANK_SIZE (((iw_mode) ? 256*1024*1024 : 256*1024))
 
@@ -3115,7 +3115,7 @@ void gus_wave_init(struct address_info *hw_config)
 		hw_config->slots[0] = sdev;
 		synth_devs[sdev] = &guswave_operations;
 		sequencer_init();
-#if defined(CONFIG_SEQUENCER) || defined(MODULE)
+#ifdef CONFIG_SEQUENCER
 		gus_tmr_install(gus_base + 8);
 #endif
 	}
@@ -3442,7 +3442,7 @@ void guswave_dma_irq(void)
 	}
 }
 
-#if defined(CONFIG_SEQUENCER) || defined(MODULE)
+#ifdef CONFIG_SEQUENCER
 
 /*
  * Timer stuff

@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.56 1998/04/17 02:36:46 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.57 1998/05/08 01:54:56 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -217,21 +217,6 @@ int ip_output(struct sk_buff *skb)
 
 	return ip_finish_output(skb);
 }
-
-#ifdef CONFIG_IP_ACCT
-int ip_acct_output(struct sk_buff *skb)
-{
-	/*
-	 *	Count mapping we shortcut
-	 */
-			 
-	ip_fw_chk(skb->nh.iph, skb->dev, NULL, ip_acct_chain, 0, IP_FW_MODE_ACCT_OUT);
-
-	dev_queue_xmit(skb);
-
-	return 0;
-}
-#endif
 
 /* Queues a packet to be sent, and starts the transmitter if necessary.  
  * This routine also needs to put in the total length and compute the 

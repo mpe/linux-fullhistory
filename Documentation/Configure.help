@@ -1611,44 +1611,17 @@ CONFIG_IP_ROUTER
 
 IP: firewalling
 CONFIG_IP_FIREWALL
-  If you want to configure your Linux box as a packet filter firewall
-  for a local TCP/IP based network, say Y here. This will enlarge your
-  kernel by about 2kB. You may need to read the FIREWALL-HOWTO,
-  available via ftp (user: anonymous) in
-  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
+  Complete rewrite of IP firewalling support.  Requires new ipfwadm.
+  This was previously called CONFIG_IP_FIREWALL_CHAINS in patch sets
+  released by the author, but now it is and will be the standard
+  firewalling implementation for 2.1.x and onward.
 
-  Also, you will need the ipfwadm tool (available via ftp (user:
-  anonymous) from ftp://ftp.xos.nl/pub/linux/ipfwadm/) to allow selective
-  blocking of Internet traffic based on type, origin and destination;
-  this type of firewall is called a "packet filter". The other type of
-  firewall, "proxy-based" ones, is more secure but more intrusive and
-  more bothersome to set up; it inspects the network traffic much more
-  closely, modifies it and has knowledge about the higher level
-  protocols, which a packet filter lacks. Moreover, proxy-based
-  firewalls often require changes to the programs running on the local
-  clients. Proxy-based firewalls don't need support by the kernel, but
-  they are often combined with a packet filter, which only works if
-  you say Y here.
-
-  The firewalling code will only work if IP forwarding is enabled in
-  your kernel. You can do that by saying Y to "/proc filesystem
-  support" and "Sysctl support" below and executing the line
-
-    echo "1" > /proc/sys/net/ipv4/ip_forward
-
-  at boot time after the /proc filesystem has been mounted.  
-
-  You need to say Y to "IP firewalling" in order to be able to use IP
-  masquerading (masquerading means that local computers can chat with
-  an outside host, but that outside host is made to think that it is
-  talking to the firewall box -- makes the local network completely
-  invisible to the outside world and avoids the need to allocate
-  globally valid IP host addresses for the machines on the local net)
-  and IP packet accounting (keeping track of what is using all your
-  network bandwidth) and IP transparent proxying (makes the computers
-  on the local network think they're talking to a remote computer,
-  while in reality the traffic is redirected by your Linux firewall to
-  a local proxy server).
+  More powerful than the old IP firewalling but also provides similar
+  structure to original firewalling for experienced users.  IP
+  accounting and packet logging are automatically included with firewall
+  chains, so you don't need them them if you say Y here.  See
+  http://www.adelaide.net.au/~rustcorp for new ipfwadm (called ipchains).
+  If in doubt, say N here.
 
 IP: firewall packet netlink device
 CONFIG_IP_FIREWALL_NETLINK
@@ -1660,17 +1633,8 @@ CONFIG_IP_FIREWALL_NETLINK
   /dev with major number 36 and minor number 3 using mknod ("man
   mknod"), and you need (to write) a program that reads from that
   device and takes appropriate action.
-
-IP: accounting
-CONFIG_IP_ACCT
-  This keeps track of your IP network traffic and produces some
-  statistics. Usually, you only want to say Y here if your box will be
-  a router or a firewall for some local network. For the latter, you
-  need to say Y to "IP firewalling". The data is accessible with "cat
-  /proc/net/ip_acct", so you want to say Y to the /proc filesystem
-  below, if you say Y here. To specify what exactly should be
-  recorded, you need the tool ipfwadm (available via ftp (user:
-  anonymous) from ftp://ftp.xos.nl/pub/linux/ipfwadm/).
+  With the current generic firewalling chains you can specify which
+  packets go to this device, as well as how many bytes.
 
 IP: kernel level autoconfiguration
 CONFIG_IP_PNP
@@ -1825,6 +1789,37 @@ CONFIG_IP_MASQUERADE_IPAUTOFW
   inserted in and removed from the running kernel whenever you want).
   The module will be called ip_masq_autofw.o. If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
+
+IP: ipportfw masquerade support
+CONFIG_IP_MASQUERADE_IPPORTFW
+  ipportfw is an addition to IP Masquerading written by Steven Clarke
+  to allow some forwarding of packets from outside to inside a
+  firewall on given ports. Information and source for ipportfw is
+  available from
+  http://www.monmouth.demon.co.uk/ipsubs/portforwarding.html
+  The portfw code is still under development and so is currently
+  marked EXPERIMENTAL.
+  If you want this, say Y.
+
+IP: ICMP masquerading
+CONFIG_IP_MASQUERADE_ICMP
+  The basic masquerade code described for CONFIG_IP_MASQUERADE only
+  handles TCP or UDP packets (and ICMP errors for existing 
+  connections).  This option adds additional support for masquerading
+  ICMP packets, such as ping or the probes used by the Windows 95
+  tracert program.
+  If you want this, say Y.
+
+IP: ipautofw masquerade support
+CONFIG_IP_MASQUERADE_IPAUTOFW (Experimental)
+  ipautofw is a program by Richard Lynch allowing additional
+  support for masquerading protocols which do not (as yet)
+  have additional protocol helpers.  
+  Information and source for ipautofw is available from
+  ftp://ftp.netis.com/pub/members/rlynch/
+  The ipautofw code is still under development and so is currently
+  marked EXPERIMENTAL.
+  If you want this, say Y.
 
 IP: ipportfw masquerade support
 CONFIG_IP_MASQUERADE_IPPORTFW
@@ -2029,7 +2024,8 @@ CONFIG_UNIX
   as a module, say M here and read Documentation/modules.txt. If you
   try building this as a module and you are running kerneld, be sure
   to add 'alias net-pf-1 unix' to your /etc/conf.module file. If
-  unsure, say Y.
+  unsure, say Y.  (NOTE: X Windows and syslog probably won't work
+  if you say N to this or fail to configure it correctly)
 
 The IPv6 protocol
 CONFIG_IPV6
@@ -2069,44 +2065,26 @@ CONFIG_IPV6_NO_PB
   some problems caused by the presence of two link-local addresses on
   an interface.
 
-IPv6: routing messages via old netlink
-CONFIG_IPV6_NETLINK
-  You can say Y here to receive routing messages from the IPv6 code
-  through the old netlink interface. However, a better option is to
-  say Y to "Kernel/User network link driver" and to "Routing
-  messages" instead.
-  
-The IPX protocol
+IPX networking
 CONFIG_IPX
   This is support for the Novell networking protocol, IPX, commonly
   used for local networks of Windows machines. You need it if you want
   to access Novell NetWare file or print servers using the Linux
   Novell client ncpfs (available via ftp (user: anonymous) from
-  ftp://sunsite.unc.edu/pub/Linux/system/filesystems/) or from within
-  the Linux DOS emulator dosemu (read the DOSEMU-HOWTO, available in
-  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO). In order to do the
-  former, you'll also have to say Y to "NCP filesystem support",
-  below.
-
-  IPX is similar in scope to IP, while SPX, which runs on top of IPX,
-  is similar to TCP. There is also experimental support for SPX in
-  Linux (see "SPX networking", below).
-
-  To turn your Linux box into a fully featured NetWare file server and
+  sunsite.unc.edu:/pub/Linux/system/filesystems/) or from within the
+  Linux DOS emulator dosemu (read the DOSEMU-HOWTO, available in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO). In order to do the former,
+  you'll also have to say Y to "NCP filesystem support", below. To
+  turn your Linux box into a fully featured NetWare file server and
   IPX router, say Y here and fetch either lwared from
-  ftp://sunsite.unc.edu/pub/Linux/system/network/daemons/ or mars_nwe from
-  ftp://ftp.gwdg.de/pub/linux/misc/ncpfs. For more information, read the
-  IPX-HOWTO in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
-  General information about how to connect Linux, Windows machines and
-  Macs is on the WWW at http://www.eats.com/linux_mac_win.html (to
-  browse the WWW, you need to have access to a machine on the Internet
-  that has a program like lynx or netscape). 
-
-  The IPX driver would enlarge your kernel by about 5 kB. This driver
-  is also available as a module ( = code which can be inserted in and
-  removed from the running kernel whenever you want). The module will
-  be called ipx.o. If you want to compile it as a module, say M here
-  and read Documentation/modules.txt. Unless you want to integrate
+  sunsite.unc.edu:/pub/Linux/system/network/daemons/ or mars_nwe from
+  ftp.gwdg.de:/pub/linux/misc/ncpfs. For more information, read the
+  IPX-HOWTO in sunsite.unc.edu:/pub/Linux/docs/howto. The IPX driver
+  would enlarge your kernel by about 5 kB. This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). The module will be
+  called ipx.o. If you want to compile it as a module, say M here
+  and read Documentation/modules.txt.  Unless you want to integrate
   your Linux box with a local Novell network, say N.
 
 IPX: Full internal IPX network
@@ -2114,12 +2092,11 @@ CONFIG_IPX_INTERN
   Every IPX network has an address that identifies it. Sometimes it is
   useful to give an IPX "network" address to your Linux box as well
   (for example if your box is acting as a fileserver for different IPX
-  networks: it will then be accessible from everywhere using the same
+  networks: it will then be accessible form everywhere using the same
   address).  The way this is done is to create a virtual internal
   "network" inside your box and to assign an IPX address to this
   network. Say Y here if you want to do this; read the IPX-HOWTO at
   sunsite.unc.edu:/pub/Linux/docs/howto for details.  
-
   The full internal IPX network enables you to allocate sockets on
   different virtual nodes of the internal network. This is done by
   evaluating the field sipx_node of the socket address given to the
@@ -2131,72 +2108,54 @@ CONFIG_IPX_INTERN
   'special' sockets to sockets listening on the primary network is
   disabled. This might break existing applications, especially RIP/SAP
   daemons. A RIP/SAP daemon that works well with the full internal net
-  can be found on ftp://ftp.gwdg.de/pub/linux/misc/ncpfs.  If you don't
+  can be found on ftp.gwdg.de:/pub/linux/misc/ncpfs.  If you don't
   know what you are doing, say N.
 
 IPX: SPX networking (EXPERIMENTAL)
 CONFIG_SPX
-  The Sequenced Packet eXchange protocol is a transport layer protocol
-  built on top of IPX. It is used in Novell NetWare systems for
-  client-server applications and is similar to TCP (which runs on top
-  of IP).
-
-  Note that Novell NetWare file sharing does not use SPX; it uses a
-  protocol called NCP, for which separate Linux support is available
-  ("NCP filesystem support" below for the client side, and the user
-  space programs lwared or mars_nwe for the server side).
-
-  Say Y here if you have use for SPX; read the IPX-HOWTO at
-  sunsite.unc.edu:/pub/Linux/docs/howto for details.
-
-  This driver is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called af_spx.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
+  The (SPP-derived) Sequenced Packet eXchange (SPX) protocol. Novell's
+  networking protocol which monitors transmissions to guarantee
+  successful delivery. An example server/client program (SPX-0.0x.tar.gz) 
+  is available at ftp://ftp.spacs.k12.wi.us/users/jschlst/SPX-0.0x.tar.gz.
+  It is safe to say Y/M here.
 
 Appletalk DDP
 CONFIG_ATALK
   Appletalk is the way Apple computers speak to each other on a
-  network. If your Linux box is connected to such a network and you
+  network. If your linux box is connected to such a network and you
   want to join the conversation, say Y. You will need to use the
   netatalk package so that your Linux box can act as a print and file
   server for macs as well as access appletalk printers. Check out
-  http://threepio.hitchcock.org/cgi-bin/faq/netatalk/faq.pl on the WWW
-  for details (to browse the WWW, you need to have access to a machine
-  on the Internet that has a program like lynx or netscape). EtherTalk
-  is the name used for appletalk over Ethernet and the cheaper and
-  slower LocalTalk is appletalk over a proprietary apple network using
-  serial links. Ethertalk and Localtalk are fully supported by Linux.
-  The NET-2-HOWTO, available via ftp (user: anonymous) in
-  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO contains valuable
-  information as well.
-
-  General information about how to connect Linux, Windows machines and
-  Macs is on the WWW at http://www.eats.com/linux_mac_win.html
-
-  This driver is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module is called appletalk.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt. I hear that
-  the GNU boycott of Apple is over, so even politically correct people
-  are allowed to say Y here.
+  http://artoo.hitchcock.org/~flowerpt/projects/linux-netatalk/ on the
+  WWW for details (to browse the WWW, you need to have access to a
+  machine on the Internet that has a program like lynx or
+  netscape). EtherTalk is the name used for appletalk over Ethernet
+  and the cheaper and slower LocalTalk is appletalk over a proprietary
+  apple network using serial links. Ethertalk and Localtalk are fully 
+  supported by Linux. The NET-2-HOWTO, available via ftp (user: anonymous)
+  in sunsite.unc.edu:/pub/Linux/docs/HOWTO contains valuable information
+  as well. This driver is also available as a module ( = code which
+  can be inserted in and removed from the running kernel whenever you
+  want). The module is called appletalk.o. If you want to compile
+  it as a module, say M here and read Documentation/modules.txt. I
+  hear that the GNU boycott of Apple is over, so even politically
+  correct people are allowed to say Y here.
 
 Appletalk-IP driver support
 CONFIG_IPDDP
   This allows IP networking for users who only have Appletalk
-  networking available. This feature is experimental. With this
+  networking available.  This feature is experimental. With this
   driver, you can either encapsulate IP inside Appletalk (e.g. if your
-  Linux box is stuck on an Appletalk only network) or decapsulate
-  (e.g. if you want your Linux box to act as an Internet gateway for a
+  Linux box is stuck on an appletalk only network) or decapsulate
+  (e.g. if you want your Linux box to act as a Internet gateway for a
   zoo of appletalk connected Macs). You decide which one of the two
   you want in the following two questions; you can say Y to only one
   of them. Please see Documentation/networking/ipddp.txt for more
-  information.
-
-  This driver is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module is called ipddp.o. If you want to compile it as a module,
-  say M here and read Documentation/modules.txt.
+  information.  This driver is also available as a module ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). The module is called ipddp.o. If you want to
+  compile it as a module, say M here and read
+  Documentation/modules.txt.
 
 IP to Appletalk-IP Encapsulation support
 CONFIG_IPDDP_ENCAP
@@ -4893,6 +4852,18 @@ CONFIG_ES3210
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called es3210.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt.
+
+Mylex EISA LNE390A/LNE390B support
+CONFIG_LNE390
+  If you have a network (Ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called lne390.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 

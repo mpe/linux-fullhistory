@@ -18,7 +18,7 @@
 #include <linux/config.h>
 #include "sound_config.h"
 
-#if defined(CONFIG_SBDSP) || defined(MODULE)
+#ifdef CONFIG_SBDSP
 #define __SB_MIXER_C__
 
 #include "sb.h"

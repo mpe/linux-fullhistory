@@ -1,6 +1,8 @@
 #
 # Traffic control configuration.
 # 
+define_bool CONFIG_NETLINK y
+define_bool CONFIG_RTNETLINK y	
 tristate 'CBQ packet scheduler' CONFIG_NET_SCH_CBQ
 tristate 'CSZ packet scheduler' CONFIG_NET_SCH_CSZ
 #tristate 'H-PFQ packet scheduler' CONFIG_NET_SCH_HPFQ
@@ -14,12 +16,12 @@ bool 'QoS support' CONFIG_NET_QOS
 if [ "$CONFIG_NET_QOS" = "y" ]; then
     bool 'Rate estimator' CONFIG_NET_ESTIMATOR
 fi
-if [ "$CONFIG_IP_MULTIPLE_TABLES" = "y" ]; then
-  bool 'Packet classifier API' CONFIG_NET_CLS
-fi
+bool 'Packet classifier API' CONFIG_NET_CLS
 if [ "$CONFIG_NET_CLS" = "y" ]; then
   bool 'Routing tables based classifier' CONFIG_NET_CLS_ROUTE
-#  bool 'Firewall based classifier' CONFIG_NET_CLS_FW
+  if [ "$CONFIG_IP_FIREWALL" = "y" ]; then
+    bool 'Firewall based classifier' CONFIG_NET_CLS_FW
+  fi
   tristate 'U32 classifier' CONFIG_NET_CLS_U32
   if [ "$CONFIG_NET_QOS" = "y" ]; then
     tristate 'Special RSVP classifier' CONFIG_NET_CLS_RSVP

@@ -12,16 +12,16 @@
  *	with a set of 32bit key/mask pairs at every node.
  *	Nodes reference next level hash tables etc.
  *
- *	This scheme is the best universal classifier
- *	I managed to invent; it is not super-fast, but it is not slow
- *	(provided you programmed it correctly), and enough general.
- *	And its relative speed grows, when number of rules becomes larger.
+ *	This scheme is the best universal classifier I managed to
+ *	invent; it is not super-fast, but it is not slow (provided you
+ *	program it correctly), and general enough.  And its relative
+ *	speed grows as the number of rules becomes larger.
  *
- *	Seems, it presents the best middle point between speed and
- *	managability both by human and by machine.
+ *	It seems that it represents the best middle point between
+ *	speed and manageability both by human and by machine.
  *
- *	It is especially useful for link sharing and link sharing, combined
- *	with QoS; pure RSVP need not such general approach and can use
+ *	It is especially useful for link sharing combined with QoS;
+ *	pure RSVP doesn't need such a general approach and can use
  *	much simpler (and faster) schemes, sort of cls_rsvp.c.
  */
 

@@ -12,12 +12,16 @@ IPV4_OBJS := utils.o route.o proc.o timer.o protocol.o \
 	     ip_input.o ip_fragment.o ip_forward.o ip_options.o \
 	     ip_output.o ip_sockglue.o \
 	     tcp.o tcp_input.o tcp_output.o tcp_timer.o tcp_ipv4.o\
-	     raw.o udp.o arp.o icmp.o devinet.o af_inet.o igmp.o ip_fw.o \
+	     raw.o udp.o arp.o icmp.o devinet.o af_inet.o igmp.o \
 	     sysctl_net_ipv4.o fib_frontend.o fib_semantics.o fib_hash.o
 IPV4X_OBJS :=
 
 MOD_LIST_NAME := IPV4_MODULES
 M_OBJS :=
+
+ifeq ($(CONFIG_IP_FIREWALL),y)
+IPV4_OBJS += ip_fw.o
+endif
 
 ifeq ($(CONFIG_IP_MULTIPLE_TABLES),y)
 IPV4_OBJS += fib_rules.o

@@ -22,7 +22,7 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#if defined(CONFIG_SSCAPE) || defined(MODULE)
+#ifdef CONFIG_SSCAPE
 
 #include "coproc.h"
 

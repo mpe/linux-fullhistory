@@ -38,11 +38,12 @@
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
 
-#define SOUND_CORE
-
 #include "soundmodule.h"
+struct notifier_block *sound_locker=(struct notifier_block *)0;
+static int lock_depth = 0;
 
 #include <linux/major.h>
+
 #ifdef MODULE
 #define modular 1
 #else
@@ -486,9 +487,12 @@ static int sound_open(struct inode *inode, struct file *file)
 		return -ENXIO;
 	}
 	in_use++;
-#ifdef MODULE
-	SOUND_INC_USE_COUNT;
+
+#ifdef CONFIG_MODULES
+	notifier_call_chain(&sound_locker, 1, 0);
+	lock_depth++;
 #endif
+
 	return 0;
 }
 
@@ -527,9 +531,12 @@ static int sound_release(struct inode *inode, struct file *file)
 		printk(KERN_ERR "Sound error: Releasing unknown device 0x%02x\n", dev);
 	}
 	in_use--;
-#ifdef MODULE
-	SOUND_DEC_USE_COUNT;
+
+#ifdef CONFIG_MODULES
+	notifier_call_chain(&sound_locker, 0, 0);
+	lock_depth--;
 #endif
+
 	return 0;
 }
 
@@ -662,18 +669,18 @@ static unsigned int sound_poll(struct file *file, poll_table * wait)
 
 	DEB(printk("sound_poll(dev=%d)\n", dev));
 	switch (dev & 0x0f) {
-#if defined(CONFIG_SEQUENCER) || defined(MODULE)
+#ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
 		return sequencer_poll(dev, file, wait);
 #endif
 
-#if defined(CONFIG_MIDI)
+#ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
 		return MIDIbuf_poll(dev, file, wait);
 #endif
 
-#if defined(CONFIG_AUDIO) || defined(MODULE)
+#ifdef CONFIG_AUDIO
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
@@ -770,6 +777,12 @@ void
 #endif
 soundcard_init(void)
 {
+	/* drag in sound_syms.o */
+	{
+		extern char sound_syms_symbol;
+		sound_syms_symbol = 0;
+	}
+
 #ifndef MODULE
 	register_chrdev(sound_major, "sound", &sound_fops);
 	chrdev_registered = 1;
@@ -785,7 +798,7 @@ soundcard_init(void)
 		return;		/* No cards detected */
 #endif
 
-#if defined(CONFIG_AUDIO)
+#ifdef CONFIG_AUDIO
 	if (num_audiodevs || modular)	/* Audio devices present */
 	{
 		audio_init_devices();
@@ -798,6 +811,8 @@ soundcard_init(void)
 static int      sound[20] = {
 	0
 };
+
+#ifdef MODULE
 
 int init_module(void)
 {
@@ -833,9 +848,6 @@ int init_module(void)
 	return 0;
 }
 
-#ifdef MODULE
-
-
 void cleanup_module(void)
 {
 	int i;
@@ -849,7 +861,7 @@ void cleanup_module(void)
 	if (chrdev_registered)
 		unregister_chrdev(sound_major, "sound");
 
-#if defined(CONFIG_SEQUENCER) || defined(MODULE)
+#ifdef CONFIG_SEQUENCER
 	sound_stop_timer();
 #endif
 
@@ -942,7 +954,7 @@ void sound_close_dma(int chn)
 	restore_flags(flags);
 }
 
-#if defined(CONFIG_SEQUENCER) || defined(MODULE)
+#ifdef CONFIG_SEQUENCER
 
 static void do_sequencer_timer(unsigned long dummy)
 {
@@ -1022,12 +1034,6 @@ void conf_printf2(char *name, int base, int irq, int dma, int dma2)
  *	Module and lock management
  */
  
-struct notifier_block *sound_locker=(struct notifier_block *)0;
-static int lock_depth = 0;
-
-#define SOUND_INC_USE_COUNT	do { notifier_call_chain(&sound_locker, 1, 0); lock_depth++; } while(0);
-#define SOUND_DEC_USE_COUNT	do { notifier_call_chain(&sound_locker, 0, 0); lock_depth--; } while(0);
-
 /*
  *	When a sound module is registered we need to bring it to the current
  *	lock level...

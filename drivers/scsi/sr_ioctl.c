@@ -53,6 +53,7 @@ int sr_do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned bufl
     Scsi_Cmnd * SCpnt;
     Scsi_Device * SDev;
     int result, err = 0, retries = 0;
+    unsigned long flags;
 
     SDev  = scsi_CDs[target].device;
     SCpnt = scsi_allocate_device(NULL, scsi_CDs[target].device, 1);
@@ -63,9 +64,11 @@ retry:
     {
 	struct semaphore sem = MUTEX_LOCKED;
 	SCpnt->request.sem = &sem;
+	spin_lock_irqsave(&io_request_lock, flags);
 	scsi_do_cmd(SCpnt,
 		    (void *) sr_cmd, buffer, buflength, sr_ioctl_done, 
 		    IOCTL_TIMEOUT, IOCTL_RETRIES);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 	down(&sem);
         SCpnt->request.sem = NULL;
     }

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.15 1998/04/30 16:24:28 freitag Exp $
+ *	$Id: mcast.c,v 1.16 1998/05/07 15:43:10 davem Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -52,8 +52,7 @@
 #define MDBG(x)
 #endif
 
-static struct inode igmp6_inode;
-static struct socket *igmp6_socket=&igmp6_inode.u.socket_i;
+static struct socket *igmp6_socket;
 
 static void igmp6_join_group(struct ifmcaddr6 *ma);
 static void igmp6_leave_group(struct ifmcaddr6 *ma);
@@ -598,7 +597,7 @@ done:
 }
 #endif
 
-__initfunc(void igmp6_init(struct net_proto_family *ops))
+__initfunc(int igmp6_init(struct net_proto_family *ops))
 {
 #ifdef CONFIG_PROC_FS
 	struct proc_dir_entry *ent;
@@ -606,18 +605,24 @@ __initfunc(void igmp6_init(struct net_proto_family *ops))
 	struct sock *sk;
 	int err;
 
-	igmp6_inode.i_mode = S_IFSOCK;
-	igmp6_inode.i_sock = 1;
-	igmp6_inode.i_uid = 0;
-	igmp6_inode.i_gid = 0;
-
-	igmp6_socket->inode = &igmp6_inode;
-	igmp6_socket->state = SS_UNCONNECTED;
+	igmp6_socket = sock_alloc();
+	if (igmp6_socket == NULL) {
+		printk(KERN_ERR
+		       "Failed to create the IGMP6 control socket.\n");
+		return -1;
+	}
+	igmp6_socket->inode->i_uid = 0;
+	igmp6_socket->inode->i_gid = 0;
 	igmp6_socket->type = SOCK_RAW;
 
-	if((err=ops->create(igmp6_socket, IPPROTO_ICMPV6))<0)
+	if((err = ops->create(igmp6_socket, IPPROTO_ICMPV6)) < 0) {
 		printk(KERN_DEBUG 
-		       "Failed to create the IGMP6 control socket.\n");
+		       "Failed to initialize the IGMP6 control socket (err %d).\n",
+		       err);
+		sock_release(igmp6_socket);
+		igmp6_socket = NULL; /* For safety. */
+		return err;
+	}
 
 	sk = igmp6_socket->sk;
 	sk->allocation = GFP_ATOMIC;
@@ -628,11 +633,17 @@ __initfunc(void igmp6_init(struct net_proto_family *ops))
 	ent = create_proc_entry("net/igmp6", 0, 0);
 	ent->read_proc = igmp6_read_proc;
 #endif
+
+	return 0;
 }
 
+#ifdef MODULE
 void igmp6_cleanup(void)
 {
+	sock_release(igmp6_socket);
+	igmp6_socket = NULL; /* for safety */
 #ifdef CONFIG_PROC_FS
-	remove_proc_entry("net/igmp6", 0); 
+	remove_proc_entry("net/igmp6", 0);
 #endif
 }
+#endif

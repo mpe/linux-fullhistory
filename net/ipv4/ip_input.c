@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.29 1998/04/03 10:52:06 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.30 1998/05/08 01:54:54 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -401,15 +401,6 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		goto drop;
 
 	ip_statistics.IpInReceives++;
-
-	/*
-	 *	Account for the packet (even if the packet is
-	 *	not accepted by the firewall!).
-	 */
-
-#ifdef CONFIG_IP_ACCT
-	ip_fw_chk(iph,dev,NULL,ip_acct_chain,0,IP_FW_MODE_ACCT_IN);
-#endif	
 
 	/*
 	 *	RFC1122: 3.1.2.2 MUST silently discard any IP frame that fails the checksum.

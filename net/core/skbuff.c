@@ -179,6 +179,9 @@ static inline void skb_headerinit(void *p, kmem_cache_t *cache,
 	skb->ip_summed = 0;
 	skb->security = 0;	/* By default packets are insecure */
 	skb->dst = NULL;
+#ifdef CONFIG_IP_FIREWALL_CHAINS
+        skb->fwmark = 0;
+#endif
 	memset(skb->cb, 0, sizeof(skb->cb));
 	skb->priority = 0;
 }

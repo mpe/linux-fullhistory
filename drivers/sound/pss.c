@@ -32,7 +32,8 @@
 #include "sound_firmware.h"
 #include "soundmodule.h"
 
-#if (defined(CONFIG_PSS) && defined(CONFIG_AUDIO))||defined(MODULE)
+#ifdef CONFIG_PSS
+#ifdef CONFIG_AUDIO
 
 /*
  * PSS registers.
@@ -80,11 +81,12 @@
 
 #include "coproc.h"
 
-#ifdef CONFIG_PSS_HAVE_BOOT
+#ifdef PSS_HAVE_LD
 #include "pss_boot.h"
 #else
-static unsigned char *pss_synth = NULL;
 static int pss_synthLen = 0;
+static unsigned char *pss_synth =
+NULL;
 #endif
 
 unsigned char pss_mixer = 1;
@@ -1120,5 +1122,6 @@ void cleanup_module(void)
 	unload_pss(&cfgpss);
 	SOUND_LOCK_END;
 }
+#endif
 #endif
 #endif

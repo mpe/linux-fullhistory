@@ -17,7 +17,8 @@
 
 #include "gus_hw.h"
 
-#if ( defined(CONFIG_GUS) && defined(CONFIG_MIDI) ) || defined (MODULE)
+#ifdef CONFIG_GUS
+#ifdef CONFIG_MIDI
 
 static int      midi_busy = 0, input_opened = 0;
 static int      my_dev;
@@ -265,4 +266,5 @@ void gus_midi_interrupt(int dummy)
 	restore_flags(flags);
 }
 
+#endif
 #endif

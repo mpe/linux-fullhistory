@@ -547,6 +547,6 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_capget)
 	.long SYMBOL_NAME(sys_capset)           /* 185 */
 	
-	.rept NR_syscalls-184
+	.rept NR_syscalls-185
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

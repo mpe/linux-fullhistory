@@ -31,21 +31,21 @@
 #include <net/pkt_sched.h>
 
 /*
-   This text is NOT intended to be used for statistics collection,
-   its purpose is to provide base for statistical multiplexing
+   This code is NOT intended to be used for statistics collection,
+   its purpose is to provide a base for statistical multiplexing
    for controlled load service.
-   If you need only statistics, run user level daemon, which will
-   periodically read byte counters.
+   If you need only statistics, run a user level daemon which
+   periodically reads byte counters.
 
-   Unfortunately, rate estimation is not very easy task.
-   F.e. I did not find a simple way to estimate current peak rate
+   Unfortunately, rate estimation is not a very easy task.
+   F.e. I did not find a simple way to estimate the current peak rate
    and even failed to formulate the problem 8)8)
 
-   So that I preferred not to built estimator in scheduler,
+   So I preferred not to built an estimator into the scheduler,
    but run this task separately.
    Ideally, it should be kernel thread(s), but for now it runs
-   from timers, which puts apparent top bounds on number of rated
-   flows, but has minimal overhead on small, but enough
+   from timers, which puts apparent top bounds on the number of rated
+   flows, has minimal overhead on small, but is enough
    to handle controlled load service, sets of aggregates.
 
    We measure rate over A=(1<<interval) seconds and evaluate EWMA:
@@ -54,18 +54,18 @@
 
    where W is chosen as negative power of 2: W = 2^(-ewma_log)
 
-   Resulting time constant is:
+   The resulting time constant is:
 
    T = A/(-ln(1-W))
 
 
    NOTES.
 
-   * Stored value for avbps is scaled by 2^5, so that maximal
+   * The stored value for avbps is scaled by 2^5, so that maximal
      rate is ~1Gbit, avpps is scaled by 2^10.
 
-   * Minimal interval is HZ/4=250msec (it is the least integer divisor
-     both for HZ=100 and HZ=1024 8)), maximal interval
+   * Minimal interval is HZ/4=250msec (it is the greatest common divisor
+     for HZ=100 and HZ=1024 8)), maximal interval
      is (HZ/4)*2^EST_MAX_INTERVAL = 8sec. Shorter intervals
      are too expensive, longer ones can be implemented
      at user level painlessly.

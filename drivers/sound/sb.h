@@ -1,4 +1,5 @@
 #include <linux/config.h>
+#include "legacy.h"
 
 #ifdef CONFIG_SBDSP
 #define DSP_RESET	(devc->base + 0x6)
@@ -112,6 +113,7 @@ typedef struct sb_devc {
 	   int input_opened;
 	   int midi_broken;
 	   void (*midi_input_intr) (int dev, unsigned char data);
+	   void *midi_irq_cookie;	/* IRQ cookie for the midi */
 	} sb_devc;
 
 int sb_dsp_command (sb_devc *devc, unsigned char val);
@@ -131,4 +133,5 @@ int ess_write (sb_devc *devc, unsigned char reg, unsigned char data);
 int ess_read (sb_devc *devc, unsigned char reg);
 
 extern int acer;
+extern sb_devc *last_sb;
 #endif

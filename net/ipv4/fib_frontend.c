@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: FIB frontend.
  *
- * Version:	$Id: fib_frontend.c,v 1.9 1998/03/08 20:52:36 davem Exp $
+ * Version:	$Id: fib_frontend.c,v 1.10 1998/05/08 21:06:27 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *

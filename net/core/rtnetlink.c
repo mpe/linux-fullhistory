@@ -348,6 +348,8 @@ rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh, int *errp)
 	}
 
 	if (kind == 2 && nlh->nlmsg_flags&NLM_F_DUMP) {
+		int rlen;
+
 		if (link->dumpit == NULL)
 			link = &(rtnetlink_links[PF_UNSPEC][type]);
 
@@ -364,7 +366,10 @@ rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh, int *errp)
 				atomic_dec(&rtnl_rlockct);
 			return -1;
 		}
-		skb_pull(skb, NLMSG_ALIGN(nlh->nlmsg_len));
+		rlen = NLMSG_ALIGN(nlh->nlmsg_len);
+		if (rlen > skb->len)
+			rlen = skb->len;
+		skb_pull(skb, rlen);
 		return -1;
 	}
 

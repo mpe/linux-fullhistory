@@ -720,7 +720,7 @@ void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err)
 	if (err == 0)
 		size = NLMSG_SPACE(sizeof(struct nlmsgerr));
 	else
-		size = NLMSG_SPACE(4 + nlh->nlmsg_len);
+		size = NLMSG_SPACE(4 + NLMSG_ALIGN(nlh->nlmsg_len));
 
 	skb = alloc_skb(size, GFP_KERNEL);
 	if (!skb)

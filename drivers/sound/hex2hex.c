@@ -81,7 +81,7 @@ int main( int argc, const char * argv [] )
 		fprintf(stderr,"hex2hex: [-i] filename\n");
 		exit(1);
 	}
-	varline = argv[1;
+	varline = argv[1];
 	l = loadhex(stdin, buf);
 
 	printf("/*\n *\t Computer generated file. Do not edit.\n */\n");

@@ -54,18 +54,18 @@
 
 	-----------------------------------------------------------------------
 
-	Algorithm skeleton is taken from from NS simulator cbq.cc.
-	If someone wants to check this text against LBL version,
-	he should take into account that ONLY skeleton is borrowed,
-	implementation is different. Particularly:
+	Algorithm skeleton was taken from from NS simulator cbq.cc.
+	If someone wants to check this code against the LBL version,
+	he should take into account that ONLY the skeleton was borrowed,
+	the implementation is different. Particularly:
 
-	--- WRR algorithm is different. Our version looks
-	more reasonable (I hope) and works when quanta are allowed
-	to be less than MTU, which always is the case, when real time
-	classes have small rates. Note, that the statement of [3] is incomplete,
-	Actually delay may be estimated even if class per-round allotment
-	less than MTU. Namely, if per-round allotment is W*r_i,
-	and r_1+...+r_k = r < 1
+	--- The WRR algorithm is different. Our version looks more
+        reasonable (I hope) and works when quanta are allowed to be
+        less than MTU, which is always the case when real time classes
+        have small rates. Note, that the statement of [3] is
+        incomplete, delay may actually be estimated even if class
+        per-round allotment is less than MTU. Namely, if per-round
+        allotment is W*r_i, and r_1+...+r_k = r < 1
 
 	delay_i <= ([MTU/(W*r_i)]*W*r + W*r + k*MTU)/B
 
@@ -73,18 +73,17 @@
 	and C = MTU*r. The proof (if correct at all) is trivial.
 
 
-	--- Seems, cbq-2.0 is not very accurate. At least, I cannot
-	interpret some places, which look like wrong translation
-	from NS. Anyone is advertised to found these differences
-	and explain me, why I am wrong 8).
+	--- It seems that cbq-2.0 is not very accurate. At least, I cannot
+	interpret some places, which look like wrong translations
+	from NS. Anyone is advised to find these differences
+	and explain to me, why I am wrong 8).
 
 	--- Linux has no EOI event, so that we cannot estimate true class
 	idle time. Workaround is to consider the next dequeue event
-	as sign that previous packet is finished. It is wrong because of
-	internal device queueing, but on permanently loaded link it is true.
+	as sign that previous packet is finished. This is wrong because of
+	internal device queueing, but on a permanently loaded link it is true.
 	Moreover, combined with clock integrator, this scheme looks
-	very close to ideal solution.
-*/
+	very close to an ideal solution.  */
 
 struct cbq_sched_data;
 
@@ -177,7 +176,7 @@ struct cbq_sched_data
 	unsigned		pmask;
 
 	struct timer_list	delay_timer;
-	struct timer_list	wd_timer;	/* Wathchdog timer, that
+	struct timer_list	wd_timer;	/* Watchdog timer,
 						   started when CBQ has
 						   backlog, but cannot
 						   transmit just now */
@@ -231,9 +230,9 @@ cbq_reclassify(struct sk_buff *skb, struct cbq_class *this)
    transparently.
 
    Namely, you can put link sharing rules (f.e. route based) at root of CBQ,
-   so that it resolves to split nodes. Then packeta are classified
-   by logical priority, or more specific classifier may be attached
-   to split node.
+   so that it resolves to split nodes. Then packets are classified
+   by logical priority, or a more specific classifier may be attached
+   to the split node.
  */
 
 static struct cbq_class *
@@ -283,9 +282,9 @@ cbq_classify(struct sk_buff *skb, struct Qdisc *sch)
 		}
 
 		/*
-		 * Step 3+n. If classifier selected link sharing class,
+		 * Step 3+n. If classifier selected a link sharing class,
 		 *	   apply agency specific classifier.
-		 *	   Repeat this procdure until we hit leaf node.
+		 *	   Repeat this procdure until we hit a leaf node.
 		 */
 		head = cl;
 	}
@@ -332,7 +331,7 @@ static __inline__ void cbq_activate_class(struct cbq_class *cl)
 
 /*
    Unlink class from active chain.
-   Note, that the same procedure is made directly in cbq_dequeue*
+   Note that this same procedure is done directly in cbq_dequeue*
    during round-robin procedure.
  */
 
@@ -712,9 +711,9 @@ cbq_update(struct cbq_sched_data *q)
 
 			/*
 			   That is not all.
-			   To maintain rate allocated to class,
+			   To maintain the rate allocated to the class,
 			   we add to undertime virtual clock,
-			   necassry to complete transmitted packet.
+			   necesary to complete transmitted packet.
 			   (len/phys_bandwidth has been already passed
 			   to the moment of cbq_update)
 			 */
@@ -932,8 +931,8 @@ cbq_dequeue(struct Qdisc *sch)
 		   an arbitrary class is appropriate for ancestor-only
 		   sharing, but not for toplevel algorithm.
 
-		   Our version is better, but slower, because requires
-		   two passes, but it is inavoidable with top-level sharing.
+		   Our version is better, but slower, because it requires
+		   two passes, but it is unavoidable with top-level sharing.
 		*/
 
 		if (q->toplevel == TC_CBQ_MAXLEVEL &&
@@ -1000,8 +999,8 @@ static void cbq_normalize_quanta(struct cbq_sched_data *q, int prio)
 					q->quanta[prio];
 			}
 			if (cl->quantum <= 0 || cl->quantum>32*cl->qdisc->dev->mtu) {
-				printk("Damn! %08x cl->quantum==%ld\n", cl->classid, cl->quantum);
-				cl->quantum = 1;
+				printk(KERN_WARNING "CBQ: class %08x has bad quantum==%ld, repaired.\n", cl->classid, cl->quantum);
+				cl->quantum = cl->qdisc->dev->mtu/2 + 1;
 			}
 		}
 	}

@@ -4,7 +4,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: ipv6.h,v 1.10 1998/04/30 16:24:14 freitag Exp $
+ *	$Id: ipv6.h,v 1.11 1998/05/07 15:42:46 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -266,11 +266,16 @@ extern int			ipv6_getsockopt(struct sock *sk, int level,
 						int optname, char *optval, 
 						int *optlen);
 
+extern void			ipv6_packet_init(void);
 
-extern void			ipv6_init(void);
-extern void			ipv6_cleanup(void);
-#endif
-#endif
+extern void			ipv6_netdev_notif_init(void);
+
+extern void			ipv6_packet_cleanup(void);
+
+extern void			ipv6_netdev_notif_cleanup(void);
+
+#endif /* __KERNEL__ */
+#endif /* _NET_IPV6_H */
 
 
 

@@ -33,7 +33,7 @@ http://cyberbuzz.gatech.edu/kaboom/linux/ as well.
    Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
 needs.
 
-Last updated: May 9, 1998
+Last updated: May 12, 1998
 Current Author: Chris Ricker (kaboom@gatech.edu).
 
 Current Minimal Requirements
@@ -49,17 +49,17 @@ running, the suggested command should tell you.
 - Linux C Library	 5.4.44                  ; ls -l /lib/libc.so.*
 - Dynamic Linker (ld.so) 1.9.5                   ; ldd --version
 - Linux C++ Library	 2.7.2.8                 ; ls -l /usr/lib/libg++.so.*
-- Procps		 1.2.5                   ; ps --version
+- Procps		 1.2.7                   ; ps --version
 - Procinfo               13                      ; procinfo -v
 - Mount                  2.7l                    ; mount --version
-- Net-tools              1.41                    ; hostname -V
+- Net-tools              1.45                    ; hostname -V
 - Loadlin                1.6a
 - Sh-utils               1.16                    ; basename --v
 - Autofs                 0.3.11                  ; automount --version
 - NFS                    0.4.21                  ; showmount --version
 - Bash                   1.14.7                  ; bash -version
-- Ncpfs                  2.1.1                   ; ncpmount -v
-- Pcmcia-cs              May 4, 1998
+- Ncpfs                  2.2.0                   ; ncpmount -v
+- Pcmcia-cs              3.0.1
 - PPP                    2.3.5                   ; pppd -v
 
 Upgrade notes
@@ -77,6 +77,11 @@ the BIOS.
    Also, please remember that cua* devices are now obsolete.  Switch to
 the corresponding ttyS* device instead (e.g., cua0 -> ttyS0, cua1 ->
 ttyS1, etc.).
+
+   In addition, some software still works, but needs to be compiled
+against 2.1 headers for complete functionality.  Fdutils binaries
+compiled under 2.0 or earlier kernels should be replaced with ones
+compiled under 2.1, for example.
 
 Libc
 ====
@@ -412,7 +417,7 @@ NFS
 
 The 0.4.21 release:
 ftp://ftp.mathematik.th-darmstadt.de/pub/linux/okir/linux-nfs-0.4.21.tar.gz
-ftp://linux.nrao.edu/pub/people/okir/linux-nfs-0.4.21.tar.gz
+ftp://linux.nrao.edu/mirrors/fb0429.mathematik.th-darmstadt.de/pub/linux/okir/linux-nfs-0.4.21.tar.gz
 
 Net-tools
 =========
@@ -436,14 +441,14 @@ ftp://prep.ai.mit.edu/pub/gnu/bash-1.14.7.tar.gz
 Ncpfs
 =====
 
-The 2.1.1 release:
-ftp://ftp.gwdg.de/pub/linux/misc/ncpfs/ncpfs-2.1.1.tgz
+The 2.2.0 release:
+ftp://ftp.gwdg.de/pub/linux/misc/ncpfs/ncpfs-2.2.0.tgz
 
 Pcmcia-cs
 =========
 
-The May 4, 1998 release:
-ftp://hyper.stanford.edu/pub/pcmcia/NEW/pcmcia-cs.04-May-98.tar.gz
+The 3.0.1 release:
+ftp://hyper.stanford.edu/pub/pcmcia/pcmcia-cs.3.0.1.tar.gz
 
 PPP
 ===

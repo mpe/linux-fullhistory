@@ -16,7 +16,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_SEQUENCER) || defined(CONFIG_SEQUENCER_MODULE)
+#if defined(CONFIG_SEQUENCER)
 
 static volatile int initialized = 0, opened = 0, tmr_running = 0;
 static volatile time_t tmr_offs, tmr_ctr;

@@ -261,6 +261,7 @@ static void idescsi_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 	idescsi_pc_t *pc = (idescsi_pc_t *) rq->buffer;
 	int log = test_bit(IDESCSI_LOG_CMD, &scsi->log);
 	u8 *scsi_buf;
+	unsigned long flags;
 
 	if (rq->cmd != IDESCSI_PC_RQ) {
 		ide_end_request (uptodate, hwgroup);
@@ -287,7 +288,9 @@ static void idescsi_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 			} else printk("\n");
 		}
 	}
+	spin_lock_irqsave(&io_request_lock,flags);	
 	pc->done(pc->scsi_cmd);
+	spin_unlock_irqrestore(&io_request_lock,flags);
 	idescsi_free_bh (rq->bh);
 	kfree(pc); kfree(rq);
 	scsi->pc = NULL;
@@ -767,7 +770,9 @@ int idescsi_queue (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
 	rq->buffer = (char *) pc;
 	rq->bh = idescsi_dma_bh (drive, pc);
 	rq->cmd = IDESCSI_PC_RQ;
+	spin_unlock(&io_request_lock);
 	(void) ide_do_drive_cmd (drive, rq, ide_end);
+	spin_lock(&io_request_lock);
 	return 0;
 abort:
 	if (pc) kfree (pc);

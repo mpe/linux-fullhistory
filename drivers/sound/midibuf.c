@@ -411,6 +411,11 @@ unsigned int MIDIbuf_poll(int dev, struct file *file, poll_table * wait)
 
 void MIDIbuf_init(void)
 {
+	/* drag in midi_syms.o */
+	{
+		extern char midi_syms_symbol;
+		midi_syms_symbol = 0;
+	}
 }
 
 int MIDIbuf_avail(int dev)

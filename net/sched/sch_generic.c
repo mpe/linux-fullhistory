@@ -37,7 +37,7 @@
 struct Qdisc_head qdisc_head = { &qdisc_head };
 
 /* Kick device.
-   Note, that this procedure can be called by watchdog timer, so that
+   Note, that this procedure can be called by a watchdog timer, so that
    we do not check dev->tbusy flag here.
 
    Returns:  0  - queue is empty.
@@ -62,7 +62,7 @@ int qdisc_restart(struct device *dev)
 		}
 
 		/* Device kicked us out :(
-		   It is possible in three cases:
+		   This is possible in three cases:
 
 		   1. fastroute is enabled
 		   2. device cannot determine busy state
@@ -79,7 +79,7 @@ int qdisc_restart(struct device *dev)
 /* Scan transmission queue and kick devices.
 
    Deficiency: slow devices (ppp) and fast ones (100Mb ethernet)
-   share one queue. It means, that if we have a lot of loaded ppp channels,
+   share one queue. This means that if we have a lot of loaded ppp channels,
    we will scan a long list on every 100Mb EOI.
    I have no idea how to solve it using only "anonymous" Linux mark_bh().
 
@@ -99,12 +99,12 @@ void qdisc_run_queues(void)
 		while (!dev->tbusy && (res = qdisc_restart(dev)) < 0)
 			/* NOTHING */;
 
-		/* The explanation is necessary here.
+		/* An explanation is necessary here.
 		   qdisc_restart called dev->hard_start_xmit,
 		   if device is virtual, it could trigger one more
-		   dev_queue_xmit and new device could appear
-		   in active chain. In this case we cannot unlink
-		   empty queue, because we lost back pointer.
+		   dev_queue_xmit and a new device could appear
+		   in the active chain. In this case we cannot unlink
+		   the empty queue, because we lost the back pointer.
 		   No problem, we will unlink it during the next round.
 		 */
 
@@ -117,7 +117,7 @@ void qdisc_run_queues(void)
 	}
 }
 
-/* Periodic watchdoc timer to recover of hard/soft device bugs. */
+/* Periodic watchdoc timer to recover from hard/soft device bugs. */
 
 static void dev_do_watchdog(unsigned long dummy);
 
@@ -141,8 +141,8 @@ static void dev_do_watchdog(unsigned long dummy)
 
 
 /* "NOOP" scheduler: the best scheduler, recommended for all interfaces
-   in all curcumstances. It is difficult to invent anything more
-   fast or cheap.
+   under all circumstances. It is difficult to invent anything faster or
+   cheaper.
  */
 
 static int

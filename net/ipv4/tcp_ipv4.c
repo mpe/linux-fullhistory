@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.146 1998/05/03 14:30:59 alan Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.147 1998/05/06 13:25:00 freitag Exp $
  *
  *		IPv4 specific functions
  *
@@ -690,7 +690,7 @@ static struct open_request *tcp_v4_search_req(struct tcp_opt *tp,
 
 
 /* 
- * This routine does path mtu discovery as defined in RFC1197.
+ * This routine does path mtu discovery as defined in RFC1191.
  */
 static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip)
 {

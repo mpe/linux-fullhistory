@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.39 1998/05/03 14:31:04 alan Exp $
+ *	$Id: addrconf.c,v 1.41 1998/05/08 21:06:31 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -53,6 +53,7 @@
 #include <linux/rtnetlink.h>
 
 #include <asm/uaccess.h>
+#include <asm/delay.h>
 
 /* Set to 3 to get tracing... */
 #define ACONF_DEBUG 2
@@ -1157,13 +1158,6 @@ static int addrconf_ifdown(struct device *dev, int how)
 
 	start_bh_atomic();
 
-	/* Discard multicast list */
-
-	if (how == 1)
-		ipv6_mc_destroy_dev(idev);
-	else
-		ipv6_mc_down(idev);
-
 	/* Discard address list */
 
 	idev->addr_list = NULL;
@@ -1186,6 +1180,13 @@ static int addrconf_ifdown(struct device *dev, int how)
 			bifa = &ifa->lst_next;
 		}
 	}
+
+	/* Discard multicast list */
+
+	if (how == 1)
+		ipv6_mc_destroy_dev(idev);
+	else
+		ipv6_mc_down(idev);
 
 	/* Delete device from device hash table (if unregistered) */
 

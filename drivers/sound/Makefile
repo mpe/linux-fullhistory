@@ -1,263 +1,177 @@
-BUILDCODE=s
 # Makefile for the Linux sound card driver
 #
-# Note 2! The CFLAGS definitions are now inherited from the
-# parent makes. (hopefully)
-#
-#
-#
-#
+# 18 Apr 1998, Michael Elizabeth Chastain, <mailto:mec@shout.net>
+# Rewritten to use lists instead of if-statements.
+
+
+
+# My subdirectories.
+
+SUB_DIRS	:= 
+MOD_SUB_DIRS	:=
+MOD_IN_SUB_DIRS	:=
+ALL_SUB_DIRS	:= $(SUB_DIRS) lowlevel
+
+ifeq ($(CONFIG_LOWLEVEL_SOUND),y)
+    SUB_DIRS		+= lowlevel
+    MOD_IN_SUB_DIRS	+= lowlevel
+endif
+
+
+
+# All of the (potential) objects that export symbols.
+# This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
+
+export-objs	:= ad1848.o mpu401.o opl3.o sb_card.o uart401.o		\
+		   audio_syms.o midi_syms.o sequencer_syms.o sound_syms.o
+
+
+
+# Object file lists.
+
+obj-y		:=
+obj-m		:=
+obj-n		:=
+obj-		:=
+
+
+
+# Each configuration option enables a list of files.
+
 ifeq ($(ARCH),m68k)
-  L_TARGET := sound.a
-  L_OBJS   :=
-  M_OBJS   :=
-  ifeq ($(CONFIG_DMASOUND),y)
-    L_OBJS += dmasound.o
-  else
-    ifeq ($(CONFIG_DMASOUND),m)
-    M_OBJS += dmasound.o
-    endif
-  endif
 
-  include $(TOPDIR)/Rules.make
-
-  clean:
-	rm -f core *.o *.a *.s
+obj-$(CONFIG_DMASOUND)		+= dmasound.o
 
 else
 
-include Defines
+obj-$(CONFIG_SOUND)		+= sound.o
+obj-$(CONFIG_SOUND_ADLIB)	+= adlib_card.o opl3.o
+obj-$(CONFIG_SOUND_CS4232)	+= cs4232.o ad1848.o uart401.o
+obj-$(CONFIG_SOUND_GUS)		+= gus.o ad1848.o
+obj-$(CONFIG_SOUND_MAD16)	+= mad16.o ad1848.o sb.o uart401.o
+obj-$(CONFIG_SOUND_MAUI)	+= maui.o mpu401.o
+obj-$(CONFIG_SOUND_MPU401)	+= mpu401.o
+obj-$(CONFIG_SOUND_MSS)		+= ad1848.o
+obj-$(CONFIG_SOUND_OPL3SA1)	+= opl3sa.o ad1848.o uart401.o
+obj-$(CONFIG_SOUND_PAS)		+= pas2.o sb.o uart401.o
+obj-$(CONFIG_SOUND_PSS)		+= pss.o ad1848.o mpu401.o
+obj-$(CONFIG_SOUND_SB)		+= sb.o uart401.o
+obj-$(CONFIG_SOUND_SOFTOSS)	+= softoss2.o
+obj-$(CONFIG_SOUND_SGALAXY)	+= sgalaxy.o
+obj-$(CONFIG_SOUND_SSCAPE)	+= sscape.o ad1848.o mpu401.o
+obj-$(CONFIG_SOUND_TRIX)	+= trix.o ad1848.o sb.o uart401.o
+obj-$(CONFIG_SOUND_UART6850)	+= uart6850.c
+obj-$(CONFIG_SOUND_VMIDI)	+= v_midi.o
+obj-$(CONFIG_SOUND_YM3812)	+= adlib_card.o opl3.o
+obj-$(CONFIG_VIDC_SOUND)	+= vidc_mod.o
 
-ifndef TOPDIR
-TOPDIR=/usr/src/linux
 endif
 
-SUB_DIRS     := lowlevel
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
 
-L_TARGET := sound.a
-M_OBJS   :=
-L_OBJS   :=
 
-ifeq ($(CONFIG_SOUND),y)
-  L_OBJS += soundcard.o dev_table.o sequencer.o sys_timer.o sound_timer.o lowlevel/lowlevel.o midi_synth.o midibuf.o sound_firmware.o audio.o dmabuf.o
-else
-  ifeq ($(CONFIG_SOUND),m)
-     M_OBJS += sound.o
-     MIX_OBJS += sound_syms.o
-  endif
-endif
+# Declare multi-part drivers.
 
-ifeq ($(CONFIG_MIDI),y)
-  L_OBJS += midibuf.o
-  LX_OBJS += midi_synth.o
-endif
+list-multi	:= sound.o gus.o pas2.o sb.o softoss2.o vidc_mod.o
 
-#ifeq ($(CONFIG_AUDIO),y)
-#L_OBJS += dmabuf.o
-#endif
+sound-objs	:= 							\
+    dev_table.o soundcard.o sound_firmware.o sound_syms.o		\
+    audio.o audio_syms.o dmabuf.o					\
+    midi_syms.o midi_synth.o midibuf.o					\
+    sequencer.o sequencer_syms.o sound_timer.o sys_timer.o
 
-ifeq ($(CONFIG_YM3812),y)
-LX_OBJS += adlib_card.o opl3.o
-else
-  ifeq ($(CONFIG_YM3812),m)
-  MX_OBJS += adlib_card.o opl3.o
-  endif
-endif
+gus-objs	:= gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o
+pas2-objs	:= pas2_card.o pas2_midi.o pas2_mixer.o pas2_pcm.o
+sb-objs		:= sb_audio.o sb_card.o sb_common.o sb_midi.o sb_mixer.o
+softoss2-objs	:= softoss.o softoss_rs.o
+vidc_mod-objs	:= vidc.o vidc_audio.o vidc_fill.o vidc_mixer.o vidc_synth.o
 
-ifeq ($(CONFIG_PAS),y)
-L_OBJS += pas2.o
-else
-  ifeq ($(CONFIG_PAS),m)
-  M_OBJS += pas2.o
-  endif
-endif
 
-ifeq ($(CONFIG_GUS),y)
-L_OBJS += gus.o
-  ifeq ($(CONFIG_GUSMAX),y)
-    CONFIG_MSS = y
-  endif
-else
-  ifeq ($(CONFIG_GUS),m)
-    M_OBJS += gus.o
-  endif
-  ifeq ($(CONFIG_GUSMAX),y)
-    ifneq ($(CONFIG_MSS),y)
-      CONFIG_MSS = m
-    endif
-  endif
-endif
 
-ifeq ($(CONFIG_SB),y)
-L_OBJS += sb_audio.o sb_common.o sb_midi.o sb_mixer.o
-LX_OBJS += sb_card.o
-CONFIG_UART401 = y
-else
-  ifeq ($(CONFIG_SB),m)
-  M_OBJS += sb.o
-  MIX_OBJS += sb_card.o
-  ifneq ($(CONFIG_UART401),y)
-    CONFIG_UART401 = m
-  endif
-  endif
-endif
+# Extract lists of the multi-part drivers.
+# The 'int-*' lists are the intermediate files used to build the multi's.
 
-ifeq ($(CONFIG_MSS),y)
-LX_OBJS += ad1848.o
-else
-  ifeq ($(CONFIG_MSS),m)
-  MX_OBJS += ad1848.o
-  endif
-endif
+multi-y		:= $(filter $(list-multi), $(obj-y))
+multi-m		:= $(filter $(list-multi), $(obj-m))
+int-y		:= $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
+int-m		:= $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
 
-ifeq ($(CONFIG_ADLIB),y)
-LX_OBJS += adlib_card.o
-else
-  ifeq ($(CONFIG_ADLIB),m)
-  MX_OBJS += adlib_card.o
-  endif
-endif
 
-ifeq ($(CONFIG_MPU401),y)
-LX_OBJS += mpu401.o
-else
-  ifeq ($(CONFIG_MPU401),m)
-  MX_OBJS += mpu401.o
-  else
-    ifeq ($(CONFIG_MPU_EMU),y)
-    LX_OBJS += mpu401.o
-    else
-      ifeq ($(CONFIG_MPU_EMU),m)
-      MX_OBJS += mpu401.o
-      endif
-    endif
-  endif
-endif
 
-ifeq ($(CONFIG_UART401),y)
-LX_OBJS += uart401.o
-else
-  ifeq ($(CONFIG_UART401),m)
-  MX_OBJS += uart401.o
-  endif
-endif
+# Files that are both resident and modular: remove from modular.
 
-ifeq ($(CONFIG_UART6850),y)
-LX_OBJS += uart6850.o
-else
-  ifeq ($(CONFIG_UART6850),m)
-  MX_OBJS += uart6850.o
-  endif
-endif
+obj-m		:= $(filter-out $(obj-y), $(obj-m))
+int-m		:= $(filter-out $(int-y), $(int-m))
 
-ifeq ($(CONFIG_PSS),y)
-L_OBJS += pss.o
-else
-  ifeq ($(CONFIG_PSS),m)
-  M_OBJS += pss.o
-  endif
-endif
 
-ifeq ($(CONFIG_SSCAPE),y)
-L_OBJS += sscape.o
-else
-  ifeq ($(CONFIG_SSCAPE),m)
-  M_OBJS += sscape.o
-  endif
-endif
 
-ifeq ($(CONFIG_TRIX),y)
-L_OBJS += trix.o
-else
-  ifeq ($(CONFIG_TRIX),m)
-  M_OBJS += trix.o
-  endif
-endif
+# Set flags for secondary drivers.
+# I have to do this before I reduce obj-y to components.
 
-ifeq ($(CONFIG_MAD16),y)
-L_OBJS += mad16.o
-else
-  ifeq ($(CONFIG_MAD16),m)
-  M_OBJS += mad16.o sb.o uart401.o
-  MX_OBJS += sb_card.o ad1848.o
-  endif
-endif
+EXTRA_CFLAGS	:= $(sort					\
+    $(patsubst ad1848.o,  -DCONFIG_SOUND_AD1848,		\
+    $(patsubst mpu401.o,  -DCONFIG_SOUND_MPU_EMU,		\
+    $(patsubst sb.o,      -DCONFIG_SOUND_SBDSP,			\
+    $(patsubst uart401.o, -DCONFIG_SOUND_UART401,		\
+	$(filter ad1848.o mpu401.o sb.o uart401.o, $(obj-y))	\
+    )))))
 
-ifeq ($(CONFIG_CS4232),y)
-LX_OBJS += cs4232.o
-else
-  ifeq ($(CONFIG_CS4232),m)
-  MX_OBJS += cs4232.o
-  endif
-endif
 
-ifeq ($(CONFIG_MAUI),y)
-L_OBJS += maui.o
-else
-  ifeq ($(CONFIG_MAUI),m)
-    M_OBJS += maui.o
-  endif
-endif
 
-ifeq ($(CONFIG_SOFTOSS),y)
-L_OBJS += softoss.o softoss_rs.o
-else
-   ifeq ($(CONFIG_SOFTOSS),m)
-      M_OBJS += softoss2.o
-   endif
-endif
+# Take multi-part drivers out of obj-y and put components in.
 
-ifeq ($(CONFIG_OPL3SA1),y)
-L_OBJS += opl3sa.o
-LX_OBJS += ad1848.o
-else
-  ifeq ($(CONFIG_OPL3SA1),m)
-  M_OBJS += opl3sa.o
-  MX_OBJS += ad1848.o
-  endif
-endif
+obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
 
-ifeq ($(CONFIG_VMIDI),y)
-L_OBJS += v_midi.o
-else
-   ifeq ($(CONFIG_VMIDI),m)
-      M_OBJS += v_midi.o
-   endif
-endif
 
-ifeq ($(CONFIG_VIDC_SOUND),y)
-  L_OBJS += vidc.o vidc_audio.o vidc_mixer.o vidc_synth.o vidc_fill.o
+
+# Translate to Rules.make lists.
+
+L_TARGET	:= sound.a
+MOD_LIST_NAME	:= SOUND_MODULES
+
+L_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-y)))
+LX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-y)))
+M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
+MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
+MI_OBJS		:= $(sort $(filter-out $(export-objs), $(int-m)))
+MIX_OBJS	:= $(sort $(filter     $(export-objs), $(int-m)))
+
+ifeq ($(CONFIG_LOWLEVEL_SOUND),y)
+    L_OBJS	+= lowlevel/lowlevel.o
 endif
 
 include $(TOPDIR)/Rules.make
 
-softoss2.o:	softoss.o softoss_rs.o
-	$(LD) -r -o softoss2.o softoss.o softoss_rs.o
 
-pas2.o:       pas2_card.o pas2_midi.o pas2_mixer.o pas2_pcm.o
-	$(LD) -r -o pas2.o pas2_card.o pas2_midi.o pas2_mixer.o pas2_pcm.o
 
-sb.o: sb_audio.o sb_card.o sb_common.o sb_midi.o sb_mixer.o
-	$(LD) -r -o sb.o sb_audio.o sb_card.o sb_common.o sb_midi.o sb_mixer.o
+# Link rules for multi-part drivers.
 
-lowlevel/lowlevel.o:
-	cd lowlevel; make
+sound.o: $(sound-objs)
+	$(LD) -r -o $@ $(sound-objs)
 
-sound.o: soundcard.o dev_table.o audio.o dmabuf.o sequencer.o sys_timer.o sound_timer.o lowlevel/lowlevel.o midi_synth.o midibuf.o sound_firmware.o sound_syms.o
-	$(LD) -r -o sound.o soundcard.o dev_table.o audio.o dmabuf.o \
-	       sequencer.o sys_timer.o sound_timer.o lowlevel/lowlevel.o \
-	       midi_synth.o midibuf.o sound_firmware.o sound_syms.o
+gus.o: $(gus-objs)
+	$(LD) -r -o $@ $(gus-objs)
 
-gus.o: gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o
-	$(LD) -r -o gus.o gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o
+pas2.o: $(pas2-objs)
+	$(LD) -r -o $@ $(pas2-objs)
+
+sb.o: $(sb-objs)
+	$(LD) -r -o $@ $(sb-objs)
+
+softoss2.o: $(softoss2-objs)
+	$(LD) -r -o $@ $(softoss2-objs)
+
+vidc_mod.o: $(vidc_mod-objs)
+	$(LD) -r -o $@ $(vidc_mod-objs)
+
+
 
 # Firmware files that need translation
 #
 # The translated files are protected by a file that keeps track
 # of what name was used to build them.  If the name changes, they
 # will be forced to be remade.
+#
+# First make the utilities.
 
 bin2hex: bin2hex.c
 	$(HOSTCC) -o bin2hex bin2hex.c
@@ -265,53 +179,74 @@ bin2hex: bin2hex.c
 hex2hex: hex2hex.c
 	$(HOSTCC) -o hex2hex hex2hex.c
 
-ifeq ($(CONFIG_MAUI_HAVE_BOOT),y)
 
-CONFIG_MAUI_BOOT_FILE := $(patsubst "%", %, $(CONFIG_MAUI_BOOT_FILE))
+
+
+# Turtle Beach Maui / Tropez
 
 maui.o: maui_boot.h
 
-maui_boot.h: $(CONFIG_MAUI_BOOT_FILE) bin2hex
-	bin2hex -i maui_os < "$(CONFIG_MAUI_BOOT_FILE)" > $@
+ifeq ($(CONFIG_MAUI_HAVE_BOOT),y)
+    maui_boot.h: $(patsubst "%", %, $(CONFIG_MAUI_BOOT_FILE)) bin2hex
+	bin2hex -i maui_os < $(CONFIG_MAUI_BOOT_FILE) > $@
+else
+    maui_boot.h:
+	(							\
+	    echo 'static unsigned char * maui_os = NULL;';	\
+	    echo 'static int maui_osLen = 0;';			\
+	) > $@
+endif
 	@ ( \
-	    echo 'ifeq ($(strip $(CONFIG_MAUI_BOOT_FILE)),$$(strip $$(CONFIG_MAUI_BOOT_FILE)))'; \
+	    echo 'ifeq ($(strip $(CONFIG_MAUI_HAVE_BOOT) $(CONFIG_MAUI_BOOT_FILE)),$$(strip $$(CONFIG_MAUI_HAVE_BOOT) $$(CONFIG_MAUI_BOOT_FILE)))'; \
 	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
 	    echo 'endif' \
 	) > .$@.boot
 
-endif
 
-ifeq ($(CONFIG_PSS_HAVE_BOOT),y)
 
-CONFIG_PSS_BOOT_FILE := $(patsubst "%", %, $(CONFIG_PSS_BOOT_FILE))
+# PSS (ECHO-ADI2111)
 
 pss.o: pss_boot.h
 
-pss_boot.h: $(CONFIG_PSS_BOOT_FILE) bin2hex
-	bin2hex pss_synth < "$(CONFIG_PSS_BOOT_FILE)" > $@
+ifeq ($(CONFIG_PSS_HAVE_BOOT),y)
+    pss_boot.h: $(patsubst "%", %, $(CONFIG_PSS_BOOT_FILE)) bin2hex
+	bin2hex pss_synth < $(CONFIG_PSS_BOOT_FILE) > $@
+else
+    pss_boot.h:
+	(							\
+	    echo 'static unsigned char * pss_synth = NULL;';	\
+	    echo 'static int pss_synthLen = 0;';		\
+	) > $@
+endif
 	@ ( \
-	    echo 'ifeq ($(strip $(CONFIG_PSS_BOOT_FILE)),$$(strip $$(CONFIG_PSS_BOOT_FILE)))'; \
+	    echo 'ifeq ($(strip $(CONFIG_PSS_HAVE_BOOT) $(CONFIG_PSS_BOOT_FILE)),$$(strip $$(CONFIG_PSS_HAVE_BOOT) $$(CONFIG_PSS_BOOT_FILE)))'; \
 	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
 	    echo 'endif' \
 	) > .$@.boot
 
-endif
 
-ifeq ($(CONFIG_TRIX_HAVE_BOOT),y)
 
-CONFIG_TRIX_BOOT_FILE := $(patsubst "%", %, $(CONFIG_TRIX_BOOT_FILE))
+# MediaTrix AudioTrix Pro
 
 trix.o: trix_boot.h
 
-trix_boot.h: $(CONFIG_TRIX_BOOT_FILE) hex2hex
-	hex2hex -i trix_boot < "$(CONFIG_TRIX_BOOT_FILE)" > $@
+ifeq ($(CONFIG_TRIX_HAVE_BOOT),y)
+    trix_boot.h: $(patsubst "%", %, $(CONFIG_TRIX_BOOT_FILE)) hex2hex
+	hex2hex -i trix_boot < $(CONFIG_TRIX_BOOT_FILE) > $@
+else
+    trix_boot.h:
+	(							\
+	    echo 'static unsigned char * trix_boot = NULL;';	\
+	    echo 'static int trix_boot_len = 0;';		\
+	) > $@
+endif
 	@ ( \
-	    echo 'ifeq ($(strip $(CONFIG_TRIX_BOOT_FILE)),$$(strip $$(CONFIG_TRIX_BOOT_FILE)))'; \
+	    echo 'ifeq ($(strip $(CONFIG_TRIX_HAVE_BOOT) $(CONFIG_TRIX_BOOT_FILE)),$$(strip $$(CONFIG_TRIX_HAVE_BOOT) $$(CONFIG_TRIX_BOOT_FILE)))'; \
 	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
 	    echo 'endif' \
 	) > .$@.boot
 
-endif
+
 
 # Find boot files whose source file names have changed and force rebuild.
 
@@ -328,5 +263,4 @@ FILES_BOOT_CHANGED := $(strip \
 
 ifneq ($(FILES_BOOT_CHANGED),)
 $(FILES_BOOT_CHANGED): dummy
-endif
 endif

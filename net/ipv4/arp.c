@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.65 1998/03/08 20:52:34 davem Exp $
+ * Version:	$Id: arp.c,v 1.66 1998/05/08 01:54:55 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -135,8 +135,8 @@ static struct neigh_ops arp_generic_ops =
 	arp_error_report,
 	neigh_resolve_output,
 	neigh_connected_output,
-	ip_acct_output,
-	ip_acct_output
+	dev_queue_xmit,
+	dev_queue_xmit
 };
 
 static struct neigh_ops arp_hh_ops =
@@ -147,8 +147,8 @@ static struct neigh_ops arp_hh_ops =
 	arp_error_report,
 	neigh_resolve_output,
 	neigh_resolve_output,
-	ip_acct_output,
-	ip_acct_output
+	dev_queue_xmit,
+	dev_queue_xmit
 };
 
 static struct neigh_ops arp_direct_ops =
@@ -157,10 +157,10 @@ static struct neigh_ops arp_direct_ops =
 	NULL,
 	NULL,
 	NULL,
-	ip_acct_output,
-	ip_acct_output,
-	ip_acct_output,
-	ip_acct_output
+	dev_queue_xmit,
+	dev_queue_xmit,
+	dev_queue_xmit,
+	dev_queue_xmit
 };
 
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25) || \
@@ -173,8 +173,8 @@ struct neigh_ops arp_broken_ops =
 	arp_error_report,
 	neigh_compat_output,
 	neigh_compat_output,
-	ip_acct_output,
-	ip_acct_output,
+	dev_queue_xmit,
+	dev_queue_xmit,
 };
 #endif
 

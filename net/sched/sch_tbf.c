@@ -48,12 +48,12 @@
 	Description.
 	------------
 
-	Data flow obeys TBF with rate R and depth B, if for any
-	time interval t_i...t_f number of transmitted bits
+	A data flow obeys TBF with rate R and depth B, if for any
+	time interval t_i...t_f the number of transmitted bits
 	does not exceed B + R*(t_f-t_i).
 
 	Packetized version of this definition:
-	sequence of packets of sizes s_i served at moments t_i
+	The sequence of packets of sizes s_i served at moments t_i
 	obeys TBF, if for any i<=k:
 
 	s_i+....+s_k <= B + R*(t_k - t_i)
@@ -61,7 +61,7 @@
 	Algorithm.
 	----------
 	
-	Let N(t_i) be B/R initially and N(t) grows continuously with time as:
+	Let N(t_i) be B/R initially and N(t) grow continuously with time as:
 
 	N(t+delta) = min{B/R, N(t) + delta}
 
@@ -73,13 +73,13 @@
 
 
 
-	Actually, QoS requires two TBF to be applied to data stream.
+	Actually, QoS requires two TBF to be applied to a data stream.
 	One of them controls steady state burst size, another
-	with rate P (peak rate) and depth M (equal to link MTU)
-	limits bursts at smaller time scale.
+	one with rate P (peak rate) and depth M (equal to link MTU)
+	limits bursts at a smaller time scale.
 
-	Apparently, P>R, and B>M. If P is infinity, this double
-	TBF is equivalent to single one.
+	It is easy to see that P>R, and B>M. If P is infinity, this double
+	TBF is equivalent to a single one.
 
 	When TBF works in reshaping mode, latency is estimated as:
 
@@ -89,22 +89,22 @@
 	NOTES.
 	------
 
-	If TBF throttles, it starts watchdog timer, which will wake up it
-	when it will be ready to transmit.
-	Note, that minimal timer resolution is 1/HZ.
-	If no new packets will arrive during this period,
-	or device will not be awaken by EOI for previous packet,
-	tbf could stop its activity for 1/HZ.
+	If TBF throttles, it starts a watchdog timer, which will wake it up
+	when it is ready to transmit.
+	Note that the minimal timer resolution is 1/HZ.
+	If no new packets arrive during this period,
+	or if the device is not awaken by EOI for some previous packet,
+	TBF can stop its activity for 1/HZ.
 
 
-	It means, that with depth B, the maximal rate is
+	This means, that with depth B, the maximal rate is
 
 	R_crit = B*HZ
 
-	F.e. for 10Mbit ethernet and HZ=100 minimal allowed B is ~10Kbytes.
+	F.e. for 10Mbit ethernet and HZ=100 the minimal allowed B is ~10Kbytes.
 
-	Note, that peak rate TBF is much more tough: with MTU 1500
-	P_crit = 150Kbytes/sec. So that, if you need greater peak
+	Note that the peak rate TBF is much more tough: with MTU 1500
+	P_crit = 150Kbytes/sec. So, if you need greater peak
 	rates, use alpha with HZ=1000 :-)
 */
 
@@ -139,7 +139,7 @@ tbf_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 		return 1;
 	}
 
-	/* Drop action: undo the things that we just made,
+	/* Drop action: undo the things that we just did,
 	 * i.e. make tail drop
 	 */
 
@@ -230,14 +230,14 @@ tbf_dequeue(struct Qdisc* sch)
 			add_timer(&q->wd_timer);
 		}
 
-		/* Maybe, we have in queue a shorter packet,
+		/* Maybe we have a shorter packet in the queue,
 		   which can be sent now. It sounds cool,
-		   but, however, wrong in principle.
-		   We MUST NOT reorder packets in these curcumstances.
+		   but, however, this is wrong in principle.
+		   We MUST NOT reorder packets under these circumstances.
 
-		   Really, if we splitted flow to independent
-		   subflows, it would be very good solution.
-		   It is main idea of all FQ algorithms
+		   Really, if we split the flow into independent
+		   subflows, it would be a very good solution.
+		   This is the main idea of all FQ algorithms
 		   (cf. CSZ, HPFQ, HFCS)
 		 */
 		__skb_queue_head(&sch->q, skb);

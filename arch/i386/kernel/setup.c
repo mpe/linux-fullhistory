@@ -238,6 +238,9 @@ __initfunc(static int cyrix_model(struct cpuinfo_x86 *c))
 	int nr = c->x86_model;
 	char *buf = c->x86_model_id;
 
+	/* Cyrix claims they have a TSC, but it is broken */
+	c->x86_capability &= ~16;
+
 	/* Note that some of the possibilities this decoding allows
 	 * have never actually been manufactured - but those that
 	 * do actually exist are correctly decoded.

@@ -525,10 +525,6 @@ __initfunc(void time_init(void))
 	xtime.tv_usec = 0;
 
 	/* If we have the CPU hardware time counters, use them */
-#ifndef CONFIG_APM
-				/* Don't use them if a suspend/resume could
-                                   corrupt the timer value.  This problem
-                                   needs more debugging. */
 	if (boot_cpu_data.x86_capability & 16) {
 		do_gettimeoffset = do_fast_gettimeoffset;
 		do_get_fast_time = do_x86_get_fast_time;
@@ -551,6 +547,5 @@ __initfunc(void time_init(void))
 			 "=d" (init_timer_cc.high));
 		irq0.handler = pentium_timer_interrupt;
 	}
-#endif
 	setup_x86_irq(0, &irq0);
 }

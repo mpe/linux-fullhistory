@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.32 1998/03/08 05:56:26 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.35 1998/05/08 21:06:28 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -38,6 +38,8 @@
 #include <net/route.h>
 
 #include <asm/uaccess.h>
+
+#define MAX(a,b) ((a)>(b)?(a):(b))
 
 #define IP_CMSG_PKTINFO		1
 #define IP_CMSG_TTL		2
@@ -227,8 +229,8 @@ int ip_ra_control(struct sock *sk, unsigned char on, void (*destructor)(struct s
 int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen)
 {
 	int val=0,err;
-#if defined(CONFIG_IP_FIREWALL) || defined(CONFIG_IP_ACCT)
-	struct ip_fw tmp_fw;
+#if defined(CONFIG_IP_FIREWALL)
+	char tmp_fw[MAX(sizeof(struct ip_fwtest),sizeof(struct ip_fwnew))];
 #endif
 #ifdef CONFIG_IP_MASQUERADE
 	char masq_ctl[IP_FW_MASQCTL_MAX];
@@ -387,7 +389,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			}
 
 			if (!mreq.imr_ifindex) {
-				if (!mreq.imr_address.s_addr == INADDR_ANY) {
+				if (mreq.imr_address.s_addr == INADDR_ANY) {
 					sk->ip_mc_index = 0;
 					sk->ip_mc_addr  = 0;
 					return 0;
@@ -432,28 +434,18 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			return ip_ra_control(sk, val ? 1 : 0, NULL);
 		
 #ifdef CONFIG_IP_FIREWALL
-		case IP_FW_INSERT_IN:
-		case IP_FW_INSERT_OUT:
-		case IP_FW_INSERT_FWD:
-		case IP_FW_APPEND_IN:
-		case IP_FW_APPEND_OUT:
-		case IP_FW_APPEND_FWD:
-		case IP_FW_DELETE_IN:
-		case IP_FW_DELETE_OUT:
-		case IP_FW_DELETE_FWD:
-		case IP_FW_CHECK_IN:
-		case IP_FW_CHECK_OUT:
-		case IP_FW_CHECK_FWD:
-		case IP_FW_FLUSH_IN:
-		case IP_FW_FLUSH_OUT:
-		case IP_FW_FLUSH_FWD:
-		case IP_FW_ZERO_IN:
-		case IP_FW_ZERO_OUT:
-		case IP_FW_ZERO_FWD:
-		case IP_FW_POLICY_IN:
-		case IP_FW_POLICY_OUT:
-		case IP_FW_POLICY_FWD:
 		case IP_FW_MASQ_TIMEOUTS:
+		case IP_FW_APPEND:
+		case IP_FW_REPLACE:
+		case IP_FW_DELETE:
+		case IP_FW_DELETE_NUM:
+		case IP_FW_INSERT:
+		case IP_FW_FLUSH:
+		case IP_FW_ZERO:
+		case IP_FW_CHECK:
+		case IP_FW_CREATECHAIN:
+		case IP_FW_DELETECHAIN:
+		case IP_FW_POLICY:
 			if(!capable(CAP_NET_ADMIN))
 				return -EACCES;
 			if(optlen>sizeof(tmp_fw) || optlen<1)
@@ -462,8 +454,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				return -EFAULT;
 			err=ip_fw_ctl(optname, &tmp_fw,optlen);
 			return -err;	/* -0 is 0 after all */
-			
-#endif
+#endif /* CONFIG_IP_FIREWALL */
 #ifdef CONFIG_IP_MASQUERADE
 		case IP_FW_MASQ_ADD:
 		case IP_FW_MASQ_DEL:
@@ -477,21 +468,6 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			err=ip_masq_ctl(optname, masq_ctl,optlen);
 			return -err;	/* -0 is 0 after all */
 			
-#endif
-#ifdef CONFIG_IP_ACCT
-		case IP_ACCT_INSERT:
-		case IP_ACCT_APPEND:
-		case IP_ACCT_DELETE:
-		case IP_ACCT_FLUSH:
-		case IP_ACCT_ZERO:
-			if(!capable(CAP_NET_ADMIN))
-				return -EACCES;
-			if(optlen>sizeof(tmp_fw) || optlen<1)
-				return -EINVAL;
-			if(copy_from_user(&tmp_fw, optval,optlen))
-				return -EFAULT; 
-			err=ip_acct_ctl(optname, &tmp_fw,optlen);
-			return -err;	/* -0 is 0 after all */
 #endif
 		default:
 			return(-ENOPROTOOPT);

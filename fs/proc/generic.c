@@ -154,14 +154,19 @@ proc_file_read(struct file * file, char * buf, size_t nbytes, loff_t *ppos)
 			break;
 		}
 		
-		n -= copy_to_user(buf, start, n);	/* BUG ??? */
+		/* This is a hack to allow mangling of file pos independent
+ 		 * of actual bytes read.  Simply place the data at page,
+ 		 * return the bytes, and set `start' to the desired offset
+ 		 * as an unsigned int. - Paul.Russell@rustcorp.com.au
+		 */
+ 		n -= copy_to_user(buf, start < page ? page : start, n);
 		if (n == 0) {
 			if (retval == 0)
 				retval = -EFAULT;
 			break;
 		}
-		
-		*ppos += n;	/* Move down the file */
+
+		*ppos += start < page ? (long)start : n; /* Move down the file */
 		nbytes -= n;
 		buf += n;
 		retval += n;

@@ -16,7 +16,7 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#if defined(CONFIG_YM3812) || defined(MODULE)
+#ifdef CONFIG_YM3812
 
 void attach_adlib_card(struct address_info *hw_config)
 {

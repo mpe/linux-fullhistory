@@ -880,6 +880,7 @@ void get_sectorsize(int i){
     unsigned char *buffer;
     int the_result, retries;
     Scsi_Cmnd * SCpnt;
+    unsigned long flags;
 
     buffer = (unsigned char *) scsi_malloc(512);
     SCpnt = scsi_allocate_device(NULL, scsi_CDs[i].device, 1);
@@ -898,10 +899,12 @@ void get_sectorsize(int i){
 	{
 	    struct semaphore sem = MUTEX_LOCKED;
 	    SCpnt->request.sem = &sem;
+	    spin_lock_irqsave(&io_request_lock, flags);
 	    scsi_do_cmd (SCpnt,
 			 (void *) cmd, (void *) buffer,
 			 512, sr_init_done,  SR_TIMEOUT,
 			 MAX_RETRIES);
+	    spin_unlock_irqrestore(&io_request_lock, flags);
 	    down(&sem);
 	}
 

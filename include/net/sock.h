@@ -126,12 +126,6 @@ struct ipx_opt {
 	unsigned char           node[IPX_NODE_LEN];
 #endif
 	unsigned short		type;
-/* 
- * To handle asynchronous messages from the NetWare server, we have to
- * know the connection this socket belongs to. 
- */
-	struct ncp_server       *ncp_server;
-	
 };
 #endif
 

@@ -528,8 +528,18 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	 */
 	p->tss.bitmap = sizeof(struct thread_struct);
 
+/*
+ * This tried to copy the FPU state, but I wonder whether we really
+ * want this at all. It is probably nicer to just have a newly started
+ * process start with a clean slate wrt the fpu.  - Linus
+ */
+#if 1
+	current->used_math = 0;
+	current->flags &= ~PF_USEDFPU;
+#else
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0 ; frstor %0":"=m" (p->tss.i387));
+#endif
 
 	return 0;
 }

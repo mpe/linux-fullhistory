@@ -43,17 +43,17 @@
 	for Congestion Avoidance", 1993, IEEE/ACM Transactions on Networking.
 
 	This file codes a "divisionless" version of RED algorithm
-	written down in Fig.17 of the paper.
+	as written down in Fig.17 of the paper.
 
 Short description.
 ------------------
 
-	When new packet arrives we calculate average queue length:
+	When a new packet arrives we calculate the average queue length:
 
 	avg = (1-W)*avg + W*current_queue_len,
 
-	W is filter time constant (choosen as 2^(-Wlog)), controlling
-	inertia of algorithm. To allow larger bursts, W should be
+	W is the filter time constant (choosen as 2^(-Wlog)), it controls
+	the inertia of the algorithm. To allow larger bursts, W should be
 	decreased.
 
 	if (avg > th_max) -> packet marked (dropped).
@@ -67,7 +67,7 @@ Short description.
 	max_P should be small (not 1), usually 0.01..0.02 is good value.
 
 	max_P is chosen as a number, so that max_P/(th_max-th_min)
-	is negative power of two in order arithmetics to contain
+	is a negative power of two in order arithmetics to contain
 	only shifts.
 
 
@@ -78,9 +78,9 @@ Short description.
 
 	Hard limit on queue length, should be chosen >qth_max
 	to allow packet bursts. This parameter does not
-	affect algorithm behaviour and can be chosen
+	affect the algorithms behaviour and can be chosen
 	arbitrarily high (well, less than ram size)
-	Really, this limit will never be achieved
+	Really, this limit will never be reached
 	if RED works correctly.
 
 	qth_min		- bytes (should be < qth_max/2)
@@ -162,18 +162,18 @@ red_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 
 /*
    The problem: ideally, average length queue recalcultion should
-   be done over constant clock intervals. It is too expensive, so that
-   calculation is driven by outgoing packets.
-   When queue is idle we have to model this clock by hands.
+   be done over constant clock intervals. This is too expensive, so that
+   the calculation is driven by outgoing packets.
+   When the queue is idle we have to model this clock by hand.
 
    SF+VJ proposed to "generate" m = idletime/(average_pkt_size/bandwidth)
-   dummy packets as burst after idle time, i.e.
+   dummy packets as a burst after idle time, i.e.
 
           q->qave *= (1-W)^m
 
-   It is apparently overcomplicated solution (f.e. we have to precompute
-   a table to make this calculation for reasonable time)
-   I believe, that a simpler model may be used here,
+   This is an apparently overcomplicated solution (f.e. we have to precompute
+   a table to make this calculation in reasonable time)
+   I believe that a simpler model may be used here,
    but it is field for experiments.
 */
 		q->qave >>= q->Stab[(us_idle>>q->Scell_log)&0xFF];

@@ -29,7 +29,7 @@
 #include "soundmodule.h"
 #include "sound_firmware.h"
 
-#if defined(CONFIG_MAUI) || defined(MODULE)
+#ifdef CONFIG_MAUI
 
 static int      maui_base = 0x330;
 
@@ -50,7 +50,7 @@ static int     *maui_osp;
 static int      (*orig_load_patch) (int dev, int format, const char *addr,
 			      int offs, int count, int pmgr_flag) = NULL;
 
-#ifdef CONFIG_MAUI_HAVE_BOOT
+#ifdef HAVE_MAUI_BOOT
 #include "maui_boot.h"
 #else
 static unsigned char *maui_os = NULL;

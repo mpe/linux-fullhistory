@@ -38,8 +38,8 @@
    How to setup it.
    ----------------
 
-   After loading this module you will find new device teqlN
-   and new qdisc with the same name. To join a slave to equalizer
+   After loading this module you will find a new device teqlN
+   and new qdisc with the same name. To join a slave to the equalizer
    you should just set this qdisc on a device f.e.
 
    # tc qdisc add dev eth0 root teql0
@@ -50,20 +50,19 @@
    Applicability.
    --------------
 
-   1. Slave devices MUST be active devices i.e. must raise tbusy
-      signal and generate EOI event. If you want to equalize virtual devices
-      sort of tunnels, use normal eql device.
+   1. Slave devices MUST be active devices, i.e., they must raise the tbusy
+      signal and generate EOI events. If you want to equalize virtual devices
+      like tunnels, use a normal eql device.
    2. This device puts no limitations on physical slave characteristics
       f.e. it will equalize 9600baud line and 100Mb ethernet perfectly :-)
-      Certainly, large difference in link speeds will make resulting eqalized
-      link unusable, because of huge packet reordering. I estimated upper
-      useful difference as ~10 times.
-   3. If slave requires address resolution, only protocols using
-      neighbour cache (IPv4/IPv6) will work over equalized link.
-      Another protocols still are allowed to use slave device directly,
+      Certainly, large difference in link speeds will make the resulting
+      eqalized link unusable, because of huge packet reordering.
+      I estimate an upper useful difference as ~10 times.
+   3. If the slave requires address resolution, only protocols using
+      neighbour cache (IPv4/IPv6) will work over the equalized link.
+      Other protocols are still allowed to use the slave device directly,
       which will not break load balancing, though native slave
-      traffic will have the highest priority.
- */
+      traffic will have the highest priority.  */
 
 struct teql_master
 {
@@ -166,8 +165,10 @@ teql_destroy(struct Qdisc* sch)
 				NEXT_SLAVE(prev) = NEXT_SLAVE(q);
 				if (q == master->slaves) {
 					master->slaves = NEXT_SLAVE(q);
-					if (q == master->slaves)
+					if (q == master->slaves) {
 						master->slaves = NULL;
+						qdisc_reset(master->dev.qdisc);
+					}
 				}
 				skb_queue_purge(&dat->q);
 				teql_neigh_release(xchg(&dat->ncache, NULL));
@@ -270,6 +271,7 @@ static int teql_master_xmit(struct sk_buff *skb, struct device *dev)
 	struct Qdisc *start, *q;
 	int busy;
 	int nores;
+	int len = skb->len;
 	struct sk_buff *skb_res = NULL;
 
 	dev->tbusy = 1;
@@ -299,16 +301,18 @@ restart:
 				if (slave->hard_start_xmit(skb, slave) == 0) {
 					master->slaves = NEXT_SLAVE(q);
 					dev->tbusy = 0;
+					master->stats.tx_packets++;
+					master->stats.tx_bytes += len;
 					return 0;
 				}
 				break;
 			case 1:
-				nores = 1;
-				break;
-			default:
 				master->slaves = NEXT_SLAVE(q);
 				dev->tbusy = 0;
 				return 0;
+			default:
+				nores = 1;
+				break;
 			}
 			__skb_pull(skb, skb->nh.raw - skb->data);
 		}
@@ -322,8 +326,10 @@ restart:
 	dev->tbusy = busy;
 	if (busy)
 		return 1;
+	master->stats.tx_errors++;
 
 drop:
+	master->stats.tx_dropped++;
 	dev_kfree_skb(skb);
 	return 0;
 }
@@ -366,6 +372,7 @@ static int teql_master_open(struct device *dev)
 
 	m->dev.mtu = mtu;
 	m->dev.flags = (m->dev.flags&~FMASK) | flags;
+	m->dev.tbusy = 0;
 	MOD_INC_USE_COUNT;
 	return 0;
 }

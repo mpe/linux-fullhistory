@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.28 1998/04/28 06:22:04 davem Exp $
+ *	$Id: route.c,v 1.30 1998/05/08 21:06:33 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -2173,5 +2173,6 @@ void ip6_route_cleanup(void)
 	netlink_detach(NETLINK_ROUTE6);
 #endif
 	rt6_ifdown(NULL);
+	fib6_gc_cleanup();
 }
 #endif	/* MODULE */

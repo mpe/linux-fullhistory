@@ -1,8 +1,10 @@
-/proc/sys/net/ipv4/* variables:
+/proc/sys/net/ipv4/* Variables:
 
-ip_forwarding - "SNMP" BOOLEAN
-	2 - disabled (default)
-	1 - enabled
+ip_forward - BOOLEAN
+	0 - disabled (default)
+	not 0 - enabled 
+
+	Forward Packets between interfaces.
 
 	This variable is special, its change resets all configuration
 	parameters to their default state (RFC1122 for hosts, RFC1812
@@ -11,31 +13,10 @@ ip_forwarding - "SNMP" BOOLEAN
 ip_default_ttl - INTEGER
 	default 64
 
-ip_log_martians - BOOLEAN
-	log packets with strange or impossible addresses.
-	default TRUE (router)
-		FALSE (host)
-
-ip_accept_redirects - BOOLEAN
-	Accept ICMP redirect messages.
-	default TRUE (host)
-		FALSE (router)
-
-ip_secure_redirects - BOOLEAN
-	Accept ICMP redirect messages only for gateways,
-	listed in default gateway list.
-	default TRUE
-
 ip_addrmask_agent - BOOLEAN
 	Reply to ICMP ADDRESS MASK requests.
 	default TRUE (router)
 		FALSE (host)
-
-ip_rfc1620_redirects - BOOLEAN
-	Send(router) or accept(host) RFC1620 shared media redirects.
-	Overrides ip_secure_redirects.
-	default TRUE (should be FALSE for distributed version,
-		      but I use it...)
 
 ip_bootp_agent - BOOLEAN
 	Accept packets with source address of sort 0.b.c.d
@@ -44,45 +25,9 @@ ip_bootp_agent - BOOLEAN
 
 	default FALSE
 
-ip_bootp_relay - BOOLEAN
-	Accept packets with source address 0.b.c.d destined
-	not to this host as local ones. It is supposed, that
-	BOOTP relay deamon will catch and forward such packets.
-
-	default FALSE
-	Not Implemented Yet.
-
-
-ip_source_route - BOOLEAN
-	Accept packets with SRR option.
-	default TRUE (router)
-		FALSE (host)
-
-
 ip_no_pmtu_disc - BOOLEAN
 	Disable Path MTU Discovery.
 	default FALSE
-
-ip_rfc1812_filter - INTEGER
-	2 - do source validation by reversed path, as specified in RFC1812
-	    Recommended option for single homed hosts and stub network
-	    routers. Could cause troubles for complicated (not loop free)
-	    networks running a slow unreliable protocol (sort of RIP),
-	    or using static routes.
-
-	1 - (DEFAULT) Weaker form of RP filtering: drop all the packets
-	    that look as sourced at a directly connected interface, but
-	    were input from another interface.
-	    
-	0 - No source validation. 
-
-	NOTE: do not disable this option! All BSD derived routing software
-	(sort of gated, routed etc. etc.) is confused by such packets,
-	even if they are valid.
-
-	NOTE: this option is turned on per default only when ip_forwarding
-	is on. For non-forwarding hosts it doesn't make much sense and 
-	makes some legal multihoming configurations impossible.
 
 ip_fib_model - INTEGER
 	0 - (DEFAULT) Standard model. All routes are in class MAIN.
@@ -125,6 +70,7 @@ tcp_retries2 - INTEGER
 tcp_max_delay_acks - INTEGER
 tcp_fin_timeout - INTEGER
 tcp_max_ka_probes - INTEGER
+tcp_hoe_retransmits - INTEGER
 	Undocumented for now.
 
 tcp_syncookies - BOOLEAN
@@ -143,6 +89,20 @@ tcp_syn_taildrop  - BOOLEAN
 tcp_max_syn_backlog - INTEGER
 	Undocumented (work in progress)
 
+tcp_window_scaling - BOOLEAN
+	Enable window scaling as defined in RFC1323.
+
+tcp_timestamps - BOOLEAN
+	Enable timestamps as defined in RFC1323.
+
+tcp_sack - BOOLEAN
+	Enable select acknowledgements.
+
+tcp_retrans_collapse - BOOLEAN
+	Bug-to-bug compatibility with some broken printers.
+	On retransmit try to send bigger packets to work around bugs in
+	certain TCP stacks.
+
 ip_local_port_range - 2 INTEGERS
 	Defines the local port range that is used by TCP and UDP to
 	choose the local port. The first number is the first, the 
@@ -155,10 +115,94 @@ icmp_echo_ignore_broadcasts - BOOLEAN
 	ICMP ECHO requests sent to it or just those to broadcast/multicast
 	addresses, respectively.
 
+icmp_destunreach_rate - INTEGER
+icmp_paramprob_rate - INTEGER
+icmp_timeexceed_rate - INTEGER
+icmp_echoreply_rate - INTEGER (not enabled per default)
+	Limit the maximal rates for sending ICMP packets to specifc targets.
+	0 to disable any limiting, otherwise the maximal rate in jiffies(1)
+	See the source for more information.
+
+
+(1) Jiffie: internal timeunit for the kernel. On the i386 1/100s, on the
+Alpha 1/1024s. See the HZ define in /usr/include/asm/param.h for the exact
+value on your system. 
+
+conf/interface/*: 
+conf/all/* is special and changes the settings for all interfaces.
+	Change special settings per interface.
+
+log_martians - BOOLEAN
+	Log packets with impossible addresses to kernel log.
+
+accept_redirects - BOOLEAN
+	Accept ICMP redirect messages.
+	default TRUE (host)
+		FALSE (router)
+
+forwarding - BOOLEAN
+	Enable IP forwarding on this interface.
+
+mc_forwarding - BOOLEAN
+	Do multicast routing. The kernel needs to be compiled with CONFIG_MROUTE
+	and a multicast routing daemon is required.
+
+proxy_arp - BOOLEAN
+	Do proxy arp.
+
+shared_media - BOOLEAN
+	undocumented.
+
+secure_redirects - BOOLEAN
+	Accept ICMP redirect messages only for gateways,
+	listed in default gateway list.
+	default TRUE
+
+redirects - BOOLEAN
+	Send(router) or accept(host) RFC1620 shared media redirects.
+	Overrides ip_secure_redirects.
+	default TRUE (should be FALSE for distributed version,
+		      but I use it...)
+
+bootp_relay - BOOLEAN
+	Accept packets with source address 0.b.c.d destined
+	not to this host as local ones. It is supposed, that
+	BOOTP relay deamon will catch and forward such packets.
+
+	default FALSE
+	Not Implemented Yet.
+
+accept_source_route - BOOLEAN
+	Accept packets with SRR option.
+	default TRUE (router)
+		FALSE (host)
+
+rp_filter - INTEGER
+	2 - do source validation by reversed path, as specified in RFC1812
+	    Recommended option for single homed hosts and stub network
+	    routers. Could cause troubles for complicated (not loop free)
+	    networks running a slow unreliable protocol (sort of RIP),
+	    or using static routes.
+
+	1 - (DEFAULT) Weaker form of RP filtering: drop all the packets
+	    that look as sourced at a directly connected interface, but
+	    were input from another interface.
+	    
+	0 - No source validation. 
+
+	NOTE: do not disable this option! All BSD derived routing software
+	(sort of gated, routed etc. etc.) is confused by such packets,
+	even if they are valid. When enabled it also prevents ip spoofing
+	in some limited fashion.
+
+	NOTE: this option is turned on per default only when ip_forwarding
+	is on. For non-forwarding hosts it doesn't make much sense and 
+	makes some legal multihoming configurations impossible.
+
 Alexey Kuznetsov.
 kuznet@ms2.inr.ac.ru
 
 Updated by:
 Andi Kleen
 ak@muc.de
-$Id: ip-sysctl.txt,v 1.5 1997/10/17 03:58:23 tdyas Exp $
+$Id: ip-sysctl.txt,v 1.7 1998/05/02 12:05:00 davem Exp $

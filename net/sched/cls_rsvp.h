@@ -15,26 +15,26 @@
 
    * (dst, protocol) are always specified,
      so that we are able to hash them.
-   * src may be exact, and may be wildcard, so that
-     we can keep hash table plus one wildcard entry.
+   * src may be exact, or may be wildcard, so that
+     we can keep a hash table plus one wildcard entry.
    * source port (or flow label) is important only if src is given.
 
    IMPLEMENTATION.
 
-   We use two level hash table: top level is keyed by
-   destination address and protocol ID, every bucket contains list of
-   "rsvp sessions", identified by destination address, protocol
-   and DPI(="Destination Port ID"): triple (key, mask, offset).
+   We use a two level hash table: The top level is keyed by
+   destination address and protocol ID, every bucket contains a list
+   of "rsvp sessions", identified by destination address, protocol and
+   DPI(="Destination Port ID"): triple (key, mask, offset).
 
-   Every bucket has smaller hash table keyed by source address
+   Every bucket has a smaller hash table keyed by source address
    (cf. RSVP flowspec) and one wildcard entry for wildcard reservations.
-   Every bucket is again list of "RSVP flows", selected by
+   Every bucket is again a list of "RSVP flows", selected by
    source address and SPI(="Source Port ID" here rather than
    "security parameter index"): triple (key, mask, offset).
 
 
    NOTE 1. All the packets with IPv6 extension headers (but AH and ESP)
-   and all fragmented packets go to best-effort traffic class.
+   and all fragmented packets go to the best-effort traffic class.
 
 
    NOTE 2. Two "port id"'s seems to be redundant, rfc2207 requires
@@ -42,29 +42,28 @@
    ah, esp (and udp,tcp) both *pi should coincide or one of them
    should be wildcard.
 
-   From the first sight, this redundancy is just waste of CPU
-   resources. But, DPI and SPI add possibility to assign different
-   priorities to GPIs. Look also note 4 about tunnels below.
+   At first sight, this redundancy is just a waste of CPU
+   resources. But DPI and SPI add the possibility to assign different
+   priorities to GPIs. Look also at note 4 about tunnels below.
 
 
    NOTE 3. One complication is the case of tunneled packets.
-   We implement it as the following: if the first lookup
-   matches special session with "tunnelhdr" value not zero,
-   flowid contains not true flow ID, but tunnel ID (1...255).
+   We implement it as following: if the first lookup
+   matches a special session with "tunnelhdr" value not zero,
+   flowid doesn't contain the true flow ID, but the tunnel ID (1...255).
    In this case, we pull tunnelhdr bytes and restart lookup
-   with tunnel ID added to list of keys. Simple and stupid 8)8)
+   with tunnel ID added to the list of keys. Simple and stupid 8)8)
    It's enough for PIMREG and IPIP.
 
 
-   NOTE 4. Two GPIs make possible to parse even GRE packets.
+   NOTE 4. Two GPIs make it possible to parse even GRE packets.
    F.e. DPI can select ETH_P_IP (and necessary flags to make
    tunnelhdr correct) in GRE protocol field and SPI matches
    GRE key. Is it not nice? 8)8)
 
 
-   Well, as result, despite of simplicity, we get pretty
-   powerful clsssification engine.
- */
+   Well, as result, despite its simplicity, we get a pretty
+   powerful classification engine.  */
 
 #include <linux/config.h>
 
@@ -415,7 +414,7 @@ static int rsvp_change(struct tcf_proto *tp, u32 handle,
 	int err;
 
 	if (opt == NULL)
-		return -EINVAL;
+		return handle ? -EINVAL : 0;
 
 	if (rtattr_parse(tb, TCA_RSVP_MAX, RTA_DATA(opt), RTA_PAYLOAD(opt)) < 0)
 		return -EINVAL;

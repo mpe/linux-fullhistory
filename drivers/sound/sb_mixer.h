@@ -18,6 +18,7 @@
  * 
  */
 #include <linux/config.h>
+#include "legacy.h"
 
 #ifdef CONFIG_SBDSP
 

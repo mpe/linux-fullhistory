@@ -34,7 +34,7 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#if defined(CONFIG_CS4232) || defined (MODULE)
+#ifdef CONFIG_CS4232
 
 #define KEY_PORT	0x279	/* Same as LPT1 status port */
 #define CSN_NUM		0x99	/* Just a random number */
@@ -196,7 +196,6 @@ void attach_cs4232(struct address_info *hw_config)
 {
 	int base = hw_config->io_base, irq = hw_config->irq;
 	int dma1 = hw_config->dma, dma2 = hw_config->dma2;
-	int old_num_mixers = num_mixers;
 
 	if (dma2 == -1)
 		dma2 = dma1;
@@ -208,7 +207,8 @@ void attach_cs4232(struct address_info *hw_config)
 					  0,
 					  hw_config->osp);
 
-	if (num_mixers > old_num_mixers)
+	if (hw_config->slots[0] != -1 &&
+		audio_devs[hw_config->slots[0]]->mixer_dev!=-1)
 	{	
 		/* Assume the mixer map is as suggested in the CS4232 databook */
 		AD1848_REROUTE(SOUND_MIXER_LINE1, SOUND_MIXER_LINE);

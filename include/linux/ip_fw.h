@@ -1,184 +1,120 @@
 /*
- *	IP firewalling code. This is taken from 4.4BSD. Please note the 
- *	copyright message below. As per the GPL it must be maintained
- *	and the licenses thus do not conflict. While this port is subject
- *	to the GPL I also place my modifications under the original 
- *	license in recognition of the original copyright. 
+ * This code is heavily based on the code in ip_fw.h; see that file for
+ * copyrights and attributions.  This code is basically GPL.
  *
- *	Ported from BSD to Linux,
- *		Alan Cox 22/Nov/1994.
- *	Merged and included the FreeBSD-Current changes at Ugen's request
- *	(but hey it's a lot cleaner now). Ugen would prefer in some ways
- *	we waited for his final product but since Linux 1.2.0 is about to
- *	appear it's not practical - Read: It works, it's not clean but please
- *	don't consider it to be his standard of finished work.
- *		Alan.
- *
- * Fixes:
- *	Pauline Middelink	:	Added masquerading.
- *	Jos Vos			:	Separate input  and output firewall
- *					chains, new "insert" and "append"
- *					commands to replace "add" commands,
- *					add ICMP header to struct ip_fwpkt.
- *	Jos Vos			:	Add support for matching device names.
- *	Willy Konynenberg	:	Add transparent proxying support.
- *	Jos Vos			:	Add options for input/output accounting.
- *
- *	All the real work was done by .....
- */
-
-/*
- * Copyright (c) 1993 Daniel Boulet
- * Copyright (c) 1994 Ugen J.S.Antsilevich
- *
- * Redistribution and use in source forms, with and without modification,
- * are permitted provided that this entire comment appears intact.
- *
- * Redistribution in binary form may occur without any restrictions.
- * Obviously, it would be nice if you gave credit where credit is due
- * but requiring it would be too onerous.
- *
- * This software is provided ``AS IS'' without any warranties of any kind.
+ * 15-Feb-1997: Major changes to allow graphs for firewall rules.
+ *              Paul Russell <Paul.Russell@rustcorp.com.au> and
+ *		Michael Neuling <Michael.Neuling@rustcorp.com.au> 
+ * 2-Nov-1997: Changed types to __u16, etc.
+ *             Removed IP_FW_F_TCPACK & IP_FW_F_BIDIR.
+ *             Added inverse flags field.
+ *             Removed multiple port specs.
  */
 
 /*
  * 	Format of an IP firewall descriptor
  *
  * 	src, dst, src_mask, dst_mask are always stored in network byte order.
- * 	flags and num_*_ports are stored in host byte order (of course).
+ * 	flags are stored in host byte order (of course).
  * 	Port numbers are stored in HOST byte order.
  */
  
-#ifndef _IP_FW_H
-#define _IP_FW_H
+#ifndef _IP_FWCHAINS_H
+#define _IP_FWCHAINS_H
 
-#ifdef __KERNEL__
 #include <linux/icmp.h>
 #include <linux/in.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
-#endif
+#define IP_FW_MAX_LABEL_LENGTH 8
+typedef char ip_chainlabel[IP_FW_MAX_LABEL_LENGTH+1];
 
 struct ip_fw 
 {
-	struct ip_fw  *fw_next;			/* Next firewall on chain */
 	struct in_addr fw_src, fw_dst;		/* Source and destination IP addr */
 	struct in_addr fw_smsk, fw_dmsk;	/* Mask for src and dest IP addr */
-	struct in_addr fw_via;			/* IP address of interface "via" */
-	struct device *fw_viadev;		/* device of interface "via" */
-	__u16	fw_flg;				/* Flags word */
-	__u16 	fw_nsp, fw_ndp;			/* N'of src ports and # of dst ports */
-						/* in ports array (dst ports follow */
-    						/* src ports; max of 10 ports in all; */
-    						/* count of 0 means match all ports) */
-#define IP_FW_MAX_PORTS	10      		/* A reasonable maximum */
-	__u16	fw_pts[IP_FW_MAX_PORTS];	/* Array of port numbers to match */
-	unsigned long  fw_pcnt,fw_bcnt;		/* Packet and byte counters */
-	__u8	fw_tosand, fw_tosxor;		/* Revised packet priority */
+	__u32 fw_mark;                          /* ID to stamp on packet */
+	__u16 fw_proto;                         /* Protocol, 0 = ANY */
+	__u16 fw_flg;			        /* Flags word */
+        __u16 fw_invflg;                        /* Inverse flags */
+	__u16 fw_spts[2];                       /* Source port range. */
+        __u16 fw_dpts[2];                       /* Destination port range. */
+	__u16 fw_redirpt;                       /* Port to redirect to. */ 
+	__u16 fw_outputsize;                    /* Max amount to output to
+						   NETLINK */
 	char           fw_vianame[IFNAMSIZ];	/* name of interface "via" */
+	__u8           fw_tosand, fw_tosxor;	/* Revised packet priority */
 };
 
-/*
- *	Values for "flags" field .
- */
+struct ip_fwuser
+{
+	struct ip_fw ipfw;
+	ip_chainlabel label;
+};
 
-#define IP_FW_F_ALL	0x0000	/* This is a universal packet firewall*/
-#define IP_FW_F_TCP	0x0001	/* This is a TCP packet firewall      */
-#define IP_FW_F_UDP	0x0002	/* This is a UDP packet firewall      */
-#define IP_FW_F_ICMP	0x0003	/* This is a ICMP packet firewall     */
-#define IP_FW_F_KIND	0x0003	/* Mask to isolate firewall kind      */
-#define IP_FW_F_ACCEPT	0x0004	/* This is an accept firewall (as     *
-				 *         opposed to a deny firewall)*
-				 *                                    */
-#define IP_FW_F_SRNG	0x0008	/* The first two src ports are a min  *
-				 * and max range (stored in host byte *
-				 * order).                            *
-				 *                                    */
-#define IP_FW_F_DRNG	0x0010	/* The first two dst ports are a min  *
-				 * and max range (stored in host byte *
-				 * order).                            *
-				 * (ports[0] <= port <= ports[1])     *
-				 *                                    */
-#define IP_FW_F_PRN	0x0020	/* In verbose mode print this firewall*/
-#define IP_FW_F_BIDIR	0x0040	/* For bidirectional firewalls        */
-#define IP_FW_F_TCPSYN	0x0080	/* For tcp packets-check SYN only     */
-#define IP_FW_F_ICMPRPL 0x0100	/* Send back icmp unreachable packet  */
-#define IP_FW_F_MASQ	0x0200	/* Masquerading			      */
-#define IP_FW_F_TCPACK	0x0400	/* For tcp-packets match if ACK is set*/
-#define IP_FW_F_REDIR	0x0800	/* Redirect to local port fw_pts[n]   */
-#define IP_FW_F_ACCTIN  0x1000	/* Account incoming packets only.     */
-#define IP_FW_F_ACCTOUT 0x2000	/* Account outgoing packets only.     */
+/* Values for "fw_flg" field .  */
+#define IP_FW_F_PRN	0x0001	/* Print packet if it matches */
+#define IP_FW_F_TCPSYN	0x0002	/* For tcp packets-check SYN only */
+#define IP_FW_F_FRAG	0x0004  /* Set if rule is a fragment rule */
+#define IP_FW_F_MARKABS	0x0008  /* Set the mark to fw_mark, not add. */
+#define IP_FW_F_WILDIF	0x0010  /* Need only match start of interface name. */
+#define IP_FW_F_NETLINK 0x0020  /* Redirect to netlink: 2.1.x only */
+#define IP_FW_F_MASK	0x002F	/* All possible flag bits mask   */
 
-#define IP_FW_F_MASK	0x3FFF	/* All possible flag bits mask        */
+/* Values for "fw_invflg" field. */
+#define IP_FW_INV_SRCIP 0x0001  /* Invert the sense of fw_src. */
+#define IP_FW_INV_DSTIP 0x0002  /* Invert the sense of fw_dst. */
+#define IP_FW_INV_PROTO 0x0004  /* Invert the sense of fw_proto. */
+#define IP_FW_INV_SRCPT 0x0008  /* Invert the sense of source ports. */
+#define IP_FW_INV_DSTPT 0x0010  /* Invert the sense of destination ports. */
+#define IP_FW_INV_VIA   0x0020  /* Invert the sense of fw_vianame. */
+#define IP_FW_INV_SYN   0x0040  /* Invert the sense of IP_FW_F_TCPSYN. */
+#define IP_FW_INV_FRAG  0x0080  /* Invert the sense of IP_FW_F_FRAG. */
 
 /*    
  *	New IP firewall options for [gs]etsockopt at the RAW IP level.
  *	Unlike BSD Linux inherits IP options so you don't have to use
- *	a raw socket for this. Instead we check rights in the calls.
- */     
+ * a raw socket for this. Instead we check rights in the calls.  */
 
 #define IP_FW_BASE_CTL  	64	/* base for firewall socket options */
 
-#define IP_FW_COMMAND		0x00FF	/* mask for command without chain */
-#define IP_FW_TYPE		0x0300	/* mask for type (chain) */
-#define IP_FW_SHIFT		8	/* shift count for type (chain) */
+#define IP_FW_APPEND		(IP_FW_BASE_CTL)    /* Takes ip_fwchange */
+#define IP_FW_REPLACE		(IP_FW_BASE_CTL+1)  /* Takes ip_fwnew */
+#define IP_FW_DELETE_NUM	(IP_FW_BASE_CTL+2)  /* Takes ip_fwdelnum */
+#define IP_FW_DELETE		(IP_FW_BASE_CTL+3)  /* Takes ip_fwchange */
+#define IP_FW_INSERT		(IP_FW_BASE_CTL+4)  /* Takes ip_fwnew */
+#define IP_FW_FLUSH		(IP_FW_BASE_CTL+5)  /* Takes ip_chainlabel */
+#define IP_FW_ZERO		(IP_FW_BASE_CTL+6)  /* Takes ip_chainlabel */
+#define IP_FW_CHECK		(IP_FW_BASE_CTL+7)  /* Takes ip_fwtest */
+#define IP_FW_MASQ_TIMEOUTS	(IP_FW_BASE_CTL+8)  /* Takes 3 ints */
+#define IP_FW_CREATECHAIN	(IP_FW_BASE_CTL+9)  /* Takes ip_chainlabel */
+#define IP_FW_DELETECHAIN	(IP_FW_BASE_CTL+10) /* Takes ip_chainlabel */
+#define IP_FW_POLICY		(IP_FW_BASE_CTL+11) /* Takes ip_fwpolicy */
+/* Masquerade controls */
+#define IP_FW_MASQ_INSERT	(IP_FW_BASE_CTL+12)
+#define IP_FW_MASQ_ADD		(IP_FW_BASE_CTL+13)
+#define IP_FW_MASQ_DEL		(IP_FW_BASE_CTL+14)
+#define IP_FW_MASQ_FLUSH  	(IP_FW_BASE_CTL+15)
 
-#define IP_FW_FWD		0
-#define IP_FW_IN		1
-#define IP_FW_OUT		2
-#define IP_FW_ACCT		3
-#define IP_FW_CHAINS		4	/* total number of ip_fw chains */
-#define IP_FW_MASQ		5
+/* Builtin chain labels */
+#define IP_FW_LABEL_FORWARD	"forward"
+#define IP_FW_LABEL_INPUT	"input"
+#define IP_FW_LABEL_OUTPUT	"output"
 
-#define IP_FW_INSERT		(IP_FW_BASE_CTL)
-#define IP_FW_APPEND		(IP_FW_BASE_CTL+1)
-#define IP_FW_DELETE		(IP_FW_BASE_CTL+2)
-#define IP_FW_FLUSH		(IP_FW_BASE_CTL+3)
-#define IP_FW_ZERO		(IP_FW_BASE_CTL+4)
-#define IP_FW_POLICY		(IP_FW_BASE_CTL+5)
-#define IP_FW_CHECK		(IP_FW_BASE_CTL+6)
-#define IP_FW_MASQ_TIMEOUTS	(IP_FW_BASE_CTL+7)
+/* Special targets */
+#define IP_FW_LABEL_MASQUERADE  "MASQ"
+#define IP_FW_LABEL_REDIRECT    "REDIRECT"
+#define IP_FW_LABEL_ACCEPT	"ACCEPT"
+#define IP_FW_LABEL_BLOCK	"DENY"
+#define IP_FW_LABEL_REJECT	"REJECT"
+#define IP_FW_LABEL_RETURN	"RETURN"
+#define IP_FW_LABEL_QUEUE       "QUEUE"
 
-#define IP_FW_INSERT_FWD	(IP_FW_INSERT | (IP_FW_FWD << IP_FW_SHIFT))
-#define IP_FW_APPEND_FWD	(IP_FW_APPEND | (IP_FW_FWD << IP_FW_SHIFT))
-#define IP_FW_DELETE_FWD	(IP_FW_DELETE | (IP_FW_FWD << IP_FW_SHIFT))
-#define IP_FW_FLUSH_FWD		(IP_FW_FLUSH  | (IP_FW_FWD << IP_FW_SHIFT))
-#define IP_FW_ZERO_FWD		(IP_FW_ZERO   | (IP_FW_FWD << IP_FW_SHIFT))
-#define IP_FW_POLICY_FWD	(IP_FW_POLICY | (IP_FW_FWD << IP_FW_SHIFT))
-#define IP_FW_CHECK_FWD		(IP_FW_CHECK  | (IP_FW_FWD << IP_FW_SHIFT))
+/* Files in /proc/net */
+#define IP_FW_PROC_CHAINS	"ip_fwchains"
+#define IP_FW_PROC_CHAIN_NAMES	"ip_fwnames"
 
-#define IP_FW_INSERT_IN		(IP_FW_INSERT | (IP_FW_IN << IP_FW_SHIFT))
-#define IP_FW_APPEND_IN		(IP_FW_APPEND | (IP_FW_IN << IP_FW_SHIFT))
-#define IP_FW_DELETE_IN		(IP_FW_DELETE | (IP_FW_IN << IP_FW_SHIFT))
-#define IP_FW_FLUSH_IN		(IP_FW_FLUSH  | (IP_FW_IN << IP_FW_SHIFT))
-#define IP_FW_ZERO_IN		(IP_FW_ZERO   | (IP_FW_IN << IP_FW_SHIFT))
-#define IP_FW_POLICY_IN		(IP_FW_POLICY | (IP_FW_IN << IP_FW_SHIFT))
-#define IP_FW_CHECK_IN		(IP_FW_CHECK  | (IP_FW_IN << IP_FW_SHIFT))
-
-#define IP_FW_INSERT_OUT	(IP_FW_INSERT | (IP_FW_OUT << IP_FW_SHIFT))
-#define IP_FW_APPEND_OUT	(IP_FW_APPEND | (IP_FW_OUT << IP_FW_SHIFT))
-#define IP_FW_DELETE_OUT	(IP_FW_DELETE | (IP_FW_OUT << IP_FW_SHIFT))
-#define IP_FW_FLUSH_OUT		(IP_FW_FLUSH  | (IP_FW_OUT << IP_FW_SHIFT))
-#define IP_FW_ZERO_OUT		(IP_FW_ZERO   | (IP_FW_OUT << IP_FW_SHIFT))
-#define IP_FW_POLICY_OUT	(IP_FW_POLICY | (IP_FW_OUT << IP_FW_SHIFT))
-#define IP_FW_CHECK_OUT		(IP_FW_CHECK  | (IP_FW_OUT << IP_FW_SHIFT))
-
-#define IP_ACCT_INSERT		(IP_FW_INSERT | (IP_FW_ACCT << IP_FW_SHIFT))
-#define IP_ACCT_APPEND		(IP_FW_APPEND | (IP_FW_ACCT << IP_FW_SHIFT))
-#define IP_ACCT_DELETE		(IP_FW_DELETE | (IP_FW_ACCT << IP_FW_SHIFT))
-#define IP_ACCT_FLUSH		(IP_FW_FLUSH  | (IP_FW_ACCT << IP_FW_SHIFT))
-#define IP_ACCT_ZERO		(IP_FW_ZERO   | (IP_FW_ACCT << IP_FW_SHIFT))
-
-#define IP_FW_MASQ_INSERT	(IP_FW_INSERT | (IP_FW_MASQ << IP_FW_SHIFT))
-#define IP_FW_MASQ_ADD		(IP_FW_APPEND | (IP_FW_MASQ << IP_FW_SHIFT))
-#define IP_FW_MASQ_DEL		(IP_FW_DELETE | (IP_FW_MASQ << IP_FW_SHIFT))
-#define IP_FW_MASQ_FLUSH  	(IP_FW_FLUSH  | (IP_FW_MASQ << IP_FW_SHIFT))
-
-#define IP_FW_MASQ_INSERT	(IP_FW_INSERT | (IP_FW_MASQ << IP_FW_SHIFT))
-#define IP_FW_MASQ_ADD		(IP_FW_APPEND | (IP_FW_MASQ << IP_FW_SHIFT))
-#define IP_FW_MASQ_DEL		(IP_FW_DELETE | (IP_FW_MASQ << IP_FW_SHIFT))
-#define IP_FW_MASQ_FLUSH  	(IP_FW_FLUSH  | (IP_FW_MASQ << IP_FW_SHIFT))
 
 struct ip_fwpkt
 {
@@ -192,6 +128,48 @@ struct ip_fwpkt
 	char           fwp_vianame[IFNAMSIZ];	/* interface name */
 };
 
+/* The argument to IP_FW_DELETE and IP_FW_APPEND */
+struct ip_fwchange
+{
+	struct ip_fwuser fwc_rule;
+	ip_chainlabel fwc_label;
+};	
+
+/* The argument to IP_FW_CHECK. */
+struct ip_fwtest
+{
+	struct ip_fwpkt fwt_packet; /* Packet to be tested */
+	ip_chainlabel fwt_label;   /* Block to start test in */
+};
+						
+/* The argument to IP_FW_DELETE_NUM */
+struct ip_fwdelnum
+{
+	__u32 fwd_rulenum;
+	ip_chainlabel fwd_label;
+};
+
+/* The argument to IP_FW_REPLACE and IP_FW_INSERT */
+struct ip_fwnew
+{
+	__u32 fwn_rulenum;
+	struct ip_fwuser fwn_rule;
+	ip_chainlabel fwn_label;
+};
+ 
+/* The argument to IP_FW_POLICY */
+struct ip_fwpolicy
+{
+	ip_chainlabel fwp_policy;
+	ip_chainlabel fwp_label;
+};
+/*      
+ * timeouts for ip masquerading
+ */
+
+struct ip_fw_masq;
+
+/* Masquerading stuff */
 #define IP_FW_MASQCTL_MAX 256
 #define IP_MASQ_MOD_NMAX  32
 
@@ -206,11 +184,7 @@ struct ip_fw_masqctl
 	} u;
 };
 
-/*
- * timeouts for ip masquerading
- */
 
-struct ip_fw_masq;
 
 /*
  *	Main firewall chains definitions and global var's definitions.
@@ -218,37 +192,18 @@ struct ip_fw_masq;
 
 #ifdef __KERNEL__
 
-/* Modes used in the ip_fw_chk() routine. */
-#define IP_FW_MODE_FW		0x00	/* kernel firewall check */
-#define IP_FW_MODE_ACCT_IN	0x01	/* accounting (incoming) */
-#define IP_FW_MODE_ACCT_OUT	0x02	/* accounting (outgoing) */
-#define IP_FW_MODE_CHK		0x04	/* check requested by user */
-
 #include <linux/config.h>
-#ifdef CONFIG_IP_FIREWALL
-extern struct ip_fw *ip_fw_in_chain;
-extern struct ip_fw *ip_fw_out_chain;
-extern struct ip_fw *ip_fw_fwd_chain;
-extern int ip_fw_in_policy;
-extern int ip_fw_out_policy;
-extern int ip_fw_fwd_policy;
-extern int ip_fw_ctl(int, void *, int);
-#endif
-#ifdef CONFIG_IP_ACCT
-extern struct ip_fw *ip_acct_chain;
-extern int ip_acct_ctl(int, void *, int);
-#endif
-#ifdef CONFIG_IP_MASQUERADE
-extern int ip_masq_ctl(int, void *, int);
-#endif
-#ifdef CONFIG_IP_MASQUERADE
-extern int ip_masq_ctl(int, void *, int);
-#endif
-
-extern int ip_fw_chk(struct iphdr *, struct device *, __u16 *, struct ip_fw *, int, int);
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
+#include <linux/init.h>
+extern void ip_fw_init(void) __init;
+#else /* 2.0.x */
 extern void ip_fw_init(void);
+#endif /* 2.1.x */
+extern int ip_fw_ctl(int, void *, int);
+#ifdef CONFIG_IP_MASQUERADE
+extern int ip_masq_ctl(int, void *, int);
+#endif
 #endif /* KERNEL */
 
-
-
-#endif /* _IP_FW_H */
+#endif /* _IP_FWCHAINS_H */

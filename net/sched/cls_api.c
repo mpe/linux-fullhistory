@@ -114,6 +114,7 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 	u32 protocol = TC_H_MIN(t->tcm_info);
 	u32 prio = TC_H_MAJ(t->tcm_info);
 	u32 nprio = prio;
+	u32 parent = t->tcm_parent;
 	struct device *dev;
 	struct Qdisc  *q;
 	struct tcf_proto **back, **chain;
@@ -141,9 +142,10 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 		return -ENODEV;
 
 	/* Find qdisc */
-	if (!t->tcm_parent)
+	if (!parent) {
 		q = dev->qdisc_sleeping;
-	else if ((q = qdisc_lookup(dev, TC_H_MAJ(t->tcm_parent))) == NULL)
+		parent = q->handle;
+	} else if ((q = qdisc_lookup(dev, TC_H_MAJ(t->tcm_parent))) == NULL)
 		return -EINVAL;
 
 	/* Is it classful? */
@@ -151,8 +153,8 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 		return -EINVAL;
 
 	/* Do we search for filter, attached to class? */
-	if (TC_H_MIN(t->tcm_parent)) {
-		cl = cops->get(q, t->tcm_parent);
+	if (TC_H_MIN(parent)) {
+		cl = cops->get(q, parent);
 		if (cl == 0)
 			return -ENOENT;
 	}
@@ -203,7 +205,7 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 		tp->prio = nprio ? : tcf_auto_prio(*back, prio);
 		tp->q = q;
 		tp->classify = tp_ops->classify;
-		tp->classid = t->tcm_parent;
+		tp->classid = parent;
 		err = tp_ops->init(tp);
 		if (err) {
 			kfree(tp);

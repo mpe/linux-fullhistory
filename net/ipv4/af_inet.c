@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.72 1998/05/03 14:30:49 alan Exp $
+ * Version:	$Id: af_inet.c,v 1.74 1998/05/08 21:06:24 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1129,9 +1129,10 @@ __initfunc(void inet_proto_init(struct net_proto *pro))
 	/*
 	 *	Set the firewalling up
 	 */
-#if defined(CONFIG_IP_ACCT)||defined(CONFIG_IP_FIREWALL)
+#if defined(CONFIG_IP_FIREWALL)
 	ip_fw_init();
 #endif
+
 #ifdef CONFIG_IP_MASQUERADE
 	ip_masq_init();
 #endif

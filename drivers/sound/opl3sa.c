@@ -1,5 +1,5 @@
 /*
- * sound/Xopl3sa.c
+ * sound/opl3sa.c
  *
  * Low level driver for Yamaha YMF701B aka OPL3-SA chip
  * 
@@ -19,10 +19,12 @@
  */
  
 #include <linux/config.h>
+#include <linux/module.h>
 
 #undef  SB_OK
 
 #include "sound_config.h"
+#include "soundmodule.h"
 #ifdef SB_OK
 #include "sb.h"
 static int sb_initialized = 0;
@@ -293,6 +295,7 @@ MODULE_PARM(mpu_irq,"i");
 
 struct address_info cfg;
 struct address_info mpu_cfg;
+static int found_mpu;
 
 int init_module(void)
 {
@@ -312,7 +315,7 @@ int init_module(void)
 	if (probe_opl3sa_wss(&cfg) == 0)
 		return -ENODEV;
 
-	found_mpu=probe_opl3_mpu(&mpu_cfg);
+	found_mpu=probe_opl3sa_mpu(&mpu_cfg);
 
 	attach_opl3sa_wss(&cfg);
 	if(found_mpu)
@@ -325,7 +328,7 @@ void cleanup_module(void)
 {
 	if(found_mpu)
 		unload_opl3sa_mpu(&mpu_cfg);
-	unload_opl3sa(&cfg);
+	unload_opl3sa_wss(&cfg);
 	SOUND_LOCK_END;
 }
 

@@ -1,7 +1,7 @@
 Classes
 -------
 
-	"Class" is complete routing table in common sence.
+	"Class" is a complete routing table in common sense.
 	I.e. it is tree of nodes (destination prefix, tos, metric)
 	with attached information: gateway, device etc.
 	This tree is looked up as specified in RFC1812 5.2.4.3
@@ -16,7 +16,7 @@ Classes
 	THROW  - abort route lookup in this class.
 
 
-	Currently number of classes is limited by 255
+	Currently the number of classes is limited to 255
 	(0 is reserved for "not specified class")
 
 	Three classes are builtin:
@@ -34,7 +34,7 @@ Classes
 
 Rules
 -----
-	Rule is record of (src prefix, src interface, tos, dst prefix)
+	Rule is a record of (src prefix, src interface, tos, dst prefix)
 	with attached information.
 
 	Rule types:
@@ -65,15 +65,15 @@ Lookup algorithm
 ----------------
 
 	We scan rules list, and if a rule is matched, apply it.
-	If route is found, return it.
-	If it is not found or THROW node was matched, continue
+	If a route is found, return it.
+	If it is not found or a THROW node was matched, continue
 	to scan rules.
 
 Applications
 ------------
 
-1.	Just ignore classes. All the routes are put to MAIN class
-	(and/or to DEFAULT class).
+1.	Just ignore classes. All the routes are put into MAIN class
+	(and/or into DEFAULT class).
 
 	HOWTO:  iproute add PREFIX [ tos TOS ] [ gw GW ] [ dev DEV ]
 		[ metric METRIC ] [ reject ] ... (look at iproute utility)
@@ -89,13 +89,13 @@ Applications
 		[ dev INPUTDEV] [ pref PREFERENCE ] route [ gw GATEWAY ]
 		[ dev OUTDEV ] .....
 
-	Warning: just now size of routing table in this approach is
-	limited by 256. If someone will like this model, I'll
+	Warning: As of now the size of the routing table in this
+	approach is limited to 256. If someone likes this model, I'll
 	relax this limitation.
 
 3.	OSPF classes (see RFC1583, RFC1812 E.3.3)
 	Very clean, stable and robust algorithm for OSPF routing
-	domains. Unfortunately, it is not used widely in the Internet.
+	domains. Unfortunately, it is not widely used in the Internet.
 
 	Proposed setup:
 	255 local addresses
@@ -124,8 +124,8 @@ Applications
 
 4.	The Variant Router Requirements Algorithm (RFC1812 E.3.2)
 	Create 16 classes for different TOS values.
-	It is funny, but pretty useless algorithm.
-	I listed it just to show power of new routing code.
+	It is a funny, but pretty useless algorithm.
+	I listed it just to show the power of new routing code.
 
 5.	All the variety of combinations......
 
@@ -139,10 +139,10 @@ GATED
 
 IMPORTANT NOTE
 --------------
-	route.c has compilation time switch CONFIG_IP_LOCAL_RT_POLICY.
+	route.c has a compilation time switch CONFIG_IP_LOCAL_RT_POLICY.
 	If it is set, locally originated packets are routed
-	using all the policy list. It is not very convenient and
-	pretty ambiguous, when used with NAT and masquerading.
+	using all the policy list. This is not very convenient and
+	pretty ambiguous when used with NAT and masquerading.
 	I set it to FALSE by default.
 
 

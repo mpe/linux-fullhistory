@@ -26,7 +26,7 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#if defined(CONFIG_GUS) || defined(MODULE)
+#ifdef CONFIG_GUS
 
 #include "gus_hw.h"
 
@@ -57,7 +57,7 @@ void attach_gus_card(struct address_info *hw_config)
 	if (hw_config->dma2 != -1 && hw_config->dma2 != hw_config->dma)
 		if (sound_alloc_dma(hw_config->dma2, "GUS(2)"))
 			printk(KERN_ERR "gus_card.c: Can't allocate DMA channel %d\n", hw_config->dma2);
-#if defined(CONFIG_MIDI)
+#ifdef CONFIG_MIDI
 	gus_midi_init(hw_config);
 #endif
 }
@@ -152,13 +152,13 @@ void gusintr(int irq, void *dev_id, struct pt_regs *dummy)
 		}
 		if (src & (MIDI_TX_IRQ | MIDI_RX_IRQ))
 		{
-#if defined(CONFIG_MIDI)
+#ifdef CONFIG_MIDI
 			gus_midi_interrupt(0);
 #endif
 		}
 		if (src & (GF1_TIMER1_IRQ | GF1_TIMER2_IRQ))
 		{
-#if defined(CONFIG_SEQUENCER) || defined(CONFIG_SEQUENCER_MODULE)
+#ifdef CONFIG_SEQUENCER
 			if (gus_timer_enabled)
 				sound_timer_interrupt();
 			gus_write8(0x45, 0);	/* Ack IRQ */
@@ -187,7 +187,7 @@ int probe_gus_db16(struct address_info *hw_config)
 
 void attach_gus_db16(struct address_info *hw_config)
 {
-#if defined(CONFIG_GUS) || defined(MODULE)
+#ifdef CONFIG_GUS
 	gus_pcm_volume = 100;
 	gus_wave_volume = 90;
 #endif

@@ -110,6 +110,12 @@ struct mpc_config_intsrc mp_irqs[MAX_IRQ_SOURCES];
 int mpc_default_type = 0;			/* non-0 if default (table-less)
 						   MP configuration */
 
+
+/*
+ * This is performance-critical, we want to do it O(1)
+ */
+static int irq_2_pin[NR_IRQS];
+
 unsigned int io_apic_read (unsigned int reg)
 {
 	*IO_APIC_BASE = reg;
@@ -122,32 +128,32 @@ void io_apic_write (unsigned int reg, unsigned int value)
 	*(IO_APIC_BASE+4) = value;
 }
 
-void enable_IO_APIC_irq (unsigned int irq)
+/*
+ * We disable IO-APIC IRQs by setting their 'destination CPU mask' to
+ * zero. Trick, trick.
+ */
+void disable_IO_APIC_irq(unsigned int irq)
 {
+	int pin = irq_2_pin[irq];
 	struct IO_APIC_route_entry entry;
 
-	/*
-	 * Enable it in the IO-APIC irq-routing table:
-	 */
-	*(((int *)&entry)+0) = io_apic_read(0x10+irq*2);
-	entry.mask = 0;
-	io_apic_write(0x10+2*irq, *(((int *)&entry)+0));
+	if (pin != -1) {
+		*(((int *)&entry)+1) = io_apic_read(0x11+pin*2);
+		entry.dest.logical.logical_dest = 0x0;
+		io_apic_write(0x11+2*pin, *(((int *)&entry)+1));
+	}
 }
 
-/*
- * this function is just here to make things complete, otherwise it's
- * unused
- */
-void disable_IO_APIC_irq (unsigned int irq)
+void enable_IO_APIC_irq(unsigned int irq)
 {
+	int pin = irq_2_pin[irq];
 	struct IO_APIC_route_entry entry;
 
-	/*
-	 * Disable it in the IO-APIC irq-routing table:
-	 */
-	*(((int *)&entry)+0) = io_apic_read(0x10+irq*2);
-	entry.mask = 1;
-	io_apic_write(0x10+2*irq, *(((int *)&entry)+0));
+	if (pin != -1) {
+		*(((int *)&entry)+1) = io_apic_read(0x11+pin*2);
+		entry.dest.logical.logical_dest = 0xff;
+		io_apic_write(0x11+2*pin, *(((int *)&entry)+1));
+	}
 }
 
 void clear_IO_APIC_pin (unsigned int pin)
@@ -162,6 +168,7 @@ void clear_IO_APIC_pin (unsigned int pin)
 	io_apic_write(0x10+2*pin, *(((int *)&entry)+0));
 	io_apic_write(0x11+2*pin, *(((int *)&entry)+1));
 }
+
 
 /*
  * support for broken MP BIOSes, enables hand-redirection of PIRQ0-7 to
@@ -258,66 +265,15 @@ int IO_APIC_get_PCI_irq_vector (int bus, int slot, int pci_pin)
 	return -1;
 }
 
-static int irq_trigger(int idx)
-{
-	int bus = mp_irqs[idx].mpc_srcbus;
-	int trigger;
+/*
+ * There are broken mptables which register ISA+high-active+level IRQs,
+ * these are illegal and are converted here to ISA+high-active+edge
+ * IRQ sources. Careful, ISA+low-active+level is another broken entry
+ * type, it represents PCI IRQs 'embedded into an ISA bus', they have
+ * to be accepted. Yes, ugh.
+ */
 
-	/*
-	 * Determine IRQ trigger mode (edge or level sensitive):
-	 */
-	switch ((mp_irqs[idx].mpc_irqflag>>2) & 3)
-	{
-		case 0: /* conforms, ie. bus-type dependent */
-		{
-			switch (mp_bus_id_to_type[bus])
-			{
-				case MP_BUS_ISA: /* ISA pin, edge */
-				{
-					trigger = 0;
-					break;
-				}
-				case MP_BUS_PCI: /* PCI pin, level */
-				{
-					trigger = 1;
-					break;
-				}
-				default:
-				{
-					printk("broken BIOS!!\n");
-					trigger = 1;
-					break;
-				}
-			}
-			break;
-		}
-		case 1: /* edge */
-		{
-			trigger = 0;
-			break;
-		}
-		case 2: /* reserved */
-		{
-			printk("broken BIOS!!\n");
-			trigger = 1;
-			break;
-		}
-		case 3: /* level */
-		{
-			trigger = 1;
-			break;
-		}
-		default: /* invalid */
-		{
-			printk("broken BIOS!!\n");
-			trigger = 0;
-			break;
-		}
-	}
-	return trigger;
-}
-
-__initfunc(static int irq_polarity(int idx))
+static int MPBIOS_polarity(int idx)
 {
 	int bus = mp_irqs[idx].mpc_srcbus;
 	int polarity;
@@ -376,10 +332,108 @@ __initfunc(static int irq_polarity(int idx))
 	return polarity;
 }
 
-__initfunc(static int pin_2_irq (int idx, int pin))
+
+static int MPBIOS_trigger(int idx)
+{
+	int bus = mp_irqs[idx].mpc_srcbus;
+	int trigger;
+
+	/*
+	 * Determine IRQ trigger mode (edge or level sensitive):
+	 */
+	switch ((mp_irqs[idx].mpc_irqflag>>2) & 3)
+	{
+		case 0: /* conforms, ie. bus-type dependent */
+		{
+			switch (mp_bus_id_to_type[bus])
+			{
+				case MP_BUS_ISA: /* ISA pin, edge */
+				{
+					trigger = 0;
+					break;
+				}
+				case MP_BUS_PCI: /* PCI pin, level */
+				{
+					trigger = 1;
+					break;
+				}
+				default:
+				{
+					printk("broken BIOS!!\n");
+					trigger = 1;
+					break;
+				}
+			}
+			break;
+		}
+		case 1: /* edge */
+		{
+			trigger = 0;
+			break;
+		}
+		case 2: /* reserved */
+		{
+			printk("broken BIOS!!\n");
+			trigger = 1;
+			break;
+		}
+		case 3: /* level */
+		{
+			trigger = 1;
+			break;
+		}
+		default: /* invalid */
+		{
+			printk("broken BIOS!!\n");
+			trigger = 0;
+			break;
+		}
+	}
+	return trigger;
+}
+
+static int trigger_flag_broken (int idx)
+{
+	int bus = mp_irqs[idx].mpc_srcbus;
+	int polarity = MPBIOS_polarity(idx);
+	int trigger = MPBIOS_trigger(idx);
+
+	if ( (mp_bus_id_to_type[bus] == MP_BUS_ISA) &&
+		(polarity == 0) /* active-high */ &&
+		(trigger == 1) /* level */ )
+
+		return 1; /* broken */
+
+	return 0;
+}
+
+static int irq_polarity (int idx)
+{
+	/*
+	 * There are no known BIOS bugs wrt polarity.                yet.
+	 */
+	return MPBIOS_polarity(idx);
+}
+
+static int irq_trigger (int idx)
+{
+	int trigger = MPBIOS_trigger(idx);
+
+	if (trigger_flag_broken (idx))
+		trigger = 0;
+	return trigger;
+}
+
+static int pin_2_irq (int idx, int pin)
 {
 	int irq;
 	int bus = mp_irqs[idx].mpc_srcbus;
+
+	/*
+	 * Debugging check, we are in big trouble if this message pops up!
+	 */
+	if (mp_irqs[idx].mpc_dstirq != pin)
+		printk("broken BIOS or MPTABLE parser, ayiee!!\n");
 
 	switch (mp_bus_id_to_type[bus])
 	{
@@ -423,12 +477,12 @@ __initfunc(static int pin_2_irq (int idx, int pin))
 
 int IO_APIC_irq_trigger (int irq)
 {
-	int idx, i;
+	int idx, pin;
 
-	for (i=0; i<nr_ioapic_registers; i++) {
-		idx = find_irq_entry(i,mp_INT);
-		if (irq == pin_2_irq(idx,i))
-			return irq_trigger(idx);
+	for (pin=0; pin<nr_ioapic_registers; pin++) {
+		idx = find_irq_entry(pin,mp_INT);
+		if ((idx != -1) && (irq == pin_2_irq(idx,pin)))
+			return (irq_trigger(idx));
 	}
 	/*
 	 * nonexistant IRQs are edge default
@@ -439,11 +493,11 @@ int IO_APIC_irq_trigger (int irq)
 __initfunc(void setup_IO_APIC_irqs (void))
 {
 	struct IO_APIC_route_entry entry;
-	int i, idx, bus, irq, first_notcon=1;
+	int pin, idx, bus, irq, first_notcon=1;
 
 	printk("init IO_APIC IRQs\n");
 
-	for (i=0; i<nr_ioapic_registers; i++) {
+	for (pin=0; pin<nr_ioapic_registers; pin++) {
 
 		/*
 		 * add it to the IO-APIC irq-routing table:
@@ -455,45 +509,34 @@ __initfunc(void setup_IO_APIC_irqs (void))
 		entry.mask = 0;				/* enable IRQ */
 		entry.dest.logical.logical_dest = 0xff;	/* all CPUs */
 
-		idx = find_irq_entry(i,mp_INT);
+		idx = find_irq_entry(pin,mp_INT);
 		if (idx == -1) {
 			if (first_notcon) {
-				printk(" IO-APIC pin %d", i);
+				printk(" IO-APIC pin %d", pin);
 				first_notcon=0;
 			} else
-				printk(", %d", i);
+				printk(", %d", pin);
 			continue;
 		}
 
 		entry.trigger = irq_trigger(idx);
 		entry.polarity = irq_polarity(idx);
 
-		irq = pin_2_irq(idx,i);
+		irq = pin_2_irq(idx,pin);
+		irq_2_pin[irq] = pin;
 
 		if (!IO_APIC_IRQ(irq))
 			continue;
 
 		entry.vector = IO_APIC_VECTOR(irq);
 
-	/*
-	 * There are broken mptables which register ISA+high-active+level IRQs,
-	 * these are illegal and are converted here to ISA+high-active+edge
-	 * IRQ sources. Careful, ISA+low-active+level is another broken entry
-	 * type, it represents PCI IRQs 'embedded into an ISA bus', they have
-	 * to be accepted. Yes, ugh.
-	 */
 		bus = mp_irqs[idx].mpc_srcbus;
 
-		if ( (mp_bus_id_to_type[bus] == MP_BUS_ISA) &&
-			(entry.polarity == 0) /* active-high */ &&
-			(entry.trigger == 1) /* level */ )
-		{
-			printk("broken BIOS, changing pin %d to edge\n", i);
-			entry.trigger = 0;
-		}
+		if (trigger_flag_broken (idx))
+			printk("broken BIOS, changing pin %d to edge\n", pin);
 
-		io_apic_write(0x10+2*i, *(((int *)&entry)+0));
-		io_apic_write(0x11+2*i, *(((int *)&entry)+1));
+		io_apic_write(0x10+2*pin, *(((int *)&entry)+0));
+		io_apic_write(0x11+2*pin, *(((int *)&entry)+1));
 	}
 
 	if (!first_notcon)
@@ -549,7 +592,7 @@ __initfunc(void setup_ExtINT_pin (unsigned int pin))
 	io_apic_write(0x11+2*pin, *(((int *)&entry)+1));
 }
 
-__initfunc(void print_IO_APIC (void))
+void print_IO_APIC (void)
 {
 	int i;
 	struct IO_APIC_reg_00 reg_00;
@@ -598,7 +641,7 @@ __initfunc(void print_IO_APIC (void))
 
 	printk(".... IRQ redirection table:\n");
 
-	printk(" NR  Log Phy ");
+	printk(" NR Log Phy ");
 	printk("Mask Trig IRR Pol Stat Dest Deli Vect:   \n");
 
 	for (i=0; i<=reg_01.entries; i++) {
@@ -607,7 +650,7 @@ __initfunc(void print_IO_APIC (void))
 		*(((int *)&entry)+0) = io_apic_read(0x10+i*2);
 		*(((int *)&entry)+1) = io_apic_read(0x11+i*2);
 
-		printk(" %02x  %03X  %02X   ",
+		printk(" %02x %03X %02X  ",
 			i,
 			entry.dest.logical.logical_dest,
 			entry.dest.physical.physical_dest
@@ -625,6 +668,11 @@ __initfunc(void print_IO_APIC (void))
 		);
 	}
 
+	printk("IRQ to pin mappings:\n");
+	for (i=0; i<NR_IRQS; i++)
+		printk("%d->%d ", i, irq_2_pin[i]);
+	printk("\n");
+
 	printk(".................................... done.\n");
 
 	return;
@@ -632,8 +680,10 @@ __initfunc(void print_IO_APIC (void))
 
 __initfunc(static void init_sym_mode (void))
 {
-	int i;
+	int i, pin;
 
+	for (i=0; i<NR_IRQS; i++)
+		irq_2_pin[i] = -1;
 	if (!pirqs_enabled)
 		for (i=0; i<MAX_PIRQS; i++)
 			pirq_entries[i]=-1;
@@ -658,8 +708,8 @@ __initfunc(static void init_sym_mode (void))
 	/*
 	 * Do not trust the IO-APIC being empty at bootup
 	 */
-	for (i=0; i<nr_ioapic_registers; i++)
-		clear_IO_APIC_pin (i);
+	for (pin=0; pin<nr_ioapic_registers; pin++)
+		clear_IO_APIC_pin (pin);
 }
 
 /*

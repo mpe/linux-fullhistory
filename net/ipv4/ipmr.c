@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.34 1998/04/28 06:21:59 davem Exp $
+ *	Version: $Id: ipmr.c,v 1.35 1998/05/13 06:23:24 davem Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -321,7 +321,7 @@ static void ipmr_cache_delete(struct mfc_cache *cache)
 				nlh->nlmsg_len = NLMSG_LENGTH(sizeof(struct nlmsgerr));
 				skb_trim(skb, nlh->nlmsg_len);
 				((struct nlmsgerr*)NLMSG_DATA(nlh))->error = -ETIMEDOUT;
-				netlink_unicast(rtnl, skb, NETLINK_CB(skb).pid, MSG_DONTWAIT);
+				netlink_unicast(rtnl, skb, NETLINK_CB(skb).dst_pid, MSG_DONTWAIT);
 			} else
 #endif
 			kfree_skb(skb);

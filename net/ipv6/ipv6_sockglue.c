@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.20 1998/05/03 14:31:07 alan Exp $
+ *	$Id: ipv6_sockglue.c,v 1.21 1998/05/07 15:43:13 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -220,31 +220,24 @@ extern void ipv6_sysctl_register(void);
 extern void ipv6_sysctl_unregister(void);
 #endif
 
-__initfunc(void ipv6_init(void))
+__initfunc(void ipv6_packet_init(void))
 {
 	dev_add_pack(&ipv6_packet_type);
+}
 
-#if defined(MODULE) && defined(CONFIG_SYSCTL)
-	ipv6_sysctl_register();
-#endif
-
+__initfunc(void ipv6_netdev_notif_init(void))
+{
 	register_netdevice_notifier(&ipv6_dev_notf);
-	
-	ip6_route_init();
 }
 
 #ifdef MODULE
-void ipv6_cleanup(void)
+void ipv6_packet_cleanup(void)
+{
+	dev_remove_pack(&ipv6_packet_type);
+}
+
+void ipv6_netdev_notif_cleanup(void)
 {
 	unregister_netdevice_notifier(&ipv6_dev_notf);
-	dev_remove_pack(&ipv6_packet_type);
-#ifdef CONFIG_SYSCTL
-	ipv6_sysctl_unregister();	
-#endif
-	ip6_route_cleanup();
-	icmpv6_cleanup();
-	addrconf_cleanup();	
 }
 #endif
-
-

@@ -9,7 +9,7 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#if defined(CONFIG_PAS) || defined(MODULE)
+#ifdef CONFIG_PAS
 
 static unsigned char dma_bits[] = {
 	4, 1, 2, 3, 0, 5, 6, 7
@@ -89,7 +89,7 @@ static void pasintr(int irq, void *dev_id, struct pt_regs *dummy)
 	}
 	if (status & 0x10)
 	{
-#if defined(CONFIG_MIDI)
+#ifdef CONFIG_MIDI
 		  pas_midi_interrupt();
 #endif
 		  status &= ~0x10;
@@ -219,7 +219,7 @@ static int config_pas_hw(struct address_info *hw_config)
 	mix_write(0x80 | 5, 0x078B);
 	mix_write(5, 0x078B);
 
-#if !defined(DISABLE_SB_EMULATION) && (defined(CONFIG_SB) || defined(CONFIG_SB_MODULE))
+#if !defined(DISABLE_SB_EMULATION) && defined(CONFIG_SB)
 
 	{
 		struct address_info *sb_config;
@@ -322,7 +322,7 @@ void attach_pas_card(struct address_info *hw_config)
 
 		if ((pas_model = pas_read(0xFF88)))
 		{
-			char temp[100];
+			char            temp[100];
 
 			sprintf(temp,
 			    "%s rev %d", pas_model_names[(int) pas_model],
@@ -335,12 +335,12 @@ void attach_pas_card(struct address_info *hw_config)
 			pas_pcm_init(hw_config);
 #endif
 
-#if !defined(DISABLE_SB_EMULATION) && (defined(CONFIG_SB) || defined(CONFIG_SB_MODULE))
+#if !defined(DISABLE_SB_EMULATION) && defined(CONFIG_SB)
 
 			sb_dsp_disable_midi(pas_sb_base);	/* No MIDI capability */
 #endif
 
-#if defined(CONFIG_MIDI)
+#ifdef CONFIG_MIDI
 			pas_midi_init();
 #endif
 			pas_init_mixer();

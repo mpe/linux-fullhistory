@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.47 1998/04/28 06:22:01 davem Exp $
+ * Version:	$Id: route.c,v 1.50 1998/05/13 06:23:25 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -144,9 +144,9 @@ struct dst_ops ipv4_dst_ops =
 };
 
 __u8 ip_tos2prio[16] = {
-	TC_PRIO_FILLER,
 	TC_PRIO_BESTEFFORT,
 	TC_PRIO_FILLER,
+	TC_PRIO_BESTEFFORT,
 	TC_PRIO_FILLER,
 	TC_PRIO_BULK,
 	TC_PRIO_FILLER,
@@ -221,7 +221,7 @@ static int rt_cache_get_info(char *buffer, char **start, off_t offset, int lengt
 				r->u.dst.window,
 				(int)r->u.dst.rtt, r->key.tos,
 				r->u.dst.hh ? atomic_read(&r->u.dst.hh->hh_refcnt) : -1,
-				r->u.dst.hh ? (r->u.dst.hh->hh_output == ip_acct_output) : 0,
+				r->u.dst.hh ? (r->u.dst.hh->hh_output == dev_queue_xmit) : 0,
 				r->rt_spec_dst);
 			sprintf(buffer+len,"%-127s\n",temp);
 			len += 128;
@@ -816,7 +816,7 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res)
 		rt->u.dst.window= 0;
 		rt->u.dst.rtt	= TCP_TIMEOUT_INIT;
 	}
-#ifdef CONFIG_NET_CLS_ROUTE
+#if defined(CONFIG_NET_CLS_ROUTE) && defined(CONFIG_IP_MULTIPLE_TABLES)
 	if (rt->u.dst.tclassid == 0)
 		rt->u.dst.tclassid = fib_rules_tclass(res);
 #endif
@@ -1637,7 +1637,7 @@ int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
 	if (rtm->rtm_flags & RTM_F_NOTIFY)
 		rt->rt_flags |= RTCF_NOTIFY;
 
-	NETLINK_CB(skb).pid = NETLINK_CB(in_skb).pid;
+	NETLINK_CB(skb).dst_pid = NETLINK_CB(in_skb).pid;
 
 	err = rt_fill_info(skb, NETLINK_CB(in_skb).pid, nlh->nlmsg_seq, RTM_NEWROUTE, 0);
 	if (err == 0)

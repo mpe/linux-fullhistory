@@ -50,7 +50,7 @@ static __inline__ int scm_check_creds(struct ucred *creds)
 	      creds->uid == current->suid) || capable(CAP_SETUID)) &&
 	    ((creds->gid == current->gid || creds->gid == current->egid ||
 	      creds->gid == current->sgid) || capable(CAP_SETGID))) {
-		return 0;
+	       return 0;
 	}
 	return -EPERM;
 }

@@ -24,8 +24,10 @@
  */
 
 #include "sound_config.h"
+
+#ifdef CONFIG_SOUND_UART6850
+#ifdef CONFIG_MIDI
 #include "soundmodule.h"
-#if defined(CONFIG_UART6850) && defined(CONFIG_MIDI) || defined(MODULE)
 
 static int uart6850_base = 0x330;
 
@@ -351,5 +353,6 @@ void cleanup_module(void)
 	unload_uart6850(&cfg);
 	SOUND_LOCK_END;
 }
+#endif
 #endif
 #endif

@@ -56,7 +56,8 @@ struct ra_msg {
 };
 
 
-extern void			ndisc_init(struct net_proto_family *ops);
+extern int			ndisc_init(struct net_proto_family *ops);
+
 extern void			ndisc_cleanup(void);
 
 extern int			ndisc_rcv(struct sk_buff *skb,
@@ -91,7 +92,9 @@ struct rt6_info *		dflt_rt_lookup(void);
 /*
  *	IGMP
  */
-extern void			igmp6_init(struct net_proto_family *ops);
+extern int			igmp6_init(struct net_proto_family *ops);
+
+extern void			igmp6_cleanup(void);
 
 extern int			igmp6_event_query(struct sk_buff *skb,
 						  struct icmp6hdr *hdr,

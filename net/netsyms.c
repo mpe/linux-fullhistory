@@ -60,7 +60,8 @@ extern int tcp_tw_death_row_slot;
 	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
 	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
 	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		|| \
-	defined(CONFIG_ES3210)
+	defined(CONFIG_ES3210)	||	defined(CONFIG_ULTRA32)		|| \
+	defined(CONFIG_LNE390)
 #include "../drivers/net/8390.h"
 #endif
 
@@ -357,7 +358,8 @@ EXPORT_SYMBOL(sock_rmalloc);
 	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
 	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
 	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		|| \
-	defined(CONFIG_ES3210)
+	defined(CONFIG_ES3210)	||	defined(CONFIG_ULTRA32)		|| \
+	defined(CONFIG_LNE390)
 /* If 8390 NIC support is built in, we will need these. */
 EXPORT_SYMBOL(ei_open);
 EXPORT_SYMBOL(ei_close);
@@ -422,9 +424,6 @@ EXPORT_SYMBOL(dev_fastroute_stat);
 EXPORT_SYMBOL(netdev_register_fc);
 EXPORT_SYMBOL(netdev_unregister_fc);
 EXPORT_SYMBOL(netdev_fc_xoff);
-#endif
-#ifdef CONFIG_IP_ACCT
-EXPORT_SYMBOL(ip_acct_output);
 #endif
 EXPORT_SYMBOL(dev_base);
 EXPORT_SYMBOL(dev_close);

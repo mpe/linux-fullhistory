@@ -31,7 +31,7 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#if defined(CONFIG_SOFTOSS) || defined(MODULE)
+#ifdef CONFIG_SOFTOSS
 #include "softoss.h"
 #include <linux/ultrasound.h>
 

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.17 1998/05/01 10:31:41 davem Exp $
+ *	$Id: icmp.c,v 1.18 1998/05/07 15:42:59 davem Exp $
  *
  *	Based on net/ipv4/icmp.c
  *
@@ -62,8 +62,7 @@
  *	ICMP socket for flow control.
  */
 
-struct inode icmpv6_inode;
-struct socket *icmpv6_socket=&icmpv6_inode.u.socket_i;
+struct socket *icmpv6_socket;
 
 int icmpv6_rcv(struct sk_buff *skb, struct device *dev,
 	       struct in6_addr *saddr, struct in6_addr *daddr,
@@ -557,19 +556,23 @@ __initfunc(int icmpv6_init(struct net_proto_family *ops))
 	struct sock *sk;
 	int err;
 
-	icmpv6_inode.i_mode = S_IFSOCK;
-	icmpv6_inode.i_sock = 1;
-	icmpv6_inode.i_uid = 0;
-	icmpv6_inode.i_gid = 0;
-
-	icmpv6_socket->inode = &icmpv6_inode;
-	icmpv6_socket->state = SS_UNCONNECTED;
-	icmpv6_socket->type=SOCK_RAW;
-
-	if((err=ops->create(icmpv6_socket, IPPROTO_ICMPV6))<0) {
-		printk(KERN_DEBUG 
+	icmpv6_socket = sock_alloc();
+	if (icmpv6_socket == NULL) {
+		printk(KERN_ERR
 		       "Failed to create the ICMP6 control socket.\n");
-		return 1;
+		return -1;
+	}
+	icmpv6_socket->inode->i_uid = 0;
+	icmpv6_socket->inode->i_gid = 0;
+	icmpv6_socket->type = SOCK_RAW;
+
+	if ((err = ops->create(icmpv6_socket, IPPROTO_ICMPV6)) < 0) {
+		printk(KERN_ERR
+		       "Failed to initialize the ICMP6 control socket (err %d).\n",
+		       err);
+		sock_release(icmpv6_socket);
+		icmpv6_socket = NULL; /* for safety */
+		return err;
 	}
 
 	sk = icmpv6_socket->sk;
@@ -578,18 +581,14 @@ __initfunc(int icmpv6_init(struct net_proto_family *ops))
 
 	inet6_add_protocol(&icmpv6_protocol);
 
-	ndisc_init(ops);
-	igmp6_init(ops);
-	return 0; 
+	return 0;
 }
 
 void icmpv6_cleanup(void)
 {
+	sock_release(icmpv6_socket);
+	icmpv6_socket = NULL; /* For safety. */
 	inet6_del_protocol(&icmpv6_protocol);
-#if 0
-	ndisc_cleanup();
-#endif
-	igmp6_cleanup();
 }
 
 static struct icmp6_err {

@@ -19,7 +19,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_PAS) || defined(MODULE)
+#ifdef CONFIG_PAS
 
 #ifndef DEB
 #define DEB(what)		/* (what) */
