@@ -215,7 +215,7 @@ extern void sm_setup(char *str, int *ints);
 #ifdef CONFIG_WDT
 extern void wdt_setup(char *str, int *ints);
 #endif
-#ifdef CONFIG_PNP_PARPORT
+#ifdef CONFIG_PARPORT
 extern void parport_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_PLIP
@@ -511,7 +511,7 @@ struct {
 #ifdef CONFIG_WDT
 	{ "wdt=", wdt_setup },
 #endif
-#ifdef CONFIG_PNP_PARPORT
+#ifdef CONFIG_PARPORT
 	{ "parport=", parport_setup },
 #endif
 #ifdef CONFIG_PLIP

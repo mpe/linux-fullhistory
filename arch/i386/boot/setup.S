@@ -272,8 +272,8 @@ loader_ok:
 	! and fall into the old memory detection code to populate the
 	! compatability slot.
 
-	pop	ebx
 oldstylemem:
+	pop	ebx
 #endif
 	mov	ah,#0x88
 	int	0x15

@@ -49,7 +49,8 @@ struct dentry {
 	struct list_head d_alias;	/* inode alias list */
 	struct list_head d_lru;		/* d_count = 0 LRU list */
 	struct qstr d_name;
-	struct dentry * (*d_revalidate)(struct dentry *);
+	unsigned long d_time;		/* used by d_revalidate */
+	int (*d_revalidate)(struct dentry *);
 };
 
 /*
@@ -102,8 +103,8 @@ extern struct dentry * d_lookup(struct dentry * dir, struct qstr * name);
 extern int d_validate(struct dentry *dentry, struct dentry *dparent,
 		      unsigned int hash, unsigned int len);
 
-/* write full pathname into buffer and return length */
-extern int d_path(struct dentry * entry, struct dentry * chroot, char * buf);
+/* write full pathname into buffer and return start of pathname */
+extern char * d_path(struct dentry * entry, char * buf, int buflen);
 
 /* Allocation counts.. */
 static inline struct dentry * dget(struct dentry *dentry)

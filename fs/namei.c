@@ -240,45 +240,44 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
 	struct dentry * result;
 	struct inode *dir = parent->d_inode;
 
-	result = ERR_PTR(-ENOTDIR);
-	if (dir->i_op && dir->i_op->lookup) {
-		down(&dir->i_sem);
-		result = d_lookup(parent, name);
-		if (!result) {
-			int error;
-			result = d_alloc(parent, name);
-			error = dir->i_op->lookup(dir, result);
-			if (error) {
-				d_free(result);
-				result = ERR_PTR(error);
-			}
+	down(&dir->i_sem);
+	result = d_lookup(parent, name);
+	if (!result) {
+		int error;
+		result = d_alloc(parent, name);
+		error = dir->i_op->lookup(dir, result);
+		if (error) {
+			d_free(result);
+			result = ERR_PTR(error);
 		}
-		up(&dir->i_sem);
 	}
+	up(&dir->i_sem);
 	return result;
 }
 
-/* Internal lookup() using the new generic dcache. */
+/*
+ * Internal lookup() using the new generic dcache.
+ *
+ * Note the revalidation: we have to drop the dcache
+ * lock when we revalidate, so we need to update the
+ * counts around it.
+ */
 static struct dentry * cached_lookup(struct dentry * parent, struct qstr * name)
 {
 	struct dentry * dentry = d_lookup(parent, name);
 
-	if (dentry) {
-		if (dentry->d_revalidate) {
-			/* spin_unlock(&dentry_lock); */
-			dentry = dentry->d_revalidate(dentry);
-			/* spin_lock(&dentry_lock); */
-		}
+	if (dentry && dentry->d_revalidate) {
+		int validated, (*revalidate)(struct dentry *) = dentry->d_revalidate;
+		struct dentry * save;
 
-		/*
-		 * The parent d_count _should_ be at least 2: one for the
-		 * dentry we found, and one for the fact that we are using
-		 * it.
-		 */
-		if (parent->d_count <= 1) {
-			printk("lookup of %s success in %s, but parent count is %d\n",
-				dentry->d_name.name, parent->d_name.name, parent->d_count);
+		dentry->d_count++;
+		validated = revalidate(dentry);
+		save = dentry;
+		if (!validated) {
+			d_drop(dentry);
+			dentry = NULL;
 		}
+		dput(save);
 	}
 	return dentry;
 }
@@ -311,14 +310,7 @@ static struct dentry * reserved_lookup(struct dentry * parent, struct qstr * nam
 /* In difference to the former version, lookup() no longer eats the dir. */
 static struct dentry * lookup(struct dentry * dir, struct qstr * name)
 {
-	int err;
 	struct dentry * result;
-
-	/* Check permissions before traversing mount-points. */
-	err = permission(dir->d_inode, MAY_EXEC);
-	result = ERR_PTR(err);
- 	if (err)
-		goto done_error;
 
 	result = reserved_lookup(dir, name);
 	if (result)
@@ -334,7 +326,6 @@ static struct dentry * lookup(struct dentry * dir, struct qstr * name)
 done_noerror:
 		result = dget(result->d_mounts);
 	}
-done_error:
 	return result;
 }
 
@@ -396,14 +387,26 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 
 	/* At this point we know we have a real path component. */
 	for(;;) {
-		int len;
+		int len, err;
 		unsigned long hash;
 		struct qstr this;
+		struct inode *inode;
 		char c, follow;
 
 		dentry = ERR_PTR(-ENOENT);
-		if (!base->d_inode)
+		inode = base->d_inode;
+		if (!inode)
 			break;
+
+		dentry = ERR_PTR(-ENOTDIR);
+		if (!inode->i_op || !inode->i_op->lookup)
+			break;
+
+		err = permission(inode, MAY_EXEC);
+		dentry = ERR_PTR(err);
+ 		if (err)
+			break;
+
 		this.name = name;
 		hash = init_name_hash();
 		len = 0;
@@ -890,11 +893,11 @@ static inline int do_symlink(const char * oldname, const char * newname)
 	if (IS_ERR(dentry))
 		goto exit;
 
+	dir = lock_parent(dentry);
+
 	error = -EEXIST;
 	if (dentry->d_inode)
-		goto exit;
-
-	dir = lock_parent(dentry);
+		goto exit_lock;
 
 	error = -EROFS;
 	if (IS_RDONLY(dir))
@@ -1037,11 +1040,17 @@ static inline void double_down(struct semaphore *s1, struct semaphore *s2)
 		down(s2);
 	} else if (s1 == s2) {
 		down(s1);
-		atomic_dec(&s1->count);
 	} else {
 		down(s2);
 		down(s1);
 	}
+}
+
+static inline void double_up(struct semaphore *s1, struct semaphore *s2)
+{
+	up(s1);
+	if (s1 != s2)
+		up(s2);
 }
 
 static inline int is_reserved(struct dentry *dentry)
@@ -1126,8 +1135,7 @@ static inline int do_rename(const char * oldname, const char * newname)
 	error = old_dir->i_op->rename(old_dir, old_dentry, new_dir, new_dentry);
 
 exit_lock:
-	up(&new_dir->i_sem);
-	up(&old_dir->i_sem);
+	double_up(&new_dir->i_sem, &old_dir->i_sem);
 	dput(new_dentry);
 exit_old:
 	dput(old_dentry);

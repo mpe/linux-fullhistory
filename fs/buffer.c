@@ -49,8 +49,9 @@ static char buffersize_index[17] =
 
 #define BUFSIZE_INDEX(X) ((int) buffersize_index[(X)>>9])
 #define MAX_BUF_PER_PAGE (PAGE_SIZE / 512)
-#define MAX_UNUSED_BUFFERS 30 /* don't ever have more than this number of 
-				 unused buffer heads */
+#define NR_RESERVED (2*MAX_BUF_PER_PAGE)
+#define MAX_UNUSED_BUFFERS NR_RESERVED+20 /* don't ever have more than this 
+					     number of unused buffer heads */
 #define HASH_PAGES         4  /* number of pages to use for the hash table */
 #define HASH_PAGES_ORDER   2
 #define NR_HASH (HASH_PAGES*PAGE_SIZE/sizeof(struct buffer_head *))
@@ -1034,32 +1035,9 @@ static void put_unused_buffer_head(struct buffer_head * bh)
 	nr_unused_buffer_heads++;
 	bh->b_next_free = unused_list;
 	unused_list = bh;
+	if (!waitqueue_active(&buffer_wait))
+		return;
 	wake_up(&buffer_wait);
-}
-
-static void get_more_buffer_heads(void)
-{
-	struct buffer_head * bh;
-
-	while (!unused_list) {
-		/* This is critical.  We can't swap out pages to get
-		 * more buffer heads, because the swap-out may need
-		 * more buffer-heads itself.  Thus SLAB_ATOMIC.
-		 */
-		if((bh = kmem_cache_alloc(bh_cachep, SLAB_ATOMIC)) != NULL) {
-			put_unused_buffer_head(bh);
-			nr_buffer_heads++;
-			return;
-		}
-
-		/* Uhhuh. We're _really_ low on memory. Now we just
-		 * wait for old buffer heads to become free due to
-		 * finishing IO..
-		 */
-		run_task_queue(&tq_disk);
-		sleep_on(&buffer_wait);
-	}
-
 }
 
 /* 
@@ -1083,18 +1061,59 @@ static inline void recover_reusable_buffer_heads(void)
 	}
 }
 
-static struct buffer_head * get_unused_buffer_head(void)
+/*
+ * Reserve NR_RESERVED buffer heads for async IO requests to avoid
+ * no-buffer-head deadlock.  Return NULL on failure; waiting for
+ * buffer heads is now handled in create_buffers().
+ */ 
+static struct buffer_head * get_unused_buffer_head(int async)
 {
 	struct buffer_head * bh;
 
 	recover_reusable_buffer_heads();
-	get_more_buffer_heads();
-	if (!unused_list)
-		return NULL;
-	bh = unused_list;
-	unused_list = bh->b_next_free;
-	nr_unused_buffer_heads--;
-	return bh;
+	if (nr_unused_buffer_heads > NR_RESERVED) {
+		bh = unused_list;
+		unused_list = bh->b_next_free;
+		nr_unused_buffer_heads--;
+		return bh;
+	}
+
+	/* This is critical.  We can't swap out pages to get
+	 * more buffer heads, because the swap-out may need
+	 * more buffer-heads itself.  Thus SLAB_ATOMIC.
+	 */
+	if((bh = kmem_cache_alloc(bh_cachep, SLAB_ATOMIC)) != NULL) {
+		memset(bh, 0, sizeof(*bh));
+		nr_buffer_heads++;
+		return bh;
+	}
+
+	/*
+	 * If we need an async buffer, use the reserved buffer heads.
+	 */
+	if (async && unused_list) {
+		bh = unused_list;
+		unused_list = bh->b_next_free;
+		nr_unused_buffer_heads--;
+		return bh;
+	}
+
+#if 0
+	/*
+	 * (Pending further analysis ...)
+	 * Ordinary (non-async) requests can use a different memory priority
+	 * to free up pages. Any swapping thus generated will use async
+	 * buffer heads.
+	 */
+	if(!async &&
+	   (bh = kmem_cache_alloc(bh_cachep, SLAB_KERNEL)) != NULL) {
+		memset(bh, 0, sizeof(*bh));
+		nr_buffer_heads++;
+		return bh;
+	}
+#endif
+
+	return NULL;
 }
 
 /*
@@ -1102,16 +1121,22 @@ static struct buffer_head * get_unused_buffer_head(void)
  * the size of each buffer.. Use the bh->b_this_page linked list to
  * follow the buffers created.  Return NULL if unable to create more
  * buffers.
+ * The async flag is used to differentiate async IO (paging, swapping)
+ * from ordinary buffer allocations, and only async requests are allowed
+ * to sleep waiting for buffer heads. 
  */
-static struct buffer_head * create_buffers(unsigned long page, unsigned long size)
+static struct buffer_head * create_buffers(unsigned long page, 
+						unsigned long size, int async)
 {
+	struct wait_queue wait = { current, NULL };
 	struct buffer_head *bh, *head;
 	long offset;
 
+try_again:
 	head = NULL;
 	offset = PAGE_SIZE;
 	while ((offset -= size) >= 0) {
-		bh = get_unused_buffer_head();
+		bh = get_unused_buffer_head(async);
 		if (!bh)
 			goto no_grow;
 
@@ -1138,7 +1163,35 @@ no_grow:
 		bh = bh->b_this_page;
 		put_unused_buffer_head(head);
 	}
-	return NULL;
+
+	/*
+	 * Return failure for non-async IO requests.  Async IO requests
+	 * are not allowed to fail, so we have to wait until buffer heads
+	 * become available.  But we don't want tasks sleeping with 
+	 * partially complete buffers, so all were released above.
+	 */
+	if (!async)
+		return NULL;
+
+	/* Uhhuh. We're _really_ low on memory. Now we just
+	 * wait for old buffer heads to become free due to
+	 * finishing IO.  Since this is an async request and
+	 * the reserve list is empty, we're sure there are 
+	 * async buffer heads in use.
+	 */
+	run_task_queue(&tq_disk);
+
+	/* 
+	 * Set our state for sleeping, then check again for buffer heads.
+	 * This ensures we won't miss a wake_up from an interrupt.
+	 */
+	add_wait_queue(&buffer_wait, &wait);
+	current->state = TASK_UNINTERRUPTIBLE;
+	recover_reusable_buffer_heads();
+	schedule();
+	remove_wait_queue(&buffer_wait, &wait);
+	current->state = TASK_RUNNING;
+	goto try_again;
 }
 
 /* Run the hooks that have to be done when a page I/O has completed. */
@@ -1189,12 +1242,13 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 	clear_bit(PG_uptodate, &page->flags);
 	clear_bit(PG_error, &page->flags);
 	/*
-	 * Allocate buffer heads pointing to this page, just for I/O.
+	 * Allocate async buffer heads pointing to this page, just for I/O.
 	 * They do _not_ show up in the buffer hash table!
 	 * They are _not_ registered in page->buffers either!
 	 */
-	bh = create_buffers(page_address(page), size);
+	bh = create_buffers(page_address(page), size, 1);
 	if (!bh) {
+		/* WSH: exit here leaves page->count incremented */
 		clear_bit(PG_locked, &page->flags);
 		wake_up(&page->wait);
 		return -ENOMEM;
@@ -1405,16 +1459,15 @@ static int grow_buffers(int pri, int size)
 		return 0;
 	}
 
-	isize = BUFSIZE_INDEX(size);
-
 	if (!(page = __get_free_page(pri)))
 		return 0;
-	bh = create_buffers(page, size);
+	bh = create_buffers(page, size, 0);
 	if (!bh) {
 		free_page(page);
 		return 0;
 	}
 
+	isize = BUFSIZE_INDEX(size);
 	insert_point = free_list[isize];
 
 	tmp = bh;
@@ -1554,6 +1607,18 @@ void buffer_init(void)
 				      SLAB_HWCACHE_ALIGN, NULL, NULL);
 	if(!bh_cachep)
 		panic("Cannot create buffer head SLAB cache\n");
+	/*
+	 * Allocate the reserved buffer heads.
+	 */
+	while (nr_buffer_heads < NR_RESERVED) {
+		struct buffer_head * bh;
+
+		bh = kmem_cache_alloc(bh_cachep, SLAB_ATOMIC);
+		if (!bh)
+			break;
+		put_unused_buffer_head(bh);
+		nr_buffer_heads++;
+	}
 
 	lru_list[BUF_CLEAN] = 0;
 	grow_buffers(GFP_KERNEL, BLOCK_SIZE);

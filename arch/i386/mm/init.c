@@ -230,7 +230,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 				set_in_cr4(X86_CR4_PGE);
 				__pe += _PAGE_GLOBAL;
 			}
-			pgd_val(pg_dir[768]) = _PAGE_TABLE + _PAGE_4M + __pa(address);
+			pgd_val(pg_dir[768]) = __pe;
 			pg_dir++;
 			address += 4*1024*1024;
 			continue;

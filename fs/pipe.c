@@ -483,6 +483,7 @@ int do_pipe(int *fd)
 close_f12_inode_i:
 	put_unused_fd(i);
 close_f12_inode:
+	free_page((unsigned long) PIPE_BASE(*inode));
 	iput(inode);
 close_f12:
 	put_filp(f2);

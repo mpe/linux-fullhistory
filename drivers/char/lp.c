@@ -500,7 +500,7 @@ static int lp_release(struct inode * inode, struct file * file)
 	unsigned int minor = MINOR(inode->i_rdev);
 	unsigned int irq;
 
-	if ((irq = LP_IRQ(minor))) {
+	if ((irq = LP_IRQ(minor)) != PARPORT_IRQ_NONE) {
 		kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
 		lp_table[minor].lp_buffer = NULL;
 	}
@@ -642,7 +642,7 @@ void lp_setup(char *str, int *ints)
 		parport[0] = -3;
 	} else {
 		if (ints[0] == 0 || ints[1] == 0) {
-			/* disable driver on "parport=" or "parport=0" */
+			/* disable driver on "lp=" or "lp=0" */
 			parport[0] = -2;
 		} else {
 			printk(KERN_WARNING "warning: 'lp=0x%x' is deprecated, ignored\n", ints[1]);

@@ -326,7 +326,28 @@ nfs_free_dircache(void)
 		cache->entry = NULL;
 	}
 }
- 
+
+/*
+ * This is called every time the dcache has a lookup hit,
+ * and we should check whether we can really trust that
+ * lookup.
+ *
+ * NOTE! The hit can be a negative hit too, don't assume
+ * we have an inode!
+ *
+ * The decision to drop the dentry should probably be
+ * smarter than this. Right now we believe in directories
+ * for 10 seconds, and in normal files for five..
+ */
+static int nfs_lookup_revalidate(struct dentry * dentry)
+{
+	unsigned long time = jiffies - dentry->d_time;
+	unsigned long max = 5*HZ;
+
+	if (dentry->d_inode && S_ISDIR(dentry->d_inode->i_mode))
+		max = 10*HZ;
+	return time < max;
+}
 
 static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 {
@@ -358,6 +379,8 @@ static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 	} else if (error != -ENOENT)
 		return error;
 
+	dentry->d_time = jiffies;
+	dentry->d_revalidate = nfs_lookup_revalidate;
 	d_add(dentry, inode);
 	return 0;
 }

@@ -23,6 +23,7 @@ EXPORT_SYMBOL(fat_brelse);
 EXPORT_SYMBOL(fat_cache_inval_inode);
 EXPORT_SYMBOL(fat_code2uni);
 EXPORT_SYMBOL(fat_date_unix2dos);
+EXPORT_SYMBOL(fat_delete_inode);
 EXPORT_SYMBOL(fat_dir_operations);
 EXPORT_SYMBOL(fat_file_read);
 EXPORT_SYMBOL(fat_file_write);

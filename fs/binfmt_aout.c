@@ -212,7 +212,6 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 close_coredump:
 	if (file.f_op->release)
 		file.f_op->release(inode,&file);
-done_coredump:
 	put_write_access(inode);
 end_coredump:
 	set_fs(fs);

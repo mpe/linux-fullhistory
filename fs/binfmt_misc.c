@@ -69,6 +69,7 @@ static struct proc_dir_entry *bm_dir = NULL;
 static struct binfmt_entry *entries = NULL;
 static int free_id = 1;
 static int enabled = 1;
+
 static rwlock_t entries_lock = RW_LOCK_UNLOCKED;
 
 

@@ -353,27 +353,43 @@ void d_move(struct dentry * dentry, struct dentry * newdir, struct qstr * newnam
 	dentry->d_parent = newdir;
 	d_insert_to_parent(dentry, newdir);
 }
-
 /*
- * This is broken in more ways than one. Unchecked recursion,
- * unchecked buffer size. Get rid of it.
+ * "buflen" should be PAGE_SIZE or more.
  */
-int d_path(struct dentry * entry, struct dentry * chroot, char * buf)
+char * d_path(struct dentry *dentry, char *buffer, int buflen)
 {
-	if (IS_ROOT(entry) || (chroot && entry == chroot)) {
-		*buf = '/';
-		return 1;
-	} else {
-		int len = d_path(entry->d_covers->d_parent, chroot, buf);
+	char * end = buffer+buflen;
+	char * retval;
+	struct dentry * root = current->fs->root;
 
-		buf += len;
-		if (len > 1) {
-			*buf++ = '/';
-			len++;
-		}
-		memcpy(buf, entry->d_name.name, entry->d_name.len);
-		return len + entry->d_name.len;
+	*--end = '\0';
+	buflen--;
+
+	/* Get '/' right */
+	retval = end-1;
+	*retval = '/';
+
+	for (;;) {
+		struct dentry * parent;
+		int namelen;
+
+		if (dentry == root)
+			break;
+		dentry = dentry->d_covers;
+		parent = dentry->d_parent;
+		if (dentry == parent)
+			break;
+		namelen = dentry->d_name.len;
+		buflen -= namelen + 1;
+		if (buflen < 0)
+			break;
+		end -= namelen;
+		memcpy(end, dentry->d_name.name, namelen);
+		*--end = '/';
+		retval = end;
+		dentry = parent;
 	}
+	return retval;
 }
 
 __initfunc(void dcache_init(void))

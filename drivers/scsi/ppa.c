@@ -144,7 +144,7 @@ static char *PPA_MODE_STRING[] =
 	"Unknown"};
 
 typedef struct {
-	struct ppd *dev;	/* Parport device entry          */
+	struct pardevice *dev;	/* Parport device entry          */
 	int speed;		/* General PPA delay constant   */
 	int speed_fast;		/* Const for nibble/byte modes  */
 	int epp_speed;		/* Reset time period            */
@@ -1137,7 +1137,7 @@ int ppa_detect(Scsi_Host_Template * host)
 		int modes = pb->modes;
 
 		/* We only understand PC-style ports */
-		if (modes & PARPORT_MODE_SPP) {
+		if (modes & PARPORT_MODE_PCSPP) {
 
 			/* transfer global values here */
 			if (ppa_speed >= 0)
@@ -1156,16 +1156,16 @@ int ppa_detect(Scsi_Host_Template * host)
 			w_ctr(i, 0x0c);
 
 			ppa_hosts[i].mode = PPA_NIBBLE;
-			if (modes & (PARPORT_MODE_EPP | PARPORT_MODE_ECPEPP)) {
+			if (modes & (PARPORT_MODE_PCEPP | PARPORT_MODE_PCECPEPP)) {
 				ppa_hosts[i].mode = PPA_EPP_32;
-				printk("PPA: Parport [ EPP ]\n");
-			} else if (modes & PARPORT_MODE_ECP) {
+				printk("PPA: Parport [ PCEPP ]\n");
+			} else if (modes & PARPORT_MODE_PCECP) {
 				w_ecr(i, 0x20);
 				ppa_hosts[i].mode = PPA_PS2;
-				printk("PPA: Parport [ ECP in PS2 submode ]\n");
-			} else if (modes & PARPORT_MODE_PS2) {
+				printk("PPA: Parport [ PCECP in PS2 submode ]\n");
+			} else if (modes & PARPORT_MODE_PCPS2) {
 				ppa_hosts[i].mode = PPA_PS2;
-				printk("PPA: Parport [ PS2 ]\n");
+				printk("PPA: Parport [ PCPS2 ]\n");
 			}
 			/* Done configuration */
 			ppa_pb_release(i);

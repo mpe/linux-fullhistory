@@ -138,15 +138,18 @@ static int proc_readlink(struct inode * inode, char * buffer, int buflen)
 	if (!IS_ERR(dentry)) {
 		error = -ENOENT;
 		if (dentry) {
-			char * tmp = (char*)__get_free_page(GFP_KERNEL);
-			int len = d_path(dentry, current->fs->root, tmp);
-			int min = buflen<PAGE_SIZE ? buflen : PAGE_SIZE;
-			if(len <= min)
-				min = len+1;
+			char * tmp = (char*)__get_free_page(GFP_KERNEL), *path;
+			int len;
+
+			path = d_path(dentry, tmp, PAGE_SIZE);
+			len = tmp + PAGE_SIZE - path;
+
+			if (len < buflen)
+				buflen = len;
 			dput(dentry);
-			copy_to_user(buffer, tmp, min);
+			copy_to_user(buffer, path, buflen);
 			free_page((unsigned long)tmp);
-			error = len;
+			error = buflen;
 		}
 	}
 	return error;

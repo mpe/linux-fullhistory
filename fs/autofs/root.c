@@ -133,7 +133,7 @@ static int try_to_fill_dentry(struct dentry * dentry, struct super_block * sb, s
  * yet completely filled in, and revalidate has to delay such
  * lookups..
  */
-static struct dentry * autofs_revalidate(struct dentry * dentry)
+static int autofs_revalidate(struct dentry * dentry)
 {
 	struct autofs_sb_info *sbi;
 	struct inode * dir = dentry->d_parent->d_inode;
@@ -143,18 +143,18 @@ static struct dentry * autofs_revalidate(struct dentry * dentry)
 	/* Incomplete dentry? */
 	if (dentry->d_flags) {
 		if (autofs_oz_mode(sbi))
-			return dentry;
+			return 1;
 
 		try_to_fill_dentry(dentry, dir->i_sb, sbi);
-		return dentry;
+		return 1;
 	}
 
 	/* Negative dentry.. Should we time these out? */
 	if (!dentry->d_inode)
-		return dentry;
+		return 1;
 
 	/* We should update the usage stuff here.. */
-	return dentry;
+	return 1;
 }
 
 static int autofs_root_lookup(struct inode *dir, struct dentry * dentry)

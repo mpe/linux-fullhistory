@@ -1379,6 +1379,11 @@ asmlinkage int sys_sched_getparam(pid_t pid, struct sched_param *param)
 
 asmlinkage int sys_sched_yield(void)
 {
+	/*
+	 * This is not really right. We'd like to reschedule
+	 * just _once_ with this process having a zero count.
+	 */
+	current->counter = 0;
 	spin_lock(&scheduler_lock);
 	spin_lock_irq(&runqueue_lock);
 	move_last_runqueue(current);
