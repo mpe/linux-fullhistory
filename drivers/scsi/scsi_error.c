@@ -35,7 +35,11 @@
 #include "hosts.h"
 #include "constants.h"
 
-#define SHUTDOWN_SIGS	(sigmask(SIGKILL)|sigmask(SIGINT)|sigmask(SIGTERM))
+#ifdef MODULE
+	#define SHUTDOWN_SIGS	(sigmask(SIGKILL)|sigmask(SIGINT)|sigmask(SIGTERM))
+#else
+	#define SHUTDOWN_SIGS	(0UL)
+#endif
 
 #ifdef DEBUG
     #define SENSE_TIMEOUT SCSI_TIMEOUT

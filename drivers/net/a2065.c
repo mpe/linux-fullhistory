@@ -499,7 +499,7 @@ static int lance_open (struct device *dev)
 	last_dev = dev;
 
 	/* Install the Interrupt handler */
-	if (request_irq(IRQ_AMIGA_PORTS, lance_interrupt, 0,
+	if (request_irq(IRQ_AMIGA_PORTS, lance_interrupt, SA_SHIRQ,
 			"a2065 Ethernet", dev))
 		return -EAGAIN;
 

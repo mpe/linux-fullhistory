@@ -91,6 +91,13 @@ struct uhci_framelist {
 #define TD_CTRL_NAK		(1 << 19)	/* NAK Received */
 #define TD_CTRL_CRCTIME		(1 << 18)	/* CTC/Time Out Error */
 #define TD_CTRL_BITSTUFF	(1 << 17)	/* Bit Stuff Error */
+#define TD_CTRL_ACTLEN_MASK	0x7ff		/* actual length, encoded as n - 1 */
+
+#define TD_CTRL_ANY_ERROR	(TD_CTRL_STALLED | TD_CTRL_DBUFERR | \
+				 TD_CTRL_BABBLE | TD_CTRL_CRCTIME | TD_CTRL_BITSTUFF)
+
+#define uhci_status_bits(ctrl_sts)	((ctrl_sts >> 16) & 0xff)
+#define uhci_actual_length(ctrl_sts)	((ctrl_sts + 1) & TD_CTRL_ACTLEN_MASK) /* 1-based */
 
 #define uhci_ptr_to_virt(x)	bus_to_virt(x & ~UHCI_PTR_BITS)
 

@@ -7,6 +7,9 @@ if [ "$CONFIG_PARTITION_ADVANCED" = "n" ]; then
   if [ "$ARCH" = "alpha" ]; then
     define_bool CONFIG_OSF_PARTITION y
   fi
+  if [ "$CONFIG_AMIGA" = "y" ]; then
+    define_bool CONFIG_AMIGA_PARTITION y
+  fi
   if [ "$CONFIG_ARM" = "y" ]; then
     if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
       define_bool CONFIG_ACORN_PARTITION y
@@ -16,6 +19,9 @@ if [ "$CONFIG_PARTITION_ADVANCED" = "n" ]; then
       define_bool CONFIG_ACORN_PARTITION_POWERTEC y
       define_bool CONFIG_ACORN_PARTITION_RISCIX y
     fi
+  fi
+  if [ "$CONFIG_ATARI" = "y" ]; then
+    define_bool CONFIG_ATARI_PARTITION y
   fi
   bool 'SMD disklabel (Sun partition tables) support' CONFIG_SMD_DISKLABEL
   if [ "$ARCH" = "sparc" -o "$CONFIG_SMD_DISKLABEL" = "y" ]; then

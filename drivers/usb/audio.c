@@ -6,6 +6,7 @@
 #include <linux/module.h>
 
 #include "usb.h"
+#define AUDIO_DEBUG 1
 
 static int usb_audio_probe(struct usb_device *dev);
 static void usb_audio_disconnect(struct usb_device *dev);
@@ -35,23 +36,23 @@ static int usb_audio_irq(int state, void *buffer, int len, void *dev_id)
 
 static int usb_audio_probe(struct usb_device *dev)
 {
-	struct usb_interface_descriptor *interface;
+	struct usb_interface_descriptor *intf_desc;
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_audio *aud;
+	int bEndpointAddress = 0;
 	int i;
 	int na=0;
 	
-	interface = &dev->config[0].altsetting[0].interface[0];
 
 	for (i=0; i<dev->config[0].bNumInterfaces; i++) {
-		endpoint = &interface->endpoint[i];
+		intf_desc = &dev->config->interface[i].altsetting[0];
 
-		if(interface->bInterfaceClass != 1) 
+		if(intf_desc->bInterfaceClass != 1) 
 	        	continue;
 
 		printk(KERN_INFO "USB audio device detected.\n");
 	
-		switch(interface->bInterfaceSubClass) {
+		switch(intf_desc->bInterfaceSubClass) {
 			case 0x01:
 				printk(KERN_INFO "audio: Control device.\n");
 				break;
@@ -74,8 +75,6 @@ static int usb_audio_probe(struct usb_device *dev)
         	aud->dev = dev;
         	dev->private = aud;
 
-		endpoint = &interface->endpoint[0];
-
 //        	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
 //			printk (KERN_INFO " Failed usb_set_configuration: Audio\n");
 //			break;
@@ -83,11 +82,11 @@ static int usb_audio_probe(struct usb_device *dev)
 //        	usb_set_protocol(dev, 0);
 //        	usb_set_idle(dev, 0, 0);
         
-        	usb_request_irq(dev,
-                        usb_rcvctrlpipe(dev, endpoint->bEndpointAddress),
-                        usb_audio_irq,
-                        endpoint->bInterval,
-                        aud);
+//        	usb_request_irq(dev,
+//                        usb_rcvctrlpipe(dev, bEndpointAddress),
+//                        usb_audio_irq,
+//                        endpoint->bInterval,
+//                        aud);
 
 		list_add(&aud->list, &usb_audio_list);
 		
@@ -123,10 +122,16 @@ int usb_audio_init(void)
  
 void usb_audio_interface(struct usb_interface_descriptor *interface, u8 *data)
 {
+#ifdef AUDIO_DEBUG
+	printk(KERN_DEBUG "usb_audio_interface.\n");
+#endif
 }
 
 void usb_audio_endpoint(struct usb_endpoint_descriptor *interface, u8 *data)
 {
+#ifdef AUDIO_DEBUG
+	printk(KERN_DEBUG "usb_audio_interface.\n");
+#endif
 }
 
 #ifdef MODULE

@@ -293,7 +293,7 @@ static int ariadne_open(struct device *dev)
     dev->interrupt = 0;
     dev->start = 1;
 
-    if (request_irq(IRQ_AMIGA_PORTS, ariadne_interrupt, 0,
+    if (request_irq(IRQ_AMIGA_PORTS, ariadne_interrupt, SA_SHIRQ,
                     "Ariadne Ethernet", dev))
 	return(-EAGAIN);
 

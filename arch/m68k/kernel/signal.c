@@ -14,6 +14,10 @@
  * 68060 fixes by Jesper Skov
  *
  * 1997-12-01  Modified for POSIX.1b signals by Andreas Schwab
+ *
+ * mathemu support by Roman Zippel
+ *  (Note: fpstate in the signal context is completly ignored for the emulator
+ *         and the internal floating point format is put on stack)
  */
 
 /*
@@ -190,6 +194,13 @@ static inline int restore_fpu_state(struct sigcontext *sc)
 {
 	int err = 1;
 
+	if (FPU_IS_EMU) {
+	    /* restore registers */
+	    memcpy(current->thread.fpcntl, sc->sc_fpcntl, 12);
+	    memcpy(current->thread.fp, sc->sc_fpregs, 24);
+	    return 0;
+	}
+
 	if (CPU_IS_060 ? sc->sc_fpstate[2] : sc->sc_fpstate[0]) {
 	    /* Verify the frame format.  */
 	    if (!CPU_IS_060 && (sc->sc_fpstate[0] != fpu_version))
@@ -241,6 +252,18 @@ static inline int rt_restore_fpu_state(struct ucontext *uc)
 	int context_size = CPU_IS_060 ? 8 : 0;
 	fpregset_t fpregs;
 	int err = 1;
+
+	if (FPU_IS_EMU) {
+		/* restore fpu control register */
+		if (__copy_from_user(current->thread.fpcntl,
+				&uc->uc_mcontext.fpregs.f_pcr, 12))
+			goto out;
+		/* restore all other fpu register */
+		if (__copy_from_user(current->thread.fp,
+				uc->uc_mcontext.fpregs.f_fpregs, 96))
+			goto out;
+		return 0;
+	}
 
 	if (__get_user(*(long *)fpstate, (long *)&uc->uc_fpstate))
 		goto out;
@@ -539,6 +562,13 @@ badframe:
 
 static inline void save_fpu_state(struct sigcontext *sc, struct pt_regs *regs)
 {
+	if (FPU_IS_EMU) {
+		/* save registers */
+		memcpy(sc->sc_fpcntl, current->thread.fpcntl, 12);
+		memcpy(sc->sc_fpregs, current->thread.fp, 24);
+		return;
+	}
+
 	__asm__ volatile (".chip 68k/68881\n\t"
 			  "fsave %0\n\t"
 			  ".chip 68k"
@@ -569,6 +599,16 @@ static inline int rt_save_fpu_state(struct ucontext *uc, struct pt_regs *regs)
 	unsigned char fpstate[FPCONTEXT_SIZE];
 	int context_size = CPU_IS_060 ? 8 : 0;
 	int err = 0;
+
+	if (FPU_IS_EMU) {
+		/* save fpu control register */
+		err |= copy_to_user(&uc->uc_mcontext.fpregs.f_pcr,
+				current->thread.fpcntl, 12);
+		/* save all other fpu register */
+		err |= copy_to_user(uc->uc_mcontext.fpregs.f_fpregs,
+				current->thread.fp, 96);
+		return err;
+	}
 
 	__asm__ volatile (".chip 68k/68881\n\t"
 			  "fsave %0\n\t"

@@ -86,14 +86,14 @@ void (*mach_free_irq) (unsigned int, void *) = dummy_free_irq;
  * the IRQ handling routines.
  */
 
-__initfunc(void init_IRQ(void))
+void __init init_IRQ(void)
 {
 	int i;
 
 	for (i = 0; i < SYS_IRQS; i++) {
 		if (mach_default_handler)
 			irq_list[i].handler = (*mach_default_handler)[i];
-		irq_list[i].flags   = IRQ_FLG_STD;
+		irq_list[i].flags   = 0;
 		irq_list[i].dev_id  = NULL;
 		irq_list[i].devname = default_names[i];
 	}
@@ -144,6 +144,7 @@ int sys_request_irq(unsigned int irq,
 		return -ENXIO;
 	}
 
+#if 0
 	if (!(irq_list[irq].flags & IRQ_FLG_STD)) {
 		if (irq_list[irq].flags & IRQ_FLG_LOCK) {
 			printk("%s: IRQ %d from %s is not replaceable\n",
@@ -156,6 +157,8 @@ int sys_request_irq(unsigned int irq,
 			return -EBUSY;
 		}
 	}
+#endif
+
 	irq_list[irq].handler = handler;
 	irq_list[irq].flags   = flags;
 	irq_list[irq].dev_id  = dev_id;
@@ -175,7 +178,7 @@ void sys_free_irq(unsigned int irq, void *dev_id)
 		       __FUNCTION__, irq, irq_list[irq].devname);
 
 	irq_list[irq].handler = (*mach_default_handler)[irq];
-	irq_list[irq].flags   = IRQ_FLG_STD;
+	irq_list[irq].flags   = 0;
 	irq_list[irq].dev_id  = NULL;
 	irq_list[irq].devname = default_names[irq];
 }
@@ -250,9 +253,6 @@ int get_irq_list(char *buf)
 		for (i = 0; i < SYS_IRQS; i++) {
 			len += sprintf(buf+len, "auto %2d: %10u ", i,
 			               i ? kstat.irqs[0][i] : num_spurious);
-			if (irq_list[i].flags & IRQ_FLG_LOCK)
-				len += sprintf(buf+len, "L ");
-			else
 				len += sprintf(buf+len, "  ");
 			len += sprintf(buf+len, "%s\n", irq_list[i].devname);
 		}

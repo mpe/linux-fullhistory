@@ -50,6 +50,7 @@
  *
  */
 
+#include <linux/config.h>
 #include "eicon.h"
 #include "eicon_isa.h"
 

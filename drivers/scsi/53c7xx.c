@@ -1074,7 +1074,7 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 
     NCR53c7x0_driver_init (host);
 
-    if (request_irq(host->irq, NCR53c7x0_intr, 0, "53c7xx", host))
+    if (request_irq(host->irq, NCR53c7x0_intr, SA_SHIRQ, "53c7xx", host))
     {
 	printk("scsi%d : IRQ%d not free, detaching\n",
 		host->host_no, host->irq);

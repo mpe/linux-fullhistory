@@ -33,7 +33,6 @@
 #undef ISDN_TTY_FAX_CMD_DEBUG
 
 #define __NO_VERSION__
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/isdn.h>
 #include "isdn_common.h"

@@ -240,32 +240,15 @@ int q40kbd_getkeycode(unsigned int scancode)
 
 
 
-int q40kbd_pretranslate(unsigned char scancode, char raw_mode)
-{
-	if (scancode == 0xff) {
-		/* in scancode mode 1, my ESC key generates 0xff */
-		/* the calculator keys on a FOCUS 9000 generate 0xff */
-#ifndef KBD_IS_FOCUS_9000
-#ifdef KBD_REPORT_ERR
-		if (!raw_mode)
-		  printk(KERN_DEBUG "Keyboard error\n");
-#endif
-#endif
-		prev_scancode = 0;
-		return 0;
-	}
-
-	if (scancode == 0xe0 || scancode == 0xe1) {
-		prev_scancode = scancode;
-		return 0;
- 	}
- 	return 1;
-}
 
 int q40kbd_translate(unsigned char scancode, unsigned char *keycode,
 		    char raw_mode)
 {
-  /*printk("translate ...\n");*/
+  	if (scancode == 0xe0 || scancode == 0xe1) {
+		prev_scancode = scancode;
+		return 0;
+ 	}
+
 	if (prev_scancode) {
 	  /*
 	   * usually it will be 0xe0, but a Pause key generates
@@ -376,7 +359,7 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		if (qcode == 0xe0)
 		  {
 		    qprev=0xe0;
-		    handle_scancode(qprev);
+		    handle_scancode(qprev , 1);
 		    goto exit;
 		  }
 		
@@ -394,7 +377,7 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		if (scancode==0xff)  /* SySrq */
 		  scancode=SYSRQ_KEY;
 
-		handle_scancode(scancode | (keyup ? 0200 : 0));
+		handle_scancode(scancode, ! keyup );
 		keyup=0;
 		mark_bh(KEYBOARD_BH);
 

@@ -50,10 +50,7 @@ static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pt
 	if (pte_val(pte) != pte_val(*page_table))
 		goto out_failed_unlock;
 
-	/*
-	 * Dont be too eager to get aging right if
-	 * memory is dangerously low.
-	 */
+	/* Don't look at this pte if it's been accessed recently. */
 	if (pte_young(pte)) {
 		/*
 		 * Transfer the "accessed" bit from the page

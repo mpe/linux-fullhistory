@@ -58,6 +58,13 @@ bool '68020 support' CONFIG_M68020
 bool '68030 support' CONFIG_M68030
 bool '68040 support' CONFIG_M68040
 bool '68060 support' CONFIG_M68060
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool 'Math emulation support' CONFIG_M68KFPU_EMU
+  if [ "$CONFIG_M68KFPU_EMU" = "y" ]; then
+    bool 'Math emulation extra precision' CONFIG_M68KFPU_EMU_EXTRAPREC
+    bool 'Math emulation only kernel' CONFIG_M68KFPU_EMU_ONLY
+  fi
+fi
 bool 'Advanced configuration options' CONFIG_ADVANCED
 if [ "$CONFIG_ADVANCED" = "y" ]; then
   bool 'Use read-modify-write instructions' CONFIG_RMW_INSNS

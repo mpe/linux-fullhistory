@@ -36,6 +36,7 @@
  */
 
 
+#include <linux/config.h>
 #include "eicon.h"
 
 void

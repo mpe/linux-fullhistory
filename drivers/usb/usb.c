@@ -329,7 +329,7 @@ static int usb_parse_endpoint(struct usb_device *dev, struct usb_endpoint_descri
 	return parsed;// + ptr[parsed];
 }
 
-static int usb_parse_interface(struct usb_device *dev, struct usb_interface_descriptor *interface, unsigned char *ptr, int len)
+static int usb_parse_altsetting(struct usb_device *dev, struct usb_interface_descriptor *altsetting, unsigned char *ptr, int len)
 {
 	int i;
 	int parsed = usb_expect_descriptor(ptr, len, USB_DT_INTERFACE, USB_DT_INTERFACE_SIZE);
@@ -338,35 +338,35 @@ static int usb_parse_interface(struct usb_device *dev, struct usb_interface_desc
 	if (parsed < 0)
 		return parsed;
 
-	memcpy(interface, ptr + parsed, *ptr);
+	memcpy(altsetting, ptr + parsed, *ptr);
 	len -= ptr[parsed];
 	parsed += ptr[parsed];
 
 	while((i=usb_check_descriptor(ptr+parsed, len, 0x24)) >= 0) {
-		usb_audio_interface(interface, ptr+parsed+i);
+		usb_audio_interface(altsetting, ptr+parsed+i);
 		len -= ptr[parsed+i];
 		parsed += ptr[parsed+i];
 	}
 	
-	if (interface->bNumEndpoints > USB_MAXENDPOINTS) {
+	if (altsetting->bNumEndpoints > USB_MAXENDPOINTS) {
 		printk(KERN_WARNING "usb: too many endpoints.\n");
 		return -1;
 	}
 
-	interface->endpoint = (struct usb_endpoint_descriptor *)
-		kmalloc(interface->bNumEndpoints * sizeof(struct usb_endpoint_descriptor), GFP_KERNEL);
-	if (!interface->endpoint) {
+	altsetting->endpoint = (struct usb_endpoint_descriptor *)
+		kmalloc(altsetting->bNumEndpoints * sizeof(struct usb_endpoint_descriptor), GFP_KERNEL);
+	if (!altsetting->endpoint) {
 		printk(KERN_WARNING "usb: out of memory.\n");
 		return -1;	
 	}
-	memset(interface->endpoint, 0, interface->bNumEndpoints*sizeof(struct usb_endpoint_descriptor));
+	memset(altsetting->endpoint, 0, altsetting->bNumEndpoints*sizeof(struct usb_endpoint_descriptor));
 	
-	for (i = 0; i < interface->bNumEndpoints; i++) {
+	for (i = 0; i < altsetting->bNumEndpoints; i++) {
 //		if(((USB_DT_HID << 8) | 9) == *(unsigned short*)(ptr + parsed)) {
 //			parsed += 9;	/* skip over the HID descriptor for now */
 //			len -= 9;
 //		}
-		retval = usb_parse_endpoint(dev, interface->endpoint + i, ptr + parsed, len);
+		retval = usb_parse_endpoint(dev, altsetting->endpoint + i, ptr + parsed, len);
 		if (retval < 0)
 			return retval;
 		parsed += retval;
@@ -377,10 +377,13 @@ static int usb_parse_interface(struct usb_device *dev, struct usb_interface_desc
 
 static int usb_parse_config(struct usb_device *dev, struct usb_config_descriptor *config, unsigned char *ptr, int len)
 {
-	int i, j;
+	int i;
 	int retval;
-	struct usb_alternate_setting *as;
+	struct usb_interface *intf;
+	struct usb_interface_descriptor as;	/* This is needing for copying. */
 	int parsed = usb_expect_descriptor(ptr, len, USB_DT_CONFIG, 9);
+	unsigned short bNumInterfaces;
+	unsigned short bIntfaceNum = 0, bAltSetting = 0;
 
 	if (parsed < 0)
 		return parsed;
@@ -389,65 +392,65 @@ static int usb_parse_config(struct usb_device *dev, struct usb_config_descriptor
 	len -= *ptr;
 	parsed += *ptr;
 	le16_to_cpus(&config->wTotalLength);
+	bNumInterfaces = config->bNumInterfaces;
 
-	if (config->bNumInterfaces > USB_MAXINTERFACES) {
+	if (bNumInterfaces > USB_MAXINTERFACES) {
 		printk(KERN_WARNING "usb: too many interfaces.\n");
 		return -1;
-
 	}
 
-	config->altsetting = (struct usb_alternate_setting *)
-	        kmalloc(USB_MAXALTSETTING * sizeof(struct usb_alternate_setting), GFP_KERNEL);
-	if (!config->altsetting) {
+	config->interface = (struct usb_interface *)
+	        kmalloc(bNumInterfaces * sizeof(struct usb_interface), GFP_KERNEL);
+	if (!config->interface) {
 		printk(KERN_WARNING "usb: out of memory.\n");
 		return -1;
 	}
-	config->act_altsetting = 0;
-	config->num_altsetting = 1;
+	memset(config->interface, 
+		   0, (bNumInterfaces) * sizeof(struct usb_interface));
 
-	config->altsetting->interface = (struct usb_interface_descriptor *)
-		kmalloc(config->bNumInterfaces * sizeof(struct usb_interface_descriptor), GFP_KERNEL);
-	if (!config->altsetting->interface) {
-		printk(KERN_WARNING "usb: out of memory.\n");
-		return -1;	
+	for (i = 0; i < bNumInterfaces; i++) {
+		intf = (config->interface) +i;
+		/* We have at least one interface */
+		intf->num_altsetting = 1;
+		intf->altsetting = (struct usb_interface_descriptor*)
+			kmalloc((USB_MAXALTSETTING +1) * sizeof(struct usb_interface_descriptor), GFP_KERNEL);
+		if (!config->interface[i].altsetting) {
+			printk(KERN_WARNING "usb: out of memory.\n");
+			return -1;	
+		}
+		memset(intf->altsetting, 
+			   0, (USB_MAXALTSETTING+1) * sizeof(struct usb_interface_descriptor));
 	}
-	memset(config->altsetting->interface, 
-	       0, config->bNumInterfaces*sizeof(struct usb_interface_descriptor));
-	
-	for (i = 0; i < config->bNumInterfaces; i++) {
-		retval = usb_parse_interface(dev, config->altsetting->interface + i, ptr + parsed, len);
+		
+	/* Ok, we now have allocated the necessary structures, now decide
+     * where to put the parsed interface descriptors - sort by
+	 * bAltSetting and bInterfaceNumber.
+	 */
+	while (len > 0) {
+		retval = usb_parse_altsetting(dev, &as, ptr + parsed, len);
 		if (retval < 0)
 			return parsed; // HACK
-//			return retval;
+	//		return retval;
 		parsed += retval;
 		len -= retval;
+		bIntfaceNum = as.bInterfaceNumber;
+		if (bIntfaceNum > config->bNumInterfaces) {
+			printk(KERN_WARNING "usb: bInterfaceNumber %2u exceeding config->bNumINterfaces.\n", bIntfaceNum);
+			return -1;
+		}
+		bAltSetting = as.bAlternateSetting;
+		if (bAltSetting > USB_MAXALTSETTING) {
+			printk(KERN_WARNING "usb: illegal bAlternateSetting %2u.\n", bAltSetting);
+			return -1;
+		}
+		if (bAltSetting > config->interface[bIntfaceNum].num_altsetting) {
+			config->interface[bIntfaceNum].num_altsetting = bAltSetting +1;
+		}
+		memcpy( &(config->interface[bIntfaceNum].altsetting[bAltSetting]),
+		   		&as, sizeof(struct usb_interface_descriptor));
 	}
 
 	printk("parsed = %d len = %d\n", parsed, len);
-
-	// now parse for additional alternate settings
-	for (j = 1; j < USB_MAXALTSETTING; j++) {
-		retval = usb_expect_descriptor(ptr + parsed, len, USB_DT_INTERFACE, 9);
-		if (retval) 
-			break;
-		config->num_altsetting++;
-		as = config->altsetting + j;
-		as->interface = (struct usb_interface_descriptor *)
-			kmalloc(config->bNumInterfaces * sizeof(struct usb_interface_descriptor), GFP_KERNEL);
-		if (!as->interface) {
-			printk(KERN_WARNING "usb: out of memory.\n");
-			return -1;
-		}
-		memset(as->interface, 0, config->bNumInterfaces * sizeof(struct usb_interface_descriptor));
-		for (i = 0; i < config->bNumInterfaces; i++) {
-			retval = usb_parse_interface(dev, as->interface + i, 
-					 ptr + parsed, len);
-			if (retval < 0)
-				return parsed;
-			parsed += retval;
-			len -= retval;
-		}
-	}
 	return parsed;
 }
 
@@ -484,29 +487,29 @@ void usb_destroy_configuration(struct usb_device *dev)
 {
 	int c, a, i;
 	struct usb_config_descriptor *cf;
-	struct usb_alternate_setting *as;
-	struct usb_interface_descriptor *ifp;
+	struct usb_interface *intf;
+	struct usb_interface_descriptor *as;
 	
 	if (!dev->config)
 		return;
 
 	for (c = 0; c < dev->descriptor.bNumConfigurations; c++) {
 		cf = &dev->config[c];
-		if (!cf->altsetting)
+		if (!cf->interface)
 		        break;
-		for (a = 0; a < cf->num_altsetting; a++) {
-		        as = &cf->altsetting[a];
-			if (as->interface == NULL)
+		for (a = 0; a < cf->bNumInterfaces; a++) {
+		        intf = &cf->interface[a];
+			if (intf->altsetting == NULL)
 			        break;
-			for(i=0;i<cf->bNumInterfaces;i++) {
-			        ifp = &as->interface[i];
-				if(ifp->endpoint==NULL)
+			for(i=0; i <= USB_MAXALTSETTING ;i++) {
+			        as = &intf->altsetting[i];
+				if(as->endpoint==NULL)
 				       break;
-				kfree(ifp->endpoint);
+				kfree(as->endpoint);
 			}
-			kfree(as->interface);
+			kfree(intf->altsetting);
 		}
-		kfree(cf->altsetting);
+		kfree(cf->interface);
 	}
 	kfree(dev->config);
 
@@ -700,22 +703,24 @@ int usb_set_idle(struct usb_device *dev,  int duration, int report_id)
 
 static void usb_set_maxpacket(struct usb_device *dev)
 {
-	int i;
-	int act_as = dev->actconfig->act_altsetting;
-	struct usb_alternate_setting *as = dev->actconfig->altsetting + act_as;
+	int i, j;
+	struct usb_interface *intf;
 
 	for (i=0; i<dev->actconfig->bNumInterfaces; i++) {
-		struct usb_interface_descriptor *ip = &as->interface[i];
-		struct usb_endpoint_descriptor *ep = ip->endpoint;
-		int e;
+		intf = (dev->actconfig->interface) +i;
+		for (j = 0; j < intf->num_altsetting; j++) {
+			struct usb_interface_descriptor *as = intf->altsetting +j;
+			struct usb_endpoint_descriptor *ep = as->endpoint;
+			int e;
 
-		for (e=0; e<ip->bNumEndpoints; e++) {
-			if (usb_endpoint_out(ep[e].bEndpointAddress))
-				dev->epmaxpacketout[ep[e].bEndpointAddress & 0x0f] =
-					ep[e].wMaxPacketSize;
-			else
-				dev->epmaxpacketin [ep[e].bEndpointAddress & 0x0f] =
-					ep[e].wMaxPacketSize;
+			for (e=0; e<as->bNumEndpoints; e++) {
+				if (usb_endpoint_out(ep[e].bEndpointAddress))
+					dev->epmaxpacketout[ep[e].bEndpointAddress & 0x0f] =
+						ep[e].wMaxPacketSize;
+				else
+					dev->epmaxpacketin[ep[e].bEndpointAddress & 0x0f] =
+						ep[e].wMaxPacketSize;
+			}
 		}
 	}
 }
@@ -781,7 +786,7 @@ int usb_set_interface(struct usb_device *dev, int interface, int alternate)
 		return -1;
 
 	dev->ifnum = interface;
-	dev->actconfig->act_altsetting = alternate;
+	dev->actconfig->interface[interface].act_altsetting = alternate;
 	usb_set_maxpacket(dev);
 	return 0;
 }

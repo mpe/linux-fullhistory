@@ -54,6 +54,7 @@
 #ifndef IDI_H
 #define IDI_H
 
+#include <linux/config.h>
 
 #define ASSIGN  0x01
 #define REMOVE  0xff

@@ -8,6 +8,19 @@
 #ifndef _LINUX_IOPORT_H
 #define _LINUX_IOPORT_H
 
+#define DEVICE_IO_NOTSET	(~0)
+#define DEVICE_IO_AUTO		((~0)-1)
+
+#define DEVICE_IO_FLAG_WRITEABLE	(1<<0)
+#define DEVICE_IO_FLAG_CACHEABLE	(1<<1)
+#define DEVICE_IO_FLAG_RANGELENGTH	(1<<2)
+#define DEVICE_IO_FLAG_SHADOWABLE	(1<<4)
+#define DEVICE_IO_FLAG_EXPANSIONROM	(1<<5)
+
+#define DEVICE_IO_TYPE_8BIT		0
+#define DEVICE_IO_TYPE_16BIT		1
+#define DEVICE_IO_TYPE_8AND16BIT	2
+
 /*
  * Resources are tree-like, allowing
  * nesting etc..
@@ -16,6 +29,10 @@ struct resource {
 	const char *name;
 	unsigned long start, end;
 	unsigned long flags;
+	unsigned char bits;		/* decoded bits */
+	unsigned char fixed;		/* fixed range */
+	unsigned short hw_flags;	/* hardware flags */
+	unsigned short type;		/* region type */
 	struct resource *parent, *sibling, *child;
 };
 

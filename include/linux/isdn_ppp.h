@@ -3,6 +3,7 @@
 #ifndef _LINUX_ISDN_PPP_H
 #define _LINUX_ISDN_PPP_H
 
+#include <linux/config.h>
 #include <linux/isdn_compat.h>
 
 #define CALLTYPE_INCOMING 0x1

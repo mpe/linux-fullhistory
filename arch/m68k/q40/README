@@ -7,7 +7,7 @@ available from this place and ftp.uni-erlangen.de/linux/680x0/q40/
 and mirrors.
 
 Hints to documentation usually refer to the linux source tree in
-/usr/src/linux unless URL given.
+/usr/src/linux/Documentation unless URL given.
 
 It seems IRQ unmasking can't be safely done on a Q40. Autoprobing is 
 not yet implemented - do not try it! (See below)
@@ -18,8 +18,8 @@ particular device drivers.
 The floppy imposes a very high interrupt load on the CPU, approx 30K/s.
 When something blocks interrupts (HD) it will loose some of them, so far 
 this is not known to have caused any data loss. On hihgly loaded systems
-it can make the floppy very slow. Other Q40 OS' simply poll the floppy
-for this reason - something that can't be done in Linux.
+it can make the floppy very slow or practicaly stop. Other Q40 OS' simply 
+poll the floppy for this reason - something that can't be done in Linux.
 Only possible cure is getting a 82072 contoler with fifo instead of 
 the 8272A
 
@@ -48,7 +48,7 @@ Debugging
 Upon startup the kernel will usually output "ABCQGHIJ" into the SRAM, 
 preceded by the booter signature. This is a trace just in case something 
 went wrong during earliest setup stages. 
-*Changed* to preserve SRAM contents by default, this is only done when 
+**Changed** to preserve SRAM contents by default, this is only done when 
 requested - SRAM must start with '%LX$' signature to do this. '-d' option 
 to 'lxx' loader enables this.
 
@@ -92,12 +92,22 @@ Interrupts
 ==========
 
 q40 master chip handles only level triggered interrupts :-((
-further limitation is no disabling etc. Unless someone finds 
-some ingenious clue this means autoprobing will never work.
-Parallel port interrupts cause most trouble..
+further limitation is no disabling etc. There is NO WAY to remove
+an ISA irq request other than serve the HW specific control register,
+the ISA irq lines are connected straight to the CPU ipl1 pin..
 
-IRQ sharing is not yet implemented.
+IRQ sharing is not yet implemented but this should be only a minor
+problem..
 
+Linux has some requirements wrt interrupt architecture, these are
+to my knowledge:
+	(a) interrupt handler must not be reentered even when sti() is called
+	(b) working enable/disable_irq
+
+Luckily these requirements are only important for drivers shared
+with other architectures - ide,serial,parallel, ethernet..
+q40ints.c now contains a trivial hack for (a), however (b) could
+be only solved by driver-specific code
 
 Keyboard
 ========

@@ -180,8 +180,8 @@ static int __init ariadne2_init(struct device *dev, unsigned int key,
     dev->irq = IRQ_AMIGA_PORTS;
 
     /* Install the Interrupt handler */
-    if (request_irq(IRQ_AMIGA_PORTS, ei_interrupt, 0, "AriadNE2 Ethernet",
-		    dev))
+    if (request_irq(IRQ_AMIGA_PORTS, ei_interrupt, SA_SHIRQ,
+		    "AriadNE2 Ethernet", dev))
 	return -EAGAIN;
 
     /* Allocate dev->priv and fill in 8390 specific dev fields. */

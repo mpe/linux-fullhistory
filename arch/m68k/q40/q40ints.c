@@ -29,7 +29,7 @@
  *            3,4,5,6,7,10,11,14,15 : ISA dev IRQs
  *            16-31: reserved
  *            32   : keyboard int
- *            33   : frame int (50 Hz periodic timer)
+ *            33   : frame int (50/200 Hz periodic timer)
  *            34   : sample int (10/20 KHz periodic timer)
  *          
 */
@@ -45,19 +45,20 @@ extern void (*q40_sys_default_handler[]) (int, void *, struct pt_regs *);  /* ad
 static void q40_defhand (int irq, void *dev_id, struct pt_regs *fp);
 static void sys_default_handler(int lev, void *dev_id, struct pt_regs *regs);
 
-/*
- * This should ideally be 4 elements only, for speed.
- */
 
 #define DEVNAME_SIZE 24
 
-static struct {
+static struct q40_irq_node {
 	void		(*handler)(int, void *, struct pt_regs *);
 	unsigned long	flags;
 	void		*dev_id;
+  /*        struct q40_irq_node *next;*/
         char	        devname[DEVNAME_SIZE];
 	unsigned	count;
+        unsigned short  state;
 } irq_tab[Q40_IRQ_MAX+1];
+
+short unsigned q40_ablecount[Q40_IRQ_MAX+1];
 
 /*
  * void q40_init_IRQ (void)
@@ -78,8 +79,11 @@ void q40_init_IRQ (void)
 		irq_tab[i].handler = q40_defhand;
 		irq_tab[i].flags = IRQ_FLG_STD;
 		irq_tab[i].dev_id = NULL;
+		/*		irq_tab[i].next = NULL;*/
 		irq_tab[i].devname[0] = 0;
 		irq_tab[i].count = 0;
+		irq_tab[i].state =0;
+		q40_ablecount[i]=0;   /* all enabled */
 	}
 
 	/* setup handler for ISA ints */
@@ -108,23 +112,20 @@ int q40_request_irq(unsigned int irq,
 	}
 
 	/* test for ISA ints not implemented by HW */
-	if (irq<15) 
+	switch (irq)
 	  {
-	    switch (irq){
-	    case 1: case 2: case 8: case 9:
-	    case 12: case 13:
-	      printk("%s: ISA IRQ %d from %s not implemented by HW\n", __FUNCTION__, irq, devname);
-	      return -ENXIO;
-	    default:
-	    }
+	  case 1: case 2: case 8: case 9:
+	  case 12: case 13:
+	    printk("%s: ISA IRQ %d from %s not implemented by HW\n", __FUNCTION__, irq, devname);
+	    return -ENXIO;
+	  case 11: 	      
+	    printk("warning IRQ 10 and 11 not distinguishable\n");
+	    irq=10;
+	  default:
 	  }
 
 	if (irq<Q40_IRQ_TIMER)
 	  {
-	    if (irq==11) {
-	      printk("warning IRQ 10 and 11 not distinguishable\n");
-	      irq=10;
-	    }
 	    if (!(irq_tab[irq].flags & IRQ_FLG_STD)) 
 	      {
 		if (irq_tab[irq].flags & IRQ_FLG_LOCK) 
@@ -145,6 +146,7 @@ int q40_request_irq(unsigned int irq,
 	    irq_tab[irq].flags   = flags;
 	    irq_tab[irq].dev_id  = dev_id;
 	    strncpy(irq_tab[irq].devname,devname,DEVNAME_SIZE);
+	    irq_tab[irq].state = 0;
 	    return 0;
 	  }
 	else {
@@ -163,30 +165,33 @@ void q40_free_irq(unsigned int irq, void *dev_id)
 	}
 
 	/* test for ISA ints not implemented by HW */
-	if (irq<15) {
-	  switch (irq){
+	switch (irq)
+	  {
 	  case 1: case 2: case 8: case 9:
 	  case 12: case 13:
-	        printk("%s: ISA IRQ %d from %x illegal\n", __FUNCTION__, irq, (unsigned)dev_id);
-		return;
+	    printk("%s: ISA IRQ %d from %x illegal\n", __FUNCTION__, irq, (unsigned)dev_id);
+	    return;
+	  case 11: irq=10;
 	  default:
-		  }
-	}
+	  }
 	
-	if (irq<Q40_IRQ_TIMER){
-	  if (irq==11) irq=10;
-	  if (irq_tab[irq].dev_id != dev_id)
-	    printk("%s: Removing probably wrong IRQ %d from %s\n",
-		   __FUNCTION__, irq, irq_tab[irq].devname);
-	  
-	  irq_tab[irq].handler = q40_defhand;
-	  irq_tab[irq].flags   = IRQ_FLG_STD;
-	  irq_tab[irq].dev_id  = NULL;
-	  /* irq_tab[irq].devname = NULL; */
-	} else { /* == Q40_IRQ_TIMER */
-	  sys_free_irq(4,dev_id);
-	  sys_free_irq(6,dev_id);
-	}
+	if (irq<Q40_IRQ_TIMER)
+	  {
+	    if (irq_tab[irq].dev_id != dev_id)
+	      printk("%s: Removing probably wrong IRQ %d from %s\n",
+		     __FUNCTION__, irq, irq_tab[irq].devname);
+	    
+	    irq_tab[irq].handler = q40_defhand;
+	    irq_tab[irq].flags   = IRQ_FLG_STD;
+	    irq_tab[irq].dev_id  = NULL;
+	    /* irq_tab[irq].devname = NULL; */
+	    /* do not reset state !! */
+	  }
+	else
+	  { /* == Q40_IRQ_TIMER */
+	    sys_free_irq(4,dev_id);
+	    sys_free_irq(6,dev_id);
+	  }
 }
 
 #if 1
@@ -224,11 +229,16 @@ static struct IRQ_TABLE eirqs[]={
 
   {0,0}};
 
-/* complaiun only this many times about spurious ints : */
+/* complain only this many times about spurious ints : */
 static int ccleirq=60;    /* ISA dev IRQ's*/
 static int cclirq=60;     /* internal */
 
-/* FIX: add IRQ_INPROGRESS,mask,unmask,probing.... */
+/* FIX: add shared ints,mask,unmask,probing.... */
+
+/* this is an awfull hack.. */
+#define IRQ_INPROGRESS 1
+static int disabled=0;
+/*static unsigned short saved_mask;*/
 
 void q40_irq2_handler (int vec, void *devname, struct pt_regs *fp)
 {
@@ -237,11 +247,6 @@ void q40_irq2_handler (int vec, void *devname, struct pt_regs *fp)
         unsigned mir=master_inb(IIRQ_REG);
 	unsigned mer;
 	int irq,i;
-
-	/*
-	 *  more than 1 bit might be set, must handle atmost 1 int source,
-	 *  - handle only those with explicitly set handler
-	 */
 
 	if ((mir&IRQ_SER_MASK) || (mir&IRQ_EXT_MASK)) 
 	  {
@@ -257,9 +262,37 @@ void q40_irq2_handler (int vec, void *devname, struct pt_regs *fp)
 		    irq=eirqs[i].irq;
 		    irq_tab[irq].count++;
 		    if (irq_tab[irq].handler == q40_defhand )
-		      continue; /* ignore uninited INTs :-( */
-		    
+		      {
+			printk("handler for IRQ %d not defined\n",irq);
+			continue; /* ignore uninited INTs :-( */
+		      }
+
+		    if ( irq_tab[irq].state & IRQ_INPROGRESS )
+		      {
+			/*printk("IRQ_INPROGRESS detected for irq %d, disabling - %s disabled\n",irq,disabled ? "already" : "not yet"); */
+
+			/*saved_mask = fp->sr;*/
+			fp->sr = (fp->sr & (~0x700))+0x200;
+			disabled=1;
+			return;
+		      }
+		    irq_tab[irq].state |= IRQ_INPROGRESS;
 		    irq_tab[irq].handler(irq,irq_tab[irq].dev_id,fp);
+
+		    /* naively enable everything, if that fails than    */
+		    /* this function will be reentered immediately thus */
+		    /* getting another chance to disable the IRQ        */
+
+		    irq_tab[irq].state &= ~IRQ_INPROGRESS;
+		    if ( disabled ) 
+		      {
+			/*printk("reenabling irq %d\n",irq); */
+			fp->sr = (fp->sr & (~0x700)); /*saved_mask; */
+			disabled=0;
+		      }
+		    else if ( fp->sr &0x200 )
+		      printk("exiting irq handler: fp->sr &0x200 !!\n");
+
 		    return;
 		  }
 	      }
@@ -279,7 +312,17 @@ void q40_irq2_handler (int vec, void *devname, struct pt_regs *fp)
 		    if (irq_tab[irq].handler == q40_defhand )
 		      continue; /* ignore uninited INTs :-( */
 		    
+		    /* the INPROGRESS stuff should be completely useless*/
+		    /* for internal ints, nevertheless test it..*/
+		    if ( irq_tab[irq].state & IRQ_INPROGRESS )
+		      {
+			/*disable_irq(irq);
+			  return;*/
+			printk("rentering handler for IRQ %d !!\n",irq);
+		      }
 		    irq_tab[irq].handler(irq,irq_tab[irq].dev_id,fp);
+		    irq_tab[irq].state &= ~IRQ_INPROGRESS;
+		    /*enable_irq(irq);*/ /* better not try luck !*/
 		    return;
 		  }
 	      }
@@ -327,19 +370,59 @@ static void sys_default_handler(int lev, void *dev_id, struct pt_regs *regs)
    sys_default_handler,sys_default_handler,sys_default_handler,sys_default_handler
  };
 
+int irq_disabled=0;
 void q40_enable_irq (unsigned int irq)
 {
+  /* enable ISA iqs */
+  if ( irq>=0 && irq<=15 ) /* the moderately bad case */
+    master_outb(1,EXT_ENABLE_REG);
+#if 0
+  unsigned long flags;
+  int i;
+
+  if (irq>=10 && irq <= 15)
+    {
+      if ( !(--q40_ablecount[irq]))
+	for (i=10,irq_disabled=0; i<=15; i++)
+	  {
+	    irq_disabled |= (q40_ablecount[irq] !=0);
+	  }
+      if ( !irq_disabled )
+	{
+	  save_flags(flags);
+	  restore_flags(flags & (~0x700));
+	}
+    }
+#endif
 }
 
 
 void q40_disable_irq (unsigned int irq)
 {
+  /* disable ISA iqs : only do something if the driver has been
+  * verified to be Q40 "compatible" - right now only IDE
+  * Any driver should not attempt to sleep accross disable_irq !!
+  */
+
+  if ( irq>=10 && irq<=15 ) /* the moderately bad case */
+    master_outb(0,EXT_ENABLE_REG);
+#if 0
+  unsigned long flags;
+
+  if (irq>=10 && irq <= 15)
+    {
+      save_flags(flags);
+      restore_flags(flags | 0x200 );
+      irq_disabled=1;
+      q40_ablecount[irq]++;
+    }
+#endif
 }
 
 unsigned long q40_probe_irq_on (void)
 {
-  printk("sorry, irq probing not yet implemented - reconfigure the driver to avoid this\n");
-  return 0;
+  printk("irq probing not working - reconfigure the driver to avoid this\n");
+  return -1;
 }
 int q40_probe_irq_off (unsigned long irqs)
 {

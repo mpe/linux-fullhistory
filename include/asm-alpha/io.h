@@ -1,7 +1,10 @@
 #ifndef __ALPHA_IO_H
 #define __ALPHA_IO_H
 
+#define __DEBUG_IOREMAP 1
+
 #include <linux/config.h>
+#include <linux/kernel.h>
 #include <asm/system.h>
 
 /* We don't use IO slowdowns on the Alpha, but.. */
@@ -103,6 +106,9 @@ extern void _sethae (unsigned long addr);	/* cached version */
 # define __writel(v,a)	alpha_mv.mv_writel((v),(unsigned long)(a))
 # define __writeq(v,a)	alpha_mv.mv_writeq((v),(unsigned long)(a))
 
+# define __ioremap(a)	alpha_mv.mv_ioremap(a)
+# define __is_ioaddr(a)	alpha_mv.mv_is_ioaddr(a)
+
 # define inb		__inb
 # define inw		__inw
 # define inl		__inl
@@ -110,16 +116,14 @@ extern void _sethae (unsigned long addr);	/* cached version */
 # define outw		__outw
 # define outl		__outl
 
-# define readb		__readb
-# define readw		__readw
-# define readl		__readl
-# define readq		__readq
-# define writeb		__writeb
-# define writew		__writew
-# define writel		__writel
-# define writeq		__writeq
-
-# define dense_mem(a)	alpha_mv.mv_dense_mem(a)
+# define __raw_readb	__readb
+# define __raw_readw	__readw
+# define __raw_readl	__readl
+# define __raw_readq	__readq
+# define __raw_writeb	__writeb
+# define __raw_writeb	__writew
+# define __raw_writel	__writel
+# define __raw_writeq	__writeq
 
 #else
 
@@ -244,20 +248,84 @@ extern void		writel(unsigned int b, unsigned long addr);
 #ifdef __KERNEL__
 
 /*
- * The "address" in IO memory space is not clearly either an integer or a
- * pointer. We will accept both, thus the casts.
+ * On Alpha, we have the whole of I/O space mapped at all times, but
+ * at odd and sometimes discontinuous addresses.  Note that the 
+ * discontinuities are all across busses, so we need not care for that
+ * for any one device.
  *
- * On the alpha, we have the whole physical address space mapped at all
- * times, so "ioremap()" and "iounmap()" do not need to do anything.
+ * Map the I/O space address into the kernel's virtual address space.
  */
 static inline void * ioremap(unsigned long offset, unsigned long size)
 {
-	return (void *) offset;
+	return (void *) __ioremap(offset);
 } 
 
 static inline void iounmap(void *addr)
 {
 }
+
+/* Indirect back to the macros provided.  */
+
+extern unsigned long	___raw_readb(unsigned long addr);
+extern unsigned long	___raw_readw(unsigned long addr);
+extern unsigned long	___raw_readl(unsigned long addr);
+extern unsigned long	___raw_readq(unsigned long addr);
+extern void		___raw_writeb(unsigned char b, unsigned long addr);
+extern void		___raw_writeb(unsigned short b, unsigned long addr);
+extern void		___raw_writel(unsigned int b, unsigned long addr);
+extern void		___raw_writeq(unsigned long b, unsigned long addr);
+
+#ifdef __raw_readb
+# define readb(a)	({ unsigned long r_ = __raw_readb(a); mb(); r_; })
+#endif
+#ifdef __raw_readw
+# define readw(a)	({ unsigned long r_ = __raw_readw(a); mb(); r_; })
+#endif
+#ifdef __raw_readl
+# define readl(a)	({ unsigned long r_ = __raw_readl(a); mb(); r_; })
+#endif
+#ifdef __raw_readq
+# define readq(a)	({ unsigned long r_ = __raw_readq(a); mb(); r_; })
+#endif
+
+#ifdef __raw_writeb
+# define writeb(v,a)	({ __raw_writeb((v),(a)); mb(); })
+#endif
+#ifdef __raw_writeb
+# define writew(v,a)	({ __raw_writeb((v),(a)); mb(); })
+#endif
+#ifdef __raw_writel
+# define writel(v,a)	({ __raw_writel((v),(a)); mb(); })
+#endif
+#ifdef __raw_writeq
+# define writeq(v,a)	({ __raw_writeq((v),(a)); mb(); })
+#endif
+
+#ifndef __raw_readb
+# define __raw_readb(a)	___raw_readb((unsigned long)(a))
+#endif
+#ifndef __raw_readw
+# define __raw_readw(a)	___raw_readw((unsigned long)(a))
+#endif
+#ifndef __raw_readl
+# define __raw_readl(a)	___raw_readl((unsigned long)(a))
+#endif
+#ifndef __raw_readq
+# define __raw_readq(a)	___raw_readq((unsigned long)(a))
+#endif
+
+#ifndef __raw_writeb
+# define __raw_writeb(v,a)  ___raw_writeb((v),(unsigned long)(a))
+#endif
+#ifndef __raw_writeb
+# define __raw_writeb(v,a)  ___raw_writeb((v),(unsigned long)(a))
+#endif
+#ifndef __raw_writel
+# define __raw_writel(v,a)  ___raw_writel((v),(unsigned long)(a))
+#endif
+#ifndef __raw_writeq
+# define __raw_writeq(v,a)  ___raw_writeq((v),(unsigned long)(a))
+#endif
 
 #ifndef readb
 # define readb(a)	_readb((unsigned long)(a))
@@ -271,6 +339,7 @@ static inline void iounmap(void *addr)
 #ifndef readq
 # define readq(a)	_readq((unsigned long)(a))
 #endif
+
 #ifndef writeb
 # define writeb(v,a)	_writeb((v),(unsigned long)(a))
 #endif

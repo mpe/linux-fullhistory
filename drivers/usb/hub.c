@@ -199,7 +199,7 @@ static void usb_hub_configure(struct usb_hub *hub)
 
 static int hub_probe(struct usb_device *dev)
 {
-	struct usb_interface_descriptor *interface;
+	struct usb_interface_descriptor *intf_desc;
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_hub *hub;
 	unsigned long flags;
@@ -212,20 +212,20 @@ static int hub_probe(struct usb_device *dev)
 	if (dev->config[0].bNumInterfaces != 1)
 		return -1;
 
-	interface = &dev->config[0].altsetting[0].interface[0];
+	intf_desc = &dev->config[0].interface[0].altsetting[0];
 
 	/* Is it a hub? */
-	if (interface->bInterfaceClass != 9)
+	if (intf_desc->bInterfaceClass != 9)
 		return -1;
-	if ((interface->bInterfaceSubClass != 0) &&
-	    (interface->bInterfaceSubClass != 1))
+	if ((intf_desc->bInterfaceSubClass != 0) &&
+	    (intf_desc->bInterfaceSubClass != 1))
 		return -1;
 
 	/* Multiple endpoints? What kind of mutant ninja-hub is this? */
-	if (interface->bNumEndpoints != 1)
+	if (intf_desc->bNumEndpoints != 1)
 		return -1;
 
-	endpoint = &interface->endpoint[0];
+	endpoint = &intf_desc->endpoint[0];
 
 	/* Output endpoint? Curiousier and curiousier.. */
 	if (!(endpoint->bEndpointAddress & USB_DIR_IN))

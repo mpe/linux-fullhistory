@@ -13,28 +13,28 @@ static void usb_show_endpoint(struct usb_endpoint_descriptor *endpoint)
 	usb_show_endpoint_descriptor(endpoint);
 }
 
-static void usb_show_interface(struct usb_interface_descriptor *interface)
+static void usb_show_interface(struct usb_interface_descriptor *altsetting)
 {
 	int i;
 
-	usb_show_interface_descriptor(interface);
-	for (i = 0 ; i < interface->bNumEndpoints; i++)
-		usb_show_endpoint(interface->endpoint + i);
+	usb_show_interface_descriptor(altsetting);
+	for (i = 0 ; i < altsetting->bNumEndpoints; i++)
+		usb_show_endpoint(altsetting->endpoint + i);
 }
 
 static void usb_show_config(struct usb_config_descriptor *config)
 {
   int i, j;
-  struct usb_alternate_setting *as;
+  struct usb_interface *intf;
 
   usb_show_config_descriptor(config);
-  for (i = 0; i < config->num_altsetting; i++) {
-    as = config->altsetting + i;
-    if ((as) == NULL)
+  for (i = 0; i < config->bNumInterfaces; i++) {
+    intf = config->interface + i;
+    if ((intf) == NULL)
       break;
-    printk("\n  Alternate Setting: %d\n", i);
-    for (j = 0 ; j < config->bNumInterfaces; j++)
-      usb_show_interface(as->interface + j);
+    printk("\n  Interface: %d\n", i);
+    for (j = 0 ; j < intf->num_altsetting; j++)
+      usb_show_interface(intf->altsetting + j);
   }
 }
 
@@ -99,7 +99,7 @@ void usb_show_config_descriptor(struct usb_config_descriptor * desc)
 
 void usb_show_interface_descriptor(struct usb_interface_descriptor * desc)
 {
-	printk("  Interface:\n");
+	printk("  Alternate Setting: %2d\n", desc->bAlternateSetting);
 	printk("    bLength             = %4d%s\n", desc->bLength,
 		desc->bLength == USB_DT_INTERFACE_SIZE ? "" : " (!!!)");
 	printk("    bDescriptorType     =   %02x\n", desc->bDescriptorType);
@@ -113,10 +113,13 @@ void usb_show_interface_descriptor(struct usb_interface_descriptor * desc)
 
 void usb_show_endpoint_descriptor(struct usb_endpoint_descriptor * desc)
 {
+	char *bLengthCommentString = (USB_DT_AUCLSTEP_SIZE == desc->bLength) ?
+		  " (!Audio)" : " (!!!)";
+
 	char *EndpointType[4] = { "Control", "Isochronous", "Bulk", "Interrupt" };
 	printk("    Endpoint:\n");
 	printk("      bLength             = %4d%s\n", desc->bLength,
-		desc->bLength == USB_DT_ENDPOINT_SIZE ? "" : " (!!!)");
+		desc->bLength == USB_DT_ENDPOINT_SIZE ? "" : bLengthCommentString);
 	printk("      bDescriptorType     =   %02x\n", desc->bDescriptorType);
 	printk("      bEndpointAddress    =   %02x (%s)\n", desc->bEndpointAddress,
 		(desc->bEndpointAddress & 0x80) ? "in" : "out");
@@ -124,6 +127,10 @@ void usb_show_endpoint_descriptor(struct usb_endpoint_descriptor * desc)
 		EndpointType[3 & desc->bmAttributes]);
 	printk("      wMaxPacketSize      = %04x\n", desc->wMaxPacketSize);
 	printk("      bInterval           =   %02x\n", desc->bInterval);
+	if (USB_DT_AUCLSTEP_SIZE == desc->bLength) {
+		printk("      bRefresh            = %04x\n", desc->bRefresh);
+		printk("      bSynchAddress       =   %02x\n", desc->bSynchAddress);
+	}
 }
 
 void usb_show_hub_descriptor(struct usb_hub_descriptor * desc)

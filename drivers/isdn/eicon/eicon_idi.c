@@ -70,6 +70,7 @@
  *
  */
 
+#include <linux/config.h>
 #define __NO_VERSION__
 #include "eicon.h"
 #include "eicon_idi.h"

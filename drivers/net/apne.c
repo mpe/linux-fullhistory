@@ -294,7 +294,8 @@ static int __init apne_probe1(struct device *dev, int ioaddr)
     dev->base_addr = ioaddr;
 
     /* Install the Interrupt handler */
-    if (request_irq(IRQ_AMIGA_PORTS, apne_interrupt, 0, "apne Ethernet", dev))
+    if (request_irq(IRQ_AMIGA_PORTS, apne_interrupt, SA_SHIRQ,
+		    "apne Ethernet", dev))
         return -EAGAIN;
 
 

@@ -126,6 +126,7 @@
  *
  */
 
+#include <linux/config.h>
 #define __NO_VERSION__
 #include "hisax.h"
 #include "../avmb1/capicmd.h"  /* this should be moved in a common place */

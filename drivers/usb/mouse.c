@@ -256,7 +256,7 @@ static struct miscdevice usb_mouse = {
 
 static int mouse_probe(struct usb_device *dev)
 {
-	struct usb_interface_descriptor *interface;
+	struct usb_interface_descriptor *intf_desc;
 	struct usb_endpoint_descriptor *endpoint;
 	struct mouse_state *mouse = &static_mouse_state;
 
@@ -269,19 +269,19 @@ static int mouse_probe(struct usb_device *dev)
 		return -1;
 
 	/* Is it a mouse interface? */
-	interface = &dev->config[0].altsetting[0].interface[0];
-	if (interface->bInterfaceClass != 3)
+	intf_desc = &dev->config[0].interface[0].altsetting[0];
+	if (intf_desc->bInterfaceClass != 3)
 		return -1;
-	if (interface->bInterfaceSubClass != 1)
+	if (intf_desc->bInterfaceSubClass != 1)
 		return -1;
-	if (interface->bInterfaceProtocol != 2)
+	if (intf_desc->bInterfaceProtocol != 2)
 		return -1;
 
 	/* Multiple endpoints? What kind of mutant ninja-mouse is this? */
-	if (interface->bNumEndpoints != 1)
+	if (intf_desc->bNumEndpoints != 1)
 		return -1;
 
-	endpoint = &interface->endpoint[0];
+	endpoint = &intf_desc->endpoint[0];
 
 	/* Output endpoint? Curiousier and curiousier.. */
 	if (!(endpoint->bEndpointAddress & 0x80))

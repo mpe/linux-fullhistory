@@ -213,7 +213,7 @@ static int usb_dump_config (const struct usb_config_descriptor *config,
 				const int active, char *buf, int *len)
 {
 	int i, j;
-	struct usb_alternate_setting *as;
+	struct usb_interface *intf;
 
 	if (!config) {		/* getting these some in 2.3.7; none in 2.3.6 */
 		*len += sprintf (buf + *len, "(null Cfg. desc.)\n");
@@ -223,13 +223,13 @@ static int usb_dump_config (const struct usb_config_descriptor *config,
 	if (usb_dump_config_descriptor (config, active, buf, len) < 0)
 		return -1;
 
-	for (i = 0; i < config->num_altsetting; i++) {
-		as = config->altsetting + i;
-		if ((as) == NULL)
+	for (i = 0; i < config->bNumInterfaces; i++) {
+		intf = config->interface + i;
+		if ((intf) == NULL)
 			break;
 
-		for (j = 0; j < config->bNumInterfaces; j++)
-			if (usb_dump_interface (as->interface + j, buf, len) < 0)
+		for (j = 0; j < intf->num_altsetting; j++)
+			if (usb_dump_interface (intf->altsetting + j, buf, len) < 0)
 				return -1;
 	}
 

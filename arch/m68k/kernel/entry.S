@@ -164,6 +164,36 @@ do_delayed_trace:
 	addql	#4,%sp
 	jra	5b
 
+
+#if 0
+#if CONFIG_AMIGA
+SYMBOL_NAME_LABEL(ami_inthandler)
+	addql	#1,SYMBOL_NAME(local_irq_count)
+	SAVE_ALL_INT
+	GET_CURRENT(%d0)
+
+	bfextu	%sp@(PT_VECTOR){#4,#12},%d0
+	movel	%d0,%a0
+	addql	#1,%a0@(SYMBOL_NAME(kstat)+STAT_IRQ-VECOFF(VEC_SPUR))
+	movel	%a0@(SYMBOL_NAME(autoirq_list)-VECOFF(VEC_SPUR)),%a0
+
+| amiga vector int handler get the req mask instead of irq vector
+	lea	CUSTOMBASE,%a1
+	movew	%a1@(C_INTREQR),%d0
+	andw	%a1@(C_INTENAR),%d0
+
+| prepare stack (push frame pointer, dev_id & req mask)
+	pea	%sp@
+	movel	%a0@(IRQ_DEVID),%sp@-
+	movel	%d0,%sp@-
+	pea	%pc@(SYMBOL_NAME(ret_from_interrupt):w)
+	jbra	@(IRQ_HANDLER,%a0)@(0)
+
+ENTRY(nmi_handler)
+	rte
+#endif
+#endif
+
 /*
 ** This is the main interrupt handler, responsible for calling process_int()
 */
@@ -183,7 +213,7 @@ SYMBOL_NAME_LABEL(inthandler)
 	jbeq	1f
 	jbsr	SYMBOL_NAME(floppy_hardint)
 	jbra	3f
-1:		
+1:
 #endif		
 	jbsr	SYMBOL_NAME(process_int)|  process the IRQ
 3:     	addql	#8,%sp			|  pop parameters off stack
@@ -191,7 +221,7 @@ SYMBOL_NAME_LABEL(inthandler)
 SYMBOL_NAME_LABEL(ret_from_interrupt)
 	subql	#1,SYMBOL_NAME(local_irq_count)
 	jeq	1f
-2:	
+2:
 	RESTORE_ALL
 1:
 #if 1
@@ -295,6 +325,11 @@ SYMBOL_NAME_LABEL(resume)
 	movel	%sp,%a0@(TASK_THREAD+THREAD_KSP)
 
 	/* save floating point context */
+#ifndef CONFIG_M68KFPU_EMU_ONLY
+#ifdef CONFIG_M68KFPU_EMU
+	tstl	SYMBOL_NAME(m68k_fputype)
+	jeq	3f
+#endif
 	fsave	%a0@(TASK_THREAD+THREAD_FPSTATE)
 
 #if defined(CONFIG_M68060)
@@ -316,6 +351,7 @@ SYMBOL_NAME_LABEL(resume)
 2:	fmovemx	%fp0-%fp7,%a0@(TASK_THREAD+THREAD_FPREG)
 	fmoveml	%fpcr/%fpsr/%fpiar,%a0@(TASK_THREAD+THREAD_FPCNTL)
 3:
+#endif	/* CONFIG_M68KFPU_EMU_ONLY */
 	/* Return previous task in %d1 */
 	movel	%curptr,%d1
 
@@ -323,7 +359,11 @@ SYMBOL_NAME_LABEL(resume)
 	movel	%a1,%curptr
 
 	/* restore floating point context */
-
+#ifndef CONFIG_M68KFPU_EMU_ONLY
+#ifdef CONFIG_M68KFPU_EMU
+	tstl	SYMBOL_NAME(m68k_fputype)
+	jeq	4f
+#endif
 #if defined(CONFIG_M68060)
 #if !defined(CPU_M68060_ONLY)
 	btst	#3,SYMBOL_NAME(m68k_cputype)+3
@@ -343,6 +383,8 @@ SYMBOL_NAME_LABEL(resume)
 2:	fmovemx	%a1@(TASK_THREAD+THREAD_FPREG),%fp0-%fp7
 	fmoveml	%a1@(TASK_THREAD+THREAD_FPCNTL),%fpcr/%fpsr/%fpiar
 3:	frestore %a1@(TASK_THREAD+THREAD_FPSTATE)
+4:
+#endif	/* CONFIG_M68KFPU_EMU_ONLY */
 
 	/* restore the kernel stack pointer */
 	movel	%a1@(TASK_THREAD+THREAD_KSP),%sp

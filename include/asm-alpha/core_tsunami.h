@@ -158,7 +158,7 @@ union TPchipPERROR {
 		unsigned perror_v_rsvd2 : 1;
 		unsigned perror_v_cmd : 4;
 		unsigned perror_v_syn : 8;
-        } perror_r_bits;
+	} perror_r_bits;
 	int perror_q_whole [2];
 };                       
 
@@ -178,7 +178,7 @@ union TPchipWSBA {
 		unsigned wsba_v_rsvd1 : 17;
 		unsigned wsba_v_addr : 12;
 		unsigned wsba_v_rsvd2 : 32;
-        } wsba_r_bits;
+	} wsba_r_bits;
 	int wsba_q_whole [2];
 };
 
@@ -272,7 +272,7 @@ union TPchipPERRMASK {
 		unsigned perrmask_v_cre : 1;                 
 		unsigned perrmask_v_rsvd1 : 20;
 		unsigned perrmask_v_rsvd2 : 32;
-        } perrmask_r_bits;
+	} perrmask_r_bits;
 	int perrmask_q_whole [2];
 };                       
 
@@ -369,55 +369,118 @@ __EXTERN_INLINE void tsunami_outl(unsigned int b, unsigned long addr)
  * Memory functions.  all accesses are done through linear space.
  */
 
+__EXTERN_INLINE unsigned long tsunami_ioremap(unsigned long addr)
+{
+	return XADDR + TSUNAMI_MEM(XHOSE);
+}
+
+__EXTERN_INLINE int tsunami_is_ioaddr(unsigned long addr)
+{
+	return addr >= IDENT_ADDR+TS_BIAS;
+}
+
 __EXTERN_INLINE unsigned long tsunami_readb(unsigned long addr)
 {
-	return __kernel_ldbu(*(vucp)(XADDR + TSUNAMI_MEM(XHOSE)));
+#if __DEBUG_IOREMAP
+	if (addr <= 0x1000000000) {
+		printk(KERN_CRIT "tsunami: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr = tsunami_ioremap(addr);
+	}
+#endif
+
+	return __kernel_ldbu(*(vucp)addr);
 }
 
 __EXTERN_INLINE unsigned long tsunami_readw(unsigned long addr)
 {
-	return __kernel_ldwu(*(vusp)(XADDR + TSUNAMI_MEM(XHOSE)));
+#if __DEBUG_IOREMAP
+	if (addr <= 0x1000000000) {
+		printk(KERN_CRIT "tsunami: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr = tsunami_ioremap(addr);
+	}
+#endif
+
+	return __kernel_ldwu(*(vusp)addr);
 }
 
 __EXTERN_INLINE unsigned long tsunami_readl(unsigned long addr)
 {
-	return *(vuip)(XADDR + TSUNAMI_MEM(XHOSE));
+#if __DEBUG_IOREMAP
+	if (addr <= 0x1000000000) {
+		printk(KERN_CRIT "tsunami: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr = tsunami_ioremap(addr);
+	}
+#endif
+
+	return *(vuip)addr;
 }
 
 __EXTERN_INLINE unsigned long tsunami_readq(unsigned long addr)
 {
-	return *(vulp)(XADDR + TSUNAMI_MEM(XHOSE));
+#if __DEBUG_IOREMAP
+	if (addr <= 0x1000000000) {
+		printk(KERN_CRIT "tsunami: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr = tsunami_ioremap(addr);
+	}
+#endif
+
+	return *(vulp)addr;
 }
 
 __EXTERN_INLINE void tsunami_writeb(unsigned char b, unsigned long addr)
 {
-	__kernel_stb(b, *(vucp)(XADDR + TSUNAMI_MEM(XHOSE)));
-	mb();
+#if __DEBUG_IOREMAP
+	if (addr <= 0x1000000000) {
+		printk(KERN_CRIT "tsunami: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr = tsunami_ioremap(addr);
+	}
+#endif
+
+	__kernel_stb(b, *(vucp)addr);
 }
 
 __EXTERN_INLINE void tsunami_writew(unsigned short b, unsigned long addr)
 {
-	__kernel_stw(b, *(vusp)(XADDR + TSUNAMI_MEM(XHOSE)));
-	mb();
+#if __DEBUG_IOREMAP
+	if (addr <= 0x1000000000) {
+		printk(KERN_CRIT "tsunami: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr = tsunami_ioremap(addr);
+	}
+#endif
+
+	__kernel_stw(b, *(vusp)addr);
 }
 
 __EXTERN_INLINE void tsunami_writel(unsigned int b, unsigned long addr)
 {
-	*(vuip)(XADDR + TSUNAMI_MEM(XHOSE)) = b;
-	mb();
+#if __DEBUG_IOREMAP
+	if (addr <= 0x1000000000) {
+		printk(KERN_CRIT "tsunami: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr = tsunami_ioremap(addr);
+	}
+#endif
+
+	*(vuip)addr = b;
 }
 
 __EXTERN_INLINE void tsunami_writeq(unsigned long b, unsigned long addr)
 {
-	*(vulp)(XADDR + TSUNAMI_MEM(XHOSE)) = b;
-	mb();
-}
+#if __DEBUG_IOREMAP
+	if (addr <= 0x1000000000) {
+		printk(KERN_CRIT "tsunami: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr = tsunami_ioremap(addr);
+	}
+#endif
 
-/* Find the DENSE memory area for a given bus address.  */
-
-__EXTERN_INLINE unsigned long tsunami_dense_mem(unsigned long addr)
-{
-	return TSUNAMI_MEM(XHOSE);
+	*(vulp)addr = b;
 }
 
 #undef vucp
@@ -447,7 +510,8 @@ __EXTERN_INLINE unsigned long tsunami_dense_mem(unsigned long addr)
 #define __readq		tsunami_readq
 #define __writel	tsunami_writel
 #define __writeq	tsunami_writeq
-#define dense_mem	tsunami_dense_mem
+#define __ioremap	tsunami_ioremap
+#define __is_ioaddr	tsunami_is_ioaddr
 
 #define inb(port) __inb((port))
 #define inw(port) __inw((port))
@@ -457,15 +521,16 @@ __EXTERN_INLINE unsigned long tsunami_dense_mem(unsigned long addr)
 #define outw(v, port) __outw((v),(port))
 #define outl(v, port) __outl((v),(port))
 
-#define readb(a)	__readb((unsigned long)(a))
-#define readw(a)	__readw((unsigned long)(a))
-#define readl(a)	__readl((unsigned long)(a))
-#define readq(a)	__readq((unsigned long)(a))
-
-#define writeb(v,a)	__writeb((v),(unsigned long)(a))
-#define writew(v,a)	__writew((v),(unsigned long)(a))
-#define writel(v,a)	__writel((v),(unsigned long)(a))
-#define writeq(v,a)	__writeq((v),(unsigned long)(a))
+#if !__DEBUG_IOREMAP
+#define __raw_readb(a)		__readb((unsigned long)(a))
+#define __raw_readw(a)		__readw((unsigned long)(a))
+#define __raw_readl(a)		__readl((unsigned long)(a))
+#define __raw_readq(a)		__readq((unsigned long)(a))
+#define __raw_writeb(v,a)	__writeb((v),(unsigned long)(a))
+#define __raw_writeb(v,a)	__writew((v),(unsigned long)(a))
+#define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
+#define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
+#endif
 
 #endif /* __WANT_IO_DEF */
 

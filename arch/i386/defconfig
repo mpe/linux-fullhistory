@@ -70,6 +70,12 @@ CONFIG_BINFMT_MISC=y
 # CONFIG_I2O_PROC is not set
 
 #
+# Plug and Play configuration
+#
+CONFIG_PNP=y
+CONFIG_ISAPNP=y
+
+#
 # Block devices
 #
 CONFIG_BLK_DEV_FD=y

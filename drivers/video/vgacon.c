@@ -277,6 +277,7 @@ static const char __init *vgacon_startup(void)
 			vga_video_font_height = 8;
 		}
 	}
+
 	vga_vram_base = VGA_MAP_MEM(vga_vram_base);
 	vga_vram_end = VGA_MAP_MEM(vga_vram_end);
 

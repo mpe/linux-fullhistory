@@ -503,10 +503,18 @@ func_define	putn,1
 
 .macro	puts		string
 #if defined(CONSOLE) || defined(SERIAL_DEBUG)
+/* The __INITDATA stuff is a no-op when ftrace or kgdb are turned on */
+#if defined(CONFIG_FTRACE) || defined(CONFIG_KGDB)
+	bra 1f
+#endif
 	__INITDATA
 .Lstr\@:
 	.string	"\string"
 	__FINIT
+#if defined(CONFIG_FTRACE) || defined(CONFIG_KGDB)
+	.align 2
+1:
+#endif
 	pea	%pc@(.Lstr\@)
 	func_call	puts
 	addql	#4,%sp

@@ -1,0 +1,2159 @@
+/*
+ *  ISA Plug & Play support
+ *  Copyright (c) by Jaroslav Kysela <perex@suse.cz>
+ *
+ *
+ *   This program is free software; you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation; either version 2 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   along with this program; if not, write to the Free Software
+ *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
+
+#include <linux/config.h>
+#include <linux/version.h>
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/errno.h>
+#include <linux/ioport.h>
+#include <linux/string.h>
+#include <linux/malloc.h>
+#include <linux/proc_fs.h>
+#include <asm/io.h>
+#include <asm/dma.h>
+#include <asm/irq.h>
+#include <linux/pci.h>
+#include <linux/vmalloc.h>
+#include <linux/poll.h>
+#include <linux/init.h>
+#include <asm/uaccess.h>
+#include <linux/isapnp.h>
+
+#ifdef CONFIG_PROC_FS
+#include "isapnp_proc.c"
+#endif
+
+#if 0
+#define ISAPNP_REGION_OK
+#endif
+#if 0
+#define ISAPNP_DEBUG
+#endif
+
+struct resource *pidxr_res = NULL;
+struct resource *pnpwrp_res = NULL;
+struct resource *isapnp_rdp_res = NULL;
+
+int isapnp_disable = 0;			/* Disable ISA PnP */
+int isapnp_rdp = 0;			/* Read Data Port */
+int isapnp_reset = 0;			/* reset all PnP cards (deactivate) */
+int isapnp_skip_pci_scan = 0;		/* skip PCI resource scanning */
+int isapnp_verbose = 1;			/* verbose mode */
+int isapnp_reserve_irq[16] = { [0 ... 15] = -1 };	/* reserve (don't use) some IRQ */
+int isapnp_reserve_dma[8] = { [0 ... 7] = -1 };		/* reserve (don't use) some DMA */
+int isapnp_reserve_io[16] = { [0 ... 15] = -1 };	/* reserve (don't use) some I/O region */
+int isapnp_reserve_mem[16] = { [0 ... 15] = -1 };	/* reserve (don't use) some memory region */
+
+MODULE_AUTHOR("Jaroslav Kysela <perex@suse.cz>");
+MODULE_DESCRIPTION("Generic ISA Plug & Play support");
+MODULE_PARM(isapnp_disable, "i");
+MODULE_PARM_DESC(isapnp_disable, "ISA Plug & Play disable");
+MODULE_PARM(isapnp_rdp, "i");
+MODULE_PARM_DESC(isapnp_rdp, "ISA Plug & Play read data port");
+MODULE_PARM(isapnp_reset, "i");
+MODULE_PARM_DESC(isapnp_reset, "ISA Plug & Play reset all cards");
+MODULE_PARM(isapnp_skip_pci_scan, "i");
+MODULE_PARM_DESC(isapnp_skip_pci_scan, "ISA Plug & Play skip PCI resource scanning");
+MODULE_PARM(isapnp_verbose, "i");
+MODULE_PARM_DESC(isapnp_verbose, "ISA Plug & Play verbose mode");
+MODULE_PARM(isapnp_reserve_irq, "1-16i");
+MODULE_PARM_DESC(isapnp_reserve_irq, "ISA Plug & Play - reserve IRQ line(s)");
+MODULE_PARM(isapnp_reserve_dma, "1-8i");
+MODULE_PARM_DESC(isapnp_reserve_dma, "ISA Plug & Play - reserve DMA channel(s)");
+MODULE_PARM(isapnp_reserve_io, "1-16i");
+MODULE_PARM_DESC(isapnp_reserve_io, "ISA Plug & Play - reserve I/O region(s) - port,size");
+MODULE_PARM(isapnp_reserve_mem, "1-16i");
+MODULE_PARM_DESC(isapnp_reserve_mem, "ISA Plug & Play - reserve memory region(s) - address,size");
+
+#define _PIDXR		0x279
+#define _PNPWRP		0xa79
+
+/* short tags */
+#define _STAG_PNPVERNO		0x01
+#define _STAG_LOGDEVID		0x02
+#define _STAG_COMPATDEVID	0x03
+#define _STAG_IRQ		0x04
+#define _STAG_DMA		0x05
+#define _STAG_STARTDEP		0x06
+#define _STAG_ENDDEP		0x07
+#define _STAG_IOPORT		0x08
+#define _STAG_FIXEDIO		0x09
+#define _STAG_VENDOR		0x0e
+#define _STAG_END		0x0f
+/* long tags */
+#define _LTAG_MEMRANGE		0x81
+#define _LTAG_ANSISTR		0x82
+#define _LTAG_UNICODESTR	0x83
+#define _LTAG_VENDOR		0x84
+#define _LTAG_MEM32RANGE	0x85
+#define _LTAG_FIXEDMEM32RANGE	0x86
+
+struct pci_bus *isapnp_cards = NULL;	/* ISA PnP cards */
+struct pci_dev *isapnp_devices = NULL;	/* ISA PnP devices */
+static struct pci_dev *isapnp_last_device = NULL;
+static unsigned char isapnp_checksum_value;
+static DECLARE_MUTEX(isapnp_cfg_mutex);
+static int isapnp_detected = 0;
+
+/* some prototypes */
+
+static int isapnp_config_prepare(struct pci_dev *dev);
+static int isapnp_config_activate(struct pci_dev *dev);
+static int isapnp_config_deactivate(struct pci_dev *dev);
+
+static int isapnp_debug = 0;
+
+static inline void write_data(unsigned char x)
+{
+// if (isapnp_debug) printk("<D:%02x>",x);
+	outb(x, _PNPWRP);
+}
+
+static inline void write_address(unsigned char x)
+{
+// if (isapnp_debug) printk("<A:%02x>",x);
+	outb(x, _PIDXR);
+	udelay(10);
+}
+
+static inline unsigned char read_data(void)
+{
+	unsigned char val = inb(isapnp_rdp);
+// if (isapnp_debug) printk("<R:%02x>",val);
+	return val;
+}
+
+unsigned char isapnp_read_byte(unsigned char idx)
+{
+	write_address(idx);
+	return read_data();
+}
+
+unsigned short isapnp_read_word(unsigned char idx)
+{
+	unsigned short val;
+
+	val = isapnp_read_byte(idx);
+	val = (val << 8) + isapnp_read_byte(idx+1);
+	return val;
+}
+
+unsigned int isapnp_read_dword(unsigned char idx)
+{
+	unsigned int val;
+
+	val = isapnp_read_byte(idx);
+	val = (val << 8) + isapnp_read_byte(idx+1);
+	val = (val << 8) + isapnp_read_byte(idx+2);
+	val = (val << 8) + isapnp_read_byte(idx+3);
+	return val;
+}
+
+void isapnp_write_byte(unsigned char idx, unsigned char val)
+{
+	write_address(idx);
+	write_data(val);
+}
+
+void isapnp_write_word(unsigned char idx, unsigned short val)
+{
+	isapnp_write_byte(idx, val >> 8);
+	isapnp_write_byte(idx+1, val);
+}
+
+void isapnp_write_dword(unsigned char idx, unsigned int val)
+{
+	isapnp_write_byte(idx, val >> 24);
+	isapnp_write_byte(idx+1, val >> 16);
+	isapnp_write_byte(idx+2, val >> 8);
+	isapnp_write_byte(idx+3, val);
+}
+
+static void *isapnp_alloc(long size)
+{
+	void *result;
+
+	result = kmalloc(size, GFP_KERNEL);
+	if (!result)
+		return NULL;
+	memset(result, 0, size);
+	return result;
+}
+
+static void isapnp_key(void)
+{
+	unsigned char code = 0x6a, msb;
+	int i;
+
+	mdelay(1);
+	write_address(0x00);
+	write_address(0x00);
+
+	write_address(code);
+
+	for (i = 1; i < 32; i++) {
+		msb = ((code & 0x01) ^ ((code & 0x02) >> 1)) << 7;
+		code = (code >> 1) | msb;
+		write_address(code);
+	}
+}
+
+/* place all pnp cards in wait-for-key state */
+static void isapnp_wait(void)
+{
+	isapnp_write_byte(0x02, 0x02);
+}
+
+void isapnp_wake(unsigned char csn)
+{
+	isapnp_write_byte(0x03, csn);
+}
+
+void isapnp_device(unsigned char logdev)
+{
+	isapnp_write_byte(0x07, logdev);
+}
+
+void isapnp_activate(unsigned char logdev)
+{
+	isapnp_device(logdev);
+	isapnp_write_byte(ISAPNP_CFG_ACTIVATE, 1);
+	udelay(250);
+}
+
+void isapnp_deactivate(unsigned char logdev)
+{
+	isapnp_device(logdev);
+	isapnp_write_byte(ISAPNP_CFG_ACTIVATE, 0);
+}
+
+static void __init isapnp_peek(unsigned char *data, int bytes)
+{
+	int i, j;
+	unsigned char d;
+
+	for (i = 1; i <= bytes; i++) {
+		for (j = 0; j < 10; j++) {
+			d = isapnp_read_byte(0x05);
+			if (d & 1)
+				break;
+			udelay(10);
+		}
+		if (!(d & 1)) {
+			*data++ = 0xff;
+			continue;
+		}
+		d = isapnp_read_byte(0x04);	/* PRESDI */
+		isapnp_checksum_value += d;
+		if (data != NULL)
+			*data++ = d;
+	}
+}
+
+#define RDP_STEP	32	/* minimum is 4 */
+
+static int isapnp_next_rdp(void)
+{
+	int rdp = isapnp_rdp;
+	while (rdp <= 0x3ff) {
+		if (!check_region(rdp, 1)) {
+			isapnp_rdp = rdp;
+			return 0;
+		}
+		rdp += RDP_STEP;
+	}
+	return -1;
+}
+
+/* Set read port address */
+static inline void isapnp_set_rdp(void)
+{
+	isapnp_write_byte(0x00, isapnp_rdp >> 2);
+	udelay(100);
+}
+
+
+static int __init isapnp_isolate_rdp_select(void)
+{
+	isapnp_wait();
+	isapnp_key();
+
+	isapnp_write_byte(0x02, 0x04);	/* Control: reset CSN */
+	mdelay(2);
+
+	isapnp_wait();
+	isapnp_key();
+	isapnp_wake(0x00);
+
+	if (isapnp_next_rdp() < 0) {
+		isapnp_wait();
+		return -1;
+	}
+
+	isapnp_set_rdp();
+	udelay(1000);
+	write_address(0x01);
+	udelay(1000);
+	return 0;
+}
+
+/*
+ *  Isolate (assign uniqued CSN) to all ISA PnP devices.
+ */
+
+static int __init isapnp_isolate(void)
+{
+	unsigned char checksum = 0x6a;
+	unsigned char chksum = 0x00;
+	unsigned char bit = 0x00;
+	int data;
+	int csn = 0;
+	int i;
+	int iteration = 1;
+
+	isapnp_rdp = 0x213;
+	if (isapnp_isolate_rdp_select() < 0)
+		return -1;
+
+	while (1) {
+		for (i = 1; i <= 64; i++) {
+			data = read_data() << 8;
+			udelay(250);
+			data = data | read_data();
+			udelay(250);
+			if (data == 0x55aa)
+				bit = 0x01;
+			checksum = ((((checksum ^ (checksum >> 1)) & 0x01) ^ bit) << 7) | (checksum >> 1);
+			bit = 0x00;
+		}
+		for (i = 65; i <= 72; i++) {
+			data = read_data() << 8;
+			udelay(250);
+			data = data | read_data();
+			udelay(250);
+			if (data == 0x55aa)
+				chksum |= (1 << (i - 65));
+		}
+		if (checksum != 0x00 && checksum == chksum) {
+			csn++;
+
+			isapnp_write_byte(0x06, csn);
+			udelay(250);
+			iteration++;
+			isapnp_wake(0x00);
+			write_address(0x01);
+			goto __next;
+		}
+		if (iteration == 1) {
+			isapnp_rdp += RDP_STEP;
+isapnp_debug = 0;
+			if (isapnp_isolate_rdp_select() < 0)
+				return -1;
+		} else if (iteration > 1) {
+			break;
+		}
+	      __next:
+		checksum = 0x6a;
+		chksum = 0x00;
+		bit = 0x00;
+	}
+	isapnp_wait();
+	return csn;
+}
+
+/*
+ *  Read one tag from stream.
+ */
+
+static int __init isapnp_read_tag(unsigned char *type, unsigned short *size)
+{
+	unsigned char tag, tmp[2];
+
+	isapnp_peek(&tag, 1);
+	if (tag == 0)				/* invalid tag */
+		return -1;
+	if (tag & 0x80) {	/* large item */
+		*type = tag;
+		isapnp_peek(tmp, 2);
+		*size = (tmp[1] << 8) | tmp[0];
+	} else {
+		*type = (tag >> 3) & 0x0f;
+		*size = tag & 0x07;
+	}
+#if 0
+	printk("tag = 0x%x, type = 0x%x, size = %i\n", tag, *type, *size);
+#endif
+	if (type == 0)				/* wrong type */
+		return -1;
+	if (*type == 0xff && *size == 0xffff)	/* probably invalid data */
+		return -1;
+	return 0;
+}
+
+/*
+ *  Skip specified number of bytes from stream.
+ */
+ 
+static void __init isapnp_skip_bytes(int count)
+{
+	isapnp_peek(NULL, count);
+}
+
+/*
+ *  Parse logical device tag.
+ */
+
+static struct pci_dev * __init isapnp_parse_device(struct pci_bus *card, int size, int number)
+{
+	unsigned char tmp[6];
+	struct pci_dev *dev;
+
+	isapnp_peek(tmp, size);
+	dev = isapnp_alloc(sizeof(struct pci_dev));
+	if (!dev)
+		return NULL;
+	dev->devfn = number;
+	dev->vendor = (tmp[1] << 8) | tmp[0];
+	dev->device = (tmp[3] << 8) | tmp[2];
+	dev->regs = tmp[4];
+	dev->bus = card;
+	if (size > 5)
+		dev->regs |= tmp[5] << 8;
+	dev->prepare = isapnp_config_prepare;
+	dev->activate = isapnp_config_activate;
+	dev->deactivate = isapnp_config_deactivate;
+	return dev;
+}
+
+/*
+ *  Build new resources structure
+ */
+
+static struct isapnp_resources * __init isapnp_build_resources(struct pci_dev *dev, int dependent)
+{
+	struct isapnp_resources *res, *ptr, *ptra;
+	
+	res = isapnp_alloc(sizeof(struct isapnp_resources));
+	if (!res)
+		return NULL;
+	res->dev = dev;
+	ptr = (struct isapnp_resources *)dev->sysdata;
+	while (ptr && ptr->next)
+		ptr = ptr->next;
+	if (ptr && ptr->dependent && dependent) { /* add to another list */
+		ptra = ptr->alt;
+		while (ptra && ptra->alt)
+			ptra = ptra->alt;
+		if (!ptra)
+			ptr->alt = res;
+		else
+			ptra->alt = res;
+	} else {
+		if (!ptr)
+			dev->sysdata = res;
+		else
+			ptr->next = res;
+	}
+	if (dependent) {
+		res->priority = dependent & 0xff;
+		if (res->priority > ISAPNP_RES_PRIORITY_FUNCTIONAL)
+			res->priority = ISAPNP_RES_PRIORITY_INVALID;
+		res->dependent = 1;
+	} else {
+		res->priority = ISAPNP_RES_PRIORITY_PREFERRED;
+		res->dependent = 0;
+	}
+	return res;
+}
+
+/*
+ *  Add IRQ resource to resources list.
+ */
+
+static void __init isapnp_add_irq_resource(struct pci_dev *dev,
+                                    	       struct isapnp_resources **res,
+                                               int dependent, int size)
+{
+	unsigned char tmp[3];
+	struct isapnp_irq *irq, *ptr;
+
+	isapnp_peek(tmp, size);
+	irq = isapnp_alloc(sizeof(struct isapnp_irq));
+	if (!irq)
+		return;
+	if (*res == NULL) {
+		*res = isapnp_build_resources(dev, dependent);
+		if (*res == NULL) {
+			kfree(irq);
+			return;
+		}
+	}
+	irq->map = (tmp[1] << 8) | tmp[0];
+	if (size > 2)
+		irq->flags = tmp[2];
+	else
+		irq->flags = DEVICE_IRQ_FLAG_HIGHEDGE;
+	irq->res = *res;
+	ptr = (*res)->irq;
+	while (ptr && ptr->next)
+		ptr = ptr->next;
+	if (ptr)
+		ptr->next = irq;
+	else
+		(*res)->irq = irq;
+}
+
+/*
+ *  Add DMA resource to resources list.
+ */
+
+static void __init isapnp_add_dma_resource(struct pci_dev *dev,
+                                    	       struct isapnp_resources **res,
+                                    	       int dependent, int size)
+{
+	unsigned char tmp[2];
+	struct isapnp_dma *dma, *ptr;
+
+	isapnp_peek(tmp, size);
+	dma = isapnp_alloc(sizeof(struct isapnp_dma));
+	if (!dma)
+		return;
+	if (*res == NULL) {
+		*res = isapnp_build_resources(dev, dependent);
+		if (*res == NULL) {
+			kfree(dma);
+			return;
+		}
+	}
+	dma->map = tmp[0];
+	dma->type = tmp[1] & 3;
+	dma->flags = (tmp[1] >> 2) & 7;
+	dma->speed = (tmp[1] >> 6) & 3;
+	dma->res = *res;
+	ptr = (*res)->dma;
+	while (ptr && ptr->next)
+		ptr = ptr->next;
+	if (ptr)
+		ptr->next = dma;
+	else
+		(*res)->dma = dma;
+}
+
+/*
+ *  Add port resource to resources list.
+ */
+
+static void __init isapnp_add_port_resource(struct pci_dev *dev,
+						struct isapnp_resources **res,
+						int dependent, int size)
+{
+	unsigned char tmp[7];
+	struct isapnp_port *port, *ptr;
+
+	isapnp_peek(tmp, size);
+	port = isapnp_alloc(sizeof(struct isapnp_port));
+	if (!port)
+		return;
+	if (*res == NULL) {
+		*res = isapnp_build_resources(dev, dependent);
+		if (*res == NULL) {
+			kfree(port);
+			return;
+		}
+	}
+	port->min = (tmp[2] << 8) | tmp[1];
+	port->max = (tmp[4] << 8) | tmp[3];
+	port->align = tmp[5];
+	port->size = tmp[6];
+	port->flags = tmp[0] ? ISAPNP_PORT_FLAG_16BITADDR : 0;
+	port->res = *res;
+	ptr = (*res)->port;
+	while (ptr && ptr->next)
+		ptr = ptr->next;
+	if (ptr)
+		ptr->next = port;
+	else
+		(*res)->port = port;
+}
+
+/*
+ *  Add fixed port resource to resources list.
+ */
+
+static void __init isapnp_add_fixed_port_resource(struct pci_dev *dev,
+						      struct isapnp_resources **res,
+						      int dependent, int size)
+{
+	unsigned char tmp[3];
+	struct isapnp_port *port, *ptr;
+
+	isapnp_peek(tmp, size);
+	port = isapnp_alloc(sizeof(struct isapnp_port));
+	if (!port)
+		return;
+	if (*res == NULL) {
+		*res = isapnp_build_resources(dev, dependent);
+		if (*res == NULL) {
+			kfree(port);
+			return;
+		}
+	}
+	port->min = port->max = (tmp[1] << 8) | tmp[0];
+	port->size = tmp[2];
+	port->align = 0;
+	port->flags = ISAPNP_PORT_FLAG_FIXED;
+	port->res = *res;
+	ptr = (*res)->port;
+	while (ptr && ptr->next)
+		ptr = ptr->next;
+	if (ptr)
+		ptr->next = port;
+	else
+		(*res)->port = port;
+}
+
+/*
+ *  Add memory resource to resources list.
+ */
+
+static void __init isapnp_add_mem_resource(struct pci_dev *dev,
+					       struct isapnp_resources **res,
+					       int dependent, int size)
+{
+	unsigned char tmp[9];
+	struct isapnp_mem *mem, *ptr;
+
+	isapnp_peek(tmp, size);
+	mem = isapnp_alloc(sizeof(struct isapnp_mem));
+	if (!mem)
+		return;
+	if (*res == NULL) {
+		*res = isapnp_build_resources(dev, dependent);
+		if (*res == NULL) {
+			kfree(mem);
+			return;
+		}
+	}
+	mem->min = ((tmp[2] << 8) | tmp[1]) << 8;
+	mem->max = ((tmp[4] << 8) | tmp[3]) << 8;
+	mem->align = (tmp[6] << 8) | tmp[5];
+	mem->size = ((tmp[8] << 8) | tmp[7]) << 8;
+	mem->flags = tmp[0] & 7;
+	mem->flags |= (tmp[0] >> 2) & 0x18;
+	mem->type = (tmp[0] >> 3) & 3;
+	mem->res = *res;
+	ptr = (*res)->mem;
+	while (ptr && ptr->next)
+		ptr = ptr->next;
+	if (ptr)
+		ptr->next = mem;
+	else
+		(*res)->mem = mem;
+}
+
+/*
+ *  Add 32-bit memory resource to resources list.
+ */
+
+static void __init isapnp_add_mem32_resource(struct pci_dev *dev,
+						 struct isapnp_resources **res,
+						 int dependent, int size)
+{
+	unsigned char tmp[17];
+	struct isapnp_mem32 *mem32, *ptr;
+
+	isapnp_peek(tmp, size);
+	mem32 = isapnp_alloc(sizeof(struct isapnp_mem32));
+	if (!mem32)
+		return;
+	if (*res == NULL) {
+		*res = isapnp_build_resources(dev, dependent);
+		if (*res == NULL) {
+			kfree(mem32);
+			return;
+		}
+	}
+	memcpy(mem32->data, tmp, 17);
+	mem32->res = *res;
+	ptr = (*res)->mem32;
+	while (ptr && ptr->next)
+		ptr = ptr->next;
+	if (ptr)
+		ptr->next = mem32;
+	else
+		(*res)->mem32 = mem32;
+}
+
+/*
+ *  Add 32-bit fixed memory resource to resources list.
+ */
+
+static void __init isapnp_add_fixed_mem32_resource(struct pci_dev *dev,
+						       struct isapnp_resources **res,
+						       int dependent, int size)
+{
+	unsigned char tmp[17];
+	struct isapnp_mem32 *mem32, *ptr;
+
+	isapnp_peek(tmp, size);
+	mem32 = isapnp_alloc(sizeof(struct isapnp_mem32));
+	if (!mem32)
+		return;
+	if (*res == NULL) {
+		*res = isapnp_build_resources(dev, dependent);
+		if (*res == NULL) {
+			kfree(mem32);
+			return;
+		}
+	}
+	memcpy(mem32->data, tmp, 17);
+	mem32->res = *res;
+	ptr = (*res)->mem32;
+	while (ptr && ptr->next)
+		ptr = ptr->next;
+	if (ptr)
+		ptr->next = mem32;
+	else
+		(*res)->mem32 = mem32;
+}
+
+/*
+ *  Parse resource map for logical device.
+ */
+
+static int __init isapnp_create_device(struct pci_bus *card,
+					   unsigned short size)
+{
+	int number = 0, skip = 0, dependent = 0, compat = 0;
+	unsigned char type, tmp[17];
+	struct pci_dev *dev, *prev_dev;
+	struct isapnp_resources *res = NULL;
+	
+	if ((dev = isapnp_parse_device(card, size, number++)) == NULL)
+		return 1;
+	card->devices = dev;
+	if (isapnp_last_device) {
+		isapnp_last_device->next = dev;
+		isapnp_last_device = dev;
+	} else {
+		isapnp_devices = isapnp_last_device = dev;
+	}
+	while (1) {
+		if (isapnp_read_tag(&type, &size)<0)
+			return 1;
+		if (skip && type != _STAG_LOGDEVID && type != _STAG_END)
+			goto __skip;
+		switch (type) {
+		case _STAG_LOGDEVID:
+			if (size >= 5 && size <= 6) {
+				prev_dev = dev;
+				isapnp_config_prepare(dev);
+				if ((dev = isapnp_parse_device(card, size, number++)) == NULL)
+					return 1;
+				prev_dev->sibling = dev;
+				isapnp_last_device->next = dev;
+				isapnp_last_device = dev;
+				size = 0;
+				skip = 0;
+			} else {
+				skip = 1;
+			}
+			res = NULL;
+			dependent = 0;
+			compat = 0;
+			break;
+		case _STAG_COMPATDEVID:
+			if (size == 4 && compat < DEVICE_COUNT_COMPATIBLE) {
+				isapnp_peek(tmp, 4);
+				dev->vendor_compatible[compat] = (tmp[1] << 8) | tmp[0];
+				dev->device_compatible[compat] = (tmp[3] << 8) | tmp[2];
+				compat++;
+				size = 0;
+			}
+			break;
+		case _STAG_IRQ:
+			if (size < 2 || size > 3)
+				goto __skip;
+			isapnp_add_irq_resource(dev, &res, dependent, size);
+			size = 0;
+			break;
+		case _STAG_DMA:
+			if (size != 2)
+				goto __skip;
+			isapnp_add_dma_resource(dev, &res, dependent, size);
+			size = 0;
+			break;
+		case _STAG_STARTDEP:
+			if (size > 1)
+				goto __skip;
+			res = NULL;
+			dependent = 0x100 | ISAPNP_RES_PRIORITY_ACCEPTABLE;
+			if (size > 0) {
+				isapnp_peek(tmp, size);
+				dependent = 0x100 | tmp[0];
+				size = 0;
+			}
+			break;
+		case _STAG_ENDDEP:
+			if (size != 0)
+				goto __skip;
+			res = NULL;
+			dependent = 0;
+			break;
+		case _STAG_IOPORT:
+			if (size != 7)
+				goto __skip;
+			isapnp_add_port_resource(dev, &res, dependent, size);
+			size = 0;
+			break;
+		case _STAG_FIXEDIO:
+			if (size != 3)
+				goto __skip;
+			isapnp_add_fixed_port_resource(dev, &res, dependent, size);
+			size = 0;
+			break;
+		case _STAG_VENDOR:
+			break;
+		case _LTAG_MEMRANGE:
+			if (size != 9)
+				goto __skip;
+			isapnp_add_mem_resource(dev, &res, dependent, size);
+			size = 0;
+			break;
+		case _LTAG_ANSISTR:
+			if (dev->name[0] == '\0') {
+				unsigned short size1 = size > 47 ? 47 : size;
+				isapnp_peek(dev->name, size1);
+				dev->name[size1] = '\0';
+				size -= size1;
+			}
+			break;
+		case _LTAG_UNICODESTR:
+			/* silently ignore */
+			/* who use unicode for hardware identification? */
+			break;
+		case _LTAG_VENDOR:
+			break;
+		case _LTAG_MEM32RANGE:
+			if (size != 17)
+				goto __skip;
+			isapnp_add_mem32_resource(dev, &res, dependent, size);
+			size = 0;
+			break;
+		case _LTAG_FIXEDMEM32RANGE:
+			if (size != 17)
+				goto __skip;
+			isapnp_add_fixed_mem32_resource(dev, &res, dependent, size);
+			size = 0;
+			break;
+		case _STAG_END:
+			if (size > 0)
+				isapnp_skip_bytes(size);
+			return 1;
+		default:
+			printk("isapnp: unexpected or unknown tag type 0x%x for logical device %i (device %i), ignored\n", type, dev->devfn, card->number);
+		}
+	      __skip:
+	      	if (size > 0)
+		      	isapnp_skip_bytes(size);
+	}
+	isapnp_config_prepare(dev);
+	return 0;
+}
+
+/*
+ *  Parse resource map for ISA PnP card.
+ */
+ 
+static void __init isapnp_parse_resource_map(struct pci_bus *card)
+{
+	unsigned char type, tmp[17];
+	unsigned short size;
+	
+	while (1) {
+		if (isapnp_read_tag(&type, &size)<0)
+			return;
+		switch (type) {
+		case _STAG_PNPVERNO:
+			if (size != 2)
+				goto __skip;
+			isapnp_peek(tmp, 2);
+			card->pnpver = tmp[0];
+			card->productver = tmp[1];
+			size = 0;
+			break;
+		case _STAG_LOGDEVID:
+			if (size >= 5 && size <= 6) {
+				if (isapnp_create_device(card, size)==1)
+					return;
+				size = 0;
+			}
+			break;
+		case _STAG_VENDOR:
+			break;
+		case _LTAG_ANSISTR:
+			if (card->name[0] == '\0') {
+				unsigned short size1 = size > 47 ? 47 : size;
+				isapnp_peek(card->name, size1);
+				card->name[size1] = '\0';
+				size -= size1;
+			}
+			break;
+		case _LTAG_UNICODESTR:
+			/* silently ignore */
+			/* who use unicode for hardware identification? */
+			break;
+		case _LTAG_VENDOR:
+			break;
+		case _STAG_END:
+			if (size > 0)
+				isapnp_skip_bytes(size);
+			return;
+		default:
+			printk("isapnp: unexpected or unknown tag type 0x%x for device %i, ignored\n", type, card->number);
+		}
+	      __skip:
+	      	if (size > 0)
+		      	isapnp_skip_bytes(size);
+	}
+}
+
+/*
+ *  Compute ISA PnP checksum for first eight bytes.
+ */
+
+static unsigned char __init isapnp_checksum(unsigned char *data)
+{
+	int i, j;
+	unsigned char checksum = 0x6a, bit, b;
+	
+	for (i = 0; i < 8; i++) {
+		b = data[i];
+		for (j = 0; j < 8; j++) {
+			bit = 0;
+			if (b & (1 << j))
+				bit = 1;
+			checksum = ((((checksum ^ (checksum >> 1)) & 0x01) ^ bit) << 7) | (checksum >> 1);
+		}
+	}
+	return checksum;
+}
+
+/*
+ *  Build device list for all present ISA PnP devices.
+ */
+
+static int __init isapnp_build_device_list(void)
+{
+	int csn;
+	unsigned char header[9], checksum;
+	struct pci_bus *card, *prev = NULL;
+
+	isapnp_wait();
+	isapnp_key();
+	for (csn = 1; csn <= 10; csn++) {
+		isapnp_wake(csn);
+		isapnp_peek(header, 9);
+		checksum = isapnp_checksum(header);
+#if 0
+		printk("vendor: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
+			header[0], header[1], header[2], header[3],
+			header[4], header[5], header[6], header[7], header[8]);
+		printk("checksum = 0x%x\n", checksum);
+#endif
+		if (checksum == 0x00 || checksum != header[8])	/* not valid CSN */
+			continue;
+		if ((card = isapnp_alloc(sizeof(struct pci_bus))) == NULL)
+			continue;
+		card->number = csn;
+		card->vendor = (header[1] << 8) | header[0];
+		card->device = (header[3] << 8) | header[2];
+		card->serial = (header[7] << 24) | (header[6] << 16) | (header[5] << 8) | header[4];
+		isapnp_checksum_value = 0x00;
+		isapnp_parse_resource_map(card);
+		if (isapnp_checksum_value != 0x00)
+			printk("isapnp: checksum for device %i is not valid (0x%x)\n", csn, isapnp_checksum_value);
+		card->checksum = isapnp_checksum_value;
+		if (!isapnp_cards)
+			isapnp_cards = card;
+		else
+			prev->next = card;
+		prev = card;
+	}
+	return 0;
+}
+
+/*
+ *  Basic configuration routines.
+ */
+
+int isapnp_present(void)
+{
+	if (isapnp_devices)
+		return 1;
+	return 0;
+}
+
+int isapnp_cfg_begin(int csn, int logdev)
+{
+	if (csn < 1 || csn > 10 || logdev > 10)
+		return -EINVAL;
+	MOD_INC_USE_COUNT;
+	down(&isapnp_cfg_mutex);
+	isapnp_wait();
+	isapnp_key();
+	isapnp_wake(csn);
+#if 1	/* to avoid malfunction when isapnptools is used */
+	isapnp_set_rdp();
+	udelay(1000);	/* delay 1000us */
+	write_address(0x01);
+	udelay(1000);	/* delay 1000us */
+#endif
+	if (logdev >= 0)
+		isapnp_device(logdev);
+	return 0;
+}
+
+int isapnp_cfg_end(void)
+{
+	isapnp_wait();
+	up(&isapnp_cfg_mutex);
+	MOD_DEC_USE_COUNT;
+	return 0;
+}
+
+/*
+ *  Resource manager.
+ */
+
+static struct isapnp_port *isapnp_find_port(struct pci_dev *dev, int index)
+{
+	struct isapnp_resources *res;
+	struct isapnp_port *port;
+	
+	if (!dev || index < 0 || index > 7)
+		return NULL;
+	for (res = (struct isapnp_resources *)dev->sysdata; res; res = res->next) {
+		for (port = res->port; port; port = port->next) {
+			if (!index)
+				return port;
+			index--;
+		}
+	}
+	return NULL;
+}
+
+struct isapnp_irq *isapnp_find_irq(struct pci_dev *dev, int index)
+{
+	struct isapnp_resources *res, *resa;
+	struct isapnp_irq *irq;
+	int index1, index2, index3;
+	
+	if (!dev || index < 0 || index > 7)
+		return NULL;
+	for (res = (struct isapnp_resources *)dev->sysdata; res; res = res->next) {
+		index3 = 0;
+		for (resa = res; resa; resa = resa->alt) {
+			index1 = index;
+			index2 = 0;
+			for (irq = resa->irq; irq; irq = irq->next) {
+				if (!index1)
+					return irq;
+				index1--;
+				index2++;
+			}
+			if (index3 < index2)
+				index3 = index2;
+		}
+		index -= index3;
+	}
+	return NULL;
+}
+
+struct isapnp_dma *isapnp_find_dma(struct pci_dev *dev, int index)
+{
+	struct isapnp_resources *res;
+	struct isapnp_dma *dma;
+	
+	if (!dev || index < 0 || index > 7)
+		return NULL;
+	for (res = (struct isapnp_resources *)dev->sysdata; res; res = res->next) {
+		for (dma = res->dma; dma; dma = dma->next) {
+			if (!index)
+				return dma;
+			index--;
+		}
+	}
+	return NULL;
+}
+
+struct isapnp_mem *isapnp_find_mem(struct pci_dev *dev, int index)
+{
+	struct isapnp_resources *res;
+	struct isapnp_mem *mem;
+	
+	if (!dev || index < 0 || index > 7)
+		return NULL;
+	for (res = (struct isapnp_resources *)dev->sysdata; res; res = res->next) {
+		for (mem = res->mem; mem; mem = mem->next) {
+			if (!index)
+				return mem;
+			index--;
+		}
+	}
+	return NULL;
+}
+
+struct isapnp_mem32 *isapnp_find_mem32(struct pci_dev *dev, int index)
+{
+	struct isapnp_resources *res;
+	struct isapnp_mem32 *mem32;
+	
+	if (!dev || index < 0 || index > 7)
+		return NULL;
+	for (res = (struct isapnp_resources *)dev->sysdata; res; res = res->next) {
+		for (mem32 = res->mem32; mem32; mem32 = mem32->next) {
+			if (!index)
+				return mem32;
+			index--;
+		}
+	}
+	return NULL;
+}
+
+/*
+ *  Device manager.
+ */
+
+struct pci_bus *isapnp_find_card(unsigned short vendor,
+				 unsigned short device,
+				 struct pci_bus *from)
+{
+	struct pci_bus *card;
+
+	if (from == NULL) {
+		from = isapnp_cards;
+	} else {
+		from = from->next;
+	}
+	for (card = from; card; card = card->next) {
+		if (card->vendor == vendor && card->device == device)
+			return card;
+	}
+	return NULL;
+}
+
+struct pci_dev *isapnp_find_dev(struct pci_bus *card,
+				unsigned short vendor,
+				unsigned short function,
+				struct pci_dev *from)
+{
+	struct pci_dev *dev;
+	int idx;
+	
+	if (card == NULL) {	/* look for a logical device from all cards */
+		if (from == NULL) {
+			from = isapnp_devices;
+		} else {
+			from = from->next;
+		}
+		for (dev = from; dev; dev = dev->next) {
+			if (dev->vendor == vendor && dev->device == function)
+				return dev;
+			for (idx = 0; idx < DEVICE_COUNT_COMPATIBLE; idx++)
+				if (dev->vendor_compatible[idx] == vendor &&
+				    dev->device_compatible[idx] == function)
+					return dev;
+		}
+	} else {
+		if (from == NULL) {
+			from = card->devices;
+		} else {
+			from = from->next;
+		}
+		if (from->bus != card)	/* something is wrong */
+			return NULL;
+		for (dev = from; dev; dev = dev->sibling) {
+			if (dev->vendor == vendor && dev->device == function)
+				return dev;
+			for (idx = 0; idx < DEVICE_COUNT_COMPATIBLE; idx++)
+				if (dev->vendor_compatible[idx] == vendor &&
+				    dev->device_compatible[idx] == function)
+					return dev;
+		}		
+	}
+	return NULL;
+}
+
+static int isapnp_config_prepare(struct pci_dev *dev)
+{
+	struct isapnp_resources *res, *resa;
+	struct isapnp_port *port;
+	struct isapnp_irq *irq;
+	struct isapnp_dma *dma;
+	struct isapnp_mem *mem;
+	int port_count, port_count1;
+	int irq_count, irq_count1;
+	int dma_count, dma_count1;
+	int mem_count, mem_count1;
+	int idx;
+
+	if (dev == NULL)
+		return -EINVAL;
+	if (dev->active || dev->ro)
+		return -EBUSY;
+	dev->irq = dev->irq2 = DEVICE_IRQ_NOTSET;
+	dev->irq_flags = dev->irq2_flags = 0;
+	for (idx = 0; idx < DEVICE_COUNT_DMA; idx++) {
+		dev->dma[idx] = DEVICE_DMA_NOTSET;
+		dev->dma_type[idx] = DEVICE_DMA_TYPE_8AND16BIT;
+		dev->dma_flags[idx] = 0;
+		dev->dma_speed[idx] = DEVICE_DMA_SPEED_COMPATIBLE;
+	}
+	for (idx = 0; idx < DEVICE_COUNT_RESOURCE; idx++) {
+		dev->resource[idx].name = NULL;
+		dev->resource[idx].start = DEVICE_IO_NOTSET;
+		dev->resource[idx].end = 0;
+		dev->resource[idx].fixed = 0;
+		dev->resource[idx].bits = 12;
+		dev->resource[idx].hw_flags = 0;
+		dev->resource[idx].type = DEVICE_IO_TYPE_8AND16BIT;
+	}
+	port_count = irq_count = dma_count = mem_count = 0;
+	for (res = (struct isapnp_resources *)dev->sysdata; res; res = res->next) {
+		port_count1 = irq_count1 = dma_count1 = mem_count1 = 0;
+		for (resa = res; resa; resa = resa->alt) {
+			for (port = resa->port, idx = 0; port; port = port->next, idx++) {
+				if (dev->resource[port_count + idx].start == DEVICE_IO_NOTSET) {
+					dev->resource[port_count + idx].start = DEVICE_IO_AUTO;
+					dev->resource[port_count + idx].end = port->size;
+					dev->resource[port_count + idx].bits = port->flags & ISAPNP_PORT_FLAG_16BITADDR ? 16 : 12;
+					dev->resource[port_count + idx].fixed = port->flags & ISAPNP_PORT_FLAG_FIXED ? 1 : 0;
+				}
+			}
+			if (port_count1 < idx)
+				port_count1 = idx;
+			for (irq = resa->irq, idx = 0; irq; irq = irq->next, idx++) {
+				if (irq_count + idx == 0) {
+					if (dev->irq == DEVICE_IRQ_NOTSET) {
+						dev->irq = DEVICE_IRQ_AUTO;
+						dev->irq_flags = irq->flags;
+					}
+				} else if (irq_count + idx == 1) {
+					if (dev->irq2 == DEVICE_IRQ_NOTSET) {
+						dev->irq2 = DEVICE_IRQ_AUTO;
+						dev->irq2_flags = irq->flags;
+					}
+				}
+				
+			}
+			if (irq_count1 < idx)
+				irq_count1 = idx;
+			for (dma = resa->dma, idx = 0; dma; dma = dma->next, idx++)
+				if (dev->dma[idx] == DEVICE_DMA_NOTSET) {
+					dev->dma[idx] = DEVICE_DMA_AUTO;
+					dev->dma_type[idx] = dma->type;
+					dev->dma_flags[idx] = dma->flags;
+					dev->dma_speed[idx] = dma->speed;
+				}
+			if (dma_count1 < idx)
+				dma_count1 = idx;
+			for (mem = resa->mem, idx = 0; mem; mem = mem->next, idx++)
+				if (dev->resource[mem_count + idx + 8].start == DEVICE_IO_AUTO) {
+					dev->resource[mem_count + idx].start = DEVICE_IO_AUTO;
+					dev->resource[mem_count + idx].end = mem->size;
+					dev->resource[mem_count + idx].bits = 24;
+					dev->resource[mem_count + idx].fixed = 0;
+					dev->resource[mem_count + idx].hw_flags = mem->flags;
+					dev->resource[mem_count + idx].type = mem->type;
+				}
+			if (mem_count1 < idx)
+				mem_count1 = idx;
+		}
+		port_count += port_count1;
+		irq_count += irq_count1;
+		dma_count += dma_count1;
+		mem_count += mem_count1;
+	}
+	return 0;
+}
+
+struct isapnp_cfgtmp {
+	struct isapnp_port *port[8];
+	struct isapnp_irq *irq[2];
+	struct isapnp_dma *dma[2];
+	struct isapnp_mem *mem[4];
+	struct pci_dev *request;
+	struct pci_dev result;
+};
+
+static int isapnp_alternative_switch(struct isapnp_cfgtmp *cfg,
+				     struct isapnp_resources *from,
+				     struct isapnp_resources *to)
+{
+	int tmp, tmp1;
+	struct isapnp_port *port;
+	struct isapnp_irq *irq;
+	struct isapnp_dma *dma;
+	struct isapnp_mem *mem;
+
+	if (!cfg)
+		return -EINVAL;
+	/* process port settings */
+	for (tmp = 0; tmp < 8; tmp++) {
+		if (cfg->request->resource[tmp].start != DEVICE_IO_AUTO)
+			continue;		/* don't touch */
+		port = cfg->port[tmp];
+		if (!port) {
+			cfg->port[tmp] = port = isapnp_find_port(cfg->request, tmp);
+			if (!port)
+				return -EINVAL;
+		}
+		if (from && port->res == from) {
+			while (port->res != to) {
+				if (!port->res->alt)
+					return -EINVAL;
+				port = port->res->alt->port;
+				for (tmp1 = tmp; tmp1 > 0 && port; tmp1--)
+					port = port->next;
+				cfg->port[tmp] = port;
+				cfg->result.resource[tmp].start = DEVICE_IO_AUTO;
+				if (!port)
+					return -ENOENT;
+			}
+		}
+	}
+	/* process irq settings */
+	for (tmp = 0; tmp < 2; tmp++) {
+		if (tmp == 0) {
+			if (cfg->request->irq != DEVICE_IRQ_AUTO)
+				continue;		/* don't touch */
+		} else {
+			if (cfg->request->irq2 != DEVICE_IRQ_AUTO)
+				continue;		/* don't touch */
+		}
+		irq = cfg->irq[tmp];
+		if (!irq) {
+			cfg->irq[tmp] = irq = isapnp_find_irq(cfg->request, tmp);
+			if (!irq)
+				return -EINVAL;
+		}
+		if (from && irq->res == from) {
+			while (irq->res != to) {
+				if (!irq->res->alt)
+					return -EINVAL;
+				irq = irq->res->alt->irq;
+				for (tmp1 = tmp; tmp1 > 0 && irq; tmp1--)
+					irq = irq->next;
+				cfg->irq[tmp] = irq;
+				if (tmp == 0) {
+					cfg->result.irq = DEVICE_IRQ_AUTO;
+				} else {
+					cfg->result.irq2 = DEVICE_IRQ_AUTO;
+				}
+				if (!irq)
+					return -ENOENT;
+			}
+		}
+	}
+	/* process dma settings */
+	for (tmp = 0; tmp < 2; tmp++) {
+		if (cfg->request->dma[tmp] != DEVICE_DMA_AUTO)
+			continue;		/* don't touch */
+		dma = cfg->dma[tmp];
+		if (!dma) {
+			cfg->dma[tmp] = dma = isapnp_find_dma(cfg->request, tmp);
+			if (!dma)
+				return -EINVAL;
+		}
+		if (from && dma->res == from) {
+			while (dma->res != to) {
+				if (!dma->res->alt)
+					return -EINVAL;
+				dma = dma->res->alt->dma;
+				for (tmp1 = tmp; tmp1 > 0 && dma; tmp1--)
+					dma = dma->next;
+				cfg->dma[tmp] = dma;
+				cfg->result.dma[tmp] = DEVICE_DMA_AUTO;
+				if (!dma)
+					return -ENOENT;
+			}
+		}
+	}
+	/* process memory settings */
+	for (tmp = 0; tmp < 4; tmp++) {
+		if (cfg->request->resource[tmp + 8].start != DEVICE_IO_AUTO)
+			continue;		/* don't touch */
+		mem = cfg->mem[tmp];
+		if (!mem) {
+			cfg->mem[tmp] = mem = isapnp_find_mem(cfg->request, tmp);
+			if (!mem)
+				return -EINVAL;
+		}
+		if (from && mem->res == from) {
+			while (mem->res != to) {
+				if (!mem->res->alt)
+					return -EINVAL;
+				mem = mem->res->alt->mem;
+				for (tmp1 = tmp; tmp1 > 0 && mem; tmp1--)
+					mem = mem->next;
+				cfg->mem[tmp] = mem;
+				cfg->result.resource[tmp + 8].start = DEVICE_IO_AUTO;
+				if (!mem)
+					return -ENOENT;
+			}
+		}
+	}
+	return 0;
+}
+
+static int isapnp_check_port(struct isapnp_cfgtmp *cfg, int port, int size, int idx)
+{
+	int i, tmp, rport, rsize;
+	struct isapnp_port *xport;
+	struct pci_dev *dev;
+
+	if (check_region(port, size))
+		return 1;
+	for (i = 0; i < 8; i++) {
+		rport = isapnp_reserve_io[i << 1];
+		rsize = isapnp_reserve_io[(i << 1) + 1];
+		if (port >= rport && port < rport + rsize)
+			return 1;
+		if (port + size > rport && port + size < (rport + rsize) - 1)
+			return 1;
+	}
+	for (dev = isapnp_devices; dev; dev = dev->next) {
+		if (dev->active) {
+			for (tmp = 0; tmp < 8; tmp++) {
+				if (dev->resource[tmp].start != DEVICE_IO_NOTSET) {
+					rport = dev->resource[tmp].start;
+					rsize = (dev->resource[tmp].end - rport) + 1;
+					if (port >= rport && port < rport + rsize)
+						return 1;
+					if (port + size > rport && port + size < (rport + rsize) - 1)
+						return 1;
+				}
+			}
+		}
+	}
+	for (i = 0; i < 8; i++) {
+		if (i == idx)
+			continue;
+		tmp = cfg->request->resource[i].start;
+		if (tmp == DEVICE_IO_NOTSET)
+			continue;
+		if (tmp == DEVICE_IO_AUTO) {		/* auto */
+			xport = cfg->port[i];
+			if (!xport)
+				return 1;
+			tmp = cfg->result.resource[i].start;
+			if (tmp == DEVICE_IO_AUTO)
+				continue;
+			if (tmp + xport->size >= port && tmp <= port + xport->size)
+				return 1;
+			continue;
+		}
+		if (port == tmp)
+			return 1;
+		xport = isapnp_find_port(cfg->request, i);
+		if (!xport)
+			return 1;
+		if (tmp + xport->size >= port && tmp <= port + xport->size)
+			return 1;
+	}
+	return 0;
+}
+
+static int isapnp_valid_port(struct isapnp_cfgtmp *cfg, int idx)
+{
+	int err;
+	unsigned long *value;
+	struct isapnp_port *port;
+
+	if (!cfg || idx < 0 || idx > 7)
+		return -EINVAL;
+	if (cfg->result.resource[idx].start != DEVICE_IO_AUTO) /* don't touch */
+		return 0;
+      __again:
+      	port = cfg->port[idx];
+      	if (!port)
+      		return -EINVAL;
+      	value = &cfg->result.resource[idx].start;
+	if (*value == DEVICE_IO_AUTO) {
+		if (!isapnp_check_port(cfg, *value = port->min, port->size, idx))
+			return 0;
+	}
+	do {
+		*value += port->align;
+		if (*value > port->max || !port->align) {
+			if (port->res && port->res->alt) {
+				if ((err = isapnp_alternative_switch(cfg, port->res, port->res->alt))<0)
+					return err;
+				goto __again;
+			}
+			return -ENOENT;
+		}
+	} while (isapnp_check_port(cfg, *value, port->size, idx));
+	return 0;
+}
+
+static void isapnp_test_handler(int irq, void *dev_id, struct pt_regs *regs)
+{
+}
+
+static int isapnp_check_interrupt(struct isapnp_cfgtmp *cfg, int irq, int idx)
+{
+	int i;
+	struct pci_dev *dev;
+
+	if (irq < 0 || irq > 15)
+		return 1;
+	for (i = 0; i < 16; i++) {
+		if (isapnp_reserve_irq[i] == irq)
+			return 1;
+	}
+	for (dev = isapnp_devices; dev; dev = dev->next) {
+		if (dev->active) {
+			if (dev->irq == irq || dev->irq2 == irq)
+				return 1;
+		}
+	}
+	if (request_irq(irq, isapnp_test_handler, SA_INTERRUPT, "isapnp", NULL))
+		return 1;
+	free_irq(irq, NULL);
+	if (idx != 0) {
+		if (cfg->result.irq != DEVICE_IRQ_AUTO &&
+		    cfg->result.irq != DEVICE_IRQ_NOTSET)
+			if (cfg->result.irq == irq)
+				return 1;
+	}
+	if (idx != 1) {
+		if (cfg->result.irq2 != DEVICE_IRQ_AUTO &&
+		    cfg->result.irq2 != DEVICE_IRQ_NOTSET)
+			if (cfg->result.irq2 == irq)
+				return 1;
+	}
+	return 0;
+}
+
+static int isapnp_valid_irq(struct isapnp_cfgtmp *cfg, int idx)
+{
+	/* IRQ priority: table is good for i386 */
+	static unsigned short xtab[16] = {
+		5, 10, 11, 12, 9, 14, 15, 7, 3, 4, 13, 0, 1, 6, 8, 2
+	};
+	int err, i;
+	unsigned int *value;
+	struct isapnp_irq *irq;
+
+	if (!cfg || idx < 0 || idx > 1)
+		return -EINVAL;
+	if (idx == 0) {
+		if (cfg->result.irq != DEVICE_IRQ_AUTO) /* don't touch */
+			return 0;
+	} else {
+		if (cfg->result.irq2 != DEVICE_IRQ_AUTO) /* don't touch */
+			return 0;
+	}
+      __again:
+      	irq = cfg->irq[idx];
+      	if (!irq)
+      		return -EINVAL;
+      	if (idx == 0) {
+	      	value = &cfg->result.irq;
+	} else {
+		value = &cfg->result.irq2;
+	}
+	if (*value == DEVICE_IRQ_AUTO) {
+		for (i = 0; i < 16 && !(irq->map & (1<<xtab[i])); i++);
+		if (i >= 16)
+			return -ENOENT;
+		if (!isapnp_check_interrupt(cfg, *value = xtab[i], idx))
+			return 0;
+	}
+	do {
+		for (i = 0; i < 16 && xtab[i] != *value; i++);
+		for (i++; i < 16 && !(irq->map & (1<<xtab[i])); i++);
+		if (i >= 16) {
+			if (irq->res && irq->res->alt) {
+				if ((err = isapnp_alternative_switch(cfg, irq->res, irq->res->alt))<0)
+					return err;
+				goto __again;
+			}
+			return -ENOENT;
+		} else {
+			*value = xtab[i];
+		}
+	} while (isapnp_check_interrupt(cfg, *value, idx));
+	return 0;
+}
+
+static int isapnp_check_dma(struct isapnp_cfgtmp *cfg, int dma, int idx)
+{
+	int i;
+	struct pci_dev *dev;
+
+	if (dma < 0 || dma == 4 || dma > 7)
+		return 1;
+	for (i = 0; i < 8; i++) {
+		if (isapnp_reserve_dma[i] == dma)
+			return 1;
+	}
+	for (dev = isapnp_devices; dev; dev = dev->next) {
+		if (dev->active) {
+			if (dev->dma[0] == dma || dev->dma[1] == dma)
+				return 1;
+		}
+	}
+	if (request_dma(dma, "isapnp"))
+		return 1;
+	free_dma(dma);
+	for (i = 0; i < 2; i++) {
+		if (i == idx)
+			continue;
+		if (cfg->result.dma[i] == DEVICE_DMA_NOTSET ||
+		    cfg->result.dma[i] == DEVICE_DMA_AUTO)
+			continue;
+		if (cfg->result.dma[i] == dma)
+			return 1;
+	}
+	return 0;
+}
+
+static int isapnp_valid_dma(struct isapnp_cfgtmp *cfg, int idx)
+{
+	int err, i;
+	unsigned char *value;
+	struct isapnp_dma *dma;
+
+	if (!cfg || idx < 0 || idx > 1)
+		return -EINVAL;
+	if (cfg->result.dma[idx] != DEVICE_DMA_AUTO)	/* don't touch */
+		return 0;
+      __again:
+      	dma = cfg->dma[idx];
+      	if (!dma)
+      		return -EINVAL;
+      	value = &cfg->result.dma[idx];
+	if (*value == DEVICE_DMA_AUTO) {
+		for (i = 0; i < 8 && !(dma->map & (1<<i)); i++);
+		if (i >= 8)
+			return -ENOENT;
+		if (!isapnp_check_dma(cfg, *value = i, idx))
+			return 0;
+	}
+	do {
+		for (i = *value + 1; i < 8 && !(dma->map & (1<<i)); i++);
+		if (i >= 8) {
+			if (dma->res && dma->res->alt) {
+				if ((err = isapnp_alternative_switch(cfg, dma->res, dma->res->alt))<0)
+					return err;
+				goto __again;
+			}
+			return -ENOENT;
+		} else {
+			*value = i;
+		}
+	} while (isapnp_check_dma(cfg, *value, idx));
+	return 0;
+}
+
+static int isapnp_check_mem(struct isapnp_cfgtmp *cfg, unsigned int addr, unsigned int size, int idx)
+{
+	int i, tmp;
+	unsigned int raddr, rsize;
+	struct pci_dev *dev;
+	struct isapnp_mem *xmem;
+
+	for (i = 0; i < 8; i++) {
+		raddr = (unsigned int)isapnp_reserve_mem[i << 1];
+		rsize = (unsigned int)isapnp_reserve_mem[(i << 1) + 1];
+		if (addr >= raddr && addr < raddr + rsize)
+			return 1;
+		if (addr + size > raddr && addr + size < (raddr + rsize) - 1)
+			return 1;
+		if (__check_region(&iomem_resource, addr, size))
+			return 1;
+	}
+	for (dev = isapnp_devices; dev; dev = dev->next) {
+		if (dev->active) {
+			for (tmp = 0; tmp < 4; tmp++) {
+				if (dev->resource[tmp].start != DEVICE_IO_NOTSET) {
+					raddr = dev->resource[tmp + 8].start;
+					rsize = (dev->resource[tmp + 8].end - raddr) + 1;
+					if (addr >= raddr && addr < raddr + rsize)
+						return 1;
+					if (addr + size > raddr && addr + size < (raddr + rsize) - 1)
+						return 1;
+				}
+			}
+		}
+	}
+	for (i = 0; i < 4; i++) {
+		if (i == idx)
+			continue;
+		tmp = cfg->request->resource[i + 8].start;
+		if (tmp == DEVICE_IO_NOTSET)
+			continue;
+		if (tmp == DEVICE_IO_AUTO) {		/* auto */
+			xmem = cfg->mem[i];
+			if (!xmem)
+				return 1;
+			tmp = cfg->result.resource[i + 8].start;
+			if (tmp == DEVICE_IO_AUTO)
+				continue;
+			if (tmp + xmem->size >= addr && tmp <= addr + xmem->size)
+				return 1;
+			continue;
+		}
+		if (addr == tmp)
+			return 1;
+		xmem = isapnp_find_mem(cfg->request, i);
+		if (!xmem)
+			return 1;
+		if (tmp + xmem->size >= addr && tmp <= addr + xmem->size)
+			return 1;
+	}
+	return 0;
+}
+
+static int isapnp_valid_mem(struct isapnp_cfgtmp *cfg, int idx)
+{
+	int err;
+	unsigned long *value;
+	struct isapnp_mem *mem;
+
+	if (!cfg || idx < 0 || idx > 3)
+		return -EINVAL;
+	if (cfg->result.resource[idx + 8].start != DEVICE_IO_AUTO) /* don't touch */
+		return 0;
+      __again:
+      	mem = cfg->mem[idx];
+      	if (!mem)
+      		return -EINVAL;
+      	value = &cfg->result.resource[idx].start;
+	if (*value == DEVICE_IO_AUTO) {
+		*value = mem->min;
+		if (!isapnp_check_mem(cfg, *value, mem->size, idx))
+			return 0;
+	}
+	do {
+		*value += mem->align;
+		if (*value >= 8 || !mem->align) {
+			if (mem->res && mem->res->alt) {
+				if ((err = isapnp_alternative_switch(cfg, mem->res, mem->res->alt))<0)
+					return err;
+				goto __again;
+			}
+			return -ENOENT;
+		}
+	} while (isapnp_check_mem(cfg, *value, mem->size, idx));
+	return 0;
+}
+
+static int isapnp_check_valid(struct isapnp_cfgtmp *cfg)
+{
+	int tmp;
+	
+	for (tmp = 0; tmp < 8; tmp++)
+		if (cfg->result.resource[tmp].start == DEVICE_IO_AUTO)
+			return -EAGAIN;
+	if (cfg->result.irq == DEVICE_IRQ_AUTO)
+		return -EAGAIN;
+	if (cfg->result.irq2 == DEVICE_IRQ_AUTO)
+		return -EAGAIN;
+	for (tmp = 0; tmp < 2; tmp++)
+		if (cfg->result.dma[tmp] == DEVICE_DMA_AUTO)
+			return -EAGAIN;
+	for (tmp = 0; tmp < 4; tmp++)
+		if (cfg->result.resource[tmp + 1].start == DEVICE_IO_AUTO)
+			return -EAGAIN;
+	return 0;
+}
+
+static int isapnp_config_activate(struct pci_dev *dev)
+{
+	struct isapnp_cfgtmp cfg;
+	int tmp, fauto, err;
+	
+	if (!dev)
+		return -EINVAL;
+	if (dev->active)
+		return -EBUSY;
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.request = dev;
+	memcpy(&cfg.result, dev, sizeof(struct pci_dev));
+	/* check if all values are set, otherwise try auto-configuration */
+	for (tmp = fauto = 0; !fauto && tmp < 8; tmp++) {
+		if (dev->resource[tmp].start == DEVICE_IO_AUTO)
+			fauto++;
+	}
+	if (dev->irq == DEVICE_IRQ_AUTO)
+		fauto++;
+	if (dev->irq2 == DEVICE_IRQ_AUTO)
+		fauto++;
+	for (tmp = 0; !fauto && tmp < 2; tmp++) {
+		if (dev->dma[tmp] == DEVICE_DMA_AUTO)
+			fauto++;
+	}
+	for (tmp = 0; !fauto && tmp < 4; tmp++) {
+		if (dev->resource[tmp + 8].start == DEVICE_IO_AUTO)
+			fauto++;
+	}
+	if (!fauto)
+		goto __skip_auto;
+	/* set variables to initial values */
+	if ((err = isapnp_alternative_switch(&cfg, NULL, NULL))<0)
+		return err;
+	/* find first valid configuration */
+	fauto = 0;
+	do {
+		for (tmp = 0; tmp < 8 && cfg.result.resource[tmp].start != DEVICE_IO_NOTSET; tmp++)
+			if ((err = isapnp_valid_port(&cfg, tmp))<0)
+				return err;
+		if (cfg.result.irq != DEVICE_IRQ_NOTSET)
+			if ((err = isapnp_valid_irq(&cfg, 0))<0)
+				return err;
+		if (cfg.result.irq2 != DEVICE_IRQ_NOTSET)
+			if ((err = isapnp_valid_irq(&cfg, 1))<0)
+				return err;
+		for (tmp = 0; tmp < 2 && tmp < cfg.result.dma[tmp] != DEVICE_DMA_NOTSET; tmp++)
+			if ((err = isapnp_valid_dma(&cfg, tmp))<0)
+				return err;
+		for (tmp = 0; tmp < 4 && tmp < cfg.result.resource[tmp + 8].start != DEVICE_IO_NOTSET; tmp++)
+			if ((err = isapnp_valid_mem(&cfg, tmp))<0)
+				return err;
+	} while (isapnp_check_valid(&cfg)<0 && fauto++ < 20);
+	if (fauto >= 20)
+		return -EAGAIN;
+      __skip_auto:
+      	/* we have valid configuration, try configure hardware */
+      	isapnp_cfg_begin(dev->bus->number, dev->devfn);
+	dev->active = 1;
+	dev->irq = cfg.result.irq;
+	dev->irq2 = cfg.result.irq2;
+	dev->dma[0] = cfg.result.dma[0];
+	dev->dma[1] = cfg.result.dma[1];
+	for (tmp = 0; tmp < 12; tmp++) {
+		dev->resource[tmp].start = cfg.result.resource[tmp].start;
+		if (cfg.result.resource[tmp].start != DEVICE_IO_NOTSET &&
+		    cfg.result.resource[tmp].end != DEVICE_IO_AUTO)
+			dev->resource[tmp].end += cfg.result.resource[tmp].start;
+	}	
+	for (tmp = 0; tmp < 8 && dev->resource[tmp].start != DEVICE_IO_NOTSET; tmp++)
+		isapnp_write_word(ISAPNP_CFG_PORT+(tmp<<1), dev->resource[tmp].start);
+	if (dev->irq != DEVICE_IRQ_NOTSET) {
+		if (dev->irq == 2)
+			dev->irq = 9;
+		isapnp_write_byte(ISAPNP_CFG_IRQ+(0<<1), dev->irq);
+	}
+	if (dev->irq2 != DEVICE_IRQ_NOTSET) {
+		if (dev->irq2 == 2)
+			dev->irq2 = 9;
+		isapnp_write_byte(ISAPNP_CFG_IRQ+(1<<1), dev->irq2);
+	}
+	for (tmp = 0; tmp < 2 && dev->dma[tmp] != DEVICE_DMA_NOTSET; tmp++)
+		isapnp_write_byte(ISAPNP_CFG_DMA+tmp, dev->dma[tmp]);
+	for (tmp = 0; tmp < 4 && dev->resource[tmp].start != DEVICE_IO_NOTSET; tmp++)
+		isapnp_write_word(ISAPNP_CFG_MEM+(tmp<<2), (dev->resource[tmp + 8].start >> 8) & 0xffff);
+	isapnp_activate(dev->devfn);
+	isapnp_cfg_end();
+	return 0;
+}
+
+static int isapnp_config_deactivate(struct pci_dev *dev)
+{
+	if (!dev || !dev->active)
+		return -EINVAL;
+      	isapnp_cfg_begin(dev->bus->number, dev->devfn);
+	isapnp_deactivate(dev->devfn);
+	dev->activate = 0;
+	isapnp_cfg_end();
+	return 0;
+}
+
+/*
+ *  Inititialization.
+ */
+
+#ifdef MODULE
+
+static void isapnp_free_port(struct isapnp_port *port)
+{
+	struct isapnp_port *next;
+
+	while (port) {
+		next = port->next;
+		kfree(port);
+		port = next;
+	}
+}
+
+static void isapnp_free_irq(struct isapnp_irq *irq)
+{
+	struct isapnp_irq *next;
+
+	while (irq) {
+		next = irq->next;
+		kfree(irq);
+		irq = next;
+	}
+}
+
+static void isapnp_free_dma(struct isapnp_dma *dma)
+{
+	struct isapnp_dma *next;
+
+	while (dma) {
+		next = dma->next;
+		kfree(dma);
+		dma = next;
+	}
+}
+
+static void isapnp_free_mem(struct isapnp_mem *mem)
+{
+	struct isapnp_mem *next;
+
+	while (mem) {
+		next = mem->next;
+		kfree(mem);
+		mem = next;
+	}
+}
+
+static void isapnp_free_mem32(struct isapnp_mem32 *mem32)
+{
+	struct isapnp_mem32 *next;
+
+	while (mem32) {
+		next = mem32->next;
+		kfree(mem32);
+		mem32 = next;
+	}
+}
+
+static void isapnp_free_resources(struct isapnp_resources *resources, int alt)
+{
+	struct isapnp_resources *next;
+
+	while (resources) {
+		next = alt ? resources->alt : resources->next;
+		isapnp_free_port(resources->port);
+		isapnp_free_irq(resources->irq);
+		isapnp_free_dma(resources->dma);
+		isapnp_free_mem(resources->mem);
+		isapnp_free_mem32(resources->mem32);
+		if (!alt && resources->alt)
+			isapnp_free_resources(resources->alt, 1);
+		kfree(resources);
+		resources = next;
+	}
+}
+
+static void isapnp_free_device(struct pci_dev *dev)
+{
+	struct pci_dev *next;
+
+	while (dev) {
+		next = dev->next;
+		isapnp_free_resources((struct isapnp_resources *)dev->sysdata, 0);
+		kfree(dev);
+		dev = next;
+	}
+}
+
+#endif /* MODULE */
+
+static void isapnp_free_all_resources(void)
+{
+#ifdef MODULE
+	struct pci_bus *card, *cardnext;
+#endif
+
+#ifdef ISAPNP_REGION_OK
+	release_resource(pidxr_res);
+#endif
+	release_resource(pnpwrp_res);
+	if (isapnp_rdp >= 0x203 && isapnp_rdp <= 0x3ff)
+		release_resource(isapnp_rdp_res);
+#ifdef MODULE
+	for (card = isapnp_cards; card; card = cardnext) {
+		cardnext = card->next;
+		isapnp_free_device(card->devices);
+		kfree(card);
+	}
+#ifdef CONFIG_PROC_FS
+	isapnp_proc_done();
+#endif
+#endif
+}
+
+static int __init isapnp_do_reserve_irq(int irq)
+{
+	int i;
+	
+	if (irq < 0 || irq > 15)
+		return -EINVAL;
+	for (i = 0; i < 16; i++) {
+		if (isapnp_reserve_irq[i] == irq)
+			return 0;
+	}
+	for (i = 0; i < 16; i++) {
+		if (isapnp_reserve_irq[i] < 0) {
+			isapnp_reserve_irq[i] = irq;
+#ifdef ISAPNP_DEBUG
+			printk("IRQ %i is reserved now.\n", irq);
+#endif
+			return 0;
+		}
+	}
+	return -ENOMEM;
+}
+
+#ifdef CONFIG_PCI
+
+static void __init isapnp_pci_init(void)
+{
+	int devfn;
+	struct pci_dev *dev;
+	
+	for (devfn = 0; devfn < 255; devfn++) {
+		dev = pci_find_slot(0, devfn);
+		if (dev != NULL)
+			break;
+	}
+	if (dev == NULL)
+		return;
+	while (dev) {
+#ifdef ISAPNP_DEBUG
+		printk("PCI: reserved IRQ: %i\n", dev->irq);
+#endif
+		if (dev->irq > 0)
+			isapnp_do_reserve_irq(dev->irq);
+		dev = dev->next;
+	}
+}
+
+#endif /* CONFIG_PCI */
+
+EXPORT_SYMBOL(isapnp_present);
+EXPORT_SYMBOL(isapnp_cfg_begin);
+EXPORT_SYMBOL(isapnp_cfg_end);
+EXPORT_SYMBOL(isapnp_read_byte);
+EXPORT_SYMBOL(isapnp_read_word);
+EXPORT_SYMBOL(isapnp_read_dword);
+EXPORT_SYMBOL(isapnp_write_byte);
+EXPORT_SYMBOL(isapnp_write_word);
+EXPORT_SYMBOL(isapnp_write_dword);
+EXPORT_SYMBOL(isapnp_wake);
+EXPORT_SYMBOL(isapnp_device);
+EXPORT_SYMBOL(isapnp_activate);
+EXPORT_SYMBOL(isapnp_deactivate);
+EXPORT_SYMBOL(isapnp_find_card);
+EXPORT_SYMBOL(isapnp_find_dev);
+
+int __init isapnp_init(void)
+{
+	int cards;
+	struct pci_bus *card;
+	struct pci_dev *dev;
+
+	if (isapnp_disable) {
+		isapnp_detected = 0;
+		printk("isapnp: ISA Plug & Play support disabled\n");
+		return 0;
+	}
+#ifdef ISAPNP_REGION_OK
+	pidxr_res=request_region(_PIDXR, 1, "isapnp index");
+	if(!pidxr_res) {
+		printk("isapnp: Index Register 0x%x already used\n", _PIDXR);
+		return -EBUSY;
+	}
+#endif
+	pnpwrp_res=request_region(_PNPWRP, 1, "isapnp write");
+	if(!pnpwrp_res) {
+		printk("isapnp: Write Data Register 0x%x already used\n", _PNPWRP);
+		return -EBUSY;
+	}
+	if (isapnp_rdp >= 0x203 && isapnp_rdp <= 0x3ff) {
+		isapnp_rdp_res=request_region(isapnp_rdp, 1, "isapnp read");
+		if(!isapnp_rdp_res) {
+			printk("isapnp: Read Data Register 0x%x already used\n", isapnp_rdp);
+			return -EBUSY;
+		}
+	}
+	isapnp_detected = 1;
+	if (isapnp_rdp < 0x203 || isapnp_rdp > 0x3ff) {
+		cards = isapnp_isolate();
+		if (cards < 0 || 
+		    (isapnp_rdp < 0x203 || isapnp_rdp > 0x3ff)) {
+			isapnp_free_all_resources();
+			isapnp_detected = 0;
+			printk("isapnp: No Plug & Play device found\n");
+			return 0;
+		}
+		isapnp_rdp_res=request_region(isapnp_rdp, 1, "isapnp read");
+	}
+	isapnp_build_device_list();
+	cards = 0;
+	for (card = isapnp_cards; card; card = card->next)
+		cards++;
+	if (isapnp_verbose) {
+		for (card = isapnp_cards; card; card = card->next) {
+			printk( "isapnp: Card '%s'\n", card->name[0]?card->name:"Unknown");
+			if (isapnp_verbose < 2)
+				continue;
+			for (dev = card->devices; dev; dev = dev->next)
+				printk("isapnp:   Device '%s'\n", dev->name[0]?card->name:"Unknown");
+		}
+	}
+	if (cards) {
+		printk("isapnp: %i Plug & Play card%s detected total\n", cards, cards>1?"s":"");
+	} else {
+		printk("isapnp: No Plug & Play card found\n");
+	}
+#ifdef CONFIG_PCI
+	if (!isapnp_skip_pci_scan)
+		isapnp_pci_init();
+#endif
+#ifdef CONFIG_PROC_FS
+	isapnp_proc_init();
+#endif
+	return 0;
+}
+
+#ifdef MODULE
+
+int init_module(void)
+{
+	return isapnp_init();
+}
+
+void cleanup_module(void)
+{
+	if (isapnp_detected)
+		isapnp_free_all_resources();
+}
+
+#endif

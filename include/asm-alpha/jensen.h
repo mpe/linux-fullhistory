@@ -292,12 +292,14 @@ __EXTERN_INLINE void jensen_writeq(unsigned long b, unsigned long addr)
 	*(vuip) (addr + (4 << 7)) = b >> 32;
 }
 
-/* Find the DENSE memory area for a given bus address.
-   Whee, there is none.  */
-
-__EXTERN_INLINE unsigned long jensen_dense_mem(unsigned long addr)
+__EXTERN_INLINE unsigned long jensen_ioremap(unsigned long addr)
 {
-	return 0;
+	return addr;
+}
+
+__EXTERN_INLINE int jensen_is_ioaddr(unsigned long addr)
+{
+	return (long)addr >= 0;
 }
 
 #undef vuip
@@ -320,7 +322,8 @@ __EXTERN_INLINE unsigned long jensen_dense_mem(unsigned long addr)
 #define __readq		jensen_readq
 #define __writel	jensen_writel
 #define __writeq	jensen_writeq
-#define dense_mem	jensen_dense_mem
+#define __ioremap	jensen_ioremap
+#define __is_ioaddr	jensen_is_ioaddr
 
 /*
  * The above have so much overhead that it probably doesn't make

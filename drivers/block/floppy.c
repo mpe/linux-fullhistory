@@ -4068,8 +4068,7 @@ static struct param_table {
 	{ "no_unexpected_interrupts", 0, &print_unex, 0, 0 },
 	{ "L40SX", 0, &print_unex, 0, 0 } };
 
-#define FLOPPY_SETUP
-void __init floppy_setup(char *str)
+static int __init floppy_setup(char *str)
 {
 	int i;
 	int param;
@@ -4091,7 +4090,7 @@ void __init floppy_setup(char *str)
 					DPRINT("%s=%d\n", str, param);
 					*config_params[i].var = param;
 				}
-				return;
+				return 1;
 			}
 		}
 	}
@@ -4105,6 +4104,7 @@ void __init floppy_setup(char *str)
 	} else
 		DPRINT("botched floppy option\n");
 	DPRINT("Read linux/drivers/block/README.fd\n");
+	return 1;
 }
 
 static int have_no_fdc= -EIO;
@@ -4463,6 +4463,9 @@ MODULE_SUPPORTED_DEVICE("fd");
 #endif
 
 #else
+
+__setup ("floppy=", floppy_setup);
+
 /* eject the boot floppy (if we need the drive for a different root floppy) */
 /* This should only be called at boot time when we're sure that there's no
  * resource contention. */

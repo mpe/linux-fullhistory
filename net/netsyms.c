@@ -178,7 +178,9 @@ EXPORT_SYMBOL(neigh_sysctl_register);
 #endif
 EXPORT_SYMBOL(pneigh_lookup);
 EXPORT_SYMBOL(pneigh_enqueue);
+EXPORT_SYMBOL(neigh_create);
 EXPORT_SYMBOL(neigh_destroy);
+EXPORT_SYMBOL(neigh_lookup);
 EXPORT_SYMBOL(neigh_parms_alloc);
 EXPORT_SYMBOL(neigh_parms_release);
 EXPORT_SYMBOL(neigh_rand_reach_time);

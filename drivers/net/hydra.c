@@ -282,7 +282,8 @@ static int hydra_open(struct device *dev)
 	dev->interrupt = 0;
 	dev->start = 1;
     
-	if(request_irq(IRQ_AMIGA_PORTS, hydra_interrupt, 0, "Hydra Ethernet", dev))
+	if(request_irq(IRQ_AMIGA_PORTS, hydra_interrupt, SA_SHIRQ,
+		       "Hydra Ethernet", dev))
 		return(-EAGAIN);
 
 	MOD_INC_USE_COUNT;

@@ -447,7 +447,7 @@ static int __init offb_init_driver(struct device_node *dp)
 #endif /* CONFIG_FB_PLATINUM */
 #ifdef CONFIG_FB_CLGEN
     if ((!strncmp(dp->name, "MacPicasso",10) ||
-        (!strncmp(dp->name, "54m30",10)) {
+        (!strncmp(dp->name, "54m30",5)) {
        clgen_of_init(dp);
        return 1;
     }

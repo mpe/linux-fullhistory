@@ -315,6 +315,16 @@ extern int m68k_is040or060;
 
 #define CPU_TYPE (m68k_cputype)
 
+#ifdef CONFIG_M68KFPU_EMU
+#  ifdef CONFIG_M68KFPU_EMU_ONLY
+#    define FPU_IS_EMU (1)
+#  else
+#    define FPU_IS_EMU (!m68k_fputype)
+#  endif
+#else
+#  define FPU_IS_EMU (0)
+#endif
+
 
     /*
      *  Miscellaneous

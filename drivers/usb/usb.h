@@ -61,6 +61,7 @@ typedef struct {
 #define USB_DT_CONFIG_SIZE		9
 #define USB_DT_INTERFACE_SIZE		9
 #define USB_DT_ENDPOINT_SIZE		7
+#define USB_DT_AUCLSTEP_SIZE		9	/* Audio Classes are special */
 #define USB_DT_HUB_NONVAR_SIZE		7
 
 /*
@@ -167,7 +168,7 @@ struct usb_devmap {
  */
 
 #define USB_MAXCONFIG		8
-#define USB_MAXALTSETTING       5
+#define USB_MAXALTSETTING   6   
 #define USB_MAXINTERFACES	32
 #define USB_MAXENDPOINTS	32
 
@@ -196,6 +197,8 @@ struct usb_endpoint_descriptor {
 	__u8  bmAttributes;
 	__u16 wMaxPacketSize;
 	__u8  bInterval;
+	__u8  bRefresh;
+	__u8  bSynchAddress;
 	void  *audio;
 };
 
@@ -215,9 +218,10 @@ struct usb_interface_descriptor {
 	void  *audio;
 };
 
-/* hack for alternate settings */
-struct usb_alternate_setting {
-        struct usb_interface_descriptor *interface;
+struct usb_interface {
+        struct usb_interface_descriptor *altsetting;
+        int act_altsetting;                /* active alternate setting */
+        int num_altsetting;                /* number of alternate settings */
 };
 
 /* Configuration descriptor information.. */
@@ -230,9 +234,7 @@ struct usb_config_descriptor {
 	__u8  iConfiguration;
 	__u8  bmAttributes;
 	__u8  MaxPower;
-        int act_altsetting;                /* active alternate setting */
-        int num_altsetting;                /* number of alternate settings */
-	struct usb_alternate_setting *altsetting;
+	struct usb_interface *interface;
 };
 
 /* String descriptor */
@@ -398,7 +400,7 @@ extern int usb_compress_isochronous (struct usb_device *usb_dev, void *_isodesc)
  * unsigned int. The encoding is:
  *
  *  - max size:		bits 0-1	(00 = 8, 01 = 16, 10 = 32, 11 = 64)
- *  - direction:	bit 7		(0 = Host-to-Device, 1 = Device-to-Host)
+ *  - direction:	bit 7		(0 = Host-to-Device [Out], 1 = Device-to-Host [In])
  *  - device:		bits 8-14
  *  - endpoint:		bits 15-18
  *  - Data0/1:		bit 19
@@ -414,7 +416,7 @@ extern int usb_compress_isochronous (struct usb_device *usb_dev, void *_isodesc)
 #define usb_maxpacket(dev, pipe, out)	(out \
 				? (dev)->epmaxpacketout[usb_pipeendpoint(pipe)] \
 				: (dev)->epmaxpacketin [usb_pipeendpoint(pipe)] )
-#define usb_packetid(pipe)	(((pipe) & 0x80) ? 0x69 : 0xE1)
+#define usb_packetid(pipe)	(((pipe) & USB_DIR_IN) ? USB_PID_IN : USB_PID_OUT)
 
 #define usb_pipeout(pipe)	((((pipe) >> 7) & 1) ^ 1)
 #define usb_pipein(pipe)	(((pipe) >> 7) & 1)
@@ -454,13 +456,13 @@ static inline unsigned int __default_pipe(struct usb_device *dev)
 
 /* Create various pipes... */
 #define usb_sndctrlpipe(dev,endpoint)	((2 << 30) | __create_pipe(dev,endpoint))
-#define usb_rcvctrlpipe(dev,endpoint)	((2 << 30) | __create_pipe(dev,endpoint) | 0x80)
+#define usb_rcvctrlpipe(dev,endpoint)	((2 << 30) | __create_pipe(dev,endpoint) | USB_DIR_IN)
 #define usb_sndisocpipe(dev,endpoint)	((0 << 30) | __create_pipe(dev,endpoint))
-#define usb_rcvisocpipe(dev,endpoint)	((0 << 30) | __create_pipe(dev,endpoint) | 0x80)
+#define usb_rcvisocpipe(dev,endpoint)	((0 << 30) | __create_pipe(dev,endpoint) | USB_DIR_IN)
 #define usb_sndbulkpipe(dev,endpoint)	((3 << 30) | __create_pipe(dev,endpoint))
-#define usb_rcvbulkpipe(dev,endpoint)	((3 << 30) | __create_pipe(dev,endpoint) | 0x80)
+#define usb_rcvbulkpipe(dev,endpoint)	((3 << 30) | __create_pipe(dev,endpoint) | USB_DIR_IN)
 #define usb_snddefctrl(dev)		((2 << 30) | __default_pipe(dev))
-#define usb_rcvdefctrl(dev)		((2 << 30) | __default_pipe(dev) | 0x80)
+#define usb_rcvdefctrl(dev)		((2 << 30) | __default_pipe(dev) | USB_DIR_IN)
 
 /*
  * Send and receive control messages..

@@ -186,6 +186,7 @@ typedef struct {
 #ifdef __KERNEL__
 
 /* Kernel includes */
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/tqueue.h>

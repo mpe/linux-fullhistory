@@ -37,17 +37,15 @@
 
 /* MCPCIA ADDRESS BIT DEFINITIONS
  *
- *  3 3 3 3|3 3 3 3|3 3 2 2|2 2 2 2|2 2 2 2|1 1 1 1|1 1 1 1|1 1 
- *  9 8 7 6|5 4 3 2|1 0 9 8|7 6 5 4|3 2 1 0|9 8 7 6|5 4 3 2|1 0 9 8|7 6 5 4|3 2 1 0
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |1| | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |0|0|0|
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
- *  |                                                                        \_/ \_/
- *  |                                                                         |   |
- *  +-- IO space, not cached.                                   Byte Enable --+   |
- *                                                              Transfer Length --+
- *
- *
+ *  3333 3333 3322 2222 2222 1111 1111 11
+ *  9876 5432 1098 7654 3210 9876 5432 1098 7654 3210
+ *  ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ *  1                                             000
+ *  ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ *  |                                             |\|
+ *  |                               Byte Enable --+ |
+ *  |                             Transfer Length --+
+ *  +-- IO space, not cached
  *
  *   Byte      Transfer
  *   Enable    Length    Transfer  Byte    Address
@@ -171,8 +169,8 @@
  * Data structure for handling MCPCIA machine checks:
  */
 struct el_MCPCIA_uncorrected_frame_mcheck {
-        struct el_common header;
-        struct el_common_EV5_uncorrectable_mcheck procdata;
+	struct el_common header;
+	struct el_common_EV5_uncorrectable_mcheck procdata;
 };
 
 
@@ -214,41 +212,6 @@ __EXTERN_INLINE void * mcpcia_bus_to_virt(unsigned long address)
 #define vip	volatile int *
 #define vuip	volatile unsigned int *
 #define vulp	volatile unsigned long *
-
-#if 0 /* BWIO */
-__EXTERN_INLINE unsigned int mcpcia_bw_inb(unsigned long addr)
-{
-	return __kernel_ldbu(*(vucp)(addr+MCPCIA_BW_IO));
-}
-
-__EXTERN_INLINE void mcpcia_bw_outb(unsigned char b, unsigned long addr)
-{
-	__kernel_stb(b, *(vucp)(addr+MCPCIA_BW_IO));
-	mb();
-}
-
-__EXTERN_INLINE unsigned int mcpcia_bw_inw(unsigned long addr)
-{
-	return __kernel_ldwu(*(vusp)(addr+MCPCIA_BW_IO));
-}
-
-__EXTERN_INLINE void mcpcia_bw_outw(unsigned short b, unsigned long addr)
-{
-	__kernel_stw(b, *(vusp)(addr+MCPCIA_BW_IO));
-	mb();
-}
-
-__EXTERN_INLINE unsigned int mcpcia_bw_inl(unsigned long addr)
-{
-	return *(vuip)(addr+MCPCIA_BW_IO);
-}
-
-__EXTERN_INLINE void mcpcia_bw_outl(unsigned int b, unsigned long addr)
-{
-	*(vuip)(addr+MCPCIA_BW_IO) = b;
-	mb();
-}
-#endif
 
 __EXTERN_INLINE unsigned int mcpcia_inb(unsigned long in_addr)
 {
@@ -307,8 +270,8 @@ __EXTERN_INLINE void mcpcia_outl(unsigned int b, unsigned long in_addr)
 /*
  * Memory functions.  64-bit and 32-bit accesses are done through
  * dense memory space, everything else through sparse space.
- * 
- * For reading and writing 8 and 16 bit quantities we need to 
+ *
+ * For reading and writing 8 and 16 bit quantities we need to
  * go through one of the three sparse address mapping regions
  * and use the HAE_MEM CSR to provide some bits of the address.
  * The following few routines use only sparse address region 1
@@ -317,10 +280,10 @@ __EXTERN_INLINE void mcpcia_outl(unsigned int b, unsigned long in_addr)
  * See p 6-17 of the specification but it looks something like this:
  *
  * 21164 Address:
- * 
+ *
  *          3         2         1
  * 9876543210987654321098765432109876543210
- * 1ZZZZ0.PCI.QW.Address............BBLL                 
+ * 1ZZZZ0.PCI.QW.Address............BBLL
  *
  * ZZ = SBZ
  * BB = Byte offset
@@ -333,56 +296,34 @@ __EXTERN_INLINE void mcpcia_outl(unsigned int b, unsigned long in_addr)
  * HHH....PCI.QW.Address........ 00
  *
  * HHH = 31:29 HAE_MEM CSR
- * 
+ *
  */
 
-#if 0 /* BWIO */
-__EXTERN_INLINE unsigned long mcpcia_bw_readb(unsigned long addr)
+__EXTERN_INLINE unsigned long mcpcia_ioremap(unsigned long in_addr)
 {
-	return __kernel_ldbu(*(vucp)(addr+MCPCIA_BW_MEM));
+	unsigned long addr = in_addr & 0xffffffffUL;
+	unsigned long hose = (in_addr >> 32) & 3;
+	return addr + MCPCIA_DENSE(hose);
 }
 
-__EXTERN_INLINE unsigned long mcpcia_bw_readw(unsigned long addr)
+__EXTERN_INLINE int mcpcia_is_ioaddr(unsigned long addr)
 {
-	return __kernel_ldbw(*(vusp)(addr+MCPCIA_BW_MEM));
+	return addr >= IDENT_ADDR + 0x8000000000UL;
 }
-
-__EXTERN_INLINE unsigned long mcpcia_bw_readl(unsigned long addr)
-{
-	return *(vuip)(addr + MCPCIA_BW_MEM);
-}
-
-__EXTERN_INLINE unsigned long mcpcia_bw_readq(unsigned long addr)
-{
-	return *(vulp)(addr + MCPCIA_BW_MEM);
-}
-
-__EXTERN_INLINE void mcpcia_bw_writeb(unsigned char b, unsigned long addr)
-{
-	__kernel_stb(b, *(vucp)(addr+MCPCIA_BW_MEM));
-}
-
-__EXTERN_INLINE void mcpcia_bw_writew(unsigned short b, unsigned long addr)
-{
-	__kernel_stw(b, *(vusp)(addr+MCPCIA_BW_MEM));
-}
-
-__EXTERN_INLINE void mcpcia_bw_writel(unsigned int b, unsigned long addr)
-{
-	*(vuip)(addr+MCPCIA_BW_MEM) = b;
-}
-
-__EXTERN_INLINE void mcpcia_bw_writeq(unsigned long b, unsigned long addr)
-{
-	*(vulp)(addr+MCPCIA_BW_MEM) = b;
-}
-#endif
 
 __EXTERN_INLINE unsigned long mcpcia_srm_base(unsigned long addr)
 {
 	unsigned long mask, base;
 	unsigned long hose = (addr >> 32) & 3;
 
+#if __DEBUG_IOREMAP
+	if (addr <= 0x1000000000) {
+		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+	}
+#endif
+
+	addr &= 0xfffffffful;
 	if (addr >= alpha_mv.sm_base_r1
 	    && addr <= alpha_mv.sm_base_r1 + MCPCIA_MEM_MASK) {
 		mask = MCPCIA_MEM_MASK;
@@ -407,7 +348,7 @@ __EXTERN_INLINE unsigned long mcpcia_srm_readb(unsigned long addr)
 		return 0xff;
 	work += 0x00;	/* add transfer length */
 
-	result = *(vip) work;
+	result = *(vip)work;
 	return __kernel_extbl(result, addr & 3);
 }
 
@@ -425,27 +366,38 @@ __EXTERN_INLINE unsigned long mcpcia_srm_readw(unsigned long addr)
 
 __EXTERN_INLINE void mcpcia_srm_writeb(unsigned char b, unsigned long addr)
 {
-	unsigned long work = mcpcia_srm_base(addr);
+	unsigned long w, work = mcpcia_srm_base(addr);
 	if (work) {
 		work += 0x00;	/* add transfer length */
-		*(vuip) work = b * 0x01010101;
+		w = __kernel_insbl(b, addr & 3);
+		*(vuip)work = w;
 	}
 }
 
 __EXTERN_INLINE void mcpcia_srm_writew(unsigned short b, unsigned long addr)
 {
-	unsigned long work = mcpcia_srm_base(addr);
+	unsigned long w, work = mcpcia_srm_base(addr);
 	if (work) {
 		work += 0x08;	/* add transfer length */
-		*(vuip) work = b * 0x00010001;
+		w = __kernel_inswl(b, addr & 3);
+		*(vuip)work = w;
 	}
 }
 
 __EXTERN_INLINE unsigned long mcpcia_readb(unsigned long in_addr)
 {
+	/* Note that MCPCIA_DENSE(hose) has no bits not masked here, and
+	   that the hose calculation is still correct.  */
 	unsigned long addr = in_addr & 0xffffffffUL;
 	unsigned long hose = (in_addr >> 32) & 3;
 	unsigned long result, msb, work, temp;
+
+#if __DEBUG_IOREMAP
+	if (in_addr <= 0x1000000000) {
+		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+	}
+#endif
 
 	msb = addr & ~MCPCIA_MEM_MASK;
 	temp = addr & MCPCIA_MEM_MASK;
@@ -458,12 +410,21 @@ __EXTERN_INLINE unsigned long mcpcia_readb(unsigned long in_addr)
 
 __EXTERN_INLINE unsigned long mcpcia_readw(unsigned long in_addr)
 {
+	/* Note that MCPCIA_DENSE(hose) has no bits not masked here, and
+	   that the hose calculation is still correct.  */
 	unsigned long addr = in_addr & 0xffffffffUL;
 	unsigned long hose = (in_addr >> 32) & 3;
 	unsigned long result, msb, work, temp;
 
+#if __DEBUG_IOREMAP
+	if (in_addr <= 0x1000000000) {
+		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+	}
+#endif
+
 	msb = addr & ~MCPCIA_MEM_MASK;
-	temp = addr & MCPCIA_MEM_MASK ;
+	temp = addr & MCPCIA_MEM_MASK;
 	set_hae(msb);
 
 	work = ((temp << 5) + MCPCIA_SPARSE(hose) + 0x08);
@@ -473,63 +434,100 @@ __EXTERN_INLINE unsigned long mcpcia_readw(unsigned long in_addr)
 
 __EXTERN_INLINE void mcpcia_writeb(unsigned char b, unsigned long in_addr)
 {
+	/* Note that MCPCIA_DENSE(hose) has no bits not masked here, and
+	   that the hose calculation is still correct.  */
 	unsigned long addr = in_addr & 0xffffffffUL;
 	unsigned long hose = (in_addr >> 32) & 3;
-        unsigned long msb; 
+	unsigned long msb, w;
+
+#if __DEBUG_IOREMAP
+	if (in_addr <= 0x1000000000) {
+		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+	}
+#endif
 
 	msb = addr & ~MCPCIA_MEM_MASK;
 	addr &= MCPCIA_MEM_MASK;
 	set_hae(msb);
 
-	*(vuip) ((addr << 5) + MCPCIA_SPARSE(hose) + 0x00) = b * 0x01010101;
+	w = __kernel_insbl(b, in_addr & 3);
+	*(vuip) ((addr << 5) + MCPCIA_SPARSE(hose) + 0x00) = w;
 }
 
 __EXTERN_INLINE void mcpcia_writew(unsigned short b, unsigned long in_addr)
 {
+	/* Note that MCPCIA_DENSE(hose) has no bits not masked here, and
+	   that the hose calculation is still correct.  */
 	unsigned long addr = in_addr & 0xffffffffUL;
 	unsigned long hose = (in_addr >> 32) & 3;
-        unsigned long msb ; 
+	unsigned long msb, w;
 
-	msb = addr & ~MCPCIA_MEM_MASK ;
-	addr &= MCPCIA_MEM_MASK ;
+#if __DEBUG_IOREMAP
+	if (in_addr <= 0x1000000000) {
+		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+	}
+#endif
+
+	msb = addr & ~MCPCIA_MEM_MASK;
+	addr &= MCPCIA_MEM_MASK;
 	set_hae(msb);
 
-	*(vuip) ((addr << 5) + MCPCIA_SPARSE(hose) + 0x08) = b * 0x00010001;
+	w = __kernel_inswl(b, in_addr & 3);
+	*(vuip) ((addr << 5) + MCPCIA_SPARSE(hose) + 0x08) = w;
 }
 
-__EXTERN_INLINE unsigned long mcpcia_readl(unsigned long in_addr)
+__EXTERN_INLINE unsigned long mcpcia_readl(unsigned long addr)
 {
-	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	return *(vuip) (addr + MCPCIA_DENSE(hose));
+#if __DEBUG_IOREMAP
+	if (addr <= 0x1000000000) {
+		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr = mcpcia_ioremap(addr);
+	}
+#endif
+
+	return *(vuip)addr;
 }
 
-__EXTERN_INLINE unsigned long mcpcia_readq(unsigned long in_addr)
+__EXTERN_INLINE unsigned long mcpcia_readq(unsigned long addr)
 {
-	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	return *(vulp) (addr + MCPCIA_DENSE(hose));
+#if __DEBUG_IOREMAP
+	if (addr <= 0x1000000000) {
+		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr = mcpcia_ioremap(addr);
+	}
+#endif
+
+	return *(vulp)addr;
 }
 
-__EXTERN_INLINE void mcpcia_writel(unsigned int b, unsigned long in_addr)
+__EXTERN_INLINE void mcpcia_writel(unsigned int b, unsigned long addr)
 {
-	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	*(vuip) (addr + MCPCIA_DENSE(hose)) = b;
+#if __DEBUG_IOREMAP
+	if (addr <= 0x1000000000) {
+		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr = mcpcia_ioremap(addr);
+	}
+#endif
+
+	*(vuip)addr = b;
 }
 
-__EXTERN_INLINE void mcpcia_writeq(unsigned long b, unsigned long in_addr)
+__EXTERN_INLINE void mcpcia_writeq(unsigned long b, unsigned long addr)
 {
-	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	*(vulp) (addr + MCPCIA_DENSE(hose)) = b;
-}
+#if __DEBUG_IOREMAP
+	if (addr <= 0x1000000000) {
+		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr = mcpcia_ioremap(addr);
+	}
+#endif
 
-/* Find the DENSE memory area for a given bus address.  */
-
-__EXTERN_INLINE unsigned long mcpcia_dense_mem(unsigned long addr)
-{
-	return MCPCIA_DENSE((addr >> 32) & 3);
+	*(vulp)addr = b;
 }
 
 #undef vucp
@@ -543,69 +541,42 @@ __EXTERN_INLINE unsigned long mcpcia_dense_mem(unsigned long addr)
 #define virt_to_bus	mcpcia_virt_to_bus
 #define bus_to_virt	mcpcia_bus_to_virt
 
-#if 0 /* BWIO */
-# define __inb		mcpcia_bw_inb
-# define __inw		mcpcia_bw_inw
-# define __inl		mcpcia_bw_inl
-# define __outb		mcpcia_bw_outb
-# define __outw		mcpcia_bw_outw
-# define __outl		mcpcia_bw_outl
-# define __readb	mcpcia_bw_readb
-# define __readw	mcpcia_bw_readw
-# define __writeb	mcpcia_bw_writeb
-# define __writew	mcpcia_bw_writew
-# define __readl	mcpcia_bw_readl
-# define __readq	mcpcia_bw_readq
-# define __writel	mcpcia_bw_writel
-# define __writeq	mcpcia_bw_writeq
+#define __inb		mcpcia_inb
+#define __inw		mcpcia_inw
+#define __inl		mcpcia_inl
+#define __outb		mcpcia_outb
+#define __outw		mcpcia_outw
+#define __outl		mcpcia_outl
+#ifdef CONFIG_ALPHA_SRM_SETUP
+# define __readb	mcpcia_srm_readb
+# define __readw	mcpcia_srm_readw
+# define __writeb	mcpcia_srm_writeb
+# define __writew	mcpcia_srm_writew
 #else
-# define __inb		mcpcia_inb
-# define __inw		mcpcia_inw
-# define __inl		mcpcia_inl
-# define __outb		mcpcia_outb
-# define __outw		mcpcia_outw
-# define __outl		mcpcia_outl
-# ifdef CONFIG_ALPHA_SRM_SETUP
-#  define __readb	mcpcia_srm_readb
-#  define __readw	mcpcia_srm_readw
-#  define __writeb	mcpcia_srm_writeb
-#  define __writew	mcpcia_srm_writew
-# else
-#  define __readb	mcpcia_readb
-#  define __readw	mcpcia_readw
-#  define __writeb	mcpcia_writeb
-#  define __writew	mcpcia_writew
-# endif
-# define __readl	mcpcia_readl
-# define __readq	mcpcia_readq
-# define __writel	mcpcia_writel
-# define __writeq	mcpcia_writeq
-#endif /* BWIO */
+# define __readb	mcpcia_readb
+# define __readw	mcpcia_readw
+# define __writeb	mcpcia_writeb
+# define __writew	mcpcia_writew
+#endif
+#define __readl		mcpcia_readl
+#define __readq		mcpcia_readq
+#define __writel	mcpcia_writel
+#define __writeq	mcpcia_writeq
 
-#define dense_mem	mcpcia_dense_mem
+#define __ioremap	mcpcia_ioremap
+#define __is_ioaddr	mcpcia_is_ioaddr
 
-#if 0 /* BWIO */
-# define inb(port) __inb((port))
-# define inw(port) __inw((port))
-# define inl(port) __inl((port))
-# define outb(x, port) __outb((x),(port))
-# define outw(x, port) __outw((x),(port))
-# define outl(x, port) __outl((x),(port))
-# define readb(addr) __readb((addr))
-# define readw(addr) __readw((addr))
-# define writeb(b, addr) __writeb((b),(addr))
-# define writew(b, addr) __writew((b),(addr))
-#else
 # define inb(port) \
   (__builtin_constant_p((port))?__inb(port):_inb(port))
 # define outb(x, port) \
   (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
-#endif /* BWIO */
 
-#define readl(a)	__readl((unsigned long)(a))
-#define readq(a)	__readq((unsigned long)(a))
-#define writel(v,a)	__writel((v),(unsigned long)(a))
-#define writeq(v,a)	__writeq((v),(unsigned long)(a))
+#if !__DEBUG_IOREMAP
+#define __raw_readl(a)		__readl((unsigned long)(a))
+#define __raw_readq(a)		__readq((unsigned long)(a))
+#define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
+#define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
+#endif
 
 #endif /* __WANT_IO_DEF */
 

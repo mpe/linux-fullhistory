@@ -71,7 +71,8 @@
 	mv_writew:		CAT(low1,_writew),			\
 	mv_writel:		CAT(low1,_writel),			\
 	mv_writeq:		CAT(low1,_writeq),			\
-	mv_dense_mem:		CAT(low2,_dense_mem)
+	mv_ioremap:		CAT(low2,_ioremap),			\
+	mv_is_ioaddr:		CAT(low2,_is_ioaddr)
 
 #define IO(UP,low1,low2)						\
 	IO_LITE(UP,low1,low2),						\

@@ -29,7 +29,6 @@
 
 
 
-#include <linux/config.h>
 #include <linux/ioctl.h>
 #include <linux/types.h>
 

@@ -58,7 +58,7 @@ static void default_idle(void)
 {
 	while(1) {
 		if (!current->need_resched)
-#ifdef MACH_ATARI_ONLY
+#if defined(MACH_ATARI_ONLY) && !defined(CONFIG_HADES)
 			/* block out HSYNC on the atari (falcon) */
 			__asm__("stop #0x2200" : : : "cc");
 #else
@@ -161,9 +161,10 @@ void flush_thread(void)
 	unsigned long zero = 0;
 	set_fs(USER_DS);
 	current->thread.fs = __USER_DS;
-	asm volatile (".chip 68k/68881\n\t"
-		      "frestore %0@\n\t"
-		      ".chip 68k" : : "a" (&zero));
+	if (!FPU_IS_EMU)
+		asm volatile (".chip 68k/68881\n\t"
+			      "frestore %0@\n\t"
+			      ".chip 68k" : : "a" (&zero));
 }
 
 /*
@@ -224,16 +225,18 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	 */
 	p->thread.fs = get_fs().seg;
 
-	/* Copy the current fpu state */
-	asm volatile ("fsave %0" : : "m" (p->thread.fpstate[0]) : "memory");
+	if (!FPU_IS_EMU) {
+		/* Copy the current fpu state */
+		asm volatile ("fsave %0" : : "m" (p->thread.fpstate[0]) : "memory");
 
-	if (!CPU_IS_060 ? p->thread.fpstate[0] : p->thread.fpstate[2])
-	  asm volatile ("fmovemx %/fp0-%/fp7,%0\n\t"
-			"fmoveml %/fpiar/%/fpcr/%/fpsr,%1"
-			: : "m" (p->thread.fp[0]), "m" (p->thread.fpcntl[0])
-			: "memory");
-	/* Restore the state in case the fpu was busy */
-	asm volatile ("frestore %0" : : "m" (p->thread.fpstate[0]));
+		if (!CPU_IS_060 ? p->thread.fpstate[0] : p->thread.fpstate[2])
+		  asm volatile ("fmovemx %/fp0-%/fp7,%0\n\t"
+				"fmoveml %/fpiar/%/fpcr/%/fpsr,%1"
+				: : "m" (p->thread.fp[0]), "m" (p->thread.fpcntl[0])
+				: "memory");
+		/* Restore the state in case the fpu was busy */
+		asm volatile ("frestore %0" : : "m" (p->thread.fpstate[0]));
+	}
 
 	return 0;
 }
@@ -244,18 +247,32 @@ int dump_fpu (struct pt_regs *regs, struct user_m68kfp_struct *fpu)
 {
 	char fpustate[216];
 
-  /* First dump the fpu context to avoid protocol violation.  */
-  asm volatile ("fsave %0" :: "m" (fpustate[0]) : "memory");
-  if (!CPU_IS_060 ? !fpustate[0] : !fpustate[2])
-     return 0;
+	if (FPU_IS_EMU) {
+		int i;
 
-  asm volatile ("fmovem %/fpiar/%/fpcr/%/fpsr,%0"
+		memcpy(fpu->fpcntl, current->thread.fpcntl, 12);
+		memcpy(fpu->fpregs, current->thread.fp, 96);
+		/* Convert internal fpu reg representation
+		 * into long double format
+		 */
+		for (i = 0; i < 24; i += 3)
+			fpu->fpregs[i] = ((fpu->fpregs[i] & 0xffff0000) << 15) |
+			                 ((fpu->fpregs[i] & 0x0000ffff) << 16);
+		return 1;
+	}
+
+	/* First dump the fpu context to avoid protocol violation.  */
+	asm volatile ("fsave %0" :: "m" (fpustate[0]) : "memory");
+	if (!CPU_IS_060 ? !fpustate[0] : !fpustate[2])
+		return 0;
+
+	asm volatile ("fmovem %/fpiar/%/fpcr/%/fpsr,%0"
 		:: "m" (fpu->fpcntl[0])
 		: "memory");
-  asm volatile ("fmovemx %/fp0-%/fp7,%0"
+	asm volatile ("fmovemx %/fp0-%/fp7,%0"
 		:: "m" (fpu->fpregs[0])
 		: "memory");
-  return 1;
+	return 1;
 }
 
 /*

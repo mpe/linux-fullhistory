@@ -47,6 +47,7 @@ asmlinkage void buserr(void);
 asmlinkage void trap(void);
 asmlinkage void inthandler(void);
 asmlinkage void nmihandler(void);
+asmlinkage void fpu_emu(void);
 
 e_vector vectors[256] = {
 	0, 0, buserr, trap, trap, trap, trap, trap,
@@ -65,12 +66,12 @@ asm(".text\n"
     __ALIGN_STR "\n"
     SYMBOL_NAME_STR(nmihandler) ": rte");
 
-__initfunc(void base_trap_init(void))
+void __init base_trap_init(void)
 {
 	/* setup the exception vector table */
 	__asm__ volatile ("movec %0,%%vbr" : : "r" ((void*)vectors));
 
-	if (CPU_IS_040) {
+	if (CPU_IS_040 && !FPU_IS_EMU) {
 		/* set up FPSP entry points */
 		asmlinkage void dz_vec(void) asm ("dz");
 		asmlinkage void inex_vec(void) asm ("inex");
@@ -93,6 +94,12 @@ __initfunc(void base_trap_init(void))
 		vectors[VEC_FPUNSUP] = unsupp_vec;
 	}
 	if (CPU_IS_060) {
+		/* set up ISP entry points */
+		asmlinkage void unimp_vec(void) asm ("_060_isp_unimp");
+
+		vectors[VEC_UNIMPII] = unimp_vec;
+	}
+	if (CPU_IS_060 && !FPU_IS_EMU) {
 		/* set up IFPSP entry points */
 		asmlinkage void snan_vec(void) asm ("_060_fpsp_snan");
 		asmlinkage void operr_vec(void) asm ("_060_fpsp_operr");
@@ -104,8 +111,6 @@ __initfunc(void base_trap_init(void))
 		asmlinkage void unsupp_vec(void) asm ("_060_fpsp_unsupp");
 		asmlinkage void effadd_vec(void) asm ("_060_fpsp_effadd");
 
-		asmlinkage void unimp_vec(void) asm ("_060_isp_unimp");
-
 		vectors[VEC_FPNAN] = snan_vec;
 		vectors[VEC_FPOE] = operr_vec;
 		vectors[VEC_FPOVER] = ovfl_vec;
@@ -115,14 +120,10 @@ __initfunc(void base_trap_init(void))
 		vectors[VEC_LINE11] = fline_vec;
 		vectors[VEC_FPUNSUP] = unsupp_vec;
 		vectors[VEC_UNIMPEA] = effadd_vec;
-
-		/* set up ISP entry points */
-
-		vectors[VEC_UNIMPII] = unimp_vec;
 	}
 }
 
-__initfunc(void trap_init (void))
+void __init trap_init (void)
 {
 	int i;
 
@@ -133,16 +134,15 @@ __initfunc(void trap_init (void))
 	for (i = 64; i < 256; i++)
 		vectors[i] = inthandler;
 
+#ifdef CONFIG_M68KFPU_EMU
+	if (FPU_IS_EMU)
+		vectors[VEC_LINE11] = fpu_emu;
+#endif
+
         /* if running on an amiga, make the NMI interrupt do nothing */
 	if (MACH_IS_AMIGA) {
 		vectors[VEC_INT7] = nmihandler;
 	}
-}
-
-void set_evector(int vecnum, void (*handler)(void))
-{
-	if (vecnum >= 0 && vecnum <= 256)
-		vectors[vecnum] = handler;
 }
 
 
@@ -151,6 +151,7 @@ static inline void console_verbose(void)
 	extern int console_loglevel;
 	console_loglevel = 15;
 }
+
 
 static char *vec_names[] = {
 	"RESET SP", "RESET PC", "BUS ERROR", "ADDRESS ERROR",
@@ -178,7 +179,6 @@ static char *space_names[] = {
 	"Space 0", "User Data", "User Program", "Space 3",
 	"Space 4", "Super Data", "Super Program", "CPU"
 	};
-
 
 
 void die_if_kernel(char *,struct pt_regs *,int);
@@ -507,44 +507,6 @@ static inline void bus_error030 (struct frame *fp)
 	    else
 		    asm volatile ("ploadr %1,%0@" : /* no outputs */
 				  : "a" (addr), "d" (ssw));
-
-#if 0
-	    /* If this was a data fault due to an invalid page and a
-	       prefetch is pending on the same page, simulate it (but
-	       only if the page is now valid).  Otherwise we'll get an
-	       weird insn access.  */
-	    if ((ssw & RB) && (mmusr & MMU_I))
-	      {
-		unsigned long iaddr;
-
-		if ((fp->ptregs.format) == 0xB)
-		  iaddr = fp->un.fmtb.baddr;
-		else
-		  iaddr = fp->ptregs.pc + 4;
-		if (((addr ^ iaddr) & PAGE_MASK) == 0)
-		  {
-		    /* We only need to check the ATC as the entry has
-		       already been set up above.  */
-		    asm volatile ("ptestr #1,%1@,#0\n\t"
-				  "pmove %/psr,%0@"
-				  : : "a" (&temp), "a" (iaddr));
-		    mmusr = temp;
-#ifdef DEBUG
-		    printk ("prefetch iaddr=%#lx ssw=%#x mmusr=%#x\n",
-			    iaddr, ssw, mmusr);
-#endif
-		    if (!(mmusr & MMU_I))
-		      {
-			unsigned short insn;
-			asm volatile ("movesw %1@,%0"
-				      : "=r" (insn)
-				      : "a" (iaddr));
-			fp->un.fmtb.isb = insn;
-			fp->un.fmtb.ssw &= ~RB;
-		      }
-		  }
-	      }
-#endif
 	  }
 
 	/* Now handle the instruction fault. */
@@ -598,43 +560,6 @@ static inline void bus_error030 (struct frame *fp)
 		die_if_kernel("Oops",&fp->ptregs,mmusr);
 		force_sig(SIGSEGV, current);
 		return;
-	} else {
-#if 0 /* stale ATC entry??  Ignore it */
-
-#ifdef DEBUG
-		static volatile long tlong;
-#endif
-
-		printk ("weird insn access at %#lx from pc %#lx (ssw is %#x)\n",
-			addr, fp->ptregs.pc, ssw);
-		asm volatile ("ptestr #1,%1@,#0\n\t"
-			      "pmove %/psr,%0@"
-			      : /* no outputs */
-			      : "a" (&temp), "a" (addr));
-		mmusr = temp;
-		      
-		printk ("level 0 mmusr is %#x\n", mmusr);
-#ifdef DEBUG
-		if (m68k_cputype & CPU_68030) {
-			asm volatile ("pmove %/tt0,%0@"
-				      : /* no outputs */
-				      : "a" (&tlong));
-			printk ("tt0 is %#lx, ", tlong);
-			asm volatile ("pmove %/tt1,%0@"
-				      : /* no outputs */
-				      : "a" (&tlong));
-			printk ("tt1 is %#lx\n", tlong);
-		}
-
-#endif
-
-#if DEBUG
-		printk("Unknown SIGSEGV - 3\n");
-#endif
-		die_if_kernel("Oops",&fp->ptregs,mmusr);
-		force_sig(SIGSEGV, current);
-		return;
-#endif
 	}
 
 create_atc_entry:
@@ -990,3 +915,16 @@ asmlinkage void fpsp040_die(void)
 {
 	do_exit(SIGSEGV);
 }
+
+#ifdef CONFIG_M68KFPU_EMU
+asmlinkage void fpemu_signal(int signal, int code, void *addr)
+{
+	siginfo_t info;
+
+	info.si_signo = signal;
+	info.si_errno = 0;
+	info.si_code = code;
+	info.si_addr = addr;
+	force_sig_info(signal, &info, current);
+}
+#endif

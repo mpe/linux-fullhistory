@@ -39,8 +39,6 @@
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
 
-#include <asm/pgtable.h>
-
 #ifdef USE_BOTTOM_HALF
 #include <linux/tqueue.h>
 #include <linux/interrupt.h>

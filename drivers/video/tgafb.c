@@ -325,9 +325,9 @@ static int tgafb_encode_fix(struct fb_fix_screeninfo *fix, const void *fb_par,
 	fix->visual = FB_VISUAL_TRUECOLOR;
 
     fix->line_length = par->xres * (par->bits_per_pixel >> 3);
-    fix->smem_start = (char *)__pa(fb_info.tga_fb_base + dense_mem(fb_info.tga_fb_base));
+    fix->smem_start = ioremap(fb_info.tga_fb_base);
     fix->smem_len = fix->line_length * par->yres;
-    fix->mmio_start = (char *)__pa(fb_info.tga_regs_base);
+    fix->mmio_start = ioremap(fb_info.tga_regs_base);
     fix->mmio_len = 0x1000;		/* Is this sufficient? */
     fix->xpanstep = fix->ypanstep = fix->ywrapstep = 0;
     fix->accel = FB_ACCEL_DEC_TGA;
@@ -934,7 +934,7 @@ static int tgafb_blank(int blank, struct fb_info_gen *info)
 static void tgafb_set_disp(const void *fb_par, struct display *disp,
 	struct fb_info_gen *info)
 {
-    disp->screen_base = (char *)fb_info.tga_fb_base + dense_mem(fb_info.tga_fb_base);
+    disp->screen_base = ioremap(fb_info.tga_fb_base);
     switch (fb_info.tga_type) {
 #ifdef FBCON_HAS_CFB8
 	case 0: /* 8-plane */

@@ -1,11 +1,11 @@
 /*
  *  arch/m68k/q40/config.c
  *
+ *  Copyright (C) 1999 Richard Zidlicky
+ *
  * originally based on:
  *
  *  linux/bvme/config.c
- *
- *  Copyright (C) 1993 Hamish Macdonald
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file README.legal in the main directory of this archive
@@ -23,6 +23,7 @@
 #include <linux/init.h>
 #include <linux/major.h>
 
+#include <asm/rtc.h>
 #include <asm/bootinfo.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
@@ -134,12 +135,11 @@ int q40_kbdrate (struct kbd_repeat *k)
 void q40_reset()
 {
 
-	printk ("\n\n*******************************************\n"
-                     "Called q40_reset : press the RESET button!! \n");
-	printk(     "*******************************************\n");
-
-	while(1)
-		;
+        printk ("\n\n*******************************************\n"
+		"Called q40_reset : press the RESET button!! \n"
+		"*******************************************\n");
+	
+	while(1) ;
 }
 
 static void q40_get_model(char *model)
@@ -232,6 +232,9 @@ void q40_mksound(unsigned int hz, unsigned int ticks)
 }
 
 static void (*q40_timer_routine)(int, void *, struct pt_regs *);
+static short rtc_oldsecs=0;
+unsigned rtc_irq_flags=0;
+unsigned rtc_irq_ctrl=0;
 
 static void q40_timer_int (int irq, void *dev_id, struct pt_regs *fp)
 {
@@ -250,6 +253,14 @@ static void q40_timer_int (int irq, void *dev_id, struct pt_regs *fp)
 	*DAC_LEFT=sval;
 	*DAC_RIGHT=sval;
       }
+#ifdef CONFIG_Q40RTC
+    if (rtc_irq_ctrl && (rtc_oldsecs != RTC_SECS))
+      {
+	rtc_oldsecs = RTC_SECS;
+	rtc_irq_flags = RTC_UIE;
+	rtc_interrupt();
+      }
+#endif
     if (ql_ticks) return;
 #endif
     q40_timer_routine(irq, dev_id, fp);

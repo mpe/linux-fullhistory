@@ -118,7 +118,7 @@ __setup("console=", console_setup);
  */
 int do_syslog(int type, char * buf, int len)
 {
-	unsigned long i, j, count, flags;
+	unsigned long i, j, count;
 	int do_clear = 0;
 	char c;
 	int error = -EPERM;

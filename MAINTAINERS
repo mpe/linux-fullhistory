@@ -377,7 +377,7 @@ S:	Maintained
 
 HP100:	Driver for HP 10/100 Mbit/s Voice Grade Network Adapter Series
 P:	Jaroslav Kysela
-M:	perex@jcu.cz
+M:	perex@suse.cz
 S:	Maintained
 
 IBM MCA SCSI SUBSYSTEM DRIVER
@@ -433,6 +433,11 @@ M:      Dag Brattli <dagb@cs.uit.no>
 L:      linux-irda@list.uit.no
 W:      http://www.cs.uit.no/linux-irda/
 S:      Maintained
+
+ISAPNP
+P:	Jaroslav Kysela
+M:	perex@suse.cz
+S:	Maintained
 
 ISDN SUBSYSTEM
 P:	Fritz Elfert

@@ -18,4 +18,12 @@ LX_OBJS  :=
 MI_OBJS  :=
 MIX_OBJS :=
 
+ifeq ($(CONFIG_ISAPNP),y)
+  LX_OBJS += isapnp.o
+else
+  ifeq ($(CONFIG_ISAPNP),m)
+    MX_OBJS += isapnp.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make

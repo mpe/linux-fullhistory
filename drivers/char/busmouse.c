@@ -380,7 +380,7 @@ register_busmouse(struct busmouse *ops)
 	if (busmouse_data[msedev])
 		return -EBUSY;
 
-	mse = kmalloc(GFP_KERNEL, sizeof(*mse));
+	mse = kmalloc(sizeof(*mse), GFP_KERNEL);
 	if (!mse)
 		return -ENOMEM;
 
@@ -465,6 +465,7 @@ bus_mouse_init(void))
 	return 0;
 }
 
+EXPORT_SYMBOL(busmouse_add_movementbuttons);
 EXPORT_SYMBOL(busmouse_add_movement);
 EXPORT_SYMBOL(busmouse_add_buttons);
 EXPORT_SYMBOL(register_busmouse);

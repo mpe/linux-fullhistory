@@ -716,6 +716,7 @@ do {									\
 	add_wait_queue(&wq, &__wait);					\
 	for (;;) {							\
 		current->state = TASK_UNINTERRUPTIBLE;			\
+		mb();							\
 		if (condition)						\
 			break;						\
 		schedule();						\
@@ -739,6 +740,7 @@ do {									\
 	add_wait_queue(&wq, &__wait);					\
 	for (;;) {							\
 		current->state = TASK_INTERRUPTIBLE;			\
+		mb();							\
 		if (condition)						\
 			break;						\
 		if (!signal_pending(current)) {				\

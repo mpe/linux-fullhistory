@@ -134,6 +134,7 @@
 #ifndef isdnif_h
 #define isdnif_h
 
+#include <linux/config.h>
 #include <linux/isdn_compat.h>
 
 /*

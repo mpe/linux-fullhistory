@@ -10663,6 +10663,33 @@ CONFIG_M68060
   If you anticipate running this kernel on a computer with a MC68060
   processor, say Y. Otherwise, say N.
 
+Math emulation support
+CONFIG_M68KFPU_EMU
+  At some point in the future, this will cause floating-point math
+  instructions to be emulated by the kernel on machines that lack a
+  floating-point math coprocessor.  Thrill-seekers and chronically
+  sleep-deprived psychotic hacker types can say Y now, everyone else
+  should probably wait a while.
+
+Math emulation only kernel
+CONFIG_M68KFPU_EMU_ONLY
+  This option prevents any floating-point instructions from being
+  compiled into the kernel, thereby the kernel doesn't save any
+  floating point context anymore during task switches, so this
+  kernel will only be usable on machines without a floating-point
+  math coprocessor. This makes the kernel a bit faster as no tests
+  needs to be executed whether a floating-point instruction in the
+  kernel should be executed or not.
+
+Math emulation extra precision
+CONFIG_M68KFPU_EMU_EXTRAPREC
+  The fpu uses normally a few bit more during calculations for
+  correct rounding, the emulator can (often) do the same but this
+  extra calculation can cost quite some time, so you can disable
+  it here. The emulator will then "only" calculate with a 64 bit
+  mantissa and round slightly incorrect, what is more then enough
+  for normal usage.
+
 Advanced processor options
 CONFIG_ADVANCED_CPU
   This gives you access to some advanced options for the CPU. The

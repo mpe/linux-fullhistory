@@ -56,7 +56,8 @@ struct alpha_machine_vector
 	void (*mv_writel)(unsigned int, unsigned long);
 	void (*mv_writeq)(unsigned long, unsigned long);
 
-	unsigned long (*mv_dense_mem)(unsigned long);
+	unsigned long (*mv_ioremap)(unsigned long);
+	int (*mv_is_ioaddr)(unsigned long);
 
 	int (*hose_read_config_byte)(u8, u8, u8, u8 *value,
 				     struct linux_hose_info *);

@@ -19,6 +19,20 @@
  *                           called again.
  *           The whole interrupt handling for CIAs is moved to cia.c
  *           /Roman Zippel
+ *
+ * 07/08/99: rewamp of the interrupt handling - we now have two types of
+ *           interrupts, normal and fast handlers, fast handlers being
+ *           marked with SA_INTERRUPT and runs with all other interrupts
+ *           disabled. Normal interrupts disable their own source but
+ *           run with all other interrupt sources enabled.
+ *           PORTS and EXTER interrupts are always shared even if the
+ *           drivers do not explicitly mark this when calling
+ *           request_irq which they really should do.
+ *           This is similar to the way interrupts are handled on all
+ *           other architectures and makes a ton of sense besides
+ *           having the advantage of making it easier to share
+ *           drivers.
+ *           /Jes
  */
 
 #include <linux/types.h>
@@ -70,7 +84,7 @@ static void ami_badint(int irq, void *dev_id, struct pt_regs *fp)
  * the amiga IRQ handling routines.
  */
 
-__initfunc(void amiga_init_IRQ(void))
+void __init amiga_init_IRQ(void)
 {
 	int i;
 
@@ -81,7 +95,7 @@ __initfunc(void amiga_init_IRQ(void))
 		} else {
 			ami_irq_list[i] = new_irq_node();
 			ami_irq_list[i]->handler = ami_badint;
-			ami_irq_list[i]->flags   = IRQ_FLG_STD;
+			ami_irq_list[i]->flags   = 0;
 			ami_irq_list[i]->dev_id  = NULL;
 			ami_irq_list[i]->devname = NULL;
 			ami_irq_list[i]->next    = NULL;
@@ -117,19 +131,18 @@ static inline void amiga_insert_irq(irq_node_t **list, irq_node_t *node)
 
 	cur = *list;
 
-	if (node->flags & IRQ_FLG_FAST) {
-		node->flags &= ~IRQ_FLG_SLOW;
-		while (cur && cur->flags & IRQ_FLG_FAST) {
-			list = &cur->next;
-			cur = cur->next;
-		}
-	} else if (node->flags & IRQ_FLG_SLOW) {
-		while (cur) {
+	if (node->flags & SA_INTERRUPT) {
+		if (node->flags & SA_SHIRQ)
+			return;
+		/*
+		 * There should never be more than one
+		 */
+		while (cur && cur->flags & SA_INTERRUPT) {
 			list = &cur->next;
 			cur = cur->next;
 		}
 	} else {
-		while (cur && !(cur->flags & IRQ_FLG_SLOW)) {
+		while (cur) {
 			list = &cur->next;
 			cur = cur->next;
 		}
@@ -168,13 +181,15 @@ static inline void amiga_delete_irq(irq_node_t **list, void *dev_id)
  *                     If the addition was successful, it returns 0.
  */
 
-int amiga_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
+int amiga_request_irq(unsigned int irq,
+		      void (*handler)(int, void *, struct pt_regs *),
                       unsigned long flags, const char *devname, void *dev_id)
 {
 	irq_node_t *node;
 
 	if (irq >= AMI_IRQS) {
-		printk ("%s: Unknown IRQ %d from %s\n", __FUNCTION__, irq, devname);
+		printk ("%s: Unknown IRQ %d from %s\n", __FUNCTION__,
+			irq, devname);
 		return -ENXIO;
 	}
 
@@ -190,6 +205,11 @@ int amiga_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_r
 		return cia_request_irq(&ciaa_base, irq - IRQ_AMIGA_CIAA,
 		                       handler, flags, devname, dev_id);
 
+	/*
+	 * IRQ_AMIGA_PORTS & IRQ_AMIGA_EXTER defaults to shared,
+	 * we could add a check here for the SA_SHIRQ flag but all drivers
+	 * should be aware of sharing anyway.
+	 */
 	if (ami_servers[irq]) {
 		if (!(node = new_irq_node()))
 			return -ENOMEM;
@@ -200,18 +220,6 @@ int amiga_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_r
 		node->next    = NULL;
 		amiga_insert_irq(&ami_irq_list[irq], node);
 	} else {
-		if (!(ami_irq_list[irq]->flags & IRQ_FLG_STD)) {
-			if (ami_irq_list[irq]->flags & IRQ_FLG_LOCK) {
-				printk("%s: IRQ %d from %s is not replaceable\n",
-				       __FUNCTION__, irq, ami_irq_list[irq]->devname);
-				return -EBUSY;
-			}
-			if (!(flags & IRQ_FLG_REPLACE)) {
-				printk("%s: %s can't replace IRQ %d from %s\n",
-				       __FUNCTION__, devname, irq, ami_irq_list[irq]->devname);
-				return -EBUSY;
-			}
-		}
 		ami_irq_list[irq]->handler = handler;
 		ami_irq_list[irq]->flags   = flags;
 		ami_irq_list[irq]->dev_id  = dev_id;
@@ -255,7 +263,7 @@ void amiga_free_irq(unsigned int irq, void *dev_id)
 			printk("%s: removing probably wrong IRQ %d from %s\n",
 			       __FUNCTION__, irq, ami_irq_list[irq]->devname);
 		ami_irq_list[irq]->handler = ami_badint;
-		ami_irq_list[irq]->flags   = IRQ_FLG_STD;
+		ami_irq_list[irq]->flags   = 0;
 		ami_irq_list[irq]->dev_id  = NULL;
 		ami_irq_list[irq]->devname = NULL;
 		custom.intena = ami_intena_vals[irq];
@@ -345,37 +353,58 @@ inline void amiga_do_irq(int irq, struct pt_regs *fp)
 void amiga_do_irq_list(int irq, struct pt_regs *fp, struct irq_server *server)
 {
 	irq_node_t *node, *slow_nodes;
-	unsigned short flags;
+	unsigned short flags, intena;
 
 	kstat.irqs[0][SYS_IRQS + irq]++;
 	if (server->count++)
 		server->reentrance = 1;
-	/* serve first fast and normal handlers */
-	for (node = ami_irq_list[irq];
-	     node && (!(node->flags & IRQ_FLG_SLOW));
-	     node = node->next)
-		node->handler(irq, node->dev_id, fp);
-	custom.intreq = ami_intena_vals[irq];
+
+	intena = ami_intena_vals[irq];
+	custom.intreq = intena;
+
+	/* serve first fast handlers - there can only be one of these */
+	node = ami_irq_list[irq];
+
+	/*
+	 * Timer interrupts show up like this
+	 */
 	if (!node) {
 		server->count--;
 		return;
 	}
+
+	if (node && (node->flags & SA_INTERRUPT)) {
+		save_flags(flags);
+		cli();
+		node->handler(irq, node->dev_id, fp);
+		restore_flags(flags);
+
+		server->count--;
+		return;
+	}
+
+	/*
+	 * Disable the interrupt source in question and reenable all
+	 * other interrupts. No interrupt handler should ever touch
+	 * the intena flags directly!
+	 */
+	custom.intena = intena;
 	save_flags(flags);
-	restore_flags((flags & ~0x0700) | (fp->sr & 0x0700));
-	/* if slow handlers exists, serve them now */
+	sti();
+
 	slow_nodes = node;
 	for (;;) {
 		for (; node; node = node->next)
 			node->handler(irq, node->dev_id, fp);
-		/* if reentrance occurred, serve slow handlers again */
-		custom.intena = ami_intena_vals[irq];
+
 		if (!server->reentrance) {
 			server->count--;
-			custom.intena = IF_SETCLR | ami_intena_vals[irq];
+			restore_flags(flags);
+			custom.intena = IF_SETCLR | intena;
 			return;
 		}
+
 		server->reentrance = 0;
-		custom.intena = IF_SETCLR | ami_intena_vals[irq];
 		node = slow_nodes;
 	}
 }
@@ -493,24 +522,13 @@ int amiga_get_irq_list(char *buf)
 	for (i = 0; i < AMI_STD_IRQS; i++) {
 		if (!(node = ami_irq_list[i]))
 			continue;
-		if (node->flags & IRQ_FLG_STD)
-			continue;
 		len += sprintf(buf+len, "ami  %2d: %10u ", i,
 		               kstat.irqs[0][SYS_IRQS + i]);
 		do {
-			if (ami_servers[i]) {
-				if (node->flags & IRQ_FLG_FAST)
-					len += sprintf(buf+len, "F ");
-				else if (node->flags & IRQ_FLG_SLOW)
-					len += sprintf(buf+len, "S ");
-				else
-					len += sprintf(buf+len, "  ");
-			} else {
-				if (node->flags & IRQ_FLG_LOCK)
-					len += sprintf(buf+len, "L ");
-				else
-					len += sprintf(buf+len, "  ");
-			}
+			if (node->flags & SA_INTERRUPT)
+				len += sprintf(buf+len, "F ");
+			else
+				len += sprintf(buf+len, "  ");
 			len += sprintf(buf+len, "%s\n", node->devname);
 			if ((node = node->next))
 				len += sprintf(buf+len, "                    ");

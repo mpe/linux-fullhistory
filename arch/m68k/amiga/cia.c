@@ -94,20 +94,6 @@ int cia_request_irq(struct ciabase *base, unsigned int irq,
 {
 	u_char mask;
 
-	if (!(base->irq_list[irq].flags & IRQ_FLG_STD)) {
-		if (base->irq_list[irq].flags & IRQ_FLG_LOCK) {
-			printk("%s: IRQ %i from %s is not replaceable\n",
-			       __FUNCTION__, base->cia_irq + irq,
-			       base->irq_list[irq].devname);
-			return -EBUSY;
-		}
-		if (!(flags & IRQ_FLG_REPLACE)) {
-			printk("%s: %s can't replace IRQ %i from %s\n", __FUNCTION__,
-			       devname, base->cia_irq + irq,
-			       base->irq_list[irq].devname);
-			return -EBUSY;
-		}
-	}
 	base->irq_list[irq].handler = handler;
 	base->irq_list[irq].flags   = flags;
 	base->irq_list[irq].dev_id  = dev_id;
@@ -128,7 +114,7 @@ void cia_free_irq(struct ciabase *base, unsigned int irq, void *dev_id)
 		       base->irq_list[irq].devname);
 
 	base->irq_list[irq].handler = NULL;
-	base->irq_list[irq].flags   = IRQ_FLG_STD;
+	base->irq_list[irq].flags   = 0;
 
 	cia_able_irq(base, 1 << irq);
 }
@@ -153,14 +139,14 @@ static void cia_handler(int irq, void *dev_id, struct pt_regs *fp)
 	amiga_do_irq_list(base->server_irq, fp, &base->server);
 }
 
-__initfunc(void cia_init_IRQ(struct ciabase *base))
+void __init cia_init_IRQ(struct ciabase *base)
 {
 	int i;
 
 	/* init isr handlers */
 	for (i = 0; i < CIA_IRQS; i++) {
 		base->irq_list[i].handler = NULL;
-		base->irq_list[i].flags   = IRQ_FLG_STD;
+		base->irq_list[i].flags   = 0;
 	}
 
 	/* clear any pending interrupt and turn off all interrupts */
@@ -168,7 +154,7 @@ __initfunc(void cia_init_IRQ(struct ciabase *base))
 	cia_able_irq(base, CIA_ICR_ALL);
 
 	/* install CIA handler */
-	request_irq(base->handler_irq, cia_handler, IRQ_FLG_LOCK, base->name, base);
+	request_irq(base->handler_irq, cia_handler, 0, base->name, base);
 
 	custom.intena = IF_SETCLR | base->int_mask;
 }
@@ -179,15 +165,10 @@ int cia_get_irq_list(struct ciabase *base, char *buf)
 
 	j = base->cia_irq;
 	for (i = 0; i < CIA_IRQS; i++) {
-		if (!(base->irq_list[i].flags & IRQ_FLG_STD)) {
-			len += sprintf(buf+len, "cia  %2d: %10d ", j + i,
-			               kstat.irqs[0][SYS_IRQS + j + i]);
-			if (base->irq_list[i].flags & IRQ_FLG_LOCK)
-				len += sprintf(buf+len, "L ");
-			else
-				len += sprintf(buf+len, "  ");
-			len += sprintf(buf+len, "%s\n", base->irq_list[i].devname);
-		}
+		len += sprintf(buf+len, "cia  %2d: %10d ", j + i,
+			       kstat.irqs[0][SYS_IRQS + j + i]);
+			len += sprintf(buf+len, "  ");
+		len += sprintf(buf+len, "%s\n", base->irq_list[i].devname);
 	}
 	return len;
 }

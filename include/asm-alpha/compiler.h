@@ -13,7 +13,7 @@
  * EGCS (of varying versions) does a good job of using insxl and extxl.
  */
 
-#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+#if 0 && (__GNUC__ > 2 || __GNUC_MINOR__ >= 91)
 #define __kernel_insbl(val, shift) \
   (((unsigned long)(val) & 0xfful) << ((shift) * 8))
 #define __kernel_inswl(val, shift) \
@@ -29,7 +29,7 @@
      __kir; })
 #endif
 
-#if __GNUC__ > 2 || __GNUC_MINOR__ >= 92
+#if 0 && (__GNUC__ > 2 || __GNUC_MINOR__ >= 92)
 #define __kernel_extbl(val, shift)  (((val) >> (((shift) & 7) * 8)) & 0xfful)
 #define __kernel_extwl(val, shift)  (((val) >> (((shift) & 7) * 8)) & 0xfffful)
 #else

@@ -426,12 +426,12 @@ static inline void * apecs_xl_bus_to_virt(unsigned long address)
 	 * detect null "pointers" (the NCR driver is much simpler if
 	 * NULL pointers are preserved).
 	 */
-        if (address < APECS_XL_DMA_WIN1_BASE)
-                return 0;
-        else if (address < (APECS_XL_DMA_WIN1_BASE + APECS_XL_DMA_WIN1_SIZE))
-                address -= APECS_XL_DMA_WIN1_BASE;
+	if (address < APECS_XL_DMA_WIN1_BASE)
+		return 0;
+	else if (address < (APECS_XL_DMA_WIN1_BASE + APECS_XL_DMA_WIN1_SIZE))
+		address -= APECS_XL_DMA_WIN1_BASE;
 	else /* should be more checking here, maybe? */
-                address -= APECS_XL_DMA_WIN2_BASE;
+		address -= APECS_XL_DMA_WIN2_BASE;
 	return phys_to_virt(address);
 }
 
@@ -501,6 +501,15 @@ __EXTERN_INLINE unsigned long apecs_readb(unsigned long addr)
 {
 	unsigned long result, msb;
 
+#if __DEBUG_IOREMAP
+	if (addr <= 0x100000000) {
+		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr += APECS_DENSE_MEM;
+	}
+#endif
+
+	addr -= APECS_DENSE_MEM;
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;
 		addr -= msb;
@@ -514,6 +523,15 @@ __EXTERN_INLINE unsigned long apecs_readw(unsigned long addr)
 {
 	unsigned long result, msb;
 
+#if __DEBUG_IOREMAP
+	if (addr <= 0x100000000) {
+		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr += APECS_DENSE_MEM;
+	}
+#endif
+
+	addr -= APECS_DENSE_MEM;
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;
 		addr -= msb;
@@ -525,18 +543,43 @@ __EXTERN_INLINE unsigned long apecs_readw(unsigned long addr)
 
 __EXTERN_INLINE unsigned long apecs_readl(unsigned long addr)
 {
-	return *(vuip) (addr + APECS_DENSE_MEM);
+#if __DEBUG_IOREMAP
+	if (addr <= 0x100000000) {
+		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr += APECS_DENSE_MEM;
+	}
+#endif
+
+	return *(vuip)addr;
 }
 
 __EXTERN_INLINE unsigned long apecs_readq(unsigned long addr)
 {
-	return *(vulp) (addr + APECS_DENSE_MEM);
+#if __DEBUG_IOREMAP
+	if (addr <= 0x100000000) {
+		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr += APECS_DENSE_MEM;
+	}
+#endif
+
+	return *(vulp)addr;
 }
 
 __EXTERN_INLINE void apecs_writeb(unsigned char b, unsigned long addr)
 {
 	unsigned long msb;
 
+#if __DEBUG_IOREMAP
+	if (addr <= 0x100000000) {
+		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr += APECS_DENSE_MEM;
+	}
+#endif
+
+	addr -= APECS_DENSE_MEM;
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;
 		addr -= msb;
@@ -549,6 +592,15 @@ __EXTERN_INLINE void apecs_writew(unsigned short b, unsigned long addr)
 {
 	unsigned long msb;
 
+#if __DEBUG_IOREMAP
+	if (addr <= 0x100000000) {
+		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr += APECS_DENSE_MEM;
+	}
+#endif
+
+	addr -= APECS_DENSE_MEM;
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;
 		addr -= msb;
@@ -559,19 +611,38 @@ __EXTERN_INLINE void apecs_writew(unsigned short b, unsigned long addr)
 
 __EXTERN_INLINE void apecs_writel(unsigned int b, unsigned long addr)
 {
-	*(vuip) (addr + APECS_DENSE_MEM) = b;
+#if __DEBUG_IOREMAP
+	if (addr <= 0x100000000) {
+		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr += APECS_DENSE_MEM;
+	}
+#endif
+
+	*(vuip)addr = b;
 }
 
 __EXTERN_INLINE void apecs_writeq(unsigned long b, unsigned long addr)
 {
-	*(vulp) (addr + APECS_DENSE_MEM) = b;
+#if __DEBUG_IOREMAP
+	if (addr <= 0x100000000) {
+		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
+		       addr, __builtin_return_address(0));
+		addr += APECS_DENSE_MEM;
+	}
+#endif
+
+	*(vulp)addr = b;
 }
 
-/* Find the DENSE memory area for a given bus address.  */
-
-__EXTERN_INLINE unsigned long apecs_dense_mem(unsigned long addr)
+__EXTERN_INLINE unsigned long apecs_ioremap(unsigned long addr)
 {
-	return APECS_DENSE_MEM;
+	return APECS_DENSE_MEM + addr;
+}
+
+__EXTERN_INLINE int apecs_is_ioaddr(unsigned long addr)
+{
+	return addr >= IDENT_ADDR + 0x100000000UL;
 }
 
 #undef vip
@@ -602,7 +673,8 @@ __EXTERN_INLINE unsigned long apecs_dense_mem(unsigned long addr)
 #define __writew	apecs_writew
 #define __writel	apecs_writel
 #define __writeq	apecs_writeq
-#define dense_mem	apecs_dense_mem
+#define __ioremap	apecs_ioremap
+#define __is_ioaddr	apecs_is_ioaddr
 
 #define inb(port) \
 (__builtin_constant_p((port))?__inb(port):_inb(port))
@@ -610,10 +682,12 @@ __EXTERN_INLINE unsigned long apecs_dense_mem(unsigned long addr)
 #define outb(x, port) \
 (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
 
-#define readl(a)	__readl((unsigned long)(a))
-#define readq(a)	__readq((unsigned long)(a))
-#define writel(v,a)	__writel((v),(unsigned long)(a))
-#define writeq(v,a)	__writeq((v),(unsigned long)(a))
+#if !__DEBUG_IOREMAP
+#define __raw_readl(a)		__readl((unsigned long)(a))
+#define __raw_readq(a)		__readq((unsigned long)(a))
+#define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
+#define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
+#endif
 
 #endif /* __WANT_IO_DEF */
 

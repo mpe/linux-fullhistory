@@ -18,6 +18,7 @@
 #include <linux/errno.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
+#include <linux/config.h>
 
 #include <asm/uaccess.h>
 #include <asm/page.h>
@@ -384,10 +385,17 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				tmp = get_reg(child, addr);
 				if (addr == PT_SR)
 					tmp >>= 16;
-			}
-			else if (addr >= 21 && addr < 49)
+			} else if (addr >= 21 && addr < 49) {
 				tmp = child->thread.fp[addr - 21];
-			else
+#ifdef CONFIG_M68KFPU_EMU
+				/* Convert internal fpu reg representation
+				 * into long double format
+				 */
+				if (FPU_IS_EMU && (addr < 45) && !(addr % 3))
+					tmp = ((tmp & 0xffff0000) << 15) |
+					      ((tmp & 0x0000ffff) << 16);
+#endif
+			} else
 				goto out;
 			ret = put_user(tmp,(unsigned long *) data);
 			goto out;
@@ -423,6 +431,16 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			}
 			if (addr >= 21 && addr < 48)
 			{
+#ifdef CONFIG_M68KFPU_EMU
+				/* Convert long double format
+				 * into internal fpu reg representation
+				 */
+				if (FPU_IS_EMU && (addr < 45) && !(addr % 3)) {
+					data = (unsigned long)data << 15;
+					data = (data & 0xffff0000) |
+					       ((data & 0x0000ffff) >> 1);
+				}
+#endif
 				child->thread.fp[addr - 21] = data;
 				ret = 0;
 			}

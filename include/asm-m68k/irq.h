@@ -79,13 +79,17 @@ extern int sys_request_irq(unsigned int,
 extern void sys_free_irq(unsigned int, void *);
 
 /*
- * various flags for request_irq()
+ * various flags for request_irq() - the Amiga now uses the standard
+ * mechanism like all other architectures - SA_INTERRUPT and SA_SHIRQ
+ * are your friends.
  */
+#ifndef CONFIG_AMIGA
 #define IRQ_FLG_LOCK	(0x0001)	/* handler is not replaceable	*/
 #define IRQ_FLG_REPLACE	(0x0002)	/* replace existing handler	*/
 #define IRQ_FLG_FAST	(0x0004)
 #define IRQ_FLG_SLOW	(0x0008)
 #define IRQ_FLG_STD	(0x8000)	/* internally used		*/
+#endif
 
 /*
  * This structure is used to chain together the ISRs for a particular
