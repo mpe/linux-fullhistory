@@ -765,9 +765,6 @@ static snd_pcm_uframes_t snd_cs46xx_capture_indirect_pointer(snd_pcm_substream_t
 static int snd_cs46xx_playback_trigger(snd_pcm_substream_t * substream,
 				       int cmd)
 {
-#ifndef CONFIG_SND_CS46XX_NEW_DSP
-	unsigned long flags;
-#endif
 	cs46xx_t *chip = snd_pcm_substream_chip(substream);
 	/*snd_pcm_runtime_t *runtime = substream->runtime;*/
 	int result = 0;
@@ -792,7 +789,7 @@ static int snd_cs46xx_playback_trigger(snd_pcm_substream_t * substream,
 		if (substream->runtime->periods != CS46XX_FRAGS)
 			snd_cs46xx_playback_transfer(substream);
 #else
-		spin_lock_irqsave(&chip->reg_lock, flags);
+		spin_lock(&chip->reg_lock);
 		if (substream->runtime->periods != CS46XX_FRAGS)
 			snd_cs46xx_playback_transfer(substream);
 		{ unsigned int tmp;
@@ -800,7 +797,7 @@ static int snd_cs46xx_playback_trigger(snd_pcm_substream_t * substream,
 		tmp &= 0x0000ffff;
 		snd_cs46xx_poke(chip, BA1_PCTL, chip->play_ctl | tmp);
 		}
-		spin_unlock_irqrestore(&chip->reg_lock, flags);
+		spin_unlock(&chip->reg_lock);
 #endif
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
@@ -813,13 +810,13 @@ static int snd_cs46xx_playback_trigger(snd_pcm_substream_t * substream,
 		if (!cpcm->pcm_channel->unlinked)
 			cs46xx_dsp_pcm_unlink(chip,cpcm->pcm_channel);
 #else
-		spin_lock_irqsave(&chip->reg_lock, flags);
+		spin_lock(&chip->reg_lock);
 		{ unsigned int tmp;
 		tmp = snd_cs46xx_peek(chip, BA1_PCTL);
 		tmp &= 0x0000ffff;
 		snd_cs46xx_poke(chip, BA1_PCTL, tmp);
 		}
-		spin_unlock_irqrestore(&chip->reg_lock, flags);
+		spin_unlock(&chip->reg_lock);
 #endif
 		break;
 	default:
@@ -833,12 +830,11 @@ static int snd_cs46xx_playback_trigger(snd_pcm_substream_t * substream,
 static int snd_cs46xx_capture_trigger(snd_pcm_substream_t * substream,
 				      int cmd)
 {
-	unsigned long flags;
 	cs46xx_t *chip = snd_pcm_substream_chip(substream);
 	unsigned int tmp;
 	int result = 0;
 
-	spin_lock_irqsave(&chip->reg_lock, flags);
+	spin_lock(&chip->reg_lock);
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
@@ -856,7 +852,7 @@ static int snd_cs46xx_capture_trigger(snd_pcm_substream_t * substream,
 		result = -EINVAL;
 		break;
 	}
-	spin_unlock_irqrestore(&chip->reg_lock, flags);
+	spin_unlock(&chip->reg_lock);
 
 	return result;
 }

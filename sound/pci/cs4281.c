@@ -697,11 +697,10 @@ static unsigned short snd_cs4281_ac97_read(ac97_t *ac97,
 
 static int snd_cs4281_trigger(snd_pcm_substream_t *substream, int cmd)
 {
-	unsigned long flags;
 	cs4281_dma_t *dma = (cs4281_dma_t *)substream->runtime->private_data;
 	cs4281_t *chip = snd_pcm_substream_chip(substream);
 
-	spin_lock_irqsave(&chip->reg_lock, flags);
+	spin_lock(&chip->reg_lock);
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 		dma->valDCR |= BA0_DCR_MSK;
@@ -728,13 +727,13 @@ static int snd_cs4281_trigger(snd_pcm_substream_t *substream, int cmd)
 			dma->valFCR &= ~BA0_FCR_FEN;
 		break;
 	default:
-		spin_unlock_irqrestore(&chip->reg_lock, flags);
+		spin_unlock(&chip->reg_lock);
 		return -EINVAL;
 	}
 	snd_cs4281_pokeBA0(chip, dma->regDMR, dma->valDMR);
 	snd_cs4281_pokeBA0(chip, dma->regFCR, dma->valFCR);
 	snd_cs4281_pokeBA0(chip, dma->regDCR, dma->valDCR);
-	spin_unlock_irqrestore(&chip->reg_lock, flags);
+	spin_unlock(&chip->reg_lock);
 	return 0;
 }
 

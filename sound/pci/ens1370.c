@@ -754,8 +754,6 @@ static void snd_es1371_dac2_rate(ensoniq_t * ensoniq, unsigned int rate)
 
 static int snd_ensoniq_trigger(snd_pcm_substream_t *substream, int cmd)
 {
-	unsigned long flags;
-
 	ensoniq_t *ensoniq = snd_pcm_substream_chip(substream);
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
@@ -775,13 +773,13 @@ static int snd_ensoniq_trigger(snd_pcm_substream_t *substream, int cmd)
 			} else if (s == ensoniq->capture_substream)
 				return -EINVAL;
 		}
-		spin_lock_irqsave(&ensoniq->reg_lock, flags);
+		spin_lock(&ensoniq->reg_lock);
 		if (cmd == SNDRV_PCM_TRIGGER_PAUSE_PUSH)
 			ensoniq->sctrl |= what;
 		else
 			ensoniq->sctrl &= ~what;
 		outl(ensoniq->sctrl, ES_REG(ensoniq, SERIAL));
-		spin_unlock_irqrestore(&ensoniq->reg_lock, flags);
+		spin_unlock(&ensoniq->reg_lock);
 		break;
 	}
 	case SNDRV_PCM_TRIGGER_START:
@@ -803,13 +801,13 @@ static int snd_ensoniq_trigger(snd_pcm_substream_t *substream, int cmd)
 				snd_pcm_trigger_done(s, substream);
 			}
 		}
-		spin_lock_irqsave(&ensoniq->reg_lock, flags);
+		spin_lock(&ensoniq->reg_lock);
 		if (cmd == SNDRV_PCM_TRIGGER_START)
 			ensoniq->ctrl |= what;
 		else
 			ensoniq->ctrl &= ~what;
 		outl(ensoniq->ctrl, ES_REG(ensoniq, CONTROL));
-		spin_unlock_irqrestore(&ensoniq->reg_lock, flags);
+		spin_unlock(&ensoniq->reg_lock);
 		break;
 	}
 	default:
@@ -958,11 +956,10 @@ static int snd_ensoniq_capture_prepare(snd_pcm_substream_t * substream)
 
 static snd_pcm_uframes_t snd_ensoniq_playback1_pointer(snd_pcm_substream_t * substream)
 {
-	unsigned long flags;
 	ensoniq_t *ensoniq = snd_pcm_substream_chip(substream);
 	size_t ptr;
 
-	spin_lock_irqsave(&ensoniq->reg_lock, flags);
+	spin_lock(&ensoniq->reg_lock);
 	if (inl(ES_REG(ensoniq, CONTROL)) & ES_DAC1_EN) {
 		outl(ES_MEM_PAGEO(ES_PAGE_DAC), ES_REG(ensoniq, MEM_PAGE));
 		ptr = ES_REG_FCURR_COUNTI(inl(ES_REG(ensoniq, DAC1_SIZE)));
@@ -970,17 +967,16 @@ static snd_pcm_uframes_t snd_ensoniq_playback1_pointer(snd_pcm_substream_t * sub
 	} else {
 		ptr = 0;
 	}
-	spin_unlock_irqrestore(&ensoniq->reg_lock, flags);
+	spin_unlock(&ensoniq->reg_lock);
 	return ptr;
 }
 
 static snd_pcm_uframes_t snd_ensoniq_playback2_pointer(snd_pcm_substream_t * substream)
 {
-	unsigned long flags;
 	ensoniq_t *ensoniq = snd_pcm_substream_chip(substream);
 	size_t ptr;
 
-	spin_lock_irqsave(&ensoniq->reg_lock, flags);
+	spin_lock(&ensoniq->reg_lock);
 	if (inl(ES_REG(ensoniq, CONTROL)) & ES_DAC2_EN) {
 		outl(ES_MEM_PAGEO(ES_PAGE_DAC), ES_REG(ensoniq, MEM_PAGE));
 		ptr = ES_REG_FCURR_COUNTI(inl(ES_REG(ensoniq, DAC2_SIZE)));
@@ -988,17 +984,16 @@ static snd_pcm_uframes_t snd_ensoniq_playback2_pointer(snd_pcm_substream_t * sub
 	} else {
 		ptr = 0;
 	}
-	spin_unlock_irqrestore(&ensoniq->reg_lock, flags);
+	spin_unlock(&ensoniq->reg_lock);
 	return ptr;
 }
 
 static snd_pcm_uframes_t snd_ensoniq_capture_pointer(snd_pcm_substream_t * substream)
 {
-	unsigned long flags;
 	ensoniq_t *ensoniq = snd_pcm_substream_chip(substream);
 	size_t ptr;
 
-	spin_lock_irqsave(&ensoniq->reg_lock, flags);
+	spin_lock(&ensoniq->reg_lock);
 	if (inl(ES_REG(ensoniq, CONTROL)) & ES_ADC_EN) {
 		outl(ES_MEM_PAGEO(ES_PAGE_ADC), ES_REG(ensoniq, MEM_PAGE));
 		ptr = ES_REG_FCURR_COUNTI(inl(ES_REG(ensoniq, ADC_SIZE)));
@@ -1006,7 +1001,7 @@ static snd_pcm_uframes_t snd_ensoniq_capture_pointer(snd_pcm_substream_t * subst
 	} else {
 		ptr = 0;
 	}
-	spin_unlock_irqrestore(&ensoniq->reg_lock, flags);
+	spin_unlock(&ensoniq->reg_lock);
 	return ptr;
 }
 
