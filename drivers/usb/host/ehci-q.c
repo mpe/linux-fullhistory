@@ -349,13 +349,13 @@ qh_completions (struct ehci_hcd *ehci, struct ehci_qh *qh, struct pt_regs *regs)
 
 		/* stop scanning when we reach qtds the hc is using */
 		} else if (likely (!stopped
-				&& HCD_IS_RUNNING (ehci_to_hcd(ehci)->state))) {
+				&& HC_IS_RUNNING (ehci_to_hcd(ehci)->state))) {
 			break;
 
 		} else {
 			stopped = 1;
 
-			if (unlikely (!HCD_IS_RUNNING (ehci_to_hcd(ehci)->state)))
+			if (unlikely (!HC_IS_RUNNING (ehci_to_hcd(ehci)->state)))
 				urb->status = -ESHUTDOWN;
 
 			/* ignore active urbs unless some previous qtd
@@ -781,7 +781,7 @@ static void qh_link_async (struct ehci_hcd *ehci, struct ehci_qh *qh)
 			(void) handshake (&ehci->regs->status, STS_ASS, 0, 150);
 			cmd |= CMD_ASE | CMD_RUN;
 			writel (cmd, &ehci->regs->command);
-			ehci_to_hcd(ehci)->state = USB_STATE_RUNNING;
+			ehci_to_hcd(ehci)->state = HC_STATE_RUNNING;
 			/* posted write need not be known to HC yet ... */
 		}
 	}
@@ -960,7 +960,7 @@ static void end_unlink_async (struct ehci_hcd *ehci, struct pt_regs *regs)
 	qh_completions (ehci, qh, regs);
 
 	if (!list_empty (&qh->qtd_list)
-			&& HCD_IS_RUNNING (ehci_to_hcd(ehci)->state))
+			&& HC_IS_RUNNING (ehci_to_hcd(ehci)->state))
 		qh_link_async (ehci, qh);
 	else {
 		qh_put (qh);		// refcount from async list
@@ -968,7 +968,7 @@ static void end_unlink_async (struct ehci_hcd *ehci, struct pt_regs *regs)
 		/* it's not free to turn the async schedule on/off; leave it
 		 * active but idle for a while once it empties.
 		 */
-		if (HCD_IS_RUNNING (ehci_to_hcd(ehci)->state)
+		if (HC_IS_RUNNING (ehci_to_hcd(ehci)->state)
 				&& ehci->async->qh_next.qh == NULL)
 			timer_action (ehci, TIMER_ASYNC_OFF);
 	}
@@ -999,7 +999,7 @@ static void start_unlink_async (struct ehci_hcd *ehci, struct ehci_qh *qh)
 	/* stop async schedule right now? */
 	if (unlikely (qh == ehci->async)) {
 		/* can't get here without STS_ASS set */
-		if (ehci_to_hcd(ehci)->state != USB_STATE_HALT) {
+		if (ehci_to_hcd(ehci)->state != HC_STATE_HALT) {
 			writel (cmd & ~CMD_ASE, &ehci->regs->command);
 			wmb ();
 			// handshake later, if we need to
@@ -1019,7 +1019,7 @@ static void start_unlink_async (struct ehci_hcd *ehci, struct ehci_qh *qh)
 	prev->qh_next = qh->qh_next;
 	wmb ();
 
-	if (unlikely (ehci_to_hcd(ehci)->state == USB_STATE_HALT)) {
+	if (unlikely (ehci_to_hcd(ehci)->state == HC_STATE_HALT)) {
 		/* if (unlikely (qh->reclaim != 0))
 		 * 	this will recurse, probably not much
 		 */

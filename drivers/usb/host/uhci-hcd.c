@@ -414,7 +414,7 @@ static int start_hc(struct uhci_hcd *uhci)
 	}
 
 	/* Mark controller as running before we enable interrupts */
-	uhci_to_hcd(uhci)->state = USB_STATE_RUNNING;
+	uhci_to_hcd(uhci)->state = HC_STATE_RUNNING;
 
 	/* Turn on PIRQ and all interrupts */
 	pci_write_config_word(to_pci_dev(uhci_dev(uhci)), USBLEGSUP,
@@ -803,7 +803,7 @@ static int uhci_resume(struct usb_hcd *hcd)
 		if ((rc = start_hc(uhci)) != 0)
 			return rc;
 	}
-	hcd->state = USB_STATE_RUNNING;
+	hcd->state = HC_STATE_RUNNING;
 	return 0;
 }
 #endif

@@ -249,14 +249,14 @@ static int enable_periodic (struct ehci_hcd *ehci)
 	 */
 	status = handshake (&ehci->regs->status, STS_PSS, 0, 9 * 125);
 	if (status != 0) {
-		ehci_to_hcd(ehci)->state = USB_STATE_HALT;
+		ehci_to_hcd(ehci)->state = HC_STATE_HALT;
 		return status;
 	}
 
 	cmd = readl (&ehci->regs->command) | CMD_PSE;
 	writel (cmd, &ehci->regs->command);
 	/* posted write ... PSS happens later */
-	ehci_to_hcd(ehci)->state = USB_STATE_RUNNING;
+	ehci_to_hcd(ehci)->state = HC_STATE_RUNNING;
 
 	/* make sure ehci_work scans these */
 	ehci->next_uframe = readl (&ehci->regs->frame_index)
@@ -274,7 +274,7 @@ static int disable_periodic (struct ehci_hcd *ehci)
 	 */
 	status = handshake (&ehci->regs->status, STS_PSS, STS_PSS, 9 * 125);
 	if (status != 0) {
-		ehci_to_hcd(ehci)->state = USB_STATE_HALT;
+		ehci_to_hcd(ehci)->state = HC_STATE_HALT;
 		return status;
 	}
 
@@ -1864,7 +1864,7 @@ scan_periodic (struct ehci_hcd *ehci, struct pt_regs *regs)
 	 * Touches as few pages as possible:  cache-friendly.
 	 */
 	now_uframe = ehci->next_uframe;
-	if (HCD_IS_RUNNING (ehci_to_hcd(ehci)->state))
+	if (HC_IS_RUNNING (ehci_to_hcd(ehci)->state))
 		clock = readl (&ehci->regs->frame_index);
 	else
 		clock = now_uframe + mod - 1;
@@ -1898,7 +1898,7 @@ restart:
 			union ehci_shadow	temp;
 			int			live;
 
-			live = HCD_IS_RUNNING (ehci_to_hcd(ehci)->state);
+			live = HC_IS_RUNNING (ehci_to_hcd(ehci)->state);
 			switch (type) {
 			case Q_TYPE_QH:
 				/* handle any completions */
@@ -1987,7 +1987,7 @@ restart:
 		if (now_uframe == clock) {
 			unsigned	now;
 
-			if (!HCD_IS_RUNNING (ehci_to_hcd(ehci)->state))
+			if (!HC_IS_RUNNING (ehci_to_hcd(ehci)->state))
 				break;
 			ehci->next_uframe = now_uframe;
 			now = readl (&ehci->regs->frame_index) % mod;

@@ -226,8 +226,8 @@ int usb_hcd_pci_suspend (struct pci_dev *dev, u32 state)
 	/* entry if root hub wasn't yet suspended ... from sysfs,
 	 * without autosuspend, or if USB_SUSPEND isn't configured.
 	 */
-	case USB_STATE_RUNNING:
-		hcd->state = USB_STATE_QUIESCING;
+	case HC_STATE_RUNNING:
+		hcd->state = HC_STATE_QUIESCING;
 		retval = hcd->driver->suspend (hcd, state);
 		if (retval) {
 			dev_dbg (hcd->self.controller, 
@@ -235,7 +235,7 @@ int usb_hcd_pci_suspend (struct pci_dev *dev, u32 state)
 					retval);
 			break;
 		}
-		hcd->state = HCD_STATE_SUSPENDED;
+		hcd->state = HC_STATE_SUSPENDED;
 		/* FALLTHROUGH */
 
 	/* entry with CONFIG_USB_SUSPEND, or hcds that autosuspend: the
@@ -245,7 +245,7 @@ int usb_hcd_pci_suspend (struct pci_dev *dev, u32 state)
 	 * FIXME only CONFIG_USB_SUSPEND guarantees hub_suspend() will
 	 * have been called, otherwise root hub timers still run ...
 	 */
-	case HCD_STATE_SUSPENDED:
+	case HC_STATE_SUSPENDED:
 		if (state <= dev->current_state)
 			break;
 
@@ -311,7 +311,7 @@ int usb_hcd_pci_resume (struct pci_dev *dev)
 	int			has_pci_pm;
 
 	hcd = pci_get_drvdata(dev);
-	if (hcd->state != HCD_STATE_SUSPENDED) {
+	if (hcd->state != HC_STATE_SUSPENDED) {
 		dev_dbg (hcd->self.controller, 
 				"can't resume, not suspended!\n");
 		return 0;
@@ -323,7 +323,7 @@ int usb_hcd_pci_resume (struct pci_dev *dev)
 			pci_state(dev->current_state),
 			has_pci_pm ? "" : " (legacy)");
 
-	hcd->state = USB_STATE_RESUMING;
+	hcd->state = HC_STATE_RESUMING;
 
 	if (has_pci_pm)
 		pci_set_power_state (dev, 0);
@@ -343,7 +343,7 @@ int usb_hcd_pci_resume (struct pci_dev *dev)
 #endif
 
 	retval = hcd->driver->resume (hcd);
-	if (!HCD_IS_RUNNING (hcd->state)) {
+	if (!HC_IS_RUNNING (hcd->state)) {
 		dev_dbg (hcd->self.controller, 
 				"resume fail, retval %d\n", retval);
 		usb_hc_died (hcd);

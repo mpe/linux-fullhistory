@@ -455,7 +455,7 @@ static int rh_call_control (struct usb_hcd *hcd, struct urb *urb)
 
 	default:
 		/* non-generic request */
-		if (HCD_IS_SUSPENDED (hcd->state))
+		if (HC_IS_SUSPENDED (hcd->state))
 			status = -EAGAIN;
 		else {
 			switch (typeReq) {
@@ -1117,8 +1117,8 @@ static int hcd_submit_urb (struct urb *urb, int mem_flags)
 	else if (unlikely (urb->reject))
 		status = -EPERM;
 	else switch (hcd->state) {
-	case USB_STATE_RUNNING:
-	case USB_STATE_RESUMING:
+	case HC_STATE_RUNNING:
+	case HC_STATE_RESUMING:
 		usb_get_dev (urb->dev);
 		list_add_tail (&urb->urb_list, &ep->urb_list);
 		status = 0;
@@ -1192,7 +1192,7 @@ done:
 static int hcd_get_frame_number (struct usb_device *udev)
 {
 	struct usb_hcd	*hcd = (struct usb_hcd *)udev->bus->hcpriv;
-	if (!HCD_IS_RUNNING (hcd->state))
+	if (!HC_IS_RUNNING (hcd->state))
 		return -ESHUTDOWN;
 	return hcd->driver->get_frame_number (hcd);
 }
@@ -1274,7 +1274,7 @@ static int hcd_unlink_urb (struct urb *urb, int status)
 	 * halted ~= no unlink handshake is needed
 	 * suspended, resuming == should never happen
 	 */
-	WARN_ON (!HCD_IS_RUNNING (hcd->state) && hcd->state != USB_STATE_HALT);
+	WARN_ON (!HC_IS_RUNNING (hcd->state) && hcd->state != HC_STATE_HALT);
 
 	/* insist the urb is still queued */
 	list_for_each(tmp, &ep->urb_list) {
@@ -1341,7 +1341,7 @@ hcd_endpoint_disable (struct usb_device *udev, struct usb_host_endpoint *ep)
 
 	hcd = udev->bus->hcpriv;
 
-	WARN_ON (!HCD_IS_RUNNING (hcd->state) && hcd->state != USB_STATE_HALT);
+	WARN_ON (!HC_IS_RUNNING (hcd->state) && hcd->state != HC_STATE_HALT);
 
 	local_irq_disable ();
 
@@ -1552,13 +1552,13 @@ irqreturn_t usb_hcd_irq (int irq, void *__hcd, struct pt_regs * r)
 	struct usb_hcd		*hcd = __hcd;
 	int			start = hcd->state;
 
-	if (start == USB_STATE_HALT)
+	if (start == HC_STATE_HALT)
 		return IRQ_NONE;
 	if (hcd->driver->irq (hcd, r) == IRQ_NONE)
 		return IRQ_NONE;
 
 	hcd->saw_irq = 1;
-	if (hcd->state != start && hcd->state == USB_STATE_HALT)
+	if (hcd->state != start && hcd->state == HC_STATE_HALT)
 		usb_hc_died (hcd);
 	return IRQ_HANDLED;
 }
@@ -1733,14 +1733,14 @@ void usb_remove_hcd(struct usb_hcd *hcd)
 {
 	dev_info(hcd->self.controller, "remove, state %x\n", hcd->state);
 
-	if (HCD_IS_RUNNING (hcd->state))
-		hcd->state = USB_STATE_QUIESCING;
+	if (HC_IS_RUNNING (hcd->state))
+		hcd->state = HC_STATE_QUIESCING;
 
 	dev_dbg(hcd->self.controller, "roothub graceful disconnect\n");
 	usb_disconnect(&hcd->self.root_hub);
 
 	hcd->driver->stop(hcd);
-	hcd->state = USB_STATE_HALT;
+	hcd->state = HC_STATE_HALT;
 
 	if (hcd->irq >= 0)
 		free_irq(hcd->irq, hcd);

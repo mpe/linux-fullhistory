@@ -87,14 +87,14 @@ struct usb_hcd {	/* usb_bus.hcpriv points to this */
 #	define	__SUSPEND		0x04
 #	define	__TRANSIENT		0x80
 
-#	define	USB_STATE_HALT		0
-#	define	USB_STATE_RUNNING	(__ACTIVE)
-#	define	USB_STATE_QUIESCING	(__SUSPEND|__TRANSIENT|__ACTIVE)
-#	define	USB_STATE_RESUMING	(__SUSPEND|__TRANSIENT)
-#	define	HCD_STATE_SUSPENDED	(__SUSPEND)
+#	define	HC_STATE_HALT		0
+#	define	HC_STATE_RUNNING	(__ACTIVE)
+#	define	HC_STATE_QUIESCING	(__SUSPEND|__TRANSIENT|__ACTIVE)
+#	define	HC_STATE_RESUMING	(__SUSPEND|__TRANSIENT)
+#	define	HC_STATE_SUSPENDED	(__SUSPEND)
 
-#define	HCD_IS_RUNNING(state) ((state) & __ACTIVE)
-#define	HCD_IS_SUSPENDED(state) ((state) & __SUSPEND)
+#define	HC_IS_RUNNING(state) ((state) & __ACTIVE)
+#define	HC_IS_SUSPENDED(state) ((state) & __SUSPEND)
 
 	/* more shared queuing code would be good; it should support
 	 * smarter scheduling, handle transaction translators, etc;

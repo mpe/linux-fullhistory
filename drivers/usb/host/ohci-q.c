@@ -172,7 +172,7 @@ static int ed_schedule (struct ohci_hcd *ohci, struct ed *ed)
 {	 
 	int	branch;
 
-	if (ohci_to_hcd(ohci)->state == USB_STATE_QUIESCING)
+	if (ohci_to_hcd(ohci)->state == HC_STATE_QUIESCING)
 		return -EAGAIN;
 
 	ed->state = ED_OPER;
@@ -923,7 +923,7 @@ rescan_all:
 		/* only take off EDs that the HC isn't using, accounting for
 		 * frame counter wraps and EDs with partially retired TDs
 		 */
-		if (likely (regs && HCD_IS_RUNNING(ohci_to_hcd(ohci)->state))) {
+		if (likely (regs && HC_IS_RUNNING(ohci_to_hcd(ohci)->state))) {
 			if (tick_before (tick, ed->tick)) {
 skip_ed:
 				last = &ed->ed_next;
@@ -1005,7 +1005,7 @@ rescan_this:
 
 		/* but if there's work queued, reschedule */
 		if (!list_empty (&ed->td_list)) {
-			if (HCD_IS_RUNNING(ohci_to_hcd(ohci)->state))
+			if (HC_IS_RUNNING(ohci_to_hcd(ohci)->state))
 				ed_schedule (ohci, ed);
 		}
 
@@ -1014,8 +1014,8 @@ rescan_this:
    	}
 
 	/* maybe reenable control and bulk lists */ 
-	if (HCD_IS_RUNNING(ohci_to_hcd(ohci)->state)
-			&& ohci_to_hcd(ohci)->state != USB_STATE_QUIESCING
+	if (HC_IS_RUNNING(ohci_to_hcd(ohci)->state)
+			&& ohci_to_hcd(ohci)->state != HC_STATE_QUIESCING
 			&& !ohci->ed_rm_list) {
 		u32	command = 0, control = 0;
 

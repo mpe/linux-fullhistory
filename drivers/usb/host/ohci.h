@@ -594,7 +594,7 @@ static inline u16 ohci_hwPSW(const struct ohci_hcd *ohci,
 
 static inline void disable (struct ohci_hcd *ohci)
 {
-	ohci_to_hcd(ohci)->state = USB_STATE_HALT;
+	ohci_to_hcd(ohci)->state = HC_STATE_HALT;
 }
 
 #define	FI			0x2edf		/* 12000 bits per frame (-1) */

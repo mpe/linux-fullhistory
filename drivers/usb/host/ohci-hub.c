@@ -73,7 +73,7 @@ static int ohci_hub_suspend (struct usb_hcd *hcd)
 	ohci_dbg (ohci, "suspend root hub\n");
 
 	/* First stop any processing */
-	hcd->state = USB_STATE_QUIESCING;
+	hcd->state = HC_STATE_QUIESCING;
 	if (ohci->hc_control & OHCI_SCHED_ENABLES) {
 		int		limit;
 
@@ -119,7 +119,7 @@ static int ohci_hub_suspend (struct usb_hcd *hcd)
 
 done:
 	if (status == 0)
-		hcd->state = HCD_STATE_SUSPENDED;
+		hcd->state = HC_STATE_SUSPENDED;
 	spin_unlock_irqrestore (&ohci->lock, flags);
 	return status;
 }
@@ -147,7 +147,7 @@ static int ohci_hub_resume (struct usb_hcd *hcd)
 
 	if (ohci->hc_control & (OHCI_CTRL_IR | OHCI_SCHED_ENABLES)) {
 		/* this can happen after suspend-to-disk */
-		if (hcd->state == USB_STATE_RESUMING) {
+		if (hcd->state == HC_STATE_RESUMING) {
 			ohci_dbg (ohci, "BIOS/SMM active, control %03x\n",
 					ohci->hc_control);
 			status = -EBUSY;
@@ -198,7 +198,7 @@ static int ohci_hub_resume (struct usb_hcd *hcd)
 	}
 
 	/* Some controllers (lucent) need extra-long delays */
-	hcd->state = USB_STATE_RESUMING;
+	hcd->state = HC_STATE_RESUMING;
 	mdelay (20 /* usb 11.5.1.10 */ + 15);
 
 	temp = ohci_readl (ohci, &ohci->regs->control);
@@ -272,7 +272,7 @@ static int ohci_hub_resume (struct usb_hcd *hcd)
 		(void) ohci_readl (ohci, &ohci->regs->control);
 	}
 
-	hcd->state = USB_STATE_RUNNING;
+	hcd->state = HC_STATE_RUNNING;
 	return 0;
 }
 
@@ -313,7 +313,7 @@ ohci_hub_status_data (struct usb_hcd *hcd, char *buf)
 	 * letting khubd or root hub timer see state changes.
 	 */
 	if ((ohci->hc_control & OHCI_CTRL_HCFS) != OHCI_USB_OPER
-			|| !HCD_IS_RUNNING(hcd->state)) {
+			|| !HC_IS_RUNNING(hcd->state)) {
 		can_suspend = 0;
 		goto done;
 	}
@@ -378,7 +378,7 @@ done:
 			) {
 		ohci_vdbg (ohci, "autosuspend\n");
 		(void) ohci_hub_suspend (hcd);
-		hcd->state = USB_STATE_RUNNING;
+		hcd->state = HC_STATE_RUNNING;
 		usb_unlock_device (hcd->self.root_hub);
 	}
 #endif

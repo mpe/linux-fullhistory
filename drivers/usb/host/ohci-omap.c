@@ -499,7 +499,7 @@ static int ohci_omap_suspend(struct device *dev, u32 state, u32 level)
 					USB_STATE_SUSPENDED;
 			state = 4;
 		}
-		ohci_to_hcd(ohci)->state = HCD_STATE_SUSPENDED;
+		ohci_to_hcd(ohci)->state = HC_STATE_SUSPENDED;
 		dev->power.power_state = state;
 	}
 	up(&ohci_to_hcd(ohci)->self.root_hub->serialize);

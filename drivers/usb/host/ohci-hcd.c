@@ -252,7 +252,7 @@ static int ohci_urb_enqueue (
 	spin_lock_irqsave (&ohci->lock, flags);
 
 	/* don't submit to a dead HC */
-	if (!HCD_IS_RUNNING(hcd->state)) {
+	if (!HC_IS_RUNNING(hcd->state)) {
 		retval = -ENODEV;
 		goto fail;
 	}
@@ -320,7 +320,7 @@ static int ohci_urb_dequeue (struct usb_hcd *hcd, struct urb *urb)
 #endif		  
 
 	spin_lock_irqsave (&ohci->lock, flags);
- 	if (HCD_IS_RUNNING(hcd->state)) {
+ 	if (HC_IS_RUNNING(hcd->state)) {
 		urb_priv_t  *urb_priv;
 
 		/* Unless an IRQ completed the unlink while it was being
@@ -367,7 +367,7 @@ ohci_endpoint_disable (struct usb_hcd *hcd, struct usb_host_endpoint *ep)
 rescan:
 	spin_lock_irqsave (&ohci->lock, flags);
 
-	if (!HCD_IS_RUNNING (hcd->state)) {
+	if (!HC_IS_RUNNING (hcd->state)) {
 sanitize:
 		ed->state = ED_IDLE;
 		finish_unlinks (ohci, 0, NULL);
@@ -620,7 +620,7 @@ retry:
 	ohci->hc_control &= OHCI_CTRL_RWC;
  	ohci->hc_control |= OHCI_CONTROL_INIT | OHCI_USB_OPER;
  	ohci_writel (ohci, ohci->hc_control, &ohci->regs->control);
-	ohci_to_hcd(ohci)->state = USB_STATE_RUNNING;
+	ohci_to_hcd(ohci)->state = HC_STATE_RUNNING;
 
 	/* wake on ConnectStatusChange, matching external hubs */
 	ohci_writel (ohci, RH_HS_DRWE, &ohci->regs->roothub.status);
@@ -656,7 +656,7 @@ retry:
 	// POTPGT delay is bits 24-31, in 2 ms units.
 	mdelay ((temp >> 23) & 0x1fe);
 	bus = &ohci_to_hcd(ohci)->self;
-	ohci_to_hcd(ohci)->state = USB_STATE_RUNNING;
+	ohci_to_hcd(ohci)->state = HC_STATE_RUNNING;
 
 	ohci_dump (ohci, 1);
 
@@ -732,12 +732,12 @@ static irqreturn_t ohci_irq (struct usb_hcd *hcd, struct pt_regs *ptregs)
 	}
 
 	if (ints & OHCI_INTR_WDH) {
-		if (HCD_IS_RUNNING(hcd->state))
+		if (HC_IS_RUNNING(hcd->state))
 			ohci_writel (ohci, OHCI_INTR_WDH, &regs->intrdisable);	
 		spin_lock (&ohci->lock);
 		dl_done_list (ohci, ptregs);
 		spin_unlock (&ohci->lock);
-		if (HCD_IS_RUNNING(hcd->state))
+		if (HC_IS_RUNNING(hcd->state))
 			ohci_writel (ohci, OHCI_INTR_WDH, &regs->intrenable); 
 	}
   
@@ -750,11 +750,11 @@ static irqreturn_t ohci_irq (struct usb_hcd *hcd, struct pt_regs *ptregs)
 	if (ohci->ed_rm_list)
 		finish_unlinks (ohci, ohci_frame_no(ohci), ptregs);
 	if ((ints & OHCI_INTR_SF) != 0 && !ohci->ed_rm_list
-			&& HCD_IS_RUNNING(hcd->state))
+			&& HC_IS_RUNNING(hcd->state))
 		ohci_writel (ohci, OHCI_INTR_SF, &regs->intrdisable);	
 	spin_unlock (&ohci->lock);
 
-	if (HCD_IS_RUNNING(hcd->state)) {
+	if (HC_IS_RUNNING(hcd->state)) {
 		ohci_writel (ohci, ints, &regs->intrstatus);
 		ohci_writel (ohci, OHCI_INTR_MIE, &regs->intrenable);	
 		// flush those writes

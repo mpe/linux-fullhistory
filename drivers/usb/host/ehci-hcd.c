@@ -212,7 +212,7 @@ static int ehci_reset (struct ehci_hcd *ehci)
 	command |= CMD_RESET;
 	dbg_cmd (ehci, "reset", command);
 	writel (command, &ehci->regs->command);
-	ehci_to_hcd(ehci)->state = USB_STATE_HALT;
+	ehci_to_hcd(ehci)->state = HC_STATE_HALT;
 	ehci->next_statechange = jiffies;
 	retval = handshake (&ehci->regs->command, CMD_RESET, 0, 250 * 1000);
 
@@ -231,7 +231,7 @@ static void ehci_quiesce (struct ehci_hcd *ehci)
 	u32	temp;
 
 #ifdef DEBUG
-	if (!HCD_IS_RUNNING (ehci_to_hcd(ehci)->state))
+	if (!HC_IS_RUNNING (ehci_to_hcd(ehci)->state))
 		BUG ();
 #endif
 
@@ -240,7 +240,7 @@ static void ehci_quiesce (struct ehci_hcd *ehci)
 	temp &= STS_ASS | STS_PSS;
 	if (handshake (&ehci->regs->status, STS_ASS | STS_PSS,
 				temp, 16 * 125) != 0) {
-		ehci_to_hcd(ehci)->state = USB_STATE_HALT;
+		ehci_to_hcd(ehci)->state = HC_STATE_HALT;
 		return;
 	}
 
@@ -252,7 +252,7 @@ static void ehci_quiesce (struct ehci_hcd *ehci)
 	/* hardware can take 16 microframes to turn off ... */
 	if (handshake (&ehci->regs->status, STS_ASS | STS_PSS,
 				0, 16 * 125) != 0) {
-		ehci_to_hcd(ehci)->state = USB_STATE_HALT;
+		ehci_to_hcd(ehci)->state = HC_STATE_HALT;
 		return;
 	}
 }
@@ -615,7 +615,7 @@ done2:
 		register_reboot_notifier (&ehci->reboot_notifier);
 	}
 
-	hcd->state = USB_STATE_RUNNING;
+	hcd->state = HC_STATE_RUNNING;
 	writel (FLAG_CF, &ehci->regs->configured_flag);
 	readl (&ehci->regs->command);	/* unblock posted write */
 
@@ -636,7 +636,7 @@ done2:
 	 * and device drivers may start it running.
 	 */
 	if (first && usb_hcd_register_root_hub (udev, hcd) != 0) {
-		if (hcd->state == USB_STATE_RUNNING)
+		if (hcd->state == HC_STATE_RUNNING)
 			ehci_quiesce (ehci);
 		ehci_reset (ehci);
 		usb_put_dev (udev); 
@@ -672,7 +672,7 @@ static void ehci_stop (struct usb_hcd *hcd)
 	del_timer_sync (&ehci->watchdog);
 
 	spin_lock_irq(&ehci->lock);
-	if (HCD_IS_RUNNING (hcd->state))
+	if (HC_IS_RUNNING (hcd->state))
 		ehci_quiesce (ehci);
 
 	ehci_reset (ehci);
@@ -839,7 +839,7 @@ static void ehci_work (struct ehci_hcd *ehci, struct pt_regs *regs)
 	 * misplace IRQs, and should let us run completely without IRQs.
 	 * such lossage has been observed on both VT6202 and VT8235. 
 	 */
-	if (HCD_IS_RUNNING (ehci_to_hcd(ehci)->state) &&
+	if (HC_IS_RUNNING (ehci_to_hcd(ehci)->state) &&
 			(ehci->async->qh_next.ptr != NULL ||
 			 ehci->periodic_sched != 0))
 		timer_action (ehci, TIMER_IO_WATCHDOG);
@@ -1000,7 +1000,7 @@ static void unlink_async (struct ehci_hcd *ehci, struct ehci_qh *qh)
 	/* if we need to use IAA and it's busy, defer */
 	if (qh->qh_state == QH_STATE_LINKED
 			&& ehci->reclaim
-			&& HCD_IS_RUNNING (ehci_to_hcd(ehci)->state)) {
+			&& HC_IS_RUNNING (ehci_to_hcd(ehci)->state)) {
 		struct ehci_qh		*last;
 
 		for (last = ehci->reclaim;
@@ -1011,7 +1011,7 @@ static void unlink_async (struct ehci_hcd *ehci, struct ehci_qh *qh)
 		last->reclaim = qh;
 
 	/* bypass IAA if the hc can't care */
-	} else if (!HCD_IS_RUNNING (ehci_to_hcd(ehci)->state) && ehci->reclaim)
+	} else if (!HC_IS_RUNNING (ehci_to_hcd(ehci)->state) && ehci->reclaim)
 		end_unlink_async (ehci, NULL);
 
 	/* something else might have unlinked the qh by now */
@@ -1059,7 +1059,7 @@ static int ehci_urb_dequeue (struct usb_hcd *hcd, struct urb *urb)
 
 		/* reschedule QH iff another request is queued */
 		if (!list_empty (&qh->qtd_list)
-				&& HCD_IS_RUNNING (hcd->state)) {
+				&& HC_IS_RUNNING (hcd->state)) {
 			int status;
 
 			status = qh_schedule (ehci, qh);
@@ -1115,7 +1115,7 @@ rescan:
 		goto idle_timeout;
 	}
 
-	if (!HCD_IS_RUNNING (hcd->state))
+	if (!HC_IS_RUNNING (hcd->state))
 		qh->qh_state = QH_STATE_IDLE;
 	switch (qh->qh_state) {
 	case QH_STATE_LINKED:

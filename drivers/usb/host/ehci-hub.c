@@ -42,9 +42,9 @@ static int ehci_hub_suspend (struct usb_hcd *hcd)
 	spin_lock_irq (&ehci->lock);
 
 	/* stop schedules, clean any completed work */
-	if (HCD_IS_RUNNING(hcd->state)) {
+	if (HC_IS_RUNNING(hcd->state)) {
 		ehci_quiesce (ehci);
-		hcd->state = USB_STATE_QUIESCING;
+		hcd->state = HC_STATE_QUIESCING;
 	}
 	ehci->command = readl (&ehci->regs->command);
 	if (ehci->reclaim)
@@ -73,7 +73,7 @@ static int ehci_hub_suspend (struct usb_hcd *hcd)
 
 	/* turn off now-idle HC */
 	ehci_halt (ehci);
-	hcd->state = HCD_STATE_SUSPENDED;
+	hcd->state = HC_STATE_SUSPENDED;
 
 	ehci->next_statechange = jiffies + msecs_to_jiffies(10);
 	spin_unlock_irq (&ehci->lock);
@@ -145,7 +145,7 @@ static int ehci_hub_resume (struct usb_hcd *hcd)
 	}
 
 	ehci->next_statechange = jiffies + msecs_to_jiffies(5);
-	hcd->state = USB_STATE_RUNNING;
+	hcd->state = HC_STATE_RUNNING;
 
 	/* Now we can safely re-enable irqs */
 	if (intr_enable)
@@ -212,7 +212,7 @@ ehci_hub_status_data (struct usb_hcd *hcd, char *buf)
 	unsigned long	flags;
 
 	/* if !USB_SUSPEND, root hub timers won't get shut down ... */
-	if (!HCD_IS_RUNNING(hcd->state))
+	if (!HC_IS_RUNNING(hcd->state))
 		return 0;
 
 	/* init status to no-changes */
