@@ -315,7 +315,7 @@ asmlinkage int do_signal(unsigned long oldmask,
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;
-			notify_parent(current);
+			notify_parent(current, SIGCHLD);
 			schedule();
 			single_stepping |= ptrace_cancel_bpt(current);
 			if (!(signr = current->exit_code))
@@ -354,7 +354,7 @@ asmlinkage int do_signal(unsigned long oldmask,
 				current->exit_code = signr;
 				if (!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags & 
 						SA_NOCLDSTOP))
-					notify_parent(current);
+					notify_parent(current, SIGCHLD);
 				schedule();
 				single_stepping |= ptrace_cancel_bpt(current);
 				continue;

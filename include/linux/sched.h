@@ -444,7 +444,7 @@ extern void wake_up(struct wait_queue ** p);
 extern void wake_up_interruptible(struct wait_queue ** p);
 extern void wake_up_process(struct task_struct * tsk);
 
-extern void notify_parent(struct task_struct * tsk);
+extern void notify_parent(struct task_struct * tsk, int signal);
 extern void force_sig(unsigned long sig,struct task_struct * p);
 extern int send_sig(unsigned long sig,struct task_struct * p,int priv);
 extern int in_group_p(gid_t grp);

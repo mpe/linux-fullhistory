@@ -119,12 +119,12 @@ int send_sig(unsigned long sig,struct task_struct * p,int priv)
 	return 0;
 }
 
-void notify_parent(struct task_struct * tsk)
+void notify_parent(struct task_struct * tsk, int signal)
 {
-	if (tsk->p_pptr == task[smp_num_cpus])		/* Init */
-		tsk->exit_signal = SIGCHLD;
-	send_sig(tsk->exit_signal, tsk->p_pptr, 1);
-	wake_up_interruptible(&tsk->p_pptr->wait_chldexit);
+	struct task_struct * parent = tsk->p_pptr;
+
+	send_sig(signal, parent, 1);
+	wake_up_interruptible(&parent->wait_chldexit);
 }
 
 static void release(struct task_struct * p)
@@ -346,11 +346,10 @@ static inline void forget_original_parent(struct task_struct * father)
 
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
-		if (p->p_opptr == father)
-			if (task[smp_num_cpus])	/* init */
-				p->p_opptr = task[smp_num_cpus];
-			else
-				p->p_opptr = task[0];
+		if (p->p_opptr == father) {
+			p->exit_signal = SIGCHLD;
+			p->p_opptr = task[smp_num_cpus] ? : task[0];	/* init */
+		}
 	}
 	read_unlock(&tasklist_lock);
 }
@@ -488,7 +487,7 @@ static void exit_notify(void)
 		kill_pg(current->pgrp,SIGCONT,1);
 	}
 	/* Let father know we died */
-	notify_parent(current);
+	notify_parent(current, current->exit_signal);
 
 	/*
 	 * This loop does two things:
@@ -502,15 +501,13 @@ static void exit_notify(void)
 		current->p_cptr = p->p_osptr;
 		p->p_ysptr = NULL;
 		p->flags &= ~(PF_PTRACED|PF_TRACESYS);
-		if (task[smp_num_cpus] && task[smp_num_cpus] != current) /* init */
-			p->p_pptr = task[smp_num_cpus];
-		else
-			p->p_pptr = task[0];
+
+		p->p_pptr = p->p_opptr;
 		p->p_osptr = p->p_pptr->p_cptr;
 		p->p_osptr->p_ysptr = p;
 		p->p_pptr->p_cptr = p;
 		if (p->state == TASK_ZOMBIE)
-			notify_parent(p);
+			notify_parent(p, p->exit_signal);
 		/*
 		 * process group orphan check
 		 * Case ii: Our child is in a different pgrp
@@ -651,7 +648,7 @@ repeat:
 					REMOVE_LINKS(p);
 					p->p_pptr = p->p_opptr;
 					SET_LINKS(p);
-					notify_parent(p);
+					notify_parent(p, SIGCHLD);
 				} else
 					release(p);
 #ifdef DEBUG_PROC_TREE
