@@ -2,8 +2,8 @@
  *
  * Name:	skdebug.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.9 $
- * Date:	$Date: 1999/09/14 14:02:43 $
+ * Version:	$Revision: 1.10 $
+ * Date:	$Date: 1999/11/22 13:47:40 $
  * Purpose:	SK specific DEBUG support
  *
  ******************************************************************************/
@@ -26,6 +26,9 @@
  *
  * History:
  *	$Log: skdebug.h,v $
+ *	Revision 1.10  1999/11/22 13:47:40  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.9  1999/09/14 14:02:43  rwahl
  *	Added SK_DBGMOD_PECP.
  *	

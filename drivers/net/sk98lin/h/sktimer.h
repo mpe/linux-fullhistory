@@ -2,8 +2,8 @@
  *
  * Name:	sktimer.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.8 $
- * Date:	$Date: 1998/09/08 08:48:02 $
+ * Version:	$Revision: 1.9 $
+ * Date:	$Date: 1999/11/22 14:00:29 $
  * Purpose:	Defines for the timer functions
  *
  ******************************************************************************/
@@ -27,6 +27,9 @@
  * History:
  *
  *	$Log: sktimer.h,v $
+ *	Revision 1.9  1999/11/22 14:00:29  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.8  1998/09/08 08:48:02  gklug
  *	add: init level handling
  *	

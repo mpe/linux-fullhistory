@@ -29,6 +29,9 @@
 #include "acpi.h"
 #include "driver.h"
 
+#define _COMPONENT	OS_DEPENDENT
+	MODULE_NAME	("os")
+
 static int acpi_irq_irq = 0;
 static OSD_HANDLER acpi_irq_handler = NULL;
 static void *acpi_irq_context = NULL;
@@ -61,7 +64,7 @@ acpi_os_terminate(void)
 }
 
 s32
-acpi_os_printf(const char *fmt,...)
+acpi_os_printf(const NATIVE_CHAR *fmt,...)
 {
 	s32 size;
 	va_list args;
@@ -72,11 +75,11 @@ acpi_os_printf(const char *fmt,...)
 }
 
 s32
-acpi_os_vprintf(const char *fmt, va_list args)
+acpi_os_vprintf(const NATIVE_CHAR *fmt, va_list args)
 {
 	static char buffer[512];
 	int size = vsprintf(buffer, fmt, args);
-	printk(KERN_DEBUG "ACPI: %s", buffer);
+	printk("%s", buffer);
 	return size;
 }
 
@@ -137,7 +140,7 @@ acpi_os_install_interrupt_handler(u32 irq, OSD_HANDLER handler, void *context)
 	acpi_irq_context = context;
 	if (request_irq(irq,
 			acpi_irq,
-			SA_INTERRUPT | SA_SHIRQ,
+			SA_SHIRQ,
 			"acpi",
 			acpi_irq)) {
 		printk(KERN_ERR "ACPI: SCI (IRQ%d) allocation failed\n", irq);
@@ -338,7 +341,7 @@ acpi_os_signal_semaphore(ACPI_HANDLE handle, u32 units)
 }
 
 ACPI_STATUS
-acpi_os_breakpoint(char *msg)
+acpi_os_breakpoint(NATIVE_CHAR *msg)
 {
 	acpi_os_printf("breakpoint: %s", msg);
 	return AE_OK;
@@ -351,13 +354,13 @@ acpi_os_dbg_trap(char *msg)
 }
 
 void
-acpi_os_dbg_assert(void *failure, void *file, u32 line, char *msg)
+acpi_os_dbg_assert(void *failure, void *file, u32 line, NATIVE_CHAR *msg)
 {
 	acpi_os_printf("assert: %s", msg);
 }
 
 u32
-acpi_os_get_line(char *buffer)
+acpi_os_get_line(NATIVE_CHAR *buffer)
 {
 	return 0;
 }

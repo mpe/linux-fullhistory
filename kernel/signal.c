@@ -41,7 +41,7 @@ void __init signals_init(void)
 				  __alignof__(struct sigqueue),
 				  SIG_SLAB_DEBUG, NULL, NULL);
 	if (!sigqueue_cachep)
-		panic("signals_init(): cannot create sigueue SLAB cache");
+		panic("signals_init(): cannot create sigqueue SLAB cache");
 }
 
 

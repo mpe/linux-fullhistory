@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
- * Name: hardware.h -- hardware specific interfaces
+ * Name: achware.h -- hardware specific interfaces
+ *       $Revision: 41 $
  *
  *****************************************************************************/
 
@@ -23,8 +23,8 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef __HARDWARE_H__
-#define __HARDWARE_H__
+#ifndef __ACHWARE_H__
+#define __ACHWARE_H__
 
 
 /* Prototypes */
@@ -166,4 +166,4 @@ acpi_hw_pmt_resolution (
 	void);
 
 
-#endif /* __HARDWARE_H__ */
+#endif /* __ACHWARE_H__ */

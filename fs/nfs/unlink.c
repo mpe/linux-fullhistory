@@ -121,8 +121,11 @@ nfs_async_unlink_done(struct rpc_task *task)
 {
 	struct nfs_unlinkdata	*data = (struct nfs_unlinkdata *)task->tk_calldata;
 	struct dentry		*dir = data->dir;
-	struct inode		*dir_i = dir->d_inode;
+	struct inode		*dir_i;
 
+	if (!dir)
+		return;
+	dir_i = dir->d_inode;
 	nfs_zap_caches(dir_i);
 	NFS_PROTO(dir_i)->unlink_done(dir, &task->tk_msg);
 	rpcauth_releasecred(task->tk_auth, data->cred);
@@ -206,6 +209,7 @@ nfs_complete_unlink(struct dentry *dentry)
 		return;
 	data->count++;
 	nfs_copy_dname(dentry, data);
+	dentry->d_flags &= ~DCACHE_NFSFS_RENAMED;
 	if (data->task.tk_rpcwait == &nfs_delete_queue)
 		rpc_wake_up_task(&data->task);
 	nfs_put_unlinkdata(data);

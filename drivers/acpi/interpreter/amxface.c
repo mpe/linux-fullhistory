@@ -1,7 +1,8 @@
 
 /******************************************************************************
  *
- * Module Name: ixface - External interpreter interfaces
+ * Module Name: amxface - External interpreter interfaces
+ *              $Revision: 22 $
  *
  *****************************************************************************/
 
@@ -25,11 +26,11 @@
 
 
 #include "acpi.h"
-#include "interp.h"
+#include "acinterp.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amxface");
+	 MODULE_NAME         ("amxface")
 
 
 /*
@@ -48,8 +49,8 @@
 
 #define DEFINE_AML_GLOBALS
 #include "amlcode.h"
-#include "parser.h"
-#include "namesp.h"
+#include "acparser.h"
+#include "acnamesp.h"
 
 
 /*******************************************************************************
@@ -70,9 +71,9 @@
 
 ACPI_STATUS
 acpi_aml_execute_method (
-	ACPI_NAMED_OBJECT       *method_entry,
-	ACPI_OBJECT_INTERNAL    **params,
-	ACPI_OBJECT_INTERNAL    **return_obj_desc)
+	ACPI_NAMESPACE_NODE     *method_node,
+	ACPI_OPERAND_OBJECT     **params,
+	ACPI_OPERAND_OBJECT     **return_obj_desc)
 {
 	ACPI_STATUS             status;
 
@@ -84,7 +85,7 @@ acpi_aml_execute_method (
 
 	acpi_aml_enter_interpreter ();
 
-	status = acpi_psx_execute (method_entry, params, return_obj_desc);
+	status = acpi_psx_execute (method_node, params, return_obj_desc);
 
 	acpi_aml_exit_interpreter ();
 

@@ -2,6 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amresop - AML Interpreter operand/object resolution
+ *              $Revision: 15 $
  *
  *****************************************************************************/
 
@@ -26,16 +27,16 @@
 
 #include "acpi.h"
 #include "amlcode.h"
-#include "parser.h"
-#include "dispatch.h"
-#include "interp.h"
-#include "namesp.h"
-#include "tables.h"
-#include "events.h"
+#include "acparser.h"
+#include "acdispat.h"
+#include "acinterp.h"
+#include "acnamesp.h"
+#include "actables.h"
+#include "acevents.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amresop");
+	 MODULE_NAME         ("amresop")
 
 
 /*******************************************************************************
@@ -60,19 +61,20 @@
 ACPI_STATUS
 acpi_aml_resolve_operands (
 	u16                     opcode,
-	ACPI_OBJECT_INTERNAL    **stack_ptr)
+	ACPI_OPERAND_OBJECT     **stack_ptr,
+	ACPI_WALK_STATE         *walk_state)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_STATUS             status = AE_OK;
 	u8                      object_type;
 	ACPI_HANDLE             temp_handle;
 	u32                     arg_types;
-	ACPI_OP_INFO            *op_info;
+	ACPI_OPCODE_INFO        *op_info;
 	u32                     this_arg_type;
 
 
 	op_info = acpi_ps_get_opcode_info (opcode);
-	if (!op_info) {
+	if (ACPI_GET_OP_TYPE (op_info) != ACPI_OP_TYPE_OPCODE) {
 		return (AE_AML_BAD_OPCODE);
 	}
 
@@ -105,9 +107,9 @@ acpi_aml_resolve_operands (
 		/* Decode the descriptor type */
 
 		if (VALID_DESCRIPTOR_TYPE (obj_desc, ACPI_DESC_TYPE_NAMED)) {
-			/* NTE */
+			/* Node */
 
-			object_type = ((ACPI_NAMED_OBJECT*) obj_desc)->type;
+			object_type = ((ACPI_NAMESPACE_NODE *) obj_desc)->type;
 		}
 
 		else if (VALID_DESCRIPTOR_TYPE (obj_desc, ACPI_DESC_TYPE_INTERNAL)) {
@@ -128,7 +130,7 @@ acpi_aml_resolve_operands (
 				 */
 
 				op_info = acpi_ps_get_opcode_info (opcode);
-				if (!op_info) {
+				if (ACPI_GET_OP_TYPE (op_info) != ACPI_OP_TYPE_OPCODE) {
 					return (AE_AML_BAD_OPCODE);
 				}
 
@@ -205,7 +207,8 @@ acpi_aml_resolve_operands (
 
 			/* Need an operand of type ACPI_TYPE_NUMBER */
 
-			if ((status = acpi_aml_resolve_to_value (stack_ptr)) != AE_OK) {
+			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
+			if (ACPI_FAILURE (status)) {
 				goto cleanup;
 			}
 
@@ -220,7 +223,8 @@ acpi_aml_resolve_operands (
 
 			/* Need an operand of type ACPI_TYPE_STRING or ACPI_TYPE_BUFFER */
 
-			if ((status = acpi_aml_resolve_to_value (stack_ptr)) != AE_OK) {
+			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
+			if (ACPI_FAILURE (status)) {
 				goto cleanup;
 			}
 
@@ -237,7 +241,8 @@ acpi_aml_resolve_operands (
 
 			/* Need an operand of type ACPI_TYPE_BUFFER */
 
-			if ((status = acpi_aml_resolve_to_value(stack_ptr)) != AE_OK) {
+			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
+			if (ACPI_FAILURE (status)) {
 				goto cleanup;
 			}
 
@@ -252,7 +257,8 @@ acpi_aml_resolve_operands (
 
 			/* Need an operand of type ACPI_TYPE_MUTEX */
 
-			if ((status = acpi_aml_resolve_to_value(stack_ptr)) != AE_OK) {
+			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
+			if (ACPI_FAILURE (status)) {
 				goto cleanup;
 			}
 
@@ -267,7 +273,8 @@ acpi_aml_resolve_operands (
 
 			/* Need an operand of type ACPI_TYPE_EVENT */
 
-			if ((status = acpi_aml_resolve_to_value(stack_ptr)) != AE_OK) {
+			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
+			if (ACPI_FAILURE (status)) {
 				goto cleanup;
 			}
 
@@ -282,7 +289,8 @@ acpi_aml_resolve_operands (
 
 			/* Need an operand of type ACPI_TYPE_REGION */
 
-			if ((status = acpi_aml_resolve_to_value(stack_ptr)) != AE_OK) {
+			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
+			if (ACPI_FAILURE (status)) {
 				goto cleanup;
 			}
 
@@ -308,7 +316,8 @@ acpi_aml_resolve_operands (
 
 			/* Need an operand of type ACPI_TYPE_PACKAGE */
 
-			if ((status = acpi_aml_resolve_to_value (stack_ptr)) != AE_OK) {
+			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
+			if (ACPI_FAILURE (status)) {
 				goto cleanup;
 			}
 
@@ -337,7 +346,8 @@ acpi_aml_resolve_operands (
 
 			/* All others must be resolved */
 
-			if ((status = acpi_aml_resolve_to_value (stack_ptr)) != AE_OK) {
+			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
+			if (ACPI_FAILURE (status)) {
 				goto cleanup;
 			}
 
@@ -352,15 +362,16 @@ acpi_aml_resolve_operands (
 			 *
 			 * The ACPI specification allows Size_of to return the size of
 			 *  a Buffer, String or Package.  However, the MS ACPI.SYS AML
-			 *  Interpreter also allows an NTE reference to return without
+			 *  Interpreter also allows an Node reference to return without
 			 *  error with a size of 4.
 			 */
 
-			if ((status = acpi_aml_resolve_to_value (stack_ptr)) != AE_OK) {
+			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
+			if (ACPI_FAILURE (status)) {
 				goto cleanup;
 			}
 
-			/* Need a buffer, string, package or NTE reference */
+			/* Need a buffer, string, package or Node reference */
 
 			if (((*stack_ptr)->common.type != ACPI_TYPE_BUFFER) &&
 				((*stack_ptr)->common.type != ACPI_TYPE_STRING) &&
@@ -372,10 +383,10 @@ acpi_aml_resolve_operands (
 			}
 
 			/*
-			 * If this is a reference, only allow a reference to an NTE.
+			 * If this is a reference, only allow a reference to an Node.
 			 */
 			if ((*stack_ptr)->common.type == INTERNAL_TYPE_REFERENCE) {
-				if (!(*stack_ptr)->reference.nte) {
+				if (!(*stack_ptr)->reference.node) {
 					status = AE_AML_OPERAND_TYPE;
 					goto cleanup;
 				}
@@ -386,7 +397,8 @@ acpi_aml_resolve_operands (
 
 		case ARGI_COMPLEXOBJ:
 
-			if ((status = acpi_aml_resolve_to_value (stack_ptr)) != AE_OK) {
+			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
+			if (ACPI_FAILURE (status)) {
 				goto cleanup;
 			}
 

@@ -2,8 +2,8 @@
  *
  * Name:	ski2c.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.27 $
- * Date:	$Date: 1999/05/20 09:23:10 $
+ * Version:	$Revision: 1.29 $
+ * Date:	$Date: 2000/08/03 14:28:17 $
  * Purpose:	Defines to access Voltage and Temperature Sensor
  *		(taken from Monalisa (taken from Concentrator))
  *
@@ -28,6 +28,13 @@
  * History:
  *
  *	$Log: ski2c.h,v $
+ *	Revision 1.29  2000/08/03 14:28:17  rassmann
+ *	- Added function to wait for I2C being ready before resetting the board.
+ *	- Replaced one duplicate "out of range" message with correct one.
+ *	
+ *	Revision 1.28  1999/11/22 13:55:46  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.27  1999/05/20 09:23:10  cgoos
  *	Changes for 1000Base-T (Fan sensors).
  *	
@@ -254,9 +261,9 @@ typedef	struct	s_I2c {
 
 extern int SkI2cReadSensor(SK_AC *pAC, SK_IOC IoC, SK_SENSOR *pSen);
 #ifndef SK_DIAG
-extern int SkI2cEvent(SK_AC *pAC, SK_IOC IoC, SK_U32 Event,
-	SK_EVPARA Para);
+extern int SkI2cEvent(SK_AC *pAC, SK_IOC IoC, SK_U32 Event, SK_EVPARA Para);
 extern int SkI2cInit(SK_AC *pAC, SK_IOC IoC, int Level);
+extern void SkI2cWaitIrq(SK_AC *pAC, SK_IOC IoC);
 extern void SkI2cIsr(SK_AC *pAC, SK_IOC IoC);
 
 #endif

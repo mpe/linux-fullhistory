@@ -2,6 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amutils - interpreter/scanner utilities
+ *              $Revision: 53 $
  *
  *****************************************************************************/
 
@@ -25,21 +26,21 @@
 
 
 #include "acpi.h"
-#include "parser.h"
-#include "interp.h"
+#include "acparser.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "namesp.h"
-#include "events.h"
+#include "acnamesp.h"
+#include "acevents.h"
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amutils");
+	 MODULE_NAME         ("amutils")
 
 
 typedef struct internal_search_st
 {
-	ACPI_OBJECT_INTERNAL        *dest_obj;
+	ACPI_OPERAND_OBJECT         *dest_obj;
 	u32                         index;
-	ACPI_OBJECT_INTERNAL        *source_obj;
+	ACPI_OPERAND_OBJECT         *source_obj;
 
 } INTERNAL_PKG_SEARCH_INFO;
 
@@ -49,7 +50,7 @@ typedef struct internal_search_st
 INTERNAL_PKG_SEARCH_INFO        copy_level[MAX_PACKAGE_DEPTH];
 
 
-static char                 hex[] =
+static NATIVE_CHAR          hex[] =
 	{'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'};
 
 
@@ -121,41 +122,10 @@ acpi_aml_validate_object_type (
 	if ((type > ACPI_TYPE_MAX && type < INTERNAL_TYPE_BEGIN) ||
 		(type > INTERNAL_TYPE_MAX))
 	{
-		return FALSE;
+		return (FALSE);
 	}
 
-	return TRUE;
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    Acpi_aml_append_operand_diag
- *
- * PARAMETERS:  *File_name      - Name of source file
- *              Line_num        - Line Number in file
- *              Op_code         - Op_code being executed
- *              Num_operands    - Number of operands Prep_stack tried to check
- *
- * DESCRIPTION: Print diagnostic information about operands.
- *              This function is intended to be called after Prep_stack
- *              has returned S_ERROR.
- *
- ******************************************************************************/
-
-void
-acpi_aml_append_operand_diag (
-	char                    *file_name,
-	s32                     line_num,
-	u16                     op_code,
-	ACPI_OBJECT_INTERNAL    **operands,
-	s32                     num_operands)
-{
-
-	/*
-	 * This function outputs debug information only
-	 */
-
+	return (TRUE);
 }
 
 
@@ -178,7 +148,7 @@ u32
 acpi_aml_buf_seq (void)
 {
 
-	return ++acpi_gbl_buf_seq;
+	return (++acpi_gbl_buf_seq);
 }
 
 
@@ -270,12 +240,12 @@ acpi_aml_release_global_lock (
  *
  ******************************************************************************/
 
-s32
+u32
 acpi_aml_digits_needed (
-	s32                     val,
-	s32                     base)
+	u32                     val,
+	u32                     base)
 {
-	s32                     num_digits = 0;
+	u32                     num_digits = 0;
 
 
 	if (base < 1) {
@@ -309,13 +279,13 @@ _ntohl (
 	union
 	{
 		u32                 value;
-		char                bytes[4];
+		u8                  bytes[4];
 	} out;
 
 	union
 	{
 		u32                 value;
-		char                bytes[4];
+		u8                  bytes[4];
 	} in;
 
 
@@ -326,7 +296,7 @@ _ntohl (
 	out.bytes[2] = in.bytes[1];
 	out.bytes[3] = in.bytes[0];
 
-	return out.value;
+	return (out.value);
 }
 
 
@@ -344,7 +314,7 @@ _ntohl (
 ACPI_STATUS
 acpi_aml_eisa_id_to_string (
 	u32                     numeric_id,
-	char                    *out_string)
+	NATIVE_CHAR             *out_string)
 {
 	u32                     id;
 
@@ -361,7 +331,7 @@ acpi_aml_eisa_id_to_string (
 	out_string[6] = hex[id & 0xf];
 	out_string[7] = 0;
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -381,16 +351,17 @@ acpi_aml_eisa_id_to_string (
 
 ACPI_STATUS
 acpi_aml_build_copy_internal_package_object (
-	ACPI_OBJECT_INTERNAL    *source_obj,
-	ACPI_OBJECT_INTERNAL    *dest_obj)
+	ACPI_OPERAND_OBJECT     *source_obj,
+	ACPI_OPERAND_OBJECT     *dest_obj,
+	ACPI_WALK_STATE         *walk_state)
 {
 	u32                         current_depth = 0;
 	ACPI_STATUS                 status = AE_OK;
 	u32                         length = 0;
 	u32                         this_index;
 	u32                         object_space = 0;
-	ACPI_OBJECT_INTERNAL        *this_dest_obj;
-	ACPI_OBJECT_INTERNAL        *this_source_obj;
+	ACPI_OPERAND_OBJECT         *this_dest_obj;
+	ACPI_OPERAND_OBJECT         *this_source_obj;
 	INTERNAL_PKG_SEARCH_INFO    *level_ptr;
 
 
@@ -429,8 +400,8 @@ acpi_aml_build_copy_internal_package_object (
 
 	while (1) {
 		this_index      = level_ptr->index;
-		this_dest_obj   = (ACPI_OBJECT_INTERNAL *) level_ptr->dest_obj->package.elements[this_index];
-		this_source_obj = (ACPI_OBJECT_INTERNAL *) level_ptr->source_obj->package.elements[this_index];
+		this_dest_obj   = (ACPI_OPERAND_OBJECT  *) level_ptr->dest_obj->package.elements[this_index];
+		this_source_obj = (ACPI_OPERAND_OBJECT  *) level_ptr->source_obj->package.elements[this_index];
 
 		if (IS_THIS_OBJECT_TYPE (this_source_obj, ACPI_TYPE_PACKAGE)) {
 			/*
@@ -458,7 +429,7 @@ acpi_aml_build_copy_internal_package_object (
 			 * update the buffer length counter
 			 */
 			object_space            = this_dest_obj->package.count *
-					  sizeof (ACPI_OBJECT_INTERNAL);
+					  sizeof (ACPI_OPERAND_OBJECT);
 			length                  += object_space;
 			current_depth++;
 			level_ptr               = &copy_level[current_depth];
@@ -474,9 +445,9 @@ acpi_aml_build_copy_internal_package_object (
 					   this_source_obj->common.type);
 			level_ptr->dest_obj->package.elements[this_index] = this_dest_obj;
 
-			status = acpi_aml_store_object_to_object(this_source_obj, this_dest_obj);
+			status = acpi_aml_store_object_to_object(this_source_obj, this_dest_obj, walk_state);
 
-			if (status != AE_OK) {
+			if (ACPI_FAILURE (status)) {
 				/*
 				 * Failure get out
 				 */
@@ -511,12 +482,6 @@ acpi_aml_build_copy_internal_package_object (
 			}
 		}   /* else object is NOT a package */
 	}   /* while (1)  */
-
-
-	/*
-	 * We'll never get here, but the compiler whines about return value
-	 */
-	return (AE_OK);
 }
 
 

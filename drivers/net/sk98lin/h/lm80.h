@@ -2,8 +2,8 @@
  *
  * Name:	lm80.h	
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.2 $
- * Date:	$Date: 1999/03/12 13:26:51 $
+ * Version:	$Revision: 1.3 $
+ * Date:	$Date: 1999/11/22 13:41:19 $
  * Purpose:	Contains all defines for the LM80 Chip
  *		(National Semiconductor).
  *
@@ -27,6 +27,9 @@
  *
  * History:
  *	$Log: lm80.h,v $
+ *	Revision 1.3  1999/11/22 13:41:19  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.2  1999/03/12 13:26:51  malthoff
  *	remove __STDC__.
  *	

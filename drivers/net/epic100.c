@@ -33,9 +33,9 @@
 	LK1.1.4 (jgarzik):
 	* Merge becker test version 1.09 (5/29/2000)
 
-	LK1.1.5 (jgarzik):
-	* Fix locking
-	* Limit 83c175 probe to ethernet-class PCI devices
+	LK1.1.5:
+	* Fix locking (jgarzik)
+	* Limit 83c175 probe to ethernet-class PCI devices (rgooch)
 
 */
 

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: cmeval - Object evaluation
+ *              $Revision: 14 $
  *
  *****************************************************************************/
 
@@ -25,19 +25,19 @@
 
 
 #include "acpi.h"
-#include "namesp.h"
-#include "interp.h"
+#include "acnamesp.h"
+#include "acinterp.h"
 
 
 #define _COMPONENT          MISCELLANEOUS
-	 MODULE_NAME         ("cmeval");
+	 MODULE_NAME         ("cmeval")
 
 
 /****************************************************************************
  *
  * FUNCTION:    Acpi_cm_evaluate_numeric_object
  *
- * PARAMETERS:  Acpi_device         - NTE for the device
+ * PARAMETERS:  Device_node         - Node for the device
  *              *Address            - Where the value is returned
  *
  * RETURN:      Status
@@ -51,17 +51,17 @@
 
 ACPI_STATUS
 acpi_cm_evaluate_numeric_object (
-	char                    *object_name,
-	ACPI_NAMED_OBJECT       *acpi_device,
+	NATIVE_CHAR             *object_name,
+	ACPI_NAMESPACE_NODE     *device_node,
 	u32                     *address)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_STATUS             status;
 
 
 	/* Execute the method */
 
-	status = acpi_ns_evaluate_relative (acpi_device, object_name, NULL, &obj_desc);
+	status = acpi_ns_evaluate_relative (device_node, object_name, NULL, &obj_desc);
 	if (ACPI_FAILURE (status)) {
 
 		return (status);
@@ -99,7 +99,7 @@ acpi_cm_evaluate_numeric_object (
  *
  * FUNCTION:    Acpi_cm_execute_HID
  *
- * PARAMETERS:  Acpi_device         - NTE for the device
+ * PARAMETERS:  Device_node         - Node for the device
  *              *Hid                - Where the HID is returned
  *
  * RETURN:      Status
@@ -113,16 +113,16 @@ acpi_cm_evaluate_numeric_object (
 
 ACPI_STATUS
 acpi_cm_execute_HID (
-	ACPI_NAMED_OBJECT       *acpi_device,
+	ACPI_NAMESPACE_NODE     *device_node,
 	DEVICE_ID               *hid)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_STATUS             status;
 
 
 	/* Execute the method */
 
-	status = acpi_ns_evaluate_relative (acpi_device,
+	status = acpi_ns_evaluate_relative (device_node,
 			 METHOD_NAME__HID, NULL, &obj_desc);
 	if (ACPI_FAILURE (status)) {
 
@@ -176,7 +176,7 @@ acpi_cm_execute_HID (
  *
  * FUNCTION:    Acpi_cm_execute_UID
  *
- * PARAMETERS:  Acpi_device         - NTE for the device
+ * PARAMETERS:  Device_node         - Node for the device
  *              *Uid                - Where the UID is returned
  *
  * RETURN:      Status
@@ -190,16 +190,16 @@ acpi_cm_execute_HID (
 
 ACPI_STATUS
 acpi_cm_execute_UID (
-	ACPI_NAMED_OBJECT       *acpi_device,
+	ACPI_NAMESPACE_NODE     *device_node,
 	DEVICE_ID               *uid)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_STATUS             status;
 
 
 	/* Execute the method */
 
-	status = acpi_ns_evaluate_relative (acpi_device,
+	status = acpi_ns_evaluate_relative (device_node,
 			 METHOD_NAME__UID, NULL, &obj_desc);
 	if (ACPI_FAILURE (status)) {
 
@@ -251,7 +251,7 @@ acpi_cm_execute_UID (
  *
  * FUNCTION:    Acpi_cm_execute_STA
  *
- * PARAMETERS:  Acpi_device         - NTE for the device
+ * PARAMETERS:  Device_node         - Node for the device
  *              *Flags              - Where the status flags are returned
  *
  * RETURN:      Status
@@ -265,16 +265,16 @@ acpi_cm_execute_UID (
 
 ACPI_STATUS
 acpi_cm_execute_STA (
-	ACPI_NAMED_OBJECT       *acpi_device,
+	ACPI_NAMESPACE_NODE     *device_node,
 	u32                     *flags)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_STATUS             status;
 
 
 	/* Execute the method */
 
-	status = acpi_ns_evaluate_relative (acpi_device,
+	status = acpi_ns_evaluate_relative (device_node,
 			 METHOD_NAME__STA, NULL, &obj_desc);
 	if (ACPI_FAILURE (status)) {
 

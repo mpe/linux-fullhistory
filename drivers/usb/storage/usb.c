@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: usb.c,v 1.33 2000/08/25 00:13:51 mdharm Exp $
+ * $Id: usb.c,v 1.39 2000/09/08 21:20:06 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -43,12 +43,12 @@
  * 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <linux/config.h>
 #include "usb.h"
 #include "scsiglue.h"
 #include "transport.h"
 #include "protocol.h"
 #include "debug.h"
+#include "initializers.h"
 #ifdef CONFIG_USB_STORAGE_HP8200e
 #include "shuttle_usbat.h"
 #endif
@@ -62,6 +62,7 @@
 #include "freecom.h"
 #endif
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -206,7 +207,7 @@ static int usb_stor_control_thread(void * __us)
 			 */
 			if (us->srb->sc_data_direction == SCSI_DATA_UNKNOWN) {
 				US_DEBUGP("UNKNOWN data direction\n");
-				us->srb->result = DID_ERROR;
+				us->srb->result = DID_ERROR << 16;
 				set_current_state(TASK_INTERRUPTIBLE);
 				us->srb->scsi_done(us->srb);
 				us->srb = NULL;
@@ -242,7 +243,7 @@ static int usb_stor_control_thread(void * __us)
 			/* handle those devices which can't do a START_STOP */
 			if ((us->srb->cmnd[0] == START_STOP) &&
 			    (us->flags & US_FL_START_STOP)) {
-				us->srb->result = GOOD;
+				us->srb->result = GOOD << 1;
 
 				set_current_state(TASK_INTERRUPTIBLE);
 				us->srb->scsi_done(us->srb);
@@ -264,12 +265,12 @@ static int usb_stor_control_thread(void * __us)
 					memcpy(us->srb->request_buffer, 
 					       usb_stor_sense_notready, 
 					       sizeof(usb_stor_sense_notready));
-					us->srb->result = GOOD;
+					us->srb->result = GOOD << 1;
 				} else {
 					memcpy(us->srb->sense_buffer, 
 					       usb_stor_sense_notready, 
 					       sizeof(usb_stor_sense_notready));
-					us->srb->result = CHECK_CONDITION;
+					us->srb->result = CHECK_CONDITION << 1;
 				}
 			} else { /* !us->pusb_dev */
 				/* we've got a command, let's do it! */
@@ -328,20 +329,6 @@ static int usb_stor_control_thread(void * __us)
  * restriction. However, if the flag is not present, then you
  * are free to use as many characters as you like.
  */
-
-int euscsi_init(struct us_data *us)
-{
-	unsigned char bar = 0x1;
-	int result;
-
-	US_DEBUGP("Attempting to init eUSCSI bridge...\n");
-	result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev, 0),
-			0x0C, USB_RECIP_INTERFACE | USB_TYPE_VENDOR,
-			0x01, 0x0, &bar, 0x1, 5*HZ);
-	US_DEBUGP("-- result is %d\n", result);
-	US_DEBUGP("-- bar afterwards is %d\n", bar);
-}
-
 static struct us_unusual_dev us_unusual_dev_list[] = {
 
 	{ 0x03f0, 0x0107, 0x0200, 0x0200, 
@@ -367,7 +354,7 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 	{ 0x04e6, 0x0002, 0x0100, 0x0100, 
 		"Shuttle",
 		"eUSCSI Bridge",
-		US_SC_SCSI, US_PR_BULK, euscsi_init, 
+		US_SC_SCSI, US_PR_BULK, usb_stor_euscsi_init, 
 		US_FL_SCM_MULT_TARG }, 
 
 #ifdef CONFIG_USB_STORAGE_SDDR09
@@ -392,28 +379,34 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 		US_SC_SCSI, US_PR_CB, NULL, 
 		US_FL_SINGLE_LUN}, 
 
+	{ 0x04e6, 0x0007, 0x0100, 0x0200, 
+		"Sony",
+		"Hifd",
+		US_SC_SCSI, US_PR_CB, NULL, 
+		US_FL_SINGLE_LUN}, 
+
 	{ 0x04e6, 0x0009, 0x0200, 0x0200, 
 		"Shuttle",
-		"ATA/ATAPI Bridge",
+		"eUSB ATA/ATAPI Adapter",
 		US_SC_8020, US_PR_CB, NULL, 
 		US_FL_SINGLE_LUN},
 
-	{ 0x04e6, 0x000A, 0x0200, 0x0200, 
+	{ 0x04e6, 0x000a, 0x0200, 0x0200, 
 		"Shuttle",
-		"Compact Flash Reader",
+		"eUSB CompactFlash Adapter",
 		US_SC_8020, US_PR_CB, NULL, 
 		US_FL_SINGLE_LUN},
 
 	{ 0x04e6, 0x000B, 0x0100, 0x0100, 
 		"Shuttle",
 		"eUSCSI Bridge",
-		US_SC_SCSI, US_PR_BULK, euscsi_init, 
+		US_SC_SCSI, US_PR_BULK, usb_stor_euscsi_init, 
 		US_FL_SCM_MULT_TARG }, 
 
 	{ 0x04e6, 0x000C, 0x0100, 0x0100, 
 		"Shuttle",
 		"eUSCSI Bridge",
-		US_SC_SCSI, US_PR_BULK, euscsi_init, 
+		US_SC_SCSI, US_PR_BULK, usb_stor_euscsi_init, 
 		US_FL_SCM_MULT_TARG }, 
 
 	{ 0x04e6, 0x0101, 0x0200, 0x0200, 
@@ -424,7 +417,7 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 
 	{ 0x054c, 0x0010, 0x0210, 0x0210, 
 		"Sony",
-		"DSC-S30/S70", 
+		"DSC-S30/S70/505V", 
 		US_SC_SCSI, US_PR_CB, NULL,
 		US_FL_SINGLE_LUN | US_FL_START_STOP | US_FL_MODE_XLATE },
 
@@ -454,9 +447,23 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 
 	{ 0x05ab, 0x0031, 0x0100, 0x0100, 
 		"In-System",
-		"USB/IDE Bridge",
+		"USB/IDE Bridge (ATAPI ONLY!)",
 		US_SC_8070, US_PR_BULK, NULL,
 		0 }, 
+
+	{ 0x0644, 0x0000, 0x0100, 0x0100, 
+		"TEAC",
+		"Floppy Drive",
+		US_SC_UFI, US_PR_CB, NULL,
+		0 }, 
+
+#ifdef CONFIG_USB_STORAGE_SDDR09
+	{ 0x066b, 0x0105, 0x0100, 0x0100, 
+		"Olympus",
+		"Camedia MAUSB-2",
+		US_SC_SCSI, US_PR_EUSB_SDDR09, NULL,
+		US_FL_SINGLE_LUN | US_FL_START_STOP },
+#endif
 
 	{ 0x0693, 0x0005, 0x0100, 0x0100,
 		"Hagiwara",
@@ -493,20 +500,20 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 	{ 0x07af, 0x0004, 0x0100, 0x0100, 
 		"Microtech",
 		"USB-SCSI-DB25",
-		US_SC_SCSI, US_PR_BULK, euscsi_init,
+		US_SC_SCSI, US_PR_BULK, usb_stor_euscsi_init,
 		US_FL_SCM_MULT_TARG }, 
 
 #ifdef CONFIG_USB_STORAGE_FREECOM
         { 0x07ab, 0xfc01, 0x0921, 0x0921,
                 "Freecom",
                 "USB-IDE",
-                US_SC_8070, US_PR_FREECOM, NULL, US_FL_SINGLE_LUN },
+                US_SC_8070, US_PR_FREECOM, freecom_init, US_FL_SINGLE_LUN },
 #endif
 
 	{ 0x07af, 0x0005, 0x0100, 0x0100, 
 		"Microtech",
 		"USB-SCSI-HD50",
-		US_SC_SCSI, US_PR_BULK, euscsi_init,
+		US_SC_SCSI, US_PR_BULK, usb_stor_euscsi_init,
 		US_FL_SCM_MULT_TARG }, 
 
 #ifdef CONFIG_USB_STORAGE_DPCM
@@ -613,7 +620,9 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 	unsigned int flags;
 	struct us_unusual_dev *unusual_dev;
 	struct us_data *ss = NULL;
+#ifdef CONFIG_USB_STORAGE_SDDR09
 	int result;
+#endif
 
 	/* these are temporary copies -- we test on these, then put them
 	 * in the us-data structure 

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: dswscope - Scope stack manipulation
+ *              $Revision: 38 $
  *
  *****************************************************************************/
 
@@ -25,12 +25,12 @@
 
 
 #include "acpi.h"
-#include "interp.h"
-#include "dispatch.h"
+#include "acinterp.h"
+#include "acdispat.h"
 
 
 #define _COMPONENT          NAMESPACE
-	 MODULE_NAME         ("dswscope");
+	 MODULE_NAME         ("dswscope")
 
 
 #define STACK_POP(head) head
@@ -69,24 +69,24 @@ acpi_ds_scope_stack_clear (
  *
  * FUNCTION:    Acpi_ds_scope_stack_push
  *
- * PARAMETERS:  *New_scope,             - Name to be made current
- *              Type,                   - Type of frame being pushed
+ * PARAMETERS:  *Node,              - Name to be made current
+ *              Type,               - Type of frame being pushed
  *
  * DESCRIPTION: Push the current scope on the scope stack, and make the
- *              passed nte current.
+ *              passed Node current.
  *
  ***************************************************************************/
 
 ACPI_STATUS
 acpi_ds_scope_stack_push (
-	ACPI_NAME_TABLE         *new_scope,
+	ACPI_NAMESPACE_NODE     *node,
 	OBJECT_TYPE_INTERNAL    type,
 	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_GENERIC_STATE      *scope_info;
 
 
-	if (!new_scope) {
+	if (!node) {
 		/*  invalid scope   */
 
 		REPORT_ERROR ("Ds_scope_stack_push: null scope passed");
@@ -109,7 +109,7 @@ acpi_ds_scope_stack_push (
 
 	/* Init new scope object */
 
-	scope_info->scope.name_table = new_scope;
+	scope_info->scope.node = node;
 	scope_info->common.value = (u16) type;
 
 	/* Push new scope object onto stack */

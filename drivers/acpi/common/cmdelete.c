@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: cmdelete - object deletion and reference count utilities
+ *              $Revision: 53 $
  *
  *****************************************************************************/
 
@@ -25,13 +25,13 @@
 
 
 #include "acpi.h"
-#include "interp.h"
-#include "namesp.h"
-#include "tables.h"
-#include "parser.h"
+#include "acinterp.h"
+#include "acnamesp.h"
+#include "actables.h"
+#include "acparser.h"
 
 #define _COMPONENT          MISCELLANEOUS
-	 MODULE_NAME         ("cmdelete");
+	 MODULE_NAME         ("cmdelete")
 
 
 /******************************************************************************
@@ -49,7 +49,7 @@
 
 void
 acpi_cm_delete_internal_obj (
-	ACPI_OBJECT_INTERNAL    *object)
+	ACPI_OPERAND_OBJECT     *object)
 {
 	void                    *obj_pointer = NULL;
 
@@ -110,14 +110,7 @@ acpi_cm_delete_internal_obj (
 
 	case ACPI_TYPE_METHOD:
 
-		/* Delete parse tree if it exists */
-
-		if (object->method.parser_op) {
-			acpi_ps_delete_parse_tree (object->method.parser_op);
-			object->method.parser_op = NULL;
-		}
-
-		/* Delete semaphore if it exists */
+		/* Delete the method semaphore if it exists */
 
 		if (object->method.semaphore) {
 			acpi_os_delete_semaphore (object->method.semaphore);
@@ -146,7 +139,7 @@ acpi_cm_delete_internal_obj (
 	/* Only delete the object if it was dynamically allocated */
 
 
-	if (!(object->common.flags & AO_STATIC_ALLOCATION)) {
+	if (!(object->common.flags & AOPOBJ_STATIC_ALLOCATION)) {
 		acpi_cm_delete_object_desc (object);
 
 	}
@@ -170,9 +163,9 @@ acpi_cm_delete_internal_obj (
 
 ACPI_STATUS
 acpi_cm_delete_internal_object_list (
-	ACPI_OBJECT_INTERNAL    **obj_list)
+	ACPI_OPERAND_OBJECT     **obj_list)
 {
-	ACPI_OBJECT_INTERNAL    **internal_obj;
+	ACPI_OPERAND_OBJECT     **internal_obj;
 
 
 	/* Walk the null-terminated internal list */
@@ -220,8 +213,8 @@ acpi_cm_delete_internal_object_list (
 
 void
 acpi_cm_update_ref_count (
-	ACPI_OBJECT_INTERNAL    *object,
-	s32                     action)
+	ACPI_OPERAND_OBJECT     *object,
+	u32                     action)
 {
 	u16                     count;
 	u16                     new_count;
@@ -308,23 +301,23 @@ acpi_cm_update_ref_count (
  * DESCRIPTION: Increment the object reference count
  *
  * Object references are incremented when:
- * 1) An object is added as a value in an Name Table Entry (NTE)
+ * 1) An object is attached to a Node (namespace object)
  * 2) An object is copied (all subobjects must be incremented)
  *
  * Object references are decremented when:
- * 1) An object is removed from an NTE
+ * 1) An object is detached from an Node
  *
  ******************************************************************************/
 
 ACPI_STATUS
 acpi_cm_update_object_reference (
-	ACPI_OBJECT_INTERNAL    *object,
+	ACPI_OPERAND_OBJECT     *object,
 	u16                     action)
 {
 	ACPI_STATUS             status;
 	u32                     i;
-	ACPI_OBJECT_INTERNAL    *next;
-	ACPI_OBJECT_INTERNAL    *new;
+	ACPI_OPERAND_OBJECT     *next;
+	ACPI_OPERAND_OBJECT     *new;
 	ACPI_GENERIC_STATE       *state_list = NULL;
 	ACPI_GENERIC_STATE       *state;
 
@@ -381,9 +374,9 @@ acpi_cm_update_object_reference (
 
 			/* Must walk list of address handlers */
 
-			next = object->addr_handler.link;
+			next = object->addr_handler.next;
 			while (next) {
-				new = next->addr_handler.link;
+				new = next->addr_handler.next;
 				acpi_cm_update_ref_count (next, action);
 
 				next = new;
@@ -512,7 +505,7 @@ acpi_cm_update_object_reference (
 
 void
 acpi_cm_add_reference (
-	ACPI_OBJECT_INTERNAL    *object)
+	ACPI_OPERAND_OBJECT     *object)
 {
 
 
@@ -549,7 +542,7 @@ acpi_cm_add_reference (
 
 void
 acpi_cm_remove_reference (
-	ACPI_OBJECT_INTERNAL    *object)
+	ACPI_OPERAND_OBJECT     *object)
 {
 
 

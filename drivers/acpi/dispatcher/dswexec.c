@@ -1,7 +1,8 @@
 /******************************************************************************
  *
  * Module Name: dswexec - Dispatcher method execution callbacks;
- *                          Dispatch to interpreter.
+ *                        dispatch to interpreter.
+ *              $Revision: 42 $
  *
  *****************************************************************************/
 
@@ -25,16 +26,16 @@
 
 
 #include "acpi.h"
-#include "parser.h"
+#include "acparser.h"
 #include "amlcode.h"
-#include "dispatch.h"
-#include "interp.h"
-#include "namesp.h"
-#include "debugger.h"
+#include "acdispat.h"
+#include "acinterp.h"
+#include "acnamesp.h"
+#include "acdebug.h"
 
 
 #define _COMPONENT          DISPATCHER
-	 MODULE_NAME         ("dswexec");
+	 MODULE_NAME         ("dswexec")
 
 
 /*****************************************************************************
@@ -55,14 +56,29 @@
 
 ACPI_STATUS
 acpi_ds_exec_begin_op (
+	u16                     opcode,
+	ACPI_PARSE_OBJECT       *op,
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op)
+	ACPI_PARSE_OBJECT       **out_op)
 {
-	ACPI_OP_INFO            *op_info;
+	ACPI_OPCODE_INFO        *op_info;
 	ACPI_STATUS             status = AE_OK;
 
 
+	if (!op) {
+		status = acpi_ds_load2_begin_op (opcode, NULL, walk_state, out_op);
+		if (ACPI_FAILURE (status)) {
+			return (status);
+		}
+
+		op = *out_op;
+	}
+
 	if (op == walk_state->origin) {
+		if (out_op) {
+			*out_op = op;
+		}
+
 		return (AE_OK);
 	}
 
@@ -97,7 +113,7 @@ acpi_ds_exec_begin_op (
 	 * Handle the opcode based upon the opcode type
 	 */
 
-	switch (op_info->flags & OP_INFO_TYPE)
+	switch (ACPI_GET_OP_CLASS (op_info))
 	{
 	case OPTYPE_CONTROL:
 
@@ -107,7 +123,7 @@ acpi_ds_exec_begin_op (
 
 	case OPTYPE_NAMED_OBJECT:
 
-		if (walk_state->origin->opcode == AML_METHOD_OP) {
+		if (walk_state->walk_type == WALK_METHOD) {
 			/*
 			 * Found a named object declaration during method
 			 * execution;  we must enter this object into the
@@ -116,7 +132,7 @@ acpi_ds_exec_begin_op (
 			 * of this method.
 			 */
 
-			status = acpi_ds_load2_begin_op (walk_state, op);
+			status = acpi_ds_load2_begin_op (op->opcode, op, walk_state, NULL);
 		}
 		break;
 
@@ -150,17 +166,17 @@ acpi_ds_exec_begin_op (
 ACPI_STATUS
 acpi_ds_exec_end_op (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op)
+	ACPI_PARSE_OBJECT       *op)
 {
 	ACPI_STATUS             status = AE_OK;
 	u16                     opcode;
 	u8                      optype;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_GENERIC_OP         *next_op;
-	ACPI_NAMED_OBJECT       *entry;
-	ACPI_GENERIC_OP         *first_arg;
-	ACPI_OBJECT_INTERNAL    *result_obj = NULL;
-	ACPI_OP_INFO            *op_info;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_PARSE_OBJECT       *next_op;
+	ACPI_NAMESPACE_NODE     *node;
+	ACPI_PARSE_OBJECT       *first_arg;
+	ACPI_OPERAND_OBJECT     *result_obj = NULL;
+	ACPI_OPCODE_INFO        *op_info;
 	u32                     operand_index;
 
 
@@ -168,11 +184,11 @@ acpi_ds_exec_end_op (
 
 
 	op_info = acpi_ps_get_opcode_info (op->opcode);
-	if (!op_info) {
+	if (ACPI_GET_OP_TYPE (op_info) != ACPI_OP_TYPE_OPCODE) {
 		return (AE_NOT_IMPLEMENTED);
 	}
 
-	optype = (u8) (op_info->flags & OP_INFO_TYPE);
+	optype = (u8) ACPI_GET_OP_CLASS (op_info);
 	first_arg = op->value.arg;
 
 	/* Init the walk state */
@@ -182,6 +198,9 @@ acpi_ds_exec_end_op (
 
 
 	/* Call debugger for single step support (DEBUG build only) */
+
+	DEBUGGER_EXEC (status = acpi_db_single_step (walk_state, op, optype));
+	DEBUGGER_EXEC (if (ACPI_FAILURE (status)) {return (status);});
 
 
 	/* Decode the opcode */
@@ -219,6 +238,7 @@ acpi_ds_exec_end_op (
 	case OPTYPE_MATCH:
 	case OPTYPE_CREATE_FIELD:
 	case OPTYPE_FATAL:
+
 
 		status = acpi_ds_create_operands (walk_state, first_arg);
 		if (ACPI_FAILURE (status)) {
@@ -376,12 +396,12 @@ acpi_ds_exec_end_op (
 	case OPTYPE_METHOD_CALL:
 
 		/*
-		 * (AML_METHODCALL) Op->Value->Arg->Acpi_named_object contains
-		 * the method NTE pointer
+		 * (AML_METHODCALL) Op->Value->Arg->Node contains
+		 * the method Node pointer
 		 */
 		/* Next_op points to the op that holds the method name */
 		next_op = first_arg;
-		entry = next_op->acpi_named_object;
+		node = next_op->node;
 
 		/* Next_op points to first argument op */
 		next_op = next_op->next;
@@ -410,7 +430,7 @@ acpi_ds_exec_end_op (
 
 		/* Open new scope on the scope stack */
 /*
-		Status = Acpi_ns_scope_stack_push_entry (Entry);
+		Status = Acpi_ns_scope_stack_push_entry (Node);
 		if (ACPI_FAILURE (Status)) {
 			break;
 		}
@@ -419,7 +439,7 @@ acpi_ds_exec_end_op (
 		/* Tell the walk loop to preempt this running method and
 		execute the new method */
 
-		status = AE_CTRL_PENDING;
+		status = AE_CTRL_TRANSFER;
 
 		/* Return now; we don't want to disturb anything,
 		especially the operand count! */
@@ -431,14 +451,20 @@ acpi_ds_exec_end_op (
 	case OPTYPE_NAMED_OBJECT:
 
 
-		if ((walk_state->origin->opcode == AML_METHOD_OP) &&
-			(walk_state->origin != op))
+		status = acpi_ds_load2_end_op (walk_state, op);
+		if (ACPI_FAILURE (status)) {
+			break;
+		}
+/*
+		if ((Walk_state->Origin->Opcode == AML_METHOD_OP) &&
+			(Walk_state->Origin != Op))
 		{
-			status = acpi_ds_load2_end_op (walk_state, op);
-			if (ACPI_FAILURE (status)) {
+			Status = Acpi_ds_load2_end_op (Walk_state, Op);
+			if (ACPI_FAILURE (Status)) {
 				break;
 			}
 		}
+*/
 
 		switch (op->opcode)
 		{
@@ -504,7 +530,7 @@ acpi_ds_exec_end_op (
 				goto cleanup;
 			}
 
-			status = acpi_aml_resolve_to_value (&walk_state->operands [0]);
+			status = acpi_aml_resolve_to_value (&walk_state->operands [0], walk_state);
 			if (ACPI_FAILURE (status)) {
 				goto cleanup;
 			}
@@ -537,6 +563,8 @@ acpi_ds_exec_end_op (
 
 		 /* Break to debugger to display result */
 
+		DEBUGGER_EXEC (acpi_db_display_result_object (obj_desc, walk_state));
+
 		/* Delete the predicate result object (we know that
 		we don't need it anymore) and cleanup the stack */
 
@@ -551,6 +579,8 @@ cleanup:
 
 	if (result_obj) {
 		/* Break to debugger to display result */
+
+		DEBUGGER_EXEC (acpi_db_display_result_object (result_obj, walk_state));
 
 		/*
 		 * Delete the result op if and only if:

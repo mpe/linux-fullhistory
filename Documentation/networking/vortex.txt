@@ -166,8 +166,9 @@ watchdog=N
 
   Sets the time duration (in milliseconds) after which the kernel
   decides that the transmitter has become stuck and needs to be reset. 
-  This is mainly for debugging purposes.  The default value is 400 (0.4
-  seconds).
+  This is mainly for debugging purposes, although it may be advantageous
+  to increase this value on LANs which have very high collision rates.
+  The default value is 400 (0.4 seconds).
 
 Additional resources
 --------------------

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
- * Name: internal.h - Internal data types used across the ACPI subsystem
+ * Name: aclocal.h - Internal data types used across the ACPI subsystem
+ *       $Revision: 77 $
  *
  *****************************************************************************/
 
@@ -23,10 +23,8 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _ACPI_INTERNAL_H
-#define _ACPI_INTERNAL_H
-
-#include "config.h"
+#ifndef __ACLOCAL_H__
+#define __ACLOCAL_H__
 
 
 #define WAIT_FOREVER                ((u32) -1)
@@ -37,11 +35,12 @@ typedef u32                         ACPI_MUTEX_HANDLE;
 
 /* Object descriptor types */
 
-#define ACPI_DESC_TYPE_INTERNAL     0xAA
-#define ACPI_DESC_TYPE_PARSER       0xBB
-#define ACPI_DESC_TYPE_STATE        0xCC
-#define ACPI_DESC_TYPE_WALK         0xDD
-#define ACPI_DESC_TYPE_NAMED        0xEE
+#define ACPI_CACHED_OBJECT          0x11    /* ORed in when object is cached */
+#define ACPI_DESC_TYPE_STATE        0x22
+#define ACPI_DESC_TYPE_WALK         0x44
+#define ACPI_DESC_TYPE_PARSER       0x66
+#define ACPI_DESC_TYPE_INTERNAL     0x88
+#define ACPI_DESC_TYPE_NAMED        0xAA
 
 
 /*****************************************************************************
@@ -80,7 +79,7 @@ typedef u32                         ACPI_MUTEX_HANDLE;
 
 /* Names for the mutexes used in the subsystem */
 
-static char                 *acpi_gbl_mutex_names[] =
+static NATIVE_CHAR          *acpi_gbl_mutex_names[] =
 {
 	"ACPI_MTX_Hardware",
 	"ACPI_MTX_Memory",
@@ -139,58 +138,45 @@ typedef u16                         ACPI_OWNER_ID;
 
 typedef enum
 {
-	IMODE_LOAD_PASS1 = 0x01,
-	IMODE_LOAD_PASS2 = 0x02,
-	IMODE_EXECUTE   = 0x0E
+	IMODE_LOAD_PASS1                = 0x01,
+	IMODE_LOAD_PASS2                = 0x02,
+	IMODE_EXECUTE                   = 0x0E
 
 } OPERATING_MODE;
 
 
 /*
- * The Acpi_named_object describes a named object that appears in the AML
- * An Acpi_name_table is used to store Acpi_named_objects.
+ * The Node describes a named object that appears in the AML
+ * An Acpi_node is used to store Nodes.
  *
  * Data_type is used to differentiate between internal descriptors, and MUST
  * be the first byte in this structure.
  */
 
-typedef struct acpi_named_object
+typedef struct acpi_node
 {
 	u8                      data_type;
 	u8                      type;           /* Type associated with this name */
-	u8                      this_index;     /* Entry number */
-	u8                      flags;
 	u32                     name;           /* ACPI Name, always 4 chars per ACPI spec */
+	u16                     owner_id;
 
 
 	void                    *object;        /* Pointer to attached ACPI object (optional) */
-	struct acpi_name_table  *child_table;   /* Scope owned by this name (optional) */
-	ACPI_OWNER_ID           owner_id;       /* ID of owner - either an ACPI table or a method */
+	struct acpi_node        *child;         /* first child */
+	struct acpi_node        *peer;          /* Next peer*/
 	u16                     reference_count; /* Current count of references and children */
+	u8                      flags;
 
-#ifdef _IA64
-	u32                     fill1;          /* 64-bit alignment */
-#endif
-
-} ACPI_NAMED_OBJECT;
+} ACPI_NAMESPACE_NODE;
 
 
-typedef struct acpi_name_table
-{
-	struct acpi_name_table  *next_table;
-	struct acpi_name_table  *parent_table;
-	ACPI_NAMED_OBJECT       *parent_entry;
-	ACPI_NAMED_OBJECT       entries[1];
-
-} ACPI_NAME_TABLE;
+#define ENTRY_NOT_FOUND             NULL
 
 
-#define ENTRY_NOT_FOUND     NULL
+/* Node flags */
 
-
-/* NTE flags */
-
-#define NTE_AML_ATTACHMENT  0x1
+#define ANOBJ_AML_ATTACHMENT        0x1
+#define ANOBJ_END_OF_PEER_LIST      0x2
 
 
 /*
@@ -217,19 +203,16 @@ typedef struct acpi_table_desc
 
 typedef struct
 {
-	char                    *search_for;
+	NATIVE_CHAR             *search_for;
 	ACPI_HANDLE             *list;
-	s32                     *count;
+	u32                     *count;
 
 } FIND_CONTEXT;
 
 
 typedef struct
 {
-	ACPI_NAME_TABLE        *name_table;
-	u32                     position;
-	u8                      table_full;
-
+	ACPI_NAMESPACE_NODE     *node;
 } NS_SEARCH_DATA;
 
 
@@ -242,9 +225,9 @@ typedef struct
 
 typedef struct
 {
-	char                    *name;
+	NATIVE_CHAR             *name;
 	ACPI_OBJECT_TYPE        type;
-	char                    *val;
+	NATIVE_CHAR             *val;
 
 } PREDEFINED_NAMES;
 
@@ -338,141 +321,6 @@ typedef struct
 
 /*****************************************************************************
  *
- * Parser typedefs and structs
- *
- ****************************************************************************/
-
-
-#define OP_INFO_TYPE                0x1F
-#define OP_INFO_HAS_ARGS            0x20
-#define OP_INFO_CHILD_LOCATION      0xC0
-
-/*
- * AML opcode, name, and argument layout
- */
-typedef struct acpi_op_info
-{
-	u16                     opcode;         /* AML opcode */
-	u8                      flags;          /* Opcode type, Has_args flag */
-	u32                     parse_args;     /* Grammar/Parse time arguments */
-	u32                     runtime_args;   /* Interpret time arguments */
-
-	DEBUG_ONLY_MEMBERS (
-	char                    *name)          /* op name (debug only) */
-
-} ACPI_OP_INFO;
-
-
-typedef union acpi_op_value
-{
-	u32                     integer;        /* integer constant */
-	u32                     size;           /* bytelist or field size */
-	char                    *string;        /* NULL terminated string */
-	u8                      *buffer;        /* buffer or string */
-	char                    *name;          /* NULL terminated string */
-	struct acpi_generic_op  *arg;           /* arguments and contained ops */
-	ACPI_NAMED_OBJECT       *entry;         /* entry in interpreter namespace tbl */
-
-} ACPI_OP_VALUE;
-
-
-#define ACPI_COMMON_OP \
-	u8                      data_type;      /* To differentiate various internal objs */\
-	u8                      flags;          /* Type of Op */\
-	u16                     opcode;         /* AML opcode */\
-	u32                     aml_offset;     /* offset of declaration in AML */\
-	struct acpi_generic_op  *parent;        /* parent op */\
-	struct acpi_generic_op  *next;          /* next op */\
-	DEBUG_ONLY_MEMBERS (\
-	char                    op_name[16])    /* op name (debug only) */\
-			  /* NON-DEBUG members below: */\
-	void                    *acpi_named_object;/* for use by interpreter */\
-	ACPI_OP_VALUE           value;          /* Value or args associated with the opcode */\
-
-
-/*
- * generic operation (eg. If, While, Store)
- */
-typedef struct acpi_generic_op
-{
-	ACPI_COMMON_OP
-} ACPI_GENERIC_OP;
-
-
-/*
- * operation with a name (eg. Scope, Method, Name, Named_field, ...)
- */
-typedef struct acpi_named_op
-{
-	ACPI_COMMON_OP
-	u32                     name;           /* 4-byte name or zero if no name */
-
-} ACPI_NAMED_OP;
-
-
-/*
- * special operation for methods and regions (parsing must be deferred
- * until a first pass parse is completed)
- */
-typedef struct acpi_deferred_op
-{
-	ACPI_COMMON_OP
-	u32                     name;           /* 4-byte name or 0 if none */
-	u32                     body_length;    /* AML body size */
-	u8                      *body;          /* AML body */
-	u16                     thread_count;   /* Count of threads currently executing a method */
-
-} ACPI_DEFERRED_OP;
-
-
-/*
- * special operation for bytelists (Byte_list only)
- */
-typedef struct acpi_bytelist_op
-{
-	ACPI_COMMON_OP
-	u8                      *data;          /* bytelist data */
-
-} ACPI_BYTELIST_OP;
-
-
-/*
- * Parse state - one state per parser invocation and each control
- * method.
- */
-
-typedef struct acpi_parse_state
-{
-	u8                      *aml_start;     /* first AML byte */
-	u8                      *aml;           /* next AML byte */
-	u8                      *aml_end;       /* (last + 1) AML byte */
-	u8                      *pkg_end;       /* current package end */
-	ACPI_GENERIC_OP         *start_op;      /* root of parse tree */
-	struct acpi_parse_scope *scope;         /* current scope */
-	struct acpi_parse_scope *scope_avail;   /* unused (extra) scope structs */
-	struct acpi_parse_state *next;
-
-} ACPI_PARSE_STATE;
-
-
-/*
- * Parse scope - one per ACPI scope
- */
-
-typedef struct acpi_parse_scope
-{
-	ACPI_GENERIC_OP         *op;            /* current op being parsed */
-	u8                      *arg_end;       /* current argument end */
-	u8                      *pkg_end;       /* current package end */
-	struct acpi_parse_scope *parent;        /* parent scope */
-	u32                     arg_list;       /* next argument to parse */
-	u32                     arg_count;      /* Number of fixed arguments */
-
-} ACPI_PARSE_SCOPE;
-
-
-/*****************************************************************************
- *
  * Generic "state" object for stacks
  *
  ****************************************************************************/
@@ -483,6 +331,11 @@ typedef struct acpi_parse_scope
 #define CONTROL_PREDICATE_EXECUTING           0xC2
 #define CONTROL_PREDICATE_FALSE               0xC3
 #define CONTROL_PREDICATE_TRUE                0xC4
+
+
+/* Forward declaration */
+struct acpi_walk_state;
+struct acpi_parse_obj ;
 
 
 #define ACPI_STATE_COMMON                  /* Two 32-bit fields and a pointer */\
@@ -505,7 +358,7 @@ typedef struct acpi_common_state
 typedef struct acpi_update_state
 {
 	ACPI_STATE_COMMON
-	union acpi_obj_internal *object;
+	union acpi_operand_obj  *object;
 
 } ACPI_UPDATE_STATE;
 
@@ -516,7 +369,8 @@ typedef struct acpi_update_state
 typedef struct acpi_control_state
 {
 	ACPI_STATE_COMMON
-	ACPI_GENERIC_OP         *predicate_op;  /* Start of if/while predicate */
+	struct acpi_parse_obj   *predicate_op;
+	u8                      *aml_predicate_start; /* Start of if/while predicate */
 
 } ACPI_CONTROL_STATE;
 
@@ -528,9 +382,21 @@ typedef struct acpi_control_state
 typedef struct acpi_scope_state
 {
 	ACPI_STATE_COMMON
-	ACPI_NAME_TABLE         *name_table;
+	ACPI_NAMESPACE_NODE     *node;
 
 } ACPI_SCOPE_STATE;
+
+
+typedef struct acpi_pscope_state
+{
+	ACPI_STATE_COMMON
+	struct acpi_parse_obj   *op;            /* current op being parsed */
+	u8                      *arg_end;       /* current argument end */
+	u8                      *pkg_end;       /* current package end */
+	u32                     arg_list;       /* next argument to parse */
+	u32                     arg_count;      /* Number of fixed arguments */
+
+} ACPI_PSCOPE_STATE;
 
 
 typedef union acpi_gen_state
@@ -539,8 +405,127 @@ typedef union acpi_gen_state
 	ACPI_CONTROL_STATE      control;
 	ACPI_UPDATE_STATE       update;
 	ACPI_SCOPE_STATE        scope;
+	ACPI_PSCOPE_STATE       parse_scope;
 
 } ACPI_GENERIC_STATE;
+
+
+typedef
+ACPI_STATUS (*ACPI_PARSE_DOWNWARDS) (
+	u16                     opcode,
+	struct acpi_parse_obj   *op,
+	struct acpi_walk_state  *walk_state,
+	struct acpi_parse_obj   **out_op);
+
+typedef
+ACPI_STATUS (*ACPI_PARSE_UPWARDS) (
+	struct acpi_walk_state  *walk_state,
+	struct acpi_parse_obj   *op);
+
+
+/*****************************************************************************
+ *
+ * Parser typedefs and structs
+ *
+ ****************************************************************************/
+
+
+#define ACPI_OP_CLASS_MASK          0x1F
+#define ACPI_OP_ARGS_MASK           0x20
+#define ACPI_OP_TYPE_MASK           0xC0
+
+#define ACPI_OP_TYPE_OPCODE         0x00
+#define ACPI_OP_TYPE_ASCII          0x40
+#define ACPI_OP_TYPE_PREFIX         0x80
+#define ACPI_OP_TYPE_UNKNOWN        0xC0
+
+#define ACPI_GET_OP_CLASS(a)        ((a)->flags & ACPI_OP_CLASS_MASK)
+#define ACPI_GET_OP_ARGS(a)         ((a)->flags & ACPI_OP_ARGS_MASK)
+#define ACPI_GET_OP_TYPE(a)         ((a)->flags & ACPI_OP_TYPE_MASK)
+
+
+/*
+ * AML opcode, name, and argument layout
+ */
+typedef struct acpi_opcode_info
+{
+	u8                      flags;          /* Opcode type, Has_args flag */
+	u32                     parse_args;     /* Grammar/Parse time arguments */
+	u32                     runtime_args;   /* Interpret time arguments */
+
+	DEBUG_ONLY_MEMBERS (
+	NATIVE_CHAR             *name)          /* op name (debug only) */
+
+} ACPI_OPCODE_INFO;
+
+
+typedef union acpi_parse_val
+{
+	u32                     integer;        /* integer constant */
+	u32                     size;           /* bytelist or field size */
+	NATIVE_CHAR             *string;        /* NULL terminated string */
+	u8                      *buffer;        /* buffer or string */
+	NATIVE_CHAR             *name;          /* NULL terminated string */
+	struct acpi_parse_obj   *arg;           /* arguments and contained ops */
+
+} ACPI_PARSE_VALUE;
+
+
+#define ACPI_PARSE_COMMON \
+	u8                      data_type;      /* To differentiate various internal objs */\
+	u8                      flags;          /* Type of Op */\
+	u16                     opcode;         /* AML opcode */\
+	u32                     aml_offset;     /* offset of declaration in AML */\
+	struct acpi_parse_obj   *parent;        /* parent op */\
+	struct acpi_parse_obj   *next;          /* next op */\
+	DEBUG_ONLY_MEMBERS (\
+	NATIVE_CHAR             op_name[16])    /* op name (debug only) */\
+			  /* NON-DEBUG members below: */\
+	ACPI_NAMESPACE_NODE     *node;/* for use by interpreter */\
+	ACPI_PARSE_VALUE        value;          /* Value or args associated with the opcode */\
+
+
+/*
+ * generic operation (eg. If, While, Store)
+ */
+typedef struct acpi_parse_obj
+{
+	ACPI_PARSE_COMMON
+} ACPI_PARSE_OBJECT;
+
+
+/*
+ * Extended Op for named ops (Scope, Method, etc.), deferred ops (Methods and Op_regions),
+ * and bytelists.
+ */
+typedef struct acpi_parse2_obj
+{
+	ACPI_PARSE_COMMON
+	u8                      *data;          /* AML body or bytelist data */
+	u32                     length;         /* AML length */
+	u32                     name;           /* 4-byte name or zero if no name */
+
+} ACPI_PARSE2_OBJECT;
+
+
+/*
+ * Parse state - one state per parser invocation and each control
+ * method.
+ */
+
+typedef struct acpi_parse_state
+{
+	u8                      *aml_start;     /* first AML byte */
+	u8                      *aml;           /* next AML byte */
+	u8                      *aml_end;       /* (last + 1) AML byte */
+	u8                      *pkg_start;     /* current package begin */
+	u8                      *pkg_end;       /* current package end */
+	ACPI_PARSE_OBJECT       *start_op;      /* root of parse tree */
+	struct acpi_node        *start_node;
+	ACPI_GENERIC_STATE      *scope;         /* current scope */
+	struct acpi_parse_state *next;
+
+} ACPI_PARSE_STATE;
 
 
 /*****************************************************************************
@@ -558,6 +543,9 @@ typedef union acpi_gen_state
 #define NEXT_OP_DOWNWARD    1
 #define NEXT_OP_UPWARD      2
 
+#define WALK_METHOD         1
+#define WALK_NON_METHOD     0
+
 typedef struct acpi_walk_state
 {
 	u8                      data_type;                          /* To differentiate various internal objs */\
@@ -569,18 +557,37 @@ typedef struct acpi_walk_state
 	u8                      current_result;                     /* */
 
 	struct acpi_walk_state  *next;                              /* Next Walk_state in list */
-	ACPI_GENERIC_OP         *origin;                            /* Start of walk */
-	ACPI_GENERIC_OP         *prev_op;                           /* Last op that was processed */
-	ACPI_GENERIC_OP         *next_op;                           /* next op to be processed */
+	ACPI_PARSE_OBJECT       *origin;                            /* Start of walk */
+
+/* TBD: Obsolete with removal of WALK procedure ? */
+	ACPI_PARSE_OBJECT       *prev_op;                           /* Last op that was processed */
+	ACPI_PARSE_OBJECT       *next_op;                           /* next op to be processed */
+
+
 	ACPI_GENERIC_STATE      *control_state;                     /* List of control states (nested IFs) */
 	ACPI_GENERIC_STATE      *scope_info;                        /* Stack of nested scopes */
-	union acpi_obj_internal *return_desc;                       /* Return object, if any */
-	union acpi_obj_internal *method_desc;                       /* Method descriptor if running a method */
-	ACPI_GENERIC_OP         *method_call_op;                    /* Method_call Op if running a method */
-	union acpi_obj_internal *operands[OBJ_NUM_OPERANDS];        /* Operands passed to the interpreter */
-	union acpi_obj_internal *results[OBJ_NUM_OPERANDS];         /* Accumulated results */
-	struct acpi_named_object arguments[MTH_NUM_ARGS];           /* Control method arguments */
-	struct acpi_named_object local_variables[MTH_NUM_LOCALS];   /* Control method locals */
+	ACPI_PARSE_STATE        *parser_state;                      /* Current state of parser */
+	u8                      *aml_last_while;
+	ACPI_PARSE_DOWNWARDS    descending_callback;
+	ACPI_PARSE_UPWARDS      ascending_callback;
+
+	union acpi_operand_obj  *return_desc;                       /* Return object, if any */
+	union acpi_operand_obj  *method_desc;                       /* Method descriptor if running a method */
+	struct acpi_node        *method_node;                       /* Method Node if running a method */
+	ACPI_PARSE_OBJECT       *method_call_op;                    /* Method_call Op if running a method */
+	struct acpi_node        *method_call_node;                  /* Called method Node*/
+	union acpi_operand_obj  *operands[OBJ_NUM_OPERANDS];        /* Operands passed to the interpreter */
+	union acpi_operand_obj  *results[OBJ_NUM_OPERANDS];         /* Accumulated results */
+	struct acpi_node        arguments[MTH_NUM_ARGS];            /* Control method arguments */
+	struct acpi_node        local_variables[MTH_NUM_LOCALS];    /* Control method locals */
+	u32                     parse_flags;
+	u8                      walk_type;
+	u8                      return_used;
+	u32                     prev_arg_types;
+
+	/* Debug support */
+
+	u32                     method_breakpoint;
 
 
 } ACPI_WALK_STATE;
@@ -596,12 +603,6 @@ typedef struct acpi_walk_list
 	ACPI_WALK_STATE         *walk_state;
 
 } ACPI_WALK_LIST;
-
-
-typedef
-ACPI_STATUS (*INTERPRETER_CALLBACK) (
-	ACPI_WALK_STATE         *state,
-	ACPI_GENERIC_OP         *op);
 
 
 /* Info used by Acpi_ps_init_objects */
@@ -810,8 +811,8 @@ typedef struct
 	union
 	{
 		u32                 number;
-		char                *string_ptr;
-		char                buffer[9];
+		NATIVE_CHAR         *string_ptr;
+		NATIVE_CHAR         buffer[9];
 	} data;
 
 } DEVICE_ID;
@@ -840,11 +841,11 @@ typedef struct allocation_info
 	u32                     size;
 	u32                     component;
 	u32                     line;
-	char                    module[MAX_MODULE_NAME];
+	NATIVE_CHAR             module[MAX_MODULE_NAME];
 	u8                      alloc_type;
 
 } ALLOCATION_INFO;
 
 #endif
 
-#endif
+#endif /* __ACLOCAL_H__ */

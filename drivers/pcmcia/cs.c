@@ -103,13 +103,13 @@ MODULE_DESCRIPTION("Linux PCMCIA Card Services " CS_RELEASE
 
 #define INT_MODULE_PARM(n, v) static int n = v; MODULE_PARM(n, "i")
 
-INT_MODULE_PARM(setup_delay,	HZ/20);		/* ticks */
-INT_MODULE_PARM(resume_delay,	HZ/5);		/* ticks */
-INT_MODULE_PARM(shutdown_delay,	HZ/40);		/* ticks */
-INT_MODULE_PARM(vcc_settle,	400);		/* msecs */
+INT_MODULE_PARM(setup_delay,	10);		/* centiseconds */
+INT_MODULE_PARM(resume_delay,	20);		/* centiseconds */
+INT_MODULE_PARM(shutdown_delay,	3);		/* centiseconds */
+INT_MODULE_PARM(vcc_settle,	40);		/* centiseconds */
 INT_MODULE_PARM(reset_time,	10);		/* usecs */
-INT_MODULE_PARM(unreset_delay,	100);		/* msecs */
-INT_MODULE_PARM(unreset_check,	100);		/* msecs */
+INT_MODULE_PARM(unreset_delay,	10);		/* centiseconds */
+INT_MODULE_PARM(unreset_check,	10);		/* centiseconds */
 INT_MODULE_PARM(unreset_limit,	30);		/* unreset_check's */
 
 /* Access speed for attribute memory windows */
@@ -446,10 +446,13 @@ static void free_regions(memory_handle_t *list)
 
 static int send_event(socket_info_t *s, event_t event, int priority);
 
-static void msleep(unsigned int msec)
+/*
+ * Sleep for n_cs centiseconds (1 cs = 1/100th of a second)
+ */
+static void cs_sleep(unsigned int n_cs)
 {
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout( (msec * HZ + 999) / 1000);
+	schedule_timeout( (n_cs * HZ + 99) / 100);
 }
 
 static void shutdown_socket(socket_info_t *s)
@@ -504,7 +507,7 @@ static int setup_socket(socket_info_t *s)
 		if (!(val & SS_PENDING))
 			break;
 		if (--setup_timeout) {
-			msleep(100);
+			cs_sleep(10);
 			continue;
 		}
 		printk(KERN_NOTICE "cs: socket %p voltage interrogation"
@@ -516,7 +519,7 @@ static int setup_socket(socket_info_t *s)
 	if (val & SS_DETECT) {
 		DEBUG(1, "cs: setup_socket(%p): applying power\n", s);
 		s->state |= SOCKET_PRESENT;
-		s->socket.flags = 0;
+		s->socket.flags &= SS_DEBOUNCED;
 		if (val & SS_3VCARD)
 		    s->socket.Vcc = s->socket.Vpp = 33;
 		else if (!(val & SS_XVCARD))
@@ -533,7 +536,7 @@ static int setup_socket(socket_info_t *s)
 #endif
 		}
 		set_socket(s, &s->socket);
-		msleep(vcc_settle);
+		cs_sleep(vcc_settle);
 		reset_socket(s);
 		ret = 1;
 	} else {
@@ -561,7 +564,7 @@ static void reset_socket(socket_info_t *s)
     udelay((long)reset_time);
     s->socket.flags &= ~SS_RESET;
     set_socket(s, &s->socket);
-    msleep(unreset_delay);
+    cs_sleep(unreset_delay/10);
     unreset_socket(s);
 } /* reset_socket */
 
@@ -580,11 +583,11 @@ static void unreset_socket(socket_info_t *s)
 			break;
 		DEBUG(2, "cs: socket %d not ready yet\n", s->sock);
 		if (--setup_timeout) {
-			msleep(unreset_check);
+			cs_sleep(unreset_check);
 			continue;
 		}
 		printk(KERN_NOTICE "cs: socket %p timed out during"
-			" reset\n", s);
+			" reset.  Try increasing setup_delay.\n", s);
 		s->state &= ~EVENT_MASK;
 		return;
 	}
@@ -656,7 +659,7 @@ static void do_shutdown(socket_info_t *s)
 	DEBUG(0, "cs: flushing pending setup\n");
 	s->state &= ~EVENT_MASK;
     }
-    msleep(shutdown_delay);
+    cs_sleep(shutdown_delay);
     s->state &= ~SOCKET_PRESENT;
     shutdown_socket(s);
 }
@@ -679,11 +682,13 @@ static void parse_events(void *info, u_int events)
 	    }
 	    s->state |= SOCKET_SETUP_PENDING;
 	    if (s->state & SOCKET_SUSPEND)
-		msleep(resume_delay);
+		cs_sleep(resume_delay);
 	    else
-		msleep(setup_delay);
+		cs_sleep(setup_delay);
+	    s->socket.flags |= SS_DEBOUNCED;
 	    if (setup_socket(s) == 0)
 		s->state &= ~SOCKET_SETUP_PENDING;
+	    s->socket.flags &= ~SS_DEBOUNCED;
 	}
     }
     if (events & SS_BATDEAD)

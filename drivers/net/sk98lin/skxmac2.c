@@ -2,8 +2,8 @@
  *
  * Name:	skxmac2.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.49 $
- * Date:	$Date: 1999/11/22 08:12:13 $
+ * Version:	$Revision: 1.53 $
+ * Date:	$Date: 2000/07/27 12:22:11 $
  * Purpose:	Contains functions to initialize the XMAC II
  *
  ******************************************************************************/
@@ -12,8 +12,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -29,6 +27,18 @@
  * History:
  *
  *	$Log: skxmac2.c,v $
+ *	Revision 1.53  2000/07/27 12:22:11  gklug
+ *	fix: possible endless loop in XmHardRst.
+ *	
+ *	Revision 1.52  2000/05/22 08:48:31  malthoff
+ *	Fix: #10523 errata valid for all BCOM PHYs.
+ *	
+ *	Revision 1.51  2000/05/17 12:52:18  malthoff
+ *	Fixes BCom link errata (#10523).
+ *	
+ *	Revision 1.50  1999/11/22 13:40:14  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.49  1999/11/22 08:12:13  malthoff
  *	Add workaround for power consumption feature of Bcom C0 chip.
  *	
@@ -224,7 +234,7 @@
 /* local variables ************************************************************/
 
 static const char SysKonnectFileId[] =
-	"@(#)$Id: skxmac2.c,v 1.49 1999/11/22 08:12:13 malthoff Exp $ (C) SK ";
+	"@(#)$Id: skxmac2.c,v 1.53 2000/07/27 12:22:11 gklug Exp $ (C) SK ";
 
 /* BCOM PHY magic pattern list */
 typedef struct s_PhyHack {
@@ -558,6 +568,10 @@ int	Port)	/* port to stop (MAC_1 + n) */
  *	register (Timing requirements: Broadcom: 400ns, Level One:
  *	none, National: 80ns).
  *
+ * ATTENTION:
+ * 	It is absolutely neccessary to reset the SW_RST Bit first
+ *	before calling this function.
+ *
  * Returns:
  *	nothing
  */
@@ -568,6 +582,7 @@ int	Port)	/* port to stop (MAC_1 + n) */
 {
 	SK_U16	Word;
 	int	i;
+	int	TOut;
 	SK_U32	Reg;
 
 	for (i=0; i<4; i++) {
@@ -575,12 +590,25 @@ int	Port)	/* port to stop (MAC_1 + n) */
 		/* bit contains buttoms to press */
 		SK_OUT16(IoC, MR_ADDR(Port, TX_MFF_CTRL1),
 			(SK_U16) MFF_CLR_MAC_RST);
-		SK_OUT16(IoC, MR_ADDR(Port, TX_MFF_CTRL1),
-			(SK_U16) MFF_SET_MAC_RST);
+
+		TOut = 0;
 		do {
+			TOut ++;
+			if (TOut > 10000) {
+				/*
+				 * Adapter seems to be in RESET state.
+				 * Registers cannot be written.
+				 */
+				return;
+			}
+
+			SK_OUT16(IoC, MR_ADDR(Port, TX_MFF_CTRL1),
+				(SK_U16) MFF_SET_MAC_RST);
 			SK_IN16(IoC,MR_ADDR(Port,TX_MFF_CTRL1), &Word);
 		} while ((Word & MFF_SET_MAC_RST) == 0);
 	}
+
+	/* For external PHYs there must be special handling */
 	if (pAC->GIni.GP[Port].PhyType != SK_PHY_XMAC) {
 
 		/* reset external PHY */
@@ -696,6 +724,11 @@ int	Port)		/* Port Index (MAC_1 + n) */
 					i++;
 				}
 			}
+			/* Workaround BCOM Errata (#10523) for all BCom PHYs*/
+			/* Disable Power Management after reset */
+			PHY_READ(IoC, pPrt, Port, PHY_BCOM_AUX_CTRL, &SWord);
+			PHY_WRITE(IoC, pPrt, Port, PHY_BCOM_AUX_CTRL,
+				SWord | PHY_B_AC_DIS_PM);
 
 			/*
 			 * PHY LED initialization is performed in
@@ -1845,6 +1878,7 @@ int	Port)		/* Port Index (MAC_1 + n) */
 	SK_GEPORT	*pPrt;
 	SK_U16		Reg ;		/* 16bit register value */
 	SK_U16		IntMask;	/* XMac interrupt mask */
+	SK_U16		SWord;
 
 	pPrt = &pAC->GIni.GP[Port];
 
@@ -1892,6 +1926,11 @@ int	Port)		/* Port Index (MAC_1 + n) */
 	}
 	switch (pPrt->PhyType) {
 	case SK_PHY_BCOM:
+		/* Workaround BCOM Errata (#10523) for all BCom Phys */
+		/* Enable Power Management after link up */
+		PHY_READ(IoC, pPrt, Port, PHY_BCOM_AUX_CTRL, &SWord);
+		PHY_WRITE(IoC, pPrt, Port, PHY_BCOM_AUX_CTRL,	
+			SWord & ~PHY_B_AC_DIS_PM);
 		PHY_WRITE(IoC, pPrt, Port, PHY_BCOM_INT_MASK, 
 			PHY_B_DEF_MSK);
 		break;

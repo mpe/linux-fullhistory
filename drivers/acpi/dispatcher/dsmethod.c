@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: dsmethod - Parser/Interpreter interface - control method parsing
+ *              $Revision: 52 $
  *
  *****************************************************************************/
 
@@ -25,24 +25,24 @@
 
 
 #include "acpi.h"
-#include "parser.h"
+#include "acparser.h"
 #include "amlcode.h"
-#include "dispatch.h"
-#include "interp.h"
-#include "namesp.h"
-#include "tables.h"
-#include "debugger.h"
+#include "acdispat.h"
+#include "acinterp.h"
+#include "acnamesp.h"
+#include "actables.h"
+#include "acdebug.h"
 
 
 #define _COMPONENT          DISPATCHER
-	 MODULE_NAME         ("dsmethod");
+	 MODULE_NAME         ("dsmethod")
 
 
 /*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_parse_method
  *
- * PARAMETERS:  Obj_handle      - NTE of the method
+ * PARAMETERS:  Obj_handle      - Node of the method
  *              Level           - Current nesting level
  *              Context         - Points to a method counter
  *              Return_value    - Not used
@@ -61,9 +61,9 @@ acpi_ds_parse_method (
 	ACPI_HANDLE             obj_handle)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_GENERIC_OP         *op;
-	ACPI_NAMED_OBJECT       *entry;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_PARSE_OBJECT       *op;
+	ACPI_NAMESPACE_NODE     *node;
 	ACPI_OWNER_ID           owner_id;
 
 
@@ -74,10 +74,10 @@ acpi_ds_parse_method (
 	}
 
 
-	/* Extract the method object from the method NTE */
+	/* Extract the method object from the method Node */
 
-	entry = (ACPI_NAMED_OBJECT*) obj_handle;
-	obj_desc = entry->object;
+	node = (ACPI_NAMESPACE_NODE *) obj_handle;
+	obj_desc = node->object;
 	if (!obj_desc) {
 		return (AE_NULL_OBJECT);
 	}
@@ -87,8 +87,7 @@ acpi_ds_parse_method (
 	if ((obj_desc->method.concurrency != INFINITE_CONCURRENCY) &&
 		(!obj_desc->method.semaphore))
 	{
-		status = acpi_os_create_semaphore (1,
-				   obj_desc->method.concurrency,
+		status = acpi_os_create_semaphore (1,obj_desc->method.concurrency,
 				   &obj_desc->method.semaphore);
 		if (ACPI_FAILURE (status)) {
 			return (status);
@@ -105,17 +104,17 @@ acpi_ds_parse_method (
 		return (AE_NO_MEMORY);
 	}
 
-	/* Init new op with the method name and pointer back to the NTE */
+	/* Init new op with the method name and pointer back to the Node */
 
-	acpi_ps_set_name (op, entry->name);
-	op->acpi_named_object = entry;
+	acpi_ps_set_name (op, node->name);
+	op->node = node;
 
 
 	/*
-	 * Parse the method, creating a parse tree.
+	 * Parse the method, first pass
 	 *
-	 * The parse also includes a first pass load of the
-	 * namespace where newly declared named objects are
+	 * The first pass load is
+	 * where newly declared named objects are
 	 * added into the namespace.  Actual evaluation of
 	 * the named objects (what would be called a "second
 	 * pass") happens during the actual execution of the
@@ -124,7 +123,10 @@ acpi_ds_parse_method (
 	 */
 
 	status = acpi_ps_parse_aml (op, obj_desc->method.pcode,
-			  obj_desc->method.pcode_length, 0);
+			   obj_desc->method.pcode_length,
+			   ACPI_PARSE_LOAD_PASS1 | ACPI_PARSE_DELETE_TREE,
+			   node, NULL, NULL,
+			   acpi_ds_load1_begin_op, acpi_ds_load1_end_op);
 
 	if (ACPI_FAILURE (status)) {
 		return (status);
@@ -133,11 +135,13 @@ acpi_ds_parse_method (
 	/* Get a new Owner_id for objects created by this method */
 
 	owner_id = acpi_cm_allocate_owner_id (OWNER_TYPE_METHOD);
+	obj_desc->method.owning_id = owner_id;
 
 	/* Install the parsed tree in the method object */
+	/* TBD: [Restructure] Obsolete field? */
 
-	obj_desc->method.parser_op = op;
-	obj_desc->method.owning_id = owner_id;
+	acpi_ps_delete_parse_tree (op);
+
 
 	return (status);
 }
@@ -147,7 +151,7 @@ acpi_ds_parse_method (
  *
  * FUNCTION:    Acpi_ds_begin_method_execution
  *
- * PARAMETERS:  Method_entry        - NTE of the method
+ * PARAMETERS:  Method_node        - Node of the method
  *              Obj_desc            - The method object
  *
  * RETURN:      Status
@@ -162,56 +166,21 @@ acpi_ds_parse_method (
 
 ACPI_STATUS
 acpi_ds_begin_method_execution (
-	ACPI_NAMED_OBJECT       *method_entry,
-	ACPI_OBJECT_INTERNAL    *obj_desc)
+	ACPI_NAMESPACE_NODE     *method_node,
+	ACPI_OPERAND_OBJECT     *obj_desc)
 {
 	ACPI_STATUS             status = AE_OK;
 
 
-	if (!method_entry) {
+	if (!method_node) {
 		return (AE_NULL_ENTRY);
 	}
 
-	obj_desc = acpi_ns_get_attached_object (method_entry);
+	obj_desc = acpi_ns_get_attached_object (method_node);
 	if (!obj_desc) {
 		return (AE_NULL_OBJECT);
 	}
 
-	/*
-	 * Lock the parser while we check for and possibly parse the
-	 * control method
-	 */
-
-	acpi_cm_acquire_mutex (ACPI_MTX_PARSER);
-
-
-	/* If method is not parsed at this time, we must parse it first */
-
-	if (!obj_desc->method.parser_op) {
-
-		status = acpi_ds_parse_method (method_entry);
-		if (ACPI_FAILURE (status)) {
-			acpi_cm_release_mutex (ACPI_MTX_PARSER);
-			return (status);
-		}
-	}
-
-
-	/*
-	 * Increment the method parse tree thread count since there
-	 * is one additional thread executing in it.  If configured
-	 * for deletion-on-exit, the parse tree will be deleted when
-	 * the last thread completes execution of the method
-	 */
-
-	((ACPI_DEFERRED_OP *) obj_desc->method.parser_op)->thread_count++;
-
-	/*
-	 * Parsing is complete, we can unlock the parser.  Parse tree
-	 * cannot be deleted at least until this thread completes.
-	 */
-
-	acpi_cm_release_mutex (ACPI_MTX_PARSER);
 
 	/*
 	 * If there is a concurrency limit on this method, we need to
@@ -225,8 +194,17 @@ acpi_ds_begin_method_execution (
 	}
 
 
-	return (status);
+	/*
+	 * Increment the method parse tree thread count since there
+	 * is one additional thread executing in it.  If configured
+	 * for deletion-on-exit, the parse tree will be deleted when
+	 * the last thread completes execution of the method
+	 */
 
+	obj_desc->method.thread_count++;
+
+
+	return (status);
 }
 
 
@@ -247,61 +225,76 @@ ACPI_STATUS
 acpi_ds_call_control_method (
 	ACPI_WALK_LIST          *walk_list,
 	ACPI_WALK_STATE         *this_walk_state,
-	ACPI_GENERIC_OP         *op)
+	ACPI_PARSE_OBJECT       *op)
 {
 	ACPI_STATUS             status;
-	ACPI_DEFERRED_OP        *method;
-	ACPI_NAMED_OBJECT       *method_entry;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_NAMESPACE_NODE     *method_node;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_WALK_STATE         *next_walk_state;
+	ACPI_PARSE_STATE        *parser_state;
 	u32                     i;
 
 
 	/*
-	 * Prev_op points to the METHOD_CALL Op.
-	 * Get the NTE entry (in the METHOD_CALL->NAME Op) and the
-	 * corresponding METHOD Op
+	 * Get the namespace entry for the control method we are about to call
 	 */
 
-	method_entry = (this_walk_state->prev_op->value.arg)->acpi_named_object;
-	if (!method_entry) {
+	method_node = this_walk_state->method_call_node;
+	if (!method_node) {
 		return (AE_NULL_ENTRY);
 	}
 
-	obj_desc = acpi_ns_get_attached_object (method_entry);
+	obj_desc = acpi_ns_get_attached_object (method_node);
 	if (!obj_desc) {
 		return (AE_NULL_OBJECT);
 	}
 
-	/* Parse method if necessary, wait on concurrency semaphore */
 
-	status = acpi_ds_begin_method_execution (method_entry, obj_desc);
+	/* Init for new method, wait on concurrency semaphore */
+
+	status = acpi_ds_begin_method_execution (method_node, obj_desc);
 	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
 
-	/* Save the (current) Op for when this walk is restarted */
 
-	this_walk_state->method_call_op = this_walk_state->prev_op;
-	this_walk_state->prev_op    = op;
-	method                      = obj_desc->method.parser_op;
+	/* Create and initialize a new parser state */
+
+	parser_state = acpi_ps_create_state (obj_desc->method.pcode,
+			   obj_desc->method.pcode_length);
+	if (!parser_state) {
+		return (AE_NO_MEMORY);
+	}
+
+	acpi_ps_init_scope (parser_state, NULL);
+	parser_state->start_node = method_node;
+
 
 	/* Create a new state for the preempting walk */
 
 	next_walk_state = acpi_ds_create_walk_state (obj_desc->method.owning_id,
-			  (ACPI_GENERIC_OP *) method,
-			  obj_desc, walk_list);
+			  NULL, obj_desc, walk_list);
 	if (!next_walk_state) {
+		/* TBD: delete parser state */
+
 		return (AE_NO_MEMORY);
 	}
 
-	/* The Next_op of the Next_walk will be the beginning of the method */
+	next_walk_state->walk_type          = WALK_METHOD;
+	next_walk_state->method_node        = method_node;
+	next_walk_state->parser_state       = parser_state;
+	next_walk_state->parse_flags        = this_walk_state->parse_flags;
+	next_walk_state->descending_callback = this_walk_state->descending_callback;
+	next_walk_state->ascending_callback = this_walk_state->ascending_callback;
 
-	next_walk_state->next_op = (ACPI_GENERIC_OP *) method;
+	/* The Next_op of the Next_walk will be the beginning of the method */
+	/* TBD: [Restructure] -- obsolete? */
+
+	next_walk_state->next_op = NULL;
 
 	/* Open a new scope */
 
-	status = acpi_ds_scope_stack_push (method_entry->child_table,
+	status = acpi_ds_scope_stack_push (method_node,
 			   ACPI_TYPE_METHOD, next_walk_state);
 	if (ACPI_FAILURE (status)) {
 		goto cleanup;
@@ -316,10 +309,27 @@ acpi_ds_call_control_method (
 	 */
 
 	status = acpi_ds_method_data_init_args (&this_walk_state->operands[0],
-			 this_walk_state->num_operands);
+			 this_walk_state->num_operands,
+			 next_walk_state);
 	if (ACPI_FAILURE (status)) {
 		goto cleanup;
 	}
+
+
+	/* Create and init a Root Node */
+
+	op = acpi_ps_alloc_op (AML_SCOPE_OP);
+	if (!op) {
+		return (AE_NO_MEMORY);
+	}
+
+	status = acpi_ps_parse_aml (op, obj_desc->method.pcode,
+			  obj_desc->method.pcode_length,
+			  ACPI_PARSE_LOAD_PASS1 | ACPI_PARSE_DELETE_TREE,
+			  method_node, NULL, NULL,
+			  acpi_ds_load1_begin_op, acpi_ds_load1_end_op);
+	acpi_ps_delete_parse_tree (op);
+
 
 	/*
 	 * Delete the operands on the previous walkstate operand stack
@@ -328,6 +338,7 @@ acpi_ds_call_control_method (
 
 	for (i = 0; i < obj_desc->method.param_count; i++) {
 		acpi_cm_remove_reference (this_walk_state->operands [i]);
+		this_walk_state->operands [i] = NULL;
 	}
 
 	/* Clear the operand stack */
@@ -364,30 +375,33 @@ cleanup:
 ACPI_STATUS
 acpi_ds_restart_control_method (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_OBJECT_INTERNAL    *return_desc)
+	ACPI_OPERAND_OBJECT     *return_desc)
 {
 	ACPI_STATUS             status;
 
 
 	if (return_desc) {
-		/*
-		 * Get the return value (if any) from the previous method.
-		 * NULL if no return value
-		 */
+		if (walk_state->return_used) {
+			/*
+			 * Get the return value (if any) from the previous method.
+			 * NULL if no return value
+			 */
 
-		status = acpi_ds_result_stack_push (return_desc, walk_state);
-		if (ACPI_FAILURE (status)) {
-			acpi_cm_remove_reference (return_desc);
-			return (status);
+			status = acpi_ds_result_stack_push (return_desc, walk_state);
+			if (ACPI_FAILURE (status)) {
+				acpi_cm_remove_reference (return_desc);
+				return (status);
+			}
 		}
 
-		/*
-		 * Delete the return value if it will not be used by the
-		 * calling method
-		 */
+		else {
+			/*
+			 * Delete the return value if it will not be used by the
+			 * calling method
+			 */
+			acpi_cm_remove_reference (return_desc);
+		}
 
-		acpi_ds_delete_result_if_not_used (walk_state->method_call_op,
-				   return_desc, walk_state);
 	}
 
 
@@ -414,9 +428,8 @@ acpi_ds_terminate_control_method (
 	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_DEFERRED_OP        *op;
-	ACPI_NAMED_OBJECT       *method_entry;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_NAMESPACE_NODE     *method_node;
 
 
 	/* The method object should be stored in the walk state */
@@ -438,66 +451,41 @@ acpi_ds_terminate_control_method (
 
 	acpi_cm_acquire_mutex (ACPI_MTX_PARSER);
 
-	/*
-	 * The root of the method parse tree should be stored
-	 * in the method object
-	 */
-
-	op = obj_desc->method.parser_op;
-	if (!op) {
-		goto unlock_and_exit;
-	}
 
 	/* Signal completion of the execution of this method if necessary */
 
 	if (walk_state->method_desc->method.semaphore) {
 		status = acpi_os_signal_semaphore (
-			walk_state->method_desc->method.semaphore, 1);
+				 walk_state->method_desc->method.semaphore, 1);
 	}
 
 	/* Decrement the thread count on the method parse tree */
 
-	op->thread_count--;
-	if (!op->thread_count) {
+	walk_state->method_desc->method.thread_count--;
+	if (!walk_state->method_desc->method.thread_count) {
 		/*
 		 * There are no more threads executing this method.  Perform
 		 * additional cleanup.
 		 *
-		 * The method NTE is stored in the method Op
+		 * The method Node is stored in the walk state
 		 */
-		method_entry = op->acpi_named_object;
-
+		method_node = walk_state->method_node;
 		/*
 		 * Delete any namespace entries created immediately underneath
 		 * the method
 		 */
 		acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
-		if (method_entry->child_table) {
-			acpi_ns_delete_namespace_subtree (method_entry);
+		if (method_node->child) {
+			acpi_ns_delete_namespace_subtree (method_node);
 		}
 
 		/*
 		 * Delete any namespace entries created anywhere else within
 		 * the namespace
 		 */
-
-		acpi_ns_delete_namespace_by_owner (
-				 walk_state->method_desc->method.owning_id);
-
+		acpi_ns_delete_namespace_by_owner (walk_state->method_desc->method.owning_id);
 		acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
-
-		/*
-		 * Delete the method's parse tree if asked to
-		 */
-		if (acpi_gbl_when_to_parse_methods & METHOD_DELETE_AT_COMPLETION) {
-			acpi_ps_delete_parse_tree (
-					walk_state->method_desc->method.parser_op);
-
-			walk_state->method_desc->method.parser_op = NULL;
-		}
 	}
-
-unlock_and_exit:
 
 	acpi_cm_release_mutex (ACPI_MTX_PARSER);
 	return (AE_OK);

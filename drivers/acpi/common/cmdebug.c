@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: cmdebug - Debug print routines
+ *              $Revision: 60 $
  *
  *****************************************************************************/
 
@@ -27,7 +27,7 @@
 #include "acpi.h"
 
 #define _COMPONENT          MISCELLANEOUS
-	 MODULE_NAME         ("cmdebug");
+	 MODULE_NAME         ("cmdebug")
 
 
 /*****************************************************************************
@@ -41,16 +41,16 @@
  ****************************************************************************/
 
 
-s32
+u32
 get_debug_level (void)
 {
 
-	return acpi_dbg_level;
+	return (acpi_dbg_level);
 }
 
 void
 set_debug_level (
-	s32                     new_debug_level)
+	u32                     new_debug_level)
 {
 
 	acpi_dbg_level = new_debug_level;
@@ -75,10 +75,10 @@ set_debug_level (
 
 void
 function_trace (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
-	char                    *function_name)
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name)
 {
 
 	acpi_gbl_nesting_level++;
@@ -109,10 +109,10 @@ function_trace (
 
 void
 function_trace_ptr (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
-	char                    *function_name,
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name,
 	void                    *pointer)
 {
 
@@ -142,11 +142,11 @@ function_trace_ptr (
 
 void
 function_trace_str (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
-	char                    *function_name,
-	char                    *string)
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name,
+	NATIVE_CHAR             *string)
 {
 
 	acpi_gbl_nesting_level++;
@@ -175,16 +175,16 @@ function_trace_str (
 
 void
 function_trace_u32 (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
-	char                    *function_name,
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name,
 	u32                     integer)
 {
 
 	acpi_gbl_nesting_level++;
 	debug_print (module_name, line_number, component_id, TRACE_FUNCTIONS,
-			 " %2.2ld Entered Function: %s, 0x%l_x\n",
+			 " %2.2ld Entered Function: %s, 0x%lX\n",
 			 acpi_gbl_nesting_level, function_name, integer);
 }
 
@@ -207,10 +207,10 @@ function_trace_u32 (
 
 void
 function_exit (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
-	char                    *function_name)
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name)
 {
 
 	debug_print (module_name, line_number, component_id, TRACE_FUNCTIONS,
@@ -240,30 +240,19 @@ function_exit (
 
 void
 function_status_exit (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
-	char                    *function_name,
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name,
 	ACPI_STATUS             status)
 {
 
-	if (status > ACPI_MAX_STATUS) {
-		debug_print (module_name, line_number, component_id,
-			TRACE_FUNCTIONS,
-			" %2.2ld Exiting Function: %s, [Unknown Status] 0x%X\n",
-			acpi_gbl_nesting_level,
-			function_name,
-			status);
-	}
-
-	else {
-		debug_print (module_name, line_number, component_id,
-			TRACE_FUNCTIONS,
-			" %2.2ld Exiting Function: %s, %s\n",
-			acpi_gbl_nesting_level,
-			function_name,
-			acpi_cm_format_exception (status));
-	}
+	debug_print (module_name, line_number, component_id,
+		TRACE_FUNCTIONS,
+		" %2.2ld Exiting Function: %s, %s\n",
+		acpi_gbl_nesting_level,
+		function_name,
+		acpi_cm_format_exception (status));
 
 	acpi_gbl_nesting_level--;
 }
@@ -288,10 +277,10 @@ function_status_exit (
 
 void
 function_value_exit (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
-	char                    *function_name,
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name,
 	NATIVE_UINT             value)
 {
 
@@ -322,11 +311,11 @@ function_value_exit (
 
 void
 function_ptr_exit (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
-	char                    *function_name,
-	char                    *ptr)
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name,
+	u8                      *ptr)
 {
 
 	debug_print (module_name, line_number, component_id, TRACE_FUNCTIONS,
@@ -357,11 +346,11 @@ function_ptr_exit (
 
 void
 debug_print (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
-	s32                     print_level,
-	char                    *format,
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	u32                     print_level,
+	NATIVE_CHAR             *format,
 	...)
 {
 	va_list                 args;
@@ -397,8 +386,8 @@ debug_print (
 
 void
 debug_print_prefix (
-	char                    *module_name,
-	s32                     line_number)
+	NATIVE_CHAR             *module_name,
+	u32                     line_number)
 {
 
 
@@ -421,7 +410,7 @@ debug_print_prefix (
 
 void
 debug_print_raw (
-	char                    *format,
+	NATIVE_CHAR             *format,
 	...)
 {
 	va_list                 args;
@@ -451,10 +440,10 @@ debug_print_raw (
 
 void
 acpi_cm_dump_buffer (
-	char                    *buffer,
+	u8                      *buffer,
 	u32                     count,
 	u32                     display,
-	s32                     component_id)
+	u32                     component_id)
 {
 	u32                     i = 0;
 	u32                     j;
@@ -477,7 +466,7 @@ acpi_cm_dump_buffer (
 	while (i < count) {
 		/* Print current offset */
 
-		acpi_os_printf ("%05_x  ", i);
+		acpi_os_printf ("%05X  ", i);
 
 
 		/* Print 16 hex chars */
@@ -488,7 +477,7 @@ acpi_cm_dump_buffer (
 				return;
 			}
 
-			/* Make sure that the char doesn't get sign-extended! */
+			/* Make sure that the s8 doesn't get sign-extended! */
 
 			switch (display)
 			{
@@ -496,7 +485,7 @@ acpi_cm_dump_buffer (
 
 			default:
 
-				acpi_os_printf ("%02_x ",
+				acpi_os_printf ("%02X ",
 						*((u8 *) &buffer[i + j]));
 				j += 1;
 				break;
@@ -506,7 +495,7 @@ acpi_cm_dump_buffer (
 
 				MOVE_UNALIGNED16_TO_32 (&temp32,
 						 &buffer[i + j]);
-				acpi_os_printf ("%04_x ", temp32);
+				acpi_os_printf ("%04X ", temp32);
 				j += 2;
 				break;
 
@@ -515,7 +504,7 @@ acpi_cm_dump_buffer (
 
 				MOVE_UNALIGNED32_TO_32 (&temp32,
 						 &buffer[i + j]);
-				acpi_os_printf ("%08_x ", temp32);
+				acpi_os_printf ("%08X ", temp32);
 				j += 4;
 				break;
 
@@ -524,11 +513,11 @@ acpi_cm_dump_buffer (
 
 				MOVE_UNALIGNED32_TO_32 (&temp32,
 						 &buffer[i + j]);
-				acpi_os_printf ("%08_x", temp32);
+				acpi_os_printf ("%08X", temp32);
 
 				MOVE_UNALIGNED32_TO_32 (&temp32,
 						 &buffer[i + j + 4]);
-				acpi_os_printf ("%08_x ", temp32);
+				acpi_os_printf ("%08X ", temp32);
 				j += 8;
 				break;
 			}

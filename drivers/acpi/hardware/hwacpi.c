@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: hwacpi - ACPI hardware functions - mode and timer
+ *              $Revision: 22 $
  *
  *****************************************************************************/
 
@@ -25,11 +25,11 @@
 
 
 #include "acpi.h"
-#include "hardware.h"
+#include "achware.h"
 
 
 #define _COMPONENT          HARDWARE
-	 MODULE_NAME         ("hwacpi");
+	 MODULE_NAME         ("hwacpi")
 
 
 /******************************************************************************
@@ -95,7 +95,7 @@ acpi_hw_get_mode (void)
 {
 
 
-	if (acpi_hw_register_access (ACPI_READ, ACPI_MTX_LOCK, (s32)SCI_EN)) {
+	if (acpi_hw_register_access (ACPI_READ, ACPI_MTX_LOCK, SCI_EN)) {
 		return (SYS_MODE_ACPI);
 	}
 	else {

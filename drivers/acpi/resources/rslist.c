@@ -2,6 +2,7 @@
  *
  * Module Name: rslist - Acpi_rs_byte_stream_to_list
  *                       Acpi_list_to_byte_stream
+ *              $Revision: 6 $
  *
  *****************************************************************************/
 
@@ -25,10 +26,10 @@
 
 
 #include "acpi.h"
-#include "resource.h"
+#include "acresrc.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
-	 MODULE_NAME         ("rslist");
+	 MODULE_NAME         ("rslist")
 
 
 /***************************************************************************
@@ -53,7 +54,7 @@ acpi_rs_byte_stream_to_list (
 	u32                     byte_stream_buffer_length,
 	u8                      **output_buffer)
 {
-	ACPI_STATUS             status = AE_UNKNOWN_STATUS;
+	ACPI_STATUS             status;
 	u32                     bytes_parsed = 0;
 	u8                      resource_type = 0;
 	u32                     bytes_consumed = 0;
@@ -167,7 +168,7 @@ acpi_rs_byte_stream_to_list (
 				 * If we get here, everything is out of sync,
 				 *  so exit with an error
 				 */
-				return (AE_ERROR);
+				return (AE_AML_ERROR);
 				break;
 			}
 		}
@@ -275,11 +276,11 @@ acpi_rs_byte_stream_to_list (
 				 * If we get here, everything is out of sync,
 				 *  so exit with an error
 				 */
-				return (AE_ERROR);
+				return (AE_AML_ERROR);
 				break;
 
 			} /* switch */
-		}  /* if(Resource_type & 0x80) */
+		}  /* end else */
 
 		/*
 		 * Update the return value and counter
@@ -296,14 +297,15 @@ acpi_rs_byte_stream_to_list (
 		 */
 		*buffer += structure_size;
 
-	} /*  while (Bytes_parsed < Byte_stream_buffer_length &&
-		  FALSE == End_tag_processed) */
+	} /*  end while */
 
 	/*
 	 * Check the reason for exiting the while loop
 	 */
-	if (byte_stream_buffer_length != bytes_parsed || TRUE != end_tag_processed) {
-		return (AE_ERROR);
+	if (!(byte_stream_buffer_length == bytes_parsed) ||
+		 (TRUE != end_tag_processed))
+	{
+		return (AE_AML_ERROR);
 	}
 
 	return (AE_OK);
@@ -338,7 +340,7 @@ acpi_rs_list_to_byte_stream (
 	u32                     byte_stream_size_needed,
 	u8                      **output_buffer)
 {
-	ACPI_STATUS             status = AE_UNKNOWN_STATUS;
+	ACPI_STATUS             status;
 	u8                      *buffer = *output_buffer;
 	u32                     bytes_consumed = 0;
 	u8                      done = FALSE;

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: nswalk - Functions for walking the APCI namespace
+ *              $Revision: 17 $
  *
  *****************************************************************************/
 
@@ -25,90 +25,85 @@
 
 
 #include "acpi.h"
-#include "interp.h"
-#include "namesp.h"
+#include "acinterp.h"
+#include "acnamesp.h"
 
 
 #define _COMPONENT          NAMESPACE
-	 MODULE_NAME         ("nswalk");
+	 MODULE_NAME         ("nswalk")
 
 
 /****************************************************************************
  *
  * FUNCTION:    Acpi_get_next_object
  *
- * PARAMETERS:  Type            - Type of object to be searched for
- *              Parent          - Parent object whose children we are getting
- *              Last_child      - Previous child that was found.
- *                                The NEXT child will be returned
- *              Ret_handle      - Where handle to the next object is placed
+ * PARAMETERS:  Type                - Type of object to be searched for
+ *              Parent              - Parent object whose children we are
+ *                                      getting
+ *              Last_child          - Previous child that was found.
+ *                                    The NEXT child will be returned
  *
- * RETURN:      Status
+ * RETURN:      ACPI_NAMESPACE_NODE - Pointer to the NEXT child or NULL if
+ *                                      none is found.
  *
- * DESCRIPTION: Return the next peer object within the namespace.  If Handle is
- *              valid, Scope is ignored.  Otherwise, the first object within
- *              Scope is returned.
+ * DESCRIPTION: Return the next peer object within the namespace.  If Handle
+ *              is valid, Scope is ignored.  Otherwise, the first object
+ *              within Scope is returned.
  *
- ******************************************************************************/
+ ****************************************************************************/
 
-ACPI_NAMED_OBJECT*
+ACPI_NAMESPACE_NODE *
 acpi_ns_get_next_object (
 	OBJECT_TYPE_INTERNAL    type,
-	ACPI_NAMED_OBJECT       *parent,
-	ACPI_NAMED_OBJECT       *child)
+	ACPI_NAMESPACE_NODE     *parent_node,
+	ACPI_NAMESPACE_NODE     *child_node)
 {
-	ACPI_NAMED_OBJECT       *this_entry = NULL;
+	ACPI_NAMESPACE_NODE     *next_node = NULL;
 
 
-	if (!child) {
+	if (!child_node) {
 
 		/* It's really the parent's _scope_ that we want */
 
-		if (parent->child_table) {
-			this_entry = parent->child_table->entries;
+		if (parent_node->child) {
+			next_node = parent_node->child;
 		}
 	}
 
 	else {
 		/* Start search at the NEXT object */
 
-		this_entry = acpi_ns_get_next_valid_entry (child);
+		next_node = acpi_ns_get_next_valid_object (child_node);
 	}
 
 
 	/* If any type is OK, we are done */
 
 	if (type == ACPI_TYPE_ANY) {
-		/* Make sure this is valid entry first */
+		/* Next_node is NULL if we are at the end-of-list */
 
-		if ((!this_entry) ||
-			(!this_entry->name))
-		{
-			return NULL;
-		}
-
-		return (this_entry);
+		return (next_node);
 	}
 
 
 	/* Must search for the object -- but within this scope only */
 
-	while (this_entry) {
+	while (next_node) {
 		/* If type matches, we are done */
 
-		if (this_entry->type == type) {
-			return (this_entry);
+		if (next_node->type == type) {
+			return (next_node);
 		}
 
 		/* Otherwise, move on to the next object */
 
-		this_entry = acpi_ns_get_next_valid_entry (this_entry);
+		next_node = acpi_ns_get_next_valid_object (next_node);
 	}
 
 
 	/* Not found */
 
-	return NULL;
+	return (NULL);
 }
 
 
@@ -117,7 +112,7 @@ acpi_ns_get_next_object (
  * FUNCTION:    Acpi_ns_walk_namespace
  *
  * PARAMETERS:  Type                - ACPI_OBJECT_TYPE to search for
- *              Start_object        - Handle in namespace where search begins
+ *              Start_node          - Handle in namespace where search begins
  *              Max_depth           - Depth to which search is to reach
  *              Unlock_before_callback- Whether to unlock the NS before invoking
  *                                    the callback routine
@@ -145,7 +140,7 @@ acpi_ns_get_next_object (
 ACPI_STATUS
 acpi_ns_walk_namespace (
 	OBJECT_TYPE_INTERNAL    type,
-	ACPI_HANDLE             start_object,
+	ACPI_HANDLE             start_node,
 	u32                     max_depth,
 	u8                      unlock_before_callback,
 	WALK_CALLBACK           user_function,
@@ -153,25 +148,25 @@ acpi_ns_walk_namespace (
 	void                    **return_value)
 {
 	ACPI_STATUS             status;
-	ACPI_NAMED_OBJECT       *child_entry;
-	ACPI_NAMED_OBJECT       *parent_entry;
+	ACPI_NAMESPACE_NODE     *child_node;
+	ACPI_NAMESPACE_NODE     *parent_node;
 	OBJECT_TYPE_INTERNAL    child_type;
 	u32                     level;
 
 
-	/* Special case for the namespace root object */
+	/* Special case for the namespace Root Node */
 
-	if (start_object == ACPI_ROOT_OBJECT) {
-		start_object = acpi_gbl_root_object;
+	if (start_node == ACPI_ROOT_OBJECT) {
+		start_node = acpi_gbl_root_node;
 	}
 
 
 	/* Null child means "get first object" */
 
-	parent_entry   = start_object;
-	child_entry    = 0;
-	child_type      = ACPI_TYPE_ANY;
-	level           = 1;
+	parent_node = start_node;
+	child_node = 0;
+	child_type  = ACPI_TYPE_ANY;
+	level       = 1;
 
 	/*
 	 * Traverse the tree of objects until we bubble back up to where we
@@ -186,18 +181,18 @@ acpi_ns_walk_namespace (
 		 */
 
 		status = AE_OK;
-		child_entry = acpi_ns_get_next_object (ACPI_TYPE_ANY,
-				 parent_entry,
-				 child_entry);
+		child_node = acpi_ns_get_next_object (ACPI_TYPE_ANY,
+				 parent_node,
+				 child_node);
 
-		if (child_entry) {
+		if (child_node) {
 			/*
 			 * Found an object, Get the type if we are not
 			 * searching for ANY
 			 */
 
 			if (type != ACPI_TYPE_ANY) {
-				child_type = child_entry->type;
+				child_type = child_node->type;
 			}
 
 			if (child_type == type) {
@@ -210,7 +205,7 @@ acpi_ns_walk_namespace (
 					acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
 				}
 
-				status = user_function (child_entry, level,
+				status = user_function (child_node, level,
 						 context, return_value);
 
 				if (unlock_before_callback) {
@@ -247,15 +242,15 @@ acpi_ns_walk_namespace (
 
 			if ((level < max_depth) && (status != AE_CTRL_DEPTH)) {
 				if (acpi_ns_get_next_object (ACPI_TYPE_ANY,
-						 child_entry, 0))
+						 child_node, 0))
 				{
 					/*
 					 * There is at least one child of this
 					 * object, visit the object
 					 */
 					level++;
-					parent_entry   = child_entry;
-					child_entry    = 0;
+					parent_node   = child_node;
+					child_node    = 0;
 				}
 			}
 		}
@@ -267,8 +262,8 @@ acpi_ns_walk_namespace (
 			 * the object's parent.
 			 */
 			level--;
-			child_entry = parent_entry;
-			parent_entry = acpi_ns_get_parent_entry (parent_entry);
+			child_node = parent_node;
+			parent_node = acpi_ns_get_parent_object (parent_node);
 		}
 	}
 

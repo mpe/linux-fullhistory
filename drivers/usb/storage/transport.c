@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: transport.c,v 1.18 2000/08/25 00:13:51 mdharm Exp $
+ * $Id: transport.c,v 1.23 2000/09/08 21:20:06 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -680,7 +680,7 @@ void usb_stor_invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 		need_auto_sense = 1;
 	}
 	if (result == USB_STOR_TRANSPORT_ERROR) {
-		/* FIXME: we need to invoke a transport reset here */
+		us->transport_reset(us);
 		US_DEBUGP("-- transport indicates transport failure\n");
 		need_auto_sense = 0;
 		srb->result = DID_ERROR << 16;
@@ -742,7 +742,7 @@ void usb_stor_invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 		/* issue the auto-sense command */
 		temp_result = us->transport(us->srb, us);
 		if (temp_result != USB_STOR_TRANSPORT_GOOD) {
-			/* FIXME: we need to invoke a transport reset here */
+			us->transport_reset(us);
 			US_DEBUGP("-- auto-sense failure\n");
 			srb->result = DID_ERROR << 16;
 			return;
@@ -754,9 +754,15 @@ void usb_stor_invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 			  srb->sense_buffer[2] & 0xf,
 			  srb->sense_buffer[12], 
 			  srb->sense_buffer[13]);
+#ifdef CONFIG_USB_STORAGE_DEBUG
+		usb_stor_show_sense(
+			  srb->sense_buffer[2] & 0xf,
+			  srb->sense_buffer[12], 
+			  srb->sense_buffer[13]);
+#endif
 
 		/* set the result so the higher layers expect this data */
-		srb->result = CHECK_CONDITION;
+		srb->result = CHECK_CONDITION << 1;
 
 		/* we're done here, let's clean up */
 		srb->request_buffer = old_request_buffer;
@@ -767,15 +773,15 @@ void usb_stor_invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 
 		/* If things are really okay, then let's show that */
 		if ((srb->sense_buffer[2] & 0xf) == 0x0)
-			srb->result = GOOD;
+			srb->result = GOOD << 1;
 	} else /* if (need_auto_sense) */
-		srb->result = GOOD;
+		srb->result = GOOD << 1;
 
 	/* Regardless of auto-sense, if we _know_ we have an error
 	 * condition, show that in the result code
 	 */
 	if (result == USB_STOR_TRANSPORT_FAILED)
-		srb->result = CHECK_CONDITION;
+		srb->result = CHECK_CONDITION << 1;
 
 	/* If we think we're good, then make sure the sense data shows it.
 	 * This is necessary because the auto-sense for some devices always
@@ -822,6 +828,9 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 {
 	int result;
 
+	/* Set up for status notification */
+	us->ip_wanted = 1;
+
 	/* COMMAND STAGE */
 	/* let's send the command via the control pipe */
 	result = usb_stor_control_msg(us, usb_sndctrlpipe(us->pusb_dev,0),
@@ -832,6 +841,9 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 	/* check the return code for the command */
 	US_DEBUGP("Call to usb_stor_control_msg() returned %d\n", result);
 	if (result < 0) {
+		/* Reset flag for status notification */
+		us->ip_wanted = 0;
+
 		/* if the command was aborted, indicate that */
 		if (result == -ENOENT)
 			return USB_STOR_TRANSPORT_ABORTED;
@@ -849,9 +861,6 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 		/* Uh oh... serious problem here */
 		return USB_STOR_TRANSPORT_ERROR;
 	}
-
-	/* Set up for status notification */
-	us->ip_wanted = 1;
 
 	/* DATA STAGE */
 	/* transfer the data payload for this command, if one exists*/
@@ -1167,6 +1176,9 @@ int usb_stor_CB_reset(struct us_data *us)
 				 USB_TYPE_CLASS | USB_RECIP_INTERFACE,
 				 0, us->ifnum, cmd, sizeof(cmd), HZ*5);
 
+	if (result < 0)
+		US_DEBUGP("CB[I] soft reset failed %d\n", result);
+
 	/* long wait for reset */
 	schedule_timeout(HZ*6);
 
@@ -1177,7 +1189,8 @@ int usb_stor_CB_reset(struct us_data *us)
 		   usb_rcvbulkpipe(us->pusb_dev, us->ep_out));
 
 	US_DEBUGP("CB_reset done\n");
-	return 0;
+	/* return a result code based on the result of the control message */
+	return result < 0 ? FAILED : SUCCESS;
 }
 
 /* This issues a Bulk-only Reset to the device in question, including
@@ -1196,15 +1209,16 @@ int usb_stor_Bulk_reset(struct us_data *us)
 				 0, us->ifnum, NULL, 0, HZ*5);
 
 	if (result < 0)
-		US_DEBUGP("Bulk hard reset failed %d\n", result);
+		US_DEBUGP("Bulk soft reset failed %d\n", result);
+
+	/* long wait for reset */
+	schedule_timeout(HZ*6);
 
 	clear_halt(us->pusb_dev, 
 		   usb_rcvbulkpipe(us->pusb_dev, us->ep_in));
 	clear_halt(us->pusb_dev, 
 		   usb_sndbulkpipe(us->pusb_dev, us->ep_out));
 
-	/* long wait for reset */
-	schedule_timeout(HZ*6);
-
-	return result;
+	/* return a result code based on the result of the control message */
+	return result < 0 ? FAILED : SUCCESS;
 }

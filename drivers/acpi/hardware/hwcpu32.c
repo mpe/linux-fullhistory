@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Name: hwcpu32.c - CPU support for IA32 (Throttling, Cx_states)
+ *              $Revision: 33 $
  *
  *****************************************************************************/
 
@@ -23,11 +24,11 @@
  */
 
 #include "acpi.h"
-#include "namesp.h"
-#include "hardware.h"
+#include "acnamesp.h"
+#include "achware.h"
 
 #define _COMPONENT          HARDWARE
-	 MODULE_NAME         ("Hwcpu32");
+	 MODULE_NAME         ("Hwcpu32")
 
 
 #define BIT_4               0x10  /* TBD: [investigate] is this correct?  */
@@ -82,7 +83,7 @@ acpi_hw_enter_c1(
 		*pm_timer_ticks = timer;
 	}
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -108,7 +109,7 @@ acpi_hw_enter_c2(
 
 
 	if (!pblk_address || !pm_timer_ticks) {
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
 	/*
@@ -146,7 +147,7 @@ acpi_hw_enter_c2(
 	 */
 	enable ();
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -175,7 +176,7 @@ acpi_hw_enter_c3(
 
 
 	if (!pblk_address || !pm_timer_ticks) {
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
 	/*
@@ -186,14 +187,14 @@ acpi_hw_enter_c3(
 	 *  eventually cause a demotion to C2
 	 */
 	if (1 == (bus_master_status =
-		acpi_hw_register_access (ACPI_READ, ACPI_MTX_LOCK, (s32)BM_STS)))
+		acpi_hw_register_access (ACPI_READ, ACPI_MTX_LOCK, BM_STS)))
 	{
 		/*
 		 * Clear the BM_STS bit by setting it.
 		 */
-		acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, (s32)BM_STS, 1);
+		acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, BM_STS, 1);
 		*pm_timer_ticks = 0;
-		return AE_OK;
+		return (AE_OK);
 	}
 
 	/*
@@ -253,7 +254,7 @@ acpi_hw_enter_c3(
 	 */
 	enable();
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -277,7 +278,7 @@ acpi_hw_enter_cx (
 {
 
 	if (!acpi_hw_cx_handlers[acpi_hw_active_cx_state]) {
-		return AE_SUPPORT;
+		return (AE_SUPPORT);
 	}
 
 	return (acpi_hw_cx_handlers[acpi_hw_active_cx_state] (pblk_address, pm_timer_ticks));
@@ -305,11 +306,11 @@ acpi_hw_set_cx (
 	 * ----------------
 	 */
 	if ((cx_state < 1) || (cx_state > 3)) {
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
 	if (!acpi_hw_cx_handlers[cx_state]) {
-		return AE_SUPPORT;
+		return (AE_SUPPORT);
 	}
 
 	/*
@@ -318,7 +319,7 @@ acpi_hw_set_cx (
 	 * We only care when moving from one state to another...
 	 */
 	if (acpi_hw_active_cx_state == cx_state) {
-		return AE_OK;
+		return (AE_OK);
 	}
 
 	/*
@@ -331,7 +332,7 @@ acpi_hw_set_cx (
 	switch (cx_state)
 	{
 	case 3:
-		acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, (s32)BM_RLD, 1);
+		acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, BM_RLD, 1);
 		break;
 	}
 
@@ -345,7 +346,7 @@ acpi_hw_set_cx (
 	switch (acpi_hw_active_cx_state)
 	{
 	case 3:
-		acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, (s32)BM_RLD, 0);
+		acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, BM_RLD, 0);
 		break;
 	}
 
@@ -355,7 +356,7 @@ acpi_hw_set_cx (
 	 */
 	acpi_hw_active_cx_state = cx_state;
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -526,7 +527,7 @@ acpi_hw_local_pow (
 		result = result * x;
 	}
 
-	return result;
+	return (result);
 }
 
 

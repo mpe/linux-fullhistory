@@ -1,10 +1,11 @@
 
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: hwregs - Read/write access functions for the various ACPI
  *                       control and status registers.
+ *              $Revision: 67 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -26,20 +27,20 @@
 
 
 #include "acpi.h"
-#include "hardware.h"
-#include "namesp.h"
+#include "achware.h"
+#include "acnamesp.h"
 
 #define _COMPONENT          HARDWARE
-	 MODULE_NAME         ("hwregs");
+	 MODULE_NAME         ("hwregs")
 
 
 /* This matches the #defines in actypes.h. */
 
-ACPI_STRING sleep_state_table[] = {"\\_S0_","\\_S1_","\\_S2_","\\_S3_",
+NATIVE_CHAR *sleep_state_table[] = {"\\_S0_","\\_S1_","\\_S2_","\\_S3_",
 			   "\\_S4_","\\_S4_b","\\_S5_"};
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_hw_get_bit_shift
  *
@@ -52,11 +53,11 @@ ACPI_STRING sleep_state_table[] = {"\\_S0_","\\_S1_","\\_S2_","\\_S3_",
  *
  ******************************************************************************/
 
-s32
+u32
 acpi_hw_get_bit_shift (
 	u32                     mask)
 {
-	s32                     shift;
+	u32                     shift;
 
 
 	for (shift = 0; ((mask >> shift) & 1) == 0; shift++) { ; }
@@ -65,7 +66,7 @@ acpi_hw_get_bit_shift (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_hw_clear_acpi_status
  *
@@ -116,7 +117,7 @@ acpi_hw_clear_acpi_status (void)
 }
 
 
-/****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_hw_obtain_sleep_type_register_data
  *
@@ -129,8 +130,7 @@ acpi_hw_clear_acpi_status (void)
  * DESCRIPTION: Acpi_hw_obtain_sleep_type_register_data() obtains the SLP_TYP and
  *              SLP_TYPb values for the sleep state requested.
  *
-
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_hw_obtain_sleep_type_register_data (
@@ -139,7 +139,7 @@ acpi_hw_obtain_sleep_type_register_data (
 	u8                      *slp_typ_b)
 {
 	ACPI_STATUS             status = AE_OK;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 
 
 	/*
@@ -157,45 +157,64 @@ acpi_hw_obtain_sleep_type_register_data (
 	 */
 
 	status = acpi_ns_evaluate_by_name (sleep_state_table[sleep_state], NULL, &obj_desc);
-	if (AE_OK == status) {
-		if (obj_desc) {
-			/*
-			 *  We got something, now ensure it is correct.  The object must
-			 *  be a package and must have at least 2 numeric values as the
-			 *  two elements
-			 */
-
-			if ((obj_desc->common.type != ACPI_TYPE_PACKAGE) ||
-				((obj_desc->package.elements[0])->common.type !=
-					ACPI_TYPE_NUMBER) ||
-				((obj_desc->package.elements[1])->common.type !=
-					ACPI_TYPE_NUMBER))
-			{
-				/* Invalid _Sx_ package type or value  */
-
-				REPORT_ERROR ("Object type returned from interpreter differs from expected value");
-				status = AE_ERROR;
-			}
-			else {
-				/*
-				 *  Valid _Sx_ package size, type, and value
-				 */
-				*slp_typ_a =
-					(u8) (obj_desc->package.elements[0])->number.value;
-
-				*slp_typ_b =
-					(u8) (obj_desc->package.elements[1])->number.value;
-			}
-
-			acpi_cm_remove_reference (obj_desc);
-		}
+	if (ACPI_FAILURE (status)) {
+		return (status);
 	}
+
+	if (!obj_desc) {
+		REPORT_ERROR ("Missing Sleep State object");
+		return (AE_NOT_EXIST);
+	}
+
+	/*
+	 *  We got something, now ensure it is correct.  The object must
+	 *  be a package and must have at least 2 numeric values as the
+	 *  two elements
+	 */
+
+	if (obj_desc->common.type != ACPI_TYPE_PACKAGE) {
+		/* Must be a package */
+
+		REPORT_ERROR ("Sleep State object is not of type Package");
+		status = AE_ERROR;
+	}
+
+	else if (obj_desc->package.count < 2) {
+		/* Must have at least two elements */
+
+		REPORT_ERROR ("Sleep State package does not have at least two elements");
+		status = AE_ERROR;
+	}
+
+	else if (((obj_desc->package.elements[0])->common.type !=
+			 ACPI_TYPE_NUMBER) ||
+			 ((obj_desc->package.elements[1])->common.type !=
+				ACPI_TYPE_NUMBER))
+	{
+		/* Must have two  */
+
+		REPORT_ERROR ("Sleep State package elements are not both of type Number");
+		status = AE_ERROR;
+	}
+
+	else {
+		/*
+		 *  Valid _Sx_ package size, type, and value
+		 */
+		*slp_typ_a = (u8) (obj_desc->package.elements[0])->number.value;
+
+		*slp_typ_b = (u8) (obj_desc->package.elements[1])->number.value;
+	}
+
+
+
+	acpi_cm_remove_reference (obj_desc);
 
 	return (status);
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_hw_register_access
  *
@@ -229,7 +248,7 @@ acpi_hw_register_access (
 		va_list         marker;
 
 		va_start (marker, register_id);
-		value = va_arg (marker, s32);
+		value = va_arg (marker, u32);
 		va_end (marker);
 	}
 
@@ -407,7 +426,7 @@ acpi_hw_register_access (
 			register_value = (u32) acpi_os_in16 (acpi_gbl_FACP->pm1a_cnt_blk);
 		}
 
-		if (acpi_gbl_FACP->pm1b_cnt_blk && register_id != (s32) SLP_TYPE_A) {
+		if (acpi_gbl_FACP->pm1b_cnt_blk && register_id != (u32) SLP_TYPE_A) {
 			register_value |= (u32) acpi_os_in16 (acpi_gbl_FACP->pm1b_cnt_blk);
 		}
 
@@ -469,7 +488,7 @@ acpi_hw_register_access (
 				}
 			}
 
-			if (acpi_gbl_FACP->pm1b_cnt_blk && register_id != (s32) SLP_TYPE_A) {
+			if (acpi_gbl_FACP->pm1b_cnt_blk && register_id != (u32) SLP_TYPE_A) {
 				acpi_os_out16 (acpi_gbl_FACP->pm1b_cnt_blk, (u16) register_value);
 			}
 		}
@@ -551,13 +570,17 @@ acpi_hw_register_access (
 		mask = (((u32) register_id) & BIT_IN_REGISTER_MASK);
 		mask = 1 << (mask-1);
 
-		/* The base address of the GPE 0 Register Block */
-		/* Plus 1/2 the length of the GPE 0 Register Block */
-		/* The enable register is the register following the Status Register */
-		/* and each register is defined as 1/2 of the total Register Block */
+		/*
+		 * The base address of the GPE 0 Register Block
+		 * Plus 1/2 the length of the GPE 0 Register Block
+		 * The enable register is the register following the Status Register
+		 * and each register is defined as 1/2 of the total Register Block
+		 */
 
-		/* This sets the bit within Enable_bit that needs to be written to */
-		/* the register indicated in Mask to a 1, all others are 0 */
+		/*
+		 * This sets the bit within Enable_bit that needs to be written to
+		 * the register indicated in Mask to a 1, all others are 0
+		 */
 
 		if (mask > LOW_BYTE) {
 			/* Shift the value 1 byte to the right and add 1 to the register */

@@ -67,7 +67,7 @@ static inline void copy_cow_page(struct page * from, struct page * to, unsigned 
 	copy_user_highpage(to, from, address);
 }
 
-mem_map_t * mem_map = NULL;
+mem_map_t * mem_map;
 
 /*
  * Note: this doesn't free the actual pages themselves. That
@@ -1040,7 +1040,8 @@ void swapin_readahead(swp_entry_t entry)
 	num = valid_swaphandles(entry, &offset);
 	for (i = 0; i < num; offset++, i++) {
 		/* Don't block on I/O for read-ahead */
-		if (atomic_read(&nr_async_pages) >= pager_daemon.swap_cluster) {
+		if (atomic_read(&nr_async_pages) >= pager_daemon.swap_cluster
+				* (1 << page_cluster)) {
 			while (i++ < num)
 				swap_free(SWP_ENTRY(SWP_TYPE(entry), offset++));
 			break;
@@ -1239,7 +1240,7 @@ int handle_mm_fault(struct mm_struct *mm, struct vm_area_struct * vma,
 
 	pgd = pgd_offset(mm, address);
 	pmd = pmd_alloc(pgd, address);
-	
+
 	if (pmd) {
 		pte_t * pte = pte_alloc(pmd, address);
 		if (pte)

@@ -4,6 +4,7 @@
  *                       Acpi_rs_address16_stream
  *                       Acpi_rs_address32_resource
  *                       Acpi_rs_address32_stream
+ *              $Revision: 9 $
  *
  *****************************************************************************/
 
@@ -29,7 +30,7 @@
 #include "acpi.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
-	 MODULE_NAME         ("rsaddr");
+	 MODULE_NAME         ("rsaddr")
 
 
 /***************************************************************************
@@ -63,8 +64,8 @@ acpi_rs_address16_resource (
 {
 	u8                      *buffer = byte_stream_buffer;
 	RESOURCE                *output_struct = (RESOURCE *) * output_buffer;
-	u16                     temp16 = 0;
-	u8                      temp8 = 0;
+	u16                     temp16;
+	u8                      temp8;
 	u32                     index;
 	u32                     struct_size = sizeof(ADDRESS16_RESOURCE) +
 			  RESOURCE_LENGTH_NO_DATA;
@@ -75,7 +76,7 @@ acpi_rs_address16_resource (
 	 */
 	buffer += 1;
 
-	temp16 = *(u16 *)buffer;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	*bytes_consumed = temp16 + 3;
 
@@ -91,7 +92,7 @@ acpi_rs_address16_resource (
 
 	/* Values 0-2 are valid */
 	if (temp8 > 2) {
-		return (AE_ERROR);
+		return (AE_AML_ERROR);
 	}
 
 	output_struct->data.address16.resource_type = temp8 & 0x03;
@@ -235,17 +236,13 @@ acpi_rs_address16_resource (
 		 */
 		temp8 = (u8) (index + 1);
 		struct_size += ROUND_UP_TO_32_bITS (temp8);
+		output_struct->length = struct_size;
 	}
 	else {
 		output_struct->data.address16.resource_source_index = 0x00;
 		output_struct->data.address16.resource_source_string_length = 0;
 		output_struct->data.address16.resource_source[0] = 0x00;
 	}
-
-	/*
-	 * Set the Length parameter
-	 */
-	output_struct->length = struct_size;
 
 	/*
 	 * Return the final size of the structure
@@ -281,8 +278,8 @@ acpi_rs_address16_stream (
 {
 	u8                      *buffer = *output_buffer;
 	u8                      *length_field;
-	u8                      temp8 = 0;
-	u8                      *temp_pointer = NULL;
+	u8                      temp8;
+	NATIVE_CHAR             *temp_pointer = NULL;
 	u32                     actual_bytes;
 
 
@@ -389,7 +386,7 @@ acpi_rs_address16_stream (
 		*buffer = temp8;
 		buffer += 1;
 
-		temp_pointer = buffer;
+		temp_pointer = (NATIVE_CHAR *) buffer;
 
 		/*
 		 * Copy the string
@@ -450,14 +447,20 @@ acpi_rs_address32_resource (
 	u8                      **output_buffer,
 	u32                     *structure_size)
 {
-	u8                      *buffer = byte_stream_buffer;
-	RESOURCE                *output_struct = (RESOURCE *) * output_buffer;
-	u16                     temp16 = 0;
-	u8                      temp8 = 0;
-	u32                     struct_size = sizeof (ADDRESS32_RESOURCE) +
-			  RESOURCE_LENGTH_NO_DATA;
+	u8                      *buffer;
+	RESOURCE                *output_struct;
+	u16                     temp16;
+	u8                      temp8;
+	u32                     struct_size;
 	u32                     index;
 
+
+	buffer = byte_stream_buffer;
+
+	output_struct = (RESOURCE *) *output_buffer;
+
+	struct_size = sizeof (ADDRESS32_RESOURCE) +
+			  RESOURCE_LENGTH_NO_DATA;
 
 	/*
 	 * Point past the Descriptor to get the number of bytes consumed
@@ -477,7 +480,7 @@ acpi_rs_address32_resource (
 
 	/* Values 0-2 are valid */
 	if(temp8 > 2) {
-		return (AE_ERROR);
+		return (AE_AML_ERROR);
 	}
 
 	output_struct->data.address32.resource_type = temp8 & 0x03;
@@ -661,11 +664,13 @@ acpi_rs_address32_stream (
 	u8                      **output_buffer,
 	u32                     *bytes_consumed)
 {
-	u8                      *buffer = *output_buffer;
+	u8                      *buffer;
 	u16                     *length_field;
-	u8                      temp8 = 0;
-	u8                      *temp_pointer = NULL;
+	u8                      temp8;
+	NATIVE_CHAR             *temp_pointer;
 
+
+	buffer = *output_buffer;
 
 	/*
 	 * The descriptor field is static
@@ -779,7 +784,7 @@ acpi_rs_address32_stream (
 
 		buffer += 1;
 
-		temp_pointer = buffer;
+		temp_pointer = (NATIVE_CHAR *) buffer;
 
 		/*
 		 * Copy the string

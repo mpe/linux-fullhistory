@@ -474,7 +474,7 @@ static void chipset_init(struct net_device *dev)
 } /* chipset_init() */
 
 
-int __init pt_init(void)
+int __init ptwin_init(void)
 {
     int *port;
     int ioaddr = 0;
@@ -531,7 +531,7 @@ int __init pt_init(void)
     pt0b.irq = pt0a.irq;	/* IRQ is shared */
 
     return 0;
-} /* pt_init() */
+} /* ptwin_init() */
 
 /*
  * Probe for PT card.  Also initialises the timers
@@ -1758,7 +1758,7 @@ MODULE_DESCRIPTION("AX.25 driver for the Gracillis PacketTwin HDLC card");
 
 int init_module(void)
 {
-	return pt_init();
+	return ptwin_init();
 }
 
 void cleanup_module(void)

@@ -809,14 +809,9 @@ static int nfs_sillyrename(struct inode *dir_i, struct dentry *dentry)
 		dentry->d_parent->d_name.name, dentry->d_name.name, 
 		atomic_read(&dentry->d_count));
 
-	/*
-	 * Note that a silly-renamed file can be deleted once it's
-	 * no longer in use -- it's just an ordinary file now.
-	 */
-	if (atomic_read(&dentry->d_count) == 1) {
-		dentry->d_flags &= ~DCACHE_NFSFS_RENAMED;
+	if (atomic_read(&dentry->d_count) == 1)
 		goto out;  /* No need to silly rename. */
-	}
+
 
 #ifdef NFS_PARANOIA
 if (!dentry->d_inode)
@@ -900,12 +895,21 @@ static int nfs_safe_remove(struct dentry *dentry)
 #endif
 		goto out;
 	}
+
+	/* If the dentry was sillyrenamed, we simply call d_delete() */
+	if (dentry->d_flags & DCACHE_NFSFS_RENAMED) {
+		error = 0;
+		goto out_delete;
+	}
+
 	nfs_zap_caches(dir_i);
 	if (inode)
 		NFS_CACHEINV(inode);
 	error = NFS_PROTO(dir_i)->remove(dir, &dentry->d_name);
 	if (error < 0)
 		goto out;
+
+ out_delete:
 	/*
 	 * Free the inode
 	 */

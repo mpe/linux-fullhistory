@@ -2,6 +2,7 @@
  *
  * Module Name: evevent - Fixed and General Purpose Acpi_event
  *                          handling and dispatch
+ *              $Revision: 13 $
  *
  *****************************************************************************/
 
@@ -24,13 +25,13 @@
  */
 
 #include "acpi.h"
-#include "hardware.h"
-#include "events.h"
-#include "namesp.h"
-#include "common.h"
+#include "achware.h"
+#include "acevents.h"
+#include "acnamesp.h"
+#include "accommon.h"
 
 #define _COMPONENT          EVENT_HANDLING
-	 MODULE_NAME         ("evevent");
+	 MODULE_NAME         ("evevent")
 
 
 /******************************************************************************
@@ -68,7 +69,7 @@ acpi_ev_fixed_event_initialize(void)
 	acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, ACPI_EVENT_RTC +
 			 TMR_EN, 0);
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -140,7 +141,7 @@ acpi_ev_fixed_event_detect(void)
 		int_status |= acpi_ev_fixed_event_dispatch (ACPI_EVENT_SLEEP_BUTTON);
 	}
 
-	return int_status;
+	return (int_status);
 }
 
 
@@ -163,7 +164,7 @@ acpi_ev_fixed_event_dispatch (
 {
 	/* Clear the status bit */
 
-	acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_DO_NOT_LOCK, (s32)TMR_STS +
+	acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_DO_NOT_LOCK, TMR_STS +
 			 event, 1);
 
 	/*
@@ -175,13 +176,13 @@ acpi_ev_fixed_event_dispatch (
 				 TMR_EN + event, 0);
 
 		REPORT_ERROR("No installed handler for fixed event.");
-		return INTERRUPT_NOT_HANDLED;
+		return (INTERRUPT_NOT_HANDLED);
 	}
 
 	/* Invoke the handler */
 
-	return (acpi_gbl_fixed_event_handlers[event].handler)(
-			  acpi_gbl_fixed_event_handlers[event].context);
+	return ((acpi_gbl_fixed_event_handlers[event].handler)(
+			  acpi_gbl_fixed_event_handlers[event].context));
 }
 
 
@@ -215,6 +216,11 @@ acpi_ev_gpe_initialize (void)
 	gpe0register_count      = (u16) DIV_2 (acpi_gbl_FACP->gpe0blk_len);
 	gpe1_register_count     = (u16) DIV_2 (acpi_gbl_FACP->gpe1_blk_len);
 	acpi_gbl_gpe_register_count = gpe0register_count + gpe1_register_count;
+
+	if (!acpi_gbl_gpe_register_count) {
+		REPORT_WARNING ("No GPEs defined in the FACP");
+		return (AE_OK);
+	}
 
 	/*
 	 * Allocate the Gpe information block
@@ -341,17 +347,17 @@ acpi_ev_save_method_info (
 	void                    **return_value)
 {
 	u32                     gpe_number;
-	char                    name[ACPI_NAME_SIZE + 1];
+	NATIVE_CHAR             name[ACPI_NAME_SIZE + 1];
 	u8                      type;
 
 
 	/* Extract the name from the object and convert to a string */
 
-	MOVE_UNALIGNED32_TO_32 (name, &((ACPI_NAMED_OBJECT*) obj_handle)->name);
+	MOVE_UNALIGNED32_TO_32 (name, &((ACPI_NAMESPACE_NODE *) obj_handle)->name);
 	name[ACPI_NAME_SIZE] = 0;
 
 	/*
-	 * Edge/Level determination is based on the 2nd char of the method name
+	 * Edge/Level determination is based on the 2nd s8 of the method name
 	 */
 	if (name[1] == 'L') {
 		type = ACPI_EVENT_LEVEL_TRIGGERED;
@@ -362,7 +368,7 @@ acpi_ev_save_method_info (
 	else {
 		/* Unknown method type, just ignore it! */
 
-		return AE_OK;
+		return (AE_OK);
 	}
 
 	/* Convert the last two characters of the name to the Gpe Number */
@@ -371,7 +377,7 @@ acpi_ev_save_method_info (
 	if (gpe_number == ACPI_UINT32_MAX) {
 		/* Conversion failed; invalid method, just ignore it */
 
-		return AE_OK;
+		return (AE_OK);
 	}
 
 	/* Ensure that we have a valid GPE number */
@@ -379,7 +385,7 @@ acpi_ev_save_method_info (
 	if (acpi_gbl_gpe_valid[gpe_number] == ACPI_GPE_INVALID) {
 		/* Not valid, all we can do here is ignore it */
 
-		return AE_OK;
+		return (AE_OK);
 	}
 
 	/*
@@ -397,7 +403,7 @@ acpi_ev_save_method_info (
 
 	acpi_hw_enable_gpe (gpe_number);
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -431,7 +437,7 @@ acpi_ev_init_gpe_control_methods (void)
 	/* Traverse the namespace under \_GPE to find all methods there */
 
 	status = acpi_walk_namespace (ACPI_TYPE_METHOD, acpi_gbl_gpe_obj_handle,
-			  ACPI_INT32_MAX, acpi_ev_save_method_info,
+			  ACPI_UINT32_MAX, acpi_ev_save_method_info,
 			  NULL, NULL);
 
 	return (status);
@@ -523,7 +529,7 @@ acpi_ev_gpe_detect (void)
 		}
 	}
 
-	return int_status;
+	return (int_status);
 }
 
 

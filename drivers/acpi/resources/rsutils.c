@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Module Name: rsutils - Utilities for the resource manager
+ *              $Revision: 10 $
  *
  *****************************************************************************/
 
@@ -24,19 +25,19 @@
 
 
 #include "acpi.h"
-#include "namesp.h"
-#include "resource.h"
+#include "acnamesp.h"
+#include "acresrc.h"
 
 
 #define _COMPONENT          RESOURCE_MANAGER
-	 MODULE_NAME         ("rsutils");
+	 MODULE_NAME         ("rsutils")
 
 
 /******************************************************************************
  *
  * FUNCTION:    Acpi_rs_get_prt_method_data
  *
- * PARAMETERS:  Device_handle   - a handle to the containing object
+ * PARAMETERS:  Handle          - a handle to the containing object
  *              Ret_buffer      - a pointer to a buffer structure for the
  *                                  results
  *
@@ -55,28 +56,20 @@ acpi_rs_get_prt_method_data (
 	ACPI_HANDLE             handle,
 	ACPI_BUFFER             *ret_buffer)
 {
-	ACPI_OBJECT_INTERNAL    *ret_obj;
+	ACPI_OPERAND_OBJECT     *ret_obj;
 	ACPI_STATUS             status;
-	u32                     buffer_space_needed = ret_buffer->length;
+	u32                     buffer_space_needed;
 
 
-	/*
-	 *  Must have a valid handle and buffer, So we have to have a handle
-	 *  a return buffer structure and if there is a non-zero buffer length
-	 *  we also need a valid pointer in the buffer
-	 */
-	if ((!handle)               ||
-		(!ret_buffer)           ||
-		((!ret_buffer->pointer) && (ret_buffer->length)))
-	{
-		return (AE_BAD_PARAMETER);
-	}
+	/* already validated params, so we won't repeat here */
+
+	buffer_space_needed = ret_buffer->length;
 
 	/*
 	 *  Execute the method, no parameters
 	 */
 	status = acpi_ns_evaluate_relative (handle, "_PRT", NULL, &ret_obj);
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
 
@@ -128,7 +121,7 @@ cleanup:
  *
  * FUNCTION:    Acpi_rs_get_crs_method_data
  *
- * PARAMETERS:  Device_handle   - a handle to the containing object
+ * PARAMETERS:  Handle          - a handle to the containing object
  *              Ret_buffer      - a pointer to a buffer structure for the
  *                                  results
  *
@@ -147,28 +140,18 @@ acpi_rs_get_crs_method_data (
 	ACPI_HANDLE             handle,
 	ACPI_BUFFER             *ret_buffer)
 {
-	ACPI_OBJECT_INTERNAL    *ret_obj;
+	ACPI_OPERAND_OBJECT     *ret_obj;
 	ACPI_STATUS             status;
 	u32                     buffer_space_needed = ret_buffer->length;
 
 
-	/*
-	 *  Must have a valid handle and buffer, So we have to have a handle
-	 *  a return buffer structure and if there is a non-zero buffer length
-	 *  we also need a valid pointer in the buffer
-	 */
-	if ((!handle)               ||
-		(!ret_buffer)           ||
-		((!ret_buffer->pointer) && (ret_buffer->length)))
-	{
-		return (AE_BAD_PARAMETER);
-	}
+	/* already validated params, so we won't repeat here */
 
 	/*
 	 *  Execute the method, no parameters
 	 */
 	status = acpi_ns_evaluate_relative (handle, "_CRS", NULL, &ret_obj);
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
 
@@ -198,9 +181,7 @@ acpi_rs_get_crs_method_data (
 			  ret_buffer->pointer,
 			  &buffer_space_needed);
 
-	if (AE_OK == status) {
-		acpi_rs_dump_resource_list((RESOURCE *)ret_buffer->pointer);
-	}
+
 
 	/*
 	 * Tell the user how much of the buffer we have used or is needed
@@ -223,7 +204,7 @@ cleanup:
  *
  * FUNCTION:    Acpi_rs_get_prs_method_data
  *
- * PARAMETERS:  Device_handle   - a handle to the containing object
+ * PARAMETERS:  Handle          - a handle to the containing object
  *              Ret_buffer      - a pointer to a buffer structure for the
  *                                  results
  *
@@ -242,28 +223,18 @@ acpi_rs_get_prs_method_data (
 	ACPI_HANDLE             handle,
 	ACPI_BUFFER             *ret_buffer)
 {
-	ACPI_OBJECT_INTERNAL    *ret_obj;
+	ACPI_OPERAND_OBJECT     *ret_obj;
 	ACPI_STATUS             status;
 	u32                     buffer_space_needed = ret_buffer->length;
 
 
-	/*
-	 *  Must have a valid handle and buffer, So we have to have a handle
-	 *  a return buffer structure and if there is a non-zero buffer length
-	 *  we also need a valid pointer in the buffer
-	 */
-	if ((!handle)               ||
-		(!ret_buffer)           ||
-		((!ret_buffer->pointer) && (ret_buffer->length)))
-	{
-		return (AE_BAD_PARAMETER);
-	}
+	/* already validated params, so we won't repeat here */
 
 	/*
 	 *  Execute the method, no parameters
 	 */
 	status = acpi_ns_evaluate_relative (handle, "_PRS", NULL, &ret_obj);
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
 
@@ -314,9 +285,7 @@ cleanup:
  *
  * FUNCTION:    Acpi_rs_set_srs_method_data
  *
- * PARAMETERS:  Device_handle   - a handle to the containing object
- *              *Method_name    - Name of method to execute, If NULL, the
- *                                handle is the object to execute
+ * PARAMETERS:  Handle          - a handle to the containing object
  *              In_buffer       - a pointer to a buffer structure of the
  *                                  parameter
  *
@@ -335,22 +304,13 @@ acpi_rs_set_srs_method_data (
 	ACPI_HANDLE             handle,
 	ACPI_BUFFER             *in_buffer)
 {
-	ACPI_OBJECT_INTERNAL    *params[2];
-	ACPI_OBJECT_INTERNAL    param_obj;
+	ACPI_OPERAND_OBJECT     *params[2];
+	ACPI_OPERAND_OBJECT     param_obj;
 	ACPI_STATUS             status;
 	u8                      *byte_stream = NULL;
 	u32                     buffer_size_needed = 0;
 
-	/*
-	 *  Must have a valid handle and buffer
-	 */
-	if ((!handle)       ||
-		(!in_buffer)          ||
-		(!in_buffer->pointer) ||
-		(!in_buffer->length))
-	{
-		return (AE_BAD_PARAMETER);
-	}
+	/* already validated params, so we won't repeat here */
 
 	/*
 	 * The In_buffer parameter will point to a linked list of
@@ -390,12 +350,8 @@ acpi_rs_set_srs_method_data (
 			   byte_stream,
 			   &buffer_size_needed);
 
-	if(AE_OK != status) {
-		/*
-		 *  Failed the call
-		 */
-		acpi_cm_free (byte_stream);
-		return (status);
+	if (ACPI_FAILURE (status)) {
+		goto cleanup;
 	}
 
 	/*
@@ -424,6 +380,9 @@ acpi_rs_set_srs_method_data (
 	/*
 	 *  Clean up and return the status from Acpi_ns_evaluate_relative
 	 */
+
+cleanup:
+
 	acpi_cm_free (byte_stream);
 	return (status);
 }

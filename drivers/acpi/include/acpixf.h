@@ -28,7 +28,7 @@
 #define __ACXFACE_H__
 
 #include "actypes.h"
-#include "actables.h"
+#include "actbl.h"
 
 /*
  * Global interfaces

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
- * Name: output.h -- debug output
+ * Name: acoutput.h -- debug output
+ *       $Revision: 63 $
  *
  *****************************************************************************/
 
@@ -23,8 +23,8 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _OUTPUT_H
-#define _OUTPUT_H
+#ifndef __ACOUTPUT_H__
+#define __ACOUTPUT_H__
 
 /*
  * Debug levels and component IDs.  These are used to control the
@@ -121,4 +121,4 @@
 #define CHARS_PER_LINE              16          /* used in Dump_buf function */
 
 
-#endif /* _OUTPUT_H */
+#endif /* __ACOUTPUT_H__ */

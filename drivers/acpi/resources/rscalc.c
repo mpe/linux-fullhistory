@@ -2,6 +2,7 @@
  *
  * Module Name: rscalc - Acpi_rs_calculate_byte_stream_length
  *                       Acpi_rs_calculate_list_length
+ *              $Revision: 9 $
  *
  *****************************************************************************/
 
@@ -27,7 +28,7 @@
 #include "acpi.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
-	 MODULE_NAME         ("rscalc");
+	 MODULE_NAME         ("rscalc")
 
 
 /***************************************************************************
@@ -51,9 +52,8 @@ acpi_rs_calculate_byte_stream_length (
 	RESOURCE                *linked_list,
 	u32                     *size_needed)
 {
-	ACPI_STATUS             status = AE_OK;
 	u32                     byte_stream_size_needed = 0;
-	u32                     size_of_this_bit;
+	u32                     segment_size;
 	EXTENDED_IRQ_RESOURCE   *ex_irq = NULL;
 	u8                      done = FALSE;
 
@@ -64,7 +64,7 @@ acpi_rs_calculate_byte_stream_length (
 		 * Init the variable that will hold the size to add to the
 		 *  total.
 		 */
-		size_of_this_bit = 0;
+		segment_size = 0;
 
 		switch (linked_list->id)
 		{
@@ -76,7 +76,7 @@ acpi_rs_calculate_byte_stream_length (
 			 * For an IRQ Resource, Byte 3, although optional, will
 			 *  always be created - it holds IRQ information.
 			 */
-			size_of_this_bit = 4;
+			segment_size = 4;
 			break;
 
 		case dma:
@@ -86,7 +86,7 @@ acpi_rs_calculate_byte_stream_length (
 			/*
 			 * For this resource the size is static
 			 */
-			size_of_this_bit = 3;
+			segment_size = 3;
 			break;
 
 		case start_dependent_functions:
@@ -97,7 +97,7 @@ acpi_rs_calculate_byte_stream_length (
 			 * For a Start_dependent_functions Resource, Byte 1,
 			 * although optional, will always be created.
 			 */
-			size_of_this_bit = 2;
+			segment_size = 2;
 			break;
 
 		case end_dependent_functions:
@@ -107,7 +107,7 @@ acpi_rs_calculate_byte_stream_length (
 			/*
 			 * For this resource the size is static
 			 */
-			size_of_this_bit = 1;
+			segment_size = 1;
 			break;
 
 		case io:
@@ -117,7 +117,7 @@ acpi_rs_calculate_byte_stream_length (
 			/*
 			 * For this resource the size is static
 			 */
-			size_of_this_bit = 8;
+			segment_size = 8;
 			break;
 
 		case fixed_io:
@@ -127,7 +127,7 @@ acpi_rs_calculate_byte_stream_length (
 			/*
 			 * For this resource the size is static
 			 */
-			size_of_this_bit = 4;
+			segment_size = 4;
 			break;
 
 		case vendor_specific:
@@ -141,12 +141,12 @@ acpi_rs_calculate_byte_stream_length (
 			 *  Resource data type.
 			 */
 			if(linked_list->data.vendor_specific.length > 7) {
-				size_of_this_bit = 3;
+				segment_size = 3;
 			}
 			else {
-				size_of_this_bit = 1;
+				segment_size = 1;
 			}
-			size_of_this_bit +=
+			segment_size +=
 				linked_list->data.vendor_specific.length;
 			break;
 
@@ -157,7 +157,7 @@ acpi_rs_calculate_byte_stream_length (
 			/*
 			 * For this resource the size is static
 			 */
-			size_of_this_bit = 2;
+			segment_size = 2;
 			done = TRUE;
 			break;
 
@@ -168,7 +168,7 @@ acpi_rs_calculate_byte_stream_length (
 			/*
 			 * For this resource the size is static
 			 */
-			size_of_this_bit = 12;
+			segment_size = 12;
 			break;
 
 		case memory32:
@@ -178,7 +178,7 @@ acpi_rs_calculate_byte_stream_length (
 			/*
 			 * For this resource the size is static
 			 */
-			size_of_this_bit = 20;
+			segment_size = 20;
 			break;
 
 		case fixed_memory32:
@@ -188,7 +188,7 @@ acpi_rs_calculate_byte_stream_length (
 			/*
 			 * For this resource the size is static
 			 */
-			size_of_this_bit = 12;
+			segment_size = 12;
 			break;
 
 		case address16:
@@ -201,10 +201,10 @@ acpi_rs_calculate_byte_stream_length (
 			 *  the Index + the length of the null terminated
 			 *  string Resource Source + 1 for the null.
 			 */
-			size_of_this_bit = 16;
+			segment_size = 16;
 
 			if(NULL != linked_list->data.address16.resource_source) {
-				size_of_this_bit += (1 +
+				segment_size += (1 +
 					linked_list->data.address16.resource_source_string_length);
 			}
 			break;
@@ -219,10 +219,10 @@ acpi_rs_calculate_byte_stream_length (
 			 *  length of the null terminated string Resource Source +
 			 *  1 for the null.
 			 */
-			size_of_this_bit = 26;
+			segment_size = 26;
 
 			if(NULL != linked_list->data.address16.resource_source) {
-				size_of_this_bit += (1 +
+				segment_size += (1 +
 					linked_list->data.address16.resource_source_string_length);
 			}
 			break;
@@ -239,14 +239,14 @@ acpi_rs_calculate_byte_stream_length (
 			 *  Index + the length of the null terminated string
 			 *  Resource Source + 1 for the null.
 			 */
-			size_of_this_bit = 9;
+			segment_size = 9;
 
-			size_of_this_bit +=
+			segment_size +=
 				(linked_list->data.extended_irq.number_of_interrupts -
 				 1) * 4;
 
 			if(NULL != ex_irq->resource_source) {
-				size_of_this_bit += (1 +
+				segment_size += (1 +
 					linked_list->data.extended_irq.resource_source_string_length);
 			}
 			break;
@@ -256,7 +256,7 @@ acpi_rs_calculate_byte_stream_length (
 			 * If we get here, everything is out of sync,
 			 *  so exit with an error
 			 */
-			return (AE_ERROR);
+			return (AE_AML_ERROR);
 			break;
 
 		} /* switch (Linked_list->Id) */
@@ -264,7 +264,7 @@ acpi_rs_calculate_byte_stream_length (
 		/*
 		 * Update the total
 		 */
-		byte_stream_size_needed += size_of_this_bit;
+		byte_stream_size_needed += segment_size;
 
 		/*
 		 * Point to the next object
@@ -278,7 +278,7 @@ acpi_rs_calculate_byte_stream_length (
 	 */
 	*size_needed = byte_stream_size_needed;
 
-	return (status);
+	return (AE_OK);
 
 } /* Acpi_rs_calculate_byte_stream_length */
 
@@ -309,16 +309,16 @@ acpi_rs_calculate_list_length (
 {
 	u32                     buffer_size = 0;
 	u32                     bytes_parsed = 0;
-	u8                      resource_type = 0;
-	u32                     structure_size = 0;
-	u32                     bytes_consumed = 0;
-	u8                      *buffer;
 	u8                      number_of_interrupts = 0;
+	u8                      number_of_channels = 0;
+	u8                      resource_type;
+	u32                     structure_size;
+	u32                     bytes_consumed;
+	u8                      *buffer;
 	u8                      temp8;
 	u16                     temp16;
 	u8                      index;
-	u8                      number_of_channels = 0;
-	u8                      additional_bytes = 0;
+	u8                      additional_bytes;
 
 
 	while (bytes_parsed < byte_stream_buffer_length) {
@@ -532,7 +532,7 @@ acpi_rs_calculate_list_length (
 				 * If we get here, everything is out of sync,
 				 *  so exit with an error
 				 */
-				return (AE_ERROR);
+				return (AE_AML_ERROR);
 				break;
 			}
 		}
@@ -723,7 +723,7 @@ acpi_rs_calculate_list_length (
 				 * If we get here, everything is out of sync,
 				 *  so exit with an error
 				 */
-				return (AE_ERROR);
+				return (AE_AML_ERROR);
 				break;
 
 			} /* switch */
@@ -752,3 +752,116 @@ acpi_rs_calculate_list_length (
 
 } /* Acpi_rs_calculate_list_length */
 
+/***************************************************************************
+ * FUNCTION:    Acpi_rs_calculate_pci_routing_table_length
+ *
+ * PARAMETERS:
+ *              Package_object          - Pointer to the package object
+ *              Buffer_size_needed      - u32 pointer of the size buffer
+ *                                          needed to properly return the
+ *                                          parsed data
+ *
+ * RETURN:      Status  AE_OK
+ *
+ * DESCRIPTION: Given a package representing a PCI routing table, this
+ *                calculates the size of the corresponding linked list of
+ *                descriptions.
+ *
+ ***************************************************************************/
+
+ACPI_STATUS
+acpi_rs_calculate_pci_routing_table_length (
+	ACPI_OPERAND_OBJECT     *package_object,
+	u32                     *buffer_size_needed)
+{
+	u32                      number_of_elements;
+	u32                      temp_size_needed;
+	ACPI_OPERAND_OBJECT      **top_object_list;
+	u32                      index;
+
+	number_of_elements = package_object->package.count;
+
+	/*
+	 * Calculate the size of the return buffer.
+	 * The base size is the number of elements * the sizes of the
+	 * structures.  Additional space for the strings is added below.
+	 * The minus one is to subtract the size of the u8 Source[1]
+	 * member because it is added below.
+	 *
+	 * NOTE: The Number_of_elements is incremented by one to add an end
+	 * table structure that is essentially a structure of zeros.
+	 */
+	temp_size_needed = (number_of_elements + 1) *
+			  (sizeof (PCI_ROUTING_TABLE) - 1);
+
+	/*
+	 * But each PRT_ENTRY structure has a pointer to a string and
+	 * the size of that string must be found.
+	 */
+	top_object_list = package_object->package.elements;
+
+	for (index = 0; index < number_of_elements; index++) {
+		ACPI_OPERAND_OBJECT     *package_element;
+		ACPI_OPERAND_OBJECT     **sub_object_list;
+		u8                      name_found;
+		u32                     table_index;
+
+		/*
+		 * Dereference the sub-package
+		 */
+		package_element = *top_object_list;
+
+		/*
+		 * The Sub_object_list will now point to an array of the
+		 * four IRQ elements: Address, Pin, Source and Source_index
+		 */
+		sub_object_list = package_element->package.elements;
+
+		/*
+		 * Scan the Irq_table_elements for the Source Name String
+		 */
+		name_found = FALSE;
+
+		for (table_index = 0; table_index < 4 && !name_found; table_index++) {
+			if (ACPI_TYPE_STRING == (*sub_object_list)->common.type) {
+				name_found = TRUE;
+			}
+
+			else {
+				/*
+				 * Look at the next element
+				 */
+				sub_object_list++;
+			}
+		}
+
+		/*
+		 * Was a String type found?
+		 */
+		if (TRUE == name_found) {
+			/*
+			 * The length String.Length field includes the
+			 * terminating NULL
+			 */
+			temp_size_needed += (*sub_object_list)->string.length;
+			temp_size_needed = ROUND_UP_TO_32_bITS (temp_size_needed);
+		}
+
+		else {
+			/*
+			 * If no name was found, then this is a NULL, which is
+			 *  translated as a u32 zero.
+			 */
+			temp_size_needed += sizeof(u32);
+		}
+
+		/*
+		 * Point to the next ACPI_OPERAND_OBJECT
+		 */
+		top_object_list++;
+	}
+
+	*buffer_size_needed = temp_size_needed;
+
+	return (AE_OK);
+}

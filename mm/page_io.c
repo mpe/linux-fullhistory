@@ -43,7 +43,8 @@ static int rw_swap_page_base(int rw, swp_entry_t entry, struct page *page, int w
 	struct inode *swapf = 0;
 
 	/* Don't allow too many pending pages in flight.. */
-	if (atomic_read(&nr_async_pages) > pager_daemon.swap_cluster)
+	if ((rw == WRITE) && atomic_read(&nr_async_pages) >
+			pager_daemon.swap_cluster * (1 << page_cluster))
 		wait = 1;
 
 	if (rw == READ) {

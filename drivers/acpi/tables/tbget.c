@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: tbget - ACPI Table get* routines
+ *              $Revision: 22 $
  *
  *****************************************************************************/
 
@@ -25,12 +25,12 @@
 
 
 #include "acpi.h"
-#include "hardware.h"
-#include "tables.h"
+#include "achware.h"
+#include "actables.h"
 
 
 #define _COMPONENT          TABLE_MANAGER
-	 MODULE_NAME         ("tbget");
+	 MODULE_NAME         ("tbget")
 
 
 /*******************************************************************************
@@ -90,10 +90,15 @@ acpi_tb_get_table_ptr (
 		return (AE_NOT_EXIST);
 	}
 
-	/* Walk the list to get the table */
-
+	/* Walk the list to get the desired table
+	 *  Since the if (Instance == 1) check above checked for the
+	 *  first table, setting Table_desc equal to the .Next member
+	 *  is actually pointing to the second table.  Therefore, we
+	 *  need to walk from the 2nd table until we reach the Instance
+	 *  that the user is looking for and return its table pointer.
+	 */
 	table_desc = acpi_gbl_acpi_tables[table_type].next;
-	for (i = 1; i < acpi_gbl_acpi_tables[table_type].count; i++) {
+	for (i = 2; i < instance; i++) {
 		table_desc = table_desc->next;
 	}
 
@@ -110,8 +115,8 @@ acpi_tb_get_table_ptr (
  * FUNCTION:    Acpi_tb_get_table
  *
  * PARAMETERS:  Physical_address        - Physical address of table to retrieve
- *              *Buffer_ptr             - If == NULL, read data from buffer
- *                                        rather than searching memory
+ *              *Buffer_ptr             - If Buffer_ptr is valid, read data from
+ *                                         buffer rather than searching memory
  *              *Table_info             - Where the table info is returned
  *
  * RETURN:      Status
@@ -123,7 +128,7 @@ acpi_tb_get_table_ptr (
 ACPI_STATUS
 acpi_tb_get_table (
 	void                    *physical_address,
-	char                    *buffer_ptr,
+	ACPI_TABLE_HEADER       *buffer_ptr,
 	ACPI_TABLE_DESC         *table_info)
 {
 	ACPI_TABLE_HEADER       *table_header = NULL;
@@ -143,7 +148,7 @@ acpi_tb_get_table (
 		 * Getting data from a buffer, not BIOS tables
 		 */
 
-		table_header = (ACPI_TABLE_HEADER *) buffer_ptr;
+		table_header = buffer_ptr;
 		status = acpi_tb_validate_table_header (table_header);
 		if (ACPI_FAILURE (status)) {
 			/* Table failed verification, map all errors to BAD_DATA */
@@ -160,7 +165,7 @@ acpi_tb_get_table (
 
 		/* Copy the entire table (including header) to the local buffer */
 
-		size = (ACPI_SIZE) table_header->length;
+		size = table_header->length;
 		MEMCPY (full_table, buffer_ptr, size);
 
 		/* Save allocation type */
@@ -216,7 +221,7 @@ acpi_tb_get_table (
 ACPI_STATUS
 acpi_tb_get_all_tables (
 	u32                     number_of_tables,
-	char                    *table_ptr)
+	ACPI_TABLE_HEADER       *table_ptr)
 {
 	ACPI_STATUS             status = AE_OK;
 	u32                     index;

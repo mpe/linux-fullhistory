@@ -1,6 +1,7 @@
 /******************************************************************************
  *
- * Module Name: dispatch.h
+ * Name: acdispat.h - dispatcher (parser to interpreter interface)
+ *       $Revision: 29 $
  *
  *****************************************************************************/
 
@@ -23,8 +24,8 @@
  */
 
 
-#ifndef _DISPATCH_H_
-#define _DISPATCH_H_
+#ifndef _ACDISPAT_H_
+#define _ACDISPAT_H_
 
 
 #define NAMEOF_LOCAL_NTE    "__L0"
@@ -56,7 +57,7 @@ acpi_ds_obj_stack_get_value (
 
 ACPI_STATUS
 acpi_ds_obj_stack_pop_object (
-	ACPI_OBJECT_INTERNAL    **object,
+	ACPI_OPERAND_OBJECT     **object,
 	ACPI_WALK_STATE         *walk_state);
 
 
@@ -64,47 +65,36 @@ acpi_ds_obj_stack_pop_object (
 
 ACPI_STATUS
 acpi_ds_get_region_arguments (
-	ACPI_OBJECT_INTERNAL    *rgn_desc);
+	ACPI_OPERAND_OBJECT     *rgn_desc);
 
 
 /* dsctrl - Parser/Interpreter interface, control stack routines */
 
-/*
-ACPI_CTRL_STATE *
-Acpi_ds_create_control_state (void);
-
-void
-Acpi_ds_push_control_state (
-	ACPI_CTRL_STATE         *Control_state,
-	ACPI_WALK_STATE         *Walk_state);
-
-ACPI_CTRL_STATE *
-Acpi_ds_pop_control_state (
-	ACPI_WALK_STATE         *Walk_state);
-*/
 
 ACPI_STATUS
 acpi_ds_exec_begin_control_op (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op);
+	ACPI_PARSE_OBJECT       *op);
 
 ACPI_STATUS
 acpi_ds_exec_end_control_op (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op);
+	ACPI_PARSE_OBJECT       *op);
 
 
 /* dsexec - Parser/Interpreter interface, method execution callbacks */
 
 ACPI_STATUS
 acpi_ds_exec_begin_op (
-	ACPI_WALK_STATE         *state,
-	ACPI_GENERIC_OP         *op);
+	u16                     opcode,
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_WALK_STATE         *walk_state,
+	ACPI_PARSE_OBJECT       **out_op);
 
 ACPI_STATUS
 acpi_ds_exec_end_op (
 	ACPI_WALK_STATE         *state,
-	ACPI_GENERIC_OP         *op);
+	ACPI_PARSE_OBJECT       *op);
 
 
 /* dsfield - Parser/Interpreter interface for AML fields */
@@ -112,20 +102,20 @@ acpi_ds_exec_end_op (
 
 ACPI_STATUS
 acpi_ds_create_field (
-	ACPI_GENERIC_OP         *op,
-	ACPI_HANDLE             region,
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_NAMESPACE_NODE     *region_node,
 	ACPI_WALK_STATE         *walk_state);
 
 ACPI_STATUS
 acpi_ds_create_bank_field (
-	ACPI_GENERIC_OP         *op,
-	ACPI_HANDLE             region,
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_NAMESPACE_NODE     *region_node,
 	ACPI_WALK_STATE         *walk_state);
 
 ACPI_STATUS
 acpi_ds_create_index_field (
-	ACPI_GENERIC_OP         *op,
-	ACPI_HANDLE             region,
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_HANDLE             region_node,
 	ACPI_WALK_STATE         *walk_state);
 
 
@@ -133,27 +123,38 @@ acpi_ds_create_index_field (
 
 ACPI_STATUS
 acpi_ds_load1_begin_op (
+	u16                     opcode,
+	ACPI_PARSE_OBJECT       *op,
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op);
+	ACPI_PARSE_OBJECT       **out_op);
 
 ACPI_STATUS
 acpi_ds_load1_end_op (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op);
+	ACPI_PARSE_OBJECT       *op);
 
 ACPI_STATUS
 acpi_ds_load2_begin_op (
-	ACPI_WALK_STATE         *state,
-	ACPI_GENERIC_OP         *op);
+	u16                     opcode,
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_WALK_STATE         *walk_state,
+	ACPI_PARSE_OBJECT       **out_op);
 
 ACPI_STATUS
 acpi_ds_load2_end_op (
 	ACPI_WALK_STATE         *state,
-	ACPI_GENERIC_OP         *op);
+	ACPI_PARSE_OBJECT       *op);
 
 
 /* dsmthdat - method data (locals/args) */
 
+
+ACPI_STATUS
+acpi_ds_method_data_get_entry (
+	u32                     type,
+	u32                     index,
+	ACPI_WALK_STATE         *walk_state,
+	ACPI_OPERAND_OBJECT     ***node);
 
 ACPI_STATUS
 acpi_ds_method_data_delete_all (
@@ -161,42 +162,55 @@ acpi_ds_method_data_delete_all (
 
 u8
 acpi_ds_is_method_value (
-	ACPI_OBJECT_INTERNAL    *obj_desc);
+	ACPI_OPERAND_OBJECT     *obj_desc);
 
 OBJECT_TYPE_INTERNAL
 acpi_ds_method_data_get_type (
 	u32                     type,
-	u32                     index);
+	u32                     index,
+	ACPI_WALK_STATE         *walk_state);
 
 ACPI_STATUS
 acpi_ds_method_data_get_value (
 	u32                     type,
 	u32                     index,
-	ACPI_OBJECT_INTERNAL    **obj_desc);
+	ACPI_WALK_STATE         *walk_state,
+	ACPI_OPERAND_OBJECT     **dest_desc);
 
 ACPI_STATUS
 acpi_ds_method_data_set_value (
 	u32                     type,
 	u32                     index,
-	ACPI_OBJECT_INTERNAL    *obj_desc);
+	ACPI_OPERAND_OBJECT     *src_desc,
+	ACPI_WALK_STATE         *walk_state);
 
 ACPI_STATUS
 acpi_ds_method_data_delete_value (
 	u32                     type,
-	u32                     index);
+	u32                     index,
+	ACPI_WALK_STATE         *walk_state);
 
 ACPI_STATUS
 acpi_ds_method_data_init_args (
-	ACPI_OBJECT_INTERNAL    **params,
-	u32                     param_count);
+	ACPI_OPERAND_OBJECT     **params,
+	u32                     max_param_count,
+	ACPI_WALK_STATE         *walk_state);
 
-ACPI_NAMED_OBJECT*
+ACPI_NAMESPACE_NODE *
 acpi_ds_method_data_get_nte (
 	u32                     type,
-	u32                     index);
+	u32                     index,
+	ACPI_WALK_STATE         *walk_state);
 
 ACPI_STATUS
 acpi_ds_method_data_init (
+	ACPI_WALK_STATE         *walk_state);
+
+ACPI_STATUS
+acpi_ds_method_data_set_entry (
+	u32                     type,
+	u32                     index,
+	ACPI_OPERAND_OBJECT     *object,
 	ACPI_WALK_STATE         *walk_state);
 
 
@@ -210,12 +224,12 @@ ACPI_STATUS
 acpi_ds_call_control_method (
 	ACPI_WALK_LIST          *walk_list,
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op);
+	ACPI_PARSE_OBJECT       *op);
 
 ACPI_STATUS
 acpi_ds_restart_control_method (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_OBJECT_INTERNAL    *return_desc);
+	ACPI_OPERAND_OBJECT     *return_desc);
 
 ACPI_STATUS
 acpi_ds_terminate_control_method (
@@ -223,8 +237,8 @@ acpi_ds_terminate_control_method (
 
 ACPI_STATUS
 acpi_ds_begin_method_execution (
-	ACPI_NAMED_OBJECT       *method_entry,
-	ACPI_OBJECT_INTERNAL    *obj_desc);
+	ACPI_NAMESPACE_NODE     *method_node,
+	ACPI_OPERAND_OBJECT     *obj_desc);
 
 
 /* dsobj - Parser/Interpreter interface - object initialization and conversion */
@@ -239,32 +253,32 @@ acpi_ds_init_one_object (
 ACPI_STATUS
 acpi_ds_initialize_objects (
 	ACPI_TABLE_DESC         *table_desc,
-	ACPI_NAMED_OBJECT       *start_entry);
+	ACPI_NAMESPACE_NODE     *start_node);
 
 ACPI_STATUS
 acpi_ds_build_internal_package_obj (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op,
-	ACPI_OBJECT_INTERNAL    **obj_desc);
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_OPERAND_OBJECT     **obj_desc);
 
 ACPI_STATUS
 acpi_ds_build_internal_object (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op,
-	ACPI_OBJECT_INTERNAL    **obj_desc_ptr);
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_OPERAND_OBJECT     **obj_desc_ptr);
 
 ACPI_STATUS
 acpi_ds_init_object_from_op (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op,
+	ACPI_PARSE_OBJECT       *op,
 	u16                     opcode,
-	ACPI_OBJECT_INTERNAL    *obj_desc);
+	ACPI_OPERAND_OBJECT     **obj_desc);
 
 ACPI_STATUS
-acpi_ds_create_named_object (
+acpi_ds_create_node (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_NAMED_OBJECT       *entry,
-	ACPI_GENERIC_OP         *op);
+	ACPI_NAMESPACE_NODE     *node,
+	ACPI_PARSE_OBJECT       *op);
 
 
 /* dsregn - Parser/Interpreter interface - Op Region parsing */
@@ -272,7 +286,7 @@ acpi_ds_create_named_object (
 ACPI_STATUS
 acpi_ds_eval_region_operands (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op);
+	ACPI_PARSE_OBJECT       *op);
 
 ACPI_STATUS
 acpi_ds_initialize_region (
@@ -281,21 +295,25 @@ acpi_ds_initialize_region (
 
 /* dsutils - Parser/Interpreter interface utility routines */
 
+u8
+acpi_ds_is_result_used (
+	ACPI_PARSE_OBJECT       *op);
+
 void
 acpi_ds_delete_result_if_not_used (
-	ACPI_GENERIC_OP         *op,
-	ACPI_OBJECT_INTERNAL    *result_obj,
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_OPERAND_OBJECT     *result_obj,
 	ACPI_WALK_STATE         *walk_state);
 
 ACPI_STATUS
 acpi_ds_create_operand (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *arg);
+	ACPI_PARSE_OBJECT       *arg);
 
 ACPI_STATUS
 acpi_ds_create_operands (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *first_arg);
+	ACPI_PARSE_OBJECT       *first_arg);
 
 ACPI_STATUS
 acpi_ds_resolve_operands (
@@ -317,7 +335,7 @@ acpi_ds_map_named_opcode_to_data_type (
 
 ACPI_STATUS
 acpi_ds_scope_stack_push (
-	ACPI_NAME_TABLE         *new_scope,
+	ACPI_NAMESPACE_NODE     *node,
 	OBJECT_TYPE_INTERNAL    type,
 	ACPI_WALK_STATE         *walk_state);
 
@@ -336,8 +354,8 @@ acpi_ds_scope_stack_clear (
 ACPI_WALK_STATE *
 acpi_ds_create_walk_state (
 	ACPI_OWNER_ID           owner_id,
-	ACPI_GENERIC_OP         *origin,
-	ACPI_OBJECT_INTERNAL    *mth_desc,
+	ACPI_PARSE_OBJECT       *origin,
+	ACPI_OPERAND_OBJECT     *mth_desc,
 	ACPI_WALK_LIST          *walk_list);
 
 ACPI_STATUS
@@ -359,7 +377,7 @@ acpi_ds_pop_walk_state (
 
 ACPI_STATUS
 acpi_ds_result_stack_pop (
-	ACPI_OBJECT_INTERNAL    **object,
+	ACPI_OPERAND_OBJECT     **object,
 	ACPI_WALK_STATE         *walk_state);
 
 ACPI_STATUS
@@ -380,4 +398,4 @@ acpi_ds_delete_walk_state_cache (
 	void);
 
 
-#endif /* _DISPATCH_H_ */
+#endif /* _ACDISPAT_H_ */

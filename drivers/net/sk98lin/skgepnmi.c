@@ -2,8 +2,8 @@
  *
  * Name:	skgepnmi.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.69 $
- * Date:	$Date: 1999/10/18 11:42:15 $
+ * Version:	$Revision: 1.78 $
+ * Date:	$Date: 2000/09/12 10:44:58 $
  * Purpose:	Private Network Management Interface
  *
  ****************************************************************************/
@@ -12,8 +12,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -29,6 +27,43 @@
  * History:
  *
  *	$Log: skgepnmi.c,v $
+ *	Revision 1.78  2000/09/12 10:44:58  cgoos
+ *	Fixed SK_PNMI_STORE_U32 calls with typecasted argument.
+ *	
+ *	Revision 1.77  2000/09/07 08:10:19  rwahl
+ *	- Modified algorithm for 64bit NDIS statistic counters;
+ *	  returns 64bit or 32bit value depending on passed buffer
+ *	  size. Indicate capability for 64bit NDIS counter, if passed
+ *	  buffer size is zero. OID_GEN_XMIT_ERROR, OID_GEN_RCV_ERROR,
+ *	  and OID_GEN_RCV_NO_BUFFER handled as 64bit counter, too.
+ *	- corrected OID_SKGE_RLMT_PORT_PREFERRED.
+ *	
+ *	Revision 1.76  2000/08/03 15:23:39  rwahl
+ *	- Correction for FrameTooLong counter has to be moved to OID handling
+ *	  routines (instead of statistic counter routine).
+ *	- Fix in XMAC Reset Event handling: Only offset counter for hardware
+ *	  statistic registers are updated.
+ *	
+ *	Revision 1.75  2000/08/01 16:46:05  rwahl
+ *	- Added StatRxLongFrames counter and correction of FrameTooLong counter.
+ *	- Added directive to control width (default = 32bit) of NDIS statistic
+ *	  counters (SK_NDIS_64BIT_CTR).
+ *	
+ *	Revision 1.74  2000/07/04 11:41:53  rwahl
+ *	- Added volition connector type.
+ *	
+ *	Revision 1.73  2000/03/15 16:33:10  rwahl
+ *	Fixed bug 10510; wrong reset of virtual port statistic counters.
+ *	
+ *	Revision 1.72  1999/12/06 16:15:53  rwahl
+ *	Fixed problem of instance range for current and factory MAC address.
+ *	
+ *	Revision 1.71  1999/12/06 10:14:20  rwahl
+ *	Fixed bug 10476; set operation for PHY_OPERATION_MODE.
+ *	
+ *	Revision 1.70  1999/11/22 13:33:34  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.69  1999/10/18 11:42:15  rwahl
  *	Added typecasts for checking event dependent param (debug only).
  *	
@@ -297,7 +332,8 @@
 
 
 static const char SysKonnectFileId[] =
-	"@(#) $Id: skgepnmi.c,v 1.69 1999/10/18 11:42:15 rwahl Exp $ (C) SysKonnect.";
+	"@(#) $Id: skgepnmi.c,v 1.78 2000/09/12 10:44:58 cgoos Exp $"
+	" (C) SysKonnect.";
 
 #include "h/skdrv1st.h"
 #include "h/sktypes.h"
@@ -982,6 +1018,11 @@ static const SK_PNMI_TAB_ENTRY IdTable[] = {
 		sizeof(SK_PNMI_STAT),
 		SK_PNMI_OFF(Stat) + SK_PNMI_STA_OFF(StatRxUnicastOkCts),
 		SK_PNMI_RO, MacPrivateStat, SK_PNMI_HRX_UNICAST},
+	{OID_SKGE_STAT_RX_LONGFRAMES,
+		SK_PNMI_MAC_ENTRIES,
+		sizeof(SK_PNMI_STAT),
+		SK_PNMI_OFF(Stat) + SK_PNMI_STA_OFF(StatRxLongFramesCts),
+		SK_PNMI_RO, MacPrivateStat, SK_PNMI_HRX_LONGFRAMES},
 	{OID_SKGE_STAT_RX_PFLOWC,
 		SK_PNMI_MAC_ENTRIES,
 		sizeof(SK_PNMI_STAT),
@@ -1197,7 +1238,7 @@ static const SK_PNMI_TAB_ENTRY IdTable[] = {
 		0,
 		SK_PNMI_MAI_OFF(RlmtPortActive),
 		SK_PNMI_RO, Rlmt, 0},
-	{OID_SKGE_RLMT_PORT_PREFERED,
+	{OID_SKGE_RLMT_PORT_PREFERRED,
 		1,
 		0,
 		SK_PNMI_MAI_OFF(RlmtPortPreferred),
@@ -1353,7 +1394,8 @@ static const SK_PNMI_STATADDR StatAddress[SK_PNMI_MAX_IDX] = {
 	/* 62 */	{TRUE, XM_RXF_1023B},
 	/* 63 */	{TRUE, XM_RXF_MAX_SZ},
 	/* 64 */	{FALSE, 0},
-	/* 65 */	{FALSE, 0}
+	/* 65 */	{FALSE, 0},
+	/* 66 */	{TRUE, 0}
 };
 
 
@@ -1518,6 +1560,10 @@ int Level)		/* Initialization level */
 
 		case 'J':
 			pAC->Pnmi.Connector = 5;
+			break;
+
+		case 'V':
+			pAC->Pnmi.Connector = 6;
 			break;
 
 		default:
@@ -2074,8 +2120,13 @@ SK_EVPARA Param)	/* Event dependent parameter */
 			case SK_PNMI_HRX_OCTETLOW:
 			case SK_PNMI_HRX_IRLENGTH:
 			case SK_PNMI_HRX_RESERVED22:
+			
+			/*
+			 * the following counters aren't be handled (id > 63)
+			 */
 			case SK_PNMI_HTX_SYNC:
 			case SK_PNMI_HTX_SYNC_OCTET:
+			case SK_PNMI_HRX_LONGFRAMES:
 				break;
 
 			default:
@@ -2270,7 +2321,7 @@ SK_EVPARA Param)	/* Event dependent parameter */
 		 */
 		pAC->Pnmi.MacUpdatedFlag ++;
 
-		for (CounterIndex = 0; CounterIndex < SK_PNMI_MAX_IDX;
+		for (CounterIndex = 0; CounterIndex < SK_PNMI_SCNT_NOT;
 			CounterIndex ++) {
 
 			if (!StatAddress[CounterIndex].GetOffset) {
@@ -2985,9 +3036,9 @@ unsigned int *pLen,	/* On call: buffer length. On return: used buffer */
 SK_U32 Instance,	/* Instance (1..n) that is to be queried or -1 */
 unsigned int TableIndex) /* Index to the Id table */
 {
-	int	Ret;
-	SK_U32	StatVal;
-
+	int    Ret;
+	SK_U64 StatVal;
+	SK_BOOL Is64BitReq = SK_FALSE;
 
 	/*
 	 * Only the active Mac is returned
@@ -3022,11 +3073,28 @@ unsigned int TableIndex) /* Index to the Id table */
 		break;
 
 	default:
-		if (*pLen < 4) {
-
-			*pLen = 4;
+#ifndef SK_NDIS_64BIT_CTR
+		if (*pLen < sizeof(SK_U32)) {
+			*pLen = sizeof(SK_U32);
 			return (SK_PNMI_ERR_TOO_SHORT);
 		}
+
+#else /* SK_NDIS_64BIT_CTR */
+		
+		/*
+		 * for compatibility, at least 32bit are required for oid
+		 */
+		if (*pLen < sizeof(SK_U32)) {
+			/*
+			* but indicate handling for 64bit values,
+			* if insufficient space is provided
+			*/
+			*pLen = sizeof(SK_U64);
+			return (SK_PNMI_ERR_TOO_SHORT);
+		}
+		
+		Is64BitReq = (*pLen < sizeof(SK_U64)) ? SK_FALSE : SK_TRUE;
+#endif /* SK_NDIS_64BIT_CTR */
 		break;
 	}
 
@@ -3059,10 +3127,21 @@ unsigned int TableIndex) /* Index to the Id table */
 		break;
 
 	default:
-		StatVal = (SK_U32)GetStatVal(pAC, IoC, 0,
-			IdTable[TableIndex].Param);
-		SK_PNMI_STORE_U32(pBuf, StatVal);
-		*pLen = sizeof(SK_U32);
+		StatVal = GetStatVal(pAC, IoC, 0, IdTable[TableIndex].Param);
+
+		/*
+		 * by default 32bit values are evaluated
+		 */
+		if (!Is64BitReq) {
+			SK_U32	StatVal32;
+			StatVal32 = (SK_U32)StatVal;
+			SK_PNMI_STORE_U32(pBuf, StatVal32);
+			*pLen = sizeof(SK_U32);
+		}
+		else {
+			SK_PNMI_STORE_U64(pBuf, StatVal);
+			*pLen = sizeof(SK_U64);
+		}
 		break;
 	}
 
@@ -3177,6 +3256,20 @@ unsigned int TableIndex) /* Index to the Id table */
 		case OID_SKGE_STAT_RX_UTIL:
 			return (SK_PNMI_ERR_GENERAL);
 */
+		/*
+		 * Frames longer than IEEE 802.3 frame max size are counted
+		 * by XMAC in frame_too_long counter even reception of long
+		 * frames was enabled and the frame was correct.
+		 * So correct the value by subtracting RxLongFrame counter.
+		 */
+		case OID_SKGE_STAT_RX_TOO_LONG:
+			StatVal = GetStatVal(pAC, IoC, LogPortIndex,
+					     IdTable[TableIndex].Param) -
+				GetStatVal(pAC, IoC, LogPortIndex,
+					   SK_PNMI_HRX_LONGFRAMES);
+			SK_PNMI_STORE_U64(pBuf + Offset, StatVal);
+			break;
+
 		default:
 			StatVal = GetStatVal(pAC, IoC, LogPortIndex,
 				IdTable[TableIndex].Param);
@@ -3245,7 +3338,7 @@ unsigned int TableIndex) /* Index to the Id table */
 
 	if ((Instance != (SK_U32)(-1))) {
 		
-		if ((Instance < 1) || (Instance > SKCS_NUM_PROTOCOLS)) {
+		if ((Instance < 1) || (Instance > LogPortMax)) {
 
 			*pLen = 0;
 			return (SK_PNMI_ERR_UNKNOWN_INST);
@@ -4289,6 +4382,7 @@ unsigned int TableIndex) /* Index to the Id table */
 	SK_U64		Val64;
 	SK_U64		Val64RxHwErrs = 0;
 	SK_U64		Val64TxHwErrs = 0;
+	SK_BOOL		Is64BitReq = SK_FALSE;
 	char		Buf[256];
 
 
@@ -4315,13 +4409,37 @@ unsigned int TableIndex) /* Index to the Id table */
 	 */
 	switch (Id) {
 
+	case OID_GEN_XMIT_ERROR:
+	case OID_GEN_RCV_ERROR:
+	case OID_GEN_RCV_NO_BUFFER:
+#ifndef SK_NDIS_64BIT_CTR
+		if (*pLen < sizeof(SK_U32)) {
+			*pLen = sizeof(SK_U32);
+			return (SK_PNMI_ERR_TOO_SHORT);
+		}
+
+#else /* SK_NDIS_64BIT_CTR */
+		
+		/*
+		 * for compatibility, at least 32bit are required for oid
+		 */
+		if (*pLen < sizeof(SK_U32)) {
+			/*
+			* but indicate handling for 64bit values,
+			* if insufficient space is provided
+			*/
+			*pLen = sizeof(SK_U64);
+			return (SK_PNMI_ERR_TOO_SHORT);
+		}
+		
+		Is64BitReq = (*pLen < sizeof(SK_U64)) ? SK_FALSE : SK_TRUE;
+#endif /* SK_NDIS_64BIT_CTR */
+		break;
+
 	case OID_SKGE_PORT_NUMBER:
 	case OID_SKGE_DEVICE_TYPE:
 	case OID_SKGE_RESULT:
 	case OID_SKGE_RLMT_MONITOR_NUMBER:
-	case OID_GEN_XMIT_ERROR:
-	case OID_GEN_RCV_ERROR:
-	case OID_GEN_RCV_NO_BUFFER:
 	case OID_GEN_TRANSMIT_QUEUE_LENGTH:
 	case OID_SKGE_TRAP_NUMBER:
 	case OID_SKGE_MDB_VERSION:
@@ -4420,7 +4538,8 @@ unsigned int TableIndex) /* Index to the Id table */
 				GetStatVal(pAC, IoC, 0, SK_PNMI_HRX_SYMBOL) +
 				GetStatVal(pAC, IoC, 0, SK_PNMI_HRX_SHORTS) +
 				GetStatVal(pAC, IoC, 0, SK_PNMI_HRX_RUNT) +
-				GetStatVal(pAC, IoC, 0, SK_PNMI_HRX_TOO_LONG)+
+				GetStatVal(pAC, IoC, 0, SK_PNMI_HRX_TOO_LONG)-
+				GetStatVal(pAC, IoC, 0, SK_PNMI_HRX_LONGFRAMES)+
 				GetStatVal(pAC, IoC, 0, SK_PNMI_HRX_FCS) +
 				GetStatVal(pAC, IoC, 0, SK_PNMI_HRX_CEXT);
 			break;
@@ -4748,21 +4867,57 @@ unsigned int TableIndex) /* Index to the Id table */
 		break;
 
 	case OID_GEN_RCV_ERROR:
-		Val32 = (SK_U32)(Val64RxHwErrs + pAC->Pnmi.RxNoBufCts);
-		SK_PNMI_STORE_U32(pBuf, Val32);
-		*pLen = sizeof(SK_U32);
+		Val64 = Val64RxHwErrs + pAC->Pnmi.RxNoBufCts;
+
+		/*
+		 * by default 32bit values are evaluated
+		 */
+		if (!Is64BitReq) {
+			SK_U32	Val32;
+			Val32 = (SK_U32)Val64;
+			SK_PNMI_STORE_U32(pBuf, Val32);
+			*pLen = sizeof(SK_U32);
+		}
+		else {
+			SK_PNMI_STORE_U64(pBuf, Val64);
+			*pLen = sizeof(SK_U64);
+		}
 		break;
 
 	case OID_GEN_XMIT_ERROR:
-		Val32 = (SK_U32)(Val64TxHwErrs + pAC->Pnmi.TxNoBufCts);
-		SK_PNMI_STORE_U32(pBuf, Val32);
-		*pLen = sizeof(SK_U32);
+		Val64 = Val64TxHwErrs + pAC->Pnmi.TxNoBufCts;
+
+		/*
+		 * by default 32bit values are evaluated
+		 */
+		if (!Is64BitReq) {
+			SK_U32	Val32;
+			Val32 = (SK_U32)Val64;
+			SK_PNMI_STORE_U32(pBuf, Val32);
+			*pLen = sizeof(SK_U32);
+		}
+		else {
+			SK_PNMI_STORE_U64(pBuf, Val64);
+			*pLen = sizeof(SK_U64);
+		}
 		break;
 
 	case OID_GEN_RCV_NO_BUFFER:
-		Val32 = (SK_U32)pAC->Pnmi.RxNoBufCts;
-		SK_PNMI_STORE_U32(pBuf, Val32);
-		*pLen = sizeof(SK_U32);
+		Val64 = pAC->Pnmi.RxNoBufCts;
+
+		/*
+		 * by default 32bit values are evaluated
+		 */
+		if (!Is64BitReq) {
+			SK_U32	Val32;
+			Val32 = (SK_U32)Val64;
+			SK_PNMI_STORE_U32(pBuf, Val32);
+			*pLen = sizeof(SK_U32);
+		}
+		else {
+			SK_PNMI_STORE_U64(pBuf, Val64);
+			*pLen = sizeof(SK_U64);
+		}
 		break;
 
 	case OID_GEN_TRANSMIT_QUEUE_LENGTH:
@@ -4853,7 +5008,7 @@ unsigned int TableIndex) /* Index to the Id table */
 
 		case OID_SKGE_RLMT_MODE:
 		case OID_SKGE_RLMT_PORT_ACTIVE:
-		case OID_SKGE_RLMT_PORT_PREFERED:
+		case OID_SKGE_RLMT_PORT_PREFERRED:
 			if (*pLen < sizeof(SK_U8)) {
 
 				*pLen = sizeof(SK_U8);
@@ -4941,7 +5096,7 @@ unsigned int TableIndex) /* Index to the Id table */
 			*pLen = sizeof(char);
 			break;
 
-		case OID_SKGE_RLMT_PORT_PREFERED:
+		case OID_SKGE_RLMT_PORT_PREFERRED:
 			*pBuf = (char)SK_PNMI_PORT_PHYS2LOG(
 				pAC->Rlmt.MacPreferred);
 			*pLen = sizeof(char);
@@ -5021,7 +5176,7 @@ unsigned int TableIndex) /* Index to the Id table */
 			}
 			break;
 
-		case OID_SKGE_RLMT_PORT_PREFERED:
+		case OID_SKGE_RLMT_PORT_PREFERRED:
 			/* Check if the buffer length is plausible */
 			if (*pLen < sizeof(char)) {
 
@@ -5622,6 +5777,7 @@ unsigned int TableIndex) /* Index to the Id table */
 
 	case OID_SKGE_LINK_MODE:
 	case OID_SKGE_FLOWCTRL_MODE:
+	case OID_SKGE_PHY_OPERATION_MODE:
 		if (*pLen < Limit - LogPortIndex) {
 
 			*pLen = Limit - LogPortIndex;
@@ -5795,6 +5951,82 @@ unsigned int TableIndex) /* Index to the Id table */
 					return (SK_PNMI_ERR_GENERAL);
 				}
 			}
+			Offset += sizeof(char);
+			break;
+
+		case OID_SKGE_PHY_OPERATION_MODE :
+			/* Check the value range */
+			Val8 = *(pBuf + Offset);
+			if (Val8 == 0) {
+				/* mode of this port remains unchanged */
+				Offset += sizeof(char);
+				break;
+			}
+			if (Val8 < SK_MS_MODE_AUTO ||
+				Val8 > SK_MS_MODE_SLAVE) {
+
+				*pLen = 0;
+				return (SK_PNMI_ERR_BAD_VALUE);
+			}
+
+			/* The preset ends here */
+			if (Action == SK_PNMI_PRESET) {
+
+				return (SK_PNMI_ERR_OK);
+			}
+
+			if (LogPortIndex == 0) {
+
+				/*
+				 * The virtual port consists of all currently
+				 * active ports. Find them and send an event
+				 * with new master/slave (role) mode to SIRQ.
+				 */
+				for (PhysPortIndex = 0;
+					PhysPortIndex < PhysPortMax;
+					PhysPortIndex ++) {
+
+					if (!pAC->Pnmi.Port[PhysPortIndex].
+						ActiveFlag) {
+
+						continue;
+					}
+
+					EventParam.Para32[0] = PhysPortIndex;
+					EventParam.Para32[1] = (SK_U32)Val8;
+					if (SkGeSirqEvent(pAC, IoC,
+						SK_HWEV_SET_ROLE,
+						EventParam) > 0) {
+
+						SK_ERR_LOG(pAC, SK_ERRCL_SW,
+							SK_PNMI_ERR052,
+							SK_PNMI_ERR052MSG);
+
+						*pLen = 0;
+						return (SK_PNMI_ERR_GENERAL);
+					}
+				}
+			}
+			else {
+				/*
+				 * Send an event with the new master/slave
+				 * (role) mode to the SIRQ module.
+				 */
+				EventParam.Para32[0] = SK_PNMI_PORT_LOG2PHYS(
+					pAC, LogPortIndex);
+				EventParam.Para32[1] = (SK_U32)Val8;
+				if (SkGeSirqEvent(pAC, IoC,
+					SK_HWEV_SET_ROLE, EventParam) > 0) {
+
+					SK_ERR_LOG(pAC, SK_ERRCL_SW,
+						SK_PNMI_ERR052,
+						SK_PNMI_ERR052MSG);
+
+					*pLen = 0;
+					return (SK_PNMI_ERR_GENERAL);
+				}
+			}
+			
 			Offset += sizeof(char);
 			break;
 
@@ -6670,6 +6902,12 @@ unsigned int StatIndex)		/* Index to statistic value */
 			32);
 		break;
 
+	case SK_PNMI_HRX_LONGFRAMES:
+		LowVal = (SK_U32)pAC->Pnmi.Port[PhysPortIndex].StatRxLongFrameCts;
+		HighVal = (SK_U32)
+			(pAC->Pnmi.Port[PhysPortIndex].StatRxLongFrameCts >> 32);
+		break;
+
 	case SK_PNMI_HRX_FCS:
 		/* 
 		 * Broadcom filters fcs errors and counts it in 
@@ -6765,11 +7003,16 @@ SK_IOC IoC)		/* IO context handle */
 		SK_MEMSET((char *)&pAC->Pnmi.Port[PhysPortIndex].
 			StatSyncOctetsCts, 0, sizeof(pAC->Pnmi.Port[
 			PhysPortIndex].StatSyncOctetsCts));
+		SK_MEMSET((char *)&pAC->Pnmi.Port[PhysPortIndex].
+			StatRxLongFrameCts, 0, sizeof(pAC->Pnmi.Port[
+			PhysPortIndex].StatRxLongFrameCts));
 	}
 
 	/*
 	 * Clear local statistics
 	 */
+	SK_MEMSET((char *)&pAC->Pnmi.VirtualCounterOffset, 0,
+		  sizeof(pAC->Pnmi.VirtualCounterOffset));
 	pAC->Pnmi.RlmtChangeCts = 0;
 	pAC->Pnmi.RlmtChangeTime = 0;
 	SK_MEMSET((char *)&pAC->Pnmi.RlmtChangeEstimate.EstValue[0], 0,

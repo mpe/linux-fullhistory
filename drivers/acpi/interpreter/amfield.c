@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Module Name: amfield - ACPI AML (p-code) execution - field manipulation
+ *              $Revision: 70 $
  *
  *****************************************************************************/
 
@@ -24,16 +25,16 @@
 
 
 #include "acpi.h"
-#include "dispatch.h"
-#include "interp.h"
+#include "acdispat.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "namesp.h"
-#include "hardware.h"
-#include "events.h"
+#include "acnamesp.h"
+#include "achware.h"
+#include "acevents.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amfield");
+	 MODULE_NAME         ("amfield")
 
 
 /*******************************************************************************
@@ -67,12 +68,12 @@
 
 ACPI_STATUS
 acpi_aml_setup_field (
-	ACPI_OBJECT_INTERNAL    *obj_desc,
-	ACPI_OBJECT_INTERNAL    *rgn_desc,
-	s32                     field_bit_width)
+	ACPI_OPERAND_OBJECT     *obj_desc,
+	ACPI_OPERAND_OBJECT     *rgn_desc,
+	u32                     field_bit_width)
 {
 	ACPI_STATUS             status = AE_OK;
-	s32                     field_byte_width;
+	u32                     field_byte_width;
 
 
 	/* Parameter validation */
@@ -87,6 +88,8 @@ acpi_aml_setup_field (
 
 
 	/*
+	 * TBD: [Future] Acpi 2.0 supports Qword fields
+	 *
 	 * Init and validate Field width
 	 * Possible values are 1, 2, 4
 	 */
@@ -105,19 +108,13 @@ acpi_aml_setup_field (
 	 * If the address and length have not been previously evaluated,
 	 * evaluate them and save the results.
 	 */
-	if (!(rgn_desc->region.region_flags & REGION_AGRUMENT_DATA_VALID)) {
+	if (!(rgn_desc->region.flags & AOPOBJ_DATA_VALID)) {
 
 		status = acpi_ds_get_region_arguments (rgn_desc);
 		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
 	}
-
-
-	/*
-	 * If (offset rounded up to next multiple of field width)
-	 * exceeds region length, indicate an error.
-	 */
 
 	if (rgn_desc->region.length <
 	   (obj_desc->field.offset & ~((u32) field_byte_width - 1)) +
@@ -152,12 +149,12 @@ acpi_aml_setup_field (
 
 ACPI_STATUS
 acpi_aml_access_named_field (
-	s32                     mode,
+	u32                     mode,
 	ACPI_HANDLE             named_field,
 	void                    *buffer,
 	u32                     buffer_length)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc = NULL;
+	ACPI_OPERAND_OBJECT     *obj_desc = NULL;
 	ACPI_STATUS             status = AE_OK;
 	u8                      locked = FALSE;
 	u32                     bit_granularity = 0;
@@ -166,6 +163,11 @@ acpi_aml_access_named_field (
 	u32                     actual_byte_length;
 	u32                     byte_field_length;
 
+
+	/* Basic data checking */
+	if ((!named_field) || (ACPI_READ == mode && !buffer)) {
+		return (AE_AML_INTERNAL);
+	}
 
 	/* Get the attached field object */
 
@@ -256,72 +258,6 @@ acpi_aml_access_named_field (
 
 	acpi_aml_release_global_lock (locked);
 
-	return (status);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    Acpi_aml_set_named_field_value
- *
- * PARAMETERS:  Named_field         - Handle for field to be set
- *              Buffer              - Bytes to be stored
- *              Buffer_length       - Number of bytes to be stored
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Store the given value into the field
- *
- ******************************************************************************/
-
-ACPI_STATUS
-acpi_aml_set_named_field_value (
-	ACPI_HANDLE             named_field,
-	void                    *buffer,
-	u32                     buffer_length)
-{
-	ACPI_STATUS             status;
-
-
-	if (!named_field) {
-		return (AE_AML_INTERNAL);
-	}
-
-	status = acpi_aml_access_named_field (ACPI_WRITE, named_field, buffer,
-			 buffer_length);
-	return (status);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    Acpi_aml_get_named_field_value
- *
- * PARAMETERS:  Named_field         - Handle for field to be read
- *              *Buffer             - Where to store value read from field
- *              Buffer_length       - Max length to read
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Retrieve the value of the given field
- *
- ******************************************************************************/
-
-ACPI_STATUS
-acpi_aml_get_named_field_value (
-	ACPI_HANDLE             named_field,
-	void                    *buffer,
-	u32                     buffer_length)
-{
-	ACPI_STATUS             status;
-
-
-	if ((!named_field) || (!buffer)) {
-		return (AE_AML_INTERNAL);
-	}
-
-	status = acpi_aml_access_named_field (ACPI_READ, named_field, buffer,
-			 buffer_length);
 	return (status);
 }
 

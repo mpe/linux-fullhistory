@@ -1182,7 +1182,7 @@ static void chipset_init(struct net_device *dev)
 }
 
 
-int __init pi_init(void)
+int __init pi2_init(void)
 {
     int *port;
     int ioaddr = 0;
@@ -1658,7 +1658,7 @@ MODULE_DESCRIPTION("AX.25 driver for the Ottawa PI and PI/2 HDLC cards");
 
 int init_module(void)
 {
-    return pi_init();
+    return pi2_init();
 }
 
 void cleanup_module(void)

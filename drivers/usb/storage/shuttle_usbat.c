@@ -1,6 +1,6 @@
 /* Driver for SCM Microsystems USB-ATAPI cable
  *
- * $Id: shuttle_usbat.c,v 1.4 2000/08/25 00:13:51 mdharm Exp $
+ * $Id: shuttle_usbat.c,v 1.7 2000/09/04 02:08:42 groovyjava Exp $
  *
  * SCM driver v0.2:
  *
@@ -67,6 +67,8 @@ extern int usb_stor_bulk_msg(struct us_data *us, void *data, int pipe,
 #define short_pack(b1,b2) ( ((u16)(b1)) | ( ((u16)(b2))<<8 ) )
 #define LSB_of(s) ((s)&0xFF)
 #define MSB_of(s) ((s)>>8)
+
+int transferred = 0;
 
 /*
  * Send a control message and wait for the response.
@@ -192,7 +194,7 @@ static int usbat_raw_bulk(struct us_data *us,
 		if (result == -EPIPE) {
 			US_DEBUGP("usbat_raw_bulk():"
 				" output pipe stalled\n");
-			return USB_STOR_TRANSPORT_FAILED;
+			return US_BULK_TRANSFER_SHORT;
 		}
 
                 /* the catch-all case */
@@ -225,13 +227,13 @@ static int usbat_bulk_transport(struct us_data *us,
 
 	int result = USB_STOR_TRANSPORT_GOOD;
 	int transferred = 0;
-	unsigned char execute[8] = {
-		0x40, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-	};
+	// unsigned char execute[8] = {
+	//	0x40, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	// };
 	int i;
 	struct scatterlist *sg;
-	char string[64];
-	int pipe;
+	// char string[64];
+	// int pipe;
 
 /*
 	if (command_len != 0) {
@@ -262,10 +264,10 @@ static int usbat_bulk_transport(struct us_data *us,
 	if (command_len != 0)
 		direction = (command[0]&0x80) ? SCSI_DATA_READ :
 			SCSI_DATA_WRITE;
-
+/*
 	if (direction == SCSI_DATA_WRITE) {
 
-		/* Debug-print the first 48 bytes of the write transfer */
+		// Debug-print the first 48 bytes of the write transfer
 
 		if (!use_sg) {
 			string[0] = 0;
@@ -281,7 +283,7 @@ static int usbat_bulk_transport(struct us_data *us,
 				US_DEBUGP("%s\n", string);
 		}
 	}
-
+*/
 
 	US_DEBUGP("SCM data %s transfer %d sg buffers %d\n",
 		  ( direction==SCSI_DATA_READ ? "in" : "out"),
@@ -311,9 +313,9 @@ int usbat_read(struct us_data *us,
 	     unsigned char *content) {
 
 	int result;
-	unsigned char command[8] = {
-		0xC0, access, reg, 0x00, 0x00, 0x00, 0x00, 0x00
-	};
+	// unsigned char command[8] = {
+	// 	0xC0, access, reg, 0x00, 0x00, 0x00, 0x00, 0x00
+	// };
 
 	result = usbat_send_control(us,
 		usb_rcvctrlpipe(us->pusb_dev,0),
@@ -335,9 +337,9 @@ int usbat_write(struct us_data *us,
 	     unsigned char content) {
 
 	int result;
-	unsigned char command[8] = {
-		0x40, access|0x01, reg, content, 0x00, 0x00, 0x00, 0x00
-	};
+	// unsigned char command[8] = {
+	//	0x40, access|0x01, reg, content, 0x00, 0x00, 0x00, 0x00
+	// };
 
 	result = usbat_send_control(us,
 		usb_sndctrlpipe(us->pusb_dev,0),
@@ -427,11 +429,14 @@ int usbat_wait_not_busy(struct us_data *us) {
 	unsigned char status;
 
 	/* Synchronizing cache on a CDR could take a heck of a long time,
-	   but probably not more than 15 minutes or so */
+	   but probably not more than 10 minutes or so */
 
-	for (i=0; i<500; i++) {
+	for (i=0; i<1800; i++) {
+
  		result = usbat_read(us, USBAT_ATA, 0x17, &status);
-		US_DEBUGP("SCM: Write ATA data status is %02X\n", status);
+
+		// US_DEBUGP("SCM: Write ATA data status is %02X\n", status);
+
 		if (result!=USB_STOR_TRANSPORT_GOOD)
 			return result;
 		if (status&0x01) // check condition
@@ -440,19 +445,21 @@ int usbat_wait_not_busy(struct us_data *us) {
 			return USB_STOR_TRANSPORT_FAILED;
 		if ((status&0x80)!=0x80) // not busy
 			break;
-		if (i<5)
-			wait_ms(100);
-		else if (i<20)
-			wait_ms(500);
-		else if (i<49)
-			wait_ms(1000);
-		else if (i<499)
-			wait_ms(2000);
+
+		if (i<500)
+			wait_ms(10); // 5 seconds
+		else if (i<700)
+			wait_ms(50); // 10 seconds
+		else if (i<1200)
+			wait_ms(100); // 50 seconds
+		else if (i<1800)
+			wait_ms(1000); // 10 minutes
 	}
 
-	if (i==500)
+	if (i==1800)
 		return USB_STOR_TRANSPORT_FAILED;
 
+	US_DEBUGP("Waited not busy for %d steps\n", i);
 	return USB_STOR_TRANSPORT_GOOD;
 }
 
@@ -493,15 +500,16 @@ int usbat_write_block(struct us_data *us,
 	return usbat_wait_not_busy(us);
 }
 
-int usbat_write_block_test(struct us_data *us,
+int usbat_rw_block_test(struct us_data *us,
 	     unsigned char access,
 	     unsigned char *registers,
 	     unsigned char *data_out,
 	     unsigned short num_registers,
 	     unsigned char data_reg, 
 	     unsigned char status_reg, 
-	     unsigned char qualifier, 
 	     unsigned char timeout, 
+	     unsigned char qualifier, 
+	     int direction,
 	     unsigned char *content,
 	     unsigned short len,
 	     int use_sg) {
@@ -509,91 +517,129 @@ int usbat_write_block_test(struct us_data *us,
 	int result;
 
 	// Not really sure the 0x07, 0x17, 0xfc, 0xe7 is necessary here,
-	// but that's what came out of the trace.
+	// but that's what came out of the trace every single time.
 
 	unsigned char command[16] = {
 		0x40, access|0x07, 0x07, 0x17, 0xfc, 0xe7,
 		LSB_of(num_registers*2), MSB_of(num_registers*2),
-		0x40, access|0x05, data_reg, status_reg,
-		qualifier, timeout, LSB_of(len), MSB_of(len)
+		(direction==SCSI_DATA_WRITE ? 0x40 : 0xC0), 
+		access|(direction==SCSI_DATA_WRITE ? 0x05 : 0x04), 
+		data_reg, status_reg,
+		timeout, qualifier, LSB_of(len), MSB_of(len)
 	};
+
 	int i;
 	unsigned char data[num_registers*2];
-	int transferred;
-	struct scatterlist *sg;
-	char string[64];
+	unsigned char status;
 
 	for (i=0; i<num_registers; i++) {
 		data[i<<1] = registers[i];
 		data[1+(i<<1)] = data_out[i];
 	}
 
-	result = usbat_send_control(us,
-		usb_sndctrlpipe(us->pusb_dev,0),
-		0x80,
-		0x40,
-		0,
-		0,
-		command,
-		16);
+	for (i=0; i<20; i++) {
 
-	if (result != USB_STOR_TRANSPORT_GOOD)
-		return result;
+		/*
+		 * The first time we send the full command, which consists
+		 * of downloading the SCSI command followed by downloading
+		 * the data via a write-and-test.  Any other time we only
+		 * send the command to download the data -- the SCSI command
+		 * is still 'active' in some sense in the device.
+		 * 
+		 * We're only going to try sending the data 10 times. After
+		 * that, we just return a failure.
+		 */
 
-	result = usbat_bulk_transport(us,
-		NULL, 0, SCSI_DATA_WRITE, data, num_registers*2, 0);
+		result = usbat_send_control(us,
+			  usb_sndctrlpipe(us->pusb_dev,0),
+			0x80,
+			0x40,
+			0,
+			0,
+			(i==0 ? command : command+8),
+			(i==0 ? 16 : 8));
 
-	// result =  usbat_bulk_transport(us,
-	//	command, 16, 0, data, num_registers*2, 0);
+		if (result != USB_STOR_TRANSPORT_GOOD)
+			return result;
 
-	if (result!=USB_STOR_TRANSPORT_GOOD)
-		return result;
+		if (i==0) {
 
-	// transferred = 0;
+			result = usbat_bulk_transport(us,
+				NULL, 0, SCSI_DATA_WRITE, 
+				data, num_registers*2, 0);
 
-	US_DEBUGP("Transfer out %d bytes, sg buffers %d\n",
-		len, use_sg);
+			if (result!=USB_STOR_TRANSPORT_GOOD)
+				return result;
 
-	result = usbat_bulk_transport(us,
-		NULL, 0, SCSI_DATA_WRITE, content, len, use_sg);
-
-/*
-	if (!use_sg) {
-
-		// Debug-print the first 48 bytes of the transfer
-
-		string[0] = 0;
-		for (i=0; i<len && i<48; i++) {
-			sprintf(string+strlen(string), "%02X ",
-				content[i]);
-			if ((i%16)==15) {
-				US_DEBUGP("%s\n", string);
-				string[0] = 0;
-			}
 		}
-		if (string[0]!=0)
-			US_DEBUGP("%s\n", string);
 
-		result = usbat_raw_bulk(us, SCSI_DATA_WRITE, content, len);
 
-	} else {
+		US_DEBUGP("Transfer %s %d bytes, sg buffers %d\n",
+			direction == SCSI_DATA_WRITE ? "out" : "in",
+			len, use_sg);
 
-		sg = (struct scatterlist *)content;
-		for (i=0; i<use_sg && transferred<len; i++) {
-			result = usbat_raw_bulk(us, SCSI_DATA_WRITE,
-				sg[i].address, 
-				len-transferred > sg[i].length ?
-					sg[i].length : len-transferred);
-			if (result!=US_BULK_TRANSFER_GOOD)
-				break;
-			transferred += sg[i].length;
-		}
+		result = usbat_bulk_transport(us,
+			NULL, 0, direction, content, len, use_sg);
+
+		/*
+		 * If we get a stall on the bulk download, we'll retry
+		 * the bulk download -- but not the SCSI command because
+		 * in some sense the SCSI command is still 'active' and
+		 * waiting for the data. Don't ask me why this should be;
+		 * I'm only following what the Windoze driver did.
+		 *
+		 * Note that a stall for the test-and-read/write command means
+		 * that the test failed. In this case we're testing to make
+		 * sure that the device is error-free
+		 * (i.e. bit 0 -- CHK -- of status is 0). The most likely
+		 * hypothesis is that the USBAT chip somehow knows what
+		 * the device will accept, but doesn't give the device any
+		 * data until all data is received. Thus, the device would
+		 * still be waiting for the first byte of data if a stall
+		 * occurs, even if the stall implies that some data was
+		 * transferred.
+		 */
+
+		if (result == US_BULK_TRANSFER_SHORT) {
+
+			/*
+			 * If we're reading and we stalled, then clear
+			 * the bulk output pipe only the first time.
+			 */
+
+			if (direction==SCSI_DATA_READ && i==0)
+				usb_clear_halt(us->pusb_dev,
+					usb_sndbulkpipe(us->pusb_dev,
+					  us->ep_out));
+			/*
+			 * Read status: is the device angry, or just busy?
+			 */
+
+ 			result = usbat_read(us, USBAT_ATA, 
+				direction==SCSI_DATA_WRITE ? 0x17 : 0x0E, 
+				&status);
+
+			if (result!=USB_STOR_TRANSPORT_GOOD)
+				return result;
+			if (status&0x01) // check condition
+				return USB_STOR_TRANSPORT_FAILED;
+			if (status&0x20) // device fault
+				return USB_STOR_TRANSPORT_FAILED;
+
+			US_DEBUGP("Redoing %s\n",
+			  direction==SCSI_DATA_WRITE ? "write" : "read");
+
+		} else if (result != US_BULK_TRANSFER_GOOD)
+			return result;
+		else
+			return usbat_wait_not_busy(us);
+
 	}
-*/
-	if (result!=USB_STOR_TRANSPORT_GOOD)
-		return result;
 
-	return usbat_wait_not_busy(us);
+	US_DEBUGP("Bummer! %s bulk data 10 times failed.\n",
+		direction==SCSI_DATA_WRITE ? "Writing" : "Reading");
+
+	return USB_STOR_TRANSPORT_FAILED;
 }
 
 int usbat_multiple_write(struct us_data *us, 
@@ -642,9 +688,9 @@ int usbat_multiple_write(struct us_data *us,
 int usbat_read_user_io(struct us_data *us,
 		unsigned char *data_flags) {
 
-	unsigned char command[8] = {
-		0xC0, 0x82, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-	};
+	// unsigned char command[8] = {
+	//	0xC0, 0x82, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	// };
 	int result;
 
 	result = usbat_send_control(us,
@@ -665,9 +711,9 @@ int usbat_write_user_io(struct us_data *us,
 		unsigned char enable_flags,
 		unsigned char data_flags) {
 
-	unsigned char command[8] = {
-		0x40, 0x82, enable_flags, data_flags, 0x00, 0x00, 0x00, 0x00
-	};
+	// unsigned char command[8] = {
+	//	0x40, 0x82, enable_flags, data_flags, 0x00, 0x00, 0x00, 0x00
+	// };
 	int result;
 
 	result = usbat_send_control(us,
@@ -882,18 +928,18 @@ int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us)
 	   h = return length/2048 in cmnd[7-8].
 	*/
 
-	static char *lengths =
+	// static char *lengths =
 
 	/* 0123456789ABCDEF   0123456789ABCDEF */
 
-	  "0XXL0XXXXXXXXXXX" "XXLXXXXXXXX0XX0X"  /* 00-1F */
-	  "XXXXX8XXhXH0XXX0" "XXXXX0XXXXXXXXXX"  /* 20-3F */
-	  "XXHHL0X0XXH0XX0X" "XHH00HXX0TH0H0XX"  /* 40-5F */
-	  "XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* 60-7F */
-	  "XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* 80-9F */
-	  "X0XXX0XXDXDXXXXX" "XXXXXXXXX000XHBX"  /* A0-BF */
-	  "XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* C0-DF */
-	  "XDXXXXXXXXXXXXXX" "XXW00HXXXXXXXXXX"; /* E0-FF */
+	//   "0XXL0XXXXXXXXXXX" "XXLXXXXXXXX0XX0X"  /* 00-1F */
+	//   "XXXXX8XXhXH0XXX0" "XXXXX0XXXXXXXXXX"  /* 20-3F */
+	//   "XXHHL0X0XXH0XX0X" "XHH00HXX0TH0H0XX"  /* 40-5F */
+	//   "XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* 60-7F */
+	//   "XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* 80-9F */
+	//   "X0XXX0XXDXDXXXXX" "XXXXXXXXX000XHBX"  /* A0-BF */
+	//   "XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* C0-DF */
+	//   "XDXXXXXXXXXXXXXX" "XXW00HXXXXXXXXXX"; /* E0-FF */
 
 /*	if (us->flags & US_FL_NEED_INIT) {
 		US_DEBUGP("8200e: initializing\n");
@@ -986,16 +1032,36 @@ int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us)
 	data[5] = 0xB0; 		// (device sel) = slave
 	data[6] = 0xA0; 		// (command) = ATA PACKET COMMAND
 
+	for (i=7; i<19; i++) {
+		registers[i] = 0x10;
+		data[i] = (i-7 >= srb->cmd_len) ? 0 : srb->cmnd[i-7];
+	}
+
+	if (srb->cmnd[0] == TEST_UNIT_READY)
+		transferred = 0;
+
 	if (srb->sc_data_direction == SCSI_DATA_WRITE) {
 
-		for (i=7; i<19; i++) {
-			registers[i] = 0x10;
-			data[i] = (i-7 >= srb->cmd_len) ? 0 : srb->cmnd[i-7];
-		}
-
-		result = usbat_write_block_test(us, USBAT_ATA, 
+		result = usbat_rw_block_test(us, USBAT_ATA, 
 			registers, data, 19,
 			0x10, 0x17, 0xFD, 0x30,
+			SCSI_DATA_WRITE,
+			srb->request_buffer, 
+			len, srb->use_sg);
+
+		if (result == USB_STOR_TRANSPORT_GOOD) {
+			transferred += len;
+			US_DEBUGP("Wrote %08X bytes\n", transferred);
+		}
+
+		return result;
+
+	} else if (srb->cmnd[0] == READ_10) {
+
+		result = usbat_rw_block_test(us, USBAT_ATA, 
+			registers, data, 19,
+			0x10, 0x17, 0xFD, 0x30,
+			SCSI_DATA_READ,
 			srb->request_buffer, 
 			len, srb->use_sg);
 

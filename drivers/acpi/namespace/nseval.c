@@ -1,10 +1,10 @@
-
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: nseval - Object evaluation interfaces -- includes control
  *                       method lookup and execution.
+ *              $Revision: 76 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -27,20 +27,20 @@
 
 #include "acpi.h"
 #include "amlcode.h"
-#include "parser.h"
-#include "interp.h"
-#include "namesp.h"
+#include "acparser.h"
+#include "acinterp.h"
+#include "acnamesp.h"
 
 
 #define _COMPONENT          NAMESPACE
-	 MODULE_NAME         ("nseval");
+	 MODULE_NAME         ("nseval")
 
 
-/****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ns_evaluate_relative
  *
- * PARAMETERS:  Rel_obj_entry       - NTE of the relative containing object
+ * PARAMETERS:  Handle              - The relative containing object
  *              *Pathname           - Name of method to execute, If NULL, the
  *                                    handle is the object to execute
  *              **Params            - List of parameters to pass to the method,
@@ -56,19 +56,19 @@
  *
  * MUTEX:       Locks Namespace
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ns_evaluate_relative (
-	ACPI_NAMED_OBJECT       *handle,
-	char                    *pathname,
-	ACPI_OBJECT_INTERNAL    **params,
-	ACPI_OBJECT_INTERNAL    **return_object)
+	ACPI_NAMESPACE_NODE     *handle,
+	NATIVE_CHAR             *pathname,
+	ACPI_OPERAND_OBJECT     **params,
+	ACPI_OPERAND_OBJECT     **return_object)
 {
-	ACPI_NAMED_OBJECT       *rel_obj_entry;
+	ACPI_NAMESPACE_NODE     *prefix_node;
 	ACPI_STATUS             status;
-	ACPI_NAMED_OBJECT       *obj_entry = NULL;
-	char                    *internal_path = NULL;
+	ACPI_NAMESPACE_NODE     *node = NULL;
+	NATIVE_CHAR             *internal_path = NULL;
 	ACPI_GENERIC_STATE      scope_info;
 
 
@@ -86,12 +86,12 @@ acpi_ns_evaluate_relative (
 		return (status);
 	}
 
-	/* Get the prefix handle and NTE */
+	/* Get the prefix handle and Node */
 
 	acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
 
-	rel_obj_entry = acpi_ns_convert_handle_to_entry (handle);
-	if (!rel_obj_entry) {
+	prefix_node = acpi_ns_convert_handle_to_entry (handle);
+	if (!prefix_node) {
 		acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
 		status = AE_BAD_PARAMETER;
 		goto cleanup;
@@ -99,15 +99,14 @@ acpi_ns_evaluate_relative (
 
 	/* Lookup the name in the namespace */
 
-	scope_info.scope.name_table = rel_obj_entry->child_table;
+	scope_info.scope.node = prefix_node->child;
 	status = acpi_ns_lookup (&scope_info, internal_path, ACPI_TYPE_ANY,
-			 IMODE_EXECUTE,
-			 NS_NO_UPSEARCH, NULL,
-			 &obj_entry);
+			 IMODE_EXECUTE, NS_NO_UPSEARCH, NULL,
+			 &node);
 
 	acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
 
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		goto cleanup;
 	}
 
@@ -116,7 +115,7 @@ acpi_ns_evaluate_relative (
 	 * to evaluate it.
 	 */
 
-	status = acpi_ns_evaluate_by_handle (obj_entry, params, return_object);
+	status = acpi_ns_evaluate_by_handle (node, params, return_object);
 
 cleanup:
 
@@ -128,7 +127,7 @@ cleanup:
 }
 
 
-/****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ns_evaluate_by_name
  *
@@ -146,26 +145,24 @@ cleanup:
  *
  * MUTEX:       Locks Namespace
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ns_evaluate_by_name (
-	char                    *pathname,
-	ACPI_OBJECT_INTERNAL    **params,
-	ACPI_OBJECT_INTERNAL    **return_object)
+	NATIVE_CHAR             *pathname,
+	ACPI_OPERAND_OBJECT     **params,
+	ACPI_OPERAND_OBJECT     **return_object)
 {
 	ACPI_STATUS             status;
-	ACPI_NAMED_OBJECT       *obj_entry = NULL;
-	char                    *internal_path = NULL;
+	ACPI_NAMESPACE_NODE     *node = NULL;
+	NATIVE_CHAR             *internal_path = NULL;
 
 
 	/* Build an internal name string for the method */
 
-	if (pathname[0] != '\\' || pathname[1] != '/') {
-		status = acpi_ns_internalize_name (pathname, &internal_path);
-		if (ACPI_FAILURE (status)) {
-			return (status);
-		}
+	status = acpi_ns_internalize_name (pathname, &internal_path);
+	if (ACPI_FAILURE (status)) {
+		return (status);
 	}
 
 	acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
@@ -173,13 +170,12 @@ acpi_ns_evaluate_by_name (
 	/* Lookup the name in the namespace */
 
 	status = acpi_ns_lookup (NULL, internal_path, ACPI_TYPE_ANY,
-			 IMODE_EXECUTE,
-			 NS_NO_UPSEARCH, NULL,
-			 &obj_entry);
+			 IMODE_EXECUTE, NS_NO_UPSEARCH, NULL,
+			 &node);
 
 	acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
 
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		goto cleanup;
 	}
 
@@ -188,7 +184,7 @@ acpi_ns_evaluate_by_name (
 	 * to evaluate it.
 	 */
 
-	status = acpi_ns_evaluate_by_handle (obj_entry, params, return_object);
+	status = acpi_ns_evaluate_by_handle (node, params, return_object);
 
 
 cleanup:
@@ -203,16 +199,16 @@ cleanup:
 }
 
 
-/****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ns_evaluate_by_handle
  *
- * PARAMETERS:  Obj_entry           - NTE of method to execute
- *              *Return_object      - Where to put method's return value (if
- *                                    any).  If NULL, no value is returned.
+ * PARAMETERS:  Handle              - Method Node to execute
  *              **Params            - List of parameters to pass to the method,
  *                                    terminated by NULL.  Params itself may be
  *                                    NULL if no parameters are being passed.
+ *              *Return_object      - Where to put method's return value (if
+ *                                    any).  If NULL, no value is returned.
  *
  * RETURN:      Status
  *
@@ -220,22 +216,22 @@ cleanup:
  *
  * MUTEX:       Locks Namespace
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ns_evaluate_by_handle (
-	ACPI_NAMED_OBJECT       *handle,
-	ACPI_OBJECT_INTERNAL    **params,
-	ACPI_OBJECT_INTERNAL    **return_object)
+	ACPI_NAMESPACE_NODE     *handle,
+	ACPI_OPERAND_OBJECT     **params,
+	ACPI_OPERAND_OBJECT     **return_object)
 {
-	ACPI_NAMED_OBJECT       *obj_entry;
+	ACPI_NAMESPACE_NODE     *node;
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    *local_return_object;
+	ACPI_OPERAND_OBJECT     *local_return_object;
 
 
 	/* Check if namespace has been initialized */
 
-	if (!acpi_gbl_root_object->child_table) {
+	if (!acpi_gbl_root_node) {
 		return (AE_NO_NAMESPACE);
 	}
 
@@ -251,12 +247,12 @@ acpi_ns_evaluate_by_handle (
 		*return_object = NULL;
 	}
 
-	/* Get the prefix handle and NTE */
+	/* Get the prefix handle and Node */
 
 	acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
 
-	obj_entry = acpi_ns_convert_handle_to_entry (handle);
-	if (!obj_entry) {
+	node = acpi_ns_convert_handle_to_entry (handle);
+	if (!node) {
 		status = AE_BAD_PARAMETER;
 		goto unlock_and_exit;
 	}
@@ -271,14 +267,11 @@ acpi_ns_evaluate_by_handle (
 	 * In both cases, the namespace is unlocked by the
 	 *  Acpi_ns* procedure
 	 */
-
-	if (acpi_ns_get_type (obj_entry) == ACPI_TYPE_METHOD) {
+	if (acpi_ns_get_type (node) == ACPI_TYPE_METHOD) {
 		/*
 		 * Case 1) We have an actual control method to execute
 		 */
-
-		status = acpi_ns_execute_control_method (obj_entry,
-				 params,
+		status = acpi_ns_execute_control_method (node, params,
 				 &local_return_object);
 	}
 
@@ -287,9 +280,7 @@ acpi_ns_evaluate_by_handle (
 		 * Case 2) Object is NOT a method, just return its
 		 * current value
 		 */
-
-		status = acpi_ns_get_object_value (obj_entry,
-				   &local_return_object);
+		status = acpi_ns_get_object_value (node, &local_return_object);
 	}
 
 
@@ -297,7 +288,6 @@ acpi_ns_evaluate_by_handle (
 	 * Check if there is a return value on the stack that must
 	 * be dealt with
 	 */
-
 	if (status == AE_CTRL_RETURN_VALUE) {
 		/*
 		 * If the Method returned a value and the caller
@@ -305,13 +295,11 @@ acpi_ns_evaluate_by_handle (
 		 * the returned value to the object descriptor provided
 		 * by the caller.
 		 */
-
 		if (return_object) {
 			/*
 			 * Valid return object, copy the pointer to
 			 * the returned object
 			 */
-
 			*return_object = local_return_object;
 		}
 
@@ -327,7 +315,6 @@ acpi_ns_evaluate_by_handle (
 	 * Namespace was unlocked by the handling Acpi_ns* function,
 	 * so we just return
 	 */
-
 	return (status);
 
 
@@ -338,14 +325,16 @@ unlock_and_exit:
 }
 
 
-/****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ns_execute_control_method
  *
- * PARAMETERS:  Method_entry        - The Nte of the object/method
+ * PARAMETERS:  Method_node     - The object/method
  *              **Params            - List of parameters to pass to the method,
  *                                    terminated by NULL.  Params itself may be
  *                                    NULL if no parameters are being passed.
+ *              **Return_obj_desc   - List of result objects to be returned
+ *                                    from the method.
  *
  * RETURN:      Status
  *
@@ -353,36 +342,31 @@ unlock_and_exit:
  *
  * MUTEX:       Assumes namespace is locked
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ns_execute_control_method (
-	ACPI_NAMED_OBJECT       *method_entry,
-	ACPI_OBJECT_INTERNAL    **params,
-	ACPI_OBJECT_INTERNAL    **return_obj_desc)
+	ACPI_NAMESPACE_NODE     *method_node,
+	ACPI_OPERAND_OBJECT     **params,
+	ACPI_OPERAND_OBJECT     **return_obj_desc)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 
 
 	/* Verify that there is a method associated with this object */
 
-	obj_desc = acpi_ns_get_attached_object ((ACPI_HANDLE) method_entry);
+	obj_desc = acpi_ns_get_attached_object ((ACPI_HANDLE) method_node);
 	if (!obj_desc) {
 		return (AE_ERROR);
 	}
-
-	/*
-	 * Valid method, Set the current scope to that of the Method,
-	 * and execute it.
-	 */
 
 
 	/*
 	 * Unlock the namespace before execution.  This allows namespace access
 	 * via the external Acpi* interfaces while a method is being executed.
 	 * However, any namespace deletion must acquire both the namespace and
-	 * interpter locks to ensure that no thread is using the portion of the
+	 * interpreter locks to ensure that no thread is using the portion of the
 	 * namespace that is being deleted.
 	 */
 
@@ -391,17 +375,17 @@ acpi_ns_execute_control_method (
 	/*
 	 * Excecute the method via the interpreter
 	 */
-	status = acpi_aml_execute_method (method_entry, params, return_obj_desc);
+	status = acpi_aml_execute_method (method_node, params, return_obj_desc);
 
 	return (status);
 }
 
 
-/****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ns_get_object_value
  *
- * PARAMETERS:  Object_entry        - The Nte of the object
+ * PARAMETERS:  Node         - The object
  *
  * RETURN:      Status
  *
@@ -409,30 +393,29 @@ acpi_ns_execute_control_method (
  *
  * MUTEX:       Assumes namespace is locked
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ns_get_object_value (
-	ACPI_NAMED_OBJECT       *object_entry,
-	ACPI_OBJECT_INTERNAL    **return_obj_desc)
+	ACPI_NAMESPACE_NODE     *node,
+	ACPI_OPERAND_OBJECT     **return_obj_desc)
 {
 	ACPI_STATUS             status = AE_OK;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_OBJECT_INTERNAL    *val_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_OPERAND_OBJECT     *val_desc;
 
 
 	/*
 	 *  We take the value from certain objects directly
 	 */
 
-	if ((object_entry->type == ACPI_TYPE_PROCESSOR) ||
-		(object_entry->type == ACPI_TYPE_POWER))
+	if ((node->type == ACPI_TYPE_PROCESSOR) ||
+		(node->type == ACPI_TYPE_POWER))
 	{
-
 		/*
 		 *  Create a Reference object to contain the object
 		 */
-		obj_desc = acpi_cm_create_internal_object (object_entry->type);
+		obj_desc = acpi_cm_create_internal_object (node->type);
 		if (!obj_desc) {
 		   status = AE_NO_MEMORY;
 		   goto unlock_and_exit;
@@ -442,7 +425,7 @@ acpi_ns_get_object_value (
 		 *  Get the attached object
 		 */
 
-		val_desc = acpi_ns_get_attached_object (object_entry);
+		val_desc = acpi_ns_get_attached_object (node);
 		if (!val_desc) {
 			status = AE_NULL_OBJECT;
 			goto unlock_and_exit;
@@ -452,10 +435,25 @@ acpi_ns_get_object_value (
 		 *  Just copy from the original to the return object
 		 */
 
-		MEMCPY (&obj_desc->common.first_non_common_byte,
-				&val_desc->common.first_non_common_byte,
-				(sizeof(ACPI_OBJECT_COMMON) -
-				sizeof(obj_desc->common.first_non_common_byte)));
+		switch (node->type)
+		{
+		case ACPI_TYPE_PROCESSOR:
+		   obj_desc->processor.proc_id      = val_desc->processor.proc_id;
+		   obj_desc->processor.address      = val_desc->processor.address;
+		   obj_desc->processor.sys_handler  = val_desc->processor.sys_handler;
+		   obj_desc->processor.drv_handler  = val_desc->processor.drv_handler;
+		   obj_desc->processor.addr_handler = val_desc->processor.addr_handler;
+
+		   break;
+
+		case ACPI_TYPE_POWER:
+			obj_desc->power_resource.system_level   = val_desc->power_resource.system_level;
+			obj_desc->power_resource.resource_order = val_desc->power_resource.resource_order;
+			obj_desc->power_resource.sys_handler    = val_desc->power_resource.sys_handler;
+			obj_desc->power_resource.drv_handler    = val_desc->power_resource.drv_handler;
+
+			break;
+		}
 	}
 
 
@@ -475,15 +473,19 @@ acpi_ns_get_object_value (
 		/* Construct a descriptor pointing to the name */
 
 		obj_desc->reference.op_code = (u8) AML_NAME_OP;
-		obj_desc->reference.object = (void *) object_entry;
+		obj_desc->reference.object = (void *) node;
 
 		/*
 		 * Use Acpi_aml_resolve_to_value() to get the associated value.
 		 * The call to Acpi_aml_resolve_to_value causes
 		 * Obj_desc (allocated above) to always be deleted.
+		 *
+		 * NOTE: we can get away with passing in NULL for a walk state
+		 * because Obj_desc is guaranteed to not be a reference to either
+		 * a method local or a method argument
 		 */
 
-		status = acpi_aml_resolve_to_value (&obj_desc);
+		status = acpi_aml_resolve_to_value (&obj_desc, NULL);
 	}
 
 	/*
@@ -491,7 +493,7 @@ acpi_ns_get_object_value (
 	 * placed in Obj_desc.
 	 */
 
-	if (status == AE_OK) {
+	if (ACPI_SUCCESS (status)) {
 		status = AE_CTRL_RETURN_VALUE;
 
 		*return_obj_desc = obj_desc;

@@ -1,8 +1,8 @@
-
 /******************************************************************************
  *
  * Module Name: tbxface - Public interfaces to the ACPI subsystem
  *                         ACPI table oriented interfaces
+ *              $Revision: 24 $
  *
  *****************************************************************************/
 
@@ -26,13 +26,13 @@
 
 
 #include "acpi.h"
-#include "namesp.h"
-#include "interp.h"
-#include "tables.h"
+#include "acnamesp.h"
+#include "acinterp.h"
+#include "actables.h"
 
 
 #define _COMPONENT          TABLE_MANAGER
-	 MODULE_NAME         ("tbxface");
+	 MODULE_NAME         ("tbxface")
 
 
 /*******************************************************************************
@@ -57,7 +57,7 @@ acpi_load_firmware_tables (void)
 	/* Get the RSDT first */
 
 	status = acpi_tb_get_table_rsdt (&number_of_tables);
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		goto error_exit;
 	}
 
@@ -65,7 +65,7 @@ acpi_load_firmware_tables (void)
 	/* Now get the rest of the tables */
 
 	status = acpi_tb_get_all_tables (number_of_tables, NULL);
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		goto error_exit;
 	}
 
@@ -105,12 +105,12 @@ acpi_load_table (
 
 
 	if (!table_ptr) {
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
 	/* Copy the table to a local buffer */
 
-	status = acpi_tb_get_table (NULL, ((char *) table_ptr), &table_info);
+	status = acpi_tb_get_table (NULL, table_ptr, &table_info);
 	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
@@ -157,7 +157,12 @@ acpi_unload_table (
 	list_head = &acpi_gbl_acpi_tables[table_type];
 	do
 	{
-		/* Delete the entire namespace under this table NTE */
+		/*
+		 * Delete all namespace entries owned by this table.  Note that these
+		 * entries can appear anywhere in the namespace by virtue of the AML
+		 * "Scope" operator.  Thus, we need to track ownership by an ID, not
+		 * simply a position within the hierarchy
+		 */
 
 		acpi_ns_delete_namespace_by_owner (list_head->table_id);
 
@@ -205,8 +210,6 @@ acpi_get_table_header (
 	ACPI_STATUS             status;
 
 
-	status = AE_OK;
-
 	if ((instance == 0)                 ||
 		(table_type == ACPI_TABLE_RSDP) ||
 		(!out_table_header))
@@ -217,7 +220,7 @@ acpi_get_table_header (
 	/* Check the table type and instance */
 
 	if ((table_type > ACPI_TABLE_MAX)   ||
-		(acpi_gbl_acpi_table_data[table_type].flags == ACPI_TABLE_SINGLE &&
+		(IS_SINGLE_TABLE (acpi_gbl_acpi_table_data[table_type].flags) &&
 		 instance > 1))
 	{
 		return (AE_BAD_PARAMETER);
@@ -227,7 +230,7 @@ acpi_get_table_header (
 	/* Get a pointer to the entire table */
 
 	status = acpi_tb_get_table_ptr (table_type, instance, &tbl_ptr);
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
 
@@ -285,8 +288,6 @@ acpi_get_table (
 	u32                     ret_buf_len;
 
 
-	status = AE_OK;
-
 	/*
 	 *  Must have a buffer
 	 */
@@ -301,7 +302,7 @@ acpi_get_table (
 	/* Check the table type and instance */
 
 	if ((table_type > ACPI_TABLE_MAX)   ||
-		(acpi_gbl_acpi_table_data[table_type].flags == ACPI_TABLE_SINGLE &&
+		(IS_SINGLE_TABLE (acpi_gbl_acpi_table_data[table_type].flags) &&
 		 instance > 1))
 	{
 		return (AE_BAD_PARAMETER);
@@ -311,12 +312,13 @@ acpi_get_table (
 	/* Get a pointer to the entire table */
 
 	status = acpi_tb_get_table_ptr (table_type, instance, &tbl_ptr);
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
 
 	/*
-	 * The function will return a NULL pointer if the table is not loaded
+	 * Acpi_tb_get_table_ptr will return a NULL pointer if the
+	 *  table is not loaded.
 	 */
 	if (tbl_ptr == NULL) {
 		return (AE_NOT_EXIST);

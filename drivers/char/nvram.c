@@ -109,7 +109,7 @@
 
 extern spinlock_t rtc_lock;
 
-static int nvram_open_cnt = 0;	/* #times opened */
+static int nvram_open_cnt;	/* #times opened */
 static int nvram_open_mode;		/* special open modes */
 #define	NVRAM_WRITE		1		/* opened for writing (exclusive) */
 #define	NVRAM_EXCL		2		/* opened with O_EXCL */
@@ -415,14 +415,29 @@ static struct miscdevice nvram_dev = {
 
 static int __init nvram_init(void)
 {
+	int ret;
+
 	/* First test whether the driver should init at all */
 	if (!CHECK_DRIVER_INIT())
 	    return( -ENXIO );
 
-	printk(KERN_INFO "Non-volatile memory driver v%s\n", NVRAM_VERSION );
-	misc_register( &nvram_dev );
-	create_proc_read_entry("driver/nvram",0,0,nvram_read_proc,NULL);
-	return( 0 );
+	ret = misc_register( &nvram_dev );
+	if (ret) {
+		printk(KERN_ERR "nvram: can't misc_register on minor=%d\n", NVRAM_MINOR);
+		goto out;
+	}
+	if (!create_proc_read_entry("driver/nvram",0,0,nvram_read_proc,NULL)) {
+		printk(KERN_ERR "nvram: can't create /proc/driver/nvram\n");
+		ret = -ENOMEM;
+		goto outmisc;
+	}
+	ret = 0;
+	printk(KERN_INFO "Non-volatile memory driver v" NVRAM_VERSION "\n");
+out:
+	return( ret );
+outmisc:
+	misc_deregister( &nvram_dev );
+	goto out;
 }
 
 static void __exit nvram_cleanup_module (void)

@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Module Name: psargs - Parse AML opcode arguments
+ *              $Revision: 35 $
  *
  *****************************************************************************/
 
@@ -24,12 +25,26 @@
 
 
 #include "acpi.h"
-#include "parser.h"
+#include "acparser.h"
 #include "amlcode.h"
-#include "namesp.h"
+#include "acnamesp.h"
 
 #define _COMPONENT          PARSER
-	 MODULE_NAME         ("psargs");
+	 MODULE_NAME         ("psargs")
+
+
+u32
+acpi_ps_pkg_length_encoding_size (
+	u32                     first_byte)
+{
+
+	/*
+	 * Bits 6-7 contain the number of bytes
+	 * in the encoded package length (-1)
+	 */
+
+	return ((first_byte >> 6) + 1);
+}
 
 
 /*******************************************************************************
@@ -46,14 +61,63 @@
  ******************************************************************************/
 
 u32
+xxx_acpi_ps_get_next_package_length (
+	ACPI_PARSE_STATE        *parser_state)
+{
+	u32                     encoding_length;
+	u32                     package_length = 0;
+	u8                      *aml_ptr = parser_state->aml;
+
+
+	encoding_length = acpi_ps_pkg_length_encoding_size ((u32) GET8 (aml_ptr));
+
+
+	switch (encoding_length)
+	{
+	case 1: /* 1-byte encoding (bits 0-5) */
+
+		package_length = ((u32) GET8 (aml_ptr) & 0x3f);
+		break;
+
+
+	case 2: /* 2-byte encoding (next byte + bits 0-3) */
+
+		package_length = ((((u32) GET8 (aml_ptr + 1)) << 4) |
+				   (((u32) GET8 (aml_ptr)) & 0x0f));
+		break;
+
+
+	case 3: /* 3-byte encoding (next 2 bytes + bits 0-3) */
+
+		package_length = ((((u32) GET8 (aml_ptr + 2)) << 12) |
+				   (((u32) GET8 (aml_ptr + 1)) << 4) |
+				   (((u32) GET8 (aml_ptr)) & 0x0f));
+		break;
+
+
+	case 4: /* 4-byte encoding (next 3 bytes + bits 0-3) */
+
+		package_length = ((((u32) GET8 (aml_ptr + 3)) << 20) |
+				   (((u32) GET8 (aml_ptr + 2)) << 12) |
+				   (((u32) GET8 (aml_ptr + 1)) << 4) |
+				   (((u32) GET8 (aml_ptr)) & 0x0f));
+		break;
+	}
+
+	parser_state->aml += encoding_length;
+
+	return (package_length);
+}
+
+u32
 acpi_ps_get_next_package_length (
 	ACPI_PARSE_STATE        *parser_state)
 {
-	s32                     encoded_length;
-	s32                     length = 0;
+	u32                     encoded_length;
+	u32                     length = 0;
 
 
-	encoded_length = (s32) GET8 (parser_state->aml);
+	encoded_length = (u32) GET8 (parser_state->aml);
 	parser_state->aml++;
 
 
@@ -137,13 +201,13 @@ acpi_ps_get_next_package_end (
  *
  ******************************************************************************/
 
-char *
+NATIVE_CHAR *
 acpi_ps_get_next_namestring (
 	ACPI_PARSE_STATE        *parser_state)
 {
-	char                    *start = (char *) parser_state->aml;
-	char                    *end = (char *) parser_state->aml;
-	s32                     length;
+	u8                       *start = parser_state->aml;
+	u8                       *end = parser_state->aml;
+	u32                     length;
 
 
 	/* Handle multiple prefix characters */
@@ -181,7 +245,7 @@ acpi_ps_get_next_namestring (
 
 		/* multiple name segments */
 
-		length = (s32) GET8 (end + 1) * 4;
+		length = (u32) GET8 (end + 1) * 4;
 		end += 2 + length;
 		break;
 
@@ -197,7 +261,7 @@ acpi_ps_get_next_namestring (
 
 	parser_state->aml = (u8*) end;
 
-	return (start);
+	return ((NATIVE_CHAR *) start);
 }
 
 
@@ -228,14 +292,14 @@ acpi_ps_get_next_namestring (
 void
 acpi_ps_get_next_namepath (
 	ACPI_PARSE_STATE        *parser_state,
-	ACPI_GENERIC_OP         *arg,
+	ACPI_PARSE_OBJECT       *arg,
 	u32                     *arg_count,
 	u8                      method_call)
 {
-	char                    *path;
-	ACPI_GENERIC_OP         *name;
-	ACPI_GENERIC_OP         *op;
-	ACPI_GENERIC_OP         *count;
+	NATIVE_CHAR             *path;
+	ACPI_PARSE_OBJECT       *name_op;
+	ACPI_PARSE_OBJECT       *op;
+	ACPI_PARSE_OBJECT       *count;
 
 
 	path = acpi_ps_get_next_namestring (parser_state);
@@ -270,18 +334,18 @@ acpi_ps_get_next_namepath (
 
 				count = acpi_ps_get_arg (op, 0);
 				if (count && count->opcode == AML_BYTE_OP) {
-					name = acpi_ps_alloc_op (AML_NAMEPATH_OP);
-					if (name) {
+					name_op = acpi_ps_alloc_op (AML_NAMEPATH_OP);
+					if (name_op) {
 						/* Change arg into a METHOD CALL and attach the name */
 
 						acpi_ps_init_op (arg, AML_METHODCALL_OP);
 
-						name->value.name = path;
+						name_op->value.name = path;
 
-						/* Point METHODCALL/NAME to the METHOD NTE */
+						/* Point METHODCALL/NAME to the METHOD Node */
 
-						name->acpi_named_object = op;
-						acpi_ps_append_arg (arg, name);
+						name_op->node = (ACPI_NAMESPACE_NODE *) op;
+						acpi_ps_append_arg (arg, name_op);
 
 						*arg_count = count->value.integer &
 								 METHOD_FLAGS_ARG_COUNT;
@@ -320,15 +384,15 @@ acpi_ps_get_next_namepath (
 void
 acpi_ps_get_next_namepath (
 	ACPI_PARSE_STATE        *parser_state,
-	ACPI_GENERIC_OP         *arg,
+	ACPI_PARSE_OBJECT       *arg,
 	u32                     *arg_count,
 	u8                      method_call)
 {
-	char                    *path;
-	ACPI_GENERIC_OP         *name;
+	NATIVE_CHAR             *path;
+	ACPI_PARSE_OBJECT       *name_op;
 	ACPI_STATUS             status;
-	ACPI_NAMED_OBJECT       *method = NULL;
-	ACPI_NAMED_OBJECT       *entry;
+	ACPI_NAMESPACE_NODE     *method_node = NULL;
+	ACPI_NAMESPACE_NODE     *node;
 	ACPI_GENERIC_STATE      scope_info;
 
 
@@ -346,10 +410,10 @@ acpi_ps_get_next_namepath (
 		/*
 		 * Lookup the name in the internal namespace
 		 */
-		scope_info.scope.name_table = NULL;
-		entry = parser_state->start_op->acpi_named_object;
-		if (entry) {
-			scope_info.scope.name_table = entry->child_table;
+		scope_info.scope.node = NULL;
+		node = parser_state->start_node;
+		if (node) {
+			scope_info.scope.node = node;
 		}
 
 		/*
@@ -361,24 +425,24 @@ acpi_ps_get_next_namepath (
 
 		status = acpi_ns_lookup (&scope_info, path, ACPI_TYPE_ANY, IMODE_EXECUTE,
 				 NS_SEARCH_PARENT | NS_DONT_OPEN_SCOPE, NULL,
-				 &entry);
+				 &node);
 		if (ACPI_SUCCESS (status)) {
-			if (entry->type == ACPI_TYPE_METHOD) {
-				method = entry;
-				name = acpi_ps_alloc_op (AML_NAMEPATH_OP);
-				if (name) {
+			if (node->type == ACPI_TYPE_METHOD) {
+				method_node = node;
+				name_op = acpi_ps_alloc_op (AML_NAMEPATH_OP);
+				if (name_op) {
 					/* Change arg into a METHOD CALL and attach name to it */
 
 					acpi_ps_init_op (arg, AML_METHODCALL_OP);
 
-					name->value.name        = path;
+					name_op->value.name = path;
 
-					/* Point METHODCALL/NAME to the METHOD NTE */
+					/* Point METHODCALL/NAME to the METHOD Node */
 
-					name->acpi_named_object  = method;
-					acpi_ps_append_arg (arg, name);
+					name_op->node = method_node;
+					acpi_ps_append_arg (arg, name_op);
 
-					*arg_count = ((ACPI_OBJECT_INTERNAL *) method->object)->method.param_count;
+					*arg_count = ((ACPI_OPERAND_OBJECT *) method_node->object)->method.param_count;
 				}
 
 				return;
@@ -424,8 +488,8 @@ acpi_ps_get_next_namepath (
 void
 acpi_ps_get_next_simple_arg (
 	ACPI_PARSE_STATE        *parser_state,
-	s32                     arg_type,
-	ACPI_GENERIC_OP         *arg)
+	u32                     arg_type,
+	ACPI_PARSE_OBJECT       *arg)
 {
 
 
@@ -498,13 +562,13 @@ acpi_ps_get_next_simple_arg (
  *
  ******************************************************************************/
 
-ACPI_GENERIC_OP *
+ACPI_PARSE_OBJECT *
 acpi_ps_get_next_field (
 	ACPI_PARSE_STATE        *parser_state)
 {
 	ACPI_PTRDIFF            aml_offset = parser_state->aml -
 			 parser_state->aml_start;
-	ACPI_GENERIC_OP         *field;
+	ACPI_PARSE_OBJECT       *field;
 	u16                     opcode;
 	u32                     name;
 
@@ -598,16 +662,16 @@ acpi_ps_get_next_field (
  *
  ******************************************************************************/
 
-ACPI_GENERIC_OP *
+ACPI_PARSE_OBJECT *
 acpi_ps_get_next_arg (
 	ACPI_PARSE_STATE        *parser_state,
-	s32                     arg_type,
+	u32                     arg_type,
 	u32                     *arg_count)
 {
-	ACPI_GENERIC_OP         *arg = NULL;
-	ACPI_GENERIC_OP         *prev = NULL;
-	ACPI_GENERIC_OP         *field;
-	s32                     subop;
+	ACPI_PARSE_OBJECT       *arg = NULL;
+	ACPI_PARSE_OBJECT       *prev = NULL;
+	ACPI_PARSE_OBJECT       *field;
+	u32                     subop;
 
 
 	switch (arg_type)
@@ -675,7 +739,7 @@ acpi_ps_get_next_arg (
 				/* fill in bytelist data */
 
 				arg->value.size = (parser_state->pkg_end - parser_state->aml);
-				acpi_ps_to_bytelist_op (arg)->data = parser_state->aml;
+				((ACPI_PARSE2_OBJECT *) arg)->data = parser_state->aml;
 			}
 
 			/* skip to End of byte data */

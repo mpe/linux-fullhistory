@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Module Name: pswalk - Parser routines to walk parsed op tree(s)
+ *              $Revision: 45 $
  *
  *****************************************************************************/
 
@@ -25,13 +26,13 @@
 
 #include "acpi.h"
 #include "amlcode.h"
-#include "parser.h"
-#include "dispatch.h"
-#include "namesp.h"
-#include "interp.h"
+#include "acparser.h"
+#include "acdispat.h"
+#include "acnamesp.h"
+#include "acinterp.h"
 
 #define _COMPONENT          PARSER
-	 MODULE_NAME         ("pswalk");
+	 MODULE_NAME         ("pswalk")
 
 
 /*******************************************************************************
@@ -53,12 +54,12 @@
 ACPI_STATUS
 acpi_ps_get_next_walk_op (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op,
-	INTERPRETER_CALLBACK    ascending_callback)
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_PARSE_UPWARDS      ascending_callback)
 {
-	ACPI_GENERIC_OP         *next;
-	ACPI_GENERIC_OP         *parent;
-	ACPI_GENERIC_OP         *grand_parent;
+	ACPI_PARSE_OBJECT       *next;
+	ACPI_PARSE_OBJECT       *parent;
+	ACPI_PARSE_OBJECT       *grand_parent;
 	ACPI_STATUS             status;
 
 
@@ -146,6 +147,18 @@ acpi_ps_get_next_walk_op (
 
 		default:
 			/*
+			 * If we are back to the starting point, the walk is complete.
+			 */
+			if (op == walk_state->origin) {
+				/* Reached the point of origin, the walk is complete */
+
+				walk_state->prev_op     = op;
+				walk_state->next_op     = NULL;
+
+				return (status);
+			}
+
+			/*
 			 * Check for a sibling to the current op.  A sibling means
 			 * we are still going "downward" in the tree.
 			 */
@@ -166,7 +179,7 @@ acpi_ps_get_next_walk_op (
 			 * No sibling, but check status.
 			 * Abort on error from callback routine
 			 */
-			if (status != AE_OK) {
+			if (ACPI_FAILURE (status)) {
 				/* Next op will be the parent */
 
 				walk_state->prev_op     = op;
@@ -302,7 +315,7 @@ acpi_ps_get_next_walk_op (
 		 * No sibling, check for an error from closing the parent
 		 * (Also, AE_PENDING if a method call was encountered)
 		 */
-		if (status != AE_OK) {
+		if (ACPI_FAILURE (status)) {
 			walk_state->prev_op     = parent;
 			walk_state->next_op     = grand_parent;
 			walk_state->next_op_info = NEXT_OP_UPWARD;
@@ -347,13 +360,13 @@ acpi_ps_get_next_walk_op (
 ACPI_STATUS
 acpi_ps_walk_loop (
 	ACPI_WALK_LIST          *walk_list,
-	ACPI_GENERIC_OP         *start_op,
-	INTERPRETER_CALLBACK    descending_callback,
-	INTERPRETER_CALLBACK    ascending_callback)
+	ACPI_PARSE_OBJECT       *start_op,
+	ACPI_PARSE_DOWNWARDS    descending_callback,
+	ACPI_PARSE_UPWARDS      ascending_callback)
 {
 	ACPI_STATUS             status = AE_OK;
 	ACPI_WALK_STATE         *walk_state;
-	ACPI_GENERIC_OP         *op = start_op;
+	ACPI_PARSE_OBJECT       *op = start_op;
 
 
 	walk_state = acpi_ds_get_current_walk_state (walk_list);
@@ -363,7 +376,7 @@ acpi_ps_walk_loop (
 
 	while (op) {
 		if (walk_state->next_op_info != NEXT_OP_UPWARD) {
-			status = descending_callback (walk_state, op);
+			status = descending_callback (op->opcode, op, walk_state, NULL);
 		}
 
 		/*
@@ -437,19 +450,19 @@ acpi_ps_walk_loop (
 
 ACPI_STATUS
 acpi_ps_walk_parsed_aml (
-	ACPI_GENERIC_OP         *start_op,
-	ACPI_GENERIC_OP         *end_op,
-	ACPI_OBJECT_INTERNAL    *mth_desc,
-	ACPI_NAME_TABLE         *start_scope,
-	ACPI_OBJECT_INTERNAL    **params,
-	ACPI_OBJECT_INTERNAL    **caller_return_desc,
+	ACPI_PARSE_OBJECT       *start_op,
+	ACPI_PARSE_OBJECT       *end_op,
+	ACPI_OPERAND_OBJECT     *mth_desc,
+	ACPI_NAMESPACE_NODE     *start_node,
+	ACPI_OPERAND_OBJECT     **params,
+	ACPI_OPERAND_OBJECT     **caller_return_desc,
 	ACPI_OWNER_ID           owner_id,
-	INTERPRETER_CALLBACK    descending_callback,
-	INTERPRETER_CALLBACK    ascending_callback)
+	ACPI_PARSE_DOWNWARDS    descending_callback,
+	ACPI_PARSE_UPWARDS      ascending_callback)
 {
-	ACPI_GENERIC_OP         *op;
+	ACPI_PARSE_OBJECT       *op;
 	ACPI_WALK_STATE         *walk_state;
-	ACPI_OBJECT_INTERNAL    *return_desc;
+	ACPI_OPERAND_OBJECT     *return_desc;
 	ACPI_STATUS             status;
 	ACPI_WALK_LIST          walk_list;
 	ACPI_WALK_LIST          *prev_walk_list;
@@ -458,7 +471,7 @@ acpi_ps_walk_parsed_aml (
 	/* Parameter Validation */
 
 	if (!start_op || !end_op) {
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
 	/* Initialize a new walk list */
@@ -475,10 +488,10 @@ acpi_ps_walk_parsed_aml (
 	prev_walk_list = acpi_gbl_current_walk_list;
 	acpi_gbl_current_walk_list = &walk_list;
 
-	if (start_scope) {
+	if (start_node) {
 		/* Push start scope on scope stack and make it current  */
 
-		status = acpi_ds_scope_stack_push (start_scope, ACPI_TYPE_METHOD, walk_state);
+		status = acpi_ds_scope_stack_push (start_node, ACPI_TYPE_METHOD, walk_state);
 		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
@@ -489,7 +502,7 @@ acpi_ps_walk_parsed_aml (
 		/* Init arguments if this is a control method */
 		/* TBD: [Restructure] add walkstate as a param */
 
-		acpi_ds_method_data_init_args (params, MTH_NUM_ARGS);
+		acpi_ds_method_data_init_args (params, MTH_NUM_ARGS, walk_state);
 	}
 
 	op = start_op;
@@ -502,7 +515,7 @@ acpi_ps_walk_parsed_aml (
 	 */
 
 	while (walk_state) {
-		if (status == AE_OK) {
+		if (ACPI_SUCCESS (status)) {
 			status = acpi_ps_walk_loop (&walk_list, op, descending_callback,
 					 ascending_callback);
 		}
@@ -526,9 +539,7 @@ acpi_ps_walk_parsed_aml (
 		 * there's lots of cleanup to do
 		 */
 
-		if (walk_state->method_desc &&
-			walk_state->method_desc->method.parser_op)
-		{
+		if (walk_state->method_desc) {
 			acpi_ds_terminate_control_method (walk_state);
 		}
 
@@ -540,7 +551,7 @@ acpi_ps_walk_parsed_aml (
 
 		walk_state = acpi_ds_get_current_walk_state (&walk_list);
 		if (walk_state &&
-			status == AE_OK)
+			ACPI_SUCCESS (status))
 		{
 			/* There is another walk state, restart it */
 

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: cminit - Common ACPI subsystem initialization
+ *              $Revision: 79 $
  *
  *****************************************************************************/
 
@@ -25,14 +25,14 @@
 
 
 #include "acpi.h"
-#include "hardware.h"
-#include "namesp.h"
-#include "events.h"
-#include "parser.h"
-#include "dispatch.h"
+#include "achware.h"
+#include "acnamesp.h"
+#include "acevents.h"
+#include "acparser.h"
+#include "acdispat.h"
 
 #define _COMPONENT          MISCELLANEOUS
-	 MODULE_NAME         ("cminit");
+	 MODULE_NAME         ("cminit")
 
 
 /*******************************************************************************
@@ -52,7 +52,7 @@
 
 void
 acpi_cm_facp_register_error (
-	char                    *register_name,
+	NATIVE_CHAR             *register_name,
 	u32                     value)
 {
 
@@ -77,7 +77,7 @@ ACPI_STATUS
 acpi_cm_hardware_initialize (void)
 {
 	ACPI_STATUS             status = AE_OK;
-	s32                     index;
+	u32                     index;
 
 
 	/* Are we running on the actual hardware */
@@ -351,8 +351,9 @@ acpi_cm_subsystem_shutdown (void)
 	acpi_ps_delete_parse_cache ();
 
 	/* Debug only - display leftover memory allocation, if any */
-
+#ifdef ENABLE_DEBUGGER
 	acpi_cm_dump_current_allocations (ACPI_UINT32_MAX, NULL);
+#endif
 
 	BREAKPOINT3;
 

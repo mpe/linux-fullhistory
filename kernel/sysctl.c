@@ -235,7 +235,7 @@ static ctl_table kern_table[] = {
 
 static ctl_table vm_table[] = {
 	{VM_FREEPG, "freepages", 
-	 &freepages, sizeof(freepages_t), 0644, NULL, &proc_dointvec},
+	 &freepages, sizeof(freepages_t), 0444, NULL, &proc_dointvec},
 	{VM_BDFLUSH, "bdflush", &bdf_prm, 9*sizeof(int), 0644, NULL,
 	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
 	 &bdflush_min, &bdflush_max},

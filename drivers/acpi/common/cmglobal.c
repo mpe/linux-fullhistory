@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: cmglobal - Global variables for the ACPI subsystem
+ *              $Revision: 99 $
  *
  *****************************************************************************/
 
@@ -26,13 +26,13 @@
 #define DEFINE_ACPI_GLOBALS
 
 #include "acpi.h"
-#include "events.h"
-#include "namesp.h"
-#include "interp.h"
+#include "acevents.h"
+#include "acnamesp.h"
+#include "acinterp.h"
 
 
 #define _COMPONENT          MISCELLANEOUS
-	 MODULE_NAME         ("cmglobal");
+	 MODULE_NAME         ("cmglobal")
 
 
 /******************************************************************************
@@ -126,31 +126,25 @@ u8                          acpi_gbl_ns_properties[] =
 	NSP_NEWSCOPE | NSP_LOCAL,   /* 13 Thermal          */
 	NSP_NORMAL,                 /* 14 Buffer_field     */
 	NSP_NORMAL,                 /* 15 Ddb_handle       */
-	NSP_NORMAL,                 /* 16 reserved         */
-	NSP_NORMAL,                 /* 17 reserved         */
-	NSP_NORMAL,                 /* 18 reserved         */
-	NSP_NORMAL,                 /* 19 reserved         */
-	NSP_NORMAL,                 /* 20 reserved         */
-	NSP_NORMAL,                 /* 21 reserved         */
-	NSP_NORMAL,                 /* 22 reserved         */
-	NSP_NORMAL,                 /* 23 reserved         */
-	NSP_NORMAL,                 /* 24 reserved         */
-	NSP_NORMAL,                 /* 25 Def_field        */
-	NSP_NORMAL,                 /* 26 Bank_field       */
-	NSP_NORMAL,                 /* 27 Index_field      */
-	NSP_NORMAL,                 /* 28 Def_field_defn   */
-	NSP_NORMAL,                 /* 29 Bank_field_defn  */
-	NSP_NORMAL,                 /* 30 Index_field_defn */
-	NSP_NORMAL,                 /* 31 If               */
-	NSP_NORMAL,                 /* 32 Else             */
-	NSP_NORMAL,                 /* 33 While            */
-	NSP_NEWSCOPE,               /* 34 Scope            */
-	NSP_LOCAL,                  /* 35 Def_any          */
-	NSP_NORMAL,                 /* 36 Reference        */
-	NSP_NORMAL,                 /* 37 Alias            */
-	NSP_NORMAL,                 /* 38 Notify           */
-	NSP_NORMAL,                 /* 39 Address Handler  */
-	NSP_NORMAL                  /* 40 Invalid          */
+	NSP_NORMAL,                 /* 16 Debug Object     */
+	NSP_NORMAL,                 /* 17 Def_field        */
+	NSP_NORMAL,                 /* 18 Bank_field       */
+	NSP_NORMAL,                 /* 19 Index_field      */
+	NSP_NORMAL,                 /* 20 Reference        */
+	NSP_NORMAL,                 /* 21 Alias            */
+	NSP_NORMAL,                 /* 22 Notify           */
+	NSP_NORMAL,                 /* 23 Address Handler  */
+	NSP_NORMAL,                 /* 24 Def_field_defn   */
+	NSP_NORMAL,                 /* 25 Bank_field_defn  */
+	NSP_NORMAL,                 /* 26 Index_field_defn */
+	NSP_NORMAL,                 /* 27 If               */
+	NSP_NORMAL,                 /* 28 Else             */
+	NSP_NORMAL,                 /* 29 While            */
+	NSP_NEWSCOPE,               /* 30 Scope            */
+	NSP_LOCAL,                  /* 31 Def_any          */
+	NSP_NORMAL,                 /* 32 Method Arg       */
+	NSP_NORMAL,                 /* 33 Method Local     */
+	NSP_NORMAL                  /* 34 Invalid          */
 };
 
 
@@ -204,11 +198,11 @@ acpi_cm_valid_object_type (
 		if ((type < INTERNAL_TYPE_BEGIN) ||
 			(type > INTERNAL_TYPE_MAX))
 		{
-			return FALSE;
+			return (FALSE);
 		}
 	}
 
-	return TRUE;
+	return (TRUE);
 }
 
 
@@ -224,16 +218,60 @@ acpi_cm_valid_object_type (
  *
  ****************************************************************************/
 
-char *
+NATIVE_CHAR *
 acpi_cm_format_exception (
 	ACPI_STATUS             status)
 {
+	NATIVE_CHAR             *exception = "UNKNOWN_STATUS";
+	ACPI_STATUS             sub_status;
 
-	if (status > ACPI_MAX_STATUS) {
-		return "UNKNOWN_STATUS";
+
+	sub_status = (status & ~AE_CODE_MASK);
+
+
+	switch (status & AE_CODE_MASK)
+	{
+	case AE_CODE_ENVIRONMENTAL:
+
+		if (sub_status <= AE_CODE_ENV_MAX) {
+			exception = acpi_gbl_exception_names_env [sub_status];
+		}
+		break;
+
+	case AE_CODE_PROGRAMMER:
+
+		if (sub_status <= AE_CODE_PGM_MAX) {
+			exception = acpi_gbl_exception_names_pgm [sub_status -1];
+		}
+		break;
+
+	case AE_CODE_ACPI_TABLES:
+
+		if (sub_status <= AE_CODE_TBL_MAX) {
+			exception = acpi_gbl_exception_names_tbl [sub_status -1];
+		}
+		break;
+
+	case AE_CODE_AML:
+
+		if (sub_status <= AE_CODE_AML_MAX) {
+			exception = acpi_gbl_exception_names_aml [sub_status -1];
+		}
+		break;
+
+	case AE_CODE_CONTROL:
+
+		if (sub_status <= AE_CODE_CTRL_MAX) {
+			exception = acpi_gbl_exception_names_ctrl [sub_status -1];
+		}
+		break;
+
+	default:
+		break;
 	}
 
-	return (acpi_gbl_exception_names [status]);
+
+	return (exception);
 }
 
 
@@ -389,6 +427,11 @@ acpi_cm_init_globals (ACPI_INIT_DATA *init_data)
 	acpi_gbl_parse_cache_requests       = 0;
 	acpi_gbl_parse_cache_hits           = 0;
 
+	acpi_gbl_ext_parse_cache            = NULL;
+	acpi_gbl_ext_parse_cache_depth      = 0;
+	acpi_gbl_ext_parse_cache_requests   = 0;
+	acpi_gbl_ext_parse_cache_hits       = 0;
+
 	acpi_gbl_object_cache               = NULL;
 	acpi_gbl_object_cache_depth         = 0;
 	acpi_gbl_object_cache_requests      = 0;
@@ -402,7 +445,7 @@ acpi_cm_init_globals (ACPI_INIT_DATA *init_data)
 	/* Interpreter */
 
 	acpi_gbl_buf_seq                    = 0;
-	acpi_gbl_named_object_err           = FALSE;
+	acpi_gbl_node_err                   = FALSE;
 
 	/* Parser */
 
@@ -418,18 +461,15 @@ acpi_cm_init_globals (ACPI_INIT_DATA *init_data)
 
 	/* Namespace */
 
-	acpi_gbl_root_name_table.next_table = NULL;
-	acpi_gbl_root_name_table.parent_entry = NULL;
-	acpi_gbl_root_name_table.parent_table = NULL;
+	acpi_gbl_root_node                  = NULL;
 
-	acpi_gbl_root_object                = acpi_gbl_root_name_table.entries;
-
-	acpi_gbl_root_object->name          = ACPI_ROOT_NAME;
-	acpi_gbl_root_object->data_type     = ACPI_DESC_TYPE_NAMED;
-	acpi_gbl_root_object->type          = ACPI_TYPE_ANY;
-	acpi_gbl_root_object->this_index    = 0;
-	acpi_gbl_root_object->child_table   = NULL;
-	acpi_gbl_root_object->object        = NULL;
+	acpi_gbl_root_node_struct.name      = ACPI_ROOT_NAME;
+	acpi_gbl_root_node_struct.data_type = ACPI_DESC_TYPE_NAMED;
+	acpi_gbl_root_node_struct.type      = ACPI_TYPE_ANY;
+	acpi_gbl_root_node_struct.child     = NULL;
+	acpi_gbl_root_node_struct.peer      = NULL;
+	acpi_gbl_root_node_struct.object    = NULL;
+	acpi_gbl_root_node_struct.flags     = ANOBJ_END_OF_PEER_LIST;
 
 	/* Memory allocation metrics - compiled out in non-debug mode. */
 

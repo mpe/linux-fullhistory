@@ -61,7 +61,7 @@
 */
 
 static int
-  BusLogic_DriverOptionsCount =			0;
+  BusLogic_DriverOptionsCount;
 
 
 /*
@@ -79,7 +79,7 @@ static BusLogic_DriverOptions_T
 */
 
 #ifdef MODULE
-static char *BusLogic =	NULL;
+static char *BusLogic;
 MODULE_PARM(BusLogic, "s");
 #endif
 
@@ -90,7 +90,7 @@ MODULE_PARM(BusLogic, "s");
 */
 
 static BusLogic_ProbeOptions_T
-  BusLogic_ProbeOptions =			{ 0 };
+  BusLogic_ProbeOptions;
 
 
 /*
@@ -99,7 +99,7 @@ static BusLogic_ProbeOptions_T
 */
 
 static BusLogic_GlobalOptions_T
-  BusLogic_GlobalOptions =			{ 0 };
+  BusLogic_GlobalOptions;
 
 
 /*
@@ -108,8 +108,8 @@ static BusLogic_GlobalOptions_T
 */
 
 static BusLogic_HostAdapter_T
-  *BusLogic_FirstRegisteredHostAdapter =	NULL,
-  *BusLogic_LastRegisteredHostAdapter =		NULL;
+  *BusLogic_FirstRegisteredHostAdapter,
+  *BusLogic_LastRegisteredHostAdapter;
 
 
 /*
@@ -117,7 +117,7 @@ static BusLogic_HostAdapter_T
 */
 
 static int
-  BusLogic_ProbeInfoCount =			0;
+  BusLogic_ProbeInfoCount;
 
 
 /*
@@ -128,7 +128,7 @@ static int
 */
 
 static BusLogic_ProbeInfo_T
-  *BusLogic_ProbeInfoList =			NULL;
+  *BusLogic_ProbeInfoList;
 
 
 /*

@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.154 2000/08/09 00:00:15 davem Exp $
+/*  $Id: init.c,v 1.155 2000/09/09 00:02:19 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)

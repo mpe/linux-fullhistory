@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: amcreate - Named object creation
+ *              $Revision: 44 $
  *
  *****************************************************************************/
 
@@ -25,19 +25,19 @@
 
 
 #include "acpi.h"
-#include "parser.h"
-#include "interp.h"
+#include "acparser.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "namesp.h"
-#include "events.h"
-#include "dispatch.h"
+#include "acnamesp.h"
+#include "acevents.h"
+#include "acdispat.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amcreate");
+	 MODULE_NAME         ("amcreate")
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_aml_exec_create_field
  *
@@ -64,19 +64,19 @@
  *  Num_bits            :=  Term_arg=>Integer
  *  Source_buff         :=  Term_arg=>Buffer
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_aml_exec_create_field (
 	u16                     opcode,
 	ACPI_WALK_STATE         *walk_state)
 {
-	ACPI_OBJECT_INTERNAL    *res_desc = NULL;
-	ACPI_OBJECT_INTERNAL    *cnt_desc = NULL;
-	ACPI_OBJECT_INTERNAL    *off_desc = NULL;
-	ACPI_OBJECT_INTERNAL    *src_desc = NULL;
-	ACPI_OBJECT_INTERNAL    *field_desc;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *res_desc = NULL;
+	ACPI_OPERAND_OBJECT     *cnt_desc = NULL;
+	ACPI_OPERAND_OBJECT     *off_desc = NULL;
+	ACPI_OPERAND_OBJECT     *src_desc = NULL;
+	ACPI_OPERAND_OBJECT     *field_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	OBJECT_TYPE_INTERNAL    res_type;
 	ACPI_STATUS             status;
 	u32                     num_operands = 3;
@@ -88,7 +88,7 @@ acpi_aml_exec_create_field (
 
 	/* Resolve the operands */
 
-	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS);
+	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS, walk_state);
 
 	/* Get the operands */
 
@@ -101,11 +101,9 @@ acpi_aml_exec_create_field (
 	status |= acpi_ds_obj_stack_pop_object (&off_desc, walk_state);
 	status |= acpi_ds_obj_stack_pop_object (&src_desc, walk_state);
 
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		/* Invalid parameters on object stack  */
 
-		acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__, opcode,
-				  WALK_OPERANDS, 3);
 		goto cleanup;
 	}
 
@@ -288,16 +286,17 @@ acpi_aml_exec_create_field (
 		if (obj_desc) {
 			/*
 			 * There is an existing object here;  delete it and zero out the
-			 * NTE
+			 * object field within the Node
 			 */
 
 			acpi_cm_remove_reference (obj_desc);
-			acpi_ns_attach_object (res_desc, NULL, ACPI_TYPE_ANY);
+			acpi_ns_attach_object ((ACPI_NAMESPACE_NODE *) res_desc, NULL,
+					 ACPI_TYPE_ANY);
 		}
 
 		/* Set the type to ANY (or the store below will fail) */
 
-		((ACPI_NAMED_OBJECT*) res_desc)->type = ACPI_TYPE_ANY;
+		((ACPI_NAMESPACE_NODE *) res_desc)->type = ACPI_TYPE_ANY;
 
 		break;
 
@@ -310,7 +309,7 @@ acpi_aml_exec_create_field (
 
 	/* Store constructed field descriptor in result location */
 
-	status = acpi_aml_exec_store (field_desc, res_desc);
+	status = acpi_aml_exec_store (field_desc, res_desc, walk_state);
 
 	/*
 	 * If the field descriptor was not physically stored (or if a failure
@@ -358,39 +357,41 @@ ACPI_STATUS
 acpi_aml_exec_create_alias (
 	ACPI_WALK_STATE         *walk_state)
 {
-	ACPI_NAMED_OBJECT       *src_entry;
-	ACPI_NAMED_OBJECT       *alias_entry;
+	ACPI_NAMESPACE_NODE     *source_node;
+	ACPI_NAMESPACE_NODE     *alias_node;
 	ACPI_STATUS             status;
 
 
 	/* Get the source/alias operands (both NTEs) */
 
-	status = acpi_ds_obj_stack_pop_object ((ACPI_OBJECT_INTERNAL **) &src_entry,
+	status = acpi_ds_obj_stack_pop_object ((ACPI_OPERAND_OBJECT **) &source_node,
 			 walk_state);
 	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
 
-	/* Don't pop it, it gets popped later */
+	/*
+	 * Don't pop it, it gets removed in the calling routine
+	 */
 
-	alias_entry = acpi_ds_obj_stack_get_value (0, walk_state);
+	alias_node = acpi_ds_obj_stack_get_value (0, walk_state);
 
 	/* Add an additional reference to the object */
 
-	acpi_cm_add_reference (src_entry->object);
+	acpi_cm_add_reference (source_node->object);
 
 	/*
-	 * Attach the original source NTE to the new Alias NTE.
+	 * Attach the original source Node to the new Alias Node.
 	 */
-	status = acpi_ns_attach_object (alias_entry, src_entry->object,
-			   src_entry->type);
+	status = acpi_ns_attach_object (alias_node, source_node->object,
+			   source_node->type);
 
 
 	/*
 	 * The new alias assumes the type of the source, but it points
 	 * to the same object.  The reference count of the object has two
 	 * additional references to prevent deletion out from under either the
-	 * source or the alias NTE
+	 * source or the alias Node
 	 */
 
 	/* Since both operands are NTEs, we don't need to delete them */
@@ -416,7 +417,7 @@ acpi_aml_exec_create_event (
 	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 
 
  BREAKPOINT3;
@@ -438,7 +439,7 @@ acpi_aml_exec_create_event (
 		goto cleanup;
 	}
 
-	/* Attach object to the NTE */
+	/* Attach object to the Node */
 
 	status = acpi_ns_attach_object (acpi_ds_obj_stack_get_value (0, walk_state),
 			   obj_desc, (u8) ACPI_TYPE_EVENT);
@@ -473,8 +474,8 @@ acpi_aml_exec_create_mutex (
 	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status = AE_OK;
-	ACPI_OBJECT_INTERNAL    *sync_desc;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *sync_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 
 
 	/* Get the operand */
@@ -546,22 +547,27 @@ acpi_aml_exec_create_region (
 	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    *obj_desc_region;
-	ACPI_HANDLE             *entry;
+	ACPI_OPERAND_OBJECT     *obj_desc_region;
+	ACPI_NAMESPACE_NODE     *node;
 
 
 	if (region_space >= NUM_REGION_TYPES) {
-		/* TBD: [Errors] should this return an error, or should we just keep
-		 * going? */
+		/* TBD: [Future] In ACPI 2.0, valid region space
+		 *  includes types 0-6 (Adding CMOS and PCIBARTarget).
+		 *  Also, types 0x80-0xff are defined as "OEM Region
+		 *  Space handler"
+		 *
+		 * Should this return an error, or should we just keep
+		 * going?  How do we handle the OEM region handlers?
+		 */
 
 		REPORT_WARNING ("Unable to decode the Region_space");
 	}
 
 
-	/* Get the NTE from the object stack  */
+	/* Get the Node from the object stack  */
 
-	entry = acpi_ds_obj_stack_get_value (0, walk_state);
-
+	node = (ACPI_NAMESPACE_NODE *) acpi_ds_obj_stack_get_value (0, walk_state);
 
 	/* Create the region descriptor */
 
@@ -583,10 +589,9 @@ acpi_aml_exec_create_region (
 
 	/* Init the region from the operands */
 
-	obj_desc_region->region.space_id    = (u16) region_space;
+	obj_desc_region->region.space_id    = (u8) region_space;
 	obj_desc_region->region.address     = 0;
 	obj_desc_region->region.length      = 0;
-	obj_desc_region->region.region_flags = 0;
 
 	/*
 	 * Remember location in AML stream of address & length
@@ -596,19 +601,38 @@ acpi_aml_exec_create_region (
 	obj_desc_region->region.method->method.pcode_length = aml_length;
 
 
-	/* Install the new region object in the parent NTE */
+	/* Install the new region object in the parent Node */
 
-	obj_desc_region->region.nte = (ACPI_NAMED_OBJECT*) entry;
+	obj_desc_region->region.node = node;
 
-	status = acpi_ns_attach_object (entry, obj_desc_region,
+	status = acpi_ns_attach_object (node, obj_desc_region,
 			  (u8) ACPI_TYPE_REGION);
+
 	if (ACPI_FAILURE (status)) {
 		goto cleanup;
 	}
 
+	/*
+	 * If we have a valid region, initialize it
+	 * Namespace is NOT locked at this point.
+	 */
+
+	status = acpi_ev_initialize_region (obj_desc_region, FALSE);
+
+	if (ACPI_FAILURE (status)) {
+		/*
+		 *  If AE_NOT_EXIST is returned, it is not fatal
+		 *  because many regions get created before a handler
+		 *  is installed for said region.
+		 */
+		if (AE_NOT_EXIST == status) {
+			status = AE_OK;
+		}
+	}
+
 cleanup:
 
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		/* Delete region object and method subobject */
 
 		if (obj_desc_region) {
@@ -617,22 +641,6 @@ cleanup:
 			acpi_cm_remove_reference (obj_desc_region);
 			obj_desc_region = NULL;
 		}
-	}
-
-
-	/*
-	 * If we have a valid region, initialize it
-	 */
-	if (obj_desc_region) {
-		/*
-		 *  TBD: [Errors] Is there anything we can or could do when this
-		 *          fails?
-		 *  We need to do something useful with a failure.
-		 */
-		/* Namespace IS locked */
-
-		(void *) acpi_ev_initialize_region (obj_desc_region, TRUE);
-
 	}
 
 	return (status);
@@ -645,7 +653,7 @@ cleanup:
  *
  * PARAMETERS:  Op              - Op containing the Processor definition and
  *                                args
- *              Processor_nTE   - NTE for the containing NTE
+ *              Processor_nTE   - Node for the containing Node
  *
  * RETURN:      Status
  *
@@ -655,12 +663,12 @@ cleanup:
 
 ACPI_STATUS
 acpi_aml_exec_create_processor (
-	ACPI_GENERIC_OP         *op,
+	ACPI_PARSE_OBJECT       *op,
 	ACPI_HANDLE             processor_nTE)
 {
 	ACPI_STATUS             status;
-	ACPI_GENERIC_OP         *arg;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_PARSE_OBJECT       *arg;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 
 
 	obj_desc = acpi_cm_create_internal_object (ACPI_TYPE_PROCESSOR);
@@ -669,7 +677,7 @@ acpi_aml_exec_create_processor (
 		return (status);
 	}
 
-	/* Install the new processor object in the parent NTE */
+	/* Install the new processor object in the parent Node */
 
 	status = acpi_ns_attach_object (processor_nTE, obj_desc,
 			   (u8) ACPI_TYPE_PROCESSOR);
@@ -700,7 +708,7 @@ acpi_aml_exec_create_processor (
 
 	/* Second arg is the PBlock Address */
 
-	obj_desc->processor.pblk_address = (ACPI_IO_ADDRESS) arg->value.integer;
+	obj_desc->processor.address = (ACPI_IO_ADDRESS) arg->value.integer;
 
 	/* Move to next arg and check existence */
 
@@ -712,7 +720,7 @@ acpi_aml_exec_create_processor (
 
 	/* Third arg is the PBlock Length */
 
-	obj_desc->processor.pblk_length = (u8) arg->value.integer;
+	obj_desc->processor.length = (u8) arg->value.integer;
 
 	return (AE_OK);
 }
@@ -724,7 +732,7 @@ acpi_aml_exec_create_processor (
  *
  * PARAMETERS:  Op              - Op containing the Power_resource definition
  *                                and args
- *              Power_res_nTE   - NTE for the containing NTE
+ *              Power_res_nTE   - Node for the containing Node
  *
  * RETURN:      Status
  *
@@ -734,12 +742,12 @@ acpi_aml_exec_create_processor (
 
 ACPI_STATUS
 acpi_aml_exec_create_power_resource (
-	ACPI_GENERIC_OP         *op,
+	ACPI_PARSE_OBJECT       *op,
 	ACPI_HANDLE             power_res_nTE)
 {
 	ACPI_STATUS             status;
-	ACPI_GENERIC_OP         *arg;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_PARSE_OBJECT       *arg;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 
 
 	obj_desc = acpi_cm_create_internal_object (ACPI_TYPE_POWER);
@@ -748,7 +756,7 @@ acpi_aml_exec_create_power_resource (
 		return (status);
 	}
 
-	/* Install the new power resource object in the parent NTE */
+	/* Install the new power resource object in the parent Node */
 
 	status = acpi_ns_attach_object (power_res_nTE, obj_desc,
 			  (u8) ACPI_TYPE_POWER);
@@ -789,11 +797,14 @@ acpi_aml_exec_create_power_resource (
  *
  * FUNCTION:    Acpi_aml_exec_create_method
  *
- * PARAMETERS:  Interpreter_mode    - Current running mode (load1/Load2/Exec)
+ * PARAMETERS:  Aml_ptr         - First byte of the method's AML
+ *              Aml_length      - AML byte count for this method
+ *              Method_flags    - AML method flag byte
+ *              Method          - Method Node
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Create a new mutex object
+ * DESCRIPTION: Create a new method object
  *
  ****************************************************************************/
 
@@ -804,7 +815,7 @@ acpi_aml_exec_create_method (
 	u32                     method_flags,
 	ACPI_HANDLE             method)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_STATUS             status;
 
 
@@ -830,9 +841,8 @@ acpi_aml_exec_create_method (
 			  METHOD_FLAGS_ARG_COUNT);
 
 	/*
-	 * Get the concurrency count
-	 * If required, a semaphore will be created for this method when it is
-	 * parsed.
+	 * Get the concurrency count.  If required, a semaphore will be
+	 * created for this method when it is parsed.
 	 *
 	 * TBD: [Future]  for APCI 2.0, there will be a Sync_level value, not
 	 * just a flag
@@ -842,27 +852,16 @@ acpi_aml_exec_create_method (
 	if (method_flags & METHOD_FLAGS_SERIALIZED) {
 		obj_desc->method.concurrency = 1;
 	}
+
 	else {
 		obj_desc->method.concurrency = INFINITE_CONCURRENCY;
 	}
 
-	/* Mark the Method as not parsed yet */
-
-	obj_desc->method.parser_op  = NULL;
-
-	/*
-	 * Another  +1 gets added when Acpi_psx_execute is called,
-	 * no need for: Obj_desc->Method.Pcode++;
-	 */
-
-	obj_desc->method.acpi_table = NULL; /* TBD: [Restructure] was (u8 *) Pcode_addr; */
-	obj_desc->method.table_length = 0;  /* TBD: [Restructure] needed? (u32) (Walk_state->aml_end - Pcode_addr); */
-
-	/* Attach the new object to the method NTE */
+	/* Attach the new object to the method Node */
 
 	status = acpi_ns_attach_object (method, obj_desc, (u8) ACPI_TYPE_METHOD);
 	if (ACPI_FAILURE (status)) {
-		acpi_cm_free (obj_desc);
+		acpi_cm_delete_object_desc (obj_desc);
 	}
 
 	return (status);

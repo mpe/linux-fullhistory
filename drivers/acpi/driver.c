@@ -32,6 +32,9 @@
 #include "acpi.h"
 #include "driver.h"
 
+#define _COMPONENT	OS_DEPENDENT
+	MODULE_NAME	("driver")
+
 struct acpi_run_entry
 {
 	void (*callback)(void*);

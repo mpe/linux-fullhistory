@@ -1654,7 +1654,8 @@ void *mac_drv_get_desc_mem(struct s_smc *smc, unsigned int size)
 
 	virt = mac_drv_get_space(smc, size);
 
-	size = (u_int) ((0 - (unsigned long) virt) & 15UL);
+	size = (u_int) (16 - (((unsigned long) virt) & 15UL));
+	size = size % 16;
 
 	PRINTK("Allocate %u bytes alignment gap ", size);
 	PRINTK("for descriptor memory.\n");

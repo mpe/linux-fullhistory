@@ -4,6 +4,7 @@
  *                      Acpi_rs_irq_stream
  *                      Acpi_rs_extended_irq_resource
  *                      Acpi_rs_extended_irq_stream
+ *              $Revision: 8 $
  *
  *****************************************************************************/
 
@@ -29,7 +30,7 @@
 #include "acpi.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
-	 MODULE_NAME         ("rsirq");
+	 MODULE_NAME         ("rsirq")
 
 
 /***************************************************************************
@@ -85,7 +86,7 @@ acpi_rs_irq_resource (
 	 * Point to the 16-bits of Bytes 1 and 2
 	 */
 	buffer += 1;
-	temp16 = *(u16 *)buffer;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	output_struct->data.irq.number_of_interrupts = 0;
 
@@ -226,7 +227,7 @@ acpi_rs_irq_stream (
 		temp16 |= 0x1 << temp8;
 	}
 
-	*(u16 *)buffer = temp16;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	buffer += 2;
 
@@ -306,7 +307,7 @@ acpi_rs_extended_irq_resource (
 	 * Point past the Descriptor to get the number of bytes consumed
 	 */
 	buffer += 1;
-	temp16 = *(u16 *)buffer;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	*bytes_consumed = temp16 + 3;
 	output_struct->id = extended_irq;
@@ -476,7 +477,7 @@ acpi_rs_extended_irq_stream (
 	u16                     *length_field;
 	u8                      temp8 = 0;
 	u8                      index;
-	u8                      *temp_pointer = NULL;
+	NATIVE_CHAR             *temp_pointer = NULL;
 
 
 	/*
@@ -533,11 +534,10 @@ acpi_rs_extended_irq_stream (
 	 * Resource Source Index and Resource Source are optional
 	 */
 	if (0 != linked_list->data.extended_irq.resource_source_string_length) {
-		temp8 = (u8) linked_list->data.extended_irq.resource_source_index;
-
-		*buffer = temp8;
+		*buffer = (u8) linked_list->data.extended_irq.resource_source_index;
 		buffer += 1;
-		temp_pointer = buffer;
+
+		temp_pointer = (NATIVE_CHAR *) buffer;
 
 		/*
 		 * Copy the string

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
- * Name: macros.h - C macros for the entire subsystem.
+ * Name: acmacros.h - C macros for the entire subsystem.
+ *       $Revision: 48 $
  *
  *****************************************************************************/
 
@@ -23,8 +23,8 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef __MACROS_H__
-#define __MACROS_H__
+#ifndef __ACMACROS_H__
+#define __ACMACROS_H__
 
 /*
  * Data manipulation macros
@@ -91,13 +91,13 @@
  * the destination (or both) is/are unaligned.
  */
 
-#define MOVE_UNALIGNED16_TO_16(d,s)     {((char *)(d))[0] = ((char *)(s))[0];\
-	 ((char *)(d))[1] = ((char *)(s))[1];}
+#define MOVE_UNALIGNED16_TO_16(d,s)     {((u8 *)(d))[0] = ((u8 *)(s))[0];\
+	 ((u8 *)(d))[1] = ((u8 *)(s))[1];}
 
-#define MOVE_UNALIGNED32_TO_32(d,s)     {((char *)(d))[0] = ((char *)(s))[0];\
-			  ((char *)(d))[1] = ((char *)(s))[1];\
-			  ((char *)(d))[2] = ((char *)(s))[2];\
-			  ((char *)(d))[3] = ((char *)(s))[3];}
+#define MOVE_UNALIGNED32_TO_32(d,s)     {((u8 *)(d))[0] = ((u8 *)(s))[0];\
+			  ((u8 *)(d))[1] = ((u8 *)(s))[1];\
+			  ((u8 *)(d))[2] = ((u8 *)(s))[2];\
+			  ((u8 *)(d))[3] = ((u8 *)(s))[3];}
 
 #define MOVE_UNALIGNED16_TO_32(d,s)     {(*(u32*)(d)) = 0; MOVE_UNALIGNED16_TO_16(d,s);}
 
@@ -108,9 +108,9 @@
  * Fast power-of-two math macros for non-optimized compilers
  */
 
-#define _DIV(value,power_of2)           ((value) >> (power_of2))
-#define _MUL(value,power_of2)           ((value) << (power_of2))
-#define _MOD(value,divisor)             ((value) & ((divisor) -1))
+#define _DIV(value,power_of2)           ((u32) ((value) >> (power_of2)))
+#define _MUL(value,power_of2)           ((u32) ((value) << (power_of2)))
+#define _MOD(value,divisor)             ((u32) ((value) & ((divisor) -1)))
 
 #define DIV_2(a)                        _DIV(a,1)
 #define MUL_2(a)                        _MUL(a,1)
@@ -149,20 +149,23 @@
 
 
 /*
- * An ACPI_HANDLE (which is actually an ACPI_NAMED_OBJECT*) can appear in some contexts,
- * such as on ap_obj_stack, where a pointer to an ACPI_OBJECT_INTERNAL can also
+ * An ACPI_HANDLE (which is actually an ACPI_NAMESPACE_NODE *) can appear in some contexts,
+ * such as on ap_obj_stack, where a pointer to an ACPI_OPERAND_OBJECT can also
  * appear.  This macro is used to distinguish them.
  *
  * The Data_type field is the first field in both structures.
  */
 
-#define VALID_DESCRIPTOR_TYPE(d,t)      (((ACPI_NAMED_OBJECT*)d)->data_type == t)
+#define VALID_DESCRIPTOR_TYPE(d,t)      (((ACPI_NAMESPACE_NODE *)d)->data_type == t)
 
 
 /* Macro to test the object type */
 
-#define IS_THIS_OBJECT_TYPE(d,t)        (((ACPI_OBJECT_INTERNAL *)d)->common.type == (u8)t)
+#define IS_THIS_OBJECT_TYPE(d,t)        (((ACPI_OPERAND_OBJECT  *)d)->common.type == (u8)t)
 
+/* Macro to check the table flags for SINGLE or MULTIPLE tables are allowed */
+
+#define IS_SINGLE_TABLE(x)              (((x) & 0x01) == ACPI_TABLE_SINGLE ? 1 : 0)
 
 /*
  * Macro to check if a pointer is within an ACPI table.
@@ -186,9 +189,9 @@
  */
 
 #ifdef ACPI_DEBUG
-#define OP_INFO_ENTRY(opcode,flags,name,Pargs,Iargs)     {opcode,flags,Pargs,Iargs,name}
+#define OP_INFO_ENTRY(flags,name,Pargs,Iargs)     {flags,Pargs,Iargs,name}
 #else
-#define OP_INFO_ENTRY(opcode,flags,name,Pargs,Iargs)     {opcode,flags,Pargs,Iargs}
+#define OP_INFO_ENTRY(flags,name,Pargs,Iargs)     {flags,Pargs,Iargs}
 #endif
 
 #define ARG_TYPE_WIDTH                  5
@@ -232,14 +235,12 @@
 #define REPORT_INFO(a)                  _report_info(_THIS_MODULE,__LINE__,_COMPONENT,a)
 #define REPORT_ERROR(a)                 _report_error(_THIS_MODULE,__LINE__,_COMPONENT,a)
 #define REPORT_WARNING(a)               _report_warning(_THIS_MODULE,__LINE__,_COMPONENT,a)
-#define REPORT_SUCCESS(a)               _report_success(_THIS_MODULE,__LINE__,_COMPONENT,a)
 
 #else
 
 #define REPORT_INFO(a)                  _report_info("",__LINE__,_COMPONENT,a)
 #define REPORT_ERROR(a)                 _report_error("",__LINE__,_COMPONENT,a)
 #define REPORT_WARNING(a)               _report_warning("",__LINE__,_COMPONENT,a)
-#define REPORT_SUCCESS(a)               _report_success("",__LINE__,_COMPONENT,a)
 
 #endif
 
@@ -251,7 +252,7 @@
 
 /* Buffer dump macros */
 
-#define DUMP_BUFFER(a,b)                acpi_cm_dump_buffer((char *)a,b,DB_BYTE_DISPLAY,_COMPONENT)
+#define DUMP_BUFFER(a,b)                acpi_cm_dump_buffer((u8 *)a,b,DB_BYTE_DISPLAY,_COMPONENT)
 
 /*
  * Debug macros that are conditionally compiled
@@ -259,7 +260,7 @@
 
 #ifdef ACPI_DEBUG
 
-#define MODULE_NAME(name)               static char *_THIS_MODULE = name
+#define MODULE_NAME(name)               static char *_THIS_MODULE = name;
 
 /*
  * Function entry tracing.
@@ -274,7 +275,7 @@
 #define FUNCTION_TRACE_U32(a,b)         char * _proc_name = a;\
 										function_trace_u32(_THIS_MODULE,__LINE__,_COMPONENT,a,(u32)b)
 #define FUNCTION_TRACE_STR(a,b)         char * _proc_name = a;\
-										function_trace_str(_THIS_MODULE,__LINE__,_COMPONENT,a,(char *)b)
+										function_trace_str(_THIS_MODULE,__LINE__,_COMPONENT,a,(NATIVE_CHAR *)b)
 /*
  * Function exit tracing.
  * WARNING: These macros include a return statement.  This is usually considered
@@ -285,7 +286,7 @@
 #define return_VOID                     {function_exit(_THIS_MODULE,__LINE__,_COMPONENT,_proc_name);return;}
 #define return_ACPI_STATUS(s)           {function_status_exit(_THIS_MODULE,__LINE__,_COMPONENT,_proc_name,s);return(s);}
 #define return_VALUE(s)                 {function_value_exit(_THIS_MODULE,__LINE__,_COMPONENT,_proc_name,(NATIVE_UINT)s);return(s);}
-#define return_PTR(s)                   {function_ptr_exit(_THIS_MODULE,__LINE__,_COMPONENT,_proc_name,(char *)s);return(s);}
+#define return_PTR(s)                   {function_ptr_exit(_THIS_MODULE,__LINE__,_COMPONENT,_proc_name,(u8 *)s);return(s);}
 
 
 /* Conditional execution */
@@ -306,6 +307,7 @@
 #define DUMP_ENTRY(a,b)                 acpi_ns_dump_entry (a,b)
 #define DUMP_TABLES(a,b)                acpi_ns_dump_tables(a,b)
 #define DUMP_PATHNAME(a,b,c,d)          acpi_ns_dump_pathname(a,b,c,d)
+#define DUMP_RESOURCE_LIST(a)           acpi_rs_dump_resource_list(a)
 #define BREAK_MSG(a)                    acpi_os_breakpoint (a)
 
 /*
@@ -375,6 +377,7 @@
 #define DUMP_ENTRY(a,b)
 #define DUMP_TABLES(a,b)
 #define DUMP_PATHNAME(a,b,c,d)
+#define DUMP_RESOURCE_LIST(a)
 #define DEBUG_PRINT(l,f)
 #define DEBUG_PRINT_RAW(l,f)
 #define BREAK_MSG(a)
@@ -387,6 +390,17 @@
 #define ACPI_ASSERT(exp)
 #define DEBUG_ASSERT(msg, exp)
 
+#endif
+
+/*
+ * Some code only gets executed when the debugger is built in.
+ * Note that this is entirely independent of whether the
+ * DEBUG_PRINT stuff (set by ACPI_DEBUG) is on, or not.
+ */
+#ifdef ENABLE_DEBUGGER
+#define DEBUGGER_EXEC(a)                a;
+#else
+#define DEBUGGER_EXEC(a)
 #endif
 
 
@@ -402,12 +416,7 @@
 #endif
 
 
-#ifndef ACPI_DEBUG
-
-#define ADD_OBJECT_NAME(a,b)
-
-#else
-
+#ifdef ACPI_DEBUG
 
 /*
  * 1) Set name to blanks
@@ -417,7 +426,10 @@
 #define ADD_OBJECT_NAME(a,b)            MEMSET (a->common.name, ' ', sizeof (a->common.name));\
 										STRNCPY (a->common.name, acpi_gbl_ns_type_names[b], sizeof (a->common.name))
 
+#else
+
+#define ADD_OBJECT_NAME(a,b)
+
 #endif
 
-
-#endif /* MACROS_H */
+#endif /* ACMACROS_H */

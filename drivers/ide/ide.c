@@ -1082,7 +1082,7 @@ static ide_startstop_t execute_drive_cmd (ide_drive_t *drive, struct request *rq
 {
 	byte *args = rq->buffer;
 	if (args && rq->cmd == IDE_DRIVE_TASK) {
-
+		byte sel;
 #ifdef DEBUG
 		printk("%s: DRIVE_TASK_CMD data=x%02x cmd=0x%02x fr=0x%02x ns=0x%02x sc=0x%02x lcyl=0x%02x hcyl=0x%02x sel=0x%02x\n",
 			drive->name, args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
@@ -1091,7 +1091,10 @@ static ide_startstop_t execute_drive_cmd (ide_drive_t *drive, struct request *rq
 		OUT_BYTE(args[3], IDE_SECTOR_REG);
 		OUT_BYTE(args[4], IDE_LCYL_REG);
 		OUT_BYTE(args[5], IDE_HCYL_REG);
-		OUT_BYTE(args[6], IDE_SELECT_REG);
+		sel = (args[6] & ~0x10);
+		if (drive->select.b.unit)
+			sel |= 0x10;
+		OUT_BYTE(sel, IDE_SELECT_REG);
 		ide_cmd(drive, args[0], args[2], &drive_cmd_intr);
 		return ide_started;
 	} else if (args) {

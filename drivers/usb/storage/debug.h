@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * Debugging Functions Header File
  *
- * $Id: debug.h,v 1.4 2000/08/25 00:13:51 mdharm Exp $
+ * $Id: debug.h,v 1.5 2000/09/04 02:12:47 groovyjava Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -55,6 +55,8 @@
 #ifdef CONFIG_USB_STORAGE_DEBUG
 void usb_stor_show_command(Scsi_Cmnd *srb);
 void usb_stor_print_Scsi_Cmnd( Scsi_Cmnd* cmd );
+void usb_stor_show_sense( unsigned char key,
+		unsigned char asc, unsigned char ascq );
 #define US_DEBUGP(x...) printk( KERN_DEBUG USB_STORAGE ## x )
 #define US_DEBUGPX(x...) printk( ## x )
 #define US_DEBUG(x) x 

@@ -2,6 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amprep - ACPI AML (p-code) execution - field prep utilities
+ *              $Revision: 67 $
  *
  *****************************************************************************/
 
@@ -25,14 +26,14 @@
 
 
 #include "acpi.h"
-#include "interp.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "namesp.h"
-#include "parser.h"
+#include "acnamesp.h"
+#include "acparser.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amprep");
+	 MODULE_NAME         ("amprep")
 
 
 /*******************************************************************************
@@ -55,25 +56,25 @@ acpi_aml_decode_field_access_type (
 	switch (access)
 	{
 	case ACCESS_ANY_ACC:
-		return 8;
+		return (8);
 		break;
 
 	case ACCESS_BYTE_ACC:
-		return 8;
+		return (8);
 		break;
 
 	case ACCESS_WORD_ACC:
-		return 16;
+		return (16);
 		break;
 
 	case ACCESS_DWORD_ACC:
-		return 32;
+		return (32);
 		break;
 
 	default:
 		/* Invalid field access type */
 
-		return 0;
+		return (0);
 	}
 }
 
@@ -98,7 +99,7 @@ acpi_aml_decode_field_access_type (
 
 ACPI_STATUS
 acpi_aml_prep_common_field_object (
-	ACPI_OBJECT_INTERNAL    *obj_desc,
+	ACPI_OPERAND_OBJECT     *obj_desc,
 	u8                      field_flags,
 	u8                      field_attribute,
 	u32                     field_position,
@@ -150,7 +151,7 @@ acpi_aml_prep_common_field_object (
  *
  * FUNCTION:    Acpi_aml_prep_def_field_value
  *
- * PARAMETERS:  This_entry          - Owning NTE
+ * PARAMETERS:  Node            - Owning Node
  *              Region              - Region in which field is being defined
  *              Field_flags         - Access, Lock_rule, or Update_rule.
  *                                    The format of a Field_flag is described
@@ -160,22 +161,22 @@ acpi_aml_prep_common_field_object (
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Construct an ACPI_OBJECT_INTERNAL of type Def_field and
- *              connect it to the parent NTE.
+ * DESCRIPTION: Construct an ACPI_OPERAND_OBJECT  of type Def_field and
+ *              connect it to the parent Node.
  *
  ******************************************************************************/
 
 ACPI_STATUS
 acpi_aml_prep_def_field_value (
-	ACPI_NAMED_OBJECT       *this_entry,
+	ACPI_NAMESPACE_NODE     *node,
 	ACPI_HANDLE             region,
 	u8                      field_flags,
 	u8                      field_attribute,
 	u32                     field_position,
 	u32                     field_length)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	s32                     type;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	u32                     type;
 	ACPI_STATUS             status;
 
 
@@ -220,11 +221,11 @@ acpi_aml_prep_def_field_value (
 	/* Debug info */
 
 	/*
-	 * Store the constructed descriptor (Obj_desc) into the nte whose
-	 * handle is on TOS, preserving the current type of that nte.
+	 * Store the constructed descriptor (Obj_desc) into the Named_obj whose
+	 * handle is on TOS, preserving the current type of that Named_obj.
 	 */
-	status = acpi_ns_attach_object ((ACPI_HANDLE) this_entry, obj_desc,
-			  (u8) acpi_ns_get_type ((ACPI_HANDLE) this_entry));
+	status = acpi_ns_attach_object ((ACPI_HANDLE) node, obj_desc,
+			  (u8) acpi_ns_get_type ((ACPI_HANDLE) node));
 
 	return (status);
 }
@@ -234,7 +235,7 @@ acpi_aml_prep_def_field_value (
  *
  * FUNCTION:    Acpi_aml_prep_bank_field_value
  *
- * PARAMETERS:  This_entry          - Owning NTE
+ * PARAMETERS:  Node            - Owning Node
  *              Region              - Region in which field is being defined
  *              Bank_reg            - Bank selection register
  *              Bank_val            - Value to store in selection register
@@ -244,14 +245,14 @@ acpi_aml_prep_def_field_value (
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Construct an ACPI_OBJECT_INTERNAL of type Bank_field and
- *              connect it to the parent NTE.
+ * DESCRIPTION: Construct an ACPI_OPERAND_OBJECT  of type Bank_field and
+ *              connect it to the parent Node.
  *
  ******************************************************************************/
 
 ACPI_STATUS
 acpi_aml_prep_bank_field_value (
-	ACPI_NAMED_OBJECT       *this_entry,
+	ACPI_NAMESPACE_NODE     *node,
 	ACPI_HANDLE             region,
 	ACPI_HANDLE             bank_reg,
 	u32                     bank_val,
@@ -260,8 +261,8 @@ acpi_aml_prep_bank_field_value (
 	u32                     field_position,
 	u32                     field_length)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	s32                     type;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	u32                     type;
 	ACPI_STATUS             status;
 
 
@@ -308,11 +309,11 @@ acpi_aml_prep_bank_field_value (
 	/* Debug info */
 
 	/*
-	 * Store the constructed descriptor (Obj_desc) into the nte whose
-	 * handle is on TOS, preserving the current type of that nte.
+	 * Store the constructed descriptor (Obj_desc) into the Named_obj whose
+	 * handle is on TOS, preserving the current type of that Named_obj.
 	 */
-	status = acpi_ns_attach_object ((ACPI_HANDLE) this_entry, obj_desc,
-			 (u8) acpi_ns_get_type ((ACPI_HANDLE) this_entry));
+	status = acpi_ns_attach_object ((ACPI_HANDLE) node, obj_desc,
+			 (u8) acpi_ns_get_type ((ACPI_HANDLE) node));
 
 	return (status);
 }
@@ -322,7 +323,7 @@ acpi_aml_prep_bank_field_value (
  *
  * FUNCTION:    Acpi_aml_prep_index_field_value
  *
- * PARAMETERS:  This_entry          - Owning NTE
+ * PARAMETERS:  Node            - Owning Node
  *              Index_reg           - Index register
  *              Data_reg            - Data register
  *              Field_flags         - Access, Lock_rule, or Update_rule
@@ -331,14 +332,14 @@ acpi_aml_prep_bank_field_value (
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Construct an ACPI_OBJECT_INTERNAL of type Index_field and
- *              connect it to the parent NTE.
+ * DESCRIPTION: Construct an ACPI_OPERAND_OBJECT  of type Index_field and
+ *              connect it to the parent Node.
  *
  ******************************************************************************/
 
 ACPI_STATUS
 acpi_aml_prep_index_field_value (
-	ACPI_NAMED_OBJECT       *this_entry,
+	ACPI_NAMESPACE_NODE     *node,
 	ACPI_HANDLE             index_reg,
 	ACPI_HANDLE             data_reg,
 	u8                      field_flags,
@@ -346,7 +347,7 @@ acpi_aml_prep_index_field_value (
 	u32                     field_position,
 	u32                     field_length)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_STATUS             status;
 
 
@@ -381,11 +382,11 @@ acpi_aml_prep_index_field_value (
 	/* Debug info */
 
 	/*
-	 * Store the constructed descriptor (Obj_desc) into the nte whose
-	 * handle is on TOS, preserving the current type of that nte.
+	 * Store the constructed descriptor (Obj_desc) into the Named_obj whose
+	 * handle is on TOS, preserving the current type of that Named_obj.
 	 */
-	status = acpi_ns_attach_object ((ACPI_HANDLE) this_entry, obj_desc,
-			 (u8) acpi_ns_get_type ((ACPI_HANDLE) this_entry));
+	status = acpi_ns_attach_object ((ACPI_HANDLE) node, obj_desc,
+			 (u8) acpi_ns_get_type ((ACPI_HANDLE) node));
 
 	return (status);
 }

@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: protocol.c,v 1.5 2000/08/25 00:13:51 mdharm Exp $
+ * $Id: protocol.c,v 1.6 2000/09/01 22:03:55 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -170,7 +170,7 @@ void usb_stor_ATAPI_command(Scsi_Cmnd *srb, struct us_data *us)
 	usb_stor_invoke_transport(srb, us);
 
 	/* Fix the MODE_SENSE data if we translated the command */
-	if ((old_cmnd == MODE_SENSE) && (srb->result == GOOD))
+	if ((old_cmnd == MODE_SENSE) && (status_byte(srb->result) == GOOD))
 		usb_stor_scsiSense10to6(srb);
 
 	/* fix the INQUIRY data if necessary */
@@ -265,7 +265,7 @@ void usb_stor_ufi_command(Scsi_Cmnd *srb, struct us_data *us)
 	usb_stor_invoke_transport(srb, us);
 	
 	/* Fix the MODE_SENSE data if we translated the command */
-	if ((old_cmnd == MODE_SENSE) && (srb->result == GOOD))
+	if ((old_cmnd == MODE_SENSE) && (status_byte(srb->result) == GOOD))
 		usb_stor_scsiSense10to6(srb);
 
 	/* Fix the data for an INQUIRY, if necessary */

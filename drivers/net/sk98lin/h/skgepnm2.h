@@ -2,8 +2,8 @@
  *
  * Name:	skgepnm2.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.24 $
- * Date:	$Date: 1999/04/13 15:11:11 $
+ * Version:	$Revision: 1.28 $
+ * Date:	$Date: 2000/08/03 15:12:48 $
  * Purpose:	Defines for Private Network Management Interface
  *
  ****************************************************************************/
@@ -27,6 +27,20 @@
  * History:
  *
  *	$Log: skgepnm2.h,v $
+ *	Revision 1.28  2000/08/03 15:12:48  rwahl
+ *	- Additional comment for MAC statistic data structure.
+ *	
+ *	Revision 1.27  2000/08/01 16:10:18  rwahl
+ *	- Added mac statistic data structure for StatRxLongFrame counter.
+ *	
+ *	Revision 1.26  2000/03/31 13:51:34  rwahl
+ *	Added SK_UPTR cast to offset calculation for PNMI struct fields;
+ *	missing cast caused compiler warnings by Win64 compiler.
+ *	
+ *	Revision 1.25  1999/11/22 13:57:41  cgoos
+ *	Changed license header to GPL.
+ *	Allowing overwrite for SK_PNMI_STORE/_READ defines.
+ *	
  *	Revision 1.24  1999/04/13 15:11:11  mhaveman
  *	Changed copyright.
  *	
@@ -203,6 +217,8 @@ typedef struct s_OidTabEntry {
 
 /*
  * MAC statistic data structures
+ * Only for the first 64 counters: the number relates to the bit in the
+ * XMAC overflow status register
  */
 #define SK_PNMI_HTX			0
 #define SK_PNMI_HTX_OCTET		1
@@ -274,6 +290,8 @@ typedef struct s_OidTabEntry {
 #define SK_PNMI_HTX_SYNC		64
 #define SK_PNMI_HTX_SYNC_OCTET		65
 
+#define SK_PNMI_HRX_LONGFRAMES		66
+
 #define SK_PNMI_MAX_IDX			(SK_PNMI_CNT_NO)
 
 /*
@@ -288,25 +306,25 @@ typedef struct s_PnmiStatAddr {
 /*
  * SK_PNMI_STRUCT_DATA copy offset evaluation macros
  */
-#define SK_PNMI_OFF(e)		((SK_U32)&(((SK_PNMI_STRUCT_DATA *)0)->e))
-#define SK_PNMI_MAI_OFF(e)	((SK_U32)&(((SK_PNMI_STRUCT_DATA *)0)->e))
-#define SK_PNMI_VPD_OFF(e)	((SK_U32)&(((SK_PNMI_VPD *)0)->e))
-#define SK_PNMI_SEN_OFF(e)	((SK_U32)&(((SK_PNMI_SENSOR *)0)->e))
-#define SK_PNMI_CHK_OFF(e)	((SK_U32)&(((SK_PNMI_CHECKSUM *)0)->e))
-#define SK_PNMI_STA_OFF(e)	((SK_U32)&(((SK_PNMI_STAT *)0)->e))
-#define SK_PNMI_CNF_OFF(e)	((SK_U32)&(((SK_PNMI_CONF *)0)->e))
-#define SK_PNMI_RLM_OFF(e)	((SK_U32)&(((SK_PNMI_RLMT *)0)->e))
-#define SK_PNMI_MON_OFF(e)	((SK_U32)&(((SK_PNMI_RLMT_MONITOR *)0)->e))
-#define SK_PNMI_TRP_OFF(e)	((SK_U32)&(((SK_PNMI_TRAP *)0)->e))
+#define SK_PNMI_OFF(e)		((SK_U32)(SK_UPTR)&(((SK_PNMI_STRUCT_DATA *)0)->e))
+#define SK_PNMI_MAI_OFF(e)	((SK_U32)(SK_UPTR)&(((SK_PNMI_STRUCT_DATA *)0)->e))
+#define SK_PNMI_VPD_OFF(e)	((SK_U32)(SK_UPTR)&(((SK_PNMI_VPD *)0)->e))
+#define SK_PNMI_SEN_OFF(e)	((SK_U32)(SK_UPTR)&(((SK_PNMI_SENSOR *)0)->e))
+#define SK_PNMI_CHK_OFF(e)	((SK_U32)(SK_UPTR)&(((SK_PNMI_CHECKSUM *)0)->e))
+#define SK_PNMI_STA_OFF(e)	((SK_U32)(SK_UPTR)&(((SK_PNMI_STAT *)0)->e))
+#define SK_PNMI_CNF_OFF(e)	((SK_U32)(SK_UPTR)&(((SK_PNMI_CONF *)0)->e))
+#define SK_PNMI_RLM_OFF(e)	((SK_U32)(SK_UPTR)&(((SK_PNMI_RLMT *)0)->e))
+#define SK_PNMI_MON_OFF(e)	((SK_U32)(SK_UPTR)&(((SK_PNMI_RLMT_MONITOR *)0)->e))
+#define SK_PNMI_TRP_OFF(e)	((SK_U32)(SK_UPTR)&(((SK_PNMI_TRAP *)0)->e))
 
 #define SK_PNMI_SET_STAT(b,s,o)	{SK_U32	Val32; char *pVal; \
 					Val32 = (s); \
-					pVal = (char *)(b) + ((SK_U32) \
+					pVal = (char *)(b) + ((SK_U32)(SK_UPTR) \
 						&(((SK_PNMI_STRUCT_DATA *)0)-> \
 						ReturnStatus.ErrorStatus)); \
 					SK_PNMI_STORE_U32(pVal, Val32); \
 					Val32 = (o); \
-					pVal = (char *)(b) + ((SK_U32) \
+					pVal = (char *)(b) + ((SK_U32)(SK_UPTR) \
 						&(((SK_PNMI_STRUCT_DATA *)0)-> \
 						ReturnStatus.ErrorOffset)); \
 					SK_PNMI_STORE_U32(pVal, Val32);}

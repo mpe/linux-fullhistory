@@ -73,7 +73,7 @@ static inline void remove_from_swap_cache(struct page *page)
 		PAGE_BUG(page);
 
 	PageClearSwapCache(page);
-	remove_inode_page(page);
+	__remove_inode_page(page);
 }
 
 /*
@@ -105,7 +105,9 @@ void delete_from_swap_cache_nolock(struct page *page)
 	if (block_flushpage(page, 0))
 		lru_cache_del(page);
 
+	spin_lock(&pagecache_lock);
 	__delete_from_swap_cache(page);
+	spin_unlock(&pagecache_lock);
 	page_cache_release(page);
 }
 

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: tbinstal - ACPI table installation and removal
+ *              $Revision: 29 $
  *
  *****************************************************************************/
 
@@ -25,12 +25,12 @@
 
 
 #include "acpi.h"
-#include "hardware.h"
-#include "tables.h"
+#include "achware.h"
+#include "actables.h"
 
 
 #define _COMPONENT          TABLE_MANAGER
-	 MODULE_NAME         ("tbinstal");
+	 MODULE_NAME         ("tbinstal")
 
 
 /*******************************************************************************
@@ -50,11 +50,9 @@
 
 ACPI_STATUS
 acpi_tb_install_table (
-	char                    *table_ptr,
+	ACPI_TABLE_HEADER       *table_ptr,
 	ACPI_TABLE_DESC         *table_info)
 {
-	ACPI_TABLE_TYPE         table_type;
-	ACPI_TABLE_HEADER       *table_header;
 	ACPI_STATUS             status;
 
 
@@ -68,11 +66,6 @@ acpi_tb_install_table (
 		return (status);
 	}
 
-	/* Table type is returned by Recognize_table */
-
-	table_type  = table_info->type;
-	table_header = table_info->pointer;
-
 	/* Lock tables while installing */
 
 	acpi_cm_acquire_mutex (ACPI_MTX_TABLES);
@@ -80,12 +73,9 @@ acpi_tb_install_table (
 	/* Install the table into the global data structure */
 
 	status = acpi_tb_init_table_descriptor (table_info->type, table_info);
-	if (ACPI_FAILURE (status)) {
-		return (status);
-	}
 
 	acpi_cm_release_mutex (ACPI_MTX_TABLES);
-	return (AE_OK);
+	return (status);
 }
 
 
@@ -112,7 +102,7 @@ acpi_tb_install_table (
 
 ACPI_STATUS
 acpi_tb_recognize_table (
-	char                    *table_ptr,
+	ACPI_TABLE_HEADER       *table_ptr,
 	ACPI_TABLE_DESC         *table_info)
 {
 	ACPI_TABLE_HEADER       *table_header;
@@ -215,9 +205,10 @@ acpi_tb_init_table_descriptor (
 	 * the table are allowed.  This includes SSDT and PSDTs.
 	 */
 
-	if (acpi_gbl_acpi_table_data[table_type].flags == ACPI_TABLE_SINGLE) {
+	if (IS_SINGLE_TABLE (acpi_gbl_acpi_table_data[table_type].flags)) {
 		/*
-		 * Only one table allowed, just update the list head
+		 * Only one table allowed, and a table has alread been installed
+		 *  at this location, so return an error.
 		 */
 
 		if (list_head->pointer) {
@@ -249,7 +240,7 @@ acpi_tb_init_table_descriptor (
 			/* Update new entry */
 
 			table_desc->prev = list_head->prev;
-			table_desc->next = (ACPI_TABLE_DESC *) list_head;
+			table_desc->next = list_head;
 
 			/* Update list head */
 
@@ -308,7 +299,7 @@ acpi_tb_init_table_descriptor (
 void
 acpi_tb_delete_acpi_tables (void)
 {
-	u32                         i;
+	ACPI_TABLE_TYPE             type;
 
 
 	/*
@@ -316,8 +307,8 @@ acpi_tb_delete_acpi_tables (void)
 	 * Memory can either be mapped or allocated
 	 */
 
-	for (i = 0; i < ACPI_TABLE_MAX; i++) {
-		acpi_tb_delete_acpi_table (i);
+	for (type = 0; type < ACPI_TABLE_MAX; type++) {
+		acpi_tb_delete_acpi_table (type);
 	}
 
 }
@@ -395,6 +386,46 @@ acpi_tb_delete_acpi_table (
 	}
 
 	acpi_cm_release_mutex (ACPI_MTX_TABLES);
+
+	return;
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_tb_free_acpi_tables_of_type
+ *
+ * PARAMETERS:  Table_info          - A table info struct
+ *
+ * RETURN:      None.
+ *
+ * DESCRIPTION: Free the memory associated with an internal ACPI table
+ *              Table mutex should be locked.
+ *
+ ******************************************************************************/
+
+void
+acpi_tb_free_acpi_tables_of_type (
+	ACPI_TABLE_DESC         *list_head)
+{
+	ACPI_TABLE_DESC         *table_desc;
+	u32                     count;
+	u32                     i;
+
+
+	/* Get the head of the list */
+
+	table_desc  = list_head;
+	count       = list_head->count;
+
+	/*
+	 * Walk the entire list, deleting both the allocated tables
+	 * and the table descriptors
+	 */
+
+	for (i = 0; i < count; i++) {
+		table_desc = acpi_tb_delete_single_table (table_desc);
+	}
 
 	return;
 }
@@ -488,46 +519,6 @@ acpi_tb_delete_single_table (
 
 
 	return (next_desc);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    Acpi_tb_free_acpi_tables_of_type
- *
- * PARAMETERS:  Table_info          - A table info struct
- *
- * RETURN:      None.
- *
- * DESCRIPTION: Free the memory associated with an internal ACPI table
- *              Table mutex should be locked.
- *
- ******************************************************************************/
-
-void
-acpi_tb_free_acpi_tables_of_type (
-	ACPI_TABLE_DESC         *list_head)
-{
-	ACPI_TABLE_DESC         *table_desc;
-	u32                     count;
-	u32                     i;
-
-
-	/* Get the head of the list */
-
-	table_desc  = list_head;
-	count       = list_head->count;
-
-	/*
-	 * Walk the entire list, deleting both the allocated tables
-	 * and the table descriptors
-	 */
-
-	for (i = 0; i < count; i++) {
-		table_desc = acpi_tb_delete_single_table (table_desc);
-	}
-
-	return;
 }
 
 

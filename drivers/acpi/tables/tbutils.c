@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: tbutils - Table manipulation utilities
+ *              $Revision: 26 $
  *
  *****************************************************************************/
 
@@ -25,23 +25,24 @@
 
 
 #include "acpi.h"
-#include "tables.h"
-#include "interp.h"
+#include "actables.h"
+#include "acinterp.h"
 
 
 #define _COMPONENT          TABLE_MANAGER
-	 MODULE_NAME         ("tbutils");
+	 MODULE_NAME         ("tbutils")
 
 
 /*******************************************************************************
  *
- * FUNCTION:    Acpi_tb_system_table_pointer
+ * FUNCTION:    Acpi_tb_handle_to_object
  *
- * PARAMETERS:  *Where              - Pointer to be examined
+ * PARAMETERS:  Table_id            - Id for which the function is searching
+ *              Table_desc          - Pointer to return the matching table
+ *                                      descriptor.
  *
- * RETURN:      TRUE if Where is within the AML stream (in one of the ACPI
- *              system tables such as the DSDT or an SSDT.)
- *              FALSE otherwise
+ * RETURN:      Search the tables to find one with a matching Table_id and
+ *              return a pointer to that table descriptor.
  *
  ******************************************************************************/
 
@@ -60,7 +61,7 @@ acpi_tb_handle_to_object (
 		{
 			if (list_head->table_id == table_id) {
 				*table_desc = list_head;
-				return AE_OK;
+				return (AE_OK);
 			}
 
 			list_head = list_head->next;
@@ -69,7 +70,7 @@ acpi_tb_handle_to_object (
 	}
 
 
-	return AE_BAD_PARAMETER;
+	return (AE_BAD_PARAMETER);
 }
 
 
@@ -177,7 +178,7 @@ acpi_tb_validate_table_header (
 	/* Verify that this is a valid address */
 
 	if (!acpi_os_readable (table_header, sizeof (ACPI_TABLE_HEADER))) {
-		return AE_BAD_ADDRESS;
+		return (AE_BAD_ADDRESS);
 	}
 
 
@@ -186,7 +187,7 @@ acpi_tb_validate_table_header (
 	MOVE_UNALIGNED32_TO_32 (&signature, &table_header->signature);
 	if (!acpi_cm_valid_acpi_name (signature)) {
 		REPORT_WARNING ("Invalid table signature found");
-		return AE_BAD_SIGNATURE;
+		return (AE_BAD_SIGNATURE);
 	}
 
 
@@ -194,10 +195,10 @@ acpi_tb_validate_table_header (
 
 	if (table_header->length < sizeof (ACPI_TABLE_HEADER)) {
 		REPORT_WARNING ("Invalid table header length found");
-		return AE_BAD_HEADER;
+		return (AE_BAD_HEADER);
 	}
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -236,7 +237,7 @@ acpi_tb_map_acpi_table (
 		status = acpi_os_map_memory (physical_address, sizeof (ACPI_TABLE_HEADER),
 				  (void **) &table);
 		if (ACPI_FAILURE (status)) {
-			return status;
+			return (status);
 		}
 
 		/* Extract the full table length before we delete the mapping */
@@ -257,7 +258,7 @@ acpi_tb_map_acpi_table (
 		/* Exit if header invalid */
 
 		if (ACPI_FAILURE (status)) {
-			return status;
+			return (status);
 		}
 	}
 
@@ -266,13 +267,13 @@ acpi_tb_map_acpi_table (
 
 	status = acpi_os_map_memory (physical_address, table_size, (void **) &table);
 	if (ACPI_FAILURE (status)) {
-		return status;
+		return (status);
 	}
 
 	*size = table_size;
 	*logical_address = table;
 
-	return status;
+	return (status);
 }
 
 
@@ -346,7 +347,7 @@ acpi_tb_checksum (
 		}
 	}
 
-	return sum;
+	return (sum);
 }
 
 

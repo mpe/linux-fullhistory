@@ -1,8 +1,8 @@
-
 /******************************************************************************
  *
- * Module Name: dsopcode - Dispatcher Op Region support
- *                          and handling of "control" opcodes
+ * Module Name: dsopcode - Dispatcher Op Region support and handling of
+ *                         "control" opcodes
+ *              $Revision: 17 $
  *
  *****************************************************************************/
 
@@ -26,16 +26,16 @@
 
 
 #include "acpi.h"
-#include "parser.h"
+#include "acparser.h"
 #include "amlcode.h"
-#include "dispatch.h"
-#include "interp.h"
-#include "namesp.h"
-#include "events.h"
-#include "tables.h"
+#include "acdispat.h"
+#include "acinterp.h"
+#include "acnamesp.h"
+#include "acevents.h"
+#include "actables.h"
 
 #define _COMPONENT          DISPATCHER
-	 MODULE_NAME         ("dsopcode");
+	 MODULE_NAME         ("dsopcode")
 
 
 /*****************************************************************************
@@ -53,23 +53,23 @@
 
 ACPI_STATUS
 acpi_ds_get_region_arguments (
-	ACPI_OBJECT_INTERNAL    *rgn_desc)
+	ACPI_OPERAND_OBJECT     *rgn_desc)
 {
-	ACPI_OBJECT_INTERNAL    *method_desc;
-	ACPI_NAMED_OBJECT       *entry;
-	ACPI_GENERIC_OP         *op;
-	ACPI_GENERIC_OP         *region_op;
+	ACPI_OPERAND_OBJECT     *method_desc;
+	ACPI_NAMESPACE_NODE     *node;
+	ACPI_PARSE_OBJECT       *op;
+	ACPI_PARSE_OBJECT       *region_op;
 	ACPI_STATUS             status;
 	ACPI_TABLE_DESC         *table_desc;
 
 
-	if (rgn_desc->region.region_flags & REGION_AGRUMENT_DATA_VALID) {
+	if (rgn_desc->region.flags & AOPOBJ_DATA_VALID) {
 		return (AE_OK);
 	}
 
 
 	method_desc = rgn_desc->region.method;
-	entry = rgn_desc->region.nte;
+	node = rgn_desc->region.node;
 
 
 	/*
@@ -77,18 +77,18 @@ acpi_ds_get_region_arguments (
 	 * Op_region tree
 	 */
 
-	op = acpi_ps_alloc_op (AML_REGION_OP);
+	op = acpi_ps_alloc_op (AML_SCOPE_OP);
 	if (!op) {
-		return AE_NO_MEMORY;
+		return (AE_NO_MEMORY);
 	}
 
-	/* Save the NTE for use in Acpi_ps_parse_aml */
+	/* Save the Node for use in Acpi_ps_parse_aml */
 
-	op->acpi_named_object = acpi_ns_get_parent_entry (entry);
+	op->node = acpi_ns_get_parent_object (node);
 
 	/* Get a handle to the parent ACPI table */
 
-	status = acpi_tb_handle_to_object (entry->owner_id, &table_desc);
+	status = acpi_tb_handle_to_object (node->owner_id, &table_desc);
 	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
@@ -96,20 +96,44 @@ acpi_ds_get_region_arguments (
 	/* Parse the entire Op_region declaration, creating a parse tree */
 
 	status = acpi_ps_parse_aml (op, method_desc->method.pcode,
-			  method_desc->method.pcode_length, 0);
-	if (ACPI_SUCCESS (status)) {
-		/* Get and init the actual Region_op created above */
+			  method_desc->method.pcode_length, 0,
+			  NULL, NULL, NULL, acpi_ds_load1_begin_op, acpi_ds_load1_end_op);
 
-		region_op = op->value.arg;
-		region_op->acpi_named_object = entry;
-
-		/* Acpi_evaluate the address and length arguments for the Op_region */
-
-		acpi_ps_walk_parsed_aml (region_op, region_op, NULL, NULL, NULL,
-				 NULL, table_desc->table_id,
-				 acpi_ds_exec_begin_op, acpi_ds_exec_end_op);
+	if (ACPI_FAILURE (status)) {
+		acpi_ps_delete_parse_tree (op);
+		return (status);
 	}
 
+
+	/* Get and init the actual Region_op created above */
+
+/*    Region_op = Op->Value.Arg;
+	Op->Node = Node;*/
+
+
+	region_op = op->value.arg;
+	region_op->node = node;
+	acpi_ps_delete_parse_tree (op);
+
+	/* Acpi_evaluate the address and length arguments for the Op_region */
+
+	op = acpi_ps_alloc_op (AML_SCOPE_OP);
+	if (!op) {
+		return (AE_NO_MEMORY);
+	}
+
+	op->node = acpi_ns_get_parent_object (node);
+
+	status = acpi_ps_parse_aml (op, method_desc->method.pcode,
+			  method_desc->method.pcode_length,
+			  ACPI_PARSE_EXECUTE | ACPI_PARSE_DELETE_TREE,
+			  NULL /*Method_desc*/, NULL, NULL,
+			  acpi_ds_exec_begin_op, acpi_ds_exec_end_op);
+/*
+	Acpi_ps_walk_parsed_aml (Region_op, Region_op, NULL, NULL, NULL,
+			 NULL, Table_desc->Table_id,
+			 Acpi_ds_exec_begin_op, Acpi_ds_exec_end_op);
+*/
 	/* All done with the parse tree, delete it */
 
 	acpi_ps_delete_parse_tree (op);
@@ -134,7 +158,7 @@ ACPI_STATUS
 acpi_ds_initialize_region (
 	ACPI_HANDLE             obj_handle)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_STATUS             status;
 
 
@@ -144,7 +168,7 @@ acpi_ds_initialize_region (
 
 	status = acpi_ev_initialize_region (obj_desc, FALSE);
 
-	return status;
+	return (status);
 }
 
 
@@ -164,20 +188,20 @@ acpi_ds_initialize_region (
 ACPI_STATUS
 acpi_ds_eval_region_operands (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op)
+	ACPI_PARSE_OBJECT       *op)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_OBJECT_INTERNAL    *region_desc;
-	ACPI_NAMED_OBJECT       *entry;
-	ACPI_GENERIC_OP         *next_op;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_OPERAND_OBJECT     *region_desc;
+	ACPI_NAMESPACE_NODE     *node;
+	ACPI_PARSE_OBJECT       *next_op;
 
 
 	/*
 	 * This is where we evaluate the address and length fields of the Op_region declaration
 	 */
 
-	entry =  op->acpi_named_object;
+	node =  op->node;
 
 	/* Next_op points to the op that holds the Space_iD */
 	next_op = op->value.arg;
@@ -192,7 +216,7 @@ acpi_ds_eval_region_operands (
 		return (status);
 	}
 
-	region_desc = acpi_ns_get_attached_object (entry);
+	region_desc = acpi_ns_get_attached_object (node);
 	if (!region_desc) {
 		return (AE_NOT_EXIST);
 	}
@@ -216,7 +240,7 @@ acpi_ds_eval_region_operands (
 
 	/* Now the address and length are valid for this opregion */
 
-	region_desc->region.region_flags |= REGION_AGRUMENT_DATA_VALID;
+	region_desc->region.flags |= AOPOBJ_DATA_VALID;
 
 	return (status);
 }
@@ -239,7 +263,7 @@ acpi_ds_eval_region_operands (
 ACPI_STATUS
 acpi_ds_exec_begin_control_op (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op)
+	ACPI_PARSE_OBJECT       *op)
 {
 	ACPI_STATUS             status = AE_OK;
 	ACPI_GENERIC_STATE      *control_state;
@@ -263,6 +287,14 @@ acpi_ds_exec_begin_control_op (
 		}
 
 		acpi_cm_push_generic_state (&walk_state->control_state, control_state);
+
+		/*
+		 * Save a pointer to the predicate for multiple executions
+		 * of a loop
+		 */
+		walk_state->control_state->control.aml_predicate_start =
+				 walk_state->parser_state->aml - 1;
+				 /*Acpi_ps_pkg_length_encoding_size (GET8 (Walk_state->Parser_state->Aml));*/
 		break;
 
 
@@ -287,7 +319,7 @@ acpi_ds_exec_begin_control_op (
 		break;
 	}
 
-	return status;
+	return (status);
 }
 
 
@@ -309,7 +341,7 @@ acpi_ds_exec_begin_control_op (
 ACPI_STATUS
 acpi_ds_exec_end_control_op (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op)
+	ACPI_PARSE_OBJECT       *op)
 {
 	ACPI_STATUS             status = AE_OK;
 	ACPI_GENERIC_STATE      *control_state;
@@ -350,16 +382,18 @@ acpi_ds_exec_end_control_op (
 		if (walk_state->control_state->common.value) {
 			/* Predicate was true, go back and evaluate it again! */
 
-			status = AE_CTRL_TRUE;
+			status = AE_CTRL_PENDING;
 		}
 
-		else {
+/*        else {*/
 			/* Pop this control state and free it */
 
 			control_state =
 					acpi_cm_pop_generic_state (&walk_state->control_state);
+
+			walk_state->aml_last_while = control_state->control.aml_predicate_start;
 			acpi_cm_delete_generic_state (control_state);
-		}
+/*        }*/
 
 		break;
 
@@ -367,18 +401,18 @@ acpi_ds_exec_end_control_op (
 	case AML_RETURN_OP:
 
 
-		/* One optional operand -- the return value */
-
+		/*
+		 * One optional operand -- the return value
+		 * It can be either an immediate operand or a result that
+		 * has been bubbled up the tree
+		 */
 		if (op->value.arg) {
+			/* Return statement has an immediate operand */
+
 			status = acpi_ds_create_operands (walk_state, op->value.arg);
 			if (ACPI_FAILURE (status)) {
-				return status;
+				return (status);
 			}
-
-			/*
-			 * TBD: [Restructure] Just check for NULL arg
-			 * to signify no return value???
-			 */
 
 			/*
 			 * If value being returned is a Reference (such as
@@ -386,25 +420,43 @@ acpi_ds_exec_end_control_op (
 			 * cease to exist at the end of the method.
 			 */
 
-			status = acpi_aml_resolve_to_value (&walk_state->operands [0]);
+			status = acpi_aml_resolve_to_value (&walk_state->operands [0], walk_state);
 			if (ACPI_FAILURE (status)) {
-				return status;
+				return (status);
 			}
 
 			/*
 			 * Get the return value and save as the last result
-			 * value
-			 * This is the only place where Walk_state->Return_desc
+			 * value.  This is the only place where Walk_state->Return_desc
 			 * is set to anything other than zero!
 			 */
 
 			walk_state->return_desc = walk_state->operands[0];
 		}
 
+		else if (walk_state->num_results > 0) {
+			/*
+			 * The return value has come from a previous calculation.
+			 *
+			 * If value being returned is a Reference (such as
+			 * an arg or local), resolve it now because it may
+			 * cease to exist at the end of the method.
+			 */
+
+			status = acpi_aml_resolve_to_value (&walk_state->results [0], walk_state);
+			if (ACPI_FAILURE (status)) {
+				return (status);
+			}
+
+			walk_state->return_desc = walk_state->results [0];
+		}
+
 		else {
 			/* No return operand */
 
-			acpi_cm_remove_reference (walk_state->operands [0]);
+			if (walk_state->num_operands) {
+				acpi_cm_remove_reference (walk_state->operands [0]);
+			}
 
 			walk_state->operands [0]    = NULL;
 			walk_state->num_operands    = 0;
@@ -417,7 +469,7 @@ acpi_ds_exec_end_control_op (
 		break;
 
 
-	case AML_NOOP_CODE:
+	case AML_NOOP_OP:
 
 		/* Just do nothing! */
 		break;
@@ -459,6 +511,6 @@ acpi_ds_exec_end_control_op (
 	}
 
 
-	return status;
+	return (status);
 }
 

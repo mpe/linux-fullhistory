@@ -123,18 +123,15 @@ int notifier_call_chain(struct notifier_block **n, unsigned long val, void *v)
 	int ret=NOTIFY_DONE;
 	struct notifier_block *nb = *n;
 
-	read_lock(&notifier_lock);
 	while(nb)
 	{
 		ret=nb->notifier_call(nb,val,v);
 		if(ret&NOTIFY_STOP_MASK)
 		{
-			read_unlock(&notifier_lock);
 			return ret;
 		}
 		nb=nb->next;
 	}
-	read_unlock(&notifier_lock);
 	return ret;
 }
 

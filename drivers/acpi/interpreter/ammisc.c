@@ -2,6 +2,7 @@
 /******************************************************************************
  *
  * Module Name: ammisc - ACPI AML (p-code) execution - specific opcodes
+ *              $Revision: 67 $
  *
  *****************************************************************************/
 
@@ -25,14 +26,14 @@
 
 
 #include "acpi.h"
-#include "parser.h"
-#include "interp.h"
+#include "acparser.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "dispatch.h"
+#include "acdispat.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("ammisc");
+	 MODULE_NAME         ("ammisc")
 
 
 /*******************************************************************************
@@ -58,25 +59,23 @@ ACPI_STATUS
 acpi_aml_exec_fatal (
 	ACPI_WALK_STATE         *walk_state)
 {
-	ACPI_OBJECT_INTERNAL    *type_desc;
-	ACPI_OBJECT_INTERNAL    *code_desc;
-	ACPI_OBJECT_INTERNAL    *arg_desc;
+	ACPI_OPERAND_OBJECT     *type_desc;
+	ACPI_OPERAND_OBJECT     *code_desc;
+	ACPI_OPERAND_OBJECT     *arg_desc;
 	ACPI_STATUS             status;
 
 
 	/* Resolve operands */
 
-	status = acpi_aml_resolve_operands (AML_FATAL_OP, WALK_OPERANDS);
+	status = acpi_aml_resolve_operands (AML_FATAL_OP, WALK_OPERANDS, walk_state);
 	/* Get operands */
 
 	status |= acpi_ds_obj_stack_pop_object (&arg_desc, walk_state);
 	status |= acpi_ds_obj_stack_pop_object (&code_desc, walk_state);
 	status |= acpi_ds_obj_stack_pop_object (&type_desc, walk_state);
-	if (status != AE_OK) {
-		/* invalid parameters on object stack  */
+	if (ACPI_FAILURE (status)) {
+		/* Invalid parameters on object stack  */
 
-		acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__,
-				  (u16) AML_FATAL_OP, WALK_OPERANDS, 3);
 		goto cleanup;
 	}
 
@@ -130,30 +129,28 @@ cleanup:
 ACPI_STATUS
 acpi_aml_exec_index (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_OBJECT_INTERNAL    **return_desc)
+	ACPI_OPERAND_OBJECT     **return_desc)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_OBJECT_INTERNAL    *idx_desc;
-	ACPI_OBJECT_INTERNAL    *res_desc;
-	ACPI_OBJECT_INTERNAL    *ret_desc = NULL;
-	ACPI_OBJECT_INTERNAL    *tmp_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_OPERAND_OBJECT     *idx_desc;
+	ACPI_OPERAND_OBJECT     *res_desc;
+	ACPI_OPERAND_OBJECT     *ret_desc = NULL;
+	ACPI_OPERAND_OBJECT     *tmp_desc;
 	ACPI_STATUS             status;
 
 
 	/* Resolve operands */
 	/* First operand can be either a package or a buffer */
 
-	status = acpi_aml_resolve_operands (AML_INDEX_OP, WALK_OPERANDS);
+	status = acpi_aml_resolve_operands (AML_INDEX_OP, WALK_OPERANDS, walk_state);
 	/* Get all operands */
 
 	status |= acpi_ds_obj_stack_pop_object (&res_desc, walk_state);
 	status |= acpi_ds_obj_stack_pop_object (&idx_desc, walk_state);
 	status |= acpi_ds_obj_stack_pop_object (&obj_desc, walk_state);
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		/* Invalid parameters on object stack  */
 
-		acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__,
-				  (u16) AML_INDEX_OP, WALK_OPERANDS, 3);
 		goto cleanup;
 	}
 
@@ -202,7 +199,7 @@ acpi_aml_exec_index (
 			ret_desc->reference.target_type = tmp_desc->common.type;
 			ret_desc->reference.object    = tmp_desc;
 
-			status = acpi_aml_exec_store (ret_desc, res_desc);
+			status = acpi_aml_exec_store (ret_desc, res_desc, walk_state);
 			ret_desc->reference.object    = NULL;
 		}
 
@@ -228,7 +225,7 @@ acpi_aml_exec_index (
 		ret_desc->reference.object      = obj_desc;
 		ret_desc->reference.offset      = idx_desc->number.value;
 
-		status = acpi_aml_exec_store (ret_desc, res_desc);
+		status = acpi_aml_exec_store (ret_desc, res_desc, walk_state);
 	}
 
 
@@ -282,15 +279,15 @@ cleanup:
 ACPI_STATUS
 acpi_aml_exec_match (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_OBJECT_INTERNAL    **return_desc)
+	ACPI_OPERAND_OBJECT     **return_desc)
 {
-	ACPI_OBJECT_INTERNAL    *pkg_desc;
-	ACPI_OBJECT_INTERNAL    *op1_desc;
-	ACPI_OBJECT_INTERNAL    *V1_desc;
-	ACPI_OBJECT_INTERNAL    *op2_desc;
-	ACPI_OBJECT_INTERNAL    *V2_desc;
-	ACPI_OBJECT_INTERNAL    *start_desc;
-	ACPI_OBJECT_INTERNAL    *ret_desc = NULL;
+	ACPI_OPERAND_OBJECT     *pkg_desc;
+	ACPI_OPERAND_OBJECT     *op1_desc;
+	ACPI_OPERAND_OBJECT     *V1_desc;
+	ACPI_OPERAND_OBJECT     *op2_desc;
+	ACPI_OPERAND_OBJECT     *V2_desc;
+	ACPI_OPERAND_OBJECT     *start_desc;
+	ACPI_OPERAND_OBJECT     *ret_desc = NULL;
 	ACPI_STATUS             status;
 	u32                     index;
 	u32                     match_value = (u32) -1;
@@ -298,7 +295,7 @@ acpi_aml_exec_match (
 
 	/* Resolve all operands */
 
-	status = acpi_aml_resolve_operands (AML_MATCH_OP, WALK_OPERANDS);
+	status = acpi_aml_resolve_operands (AML_MATCH_OP, WALK_OPERANDS, walk_state);
 	/* Get all operands */
 
 	status |= acpi_ds_obj_stack_pop_object (&start_desc, walk_state);
@@ -308,11 +305,9 @@ acpi_aml_exec_match (
 	status |= acpi_ds_obj_stack_pop_object (&op1_desc, walk_state);
 	status |= acpi_ds_obj_stack_pop_object (&pkg_desc, walk_state);
 
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		/* Invalid parameters on object stack  */
 
-		acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__,
-				  (u16) AML_MATCH_OP, WALK_OPERANDS, 6);
 		goto cleanup;
 	}
 

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: cmobject - ACPI object create/delete/size/cache routines
+ *              $Revision: 27 $
  *
  *****************************************************************************/
 
@@ -25,14 +25,14 @@
 
 
 #include "acpi.h"
-#include "interp.h"
-#include "namesp.h"
-#include "tables.h"
+#include "acinterp.h"
+#include "acnamesp.h"
+#include "actables.h"
 #include "amlcode.h"
 
 
 #define _COMPONENT          MISCELLANEOUS
-	 MODULE_NAME         ("cmobject");
+	 MODULE_NAME         ("cmobject")
 
 
 /******************************************************************************
@@ -57,14 +57,14 @@
  *
  ******************************************************************************/
 
-ACPI_OBJECT_INTERNAL *
+ACPI_OPERAND_OBJECT  *
 _cm_create_internal_object (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
 	OBJECT_TYPE_INTERNAL    type)
 {
-	ACPI_OBJECT_INTERNAL    *object;
+	ACPI_OPERAND_OBJECT     *object;
 
 
 	/* Allocate the raw object descriptor */
@@ -79,7 +79,6 @@ _cm_create_internal_object (
 	/* Save the object type in the object descriptor */
 
 	object->common.type = type;
-	object->common.size = (u8) sizeof (ACPI_OBJECT_INTERNAL);
 
 	/* Init the reference count */
 
@@ -87,10 +86,6 @@ _cm_create_internal_object (
 
 	/* Any per-type initialization should go here */
 
-
-	/* Memory allocation metrics - compiled out in non debug mode. */
-
-	INCREMENT_OBJECT_METRICS (sizeof (ACPI_OBJECT_INTERNAL));
 
 	return (object);
 }
@@ -102,7 +97,7 @@ _cm_create_internal_object (
  *
  * PARAMETERS:  Operand             - Object to be validated
  *
- * RETURN:      Validate a pointer to be an ACPI_OBJECT_INTERNAL
+ * RETURN:      Validate a pointer to be an ACPI_OPERAND_OBJECT
  *
  *****************************************************************************/
 
@@ -114,13 +109,13 @@ acpi_cm_valid_internal_object (
 	/* Check for a null pointer */
 
 	if (!object) {
-		return FALSE;
+		return (FALSE);
 	}
 
 	/* Check for a pointer within one of the ACPI tables */
 
 	if (acpi_tb_system_table_pointer (object)) {
-		return FALSE;
+		return (FALSE);
 	}
 
 	/* Check the descriptor type field */
@@ -131,13 +126,13 @@ acpi_cm_valid_internal_object (
 
 
 
-		return FALSE;
+		return (FALSE);
 	}
 
 
-	/* The object appears to be a valid ACPI_OBJECT_INTERNAL */
+	/* The object appears to be a valid ACPI_OPERAND_OBJECT  */
 
-	return TRUE;
+	return (TRUE);
 }
 
 
@@ -159,11 +154,11 @@ acpi_cm_valid_internal_object (
 
 void *
 _cm_allocate_object_desc (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id)
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id)
 {
-	ACPI_OBJECT_INTERNAL    *object;
+	ACPI_OPERAND_OBJECT     *object;
 
 
 	acpi_cm_acquire_mutex (ACPI_MTX_CACHES);
@@ -176,8 +171,8 @@ _cm_allocate_object_desc (
 		/* There is an object available, use it */
 
 		object = acpi_gbl_object_cache;
-		acpi_gbl_object_cache = object->common.next;
-		object->common.next = NULL;
+		acpi_gbl_object_cache = object->cache.next;
+		object->cache.next = NULL;
 
 		acpi_gbl_object_cache_hits++;
 		acpi_gbl_object_cache_depth--;
@@ -192,9 +187,8 @@ _cm_allocate_object_desc (
 
 		/* Attempt to allocate new descriptor */
 
-		object = _cm_callocate (sizeof (ACPI_OBJECT_INTERNAL), component_id,
+		object = _cm_callocate (sizeof (ACPI_OPERAND_OBJECT), component_id,
 				  module_name, line_number);
-
 		if (!object) {
 			/* Allocation failed */
 
@@ -203,6 +197,10 @@ _cm_allocate_object_desc (
 
 			return (NULL);
 		}
+
+		/* Memory allocation metrics - compiled out in non debug mode. */
+
+		INCREMENT_OBJECT_METRICS (sizeof (ACPI_OPERAND_OBJECT));
 	}
 
 	/* Mark the descriptor type */
@@ -227,19 +225,19 @@ _cm_allocate_object_desc (
 
 void
 acpi_cm_delete_object_desc (
-	ACPI_OBJECT_INTERNAL    *object)
+	ACPI_OPERAND_OBJECT     *object)
 {
 
 
-	/* Object must be an ACPI_OBJECT_INTERNAL */
+	/* Make sure that the object isn't already in the cache */
 
-	if (object->common.data_type != ACPI_DESC_TYPE_INTERNAL) {
+	if (object->common.data_type == (ACPI_DESC_TYPE_INTERNAL | ACPI_CACHED_OBJECT)) {
 		return;
 	}
 
-	/* Make sure that the object isn't already in the cache */
+	/* Object must be an ACPI_OPERAND_OBJECT  */
 
-	if (object->common.next) {
+	if (object->common.data_type != ACPI_DESC_TYPE_INTERNAL) {
 		return;
 	}
 
@@ -251,7 +249,7 @@ acpi_cm_delete_object_desc (
 		 * Memory allocation metrics.  Call the macro here since we only
 		 * care about dynamically allocated objects.
 		 */
-		DECREMENT_OBJECT_METRICS (acpi_gbl_object_cache->common.size);
+		DECREMENT_OBJECT_METRICS (sizeof (ACPI_OPERAND_OBJECT));
 
 		acpi_cm_free (object);
 		return;
@@ -261,17 +259,18 @@ acpi_cm_delete_object_desc (
 
 	/* Clear the entire object.  This is important! */
 
-	MEMSET (object, 0, sizeof (ACPI_OBJECT_INTERNAL));
-	object->common.data_type = ACPI_DESC_TYPE_INTERNAL;
+	MEMSET (object, 0, sizeof (ACPI_OPERAND_OBJECT));
+	object->common.data_type = ACPI_DESC_TYPE_INTERNAL | ACPI_CACHED_OBJECT;
 
 	/* Put the object at the head of the global cache list */
 
-	object->common.next = acpi_gbl_object_cache;
+	object->cache.next = acpi_gbl_object_cache;
 	acpi_gbl_object_cache = object;
 	acpi_gbl_object_cache_depth++;
 
 
 	acpi_cm_release_mutex (ACPI_MTX_CACHES);
+	return;
 }
 
 
@@ -292,7 +291,7 @@ void
 acpi_cm_delete_object_cache (
 	void)
 {
-	ACPI_OBJECT_INTERNAL    *next;
+	ACPI_OPERAND_OBJECT     *next;
 
 
 	/* Traverse the global cache list */
@@ -300,17 +299,18 @@ acpi_cm_delete_object_cache (
 	while (acpi_gbl_object_cache) {
 		/* Delete one cached state object */
 
-		next = acpi_gbl_object_cache->common.next;
-		acpi_gbl_object_cache->common.next = NULL;
+		next = acpi_gbl_object_cache->cache.next;
+		acpi_gbl_object_cache->cache.next = NULL;
 
 		/*
 		 * Memory allocation metrics.  Call the macro here since we only
 		 * care about dynamically allocated objects.
 		 */
-		DECREMENT_OBJECT_METRICS (acpi_gbl_object_cache->common.size);
+		DECREMENT_OBJECT_METRICS (sizeof (ACPI_OPERAND_OBJECT));
 
 		acpi_cm_free (acpi_gbl_object_cache);
 		acpi_gbl_object_cache = next;
+		acpi_gbl_object_cache_depth--;
 	}
 
 	return;
@@ -333,7 +333,7 @@ acpi_cm_delete_object_cache (
 
 void
 acpi_cm_init_static_object (
-	ACPI_OBJECT_INTERNAL    *obj_desc)
+	ACPI_OPERAND_OBJECT     *obj_desc)
 {
 
 
@@ -345,12 +345,12 @@ acpi_cm_init_static_object (
 	/*
 	 * Clear the entire descriptor
 	 */
-	MEMSET ((void *) obj_desc, 0, sizeof (ACPI_OBJECT_INTERNAL));
+	MEMSET ((void *) obj_desc, 0, sizeof (ACPI_OPERAND_OBJECT));
 
 
 	/*
 	 * Initialize the header fields
-	 * 1) This is an ACPI_OBJECT_INTERNAL descriptor
+	 * 1) This is an ACPI_OPERAND_OBJECT  descriptor
 	 * 2) The size is the full object (worst case)
 	 * 3) The flags field indicates static allocation
 	 * 4) Reference count starts at one (not really necessary since the
@@ -358,8 +358,7 @@ acpi_cm_init_static_object (
 	 */
 
 	obj_desc->common.data_type      = ACPI_DESC_TYPE_INTERNAL;
-	obj_desc->common.size           = sizeof (ACPI_OBJECT_INTERNAL);
-	obj_desc->common.flags          = AO_STATIC_ALLOCATION;
+	obj_desc->common.flags          = AOPOBJ_STATIC_ALLOCATION;
 	obj_desc->common.reference_count = 1;
 
 	return;
@@ -385,7 +384,7 @@ acpi_cm_init_static_object (
 
 ACPI_STATUS
 acpi_cm_get_simple_object_size (
-	ACPI_OBJECT_INTERNAL    *internal_obj,
+	ACPI_OPERAND_OBJECT     *internal_obj,
 	u32                     *obj_length)
 {
 	u32                     length;
@@ -405,7 +404,7 @@ acpi_cm_get_simple_object_size (
 	length = sizeof (ACPI_OBJECT);
 
 	if (VALID_DESCRIPTOR_TYPE (internal_obj, ACPI_DESC_TYPE_NAMED)) {
-		/* Object is an NTE (reference), just return the length */
+		/* Object is a named object (reference), just return the length */
 
 		*obj_length = (u32) ROUND_UP_TO_NATIVE_WORD (length);
 		return (status);
@@ -495,13 +494,13 @@ acpi_cm_get_simple_object_size (
 
 ACPI_STATUS
 acpi_cm_get_package_object_size (
-	ACPI_OBJECT_INTERNAL    *internal_obj,
+	ACPI_OPERAND_OBJECT     *internal_obj,
 	u32                     *obj_length)
 {
 
-	ACPI_OBJECT_INTERNAL    *this_internal_obj;
-	ACPI_OBJECT_INTERNAL    *parent_obj[MAX_PACKAGE_DEPTH] = { 0,0,0,0,0 };
-	ACPI_OBJECT_INTERNAL    *this_parent;
+	ACPI_OPERAND_OBJECT     *this_internal_obj;
+	ACPI_OPERAND_OBJECT     *parent_obj[MAX_PACKAGE_DEPTH] = { 0,0,0,0,0 };
+	ACPI_OPERAND_OBJECT     *this_parent;
 	u32                     this_index;
 	u32                     index[MAX_PACKAGE_DEPTH] = { 0,0,0,0,0 };
 	u32                     length = 0;
@@ -537,7 +536,7 @@ acpi_cm_get_package_object_size (
 			status =
 				acpi_cm_get_simple_object_size (this_internal_obj, &object_space);
 
-			if (status != AE_OK) {
+			if (ACPI_FAILURE (status)) {
 				return (status);
 			}
 
@@ -603,8 +602,6 @@ acpi_cm_get_package_object_size (
 			}
 		}
 	}
-
-	return (AE_OK);
 }
 
 
@@ -624,7 +621,7 @@ acpi_cm_get_package_object_size (
 
 ACPI_STATUS
 acpi_cm_get_object_size(
-	ACPI_OBJECT_INTERNAL    *internal_obj,
+	ACPI_OPERAND_OBJECT     *internal_obj,
 	u32                     *obj_length)
 {
 	ACPI_STATUS             status;
@@ -642,7 +639,7 @@ acpi_cm_get_object_size(
 			acpi_cm_get_simple_object_size (internal_obj, obj_length);
 	}
 
-	return status;
+	return (status);
 }
 
 

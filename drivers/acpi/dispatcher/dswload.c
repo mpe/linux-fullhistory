@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: dswload - Dispatcher namespace load callbacks
+ *              $Revision: 19 $
  *
  *****************************************************************************/
 
@@ -25,16 +25,16 @@
 
 
 #include "acpi.h"
-#include "parser.h"
+#include "acparser.h"
 #include "amlcode.h"
-#include "dispatch.h"
-#include "interp.h"
-#include "namesp.h"
-#include "events.h"
+#include "acdispat.h"
+#include "acinterp.h"
+#include "acnamesp.h"
+#include "acevents.h"
 
 
 #define _COMPONENT          DISPATCHER
-	 MODULE_NAME         ("dswload");
+	 MODULE_NAME         ("dswload")
 
 
 /*****************************************************************************
@@ -53,42 +53,37 @@
 
 ACPI_STATUS
 acpi_ds_load1_begin_op (
+	u16                     opcode,
+	ACPI_PARSE_OBJECT       *op,
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op)
+	ACPI_PARSE_OBJECT       **out_op)
 {
-	ACPI_NAMED_OBJECT       *new_entry;
+	ACPI_NAMESPACE_NODE     *node;
 	ACPI_STATUS             status;
 	OBJECT_TYPE_INTERNAL    data_type;
+	NATIVE_CHAR             *path;
 
 
 	/* We are only interested in opcodes that have an associated name */
 
-	if (!acpi_ps_is_named_op (op->opcode)) {
-		return AE_OK;
+	if (!acpi_ps_is_named_op (opcode)) {
+		*out_op = op;
+		return (AE_OK);
 	}
 
 
 	/* Check if this object has already been installed in the namespace */
 
-	if (op->acpi_named_object) {
-		return AE_OK;
+	if (op && op->node) {
+		*out_op = op;
+		return (AE_OK);
 	}
+
+	path = acpi_ps_get_next_namestring (walk_state->parser_state);
 
 	/* Map the raw opcode into an internal object type */
 
-	data_type = acpi_ds_map_named_opcode_to_data_type (op->opcode);
-
-	/* Attempt to type a NAME opcode by examining the argument */
-
-	/* TBD: [Investigate] is this the right place to do this? */
-
-	if (op->opcode == AML_NAME_OP) {
-		if (op->value.arg) {
-
-			data_type = acpi_ds_map_opcode_to_data_type ((op->value.arg)->opcode,
-					  NULL);
-		}
-	}
+	data_type = acpi_ds_map_named_opcode_to_data_type (opcode);
 
 
 	/*
@@ -96,18 +91,37 @@ acpi_ds_load1_begin_op (
 	 * as we go downward in the parse tree.  Any necessary subobjects that involve
 	 * arguments to the opcode must be created as we go back up the parse tree later.
 	 */
-	status = acpi_ns_lookup (walk_state->scope_info,
-			 (char *) &((ACPI_NAMED_OP *)op)->name,
+	status = acpi_ns_lookup (walk_state->scope_info, path,
 			 data_type, IMODE_LOAD_PASS1,
-			 NS_NO_UPSEARCH, walk_state, &(new_entry));
+			 NS_NO_UPSEARCH, walk_state, &(node));
 
-	if (ACPI_SUCCESS (status)) {
-		/*
-		 * Put the NTE in the "op" object that the parser uses, so we
-		 * can get it again quickly when this scope is closed
-		 */
-		op->acpi_named_object = new_entry;
+	if (ACPI_FAILURE (status)) {
+		return (status);
 	}
+
+	if (!op) {
+		/* Create a new op */
+
+		op = acpi_ps_alloc_op (opcode);
+		if (!op) {
+			return (AE_NO_MEMORY);
+		}
+	}
+
+	/* Initialize */
+
+	((ACPI_PARSE2_OBJECT *)op)->name = node->name;
+
+	/*
+	 * Put the Node in the "op" object that the parser uses, so we
+	 * can get it again quickly when this scope is closed
+	 */
+	op->node = node;
+
+
+	acpi_ps_append_arg (acpi_ps_get_parent_scope (walk_state->parser_state), op);
+
+	*out_op = op;
 
 	return (status);
 }
@@ -131,7 +145,7 @@ acpi_ds_load1_begin_op (
 ACPI_STATUS
 acpi_ds_load1_end_op (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op)
+	ACPI_PARSE_OBJECT       *op)
 {
 	OBJECT_TYPE_INTERNAL    data_type;
 
@@ -139,19 +153,25 @@ acpi_ds_load1_end_op (
 	/* We are only interested in opcodes that have an associated name */
 
 	if (!acpi_ps_is_named_op (op->opcode)) {
-		return AE_OK;
+		return (AE_OK);
 	}
 
-	/* TBD: [Investigate] can this be removed? */
 
-	if (op->opcode == AML_SCOPE_OP) {
-		if (((ACPI_NAMED_OP *)op)->name == -1) {
-			return AE_OK;
+	/* Get the type to determine if we should pop the scope */
+
+	data_type = acpi_ds_map_named_opcode_to_data_type (op->opcode);
+
+	if (op->opcode == AML_NAME_OP) {
+		/* For Name opcode, check the argument */
+
+		if (op->value.arg) {
+			data_type = acpi_ds_map_opcode_to_data_type (
+					  (op->value.arg)->opcode, NULL);
+			((ACPI_NAMESPACE_NODE *)op->node)->type =
+					  (u8) data_type;
 		}
 	}
 
-
-	data_type = acpi_ds_map_named_opcode_to_data_type (op->opcode);
 
 	/* Pop the scope stack */
 
@@ -160,7 +180,7 @@ acpi_ds_load1_end_op (
 		acpi_ds_scope_stack_pop (walk_state);
 	}
 
-	return AE_OK;
+	return (AE_OK);
 
 }
 
@@ -181,60 +201,74 @@ acpi_ds_load1_end_op (
 
 ACPI_STATUS
 acpi_ds_load2_begin_op (
+	u16                     opcode,
+	ACPI_PARSE_OBJECT       *op,
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op)
+	ACPI_PARSE_OBJECT       **out_op)
 {
-	ACPI_NAMED_OBJECT       *new_entry;
+	ACPI_NAMESPACE_NODE     *node;
 	ACPI_STATUS             status;
 	OBJECT_TYPE_INTERNAL    data_type;
-	char                    *buffer_ptr;
+	NATIVE_CHAR             *buffer_ptr;
 	void                    *original = NULL;
 
 
 	/* We only care about Namespace opcodes here */
 
-	if (!acpi_ps_is_namespace_op (op->opcode) &&
-		op->opcode != AML_NAMEPATH_OP)
+	if (!acpi_ps_is_namespace_op (opcode) &&
+		opcode != AML_NAMEPATH_OP)
 	{
-		return AE_OK;
+		return (AE_OK);
 	}
 
 
-	/*
-	 * Get the name we are going to enter or lookup in the namespace
-	 */
-	if (op->opcode == AML_NAMEPATH_OP) {
-		/* For Namepath op , get the path string */
+	/* Temp! same code as in psparse */
 
-		buffer_ptr = op->value.string;
-		if (!buffer_ptr) {
-			/* No name, just exit */
+	if (!acpi_ps_is_named_op (opcode)) {
+		return (AE_OK);
+	}
 
-			return AE_OK;
+	if (op) {
+		/*
+		 * Get the name we are going to enter or lookup in the namespace
+		 */
+		if (opcode == AML_NAMEPATH_OP) {
+			/* For Namepath op, get the path string */
+
+			buffer_ptr = op->value.string;
+			if (!buffer_ptr) {
+				/* No name, just exit */
+
+				return (AE_OK);
+			}
+		}
+
+		else {
+			/* Get name from the op */
+
+			buffer_ptr = (NATIVE_CHAR *) &((ACPI_PARSE2_OBJECT *)op)->name;
 		}
 	}
 
 	else {
-		/* Get name from the op */
-
-		buffer_ptr = (char *) &((ACPI_NAMED_OP *)op)->name;
+		buffer_ptr = acpi_ps_get_next_namestring (walk_state->parser_state);
 	}
 
 
 	/* Map the raw opcode into an internal object type */
 
-	data_type = acpi_ds_map_named_opcode_to_data_type (op->opcode);
+	data_type = acpi_ds_map_named_opcode_to_data_type (opcode);
 
 
-	if (op->opcode == AML_DEF_FIELD_OP      ||
-		op->opcode == AML_BANK_FIELD_OP     ||
-		op->opcode == AML_INDEX_FIELD_OP)
+	if (opcode == AML_DEF_FIELD_OP      ||
+		opcode == AML_BANK_FIELD_OP     ||
+		opcode == AML_INDEX_FIELD_OP)
 	{
-		new_entry = NULL;
+		node = NULL;
 		status = AE_OK;
 	}
 
-	else if (op->opcode == AML_NAMEPATH_OP) {
+	else if (opcode == AML_NAMEPATH_OP) {
 		/*
 		 * The Name_path is an object reference to an existing object. Don't enter the
 		 * name into the namespace, but look it up for use later
@@ -242,16 +276,16 @@ acpi_ds_load2_begin_op (
 		status = acpi_ns_lookup (walk_state->scope_info, buffer_ptr,
 				 data_type, IMODE_EXECUTE,
 				 NS_SEARCH_PARENT, walk_state,
-				 &(new_entry));
+				 &(node));
 	}
 
 	else {
-		if (op->acpi_named_object) {
-			original = op->acpi_named_object;
-			new_entry = op->acpi_named_object;
+		if (op && op->node) {
+			original = op->node;
+			node = op->node;
 
 			if (acpi_ns_opens_scope (data_type)) {
-				status = acpi_ds_scope_stack_push (new_entry->child_table,
+				status = acpi_ds_scope_stack_push (node,
 						   data_type,
 						   walk_state);
 				if (ACPI_FAILURE (status)) {
@@ -259,7 +293,7 @@ acpi_ds_load2_begin_op (
 				}
 
 			}
-			return AE_OK;
+			return (AE_OK);
 		}
 
 		/*
@@ -270,15 +304,30 @@ acpi_ds_load2_begin_op (
 		status = acpi_ns_lookup (walk_state->scope_info, buffer_ptr,
 				 data_type, IMODE_EXECUTE,
 				 NS_NO_UPSEARCH, walk_state,
-				 &(new_entry));
+				 &(node));
 	}
 
 	if (ACPI_SUCCESS (status)) {
+		if (!op) {
+			/* Create a new op */
+
+			op = acpi_ps_alloc_op (opcode);
+			if (!op) {
+				return (AE_NO_MEMORY);
+			}
+
+			/* Initialize */
+
+			((ACPI_PARSE2_OBJECT *)op)->name = node->name;
+			*out_op = op;
+		}
+
+
 		/*
-		 * Put the NTE in the "op" object that the parser uses, so we
+		 * Put the Node in the "op" object that the parser uses, so we
 		 * can get it again quickly when this scope is closed
 		 */
-		op->acpi_named_object = new_entry;
+		op->node = node;
 
 	}
 
@@ -305,22 +354,22 @@ acpi_ds_load2_begin_op (
 ACPI_STATUS
 acpi_ds_load2_end_op (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op)
+	ACPI_PARSE_OBJECT       *op)
 {
 	ACPI_STATUS             status = AE_OK;
 	OBJECT_TYPE_INTERNAL    data_type;
-	ACPI_NAMED_OBJECT       *entry;
-	ACPI_GENERIC_OP         *arg;
-	ACPI_NAMED_OBJECT       *new_entry;
+	ACPI_NAMESPACE_NODE     *node;
+	ACPI_PARSE_OBJECT       *arg;
+	ACPI_NAMESPACE_NODE     *new_node;
 
 
 	if (!acpi_ps_is_namespace_object_op (op->opcode)) {
-		return AE_OK;
+		return (AE_OK);
 	}
 
 	if (op->opcode == AML_SCOPE_OP) {
-		if (((ACPI_NAMED_OP *)op)->name == -1) {
-			return AE_OK;
+		if (((ACPI_PARSE2_OBJECT *)op)->name == -1) {
+			return (AE_OK);
 		}
 	}
 
@@ -328,17 +377,17 @@ acpi_ds_load2_end_op (
 	data_type = acpi_ds_map_named_opcode_to_data_type (op->opcode);
 
 	/*
-	 * Get the NTE/name from the earlier lookup
+	 * Get the Node/name from the earlier lookup
 	 * (It was saved in the *op structure)
 	 */
-	entry = op->acpi_named_object;
+	node = op->node;
 
 	/*
-	 * Put the NTE on the object stack (Contains the ACPI Name of
+	 * Put the Node on the object stack (Contains the ACPI Name of
 	 * this object)
 	 */
 
-	walk_state->operands[0] = (void *) entry;
+	walk_state->operands[0] = (void *) node;
 	walk_state->num_operands = 1;
 
 	/* Pop the scope stack */
@@ -409,29 +458,38 @@ acpi_ds_load2_end_op (
 				 INTERNAL_TYPE_DEF_ANY,
 				 IMODE_LOAD_PASS1,
 				 NS_NO_UPSEARCH | NS_DONT_OPEN_SCOPE,
-				 walk_state, &(new_entry));
+				 walk_state, &(new_node));
 
 		if (ACPI_SUCCESS (status)) {
-			/* We could put the returned object (NTE) on the object stack for later, but
+			/* We could put the returned object (Node) on the object stack for later, but
 			 * for now, we will put it in the "op" object that the parser uses, so we
 			 * can get it again at the end of this scope
 			 */
-			op->acpi_named_object = new_entry;
-		}
+			op->node = new_node;
 
+			/*
+			 * If this is NOT a control method, we need to evaluate this opcode now.
+			 */
+
+			/* THIS WON"T WORK. Must execute all operands like Add().  => Must do an execute pass
+			if (!Walk_state->Method_desc) {
+				Status = Acpi_ds_exec_end_op (Walk_state, Op);
+			}
+			*/
+		}
 		break;
 
 
 	case AML_METHODCALL_OP:
 
 		/*
-		 * Lookup the method name and save the NTE
+		 * Lookup the method name and save the Node
 		 */
 
 		status = acpi_ns_lookup (walk_state->scope_info, arg->value.string,
 				 ACPI_TYPE_ANY, IMODE_LOAD_PASS2,
 				 NS_SEARCH_PARENT | NS_DONT_OPEN_SCOPE,
-				 walk_state, &(new_entry));
+				 walk_state, &(new_node));
 
 		if (ACPI_SUCCESS (status)) {
 
@@ -440,11 +498,11 @@ acpi_ds_load2_end_op (
 			/* TBD: [Restructure] Make sure that what we found is indeed a method! */
 			/* We didn't search for a method on purpose, to see if the name would resolve! */
 
-			/* We could put the returned object (NTE) on the object stack for later, but
+			/* We could put the returned object (Node) on the object stack for later, but
 			 * for now, we will put it in the "op" object that the parser uses, so we
 			 * can get it again at the end of this scope
 			 */
-			op->acpi_named_object = new_entry;
+			op->node = new_node;
 		}
 
 
@@ -455,7 +513,7 @@ acpi_ds_load2_end_op (
 
 		/* Nothing to do other than enter object into namespace */
 
-		status = acpi_aml_exec_create_processor (op, (ACPI_HANDLE) entry);
+		status = acpi_aml_exec_create_processor (op, (ACPI_HANDLE) node);
 		if (ACPI_FAILURE (status)) {
 			goto cleanup;
 		}
@@ -467,7 +525,7 @@ acpi_ds_load2_end_op (
 
 		/* Nothing to do other than enter object into namespace */
 
-		status = acpi_aml_exec_create_power_resource (op, (ACPI_HANDLE) entry);
+		status = acpi_aml_exec_create_power_resource (op, (ACPI_HANDLE) node);
 		if (ACPI_FAILURE (status)) {
 			goto cleanup;
 		}
@@ -487,7 +545,7 @@ acpi_ds_load2_end_op (
 		arg = op->value.arg;
 
 		status = acpi_ds_create_field (op,
-				  (ACPI_HANDLE) arg->acpi_named_object,
+				  arg->node,
 				  walk_state);
 		break;
 
@@ -497,7 +555,7 @@ acpi_ds_load2_end_op (
 		arg = op->value.arg;
 
 		status = acpi_ds_create_index_field (op,
-				   (ACPI_HANDLE) arg->acpi_named_object,
+				   (ACPI_HANDLE) arg->node,
 				   walk_state);
 		break;
 
@@ -506,7 +564,7 @@ acpi_ds_load2_end_op (
 
 		arg = op->value.arg;
 		status = acpi_ds_create_bank_field (op,
-				   (ACPI_HANDLE) arg->acpi_named_object,
+				   arg->node,
 				   walk_state);
 		break;
 
@@ -516,10 +574,10 @@ acpi_ds_load2_end_op (
 	 */
 	case AML_METHOD_OP:
 
-		if (!entry->object) {
-			status = acpi_aml_exec_create_method (((ACPI_DEFERRED_OP *) op)->body,
-					   ((ACPI_DEFERRED_OP *) op)->body_length,
-					   arg->value.integer, (ACPI_HANDLE) entry);
+		if (!node->object) {
+			status = acpi_aml_exec_create_method (((ACPI_PARSE2_OBJECT *) op)->data,
+					   ((ACPI_PARSE2_OBJECT *) op)->length,
+					   arg->value.integer, (ACPI_HANDLE) node);
 		}
 
 		break;
@@ -549,14 +607,18 @@ acpi_ds_load2_end_op (
 
 	case AML_REGION_OP:
 
+		if (node->object) {
+			break;
+		}
+
 
 		/*
 		 * The Op_region is not fully parsed at this time. Only valid argument is the Space_id.
 		 * (We must save the address of the AML of the address and length operands)
 		 */
 
-		status = acpi_aml_exec_create_region (((ACPI_DEFERRED_OP *) op)->body,
-				   ((ACPI_DEFERRED_OP *) op)->body_length,
+		status = acpi_aml_exec_create_region (((ACPI_PARSE2_OBJECT *) op)->data,
+				   ((ACPI_PARSE2_OBJECT *) op)->length,
 				   arg->value.integer, walk_state);
 
 		break;
@@ -577,7 +639,7 @@ acpi_ds_load2_end_op (
 
 	case AML_NAME_OP:
 
-		status = acpi_ds_create_named_object (walk_state, entry, op);
+		status = acpi_ds_create_node (walk_state, node, op);
 
 		break;
 
@@ -593,7 +655,9 @@ acpi_ds_load2_end_op (
 
 
 cleanup:
-	/* Remove the NTE pushed at the very beginning */
+
+	/* Remove the Node pushed at the very beginning */
+
 	acpi_ds_obj_stack_pop (1, walk_state);
 	return (status);
 }

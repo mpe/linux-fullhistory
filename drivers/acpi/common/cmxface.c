@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Module Name: cmxface - External interfaces for "global" ACPI functions
+ *              $Revision: 43 $
  *
  *****************************************************************************/
 
@@ -24,16 +25,16 @@
 
 
 #include "acpi.h"
-#include "events.h"
-#include "hardware.h"
-#include "namesp.h"
-#include "interp.h"
+#include "acevents.h"
+#include "achware.h"
+#include "acnamesp.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "debugger.h"
+#include "acdebug.h"
 
 
 #define _COMPONENT          MISCELLANEOUS
-	 MODULE_NAME         ("cmxface");
+	 MODULE_NAME         ("cmxface")
 
 
 /*******************************************************************************
@@ -77,6 +78,8 @@ acpi_initialize (ACPI_INIT_DATA *init_data)
 
 	/* If configured, initialize the AML debugger */
 
+	DEBUGGER_EXEC (acpi_db_initialize ());
+
 	return (status);
 }
 
@@ -100,7 +103,9 @@ acpi_terminate (void)
 	/* Terminate the AML Debuger if present */
 
 	acpi_gbl_db_terminate_threads = TRUE;
-	acpi_cm_release_mutex (ACPI_MTX_DEBUG_CMD_READY);
+
+	/* TBD: [Investigate] This is no longer needed?*/
+/*    Acpi_cm_release_mutex (ACPI_MTX_DEBUG_CMD_READY); */
 
 
 	/* Shutdown and free all resources */
@@ -224,7 +229,7 @@ acpi_format_exception (
 	ACPI_BUFFER             *out_buffer)
 {
 	u32                     length;
-	char                    *formatted_exception;
+	NATIVE_CHAR             *formatted_exception;
 
 
 	/*
@@ -237,14 +242,7 @@ acpi_format_exception (
 	}
 
 
-	/* Exception must be within range */
-
-	if (exception > ACPI_MAX_STATUS) {
-		return (AE_BAD_PARAMETER);
-	}
-
-
-	/* Convert the exception code */
+	/* Convert the exception code (Handles bad exception codes) */
 
 	formatted_exception = acpi_cm_format_exception (exception);
 

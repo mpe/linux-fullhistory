@@ -25,6 +25,9 @@
 #include "acpi.h"
 #include "driver.h"
 
+#define _COMPONENT	OS_DEPENDENT
+	MODULE_NAME	("cpu")
+
 unsigned long acpi_c2_exit_latency = ACPI_INFINITE;
 unsigned long acpi_c3_exit_latency = ACPI_INFINITE;
 unsigned long acpi_c2_enter_latency = ACPI_INFINITE;
@@ -33,6 +36,7 @@ unsigned long acpi_c3_enter_latency = ACPI_INFINITE;
 static unsigned long acpi_pblk = ACPI_INVALID;
 static int acpi_c2_tested = 0;
 static int acpi_c3_tested = 0;
+static int acpi_max_c_state = 1;
 
 /*
  * Clear busmaster activity flag
@@ -101,10 +105,14 @@ acpi_idle(void)
 	/*
 	 * start from the previous sleep level..
 	 */
-	if (sleep_level == 1)
+	if (sleep_level == 1
+	    || acpi_max_c_state < 2)
 		goto sleep1;
-	if (sleep_level == 2)
+
+	if (sleep_level == 2
+	    || acpi_max_c_state < 3)
 		goto sleep2;
+
       sleep3:
 	sleep_level = 3;
 	if (!acpi_c3_tested) {
@@ -193,7 +201,8 @@ acpi_idle(void)
 			acpi_clear_bm_activity(facp);
 			continue;
 		}
-		if (time > acpi_c3_enter_latency)
+		if (time > acpi_c3_enter_latency
+		    && acpi_max_c_state >= 3)
 			goto sleep3;
 	}
 
@@ -210,7 +219,8 @@ acpi_idle(void)
 		time = TIME_BEGIN(pm_tmr);
 		safe_halt();
 		time = TIME_END(pm_tmr, time);
-		if (time > acpi_c2_enter_latency)
+		if (time > acpi_c2_enter_latency
+		    && acpi_max_c_state >= 2)
 			goto sleep2;
 	}
 
@@ -260,12 +270,19 @@ acpi_find_cpu(ACPI_HANDLE handle, u32 level, void *ctx, void **value)
 		return AE_OK;
 
 	if (lat[2].latency < MAX_CX_STATE_LATENCY) {
-		printk(KERN_INFO "ACPI: C2 supported\n");
+		printk(KERN_INFO "ACPI: C2");
 		acpi_c2_exit_latency = lat[2].latency;
-	}
-	if (lat[3].latency < MAX_CX_STATE_LATENCY) {
-		printk(KERN_INFO "ACPI: C3 supported\n");
-		acpi_c3_exit_latency = lat[3].latency;
+		acpi_max_c_state = 2;
+	
+		if (lat[3].latency < MAX_CX_STATE_LATENCY) {
+			printk(", C3 supported\n");
+			acpi_c3_exit_latency = lat[3].latency;
+			acpi_max_c_state = 3;
+		}
+		else {
+			printk(" supported\n");
+		}
+			
 	}
 
 	memset(throttle, 0, sizeof(throttle));
@@ -291,7 +308,7 @@ acpi_cpu_init(void)
 {
 	acpi_walk_namespace(ACPI_TYPE_PROCESSOR,
 			    ACPI_ROOT_OBJECT,
-			    ACPI_INT32_MAX,
+			    ACPI_UINT32_MAX,
 			    acpi_find_cpu,
 			    NULL,
 			    NULL);

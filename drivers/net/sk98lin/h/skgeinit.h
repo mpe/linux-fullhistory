@@ -2,15 +2,15 @@
  *
  * Name:	skgeinit.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.44 $
- * Date:	$Date: 1999/10/26 07:34:15 $
+ * Version:	$Revision: 1.46 $
+ * Date:	$Date: 2000/08/10 11:28:00 $
  * Purpose:	Structures and prototypes for the GE Init Module
  *
  ******************************************************************************/
 
 /******************************************************************************
  *
- *	(C)Copyright 1998,1999 SysKonnect,
+ *	(C)Copyright 1998-2000 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
  *
  *	This program is free software; you can redistribute it and/or modify
@@ -27,6 +27,13 @@
  * History:
  *
  *	$Log: skgeinit.h,v $
+ *	Revision 1.46  2000/08/10 11:28:00  rassmann
+ *	Editorial changes.
+ *	Preserving 32-bit alignment in structs for the adapter context.
+ *	
+ *	Revision 1.45  1999/11/22 13:56:19  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.44  1999/10/26 07:34:15  malthoff
  *	The define SK_LNK_ON has been lost in v1.41.
  *	
@@ -443,61 +450,63 @@ typedef	struct s_GePort {
 	SK_TIMER	PWaTimer;	/* Workaround Timer */
 #endif
 	SK_U64	PPrevShorts;	/* Previous short Counter checking */
-	SK_U64	PPrevRx;	/* Previous RxOk Counter checking */
-	SK_U64	PPrevFcs;	/* Previous FCS Error Counter checking */
-	SK_U64	PRxLim;		/* Previous RxOk Counter checking */
-	int	PLinkResCt;	/* Link Restart Counter */
-	int	PAutoNegTimeOut;/* AutoNegotiation timeout current value */
-	int	PRxQSize;	/* Port Rx Queue Size in kB */
-	int	PXSQSize;	/* Port Synchronous Transmit Queue Size in kB */
-	int	PXAQSize;	/* Port Asynchronous Transmit Queue Size in kB*/
+	SK_U64	PPrevRx;		/* Previous RxOk Counter checking */
+	SK_U64	PPrevFcs;		/* Previous FCS Error Counter checking */
+	SK_U64	PRxLim;			/* Previous RxOk Counter checking */
+	int		PLinkResCt;		/* Link Restart Counter */
+	int		PAutoNegTimeOut;/* AutoNegotiation timeout current value */
+	int		PRxQSize;		/* Port Rx Queue Size in kB */
+	int		PXSQSize;		/* Port Synchronous Transmit Queue Size in kB */
+	int		PXAQSize;		/* Port Asynchronous Transmit Queue Size in kB*/
 	SK_U32	PRxQRamStart;	/* Receive Queue RAM Buffer Start Address */
-	SK_U32	PRxQRamEnd;	/* Receive Queue RAM Buffer End Address */
+	SK_U32	PRxQRamEnd;		/* Receive Queue RAM Buffer End Address */
 	SK_U32	PXsQRamStart;	/* Sync Tx Queue RAM Buffer Start Address */
-	SK_U32	PXsQRamEnd;	/* Sync Tx Queue RAM Buffer End Address */
+	SK_U32	PXsQRamEnd;		/* Sync Tx Queue RAM Buffer End Address */
 	SK_U32	PXaQRamStart;	/* Async Tx Queue RAM Buffer Start Address */
-	SK_U32	PXaQRamEnd;	/* Async Tx Queue RAM Buffer End Address */
-	int	PRxQOff;	/* Rx Queue Address Offset */
-	int	PXsQOff;	/* Synchronous Tx Queue Address Offset */
-	int	PXaQOff;	/* Asynchronous Tx Queue Address Offset */
-	SK_U16	PRxCmd;		/* Port Receive Command Configuration Value */
-	SK_U16	PIsave;		/* Saved Interrupt status word */
-	SK_U16	PSsave;		/* Saved PHY status word */
-	SK_BOOL	PHWLinkUp;	/* The hardware Link is up (wireing) */
-	SK_BOOL	PState;		/* Is port initialized ? */
+	SK_U32	PXaQRamEnd;		/* Async Tx Queue RAM Buffer End Address */
+	int		PRxQOff;		/* Rx Queue Address Offset */
+	int		PXsQOff;		/* Synchronous Tx Queue Address Offset */
+	int		PXaQOff;		/* Asynchronous Tx Queue Address Offset */
+	SK_U16	PRxCmd;			/* Port Receive Command Configuration Value */
+	SK_U16	PIsave;			/* Saved Interrupt status word */
+	SK_U16	PSsave;			/* Saved PHY status word */
+	SK_BOOL	PHWLinkUp;		/* The hardware Link is up (wireing) */
+	SK_BOOL	PState;			/* Is port initialized ? */
 	SK_BOOL	PLinkBroken;	/* Is Link broken ? */
-	SK_BOOL	PCheckPar;	/* Do we check for parity errors ? */
-	SK_U8	PLinkCap;	/* Link Capabilities */
+	SK_BOOL	PCheckPar;		/* Do we check for parity errors ? */
+	SK_U8	PLinkCap;		/* Link Capabilities */
 	SK_U8	PLinkModeConf;	/* Link Mode configured */
-	SK_U8	PLinkMode;	/* Link Mode currently used */
-	SK_U8	PLinkModeStatus;	/* Link Mode Status */
+	SK_U8	PLinkMode;		/* Link Mode currently used */
+	SK_U8	PLinkModeStatus;/* Link Mode Status */
 	SK_U8	PFlowCtrlCap;	/* Flow Control Capabilities */
 	SK_U8	PFlowCtrlMode;	/* Flow Control Mode */
-	SK_U8	PFlowCtrlStatus;	/* Flow Control Status */
-	SK_U8	PMSCap;		/* Master/Slave Capabilities */
-	SK_U8	PMSMode;	/* Master/Slave Mode */
-	SK_U8	PMSStatus;	/* Master/Slave Status */
+	SK_U8	PFlowCtrlStatus;/* Flow Control Status */
+	SK_U8	PMSCap;			/* Master/Slave Capabilities */
+	SK_U8	PMSMode;		/* Master/Slave Mode */
+	SK_U8	PMSStatus;		/* Master/Slave Status */
 	SK_U8	PAutoNegFail;	/* Autonegotiation fail flag */
 	SK_U8	PLipaAutoNeg;	/* Autonegotiation possible with Link Partner */
+	SK_U16	PhyAddr;		/* MDIO/MDC PHY address */
 	int	PhyType;	/* PHY used on this port */
-	SK_U16	PhyAddr;	/* MDIO/MDC PHY address */
 } SK_GEPORT;
 
 /*
  * Gigabit Ethernet Initalization Struct
- * (has to be included in the adapter context
+ * (has to be included in the adapter context)
  */
 typedef	struct s_GeInit {
-	int	GIMacsFound;	/* Number of MACs found on this adapter */
-	int	GIPciHwRev;	/* PCI HW Revision Number */
-	SK_U32	GIRamOffs;	/* RAM Address Offset for addr calculation */
-	int	GIRamSize;	/* The RAM size of the adapter in kB */
-	int	GIHstClkFact;	/* Host Clock Factor (62.5 / HstClk * 100) */
-	int	GIPortUsage;	/* driver port usage: SK_RED_LINK/SK_MUL_LINK */
-	SK_U32	GIPollTimerVal;	/* Descriptor Poll Timer Init Val in clk ticks*/
-	int	GILevel;	/* Initialization Level Completed */
-	SK_BOOL	GIAnyPortAct;	/* Is True if one or more port is initialized */
-	SK_GEPORT	GP[SK_MAX_MACS];	/* Port Dependent Information */
+	int			GIMacsFound;	/* Number of MACs found on this adapter */
+	int			GIPciHwRev;		/* PCI HW Revision Number */
+	SK_U32		GIRamOffs;		/* RAM Address Offset for addr calculation */
+	int			GIRamSize;		/* The RAM size of the adapter in kB */
+	int			GIHstClkFact;	/* Host Clock Factor (62.5 / HstClk * 100) */
+	int			GIPortUsage;	/* driver port usage: SK_RED_LINK/SK_MUL_LINK */
+	SK_U32		GIPollTimerVal;	/* Descriptor Poll Timer Init Val in clk ticks*/
+	int			GILevel;		/* Initialization Level Completed */
+	SK_GEPORT	GP[SK_MAX_MACS];/* Port Dependent Information */
+	SK_BOOL		GIAnyPortAct;	/* Is True if one or more port is initialized */
+	SK_U8		Align01;
+	SK_U16		Align02;
 } SK_GEINIT;
 
 /*

@@ -26,6 +26,9 @@
 #include "acpi.h"
 #include "driver.h"
 
+#define _COMPONENT	OS_DEPENDENT
+	MODULE_NAME	("tables")
+
 struct acpi_facp acpi_facp;
 
 #define ACPI_DUMMY_CHECKSUM 9

@@ -1,10 +1,10 @@
- /*
+/*
  * URB OHCI HCD (Host Controller Driver) for USB.
  * 
- *(C) Copyright 1999 Roman Weissgaerber <weissg@vienna.at>
+ * (C) Copyright 1999 Roman Weissgaerber <weissg@vienna.at>
+ * (C) Copyright 2000 David Brownell <david-b@pacbell.net>
  * 
  * usb-ohci.h
- * 
  */
 
  
@@ -40,7 +40,7 @@ struct td;
 #define ED_UNLINK 	0x01
 #define ED_OPER		0x02
 #define ED_DEL		0x04
-#define ED_URB_DEL  0x08
+#define ED_URB_DEL  	0x08
 
 /* usb_ohci_ed */
 typedef struct ed {
@@ -372,8 +372,8 @@ typedef struct ohci {
 	struct list_head ohci_hcd_list;	/* list of all ohci_hcd */
 
 	struct ohci * next; 		// chain of uhci device contexts
-	struct list_head urb_list; 	// list of all pending urbs
-	spinlock_t urb_list_lock; 	// lock to keep consistency 
+	// struct list_head urb_list; 	// list of all pending urbs
+	// spinlock_t urb_list_lock; 	// lock to keep consistency 
   
 	int ohci_int_load[32];		/* load of the 32 Interrupt Chains (for load balancing)*/
 	ed_t * ed_rm_list[2];     /* lists of all endpoints to be removed */
@@ -418,7 +418,7 @@ static int rh_submit_urb(urb_t * urb);
 static int rh_unlink_urb(urb_t * urb);
 static int rh_init_int_timer(urb_t * urb);
 
-#ifdef DEBUG
+#ifdef OHCI_VERBOSE_DEBUG
 #define OHCI_FREE(x) kfree(x); printk("OHCI FREE: %d: %4x\n", -- __ohci_free_cnt, (unsigned int) x)
 #define OHCI_ALLOC(x,size) (x) = kmalloc(size, in_interrupt() ? GFP_ATOMIC : GFP_KERNEL); printk("OHCI ALLO: %d: %4x\n", ++ __ohci_free_cnt,(unsigned int) x)
 static int __ohci_free_cnt = 0;

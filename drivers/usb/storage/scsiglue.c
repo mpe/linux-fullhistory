@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * SCSI layer glue code
  *
- * $Id: scsiglue.c,v 1.9 2000/08/25 00:13:51 mdharm Exp $
+ * $Id: scsiglue.c,v 1.10 2000/08/30 01:22:42 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -189,12 +189,6 @@ static int command_abort( Scsi_Cmnd *srb )
 		return SUCCESS;
 	}
 
-	/* This is a sanity check that we should never hit */
-	if (in_interrupt()) {
-		printk(KERN_ERR "usb-storage: command_abort() called from an interrupt!!! BAD!!! BAD!! BAD!!\n");
-		return FAILED;
-	}
-
 	/* if we have an urb pending, let's wake the control thread up */
 	if (us->current_urb->status == -EINPROGRESS) {
 		/* cancel the URB */
@@ -213,18 +207,63 @@ static int command_abort( Scsi_Cmnd *srb )
 	return FAILED;
 }
 
-/* FIXME: this doesn't do anything right now */
-static int bus_reset( Scsi_Cmnd *srb )
+/* This invokes the transport reset mechanism to reset the state of the
+ * device */
+static int device_reset( Scsi_Cmnd *srb )
 {
-	// struct us_data *us = (struct us_data *)srb->host->hostdata[0];
+	struct us_data *us = (struct us_data *)srb->host->hostdata[0];
 
-	printk(KERN_CRIT "usb-storage: bus_reset() requested but not implemented\n" );
-	US_DEBUGP("Bus reset requested\n");
-	//  us->transport_reset(us);
-	return FAILED;
+	US_DEBUGP("device_reset() called\n" );
+	return us->transport_reset(us);
 }
 
-/* FIXME: This doesn't actually reset anything */
+/* This resets the device port, and simulates the device
+ * disconnect/reconnect for all drivers which have claimed other
+ * interfaces. */
+static int bus_reset( Scsi_Cmnd *srb )
+{
+	struct us_data *us = (struct us_data *)srb->host->hostdata[0];
+	int result;
+	int i;
+
+	/* we use the usb_reset_device() function to handle this for us */
+	US_DEBUGP("bus_reset() called\n");
+	result = usb_reset_device(us->pusb_dev) ? FAILED : SUCCESS;
+
+	/* did the reset work? */
+	if (result < 0)
+		return FAILED;
+
+	/* FIXME: This needs to lock out driver probing while it's working
+	 * or we can have race conditions */
+        for (i = 0; i < us->pusb_dev->actconfig->bNumInterfaces; i++) {
+ 		struct usb_interface *intf =
+			&us->pusb_dev->actconfig->interface[i];
+
+		US_DEBUGP("Examinging driver %s...", intf->driver->name);
+		/* skip interfaces which we've claimed */
+		if (intf->driver && !strncmp(intf->driver->name,
+					"usb-storage", 12)) {
+			US_DEBUGPX("skipping.\n");
+			continue;
+		}
+
+		/* simulate a disconnect and reconnect for all interfaces */
+		if (intf->driver) {
+			US_DEBUGPX("simulating disconnect/reconnect.\n");
+			down(&intf->driver->serialize);
+			intf->driver->disconnect(us->pusb_dev,
+					intf->private_data);
+			intf->driver->probe(us->pusb_dev, i);
+			up(&intf->driver->serialize);
+		}
+	}
+
+	US_DEBUGP("bus_reset() complete\n");
+	return SUCCESS;
+}
+
+/* FIXME: This doesn't do anything right now */
 static int host_reset( Scsi_Cmnd *srb )
 {
 	printk(KERN_CRIT "usb-storage: host_reset() requested but not implemented\n" );
@@ -313,7 +352,7 @@ Scsi_Host_Template usb_stor_host_template = {
 	queuecommand:		queuecommand,
 
 	eh_abort_handler:	command_abort,
-	eh_device_reset_handler:bus_reset,
+	eh_device_reset_handler:device_reset,
 	eh_bus_reset_handler:	bus_reset,
 	eh_host_reset_handler:	host_reset,
 

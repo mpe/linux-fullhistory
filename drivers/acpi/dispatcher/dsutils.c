@@ -1,9 +1,9 @@
-
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: dsutils - Dispatcher utilities
+ *              $Revision: 44 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -25,18 +25,104 @@
 
 
 #include "acpi.h"
-#include "parser.h"
+#include "acparser.h"
 #include "amlcode.h"
-#include "dispatch.h"
-#include "interp.h"
-#include "namesp.h"
-#include "debugger.h"
+#include "acdispat.h"
+#include "acinterp.h"
+#include "acnamesp.h"
+#include "acdebug.h"
 
 #define _COMPONENT          PARSER
-	 MODULE_NAME         ("dsutils");
+	 MODULE_NAME         ("dsutils")
 
 
-/*****************************************************************************
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_ds_is_result_used
+ *
+ * PARAMETERS:  Op
+ *              Result_obj
+ *              Walk_state
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Check if a result object will be used by the parent
+ *
+ ******************************************************************************/
+
+u8
+acpi_ds_is_result_used (
+	ACPI_PARSE_OBJECT       *op)
+{
+	ACPI_OPCODE_INFO        *parent_info;
+
+
+	/* Must have both an Op and a Result Object */
+
+	if (!op) {
+		return (TRUE);
+	}
+
+
+	/*
+	 * If there is no parent, the result can't possibly be used!
+	 * (An executing method typically has no parent, since each
+	 * method is parsed separately)  However, a method that is
+	 * invoked from another method has a parent.
+	 */
+	if (!op->parent) {
+		return (FALSE);
+	}
+
+
+	/*
+	 * Get info on the parent.  The root Op is AML_SCOPE
+	 */
+
+	parent_info = acpi_ps_get_opcode_info (op->parent->opcode);
+	if (ACPI_GET_OP_TYPE (parent_info) != ACPI_OP_TYPE_OPCODE) {
+		return (FALSE);
+	}
+
+
+	/* Never delete the return value associated with a return opcode */
+
+	if (op->parent->opcode == AML_RETURN_OP) {
+		return (TRUE);
+	}
+
+
+	/*
+	 * Decide what to do with the result based on the parent.  If
+	 * the parent opcode will not use the result, delete the object.
+	 * Otherwise leave it as is, it will be deleted when it is used
+	 * as an operand later.
+	 */
+
+	switch (ACPI_GET_OP_CLASS (parent_info))
+	{
+	/*
+	 * In these cases, the parent will never use the return object
+	 */
+	case OPTYPE_CONTROL:        /* IF, ELSE, WHILE only */
+	case OPTYPE_NAMED_OBJECT:   /* Scope, method, etc. */
+
+		return (FALSE);
+		break;
+
+	/*
+	 * In all other cases. the parent will actually use the return
+	 * object, so keep it.
+	 */
+	default:
+		break;
+	}
+
+	return (TRUE);
+}
+
+
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_delete_result_if_not_used
  *
@@ -51,16 +137,15 @@
  *              this result.  If not, delete the result now so that it will
  *              not become orphaned.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 void
 acpi_ds_delete_result_if_not_used (
-	ACPI_GENERIC_OP         *op,
-	ACPI_OBJECT_INTERNAL    *result_obj,
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_OPERAND_OBJECT     *result_obj,
 	ACPI_WALK_STATE         *walk_state)
 {
-	ACPI_OP_INFO            *parent_info;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_STATUS             status;
 
 
@@ -72,88 +157,24 @@ acpi_ds_delete_result_if_not_used (
 		return;
 	}
 
-	if (!op->parent) {
-		/*
-		 * If there is no parent, the result can't possibly be used!
-		 * (An executing method typically has no parent, since each
-		 * method is parsed separately
-		 */
 
+	if (!acpi_ds_is_result_used (op)) {
 		/*
 		 * Must pop the result stack (Obj_desc should be equal
 		 *  to Result_obj)
 		 */
 
 		status = acpi_ds_result_stack_pop (&obj_desc, walk_state);
-		if (ACPI_FAILURE (status)) {
-			return;
+		if (ACPI_SUCCESS (status)) {
+			acpi_cm_remove_reference (result_obj);
 		}
-
-		acpi_cm_remove_reference (result_obj);
-
-		return;
-	}
-
-
-	/*
-	 * Get info on the parent.  The root Op is AML_SCOPE
-	 */
-
-	parent_info = acpi_ps_get_opcode_info (op->parent->opcode);
-	if (!parent_info) {
-		return;
-	}
-
-
-	/* Never delete the return value associated with a return opcode */
-
-	if (op->parent->opcode == AML_RETURN_OP) {
-		return;
-	}
-
-
-	/*
-	 * Decide what to do with the result based on the parent.  If
-	 * the parent opcode will not use the result, delete the object.
-	 * Otherwise leave it as is, it will be deleted when it is used
-	 * as an operand later.
-	 */
-
-	switch (parent_info->flags & OP_INFO_TYPE)
-	{
-	/*
-	 * In these cases, the parent will never use the return object,
-	 * so delete it here and now.
-	 */
-	case OPTYPE_CONTROL:        /* IF, ELSE, WHILE only */
-	case OPTYPE_NAMED_OBJECT:   /* Scope, method, etc. */
-
-		/*
-		 * Must pop the result stack (Obj_desc should be equal
-		 * to Result_obj)
-		 */
-
-		status = acpi_ds_result_stack_pop (&obj_desc, walk_state);
-		if (ACPI_FAILURE (status)) {
-			return;
-		}
-
-		acpi_cm_remove_reference (result_obj);
-		break;
-
-	/*
-	 * In all other cases. the parent will actually use the return
-	 * object, so keep it.
-	 */
-	default:
-		break;
 	}
 
 	return;
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_create_operand
  *
@@ -167,19 +188,19 @@ acpi_ds_delete_result_if_not_used (
  *              looking up a name or entering a new name into the internal
  *              namespace.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_create_operand (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *arg)
+	ACPI_PARSE_OBJECT       *arg)
 {
 	ACPI_STATUS             status = AE_OK;
-	char                    *name_string;
+	NATIVE_CHAR             *name_string;
 	u32                     name_length;
 	OBJECT_TYPE_INTERNAL    data_type;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_GENERIC_OP         *parent_op;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_PARSE_OBJECT       *parent_op;
 	u16                     opcode;
 	u32                     flags;
 	OPERATING_MODE          interpreter_mode;
@@ -214,7 +235,7 @@ acpi_ds_create_operand (
 		 */
 
 		parent_op = arg->parent;
-		if ((acpi_ps_is_named_object_op (parent_op->opcode)) &&
+		if ((acpi_ps_is_node_op (parent_op->opcode)) &&
 			(parent_op->opcode != AML_METHODCALL_OP) &&
 			(parent_op->opcode != AML_NAMEPATH_OP))
 		{
@@ -233,7 +254,7 @@ acpi_ds_create_operand (
 				 ACPI_TYPE_ANY, interpreter_mode,
 				 NS_SEARCH_PARENT | NS_DONT_OPEN_SCOPE,
 				 walk_state,
-				 (ACPI_NAMED_OBJECT**) &obj_desc);
+				 (ACPI_NAMESPACE_NODE **) &obj_desc);
 
 		/* Free the namestring created above */
 
@@ -252,7 +273,7 @@ acpi_ds_create_operand (
 				 * indicate this to the interpreter, set the
 				 * object to the root
 				 */
-				obj_desc = (ACPI_OBJECT_INTERNAL *) acpi_gbl_root_object;
+				obj_desc = (ACPI_OPERAND_OBJECT *) acpi_gbl_root_node;
 				status = AE_OK;
 			}
 
@@ -277,6 +298,7 @@ acpi_ds_create_operand (
 		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
+		DEBUGGER_EXEC (acpi_db_display_argument_object (obj_desc, walk_state));
 	}
 
 
@@ -311,6 +333,8 @@ acpi_ds_create_operand (
 		}
 
 		if (flags & OP_HAS_RETURN_VALUE) {
+			DEBUGGER_EXEC (acpi_db_display_argument_object (walk_state->operands [walk_state->num_operands - 1], walk_state));
+
 			/*
 			 * Use value that was already previously returned
 			 * by the evaluation of this argument
@@ -338,9 +362,9 @@ acpi_ds_create_operand (
 			/* Initialize the new object */
 
 			status = acpi_ds_init_object_from_op (walk_state, arg,
-					 opcode, obj_desc);
+					 opcode, &obj_desc);
 			if (ACPI_FAILURE (status)) {
-				acpi_cm_free (obj_desc);
+				acpi_cm_delete_object_desc (obj_desc);
 				return (status);
 			}
 	   }
@@ -352,13 +376,14 @@ acpi_ds_create_operand (
 			return (status);
 		}
 
+		DEBUGGER_EXEC (acpi_db_display_argument_object (obj_desc, walk_state));
 	}
 
 	return (AE_OK);
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_create_operands
  *
@@ -370,15 +395,15 @@ acpi_ds_create_operand (
  *              namespace objects and place those argument object on the object
  *              stack in preparation for evaluation by the interpreter.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_create_operands (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *first_arg)
+	ACPI_PARSE_OBJECT       *first_arg)
 {
 	ACPI_STATUS             status = AE_OK;
-	ACPI_GENERIC_OP         *arg;
+	ACPI_PARSE_OBJECT       *arg;
 	u32                     args_pushed = 0;
 
 
@@ -416,7 +441,7 @@ cleanup:
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_resolve_operands
  *
@@ -428,7 +453,7 @@ cleanup:
  *              arguments to a control method invocation (a call from one
  *              method to another.)
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_resolve_operands (
@@ -449,7 +474,7 @@ acpi_ds_resolve_operands (
 	 */
 
 	for (i = 0; i < walk_state->num_operands; i++) {
-		status = acpi_aml_resolve_to_value (&walk_state->operands[i]);
+		status = acpi_aml_resolve_to_value (&walk_state->operands[i], walk_state);
 		if (ACPI_FAILURE (status)) {
 			break;
 		}
@@ -459,7 +484,7 @@ acpi_ds_resolve_operands (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_map_opcode_to_data_type
  *
@@ -472,7 +497,7 @@ acpi_ds_resolve_operands (
  *              if any.  If the opcode returns a value as part of the
  *              intepreter execution, a flag is returned in Out_flags.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 OBJECT_TYPE_INTERNAL
 acpi_ds_map_opcode_to_data_type (
@@ -480,18 +505,18 @@ acpi_ds_map_opcode_to_data_type (
 	u32                     *out_flags)
 {
 	OBJECT_TYPE_INTERNAL    data_type = INTERNAL_TYPE_INVALID;
-	ACPI_OP_INFO            *op_info;
+	ACPI_OPCODE_INFO        *op_info;
 	u32                     flags = 0;
 
 
 	op_info = acpi_ps_get_opcode_info (opcode);
-	if (!op_info) {
+	if (ACPI_GET_OP_TYPE (op_info) != ACPI_OP_TYPE_OPCODE) {
 		/* Unknown opcode */
 
-		return data_type;
+		return (data_type);
 	}
 
-	switch (op_info->flags & OP_INFO_TYPE)
+	switch (ACPI_GET_OP_CLASS (op_info))
 	{
 
 	case OPTYPE_LITERAL:
@@ -552,6 +577,7 @@ acpi_ds_map_opcode_to_data_type (
 	case OPTYPE_DYADIC2_s:
 	case OPTYPE_INDEX:
 	case OPTYPE_MATCH:
+	case OPTYPE_RETURN:
 
 		flags = OP_HAS_RETURN_VALUE;
 		data_type = ACPI_TYPE_ANY;
@@ -592,11 +618,11 @@ acpi_ds_map_opcode_to_data_type (
 		*out_flags = flags;
 	}
 
-	return data_type;
+	return (data_type);
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_map_named_opcode_to_data_type
  *
@@ -607,7 +633,7 @@ acpi_ds_map_opcode_to_data_type (
  * DESCRIPTION: Convert a raw Named AML opcode to the associated data type.
  *              Named opcodes are a subsystem of the AML opcodes.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 OBJECT_TYPE_INTERNAL
 acpi_ds_map_named_opcode_to_data_type (
@@ -688,7 +714,7 @@ acpi_ds_map_named_opcode_to_data_type (
 
 	}
 
-	return data_type;
+	return (data_type);
 }
 
 

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: nsload - namespace loading/expanding/contracting procedures
+ *              $Revision: 28 $
  *
  *****************************************************************************/
 
@@ -25,16 +25,16 @@
 
 
 #include "acpi.h"
-#include "interp.h"
-#include "namesp.h"
+#include "acinterp.h"
+#include "acnamesp.h"
 #include "amlcode.h"
-#include "parser.h"
-#include "dispatch.h"
-#include "debugger.h"
+#include "acparser.h"
+#include "acdispat.h"
+#include "acdebug.h"
 
 
 #define _COMPONENT          NAMESPACE
-	 MODULE_NAME         ("nsload");
+	 MODULE_NAME         ("nsload")
 
 
 /*******************************************************************************
@@ -42,7 +42,7 @@
  * FUNCTION:    Acpi_ns_parse_table
  *
  * PARAMETERS:  Table_desc      - An ACPI table descriptor for table to parse
- *              Scope           - Where to enter the table into the namespace
+ *              Start_node      - Where to enter the table into the namespace
  *
  * RETURN:      Status
  *
@@ -53,50 +53,85 @@
 ACPI_STATUS
 acpi_ns_parse_table (
 	ACPI_TABLE_DESC         *table_desc,
-	ACPI_NAME_TABLE         *scope)
+	ACPI_NAMESPACE_NODE     *start_node)
 {
 	ACPI_STATUS             status;
 
 
-	/* Create the root object */
+	/*
+	 * AML Parse, pass 1
+	 *
+	 * In this pass, we load most of the namespace.  Control methods
+	 * are not parsed until later.  A parse tree is not created.  Instead,
+	 * each Parser Op subtree is deleted when it is finished.  This saves
+	 * a great deal of memory, and allows a small cache of parse objects
+	 * to service the entire parse.  The second pass of the parse then
+	 * performs another complete parse of the AML..
+	 */
+
+	/* Create and init a Root Node */
 
 	acpi_gbl_parsed_namespace_root = acpi_ps_alloc_op (AML_SCOPE_OP);
 	if (!acpi_gbl_parsed_namespace_root) {
 		return (AE_NO_MEMORY);
 	}
 
-	/* Initialize the root object */
+	((ACPI_PARSE2_OBJECT *) acpi_gbl_parsed_namespace_root)->name = ACPI_ROOT_NAME;
 
-	((ACPI_NAMED_OP *) acpi_gbl_parsed_namespace_root)->name = ACPI_ROOT_NAME;
 
 	/* Pass 1:  Parse everything except control method bodies */
 
 	status = acpi_ps_parse_aml (acpi_gbl_parsed_namespace_root,
 			 table_desc->aml_pointer,
-			 table_desc->aml_length, 0);
+			 table_desc->aml_length,
+			 ACPI_PARSE_LOAD_PASS1 | ACPI_PARSE_DELETE_TREE,
+			 NULL, NULL, NULL,
+			 acpi_ds_load1_begin_op,
+			 acpi_ds_load1_end_op);
 
 	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
 
-
-#ifndef PARSER_ONLY
-	status = acpi_ps_walk_parsed_aml (acpi_ps_get_child (acpi_gbl_parsed_namespace_root),
-			  acpi_gbl_parsed_namespace_root, NULL,
-			  scope, NULL, NULL,
-			  table_desc->table_id,
-			  acpi_ds_load2_begin_op,
-			  acpi_ds_load2_end_op);
+	acpi_ps_delete_parse_tree (acpi_gbl_parsed_namespace_root);
 
 
 	/*
-	 * Now that the internal namespace has been constructed, we can delete the
-	 * parsed namespace, since it is no longer needed
+	 * AML Parse, pass 2
+	 *
+	 * In this pass, we resolve forward references and other things
+	 * that could not be completed during the first pass.
+	 * Another complete parse of the AML is performed, but the
+	 * overhead of this is compensated for by the fact that the
+	 * parse objects are all cached.
 	 */
+
+	/* Create and init a Root Node */
+
+	acpi_gbl_parsed_namespace_root = acpi_ps_alloc_op (AML_SCOPE_OP);
+	if (!acpi_gbl_parsed_namespace_root) {
+		return (AE_NO_MEMORY);
+	}
+
+	((ACPI_PARSE2_OBJECT *) acpi_gbl_parsed_namespace_root)->name = ACPI_ROOT_NAME;
+
+
+	/* Pass 2: Resolve forward references */
+
+	status = acpi_ps_parse_aml (acpi_gbl_parsed_namespace_root,
+			 table_desc->aml_pointer,
+			 table_desc->aml_length,
+			 ACPI_PARSE_LOAD_PASS1 | ACPI_PARSE_DELETE_TREE,
+			 NULL, NULL, NULL,
+			 acpi_ds_load2_begin_op,
+			 acpi_ds_load2_end_op);
+
+	if (ACPI_FAILURE (status)) {
+		return (status);
+	}
 
 	acpi_ps_delete_parse_tree (acpi_gbl_parsed_namespace_root);
 	acpi_gbl_parsed_namespace_root = NULL;
-#endif
 
 
 	return (status);
@@ -120,7 +155,7 @@ acpi_ns_parse_table (
 ACPI_STATUS
 acpi_ns_load_table (
 	ACPI_TABLE_DESC         *table_desc,
-	ACPI_NAMED_OBJECT       *entry)
+	ACPI_NAMESPACE_NODE     *node)
 {
 	ACPI_STATUS             status;
 
@@ -146,7 +181,7 @@ acpi_ns_load_table (
 	 */
 
 	acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
-	status = acpi_ns_parse_table (table_desc, entry->child_table);
+	status = acpi_ns_parse_table (table_desc, node->child);
 	acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
 
 	if (ACPI_FAILURE (status)) {
@@ -160,7 +195,7 @@ acpi_ns_load_table (
 	 * parse trees.
 	 */
 
-	status = acpi_ds_initialize_objects (table_desc, entry);
+	status = acpi_ds_initialize_objects (table_desc, node);
 
 	return (status);
 }
@@ -222,7 +257,7 @@ acpi_ns_load_table_by_type (
 
 		/* Now load the single DSDT */
 
-		status = acpi_ns_load_table (table_desc, acpi_gbl_root_object);
+		status = acpi_ns_load_table (table_desc, acpi_gbl_root_node);
 		if (ACPI_SUCCESS (status)) {
 			table_desc->loaded_into_namespace = TRUE;
 		}
@@ -247,7 +282,7 @@ acpi_ns_load_table_by_type (
 
 			if (!table_desc->loaded_into_namespace) {
 				status = acpi_ns_load_table (table_desc,
-						  acpi_gbl_root_object);
+						  acpi_gbl_root_node);
 				if (ACPI_FAILURE (status)) {
 					break;
 				}
@@ -276,7 +311,7 @@ acpi_ns_load_table_by_type (
 
 			if (!table_desc->loaded_into_namespace) {
 				status = acpi_ns_load_table (table_desc,
-						  acpi_gbl_root_object);
+						  acpi_gbl_root_node);
 				if (ACPI_FAILURE (status)) {
 					break;
 				}
@@ -301,52 +336,6 @@ unlock_and_exit:
 
 	return (status);
 
-}
-
-
-/******************************************************************************
- *
- * FUNCTION:    Acpi_ns_free_table_entry
- *
- * PARAMETERS:  Entry           - The entry to be deleted
- *
- * RETURNS      None
- *
- * DESCRIPTION: Free an entry in a namespace table.  Delete any objects contained
- *              in the entry, unlink the entry, then mark it unused.
- *
- ******************************************************************************/
-
-void
-acpi_ns_free_table_entry (
-	ACPI_NAMED_OBJECT       *entry)
-{
-
-	if (!entry) {
-		return;
-	}
-
-	/*
-	 * Need to delete
-	 * 1) The scope, if any
-	 * 2) An attached object, if any
-	 */
-
-	if (entry->child_table) {
-		acpi_cm_free (entry->child_table);
-		entry->child_table = NULL;
-	}
-
-	if (entry->object) {
-		acpi_ns_detach_object (entry->object);
-		entry->object = NULL;
-	}
-
-	/* Mark the entry unallocated */
-
-	entry->name = 0;
-
-	return;
 }
 
 
@@ -394,15 +383,6 @@ acpi_ns_delete_subtree (
 				  child_handle,
 				  &next_child_handle);
 
-		/*
-		 * Regardless of the success or failure of the
-		 * previous operation, we are done with the previous
-		 * object (if there was one), and any children it
-		 * may have had.  So we can now safely delete it (and
-		 * its scope, if any)
-		 */
-
-		acpi_ns_free_table_entry (child_handle);
 		child_handle = next_child_handle;
 
 
@@ -432,6 +412,11 @@ acpi_ns_delete_subtree (
 			 * the object's parent
 			 */
 			level--;
+
+			/* Delete all children now */
+
+			acpi_ns_delete_children (child_handle);
+
 			child_handle = parent_handle;
 			acpi_get_parent (parent_handle, &parent_handle);
 		}
@@ -439,7 +424,7 @@ acpi_ns_delete_subtree (
 
 	/* Now delete the starting object, and we are done */
 
-	acpi_ns_free_table_entry ((ACPI_NAMED_OBJECT*) child_handle);
+	acpi_ns_delete_node (child_handle);
 
 
 	return (AE_OK);
@@ -469,7 +454,7 @@ acpi_ns_unload_namespace (
 
 	/* Parameter validation */
 
-	if (!acpi_gbl_root_object->child_table) {
+	if (!acpi_gbl_root_node) {
 		return (AE_NO_NAMESPACE);
 	}
 

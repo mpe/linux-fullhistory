@@ -254,7 +254,6 @@ EXPORT_SYMBOL(pmac_xpram_read);
 EXPORT_SYMBOL(pmac_xpram_write);
 #endif /* CONFIG_NVRAM */
 #ifdef CONFIG_PPC_RTC
-EXPORT_SYMBOL(mktime);
 EXPORT_SYMBOL(to_tm);
 #endif
 

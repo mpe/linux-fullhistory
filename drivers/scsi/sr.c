@@ -849,13 +849,13 @@ static void sr_detach(Scsi_Device * SDp)
 	return;
 }
 
-int init_sr(void)
+static int __init init_sr(void)
 {
 	sr_template.module = THIS_MODULE;
 	return scsi_register_module(MODULE_SCSI_DEV, &sr_template);
 }
 
-void exit_sr(void)
+static void __exit exit_sr(void)
 {
 	scsi_unregister_module(MODULE_SCSI_DEV, &sr_template);
 	devfs_unregister_blkdev(MAJOR_NR, "sr");

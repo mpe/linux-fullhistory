@@ -98,6 +98,18 @@
     - Added INVERT_LED_PWR, used it.
     - Backed out the extra_reset stuff
 
+   LK1.1.9 2 Sep 2000 andrewm
+    - Backed out the tx_reset_resume flags.  It was a no-op.
+    - In vortex_error, don't reset the Tx on txReclaim errors
+    - In vortex_error, don't reset the Tx on maxCollisions errors.
+      Hence backed out all the DownListPtr logic here.
+    - In vortex_error, give Tornado cards a partial TxReset on
+      maxCollisions (David Hinds).  Defined MAX_COLLISION_RESET for this.
+    - Redid some driver flags and device names based on pcmcia_cs-3.1.20.
+    - Fixed a bug where, if vp->tx_full is set when the interface
+      is downed, it remains set when the interface is upped.  Bad
+      things happen.
+
     - See http://www.uow.edu.au/~andrewm/linux/#3c59x-2.3 for more details.
     - Also see Documentation/networking/vortex.txt
 */
@@ -183,7 +195,7 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
 #include <linux/delay.h>
 
 static char version[] __devinitdata =
-"3c59x.c:LK1.1.8  13 Aug 2000  Donald Becker and others. http://www.scyld.com/network/vortex.html " "$Revision: 1.102.2.25 $\n";
+"3c59x.c:LK1.1.9  2 Sep 2000  Donald Becker and others. http://www.scyld.com/network/vortex.html " "$Revision: 1.102.2.38 $\n";
 
 MODULE_AUTHOR("Donald Becker <becker@scyld.com>");
 MODULE_DESCRIPTION("3Com 3c59x/3c90x/3c575 series Vortex/Boomerang/Cyclone driver");
@@ -303,7 +315,7 @@ enum pci_flags_bit {
 enum {	IS_VORTEX=1, IS_BOOMERANG=2, IS_CYCLONE=4, IS_TORNADO=8,
 	EEPROM_8BIT=0x10,	/* AKPM: Uses 0x230 as the base bitmaps for EEPROM reads */
 	HAS_PWR_CTRL=0x20, HAS_MII=0x40, HAS_NWAY=0x80, HAS_CB_FNS=0x100,
-	INVERT_MII_PWR=0x200, INVERT_LED_PWR=0x400 };
+	INVERT_MII_PWR=0x200, INVERT_LED_PWR=0x400, MAX_COLLISION_RESET=0x800 };
 
 
 enum vortex_chips {
@@ -415,14 +427,14 @@ static struct vortex_chip_info {
 
 	{"3CCFE575BT Cyclone CardBus",
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS|EEPROM_8BIT|INVERT_LED_PWR, 128, },
-	{"3CCFE575CT Cyclone CardBus",
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS|EEPROM_8BIT|INVERT_MII_PWR, 128, },
+	{"3CCFE575CT Tornado CardBus",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_TORNADO|HAS_NWAY|HAS_CB_FNS|EEPROM_8BIT|INVERT_MII_PWR|MAX_COLLISION_RESET, 128, },
 	{"3CCFE656 Cyclone CardBus",
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS|EEPROM_8BIT|INVERT_MII_PWR|INVERT_LED_PWR, 128, },
 	{"3CCFEM656B Cyclone+Winmodem CardBus",
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS|EEPROM_8BIT|INVERT_MII_PWR|INVERT_LED_PWR, 128, },
-	{"3CCFE656C Tornado+Winmodem CardBus",			/* From pcmcia-cs-3.1.5 */
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS|EEPROM_8BIT|INVERT_MII_PWR, 128, },
+	{"3CXFEM656C Tornado+Winmodem CardBus",			/* From pcmcia-cs-3.1.5 */
+	 PCI_USES_IO|PCI_USES_MASTER, IS_TORNADO|HAS_NWAY|HAS_CB_FNS|EEPROM_8BIT|INVERT_MII_PWR|MAX_COLLISION_RESET, 128, },
 
 	{"3c450 HomePNA Tornado",						/* AKPM: from Don's 0.99Q */
 	 PCI_USES_IO|PCI_USES_MASTER, IS_TORNADO|HAS_NWAY, 128, },
@@ -652,7 +664,6 @@ struct vortex_private {
 		open:1,
 		must_free_region:1;				/* Flag: if zero, Cardbus owns the I/O region */
 	int drv_flags;
-	int tx_reset_resume;				/* Flag to retart timer after vortex_error handling */
 	u16 status_enable;
 	u16 intr_enable;
 	u16 available_media;				/* From Wn3_Options. */
@@ -1369,6 +1380,7 @@ vortex_open(struct net_device *dev)
 
 	vortex_up(dev);
 	vp->open = 1;
+	vp->tx_full = 0;
 	return 0;
 
 out_free_irq:
@@ -1570,7 +1582,7 @@ vortex_error(struct net_device *dev, int status)
 {
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	long ioaddr = dev->base_addr;
-	int do_tx_reset = 0;
+	int do_tx_reset = 0, reset_mask = 0;
 	unsigned char tx_status = 0;
 
 	if (vortex_debug > 2) {
@@ -1589,10 +1601,14 @@ vortex_error(struct net_device *dev, int status)
 		if (tx_status & 0x14)  vp->stats.tx_fifo_errors++;
 		if (tx_status & 0x38)  vp->stats.tx_aborted_errors++;
 		outb(0, ioaddr + TxStatus);
-		if (tx_status & 0x3a)	/* TxReset after 16 collisions, despite what the manual says */
-			do_tx_reset = 1;	/* Also reset on reclaim errors */
-		else					/* Merely re-enable the transmitter. */
+		if (tx_status & 0x30) {			/* txJabber or txUnderrun */
+			do_tx_reset = 1;
+		} else if ((tx_status & 0x08) && (vp->drv_flags & MAX_COLLISION_RESET)) {	/* maxCollisions */
+			do_tx_reset = 1;
+			reset_mask = 0x0108;		/* Reset interface logic, but not download logic */
+		} else {						/* Merely re-enable the transmitter. */
 			outw(TxEnable, ioaddr + EL3_CMD);
+		}
 	}
 
 	if (status & RxEarly) {				/* Rx early is unused. */
@@ -1644,40 +1660,11 @@ vortex_error(struct net_device *dev, int status)
 		}
 	}
 
-	/*
-	 * Black magic.  If we're resetting the transmitter,  remember the current downlist
-	 * pointer and restore it afterwards.  We can't usr cur_tx because that could
-	 * lag the actual hardware index.
-	 */
 	if (do_tx_reset) {
-		if (vp->full_bus_master_tx) {
-			unsigned long old_down_list_ptr;
-
-			wait_for_completion(dev, DownStall);
-			old_down_list_ptr = inl(ioaddr + DownListPtr);
-			wait_for_completion(dev, TxReset);
-			outw(TxEnable, ioaddr + EL3_CMD);
-
-			/* Restart DMA if necessary */
-			outl(old_down_list_ptr, ioaddr + DownListPtr);
-			if (vortex_debug > 2)
-					printk(KERN_DEBUG "reset DMA to 0x%08x\n", inl(ioaddr + DownListPtr));
-			outw(DownUnstall, ioaddr + EL3_CMD);
-
-			/*
-			 * Here we make a single attempt to prevent a timeout by
-			 * restarting the timer if we think that the ISR has a good
-			 * chance of unjamming things.
-			 */
-			if (vp->tx_reset_resume == 0 && vp->tx_full) {
-				vp->tx_reset_resume = 1;
-				dev->trans_start = jiffies;
-			}
-		} else {
-			wait_for_completion(dev, TxReset);
-			outw(TxEnable, ioaddr + EL3_CMD);
+		wait_for_completion(dev, TxReset|reset_mask);
+		outw(TxEnable, ioaddr + EL3_CMD);
+		if (!vp->full_bus_master_tx)
 			netif_wake_queue(dev);
-		}
 	}
 }
 
@@ -1785,7 +1772,6 @@ boomerang_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		/* netif_start_queue (dev); */		/* AKPM: redundant? */
 	}
 	outw(DownUnstall, ioaddr + EL3_CMD);
-	vp->tx_reset_resume = 0;
 	spin_unlock_irqrestore(&vp->lock, flags);
 	dev->trans_start = jiffies;
 	return 0;

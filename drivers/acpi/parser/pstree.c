@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Module Name: pstree - Parser op tree manipulation/traversal/search
+ *              $Revision: 23 $
  *
  *****************************************************************************/
 
@@ -24,11 +25,11 @@
 
 
 #include "acpi.h"
-#include "parser.h"
+#include "acparser.h"
 #include "amlcode.h"
 
 #define _COMPONENT          PARSER
-	 MODULE_NAME         ("pstree");
+	 MODULE_NAME         ("pstree")
 
 
 /*******************************************************************************
@@ -44,30 +45,30 @@
  *
  ******************************************************************************/
 
-ACPI_GENERIC_OP *
+ACPI_PARSE_OBJECT *
 acpi_ps_get_arg (
-	ACPI_GENERIC_OP         *op,
+	ACPI_PARSE_OBJECT       *op,
 	u32                     argn)
 {
-	ACPI_GENERIC_OP         *arg = NULL;
-	ACPI_OP_INFO            *op_info;
+	ACPI_PARSE_OBJECT       *arg = NULL;
+	ACPI_OPCODE_INFO        *op_info;
 
 
 	/* Get the info structure for this opcode */
 
 	op_info = acpi_ps_get_opcode_info (op->opcode);
-	if (!op_info) {
-		/* Invalid opcode */
+	if (ACPI_GET_OP_TYPE (op_info) != ACPI_OP_TYPE_OPCODE) {
+		/* Invalid opcode or ASCII character */
 
-		return NULL;
+		return (NULL);
 	}
 
 	/* Check if this opcode requires argument sub-objects */
 
-	if (!(op_info->flags & OP_INFO_HAS_ARGS)) {
+	if (!(ACPI_GET_OP_ARGS (op_info))) {
 		/* Has no linked argument objects */
 
-		return NULL;
+		return (NULL);
 	}
 
 	/* Get the requested argument object */
@@ -78,7 +79,7 @@ acpi_ps_get_arg (
 		arg = arg->next;
 	}
 
-	return arg;
+	return (arg);
 }
 
 
@@ -97,11 +98,11 @@ acpi_ps_get_arg (
 
 void
 acpi_ps_append_arg (
-	ACPI_GENERIC_OP         *op,
-	ACPI_GENERIC_OP         *arg)
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_PARSE_OBJECT       *arg)
 {
-	ACPI_GENERIC_OP         *prev_arg;
-	ACPI_OP_INFO            *op_info;
+	ACPI_PARSE_OBJECT       *prev_arg;
+	ACPI_OPCODE_INFO        *op_info;
 
 
 	if (!op) {
@@ -111,7 +112,7 @@ acpi_ps_append_arg (
 	/* Get the info structure for this opcode */
 
 	op_info = acpi_ps_get_opcode_info (op->opcode);
-	if (!op_info) {
+	if (ACPI_GET_OP_TYPE (op_info) != ACPI_OP_TYPE_OPCODE) {
 		/* Invalid opcode */
 
 		return;
@@ -119,7 +120,7 @@ acpi_ps_append_arg (
 
 	/* Check if this opcode requires argument sub-objects */
 
-	if (!(op_info->flags & OP_INFO_HAS_ARGS)) {
+	if (!(ACPI_GET_OP_ARGS (op_info))) {
 		/* Has no linked argument objects */
 
 		return;
@@ -166,11 +167,11 @@ acpi_ps_append_arg (
  *
  ******************************************************************************/
 
-ACPI_GENERIC_OP *
+ACPI_PARSE_OBJECT *
 acpi_ps_get_child (
-	ACPI_GENERIC_OP         *op)
+	ACPI_PARSE_OBJECT       *op)
 {
-	ACPI_GENERIC_OP         *child = NULL;
+	ACPI_PARSE_OBJECT       *child = NULL;
 
 
 	switch (op->opcode)
@@ -211,7 +212,7 @@ acpi_ps_get_child (
 
 	}
 
-	return child;
+	return (child);
 }
 
 
@@ -229,32 +230,32 @@ acpi_ps_get_child (
  *
  ******************************************************************************/
 
-ACPI_GENERIC_OP *
+ACPI_PARSE_OBJECT *
 acpi_ps_get_depth_next (
-	ACPI_GENERIC_OP         *origin,
-	ACPI_GENERIC_OP         *op)
+	ACPI_PARSE_OBJECT       *origin,
+	ACPI_PARSE_OBJECT       *op)
 {
-	ACPI_GENERIC_OP         *next = NULL;
-	ACPI_GENERIC_OP         *parent;
-	ACPI_GENERIC_OP         *arg;
+	ACPI_PARSE_OBJECT       *next = NULL;
+	ACPI_PARSE_OBJECT       *parent;
+	ACPI_PARSE_OBJECT       *arg;
 
 
 	if (!op) {
-		return NULL;
+		return (NULL);
 	}
 
 	/* look for an argument or child */
 
 	next = acpi_ps_get_arg (op, 0);
 	if (next) {
-		return next;
+		return (next);
 	}
 
 	/* look for a sibling */
 
 	next = op->next;
 	if (next) {
-		return next;
+		return (next);
 	}
 
 	/* look for a sibling of parent */
@@ -270,19 +271,19 @@ acpi_ps_get_depth_next (
 		if (arg == origin) {
 			/* reached parent of origin, end search */
 
-			return NULL;
+			return (NULL);
 		}
 
 		if (parent->next) {
 			/* found sibling of parent */
-			return parent->next;
+			return (parent->next);
 		}
 
 		op = parent;
 		parent = parent->parent;
 	}
 
-	return next;
+	return (next);
 }
 
 
@@ -300,10 +301,10 @@ acpi_ps_get_depth_next (
  *
  ******************************************************************************/
 
-ACPI_GENERIC_OP *
+ACPI_PARSE_OBJECT *
 acpi_ps_fetch_prefix (
-	ACPI_GENERIC_OP         *scope,
-	char                    **path,
+	ACPI_PARSE_OBJECT       *scope,
+	NATIVE_CHAR             **path,
 	u32                     io)
 {
 	u32                     prefix = io ? GET8 (*path):**path;
@@ -338,7 +339,7 @@ acpi_ps_fetch_prefix (
 		scope = acpi_ps_get_child (scope);
 	}
 
-	return scope;
+	return (scope);
 }
 
 
@@ -349,7 +350,7 @@ acpi_ps_fetch_prefix (
  * PARAMETERS:  Path            - A string containing the name segment
  *              io              - Direction flag
  *
- * RETURN:      The 4-char ASCII ACPI Name as a u32
+ * RETURN:      The 4-s8 ASCII ACPI Name as a u32
  *
  * DESCRIPTION: Fetch ACPI name segment (dot-delimited)
  *
@@ -357,13 +358,13 @@ acpi_ps_fetch_prefix (
 
 u32
 acpi_ps_fetch_name (
-	char                    **path,
+	NATIVE_CHAR             **path,
 	u32                     io)
 {
 	u32                     name = 0;
-	char                    *nm;
+	NATIVE_CHAR             *nm;
 	u32                     i;
-	char                    ch;
+	NATIVE_CHAR             ch;
 
 
 	if (io) {
@@ -378,7 +379,7 @@ acpi_ps_fetch_name (
 			*path += 1;
 		}
 
-		nm = (char*) &name;
+		nm = (NATIVE_CHAR *) &name;
 		for (i = 0; i < 4; i++) {
 			ch = **path;
 			if (ch && ch != '.') {
@@ -393,7 +394,7 @@ acpi_ps_fetch_name (
 		}
 	}
 
-	return name;
+	return (name);
 }
 
 

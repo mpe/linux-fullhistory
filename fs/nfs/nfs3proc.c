@@ -279,6 +279,7 @@ nfs3_proc_unlink_setup(struct rpc_message *msg, struct dentry *dir, struct qstr 
 	arg->fh = NFS_FH(dir);
 	arg->name = name->name;
 	arg->len = name->len;
+	res->valid = 0;
 	msg->rpc_proc = NFS3PROC_REMOVE;
 	msg->rpc_argp = arg;
 	msg->rpc_resp = res;
@@ -288,10 +289,13 @@ nfs3_proc_unlink_setup(struct rpc_message *msg, struct dentry *dir, struct qstr 
 static void
 nfs3_proc_unlink_done(struct dentry *dir, struct rpc_message *msg)
 {
-	struct nfs_fattr	*dir_attr = (struct nfs_fattr*)msg->rpc_resp;
+	struct nfs_fattr	*dir_attr;
 
-	nfs_refresh_inode(dir->d_inode, dir_attr);
-	kfree(msg->rpc_argp);
+	if (msg->rpc_argp) {
+		dir_attr = (struct nfs_fattr*)msg->rpc_resp;
+		nfs_refresh_inode(dir->d_inode, dir_attr);
+		kfree(msg->rpc_argp);
+	}
 }
 
 static int

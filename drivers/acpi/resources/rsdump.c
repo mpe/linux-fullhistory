@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Module Name: rsdump - Functions do dump out the resource structures.
+ *              $Revision: 10 $
  *
  *****************************************************************************/
 
@@ -26,7 +27,7 @@
 #include "acpi.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
-	 MODULE_NAME         ("rsdump");
+	 MODULE_NAME         ("rsdump")
 
 
 /******************************************************************************
@@ -120,7 +121,7 @@ acpi_rs_dump_dma (
 		break;
 	}
 
-	acpi_os_printf ("\t\t%s_bus Master\n",
+	acpi_os_printf ("\t\t%sBus Master\n",
 			 BUS_MASTER == dma_data->bus_master ?
 			 "" : "Not a ");
 
@@ -802,7 +803,7 @@ void
 acpi_rs_dump_resource_list (
 	RESOURCE            *resource)
 {
-	s8                  count = 0;
+	u8                  count = 0;
 	u8                  done = FALSE;
 
 
@@ -902,7 +903,7 @@ acpi_rs_dump_irq_list (
 	u8                  *route_table)
 {
 	u8                  *buffer = route_table;
-	s8                  count = 0;
+	u8                  count = 0;
 	u8                  done = FALSE;
 	PCI_ROUTING_TABLE   *prt_element;
 

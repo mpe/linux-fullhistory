@@ -258,25 +258,27 @@ static ssize_t read_kmem(struct file *file, char *buf,
 		count -= read;
 	}
 
-	kbuf = (char *)__get_free_page(GFP_KERNEL);
-	if (!kbuf)
-		return -ENOMEM;
-	while (count > 0) {
-		int len = count;
+	if (count > 0) {
+		kbuf = (char *)__get_free_page(GFP_KERNEL);
+		if (!kbuf)
+			return -ENOMEM;
+		while (count > 0) {
+			int len = count;
 
-		if (len > PAGE_SIZE)
-			len = PAGE_SIZE;
-		len = vread(kbuf, (char *)p, len);
-		if (len && copy_to_user(buf, kbuf, len)) {
-			free_page((unsigned long)kbuf);
-			return -EFAULT;
+			if (len > PAGE_SIZE)
+				len = PAGE_SIZE;
+			len = vread(kbuf, (char *)p, len);
+			if (len && copy_to_user(buf, kbuf, len)) {
+				free_page((unsigned long)kbuf);
+				return -EFAULT;
+			}
+			count -= len;
+			buf += len;
+			virtr += len;
+			p += len;
 		}
-		count -= len;
-		buf += len;
-		virtr += len;
-		p += len;
+		free_page((unsigned long)kbuf);
 	}
-	free_page((unsigned long)kbuf);
  	*ppos = p;
  	return virtr + read;
 }

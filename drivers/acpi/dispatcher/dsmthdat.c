@@ -1,9 +1,9 @@
-
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: dsmthdat - control method arguments and local variables
+ *              $Revision: 34 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -25,18 +25,18 @@
 
 
 #include "acpi.h"
-#include "parser.h"
-#include "dispatch.h"
-#include "interp.h"
+#include "acparser.h"
+#include "acdispat.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "namesp.h"
+#include "acnamesp.h"
 
 
 #define _COMPONENT          DISPATCHER
-	 MODULE_NAME         ("dsmthdat");
+	 MODULE_NAME         ("dsmthdat")
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_method_data_init
  *
@@ -49,7 +49,7 @@
  *              This allows Ref_of and De_ref_of to work properly for these
  *              special data types.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_method_data_init (
@@ -62,8 +62,8 @@ acpi_ds_method_data_init (
 	 * Walk_state fields are initialized to zero by the
 	 * Acpi_cm_callocate().
 	 *
-	 * An NTE is assigned to each argument and local so
-	 * that Ref_of() can return a pointer to the NTE.
+	 * An Node is assigned to each argument and local so
+	 * that Ref_of() can return a pointer to the Node.
 	 */
 
 	/* Init the method arguments */
@@ -72,10 +72,9 @@ acpi_ds_method_data_init (
 		MOVE_UNALIGNED32_TO_32 (&walk_state->arguments[i].name,
 				 NAMEOF_ARG_NTE);
 
-		walk_state->arguments[i].name           |= (i << 24);
-		walk_state->arguments[i].data_type      = ACPI_DESC_TYPE_NAMED;
-		walk_state->arguments[i].type           =
-				   INTERNAL_TYPE_METHOD_ARGUMENT;
+		walk_state->arguments[i].name      |= (i << 24);
+		walk_state->arguments[i].data_type  = ACPI_DESC_TYPE_NAMED;
+		walk_state->arguments[i].type       = INTERNAL_TYPE_METHOD_ARGUMENT;
 	}
 
 	/* Init the method locals */
@@ -84,18 +83,16 @@ acpi_ds_method_data_init (
 		MOVE_UNALIGNED32_TO_32 (&walk_state->local_variables[i].name,
 				 NAMEOF_LOCAL_NTE);
 
-		walk_state->local_variables[i].name     |= (i << 24);
+		walk_state->local_variables[i].name  |= (i << 24);
 		walk_state->local_variables[i].data_type = ACPI_DESC_TYPE_NAMED;
-		walk_state->local_variables[i].type     =
-				   INTERNAL_TYPE_METHOD_LOCAL_VAR;
+		walk_state->local_variables[i].type   = INTERNAL_TYPE_METHOD_LOCAL_VAR;
 	}
-
 
 	return (AE_OK);
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_method_data_delete_all
  *
@@ -106,14 +103,14 @@ acpi_ds_method_data_init (
  * DESCRIPTION: Delete method locals and arguments.  Arguments are only
  *              deleted if this method was called from another method.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_method_data_delete_all (
 	ACPI_WALK_STATE         *walk_state)
 {
 	u32                     index;
-	ACPI_OBJECT_INTERNAL    *object;
+	ACPI_OPERAND_OBJECT     *object;
 
 
 	/* Delete the locals */
@@ -122,8 +119,11 @@ acpi_ds_method_data_delete_all (
 		object = walk_state->local_variables[index].object;
 		if (object) {
 			/* Remove first */
+
 			walk_state->local_variables[index].object = NULL;
+
 			/* Was given a ref when stored */
+
 			acpi_cm_remove_reference (object);
 	   }
 	}
@@ -135,8 +135,11 @@ acpi_ds_method_data_delete_all (
 		object = walk_state->arguments[index].object;
 		if (object) {
 			/* Remove first */
+
 			walk_state->arguments[index].object = NULL;
+
 			 /* Was given a ref when stored */
+
 			acpi_cm_remove_reference (object);
 		}
 	}
@@ -145,7 +148,7 @@ acpi_ds_method_data_delete_all (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_method_data_init_args
  *
@@ -155,12 +158,13 @@ acpi_ds_method_data_delete_all (
  *
  * DESCRIPTION: Initialize arguments for a method
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_method_data_init_args (
-	ACPI_OBJECT_INTERNAL    **params,
-	u32                     max_param_count)
+	ACPI_OPERAND_OBJECT     **params,
+	u32                     max_param_count,
+	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status;
 	u32                     mindex;
@@ -183,9 +187,8 @@ acpi_ds_method_data_init_args (
 			 * Set the current method argument to the
 			 * Params[Pindex++] argument object descriptor
 			 */
-			status = acpi_ds_method_data_set_value (MTH_TYPE_ARG,
-					 mindex,
-					 params[pindex]);
+			status = acpi_ds_method_data_set_value (MTH_TYPE_ARG, mindex,
+					 params[pindex], walk_state);
 			if (ACPI_FAILURE (status)) {
 				break;
 			}
@@ -202,7 +205,7 @@ acpi_ds_method_data_init_args (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_method_data_get_entry
  *
@@ -215,18 +218,16 @@ acpi_ds_method_data_init_args (
  *
  * DESCRIPTION: Get the address of the stack entry given by Type:Index
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_method_data_get_entry (
 	u32                     type,
 	u32                     index,
-	ACPI_OBJECT_INTERNAL    ***entry)
+	ACPI_WALK_STATE         *walk_state,
+	ACPI_OPERAND_OBJECT     ***entry)
 {
-	ACPI_WALK_STATE         *walk_state;
 
-
-	walk_state = acpi_ds_get_current_walk_state (acpi_gbl_current_walk_list);
 
 	/*
 	 * Get the requested object.
@@ -243,7 +244,7 @@ acpi_ds_method_data_get_entry (
 		}
 
 		*entry =
-			(ACPI_OBJECT_INTERNAL **) &walk_state->local_variables[index].object;
+			(ACPI_OPERAND_OBJECT  **) &walk_state->local_variables[index].object;
 		break;
 
 
@@ -254,7 +255,7 @@ acpi_ds_method_data_get_entry (
 		}
 
 		*entry =
-			(ACPI_OBJECT_INTERNAL **) &walk_state->arguments[index].object;
+			(ACPI_OPERAND_OBJECT  **) &walk_state->arguments[index].object;
 		break;
 
 
@@ -267,7 +268,7 @@ acpi_ds_method_data_get_entry (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_method_data_set_entry
  *
@@ -279,21 +280,22 @@ acpi_ds_method_data_get_entry (
  *
  * DESCRIPTION: Insert an object onto the method stack at entry Type:Index.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_method_data_set_entry (
 	u32                     type,
 	u32                     index,
-	ACPI_OBJECT_INTERNAL    *object)
+	ACPI_OPERAND_OBJECT     *object,
+	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    **entry;
+	ACPI_OPERAND_OBJECT     **entry;
 
 
 	/* Get a pointer to the stack entry to set */
 
-	status = acpi_ds_method_data_get_entry (type, index, &entry);
+	status = acpi_ds_method_data_get_entry (type, index, walk_state, &entry);
 	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
@@ -310,7 +312,7 @@ acpi_ds_method_data_set_entry (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_method_data_get_type
  *
@@ -321,21 +323,22 @@ acpi_ds_method_data_set_entry (
  * RETURN:      Data type of selected Arg or Local
  *              Used only in Exec_monadic2()/Type_op.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 OBJECT_TYPE_INTERNAL
 acpi_ds_method_data_get_type (
 	u32                     type,
-	u32                     index)
+	u32                     index,
+	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    **entry;
-	ACPI_OBJECT_INTERNAL    *object;
+	ACPI_OPERAND_OBJECT     **entry;
+	ACPI_OPERAND_OBJECT     *object;
 
 
 	/* Get a pointer to the requested stack entry */
 
-	status = acpi_ds_method_data_get_entry (type, index, &entry);
+	status = acpi_ds_method_data_get_entry (type, index, walk_state, &entry);
 	if (ACPI_FAILURE (status)) {
 		return ((ACPI_TYPE_NOT_FOUND));
 	}
@@ -355,7 +358,7 @@ acpi_ds_method_data_get_type (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_method_data_get_nte
  *
@@ -363,20 +366,17 @@ acpi_ds_method_data_get_type (
  *              Index               - Which local_var or argument whose type
  *                                      to get
  *
- * RETURN:      Get the NTE associated with a local or arg.
+ * RETURN:      Get the Node associated with a local or arg.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
-ACPI_NAMED_OBJECT*
+ACPI_NAMESPACE_NODE *
 acpi_ds_method_data_get_nte (
 	u32                     type,
-	u32                     index)
+	u32                     index,
+	ACPI_WALK_STATE         *walk_state)
 {
-	ACPI_NAMED_OBJECT       *entry = NULL;
-	ACPI_WALK_STATE         *walk_state;
-
-
-	walk_state = acpi_ds_get_current_walk_state (acpi_gbl_current_walk_list);
+	ACPI_NAMESPACE_NODE     *node = NULL;
 
 
 	switch (type)
@@ -385,20 +385,20 @@ acpi_ds_method_data_get_nte (
 	case MTH_TYPE_LOCAL:
 
 		if (index > MTH_MAX_LOCAL) {
-			return (entry);
+			return (node);
 		}
 
-		entry =  &walk_state->local_variables[index];
+		node =  &walk_state->local_variables[index];
 		break;
 
 
 	case MTH_TYPE_ARG:
 
 		if (index > MTH_MAX_ARG) {
-			return (entry);
+			return (node);
 		}
 
-		entry = &walk_state->arguments[index];
+		node = &walk_state->arguments[index];
 		break;
 
 
@@ -407,11 +407,11 @@ acpi_ds_method_data_get_nte (
 	}
 
 
-	return (entry);
+	return (node);
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_method_data_get_value
  *
@@ -426,17 +426,18 @@ acpi_ds_method_data_get_nte (
  *              at the current top of the method stack.
  *              Used only in Acpi_aml_resolve_to_value().
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_method_data_get_value (
 	u32                     type,
 	u32                     index,
-	ACPI_OBJECT_INTERNAL    **dest_desc)
+	ACPI_WALK_STATE         *walk_state,
+	ACPI_OPERAND_OBJECT     **dest_desc)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    **entry;
-	ACPI_OBJECT_INTERNAL    *object;
+	ACPI_OPERAND_OBJECT     **entry;
+	ACPI_OPERAND_OBJECT     *object;
 
 
 	/* Validate the object descriptor */
@@ -448,7 +449,7 @@ acpi_ds_method_data_get_value (
 
 	/* Get a pointer to the requested method stack entry */
 
-	status = acpi_ds_method_data_get_entry (type, index, &entry);
+	status = acpi_ds_method_data_get_entry (type, index, walk_state, &entry);
 	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
@@ -494,7 +495,7 @@ acpi_ds_method_data_get_value (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_method_data_delete_value
  *
@@ -506,21 +507,22 @@ acpi_ds_method_data_get_value (
  * DESCRIPTION: Delete the entry at Type:Index on the method stack.  Inserts
  *              a null into the stack slot after the object is deleted.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_method_data_delete_value (
 	u32                     type,
-	u32                     index)
+	u32                     index,
+	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    **entry;
-	ACPI_OBJECT_INTERNAL    *object;
+	ACPI_OPERAND_OBJECT     **entry;
+	ACPI_OPERAND_OBJECT     *object;
 
 
 	/* Get a pointer to the requested entry */
 
-	status = acpi_ds_method_data_get_entry (type, index, &entry);
+	status = acpi_ds_method_data_get_entry (type, index, walk_state, &entry);
 	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
@@ -532,7 +534,7 @@ acpi_ds_method_data_delete_value (
 	/*
 	 * Undefine the Arg or Local by setting its descriptor
 	 * pointer to NULL. Locals/Args can contain both
-	 * ACPI_OBJECT_INTERNALS and ACPI_NAMED_OBJECTs
+	 * ACPI_OPERAND_OBJECTS and ACPI_NAMESPACE_NODEs
 	 */
 	*entry = NULL;
 
@@ -554,7 +556,7 @@ acpi_ds_method_data_delete_value (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_method_data_set_value
  *
@@ -573,16 +575,17 @@ acpi_ds_method_data_delete_value (
  *              as the new value for the Arg or Local and the reference count
  *              is incremented.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_method_data_set_value (
 	u32                     type,
 	u32                     index,
-	ACPI_OBJECT_INTERNAL    *src_desc)
+	ACPI_OPERAND_OBJECT     *src_desc,
+	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    **entry;
+	ACPI_OPERAND_OBJECT     **entry;
 
 
 	/* Parameter validation */
@@ -594,7 +597,7 @@ acpi_ds_method_data_set_value (
 
 	/* Get a pointer to the requested method stack entry */
 
-	status = acpi_ds_method_data_get_entry (type, index, &entry);
+	status = acpi_ds_method_data_get_entry (type, index, walk_state, &entry);
 	if (ACPI_FAILURE (status)) {
 		goto cleanup;
 	}
@@ -614,7 +617,7 @@ acpi_ds_method_data_set_value (
 	if (*entry) {
 		/*
 		 * Check for an indirect store if an argument
-		 * contains an object reference (stored as an NTE).
+		 * contains an object reference (stored as an Node).
 		 * We don't allow this automatic dereferencing for
 		 * locals, since a store to a local should overwrite
 		 * anything there, including an object reference.
@@ -632,16 +635,16 @@ acpi_ds_method_data_set_value (
 		if ((type == MTH_TYPE_ARG) &&
 			(VALID_DESCRIPTOR_TYPE (*entry, ACPI_DESC_TYPE_NAMED)))
 		{
-			/* Detach an existing object from the NTE */
+			/* Detach an existing object from the Node */
 
-			acpi_ns_detach_object (*entry);
+			acpi_ns_detach_object ((ACPI_NAMESPACE_NODE *) *entry);
 
 			/*
-			 * Store this object into the NTE
+			 * Store this object into the Node
 			 * (do the indirect store)
 			 */
 
-			status = acpi_ns_attach_object (*entry, src_desc,
+			status = acpi_ns_attach_object ((ACPI_NAMESPACE_NODE *) *entry, src_desc,
 					   src_desc->common.type);
 			return (status);
 		}
@@ -652,7 +655,7 @@ acpi_ds_method_data_set_value (
 		 * before storing the new one
 		 */
 
-		acpi_ds_method_data_delete_value (type, index);
+		acpi_ds_method_data_delete_value (type, index, walk_state);
 	}
 
 
@@ -663,7 +666,7 @@ acpi_ds_method_data_set_value (
 	 * (increments the object reference count by one)
 	 */
 
-	status = acpi_ds_method_data_set_entry (type, index, src_desc);
+	status = acpi_ds_method_data_set_entry (type, index, src_desc, walk_state);
 	if (ACPI_FAILURE (status)) {
 		goto cleanup;
 	}

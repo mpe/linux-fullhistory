@@ -2,6 +2,7 @@
  *
  * Module Name: evxfregn - External Interfaces, ACPI Operation Regions and
  *                         Address Spaces.
+ *              $Revision: 20 $
  *
  *****************************************************************************/
 
@@ -25,14 +26,14 @@
 
 
 #include "acpi.h"
-#include "hardware.h"
-#include "namesp.h"
-#include "events.h"
+#include "achware.h"
+#include "acnamesp.h"
+#include "acevents.h"
 #include "amlcode.h"
-#include "interp.h"
+#include "acinterp.h"
 
 #define _COMPONENT          EVENT_HANDLING
-	 MODULE_NAME         ("evxfregn");
+	 MODULE_NAME         ("evxfregn")
 
 
 /******************************************************************************
@@ -59,9 +60,9 @@ acpi_install_address_space_handler (
 	ADDRESS_SPACE_SETUP     setup,
 	void                    *context)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_OBJECT_INTERNAL    *handler_obj;
-	ACPI_NAMED_OBJECT       *obj_entry;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_OPERAND_OBJECT     *handler_obj;
+	ACPI_NAMESPACE_NODE     *node;
 	ACPI_STATUS             status = AE_OK;
 	OBJECT_TYPE_INTERNAL    type;
 	u16                     flags = 0;
@@ -80,8 +81,8 @@ acpi_install_address_space_handler (
 
 	/* Convert and validate the device handle */
 
-	obj_entry = acpi_ns_convert_handle_to_entry (device);
-	if (!obj_entry) {
+	node = acpi_ns_convert_handle_to_entry (device);
+	if (!node) {
 		status = AE_BAD_PARAMETER;
 		goto unlock_and_exit;
 	}
@@ -92,10 +93,10 @@ acpi_install_address_space_handler (
 	 *  get placed.
 	 */
 
-	if ((obj_entry->type != ACPI_TYPE_DEVICE)    &&
-		(obj_entry->type != ACPI_TYPE_PROCESSOR) &&
-		(obj_entry->type != ACPI_TYPE_THERMAL)   &&
-		(obj_entry != acpi_gbl_root_object))
+	if ((node->type != ACPI_TYPE_DEVICE)     &&
+		(node->type != ACPI_TYPE_PROCESSOR)  &&
+		(node->type != ACPI_TYPE_THERMAL)    &&
+		(node != acpi_gbl_root_node))
 	{
 		status = AE_BAD_PARAMETER;
 		goto unlock_and_exit;
@@ -139,7 +140,7 @@ acpi_install_address_space_handler (
 	 *  Check for an existing internal object
 	 */
 
-	obj_desc = acpi_ns_get_attached_object ((ACPI_HANDLE) obj_entry);
+	obj_desc = acpi_ns_get_attached_object ((ACPI_HANDLE) node);
 	if (obj_desc) {
 		/*
 		 *  The object exists.
@@ -162,19 +163,19 @@ acpi_install_address_space_handler (
 			/*
 			 *  Move through the linked list of handlers
 			 */
-			handler_obj = handler_obj->addr_handler.link;
+			handler_obj = handler_obj->addr_handler.next;
 		}
 	}
 
 	else {
 		/* Obj_desc does not exist, create one */
 
-		if (obj_entry->type == ACPI_TYPE_ANY) {
+		if (node->type == ACPI_TYPE_ANY) {
 			type = ACPI_TYPE_DEVICE;
 		}
 
 		else {
-			type = obj_entry->type;
+			type = node->type;
 		}
 
 		obj_desc = acpi_cm_create_internal_object (type);
@@ -187,18 +188,12 @@ acpi_install_address_space_handler (
 
 		obj_desc->common.type = (u8) type;
 
-		/* Attach the new object to the NTE */
+		/* Attach the new object to the Node */
 
 		status = acpi_ns_attach_object (device, obj_desc, (u8) type);
 		if (ACPI_FAILURE (status)) {
 			acpi_cm_remove_reference (obj_desc);
 			goto unlock_and_exit;
-		}
-
-		/* TBD: [Investigate] Will this always be of type DEVICE? */
-
-		if (type == ACPI_TYPE_DEVICE) {
-			obj_desc->device.handle = device;
 		}
 	}
 
@@ -215,11 +210,11 @@ acpi_install_address_space_handler (
 		goto unlock_and_exit;
 	}
 
-	handler_obj->addr_handler.space_id  = (u16) space_id;
+	handler_obj->addr_handler.space_id  = (u8) space_id;
 	handler_obj->addr_handler.hflags    = flags;
-	handler_obj->addr_handler.link      = obj_desc->device.addr_handler;
+	handler_obj->addr_handler.next      = obj_desc->device.addr_handler;
 	handler_obj->addr_handler.region_list = NULL;
-	handler_obj->addr_handler.nte       = obj_entry;
+	handler_obj->addr_handler.node      = node;
 	handler_obj->addr_handler.handler   = handler;
 	handler_obj->addr_handler.context   = context;
 	handler_obj->addr_handler.setup     = setup;
@@ -237,7 +232,7 @@ acpi_install_address_space_handler (
 	 *  of the branch
 	 */
 	status = acpi_ns_walk_namespace (ACPI_TYPE_ANY, device,
-			 ACPI_INT32_MAX, NS_WALK_NO_UNLOCK,
+			 ACPI_UINT32_MAX, NS_WALK_UNLOCK,
 			 acpi_ev_addr_handler_helper,
 			 handler_obj, NULL);
 
@@ -276,11 +271,11 @@ acpi_remove_address_space_handler (
 	ACPI_ADDRESS_SPACE_TYPE space_id,
 	ADDRESS_SPACE_HANDLER   handler)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_OBJECT_INTERNAL    *handler_obj;
-	ACPI_OBJECT_INTERNAL    *region_obj;
-	ACPI_OBJECT_INTERNAL    **last_obj_ptr;
-	ACPI_NAMED_OBJECT       *obj_entry;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_OPERAND_OBJECT     *handler_obj;
+	ACPI_OPERAND_OBJECT     *region_obj;
+	ACPI_OPERAND_OBJECT     **last_obj_ptr;
+	ACPI_NAMESPACE_NODE     *node;
 	ACPI_STATUS             status = AE_OK;
 
 
@@ -297,8 +292,8 @@ acpi_remove_address_space_handler (
 
 	/* Convert and validate the device handle */
 
-	obj_entry = acpi_ns_convert_handle_to_entry (device);
-	if (!obj_entry) {
+	node = acpi_ns_convert_handle_to_entry (device);
+	if (!node) {
 		status = AE_BAD_PARAMETER;
 		goto unlock_and_exit;
 	}
@@ -306,7 +301,7 @@ acpi_remove_address_space_handler (
 
 	/* Make sure the internal object exists */
 
-	obj_desc = acpi_ns_get_attached_object ((ACPI_HANDLE) obj_entry);
+	obj_desc = acpi_ns_get_attached_object ((ACPI_HANDLE) node);
 	if (!obj_desc) {
 		/*
 		 *  The object DNE.
@@ -356,7 +351,7 @@ acpi_remove_address_space_handler (
 			/*
 			 *  Remove this Handler object from the list
 			 */
-			*last_obj_ptr = handler_obj->addr_handler.link;
+			*last_obj_ptr = handler_obj->addr_handler.next;
 
 			/*
 			 *  Now we can delete the handler object
@@ -370,8 +365,8 @@ acpi_remove_address_space_handler (
 		/*
 		 *  Move through the linked list of handlers
 		 */
-		last_obj_ptr = &handler_obj->addr_handler.link;
-		handler_obj = handler_obj->addr_handler.link;
+		last_obj_ptr = &handler_obj->addr_handler.next;
+		handler_obj = handler_obj->addr_handler.next;
 	}
 
 

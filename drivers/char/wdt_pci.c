@@ -29,6 +29,7 @@
  *		JP Nollmann	:	Added support for PCI wdt501p
  *		Alan Cox	:	Split ISA and PCI cards into two drivers
  *		Jeff Garzik	:	PCI cleanups
+ *		Tigran Aivazian	:	Restructured wdtpci_init_one() to handle failures
  */
 
 #include <linux/config.h>
@@ -70,7 +71,7 @@
 #define PCI_DEVICE_ID_WDG_CSM 0x22c0
 #endif
 
-static int wdt_is_open=0;
+static int wdt_is_open;
 
 /*
  *	You must set these - there is no sane way to probe for this board.
@@ -499,6 +500,7 @@ static int __init wdtpci_init_one (struct pci_dev *dev,
 				   const struct pci_device_id *ent)
 {
 	static int dev_count = 0;
+	int ret = -EIO;
 
 	dev_count++;
 	if (dev_count > 1) {
@@ -513,33 +515,53 @@ static int __init wdtpci_init_one (struct pci_dev *dev,
 		"(Interrupt %d)\n", io, irq);
 
 	if (pci_enable_device (dev))
-		goto err_out;
+		goto out;
 
 	if (request_region (io, 16, "wdt-pci") == NULL) {
 		printk (KERN_ERR PFX "I/O %d is not free.\n", io);
-		goto err_out;
+		goto out;
 	}
 
 	if (request_irq (irq, wdtpci_interrupt, SA_INTERRUPT | SA_SHIRQ,
 			 "wdt-pci", &wdtpci_miscdev)) {
 		printk (KERN_ERR PFX "IRQ %d is not free.\n", irq);
-		goto err_out_free_res;
+		goto out_reg;
 	}
 
-	misc_register (&wdtpci_miscdev);
+	ret = misc_register (&wdtpci_miscdev);
+	if (ret) {
+		printk (KERN_ERR PFX "can't misc_register on minor=%d\n", WATCHDOG_MINOR);
+		goto out_irq;
+	}
 
+	ret = register_reboot_notifier (&wdtpci_notifier);
+	if (ret) {
+		printk (KERN_ERR PFX "can't misc_register on minor=%d\n", WATCHDOG_MINOR);
+		goto out_misc;
+	}
 #ifdef CONFIG_WDT_501
-	misc_register (&temp_miscdev);
+	ret = misc_register (&temp_miscdev);
+	if (ret) {
+		printk (KERN_ERR PFX "can't misc_register (temp) on minor=%d\n", TEMP_MINOR);
+		goto out_rbt;
+	}
 #endif
 
-	register_reboot_notifier (&wdtpci_notifier);
+	ret = 0;
+out:
+	return ret;
 
-	return 0;
-
-err_out_free_res:
+#ifdef CONFIG_WDT_501
+out_rbt:
+	unregister_reboot_notifier(&wdtpci_notifier);
+#endif
+out_misc:
+	misc_deregister(&wdtpci_miscdev);
+out_irq:
+	free_irq(irq, &wdtpci_miscdev);
+out_reg:
 	release_region (io, 16);
-err_out:
-	return -EIO;
+	goto out;
 }
 
 

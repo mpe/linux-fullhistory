@@ -2,8 +2,8 @@
  *
  * Name:	skhwt.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.4 $
- * Date:	$Date: 1998/08/19 09:50:58 $
+ * Version:	$Revision: 1.5 $
+ * Date:	$Date: 1999/11/22 13:54:24 $
  * Purpose:	Defines for the hardware timer functions
  *
  ******************************************************************************/
@@ -27,6 +27,9 @@
  * History:
  *
  *	$Log: skgehwt.h,v $
+ *	Revision 1.5  1999/11/22 13:54:24  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.4  1998/08/19 09:50:58  gklug
  *	fix: remove struct keyword from c-code (see CCC) add typedefs
  *	

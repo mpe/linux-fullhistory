@@ -2,8 +2,8 @@
  *
  * Name:	skqueue.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.14 $
- * Date:	$Date: 1998/10/15 15:11:35 $
+ * Version:	$Revision: 1.15 $
+ * Date:	$Date: 1999/11/22 13:36:29 $
  * Purpose:	Management of an event queue.
  *
  ******************************************************************************/
@@ -12,8 +12,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -29,6 +27,9 @@
  * History:
  *
  *	$Log: skqueue.c,v $
+ *	Revision 1.15  1999/11/22 13:36:29  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.14  1998/10/15 15:11:35  gklug
  *	fix: ID_sccs to SysKonnectFileId
  *	
@@ -81,7 +82,7 @@
 	Event queue and dispatcher
 */
 static const char SysKonnectFileId[] =
-	"$Header: /usr56/projects/ge/schedule/skqueue.c,v 1.14 1998/10/15 15:11:35 gklug Exp $" ;
+	"$Header: /usr56/projects/ge/schedule/skqueue.c,v 1.15 1999/11/22 13:36:29 cgoos Exp $" ;
 
 #include "h/skdrv1st.h"		/* Driver Specific Definitions */
 #include "h/skqueue.h"		/* Queue Definitions */

@@ -2,8 +2,8 @@
  *
  * Name:	ski2c.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.41 $
- * Date:	$Date: 1999/09/14 14:11:30 $
+ * Version:	$Revision: 1.44 $
+ * Date:	$Date: 2000/08/07 15:49:03 $
  * Purpose:	Funktions to access Voltage and Temperature Sensor
  *		(taken from Monalisa (taken from Concentrator))
  *
@@ -11,10 +11,8 @@
 
 /******************************************************************************
  *
- *	(C)Copyright 1998,1999 SysKonnect,
+ *	(C)Copyright 1998-2000 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -30,6 +28,16 @@
  * History:
  *
  *	$Log: ski2c.c,v $
+ *	Revision 1.44  2000/08/07 15:49:03  gklug
+ *	fix: SK_INFAST only in NetWare driver
+ *	
+ *	Revision 1.43  2000/08/03 14:28:17  rassmann
+ *	- Added function to wait for I2C being ready before resetting the board.
+ *	- Replaced one duplicate "out of range" message with correct one.
+ *	
+ *	Revision 1.42  1999/11/22 13:35:12  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.41  1999/09/14 14:11:30  malthoff
  *	The 1000BT Dual Link adapter has got only one Fan.
  *	The second Fan has been removed.
@@ -172,10 +180,10 @@
 
 
 /*
-	i2C Protocol
+	I2C Protocol
 */
 static const char SysKonnectFileId[] =
-	"$Id: ski2c.c,v 1.41 1999/09/14 14:11:30 malthoff Exp $" ;
+	"$Id: ski2c.c,v 1.44 2000/08/07 15:49:03 gklug Exp $";
 
 #include "h/skdrv1st.h"		/* Driver Specific Definitions */
 #include "h/lm80.h"
@@ -193,9 +201,9 @@ static const char SysKonnectFileId[] =
 	This file covers functions that allow to read write and do
 	some bulk requests a specified I2C address.
 
-	The Genesis has 2 I2C busses. One for the EEPROM which holds
+	The Genesis has 2 I2C buses. One for the EEPROM which holds
 	the VPD Data and one for temperature and voltage sensor.
-	The following picture shows the I2C busses, I2C devices and
+	The following picture shows the I2C buses, I2C devices and
 	there control registers.
 
 	Note: The VPD functions are in skvpd.c
@@ -292,13 +300,13 @@ intro()
  * serial data line simultaneously (ASIC: last bit of a byte = '1', I2C client
  * send an 'ACK'). See also Concentrator Bugreport No. 10192.
  */
-#define I2C_DATA_HIGH(IoC)	SK_I2C_SET_BIT(IoC,I2C_DATA)
-#define	I2C_DATA_LOW(IoC)	SK_I2C_CLR_BIT(IoC,I2C_DATA)
-#define	I2C_DATA_OUT(IoC)	SK_I2C_SET_BIT(IoC,I2C_DATA_DIR)
-#define	I2C_DATA_IN(IoC)	SK_I2C_CLR_BIT(IoC,I2C_DATA_DIR|I2C_DATA)
-#define	I2C_CLK_HIGH(IoC)	SK_I2C_SET_BIT(IoC,I2C_CLK)
-#define	I2C_CLK_LOW(IoC)	SK_I2C_CLR_BIT(IoC,I2C_CLK|I2C_DATA_DIR)
-#define	I2C_START_COND(IoC)	SK_I2C_CLR_BIT(IoC,I2C_CLK)
+#define I2C_DATA_HIGH(IoC)	SK_I2C_SET_BIT(IoC, I2C_DATA)
+#define	I2C_DATA_LOW(IoC)	SK_I2C_CLR_BIT(IoC, I2C_DATA)
+#define	I2C_DATA_OUT(IoC)	SK_I2C_SET_BIT(IoC, I2C_DATA_DIR)
+#define	I2C_DATA_IN(IoC)	SK_I2C_CLR_BIT(IoC, I2C_DATA_DIR|I2C_DATA)
+#define	I2C_CLK_HIGH(IoC)	SK_I2C_SET_BIT(IoC, I2C_CLK)
+#define	I2C_CLK_LOW(IoC)	SK_I2C_CLR_BIT(IoC, I2C_CLK|I2C_DATA_DIR)
+#define	I2C_START_COND(IoC)	SK_I2C_CLR_BIT(IoC, I2C_CLK)
 
 #define NS2CLKT(x)	((x*125L)/10000)
 
@@ -308,25 +316,24 @@ intro()
  * sending one bit
  */
 void SkI2cSndBit(
-SK_IOC	IoC,	/* IoContext */
+SK_IOC	IoC,	/* I/O Context */
 SK_U8	Bit)	/* Bit to send */
 {
-	I2C_DATA_OUT(IoC) ;
+	I2C_DATA_OUT(IoC);
 	if (Bit) {
 		I2C_DATA_HIGH(IoC);
 	} else {
 		I2C_DATA_LOW(IoC);
 	}
-	SkDgWaitTime(IoC,NS2BCLK(T_DATA_IN_SETUP));
+	SkDgWaitTime(IoC, NS2BCLK(T_DATA_IN_SETUP));
 	I2C_CLK_HIGH(IoC);
-	SkDgWaitTime(IoC,NS2BCLK(T_CLK_HIGH));
+	SkDgWaitTime(IoC, NS2BCLK(T_CLK_HIGH));
 	I2C_CLK_LOW(IoC);
-}
-
+}	/* SkI2cSndBit*/
 
 
 /*
- * Signal a start to the i2C Bus.
+ * Signal a start to the I2C Bus.
  *
  * A start is signaled when data goes to low in a high clock cycle.
  *
@@ -334,66 +341,70 @@ SK_U8	Bit)	/* Bit to send */
  *
  * Status: not tested
  */
-void SkI2cStart(SK_IOC	IoC)	/* I/O Context */
+void SkI2cStart(
+SK_IOC	IoC)	/* I/O Context */
 {
 	/* Init data and Clock to output lines */
 	/* Set Data high */
-	I2C_DATA_OUT(IoC) ;
-	I2C_DATA_HIGH(IoC) ;
+	I2C_DATA_OUT(IoC);
+	I2C_DATA_HIGH(IoC);
 	/* Set Clock high */
-	I2C_CLK_HIGH(IoC) ;
+	I2C_CLK_HIGH(IoC);
 
-	SkDgWaitTime(IoC,NS2BCLK(T_START_SETUP)) ;
+	SkDgWaitTime(IoC, NS2BCLK(T_START_SETUP));
 
 	/* Set Data Low */
-	I2C_DATA_LOW(IoC) ;
+	I2C_DATA_LOW(IoC);
 
-	SkDgWaitTime(IoC,NS2BCLK(T_START_HOLD)) ;
+	SkDgWaitTime(IoC, NS2BCLK(T_START_HOLD));
 
 	/* Clock low without Data to Input */
-	I2C_START_COND(IoC) ;
+	I2C_START_COND(IoC);
 
-	SkDgWaitTime(IoC,NS2BCLK(T_CLK_LOW)) ;
-}
+	SkDgWaitTime(IoC, NS2BCLK(T_CLK_LOW));
+}	/* SkI2cStart */
 
 
-void SkI2cStop(SK_IOC	IoC)	/* I/O Context */
+void SkI2cStop(
+SK_IOC	IoC)	/* I/O Context */
 {
 	/* Init data and Clock to output lines */
 	/* Set Data low */
-	I2C_DATA_OUT(IoC) ;
-	I2C_DATA_LOW(IoC) ;
+	I2C_DATA_OUT(IoC);
+	I2C_DATA_LOW(IoC);
 
-	SkDgWaitTime(IoC,NS2BCLK(T_CLK_2_DATA_OUT)) ;
+	SkDgWaitTime(IoC, NS2BCLK(T_CLK_2_DATA_OUT));
 
 	/* Set Clock high */
-	I2C_CLK_HIGH(IoC) ;
+	I2C_CLK_HIGH(IoC);
 
-	SkDgWaitTime(IoC,NS2BCLK(T_STOP_SETUP)) ;
+	SkDgWaitTime(IoC, NS2BCLK(T_STOP_SETUP));
 
 	/*
 	 * Set Data High:	Do it by setting the Data Line to Input.
 	 *			Because of a pull up resistor the Data Line
 	 *			floods to high.
 	 */
-	I2C_DATA_IN(IoC) ;
+	I2C_DATA_IN(IoC);
 
 	/*
 	 *	When I2C activity is stopped
 	 *	 o	DATA should be set to input and
 	 *	 o	CLOCK should be set to high!
 	 */
-	SkDgWaitTime(IoC,NS2BCLK(T_BUS_IDLE)) ;
-}
+	SkDgWaitTime(IoC, NS2BCLK(T_BUS_IDLE));
+}	/* SkI2cStop */
+
 
 /*
- * Receive just one bit via the i2C bus.
+ * Receive just one bit via the I2C bus.
  *
  * Note:	Clock must be set to LOW before calling this function.
  *
  * Returns The received bit.
  */
-int SkI2cRcvBit(SK_IOC	IoC)	/* I/O Context */
+int SkI2cRcvBit(
+SK_IOC	IoC)	/* I/O Context */
 {
 	int	Bit;
 	SK_U8	I2cSwCtrl;
@@ -401,13 +412,13 @@ int SkI2cRcvBit(SK_IOC	IoC)	/* I/O Context */
 	/* Init data as input line */
 	I2C_DATA_IN(IoC);
 
-	SkDgWaitTime(IoC,NS2BCLK(T_CLK_2_DATA_OUT)) ;
+	SkDgWaitTime(IoC, NS2BCLK(T_CLK_2_DATA_OUT));
 
 	I2C_CLK_HIGH(IoC);
 
-	SkDgWaitTime(IoC,NS2BCLK(T_CLK_HIGH)) ;
+	SkDgWaitTime(IoC, NS2BCLK(T_CLK_HIGH));
 
-	SK_I2C_GET_SW(IoC,&I2cSwCtrl) ;
+	SK_I2C_GET_SW(IoC, &I2cSwCtrl);
 	if (I2cSwCtrl & I2C_DATA) {
 		Bit = 1;
 	} else {
@@ -415,10 +426,11 @@ int SkI2cRcvBit(SK_IOC	IoC)	/* I/O Context */
 	}
 
 	I2C_CLK_LOW(IoC);
-	SkDgWaitTime(IoC,NS2BCLK(T_CLK_LOW-T_CLK_2_DATA_OUT)) ;
+	SkDgWaitTime(IoC, NS2BCLK(T_CLK_LOW-T_CLK_2_DATA_OUT));
 
 	return(Bit);
-}
+}	/* SkI2cRcvBit */
+
 
 /*
  * Receive an ACK.
@@ -426,58 +438,64 @@ int SkI2cRcvBit(SK_IOC	IoC)	/* I/O Context */
  * returns	0 If acknoledged
  *		1 in case of an error
  */
-int SkI2cRcvAck(SK_IOC IoC)	/* I/O Context */
+int SkI2cRcvAck(
+SK_IOC IoC)	/* I/O Context */
 {
 	/*
 	 * Received bit must be zero.
 	 */
-	return (SkI2cRcvBit(IoC) != 0) ;
-}
+	return (SkI2cRcvBit(IoC) != 0);
+}	/* SkI2cRcvAck */
+
 
 /*
  * Send an NACK.
  */
-void SkI2cSndNAck(SK_IOC IoC)	/* I/O Context */
+void SkI2cSndNAck(
+SK_IOC IoC)	/* I/O Context */
 {
 	/*
 	 * Received bit must be zero.
 	 */
-	SkI2cSndBit(IoC,1) ;
-}
+	SkI2cSndBit(IoC, 1);
+}	/* SkI2cSndNAck */
+
 
 /*
  * Send an ACK.
  */
-void SkI2cSndAck(SK_IOC IoC)	/* I/O Context */
+void SkI2cSndAck(
+SK_IOC IoC)	/* I/O Context */
 {
 	/*
 	 * Received bit must be zero.
 	 *
 	 */
-	SkI2cSndBit(IoC,0) ;
-}
+	SkI2cSndBit(IoC, 0);
+}	/* SkI2cSndAck */
+
 
 /*
- * Send one byte to the i2C device and wait for ACK.
+ * Send one byte to the I2C device and wait for ACK.
  *
  * Return acknoleged status.
  */
 int SkI2cSndByte(
 SK_IOC	IoC,	/* I/O Context */
-int	Byte)	/* byte to send */
+int	Byte)		/* byte to send */
 {
 	int	i;
 
 	for (i=0; i<8; i++) {
 		if (Byte & (1<<(7-i))) {
-			SkI2cSndBit(IoC,1) ;
+			SkI2cSndBit(IoC, 1);
 		} else {
-			SkI2cSndBit(IoC,0) ;
+			SkI2cSndBit(IoC, 0);
 		}
 	}
 
-	return(SkI2cRcvAck(IoC)) ;
-}
+	return(SkI2cRcvAck(IoC));
+}	/* SkI2cSndByte */
 
 
 /*
@@ -487,24 +505,24 @@ int	Byte)	/* byte to send */
  */
 int SkI2cRcvByte(
 SK_IOC	IoC,	/* I/O Context */
-int	Last)	/* Last Byte Flag */
+int	Last)		/* Last Byte Flag */
 {
 	int	i;
 	int	Byte = 0;
 
 	for (i=0; i<8; i++) {
-		Byte <<= 1 ;
-		Byte |= SkI2cRcvBit(IoC) ;
+		Byte <<= 1;
+		Byte |= SkI2cRcvBit(IoC);
 	}
 
 	if (Last) {
-		SkI2cSndNAck(IoC) ;
+		SkI2cSndNAck(IoC);
 	} else {
-		SkI2cSndAck(IoC) ;
+		SkI2cSndAck(IoC);
 	}
 
-	return(Byte) ;
-}
+	return(Byte);
+}	/* SkI2cRcvByte */
 
 
 /*
@@ -514,68 +532,106 @@ int	Last)	/* Last Byte Flag */
  */
 int	SkI2cSndDev(
 SK_IOC	IoC,	/* I/O Context */
-int	Addr,	/* Device Address */
-int	Rw)	/* Read / Write Flag */
+int		Addr,	/* Device Address */
+int		Rw)		/* Read / Write Flag */
 {
-	SkI2cStart(IoC) ;
-	Rw = ~Rw ; 
-	Rw &= I2C_WRITE ;
-	return(SkI2cSndByte(IoC, (Addr<<1) | Rw)) ;
-}
+	SkI2cStart(IoC);
+	Rw = ~Rw; 
+	Rw &= I2C_WRITE;
+	return(SkI2cSndByte(IoC, (Addr<<1) | Rw));
+}	/* SkI2cSndDev */
 
 #endif	/* SK_DIAG */
 
 /*----------------- I2C CTRL Register Functions ----------*/
 
 /*
- * waits for a completetion of a I2C transfer
+ * waits for a completion of an I2C transfer
  *
  * returns	0:	success, transfer completes
- *		1:	error,	 transfer does not complete, I2C transfer
- *				 killed, wait loop terminated.
+ *			1:	error,	 transfer does not complete, I2C transfer
+ *						 killed, wait loop terminated.
  */
 int	SkI2cWait(
 SK_AC	*pAC,	/* Adapter Context */
-SK_IOC	IoC,	/* IoContext */
-int	Event)	/* complete event to wait for (I2C_READ or I2C_WRITE) */
+SK_IOC	IoC,	/* I/O Context */
+int		Event)	/* complete event to wait for (I2C_READ or I2C_WRITE) */
 {
-	SK_U64	StartTime ;
-	SK_U32	I2cCtrl ;
+	SK_U64	StartTime;
+	SK_U32	I2cCtrl;
 
-	StartTime = SkOsGetTime(pAC) ;
+	StartTime = SkOsGetTime(pAC);
 	do {
-		if (SkOsGetTime(pAC) - StartTime > SK_TICKS_PER_SEC/16) {
-			SK_I2C_STOP(IoC) ;
+		if (SkOsGetTime(pAC) - StartTime > SK_TICKS_PER_SEC / 8) {
+			SK_I2C_STOP(IoC);
 #ifndef SK_DIAG
-			SK_ERR_LOG(pAC, SK_ERRCL_SW, SKERR_I2C_E002,
-				SKERR_I2C_E002MSG) ;
+			SK_ERR_LOG(pAC, SK_ERRCL_SW, SKERR_I2C_E002, SKERR_I2C_E002MSG);
 #endif	/* !SK_DIAG */
-			return(1) ;
+			return(1);
 		}
-		SK_I2C_GET_CTL(IoC,&I2cCtrl) ;
-	} while((I2cCtrl & I2C_FLAG) == (SK_U32)Event << 31) ;
+		SK_I2C_GET_CTL(IoC, &I2cCtrl);
+	} while ((I2cCtrl & I2C_FLAG) == (SK_U32)Event << 31);
 
-	return(0) ;
-}
+	return(0);
+}	/* SkI2cWait */
+
+
+/*
+ * waits for a completion of an I2C transfer
+ *
+ * Returns
+ *	Nothing
+ */
+void	SkI2cWaitIrq(
+SK_AC	*pAC,	/* Adapter Context */
+SK_IOC	IoC)	/* I/O Context */
+{
+	SK_SENSOR	*pSen;
+	SK_U64		StartTime;
+	SK_U32		IrqSrc;
+
+	pSen = &pAC->I2c.SenTable[pAC->I2c.CurrSens];
+
+	if (pSen->SenState == SK_SEN_IDLE) {
+		return;
+	}
+
+	StartTime = SkOsGetTime(pAC);
+	do {
+		if (SkOsGetTime(pAC) - StartTime > SK_TICKS_PER_SEC / 8) {
+			SK_I2C_STOP(IoC);
+#ifndef SK_DIAG
+			SK_ERR_LOG(pAC, SK_ERRCL_SW, SKERR_I2C_E002, SKERR_I2C_E002MSG);
+#endif	/* !SK_DIAG */
+			return;
+		}
+		SK_IN32(pAC, B0_ISRC, &IrqSrc);
+	} while ((IrqSrc & IS_I2C_READY) == 0);
+
+	return;
+}	/* SkI2cWaitIrq */
 
 #ifdef	SK_DIAG
+
 /*
  * writes a single byte or 4 bytes into the I2C device
  *
  * returns	0:	success
- *		1:	error
+ *			1:	error
  */
 int SkI2cWrite(
-SK_AC	*pAC,	/* Adapter Context */
+SK_AC	*pAC,		/* Adapter Context */
+SK_IOC	IoC,		/* I/O Context */
 SK_U32	I2cData,	/* I2C Data to write */
-int	I2cDev,		/* I2C Device Address */
-int	I2cReg,		/* I2C Device Register Address */
-int	I2cBurst)	/* I2C Burst Flag ( 0 || I2C_BURST ) */
+int		I2cDev,		/* I2C Device Address */
+int		I2cReg,		/* I2C Device Register Address */
+int		I2cBurst)	/* I2C Burst Flag ( 0 || I2C_BURST ) */
 {
-	SK_OUT32(pAC,B2_I2C_DATA,I2cData) ;
-	SK_I2C_CTL(pAC,I2C_WRITE,I2cDev,I2cReg,I2cBurst);
-	return(SkI2cWait(pAC,pAC,I2C_WRITE)) ;
-}
+	SK_OUT32(IoC, B2_I2C_DATA, I2cData);
+	SK_I2C_CTL(IoC, I2C_WRITE, I2cDev, I2cReg, I2cBurst);
+	return(SkI2cWait(pAC, IoC, I2C_WRITE));
+}	/* SkI2cWrite*/
+
 
 /*
  * reads a single byte or 4 bytes from the I2C device
@@ -583,39 +639,42 @@ int	I2cBurst)	/* I2C Burst Flag ( 0 || I2C_BURST ) */
  * returns	the word read
  */
 SK_U32 SkI2cRead(
-SK_AC	*pAC,	/* Adapter Context */
-int	I2cDev,		/* I2C Device Address */
-int	I2cReg,		/* I2C Device Register Address */
-int	I2cBurst)	/* I2C Burst Flag ( 0 || I2C_BURST ) */
+SK_AC	*pAC,		/* Adapter Context */
+SK_IOC	IoC,		/* I/O Context */
+int		I2cDev,		/* I2C Device Address */
+int		I2cReg,		/* I2C Device Register Address */
+int		I2cBurst)	/* I2C Burst Flag ( 0 || I2C_BURST ) */
 {
-	SK_U32	Data ;
+	SK_U32	Data;
 
-	SK_OUT32(pAC,B2_I2C_DATA,0) ;
-	SK_I2C_CTL(pAC,I2C_READ,I2cDev,I2cReg,I2cBurst);
-	if (SkI2cWait(pAC,pAC,I2C_READ)) {
-		w_print("I2c Transfer Timeout!\n"); 
+	SK_OUT32(IoC, B2_I2C_DATA, 0);
+	SK_I2C_CTL(IoC, I2C_READ, I2cDev, I2cReg, I2cBurst);
+	if (SkI2cWait(pAC, IoC, I2C_READ)) {
+		w_print("I2C Transfer Timeout!\n"); 
 	}
-	SK_IN32(pAC,B2_I2C_DATA,&Data) ;
-	return(Data) ;
-}
+	SK_IN32(IoC, B2_I2C_DATA, &Data);
+	return(Data);
+}	/* SkI2cRead */
+
 #endif	/* SK_DIAG */
 
+
 /*
- * read a sensors value
+ * read a sensor's value
  *
- * This function read a sensors value from the I2c sensor chip. The sensor
+ * This function read a sensors value from the I2C sensor chip. The sensor
  * is defined by its index into the sensors database in the struct pAC points
  * to.
  * Returns	1 if the read is completed
- *		0 if the read must be continued (I2c Bus still allocated)
+ *		0 if the read must be continued (I2C Bus still allocated)
  */
 int	SkI2cReadSensor(
 SK_AC		*pAC,	/* Adapter Context */
-SK_IOC		IoC,	/* IoContext */
+SK_IOC		IoC,	/* I/O Context */
 SK_SENSOR	*pSen)	/* Sensor to be read */
 {
-	return((*pSen->SenRead)(pAC,IoC,pSen)) ;
-}
+	return((*pSen->SenRead)(pAC, IoC, pSen));
+}	/* SkI2cReadSensor*/
 
 /*
  * Do the Init state 0 initialization
@@ -639,7 +698,7 @@ SK_AC	*pAC)	/* Adapter Context */
 	for (i=0; i < SK_MAX_SENSORS; i ++) {
 		switch (i) {
 		case 0:
-			pAC->I2c.SenTable[i].SenDesc = "Temperature" ;
+			pAC->I2c.SenTable[i].SenDesc = "Temperature";
 			pAC->I2c.SenTable[i].SenType = SK_SEN_TEMP;
 			pAC->I2c.SenTable[i].SenThreErrHigh = SK_SEN_ERRHIGH0;
 			pAC->I2c.SenTable[i].SenThreErrLow = SK_SEN_ERRLOW0;
@@ -733,10 +792,11 @@ SK_AC	*pAC)	/* Adapter Context */
 		pAC->I2c.SenTable[i].SenDev = LM80_ADDR;
 	}
 
-	/* Now we are INIT dataed */
+	/* Now we are "INIT data"ed */
 	pAC->I2c.InitLevel = SK_INIT_DATA;
 	return(0);
-}
+}	/* SkI2cInit0*/
+
 
 /*
  * Do the init state 1 initialization
@@ -760,7 +820,7 @@ SK_AC	*pAC)	/* Adapter Context */
  */
 static	int	SkI2cInit1(
 SK_AC	*pAC,	/* Adapter Context */
-SK_IOC	IoC)	/* IoContext needed in level 1 */
+SK_IOC	IoC)	/* I/O Context */
 {
 	if (pAC->I2c.InitLevel != SK_INIT_DATA) {
 		/* ReInit not needed in I2C module */
@@ -769,27 +829,27 @@ SK_IOC	IoC)	/* IoContext needed in level 1 */
 
 	SK_OUT32(IoC, B2_I2C_DATA, 0);
 	SK_I2C_CTL(IoC, I2C_WRITE, LM80_ADDR, LM80_CFG, 0);
-	(void)SkI2cWait(pAC, IoC, I2C_WRITE) ;
+	(void)SkI2cWait(pAC, IoC, I2C_WRITE);
 
 	SK_OUT32(IoC, B2_I2C_DATA, 0xff);
 	SK_I2C_CTL(IoC, I2C_WRITE, LM80_ADDR, LM80_IMSK_1, 0);
-	(void)SkI2cWait(pAC, IoC, I2C_WRITE) ;
+	(void)SkI2cWait(pAC, IoC, I2C_WRITE);
 
 	SK_OUT32(IoC, B2_I2C_DATA, 0xff);
 	SK_I2C_CTL(IoC, I2C_WRITE, LM80_ADDR, LM80_IMSK_2, 0);
-	(void)SkI2cWait(pAC, IoC, I2C_WRITE) ;
+	(void)SkI2cWait(pAC, IoC, I2C_WRITE);
 
 	SK_OUT32(IoC, B2_I2C_DATA, 0x0);
 	SK_I2C_CTL(IoC, I2C_WRITE, LM80_ADDR, LM80_FAN_CTRL, 0);
-	(void)SkI2cWait(pAC, IoC, I2C_WRITE) ;
+	(void)SkI2cWait(pAC, IoC, I2C_WRITE);
 
 	SK_OUT32(IoC, B2_I2C_DATA, 0);
 	SK_I2C_CTL(IoC, I2C_WRITE, LM80_ADDR, LM80_TEMP_CTRL, 0);
-	(void)SkI2cWait(pAC, IoC, I2C_WRITE) ;
+	(void)SkI2cWait(pAC, IoC, I2C_WRITE);
 
 	SK_OUT32(IoC, B2_I2C_DATA, LM80_CFG_START);
 	SK_I2C_CTL(IoC, I2C_WRITE, LM80_ADDR, LM80_CFG, 0);
-	(void)SkI2cWait(pAC, IoC, I2C_WRITE) ;
+	(void)SkI2cWait(pAC, IoC, I2C_WRITE);
 
 	/*
 	 * MaxSens has to be initialized here, because PhyType is not
@@ -820,14 +880,15 @@ SK_IOC	IoC)	/* IoContext needed in level 1 */
 	/* Now we are IO initialized */
 	pAC->I2c.InitLevel = SK_INIT_IO;
 	return(0);
-}
+}	/* SkI2cInit1 */
+
 
 /*
  * Init level 2: Start first sensors read
  */
 static	int	SkI2cInit2(
 SK_AC	*pAC,	/* Adapter Context */
-SK_IOC	IoC)	/* IoContext needed in level 1 */
+SK_IOC	IoC)	/* I/O Context */
 {
 	int		ReadComplete;
 	SK_SENSOR	*pSen;
@@ -839,18 +900,18 @@ SK_IOC	IoC)	/* IoContext needed in level 1 */
 	}
 
 	pSen = &pAC->I2c.SenTable[pAC->I2c.CurrSens];
-	ReadComplete = SkI2cReadSensor(pAC,IoC,pSen);
+	ReadComplete = SkI2cReadSensor(pAC, IoC, pSen);
 
 	if (ReadComplete) {
-		SK_ERR_LOG(pAC, SK_ERRCL_INIT, SKERR_I2C_E008,
-			SKERR_I2C_E008MSG);
+		SK_ERR_LOG(pAC, SK_ERRCL_INIT, SKERR_I2C_E008, SKERR_I2C_E008MSG);
 	}
 
 	/* Now we are correctly initialized */
 	pAC->I2c.InitLevel = SK_INIT_RUN;
 
 	return(0);
-}
+}	/* SkI2cInit2*/
+
 
 /*
  * Initialize I2C devices
@@ -871,27 +932,29 @@ SK_IOC	IoC)	/* IoContext needed in level 1 */
  */
 int	SkI2cInit(
 SK_AC	*pAC,	/* Adapter Context */
-SK_IOC	IoC,	/* IoContext needed in level 1 */
-int	Level)	/* Init Level */
+SK_IOC	IoC,	/* I/O Context needed in levels 1 and 2 */
+int		Level)	/* Init Level */
 {
 
 	switch (Level) {
 	case SK_INIT_DATA:
-		return(SkI2cInit0(pAC)) ;
+		return(SkI2cInit0(pAC));
 	case SK_INIT_IO:
-		return(SkI2cInit1(pAC, IoC)) ;
+		return(SkI2cInit1(pAC, IoC));
 	case SK_INIT_RUN:
-		return(SkI2cInit2(pAC, IoC)) ;
+		return(SkI2cInit2(pAC, IoC));
 	default:
 		break;
 	}
 
-	return(0) ;
-}
+	return(0);
+}	/* SkI2cInit */
+
 
 #ifndef SK_DIAG
+
 /*
- * Interrupt service function for the I2c Interface
+ * Interrupt service function for the I2C Interface
  *
  * Clears the Interrupt source
  *
@@ -900,23 +963,24 @@ int	Level)	/* Init Level */
  * Starts the timer if necessary.
  */
 void	SkI2cIsr(
-SK_AC	*pAC,		/* Adapters context */
-SK_IOC	IoC)		/* Io Context */
+SK_AC	*pAC,	/* Adapter Context */
+SK_IOC	IoC)	/* I/O Context */
 {
 	SK_EVPARA	Para;
 
 	/* Clear the interrupt source */
-	SK_OUT32(IoC, B2_I2C_IRQ, I2C_CLR_IRQ) ;
+	SK_OUT32(IoC, B2_I2C_IRQ, I2C_CLR_IRQ);
 
 	Para.Para64 = 0;
 	SkEventQueue(pAC, SKGE_I2C, SK_I2CEV_IRQ, Para);
-}
+}	/* SkI2cIsr */
+
 
 /*
  * Check this sensors Value against the threshold and send events.
  */
 static	void	SkI2cCheckSensor(
-SK_AC		*pAC,		/* Adapters context */
+SK_AC		*pAC,	/* Adapter Context */
 SK_SENSOR	*pSen)
 {
 	SK_EVPARA	ParaLocal;
@@ -929,12 +993,12 @@ SK_SENSOR	*pSen)
 
 	/* Check Dummy Reads first */
 	if (pAC->I2c.DummyReads > 0) {
-		pAC->I2c.DummyReads -- ;
+		pAC->I2c.DummyReads --;
 		return;
 	}
 
 	/* Get the current time */
-	CurrTime = SkOsGetTime(pAC) ;
+	CurrTime = SkOsGetTime(pAC);
 
 	/* Set para to the most usefull setting:
 	 * The current sensor.
@@ -943,17 +1007,17 @@ SK_SENSOR	*pSen)
 
 	/* Check the Value against the thresholds */
 	/* First: Error Thresholds */
-	TooHigh = (pSen->SenValue > pSen->SenThreErrHigh) ;
-	TooLow = (pSen->SenValue < pSen->SenThreErrLow) ;
+	TooHigh = (pSen->SenValue > pSen->SenThreErrHigh);
+	TooLow = (pSen->SenValue < pSen->SenThreErrLow);
 		
-	IsError = SK_FALSE ;
+	IsError = SK_FALSE;
 	if (TooHigh || TooLow) {
-		/* Error condition is satiesfied */
+		/* Error condition is satisfied */
 		DoTrapSend = SK_TRUE;
 		DoErrLog = SK_TRUE;
 
 		/* Now error condition is satisfied */
-		IsError = SK_TRUE ;
+		IsError = SK_TRUE;
 
 		if (pSen->SenErrFlag == SK_SEN_ERR_ERR) {
 			/* This state is the former one */
@@ -981,7 +1045,7 @@ SK_SENSOR	*pSen)
 			/* We came from a different state */
 			/* -> Set Begin Time Stamp */
 			pSen->SenBegErrTS = CurrTime;
-			pSen->SenErrFlag = SK_SEN_ERR_ERR ;
+			pSen->SenErrFlag = SK_SEN_ERR_ERR;
 		}
 
 		if (DoTrapSend) {
@@ -993,7 +1057,7 @@ SK_SENSOR	*pSen)
 			SkEventQueue(pAC, SKGE_PNMI, (TooHigh ?
 				SK_PNMI_EVT_SEN_ERR_UPP :
 				SK_PNMI_EVT_SEN_ERR_LOW),
-				ParaLocal) ;
+				ParaLocal);
 		}
 
 		if (DoErrLog) {
@@ -1016,12 +1080,12 @@ SK_SENSOR	*pSen)
 
 	/* Check the Value against the thresholds */
 	/* 2nd: Warning thresholds */
-	TooHigh = (pSen->SenValue > pSen->SenThreWarnHigh) ;
-	TooLow = (pSen->SenValue < pSen->SenThreWarnLow) ;
+	TooHigh = (pSen->SenValue > pSen->SenThreWarnHigh);
+	TooLow = (pSen->SenValue < pSen->SenThreWarnLow);
 		
 
 	if (!IsError && (TooHigh || TooLow)) {
-		/* Error condition is satiesfied */
+		/* Error condition is satisfied */
 		DoTrapSend = SK_TRUE;
 		DoErrLog = SK_TRUE;
 
@@ -1051,7 +1115,7 @@ SK_SENSOR	*pSen)
 			/* We came from a different state */
 			/* -> Set Begin Time Stamp */
 			pSen->SenBegWarnTS = CurrTime;
-			pSen->SenErrFlag = SK_SEN_ERR_WARN ;
+			pSen->SenErrFlag = SK_SEN_ERR_WARN;
 		}
 
 		if (DoTrapSend) {
@@ -1063,7 +1127,7 @@ SK_SENSOR	*pSen)
 			SkEventQueue(pAC, SKGE_PNMI, (TooHigh ?
 				SK_PNMI_EVT_SEN_WAR_UPP :
 				SK_PNMI_EVT_SEN_WAR_LOW),
-				ParaLocal) ;
+				ParaLocal);
 		}
 
 		if (DoErrLog) {
@@ -1074,8 +1138,8 @@ SK_SENSOR	*pSen)
 				SK_ERR_LOG(pAC, SK_ERRCL_HW, SKERR_I2C_E009,
 					SKERR_I2C_E009MSG);
 			} else if (pSen->SenType == SK_SEN_VOLT) {
-				SK_ERR_LOG(pAC, SK_ERRCL_HW, SKERR_I2C_E009,
-					SKERR_I2C_E009MSG);
+				SK_ERR_LOG(pAC, SK_ERRCL_HW, SKERR_I2C_E010,
+					SKERR_I2C_E010MSG);
 			} else
 			{
 				SK_ERR_LOG(pAC, SK_ERRCL_HW, SKERR_I2C_E014,
@@ -1087,7 +1151,7 @@ SK_SENSOR	*pSen)
 	/* Check for NO error at all */
 	if (!IsError && !TooHigh && !TooLow) {
 		/* Set o.k. Status if no error and no warning condition */
-		pSen->SenErrFlag = SK_SEN_ERR_OK ;
+		pSen->SenErrFlag = SK_SEN_ERR_OK;
 	}
 
 	/* End of check against the thresholds */
@@ -1115,17 +1179,18 @@ SK_SENSOR	*pSen)
 	if (!pSen->SenInit) {
 		SK_ERR_LOG(pAC, SK_ERRCL_HW, SKERR_I2C_E013, SKERR_I2C_E013MSG);
 	}
-}
+}	/* SkI2cCheckSensor*/
+
 
 /*
  * The only Event to be served is the timeout event
  *
  */
 int	SkI2cEvent(
-SK_AC		*pAC,		/* Adapters context */
-SK_IOC		IoC,		/* Io Context */
-SK_U32		Event,		/* Module specific Event */
-SK_EVPARA	Para)		/* Event specific Parameter */
+SK_AC		*pAC,	/* Adapter Context */
+SK_IOC		IoC,	/* I/O Context */
+SK_U32		Event,	/* Module specific Event */
+SK_EVPARA	Para)	/* Event specific Parameter */
 {
 	int		ReadComplete;
 	SK_SENSOR	*pSen;
@@ -1141,7 +1206,7 @@ SK_EVPARA	Para)		/* Event specific Parameter */
 
 		if (ReadComplete) {
 			/* Check sensor against defined thresholds */
-			SkI2cCheckSensor (pAC, pSen) ;
+			SkI2cCheckSensor (pAC, pSen);
 
 			/* Increment Current and set appropriate Timeout */
 			Time = SK_I2C_TIM_SHORT;
@@ -1155,7 +1220,7 @@ SK_EVPARA	Para)		/* Event specific Parameter */
 			/* Start Timer */
 			ParaLocal.Para64 = (SK_U64) 0;
 			SkTimerStart(pAC, IoC, &pAC->I2c.SenTimer, Time,
-				SKGE_I2C, SK_I2CEV_TIM, ParaLocal) ;
+				SKGE_I2C, SK_I2CEV_TIM, ParaLocal);
 		}
 		break;
 	case SK_I2CEV_CLEAR:
@@ -1176,6 +1241,6 @@ SK_EVPARA	Para)		/* Event specific Parameter */
 	}
 
 	return(0);
-}
-#endif	/* !SK_DIAG */
-/* End of File */
+}	/* SkI2cEvent*/
+
+#endif	/* !SK_DIAG */ 

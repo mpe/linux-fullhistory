@@ -2,8 +2,8 @@
  *
  * Name:	skgesirq.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.18 $
- * Date:	$Date: 1999/05/19 07:32:59 $
+ * Version:	$Revision: 1.20 $
+ * Date:	$Date: 1999/12/06 10:00:44 $
  * Purpose:	SK specific Gigabit Ethernet special IRQ functions
  *
  ******************************************************************************/
@@ -26,6 +26,12 @@
  *
  * History:
  *	$Log: skgesirq.h,v $
+ *	Revision 1.20  1999/12/06 10:00:44  cgoos
+ *	Added SET event for role.
+ *	
+ *	Revision 1.19  1999/11/22 13:58:26  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.18  1999/05/19 07:32:59  cgoos
  *	Changes for 1000Base-T.
  *	
@@ -99,6 +105,7 @@
 #define SK_HWEV_UPDATE_STAT	5	/* Update Statistics by PNMI */
 #define SK_HWEV_SET_LMODE	6	/* Set Link Mode by PNMI */
 #define SK_HWEV_SET_FLOWMODE	7	/* Set Flow Control Mode by PNMI */
+#define SK_HWEV_SET_ROLE	8	/* Set Master/Slave (Role) by PNMI */
 
 #define	SK_WA_ACT_TIME		(5000000L)	/* 5 sec */
 #define	SK_WA_INA_TIME		(100000L)	/* 100 msec */

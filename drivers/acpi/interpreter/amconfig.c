@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: amconfig - Namespace reconfiguration (Load/Unload opcodes)
+ *              $Revision: 23 $
  *
  *****************************************************************************/
 
@@ -25,17 +25,17 @@
 
 
 #include "acpi.h"
-#include "parser.h"
-#include "interp.h"
+#include "acparser.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "namesp.h"
-#include "events.h"
-#include "tables.h"
-#include "dispatch.h"
+#include "acnamesp.h"
+#include "acevents.h"
+#include "actables.h"
+#include "acdispat.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amconfig");
+	 MODULE_NAME         ("amconfig")
 
 
 /*****************************************************************************
@@ -53,13 +53,13 @@
 
 ACPI_STATUS
 acpi_aml_exec_load_table (
-	ACPI_OBJECT_INTERNAL    *rgn_desc,
+	ACPI_OPERAND_OBJECT     *rgn_desc,
 	ACPI_HANDLE             *ddb_handle)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    *table_desc = NULL;
-	char                    *table_ptr;
-	char                    *table_data_ptr;
+	ACPI_OPERAND_OBJECT     *table_desc = NULL;
+	u8                      *table_ptr;
+	u8                      *table_data_ptr;
 	ACPI_TABLE_HEADER       table_header;
 	ACPI_TABLE_DESC         table_info;
 	u32                     i;
@@ -73,7 +73,7 @@ acpi_aml_exec_load_table (
 	table_header.length = 0;
 	for (i = 0; i < sizeof (ACPI_TABLE_HEADER); i++) {
 		status = acpi_ev_address_space_dispatch (rgn_desc, ADDRESS_SPACE_READ,
-				  i, 8, (u32 *) ((char *) &table_header + i));
+				  i, 8, (u32 *) ((u8 *) &table_header + i));
 		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
@@ -184,16 +184,19 @@ acpi_aml_exec_unload_table (
 	ACPI_HANDLE             ddb_handle)
 {
 	ACPI_STATUS             status = AE_NOT_IMPLEMENTED;
-	ACPI_OBJECT_INTERNAL    *table_desc = (ACPI_OBJECT_INTERNAL *) ddb_handle;
+	ACPI_OPERAND_OBJECT     *table_desc = (ACPI_OPERAND_OBJECT *) ddb_handle;
 	ACPI_TABLE_DESC         *table_info;
 
 
 	/* Validate the handle */
-	/* TBD: [Errors] Wasn't this done earlier? */
+	/* Although the handle is partially validated in Acpi_aml_exec_reconfiguration(),
+	 *  when it calls Acpi_aml_resolve_operands(), the handle is more completely
+	 *  validated here.
+	 */
 
 	if ((!ddb_handle) ||
 		(!VALID_DESCRIPTOR_TYPE (ddb_handle, ACPI_DESC_TYPE_INTERNAL)) ||
-		(((ACPI_OBJECT_INTERNAL *)ddb_handle)->common.type !=
+		(((ACPI_OPERAND_OBJECT  *)ddb_handle)->common.type !=
 				INTERNAL_TYPE_REFERENCE))
 	{
 		return (AE_BAD_PARAMETER);
@@ -205,7 +208,7 @@ acpi_aml_exec_unload_table (
 	table_info = (ACPI_TABLE_DESC *) table_desc->reference.object;
 
 	/*
-	 * Delete the entire namespace under this table NTE
+	 * Delete the entire namespace under this table Node
 	 * (Offset contains the Table_id)
 	 */
 
@@ -245,16 +248,16 @@ acpi_aml_exec_reconfiguration (
 	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    *region_desc = NULL;
+	ACPI_OPERAND_OBJECT     *region_desc = NULL;
 	ACPI_HANDLE             *ddb_handle;
 
 
 	/* Resolve the operands */
 
-	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS);
+	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS, walk_state);
 	/* Get the table handle, common for both opcodes */
 
-	status |= acpi_ds_obj_stack_pop_object ((ACPI_OBJECT_INTERNAL **) &ddb_handle,
+	status |= acpi_ds_obj_stack_pop_object ((ACPI_OPERAND_OBJECT **) &ddb_handle,
 			 walk_state);
 
 	switch (opcode)
@@ -265,22 +268,19 @@ acpi_aml_exec_reconfiguration (
 		/* Get the region or field descriptor */
 
 		status |= acpi_ds_obj_stack_pop_object (&region_desc, walk_state);
-		if (status != AE_OK) {
-			acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__, opcode,
-					  WALK_OPERANDS, 2);
-			goto cleanup2;
+		if (ACPI_FAILURE (status)) {
+			acpi_cm_remove_reference (region_desc);
+			return (status);
 		}
 
 		status = acpi_aml_exec_load_table (region_desc, ddb_handle);
 		break;
 
 
-	case AML_UN_LOAD_OP:
+	case AML_UNLOAD_OP:
 
-		if (status != AE_OK) {
-			acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__, opcode,
-					  WALK_OPERANDS, 1);
-			goto cleanup1;
+		if (ACPI_FAILURE (status)) {
+			return (status);
 		}
 
 		status = acpi_aml_exec_unload_table (ddb_handle);
@@ -294,10 +294,6 @@ acpi_aml_exec_reconfiguration (
 	}
 
 
-cleanup2:
-	acpi_cm_remove_reference (region_desc);
-
-cleanup1:
 	return (status);
 }
 

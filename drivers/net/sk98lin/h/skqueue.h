@@ -2,8 +2,8 @@
  *
  * Name:	skqueue.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.12 $
- * Date:	$Date: 1998/09/08 08:48:01 $
+ * Version:	$Revision: 1.13 $
+ * Date:	$Date: 1999/11/22 13:59:05 $
  * Purpose:	Defines for the Event queue
  *
  ******************************************************************************/
@@ -27,6 +27,9 @@
  * History:
  *
  *	$Log: skqueue.h,v $
+ *	Revision 1.13  1999/11/22 13:59:05  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.12  1998/09/08 08:48:01  gklug
  *	add: init level handling
  *	

@@ -233,6 +233,11 @@ static int yenta_set_socket(pci_socket_t *socket, socket_state_t *state)
 {
 	u16 bridge;
 
+	if (state->flags & SS_DEBOUNCED) {
+		/* The insertion debounce period has ended.  Clear any pending insertion events */
+		socket->events &= ~SS_DETECT;
+		state->flags &= ~SS_DEBOUNCED;		/* SS_DEBOUNCED is oneshot */
+	}
 	yenta_set_power(socket, state);
 	socket->io_irq = state->io_irq;
 	bridge = config_readw(socket, CB_BRIDGE_CONTROL) & ~(CB_BRIDGE_CRST | CB_BRIDGE_INTR);

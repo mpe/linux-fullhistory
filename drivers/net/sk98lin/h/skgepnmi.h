@@ -2,8 +2,8 @@
  *
  * Name:	skgepnmi.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.37 $
- * Date:	$Date: 1999/09/14 14:25:32 $
+ * Version:	$Revision: 1.44 $
+ * Date:	$Date: 2000/09/07 07:35:27 $
  * Purpose:	Defines for Private Network Management Interface
  *
  ****************************************************************************/
@@ -27,6 +27,34 @@
  * History:
  *
  *	$Log: skgepnmi.h,v $
+ *	Revision 1.44  2000/09/07 07:35:27  rwahl
+ *	- removed NDIS counter specific data type.
+ *	- fixed spelling for OID_SKGE_RLMT_PORT_PREFERRED.
+ *	
+ *	Revision 1.43  2000/08/04 11:41:08  rwahl
+ *	- Fixed compiler warning (port is always >= 0) for macros
+ *	  SK_PNMI_CNT_RX_LONGFRAMES & SK_PNMI_CNT_SYNC_OCTETS
+ *	
+ *	Revision 1.42  2000/08/03 15:14:07  rwahl
+ *	- Corrected error in driver macros addressing a physical port.
+ *	
+ *	Revision 1.41  2000/08/01 16:22:29  rwahl
+ *	- Changed MDB version to 3.1.
+ *	- Added definitions for StatRxLongFrames counter.
+ *	- Added macro to be used by driver to count long frames received.
+ *	- Added directive to control width (default = 32bit) of NDIS statistic
+ *	  counters (SK_NDIS_64BIT_CTR).
+ *	
+ *	Revision 1.40  2000/03/31 13:51:34  rwahl
+ *	Added SK_UPTR cast to offset calculation for PNMI struct fields;
+ *	missing cast caused compiler warnings by Win64 compiler.
+ *	
+ *	Revision 1.39  1999/12/06 10:09:47  rwahl
+ *	Added new error log message.
+ *	
+ *	Revision 1.38  1999/11/22 13:57:55  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.37  1999/09/14 14:25:32  rwahl
  *	Set MDB version for 1000Base-T (sensors, Master/Slave) changes.
  *	
@@ -164,7 +192,7 @@
 /*
  * Management Database Version
  */
-#define SK_PNMI_MDB_VERSION		0x00030000	/* 3.0 */
+#define SK_PNMI_MDB_VERSION		0x00030001	/* 3.1 */
 
 
 /*
@@ -383,6 +411,7 @@
 #define OID_SKGE_STAT_RX_511		0xFF020154
 #define OID_SKGE_STAT_RX_1023		0xFF020155
 #define OID_SKGE_STAT_RX_MAX		0xFF020156
+#define OID_SKGE_STAT_RX_LONGFRAMES	0xFF020157
 			
 #define OID_SKGE_PHYS_CUR_ADDR		0xFF010120
 #define OID_SKGE_PHYS_FAC_ADDR		0xFF010121
@@ -405,7 +434,7 @@
 #define OID_SKGE_RLMT_MODE		0xFF010140
 #define OID_SKGE_RLMT_PORT_NUMBER	0xFF010141
 #define OID_SKGE_RLMT_PORT_ACTIVE	0xFF010142
-#define OID_SKGE_RLMT_PORT_PREFERED	0xFF010143
+#define OID_SKGE_RLMT_PORT_PREFERRED	0xFF010143
 #define OID_SKGE_RLMT_CHANGE_CTS	0xFF020160
 #define OID_SKGE_RLMT_CHANGE_TIME	0xFF020161
 #define OID_SKGE_RLMT_CHANGE_ESTIM	0xFF020162
@@ -559,6 +588,8 @@
 #define SK_PNMI_ERR050MSG	"MacUpdate: Cannot update statistic counter"
 #define SK_PNMI_ERR051		(SK_ERRBASE_PNMI + 51)
 #define SK_PNMI_ERR051MSG	"SkPnmiEvent: Port switch suspicious"
+#define SK_PNMI_ERR052		(SK_ERRBASE_PNMI + 52)
+#define SK_PNMI_ERR052MSG	"MacPrivateConf: SK_HWEV_SET_ROLE returned not 0"
 
 /*
  * Management counter macros called by the driver
@@ -592,9 +623,16 @@
 
 #define SK_PNMI_CNT_SYNC_OCTETS(pAC,p,v) \
 	{ \
-		if (((p) >= 0) && ((p) < SK_MAX_MACS)) { \
-			((pAC)->Pnmi.StatSyncCts[p])++; \
-			(pAC)->Pnmi.StatSyncOctetsCts[p] += (SK_U64)(v); \
+		if ((p) < SK_MAX_MACS) { \
+			((pAC)->Pnmi.Port[p].StatSyncCts)++; \
+			(pAC)->Pnmi.Port[p].StatSyncOctetsCts += (SK_U64)(v); \
+		} \
+	}
+
+#define SK_PNMI_CNT_RX_LONGFRAMES(pAC,p) \
+	{ \
+		if ((p) < SK_MAX_MACS) { \
+			((pAC)->Pnmi.Port[p].StatRxLongFrameCts)++; \
 		} \
 	}
 
@@ -687,6 +725,7 @@ typedef struct s_PnmiStat {
 	SK_U64			StatRxBroadcastOkCts;
 	SK_U64			StatRxMulticastOkCts;
 	SK_U64			StatRxUnicastOkCts;
+	SK_U64			StatRxLongFramesCts;
 	SK_U64			StatRxPauseMacCtrlCts;
 	SK_U64			StatRxMacCtrlCts;
 	SK_U64			StatRxPauseMacCtrlErrorCts;
@@ -809,8 +848,9 @@ typedef struct s_PnmiStrucData {
 } SK_PNMI_STRUCT_DATA;
 
 #define SK_PNMI_STRUCT_SIZE	(sizeof(SK_PNMI_STRUCT_DATA))
-#define SK_PNMI_MIN_STRUCT_SIZE	((unsigned int)&(((SK_PNMI_STRUCT_DATA *)0)->\
-					VpdFreeBytes))	/*
+#define SK_PNMI_MIN_STRUCT_SIZE	((unsigned int)(SK_UPTR)\
+				 &(((SK_PNMI_STRUCT_DATA *)0)->VpdFreeBytes))
+							/*
 							 * ReturnStatus field
 							 * must be located
 							 * before VpdFreeBytes
@@ -822,7 +862,7 @@ typedef struct s_PnmiStrucData {
 #define SK_PNMI_MAX_PROTOS		3
 
 #define SK_PNMI_SCNT_NOT		64
-#define SK_PNMI_CNT_NO			66
+#define SK_PNMI_CNT_NO			67
 
 /*
  * Estimate data structure
@@ -843,6 +883,7 @@ typedef struct s_PnmiPort {
 	SK_U64			CounterOffset[SK_PNMI_CNT_NO];
 	SK_U64			StatSyncCts;
 	SK_U64			StatSyncOctetsCts;
+	SK_U64			StatRxLongFrameCts;
 	SK_BOOL			ActiveFlag;
 } SK_PNMI_PORT;
 

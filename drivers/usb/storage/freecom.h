@@ -1,6 +1,6 @@
 /* Driver for Freecom USB/IDE adaptor
  *
- * $Id: freecom.h,v 1.3 2000/08/25 00:13:51 mdharm Exp $
+ * $Id: freecom.h,v 1.4 2000/08/29 14:49:15 dlbrown Exp $
  *
  * Freecom v0.1:
  *
@@ -31,5 +31,6 @@
 
 extern int freecom_transport(Scsi_Cmnd *srb, struct us_data *us);
 extern int usb_stor_freecom_reset(struct us_data *us);
+extern int freecom_init (struct us_data *us);
 
 #endif

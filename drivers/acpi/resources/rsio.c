@@ -6,6 +6,7 @@
  *                     Acpi_rs_fixed_io_stream
  *                     Acpi_rs_dma_resource
  *                     Acpi_rs_dma_stream
+ *              $Revision: 7 $
  *
  *****************************************************************************/
 
@@ -31,7 +32,7 @@
 #include "acpi.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
-	 MODULE_NAME         ("rsio");
+	 MODULE_NAME         ("rsio")
 
 
 /***************************************************************************
@@ -90,7 +91,7 @@ acpi_rs_io_resource (
 	 * Check Min_base Address
 	 */
 	buffer += 1;
-	temp16 = *(u16 *)buffer;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	output_struct->data.io.min_base_address = temp16;
 
@@ -98,7 +99,7 @@ acpi_rs_io_resource (
 	 * Check Max_base Address
 	 */
 	buffer += 2;
-	temp16 = *(u16 *)buffer;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	output_struct->data.io.max_base_address = temp16;
 
@@ -255,7 +256,7 @@ acpi_rs_io_stream (
 	 */
 	temp16 = (u16) linked_list->data.io.min_base_address;
 
-	*(u16 *)buffer = temp16;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	buffer += 2;
 
@@ -264,7 +265,7 @@ acpi_rs_io_stream (
 	 */
 	temp16 = (u16) linked_list->data.io.max_base_address;
 
-	*(u16 *)buffer = temp16;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	buffer += 2;
 
@@ -336,7 +337,7 @@ acpi_rs_fixed_io_stream (
 	 */
 	temp16 = (u16) linked_list->data.fixed_io.base_address;
 
-	*(u16 *)buffer = temp16;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	buffer += 2;
 

@@ -1522,7 +1522,7 @@ static int shm_swap_preop(swp_entry_t *swap_entry)
 }
 
 /*
- * Goes through counter = (shm_rss / (prio + 1)) present shm pages.
+ * Goes through counter = (shm_rss >> prio) present shm pages.
  */
 static unsigned long swap_id; /* currently being swapped */
 static unsigned long swap_idx; /* next to swap */
@@ -1537,7 +1537,7 @@ int shm_swap (int prio, int gfp_mask)
 	struct page * page_map;
 
 	zshm_swap(prio, gfp_mask);
-	counter = shm_rss / (prio + 1);
+	counter = shm_rss >> prio;
 	if (!counter)
 		return 0;
 	if (shm_swap_preop(&swap_entry))
@@ -1863,7 +1863,7 @@ static void zshm_swap (int prio, int gfp_mask)
 	int counter;
 	struct page * page_map;
 
-	counter = zshm_rss / (prio + 1);
+	counter = zshm_rss >> prio;
 	if (!counter)
 		return;
 next:

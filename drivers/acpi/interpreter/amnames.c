@@ -2,6 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amnames - interpreter/scanner name load/execute
+ *              $Revision: 70 $
  *
  *****************************************************************************/
 
@@ -25,12 +26,12 @@
 
 
 #include "acpi.h"
-#include "interp.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "namesp.h"
+#include "acnamesp.h"
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amnames");
+	 MODULE_NAME         ("amnames")
 
 
 /* AML Package Length encodings */
@@ -57,13 +58,13 @@
  *
  ******************************************************************************/
 
-char *
+NATIVE_CHAR *
 acpi_aml_allocate_name_string (
 	u32                     prefix_count,
 	u32                     num_name_segs)
 {
-	char                    *temp_ptr;
-	char                    *name_string;
+	NATIVE_CHAR             *temp_ptr;
+	NATIVE_CHAR             *name_string;
 	u32                      size_needed;
 
 
@@ -87,7 +88,7 @@ acpi_aml_allocate_name_string (
 	 * This buffer must be deleted by the caller!
 	 */
 
-	name_string = acpi_cm_allocate ((ACPI_SIZE) size_needed);
+	name_string = acpi_cm_allocate (size_needed);
 	if (!name_string) {
 		REPORT_ERROR ("Aml_allocate_name_string: name allocation failure");
 		return (NULL);
@@ -133,52 +134,6 @@ acpi_aml_allocate_name_string (
 	return (name_string);
 }
 
-
-/*******************************************************************************
- *
- * FUNCTION:    Acpi_aml_decode_package_length
- *
- * PARAMETERS:  Last_pkg_len        - latest value decoded by Do_pkg_length() for
- *                                    most recently examined package or field
- *
- * RETURN:      Number of bytes contained in package length encoding
- *
- * DESCRIPTION: Decodes the Package Length. Upper 2 bits are are used to
- *              tell if type 1, 2, 3, or 4.
- *                  0x3F        = Max 1 byte encoding,
- *                  0xFFF       = Max 2 byte encoding,
- *                  0xFFFFF     = Max 3 Byte encoding,
- *                  0xFFFFFFFFF = Max 4 Byte encoding.
- *
- ******************************************************************************/
-
-u32
-acpi_aml_decode_package_length (
-	u32                     last_pkg_len)
-{
-	u32                     num_bytes = 0;
-
-
-	if (last_pkg_len < ACPI_AML_PACKAGE_TYPE1) {
-		num_bytes = 1;
-	}
-
-	else if (last_pkg_len < ACPI_AML_PACKAGE_TYPE2) {
-		num_bytes = 2;
-	}
-
-	else if (last_pkg_len < ACPI_AML_PACKAGE_TYPE3) {
-		num_bytes = 3;
-	}
-
-	else if (last_pkg_len < ACPI_AML_PACKAGE_TYPE4) {
-		num_bytes = 4;
-	}
-
-	return (num_bytes);
-}
-
-
 /*******************************************************************************
  *
  * FUNCTION:    Acpi_aml_exec_name_segment
@@ -194,12 +149,12 @@ acpi_aml_decode_package_length (
 ACPI_STATUS
 acpi_aml_exec_name_segment (
 	u8                      **in_aml_address,
-	char                    *name_string)
+	NATIVE_CHAR             *name_string)
 {
 	u8                      *aml_address = *in_aml_address;
 	ACPI_STATUS             status = AE_OK;
-	s32                     index;
-	char                    char_buf[5];
+	u32                     index;
+	NATIVE_CHAR             char_buf[5];
 
 
 	/*
@@ -271,15 +226,16 @@ ACPI_STATUS
 acpi_aml_get_name_string (
 	OBJECT_TYPE_INTERNAL    data_type,
 	u8                      *in_aml_address,
-	char                    **out_name_string,
+	NATIVE_CHAR             **out_name_string,
 	u32                     *out_name_length)
 {
 	ACPI_STATUS             status = AE_OK;
 	u8                      *aml_address = in_aml_address;
-	char                    *name_string = NULL;
-	s32                     num_segments;
-	s32                     prefix_count = 0;
+	NATIVE_CHAR             *name_string = NULL;
+	u32                     num_segments;
+	u32                     prefix_count = 0;
 	u8                      prefix = 0;
+	u8                      has_prefix = FALSE;
 
 
 	if (INTERNAL_TYPE_DEF_FIELD == data_type  ||
@@ -313,7 +269,8 @@ acpi_aml_get_name_string (
 			 * Remember that we have a Root_prefix --
 			 * see comment in Acpi_aml_allocate_name_string()
 			 */
-			prefix_count = -1;
+			prefix_count = (u32) -1;
+			has_prefix = TRUE;
 			break;
 
 
@@ -327,7 +284,7 @@ acpi_aml_get_name_string (
 				++prefix_count;
 
 			} while (*aml_address == AML_PARENT_PREFIX);
-
+			has_prefix = TRUE;
 			break;
 
 
@@ -351,9 +308,8 @@ acpi_aml_get_name_string (
 				break;
 			}
 
-			/* Ensure Prefix_count != 0 to remember processing a prefix */
-
-			prefix_count += 2;
+			/* Indicate that we processed a prefix */
+			has_prefix = TRUE;
 
 			status = acpi_aml_exec_name_segment (&aml_address, name_string);
 			if (ACPI_SUCCESS (status)) {
@@ -375,9 +331,8 @@ acpi_aml_get_name_string (
 				break;
 			}
 
-			/* Ensure Prefix_count != 0 to remember processing a prefix */
-
-			prefix_count += 2;
+			/* Indicate that we processed a prefix */
+			has_prefix = TRUE;
 
 			while (num_segments &&
 					(status = acpi_aml_exec_name_segment (&aml_address, name_string)) == AE_OK)
@@ -422,7 +377,7 @@ acpi_aml_get_name_string (
 	}
 
 
-	if (AE_CTRL_PENDING == status && prefix_count != 0) {
+	if (AE_CTRL_PENDING == status && has_prefix) {
 		/* Ran out of segments after processing a prefix */
 
 		REPORT_ERROR ("Ran out of segments after processing a prefix");

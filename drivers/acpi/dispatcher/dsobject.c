@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: dsobject - Dispatcher object management routines
+ *              $Revision: 43 $
  *
  *****************************************************************************/
 
@@ -25,21 +25,21 @@
 
 
 #include "acpi.h"
-#include "parser.h"
+#include "acparser.h"
 #include "amlcode.h"
-#include "dispatch.h"
-#include "interp.h"
-#include "namesp.h"
+#include "acdispat.h"
+#include "acinterp.h"
+#include "acnamesp.h"
 
 #define _COMPONENT          DISPATCHER
-	 MODULE_NAME         ("dsobject");
+	 MODULE_NAME         ("dsobject")
 
 
 /*******************************************************************************
  *
  * FUNCTION:    Acpi_ds_init_one_object
  *
- * PARAMETERS:  Obj_handle      - NTE of the object
+ * PARAMETERS:  Obj_handle      - Node
  *              Level           - Current nesting level
  *              Context         - Points to a init info struct
  *              Return_value    - Not used
@@ -64,7 +64,6 @@ acpi_ds_init_one_object (
 {
 	OBJECT_TYPE_INTERNAL    type;
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
 	INIT_WALK_INFO          *info = (INIT_WALK_INFO *) context;
 
 
@@ -73,10 +72,10 @@ acpi_ds_init_one_object (
 	 * was just loaded
 	 */
 
-	if (((ACPI_NAMED_OBJECT*) obj_handle)->owner_id !=
+	if (((ACPI_NAMESPACE_NODE *) obj_handle)->owner_id !=
 			info->table_desc->table_id)
 	{
-		return AE_OK;
+		return (AE_OK);
 	}
 
 
@@ -119,12 +118,7 @@ acpi_ds_init_one_object (
 		 */
 
 		if (acpi_gbl_when_to_parse_methods != METHOD_PARSE_AT_INIT) {
-
 			acpi_ns_delete_namespace_subtree (obj_handle);
-
-			obj_desc = ((ACPI_NAMED_OBJECT*)obj_handle)->object;
-			acpi_ps_delete_parse_tree (obj_desc->method.parser_op);
-			obj_desc->method.parser_op = NULL;
 		}
 
 		break;
@@ -149,15 +143,15 @@ acpi_ds_init_one_object (
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Walk the entire namespace and perform any necessary initialization
- *              on the objects found therein
+ * DESCRIPTION: Walk the entire namespace and perform any necessary
+ *              initialization on the objects found therein
  *
  ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_initialize_objects (
 	ACPI_TABLE_DESC         *table_desc,
-	ACPI_NAMED_OBJECT       *start_entry)
+	ACPI_NAMESPACE_NODE     *start_node)
 {
 	ACPI_STATUS             status;
 	INIT_WALK_INFO          info;
@@ -170,8 +164,8 @@ acpi_ds_initialize_objects (
 
 	/* Walk entire namespace from the supplied root */
 
-	status = acpi_walk_namespace (ACPI_TYPE_ANY, start_entry,
-			  ACPI_INT32_MAX, acpi_ds_init_one_object,
+	status = acpi_walk_namespace (ACPI_TYPE_ANY, start_node,
+			  ACPI_UINT32_MAX, acpi_ds_init_one_object,
 			  &info, NULL);
 
 	return (AE_OK);
@@ -197,28 +191,28 @@ acpi_ds_initialize_objects (
 ACPI_STATUS
 acpi_ds_init_object_from_op (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op,
+	ACPI_PARSE_OBJECT       *op,
 	u16                     opcode,
-	ACPI_OBJECT_INTERNAL    *obj_desc)
+	ACPI_OPERAND_OBJECT     **obj_desc)
 {
 	ACPI_STATUS             status;
-	ACPI_GENERIC_OP         *arg;
-	ACPI_BYTELIST_OP        *byte_list;
-	ACPI_OBJECT_INTERNAL    *arg_desc;
-	ACPI_OP_INFO            *op_info;
+	ACPI_PARSE_OBJECT       *arg;
+	ACPI_PARSE2_OBJECT      *byte_list;
+	ACPI_OPERAND_OBJECT     *arg_desc;
+	ACPI_OPCODE_INFO        *op_info;
 
 
 	op_info = acpi_ps_get_opcode_info (opcode);
-	if (!op_info) {
+	if (ACPI_GET_OP_TYPE (op_info) != ACPI_OP_TYPE_OPCODE) {
 		/* Unknown opcode */
 
-		return AE_TYPE;
+		return (AE_TYPE);
 	}
 
 
 	/* Get and prepare the first argument */
 
-	switch (obj_desc->common.type)
+	switch ((*obj_desc)->common.type)
 	{
 	case ACPI_TYPE_BUFFER:
 
@@ -230,31 +224,31 @@ acpi_ds_init_object_from_op (
 
 		/* Resolve the object (could be an arg or local) */
 
-		status = acpi_aml_resolve_to_value (&arg_desc);
+		status = acpi_aml_resolve_to_value (&arg_desc, walk_state);
 		if (ACPI_FAILURE (status)) {
 			acpi_cm_remove_reference (arg_desc);
-			return status;
+			return (status);
 		}
 
 		/* We are expecting a number */
 
 		if (arg_desc->common.type != ACPI_TYPE_NUMBER) {
 			acpi_cm_remove_reference (arg_desc);
-			return AE_TYPE;
+			return (AE_TYPE);
 		}
 
 		/* Get the value, delete the internal object */
 
-		obj_desc->buffer.length = arg_desc->number.value;
+		(*obj_desc)->buffer.length = arg_desc->number.value;
 		acpi_cm_remove_reference (arg_desc);
 
 		/* Allocate the buffer */
 
-		obj_desc->buffer.pointer =
-				  acpi_cm_callocate (obj_desc->buffer.length);
+		(*obj_desc)->buffer.pointer =
+				  acpi_cm_callocate ((*obj_desc)->buffer.length);
 
-		if (!obj_desc->buffer.pointer) {
-			return AE_NO_MEMORY;
+		if (!(*obj_desc)->buffer.pointer) {
+			return (AE_NO_MEMORY);
 		}
 
 		/*
@@ -265,27 +259,42 @@ acpi_ds_init_object_from_op (
 
 		/* skip first arg */
 		arg = op->value.arg;
-		byte_list = (ACPI_BYTELIST_OP *) arg->next;
+		byte_list = (ACPI_PARSE2_OBJECT *) arg->next;
 		if (byte_list) {
 			if (byte_list->opcode != AML_BYTELIST_OP) {
-				return AE_TYPE;
+				return (AE_TYPE);
 			}
 
-			MEMCPY (obj_desc->buffer.pointer, byte_list->data,
-					obj_desc->buffer.length);
+			MEMCPY ((*obj_desc)->buffer.pointer, byte_list->data,
+					(*obj_desc)->buffer.length);
 		}
 
 		break;
 
 
+	case ACPI_TYPE_PACKAGE:
+
+		/*
+		 * When called, an internal package object has already
+		 *  been built and is pointed to by *Obj_desc.
+		 *  Acpi_ds_build_internal_object build another internal
+		 *  package object, so remove reference to the original
+		 *  so that it is deleted.  Error checking is done
+		 *  within the remove reference function.
+		 */
+		acpi_cm_remove_reference(*obj_desc);
+
+		status = acpi_ds_build_internal_object (walk_state, op, obj_desc);
+		break;
+
 	case ACPI_TYPE_NUMBER:
-		obj_desc->number.value = op->value.integer;
+		(*obj_desc)->number.value = op->value.integer;
 		break;
 
 
 	case ACPI_TYPE_STRING:
-		obj_desc->string.pointer = op->value.string;
-		obj_desc->string.length = STRLEN (op->value.string);
+		(*obj_desc)->string.pointer = op->value.string;
+		(*obj_desc)->string.length = STRLEN (op->value.string);
 		break;
 
 
@@ -295,33 +304,33 @@ acpi_ds_init_object_from_op (
 
 	case INTERNAL_TYPE_REFERENCE:
 
-		switch (op_info->flags & OP_INFO_TYPE)
+		switch (ACPI_GET_OP_CLASS (op_info))
 		{
 		case OPTYPE_LOCAL_VARIABLE:
 
 			/* Split the opcode into a base opcode + offset */
 
-			obj_desc->reference.op_code = AML_LOCAL_OP;
-			obj_desc->reference.offset = opcode - AML_LOCAL_OP;
+			(*obj_desc)->reference.op_code = AML_LOCAL_OP;
+			(*obj_desc)->reference.offset = opcode - AML_LOCAL_OP;
 			break;
 
 		case OPTYPE_METHOD_ARGUMENT:
 
 			/* Split the opcode into a base opcode + offset */
 
-			obj_desc->reference.op_code = AML_ARG_OP;
-			obj_desc->reference.offset = opcode - AML_ARG_OP;
+			(*obj_desc)->reference.op_code = AML_ARG_OP;
+			(*obj_desc)->reference.offset = opcode - AML_ARG_OP;
 			break;
 
 		default: /* Constants, Literals, etc.. */
 
 			if (op->opcode == AML_NAMEPATH_OP) {
-				/* Nte was saved in Op */
+				/* Node was saved in Op */
 
-				obj_desc->reference.nte = op->acpi_named_object;
+				(*obj_desc)->reference.node = op->node;
 			}
 
-			obj_desc->reference.op_code = opcode;
+			(*obj_desc)->reference.op_code = opcode;
 			break;
 		}
 
@@ -333,7 +342,7 @@ acpi_ds_init_object_from_op (
 		break;
 	}
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -354,10 +363,10 @@ acpi_ds_init_object_from_op (
 ACPI_STATUS
 acpi_ds_build_internal_simple_obj (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op,
-	ACPI_OBJECT_INTERNAL    **obj_desc_ptr)
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_OPERAND_OBJECT     **obj_desc_ptr)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	OBJECT_TYPE_INTERNAL    type;
 	ACPI_STATUS             status;
 
@@ -369,13 +378,13 @@ acpi_ds_build_internal_simple_obj (
 		 * Otherwise, go ahead and look it up now
 		 */
 
-		if (!op->acpi_named_object) {
+		if (!op->node) {
 			status = acpi_ns_lookup (walk_state->scope_info,
 					  op->value.string, ACPI_TYPE_ANY,
 					  IMODE_EXECUTE,
 					  NS_SEARCH_PARENT | NS_DONT_OPEN_SCOPE,
 					  NULL,
-					  (ACPI_NAMED_OBJECT**)&(op->acpi_named_object));
+					  (ACPI_NAMESPACE_NODE **)&(op->node));
 
 			if (ACPI_FAILURE (status)) {
 				return (status);
@@ -403,7 +412,7 @@ acpi_ds_build_internal_simple_obj (
 	}
 
 	status = acpi_ds_init_object_from_op (walk_state, op,
-			 op->opcode, obj_desc);
+			 op->opcode, &obj_desc);
 
 	if (ACPI_FAILURE (status)) {
 		acpi_cm_remove_reference (obj_desc);
@@ -433,11 +442,11 @@ acpi_ds_build_internal_simple_obj (
 ACPI_STATUS
 acpi_ds_build_internal_package_obj (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op,
-	ACPI_OBJECT_INTERNAL    **obj_desc_ptr)
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_OPERAND_OBJECT     **obj_desc_ptr)
 {
-	ACPI_GENERIC_OP         *arg;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_PARSE_OBJECT       *arg;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_STATUS             status = AE_OK;
 
 
@@ -466,7 +475,7 @@ acpi_ds_build_internal_package_obj (
 
 		REPORT_ERROR ("Ds_build_internal_package_obj: Package vector allocation failure");
 
-		acpi_cm_free (obj_desc);
+		acpi_cm_delete_object_desc (obj_desc);
 		return (AE_NO_MEMORY);
 	}
 
@@ -514,8 +523,8 @@ acpi_ds_build_internal_package_obj (
 ACPI_STATUS
 acpi_ds_build_internal_object (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_GENERIC_OP         *op,
-	ACPI_OBJECT_INTERNAL    **obj_desc_ptr)
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_OPERAND_OBJECT     **obj_desc_ptr)
 {
 	ACPI_STATUS             status;
 
@@ -536,7 +545,7 @@ acpi_ds_build_internal_object (
 
 /*****************************************************************************
  *
- * FUNCTION:    Acpi_ds_create_named_object
+ * FUNCTION:    Acpi_ds_create_node
  *
  * PARAMETERS:  Op              - Parser object to be translated
  *              Obj_desc_ptr    - Where the ACPI internal object is returned
@@ -548,13 +557,13 @@ acpi_ds_build_internal_object (
  ****************************************************************************/
 
 ACPI_STATUS
-acpi_ds_create_named_object (
+acpi_ds_create_node (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_NAMED_OBJECT       *entry,
-	ACPI_GENERIC_OP         *op)
+	ACPI_NAMESPACE_NODE     *node,
+	ACPI_PARSE_OBJECT       *op)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 
 
 	if (!op->value.arg) {
@@ -575,12 +584,12 @@ acpi_ds_create_named_object (
 
 	/* Re-type the object according to it's argument */
 
-	entry->type = obj_desc->common.type;
+	node->type = obj_desc->common.type;
 
 	/* Init obj */
 
-	status = acpi_ns_attach_object ((ACPI_HANDLE) entry, obj_desc,
-			   (u8) entry->type);
+	status = acpi_ns_attach_object ((ACPI_HANDLE) node, obj_desc,
+			   (u8) node->type);
 	if (ACPI_FAILURE (status)) {
 		goto cleanup;
 	}

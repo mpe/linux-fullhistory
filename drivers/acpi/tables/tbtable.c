@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: tbtable - ACPI tables: FACP, FACS, and RSDP utilities
+ *              $Revision: 24 $
  *
  *****************************************************************************/
 
@@ -25,12 +25,12 @@
 
 
 #include "acpi.h"
-#include "hardware.h"
-#include "tables.h"
+#include "achware.h"
+#include "actables.h"
 
 
 #define _COMPONENT          TABLE_MANAGER
-	 MODULE_NAME         ("tbtable");
+	 MODULE_NAME         ("tbtable")
 
 
 /*******************************************************************************
@@ -38,7 +38,6 @@
  * FUNCTION:    Acpi_tb_get_table_rsdt
  *
  * PARAMETERS:  Number_of_tables    - Where the table count is placed
- *              Table_ptr           - Input buffer pointer, optional
  *
  * RETURN:      Status
  *
@@ -85,15 +84,15 @@ acpi_tb_get_table_rsdt (
 			REPORT_ERROR ("Invalid signature where RSDP indicates RSDT should be located");
 
 		}
+		REPORT_ERROR ("Unable to locate RSDT");
+
+		return (status);
 	}
 
 
 	/* Always delete the RSDP mapping */
 
 	acpi_tb_delete_acpi_table (ACPI_TABLE_RSDP);
-	if (ACPI_FAILURE (status)) {
-		return (status);
-	}
 
 	/* Save the table pointers and allocation info */
 
@@ -109,10 +108,15 @@ acpi_tb_get_table_rsdt (
 
 	status = acpi_tb_verify_table_checksum ((ACPI_TABLE_HEADER *) acpi_gbl_RSDT);
 
-	/* Determine the number of tables pointed to by the RSDT */
+	/*
+	 * Determine the number of tables pointed to by the RSDT.
+	 * This is defined by the ACPI Specification to be the number of
+	 * pointers contained within the RSDT.  The size of the pointers
+	 * is architecture-dependent.
+	 */
 
-	*number_of_tables = (s32) DIV_4 (acpi_gbl_RSDT->header.length -
-			   sizeof (ACPI_TABLE_HEADER));
+	*number_of_tables = ((acpi_gbl_RSDT->header.length -
+			   sizeof (ACPI_TABLE_HEADER)) / sizeof (void *));
 
 
 	return (status);
@@ -132,13 +136,13 @@ acpi_tb_get_table_rsdt (
  *
  ******************************************************************************/
 
-char *
+u8 *
 acpi_tb_scan_memory_for_rsdp (
-	char                    *start_address,
+	u8                      *start_address,
 	u32                     length)
 {
 	u32                     offset;
-	char                    *mem_rover;
+	u8                      *mem_rover;
 
 
 	/* Search from given start addr for the requested length  */
@@ -150,19 +154,19 @@ acpi_tb_scan_memory_for_rsdp (
 
 		/* The signature and checksum must both be correct */
 
-		if (STRNCMP (mem_rover, RSDP_SIG, sizeof (RSDP_SIG)-1) == 0 &&
+		if (STRNCMP ((NATIVE_CHAR *) mem_rover, RSDP_SIG, sizeof (RSDP_SIG)-1) == 0 &&
 			acpi_tb_checksum (mem_rover,
 				sizeof (ROOT_SYSTEM_DESCRIPTOR_POINTER)) == 0)
 		{
 			/* If so, we have found the RSDP */
 
-			return mem_rover;
+			return (mem_rover);
 		}
 	}
 
 	/* Searched entire block, no RSDP was found */
 
-	return NULL;
+	return (NULL);
 }
 
 
@@ -189,8 +193,8 @@ ACPI_STATUS
 acpi_tb_find_rsdp (
 	ACPI_TABLE_DESC         *table_info)
 {
-	char                    *table_ptr;
-	char                    *mem_rover;
+	u8                      *table_ptr;
+	u8                      *mem_rover;
 	ACPI_STATUS             status = AE_OK;
 
 	if (acpi_gbl_acpi_init_data.RSDP_physical_address) {
@@ -214,9 +218,9 @@ acpi_tb_find_rsdp (
 		 *  The signature and checksum must both be correct
 		 */
 
-		if (STRNCMP (table_ptr, RSDP_SIG, sizeof (RSDP_SIG)-1) != 0) {
+		if (STRNCMP ((NATIVE_CHAR *) table_ptr, RSDP_SIG, sizeof (RSDP_SIG)-1) != 0) {
 			/* Nope, BAD Signature */
-
+			acpi_os_unmap_memory (table_ptr, sizeof (ROOT_SYSTEM_DESCRIPTOR_POINTER));
 			return (AE_BAD_SIGNATURE);
 		}
 
@@ -226,7 +230,7 @@ acpi_tb_find_rsdp (
 				sizeof (ROOT_SYSTEM_DESCRIPTOR_POINTER)) != 0)
 		{
 			/* Nope, BAD Checksum */
-
+			acpi_os_unmap_memory (table_ptr, sizeof (ROOT_SYSTEM_DESCRIPTOR_POINTER));
 			return (AE_BAD_CHECKSUM);
 		}
 
@@ -309,12 +313,12 @@ acpi_tb_find_rsdp (
 }
 
 
-/*******************************************************************************
+/******************************************************************************
  *
  * FUNCTION:    Acpi_tb_get_table_facs
  *
- * PARAMETERS:  *Buffer_ptr             - If == NULL, read data from buffer
- *                                        rather than searching memory
+ * PARAMETERS:  *Buffer_ptr             - If Buffer_ptr is valid, read data from
+ *                                          buffer rather than searching memory
  *              *Table_info             - Where the table info is returned
  *
  * RETURN:      Status
@@ -324,11 +328,11 @@ acpi_tb_find_rsdp (
  *              correctly initialized.  The value of FACP->Firmware_ctrl
  *              into a far pointer which is returned.
  *
- ******************************************************************************/
+ *****************************************************************************/
 
 ACPI_STATUS
 acpi_tb_get_table_facs (
-	char                    *buffer_ptr,
+	ACPI_TABLE_HEADER       *buffer_ptr,
 	ACPI_TABLE_DESC         *table_info)
 {
 	void                    *table_ptr = NULL;

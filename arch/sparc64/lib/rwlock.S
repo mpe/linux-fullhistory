@@ -1,4 +1,4 @@
-/* $Id: rwlock.S,v 1.3 2000/03/16 16:44:38 davem Exp $
+/* $Id: rwlock.S,v 1.4 2000/09/09 00:00:34 davem Exp $
  * rwlocks.S: These things are too big to do inline.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -30,54 +30,38 @@ __read_unlock: /* %o0 = lock_ptr */
 	cmp		%g5, %g7
 	be,pt		%xcc, 99b
 	 membar		#StoreLoad | #StoreStore
-	b,a,pt		%xcc, __read_unlock
+	ba,a,pt		%xcc, __read_unlock
 
 __read_wait_for_writer:
 	ldsw		[%o0], %g5
 	brlz,pt		%g5, __read_wait_for_writer
 	 membar		#LoadLoad
-	b,a,pt		%xcc, 4b
-__write_wait_for_writer:
-	ldsw		[%o0], %g5
-	brlz,pt		%g5, __write_wait_for_writer
+	ba,a,pt		%xcc, 4b
+__write_wait_for_any:
+	lduw		[%o0], %g5
+	brnz,pt		%g5, __write_wait_for_any
 	 membar		#LoadLoad
-	b,a,pt		%xcc, 4f
-
-	/* Similarly, 2 cache lines for non-contention write locks. */
+	ba,a,pt		%xcc, 4f
 
 	.align		64
 	.globl		__write_unlock
 __write_unlock: /* %o0 = lock_ptr */
-	sethi		%hi(0x80000000), %g2
-1:	lduw		[%o0], %g5
-	andn		%g5, %g2, %g7
-	cas		[%o0], %g5, %g7
-	cmp		%g5, %g7
-	be,pt		%icc, 99b
-	 membar		#StoreLoad | #StoreStore
-	b,a,pt		%xcc, 1b
+	membar		#LoadStore | #StoreStore
+	retl
+	 stw		%g0, [%o0]
 
 	.globl		__write_lock
 __write_lock: /* %o0 = lock_ptr */
 	sethi		%hi(0x80000000), %g2
-1:	ldsw		[%o0], %g5
-4:	brnz,pn		%g5, 5f
-	 or		%g5, %g2, %g7
+
+1:	lduw		[%o0], %g5
+	brnz,pn		%g5, __write_wait_for_any
+4:	 or		%g5, %g2, %g7
 	cas		[%o0], %g5, %g7
+
 	cmp		%g5, %g7
 	be,pt		%icc, 99b
 	 membar		#StoreLoad | #StoreStore
-
-	b,a,pt		%xcc, 1b
-5:	brlz		%g5, __write_wait_for_writer
-	or		%g5, %g2, %g7
-	cas		[%o0], %g5, %g7
-	cmp		%g5, %g7
-	bne,pn		%icc, 5b
-8:	 ldsw		[%o0], %g5
-	cmp		%g5, %g2
-	be,pn		%icc, 99b
-	 membar		#LoadLoad
-	b,a,pt		%xcc, 99b
+	ba,a,pt		%xcc, 1b
 rwlock_impl_end:
 

@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.119 2000/09/06 00:45:01 davem Exp $
+/* $Id: entry.S,v 1.120 2000/09/08 13:58:12 jj Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -940,8 +940,8 @@ ret_from_syscall:
 
 1:		b,pt		%xcc, ret_sys_call
 		 ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0], %o0
-sparc_exit:	rdpr		%otherwin, %g1
-		wrpr		%g0, (PSTATE_RMO | PSTATE_PEF | PSTATE_PRIV), %pstate
+sparc_exit:	wrpr		%g0, (PSTATE_RMO | PSTATE_PEF | PSTATE_PRIV), %pstate
+		rdpr		%otherwin, %g1
 		rdpr		%cansave, %g3
 		add		%g3, %g1, %g3
 		wrpr		%g3, 0x0, %cansave

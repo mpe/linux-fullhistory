@@ -6,6 +6,7 @@
  *                        Acpi_rs_fixed_memory32_resource
  *                        Acpi_rs_memory32_range_stream
  *                        Acpi_rs_fixed_memory32_stream
+ *              $Revision: 7 $
  *
  *****************************************************************************/
 
@@ -31,7 +32,7 @@
 #include "acpi.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
-	 MODULE_NAME         ("rsmemory");
+	 MODULE_NAME         ("rsmemory")
 
 
 /***************************************************************************
@@ -76,7 +77,7 @@ acpi_rs_memory24_resource (
 	 */
 	buffer += 1;
 
-	temp16 = *(u16 *)buffer;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	buffer += 2;
 
@@ -96,7 +97,7 @@ acpi_rs_memory24_resource (
 	/*
 	 * Get Min_base_address (Bytes 4-5)
 	 */
-	temp16 = *(u16 *)buffer;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	buffer += 2;
 
@@ -105,7 +106,7 @@ acpi_rs_memory24_resource (
 	/*
 	 * Get Max_base_address (Bytes 6-7)
 	 */
-	temp16 = *(u16 *)buffer;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	buffer += 2;
 
@@ -114,7 +115,7 @@ acpi_rs_memory24_resource (
 	/*
 	 * Get Alignment (Bytes 8-9)
 	 */
-	temp16 = *(u16 *)buffer;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	buffer += 2;
 
@@ -123,7 +124,7 @@ acpi_rs_memory24_resource (
 	/*
 	 * Get Range_length (Bytes 10-11)
 	 */
-	temp16 = *(u16 *)buffer;
+	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 	output_struct->data.memory24.range_length = temp16;
 

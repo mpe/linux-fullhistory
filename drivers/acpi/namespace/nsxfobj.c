@@ -1,10 +1,10 @@
-
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: nsxfobj - Public interfaces to the ACPI subsystem
  *                         ACPI Object oriented interfaces
+ *              $Revision: 65 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -26,15 +26,15 @@
 
 
 #include "acpi.h"
-#include "interp.h"
-#include "namesp.h"
+#include "acinterp.h"
+#include "acnamesp.h"
 
 
 #define _COMPONENT          NAMESPACE
-	 MODULE_NAME         ("nsxfobj");
+	 MODULE_NAME         ("nsxfobj")
 
 
-/****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_evaluate_object
  *
@@ -54,7 +54,7 @@
  *              parameters if necessary.  One of "Handle" or "Pathname" must
  *              be valid (non-null)
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_evaluate_object (
@@ -64,9 +64,9 @@ acpi_evaluate_object (
 	ACPI_BUFFER             *return_buffer)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    **param_ptr = NULL;
-	ACPI_OBJECT_INTERNAL    *return_obj = NULL;
-	ACPI_OBJECT_INTERNAL    *object_ptr = NULL;
+	ACPI_OPERAND_OBJECT     **param_ptr = NULL;
+	ACPI_OPERAND_OBJECT     *return_obj = NULL;
+	ACPI_OPERAND_OBJECT     *object_ptr = NULL;
 	u32                     buffer_space_needed;
 	u32                     user_buffer_length;
 	u32                     count;
@@ -85,12 +85,11 @@ acpi_evaluate_object (
 		/*
 		 * Allocate a new parameter block for the internal objects
 		 * Add 1 to count to allow for null terminated internal list
-		 * TBD: [Restructure] merge into single allocation!
 		 */
 
 		count           = param_objects->count;
 		param_length    = (count + 1) * sizeof (void *);
-		object_length   = count * sizeof (ACPI_OBJECT_INTERNAL);
+		object_length   = count * sizeof (ACPI_OPERAND_OBJECT);
 
 		param_ptr = acpi_cm_callocate (param_length + /* Parameter List part */
 				  object_length); /* Actual objects */
@@ -98,7 +97,7 @@ acpi_evaluate_object (
 			return (AE_NO_MEMORY);
 		}
 
-		object_ptr = (ACPI_OBJECT_INTERNAL *) ((u8 *) param_ptr +
+		object_ptr = (ACPI_OPERAND_OBJECT *) ((u8 *) param_ptr +
 				  param_length);
 
 		/*
@@ -169,18 +168,15 @@ acpi_evaluate_object (
 			 * The null pathname case means the handle is for
 			 * the actual object to be evaluated
 			 */
-			status = acpi_ns_evaluate_by_handle (handle,
-					   param_ptr,
-					   &return_obj);
+			status = acpi_ns_evaluate_by_handle (handle, param_ptr, &return_obj);
 		}
 
 		else {
 		   /*
 			* Both a Handle and a relative Pathname
 			*/
-			status = acpi_ns_evaluate_relative (handle, pathname,
-					   param_ptr,
-					   &return_obj);
+			status = acpi_ns_evaluate_relative (handle, pathname, param_ptr,
+					 &return_obj);
 		}
 	}
 
@@ -195,11 +191,9 @@ acpi_evaluate_object (
 		return_buffer->length = 0;
 
 		if (return_obj) {
-			if (VALID_DESCRIPTOR_TYPE (return_obj,
-					  ACPI_DESC_TYPE_NAMED))
-			{
+			if (VALID_DESCRIPTOR_TYPE (return_obj, ACPI_DESC_TYPE_NAMED)) {
 				/*
-				 * If we got an NTE as a return object,
+				 * If we got an Node as a return object,
 				 * this means the object we are evaluating
 				 * has nothing interesting to return (such
 				 * as a mutex, etc.)  We return an error
@@ -210,7 +204,7 @@ acpi_evaluate_object (
 				 * types at a later date if necessary.
 				 */
 				status = AE_TYPE;
-				return_obj = NULL;  /* No need to delete an NTE */
+				return_obj = NULL;  /* No need to delete an Node */
 			}
 
 			if (ACPI_SUCCESS (status)) {
@@ -241,9 +235,8 @@ acpi_evaluate_object (
 						/*
 						 *  We have enough space for the object, build it
 						 */
-						status =
-							acpi_cm_build_external_object (return_obj,
-									  return_buffer);
+						status = acpi_cm_build_external_object (return_obj,
+								  return_buffer);
 						return_buffer->length = buffer_space_needed;
 					}
 				}
@@ -276,7 +269,7 @@ acpi_evaluate_object (
 }
 
 
-/****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_get_next_object
  *
@@ -302,15 +295,15 @@ acpi_get_next_object (
 	ACPI_HANDLE             *ret_handle)
 {
 	ACPI_STATUS             status = AE_OK;
-	ACPI_NAMED_OBJECT       *entry;
-	ACPI_NAMED_OBJECT       *parent_entry = NULL;
-	ACPI_NAMED_OBJECT       *child_entry = NULL;
+	ACPI_NAMESPACE_NODE     *node;
+	ACPI_NAMESPACE_NODE     *parent_node = NULL;
+	ACPI_NAMESPACE_NODE     *child_node = NULL;
 
 
 	/* Parameter validation */
 
 	if (type > ACPI_TYPE_MAX) {
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
 	acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
@@ -320,8 +313,8 @@ acpi_get_next_object (
 	if (!child) {
 		/* Start search at the beginning of the specified scope */
 
-		parent_entry = acpi_ns_convert_handle_to_entry (parent);
-		if (!parent_entry) {
+		parent_node = acpi_ns_convert_handle_to_entry (parent);
+		if (!parent_node) {
 			status = AE_BAD_PARAMETER;
 			goto unlock_and_exit;
 		}
@@ -332,8 +325,8 @@ acpi_get_next_object (
 	else {
 		/* Convert and validate the handle */
 
-		child_entry = acpi_ns_convert_handle_to_entry (child);
-		if (!child_entry) {
+		child_node = acpi_ns_convert_handle_to_entry (child);
+		if (!child_node) {
 			status = AE_BAD_PARAMETER;
 			goto unlock_and_exit;
 		}
@@ -342,26 +335,26 @@ acpi_get_next_object (
 
 	/* Internal function does the real work */
 
-	entry = acpi_ns_get_next_object ((OBJECT_TYPE_INTERNAL) type,
-			   parent_entry, child_entry);
-	if (!entry) {
+	node = acpi_ns_get_next_object ((OBJECT_TYPE_INTERNAL) type,
+			   parent_node, child_node);
+	if (!node) {
 		status = AE_NOT_FOUND;
 		goto unlock_and_exit;
 	}
 
 	if (ret_handle) {
-		*ret_handle = acpi_ns_convert_entry_to_handle (entry);
+		*ret_handle = acpi_ns_convert_entry_to_handle (node);
 	}
 
 
 unlock_and_exit:
 
 	acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
-	return status;
+	return (status);
 }
 
 
-/****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_get_type
  *
@@ -379,44 +372,43 @@ acpi_get_type (
 	ACPI_HANDLE             handle,
 	ACPI_OBJECT_TYPE        *ret_type)
 {
-	ACPI_NAMED_OBJECT       *object;
+	ACPI_NAMESPACE_NODE     *node;
 
 
 	/* Parameter Validation */
 
 	if (!ret_type) {
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
 	/*
-	 * Special case for the predefined Root Object
+	 * Special case for the predefined Root Node
 	 * (return type ANY)
 	 */
-
 	if (handle == ACPI_ROOT_OBJECT) {
 		*ret_type = ACPI_TYPE_ANY;
-		return AE_OK;
+		return (AE_OK);
 	}
 
 	acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
 
 	/* Convert and validate the handle */
 
-	object = acpi_ns_convert_handle_to_entry (handle);
-	if (!object) {
+	node = acpi_ns_convert_handle_to_entry (handle);
+	if (!node) {
 		acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
-	*ret_type = object->type;
+	*ret_type = node->type;
 
 
 	acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
-	return AE_OK;
+	return (AE_OK);
 }
 
 
-/****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_get_parent
  *
@@ -435,7 +427,7 @@ acpi_get_parent (
 	ACPI_HANDLE             handle,
 	ACPI_HANDLE             *ret_handle)
 {
-	ACPI_NAMED_OBJECT       *object;
+	ACPI_NAMESPACE_NODE     *node;
 	ACPI_STATUS             status = AE_OK;
 
 
@@ -443,13 +435,13 @@ acpi_get_parent (
 
 
 	if (!ret_handle) {
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
-	/* Special case for the predefined Root Object (no parent) */
+	/* Special case for the predefined Root Node (no parent) */
 
 	if (handle == ACPI_ROOT_OBJECT) {
-		return AE_NULL_ENTRY;
+		return (AE_NULL_ENTRY);
 	}
 
 
@@ -457,8 +449,8 @@ acpi_get_parent (
 
 	/* Convert and validate the handle */
 
-	object = acpi_ns_convert_handle_to_entry (handle);
-	if (!object) {
+	node = acpi_ns_convert_handle_to_entry (handle);
+	if (!node) {
 		status = AE_BAD_PARAMETER;
 		goto unlock_and_exit;
 	}
@@ -467,11 +459,11 @@ acpi_get_parent (
 	/* Get the parent entry */
 
 	*ret_handle =
-		acpi_ns_convert_entry_to_handle (acpi_ns_get_parent_entry (object));
+		acpi_ns_convert_entry_to_handle (acpi_ns_get_parent_object (node));
 
 	/* Return exeption if parent is null */
 
-	if (!acpi_ns_get_parent_entry (object)) {
+	if (!acpi_ns_get_parent_object (node)) {
 		status = AE_NULL_ENTRY;
 	}
 
@@ -479,11 +471,11 @@ acpi_get_parent (
 unlock_and_exit:
 
 	acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
-	return AE_OK;
+	return (status);
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_walk_namespace
  *

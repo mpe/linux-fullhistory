@@ -244,7 +244,7 @@ acpi_os_write_pci_cfg_dword (
 
 ACPI_STATUS
 acpi_os_breakpoint (
-	char                    *message);
+	NATIVE_CHAR             *message);
 
 u8
 acpi_os_readable (
@@ -264,12 +264,12 @@ acpi_os_writable (
 
 s32
 acpi_os_printf (
-	const char              *format,
+	const NATIVE_CHAR       *format,
 	...);
 
 s32
 acpi_os_vprintf (
-	const char              *format,
+	const NATIVE_CHAR       *format,
 	va_list                 args);
 
 /*
@@ -278,7 +278,7 @@ acpi_os_vprintf (
 
 u32
 acpi_os_get_line (
-	char                    *buffer);
+	NATIVE_CHAR             *buffer);
 
 
 /*
@@ -290,7 +290,7 @@ acpi_os_dbg_assert(
 	void                    *failed_assertion,
 	void                    *file_name,
 	u32                     line_number,
-	char                    *message);
+	NATIVE_CHAR             *message);
 
 
 #endif /* __ACPIOSD_H__ */

@@ -24,6 +24,9 @@
 #include "acpi.h"
 #include "driver.h"
 
+#define _COMPONENT	OS_DEPENDENT
+	MODULE_NAME	("sys")
+
 #define ACPI_SLP_TYP(typa, typb) (((int)(typa) << 8) | (int)(typb))
 #define ACPI_SLP_TYPA(value) \
         ((((value) >> 8) << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK)

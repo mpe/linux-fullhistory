@@ -40,7 +40,18 @@ freepages_t freepages = {
 };
 
 /* How many pages do we try to swap or page in/out together? */
-int page_cluster = 4; /* Default value modified in swap_setup() */
+int page_cluster;
+
+/*
+ * This variable contains the amount of page steals the system
+ * is doing, averaged over a minute. We use this to determine how
+ * many inactive pages we should have.
+ *
+ * In reclaim_page and __alloc_pages: memory_pressure++
+ * In __free_pages_ok: memory_pressure--
+ * In recalculate_vm_stats the value is decayed (once a second)
+ */
+int memory_pressure;
 
 /* We track the number of pages currently being asynchronously swapped
    out, so that we don't try to swap TOO many pages out at once */
@@ -61,13 +72,240 @@ buffer_mem_t page_cache = {
 pager_daemon_t pager_daemon = {
 	512,	/* base number for calculating the number of tries */
 	SWAP_CLUSTER_MAX,	/* minimum number of tries */
-	SWAP_CLUSTER_MAX,	/* do swap I/O in clusters of this size */
+	8,	/* do swap I/O in clusters of this size */
 };
+
+/**
+ * age_page_{up,down} -	page aging helper functions
+ * @page - the page we want to age
+ * @nolock - are we already holding the pagelist_lru_lock?
+ *
+ * If the page is on one of the lists (active, inactive_dirty or
+ * inactive_clean), we will grab the pagelist_lru_lock as needed.
+ * If you're already holding the lock, call this function with the
+ * nolock argument non-zero.
+ */
+void age_page_up_nolock(struct page * page)
+{
+	/*
+	 * We're dealing with an inactive page, move the page
+	 * to the active list.
+	 */
+	if (!page->age)
+		activate_page_nolock(page);
+
+	/* The actual page aging bit */
+	page->age += PAGE_AGE_ADV;
+	if (page->age > PAGE_AGE_MAX)
+		page->age = PAGE_AGE_MAX;
+}
+
+void age_page_down_nolock(struct page * page)
+{
+	/* The actual page aging bit */
+	page->age /= 2;
+
+	/*
+	 * The page is now an old page. Move to the inactive
+	 * list (if possible ... see below).
+	 */
+	if (!page->age)
+	       deactivate_page_nolock(page);
+}
+
+void age_page_up(struct page * page)
+{
+	/*
+	 * We're dealing with an inactive page, move the page
+	 * to the active list.
+	 */
+	if (!page->age)
+		activate_page(page);
+
+	/* The actual page aging bit */
+	page->age += PAGE_AGE_ADV;
+	if (page->age > PAGE_AGE_MAX)
+		page->age = PAGE_AGE_MAX;
+}
+
+void age_page_down(struct page * page)
+{
+	/* The actual page aging bit */
+	page->age /= 2;
+
+	/*
+	 * The page is now an old page. Move to the inactive
+	 * list (if possible ... see below).
+	 */
+	if (!page->age)
+	       deactivate_page(page);
+}
+
+
+/**
+ * (de)activate_page - move pages from/to active and inactive lists
+ * @page: the page we want to move
+ * @nolock - are we already holding the pagemap_lru_lock?
+ *
+ * Deactivate_page will move an active page to the right
+ * inactive list, while activate_page will move a page back
+ * from one of the inactive lists to the active list. If
+ * called on a page which is not on any of the lists, the
+ * page is left alone.
+ */
+void deactivate_page_nolock(struct page * page)
+{
+	page->age = 0;
+
+	/*
+	 * Don't touch it if it's not on the active list.
+	 * (some pages aren't on any list at all)
+	 */
+	if (PageActive(page) && (page_count(page) == 1 || page->buffers) &&
+			!page_ramdisk(page)) {
+
+		/*
+		 * We can move the page to the inactive_dirty list
+		 * if we know there is backing store available.
+		 */
+		if (page->buffers) {
+			del_page_from_active_list(page);
+			add_page_to_inactive_dirty_list(page);
+		/*
+		 * If the page is clean and immediately reusable,
+		 * we can move it to the inactive_clean list.
+		 */
+		} else if (page->mapping && !PageDirty(page) &&
+							!PageLocked(page)) {
+			del_page_from_active_list(page);
+			add_page_to_inactive_clean_list(page);
+		}
+		/*
+		 * ELSE: no backing store available, leave it on
+		 * the active list.
+		 */
+	}
+}	
+
+void deactivate_page(struct page * page)
+{
+	spin_lock(&pagemap_lru_lock);
+	deactivate_page_nolock(page);
+	spin_unlock(&pagemap_lru_lock);
+}
+
+/*
+ * Move an inactive page to the active list.
+ */
+void activate_page_nolock(struct page * page)
+{
+	if (PageInactiveDirty(page)) {
+		del_page_from_inactive_dirty_list(page);
+		add_page_to_active_list(page);
+	} else if (PageInactiveClean(page)) {
+		del_page_from_inactive_clean_list(page);
+		add_page_to_active_list(page);
+	} else {
+		/*
+		 * The page was not on any list, so we take care
+		 * not to do anything.
+		 */
+	}
+}
+
+void activate_page(struct page * page)
+{
+	spin_lock(&pagemap_lru_lock);
+	activate_page_nolock(page);
+	spin_unlock(&pagemap_lru_lock);
+}
+
+/**
+ * lru_cache_add: add a page to the page lists
+ * @page: the page to add
+ */
+void lru_cache_add(struct page * page)
+{
+	spin_lock(&pagemap_lru_lock);
+	if (!PageLocked(page))
+		BUG();
+	/*
+	 * Heisenbug Compensator(tm)
+	 * This bug shouldn't trigger, but for unknown reasons it
+	 * sometimes does. If there are no signs of list corruption,
+	 * we ignore the problem. Else we BUG()...
+	 */
+	if (PageActive(page) || PageInactiveDirty(page) ||
+					PageInactiveClean(page)) {
+		struct list_head * page_lru = &page->lru;
+		if (page_lru->next->prev != page_lru) {
+			printk("VM: lru_cache_add, bit or list corruption..\n");
+			BUG();
+		}
+		printk("VM: lru_cache_add, page already in list!\n");
+		goto page_already_on_list;
+	}
+	add_page_to_active_list(page);
+	/* This should be relatively rare */
+	if (!page->age)
+		deactivate_page_nolock(page);
+page_already_on_list:
+	spin_unlock(&pagemap_lru_lock);
+}
+
+/**
+ * __lru_cache_del: remove a page from the page lists
+ * @page: the page to add
+ *
+ * This function is for when the caller already holds
+ * the pagemap_lru_lock.
+ */
+void __lru_cache_del(struct page * page)
+{
+	if (PageActive(page)) {
+		del_page_from_active_list(page);
+	} else if (PageInactiveDirty(page)) {
+		del_page_from_inactive_dirty_list(page);
+	} else if (PageInactiveClean(page)) {
+		del_page_from_inactive_clean_list(page);
+	} else {
+		printk("VM: __lru_cache_del, found unknown page ?!\n");
+	}
+	DEBUG_ADD_PAGE
+}
+
+/**
+ * lru_cache_del: remove a page from the page lists
+ * @page: the page to remove
+ */
+void lru_cache_del(struct page * page)
+{
+	if (!PageLocked(page))
+		BUG();
+	spin_lock(&pagemap_lru_lock);
+	__lru_cache_del(page);
+	spin_unlock(&pagemap_lru_lock);
+}
+
+/**
+ * recalculate_vm_stats - recalculate VM statistics
+ *
+ * This function should be called once a second to recalculate
+ * some useful statistics the VM subsystem uses to determine
+ * its behaviour.
+ */
+void recalculate_vm_stats(void)
+{
+	/*
+	 * Substract one second worth of memory_pressure from
+	 * memory_pressure.
+	 */
+	memory_pressure -= (memory_pressure >> INACTIVE_SHIFT);
+}
 
 /*
  * Perform any setup for the swap system
  */
-
 void __init swap_setup(void)
 {
 	/* Use a smaller cluster for memory <16MB or <32MB */

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
- * Name: actables.h - Table data structures defined in ACPI specification
+ * Name: actables.h - ACPI table management
+ *       $Revision: 20 $
  *
  *****************************************************************************/
 
@@ -27,162 +27,139 @@
 #define __ACTABLES_H__
 
 
+/* Used in Acpi_tb_map_acpi_table for size parameter if table header is to be used */
+
+#define SIZE_IN_HEADER          0
+
+
+ACPI_STATUS
+acpi_tb_handle_to_object (
+	u16                     table_id,
+	ACPI_TABLE_DESC         **table_desc);
+
+
 /*
- *  Values for description table header signatures
+ * Acpi_tbfac - FACP, FACS utilities
  */
 
-#define RSDP_SIG            "RSD PTR "              /* RSDT Pointer signature */
-#define APIC_SIG            "APIC"                  /* Multiple APIC Description Table */
-#define DSDT_SIG            "DSDT"                  /* Differentiated System Description Table */
-#define FACP_SIG            "FACP"                  /* Fixed ACPI Description Table */
-#define FACS_SIG            "FACS"                  /* Firmware ACPI Control Structure */
-#define PSDT_SIG            "PSDT"                  /* Persistent System Description Table */
-#define RSDT_SIG            "RSDT"                  /* Root System Description Table */
-#define SSDT_SIG            "SSDT"                  /* Secondary System Description Table */
-#define SBST_SIG            "SBST"                  /* Smart Battery Specification Table */
-#define BOOT_SIG            "BOOT"                  /* Boot table */
-
-
-#define GL_OWNED            0x02                    /* Ownership of global lock is bit 1 */
-
-/* values of Mapic.Model */
-
-#define DUAL_PIC            0
-#define MULTIPLE_APIC       1
-
-/* values of Type in APIC_HEADER */
-
-#define APIC_PROC           0
-#define APIC_IO             1
+ACPI_STATUS
+acpi_tb_get_table_facs (
+	ACPI_TABLE_HEADER       *buffer_ptr,
+	ACPI_TABLE_DESC         *table_info);
 
 
 /*
- * Architecture-independent tables
- * The architecture dependent tables are in separate files
+ * Acpi_tbget - Table "get" routines
  */
 
-typedef struct  /* Root System Descriptor Pointer */
-{
-	char                    signature [8];          /* contains "RSD PTR " */
-	u8                      checksum;               /* to make sum of struct == 0 */
-	char                    oem_id [6];             /* OEM identification */
-	u8                      reserved;               /* reserved - must be zero */
-	u32                     rsdt_physical_address;  /* physical address of RSDT */
+ACPI_STATUS
+acpi_tb_get_table_ptr (
+	ACPI_TABLE_TYPE         table_type,
+	u32                     instance,
+	ACPI_TABLE_HEADER       **table_ptr_loc);
 
-} ROOT_SYSTEM_DESCRIPTOR_POINTER;
-
-
-typedef struct  /* ACPI common table header */
-{
-	char                    signature [4];          /* identifies type of table */
-	u32                     length;                 /* length of table, in bytes,
-			  * including header */
-	u8                      revision;               /* specification minor version # */
-	u8                      checksum;               /* to make sum of entire table == 0 */
-	char                    oem_id [6];             /* OEM identification */
-	char                    oem_table_id [8];       /* OEM table identification */
-	u32                     oem_revision;           /* OEM revision number */
-	char                    asl_compiler_id [4];    /* ASL compiler vendor ID */
-	u32                     asl_compiler_revision;  /* ASL compiler revision number */
-
-} ACPI_TABLE_HEADER;
-
-
-typedef struct  /* APIC Table */
-{
-	ACPI_TABLE_HEADER       header;                 /* table header */
-	u32                     local_apic_address;     /* Physical address for accessing local APICs */
-	u32                     PCATcompat      : 1;    /* a one indicates system also has dual 8259s */
-	u32                     reserved1       : 31;
-
-} APIC_TABLE;
-
-
-typedef struct  /* APIC Header */
-{
-	u8                      type;                   /* APIC type.  Either APIC_PROC or APIC_IO */
-	u8                      length;                 /* Length of APIC structure */
-
-} APIC_HEADER;
-
-
-typedef struct  /* Processor APIC */
-{
-	APIC_HEADER             header;
-	u8                      processor_apic_id;      /* ACPI processor id */
-	u8                      local_apic_id;          /* processor's local APIC id */
-	u32                     processor_enabled: 1;   /* Processor is usable if set */
-	u32                     reserved1       : 32;
-
-} PROCESSOR_APIC;
-
-
-typedef struct  /* IO APIC */
-{
-	APIC_HEADER             header;
-	u8                      io_apic_id;             /* I/O APIC ID */
-	u8                      reserved;               /* reserved - must be zero */
-	u32                     io_apic_address;        /* APIC's physical address */
-	u32                     vector;                 /* interrupt vector index where INTI
-			  * lines start */
-} IO_APIC;
+ACPI_STATUS
+acpi_tb_get_table (
+	void                    *physical_address,
+	ACPI_TABLE_HEADER       *buffer_ptr,
+	ACPI_TABLE_DESC         *table_info);
 
 
 /*
-**  IA64 TODO:  Add SAPIC Tables
-*/
-
-/*
-**  IA64 TODO:  Modify Smart Battery Description to comply with ACPI IA64
-**              extensions.
-*/
-typedef struct  /* Smart Battery Description Table */
-{
-	ACPI_TABLE_HEADER       header;
-	u32                     warning_level;
-	u32                     low_level;
-	u32                     critical_level;
-
-} SMART_BATTERY_DESCRIPTION_TABLE;
-
-
-/*
- * ACPI Table information.  We save the table address, length,
- * and type of memory allocation (mapped or allocated) for each
- * table for 1) when we exit, and 2) if a new table is installed
+ * Acpi_tbgetall - Get all firmware ACPI tables
  */
 
-#define ACPI_MEM_NOT_ALLOCATED  0
-#define ACPI_MEM_ALLOCATED      1
-#define ACPI_MEM_MAPPED         2
-
-#define ACPI_TABLE_SINGLE       0
-#define ACPI_TABLE_MULTIPLE     1
-
-
-/* Data about each known table type */
-
-typedef struct _acpi_table_support
-{
-	char                    *name;
-	char                    *signature;
-	u8                      sig_length;
-	u8                      flags;
-	u16                     status;
-	void                    **global_ptr;
-
-} ACPI_TABLE_SUPPORT;
+ACPI_STATUS
+acpi_tb_get_all_tables (
+	u32                     number_of_tables,
+	ACPI_TABLE_HEADER       *buffer_ptr);
 
 
 /*
- * Get the architecture-specific tables
+ * Acpi_tbinstall - Table installation
  */
 
-#ifdef IA64
-#include "actbl64.h"
-#else
-#include "actbl32.h"
-#endif
+ACPI_STATUS
+acpi_tb_install_table (
+	ACPI_TABLE_HEADER       *table_ptr,
+	ACPI_TABLE_DESC         *table_info);
+
+ACPI_STATUS
+acpi_tb_recognize_table (
+	ACPI_TABLE_HEADER       *table_ptr,
+	ACPI_TABLE_DESC         *table_info);
+
+ACPI_STATUS
+acpi_tb_init_table_descriptor (
+	ACPI_TABLE_TYPE         table_type,
+	ACPI_TABLE_DESC         *table_info);
+
+
+/*
+ * Acpi_tbremove - Table removal and deletion
+ */
+
+void
+acpi_tb_delete_acpi_tables (
+	void);
+
+void
+acpi_tb_delete_acpi_table (
+	ACPI_TABLE_TYPE         type);
+
+ACPI_TABLE_DESC *
+acpi_tb_delete_single_table (
+	ACPI_TABLE_DESC         *table_desc);
+
+void
+acpi_tb_free_acpi_tables_of_type (
+	ACPI_TABLE_DESC         *table_info);
+
+
+/*
+ * Acpi_tbrsd - RSDP, RSDT utilities
+ */
+
+ACPI_STATUS
+acpi_tb_get_table_rsdt (
+	u32                     *number_of_tables);
+
+u8 *
+acpi_tb_scan_memory_for_rsdp (
+	u8                      *start_address,
+	u32                     length);
+
+ACPI_STATUS
+acpi_tb_find_rsdp (
+	ACPI_TABLE_DESC         *table_info);
+
+
+/*
+ * Acpi_tbutils - common table utilities
+ */
+
+u8
+acpi_tb_system_table_pointer (
+	void                    *where);
+
+ACPI_STATUS
+acpi_tb_map_acpi_table (
+	void                    *physical_address,
+	u32                     *size,
+	void                    **logical_address);
+
+ACPI_STATUS
+acpi_tb_verify_table_checksum (
+	ACPI_TABLE_HEADER       *table_header);
+
+u8
+acpi_tb_checksum (
+	void                    *buffer,
+	u32                     length);
+
+ACPI_STATUS
+acpi_tb_validate_table_header (
+	ACPI_TABLE_HEADER       *table_header);
 
 
 #endif /* __ACTABLES_H__ */

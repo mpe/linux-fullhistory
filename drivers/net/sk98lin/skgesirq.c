@@ -2,8 +2,8 @@
  *
  * Name:	skgesirq.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.46 $
- * Date:	$Date: 1999/09/16 10:30:07 $
+ * Version:	$Revision: 1.55 $
+ * Date:	$Date: 2000/06/19 08:36:25 $
  * Purpose:	Special IRQ module
  *
  ******************************************************************************/
@@ -12,8 +12,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -29,6 +27,34 @@
  * History:
  *
  *	$Log: skgesirq.c,v $
+ *	Revision 1.55  2000/06/19 08:36:25  cgoos
+ *	Changed comment.
+ *	
+ *	Revision 1.54  2000/05/22 08:45:57  malthoff
+ *	Fix: #10523 is valid for all BCom PHYs.
+ *	
+ *	Revision 1.53  2000/05/19 10:20:30  cgoos
+ *	Removed Solaris debug output code.
+ *	
+ *	Revision 1.52  2000/05/19 10:19:37  cgoos
+ *	Added PHY state check in HWLinkDown.
+ *	Move PHY interrupt code to IS_EXT_REG case in SkGeSirqIsr.
+ *	
+ *	Revision 1.51  2000/05/18 05:56:20  cgoos
+ *	Fixed typo.
+ *	
+ *	Revision 1.50  2000/05/17 12:49:49  malthoff
+ *	Fixes BCom link bugs (#10523).
+ *	
+ *	Revision 1.49  1999/12/17 11:02:50  gklug
+ *	fix: read PHY_STAT of Broadcom chip more often to assure good status
+ *	
+ *	Revision 1.48  1999/12/06 10:01:17  cgoos
+ *	Added SET function for Role.
+ *	
+ *	Revision 1.47  1999/11/22 13:34:24  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.46  1999/09/16 10:30:07  cgoos
  *	Removed debugging output statement from Linux.
  *	
@@ -215,7 +241,7 @@
 
 */
 static const char SysKonnectFileId[] =
-	"$Id: skgesirq.c,v 1.46 1999/09/16 10:30:07 cgoos Exp $" ;
+	"$Id: skgesirq.c,v 1.55 2000/06/19 08:36:25 cgoos Exp $" ;
 
 #include "h/skdrv1st.h"		/* Driver Specific Definitions */
 #include "h/skgepnmi.h"		/* PNMI Definitions */
@@ -385,6 +411,15 @@ int	Port)		/* Port Index (MAC_1 + n) */
 	/* disable all PHY interrupts */
 	switch (pAC->GIni.GP[Port].PhyType) {
 		case SK_PHY_BCOM:
+			/* make sure that PHY is initialized */
+			if (pAC->GIni.GP[Port].PState) {
+				/* Workaround BCOM Errata (#10523) all BCom */
+				/* Disable Power Management if link is down */
+				PHY_READ(IoC, pPrt, Port, PHY_BCOM_AUX_CTRL,
+					&Word);
+				PHY_WRITE(IoC, pPrt, Port, PHY_BCOM_AUX_CTRL,	
+					Word | PHY_B_AC_DIS_PM);
+			}
 			PHY_WRITE(IoC, pPrt, Port, PHY_BCOM_INT_MASK, 
 				0xffff);
 			break;
@@ -766,12 +801,11 @@ SK_U32	Istatus)	/* Interrupt status word */
 	}
 
 	/*
-	 * I2C Ready interrupt
+	 * external reg interrupt
 	 */
-	if (Istatus & IS_I2C_READY) {
+	if (Istatus & IS_EXT_REG) {
 		SK_U16 	PhyInt;
 		SK_U16 	PhyIMsk;
-		SK_BOOL	IsPhyInt = SK_FALSE;
 		int	i;
 		/* test IRQs from PHY */
 		for (i=0; i<pAC->GIni.GIMacsFound; i++) {
@@ -794,7 +828,6 @@ SK_U32	Istatus)	/* Interrupt status word */
 						SkPhyIsrBcom(pAC, IoC, i,
 							(SK_U16) 
 							(PhyInt & (~PhyIMsk)));
-						IsPhyInt = SK_TRUE;
 					}
 				}
 				else {
@@ -814,7 +847,6 @@ SK_U32	Istatus)	/* Interrupt status word */
 						i, PhyInt, PhyIMsk));
 					SkPhyIsrLone(pAC, IoC, i,
 						(SK_U16) (PhyInt & PhyIMsk));
-					IsPhyInt = SK_TRUE;
 				}
 				break;
 			case SK_PHY_NAT:
@@ -822,9 +854,13 @@ SK_U32	Istatus)	/* Interrupt status word */
 				break;
 			}
 		}
-		if (!IsPhyInt) {
-			SkI2cIsr(pAC, IoC);
-		}
+	}
+
+	/*
+	 * I2C Ready interrupt
+	 */
+	if (Istatus & IS_I2C_READY) {
+		SkI2cIsr(pAC, IoC);
 	}
 
 	if (Istatus & IS_LNK_SYNC_M1) {
@@ -1328,8 +1364,23 @@ int	Port)		/* Which port should be checked */
 	SK_U16		PhyStat;	/* Phy Status Register */
 	int		Done;
 	SK_U16		ResAb;
+	SK_U16		SWord;
 
 	pPrt = &pAC->GIni.GP[Port];
+
+	/* Check for No HCD Link events (#10523) */
+	PHY_READ(IoC, pPrt, Port, PHY_BCOM_INT_STAT, &Isrc);
+	if ((Isrc & PHY_B_IS_NO_HDCL) == PHY_B_IS_NO_HDCL) {
+
+		/* Workaround BCOM Errata */
+		/* enable and disable Loopback mode if NO HCD occurs */
+		PHY_READ(IoC, pPrt, Port, PHY_BCOM_CTRL, &SWord);
+		PHY_WRITE(IoC, pPrt, Port, PHY_BCOM_CTRL, SWord | PHY_CT_LOOP);
+		PHY_WRITE(IoC, pPrt, Port, PHY_BCOM_CTRL, SWord & ~PHY_CT_LOOP);
+		SK_DBG_MSG(pAC, SK_DBGMOD_HWM, SK_DBGCAT_CTRL,
+			("No HCD Link event, Port %d\n", Port));
+	}
+
 	PHY_READ(IoC, pPrt, Port, PHY_BCOM_STAT, &PhyStat);
 
 	if (pPrt->PHWLinkUp) {
@@ -1338,7 +1389,7 @@ int	Port)		/* Which port should be checked */
 
 	pPrt->PIsave = 0;
 
-	/* Now wait for each ports link */
+	/* Now wait for each port's link */
 	if (pPrt->PLinkMode == SK_LMODE_HALF ||
 	    pPrt->PLinkMode == SK_LMODE_FULL) {
 		AutoNeg = SK_FALSE;
@@ -1355,13 +1406,43 @@ int	Port)		/* Which port should be checked */
 	PHY_READ(IoC, pPrt, Port, PHY_BCOM_STAT, &PhyStat);
 
 	SkXmAutoNegLipaBcom(pAC, IoC, Port, PhyStat);
-	if ((PhyStat & PHY_ST_LSYNC) == 0){
-		return(SK_HW_PS_NONE) ; 
+	
+	SK_DBG_MSG(pAC, SK_DBGMOD_HWM, SK_DBGCAT_CTRL,
+		("AutoNeg:%d, PhyStat: %Xh.\n", AutoNeg, PhyStat));
+
+	PHY_READ(IoC, pPrt, Port, PHY_BCOM_1000T_STAT, &ResAb);
+
+	if ((PhyStat & PHY_ST_LSYNC) == 0) {
+		if (ResAb & (PHY_B_1000S_MSF)) {
+			/* Error */
+			SK_DBG_MSG(pAC,SK_DBGMOD_HWM,SK_DBGCAT_CTRL,
+				("Master/Slave Fault port %d\n", Port));
+			pPrt->PAutoNegFail = SK_TRUE;
+			pPrt->PMSStatus = SK_MS_STAT_FAULT;
+			return (SK_AND_OTHER);
+		}
+		return (SK_HW_PS_NONE);
 	}
+	
+	if (ResAb & (PHY_B_1000S_MSF)) {
+		/* Error */
+		SK_DBG_MSG(pAC,SK_DBGMOD_HWM,SK_DBGCAT_CTRL,
+			("Master/Slave Fault port %d\n", Port));
+		pPrt->PAutoNegFail = SK_TRUE;
+		pPrt->PMSStatus = SK_MS_STAT_FAULT;
+		return (SK_AND_OTHER);
+	} else if (ResAb & PHY_B_1000S_MSR) {
+		pPrt->PMSStatus = SK_MS_STAT_MASTER;
+	} else {
+		pPrt->PMSStatus = SK_MS_STAT_SLAVE;
+	}
+	
+	SK_DBG_MSG(pAC, SK_DBGMOD_HWM, SK_DBGCAT_CTRL,
+		("AutoNeg:%d, PhyStat: %Xh.\n", AutoNeg, PhyStat));
 
 	if (AutoNeg) {
 		if (PhyStat & PHY_ST_AN_OVER) {
-			SkHWLinkUp(pAC, IoC, Port) ;
+			SkHWLinkUp(pAC, IoC, Port);
 			Done = SkXmAutoNegDone(pAC,IoC,Port);
 			if (Done != SK_AND_OK) {
 				/* Get PHY parameters, for debuging only */
@@ -1400,6 +1481,8 @@ int	Port)		/* Which port should be checked */
 				Port));
 		}
 #endif
+
+#if 0
 		PHY_READ(IoC, pPrt, Port, PHY_BCOM_1000T_STAT, &ResAb);
 		if (ResAb & (PHY_B_1000S_MSF)) {
 			/* Error */
@@ -1413,6 +1496,7 @@ int	Port)		/* Which port should be checked */
 		} else {
 			pPrt->PMSStatus = SK_MS_STAT_SLAVE ;
 		}
+#endif	/* 0 */
 
 
 		/*
@@ -1753,6 +1837,18 @@ SK_EVPARA	Para)		/* Event specific Parameter */
 		if (pAC->GIni.GP[Port].PFlowCtrlMode != Val8) {
 			/* Set New Flow Control mode */
 			pAC->GIni.GP[Port].PFlowCtrlMode = Val8;
+
+			/* Restart Port */
+			SkEventQueue(pAC, SKGE_HWAC, SK_HWEV_PORT_STOP, Para);
+			SkEventQueue(pAC, SKGE_HWAC, SK_HWEV_PORT_START, Para);
+		}
+		break;
+
+	case SK_HWEV_SET_ROLE:
+		Val8 = (SK_U8) Para.Para32[1];
+		if (pAC->GIni.GP[Port].PMSMode != Val8) {
+			/* Set New link mode */
+			pAC->GIni.GP[Port].PMSMode = Val8;
 
 			/* Restart Port */
 			SkEventQueue(pAC, SKGE_HWAC, SK_HWEV_PORT_STOP, Para);

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
- * Name: events.h - Acpi_event subcomponent prototypes and defines
+ * Name: acevents.h - Event subcomponent prototypes and defines
+ *       $Revision: 56 $
  *
  *****************************************************************************/
 
@@ -23,8 +23,8 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef __EVENTS_H__
-#define __EVENTS_H__
+#ifndef __ACEVENTS_H__
+#define __ACEVENTS_H__
 
 
 /*
@@ -102,7 +102,7 @@ acpi_ev_install_default_address_space_handlers (
 
 ACPI_STATUS
 acpi_ev_address_space_dispatch (
-	ACPI_OBJECT_INTERNAL   *region_obj,
+	ACPI_OPERAND_OBJECT    *region_obj,
 	u32                     function,
 	u32                     address,
 	u32                     bit_width,
@@ -118,13 +118,14 @@ acpi_ev_addr_handler_helper (
 
 void
 acpi_ev_disassociate_region_from_handler(
-	ACPI_OBJECT_INTERNAL   *region_obj);
+	ACPI_OPERAND_OBJECT    *region_obj);
 
 
 ACPI_STATUS
-acpi_ev_associate_region_and_handler(
-	ACPI_OBJECT_INTERNAL    *handler_obj,
-	ACPI_OBJECT_INTERNAL    *region_obj);
+acpi_ev_associate_region_and_handler (
+	ACPI_OPERAND_OBJECT     *handler_obj,
+	ACPI_OPERAND_OBJECT     *region_obj,
+	u8                      acpi_ns_is_locked);
 
 
 /*
@@ -136,37 +137,37 @@ acpi_ev_system_memory_region_setup (
 	ACPI_HANDLE             handle,
 	u32                     function,
 	void                    *handler_context,
-	void                    **return_context);
+	void                    **region_context);
 
 ACPI_STATUS
 acpi_ev_io_space_region_setup (
 	ACPI_HANDLE             handle,
 	u32                     function,
 	void                    *handler_context,
-	void                    **return_context);
+	void                    **region_context);
 
 ACPI_STATUS
 acpi_ev_pci_config_region_setup (
 	ACPI_HANDLE             handle,
 	u32                     function,
 	void                    *handler_context,
-	void                    **return_context);
+	void                    **region_context);
 
 ACPI_STATUS
 acpi_ev_default_region_setup (
 	ACPI_HANDLE             handle,
 	u32                     function,
 	void                    *handler_context,
-	void                    **return_context);
+	void                    **region_context);
 
 ACPI_STATUS
 acpi_ev_initialize_region (
-	ACPI_OBJECT_INTERNAL    *region_obj,
+	ACPI_OPERAND_OBJECT     *region_obj,
 	u8                      acpi_ns_locked);
 
 
 /*
- * Acpi_evsci - SCI (System Control Interrupt) handling/dispatch
+ * Evsci - SCI (System Control Interrupt) handling/dispatch
  */
 
 u32
@@ -177,9 +178,9 @@ ACPI_STATUS
 acpi_ev_remove_sci_handler (
 	void);
 
-s32
+u32
 acpi_ev_initialize_sCI (
-	s32                     program_sCI);
+	u32                     program_sCI);
 
 void
 acpi_ev_restore_acpi_state (
@@ -194,7 +195,7 @@ acpi_ev_terminate (
 
 #ifdef ACPI_DEBUG
 
-s32
+u32
 acpi_ev_sci_count (
 	u32                     acpi_event);
 
@@ -206,4 +207,4 @@ acpi_ev_sci_count (
 #endif
 
 
-#endif  /*  __EVENTS_H__   */
+#endif  /* __ACEVENTS_H__  */

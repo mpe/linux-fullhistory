@@ -15,7 +15,9 @@ extern unsigned long max_mapnr;
 extern unsigned long num_physpages;
 extern void * high_memory;
 extern int page_cluster;
-extern struct list_head lru_cache;
+/* The inactive_clean lists are per zone. */
+extern struct list_head active_list;
+extern struct list_head inactive_dirty_list;
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -149,6 +151,7 @@ typedef struct page {
 	atomic_t count;
 	unsigned long flags;	/* atomic flags, some possibly updated asynchronously */
 	struct list_head lru;
+	unsigned long age;
 	wait_queue_head_t wait;
 	struct page **pprev_hash;
 	struct buffer_head * buffers;
@@ -169,12 +172,12 @@ typedef struct page {
 #define PG_uptodate		 3
 #define PG_dirty		 4
 #define PG_decr_after		 5
-#define PG_unused_01		 6
-#define PG__unused_02		 7
+#define PG_active		 6
+#define PG_inactive_dirty	 7
 #define PG_slab			 8
 #define PG_swap_cache		 9
 #define PG_skip			10
-#define PG_unused_03		11
+#define PG_inactive_clean	11
 #define PG_highmem		12
 				/* bits 21-30 unused */
 #define PG_reserved		31
@@ -199,6 +202,7 @@ typedef struct page {
 #define ClearPageError(page)	clear_bit(PG_error, &(page)->flags)
 #define PageReferenced(page)	test_bit(PG_referenced, &(page)->flags)
 #define SetPageReferenced(page)	set_bit(PG_referenced, &(page)->flags)
+#define ClearPageReferenced(page)	clear_bit(PG_referenced, &(page)->flags)
 #define PageTestandClearReferenced(page)	test_and_clear_bit(PG_referenced, &(page)->flags)
 #define PageDecrAfter(page)	test_bit(PG_decr_after, &(page)->flags)
 #define SetPageDecrAfter(page)	set_bit(PG_decr_after, &(page)->flags)
@@ -216,6 +220,18 @@ typedef struct page {
 #define PageClearSwapCache(page)	clear_bit(PG_swap_cache, &(page)->flags)
 
 #define PageTestandClearSwapCache(page)	test_and_clear_bit(PG_swap_cache, &(page)->flags)
+
+#define PageActive(page)	test_bit(PG_active, &(page)->flags)
+#define SetPageActive(page)	set_bit(PG_active, &(page)->flags)
+#define ClearPageActive(page)	clear_bit(PG_active, &(page)->flags)
+
+#define PageInactiveDirty(page)	test_bit(PG_inactive_dirty, &(page)->flags)
+#define SetPageInactiveDirty(page)	set_bit(PG_inactive_dirty, &(page)->flags)
+#define ClearPageInactiveDirty(page)	clear_bit(PG_inactive_dirty, &(page)->flags)
+
+#define PageInactiveClean(page)	test_bit(PG_inactive_clean, &(page)->flags)
+#define SetPageInactiveClean(page)	set_bit(PG_inactive_clean, &(page)->flags)
+#define ClearPageInactiveClean(page)	clear_bit(PG_inactive_clean, &(page)->flags)
 
 #ifdef CONFIG_HIGHMEM
 #define PageHighMem(page)		test_bit(PG_highmem, &(page)->flags)

@@ -2,8 +2,8 @@
  *
  * Name:	skgedrv.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.3 $
- * Date:	$Date: 1998/12/01 13:31:39 $
+ * Version:	$Revision: 1.4 $
+ * Date:	$Date: 1999/11/22 13:52:46 $
  * Purpose:	Interface with the driver
  *
  ******************************************************************************/
@@ -27,6 +27,9 @@
  * History:
  *
  *	$Log: skgedrv.h,v $
+ *	Revision 1.4  1999/11/22 13:52:46  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.3  1998/12/01 13:31:39  cgoos
  *	SWITCH INTERN Event added.
  *	

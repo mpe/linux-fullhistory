@@ -35,7 +35,7 @@
 
 #define R128_NAME	 "r128"
 #define R128_DESC	 "ATI Rage 128"
-#define R128_DATE	 "20000719"
+#define R128_DATE	 "20000910"
 #define R128_MAJOR	 1
 #define R128_MINOR	 0
 #define R128_PATCHLEVEL  0
@@ -467,7 +467,7 @@ int r128_open(struct inode *inode, struct file *filp)
 		}
 		spin_unlock(&dev->count_lock);
 	}
-	
+
 	return retcode;
 }
 
@@ -501,7 +501,7 @@ int r128_release(struct inode *inode, struct file *filp)
 		}
 		spin_unlock(&dev->count_lock);
 	}
-	
+
 	unlock_kernel();
 	return retcode;
 }

@@ -1,8 +1,9 @@
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: cmutils - common utility procedures
+ *              $Revision: 18 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -24,19 +25,19 @@
 
 
 #include "acpi.h"
-#include "events.h"
-#include "hardware.h"
-#include "namesp.h"
-#include "interp.h"
+#include "acevents.h"
+#include "achware.h"
+#include "acnamesp.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "debugger.h"
+#include "acdebug.h"
 
 
 #define _COMPONENT          MISCELLANEOUS
-	 MODULE_NAME         ("cmutils");
+	 MODULE_NAME         ("cmutils")
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_valid_acpi_name
  *
@@ -49,13 +50,13 @@
  *              2) numeric
  *              3) underscore
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 u8
 acpi_cm_valid_acpi_name (
 	u32                     name)
 {
-	char                    *name_ptr = (char *) &name;
+	NATIVE_CHAR             *name_ptr = (NATIVE_CHAR *) &name;
 	u32                     i;
 
 
@@ -64,16 +65,16 @@ acpi_cm_valid_acpi_name (
 			  (name_ptr[i] >= 'A' && name_ptr[i] <= 'Z') ||
 			  (name_ptr[i] >= '0' && name_ptr[i] <= '9')))
 		{
-			return FALSE;
+			return (FALSE);
 		}
 	}
 
 
-	return TRUE;
+	return (TRUE);
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_valid_acpi_character
  *
@@ -83,11 +84,11 @@ acpi_cm_valid_acpi_name (
  *
  * DESCRIPTION: Check for a printable character
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 u8
 acpi_cm_valid_acpi_character (
-	char                    character)
+	NATIVE_CHAR             character)
 {
 
 	return ((u8)   ((character == '_') ||
@@ -96,7 +97,7 @@ acpi_cm_valid_acpi_character (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_mutex_initialize
  *
@@ -106,7 +107,7 @@ acpi_cm_valid_acpi_character (
  *
  * DESCRIPTION: Create the system mutex objects.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_cm_mutex_initialize (
@@ -130,7 +131,7 @@ acpi_cm_mutex_initialize (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_mutex_terminate
  *
@@ -140,7 +141,7 @@ acpi_cm_mutex_initialize (
  *
  * DESCRIPTION: Delete all of the system mutex objects.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 void
 acpi_cm_mutex_terminate (
@@ -160,7 +161,7 @@ acpi_cm_mutex_terminate (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_create_mutex
  *
@@ -170,7 +171,7 @@ acpi_cm_mutex_terminate (
  *
  * DESCRIPTION: Create a mutex object.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_cm_create_mutex (
@@ -195,7 +196,7 @@ acpi_cm_create_mutex (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_delete_mutex
  *
@@ -205,7 +206,7 @@ acpi_cm_create_mutex (
  *
  * DESCRIPTION: Delete a mutex object.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_cm_delete_mutex (
@@ -228,7 +229,7 @@ acpi_cm_delete_mutex (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_acquire_mutex
  *
@@ -238,7 +239,7 @@ acpi_cm_delete_mutex (
  *
  * DESCRIPTION: Acquire a mutex object.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_cm_acquire_mutex (
@@ -252,9 +253,8 @@ acpi_cm_acquire_mutex (
 	}
 
 
-	status =
-		acpi_os_wait_semaphore (acpi_gbl_acpi_mutex_info[mutex_id].mutex,
-				   1, WAIT_FOREVER);
+	status = acpi_os_wait_semaphore (acpi_gbl_acpi_mutex_info[mutex_id].mutex,
+			   1, WAIT_FOREVER);
 
 	if (ACPI_SUCCESS (status)) {
 		acpi_gbl_acpi_mutex_info[mutex_id].locked = TRUE;
@@ -265,7 +265,7 @@ acpi_cm_acquire_mutex (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_release_mutex
  *
@@ -275,7 +275,7 @@ acpi_cm_acquire_mutex (
  *
  * DESCRIPTION: Release a mutex object.
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_cm_release_mutex (
@@ -291,14 +291,14 @@ acpi_cm_release_mutex (
 
 	acpi_gbl_acpi_mutex_info[mutex_id].locked = FALSE; /* Mark before unlocking */
 
-	status =
-		acpi_os_signal_semaphore (acpi_gbl_acpi_mutex_info[mutex_id].mutex, 1);
+	status = acpi_os_signal_semaphore (acpi_gbl_acpi_mutex_info[mutex_id].mutex, 1);
+
 
 	return (status);
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_create_update_state_and_push
  *
@@ -314,7 +314,7 @@ acpi_cm_release_mutex (
 
 ACPI_STATUS
 acpi_cm_create_update_state_and_push (
-	ACPI_OBJECT_INTERNAL    *object,
+	ACPI_OPERAND_OBJECT     *object,
 	u16                     action,
 	ACPI_GENERIC_STATE      **state_list)
 {
@@ -324,21 +324,21 @@ acpi_cm_create_update_state_and_push (
 	/* Ignore null objects; these are expected */
 
 	if (!object) {
-		return AE_OK;
+		return (AE_OK);
 	}
 
 	state = acpi_cm_create_update_state (object, action);
 	if (!state) {
-		return AE_NO_MEMORY;
+		return (AE_NO_MEMORY);
 	}
 
 
 	acpi_cm_push_generic_state (state_list, state);
-	return AE_OK;
+	return (AE_OK);
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_push_generic_state
  *
@@ -365,7 +365,7 @@ acpi_cm_push_generic_state (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_pop_generic_state
  *
@@ -397,7 +397,7 @@ acpi_cm_pop_generic_state (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_create_generic_state
  *
@@ -433,6 +433,7 @@ acpi_cm_create_generic_state (void)
 		acpi_gbl_generic_state_cache_depth--;
 
 		acpi_cm_release_mutex (ACPI_MTX_CACHES);
+
 	}
 
 	else {
@@ -446,18 +447,23 @@ acpi_cm_create_generic_state (void)
 	/* Initialize */
 
 	if (state) {
+		/* Always zero out the object before init */
+
+		MEMSET (state, 0, sizeof (ACPI_GENERIC_STATE));
+
 		state->common.data_type = ACPI_DESC_TYPE_STATE;
 	}
 
-	return state;
+	return (state);
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_create_update_state
  *
- * PARAMETERS:  Object              - Initial Object to be installed in the state
+ * PARAMETERS:  Object              - Initial Object to be installed in the
+ *                                    state
  *              Action              - Update action to be performed
  *
  * RETURN:      Status
@@ -470,7 +476,7 @@ acpi_cm_create_generic_state (void)
 
 ACPI_GENERIC_STATE *
 acpi_cm_create_update_state (
-	ACPI_OBJECT_INTERNAL    *object,
+	ACPI_OPERAND_OBJECT     *object,
 	u16                     action)
 {
 	ACPI_GENERIC_STATE      *state;
@@ -480,7 +486,7 @@ acpi_cm_create_update_state (
 
 	state = acpi_cm_create_generic_state ();
 	if (!state) {
-		return NULL;
+		return (NULL);
 	}
 
 	/* Init fields specific to the update struct */
@@ -492,7 +498,7 @@ acpi_cm_create_update_state (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_create_control_state
  *
@@ -516,7 +522,7 @@ acpi_cm_create_control_state (
 
 	state = acpi_cm_create_generic_state ();
 	if (!state) {
-		return NULL;
+		return (NULL);
 	}
 
 
@@ -528,7 +534,7 @@ acpi_cm_create_control_state (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_delete_generic_state
  *
@@ -575,7 +581,7 @@ acpi_cm_delete_generic_state (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_delete_generic_state_cache
  *
@@ -603,13 +609,14 @@ acpi_cm_delete_generic_state_cache (
 		next = acpi_gbl_generic_state_cache->common.next;
 		acpi_cm_free (acpi_gbl_generic_state_cache);
 		acpi_gbl_generic_state_cache = next;
+		acpi_gbl_generic_state_cache_depth--;
 	}
 
 	return;
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    _Report_error
  *
@@ -622,14 +629,14 @@ acpi_cm_delete_generic_state_cache (
  *
  * DESCRIPTION: Print error message from KD table
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 void
 _report_error (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
-	char                    *message)
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *message)
 {
 
 	debug_print (module_name, line_number, component_id, ACPI_ERROR,
@@ -638,7 +645,7 @@ _report_error (
 }
 
 
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    _Report_warning
  *
@@ -651,14 +658,14 @@ _report_error (
  *
  * DESCRIPTION: Print warning message from KD table
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 void
 _report_warning (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
-	char                    *message)
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *message)
 {
 
 	debug_print (module_name, line_number, component_id, ACPI_WARN,
@@ -667,35 +674,7 @@ _report_warning (
 }
 
 
-/*****************************************************************************
- *
- * FUNCTION:    _Report_success
- *
- * PARAMETERS:  Module_name         - Caller's module name (for error output)
- *              Line_number         - Caller's line number (for error output)
- *              Component_id        - Caller's component ID (for error output)
- *              Message             - Error message to use on failure
- *
- * RETURN:      None
- *
- * DESCRIPTION: Print warning message from KD table
- *
- ****************************************************************************/
-
-void
-_report_success (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
-	char                    *message)
-{
-
-	debug_print (module_name, line_number, component_id, ACPI_OK,
-			 "*** Success: %s\n", message);
-}
-
-
-/*****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    _Report_info
  *
@@ -708,14 +687,14 @@ _report_success (
  *
  * DESCRIPTION: Print information message from KD table
  *
- ****************************************************************************/
+ ******************************************************************************/
 
 void
 _report_info (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
-	char                    *message)
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *message)
 {
 
 	debug_print (module_name, line_number, component_id, ACPI_INFO,

@@ -1,8 +1,8 @@
-
 /******************************************************************************
  *
  * Module Name: nsutils - Utilities for accessing ACPI namespace, accessing
- *                          parents and siblings and Scope manipulation
+ *                        parents and siblings and Scope manipulation
+ *              $Revision: 69 $
  *
  *****************************************************************************/
 
@@ -26,13 +26,13 @@
 
 
 #include "acpi.h"
-#include "namesp.h"
-#include "interp.h"
+#include "acnamesp.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "tables.h"
+#include "actables.h"
 
 #define _COMPONENT          NAMESPACE
-	 MODULE_NAME         ("nsutils");
+	 MODULE_NAME         ("nsutils")
 
 
 /****************************************************************************
@@ -49,7 +49,7 @@
 
 u8
 acpi_ns_valid_root_prefix (
-	char                    prefix)
+	NATIVE_CHAR             prefix)
 {
 
 	return ((u8) (prefix == '\\'));
@@ -70,7 +70,7 @@ acpi_ns_valid_root_prefix (
 
 u8
 acpi_ns_valid_path_separator (
-	char                    sep)
+	NATIVE_CHAR             sep)
 {
 
 	return ((u8) (sep == '.'));
@@ -81,9 +81,9 @@ acpi_ns_valid_path_separator (
  *
  * FUNCTION:    Acpi_ns_get_type
  *
- * PARAMETERS:  Handle              - Handle of nte to be examined
+ * PARAMETERS:  Handle              - Parent Node to be examined
  *
- * RETURN:      Type field from nte whose handle is passed
+ * RETURN:      Type field from Node whose handle is passed
  *
  ***************************************************************************/
 
@@ -93,13 +93,11 @@ acpi_ns_get_type (
 {
 
 	if (!handle) {
-		/*  Handle invalid  */
-
 		REPORT_WARNING ("Ns_get_type: Null handle");
 		return (ACPI_TYPE_ANY);
 	}
 
-	return (((ACPI_NAMED_OBJECT*) handle)->type);
+	return (((ACPI_NAMESPACE_NODE *) handle)->type);
 }
 
 
@@ -114,19 +112,19 @@ acpi_ns_get_type (
  *
  ***************************************************************************/
 
-s32
+u32
 acpi_ns_local (
 	OBJECT_TYPE_INTERNAL    type)
 {
 
 	if (!acpi_cm_valid_object_type (type)) {
-		/*  type code out of range  */
+		/* Type code out of range  */
 
 		REPORT_WARNING ("Ns_local: Invalid Object Type");
 		return (NSP_NORMAL);
 	}
 
-	return ((s32) acpi_gbl_ns_properties[type] & NSP_LOCAL);
+	return ((u32) acpi_gbl_ns_properties[type] & NSP_LOCAL);
 }
 
 
@@ -147,12 +145,12 @@ acpi_ns_local (
 
 ACPI_STATUS
 acpi_ns_internalize_name (
-	char                    *external_name,
-	char                    **converted_name)
+	NATIVE_CHAR             *external_name,
+	NATIVE_CHAR             **converted_name)
 {
-	char                    *result = NULL;
-	char                    *internal_name;
-	ACPI_SIZE               num_segments;
+	NATIVE_CHAR             *result = NULL;
+	NATIVE_CHAR             *internal_name;
+	u32                     num_segments;
 	u8                      fully_qualified = FALSE;
 	u32                     i;
 
@@ -235,7 +233,7 @@ acpi_ns_internalize_name (
 			}
 
 			else {
-				/* Convert char to uppercase and save it */
+				/* Convert s8 to uppercase and save it */
 
 				result[i] = (char) TOUPPER (*external_name);
 				external_name++;
@@ -273,166 +271,17 @@ acpi_ns_internalize_name (
 
 /****************************************************************************
  *
- * FUNCTION:    Acpi_ns_externalize_name
- *
- * PARAMETERS:  *Internal_name         - Internal representation of name
- *              **Converted_name       - Where to return the resulting
- *                                        external representation of name
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Convert internal name (e.g. 5c 2f 02 5f 50 52 5f 43 50 55 30)
- *              to its external form (e.g. "\_PR_.CPU0")
- *
- ****************************************************************************/
-
-ACPI_STATUS
-acpi_ns_externalize_name (
-	u32                     internal_name_length,
-	char                    *internal_name,
-	u32                     *converted_name_length,
-	char                    **converted_name)
-{
-	u32                     prefix_length = 0;
-	u32                     names_index = 0;
-	u32                     names_count = 0;
-	u32                     i = 0;
-	u32                     j = 0;
-
-	if (internal_name_length < 0 ||
-		!internal_name ||
-		!converted_name_length ||
-		!converted_name)
-	{
-		return (AE_BAD_PARAMETER);
-	}
-
-	/*
-	 * Check for a prefix (one '\' | one or more '^').
-	 */
-	switch (internal_name[0])
-	{
-	case '\\':
-		prefix_length = 1;
-		break;
-
-	case '^':
-		for (i = 0; i < internal_name_length; i++) {
-			if (internal_name[i] != '^') {
-				prefix_length = i + 1;
-			}
-		}
-
-		if (i == internal_name_length) {
-			prefix_length = i;
-		}
-
-		break;
-	}
-
-	/*
-	 * Check for object names.  Note that there could be 0-255 of these
-	 * 4-byte elements.
-	 */
-	if (prefix_length < internal_name_length) {
-		switch (internal_name[prefix_length])
-		{
-
-		/* <count> 4-byte names */
-
-		case AML_MULTI_NAME_PREFIX_OP:
-			names_index = prefix_length + 2;
-			names_count = (u32) internal_name[prefix_length + 1];
-			break;
-
-
-		/* two 4-byte names */
-
-		case AML_DUAL_NAME_PREFIX:
-			names_index = prefix_length + 1;
-			names_count = 2;
-			break;
-
-
-		/* Null_name */
-
-		case 0:
-			names_index = 0;
-			names_count = 0;
-			break;
-
-
-		/* one 4-byte name */
-
-		default:
-			names_index = prefix_length;
-			names_count = 1;
-			break;
-		}
-	}
-
-	/*
-	 * Calculate the length of Converted_name, which equals the length
-	 * of the prefix, length of all object names, length of any required
-	 * punctuation ('.') between object names, plus the NULL terminator.
-	 */
-	*converted_name_length = prefix_length + (4 * names_count) +
-			   ((names_count > 0) ? (names_count - 1) : 0) + 1;
-
-	/*
-	 * Check to see if we're still in bounds.  If not, there's a problem
-	 * with Internal_name (invalid format).
-	 */
-	if (*converted_name_length > internal_name_length) {
-		REPORT_ERROR ("Ns_externalize_name: Invalid internal name.\n");
-		return (AE_BAD_PATHNAME);
-	}
-
-	/*
-	 * Build Converted_name...
-	 */
-
-	(*converted_name) = acpi_cm_callocate (*converted_name_length);
-	if (!(*converted_name)) {
-		return (AE_NO_MEMORY);
-	}
-
-	j = 0;
-
-	for (i = 0; i < prefix_length; i++) {
-		(*converted_name)[j++] = internal_name[i];
-	}
-
-	if (names_count > 0) {
-		for (i = 0; i < names_count; i++) {
-			if (i > 0) {
-				(*converted_name)[j++] = '.';
-			}
-
-			(*converted_name)[j++] = internal_name[names_index++];
-			(*converted_name)[j++] = internal_name[names_index++];
-			(*converted_name)[j++] = internal_name[names_index++];
-			(*converted_name)[j++] = internal_name[names_index++];
-		}
-	}
-
-	return (AE_OK);
-}
-
-
-/****************************************************************************
- *
  * FUNCTION:    Acpi_ns_convert_handle_to_entry
  *
- * PARAMETERS:  Handle          - Handle to be converted to an NTE
+ * PARAMETERS:  Handle          - Handle to be converted to an Node
  *
  * RETURN:      A Name table entry pointer
  *
- * DESCRIPTION: Convert a namespace handle to a real NTE
+ * DESCRIPTION: Convert a namespace handle to a real Node
  *
  ****************************************************************************/
 
-ACPI_NAMED_OBJECT*
+ACPI_NAMESPACE_NODE *
 acpi_ns_convert_handle_to_entry (
 	ACPI_HANDLE             handle)
 {
@@ -444,21 +293,21 @@ acpi_ns_convert_handle_to_entry (
 	 */
 
 	if (!handle) {
-		return NULL;
+		return (NULL);
 	}
 
 	if (handle == ACPI_ROOT_OBJECT) {
-		return acpi_gbl_root_object;
+		return (acpi_gbl_root_node);
 	}
 
 
 	/* We can at least attempt to verify the handle */
 
 	if (!VALID_DESCRIPTOR_TYPE (handle, ACPI_DESC_TYPE_NAMED)) {
-		return NULL;
+		return (NULL);
 	}
 
-	return (ACPI_NAMED_OBJECT*) handle;
+	return ((ACPI_NAMESPACE_NODE *) handle);
 }
 
 
@@ -466,16 +315,17 @@ acpi_ns_convert_handle_to_entry (
  *
  * FUNCTION:    Acpi_ns_convert_entry_to_handle
  *
- * PARAMETERS:  Nte          - NTE to be converted to a Handle
+ * PARAMETERS:  Node          - Node to be converted to a Handle
  *
  * RETURN:      An USER ACPI_HANDLE
  *
- * DESCRIPTION: Convert a real NTE to a namespace handle
+ * DESCRIPTION: Convert a real Node to a namespace handle
  *
  ****************************************************************************/
 
 ACPI_HANDLE
-acpi_ns_convert_entry_to_handle(ACPI_NAMED_OBJECT*nte)
+acpi_ns_convert_entry_to_handle (
+	ACPI_NAMESPACE_NODE         *node)
 {
 
 
@@ -485,21 +335,21 @@ acpi_ns_convert_entry_to_handle(ACPI_NAMED_OBJECT*nte)
 	 * and keep all pointers within this subsystem!
 	 */
 
-	return (ACPI_HANDLE) nte;
+	return ((ACPI_HANDLE) node);
 
 
 /* ---------------------------------------------------
 
-	if (!Nte) {
-		return NULL;
+	if (!Node) {
+		return (NULL);
 	}
 
-	if (Nte == Acpi_gbl_Root_object) {
-		return ACPI_ROOT_OBJECT;
+	if (Node == Acpi_gbl_Root_node) {
+		return (ACPI_ROOT_OBJECT);
 	}
 
 
-	return (ACPI_HANDLE) Nte;
+	return ((ACPI_HANDLE) Node);
 ------------------------------------------------------*/
 }
 
@@ -519,11 +369,11 @@ acpi_ns_convert_entry_to_handle(ACPI_NAMED_OBJECT*nte)
 void
 acpi_ns_terminate (void)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_NAMED_OBJECT       *entry;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_NAMESPACE_NODE     *this_node;
 
 
-	entry = acpi_gbl_root_object;
+	this_node = acpi_gbl_root_node;
 
 	/*
 	 * 1) Free the entire namespace -- all objects, tables, and stacks
@@ -533,21 +383,18 @@ acpi_ns_terminate (void)
 	 * (additional table descriptors)
 	 */
 
-	acpi_ns_delete_namespace_subtree (entry);
+	acpi_ns_delete_namespace_subtree (this_node);
 
 	/* Detach any object(s) attached to the root */
 
-	obj_desc = acpi_ns_get_attached_object (entry);
+	obj_desc = acpi_ns_get_attached_object (this_node);
 	if (obj_desc) {
-		acpi_ns_detach_object (entry);
+		acpi_ns_detach_object (this_node);
 		acpi_cm_remove_reference (obj_desc);
 	}
 
-	acpi_ns_delete_name_table (entry->child_table);
-	entry->child_table = NULL;
+	acpi_ns_delete_children (this_node);
 
-
-	REPORT_SUCCESS ("Entire namespace and objects deleted");
 
 	/*
 	 * 2) Now we can delete the ACPI tables
@@ -570,7 +417,7 @@ acpi_ns_terminate (void)
  *
  ***************************************************************************/
 
-s32
+u32
 acpi_ns_opens_scope (
 	OBJECT_TYPE_INTERNAL    type)
 {
@@ -582,47 +429,46 @@ acpi_ns_opens_scope (
 		return (NSP_NORMAL);
 	}
 
-	return (((s32) acpi_gbl_ns_properties[type]) & NSP_NEWSCOPE);
+	return (((u32) acpi_gbl_ns_properties[type]) & NSP_NEWSCOPE);
 }
 
 
 /****************************************************************************
  *
- * FUNCTION:    Acpi_ns_get_named_object
+ * FUNCTION:    Acpi_ns_get_node
  *
  * PARAMETERS:  *Pathname   - Name to be found, in external (ASL) format. The
  *                            \ (backslash) and ^ (carat) prefixes, and the
  *                            . (period) to separate segments are supported.
- *              In_scope    - Root of subtree to be searched, or NS_ALL for the
+ *              Start_node  - Root of subtree to be searched, or NS_ALL for the
  *                            root of the name space.  If Name is fully
- *                            qualified (first char is '\'), the passed value
+ *                            qualified (first s8 is '\'), the passed value
  *                            of Scope will not be accessed.
- *              Out_nte     - Where the Nte is returned
+ *              Return_node - Where the Node is returned
  *
  * DESCRIPTION: Look up a name relative to a given scope and return the
- *              corresponding NTE.  NOTE: Scope can be null.
+ *              corresponding Node.  NOTE: Scope can be null.
  *
  * MUTEX:       Locks namespace
  *
  ***************************************************************************/
 
 ACPI_STATUS
-acpi_ns_get_named_object (
-	char                    *pathname,
-	ACPI_NAME_TABLE         *in_scope,
-	ACPI_NAMED_OBJECT       **out_nte)
+acpi_ns_get_node (
+	NATIVE_CHAR             *pathname,
+	ACPI_NAMESPACE_NODE     *start_node,
+	ACPI_NAMESPACE_NODE     **return_node)
 {
 	ACPI_GENERIC_STATE      scope_info;
 	ACPI_STATUS             status;
-	ACPI_NAMED_OBJECT       *obj_entry = NULL;
-	char                    *internal_path = NULL;
+	NATIVE_CHAR             *internal_path = NULL;
 
 
-	scope_info.scope.name_table = in_scope;
+	scope_info.scope.node = start_node;
 
 	/* Ensure that the namespace has been initialized */
 
-	if (!acpi_gbl_root_object->child_table) {
+	if (!acpi_gbl_root_node) {
 		return (AE_NO_NAMESPACE);
 	}
 
@@ -643,13 +489,13 @@ acpi_ns_get_named_object (
 
 	/* NS_ALL means start from the root */
 
-	if (NS_ALL == scope_info.scope.name_table) {
-		scope_info.scope.name_table = acpi_gbl_root_object->child_table;
+	if (NS_ALL == scope_info.scope.node) {
+		scope_info.scope.node = acpi_gbl_root_node;
 	}
 
 	else {
-		scope_info.scope.name_table = in_scope;
-		if (!scope_info.scope.name_table) {
+		scope_info.scope.node = start_node;
+		if (!scope_info.scope.node) {
 			status = AE_BAD_PARAMETER;
 			goto unlock_and_exit;
 		}
@@ -660,12 +506,8 @@ acpi_ns_get_named_object (
 	status = acpi_ns_lookup (&scope_info, internal_path,
 			 ACPI_TYPE_ANY, IMODE_EXECUTE,
 			 NS_NO_UPSEARCH | NS_DONT_OPEN_SCOPE,
-			 NULL, &obj_entry);
+			 NULL, return_node);
 
-
-	/* Return what was wanted - the NTE that matches the name */
-
-	*out_nte = obj_entry;
 
 
 unlock_and_exit:
@@ -684,11 +526,11 @@ unlock_and_exit:
  *
  * FUNCTION:    Acpi_ns_find_parent_name
  *
- * PARAMETERS:  *Child_entry            - nte whose name is to be found
+ * PARAMETERS:  *Child_node            - Named Obj whose name is to be found
  *
  * RETURN:      The ACPI name
  *
- * DESCRIPTION: Search for the given nte in its parent scope and return the
+ * DESCRIPTION: Search for the given obj in its parent scope and return the
  *              name segment, or "????" if the parent name can't be found
  *              (which "should not happen").
  *
@@ -696,18 +538,18 @@ unlock_and_exit:
 
 ACPI_NAME
 acpi_ns_find_parent_name (
-	ACPI_NAMED_OBJECT       *child_entry)
+	ACPI_NAMESPACE_NODE     *child_node)
 {
-	ACPI_NAMED_OBJECT       *parent_entry;
+	ACPI_NAMESPACE_NODE     *parent_node;
 
 
-	if (child_entry) {
-		/* Valid entry.  Get the parent Nte */
+	if (child_node) {
+		/* Valid entry.  Get the parent Node */
 
-		parent_entry = acpi_ns_get_parent_entry (child_entry);
-		if (parent_entry) {
-			if (parent_entry->name) {
-				return (parent_entry->name);
+		parent_node = acpi_ns_get_parent_object (child_node);
+		if (parent_node) {
+			if (parent_node->name) {
+				return (parent_node->name);
 			}
 		}
 
@@ -717,92 +559,12 @@ acpi_ns_find_parent_name (
 	return (ACPI_UNKNOWN_NAME);
 }
 
-/****************************************************************************
- *
- * FUNCTION:    Acpi_ns_exist_downstream_sibling
- *
- * PARAMETERS:  *This_entry         - pointer to first nte to examine
- *
- * RETURN:      TRUE if sibling is found, FALSE otherwise
- *
- * DESCRIPTION: Searches remainder of scope being processed to determine
- *              whether there is a downstream sibling to the current
- *              object.  This function is used to determine what type of
- *              line drawing character to use when displaying namespace
- *              trees.
- *
- ***************************************************************************/
-
-u8
-acpi_ns_exist_downstream_sibling (
-	ACPI_NAMED_OBJECT       *this_entry)
-{
-
-	if (!this_entry) {
-		return FALSE;
-	}
-
-	if (this_entry->name) {
-		return TRUE;
-	}
-
-
-/* TBD: what did this really do?
-	if (This_entry->Next_entry) {
-		return TRUE;
-	}
-*/
-	return FALSE;
-}
-
 
 /****************************************************************************
  *
- * FUNCTION:    Acpi_ns_get_owner_table
+ * FUNCTION:    Acpi_ns_get_parent_object
  *
- * PARAMETERS:
- *
- * RETURN:
- *
- * DESCRIPTION:
- *
- ***************************************************************************/
-
-
-ACPI_NAME_TABLE *
-acpi_ns_get_owner_table (
-	ACPI_NAMED_OBJECT       *this_entry)
-{
-
-	/*
-	 * Given an entry in the Name_table->Entries field of a name table,
-	 * we can create a pointer to the beginning of the table as follows:
-	 *
-	 * 1) Starting with the the pointer to the entry,
-	 * 2) Subtract the entry index * size of each entry to get a
-	 *    pointer to Entries[0]
-	 * 3) Subtract the size of NAME_TABLE structure to get a pointer
-	 *    to the start.
-	 *
-	 * This saves having to put a pointer in every entry that points
-	 * back to the beginning of the table and/or a pointer back to
-	 * the parent.
-	 */
-
-	return (ACPI_NAME_TABLE *) ((char *) this_entry -
-			 (this_entry->this_index *
-			 sizeof (ACPI_NAMED_OBJECT)) -
-			 (sizeof (ACPI_NAME_TABLE) -
-			 sizeof (ACPI_NAMED_OBJECT)));
-
-}
-
-
-/****************************************************************************
- *
- * FUNCTION:    Acpi_ns_get_parent_entry
- *
- * PARAMETERS:  This_entry      - Current table entry
+ * PARAMETERS:  Node       - Current table entry
  *
  * RETURN:      Parent entry of the given entry
  *
@@ -811,76 +573,58 @@ acpi_ns_get_owner_table (
  ***************************************************************************/
 
 
-ACPI_NAMED_OBJECT *
-acpi_ns_get_parent_entry (
-	ACPI_NAMED_OBJECT       *this_entry)
+ACPI_NAMESPACE_NODE *
+acpi_ns_get_parent_object (
+	ACPI_NAMESPACE_NODE     *node)
 {
-	ACPI_NAME_TABLE         *name_table;
 
-
-	name_table = acpi_ns_get_owner_table (this_entry);
 
 	/*
-	 * Now that we have a pointer to the name table, we can just pluck
-	 * the parent
+	 * Walk to the end of this peer list.
+	 * The last entry is marked with a flag and the peer
+	 * pointer is really a pointer back to the parent.
+	 * This saves putting a parent back pointer in each and
+	 * every named object!
 	 */
 
-	return (name_table->parent_entry);
+	while (!(node->flags & ANOBJ_END_OF_PEER_LIST)) {
+		node = node->peer;
+	}
+
+
+	return (node->peer);
 }
 
 
 /****************************************************************************
  *
- * FUNCTION:    Acpi_ns_get_next_valid_entry
+ * FUNCTION:    Acpi_ns_get_next_valid_object
  *
- * PARAMETERS:  This_entry      - Current table entry
+ * PARAMETERS:  Node       - Current table entry
  *
  * RETURN:      Next valid object in the table.  NULL if no more valid
  *              objects
  *
  * DESCRIPTION: Find the next valid object within a name table.
+ *              Useful for implementing NULL-end-of-list loops.
  *
  ***************************************************************************/
 
 
-ACPI_NAMED_OBJECT *
-acpi_ns_get_next_valid_entry (
-	ACPI_NAMED_OBJECT       *this_entry)
+ACPI_NAMESPACE_NODE *
+acpi_ns_get_next_valid_object (
+	ACPI_NAMESPACE_NODE     *node)
 {
-	ACPI_NAME_TABLE         *name_table;
-	u32                     index;
 
+	/* If we are at the end of this peer list, return NULL */
 
-	index = this_entry->this_index + 1;
-	name_table = acpi_ns_get_owner_table (this_entry);
-
-
-	while (name_table) {
-		if (index >= NS_TABLE_SIZE) {
-			/* We are at the end of this table */
-
-			name_table = name_table->next_table;
-			index = 0;
-			continue;
-		}
-
-
-		/* Is this a valid (occupied) slot? */
-
-		if (name_table->entries[index].name) {
-			/* Found a valid entry, all done */
-
-			return (&name_table->entries[index]);
-		}
-
-		/* Go to the next slot */
-
-		index++;
+	if (node->flags & ANOBJ_END_OF_PEER_LIST) {
+		return NULL;
 	}
 
-	/* No more valid entries in this name table */
+	/* Otherwise just return the next peer */
 
-	return NULL;
+	return (node->peer);
 }
 
 

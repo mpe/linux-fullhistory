@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Module Name: amfldio - Aml Field I/O
+ *              $Revision: 26 $
  *
  *****************************************************************************/
 
@@ -24,15 +25,15 @@
 
 
 #include "acpi.h"
-#include "interp.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "namesp.h"
-#include "hardware.h"
-#include "events.h"
+#include "acnamesp.h"
+#include "achware.h"
+#include "acevents.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amfldio");
+	 MODULE_NAME         ("amfldio")
 
 
 /*******************************************************************************
@@ -51,16 +52,16 @@
 
 ACPI_STATUS
 acpi_aml_read_field_data (
-	ACPI_OBJECT_INTERNAL    *obj_desc,
+	ACPI_OPERAND_OBJECT     *obj_desc,
 	u32                     field_byte_offset,
 	u32                     field_bit_width,
 	u32                     *value)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    *rgn_desc = NULL;
+	ACPI_OPERAND_OBJECT     *rgn_desc = NULL;
 	u32                     address;
 	u32                     local_value = 0;
-	s32                     field_byte_width;
+	u32                     field_byte_width;
 
 
 	/* Obj_desc is validated by callers */
@@ -72,7 +73,7 @@ acpi_aml_read_field_data (
 
 	field_byte_width = DIV_8 (field_bit_width);
 	status = acpi_aml_setup_field (obj_desc, rgn_desc, field_bit_width);
-	if (AE_OK != status) {
+	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
 
@@ -84,13 +85,13 @@ acpi_aml_read_field_data (
 
 
 	/*
-	 * Round offset down to next multiple of
-	 * field width, add region base address and offset within the field
+	 * Set offset to next multiple of field width,
+	 *  add region base address and offset within the field
 	 */
-
 	address = rgn_desc->region.address +
-			  (obj_desc->field.offset & ~((u32) field_byte_width - 1)) +
+			  (obj_desc->field.offset * field_byte_width) +
 			  field_byte_offset;
+
 
 
 
@@ -122,7 +123,7 @@ acpi_aml_read_field_data (
 
 ACPI_STATUS
 acpi_aml_read_field (
-	ACPI_OBJECT_INTERNAL    *obj_desc,
+	ACPI_OPERAND_OBJECT     *obj_desc,
 	void                    *buffer,
 	u32                     buffer_length,
 	u32                     byte_length,
@@ -236,6 +237,7 @@ acpi_aml_read_field (
 			 * field datum
 			 */
 
+
 			if (obj_desc->field.bit_offset != 0) {
 				merged_datum =
 					(previous_raw_datum >> obj_desc->field.bit_offset) |
@@ -247,10 +249,27 @@ acpi_aml_read_field (
 			}
 
 			/*
+			 * Prepare the merged datum for storing into the caller's
+			 *  buffer.  It is possible to have a 32-bit buffer
+			 *  (Byte_granularity == 4), but a Obj_desc->Field.Length
+			 *  of 8 or 16, meaning that the upper bytes of merged data
+			 *  are undesired.  This section fixes that.
+			 */
+			switch (obj_desc->field.length)
+			{
+			case 8:
+				merged_datum &= 0x000000FF;
+				break;
+
+			case 16:
+				merged_datum &= 0x0000FFFF;
+				break;
+			}
+
+			/*
 			 * Now store the datum in the caller's buffer, according to
 			 * the data type
 			 */
-
 			switch (byte_granularity)
 			{
 			case 1:
@@ -265,7 +284,6 @@ acpi_aml_read_field (
 				MOVE_UNALIGNED32_TO_32 (&(((u32 *) buffer) [this_field_datum_offset]), &merged_datum);
 				break;
 			}
-
 
 			/*
 			 * Save the most recent datum since it contains bits of
@@ -302,15 +320,15 @@ cleanup:
 
 ACPI_STATUS
 acpi_aml_write_field_data (
-	ACPI_OBJECT_INTERNAL    *obj_desc,
+	ACPI_OPERAND_OBJECT     *obj_desc,
 	u32                     field_byte_offset,
 	u32                     field_bit_width,
 	u32                     value)
 {
 	ACPI_STATUS             status = AE_OK;
-	ACPI_OBJECT_INTERNAL    *rgn_desc = NULL;
+	ACPI_OPERAND_OBJECT     *rgn_desc = NULL;
 	u32                     address;
-	s32                     field_byte_width;
+	u32                     field_byte_width;
 
 
 	/* Obj_desc is validated by callers */
@@ -321,19 +339,19 @@ acpi_aml_write_field_data (
 
 	field_byte_width = DIV_8 (field_bit_width);
 	status = acpi_aml_setup_field (obj_desc, rgn_desc, field_bit_width);
-	if (AE_OK != status) {
+	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
 
 
 	/*
-	 * Round offset down to next multiple of
-	 * field width, add region base address and offset within the field
+	 * Set offset to next multiple of field width,
+	 *  add region base address and offset within the field
 	 */
-
 	address = rgn_desc->region.address +
-			  (obj_desc->field.offset & ~((u32) field_byte_width - 1)) +
+			  (obj_desc->field.offset * field_byte_width) +
 			  field_byte_offset;
+
 
 
 	/* Invoke the appropriate Address_space/Op_region handler */
@@ -363,7 +381,7 @@ acpi_aml_write_field_data (
 
 ACPI_STATUS
 acpi_aml_write_field_data_with_update_rule (
-	ACPI_OBJECT_INTERNAL    *obj_desc,
+	ACPI_OPERAND_OBJECT     *obj_desc,
 	u32                     mask,
 	u32                     field_value,
 	u32                     this_field_byte_offset,
@@ -426,7 +444,7 @@ acpi_aml_write_field_data_with_update_rule (
 				   bit_granularity, merged_value);
 	}
 
-	return status;
+	return (status);
 }
 
 
@@ -446,7 +464,7 @@ acpi_aml_write_field_data_with_update_rule (
 
 ACPI_STATUS
 acpi_aml_write_field (
-	ACPI_OBJECT_INTERNAL    *obj_desc,
+	ACPI_OPERAND_OBJECT     *obj_desc,
 	void                    *buffer,
 	u32                     buffer_length,
 	u32                     byte_length,
@@ -638,7 +656,8 @@ acpi_aml_write_field (
 		field_value = (previous_raw_datum >>
 				  (bit_granularity - obj_desc->field.bit_offset)) & mask;
 
-		status = acpi_aml_write_field_data_with_update_rule (obj_desc, mask, field_value, this_field_byte_offset + 1,
+		status = acpi_aml_write_field_data_with_update_rule (obj_desc, mask, field_value,
+				 this_field_byte_offset + byte_granularity,
 				 bit_granularity);
 		if (ACPI_FAILURE (status)) {
 			goto cleanup;

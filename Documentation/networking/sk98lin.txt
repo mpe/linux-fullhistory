@@ -1,9 +1,9 @@
-(C)Copyright 1999 SysKonnect.
+(C)Copyright 1999-2000 SysKonnect.
 ===========================================================================
 
-sk98lin.txt created 11-Nov-1999
+sk98lin.txt created 12-Sept-2000
 
-Readme File for sk98lin.o v3.04
+Readme File for sk98lin.o v3.05
 SK-NET Gigabit Ethernet Adapter SK-98xx Driver for Linux
 
 This file contains
@@ -372,6 +372,12 @@ following information is available:
 
 (8) HISTORY
 ===========
+
+VERSION 3.05 (In-Kernel version)
+Problems fixed:
+- Failed for multiple adapters in kernel 2.4.0
+New features:
+- New versions of several common modules
 
 VERSION 3.04 (In-Kernel version)
 Problems fixed:

@@ -28,13 +28,14 @@ typedef struct zone_struct {
 	spinlock_t		lock;
 	unsigned long		offset;
 	unsigned long		free_pages;
-	char			low_on_memory;
-	char			zone_wake_kswapd;
+	unsigned long		inactive_clean_pages;
+	unsigned long		inactive_dirty_pages;
 	unsigned long		pages_min, pages_low, pages_high;
 
 	/*
 	 * free areas of different sizes
 	 */
+	struct list_head	inactive_clean_list;
 	free_area_t		free_area[MAX_ORDER];
 
 	/*

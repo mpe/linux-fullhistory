@@ -2,6 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amsystem - Interface to OS services
+ *              $Revision: 51 $
  *
  *****************************************************************************/
 
@@ -25,13 +26,13 @@
 
 
 #include "acpi.h"
-#include "interp.h"
-#include "namesp.h"
-#include "hardware.h"
-#include "events.h"
+#include "acinterp.h"
+#include "acnamesp.h"
+#include "achware.h"
+#include "acevents.h"
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amsystem");
+	 MODULE_NAME         ("amsystem")
 
 
 /*******************************************************************************
@@ -181,8 +182,8 @@ acpi_aml_system_do_suspend (
 
 ACPI_STATUS
 acpi_aml_system_acquire_mutex (
-	ACPI_OBJECT_INTERNAL    *time_desc,
-	ACPI_OBJECT_INTERNAL    *obj_desc)
+	ACPI_OPERAND_OBJECT     *time_desc,
+	ACPI_OPERAND_OBJECT     *obj_desc)
 {
 	ACPI_STATUS             status = AE_OK;
 
@@ -223,7 +224,7 @@ acpi_aml_system_acquire_mutex (
 
 ACPI_STATUS
 acpi_aml_system_release_mutex (
-	ACPI_OBJECT_INTERNAL    *obj_desc)
+	ACPI_OPERAND_OBJECT     *obj_desc)
 {
 	ACPI_STATUS             status = AE_OK;
 
@@ -260,7 +261,7 @@ acpi_aml_system_release_mutex (
 
 ACPI_STATUS
 acpi_aml_system_signal_event (
-	ACPI_OBJECT_INTERNAL    *obj_desc)
+	ACPI_OPERAND_OBJECT     *obj_desc)
 {
 	ACPI_STATUS             status = AE_OK;
 
@@ -290,8 +291,8 @@ acpi_aml_system_signal_event (
 
 ACPI_STATUS
 acpi_aml_system_wait_event (
-	ACPI_OBJECT_INTERNAL    *time_desc,
-	ACPI_OBJECT_INTERNAL    *obj_desc)
+	ACPI_OPERAND_OBJECT     *time_desc,
+	ACPI_OPERAND_OBJECT     *obj_desc)
 {
 	ACPI_STATUS             status = AE_OK;
 
@@ -321,7 +322,7 @@ acpi_aml_system_wait_event (
 
 ACPI_STATUS
 acpi_aml_system_reset_event (
-	ACPI_OBJECT_INTERNAL    *obj_desc)
+	ACPI_OPERAND_OBJECT     *obj_desc)
 {
 	ACPI_STATUS             status = AE_OK;
 	void                    *temp_semaphore;

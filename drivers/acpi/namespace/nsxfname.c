@@ -2,6 +2,7 @@
  *
  * Module Name: nsxfname - Public interfaces to the ACPI subsystem
  *                         ACPI Namespace oriented interfaces
+ *              $Revision: 64 $
  *
  *****************************************************************************/
 
@@ -25,16 +26,16 @@
 
 
 #include "acpi.h"
-#include "interp.h"
-#include "namesp.h"
+#include "acinterp.h"
+#include "acnamesp.h"
 #include "amlcode.h"
-#include "parser.h"
-#include "dispatch.h"
-#include "events.h"
+#include "acparser.h"
+#include "acdispat.h"
+#include "acevents.h"
 
 
 #define _COMPONENT          NAMESPACE
-	 MODULE_NAME         ("nsxfname");
+	 MODULE_NAME         ("nsxfname")
 
 
 /******************************************************************************
@@ -63,21 +64,6 @@ acpi_load_namespace (
 		return (AE_NO_ACPI_TABLES);
 	}
 
-
-	/* Init the hardware */
-
-	/*
-	 * TBD: [Restructure] Should this should be moved elsewhere,
-	 * like Acpi_enable! ??
-	 */
-
-	/* we need to be able to call this interface repeatedly! */
-	/* Does H/W require init before loading the namespace? */
-
-	status = acpi_cm_hardware_initialize ();
-	if (ACPI_FAILURE (status)) {
-		return (status);
-	}
 
 	/*
 	 * Load the namespace.  The DSDT is required,
@@ -131,24 +117,24 @@ acpi_get_handle (
 	ACPI_HANDLE             *ret_handle)
 {
 	ACPI_STATUS             status;
-	ACPI_NAMED_OBJECT       *this_entry;
-	ACPI_NAME_TABLE         *scope = NULL;
+	ACPI_NAMESPACE_NODE     *node;
+	ACPI_NAMESPACE_NODE     *prefix_node = NULL;
 
 
 	if (!ret_handle || !pathname) {
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
 	if (parent) {
 		acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
 
-		this_entry = acpi_ns_convert_handle_to_entry (parent);
-		if (!this_entry) {
+		node = acpi_ns_convert_handle_to_entry (parent);
+		if (!node) {
 			acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
-			return AE_BAD_PARAMETER;
+			return (AE_BAD_PARAMETER);
 		}
 
-		scope = this_entry->child_table;
+		prefix_node = node->child;
 		acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
 	}
 
@@ -156,17 +142,20 @@ acpi_get_handle (
 	/* TBD: [Investigate] Check for both forward and backslash?? */
 
 	if (STRCMP (pathname, NS_ROOT_PATH) == 0) {
-		*ret_handle = acpi_ns_convert_entry_to_handle (acpi_gbl_root_object);
-		return AE_OK;
+		*ret_handle = acpi_ns_convert_entry_to_handle (acpi_gbl_root_node);
+		return (AE_OK);
 	}
 
 	/*
-	 *  Find the Nte and convert to the user format
+	 *  Find the Node and convert to the user format
 	 */
-	this_entry = NULL;
-	status = acpi_ns_get_named_object (pathname, scope, &this_entry);
+	node = NULL;
+	status = acpi_ns_get_node (pathname, prefix_node, &node);
 
-   *ret_handle = acpi_ns_convert_entry_to_handle (this_entry);
+	*ret_handle = NULL;
+	if(ACPI_SUCCESS(status)) {
+		*ret_handle = acpi_ns_convert_entry_to_handle (node);
+	}
 
 	return (status);
 }
@@ -195,13 +184,13 @@ acpi_get_name (
 	ACPI_BUFFER             *ret_path_ptr)
 {
 	ACPI_STATUS             status;
-	ACPI_NAMED_OBJECT       *obj_entry;
+	ACPI_NAMESPACE_NODE     *node;
 
 
 	/* Buffer pointer must be valid always */
 
 	if (!ret_path_ptr || (name_type > ACPI_NAME_TYPE_MAX)) {
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
 	/* Allow length to be zero and ignore the pointer */
@@ -209,7 +198,7 @@ acpi_get_name (
 	if ((ret_path_ptr->length) &&
 	   (!ret_path_ptr->pointer))
 	{
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
 	if (name_type == ACPI_FULL_PATHNAME) {
@@ -217,17 +206,17 @@ acpi_get_name (
 
 		status = acpi_ns_handle_to_pathname (handle, &ret_path_ptr->length,
 				   ret_path_ptr->pointer);
-		return status;
+		return (status);
 	}
 
 	/*
 	 * Wants the single segment ACPI name.
-	 * Validate handle and convert to an NTE
+	 * Validate handle and convert to an Node
 	 */
 
 	acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
-	obj_entry = acpi_ns_convert_handle_to_entry (handle);
-	if (!obj_entry) {
+	node = acpi_ns_convert_handle_to_entry (handle);
+	if (!node) {
 		status = AE_BAD_PARAMETER;
 		goto unlock_and_exit;
 	}
@@ -240,18 +229,18 @@ acpi_get_name (
 		goto unlock_and_exit;
 	}
 
-	/* Just copy the ACPI name from the NTE and zero terminate it */
+	/* Just copy the ACPI name from the Node and zero terminate it */
 
-	STRNCPY (ret_path_ptr->pointer, (char *) &obj_entry->name,
+	STRNCPY (ret_path_ptr->pointer, (NATIVE_CHAR *) &node->name,
 			 ACPI_NAME_SIZE);
-	((char *) ret_path_ptr->pointer) [ACPI_NAME_SIZE] = 0;
+	((NATIVE_CHAR *) ret_path_ptr->pointer) [ACPI_NAME_SIZE] = 0;
 	status = AE_OK;
 
 
 unlock_and_exit:
 
 	acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
-	return status;
+	return (status);
 }
 
 
@@ -279,27 +268,27 @@ acpi_get_object_info (
 	ACPI_STATUS             status;
 	u32                     device_status = 0;
 	u32                     address = 0;
-	ACPI_NAMED_OBJECT       *device_entry;
+	ACPI_NAMESPACE_NODE     *device_node;
 
 
 	/* Parameter validation */
 
 	if (!device || !info) {
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
 	acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
 
-	device_entry = acpi_ns_convert_handle_to_entry (device);
-	if (!device_entry) {
+	device_node = acpi_ns_convert_handle_to_entry (device);
+	if (!device_node) {
 		acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
-	info->type      = device_entry->type;
-	info->name      = device_entry->name;
-	info->parent    =
-		acpi_ns_convert_entry_to_handle (acpi_ns_get_parent_entry (device_entry));
+	info->type      = device_node->type;
+	info->name      = device_node->name;
+	info->parent    = acpi_ns_convert_entry_to_handle (
+			   acpi_ns_get_parent_object (device_node));
 
 	acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
 
@@ -307,17 +296,17 @@ acpi_get_object_info (
 	 * If not a device, we are all done.
 	 */
 	if (info->type != ACPI_TYPE_DEVICE) {
-		return AE_OK;
+		return (AE_OK);
 	}
 
 
 	/* Get extra info for ACPI devices */
 
-	info->valid     = 0;
+	info->valid = 0;
 
 	/* Execute the _HID method and save the result */
 
-	status = acpi_cm_execute_HID (device_entry, &hid);
+	status = acpi_cm_execute_HID (device_node, &hid);
 	if (ACPI_SUCCESS (status)) {
 		if (hid.type == STRING_PTR_DEVICE_ID) {
 			STRCPY (info->hardware_id, hid.data.string_ptr);
@@ -331,7 +320,7 @@ acpi_get_object_info (
 
 	/* Execute the _UID method and save the result */
 
-	status = acpi_cm_execute_UID (device_entry, &uid);
+	status = acpi_cm_execute_UID (device_node, &uid);
 	if (ACPI_SUCCESS (status)) {
 		if (hid.type == STRING_PTR_DEVICE_ID) {
 			STRCPY (info->unique_id, uid.data.string_ptr);
@@ -348,7 +337,7 @@ acpi_get_object_info (
 	 * _STA is not always present
 	 */
 
-	status = acpi_cm_execute_STA (device_entry, &device_status);
+	status = acpi_cm_execute_STA (device_node, &device_status);
 	if (ACPI_SUCCESS (status)) {
 		info->current_status = device_status;
 		info->valid |= ACPI_VALID_STA;
@@ -360,13 +349,13 @@ acpi_get_object_info (
 	 */
 
 	status = acpi_cm_evaluate_numeric_object (METHOD_NAME__ADR,
-			  device_entry, &address);
+			  device_node, &address);
 
 	if (ACPI_SUCCESS (status)) {
 		info->address = address;
 		info->valid |= ACPI_VALID_ADR;
 	}
 
-	return AE_OK;
+	return (AE_OK);
 }
 

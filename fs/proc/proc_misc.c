@@ -156,22 +156,30 @@ static int meminfo_read_proc(char *page, char **start, off_t off,
          * have been updated.
          */
         len += sprintf(page+len,
-                "MemTotal:  %8lu kB\n"
-                "MemFree:   %8lu kB\n"
-                "MemShared: %8lu kB\n"
-                "Buffers:   %8lu kB\n"
-                "Cached:    %8u kB\n"
-                "HighTotal: %8lu kB\n"
-                "HighFree:  %8lu kB\n"
-                "LowTotal:  %8lu kB\n"
-                "LowFree:   %8lu kB\n"
-                "SwapTotal: %8lu kB\n"
-                "SwapFree:  %8lu kB\n",
+                "MemTotal:     %8lu kB\n"
+                "MemFree:      %8lu kB\n"
+                "MemShared:    %8lu kB\n"
+                "Buffers:      %8lu kB\n"
+                "Cached:       %8u kB\n"
+		"Active:       %8u kB\n"
+		"Inact_dirty:  %8u kB\n"
+		"Inact_clean:  %8u kB\n"
+		"Inact_target: %8lu kB\n"
+                "HighTotal:    %8lu kB\n"
+                "HighFree:     %8lu kB\n"
+                "LowTotal:     %8lu kB\n"
+                "LowFree:      %8lu kB\n"
+                "SwapTotal:    %8lu kB\n"
+                "SwapFree:     %8lu kB\n",
                 K(i.totalram),
                 K(i.freeram),
                 K(i.sharedram),
                 K(i.bufferram),
                 K(atomic_read(&page_cache_size)),
+		K(nr_active_pages),
+		K(nr_inactive_dirty_pages),
+		K(nr_inactive_clean_pages()),
+		K(inactive_target),
                 K(i.totalhigh),
                 K(i.freehigh),
                 K(i.totalram-i.totalhigh),

@@ -68,30 +68,8 @@ int R128_READ_PLL(drm_device_t *dev, int addr)
 	return R128_READ(R128_CLOCK_CNTL_DATA);
 }
 
-#ifdef __i386__
-static void r128_flush_write_combine(void)
-{
-	int xchangeDummy;
+#define r128_flush_write_combine()	mb()
 
-	__asm__ volatile("push %%eax ;"
-			 "xchg %%eax, %0 ;"
-			 "pop %%eax" : : "m" (xchangeDummy));
-	__asm__ volatile("push %%eax ;"
-			 "push %%ebx ;"
-			 "push %%ecx ;"
-			 "push %%edx ;"
-			 "movl $0,%%eax ;"
-			 "cpuid ;"
-			 "pop %%edx ;"
-			 "pop %%ecx ;"
-			 "pop %%ebx ;"
-			 "pop %%eax" : /* no outputs */ :  /* no inputs */ );
-}
-#else
-static void r128_flush_write_combine(void)
-{
-}
-#endif
 
 static void r128_status(drm_device_t *dev)
 {

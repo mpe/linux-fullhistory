@@ -8,6 +8,7 @@
  *                       Acpi_rs_end_dependent_functions_resource
  *                       Acpi_rs_start_dependent_functions_stream
  *                       Acpi_rs_end_dependent_functions_stream
+ *              $Revision: 7 $
  *
  *****************************************************************************/
 
@@ -33,7 +34,7 @@
 #include "acpi.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
-	 MODULE_NAME         ("rsmisc");
+	 MODULE_NAME         ("rsmisc")
 
 
 /***************************************************************************
@@ -199,7 +200,7 @@ acpi_rs_vendor_resource (
 
 		/* Dereference */
 
-		temp16 = *(u16 *)buffer;
+		MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 		/* Calculate bytes consumed */
 
@@ -304,7 +305,7 @@ acpi_rs_vendor_stream (
 
 		temp16 = (u16) linked_list->data.vendor_specific.length;
 
-		*(u16 *)buffer = temp16;
+		MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
 
 		buffer += 2;
 	}
@@ -404,7 +405,7 @@ acpi_rs_start_dependent_functions_resource (
 				temp8 & 0x03;
 
 		if (3 == output_struct->data.start_dependent_functions.compatibility_priority) {
-			return (AE_ERROR);
+			return (AE_AML_ERROR);
 		}
 
 		/*
@@ -414,7 +415,7 @@ acpi_rs_start_dependent_functions_resource (
 				(temp8 >> 2) & 0x03;
 
 		if (3 == output_struct->data.start_dependent_functions.performance_robustness) {
-			return (AE_ERROR);
+			return (AE_AML_ERROR);
 		}
 	}
 

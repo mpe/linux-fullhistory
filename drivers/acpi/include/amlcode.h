@@ -1,9 +1,9 @@
-
 /******************************************************************************
  *
  * Name: amlcode.h - Definitions for AML, as included in "definition blocks"
  *                   Declarations and definitions contained herein are derived
  *                   directly from the ACPI specification.
+ *       $Revision: 39 $
  *
  *****************************************************************************/
 
@@ -108,7 +108,7 @@
 #define AML_IF_OP                   (u16) 0xa0
 #define AML_ELSE_OP                 (u16) 0xa1
 #define AML_WHILE_OP                (u16) 0xa2
-#define AML_NOOP_CODE               (u16) 0xa3
+#define AML_NOOP_OP                 (u16) 0xa3
 #define AML_RETURN_OP               (u16) 0xa4
 #define AML_BREAK_OP                (u16) 0xa5
 #define AML_BREAK_POINT_OP          (u16) 0xcc
@@ -133,9 +133,9 @@
 #define AML_WAIT_OP                 (u16) 0x5b25
 #define AML_RESET_OP                (u16) 0x5b26
 #define AML_RELEASE_OP              (u16) 0x5b27
-#define AML_FROM_BCDOP              (u16) 0x5b28
-#define AML_TO_BCDOP                (u16) 0x5b29
-#define AML_UN_LOAD_OP              (u16) 0x5b2a
+#define AML_FROM_BCD_OP             (u16) 0x5b28
+#define AML_TO_BCD_OP               (u16) 0x5b29
+#define AML_UNLOAD_OP               (u16) 0x5b2a
 #define AML_REVISION_OP             (u16) 0x5b30
 #define AML_DEBUG_OP                (u16) 0x5b31
 #define AML_FATAL_OP                (u16) 0x5b32
@@ -156,7 +156,11 @@
 #define AML_LNOTEQUAL_OP            (u16) 0x9293
 
 
-/* Internal opcodes */
+/*
+ * Internal opcodes
+ * Use only "Unknown" AML opcodes, don't attempt to use
+ * any valid ACPI ASCII values (A-Z, 0-9, '-')
+ */
 
 #define AML_NAMEPATH_OP             (u16) 0x002d
 #define AML_NAMEDFIELD_OP           (u16) 0x0030
@@ -165,29 +169,7 @@
 #define AML_BYTELIST_OP             (u16) 0x0033
 #define AML_STATICSTRING_OP         (u16) 0x0034
 #define AML_METHODCALL_OP           (u16) 0x0035
-
-
-/*
- * argument types
- */
-
-/*
-#define AML_ASCIICHARLIST_ARG       'A'
-#define AML_BYTEDATA_ARG            'b'
-#define AML_BYTELIST_ARG            'B'
-#define AML_DWORDDATA_ARG           'd'
-#define AML_DATAOBJECT_ARG          'o'
-#define AML_DATAOBJECTLIST_ARG      'O'
-#define AML_FIELDLIST_ARG           'F'
-#define AML_NAMESTRING_ARG          'n'
-#define AML_OBJECTLIST_ARG          'P'
-#define AML_PKGLENGTH_ARG           'p'
-#define AML_SUPERNAME_ARG           's'
-#define AML_TARGET_ARG              'l'
-#define AML_TERMARG_ARG             't'
-#define AML_TERMLIST_ARG            'T'
-#define AML_WORDDATA_ARG            'w'
-*/
+#define AML_RETURN_VALUE_OP         (u16) 0x0036
 
 
 #define ARG_NONE                    0x0
@@ -229,7 +211,7 @@
 #define ARGI_STRING                 0x06
 #define ARGI_BUFFER                 0x07
 #define ARGI_PACKAGE                0x08
-#define ARGI_DATAOBJECT             0x09     /* Buffer, string, package or NTE reference - Used only by Size_of operator*/
+#define ARGI_DATAOBJECT             0x09     /* Buffer, string, package or reference to a Node - Used only by Size_of operator*/
 #define ARGI_COMPLEXOBJ             0x0A     /* Buffer or package */
 #define ARGI_MUTEX                  0x0B
 #define ARGI_EVENT                  0x0C
@@ -291,8 +273,9 @@
 #define OPTYPE_CONTROL              18
 #define OPTYPE_RECONFIGURATION      19
 #define OPTYPE_NAMED_OBJECT         20
+#define OPTYPE_RETURN               21
 
-#define OPTYPE_BOGUS                21
+#define OPTYPE_BOGUS                22
 
 
 /* Comparison operation codes for Match_op operator */
@@ -375,13 +358,11 @@ typedef enum
 
 extern u8                       acpi_gbl_aml            [NUM_OPCODES];
 extern u16                      acpi_gbl_pfx            [NUM_OPCODES];
-extern char                     *acpi_gbl_short_ops     [NUM_OPCODES];
-extern char                     *acpi_gbl_long_ops      [NUM_OPCODES];
-extern char                     *acpi_gbl_region_types  [NUM_REGION_TYPES];
-extern char                     *acpi_gbl_match_ops     [NUM_MATCH_OPS];
-extern char                     *acpi_gbl_access_types  [NUM_ACCESS_TYPES];
-extern char                     *acpi_gbl_update_rules  [NUM_UPDATE_RULES];
-extern char                     *acpi_gbl_FEnames       [NUM_FIELD_NAMES];
+extern NATIVE_CHAR              *acpi_gbl_region_types  [NUM_REGION_TYPES];
+extern NATIVE_CHAR              *acpi_gbl_match_ops     [NUM_MATCH_OPS];
+extern NATIVE_CHAR              *acpi_gbl_access_types  [NUM_ACCESS_TYPES];
+extern NATIVE_CHAR              *acpi_gbl_update_rules  [NUM_UPDATE_RULES];
+extern NATIVE_CHAR              *acpi_gbl_FEnames       [NUM_FIELD_NAMES];
 
 
 /*
@@ -392,7 +373,7 @@ extern char                     *acpi_gbl_FEnames       [NUM_FIELD_NAMES];
 
 /* Data used in keeping track of fields */
 
-char            *acpi_gbl_FEnames[NUM_FIELD_NAMES] =
+NATIVE_CHAR *acpi_gbl_FEnames[NUM_FIELD_NAMES] =
 {
 	"skip",
 	"?access?"
@@ -401,7 +382,7 @@ char            *acpi_gbl_FEnames[NUM_FIELD_NAMES] =
 
 /* Region type decoding */
 
-char *acpi_gbl_region_types[NUM_REGION_TYPES] =
+NATIVE_CHAR *acpi_gbl_region_types[NUM_REGION_TYPES] =
 {
 	"System_memory",
 	"System_iO",
@@ -411,7 +392,7 @@ char *acpi_gbl_region_types[NUM_REGION_TYPES] =
 };
 
 
-char *acpi_gbl_match_ops[NUM_MATCH_OPS] =
+NATIVE_CHAR *acpi_gbl_match_ops[NUM_MATCH_OPS] =
 {
 	"Error",
 	"MTR",
@@ -425,7 +406,7 @@ char *acpi_gbl_match_ops[NUM_MATCH_OPS] =
 
 /* Access type decoding */
 
-char *acpi_gbl_access_types[NUM_ACCESS_TYPES] =
+NATIVE_CHAR *acpi_gbl_access_types[NUM_ACCESS_TYPES] =
 {
 	"Any_acc",
 	"Byte_acc",
@@ -439,7 +420,7 @@ char *acpi_gbl_access_types[NUM_ACCESS_TYPES] =
 
 /* Update rule decoding */
 
-char *acpi_gbl_update_rules[NUM_UPDATE_RULES] =
+NATIVE_CHAR *acpi_gbl_update_rules[NUM_UPDATE_RULES] =
 {
 	"Preserve",
 	"Write_as_ones",

@@ -26,6 +26,7 @@
  *		Alan Cox	:	Cleaned up copy/user stuff
  *		Tim Hockin	:	Added insmod parameters, comment cleanup
  *					Parameterized timeout
+ *		Tigran Aivazian	:	Restructured wdt_init() to handle failures
  */
 
 #include <linux/config.h>
@@ -49,7 +50,7 @@
 #include <linux/reboot.h>
 #include <linux/init.h>
 
-static int wdt_is_open=0;
+static int wdt_is_open;
 
 /*
  *	You must set these - there is no sane way to probe for this board.
@@ -495,18 +496,53 @@ void cleanup_module(void)
  
 int __init wdt_init(void)
 {
-	printk(KERN_INFO "WDT500/501-P driver 0.07 at %X (Interrupt %d)\n", io,irq);
-	if(request_irq(irq, wdt_interrupt, SA_INTERRUPT, "wdt501p", &wdt_miscdev))
-	{
-		printk(KERN_ERR "IRQ %d is not free.\n", irq);
-		return -EIO;
+	int ret;
+
+	ret = misc_register(&wdt_miscdev);
+	if (ret) {
+		printk(KERN_ERR "wdt: can't misc_register on minor=%d\n", WATCHDOG_MINOR);
+		goto out;
 	}
-	misc_register(&wdt_miscdev);
-#ifdef CONFIG_WDT_501	
-	misc_register(&temp_miscdev);
-#endif	
-	request_region(io, 8, "wdt501p");
-	register_reboot_notifier(&wdt_notifier);
-	return 0;
+	ret = request_irq(irq, wdt_interrupt, SA_INTERRUPT, "wdt501p", NULL);
+	if(ret) {
+		printk(KERN_ERR "wdt: IRQ %d is not free.\n", irq);
+		goto outmisc;
+	}
+	if (!request_region(io, 8, "wdt501p")) {
+		printk(KERN_ERR "wdt: IO %X is not free.\n", io);
+		ret = -EBUSY;
+		goto outirq;
+	}
+	ret = register_reboot_notifier(&wdt_notifier);
+	if(ret) {
+		printk(KERN_ERR "wdt: can't register reboot notifier (err=%d)\n", ret);
+		goto outreg;
+	}
+
+#ifdef CONFIG_WDT_501
+	ret = misc_register(&temp_miscdev);
+	if (ret) {
+		printk(KERN_ERR "wdt: can't misc_register (temp) on minor=%d\n", TEMP_MINOR);
+		goto outrbt;
+	}
+#endif
+
+	ret = 0;
+	printk(KERN_INFO "WDT500/501-P driver 0.07 at %X (Interrupt %d)\n", io, irq);
+out:
+	return ret;
+
+#ifdef CONFIG_WDT_501
+outrbt:
+	unregister_reboot_notifier(&wdt_notifier);
+#endif
+
+outreg:
+	release_region(io,8);
+outirq:
+	free_irq(irq, NULL);
+outmisc:
+	misc_deregister(&wdt_miscdev);
+	goto out;
 }
 

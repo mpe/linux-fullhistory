@@ -2,15 +2,15 @@
  *
  * Name:	skaddr.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.19 $
- * Date:	$Date: 1999/05/28 10:56:07 $
- * Purpose:	Header file for Address Management (MC, UC, Prom)
+ * Version:	$Revision: 1.23 $
+ * Date:	$Date: 2000/08/10 11:27:50 $
+ * Purpose:	Header file for Address Management (MC, UC, Prom).
  *
  ******************************************************************************/
 
 /******************************************************************************
  *
- *	(C)Copyright 1998,1999 SysKonnect,
+ *	(C)Copyright 1998-2000 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
  *
  *	This program is free software; you can redistribute it and/or modify
@@ -27,6 +27,21 @@
  * History:
  *
  *	$Log: skaddr.h,v $
+ *	Revision 1.23  2000/08/10 11:27:50  rassmann
+ *	Editorial changes.
+ *	Preserving 32-bit alignment in structs for the adapter context.
+ *	
+ *	Revision 1.22  2000/08/07 11:10:40  rassmann
+ *	Editorial changes.
+ *	
+ *	Revision 1.21  2000/05/04 09:39:59  rassmann
+ *	Editorial changes.
+ *	Corrected multicast address hashing.
+ *	
+ *	Revision 1.20  1999/11/22 13:46:14  cgoos
+ *	Changed license header to GPL.
+ *	Allowing overwrite for SK_ADDR_EQUAL.
+ *	
  *	Revision 1.19  1999/05/28 10:56:07  rassmann
  *	Editorial changes.
  *	
@@ -115,32 +130,33 @@
 #define __INC_SKADDR_H
 
 #ifdef __cplusplus
-xxxx	/* not supported yet - force error */
+#error C++ is not yet supported.
 extern "C" {
 #endif	/* cplusplus */
 
 /* defines ********************************************************************/
 
-#define SK_MAC_ADDR_LEN		6	/* Length of MAC address. */
-#define	SK_MAX_ADDRS		14	/* #Addrs for exact match. */
+#define SK_MAC_ADDR_LEN				6	/* Length of MAC address. */
+#define	SK_MAX_ADDRS				14	/* #Addrs for exact match. */
 
 /* ----- Common return values ----- */
 
-#define SK_ADDR_SUCCESS		0	/* Function returned successfully. */
-#define SK_ADDR_ILLEGAL_PORT	100	/* Port number too high. */
-#define SK_ADDR_TOO_EARLY	101	/* Function called too early. */
+#define SK_ADDR_SUCCESS				0	/* Function returned successfully. */
+#define SK_ADDR_ILLEGAL_PORT		100	/* Port number too high. */
+#define SK_ADDR_TOO_EARLY			101	/* Function called too early. */
 
 /* ----- Clear/Add flag bits ----- */
 
-#define SK_ADDR_PERMANENT	1	/* RLMT Address */
+#define SK_ADDR_PERMANENT			1	/* RLMT Address */
 
 /* ----- Additional Clear flag bits ----- */
 
-#define SK_MC_SW_ONLY		2	/* Do not update HW when clearing. */
+#define SK_MC_SW_ONLY				2	/* Do not update HW when clearing. */
 
 /* ----- Override flag bits ----- */
 
-#define SK_ADDR_VIRTUAL_ADDRESS		0
+#define SK_ADDR_LOGICAL_ADDRESS		0
+#define SK_ADDR_VIRTUAL_ADDRESS		(SK_ADDR_LOGICAL_ADDRESS)	/* old */
 #define SK_ADDR_PHYSICAL_ADDRESS	1
 
 /* ----- Override return values ----- */
@@ -151,7 +167,7 @@ extern "C" {
 
 /* ----- Partitioning of excact match table ----- */
 
-#define SK_ADDR_EXACT_MATCHES	16	/* #Exact match entries. */
+#define SK_ADDR_EXACT_MATCHES		16	/* #Exact match entries. */
 
 #define SK_ADDR_FIRST_MATCH_RLMT	1
 #define SK_ADDR_LAST_MATCH_RLMT		2
@@ -160,21 +176,21 @@ extern "C" {
 
 /* ----- SkAddrMcAdd/SkAddrMcUpdate return values ----- */
 
-#define SK_MC_FILTERING_EXACT	0	/* Exact filtering. */
-#define SK_MC_FILTERING_INEXACT	1	/* Inexact filtering. */
+#define SK_MC_FILTERING_EXACT		0	/* Exact filtering. */
+#define SK_MC_FILTERING_INEXACT		1	/* Inexact filtering. */
 
 /* ----- Additional SkAddrMcAdd return values ----- */
 
-#define SK_MC_ILLEGAL_ADDRESS	2	/* Illegal address. */
-#define SK_MC_ILLEGAL_PORT	3	/* Illegal port (not the active one). */
-#define SK_MC_RLMT_OVERFLOW	4	/* Too many RLMT mc addresses. */
+#define SK_MC_ILLEGAL_ADDRESS		2	/* Illegal address. */
+#define SK_MC_ILLEGAL_PORT			3	/* Illegal port (not the active one). */
+#define SK_MC_RLMT_OVERFLOW			4	/* Too many RLMT mc addresses. */
 
 /* Promiscuous mode bits ----- */
 
-#define SK_PROM_MODE_NONE	0	/* Normal receive. */
-#define SK_PROM_MODE_LLC	1	/* Receive all LLC frames. */
-#define SK_PROM_MODE_ALL_MC	2	/* Receive all multicast frames. */
-/* #define SK_PROM_MODE_NON_LLC	4 */	/* Receive all non-LLC frames. */
+#define SK_PROM_MODE_NONE			0	/* Normal receive. */
+#define SK_PROM_MODE_LLC			1	/* Receive all LLC frames. */
+#define SK_PROM_MODE_ALL_MC			2	/* Receive all multicast frames. */
+/* #define SK_PROM_MODE_NON_LLC		4 */	/* Receive all non-LLC frames. */
 
 /* Macros */
 
@@ -192,7 +208,7 @@ extern "C" {
 	*(SK_U32 *)&(((SK_U8 *)(A1))[2]) == *(SK_U32 *)&(((SK_U8 *)(A2))[2]) && \
 	*(SK_U32 *)&(((SK_U8 *)(A1))[0]) == *(SK_U32 *)&(((SK_U8 *)(A2))[0]))
 #endif	/* SK_ADDR_DWORD_COMPARE */
-#endif /* SK_ADDR_EQUAL */
+#endif	/* SK_ADDR_EQUAL */
 
 /* typedefs *******************************************************************/
 
@@ -203,27 +219,28 @@ typedef struct s_MacAddr {
 /* SK_FILTER is used to ensure alignment of the filter. */
 typedef union s_InexactFilter {
 	SK_U8	Bytes[8];
-	SK_U64	Val;		/* Dummy entry for alignment only. */
+	SK_U64	Val;	/* Dummy entry for alignment only. */
 } SK_FILTER64;
 
 typedef struct s_AddrPort {
 
 /* ----- Public part (read-only) ----- */
 
-	SK_MAC_ADDR	PermanentMacAddress;	/* Physical MAC Address. */
-	SK_MAC_ADDR	CurrentMacAddress;	/* Physical MAC Address. */
-	int		PromMode;		/* Promiscuous Mode. */
+	SK_MAC_ADDR	CurrentMacAddress;		/* Current physical MAC Address. */
+	SK_MAC_ADDR	PermanentMacAddress;	/* Permanent physical MAC Address. */
+	int		PromMode;					/* Promiscuous Mode. */
 
 /* ----- Private part ----- */
 
+	SK_MAC_ADDR	PreviousMacAddress;		/* Prev. phys. MAC Address. */
 	SK_BOOL		CurrentMacAddressSet;	/* CurrentMacAddress is set. */
-	SK_MAC_ADDR	PreviousMacAddress;	/* Prev. phys. MAC Address. */
+	SK_U8		Align01;
 	SK_U32		FirstExactMatchRlmt;
 	SK_U32		NextExactMatchRlmt;
 	SK_U32		FirstExactMatchDrv;
 	SK_U32		NextExactMatchDrv;
 	SK_MAC_ADDR	Exact[SK_ADDR_EXACT_MATCHES];
-	SK_FILTER64	InexactFilter;		/* For 64-bit hash register. */
+	SK_FILTER64	InexactFilter;			/* For 64-bit hash register. */
 } SK_ADDR_PORT;
 
 typedef struct s_Addr {
@@ -232,22 +249,21 @@ typedef struct s_Addr {
 
 	SK_ADDR_PORT	Port[SK_MAX_MACS];
 	SK_MAC_ADDR	PermanentMacAddress;	/* Logical MAC Address. */
-	SK_MAC_ADDR	CurrentMacAddress;	/* Logical MAC Address. */
+	SK_MAC_ADDR	CurrentMacAddress;		/* Logical MAC Address. */
 
 /* ----- Private part ----- */
 
-#if 0
-	SK_BOOL		Initialized;	/* Flag: Addr module is initialized. */
-#endif	/* 0 */
+	SK_U32		ActivePort;				/* View of module ADDR. */
 	SK_BOOL		CurrentMacAddressSet;	/* CurrentMacAddress is set. */
-	SK_U32		ActivePort;		/* Vie of module ADDR. */
+	SK_U8		Align01;
+	SK_U16		Align02;
 } SK_ADDR;
 
 /* function prototypes ********************************************************/
 
 #ifndef SK_KR_PROTO
 
-/* Functions provided by SkRlmt */
+/* Functions provided by SkAddr */
 
 /* ANSI/C++ compliant function prototypes */
 
@@ -297,7 +313,7 @@ extern	int	SkAddrSwap(
 
 /* Non-ANSI/C++ compliant function prototypes */
 
-xxxx	/* not supported yet - force error */
+#error KR-style prototypes are not yet provided.
 
 #endif	/* defined(SK_KR_PROTO)) */
 

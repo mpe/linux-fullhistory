@@ -2,8 +2,8 @@
  *
  * Name:	sklm80.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.16 $
- * Date:	$Date: 1999/05/27 14:05:47 $
+ * Version:	$Revision: 1.17 $
+ * Date:	$Date: 1999/11/22 13:35:51 $
  * Purpose:	Funktions to access Voltage and Temperature Sensor (LM80)
  *
  ******************************************************************************/
@@ -12,8 +12,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -29,6 +27,9 @@
  * History:
  *
  *	$Log: sklm80.c,v $
+ *	Revision 1.17  1999/11/22 13:35:51  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.16  1999/05/27 14:05:47  malthoff
  *	Fans: Set SenVal to 0 if the fan value is 0 or 0xff. Both values
  *	are outside the limits (0: div zero error, 0xff: value not in
@@ -92,7 +93,7 @@
 	LM80 functions
 */
 static const char SysKonnectFileId[] =
-	"$Id: sklm80.c,v 1.16 1999/05/27 14:05:47 malthoff Exp $" ;
+	"$Id: sklm80.c,v 1.17 1999/11/22 13:35:51 cgoos Exp $" ;
 
 #include "h/skdrv1st.h"		/* Driver Specific Definitions */
 #include "h/lm80.h"

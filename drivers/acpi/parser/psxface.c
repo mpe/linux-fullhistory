@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: psxface - Parser external interfaces
+ *              $Revision: 36 $
  *
  *****************************************************************************/
 
@@ -25,18 +25,15 @@
 
 
 #include "acpi.h"
-#include "parser.h"
-#include "dispatch.h"
-#include "interp.h"
+#include "acparser.h"
+#include "acdispat.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "namesp.h"
+#include "acnamesp.h"
 
 
 #define _COMPONENT          PARSER
-	 MODULE_NAME         ("psxface");
-
-
-char    *acpi_gbl_parser_id = "Non-recursive AML Parser";
+	 MODULE_NAME         ("psxface")
 
 
 /*****************************************************************************
@@ -57,29 +54,30 @@ char    *acpi_gbl_parser_id = "Non-recursive AML Parser";
 
 ACPI_STATUS
 acpi_psx_execute (
-	ACPI_NAMED_OBJECT       *method_entry,
-	ACPI_OBJECT_INTERNAL    **params,
-	ACPI_OBJECT_INTERNAL    **return_obj_desc)
+	ACPI_NAMESPACE_NODE     *method_node,
+	ACPI_OPERAND_OBJECT     **params,
+	ACPI_OPERAND_OBJECT     **return_obj_desc)
 {
 	ACPI_STATUS             status;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	u32                     i;
+	ACPI_PARSE_OBJECT       *op;
 
 
-	/* Validate the NTE and get the attached object */
+	/* Validate the Node and get the attached object */
 
-	if (!method_entry) {
+	if (!method_node) {
 		return (AE_NULL_ENTRY);
 	}
 
-	obj_desc = acpi_ns_get_attached_object (method_entry);
+	obj_desc = acpi_ns_get_attached_object (method_node);
 	if (!obj_desc) {
 		return (AE_NULL_OBJECT);
 	}
 
-	/* Parse method if necessary, wait on concurrency semaphore */
+	/* Init for new method, wait on concurrency semaphore */
 
-	status = acpi_ds_begin_method_execution (method_entry, obj_desc);
+	status = acpi_ds_begin_method_execution (method_node, obj_desc);
 	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
@@ -96,15 +94,40 @@ acpi_psx_execute (
 	}
 
 	/*
-	 * Method is parsed and ready to execute
-	 * The walk of the parse tree is where we actually execute the method
+	 * Perform the first pass parse of the method to enter any
+	 * named objects that it creates into the namespace
 	 */
 
-	status = acpi_ps_walk_parsed_aml (obj_desc->method.parser_op,
-			  obj_desc->method.parser_op, obj_desc,
-			  method_entry->child_table, params, return_obj_desc,
-			  obj_desc->method.owning_id, acpi_ds_exec_begin_op,
-			  acpi_ds_exec_end_op);
+	/* Create and init a Root Node */
+
+	op = acpi_ps_alloc_op (AML_SCOPE_OP);
+	if (!op) {
+		return (AE_NO_MEMORY);
+	}
+
+	status = acpi_ps_parse_aml (op, obj_desc->method.pcode,
+			  obj_desc->method.pcode_length,
+			  ACPI_PARSE_LOAD_PASS1 | ACPI_PARSE_DELETE_TREE,
+			  method_node, params, return_obj_desc,
+			  acpi_ds_load1_begin_op, acpi_ds_load1_end_op);
+	acpi_ps_delete_parse_tree (op);
+
+	/* Create and init a Root Node */
+
+	op = acpi_ps_alloc_op (AML_SCOPE_OP);
+	if (!op) {
+		return (AE_NO_MEMORY);
+	}
+
+	/*
+	 * The walk of the parse tree is where we actually execute the method
+	 */
+	status = acpi_ps_parse_aml (op, obj_desc->method.pcode,
+			  obj_desc->method.pcode_length,
+			  ACPI_PARSE_EXECUTE | ACPI_PARSE_DELETE_TREE,
+			  method_node, params, return_obj_desc,
+			  acpi_ds_exec_begin_op, acpi_ds_exec_end_op);
+	acpi_ps_delete_parse_tree (op);
 
 	if (params) {
 		/* Take away the extra reference that we gave the parameters above */

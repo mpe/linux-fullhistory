@@ -35,6 +35,7 @@
 #include <linux/locks.h>
 #include <linux/errno.h>
 #include <linux/swap.h>
+#include <linux/swapctl.h>
 #include <linux/smp_lock.h>
 #include <linux/vmalloc.h>
 #include <linux/blkdev.h>
@@ -704,9 +705,9 @@ void set_blocksize(kdev_t dev, int size)
 static void refill_freelist(int size)
 {
 	if (!grow_buffers(size)) {
-		wakeup_bdflush(1);
-		current->policy |= SCHED_YIELD;
-		schedule();
+		//wakeup_bdflush(1);
+		balance_dirty(NODEV);
+		wakeup_kswapd(1);
 	}
 }
 
@@ -856,20 +857,32 @@ repeat:
 /* -1 -> no need to flush
     0 -> async flush
     1 -> sync flush (wait for I/O completation) */
-static int balance_dirty_state(kdev_t dev)
+int balance_dirty_state(kdev_t dev)
 {
 	unsigned long dirty, tot, hard_dirty_limit, soft_dirty_limit;
 
 	dirty = size_buffers_type[BUF_DIRTY] >> PAGE_SHIFT;
 	tot = nr_free_buffer_pages();
-	tot -= size_buffers_type[BUF_PROTECTED] >> PAGE_SHIFT;
+//	tot -= size_buffers_type[BUF_PROTECTED] >> PAGE_SHIFT;
 
 	dirty *= 200;
 	soft_dirty_limit = tot * bdf_prm.b_un.nfract;
 	hard_dirty_limit = soft_dirty_limit * 2;
 
-	if (dirty > soft_dirty_limit) {
+	/* First, check for the "real" dirty limit. */
+	if (dirty > soft_dirty_limit || inactive_shortage()) {
 		if (dirty > hard_dirty_limit)
+			return 1;
+		return 0;
+	}
+
+	/*
+	 * Then, make sure the number of inactive pages won't overwhelm
+	 * page replacement ... this should avoid stalls.
+	 */
+	if (nr_inactive_dirty_pages >
+				nr_free_pages() + nr_inactive_clean_pages()) {
+		if (free_shortage() > freepages.min)
 			return 1;
 		return 0;
 	}
@@ -1380,6 +1393,19 @@ static void unmap_underlying_metadata(struct buffer_head * bh)
 }
 
 /*
+ * NOTE! All mapped/uptodate combinations are valid:
+ *
+ *	Mapped	Uptodate	Meaning
+ *
+ *	No	No		"unknown" - must do get_block()
+ *	No	Yes		"hole" - zero-filled
+ *	Yes	No		"allocated" - allocated on disk, not read in
+ *	Yes	Yes		"valid" - allocated and up-to-date in memory.
+ *
+ * "Dirty" is valid only with the last case (mapped+uptodate).
+ */
+
+/*
  * block_write_full_page() is SMP-safe - currently it's still
  * being called with the kernel lock held, but the code is ready.
  */
@@ -1758,17 +1784,24 @@ int block_truncate_page(struct address_space *mapping, loff_t from, get_block_t 
 		pos += blocksize;
 	}
 
+	err = 0;
+	if (!buffer_mapped(bh)) {
+		/* Hole? Nothing to do */
+		if (buffer_uptodate(bh))
+			goto unlock;
+		get_block(inode, iblock, bh, 0);
+		/* Still unmapped? Nothing to do */
+		if (!buffer_mapped(bh))
+			goto unlock;
+	}
+
+	/* Ok, it's mapped. Make sure it's up-to-date */
 	if (!buffer_uptodate(bh)) {
-		err = 0;
-		if (!buffer_mapped(bh)) {
-			get_block(inode, iblock, bh, 0);
-			if (!buffer_mapped(bh))
-				goto unlock;
-		}
 		err = -EIO;
 		bh->b_end_io = end_buffer_io_sync;
 		ll_rw_block(READ, 1, &bh);
 		wait_on_buffer(bh);
+		/* Uhhuh. Read error. Complain and punt. */
 		if (!buffer_uptodate(bh))
 			goto unlock;
 	}
@@ -2152,6 +2185,7 @@ static int grow_buffers(int size)
 	page = alloc_page(GFP_BUFFER);
 	if (!page)
 		goto out;
+	LockPage(page);
 	bh = create_buffers(page, size, 0);
 	if (!bh)
 		goto no_buffer_head;
@@ -2184,6 +2218,7 @@ static int grow_buffers(int size)
 	page->buffers = bh;
 	page->flags &= ~(1 << PG_referenced);
 	lru_cache_add(page);
+	UnlockPage(page);
 	atomic_inc(&buffermem_pages);
 	return 1;
 
@@ -2609,6 +2644,9 @@ int bdflush(void *sem)
 		CHECK_EMERGENCY_SYNC
 
 		flushed = flush_dirty_buffers(0);
+		if (nr_inactive_dirty_pages > nr_free_pages() +
+						nr_inactive_clean_pages())
+			flushed += page_launder(GFP_KSWAPD, 0);
 
 		/* If wakeup_bdflush will wakeup us
 		   after our bdflush_done wakeup, then
@@ -2619,14 +2657,16 @@ int bdflush(void *sem)
 		   (as we would be sleeping) and so it would
 		   deadlock in SMP. */
 		__set_current_state(TASK_INTERRUPTIBLE);
-		wake_up(&bdflush_done);
+		wake_up_all(&bdflush_done);
 		/*
 		 * If there are still a lot of dirty buffers around,
 		 * skip the sleep and flush some more. Otherwise, we
 		 * go to sleep waiting a wakeup.
 		 */
-		if (!flushed || balance_dirty_state(NODEV) < 0)
+		if (!flushed || balance_dirty_state(NODEV) < 0) {
+			run_task_queue(&tq_disk);
 			schedule();
+		}
 		/* Remember to mark us as running otherwise
 		   the next schedule will block. */
 		__set_current_state(TASK_RUNNING);

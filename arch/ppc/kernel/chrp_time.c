@@ -15,6 +15,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
+#include <linux/time.h>
 #include <linux/timex.h>
 #include <linux/kernel_stat.h>
 #include <linux/mc146818rtc.h>

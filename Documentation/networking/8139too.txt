@@ -1,6 +1,6 @@
 
 		"8139too" Fast Ethernet driver for Linux
-	  Improved support for RTL-8139 Fast Ethernet adapters
+	  Improved support for RTL-8139 10/100 Fast Ethernet adapters
 
 	 Copyright 2000 Jeff Garzik <jgarzik@mandrakesoft.com>
 
@@ -8,6 +8,7 @@
 	      Architectures supported (all PCI platforms):
 		    x86, Alpha AXP, PowerPC, Sparc64
 
+		    Kernel versions supported: 2.4.x
 
 
 
@@ -188,6 +189,14 @@ User-mode (or maybe optional /proc) diagnostics program.
 
 Change History
 --------------
+Version 0.9.9 - September 9, 2000
+
+* Fix oops-able bug in Rx ring wrap calculation (David Ford)
+* Use PIO instead of MMIO when USE_IO_OPS is defined
+* Move Rx error handling out of Rx interrupt handler, resulting in
+  tighter Rx interrupt processing
+
+
 Version 0.9.8 - September 7, 2000
 
 * Propagate request_irq error value (andrew morton)

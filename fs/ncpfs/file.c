@@ -256,7 +256,7 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 		}
 		if (ncp_write_kernel(NCP_SERVER(inode), 
 		    NCP_FINFO(inode)->file_handle,
-		    pos, to_write, buf, &written_this_time) != 0) {
+		    pos, to_write, bouncebuffer, &written_this_time) != 0) {
 			errno = -EIO;
 			break;
 		}

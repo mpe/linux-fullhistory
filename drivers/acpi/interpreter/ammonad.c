@@ -2,6 +2,7 @@
 /******************************************************************************
  *
  * Module Name: ammonad - ACPI AML (p-code) execution for monadic operators
+ *              $Revision: 79 $
  *
  *****************************************************************************/
 
@@ -25,15 +26,15 @@
 
 
 #include "acpi.h"
-#include "parser.h"
-#include "dispatch.h"
-#include "interp.h"
+#include "acparser.h"
+#include "acdispat.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "namesp.h"
+#include "acnamesp.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("ammonad");
+	 MODULE_NAME         ("ammonad")
 
 
 /*******************************************************************************
@@ -52,8 +53,9 @@
 
 ACPI_STATUS
 acpi_aml_get_object_reference (
-	ACPI_OBJECT_INTERNAL    *obj_desc,
-	ACPI_OBJECT_INTERNAL    **ret_desc)
+	ACPI_OPERAND_OBJECT     *obj_desc,
+	ACPI_OPERAND_OBJECT     **ret_desc,
+	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status = AE_OK;
 
@@ -74,14 +76,14 @@ acpi_aml_get_object_reference (
 		case AML_LOCAL_OP:
 
 			*ret_desc = (void *) acpi_ds_method_data_get_nte (MTH_TYPE_LOCAL,
-					  (obj_desc->reference.offset));
+					  (obj_desc->reference.offset), walk_state);
 			break;
 
 
 		case AML_ARG_OP:
 
 			*ret_desc = (void *) acpi_ds_method_data_get_nte (MTH_TYPE_ARG,
-					  (obj_desc->reference.offset));
+					  (obj_desc->reference.offset), walk_state);
 			break;
 
 
@@ -95,7 +97,7 @@ acpi_aml_get_object_reference (
 	}
 
 	else if (VALID_DESCRIPTOR_TYPE (obj_desc, ACPI_DESC_TYPE_NAMED)) {
-		/* Must be a named object;  Just return the NTE */
+		/* Must be a named object;  Just return the Node */
 
 		*ret_desc = obj_desc;
 	}
@@ -130,19 +132,17 @@ acpi_aml_exec_monadic1 (
 	u16                     opcode,
 	ACPI_WALK_STATE         *walk_state)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_STATUS             status;
 
 
 	/* Resolve all operands */
 
-	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS);
+	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS, walk_state);
 	/* Get all operands */
 
 	status |= acpi_ds_obj_stack_pop_object (&obj_desc, walk_state);
-	if (status != AE_OK) {
-		acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__,
-				  opcode, WALK_OPERANDS, 1);
+	if (ACPI_FAILURE (status)) {
 		goto cleanup;
 	}
 
@@ -196,6 +196,7 @@ acpi_aml_exec_monadic1 (
 
 	default:
 
+		REPORT_ERROR ("Acpi_aml_exec_monadic1: Unknown monadic opcode");
 		status = AE_AML_BAD_OPCODE;
 		break;
 
@@ -229,30 +230,28 @@ ACPI_STATUS
 acpi_aml_exec_monadic2_r (
 	u16                     opcode,
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_OBJECT_INTERNAL    **return_desc)
+	ACPI_OPERAND_OBJECT     **return_desc)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_OBJECT_INTERNAL    *res_desc;
-	ACPI_OBJECT_INTERNAL    *ret_desc = NULL;
-	ACPI_OBJECT_INTERNAL    *ret_desc2 = NULL;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_OPERAND_OBJECT     *res_desc;
+	ACPI_OPERAND_OBJECT     *ret_desc = NULL;
+	ACPI_OPERAND_OBJECT     *ret_desc2 = NULL;
 	u32                     res_val;
 	ACPI_STATUS             status;
-	s32                     d0;
-	s32                     d1;
-	s32                     d2;
-	s32                     d3;
+	u32                     d0;
+	u32                     d1;
+	u32                     d2;
+	u32                     d3;
 
 
 	/* Resolve all operands */
 
-	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS);
+	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS, walk_state);
 	/* Get all operands */
 
 	status |= acpi_ds_obj_stack_pop_object (&res_desc, walk_state);
 	status |= acpi_ds_obj_stack_pop_object (&obj_desc, walk_state);
-	if (status != AE_OK) {
-		acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__,
-				  opcode, WALK_OPERANDS, 2);
+	if (ACPI_FAILURE (status)) {
 		goto cleanup;
 	}
 
@@ -264,8 +263,8 @@ acpi_aml_exec_monadic2_r (
 	case AML_BIT_NOT_OP:
 	case AML_FIND_SET_LEFT_BIT_OP:
 	case AML_FIND_SET_RIGHT_BIT_OP:
-	case AML_FROM_BCDOP:
-	case AML_TO_BCDOP:
+	case AML_FROM_BCD_OP:
+	case AML_TO_BCD_OP:
 	case AML_COND_REF_OF_OP:
 
 		ret_desc = acpi_cm_create_internal_object (ACPI_TYPE_NUMBER);
@@ -293,7 +292,13 @@ acpi_aml_exec_monadic2_r (
 	case AML_FIND_SET_LEFT_BIT_OP:
 
 		ret_desc->number.value = obj_desc->number.value;
-		for (res_val = 0; ret_desc->number.value && res_val < 33; ++res_val) {
+
+		/*
+		 * Acpi x1.94 spec, Chapter 16 describes Integer as a 32-bit
+		 *  little endian unsigned value, so this boundry condition
+		 *  is valid.
+		 */
+		for (res_val = 0; ret_desc->number.value && res_val < 32; ++res_val) {
 			ret_desc->number.value >>= 1;
 		}
 
@@ -306,22 +311,29 @@ acpi_aml_exec_monadic2_r (
 	case AML_FIND_SET_RIGHT_BIT_OP:
 
 		ret_desc->number.value = obj_desc->number.value;
-		for (res_val = 0; ret_desc->number.value && res_val < 33; ++res_val) {
+
+		/*
+		 * Acpi x1.94 spec, Chapter 16 describes Integer as a 32-bit
+		 *  little endian unsigned value, so this boundry condition
+		 *  is valid.
+		 */
+		for (res_val = 0; ret_desc->number.value && res_val < 32; ++res_val) {
 			ret_desc->number.value <<= 1;
 		}
 
+		/* Since returns must be 1-based, subtract from 33 */
 		ret_desc->number.value = res_val == 0 ? 0 : 33 - res_val;
 		break;
 
 
 	/*  Def_from_bDC := From_bCDOp  BCDValue    Result  */
 
-	case AML_FROM_BCDOP:
+	case AML_FROM_BCD_OP:
 
-		d0 = (s32) (obj_desc->number.value & 15);
-		d1 = (s32) (obj_desc->number.value >> 4 & 15);
-		d2 = (s32) (obj_desc->number.value >> 8 & 15);
-		d3 = (s32) (obj_desc->number.value >> 12 & 15);
+		d0 = (u32) (obj_desc->number.value & 15);
+		d1 = (u32) (obj_desc->number.value >> 4 & 15);
+		d2 = (u32) (obj_desc->number.value >> 8 & 15);
+		d3 = (u32) (obj_desc->number.value >> 12 & 15);
 
 		if (d0 > 9 || d1 > 9 || d2 > 9 || d3 > 9) {
 			status = AE_AML_NUMERIC_OVERFLOW;
@@ -334,7 +346,7 @@ acpi_aml_exec_monadic2_r (
 
 	/*  Def_to_bDC  :=  To_bCDOp Operand Result */
 
-	case AML_TO_BCDOP:
+	case AML_TO_BCD_OP:
 
 
 		if (obj_desc->number.value > 9999) {
@@ -361,7 +373,7 @@ acpi_aml_exec_monadic2_r (
 		 * (There are really two return values)
 		 */
 
-		if ((ACPI_NAMED_OBJECT*) obj_desc == acpi_gbl_root_object) {
+		if ((ACPI_NAMESPACE_NODE *) obj_desc == acpi_gbl_root_node) {
 			/*
 			 * This means that the object does not exist in the namespace,
 			 * return FALSE
@@ -380,12 +392,12 @@ acpi_aml_exec_monadic2_r (
 
 		/* Get the object reference and store it */
 
-		status = acpi_aml_get_object_reference (obj_desc, &ret_desc2);
+		status = acpi_aml_get_object_reference (obj_desc, &ret_desc2, walk_state);
 		if (ACPI_FAILURE (status)) {
 			goto cleanup;
 		}
 
-		status = acpi_aml_exec_store (ret_desc2, res_desc);
+		status = acpi_aml_exec_store (ret_desc2, res_desc, walk_state);
 
 		/* The object exists in the namespace, return TRUE */
 
@@ -406,7 +418,7 @@ acpi_aml_exec_monadic2_r (
 		 * since the object itself may have been stored.
 		 */
 
-		status = acpi_aml_exec_store (obj_desc, res_desc);
+		status = acpi_aml_exec_store (obj_desc, res_desc, walk_state);
 		if (ACPI_FAILURE (status)) {
 			/* On failure, just delete the Obj_desc */
 
@@ -454,12 +466,13 @@ acpi_aml_exec_monadic2_r (
 
 	default:
 
+		REPORT_ERROR ("Acpi_aml_exec_monadic2_r: Unknown monadic opcode");
 		status = AE_AML_BAD_OPCODE;
 		goto cleanup;
 	}
 
 
-	status = acpi_aml_exec_store (ret_desc, res_desc);
+	status = acpi_aml_exec_store (ret_desc, res_desc, walk_state);
 
 
 cleanup:
@@ -502,25 +515,32 @@ ACPI_STATUS
 acpi_aml_exec_monadic2 (
 	u16                     opcode,
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_OBJECT_INTERNAL    **return_desc)
+	ACPI_OPERAND_OBJECT     **return_desc)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_OBJECT_INTERNAL    *tmp_desc;
-	ACPI_OBJECT_INTERNAL    *ret_desc = NULL;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_OPERAND_OBJECT     *tmp_desc;
+	ACPI_OPERAND_OBJECT     *ret_desc = NULL;
+	ACPI_STATUS             resolve_status;
 	ACPI_STATUS             status;
 	u32                     type;
 	u32                     value;
 
 
-	/* Resolve all operands */
+	/* Attempt to resolve the operands */
 
-	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS);
-	/* Get all operands */
+	resolve_status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS, walk_state);
+	/* Always get all operands */
 
-	status |= acpi_ds_obj_stack_pop_object (&obj_desc, walk_state);
-	if (status != AE_OK) {
-		acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__,
-				  opcode, WALK_OPERANDS, 1);
+	status = acpi_ds_obj_stack_pop_object (&obj_desc, walk_state);
+
+
+	/* Now we can check the status codes */
+
+	if (ACPI_FAILURE (resolve_status)) {
+		goto cleanup;
+	}
+
+	if (ACPI_FAILURE (status)) {
 		goto cleanup;
 	}
 
@@ -553,7 +573,7 @@ acpi_aml_exec_monadic2 (
 
 		/*
 		 * Since we are expecting an Reference on the top of the stack, it
-		 * can be either an NTE or an internal object.
+		 * can be either an Node or an internal object.
 		 *
 		 * TBD: [Future] This may be the prototype code for all cases where
 		 * an Reference is expected!! 10/99
@@ -586,10 +606,8 @@ acpi_aml_exec_monadic2 (
 		 * (This deletes the original Ret_desc)
 		 */
 
-		status = acpi_aml_resolve_operands (AML_LNOT_OP, &ret_desc);
-		if (status != AE_OK) {
-			acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__,
-					  opcode, WALK_OPERANDS, 1);
+		status = acpi_aml_resolve_operands (AML_LNOT_OP, &ret_desc, walk_state);
+		if (ACPI_FAILURE (status)) {
 			goto cleanup;
 		}
 
@@ -604,7 +622,7 @@ acpi_aml_exec_monadic2 (
 
 		/* Store the result back in the original descriptor */
 
-		status = acpi_aml_exec_store (ret_desc, obj_desc);
+		status = acpi_aml_exec_store (ret_desc, obj_desc, walk_state);
 
 		/* Objdesc was just deleted (because it is an Reference) */
 
@@ -662,19 +680,20 @@ acpi_aml_exec_monadic2 (
 			case AML_LOCAL_OP:
 
 				type = acpi_ds_method_data_get_type (MTH_TYPE_LOCAL,
-						  (obj_desc->reference.offset));
+						  (obj_desc->reference.offset), walk_state);
 				break;
 
 
 			case AML_ARG_OP:
 
 				type = acpi_ds_method_data_get_type (MTH_TYPE_ARG,
-						  (obj_desc->reference.offset));
+						  (obj_desc->reference.offset), walk_state);
 				break;
 
 
 			default:
 
+				REPORT_ERROR ("Acpi_aml_exec_monadic2/Type_op:internal error: Unknown Reference subtype");
 				status = AE_AML_INTERNAL;
 				goto cleanup;
 			}
@@ -682,8 +701,7 @@ acpi_aml_exec_monadic2 (
 
 		else {
 			/*
-			 * Since we passed Acpi_aml_resolve_operands("l") and it's not a
-			 * Reference, it must be a direct name pointer.
+			 * It's not a Reference, so it must be a direct name pointer.
 			 */
 			type = acpi_ns_get_type ((ACPI_HANDLE) obj_desc);
 		}
@@ -764,7 +782,7 @@ acpi_aml_exec_monadic2 (
 
 	case AML_REF_OF_OP:
 
-		status = acpi_aml_get_object_reference (obj_desc, &ret_desc);
+		status = acpi_aml_get_object_reference (obj_desc, &ret_desc, walk_state);
 		if (ACPI_FAILURE (status)) {
 			goto cleanup;
 		}
@@ -789,7 +807,7 @@ acpi_aml_exec_monadic2 (
 			case AML_LOCAL_OP:
 
 				acpi_ds_method_data_get_value (MTH_TYPE_LOCAL,
-						(obj_desc->reference.offset), &tmp_desc);
+						(obj_desc->reference.offset), walk_state, &tmp_desc);
 
 				/*
 				 * Delete our reference to the input object and
@@ -803,7 +821,7 @@ acpi_aml_exec_monadic2 (
 			case AML_ARG_OP:
 
 				acpi_ds_method_data_get_value (MTH_TYPE_ARG,
-						(obj_desc->reference.offset), &tmp_desc);
+						(obj_desc->reference.offset), walk_state, &tmp_desc);
 
 				/*
 				 * Delete our reference to the input object and
@@ -824,9 +842,9 @@ acpi_aml_exec_monadic2 (
 		/* Obj_desc may have changed from the code above */
 
 		if (VALID_DESCRIPTOR_TYPE (obj_desc, ACPI_DESC_TYPE_NAMED)) {
-			/* Get the actual object from the NTE (This is the dereference) */
+			/* Get the actual object from the Node (This is the dereference) */
 
-			ret_desc = ((ACPI_NAMED_OBJECT*) obj_desc)->object;
+			ret_desc = ((ACPI_NAMESPACE_NODE *) obj_desc)->object;
 
 			/* Returning a pointer to the object, add another reference! */
 
@@ -928,6 +946,7 @@ acpi_aml_exec_monadic2 (
 
 	default:
 
+		REPORT_ERROR ("Acpi_aml_exec_monadic2: Internal error, unknown monadic opcode");
 		status = AE_AML_BAD_OPCODE;
 		goto cleanup;
 	}

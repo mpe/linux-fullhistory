@@ -1471,9 +1471,9 @@
 	6055  3c556 Laptop Hurricane
 	5057  3c575 [Megahertz] 10/100 LAN CardBus
 		10b7 5a57  3C575 Megahertz 10/100 LAN Cardbus PC Card
-	5157  3c575 [Megahertz] 10/100 LAN CardBus
+	5157  3CCFE575BT Cyclone CardBus
 		10b7 5b57  3C575 Megahertz 10/100 LAN Cardbus PC Card
-	5257  3CCFE575CT Cyclone CardBus
+	5257  3CCFE575CT Tornado CardBus
 	5900  3c590 10BaseT [Vortex]
 	5920  3c592 EISA 10mbps Demon/Vortex
 	5950  3c595 100BaseTX [Vortex]
@@ -1483,8 +1483,8 @@
 	5b57  3c595 [Megahertz] 10/100 LAN CardBus
 		10b7 5b57  3C575 Megahertz 10/100 LAN Cardbus PC Card
 	6560  3CCFE656 Cyclone CardBus
-	6562  3CCFEM656 [id 6562] Cyclone CardBus
-	6564  3CCFEM656 [id 6564] Cyclone CardBus
+	6562  3CCFEM656B Cyclone CardBus
+	6564  3CXFEM656C Tornado CardBus
 	7646  3cSOHO100-TX Hurricane
 	8811  Token ring
 	9000  3c900 10BaseT [Boomerang]

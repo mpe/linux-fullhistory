@@ -1,7 +1,9 @@
 
 /******************************************************************************
  *
- * Module Name: amstoren - AML Interpreter object store support, store to NTE
+ * Module Name: amstoren - AML Interpreter object store support,
+ *                         Store to Node (namespace object)
+ *              $Revision: 21 $
  *
  *****************************************************************************/
 
@@ -25,24 +27,24 @@
 
 
 #include "acpi.h"
-#include "parser.h"
-#include "dispatch.h"
-#include "interp.h"
+#include "acparser.h"
+#include "acdispat.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "namesp.h"
-#include "tables.h"
+#include "acnamesp.h"
+#include "actables.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amstoren");
+	 MODULE_NAME         ("amstoren")
 
 
 /*******************************************************************************
  *
- * FUNCTION:    Acpi_aml_store_object_to_nte
+ * FUNCTION:    Acpi_aml_store_object_to_node
  *
  * PARAMETERS:  *Val_desc           - Value to be stored
- *              *Entry              - Named object to recieve the value
+ *              *Node           - Named object to recieve the value
  *
  * RETURN:      Status
  *
@@ -65,9 +67,10 @@
  ******************************************************************************/
 
 ACPI_STATUS
-acpi_aml_store_object_to_nte (
-	ACPI_OBJECT_INTERNAL    *val_desc,
-	ACPI_NAMED_OBJECT       *entry)
+acpi_aml_store_object_to_node (
+	ACPI_OPERAND_OBJECT     *val_desc,
+	ACPI_NAMESPACE_NODE     *node,
+	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status = AE_OK;
 	u8                      *buffer = NULL;
@@ -76,16 +79,16 @@ acpi_aml_store_object_to_nte (
 	u32                     new_value;
 	u8                      locked = FALSE;
 	u8                      *location=NULL;
-	ACPI_OBJECT_INTERNAL    *dest_desc;
+	ACPI_OPERAND_OBJECT     *dest_desc;
 	OBJECT_TYPE_INTERNAL    destination_type = ACPI_TYPE_ANY;
 
 
 	/*
 	 *  Assuming the parameters are valid!!!
 	 */
-	ACPI_ASSERT((entry) && (val_desc));
+	ACPI_ASSERT((node) && (val_desc));
 
-	destination_type = acpi_ns_get_type (entry);
+	destination_type = acpi_ns_get_type (node);
 
 	/*
 	 *  First ensure we have a value that can be stored in the target
@@ -120,8 +123,8 @@ acpi_aml_store_object_to_nte (
 			/*
 			 *  Initially not a number, convert
 			 */
-			status = acpi_aml_resolve_to_value (&val_desc);
-			if ((status == AE_OK) &&
+			status = acpi_aml_resolve_to_value (&val_desc, walk_state);
+			if (ACPI_SUCCESS (status) &&
 				(val_desc->common.type != ACPI_TYPE_NUMBER))
 			{
 				/*
@@ -151,8 +154,8 @@ acpi_aml_store_object_to_nte (
 			/*
 			 *  Initially not a valid type, convert
 			 */
-			status = acpi_aml_resolve_to_value (&val_desc);
-			if ((status == AE_OK) &&
+			status = acpi_aml_resolve_to_value (&val_desc, walk_state);
+			if (ACPI_SUCCESS (status) &&
 				(val_desc->common.type != ACPI_TYPE_NUMBER) &&
 				(val_desc->common.type != ACPI_TYPE_BUFFER) &&
 				(val_desc->common.type != ACPI_TYPE_STRING))
@@ -184,7 +187,7 @@ acpi_aml_store_object_to_nte (
 		 * Val_desc reference count is incremented by Attach_object.
 		 */
 
-		status = acpi_ns_attach_object (entry, val_desc, val_desc->common.type);
+		status = acpi_ns_attach_object (node, val_desc, val_desc->common.type);
 
 		goto clean_up_and_bail_out;
 		break;
@@ -192,24 +195,24 @@ acpi_aml_store_object_to_nte (
 
 	/* Exit now if failure above */
 
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		goto clean_up_and_bail_out;
 	}
 
 	/*
-	 *  Get descriptor for object attached to NTE
+	 *  Get descriptor for object attached to Node
 	 */
-	dest_desc = acpi_ns_get_attached_object (entry);
+	dest_desc = acpi_ns_get_attached_object (node);
 	if (!dest_desc) {
 		/*
-		 *  There is no existing object attached to this NTE
+		 *  There is no existing object attached to this Node
 		 */
 		status = AE_AML_INTERNAL;
 		goto clean_up_and_bail_out;
 	}
 
 	/*
-	 *  Make sure the destination Object is the same as the NTE
+	 *  Make sure the destination Object is the same as the Node
 	 */
 	if (dest_desc->common.type != (u8) destination_type) {
 		status = AE_AML_INTERNAL;
@@ -237,15 +240,17 @@ acpi_aml_store_object_to_nte (
 		 *  Perform the update (Set Bank Select)
 		 */
 
-		status = acpi_aml_set_named_field_value (dest_desc->bank_field.bank_select,
-				  &dest_desc->bank_field.value,
-				  sizeof (dest_desc->bank_field.value));
-		if (status == AE_OK) {
+		status = acpi_aml_access_named_field (ACPI_WRITE,
+				 dest_desc->bank_field.bank_select,
+				 &dest_desc->bank_field.value,
+				 sizeof (dest_desc->bank_field.value));
+		if (ACPI_SUCCESS (status)) {
 			/* Set bank select successful, set data value  */
 
-			status = acpi_aml_set_named_field_value (dest_desc->bank_field.bank_select,
-					  &val_desc->bank_field.value,
-					  sizeof (val_desc->bank_field.value));
+			status = acpi_aml_access_named_field (ACPI_WRITE,
+					   dest_desc->bank_field.bank_select,
+					   &val_desc->bank_field.value,
+					   sizeof (val_desc->bank_field.value));
 		}
 
 		break;
@@ -280,7 +285,9 @@ acpi_aml_store_object_to_nte (
 			break;
 		}
 
-		status = acpi_aml_set_named_field_value (entry, buffer, length);
+		status = acpi_aml_access_named_field (ACPI_WRITE,
+				  node, buffer, length);
+
 		break;      /* Global Lock released below   */
 
 
@@ -405,16 +412,18 @@ acpi_aml_store_object_to_nte (
 		 *  perform the update (Set index)
 		 */
 
-		status = acpi_aml_set_named_field_value (dest_desc->index_field.index,
-				  &dest_desc->index_field.value,
-				  sizeof (dest_desc->index_field.value));
+		status = acpi_aml_access_named_field (ACPI_WRITE,
+				 dest_desc->index_field.index,
+				 &dest_desc->index_field.value,
+				 sizeof (dest_desc->index_field.value));
 
-		if (AE_OK == status) {
+		if (ACPI_SUCCESS (status)) {
 			/* set index successful, next set Data value */
 
-			status = acpi_aml_set_named_field_value (dest_desc->index_field.data,
-					  &val_desc->number.value,
-					  sizeof (val_desc->number.value));
+			status = acpi_aml_access_named_field (ACPI_WRITE,
+					   dest_desc->index_field.data,
+					   &val_desc->number.value,
+					   sizeof (val_desc->number.value));
 		}
 		break;
 

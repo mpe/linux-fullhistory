@@ -2,8 +2,8 @@
  *
  * Name:	skrlmt.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.48 $
- * Date:	$Date: 1999/10/04 14:01:17 $
+ * Version:	$Revision: 1.49 $
+ * Date:	$Date: 1999/11/22 13:38:02 $
  * Purpose:	Manage links on SK-NET Adapters, esp. redundant ones.
  *
  ******************************************************************************/
@@ -12,8 +12,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -29,6 +27,10 @@
  * History:
  *
  *	$Log: skrlmt.c,v $
+ *	Revision 1.49  1999/11/22 13:38:02  cgoos
+ *	Changed license header to GPL.
+ *	Added initialization to some variables to avoid compiler warnings.
+ *	
  *	Revision 1.48  1999/10/04 14:01:17  rassmann
  *	Corrected reaction to reception of BPDU frames.
  *	Added parameter descriptions to "For Readme" section skrlmt.txt.
@@ -216,7 +218,7 @@
 
 #ifndef	lint
 static const char SysKonnectFileId[] =
-	"@(#) $Id: skrlmt.c,v 1.48 1999/10/04 14:01:17 rassmann Exp $ (C) SysKonnect.";
+	"@(#) $Id: skrlmt.c,v 1.49 1999/11/22 13:38:02 cgoos Exp $ (C) SysKonnect.";
 #endif	/* !defined(lint) */
 
 #define __SKRLMT_C

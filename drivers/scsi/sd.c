@@ -1335,12 +1335,13 @@ static void sd_detach(Scsi_Device * SDp)
 	return;
 }
 
-int init_sd(void)
+static int init_sd(void)
 {
 	sd_template.module = THIS_MODULE;
 	return scsi_register_module(MODULE_SCSI_DEV, &sd_template);
 }
-void exit_sd(void)
+
+static void exit_sd(void)
 {
 	struct gendisk **prev_sdgd_link;
 	struct gendisk *sdgd;

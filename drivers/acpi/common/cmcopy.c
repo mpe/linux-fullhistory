@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Module Name: cmcopy - Internal to external object translation utilities
+ *              $Revision: 56 $
  *
  *****************************************************************************/
 
@@ -24,17 +25,17 @@
 
 
 #include "acpi.h"
-#include "interp.h"
-#include "namesp.h"
+#include "acinterp.h"
+#include "acnamesp.h"
 
 
 #define _COMPONENT          MISCELLANEOUS
-	 MODULE_NAME         ("cmcopy");
+	 MODULE_NAME         ("cmcopy")
 
 
 typedef struct search_st
 {
-	ACPI_OBJECT_INTERNAL        *internal_obj;
+	ACPI_OPERAND_OBJECT         *internal_obj;
 	u32                         index;
 	ACPI_OBJECT                 *external_obj;
 
@@ -64,13 +65,13 @@ PKG_SEARCH_INFO                 level[MAX_PACKAGE_DEPTH];
 
 ACPI_STATUS
 acpi_cm_build_external_simple_object (
-	ACPI_OBJECT_INTERNAL    *internal_obj,
+	ACPI_OPERAND_OBJECT     *internal_obj,
 	ACPI_OBJECT             *external_obj,
 	u8                      *data_space,
 	u32                     *buffer_space_used)
 {
 	u32                     length = 0;
-	char                    *source_ptr = NULL;
+	u8                      *source_ptr = NULL;
 
 
 	/*
@@ -103,8 +104,8 @@ acpi_cm_build_external_simple_object (
 
 		length = internal_obj->string.length;
 		external_obj->string.length = internal_obj->string.length;
-		external_obj->string.pointer = (char *) data_space;
-		source_ptr = internal_obj->string.pointer;
+		external_obj->string.pointer = (NATIVE_CHAR *) data_space;
+		source_ptr = (u8 *) internal_obj->string.pointer;
 		break;
 
 
@@ -113,7 +114,7 @@ acpi_cm_build_external_simple_object (
 		length = internal_obj->buffer.length;
 		external_obj->buffer.length = internal_obj->buffer.length;
 		external_obj->buffer.pointer = data_space;
-		source_ptr = (char *) internal_obj->buffer.pointer;
+		source_ptr = (u8 *) internal_obj->buffer.pointer;
 		break;
 
 
@@ -132,7 +133,7 @@ acpi_cm_build_external_simple_object (
 		 */
 
 		external_obj->type = ACPI_TYPE_ANY;
-		external_obj->reference.handle = internal_obj->reference.nte;
+		external_obj->reference.handle = internal_obj->reference.node;
 		break;
 
 
@@ -142,10 +143,10 @@ acpi_cm_build_external_simple_object (
 				 internal_obj->processor.proc_id;
 
 		external_obj->processor.pblk_address =
-				 internal_obj->processor.pblk_address;
+				 internal_obj->processor.address;
 
 		external_obj->processor.pblk_length =
-				 internal_obj->processor.pblk_length;
+				 internal_obj->processor.length;
 		break;
 
 	case ACPI_TYPE_POWER:
@@ -200,7 +201,7 @@ acpi_cm_build_external_simple_object (
 
 ACPI_STATUS
 acpi_cm_build_external_package_object (
-	ACPI_OBJECT_INTERNAL    *internal_obj,
+	ACPI_OPERAND_OBJECT     *internal_obj,
 	u8                      *buffer,
 	u32                     *space_used)
 {
@@ -211,7 +212,7 @@ acpi_cm_build_external_package_object (
 	u32                     length = 0;
 	u32                     this_index;
 	u32                     object_space;
-	ACPI_OBJECT_INTERNAL    *this_internal_obj;
+	ACPI_OPERAND_OBJECT     *this_internal_obj;
 	ACPI_OBJECT             *this_external_obj;
 	PKG_SEARCH_INFO         *level_ptr;
 
@@ -256,7 +257,7 @@ acpi_cm_build_external_package_object (
 	while (1) {
 		this_index      = level_ptr->index;
 		this_internal_obj =
-				(ACPI_OBJECT_INTERNAL *)
+				(ACPI_OPERAND_OBJECT  *)
 				level_ptr->internal_obj->package.elements[this_index];
 		this_external_obj =
 				(ACPI_OBJECT *)
@@ -264,10 +265,11 @@ acpi_cm_build_external_package_object (
 
 
 		/*
-		 * Check for 1) Null object -- OK, this can happen if package
+		 * Check for
+		 * 1) Null object -- OK, this can happen if package
 		 *              element is never initialized
-		 *           2) Not an internal object - can be an NTE instead
-		 *           3) Any internal object other than a package.
+		 * 2) Not an internal object - can be Node instead
+		 * 3) Any internal object other than a package.
 		 *
 		 * The more complex package case is handled later
 		 */
@@ -367,8 +369,6 @@ acpi_cm_build_external_package_object (
 			level_ptr->index        = 0;
 		}
 	}
-
-	return (AE_OK);
 }
 
 
@@ -388,7 +388,7 @@ acpi_cm_build_external_package_object (
 
 ACPI_STATUS
 acpi_cm_build_external_object (
-	ACPI_OBJECT_INTERNAL    *internal_obj,
+	ACPI_OPERAND_OBJECT     *internal_obj,
 	ACPI_BUFFER             *ret_buffer)
 {
 	ACPI_STATUS             status;
@@ -446,7 +446,7 @@ acpi_cm_build_external_object (
 ACPI_STATUS
 acpi_cm_build_internal_simple_object (
 	ACPI_OBJECT             *external_obj,
-	ACPI_OBJECT_INTERNAL    *internal_obj)
+	ACPI_OPERAND_OBJECT     *internal_obj)
 {
 
 
@@ -508,18 +508,17 @@ acpi_cm_build_internal_simple_object (
 
 ACPI_STATUS
 acpi_cm_build_internal_package_object (
-	ACPI_OBJECT_INTERNAL    *internal_obj,
+	ACPI_OPERAND_OBJECT     *internal_obj,
 	u8                      *buffer,
 	u32                     *space_used)
 {
 	u8                      *free_space;
 	ACPI_OBJECT             *external_obj;
 	u32                     current_depth = 0;
-	ACPI_STATUS             status = AE_OK;
 	u32                     length = 0;
 	u32                     this_index;
 	u32                     object_space = 0;
-	ACPI_OBJECT_INTERNAL    *this_internal_obj;
+	ACPI_OPERAND_OBJECT     *this_internal_obj;
 	ACPI_OBJECT             *this_external_obj;
 	PKG_SEARCH_INFO         *level_ptr;
 
@@ -562,7 +561,7 @@ acpi_cm_build_internal_package_object (
 	while (1) {
 		this_index      = level_ptr->index;
 
-		this_internal_obj = (ACPI_OBJECT_INTERNAL *)
+		this_internal_obj = (ACPI_OPERAND_OBJECT *)
 				 &level_ptr->internal_obj->package.elements[this_index];
 
 		this_external_obj = (ACPI_OBJECT *)
@@ -605,17 +604,6 @@ acpi_cm_build_internal_package_object (
 		}   /* if object is a package */
 
 		else {
-/*            Status = Acpi_cm_build_simple_object(This_internal_obj,
-				 This_external_obj, Free_space,
-				 &Object_space);
-*/
-			if (status != AE_OK) {
-				/*
-				 * Failure get out
-				 */
-				return (status);
-			}
-
 			free_space  += object_space;
 			length      += object_space;
 
@@ -651,13 +639,6 @@ acpi_cm_build_internal_package_object (
 			}
 		}   /* else object is NOT a package */
 	}   /* while (1)  */
-
-
-	/*
-	 * We'll never get here, but the compiler whines about
-	 * return value
-	 */
-	return (AE_OK);
 }
 
 
@@ -677,7 +658,7 @@ acpi_cm_build_internal_package_object (
 ACPI_STATUS
 acpi_cm_build_internal_object (
 	ACPI_OBJECT             *external_obj,
-	ACPI_OBJECT_INTERNAL    *internal_obj)
+	ACPI_OPERAND_OBJECT     *internal_obj)
 {
 	ACPI_STATUS             status;
 

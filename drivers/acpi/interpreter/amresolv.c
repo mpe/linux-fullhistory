@@ -2,6 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amresolv - AML Interpreter object resolution
+ *              $Revision: 74 $
  *
  *****************************************************************************/
 
@@ -26,16 +27,16 @@
 
 #include "acpi.h"
 #include "amlcode.h"
-#include "parser.h"
-#include "dispatch.h"
-#include "interp.h"
-#include "namesp.h"
-#include "tables.h"
-#include "events.h"
+#include "acparser.h"
+#include "acdispat.h"
+#include "acinterp.h"
+#include "acnamesp.h"
+#include "actables.h"
+#include "acevents.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amresolv");
+	 MODULE_NAME         ("amresolv")
 
 
 /*******************************************************************************
@@ -55,8 +56,8 @@
 
 ACPI_STATUS
 acpi_aml_get_field_unit_value (
-	ACPI_OBJECT_INTERNAL    *field_desc,
-	ACPI_OBJECT_INTERNAL    *result_desc)
+	ACPI_OPERAND_OBJECT     *field_desc,
+	ACPI_OPERAND_OBJECT     *result_desc)
 {
 	ACPI_STATUS             status = AE_OK;
 	u32                     mask;
@@ -143,7 +144,7 @@ acpi_aml_get_field_unit_value (
  * FUNCTION:    Acpi_aml_resolve_to_value
  *
  * PARAMETERS:  **Stack_ptr         - Points to entry on Obj_stack, which can
- *                                    be either an (ACPI_OBJECT_INTERNAL *)
+ *                                    be either an (ACPI_OPERAND_OBJECT  *)
  *                                    or an ACPI_HANDLE.
  *
  * RETURN:      Status
@@ -154,7 +155,8 @@ acpi_aml_get_field_unit_value (
 
 ACPI_STATUS
 acpi_aml_resolve_to_value (
-	ACPI_OBJECT_INTERNAL    **stack_ptr)
+	ACPI_OPERAND_OBJECT     **stack_ptr,
+	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status = AE_OK;
 
@@ -166,13 +168,13 @@ acpi_aml_resolve_to_value (
 
 	/*
 	 * The entity pointed to by the Stack_ptr can be either
-	 * 1) A valid ACPI_OBJECT_INTERNAL, or
-	 * 2) A ACPI_NAMED_OBJECT(nte)
+	 * 1) A valid ACPI_OPERAND_OBJECT, or
+	 * 2) A ACPI_NAMESPACE_NODE (Named_obj)
 	 */
 
 	if (VALID_DESCRIPTOR_TYPE (*stack_ptr, ACPI_DESC_TYPE_INTERNAL)) {
 
-		status = acpi_aml_resolve_object_to_value (stack_ptr);
+		status = acpi_aml_resolve_object_to_value (stack_ptr, walk_state);
 		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
@@ -184,7 +186,7 @@ acpi_aml_resolve_to_value (
 	 */
 
 	if (VALID_DESCRIPTOR_TYPE (*stack_ptr, ACPI_DESC_TYPE_NAMED)) {
-		status = acpi_aml_resolve_entry_to_value ((ACPI_NAMED_OBJECT**) stack_ptr);
+		status = acpi_aml_resolve_node_to_value ((ACPI_NAMESPACE_NODE **) stack_ptr);
 	}
 
 
@@ -208,19 +210,20 @@ acpi_aml_resolve_to_value (
 
 ACPI_STATUS
 acpi_aml_resolve_object_to_value (
-	ACPI_OBJECT_INTERNAL    **stack_ptr)
+	ACPI_OPERAND_OBJECT     **stack_ptr,
+	ACPI_WALK_STATE         *walk_state)
 {
-	ACPI_OBJECT_INTERNAL    *stack_desc;
+	ACPI_OPERAND_OBJECT     *stack_desc;
 	ACPI_STATUS             status = AE_OK;
 	ACPI_HANDLE             temp_handle = NULL;
-	ACPI_OBJECT_INTERNAL    *obj_desc = NULL;
+	ACPI_OPERAND_OBJECT     *obj_desc = NULL;
 	u32                     index = 0;
 	u16                     opcode;
 
 
 	stack_desc = *stack_ptr;
 
-	/* This is an ACPI_OBJECT_INTERNAL */
+	/* This is an ACPI_OPERAND_OBJECT  */
 
 	switch (stack_desc->common.type)
 	{
@@ -236,7 +239,7 @@ acpi_aml_resolve_object_to_value (
 
 			/*
 			 * Convert indirect name ptr to a direct name ptr.
-			 * Then, Acpi_aml_resolve_entry_to_value can be used to get the value
+			 * Then, Acpi_aml_resolve_node_to_value can be used to get the value
 			 */
 
 			temp_handle = stack_desc->reference.object;
@@ -256,24 +259,26 @@ acpi_aml_resolve_object_to_value (
 
 			index = stack_desc->reference.offset;
 
-			/* Delete the Reference Object */
-
-			acpi_cm_remove_reference (stack_desc);
-
 			/*
 			 * Get the local from the method's state info
-			 * Note: this increments the object reference count
+			 * Note: this increments the local's object reference count
 			 */
 
 			status = acpi_ds_method_data_get_value (MTH_TYPE_LOCAL, index,
-					 stack_ptr);
+					 walk_state, &obj_desc);
 			if (ACPI_FAILURE (status)) {
 				return (status);
 			}
 
-			stack_desc = *stack_ptr;
+			/*
+			 * Now we can delete the original Reference Object and
+			 * replace it with the resolve value
+			 */
 
-			if (ACPI_TYPE_NUMBER == stack_desc->common.type) {
+			acpi_cm_remove_reference (stack_desc);
+			*stack_ptr = obj_desc;
+
+			if (ACPI_TYPE_NUMBER == obj_desc->common.type) {
 				/* Value is a Number */
 
 			}
@@ -285,9 +290,6 @@ acpi_aml_resolve_object_to_value (
 
 			index = stack_desc->reference.offset;
 
-			/* Delete the Reference Object*/
-
-			acpi_cm_remove_reference (stack_desc);
 
 			/*
 			 * Get the argument from the method's state info
@@ -295,14 +297,20 @@ acpi_aml_resolve_object_to_value (
 			 */
 
 			status = acpi_ds_method_data_get_value (MTH_TYPE_ARG, index,
-					 stack_ptr);
+					 walk_state, &obj_desc);
 			if (ACPI_FAILURE (status)) {
 				return (status);
 			}
 
-			stack_desc = *stack_ptr;
+			/*
+			 * Now we can delete the original Reference Object and
+			 * replace it with the resolve value
+			 */
 
-			if (ACPI_TYPE_NUMBER == stack_desc->common.type) {
+			acpi_cm_remove_reference (stack_desc);
+			*stack_ptr = obj_desc;
+
+			if (ACPI_TYPE_NUMBER == obj_desc->common.type) {
 				/* Value is a Number */
 
 			}
@@ -392,7 +400,7 @@ acpi_aml_resolve_object_to_value (
 		}   /* switch (Opcode) */
 
 
-		if (AE_OK != status) {
+		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
 

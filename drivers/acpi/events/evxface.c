@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Module Name: evxface - External interfaces for ACPI events
+ *              $Revision: 88 $
  *
  *****************************************************************************/
 
@@ -24,14 +25,14 @@
 
 
 #include "acpi.h"
-#include "hardware.h"
-#include "namesp.h"
-#include "events.h"
+#include "achware.h"
+#include "acnamesp.h"
+#include "acevents.h"
 #include "amlcode.h"
-#include "interp.h"
+#include "acinterp.h"
 
 #define _COMPONENT          EVENT_HANDLING
-	 MODULE_NAME         ("evxface");
+	 MODULE_NAME         ("evxface")
 
 
 /******************************************************************************
@@ -172,9 +173,9 @@ acpi_install_notify_handler (
 	NOTIFY_HANDLER          handler,
 	void                    *context)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_OBJECT_INTERNAL    *notify_obj;
-	ACPI_NAMED_OBJECT       *obj_entry;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_OPERAND_OBJECT     *notify_obj;
+	ACPI_NAMESPACE_NODE     *device_node;
 	ACPI_STATUS             status = AE_OK;
 
 
@@ -190,8 +191,8 @@ acpi_install_notify_handler (
 
 	acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
 
-	obj_entry = acpi_ns_convert_handle_to_entry (device);
-	if (!obj_entry) {
+	device_node = acpi_ns_convert_handle_to_entry (device);
+	if (!device_node) {
 		status = AE_BAD_PARAMETER;
 		goto unlock_and_exit;
 	}
@@ -217,13 +218,13 @@ acpi_install_notify_handler (
 		}
 
 		if (handler_type == ACPI_SYSTEM_NOTIFY) {
-			acpi_gbl_sys_notify.nte = obj_entry;
+			acpi_gbl_sys_notify.node = device_node;
 			acpi_gbl_sys_notify.handler = handler;
 			acpi_gbl_sys_notify.context = context;
 		}
 
 		else {
-			acpi_gbl_drv_notify.nte = obj_entry;
+			acpi_gbl_drv_notify.node = device_node;
 			acpi_gbl_drv_notify.handler = handler;
 			acpi_gbl_drv_notify.context = context;
 		}
@@ -239,10 +240,10 @@ acpi_install_notify_handler (
 	 * These are the ONLY objects that can receive ACPI notifications
 	 */
 
-	if ((obj_entry->type != ACPI_TYPE_DEVICE)    &&
-		(obj_entry->type != ACPI_TYPE_PROCESSOR) &&
-		(obj_entry->type != ACPI_TYPE_POWER)     &&
-		(obj_entry->type != ACPI_TYPE_THERMAL))
+	if ((device_node->type != ACPI_TYPE_DEVICE)    &&
+		(device_node->type != ACPI_TYPE_PROCESSOR) &&
+		(device_node->type != ACPI_TYPE_POWER)     &&
+		(device_node->type != ACPI_TYPE_THERMAL))
 	{
 		status = AE_BAD_PARAMETER;
 		goto unlock_and_exit;
@@ -250,7 +251,7 @@ acpi_install_notify_handler (
 
 	/* Check for an existing internal object */
 
-	obj_desc = acpi_ns_get_attached_object ((ACPI_HANDLE) obj_entry);
+	obj_desc = acpi_ns_get_attached_object ((ACPI_HANDLE) device_node);
 	if (obj_desc) {
 		/*
 		 *  The object exists.
@@ -270,15 +271,15 @@ acpi_install_notify_handler (
 	else {
 		/* Create a new object */
 
-		obj_desc = acpi_cm_create_internal_object (obj_entry->type);
+		obj_desc = acpi_cm_create_internal_object (device_node->type);
 		if (!obj_desc) {
 			status = AE_NO_MEMORY;
 			goto unlock_and_exit;
 		}
 
-		/* Attach new object to the NTE */
+		/* Attach new object to the Node */
 
-		status = acpi_ns_attach_object (device, obj_desc, (u8) obj_entry->type);
+		status = acpi_ns_attach_object (device, obj_desc, (u8) device_node->type);
 
 		if (ACPI_FAILURE (status)) {
 			goto unlock_and_exit;
@@ -296,7 +297,7 @@ acpi_install_notify_handler (
 		goto unlock_and_exit;
 	}
 
-	notify_obj->notify_handler.nte = obj_entry;
+	notify_obj->notify_handler.node = device_node;
 	notify_obj->notify_handler.handler = handler;
 	notify_obj->notify_handler.context = context;
 
@@ -337,9 +338,9 @@ acpi_remove_notify_handler (
 	u32                     handler_type,
 	NOTIFY_HANDLER          handler)
 {
-	ACPI_OBJECT_INTERNAL    *notify_obj;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_NAMED_OBJECT       *obj_entry;
+	ACPI_OPERAND_OBJECT     *notify_obj;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_NAMESPACE_NODE     *device_node;
 	ACPI_STATUS             status = AE_OK;
 
 
@@ -355,8 +356,8 @@ acpi_remove_notify_handler (
 
 	/* Convert and validate the device handle */
 
-	obj_entry = acpi_ns_convert_handle_to_entry (device);
-	if (!obj_entry) {
+	device_node = acpi_ns_convert_handle_to_entry (device);
+	if (!device_node) {
 		status = AE_BAD_PARAMETER;
 		goto unlock_and_exit;
 	}
@@ -365,10 +366,10 @@ acpi_remove_notify_handler (
 	 * These are the ONLY objects that can receive ACPI notifications
 	 */
 
-	if ((obj_entry->type != ACPI_TYPE_DEVICE)    &&
-		(obj_entry->type != ACPI_TYPE_PROCESSOR) &&
-		(obj_entry->type != ACPI_TYPE_POWER)     &&
-		(obj_entry->type != ACPI_TYPE_THERMAL))
+	if ((device_node->type != ACPI_TYPE_DEVICE)    &&
+		(device_node->type != ACPI_TYPE_PROCESSOR) &&
+		(device_node->type != ACPI_TYPE_POWER)     &&
+		(device_node->type != ACPI_TYPE_THERMAL))
 	{
 		status = AE_BAD_PARAMETER;
 		goto unlock_and_exit;
@@ -376,7 +377,7 @@ acpi_remove_notify_handler (
 
 	/* Check for an existing internal object */
 
-	obj_desc = acpi_ns_get_attached_object ((ACPI_HANDLE) obj_entry);
+	obj_desc = acpi_ns_get_attached_object ((ACPI_HANDLE) device_node);
 	if (!obj_desc) {
 		status = AE_NOT_EXIST;
 		goto unlock_and_exit;
@@ -573,7 +574,7 @@ acpi_acquire_global_lock (
 	acpi_aml_exit_interpreter ();
 
 	*out_handle = 0;
-	return status;
+	return (status);
 }
 
 
@@ -598,7 +599,7 @@ acpi_release_global_lock (
 	/* TBD: [Restructure] Validate handle */
 
 	acpi_ev_release_global_lock ();
-	return AE_OK;
+	return (AE_OK);
 }
 
 

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Name: actbl64.h - ACPI tables specific to IA64
+ *       $Revision: 12 $
  *
  *****************************************************************************/
 
@@ -45,7 +45,7 @@ typedef struct
 
 typedef struct
 {
-	char                    signature[4];           /* signature "FACS" */
+	NATIVE_CHAR             signature[4];           /* signature "FACS" */
 	u32                     length;                 /* length of structure, in bytes */
 	u32                     hardware_signature;     /* hardware configuration signature */
 	u32                     reserved4;              /* must be 0 */
@@ -65,7 +65,7 @@ typedef struct
 	ACPI_TABLE_HEADER       header;                 /* table header */
 	u32                     reserved_pad;           /* IA64 alignment, must be 0 */
 	ACPI_TBLPTR             firmware_ctrl;          /* Physical address of FACS */
-	ACPI_TBLPTR             acpi_dsdt;                  /* Physical address of DSDT */
+	ACPI_TBLPTR             dsdt;                   /* Physical address of DSDT */
 	u8                      model;                  /* System Interrupt Model */
 	u8                      address_space;          /* Address Space Bitmask */
 	u16                     sci_int;                /* System vector of SCI interrupt */
@@ -90,8 +90,8 @@ typedef struct
 	u8                      gpe1_blk_len;           /* Byte Length of ports at gpe1_blk */
 	u8                      gpe1_base;              /* offset in gpe model where gpe1 events start */
 	u8                      reserved3;              /* reserved */
-	u16                     Plvl2_lat;              /* worst case HW latency to enter/exit C2 state */
-	u16                     Plvl3_lat;              /* worst case HW latency to enter/exit C3 state */
+	u16                     plvl2_lat;              /* worst case HW latency to enter/exit C2 state */
+	u16                     plvl3_lat;              /* worst case HW latency to enter/exit C3 state */
 	u8                      day_alrm;               /* index to day-of-month alarm in RTC CMOS RAM */
 	u8                      mon_alrm;               /* index to month-of-year alarm in RTC CMOS RAM */
 	u8                      century;                /* index to century in RTC CMOS RAM */
@@ -99,11 +99,11 @@ typedef struct
 	u32                     flush_cash      : 1;    /* PAL_FLUSH_CACHE is correctly supported */
 	u32                     reserved5       : 1;    /* reserved - must be zero */
 	u32                     proc_c1         : 1;    /* all processors support C1 state */
-	u32                     Plvl2_up        : 1;    /* C2 state works on MP system */
+	u32                     plvl2_up        : 1;    /* C2 state works on MP system */
 	u32                     pwr_button      : 1;    /* Power button is handled as a generic feature */
 	u32                     sleep_button    : 1;    /* Sleep button is handled as a generic feature, or not present */
 	u32                     fixed_rTC       : 1;    /* RTC wakeup stat not in fixed register space */
-	u32                     RTCS4           : 1;    /* RTC wakeup stat not possible from S4 */
+	u32                     rtcs4           : 1;    /* RTC wakeup stat not possible from S4 */
 	u32                     tmr_val_ext     : 1;    /* tmr_val is 32 bits */
 	u32                     dock_cap        : 1;    /* Supports Docking */
 	u32                     reserved6       : 22;    /* reserved - must be zero */

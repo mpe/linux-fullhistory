@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Module Name: cmalloc - local memory allocation routines
+ *              $Revision: 73 $
  *
  *****************************************************************************/
 
@@ -24,13 +25,13 @@
 
 
 #include "acpi.h"
-#include "parser.h"
-#include "interp.h"
-#include "namesp.h"
-#include "globals.h"
+#include "acparser.h"
+#include "acinterp.h"
+#include "acnamesp.h"
+#include "acglobal.h"
 
 #define _COMPONENT          MISCELLANEOUS
-	 MODULE_NAME         ("cmalloc");
+	 MODULE_NAME         ("cmalloc")
 
 
 /*****************************************************************************
@@ -52,8 +53,8 @@ void *
 _cm_allocate (
 	u32                     size,
 	u32                     component,
-	ACPI_STRING             module,
-	s32                     line)
+	NATIVE_CHAR             *module,
+	u32                     line)
 {
 	void                    *address = NULL;
 
@@ -98,8 +99,8 @@ void *
 _cm_callocate (
 	u32                     size,
 	u32                     component,
-	ACPI_STRING             module,
-	s32                     line)
+	NATIVE_CHAR             *module,
+	u32                     line)
 {
 	void                    *address = NULL;
 
@@ -146,8 +147,8 @@ void
 _cm_free (
 	void                    *address,
 	u32                     component,
-	ACPI_STRING             module,
-	s32                     line)
+	NATIVE_CHAR             *module,
+	u32                     line)
 {
 
 	if (NULL == address) {

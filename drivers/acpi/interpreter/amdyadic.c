@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
  * Module Name: amdyadic - ACPI AML (p-code) execution for dyadic operators
+ *              $Revision: 63 $
  *
  *****************************************************************************/
 
@@ -25,16 +25,16 @@
 
 
 #include "acpi.h"
-#include "parser.h"
-#include "namesp.h"
-#include "interp.h"
-#include "events.h"
+#include "acparser.h"
+#include "acnamesp.h"
+#include "acinterp.h"
+#include "acevents.h"
 #include "amlcode.h"
-#include "dispatch.h"
+#include "acdispat.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amdyadic");
+	 MODULE_NAME         ("amdyadic")
 
 
 /*****************************************************************************
@@ -57,15 +57,15 @@ acpi_aml_exec_dyadic1 (
 	u16                     opcode,
 	ACPI_WALK_STATE         *walk_state)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc = NULL;
-	ACPI_OBJECT_INTERNAL    *val_desc = NULL;
-	ACPI_NAMED_OBJECT       *entry;
+	ACPI_OPERAND_OBJECT     *obj_desc = NULL;
+	ACPI_OPERAND_OBJECT     *val_desc = NULL;
+	ACPI_NAMESPACE_NODE     *node;
 	ACPI_STATUS             status = AE_OK;
 
 
 	/* Resolve all operands */
 
-	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS);
+	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS, walk_state);
 	/* Get the operands */
 
 	status |= acpi_ds_obj_stack_pop_object (&val_desc, walk_state);
@@ -73,8 +73,6 @@ acpi_aml_exec_dyadic1 (
 	if (ACPI_FAILURE (status)) {
 		/* Invalid parameters on object stack  */
 
-		acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__, opcode,
-				 WALK_OPERANDS, 2);
 		goto cleanup;
 	}
 
@@ -88,15 +86,15 @@ acpi_aml_exec_dyadic1 (
 
 	case AML_NOTIFY_OP:
 
-		/* The Obj_desc is actually an NTE */
+		/* The Obj_desc is actually an Node */
 
-		entry = (ACPI_NAMED_OBJECT*) obj_desc;
+		node = (ACPI_NAMESPACE_NODE *) obj_desc;
 		obj_desc = NULL;
 
 		/* Object must be a device or thermal zone */
 
-		if (entry && val_desc) {
-			switch (entry->type)
+		if (node && val_desc) {
+			switch (node->type)
 			{
 			case ACPI_TYPE_DEVICE:
 			case ACPI_TYPE_THERMAL:
@@ -108,7 +106,7 @@ acpi_aml_exec_dyadic1 (
 
 				/* Dispatch the notify to the appropriate handler */
 
-				acpi_ev_notify_dispatch (entry, val_desc->number.value);
+				acpi_ev_notify_dispatch (node, val_desc->number.value);
 				break;
 
 			default:
@@ -118,6 +116,8 @@ acpi_aml_exec_dyadic1 (
 		break;
 
 	default:
+
+		REPORT_ERROR ("Acpi_aml_exec_dyadic1: Unknown dyadic opcode");
 		status = AE_AML_BAD_OPCODE;
 	}
 
@@ -153,23 +153,23 @@ ACPI_STATUS
 acpi_aml_exec_dyadic2_r (
 	u16                     opcode,
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_OBJECT_INTERNAL    **return_desc)
+	ACPI_OPERAND_OBJECT     **return_desc)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc   = NULL;
-	ACPI_OBJECT_INTERNAL    *obj_desc2  = NULL;
-	ACPI_OBJECT_INTERNAL    *res_desc   = NULL;
-	ACPI_OBJECT_INTERNAL    *res_desc2  = NULL;
-	ACPI_OBJECT_INTERNAL    *ret_desc   = NULL;
-	ACPI_OBJECT_INTERNAL    *ret_desc2  = NULL;
+	ACPI_OPERAND_OBJECT     *obj_desc   = NULL;
+	ACPI_OPERAND_OBJECT     *obj_desc2  = NULL;
+	ACPI_OPERAND_OBJECT     *res_desc   = NULL;
+	ACPI_OPERAND_OBJECT     *res_desc2  = NULL;
+	ACPI_OPERAND_OBJECT     *ret_desc   = NULL;
+	ACPI_OPERAND_OBJECT     *ret_desc2  = NULL;
 	ACPI_STATUS             status      = AE_OK;
 	u32                     remainder;
-	s32                     num_operands = 3;
-	char                    *new_buf;
+	u32                     num_operands = 3;
+	NATIVE_CHAR             *new_buf;
 
 
 	/* Resolve all operands */
 
-	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS);
+	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS, walk_state);
 	/* Get all operands */
 
 	if (AML_DIVIDE_OP == opcode) {
@@ -180,10 +180,7 @@ acpi_aml_exec_dyadic2_r (
 	status |= acpi_ds_obj_stack_pop_object (&res_desc, walk_state);
 	status |= acpi_ds_obj_stack_pop_object (&obj_desc2, walk_state);
 	status |= acpi_ds_obj_stack_pop_object (&obj_desc, walk_state);
-	if (status != AE_OK) {
-		acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__, opcode,
-			&(walk_state->operands [walk_state->num_operands -1]),
-			num_operands);
+	if (ACPI_FAILURE (status)) {
 		goto cleanup;
 	}
 
@@ -368,9 +365,9 @@ acpi_aml_exec_dyadic2_r (
 				goto cleanup;
 			}
 
-			STRCPY (new_buf, (char *) obj_desc->string.pointer);
+			STRCPY (new_buf, obj_desc->string.pointer);
 			STRCPY (new_buf + obj_desc->string.length,
-					  (char *) obj_desc2->string.pointer);
+					  obj_desc2->string.pointer);
 
 			/* Point the return object to the new string */
 
@@ -391,16 +388,8 @@ acpi_aml_exec_dyadic2_r (
 			new_buf = acpi_cm_allocate (obj_desc->buffer.length +
 					  obj_desc2->buffer.length);
 			if (!new_buf) {
-				/* Only bail out if the buffer is small */
-
-				/* TBD: [Investigate] what is the point of this code? */
-
-				if (obj_desc->buffer.length + obj_desc2->buffer.length < 1024) {
-					REPORT_ERROR
-						("Aml_exec_dyadic2_r/Concat_op: Buffer allocation failure");
-					return (AE_NO_MEMORY);
-				}
-
+				REPORT_ERROR
+					("Aml_exec_dyadic2_r/Concat_op: Buffer allocation failure");
 				status = AE_NO_MEMORY;
 				goto cleanup;
 			}
@@ -423,6 +412,7 @@ acpi_aml_exec_dyadic2_r (
 
 	default:
 
+		REPORT_ERROR ("Acpi_aml_exec_dyadic2_r: Unknown dyadic opcode");
 		status = AE_AML_BAD_OPCODE;
 		goto cleanup;
 	}
@@ -434,12 +424,13 @@ acpi_aml_exec_dyadic2_r (
 	 * descriptor (Res_desc).
 	 */
 
-	if ((status = acpi_aml_exec_store (ret_desc, res_desc)) != AE_OK) {
+	status = acpi_aml_exec_store (ret_desc, res_desc, walk_state);
+	if (ACPI_FAILURE (status)) {
 		goto cleanup;
 	}
 
 	if (AML_DIVIDE_OP == opcode) {
-		status = acpi_aml_exec_store (ret_desc2, res_desc2);
+		status = acpi_aml_exec_store (ret_desc2, res_desc2, walk_state);
 
 		/*
 		 * Since the remainder is not returned, remove a reference to
@@ -499,26 +490,24 @@ ACPI_STATUS
 acpi_aml_exec_dyadic2_s (
 	u16                     opcode,
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_OBJECT_INTERNAL    **return_desc)
+	ACPI_OPERAND_OBJECT     **return_desc)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_OBJECT_INTERNAL    *time_desc;
-	ACPI_OBJECT_INTERNAL    *ret_desc = NULL;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_OPERAND_OBJECT     *time_desc;
+	ACPI_OPERAND_OBJECT     *ret_desc = NULL;
 	ACPI_STATUS             status;
 
 
 	/* Resolve all operands */
 
-	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS);
+	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS, walk_state);
 	/* Get all operands */
 
 	status |= acpi_ds_obj_stack_pop_object (&time_desc, walk_state);
 	status |= acpi_ds_obj_stack_pop_object (&obj_desc, walk_state);
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		/* Invalid parameters on object stack  */
 
-		acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__, opcode,
-				  WALK_OPERANDS, 2);
 		goto cleanup;
 	}
 
@@ -559,6 +548,7 @@ acpi_aml_exec_dyadic2_s (
 
 	default:
 
+		REPORT_ERROR ("Acpi_aml_exec_dyadic2_s: Unknown dyadic synchronization opcode");
 		status = AE_AML_BAD_OPCODE;
 		goto cleanup;
 	}
@@ -619,27 +609,25 @@ ACPI_STATUS
 acpi_aml_exec_dyadic2 (
 	u16                     opcode,
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_OBJECT_INTERNAL    **return_desc)
+	ACPI_OPERAND_OBJECT     **return_desc)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_OBJECT_INTERNAL    *obj_desc2;
-	ACPI_OBJECT_INTERNAL    *ret_desc = NULL;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc2;
+	ACPI_OPERAND_OBJECT     *ret_desc = NULL;
 	ACPI_STATUS             status;
 	u8                      lboolean;
 
 
 	/* Resolve all operands */
 
-	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS);
+	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS, walk_state);
 	/* Get all operands */
 
 	status |= acpi_ds_obj_stack_pop_object (&obj_desc2, walk_state);
 	status |= acpi_ds_obj_stack_pop_object (&obj_desc, walk_state);
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		/* Invalid parameters on object stack  */
 
-		acpi_aml_append_operand_diag (_THIS_MODULE, __LINE__, opcode,
-				  WALK_OPERANDS, 2);
 		goto cleanup;
 	}
 
@@ -707,6 +695,7 @@ acpi_aml_exec_dyadic2 (
 
 	default:
 
+		REPORT_ERROR ("Acpi_aml_exec_dyadic2: Unknown dyadic opcode");
 		status = AE_AML_BAD_OPCODE;
 		goto cleanup;
 		break;

@@ -15,8 +15,6 @@
 extern unsigned decrementer_count;
 extern unsigned count_period_num;
 extern unsigned count_period_den;
-extern unsigned long mktime(unsigned int, unsigned int, unsigned int,
-			    unsigned int, unsigned int, unsigned int);
 extern void to_tm(int tim, struct rtc_time * tm);
 extern time_t last_rtc_update;
 

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
- * Name: globals.h - Declarations for global variables
+ * Name: acglobal.h - Declarations for global variables
+ *       $Revision: 84 $
  *
  *****************************************************************************/
 
@@ -23,12 +23,15 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef __GLOBALS_H__
-#define __GLOBALS_H__
+#ifndef __ACGLOBAL_H__
+#define __ACGLOBAL_H__
 
 
 /*
- * Ensure that the globals are actually defined only once
+ * Ensure that the globals are actually defined only once.
+ *
+ * The use of these defines allows a single list of globals (here) in order
+ * to simplify maintenance of the code.
  */
 #ifdef DEFINE_ACPI_GLOBALS
 #define ACPI_EXTERN
@@ -37,7 +40,7 @@
 #endif
 
 
-extern      char                        *msg_acpi_error_break;
+extern      NATIVE_CHAR                 *msg_acpi_error_break;
 
 /*****************************************************************************
  *
@@ -110,8 +113,9 @@ ACPI_EXTERN u8                         *acpi_gbl_gpe0enable_register_save;
 ACPI_EXTERN u8                         *acpi_gbl_gpe1_enable_register_save;
 ACPI_EXTERN ACPI_WALK_STATE            *acpi_gbl_breakpoint_walk;
 ACPI_EXTERN ACPI_GENERIC_STATE         *acpi_gbl_generic_state_cache;
-ACPI_EXTERN ACPI_GENERIC_OP            *acpi_gbl_parse_cache;
-ACPI_EXTERN ACPI_OBJECT_INTERNAL       *acpi_gbl_object_cache;
+ACPI_EXTERN ACPI_PARSE_OBJECT          *acpi_gbl_parse_cache;
+ACPI_EXTERN ACPI_PARSE2_OBJECT         *acpi_gbl_ext_parse_cache;
+ACPI_EXTERN ACPI_OPERAND_OBJECT        *acpi_gbl_object_cache;
 ACPI_EXTERN ACPI_WALK_STATE            *acpi_gbl_walk_state_cache;
 ACPI_EXTERN ACPI_HANDLE                 acpi_gbl_global_lock_semaphore;
 
@@ -127,6 +131,8 @@ ACPI_EXTERN u32                         acpi_gbl_state_cache_requests;
 ACPI_EXTERN u32                         acpi_gbl_state_cache_hits;
 ACPI_EXTERN u32                         acpi_gbl_parse_cache_requests;
 ACPI_EXTERN u32                         acpi_gbl_parse_cache_hits;
+ACPI_EXTERN u32                         acpi_gbl_ext_parse_cache_requests;
+ACPI_EXTERN u32                         acpi_gbl_ext_parse_cache_hits;
 ACPI_EXTERN u32                         acpi_gbl_object_cache_requests;
 ACPI_EXTERN u32                         acpi_gbl_object_cache_hits;
 ACPI_EXTERN u32                         acpi_gbl_walk_state_cache_requests;
@@ -137,6 +143,7 @@ ACPI_EXTERN u32                         acpi_gbl_ps_find_count;
 
 ACPI_EXTERN u16                         acpi_gbl_generic_state_cache_depth;
 ACPI_EXTERN u16                         acpi_gbl_parse_cache_depth;
+ACPI_EXTERN u16                         acpi_gbl_ext_parse_cache_depth;
 ACPI_EXTERN u16                         acpi_gbl_object_cache_depth;
 ACPI_EXTERN u16                         acpi_gbl_walk_state_cache_depth;
 ACPI_EXTERN u16                         acpi_gbl_pm1_enable_register_save;
@@ -169,8 +176,8 @@ extern      u32                         acpi_gbl_startup_flags;
 #define NUM_PREDEFINED_NAMES            9
 
 
-ACPI_EXTERN ACPI_NAME_TABLE             acpi_gbl_root_name_table;
-ACPI_EXTERN ACPI_NAMED_OBJECT          *acpi_gbl_root_object;
+ACPI_EXTERN ACPI_NAMESPACE_NODE         acpi_gbl_root_node_struct;
+ACPI_EXTERN ACPI_NAMESPACE_NODE        *acpi_gbl_root_node;
 
 extern      u8                          acpi_gbl_ns_properties[NUM_NS_TYPES];
 extern      PREDEFINED_NAMES            acpi_gbl_pre_defined_names [NUM_PREDEFINED_NAMES];
@@ -206,7 +213,7 @@ ACPI_EXTERN u32                         acpi_gbl_Pcode_block_len;
 ACPI_EXTERN u32                         acpi_gbl_Pcode_len;
 
 ACPI_EXTERN u32                         acpi_gbl_buf_seq;           /* Counts allocated Buffer descriptors */
-ACPI_EXTERN s32                         acpi_gbl_named_object_err;  /* Indicate if inc_error should be called */
+ACPI_EXTERN u32                         acpi_gbl_node_err;   /* Indicate if inc_error should be called */
 
 /*
  * Handle to the last method found - used during pass1 of load
@@ -231,11 +238,10 @@ ACPI_EXTERN u8                          acpi_gbl_cm_single_step;
  *
  ****************************************************************************/
 
-ACPI_EXTERN ACPI_GENERIC_OP             *acpi_gbl_parsed_namespace_root;
+ACPI_EXTERN ACPI_PARSE_OBJECT           *acpi_gbl_parsed_namespace_root;
 
-extern ACPI_OP_INFO                     acpi_gbl_aml_op_info[];
+extern ACPI_OPCODE_INFO                 acpi_gbl_aml_op_info[];
 extern u8                               acpi_gbl_aml_op_info_index[256];
-extern char                             *acpi_gbl_parser_id;
 
 
 /*****************************************************************************
@@ -304,8 +310,11 @@ ACPI_EXTERN u32                         acpi_gbl_max_concurrent_object_count;
 ACPI_EXTERN u32                         acpi_gbl_max_concurrent_object_size;
 ACPI_EXTERN u32                         acpi_gbl_running_object_count;
 ACPI_EXTERN u32                         acpi_gbl_running_object_size;
+ACPI_EXTERN u32                         acpi_gbl_current_node_count;
+ACPI_EXTERN u32                         acpi_gbl_current_node_size;
+ACPI_EXTERN u32                         acpi_gbl_max_concurrent_node_count;
 
 #endif
 
 
-#endif /* __GLOBALS_H__ */
+#endif /* __ACGLOBAL_H__ */

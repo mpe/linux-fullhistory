@@ -30,17 +30,17 @@ ssize_t block_write(struct file * filp, const char * buf,
 	ssize_t block, blocks;
 	loff_t offset;
 	ssize_t chars;
-	ssize_t written = 0;
+	ssize_t written;
 	struct buffer_head * bhlist[NBUF];
 	size_t size;
-	kdev_t dev;
+	kdev_t dev = inode->i_rdev;
 	struct buffer_head * bh, *bufferlist[NBUF];
 	register char * p;
 
-	write_error = buffercount = 0;
-	dev = inode->i_rdev;
-	if ( is_read_only( inode->i_rdev ))
+	if (is_read_only(dev))
 		return -EPERM;
+
+	written = write_error = buffercount = 0;
 	blocksize = BLOCK_SIZE;
 	if (blksize_size[MAJOR(dev)] && blksize_size[MAJOR(dev)][MINOR(dev)])
 		blocksize = blksize_size[MAJOR(dev)][MINOR(dev)];

@@ -2,8 +2,8 @@
  *
  * Name:	skerror.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.3 $
- * Date:	$Date: 1999/09/14 14:04:42 $
+ * Version:	$Revision: 1.4 $
+ * Date:	$Date: 1999/11/22 13:51:59 $
  * Purpose:	SK specific Error log support
  *
  ******************************************************************************/
@@ -26,6 +26,9 @@
  *
  * History:
  *	$Log: skerror.h,v $
+ *	Revision 1.4  1999/11/22 13:51:59  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.3  1999/09/14 14:04:42  rwahl
  *	Added error base SK_ERRBASE_PECP.
  *	Changed error base for driver.

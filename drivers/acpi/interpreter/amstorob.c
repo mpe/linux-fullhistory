@@ -2,6 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amstorob - AML Interpreter object store support, store to object
+ *              $Revision: 16 $
  *
  *****************************************************************************/
 
@@ -25,16 +26,16 @@
 
 
 #include "acpi.h"
-#include "parser.h"
-#include "dispatch.h"
-#include "interp.h"
+#include "acparser.h"
+#include "acdispat.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "namesp.h"
-#include "tables.h"
+#include "acnamesp.h"
+#include "actables.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amstorob");
+	 MODULE_NAME         ("amstorob")
 
 
 /*******************************************************************************
@@ -65,8 +66,9 @@
 
 ACPI_STATUS
 acpi_aml_store_object_to_object (
-	ACPI_OBJECT_INTERNAL    *val_desc,
-	ACPI_OBJECT_INTERNAL    *dest_desc)
+	ACPI_OPERAND_OBJECT     *val_desc,
+	ACPI_OPERAND_OBJECT     *dest_desc,
+	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status = AE_OK;
 	u8                      *buffer = NULL;
@@ -99,8 +101,8 @@ acpi_aml_store_object_to_object (
 			/*
 			 *  Initially not a number, convert
 			 */
-			status = acpi_aml_resolve_to_value (&val_desc);
-			if ((status == AE_OK) &&
+			status = acpi_aml_resolve_to_value (&val_desc, walk_state);
+			if (ACPI_SUCCESS (status) &&
 				(val_desc->common.type != ACPI_TYPE_NUMBER))
 			{
 				/*
@@ -129,8 +131,8 @@ acpi_aml_store_object_to_object (
 			/*
 			 *  Initially not a valid type, convert
 			 */
-			status = acpi_aml_resolve_to_value (&val_desc);
-			if ((status == AE_OK) &&
+			status = acpi_aml_resolve_to_value (&val_desc, walk_state);
+			if (ACPI_SUCCESS (status) &&
 				(val_desc->common.type != ACPI_TYPE_NUMBER) &&
 				(val_desc->common.type != ACPI_TYPE_BUFFER) &&
 				(val_desc->common.type != ACPI_TYPE_STRING))
@@ -155,7 +157,7 @@ acpi_aml_store_object_to_object (
 
 	/* Exit now if failure above */
 
-	if (status != AE_OK) {
+	if (ACPI_FAILURE (status)) {
 		goto clean_up_and_bail_out;
 	}
 

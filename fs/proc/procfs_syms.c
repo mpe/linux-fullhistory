@@ -28,7 +28,9 @@ static int __init init_proc_fs(void)
 	if (!err) {
 		proc_mnt = kern_mount(&proc_fs_type);
 		err = PTR_ERR(proc_mnt);
-		if (!IS_ERR(proc_mnt))
+		if (IS_ERR(proc_mnt))
+			unregister_filesystem(&proc_fs_type);
+		else
 			err = 0;
 	}
 	return err;

@@ -2,8 +2,8 @@
  *
  * Name:	xmac_ii.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.25 $
- * Date:	$Date: 1999/08/12 19:19:38 $
+ * Version:	$Revision: 1.27 $
+ * Date:	$Date: 2000/05/17 11:00:46 $
  * Purpose:	Defines and Macros for XaQti's Gigabit Ethernet Controller
  *
  ******************************************************************************/
@@ -27,6 +27,12 @@
  * History:
  *
  *	$Log: xmac_ii.h,v $
+ *	Revision 1.27  2000/05/17 11:00:46  malthoff
+ *	Add bit for enable/disable power management in BCOM chip.
+ *	
+ *	Revision 1.26  1999/11/22 14:03:00  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.25  1999/08/12 19:19:38  malthoff
  *	Add PHY_B_AC_TX_TST bit according to BCOM A1 errata sheet.
  *	
@@ -930,7 +936,9 @@ extern "C" {
 #define PHY_B_AC_TX_TST		(1<<10) /* Bit 10:	tx test bit, always 1 */
 					/* Bit  9.. 8:	reserved */
 #define PHY_B_AC_DIS_PRF	(1<<7)	/* Bit  7:	dis part resp filter */
-					/* Bit  6.. 4:	reserved */
+					/* Bit  6:	reserved */
+#define PHY_B_AC_DIS_PM		(1<<5)	/* Bit  5:	dis power management */
+					/* Bit  4:	reserved */
 #define PHY_B_AC_DIAG		(1<<3)	/* Bit  3:	Diagnostic Mode */
 					/* Bit  2.. 0:	reserved */
 

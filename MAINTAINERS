@@ -1152,6 +1152,13 @@ M:	jgarzik@mandrakesoft.com
 L:	linux-tulip@cesdis.gsfc.nasa.gov
 S:	Maintained
 
+TUN/TAP driver
+P:	Maxim Krasnyansky
+M:	maxk@qualcomm.com, max_mk@yahoo.com
+L:	vtun@office.satix.net
+W:	http://vtun.sourceforge.net/tun
+S:	Maintained
+
 U14-34F SCSI DRIVER
 P:	Dario Ballabio
 M:	dario@milano.europe.dg.com
@@ -1228,7 +1235,7 @@ S:	Maintained
 
 USB OV511 DRIVER
 P:     Mark McClelland
-M:     mmcclelland@delphi.com
+M:     mwm@i.am
 L:     linux-usb-users@lists.sourceforge.net
 L:     linux-usb-devel@lists.sourceforge.net
 W:     http://alpha.dyndns.org/ov511/

@@ -1,7 +1,7 @@
-
 /******************************************************************************
  *
- * Name: common.h -- prototypes for the common (subsystem-wide) procedures
+ * Name: accommon.h -- prototypes for the common (subsystem-wide) procedures
+ *       $Revision: 74 $
  *
  *****************************************************************************/
 
@@ -23,8 +23,8 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _COMMON_H
-#define _COMMON_H
+#ifndef _ACCOMMON_H
+#define _ACCOMMON_H
 
 
 #define REF_INCREMENT       (u16) 0
@@ -66,11 +66,11 @@ acpi_cm_subsystem_shutdown (
  * Acpi_cm_global - Global data structures and procedures
  */
 
-char *
+NATIVE_CHAR *
 acpi_cm_get_mutex_name (
 	u32                     mutex_id);
 
-char *
+NATIVE_CHAR *
 acpi_cm_get_type_name (
 	u32                     type);
 
@@ -87,77 +87,77 @@ acpi_cm_allocate_owner_id (
  * Acpi_cm_clib - Local implementations of C library functions
  */
 
-ACPI_SIZE
+NATIVE_UINT
 acpi_cm_strlen (
-	const char              *string);
+	const NATIVE_CHAR       *string);
 
-char *
+NATIVE_CHAR *
 acpi_cm_strcpy (
-	char                    *dst_string,
-	const char              *src_string);
+	NATIVE_CHAR             *dst_string,
+	const NATIVE_CHAR       *src_string);
 
-char *
+NATIVE_CHAR *
 acpi_cm_strncpy (
-	char                    *dst_string,
-	const char              *src_string,
-	ACPI_SIZE               count);
+	NATIVE_CHAR             *dst_string,
+	const NATIVE_CHAR       *src_string,
+	NATIVE_UINT             count);
 
 u32
 acpi_cm_strncmp (
-	const char              *string1,
-	const char              *string2,
-	ACPI_SIZE               count);
+	const NATIVE_CHAR       *string1,
+	const NATIVE_CHAR       *string2,
+	NATIVE_UINT             count);
 
 u32
 acpi_cm_strcmp (
-	const char              *string1,
-	const char              *string2);
+	const NATIVE_CHAR       *string1,
+	const NATIVE_CHAR       *string2);
 
-char *
+NATIVE_CHAR *
 acpi_cm_strcat (
-	char                    *dst_string,
-	const char              *src_string);
+	NATIVE_CHAR             *dst_string,
+	const NATIVE_CHAR       *src_string);
 
-char *
+NATIVE_CHAR *
 acpi_cm_strncat (
-	char                    *dst_string,
-	const char              *src_string,
-	ACPI_SIZE               count);
+	NATIVE_CHAR             *dst_string,
+	const NATIVE_CHAR       *src_string,
+	NATIVE_UINT             count);
 
 u32
 acpi_cm_strtoul (
-	const char              *string,
-	char                    **terminator,
-	s32                     base);
+	const NATIVE_CHAR       *string,
+	NATIVE_CHAR             **terminator,
+	u32                     base);
 
-char *
+NATIVE_CHAR *
 acpi_cm_strstr (
-	char                    *string1,
-	char                    *string2);
+	NATIVE_CHAR             *string1,
+	NATIVE_CHAR             *string2);
 
-char *
+NATIVE_CHAR *
 acpi_cm_strupr (
-	char                    *src_string);
+	NATIVE_CHAR             *src_string);
 
 void *
 acpi_cm_memcpy (
 	void                    *dest,
 	const void              *src,
-	ACPI_SIZE               count);
+	NATIVE_UINT             count);
 
 void *
 acpi_cm_memset (
 	void                    *dest,
-	s32                     value,
-	ACPI_SIZE               count);
+	u32                     value,
+	NATIVE_UINT             count);
 
-s32
+u32
 acpi_cm_to_upper (
-	s32                     c);
+	u32                     c);
 
-s32
+u32
 acpi_cm_to_lower (
-	s32                     c);
+	u32                     c);
 
 
 /*
@@ -166,41 +166,41 @@ acpi_cm_to_lower (
 
 ACPI_STATUS
 acpi_cm_build_simple_object(
-	ACPI_OBJECT_INTERNAL    *obj,
+	ACPI_OPERAND_OBJECT     *obj,
 	ACPI_OBJECT             *user_obj,
-	char                    *data_space,
+	u8                      *data_space,
 	u32                     *buffer_space_used);
 
 ACPI_STATUS
 acpi_cm_build_package_object (
-	ACPI_OBJECT_INTERNAL    *obj,
-	char                    *buffer,
+	ACPI_OPERAND_OBJECT     *obj,
+	u8                      *buffer,
 	u32                     *space_used);
 
 ACPI_STATUS
 acpi_cm_build_external_object (
-	ACPI_OBJECT_INTERNAL    *obj,
+	ACPI_OPERAND_OBJECT     *obj,
 	ACPI_BUFFER             *ret_buffer);
 
 ACPI_STATUS
 acpi_cm_build_internal_simple_object(
 	ACPI_OBJECT             *user_obj,
-	ACPI_OBJECT_INTERNAL    *obj);
+	ACPI_OPERAND_OBJECT     *obj);
 
 ACPI_STATUS
 acpi_cm_build_internal_object (
 	ACPI_OBJECT             *obj,
-	ACPI_OBJECT_INTERNAL    *internal_obj);
+	ACPI_OPERAND_OBJECT     *internal_obj);
 
 ACPI_STATUS
 acpi_cm_copy_internal_simple_object (
-	ACPI_OBJECT_INTERNAL    *source_obj,
-	ACPI_OBJECT_INTERNAL    *dest_obj);
+	ACPI_OPERAND_OBJECT     *source_obj,
+	ACPI_OPERAND_OBJECT     *dest_obj);
 
 ACPI_STATUS
 acpi_cm_build_copy_internal_package_object (
-	ACPI_OBJECT_INTERNAL    *source_obj,
-	ACPI_OBJECT_INTERNAL    *dest_obj);
+	ACPI_OPERAND_OBJECT     *source_obj,
+	ACPI_OPERAND_OBJECT     *dest_obj);
 
 
 /*
@@ -209,14 +209,14 @@ acpi_cm_build_copy_internal_package_object (
 
 ACPI_STATUS
 acpi_cm_update_object_reference (
-	ACPI_OBJECT_INTERNAL    *object,
+	ACPI_OPERAND_OBJECT     *object,
 	u16                     action);
 
-ACPI_OBJECT_INTERNAL *
+ACPI_OPERAND_OBJECT  *
 _cm_create_internal_object (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id,
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
 	OBJECT_TYPE_INTERNAL    type);
 
 
@@ -224,127 +224,120 @@ _cm_create_internal_object (
  * Acpi_cm_debug - Debug interfaces
  */
 
-s32
+u32
 get_debug_level (
 	void);
 
 void
 set_debug_level (
-	s32                     level);
+	u32                     level);
 
 void
 function_trace (
-	ACPI_STRING             module_name,
-	s32                     line_number,
-	s32                     component_id,
-	ACPI_STRING             function_name);
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name);
 
 void
 function_trace_ptr (
-	ACPI_STRING             module_name,
-	s32                     line_number,
-	s32                     component_id,
-	ACPI_STRING             function_name,
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name,
 	void                    *pointer);
 
 void
 function_trace_u32 (
-	ACPI_STRING             module_name,
-	s32                     line_number,
-	s32                     component_id,
-	ACPI_STRING             function_name,
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name,
 	u32                     integer);
 
 void
 function_trace_str (
-	ACPI_STRING             module_name,
-	s32                     line_number,
-	s32                     component_id,
-	ACPI_STRING             function_name,
-	char                    *string);
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name,
+	NATIVE_CHAR             *string);
 
 void
 function_exit (
-	ACPI_STRING             module_name,
-	s32                     line_number,
-	s32                     component_id,
-	ACPI_STRING             function_name);
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name);
 
 void
 function_status_exit (
-	ACPI_STRING             module_name,
-	s32                     line_number,
-	s32                     component_id,
-	ACPI_STRING             function_name,
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name,
 	ACPI_STATUS             status);
 
 void
 function_value_exit (
-	ACPI_STRING             module_name,
-	s32                     line_number,
-	s32                     component_id,
-	ACPI_STRING             function_name,
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name,
 	NATIVE_UINT             value);
 
 void
 function_ptr_exit (
-	ACPI_STRING             module_name,
-	s32                     line_number,
-	s32                     component_id,
-	ACPI_STRING             function_name,
-	char                    *ptr);
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *function_name,
+	u8                      *ptr);
 
 void
 debug_print_prefix (
-	ACPI_STRING             module_name,
-	s32                     line_number);
+	NATIVE_CHAR             *module_name,
+	u32                     line_number);
 
 void
 debug_print (
-	ACPI_STRING             module_name,
-	s32                     line_number,
-	s32                     component_id,
-	s32                     print_level,
-	char                    *format, ...);
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	u32                     print_level,
+	NATIVE_CHAR             *format, ...);
 
 void
 debug_print_raw (
-	char                    *format, ...);
+	NATIVE_CHAR             *format, ...);
 
 void
 _report_info (
-	ACPI_STRING             module_name,
-	s32                     line_number,
-	s32                     component_id,
-	ACPI_STRING             message);
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *message);
 
 void
 _report_error (
-	ACPI_STRING             module_name,
-	s32                     line_number,
-	s32                     component_id,
-	ACPI_STRING             message);
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *message);
 
 void
 _report_warning (
-	ACPI_STRING             module_name,
-	s32                     line_number,
-	s32                     component_id,
-	ACPI_STRING             message);
-
-void
-_report_success (
-	ACPI_STRING             module_name,
-	s32                     line_number,
-	s32                     component_id,
-	ACPI_STRING             message);
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id,
+	NATIVE_CHAR             *message);
 
 void
 acpi_cm_dump_buffer (
-	char                    *buffer,
+	u8                      *buffer,
 	u32                     count,
 	u32                     display,
-	s32                     component_id);
+	u32                     component_id);
 
 
 /*
@@ -353,19 +346,19 @@ acpi_cm_dump_buffer (
 
 void
 acpi_cm_delete_internal_obj (
-	ACPI_OBJECT_INTERNAL    *object);
+	ACPI_OPERAND_OBJECT     *object);
 
 void
 acpi_cm_delete_internal_package_object (
-	ACPI_OBJECT_INTERNAL    *object);
+	ACPI_OPERAND_OBJECT     *object);
 
 void
 acpi_cm_delete_internal_simple_object (
-	ACPI_OBJECT_INTERNAL    *object);
+	ACPI_OPERAND_OBJECT     *object);
 
 ACPI_STATUS
 acpi_cm_delete_internal_object_list (
-	ACPI_OBJECT_INTERNAL    **obj_list);
+	ACPI_OPERAND_OBJECT     **obj_list);
 
 
 /*
@@ -385,23 +378,23 @@ acpi_cm_delete_internal_object_list (
 
 ACPI_STATUS
 acpi_cm_evaluate_numeric_object (
-	char                    *method_name,
-	ACPI_NAMED_OBJECT       *acpi_device,
+	NATIVE_CHAR             *method_name,
+	ACPI_NAMESPACE_NODE     *device_node,
 	u32                     *address);
 
 ACPI_STATUS
 acpi_cm_execute_HID (
-	ACPI_NAMED_OBJECT       *acpi_device,
+	ACPI_NAMESPACE_NODE     *device_node,
 	DEVICE_ID               *hid);
 
 ACPI_STATUS
 acpi_cm_execute_STA (
-	ACPI_NAMED_OBJECT       *acpi_device,
+	ACPI_NAMESPACE_NODE     *device_node,
 	u32                     *status_flags);
 
 ACPI_STATUS
 acpi_cm_execute_UID (
-	ACPI_NAMED_OBJECT       *acpi_device,
+	ACPI_NAMESPACE_NODE     *device_node,
 	DEVICE_ID               *uid);
 
 
@@ -409,7 +402,7 @@ acpi_cm_execute_UID (
  * Acpi_cm_error - exception interfaces
  */
 
-char *
+NATIVE_CHAR *
 acpi_cm_format_exception (
 	ACPI_STATUS             status);
 
@@ -447,18 +440,18 @@ acpi_cm_release_mutex (
  * Acpi_cm_object - internal object create/delete/cache routines
  */
 
+void *
+_cm_allocate_object_desc (
+	NATIVE_CHAR             *module_name,
+	u32                     line_number,
+	u32                     component_id);
+
 #define acpi_cm_create_internal_object(t) _cm_create_internal_object(_THIS_MODULE,__LINE__,_COMPONENT,t)
 #define acpi_cm_allocate_object_desc()  _cm_allocate_object_desc(_THIS_MODULE,__LINE__,_COMPONENT)
 
-void *
-_cm_allocate_object_desc (
-	char                    *module_name,
-	s32                     line_number,
-	s32                     component_id);
-
 void
 acpi_cm_delete_object_desc (
-	ACPI_OBJECT_INTERNAL    *object);
+	ACPI_OPERAND_OBJECT     *object);
 
 u8
 acpi_cm_valid_internal_object (
@@ -471,11 +464,11 @@ acpi_cm_valid_internal_object (
 
 void
 acpi_cm_add_reference (
-	ACPI_OBJECT_INTERNAL    *object);
+	ACPI_OPERAND_OBJECT     *object);
 
 void
 acpi_cm_remove_reference (
-	ACPI_OBJECT_INTERNAL    *object);
+	ACPI_OPERAND_OBJECT     *object);
 
 /*
  * Acpi_cm_size - Object size routines
@@ -483,17 +476,17 @@ acpi_cm_remove_reference (
 
 ACPI_STATUS
 acpi_cm_get_simple_object_size (
-	ACPI_OBJECT_INTERNAL    *obj,
+	ACPI_OPERAND_OBJECT     *obj,
 	u32                     *obj_length);
 
 ACPI_STATUS
 acpi_cm_get_package_object_size (
-	ACPI_OBJECT_INTERNAL    *obj,
+	ACPI_OPERAND_OBJECT     *obj,
 	u32                     *obj_length);
 
 ACPI_STATUS
 acpi_cm_get_object_size(
-	ACPI_OBJECT_INTERNAL    *obj,
+	ACPI_OPERAND_OBJECT     *obj,
 	u32                     *obj_length);
 
 
@@ -517,12 +510,12 @@ acpi_cm_create_generic_state (
 
 ACPI_GENERIC_STATE *
 acpi_cm_create_update_state (
-	ACPI_OBJECT_INTERNAL    *object,
+	ACPI_OPERAND_OBJECT     *object,
 	u16                     action);
 
 ACPI_STATUS
 acpi_cm_create_update_state_and_push (
-	ACPI_OBJECT_INTERNAL    *object,
+	ACPI_OPERAND_OBJECT     *object,
 	u16                     action,
 	ACPI_GENERIC_STATE      **state_list);
 
@@ -552,7 +545,7 @@ acpi_cm_valid_acpi_name (
 
 u8
 acpi_cm_valid_acpi_character (
-	char                    character);
+	NATIVE_CHAR             character);
 
 
 /*
@@ -564,26 +557,26 @@ void *
 _cm_allocate (
 	u32                     size,
 	u32                     component,
-	ACPI_STRING             module,
-	s32                     line);
+	NATIVE_CHAR             *module,
+	u32                     line);
 
 void *
 _cm_callocate (
 	u32                     size,
 	u32                     component,
-	ACPI_STRING             module,
-	s32                     line);
+	NATIVE_CHAR             *module,
+	u32                     line);
 
 void
 _cm_free (
 	void                    *address,
 	u32                     component,
-	ACPI_STRING             module,
-	s32                     line);
+	NATIVE_CHAR             *module,
+	u32                     line);
 
 void
 acpi_cm_init_static_object (
-	ACPI_OBJECT_INTERNAL    *obj_desc);
+	ACPI_OPERAND_OBJECT     *obj_desc);
 
 #define acpi_cm_allocate(a)             _cm_allocate(a,_COMPONENT,_THIS_MODULE,__LINE__)
 #define acpi_cm_callocate(a)            _cm_callocate(a, _COMPONENT,_THIS_MODULE,__LINE__)
@@ -599,6 +592,8 @@ acpi_cm_init_static_object (
 #define DECREMENT_OBJECT_METRICS(a)
 #define INCREMENT_OBJECT_METRICS(a)
 #define INITIALIZE_ALLOCATION_METRICS()
+#define DECREMENT_NAME_TABLE_METRICS(a)
+#define INCREMENT_NAME_TABLE_METRICS(a)
 
 #else
 
@@ -614,7 +609,11 @@ acpi_cm_init_static_object (
 	acpi_gbl_running_alloc_size = 0; \
 	acpi_gbl_running_alloc_count = 0; \
 	acpi_gbl_max_concurrent_alloc_size = 0; \
-	acpi_gbl_max_concurrent_alloc_count = 0
+	acpi_gbl_max_concurrent_alloc_count = 0; \
+	acpi_gbl_current_node_count = 0; \
+	acpi_gbl_current_node_size = 0; \
+	acpi_gbl_max_concurrent_node_count = 0
+
 
 #define DECREMENT_OBJECT_METRICS(a) \
 	acpi_gbl_current_object_count--; \
@@ -634,6 +633,18 @@ acpi_cm_init_static_object (
 		acpi_gbl_max_concurrent_object_size = acpi_gbl_current_object_size; \
 	}
 
+#define DECREMENT_NAME_TABLE_METRICS(a) \
+	acpi_gbl_current_node_count--; \
+	acpi_gbl_current_node_size -= (a)
+
+#define INCREMENT_NAME_TABLE_METRICS(a) \
+	acpi_gbl_current_node_count++; \
+	acpi_gbl_current_node_size+= (a); \
+	if (acpi_gbl_max_concurrent_node_count < acpi_gbl_current_node_count) \
+	{ \
+		acpi_gbl_max_concurrent_node_count = acpi_gbl_current_node_count; \
+	} \
+
 
 void
 acpi_cm_dump_allocation_info (
@@ -642,9 +653,9 @@ acpi_cm_dump_allocation_info (
 void
 acpi_cm_dump_current_allocations (
 	u32                     component,
-	ACPI_STRING             module);
+	NATIVE_CHAR             *module);
 
 #endif
 
 
-#endif /* _COMMON_H */
+#endif /* _ACCOMMON_H */

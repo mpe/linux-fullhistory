@@ -2,6 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amresnte - AML Interpreter object resolution
+ *              $Revision: 21 $
  *
  *****************************************************************************/
 
@@ -26,32 +27,33 @@
 
 #include "acpi.h"
 #include "amlcode.h"
-#include "parser.h"
-#include "dispatch.h"
-#include "interp.h"
-#include "namesp.h"
-#include "tables.h"
-#include "events.h"
+#include "acparser.h"
+#include "acdispat.h"
+#include "acinterp.h"
+#include "acnamesp.h"
+#include "actables.h"
+#include "acevents.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amresnte");
+	 MODULE_NAME         ("amresnte")
 
 
 /*******************************************************************************
  *
- * FUNCTION:    Acpi_aml_resolve_entry_to_value
+ * FUNCTION:    Acpi_aml_resolve_node_to_value
  *
  * PARAMETERS:  Stack_ptr       - Pointer to a location on a stack that contains
- *                                a ptr to an NTE
+ *                                a pointer to an Node
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Resolve a ACPI_NAMED_OBJECT(nte, A.K.A. a "direct name pointer")
+ * DESCRIPTION: Resolve a ACPI_NAMESPACE_NODE (Node,
+ *              A.K.A. a "direct name pointer")
  *
- * Note: for some of the data types, the pointer attached to the NTE can be
- * either a pointer to an actual internal object or a pointer into the AML
- * stream itself.  These types are currently:
+ * Note: for some of the data types, the pointer attached to the Node
+ * can be either a pointer to an actual internal object or a pointer into the
+ * AML stream itself.  These types are currently:
  *
  *      ACPI_TYPE_NUMBER
  *      ACPI_TYPE_STRING
@@ -62,13 +64,13 @@
  ******************************************************************************/
 
 ACPI_STATUS
-acpi_aml_resolve_entry_to_value (
-	ACPI_NAMED_OBJECT       **stack_ptr)
+acpi_aml_resolve_node_to_value (
+	ACPI_NAMESPACE_NODE     **stack_ptr)
 {
 	ACPI_STATUS             status = AE_OK;
-	ACPI_OBJECT_INTERNAL    *val_desc = NULL;
-	ACPI_OBJECT_INTERNAL    *obj_desc = NULL;
-	ACPI_NAMED_OBJECT       *stack_entry;
+	ACPI_OPERAND_OBJECT     *val_desc = NULL;
+	ACPI_OPERAND_OBJECT     *obj_desc = NULL;
+	ACPI_NAMESPACE_NODE     *node;
 	u8                      *aml_pointer = NULL;
 	OBJECT_TYPE_INTERNAL    entry_type;
 	u8                      locked;
@@ -78,20 +80,20 @@ acpi_aml_resolve_entry_to_value (
 	OBJECT_TYPE_INTERNAL    object_type;
 
 
-	stack_entry = *stack_ptr;
+	node = *stack_ptr;
 
 
 	/*
 	 * The stack pointer is a "Direct name ptr", and points to a
-	 * a ACPI_NAMED_OBJECT(nte).  Get the pointer that is attached to
-	 * the nte.
+	 * a ACPI_NAMESPACE_NODE (Node).  Get the pointer that is attached to
+	 * the Node.
 	 */
 
-	val_desc    = acpi_ns_get_attached_object ((ACPI_HANDLE) stack_entry);
-	entry_type  = acpi_ns_get_type ((ACPI_HANDLE) stack_entry);
+	val_desc    = acpi_ns_get_attached_object ((ACPI_HANDLE) node);
+	entry_type  = acpi_ns_get_type ((ACPI_HANDLE) node);
 
 	/*
-	 * The Val_desc attached to the NTE can be either:
+	 * The Val_desc attached to the Node can be either:
 	 * 1) An internal ACPI object
 	 * 2) A pointer into the AML stream (into one of the ACPI system tables)
 	 */
@@ -105,22 +107,31 @@ acpi_aml_resolve_entry_to_value (
 
 
 	/*
-	 * Action is based on the type of the NTE, which indicates the type
+	 * Several Entry_types do not require further processing, so
+	 *  we will return immediately
+	 */
+	/* Devices rarely have an attached object, return the Node
+	 *  and Method locals and arguments have a pseudo-Node
+	 */
+	if (entry_type == ACPI_TYPE_DEVICE ||
+		entry_type == INTERNAL_TYPE_METHOD_ARGUMENT ||
+		entry_type == INTERNAL_TYPE_METHOD_LOCAL_VAR)
+	{
+		return (AE_OK);
+	}
+
+	if (!val_desc) {
+		return (AE_AML_NO_OPERAND);
+	}
+
+	/*
+	 * Action is based on the type of the Node, which indicates the type
 	 * of the attached object or pointer
 	 */
 	switch (entry_type)
 	{
 
 	case ACPI_TYPE_PACKAGE:
-
-		/*
-		 * Val_desc should point to either an ACPI_OBJECT_INTERNAL of
-		 * type Package, or an initialization in the AML stream.
-		 */
-		if (!val_desc) {
-			return (AE_AML_NO_OPERAND);
-		}
-
 
 		if (attached_aml_pointer) {
 			/*
@@ -132,7 +143,7 @@ acpi_aml_resolve_entry_to_value (
 
 		/* Val_desc is an internal object in all cases by the time we get here */
 
-		if (!val_desc || (ACPI_TYPE_PACKAGE != val_desc->common.type)) {
+		if (ACPI_TYPE_PACKAGE != val_desc->common.type) {
 			return (AE_AML_OPERAND_TYPE);
 		}
 
@@ -145,10 +156,6 @@ acpi_aml_resolve_entry_to_value (
 
 	case ACPI_TYPE_BUFFER:
 
-		if (!val_desc) {
-			return (AE_AML_NO_OPERAND);
-		}
-
 		if (attached_aml_pointer) {
 			/*
 			 * This means that the buffer initialization is not parsed
@@ -159,7 +166,7 @@ acpi_aml_resolve_entry_to_value (
 
 		/* Val_desc is an internal object in all cases by the time we get here */
 
-		if (!val_desc || (ACPI_TYPE_BUFFER != val_desc->common.type)) {
+		if (ACPI_TYPE_BUFFER != val_desc->common.type) {
 			return (AE_AML_OPERAND_TYPE);
 		}
 
@@ -183,8 +190,8 @@ acpi_aml_resolve_entry_to_value (
 
 			/* Init the internal object */
 
-			obj_desc->string.pointer = (char *) aml_pointer;
-			obj_desc->string.length = STRLEN (aml_pointer);
+			obj_desc->string.pointer = (NATIVE_CHAR *) aml_pointer;
+			obj_desc->string.length = STRLEN (obj_desc->string.pointer);
 		}
 
 		else {
@@ -202,11 +209,6 @@ acpi_aml_resolve_entry_to_value (
 
 
 	case ACPI_TYPE_NUMBER:
-
-		if (!val_desc) {
-			return (AE_AML_NO_OPERAND);
-		}
-
 
 		/*
 		 * An ACPI_TYPE_NUMBER can be either an object or an AML pointer
@@ -279,7 +281,7 @@ acpi_aml_resolve_entry_to_value (
 
 		else {
 			/*
-			 * The NTE has an attached internal object, make sure that it's a
+			 * The Node has an attached internal object, make sure that it's a
 			 * number
 			 */
 
@@ -337,18 +339,21 @@ acpi_aml_resolve_entry_to_value (
 
 			obj_desc->buffer.length = val_desc->field.length;
 
-			status = acpi_aml_get_named_field_value ((ACPI_HANDLE) stack_entry,
-					  obj_desc->buffer.pointer, obj_desc->buffer.length);
+			status = acpi_aml_access_named_field (ACPI_READ,
+					  (ACPI_HANDLE) node,
+					  obj_desc->buffer.pointer,
+					  obj_desc->buffer.length);
 
-			if (AE_OK != status) {
+			if (ACPI_FAILURE (status)) {
 				return (status);
 			}
 		}
 		else {
-			status = acpi_aml_get_named_field_value ((ACPI_HANDLE) stack_entry,
+			status = acpi_aml_access_named_field (ACPI_READ,
+					  (ACPI_HANDLE) node,
 					  &temp_val, sizeof (temp_val));
 
-			if (AE_OK != status) {
+			if (ACPI_FAILURE (status)) {
 				return (status);
 			}
 
@@ -361,10 +366,6 @@ acpi_aml_resolve_entry_to_value (
 
 	case INTERNAL_TYPE_BANK_FIELD:
 
-		if (!val_desc) {
-			return (AE_AML_NO_OPERAND);
-		}
-
 		if (attached_aml_pointer) {
 			return (AE_AML_OPERAND_TYPE);
 		}
@@ -376,30 +377,30 @@ acpi_aml_resolve_entry_to_value (
 
 		/* Get the global lock if needed */
 
-		obj_desc = (ACPI_OBJECT_INTERNAL *) *stack_ptr;
+		obj_desc = (ACPI_OPERAND_OBJECT *) *stack_ptr;
 		locked = acpi_aml_acquire_global_lock (obj_desc->field_unit.lock_rule);
-		{
 
-			/* Set Index value to select proper Data register */
-			/* perform the update */
+		/* Set Index value to select proper Data register */
+		/* perform the update */
 
-			status = acpi_aml_set_named_field_value (val_desc->bank_field.bank_select,
-					   &val_desc->bank_field.value,
-					   sizeof (val_desc->bank_field.value));
-		}
+		status = acpi_aml_access_named_field (ACPI_WRITE,
+				 val_desc->bank_field.bank_select,
+				 &val_desc->bank_field.value,
+				 sizeof (val_desc->bank_field.value));
+
 		acpi_aml_release_global_lock (locked);
 
 
-		if (AE_OK != status) {
+		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
 
 		/* Read Data value */
 
-		status = acpi_aml_get_named_field_value (
+		status = acpi_aml_access_named_field (ACPI_READ,
 				 (ACPI_HANDLE) val_desc->bank_field.container,
 				 &temp_val, sizeof (temp_val));
-		if (AE_OK != status) {
+		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
 
@@ -414,10 +415,6 @@ acpi_aml_resolve_entry_to_value (
 
 	case INTERNAL_TYPE_INDEX_FIELD:
 
-		if (!val_desc) {
-			return (AE_AML_NO_OPERAND);
-		}
-
 		if (attached_aml_pointer) {
 			return (AE_AML_OPERAND_TYPE);
 		}
@@ -430,25 +427,27 @@ acpi_aml_resolve_entry_to_value (
 		/* Set Index value to select proper Data register */
 		/* Get the global lock if needed */
 
-		obj_desc = (ACPI_OBJECT_INTERNAL *) *stack_ptr;
+		obj_desc = (ACPI_OPERAND_OBJECT *) *stack_ptr;
 		locked = acpi_aml_acquire_global_lock (obj_desc->field_unit.lock_rule);
-		{
-			/* Perform the update */
 
-			status = acpi_aml_set_named_field_value (val_desc->index_field.index,
-					   &val_desc->index_field.value,
-					   sizeof (val_desc->index_field.value));
-		}
+		/* Perform the update */
+		status = acpi_aml_access_named_field (ACPI_WRITE,
+				 val_desc->index_field.index,
+				 &val_desc->index_field.value,
+				 sizeof (val_desc->index_field.value));
+
 		acpi_aml_release_global_lock (locked);
 
-		if (AE_OK != status) {
+		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
 
 		/* Read Data value */
 
-		status = acpi_aml_get_named_field_value (val_desc->index_field.data, &temp_val, sizeof (temp_val));
-		if (AE_OK != status) {
+		status = acpi_aml_access_named_field (ACPI_READ,
+				   val_desc->index_field.data,
+				   &temp_val, sizeof (temp_val));
+		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
 
@@ -462,10 +461,6 @@ acpi_aml_resolve_entry_to_value (
 
 
 	case ACPI_TYPE_FIELD_UNIT:
-
-		if (!val_desc) {
-			return (AE_AML_NO_OPERAND);
-		}
 
 		if (attached_aml_pointer) {
 			return (AE_AML_OPERAND_TYPE);
@@ -481,7 +476,8 @@ acpi_aml_resolve_entry_to_value (
 			return (AE_NO_MEMORY);
 		}
 
-		if ((status = acpi_aml_get_field_unit_value (val_desc, obj_desc)) != AE_OK) {
+		status = acpi_aml_get_field_unit_value (val_desc, obj_desc);
+		if (ACPI_FAILURE (status)) {
 			acpi_cm_remove_reference (obj_desc);
 			return (status);
 		}
@@ -490,7 +486,7 @@ acpi_aml_resolve_entry_to_value (
 
 
 	/*
-	 * For these objects, just return the object attached to the NTE
+	 * For these objects, just return the object attached to the Node
 	 */
 
 	case ACPI_TYPE_MUTEX:
@@ -502,32 +498,11 @@ acpi_aml_resolve_entry_to_value (
 	case ACPI_TYPE_REGION:
 
 
-		/* There must be an object attached to this NTE */
-
-		if (!val_desc) {
-			return (AE_AML_INTERNAL);
-		}
-
 		/* Return an additional reference to the object */
 
 		obj_desc = val_desc;
 		acpi_cm_add_reference (obj_desc);
 		break;
-
-
-	/* Devices rarely have an attached object, return the NTE */
-
-	case ACPI_TYPE_DEVICE:
-
-
-	/* Method locals and arguments have a pseudo-NTE, just return it */
-
-	case INTERNAL_TYPE_METHOD_ARGUMENT:
-	case INTERNAL_TYPE_METHOD_LOCAL_VAR:
-
-		return (AE_OK);
-		break;
-
 
 	/* TYPE_Any is untyped, and thus there is no object associated with it */
 

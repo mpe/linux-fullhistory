@@ -8276,6 +8276,11 @@ CONFIG_SK98LIN
   - SK-9844 (dual link   1000Base-SX)
   - SK-9821 (single link 1000Base-T)
   - SK-9822 (dual link   1000Base-T)
+  - SK-9861 (single link Volition connector)
+  - SK-9862 (dual link   Volition connector)
+  The driver also supports the following adapters from Allied Telesyn:
+  - AT2970...
+
   The dual link adapters support a link-failover feature.
   Read Documentation/networking/sk98lin.txt for information about
   optional driver parameters.

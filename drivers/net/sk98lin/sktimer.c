@@ -2,8 +2,8 @@
  *
  * Name:	sktimer.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.11 $
- * Date:	$Date: 1998/12/17 13:24:13 $
+ * Version:	$Revision: 1.12 $
+ * Date:	$Date: 1999/11/22 13:38:51 $
  * Purpose:	High level timer functions.
  *
  ******************************************************************************/
@@ -12,8 +12,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -29,6 +27,9 @@
  * History:
  *
  *	$Log: sktimer.c,v $
+ *	Revision 1.12  1999/11/22 13:38:51  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.11  1998/12/17 13:24:13  gklug
  *	fix: restart problem: do NOT destroy timer queue if init 1 is done
  *	
@@ -75,7 +76,7 @@
 	Event queue and dispatcher
 */
 static const char SysKonnectFileId[] =
-	"$Header: /usr56/projects/ge/schedule/sktimer.c,v 1.11 1998/12/17 13:24:13 gklug Exp $" ;
+	"$Header: /usr56/projects/ge/schedule/sktimer.c,v 1.12 1999/11/22 13:38:51 cgoos Exp $" ;
 
 #include "h/skdrv1st.h"		/* Driver Specific Definitions */
 #include "h/skdrv2nd.h"		/* Adapter Control- and Driver specific Def. */

@@ -2,6 +2,7 @@
  *
  * Module Name: evmisc - ACPI device notification handler dispatch
  *                       and ACPI Global Lock support
+ *              $Revision: 13 $
  *
  *****************************************************************************/
 
@@ -24,13 +25,13 @@
  */
 
 #include "acpi.h"
-#include "events.h"
-#include "namesp.h"
-#include "interp.h"
-#include "hardware.h"
+#include "acevents.h"
+#include "acnamesp.h"
+#include "acinterp.h"
+#include "achware.h"
 
 #define _COMPONENT          EVENT_HANDLING
-	 MODULE_NAME         ("evmisc");
+	 MODULE_NAME         ("evmisc")
 
 
 /**************************************************************************
@@ -51,8 +52,8 @@ acpi_ev_notify_dispatch (
 	ACPI_HANDLE             device,
 	u32                     notify_value)
 {
-	ACPI_OBJECT_INTERNAL    *obj_desc;
-	ACPI_OBJECT_INTERNAL    *handler_obj;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_OPERAND_OBJECT     *handler_obj;
 	NOTIFY_HANDLER          handler;
 
 
@@ -108,7 +109,7 @@ acpi_ev_notify_dispatch (
 
 
 	/*
-	 * Get the notify object which must be attached to the device NTE
+	 * Get the notify object which must be attached to the device Node
 	 */
 
 	obj_desc = acpi_ns_get_attached_object ((ACPI_HANDLE) device);
@@ -211,7 +212,7 @@ acpi_ev_global_lock_handler (
 				  context);
 	}
 
-	return INTERRUPT_HANDLED;
+	return (INTERRUPT_HANDLED);
 }
 
 
@@ -349,7 +350,7 @@ acpi_ev_release_global_lock (void)
 		 */
 		if (pending) {
 			acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK,
-					 (s32)PM1_CONTROL | GBL_RLS, 1);
+					 PM1_CONTROL | GBL_RLS, 1);
 		}
 	}
 

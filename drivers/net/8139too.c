@@ -3,6 +3,7 @@
 	8139too.c: A RealTek RTL-8139 Fast Ethernet driver for Linux.
 
 	Copyright 2000 Jeff Garzik <jgarzik@mandrakesoft.com>
+
 	Originally: Written 1997-1999 by Donald Becker.
 
 	This software may be used and distributed according to the terms
@@ -25,6 +26,14 @@
 			posted MMIO write bugginess
 
 		Gerard Sharp - bug fix
+		
+		David Ford - Rx ring wrap fix
+		
+		Dan DeMaggio - swapped RTL8139 cards with me, and allowed me
+		to find and fix a crucial bug on older chipsets.
+		
+		Donald Becker/Chris Butterworth/Marcus Westergren -
+		Noticed various Rx packet size-related buglets.
 
 	Submitting bug reports:
 
@@ -96,8 +105,9 @@ an MMIO register read.
 #include <linux/delay.h>
 #include <asm/io.h>
 
+#undef USE_IO_OPS	/* define to 1 to enable PIO instead of MMIO */
 
-#define RTL8139_VERSION "0.9.8"
+#define RTL8139_VERSION "0.9.9"
 #define RTL8139_MODULE_NAME "8139too"
 #define RTL8139_DRIVER_NAME   RTL8139_MODULE_NAME " Fast Ethernet driver " RTL8139_VERSION
 #define PFX RTL8139_MODULE_NAME ": "
@@ -497,6 +507,32 @@ static void rtl8139_set_rx_mode (struct net_device *dev);
 static void rtl8139_hw_start (struct net_device *dev);
 
 
+#ifdef USE_IO_OPS
+
+#define RTL_R8(reg)		inb (((unsigned long)ioaddr) + (reg))
+#define RTL_R16(reg)		inw (((unsigned long)ioaddr) + (reg))
+#define RTL_R32(reg)		inl (((unsigned long)ioaddr) + (reg))
+#define RTL_W8(reg, val8)	outb ((val8), ((unsigned long)ioaddr) + (reg))
+#define RTL_W16(reg, val16)	outw ((val16), ((unsigned long)ioaddr) + (reg))
+#define RTL_W32(reg, val32)	outl ((val32), ((unsigned long)ioaddr) + (reg))
+#define RTL_W8_F		RTL_W8
+#define RTL_W16_F		RTL_W16
+#define RTL_W32_F		RTL_W32
+#undef readb
+#undef readw
+#undef readl
+#undef writeb
+#undef writew
+#undef writel
+#define readb(addr) inb((unsigned long)(addr))
+#define readw(addr) inw((unsigned long)(addr))
+#define readl(addr) inl((unsigned long)(addr))
+#define writeb(val,addr) outb((val),(unsigned long)(addr))
+#define writew(val,addr) outw((val),(unsigned long)(addr))
+#define writel(val,addr) outl((val),(unsigned long)(addr))
+
+#else
+
 /* write MMIO register, with flush */
 /* Flush avoids rtl8139 bug w/ posted MMIO writes */
 #define RTL_W8_F(reg, val8)	do { writeb ((val8), ioaddr + (reg)); readb (ioaddr + (reg)); } while (0)
@@ -524,6 +560,8 @@ static void rtl8139_hw_start (struct net_device *dev);
 #define RTL_R8(reg)		readb (ioaddr + (reg))
 #define RTL_R16(reg)		readw (ioaddr + (reg))
 #define RTL_R32(reg)		readl (ioaddr + (reg))
+
+#endif /* USE_IO_OPS */
 
 
 static const u16 rtl8139_intr_mask = 
@@ -625,6 +663,9 @@ static int __devinit rtl8139_init_board (struct pci_dev *pdev,
 
 	pci_set_master (pdev);
 
+#ifdef USE_IO_OPS
+	ioaddr = (void *) pio_start;
+#else
 	/* ioremap MMIO region */
 	ioaddr = ioremap (mmio_start, mmio_len);
 	if (ioaddr == NULL) {
@@ -632,6 +673,7 @@ static int __devinit rtl8139_init_board (struct pci_dev *pdev,
 		rc = -EIO;
 		goto err_out_free_mmio;
 	}
+#endif /* USE_IO_OPS */
 
 	/* Soft reset the chip. */
 	RTL_W8 (ChipCmd, (RTL_R8 (ChipCmd) & ChipCmdClear) | CmdReset);
@@ -653,11 +695,13 @@ static int __devinit rtl8139_init_board (struct pci_dev *pdev,
 		RTL_W8 (Config1, 0);
 	}
 
+#ifndef USE_IO_OPS
 	/* sanity checks -- ensure PIO and MMIO registers agree */
 	assert (inb (pio_start+Config0) == readb (ioaddr+Config0));
 	assert (inb (pio_start+Config1) == readb (ioaddr+Config1));
 	assert (inb (pio_start+TxConfig) == readb (ioaddr+TxConfig));
 	assert (inb (pio_start+RxConfig) == readb (ioaddr+RxConfig));
+#endif /* !USE_IO_OPS */
 	
 	/* make sure chip thinks PIO and MMIO are enabled */
 	tmp8 = RTL_R8 (Config1);
@@ -699,7 +743,9 @@ match:
 
 err_out_iounmap:
 	assert (ioaddr > 0);
+#ifndef USE_IO_OPS
 	iounmap (ioaddr);
+#endif /* !USE_IO_OPS */
 err_out_free_mmio:
 	release_mem_region (mmio_start, mmio_len);
 err_out_free_pio:
@@ -766,7 +812,7 @@ static int __devinit rtl8139_init_one (struct pci_dev *pdev,
 	dev->watchdog_timeo = TX_TIMEOUT;
 
 	dev->irq = pdev->irq;
-	dev->base_addr = pci_resource_start (pdev, 1);
+	dev->base_addr = (unsigned long) ioaddr;
 
 	/* dev->priv/tp zeroed and aligned in init_etherdev */
 	tp = dev->priv;
@@ -843,7 +889,10 @@ static void __devexit rtl8139_remove_one (struct pci_dev *pdev)
 
 	unregister_netdev (dev);
 
+#ifndef USE_IO_OPS
 	iounmap (np->mmio_addr);
+#endif /* !USE_IO_OPS */
+
 	release_region (pci_resource_start (pdev, 0),
 			pci_resource_len (pdev, 0));
 	release_mem_region (pci_resource_start (pdev, 1),
@@ -1557,11 +1606,60 @@ static inline void rtl8139_tx_interrupt (struct net_device *dev,
 }
 
 
+/* TODO: clean this up!  Rx reset need not be this intensive */
+static void rtl8139_rx_err (u32 rx_status, struct net_device *dev,
+			    struct rtl8139_private *tp, void *ioaddr)
+{
+	u8 tmp8;
+	int tmp_work = 1000;
+
+	DPRINTK ("%s: Ethernet frame had errors, status %8.8x.\n",
+	         dev->name, rx_status);
+	if (rx_status & RxTooLong) {
+		DPRINTK ("%s: Oversized Ethernet frame, status %4.4x!\n",
+			 dev->name, rx_status);
+		/* A.C.: The chip hangs here. */
+	}
+	tp->stats.rx_errors++;
+	if (rx_status & (RxBadSymbol | RxBadAlign))
+		tp->stats.rx_frame_errors++;
+	if (rx_status & (RxRunt | RxTooLong))
+		tp->stats.rx_length_errors++;
+	if (rx_status & RxCRCErr)
+		tp->stats.rx_crc_errors++;
+	/* Reset the receiver, based on RealTek recommendation. (Bug?) */
+	tp->cur_rx = 0;
+
+	/* disable receive */
+	tmp8 = RTL_R8 (ChipCmd) & ChipCmdClear;
+	RTL_W8_F (ChipCmd, tmp8 | CmdTxEnb);
+
+	/* A.C.: Reset the multicast list. */
+	rtl8139_set_rx_mode (dev);
+
+	/* XXX potentially temporary hack to
+	 * restart hung receiver */
+	while (--tmp_work > 0) {
+		tmp8 = RTL_R8 (ChipCmd);
+		if ((tmp8 & CmdRxEnb) && (tmp8 & CmdTxEnb))
+			break;
+		RTL_W8_F (ChipCmd,
+			  (tmp8 & ChipCmdClear) | CmdRxEnb | CmdTxEnb);
+	}
+
+	/* G.S.: Re-enable receiver */
+	/* XXX temporary hack to work around receiver hang */
+	rtl8139_set_rx_mode (dev);
+
+	if (tmp_work <= 0)
+		printk (KERN_WARNING PFX "tx/rx enable wait too long\n");
+}
+
+
 /* The data sheet doesn't describe the Rx ring at all, so I'm guessing at the
    field alignments and semantics. */
 static void rtl8139_rx_interrupt (struct net_device *dev,
-				  struct rtl8139_private *tp,
-				  void *ioaddr)
+				  struct rtl8139_private *tp, void *ioaddr)
 {
 	unsigned char *rx_ring;
 	u16 cur_rx;
@@ -1569,31 +1667,33 @@ static void rtl8139_rx_interrupt (struct net_device *dev,
 	assert (dev != NULL);
 	assert (tp != NULL);
 	assert (ioaddr != NULL);
-	
+
 	rx_ring = tp->rx_ring;
 	cur_rx = tp->cur_rx;
 
 	DPRINTK ("%s: In rtl8139_rx(), current %4.4x BufAddr %4.4x,"
-			" free to %4.4x, Cmd %2.2x.\n", dev->name, cur_rx,
-			RTL_R16 (RxBufAddr),
-			RTL_R16 (RxBufPtr),
-			RTL_R8 (ChipCmd));
+		 " free to %4.4x, Cmd %2.2x.\n", dev->name, cur_rx,
+		 RTL_R16 (RxBufAddr),
+		 RTL_R16 (RxBufPtr), RTL_R8 (ChipCmd));
 
 	while ((RTL_R8 (ChipCmd) & RxBufEmpty) == 0) {
 		int ring_offset = cur_rx % RX_BUF_LEN;
 		u32 rx_status = le32_to_cpu (*(u32 *) (rx_ring + ring_offset));
 		int rx_size = rx_status >> 16;
+		struct sk_buff *skb;
+		int pkt_size = rx_size - 4;
 
 		DPRINTK ("%s:  rtl8139_rx() status %4.4x, size %4.4x,"
-			" cur %4.4x.\n", dev->name, rx_status,
-			rx_size, cur_rx);
+			 " cur %4.4x.\n", dev->name, rx_status,
+			 rx_size, cur_rx);
 #if RTL8139_DEBUG > 2
 		{
-		int i;
-		DPRINTK ("%s: Frame contents ", dev->name);
-		for (i = 0; i < 70; i++)
-			printk (" %2.2x", rx_ring[ring_offset + i]);
-		printk (".\n");
+			int i;
+			DPRINTK ("%s: Frame contents ", dev->name);
+			for (i = 0; i < 70; i++)
+				printk (" %2.2x",
+					rx_ring[ring_offset + i]);
+			printk (".\n");
 		}
 #endif
 
@@ -1609,82 +1709,45 @@ static void rtl8139_rx_interrupt (struct net_device *dev,
 		if (rx_size == 0xfff0)
 			break;
 
+		/* if Rx err received, Rx process gets reset, so
+		 * we abort any further Rx processing
+		 */
 		if (rx_status &
-		    (RxBadSymbol | RxRunt | RxTooLong | RxCRCErr |
-		     RxBadAlign)) {
-			u8 tmp8;
-			int tmp_work = 1000;
+		    (RxBadSymbol | RxRunt | RxTooLong | RxCRCErr | RxBadAlign)) {
+			rtl8139_rx_err (rx_status, dev, tp, ioaddr);
+			return;
+		}
 
-			DPRINTK ("%s: Ethernet frame had errors,"
-					" status %8.8x.\n", dev->name,
-					rx_status);
-			if (rx_status & RxTooLong) {
-				DPRINTK ("%s: Oversized Ethernet frame, status %4.4x!\n",
-						dev->name, rx_status);
-				/* A.C.: The chip hangs here. */
-			}
-			tp->stats.rx_errors++;
-			if (rx_status & (RxBadSymbol | RxBadAlign))
-				tp->stats.rx_frame_errors++;
-			if (rx_status & (RxRunt | RxTooLong))
-				tp->stats.rx_length_errors++;
-			if (rx_status & RxCRCErr)
-				tp->stats.rx_crc_errors++;
-			/* Reset the receiver, based on RealTek recommendation. (Bug?) */
-			tp->cur_rx = 0;
+		/* Malloc up new buffer, compatible with net-2e. */
+		/* Omit the four octet CRC from the length. */
 
-			/* disable receive */
-			tmp8 = RTL_R8 (ChipCmd) & ChipCmdClear;
-			RTL_W8_F (ChipCmd, tmp8 | CmdTxEnb);
+		/* TODO: consider allocating skb's outside of
+		 * interrupt context, both to speed interrupt processing,
+		 * and also to reduce the chances of having to
+		 * drop packets here under memory pressure.
+		 */
 
-			/* A.C.: Reset the multicast list. */
-			rtl8139_set_rx_mode (dev);
+		skb = dev_alloc_skb (pkt_size + 2);
+		if (skb == NULL) {
+			printk (KERN_WARNING
+				"%s: Memory squeeze, dropping packet.\n",
+				dev->name);
+			tp->stats.rx_dropped++;
+			break;
+		}
+		skb->dev = dev;
+		skb_reserve (skb, 2);	/* 16 byte align the IP fields. */
 
-			/* XXX potentially temporary hack to
-			 * restart hung receiver */
-			while (--tmp_work > 0) {
-				tmp8 = RTL_R8 (ChipCmd);
-				if ((tmp8 & CmdRxEnb) && (tmp8 & CmdTxEnb))
-					break;
-				RTL_W8_F (ChipCmd, (tmp8 & ChipCmdClear) | CmdRxEnb | CmdTxEnb);
-			}
+		if (ring_offset + rx_size > RX_BUF_LEN) {
+			int semi_count = RX_BUF_LEN - ring_offset - 4;
 
-			/* G.S.: Re-enable receiver */
-			/* XXX temporary hack to work around receiver hang */
-			rtl8139_set_rx_mode (dev);
-
-			if (tmp_work <= 0)			
-				printk (KERN_WARNING PFX "tx/rx enable wait too long\n");
-		} else {
-			/* Malloc up new buffer, compatible with net-2e. */
-			/* Omit the four octet CRC from the length. */
-			struct sk_buff *skb;
-			int pkt_size = rx_size - 4;
-
-			skb = dev_alloc_skb (pkt_size + 2);
-			if (skb == NULL) {
-				printk (KERN_WARNING
-					"%s: Memory squeeze, dropping packet.\n",
-					dev->name);
-				/* We should check that some rx space is free.
-				   If not, free one and mark stats->rx_dropped++. */
-				tp->stats.rx_dropped++;
-				break;
-			}
-			skb->dev = dev;
-			skb_reserve (skb, 2);	/* 16 byte align the IP fields. */
-
-			if (ring_offset + rx_size + 4 > RX_BUF_LEN) {
-				int semi_count =
-				    RX_BUF_LEN - ring_offset - 4;
-				/* This could presumably use two calls to copy_and_sum()? */
-				memcpy (skb_put (skb, semi_count),
-					&rx_ring[ring_offset + 4],
-					semi_count);
-				memcpy (skb_put (skb, pkt_size - semi_count),
-					rx_ring, pkt_size - semi_count);
-#ifdef RTL8139_DEBUG
-				{
+			/* This could presumably use two calls to copy_and_sum()? */
+			memcpy (skb_put (skb, semi_count),
+				&rx_ring[ring_offset + 4], semi_count);
+			memcpy (skb_put (skb, pkt_size - semi_count),
+				rx_ring, pkt_size - semi_count);
+#if RTL8139_DEBUG > 4
+			{
 				int i;
 				printk (KERN_DEBUG "%s:  Frame wrap @%d",
 					dev->name, semi_count);
@@ -1692,29 +1755,29 @@ static void rtl8139_rx_interrupt (struct net_device *dev,
 					printk (" %2.2x", rx_ring[i]);
 				printk ("\n");
 				memset (rx_ring, 0xcc, 16);
-				}
-#endif /* RTL8139_DEBUG */
-
-			} else {
-				eth_copy_and_sum (skb,
-						  &rx_ring[ring_offset + 4],
-						  pkt_size, 0);
-				skb_put (skb, pkt_size);
 			}
-			skb->protocol = eth_type_trans (skb, dev);
-			netif_rx (skb);
-			tp->stats.rx_bytes += pkt_size;
-			tp->stats.rx_packets++;
+#endif				/* RTL8139_DEBUG */
+
+		} else {
+			eth_copy_and_sum (skb,
+					  &rx_ring[ring_offset + 4],
+					  pkt_size, 0);
+			skb_put (skb, pkt_size);
 		}
+		skb->protocol = eth_type_trans (skb, dev);
+		netif_rx (skb);
+		tp->stats.rx_bytes += pkt_size;
+		tp->stats.rx_packets++;
 
 		cur_rx = (cur_rx + rx_size + 4 + 3) & ~3;
 		RTL_W16_F (RxBufPtr, cur_rx - 16);
 	}
+
 	DPRINTK ("%s: Done rtl8139_rx(), current %4.4x BufAddr %4.4x,"
-		" free to %4.4x, Cmd %2.2x.\n", dev->name, cur_rx,
-		RTL_R16 (RxBufAddr),
-		RTL_R16 (RxBufPtr),
-		RTL_R8 (ChipCmd));
+		 " free to %4.4x, Cmd %2.2x.\n", dev->name, cur_rx,
+		 RTL_R16 (RxBufAddr),
+		 RTL_R16 (RxBufPtr), RTL_R8 (ChipCmd));
+
 	tp->cur_rx = cur_rx;
 }
 

@@ -2,8 +2,8 @@
  *
  * Name:	skgehw.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.33 $
- * Date:	$Date: 1999/08/27 11:17:10 $
+ * Version:	$Revision: 1.35 $
+ * Date:	$Date: 2000/05/19 10:17:13 $
  * Purpose:	Defines and Macros for the Gigabit Ethernet Adapter Product
  *		Family
  *
@@ -27,6 +27,12 @@
  *
  * History:
  * $Log: skgehw.h,v $
+ * Revision 1.35  2000/05/19 10:17:13  cgoos
+ * Added inactivity check in PHY_READ (in DEBUG mode only).
+ *
+ * Revision 1.34  1999/11/22 13:53:40  cgoos
+ * Changed license header to GPL.
+ *
  * Revision 1.33  1999/08/27 11:17:10  malthoff
  * It's more savely to put bracket around marco parameters.
  * Brackets added for PHY_READ and PHY_WRITE.
@@ -1627,7 +1633,10 @@ typedef	struct s_HwRxd {
  *			written.
  *
  * usage:	PHY_READ(IoC, pPort, MAC_1, PHY_CTRL, Value);
+ * Warning: a PHY_READ on an uninitialized PHY (PHY still in reset) never
+ *          comes back. This is checked in DEBUG mode.
  */
+#ifndef DEBUG
 #define PHY_READ(IoC, pPort, Mac, PhyReg, pVal) {			\
 	SK_U16 Mmu;  							\
 									\
@@ -1640,6 +1649,28 @@ typedef	struct s_HwRxd {
 		XM_IN16((IoC), (Mac), XM_PHY_DATA, (pVal));		\
 	}  								\
 }
+#else
+#define PHY_READ(IoC, pPort, Mac, PhyReg, pVal) {			\
+	SK_U16 Mmu;  							\
+	int __i = 0;							\
+									\
+	XM_OUT16((IoC),(Mac), XM_PHY_ADDR, (PhyReg)|(pPort)->PhyAddr);	\
+	XM_IN16((IoC), (Mac), XM_PHY_DATA, (pVal));			\
+	if ((pPort)->PhyType != SK_PHY_XMAC) {				\
+		do {  							\
+			XM_IN16((IoC), (Mac), XM_MMU_CMD, &Mmu);	\
+			__i++;						\
+			if (__i > 10000) {				\
+				SK_DBG_PRINTF("*****************************\n"); \
+				SK_DBG_PRINTF("PHY_READ on uninitialized PHY\n"); \
+				SK_DBG_PRINTF("*****************************\n"); \
+				break;					\
+			}						\
+		} while ((Mmu & XM_MMU_PHY_RDY) == 0);			\
+		XM_IN16((IoC), (Mac), XM_PHY_DATA, (pVal));		\
+	}  								\
+}
+#endif
 
 #define PHY_WRITE(IoC, pPort, Mac, PhyReg, Val) {			\
 	SK_U16 Mmu;							\

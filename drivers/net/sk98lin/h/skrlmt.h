@@ -2,8 +2,8 @@
  *
  * Name:	skrlmt.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.26 $
- * Date:	$Date: 1999/10/04 14:01:19 $
+ * Version:	$Revision: 1.27 $
+ * Date:	$Date: 1999/11/22 13:59:56 $
  * Purpose:	Header file for Redundant Link ManagemenT.
  *
  ******************************************************************************/
@@ -27,6 +27,9 @@
  * History:
  *
  *	$Log: skrlmt.h,v $
+ *	Revision 1.27  1999/11/22 13:59:56  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.26  1999/10/04 14:01:19  rassmann
  *	Corrected reaction to reception of BPDU frames.
  *	Added parameter descriptions to "For Readme" section skrlmt.txt.

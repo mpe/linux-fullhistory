@@ -2,8 +2,8 @@
  *
  * Name:      	skge.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.27 $
- * Date:       	$Date: 1999/11/25 09:06:28 $
+ * Version:	$Revision: 1.29 $
+ * Date:       	$Date: 2000/02/21 13:31:56 $
  * Purpose:	The main driver source module
  *
  ******************************************************************************/
@@ -46,6 +46,25 @@
  * History:
  *
  *	$Log: skge.c,v $
+ *	Kernel 2.4.x specific:
+ *	Revision 1.xx  2000/09/12 13:31:56  cgoos
+ *	Fixed missign "dev=NULL in skge_probe.
+ *	Added counting for jumbo frames (corrects error statistic).
+ *	Removed VLAN tag check (enables VLAN support).
+ *	
+ *	Kernel 2.2.x specific:
+ *	Revision 1.29  2000/02/21 13:31:56  cgoos
+ *	Fixed "unused" warning for UltraSPARC change.
+ *	
+ *	Partially kernel 2.2.x specific:
+ *	Revision 1.28  2000/02/21 10:32:36  cgoos
+ *	Added fixes for UltraSPARC.
+ *	Now printing RlmtMode and PrefPort setting at startup.
+ *	Changed XmitFrame return value.
+ *	Fixed rx checksum calculation for BIG ENDIAN systems.
+ *	Fixed rx jumbo frames counted as ierrors.
+ *	
+ *	
  *	Revision 1.27  1999/11/25 09:06:28  cgoos
  *	Changed base_addr to unsigned long.
  *	
@@ -225,7 +244,7 @@
 
 static const char SysKonnectFileId[] = "@(#)" __FILE__ " (C) SysKonnect.";
 static const char SysKonnectBuildNumber[] =
-	"@(#)SK-BUILD: 3.02 (19991111) PL: 01"; 
+	"@(#)SK-BUILD: 3.05 (20000907) PL: 01"; 
 
 #include	<linux/module.h>
 #include	<linux/init.h>
@@ -235,10 +254,10 @@ static const char SysKonnectBuildNumber[] =
 
 /* defines ******************************************************************/
 
-#define BOOT_STRING	"sk98lin: Network Device Driver v3.02\n" \
-			"Copyright (C) 1999 SysKonnect"
+#define BOOT_STRING	"sk98lin: Network Device Driver v3.05\n" \
+			"Copyright (C) 1999-2000 SysKonnect"
 
-#define VER_STRING	"3.02"
+#define VER_STRING	"3.05"
 
 
 /* for debuging on x86 only */
@@ -373,6 +392,8 @@ static int __init skge_probe (void)
 				      PCI_DEVICE_ID_SYSKONNECT_GE, pdev)) != NULL) {
 		if (pci_enable_device(pdev))
 			continue;
+
+		dev = NULL;
 		dev = init_etherdev(dev, sizeof(SK_AC));
 
 		if (dev == NULL) {
@@ -784,6 +805,14 @@ int	Ret;			/* return code of request_irq */
 	/* Print adapter specific string from vpd */
 	ProductStr(pAC);
 	printk("%s: %s\n", dev->name, pAC->DeviceStr);
+
+	/* Print configuration settings */
+	printk("      PrefPort:%c  RlmtMode:%s\n",
+		'A' + pAC->Rlmt.PrefPort,
+		(pAC->RlmtMode==0)  ? "ChkLink" :
+		((pAC->RlmtMode==1) ? "ChkLink" :
+		((pAC->RlmtMode==3) ? "ChkOth" :
+		((pAC->RlmtMode==7) ? "ChkSeg" : "Error"))));
 
 	SkGeYellowLED(pAC, pAC->IoBase, 1);
 
@@ -1936,6 +1965,10 @@ rx_start:
 		} /* frame > SK_COPY_TRESHOLD */
 		
 		FrameStat = pRxd->FrameStat;
+                if ((FrameStat & XMR_FS_LNG_ERR) != 0) {
+                        /* jumbo frame, count to correct statistic */
+                        SK_PNMI_CNT_RX_LONGFRAMES(pAC, pRxPort->PortIndex);
+                }
 		pRxd = pRxd->pNextRxd;
 		pRxPort->pRxdRingHead = pRxd;
 		pRxPort->RxdRingFree ++;
@@ -1947,9 +1980,9 @@ rx_start:
 			pRxPort->RxdRingFree));
 		
 		if ((Control & RX_CTRL_STAT_VALID) == RX_CTRL_STAT_VALID &&
-			(FrameStat & 
-			(XMR_FS_ANY_ERR | XMR_FS_1L_VLAN | XMR_FS_2L_VLAN))
- 			 == 0) {
+			(FrameStat & XMR_FS_ANY_ERR) == 0) {
+			// was the following, changed to allow VLAN support
+			// (XMR_FS_ANY_ERR | XMR_FS_1L_VLAN | XMR_FS_2L_VLAN)
 			SK_DBG_MSG(NULL, SK_DBGMOD_DRV,
 				SK_DBGCAT_DRV_RX_PROGRESS,("V"));
 			ForRlmt = SK_RLMT_RX_PROTOCOL;

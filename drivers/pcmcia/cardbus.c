@@ -58,11 +58,6 @@
 #include <asm/irq.h>
 #include <asm/io.h>
 
-#ifndef PCMCIA_DEBUG
-#define PCMCIA_DEBUG 1
-#endif
-static int pc_debug = PCMCIA_DEBUG;
-
 #define IN_CARD_SERVICES
 #include <pcmcia/version.h>
 #include <pcmcia/cs_types.h>
@@ -72,6 +67,11 @@ static int pc_debug = PCMCIA_DEBUG;
 #include <pcmcia/cistpl.h>
 #include "cs_internal.h"
 #include "rsrc_mgr.h"
+
+#ifndef PCMCIA_DEBUG
+#define PCMCIA_DEBUG 1
+#endif
+static int pc_debug = PCMCIA_DEBUG;
 
 /*====================================================================*/
 

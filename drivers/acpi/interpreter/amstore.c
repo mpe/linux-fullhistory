@@ -2,6 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amstore - AML Interpreter object store support
+ *              $Revision: 116 $
  *
  *****************************************************************************/
 
@@ -25,16 +26,16 @@
 
 
 #include "acpi.h"
-#include "parser.h"
-#include "dispatch.h"
-#include "interp.h"
+#include "acparser.h"
+#include "acdispat.h"
+#include "acinterp.h"
 #include "amlcode.h"
-#include "namesp.h"
-#include "tables.h"
+#include "acnamesp.h"
+#include "actables.h"
 
 
 #define _COMPONENT          INTERPRETER
-	 MODULE_NAME         ("amstore");
+	 MODULE_NAME         ("amstore")
 
 
 /*******************************************************************************
@@ -43,7 +44,7 @@
  *
  * PARAMETERS:  *Val_desc           - Value to be stored
  *              *Dest_desc          - Where to store it 0 Must be (ACPI_HANDLE)
- *                                    or an ACPI_OBJECT_INTERNAL of type
+ *                                    or an ACPI_OPERAND_OBJECT  of type
  *                                    Reference; if the latter the descriptor
  *                                    will be either reused or deleted.
  *
@@ -58,13 +59,14 @@
 
 ACPI_STATUS
 acpi_aml_exec_store (
-	ACPI_OBJECT_INTERNAL    *val_desc,
-	ACPI_OBJECT_INTERNAL    *dest_desc)
+	ACPI_OPERAND_OBJECT     *val_desc,
+	ACPI_OPERAND_OBJECT     *dest_desc,
+	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status = AE_OK;
-	ACPI_OBJECT_INTERNAL    *delete_dest_desc = NULL;
-	ACPI_OBJECT_INTERNAL    *tmp_desc;
-	ACPI_NAMED_OBJECT       *entry = NULL;
+	ACPI_OPERAND_OBJECT     *delete_dest_desc = NULL;
+	ACPI_OPERAND_OBJECT     *tmp_desc;
+	ACPI_NAMESPACE_NODE     *node = NULL;
 	u8                      value = 0;
 	u32                     length;
 	u32                     i;
@@ -81,7 +83,7 @@ acpi_aml_exec_store (
 	if (VALID_DESCRIPTOR_TYPE (dest_desc, ACPI_DESC_TYPE_NAMED)) {
 		/* Dest is an ACPI_HANDLE, create a new object */
 
-		entry = (ACPI_NAMED_OBJECT*) dest_desc;
+		node = (ACPI_NAMESPACE_NODE *) dest_desc;
 		dest_desc = acpi_cm_create_internal_object (INTERNAL_TYPE_REFERENCE);
 		if (!dest_desc) {
 			/* Allocation failure  */
@@ -92,7 +94,7 @@ acpi_aml_exec_store (
 		/* Build a new Reference wrapper around the handle */
 
 		dest_desc->reference.op_code = AML_NAME_OP;
-		dest_desc->reference.object = entry;
+		dest_desc->reference.object = node;
 	}
 
 
@@ -115,7 +117,8 @@ acpi_aml_exec_store (
 		 *  Storing into a Name
 		 */
 		delete_dest_desc = dest_desc;
-		status = acpi_aml_store_object_to_nte (val_desc, dest_desc->reference.object);
+		status = acpi_aml_store_object_to_node (val_desc, dest_desc->reference.object,
+				  walk_state);
 
 		break;  /* Case Name_op */
 
@@ -182,7 +185,7 @@ acpi_aml_exec_store (
 				 */
 				if (ACPI_TYPE_PACKAGE == tmp_desc->common.type) {
 					status = acpi_aml_build_copy_internal_package_object (
-							 val_desc, tmp_desc);
+							 val_desc, tmp_desc, walk_state);
 					if (ACPI_FAILURE (status)) {
 						acpi_cm_remove_reference (tmp_desc);
 						tmp_desc = NULL;
@@ -206,7 +209,8 @@ acpi_aml_exec_store (
 				 * convert the contents of the source (Val_desc) and copy into
 				 * the destination (Tmp_desc)
 				 */
-				status = acpi_aml_store_object_to_object(val_desc, tmp_desc);
+				status = acpi_aml_store_object_to_object (val_desc, tmp_desc,
+						  walk_state);
 				if (ACPI_FAILURE (status)) {
 					/*
 					 * An error occurrered when copying the internal object
@@ -299,7 +303,7 @@ acpi_aml_exec_store (
 		/*
 		 * If we had an error, break out of this case statement.
 		 */
-		if(AE_OK != status) {
+		if (ACPI_FAILURE (status)) {
 			break;
 		}
 
@@ -315,7 +319,7 @@ acpi_aml_exec_store (
 	case AML_ONES_OP:
 
 		/*
-		 * Storing to a constant is a no-op -- see spec sec 15.2.3.3.1.
+		 * Storing to a constant is a no-op -- see ACPI Specification
 		 * Delete the result descriptor.
 		 */
 
@@ -326,7 +330,7 @@ acpi_aml_exec_store (
 	case AML_LOCAL_OP:
 
 		status = acpi_ds_method_data_set_value (MTH_TYPE_LOCAL,
-				  (dest_desc->reference.offset), val_desc);
+				  (dest_desc->reference.offset), val_desc, walk_state);
 		delete_dest_desc = dest_desc;
 		break;
 
@@ -334,7 +338,7 @@ acpi_aml_exec_store (
 	case AML_ARG_OP:
 
 		status = acpi_ds_method_data_set_value (MTH_TYPE_ARG,
-				  (dest_desc->reference.offset), val_desc);
+				  (dest_desc->reference.offset), val_desc, walk_state);
 		delete_dest_desc = dest_desc;
 		break;
 
@@ -343,7 +347,7 @@ acpi_aml_exec_store (
 
 		/*
 		 * Storing to the Debug object causes the value stored to be
-		 * displayed and otherwise has no effect -- see sec. 15.2.3.3.3.
+		 * displayed and otherwise has no effect -- see ACPI Specification
 		 */
 
 		delete_dest_desc = dest_desc;

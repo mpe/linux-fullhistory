@@ -2,8 +2,8 @@
  *
  * Name:	skgei2c.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.16 $
- * Date:	$Date: 1999/11/12 08:24:10 $
+ * Version:	$Revision: 1.17 $
+ * Date:	$Date: 1999/11/22 13:55:25 $
  * Purpose:	Special genesis defines for I2C
  *		(taken from Monalisa (taken from Concentrator))
  *
@@ -28,6 +28,9 @@
  * History:
  *
  *	$Log: skgei2c.h,v $
+ *	Revision 1.17  1999/11/22 13:55:25  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.16  1999/11/12 08:24:10  malthoff
  *	Change voltage warning and error limits
  *	(warning +-5%, error +-10%).

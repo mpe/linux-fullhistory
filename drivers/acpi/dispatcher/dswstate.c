@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Module Name: dswstate - Dispatcher parse tree walk management routines
+ *              $Revision: 31 $
  *
  *****************************************************************************/
 
@@ -25,13 +26,13 @@
 
 #include "acpi.h"
 #include "amlcode.h"
-#include "parser.h"
-#include "dispatch.h"
-#include "namesp.h"
-#include "interp.h"
+#include "acparser.h"
+#include "acdispat.h"
+#include "acnamesp.h"
+#include "acinterp.h"
 
 #define _COMPONENT          DISPATCHER
-	 MODULE_NAME         ("dswstate");
+	 MODULE_NAME         ("dswstate")
 
 
 /*******************************************************************************
@@ -55,7 +56,7 @@ acpi_ds_result_stack_clear (
 	walk_state->num_results = 0;
 	walk_state->current_result = 0;
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -80,13 +81,13 @@ acpi_ds_result_stack_push (
 
 
 	if (walk_state->num_results >= OBJ_NUM_OPERANDS) {
-		return AE_STACK_OVERFLOW;
+		return (AE_STACK_OVERFLOW);
 	}
 
 	walk_state->results [walk_state->num_results] = object;
 	walk_state->num_results++;
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -106,7 +107,7 @@ acpi_ds_result_stack_push (
 
 ACPI_STATUS
 acpi_ds_result_stack_pop (
-	ACPI_OBJECT_INTERNAL    **object,
+	ACPI_OPERAND_OBJECT     **object,
 	ACPI_WALK_STATE         *walk_state)
 {
 
@@ -114,7 +115,7 @@ acpi_ds_result_stack_pop (
 	/* Check for stack underflow */
 
 	if (walk_state->num_results == 0) {
-		return AE_AML_NO_OPERAND;
+		return (AE_AML_NO_OPERAND);
 	}
 
 
@@ -125,13 +126,13 @@ acpi_ds_result_stack_pop (
 	/* Check for a valid result object */
 
 	if (!walk_state->results [walk_state->num_results]) {
-		return AE_AML_NO_OPERAND;
+		return (AE_AML_NO_OPERAND);
 	}
 
 	*object = walk_state->results [walk_state->num_results];
 	walk_state->results [walk_state->num_results] = NULL;
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -191,7 +192,7 @@ acpi_ds_obj_stack_push (
 	/* Check for stack overflow */
 
 	if (walk_state->num_operands >= OBJ_NUM_OPERANDS) {
-		return AE_STACK_OVERFLOW;
+		return (AE_STACK_OVERFLOW);
 	}
 
 	/* Put the object onto the stack */
@@ -199,7 +200,7 @@ acpi_ds_obj_stack_push (
 	walk_state->operands [walk_state->num_operands] = object;
 	walk_state->num_operands++;
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -219,7 +220,7 @@ acpi_ds_obj_stack_push (
 
 ACPI_STATUS
 acpi_ds_obj_stack_pop_object (
-	ACPI_OBJECT_INTERNAL    **object,
+	ACPI_OPERAND_OBJECT     **object,
 	ACPI_WALK_STATE         *walk_state)
 {
 
@@ -227,7 +228,7 @@ acpi_ds_obj_stack_pop_object (
 	/* Check for stack underflow */
 
 	if (walk_state->num_operands == 0) {
-		return AE_AML_NO_OPERAND;
+		return (AE_AML_NO_OPERAND);
 	}
 
 
@@ -238,7 +239,7 @@ acpi_ds_obj_stack_pop_object (
 	/* Check for a valid operand */
 
 	if (!walk_state->operands [walk_state->num_operands]) {
-		return AE_AML_NO_OPERAND;
+		return (AE_AML_NO_OPERAND);
 	}
 
 	/* Get operand and set stack entry to null */
@@ -246,7 +247,7 @@ acpi_ds_obj_stack_pop_object (
 	*object = walk_state->operands [walk_state->num_operands];
 	walk_state->operands [walk_state->num_operands] = NULL;
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -276,7 +277,7 @@ acpi_ds_obj_stack_pop (
 		/* Check for stack underflow */
 
 		if (walk_state->num_operands == 0) {
-			return AE_STACK_UNDERFLOW;
+			return (AE_STACK_UNDERFLOW);
 		}
 
 		/* Just set the stack entry to null */
@@ -285,7 +286,7 @@ acpi_ds_obj_stack_pop (
 		walk_state->operands [walk_state->num_operands] = NULL;
 	}
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -309,14 +310,14 @@ acpi_ds_obj_stack_pop_and_delete (
 	ACPI_WALK_STATE         *walk_state)
 {
 	u32                     i;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 
 
 	for (i = 0; i < pop_count; i++) {
 		/* Check for stack underflow */
 
 		if (walk_state->num_operands == 0) {
-			return AE_STACK_UNDERFLOW;
+			return (AE_STACK_UNDERFLOW);
 		}
 
 		/* Pop the stack and delete an object if present in this stack entry */
@@ -329,7 +330,7 @@ acpi_ds_obj_stack_pop_and_delete (
 		}
 	}
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 
@@ -393,10 +394,10 @@ acpi_ds_get_current_walk_state (
 {
 
 	if (!walk_list) {
-		return NULL;
+		return (NULL);
 	}
 
-	return walk_list->walk_state;
+	return (walk_list->walk_state);
 }
 
 
@@ -483,8 +484,8 @@ acpi_ds_pop_walk_state (
 ACPI_WALK_STATE *
 acpi_ds_create_walk_state (
 	ACPI_OWNER_ID           owner_id,
-	ACPI_GENERIC_OP         *origin,
-	ACPI_OBJECT_INTERNAL    *mth_desc,
+	ACPI_PARSE_OBJECT       *origin,
+	ACPI_OPERAND_OBJECT     *mth_desc,
 	ACPI_WALK_LIST          *walk_list)
 {
 	ACPI_WALK_STATE         *walk_state;
@@ -511,6 +512,7 @@ acpi_ds_create_walk_state (
 		/* The cache is empty, create a new object */
 
 		/* Avoid deadlock with Acpi_cm_callocate */
+
 		acpi_cm_release_mutex (ACPI_MTX_CACHES);
 
 		walk_state = acpi_cm_callocate (sizeof (ACPI_WALK_STATE));
@@ -640,6 +642,7 @@ acpi_ds_delete_walk_state_cache (
 		next = acpi_gbl_walk_state_cache->next;
 		acpi_cm_free (acpi_gbl_walk_state_cache);
 		acpi_gbl_walk_state_cache = next;
+		acpi_gbl_walk_state_cache_depth--;
 	}
 
 	return;

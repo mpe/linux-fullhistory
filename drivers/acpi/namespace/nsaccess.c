@@ -1,9 +1,9 @@
-
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: nsaccess - Top-level functions for accessing ACPI namespace
+ *              $Revision: 108 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -26,59 +26,16 @@
 
 #include "acpi.h"
 #include "amlcode.h"
-#include "interp.h"
-#include "namesp.h"
-#include "dispatch.h"
+#include "acinterp.h"
+#include "acnamesp.h"
+#include "acdispat.h"
 
 
 #define _COMPONENT          NAMESPACE
-	 MODULE_NAME         ("nsaccess");
+	 MODULE_NAME         ("nsaccess")
 
 
-/****************************************************************************
- *
- * FUNCTION:    Acpi_ns_root_create_scope
- *
- * PARAMETERS:  Entry               - NTE for which a scope will be created
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Create a scope table for the given name table entry
- *
- * MUTEX:       Expects namespace to be locked
- *
- ***************************************************************************/
-
-ACPI_STATUS
-acpi_ns_root_create_scope (
-	ACPI_NAMED_OBJECT       *entry)
-{
-
-	/* Allocate a scope table */
-
-	if (entry->child_table) {
-		return (AE_EXIST);
-	}
-
-	entry->child_table = acpi_ns_allocate_name_table (NS_TABLE_SIZE);
-	if (!entry->child_table) {
-		/*  root name table allocation failure  */
-
-		REPORT_ERROR ("Root name table allocation failure");
-		return (AE_NO_MEMORY);
-	}
-
-	/*
-	 * Init the scope first entry -- since it is the exemplar of
-	 * the scope (Some fields are duplicated to new entries!)
-	 */
-	acpi_ns_initialize_table (entry->child_table, NULL, entry);
-	return (AE_OK);
-
-}
-
-
-/****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ns_root_initialize
  *
@@ -86,40 +43,41 @@ acpi_ns_root_create_scope (
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Allocate and initialize the root name table
+ * DESCRIPTION: Allocate and initialize the default root named objects
  *
  * MUTEX:       Locks namespace for entire execution
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ns_root_initialize (void)
 {
 	ACPI_STATUS             status = AE_OK;
 	PREDEFINED_NAMES        *init_val = NULL;
-	ACPI_NAMED_OBJECT       *new_entry;
-	ACPI_OBJECT_INTERNAL    *obj_desc;
+	ACPI_NAMESPACE_NODE     *new_node;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 
 
 	acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
 
 	/*
-	 * Root is initially NULL, so a non-NULL value indicates
+	 * The global root ptr is initially NULL, so a non-NULL value indicates
 	 * that Acpi_ns_root_initialize() has already been called; just return.
 	 */
 
-	if (acpi_gbl_root_object->child_table) {
+	if (acpi_gbl_root_node) {
 		status = AE_OK;
 		goto unlock_and_exit;
 	}
 
 
-	/* Create the root scope */
+	/*
+	 * Tell the rest of the subsystem that the root is initialized
+	 * (This is OK because the namespace is locked)
+	 */
 
-	status = acpi_ns_root_create_scope (acpi_gbl_root_object);
-	if (ACPI_FAILURE (status)) {
-		goto unlock_and_exit;
-	}
+	acpi_gbl_root_node = &acpi_gbl_root_node_struct;
+
 
 	/* Enter the pre-defined names in the name table */
 
@@ -127,25 +85,25 @@ acpi_ns_root_initialize (void)
 		status = acpi_ns_lookup (NULL, init_val->name,
 				 (OBJECT_TYPE_INTERNAL) init_val->type,
 				 IMODE_LOAD_PASS2, NS_NO_UPSEARCH,
-				 NULL, &new_entry);
+				 NULL, &new_node);
+
+		if (ACPI_FAILURE (status) ||
+			(!new_node))
 
 		/*
-		 * if name entered successfully
-		 * && its entry in Pre_defined_names[] specifies an
-		 * initial value
+		 * Name entered successfully.
+		 * If entry in Pre_defined_names[] specifies an
+		 * initial value, create the initial value.
 		 */
 
-		if ((status == AE_OK) &&
-			new_entry && init_val->val)
-		{
+		if (init_val->val) {
 			/*
 			 * Entry requests an initial value, allocate a
 			 * descriptor for it.
 			 */
 
-			obj_desc =
-				acpi_cm_create_internal_object (
-					(OBJECT_TYPE_INTERNAL) init_val->type);
+			obj_desc = acpi_cm_create_internal_object (
+					  (OBJECT_TYPE_INTERNAL) init_val->type);
 
 			if (!obj_desc) {
 				status = AE_NO_MEMORY;
@@ -164,23 +122,22 @@ acpi_ns_root_initialize (void)
 			case ACPI_TYPE_NUMBER:
 
 				obj_desc->number.value =
-					(u32) STRTOUL (init_val->val, NULL, 10);
+						(u32) STRTOUL (init_val->val, NULL, 10);
 				break;
 
 
 			case ACPI_TYPE_STRING:
 
 				obj_desc->string.length =
-						  (u16) STRLEN (init_val->val);
+						(u16) STRLEN (init_val->val);
 
 				/*
 				 * Allocate a buffer for the string.  All
 				 * String.Pointers must be allocated buffers!
 				 * (makes deletion simpler)
 				 */
-				obj_desc->string.pointer =
-					acpi_cm_allocate ((ACPI_SIZE)
-							 (obj_desc->string.length + 1));
+				obj_desc->string.pointer = acpi_cm_allocate (
+						   (obj_desc->string.length + 1));
 
 				if (!obj_desc->string.pointer) {
 					REPORT_ERROR ("Initial value string"
@@ -191,24 +148,22 @@ acpi_ns_root_initialize (void)
 					goto unlock_and_exit;
 				}
 
-				STRCPY ((char *) obj_desc->string.pointer,
-						init_val->val);
+				STRCPY (obj_desc->string.pointer, init_val->val);
 				break;
 
 
 			case ACPI_TYPE_MUTEX:
 
 				obj_desc->mutex.sync_level =
-					(u16) STRTOUL (init_val->val, NULL, 10);
+						(u16) STRTOUL (init_val->val, NULL, 10);
 
 				if (STRCMP (init_val->name, "_GL_") == 0) {
 					/*
 					 * Create a counting semaphore for the
 					 * global lock
 					 */
-					status =
-						acpi_os_create_semaphore (ACPI_NO_UNIT_LIMIT,
-								 1, &obj_desc->mutex.semaphore);
+					status = acpi_os_create_semaphore (ACPI_NO_UNIT_LIMIT,
+							 1, &obj_desc->mutex.semaphore);
 
 					if (ACPI_FAILURE (status)) {
 						goto unlock_and_exit;
@@ -218,8 +173,7 @@ acpi_ns_root_initialize (void)
 					 * global lock, save it
 					 */
 
-					acpi_gbl_global_lock_semaphore =
-							   obj_desc->mutex.semaphore;
+					acpi_gbl_global_lock_semaphore = obj_desc->mutex.semaphore;
 				}
 
 				else {
@@ -232,11 +186,6 @@ acpi_ns_root_initialize (void)
 						goto unlock_and_exit;
 					}
 				}
-
-				/* TBD: [Restructure] These fields may be obsolete */
-
-				obj_desc->mutex.lock_count = 0;
-				obj_desc->mutex.thread_id = 0;
 				break;
 
 
@@ -247,9 +196,9 @@ acpi_ns_root_initialize (void)
 				continue;
 			}
 
-			/* Store pointer to value descriptor in nte */
+			/* Store pointer to value descriptor in the Node */
 
-			acpi_ns_attach_object (new_entry, obj_desc,
+			acpi_ns_attach_object (new_node, obj_desc,
 					   obj_desc->common.type);
 		}
 	}
@@ -261,16 +210,19 @@ unlock_and_exit:
 }
 
 
-/****************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_ns_lookup
  *
- * PARAMETERS:  Prefix_scope    - Search scope if name is not fully qualified
+ * PARAMETERS:  Prefix_node - Search scope if name is not fully qualified
  *              Pathname        - Search pathname, in internal format
  *                                (as represented in the AML stream)
  *              Type            - Type associated with name
  *              Interpreter_mode - IMODE_LOAD_PASS2 => add name if not found
- *              Ret_entry       - Where the new entry (NTE) is placed
+ *              Flags           - Flags describing the search restrictions
+ *              Walk_state      - Current state of the walk
+ *              Return_node - Where the Node is placed (if found
+ *                                or created successfully)
  *
  * RETURN:      Status
  *
@@ -279,55 +231,42 @@ unlock_and_exit:
  *
  * MUTEX:       Assumes namespace is locked.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_ns_lookup (
 	ACPI_GENERIC_STATE      *scope_info,
-	char                    *pathname,
+	NATIVE_CHAR             *pathname,
 	OBJECT_TYPE_INTERNAL    type,
 	OPERATING_MODE          interpreter_mode,
 	u32                     flags,
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_NAMED_OBJECT       **ret_entry)
+	ACPI_NAMESPACE_NODE     **return_node)
 {
 	ACPI_STATUS             status;
-	ACPI_NAME_TABLE         *prefix_scope;
-	ACPI_NAME_TABLE         *table_to_search = NULL;
-	ACPI_NAME_TABLE         *scope_to_push = NULL;
-	ACPI_NAMED_OBJECT       *this_entry = NULL;
+	ACPI_NAMESPACE_NODE      *prefix_node;
+	ACPI_NAMESPACE_NODE     *current_node = NULL;
+	ACPI_NAMESPACE_NODE     *scope_to_push = NULL;
+	ACPI_NAMESPACE_NODE     *this_node = NULL;
 	u32                     num_segments;
 	ACPI_NAME               simple_name;
 	u8                      null_name_path = FALSE;
 	OBJECT_TYPE_INTERNAL    type_to_check_for;
 	OBJECT_TYPE_INTERNAL    this_search_type;
 
-	if (!ret_entry) {
+	if (!return_node) {
 		return (AE_BAD_PARAMETER);
 	}
 
 
 	acpi_gbl_ns_lookup_count++;
 
-	*ret_entry = ENTRY_NOT_FOUND;
-	if (!acpi_gbl_root_object->child_table) {
-		/*
-		 * If the name space has not been initialized:
-		 * -  In Pass1 of Load mode, we need to initialize it
-		 *    before trying to define a name.
-		 * -  In Exec mode, there are no names to be found.
-		 */
+	*return_node = ENTRY_NOT_FOUND;
 
-		if (IMODE_LOAD_PASS1 == interpreter_mode) {
-			if ((status = acpi_ns_root_initialize ()) != AE_OK) {
-				return (status);
-			}
-		}
-		else {
-			return (AE_NOT_FOUND);
-		}
+
+	if (!acpi_gbl_root_node) {
+		return (AE_NO_NAMESPACE);
 	}
-
 
 	/*
 	 * Get the prefix scope.
@@ -335,12 +274,12 @@ acpi_ns_lookup (
 	 */
 
 	if ((!scope_info) ||
-		(!scope_info->scope.name_table))
+		(!scope_info->scope.node))
 	{
-		prefix_scope = acpi_gbl_root_object->child_table;
+		prefix_node = acpi_gbl_root_node;
 	}
 	else {
-		prefix_scope = scope_info->scope.name_table;
+		prefix_node = scope_info->scope.node;
 	}
 
 
@@ -369,6 +308,8 @@ acpi_ns_lookup (
 	}
 
 
+	/* TBD: [Restructure] - Move the pathname stuff into a new procedure */
+
 	/* Examine the name pointer */
 
 	if (!pathname) {
@@ -376,7 +317,7 @@ acpi_ns_lookup (
 
 		null_name_path = TRUE;
 		num_segments = 0;
-		this_entry = acpi_gbl_root_object;
+		this_node = acpi_gbl_root_node;
 
 	}
 
@@ -403,14 +344,16 @@ acpi_ns_lookup (
 		if (*pathname == AML_ROOT_PREFIX) {
 			/* Pathname is fully qualified, look in root name table */
 
-			table_to_search = acpi_gbl_root_object->child_table;
+			current_node = acpi_gbl_root_node;
+
 			/* point to segment part */
+
 			pathname++;
 
 			/* Direct reference to root, "\" */
 
 			if (!(*pathname)) {
-				this_entry = acpi_gbl_root_object;
+				this_node = acpi_gbl_root_node;
 				goto check_for_new_scope_and_exit;
 			}
 		}
@@ -418,7 +361,7 @@ acpi_ns_lookup (
 		else {
 			/* Pathname is relative to current scope, start there */
 
-			table_to_search = prefix_scope;
+			current_node = prefix_node;
 
 			/*
 			 * Handle up-prefix (carat).  More than one prefix
@@ -426,23 +369,22 @@ acpi_ns_lookup (
 			 */
 
 			while (*pathname == AML_PARENT_PREFIX) {
-
 				/* Point to segment part or next Parent_prefix */
 
 				pathname++;
 
 				/*  Backup to the parent's scope  */
 
-				table_to_search = table_to_search->parent_table;
-				if (!table_to_search) {
+				this_node = acpi_ns_get_parent_object (current_node);
+				if (!this_node) {
 					/* Current scope has no parent scope */
 
-					REPORT_ERROR ("Ns_lookup: Too many parent"
-							  "prefixes or scope has no parent");
-
+					REPORT_ERROR ("Too many parent prefixes (^) - reached root");
 
 					return (AE_NOT_FOUND);
 				}
+
+				current_node = this_node;
 			}
 		}
 
@@ -454,14 +396,18 @@ acpi_ns_lookup (
 
 		if (*pathname == AML_DUAL_NAME_PREFIX) {
 			num_segments = 2;
+
 			/* point to first segment */
+
 			pathname++;
 
 		}
 
 		else if (*pathname == AML_MULTI_NAME_PREFIX_OP) {
-			num_segments = (s32)* (u8 *) ++pathname;
+			num_segments = (u32)* (u8 *) ++pathname;
+
 			/* point to first segment */
+
 			pathname++;
 
 		}
@@ -484,32 +430,32 @@ acpi_ns_lookup (
 	 */
 
 
-	while (num_segments-- && table_to_search) {
+	while (num_segments-- && current_node) {
 		/*
-		 * Search for the current segment in the table where
-		 * it should be.
-		 * Type is significant only at the last (topmost) level.
+		 * Search for the current name segment under the current
+		 * named object.  The Type is significant only at the last (topmost)
+		 * level.  (We don't care about the types along the path, only
+		 * the type of the final target object.)
 		 */
 		this_search_type = ACPI_TYPE_ANY;
 		if (!num_segments) {
 			this_search_type = type;
 		}
 
+		/* Pluck and ACPI name from the front of the pathname */
+
 		MOVE_UNALIGNED32_TO_32 (&simple_name, pathname);
+
+		/* Try to find the ACPI name */
+
 		status = acpi_ns_search_and_enter (simple_name, walk_state,
-				   table_to_search, interpreter_mode,
+				   current_node, interpreter_mode,
 				   this_search_type, flags,
-				   &this_entry);
+				   &this_node);
 
-		if (status != AE_OK) {
+		if (ACPI_FAILURE (status)) {
 			if (status == AE_NOT_FOUND) {
-				/* Name not in ACPI namespace  */
-
-				if (IMODE_LOAD_PASS1 == interpreter_mode ||
-					IMODE_LOAD_PASS2 == interpreter_mode)
-				{
-					REPORT_ERROR ("Name table overflow");
-				}
+				/* Name not found in ACPI namespace  */
 
 			}
 
@@ -518,92 +464,54 @@ acpi_ns_lookup (
 
 
 		/*
-		 * If 1) last segment (Num_segments == 0)
+		 * If 1) This is the last segment (Num_segments == 0)
 		 *    2) and looking for a specific type
 		 *       (Not checking for TYPE_ANY)
 		 *    3) which is not a local type (TYPE_DEF_ANY)
 		 *    4) which is not a local type (TYPE_SCOPE)
 		 *    5) which is not a local type (TYPE_INDEX_FIELD_DEFN)
-		 *    6) and type of entry is known (not TYPE_ANY)
-		 *    7) and entry does not match request
+		 *    6) and type of object is known (not TYPE_ANY)
+		 *    7) and object does not match request
 		 *
 		 * Then we have a type mismatch.  Just warn and ignore it.
 		 */
-		if ((num_segments     == 0)                               &&
-			(type_to_check_for != ACPI_TYPE_ANY)                  &&
-			(type_to_check_for != INTERNAL_TYPE_DEF_ANY)          &&
-			(type_to_check_for != INTERNAL_TYPE_SCOPE)            &&
-			(type_to_check_for != INTERNAL_TYPE_INDEX_FIELD_DEFN) &&
-			(this_entry->type != ACPI_TYPE_ANY)                   &&
-			(this_entry->type != type_to_check_for))
+		if ((num_segments       == 0)                               &&
+			(type_to_check_for  != ACPI_TYPE_ANY)                   &&
+			(type_to_check_for  != INTERNAL_TYPE_DEF_ANY)           &&
+			(type_to_check_for  != INTERNAL_TYPE_SCOPE)             &&
+			(type_to_check_for  != INTERNAL_TYPE_INDEX_FIELD_DEFN)  &&
+			(this_node->type != ACPI_TYPE_ANY)                  &&
+			(this_node->type != type_to_check_for))
 		{
-			/* Complain about type mismatch */
+			/* Complain about a type mismatch */
 
 			REPORT_WARNING ("Type mismatch");
 		}
 
 		/*
-		 * If last segment and not looking for a specific type, but type of
-		 * found entry is known, use that type to see if it opens a scope.
+		 * If this is the last name segment and we are not looking for a
+		 * specific type, but the type of found object is known, use that type
+		 * to see if it opens a scope.
 		 */
 
 		if ((0 == num_segments) && (ACPI_TYPE_ANY == type)) {
-			type = this_entry->type;
+			type = this_node->type;
 		}
 
 		if ((num_segments || acpi_ns_opens_scope (type)) &&
-			(this_entry->child_table == NULL))
+			(this_node->child == NULL))
 		{
 			/*
 			 * More segments or the type implies enclosed scope,
 			 * and the next scope has not been allocated.
 			 */
 
-			if ((IMODE_LOAD_PASS1 == interpreter_mode) ||
-				(IMODE_LOAD_PASS2 == interpreter_mode))
-			{
-				/*
-				 * First or second pass load mode
-				 * ==> locate the next scope
-				 */
-
-				this_entry->child_table =
-					acpi_ns_allocate_name_table (NS_TABLE_SIZE);
-
-				if (!this_entry->child_table) {
-					return (AE_NO_MEMORY);
-				}
-			}
-
-			/* Now complain if there is no next scope */
-
-			if (this_entry->child_table == NULL) {
-				if (IMODE_LOAD_PASS1 == interpreter_mode ||
-					IMODE_LOAD_PASS2 == interpreter_mode)
-				{
-					REPORT_ERROR ("Name Table allocation failure");
-					return (AE_NOT_FOUND);
-				}
-
-				return (AE_NOT_FOUND);
-			}
-
-
-			/* Scope table initialization */
-
-			if (IMODE_LOAD_PASS1 == interpreter_mode ||
-				IMODE_LOAD_PASS2 == interpreter_mode)
-			{
-				/* Initialize the new table */
-
-				acpi_ns_initialize_table (this_entry->child_table,
-						 table_to_search,
-						 this_entry);
-			}
 		}
 
-		table_to_search = this_entry->child_table;
+		current_node = this_node;
+
 		/* point to next name segment */
+
 		pathname += ACPI_NAME_SIZE;
 	}
 
@@ -629,7 +537,7 @@ check_for_new_scope_and_exit:
 				scope_to_push = NULL;
 			}
 			else {
-				scope_to_push = this_entry->child_table;
+				scope_to_push = this_node;
 			}
 
 			status = acpi_ds_scope_stack_push (scope_to_push, type,
@@ -641,7 +549,7 @@ check_for_new_scope_and_exit:
 		}
 	}
 
-	*ret_entry = this_entry;
+	*return_node = this_node;
 	return (AE_OK);
 }
 

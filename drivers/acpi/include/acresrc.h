@@ -1,6 +1,7 @@
 /******************************************************************************
  *
- * Name: resource.h - Resource Manager function prototypes
+ * Name: acresrc.h - Resource Manager function prototypes
+ *       $Revision: 20 $
  *
  *****************************************************************************/
 
@@ -22,11 +23,9 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef __RESOURCE_H__
-#define __RESOURCE_H__
+#ifndef __ACRESRC_H__
+#define __ACRESRC_H__
 
-#include "actypes.h"
-#include "acobject.h"
 
 /*
  *  Function prototypes called from Acpi* APIs
@@ -55,7 +54,7 @@ acpi_rs_set_srs_method_data (
 
 ACPI_STATUS
 acpi_rs_create_resource_list (
-	ACPI_OBJECT_INTERNAL    *byte_stream_buffer,
+	ACPI_OPERAND_OBJECT     *byte_stream_buffer,
 	u8                      *output_buffer,
 	u32                     *output_buffer_length);
 
@@ -67,7 +66,7 @@ acpi_rs_create_byte_stream (
 
 ACPI_STATUS
 acpi_rs_create_pci_routing_table (
-	ACPI_OBJECT_INTERNAL    *method_return_object,
+	ACPI_OPERAND_OBJECT     *method_return_object,
 	u8                      *output_buffer,
 	u32                     *output_buffer_length);
 
@@ -100,6 +99,11 @@ ACPI_STATUS
 acpi_rs_calculate_byte_stream_length (
 	RESOURCE                *linked_list_buffer,
 	u32                     *size_needed);
+
+ACPI_STATUS
+acpi_rs_calculate_pci_routing_table_length (
+	ACPI_OPERAND_OBJECT     *package_object,
+	u32                     *buffer_size_needed);
 
 ACPI_STATUS
 acpi_rs_byte_stream_to_list (
@@ -297,4 +301,4 @@ acpi_rs_vendor_stream (
 	u32                     *bytes_consumed);
 
 
-#endif  /*__RESOURCE_H__ */
+#endif  /* __ACRESRC_H__ */

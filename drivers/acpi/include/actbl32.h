@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Name: actbl32.h - ACPI tables specific to IA32
+ *       $Revision: 11 $
  *
  *****************************************************************************/
 
@@ -40,7 +41,7 @@ typedef struct
 
 typedef struct
 {
-	char                    signature[4];           /* signature "FACS" */
+	NATIVE_CHAR             signature[4];           /* signature "FACS" */
 	u32                     length;                 /* length of structure, in bytes */
 	u32                     hardware_signature;     /* hardware configuration signature */
 	u32                     firmware_waking_vector; /* ACPI OS waking vector */

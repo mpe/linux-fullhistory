@@ -21,7 +21,7 @@ usb-storage-obj-$(CONFIG_USB_STORAGE_SHUTTLE_COMPACTFLASH) += shuttle_cf.o
 usb-storage-obj-$(CONFIG_USB_STORAGE_DPCM)	+= dpcm.o
 
 usb-storage-objs :=	scsiglue.o protocol.o transport.o usb.o \
-			$(usb-storage-obj-y)
+			initializers.o $(usb-storage-obj-y)
 
 # Extract lists of the multi-part drivers.
 # The 'int-*' lists are the intermediate files used to build the multi's.

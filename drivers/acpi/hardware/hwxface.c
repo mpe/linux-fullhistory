@@ -2,6 +2,7 @@
 /******************************************************************************
  *
  * Name: hwxface.c - Hardware access external interfaces
+ *              $Revision: 31 $
  *
  *****************************************************************************/
 
@@ -24,11 +25,11 @@
  */
 
 #include "acpi.h"
-#include "namesp.h"
-#include "hardware.h"
+#include "acnamesp.h"
+#include "achware.h"
 
 #define _COMPONENT          HARDWARE
-	 MODULE_NAME         ("hwxface");
+	 MODULE_NAME         ("hwxface")
 
 
 /******************************************************************************
@@ -68,10 +69,9 @@ acpi_get_processor_throttling_info (
 	NATIVE_UINT             num_throttle_states;
 	NATIVE_UINT             buffer_space_needed;
 	NATIVE_UINT             i;
-	u8                      duty_offset;
-	u8                      duty_width;
-	ACPI_NAMED_OBJECT       *cpu_entry;
-	ACPI_OBJECT_INTERNAL    *cpu_obj;
+	u8                      duty_width = 0;
+	ACPI_NAMESPACE_NODE     *cpu_node;
+	ACPI_OPERAND_OBJECT     *cpu_obj;
 	ACPI_CPU_THROTTLING_STATE *state_ptr;
 
 
@@ -86,8 +86,8 @@ acpi_get_processor_throttling_info (
 	 *  Convert and validate the device handle
 	 */
 
-	cpu_entry = acpi_ns_convert_handle_to_entry (processor_handle);
-	if (!cpu_entry) {
+	cpu_node = acpi_ns_convert_handle_to_entry (processor_handle);
+	if (!cpu_node) {
 		return (AE_BAD_PARAMETER);
 	}
 
@@ -95,23 +95,27 @@ acpi_get_processor_throttling_info (
 	*   Check for an existing internal object
 	*/
 
-	cpu_obj = acpi_ns_get_attached_object ((ACPI_HANDLE) cpu_entry);
+	cpu_obj = acpi_ns_get_attached_object ((ACPI_HANDLE) cpu_node);
 	if (!cpu_obj) {
 		return (AE_NOT_FOUND);
 	}
 
-	duty_offset = acpi_gbl_FACP->duty_offset;
+#ifndef _IA64
+	/*
+	 * No Duty fields in IA64 tables
+	 */
 	duty_width = acpi_gbl_FACP->duty_width;
+#endif
 
 	/*
 	 *  P0 must always have a P_BLK all others may be null
-	 *  in either case, we can't thottle a processor that has no P_BLK
+	 *  in either case, we can't throttle a processor that has no P_BLK
 	 *
 	 *  Also if no Duty width, one state and it is 100%
 	 *
 	 */
-	if (!cpu_obj->processor.pblk_length || !duty_width ||
-		(0xFFFF < cpu_obj->processor.pblk_address))
+	if (!cpu_obj->processor.length || !duty_width ||
+		(0xFFFF < cpu_obj->processor.address))
 	{
 		/*
 		 *  Acpi_even though we can't throttle, we still have one state (100%)
@@ -169,30 +173,35 @@ acpi_get_processor_throttling_state (
 	ACPI_HANDLE             processor_handle,
 	u32                     *throttle_state)
 {
-	ACPI_NAMED_OBJECT       *cpu_entry;
-	ACPI_OBJECT_INTERNAL    *cpu_obj;
+	ACPI_NAMESPACE_NODE     *cpu_node;
+	ACPI_OPERAND_OBJECT     *cpu_obj;
 	u32                     num_throttle_states;
 	u32                     duty_cycle;
-	u8                      duty_offset;
-	u8                      duty_width;
+	u8                      duty_offset = 0;
+	u8                      duty_width = 0;
 
 
 	/* Convert and validate the device handle */
 
-	cpu_entry = acpi_ns_convert_handle_to_entry (processor_handle);
-	if (!cpu_entry || !throttle_state) {
+	cpu_node = acpi_ns_convert_handle_to_entry (processor_handle);
+	if (!cpu_node || !throttle_state) {
 		return (AE_BAD_PARAMETER);
 	}
 
    /* Check for an existing internal object */
 
-	cpu_obj = acpi_ns_get_attached_object ((ACPI_HANDLE) cpu_entry);
+	cpu_obj = acpi_ns_get_attached_object ((ACPI_HANDLE) cpu_node);
 	if (!cpu_obj) {
 		return (AE_NOT_FOUND);
 	}
 
+#ifndef _IA64
+	/*
+	 * No Duty fields in IA64 tables
+	 */
 	duty_offset = acpi_gbl_FACP->duty_offset;
 	duty_width = acpi_gbl_FACP->duty_width;
+#endif
 
 	/*
 	 *  Must have a valid P_BLK P0 must have a P_BLK all others may be null
@@ -201,8 +210,8 @@ acpi_get_processor_throttling_state (
 	 *
 	 *  also, if Duty_width is zero there are no additional states
 	 */
-	if (!cpu_obj->processor.pblk_length || !duty_width ||
-		(0xFFFF < cpu_obj->processor.pblk_address))
+	if (!cpu_obj->processor.length || !duty_width ||
+		(0xFFFF < cpu_obj->processor.address))
 	{
 		*throttle_state = 0;
 		return(AE_OK);
@@ -214,7 +223,7 @@ acpi_get_processor_throttling_state (
 	 *  Get the current duty cycle value.
 	 */
 	duty_cycle = acpi_hw_get_duty_cycle (duty_offset,
-			   cpu_obj->processor.pblk_address,
+			   cpu_obj->processor.address,
 			   num_throttle_states);
 
 	/*
@@ -251,8 +260,8 @@ acpi_set_processor_throttling_state (
 	ACPI_HANDLE             processor_handle,
 	u32                     throttle_state)
 {
-	ACPI_NAMED_OBJECT      *cpu_entry;
-	ACPI_OBJECT_INTERNAL   *cpu_obj;
+	ACPI_NAMESPACE_NODE    *cpu_node;
+	ACPI_OPERAND_OBJECT    *cpu_obj;
 	u32                     num_throttle_states = 0;
 	u8                      duty_offset = 0;
 	u8                      duty_width = 0;
@@ -261,20 +270,25 @@ acpi_set_processor_throttling_state (
 
 	/* Convert and validate the device handle */
 
-	cpu_entry = acpi_ns_convert_handle_to_entry (processor_handle);
-	if (!cpu_entry) {
+	cpu_node = acpi_ns_convert_handle_to_entry (processor_handle);
+	if (!cpu_node) {
 		return (AE_BAD_PARAMETER);
 	}
 
    /* Check for an existing internal object */
 
-	cpu_obj = acpi_ns_get_attached_object ((ACPI_HANDLE) cpu_entry);
+	cpu_obj = acpi_ns_get_attached_object ((ACPI_HANDLE) cpu_node);
 	if (!cpu_obj) {
 		return (AE_NOT_FOUND);
 	}
 
+#ifndef _IA64
+	/*
+	 * No Duty fields in IA64 tables
+	 */
 	duty_offset = acpi_gbl_FACP->duty_offset;
 	duty_width = acpi_gbl_FACP->duty_width;
+#endif
 
 	/*
 	 *  Must have a valid P_BLK P0 must have a P_BLK all others may be null
@@ -283,8 +297,8 @@ acpi_set_processor_throttling_state (
 	 *
 	 *  also, if Duty_width is zero there are no additional states
 	 */
-	if (!cpu_obj->processor.pblk_length || !duty_width ||
-		(0xFFFF < cpu_obj->processor.pblk_address))
+	if (!cpu_obj->processor.length || !duty_width ||
+		(0xFFFF < cpu_obj->processor.address))
 	{
 		/*
 		 *  If caller wants to set the state to the only state we handle
@@ -312,19 +326,19 @@ acpi_set_processor_throttling_state (
 	/*
 	 *  Turn off throttling (don't muck with the h/w while throttling).
 	 */
-	acpi_hw_disable_throttling (cpu_obj->processor.pblk_address);
+	acpi_hw_disable_throttling (cpu_obj->processor.address);
 
 	/*
 	 *  Program the throttling state.
 	 */
 	acpi_hw_program_duty_cycle (duty_offset, duty_cycle,
-			 cpu_obj->processor.pblk_address, num_throttle_states);
+			 cpu_obj->processor.address, num_throttle_states);
 
 	/*
 	 *  Only enable throttling for non-zero states (0 - 100%)
 	 */
 	if (throttle_state) {
-		acpi_hw_enable_throttling (cpu_obj->processor.pblk_address);
+		acpi_hw_enable_throttling (cpu_obj->processor.address);
 	}
 
 	return(AE_OK);
@@ -438,9 +452,9 @@ acpi_processor_sleep (
 	ACPI_HANDLE             processor_handle,
 	u32                     *pm_timer_ticks)
 {
-	ACPI_NAMED_OBJECT       *cpu_entry = NULL;
-	ACPI_OBJECT_INTERNAL    *cpu_obj = NULL;
-	ACPI_IO_ADDRESS         pblk_address = 0;
+	ACPI_NAMESPACE_NODE     *cpu_node = NULL;
+	ACPI_OPERAND_OBJECT     *cpu_obj = NULL;
+	ACPI_IO_ADDRESS         address = 0;
 
 
 	/*
@@ -449,31 +463,31 @@ acpi_processor_sleep (
 
 	/* Convert and validate the device handle */
 
-	cpu_entry = acpi_ns_convert_handle_to_entry (processor_handle);
-	if (!cpu_entry) {
-		return AE_BAD_PARAMETER;
+	cpu_node = acpi_ns_convert_handle_to_entry (processor_handle);
+	if (!cpu_node) {
+		return (AE_BAD_PARAMETER);
 	}
 
    /* Check for an existing internal object */
 
-	cpu_obj = acpi_ns_get_attached_object ((ACPI_HANDLE) cpu_entry);
+	cpu_obj = acpi_ns_get_attached_object ((ACPI_HANDLE) cpu_node);
 	if (!cpu_obj) {
-		return AE_NOT_FOUND;
+		return (AE_NOT_FOUND);
 	}
 
 	/* Get the processor register block (P_BLK) address */
 
-	pblk_address = cpu_obj->processor.pblk_address;
-	if (!cpu_obj->processor.pblk_length) {
+	address = cpu_obj->processor.address;
+	if (!cpu_obj->processor.length) {
 		/* Ensure a NULL addresss (note that P_BLK isn't required for C1) */
 
-		pblk_address = 0;
+		address = 0;
 	}
 
 	/*
 	 * Enter the currently active Cx sleep state.
 	 */
-	return acpi_hw_enter_cx (pblk_address, pm_timer_ticks);
+	return (acpi_hw_enter_cx (address, pm_timer_ticks));
 }
 
 

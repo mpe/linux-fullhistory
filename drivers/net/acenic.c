@@ -712,7 +712,7 @@ int __init ace_module_init(void)
 	return status;
 }
 
-
+#ifdef MODULE
 #if (LINUX_VERSION_CODE < 0x02032a)
 int init_module(void)
 {
@@ -728,7 +728,7 @@ void cleanup_module(void)
 module_init(ace_module_init);
 module_exit(ace_module_cleanup);
 #endif
-
+#endif
 
 static void ace_free_descriptors(struct net_device *dev)
 {
