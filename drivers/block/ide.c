@@ -2289,7 +2289,7 @@ __initfunc(static int match_parm (char *s, const char *keywords[], int vals[], i
  * "idex=serialize"	: do not overlap operations on idex and ide(x^1)
  * "idex=four"		: four drives on idex and ide(x^1) share same ports
  * "idex=reset"		: reset interface before first use
- * "idex=nodma"		: do not enable DMA by default on either drive
+ * "idex=dma"		: enable DMA by default on both drives if possible
  *
  * The following are valid ONLY on ide0,
  * and the defaults for the base,ctl ports must not be altered.
@@ -2391,7 +2391,7 @@ __initfunc(void ide_setup (char *s))
 		/*
 		 * Be VERY CAREFUL changing this: note hardcoded indexes below
 		 */
-		const char *ide_words[] = {"noprobe", "serialize", "autotune", "noautotune", "reset", "nodma", "four",
+		const char *ide_words[] = {"noprobe", "serialize", "autotune", "noautotune", "reset", "dma", "four",
 			"qd6580", "ht6560b", "cmd640_vlb", "dtc2278", "umc8672", "ali14xx", "dc4030", NULL};
 		hw = s[3] - '0';
 		hwif = &ide_hwifs[hw];
@@ -2479,8 +2479,8 @@ __initfunc(void ide_setup (char *s))
 				goto do_serialize;
 			}
 #endif /* CONFIG_BLK_DEV_4DRIVES */
-			case -6: /* nodma */
-				hwif->no_autodma = 1;
+			case -6: /* dma */
+				hwif->autodma = 1;
 				goto done;
 			case -5: /* "reset" */
 				hwif->reset = 1;

@@ -92,7 +92,9 @@ LP_UNKNOWN = 0,
 LP_AMIGA = 1,
 LP_ATARI = 2,
 LP_MFC = 3,
-LP_IOEXT = 4
+LP_IOEXT = 4,
+LP_MVME167 = 5,
+LP_BVME6000 = 6
 };
 
 /*

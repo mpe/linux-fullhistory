@@ -229,6 +229,30 @@ extern __inline__ unsigned long ffz(unsigned long word)
 #define hweight16(x) generic_hweight16(x)
 #define hweight8(x) generic_hweight8(x)
 
+/*
+ * ffs: find first bit set. This is defined the same way as
+ * the libc and compiler builtin ffs routines, therefore
+ * differs in spirit from the above ffz (man ffs).
+ */
+
+extern __inline__ int ffs(int x)
+{
+	int cnt;
+
+	asm ("bfffo %1{#0:#0}" : "=d" (cnt) : "dm" (x & -x));
+
+	return 32 - cnt;
+}
+
+/*
+ * hweightN: returns the hamming weight (i.e. the number
+ * of bits set) of a N-bit word
+ */
+
+#define hweight32(x) generic_hweight32(x)
+#define hweight16(x) generic_hweight16(x)
+#define hweight8(x) generic_hweight8(x)
+
 #endif /* __KERNEL__ */
 
 /* Bitmap functions for the minix filesystem */

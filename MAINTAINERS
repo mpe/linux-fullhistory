@@ -290,7 +290,7 @@ IDE DRIVER [GENERAL]
 P:	Mark Lord
 M:	mlord@pobox.com
 L:	linux-kernel@vger.rutgers.edu
-S:	Maintained
+S:	Odd Fixes
 
 IDE/ATAPI CDROM DRIVER 
 P:	Erik Andersen

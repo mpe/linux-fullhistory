@@ -13,6 +13,7 @@ extern void (*mach_sched_init) (void (*handler)(int, void *, struct pt_regs *));
 extern int (*mach_keyb_init) (void);
 extern int (*mach_kbdrate) (struct kbd_repeat *);
 extern void (*mach_kbd_leds) (unsigned int);
+extern void (*kbd_reset_setup) (char *, int);
 /* machine dependent irq functions */
 extern void (*mach_init_IRQ) (void);
 extern void (*(*mach_default_handler)[]) (int, void *, struct pt_regs *);

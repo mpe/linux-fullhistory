@@ -76,7 +76,7 @@ void show_mem(void)
 	total++;
 	if (PageReserved(mem_map+i))
 	    reserved++;
-	if (PageSwapCache(mem_map+i))
+	else if (PageSwapCache(mem_map+i))
 	    cached++;
 	else if (!atomic_read(&mem_map[i].count))
 	    free++;
@@ -91,6 +91,7 @@ void show_mem(void)
     printk("%d pages nonshared\n",nonshared);
     printk("%d pages shared\n",shared);
     printk("%d pages swap cached\n",cached);
+    printk("%ld pages in page table cache\n",pgtable_cache_size);
     show_buffers();
 #ifdef CONFIG_NET
     show_net_buffers();

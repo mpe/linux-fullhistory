@@ -114,7 +114,7 @@ SYMBOL_NAME_LABEL(ret_from_exception)
 	| kernel stack, otherwise stack overflow can occur during
 	| heavy interupt load
 	andw	#ALLOWINT,%sr
-	tstl	SYMBOL_NAME(need_resched)
+	tstl	%curptr@(LTASK_NEEDRESCHED)
 	jne	SYMBOL_NAME(reschedule)
 	cmpl	#SYMBOL_NAME(task),%curptr	| task[0] cannot have signals
 	jeq	2f
@@ -582,6 +582,7 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_getcwd)
 	.long SYMBOL_NAME(sys_capget)
 	.long SYMBOL_NAME(sys_capset)           /* 185 */
+	.long SYMBOL_NAME(sys_sigaltstack)
 	.rept NR_syscalls-(.-SYMBOL_NAME(sys_call_table))/4
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

@@ -2,6 +2,8 @@
      *  Atari interleaved bitplanes (8 planes) (iplan2p8)
      */
 
+#include <linux/config.h>
+
 #ifdef MODULE
 #if defined(CONFIG_FBCON_IPLAN2P8) || defined(CONFIG_FBCON_IPLAN2P8_MODULE)
 #define FBCON_HAS_IPLAN2P8

@@ -853,13 +853,15 @@ static int file_send_actor(read_descriptor_t * desc, const char *area, unsigned 
 	unsigned long count = desc->count;
 	struct file *file = (struct file *) desc->buf;
 	struct inode *inode = file->f_dentry->d_inode;
+	mm_segment_t old_fs;
 
 	if (size > count)
 		size = count;
 	down(&inode->i_sem);
+	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 	written = file->f_op->write(file, area, size, &file->f_pos);
-	set_fs(USER_DS);
+	set_fs(old_fs);
 	up(&inode->i_sem);
 	if (written < 0) {
 		desc->error = written;

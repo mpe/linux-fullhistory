@@ -50,7 +50,7 @@ extern __inline__ void lock_kernel(void)
 
 	lock_depth = tsk->lock_depth;
 	tsk->lock_depth = lock_depth+1;
-	if (lock_depth)
+	if (!lock_depth)
 		spin_lock(&kernel_flag);
 }
 

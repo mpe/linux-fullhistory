@@ -2,7 +2,6 @@
  *	We've been given MAC frame buffer info by the booter. Now go set it up
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

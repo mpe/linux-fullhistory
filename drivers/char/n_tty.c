@@ -190,7 +190,7 @@ static int opost(unsigned char c, struct tty_struct *tty)
  * opost_block --- to speed up block console writes, among other
  * things.
  */
-static int opost_block(struct tty_struct * tty,
+static ssize_t opost_block(struct tty_struct * tty,
 		       const unsigned char * inbuf, unsigned int nr)
 {
 	char	buf[80];
@@ -863,9 +863,9 @@ static inline void copy_from_read_buf(struct tty_struct *tty,
 static ssize_t read_chan(struct tty_struct *tty, struct file *file,
 			 unsigned char *buf, size_t nr)
 {
+	unsigned char *b = buf;
 	struct wait_queue wait = { current, NULL };
 	int c;
-	unsigned char *b = buf;
 	int minimum, time;
 	ssize_t retval = 0;
 	ssize_t size;
@@ -896,25 +896,23 @@ do_it_again:
 		}
 	}
 
-	if (tty->icanon) {
-		minimum = time = 0;
-		current->timeout = (unsigned long) -1;
-	} else {
+	minimum = time = 0;
+	current->timeout = (unsigned long) -1;
+	if (!tty->icanon) {
 		time = (HZ / 10) * TIME_CHAR(tty);
 		minimum = MIN_CHAR(tty);
 		if (minimum) {
-		  	current->timeout = (unsigned long) -1;
 			if (time)
 				tty->minimum_to_wake = 1;
 			else if (!waitqueue_active(&tty->read_wait) ||
 				 (tty->minimum_to_wake > minimum))
 				tty->minimum_to_wake = minimum;
 		} else {
+			current->timeout = 0;
 			if (time) {
 				current->timeout = time + jiffies;
 				time = 0;
-			} else
-				current->timeout = 0;
+			}
 			tty->minimum_to_wake = minimum = 1;
 		}
 	}
@@ -922,10 +920,10 @@ do_it_again:
 	add_wait_queue(&tty->read_wait, &wait);
 
 	disable_bh(TQUEUE_BH);
-	while (1) {
+	while (nr) {
 		/* First test for status change. */
 		if (tty->packet && tty->link->ctrl_status) {
-			if (b != buf || !nr)
+			if (b != buf)
 				break;
 			put_user(tty->link->ctrl_status, b++);
 			nr--;
@@ -966,7 +964,7 @@ do_it_again:
 		current->state = TASK_RUNNING;
 
 		/* Deal with packet mode. */
-		if (tty->packet && b == buf && nr) {
+		if (tty->packet && b == buf) {
 			put_user(TIOCPKT_DATA, b++);
 			nr--;
 		}
@@ -1013,7 +1011,7 @@ do_it_again:
 		if (n_tty_chars_in_buffer(tty) <= TTY_THRESHOLD_UNTHROTTLE)
 			check_unthrottle(tty);
 
-		if (b - buf >= minimum || !nr)
+		if (b - buf >= minimum)
 			break;
 		if (time)
 			current->timeout = time + jiffies;
@@ -1027,25 +1025,27 @@ do_it_again:
 	current->state = TASK_RUNNING;
 	current->timeout = 0;
 	size = b - buf;
-	if (size && nr)
-	        clear_bit(TTY_PUSH, &tty->flags);
-        if (!size && test_and_clear_bit(TTY_PUSH, &tty->flags))
-                goto do_it_again;
-	if (!size && !retval)
-	        clear_bit(TTY_PUSH, &tty->flags);
-	return (size ? size : retval);
+	if (size) {
+		retval = size;
+		if (nr)
+	       		clear_bit(TTY_PUSH, &tty->flags);
+	} else if (test_and_clear_bit(TTY_PUSH, &tty->flags))
+		 goto do_it_again;
+
+	return retval;
 }
 
 static ssize_t write_chan(struct tty_struct * tty, struct file * file,
 			  const unsigned char * buf, size_t nr)
 {
+	const unsigned char *b = buf;
 	struct wait_queue wait = { current, NULL };
 	int c;
-	const unsigned char *b = buf;
-	ssize_t retval = 0, num;
+	ssize_t retval = 0;
 
 	/* Job control check -- must be done at start (POSIX.1 7.1.1.4). */
-	if (L_TOSTOP(tty) && file->f_dentry->d_inode->i_rdev != CONSOLE_DEV &&
+	if (L_TOSTOP(tty) && 
+	    file->f_dentry->d_inode->i_rdev != CONSOLE_DEV &&
 	    file->f_dentry->d_inode->i_rdev != SYSCONS_DEV) {
 		retval = tty_check_change(tty);
 		if (retval)
@@ -1065,7 +1065,11 @@ static ssize_t write_chan(struct tty_struct * tty, struct file * file,
 		}
 		if (O_OPOST(tty) && !(test_bit(TTY_HW_COOK_OUT, &tty->flags))) {
 			while (nr > 0) {
-				num = opost_block(tty, b, nr);
+				ssize_t num = opost_block(tty, b, nr);
+				if (num < 0) {
+					retval = num;
+					goto break_out;
+				}
 				b += num;
 				nr -= num;
 				if (nr == 0)
@@ -1081,7 +1085,7 @@ static ssize_t write_chan(struct tty_struct * tty, struct file * file,
 			c = tty->driver.write(tty, 1, b, nr);
 			if (c < 0) {
 				retval = c;
-				break;
+				goto break_out;
 			}
 			b += c;
 			nr -= c;
@@ -1094,6 +1098,7 @@ static ssize_t write_chan(struct tty_struct * tty, struct file * file,
 		}
 		schedule();
 	}
+break_out:
 	current->state = TASK_RUNNING;
 	remove_wait_queue(&tty->write_wait, &wait);
 	return (b - buf) ? b - buf : retval;

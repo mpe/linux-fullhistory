@@ -401,9 +401,7 @@ static int dsp56k_ioctl(struct inode *inode, struct file *file,
 			if (dsp56k_host_interface.isr & DSP56K_ISR_HF2) status |= 0x4;
 			if (dsp56k_host_interface.isr & DSP56K_ISR_HF3) status |= 0x8;
 
-			if(put_user(status, &hf->status) < 0)
-				return -EFAULT;
-			break;
+			return put_user(status, &hf->status);
 		}
 		case DSP56K_HOST_CMD:
 			if (arg > 31 || arg < 0)
@@ -427,27 +425,19 @@ static int dsp56k_ioctl(struct inode *inode, struct file *file,
  * Do I need this function at all???
  */
 #if 0
-static int dsp56k_select(struct inode *inode, struct file *file, int sel_type,
-			 select_table *wait)
+static unsigned int dsp56k_poll(struct file *file, poll_table *wait)
 {
-	int dev = MINOR(inode->i_rdev) & 0x0f;
+	int dev = MINOR(file->f_dentry->d_inode->i_rdev) & 0x0f;
 
 	switch(dev)
 	{
 	case DSP56K_DEV_56001:
-
-		switch(sel_type) {
-		case SEL_IN:		/* read */
-			return 1;
-		case SEL_OUT:		/* write */
-			return 1;
-		default:
-			return 1;
-		}
+		/* poll_wait(file, ???, wait); */
+		return POLLIN | POLLRDNORM | POLLOUT;
 
 	default:
 		printk("DSP56k driver: Unknown minor device: %d\n", dev);
-		return -ENXIO;
+		return 0;
 	}
 }
 #endif
@@ -530,22 +520,17 @@ static struct file_operations dsp56k_fops = {
 
 /****** Init and module functions ******/
 
-static int init_error = 0;
-
-__initfunc(void dsp56k_init(void))
+__initfunc(int dsp56k_init(void))
 {
-	if(!ATARIHW_PRESENT(DSP56K)) {
-		init_error = 1;
+	if(!MACH_IS_ATARI || !ATARIHW_PRESENT(DSP56K)) {
 		printk("DSP56k driver: Hardware not present\n");
-		return;
+		return -ENODEV;
 	}
 
-#ifndef MODULE
 	if(register_chrdev(DSP56K_MAJOR, "dsp56k", &dsp56k_fops)) {
 		printk("DSP56k driver: Unable to register driver\n");
-		return;
+		return -ENODEV;
 	}
-#endif /* !MODULE */
 
 	dsp56k.in_use = 0;
 
@@ -555,20 +540,7 @@ __initfunc(void dsp56k_init(void))
 #ifdef MODULE
 int init_module(void)
 {
-	int r;
-
-	init_error = 0;
-	dsp56k_init();
-	if(init_error)
-		return -EPERM;
-
-	r = register_chrdev(DSP56K_MAJOR, "dsp56k", &dsp56k_fops);
-	if(r) {
-		printk("DSP56k driver: Unable to register driver\n");
-		return r;
-	}
-	
-	return 0;
+	return dsp56k_init();
 }
 
 void cleanup_module(void)

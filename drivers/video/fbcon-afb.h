@@ -2,6 +2,8 @@
      *  Amiga bitplanes (afb)
      */
 
+#include <linux/config.h>
+
 #ifdef MODULE
 #if defined(CONFIG_FBCON_AFB) || defined(CONFIG_FBCON_AFB_MODULE)
 #define FBCON_HAS_AFB

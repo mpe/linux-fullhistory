@@ -79,6 +79,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_DAYNAPORT), y)
+L_OBJS += daynaport.o
+CONFIG_8390_BUILTIN = y
+endif
+
+ifeq ($(CONFIG_APNE),y)
+L_OBJS += apne.o
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_APNE),m)
+  M_OBJS += apne.o
+  CONFIG_8390_MODULE = y
+  endif
+endif
+
+
 ifeq ($(CONFIG_SHAPER),y)
 L_OBJS += shaper.o
 else

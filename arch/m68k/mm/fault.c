@@ -45,9 +45,10 @@ asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
 #endif
 
 	down(&mm->mmap_sem);
+
 	vma = find_vma(mm, address);
 	if (!vma)
-	  goto bad_area;
+		goto bad_area;
 	if (vma->vm_flags & VM_IO)
 		goto bad_area;
 	if (vma->vm_start <= address)
@@ -86,7 +87,6 @@ good_area:
 				goto bad_area;
 	}
 	handle_mm_fault(current, vma, address, write);
-	up(&mm->mmap_sem);
 
 	/* There seems to be a missing invalidate somewhere in do_no_page.
 	 * Until I found it, this one cures the problem and makes
@@ -94,6 +94,7 @@ good_area:
 	 */
 	if (CPU_IS_040_OR_060)
 		flush_tlb_page(vma, address);
+	up(&mm->mmap_sem);
 	return 0;
 
 /*

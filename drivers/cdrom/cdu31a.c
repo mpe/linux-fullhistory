@@ -5,6 +5,8 @@
 *
 * Colossians 3:17
 *
+*  See Documentation/cdrom/cdu31a for additional details about this driver.
+* 
 * The Sony interface device driver handles Sony interface CDROM
 * drives and provides a complete block-level interface as well as an
 * ioctl() interface compatible with the Sun (as specified in
@@ -106,69 +108,15 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
+ * TODO: 
+ *       CDs with form1 and form2 sectors cause problems
+ *       with current read-ahead strategy.
  *
  * Credits:
  *    Heiko Eissfeldt <heiko@colossus.escape.de>
  *         For finding abug in the return of the track numbers.
- */
-/* conversion to Uniform cdrom layer.
-   TOC processing redone for proper multisession support.
-
-   TODO: 
-         CDs with form1 and form2 sectors cause problems
-         with current read-ahead strategy.
-   Heiko Eissfeldt Sep 97 */
-
-/*
+ *         TOC processing redone for proper multisession support.
  *
- * Setting up the Sony CDU31A/CDU33A drive interface card.  If
- * You have another card, you are on your own.
- * 
- *      +----------+-----------------+----------------------+
- *      |  JP1     |  34 Pin Conn    |                      |
- *      |  JP2     +-----------------+                      |
- *      |  JP3                                              |
- *      |  JP4                                              |
- *      |                                                   +--+
- *      |                                                   |  +-+
- *      |                                                   |  | |  External
- *      |                                                   |  | |  Connector
- *      |                                                   |  | |
- *      |                                                   |  +-+
- *      |                                                   +--+
- *      |                                                   |
- *      |                                          +--------+
- *      |                                          |
- *      +------------------------------------------+
- * 
- *    JP1 sets the Base Address, using the following settings:
- * 
- *      Address         Pin 1           Pin 2
- *      -------         -----           -----
- *      0x320           Short           Short
- *      0x330           Short           Open
- *      0x340           Open            Short
- *      0x360           Open            Open
- * 
- *    JP2 and JP3 configure the DMA channel; they must be set the same.
- * 
- *      DMA             Pin 1           Pin 2           Pin 3
- *      ---             -----           -----           -----
- *      1               On              Off             On
- *      2               Off             On              Off
- *      3               Off             Off             On
- * 
- *    JP4 Configures the IRQ:
- * 
- *      IRQ     Pin 1           Pin 2           Pin 3           Pin 4
- *      ---     -----           -----           -----           -----
- *      3       Off             Off             On              Off
- *      4       Off             Off*            Off             On
- *      5       On              Off             Off             Off
- *      6       Off             On              Off             Off
- * 
- *              * The documentation states to set this for interrupt
- *                4, but I think that is a mistake.
  *
  *  It probably a little late to be adding a history, but I guess I
  *  will start.
@@ -190,6 +138,10 @@
  *                     just dead code left over from the port.
  *                          Erik Andersen <andersee@debian.org>
  *
+ *  16 July 1998 -- Drive donated to Erik Andersen by John Kodis
+ *                   <kodis@jagunet.com>.  Work begun on fixing driver to
+ *                   work under 2.1.X.  Added temporary extra printks
+ *                   which seem to slow it down enough to work.
 */
 
 #include <linux/major.h>
@@ -257,6 +209,7 @@ static struct
 static int handle_sony_cd_attention(void);
 static int read_subcode(void);
 static void sony_get_toc(void);
+static int scd_spinup(void);
 /*static int scd_open(struct inode *inode, struct file *filp);*/
 static int scd_open(struct cdrom_device_info *, int);
 static void do_sony_cd_cmd(unsigned char cmd,
@@ -419,9 +372,10 @@ static int scd_drive_status(struct cdrom_device_info *cdi, int slot_nr)
      /* we have no changer support */
      return -EINVAL;
   }
-
-  /*return sony_spun_up ? CDS_DISC_OK : CDS_DRIVE_NOT_READY;*/
-  return sony_spun_up ? CDS_DISC_OK : CDS_TRAY_OPEN;
+  if (scd_spinup() == 0) {
+         sony_spun_up = 1;
+  }
+  return sony_spun_up ? CDS_DISC_OK : CDS_DRIVE_NOT_READY;
 }
 
 static inline void
@@ -1680,7 +1634,6 @@ read_data_block(char          *buffer,
 #endif
 }
 
-static int scd_spinup(void);
 
 /*
  * The OS calls this to perform a read or write operation to the drive.
@@ -1984,8 +1937,11 @@ gettoc_drive_spinning:
       session = 1;
       while (1)
       {
-#if DEBUG
-         printk("Trying session %d\n", session);
+/* This seems to slow things down enough to make it work.  This
+ * appears to be a problem in do_sony_cd_cmd.  This printk seems 
+ * to address the symptoms...  -Erik */
+#if 1
+         printk("cdu31a: Trying session %d\n", session);
 #endif
 	 parms[0] = session;
 	 do_sony_cd_cmd(SONY_READ_TOC_SPEC_CMD,
@@ -2001,6 +1957,8 @@ gettoc_drive_spinning:
 	 if ((res_size < 2) || ((res_reg[0] & 0xf0) == 0x20))
 	 {
 	    /* An error reading the TOC, this must be past the last session. */
+	     if (session == 1)
+		    printk("Yikes! Couldn't read any sessions!");
 	    break;
          }
 #if DEBUG

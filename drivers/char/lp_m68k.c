@@ -173,13 +173,14 @@ void lp_interrupt(int dev)
 }
 
 #if WHICH_DRIVER == FORCE_INTERRUPT
-static long lp_write(struct inode *inode, struct file *file,
-		    const char *buf, unsigned long count)
+static ssize_t lp_write(struct file *file, const char *buf,
+			size_t count, loff_t *ppos)
 #else
-static long lp_write_interrupt(struct inode *inode, struct file *file,
-			      const char *buf, unsigned long count)
+static ssize_t lp_write_interrupt(struct file *file, const char *buf,
+				  size_t count, loff_t *ppos)
 #endif
 {
+  struct inode *inode = file->f_dentry->d_inode;
   unsigned long total_bytes_written = 0;
   unsigned int flags;
   int rc;
@@ -190,7 +191,9 @@ static long lp_write_interrupt(struct inode *inode, struct file *file,
     lp_table[dev]->bytes_written = 0;	/* init buffer read-pointer */
     lp_error = 0;
     lp_table[dev]->copy_size = (count <= LP_BUFFER_SIZE ? count : LP_BUFFER_SIZE);
-    copy_from_user(lp_table[dev]->lp_buffer, buf, lp_table[dev]->copy_size);
+    if (copy_from_user(lp_table[dev]->lp_buffer, buf,
+		       lp_table[dev]->copy_size))
+      return -EFAULT;
     while (lp_table[dev]->copy_size) {
       save_flags(flags);
       cli();				/* no interrupts now */
@@ -223,10 +226,9 @@ static long lp_write_interrupt(struct inode *inode, struct file *file,
       rc = total_bytes_written + lp_table[dev]->bytes_written;
 
       if (signal_pending(current)) {
-	if (rc)
-	  return rc;
-	else
-	  return -EINTR;
+	if (rc == 0)
+	  rc = -EINTR;
+	return rc;
       }
       if (lp_error) {
 
@@ -267,13 +269,14 @@ void (*lp_interrupt)() = NULL;
 
 #if WHICH_DRIVER != FORCE_INTERRUPT
 #if WHICH_DRIVER == FORCE_POLLING
-static long lp_write(struct inode *inode, struct file *file,
-		    const char *buf, unsigned long count)
+static ssize_t lp_write(struct file *file, const char *buf,
+			size_t count, loff_t *ppos)
 #else
-static long lp_write_polled(struct inode *inode, struct file *file,
-			   const char *buf, unsigned long count)
+static ssize_t lp_write_polled(struct file *file, const char *buf,
+			size_t count, loff_t *ppos)
 #endif
 {
+	struct inode *inode = file->f_dentry->d_inode;
 	char *temp = buf;
 	int dev = MINOR(inode->i_rdev);
 
@@ -287,52 +290,53 @@ static long lp_write_polled(struct inode *inode, struct file *file,
 
 	temp = buf;
 	while (count > 0) {
-		if (lp_char_polled(get_user(temp), dev)) {
+		int c;
+		if (get_user(c, temp))
+			return -EFAULT;
+		if (lp_char_polled(c, dev)) {
 			/* only update counting vars if character was printed */
 			count--; temp++;
 #ifdef LP_DEBUG
 			lp_total_chars++;
 #endif
 		} else { /* if printer timed out */
+			unsigned long timeout = LP_TIMEOUT_POLLED;
+			int error = 0;
 			if (lp_table[dev]->lp_has_pout(dev)) {
 				printk(KERN_NOTICE "lp%d: out of paper\n",dev);
 				if (lp_table[dev]->flags & LP_ABORT)
-					return temp - buf ? temp-buf : -ENOSPC;
-				current->state = TASK_INTERRUPTIBLE;
-				current->timeout = jiffies + LP_TIMEOUT_POLLED;
-				schedule();
+					error = -ENOSPC;
 			} else if (!lp_table[dev]->lp_is_online(dev)) {
 				printk(KERN_NOTICE "lp%d: off-line\n",dev);
 				if (lp_table[dev]->flags & LP_ABORT)
-					return temp - buf ? temp-buf : -EIO;
-				current->state = TASK_INTERRUPTIBLE;
-				current->timeout = jiffies + LP_TIMEOUT_POLLED;
-				schedule();
+					error = -EIO;
 			} else
 	                /* not offline or out of paper. on fire? */
 			if (lp_table[dev]->lp_is_busy(dev)) {
 				printk(KERN_NOTICE "lp%d: on fire\n",dev);
 				if (lp_table[dev]->flags & LP_ABORT)
-					return temp - buf ? temp-buf : -EFAULT;
-				current->state = TASK_INTERRUPTIBLE;
-				current->timeout = jiffies + LP_TIMEOUT_POLLED;
-				schedule();
+					error = -EIO;
 			}
+			else
+				timeout = lp_table[dev]->time;
 
 			/* check for signals before going to sleep */
-			if (signal_pending(current)) {
+			if (error == 0 && signal_pending(current))
+				error = -EINTR;
+			if (error) {
 				if (temp != buf)
 					return temp-buf;
 				else
-					return -EINTR;
+					return error;
 			}
+
 #ifdef LP_DEBUG
 			printk("lp sleeping at %d characters for %d jiffies\n",
-				lp_total_chars, lp_table[dev]->time);
+				lp_total_chars, timeout);
 			lp_total_chars = 0;
 #endif
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + lp_table[dev]->time;
+			current->timeout = jiffies + timeout;
 			schedule();
 		}
 	}
@@ -343,13 +347,13 @@ static long lp_write_polled(struct inode *inode, struct file *file,
 unsigned int lp_irq = 0;
 
 #if WHICH_DRIVER == PREFER_INTERRUPT
-static long lp_write(struct inode *inode, struct file *file,
-		    const char *buf, unsigned long count)
+static ssize_t lp_write(struct file *file, const char *buf, size_t count,
+			loff_t *ppos)
 {
 	if (lp_irq)
-		return lp_write_interrupt(inode, file, buf, count);
+		return lp_write_interrupt(file, buf, count, ppos);
 	else
-		return lp_write_polled(inode, file, buf, count);
+		return lp_write_polled(file, buf, count, ppos);
 }
 #endif
 
@@ -363,8 +367,12 @@ static int lp_open(struct inode *inode, struct file *file)
 	int dev = MINOR(inode->i_rdev);
 	int ret;
 
+	MOD_INC_USE_COUNT;
+
+	ret = -ENODEV;
 	if (dev >= MAX_LP)
-		return -ENODEV;
+		goto out_err;
+
 #ifdef CONFIG_KMOD
 	if (!lp_table[dev]) {
 		char modname[30];
@@ -374,21 +382,24 @@ static int lp_open(struct inode *inode, struct file *file)
 	}
 #endif
 	if (!lp_table[dev])
-		return -ENODEV;
+		goto out_err;
 	if (!(lp_table[dev]->flags & LP_EXIST))
-		return -ENODEV;
+		goto out_err;
+	ret = -EBUSY;
 	if (lp_table[dev]->flags & LP_BUSY)
-		return -EBUSY;
+		goto out_err;
 
 	lp_table[dev]->flags |= LP_BUSY;
 
 	ret = lp_table[dev]->lp_open(dev);
 	if (ret != 0) {
 		lp_table[dev]->flags &= ~LP_BUSY;
+		goto out_err;
 	}
-	else {
-		MOD_INC_USE_COUNT;
-	}
+	return ret;
+
+out_err:
+	MOD_DEC_USE_COUNT;
 	return ret;
 }
 
@@ -407,15 +418,16 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 		    unsigned int cmd, unsigned long arg)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
-	int retval = 0;
+	int retval = -ENODEV;
 
 #ifdef LP_DEBUG
 	printk("lp%d ioctl, cmd: 0x%x, arg: 0x%x\n", minor, cmd, arg);
 #endif
 	if (minor >= max_lp)
-		return -ENODEV;
+		goto out;
 	if (!(lp_table[minor]->flags & LP_EXIST))
-		return -ENODEV;
+		goto out;
+	retval = 0;
 	switch (cmd) {
 	case LPTIME:
 		lp_table[minor]->time = arg;
@@ -437,11 +449,11 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 	        retval = lp_irq;
 		break;
 	default:
+		retval = -EINVAL;
 		if (lp_table[minor]->lp_ioctl)
 			retval = lp_table[minor]->lp_ioctl(minor, cmd, arg);
-		else
-			retval = -EINVAL;
 	}
+out:
 	return retval;
 }
 

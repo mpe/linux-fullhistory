@@ -21,14 +21,66 @@
 #include <asm/amigahw.h>
 #endif
 
-/* Strings for `extern inline' functions in <asm/pgtable.h>.  If put
-   directly into these functions, they are output for every file that
-   includes pgtable.h */
+struct pgtable_cache_struct quicklists;
 
-const char PgtabStr_bad_pmd[] = "Bad pmd in pte_alloc: %08lx\n";
-const char PgtabStr_bad_pgd[] = "Bad pgd in pmd_alloc: %08lx\n";
-const char PgtabStr_bad_pmdk[] = "Bad pmd in pte_alloc_kernel: %08lx\n";
-const char PgtabStr_bad_pgdk[] = "Bad pgd in pmd_alloc_kernel: %08lx\n";
+void __bad_pte(pmd_t *pmd)
+{
+	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
+	pmd_set(pmd, BAD_PAGETABLE);
+}
+
+void __bad_pmd(pgd_t *pgd)
+{
+	printk("Bad pgd in pmd_alloc: %08lx\n", pgd_val(*pgd));
+	pgd_set(pgd, (pmd_t *)BAD_PAGETABLE);
+}
+
+pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
+{
+	pte_t *pte;
+
+	pte = (pte_t *) __get_free_page(GFP_KERNEL);
+	if (pmd_none(*pmd)) {
+		if (pte) {
+			clear_page((unsigned long)pte);
+			flush_page_to_ram((unsigned long)pte);
+			flush_tlb_kernel_page((unsigned long)pte);
+			nocache_page((unsigned long)pte);
+			pmd_set(pmd, pte);
+			return pte + offset;
+		}
+		pmd_set(pmd, BAD_PAGETABLE);
+		return NULL;
+	}
+	free_page((unsigned long)pte);
+	if (pmd_bad(*pmd)) {
+		__bad_pte(pmd);
+		return NULL;
+	}
+	return (pte_t *) pmd_page(*pmd) + offset;
+}
+
+pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset)
+{
+	pmd_t *pmd;
+
+	pmd = get_pointer_table();
+	if (pgd_none(*pgd)) {
+		if (pmd) {
+			pgd_set(pgd, pmd);
+			return pmd + offset;
+		}
+		pgd_set(pgd, (pmd_t *)BAD_PAGETABLE);
+		return NULL;
+	}
+	free_pointer_table(pmd);
+	if (pgd_bad(*pgd)) {
+		__bad_pmd(pgd);
+		return NULL;
+	}
+	return (pmd_t *) pgd_page(*pgd) + offset;
+}
+
 
 static struct ptable_desc {
 	struct ptable_desc *prev;

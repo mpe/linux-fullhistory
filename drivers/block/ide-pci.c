@@ -225,11 +225,14 @@ __initfunc(static int ide_setup_pci_baseregs (struct pci_dev *dev, const char *n
  */
 __initfunc(static void ide_setup_pci_device (struct pci_dev *dev, ide_pci_device_t *d))
 {
-	unsigned int port, at_least_one_hwif_enabled = 0, no_autodma = 0, pciirq = 0;
+	unsigned int port, at_least_one_hwif_enabled = 0, autodma = 0, pciirq = 0;
 	unsigned short pcicmd = 0, tried_config = 0;
 	byte tmp = 0;
 	ide_hwif_t *hwif, *mate = NULL;
 
+#ifdef CONFIG_IDEDMA_AUTO
+	autodma = 1;
+#endif
 check_if_enabled:
 	if (pci_read_config_word(dev, PCI_COMMAND, &pcicmd)) {
 		printk("%s: error accessing PCI regs\n", d->name);
@@ -249,7 +252,7 @@ check_if_enabled:
 			printk("%s: device disabled (BIOS)\n", d->name);
 			return;
 		}
-		no_autodma = 1;	/* default DMA off if we had to configure it here */
+		autodma = 0;	/* default DMA off if we had to configure it here */
 		goto check_if_enabled;
 	}
 	if (tried_config)
@@ -311,11 +314,11 @@ check_if_enabled:
 			hwif->mate = mate;
 			mate->mate = hwif;
 		}
-		if (no_autodma)
-			hwif->no_autodma = 1;
 #ifdef CONFIG_BLK_DEV_IDEDMA
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_SIS5513))
-			hwif->no_autodma = 1;	/* too many SIS-5513 systems have troubles */
+			autodma = 0;
+		if (autodma)
+			hwif->autodma = 1;
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246) ||
 		    ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && (dev->class & 0x80))) {
 			unsigned int extra = (!mate && IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246)) ? 16 : 0;
@@ -324,8 +327,7 @@ check_if_enabled:
 				/*
  	 			 * Set up BM-DMA capability (PnP BIOS should have done this)
  	 			 */
-printk("%s: %s enabling Bus-Master DMA\n", hwif->name, d->name);
-				hwif->no_autodma = 1;	/* default DMA off if we had to configure it here */
+				hwif->autodma = 0;	/* default DMA off if we had to configure it here */
 				(void) pci_write_config_word(dev, PCI_COMMAND, pcicmd | PCI_COMMAND_MASTER);
 				if (pci_read_config_word(dev, PCI_COMMAND, &pcicmd) || !(pcicmd & PCI_COMMAND_MASTER)) {
 					printk("%s: %s error updating PCICMD\n", hwif->name, d->name);

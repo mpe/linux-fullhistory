@@ -289,7 +289,9 @@ static void dma_irq_exit(struct NCR_ESP *esp)
 		(struct fastlane_dma_registers *) (esp->dregs);
 
 	dregs->ctrl_reg = ctrl_data & ~(FASTLANE_DMA_EDI|FASTLANE_DMA_ESI);
+#ifdef __mc68000__
 	nop();
+#endif
 	dregs->ctrl_reg = ctrl_data;
 }
 

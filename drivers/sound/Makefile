@@ -42,7 +42,7 @@ obj-		:=
 
 ifeq ($(ARCH),m68k)
 
-obj-$(CONFIG_DMASOUND)		+= dmasound.o
+obj-$(CONFIG_DMASOUND)		+= dmasound.o sound_core.o
 
 else
 

@@ -115,6 +115,22 @@ else
     endif
 endif
 
+ifeq ($(CONFIG_MVME16x_SCSI),y)
+L_OBJS += mvme16x.o 53c7xx.o
+else
+  ifeq ($(CONFIG_MVME16x_SCSI),m)
+  M_OBJS += mvme16x.o 53c7xx.o
+  endif
+endif
+
+ifeq ($(CONFIG_BVME6000_SCSI),y)
+L_OBJS += bvme6000.o 53c7xx.o
+else
+  ifeq ($(CONFIG_BVME6000_SCSI),m)
+  M_OBJS += bvme6000.o 53c7xx.o
+  endif
+endif
+
 ifeq ($(CONFIG_A4000T_SCSI),y)
 L_OBJS += amiga7xx.o 53c7xx.o
 else

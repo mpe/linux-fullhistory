@@ -246,6 +246,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_MACMOUSE),y)
+M = y
+L_OBJS += macmouse.o
+else
+  ifeq ($(CONFIG_MACMOUSE),m)
+    M_OBJS += macmouse.o
+    MM = m
+  endif
+endif
+
 ifdef CONFIG_SUN_MOUSE
 M = y
 endif

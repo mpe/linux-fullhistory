@@ -2,7 +2,6 @@
  * Based on retz3fb.c and clgen.c
  */
  
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>

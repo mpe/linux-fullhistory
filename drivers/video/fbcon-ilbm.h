@@ -2,6 +2,8 @@
      *  Amiga interleaved bitplanes (ilbm)
      */
 
+#include <linux/config.h>
+
 #ifdef MODULE
 #if defined(CONFIG_FBCON_ILBM) || defined(CONFIG_FBCON_ILBM_MODULE)  
 #define FBCON_HAS_ILBM 

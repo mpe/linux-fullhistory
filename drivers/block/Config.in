@@ -4,7 +4,14 @@
 mainmenu_option next_comment
 comment 'Block devices'
 
-tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD
+tristate 'Normal PC floppy disk support' CONFIG_BLK_DEV_FD
+if [ "$CONFIG_AMIGA" = "y" ]; then
+  tristate 'Amiga floppy support' CONFIG_AMIGA_FLOPPY
+fi
+if [ "$CONFIG_ATARI" = "y" ]; then
+  tristate 'Atari floppy support' CONFIG_ATARI_FLOPPY
+fi
+
 tristate 'Enhanced IDE/MFM/RLL disk/cdrom/tape/floppy support' CONFIG_BLK_DEV_IDE
 comment 'Please see Documentation/ide.txt for help/info on IDE drives'
 if [ "$CONFIG_BLK_DEV_IDE" = "n" ]; then
@@ -26,7 +33,10 @@ else
       bool '   Generic PCI IDE chipset support' CONFIG_BLK_DEV_IDEPCI
       if [ "$CONFIG_BLK_DEV_IDEPCI" = "y" ]; then
 	# Either the DMA code is buggy or the DMA hardware is unreliable. FIXME.
-        #bool '     Generic PCI bus-master DMA support' CONFIG_BLK_DEV_IDEDMA
+        bool '     Generic PCI bus-master DMA support' CONFIG_BLK_DEV_IDEDMA
+        if [ "$CONFIG_BLK_DEV_IDEDMA" = "y" ]; then
+          bool '     Use DMA by default when available' CONFIG_IDEDMA_AUTO
+        fi
         if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
           bool '     OPTi 82C621 chipset enhanced support (EXPERIMENTAL)' CONFIG_BLK_DEV_OPTI621
           if [ "$CONFIG_BLK_DEV_IDEDMA" = "y" ]; then
@@ -58,6 +68,17 @@ else
 fi
 if [ "$CONFIG_MCA" = "y" ]; then
   bool 'PS/2 ESDI hard disk support' CONFIG_BLK_DEV_PS2
+fi
+if [ "$CONFIG_ZORRO" = "y" ]; then
+  tristate 'Amiga Zorro II ramdisk support' CONFIG_AMIGA_Z2RAM
+fi
+if [ "$CONFIG_ATARI" = "y" ]; then
+  tristate 'Atari ACSI support' CONFIG_ATARI_ACSI
+  if [ "$CONFIG_ATARI_ACSI" != "n" ]; then
+    comment 'Some devices (e.g. CD jukebox) support multiple LUNs'
+    bool 'Probe all LUNs on each ACSI device' CONFIG_ACSI_MULTI_LUN
+    dep_tristate 'Atari SLM laser printer support' CONFIG_ATARI_SLM $CONFIG_ATARI_ACSI
+  fi
 fi
 
 comment 'Additional Block Devices'

@@ -2,6 +2,8 @@
      *  16 bpp packed pixel (cfb16)
      */
 
+#include <linux/config.h>
+
 #ifdef MODULE
 #if defined(CONFIG_FBCON_CFB16) || defined(CONFIG_FBCON_CFB16_MODULE)
 #define FBCON_HAS_CFB16

@@ -312,7 +312,6 @@ struct task_struct {
 
 #define PF_USEDFPU	0x00100000	/* task used FPU this quantum (SMP) */
 #define PF_DTRACE	0x00200000	/* delayed trace (used on m68k) */
-#define PF_ONSIGSTK	0x00400000	/* works on signal stack (m68k only) */
 
 /*
  * Limit the stack by to some sane default: root can always

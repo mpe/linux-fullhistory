@@ -750,3 +750,8 @@ __initfunc(int mac_keyb_init(void))
 
 	return 0;
 }
+
+/* for "kbd-reset" cmdline param */
+__initfunc(void mac_kbd_reset_setup(char *str, int *ints))
+{
+}

@@ -100,10 +100,10 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
 
-	if (local_irq_count[smp_processor_id()])
-		die("page fault from irq handler",regs,error_code);
 	tsk = current;
 	mm = tsk->mm;
+	if (in_interrupt())
+		die("page fault from irq handler",regs,error_code);
 
 	down(&mm->mmap_sem);
 

@@ -13,7 +13,6 @@
 #include <linux/errno.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
-#include <linux/debugreg.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>

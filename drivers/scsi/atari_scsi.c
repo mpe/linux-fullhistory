@@ -206,7 +206,9 @@ static void scsi_falcon_intr( int irq, void *dummy, struct pt_regs *fp);
 static void falcon_release_lock_if_possible( struct NCR5380_hostdata *
                                              hostdata );
 static void falcon_get_lock( void );
+#ifdef CONFIG_ATARI_SCSI_RESET_BOOT
 static void atari_scsi_reset_boot( void );
+#endif
 static unsigned char atari_scsi_tt_reg_read( unsigned char reg );
 static void atari_scsi_tt_reg_write( unsigned char reg, unsigned char value);
 static unsigned char atari_scsi_falcon_reg_read( unsigned char reg );
@@ -675,7 +677,9 @@ int atari_scsi_detect (Scsi_Host_Template *host)
         * IDE and floppy! */
        instance->irq = 0;
 
+#ifdef CONFIG_ATARI_SCSI_RESET_BOOT
 	atari_scsi_reset_boot();
+#endif
 	NCR5380_init (instance, 0);
 
 	if (IS_A_TT()) {
@@ -864,6 +868,7 @@ int atari_scsi_reset( Scsi_Cmnd *cmd, unsigned int reset_flags)
 }
 
 	
+#ifdef CONFIG_ATARI_SCSI_RESET_BOOT
 __initfunc(static void atari_scsi_reset_boot( void ))
 {
 	unsigned long end;
@@ -892,6 +897,7 @@ __initfunc(static void atari_scsi_reset_boot( void ))
 
 	printk( " done\n" );
 }
+#endif
 
 
 const char * atari_scsi_info (struct Scsi_Host *host)

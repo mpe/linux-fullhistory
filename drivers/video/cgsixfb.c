@@ -6,6 +6,7 @@
  * Copyright (C) 1996 Eddie C. Dost (ecd@skynet.be)
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

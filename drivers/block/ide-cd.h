@@ -105,9 +105,9 @@
 #define ABORTED_COMMAND         0x0b
 #define MISCOMPARE              0x0e
 
-/* We want some additional flags for cd-rom drives.
+/* We want some additional flags for CDROM drives.
    To save space in the ide_drive_t struct, use some fields which
-   doesn't make sense for cd-roms -- `bios_cyl' and `bios_head'. */
+   doesn't make sense for CDROMs -- `bios_cyl' and `bios_head'. */
 
 /* Configuration flags.  These describe the capabilities of the drive.
    They generally do not change after initialization, unless we learn

@@ -5,8 +5,8 @@
 #include <asm/setup.h>
 
 #ifndef __ASSEMBLY__
-
-#include <asm/processor.h>	/* For TASK_SIZE */
+#include <asm/processor.h>
+#include <linux/tasks.h>
 
 /*
  * This file contains the functions and defines necessary to modify and use
@@ -266,7 +266,7 @@ extern inline void flush_tlb_kernel_page(unsigned long addr)
 #define PTRS_PER_PTE	1024
 #define PTRS_PER_PMD	8
 #define PTRS_PER_PGD	128
-#define USER_PTRS_PER_PGD	(TASK_SIZE / PGDIR_SIZE)
+#define USER_PTRS_PER_PGD	(TASK_SIZE/PGDIR_SIZE)
 
 /* the no. of pointers that fit on a page: this will go away */
 #define PTRS_PER_PAGE	(PAGE_SIZE/sizeof(void*))
@@ -283,6 +283,10 @@ typedef pgd_table pgd_tablepage[PGD_TABLES_PER_PAGE];
 typedef pmd_table pmd_tablepage[PMD_TABLES_PER_PAGE];
 typedef pte_table pte_tablepage[PTE_TABLES_PER_PAGE];
 
+/* Virtual address region for use by kernel_map() */
+#define	KMAP_START	0xd0000000
+#define	KMAP_END	0xf0000000
+
 /* Just any arbitrary offset to the start of the vmalloc VM area: the
  * current 8MB value just means that there will be a 8MB "hole" after the
  * physical memory until the kernel virtual memory starts.  That means that
@@ -293,6 +297,7 @@ typedef pte_table pte_tablepage[PTE_TABLES_PER_PAGE];
 #define VMALLOC_OFFSET	(8*1024*1024)
 #define VMALLOC_START (((unsigned long) high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
+#define VMALLOC_END KMAP_START
 
 #endif /* __ASSEMBLY__ */
 
@@ -599,15 +604,79 @@ static inline void cache_page (unsigned long vaddr)
 }
 
 extern struct pgtable_cache_struct {
+	unsigned long *pmd_cache;
 	unsigned long *pte_cache;
+/* This counts in units of pointer tables, of which can be eight per page. */
 	unsigned long pgtable_cache_sz;
 } quicklists;
-#define pgd_quicklist ((unsigned long *)0)
-#define pmd_quicklist ((unsigned long *)0)
-#define pte_quicklist (quicklists.pte_cache)
-#define pgtable_cache_size (quicklists.pgtable_cache_sz)
 
-/* We don't use pgd cache yet, so this is a dummy routine */
+#define pgd_quicklist ((unsigned long *)0)
+#define pmd_quicklist (quicklists.pmd_cache)
+#define pte_quicklist (quicklists.pte_cache)
+/* This isn't accurate because of fragmentation of allocated pages for
+   pointer tables, but that should not be a problem. */
+#define pgtable_cache_size ((quicklists.pgtable_cache_sz+7)/8)
+
+extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset);
+extern pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset);
+
+extern pmd_t *get_pointer_table(void);
+extern void free_pointer_table(pmd_t *);
+extern pmd_t *get_kpointer_table(void);
+extern void free_kpointer_table(pmd_t *);
+
+extern __inline__ pte_t *get_pte_fast(void)
+{
+	unsigned long *ret;
+
+	ret = pte_quicklist;
+	if (ret) {
+		pte_quicklist = (unsigned long *)*ret;
+		ret[0] = ret[1];
+		quicklists.pgtable_cache_sz -= 8;
+	}
+	return (pte_t *)ret;
+}
+
+extern __inline__ void free_pte_fast(pte_t *pte)
+{
+	*(unsigned long *)pte = (unsigned long)pte_quicklist;
+	pte_quicklist = (unsigned long *)pte;
+	quicklists.pgtable_cache_sz += 8;
+}
+
+extern __inline__ void free_pte_slow(pte_t *pte)
+{
+	cache_page((unsigned long)pte);
+	free_page((unsigned long) pte);
+}
+
+extern __inline__ pmd_t *get_pmd_fast(void)
+{
+	unsigned long *ret;
+
+	ret = pmd_quicklist;
+	if (ret) {
+		pmd_quicklist = (unsigned long *)*ret;
+		ret[0] = ret[1];
+		quicklists.pgtable_cache_sz--;
+	}
+	return (pmd_t *)ret;
+}
+
+extern __inline__ void free_pmd_fast(pmd_t *pmd)
+{
+	*(unsigned long *)pmd = (unsigned long)pmd_quicklist;
+	pmd_quicklist = (unsigned long *) pmd;
+	quicklists.pgtable_cache_sz++;
+}
+
+extern __inline__ void free_pmd_slow(pmd_t *pmd)
+{
+	free_pointer_table(pmd);
+}
+
+/* The pgd cache is folded into the pmd cache, so these are dummy routines. */
 extern __inline__ pgd_t *get_pgd_fast(void)
 {
 	return (pgd_t *)0;
@@ -621,64 +690,20 @@ extern __inline__ void free_pgd_slow(pgd_t *pgd)
 {
 }
 
-/* We don't use pmd cache yet, so this is a dummy routine */
-extern __inline__ pmd_t *get_pmd_fast(void)
-{
-	return (pmd_t *)0;
-}
-
-extern __inline__ void free_pmd_fast(pmd_t *pmd)
-{
-}
-
-extern __inline__ void free_pmd_slow(pmd_t *pmd)
-{
-}
-
-extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long address_preadjusted);
-
-extern __inline__ pte_t *get_pte_fast(void)
-{
-        unsigned long *ret;
-
-        if((ret = (unsigned long *)pte_quicklist) != NULL) {
-                pte_quicklist = (unsigned long *)(*ret);
-                ret[0] = ret[1];
-                pgtable_cache_size--;
-        }
-        return (pte_t *)ret;
-}
-
-extern __inline__ void free_pte_fast(pte_t *pte)
-{
-        *(unsigned long *)pte = (unsigned long) pte_quicklist;
-        pte_quicklist = (unsigned long *) pte;
-        pgtable_cache_size++;
-}
-
-extern __inline__ void free_pte_slow(pte_t *pte)
-{
-	cache_page((unsigned long)pte);
-	free_page((unsigned long)pte);
-}
-
 extern void __bad_pte(pmd_t *pmd);
+extern void __bad_pmd(pgd_t *pgd);
 
-extern const char PgtabStr_bad_pmd[];
-extern const char PgtabStr_bad_pgd[];
-extern const char PgtabStr_bad_pmdk[];
-extern const char PgtabStr_bad_pgdk[];
-
-#define pte_free		free_pte_fast
-#define pte_free_kernel		free_pte_fast
-#define pte_alloc_kernel	pte_alloc
+extern inline void pte_free(pte_t * pte)
+{
+	free_pte_fast(pte);
+}
 
 extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 {
 	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
 	if (pmd_none(*pmd)) {
-		pte_t * page = (pte_t *)get_pte_fast();
-		
+		pte_t * page = get_pte_fast();
+
 		if (!page)
 			return get_pte_slow(pmd, address);
 		pmd_set(pmd,page);
@@ -691,37 +716,37 @@ extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 	return (pte_t *) pmd_page(*pmd) + address;
 }
 
-extern pmd_t *get_pointer_table (void);
-extern void free_pointer_table (pmd_t *);
-extern pmd_t *get_kpointer_table (void);
-extern void free_kpointer_table (pmd_t *);
-
 extern inline void pmd_free(pmd_t * pmd)
 {
-	free_pointer_table (pmd);
+	free_pmd_fast(pmd);
 }
 
 extern inline pmd_t * pmd_alloc(pgd_t * pgd, unsigned long address)
 {
 	address = (address >> PMD_SHIFT) & (PTRS_PER_PMD - 1);
 	if (pgd_none(*pgd)) {
-		pmd_t *page = get_pointer_table();
-		if (pgd_none(*pgd)) {
-			if (page) {
-				pgd_set(pgd, page);
-				return page + address;
-			}
-			pgd_set(pgd, (pmd_t *)BAD_PAGETABLE);
-			return NULL;
-		}
-		free_pointer_table(page);
+		pmd_t *page = get_pmd_fast();
+
+		if (!page)
+			return get_pmd_slow(pgd, address);
+		pgd_set(pgd, page);
+		return page + address;
 	}
 	if (pgd_bad(*pgd)) {
-		printk(PgtabStr_bad_pgd, pgd_val(*pgd));
-		pgd_set(pgd, (pmd_t *)BAD_PAGETABLE);
+		__bad_pmd(pgd);
 		return NULL;
 	}
 	return (pmd_t *) pgd_page(*pgd) + address;
+}
+
+extern inline void pte_free_kernel(pte_t * pte)
+{
+	free_pte_fast(pte);
+}
+
+extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
+{
+	return pte_alloc(pmd, address);
 }
 
 extern inline void pmd_free_kernel(pmd_t * pmd)
@@ -745,8 +770,7 @@ extern inline pmd_t * pmd_alloc_kernel(pgd_t * pgd, unsigned long address)
 		free_kpointer_table(page);
 	}
 	if (pgd_bad(*pgd)) {
-		printk(PgtabStr_bad_pgdk, pgd_val(*pgd));
-		pgd_set(pgd, (pmd_t *)BAD_PAGETABLE);
+		__bad_pmd(pgd);
 		return NULL;
 	}
 	return (pmd_t *) pgd_page(*pgd) + address;
@@ -754,26 +778,19 @@ extern inline pmd_t * pmd_alloc_kernel(pgd_t * pgd, unsigned long address)
 
 extern inline void pgd_free(pgd_t * pgd)
 {
-	free_pointer_table ((pmd_t *) pgd);
+	free_pmd_fast((pmd_t *)pgd);
 }
 
 extern inline pgd_t * pgd_alloc(void)
 {
-	pgd_t *ret = (pgd_t *)get_pointer_table ();
-	
-	if (ret) {
-		pgd_t * init;
-
-		init = pgd_offset(&init_mm, 0);
-		memcpy(ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
-			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof (pgd_t));
-	}
-	return ret;
+	pgd_t *pgd = (pgd_t *)get_pmd_fast();
+	if (!pgd)
+		pgd = (pgd_t *)get_pointer_table();
+	return pgd;
 }
 
 extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {
-	/* Nothing to do on m68k */
 }
 
 /*
@@ -828,13 +845,9 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 #define SWP_ENTRY(type,offset) (((type) << 2) | ((offset) << PAGE_SHIFT))
 #endif
 
+#endif /* __ASSEMBLY__ */
+
 #define module_map      vmalloc
 #define module_unmap    vfree
-#define module_shrink	vshrink
-
-/* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
-#define PageSkip(page)		(0)
-
-#endif /* __ASSEMBLY__ */
 
 #endif /* _M68K_PGTABLE_H */

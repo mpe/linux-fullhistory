@@ -27,6 +27,7 @@
 #include <asm/io.h>
 #include <asm/spinlock.h>
 #include <asm/atomic.h>
+#include <asm/debugreg.h>
 
 asmlinkage int system_call(void);
 asmlinkage void lcall7(void);
@@ -294,24 +295,66 @@ asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 		unknown_nmi_error(reason, regs);
 }
 
+/*
+ * Careful - we must not do a lock-kernel until we have checked that the
+ * debug fault happened in user mode. Getting debug exceptions while
+ * in the kernel has to be handled without locking, to avoid deadlocks..
+ *
+ * Being careful here means that we don't have to be as careful in a
+ * lot of more complicated places (task switching can be a bit lazy
+ * about restoring all the debug state, and ptrace doesn't have to
+ * find every occurrence of the TF bit that could be saved away even
+ * by user code - and we don't have to be careful about what values
+ * can be written to the debug registers because there are no really
+ * bad cases).
+ */
 asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 {
+	unsigned int condition;
+	struct task_struct *tsk = current;
+
+	if (regs->eflags & VM_MASK)
+		goto debug_vm86;
+
+	__asm__ __volatile__("movl %%db6,%0" : "=r" (condition));
+
+	/* Mask out spurious TF errors due to lazy TF clearing */
+	if (condition & DR_STEP) {
+		if ((tsk->flags & PF_PTRACED) == 0)
+			goto clear_TF;
+	}
+
+	/* Mast out spurious debug traps due to lazy DR7 setting */
+	if (condition & (DR_TRAP0|DR_TRAP1|DR_TRAP2|DR_TRAP3)) {
+		if (!tsk->tss.debugreg[7])
+			goto clear_dr7;
+	}
+
+	/* If this is a kernel mode trap, we need to reset db7 to allow us to continue sanely */
+	if ((regs->xcs & 3) == 0)
+		goto clear_dr7;
+
+	/* Ok, finally something we can handle */
+	tsk->tss.trap_no = 1;
+	tsk->tss.error_code = error_code;
+	force_sig(SIGTRAP, tsk);
+	return;
+
+debug_vm86:
 	lock_kernel();
-	if (regs->eflags & VM_MASK) {
-		handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, 1);
-		goto out;
-	}
-	force_sig(SIGTRAP, current);
-	current->tss.trap_no = 1;
-	current->tss.error_code = error_code;
-	if ((regs->xcs & 3) == 0) {
-		/* If this is a kernel mode trap, then reset db7 and allow us to continue */
-		__asm__("movl %0,%%db7"
-			: /* no output */
-			: "r" (0));
-	}
-out:
+	handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, 1);
 	unlock_kernel();
+	return;
+
+clear_dr7:
+	__asm__("movl %0,%%db7"
+		: /* no output */
+		: "r" (0));
+	return;
+
+clear_TF:
+	regs->eflags &= ~TF_MASK;
+	return;
 }
 
 /*
@@ -333,9 +376,9 @@ void math_error(void)
 	task->flags&=~PF_USEDFPU;
 	stts();
 
-	force_sig(SIGFPE, task);
 	task->tss.trap_no = 16;
 	task->tss.error_code = 0;
+	force_sig(SIGFPE, task);
 	unlock_kernel();
 }
 
@@ -434,7 +477,7 @@ __initfunc(void trap_init_f00f_bug(void))
 
 
 
-__initfunc(void trap_init(void))
+void __init trap_init(void)
 {
 	int i;
 	struct desc_struct * p;

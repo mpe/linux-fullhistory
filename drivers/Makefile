@@ -9,7 +9,13 @@
 
 SUB_DIRS     := block char net misc sound
 MOD_SUB_DIRS := $(SUB_DIRS) sbus
-ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sbus cdrom isdn pnp macintosh video
+ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sbus cdrom isdn pnp \
+				 macintosh video dio zorro
+
+ifdef CONFIG_DIO
+SUB_DIRS += dio
+MOD_SUB_DIRS += dio
+endif
 
 ifdef CONFIG_PCI
 SUB_DIRS += pci
@@ -17,6 +23,14 @@ endif
 
 ifdef CONFIG_SBUS
 SUB_DIRS += sbus
+endif
+
+ifdef CONFIG_ZORRO
+SUB_DIRS += zorro
+endif
+
+ifdef CONFIG_NUBUS
+SUB_DIRS += nubus
 endif
 
 ifdef CONFIG_VT

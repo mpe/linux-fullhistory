@@ -1125,6 +1125,15 @@ struct NCR53c7x0_cmd {
 
     int flags;				/* CMD_* flags */
 
+    unsigned char      cmnd[12];	/* CDB, copied from Scsi_Cmnd */
+    int                result;		/* Copy to Scsi_Cmnd when done */
+
+    struct {				/* Private non-cached bounce buffer */
+        unsigned char buf[256];
+	u32	      addr;
+        u32           len;
+    } bounce;
+
 /*
  * SDTR and WIDE messages are an either/or affair
  * in this message, since we will go into message out and send
@@ -1547,7 +1556,7 @@ struct NCR53c7x0_hostdata {
     NCR53c7x0_address_memory = (void *) (host)->base;			\
     NCR53c7x0_address_io = (unsigned int) (host)->io_port;		\
     NCR53c7x0_memory_mapped = ((struct NCR53c7x0_hostdata *) 		\
-	host->hostdata)-> options & OPTION_MEMORY_MAPPED 
+	host->hostdata[0])-> options & OPTION_MEMORY_MAPPED 
 
 #ifdef BIG_ENDIAN
 /* These could be more efficient, given that we are always memory mapped,

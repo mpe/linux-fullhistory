@@ -2,6 +2,8 @@
      *  4 bpp packed pixel (cfb4)
      */
 
+#include <linux/config.h>
+
 #ifdef MODULE
 #if defined(CONFIG_FBCON_CFB4) || defined(CONFIG_FBCON_CFB4_MODULE)
 #define FBCON_HAS_CFB4

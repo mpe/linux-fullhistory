@@ -210,7 +210,7 @@ static int config_drive_for_dma (ide_drive_t *drive)
 	struct hd_driveid *id = drive->id;
 	ide_hwif_t *hwif = HWIF(drive);
 
-	if (id && (id->capability & 1) && !hwif->no_autodma) {
+	if (id && (id->capability & 1) && hwif->autodma) {
 		/* Enable DMA on any drive that has UltraDMA (mode 0/1/2) enabled */
 		if (id->field_valid & 4)	/* UltraDMA */
 			if  ((id->dma_ultra & (id->dma_ultra >> 8) & 7))

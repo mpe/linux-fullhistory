@@ -281,13 +281,13 @@ int ns8390_probe1(struct device *dev, int word16, char *model_name, int type, in
 {
 	static unsigned version_printed = 0;
 
-	static unsigned char fwrd4_offsets[16]={
+	static int fwrd4_offsets[16]={
 		0,      4,      8,      12,
 		16,     20,     24,     28,
 		32,     36,     40,     44,
 		48,     52,     56,     60
 	};
-	static unsigned char back4_offsets[16]={
+	static int back4_offsets[16]={
 		60,     56,     52,     48,
 		44,     40,     36,     32,
 		28,     24,     20,     16,

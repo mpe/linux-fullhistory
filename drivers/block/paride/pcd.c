@@ -2,11 +2,11 @@
 	pcd.c	(c) 1997-8  Grant R. Guenther <grant@torque.net>
 		            Under the terms of the GNU public license.
 
-	This is high-level driver for parallel port ATAPI CDrom
+	This is a high-level driver for parallel port ATAPI CDROM
         drives based on chips supported by the paride module.
 
         By default, the driver will autoprobe for a single parallel
-        port ATAPI CDrom drive, but if their individual parameters are
+        port ATAPI CDROM drive, but if their individual parameters are
         specified, the driver can handle up to 4 drives.
 
         The behaviour of the pcd driver can be altered by setting
@@ -38,7 +38,7 @@
                         of the mode numbers supported by the adapter.
                         (-1 if not given)
 
-		<slv>   ATAPI CDroms can be jumpered to master or slave.
+		<slv>   ATAPI CDROMs can be jumpered to master or slave.
 			Set this to 0 to choose the master drive, 1 to
                         choose the slave, -1 (the default) to choose the
 			first drive found.
@@ -648,7 +648,7 @@ static int pcd_identify( int unit, char * id )
 
 	if (s) return -1;
 	if ((pcd_buffer[0] & 0x1f) != 5) {
-	  if (verbose) printk("%s: %s is not a CDrom\n",
+	  if (verbose) printk("%s: %s is not a CDROM\n",
 			PCD.name,PCD.drive?"Slave":"Master");
 	  return -1;
 	}
@@ -709,7 +709,7 @@ static int pcd_detect( void )
 
 	if (k) return 0;
 	
-	printk("%s: No CDrom drive found\n",name);
+	printk("%s: No CDROM drive found\n",name);
 	return -1;
 }
 

@@ -32,6 +32,8 @@
  *  tasks that rely on callbacks.
  *
  *  Copyright (C) 1995, 1996, Olaf Kirch <okir@monad.swb.de>
+ *
+ *  TCP callback races fixes (C) 1998 Red Hat Software <alan@redhat.com>
  */
 
 #define __KERNEL_SYSCALLS__
@@ -693,40 +695,107 @@ done:
 }
 
 /*
- * data_ready callback for TCP.
+ *	TCP task queue stuff
  */
-static void
-tcp_data_ready(struct sock *sk, int len)
+ 
+static struct rpc_xprt *rpc_xprt_pending = NULL;	/* Chain by rx_pending of rpc_xprt's */
+
+static struct tq_struct rpc_tcp_tqueue = { 0, 0, 0, 0 };
+
+
+/*
+ *	This is protected from tcp_data_ready by the bh atomicity guarantees
+ */
+
+static void tcp_rpc_bh_run(void)
+{
+	struct rpc_xprt *xprt;
+	int result;
+
+	dprintk("tcp_rpc_bh_run: Queue Running\n");
+	
+	/*
+	 *	Empty each pending socket
+	 */
+	 
+	while((xprt=rpc_xprt_pending)!=NULL)
+	{
+		int safe_retry=0;
+		
+		rpc_xprt_pending=xprt->rx_pending;
+		xprt->rx_pending_flag=0;
+		
+		dprintk("tcp_rpc_run_bh: Processing %p\n", xprt);
+		
+		do 
+		{
+			if (safe_retry++ > 50)
+				break;
+			result = tcp_input_record(xprt);
+		}
+		while (result >= 0);
+	
+		switch (result) {
+			case -EAGAIN:
+				continue;
+			case -ENOTCONN:
+			case -EPIPE:
+				xprt_disconnect(xprt);
+				continue;
+			default:
+				printk(KERN_WARNING "RPC: unexpected error %d from tcp_input_record\n",
+					result);
+		}
+	}
+}
+
+
+static void tcp_rpc_bh_queue(void)
+{
+	rpc_tcp_tqueue.routine=(void *)(void *)tcp_rpc_bh_run;
+	queue_task(&rpc_tcp_tqueue, &tq_immediate);
+	dprintk("RPC:     tcp_rpc_bh_queue: immediate op queued\n");
+	mark_bh(IMMEDIATE_BH);
+}
+
+/*
+ *	data_ready callback for TCP. We can't just jump into the
+ *	tcp recvmsg functions inside of the network receive bh or
+ * 	bad things occur. We queue it to pick up after networking
+ *	is done.
+ */
+ 
+static void tcp_data_ready(struct sock *sk, int len)
 {
 	struct rpc_xprt	*xprt;
-	int		result, safe_retry = 0;
 
 	dprintk("RPC:      tcp_data_ready...\n");
 	if (!(xprt = xprt_from_sock(sk)))
+	{
+		printk("Not a socket with xprt %p\n", sk);
 		return;
+	}
 	dprintk("RPC:      tcp_data_ready client %p\n", xprt);
 	dprintk("RPC:      state %x conn %d dead %d zapped %d\n",
 				sk->state, xprt->connected,
 				sk->dead, sk->zapped);
-
-	do {
-		if (safe_retry++ > 20)
-			return;
-		result = tcp_input_record(xprt);
-	} while (result >= 0);
-
-	switch (result) {
-	case -EAGAIN:
-		return;
-	case -ENOTCONN:
-	case -EPIPE:
-		xprt_disconnect(xprt);
-		return;
-	default:
-		printk("RPC: unexpected error %d from tcp_input_record\n",
-			result);
+	/*
+	 *	If we are not waiting for the RPC bh run then
+	 *	we are now
+	 */
+	if (!xprt->rx_pending_flag)
+	{
+		dprintk("RPC:     xprt queue\n");
+		if(rpc_xprt_pending==NULL)
+			tcp_rpc_bh_queue();
+		xprt->rx_pending_flag=1;
+		xprt->rx_pending=rpc_xprt_pending;
+		rpc_xprt_pending=xprt;
 	}
+	else
+		dprintk("RPC:     xprt queued already %p\n", xprt);
 }
+
 
 static void
 tcp_state_change(struct sock *sk)

@@ -2,6 +2,7 @@
 #include <linux/types.h>
 #include <linux/zorro.h>
 #include <asm/amigahw.h>
+#include <asm/amipcmcia.h>
 
 extern volatile u_short amiga_audio_min_period;
 extern u_short amiga_audio_period;
@@ -20,8 +21,11 @@ EXPORT_SYMBOL(amiga_chip_size);
 EXPORT_SYMBOL(amiga_audio_period);
 EXPORT_SYMBOL(amiga_audio_min_period);
 
-EXPORT_SYMBOL(zorro_find);
-EXPORT_SYMBOL(zorro_get_board);
-EXPORT_SYMBOL(zorro_config_board);
-EXPORT_SYMBOL(zorro_unconfig_board);
-EXPORT_SYMBOL(zorro_unused_z2ram);
+#ifdef CONFIG_AMIGA_PCMCIA
+  EXPORT_SYMBOL(pcmcia_reset);
+  EXPORT_SYMBOL(pcmcia_copy_tuple);
+  EXPORT_SYMBOL(pcmcia_program_voltage);
+  EXPORT_SYMBOL(pcmcia_access_speed);
+  EXPORT_SYMBOL(pcmcia_write_enable);
+  EXPORT_SYMBOL(pcmcia_write_disable);
+#endif

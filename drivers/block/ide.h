@@ -341,7 +341,7 @@ typedef struct hwif_s {
 	unsigned	serialized : 1;	/* serialized operation with mate hwif */
 	unsigned	sharing_irq: 1;	/* 1 = sharing irq with another hwif */
 	unsigned	reset      : 1;	/* reset after probe */
-	unsigned	no_autodma : 1;	/* don't automatically enable DMA at boot */
+	unsigned	autodma    : 1;	/* automatically try to enable DMA at boot */
 	byte		channel;	/* for dual-port chips: 0=primary, 1=secondary */
 	struct pci_dev	*pci_dev;	/* for pci chipsets */
 	ide_pci_devid_t	pci_devid;	/* for pci chipsets: {VID,DID} */

@@ -716,6 +716,9 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 		}
 	}
 }
+#ifdef CONFIG_STRAM_SWAP
+extern int stram_device_init( void );
+#endif
 
 /*
  * First step of what used to be end_request
@@ -796,6 +799,9 @@ __initfunc(int blk_dev_init(void))
 	memset(max_sectors, 0, sizeof(max_sectors));
 #ifdef CONFIG_AMIGA_Z2RAM
 	z2_init();
+#endif
+#ifdef CONFIG_STRAM_SWAP
+	stram_device_init();
 #endif
 #ifdef CONFIG_BLK_DEV_RAM
 	rd_init();

@@ -6,11 +6,11 @@ Carrying on the torch is: Erik Andersen <andersee@debian.org>
 ---------------
 
 The ide-cd driver should work with all ATAPI ver 1.2 to ATAPI 2.6 compliant 
-cdrom drives which attach to an IDE interface.  Note that some cdrom vendors
+CDROM drives which attach to an IDE interface.  Note that some CDROM vendors
 (including Mitsumi, Sony, Creative, Aztech, and Goldstar) have made
 both ATAPI-compliant drives and drives which use a proprietary
 interface.  If your drive uses one of those proprietary interfaces,
-this driver will not work with it (but one of the other cdrom drivers
+this driver will not work with it (but one of the other CDROM drivers
 probably will).  This driver will not work with `ATAPI' drives which
 attach to the parallel port.  In addition, there is at least one drive
 (CyCDROM CR520ie) which attaches to the IDE port but is not ATAPI;
@@ -19,9 +19,9 @@ aztcd driver).
 
 This driver provides the following features:
 
- - Reading from data tracks, and mounting iso9660 filesystems.
+ - Reading from data tracks, and mounting ISO 9660 filesystems.
 
- - Playing audio tracks.  Most of the cdrom player programs floating
+ - Playing audio tracks.  Most of the CDROM player programs floating
    around should work; I usually use Workman.
 
  - Multisession support.
@@ -30,7 +30,7 @@ This driver provides the following features:
    from audio tracks.  The program cdda2wav can be used for this.
    Note, however, that only some drives actually support this.
 
- - There is now support for cdrom changers which comply with the 
+ - There is now support for CDROM changers which comply with the 
    ATAPI 2.6 draft standard (such as the NEC CDR-251).  This additional
    functionality includes a function call to query which slot is the
    currently selected slot, a function call to query which slots contain
@@ -67,15 +67,15 @@ This driver provides the following features:
 
 2. You should also ensure that the iso9660 filesystem is either
    compiled into the kernel or available as a loadable module.  You
-   can see if a filesystem is known to the kernel by cat'ing the file
+   can see if a filesystem is known to the kernel by catting
    /proc/filesystems.
 
-3. The cdrom drive should be connected to the host on an IDE
+3. The CDROM drive should be connected to the host on an IDE
    interface.  Each interface on a system is defined by an I/O port
    address and an IRQ number, the standard assignments being
    0x170 and 14 for the primary interface and 0x1f0 and 15 for the
    secondary interface.  Each interface can control up to two devices,
-   where each device can be a hard drive, a cdrom drive, a floppy drive, 
+   where each device can be a hard drive, a CDROM drive, a floppy drive, 
    or a tape drive.  The two devices on an interface are called `master'
    and `slave'; this is usually selectable via a jumper on the drive.
 
@@ -85,10 +85,10 @@ This driver provides the following features:
    `hdc' and `hdd'.  (Interfaces at other locations get other letters
    in the third position; see Documentation/ide.txt.)
 
-   If you want your cdrom drive to be found automatically by the
+   If you want your CDROM drive to be found automatically by the
    driver, you should make sure your IDE interface uses either the
    primary or secondary addresses mentioned above.  In addition, if
-   the cdrom drive is the only device on the IDE interface, it should
+   the CDROM drive is the only device on the IDE interface, it should
    be jumpered as `master'.  (If for some reason you cannot configure
    your system in this manner, you can probably still use the driver.
    You may have to pass extra configuration information to the kernel
@@ -117,33 +117,33 @@ This driver provides the following features:
 3. Basic usage
 --------------
 
-An iso9660 format cdrom can be mounted by putting the disc in the
-drive and typing (as root)
+An ISO 9660 CDROM can be mounted by putting the disc in the drive and 
+typing (as root)
 
   mount -t iso9660 /dev/cdrom /mnt/cdrom
 
 where it is assumed that /dev/cdrom is a link pointing to the actual
 device (as described in step 5 of the last section) and /mnt/cdrom is
 an empty directory.  You should now be able to see the contents of the
-cdrom under the /mnt/cdrom directory.  If you want to eject the cdrom,
+CDROM under the /mnt/cdrom directory.  If you want to eject the CDROM,
 you must first dismount it with a command like
 
   umount /mnt/cdrom
 
-Note that audio cds cannot be mounted.
+Note that audio CDs cannot be mounted.
 
-Some distributions set up /etc/fstab to always try to mount a cdrom
-filesystem on bootup.  It is not required to mount the cdrom in this
-manner, though, and it may be a nuisance if you change cdroms often.
+Some distributions set up /etc/fstab to always try to mount a CDROM
+filesystem on bootup.  It is not required to mount the CDROM in this
+manner, though, and it may be a nuisance if you change CDROMs often.
 You should feel free to remove the cdrom line from /etc/fstab and
-mount cdroms manually if that suits you better.
+mount CDROMs manually if that suits you better.
 
 Multisession and photocd discs should work with no special handling.
 The hpcdtoppm package (ftp.gwdg.de:/pub/linux/hpcdtoppm/) may be
 useful for reading photocds.
 
-To play an audio cd, you should first unmount and remove any data
-cdrom.  Any of the cdrom player programs should then work (workman,
+To play an audio CD, you should first unmount and remove any data
+CDROM.  Any of the CDROM player programs should then work (workman,
 workbone, cdplayer, etc.).  Lacking anything else, you could use the
 cdtester program in Documentation/cdrom/sbpcd.
 
@@ -155,7 +155,7 @@ use this function on a drive which does not support it.
 For supported changers, you can use the `cdchange' program (appended to
 the end of this file) to switch between changer slots.  Note that the
 drive should be unmounted before attempting this.  The program takes
-two arguments: the cdrom device, and the slot number to which you wish
+two arguments:  the CDROM device, and the slot number to which you wish
 to change.  If the slot number is -1, the drive is unloaded.
 
 
@@ -263,7 +263,7 @@ b. Timeout/IRQ errors.
     means that the system did not see an interrupt from the drive when
     it was expecting one (on any feasible IRQ).  If <n> is negative,
     that means the system saw interrupts on multiple IRQ lines, when
-    it was expecting to receive just one from the cdrom drive.
+    it was expecting to receive just one from the CDROM drive.
 
   - Double-check your hardware configuration to make sure that the IRQ
     number of your IDE interface matches what the driver expects.
@@ -275,23 +275,23 @@ b. Timeout/IRQ errors.
     had one report of a system which was shipped with IRQ 15 disabled
     by default.
 
-  - Note that many MS-DOS cdrom drivers will still function even if
+  - Note that many MS-DOS CDROM drivers will still function even if
     there are hardware problems with the interrupt setup; they
     apparently don't use interrupts.
 
   - If you own a Pioneer DR-A24X, you _will_ get nasty error messages 
     on boot such as "irq timeout: status=0x50 { DriveReady SeekComplete }"
-    The Pioneer DR-A24X cdrom drives are fairly popular these days.
+    The Pioneer DR-A24X CDROM drives are fairly popular these days.
     Unfortunately, these drives seem to become very confused when we perform
     the standard Linux ATA disk drive probe. If you own one of these drives,
-    you can bypass the ATA probing which confuses these cdrom drives, by 
+    you can bypass the ATA probing which confuses these CDROM drives, by 
     adding `append="hdX=noprobe hdX=cdrom"' to your lilo.conf file and runing 
     lilo (again where X is the drive letter corresponding to where your drive 
     is installed.)
     
 c. System hangups.
 
-  - If the system locks up when you try to access the cdrom, the most
+  - If the system locks up when you try to access the CDROM, the most
     likely cause is that you have a buggy IDE adapter which doesn't
     properly handle simultaneous transactions on multiple interfaces.
     The most notorious of these is the CMD640B chip.  This problem can
@@ -301,27 +301,27 @@ c. System hangups.
     foolproof.  See Documentation/ide.txt for more information
     about the `serialize' option and the CMD640B.
 
-  - Note that many MS-DOS cdrom drivers will work with such buggy
-    hardware, apparently because they never attempt to overlap cdrom
+  - Note that many MS-DOS CDROM drivers will work with such buggy
+    hardware, apparently because they never attempt to overlap CDROM
     operations with other disk activity.
 
 
-d. Can't mount a cdrom.
+d. Can't mount a CDROM.
 
   - If you get errors from mount, it may help to check `dmesg' to see
     if there are any more specific errors from the driver or from the
     filesystem.
 
-  - Make sure there's a cdrom loaded in the drive, and that's it's an
-    iso9660 format disc.  You can't mount an audio cd.
+  - Make sure there's a CDROM loaded in the drive, and that's it's an
+    ISO 9660 disc.  You can't mount an audio CD.
 
-  - With the cdrom in the drive and unmounted, try something like
+  - With the CDROM in the drive and unmounted, try something like
 
       cat /dev/cdrom | od | more
 
     If you see a dump, then the drive and driver are probably working
-    ok, and the problem is at the filesystem level (i.e., the cdrom is
-    not iso9660 format or has errors in the filesystem structure).
+    OK, and the problem is at the filesystem level (i.e., the CDROM is
+    not ISO 9660 or has errors in the filesystem structure).
 
   - If you see `not a block device' errors, check that the definitions
     of the device special files are correct.  They should be as
@@ -357,7 +357,7 @@ e. Directory listings are unpredictably truncated, and `dmesg' shows
     which could cause this.  It was fixed in 1.3.0.  If you can't
     upgrade, you can probably work around the problem by specifying a
     blocksize of 2048 when mounting.  (Note that you won't be able to
-    directly execute binaries off the cdrom in that case.)
+    directly execute binaries off the CDROM in that case.)
 
     If you see this in kernels later than 1.3.0, please report it as a
     bug.
@@ -366,7 +366,7 @@ e. Directory listings are unpredictably truncated, and `dmesg' shows
 f. Data corruption.
 
   - Random data corruption was occasionally observed with the Hitachi
-    CDR-7730 cdrom. If you experience data corruption, using "hdx=slow"
+    CDR-7730 CDROM. If you experience data corruption, using "hdx=slow"
     as a command line parameter may work around the problem, at the
     expense of low system performance.
 
@@ -377,7 +377,7 @@ f. Data corruption.
 /*
  * cdchange.c  [-v]  <device>  [<slot>]
  *
- * This loads a cdrom from a specified slot in a changer, and displays 
+ * This loads a CDROM from a specified slot in a changer, and displays 
  * information about the changer status.  The drive should be unmounted before 
  * using this program.
  *
@@ -385,8 +385,8 @@ f. Data corruption.
  * or no slot was specified.
  *
  * Based on code originally from Gerhard Zuber <zuber@berlin.snafu.de>.
- * Changer status information, and rewrite for the new common cdrom driver
- * interface by Erik Andersen <andersee@et.byu.edu>.
+ * Changer status information, and rewrite for the new Uniform CDROM driver
+ * interface by Erik Andersen <andersee@debian.org>.
  */
 
 #include <stdio.h>

@@ -41,8 +41,16 @@
 
 #include "hosts.h"
 
-#if defined(CONFIG_A4000T_SCSI) || defined(CONFIG_WARPENGINE_SCSI) || defined(CONFIG_A4091_SCSI)
+#if defined(CONFIG_A4000T_SCSI) || defined(CONFIG_WARPENGINE_SCSI) || defined(CONFIG_A4091_SCSI) || defined (CONFIG_GVP_TURBO_SCSI)
 #include "amiga7xx.h"
+#endif
+
+#ifdef CONFIG_MVME16x_SCSI
+#include "mvme16x.h"
+#endif
+
+#ifdef CONFIG_BVME6000_SCSI
+#include "bvme6000.h"
 #endif
 
 #ifdef CONFIG_A3000_SCSI
@@ -295,7 +303,7 @@ Scsi_Host_Template * scsi_hosts = NULL;
 static Scsi_Host_Template builtin_scsi_hosts[] =
 {
 #ifdef CONFIG_AMIGA
-#if defined(CONFIG_WARPENGINE_SCSI) || defined(CONFIG_A4000T_SCSI) || defined(CONFIG_A4091_SCSI)
+#if defined(CONFIG_WARPENGINE_SCSI) || defined(CONFIG_A4000T_SCSI) || defined(CONFIG_A4091_SCSI) || defined (CONFIG_GVP_TURBO_SCSI)
 	AMIGA7XX_SCSI,
 #endif
 #ifdef CONFIG_A3000_SCSI
@@ -330,6 +338,12 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #endif
 
+#ifdef CONFIG_MVME16x_SCSI
+	MVME16x_SCSI,
+#endif
+#ifdef CONFIG_BVME6000_SCSI
+	BVME6000_SCSI,
+#endif
 #ifdef CONFIG_SCSI_ADVANSYS
 	ADVANSYS,
 #endif

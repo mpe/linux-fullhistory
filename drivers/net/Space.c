@@ -91,6 +91,7 @@ extern int atarilance_probe(struct device *);
 extern int a2065_probe(struct device *);
 extern int ariadne_probe(struct device *);
 extern int hydra_probe(struct device *);
+extern int apne_probe(struct device *);
 extern int bionet_probe(struct device *);
 extern int pamsnet_probe(struct device *);
 extern int tlan_probe(struct device *);
@@ -365,6 +366,9 @@ struct devprobe m68k_probes[] __initdata = {
 #endif
 #ifdef CONFIG_HYDRA		/* Hydra Systems Amiganet Ethernet board */
 	{hydra_probe, 0},
+#endif
+#ifdef CONFIG_APNE		/* A1200 PCMCIA NE2000 */
+	{apne_probe, 0},
 #endif
 #ifdef CONFIG_ATARI_BIONET	/* Atari Bionet Ethernet board */
 	{bionet_probe, 0},

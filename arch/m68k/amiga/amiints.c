@@ -32,6 +32,7 @@
 #include <asm/traps.h>
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>
+#include <asm/amipcmcia.h>
 
 extern int cia_request_irq(struct ciabase *base,int irq,
                            void (*handler)(int, void *, struct pt_regs *),
@@ -88,6 +89,10 @@ __initfunc(void amiga_init_IRQ(void))
 	}
 	for (i = 0; i < AMI_IRQS; i++)
 		ami_ablecount[i] = 0;
+
+	/* turn off PCMCIA interrupts */
+	if (AMIGAHW_PRESENT(PCMCIA))
+		pcmcia_disable_irq();
 
 	/* turn off all interrupts and enable the master interrupt bit */
 	custom.intena = 0x7fff;

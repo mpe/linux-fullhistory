@@ -90,7 +90,7 @@ void skb_over_panic(struct sk_buff *skb, int sz, void *here)
 
 void skb_under_panic(struct sk_buff *skb, int sz, void *here)
 {
-        panic("skput:over: %p:%d put:%d dev:%s",
+        panic("skput:under: %p:%d put:%d dev:%s",
                 here, skb->len, sz, skb->dev ? skb->dev->name : "<NULL>");
 }
 

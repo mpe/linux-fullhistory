@@ -61,6 +61,8 @@ void (*mach_sched_init) (void (*handler)(int, void *, struct pt_regs *)) __initd
 int (*mach_keyb_init) (void) __initdata;
 int (*mach_kbdrate) (struct kbd_repeat *) = NULL;
 void (*mach_kbd_leds) (unsigned int) = NULL;
+/* machine dependent "kbd-reset" setup function */
+void (*kbd_reset_setup) (char *, int) __initdata = NULL;
 /* machine dependent irq functions */
 void (*mach_init_IRQ) (void) __initdata;
 void (*(*mach_default_handler)[]) (int, void *, struct pt_regs *) = NULL;
@@ -102,7 +104,7 @@ extern void config_mac(void);
 extern void config_sun3(void);
 extern void config_apollo(void);
 extern void config_mvme16x(void);
-extern void config_bmve6000(void);
+extern void config_bvme6000(void);
 extern void config_hp300(void);
 
 #define MASK_256K 0xfffc0000

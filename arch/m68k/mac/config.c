@@ -63,6 +63,7 @@ unsigned long mac_orig_videoaddr;
 extern int mac_keyb_init(void);
 extern int mac_kbdrate(struct kbd_repeat *k);
 extern void mac_kbd_leds(unsigned int leds);
+extern void mac_kbd_reset_setup(char*, int);
 
 extern void (*kd_mksound)(unsigned int, unsigned int);
 extern void mac_mksound(unsigned int, unsigned int);
@@ -258,6 +259,7 @@ __initfunc(void config_mac(void))
     mach_keyb_init       = mac_keyb_init;
     mach_kbdrate         = mac_kbdrate;
     mach_kbd_leds        = mac_kbd_leds;
+    kbd_reset_setup      = mac_kbd_reset_setup;
     mach_init_IRQ        = mac_init_IRQ;
     mach_request_irq     = mac_request_irq;
     mach_free_irq        = mac_free_irq;

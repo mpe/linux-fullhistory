@@ -146,41 +146,22 @@ void remove_from_swap_cache(struct page *page)
 			"on page %08lx\n", page_address(page));
 	}
 	/*
-	 * This will be a legal case once we have a more mature swap cache.
+	 * This is a legal case, but warn about it.
 	 */
 	if (atomic_read(&page->count) == 1) {
-		printk ("VM: Removing page cache on unshared page %08lx\n", 
+		printk (KERN_WARNING 
+			"VM: Removing page cache on unshared page %08lx\n", 
 			page_address(page));
-		return;
 	}
 
-	
 #ifdef DEBUG_SWAP
 	printk("DebugVM: remove_from_swap_cache(%08lx count %d)\n",
 	       page_address(page), atomic_read(&page->count));
 #endif
-	remove_page_from_hash_queue (page);
-	remove_page_from_inode_queue (page);
 	PageClearSwapCache (page);
-	__free_page (page);
+	remove_inode_page(page);
 }
 
-
-long find_in_swap_cache(struct page *page)
-{
-#ifdef SWAP_CACHE_INFO
-	swap_cache_find_total++;
-#endif
-	if (PageSwapCache (page))  {
-		long entry = page->offset;
-#ifdef SWAP_CACHE_INFO
-		swap_cache_find_success++;
-#endif	
-		remove_from_swap_cache (page);
-		return entry;
-	}
-	return 0;
-}
 
 int delete_from_swap_cache(struct page *page)
 {

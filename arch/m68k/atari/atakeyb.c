@@ -31,7 +31,6 @@
 #include <asm/atari_joystick.h>
 #include <asm/irq.h>
 
-extern unsigned char mach_keyboard_type;
 static void atakeyb_rep( unsigned long ignore );
 extern unsigned int keymap_count;
 
@@ -781,7 +780,7 @@ __initfunc(int atari_keyb_init(void))
     keymap_count = 8;
 
     /* say that we don't have an AltGr key */
-    mach_keyboard_type = KB_84;
+    keyboard_type = KB_84;
 
     kb_state.state = KEYBOARD;
     kb_state.len = 0;
@@ -864,6 +863,6 @@ int atari_kbdrate( struct kbd_repeat *k )
 }
 
 /* for "kbd-reset" cmdline param */
-__initfunc(void kbd_reset_setup(char *str, int *ints))
+__initfunc(void atari_kbd_reset_setup(char *str, int *ints))
 {
 }

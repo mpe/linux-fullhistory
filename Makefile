@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 112
+SUBLEVEL = 113
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -111,6 +111,10 @@ DRIVERS		=drivers/block/block.a \
 LIBS		=$(TOPDIR)/lib/lib.a
 SUBDIRS		=kernel drivers mm fs net ipc lib
 
+ifdef CONFIG_NUBUS
+DRIVERS := $(DRIVERS) drivers/nubus/nubus.a
+endif
+
 ifeq ($(CONFIG_ISDN),y)
 DRIVERS := $(DRIVERS) drivers/isdn/isdn.a
 endif
@@ -133,8 +137,16 @@ ifdef CONFIG_PCI
 DRIVERS := $(DRIVERS) drivers/pci/pci.a
 endif
 
+ifdef CONFIG_DIO
+DRIVERS := $(DRIVERS) drivers/dio/dio.a
+endif
+
 ifdef CONFIG_SBUS
 DRIVERS := $(DRIVERS) drivers/sbus/sbus.a
+endif
+
+ifdef CONFIG_ZORRO
+DRIVERS := $(DRIVERS) drivers/zorro/zorro.a
 endif
 
 ifdef CONFIG_PPC

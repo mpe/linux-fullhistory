@@ -344,16 +344,10 @@ static unsigned int changed_floppies = 0xff, fake_change = 0;
 	} while(0)
 
 #define	START_TIMEOUT()						\
-    do {							\
-        del_timer( &timeout_timer );				\
-        timeout_timer.expires = jiffies + FLOPPY_TIMEOUT;	\
-        add_timer( &timeout_timer );				\
-	} while(0)
+    mod_timer(&timeout_timer, jiffies + FLOPPY_TIMEOUT)
 
 #define	STOP_TIMEOUT()						\
-    do {							\
-        del_timer( &timeout_timer );				\
-	} while(0)
+    del_timer(&timeout_timer)
 
 
 /*
@@ -1409,27 +1403,25 @@ static int check_floppy_change (kdev_t dev)
 
 static int floppy_revalidate (kdev_t dev)
 {
-  int drive = MINOR(dev) & 3;
+	int drive = MINOR(dev) & 3;
 
-  if (test_bit (drive, &changed_floppies) || test_bit (drive, &fake_change)
-      || unit[drive].disktype == 0)
-    {
-      if (UD.flags & FTD_MSG)
-          printk (KERN_ERR "floppy: clear format %p!\n", UDT);
-      BufferDrive = -1;
-      clear_bit (drive, &fake_change);
-      clear_bit (drive, &changed_floppies);
-      /* 
-       * MSch: clearing geometry makes sense only for autoprobe formats, 
-       * for 'permanent user-defined' parameter: restore default_params[] 
-       * here if flagged valid!
-       */
-      if (default_params[drive].blocks == 0)
-      UDT = 0;
-      else
-	UDT = &default_params[drive];
-    }
-  return 0;
+	if (test_bit(drive, &changed_floppies) ||
+	    test_bit(drive, &fake_change) ||
+	    unit[drive].disktype == 0) {
+		if (UD.flags & FTD_MSG)
+			printk(KERN_ERR "floppy: clear format %p!\n", UDT);
+		BufferDrive = -1;
+		clear_bit(drive, &fake_change);
+		clear_bit(drive, &changed_floppies);
+		/* MSch: clearing geometry makes sense only for autoprobe
+		   formats, for 'permanent user-defined' parameter:
+		   restore default_params[] here if flagged valid! */
+		if (default_params[drive].blocks == 0)
+			UDT = 0;
+		else
+			UDT = &default_params[drive];
+	}
+	return 0;
 }
 
 static __inline__ void copy_buffer(void *from, void *to)
@@ -1566,14 +1558,13 @@ void do_fd_request(void)
 }
 
 
-static int
-invalidate_drive (kdev_t rdev)
+static int invalidate_drive(kdev_t rdev)
 {
-  /* invalidate the buffer track to force a reread */
-  BufferDrive = -1;
-  set_bit (MINOR(rdev) & 3, &fake_change);
-  check_disk_change (rdev);
-  return 0;
+	/* invalidate the buffer track to force a reread */
+	BufferDrive = -1;
+	set_bit(MINOR(rdev) & 3, &fake_change);
+	check_disk_change(rdev);
+	return 0;
 }
 
 static int fd_ioctl(struct inode *inode, struct file *filp,
@@ -1728,30 +1719,30 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 		/* no matching disk type found above - setting user_params */
 
 	       	if (cmd == FDDEFPRM) {
-		  /* set permanent type */
-		  dtp = &default_params[drive];
+			/* set permanent type */
+			dtp = &default_params[drive];
 		} else
-		  /* set user type (reset by disk change!) */
-		  dtp = &user_params[drive];
+			/* set user type (reset by disk change!) */
+			dtp = &user_params[drive];
 
 		dtp->name   = "user format";
 		dtp->blocks = setprm.size;
 		dtp->spt    = setprm.sect;
 		if (setprm.sect > 14) 
-		  dtp->fdc_speed = 3;
+			dtp->fdc_speed = 3;
 		else
-		  dtp->fdc_speed = 0;
+			dtp->fdc_speed = 0;
 		dtp->stretch = setprm.stretch;
 
 		if (UD.flags & FTD_MSG)
-		    printk (KERN_INFO "floppy%d: blk %d spt %d str %d!\n",
-		        drive, dtp->blocks, dtp->spt, dtp->stretch);
+			printk (KERN_INFO "floppy%d: blk %d spt %d str %d!\n",
+				drive, dtp->blocks, dtp->spt, dtp->stretch);
 
 		/* sanity check */
-		if (!dtp || setprm.track != dtp->blocks/dtp->spt/2 
-		    || setprm.head != 2) {
+		if (!dtp || setprm.track != dtp->blocks/dtp->spt/2 ||
+		    setprm.head != 2) {
 			redo_fd_request();
-		return -EINVAL;
+			return -EINVAL;
 		}
 
 		UDT = dtp;
@@ -1782,7 +1773,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 		return invalidate_drive (device);
 	case FDFMTEND:
 	case FDFLUSH:
-		return invalidate_drive (drive);
+		return invalidate_drive(device);
 	}
 	return -EINVAL;
 }
@@ -1925,70 +1916,68 @@ __initfunc(static void config_types( void ))
 
 static int floppy_open( struct inode *inode, struct file *filp )
 {
-  int drive, type;
-  int old_dev;
+	int drive, type;
+	int old_dev;
 
-  if (!filp)
-    {
-      DPRINT (("Weird, open called with filp=0\n"));
-      return -EIO;
-    }
+	if (!filp) {
+		DPRINT (("Weird, open called with filp=0\n"));
+		return -EIO;
+	}
 
-  drive = MINOR (inode->i_rdev) & 3;
-  type  = MINOR(inode->i_rdev) >> 2;
-  DPRINT(("fd_open: type=%d\n",type));
-  if (drive >= FD_MAX_UNITS || type > NUM_DISK_MINORS)
-	return -ENXIO;
+	drive = MINOR(inode->i_rdev) & 3;
+	type  = MINOR(inode->i_rdev) >> 2;
+	DPRINT(("fd_open: type=%d\n",type));
+	if (drive >= FD_MAX_UNITS || type > NUM_DISK_MINORS)
+		return -ENXIO;
 
-  old_dev = fd_device[drive];
+	old_dev = fd_device[drive];
 
-  if (fd_ref[drive])
-    if (old_dev != inode->i_rdev)
-      return -EBUSY;
+	if (fd_ref[drive] && old_dev != MINOR(inode->i_rdev))
+		return -EBUSY;
 
-  if (fd_ref[drive] == -1 || (fd_ref[drive] && filp->f_flags & O_EXCL))
-    return -EBUSY;
+	if (fd_ref[drive] == -1 || (fd_ref[drive] && filp->f_flags & O_EXCL))
+		return -EBUSY;
 
-  if (filp->f_flags & O_EXCL)
-    fd_ref[drive] = -1;
-  else
-    fd_ref[drive]++;
+	MOD_INC_USE_COUNT;
 
-  fd_device[drive] = inode->i_rdev;
+	if (filp->f_flags & O_EXCL)
+		fd_ref[drive] = -1;
+	else
+		fd_ref[drive]++;
 
-  if (old_dev && old_dev != inode->i_rdev)
-    invalidate_buffers(old_dev);
+	fd_device[drive] = MINOR(inode->i_rdev);
 
-  /* Allow ioctls if we have write-permissions even if read-only open */
-  if (filp->f_mode & 2 || permission (inode, 2) == 0)
-    filp->f_mode |= IOCTL_MODE_BIT;
-  if (filp->f_mode & 2)
-    filp->f_mode |= OPEN_WRITE_BIT;
+	if (old_dev && old_dev != MINOR(inode->i_rdev))
+		invalidate_buffers(MKDEV(FLOPPY_MAJOR, old_dev));
 
-  MOD_INC_USE_COUNT;
+	/* Allow ioctls if we have write-permissions even if read-only open */
+	if (filp->f_mode & 2 || permission (inode, 2) == 0)
+		filp->f_mode |= IOCTL_MODE_BIT;
+	if (filp->f_mode & 2)
+		filp->f_mode |= OPEN_WRITE_BIT;
 
-  if (filp->f_flags & O_NDELAY)
-    return 0;
+	if (filp->f_flags & O_NDELAY)
+		return 0;
 
-  if (filp->f_mode & 3) {
-	  check_disk_change( inode->i_rdev );
-	  if (filp->f_mode & 2) {
-		  if (UD.wpstat) {
-			  floppy_release(inode, filp);
-			  return -EROFS;
-		  }
-	  }
-  }
+	if (filp->f_mode & 3) {
+		check_disk_change(inode->i_rdev);
+		if (filp->f_mode & 2) {
+			if (UD.wpstat) {
+				floppy_release(inode, filp);
+				return -EROFS;
+			}
+		}
+	}
 
-  return 0;
+	return 0;
 }
 
 
 static int floppy_release( struct inode * inode, struct file * filp )
 {
-  int drive;
+	int drive;
 
-  drive = inode->i_rdev & 3;
+	drive = MINOR(inode->i_rdev) & 3;
 
 	/*
 	 * If filp is NULL, we're being called from blkdev_release
@@ -1999,16 +1988,15 @@ static int floppy_release( struct inode * inode, struct file * filp )
 	if (filp && (filp->f_mode & (2 | OPEN_WRITE_BIT)))
 		block_fsync (filp, filp->f_dentry);
 
-  if (fd_ref[drive] < 0)
-    fd_ref[drive] = 0;
-  else if (!fd_ref[drive]--)
-    {
-      printk(KERN_ERR "floppy_release with fd_ref == 0");
-      fd_ref[drive] = 0;
-    }
+	if (fd_ref[drive] < 0)
+		fd_ref[drive] = 0;
+	else if (!fd_ref[drive]--) {
+		printk(KERN_ERR "floppy_release with fd_ref == 0");
+		fd_ref[drive] = 0;
+	}
 
-  MOD_DEC_USE_COUNT;
-  return 0;
+	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 static struct file_operations floppy_fops = {

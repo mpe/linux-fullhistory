@@ -2,6 +2,8 @@
      *  2 bpp packed pixel (cfb2)
      */
 
+#include <linux/config.h>
+
 #ifdef MODULE
 #if defined(CONFIG_FBCON_CFB2) || defined(CONFIG_FBCON_CFB2_MODULE)
 #define FBCON_HAS_CFB2

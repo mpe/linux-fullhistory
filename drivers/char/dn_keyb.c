@@ -573,13 +573,13 @@ __initfunc(int dn_keyb_init(void)) {
 
 /*  printk("dn_keyb_init\n"); */
 
-  memcpy(plain_map, dnplain_map, sizeof(plain_map));
-  memcpy(shift_map, dnshift_map, sizeof(shift_map));
-  memcpy(altgr_map, dnaltgr_map, sizeof(altgr_map));
-  memcpy(ctrl_map, dnctrl_map, sizeof(ctrl_map));
-  memcpy(shift_ctrl_map, dnshift_ctrl_map, sizeof(shift_ctrl_map));
-  memcpy(alt_map, dnalt_map, sizeof(alt_map));
-  memcpy(ctrl_alt_map, dnctrl_alt_map, sizeof(ctrl_alt_map));
+  memcpy(key_maps[0], dnplain_map, sizeof(plain_map));
+  memcpy(key_maps[1], dnshift_map, sizeof(plain_map));
+  memcpy(key_maps[2], dnaltgr_map, sizeof(plain_map));
+  memcpy(key_maps[4], dnctrl_map, sizeof(plain_map));
+  memcpy(key_maps[5], dnshift_ctrl_map, sizeof(plain_map));
+  memcpy(key_maps[8], dnalt_map, sizeof(plain_map));
+  memcpy(key_maps[12], dnctrl_alt_map, sizeof(plain_map));
 
   mouse_dx=0; 
   mouse_dy=0; 

@@ -955,14 +955,14 @@ int pgt_cache_water[2] = { 25, 50 };
 
 void check_pgt_cache(void)
 {
-        if(pgtable_cache_size > pgt_cache_water[0]) {
-                do {
-                        if(pgd_quicklist)
-                                free_pgd_slow(get_pgd_fast());
-                        if(pmd_quicklist)
-                                free_pmd_slow(get_pmd_fast());
-                        if(pte_quicklist)
-                                free_pte_slow(get_pte_fast());
-                } while(pgtable_cache_size > pgt_cache_water[1]);
-        }
+	if (pgtable_cache_size > pgt_cache_water[1]) {
+		do {
+			if (pgd_quicklist)
+				free_pgd_slow(get_pgd_fast());
+			if (pmd_quicklist)
+				free_pmd_slow(get_pmd_fast());
+			if (pte_quicklist)
+				free_pte_slow(get_pte_fast());
+		} while (pgtable_cache_size > pgt_cache_water[0]);
+	}
 }

@@ -45,6 +45,7 @@ CONFIG_ZORRO=y
 # CONFIG_AMIGA_GSP is not set
 # CONFIG_GSP_RESOLVER is not set
 # CONFIG_GSP_A2410 is not set
+# CONFIG_AMIGA_PCMCIA is not set
 # CONFIG_HEARTBEAT is not set
 CONFIG_PROC_HARDWARE=y
 
@@ -148,6 +149,7 @@ CONFIG_NETDEVICES=y
 # CONFIG_ARIADNE is not set
 # CONFIG_A2065 is not set
 # CONFIG_HYDRA is not set
+# CONFIG_APNE is not set
 # CONFIG_ATARILANCE is not set
 # CONFIG_ATARI_BIONET is not set
 # CONFIG_ATARI_PAMSNET is not set

@@ -12,12 +12,12 @@
 #include <linux/errno.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
-#include <linux/debugreg.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/processor.h>
+#include <asm/debugreg.h>
 
 /*
  * does not yet catch signals sent when the child dies.

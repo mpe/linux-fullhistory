@@ -1,12 +1,7 @@
 /*
- *  linux/zorro.h -- Amiga AutoConfig (Zorro) Expansion Device Definitions
+ *  linux/zorro.h -- Amiga AutoConfig (Zorro) Bus Definitions
  *
- *  Copyright (C) 1995 Geert Uytterhoeven
- *
- *  Please update arch/m68k/amiga/zorro.c if you make changes here!
- *
- *  Many IDs were obtained from ExpName/Identify ((C) Richard Körber)
- *  and by looking at the NetBSD-Amiga kernel sources
+ *  Copyright (C) 1995-1998 Geert Uytterhoeven
  *
  *  This file is subject to the terms and conditions of the GNU General Public
  *  License.  See the file COPYING in the main directory of this archive
@@ -17,52 +12,6 @@
 #define _LINUX_ZORRO_H
 
 #ifndef __ASSEMBLY__
-
-    /*
-     *  Zorro Product Classes
-     *
-     *  Make sure to keep these in sync with arch/m68k/amiga/zorro.c!
-     */
-
-enum Zorro_Classes {
-    ZORRO_CLASS_UNKNOWN = 0x00,
-    ZORRO_CLASS_ARCNET,
-    ZORRO_CLASS_AUDIO,
-    ZORRO_CLASS_BRIDGE,
-    ZORRO_CLASS_DSP,
-    ZORRO_CLASS_ETHERNET,
-    ZORRO_CLASS_ETHERNET_PARALLEL,
-    ZORRO_CLASS_FLASHROM,
-    ZORRO_CLASS_FPU_RAM,
-    ZORRO_CLASS_GFX,
-    ZORRO_CLASS_GFXRAM,
-    ZORRO_CLASS_HD,
-    ZORRO_CLASS_HD_RAM,
-    ZORRO_CLASS_IDE,
-    ZORRO_CLASS_IDE_RAM,
-    ZORRO_CLASS_IDE_FLOPPY,
-    ZORRO_CLASS_ISDN,
-    ZORRO_CLASS_MACEMU,
-    ZORRO_CLASS_MISC,
-    ZORRO_CLASS_MODEM,
-    ZORRO_CLASS_MULTIIO,
-    ZORRO_CLASS_RAM,
-    ZORRO_CLASS_SCANNER,
-    ZORRO_CLASS_SCSI,
-    ZORRO_CLASS_SCSI_IDE,
-    ZORRO_CLASS_SCSI_RAM,
-    ZORRO_CLASS_SCSI_SERIAL,
-    ZORRO_CLASS_SERIAL,
-    ZORRO_CLASS_TABLET,
-    ZORRO_CLASS_TURBO,
-    ZORRO_CLASS_TURBO_RAM,
-    ZORRO_CLASS_TURBO_HD,
-    ZORRO_CLASS_TURBO_IDE,
-    ZORRO_CLASS_TURBO_SCSI,
-    ZORRO_CLASS_TURBO_SCSI_RAM,
-    ZORRO_CLASS_VIDEO,
-};
-
 
     /*
      *  Known Zorro Boards
@@ -462,7 +411,7 @@ typedef __u32 zorro_id;
 #define ZORRO_MANUF_ARMAX					0x0885
 #define  ZORRO_PROD_ARMAX_OMNIBUS				ZORRO_ID(ARMAX, 0x00, 0)
 
-#define ZORRO_MANUF_ZEUS					0x088d
+#define ZORRO_MANUF_ZEUS					0x088D
 #define  ZORRO_PROD_ZEUS_SPIDER					ZORRO_ID(ZEUS, 0x04, 0)
 
 #define ZORRO_MANUF_NEWTEK					0x088F
@@ -623,7 +572,6 @@ typedef __u32 zorro_id;
 
     /*
      *  Test and illegal Manufacturer IDs.
-     *  These do NOT appear in arch/m68k/amiga/zorro.c!
      */
 
 #define ZORRO_MANUF_HACKER					0x07DB
@@ -659,25 +607,25 @@ enum GVP_flags {
 struct Node {
     struct  Node *ln_Succ;	/* Pointer to next (successor) */
     struct  Node *ln_Pred;	/* Pointer to previous (predecessor) */
-    u_char  ln_Type;
-    char    ln_Pri;		/* Priority, for sorting */
-    char    *ln_Name;		/* ID string, null terminated */
-};
+    __u8    ln_Type;
+    __s8    ln_Pri;		/* Priority, for sorting */
+    __s8    *ln_Name;		/* ID string, null terminated */
+} __attribute__ ((packed));
 
 struct ExpansionRom {
     /* -First 16 bytes of the expansion ROM */
-    u_char	er_Type;	/* Board type, size and flags */
-    u_char	er_Product;	/* Product number, assigned by manufacturer */
-    u_char	er_Flags;	/* Flags */
-    u_char	er_Reserved03;	/* Must be zero ($ff inverted) */
-    u_short	er_Manufacturer;/* Unique ID,ASSIGNED BY COMMODORE-AMIGA! */
-    u_long	er_SerialNumber;/* Available for use by manufacturer */
-    u_short	er_InitDiagVec;	/* Offset to optional "DiagArea" structure */
-    u_char	er_Reserved0c;
-    u_char	er_Reserved0d;
-    u_char	er_Reserved0e;
-    u_char	er_Reserved0f;
-};
+    __u8  er_Type;		/* Board type, size and flags */
+    __u8  er_Product;		/* Product number, assigned by manufacturer */
+    __u8  er_Flags;		/* Flags */
+    __u8  er_Reserved03;	/* Must be zero ($ff inverted) */
+    __u16 er_Manufacturer;	/* Unique ID, ASSIGNED BY COMMODORE-AMIGA! */
+    __u32 er_SerialNumber;	/* Available for use by manufacturer */
+    __u16 er_InitDiagVec;	/* Offset to optional "DiagArea" structure */
+    __u8  er_Reserved0c;
+    __u8  er_Reserved0d;
+    __u8  er_Reserved0e;
+    __u8  er_Reserved0f;
+} __attribute__ ((packed));
 
 /* er_Type board type bits */
 #define ERT_TYPEMASK	0xc0
@@ -690,17 +638,17 @@ struct ExpansionRom {
 
 struct ConfigDev {
     struct Node 	cd_Node;
-    u_char		cd_Flags;	/* (read/write) */
-    u_char		cd_Pad; 	/* reserved */
+    __u8  		cd_Flags;	/* (read/write) */
+    __u8  		cd_Pad; 	/* reserved */
     struct ExpansionRom cd_Rom; 	/* copy of board's expansion ROM */
     void		*cd_BoardAddr;	/* where in memory the board was placed */
-    u_long		cd_BoardSize;	/* size of board in bytes */
-    u_short		cd_SlotAddr;	/* which slot number (PRIVATE) */
-    u_short		cd_SlotSize;	/* number of slots (PRIVATE) */
+    __u32 		cd_BoardSize;	/* size of board in bytes */
+    __u16  		cd_SlotAddr;	/* which slot number (PRIVATE) */
+    __u16  		cd_SlotSize;	/* number of slots (PRIVATE) */
     void		*cd_Driver;	/* pointer to node of driver */
     struct ConfigDev	*cd_NextCD;	/* linked list of drivers to config */
-    u_long		cd_Unused[4];	/* for whatever the driver wants */
-};
+    __u32 		cd_Unused[4];	/* for whatever the driver wants */
+} __attribute__ ((packed));
 
 #else /* __ASSEMBLY__ */
 
@@ -745,13 +693,16 @@ CD_sizeof	= CD_Unused+(4*4)
 
 #ifdef __KERNEL__
 
-extern unsigned int zorro_num_autocon;		/* # of autoconfig devices found */
+extern unsigned int zorro_num_autocon;	/* # of autoconfig devices found */
 extern struct ConfigDev zorro_autocon[ZORRO_NUM_AUTO];
 
 
     /*
      *  Zorro Functions
      */
+
+extern void zorro_init(void);
+extern void zorro_proc_init(void);
 
 extern unsigned int zorro_find(zorro_id id, unsigned int part, unsigned int index);
 extern const struct ConfigDev *zorro_get_board(unsigned int key);
@@ -768,7 +719,7 @@ extern void zorro_unconfig_board(unsigned int key, unsigned int part);
      *  the corresponding bits.
      */
 
-extern u32 zorro_unused_z2ram[4];
+extern __u32 zorro_unused_z2ram[4];
 
 #define Z2RAM_START		(0x00200000)
 #define Z2RAM_END		(0x00a00000)
@@ -777,13 +728,6 @@ extern u32 zorro_unused_z2ram[4];
 #define Z2RAM_CHUNKMASK		(0x0000ffff)
 #define Z2RAM_CHUNKSHIFT	(16)
 
-
-    /*
-     *  Verbose Board Identification
-     */
-
-extern void zorro_identify(void);
-extern int zorro_get_list(char *buffer);
 
 #endif /* !__ASSEMBLY__ */
 #endif /* __KERNEL__ */

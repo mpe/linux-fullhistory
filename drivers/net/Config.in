@@ -35,7 +35,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     bool 'MACE (Power Mac ethernet) support' CONFIG_MACE
     bool 'BMAC (G3 ethernet) support' CONFIG_BMAC
   fi
-  if [ "$CONFIG_APUS" = "y" ]; then
+  if [ "$CONFIG_ZORRO" = "y" ]; then
     tristate 'Ariadne support' CONFIG_ARIADNE
     tristate 'A2065 support' CONFIG_A2065
     tristate 'Hydra support' CONFIG_HYDRA

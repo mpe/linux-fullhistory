@@ -72,8 +72,7 @@ typedef unsigned long sigset_t;
 /*
  * SA_FLAGS values:
  *
- * SA_ONSTACK is not currently supported, but will allow sigaltstack(2).
- *   (++roman: SA_ONSTACK is supported on m68k)
+ * SA_ONSTACK indicates that a registered stack_t will be used.
  * SA_INTERRUPT is a no-op, but left due to historical reasons. Use the
  * SA_RESTART flag to get restarting signals (which were the default long ago)
  * SA_NOCLDSTOP flag to turn off SIGCHLD when children stop.
@@ -95,6 +94,15 @@ typedef unsigned long sigset_t;
 #define SA_NOMASK	SA_NODEFER
 #define SA_ONESHOT	SA_RESETHAND
 #define SA_INTERRUPT	0x20000000 /* dummy -- ignored */
+
+/* 
+ * sigaltstack controls
+ */
+#define SS_ONSTACK	1
+#define SS_DISABLE	2
+
+#define MINSIGSTKSZ	2048
+#define SIGSTKSZ	8192
 
 #ifdef __KERNEL__
 /*

@@ -1528,7 +1528,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 				if (csum_tcpudp_magic(iph->saddr, iph->daddr, len,
 						      iph->protocol, skb->csum))
 				{
-					IP_MASQ_WARNING( "failed TCP/UDP checksum from %d.%d.%d.%d!\n",
+					IP_MASQ_DEBUG(2, "failed TCP/UDP checksum from %d.%d.%d.%d!\n",
 					       NIPQUAD(iph->saddr));
 					return -1;
 				}

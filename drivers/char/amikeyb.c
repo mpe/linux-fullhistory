@@ -301,13 +301,13 @@ __initfunc(int amiga_keyb_init(void))
         return -EIO;
 
     /* setup key map */
-    memcpy(plain_map, amiplain_map, sizeof(plain_map));
-    memcpy(shift_map, amishift_map, sizeof(shift_map));
-    memcpy(altgr_map, amialtgr_map, sizeof(altgr_map));
-    memcpy(ctrl_map, amictrl_map, sizeof(ctrl_map));
-    memcpy(shift_ctrl_map, amishift_ctrl_map, sizeof(shift_ctrl_map));
-    memcpy(alt_map, amialt_map, sizeof(alt_map));
-    memcpy(ctrl_alt_map, amictrl_alt_map, sizeof(ctrl_alt_map));
+    memcpy(key_maps[0], amiplain_map, sizeof(plain_map));
+    memcpy(key_maps[1], amishift_map, sizeof(plain_map));
+    memcpy(key_maps[2], amialtgr_map, sizeof(plain_map));
+    memcpy(key_maps[4], amictrl_map, sizeof(plain_map));
+    memcpy(key_maps[5], amishift_ctrl_map, sizeof(plain_map));
+    memcpy(key_maps[8], amialt_map, sizeof(plain_map));
+    memcpy(key_maps[12], amictrl_alt_map, sizeof(plain_map));
 
     /*
      * Initialize serial data direction.
@@ -340,4 +340,9 @@ int amiga_kbdrate( struct kbd_repeat *k )
     k->rate  = key_repeat_rate  * 1000 / HZ;
     
     return( 0 );
+}
+
+/* for "kbd-reset" cmdline param */
+__initfunc(void amiga_kbd_reset_setup(char *str, int *ints))
+{
 }

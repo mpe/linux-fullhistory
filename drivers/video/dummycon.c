@@ -5,6 +5,7 @@
  *  available, usually until fbcon takes console over.
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kdev_t.h>
 #include <linux/tty.h>

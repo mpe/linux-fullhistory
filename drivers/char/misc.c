@@ -65,12 +65,14 @@ static struct miscdevice misc_list = { 0, "head", NULL, &misc_list, &misc_list }
 static unsigned char misc_minors[DYNAMIC_MINORS / 8];
 
 #ifndef MODULE
+extern int adbdev_init(void);
 extern int bus_mouse_init(void);
 extern int psaux_init(void);
 extern int ms_bus_mouse_init(void);
 extern int atixl_busmouse_init(void);
 extern int amiga_mouse_init(void);
 extern int atari_mouse_init(void);
+extern int mac_mouse_init(void);
 extern int sun_mouse_init(void);
 extern int adb_mouse_init(void);
 extern void watchdog_init(void);
@@ -203,6 +205,9 @@ __initfunc(int misc_init(void))
 	if (proc_misc)
 		proc_misc->read_proc = misc_read_proc;
 #endif /* PROC_FS */
+#ifdef CONFIG_MAC
+	adbdev_init();
+#endif
 #ifdef CONFIG_BUSMOUSE
 	bus_mouse_init();
 #endif
@@ -220,6 +225,9 @@ __initfunc(int misc_init(void))
 #endif
 #ifdef CONFIG_ATARIMOUSE
 	atari_mouse_init();
+#endif
+#ifdef CONFIG_MACMOUSE
+	mac_mouse_init();
 #endif
 #ifdef CONFIG_SUN_MOUSE
 	sun_mouse_init();

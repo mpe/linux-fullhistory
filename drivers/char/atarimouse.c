@@ -21,10 +21,10 @@
 #include <linux/random.h>
 #include <linux/poll.h>
 #include <linux/init.h>
+#include <linux/busmouse.h>
 
 #include <asm/setup.h>
 #include <asm/atarikb.h>
-#include <asm/atari_mouse.h>
 #include <asm/uaccess.h>
 
 static struct mouse_status mouse;
@@ -160,15 +160,21 @@ static struct miscdevice atari_mouse = {
 
 __initfunc(int atari_mouse_init(void))
 {
-    mouse.active = 0;
-    mouse.ready = 0;
-    mouse.wait = NULL;
+	int r;
 
-    if (!MACH_IS_ATARI)
-	return -ENODEV;
-    printk(KERN_INFO "Atari mouse installed.\n");
-    misc_register(&atari_mouse);
-    return 0;
+	if (!MACH_IS_ATARI)
+		return -ENODEV;
+
+	mouse.active = 0;
+	mouse.ready = 0;
+	mouse.wait = NULL;
+
+	r = misc_register(&atari_mouse);
+	if (r)
+		return r;
+
+	printk(KERN_INFO "Atari mouse installed.\n");
+	return 0;
 }
 
 
@@ -201,8 +207,6 @@ __initfunc(void atari_mouse_setup( char *str, int *ints ))
 }
 
 #ifdef MODULE
-#include <asm/setup.h>
-
 int init_module(void)
 {
 	return atari_mouse_init();

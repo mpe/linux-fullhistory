@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.148 1998/07/23 12:28:25 freitag Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.150 1998/07/28 17:45:07 freitag Exp $
  *
  *		IPv4 specific functions
  *
@@ -771,10 +771,11 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	tp = &sk->tp_pinfo.af_tcp;
 	seq = ntohl(th->seq);
 	if (sk->state != TCP_LISTEN && 
-   	    !between(seq, tp->snd_una, max(tp->snd_una+32768,tp->snd_nxt))) {
+   	    !between(seq, tp->snd_una-16384, max(tp->snd_una+32768,tp->snd_nxt))) {
 		if (net_ratelimit()) 
-			printk(KERN_DEBUG "icmp packet outside the tcp window:"
-					  " s:%d %u,%u,%u\n",
+			printk(KERN_WARNING 
+				"icmp packet outside the tcp window:"
+				" state:%d seq:%u win:%u,%u\n",
 			       (int)sk->state, seq, tp->snd_una, tp->snd_nxt); 
 		return; 
 	}
@@ -1332,11 +1333,6 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	if (!newsk) 
 		goto exit;
 
-	if (newsk->rcvbuf < (3 * newsk->mtu))
-		newsk->rcvbuf = min ((3 * newsk->mtu), sysctl_rmem_max);
-	if (newsk->sndbuf < (3 * newsk->mtu))
-		newsk->sndbuf = min ((3 * newsk->mtu), sysctl_wmem_max);
- 
 	sk->tp_pinfo.af_tcp.syn_backlog--;
 	sk->ack_backlog++;
 
@@ -1353,6 +1349,11 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	newsk->opt = req->af.v4_req.opt;
 	newsk->mtu = mtu;
 
+	if (newsk->rcvbuf < (3 * newsk->mtu))
+		newsk->rcvbuf = min ((3 * newsk->mtu), sysctl_rmem_max);
+	if (newsk->sndbuf < (3 * newsk->mtu))
+		newsk->sndbuf = min ((3 * newsk->mtu), sysctl_wmem_max);
+ 
 	tcp_v4_hash(newsk);
 	add_to_prot_sklist(newsk);
 

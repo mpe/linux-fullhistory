@@ -73,6 +73,8 @@ History:
 
 1996/9/25	++geert: modularization
 
+1998-06-10	++andreas: converted to use sound_core
+
 */
 
 
@@ -85,6 +87,8 @@ History:
 #include <linux/errno.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/sound.h>
+#include <linux/init.h>
 
 #ifdef __mc68000__
 #include <asm/setup.h>
@@ -122,7 +126,9 @@ History:
 #define HAS_8BIT_TABLES
 
 #ifdef MODULE
-static int chrdev_registered = 0;
+static int sq_unit = -1;
+static int mixer_unit = -1;
+static int state_unit = -1;
 static int irq_installed = 0;
 #endif /* MODULE */
 static char **sound_buffers = NULL;
@@ -258,7 +264,9 @@ struct notifier_block awacs_sleep_notifier = {
 #define MAX_BUFSIZE		128	/* Limit for Amiga */
 
 static int catchRadius = 0, numBufs = 4, bufSize = 32;
-
+MODULE_PARM(catchRadius, "i");
+MODULE_PARM(numBufs, "i");
+MODULE_PARM(bufSize, "i");
 
 #define arraysize(x)	(sizeof(x)/sizeof(*(x)))
 #define min(x, y)	((x) < (y) ? (x) : (y))
@@ -510,74 +518,105 @@ static char alaw2dma14l[] = {
 
 
 #ifdef CONFIG_ATARI
-static long ata_ct_law(const u_char *userPtr, unsigned long userCount,
-		       u_char frame[], long *frameUsed, long frameLeft);
-static long ata_ct_s8(const u_char *userPtr, unsigned long userCount,
-		      u_char frame[], long *frameUsed, long frameLeft);
-static long ata_ct_u8(const u_char *userPtr, unsigned long userCount,
-		      u_char frame[], long *frameUsed, long frameLeft);
-static long ata_ct_s16be(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft);
-static long ata_ct_u16be(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft);
-static long ata_ct_s16le(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft);
-static long ata_ct_u16le(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft);
-static long ata_ctx_law(const u_char *userPtr, unsigned long userCount,
-			u_char frame[], long *frameUsed, long frameLeft);
-static long ata_ctx_s8(const u_char *userPtr, unsigned long userCount,
-		       u_char frame[], long *frameUsed, long frameLeft);
-static long ata_ctx_u8(const u_char *userPtr, unsigned long userCount,
-		       u_char frame[], long *frameUsed, long frameLeft);
-static long ata_ctx_s16be(const u_char *userPtr, unsigned long userCount,
-			  u_char frame[], long *frameUsed, long frameLeft);
-static long ata_ctx_u16be(const u_char *userPtr, unsigned long userCount,
-			  u_char frame[], long *frameUsed, long frameLeft);
-static long ata_ctx_s16le(const u_char *userPtr, unsigned long userCount,
-			  u_char frame[], long *frameUsed, long frameLeft);
-static long ata_ctx_u16le(const u_char *userPtr, unsigned long userCount,
-			  u_char frame[], long *frameUsed, long frameLeft);
+static ssize_t ata_ct_law(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft);
+static ssize_t ata_ct_s8(const u_char *userPtr, size_t userCount,
+			 u_char frame[], ssize_t *frameUsed,
+			 ssize_t frameLeft);
+static ssize_t ata_ct_u8(const u_char *userPtr, size_t userCount,
+			 u_char frame[], ssize_t *frameUsed,
+			 ssize_t frameLeft);
+static ssize_t ata_ct_s16be(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft);
+static ssize_t ata_ct_u16be(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft);
+static ssize_t ata_ct_s16le(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft);
+static ssize_t ata_ct_u16le(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft);
+static ssize_t ata_ctx_law(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft);
+static ssize_t ata_ctx_s8(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft);
+static ssize_t ata_ctx_u8(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft);
+static ssize_t ata_ctx_s16be(const u_char *userPtr, size_t userCount,
+			     u_char frame[], ssize_t *frameUsed,
+			     ssize_t frameLeft);
+static ssize_t ata_ctx_u16be(const u_char *userPtr, size_t userCount,
+			     u_char frame[], ssize_t *frameUsed,
+			     ssize_t frameLeft);
+static ssize_t ata_ctx_s16le(const u_char *userPtr, size_t userCount,
+			     u_char frame[], ssize_t *frameUsed,
+			     ssize_t frameLeft);
+static ssize_t ata_ctx_u16le(const u_char *userPtr, size_t userCount,
+			     u_char frame[], ssize_t *frameUsed,
+			     ssize_t frameLeft);
 #endif /* CONFIG_ATARI */
 
 #ifdef CONFIG_AMIGA
-static long ami_ct_law(const u_char *userPtr, unsigned long userCount,
-		       u_char frame[], long *frameUsed, long frameLeft);
-static long ami_ct_s8(const u_char *userPtr, unsigned long userCount,
-		      u_char frame[], long *frameUsed, long frameLeft);
-static long ami_ct_u8(const u_char *userPtr, unsigned long userCount,
-		      u_char frame[], long *frameUsed, long frameLeft);
-static long ami_ct_s16be(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft);
-static long ami_ct_u16be(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft);
-static long ami_ct_s16le(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft);
-static long ami_ct_u16le(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft);
+static ssize_t ami_ct_law(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft);
+static ssize_t ami_ct_s8(const u_char *userPtr, size_t userCount,
+			 u_char frame[], ssize_t *frameUsed,
+			 ssize_t frameLeft);
+static ssize_t ami_ct_u8(const u_char *userPtr, size_t userCount,
+			 u_char frame[], ssize_t *frameUsed,
+			 ssize_t frameLeft);
+static ssize_t ami_ct_s16be(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft);
+static ssize_t ami_ct_u16be(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft);
+static ssize_t ami_ct_s16le(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft);
+static ssize_t ami_ct_u16le(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft);
 #endif /* CONFIG_AMIGA */
 
 #ifdef CONFIG_PMAC
-static long pmac_ct_law(const u_char *userPtr, unsigned long userCount,
-			u_char frame[], long *frameUsed, long frameLeft);
-static long pmac_ct_s8(const u_char *userPtr, unsigned long userCount,
-		       u_char frame[], long *frameUsed, long frameLeft);
-static long pmac_ct_u8(const u_char *userPtr, unsigned long userCount,
-		       u_char frame[], long *frameUsed, long frameLeft);
-static long pmac_ct_s16(const u_char *userPtr, unsigned long userCount,
-			u_char frame[], long *frameUsed, long frameLeft);
-static long pmac_ct_u16(const u_char *userPtr, unsigned long userCount,
-			u_char frame[], long *frameUsed, long frameLeft);
-static long pmac_ctx_law(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft);
-static long pmac_ctx_s8(const u_char *userPtr, unsigned long userCount,
-			u_char frame[], long *frameUsed, long frameLeft);
-static long pmac_ctx_u8(const u_char *userPtr, unsigned long userCount,
-			u_char frame[], long *frameUsed, long frameLeft);
-static long pmac_ctx_s16(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft);
-static long pmac_ctx_u16(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft);
+static ssize_t pmac_ct_law(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft);
+static ssize_t pmac_ct_s8(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft);
+static ssize_t pmac_ct_u8(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft);
+static ssize_t pmac_ct_s16(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft);
+static ssize_t pmac_ct_u16(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft);
+static ssize_t pmac_ctx_law(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft);
+static ssize_t pmac_ctx_s8(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft);
+static ssize_t pmac_ctx_u8(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft);
+static ssize_t pmac_ctx_s16(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft);
+static ssize_t pmac_ctx_u16(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft);
 #endif /* CONFIG_PMAC */
 
 /*** Machine definitions *****************************************************/
@@ -613,14 +652,14 @@ typedef struct {
 } SETTINGS;
 
 typedef struct {
-	long (*ct_ulaw)(const u_char *, unsigned long, u_char *, long *, long);
-	long (*ct_alaw)(const u_char *, unsigned long, u_char *, long *, long);
-	long (*ct_s8)(const u_char *, unsigned long, u_char *, long *, long);
-	long (*ct_u8)(const u_char *, unsigned long, u_char *, long *, long);
-	long (*ct_s16be)(const u_char *, unsigned long, u_char *, long *, long);
-	long (*ct_u16be)(const u_char *, unsigned long, u_char *, long *, long);
-	long (*ct_s16le)(const u_char *, unsigned long, u_char *, long *, long);
-	long (*ct_u16le)(const u_char *, unsigned long, u_char *, long *, long);
+	ssize_t (*ct_ulaw)(const u_char *, size_t, u_char *, ssize_t *, ssize_t);
+	ssize_t (*ct_alaw)(const u_char *, size_t, u_char *, ssize_t *, ssize_t);
+	ssize_t (*ct_s8)(const u_char *, size_t, u_char *, ssize_t *, ssize_t);
+	ssize_t (*ct_u8)(const u_char *, size_t, u_char *, ssize_t *, ssize_t);
+	ssize_t (*ct_s16be)(const u_char *, size_t, u_char *, ssize_t *, ssize_t);
+	ssize_t (*ct_u16be)(const u_char *, size_t, u_char *, ssize_t *, ssize_t);
+	ssize_t (*ct_s16le)(const u_char *, size_t, u_char *, ssize_t *, ssize_t);
+	ssize_t (*ct_u16le)(const u_char *, size_t, u_char *, ssize_t *, ssize_t);
 } TRANS;
 
 struct sound_settings {
@@ -645,9 +684,9 @@ static struct sound_settings sound;
 
 
 #ifdef CONFIG_ATARI
-static void *AtaAlloc(unsigned int size, int flags);
-static void AtaFree(void *, unsigned int size);
-static int AtaIrqInit(void);
+static void *AtaAlloc(unsigned int size, int flags) __init;
+static void AtaFree(void *, unsigned int size) __init;
+static int AtaIrqInit(void) __init;
 #ifdef MODULE
 static void AtaIrqCleanUp(void);
 #endif /* MODULE */
@@ -668,9 +707,9 @@ static void ata_sq_interrupt(int irq, void *dummy, struct pt_regs *fp);
 #endif /* CONFIG_ATARI */
 
 #ifdef CONFIG_AMIGA
-static void *AmiAlloc(unsigned int size, int flags);
-static void AmiFree(void *, unsigned int);
-static int AmiIrqInit(void);
+static void *AmiAlloc(unsigned int size, int flags) __init;
+static void AmiFree(void *, unsigned int) __init;
+static int AmiIrqInit(void) __init;
 #ifdef MODULE
 static void AmiIrqCleanUp(void);
 #endif /* MODULE */
@@ -685,9 +724,9 @@ static void ami_sq_interrupt(int irq, void *dummy, struct pt_regs *fp);
 #endif /* CONFIG_AMIGA */
 
 #ifdef CONFIG_PMAC
-static void *PMacAlloc(unsigned int size, int flags);
-static void PMacFree(void *ptr, unsigned int size);
-static int PMacIrqInit(void);
+static void *PMacAlloc(unsigned int size, int flags) __init;
+static void PMacFree(void *ptr, unsigned int size) __init;
+static int PMacIrqInit(void) __init;
 #ifdef MODULE
 static void PMacIrqCleanup(void);
 #endif /* MODULE */
@@ -720,10 +759,10 @@ static int sound_set_bass(int bass);
 #if defined(CONFIG_ATARI) || defined(CONFIG_AMIGA)
 static int sound_set_treble(int treble);
 #endif /* CONFIG_ATARI || CONFIG_AMIGA */
-static long sound_copy_translate(const u_char *userPtr,
-				 unsigned long userCount,
-				 u_char frame[], long *frameUsed,
-				 long frameLeft);
+static ssize_t sound_copy_translate(const u_char *userPtr,
+				    size_t userCount,
+				    u_char frame[], ssize_t *frameUsed,
+				    ssize_t frameLeft);
 
 
 /*
@@ -735,13 +774,6 @@ struct sound_mixer {
 };
 
 static struct sound_mixer mixer;
-
-static void mixer_init(void);
-static int mixer_open(int open_mode);
-static int mixer_release(void);
-static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		       u_long arg);
-
 
 /*
  * Sound queue stuff, the heart of the driver
@@ -787,16 +819,6 @@ static struct sound_queue sq;
 	interruptible_sleep_on(&queue);
 #define WAKE_UP(queue)	(wake_up_interruptible(&queue))
 
-static void sq_init(int numBufs, int bufSize, char **buffers);
-static void sq_play(void);
-static long sq_write(const char *src, unsigned long uLeft);
-static int sq_open(int open_mode);
-static void sq_reset(void);
-static int sq_sync(void);
-static int sq_release(void);
-static void init_settings(void);
-
-
 /*
  * /dev/sndstat
  */
@@ -809,23 +831,9 @@ struct sound_state {
 
 static struct sound_state state;
 
-static void state_init(void);
-static int state_open(int open_mode);
-static int state_release(void);
-static long state_read(char *dest, unsigned long count);
+/*** Common stuff ********************************************************/
 
-
-/*** High level stuff ********************************************************/
-
-
-static int sound_open(struct inode *inode, struct file *file);
-static int sound_fsync(struct file *filp, struct dentry *dentry);
-static int sound_release(struct inode *inode, struct file *file);
 static long long sound_lseek(struct file *file, long long offset, int orig);
-static ssize_t sound_read(struct file *file, char *buf, size_t count,
-			  loff_t *ppos);
-static ssize_t sound_write(struct file *file, const char *buf, size_t count,
-			   loff_t *ppos);
 static inline int ioctl_return(int *addr, int value)
 {
 	if (value < 0)
@@ -833,17 +841,13 @@ static inline int ioctl_return(int *addr, int value)
 
 	return put_user(value, addr)? -EFAULT: 0;
 }
-static int unknown_minor_dev(char *fname, int dev);
-static int sound_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		       u_long arg);
 
 
 /*** Config & Setup **********************************************************/
 
 
-void soundcard_init(void);
+void dmasound_init(void);
 void dmasound_setup(char *str, int *ints);
-void sound_setup(char *str, int *ints);		/* ++Martin: stub for now */
 
 
 /*** Translations ************************************************************/
@@ -874,11 +878,12 @@ void sound_setup(char *str, int *ints);		/* ++Martin: stub for now */
  */
 
 #ifdef CONFIG_ATARI
-static long ata_ct_law(const u_char *userPtr, unsigned long userCount,
-		       u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ct_law(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft)
 {
 	char *table = sound.soft.format == AFMT_MU_LAW ? ulaw2dma8 : alaw2dma8;
-	long count, used;
+	ssize_t count, used;
 	u_char *p = &frame[*frameUsed];
 
 	count = min(userCount, frameLeft);
@@ -893,14 +898,15 @@ static long ata_ct_law(const u_char *userPtr, unsigned long userCount,
 		count--;
 	}
 	*frameUsed += used;
-	return(used);
+	return used;
 }
 
 
-static long ata_ct_s8(const u_char *userPtr, unsigned long userCount,
-		      u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ct_s8(const u_char *userPtr, size_t userCount,
+			 u_char frame[], ssize_t *frameUsed,
+			 ssize_t frameLeft)
 {
-	long count, used;
+	ssize_t count, used;
 	void *p = &frame[*frameUsed];
 
 	count = min(userCount, frameLeft);
@@ -914,10 +920,11 @@ static long ata_ct_s8(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long ata_ct_u8(const u_char *userPtr, unsigned long userCount,
-		      u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ct_u8(const u_char *userPtr, size_t userCount,
+			 u_char frame[], ssize_t *frameUsed,
+			 ssize_t frameLeft)
 {
-	long count, used;
+	ssize_t count, used;
 
 	if (!sound.soft.stereo) {
 		u_char *p = &frame[*frameUsed];
@@ -947,17 +954,18 @@ static long ata_ct_u8(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long ata_ct_s16be(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ct_s16be(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft)
 {
-	long count, used;
-	u_long data;
+	ssize_t count, used;
 
 	if (!sound.soft.stereo) {
 		u_short *p = (u_short *)&frame[*frameUsed];
 		count = min(userCount, frameLeft)>>1;
 		used = count*2;
 		while (count > 0) {
+			u_short data;
 			if (get_user(data, ((u_short *)userPtr)++))
 				return -EFAULT;
 			*p++ = data;
@@ -977,17 +985,18 @@ static long ata_ct_s16be(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long ata_ct_u16be(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ct_u16be(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft)
 {
-	long count, used;
-	u_long data;
+	ssize_t count, used;
 
 	if (!sound.soft.stereo) {
 		u_short *p = (u_short *)&frame[*frameUsed];
 		count = min(userCount, frameLeft)>>1;
 		used = count*2;
 		while (count > 0) {
+			u_short data;
 			if (get_user(data, ((u_short *)userPtr)++))
 				return -EFAULT;
 			data ^= 0x8000;
@@ -1001,6 +1010,7 @@ static long ata_ct_u16be(const u_char *userPtr, unsigned long userCount,
 		count = min(userCount, frameLeft)>>2;
 		used = count*4;
 		while (count > 0) {
+			u_long data;
 			if (get_user(data, ((u_int *)userPtr)++))
 				return -EFAULT;
 			*p++ = data ^ 0x80008000;
@@ -1012,11 +1022,11 @@ static long ata_ct_u16be(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long ata_ct_s16le(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ct_s16le(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft)
 {
-	long count, used;
-	u_long data;
+	ssize_t count, used;
 
 	count = frameLeft;
 	if (!sound.soft.stereo) {
@@ -1024,6 +1034,7 @@ static long ata_ct_s16le(const u_char *userPtr, unsigned long userCount,
 		count = min(userCount, frameLeft)>>1;
 		used = count*2;
 		while (count > 0) {
+			u_short data;
 			if (get_user(data, ((u_short *)userPtr)++))
 				return -EFAULT;
 			data = le2be16(data);
@@ -1037,6 +1048,7 @@ static long ata_ct_s16le(const u_char *userPtr, unsigned long userCount,
 		count = min(userCount, frameLeft)>>2;
 		used = count*4;
 		while (count > 0) {
+			u_long data;
 			if (get_user(data, ((u_int *)userPtr)++))
 				return -EFAULT;
 			data = le2be16dbl(data);
@@ -1049,11 +1061,11 @@ static long ata_ct_s16le(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long ata_ct_u16le(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ct_u16le(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft)
 {
-	long count, used;
-	u_long data;
+	ssize_t count, used;
 
 	count = frameLeft;
 	if (!sound.soft.stereo) {
@@ -1061,6 +1073,7 @@ static long ata_ct_u16le(const u_char *userPtr, unsigned long userCount,
 		count = min(userCount, frameLeft)>>1;
 		used = count*2;
 		while (count > 0) {
+			u_short data;
 			if (get_user(data, ((u_short *)userPtr)++))
 				return -EFAULT;
 			data = le2be16(data) ^ 0x8000;
@@ -1073,6 +1086,7 @@ static long ata_ct_u16le(const u_char *userPtr, unsigned long userCount,
 		count = min(userCount, frameLeft)>>2;
 		used = count;
 		while (count > 0) {
+			u_long data;
 			if (get_user(data, ((u_int *)userPtr)++))
 				return -EFAULT;
 			data = le2be16dbl(data) ^ 0x80008000;
@@ -1085,20 +1099,21 @@ static long ata_ct_u16le(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long ata_ctx_law(const u_char *userPtr, unsigned long userCount,
-			u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ctx_law(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft)
 {
 	char *table = sound.soft.format == AFMT_MU_LAW ? ulaw2dma8 : alaw2dma8;
 	/* this should help gcc to stuff everything into registers */
-	u_long data = sound.data;
 	long bal = sound.bal;
 	long hSpeed = sound.hard.speed, sSpeed = sound.soft.speed;
-	long used, usedf;
+	ssize_t used, usedf;
 
 	used = userCount;
 	usedf = frameLeft;
 	if (!sound.soft.stereo) {
 		u_char *p = &frame[*frameUsed];
+		u_char data = sound.data;
 		while (frameLeft) {
 			u_char c;
 			if (bal < 0) {
@@ -1114,8 +1129,10 @@ static long ata_ctx_law(const u_char *userPtr, unsigned long userCount,
 			frameLeft--;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	} else {
 		u_short *p = (u_short *)&frame[*frameUsed];
+		u_short data = sound.data;
 		while (frameLeft >= 2) {
 			u_char c;
 			if (bal < 0) {
@@ -1134,28 +1151,29 @@ static long ata_ctx_law(const u_char *userPtr, unsigned long userCount,
 			frameLeft -= 2;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	}
 	sound.bal = bal;
-	sound.data = data;
 	used -= userCount;
 	*frameUsed += usedf-frameLeft;
 	return(used);
 }
 
 
-static long ata_ctx_s8(const u_char *userPtr, unsigned long userCount,
-		       u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ctx_s8(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft)
 {
 	/* this should help gcc to stuff everything into registers */
-	u_long data = sound.data;
 	long bal = sound.bal;
 	long hSpeed = sound.hard.speed, sSpeed = sound.soft.speed;
-	long used, usedf;
+	ssize_t used, usedf;
 
 	used = userCount;
 	usedf = frameLeft;
 	if (!sound.soft.stereo) {
 		u_char *p = &frame[*frameUsed];
+		u_char data = sound.data;
 		while (frameLeft) {
 			if (bal < 0) {
 				if (!userCount)
@@ -1169,8 +1187,10 @@ static long ata_ctx_s8(const u_char *userPtr, unsigned long userCount,
 			frameLeft--;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	} else {
 		u_short *p = (u_short *)&frame[*frameUsed];
+		u_short data = sound.data;
 		while (frameLeft >= 2) {
 			if (bal < 0) {
 				if (userCount < 2)
@@ -1184,28 +1204,29 @@ static long ata_ctx_s8(const u_char *userPtr, unsigned long userCount,
 			frameLeft -= 2;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	}
 	sound.bal = bal;
-	sound.data = data;
 	used -= userCount;
 	*frameUsed += usedf-frameLeft;
 	return(used);
 }
 
 
-static long ata_ctx_u8(const u_char *userPtr, unsigned long userCount,
-		       u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ctx_u8(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft)
 {
 	/* this should help gcc to stuff everything into registers */
-	u_long data = sound.data;
 	long bal = sound.bal;
 	long hSpeed = sound.hard.speed, sSpeed = sound.soft.speed;
-	long used, usedf;
+	ssize_t used, usedf;
 
 	used = userCount;
 	usedf = frameLeft;
 	if (!sound.soft.stereo) {
 		u_char *p = &frame[*frameUsed];
+		u_char data = sound.data;
 		while (frameLeft) {
 			if (bal < 0) {
 				if (!userCount)
@@ -1220,8 +1241,10 @@ static long ata_ctx_u8(const u_char *userPtr, unsigned long userCount,
 			frameLeft--;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	} else {
 		u_short *p = (u_short *)&frame[*frameUsed];
+		u_short data = sound.data;
 		while (frameLeft >= 2) {
 			if (bal < 0) {
 				if (userCount < 2)
@@ -1236,28 +1259,29 @@ static long ata_ctx_u8(const u_char *userPtr, unsigned long userCount,
 			frameLeft -= 2;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	}
 	sound.bal = bal;
-	sound.data = data;
 	used -= userCount;
 	*frameUsed += usedf-frameLeft;
 	return(used);
 }
 
 
-static long ata_ctx_s16be(const u_char *userPtr, unsigned long userCount,
-			  u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ctx_s16be(const u_char *userPtr, size_t userCount,
+			     u_char frame[], ssize_t *frameUsed,
+			     ssize_t frameLeft)
 {
 	/* this should help gcc to stuff everything into registers */
-	u_long data = sound.data;
 	long bal = sound.bal;
 	long hSpeed = sound.hard.speed, sSpeed = sound.soft.speed;
-	long used, usedf;
+	ssize_t used, usedf;
 
 	used = userCount;
 	usedf = frameLeft;
 	if (!sound.soft.stereo) {
 		u_short *p = (u_short *)&frame[*frameUsed];
+		u_short data = sound.data;
 		while (frameLeft >= 4) {
 			if (bal < 0) {
 				if (userCount < 2)
@@ -1272,8 +1296,10 @@ static long ata_ctx_s16be(const u_char *userPtr, unsigned long userCount,
 			frameLeft -= 4;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	} else {
 		u_long *p = (u_long *)&frame[*frameUsed];
+		u_long data = sound.data;
 		while (frameLeft >= 4) {
 			if (bal < 0) {
 				if (userCount < 4)
@@ -1287,28 +1313,29 @@ static long ata_ctx_s16be(const u_char *userPtr, unsigned long userCount,
 			frameLeft -= 4;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	}
 	sound.bal = bal;
-	sound.data = data;
 	used -= userCount;
 	*frameUsed += usedf-frameLeft;
 	return(used);
 }
 
 
-static long ata_ctx_u16be(const u_char *userPtr, unsigned long userCount,
-			  u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ctx_u16be(const u_char *userPtr, size_t userCount,
+			     u_char frame[], ssize_t *frameUsed,
+			     ssize_t frameLeft)
 {
 	/* this should help gcc to stuff everything into registers */
-	u_long data = sound.data;
 	long bal = sound.bal;
 	long hSpeed = sound.hard.speed, sSpeed = sound.soft.speed;
-	long used, usedf;
+	ssize_t used, usedf;
 
 	used = userCount;
 	usedf = frameLeft;
 	if (!sound.soft.stereo) {
 		u_short *p = (u_short *)&frame[*frameUsed];
+		u_short data = sound.data;
 		while (frameLeft >= 4) {
 			if (bal < 0) {
 				if (userCount < 2)
@@ -1324,8 +1351,10 @@ static long ata_ctx_u16be(const u_char *userPtr, unsigned long userCount,
 			frameLeft -= 4;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	} else {
 		u_long *p = (u_long *)&frame[*frameUsed];
+		u_long data = sound.data;
 		while (frameLeft >= 4) {
 			if (bal < 0) {
 				if (userCount < 4)
@@ -1340,28 +1369,29 @@ static long ata_ctx_u16be(const u_char *userPtr, unsigned long userCount,
 			frameLeft -= 4;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	}
 	sound.bal = bal;
-	sound.data = data;
 	used -= userCount;
 	*frameUsed += usedf-frameLeft;
 	return(used);
 }
 
 
-static long ata_ctx_s16le(const u_char *userPtr, unsigned long userCount,
-			  u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ctx_s16le(const u_char *userPtr, size_t userCount,
+			     u_char frame[], ssize_t *frameUsed,
+			     ssize_t frameLeft)
 {
 	/* this should help gcc to stuff everything into registers */
-	u_long data = sound.data;
 	long bal = sound.bal;
 	long hSpeed = sound.hard.speed, sSpeed = sound.soft.speed;
-	long used, usedf;
+	ssize_t used, usedf;
 
 	used = userCount;
 	usedf = frameLeft;
 	if (!sound.soft.stereo) {
 		u_short *p = (u_short *)&frame[*frameUsed];
+		u_short data = sound.data;
 		while (frameLeft >= 4) {
 			if (bal < 0) {
 				if (userCount < 2)
@@ -1377,8 +1407,10 @@ static long ata_ctx_s16le(const u_char *userPtr, unsigned long userCount,
 			frameLeft -= 4;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	} else {
 		u_long *p = (u_long *)&frame[*frameUsed];
+		u_long data = sound.data;
 		while (frameLeft >= 4) {
 			if (bal < 0) {
 				if (userCount < 4)
@@ -1393,28 +1425,29 @@ static long ata_ctx_s16le(const u_char *userPtr, unsigned long userCount,
 			frameLeft -= 4;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	}
 	sound.bal = bal;
-	sound.data = data;
 	used -= userCount;
 	*frameUsed += usedf-frameLeft;
 	return(used);
 }
 
 
-static long ata_ctx_u16le(const u_char *userPtr, unsigned long userCount,
-			  u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ata_ctx_u16le(const u_char *userPtr, size_t userCount,
+			     u_char frame[], ssize_t *frameUsed,
+			     ssize_t frameLeft)
 {
 	/* this should help gcc to stuff everything into registers */
-	u_long data = sound.data;
 	long bal = sound.bal;
 	long hSpeed = sound.hard.speed, sSpeed = sound.soft.speed;
-	long used, usedf;
+	ssize_t used, usedf;
 
 	used = userCount;
 	usedf = frameLeft;
 	if (!sound.soft.stereo) {
 		u_short *p = (u_short *)&frame[*frameUsed];
+		u_short data = sound.data;
 		while (frameLeft >= 4) {
 			if (bal < 0) {
 				if (userCount < 2)
@@ -1430,8 +1463,10 @@ static long ata_ctx_u16le(const u_char *userPtr, unsigned long userCount,
 			frameLeft -= 4;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	} else {
 		u_long *p = (u_long *)&frame[*frameUsed];
+		u_long data = sound.data;
 		while (frameLeft >= 4) {
 			if (bal < 0) {
 				if (userCount < 4)
@@ -1446,9 +1481,9 @@ static long ata_ctx_u16le(const u_char *userPtr, unsigned long userCount,
 			frameLeft -= 4;
 			bal -= sSpeed;
 		}
+		sound.data = data;
 	}
 	sound.bal = bal;
-	sound.data = data;
 	used -= userCount;
 	*frameUsed += usedf-frameLeft;
 	return(used);
@@ -1457,11 +1492,12 @@ static long ata_ctx_u16le(const u_char *userPtr, unsigned long userCount,
 
 
 #ifdef CONFIG_AMIGA
-static long ami_ct_law(const u_char *userPtr, unsigned long userCount,
-		       u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ami_ct_law(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft)
 {
 	char *table = sound.soft.format == AFMT_MU_LAW ? ulaw2dma8 : alaw2dma8;
-	long count, used;
+	ssize_t count, used;
 
 	if (!sound.soft.stereo) {
 		u_char *p = &frame[*frameUsed];
@@ -1495,10 +1531,10 @@ static long ami_ct_law(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long ami_ct_s8(const u_char *userPtr, unsigned long userCount,
-		      u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ami_ct_s8(const u_char *userPtr, size_t userCount,
+			 u_char frame[], ssize_t *frameUsed, ssize_t frameLeft)
 {
-	long count, used;
+	ssize_t count, used;
 
 	if (!sound.soft.stereo) {
 		void *p = &frame[*frameUsed];
@@ -1523,10 +1559,10 @@ static long ami_ct_s8(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long ami_ct_u8(const u_char *userPtr, unsigned long userCount,
-		      u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ami_ct_u8(const u_char *userPtr, size_t userCount,
+			 u_char frame[], ssize_t *frameUsed, ssize_t frameLeft)
 {
-	long count, used;
+	ssize_t count, used;
 
 	if (!sound.soft.stereo) {
 		char *p = &frame[*frameUsed];
@@ -1560,11 +1596,12 @@ static long ami_ct_u8(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long ami_ct_s16be(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ami_ct_s16be(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft)
 {
-	long count, used;
-	u_long data;
+	ssize_t count, used;
+	u_short data;
 
 	if (!sound.soft.stereo) {
 		u_char *high = &frame[*frameUsed>>1];
@@ -1602,11 +1639,12 @@ static long ami_ct_s16be(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long ami_ct_u16be(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ami_ct_u16be(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft)
 {
-	long count, used;
-	u_long data;
+	ssize_t count, used;
+	u_short data;
 
 	if (!sound.soft.stereo) {
 		u_char *high = &frame[*frameUsed>>1];
@@ -1647,11 +1685,12 @@ static long ami_ct_u16be(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long ami_ct_s16le(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ami_ct_s16le(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft)
 {
-	long count, used;
-	u_long data;
+	ssize_t count, used;
+	u_short data;
 
 	if (!sound.soft.stereo) {
 		u_char *high = &frame[*frameUsed>>1];
@@ -1692,11 +1731,12 @@ static long ami_ct_s16le(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long ami_ct_u16le(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t ami_ct_u16le(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft)
 {
-	long count, used;
-	u_long data;
+	ssize_t count, used;
+	u_short data;
 
 	if (!sound.soft.stereo) {
 		u_char *high = &frame[*frameUsed>>1];
@@ -1738,11 +1778,12 @@ static long ami_ct_u16le(const u_char *userPtr, unsigned long userCount,
 #endif /* CONFIG_AMIGA */
 
 #ifdef CONFIG_PMAC
-static long pmac_ct_law(const u_char *userPtr, unsigned long userCount,
-			u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t pmac_ct_law(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft)
 {
 	short *table = sound.soft.format == AFMT_MU_LAW ? ulaw2dma16: alaw2dma16;
-	long count, used;
+	ssize_t count, used;
 	short *p = (short *) &frame[*frameUsed];
 	int val, stereo = sound.soft.stereo;
 
@@ -1769,10 +1810,11 @@ static long pmac_ct_law(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long pmac_ct_s8(const u_char *userPtr, unsigned long userCount,
-		       u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t pmac_ct_s8(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft)
 {
-	long count, used;
+	ssize_t count, used;
 	short *p = (short *) &frame[*frameUsed];
 	int val, stereo = sound.soft.stereo;
 
@@ -1799,10 +1841,11 @@ static long pmac_ct_s8(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long pmac_ct_u8(const u_char *userPtr, unsigned long userCount,
-		       u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t pmac_ct_u8(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft)
 {
-	long count, used;
+	ssize_t count, used;
 	short *p = (short *) &frame[*frameUsed];
 	int val, stereo = sound.soft.stereo;
 
@@ -1829,10 +1872,11 @@ static long pmac_ct_u8(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long pmac_ct_s16(const u_char *userPtr, unsigned long userCount,
-			u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t pmac_ct_s16(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft)
 {
-	long count, used;
+	ssize_t count, used;
 	int stereo = sound.soft.stereo;
 	short *fp = (short *) &frame[*frameUsed];
 
@@ -1857,11 +1901,12 @@ static long pmac_ct_s16(const u_char *userPtr, unsigned long userCount,
 	return stereo? used * 4: used * 2;
 }
 
-static long pmac_ct_u16(const u_char *userPtr, unsigned long userCount,
-			u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t pmac_ct_u16(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft)
 {
-	long count, used;
-	int mask = (sound.soft.format == AFMT_U16_LE? 0x0080: 0x8000);
+	ssize_t count, used;
+	short mask = (sound.soft.format == AFMT_U16_LE? 0x0080: 0x8000);
 	int stereo = sound.soft.stereo;
 	short *fp = (short *) &frame[*frameUsed];
 	short *up = (short *) userPtr;
@@ -1870,7 +1915,7 @@ static long pmac_ct_u16(const u_char *userPtr, unsigned long userCount,
 	userCount >>= (stereo? 2: 1);
 	used = count = min(userCount, frameLeft);
 	while (count > 0) {
-		int data;
+		short data;
 		if (get_user(data, up++))
 			return -EFAULT;
 		data ^= mask;
@@ -1888,8 +1933,9 @@ static long pmac_ct_u16(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long pmac_ctx_law(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t pmac_ctx_law(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft)
 {
 	unsigned short *table = (unsigned short *)
 		(sound.soft.format == AFMT_MU_LAW ? ulaw2dma16: alaw2dma16);
@@ -1934,8 +1980,9 @@ static long pmac_ctx_law(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long pmac_ctx_s8(const u_char *userPtr, unsigned long userCount,
-			u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t pmac_ctx_s8(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft)
 {
 	unsigned int *p = (unsigned int *) &frame[*frameUsed];
 	unsigned int data = sound.data;
@@ -1978,8 +2025,9 @@ static long pmac_ctx_s8(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long pmac_ctx_u8(const u_char *userPtr, unsigned long userCount,
-			u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t pmac_ctx_u8(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft)
 {
 	unsigned int *p = (unsigned int *) &frame[*frameUsed];
 	unsigned int data = sound.data;
@@ -2022,8 +2070,9 @@ static long pmac_ctx_u8(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long pmac_ctx_s16(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t pmac_ctx_s16(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft)
 {
 	unsigned int *p = (unsigned int *) &frame[*frameUsed];
 	unsigned int data = sound.data;
@@ -2066,8 +2115,9 @@ static long pmac_ctx_s16(const u_char *userPtr, unsigned long userCount,
 }
 
 
-static long pmac_ctx_u16(const u_char *userPtr, unsigned long userCount,
-			 u_char frame[], long *frameUsed, long frameLeft)
+static ssize_t pmac_ctx_u16(const u_char *userPtr, size_t userCount,
+			    u_char frame[], ssize_t *frameUsed,
+			    ssize_t frameLeft)
 {
 	int mask = (sound.soft.format == AFMT_U16_LE? 0x0080: 0x8000);
 	unsigned int *p = (unsigned int *) &frame[*frameUsed];
@@ -3425,12 +3475,12 @@ static int sound_set_treble(int treble)
 #endif /* CONFIG_ATARI || CONFIG_AMIGA */
 
 
-static long sound_copy_translate(const u_char *userPtr,
-				 unsigned long userCount,
-				 u_char frame[], long *frameUsed,
-				 long frameLeft)
+static ssize_t sound_copy_translate(const u_char *userPtr,
+				    size_t userCount,
+				    u_char frame[], ssize_t *frameUsed,
+				    ssize_t frameLeft)
 {
-	long (*ct_func)(const u_char *, unsigned long, u_char *, long *, long) = NULL;
+	ssize_t (*ct_func)(const u_char *, size_t, u_char *, ssize_t *, ssize_t) = NULL;
 
 	switch (sound.soft.format) {
 	case AFMT_MU_LAW:
@@ -3459,9 +3509,9 @@ static long sound_copy_translate(const u_char *userPtr,
 		break;
 	}
 	if (ct_func)
-		return(ct_func(userPtr, userCount, frame, frameUsed, frameLeft));
+		return ct_func(userPtr, userCount, frame, frameUsed, frameLeft);
 	else
-		return(0);
+		return 0;
 }
 
 
@@ -3475,53 +3525,19 @@ static long sound_copy_translate(const u_char *userPtr,
 #define RECLEVEL_GAIN_TO_VOXWARE(v) (((v) * 20 + 2) / 3)
 
 
-static void mixer_init(void)
+static int mixer_open(struct inode *inode, struct file *file)
 {
-	mixer.busy = 0;
-	sound.treble = 0;
-	sound.bass = 0;
-	switch (sound.mach.type) {
-#ifdef CONFIG_ATARI
-	case DMASND_TT:
-		atari_microwire_cmd(MW_LM1992_VOLUME(0));
-		sound.volume_left = 0;
-		atari_microwire_cmd(MW_LM1992_BALLEFT(0));
-		sound.volume_right = 0;
-		atari_microwire_cmd(MW_LM1992_BALRIGHT(0));
-		atari_microwire_cmd(MW_LM1992_TREBLE(0));
-		atari_microwire_cmd(MW_LM1992_BASS(0));
-		break;
-	case DMASND_FALCON:
-		sound.volume_left = (tt_dmasnd.output_atten & 0xf00) >> 8;
-		sound.volume_right = (tt_dmasnd.output_atten & 0xf0) >> 4;
-		break;
-#endif /* CONFIG_ATARI */
-#ifdef CONFIG_AMIGA
-	case DMASND_AMIGA:
-		sound.volume_left = 64;
-		sound.volume_right = 64;
-		custom.aud[0].audvol = sound.volume_left;
-		custom.aud[3].audvol = 1;	/* For pseudo 14bit */
-		custom.aud[1].audvol = sound.volume_right;
-		custom.aud[2].audvol = 1;	/* For pseudo 14bit */
-		sound.treble = 50;
-		break;
-#endif /* CONFIG_AMIGA */
-	}
-}
-
-
-static int mixer_open(int open_mode)
-{
+	MOD_INC_USE_COUNT;
 	mixer.busy = 1;
-	return(0);
+	return 0;
 }
 
 
-static int mixer_release(void)
+static int mixer_release(struct inode *inode, struct file *file)
 {
 	mixer.busy = 0;
-	return(0);
+	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 
@@ -3534,17 +3550,17 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	case DMASND_FALCON:
 		switch (cmd) {
 		case SOUND_MIXER_READ_DEVMASK:
-			return(IOCTL_OUT(arg, SOUND_MASK_VOLUME | SOUND_MASK_MIC | SOUND_MASK_SPEAKER));
+			return IOCTL_OUT(arg, SOUND_MASK_VOLUME | SOUND_MASK_MIC | SOUND_MASK_SPEAKER);
 		case SOUND_MIXER_READ_RECMASK:
-			return(IOCTL_OUT(arg, SOUND_MASK_MIC));
+			return IOCTL_OUT(arg, SOUND_MASK_MIC);
 		case SOUND_MIXER_READ_STEREODEVS:
-			return(IOCTL_OUT(arg, SOUND_MASK_VOLUME | SOUND_MASK_MIC));
+			return IOCTL_OUT(arg, SOUND_MASK_VOLUME | SOUND_MASK_MIC);
 		case SOUND_MIXER_READ_CAPS:
-			return(IOCTL_OUT(arg, SOUND_CAP_EXCL_INPUT));
+			return IOCTL_OUT(arg, SOUND_CAP_EXCL_INPUT);
 		case SOUND_MIXER_READ_VOLUME:
-			return(IOCTL_OUT(arg,
+			return IOCTL_OUT(arg,
 				VOLUME_ATT_TO_VOXWARE(sound.volume_left) |
-				VOLUME_ATT_TO_VOXWARE(sound.volume_right) << 8));
+				VOLUME_ATT_TO_VOXWARE(sound.volume_right) << 8);
 		case SOUND_MIXER_WRITE_MIC:
 			IOCTL_IN(arg, data);
 			tt_dmasnd.input_gain =
@@ -3552,9 +3568,9 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 				RECLEVEL_VOXWARE_TO_GAIN(data >> 8 & 0xff);
 			/* fall thru, return set value */
 		case SOUND_MIXER_READ_MIC:
-			return(IOCTL_OUT(arg,
+			return IOCTL_OUT(arg,
 				RECLEVEL_GAIN_TO_VOXWARE(tt_dmasnd.input_gain >> 4 & 0xf) |
-				RECLEVEL_GAIN_TO_VOXWARE(tt_dmasnd.input_gain & 0xf) << 8));
+				RECLEVEL_GAIN_TO_VOXWARE(tt_dmasnd.input_gain & 0xf) << 8);
 		case SOUND_MIXER_READ_SPEAKER:
 			{
 				int porta;
@@ -3562,11 +3578,11 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 				sound_ym.rd_data_reg_sel = 14;
 				porta = sound_ym.rd_data_reg_sel;
 				sti();
-				return(IOCTL_OUT(arg, porta & 0x40 ? 0 : 100));
+				return IOCTL_OUT(arg, porta & 0x40 ? 0 : 100);
 			}
 		case SOUND_MIXER_WRITE_VOLUME:
 			IOCTL_IN(arg, data);
-			return(IOCTL_OUT(arg, sound_set_volume(data)));
+			return IOCTL_OUT(arg, sound_set_volume(data));
 		case SOUND_MIXER_WRITE_SPEAKER:
 			{
 				int porta;
@@ -3577,7 +3593,7 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 					(data < 50 ? 0x40 : 0);
 				sound_ym.wd_data = porta;
 				sti();
-				return(IOCTL_OUT(arg, porta & 0x40 ? 0 : 100));
+				return IOCTL_OUT(arg, porta & 0x40 ? 0 : 100);
 			}
 		}
 		break;
@@ -3585,23 +3601,23 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	case DMASND_TT:
 		switch (cmd) {
 		case SOUND_MIXER_READ_DEVMASK:
-			return(IOCTL_OUT(arg,
+			return IOCTL_OUT(arg,
 					 SOUND_MASK_VOLUME | SOUND_MASK_TREBLE | SOUND_MASK_BASS |
-					 (MACH_IS_TT ? SOUND_MASK_SPEAKER : 0)));
+					 (MACH_IS_TT ? SOUND_MASK_SPEAKER : 0));
 		case SOUND_MIXER_READ_RECMASK:
-			return(IOCTL_OUT(arg, 0));
+			return IOCTL_OUT(arg, 0);
 		case SOUND_MIXER_READ_STEREODEVS:
-			return(IOCTL_OUT(arg, SOUND_MASK_VOLUME));
+			return IOCTL_OUT(arg, SOUND_MASK_VOLUME);
 		case SOUND_MIXER_READ_VOLUME:
-			return(IOCTL_OUT(arg,
+			return IOCTL_OUT(arg,
 					 VOLUME_DB_TO_VOXWARE(sound.volume_left) |
-					 (VOLUME_DB_TO_VOXWARE(sound.volume_right) << 8)));
+					 (VOLUME_DB_TO_VOXWARE(sound.volume_right) << 8));
 		case SOUND_MIXER_READ_BASS:
-			return(IOCTL_OUT(arg, TONE_DB_TO_VOXWARE(sound.bass)));
+			return IOCTL_OUT(arg, TONE_DB_TO_VOXWARE(sound.bass));
 		case SOUND_MIXER_READ_TREBLE:
-			return(IOCTL_OUT(arg, TONE_DB_TO_VOXWARE(sound.treble)));
+			return IOCTL_OUT(arg, TONE_DB_TO_VOXWARE(sound.treble));
 		case SOUND_MIXER_READ_OGAIN:
-			return(IOCTL_OUT(arg, GAIN_DB_TO_VOXWARE(sound.gain)));
+			return IOCTL_OUT(arg, GAIN_DB_TO_VOXWARE(sound.gain));
 		case SOUND_MIXER_READ_SPEAKER:
 			{
 				int porta;
@@ -3610,22 +3626,22 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 					sound_ym.rd_data_reg_sel = 14;
 					porta = sound_ym.rd_data_reg_sel;
 					sti();
-					return(IOCTL_OUT(arg, porta & 0x40 ? 0 : 100));
-				} else
-					return(-EINVAL);
+					return IOCTL_OUT(arg, porta & 0x40 ? 0 : 100);
+				}
 			}
+			break;
 		case SOUND_MIXER_WRITE_VOLUME:
 			IOCTL_IN(arg, data);
-			return(IOCTL_OUT(arg, sound_set_volume(data)));
+			return IOCTL_OUT(arg, sound_set_volume(data));
 		case SOUND_MIXER_WRITE_BASS:
 			IOCTL_IN(arg, data);
-			return(IOCTL_OUT(arg, sound_set_bass(data)));
+			return IOCTL_OUT(arg, sound_set_bass(data));
 		case SOUND_MIXER_WRITE_TREBLE:
 			IOCTL_IN(arg, data);
-			return(IOCTL_OUT(arg, sound_set_treble(data)));
+			return IOCTL_OUT(arg, sound_set_treble(data));
 		case SOUND_MIXER_WRITE_OGAIN:
 			IOCTL_IN(arg, data);
-			return(IOCTL_OUT(arg, sound_set_gain(data)));
+			return IOCTL_OUT(arg, sound_set_gain(data));
 		case SOUND_MIXER_WRITE_SPEAKER:
 			if (MACH_IS_TT) {
 				int porta;
@@ -3636,9 +3652,8 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 					(data < 50 ? 0x40 : 0);
 				sound_ym.wd_data = porta;
 				sti();
-				return(IOCTL_OUT(arg, porta & 0x40 ? 0 : 100));
-			} else
-				return(-EINVAL);
+				return IOCTL_OUT(arg, porta & 0x40 ? 0 : 100);
+			}
 		}
 		break;
 #endif /* CONFIG_ATARI */
@@ -3647,23 +3662,23 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	case DMASND_AMIGA:
 		switch (cmd) {
 		case SOUND_MIXER_READ_DEVMASK:
-			return(IOCTL_OUT(arg, SOUND_MASK_VOLUME | SOUND_MASK_TREBLE));
+			return IOCTL_OUT(arg, SOUND_MASK_VOLUME | SOUND_MASK_TREBLE);
 		case SOUND_MIXER_READ_RECMASK:
-			return(IOCTL_OUT(arg, 0));
+			return IOCTL_OUT(arg, 0);
 		case SOUND_MIXER_READ_STEREODEVS:
-			return(IOCTL_OUT(arg, SOUND_MASK_VOLUME));
+			return IOCTL_OUT(arg, SOUND_MASK_VOLUME);
 		case SOUND_MIXER_READ_VOLUME:
-			return(IOCTL_OUT(arg,
+			return IOCTL_OUT(arg,
 				VOLUME_AMI_TO_VOXWARE(sound.volume_left) |
-				VOLUME_AMI_TO_VOXWARE(sound.volume_right) << 8));
+				VOLUME_AMI_TO_VOXWARE(sound.volume_right) << 8);
 		case SOUND_MIXER_WRITE_VOLUME:
 			IOCTL_IN(arg, data);
-			return(IOCTL_OUT(arg, sound_set_volume(data)));
+			return IOCTL_OUT(arg, sound_set_volume(data));
 		case SOUND_MIXER_READ_TREBLE:
-			return(IOCTL_OUT(arg, sound.treble));
+			return IOCTL_OUT(arg, sound.treble);
 		case SOUND_MIXER_WRITE_TREBLE:
 			IOCTL_IN(arg, data);
-			return(IOCTL_OUT(arg, sound_set_treble(data)));
+			return IOCTL_OUT(arg, sound_set_treble(data));
 		}
 		break;
 #endif /* CONFIG_AMIGA */
@@ -3778,9 +3793,65 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 #endif
 	}
 
-	return(-EINVAL);
+	return -EINVAL;
 }
 
+
+static struct file_operations mixer_fops =
+{
+	sound_lseek,
+	NULL,			/* mixer_read */
+	NULL,			/* mixer_write */
+	NULL,			/* mixer_readdir */
+	NULL,			/* mixer_poll */
+	mixer_ioctl,
+	NULL,			/* mixer_mmap */
+	mixer_open,
+	mixer_release,
+};
+
+
+__initfunc(static void mixer_init(void))
+{
+#ifndef MODULE
+	int mixer_unit;
+#endif
+	mixer_unit = register_sound_mixer(&mixer_fops);
+	if (mixer_unit < 0)
+		return;
+
+	mixer.busy = 0;
+	sound.treble = 0;
+	sound.bass = 0;
+	switch (sound.mach.type) {
+#ifdef CONFIG_ATARI
+	case DMASND_TT:
+		atari_microwire_cmd(MW_LM1992_VOLUME(0));
+		sound.volume_left = 0;
+		atari_microwire_cmd(MW_LM1992_BALLEFT(0));
+		sound.volume_right = 0;
+		atari_microwire_cmd(MW_LM1992_BALRIGHT(0));
+		atari_microwire_cmd(MW_LM1992_TREBLE(0));
+		atari_microwire_cmd(MW_LM1992_BASS(0));
+		break;
+	case DMASND_FALCON:
+		sound.volume_left = (tt_dmasnd.output_atten & 0xf00) >> 8;
+		sound.volume_right = (tt_dmasnd.output_atten & 0xf0) >> 4;
+		break;
+#endif /* CONFIG_ATARI */
+#ifdef CONFIG_AMIGA
+	case DMASND_AMIGA:
+		sound.volume_left = 64;
+		sound.volume_right = 64;
+		custom.aud[0].audvol = sound.volume_left;
+		custom.aud[3].audvol = 1;	/* For pseudo 14bit */
+		custom.aud[1].audvol = sound.volume_right;
+		custom.aud[2].audvol = 1;	/* For pseudo 14bit */
+		sound.treble = 50;
+		break;
+#endif /* CONFIG_AMIGA */
+	}
+}
 
 
 /*
@@ -3788,7 +3859,7 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
  */
 
 
-static void sq_init(int numBufs, int bufSize, char **buffers)
+static void sq_setup(int numBufs, int bufSize, char **buffers)
 {
 #ifdef CONFIG_PMAC
 	int i;
@@ -3828,9 +3899,288 @@ static void sq_init(int numBufs, int bufSize, char **buffers)
 #endif /* CONFIG_PMAC */
 }
 
-static void
-init_settings(void)
+static void sq_play(void)
 {
+	(*sound.mach.play)();
+}
+
+
+/* ++TeSche: radically changed this one too */
+
+static ssize_t sq_write(struct file *file, const char *src, size_t uLeft,
+			loff_t *ppos)
+{
+	ssize_t uWritten = 0;
+	u_char *dest;
+	ssize_t uUsed, bUsed, bLeft;
+
+	/* ++TeSche: Is something like this necessary?
+	 * Hey, that's an honest question! Or does any other part of the
+	 * filesystem already checks this situation? I really don't know.
+	 */
+	if (uLeft == 0)
+		return 0;
+
+	/* The interrupt doesn't start to play the last, incomplete frame.
+	 * Thus we can append to it without disabling the interrupts! (Note
+	 * also that sq.rear isn't affected by the interrupt.)
+	 */
+
+	if (sq.count > 0 && (bLeft = sq.block_size-sq.rear_size) > 0) {
+		dest = sq_block_address(sq.rear);
+		bUsed = sq.rear_size;
+		uUsed = sound_copy_translate(src, uLeft, dest, &bUsed, bLeft);
+		if (uUsed <= 0)
+			return uUsed;
+		src += uUsed;
+		uWritten += uUsed;
+		uLeft -= uUsed;
+		sq.rear_size = bUsed;
+	}
+
+	do {
+		while (sq.count == sq.max_active) {
+			sq_play();
+			if (NON_BLOCKING(sq.open_mode))
+				return uWritten > 0 ? uWritten : -EAGAIN;
+			SLEEP(sq.write_queue, ONE_SECOND);
+			if (SIGNAL_RECEIVED)
+				return uWritten > 0 ? uWritten : -EINTR;
+		}
+
+		/* Here, we can avoid disabling the interrupt by first
+		 * copying and translating the data, and then updating
+		 * the sq variables. Until this is done, the interrupt
+		 * won't see the new frame and we can work on it
+		 * undisturbed.
+		 */
+
+		dest = sq_block_address((sq.rear+1) % sq.max_count);
+		bUsed = 0;
+		bLeft = sq.block_size;
+		uUsed = sound_copy_translate(src, uLeft, dest, &bUsed, bLeft);
+		if (uUsed <= 0)
+			break;
+		src += uUsed;
+		uWritten += uUsed;
+		uLeft -= uUsed;
+		if (bUsed) {
+			sq.rear = (sq.rear+1) % sq.max_count;
+			sq.rear_size = bUsed;
+			sq.count++;
+		}
+	} while (bUsed);   /* uUsed may have been 0 */
+
+	sq_play();
+
+	return uUsed < 0? uUsed: uWritten;
+}
+
+
+static int sq_open(struct inode *inode, struct file *file)
+{
+	int rc = 0;
+
+	MOD_INC_USE_COUNT;
+	if (sq.busy) {
+		rc = -EBUSY;
+		if (NON_BLOCKING(file->f_flags))
+			goto err_out;
+		rc = -EINTR;
+		while (sq.busy) {
+			SLEEP(sq.open_queue, ONE_SECOND);
+			if (SIGNAL_RECEIVED)
+				goto err_out;
+		}
+		rc = 0;
+	}
+	sq_setup(numBufs, bufSize << 10, sound_buffers);
+	sq.open_mode = file->f_flags;
+	sq.busy = 1;
+#ifdef CONFIG_ATARI
+	sq.ignore_int = 1;
+#endif /* CONFIG_ATARI */
+	sound.minDev = MINOR(inode->i_rdev) & 0x0f;
+	sound.soft = sound.dsp;
+	sound.hard = sound.dsp;
+	sound_init();
+	if ((MINOR(inode->i_rdev) & 0x0f) == SND_DEV_AUDIO) {
+		sound_set_speed(8000);
+		sound_set_stereo(0);
+		sound_set_format(AFMT_MU_LAW);
+	}
+	return 0;
+err_out:
+	MOD_DEC_USE_COUNT;
+	return rc;
+}
+
+
+static void sq_reset(void)
+{
+	sound_silence();
+	sq.playing = 0;
+	sq.count = 0;
+	sq.front = (sq.rear+1) % sq.max_count;
+}
+
+
+static int sq_fsync(struct file *filp, struct dentry *dentry)
+{
+	int rc = 0;
+
+	sq.syncing = 1;
+	sq_play();	/* there may be an incomplete frame waiting */
+
+	while (sq.playing) {
+		SLEEP(sq.sync_queue, ONE_SECOND);
+		if (SIGNAL_RECEIVED) {
+			/* While waiting for audio output to drain, an
+			 * interrupt occurred.  Stop audio output immediately
+			 * and clear the queue. */
+			sq_reset();
+			rc = -EINTR;
+			break;
+		}
+	}
+
+	sq.syncing = 0;
+	return rc;
+}
+
+static int sq_release(struct inode *inode, struct file *file)
+{
+	int rc = 0;
+	if (sq.busy) {
+		rc = sq_fsync(file, file->f_dentry);
+		sq.busy = 0;
+		WAKE_UP(sq.open_queue);
+		/* Wake up a process waiting for the queue being released.
+		 * Note: There may be several processes waiting for a call
+		 * to open() returning. */
+	}
+	sound.soft = sound.dsp;
+	sound.hard = sound.dsp;
+	sound_silence();
+	if (rc == 0)
+		MOD_DEC_USE_COUNT;
+	return rc;
+}
+
+
+static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
+		    u_long arg)
+{
+	u_long fmt;
+	int data;
+	int size, nbufs;
+
+	switch (cmd) {
+	case SNDCTL_DSP_RESET:
+		sq_reset();
+		return 0;
+	case SNDCTL_DSP_POST:
+	case SNDCTL_DSP_SYNC:
+		return sq_fsync(file, file->f_dentry);
+
+		/* ++TeSche: before changing any of these it's
+		 * probably wise to wait until sound playing has
+		 * settled down. */
+	case SNDCTL_DSP_SPEED:
+		sq_fsync(file, file->f_dentry);
+		IOCTL_IN(arg, data);
+		return IOCTL_OUT(arg, sound_set_speed(data));
+	case SNDCTL_DSP_STEREO:
+		sq_fsync(file, file->f_dentry);
+		IOCTL_IN(arg, data);
+		return IOCTL_OUT(arg, sound_set_stereo(data));
+	case SOUND_PCM_WRITE_CHANNELS:
+		sq_fsync(file, file->f_dentry);
+		IOCTL_IN(arg, data);
+		return IOCTL_OUT(arg, sound_set_stereo(data-1)+1);
+	case SNDCTL_DSP_SETFMT:
+		sq_fsync(file, file->f_dentry);
+		IOCTL_IN(arg, data);
+		return IOCTL_OUT(arg, sound_set_format(data));
+	case SNDCTL_DSP_GETFMTS:
+		fmt = 0;
+		if (sound.trans) {
+			if (sound.trans->ct_ulaw)
+				fmt |= AFMT_MU_LAW;
+			if (sound.trans->ct_alaw)
+				fmt |= AFMT_A_LAW;
+			if (sound.trans->ct_s8)
+				fmt |= AFMT_S8;
+			if (sound.trans->ct_u8)
+				fmt |= AFMT_U8;
+			if (sound.trans->ct_s16be)
+				fmt |= AFMT_S16_BE;
+			if (sound.trans->ct_u16be)
+				fmt |= AFMT_U16_BE;
+			if (sound.trans->ct_s16le)
+				fmt |= AFMT_S16_LE;
+			if (sound.trans->ct_u16le)
+				fmt |= AFMT_U16_LE;
+		}
+		return IOCTL_OUT(arg, fmt);
+	case SNDCTL_DSP_GETBLKSIZE:
+		size = sq.block_size
+			* sound.soft.size * (sound.soft.stereo + 1)
+			/ (sound.hard.size * (sound.hard.stereo + 1));
+		return IOCTL_OUT(arg, size);
+	case SNDCTL_DSP_SUBDIVIDE:
+		break;
+	case SNDCTL_DSP_SETFRAGMENT:
+		if (sq.count || sq.playing || sq.syncing)
+			return -EINVAL;
+		IOCTL_IN(arg, size);
+		nbufs = size >> 16;
+		if (nbufs < 2 || nbufs > numBufs)
+			nbufs = numBufs;
+		size &= 0xffff;
+		if (size >= 8 && size <= 30) {
+			size = 1 << size;
+			size *= sound.hard.size * (sound.hard.stereo + 1);
+			size /= sound.soft.size * (sound.soft.stereo + 1);
+			if (size > (bufSize << 10))
+				size = bufSize << 10;
+		} else
+			size = bufSize << 10;
+		sq_setup(numBufs, size, sound_buffers);
+		sq.max_active = nbufs;
+		return 0;
+
+	default:
+		return mixer_ioctl(inode, file, cmd, arg);
+	}
+	return -EINVAL;
+}
+
+
+
+static struct file_operations sq_fops =
+{
+	sound_lseek,
+	NULL,			/* sq_read */
+	sq_write,
+	NULL,			/* sq_readdir */
+	NULL,			/* sq_poll */
+	sq_ioctl,
+	NULL,			/* sq_mmap */
+	sq_open,
+	sq_release,
+};
+
+
+__initfunc(static void sq_init(void))
+{
+#ifndef MODULE
+	int sq_unit;
+#endif
+	sq_unit = register_sound_dsp(&sq_fops);
+	if (sq_unit < 0)
+		return;
+
 	/* whatever you like as startup mode for /dev/dsp,
 	 * (/dev/audio hasn't got a startup mode). note that
 	 * once changed a new open() will *not* restore these!
@@ -3868,175 +4218,22 @@ init_settings(void)
 	sound_silence();
 }
 
-
-static void sq_play(void)
-{
-	(*sound.mach.play)();
-}
-
-
-/* ++TeSche: radically changed this one too */
-
-static long sq_write(const char *src, unsigned long uLeft)
-{
-	long uWritten = 0;
-	u_char *dest;
-	long uUsed, bUsed, bLeft;
-
-	/* ++TeSche: Is something like this necessary?
-	 * Hey, that's an honest question! Or does any other part of the
-	 * filesystem already checks this situation? I really don't know.
-	 */
-	if (uLeft == 0)
-		return(0);
-
-	/* The interrupt doesn't start to play the last, incomplete frame.
-	 * Thus we can append to it without disabling the interrupts! (Note
-	 * also that sq.rear isn't affected by the interrupt.)
-	 */
-
-	if (sq.count > 0 && (bLeft = sq.block_size-sq.rear_size) > 0) {
-		dest = sq_block_address(sq.rear);
-		bUsed = sq.rear_size;
-		uUsed = sound_copy_translate(src, uLeft, dest, &bUsed, bLeft);
-		if (uUsed <= 0)
-			return uUsed;
-		src += uUsed;
-		uWritten += uUsed;
-		uLeft -= uUsed;
-		sq.rear_size = bUsed;
-	}
-
-	do {
-		while (sq.count == sq.max_active) {
-			sq_play();
-			if (NON_BLOCKING(sq.open_mode))
-				return(uWritten > 0 ? uWritten : -EAGAIN);
-			SLEEP(sq.write_queue, ONE_SECOND);
-			if (SIGNAL_RECEIVED)
-				return(uWritten > 0 ? uWritten : -EINTR);
-		}
-
-		/* Here, we can avoid disabling the interrupt by first
-		 * copying and translating the data, and then updating
-		 * the sq variables. Until this is done, the interrupt
-		 * won't see the new frame and we can work on it
-		 * undisturbed.
-		 */
-
-		dest = sq_block_address((sq.rear+1) % sq.max_count);
-		bUsed = 0;
-		bLeft = sq.block_size;
-		uUsed = sound_copy_translate(src, uLeft, dest, &bUsed, bLeft);
-		if (uUsed <= 0)
-			break;
-		src += uUsed;
-		uWritten += uUsed;
-		uLeft -= uUsed;
-		if (bUsed) {
-			sq.rear = (sq.rear+1) % sq.max_count;
-			sq.rear_size = bUsed;
-			sq.count++;
-		}
-	} while (bUsed);   /* uUsed may have been 0 */
-
-	sq_play();
-
-	return(uUsed < 0? uUsed: uWritten);
-}
-
-
-static int sq_open(int open_mode)
-{
-	if (sq.busy) {
-		if (NON_BLOCKING(open_mode))
-			return(-EBUSY);
-		while (sq.busy) {
-			SLEEP(sq.open_queue, ONE_SECOND);
-			if (SIGNAL_RECEIVED)
-				return(-EINTR);
-		}
-	}
-	sq_init(numBufs, bufSize << 10, sound_buffers);
-	sq.open_mode = open_mode;
-	sq.busy = 1;
-#ifdef CONFIG_ATARI
-	sq.ignore_int = 1;
-#endif /* CONFIG_ATARI */
-	return(0);
-}
-
-
-static void sq_reset(void)
-{
-	sound_silence();
-	sq.playing = 0;
-	sq.count = 0;
-	sq.front = (sq.rear+1) % sq.max_count;
-}
-
-
-static int sq_sync(void)
-{
-	int rc = 0;
-
-	sq.syncing = 1;
-	sq_play();	/* there may be an incomplete frame waiting */
-
-	while (sq.playing) {
-		SLEEP(sq.sync_queue, ONE_SECOND);
-		if (SIGNAL_RECEIVED) {
-			/* While waiting for audio output to drain, an
-			 * interrupt occurred.  Stop audio output immediately
-			 * and clear the queue. */
-			sq_reset();
-			rc = -EINTR;
-			break;
-		}
-	}
-
-	sq.syncing = 0;
-	return(rc);
-}
-
-
-static int sq_release(void)
-{
-	int rc = 0;
-	if (sq.busy) {
-		rc = sq_sync();
-		sq.busy = 0;
-		WAKE_UP(sq.open_queue);
-		/* Wake up a process waiting for the queue being released.
-		 * Note: There may be several processes waiting for a call
-		 * to open() returning. */
-	}
-	return(rc);
-}
-
-
-
 /*
  * /dev/sndstat
  */
 
 
-static void state_init(void)
-{
-	state.busy = 0;
-}
-
-
 /* state.buf should not overflow! */
 
-static int state_open(int open_mode)
+static int state_open(struct inode *inode, struct file *file)
 {
 	char *buffer = state.buf, *mach = "";
 	int len = 0;
 
 	if (state.busy)
-		return(-EBUSY);
+		return -EBUSY;
 
+	MOD_INC_USE_COUNT;
 	state.ptr = 0;
 	state.busy = 1;
 
@@ -4128,117 +4325,60 @@ static int state_open(int open_mode)
 	len += sprintf(buffer+len, "\tsq.playing = %d sq.syncing = %d\n",
 		       sq.playing, sq.syncing);
 	state.len = len;
-	return(0);
-}
-
-
-static int state_release(void)
-{
-	state.busy = 0;
-	return(0);
-}
-
-
-static long state_read(char *dest, unsigned long count)
-{
-	int n = state.len-state.ptr;
-	if (n > count)
-		n = count;
-	if (n <= 0)
-		return(0);
-	if (copy_to_user(dest, &state.buf[state.ptr], n))
-		return -EFAULT;
-	state.ptr += n;
-	return(n);
-}
-
-
-
-/*** High level stuff ********************************************************/
-
-
-static int sound_open(struct inode *inode, struct file *file)
-{
-	int dev = MINOR(inode->i_rdev) & 0x0f;
-	int rc = 0;
-
-	switch (dev) {
-	case SND_DEV_STATUS:
-		rc = state_open(file->f_flags);
-		break;
-	case SND_DEV_CTL:
-		rc = mixer_open(file->f_flags);
-		break;
-	case SND_DEV_DSP:
-	case SND_DEV_AUDIO:
-		rc = sq_open(file->f_flags);
-		if (rc == 0) {
-			sound.minDev = dev;
-			sound.soft = sound.dsp;
-			sound.hard = sound.dsp;
-			sound_init();
-			if (dev == SND_DEV_AUDIO) {
-				sound_set_speed(8000);
-				sound_set_stereo(0);
-				sound_set_format(AFMT_MU_LAW);
-			}
-		}
-		break;
-	default:
-		rc = -ENXIO;
-	}
-#ifdef MODULE
-	if (rc >= 0)
-		MOD_INC_USE_COUNT;
-#endif
-	return(rc);
-}
-
-
-static int sound_fsync(struct file *filp, struct dentry *dentry)
-{
-	int dev = MINOR(dentry->d_inode->i_rdev) & 0x0f;
-
-	switch (dev) {
-	case SND_DEV_STATUS:
-	case SND_DEV_CTL:
-		return(0);
-	case SND_DEV_DSP:
-	case SND_DEV_AUDIO:
-		return(sq_sync());
-	default:
-		return(unknown_minor_dev("sound_fsync", dev));
-	}
-}
-
-
-static int sound_release(struct inode *inode, struct file *file)
-{
-	int dev = MINOR(inode->i_rdev);
-
-	switch (dev & 0x0f) {
-	case SND_DEV_STATUS:
-		state_release();
-		break;
-	case SND_DEV_CTL:
-		mixer_release();
-		break;
-	case SND_DEV_DSP:
-	case SND_DEV_AUDIO:
-		sq_release();
-		sound.soft = sound.dsp;
-		sound.hard = sound.dsp;
-		sound_silence();
-		break;
-	default:
-		return unknown_minor_dev("sound_release", dev);
-	}
-#ifdef MODULE
-	MOD_DEC_USE_COUNT;
-#endif
 	return 0;
 }
 
+
+static int state_release(struct inode *inode, struct file *file)
+{
+	state.busy = 0;
+	MOD_DEC_USE_COUNT;
+	return 0;
+}
+
+
+static ssize_t state_read(struct file *file, char *buf, size_t count,
+			  loff_t *ppos)
+{
+	int n = state.len - state.ptr;
+	if (n > count)
+		n = count;
+	if (n <= 0)
+		return 0;
+	if (copy_to_user(buf, &state.buf[state.ptr], n))
+		return -EFAULT;
+	state.ptr += n;
+	return n;
+}
+
+
+static struct file_operations state_fops =
+{
+	sound_lseek,
+	state_read,
+	NULL,			/* state_write */
+	NULL,			/* state_readdir */
+	NULL,			/* state_poll */
+	NULL,			/* state_ioctl */
+	NULL,			/* state_mmap */
+	state_open,
+	state_release,
+};
+
+
+__initfunc(static void state_init(void))
+{
+#ifndef MODULE
+	int state_unit;
+#endif
+	state_unit = register_sound_special(&state_fops, SND_DEV_STATUS);
+	if (state_unit < 0)
+		return;
+	state.busy = 0;
+}
+
+
+/*** Common stuff ********************************************************/
 
 static long long sound_lseek(struct file *file, long long offset, int orig)
 {
@@ -4246,176 +4386,16 @@ static long long sound_lseek(struct file *file, long long offset, int orig)
 }
 
 
-static ssize_t sound_read(struct file *file, char *buf, size_t count,
-			  loff_t *ppos)
-{
-	struct inode *inode = file->f_dentry->d_inode;
-	int dev = MINOR(inode->i_rdev);
-
-	switch (dev & 0x0f) {
-	case SND_DEV_STATUS:
-		return(state_read(buf, count));
-	case SND_DEV_CTL:
-	case SND_DEV_DSP:
-	case SND_DEV_AUDIO:
-		return(-EPERM);
-	default:
-		return(unknown_minor_dev("sound_read", dev));
-	}
-}
-
-
-static ssize_t sound_write(struct file *file, const char *buf, size_t count,
-			   loff_t *ppos)
-{
-	struct inode *inode = file->f_dentry->d_inode;
-	int dev = MINOR(inode->i_rdev);
-
-	switch (dev & 0x0f) {
-	case SND_DEV_STATUS:
-	case SND_DEV_CTL:
-		return(-EPERM);
-	case SND_DEV_DSP:
-	case SND_DEV_AUDIO:
-		return(sq_write(buf, count));
-	default:
-		return(unknown_minor_dev("sound_write", dev));
-	}
-}
-
-
-static int unknown_minor_dev(char *fname, int dev)
-{
-	/* printk("%s: Unknown minor device %d\n", fname, dev); */
-	return(-ENXIO);
-}
-
-
-static int sound_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		       u_long arg)
-{
-	int dev = MINOR(inode->i_rdev);
-	u_long fmt;
-	int data;
-	int size, nbufs;
-
-	switch (dev & 0x0f) {
-	case SND_DEV_STATUS:
-		return(-EPERM);
-	case SND_DEV_CTL:
-		return(mixer_ioctl(inode, file, cmd, arg));
-	case SND_DEV_AUDIO:
-	case SND_DEV_DSP:
-		switch (cmd) {
-		case SNDCTL_DSP_RESET:
-			sq_reset();
-			return(0);
-		case SNDCTL_DSP_POST:
-		case SNDCTL_DSP_SYNC:
-			return(sound_fsync(file, file->f_dentry));
-
-			/* ++TeSche: before changing any of these it's
-			 * probably wise to wait until sound playing has
-			 * settled down. */
-		case SNDCTL_DSP_SPEED:
-			sound_fsync(file, file->f_dentry);
-			IOCTL_IN(arg, data);
-			return(IOCTL_OUT(arg, sound_set_speed(data)));
-		case SNDCTL_DSP_STEREO:
-			sound_fsync(file, file->f_dentry);
-			IOCTL_IN(arg, data);
-			return(IOCTL_OUT(arg, sound_set_stereo(data)));
-		case SOUND_PCM_WRITE_CHANNELS:
-			sound_fsync(file, file->f_dentry);
-			IOCTL_IN(arg, data);
-			return(IOCTL_OUT(arg, sound_set_stereo(data-1)+1));
-		case SNDCTL_DSP_SETFMT:
-			sound_fsync(file, file->f_dentry);
-			IOCTL_IN(arg, data);
-			return(IOCTL_OUT(arg, sound_set_format(data)));
-		case SNDCTL_DSP_GETFMTS:
-			fmt = 0;
-			if (sound.trans) {
-				if (sound.trans->ct_ulaw)
-					fmt |= AFMT_MU_LAW;
-				if (sound.trans->ct_alaw)
-					fmt |= AFMT_A_LAW;
-				if (sound.trans->ct_s8)
-					fmt |= AFMT_S8;
-				if (sound.trans->ct_u8)
-					fmt |= AFMT_U8;
-				if (sound.trans->ct_s16be)
-					fmt |= AFMT_S16_BE;
-				if (sound.trans->ct_u16be)
-					fmt |= AFMT_U16_BE;
-				if (sound.trans->ct_s16le)
-					fmt |= AFMT_S16_LE;
-				if (sound.trans->ct_u16le)
-					fmt |= AFMT_U16_LE;
-			}
-			return(IOCTL_OUT(arg, fmt));
-		case SNDCTL_DSP_GETBLKSIZE:
-			size = sq.block_size
-				* sound.soft.size * (sound.soft.stereo + 1)
-				/ (sound.hard.size * (sound.hard.stereo + 1));
-			return(IOCTL_OUT(arg, size));
-		case SNDCTL_DSP_SUBDIVIDE:
-			break;
-		case SNDCTL_DSP_SETFRAGMENT:
-			if (sq.count || sq.playing || sq.syncing)
-				return -EINVAL;
-			IOCTL_IN(arg, size);
-			nbufs = size >> 16;
-			if (nbufs < 2 || nbufs > numBufs)
-				nbufs = numBufs;
-			size &= 0xffff;
-			if (size >= 8 && size <= 30) {
-				size = 1 << size;
-				size *= sound.hard.size * (sound.hard.stereo + 1);
-				size /= sound.soft.size * (sound.soft.stereo + 1);
-				if (size > (bufSize << 10))
-					size = bufSize << 10;
-			} else
-				size = bufSize << 10;
-			sq_init(numBufs, size, sound_buffers);
-			sq.max_active = nbufs;
-			break;
-
-		default:
-			return(mixer_ioctl(inode, file, cmd, arg));
-		}
-		break;
-
-	default:
-		return(unknown_minor_dev("sound_ioctl", dev));
-	}
-	return(-EINVAL);
-}
-
-
-static struct file_operations sound_fops =
-{
-	sound_lseek,
-	sound_read,
-	sound_write,
-	NULL,
-	NULL,                      /* select */
-	sound_ioctl,
-	NULL,
-	sound_open,
-	sound_release,
-	sound_fsync
-};
-
-
-
 /*** Config & Setup **********************************************************/
 
 
-void soundcard_init(void)
+__initfunc(void dmasound_init(void))
 {
 	int has_sound = 0;
 	int i;
+#ifdef CONFIG_PMAC
+	struct device_node *np;
+#endif
 
 #ifdef __mc68000__
 	switch (m68k_machtype) {
@@ -4448,8 +4428,6 @@ void soundcard_init(void)
 #endif /* __mc68000__ */
 
 #ifdef CONFIG_PMAC
-	struct device_node *np;
-
 	np = find_devices("awacs");
 	if (np != NULL && np->n_addrs >= 3 && np->n_intrs >= 3) {
 		int vol;
@@ -4517,15 +4495,10 @@ void soundcard_init(void)
 		}
 	}
 
-#ifndef MODULE
-	/* Register driver with the VFS. */
-	register_chrdev(SOUND_MAJOR, "sound", &sound_fops);
-#endif
-
-	sq_init(numBufs, bufSize << 10, sound_buffers);
+	sq_setup(numBufs, bufSize << 10, sound_buffers);
 
 	/* Set default settings. */
-	init_settings();
+	sq_init();
 
 	/* Set up /dev/sndstat. */
 	state_init();
@@ -4547,15 +4520,10 @@ void soundcard_init(void)
 	return;
 }
 
-void sound_setup(char *str, int *ints)
-{
-	/* ++Martin: stub, could possibly be merged with soundcard.c et al later */
-}
-
 
 #define MAXARGS		8	/* Should be sufficient for now */
 
-void dmasound_setup(char *str, int *ints)
+__initfunc(void dmasound_setup(char *str, int *ints))
 {
 	/* check the bootstrap parameter for "dmasound=" */
 
@@ -4586,28 +4554,9 @@ void dmasound_setup(char *str, int *ints)
 
 #ifdef MODULE
 
-static int dmasound[MAXARGS] = { 0 };
-
 int init_module(void)
 {
-	int err, i = 0;
-	int ints[MAXARGS+1];
-
-	while (i < MAXARGS && dmasound[i])
-		ints[i + 1] = dmasound[i++];
-	ints[0] = i;
-
-	if (i)
-		dmasound_setup("dmasound=", ints);
-
-	err = register_chrdev(SOUND_MAJOR, "sound", &sound_fops);
-	if (err) {
-		printk("dmasound: driver already loaded/included in kernel\n");
-		return err;
-	}
-	chrdev_registered = 1;
-	soundcard_init();
-
+	dmasound_init();
 	return 0;
 }
 
@@ -4615,12 +4564,6 @@ int init_module(void)
 void cleanup_module(void)
 {
 	int i;
-
-	if (MOD_IN_USE)
-		return;
-
-	if (chrdev_registered)
-		unregister_chrdev(SOUND_MAJOR, "sound");
 
 	if (irq_installed) {
 		sound_silence();
@@ -4632,6 +4575,13 @@ void cleanup_module(void)
 			sound.mach.dma_free(sound_buffers[i], bufSize << 10);
 		kfree(sound_buffers);
 	}
+
+	if (mixer_unit >= 0)
+		unregister_sound_mixer(mixer_unit);
+	if (state_unit >= 0)
+		unregister_sound_special(state_unit);
+	if (sq_unit >= 0)
+		unregister_sound_dsp(sq_unit);
 }
 
 #endif /* MODULE */

@@ -19,10 +19,6 @@
 
 extern pte_t *kernel_page_table (unsigned long *memavailp);
 
-/* Virtual address region for use by kernel_map() */
-#define	KMAP_START	0xd0000000
-#define	KMAP_END	0xf0000000
-
 /* Granularity of kernel_map() allocations */
 #define KMAP_STEP	(256*1024)
 

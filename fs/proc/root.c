@@ -18,6 +18,9 @@
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
+#ifdef CONFIG_ZORRO
+#include <linux/zorro.h>
+#endif
 
 /*
  * Offset of the first process in the /proc root directory..
@@ -499,21 +502,21 @@ static struct proc_dir_entry proc_root_version = {
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };
-#ifdef CONFIG_ZORRO
-static struct proc_dir_entry proc_root_zorro = {
-	PROC_ZORRO, 5, "zorro",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-#endif
 static struct proc_dir_entry proc_root_cpuinfo = {
 	PROC_CPUINFO, 7, "cpuinfo",
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };
-#if defined (CONFIG_AMIGA) || defined (CONFIG_ATARI)
+#if defined (CONFIG_PROC_HARDWARE)
 static struct proc_dir_entry proc_root_hardware = {
 	PROC_HARDWARE, 8, "hardware",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
+};
+#endif
+#ifdef CONFIG_STRAM_PROC
+static struct proc_dir_entry proc_root_stram = {
+	PROC_STRAM, 5, "stram",
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };
@@ -641,9 +644,6 @@ __initfunc(void proc_root_init(void))
 	proc_register(&proc_root, &proc_root_meminfo);
 	proc_register(&proc_root, &proc_root_kmsg);
 	proc_register(&proc_root, &proc_root_version);
-#ifdef CONFIG_ZORRO
-	proc_register(&proc_root, &proc_root_zorro);
-#endif
 	proc_register(&proc_root, &proc_root_cpuinfo);
 	proc_register(&proc_root, &proc_root_self);
 	proc_net = create_proc_entry("net", S_IFDIR, 0);
@@ -687,8 +687,11 @@ __initfunc(void proc_root_init(void))
 #endif
 	proc_register(&proc_root, &proc_openprom);
 #endif
-#if defined (CONFIG_AMIGA) || defined (CONFIG_ATARI)
+#ifdef CONFIG_PROC_HARDWARE
 	proc_register(&proc_root, &proc_root_hardware);
+#endif
+#ifdef CONFIG_STRAM_PROC
+	proc_register(&proc_root, &proc_root_stram);
 #endif
 	proc_register(&proc_root, &proc_root_slab);
 

@@ -35,7 +35,7 @@ extern struct proc_dir_entry proc_scsi_amiga7xx;
 		       bios_param:          scsicam_bios_param,   \
 		       can_queue:           24,       \
 		       this_id:             7,               \
-		       sg_tablesize:        127,          \
+		       sg_tablesize:        63,          \
 		       cmd_per_lun:	    3,     \
 		       use_clustering:      DISABLE_CLUSTERING }
 #endif

@@ -33,14 +33,17 @@ struct proc_dir_entry proc_scsi_amiga7xx = {
     S_IFDIR | S_IRUGO | S_IXUGO, 2
 };
 
+extern ncr53c7xx_init (Scsi_Host_Template *tpnt, int board, int chip, 
+		       u32 base, int io_port, int irq, int dma,
+		       long long options, int clock);
+
 int amiga7xx_detect(Scsi_Host_Template *tpnt)
 {
     static unsigned char called = 0;
     unsigned int key;
-    int num = 0;
-    unsigned long address;
+    int num = 0, clock;
     long long options;
-    struct ConfigDev *cd;
+    const struct ConfigDev *cd;
 
     if (called || !MACH_IS_AMIGA)
 	return 0;
@@ -50,6 +53,7 @@ int amiga7xx_detect(Scsi_Host_Template *tpnt)
 #ifdef CONFIG_WARPENGINE_SCSI
     if ((key = zorro_find(ZORRO_PROD_MACROSYSTEMS_WARP_ENGINE_40xx, 0, 0)))
     {
+	unsigned long address;
 	cd = zorro_get_board(key);
 	address = (unsigned long)kernel_map((unsigned long)cd->cd_BoardAddr,
 		cd->cd_BoardSize, KERNELMAP_NOCACHE_SER, NULL);
@@ -83,8 +87,9 @@ int amiga7xx_detect(Scsi_Host_Template *tpnt)
 
 #ifdef CONFIG_A4091_SCSI
     while ( (key = zorro_find(ZORRO_PROD_CBM_A4091_1, 0, 0)) ||
-	 (key = zorro_find(ZORRO_PROD_CBM_A4091_2, 0, 0)) )
+	    (key = zorro_find(ZORRO_PROD_CBM_A4091_2, 0, 0)) )
     {
+	unsigned long address;
 	cd = zorro_get_board(key);
 	address = (unsigned long)kernel_map((unsigned long)cd->cd_BoardAddr,
 		cd->cd_BoardSize, KERNELMAP_NOCACHE_SER, NULL);

@@ -71,10 +71,19 @@
   of bytes not copied.  I was returning whatever non-zero stuff came back from 
   the copy_*_user functions directly, which would result in strange errors.
 
+2.13  July 17, 1998 -- Erik Andersen <andersee@debian.org>
+  -- Fixed a bug in CDROM_SELECT_SPEED where you couldn't lower the speed
+  of the drive.  Thanks to Tobias Ringstr|m <tori@prosolvia.se> for pointing
+  this out and providing a simple fix.
+  -- Fixed the procfs-unload-module bug with the fill_inode procfs callback.
+  thanks to Andrea Arcangeli <arcangeli@mbox.queen.it>
+  -- Fixed it so that the /proc entry now also shows up when cdrom is
+  compiled into the kernel.  Before it only worked when loaded as a module.
+
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 2.12"
-#define VERSION "Id: cdrom.c 2.12 1998/01/24 22:15:45 erik Exp"
+#define REVISION "Revision: 2.13"
+#define VERSION "Id: cdrom.c 2.13 1998/07/17 erik"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -104,14 +113,28 @@
 #include <linux/malloc.h> 
 #include <linux/cdrom.h>
 #include <linux/sysctl.h>
+#include <linux/proc_fs.h>
 #include <asm/fcntl.h>
 #include <asm/segment.h>
 #include <asm/uaccess.h>
 
+/* used to tell the module to turn on full debugging messages */
+static int debug = 0;
+/* default compatibility mode */
+static int autoclose=1;
+static int autoeject=0;
+static int lockdoor = 1;
+static int check_media_type = 0;
+MODULE_PARM(debug, "i");
+MODULE_PARM(autoclose, "i");
+MODULE_PARM(autoeject, "i");
+MODULE_PARM(lockdoor, "i");
+MODULE_PARM(check_media_type, "i");
 
 #if (ERRLOGMASK!=CD_NOTHING)
 #define cdinfo(type, fmt, args...) \
-	if (ERRLOGMASK & type) printk(KERN_INFO "cdrom: " fmt, ## args)
+        if ((ERRLOGMASK & type) || debug==1 ) \
+            printk(KERN_INFO "cdrom: " fmt, ## args)
 #else
 #define cdinfo(type, fmt, args...) 
 #endif
@@ -139,6 +162,7 @@ static int check_for_audio_disc(struct cdrom_device_info * cdi,
 			 struct cdrom_device_ops * cdo);
 static void sanitize_format(union cdrom_addr *addr, 
 		u_char * curr, u_char requested);
+static void cdrom_sysctl_register(void);
 typedef struct {
 	int data;
 	int audio;
@@ -176,6 +200,7 @@ struct file_operations cdrom_fops =
 
 int register_cdrom(struct cdrom_device_info *cdi)
 {
+	static char banner_printed = 0;
 	int major = MAJOR (cdi->dev);
         struct cdrom_device_ops *cdo = cdi->ops;
         int *change_capability = (int *)&cdo->capability; /* hack */
@@ -184,6 +209,13 @@ int register_cdrom(struct cdrom_device_info *cdi)
 		return -1;
 	if (cdo->open == NULL || cdo->release == NULL)
 		return -2;
+	if ( !banner_printed ) {
+		printk(KERN_INFO "Uniform CDROM driver " REVISION "\n");
+		banner_printed = 1;
+#ifdef CONFIG_SYSCTL
+		cdrom_sysctl_register();
+#endif /* CONFIG_SYSCTL */ 
+	}
 	ENSURE(drive_status, CDC_DRIVE_STATUS );
 	ENSURE(media_changed, CDC_MEDIA_CHANGED);
 	ENSURE(tray_move, CDC_CLOSE_TRAY | CDC_OPEN_TRAY);
@@ -195,18 +227,17 @@ int register_cdrom(struct cdrom_device_info *cdi)
 	ENSURE(reset, CDC_RESET);
 	ENSURE(audio_ioctl, CDC_PLAY_AUDIO);
 	ENSURE(dev_ioctl, CDC_IOCTLS);
-	cdi->options = CDO_AUTO_CLOSE | CDO_USE_FFLAGS | CDO_LOCK;
-					/* default compatibility mode */
 	cdi->mc_flags = 0;
 	cdo->n_minors = 0;
-
-	{
-	    static char banner_printed = 0;
-	    if ( !banner_printed ) {
-		printk(KERN_INFO "Uniform CD-ROM driver " REVISION "\n");
-		banner_printed = 1;
-	    }
-	}
+        cdi->options = CDO_USE_FFLAGS;
+	if (autoclose==1)
+		cdi->options |= (int) CDO_AUTO_CLOSE;
+	if (autoeject==1)
+		cdi->options |= (int) CDO_AUTO_EJECT;
+	if (lockdoor==1)
+		cdi->options |= (int) CDO_LOCK;
+	if (check_media_type==1)
+		cdi->options |= (int) CDO_CHECK_TYPE;
 
 	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" registered\n", cdi->name);
 	cdi->next = topCdromPtr; 	
@@ -290,7 +321,7 @@ int open_for_data(struct cdrom_device_info * cdi)
 	struct cdrom_device_ops *cdo = cdi->ops;
 	tracktype tracks;
 	cdinfo(CD_OPEN, "entering open_for_data\n");
-	/* Check if the driver can report drive status.  If it can we
+	/* Check if the driver can report drive status.  If it can, we
 	   can do clever things.  If it can't, well, we at least tried! */
 	if (cdo->drive_status != NULL) {
 		ret = cdo->drive_status(cdi, CDSL_CURRENT);
@@ -337,10 +368,15 @@ int open_for_data(struct cdrom_device_info * cdi)
 	}
 	/* CD-Players which don't use O_NONBLOCK, workman
 	 * for example, need bit CDO_CHECK_TYPE cleared! */
-	if (cdi->options & CDO_CHECK_TYPE && tracks.data==0) {
-		cdinfo(CD_OPEN, "bummer. wrong media type.\n"); 
-		ret=-EMEDIUMTYPE;
-		goto clean_up_and_return;
+	if (tracks.data==0) {
+		if (cdi->options & CDO_CHECK_TYPE) {
+		    cdinfo(CD_OPEN, "bummer. wrong media type.\n"); 
+		    ret=-EMEDIUMTYPE;
+		    goto clean_up_and_return;
+		}
+		else {
+		    cdinfo(CD_OPEN, "wrong media type, but CDO_CHECK_TYPE not set.\n");
+		}
 	}
 
 	cdinfo(CD_OPEN, "all seems well, opening the device.\n"); 
@@ -367,7 +403,7 @@ int open_for_data(struct cdrom_device_info * cdi)
 	(notably ide-cd) lock the drive after every command.  This produced
 	a nasty bug where after mount failed, the drive would remain locked!  
 	This ensures that the drive gets unlocked after a mount fails.  This 
-	is a goto to avoid adding bloating the driver with redundant code. */ 
+	is a goto to avoid bloating the driver with redundant code. */ 
 clean_up_and_return:
 	cdinfo(CD_WARNING, "open failed.\n"); 
 	if (cdo->capability & ~cdi->mask & CDC_LOCK && 
@@ -379,8 +415,7 @@ clean_up_and_return:
 }
 
 /* This code is similar to that in open_for_data. The routine is called
-   in case a audio play operation is requested. It doesn't make much sense
-   to do this on a data disc.
+   whenever an audio play operation is requested.
 */
 int check_for_audio_disc(struct cdrom_device_info * cdi,
 			 struct cdrom_device_ops * cdo)
@@ -692,8 +727,6 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		cdinfo(CD_DO_IOCTL, "entering CDROM_SELECT_SPEED\n"); 
 		if (!(cdo->capability & ~cdi->mask & CDC_SELECT_SPEED))
 			return -ENOSYS;
-		if ((int)arg > cdi->speed )
-			return -EINVAL;
 		return cdo->select_speed(cdi, arg);
 		}
 
@@ -1019,18 +1052,33 @@ ctl_table cdrom_root_table[] = {
 	{0}
 	};
 
-#endif /* endif CONFIG_SYSCTL */
-
-
-#ifdef MODULE
-
-#ifdef CONFIG_SYSCTL
-
 static struct ctl_table_header *cdrom_sysctl_header;
+
+/*
+ * This is called as the fill_inode function when an inode
+ * is going into (fill = 1) or out of service (fill = 0).
+ * We use it here to manage the module use counts.
+ *
+ * Note: only the top-level directory needs to do this; if
+ * a lower level is referenced, the parent will be as well.
+ */
+static void cdrom_procfs_modcount(struct inode *inode, int fill)
+{
+       if (fill)
+               MOD_INC_USE_COUNT;
+       else
+               MOD_DEC_USE_COUNT;
+}
 
 static void cdrom_sysctl_register(void)
 {
+	static int initialized = 0;
+
+	if ( initialized == 1 )
+		return;
 	cdrom_sysctl_header = register_sysctl_table(cdrom_root_table, 0);
+	cdrom_root_table->de->fill_inode = &cdrom_procfs_modcount;
+	initialized = 1;
 }
 
 static void cdrom_sysctl_unregister(void)
@@ -1038,6 +1086,8 @@ static void cdrom_sysctl_unregister(void)
 	unregister_sysctl_table(cdrom_sysctl_header);
 }
 #endif /* endif CONFIG_SYSCTL */
+
+#ifdef MODULE
 
 int init_module(void)
 {

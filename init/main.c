@@ -240,9 +240,13 @@ extern void dmasound_setup (char *str, int *ints);
 #ifdef CONFIG_ATARI_SCSI
 extern void atari_scsi_setup (char *str, int *ints);
 #endif
+extern void stram_swap_setup (char *str, int *ints);
 extern void wd33c93_setup (char *str, int *ints);
 extern void gvp11_setup (char *str, int *ints);
 extern void ncr53c7xx_setup (char *str, int *ints);
+#ifdef CONFIG_MAC_SCSI
+extern void mac_scsi_setup (char *str, int *ints);
+#endif
 
 #ifdef CONFIG_CYCLADES
 extern void cy_setup(char *str, int *ints);
@@ -717,7 +721,12 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_ATARI_SCSI
 	{ "atascsi=", atari_scsi_setup },
 #endif
-#if defined(CONFIG_A4000T_SCSI) || defined(CONFIG_WARPENGINE_SCSI) || defined(CONFIG_A4091_SCSI)
+#ifdef CONFIG_STRAM_SWAP
+	{ "stram_swap=", stram_swap_setup },
+#endif
+#if defined(CONFIG_A4000T_SCSI) || defined(CONFIG_WARPENGINE_SCSI) \
+	    || defined(CONFIG_A4091_SCSI) || defined(CONFIG_MVME16x_SCSI) \
+	    || defined(CONFIG_BVME6000_SCSI)
         { "53c7xx=", ncr53c7xx_setup },
 #endif
 #if defined(CONFIG_A3000_SCSI) || defined(CONFIG_A2091_SCSI) \
@@ -726,6 +735,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #if defined(CONFIG_GVP11_SCSI)
 	{ "gvp11=", gvp11_setup },
+#endif
+#ifdef CONFIG_MAC_SCSI
+	{ "mac5380=", mac_scsi_setup },
 #endif
 #ifdef CONFIG_CYCLADES
 	{ "cyclades=", cy_setup },

@@ -546,7 +546,7 @@ __initfunc(int chr_dev_init(void))
     defined (CONFIG_PSMOUSE) || defined (CONFIG_MS_BUSMOUSE) || \
     defined (CONFIG_ATIXL_BUSMOUSE) || defined(CONFIG_SOFT_WATCHDOG) || \
     defined (CONFIG_AMIGAMOUSE) || defined (CONFIG_ATARIMOUSE) || \
-    defined (CONFIG_PCWATCHDOG) || \
+    defined (CONFIG_MACMOUSE) || defined (CONFIG_PCWATCHDOG) || \
     defined (CONFIG_APM) || defined (CONFIG_RTC) || \
     defined (CONFIG_SUN_MOUSE) || defined (CONFIG_NVRAM)
 	misc_init();

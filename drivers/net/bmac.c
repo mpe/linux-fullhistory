@@ -4,6 +4,7 @@
  *
  * Copyright (C) 1998 Randy Gobbel.
  */
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

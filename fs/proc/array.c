@@ -1201,12 +1201,8 @@ extern int get_md_status (char *);
 extern int get_rtc_status (char *);
 extern int get_locks_status (char *, char **, off_t, int);
 extern int get_swaparea_info (char *);
-#ifdef CONFIG_ZORRO
-extern int zorro_get_list(char *);
-#endif
-#if defined (CONFIG_AMIGA) || defined (CONFIG_ATARI)
 extern int get_hardware_list(char *);
-#endif
+extern int get_stram_list(char *);
 
 static long get_root_array(char * page, int type, char **start,
 	off_t offset, unsigned long length)
@@ -1283,13 +1279,13 @@ static long get_root_array(char * page, int type, char **start,
 #endif
 		case PROC_LOCKS:
 			return get_locks_status(page, start, offset, length);
-#ifdef CONFIG_ZORRO
-		case PROC_ZORRO:
-			return zorro_get_list(page);
-#endif
-#if defined (CONFIG_AMIGA) || defined (CONFIG_ATARI)
+#ifdef CONFIG_PROC_HARDWARE
 		case PROC_HARDWARE:
 			return get_hardware_list(page);
+#endif
+#ifdef CONFIG_STRAM_PROC
+		case PROC_STRAM:
+			return get_stram_list(page);
 #endif
 	}
 	return -EBADF;

@@ -13,22 +13,31 @@
  * Suggestions are welcome. Patches that work are more welcome though. ;-)
  * For those wishing to work on this driver, please be sure you download
  * and comply with the latest ATAPI standard. This document can be
- * obtained by anonymous ftp from fission.dt.wdc.com in directory:
- * /pub/standards/SFF_atapi/spec/SFF8020-r2.6/PDF/8020r26.pdf
+ * obtained by anonymous ftp from:
+ * ftp://fission.dt.wdc.com/pub/standards/SFF_atapi/spec/SFF8020-r2.6/PS/8020r26.ps
  *
  * Drives that deviate from the ATAPI standard will be accomodated as much
- * as possible via compile options.  Since I only have a few drives, you you
- * generally need to send me patches...
+ * as possable via compile time or command-line options.  Since I only have
+ * a few drives, you generally need to send me patches...
  *
  * ----------------------------------
  * TO DO LIST:
- * -Avoid printing error messages for expected errors from the drive.
- *    (If you are using a cd changer, you may get errors in the kernel
- *     logs that are completly expected.  Don't complain to me about this,
- *     unless you have a patch to fix it.  I am working on it...)
+ * -Implement Microsoft Media Status Notification per the spec at
+ *   http://www.microsoft.com/hwdev/respec/storspec.htm
+ *   This will allow us to get automagically notified when the media changes
+ *   on ATAPI drives (something the stock ATAPI spec is lacking).  Looks
+ *   very cool.  I discovered its existance the other day at work...
  * -Fix ide_cdrom_reset so that it works (it does nothing right now)
  * -Query the drive to find what features are available before trying to
  *   use them (like trying to close the tray in drives that can't).
+ * -Make it so that Pioneer CD DR-A24X and friends don't get screwed up on
+ *   boot
+ * -Handle older drives that can't report their speed. (i.e. check if they
+ *   support a version of ATAPI where they can report their speed before
+ *   checking their speed and believing what they return).
+ * -It seems we do not always honor it when Uniform gets a request to change 
+ *   the cdi->options.  We should _always_ check the options before doing stuff.
+ *   This must be fixed.
  *
  *
  * ----------------------------------
@@ -205,10 +214,13 @@
  *                         messages, since this is not an error.
  *                     -- Change error messages to be const
  *                     -- Remove a "\t" which looks ugly in the syslogs
+ * 4.14  July 17, 1998 -- Change to pointing to .ps version of ATAPI spec
+ *                         since the .pdf version doesn't seem to work...
+ *                     -- Updated the TODO list to something more current.
  *
  *************************************************************************/
 
-#define IDECD_VERSION "4.13"
+#define IDECD_VERSION "4.14"
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -1157,7 +1169,7 @@ static void cdrom_pc_intr (ide_drive_t *drive)
 		if (pc->buflen == 0)
 			cdrom_end_request (1, drive);
 		else {
-			/* Comment this out, because this always happins 
+			/* Comment this out, because this always happens 
 			   right after a reset occurs, and it is annoying to 
 			   always print expected stuff.  */
 			/*

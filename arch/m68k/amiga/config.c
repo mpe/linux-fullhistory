@@ -51,6 +51,7 @@ static void amiga_sched_init(void (*handler)(int, void *, struct pt_regs *));
 /* amiga specific keyboard functions */
 extern int amiga_keyb_init(void);
 extern int amiga_kbdrate (struct kbd_repeat *);
+extern void amiga_kbd_reset_setup(char*, int);
 /* amiga specific irq functions */
 extern void amiga_init_IRQ (void);
 extern void (*amiga_default_handler[]) (int, void *, struct pt_regs *);
@@ -76,7 +77,6 @@ extern void amiga_floppy_setup(char *, int *);
 #endif
 static void amiga_reset (void);
 static int amiga_wait_key (struct console *co);
-extern void zorro_init(void);
 extern void amiga_init_sound(void);
 static void amiga_savekmsg_init(void);
 static void amiga_mem_console_write(struct console *co, const char *b,
@@ -342,6 +342,7 @@ __initfunc(void config_amiga(void))
   mach_sched_init      = amiga_sched_init;
   mach_keyb_init       = amiga_keyb_init;
   mach_kbdrate         = amiga_kbdrate;
+  kbd_reset_setup      = amiga_kbd_reset_setup;
   mach_init_IRQ        = amiga_init_IRQ;
   mach_default_handler = &amiga_default_handler;
   mach_request_irq     = amiga_request_irq;
@@ -375,9 +376,7 @@ __initfunc(void config_amiga(void))
   mach_floppy_setup    = amiga_floppy_setup;
 #endif
   mach_reset           = amiga_reset;
-#ifdef CONFIG_DUMMY_CONSOLE  
   conswitchp           = &dummy_con;
-#endif
   kd_mksound           = amiga_mksound;
 #ifdef CONFIG_MAGIC_SYSRQ
   mach_sysrq_key = 0x5f;	     /* HELP */
@@ -397,27 +396,6 @@ __initfunc(void config_amiga(void))
   custom.dmacon = DMAF_ALL;
   /* ensure that the DMA master bit is set */
   custom.dmacon = DMAF_SETCLR | DMAF_MASTER;
-
-  /* don't use Z2 RAM as system memory on Z3 capable machines */
-  if (AMIGAHW_PRESENT(ZORRO3)) {
-    int i, j;
-    unsigned long z2mem = 0;
-    for (i = 0; i < m68k_num_memory; i++)
-      if (m68k_memory[i].addr < 16*1024*1024) {
-	if (i == 0) {
-	  /* don't cut off the branch we're sitting on */
-	  printk("Warning: kernel runs in Zorro II memory\n");
-	  continue;
-	}
-	z2mem += m68k_memory[i].size;
-	m68k_num_memory--;
-	for (j = i; j < m68k_num_memory; j++)
-	  m68k_memory[j] = m68k_memory[j+1];
-      }
-    if (z2mem)
-      printk("%ldK of Zorro II memory will not be used as system memory\n",
-	     z2mem>>10);
-  }
 
   /* initialize chipram allocator */
   amiga_chip_init ();
@@ -444,12 +422,8 @@ __initfunc(void config_amiga(void))
   if (AMIGAHW_PRESENT(MAGIC_REKICK))
 	  *(unsigned char *)ZTWO_VADDR(0xde0002) |= 0x80;
 
-  zorro_init();
 #ifdef CONFIG_ZORRO
-  /*
-   * Identify all known AutoConfig Expansion Devices
-   */
-  zorro_identify();
+  zorro_init();
 #endif
 }
 

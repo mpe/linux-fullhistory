@@ -117,6 +117,9 @@ struct rpc_rqst {
 
 struct rpc_xprt {
 	struct rpc_xprt *	link;		/* list of all clients */
+	struct rpc_xprt *	rx_pending;	/* receive pending list */
+	
+	int 			rx_pending_flag;/* are we on the pending list ? */
 
 	struct file *		file;		/* VFS layer */
 	struct socket *		sock;		/* BSD socket layer */

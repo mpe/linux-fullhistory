@@ -417,10 +417,8 @@ Generic PCI bus-master DMA support
 CONFIG_BLK_DEV_IDEDMA
   If your PCI system uses IDE drive(s) (as opposed to SCSI, say) and
   is capable of bus-master DMA operation (most Pentium PCI systems),
-  you will want to say Y here to reduce CPU overhead.  With this
-  option, Linux will automatically enable DMA transfers in most cases,
-  noting this with "DMA" appended to the drive identification info.
-  You can also use the "hdparm" utility to enable DMA for drives which
+  you will want to say Y here to reduce CPU overhead.
+  You can use the "hdparm" utility to enable DMA for drives which
   were not enabled automatically.  You can get the latest version of
   the hdparm utility via anonymous FTP from
   ftp://sunsite.unc.edu/pub/Linux/system/hardware/. 
@@ -429,6 +427,18 @@ CONFIG_BLK_DEV_IDEDMA
   file Documentation/ide.txt for more information. 
 
   It is safe to say Y to this question.
+
+Use DMA by default when available
+CONFIG_IDEDMA_AUTO
+  Prior to kernel version 2.1.112, Linux used to automatically use
+  DMA for IDE drives and chipsets which support it.  Due to concerns
+  about a couple of cases where buggy hardware may have caused damage,
+  the default is now to NOT use DMA automatically.  To revert to the
+  previous behaviour, say Y to this question.
+  If you suspect your hardware is at all flakey, say N here.
+  Do NOT email the IDE kernel people regarding this issue!
+
+  It is nearly always safe to say Y to this question.
 
 Other IDE chipset support
 CONFIG_IDE_CHIPSETS
@@ -8662,6 +8672,11 @@ CONFIG_ATARI
   this kernel on an Atari, say Y here and browse the material
   available in Documentation/m68k; otherwise say N.
 
+Hades support
+CONFIG_HADES
+  This option enables support for the Hades Atari clone. If you plan to
+  use this kernel on a Hades, say Y here; otherwise say N.
+
 Macintosh support
 CONFIG_MAC
   This option enables support for the Apple Macintosh series of
@@ -8801,6 +8816,18 @@ CONFIG_AMIGA_Z2RAM
   compile it as a module, say M here and read
   Documentation/modules.txt.
 
+Atari ST-RAM swap support
+CONFIG_STRAM_SWAP
+  This enables support for using (parts of) ST-RAM as swap space,
+  instead of as normal system memory. This can first enhance system
+  performace if you have lots of alternate RAM (compared to the size
+  of ST-RAM), because executable code always will reside in faster
+  memory. ST-RAM will remain as ultra-fast swap space. On the other
+  hand, it allows much improved dynamic allocations of ST-RAM buffers
+  for device driver modules (e.g. floppy, ACSI, SLM printer, DMA
+  sound). The probability that such allocations at module load time
+  fail is drastically reduced.
+
 Atari ACSI support
 CONFIG_ATARI_ACSI
   This enables support for the Atari ACSI interface. The driver
@@ -8912,6 +8939,14 @@ CONFIG_ATARI_SCSI_TOSHIBA_DELAY
   accommodate some flaky Toshiba CD-ROM drives. Say Y if you intend to
   use a Toshiba CD-ROM drive; otherwise, the option is not needed and
   would impact performance a bit, so say N.
+
+Hades SCSI DMA emulator (EXPERIMENTAL)
+CONFIG_TT_DMA_EMUL
+  This option enables code which emulates the TT SCSI DMA chip on the
+  Hades. This increases the SCSI transfer rates at least ten times
+  compared to PIO transfers. Note that this code is experimental and
+  has only been tested on a Hades with a 68060 processor. Before you
+  use this, make backups of your entire hard disk.
 
 Ariadne support
 CONFIG_ARIADNE
