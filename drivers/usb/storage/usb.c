@@ -829,11 +829,8 @@ static void usb_stor_release_resources(struct us_data *us)
 		scsi_host_put(us->host);
 
 	/* Free the extra data and the URB */
-	if (us->extra)
-		kfree(us->extra);
-	if (us->current_urb)
-		usb_free_urb(us->current_urb);
-
+	kfree(us->extra);
+	usb_free_urb(us->current_urb);
 }
 
 /* Dissociate from the USB device */
