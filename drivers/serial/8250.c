@@ -2333,7 +2333,7 @@ static int __devexit serial8250_remove(struct device *dev)
 	return 0;
 }
 
-static int serial8250_suspend(struct device *dev, u32 state, u32 level)
+static int serial8250_suspend(struct device *dev, pm_message_t state, u32 level)
 {
 	int i;
 
