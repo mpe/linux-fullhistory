@@ -27,9 +27,6 @@
 #	LANCE_DEBUG	Set the debugging message level.
 #	DEFAULT_DMA	Change the default DMA to other than 5.
 #  CONFIG_PLIP		The Crynwr-protocol PL/IP driver
-#  SLIP			The MicroWalt SLIP driver
-#	  SL_DUMP	Uses the "dump frame" debug code
-#	  SL_COMPRESSED Use CSLIP
 #  D_LINK		The D-Link DE-600 Portable Ethernet Adaptor.
 #	  D_LINK_IO	The D-Link I/O address (0x378 == default)
 #	  D_LINK_IRQ	The D-Link IRQ number to use (IRQ7 == default)
@@ -42,6 +39,5 @@ EL2_OPTS	= #-UEL2_AUI
 NE_OPTS		=
 HP_OPTS		=
 PLIP_OPTS	=
-SLIP_OPTS	= -DSL_DUMP -DSL_COMPRESSED
 DL_OPTS		= -DD_LINK_IO=0x378 -DD_LINK_IRQ=7 -UD_LINK_DEBUG
 AT_OPTS		= # -DLANCE_DMA=5

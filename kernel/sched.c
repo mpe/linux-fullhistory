@@ -533,6 +533,9 @@ static void second_overflow(void)
  */
 static void timer_bh(void * unused)
 {
+	unsigned long mask;
+	struct timer_struct *tp;
+
 	cli();
 	while (next_timer && next_timer->expires == 0) {
 		void (*fn)(unsigned long) = next_timer->function;
@@ -543,6 +546,18 @@ static void timer_bh(void * unused)
 		cli();
 	}
 	sti();
+	
+	for (mask = 1, tp = timer_table+0 ; mask ; tp++,mask += mask) {
+		if (mask > timer_active)
+			break;
+		if (!(mask & timer_active))
+			continue;
+		if (tp->expires > jiffies)
+			continue;
+		timer_active &= ~mask;
+		tp->fn();
+		sti();
+	}
 }
 
 /*
@@ -554,7 +569,7 @@ static void timer_bh(void * unused)
 static void do_timer(struct pt_regs * regs)
 {
 	unsigned long mask;
-	struct timer_struct *tp = timer_table+0;
+	struct timer_struct *tp;
 
 	long ltemp;
 
@@ -636,16 +651,14 @@ static void do_timer(struct pt_regs * regs)
 		current->it_prof_value = current->it_prof_incr;
 		send_sig(SIGPROF,current,1);
 	}
-	for (mask = 1 ; mask ; tp++,mask += mask) {
+	for (mask = 1, tp = timer_table+0 ; mask ; tp++,mask += mask) {
 		if (mask > timer_active)
 			break;
 		if (!(mask & timer_active))
 			continue;
 		if (tp->expires > jiffies)
 			continue;
-		timer_active &= ~mask;
-		tp->fn();
-		sti();
+		mark_bh(TIMER_BH);
 	}
 	cli();
 	itimer_ticks++;

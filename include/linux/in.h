@@ -124,9 +124,9 @@ extern unsigned short int	htons(unsigned short int);
 static __inline__ unsigned long int
 __ntohl(unsigned long int x)
 {
-	__asm__("xchgb %l0,%h0\n\t"	/* swap lower bytes	*/
+	__asm__("xchgb %b0,%h0\n\t"	/* swap lower bytes	*/
 		"rorl $16,%0\n\t"	/* swap words		*/
-		"xchgb %l0,%h0"		/* swap higher bytes	*/
+		"xchgb %b0,%h0"		/* swap higher bytes	*/
 		:"=q" (x)
 		: "0" (x));
 	return x;
@@ -144,9 +144,9 @@ __ntohs(unsigned short int x)
 static __inline__ unsigned long int
 __htonl(unsigned long int x)
 {
-	__asm__("xchgb %l0,%h0\n\t"	/* swap lower bytes	*/
+	__asm__("xchgb %b0,%h0\n\t"	/* swap lower bytes	*/
 		"rorl $16,%0\n\t"	/* swap words		*/
-		"xchgb %l0,%h0"		/* swap higher bytes	*/
+		"xchgb %b0,%h0"		/* swap higher bytes	*/
 		:"=q" (x)
 		: "0" (x));
 	return x;

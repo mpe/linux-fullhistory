@@ -70,7 +70,7 @@ endif
 ifdef CONFIG_SLIP
 NETDRV_OBJS := $(NETDRV_OBJS) net.a(slip.o) net.a(slhc.o)
 slip.o:	slip.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(SLIP_OPTS) -c $<
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 endif
 
 ifdef CONFIG_DE600

@@ -593,7 +593,10 @@ slhc_uncompress(struct slcompress *comp, unsigned char *icp, int isize)
 	 * packet.  Recalculate IP checksum (but not TCP checksum).
 	 */
 
-	len = isize - (cp - icp) + hdrlen;
+	len = isize - (cp - icp);
+	if (len < 0)
+		goto bad;
+	len += hdrlen;
 	ip->tot_len = htons(len);
 	ip->check = 0;
 
