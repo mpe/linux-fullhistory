@@ -41,7 +41,7 @@ static cpumask_t flush_cpumask;
 static struct mm_struct * flush_mm;
 static unsigned long flush_va;
 static DEFINE_SPINLOCK(tlbstate_lock);
-#define FLUSH_ALL	0xffffffff
+#define FLUSH_ALL	-1ULL
 
 /*
  * We cannot call mmdrop() because we are in interrupt context, 
