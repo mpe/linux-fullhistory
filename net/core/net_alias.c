@@ -1278,6 +1278,22 @@ static struct notifier_block net_alias_dev_notifier = {
   0
 };
 
+#ifndef ALIAS_USER_LAND_DEBUG
+#ifdef CONFIG_PROC_FS
+static struct proc_dir_entry proc_net_alias_types = {
+	PROC_NET_ALIAS_TYPES, 11, "alias_types",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	net_alias_types_getinfo
+};
+static struct proc_dir_entry proc_net_aliases = {
+	PROC_NET_ALIASES, 7, "aliases",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	net_alias_getinfo
+};
+#endif
+#endif
 
 /*
  * net_alias initialisation
@@ -1299,18 +1315,8 @@ void net_alias_init(void)
   
 #ifndef ALIAS_USER_LAND_DEBUG
 #ifdef CONFIG_PROC_FS
-  proc_net_register(&(struct proc_dir_entry) {
-    PROC_NET_ALIAS_TYPES, 11, "alias_types",
-    S_IFREG | S_IRUGO, 1, 0, 0,
-    0, &proc_net_inode_operations,
-    net_alias_types_getinfo
-  });
-  proc_net_register(&(struct proc_dir_entry) {
-    PROC_NET_ALIASES, 7, "aliases",
-    S_IFREG | S_IRUGO, 1, 0, 0,
-    0, &proc_net_inode_operations,
-    net_alias_getinfo
-  });
+  proc_net_register(&proc_net_alias_types);
+  proc_net_register(&proc_net_aliases);
 #endif
 #endif
   

@@ -167,6 +167,7 @@ struct sock
 	unsigned short		rcv_ack_cnt;		/* count of same ack */
 	__u32			window_seq;
 	__u32			fin_seq;
+	__u32			syn_seq;
 	__u32			urg_seq;
 	__u32			urg_data;
 	int			users;			/* user count */

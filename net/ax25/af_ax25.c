@@ -2365,6 +2365,35 @@ static struct notifier_block ax25_dev_notifier = {
 	0
 };
 
+#ifdef CONFIG_PROC_FS			  
+static struct proc_dir_entry proc_ax25_route = {
+	PROC_NET_AX25_ROUTE, 10, "ax25_route",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	ax25_rt_get_info
+};
+static struct proc_dir_entry proc_ax25 = {
+	PROC_NET_AX25, 4, "ax25",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	ax25_get_info
+};
+static struct proc_dir_entry proc_ax25_calls = {
+	PROC_NET_AX25_CALLS, 10, "ax25_calls",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	ax25_cs_get_info
+};
+#endif
+#ifdef CONFIG_BPQETHER
+static struct proc_dir_entry proc_ax25_bpqether = {
+	PROC_NET_AX25_BPQETHER, 13, "ax25_bpqether",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	ax25_bpq_get_info
+};
+#endif
+
 void ax25_proto_init(struct net_proto *pro)
 {
 	sock_register(ax25_proto_ops.family, &ax25_proto_ops);
@@ -2376,35 +2405,15 @@ void ax25_proto_init(struct net_proto *pro)
 #endif
 	register_netdevice_notifier(&ax25_dev_notifier);
 #ifdef CONFIG_PROC_FS			  
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_AX25_ROUTE, 10, "ax25_route",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ax25_rt_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_AX25, 4, "ax25",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ax25_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_AX25_CALLS, 10, "ax25_calls",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ax25_cs_get_info
-	});
+	proc_net_register(&proc_ax25_route);
+	proc_net_register(&proc_ax25);
+	proc_net_register(&proc_ax25_calls);
 #endif	
 
 	printk(KERN_INFO "G4KLX/GW4PTS AX.25 for Linux. Version 0.32 for Linux NET3.035 (Linux 2.0)\n");
 
 #ifdef CONFIG_BPQETHER
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_AX25_BPQETHER, 13, "ax25_bpqether",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ax25_bpq_get_info
-	});
+	proc_net_register(&proc_ax25_bpqether);
 
 	printk(KERN_INFO "G8BPQ Encapsulation of AX.25 frames enabled\n");
 #endif

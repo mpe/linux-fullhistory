@@ -470,6 +470,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->delay_acks = 1;
 	newsk->copied_seq = skb->seq+1;
 	newsk->fin_seq = skb->seq;
+	newsk->syn_seq = skb->seq;
 	newsk->state = TCP_SYN_RECV;
 	newsk->timeout = 0;
 	newsk->ip_xmit_timeout = 0;
@@ -1587,6 +1588,9 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
  *	moved inline now as tcp_urg is only called from one
  *	place. We handle URGent data wrong. We have to - as
  *	BSD still doesn't use the correction from RFC961.
+ *
+ *	For 1003.1g we should support a new option TCP_STDURG to permit
+ *	either form.
  */
  
 static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
@@ -1613,6 +1617,15 @@ static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
 			kill_pg(-sk->proc, SIGURG, 1);
 		}
 	}
+	/*
+	 *	We may be adding urgent data when the last byte read was
+	 *	urgent. To do this requires some care. We cannot just ignore
+	 *	sk->copied_seq since we would read the last urgent byte again
+	 *	as data, nor can we alter copied_seq until this data arrives
+	 *	or we break the sematics of SIOCATMARK (and thus sockatmark())
+	 */
+	if (sk->urg_seq == sk->copied_seq)
+		sk->copied_seq++;	/* Move the copied sequence on correctly */
 	sk->urg_data = URG_NOTYET;
 	sk->urg_seq = ptr;
 }
@@ -1735,7 +1748,6 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 {
 	struct tcphdr *th;
 	struct sock *sk;
-	int syn_ok=0;
 	__u32 seq;
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	int r;
@@ -1959,7 +1971,6 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				 *	Ok.. it's good. Set up sequence numbers and
 				 *	move to established.
 				 */
-				syn_ok=1;	/* Don't reset this connection for the syn */
 				sk->acked_seq = skb->seq+1;
 				sk->lastwin_seq = skb->seq+1;
 				sk->fin_seq = skb->seq;
@@ -2074,10 +2085,21 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		return tcp_reset(sk,skb);
 	
 	/*
-	 *	!syn_ok is effectively the state test in RFC793.
+	 *	Check for a SYN, and ensure it matches the SYN we were
+	 *	first sent. We have to handle the rather unusual (but valid)
+	 *	sequence that KA9Q derived products may generate of
+	 *
+	 *	SYN
+	 *				SYN|ACK Data
+	 *	ACK	(lost)
+	 *				SYN|ACK Data + More Data
+	 *	.. we must ACK not RST...
+	 *
+	 *	We keep syn_seq as the sequence space occupied by the 
+	 *	original syn. 
 	 */
 	 
-	if(th->syn && !syn_ok)
+	if(th->syn && skb->seq!=sk->syn_seq)
 	{
 		tcp_send_reset(daddr,saddr,th, &tcp_prot, opt, dev, skb->ip_hdr->tos, 255);
 		return tcp_reset(sk,skb);	

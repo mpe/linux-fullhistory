@@ -92,18 +92,6 @@ struct symbol_table symbol_table = {
 #endif
 	X(get_options),
 
-	/* system info variables */
-	/* These check that they aren't defines (0/1) */
-#ifndef EISA_bus__is_a_macro
-	X(EISA_bus),
-#endif
-#ifndef MCA_bus__is_a_macro
-	X(MCA_bus),
-#endif
-#ifndef wp_works_ok__is_a_macro
-	X(wp_works_ok),
-#endif
-
 #ifdef CONFIG_PCI
 	/* PCI BIOS support */
 	X(pcibios_present),

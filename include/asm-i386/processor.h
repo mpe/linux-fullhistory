@@ -33,7 +33,6 @@ extern int  have_cpuid;		/* We have a CPUID */
  */
 extern int EISA_bus;
 #define MCA_bus 0
-#define MCA_bus__is_a_macro /* for versions in ksyms.c */
 
 /*
  * User space process size: 3GB. This is hardcoded into a few places,

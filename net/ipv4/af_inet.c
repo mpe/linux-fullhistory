@@ -1593,6 +1593,59 @@ static struct proto_ops inet_proto_ops = {
 
 extern unsigned long seq_offset;
 
+#ifdef CONFIG_PROC_FS
+#ifdef CONFIG_INET_RARP
+static struct proc_dir_entry proc_net_rarp = {
+	PROC_NET_RARP, 4, "rarp",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	rarp_get_info
+};
+#endif		/* RARP */
+static struct proc_dir_entry proc_net_raw = {
+	PROC_NET_RAW, 3, "raw",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	raw_get_info
+};
+static struct proc_dir_entry proc_net_snmp = {
+	PROC_NET_SNMP, 4, "snmp",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	snmp_get_info
+};
+static struct proc_dir_entry proc_net_sockstat = {
+	PROC_NET_SOCKSTAT, 8, "sockstat",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	afinet_get_info
+};
+static struct proc_dir_entry proc_net_tcp = {
+	PROC_NET_TCP, 3, "tcp",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	tcp_get_info
+};
+static struct proc_dir_entry proc_net_udp = {
+	PROC_NET_UDP, 3, "udp",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	udp_get_info
+};
+static struct proc_dir_entry proc_net_route = {
+	PROC_NET_ROUTE, 5, "route",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	rt_get_info
+};
+static struct proc_dir_entry proc_net_rtcache = {
+	PROC_NET_RTCACHE, 8, "rt_cache",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	rt_cache_get_info
+};
+#endif		/* CONFIG_PROC_FS */
+
 /*
  *	Called by socket.c on kernel startup.  
  */
@@ -1683,55 +1736,15 @@ void inet_proto_init(struct net_proto *pro)
 #ifdef CONFIG_PROC_FS
 
 #ifdef CONFIG_INET_RARP
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_RARP, 4, "rarp",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		rarp_get_info
-	});
+	proc_net_register(&proc_net_rarp);
 #endif		/* RARP */
 
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_RAW, 3, "raw",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		raw_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_SNMP, 4, "snmp",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		snmp_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_SOCKSTAT, 8, "sockstat",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		afinet_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_TCP, 3, "tcp",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		tcp_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_UDP, 3, "udp",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		udp_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_ROUTE, 5, "route",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		rt_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_RTCACHE, 8, "rt_cache",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		rt_cache_get_info
-	});
+	proc_net_register(&proc_net_raw);
+	proc_net_register(&proc_net_snmp);
+	proc_net_register(&proc_net_sockstat);
+	proc_net_register(&proc_net_tcp);
+	proc_net_register(&proc_net_udp);
+	proc_net_register(&proc_net_route);
+	proc_net_register(&proc_net_rtcache);
 #endif		/* CONFIG_PROC_FS */
 }

@@ -92,23 +92,23 @@ struct init_block
   unsigned char eaddr[6];
   unsigned char filter[8];
   /* bit 29-31: number of rmd's (power of 2) */
-  unsigned long rrp;   /* receive ring pointer (align 8) */
+  u32 rrp;   /* receive ring pointer (align 8) */
   /* bit 29-31: number of tmd's (power of 2) */
-  unsigned long trp;   /* transmit ring pointer (align 8) */
+  u32 trp;   /* transmit ring pointer (align 8) */
 };
 
 struct rmd /* Receive Message Descriptor */
 { 
   union
   {
-    volatile unsigned long buffer;
+    volatile u32 buffer;
     struct 
     {
       volatile unsigned char dummy[3];
       volatile unsigned char status; 
     } s;
   } u;
-  short blen;
+  volatile short blen;
   volatile unsigned short mlen;
 };
 
@@ -116,14 +116,14 @@ struct tmd
 {
   union 
   {
-    volatile unsigned long buffer;
+    volatile u32 buffer;
     struct 
     {
       volatile unsigned char dummy[3];
       volatile unsigned char status;
     } s;
   } u;
-  unsigned short blen;
+  volatile unsigned short blen;
   volatile unsigned short status2;
 };
 

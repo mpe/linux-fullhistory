@@ -21,12 +21,6 @@
 #define MCA_bus__is_a_macro /* for versions in ksyms.c */
 
 /*
- * The alpha has no problems with write protection
- */
-#define wp_works_ok 1
-#define wp_works_ok__is_a_macro /* for versions in ksyms.c */
-
-/*
  * The VM exception save area. We need to save
  *	return address (r26)
  *	PC (r30)

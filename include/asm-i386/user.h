@@ -43,7 +43,7 @@ struct user_i387_struct {
 
 /*
  * This is the old layout of "struct pt_regs", and
- * is still the layout used by user more (the new
+ * is still the layout used by user mode (the new
  * pt_regs doesn't have all registers as the kernel
  * doesn't use the extra segment registers)
  */

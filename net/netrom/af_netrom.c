@@ -1401,6 +1401,27 @@ static struct notifier_block nr_dev_notifier = {
 	0
 };
 
+#ifdef CONFIG_PROC_FS
+static struct proc_dir_entry proc_net_nr = {
+	PROC_NET_NR, 2, "nr",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations, 
+	nr_get_info
+};
+static struct proc_dir_entry proc_net_nr_neigh = {
+	PROC_NET_NR_NEIGH, 8, "nr_neigh",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations, 
+	nr_neigh_get_info
+};
+static struct proc_dir_entry proc_net_nr_nodes = {
+	PROC_NET_NR_NODES, 8, "nr_nodes",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations, 
+	nr_nodes_get_info
+};
+#endif	
+
 void nr_proto_init(struct net_proto *pro)
 {
 	sock_register(nr_proto_ops.family, &nr_proto_ops);
@@ -1418,24 +1439,9 @@ void nr_proto_init(struct net_proto *pro)
 	nr_default.paclen     = NR_DEFAULT_PACLEN;
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_NR, 2, "nr",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations, 
-		nr_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_NR_NEIGH, 8, "nr_neigh",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations, 
-		nr_neigh_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_NR_NODES, 8, "nr_nodes",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations, 
-		nr_nodes_get_info
-	});
+	proc_net_register(&proc_net_nr);
+	proc_net_register(&proc_net_nr_neigh);
+	proc_net_register(&proc_net_nr_nodes);
 #endif	
 }
 

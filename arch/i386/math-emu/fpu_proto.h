@@ -7,7 +7,7 @@ extern void stack_underflow(void);
 extern void stack_underflow_i(int i);
 extern void stack_underflow_pop(int i);
 extern int set_precision_flag(int flags);
-asmlinkage void exception(int n);
+asmlinkage void FPU_exception(int n);
 asmlinkage int real_2op_NaN(FPU_REG const *a, FPU_REG const *b, FPU_REG *dest);
 asmlinkage int arith_invalid(FPU_REG *dest);
 asmlinkage int divide_by_zero(int sign, FPU_REG *dest);

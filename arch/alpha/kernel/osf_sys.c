@@ -18,7 +18,6 @@
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
 #include <linux/malloc.h>
-#include <linux/ldt.h>
 #include <linux/user.h>
 #include <linux/a.out.h>
 #include <linux/utsname.h>

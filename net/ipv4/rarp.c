@@ -544,15 +544,17 @@ int rarp_get_info(char *buffer, char **start, off_t offset, int length, int dumm
 	return len;
 }
 
+struct proc_dir_entry proc_net_rarp = {
+	PROC_NET_RARP, 4, "rarp",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	rarp_get_info
+};
+
 void
 rarp_init(void)
 {
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_RARP, 4, "rarp",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		rarp_get_info
-	});
+	proc_net_register(&proc_net_rarp);
 	rarp_ioctl_hook = rarp_ioctl;
 }
 

@@ -19,11 +19,6 @@ extern void * high_memory;
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
 
-extern int __verify_write(const void *, unsigned long);
-
-#define verify_write(type,addr,size) \
-(((type) && !wp_works_ok)?__verify_write((addr),(size)):0)
-
 extern inline int verify_area(int type, const void * addr, unsigned long size)
 {
 	int retval = 0;

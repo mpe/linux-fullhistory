@@ -21,68 +21,66 @@
 #define ACC_MODE(x) ("\000\004\002\006"[(x)&O_ACCMODE])
 
 /*
- * How long a filename can we get from user space?
- *  -EFAULT if invalid area
- *  0 if ok (ENAMETOOLONG before EFAULT)
- *  >0 EFAULT after xx bytes
- */
-static inline int get_max_filename(unsigned long address)
-{
-	struct vm_area_struct * vma;
-
-	if (get_fs() == KERNEL_DS)
-		return 0;
-	vma = find_vma(current->mm, address);
-	if (!vma || vma->vm_start > address || !(vma->vm_flags & VM_READ))
-		return -EFAULT;
-	address = vma->vm_end - address;
-	if (address > PAGE_SIZE)
-		return 0;
-	if (vma->vm_next && vma->vm_next->vm_start == vma->vm_end &&
-	   (vma->vm_next->vm_flags & VM_READ))
-		return 0;
-	return address;
-}
-
-/*
  * In order to reduce some races, while at the same time doing additional
  * checking and hopefully speeding things up, we copy filenames to the
  * kernel data space before using them..
  *
  * POSIX.1 2.4: an empty pathname is invalid (ENOENT).
  */
-int getname(const char * filename, char **result)
+static inline int do_getname(const char * filename, char *buf)
 {
-	int i, error;
-	unsigned long page;
-	char * tmp, c;
+	int error, maxlen = PAGE_SIZE;
+	int c;
 
-	i = get_max_filename((unsigned long) filename);
-	if (i < 0)
-		return i;
-	error = -EFAULT;
-	if (!i) {
-		error = -ENAMETOOLONG;
-		i = PAGE_SIZE;
+	error = -ENAMETOOLONG;
+	if (get_fs() != KERNEL_DS) {
+		error = -EFAULT;
+		if (TASK_SIZE <= (unsigned long) filename)
+			return error;
+		maxlen = TASK_SIZE - (unsigned long) filename;
+		if (maxlen >= PAGE_SIZE) {
+			maxlen = PAGE_SIZE;
+			error = -ENAMETOOLONG;
+		}
 	}
-	c = get_user(filename++);
+
+	c = (unsigned char) get_user(filename++);
 	if (!c)
 		return -ENOENT;
-	if(!(page = __get_free_page(GFP_KERNEL)))
-		return -ENOMEM;
-	*result = tmp = (char *) page;
-	while (--i) {
-		*(tmp++) = c;
+
+	while (--maxlen) {
+		*(buf++) = c;
 		c = get_user(filename++);
 		if (!c) {
-			*tmp = '\0';
+			*buf = '\0';
 			return 0;
 		}
 	}
-	free_page(page);
 	return error;
 }
 
+int getname(const char *filename, char **result)
+{
+	int error;
+	unsigned long page = __get_free_page(GFP_KERNEL);
+
+	error = -ENOMEM;
+	if (page) {
+		error = -EFAULT;
+		if (!exception()) {
+			int retval = do_getname(filename, (char *) page);
+			end_exception();
+			if (!retval) {
+				*result = (char *) page;
+				return 0;
+			}
+			error = retval;
+		}
+		free_page(page);
+	}
+	return error;
+}
+		
 void putname(char * name)
 {
 	free_page((unsigned long) name);

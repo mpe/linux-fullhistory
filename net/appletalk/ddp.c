@@ -2006,6 +2006,26 @@ struct packet_type ppptalk_packet_type=
 
 static char ddp_snap_id[]={0x08,0x00,0x07,0x80,0x9B};
 
+#ifdef CONFIG_PROC_FS
+static struct proc_dir_entry proc_appletalk = {
+	PROC_NET_ATALK, 9, "appletalk",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	atalk_get_info
+};
+static struct proc_dir_entry proc_atalk_route = {
+	PROC_NET_AT_ROUTE, 11,"atalk_route",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	atalk_rt_get_info
+};
+static struct proc_dir_entry proc_atalk_iface = {
+	PROC_NET_ATIF, 11,"atalk_iface",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	atalk_if_get_info
+};
+#endif
 
 /* Called by proto.c on kernel start up */
 
@@ -2025,24 +2045,9 @@ void atalk_proto_init(struct net_proto *pro)
 	aarp_proto_init();
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_ATALK, 9, "appletalk",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		atalk_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_AT_ROUTE, 11,"atalk_route",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		atalk_rt_get_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_ATIF, 11,"atalk_iface",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		atalk_if_get_info
-	});
+	proc_net_register(&proc_appletalk);
+	proc_net_register(&proc_atalk_route);
+	proc_net_register(&proc_atalk_iface);
 #endif	
 
 	printk(KERN_INFO "Appletalk 0.17 for Linux NET3.035\n");

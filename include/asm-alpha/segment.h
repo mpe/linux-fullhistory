@@ -51,4 +51,7 @@ static inline unsigned long get_ds(void)
 	return 0;
 }
 
+/* Hardware write protection */
+#define verify_write(type, addr, size) 0
+
 #endif /* _ASM_SEGMENT_H */

@@ -48,6 +48,23 @@
 #define set_fs(x)	(current->tss.segment = (x))
 #define get_ds()	(KERNEL_DS)
 
+extern int __verify_write(const void *addr, unsigned long size);
+
+#if CPU > 386
+
+#define verify_write(type,addr,size) 0
+
+#else
+
+/*
+ * The intel i386 CPU needs to check writability by hand, as the
+ * CPU does not honour the write protect bit in supervisor mode
+ */
+#define verify_write(type,addr,size) \
+(((type) && !wp_works_ok)?__verify_write((addr),(size)):0)
+
+#endif
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_SEGMENT_H */

@@ -3081,6 +3081,14 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
 	len   = skb->len;
 	data  = skb_data(skb);
 /*
+ * Bug trap for null data. Release the skb and bail out.
+ */
+	if(data == NULL) {
+		printk("ppp_dev_xmit: data=NULL before ppp_dev_xmit_ip.\n");
+		dev_kfree_skb (skb, FREE_WRITE);
+		return 0;
+	}
+/*
  * Look at the protocol in the skb to determine the difference between
  * an IP frame and an IPX frame.
  */

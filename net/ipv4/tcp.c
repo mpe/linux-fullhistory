@@ -873,6 +873,8 @@ static void wait_for_tcp_memory(struct sock * sk)
 		sk->socket->flags &= ~SO_NOSPACE;
 		add_wait_queue(sk->sleep, &wait);
 		for (;;) {
+			if (current->signal & ~current->blocked)
+				break;
 			current->state = TASK_INTERRUPTIBLE;
 			if (tcp_memory_free(sk))
 				break;
@@ -930,6 +932,7 @@ static int fill_in_partial_skb(struct sock *sk, struct sk_buff *skb,
 	skb->tail += copy;
 	skb->len += copy;
 	skb->csum = csum_partial(skb->tail - tcp_size, tcp_size, 0);
+	sk->write_seq += copy;
 	if (!sk->packets_out)
 		send = tcp_send_skb;
 	send(sk, skb);
@@ -1064,7 +1067,6 @@ static int do_tcp_sendmsg(struct sock *sk,
 					from += retval;
 					copied += retval;
 					len -= retval;
-					sk->write_seq += retval;
 					continue;
 				}
 				tcp_send_skb(sk, skb);

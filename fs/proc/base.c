@@ -80,72 +80,83 @@ struct proc_dir_entry proc_pid = {
 	NULL, &proc_root, NULL
 };
 
+static struct proc_dir_entry proc_pid_status = {
+	PROC_PID_STATUS, 6, "status",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations,
+	NULL, proc_pid_fill_inode,
+};
+static struct proc_dir_entry proc_pid_mem = {
+	PROC_PID_MEM, 3, "mem",
+	S_IFREG | S_IRUSR | S_IWUSR, 1, 0, 0,
+	0, &proc_mem_inode_operations,
+	NULL, proc_pid_fill_inode,
+};
+static struct proc_dir_entry proc_pid_cwd = {
+	PROC_PID_CWD, 3, "cwd",
+	S_IFLNK | S_IRWXU, 1, 0, 0,
+	0, &proc_link_inode_operations,
+	NULL, proc_pid_fill_inode,
+};
+static struct proc_dir_entry proc_pid_root = {
+	PROC_PID_ROOT, 4, "root",
+	S_IFLNK | S_IRWXU, 1, 0, 0,
+	0, &proc_link_inode_operations,
+	NULL, proc_pid_fill_inode,
+};
+static struct proc_dir_entry proc_pid_exe = {
+	PROC_PID_EXE, 3, "exe",
+	S_IFLNK | S_IRWXU, 1, 0, 0,
+	0, &proc_link_inode_operations,
+	NULL, proc_pid_fill_inode,
+};
+static struct proc_dir_entry proc_pid_fd = {
+	PROC_PID_FD, 2, "fd",
+	S_IFDIR | S_IRUSR | S_IXUSR, 1, 0, 0,
+	0, &proc_fd_inode_operations,
+	NULL, proc_pid_fill_inode,
+};
+static struct proc_dir_entry proc_pid_environ = {
+	PROC_PID_ENVIRON, 7, "environ",
+	S_IFREG | S_IRUSR, 1, 0, 0,
+	0, &proc_array_inode_operations,
+	NULL, proc_pid_fill_inode,
+};
+static struct proc_dir_entry proc_pid_cmdline = {
+	PROC_PID_CMDLINE, 7, "cmdline",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations,
+	NULL, proc_pid_fill_inode,
+};
+static struct proc_dir_entry proc_pid_stat = {
+	PROC_PID_STAT, 4, "stat",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations,
+	NULL, proc_pid_fill_inode,
+};
+static struct proc_dir_entry proc_pid_statm = {
+	PROC_PID_STATM, 5, "statm",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations,
+	NULL, proc_pid_fill_inode,
+};
+static struct proc_dir_entry proc_pid_maps = {
+	PROC_PID_MAPS, 4, "maps",
+	S_IFIFO | S_IRUGO, 1, 0, 0,
+	0, &proc_arraylong_inode_operations,
+	NULL, proc_pid_fill_inode,
+};
 void proc_base_init(void)
 {
-	proc_register(&proc_pid, &(struct proc_dir_entry) {
-		PROC_PID_STATUS, 6, "status",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_array_inode_operations,
-		NULL, proc_pid_fill_inode,
-	});
-	proc_register(&proc_pid, &(struct proc_dir_entry) {
-		PROC_PID_MEM, 3, "mem",
-		S_IFREG | S_IRUSR | S_IWUSR, 1, 0, 0,
-		0, &proc_mem_inode_operations,
-		NULL, proc_pid_fill_inode,
-	});
-	proc_register(&proc_pid, &(struct proc_dir_entry) {
-		PROC_PID_CWD, 3, "cwd",
-		S_IFLNK | S_IRWXU, 1, 0, 0,
-		0, &proc_link_inode_operations,
-		NULL, proc_pid_fill_inode,
-	});
-	proc_register(&proc_pid, &(struct proc_dir_entry) {
-		PROC_PID_ROOT, 4, "root",
-		S_IFLNK | S_IRWXU, 1, 0, 0,
-		0, &proc_link_inode_operations,
-		NULL, proc_pid_fill_inode,
-	});
-	proc_register(&proc_pid, &(struct proc_dir_entry) {
-		PROC_PID_EXE, 3, "exe",
-		S_IFLNK | S_IRWXU, 1, 0, 0,
-		0, &proc_link_inode_operations,
-		NULL, proc_pid_fill_inode,
-	});
-	proc_register(&proc_pid, &(struct proc_dir_entry) {
-		PROC_PID_FD, 2, "fd",
-		S_IFDIR | S_IRUSR | S_IXUSR, 1, 0, 0,
-		0, &proc_fd_inode_operations,
-		NULL, proc_pid_fill_inode,
-	});
-	proc_register(&proc_pid, &(struct proc_dir_entry) {
-		PROC_PID_ENVIRON, 7, "environ",
-		S_IFREG | S_IRUSR, 1, 0, 0,
-		0, &proc_array_inode_operations,
-		NULL, proc_pid_fill_inode,
-	});
-	proc_register(&proc_pid, &(struct proc_dir_entry) {
-		PROC_PID_CMDLINE, 7, "cmdline",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_array_inode_operations,
-		NULL, proc_pid_fill_inode,
-	});
-	proc_register(&proc_pid, &(struct proc_dir_entry) {
-		PROC_PID_STAT, 4, "stat",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_array_inode_operations,
-		NULL, proc_pid_fill_inode,
-	});
-	proc_register(&proc_pid, &(struct proc_dir_entry) {
-		PROC_PID_STATM, 5, "statm",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_array_inode_operations,
-		NULL, proc_pid_fill_inode,
-	});
-	proc_register(&proc_pid, &(struct proc_dir_entry) {
-		PROC_PID_MAPS, 4, "maps",
-		S_IFIFO | S_IRUGO, 1, 0, 0,
-		0, &proc_arraylong_inode_operations,
-		NULL, proc_pid_fill_inode,
-	});
+	proc_register(&proc_pid, &proc_pid_status);
+	proc_register(&proc_pid, &proc_pid_mem);
+	proc_register(&proc_pid, &proc_pid_cwd);
+	proc_register(&proc_pid, &proc_pid_root);
+	proc_register(&proc_pid, &proc_pid_exe);
+	proc_register(&proc_pid, &proc_pid_fd);
+	proc_register(&proc_pid, &proc_pid_environ);
+	proc_register(&proc_pid, &proc_pid_cmdline);
+	proc_register(&proc_pid, &proc_pid_stat);
+	proc_register(&proc_pid, &proc_pid_statm);
+	proc_register(&proc_pid, &proc_pid_maps);
 };

@@ -596,7 +596,7 @@ LNormalise_shift_done:
 	/* There must be a masked underflow */
 	push	%eax
 	pushl	EX_Underflow
-	call	SYMBOL_NAME(exception)
+	call	SYMBOL_NAME(FPU_exception)
 	popl	%eax
 	popl	%eax
 	jmp	xL_Normalised
@@ -613,7 +613,7 @@ L_underflow_to_zero:
 
 	push	%eax
 	pushl	EX_Underflow
-	call	SYMBOL_NAME(exception)
+	call	SYMBOL_NAME(FPU_exception)
 	popl	%eax
 	popl	%eax
 

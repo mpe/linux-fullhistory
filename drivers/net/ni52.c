@@ -4,13 +4,15 @@
  * This is an extension to the Linux operating system, and is covered by the
  * same Gnu Public License that covers that work.
  * 
- * Alphacode 0.80 (96/02/19) for Linux 1.3.66 (or later)
+ * Alphacode 0.82 (96/09/29) for Linux 2.0.0 (or later)
  * Copyrights (c) 1994,1995,1996 by M.Hipp (Michael.Hipp@student.uni-tuebingen.de)
  *    [feel free to mail ....]
  *
  * when using as module: (no autoprobing!)
- *   compile with: gcc -D__KERNEL__ -DMODULE -O2 -c ni52.c
- *   run with e.g: insmod ni52.o io=0x360 irq=9 memstart=0xd0000 memend=0xd4000
+ *   compile with:
+ *       gcc -O2 -fomit-frame-pointer -m486 -D__KERNEL__ -DMODULE -c ni52.c
+ *   run with e.g:
+ *       insmod ni52.o io=0x360 irq=9 memstart=0xd0000 memend=0xd4000
  *
  * CAN YOU PLEASE REPORT ME YOUR PERFORMANCE EXPERIENCES !!.
  * 
@@ -62,6 +64,7 @@
  */
 
 /*
+ * 29.Sept.96: virt_to_bus changes for new memory scheme 
  * 19.Feb.96: more Mcast changes, module support (MH)
  *
  * 18.Nov.95: Mcast changes (AC).
@@ -129,8 +132,8 @@ static int fifo=0x8;	/* don't change */
 #define ni_enaint()   {outb(0,dev->base_addr+NI52_INTENA);}
 
 #define make32(ptr16) (p->memtop + (short) (ptr16) )
-#define make24(ptr32) ((char *) (ptr32) - p->base)
-#define make16(ptr32) ((unsigned short) ((unsigned long) (ptr32) - (unsigned long) p->memtop ))
+#define make24(ptr32) ( ((char *) (ptr32)) - p->base)
+#define make16(ptr32) ((unsigned short) ((unsigned long)(ptr32) - (unsigned long) p->memtop ))
 
 /******************* how to calculate the buffers *****************************
 
@@ -285,8 +288,8 @@ static int check586(struct device *dev,char *where,unsigned size)
   char *iscp_addrs[2];
   int i;
 
-  p->base = (unsigned long) where + size - 0x01000000;
-  p->memtop = where + size;
+  p->base = (unsigned long) bus_to_virt((unsigned long)where) + size - 0x01000000;
+  p->memtop = bus_to_virt((unsigned long)where) + size;
   p->scp = (struct scp_struct *)(p->base + SCP_DEFAULT_ADDRESS);
   memset((char *)p->scp,0, sizeof(struct scp_struct));
   for(i=0;i<sizeof(struct scp_struct);i++) /* memory was writeable? */
@@ -296,7 +299,7 @@ static int check586(struct device *dev,char *where,unsigned size)
   if(p->scp->sysbus != SYSBUSVAL)
     return 0;
   
-  iscp_addrs[0] = where;
+  iscp_addrs[0] = bus_to_virt((unsigned long)where);
   iscp_addrs[1]= (char *) p->scp - sizeof(struct iscp_struct);
 
   for(i=0;i<2;i++)
@@ -328,7 +331,7 @@ void alloc586(struct device *dev)
   DELAY(1);
 
   p->scp  = (struct scp_struct *)  (p->base + SCP_DEFAULT_ADDRESS);
-  p->scb  = (struct scb_struct *)  (dev->mem_start);
+  p->scb  = (struct scb_struct *)  bus_to_virt(dev->mem_start);
   p->iscp = (struct iscp_struct *) ((char *)p->scp - sizeof(struct iscp_struct));
 
   memset((char *) p->iscp,0,sizeof(struct iscp_struct));
@@ -479,8 +482,8 @@ static int ni52_probe1(struct device *dev,int ioaddr)
                                   /* warning: we don't free it on errors */
   memset((char *) dev->priv,0,sizeof(struct priv));
   
-  ((struct priv *) (dev->priv))->memtop = (char *) dev->mem_start + size;
-  ((struct priv *) (dev->priv))->base =  dev->mem_start + size - 0x01000000;
+  ((struct priv *) (dev->priv))->memtop = bus_to_virt(dev->mem_start) + size;
+  ((struct priv *) (dev->priv))->base =  (unsigned long) bus_to_virt(dev->mem_start) + size - 0x01000000;
   alloc586(dev);
 
   /* set number of receive-buffs according to memsize */

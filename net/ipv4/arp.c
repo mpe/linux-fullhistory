@@ -2389,6 +2389,15 @@ static struct notifier_block arp_dev_notifier={
 	0
 };
 
+#ifdef CONFIG_PROC_FS
+static struct proc_dir_entry proc_net_arp = {
+	PROC_NET_ARP, 3, "arp",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	arp_get_info
+};
+#endif
+
 void arp_init (void)
 {
 	/* Register the packet type */
@@ -2400,12 +2409,7 @@ void arp_init (void)
 	register_netdevice_notifier(&arp_dev_notifier);
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_ARP, 3, "arp",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		arp_get_info
-	});
+	proc_net_register(&proc_net_arp);
 #endif
 
 #ifdef CONFIG_ARPD

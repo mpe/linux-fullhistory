@@ -292,7 +292,7 @@ static struct {
 	      0x242  in div_Xsig.S
  */
 
-void exception(int n)
+void FPU_exception(int n)
 {
   int i, int_type;
 
@@ -482,7 +482,7 @@ int set_precision_flag(int flags)
     }
   else
     {
-      exception(flags);
+      EXCEPTION(flags);
       return 1;
     }
 }
@@ -494,7 +494,7 @@ asmlinkage void set_precision_flag_up(void)
   if ( control_word & CW_Precision )
     partial_status |= (SW_Precision | SW_C1);   /* The masked response */
   else
-    exception(EX_Precision | SW_C1);
+    EXCEPTION(EX_Precision | SW_C1);
 
 }
 
@@ -508,7 +508,7 @@ asmlinkage void set_precision_flag_down(void)
       partial_status |= SW_Precision;
     }
   else
-    exception(EX_Precision);
+    EXCEPTION(EX_Precision);
 }
 
 
@@ -521,7 +521,7 @@ asmlinkage int denormal_operand(void)
     }
   else
     {
-      exception(EX_Denormal);
+      EXCEPTION(EX_Denormal);
       return 1;
     }
 }

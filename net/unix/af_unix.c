@@ -1294,18 +1294,21 @@ struct proto_ops unix_proto_ops = {
 	unix_recvmsg
 };
 
+#ifdef CONFIG_PROC_FS
+static struct proc_dir_entry proc_net_unix = {
+	PROC_NET_UNIX,  4, "unix",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	unix_get_info
+};
+#endif
 
 void unix_proto_init(struct net_proto *pro)
 {
 	printk(KERN_INFO "NET3: Unix domain sockets 0.12 for Linux NET3.035.\n");
 	sock_register(unix_proto_ops.family, &unix_proto_ops);
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_UNIX,  4, "unix",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		unix_get_info
-	});
+	proc_net_register(&proc_net_unix);
 #endif
 }
 /*

@@ -82,10 +82,8 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate 'ICL EtherTeam 16i/32 support' CONFIG_ETH16I
     fi
     tristate 'NE2000/NE1000 support' CONFIG_NE2000
-    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'NI5210 support' CONFIG_NI52
-      bool 'NI6510 support' CONFIG_NI65
-    fi
+    tristate 'NI5210 support' CONFIG_NI52
+    tristate 'NI6510 support' CONFIG_NI65
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool 'SEEQ8005 support (EXPERIMENTAL)' CONFIG_SEEQ8005
     fi

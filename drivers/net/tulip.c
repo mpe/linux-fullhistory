@@ -1096,7 +1096,7 @@ static void set_multicast_list(struct device *dev)
 		/* Log any net taps. */
 		printk("%s: Promiscuous mode enabled.\n", dev->name);
 	}
-	else if (dev->mc_count > 15 || (dev->flags&IFF_ALLMULTI)) 
+	else if (dev->mc_count > 14 || (dev->flags&IFF_ALLMULTI)) 
 	{
 		/* Too many to filter perfectly -- accept all multicasts. */
 		tio_write(csr6 | TCMOD_ALLMCAST, CSR6);
@@ -1109,7 +1109,7 @@ static void set_multicast_list(struct device *dev)
 		unsigned short *eaddrs;
 		int i;
 
-		/* We have <= 15 addresses that we can use the wonderful
+		/* We have < 15 addresses that we can use the wonderful
 		   16 address perfect filtering of the Tulip.  Note that only
 		   the low shortword of setup_frame[] is valid. */
 		tio_write(csr6 | 0x0000, CSR6);
@@ -1122,11 +1122,15 @@ static void set_multicast_list(struct device *dev)
 		}
 		/* Fill the rest of the table with our physical address. */
 		eaddrs = (unsigned short *)dev->dev_addr;
+		/* Always accept broadcast packets */
+		*setup_frm++ = 0xffff;
+		*setup_frm++ = 0xffff;
+		*setup_frm++ = 0xffff;
 		do {
 			*setup_frm++ = eaddrs[0];
 			*setup_frm++ = eaddrs[1];
 			*setup_frm++ = eaddrs[2];
-		} while (++i < 16);
+		} while (++i < 15);
 
 		/* Now add this frame to the Tx list. */
 	}

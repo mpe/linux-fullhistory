@@ -12,7 +12,7 @@
 
 #include <linux/linkage.h>
 
-#define	EXCEPTION	SYMBOL_NAME(exception)
+#define	EXCEPTION	SYMBOL_NAME(FPU_exception)
 
 
 #define PARAM1	8(%ebp)

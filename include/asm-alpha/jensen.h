@@ -95,6 +95,8 @@ extern inline void __set_hae(unsigned long addr)
 		set_hae(addr);
 }
 
+#ifdef __KERNEL__
+
 /*
  * IO functions
  *
@@ -258,6 +260,8 @@ extern inline void __writel(unsigned int b, unsigned long addr)
 
 #define outb(x, port) \
 (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
+
+#endif /* __KERNEL__ */
 
 /*
  * The Alpha Jensen hardware for some rather strange reason puts

@@ -195,6 +195,9 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_NI52
 	&& ni52_probe(dev)
 #endif
+#ifdef CONFIG_NI65
+        && ni65_probe(dev)
+#endif
 #ifdef CONFIG_ATARILANCE	/* Lance-based Atari ethernet boards */
 	&& atarilance_probe(dev)
 #endif

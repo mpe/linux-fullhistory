@@ -156,77 +156,66 @@ repeat:
 static int sync_buffers(kdev_t dev, int wait)
 {
 	int i, retry, pass = 0, err = 0;
-	int nlist, ncount;
 	struct buffer_head * bh, *next;
 
 	/* One pass for no-wait, three for wait:
 	   0) write out all dirty, unlocked buffers;
 	   1) write out all dirty buffers, waiting if locked;
 	   2) wait for completion by waiting for all buffers to unlock. */
- repeat:
-	retry = 0;
- repeat2:
-	ncount = 0;
+	do {
+		retry = 0;
+repeat:
 	/* We search all lists as a failsafe mechanism, not because we expect
 	   there to be dirty buffers on any of the other lists. */
-	for(nlist = 0; nlist < NR_LIST; nlist++)
-	 {
-	 repeat1:
-		 bh = lru_list[nlist];
-		 if(!bh) continue;
-		 for (i = nr_buffers_type[nlist]*2 ; i-- > 0 ; bh = next) {
-			 if(bh->b_list != nlist) goto repeat1;
-			 next = bh->b_next_free;
-			 if(!lru_list[nlist]) break;
-			 if (dev && bh->b_dev != dev)
-				  continue;
-			 if (buffer_locked(bh))
-			  {
-				  /* Buffer is locked; skip it unless wait is
-				     requested AND pass > 0. */
-				  if (!wait || !pass) {
-					  retry = 1;
-					  continue;
-				  }
-				  wait_on_buffer (bh);
-				  goto repeat2;
-			  }
-			 /* If an unlocked buffer is not uptodate, there has
-			     been an IO error. Skip it. */
-			 if (wait && buffer_req(bh) && !buffer_locked(bh) &&
-			     !buffer_dirty(bh) && !buffer_uptodate(bh)) {
-				  err = 1;
-				  continue;
-			  }
-			 /* Don't write clean buffers.  Don't write ANY buffers
-			    on the third pass. */
-			 if (!buffer_dirty(bh) || pass>=2)
-				  continue;
-			 /* don't bother about locked buffers */
-			 if (buffer_locked(bh))
-				 continue;
-			 bh->b_count++;
-			 bh->b_flushtime = 0;
-			 ll_rw_block(WRITE, 1, &bh);
-
-			 if(nlist != BUF_DIRTY) { 
-				 printk("[%d %s %ld] ", nlist,
-					kdevname(bh->b_dev), bh->b_blocknr);
-				 ncount++;
-			 }
-			 bh->b_count--;
-			 retry = 1;
-		 }
-	 }
-	if (ncount)
-	  printk("sys_sync: %d dirty buffers not on dirty list\n", ncount);
+		bh = lru_list[BUF_DIRTY];
+		if (!bh)
+			break;
+		for (i = nr_buffers_type[BUF_DIRTY]*2 ; i-- > 0 ; bh = next) {
+			if (bh->b_list != BUF_DIRTY)
+				goto repeat;
+			next = bh->b_next_free;
+			if (!lru_list[BUF_DIRTY])
+				break;
+			if (dev && bh->b_dev != dev)
+				continue;
+			if (buffer_locked(bh)) {
+				/* Buffer is locked; skip it unless wait is
+				   requested AND pass > 0. */
+				if (!wait || !pass) {
+					retry = 1;
+					continue;
+				}
+				wait_on_buffer (bh);
+				goto repeat;
+			}
+			/* If an unlocked buffer is not uptodate, there has
+			    been an IO error. Skip it. */
+			if (wait && buffer_req(bh) && !buffer_locked(bh) &&
+			    !buffer_dirty(bh) && !buffer_uptodate(bh)) {
+				err = 1;
+				continue;
+			}
+			/* Don't write clean buffers.  Don't write ANY buffers
+			   on the third pass. */
+			if (!buffer_dirty(bh) || pass >= 2)
+				continue;
+			/* don't bother about locked buffers */
+			if (buffer_locked(bh))
+				continue;
+			bh->b_count++;
+			next->b_count++;
+			bh->b_flushtime = 0;
+			ll_rw_block(WRITE, 1, &bh);
+			bh->b_count--;
+			next->b_count--;
+			retry = 1;
+		}
 	
 	/* If we are waiting for the sync to succeed, and if any dirty
 	   blocks were written, then repeat; on the second pass, only
 	   wait for buffers being written (do not pass to write any
 	   more buffers on the second pass). */
-	if (wait && retry && ++pass<=2)
-		 goto repeat;
+	} while (wait && retry && ++pass<=2);
 	return err;
 }
 

@@ -30,7 +30,7 @@ ENTRY(normalize)
 	je	L_ok
 
 	pushl	$0x220
-	call	SYMBOL_NAME(exception)
+	call	SYMBOL_NAME(FPU_exception)
 	addl	$4,%esp
 
 L_ok:
@@ -107,7 +107,7 @@ ENTRY(normalize_nuo)
 	je	L_ok_nuo
 
 	pushl	$0x221
-	call	SYMBOL_NAME(exception)
+	call	SYMBOL_NAME(FPU_exception)
 	addl	$4,%esp
 
 L_ok_nuo:

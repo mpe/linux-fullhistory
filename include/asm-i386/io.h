@@ -37,58 +37,6 @@
 #define SLOW_DOWN_IO __SLOW_DOWN_IO
 #endif
 
-#include <asm/page.h>
-
-#define __io_virt(x)		((void *)(PAGE_OFFSET | (unsigned long)(x)))
-#define __io_phys(x)		((unsigned long)(x) & ~PAGE_OFFSET)
-/*
- * Change virtual addresses to physical addresses and vv.
- * These are pretty trivial
- */
-extern inline unsigned long virt_to_phys(volatile void * address)
-{
-	return __io_phys(address);
-}
-
-extern inline void * phys_to_virt(unsigned long address)
-{
-	return __io_virt(address);
-}
-
-extern void * ioremap(unsigned long offset, unsigned long size);
-extern void iounmap(void *addr);
-
-/*
- * IO bus memory addresses are also 1:1 with the physical address
- */
-#define virt_to_bus virt_to_phys
-#define bus_to_virt phys_to_virt
-
-/*
- * readX/writeX() are used to access memory mapped devices. On some
- * architectures the memory mapped IO stuff needs to be accessed
- * differently. On the x86 architecture, we just read/write the
- * memory location directly.
- */
-
-#define readb(addr) (*(volatile unsigned char *) __io_virt(addr))
-#define readw(addr) (*(volatile unsigned short *) __io_virt(addr))
-#define readl(addr) (*(volatile unsigned int *) __io_virt(addr))
-
-#define writeb(b,addr) (*(volatile unsigned char *) __io_virt(addr) = (b))
-#define writew(b,addr) (*(volatile unsigned short *) __io_virt(addr) = (b))
-#define writel(b,addr) (*(volatile unsigned int *) __io_virt(addr) = (b))
-
-#define memset_io(a,b,c)	memset(__io_virt(a),(b),(c))
-#define memcpy_fromio(a,b,c)	memcpy((a),__io_virt(b),(c))
-#define memcpy_toio(a,b,c)	memcpy(__io_virt(a),(b),(c))
-
-/*
- * Again, i386 does not require mem IO specific function.
- */
-
-#define eth_io_copy_and_sum(a,b,c,d)	eth_copy_and_sum((a),__io_virt(b),(c),(d))
-
 /*
  * Talk about misusing macros..
  */
@@ -216,6 +164,60 @@ __OUTS(l)
 	__inlc_p(port) : \
 	__inl_p(port))
 
+#ifdef __KERNEL__
+
+#include <asm/page.h>
+
+#define __io_virt(x)		((void *)(PAGE_OFFSET | (unsigned long)(x)))
+#define __io_phys(x)		((unsigned long)(x) & ~PAGE_OFFSET)
+/*
+ * Change virtual addresses to physical addresses and vv.
+ * These are pretty trivial
+ */
+extern inline unsigned long virt_to_phys(volatile void * address)
+{
+	return __io_phys(address);
+}
+
+extern inline void * phys_to_virt(unsigned long address)
+{
+	return __io_virt(address);
+}
+
+extern void * ioremap(unsigned long offset, unsigned long size);
+extern void iounmap(void *addr);
+
+/*
+ * IO bus memory addresses are also 1:1 with the physical address
+ */
+#define virt_to_bus virt_to_phys
+#define bus_to_virt phys_to_virt
+
+/*
+ * readX/writeX() are used to access memory mapped devices. On some
+ * architectures the memory mapped IO stuff needs to be accessed
+ * differently. On the x86 architecture, we just read/write the
+ * memory location directly.
+ */
+
+#define readb(addr) (*(volatile unsigned char *) __io_virt(addr))
+#define readw(addr) (*(volatile unsigned short *) __io_virt(addr))
+#define readl(addr) (*(volatile unsigned int *) __io_virt(addr))
+
+#define writeb(b,addr) (*(volatile unsigned char *) __io_virt(addr) = (b))
+#define writew(b,addr) (*(volatile unsigned short *) __io_virt(addr) = (b))
+#define writel(b,addr) (*(volatile unsigned int *) __io_virt(addr) = (b))
+
+#define memset_io(a,b,c)	memset(__io_virt(a),(b),(c))
+#define memcpy_fromio(a,b,c)	memcpy((a),__io_virt(b),(c))
+#define memcpy_toio(a,b,c)	memcpy(__io_virt(a),(b),(c))
+
+/*
+ * Again, i386 does not require mem IO specific function.
+ */
+
+#define eth_io_copy_and_sum(a,b,c,d)	eth_copy_and_sum((a),__io_virt(b),(c),(d))
+
 static inline int check_signature(unsigned long io_addr,
 	const unsigned char *signature, int length)
 {
@@ -231,5 +233,7 @@ static inline int check_signature(unsigned long io_addr,
 out:
 	return retval;
 }
+
+#endif /* __KERNEL__ */
 
 #endif

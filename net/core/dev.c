@@ -1369,6 +1369,15 @@ extern int pi_init(void);
 extern void sdla_setup(void);
 extern void dlci_setup(void);
 
+#ifdef CONFIG_PROC_FS
+static struct proc_dir_entry proc_net_dev = {
+	PROC_NET_DEV, 3, "dev",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	dev_get_info
+};
+#endif
+
 int net_dev_init(void)
 {
 	struct device *dev, **dp;
@@ -1394,9 +1403,6 @@ int net_dev_init(void)
 	 */
 #if defined(CONFIG_LANCE)
 	lance_init();
-#endif
-#if defined(CONFIG_NI65)
-	ni65_init();
 #endif
 #if defined(CONFIG_PI)
 	pi_init();
@@ -1449,12 +1455,7 @@ int net_dev_init(void)
 	}
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_DEV, 3, "dev",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		dev_get_info
-	});
+	proc_net_register(&proc_net_dev);
 #endif
 
 	/*	

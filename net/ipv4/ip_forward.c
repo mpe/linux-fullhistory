@@ -264,8 +264,12 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		if (iph->protocol == IPPROTO_ICMP)
 		{
 			if ((fw_res = ip_fw_masq_icmp(&skb, dev2)) < 0)
+			{
+				if (rt)
+					ip_rt_put(rt);
 				/* Problem - ie bad checksum */
 				return -1;
+			}
 
 			if (fw_res)
 				/* ICMP matched - skip firewall */

@@ -913,6 +913,21 @@ done:
   	return len;
 }
 
+#ifdef CONFIG_PROC_FS	
+static struct proc_dir_entry proc_net_ipmr_vif = {
+	PROC_NET_IPMR_VIF, 9 ,"ip_mr_vif",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	ipmr_vif_info
+};
+static struct proc_dir_entry proc_net_ipmr_mfc = {
+	PROC_NET_IPMR_MFC, 11 ,"ip_mr_cache",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	ipmr_mfc_info
+};
+#endif	
+
 /*
  *	Setup for IP multicast routing
  */
@@ -922,17 +937,7 @@ void ip_mr_init(void)
 	printk(KERN_INFO "Linux IP multicast router 0.06.\n");
 	register_netdevice_notifier(&ip_mr_notifier);
 #ifdef CONFIG_PROC_FS	
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_IPMR_VIF, 9 ,"ip_mr_vif",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ipmr_vif_info
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_IPMR_MFC, 11 ,"ip_mr_cache",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ipmr_mfc_info
-	});
+	proc_net_register(&proc_net_ipmr_vif);
+	proc_net_register(&proc_net_ipmr_mfc);
 #endif	
 }

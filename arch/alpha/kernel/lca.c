@@ -429,7 +429,7 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 	switch (el.c->size) {
 	      case sizeof(struct el_lca_mcheck_short):
 		printk(KERN_CRIT
-		       "  Reason: %s (short frame%s, dc_stat=%lx):\pn",
+		       "  Reason: %s (short frame%s, dc_stat=%lx):\n",
 		       reason, el.c->retry ? ", retryable" : "", el.s->dc_stat);
 		if (el.s->esr & ESR_EAV) {
 		    mem_error(el.s->esr, el.s->ear);

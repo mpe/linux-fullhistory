@@ -184,16 +184,18 @@ static struct symbol_table misc_syms = {
 #include <linux/symtab_end.h>
 };
 
+static struct proc_dir_entry proc_misc = {
+	0, 4, "misc",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, NULL /* ops -- default to array */,
+	&proc_misc_read /* get_info */,
+};
+
 int misc_init(void)
 {
 #ifndef MODULE
 #ifdef CONFIG_PROC_FS
-	proc_register_dynamic(&proc_root, &(struct proc_dir_entry) {
-		0, 4, "misc",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, NULL /* ops -- default to array */,
-		&proc_misc_read /* get_info */,
-	});	
+	proc_register_dynamic(&proc_root, &proc_misc);	
 #endif /* PROC_FS */
 #ifdef CONFIG_BUSMOUSE
 	bus_mouse_init();

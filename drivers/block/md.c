@@ -439,6 +439,10 @@ static struct symbol_table md_symbol_table=
 #include <linux/symtab_end.h>
 };
 
+static struct proc_dir_entry proc_md = {
+	PROC_MD, 6, "mdstat",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
 
 static void md_geninit (struct gendisk *gdisk)
 {
@@ -455,12 +459,7 @@ static void md_geninit (struct gendisk *gdisk)
   blksize_size[MAJOR_NR] = md_blocksizes;
   register_symtab (&md_symbol_table);
 
-  proc_register(&proc_root,
-		&(struct proc_dir_entry)
-	      {
-		PROC_MD, 6, "mdstat",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	      });
+  proc_register(&proc_root, &proc_md);
 }
 
 

@@ -471,12 +471,12 @@ static void ifc_init(void)
 } /* ifc_init */
 
 
-static void report_exception(unsigned n)
+static void report_qic_exception(unsigned n)
 {
-	if (n >= NR_OF_EXC) { tpqputs(TPQD_ALWAYS, "Oops -- report_exception"); n = 0; }
+	if (n >= NR_OF_EXC) { tpqputs(TPQD_ALWAYS, "Oops -- report_qic_exception"); n = 0; }
 	if (TPQDBG(SENSE_TEXT) || n==0)
 		printk(TPQIC02_NAME ": sense: %s\n", exception_list[n].msg);
-} /* report_exception */
+} /* report_qic_exception */
 
 
 /* Try to map the drive-exception bits `s' to a predefined "exception number",
@@ -484,7 +484,7 @@ static void report_exception(unsigned n)
  * exception table (`exception_list[]').
  * It is assumed that s!=0.
  */
-static int decode_exception_nr(unsigned s)
+static int decode_qic_exception_nr(unsigned s)
 {
 	int i;
 
@@ -492,9 +492,9 @@ static int decode_exception_nr(unsigned s)
 		if ((s & exception_list[i].mask)==exception_list[i].code)
 			return i;
 	}
-	printk(TPQIC02_NAME ": decode_exception_nr: exception(%x) not recognized\n", s);
+	printk(TPQIC02_NAME ": decode_qic_exception_nr: exception(%x) not recognized\n", s);
 	return 0;
-} /* decode_exception_nr */
+} /* decode_qic_exception_nr */
 
 
 #ifdef OBSOLETE
@@ -576,7 +576,7 @@ static void report_error(int s)
 /* Perform appropriate action for certain exceptions.
  * should return a value to indicate stop/continue (in case of bad blocks)
  */
-static void handle_exception(int exnr, int exbits)
+static void handle_qic_exception(int exnr, int exbits)
 {
 	if (exnr==EXC_NCART) {
 		/* Cartridge was changed. Redo sense().
@@ -600,7 +600,7 @@ static void handle_exception(int exnr, int exbits)
 		doing_read = NO;
 	} else if (exnr==EXC_FM)
 		doing_read = NO;
-} /* handle_exception */
+} /* handle_qic_exception */
 
 
 static inline int is_exception(void)
@@ -1035,9 +1035,9 @@ static int tp_sense(int ignore)
 
 	if (err & (TP_ST0|TP_ST1)) {
 		/* My Wangtek occasionally reports `status' 1212 which should be ignored. */
-		exnr = decode_exception_nr(err);
-		handle_exception(exnr, err);		/* update driver state wrt drive status */
-		report_exception(exnr);
+		exnr = decode_qic_exception_nr(err);
+		handle_qic_exception(exnr, err);		/* update driver state wrt drive status */
+		report_qic_exception(exnr);
 	}
 	err &= ~ignore;		/* mask unwanted errors -- not the correct way, use exception nrs?? */
 	if (((err & TP_ST0) && (err & REPORT_ERR0)) ||

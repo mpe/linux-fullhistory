@@ -473,6 +473,15 @@ done:
 }
 
 
+#ifdef CONFIG_PROC_FS        
+static struct proc_dir_entry proc_net_ip_masq_app = {
+	PROC_NET_IP_MASQ_APP, 11, "ip_masq_app",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	ip_masq_app_getinfo
+};
+#endif        
+
 /*
  *	Initialization routine
  */
@@ -482,12 +491,7 @@ int ip_masq_app_init(void)
         
         register_symtab (&ip_masq_app_syms);
 #ifdef CONFIG_PROC_FS        
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_IP_MASQ_APP, 11, "ip_masq_app",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ip_masq_app_getinfo
- 	});
+	proc_net_register(&proc_net_ip_masq_app);
 #endif        
         return 0;
 }

@@ -994,6 +994,15 @@ done:
 	return len;
 }
 
+#ifdef CONFIG_PROC_FS        
+static struct proc_dir_entry proc_net_ipmsqhst = {
+	PROC_NET_IPMSQHST, 13, "ip_masquerade",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	ip_msqhst_procinfo
+};
+#endif	
+
 /*
  *	Initialize ip masquerading
  */
@@ -1001,12 +1010,7 @@ int ip_masq_init(void)
 {
         register_symtab (&ip_masq_syms);
 #ifdef CONFIG_PROC_FS        
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_IPMSQHST, 13, "ip_masquerade",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ip_msqhst_procinfo
-	});
+	proc_net_register(&proc_net_ipmsqhst);
 #endif	
         ip_masq_app_init();
 

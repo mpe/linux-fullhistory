@@ -250,6 +250,114 @@ static struct inode_operations proc_self_inode_operations = {
 	NULL			/* permission */
 };
 
+static struct proc_dir_entry proc_root_loadavg = {
+	PROC_LOADAVG, 7, "loadavg",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+static struct proc_dir_entry proc_root_uptime = {
+	PROC_UPTIME, 6, "uptime",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+static struct proc_dir_entry proc_root_meminfo = {
+	PROC_MEMINFO, 7, "meminfo",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+static struct proc_dir_entry proc_root_kmsg = {
+	PROC_KMSG, 4, "kmsg",
+	S_IFREG | S_IRUSR, 1, 0, 0,
+};
+static struct proc_dir_entry proc_root_version = {
+	PROC_VERSION, 7, "version",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+#ifdef CONFIG_PCI
+static struct proc_dir_entry proc_root_pci = {
+	PROC_PCI, 3, "pci",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+#endif
+static struct proc_dir_entry proc_root_cpuinfo = {
+	PROC_CPUINFO, 7, "cpuinfo",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+static struct proc_dir_entry proc_root_self = {
+	PROC_SELF, 4, "self",
+	S_IFLNK | S_IRUGO | S_IWUGO | S_IXUGO, 1, 0, 0,
+	64, &proc_self_inode_operations,
+};
+#ifdef CONFIG_DEBUG_MALLOC
+static struct proc_dir_entry proc_root_malloc = {
+	PROC_MALLOC, 6, "malloc",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+#endif
+static struct proc_dir_entry proc_root_kcore = {
+	PROC_KCORE, 5, "kcore",
+	S_IFREG | S_IRUSR, 1, 0, 0,
+};
+#ifdef CONFIG_MODULES
+static struct proc_dir_entry proc_root_modules = {
+	PROC_MODULES, 7, "modules",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+static struct proc_dir_entry proc_root_ksyms = {
+	PROC_KSYMS, 5, "ksyms",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+#endif
+static struct proc_dir_entry proc_root_stat = {
+	PROC_STAT, 4, "stat",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+static struct proc_dir_entry proc_root_devices = {
+	PROC_DEVICES, 7, "devices",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+static struct proc_dir_entry proc_root_interrupts = {
+	PROC_INTERRUPTS, 10,"interrupts",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+#ifdef __SMP_PROF__
+static struct proc_dir_entry proc_root_smp = {
+	PROC_SMP_PROF, 3,"smp",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+#endif
+static struct proc_dir_entry proc_root_filesystems = {
+	PROC_FILESYSTEMS, 11,"filesystems",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+static struct proc_dir_entry proc_root_dma = {
+	PROC_DMA, 3, "dma",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+static struct proc_dir_entry proc_root_ioports = {
+	PROC_IOPORTS, 7, "ioports",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+static struct proc_dir_entry proc_root_cmdline = {
+	PROC_CMDLINE, 7, "cmdline",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+#ifdef CONFIG_RTC
+static struct proc_dir_entry proc_root_rtc = {
+	PROC_RTC, 3, "rtc",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+#endif
+static struct proc_dir_entry proc_root_locks = {
+	PROC_LOCKS, 5, "locks",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+static struct proc_dir_entry proc_root_mounts = {
+	PROC_MTAB, 6, "mounts",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+static struct proc_dir_entry proc_root_profile = {
+	PROC_PROFILE, 7, "profile",
+	S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
+};
+
 void proc_root_init(void)
 {
 	static int done = 0;
@@ -258,119 +366,48 @@ void proc_root_init(void)
 		return;
 	done = 1;
 	proc_base_init();
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_LOADAVG, 7, "loadavg",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_UPTIME, 6, "uptime",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_MEMINFO, 7, "meminfo",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_KMSG, 4, "kmsg",
-		S_IFREG | S_IRUSR, 1, 0, 0,
-	});
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_VERSION, 7, "version",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
+	proc_register(&proc_root, &proc_root_loadavg);
+	proc_register(&proc_root, &proc_root_uptime);
+	proc_register(&proc_root, &proc_root_meminfo);
+	proc_register(&proc_root, &proc_root_kmsg);
+	proc_register(&proc_root, &proc_root_version);
 #ifdef CONFIG_PCI
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_PCI, 3, "pci",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
+	proc_register(&proc_root, &proc_root_pci);
 #endif
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_CPUINFO, 7, "cpuinfo",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_SELF, 4, "self",
-		S_IFLNK | S_IRUGO | S_IWUGO | S_IXUGO, 1, 0, 0,
-		64, &proc_self_inode_operations,
-	});
+	proc_register(&proc_root, &proc_root_cpuinfo);
+	proc_register(&proc_root, &proc_root_self);
 	proc_register(&proc_root, &proc_net);
 	proc_register(&proc_root, &proc_scsi);
 	proc_register(&proc_root, &proc_sys_root);
 
 #ifdef CONFIG_DEBUG_MALLOC
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_MALLOC, 6, "malloc",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
+	proc_register(&proc_root, &proc_root_malloc);
 #endif
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_KCORE, 5, "kcore",
-		S_IFREG | S_IRUSR, 1, 0, 0,
-	});
+	proc_register(&proc_root, &proc_root_kcore);
 
 #ifdef CONFIG_MODULES
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_MODULES, 7, "modules",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_KSYMS, 5, "ksyms",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
+	proc_register(&proc_root, &proc_root_modules);
+	proc_register(&proc_root, &proc_root_ksyms);
 #endif
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_STAT, 4, "stat",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_DEVICES, 7, "devices",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_INTERRUPTS, 10,"interrupts",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
+	proc_register(&proc_root, &proc_root_stat);
+	proc_register(&proc_root, &proc_root_devices);
+	proc_register(&proc_root, &proc_root_interrupts);
 #ifdef __SMP_PROF__
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_SMP_PROF, 3,"smp",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
+	proc_register(&proc_root, &proc_root_smp);
 #endif 
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_FILESYSTEMS, 11,"filesystems",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_DMA, 3, "dma",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_IOPORTS, 7, "ioports",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_CMDLINE, 7, "cmdline",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
+	proc_register(&proc_root, &proc_root_filesystems);
+	proc_register(&proc_root, &proc_root_dma);
+	proc_register(&proc_root, &proc_root_ioports);
+	proc_register(&proc_root, &proc_root_cmdline);
 #ifdef CONFIG_RTC
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_RTC, 3, "rtc",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
+	proc_register(&proc_root, &proc_root_rtc);
 #endif
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_LOCKS, 5, "locks",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
+	proc_register(&proc_root, &proc_root_locks);
 
-	proc_register( &proc_root, &(struct proc_dir_entry)
-	   { PROC_MTAB, 6, "mounts", S_IFREG | S_IRUGO, 1, 0, 0, } );
+	proc_register(&proc_root, &proc_root_mounts);
 		   
 	if (prof_shift) {
-		proc_register(&proc_root, &(struct proc_dir_entry) {
-			PROC_PROFILE, 7, "profile",
-			S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
-		});
+		proc_register(&proc_root, &proc_root_profile);
 	}
 }
 

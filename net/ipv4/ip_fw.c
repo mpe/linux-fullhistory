@@ -1244,16 +1244,45 @@ static struct notifier_block ipfw_dev_notifier={
 
 #endif
 
+#ifdef CONFIG_PROC_FS
+#ifdef CONFIG_IP_ACCT
+static struct proc_dir_entry proc_net_ipacct = {
+	PROC_NET_IPACCT, 7, "ip_acct",
+	S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	ip_acct_procinfo
+};
+#endif
+#endif
+
+#ifdef CONFIG_IP_FIREWALL
+#ifdef CONFIG_PROC_FS		
+static struct proc_dir_entry proc_net_ipfwin = {
+	PROC_NET_IPFWIN, 8, "ip_input",
+	S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	ip_fw_in_procinfo
+};
+static struct proc_dir_entry proc_net_ipfwout = {
+	PROC_NET_IPFWOUT, 9, "ip_output",
+	S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	ip_fw_out_procinfo
+};
+static struct proc_dir_entry proc_net_ipfwfwd = {
+	PROC_NET_IPFWFWD, 10, "ip_forward",
+	S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	ip_fw_fwd_procinfo
+};
+#endif
+#endif
+
 void ip_fw_init(void)
 {
 #ifdef CONFIG_PROC_FS
 #ifdef CONFIG_IP_ACCT
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_IPACCT, 7, "ip_acct",
-		S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ip_acct_procinfo
-	});
+	proc_net_register(&proc_net_ipacct);
 #endif
 #endif
 #ifdef CONFIG_IP_FIREWALL
@@ -1262,24 +1291,9 @@ void ip_fw_init(void)
 		panic("Unable to register IP firewall.\n");
 
 #ifdef CONFIG_PROC_FS		
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_IPFWIN, 8, "ip_input",
-		S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ip_fw_in_procinfo
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_IPFWOUT, 9, "ip_output",
-		S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ip_fw_out_procinfo
-	});
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_IPFWFWD, 10, "ip_forward",
-		S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ip_fw_fwd_procinfo
-	});
+	proc_net_register(&proc_net_ipfwin);
+	proc_net_register(&proc_net_ipfwout);
+	proc_net_register(&proc_net_ipfwfwd);
 #endif
 #endif
 #ifdef CONFIG_IP_MASQUERADE

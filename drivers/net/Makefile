@@ -360,6 +360,10 @@ endif
 
 ifeq ($(CONFIG_NI65),y)
 L_OBJS += ni65.o
+else
+  ifeq ($(CONFIG_NI65),m)
+  M_OBJS += ni65.o
+  endif
 endif
 
 ifeq ($(CONFIG_ELPLUS),y)
