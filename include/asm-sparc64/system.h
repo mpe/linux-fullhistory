@@ -182,7 +182,7 @@ do {	if (test_thread_flag(TIF_PERFCTR)) {				\
 	__asm__ __volatile__("wr %%g0, %0, %%asi"			\
 	: : "r" (__thread_flag_byte_ptr(next->thread_info)[TI_FLAG_BYTE_CURRENT_DS]));\
 	__asm__ __volatile__(						\
-	"mov	%%g4, %%g5\n\t"						\
+	"mov	%%g4, %%g7\n\t"						\
 	"wrpr	%%g0, 0x95, %%pstate\n\t"				\
 	"stx	%%i6, [%%sp + 2047 + 0x70]\n\t"				\
 	"stx	%%i7, [%%sp + 2047 + 0x78]\n\t"				\
@@ -207,7 +207,7 @@ do {	if (test_thread_flag(TIF_PERFCTR)) {				\
 	"wrpr	%%g0, 0x96, %%pstate\n\t"				\
 	"andcc	%%o7, %6, %%g0\n\t"					\
 	"beq,pt %%icc, 1f\n\t"						\
-	" mov	%%g5, %0\n\t"						\
+	" mov	%%g7, %0\n\t"						\
 	"b,a ret_from_syscall\n\t"					\
 	"1:\n\t"							\
 	: "=&r" (last)							\
