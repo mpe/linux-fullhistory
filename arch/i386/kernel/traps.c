@@ -66,23 +66,6 @@ out: \
 	unlock_kernel(); \
 }
 
-#define get_seg_byte(seg,addr) ({ \
-register unsigned char __res; \
-__asm__("pushl %%fs;movl %%ax,%%fs;movb %%fs:%2,%%al;popl %%fs" \
-	:"=a" (__res):"0" (seg),"m" (*(addr))); \
-__res;})
-
-#define get_seg_long(seg,addr) ({ \
-register unsigned long __res; \
-__asm__("pushl %%fs;movl %%ax,%%fs;movl %%fs:%2,%%eax;popl %%fs" \
-	:"=a" (__res):"0" (seg),"m" (*(addr))); \
-__res;})
-
-#define _fs() ({ \
-register unsigned short __res; \
-__asm__("movl %%fs,%%ax":"=a" (__res):); \
-__res;})
-
 void page_exception(void);
 
 asmlinkage void divide_error(void);
@@ -118,6 +101,7 @@ int kstack_depth_to_print = 24;
 static void show_registers(struct pt_regs *regs)
 {
 	int i;
+	int in_kernel = 1;
 	unsigned long esp;
 	unsigned short ss;
 	unsigned long *stack, addr, module_start, module_end;
@@ -126,6 +110,7 @@ static void show_registers(struct pt_regs *regs)
 	esp = (unsigned long) &regs->esp;
 	ss = __KERNEL_DS;
 	if (regs->xcs & 3) {
+		in_kernel = 0;
 		esp = regs->esp;
 		ss = regs->xss & 0xffff;
 	}
@@ -138,59 +123,71 @@ static void show_registers(struct pt_regs *regs)
 	printk("ds: %04x   es: %04x   ss: %04x\n",
 		regs->xds & 0xffff, regs->xes & 0xffff, ss);
 	store_TR(i);
-	printk("Process %s (pid: %d, process nr: %d, stackpage=%08lx)\nStack: ",
+	printk("Process %s (pid: %d, process nr: %d, stackpage=%08lx)",
 		current->comm, current->pid, 0xffff & i, 4096+(unsigned long)current);
-	stack = (unsigned long *) esp;
-	for(i=0; i < kstack_depth_to_print; i++) {
-		if (((long) stack & 4095) == 0)
-			break;
-		if (i && ((i % 8) == 0))
-			printk("\n       ");
-		printk("%08lx ", get_seg_long(ss,stack++));
-	}
-	printk("\nCall Trace: ");
-	stack = (unsigned long *) esp;
-	i = 1;
-	module_start = PAGE_OFFSET + (max_mapnr << PAGE_SHIFT);
-	module_start = ((module_start + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1));
-	module_end = module_start + MODULE_RANGE;
-	while (((long) stack & 4095) != 0) {
-		addr = get_seg_long(ss, stack++);
-		/*
-		 * If the address is either in the text segment of the
-		 * kernel, or in the region which contains vmalloc'ed
-		 * memory, it *may* be the address of a calling
-		 * routine; if so, print it so that someone tracing
-		 * down the cause of the crash will be able to figure
-		 * out the call path that was taken.
-		 */
-		if (((addr >= (unsigned long) &_stext) &&
-		     (addr <= (unsigned long) &_etext)) ||
-		    ((addr >= module_start) && (addr <= module_end))) {
+
+	/*
+	 * When in-kernel, we also print out the stack and code at the
+	 * time of the fault..
+	 */
+	if (in_kernel) {
+		printk("\nStack: ");
+		stack = (unsigned long *) esp;
+		for(i=0; i < kstack_depth_to_print; i++) {
+			if (((long) stack & 4095) == 0)
+				break;
 			if (i && ((i % 8) == 0))
 				printk("\n       ");
-			printk("[<%08lx>] ", addr);
-			i++;
+			printk("%08lx ", *stack++);
 		}
+		printk("\nCall Trace: ");
+		stack = (unsigned long *) esp;
+		i = 1;
+		module_start = PAGE_OFFSET + (max_mapnr << PAGE_SHIFT);
+		module_start = ((module_start + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1));
+		module_end = module_start + MODULE_RANGE;
+		while (((long) stack & 4095) != 0) {
+			addr = *stack++;
+			/*
+			 * If the address is either in the text segment of the
+			 * kernel, or in the region which contains vmalloc'ed
+			 * memory, it *may* be the address of a calling
+			 * routine; if so, print it so that someone tracing
+			 * down the cause of the crash will be able to figure
+			 * out the call path that was taken.
+			 */
+			if (((addr >= (unsigned long) &_stext) &&
+			     (addr <= (unsigned long) &_etext)) ||
+			    ((addr >= module_start) && (addr <= module_end))) {
+				if (i && ((i % 8) == 0))
+					printk("\n       ");
+				printk("[<%08lx>] ", addr);
+				i++;
+			}
+		}
+		printk("\nCode: ");
+		for(i=0;i<20;i++)
+			printk("%02x ", ((unsigned char *)regs->eip)[i]);
+		printk("\n");
 	}
-	printk("\nCode: ");
-	for(i=0;i<20;i++)
-		printk("%02x ",0xff & get_seg_byte(regs->xcs & 0xffff,(i+(char *)regs->eip)));
-	printk("\n");
 }	
 
 spinlock_t die_lock;
 
-void die_if_kernel(const char * str, struct pt_regs * regs, long err)
+void die(const char * str, struct pt_regs * regs, long err)
 {
-	if ((regs->eflags & VM_MASK) || (3 & regs->xcs) == 3)
-		return;
 	console_verbose();
 	spin_lock_irq(&die_lock);
 	printk("%s: %04lx\n", str, err & 0xffff);
 	show_registers(regs);
 	spin_unlock_irq(&die_lock);
 	do_exit(SIGSEGV);
+}
+
+static void die_if_kernel(const char * str, struct pt_regs * regs, long err)
+{
+	if (!(regs->eflags & VM_MASK) && !(3 & regs->xcs))
+		die(str, regs, err);
 }
 
 DO_VM86_ERROR( 0, SIGFPE,  "divide error", divide_error, current)
@@ -200,7 +197,7 @@ DO_VM86_ERROR( 5, SIGSEGV, "bounds", bounds, current)
 DO_ERROR( 6, SIGILL,  "invalid operand", invalid_op, current)
 DO_VM86_ERROR( 7, SIGSEGV, "device not available", device_not_available, current)
 DO_ERROR( 8, SIGSEGV, "double fault", double_fault, current)
-DO_ERROR( 9, SIGFPE,  "coprocessor segment overrun", coprocessor_segment_overrun, last_task_used_math)
+DO_ERROR( 9, SIGFPE,  "coprocessor segment overrun", coprocessor_segment_overrun, current)
 DO_ERROR(10, SIGSEGV, "invalid TSS", invalid_TSS, current)
 DO_ERROR(11, SIGBUS,  "segment not present", segment_not_present, current)
 DO_ERROR(12, SIGBUS,  "stack segment", stack_segment, current)
@@ -224,17 +221,34 @@ asmlinkage void cache_flush_denied(struct pt_regs * regs, long error_code)
 
 asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {
+	if (regs->eflags & VM_MASK)
+		goto gp_in_vm86;
+
+	if (!(regs->xcs & 3))
+		goto gp_in_kernel;
+
 	lock_kernel();
-	if (regs->eflags & VM_MASK) {
-		handle_vm86_fault((struct kernel_vm86_regs *) regs, error_code);
-		goto out;
-	}
-	die_if_kernel("general protection",regs,error_code);
 	current->tss.error_code = error_code;
 	current->tss.trap_no = 13;
 	force_sig(SIGSEGV, current);	
-out:
+	return;
+
+gp_in_vm86:
+	lock_kernel();
+	handle_vm86_fault((struct kernel_vm86_regs *) regs, error_code);
 	unlock_kernel();
+	return;
+
+gp_in_kernel:
+	{
+		unsigned long fixup;
+		fixup = search_exception_table(regs->eip);
+		if (fixup) {
+			regs->eip = fixup;
+			return;
+		}
+		die("general protection fault", regs, error_code);
+	}
 }
 
 static void mem_parity_error(unsigned char reason, struct pt_regs * regs)
@@ -295,9 +309,7 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 		__asm__("movl %0,%%db7"
 			: /* no output */
 			: "r" (0));
-		goto out;
 	}
-	die_if_kernel("debug",regs,error_code);
 out:
 	unlock_kernel();
 }
@@ -313,16 +325,7 @@ void math_error(void)
 
 	lock_kernel();
 	clts();
-#ifdef __SMP__
 	task = current;
-#else
-	task = last_task_used_math;
-	last_task_used_math = NULL;
-	if (!task) {
-		__asm__("fnclex");
-		goto out;
-	}
-#endif
 	/*
 	 *	Save the info for the exception handler
 	 */
@@ -333,9 +336,6 @@ void math_error(void)
 	force_sig(SIGFPE, task);
 	task->tss.trap_no = 16;
 	task->tss.error_code = 0;
-#ifndef __SMP__
-out:
-#endif
 	unlock_kernel();
 }
 
@@ -373,15 +373,6 @@ asmlinkage void math_state_restore(void)
  *	case we swap processors. We also don't use the coprocessor
  *	timer - IRQ 13 mode isn't used with SMP machines (thank god).
  */
-#ifndef __SMP__
-	if (last_task_used_math == current)
-		return;
-	if (last_task_used_math)
-		__asm__("fnsave %0":"=m" (last_task_used_math->tss.i387));
-	else
-		__asm__("fnclex");
-	last_task_used_math = current;
-#endif
 
 	if(current->used_math)
 		__asm__("frstor %0": :"m" (current->tss.i387));

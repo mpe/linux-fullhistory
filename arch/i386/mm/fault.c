@@ -22,7 +22,7 @@
 #include <asm/pgtable.h>
 #include <asm/hardirq.h>
 
-extern void die_if_kernel(const char *,struct pt_regs *,long);
+extern void die(const char *,struct pt_regs *,long);
 
 /*
  * Ugly, ugly, but the goto's result in better assembly..
@@ -101,7 +101,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	__asm__("movl %%cr2,%0":"=r" (address));
 
 	if (local_irq_count[smp_processor_id()])
-		die_if_kernel("page fault from irq handler",regs,error_code);
+		die("page fault from irq handler",regs,error_code);
 	tsk = current;
 	mm = tsk->mm;
 
@@ -235,7 +235,7 @@ bad_area:
 		printk(KERN_ALERT "*pte = %08lx\n", page);
 	}
 	lock_kernel();
-	die_if_kernel("Oops", regs, error_code);
+	die("Oops", regs, error_code);
 	do_exit(SIGKILL);
 	unlock_kernel();
 }

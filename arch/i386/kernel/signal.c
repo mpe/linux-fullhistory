@@ -153,17 +153,10 @@ struct rt_sigframe
 
 static inline int restore_i387_hard(struct _fpstate *buf)
 {
-#ifdef __SMP__
 	if (current->flags & PF_USEDFPU) {
+		current->flags &= ~PF_USEDFPU;
 		stts();
 	}
-#else
-	if (current == last_task_used_math) {
-		last_task_used_math = NULL;
-		stts();
-	}
-#endif
-	current->flags &= ~PF_USEDFPU;
 	return __copy_from_user(&current->tss.i387.hard, buf, sizeof(*buf));
 }
 
@@ -315,20 +308,12 @@ badframe:
 
 static inline int save_i387_hard(struct _fpstate * buf)
 {
-#ifdef __SMP__
 	if (current->flags & PF_USEDFPU) {
-		__asm__ __volatile__("fnsave %0":"=m"(current->tss.i387.hard));
-		stts();
 		current->flags &= ~PF_USEDFPU;
-	}
-#else
-	if (current == last_task_used_math) {
 		__asm__ __volatile__("fnsave %0":"=m"(current->tss.i387.hard));
-		last_task_used_math = NULL;
-		__asm__ __volatile__("fwait");	/* not needed on 486+ */
 		stts();
 	}
-#endif
+	asm volatile("fwait");
 	current->tss.i387.hard.status = current->tss.i387.hard.swd;
 	if (__copy_to_user(buf, &current->tss.i387.hard, sizeof(*buf)))
 		return -1;

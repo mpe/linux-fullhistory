@@ -308,6 +308,10 @@ static inline int copy_mm(int nr, unsigned long clone_flags, struct task_struct 
 
 	if (clone_flags & CLONE_VM) {
 		mmget(current->mm);
+		/*
+		 * Set up the LDT descriptor for the clone task.
+		 */
+		copy_segments(nr, tsk, NULL);
 		SET_PAGE_DIR(tsk, current->mm->pgd);
 		return 0;
 	}

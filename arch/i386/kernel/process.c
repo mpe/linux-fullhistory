@@ -48,12 +48,10 @@
 
 spinlock_t semaphore_wake_lock = SPIN_LOCK_UNLOCKED;
 
-struct task_struct *last_task_used_math = NULL;
-
 #ifdef __SMP__
-asmlinkage void ret_from_smpfork(void) __asm__("ret_from_smpfork");
+asmlinkage void ret_from_fork(void) __asm__("ret_from_smpfork");
 #else
-asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
+asmlinkage void ret_from_fork(void) __asm__("ret_from_sys_call");
 #endif
 
 #ifdef CONFIG_APM
@@ -427,15 +425,20 @@ void show_regs(struct pt_regs * regs)
 
 void release_segments(struct mm_struct *mm)
 {
-	void * ldt;
+	void * ldt = mm->segments;
+	int nr;
 
 	/* forget local segments */
 	__asm__ __volatile__("movl %w0,%%fs ; movl %w0,%%gs ; lldt %w0"
 		: /* no outputs */
 		: "r" (0));
 	current->tss.ldt = 0;
+	/*
+	 * Set the GDT entry back to the default.
+	 */
+	nr = current->tarray_ptr - &task[0];
+	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY, &default_ldt, 1);
 
-	ldt = mm->segments;
 	if (ldt) {
 		mm->segments = NULL;
 		vfree(ldt);
@@ -447,9 +450,7 @@ void release_segments(struct mm_struct *mm)
  */
 void exit_thread(void)
 {
-	/* forget lazy i387 state */
-	if (last_task_used_math == current)
-		last_task_used_math = NULL;
+	/* nothing to do ... */
 }
 
 void flush_thread(void)
@@ -462,41 +463,81 @@ void flush_thread(void)
 	/*
 	 * Forget coprocessor state..
 	 */
-#ifdef __SMP__
 	if (current->flags & PF_USEDFPU) {
+		current->flags &= ~PF_USEDFPU;
 		stts();
 	}
-#else
-	if (last_task_used_math == current) {
-		last_task_used_math = NULL;
-		stts();
-	}
-#endif
 	current->used_math = 0;
-	current->flags &= ~PF_USEDFPU;
 }
 
 void release_thread(struct task_struct *dead_task)
 {
 }
 
+static inline void unlazy_fpu(struct task_struct *tsk)
+{
+	if (tsk->flags & PF_USEDFPU) {
+		tsk->flags &= ~PF_USEDFPU;
+		__asm__("fnsave %0":"=m" (tsk->tss.i387));
+		stts();
+	}
+}
+
+/*
+ * If new_mm is NULL, we're being called to set up the LDT descriptor
+ * for a clone task. Each clone must have a separate entry in the GDT.
+ */
 void copy_segments(int nr, struct task_struct *p, struct mm_struct *new_mm)
 {
-	int ldt_size = 1;
-	void * ldt = &default_ldt;
 	struct mm_struct * old_mm = current->mm;
+	void * old_ldt = old_mm->segments, * ldt = old_ldt;
+	int ldt_size = LDT_ENTRIES;
 
 	p->tss.ldt = _LDT(nr);
-	if (old_mm->segments) {
-		new_mm->segments = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
-		if (new_mm->segments) {
-			ldt = new_mm->segments;
-			ldt_size = LDT_ENTRIES;
-			memcpy(ldt, old_mm->segments, LDT_ENTRIES*LDT_ENTRY_SIZE);
+	if (old_ldt) {
+		if (new_mm) {
+			ldt = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
+			new_mm->segments = ldt;
+			if (!ldt) {
+				printk(KERN_WARNING "ldt allocation failed\n");
+				goto no_ldt;
+			}
+			memcpy(ldt, old_ldt, LDT_ENTRIES*LDT_ENTRY_SIZE);
 		}
+	} else {
+	no_ldt:
+		ldt = &default_ldt;
+		ldt_size = 1;
 	}
 	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY, ldt, ldt_size);
 }
+
+/*
+ * Save a segment.
+ */
+#define savesegment(seg,value) \
+	asm volatile("movl %%" #seg ",%0":"=m" (*(int *)&(value)))
+
+/*
+ * Load a segment. Fall back on loading the zero
+ * segment if something goes wrong..
+ */
+#define loadsegment(seg,value)			\
+	asm volatile("\n"			\
+		"1:\t"				\
+		"movl %0,%%" #seg "\n"		\
+		"2:\n"				\
+		".section fixup,\"ax\"\n"	\
+		"3:\t"				\
+		"pushl $0\n\t"			\
+		"popl %%" #seg "\n\t"		\
+		"jmp 2b\n"			\
+		".previous\n"			\
+		".section __ex_table,\"a\"\n\t"	\
+		".align 4\n\t"			\
+		".long 1b,3b\n"			\
+		".previous"			\
+		: :"m" (*(unsigned int *)&(value)))
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	struct task_struct * p, struct pt_regs * regs)
@@ -504,29 +545,21 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	struct pt_regs * childregs;
 
 	p->tss.tr = _TSS(nr);
-	p->tss.es = __KERNEL_DS;
-	p->tss.cs = __KERNEL_CS;
-	p->tss.ss = __KERNEL_DS;
-	p->tss.ds = __KERNEL_DS;
-	p->tss.fs = __USER_DS;
-	p->tss.gs = __USER_DS;
+	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
 	p->tss.ss0 = __KERNEL_DS;
 	p->tss.esp0 = 2*PAGE_SIZE + (unsigned long) p;
+
 	childregs = ((struct pt_regs *) (p->tss.esp0)) - 1;
-	p->tss.esp = (unsigned long) childregs;
-#ifdef __SMP__
-	p->tss.eip = (unsigned long) ret_from_smpfork;
-	p->tss.eflags = regs->eflags & 0xffffcdff;  /* iopl always 0 for a new process */
-#else
-	p->tss.eip = (unsigned long) ret_from_sys_call;
-	p->tss.eflags = regs->eflags & 0xffffcfff;  /* iopl always 0 for a new process */
-#endif
-	p->tss.ebx = (unsigned long) p;
 	*childregs = *regs;
 	childregs->eax = 0;
 	childregs->esp = esp;
-	p->tss.back_link = 0;
-	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
+	childregs->eflags = regs->eflags & 0xffffcfff;  /* iopl always 0 for a new process */
+
+	p->tss.esp = (unsigned long) childregs;
+	p->tss.eip = (unsigned long) ret_from_fork;
+
+	savesegment(fs,p->tss.fs);
+	savesegment(gs,p->tss.gs);
 
 	/*
 	 * a bitmap offset pointing outside of the TSS limit causes a nicely
@@ -535,12 +568,9 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	 */
 	p->tss.bitmap = sizeof(struct thread_struct);
 
-#ifdef __SMP__
-	if (current->flags & PF_USEDFPU)
-#else
-	if (last_task_used_math == current)
-#endif
-		__asm__("clts ; fnsave %0 ; frstor %0":"=m" (p->tss.i387));
+	unlazy_fpu(current);
+	asm volatile("fwait");
+	p->tss.i387 = current->tss.i387;
 
 	return 0;
 }
@@ -552,16 +582,11 @@ int dump_fpu (struct pt_regs * regs, struct user_i387_struct* fpu)
 {
 	int fpvalid;
 
-	if ((fpvalid = current->used_math) != 0) {
-		if (boot_cpu_data.hard_math) {
-			if (last_task_used_math == current) {
-				__asm__("clts ; fsave %0; fwait": :"m" (*fpu));
-			}
-			else
-				memcpy(fpu,&current->tss.i387.hard,sizeof(*fpu));
-		} else {
-			memcpy(fpu,&current->tss.i387.hard,sizeof(*fpu));
-		}
+	fpvalid = current->used_math;
+	if (fpvalid) {
+		unlazy_fpu(current);
+		asm volatile("fwait");
+		memcpy(fpu,&current->tss.i387.hard,sizeof(*fpu));
 	}
 
 	return fpvalid;
@@ -597,8 +622,8 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->regs.eax = regs->eax;
 	dump->regs.ds = regs->xds;
 	dump->regs.es = regs->xes;
-	__asm__("movl %%fs,%0":"=r" (dump->regs.fs));
-	__asm__("movl %%gs,%0":"=r" (dump->regs.gs));
+	savesegment(fs,dump->regs.fs);
+	savesegment(gs,dump->regs.gs);
 	dump->regs.orig_eax = regs->orig_eax;
 	dump->regs.eip = regs->eip;
 	dump->regs.cs = regs->xcs;
@@ -607,6 +632,89 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->regs.ss = regs->xss;
 
 	dump->u_fpvalid = dump_fpu (regs, &dump->i387);
+}
+
+/*
+ * This special macro can be used to load a debugging register
+ */
+#define loaddebug(tsk,register) \
+		__asm__("movl %0,%%db" #register  \
+			: /* no output */ \
+			:"r" (tsk->debugreg[register]))
+
+
+/*
+ *	switch_to(x,yn) should switch tasks from x to y.
+ *
+ * We fsave/fwait so that an exception goes off at the right time
+ * (as a call from the fsave or fwait in effect) rather than to
+ * the wrong process. Lazy FP saving no longer makes any sense
+ * with modern CPU's, and this simplifies a lot of things (SMP
+ * and UP become the same).
+ *
+ * NOTE! We used to use the x86 hardware context switching. The
+ * reason for not using it any more becomes apparent when you
+ * try to recover gracefully from saved state that is no longer
+ * valid (stale segment register values in particular). With the
+ * hardware task-switch, there is no way to fix up bad state in
+ * a reasonable manner.
+ *
+ * The fact that Intel documents the hardware task-switching to
+ * be slow is a fairly red herring - this code is not noticeably
+ * faster. However, there _is_ some room for improvement here,
+ * so the performance issues may eventually be a valid point.
+ * More important, however, is the fact that this allows us much
+ * more flexibility.
+ */
+void __switch_to(struct task_struct *prev, struct task_struct *next)
+{
+	/* Do the FPU save and set TS if it wasn't set before.. */
+	unlazy_fpu(prev);
+
+	/*
+	 * Reload TR, LDT and the page table pointers..
+	 *
+	 * We need TR for the IO permission bitmask (and
+	 * the vm86 bitmasks in case we ever use enhanced
+	 * v86 mode properly).
+	 *
+	 * We could do LDT things lazily if this turns out
+	 * to be a win. Most processes will have the default
+	 * LDT.
+	 *
+	 * We want to get rid of the TR register some day,
+	 * and copy the bitmaps around by hand. Oh, well.
+	 * In the meantime we have to clear the busy bit
+	 * in the TSS entry, ugh.
+	 */
+	gdt_table[next->tss.tr >> 3].b &= 0xfffffdff;
+	asm volatile("ltr %0": :"g" (*(unsigned short *)&next->tss.tr));
+	asm volatile("lldt %0": :"g" (*(unsigned short *)&next->tss.ldt));
+	if (next->tss.cr3 != prev->tss.cr3)
+		asm volatile("movl %0,%%cr3": :"r" (next->tss.cr3));
+
+	/*
+	 * Save away %fs and %gs. No need to save %es and %ds, as
+	 * those are always kernel segments while inside the kernel.
+	 * Restore the new values.
+	 */
+	asm volatile("movl %%fs,%0":"=m" (*(int *)&prev->tss.fs));
+	asm volatile("movl %%gs,%0":"=m" (*(int *)&prev->tss.gs));
+
+	loadsegment(fs,next->tss.fs);
+	loadsegment(gs,next->tss.gs);
+
+	/*
+	 * Now maybe reload the debug registers
+	 */
+	if (next->debugreg[7]){
+		loaddebug(next,0);
+		loaddebug(next,1);
+		loaddebug(next,2);
+		loaddebug(next,3);
+		loaddebug(next,6);
+		loaddebug(next,7);
+	}
 }
 
 asmlinkage int sys_fork(struct pt_regs regs)

@@ -851,7 +851,7 @@ static int file_send_actor(read_descriptor_t * desc, const char *area, unsigned 
 	return written;
 }
 
-asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, size_t count)
+asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t count)
 {
 	ssize_t retval;
 	struct file * in_file, * out_file;
@@ -900,16 +900,27 @@ asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, size_t count)
 	retval = 0;
 	if (count) {
 		read_descriptor_t desc;
+		loff_t pos = 0, *ppos;
+
+		retval = -EFAULT;
+		ppos = &in_file->f_pos;
+		if (offset) {
+			if (get_user(pos, offset))
+				goto fput_out;
+			ppos = &pos;
+		}
 
 		desc.written = 0;
 		desc.count = count;
 		desc.buf = (char *) out_file;
 		desc.error = 0;
-		do_generic_file_read(in_file, &in_file->f_pos, &desc, file_send_actor);
+		do_generic_file_read(in_file, ppos, &desc, file_send_actor);
 
 		retval = desc.written;
 		if (!retval)
 			retval = desc.error;
+		if (offset)
+			put_user(pos, offset);
 	}
 
 

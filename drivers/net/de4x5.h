@@ -811,7 +811,7 @@
 ** Media / mode state machine definitions
 ** User selectable:
 */
-#define TP              0x0001     /* 10Base-T                             */
+#define TP              0x0040     /* 10Base-T (now equiv to _10Mb)        */
 #define TP_NW           0x0002     /* 10Base-T with Nway                   */
 #define BNC             0x0004     /* Thinwire                             */
 #define AUI             0x0008     /* Thickwire                            */

@@ -2316,7 +2316,6 @@ __initfunc(unsigned long con_init(unsigned long kmem_start))
 {
 	const char *display_desc = NULL;
 	unsigned int currcons = 0;
-	char q[2] = { 0, 1 };
 
 	if (conswitchp)
 		kmem_start = conswitchp->con_startup(kmem_start,
@@ -2397,11 +2396,15 @@ __initfunc(unsigned long con_init(unsigned long kmem_start))
 
 #if 0
 /* The logo is too ugly to live */
+{
+	char q[2] = { 0, 1 };
+
 	if (console_show_logo)
 	    q[1] += console_show_logo();
 	conswitchp->con_putcs(vc_cons[fg_console].d, linux_logo_banner,
 			      sizeof(linux_logo_banner)-1, q[1]-1, q[0]);
 	putconsxy(0, q);
+}
 #endif
 	sw->con_cursor(vc_cons[currcons].d, CM_DRAW);
 	printk("Console: %s %s %ldx%ld",

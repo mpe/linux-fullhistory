@@ -41,7 +41,7 @@ __initfunc(static void copro_timeout(void))
 	timer_table[COPRO_TIMER].expires = jiffies+100;
 	timer_active |= 1<<COPRO_TIMER;
 	printk(KERN_ERR "387 failed: trying to reset\n");
-	send_sig(SIGFPE, last_task_used_math, 1);
+	send_sig(SIGFPE, current, 1);
 	outb_p(0,0xf1);
 	outb_p(0,0xf0);
 }
@@ -156,7 +156,7 @@ __initfunc(static void check_popad(void))
  *	misexecution of code under Linux. Owners of such processors should
  *	contact AMD for precise details and a CPU swap.
  *
- *	See	http://www.chorus.com/~poulot/k6bug.html
+ *	See	http://www.mygale.com/~poulot/k6bug.html
  *		http://www.amd.com/K6/k6docs/revgd.html
  *
  *	The following test is erm.. interesting. AMD neglected to up
@@ -202,7 +202,7 @@ __initfunc(static void check_amd_k6(void))
 			printk("system stability may be impaired when more than 32 MB are used.\n");
 		else 
 			printk("probably OK (after B9730xxxx).\n");
-		printk(KERN_INFO "Please see http://www.chorus.com/poulot/k6bug.html\n");
+		printk(KERN_INFO "Please see http://www.mygale.com/~poulot/k6bug.html\n");
 	}
 }
 

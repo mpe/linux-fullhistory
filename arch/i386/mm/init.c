@@ -27,7 +27,6 @@
 #include <asm/pgtable.h>
 #include <asm/dma.h>
 
-extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
 
 void __bad_pte_kernel(pmd_t *pmd)

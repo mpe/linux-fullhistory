@@ -74,9 +74,6 @@ extern unsigned int machine_id;
 extern unsigned int machine_submodel_id;
 extern unsigned int BIOS_revision;
 
-/* Lazy FPU handling on uni-processor */
-extern struct task_struct *last_task_used_math;
-
 /*
  * User space process size: 3GB (default).
  */
@@ -166,33 +163,34 @@ struct thread_struct {
 #define INIT_MMAP \
 { &init_mm, 0, 0, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
-#define INIT_TSS  { \
-	0,0, \
-	sizeof(init_stack) + (long) &init_stack, \
-	__KERNEL_DS, 0, \
-	0,0,0,0,0,0, \
-	(long) &swapper_pg_dir - PAGE_OFFSET, \
-	0,0,0,0,0,0,0,0,0,0, \
-	__USER_DS,0,__USER_DS,0,__USER_DS,0, \
-	__USER_DS,0,__USER_DS,0,__USER_DS,0, \
-	_LDT(0),0, \
-	0, 0x8000, \
-	{~0, }, /* ioperm */ \
-	_TSS(0), 0, 0, 0, (mm_segment_t) { 0 } /* obsolete */ , \
-	{ { 0, }, },  /* 387 state */ \
-	NULL, 0, 0, 0, 0, 0 /* vm86_info */, \
+#define INIT_TSS  {						\
+	0,0, /* back_link, __blh */				\
+	sizeof(init_stack) + (long) &init_stack, /* esp0 */	\
+	__KERNEL_DS, 0, /* ss0 */				\
+	0,0,0,0,0,0, /* stack1, stack2 */			\
+	(long) &swapper_pg_dir - PAGE_OFFSET, /* cr3 */		\
+	0,0, /* eip,eflags */					\
+	0,0,0,0, /* eax,ecx,edx,ebx */				\
+	0,0,0,0, /* esp,ebp,esi,edi */				\
+	0,0,0,0,0,0, /* es,cs,ss */				\
+	0,0,0,0,0,0, /* ds,fs,gs */				\
+	_LDT(0),0, /* ldt */					\
+	0, 0x8000, /* tace, bitmap */				\
+	{~0, }, /* ioperm */					\
+	_TSS(0), 0, 0, 0, (mm_segment_t) { 0 }, /* obsolete */	\
+	{ { 0, }, },  /* 387 state */				\
+	NULL, 0, 0, 0, 0, 0, /* vm86_info */			\
 }
 
-#define start_thread(regs, new_eip, new_esp) do {\
-	unsigned long seg = __USER_DS; \
-	__asm__("movl %w0,%%fs ; movl %w0,%%gs":"=r" (seg) :"0" (seg)); \
-	set_fs(USER_DS); \
-	regs->xds = seg; \
-	regs->xes = seg; \
-	regs->xss = seg; \
-	regs->xcs = __USER_CS; \
-	regs->eip = new_eip; \
-	regs->esp = new_esp; \
+#define start_thread(regs, new_eip, new_esp) do {		\
+	__asm__("movl %w0,%%fs ; movl %w0,%%gs": :"r" (0));	\
+	set_fs(USER_DS);					\
+	regs->xds = __USER_DS;					\
+	regs->xes = __USER_DS;					\
+	regs->xss = __USER_DS;					\
+	regs->xcs = __USER_CS;					\
+	regs->eip = new_eip;					\
+	regs->esp = new_esp;					\
 } while (0)
 
 /* Forward declaration, a strange C thing */

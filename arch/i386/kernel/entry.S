@@ -94,18 +94,31 @@ ENOSYS = 38
 	movl %dx,%ds; \
 	movl %dx,%es;
 
-#define RESTORE_ALL \
-	popl %ebx; \
-	popl %ecx; \
-	popl %edx; \
-	popl %esi; \
-	popl %edi; \
-	popl %ebp; \
-	popl %eax; \
-	popl %ds; \
-	popl %es; \
-	addl $4,%esp; \
-	iret
+#define RESTORE_ALL	\
+	popl %ebx;	\
+	popl %ecx;	\
+	popl %edx;	\
+	popl %esi;	\
+	popl %edi;	\
+	popl %ebp;	\
+	popl %eax;	\
+1:	popl %ds;	\
+2:	popl %es;	\
+3:	addl $4,%esp;	\
+	iret;		\
+.section fixup,"ax";	\
+4:	pushl $0;	\
+	popl %ds;	\
+	jmp 2b;		\
+5:	pushl $0;	\
+	popl %es;	\
+	jmp 3b;		\
+.previous;		\
+.section __ex_table,"a";\
+	.align 4;	\
+	.long 1b,4b;	\
+	.long 2b,5b;	\
+.previous
 
 #define GET_CURRENT(reg) \
 	movl %esp, reg; \
