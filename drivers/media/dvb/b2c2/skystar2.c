@@ -2629,7 +2629,7 @@ static struct pci_driver skystar2_pci_driver = {
 
 static int skystar2_init(void)
 {
-	return pci_module_init(&skystar2_pci_driver);
+	return pci_register_driver(&skystar2_pci_driver);
 }
 
 static void skystar2_cleanup(void)

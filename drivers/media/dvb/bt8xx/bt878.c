@@ -563,7 +563,7 @@ static int bt878_init_module(void)
 	/* later we register inside of bt878_find_audio_dma()
 	 * because we may want to ignore certain cards */
 	bt878_pci_driver_registered = 1;
-	return pci_module_init(&bt878_pci_driver);
+	return pci_register_driver(&bt878_pci_driver);
 }
 
 static void bt878_cleanup_module(void)
