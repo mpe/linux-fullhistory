@@ -136,6 +136,7 @@ static void *cramfs_read(struct super_block *sb, unsigned int offset, unsigned i
 	next_buffer = NEXT_BUFFER(buffer);
 	buffer_blocknr[buffer] = blocknr;
 	buffer_dev[buffer] = sb;
+
 	data = read_buffers[buffer];
 	for (i = 0; i < BLKS_PER_BUF; i++) {
 		struct buffer_head * bh = bh_array[i];
