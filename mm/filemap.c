@@ -246,7 +246,7 @@ int shrink_mmap(int priority, int gfp_mask, zone_t *zone)
 	if (!zone)
 		BUG();
 
-	count = (nr_lru_pages << 1) >> priority;
+	count = nr_lru_pages >> priority;
 	if (!count)
 		return ret;
 
@@ -266,19 +266,23 @@ again:
 		 * &young to make sure that we won't try to free it the next
 		 * time */
 		dispose = &young;
-		if (test_and_clear_bit(PG_referenced, &page->flags))
-			goto dispose_continue;
-
-		if (p_zone->free_pages > p_zone->pages_high)
+		if (PageTestandClearReferenced(page))
 			goto dispose_continue;
 
 		if (!page->buffers && page_count(page) > 1)
 			goto dispose_continue;
 
+		/*
+		 * Ok, it wasn't young, so leave it at the end of
+		 * the list ("old").
+		 */
+		dispose = &old;
+		if (p_zone->free_pages > p_zone->pages_high)
+			goto dispose_continue;
+
 		count--;
 		/* Page not used -> free it or put it on the old list
 		 * so it gets freed first the next time */
-		dispose = &old;
 		if (TryLockPage(page))
 			goto dispose_continue;
 
@@ -394,7 +398,7 @@ inside:
 		if (page->index == offset)
 			break;
 	}
-	set_bit(PG_referenced, &page->flags);
+	SetPageReferenced(page);
 not_found:
 	return page;
 }

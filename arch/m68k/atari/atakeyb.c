@@ -287,8 +287,8 @@ static void atakeyb_rep( unsigned long ignore )
 	/* A keyboard int may have come in before we disabled the irq, so
 	 * double-check whether rep_scancode is still != 0 */
 	if (rep_scancode) {
+		init_timer(&atakeyb_rep_timer);
 		atakeyb_rep_timer.expires = jiffies + key_repeat_rate;
-		atakeyb_rep_timer.prev = atakeyb_rep_timer.next = NULL;
 		add_timer( &atakeyb_rep_timer );
 
 		handle_scancode(rep_scancode, 1);
@@ -444,7 +444,6 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 		    del_timer( &atakeyb_rep_timer );
 		    rep_scancode = scancode;
 		    atakeyb_rep_timer.expires = jiffies + key_repeat_delay;
-		    atakeyb_rep_timer.prev = atakeyb_rep_timer.next = NULL;
 		    add_timer( &atakeyb_rep_timer );
 		}
 

@@ -1287,15 +1287,13 @@ struct net_device *i2o_lan_register_device(struct i2o_device *i2o_dev)
 #ifdef CONFIG_FDDI
 	case I2O_LAN_FDDI:
 	{
-		int size = sizeof(struct net_device) + sizeof(struct i2o_lan_local)
-			+ sizeof("fddi%d ");
+		int size = sizeof(struct net_device) + sizeof(struct i2o_lan_local);
 
 		dev = (struct net_device *) kmalloc(size, GFP_KERNEL);
 		if (dev == NULL)
 			return NULL;
 		memset((char *)dev, 0, size);
 	    	dev->priv = (void *)(dev + 1);
-		dev->name = (char *)(dev + 1) + sizeof(struct i2o_lan_local);
 
 		if (dev_alloc_name(dev, "fddi%d") < 0) {
 			printk(KERN_WARNING "i2o_lan: Too many FDDI devices.\n");

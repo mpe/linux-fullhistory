@@ -104,8 +104,6 @@ static struct { u_short blue, green, red, pad; } palette[256];
 
 static int             currcon   = 0;
 
-static int release_io_ports = 0;
-
 /* --------------------------------------------------------------------- */
 
 	/*
@@ -918,16 +916,13 @@ static void vga16fb_blank(int blank, struct fb_info *fb_info)
 	}
 }
 
-int __init vga16_init(void)
+int __init vga16fb_init(void)
 {
 	int i,j;
 
 	printk(KERN_DEBUG "vga16fb: initializing\n");
 
-	if (!request_mem_region(VGA_FB_PHYS, VGA_FB_PHYS_LEN, "vga16fb")) {
-		printk (KERN_ERR "vga16fb: unable to reserve VGA memory, exiting\n");
-		return -1;
-	}
+	/* XXX share VGA_FB_PHYS region with vgacon */
 
         vga16fb.video_vbase = ioremap(VGA_FB_PHYS, VGA_FB_PHYS_LEN);
 	printk(KERN_INFO "vga16fb: mapped to 0x%p\n", vga16fb.video_vbase);
@@ -948,10 +943,7 @@ int __init vga16_init(void)
 		palette[i].blue  = default_blu[j];
 	}
 
-	/* note - does not cause failure, b/c vgacon probably still owns this 
-	 * region (FIXME) */
-	if (request_region(0x3C0, 32, "vga16fb"))
-		release_io_ports = 1;
+	/* XXX share VGA I/O region with vgacon and others */
 
 	disp.var = vga16fb_defined;
 
@@ -976,29 +968,18 @@ int __init vga16_init(void)
 	return 0;
 }
 
-#ifndef MODULE
-int __init vga16fb_init(void)
-{
-    return vga16_init();
-}
-
-#else /* MODULE */
-
-int init_module(void)
-{
-    return vga16_init();
-}
-
-void cleanup_module(void)
+static void __exit vga16fb_exit(void)
 {
     unregister_framebuffer(&vga16fb.fb_info);
     iounmap(vga16fb.video_vbase);
-    release_mem_region(VGA_FB_PHYS, VGA_FB_PHYS_LEN);
-    if (release_io_ports)
-    	release_region(0x3c0, 32);
+    /* XXX unshare VGA regions */
 }
 
+#ifdef MODULE
+module_init(vga16fb_init);
 #endif
+module_exit(vga16fb_exit);
+
 
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.

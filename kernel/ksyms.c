@@ -85,6 +85,7 @@ EXPORT_SYMBOL(exec_usermodehelper);
 
 #ifdef CONFIG_MODULES
 EXPORT_SYMBOL(get_module_symbol);
+EXPORT_SYMBOL(try_inc_mod_count);
 #endif
 EXPORT_SYMBOL(get_option);
 EXPORT_SYMBOL(get_options);

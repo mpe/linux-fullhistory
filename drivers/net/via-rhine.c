@@ -121,9 +121,9 @@ static const int multicast_filter_limit = 32;
 #include <asm/io.h>
 
 /* These identify the driver base version and may not be removed. */
-static const char version1[] __devinitdata =
+static char version1[] __devinitdata =
 "via-rhine.c:v1.05-LK1.1.5  5/2/2000  Written by Donald Becker\n";
-static const char version2[] __devinitdata =
+static char version2[] __devinitdata =
 "  http://www.scyld.com/network/via-rhine.html\n";
 
 

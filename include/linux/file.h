@@ -59,9 +59,9 @@ static inline struct file * fget(unsigned int fd)
  * 23/12/1998 Marcin Dalecki <dalecki@cs.net.pl>: 
  * 
  * Since those functions where calling other functions, it was completely 
- * bogos to make them all "static inline".
+ * bogus to make them all "extern inline".
  *
- * The removal of this pseudo optimization saved me scandaleous:
+ * The removal of this pseudo optimization saved me scandalous:
  *
  * 		3756 (i386 arch) 
  *

@@ -131,10 +131,12 @@ static int sbusfb_open(struct fb_info *info, int user)
 	struct fb_info_sbusfb *fb = sbusfbinfo(info);
 	
 	if (user) {
-		if (fb->open) return -EBUSY;
-		fb->mmaped = 0;
-		fb->open = 1;
-		fb->vtconsole = -1;
+		if (fb->open == 0) {
+			fb->mmaped = 0;
+			fb->open = 1;
+			fb->vtconsole = -1;
+		}
+		fb->open++;
 	} else
 		fb->consolecnt++;
 	MOD_INC_USE_COUNT;
@@ -146,15 +148,18 @@ static int sbusfb_release(struct fb_info *info, int user)
 	struct fb_info_sbusfb *fb = sbusfbinfo(info);
 
 	if (user) {	
-		if (fb->vtconsole != -1) {
-			vt_cons[fb->vtconsole]->vc_mode = KD_TEXT;
-			if (fb->mmaped) {
-				fb->graphmode--;
-				sbusfb_clear_margin(&fb_display[fb->vtconsole], 0);
+		fb->open--;
+		if (fb->open == 0) {
+			if (fb->vtconsole != -1) {
+				vt_cons[fb->vtconsole]->vc_mode = KD_TEXT;
+				if (fb->mmaped) {
+					fb->graphmode--;
+					sbusfb_clear_margin(&fb_display[fb->vtconsole], 0);
+				}
 			}
+			if (fb->reset)
+				fb->reset(fb);
 		}
-		if (fb->reset)
-			fb->reset(fb);
 		fb->open = 0;
 	} else
 		fb->consolecnt--;

@@ -379,9 +379,9 @@ static void __init ps2esdi_geninit(void)
 	reset_status = 0;
 	reset_start = jiffies;
 	while (!reset_status) {
-		esdi_timer.expires = HZ;
+		init_timer(&esdi_timer);
+		esdi_timer.expires = jiffies + HZ;
 		esdi_timer.data = 0;
-		esdi_timer.next = esdi_timer.prev = NULL;
 		add_timer(&esdi_timer);
 		sleep_on(&ps2esdi_int);
 	}

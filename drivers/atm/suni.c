@@ -254,8 +254,8 @@ static int suni_start(struct atm_dev *dev)
 		poll_timer.function = suni_hz;
 		poll_timer.data = 1;
 #if 0
-printk(KERN_DEBUG "[u] p=0x%lx,n=0x%lx\n",(unsigned long) poll_timer.prev,
-    (unsigned long) poll_timer.next);
+printk(KERN_DEBUG "[u] p=0x%lx,n=0x%lx\n",(unsigned long) poll_timer.list.prev,
+    (unsigned long) poll_timer.list.next);
 #endif
 		add_timer(&poll_timer);
 	}

@@ -502,7 +502,7 @@ static dev_link_t *netwave_attach(void)
     dev->do_ioctl = &netwave_ioctl;
 
     ether_setup(dev);
-    strcpy(dev->name, priv->node.dev_name)
+    strcpy(dev->name, priv->node.dev_name);
     dev->init = &netwave_init;
     dev->open = &netwave_open;
     dev->stop = &netwave_close;

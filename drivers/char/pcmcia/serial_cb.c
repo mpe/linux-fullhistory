@@ -125,7 +125,7 @@ static dev_node_t *serial_attach(dev_locator_t *loc)
     return node;
 
 err_out_unregister:
-    unregister_serial(0x40 + line);
+    unregister_serial(line);
 err_out:
     MOD_DEC_USE_COUNT;
     return NULL;

@@ -56,13 +56,9 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 		 * tables to the global page map.
 		 */
 		set_pte(page_table, pte_mkold(pte));
-		set_bit(PG_referenced, &page->flags);
+                SetPageReferenced(page);
 		goto out_failed;
 	}
-
-	/* Don't look at this page if it's in a zone that we're not interested in.. */
-	if (!page->zone->zone_wake_kswapd)
-		goto out_failed;
 
 	if (TryLockPage(page))
 		goto out_failed;
@@ -112,6 +108,13 @@ drop_pte:
 	 * locks etc.
 	 */
 	if (!(gfp_mask & __GFP_IO))
+		goto out_unlock;
+
+	/*
+	 * Don't do any of the expensive stuff if
+	 * we're not really interested in this zone.
+	 */
+	if (!page->zone->zone_wake_kswapd)
 		goto out_unlock;
 
 	/*

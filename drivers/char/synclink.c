@@ -324,8 +324,7 @@ struct mgsl_struct {
 	char device_name[25];		/* device instance name */
 
 	unsigned int bus_type;	/* expansion bus type (ISA,EISA,PCI) */
-	unsigned char bus;		/* expansion bus number (zero based) */
-	unsigned char function;		/* PCI device number */
+	struct pci_dev *pdev;	/* pointer to PCI device info */
 
 	unsigned int io_base;		/* base I/O address of adapter */
 	unsigned int io_addr_size;	/* size of the I/O address range */
@@ -4524,50 +4523,24 @@ int mgsl_enumerate_devices()
 #ifdef CONFIG_PCI
 	/* Auto detect PCI adapters */
 	
-	if ( pcibios_present() ) {
-		unsigned char bus;
-		unsigned char func;
+	{
 		unsigned int  shared_mem_base;
 		unsigned int  lcr_mem_base;
 		unsigned int  io_base;
 		unsigned char irq_line;
+		struct pci_dev *pdev = NULL;
 		
-		for(i=0;;i++){
-			if ( PCIBIOS_SUCCESSFUL == pcibios_find_device(
-				MICROGATE_VENDOR_ID, SYNCLINK_DEVICE_ID, i, &bus, &func) ) {
+		while ((pdev = pci_find_device(
+				MICROGATE_VENDOR_ID, SYNCLINK_DEVICE_ID, pdev))) {
 				
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
-				struct pci_dev *pdev = pci_find_slot(bus,func);
 				irq_line = pdev->irq;				
-#else												
-				if (pcibios_read_config_byte(bus,func,
-					PCI_INTERRUPT_LINE,&irq_line) ) {
-					printk( "%s(%d):USC I/O addr not set.\n",
-						__FILE__,__LINE__);
-					continue;
-				}
-#endif
 
-				if (pcibios_read_config_dword(bus,func,
-					PCI_BASE_ADDRESS_3,&shared_mem_base) ) {
-					printk( "%s(%d):Shared mem addr not set.\n",
-						__FILE__,__LINE__);
+				shared_mem_base = pci_resource_start (pdev, 3);
+				lcr_mem_base = pci_resource_start (pdev, 0);
+				io_base = pci_resource_start (pdev, 2);
+
+				if (pci_enable_device (pdev))
 					continue;
-				}
-							
-				if (pcibios_read_config_dword(bus,func,
-					PCI_BASE_ADDRESS_0,&lcr_mem_base) ) {
-					printk( "%s(%d):LCR mem addr not set.\n",
-						__FILE__,__LINE__);
-					continue;
-				}
-				
-				if (pcibios_read_config_dword(bus,func,
-					PCI_BASE_ADDRESS_2,&io_base) ) {
-					printk( "%s(%d):USC I/O addr not set.\n",
-						__FILE__,__LINE__);
-					continue;
-				}
 				
 				info = mgsl_allocate_device();
 				if ( !info ) {
@@ -4579,29 +4552,23 @@ int mgsl_enumerate_devices()
 		
 				/* Copy user configuration info to device instance data */
 		
-				info->io_base = io_base & PCI_BASE_ADDRESS_IO_MASK;
+				info->io_base = io_base;
 				info->irq_level = (unsigned int)irq_line;
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
 				info->irq_level = irq_cannonicalize(info->irq_level);
-#else		
-				if (info->irq_level == 2)
-					info->irq_level = 9;
-#endif			
-				info->phys_memory_base = shared_mem_base & PCI_BASE_ADDRESS_MEM_MASK;
+				info->phys_memory_base = shared_mem_base;
 				
 				/* Because veremap only works on page boundaries we must map
 				 * a larger area than is actually implemented for the LCR
 				 * memory range. We map a full page starting at the page boundary.
 				 */
-				info->phys_lcr_base = lcr_mem_base & PCI_BASE_ADDRESS_MEM_MASK;
+				info->phys_lcr_base = lcr_mem_base;
 				info->lcr_offset    = info->phys_lcr_base & (PAGE_SIZE-1);
 				info->phys_lcr_base &= ~(PAGE_SIZE-1);
 				
 				info->bus_type = MGSL_BUS_TYPE_PCI;
 				info->io_addr_size = 8;
 				info->irq_flags = SA_SHIRQ;
-				info->bus = bus;
-				info->function = func;
+				info->pdev = pdev;
 		
 				/* override default max frame size if arg available */
 				if ( num_devices < MAX_TOTAL_DEVICES && 
@@ -4621,9 +4588,6 @@ int mgsl_enumerate_devices()
 				
 				/* add new device to device list */
 				mgsl_add_device( info );
-			} else {
-				break;
-			}
 		}
 	}
 #endif

@@ -1824,19 +1824,16 @@ int __init amiga_floppy_init(void)
 	}
 
 	/* initialize variables */
-	motor_on_timer.next = NULL;
-	motor_on_timer.prev = NULL;
+	init_timer(&motor_on_timer);
 	motor_on_timer.expires = 0;
 	motor_on_timer.data = 0;
 	motor_on_timer.function = motor_on_callback;
 	for (i = 0; i < FD_MAX_UNITS; i++) {
-		motor_off_timer[i].next = NULL;
-		motor_off_timer[i].prev = NULL;
+		init_timer(&motor_off_timer[i]);
 		motor_off_timer[i].expires = 0;
 		motor_off_timer[i].data = i|0x80000000;
 		motor_off_timer[i].function = fd_motor_off;
-		flush_track_timer[i].next = NULL;
-		flush_track_timer[i].prev = NULL;
+		init_timer(&flush_track_timer[i]);
 		flush_track_timer[i].expires = 0;
 		flush_track_timer[i].data = i;
 		flush_track_timer[i].function = flush_track_callback;
@@ -1844,8 +1841,7 @@ int __init amiga_floppy_init(void)
 		unit[i].track = -1;
 	}
 
-	post_write_timer.next = NULL;
-	post_write_timer.prev = NULL;
+	init_timer(&post_write_timer);
 	post_write_timer.expires = 0;
 	post_write_timer.data = 0;
 	post_write_timer.function = post_write;

@@ -283,7 +283,7 @@ static void ibmtr_detach(dev_link_t *link)
     cli();
     {
 	struct tok_info *ti = (struct tok_info *)dev->priv;
-	if (ti->tr_timer.next) del_timer(&(ti->tr_timer));
+	if (timer_pending(&ti->tr_timer)) del_timer(&ti->tr_timer);
     }
     if (link->state & DEV_RELEASE_PENDING) {
         del_timer(&link->release);

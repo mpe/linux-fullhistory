@@ -1,7 +1,7 @@
 /*
  * USB ConnectTech WhiteHEAT driver
  *
- *	(C) Copyright (C) 1999, 2000
+ *	Copyright (C) 1999, 2000
  *	    Greg Kroah-Hartman (greg@kroah.com)
  *
  *	This program is free software; you can redistribute it and/or modify
@@ -11,6 +11,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (05/04/2000) gkh
+ *	First cut at open and close commands. Data can flow through the ports at
+ *	default speeds now.
+ *
  * (03/26/2000) gkh
  *	Split driver up into device specific pieces.
  * 
@@ -45,6 +49,7 @@
 
 #include "whiteheat_fw.h"		/* firmware for the ConnectTech WhiteHEAT device */
 
+#include "whiteheat.h"			/* WhiteHEAT specific commands */
 
 #define CONNECT_TECH_VENDOR_ID		0x0710
 #define CONNECT_TECH_FAKE_WHITE_HEAT_ID	0x0001
@@ -57,6 +62,7 @@ static void whiteheat_set_termios	(struct usb_serial_port *port, struct termios 
 static void whiteheat_throttle		(struct usb_serial_port *port);
 static void whiteheat_unthrottle	(struct usb_serial_port *port);
 static int  whiteheat_startup		(struct usb_serial *serial);
+static void whiteheat_shutdown		(struct usb_serial *serial);
 
 /* All of the device info needed for the Connect Tech WhiteHEAT */
 static __u16	connecttech_vendor_id			= CONNECT_TECH_VENDOR_ID;
@@ -91,14 +97,124 @@ struct usb_serial_device_type whiteheat_device = {
 	throttle:		whiteheat_throttle,
 	unthrottle:		whiteheat_unthrottle,
 	set_termios:		whiteheat_set_termios,
+	shutdown:		whiteheat_shutdown,
 };
 
+struct whiteheat_private {
+	__u8			command_finished;
+	wait_queue_head_t	wait_command;	/* for handling sleeping while waiting for a command to finish */
+};
+
+
+#define COMMAND_PORT		4
+#define COMMAND_TIMEOUT		(2*HZ)	/* 2 second timeout for a command */
 
 /*****************************************************************************
  * Connect Tech's White Heat specific driver functions
  *****************************************************************************/
+static void command_port_write_callback (struct urb *urb)
+{
+	unsigned char *data = urb->transfer_buffer;
+#ifdef DEBUG
+	int i;
+#endif
+
+	dbg ("command_port_write_callback");
+
+	if (urb->status) {
+		dbg ("nonzero urb status: %d", urb->status);
+		return;
+	}
+
+#ifdef DEBUG
+	if (urb->actual_length) {
+		printk (KERN_DEBUG __FILE__ ": data read - length = %d, data = ", urb->actual_length);
+		for (i = 0; i < urb->actual_length; ++i) {
+			printk ("%.2x ", data[i]);
+		}
+		printk ("\n");
+	}
+#endif
+
+	return;
+}
+
+
+static void command_port_read_callback (struct urb *urb)
+{
+	struct whiteheat_private *info = (struct whiteheat_private *)urb->context;
+	unsigned char *data = urb->transfer_buffer;
+#ifdef DEBUG
+	int i;
+#endif
+
+	dbg ("command_port_write_callback");
+
+	if (urb->status) {
+		dbg ("nonzero urb status: %d", urb->status);
+		return;
+	}
+
+#ifdef DEBUG
+	if (urb->actual_length) {
+		printk (KERN_DEBUG __FILE__ ": data read - length = %d, data = ", urb->actual_length);
+		for (i = 0; i < urb->actual_length; ++i) {
+			printk ("%.2x ", data[i]);
+		}
+		printk ("\n");
+	}
+#endif
+
+	/* right now, if the command is COMMAND_COMPLETE, just flip the bit saying the command finished */
+	/* in the future we're going to have to pay attention to the actual command that completed */
+	if (data[0] == WHITEHEAT_CMD_COMPLETE) {
+		info->command_finished = TRUE;
+	}
+	
+	return;
+}
+
+
+static int whiteheat_send_cmd (struct usb_serial *serial, __u8 command, __u8 *data, __u8 datasize)
+{
+	struct whiteheat_private *info;
+	struct usb_serial_port *port;
+	int timeout;
+	__u8 *transfer_buffer;
+
+	dbg("whiteheat_send_cmd: %d", command);
+
+	port = &serial->port[COMMAND_PORT];
+	info = (struct whiteheat_private *)port->private;
+	info->command_finished = FALSE;
+	
+	transfer_buffer = (__u8 *)port->write_urb->transfer_buffer;
+	transfer_buffer[0] = command;
+	memcpy (&transfer_buffer[1], data, datasize);
+	port->write_urb->transfer_buffer_length = datasize + 1;
+	if (usb_submit_urb (port->write_urb))
+		dbg ("submit urb failed");
+
+	/* wait for the command to complete */
+	timeout = COMMAND_TIMEOUT;
+	while (timeout && (info->command_finished == FALSE)) {
+		timeout = interruptible_sleep_on_timeout (&info->wait_command, timeout);
+	}
+
+	if (info->command_finished == FALSE) {
+		return -1;
+	}
+
+	return 0;
+}
+
+
 static int whiteheat_open (struct usb_serial_port *port, struct file *filp)
 {
+	struct whiteheat_min_set	open_command;
+	struct usb_serial_port 		*command_port;
+	struct whiteheat_private	*info;
+
 	dbg("whiteheat_open port %d", port->number);
 
 	if (port->active) {
@@ -106,22 +222,50 @@ static int whiteheat_open (struct usb_serial_port *port, struct file *filp)
 		return -EINVAL;
 	}
 	port->active = 1;
- 
-	/*Start reading from the device*/
+
+	/* set up some stuff for our command port */
+	command_port = &port->serial->port[COMMAND_PORT];
+	if (command_port->private == NULL) {
+		info = (struct whiteheat_private *)kmalloc (sizeof(struct whiteheat_private), GFP_KERNEL);
+		if (info == NULL) {
+			err("out of memory");
+			return -ENOMEM;
+		}
+		
+		init_waitqueue_head(&info->wait_command);
+		command_port->private = info;
+		command_port->write_urb->complete = command_port_write_callback;
+		command_port->read_urb->complete = command_port_read_callback;
+		usb_submit_urb (command_port->read_urb);	
+	}
+	
+	/* Start reading from the device */
 	if (usb_submit_urb(port->read_urb))
 		dbg("usb_submit_urb(read bulk) failed");
+
+	/* send an open port command */
+	open_command.port = port->number - port->minor;
+	whiteheat_send_cmd (port->serial, WHITEHEAT_OPEN, (__u8 *)&open_command, sizeof(open_command));
 
 	/* Need to do device specific setup here (control lines, baud rate, etc.) */
 	/* FIXME!!! */
 
+	dbg("whiteheat_open exit");
+	
 	return (0);
 }
 
 
 static void whiteheat_close(struct usb_serial_port *port, struct file * filp)
 {
+	struct whiteheat_min_set	close_command;
+	
 	dbg("whiteheat_close port %d", port->number);
 	
+	/* send a close command to the port */
+	close_command.port = port->number - port->minor;
+	whiteheat_send_cmd (port->serial, WHITEHEAT_CLOSE, (__u8 *)&close_command, sizeof(close_command));
+
 	/* Need to change the control lines here */
 	/* FIXME */
 	
@@ -243,7 +387,24 @@ static int  whiteheat_startup (struct usb_serial *serial)
 	response = ezusb_set_reset (serial, 0);
 
 	/* we want this device to fail to have a driver assigned to it. */
-	return (1);
+	return 1;
+}
+
+
+static void whiteheat_shutdown (struct usb_serial *serial)
+{
+	struct usb_serial_port 		*command_port;
+
+	dbg("whiteheat_shutdown");
+
+	/* set up some stuff for our command port */
+	command_port = &serial->port[COMMAND_PORT];
+	if (command_port->private != NULL) {
+		kfree (command_port->private);
+		command_port->private = NULL;
+	}
+
+	return;
 }
 
 #endif	/* CONFIG_USB_SERIAL_WHITEHEAT */

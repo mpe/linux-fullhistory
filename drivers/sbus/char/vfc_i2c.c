@@ -88,8 +88,7 @@ void vfc_i2c_delay_wakeup(struct vfc_dev *dev)
 
 void vfc_i2c_delay_no_busy(struct vfc_dev *dev, unsigned long usecs) 
 {
-	dev->poll_timer.next = NULL;
-	dev->poll_timer.prev = NULL;
+	init_timer(&dev->poll_timer);
 	dev->poll_timer.expires = jiffies + 
 		((unsigned long)usecs*(HZ))/1000000;
 	dev->poll_timer.data=(unsigned long)dev;

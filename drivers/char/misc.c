@@ -85,12 +85,24 @@ static int misc_read_proc(char *buf, char **start, off_t offset,
 			  int len, int *eof, void *private)
 {
 	struct miscdevice *p;
+	int written;
 
-	len=0;
-	for (p = misc_list.next; p != &misc_list && len < 4000; p = p->next)
-		len += sprintf(buf+len, "%3i %s\n",p->minor, p->name ?: "");
+	written=0;
+	for (p = misc_list.next; p != &misc_list && written < len; p = p->next) {
+		written += sprintf(buf+written, "%3i %s\n",p->minor, p->name ?: "");
+		if (written < offset) {
+			offset -= written;
+			written = 0;
+		}
+	}
 	*start = buf + offset;
-	return len > offset ? len - offset : 0;
+	written -= offset;
+	if(written > len) {
+		*eof = 0;
+		return len;
+	}
+	*eof = 1;
+	return (written<0) ? 0 : written;
 }
 
 

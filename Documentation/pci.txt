@@ -62,9 +62,8 @@ contains:
 			deregistration of the driver or when it's manually pulled
 			out of a hot-pluggable slot). This function can be called
 			from interrupt context.
-	suspend,	Power management hooks (currently used only for CardBus
-	resume		cards) -- called when the device goes to sleep or is
-			resumed.
+	suspend,	Power management hooks -- called when the device goes to
+	resume		sleep or is resumed.
 
 The ID table is an array of struct pci_device_id ending with a all-zero entry.
 Each entry consists of:

@@ -1,7 +1,7 @@
 /*
  * USB FTDI SIO driver
  *
- * 	(C) Copyright (C) 1999, 2000
+ * 	Copyright (C) 1999, 2000
  * 	    Greg Kroah-Hartman (greg@kroah.com)
  *          Bill Ryder (bryder@sgi.com)
  *

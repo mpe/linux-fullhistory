@@ -84,14 +84,14 @@ static int rx_copybreak = 200;
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/init.h>
+#include <linux/spinlock.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
-#include <asm/spinlock.h>
 
 /* These identify the driver base version and may not be removed. */
-static const char version[] __devinitdata =
+static char version[] __devinitdata =
 "epic100.c:v1.09+LK1.1.2 4/28/2000 Written by Donald Becker <becker@scyld.com>\n";
-static const char version2[] __devinitdata =
+static char version2[] __devinitdata =
 "  	http://www.scyld.com/network/epic100.html\n";
 
 #define EPIC100_MODULE_NAME "epic100"

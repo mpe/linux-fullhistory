@@ -65,9 +65,11 @@ static int proc_exe_link(struct inode *inode, struct dentry **dentry, struct vfs
 	int result = -ENOENT;
 	struct task_struct *task = inode->u.proc_i.task;
 
-	if (!task_lock(task))
-		return result;
+	task_lock(task);
 	mm = task->mm;
+	if (mm)
+		atomic_inc(&mm->mm_users);
+	task_unlock(task);
 	if (!mm)
 		goto out;
 	down(&mm->mmap_sem);
@@ -83,67 +85,80 @@ static int proc_exe_link(struct inode *inode, struct dentry **dentry, struct vfs
 		vma = vma->vm_next;
 	}
 	up(&mm->mmap_sem);
+	mmput(mm);
 out:
-	task_unlock(task);
 	return result;
 }
 
 static int proc_cwd_link(struct inode *inode, struct dentry **dentry, struct vfsmount **mnt)
 {
+	struct fs_struct *fs;
 	int result = -ENOENT;
-	if (task_lock(inode->u.proc_i.task)) {
-		struct fs_struct *fs = inode->u.proc_i.task->fs;
-		if (fs) {
-			*mnt = mntget(fs->pwdmnt);
-			*dentry = dget(fs->pwd);
-			result = 0;
-		}
-		task_unlock(inode->u.proc_i.task);
+	task_lock(inode->u.proc_i.task);
+	fs = inode->u.proc_i.task->fs;
+	if(fs)
+		atomic_inc(&fs->count);
+	task_unlock(inode->u.proc_i.task);
+	if (fs) {
+		*mnt = mntget(fs->pwdmnt);
+		*dentry = dget(fs->pwd);
+		result = 0;
+		put_fs_struct(fs);
 	}
 	return result;
 }
 
 static int proc_root_link(struct inode *inode, struct dentry **dentry, struct vfsmount **mnt)
 {
+	struct fs_struct *fs;
 	int result = -ENOENT;
-	if (task_lock(inode->u.proc_i.task)) {
-		struct fs_struct *fs = inode->u.proc_i.task->fs;
-		if (fs) {
-			*mnt = mntget(fs->rootmnt);
-			*dentry = dget(fs->root);
-			result = 0;
-		}
-		task_unlock(inode->u.proc_i.task);
+	task_lock(inode->u.proc_i.task);
+	fs = inode->u.proc_i.task->fs;
+	if(fs)
+		atomic_inc(&fs->count);
+	task_unlock(inode->u.proc_i.task);
+	if (fs) {
+		*mnt = mntget(fs->rootmnt);
+		*dentry = dget(fs->root);
+		result = 0;
 	}
 	return result;
 }
 
-/* task is locked and can't drop mm, so we are safe */
-
 static int proc_pid_environ(struct task_struct *task, char * buffer)
 {
-	struct mm_struct *mm = task->mm;
+	struct mm_struct *mm;
 	int res = 0;
+	task_lock(task);
+	mm = task->mm;
+	if (mm)
+		atomic_inc(&mm->mm_users);
+	task_unlock(task);
 	if (mm) {
 		int len = mm->env_end - mm->env_start;
 		if (len > PAGE_SIZE)
 			len = PAGE_SIZE;
 		res = access_process_vm(task, mm->env_start, buffer, len, 0);
+		mmput(mm);
 	}
 	return res;
 }
 
-/* task is locked and can't drop mm, so we are safe */
-
 static int proc_pid_cmdline(struct task_struct *task, char * buffer)
 {
-	struct mm_struct *mm = task->mm;
+	struct mm_struct *mm;
 	int res = 0;
+	task_lock(task);
+	mm = task->mm;
+	if (mm)
+		atomic_inc(&mm->mm_users);
+	task_unlock(task);
 	if (mm) {
 		int len = mm->arg_end - mm->arg_start;
 		if (len > PAGE_SIZE)
 			len = PAGE_SIZE;
 		res = access_process_vm(task, mm->arg_start, buffer, len, 0);
+		mmput(mm);
 	}
 	return res;
 }
@@ -219,10 +234,7 @@ static ssize_t pid_maps_read(struct file * file, char * buf,
 	struct task_struct *task = inode->u.proc_i.task;
 	ssize_t res;
 
-	if (!task_lock(task))
-		return -EIO;
 	res = proc_pid_read_maps(task, file, buf, count, ppos);
-	task_unlock(task);
 	return res;
 }
 
@@ -246,14 +258,19 @@ static ssize_t proc_info_read(struct file * file, char * buf,
 	if (!(page = __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
 
-	if (!task_lock(task)) {
+	/* FIXME: check that all proc_read function
+	 *	handle a dying task gracefully.
+	 *	The memory for the task structure
+	 *	won't be freed, we've called get_task_struct().
+	 */
+#if 0
+	if (!task->p_pptr) {
 		free_page(page);
 		return -EIO;
 	}
+#endif
 	
 	length = inode->u.proc_i.op.proc_read(task, (char*)page);
-
-	task_unlock(task);
 
 	if (length < 0) {
 		free_page(page);

@@ -8,6 +8,8 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  *
+ * Please report both successes and troubles to the author at omninet@kroah.com
+ *
  */
 
 #include <linux/config.h>

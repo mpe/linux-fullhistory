@@ -252,7 +252,7 @@ set_mb_power(int which, int onoff)
 		MBDBG("mediabay%d: powering up\n", which);
 	} else {
 		feature_clear(mb->dev_node, FEATURE_Mediabay_floppy_enable);
-		feature_clear(mb->dev_node, FEATURE_Mediabay_IDE_enable);
+		feature_clear(mb->dev_node, FEATURE_IDE1_enable);
 		feature_clear(mb->dev_node, FEATURE_Mediabay_PCI_enable);
 		feature_clear(mb->dev_node, FEATURE_SWIM3_enable);
 		feature_clear(mb->dev_node, FEATURE_Mediabay_power);
@@ -271,9 +271,9 @@ set_media_bay(int which, int id)
 	
 	switch (id) {
 	case MB_CD:
-		feature_set(bay->dev_node, FEATURE_Mediabay_IDE_enable);
+		feature_set(bay->dev_node, FEATURE_IDE1_enable);
 		udelay(10);
-		feature_set(bay->dev_node, FEATURE_Mediabay_IDE_reset);
+		feature_set(bay->dev_node, FEATURE_IDE1_reset);
 		printk(KERN_INFO "media bay %d contains a CD-ROM drive\n", which);
 		break;
 	case MB_FD:
@@ -397,7 +397,7 @@ media_bay_step(int i)
 	    	}
 #ifdef CONFIG_BLK_DEV_IDE
 		MBDBG("mediabay%d: waiting IDE reset (kind:%d)\n", i, bay->content_id);
-	    	feature_clear(bay->dev_node, FEATURE_Mediabay_IDE_reset);
+	    	feature_clear(bay->dev_node, FEATURE_IDE1_reset);
 	    	bay->timer = MS_TO_HZ(MB_IDE_WAIT);
 	    	bay->state = mb_ide_resetting;
 #else

@@ -10,30 +10,30 @@ INTRODUCTION
 
 CONFIGURATION
 
-  Currently the driver can handle up to 16 different serial interfaces at
-  one time. Once more of the drivers become stable, this number will be
-  increased to the full 256. 
+  Currently the driver can handle up to 256 different serial interfaces at
+  one time. 
 
-  The major number that the driver uses is 188 so to use the driver,
-  create the following nodes:
+  If you are not using devfs:
+    The major number that the driver uses is 188 so to use the driver,
+    create the following nodes:
 	mknod /dev/ttyUSB0 c 188 0
 	mknod /dev/ttyUSB1 c 188 1
 	mknod /dev/ttyUSB2 c 188 2
 	mknod /dev/ttyUSB3 c 188 3
-	mknod /dev/ttyUSB4 c 188 4
-	mknod /dev/ttyUSB5 c 188 5
-	mknod /dev/ttyUSB6 c 188 6
-	mknod /dev/ttyUSB7 c 188 7
-	mknod /dev/ttyUSB8 c 188 8
-	mknod /dev/ttyUSB9 c 188 9
-	mknod /dev/ttyUSB10 c 188 10
-	mknod /dev/ttyUSB11 c 188 11
-	mknod /dev/ttyUSB12 c 188 12
-	mknod /dev/ttyUSB13 c 188 13
-	mknod /dev/ttyUSB14 c 188 14
-	mknod /dev/ttyUSB15 c 188 15
-	mknod /dev/ttyUSB16 c 188 16
+		.
+		.
+		.
+	mknod /dev/ttyUSB254 c 188 254
+	mknod /dev/ttyUSB255 c 188 255
 
+  If you are using devfs:
+    The devices supported by this driver will show up as
+    /dev/usb/tts/{0,1,...}
+
+  When the device is connected and recognized by the driver, the driver
+  will print to the system log, which node(s) the device has been bound
+  to.
+  
 
 SPECIFIC DEVICES SUPPORTED
 
@@ -45,8 +45,9 @@ ConnectTech WhiteHEAT 4 port converter
   being fully supported.
 
 Current status:
-  The device's firmware is downloaded on connection, but the use of a
-  special Anchor Chips extension is currently giving me problems.
+  The device's firmware is downloaded on connection, the new firmware 
+  runs properly and all four ports are successfuly recognized and connected.
+  Now data flow needs to be implemented properly.
   This driver is not fully operational.
 
 
@@ -61,7 +62,9 @@ Current status:
   
   When the device is connected, try talking to it on the second port
   (this is usually /dev/ttyUSB1 if you do not have any other usb-serial
-  devices in the system.)
+  devices in the system.) The system log should tell you which port is
+  the port to use for the HotSync transfer. The "Generic" port can be used
+  for other device communication, such as a PPP link.
 
   There is a webpage and mailing lists for this portion of the driver at: 
   http://usbvisor.sourceforge.net/
@@ -89,6 +92,19 @@ Current status:
    HW flow control
    not all of the standard USB descriptors are handled: Get_Status, Set_Feature
    O_NONBLOCK, select()
+
+
+FTDI Single Port Serial Driver
+
+  This is a single port DB-25 serial adapter. More information about this
+  device and the Linux driver can be found at:
+	http://reality.sgi.com/bryder_wellington/ftdi_sio/
+
+
+ZyXEL omni.net lcd plus ISDN TA
+
+  This is an ISDN TA. Please report both successes and troubles to the
+  author at omninet@kroah.com
 
 
 Generic Serial driver

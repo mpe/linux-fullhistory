@@ -251,7 +251,7 @@ void init_buffer(struct buffer_head *, bh_end_io_t *, void *);
 
 extern void set_bh_page(struct buffer_head *bh, struct page *page, unsigned long offset);
 
-#define touch_buffer(bh)	set_bit(PG_referenced, &bh->b_page->flags)
+#define touch_buffer(bh)	SetPageReferenced(bh->b_page)
 
 
 #include <linux/pipe_fs_i.h>

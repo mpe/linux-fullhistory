@@ -170,11 +170,6 @@ static mxser_pciinfo mxser_pcibrds[] =
 	{PCI_VENDOR_ID_MOXA, PCI_DEVICE_ID_C104, MXSER_BOARD_C104_PCI},
 };
 
-typedef struct _moxa_pci_info {
-	unsigned short busNum;
-	unsigned short devNum;
-} moxa_pci_info;
-
 static int ioaddr[MXSER_BOARDS] = {0, 0, 0, 0};
 static int ttymajor = MXSERMAJOR;
 static int calloutmajor = MXSERCUMAJOR;
@@ -198,7 +193,7 @@ struct mxser_hwconf {
 	int uart_type;
 	int ioaddr[MXSER_PORTS_PER_BOARD];
 	int baud_base[MXSER_PORTS_PER_BOARD];
-	moxa_pci_info pciInfo;
+	struct pci_dev *pdev;
 };
 
 struct mxser_struct {
@@ -304,7 +299,7 @@ void cleanup_module(void);
 static void mxser_getcfg(int board, struct mxser_hwconf *hwconf);
 int mxser_init(void);
 static int mxser_get_ISA_conf(int, struct mxser_hwconf *);
-static int mxser_get_PCI_conf(int, int, int, struct mxser_hwconf *);
+static int mxser_get_PCI_conf(struct pci_dev *, int, struct mxser_hwconf *);
 static void mxser_do_softint(void *);
 static int mxser_open(struct tty_struct *, struct file *);
 static void mxser_close(struct tty_struct *, struct file *);
@@ -454,33 +449,21 @@ static void mxser_getcfg(int board, struct mxser_hwconf *hwconf)
 	mxsercfg[board] = *hwconf;
 }
 
-static int mxser_get_PCI_conf(int busnum, int devnum, int board_type, struct mxser_hwconf *hwconf)
+static int mxser_get_PCI_conf(struct pci_dev *pdev, int board_type, struct mxser_hwconf *hwconf)
 {
 	int i;
-	unsigned int val, ioaddress;
+	unsigned int ioaddress;
 
 	hwconf->board_type = board_type;
 	hwconf->ports = mxser_numports[board_type - 1];
-	pcibios_read_config_dword(busnum, devnum, PCI_BASE_ADDRESS_2, &val);
-	if (val == 0xffffffff)
-		return (MXSER_ERR_IOADDR);
-	else
-		ioaddress = val & 0xffffffc;
+	ioaddress = pci_resource_start (pdev, 2);
 	for (i = 0; i < hwconf->ports; i++)
 		hwconf->ioaddr[i] = ioaddress + 8 * i;
 
-	pcibios_read_config_dword(busnum, devnum, PCI_BASE_ADDRESS_3, &val);
-	if (val == 0xffffffff)
-		return (MXSER_ERR_VECTOR);
-	else
-		ioaddress = val & 0xffffffc;
+	ioaddress = pci_resource_start (pdev, 3);
 	hwconf->vector = ioaddress;
 
-	pcibios_read_config_dword(busnum, devnum, PCI_INTERRUPT_LINE, &val);
-	if (val == 0xffffffff)
-		return (MXSER_ERR_IRQ);
-	else
-		hwconf->irq = val & 0xff;
+	hwconf->irq = pdev->irq;
 
 	hwconf->uart_type = PORT_16550A;
 	hwconf->vector_mask = 0;
@@ -496,7 +479,6 @@ int mxser_init(void)
 	int i, m, retval, b;
 	int n, index;
 	int ret1, ret2;
-	unsigned char busnum, devnum;
 	struct mxser_hwconf hwconf;
 
 	printk("MOXA Smartio family driver version %s\n", MXSER_VERSION);
@@ -577,8 +559,7 @@ int mxser_init(void)
 
 			continue;
 		}
-		hwconf.pciInfo.busNum = 0;
-		hwconf.pciInfo.devNum = 0;
+		hwconf.pdev = NULL;
 
 		if (mxser_initbrd(m, &hwconf) < 0)
 			continue;
@@ -613,8 +594,7 @@ int mxser_init(void)
 
 			continue;
 		}
-		hwconf.pciInfo.busNum = 0;
-		hwconf.pciInfo.devNum = 0;
+		hwconf.pdev = NULL;
 
 		if (mxser_initbrd(m, &hwconf) < 0)
 			continue;
@@ -627,29 +607,26 @@ int mxser_init(void)
 	/* start finding PCI board here */
 
 #ifdef CONFIG_PCI
-	if (pci_present()) 
 	{
+		struct pci_dev *pdev = NULL;
+
 		n = sizeof(mxser_pcibrds) / sizeof(mxser_pciinfo);
 		index = 0;
 		b = 0;
 		while (b < n) {
-			if (pcibios_find_device(mxser_pcibrds[b].vendor_id,
-					      mxser_pcibrds[b].device_id,
-						index,
-						&busnum,
-						&devnum) != 0) {
-				b++;
-				index = 0;
-				continue;
-			}
-			hwconf.pciInfo.busNum = busnum;
-			hwconf.pciInfo.devNum = devnum;
-			printk("Found MOXA %s board(BusNo=%d,DevNo=%d)\n", mxser_brdname[mxser_pcibrds[b].board_type - 1], busnum, devnum >> 3);
-			index++;
+			pdev = pci_find_device(mxser_pcibrds[b].vendor_id,
+					       mxser_pcibrds[b].device_id, pdev);
+			if (!pdev)
+				break;
+			b++;
+			hwconf.pdev = pdev;
+			printk("Found MOXA %s board(BusNo=%d,DevNo=%d)\n",
+				mxser_brdname[mxser_pcibrds[b].board_type - 1],
+				pdev->bus->number, PCI_SLOT(pdev->devfn >> 3));
 			if (m >= MXSER_BOARDS) {
 				printk("Too many Smartio family boards find (maximum %d),board not configured\n", MXSER_BOARDS);
 			} else {
-				retval = mxser_get_PCI_conf(busnum, devnum,
+				retval = mxser_get_PCI_conf(pdev,
 				   mxser_pcibrds[b].board_type, &hwconf);
 				if (retval < 0) {
 					if (retval == MXSER_ERR_IRQ)

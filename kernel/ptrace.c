@@ -121,10 +121,13 @@ int access_process_vm(struct task_struct *tsk, unsigned long addr, void *buf, in
 	struct vm_area_struct * vma;
 
 	/* Worry about races with exit() */
-	lock_kernel();
+	task_lock(tsk);
 	mm = tsk->mm;
-	atomic_inc(&mm->mm_users);
-	unlock_kernel();
+	if (mm)
+		atomic_inc(&mm->mm_users);
+	task_unlock(tsk);
+	if (!mm)
+		return 0;
 
 	down(&mm->mmap_sem);
 	vma = find_extend_vma(mm, addr);

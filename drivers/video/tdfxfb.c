@@ -2052,10 +2052,10 @@ int __init tdfxfb_init(void) {
       currcon = -1;
       if (!nohwcursor) tdfxfb_hwcursor_init();
        
+      init_timer(&fb_info.cursor.timer);
       fb_info.cursor.timer.function = do_flashcursor; 
-      fb_info.cursor.state = CM_ERASE;
-      fb_info.cursor.timer.prev = fb_info.cursor.timer.next=NULL;
       fb_info.cursor.timer.data = (unsigned long)(&fb_info);
+      fb_info.cursor.state = CM_ERASE;
       spin_lock_init(&fb_info.DAClock);
        
       strcpy(fb_info.fb_info.modename, "3Dfx "); 

@@ -346,8 +346,8 @@ struct task_struct {
 /* Thread group tracking */
    	u32 parent_exec_id;
    	u32 self_exec_id;
-/* Protection of fields allocatio/deallocation */
-	struct semaphore exit_sem;
+/* Protection of (de-)allocation: mm, files, fs */
+	spinlock_t alloc_lock;
 };
 
 /*
@@ -418,7 +418,7 @@ struct task_struct {
     blocked:		{{0}},						\
     sigqueue:		NULL,						\
     sigqueue_tail:	&tsk.sigqueue,					\
-    exit_sem:		__MUTEX_INITIALIZER(tsk.exit_sem)		\
+    alloc_lock:		SPIN_LOCK_UNLOCKED				\
 }
 
 
@@ -835,19 +835,14 @@ static inline void unhash_process(struct task_struct *p)
 	write_unlock_irq(&tasklist_lock);
 }
 
-static inline int task_lock(struct task_struct *p)
+static inline void task_lock(struct task_struct *p)
 {
-	down(&p->exit_sem);
-	if (p->p_pptr)
-		return 1;
-	/* He's dead, Jim. You take his wallet, I'll take the tricorder... */
-	up(&p->exit_sem);
-	return 0;
+	spin_lock(&p->alloc_lock);
 }
 
 static inline void task_unlock(struct task_struct *p)
 {
-	up(&p->exit_sem);
+	spin_unlock(&p->alloc_lock);
 }
 
 #endif /* __KERNEL__ */

@@ -436,8 +436,8 @@ int __init rd_init (void)
 
 #ifdef MODULE
 module_init(rd_init);
-module_exit(rd_cleanup);
 #endif
+module_exit(rd_cleanup);
 
 /* loadable module support */
 MODULE_PARM     (rd_size, "1i");

@@ -1005,6 +1005,7 @@ rpciod(void *ptr)
 	rpciod_pid = current->pid;
 	up(&rpciod_running);
 
+	exit_fs(current);
 	exit_files(current);
 	exit_mm(current);
 

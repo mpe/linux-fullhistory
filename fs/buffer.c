@@ -789,7 +789,7 @@ static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
 	/*
 	 * Run the hooks that have to be done when a page I/O has completed.
 	 */
-	if (test_and_clear_bit(PG_decr_after, &page->flags))
+	if (PageTestandClearDecrAfter(page))
 		atomic_dec(&nr_async_pages);
 
 	UnlockPage(page);
@@ -1957,7 +1957,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size)
 
 	if (!PageLocked(page))
 		panic("brw_page: page not locked for I/O");
-//	clear_bit(PG_error, &page->flags);
+//	ClearPageError(page);
 	/*
 	 * We pretty much rely on the page lock for this, because
 	 * create_page_buffers() might sleep.

@@ -1,7 +1,7 @@
 /*
  * USB Serial Converter driver
  *
- *	(C) Copyright (C) 1999, 2000
+ *	Copyright (C) 1999, 2000
  *	    Greg Kroah-Hartman (greg@kroah.com)
  *
  *	This program is free software; you can redistribute it and/or modify
@@ -20,7 +20,7 @@
 #include <linux/config.h>
 
 #define SERIAL_TTY_MAJOR	188	/* Nice legal number now */
-#define SERIAL_TTY_MINORS	16	/* Actually we are allowed 255, but this is good for now */
+#define SERIAL_TTY_MINORS	255	/* loads of devices :) */
 
 #define MAX_NUM_PORTS		8	/* The maximum number of ports one device can grab at once */
 

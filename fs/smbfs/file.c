@@ -56,7 +56,7 @@ smb_readpage_sync(struct dentry *dentry, struct page *page)
 
 	/* We can't replace this with ClearPageError. why? is it a problem? 
 	   fs/buffer.c:brw_page does the same. */
-	/* clear_bit(PG_error, &page->flags); */
+	/* ClearPageError(page); */
 
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_readpage_sync: file %s/%s, count=%d@%ld, rsize=%d\n",

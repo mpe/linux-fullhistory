@@ -1236,7 +1236,7 @@ static int
 msp3400c_mixer_open(struct inode *inode, struct file *file)
 {
         int minor = MINOR(inode->i_rdev);
-	struct i2c_client *client;
+	struct i2c_client *client = NULL;
 	struct msp3400c *msp;
 	int i;
 
@@ -1246,12 +1246,12 @@ msp3400c_mixer_open(struct inode *inode, struct file *file)
 		if (msp->mixer_num == minor) {
 			client = msps[i];
 			file->private_data = client;
-			break;
+			goto match;
 		}
 	}
-	if (MSP3400_MAX == i)
-		return -ENODEV;
+	return -ENODEV;
 
+match:
 	/* lock bttv in memory while the mixer is in use  */
 	if (client->adapter->inc_use)
 		client->adapter->inc_use(client->adapter);

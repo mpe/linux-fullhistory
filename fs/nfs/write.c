@@ -1048,7 +1048,7 @@ done:
         dprintk("NFS:      nfs_updatepage returns %d (isize %Ld)\n",
                                                 status, (long long)inode->i_size);
 	if (status < 0)
-		clear_bit(PG_uptodate, &page->flags);
+		ClearPageUptodate(page);
 	return status;
 }
 

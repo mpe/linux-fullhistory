@@ -148,20 +148,25 @@ static inline char * task_state(struct task_struct *p, char *buffer)
 {
 	int g;
 
+	read_lock(&tasklist_lock);
 	buffer += sprintf(buffer,
 		"State:\t%s\n"
 		"Pid:\t%d\n"
 		"PPid:\t%d\n"
 		"TracerPid:\t%d\n"
 		"Uid:\t%d\t%d\t%d\t%d\n"
-		"Gid:\t%d\t%d\t%d\t%d\n"
-		"FDSize:\t%d\n"
-		"Groups:\t",
+		"Gid:\t%d\t%d\t%d\t%d\n",
 		get_task_state(p),
 		p->pid, p->p_opptr->pid, p->p_pptr->pid != p->p_opptr->pid ? p->p_opptr->pid : 0,
 		p->uid, p->euid, p->suid, p->fsuid,
-		p->gid, p->egid, p->sgid, p->fsgid,
+		p->gid, p->egid, p->sgid, p->fsgid);
+	read_unlock(&tasklist_lock);	
+	task_lock(p);
+	buffer += sprintf(buffer,
+		"FDSize:\t%d\n"
+		"Groups:\t",
 		p->files ? p->files->max_fds : 0);
+	task_unlock(p);
 
 	for (g = 0; g < p->ngroups; g++)
 		buffer += sprintf(buffer, "%d ", p->groups[g]);
@@ -264,20 +269,25 @@ extern inline char *task_cap(struct task_struct *p, char *buffer)
 }
 
 
-/* task is locked, so we are safe here */
-
 int proc_pid_status(struct task_struct *task, char * buffer)
 {
 	char * orig = buffer;
-	struct mm_struct *mm = task->mm;
+	struct mm_struct *mm;
 #if defined(CONFIG_ARCH_S390)
 	int line,len;
 #endif
 
 	buffer = task_name(task, buffer);
 	buffer = task_state(task, buffer);
-	if (mm)
+	task_lock(task);
+	mm = task->mm;
+	if(mm)
+		atomic_inc(&mm->mm_users);
+	task_unlock(task);
+	if (mm) {
 		buffer = task_mem(mm, buffer);
+		mmput(mm);
+	}
 	buffer = task_sig(task, buffer);
 	buffer = task_cap(task, buffer);
 #if defined(CONFIG_ARCH_S390)
@@ -287,20 +297,24 @@ int proc_pid_status(struct task_struct *task, char * buffer)
 	return buffer - orig;
 }
 
-/* task is locked, so we are safe here */
-
 int proc_pid_stat(struct task_struct *task, char * buffer)
 {
-	struct mm_struct *mm = task->mm;
 	unsigned long vsize, eip, esp, wchan;
 	long priority, nice;
 	int tty_pgrp;
 	sigset_t sigign, sigcatch;
 	char state;
 	int res;
+	pid_t ppid;
+	struct mm_struct *mm;
 
 	state = *get_task_state(task);
 	vsize = eip = esp = 0;
+	task_lock(task);
+	mm = task->mm;
+	if(mm)
+		atomic_inc(&mm->mm_users);
+	task_unlock(task);
 	if (mm) {
 		struct vm_area_struct *vma;
 		down(&mm->mmap_sem);
@@ -330,13 +344,16 @@ int proc_pid_stat(struct task_struct *task, char * buffer)
 	nice = task->priority;
 	nice = 20 - (nice * 20 + DEF_PRIORITY / 2) / DEF_PRIORITY;
 
+	read_lock(&tasklist_lock);
+	ppid = task->p_opptr->pid;
+	read_unlock(&tasklist_lock);
 	res = sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
 %lu %lu %lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu \
 %lu %lu %lu %lu %lu %lu %lu %lu %d %d\n",
 		task->pid,
 		task->comm,
 		state,
-		task->p_opptr->pid,
+		ppid,
 		task->pgrp,
 		task->session,
 	        task->tty ? kdev_t_to_nr(task->tty->device) : 0,
@@ -376,6 +393,8 @@ int proc_pid_stat(struct task_struct *task, char * buffer)
 		task->cnswap,
 		task->exit_signal,
 		task->processor);
+	if(mm)
+		mmput(mm);
 	return res;
 }
 		
@@ -455,9 +474,14 @@ static void statm_pgd_range(pgd_t * pgd, unsigned long address, unsigned long en
 
 int proc_pid_statm(struct task_struct *task, char * buffer)
 {
-	struct mm_struct *mm = task->mm;
+	struct mm_struct *mm;
 	int size=0, resident=0, share=0, trs=0, lrs=0, drs=0, dt=0;
 
+	task_lock(task);
+	mm = task->mm;
+	if(mm)
+		atomic_inc(&mm->mm_users);
+	task_unlock(task);
 	if (mm) {
 		struct vm_area_struct * vma;
 		down(&mm->mmap_sem);
@@ -482,6 +506,7 @@ int proc_pid_statm(struct task_struct *task, char * buffer)
 			vma = vma->vm_next;
 		}
 		up(&mm->mmap_sem);
+		mmput(mm);
 	}
 	return sprintf(buffer,"%d %d %d %d %d %d %d\n",
 		       size, resident, share, trs, lrs, drs, dt);
@@ -523,7 +548,7 @@ int proc_pid_statm(struct task_struct *task, char * buffer)
 ssize_t proc_pid_read_maps (struct task_struct *task, struct file * file, char * buf,
 			  size_t count, loff_t *ppos)
 {
-	struct mm_struct *mm = task->mm;
+	struct mm_struct *mm;
 	struct vm_area_struct * map, * next;
 	char * destptr = buf, * buffer;
 	loff_t lineno;
@@ -539,7 +564,14 @@ ssize_t proc_pid_read_maps (struct task_struct *task, struct file * file, char *
 	if (!buffer)
 		goto out;
 
-	if (!mm || count == 0)
+	if (count == 0)
+		goto getlen_out;
+	task_lock(task);
+	mm = task->mm;
+	if (mm)
+		atomic_inc(&mm->mm_users);
+	task_unlock(task);
+	if (!mm)
 		goto getlen_out;
 
 	/* Check whether the mmaps could change if we sleep */
@@ -637,6 +669,7 @@ ssize_t proc_pid_read_maps (struct task_struct *task, struct file * file, char *
 
 	/* encode f_pos */
 	*ppos = (lineno << MAPS_LINE_SHIFT) + column;
+	mmput(mm);
 
 getlen_out:
 	retval = destptr - buf;

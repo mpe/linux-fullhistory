@@ -265,23 +265,18 @@ inline static int flag_low(int flag, unsigned long timeout)
 /* Timed waiting for status or data */
 static int sleep_timeout;	/* max # of ticks to sleep */
 static DECLARE_WAIT_QUEUE_HEAD(waitq);
-static struct timer_list delay_timer = {NULL, NULL, 0, 0, NULL};
-
-#define SET_TIMER(func, jifs) \
-	delay_timer.expires = jiffies+(jifs); \
-	delay_timer.function = (void *) (func); \
-	add_timer(&delay_timer);
-#define CLEAR_TIMER	del_timer(&delay_timer)
+static void sleep_timer(unsigned long data);
+static struct timer_list delay_timer = {function: sleep_timer};
 
 
 /* Timer routine: wake up when desired flag goes low,
    or when timeout expires. */
-static void sleep_timer(void)
+static void sleep_timer(unsigned long data)
 {
 	int flags = inb(STATUS_PORT) & FL_STDT;
 
 	if (flags == FL_STDT && --sleep_timeout > 0) {
-		SET_TIMER(sleep_timer, HZ/100); /* multi-statement macro */
+		mod_timer(&delay_timer, jiffies + HZ/100); /* multi-statement macro */
 	} else
 		wake_up(&waitq);
 }
@@ -297,7 +292,7 @@ static int sleep_flag_low(int flag, unsigned long timeout)
 	sleep_timeout = timeout;
 	flag_high = inb(STATUS_PORT) & flag;
 	if (flag_high && sleep_timeout > 0) {
-		SET_TIMER(sleep_timer, HZ/100);
+		mod_timer(&delay_timer, jiffies + HZ/100);
 		sleep_on(&waitq);
 		flag_high = inb(STATUS_PORT) & flag;
 	}
@@ -1079,15 +1074,11 @@ static volatile int error = 0;	/* %% do something with this?? */
 static int tries;		/* ibid?? */
 static int timeout = 0;
 
-static struct timer_list req_timer = {NULL, NULL, 0, 0, NULL};
+static void poll(unsigned long data);
+static struct timer_list req_timer = {function: poll};
 
-#define SET_REQ_TIMER(func, jifs) \
-	req_timer.expires = jiffies+(jifs); \
-	req_timer.function = (void *) (func); \
-	add_timer(&req_timer);
-#define CLEAR_REQ_TIMER	del_timer(&req_timer)
 
-static void poll(void)
+static void poll(unsigned long data)
 {
 	static volatile int read_count = 1;
 	int flags;
@@ -1363,7 +1354,7 @@ static void poll(void)
 		}
 	}
 
-	SET_REQ_TIMER(poll, HZ/100);
+	mod_timer(&req_timer, jiffies + HZ/100);
 }
 
 
@@ -1401,7 +1392,7 @@ static void do_optcd_request(request_queue_t * q)
 				timeout = READ_TIMEOUT;
 				tries = 5;
 				/* %% why not start right away?? */
-				SET_REQ_TIMER(poll, HZ/100);
+				mod_timer(&req_timer, jiffies + HZ/100);
 			}
 			break;
 		}
@@ -1945,8 +1936,8 @@ static int opt_release(struct inode *ip, struct file *fp)
 			status = exec_cmd(COMOPEN);
 			DEBUG((DEBUG_VFS, "exec_cmd COMOPEN: %02x", -status));
 		}
-		CLEAR_TIMER;
-		CLEAR_REQ_TIMER;
+		del_timer(&delay_timer);
+		del_timer(&req_timer);
 	}
 	MOD_DEC_USE_COUNT;
 	return 0;

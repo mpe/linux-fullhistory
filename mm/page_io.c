@@ -74,7 +74,7 @@ static int rw_swap_page_base(int rw, swp_entry_t entry, struct page *page, int w
 		return 0;
 	}
  	if (!wait) {
- 		set_bit(PG_decr_after, &page->flags);
+ 		SetPageDecrAfter(page);
  		atomic_inc(&nr_async_pages);
  	}
 

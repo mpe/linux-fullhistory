@@ -980,11 +980,15 @@ static int do_umount(struct vfsmount *mnt, int umount_root, int flags)
 	count = d_active_refs(sb->s_root);
 	if (mnt->mnt_parent == mnt)
 		count--;
-	if (count != 2)
+	if (count != 2) {
+		mntput(mnt);
 		return -EBUSY;
+	}
 
-	if (sb->s_root->d_inode->i_state)
+	if (sb->s_root->d_inode->i_state) {
+		mntput(mnt);
 		return -EBUSY;
+	}
 
 	/* OK, that's the point of no return */
 	mntput(mnt);

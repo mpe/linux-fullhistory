@@ -154,7 +154,7 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
 
 #include <linux/delay.h>
 
-static char *version __devinitdata =
+static char version[] __devinitdata =
 "3c59x.c:v0.99L+LK1.1.5  30 Apr 2000  Donald Becker and others  http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html " "$Revision: 1.78 $\n";
 
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
@@ -830,8 +830,8 @@ static int __devinit vortex_probe1(struct pci_dev *pdev,
 		}
 
 		/* wake up and enable device */		
-		if ((retval = pci_enable_device(pdev))) {
-			printk (KERN_ERR "%s: Cannot enable device, aborting\n", dev->name);
+		if (pci_enable_device (pdev)) {
+			retval = -EIO;
 			goto free_region;
 		}
 
@@ -2477,8 +2477,6 @@ static int __init vortex_init (void)
 {
 	int rc;
 	
-	MOD_INC_USE_COUNT;
-
 	rc = pci_module_init (&vortex_driver);
 	if (rc < 0)
 		goto out;
@@ -2494,7 +2492,6 @@ static int __init vortex_init (void)
 		vortex_have_eisa = 1;
 
 out:
-	MOD_DEC_USE_COUNT;
 	return rc;
 }
 
