@@ -1683,13 +1683,15 @@ int usb_add_hcd(struct usb_hcd *hcd,
 		hcd->irq = irqnum;
 		dev_info(hcd->self.controller, "irq %s, %s 0x%08llx\n", bufp,
 				(hcd->driver->flags & HCD_MEMORY) ?
-					"io mem" : "io base", hcd->rsrc_start);
+					"io mem" : "io base",
+					(unsigned long long)hcd->rsrc_start);
 	} else {
 		hcd->irq = -1;
 		if (hcd->rsrc_start)
 			dev_info(hcd->self.controller, "%s 0x%08llx\n",
 					(hcd->driver->flags & HCD_MEMORY) ?
-					"io mem" : "io base", hcd->rsrc_start);
+					"io mem" : "io base",
+					(unsigned long long)hcd->rsrc_start);
 	}
 
 	if ((retval = hcd->driver->start(hcd)) < 0) {
