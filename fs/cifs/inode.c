@@ -423,8 +423,12 @@ cifs_unlink(struct inode *inode, struct dentry *direntry)
 			memset(pinfo_buf,0,sizeof(FILE_BASIC_INFO));        
 		/* ATTRS set to normal clears r/o bit */
 			pinfo_buf->Attributes = cpu_to_le32(ATTR_NORMAL);
-			rc = CIFSSMBSetTimes(xid, pTcon, full_path, pinfo_buf,
-				cifs_sb->local_nls);
+			if(!(pTcon->ses->flags & CIFS_SES_NT4))
+				rc = CIFSSMBSetTimes(xid, pTcon, full_path,
+					pinfo_buf, cifs_sb->local_nls);
+			else
+				rc = -EOPNOTSUPP;
+
 			if(rc == -EOPNOTSUPP) {
 				int oplock = FALSE;
 				__u16 netfid;
@@ -438,9 +442,9 @@ cifs_unlink(struct inode *inode, struct dentry *direntry)
 			/* BB could scan to see if we already have it open */
 			/* and pass in pid of opener to function */
 				rc = CIFSSMBOpen(xid, pTcon, full_path,
-						FILE_OPEN,
-						FILE_WRITE_ATTRIBUTES,
-						CREATE_NOT_DIR, &netfid,
+						FILE_OPEN, SYNCHRONIZE |
+						 FILE_WRITE_ATTRIBUTES,
+						0, &netfid,
 						&oplock, NULL,
 						cifs_sb->local_nls);
 				if(rc==0) {
@@ -1011,8 +1015,12 @@ cifs_setattr(struct dentry *direntry, struct iattr *attrs)
 		time_buf.CreationTime = 0;	/* do not change */
 		/* In the future we should experiment - try setting timestamps
 			 via Handle (SetFileInfo) instead of by path */
-		rc = CIFSSMBSetTimes(xid, pTcon, full_path, &time_buf,
+		if(!(pTcon->ses->flags & CIFS_SES_NT4))
+			rc = CIFSSMBSetTimes(xid, pTcon, full_path, &time_buf,
 				cifs_sb->local_nls);
+		else
+			rc = -EOPNOTSUPP;
+
 		if(rc == -EOPNOTSUPP) {
 			int oplock = FALSE;
 			__u16 netfid;
@@ -1020,7 +1028,8 @@ cifs_setattr(struct dentry *direntry, struct iattr *attrs)
 			cFYI(1,("calling SetFileInfo since SetPathInfo for times not supported by this server"));
 		    /* BB we could scan to see if we already have it open */
 		    /* and pass in pid of opener to function */
-			rc = CIFSSMBOpen(xid, pTcon, full_path, FILE_OPEN, FILE_WRITE_ATTRIBUTES,
+			rc = CIFSSMBOpen(xid, pTcon, full_path, FILE_OPEN, 
+				SYNCHRONIZE | FILE_WRITE_ATTRIBUTES,
 				CREATE_NOT_DIR, &netfid, &oplock, NULL, cifs_sb->local_nls);
 			if(rc==0) {
 				rc = CIFSSMBSetFileTimes(xid, pTcon, 

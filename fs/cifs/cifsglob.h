@@ -176,6 +176,7 @@ struct cifsSesInfo {
 	enum statusEnum status;
 	__u32 sequence_number;  /* needed for CIFS PDU signature */
 	__u16 ipc_tid;		/* special tid for connection to IPC share */
+	__u16 flags;
 	char mac_signing_key[CIFS_SESSION_KEY_SIZE + 16];	
 	char *serverOS;		/* name of operating system underlying the server */
 	char *serverNOS;	/* name of network operating system that the server is running */
@@ -188,6 +189,8 @@ struct cifsSesInfo {
 	char domainName[MAX_USERNAME_SIZE + 1];
 	char * password;
 };
+/* session flags */
+#define CIFS_SES_NT4 1
 
 /*
  * there is one of these for each connection to a resource on a particular

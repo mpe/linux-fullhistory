@@ -1580,7 +1580,8 @@ CIFSSessSetup(unsigned int xid, struct cifsSesInfo *ses,
 	if(ses->server->secMode & (SECMODE_SIGN_REQUIRED | SECMODE_SIGN_ENABLED))
 		smb_buffer->Flags2 |= SMBFLG2_SECURITY_SIGNATURE;
 
-	capabilities = CAP_LARGE_FILES | CAP_NT_SMBS | CAP_LEVEL_II_OPLOCKS | CAP_LARGE_WRITE_X | CAP_LARGE_READ_X;
+	capabilities = CAP_LARGE_FILES | CAP_NT_SMBS | CAP_LEVEL_II_OPLOCKS |
+		CAP_LARGE_WRITE_X | CAP_LARGE_READ_X;
 	if (ses->capabilities & CAP_UNICODE) {
 		smb_buffer->Flags2 |= SMBFLG2_UNICODE;
 		capabilities |= CAP_UNICODE;
@@ -1607,7 +1608,7 @@ CIFSSessSetup(unsigned int xid, struct cifsSesInfo *ses,
 	bcc_ptr += CIFS_SESSION_KEY_SIZE;
 
 	if (ses->capabilities & CAP_UNICODE) {
-		if ((long) bcc_ptr % 2) {	/* must be word aligned for Unicode */
+		if ((long) bcc_ptr % 2) { /* must be word aligned for Unicode */
 			*bcc_ptr = 0;
 			bcc_ptr++;
 		}
@@ -1617,7 +1618,8 @@ CIFSSessSetup(unsigned int xid, struct cifsSesInfo *ses,
 			bytes_returned =
 			        cifs_strtoUCS((wchar_t *) bcc_ptr, user, 100,
 					nls_codepage);
-		bcc_ptr += 2 * bytes_returned;	/* convert num 16 bit words to bytes */
+		/* convert number of 16 bit words to bytes */
+		bcc_ptr += 2 * bytes_returned;
 		bcc_ptr += 2;	/* trailing null */
 		if (domain == NULL)
 			bytes_returned =
@@ -1634,8 +1636,8 @@ CIFSSessSetup(unsigned int xid, struct cifsSesInfo *ses,
 				  32, nls_codepage);
 		bcc_ptr += 2 * bytes_returned;
 		bytes_returned =
-		    cifs_strtoUCS((wchar_t *) bcc_ptr, system_utsname.release, 32,
-				  nls_codepage);
+		    cifs_strtoUCS((wchar_t *) bcc_ptr, system_utsname.release,
+				  32, nls_codepage);
 		bcc_ptr += 2 * bytes_returned;
 		bcc_ptr += 2;
 		bytes_returned =
@@ -1721,6 +1723,11 @@ CIFSSessSetup(unsigned int xid, struct cifsSesInfo *ses,
 					bcc_ptr += 2 * (len + 1);
 					ses->serverNOS[2 * len] = 0;
 					ses->serverNOS[1 + (2 * len)] = 0;
+					if(strncmp(ses->serverNOS,
+						"NT LAN Manager 4",16) == 0) {
+						cFYI(1,("NT4 server"));
+						ses->flags |= CIFS_SES_NT4;
+					}
 					remaining_words -= len + 1;
 					if (remaining_words > 0) {
 						len = UniStrnlen((wchar_t *) bcc_ptr, remaining_words);	
