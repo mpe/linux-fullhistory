@@ -1179,11 +1179,9 @@ isdnloop_command(isdn_ctrl * c, isdnloop_card * card)
 						if (!card->leased) {
 							card->leased = 1;
 							while (card->ptype == ISDN_PTYPE_UNKNOWN) {
-								current->timeout = jiffies + 10;
-								schedule();
+								schedule_timeout(10);
 							}
-							current->timeout = jiffies + 10;
-							schedule();
+							schedule_timeout(10);
 							sprintf(cbuf, "00;FV2ON\n01;EAZ1\n02;EAZ2\n");
 							i = isdnloop_writecmd(cbuf, strlen(cbuf), 0, card);
 							printk(KERN_INFO

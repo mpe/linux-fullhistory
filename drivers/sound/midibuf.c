@@ -90,11 +90,8 @@ static void drain_midi_queue(int dev)
 
 	if (midi_devs[dev]->buffer_status != NULL)
 		while (!signal_pending(current) && midi_devs[dev]->buffer_status(dev)) 
-		{
-			current->timeout = jiffies + HZ / 10;
-			interruptible_sleep_on(&midi_sleeper[dev]);
-			current->timeout = 0;
-		}
+			interruptible_sleep_on_timeout(&midi_sleeper[dev],
+						       HZ/10);
 }
 
 static void midi_input_intr(int dev, unsigned char data)
@@ -181,7 +178,7 @@ int MIDIbuf_open(int dev, struct file *file)
 				 midi_input_intr, midi_output_intr)) < 0)
 		return err;
 
-	parms[dev].prech_timeout = 0;
+	parms[dev].prech_timeout = MAX_SCHEDULE_TIMEOUT;
 	midi_in_buf[dev] = (struct midi_buf *) vmalloc(sizeof(struct midi_buf));
 
 	if (midi_in_buf[dev] == NULL)
@@ -325,9 +322,9 @@ int MIDIbuf_read(int dev, struct file *file, char *buf, int count)
 	if (!DATA_AVAIL(midi_in_buf[dev])) {	/*
 						 * No data yet, wait
 						 */
-		current->timeout = parms[dev].prech_timeout ? jiffies + parms[dev].prech_timeout : 0;
-		interruptible_sleep_on(&input_sleeper[dev]);
-		current->timeout = 0;
+		interruptible_sleep_on_timeout(&input_sleeper[dev],
+					       parms[dev].prech_timeout);
+
 		if (signal_pending(current))
 			c = -EINTR;	/* The user is getting restless */
 	}

@@ -66,6 +66,7 @@
 #define gscd_port gscd /* for compatible parameter passing with "insmod" */
 #include "gscd.h"
 
+static int gscd_blocksizes[1] = {512};
 
 static int gscdPresent            = 0;
 
@@ -1060,6 +1061,7 @@ int result;
 	}
 
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blksize_size[MAJOR_NR] = gscd_blocksizes;
 	read_ahead[MAJOR_NR] = 4;
         
         disk_state = 0;

@@ -127,17 +127,15 @@ static inline hfs_u32 brec_to_id(struct hfs_brec *brec)
  *
  * hash an (struct mdb *) and a (struct hfs_cat_key *) to an integer.
  */
-static inline unsigned long hashfn(const struct hfs_mdb *mdb,
+static inline unsigned int hashfn(const struct hfs_mdb *mdb,
 				  const struct hfs_cat_key *key)
 {
-#define LSB(X) (((unsigned char *)(&X))[3])
-	unsigned long hash;
+	unsigned int hash;
 	
-	hash = (unsigned long) mdb | (unsigned long) key->ParID[3] |
-	  hfs_strhash(&key->CName);
+	hash = (unsigned long) mdb | (unsigned long) key->ParID[3] | 
+		hfs_strhash(key->CName.Name, key->CName.Len);
 	hash = hash ^ (hash >> C_HASHBITS) ^ (hash >> C_HASHBITS*2);
 	return hash & C_HASHMASK;
-#undef LSB
 }
 
 /*
@@ -533,7 +531,6 @@ add_new_entry:
 				 HFS_BKEY(key), HFS_BFIND_READ_EQ)) {
 		        /* uh oh. we failed to read the record.
 			 * the entry doesn't actually exist. */
-		        entry->state |= HFS_DELETED;
 		        goto read_fail;
 		   }
 
@@ -564,12 +561,14 @@ add_new_entry:
 	return NULL;
 
 read_fail: 
-	/* spinlock unlocked already. we don't need to mark the entry
-	 * dirty here because we know that it doesn't exist. */
-	remove_hash(entry);
-	entry->state &= ~HFS_LOCK;
-	hfs_wake_up(&entry->wait);
-	hfs_cat_put(entry);
+	/* short-cut hfs_cat_put by doing everything here. */
+	spin_lock(&entry_lock);
+	list_del(&entry->hash);
+	list_del(&entry->list);
+	init_entry(entry);
+	list_add(&entry->list, &entry_unused);
+	entries_stat.nr_free_entries++;
+	spin_unlock(&entry_lock);
 	return NULL;
 }
 
@@ -585,6 +584,11 @@ static struct hfs_cat_entry *get_entry(struct hfs_mdb *mdb,
 				       const int read)
 {
 	struct hfs_cat_entry * entry;
+
+#if defined(DEBUG_CATALOG) || defined(DEBUG_ALL)
+	hfs_warn("hfs_get_entry: mdb=%p key=%s read=%d\n",
+		 mdb, key->CName.Name, read);
+#endif
 
 	spin_lock(&entry_lock);
 	entry = find_entry(mdb, key);
@@ -759,6 +763,7 @@ static int create_entry(struct hfs_cat_entry *parent, struct hfs_cat_key *key,
 	/* complete the cache entry and return success */
 	__read_entry(entry, record);
 	unlock_entry(entry);
+
 	if (result) {
 		*result = entry;
 	} else {
@@ -786,17 +791,7 @@ done:
  *
  * Release an entry we aren't using anymore.
  *
- * NOTE: We must be careful any time we sleep on a non-deleted
- * entry that the entry is in a consistent state, since another
- * process may get the entry while we sleep. That is why we
- * 'goto repeat' after each operation that might sleep.
- *
- * ADDITIONAL NOTE: the sys_entries will remove themselves from 
- *                  the sys_entry list on the final iput, so we don't need 
- *                  to worry about them here.
- *
- *                  nothing in hfs_cat_put goes to sleep now except 
- *                  on the initial entry.
+ * nothing in hfs_cat_put goes to sleep now except on the initial entry.  
  */
 void hfs_cat_put(struct hfs_cat_entry * entry)
 {
@@ -810,9 +805,13 @@ void hfs_cat_put(struct hfs_cat_entry * entry)
 		  return;
 		}
 
+#if defined(DEBUG_CATALOG) || defined(DEBUG_ALL)
+		hfs_warn("hfs_cat_put: %p(%u) type=%d state=%lu\n", 
+			 entry, entry->count, entry->type, entry->state);
+#endif
 		spin_lock(&entry_lock);
 		if (!--entry->count) {
-		        if ((entry->state & HFS_DELETED))
+			if ((entry->state & HFS_DELETED))
 			        goto entry_deleted;
 
 			if ((entry->type == HFS_CDR_FIL)) {
@@ -840,10 +839,7 @@ entry_deleted: 		/* deleted entries have already been removed
 			        HFS_DELETE(entry);
 				entries_stat.nr_entries--;
 			} else {
-			        spin_unlock(&entry_lock);
-				wait_on_entry(entry);
 				init_entry(entry);
-				spin_lock(&entry_lock);
 				list_add(&entry->list, &entry_unused);
 				entries_stat.nr_free_entries++;
 			}
@@ -919,7 +915,7 @@ static void delete_list(struct list_head *head)
  * hfs_cat_invalidate()
  *
  * Called by hfs_mdb_put() to remove all the entries
- * in the cache which are associated with a given MDB.
+ * in the cache that are associated with a given MDB.
  */
 void hfs_cat_invalidate(struct hfs_mdb *mdb)
 {
@@ -931,6 +927,11 @@ void hfs_cat_invalidate(struct hfs_mdb *mdb)
 	spin_unlock(&entry_lock);
 
 	delete_list(&throw_away);
+#if defined(DEBUG_CATALOG) || defined(DEBUG_ALL)
+	hfs_warn("hfs_cat_invalidate: free=%d total=%d\n",
+		 entries_stat.nr_free_entries,
+		 entries_stat.nr_entries);
+#endif
 }
 
 /*
@@ -941,7 +942,7 @@ void hfs_cat_invalidate(struct hfs_mdb *mdb)
 void hfs_cat_commit(struct hfs_mdb *mdb)
 {
         struct list_head *tmp, *head = &mdb->entry_dirty;
-	struct hfs_cat_entry * entry;
+	struct hfs_cat_entry *entry;
 
 	spin_lock(&entry_lock);
 	while ((tmp = head->prev) != head) {
@@ -1018,7 +1019,8 @@ int hfs_cat_compare(const struct hfs_cat_key *key1,
 	if (parents != 0) {
 		retval = (int)parents;
 	} else {
-		retval = hfs_strcmp(&key1->CName, &key2->CName);
+		retval = hfs_strcmp(key1->CName.Name, key1->CName.Len,
+				    key2->CName.Name, key2->CName.Len);
 	}
 	return retval;
 }
@@ -1170,9 +1172,6 @@ struct hfs_cat_entry *hfs_cat_parent(struct hfs_cat_entry *entry)
  * Create a new file with the indicated name in the indicated directory.
  * The file will have the indicated flags, type and creator.
  * If successful an (struct hfs_cat_entry) is returned in '*result'.
- *
- * XXX: the presence of "record" probably means that the following two
- *      aren't currently SMP safe and need spinlocks.
  */
 int hfs_cat_create(struct hfs_cat_entry *parent, struct hfs_cat_key *key,
 		   hfs_u8 flags, hfs_u32 type, hfs_u32 creator,
@@ -1182,6 +1181,10 @@ int hfs_cat_create(struct hfs_cat_entry *parent, struct hfs_cat_key *key,
 	hfs_u32 id = new_cnid(parent->mdb);
 	hfs_u32 mtime = hfs_time();
 
+#if defined(DEBUG_CATALOG) || defined(DEBUG_ALL)
+	hfs_warn("hfs_cat_create: %p/%s flags=%d res=%p\n",
+		 parent, key->CName.Name, flags, result);
+#endif
 	/* init some fields for the file record */
 	memset(&record, 0, sizeof(record));
 	record.cdrType = HFS_CDR_FIL;
@@ -1209,6 +1212,11 @@ int hfs_cat_mkdir(struct hfs_cat_entry *parent, struct hfs_cat_key *key,
 	hfs_u32 id = new_cnid(parent->mdb);
 	hfs_u32 mtime = hfs_time();
 
+#if defined(DEBUG_CATALOG) || defined(DEBUG_ALL)
+	hfs_warn("hfs_cat_mkdir: %p/%s res=%p\n", parent, key->CName.Name,
+		 result);
+#endif
+
 	/* init some fields for the directory record */
 	memset(&record, 0, sizeof(record));
 	record.cdrType = HFS_CDR_DIR;
@@ -1234,6 +1242,10 @@ int hfs_cat_delete(struct hfs_cat_entry *parent, struct hfs_cat_entry *entry,
 	struct hfs_mdb *mdb = parent->mdb;
 	int is_dir, error = 0;
 
+#if defined(DEBUG_CATALOG) || defined(DEBUG_ALL)
+	hfs_warn("hfs_cat_delete: %p/%p type=%d state=%lu, thread=%d\n",
+		 parent, entry, entry->type, entry->state, with_thread);
+#endif
 	if (parent->mdb != entry->mdb) {
 		return -EINVAL;
 	}
@@ -1252,39 +1264,39 @@ int hfs_cat_delete(struct hfs_cat_entry *parent, struct hfs_cat_entry *entry,
 	if (entry->type == HFS_CDR_DIR) {
 		start_read(entry);
 
-		if (entry->u.dir.files || entry->u.dir.dirs) {
-			error = -ENOTEMPTY;
-		}
+		error = -ENOTEMPTY;
+		if (entry->u.dir.files || entry->u.dir.dirs) 
+			goto hfs_delete_end;
 	}
 
 	/* try to delete the file or directory */
-	if (!error) {
-		lock_entry(entry);
-		if ((entry->state & HFS_DELETED)) {
-			/* somebody beat us to it */
-			error = -ENOENT;
-		} else {
-			error = hfs_bdelete(mdb->cat_tree,
-					    HFS_BKEY(&entry->key));
-		}
-		unlock_entry(entry);
+	lock_entry(entry);
+	error = -ENOENT;
+	if ((entry->state & HFS_DELETED)) {
+		/* somebody beat us to it. */
+		goto hfs_delete_unlock;
+	}
+		
+	/* delete the catalog record */
+	if ((error = hfs_bdelete(mdb->cat_tree, HFS_BKEY(&entry->key)))) {
+		goto hfs_delete_unlock;
 	}
 
-	if (!error) {
-		/* Mark the entry deleted and remove it from the cache */
-		lock_entry(entry);
-		delete_entry(entry);
+	/* Mark the entry deleted and remove it from the cache */
+	delete_entry(entry);
 
-		/* try to delete the thread entry if it exists */
-		if (with_thread) {
-			hfs_cat_build_key(entry->cnid, NULL, &key);
-			(void)hfs_bdelete(mdb->cat_tree, HFS_BKEY(&key));
-		}
-
-		unlock_entry(entry);
-		update_dir(mdb, parent, is_dir, -1);
+	/* try to delete the thread entry if it exists */
+	if (with_thread) {
+		hfs_cat_build_key(entry->cnid, NULL, &key);
+		(void)hfs_bdelete(mdb->cat_tree, HFS_BKEY(&key));
 	}
+	
+	update_dir(mdb, parent, is_dir, -1);
 
+hfs_delete_unlock:
+	unlock_entry(entry);
+
+hfs_delete_end:
 	if (entry->type == HFS_CDR_DIR) {
 		end_read(entry);
 	}
@@ -1332,10 +1344,10 @@ int hfs_cat_move(struct hfs_cat_entry *old_dir, struct hfs_cat_entry *new_dir,
 		return -EINVAL;
 	}
 
-	spin_lock(&entry_lock);
 	while (mdb->rename_lock) {
 		hfs_sleep_on(&mdb->rename_wait);
 	}
+	spin_lock(&entry_lock);
 	mdb->rename_lock = 1;
 	spin_unlock(&entry_lock);
 
@@ -1575,5 +1587,3 @@ void hfs_cat_init(void)
                 i--;
         } while (i);
 }
-
-

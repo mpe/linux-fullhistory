@@ -887,7 +887,7 @@ static int get_stat(int pid, char * buffer)
 		tsk->times.tms_cstime,
 		priority,
 		nice,
-		tsk->timeout,
+		0UL /* removed */,
 		tsk->it_real_value,
 		tsk->start_time,
 		vsize,

@@ -1623,11 +1623,10 @@ static int tiocsetd(struct tty_struct *tty, int *arg)
 static int send_break(struct tty_struct *tty, int duration)
 {
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + duration;
 
 	tty->driver.break_ctl(tty, -1);
 	if (!signal_pending(current))
-		schedule();
+		schedule_timeout(duration);
 	tty->driver.break_ctl(tty, 0);
 	if (signal_pending(current))
 		return -EINTR;
@@ -2046,7 +2045,10 @@ long __init console_init(long kmem_start, long kmem_end)
 	return kmem_start;
 }
 
-static struct tty_driver dev_tty_driver, dev_syscons_driver, dev_ptmx_driver;
+static struct tty_driver dev_tty_driver, dev_syscons_driver;
+#ifdef CONFIG_UNIX98_PTYS
+static struct tty_driver dev_ptmx_driver;
+#endif
 #ifdef CONFIG_VT
 static struct tty_driver dev_console_driver;
 #endif

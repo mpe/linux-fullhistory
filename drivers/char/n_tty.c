@@ -419,7 +419,7 @@ static inline void n_tty_receive_overrun(struct tty_struct *tty)
 	char buf[64];
 
 	tty->num_overrun++;
-	if (tty->overrun_time < (jiffies - HZ)) {
+	if (time_before(tty->overrun_time, jiffies - HZ)) {
 		printk("%s: %d input overrun(s)\n", tty_name(tty, buf),
 		       tty->num_overrun);
 		tty->overrun_time = jiffies;
@@ -872,6 +872,7 @@ static ssize_t read_chan(struct tty_struct *tty, struct file *file,
 	int minimum, time;
 	ssize_t retval = 0;
 	ssize_t size;
+	long timeout;
 
 do_it_again:
 
@@ -900,7 +901,7 @@ do_it_again:
 	}
 
 	minimum = time = 0;
-	current->timeout = (unsigned long) -1;
+	timeout = MAX_SCHEDULE_TIMEOUT;
 	if (!tty->icanon) {
 		time = (HZ / 10) * TIME_CHAR(tty);
 		minimum = MIN_CHAR(tty);
@@ -911,9 +912,9 @@ do_it_again:
 				 (tty->minimum_to_wake > minimum))
 				tty->minimum_to_wake = minimum;
 		} else {
-			current->timeout = 0;
+			timeout = 0;
 			if (time) {
-				current->timeout = time + jiffies;
+				timeout = time;
 				time = 0;
 			}
 			tty->minimum_to_wake = minimum = 1;
@@ -949,7 +950,7 @@ do_it_again:
 			}
 			if (tty_hung_up_p(file))
 				break;
-			if (!current->timeout)
+			if (!timeout)
 				break;
 			if (file->f_flags & O_NONBLOCK) {
 				retval = -EAGAIN;
@@ -960,7 +961,7 @@ do_it_again:
 				break;
 			}
 			enable_bh(TQUEUE_BH);
-			schedule();
+			timeout = schedule_timeout(timeout);
 			disable_bh(TQUEUE_BH);
 			continue;
 		}
@@ -1021,7 +1022,7 @@ do_it_again:
 		if (b - buf >= minimum)
 			break;
 		if (time)
-			current->timeout = time + jiffies;
+			timeout = time;
 	}
 	enable_bh(TQUEUE_BH);
 	remove_wait_queue(&tty->read_wait, &wait);
@@ -1030,7 +1031,6 @@ do_it_again:
 		tty->minimum_to_wake = minimum;
 
 	current->state = TASK_RUNNING;
-	current->timeout = 0;
 	size = b - buf;
 	if (size) {
 		retval = size;

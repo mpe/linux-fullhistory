@@ -127,7 +127,7 @@ rpc_add_timer(struct rpc_task *task, rpc_action timer)
 			task->tk_pid, task->tk_timeout * 1000 / HZ);
 	if (!timer)
 		timer = __rpc_default_timer;
-	if (expires < jiffies) {
+	if (time_before(expires, jiffies)) {
 		printk(KERN_ERR "RPC: bad timeout value %ld - setting to 10 sec!\n",
 					task->tk_timeout);
 		expires = jiffies + 10 * HZ;
@@ -413,7 +413,6 @@ __rpc_execute(struct rpc_task *task)
 							task->tk_pid);
 			if (current->pid == rpciod_pid)
 				printk(KERN_ERR "RPC: rpciod waiting on sync task!\n");
-			current->timeout = 0;
 			sleep_on(&task->tk_wait);
 
 			/*
@@ -552,9 +551,8 @@ rpc_allocate(unsigned int flags, unsigned int size)
 		}
 		if (flags & RPC_TASK_ASYNC)
 			return NULL;
-		current->timeout = jiffies + (HZ >> 4);
 		current->state = TASK_INTERRUPTIBLE;
-		schedule();
+		schedule_timeout(HZ>>4);
 	} while (!signalled());
 
 	return NULL;
@@ -846,9 +844,7 @@ rpciod_killall(void)
 		if (all_tasks) {
 			dprintk("rpciod_killall: waiting for tasks to exit\n");
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + 1;
-			schedule();
-			current->timeout = 0;
+			schedule_timeout(1);
 		}
 	}
 
@@ -919,9 +915,7 @@ rpciod_down(void)
 	 */
 	current->sigpending = 0;
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + 1;
-	schedule();
-	current->timeout = 0;
+	schedule_timeout(1);
 	/*
 	 * Display a message if we're going to wait longer.
 	 */

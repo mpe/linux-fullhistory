@@ -230,7 +230,7 @@ rwlock_t tasklist_lock = RW_LOCK_UNLOCKED;	/* third */
  * "current->state = TASK_RUNNING" to mark yourself runnable
  * without the overhead of this.
  */
-inline void wake_up_process(struct task_struct * p)
+void wake_up_process(struct task_struct * p)
 {
 	unsigned long flags;
 
@@ -248,7 +248,6 @@ static void process_timeout(unsigned long __data)
 {
 	struct task_struct * p = (struct task_struct *) __data;
 
-	p->timeout = 0;
 	wake_up_process(p);
 }
 
@@ -372,12 +371,12 @@ static inline void internal_add_timer(struct timer_list *timer)
 	} else if (idx < 1 << (TVR_BITS + 3 * TVN_BITS)) {
 		int i = (expires >> (TVR_BITS + 2 * TVN_BITS)) & TVN_MASK;
 		insert_timer(timer, tv4.vec, i);
-	} else if (expires < timer_jiffies) {
+	} else if ((signed long) idx < 0) {
 		/* can happen if you add a timer with expires == jiffies,
 		 * or you set a timer to go off in the past
 		 */
 		insert_timer(timer, tv1.vec, tv1.index);
-	} else if (idx < 0xffffffffUL) {
+	} else if (idx <= 0xffffffffUL) {
 		int i = (expires >> (TVR_BITS + 3 * TVN_BITS)) & TVN_MASK;
 		insert_timer(timer, tv5.vec, i);
 	} else {
@@ -445,6 +444,74 @@ int del_timer(struct timer_list * timer)
 
 #endif
 
+signed long schedule_timeout(signed long timeout)
+{
+	struct timer_list timer;
+	unsigned long expire;
+
+	/*
+	 * PARANOID.
+	 */
+	if (current->state == TASK_UNINTERRUPTIBLE)
+	{
+		printk(KERN_WARNING "schedule_timeout: task not interrutible "
+		       "from %p\n", __builtin_return_address(0));
+		/*
+		 * We don' t want to interrupt a not interruptible task
+		 * risking to cause corruption. Better a a deadlock ;-).
+		 */
+		timeout = MAX_SCHEDULE_TIMEOUT;
+	}
+
+	/*
+	 * Here we start for real.
+	 */
+	switch (timeout)
+	{
+	case MAX_SCHEDULE_TIMEOUT:
+		/*
+		 * These two special cases are useful to be comfortable
+		 * in the caller. Nothing more. We could take
+		 * MAX_SCHEDULE_TIMEOUT from one of the negative value
+		 * but I' d like to return a valid offset (>=0) to allow
+		 * the caller to do everything it want with the retval.
+		 */
+		schedule();
+		goto out;
+	default:
+		/*
+		 * Another bit of PARANOID. Note that the retval will be
+		 * 0 since no piece of kernel is supposed to do a check
+		 * for a negative retval of schedule_timeout() (since it
+		 * should never happens anyway). You just have the printk()
+		 * that will tell you if something is gone wrong and where.
+		 */
+		if (timeout < 0)
+		{
+			printk(KERN_ERR "schedule_timeout: wrong timeout "
+			       "value %lx from %p\n", timeout,
+			       __builtin_return_address(0));
+			goto out;
+		}
+	}
+
+	expire = timeout + jiffies;
+
+	init_timer(&timer);
+	timer.expires = expire;
+	timer.data = (unsigned long) current;
+	timer.function = process_timeout;
+
+	add_timer(&timer);
+	schedule();
+	del_timer(&timer);
+
+	timeout = expire - jiffies;
+
+ out:
+	return timeout < 0 ? 0 : timeout;
+}
+
 /*
  *  'schedule()' is the scheduler function. It's a very simple and nice
  * scheduler: it's not perfect, but certainly works for most things.
@@ -458,7 +525,6 @@ int del_timer(struct timer_list * timer)
 asmlinkage void schedule(void)
 {
 	struct task_struct * prev, * next;
-	unsigned long timeout;
 	int this_cpu;
 
 	prev = current;
@@ -481,16 +547,10 @@ asmlinkage void schedule(void)
 		prev->counter = prev->priority;
 		move_last_runqueue(prev);
 	}
-	timeout = 0;
+
 	switch (prev->state) {
 		case TASK_INTERRUPTIBLE:
-			if (signal_pending(prev))
-				goto makerunnable;
-			timeout = prev->timeout;
-			if (timeout && (timeout <= jiffies)) {
-				prev->timeout = 0;
-				timeout = 0;
-		makerunnable:
+			if (signal_pending(prev)) {
 				prev->state = TASK_RUNNING;
 				break;
 			}
@@ -550,21 +610,9 @@ asmlinkage void schedule(void)
 #endif
 
 	if (prev != next) {
-		struct timer_list timer;
-
 		kstat.context_swtch++;
-		if (timeout) {
-			init_timer(&timer);
-			timer.expires = timeout;
-			timer.data = (unsigned long) prev;
-			timer.function = process_timeout;
-			add_timer(&timer);
-		}
 		get_mmu_context(next);
 		switch_to(prev,next);
-
-		if (timeout)
-			del_timer(&timer);
 	}
 
 	spin_unlock(&scheduler_lock);
@@ -718,32 +766,54 @@ int __down_interruptible(struct semaphore * sem)
 	return __do_down(sem,TASK_INTERRUPTIBLE);
 }
 
-
-static void FASTCALL(__sleep_on(struct wait_queue **p, int state));
-static void __sleep_on(struct wait_queue **p, int state)
-{
-	unsigned long flags;
+#define	SLEEP_ON_VAR				\
+	unsigned long flags;			\
 	struct wait_queue wait;
 
-	current->state = state;
-	wait.task = current;
-	write_lock_irqsave(&waitqueue_lock, flags);
-	__add_wait_queue(p, &wait);
+#define	SLEEP_ON_HEAD					\
+	wait.task = current;				\
+	write_lock_irqsave(&waitqueue_lock, flags);	\
+	__add_wait_queue(p, &wait);			\
 	write_unlock(&waitqueue_lock);
-	schedule();
-	write_lock_irq(&waitqueue_lock);
-	__remove_wait_queue(p, &wait);
+
+#define	SLEEP_ON_TAIL						\
+	write_lock_irq(&waitqueue_lock);			\
+	__remove_wait_queue(p, &wait);				\
 	write_unlock_irqrestore(&waitqueue_lock, flags);
-}
 
 void interruptible_sleep_on(struct wait_queue **p)
 {
-	__sleep_on(p,TASK_INTERRUPTIBLE);
+	SLEEP_ON_VAR
+
+	current->state = TASK_INTERRUPTIBLE;
+
+	SLEEP_ON_HEAD
+	schedule();
+	SLEEP_ON_TAIL
+}
+
+long interruptible_sleep_on_timeout(struct wait_queue **p, long timeout)
+{
+	SLEEP_ON_VAR
+
+	current->state = TASK_INTERRUPTIBLE;
+
+	SLEEP_ON_HEAD
+	timeout = schedule_timeout(timeout);
+	SLEEP_ON_TAIL
+
+	return timeout;
 }
 
 void sleep_on(struct wait_queue **p)
 {
-	__sleep_on(p,TASK_UNINTERRUPTIBLE);
+	SLEEP_ON_VAR
+	
+	current->state = TASK_UNINTERRUPTIBLE;
+
+	SLEEP_ON_HEAD
+	schedule();
+	SLEEP_ON_TAIL
 }
 
 void scheduling_functions_end_here(void) { }
@@ -803,7 +873,7 @@ static inline void run_old_timers(void)
 			break;
 		if (!(mask & timer_active))
 			continue;
-		if (tp->expires > jiffies)
+		if (time_after(tp->expires, jiffies))
 			continue;
 		timer_active &= ~mask;
 		tp->fn();
@@ -1564,16 +1634,14 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 		return 0;
 	}
 
-	expire = timespec_to_jiffies(&t) + (t.tv_sec || t.tv_nsec) + jiffies;
+	expire = timespec_to_jiffies(&t) + (t.tv_sec || t.tv_nsec);
 
-	current->timeout = expire;
 	current->state = TASK_INTERRUPTIBLE;
-	schedule();
+	expire = schedule_timeout(expire);
 
-	if (expire > jiffies) {
+	if (expire) {
 		if (rmtp) {
-			jiffies_to_timespec(expire - jiffies -
-					    (expire > jiffies + 1), &t);
+			jiffies_to_timespec(expire, &t);
 			if (copy_to_user(rmtp, &t, sizeof(struct timespec)))
 				return -EFAULT;
 		}

@@ -41,7 +41,8 @@ static int build_key(struct hfs_cat_key *key, struct inode *dir,
 	/* check against reserved names */
 	reserved = HFS_SB(dir->i_sb)->s_reserved1;
 	while (reserved->Len) {
-		if (hfs_streq(reserved, &cname)) {
+		if (hfs_streq(reserved->Name, reserved->Len, 
+			      cname.Name, cname.Len)) {
 			return 1;
 		}
 		++reserved;
@@ -51,7 +52,8 @@ static int build_key(struct hfs_cat_key *key, struct inode *dir,
 	if (HFS_I(dir)->entry->cnid == htonl(HFS_ROOT_CNID)) {
 		reserved = HFS_SB(dir->i_sb)->s_reserved2;
 		while (reserved->Len) {
-			if (hfs_streq(reserved, &cname)) {
+			if (hfs_streq(reserved->Name, reserved->Len,
+				      cname.Name, cname.Len)) {
 				return 1;
 			}
 			++reserved;
@@ -129,16 +131,23 @@ static inline void update_dirs_minus(struct hfs_cat_entry *dir, int is_dir)
  *
  * Update inodes associated with a deleted entry to reflect its deletion.
  * Well, we really just drop the dentry.
+ *
+ * XXX: we should be using delete_inode for some of this stuff.
  */
 static inline void mark_inodes_deleted(struct hfs_cat_entry *entry, 
 				       struct dentry *dentry)
 {
 	struct dentry *de;
+	struct inode *tmp;
 	int i;
 
 	for (i = 0; i < 4; ++i) {
 		if ((de = entry->sys_entry[i]) && (dentry != de)) {
 		      dget(de);
+		      tmp = de->d_inode;
+		      tmp->i_nlink = 0;
+		      tmp->i_ctime = CURRENT_TIME;
+		      mark_inode_dirty(tmp);
 		      d_delete(de);
 		      dput(de);
 		}
@@ -177,32 +186,32 @@ int hfs_create(struct inode * dir, struct dentry *dentry, int mode)
 	int error;
 
 	/* build the key, checking against reserved names */
-	if (build_key(&key, dir, dentry->d_name.name, dentry->d_name.len)) {
-		error = -EEXIST;
-	} else {
-		/* try to create the file */
-		error = hfs_cat_create(entry, &key, 
-				       (mode & S_IWUSR) ? 0 : HFS_FIL_LOCK,
-				       HFS_SB(dir->i_sb)->s_type,
-				       HFS_SB(dir->i_sb)->s_creator, &new);
+	if (build_key(&key, dir, dentry->d_name.name, dentry->d_name.len)) 
+		return -EEXIST;
+
+	if ((error = hfs_cat_create(entry, &key, 
+			       (mode & S_IWUSR) ? 0 : HFS_FIL_LOCK,
+			       HFS_SB(dir->i_sb)->s_type,
+			       HFS_SB(dir->i_sb)->s_creator, &new)))
+		return error;
+
+	/* create an inode for the new file. back out if we run
+	 * into trouble. */
+	new->count++; /* hfs_iget() eats one */
+	if (!(inode = hfs_iget(new, HFS_I(dir)->file_type, dentry))) {
+		hfs_cat_delete(entry, new, 1);
+		hfs_cat_put(new);
+		return -EIO;
 	}
 
-	if (!error) {
-		update_dirs_plus(entry, 0);
-
-		/* create an inode for the new file */
-		inode = hfs_iget(new, HFS_I(dir)->file_type, dentry);
-		if (!inode) {
-		        /* XXX correct error? */
-		        error = -EIO;
-   		} else {
-		  if (HFS_I(dir)->d_drop_op)
-		    HFS_I(dir)->d_drop_op(dentry, HFS_I(dir)->file_type);
-		  d_instantiate(dentry, inode);
-		}
-	}
-
-	return error;
+	hfs_cat_put(new);
+	update_dirs_plus(entry, 0);
+	/* toss any relevant negative dentries */
+	if (HFS_I(dir)->d_drop_op)
+		HFS_I(dir)->d_drop_op(dentry, HFS_I(dir)->file_type);
+	mark_inode_dirty(inode);
+	d_instantiate(dentry, inode);
+	return 0;
 }
 
 /*
@@ -223,23 +232,26 @@ int hfs_mkdir(struct inode * parent, struct dentry *dentry, int mode)
 
 	/* build the key, checking against reserved names */
 	if (build_key(&key, parent, dentry->d_name.name, 
-		      dentry->d_name.len)) {
-		error = -EEXIST;
-	} else {
-		/* try to create the directory */
-		error = hfs_cat_mkdir(entry, &key, &new);
+		      dentry->d_name.len)) 
+		return -EEXIST;
+
+	/* try to create the directory */
+	if ((error = hfs_cat_mkdir(entry, &key, &new)))
+		return error;
+
+	/* back out if we run into trouble */
+	new->count++; /* hfs_iget eats one */
+	if (!(inode = hfs_iget(new, HFS_I(parent)->file_type, dentry))) {
+		hfs_cat_delete(entry, new, 1);
+		hfs_cat_put(new);
+		return -EIO;
 	}
 
-	if (!error) {
-	        update_dirs_plus(entry, 1);
-	        inode = hfs_iget(new, HFS_I(parent)->file_type, dentry);
-		if (!inode) {
-		        error = -EIO;
-		} else
-		  d_instantiate(dentry, inode);
-	}
-
-	return error;
+	hfs_cat_put(new);
+	update_dirs_plus(entry, 1);
+	mark_inode_dirty(inode);
+	d_instantiate(dentry, inode);
+	return 0;
 }
 
 /*
@@ -257,16 +269,14 @@ int hfs_mkdir(struct inode * parent, struct dentry *dentry, int mode)
  */
 int hfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rdev)
 {
-	int error;
+	if (!dir) 
+		return -ENOENT;
 
-	if (!dir) {
-		error = -ENOENT;
-	} else if (S_ISREG(mode)) {
-		error = hfs_create(dir, dentry, mode);
-	} else {
-		error = -EPERM;
-	}
-	return error;
+	/* the only thing we currently do. */
+	if (S_ISREG(mode)) 
+		return hfs_create(dir, dentry, mode);
+
+	return -EPERM;
 }
 
 /*
@@ -285,18 +295,28 @@ int hfs_unlink(struct inode * dir, struct dentry *dentry)
 	int error;
 
 	if (build_key(&key, dir, dentry->d_name.name,
-		      dentry->d_name.len)) {
-		error = -EPERM;
-	} else if (!(victim = hfs_cat_get(entry->mdb, &key))) {
-		error = -ENOENT;
-	} else if (victim->type != HFS_CDR_FIL) {
-		error = -EPERM;
-	} else if (!(error = hfs_cat_delete(entry, victim, 1))) {
+		      dentry->d_name.len)) 
+		return -EPERM;
+
+	if (!(victim = hfs_cat_get(entry->mdb, &key))) 
+		return -ENOENT;
+
+	error = -EPERM;
+	if (victim->type != HFS_CDR_FIL)
+		goto hfs_unlink_put;
+
+	if (!(error = hfs_cat_delete(entry, victim, 1))) {
+		struct inode *inode = dentry->d_inode;
+
 		mark_inodes_deleted(victim, dentry);
+		inode->i_nlink--; 
+		inode->i_ctime = CURRENT_TIME;
+		mark_inode_dirty(inode);
 		d_delete(dentry);
 		update_dirs_minus(entry, 0);
 	}
 
+hfs_unlink_put:
 	hfs_cat_put(victim);	/* Note that hfs_cat_put(NULL) is safe. */
 	return error;
 }
@@ -313,31 +333,50 @@ int hfs_rmdir(struct inode * parent, struct dentry *dentry)
 {
 	struct hfs_cat_entry *entry = HFS_I(parent)->entry;
 	struct hfs_cat_entry *victim = NULL;
+	struct inode *inode = dentry->d_inode;
 	struct hfs_cat_key key;
 	int error;
 
+	if (parent == inode) /* can't delete . */
+		return -EPERM;
+
 	if (build_key(&key, parent, dentry->d_name.name,
-		      dentry->d_name.len)) {
-		error = -EPERM;
-	} else if (!(victim = hfs_cat_get(entry->mdb, &key))) {
-		error = -ENOENT;
-	} else if (victim->type != HFS_CDR_DIR) {
-		error = -ENOTDIR;
-	} else if (/* we only have to worry about 2 and 3 for mount points */
-		   (victim->sys_entry[2] &&
-		    (victim->sys_entry[2] !=
-		     victim->sys_entry[2]->d_mounts)) ||
-		   (victim->sys_entry[3] &&
-		    (victim->sys_entry[3] != 
-		     victim->sys_entry[3]->d_mounts))
-		   ) {
-		error = -EBUSY;
-	} else if (!(error = hfs_cat_delete(entry, victim, 1))) {
-		mark_inodes_deleted(victim, dentry);
-		d_delete(dentry);
-		update_dirs_minus(entry, 1);
-	}
+		      dentry->d_name.len))
+		return -EPERM;
+
+	if (!(victim = hfs_cat_get(entry->mdb, &key)))
+		return -ENOENT;
+
+	error = -ENOTDIR;
+	if (victim->type != HFS_CDR_DIR) 
+		goto hfs_rmdir_put;
+
+	error = -EBUSY;
+	if (dentry->d_count > 1)
+		goto hfs_rmdir_put;
+
+	if (/* we only have to worry about 2 and 3 for mount points */
+		(victim->sys_entry[2] &&
+		 (victim->sys_entry[2]->d_mounts !=
+		  victim->sys_entry[2]->d_covers)) ||
+		(victim->sys_entry[3] &&
+		 (victim->sys_entry[3]->d_mounts != 
+		  victim->sys_entry[3]->d_covers))
+		) 
+		goto hfs_rmdir_put;
+
+	
+	if ((error = hfs_cat_delete(entry, victim, 1)))
+		goto hfs_rmdir_put;
+
+	mark_inodes_deleted(victim, dentry);
+	inode->i_nlink = 0;
+	inode->i_ctime = CURRENT_TIME;
+	mark_inode_dirty(inode);
+	d_delete(dentry);
+	update_dirs_minus(entry, 1);
 	 
+hfs_rmdir_put:
 	hfs_cat_put(victim);	/* Note that hfs_cat_put(NULL) is safe. */
 	return error;
 }
@@ -365,35 +404,40 @@ int hfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	if (build_key(&key, old_dir, old_dentry->d_name.name,
 		      old_dentry->d_name.len) ||
-	    (HFS_ITYPE(old_dir->i_ino) != HFS_ITYPE(new_dir->i_ino))) {
-		error = -EPERM;
-	} else if (!(victim = hfs_cat_get(old_parent->mdb, &key))) {
-		error = -ENOENT;
-	} else if (build_key(&key, new_dir, new_dentry->d_name.name,
-			     new_dentry->d_name.len)) {
-		error = -EPERM;
-	} else if (!(error = hfs_cat_move(old_parent, new_parent,
-					  victim, &key, &deleted))) {
-		int is_dir = (victim->type == HFS_CDR_DIR);
+	    (HFS_ITYPE(old_dir->i_ino) != HFS_ITYPE(new_dir->i_ino))) 
+		return -EPERM;
 
+	if (!(victim = hfs_cat_get(old_parent->mdb, &key))) 
+		return -ENOENT;
+
+	error = -EPERM;
+	if (build_key(&key, new_dir, new_dentry->d_name.name,
+			     new_dentry->d_name.len)) 
+		goto hfs_rename_put;
+
+	if (!(error = hfs_cat_move(old_parent, new_parent,
+				   victim, &key, &deleted))) {
+		int is_dir = (victim->type == HFS_CDR_DIR);
+		
 		/* drop the old dentries */
 		mark_inodes_deleted(victim, old_dentry);
 		update_dirs_minus(old_parent, is_dir);
 		if (deleted) {
-		  mark_inodes_deleted(deleted, new_dentry);
-		  hfs_cat_put(deleted);
+			mark_inodes_deleted(deleted, new_dentry);
+			hfs_cat_put(deleted);
 		} else {
-		  /* no existing inodes. just drop negative dentries */
-		  if (HFS_I(new_dir)->d_drop_op) 
-		    HFS_I(new_dir)->d_drop_op(new_dentry, 
-					      HFS_I(new_dir)->file_type);
-		  update_dirs_plus(new_parent, is_dir);
+			/* no existing inodes. just drop negative dentries */
+			if (HFS_I(new_dir)->d_drop_op) 
+				HFS_I(new_dir)->d_drop_op(new_dentry, 
+					  HFS_I(new_dir)->file_type);
+			update_dirs_plus(new_parent, is_dir);
 		}
-
+	
 		/* update dcache */
 		d_move(old_dentry, new_dentry);
 	}
 
+hfs_rename_put:
 	hfs_cat_put(victim);	/* Note that hfs_cat_put(NULL) is safe. */
 	return error;
 }

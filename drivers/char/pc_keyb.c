@@ -56,7 +56,7 @@ unsigned char pckbd_sysrq_xlate[128] =
 
 static void kbd_write(int address, int data);
 
-static spinlock_t kbd_controller_lock = SPIN_LOCK_UNLOCKED;
+spinlock_t kbd_controller_lock = SPIN_LOCK_UNLOCKED;
 
 /* used only by send_data - set by keyboard_interrupt */
 static volatile unsigned char reply_expected = 0;

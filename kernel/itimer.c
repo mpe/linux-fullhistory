@@ -102,11 +102,9 @@ void it_real_fn(unsigned long __data)
 	send_sig(SIGALRM, p, 1);
 	interval = p->it_real_incr;
 	if (interval) {
-		unsigned long timeout = jiffies + interval;
-		/* check for overflow */
-		if (timeout < interval)
-			timeout = ULONG_MAX;
-		p->real_timer.expires = timeout;
+		if (interval > (unsigned long) LONG_MAX)
+			interval = LONG_MAX;
+		p->real_timer.expires = jiffies + interval;
 		add_timer(&p->real_timer);
 	}
 }
@@ -127,10 +125,9 @@ int do_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 			current->it_real_incr = i;
 			if (!j)
 				break;
+			if (j > (unsigned long) LONG_MAX)
+				j = LONG_MAX;
 			i = j + jiffies;
-			/* check for overflow.. */
-			if (i < j)
-				i = ULONG_MAX;
 			current->real_timer.expires = i;
 			add_timer(&current->real_timer);
 			break;

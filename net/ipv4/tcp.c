@@ -1452,7 +1452,7 @@ static void tcp_close_pending (struct sock *sk)
 	tcp_synq_init(tp);
 }
 
-void tcp_close(struct sock *sk, unsigned long timeout)
+void tcp_close(struct sock *sk, long timeout)
 {
 	struct sk_buff *skb;
 	int data_was_unread = 0;
@@ -1522,7 +1522,6 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 		struct task_struct *tsk = current;
 		struct wait_queue wait = { tsk, NULL };
 
-		tsk->timeout = timeout;
 		add_wait_queue(sk->sleep, &wait);
 		release_sock(sk);
 
@@ -1530,12 +1529,11 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 			tsk->state = TASK_INTERRUPTIBLE;
 			if (!closing(sk))
 				break;
-			schedule();
-			if (signal_pending(tsk) || !tsk->timeout)
+			timeout = schedule_timeout(timeout);
+			if (signal_pending(tsk) || !timeout)
 				break;
 		}
 
-		tsk->timeout=0;
 		tsk->state = TASK_RUNNING;
 		remove_wait_queue(sk->sleep, &wait);
 		
@@ -1547,8 +1545,8 @@ void tcp_close(struct sock *sk, unsigned long timeout)
          */
 	tcp_check_fin_timer(sk);
 
-	sk->dead = 1;
 	release_sock(sk);
+	sk->dead = 1;
 }
 
 /*

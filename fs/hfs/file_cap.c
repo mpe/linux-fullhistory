@@ -180,6 +180,7 @@ static hfs_rwret_t cap_info_read(struct file *filp, char *buf,
 	if (read) {
 		inode->i_atime = CURRENT_TIME;
 		*ppos = pos;
+		mark_inode_dirty(inode);
 	}
 
 	return read;
@@ -280,6 +281,7 @@ static hfs_rwret_t cap_info_write(struct file *filp, const char *buf,
 	}
 
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+	mark_inode_dirty(inode);
 	return count;
 }
 
@@ -291,9 +293,8 @@ static hfs_rwret_t cap_info_write(struct file *filp, const char *buf,
  */
 static void cap_info_truncate(struct inode *inode)
 {
-  	/*struct inode *inode = dentry->d_inode;*/
-
 	if (inode->i_size > HFS_FORK_MAX) {
 		inode->i_size = HFS_FORK_MAX;
+		mark_inode_dirty(inode);
 	}
 }

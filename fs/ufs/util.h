@@ -305,7 +305,7 @@ static inline unsigned _ubh_find_next_zero_bit_(
 		count = min (size + offset, uspi->s_bpf);
 		size -= count - offset;
 		pos = ext2_find_next_zero_bit (ubh->bh[base]->b_data, count, offset);
-		if (pos < count + offset || !size)
+		if (pos < count || !size)
 			break;
 		base++;
 		offset = 0;

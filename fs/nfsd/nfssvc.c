@@ -115,7 +115,7 @@ nfsd(struct svc_rqst *rqstp)
 		 * Find a socket with data available and call its
 		 * recvfrom routine.
 		 */
-		while ((err = svc_recv(serv, rqstp)) == -EAGAIN)
+		while ((err = svc_recv(serv, rqstp, MAX_SCHEDULE_TIMEOUT)) == -EAGAIN)
 			;
 		if (err < 0)
 			break;

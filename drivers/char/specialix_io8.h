@@ -43,9 +43,16 @@
 
 #ifdef __KERNEL__
 
-#define SX_NBOARD		4
+/* You can have max 4 ISA cards in one PC, and I recommend not much 
+more than a few  PCI versions of the card. */
+
+#define SX_NBOARD		8
+
 /* NOTE: Specialix decoder recognizes 4 addresses, but only two are used.... */
 #define SX_IO_SPACE             4
+/* The PCI version decodes 8 addresses, but still only 2 are used. */
+#define SX_PCI_IO_SPACE         8
+
 /* eight ports per board. */
 #define SX_NPORT        	8
 #define SX_BOARD(line)		((line) / SX_NPORT)
@@ -93,6 +100,7 @@ struct specialix_board {
 
 #define SX_BOARD_PRESENT	0x00000001
 #define SX_BOARD_ACTIVE		0x00000002
+#define SX_BOARD_IS_PCI		0x00000004
 
 
 struct specialix_port {

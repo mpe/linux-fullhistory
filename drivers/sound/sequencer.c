@@ -113,9 +113,9 @@ int sequencer_read(int dev, struct file *file, char *buf, int count)
   			restore_flags(flags);
   			return -EAGAIN;
   		}
- 		current->timeout = pre_event_timeout ? jiffies + pre_event_timeout : 0;
- 		interruptible_sleep_on(&midi_sleeper);
- 		current->timeout = 0;
+
+ 		interruptible_sleep_on_timeout(&midi_sleeper,
+					       pre_event_timeout);
 		if (!iqlen)
 		{
 			restore_flags(flags);
@@ -355,7 +355,6 @@ static int seq_queue(unsigned char *note, char nonblock)
 		/*
 		 * Sleep until there is enough space on the queue
 		 */
-		current->timeout = 0;
 		interruptible_sleep_on(&seq_sleeper);
 	}
 	if (qlen >= SEQ_MAX_QUEUE)
@@ -1026,7 +1025,7 @@ int sequencer_open(int dev, struct file *file)
 
 	max_mididev = num_midis;
 	max_synthdev = num_synths;
-	pre_event_timeout = 0;
+	pre_event_timeout = MAX_SCHEDULE_TIMEOUT;
 	seq_mode = SEQ_1;
 
 	if (pending_timer != -1)
@@ -1153,11 +1152,9 @@ void seq_drain_midi_queues(void)
 		 * Let's have a delay
 		 */
 
- 		if (n) {
- 			current->timeout = jiffies + HZ / 10;
- 			interruptible_sleep_on(&seq_sleeper);
- 			current->timeout = 0;
-  		}
+ 		if (n)
+ 			interruptible_sleep_on_timeout(&seq_sleeper,
+						       HZ/10);
 	}
 }
 
@@ -1179,9 +1176,8 @@ void sequencer_release(int dev, struct file *file)
 		while (!signal_pending(current) && qlen > 0)
 		{
   			seq_sync();
- 			current->timeout = jiffies + 3 * HZ;
- 			interruptible_sleep_on(&seq_sleeper);
- 			current->timeout = 0;
+ 			interruptible_sleep_on_timeout(&seq_sleeper,
+						       3*HZ);
  			/* Extra delay */
 		}
 	}
@@ -1233,11 +1229,8 @@ static int seq_sync(void)
 
 	save_flags(flags);
 	cli();
- 	if (qlen > 0) {
- 		current->timeout = jiffies + HZ;
- 		interruptible_sleep_on(&seq_sleeper);
- 		current->timeout = 0;
-  	}
+ 	if (qlen > 0)
+ 		interruptible_sleep_on_timeout(&seq_sleeper, HZ);
 	restore_flags(flags);
 	return qlen;
 }
@@ -1262,9 +1255,7 @@ static void midi_outc(int dev, unsigned char data)
 	save_flags(flags);
 	cli();
  	while (n && !midi_devs[dev]->outputc(dev, data)) {
- 		current->timeout = jiffies + 4;
- 		interruptible_sleep_on(&seq_sleeper);
- 		current->timeout = 0;
+ 		interruptible_sleep_on_timeout(&seq_sleeper, HZ/25);
   		n--;
   	}
 	restore_flags(flags);

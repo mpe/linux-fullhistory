@@ -54,9 +54,6 @@
 #include <linux/kmod.h>
 #endif
 
-asmlinkage int sys_exit(int exit_code);
-asmlinkage int sys_brk(unsigned long);
-
 /*
  * Here are the actual binaries that will be accepted:
  * add more with "register_binfmt()" if using modules...
@@ -752,24 +749,28 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 	/* handle /sbin/loader.. */
 	{
 	    struct exec * eh = (struct exec *) bprm->buf;
+	    struct linux_binprm bprm_loader;
 
 	    if (!bprm->loader && eh->fh.f_magic == 0x183 &&
 		(eh->fh.f_flags & 0x3000) == 0x3000)
 	    {
+		int i;
 		char * dynloader[] = { "/sbin/loader" };
 		struct dentry * dentry;
 
 		dput(bprm->dentry);
 		bprm->dentry = NULL;
-		remove_arg_zero(bprm);
-		bprm->p = copy_strings(1, dynloader, bprm->page, bprm->p, 2);
-		bprm->argc++;
-		bprm->loader = bprm->p;
+
+	        bprm_loader.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
+	        for (i=0 ; i<MAX_ARG_PAGES ; i++)       /* clear page-table */
+                    bprm_loader.page[i] = 0;
+
 		dentry = open_namei(dynloader[0], 0, 0);
 		retval = PTR_ERR(dentry);
 		if (IS_ERR(dentry))
 			return retval;
 		bprm->dentry = dentry;
+		bprm->loader = bprm_loader.p;
 		retval = prepare_binprm(bprm);
 		if (retval<0)
 			return retval;

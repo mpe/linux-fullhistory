@@ -731,14 +731,14 @@ svc_tcp_init(struct svc_sock *svsk)
  * Receive the next request on any socket.
  */
 int
-svc_recv(struct svc_serv *serv, struct svc_rqst *rqstp)
+svc_recv(struct svc_serv *serv, struct svc_rqst *rqstp, long timeout)
 {
 	struct svc_sock		*svsk;
 	int			len;
 	struct wait_queue	wait = { current, NULL };
 
 	dprintk("svc: server %p waiting for data (to = %ld)\n",
-		rqstp, current->timeout);
+		rqstp, timeout);
 
 	if (rqstp->rq_sock)
 		printk(KERN_ERR 
@@ -772,7 +772,7 @@ again:
 		current->state = TASK_INTERRUPTIBLE;
 		add_wait_queue(&rqstp->rq_wait, &wait);
 		end_bh_atomic();
-		schedule();
+		schedule_timeout(timeout);
 
 		remove_wait_queue(&rqstp->rq_wait, &wait);
 

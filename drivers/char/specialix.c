@@ -58,6 +58,8 @@
  *                Made many more debug printk's a compile time option.
  * Revision 1.8:  Jul 1  1997
  *                port to linux-2.1.43 kernel.
+ * Revision 1.9:  Oct 9  1998
+ *                Added stuff for the IO8+/PCI version. . 
  * 
  */
 
@@ -87,6 +89,7 @@
 #include <linux/delay.h>
 #include <linux/tqueue.h>
 #include <linux/version.h>
+#include <linux/pci.h>
 
 
 /* ************************************************************** */
@@ -173,7 +176,6 @@ DECLARE_TASK_QUEUE(tq_specialix);
 #define SPECIALIX_TYPE_NORMAL	1
 #define SPECIALIX_TYPE_CALLOUT	2
 
-static struct specialix_board * IRQ_to_board[16] = { NULL, } ;
 static struct tty_driver specialix_driver, specialix_callout_driver;
 static int    specialix_refcount = 0;
 static struct tty_struct * specialix_table[SX_NBOARD * SX_NPORT] = { NULL, };
@@ -331,17 +333,22 @@ extern inline int sx_check_io_range(struct specialix_board * bp)
 
 extern inline void sx_request_io_range(struct specialix_board * bp)
 {
-	request_region(bp->base, SX_IO_SPACE, "specialix IO8+" );
+	request_region(bp->base, 
+	               bp->flags&SX_BOARD_IS_PCI?SX_PCI_IO_SPACE:SX_IO_SPACE,
+	               "specialix IO8+" );
 }
 
 
 extern inline void sx_release_io_range(struct specialix_board * bp)
 {
-	release_region(bp->base, SX_IO_SPACE);
+	release_region(bp->base, 
+	               bp->flags&SX_BOARD_IS_PCI?SX_PCI_IO_SPACE:SX_IO_SPACE);
 }
 
 	
 /* Must be called with enabled interrupts */
+/* Ugly. Very ugly. Don't use this for anything else than initialization 
+   code */
 extern inline void sx_long_delay(unsigned long delay)
 {
 	unsigned long i;
@@ -357,6 +364,8 @@ int sx_set_irq ( struct specialix_board *bp)
 	int virq;
 	int i;
 
+	if (bp->flags & SX_BOARD_IS_PCI) 
+		return 1;
 	switch (bp->irq) {
 	/* In the same order as in the docs... */
 	case 15: virq = 0;break;
@@ -484,9 +493,14 @@ static int sx_probe(struct specialix_board *bp)
 	printk (KERN_DEBUG "sx%d: DSR lines are: %02x, rts lines are: %02x\n", 
 	        board_No(bp),  val1, val2);
 #endif
-	if (val1 != 0xb2) {
-		printk(KERN_INFO "sx%d: specialix IO8+ ID at 0x%03x not found.\n",
-		       board_No(bp), bp->base);
+	/* They managed to switch the bit order between the docs and
+	   the IO8+ card. The new PCI card now conforms to old docs.
+	   They changed the PCI docs to reflect the situation on the
+	   old card. */
+	val2 = (bp->flags & SX_BOARD_IS_PCI)?0x4d : 0xb2;
+	if (val1 != val2) {
+		printk(KERN_INFO "sx%d: specialix IO8+ ID %02x at 0x%03x not found (%02x).\n",
+		       board_No(bp), val2, bp->base, val1);
 		return 1;
 	}
 
@@ -868,7 +882,7 @@ static void sx_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 	unsigned long loop = 0;
 	int saved_reg;
 
-	bp = IRQ_to_board[irq];
+	bp = dev_id;
 	
 	if (!bp || !(bp->flags & SX_BOARD_ACTIVE)) {
 #ifdef SPECIALIX_DEBUG 
@@ -924,6 +938,25 @@ static void sx_interrupt(int irq, void * dev_id, struct pt_regs * regs)
  *  Routines for open & close processing.
  */
 
+void turn_ints_off (struct specialix_board *bp)
+{
+	if (bp->flags & SX_BOARD_IS_PCI) {
+		/* This was intended for enabeling the interrupt on the
+		 * PCI card. However it seems that it's already enabled
+		 * and as PCI interrupts can be shared, there is no real
+		 * reason to have to turn it off. */
+	}
+	(void) sx_in_off (bp, 0); /* Turn off interrupts. */
+}
+
+void turn_ints_on (struct specialix_board *bp)
+{
+	if (bp->flags & SX_BOARD_IS_PCI) {
+		/* play with the PCI chip. See comment above. */
+	}
+	(void) sx_in (bp, 0); /* Turn ON interrupts. */
+}
+
 
 /* Called with disabled interrupts */
 extern inline int sx_setup_board(struct specialix_board * bp)
@@ -933,14 +966,12 @@ extern inline int sx_setup_board(struct specialix_board * bp)
 	if (bp->flags & SX_BOARD_ACTIVE) 
 		return 0;
 
-	error = request_irq(bp->irq, sx_interrupt, SA_INTERRUPT, "specialix IO8+", NULL);
+	error = request_irq(bp->irq, sx_interrupt, SA_INTERRUPT, "specialix IO8+", bp);
 
 	if (error) 
 		return error;
 
-	IRQ_to_board[bp->irq] = bp;
-	(void) sx_in (bp, 0); /* Turn ON interrupts. */
-
+	turn_ints_on (bp);
 	bp->flags |= SX_BOARD_ACTIVE;
 
 	MOD_INC_USE_COUNT;
@@ -956,11 +987,13 @@ extern inline void sx_shutdown_board(struct specialix_board *bp)
 	
 	bp->flags &= ~SX_BOARD_ACTIVE;
 	
-	free_irq(bp->irq, NULL);
-	(void) sx_in_off (bp, 0); /* Turn off interrupts. */
+#if SPECIALIX_DEBUG > 2
+	printk ("Freeing IRQ%d for board %d.\n", bp->irq, board_No (bp));
+#endif
+	free_irq(bp->irq, bp);
 
-	IRQ_to_board[bp->irq] = NULL;
-	
+	turn_ints_off (bp);
+
 	MOD_DEC_USE_COUNT;
 }
 
@@ -1045,12 +1078,14 @@ static void sx_change_speed(struct specialix_board *bp, struct specialix_port *p
 		/* Page 48 of version 2.0 of the CL-CD1865 databook */
 		if (tmp >= 12) {
 			printk (KERN_INFO "sx%d: Baud rate divisor is %ld. \n"
-			        "Performance degradation is possible.\n",
+			        "Performance degradation is possible.\n"
+			        "Read specialix.txt for more info.\n",
 			        port_No (port), tmp);
 		} else {
 			printk (KERN_INFO "sx%d: Baud rate divisor is %ld. \n"
 			        "Warning: overstressing Cirrus chip. "
-                                "This might not work.\n", 
+			        "This might not work.\n"
+			        "Read specialix.txt for more info.\n", 
 			        port_No (port), tmp);
 		}
 	}
@@ -2153,7 +2188,6 @@ static int sx_init_drivers(void)
 		return 1;
 	}
 	init_bh(SPECIALIX_BH, do_specialix_bh);
-	memset(IRQ_to_board, 0, sizeof(IRQ_to_board));
 	memset(&specialix_driver, 0, sizeof(specialix_driver));
 	specialix_driver.magic = TTY_DRIVER_MAGIC;
 	specialix_driver.name = "ttyW";
@@ -2265,7 +2299,7 @@ int specialix_init(void)
 	int i;
 	int found = 0;
 
-	printk(KERN_INFO "sx: Specialix IO8+ driver v" VERSION ", (c) R.E.Wolff 1997.\n");
+	printk(KERN_INFO "sx: Specialix IO8+ driver v" VERSION ", (c) R.E.Wolff 1997/1998.\n");
 	printk(KERN_INFO "sx: derived from work (c) D.Gorodchanin 1994-1996.\n");
 #ifdef CONFIG_SPECIALIX_RTSCTS
 	printk (KERN_INFO "sx: DTR/RTS pin is always RTS.\n");
@@ -2279,6 +2313,35 @@ int specialix_init(void)
 	for (i = 0; i < SX_NBOARD; i++) 
 		if (sx_board[i].base && !sx_probe(&sx_board[i]))
 			found++;
+
+#ifdef CONFIG_PCI
+	if (pci_present()) {
+		struct pci_dev *pdev = NULL;
+		unsigned int tint;
+
+		i=0;
+		while (i <= SX_NBOARD) {
+			if (sx_board[i].flags & SX_BOARD_PRESENT) {
+				i++;
+				continue;
+			}
+			pdev = pci_find_device (PCI_VENDOR_ID_SPECIALIX, 
+			                        PCI_DEVICE_ID_SPECIALIX_IO8, 
+			                        pdev);
+			if (!pdev) break;
+
+			sx_board[i].irq = pdev->irq;
+
+			pci_read_config_dword(pdev, PCI_BASE_ADDRESS_2, &tint);
+			/* Mask out the fact that it's IO-space */
+			sx_board[i].base = tint & PCI_BASE_ADDRESS_IO_MASK; 
+
+			sx_board[i].flags |= SX_BOARD_IS_PCI;
+			if (!sx_probe(&sx_board[i]))
+				found ++;
+		}
+	}
+#endif
 
 	if (!found) {
 		sx_release_drivers();
@@ -2296,7 +2359,8 @@ int irq [SX_NBOARD] = {0,};
 
 /*
  * You can setup up to 4 boards.
- * by specifying "iobase=0xXXX iobase1=0xXXX ..." as insmod parameter.
+ * by specifying "iobase=0xXXX,0xXXX ..." as insmod parameter.
+ * You should specify the IRQs too in that case "irq=....,...". 
  * 
  * More than 4 boards in one computer is not possible, as the card can
  * only use 4 different interrupts. 

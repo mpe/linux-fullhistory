@@ -10,10 +10,8 @@ Genuine bugs:
 1.	Header files have compiled-in limit (currently 10) on descriptors.
 
 Missing features:
-1.	The partition code should be migrated into the kernel to allow
-	simultaneous access to multiple partitions on a single disk.
-2.	1k block support is needed for some devices.
-3.	An ioctl()-based interface is needed to provide a consistent way
+1.	1k block support is needed for some devices.
+2.	An ioctl()-based interface is needed to provide a consistent way
 	to do things under all of the representations of forked files.
 
 Possible additional "fork" mount options:

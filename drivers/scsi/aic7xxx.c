@@ -3429,7 +3429,7 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, int channel,
    * here so that we can delay all re-sent commands for this device for the
    * 4 seconds and then have our timer routine pick them back up.
    */
-        if(p->dev_timer[i].expires)
+        if( timer_pending(&p->dev_timer[i]) )
         {
           del_timer(&p->dev_timer[i]);
         }
@@ -3482,11 +3482,8 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, int channel,
         scbq_init(&p->delayed_scbs[i]);
       }
       if ( (p->delayed_scbs[i].head == NULL) &&
-           (p->dev_timer[i].expires) )
-      {
+           timer_pending(&p->dev_timer[i]) )
         del_timer(&p->dev_timer[i]);
-        p->dev_timer[i].expires = 0;
-      }
     }
   }
 
@@ -4007,7 +4004,7 @@ aic7xxx_run_waiting_queues(struct aic7xxx_host *p)
     }
     if ( (p->dev_active_cmds[tindex] >=
           p->dev_temp_queue_depth[tindex]) ||
-         (p->dev_last_reset[tindex] >= (jiffies - (4 * HZ))) )
+         time_after_eq(p->dev_last_reset[tindex], jiffies - 4 * HZ) )
     {
 #ifdef AIC7XXX_VERBOSE_DEBUGGING
       if (aic7xxx_verbose > 0xffff)
@@ -4015,7 +4012,7 @@ aic7xxx_run_waiting_queues(struct aic7xxx_host *p)
                p->host_no, CTL_OF_SCB(scb));
 #endif
       scbq_insert_tail(&p->delayed_scbs[tindex], scb);
-      if ( !(p->dev_timer[tindex].expires) &&
+      if ( !timer_pending(&p->dev_timer[tindex]) &&
            !(p->dev_active_cmds[tindex]) )
       {
         p->dev_timer[tindex].expires = p->dev_last_reset[tindex] + (4 * HZ);
@@ -4154,15 +4151,10 @@ aic7xxx_timer(struct aic7xxx_host *p)
 #endif
   for(i=0; i<MAX_TARGETS; i++)
   {
-    if ( (p->dev_timer[i].expires) && 
-          (p->dev_timer[i].expires <= jiffies) )
+    if ( timer_pending(&p->dev_timer[i]) && 
+         time_before_eq(p->dev_timer[i].expires, jiffies) )
     {
-      p->dev_timer[i].expires = 0;
-      if ( (p->dev_timer[i].prev != NULL) ||
-           (p->dev_timer[i].next != NULL) )
-      {
-        del_timer(&p->dev_timer[i]);
-      }
+      del_timer(&p->dev_timer[i]);
       p->dev_temp_queue_depth[i] =  p->dev_max_queue_depth[i];
       j = 0;
       while ( ((scb = scbq_remove_head(&p->delayed_scbs[i])) != NULL) &&
@@ -4895,7 +4887,7 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
               p->activescbs--;
               scb->flags |= SCB_WAITINGQ | SCB_WAS_BUSY;
                   
-              if (p->dev_timer[tindex].expires == 0) 
+              if ( !timer_pending(&p->dev_timer[tindex]) ) 
               {
                 if ( p->dev_active_cmds[tindex] )
                 {
@@ -7462,7 +7454,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
   }
 
   p->host = host;
-  p->last_reset = 0;
+  p->last_reset = jiffies;
   p->host_no = host->host_no;
   host->unique_id = p->instance;
   p->isr_count = 0;
@@ -7489,7 +7481,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
     p->dev_commands_sent[i] = 0;
     p->dev_flags[i] = 0;
     p->dev_active_cmds[i] = 0;
-    p->dev_last_reset[i] = 0;
+    p->dev_last_reset[i] = jiffies;
     p->dev_last_queue_full[i] = 0;
     p->dev_last_queue_full_count[i] = 0;
     p->dev_max_queue_depth[i] = 1;
@@ -7497,7 +7489,6 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
     p->dev_mid_level_queue_depth[i] = 3;
     scbq_init(&p->delayed_scbs[i]);
     init_timer(&p->dev_timer[i]);
-    p->dev_timer[i].expires = 0;
     p->dev_timer[i].data = (unsigned long)p;
     p->dev_timer[i].function = (void *)aic7xxx_timer;
   }

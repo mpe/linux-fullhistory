@@ -464,7 +464,7 @@ int inet_release(struct socket *sock, struct socket *peersock)
 	struct sock *sk = sock->sk;
 
 	if (sk) {
-		unsigned long timeout;
+		long timeout;
 
 		/* Begin closedown and wake up sleepers. */
 		if (sock->state != SS_UNCONNECTED)
@@ -483,11 +483,11 @@ int inet_release(struct socket *sock, struct socket *peersock)
 		 */
 		timeout = 0;
 		if (sk->linger && !(current->flags & PF_EXITING)) {
-			timeout = ~0UL;
+			timeout = MAX_SCHEDULE_TIMEOUT;
 
 			/* XXX This makes no sense whatsoever... -DaveM */
 			if (!sk->lingertime)
-				timeout = jiffies + HZ*sk->lingertime;
+				timeout = HZ*sk->lingertime;
 		}
 		sock->sk = NULL;
 		sk->socket = NULL;

@@ -510,6 +510,8 @@ return_it:
 	} else {
 		hfs_warn("hfs_bnode_find: use %d(%d) lvl %d [%d]\n", bn->count,
 			 bn->buf->b_count, bn->ndNHeight, bnode_count);
+		hfs_warn("hfs_bnode_find: blnk %u flnk %u recs %u\n", 
+			 bn->ndBLink, bn->ndFLink, bn->ndNRecs);
 	}
 #endif
 

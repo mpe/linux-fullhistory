@@ -559,9 +559,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 			interruptible_sleep_on(&inode->i_wait);
 #else
 			dprintk("nfsd: write defer %d\n", current->pid);
-			current->need_resched = 1;
-			current->timeout = jiffies + HZ / 100;
-			schedule();
+			schedule_timeout((HZ+99)/100);
 			dprintk("nfsd: write resume %d\n", current->pid);
 #endif
 		}

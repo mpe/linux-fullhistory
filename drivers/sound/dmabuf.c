@@ -38,9 +38,9 @@ static int local_start_dma(struct audio_operations *adev, unsigned long physaddr
 static int debugmem = 0;	/* switched off by default */
 static int dma_buffsize = DSP_BUFFSIZE;
 
-static void dmabuf_set_timeout(struct dma_buffparms *dmap)
+static long dmabuf_timeout(struct dma_buffparms *dmap)
 {
-	unsigned long tmout;
+	long tmout;
 
 	tmout = (dmap->fragment_size * HZ) / dmap->data_rate;
 	tmout += HZ / 5;	/* Some safety distance */
@@ -48,7 +48,7 @@ static void dmabuf_set_timeout(struct dma_buffparms *dmap)
 		tmout = HZ / 2;
 	if (tmout > 20 * HZ)
 		tmout = 20 * HZ;
-	current->timeout = jiffies + tmout;
+	return tmout;
 }
 
 static int sound_alloc_dmap(struct dma_buffparms *dmap)
@@ -332,11 +332,9 @@ static void dma_reset_output(int dev)
 
 	adev->dmap_out->underrun_count = 0;
 	if (!signal_pending(current) && adev->dmap_out->qlen && 
-	    adev->dmap_out->underrun_count == 0) {
-		dmabuf_set_timeout(dmap);
-		interruptible_sleep_on(&adev->out_sleeper);
-		current->timeout = 0;
-	}
+	    adev->dmap_out->underrun_count == 0)
+		interruptible_sleep_on_timeout(&adev->out_sleeper,
+					       dmabuf_timeout(dmap));
 	adev->dmap_out->flags &= ~(DMA_SYNCING | DMA_ACTIVE);
 
 	/*
@@ -427,14 +425,14 @@ int DMAbuf_sync(int dev)
 		adev->dmap_out->underrun_count = 0;
 		while (!signal_pending(current) && n++ <= adev->dmap_out->nbufs && 
 		       adev->dmap_out->qlen && adev->dmap_out->underrun_count == 0) {
-			dmabuf_set_timeout(dmap);
-			interruptible_sleep_on(&adev->out_sleeper);
-			if (!current->timeout) {
+			long t = dmabuf_timeout(dmap);
+			t = interruptible_sleep_on_timeout(&adev->out_sleeper,
+							   t);
+			if (!t) {
 				adev->dmap_out->flags &= ~DMA_SYNCING;
 				restore_flags(flags);
 				return adev->dmap_out->qlen;
 			}
-			current->timeout = 0;
 		}
 		adev->dmap_out->flags &= ~(DMA_SYNCING | DMA_ACTIVE);
 		restore_flags(flags);
@@ -447,11 +445,10 @@ int DMAbuf_sync(int dev)
 		save_flags(flags);
 		cli();
 		if (adev->d->local_qlen) {   /* Device has hidden buffers */
-			while (!signal_pending(current) && adev->d->local_qlen(dev)) {
-				dmabuf_set_timeout(dmap);
-				interruptible_sleep_on(&adev->out_sleeper);
-				current->timeout = 0;
-			}
+			while (!signal_pending(current) &&
+			       adev->d->local_qlen(dev))
+				interruptible_sleep_on_timeout(&adev->out_sleeper,
+							       dmabuf_timeout(dmap));
 		}
 		restore_flags(flags);
 	}
@@ -546,6 +543,7 @@ int DMAbuf_getrdbuffer(int dev, char **buf, int *len, int dontblock)
 		  restore_flags(flags);
 		  return -EINVAL;
 	} else while (dmap->qlen <= 0 && n++ < 10) {
+		long timeout = MAX_SCHEDULE_TIMEOUT;
 		if (!(adev->enable_bits & PCM_ENABLE_INPUT) || !adev->go) {
 			restore_flags(flags);
 			return -EAGAIN;
@@ -560,19 +558,17 @@ int DMAbuf_getrdbuffer(int dev, char **buf, int *len, int dontblock)
 			restore_flags(flags);
 			return -EAGAIN;
 		}
-		if (!(go = adev->go))
-			current->timeout = 0;
-		else 
-			dmabuf_set_timeout(dmap);
-		interruptible_sleep_on(&adev->in_sleeper);
-		if (go && !current->timeout) {
+		if ((go = adev->go))
+			timeout = dmabuf_timeout(dmap);
+		timeout = interruptible_sleep_on_timeout(&adev->in_sleeper,
+							 timeout);
+		if (!timeout) {
 			/* FIXME: include device name */
 			err = -EIO;
 			printk(KERN_WARNING "Sound: DMA (input) timed out - IRQ/DRQ config error?\n");
 			dma_reset_input(dev);
 		} else
 			err = -EINTR;
-		current->timeout = 0;
 	}
 	restore_flags(flags);
 
@@ -725,6 +721,7 @@ static int output_sleep(int dev, int dontblock)
 	int err = 0;
 	struct dma_buffparms *dmap = adev->dmap_out;
 	int timeout;
+	long timeout_value;
 
 	if (dontblock)
 		return -EAGAIN;
@@ -738,15 +735,15 @@ static int output_sleep(int dev, int dontblock)
 		return -EIO;
 	timeout = (adev->go && !(dmap->flags & DMA_NOTIMEOUT));
 	if (timeout) 
-		dmabuf_set_timeout(dmap);
+		timeout_value = dmabuf_timeout(dmap);
 	else
-		current->timeout = 0;
-	interruptible_sleep_on(&adev->out_sleeper);
-	if (timeout && !current->timeout) {
+		timeout_value = MAX_SCHEDULE_TIMEOUT;
+	timeout_value = interruptible_sleep_on_timeout(&adev->out_sleeper,
+						       timeout_value);
+	if (timeout != MAX_SCHEDULE_TIMEOUT && !timeout_value) {
 		printk(KERN_WARNING "Sound: DMA (output) timed out - IRQ/DRQ config error?\n");
 		dma_reset_output(dev);
 	} else {
-		current->timeout = 0;
 		if (signal_pending(current))
 			err = -EINTR;
 	}

@@ -106,10 +106,10 @@ nfs_delete_inode(struct inode * inode)
 printk("nfs_delete_inode: inode %ld has pending RPC requests\n", inode->i_ino);
 #endif
 		nfs_invalidate_pages(inode);
-		while (NFS_WRITEBACK(inode) != NULL && jiffies < timeout) {
+		while (NFS_WRITEBACK(inode) != NULL &&
+		       time_before(jiffies, timeout)) {
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + HZ/10;
-			schedule();
+			schedule_timeout(HZ/10);
 		}
 		current->state = TASK_RUNNING;
 		if (NFS_WRITEBACK(inode) != NULL)

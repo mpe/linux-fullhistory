@@ -246,7 +246,6 @@ CONFIG_PSMOUSE=y
 # CONFIG_PC110_PAD is not set
 # CONFIG_UMISC is not set
 # CONFIG_QIC02_TAPE is not set
-# CONFIG_APM is not set
 # CONFIG_WATCHDOG is not set
 # CONFIG_RTC is not set
 # CONFIG_VIDEO_DEV is not set

@@ -34,7 +34,7 @@
 
 /*================ Forward declarations ================*/
 
-static void hfs_read_inode(struct inode *inode);
+static void hfs_read_inode(struct inode *);
 static void hfs_put_super(struct super_block *);
 static int hfs_statfs(struct super_block *, struct statfs *, int);
 static void hfs_write_super(struct super_block *);
@@ -45,7 +45,7 @@ static struct super_operations hfs_super_operations = {
 	hfs_read_inode,		/* read_inode */
 	NULL,			/* write_inode */
 	hfs_put_inode,		/* put_inode     - in inode.c */
-	NULL,                   /* delete inode */
+	NULL,                   /* delete_inode  */
 	hfs_notify_change,	/* notify_change - in inode.c */
 	hfs_put_super,		/* put_super */
 	hfs_write_super,	/* write_super */
@@ -74,7 +74,6 @@ static void hfs_read_inode(struct inode *inode)
   inode->i_mode = 0;
   inode->i_op = NULL;
 }
-
 
 /*
  * hfs_write_super()
@@ -134,8 +133,6 @@ static void hfs_put_super(struct super_block *sb)
 	set_blocksize(sb->s_dev, BLOCK_SIZE);
 
 	MOD_DEC_USE_COUNT;
-
-	return;
 }
 
 /*
@@ -145,7 +142,7 @@ static void hfs_put_super(struct super_block *sb)
  * HFS filesystems.  The purpose is to return various data about the
  * filesystem.
  *
- * XXX: changed f_files/f_ffree to reflect the fs_ablock/free_ablocks.
+ * changed f_files/f_ffree to reflect the fs_ablock/free_ablocks.
  */
 static int hfs_statfs(struct super_block *sb, struct statfs *buf, int len)
 {
@@ -434,14 +431,13 @@ struct super_block *hfs_read_super(struct super_block *s, void *data,
 
 	if (!mdb) {
 		if (!silent) {
-			printk("VFS: Can't find a HFS filesystem on dev %s.\n",
+			hfs_warn("VFS: Can't find a HFS filesystem on dev %s.\n",
 			       kdevname(dev));
 		}
 		goto bail2;
 	}
-	HFS_SB(s)->s_mdb = mdb;
-	INIT_LIST_HEAD(&mdb->entry_dirty);
 
+	HFS_SB(s)->s_mdb = mdb;
 	if (HFS_ITYPE(mdb->next_id) != 0) {
 		hfs_warn("hfs_fs: too many files.\n");
 		goto bail1;
@@ -480,8 +476,8 @@ bail1:
 	hfs_mdb_put(mdb, s->s_flags & MS_RDONLY);
 bail2:
 	set_blocksize(dev, BLOCK_SIZE);
-	MOD_DEC_USE_COUNT;
 	unlock_super(s);
+	MOD_DEC_USE_COUNT;
 bail3:
 	s->s_dev = 0;
 	return NULL;	

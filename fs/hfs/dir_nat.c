@@ -42,6 +42,7 @@ static int nat_hdr_rename(struct inode *, struct dentry *,
 #define DOT_DOT_LEN		2
 #define DOT_APPLEDOUBLE_LEN	12
 #define DOT_PARENT_LEN		7
+#define ROOTINFO_LEN            8
 
 const struct hfs_name hfs_nat_reserved1[] = {
 	{DOT_LEN,		"."},
@@ -52,13 +53,14 @@ const struct hfs_name hfs_nat_reserved1[] = {
 };
 
 const struct hfs_name hfs_nat_reserved2[] = {
-	{0,			""},
+	{ROOTINFO_LEN,			"RootInfo"},
 };
 
 #define DOT		(&hfs_nat_reserved1[0])
 #define DOT_DOT		(&hfs_nat_reserved1[1])
 #define DOT_APPLEDOUBLE	(&hfs_nat_reserved1[2])
 #define DOT_PARENT	(&hfs_nat_reserved1[3])
+#define ROOTINFO        (&hfs_nat_reserved2[0])
 
 static struct file_operations hfs_nat_dir_operations = {
 	NULL,			/* lseek - default */
@@ -153,43 +155,32 @@ static int nat_lookup(struct inode * dir, struct dentry *dentry)
 	/* Perform name-mangling */
 	hfs_nameout(dir, &cname, dentry->d_name.name, dentry->d_name.len);
 
-	/* Check for "." */
-	if (hfs_streq(&cname, DOT)) {
-		/* this little trick skips the iget and iput */
-	        d_add(dentry, dir);
-		return 0;
-	}
-
-	/* Check for "..". */
-	if (hfs_streq(&cname, DOT_DOT)) {
-		struct hfs_cat_entry *parent;
-
-		if (dtype != HFS_NAT_NDIR) {
-			/* Case for ".." in ".AppleDouble" */
-			parent = entry;
-			++entry->count; /* __hfs_iget() eats one */
-		} else {
-			/* Case for ".." in a normal directory */
-			parent = hfs_cat_parent(entry);
-		}
-		inode = hfs_iget(parent, HFS_NAT_NDIR, dentry);
-		goto done;
-	}
+	/* no need to check for "."  or ".." */
 
 	/* Check for ".AppleDouble" if in a normal directory,
 	   and for ".Parent" in ".AppleDouble". */
 	if (dtype==HFS_NAT_NDIR) {
 		/* Check for ".AppleDouble" */
-		if (hfs_streq(&cname, DOT_APPLEDOUBLE)) {
+		if (hfs_streq(cname.Name, cname.Len, 
+			      DOT_APPLEDOUBLE->Name, DOT_APPLEDOUBLE_LEN)) {
 			++entry->count; /* __hfs_iget() eats one */
 			inode = hfs_iget(entry, HFS_NAT_HDIR, dentry);
 			goto done;
 		}
 	} else if (dtype==HFS_NAT_HDIR) {
-		if (hfs_streq(&cname, DOT_PARENT)) {
+		if (hfs_streq(cname.Name, cname.Len, 
+			      DOT_PARENT->Name, DOT_PARENT_LEN)) {
 			++entry->count; /* __hfs_iget() eats one */
 			inode = hfs_iget(entry, HFS_NAT_HDR, dentry);
 			goto done;
+		}
+
+		if ((entry->cnid == htonl(HFS_ROOT_CNID)) &&
+		    hfs_streq(cname.Name, cname.Len, 
+			      ROOTINFO->Name, ROOTINFO_LEN)) {
+			++entry->count; /* __hfs_iget() eats one */
+			inode = hfs_iget(entry, HFS_NAT_HDR, dentry);
+                        goto done;
 		}
 	}
 
@@ -271,7 +262,7 @@ static int nat_readdir(struct file * filp,
 		filp->f_pos = 2;
 	}
 
-	if (filp->f_pos < (dir->i_size - 1)) {
+	if (filp->f_pos < (dir->i_size - 2)) {
 		hfs_u32 cnid;
 		hfs_u8 type;
 
@@ -279,7 +270,7 @@ static int nat_readdir(struct file * filp,
 		    hfs_cat_next(entry, &brec, filp->f_pos - 2, &cnid, &type)) {
 			return 0;
 		}
-		while (filp->f_pos < (dir->i_size - 1)) {
+		while (filp->f_pos < (dir->i_size - 2)) {
 			if (hfs_cat_next(entry, &brec, 1, &cnid, &type)) {
 				return 0;
 			}
@@ -302,7 +293,7 @@ static int nat_readdir(struct file * filp,
 		hfs_cat_close(entry, &brec);
 	}
 
-	if (filp->f_pos == (dir->i_size - 1)) {
+	if (filp->f_pos == (dir->i_size - 2)) {
 		if (type == HFS_NAT_NDIR) {
 			/* In normal dirs entry 2 is for ".AppleDouble" */
 			if (filldir(dirent, DOT_APPLEDOUBLE->Name,
@@ -314,6 +305,19 @@ static int nat_readdir(struct file * filp,
 			/* In .AppleDouble entry 2 is for ".Parent" */
 			if (filldir(dirent, DOT_PARENT->Name,
 				    DOT_PARENT_LEN, filp->f_pos,
+				    ntohl(entry->cnid) | HFS_NAT_HDR)) {
+				return 0;
+			}
+		}
+		++filp->f_pos;
+	}
+
+	if (filp->f_pos == (dir->i_size - 1)) {
+		/* handle ROOT/.AppleDouble/RootInfo as the last entry. */
+		if ((entry->cnid == htonl(HFS_ROOT_CNID)) &&
+		    (type == HFS_NAT_HDIR)) {
+			if (filldir(dirent, ROOTINFO->Name,
+				    ROOTINFO_LEN, filp->f_pos,
 				    ntohl(entry->cnid) | HFS_NAT_HDR)) {
 				return 0;
 			}
@@ -337,9 +341,9 @@ void hfs_nat_drop_dentry(struct dentry *dentry, const ino_t type)
   switch (type) {
   case HFS_NAT_HDR: /* given .AppleDouble/name */
     /* look for name */
-    de = hfs_lookup_dentry(dentry->d_name.name,
-			   dentry->d_name.len,
-			   dentry->d_parent->d_parent);
+    de = hfs_lookup_dentry(dentry->d_parent->d_parent,
+			   dentry->d_name.name, dentry->d_name.len);
+
     if (de) {
       if (!de->d_inode)
 	d_drop(de);
@@ -348,9 +352,10 @@ void hfs_nat_drop_dentry(struct dentry *dentry, const ino_t type)
     break;
   case HFS_NAT_DATA: /* given name */
     /* look for .AppleDouble/name */
-    hfs_drop_special(DOT_APPLEDOUBLE, dentry->d_parent, dentry);
+    hfs_drop_special(dentry->d_parent, DOT_APPLEDOUBLE, dentry);
     break;
   }
+
 }
 
 /*
@@ -370,7 +375,8 @@ static int nat_rmdir(struct inode *parent, struct dentry *dentry)
 	int error;
 
 	hfs_nameout(parent, &cname, dentry->d_name.name, dentry->d_name.len);
-	if (hfs_streq(&cname, DOT_APPLEDOUBLE)) {
+	if (hfs_streq(cname.Name, cname.Len,
+		      DOT_APPLEDOUBLE->Name, DOT_APPLEDOUBLE_LEN)) {
 		if (!HFS_SB(parent->i_sb)->s_afpd) {
 			/* Not in AFPD compatibility mode */
 			error = -EPERM;
@@ -415,7 +421,8 @@ static int nat_hdr_unlink(struct inode *dir, struct dentry *dentry)
 
 		hfs_nameout(dir, &cname, dentry->d_name.name, 
 			    dentry->d_name.len);
-		if (!hfs_streq(&cname, DOT_PARENT)) {
+		if (!hfs_streq(cname.Name, cname.Len,
+			       DOT_PARENT->Name, DOT_PARENT_LEN)) {
 			struct hfs_cat_entry *victim;
 			struct hfs_cat_key key;
 
@@ -465,7 +472,8 @@ static int nat_hdr_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 		hfs_nameout(old_dir, &cname, old_dentry->d_name.name,
 			    old_dentry->d_name.len);
-		if (!hfs_streq(&cname, DOT_PARENT)) {
+		if (!hfs_streq(cname.Name, cname.Len, 
+			       DOT_PARENT->Name, DOT_PARENT_LEN)) {
 			struct hfs_cat_entry *victim;
 			struct hfs_cat_key key;
 

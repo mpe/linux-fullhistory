@@ -73,6 +73,9 @@ static void init_file_inode(struct inode *inode, hfs_u8 fork)
  */
 void hfs_put_inode(struct inode * inode)
 {
+	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
+
+	hfs_cat_put(entry);
 	if (inode->i_count == 1) {
 	  struct hfs_hdr_layout *tmp = HFS_I(inode)->layout;
 
@@ -243,7 +246,7 @@ struct inode *hfs_iget(struct hfs_cat_entry *entry, ino_t type,
 	if (inode->i_dev != sb->s_dev) {
 	        iput(inode); /* automatically does an hfs_cat_put */
 		inode = NULL;
-	} else if (!inode->i_mode) {
+	} else if (!inode->i_mode || (*sys_entry == NULL)) {
 		/* Initialize the inode */
 		struct hfs_sb_info *hsb = HFS_SB(sb);
 
@@ -266,8 +269,7 @@ struct inode *hfs_iget(struct hfs_cat_entry *entry, ino_t type,
 		inode->i_mode &= ~hsb->s_umask;
 
 		if (!inode->i_mode) {
-			clear_inode(inode);
-			hfs_cat_put(entry);
+			iput(inode); /* does an hfs_cat_put */
 			inode = NULL;
 		} else
 			*sys_entry = dentry; /* cache dentry */
@@ -398,7 +400,7 @@ void hfs_nat_ifill(struct inode * inode, ino_t type)
 		struct hfs_dir *hdir = &entry->u.dir;
 
 		inode->i_blocks = 0;
-		inode->i_size = hdir->files + hdir->dirs + 3;
+		inode->i_size = hdir->files + hdir->dirs + 4;
 		inode->i_mode = S_IRWXUGO | S_IFDIR;
 		HFS_I(inode)->dir_size = 1;
 		if (type == HFS_NAT_NDIR) {

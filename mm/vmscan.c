@@ -440,15 +440,9 @@ static int do_try_to_free_page(int gfp_mask)
 {
 	static int state = 0;
 	int i=6;
-	int stop;
 
 	/* Always trim SLAB caches when memory gets low. */
 	kmem_cache_reap(gfp_mask);
-
-	/* We try harder if we are waiting .. */
-	stop = 3;
-	if (gfp_mask & __GFP_WAIT)
-		stop = 0;
 
 	if (buffer_over_borrow() || pgcache_over_borrow())
 		shrink_mmap(i, gfp_mask);
@@ -471,7 +465,7 @@ static int do_try_to_free_page(int gfp_mask)
 			shrink_dcache_memory(i, gfp_mask);
 			state = 0;
 		i--;
-		} while ((i - stop) >= 0);
+		} while (i >= 0);
 	}
 	return 0;
 }
@@ -537,7 +531,7 @@ int kswapd(void *unused)
 	init_swap_timer();
 	kswapd_task = current;
 	while (1) {
-		unsigned long start_time;
+		unsigned long end_time;
 
 		current->state = TASK_INTERRUPTIBLE;
 		flush_signals(current);
@@ -545,12 +539,12 @@ int kswapd(void *unused)
 		schedule();
 		swapstats.wakeups++;
 
-		start_time = jiffies;
+		/* max one hundreth of a second */
+		end_time = jiffies + (HZ-1)/100;
 		do {
-			do_try_to_free_page(0);
-			if (free_memory_available() > 1)
+			if (!do_try_to_free_page(0))
 				break;
-		} while (jiffies == start_time);
+		} while (time_before_eq(jiffies,end_time));
 	}
 	/* As if we could ever get here - maybe we want to make this killable */
 	kswapd_task = NULL;
@@ -597,14 +591,11 @@ int try_to_free_pages(unsigned int gfp_mask, int count)
  * This plays mind-games with the "goodness()"
  * function in kernel/sched.c.
  */
-static inline void kswapd_wakeup(int priority)
+static inline void kswapd_wakeup(struct task_struct *p, int priority)
 {
 	if (priority) {
-		struct task_struct *p = kswapd_task;
-		if (p) {
-			p->counter = p->priority << priority;
-			wake_up_process(p);
-		}
+		p->counter = p->priority << priority;
+		wake_up_process(p);
 	}
 }
 
@@ -613,31 +604,39 @@ static inline void kswapd_wakeup(int priority)
  */
 void swap_tick(void)
 {
-	unsigned int pages;
-	int want_wakeup;
+	struct task_struct *p = kswapd_task;
 
 	/*
-	 * Schedule for wakeup if there isn't lots
-	 * of free memory or if there is too much
-	 * of it used for buffers or pgcache.
-	 *
-	 * "want_wakeup" is our priority: 0 means
-	 * not to wake anything up, while 3 means
-	 * that we'd better give kswapd a realtime
-	 * priority.
+	 * Only bother to try to wake kswapd up
+	 * if the task exists and can be woken.
 	 */
-	want_wakeup = 0;
-	if (buffer_over_max() || pgcache_over_max())
-		want_wakeup = 1;
-	pages = nr_free_pages;
-	if (pages < freepages.high)
-		want_wakeup = 1;
-	if (pages < freepages.low)
-		want_wakeup = 2;
-	if (pages < freepages.min)
-		want_wakeup = 3;
+	if (p && (p->state & TASK_INTERRUPTIBLE)) {
+		unsigned int pages;
+		int want_wakeup;
 
-	kswapd_wakeup(want_wakeup);
+		/*
+		 * Schedule for wakeup if there isn't lots
+		 * of free memory or if there is too much
+		 * of it used for buffers or pgcache.
+		 *
+		 * "want_wakeup" is our priority: 0 means
+		 * not to wake anything up, while 3 means
+		 * that we'd better give kswapd a realtime
+		 * priority.
+		 */
+		want_wakeup = 0;
+		if (buffer_over_max() || pgcache_over_max())
+			want_wakeup = 1;
+		pages = nr_free_pages;
+		if (pages < freepages.high)
+			want_wakeup = 1;
+		if (pages < freepages.low)
+			want_wakeup = 2;
+		if (pages < freepages.min)
+			want_wakeup = 3;
+	
+		kswapd_wakeup(p,want_wakeup);
+	}
 
 	timer_active |= (1<<SWAP_TIMER);
 }
@@ -648,7 +647,7 @@ void swap_tick(void)
 
 void init_swap_timer(void)
 {
-	timer_table[SWAP_TIMER].expires = 0;
+	timer_table[SWAP_TIMER].expires = jiffies;
 	timer_table[SWAP_TIMER].fn = swap_tick;
 	timer_active |= (1<<SWAP_TIMER);
 }

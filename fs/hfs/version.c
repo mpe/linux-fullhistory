@@ -7,4 +7,4 @@
  * This file contains the version string for this release.
  */
 
-const char hfs_version[]="0.95+asun3";
+const char hfs_version[]="0.96";

@@ -81,6 +81,7 @@ extern int rd_image_start;	/* starting block # of image */
 
 extern int root_mountflags;
 extern int _etext, _edata, _end;
+extern unsigned long cpu_hz;
 
 /*
  * This is set up by the setup-routine at boot-time
@@ -617,6 +618,11 @@ int get_cpuinfo(char * buffer)
 				p += sprintf(p, "stepping\t: %d\n", c->x86_mask);
 		} else
 			p += sprintf(p, "stepping\t: unknown\n");
+
+		if (c->x86_capability & X86_FEATURE_TSC) {
+			p += sprintf(p, "cpu MHz\t\t: %lu.%06lu\n",
+				cpu_hz / 1000000, (cpu_hz % 1000000));
+		}
 
 		/* Cache size */
 		if (c->x86_cache_size >= 0)

@@ -1139,8 +1139,7 @@ int md_do_sync(struct md_dev *mddev)
 		while (blocksize*j/(jiffies-starttime+1)*HZ/1024 > SPEED_LIMIT)
 		{
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies+1;
-			schedule();
+			schedule_timeout(1);
 		}
 
 		/*

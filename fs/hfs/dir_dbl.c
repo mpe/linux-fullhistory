@@ -147,22 +147,12 @@ static int dbl_lookup(struct inode * dir, struct dentry *dentry)
 	/* Perform name-mangling */
 	hfs_nameout(dir, &cname, dentry->d_name.name, dentry->d_name.len);
  
-	/* Check for "." */
-	if (hfs_streq(&cname, DOT)) {
-		/* this little trick skips the iget and iput */
-		d_add(dentry, dir);
-		return 0;
-	}
-
-	/* Check for "..". */
-	if (hfs_streq(&cname, DOT_DOT)) {
-		inode = hfs_iget(hfs_cat_parent(entry), HFS_DBL_DIR, dentry);
-		goto done;
-	}
+	/* no need to check for "."  or ".." */
 
 	/* Check for "%RootInfo" if in the root directory. */
 	if ((entry->cnid == htonl(HFS_ROOT_CNID)) &&
-	    hfs_streq(&cname, PCNT_ROOTINFO)) {
+	    hfs_streq(cname.Name, cname.Len, 
+		      PCNT_ROOTINFO->Name, PCNT_ROOTINFO_LEN)) {
 		++entry->count; /* __hfs_iget() eats one */
 		inode = hfs_iget(entry, HFS_DBL_HDR, dentry);
 		goto done;
@@ -445,15 +435,15 @@ void hfs_dbl_drop_dentry(struct dentry *dentry, const ino_t type)
   switch (type) {
   case HFS_DBL_HDR:
    /* given %name, look for name. i don't think this happens. */
-   de = hfs_lookup_dentry(dentry->d_name.name + 1, dentry->d_name.len - 1,
-			   dentry->d_parent);
+   de = hfs_lookup_dentry(dentry->d_parent,
+			  dentry->d_name.name + 1, dentry->d_name.len - 1);
     break;
   case HFS_DBL_DATA:
     /* given name, look for %name */
     tmp_name[0] = '%';
     strncpy(tmp_name + 1, dentry->d_name.name, HFS_NAMELEN - 1);
-    de = hfs_lookup_dentry(tmp_name, dentry->d_name.len + 1,
-			     dentry->d_parent);
+    de = hfs_lookup_dentry(dentry->d_parent, 
+			   tmp_name, dentry->d_name.len + 1);
   }
 
   if (de) {

@@ -46,7 +46,7 @@ static pid_t			nlmsvc_pid = 0;
 unsigned long			nlmsvc_grace_period = 0;
 unsigned long			nlmsvc_timeout = 0;
 
-static struct wait_queue *	lockd_start = NULL;
+static struct semaphore lockd_start = MUTEX_LOCKED;
 static struct wait_queue *	lockd_exit = NULL;
 
 /*
@@ -73,7 +73,7 @@ lockd(struct svc_rqst *rqstp)
 	 * Let our maker know we're running.
 	 */
 	nlmsvc_pid = current->pid;
-	wake_up(&lockd_start);
+	up(&lockd_start);
 
 	exit_mm(current);
 	current->session = 1;
@@ -121,6 +121,7 @@ lockd(struct svc_rqst *rqstp)
 	 */
 	while ((nlmsvc_users || !signalled()) && nlmsvc_pid == current->pid)
 	{
+		long timeout = MAX_SCHEDULE_TIMEOUT;
 		if (signalled()) {
 			spin_lock_irq(&current->sigmask_lock);
 			flush_signals(current);
@@ -134,7 +135,7 @@ lockd(struct svc_rqst *rqstp)
 		 * during grace period).
 		 */
 		if (!nlmsvc_grace_period) {
-			current->timeout = nlmsvc_retry_blocked();
+			timeout = nlmsvc_retry_blocked() - jiffies;
 		} else if (nlmsvc_grace_period < jiffies)
 			nlmsvc_grace_period = 0;
 
@@ -142,7 +143,7 @@ lockd(struct svc_rqst *rqstp)
 		 * Find a socket with data available and call its
 		 * recvfrom routine.
 		 */
-		if ((err = svc_recv(serv, rqstp)) == -EAGAIN)
+		if ((err = svc_recv(serv, rqstp, timeout)) == -EAGAIN)
 			continue;
 		if (err < 0) {
 			if (err != -EINTR)
@@ -250,7 +251,7 @@ lockd_up(void)
 			"lockd_up: create thread failed, error=%d\n", error);
 		goto destroy_and_out;
 	}
-	sleep_on(&lockd_start);
+	down(&lockd_start);
 
 	/*
 	 * Note: svc_serv structures have an initial use count of 1,
@@ -291,9 +292,7 @@ lockd_down(void)
 	 * the lockd semaphore, we can't wait around forever ...
 	 */
 	current->sigpending = 0;
-	current->timeout = jiffies + HZ;
-	interruptible_sleep_on(&lockd_exit);
-	current->timeout = 0;
+	interruptible_sleep_on_timeout(&lockd_exit, HZ);
 	if (nlmsvc_pid) {
 		printk(KERN_WARNING 
 			"lockd_down: lockd failed to exit, clearing pid\n");

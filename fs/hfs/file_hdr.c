@@ -559,6 +559,7 @@ done:
 	if (read) {
 		inode->i_atime = CURRENT_TIME;
 		*ppos = pos;
+		mark_inode_dirty(inode);
 	}
 	return read;
 }
@@ -874,6 +875,7 @@ done:
 	        if (pos > inode->i_size)
 		        inode->i_size = pos;
 	        inode->i_mtime = inode->i_atime = CURRENT_TIME;
+		mark_inode_dirty(inode);
 	}
 	return written;
 }
@@ -887,7 +889,6 @@ done:
  */
 static void hdr_truncate(struct inode *inode)
 {
-  	/*struct inode *inode = dentry->d_inode;*/
 	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
 	struct hfs_hdr_layout *layout;
 	size_t size = inode->i_size;

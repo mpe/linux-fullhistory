@@ -1015,7 +1015,7 @@ int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 }
 
 
-static void udp_close(struct sock *sk, unsigned long timeout)
+static void udp_close(struct sock *sk, long timeout)
 {
 	/* See for explanation: raw_close in ipv4/raw.c */
 	sk->state = TCP_CLOSE;

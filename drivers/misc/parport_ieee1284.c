@@ -34,8 +34,7 @@ int parport_wait_peripheral(struct parport *port, unsigned char mask,
 			schedule();
 	}
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies+4;
-	schedule();				/* wait for 40ms */
+	schedule_timeout(HZ/25);				/* wait for 40ms */
 	status = parport_read_status(port);
 	return ((status & mask) == result)?0:1;
 }		

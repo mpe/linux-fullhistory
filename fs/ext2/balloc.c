@@ -721,7 +721,7 @@ void ext2_check_blocks_bitmap (struct super_block * sb)
 		
 		bh = sb->u.ext2_sb.s_block_bitmap[bitmap_nr];
 
-		if (!(le32_to_cpu(sb->u.ext2_sb.s_feature_ro_compat) &
+		if (!(sb->u.ext2_sb.s_feature_ro_compat &
 		     EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER) ||
 		    ext2_group_sparse(i)) {
 			if (!ext2_test_bit (0, bh->b_data))

@@ -71,22 +71,26 @@ extern inline void init_timer(struct timer_list * timer)
 	timer->prev = NULL;
 }
 
+extern inline int timer_pending(struct timer_list * timer)
+{
+	return timer->prev != NULL;
+}
+
 /*
  *	These inlines deal with timer wrapping correctly. You are 
  *	strongly encouraged to use them
  *	1. Because people otherwise forget
  *	2. Because if the timer wrap changes in future you wont have to
  *	   alter your driver code.
+ *
+ * Do this with "<0" and ">=0" to only test the sign of the result. A
+ * good compiler would generate better code (and a really good compiler
+ * wouldn't care). Gcc is currently neither.
  */
+#define time_after(a,b)		((long)(b) - (long)(a) < 0)
+#define time_before(a,b)	time_after(b,a)
 
-extern inline int time_before(unsigned long a, unsigned long b)
-{
-	return((long)((a) - (b)) < 0L);
-}
-
-extern inline int time_after(unsigned long a, unsigned long b)
-{
-	return((long)((a) - (b)) > 0L);
-}
+#define time_after_eq(a,b)	((long)(a) - (long)(b) >= 0)
+#define time_before_eq(a,b)	time_after_eq(b,a)
 
 #endif

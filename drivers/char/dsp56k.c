@@ -63,8 +63,7 @@
 #define wait_some(n) \
 { \
 	current->state = TASK_INTERRUPTIBLE; \
-	current->timeout = jiffies + n; \
-	schedule(); \
+	schedule_timeout(n); \
 }
 
 #define handshake(count, maxio, timeout, ENABLE, f) \

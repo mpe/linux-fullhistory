@@ -712,6 +712,7 @@ sys_rt_sigtimedwait(const sigset_t *uthese, siginfo_t *uinfo,
 	sigset_t these;
 	struct timespec ts;
 	siginfo_t info;
+	long timeout = 0;
 
 	/* XXX: Don't preclude handling different sized sigset_t's.  */
 	if (sigsetsize != sizeof(sigset_t))
@@ -738,22 +739,18 @@ sys_rt_sigtimedwait(const sigset_t *uthese, siginfo_t *uinfo,
 	if (!sig) {
 		/* None ready -- temporarily unblock those we're interested
 		   in so that we'll be awakened when they arrive.  */
-		unsigned long expire;
 		sigset_t oldblocked = current->blocked;
 		sigandsets(&current->blocked, &current->blocked, &these);
 		recalc_sigpending(current);
 		spin_unlock_irq(&current->sigmask_lock);
 
-		expire = ~0UL;
-		if (uts) {
-			expire = (timespec_to_jiffies(&ts)
-				  + (ts.tv_sec || ts.tv_nsec));
-			expire += jiffies;
-		}
-		current->timeout = expire;
+		timeout = MAX_SCHEDULE_TIMEOUT;
+		if (uts)
+			timeout = (timespec_to_jiffies(&ts)
+				   + (ts.tv_sec || ts.tv_nsec));
 
 		current->state = TASK_INTERRUPTIBLE;
-		schedule();
+		timeout = schedule_timeout(timeout);
 
 		spin_lock_irq(&current->sigmask_lock);
 		sig = dequeue_signal(&these, &info);
@@ -770,10 +767,8 @@ sys_rt_sigtimedwait(const sigset_t *uthese, siginfo_t *uinfo,
 		}
 	} else {
 		ret = -EAGAIN;
-		if (current->timeout != 0) {
-			current->timeout = 0;
+		if (timeout)
 			ret = -EINTR;
-		}
 	}
 
 	return ret;

@@ -268,12 +268,10 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
 
 	/*
-	 * If we failed to find anything, we'll return NULL, but we'll
-	 * wake up kswapd _now_ and even yield to it if we can..
-	 * This way we'll at least make some forward progress
-	 * over time.
+	 * If we can schedule, do so, and make sure to yield.
+	 * We may be a real-time process, and if kswapd is
+	 * waiting for us we need to allow it to run a bit.
 	 */
-	wakeup_kswapd();
 	if (gfp_mask & __GFP_WAIT) {
 		current->policy |= SCHED_YIELD;
 		schedule();

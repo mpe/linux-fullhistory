@@ -25,6 +25,7 @@ extern int sysctl_core_destroy_delay;
 extern int sysctl_optmem_max;
 
 ctl_table core_table[] = {
+#ifdef CONFIG_NET
 	{NET_CORE_WMEM_MAX, "wmem_max",
 	 &sysctl_wmem_max, sizeof(int), 0644, NULL,
 	 &proc_dointvec},
@@ -54,6 +55,7 @@ ctl_table core_table[] = {
 	{NET_CORE_OPTMEM_MAX, "optmem_max",
 	 &sysctl_optmem_max, sizeof(int), 0644, NULL,
 	 &proc_dointvec},
+#endif
 	{ 0 }
 };
 #endif

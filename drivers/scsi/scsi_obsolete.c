@@ -607,8 +607,10 @@ void scsi_old_done (Scsi_Cmnd * SCpnt)
 	if ((++SCpnt->retries) < SCpnt->allowed)
 	{
 	    if ((SCpnt->retries >= (SCpnt->allowed >> 1))
-		&& !(SCpnt->host->last_reset > 0 &&
-		     jiffies < SCpnt->host->last_reset + MIN_RESET_PERIOD)
+		/* FIXME: last_reset == 0 is allowed
+                 *  && !(SCpnt->host->last_reset > 0 */ &&
+		     time_before(jiffies, SCpnt->host->last_reset
+                                 + MIN_RESET_PERIOD)
 		&& !(SCpnt->flags & WAS_RESET))
 	    {
 		printk("scsi%d channel %d : resetting for second half of retries.\n",
@@ -954,8 +956,8 @@ static int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 		host->last_reset = jiffies;
 	        SCpnt->flags |= (WAS_RESET | IS_RESETTING);
 		temp = host->hostt->reset(SCpnt, reset_flags);
-		if ((host->last_reset < jiffies) ||
-		    (host->last_reset > (jiffies + 20 * HZ)))
+		if (time_before(host->last_reset, jiffies) ||
+		    (time_after(host->last_reset, jiffies + 20 * HZ)))
 		  host->last_reset = jiffies;
 		if (!host->block) host->host_busy--;
 	    }
@@ -1070,7 +1072,7 @@ int update_timeout(Scsi_Cmnd * SCset, int timeout)
    * timers for timeout.
    */
 
-  if( SCset->eh_timeout.expires == 0 )
+  if( !timer_pending(&SCset->eh_timeout) )
     {
       rtn = 0;
     }

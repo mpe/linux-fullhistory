@@ -17,7 +17,10 @@
       written by Dmitry Gorodchanin. The specialix IO8+ card
       programming information was obtained from the CL-CD1865 Data
       Book, and Specialix document number 6200059: IO8+ Hardware
-      Functional Specification.
+      Functional Specification, augmented by document number 6200088:
+      Merak Hardware Functional Specification. (IO8+/PCI is also 
+      called Merak)
+
 
       This program is free software; you can redistribute it and/or
       modify it under the terms of the GNU General Public License as
@@ -67,6 +70,9 @@ haven't the foggiest why. My Specialix card is now at 0x180.  My
 other computer runs just fine with the Specialix card at 0x100....
 The card occupies 4 addresses, but actually only two are really used.
 
+The PCI version doesn't have any dip switches. The BIOS assigns
+an IO address. 
+
 The driver now still autoprobes at 0x100, 0x180, 0x250 and 0x260.  If
 that causes trouble for you, please report that. I'll remove
 autoprobing then.
@@ -74,6 +80,9 @@ autoprobing then.
 The driver will tell the card what IRQ to use, so you don't have to
 change any jumpers to change the IRQ. Just use a command line
 argument (irq=xx) to the insmod program to set the interrupt.
+
+The BIOS assigns the IRQ on the PCI version. You have no say in what
+IRQ to use in that case. 
 
 If your specialix cards are not at the default locations, you can use
 the kernel command line argument "specialix=io0,irq0,io1,irq1...".
@@ -99,6 +108,32 @@ to the command line. This would become
 
 in your /etc/lilo.conf file if you use lilo. 
 
+The Specialix driver is slightly odd: It allows you to have the second
+or third card detected without having a first card. This has
+advantages and disadvantages. A slot that isn't filled by an ISA card,
+might be filled if a PCI card is detected. Thus if you have an ISA
+card at 0x250 and a PCI card, you would get:
+
+sx0: specialix IO8+ Board at 0x100 not found.
+sx1: specialix IO8+ Board at 0x180 not found.
+sx2: specialix IO8+ board detected at 0x250, IRQ 12, CD1865 Rev. B.
+sx3: specialix IO8+ Board at 0x260 not found.
+sx0: specialix IO8+ board detected at 0xd800, IRQ 9, CD1865 Rev. B.
+
+This would happen if you don't give any probe hints to the driver. 
+If you would specify:
+
+   specialix=0x250,11
+
+you'd get the following messages:
+
+sx0: specialix IO8+ board detected at 0x250, IRQ 11, CD1865 Rev. B.
+sx1: specialix IO8+ board detected at 0xd800, IRQ 9, CD1865 Rev. B.
+
+ISA probing is aborted after the IO address you gave is exhausted, and
+the PCI card is now detected as the second card. The ISA card is now
+also forced to IRQ11....
+
 
 Baud rates
 ==========
@@ -118,19 +153,25 @@ limit to the number of -=bits=- per second that the chip can handle.)
 If you near the "limit" you will first start to see a graceful
 degradation in that the chip cannot keep the transmitter busy at all
 times. However with a central clock this slow, you can also get it to
-miss incoming characters.
+miss incoming characters. The driver will print a warning message when
+you are outside the official specs. The messages usually show up in
+the file /var/log/messages .
 
 The specialix card cannot reliably do 115k2. If you use it, you have
 to do "extensive testing" (*) to verify if it actually works.
 
 When "mgetty" communicates with my modem at 115k2 it reports:
 got: +++[0d]ATQ0V1H0[0d][0d][8a]O[cb][0d][8a]
-                            ^^^^ ^^^^ ^^^^ 
+                            ^^^^ ^^^^    ^^^^ 
 
 The three characters that have the "^^^" under them have suffered a
 bit error in the highest bit. In conclusion: I've tested it, and found
 that it simply DOESN'T work for me. I also suspect that this is also
 caused by the baud rate being just a little bit out of tune. 
+
+I upgraded the crystal to 66Mhz on one of my Specialix cards. Works
+great! Contact me for details. (Voids warranty, requires a steady hand
+and more such restrictions....)
 
 
 (*) Cirrus logic CD1864 databook, page 40.
@@ -248,7 +289,7 @@ for this.
 Ports and devices
 =================
 
-Port 0 is the one furthest from the ISA connector.
+Port 0 is the one furthest from the card-edge connector.
 
 Devices:
 
@@ -265,10 +306,20 @@ do
 done
 echo ""
 
+If your system doesn't come with these devices preinstalled, bug your
+linux-vendor about this. They have had ample time to get this
+implemented by now.
 
 You cannot have more than 4 boards in one computer. The card only
 supports 4 different interrupts. If you really want this, contact me
 about this and I'll give you a few tips (requires soldering iron)....
+
+If you have enough PCI slots, you can probably use more than 4 PCI
+versions of the card though.... 
+
+The PCI version of the card cannot adhere to the mechanical part of
+the PCI spec because the 8 serial connectors are simply too large. If
+it doesn't fit in your computer, bring back the card.
 
 
 ------------------------------------------------------------------------

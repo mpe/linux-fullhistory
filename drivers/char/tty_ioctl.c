@@ -40,7 +40,7 @@
 #define TERMIOS_WAIT	2
 #define TERMIOS_TERMIO	4
 
-void tty_wait_until_sent(struct tty_struct * tty, int timeout)
+void tty_wait_until_sent(struct tty_struct * tty, long timeout)
 {
 	struct wait_queue wait = { current, NULL };
 
@@ -53,10 +53,8 @@ void tty_wait_until_sent(struct tty_struct * tty, int timeout)
 		return;
 	add_wait_queue(&tty->write_wait, &wait);
 	current->counter = 0;	/* make us low-priority */
-	if (timeout)
-		current->timeout = timeout + jiffies;
-	else
-		current->timeout = (unsigned) -1;
+	if (!timeout)
+		timeout = MAX_SCHEDULE_TIMEOUT;
 	do {
 #ifdef TTY_DEBUG_WAIT_UNTIL_SENT
 		printk("waiting %s...(%d)\n", tty_name(tty, buf),
@@ -67,15 +65,10 @@ void tty_wait_until_sent(struct tty_struct * tty, int timeout)
 			goto stop_waiting;
 		if (!tty->driver.chars_in_buffer(tty))
 			break;
-		schedule();
-	} while (current->timeout);
-	if (tty->driver.wait_until_sent) {
-		if (current->timeout == -1)
-			timeout = 0;
-		else
-			timeout = current->timeout - jiffies;
+		timeout = schedule_timeout(timeout);
+	} while (timeout);
+	if (tty->driver.wait_until_sent)
 		tty->driver.wait_until_sent(tty, timeout);
-	}
 stop_waiting:
 	current->state = TASK_RUNNING;
 	remove_wait_queue(&tty->write_wait, &wait);

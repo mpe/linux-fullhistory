@@ -58,6 +58,7 @@ static unsigned long fat_file_mmap_nopage(
 		}
 		filp.f_reada = 0;
 		filp.f_pos = pos;
+		filp.f_dentry=area->vm_file->f_dentry;
 		need_read = PAGE_SIZE - clear;
 		{
 			mm_segment_t cur_fs = get_fs();

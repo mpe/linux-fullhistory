@@ -1295,8 +1295,7 @@ static
 void cdrom_sleep (int time)
 {
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + time;
-	schedule ();
+	schedule_timeout(time);
 }
 
 static

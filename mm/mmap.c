@@ -93,7 +93,21 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 	struct mm_struct *mm = current->mm;
 
 	down(&mm->mmap_sem);
+
+	/*
+	 * This lock-kernel is one of the main contention points for
+	 * certain normal loads.  And it really should not be here: almost
+	 * everything in brk()/mmap()/munmap() is protected sufficiently by
+	 * the mmap semaphore that we got above.
+	 *
+	 * We should move this into the few things that really want the
+	 * lock, namely anything that actually touches a file descriptor
+	 * etc.  We can do all the normal anonymous mapping cases without
+	 * ever getting the lock at all - the actual memory management
+	 * code is already completely thread-safe.
+	 */
 	lock_kernel();
+
 	if (brk < mm->end_code)
 		goto out;
 	newbrk = PAGE_ALIGN(brk);

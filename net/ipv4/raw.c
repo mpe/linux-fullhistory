@@ -400,7 +400,7 @@ done:
 	return err<0 ? err : len;
 }
 
-static void raw_close(struct sock *sk, unsigned long timeout)
+static void raw_close(struct sock *sk, long timeout)
 {
 	/* Observation: when raw_close is called, processes have
 	   no access to socket anymore. But net still has.

@@ -786,7 +786,7 @@ int ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
 		 * superblocks is turned on, then not all groups have
 		 * this.
 		 */
-		if (le32_to_cpu(sb->u.ext2_sb.s_feature_ro_compat) &
+		if (sb->u.ext2_sb.s_feature_ro_compat &
 		    EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER) {
 			ngroups = 0;
 			for (i=0 ; i < sb->u.ext2_sb.s_groups_count; i++)

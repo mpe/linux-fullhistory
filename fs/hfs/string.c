@@ -81,13 +81,13 @@ static unsigned char casefold[256] = {
 /*
  * Hash a string to an integer in a case-independent way
  */
-unsigned long hfs_strhash(const struct hfs_name *cname)
+unsigned int hfs_strhash(const unsigned char *name, unsigned int len)
 {
 	unsigned long hash = init_name_hash();
-	unsigned int i;
-	for (i = 0; i < cname->Len; i++) {
-	        hash = partial_name_hash(caseorder[cname->Name[i]], hash);
-	}
+
+	while (len--)
+	        hash = partial_name_hash(caseorder[*name++],
+					 hash);
 	return end_name_hash(hash);
 }
 
@@ -98,45 +98,34 @@ unsigned long hfs_strhash(const struct hfs_name *cname)
  * Equivalent to ARDI's call:
  *	ROMlib_RelString(s1+1, s2+1, true, false, (s1[0]<<16) | s2[0])
  */
-int hfs_strcmp(const struct hfs_name *s1, const struct hfs_name *s2)
+int hfs_strcmp(const unsigned char *s1, unsigned int len1,
+	       const unsigned char *s2, unsigned int len2)
 {
 	int len, tmp;
-	const unsigned char *p1, *p2;
 
-	if (!s1 || !s2) {
-		return 0;
-	}
-
-	len = (s1->Len > s2->Len) ? s2->Len : s1->Len;
-	p1 = s1->Name;
-	p2 = s2->Name;
+	len = (len1 > len2) ? len2 : len1;
 
 	while (len--) {
-		if ((tmp = (int)caseorder[*(p1++)]-(int)caseorder[*(p2++)])) {
+		if ((tmp = (int)caseorder[*(s1++)] -
+		     (int)caseorder[*(s2++)])) {
 			return tmp;
 		}
 	}
-	return s1->Len - s2->Len;
+	return len1 - len2;
 }
 
 /*
  * Test for equality of two strings in the HFS filename character ordering.
  */
-int hfs_streq(const struct hfs_name *s1, const struct hfs_name *s2)
+int hfs_streq(const unsigned char *s1, unsigned int len1,
+	      const unsigned char *s2, unsigned int len2)
 {
-	int len;
-	const unsigned char *p1, *p2;
-
-	if (!s1 || !s2 || (s1->Len != s2->Len)) {
+	if (len1 != len2) {
 		return 0;
 	}
 
-	len = s1->Len;
-	p1 = s1->Name;
-	p2 = s2->Name;
-
-	while (len--) {
-		if (caseorder[*(p1++)] != caseorder[*(p2++)]) {
+	while (len1--) {
+		if (caseorder[*(s1++)] != caseorder[*(s2++)]) {
 			return 0;
 		}
 	}

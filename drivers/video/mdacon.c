@@ -3,6 +3,8 @@
  *
  *	(c) 1998 Andrew Apted <ajapted@netspace.net.au>
  *
+ *      including portions (c) 1995-1998 Patrick Caulfield.
+ *
  *  This file is based on the VGA console driver (vgacon.c):
  *	
  *	Created 28 Sep 1997 by Geert Uytterhoeven
@@ -34,6 +36,7 @@
 #include <linux/vt_buffer.h>
 #include <linux/selection.h>
 #include <linux/ioport.h>
+#include <linux/delay.h>
 #include <linux/init.h>
 
 #include <asm/io.h>
@@ -50,6 +53,8 @@ static unsigned int	mda_num_lines;		/* Number of text lines */
 static unsigned int	mda_index_port;		/* Register select port */
 static unsigned int	mda_value_port;		/* Register value port */
 static unsigned int	mda_mode_port;		/* Mode control port */
+static unsigned int	mda_status_port;	/* Status and Config port */
+static unsigned int	mda_gfx_port;		/* Graphics control port */
 
 /* current hardware state */
 
@@ -58,24 +63,48 @@ static int	mda_cursor_loc=-1;
 static int	mda_cursor_size_from=-1;
 static int	mda_cursor_size_to=-1;
 
+static enum { TYPE_MDA, TYPE_HERC, TYPE_HERCPLUS, TYPE_HERCCOLOR } mda_type;
+static char *mda_type_name;
+
 /* console information */
 
-static int	mda_first_vc = 12;
-static int	mda_last_vc  = 15;
+static int	mda_first_vc = 13;
+static int	mda_last_vc  = 16;
 
 static struct vc_data	*mda_display_fg = NULL;
 
 #ifdef MODULE_PARM
-MODULE_PARM(mda_first_vc, "0-255i");
-MODULE_PARM(mda_last_vc,  "0-255i");
+MODULE_PARM(mda_first_vc, "1-255i");
+MODULE_PARM(mda_last_vc,  "1-255i");
 #endif
+
+
+/* MDA register values
+ */
+
+#define MDA_CURSOR_BLINKING	0x00
+#define MDA_CURSOR_OFF		0x20
+#define MDA_CURSOR_SLOWBLINK	0x60
+
+#define MDA_MODE_GRAPHICS	0x02
+#define MDA_MODE_VIDEO_EN	0x08
+#define MDA_MODE_BLINK_EN	0x20
+#define MDA_MODE_GFX_PAGE1	0x80
+
+#define MDA_STATUS_HSYNC	0x01
+#define MDA_STATUS_VSYNC	0x80
+#define MDA_STATUS_VIDEO	0x08
+
+#define MDA_CONFIG_COL132	0x08
+#define MDA_GFX_MODE_EN		0x01
+#define MDA_GFX_PAGE_EN		0x02
 
 
 /*
  * MDA could easily be classified as "pre-dinosaur hardware".
  */
 
-static void write_mda_b(unsigned char reg, unsigned int val)
+static void write_mda_b(unsigned int val, unsigned char reg)
 {
 	unsigned long flags;
 
@@ -87,16 +116,32 @@ static void write_mda_b(unsigned char reg, unsigned int val)
 	restore_flags(flags);
 }
 
-static void write_mda_w(unsigned char reg, unsigned int val)
+static void write_mda_w(unsigned int val, unsigned char reg)
 {
 	unsigned long flags;
 
 	save_flags(flags); cli();
 
-	outb_p(reg,   mda_index_port); outb_p(val>>8,   mda_value_port);
-	outb_p(reg+1, mda_index_port); outb_p(val&0xff, mda_value_port);
+	outb_p(reg,   mda_index_port); outb_p(val >> 8,   mda_value_port);
+	outb_p(reg+1, mda_index_port); outb_p(val & 0xff, mda_value_port);
 
 	restore_flags(flags);
+}
+
+static int test_mda_b(unsigned char val, unsigned char reg)
+{
+	unsigned long flags;
+
+	save_flags(flags); cli();
+
+	outb_p(reg, mda_index_port); 
+	outb  (val, mda_value_port);
+
+	udelay(20); val = (inb_p(mda_value_port) == val);
+
+	restore_flags(flags);
+
+	return val;
 }
 
 static inline void mda_set_origin(unsigned int location)
@@ -104,7 +149,7 @@ static inline void mda_set_origin(unsigned int location)
 	if (mda_origin_loc == location)
 		return;
 
-	write_mda_w(0x0c, location >> 1);
+	write_mda_w(location >> 1, 0x0c);
 
 	mda_origin_loc = location;
 }
@@ -114,7 +159,7 @@ static inline void mda_set_cursor(unsigned int location)
 	if (mda_cursor_loc == location)
 		return;
 
-	write_mda_w(0x0e, location >> 1);
+	write_mda_w(location >> 1, 0x0e);
 
 	mda_cursor_loc = location;
 }
@@ -125,10 +170,10 @@ static inline void mda_set_cursor_size(int from, int to)
 		return;
 	
 	if (from > to) {
-		write_mda_b(0x0a, 0x20);	/* disable cursor */
+		write_mda_b(MDA_CURSOR_OFF, 0x0a);	/* disable cursor */
 	} else {
-		write_mda_b(0x0a, from);	/* cursor start */
-		write_mda_b(0x0b, to);		/* cursor end */
+		write_mda_b(from, 0x0a);	/* cursor start */
+		write_mda_b(to,   0x0b);	/* cursor end */
 	}
 
 	mda_cursor_size_from = from;
@@ -144,14 +189,125 @@ __initfunc(void mdacon_setup(char *str, int *ints))
 	if (ints[0] < 2)
 		return;
 
-	if (ints[1] < 0 || ints[1] >= MAX_NR_CONSOLES || 
-	    ints[2] < 0 || ints[2] >= MAX_NR_CONSOLES)
+	if (ints[1] < 1 || ints[1] > MAX_NR_CONSOLES || 
+	    ints[2] < 1 || ints[2] > MAX_NR_CONSOLES)
 		return;
 
-	mda_first_vc = ints[1];
-	mda_last_vc  = ints[2];
+	mda_first_vc = ints[1]-1;
+	mda_last_vc  = ints[2]-1;
 }
 #endif
+
+#ifdef MODULE
+static int mda_detect(void)
+#else
+__initfunc(static int mda_detect(void))
+#endif
+{
+	int count=0;
+	u16 *p, p_save;
+	u16 *q, q_save;
+
+	/* do a memory check */
+
+	p = (u16 *) mda_vram_base;
+	q = (u16 *) (mda_vram_base + 0x01000);
+
+	p_save = scr_readw(p); q_save = scr_readw(q);
+
+	scr_writew(0xAA55, p); if (scr_readw(p) == 0xAA55) count++;
+	scr_writew(0x55AA, p); if (scr_readw(p) == 0x55AA) count++;
+	scr_writew(p_save, p);
+
+	if (count != 2) {
+		return 0;
+	}
+
+	/* check if we have 4K or 8K */
+
+	scr_writew(0xA55A, q); scr_writew(0x0000, p);
+	if (scr_readw(q) == 0xA55A) count++;
+	
+	scr_writew(0x5AA5, q); scr_writew(0x0000, p);
+	if (scr_readw(q) == 0x5AA5) count++;
+
+	scr_writew(p_save, p); scr_writew(q_save, q);
+	
+	if (count == 4) {
+		mda_vram_len = 0x02000;
+	}
+	
+	/* Ok, there is definitely a card registering at the correct
+	 * memory location, so now we do an I/O port test.
+	 */
+	
+	if (! test_mda_b(0x66, 0x0f)) {	    /* cursor low register */
+		return 0;
+	}
+	if (! test_mda_b(0x99, 0x0f)) {     /* cursor low register */
+		return 0;
+	}
+
+	/* See if the card is a Hercules, by checking whether the vsync
+	 * bit of the status register is changing.  This test lasts for
+	 * approximately 1/10th of a second.
+	 */
+	
+	p_save = q_save = inb_p(mda_status_port) & MDA_STATUS_VSYNC;
+
+	for (count=0; count < 50000 && p_save == q_save; count++) {
+		q_save = inb(mda_status_port) & MDA_STATUS_VSYNC;
+		udelay(2);
+	}
+
+	if (p_save != q_save) {
+		switch (inb_p(mda_status_port) & 0x70) {
+			case 0x10:
+				mda_type = TYPE_HERCPLUS;
+				mda_type_name = "HerculesPlus";
+				break;
+			case 0x50:
+				mda_type = TYPE_HERCCOLOR;
+				mda_type_name = "HerculesColor";
+				break;
+			default:
+				mda_type = TYPE_HERC;
+				mda_type_name = "Hercules";
+				break;
+		}
+	}
+
+	return 1;
+}
+
+#ifdef MODULE
+static void mda_initialize(void)
+#else
+__initfunc(static void mda_initialize(void))
+#endif
+{
+	write_mda_b(97, 0x00);		/* horizontal total */
+	write_mda_b(80, 0x01);		/* horizontal displayed */
+	write_mda_b(82, 0x02);		/* horizontal sync pos */
+	write_mda_b(15, 0x03);		/* horizontal sync width */
+
+	write_mda_b(25, 0x04);		/* vertical total */
+	write_mda_b(6,  0x05);		/* vertical total adjust */
+	write_mda_b(25, 0x06);		/* vertical displayed */
+	write_mda_b(25, 0x07);		/* vertical sync pos */
+
+	write_mda_b(2,  0x08);		/* interlace mode */
+	write_mda_b(13, 0x09);		/* maximum scanline */
+	write_mda_b(12, 0x0a);		/* cursor start */
+	write_mda_b(13, 0x0b);		/* cursor end */
+
+	write_mda_w(0x0000, 0x0c);	/* start address */
+	write_mda_w(0x0000, 0x0e);	/* cursor location */
+
+	outb_p(MDA_MODE_VIDEO_EN | MDA_MODE_BLINK_EN, mda_mode_port);
+	outb_p(0x00, mda_status_port);
+	outb_p(0x00, mda_gfx_port);
+}
 
 #ifdef MODULE
 static const char *mdacon_startup(void)
@@ -159,38 +315,32 @@ static const char *mdacon_startup(void)
 __initfunc(static const char *mdacon_startup(void))
 #endif
 {
-	int count=0;
-	u16 saved;
-	u16 *p;
-
 	mda_num_columns = 80;
 	mda_num_lines   = 25;
 
 	mda_vram_base = VGA_MAP_MEM(0xb0000);
 	mda_vram_len  = 0x01000;
 
-	mda_index_port = 0x3b4;
-	mda_value_port = 0x3b5;
-	mda_mode_port  = 0x3b8;
+	mda_index_port  = 0x3b4;
+	mda_value_port  = 0x3b5;
+	mda_mode_port   = 0x3b8;
+	mda_status_port = 0x3ba;
+	mda_gfx_port    = 0x3bf;
 
-	/*  Make sure there is an MDA card present.
-	 *  Are there smarter methods around?
-	 */
+	mda_type = TYPE_MDA;
+	mda_type_name = "MDA";
 
-	p = (u16 *) mda_vram_base;
-	saved = scr_readw(p);
-
-	scr_writew(0xAA55, p); if (scr_readw(p) == 0xAA55) count++;
-	scr_writew(0x55AA, p); if (scr_readw(p) == 0x55AA) count++;
-	scr_writew(saved, p);
-
-	if (count != 2) {
+	if (! mda_detect()) {
 		printk("mdacon: MDA card not detected.");
 		return NULL;
 	}
 
-	printk("mdacon: MDA with %ldK of memory detected.\n",
-		mda_vram_len/1024);
+	if (mda_type != TYPE_MDA) {
+		mda_initialize();
+	}
+
+	printk("mdacon: %s with %ldK of memory detected.\n",
+		mda_type_name, mda_vram_len/1024);
 
 	return "MDA-2";
 }
@@ -347,7 +497,7 @@ static int mdacon_blank(struct vc_data *c, int blank)
 	if (blank) {
 		outb_p(0x00, mda_mode_port);	/* disable video */
 	} else {
-		outb_p(0x28, mda_mode_port);	/* enable video & blinking */
+		outb_p(MDA_MODE_VIDEO_EN | MDA_MODE_BLINK_EN, mda_mode_port);
 	}
 	
 	return 0;
@@ -380,7 +530,7 @@ static void mdacon_cursor(struct vc_data *c, int mode)
 		case CUR_BLOCK:		mda_set_cursor_size(1,  13); break;
 		case CUR_NONE:		mda_set_cursor_size(14, 13); break;
 		default:		mda_set_cursor_size(12, 13); break;
-    }
+	}
 }
 
 static int mdacon_scroll(struct vc_data *c, int t, int b, int dir, int lines)

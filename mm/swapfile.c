@@ -559,8 +559,17 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 			if (p->swap_device == swap_info[i].swap_device)
 				goto bad_swap;
 		}
-	} else if (!S_ISREG(swap_dentry->d_inode->i_mode))
+	} else if (S_ISREG(swap_dentry->d_inode->i_mode)) {
+		error = -EBUSY;
+		for (i = 0 ; i < nr_swapfiles ; i++) {
+			if (i == type)
+				continue;
+			if (p->swap_file == swap_info[i].swap_file)
+				goto bad_swap;
+		}
+	} else
 		goto bad_swap;
+
 	swap_header = (void *) __get_free_page(GFP_USER);
 	if (!swap_header) {
 		printk("Unable to start swapping: out of memory :-)\n");

@@ -61,29 +61,23 @@ hfs_buffer hfs_buffer_get(hfs_sysmdb sys_mdb, int block, int read) {
 /* hfs_strhash now uses the same hashing function as the dcache. */
 static int hfs_hash_dentry(struct dentry *dentry, struct qstr *this)
 {
-        struct hfs_name cname;
-	
-	if ((cname.Len = this->len) > HFS_NAMELEN)
+	if (this->len > HFS_NAMELEN)
 	        return 0;
 	
-	strncpy(cname.Name, this->name, this->len);
-	this->hash = hfs_strhash(&cname);
+	this->hash = hfs_strhash(this->name, this->len);
 	return 0;
 }
 
+/* return 1 on failure and 0 on success */
 static int hfs_compare_dentry(struct dentry *dentry, struct qstr *a, 
 			      struct qstr *b)
 {
-	struct hfs_name s1, s2;
-
 	if (a->len != b->len) return 1;
 
-	if ((s1.Len = s2.Len = a->len) > HFS_NAMELEN)
+	if (a->len > HFS_NAMELEN)
 	  return 1;
 
-	strncpy(s1.Name, a->name, s1.Len);
-	strncpy(s2.Name, b->name, s2.Len);
-	return hfs_streq(&s1, &s2);
+	return !hfs_streq(a->name, a->len, b->name, b->len);
 }
 
 static void hfs_dentry_iput(struct dentry *dentry, struct inode *inode)
@@ -91,6 +85,5 @@ static void hfs_dentry_iput(struct dentry *dentry, struct inode *inode)
 	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
 
 	entry->sys_entry[HFS_ITYPE_TO_INT(HFS_ITYPE(inode->i_ino))] = NULL;
-        hfs_cat_put(entry);
 	iput(inode);
 }

@@ -554,8 +554,7 @@ static int msp3400c_thread(void *data)
 			UNLOCK_I2C_BUS(msp->bus);
 
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + HZ/25;
-			schedule();
+			schedule_timeout(HZ/25);
 			if (signal_pending(current))
 				goto done;
 			if (msp->restart) {
@@ -589,8 +588,7 @@ static int msp3400c_thread(void *data)
 			UNLOCK_I2C_BUS(msp->bus);
 
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + HZ/25;
-			schedule();
+			schedule_timeout(HZ/25);
 			if (signal_pending(current))
 				goto done;
 			if (msp->restart) {
@@ -715,8 +713,7 @@ static int msp3410d_thread(void *data)
 
 		/* wait 1 sec */
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + HZ;
-		schedule();
+		schedule_timeout(HZ);
 		if (signal_pending(current))
 			goto done;
 		if (msp->restart) {

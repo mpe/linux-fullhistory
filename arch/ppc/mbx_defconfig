@@ -171,7 +171,6 @@ CONFIG_LOCKD=y
 # CONFIG_SERIAL_NONSTANDARD is not set
 # CONFIG_MOUSE is not set
 # CONFIG_QIC02_TAPE is not set
-# CONFIG_APM is not set
 # CONFIG_WATCHDOG is not set
 # CONFIG_RTC is not set
 # CONFIG_VIDEO_DEV is not set

@@ -2147,8 +2147,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	if (info->blocked_open) {
 		if (info->close_delay) {
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + info->close_delay;
-			schedule();
+			schedule_timeout(info->close_delay);
 		}
 		wake_up_interruptible(&info->open_wait);
 	}
@@ -2182,8 +2181,7 @@ static void rs_wait_until_sent(struct tty_struct *tty, int timeout)
 		(serial_in(info, UART_ESI_STAT2) != 0xff)) {
 		current->state = TASK_INTERRUPTIBLE;
 		current->counter = 0;
-		current->timeout = jiffies + char_time;
-		schedule();
+		schedule_timeout(char_time);
 
 		if (signal_pending(current))
 			break;

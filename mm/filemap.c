@@ -314,7 +314,7 @@ static unsigned long try_to_read_ahead(struct file * file,
 	offset &= PAGE_MASK;
 	switch (page_cache) {
 	case 0:
-		page_cache = __get_free_page(GFP_KERNEL);
+		page_cache = __get_free_page(GFP_USER);
 		if (!page_cache)
 			break;
 	default:
@@ -736,7 +736,7 @@ no_cached_page:
 		 * page..
 		 */
 		if (!page_cache) {
-			page_cache = __get_free_page(GFP_KERNEL);
+			page_cache = __get_free_page(GFP_USER);
 			/*
 			 * That could have slept, so go around to the
 			 * very beginning..
@@ -1002,7 +1002,7 @@ found_page:
 	 * extra page -- better to overlap the allocation with the I/O.
 	 */
 	if (no_share && !new_page) {
-		new_page = __get_free_page(GFP_KERNEL);
+		new_page = __get_free_page(GFP_USER);
 		if (!new_page)
 			goto failure;
 	}
@@ -1039,7 +1039,7 @@ success:
 	return new_page;
 
 no_cached_page:
-	new_page = __get_free_page(GFP_KERNEL);
+	new_page = __get_free_page(GFP_USER);
 	if (!new_page)
 		goto no_page;
 
@@ -1569,7 +1569,7 @@ generic_file_write(struct file *file, const char *buf,
 		hash = page_hash(inode, pgpos);
 		if (!(page = __find_page(inode, pgpos, *hash))) {
 			if (!page_cache) {
-				page_cache = __get_free_page(GFP_KERNEL);
+				page_cache = __get_free_page(GFP_USER);
 				if (page_cache)
 					continue;
 				status = -ENOMEM;

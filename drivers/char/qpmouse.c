@@ -245,8 +245,7 @@ static int poll_qp_status(void)
 		if (inb_p(qp_status)&(QP_RX_FULL))
 			inb_p(qp_data);
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + (5*HZ + 99) / 100;
-		schedule();
+		schedule_timeout((5*HZ + 99) / 100);
 		retries++;
 	}
 	return !(retries==MAX_RETRIES);

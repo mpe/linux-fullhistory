@@ -1820,9 +1820,8 @@ isdn_tty_close(struct tty_struct *tty, struct file *filp)
 		timeout = jiffies + HZ;
 		while (!(info->lsr & UART_LSR_TEMT)) {
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + 20;
-			schedule();
-			if (jiffies > timeout)
+			schedule_timeout(20);
+			if (time_after(jiffies,timeout))
 				break;
 		}
 	}
@@ -1837,8 +1836,7 @@ isdn_tty_close(struct tty_struct *tty, struct file *filp)
 	tty->closing = 0;
 	if (info->blocked_open) {
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + 50;
-		schedule();
+		schedule_timeout(50);
 		wake_up_interruptible(&info->open_wait);
 	}
 	info->flags &= ~(ISDN_ASYNC_NORMAL_ACTIVE | ISDN_ASYNC_CALLOUT_ACTIVE |

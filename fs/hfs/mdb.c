@@ -99,24 +99,30 @@ struct hfs_mdb *hfs_mdb_get(hfs_sysmdb sys_mdb, int readonly,
 	memset(mdb, 0, sizeof(*mdb));
 	mdb->magic = HFS_MDB_MAGIC;
 	mdb->sys_mdb = sys_mdb;
+	INIT_LIST_HEAD(&mdb->entry_dirty);  
 
 	/* See if this is an HFS filesystem */
 	buf = hfs_buffer_get(sys_mdb, part_start + HFS_MDB_BLK, 1);
 	if (!hfs_buffer_ok(buf)) {
 		hfs_warn("hfs_fs: Unable to read superblock\n");
+		HFS_DELETE(mdb);
 		goto bail2;
 	}
+
 	raw = (struct raw_mdb *)hfs_buffer_data(buf);
 	if (hfs_get_ns(raw->drSigWord) != htons(HFS_SUPER_MAGIC)) {
 		hfs_buffer_put(buf);
+		HFS_DELETE(mdb);
 		goto bail2;
 	}
 	mdb->buf = buf;
-
+	
 	bs = hfs_get_hl(raw->drAlBlkSiz);
 	if (!bs || bs > HFS_USHRT_MAX || (bs & (HFS_SECTOR_SIZE-1))) {
 		hfs_warn("hfs_fs: bad allocation block size %d != 512\n", bs);
-		goto bail1;
+		hfs_buffer_put(buf);
+		HFS_DELETE(mdb);
+		goto bail2;
 	}
 	mdb->alloc_blksz = bs >> HFS_SECTOR_SIZE_BITS;
 
@@ -127,7 +133,7 @@ struct hfs_mdb *hfs_mdb_get(hfs_sysmdb sys_mdb, int readonly,
 	mdb->backup_date = hfs_get_hl(raw->drVolBkUp);
 	mdb->clumpablks  = (hfs_get_hl(raw->drClpSiz) / mdb->alloc_blksz)
 						 >> HFS_SECTOR_SIZE_BITS;
-	memcpy(mdb->vname, raw->drVN, 28);
+	memcpy(mdb->vname, raw->drVN, sizeof(raw->drVN));
 
 	/* These parameters are read from and written to the MDB */
 	mdb->modify_date  = hfs_get_nl(raw->drLsMod);
@@ -139,8 +145,8 @@ struct hfs_mdb *hfs_mdb_get(hfs_sysmdb sys_mdb, int readonly,
 	mdb->root_dirs    = hfs_get_hs(raw->drNmRtDirs);
 	mdb->file_count   = hfs_get_hl(raw->drFilCnt);
 	mdb->dir_count    = hfs_get_hl(raw->drDirCnt);
-	
-	/* TRY to get the alternate (backup) MDB */
+
+	/* TRY to get the alternate (backup) MDB. */
 	lcv = mdb->fs_start + mdb->fs_ablocks * mdb->alloc_blksz;
 	limit = lcv + mdb->alloc_blksz;
 	for (; lcv < limit; ++lcv) {
@@ -148,20 +154,21 @@ struct hfs_mdb *hfs_mdb_get(hfs_sysmdb sys_mdb, int readonly,
 		if (hfs_buffer_ok(buf)) {
 			struct raw_mdb *tmp =
 				(struct raw_mdb *)hfs_buffer_data(buf);
-
+			
 			if (hfs_get_ns(tmp->drSigWord) ==
-						htons(HFS_SUPER_MAGIC)) {
+			    htons(HFS_SUPER_MAGIC)) {
 				mdb->alt_buf = buf;
 				break;
 			}
-			hfs_buffer_put(buf);
 		}
+		hfs_buffer_put(buf);
 	}
+	
 	if (mdb->alt_buf == NULL) {
 		hfs_warn("hfs_fs: unable to locate alternate MDB\n");
 		hfs_warn("hfs_fs: continuing without an alternate MDB\n");
 	}
-
+	
 	/* read in the bitmap */
 	block = hfs_get_hs(raw->drVBMSt) + part_start;
 	bmbuf = mdb->bitmap;
@@ -253,23 +260,29 @@ void hfs_mdb_commit(struct hfs_mdb *mdb, int backup)
 	hfs_put_hl(mdb->file_count,    raw->drFilCnt);
 	hfs_put_hl(mdb->dir_count,     raw->drDirCnt);
 
-	/* write MDB to disk */
-	hfs_buffer_dirty(mdb->buf);
-
-       	/* write the backup MDB, not returning until it is written */
+       	/* write the backup MDB, not returning until it is written. 
+         * we only do this when either the catalog or extents overflow
+         * files grow. */
         if (backup && hfs_buffer_ok(mdb->alt_buf)) {
-                memcpy(hfs_buffer_data(mdb->alt_buf),
-		       hfs_buffer_data(mdb->buf), HFS_SECTOR_SIZE);
-                hfs_buffer_dirty(mdb->alt_buf);
-                hfs_buffer_sync(mdb->alt_buf);
+		struct raw_mdb *tmp = (struct raw_mdb *)
+			hfs_buffer_data(mdb->alt_buf);
+		
+		if ((hfs_get_hl(tmp->drCTFlSize) < 
+		     hfs_get_hl(raw->drCTFlSize)) ||
+		    (hfs_get_hl(tmp->drXTFlSize) <
+		     hfs_get_hl(raw->drXTFlSize))) {
+			memcpy(hfs_buffer_data(mdb->alt_buf), 
+			       hfs_buffer_data(mdb->buf), HFS_SECTOR_SIZE); 
+			hfs_buffer_dirty(mdb->alt_buf);
+			hfs_buffer_sync(mdb->alt_buf);
+		}
         }
 }
 
 /*
  * hfs_mdb_put()
  *
- * Release the resources associated with the in-core MDB.
- */
+ * Release the resources associated with the in-core MDB.  */
 void hfs_mdb_put(struct hfs_mdb *mdb, int readonly) {
 	int lcv;
 
@@ -287,7 +300,7 @@ void hfs_mdb_put(struct hfs_mdb *mdb, int readonly) {
 
 	/* update volume attributes */
 	if (!readonly) {
-		struct raw_mdb *raw =
+		struct raw_mdb *raw = 
 				(struct raw_mdb *)hfs_buffer_data(mdb->buf);
 		hfs_put_ns(mdb->attrib, raw->drAtrb);
 		hfs_buffer_dirty(mdb->buf);

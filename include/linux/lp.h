@@ -41,13 +41,10 @@
 #define LP_INIT_CHAR 1000
 
 /* The parallel port specs apparently say that there needs to be
- * a .5usec wait before and after the strobe.  Since there are wildly
- * different computers running linux, I can't come up with a perfect
- * value so if 20 is not good for you use `tunelp /dev/lp? -w ?`.
- * You can also set it to 0 if your printer handle that.
+ * a .5usec wait before and after the strobe.
  */
 
-#define LP_INIT_WAIT 20
+#define LP_INIT_WAIT 1
 
 /* This is the amount of time that the driver waits for the printer to
  * catch up when the printer's buffer appears to be filled.  If you

@@ -64,12 +64,16 @@
 #define HFS_EXT_CNID	3	/* EXTents B-tree */
 #define HFS_CAT_CNID	4	/* CATalog B-tree */
 #define HFS_BAD_CNID	5	/* BAD blocks file */
+#define HFS_ALLOC_CNID  6       /* ALLOCation file (HFS+) */
+#define HFS_START_CNID  7       /* STARTup file (HFS+) */
+#define HFS_ATTR_CNID   8       /* ATTRibutes file (HFS+) */
+#define HFS_EXCH_CNID  15       /* ExchangeFiles temp id */
 
 /* values for hfs_cat_rec.cdrType */
-#define HFS_CDR_DIR	0x01
-#define HFS_CDR_FIL	0x02
-#define HFS_CDR_THD	0x03
-#define HFS_CDR_FTH	0x04
+#define HFS_CDR_DIR    0x01    /* folder (directory) */
+#define HFS_CDR_FIL    0x02    /* file */
+#define HFS_CDR_THD    0x03    /* folder (directory) thread */
+#define HFS_CDR_FTH    0x04    /* file thread */
 
 /* legal values for hfs_ext_key.FkType and hfs_file.fork */
 #define HFS_FK_DATA	0x00
@@ -484,42 +488,43 @@ extern void hfs_mdb_put(struct hfs_mdb *, int);
 extern int hfs_part_find(hfs_sysmdb, int, int, hfs_s32 *, hfs_s32 *);
 
 /* string.c */
-extern unsigned long hfs_strhash(const struct hfs_name *);
-extern int hfs_strcmp(const struct hfs_name *, const struct hfs_name *);
-extern int hfs_streq(const struct hfs_name *, const struct hfs_name *);
+extern unsigned int hfs_strhash(const unsigned char *, unsigned int);
+extern int hfs_strcmp(const unsigned char *, unsigned int, 
+		      const unsigned char *, unsigned int);
+extern int hfs_streq(const unsigned char *, unsigned int, 
+		     const unsigned char *, unsigned int);
 extern void hfs_tolower(unsigned char *, int);
 
-extern __inline__ struct dentry 
-*hfs_lookup_dentry(const char *name, const int len, 
-		   struct dentry *base)
+static __inline__ struct dentry 
+*hfs_lookup_dentry(struct dentry *base, const char *name, const int len)
 {
   struct qstr this;
 
   this.name = name;
   this.len = len;
-  this.hash = full_name_hash(name, len);
+  this.hash = hfs_strhash(name, len);
 
   return d_lookup(base, &this);
 }
 
-/* drop a dentry for one of the special subdirectories */
-extern __inline__ void hfs_drop_special(const struct hfs_name *name,
-					struct dentry *base,
+/* drop a dentry for one of the special directories.
+ * it's in the form of base/name/dentry. */
+static __inline__ void hfs_drop_special(struct dentry *base,
+					const struct hfs_name *name,
 					struct dentry *dentry)
 {
   struct dentry *dparent, *de;
   
-  dparent = hfs_lookup_dentry(name->Name, name->Len, base);
+  dparent = hfs_lookup_dentry(base, name->Name, name->Len);
   if (dparent) {
-    de = hfs_lookup_dentry(dentry->d_name.name, dentry->d_name.len,
-			   dparent);
-    dput(dparent);
-
-    if (de) {
-      if (!de->d_inode)
-	d_drop(de);
-      dput(de);
-    }
+	  de = hfs_lookup_dentry(dparent, dentry->d_name.name, 
+				 dentry->d_name.len);
+	  if (de) {
+		  if (!de->d_inode)
+			  d_drop(de);
+		  dput(de);
+	  }
+	  dput(dparent);
   }
 }
 

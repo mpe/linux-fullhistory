@@ -639,8 +639,7 @@ HISAX_INITFUNC(static int init_card(struct IsdnCardState *cs))
 		sti();
 		current->state = TASK_INTERRUPTIBLE;
 		/* Timeout 10ms */
-		current->timeout = jiffies + (10 * HZ) / 1000;
-		schedule();
+		schedule_timeout((10 * HZ) / 1000);
 		restore_flags(flags);
 		printk(KERN_INFO "%s: IRQ %d count %d\n", CardType[cs->typ],
 			cs->irq, kstat_irqs(cs->irq));

@@ -339,6 +339,7 @@ static void delete_extent(struct hfs_fork *fork, struct hfs_extent *ext)
 	if (error) {
 		hfs_warn("hfs_truncate: error %d deleting an extent.\n", error);
 	}
+
 	HFS_DELETE(ext);
 }
 

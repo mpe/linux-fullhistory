@@ -507,7 +507,6 @@ ppp_tty_read(struct tty_struct *tty, struct file *file, __u8 * buf,
 		if (file->f_flags & O_NONBLOCK)
 			break;
 
-		current->timeout = 0;
 		interruptible_sleep_on(&ppp->read_wait);
 		err = -EINTR;
 		if (signal_pending(current))

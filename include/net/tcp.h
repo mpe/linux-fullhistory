@@ -511,7 +511,7 @@ extern int			tcp_timewait_state_process(struct tcp_tw_bucket *tw,
 							   unsigned len);
 
 extern void			tcp_close(struct sock *sk, 
-					  unsigned long timeout);
+					  long timeout);
 extern struct sock *		tcp_accept(struct sock *sk, int flags);
 extern unsigned int		tcp_poll(struct file * file, struct socket *sock, struct poll_table_struct *wait);
 extern void			tcp_write_space(struct sock *sk); 

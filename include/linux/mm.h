@@ -329,10 +329,6 @@ extern void put_cached_page(unsigned long);
  */
 extern int free_memory_available(void);
 extern struct task_struct * kswapd_task;
-#define wakeup_kswapd() do { \
-	if (kswapd_task->state & TASK_INTERRUPTIBLE) \
-		wake_up_process(kswapd_task); \
-} while (0)
 			
 /* vma is the first one with  address < vma->vm_end,
  * and even  address < vma->vm_start. Have to extend vma. */

@@ -103,7 +103,7 @@ void zero_fd_set(unsigned long nr, unsigned long *fdset)
 	memset(fdset, 0, nr);
 }
 
-extern int do_select(int n, fd_set_buffer *fds, unsigned long timeout);
+extern int do_select(int n, fd_set_buffer *fds, long *timeout);
 
 #endif /* KERNEL */
 

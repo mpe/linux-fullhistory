@@ -2415,7 +2415,7 @@ void take_over_console(struct consw *csw, int first, int last, int deflt)
 	}
 	printk("Console: switching ");
 	if (!deflt)
-		printk("consoles %d-%d ", first, last);
+		printk("consoles %d-%d ", first+1, last+1);
 	if (j >= 0)
 		printk("to %s %s %dx%d\n",
 		       vc_cons[j].d->vc_can_do_color ? "colour" : "mono",
@@ -2564,7 +2564,7 @@ void poke_blanked_console(void)
 		return;
 	if (console_blanked) {
 		timer_table[BLANK_TIMER].fn = unblank_screen;
-		timer_table[BLANK_TIMER].expires = 0;
+		timer_table[BLANK_TIMER].expires = jiffies;	/* Now */
 		timer_active |= 1<<BLANK_TIMER;
 	} else if (blankinterval) {
 		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;

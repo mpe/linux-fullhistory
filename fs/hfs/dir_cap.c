@@ -167,43 +167,26 @@ static int cap_lookup(struct inode * dir, struct dentry *dentry)
 	hfs_nameout(dir, &cname, dentry->d_name.name, 
 		    dentry->d_name.len);
 
-	/* Check for "." */
-	if (hfs_streq(&cname, DOT)) {
-		/* this little trick skips the iget and iput */
-		d_add(dentry, dir);
-		return 0;
-	}
-
-	/* Check for "..". */
-	if (hfs_streq(&cname, DOT_DOT)) {
-		struct hfs_cat_entry *parent;
-
-		if (dtype != HFS_CAP_NDIR) {
-			/* Case for ".." in ".finderinfo" or ".resource" */
-			parent = entry;
-			++entry->count; /* __hfs_iget() eats one */
-		} else {
-			/* Case for ".." in a normal directory */
-			parent = hfs_cat_parent(entry);
-		}
-		inode = hfs_iget(parent, HFS_CAP_NDIR, dentry);
-		goto done;
-	}
+	/* no need to check for "."  or ".." */
 
 	/* Check for special directories if in a normal directory.
 	   Note that cap_dupdir() does an iput(dir). */
 	if (dtype==HFS_CAP_NDIR) {
 		/* Check for ".resource", ".finderinfo" and ".rootinfo" */
-		if (hfs_streq(&cname, DOT_RESOURCE)) {
+		if (hfs_streq(cname.Name, cname.Len, 
+			      DOT_RESOURCE->Name, DOT_RESOURCE_LEN)) {
 			++entry->count; /* __hfs_iget() eats one */
 			inode = hfs_iget(entry, HFS_CAP_RDIR, dentry);
 			goto done;
-		} else if (hfs_streq(&cname, DOT_FINDERINFO)) {
+		} else if (hfs_streq(cname.Name, cname.Len, 
+				     DOT_FINDERINFO->Name, 
+				     DOT_FINDERINFO_LEN)) {
 			++entry->count; /* __hfs_iget() eats one */
 			inode = hfs_iget(entry, HFS_CAP_FDIR, dentry);
 			goto done;
 		} else if ((entry->cnid == htonl(HFS_ROOT_CNID)) &&
-			   hfs_streq(&cname, DOT_ROOTINFO)) {
+			   hfs_streq(cname.Name, cname.Len, 
+				     DOT_ROOTINFO->Name, DOT_ROOTINFO_LEN)) {
 			++entry->count; /* __hfs_iget() eats one */
 			inode = hfs_iget(entry, HFS_CAP_FNDR, dentry);
 			goto done;
@@ -372,15 +355,14 @@ static int cap_readdir(struct file * filp,
 void hfs_cap_drop_dentry(struct dentry *dentry, const ino_t type)
 {
   if (type == HFS_CAP_DATA) { /* given name */
-    hfs_drop_special(DOT_FINDERINFO, dentry->d_parent, dentry);
-    hfs_drop_special(DOT_RESOURCE, dentry->d_parent, dentry);
+    hfs_drop_special(dentry->d_parent, DOT_FINDERINFO, dentry);
+    hfs_drop_special(dentry->d_parent, DOT_RESOURCE, dentry);
   } else {
     struct dentry *de;
 
-    /* look for name */
-    if ((de = hfs_lookup_dentry(dentry->d_name.name,
-			       dentry->d_name.len,
-			       dentry->d_parent->d_parent))) {
+    /* given {.resource,.finderinfo}/name, look for name */
+    if ((de = hfs_lookup_dentry(dentry->d_parent->d_parent,
+				dentry->d_name.name, dentry->d_name.len))) {
       if (!de->d_inode)
 	d_drop(de);
       dput(de);
@@ -389,13 +371,13 @@ void hfs_cap_drop_dentry(struct dentry *dentry, const ino_t type)
     switch (type) {
     case HFS_CAP_RSRC: /* given .resource/name */
        /* look for .finderinfo/name */
-      hfs_drop_special(DOT_FINDERINFO, dentry->d_parent->d_parent,
+      hfs_drop_special(dentry->d_parent->d_parent, DOT_FINDERINFO, 
 		       dentry);
       break;
     case HFS_CAP_FNDR: /* given .finderinfo/name. i don't this 
 			* happens. */
       /* look for .resource/name */
-      hfs_drop_special(DOT_RESOURCE, dentry->d_parent->d_parent,
+      hfs_drop_special(dentry->d_parent->d_parent, DOT_RESOURCE, 
 		       dentry);
       break;
     }

@@ -142,8 +142,7 @@ static void set_radio_freq(struct tuner *t, int freq)
 	if (debug) {
 		UNLOCK_I2C_BUS(t->bus);
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + HZ/10;
-		schedule();
+		schedule_timeout(HZ/10);
 		LOCK_I2C_BUS(t->bus);
 		
 		if (tuner_islocked (t))

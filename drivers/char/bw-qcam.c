@@ -214,8 +214,7 @@ static int qc_waithand(struct qcam_device *q, int val)
 			if(runs++>1000)
 			{
 				current->state=TASK_INTERRUPTIBLE;
-				current->timeout = jiffies+HZ/10;
-				schedule();
+				schedule_timeout(HZ/10);
 			}
 			if(runs>1050)
 				return -1;
@@ -232,8 +231,7 @@ static int qc_waithand(struct qcam_device *q, int val)
 			if(runs++>1000)
 			{
 				current->state=TASK_INTERRUPTIBLE;
-				current->timeout = jiffies+HZ/10;
-				schedule();
+				schedule_timeout(HZ/10);
 			}
 			if(runs++>1050)	/* 5 seconds */
 				return -1;
@@ -263,8 +261,7 @@ static unsigned int qc_waithand2(struct qcam_device *q, int val)
 		if(runs++>1000)
 		{
 			current->state=TASK_INTERRUPTIBLE;
-			current->timeout = jiffies+HZ/10;
-			schedule();
+			schedule_timeout(HZ/10);
 		}
 		if(runs++>1050)	/* 5 seconds */
 			return 0;

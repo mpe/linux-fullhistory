@@ -535,7 +535,7 @@ struct proto {
 	struct sock		*sklist_prev;
 
 	void			(*close)(struct sock *sk, 
-					unsigned long timeout);
+					long timeout);
 	int			(*connect)(struct sock *sk,
 				        struct sockaddr *uaddr, 
 					int addr_len);

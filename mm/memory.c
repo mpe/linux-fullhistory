@@ -637,7 +637,7 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	struct page * page_map;
 	
 	pte = *page_table;
-	new_page = __get_free_page(GFP_KERNEL);
+	new_page = __get_free_page(GFP_USER);
 	/* Did someone else copy this page for us while we slept? */
 	if (pte_val(*page_table) != pte_val(pte))
 		goto end_wp_page;
@@ -811,7 +811,7 @@ static int do_anonymous_page(struct task_struct * tsk, struct vm_area_struct * v
 {
 	pte_t entry = pte_wrprotect(mk_pte(ZERO_PAGE, vma->vm_page_prot));
 	if (write_access) {
-		unsigned long page = __get_free_page(GFP_KERNEL);
+		unsigned long page = __get_free_page(GFP_USER);
 		if (!page)
 			return 0;
 		clear_page(page);

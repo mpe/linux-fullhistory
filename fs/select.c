@@ -124,15 +124,14 @@ get_max:
 #define POLLOUT_SET (POLLWRBAND | POLLWRNORM | POLLOUT | POLLERR)
 #define POLLEX_SET (POLLPRI)
 
-int do_select(int n, fd_set_buffer *fds, unsigned long timeout)
+int do_select(int n, fd_set_buffer *fds, long *timeout)
 {
 	poll_table wait_table, *wait;
-	int retval;
-	int i;
+	int retval, i;
+	long __timeout = *timeout;
 
 	wait = NULL;
-	current->timeout = timeout;
-	if (timeout) {
+	if (__timeout) {
 		struct poll_table_entry *entry = (struct poll_table_entry *) __get_free_page(GFP_KERNEL);
 		if (!entry)
 			return -ENOMEM;
@@ -188,17 +187,22 @@ int do_select(int n, fd_set_buffer *fds, unsigned long timeout)
 			}
 		}
 		wait = NULL;
-		if (retval || !current->timeout || signal_pending(current))
+		if (retval || !__timeout || signal_pending(current))
 			break;
-		schedule();
+		__timeout = schedule_timeout(__timeout);
 	}
 	current->state = TASK_RUNNING;
 
 out:
-	if (timeout) {
+	if (*timeout) {
 		free_wait(&wait_table);
 		free_page((unsigned long) wait_table.entry);
 	}
+
+	/*
+	 * Up-to-date the caller timeout.
+	 */
+	*timeout = __timeout;
 	unlock_kernel();
 	return retval;
 }
@@ -215,10 +219,10 @@ asmlinkage int
 sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 {
 	fd_set_buffer *fds;
-	unsigned long timeout;
+	long timeout;
 	int ret;
 
-	timeout = ~0UL;
+	timeout = MAX_SCHEDULE_TIMEOUT;
 	if (tvp) {
 		time_t sec, usec;
 
@@ -229,8 +233,6 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 
 		timeout = ROUND_UP(usec, 1000000/HZ);
 		timeout += sec * (unsigned long) HZ;
-		if (timeout)
-			timeout += jiffies + 1;
 	}
 
 	ret = -ENOMEM;
@@ -250,12 +252,11 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 	zero_fd_set(n, fds->res_out);
 	zero_fd_set(n, fds->res_ex);
 
-	ret = do_select(n, fds, timeout);
+	ret = do_select(n, fds, &timeout);
 
 	if (tvp && !(current->personality & STICKY_TIMEOUTS)) {
-		unsigned long timeout = current->timeout - jiffies - 1;
 		time_t sec = 0, usec = 0;
-		if ((long) timeout > 0) {
+		if (timeout) {
 			sec = timeout / HZ;
 			usec = timeout % HZ;
 			usec *= (1000000/HZ);
@@ -263,7 +264,6 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 		put_user(sec, &tvp->tv_sec);
 		put_user(usec, &tvp->tv_usec);
 	}
-	current->timeout = 0;
 
 	if (ret < 0)
 		goto out;
@@ -284,7 +284,8 @@ out_nofds:
 	return ret;
 }
 
-static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait)
+static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait,
+		   long timeout)
 {
 	int count = 0;
 
@@ -318,15 +319,15 @@ static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait)
 		}
 
 		wait = NULL;
-		if (count || !current->timeout || signal_pending(current))
+		if (count || !timeout || signal_pending(current))
 			break;
-		schedule();
+		timeout = schedule_timeout(timeout);
 	}
 	current->state = TASK_RUNNING;
 	return count;
 }
 
-asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, int timeout)
+asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 {
 	int i, fdcount, err, size;
 	struct pollfd * fds, *fds1;
@@ -339,9 +340,9 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, int timeout)
 		goto out;
 
 	if (timeout < 0)
-		timeout = 0x7fffffff;
+		timeout = MAX_SCHEDULE_TIMEOUT;
 	else if (timeout)
-		timeout = ((unsigned long)timeout*HZ+999)/1000+jiffies+1;
+		timeout = (timeout*HZ+999)/1000+1;
 
 	err = -ENOMEM;
 	if (timeout) {
@@ -363,9 +364,7 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, int timeout)
 	if (copy_from_user(fds, ufds, size))
 		goto out_fds;
 
-	current->timeout = timeout;
-	fdcount = do_poll(nfds, fds, wait);
-	current->timeout = 0;
+	fdcount = do_poll(nfds, fds, wait, timeout);
 
 	/* OK, now copy the revents fields back to user space. */
 	fds1 = fds;
