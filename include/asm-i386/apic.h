@@ -1,10 +1,10 @@
-#ifndef __ASM_I82489_H
-#define __ASM_I82489_H
+#ifndef __ASM_APIC_H
+#define __ASM_APIC_H
 
 /*
- *	Offsets for programming the 82489 and Pentium integrated APIC
+ * Constants for various Intel APICs. (local APIC, IOAPIC, etc.)
  *
- *	Alan Cox <Alan.Cox@linux.org>, 1995.
+ * Alan Cox <Alan.Cox@linux.org>, 1995.
  */
 #define		APIC_PHYS_BASE	0xfee00000 /* IA s/w dev Vol 3, Section 7.4 */
  
@@ -90,14 +90,6 @@
 
 #define APIC_BASE (fix_to_virt(FIX_APIC_BASE))
 
-extern __inline void apic_write(unsigned long reg, unsigned long v)
-{
-	*((volatile unsigned long *)(APIC_BASE+reg))=v;
-}
-
-extern __inline unsigned long apic_read(unsigned long reg)
-{
-	return *((volatile unsigned long *)(APIC_BASE+reg));
-}
+#define MAX_IO_APICS 8
 
 #endif

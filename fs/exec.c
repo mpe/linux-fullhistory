@@ -379,25 +379,20 @@ static int exec_mmap(void)
 
 	mm = mm_alloc();
 	if (mm) {
-		mm->cpu_vm_mask = (1UL << smp_processor_id());
-		mm->total_vm = 0;
-		mm->rss = 0;
-		mm->pgd = pgd_alloc();
-		if (mm->pgd) {
-			struct mm_struct *active_mm = current->active_mm;
+		struct mm_struct *active_mm = current->active_mm;
 
-			current->mm = mm;
-			current->active_mm = mm;
-			activate_context();
-			mm_release();
-			if (old_mm) {
-				mmput(old_mm);
-				return 0;
-			}
-			mmdrop(active_mm);
+		mm->cpu_vm_mask = (1UL << smp_processor_id());
+		current->mm = mm;
+		current->active_mm = mm;
+		activate_context();
+		mm_release();
+		if (old_mm) {
+			if (active_mm != old_mm) BUG();
+			mmput(old_mm);
 			return 0;
 		}
-		kmem_cache_free(mm_cachep, mm);
+		mmdrop(active_mm);
+		return 0;
 	}
 	return -ENOMEM;
 }

@@ -229,6 +229,34 @@ void exit_sighand(struct task_struct *tsk)
 	__exit_sighand(tsk);
 }
 
+static inline void __exit_itimers(struct task_struct *tsk)
+{
+	struct itimer_struct *timers = tsk->posix_timers;
+	struct k_itimer *timr;
+	int i;
+
+	if (timers == NULL) return;
+	
+	if (atomic_dec_and_test(&timers->count)) {
+		tsk->posix_timers = NULL;
+		for (i = 0; i < MAX_ITIMERS; i++) {
+			timr = timers->itimer[i];
+			if (timr) {
+				start_bh_atomic();
+				del_timer(&timr->it_timer);
+				end_bh_atomic();
+				kfree(timr);
+			}
+		}
+		kfree(timers);
+	}
+}
+
+void exit_itimers(struct task_struct *tsk)
+{
+	__exit_itimers(tsk);
+}
+
 /*
  * Turn us into a lazy TLB process if we
  * aren't already..
@@ -352,6 +380,7 @@ fake_volatile:
 	__exit_files(tsk);
 	__exit_fs(tsk);
 	__exit_sighand(tsk);
+	__exit_itimers(tsk);
 	exit_thread();
 	tsk->state = TASK_ZOMBIE;
 	tsk->exit_code = code;

@@ -14,6 +14,8 @@
 #define PATH_MAX        4095	/* # chars in a path name */
 #define PIPE_BUF        4096	/* # bytes in atomic write to a pipe */
 
+#define MAX_ITIMERS       32    /* # POSIX.1b itimers per process */
+
 #define RTSIG_MAX	  32
 
 #endif

@@ -128,6 +128,8 @@ volatile unsigned long ipi_count;			/* Number of IPIs delivered				*/
 const char lk_lockmsg[] = "lock from interrupt context at %p\n"; 
 
 int mp_bus_id_to_type [MAX_MP_BUSSES] = { -1, };
+extern int nr_ioapics;
+extern struct mpc_config_ioapic mp_apics [MAX_IO_APICS];
 extern int mp_irq_entries;
 extern struct mpc_config_intsrc mp_irqs [MAX_IRQ_SOURCES];
 extern int mpc_default_type;
@@ -258,12 +260,10 @@ static int __init smp_read_mpc(struct mp_config_table *mpc)
 	}
 	memcpy(str,mpc->mpc_oem,8);
 	str[8]=0;
-	memcpy(ioapic_OEM_ID,str,9);
 	printk("OEM ID: %s ",str);
 	
 	memcpy(str,mpc->mpc_productid,12);
 	str[12]=0;
-	memcpy(ioapic_Product_ID,str,13);
 	printk("Product ID: %s ",str);
 
 	printk("APIC at: 0x%lX\n",mpc->mpc_lapic);
@@ -368,11 +368,9 @@ static int __init smp_read_mpc(struct mp_config_table *mpc)
 					printk("I/O APIC #%d Version %d at 0x%lX.\n",
 						m->mpc_apicid,m->mpc_apicver,
 						m->mpc_apicaddr);
-					/*
-					 * we use the first one only currently
-					 */
-					if (ioapics == 1)
-						mp_ioapic_addr = m->mpc_apicaddr;
+					mp_apics [nr_ioapics] = *m;
+					if (++nr_ioapics > MAX_IO_APICS)
+						--nr_ioapics;
 				}
 				mpt+=sizeof(*m);
 				count+=sizeof(*m);
@@ -404,9 +402,9 @@ static int __init smp_read_mpc(struct mp_config_table *mpc)
 			}
 		}
 	}
-	if (ioapics > 1)
+	if (ioapics > MAX_IO_APICS)
 	{
-		printk("Warning: Multiple IO-APICs not yet supported.\n");
+		printk("Warning: Max I/O APICs exceeded (max %d, found %d).\n", MAX_IO_APICS, ioapics);
 		printk("Warning: switching to non APIC mode.\n");
 		skip_ioapic_setup=1;
 	}
@@ -774,18 +772,22 @@ unsigned long __init init_smp_mappings(unsigned long memory_start)
 
 #ifdef CONFIG_X86_IO_APIC
 	{
-		unsigned long ioapic_phys;
+		unsigned long ioapic_phys, idx = FIX_IO_APIC_BASE_0;
+		int i;
 
-		if (smp_found_config) {
-			ioapic_phys = mp_ioapic_addr;
-		} else {
-			ioapic_phys = __pa(memory_start);
-			memset((void *)memory_start, 0, PAGE_SIZE);
-			memory_start += PAGE_SIZE;
+		for (i = 0; i < nr_ioapics; i++) {
+			if (smp_found_config) {
+				ioapic_phys = mp_apics[i].mpc_apicaddr;
+			} else {
+				ioapic_phys = __pa(memory_start);
+				memset((void *)memory_start, 0, PAGE_SIZE);
+				memory_start += PAGE_SIZE;
+			}
+			set_fixmap(idx,ioapic_phys);
+			printk("mapped IOAPIC to %08lx (%08lx)\n",
+					__fix_to_virt(idx), ioapic_phys);
+			idx++;
 		}
-		set_fixmap(FIX_IO_APIC_BASE,ioapic_phys);
-		printk("mapped IOAPIC to %08lx (%08lx)\n",
-				fix_to_virt(FIX_IO_APIC_BASE), ioapic_phys);
 	}
 #endif
 

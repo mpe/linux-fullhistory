@@ -57,9 +57,9 @@ typedef struct {
 /*
  * Special IRQ vectors used by the SMP architecture:
  *
- * (some of the following vectors are 'rare', they might be merged
- *  into a single vector to save vector space. TLB, reschedule and
- *  local APIC vectors are performance-critical.)
+ * (some of the following vectors are 'rare', they are merged
+ *  into a single vector (FUNCTION_VECTOR) to save vector space.
+ *  TLB, reschedule and local APIC vectors are performance-critical.)
  */
 #define RESCHEDULE_VECTOR	0x30
 #define INVALIDATE_TLB_VECTOR	0x31
@@ -120,8 +120,6 @@ enum mp_bustype {
 };
 extern int mp_bus_id_to_type [MAX_MP_BUSSES];
 extern int mp_bus_id_to_pci_bus [MAX_MP_BUSSES];
-extern char ioapic_OEM_ID [16];
-extern char ioapic_Product_ID [16];
 
 extern spinlock_t irq_controller_lock;
 

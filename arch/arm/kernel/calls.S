@@ -200,8 +200,16 @@
 		.long	SYMBOL_NAME(sys_ni_syscall)
 		.long	SYMBOL_NAME(sys_ni_syscall)
 /* 190 */	.long	SYMBOL_NAME(sys_vfork_wrapper)
+		.long	SYMBOL_NAME(sys_timer_create)
+		.long	SYMBOL_NAME(sys_timer_settime)
+		.long	SYMBOL_NAME(sys_timer_gettime)
+		.long	SYMBOL_NAME(sys_timer_getoverrun)
+/* 195 */	.long	SYMBOL_NAME(sys_timer_delete)
+		.long	SYMBOL_NAME(sys_clock_gettime)
+		.long	SYMBOL_NAME(sys_clock_settime)
+		.long	SYMBOL_NAME(sys_clock_getres)
 
-		.rept	NR_syscalls-186
+		.rept	NR_syscalls-198
 			.long	SYMBOL_NAME(sys_ni_syscall)
 		.endr
 #endif

@@ -609,6 +609,14 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_ni_syscall)		/* streams1 */
 	.long SYMBOL_NAME(sys_ni_syscall)		/* streams2 */
 	.long SYMBOL_NAME(sys_vfork)            /* 190 */
+	.long SYMBOL_NAME(sys_timer_create)
+	.long SYMBOL_NAME(sys_timer_settime)
+	.long SYMBOL_NAME(sys_timer_gettime)
+	.long SYMBOL_NAME(sys_timer_getoverrun)
+	.long SYMBOL_NAME(sys_timer_delete)	/* 195 */
+	.long SYMBOL_NAME(sys_clock_gettime)
+	.long SYMBOL_NAME(sys_clock_settime)
+	.long SYMBOL_NAME(sys_clock_getres)	/* 198 */
 
 	.rept NR_syscalls-(.-SYMBOL_NAME(sys_call_table))/4
 		.long SYMBOL_NAME(sys_ni_syscall)

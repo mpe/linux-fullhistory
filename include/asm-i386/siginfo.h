@@ -31,13 +31,14 @@ typedef struct siginfo {
 		struct {
 			unsigned int _timer1;
 			unsigned int _timer2;
+			sigval_t _sigval2;	/* FIXME: must map to _sigval below because it is the same */
 		} _timer;
 
 		/* POSIX.1b signals */
 		struct {
 			pid_t _pid;		/* sender's pid */
 			uid_t _uid;		/* sender's uid */
-			sigval_t _sigval;
+			sigval_t _sigval;	/* FIXME: move out of union together with _sigval2 */
 		} _rt;
 
 		/* SIGCHLD */
@@ -67,6 +68,8 @@ typedef struct siginfo {
  */
 #define si_pid		_sifields._kill._pid
 #define si_uid		_sifields._kill._uid
+#define si_timer1	_sifields._timer._timer1
+#define si_timer2	_sifields._timer._timer2
 #define si_status	_sifields._sigchld._status
 #define si_utime	_sifields._sigchld._utime
 #define si_stime	_sifields._sigchld._stime

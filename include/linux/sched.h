@@ -35,6 +35,7 @@ extern unsigned long event;
 #define CLONE_PID	0x00001000	/* set if pid shared */
 #define CLONE_PTRACE	0x00002000	/* set if we want to let tracing continue on the child too */
 #define CLONE_VFORK	0x00004000	/* set if the parent wants the child to wake it up on mm_release */
+#define CLONE_ITIMERS   0x00008000      /* set if POSIX.1b itimers are shared */
 
 /*
  * These are the constant used to fake the fixed-point load-average
@@ -223,6 +224,26 @@ struct signal_struct {
  */
 struct user_struct;
 
+/* POSIX.1b interval timer structure. */
+struct k_itimer {
+	spinlock_t it_lock;
+	clockid_t it_clock;		/* which timer type */
+	timer_t it_id;			/* timer id */
+	int it_overrun;			/* number of signals overrun */
+	struct sigevent it_signal;	/* signal to be delivered */
+	struct timespec it_interval;	/* interval (rounded to jiffies) */
+	int it_incr;			/* interval specified in jiffies */
+	struct task_struct *it_process;	/* process to send signal to */
+	struct timer_list it_timer;
+};
+
+/* Structure to maintain the dynamically created POSIX.1b interval timers. */
+struct itimer_struct {
+	atomic_t count;
+	spinlock_t its_lock;
+	struct k_itimer *itimer[MAX_ITIMERS];	
+};
+
 struct task_struct {
 /* these are hardcoded - don't touch */
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
@@ -278,6 +299,7 @@ struct task_struct {
 	unsigned long it_real_value, it_prof_value, it_virt_value;
 	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
 	struct timer_list real_timer;
+	struct itimer_struct *posix_timers; /* POSIX.1b Interval Timers */
 	struct tms times;
 	unsigned long start_time;
 	long per_cpu_utime[NR_CPUS], per_cpu_stime[NR_CPUS];
@@ -315,6 +337,7 @@ struct task_struct {
 	spinlock_t sigmask_lock;	/* Protects signal and blocked */
 	struct signal_struct *sig;
 	sigset_t signal, blocked;
+	siginfo_t nrt_info[SIGRTMIN];	/* siginfo for non RT signals */
 	struct signal_queue *sigqueue, **sigqueue_tail;
 	unsigned long sas_ss_sp;
 	size_t sas_ss_size;
@@ -364,6 +387,7 @@ struct task_struct {
 /* chld wait */	__WAIT_QUEUE_HEAD_INITIALIZER(name.wait_chldexit), NULL, \
 /* timeout */	SCHED_OTHER,0,0,0,0,0,0,0, \
 /* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
+/* POSIX.1b timer */ NULL, \
 /* utime */	{0,0,0,0},0, \
 /* per CPU times */ {0, }, {0, }, \
 /* flt */	0,0,0,0,0,0, \
@@ -382,7 +406,7 @@ struct task_struct {
 /* fs */	&init_fs, \
 /* files */	&init_files, \
 /* mm */	NULL, &init_mm, \
-/* signals */	SPIN_LOCK_UNLOCKED, &init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, 0, 0, \
+/* signals */	SPIN_LOCK_UNLOCKED, &init_signals, {{0}}, {{0}}, {{0,},}, NULL, &init_task.sigqueue, 0, 0, \
 }
 
 #ifndef INIT_TASK_SIZE
@@ -614,6 +638,7 @@ extern void exit_mm(struct task_struct *);
 extern void exit_fs(struct task_struct *);
 extern void exit_files(struct task_struct *);
 extern void exit_sighand(struct task_struct *);
+extern void exit_itimers(struct task_struct *);
 
 extern int do_execve(char *, char **, char **, struct pt_regs *);
 extern int do_fork(unsigned long, unsigned long, struct pt_regs *);

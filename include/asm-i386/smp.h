@@ -8,7 +8,7 @@
 #ifdef CONFIG_X86_LOCAL_APIC
 #ifndef ASSEMBLY
 #include <asm/fixmap.h>
-#include <asm/i82489.h>
+#include <asm/apic.h>
 #include <asm/bitops.h>
 #endif
 #endif
@@ -184,6 +184,16 @@ extern volatile int __cpu_logical_map[NR_CPUS];
 extern inline int cpu_logical_map(int cpu)
 {
 	return __cpu_logical_map[cpu];
+}
+
+extern __inline void apic_write(unsigned long reg, unsigned long v)
+{
+	*((volatile unsigned long *)(APIC_BASE+reg))=v;
+}
+
+extern __inline unsigned long apic_read(unsigned long reg)
+{
+	return *((volatile unsigned long *)(APIC_BASE+reg));
 }
 
 

@@ -414,3 +414,57 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 	ret = do_adjtimex(&txc);
 	return copy_to_user(txc_p, &txc, sizeof(struct timex)) ? -EFAULT : ret;
 }
+
+
+/* POSIX.1b clock functions */
+
+asmlinkage int sys_clock_gettime(clockid_t clock_id, struct timespec *ts)
+{
+	struct timespec kts;
+	struct timeval ktv;
+
+	if (clock_id != CLOCK_REALTIME)	return -EINVAL;
+	
+	if (ts == NULL) return 0;
+		
+	do_gettimeofday(&ktv);
+	kts.tv_sec = ktv.tv_sec;
+	kts.tv_nsec = ktv.tv_usec * NSEC_PER_USEC;
+	if (copy_to_user(ts, &kts, sizeof(kts))) return -EFAULT;
+
+	return 0;
+}
+
+
+asmlinkage int sys_clock_settime(clockid_t clock_id,
+				 const struct timespec *ts)
+{
+	struct timespec new_ts;
+	struct timeval tv;
+
+	if (clock_id != CLOCK_REALTIME)	return -EINVAL;
+
+	if (ts == NULL) return 0;
+
+	if (copy_from_user(&new_ts, ts, sizeof(*ts))) return -EFAULT;
+	tv.tv_sec = new_ts.tv_sec;
+	tv.tv_usec = new_ts.tv_nsec / NSEC_PER_USEC;
+	return do_sys_settimeofday(&tv, NULL);
+}
+
+
+asmlinkage int sys_clock_getres(clockid_t clock_id,
+				struct timespec *res)
+{
+	struct timespec kres;
+
+	if (clock_id != CLOCK_REALTIME) return -EINVAL;
+
+	if (res == NULL) return 0;
+
+	kres.tv_sec = 0;
+	kres.tv_nsec = NSEC_PER_SEC / HZ;
+	if (copy_to_user(res, &kres, sizeof(kres))) return -EFAULT;
+
+	return 0;
+}

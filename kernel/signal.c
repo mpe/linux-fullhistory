@@ -132,17 +132,7 @@ printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
 
 		/* Collect the siginfo appropriate to this signal.  */
 		if (sig < SIGRTMIN) {
-			/* XXX: As an extension, support queueing exactly
-			   one non-rt signal if SA_SIGINFO is set, so that
-			   we can get more detailed information about the
-			   cause of the signal.  */
-			/* Deciding not to init these couple of fields is
-			   more expensive that just initializing them.  */
-			info->si_signo = sig;
-			info->si_errno = 0;
-			info->si_code = 0;
-			info->si_pid = 0;
-			info->si_uid = 0;
+			*info = current->nrt_info[sig];
 		} else {
 			struct signal_queue *q, **pp;
 			pp = &current->sigqueue;
@@ -185,8 +175,6 @@ printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
 			sigdelset(&current->signal, sig);
 		recalc_sigpending(current);
 
-		/* XXX: Once POSIX.1b timers are in, if si_code == SI_TIMER,
-		   we need to xchg out the timer overrun values.  */
 	} else {
 		/* XXX: Once CLONE_PID is in to join those "threads" that are
 		   part of the same "process", look for signals sent to the
@@ -245,6 +233,29 @@ static int ignored_signal(int sig, struct task_struct *t)
 		return 0;
 	}
 	return 1;
+}
+
+static void set_siginfo(siginfo_t *dst, const siginfo_t *src, int sig)
+{
+	switch ((unsigned long)src) {
+	case 0:
+		dst->si_signo = sig;
+		dst->si_errno = 0;
+		dst->si_code = SI_USER;
+		dst->si_pid = current->pid;
+		dst->si_uid = current->uid;
+		break;
+	case 1:
+		dst->si_signo = sig;
+		dst->si_errno = 0;
+		dst->si_code = SI_KERNEL;
+		dst->si_pid = 0;
+		dst->si_uid = 0;
+		break;
+	default:
+		*dst = *src;
+		break;
+	}
 }
 
 int
@@ -306,12 +317,10 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 
 	if (sig < SIGRTMIN) {
 		/* Non-real-time signals are not queued.  */
-		/* XXX: As an extension, support queueing exactly one
-		   non-rt signal if SA_SIGINFO is set, so that we can
-		   get more detailed information about the cause of
-		   the signal.  */
 		if (sigismember(&t->signal, sig))
 			goto out;
+		set_siginfo(&t->nrt_info[sig], info, sig);
+
 	} else {
 		/* Real-time signals must be queued if sent by sigqueue, or
 		   some other real-time mechanism.  It is implementation
@@ -323,6 +332,21 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 
 		struct signal_queue *q = 0;
 
+		/* In case of a POSIX timer generated signal you must check 
+		   if a signal from this timer is already in the queue */
+		if (info && (info->si_code == SI_TIMER)) {
+			for (q = t->sigqueue; q; q = q->next) {
+				if ((q->info.si_code == SI_TIMER) &&
+				    (q->info.si_timer1 == info->si_timer1)) {
+					/* this special value (1) is recognized
+					   only by posix_timer_fn() in
+					   itimer.c */
+					ret = 1;
+					goto out;
+				}
+			}
+		}
+
 		if (atomic_read(&nr_queued_signals) < max_queued_signals) {
 			q = (struct signal_queue *)
 			    kmem_cache_alloc(signal_queue_cachep, GFP_ATOMIC);
@@ -333,25 +357,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 			q->next = NULL;
 			*t->sigqueue_tail = q;
 			t->sigqueue_tail = &q->next;
-			switch ((unsigned long) info) {
-			case 0:
-				q->info.si_signo = sig;
-				q->info.si_errno = 0;
-				q->info.si_code = SI_USER;
-				q->info.si_pid = current->pid;
-				q->info.si_uid = current->uid;
-				break;
-			case 1:
-				q->info.si_signo = sig;
-				q->info.si_errno = 0;
-				q->info.si_code = SI_KERNEL;
-				q->info.si_pid = 0;
-				q->info.si_uid = 0;
-				break;
-			default:
-				q->info = *info;
-				break;
-			}
+			set_siginfo(&q->info, info, sig);
 		} else {
 			/* If this was sent by a rt mechanism, try again.  */
 			if (info->si_code < 0) {

@@ -267,7 +267,7 @@ struct tss_struct {
 	unsigned short	ss1,__ss1h;
 	unsigned long	esp2;
 	unsigned short	ss2,__ss2h;
-	unsigned long	cr3;
+	unsigned long	__cr3;
 	unsigned long	eip;
 	unsigned long	eflags;
 	unsigned long	eax,ecx,edx,ebx;
@@ -292,7 +292,6 @@ struct tss_struct {
 
 struct thread_struct {
 	unsigned long	esp0;
-	unsigned long	cr3;
 	unsigned long	eip;
 	unsigned long	esp;
 	unsigned long	fs;
@@ -313,7 +312,7 @@ struct thread_struct {
 };
 
 #define INIT_THREAD  {						\
-	0,(long) &swapper_pg_dir - PAGE_OFFSET,			\
+	0,							\
 	0, 0, 0, 0, 						\
 	{ [0 ... 7] = 0 },	/* debugging registers */	\
 	0, 0, 0,						\
@@ -330,7 +329,7 @@ struct thread_struct {
 	sizeof(init_stack) + (long) &init_stack, /* esp0 */	\
 	__KERNEL_DS, 0, /* ss0 */				\
 	0,0,0,0,0,0, /* stack1, stack2 */			\
-	(long) &swapper_pg_dir - PAGE_OFFSET, /* cr3 */		\
+	0, /* cr3 */						\
 	0,0, /* eip,eflags */					\
 	0,0,0,0, /* eax,ecx,edx,ebx */				\
 	0,0,0,0, /* esp,ebp,esi,edi */				\

@@ -327,8 +327,8 @@ void machine_restart(char * __unused)
 	 * the way we set root page dir in the future, then we wont break a
 	 * seldom used feature ;)
 	 */
-
 	current->mm->pgd = swapper_pg_dir;
+	current->active_mm->pgd = swapper_pg_dir;
 	activate_context();
 
 	/* Write 0x1234 to absolute memory location 0x472.  The BIOS reads
@@ -756,21 +756,6 @@ void __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 	 */
 	asm volatile("movl %%fs,%0":"=m" (*(int *)&prev->fs));
 	asm volatile("movl %%gs,%0":"=m" (*(int *)&prev->gs));
-
-	/*
-	 * Re-load LDT if necessary
-	 */
-	if (prev_p->active_mm->segments != next_p->active_mm->segments)
-		load_LDT(next_p->mm);
-
-	/* Re-load page tables */
-	{
-		unsigned long new_cr3 = next->cr3;
-
-		tss->cr3 = new_cr3;
-		if (new_cr3 != prev->cr3)
-			asm volatile("movl %0,%%cr3": :"r" (new_cr3));
-	}
 
 	/*
 	 * Restore %fs and %gs.

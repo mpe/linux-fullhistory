@@ -790,16 +790,22 @@ still_running_back:
 	 */
 	{
 		struct mm_struct *mm = next->mm;
+		struct mm_struct *oldmm = prev->active_mm;
 		if (!mm) {
-			mm = prev->active_mm;
-			set_mmu_context(prev,next);
 			if (next->active_mm) BUG();
-			next->active_mm = mm;
-			atomic_inc(&mm->mm_count);
+			next->active_mm = oldmm;
+			atomic_inc(&oldmm->mm_count);
+		} else {
+			if (next->active_mm != mm) BUG();
+			if (mm != oldmm)
+				switch_mm(oldmm, mm);
 		}
 	}
 
-	get_mmu_context(next);
+	/*
+	 * This just switches the register state and the
+	 * stack.
+	 */
 	switch_to(prev, next, prev);
 	__schedule_tail(prev);
 

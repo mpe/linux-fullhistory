@@ -13,6 +13,7 @@
 
 #include <linux/config.h>
 #include <linux/kernel.h>
+#include <asm/apic.h>
 #include <asm/page.h>
 
 /*
@@ -45,7 +46,8 @@ enum fixed_addresses {
 	FIX_APIC_BASE,	/* local (CPU) APIC) -- required for SMP or not */
 #endif
 #ifdef CONFIG_X86_IO_APIC
-	FIX_IO_APIC_BASE,
+	FIX_IO_APIC_BASE_0,
+	FIX_IO_APIC_BASE_END = FIX_IO_APIC_BASE_0 + MAX_IO_APICS-1,
 #endif
 #ifdef CONFIG_X86_VISWS_APIC
 	FIX_CO_CPU,	/* Cobalt timer */
