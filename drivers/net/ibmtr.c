@@ -59,12 +59,13 @@
  *	Changes by Christopher Turcksin <wabbit@rtfc.demon.co.uk>
  *	+ Now compiles ok as a module again.
  *
- *	Changes by Paul Norton (p.norton@computer.org) :
+ *	Changes by Paul Norton (pnorton@ieee.org) :
  *      + moved the header manipulation code in tr_tx and tr_rx to
  *        net/802/tr.c. (July 12 1997)
  *      + add retry and timeout on open if cable disconnected. (May 5 1998)
  *      + lifted 2000 byte mtu limit. now depends on shared-RAM size.
  *        May 25 1998)
+ *      + can't allocate 2k recv buff at 8k shared-RAM. (20 October 1998)
  */
 
 #ifdef PCMCIA
@@ -93,8 +94,8 @@
 
 /* version and credits */
 static char *version =
-"ibmtr.c: v1.3.57  8/ 7/94 Peter De Schrijver and Mark Swanson\n"
-"         v2.1.106 6/22/98 Paul Norton <p.norton@computer.org>\n";
+"ibmtr.c: v1.3.57   8/ 7/94 Peter De Schrijver and Mark Swanson\n"
+"         v2.1.125 10/20/98 Paul Norton <pnorton@ieee.org>\n";
 
 static char pcchannelid[] = {
 	0x05, 0x00, 0x04, 0x09,
@@ -416,7 +417,7 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 
 			timeout = jiffies + TR_SPIN_INTERVAL;
 			while(!readb(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN))
-				if (jiffies > timeout) {
+				if (time_after(jiffies, timeout)) {
 					DPRINTK("Hardware timeout during initialization.\n");
 					kfree_s(ti, sizeof(struct tok_info));
 					return -ENODEV;
@@ -634,56 +635,56 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 	switch (ti->mapped_ram_size) {
 	case  16 : /* 8KB shared RAM */
 		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 2048);
-		ti->rbuf_len4 = 2048;
-		ti->rbuf_cnt4 = 1;
+		ti->rbuf_len4 = 1032;
+		ti->rbuf_cnt4 = 2;
 		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 2048);
-		ti->rbuf_len16 = 2048;
-		ti->rbuf_cnt16 = 1;
+		ti->rbuf_len16 = 1032;
+		ti->rbuf_cnt16 = 2;
 		break;
 	case  32 : /* 16KB shared RAM */
 		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 4464);
-		ti->rbuf_len4 = 512;
+		ti->rbuf_len4 = 520;
 		ti->rbuf_cnt4 = 9;
 		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 4096);
-		ti->rbuf_len16 = 2048;
-		ti->rbuf_cnt16 = 2;
+		ti->rbuf_len16 = 1032; /* 1024 usable */
+		ti->rbuf_cnt16 = 4;
 		break;
 	case  64 : /* 32KB shared RAM */
 		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 4464);
-		ti->rbuf_len4 = 2048;
-		ti->rbuf_cnt4 = 3;
+		ti->rbuf_len4 = 1032;
+		ti->rbuf_cnt4 = 6;
 		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 10240);
-		ti->rbuf_len16 = 2048;
-		ti->rbuf_cnt16 = 5;
+		ti->rbuf_len16 = 1032;
+		ti->rbuf_cnt16 = 10;
 		break;
 	case 127 : /* 63KB shared RAM */
 		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 4464);
-		ti->rbuf_len4 = 2048;
-		ti->rbuf_cnt4 = 3;
+		ti->rbuf_len4 = 1032;
+		ti->rbuf_cnt4 = 6;
 		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 16384);
-		ti->rbuf_len16 = 2048;
-		ti->rbuf_cnt16 = 8;
+		ti->rbuf_len16 = 1032;
+		ti->rbuf_cnt16 = 16;
 		break;
 	case 128 : /* 64KB shared RAM */
 		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 4464);
-		ti->rbuf_len4 = 2048;
-		ti->rbuf_cnt4 = 3;
+		ti->rbuf_len4 = 1032;
+		ti->rbuf_cnt4 = 6;
 		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 17960);
-		ti->rbuf_len16 = 2048;
-		ti->rbuf_cnt16 = 9;
+		ti->rbuf_len16 = 1032;
+		ti->rbuf_cnt16 = 18;
 		break;
 	default  :
 		ti->dhb_size4mb  = 2048;
-		ti->rbuf_len4 = 2048;
-		ti->rbuf_cnt4 = 1;
+		ti->rbuf_len4 = 1032;
+		ti->rbuf_cnt4 = 2;
 		ti->dhb_size16mb = 2048;
-		ti->rbuf_len16 = 2048;
-		ti->rbuf_cnt16 = 1;
+		ti->rbuf_len16 = 1032;
+		ti->rbuf_cnt16 = 2;
 		break;
 	}
 
-	ti->maxmtu16 = ti->dhb_size16mb-((ti->rbuf_cnt16)<<3)-TR_HLEN;
-	ti->maxmtu4  = ti->dhb_size4mb-((ti->rbuf_cnt4)<<3)-TR_HLEN;
+	ti->maxmtu16 = (ti->rbuf_len16*ti->rbuf_cnt16)-((ti->rbuf_cnt16)<<3)-TR_HLEN;
+	ti->maxmtu4  = (ti->rbuf_len4*ti->rbuf_cnt4)-((ti->rbuf_cnt4)<<3)-TR_HLEN;
 	DPRINTK("Maximum MTU 16Mbps: %d, 4Mbps: %d\n",
 		ti->maxmtu16, ti->maxmtu4);
 

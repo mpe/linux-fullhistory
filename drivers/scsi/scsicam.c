@@ -45,6 +45,7 @@ int scsicam_bios_param (Disk *disk, /* SCSI disk */
     struct buffer_head *bh;
     int ret_code;
     int size = disk->capacity;
+    unsigned long temp_cyl;
 
     if (!(bh = bread(MKDEV(MAJOR(dev), MINOR(dev)&~0xf), 0, 1024)))
 	return -1;
@@ -67,6 +68,11 @@ int scsicam_bios_param (Disk *disk, /* SCSI disk */
     if (ret_code || ip[0] > 255 || ip[1] > 63) {
 	 ip[0] = 64;
 	 ip[1] = 32;
+	 temp_cyl = size / (ip[0] * ip[1]);
+	 if (temp_cyl > 65534) {
+	      ip[0] = 255;
+	      ip[1] = 63;
+	 }
 	 ip[2] = size / (ip[0] * ip[1]);
     }
 

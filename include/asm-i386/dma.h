@@ -161,8 +161,6 @@ static __inline__ void disable_dma(unsigned int dmanr)
 		dma_outb(dmanr | 4,  DMA1_MASK_REG);
 	else
 		dma_outb((dmanr & 3) | 4,  DMA2_MASK_REG);
-	/* I hate voodoo programming but .. */
-	udelay(20);
 }
 
 /* Clear the 'DMA Pointer Flip Flop'.

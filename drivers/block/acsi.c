@@ -1343,7 +1343,7 @@ static int acsi_mode_sense( int target, int lun, SENSE_DATA *sd )
 		if (acsi_wait_for_noIRQ( 20 ) &&
 		    acsicmd_nodma( modesense_cmd, 0 ) &&
 		    acsi_wait_for_IRQ( 3*HZ ) &&
-		    acsi_getstatus() == 0);
+		    acsi_getstatus() == 0)
 			break;
 	}
 	if (page == 4) {

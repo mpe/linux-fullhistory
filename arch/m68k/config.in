@@ -266,7 +266,7 @@ fi
 
 tristate 'Parallel printer support' CONFIG_M68K_PRINTER
 if [ "$CONFIG_ZORRO" = "y" ]; then
-  dep_tristate 'Multiface Card III parallel support' CONFIG_MULTIFACE_III_LP $CONFIG_PRINTER
+  dep_tristate 'Multiface Card III parallel support' CONFIG_MULTIFACE_III_LP $CONFIG_M68K_PRINTER
 fi
 if [ "$CONFIG_AMIGA" = "y" ]; then
   tristate 'Amiga mouse support' CONFIG_AMIGAMOUSE
@@ -333,11 +333,6 @@ bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
 if [ "$CONFIG_WATCHDOG" != "n" ]; then
   bool '   Disable watchdog shutdown on close' CONFIG_WATCHDOG_NOWAYOUT
   bool '   Software Watchdog' CONFIG_SOFT_WATCHDOG
-fi
-if [ "$CONFIG_VME" = "y" ]; then
-  define_bool CONFIG_UMISC y
-else
-  bool 'Support for user misc device modules' CONFIG_UMISC
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   bool 'Enhanced Real Time Clock Support' CONFIG_RTC

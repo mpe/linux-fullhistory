@@ -1677,11 +1677,12 @@ S: Cliffwood, New Jersey 07721
 S: USA
 
 N: Henrik Storner
-E: storner@osiris.ping.dk
-E: storner@olicom.dk
-W: http://eolicom.olicom.dk/~storner/
-D: Configure script: tristate, bugfixes
+E: storner@image.dk
+W: http://www.image.dk/~storner/
+W: http://www.sslug.dk/
+D: Configure script: Invented tristate for module-configuration
 D: vfat/msdos integration, kerneld docs, Linux promotion
+D: Miscellaneous bug-fixes
 S: Chr. Winthersvej 1 B, st.th.
 S: DK-1860 Frederiksberg C
 S: Denmark
@@ -1910,6 +1911,11 @@ S: United Kingdom
 N: Juergen Weigert
 E: jnweiger@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen
+
+N: David Weinehall
+E: tao@acc.umu.se
+D: NE/2-driver maintainer
+D: Miscellaneous MCA-support
 
 N: Matt Welsh
 E: mdw@sunsite.unc.edu

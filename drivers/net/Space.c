@@ -110,6 +110,7 @@ extern int epic100_probe(struct device *dev);
 extern int rtl8139_probe(struct device *dev);
 extern int hplance_probe(struct device *dev);
 extern int via_rhine_probe(struct device *dev);
+extern int tc515_probe(struct device *dev);
 
 /* Gigabit Ethernet adapters */
 extern int yellowfin_probe(struct device *dev);
@@ -268,6 +269,9 @@ struct devprobe isa_probes[] __initdata = {
 #ifdef CONFIG_HP100 		/* ISA, EISA & PCI */
 	{hp100_probe, 0},
 #endif	
+#ifdef CONFIG_3C515
+	{tc515_probe, 0},
+#endif
 #ifdef CONFIG_ULTRA 
 	{ultra_probe, 0},
 #endif

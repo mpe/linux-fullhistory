@@ -538,6 +538,8 @@ int kswapd(void *unused)
 		do {
 			if (!do_try_to_free_page(0))
 				break;
+			if (nr_free_pages > 2*freepages.high)
+				break;
 		} while (time_before_eq(jiffies,end_time));
 	}
 	/* As if we could ever get here - maybe we want to make this killable */

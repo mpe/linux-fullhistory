@@ -133,6 +133,10 @@
 #include "u14-34f.h"
 #endif
 
+#ifdef CONFIG_SCSI_FD_MCS
+#include "fd_mcs.h"
+#endif
+
 #ifdef CONFIG_SCSI_FUTURE_DOMAIN
 #include "fdomain.h"
 #endif

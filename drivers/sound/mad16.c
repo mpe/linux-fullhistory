@@ -834,7 +834,6 @@ int probe_mad16_mpu(struct address_info *hw_config)
 
 void unload_mad16(struct address_info *hw_config)
 {
-	int mixer = audio_devs[hw_config->slots[0]]->mixer_dev;
 	ad1848_unload(hw_config->io_base + 4,
 			hw_config->irq,
 			hw_config->dma,

@@ -135,7 +135,7 @@ lockd(struct svc_rqst *rqstp)
 		 * during grace period).
 		 */
 		if (!nlmsvc_grace_period) {
-			timeout = nlmsvc_retry_blocked() - jiffies;
+			timeout = nlmsvc_retry_blocked();
 		} else if (nlmsvc_grace_period < jiffies)
 			nlmsvc_grace_period = 0;
 

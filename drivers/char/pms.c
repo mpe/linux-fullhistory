@@ -77,7 +77,7 @@ extern __inline__ u8 mvv_read(u8 index)
 	return inb(data_port);
 }
 
-extern int i2c_stat(u8 slave)
+static int pms_i2c_stat(u8 slave)
 {
 	int counter;
 	int i;
@@ -116,7 +116,7 @@ extern int i2c_stat(u8 slave)
 	return inb(data_port);		
 }
 
-int i2c_write(u16 slave, u16 sub, u16 data)
+static int pms_i2c_write(u16 slave, u16 sub, u16 data)
 {
 	int skip=0;
 	int count;
@@ -166,7 +166,7 @@ int i2c_write(u16 slave, u16 sub, u16 data)
 	return count;
 }
 
-int i2c_read(int slave, int sub)
+static int pms_i2c_read(int slave, int sub)
 {
 	int i=0;
 	for(i=0;i<i2c_count;i++)
@@ -178,13 +178,13 @@ int i2c_read(int slave, int sub)
 }
 
 
-void i2c_andor(int slave, int sub, int and, int or)
+static void pms_i2c_andor(int slave, int sub, int and, int or)
 {
 	u8 tmp;	
 	
-	tmp=i2c_read(slave, sub);
+	tmp=pms_i2c_read(slave, sub);
 	tmp = (tmp&and)|or;
-	i2c_write(slave, sub, tmp);
+	pms_i2c_write(slave, sub, tmp);
 }
 
 /*
@@ -202,13 +202,13 @@ static void pms_hue(short hue)
 	switch(decoder)
 	{
 		case MOTOROLA:
-			i2c_write(0x8A, 0x00, hue);
+			pms_i2c_write(0x8A, 0x00, hue);
 			break;
 		case PHILIPS2:
-			i2c_write(0x8A, 0x07, hue);
+			pms_i2c_write(0x8A, 0x07, hue);
 			break;
 		case PHILIPS1:
-			i2c_write(0x42, 0x07, hue);
+			pms_i2c_write(0x42, 0x07, hue);
 			break;
 	}
 }
@@ -218,10 +218,10 @@ static void pms_colour(short colour)
 	switch(decoder)
 	{
 		case MOTOROLA:
-			i2c_write(0x8A, 0x00, colour);
+			pms_i2c_write(0x8A, 0x00, colour);
 			break;
 		case PHILIPS1:
-			i2c_write(0x42, 012, colour);
+			pms_i2c_write(0x42, 012, colour);
 			break;
 	}
 }
@@ -232,10 +232,10 @@ static void pms_contrast(short contrast)
 	switch(decoder)
 	{
 		case MOTOROLA:
-			i2c_write(0x8A, 0x00, contrast);
+			pms_i2c_write(0x8A, 0x00, contrast);
 			break;
 		case PHILIPS1:
-			i2c_write(0x42, 0x13, contrast);
+			pms_i2c_write(0x42, 0x13, contrast);
 			break;
 	}
 }
@@ -245,12 +245,12 @@ static void pms_brightness(short brightness)
 	switch(decoder)
 	{
 		case MOTOROLA:
-			i2c_write(0x8A, 0x00, brightness);
-			i2c_write(0x8A, 0x00, brightness);
-			i2c_write(0x8A, 0x00, brightness);
+			pms_i2c_write(0x8A, 0x00, brightness);
+			pms_i2c_write(0x8A, 0x00, brightness);
+			pms_i2c_write(0x8A, 0x00, brightness);
 			break;
 		case PHILIPS1:
-			i2c_write(0x42, 0x19, brightness);
+			pms_i2c_write(0x42, 0x19, brightness);
 			break;
 	}
 }
@@ -271,20 +271,20 @@ static void pms_format(short format)
 	switch(format)
 	{
 		case 0:	/* Auto */
-			i2c_andor(target, 0x0D, 0xFE,0x00);
-			i2c_andor(target, 0x0F, 0x3F,0x80);
+			pms_i2c_andor(target, 0x0D, 0xFE,0x00);
+			pms_i2c_andor(target, 0x0F, 0x3F,0x80);
 			break;
 		case 1: /* NTSC */
-			i2c_andor(target, 0x0D, 0xFE, 0x00);
-			i2c_andor(target, 0x0F, 0x3F, 0x40);
+			pms_i2c_andor(target, 0x0D, 0xFE, 0x00);
+			pms_i2c_andor(target, 0x0F, 0x3F, 0x40);
 			break;
 		case 2: /* PAL */
-			i2c_andor(target, 0x0D, 0xFE, 0x00);
-			i2c_andor(target, 0x0F, 0x3F, 0x00);
+			pms_i2c_andor(target, 0x0D, 0xFE, 0x00);
+			pms_i2c_andor(target, 0x0F, 0x3F, 0x00);
 			break;
 		case 3:	/* SECAM */
-			i2c_andor(target, 0x0D, 0xFE, 0x01);
-			i2c_andor(target, 0x0F, 0x3F, 0x00);
+			pms_i2c_andor(target, 0x0D, 0xFE, 0x01);
+			pms_i2c_andor(target, 0x0F, 0x3F, 0x00);
 			break;
 	}
 }
@@ -302,12 +302,12 @@ static void pms_hstart(short start)
 	switch(decoder)
 	{
 		case PHILIPS1:
-			i2c_write(0x8A, 0x05, start);
-			i2c_write(0x8A, 0x18, start);
+			pms_i2c_write(0x8A, 0x05, start);
+			pms_i2c_write(0x8A, 0x18, start);
 			break;
 		case PHILIPS2:
-			i2c_write(0x42, 0x05, start);
-			i2c_write(0x42, 0x18, start);
+			pms_i2c_write(0x42, 0x05, start);
+			pms_i2c_write(0x42, 0x18, start);
 			break;
 	}
 }
@@ -319,94 +319,94 @@ static void pms_hstart(short start)
 static void pms_bandpass(short pass)
 {
 	if(decoder==PHILIPS2)
-		i2c_andor(0x8A, 0x06, 0xCF, (pass&0x03)<<4);
+		pms_i2c_andor(0x8A, 0x06, 0xCF, (pass&0x03)<<4);
 	else if(decoder==PHILIPS1)
-		i2c_andor(0x42, 0x06, 0xCF, (pass&0x03)<<4);
+		pms_i2c_andor(0x42, 0x06, 0xCF, (pass&0x03)<<4);
 }
 
 static void pms_antisnow(short snow)
 {
 	if(decoder==PHILIPS2)
-		i2c_andor(0x8A, 0x06, 0xF3, (snow&0x03)<<2);
+		pms_i2c_andor(0x8A, 0x06, 0xF3, (snow&0x03)<<2);
 	else if(decoder==PHILIPS1)
-		i2c_andor(0x42, 0x06, 0xF3, (snow&0x03)<<2);
+		pms_i2c_andor(0x42, 0x06, 0xF3, (snow&0x03)<<2);
 }
 
 static void pms_sharpness(short sharp)
 {
 	if(decoder==PHILIPS2)
-		i2c_andor(0x8A, 0x06, 0xFC, sharp&0x03);
+		pms_i2c_andor(0x8A, 0x06, 0xFC, sharp&0x03);
 	else if(decoder==PHILIPS1)
-		i2c_andor(0x42, 0x06, 0xFC, sharp&0x03);
+		pms_i2c_andor(0x42, 0x06, 0xFC, sharp&0x03);
 }
 
 static void pms_chromaagc(short agc)
 {
 	if(decoder==PHILIPS2)
-		i2c_andor(0x8A, 0x0C, 0x9F, (agc&0x03)<<5);
+		pms_i2c_andor(0x8A, 0x0C, 0x9F, (agc&0x03)<<5);
 	else if(decoder==PHILIPS1)
-		i2c_andor(0x42, 0x0C, 0x9F, (agc&0x03)<<5);
+		pms_i2c_andor(0x42, 0x0C, 0x9F, (agc&0x03)<<5);
 }
 
 static void pms_vertnoise(short noise)
 {
 	if(decoder==PHILIPS2)
-		i2c_andor(0x8A, 0x10, 0xFC, noise&3);
+		pms_i2c_andor(0x8A, 0x10, 0xFC, noise&3);
 	else if(decoder==PHILIPS1)
-		i2c_andor(0x42, 0x10, 0xFC, noise&3);
+		pms_i2c_andor(0x42, 0x10, 0xFC, noise&3);
 }
 
 static void pms_forcecolour(short colour)
 {
 	if(decoder==PHILIPS2)
-		i2c_andor(0x8A, 0x0C, 0x7F, (colour&1)<<7);
+		pms_i2c_andor(0x8A, 0x0C, 0x7F, (colour&1)<<7);
 	else if(decoder==PHILIPS1)
-		i2c_andor(0x42, 0x0C, 0x7, (colour&1)<<7);
+		pms_i2c_andor(0x42, 0x0C, 0x7, (colour&1)<<7);
 }
 
 static void pms_antigamma(short gamma)
 {
 	if(decoder==PHILIPS2)
-		i2c_andor(0xB8, 0x00, 0x7F, (gamma&1)<<7);
+		pms_i2c_andor(0xB8, 0x00, 0x7F, (gamma&1)<<7);
 	else if(decoder==PHILIPS1)
-		i2c_andor(0x42, 0x20, 0x7, (gamma&1)<<7);
+		pms_i2c_andor(0x42, 0x20, 0x7, (gamma&1)<<7);
 }
 
 static void pms_prefilter(short filter)
 {
 	if(decoder==PHILIPS2)
-		i2c_andor(0x8A, 0x06, 0xBF, (filter&1)<<6);
+		pms_i2c_andor(0x8A, 0x06, 0xBF, (filter&1)<<6);
 	else if(decoder==PHILIPS1)
-		i2c_andor(0x42, 0x06, 0xBF, (filter&1)<<6);
+		pms_i2c_andor(0x42, 0x06, 0xBF, (filter&1)<<6);
 }
 
 static void pms_hfilter(short filter)
 {
 	if(decoder==PHILIPS2)
-		i2c_andor(0xB8, 0x04, 0x1F, (filter&7)<<5);
+		pms_i2c_andor(0xB8, 0x04, 0x1F, (filter&7)<<5);
 	else if(decoder==PHILIPS1)
-		i2c_andor(0x42, 0x24, 0x1F, (filter&7)<<5);
+		pms_i2c_andor(0x42, 0x24, 0x1F, (filter&7)<<5);
 }
 
 static void pms_vfilter(short filter)
 {
 	if(decoder==PHILIPS2)
-		i2c_andor(0xB8, 0x08, 0x9F, (filter&3)<<5);
+		pms_i2c_andor(0xB8, 0x08, 0x9F, (filter&3)<<5);
 	else if(decoder==PHILIPS1)
-		i2c_andor(0x42, 0x28, 0x9F, (filter&3)<<5);
+		pms_i2c_andor(0x42, 0x28, 0x9F, (filter&3)<<5);
 }
 
 static void pms_killcolour(short colour)
 {
 	if(decoder==PHILIPS2)
 	{
-		i2c_andor(0x8A, 0x08, 0x07, (colour&0x1F)<<3);
-		i2c_andor(0x8A, 0x09, 0x07, (colour&0x1F)<<3);
+		pms_i2c_andor(0x8A, 0x08, 0x07, (colour&0x1F)<<3);
+		pms_i2c_andor(0x8A, 0x09, 0x07, (colour&0x1F)<<3);
 	}
 	else if(decoder==PHILIPS1)
 	{
-		i2c_andor(0x42, 0x08, 0x07, (colour&0x1F)<<3);
-		i2c_andor(0x42, 0x09, 0x07, (colour&0x1F)<<3);
+		pms_i2c_andor(0x42, 0x08, 0x07, (colour&0x1F)<<3);
+		pms_i2c_andor(0x42, 0x09, 0x07, (colour&0x1F)<<3);
 	}
 }
 
@@ -414,11 +414,11 @@ static void pms_chromagain(short chroma)
 {
 	if(decoder==PHILIPS2)
 	{
-		i2c_write(0x8A, 0x11, chroma);
+		pms_i2c_write(0x8A, 0x11, chroma);
 	}
 	else if(decoder==PHILIPS1)
 	{
-		i2c_write(0x42, 0x11, chroma);
+		pms_i2c_write(0x42, 0x11, chroma);
 	}
 }
 
@@ -444,9 +444,9 @@ static void pms_vstart(short start)
 static void pms_secamcross(short cross)
 {
 	if(decoder==PHILIPS2)
-		i2c_andor(0x8A, 0x0F, 0xDF, (cross&1)<<5);
+		pms_i2c_andor(0x8A, 0x0F, 0xDF, (cross&1)<<5);
 	else if(decoder==PHILIPS1)
-		i2c_andor(0x42, 0x0F, 0xDF, (cross&1)<<5);
+		pms_i2c_andor(0x42, 0x0F, 0xDF, (cross&1)<<5);
 }
 
 
@@ -454,13 +454,13 @@ static void pms_swsense(short sense)
 {
 	if(decoder==PHILIPS2)
 	{
-		i2c_write(0x8A, 0x0A, sense);
-		i2c_write(0x8A, 0x0B, sense);
+		pms_i2c_write(0x8A, 0x0A, sense);
+		pms_i2c_write(0x8A, 0x0B, sense);
 	}
 	else if(decoder==PHILIPS1)
 	{
-		i2c_write(0x42, 0x0A, sense);
-		i2c_write(0x42, 0x0B, sense);
+		pms_i2c_write(0x42, 0x0A, sense);
+		pms_i2c_write(0x42, 0x0B, sense);
 	}
 }
 
@@ -613,9 +613,9 @@ static void pms_resolution(short width, short height)
 static void pms_vcrinput(short input)
 {
 	if(decoder==PHILIPS2)
-		i2c_andor(0x8A,0x0D,0x7F,(input&1)<<7);
+		pms_i2c_andor(0x8A,0x0D,0x7F,(input&1)<<7);
 	else if(decoder==PHILIPS1)
-		i2c_andor(0x42,0x0D,0x7F,(input&1)<<7);
+		pms_i2c_andor(0x42,0x0D,0x7F,(input&1)<<7);
 }
 
 
@@ -954,13 +954,13 @@ static int init_mediavision(void)
 	
 	
 	id=mvv_read(3);
-	decst=i2c_stat(0x43);
+	decst=pms_i2c_stat(0x43);
 	
 	if(decst!=-1)
 		idec=2;
-	else if(i2c_stat(0xb9)!=-1)
+	else if(pms_i2c_stat(0xb9)!=-1)
 		idec=3;
-	else if(i2c_stat(0x8b)!=-1)
+	else if(pms_i2c_stat(0x8b)!=-1)
 		idec=1;
 	else 
 		idec=0;
@@ -983,19 +983,19 @@ static int init_mediavision(void)
 	for(i=0;i<0x19;i++)
 	{
 		if(i2c_defs[i]==0xFF)
-			i2c_andor(0x8A, i, 0x07,0x00);
+			pms_i2c_andor(0x8A, i, 0x07,0x00);
 		else
-			i2c_write(0x8A, i, i2c_defs[i]);
+			pms_i2c_write(0x8A, i, i2c_defs[i]);
 	}
 	
-	i2c_write(0xB8,0x00,0x12);
-	i2c_write(0xB8,0x04,0x00);
-	i2c_write(0xB8,0x07,0x00);
-	i2c_write(0xB8,0x08,0x00);
-	i2c_write(0xB8,0x09,0xFF);
-	i2c_write(0xB8,0x0A,0x00);
-	i2c_write(0xB8,0x0B,0x10);
-	i2c_write(0xB8,0x10,0x03);
+	pms_i2c_write(0xB8,0x00,0x12);
+	pms_i2c_write(0xB8,0x04,0x00);
+	pms_i2c_write(0xB8,0x07,0x00);
+	pms_i2c_write(0xB8,0x08,0x00);
+	pms_i2c_write(0xB8,0x09,0xFF);
+	pms_i2c_write(0xB8,0x0A,0x00);
+	pms_i2c_write(0xB8,0x0B,0x10);
+	pms_i2c_write(0xB8,0x10,0x03);
 	
 	mvv_write(0x01, 0x00);
 	mvv_write(0x05, 0xA0);
@@ -1037,7 +1037,7 @@ static void shutdown_mediavision(void)
 #ifdef MODULE
 int init_module(void)
 #else
-void init_pms_cards(void)
+int init_pms_cards(struct video_init *v)
 #endif
 {
 	printk(KERN_INFO "Mediavision Pro Movie Studio driver 0.02\n");

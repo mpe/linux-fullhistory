@@ -505,20 +505,16 @@ nfs_writepage(struct file * file, struct page *page)
  * things with a page scheduled for an RPC call (e.g. invalidate it).
  */
 int
-nfs_updatepage(struct file *file, struct page *page, const char *buffer,
-			unsigned long offset, unsigned int count, int sync)
+nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsigned int count, int sync)
 {
 	struct dentry	*dentry = file->f_dentry;
 	struct inode	*inode = dentry->d_inode;
-	u8		*page_addr = (u8 *) page_address(page);
 	struct nfs_wreq	*req;
 	int		status = 0, page_locked = 1;
 
 	dprintk("NFS:      nfs_updatepage(%s/%s %d@%ld, sync=%d)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		count, page->offset+offset, sync);
-
-	set_bit(PG_locked, &page->flags);
 
 	/*
 	 * Try to find a corresponding request on the writeback queue.
@@ -531,24 +527,13 @@ nfs_updatepage(struct file *file, struct page *page, const char *buffer,
 	 * page and retry the update.
 	 */
 	if ((req = find_write_request(inode, page)) != NULL) {
-		if (update_write_request(req, offset, count)) {
-			/* N.B. check for a fault here and cancel the req */
-			/*
-			 *	SECURITY - copy_from_user must zero the
-			 *	rest of the data after a fault!
-			 */
-			copy_from_user(page_addr + offset, buffer, count);
+		if (update_write_request(req, offset, count))
 			goto updated;
-		}
+
 		dprintk("NFS:      wake up conflicting write request.\n");
 		transfer_page_lock(req);
 		return 0;
 	}
-
-	/* Copy data to page buffer. */
-	status = -EFAULT;
-	if (copy_from_user(page_addr + offset, buffer, count))
-		goto done;
 
 	/* If wsize is smaller than page size, update and write
 	 * page synchronously.
@@ -566,6 +551,9 @@ nfs_updatepage(struct file *file, struct page *page, const char *buffer,
 	page_locked = schedule_write_request(req, sync);
 
 updated:
+	if (req->wb_bytes == PAGE_SIZE)
+		set_bit(PG_uptodate, &page->flags);
+
 	/*
 	 * If we wrote up to the end of the chunk, transmit request now.
 	 * We should be a bit more intelligent about detecting whether a

@@ -97,7 +97,7 @@ __initfunc(int ariadne2_probe(struct device *dev))
 	    return 0;
 	}
     }
-    return ENODEV;
+    return -ENODEV;
 }
 
 __initfunc(static int ariadne2_init(struct device *dev, unsigned int key,
@@ -131,7 +131,7 @@ __initfunc(static int ariadne2_init(struct device *dev, unsigned int key,
 	while ((readb(ioaddr + NE_EN0_ISR) & ENISR_RESET) == 0)
 	    if (jiffies - reset_start_time > 2*HZ/100) {
 		printk(" not found (no reset ack).\n");
-		return ENODEV;
+		return -ENODEV;
 	    }
 
 	writeb(0xff, ioaddr + NE_EN0_ISR);		/* Ack all intr. */

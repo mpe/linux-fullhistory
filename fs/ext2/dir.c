@@ -70,7 +70,7 @@ struct inode_operations ext2_dir_inode_operations = {
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
-	ext2_truncate,		/* truncate */
+	NULL,			/* truncate */
 	ext2_permission,	/* permission */
 	NULL			/* smap */
 };

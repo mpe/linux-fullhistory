@@ -453,9 +453,6 @@ print_line (WINDOW * win, int row, int width)
 {
     int y, x;
     char *line;
-#if OLD_NCURSES
-     int i;
-#endif
 
     line = get_line ();
     line += MIN (strlen (line), hscroll);	/* Scroll horizontally */
@@ -466,8 +463,11 @@ print_line (WINDOW * win, int row, int width)
     getyx (win, y, x);
     /* Clear 'residue' of previous line */
 #if OLD_NCURSES
-    for (i = 0; i < width - x; i++)
-	waddch (win, ' ');
+    {
+        int i;
+        for (i = 0; i < width - x; i++)
+	    waddch (win, ' ');
+    }
 #else
     wclrtoeol(win);
 #endif

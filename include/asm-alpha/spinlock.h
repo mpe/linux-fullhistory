@@ -5,9 +5,18 @@
 
 #ifndef __SMP__
 
-/* gcc 2.7.2 can crash initializing an empty structure.  */
-typedef struct { int dummy; } spinlock_t;
-#define SPIN_LOCK_UNLOCKED { 0 }
+/*
+ * Your basic spinlocks, allowing only a single CPU anywhere
+ *
+ * Gcc-2.7.x has a nasty bug with empty initializers.
+ */
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
+  typedef struct { } spinlock_t;
+  #define SPIN_LOCK_UNLOCKED (spinlock_t) { }
+#else
+  typedef struct { int gcc_is_buggy; } spinlock_t;
+  #define SPIN_LOCK_UNLOCKED (spinlock_t) { 0 }
+#endif
 
 #define spin_lock_init(lock)			((void) 0)
 #define spin_lock(lock)				((void) 0)
@@ -29,9 +38,16 @@ typedef struct { int dummy; } spinlock_t;
  * can "mix" irq-safe locks - any writer needs to get a
  * irq-safe write-lock, but readers can get non-irqsafe
  * read-locks.
+ *
+ * Gcc-2.7.x has a nasty bug with empty initializers.
  */
-typedef struct { int dummy; } rwlock_t;
-#define RW_LOCK_UNLOCKED { 0 }
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
+  typedef struct { } rwlock_t;
+  #define RW_LOCK_UNLOCKED (rwlock_t) { }
+#else
+  typedef struct { int gcc_is_buggy; } rwlock_t;
+  #define RW_LOCK_UNLOCKED (rwlock_t) { 0 }
+#endif
 
 #define read_lock(lock)				((void) 0)
 #define read_unlock(lock)			((void) 0)

@@ -109,20 +109,16 @@ u_int dma_arb_level;		/* DMA arbitration level */
 
 static struct wait_queue *ps2esdi_int = NULL, *ps2esdi_wait_open = NULL;
 int no_int_yet;
-static int access_count[MAX_HD] =
-{0,};
-static char ps2esdi_valid[MAX_HD] =
-{0,};
-static int ps2esdi_sizes[MAX_HD << 6] =
-{0,};
-static int ps2esdi_blocksizes[MAX_HD << 6] =
-{0,};
+static int access_count[MAX_HD] = {0,};
+static char ps2esdi_valid[MAX_HD] = {0,};
+static int ps2esdi_sizes[MAX_HD << 6] = {0,};
+static int ps2esdi_blocksizes[MAX_HD << 6] = {0,};
 static int ps2esdi_drives = 0;
 static struct hd_struct ps2esdi[MAX_HD << 6];
 static u_short io_base;
-static struct timer_list esdi_timer =
-{NULL, NULL, 0, 0L, ps2esdi_reset_timer};
+static struct timer_list esdi_timer = {NULL, NULL, 0, 0L, ps2esdi_reset_timer};
 static int reset_status;
+static int ps2esdi_slot = -1;
 int tp720esdi = 0;		/* Is it Integrated ESDI of ThinkPad-720? */
 
 struct ps2esdi_i_struct {
@@ -197,6 +193,51 @@ __initfunc(int ps2esdi_init(void))
 	return 0;
 
 }				/* ps2esdi_init */
+
+#ifdef MODULE
+
+int cyl[2] = {-1,-1};
+int head[2] = {-1, -1};
+int sect[2] = {-1, -1};
+
+MODULE_PARM(tp720esdi, "i");
+MODULE_PARM(cyl, "i");
+MODULE_PARM(head, "i");
+MODULE_PARM(track, "i");
+
+int init_module(void) {
+	int drive;
+
+	for(drive = 0; drive <= 1; drive++) {
+	        struct ps2_esdi_i_struct *info = &ps2esdi_info[drive];
+
+        	if (cyl[drive] != -1) {
+		  	info->cyl = info->lzone = cyl[drive];
+			info->wpcom = 0;
+		}
+        	if (head[drive] != -1) {
+			info->head = head[drive];
+			info->ctl = (head[drive] > 8 ? 8 : 0);
+		}
+        	if (sect[drive] != -1) info->sect = sect[drive];
+	}
+	return ps2esdi_init();
+}
+
+void
+cleanup_module(void)
+{
+	if(ps2esdi_slot)
+	{
+		mca_mark_as_unused(ps2esdi_slot);
+		mca_set_adapter_procfn(ps2esdi_slot, NULL, NULL);
+	}
+	release_region(io_base, 4);
+	free_dma(dma_arb_level);
+  	free_irq(PS2ESDI_IRQ, NULL)
+	unregister_blkdev(MAJOR_NR, "ed");
+}
+#endif /* MODULE */
 
 /* handles boot time command line parameters */
 __initfunc(void tp720_setup(char *str, int *ints))
@@ -289,6 +330,8 @@ __initfunc(static void ps2esdi_geninit(struct gendisk *ignored))
 		return;
 	}
 
+	ps2esdi_slot = slot;
+	mca_mark_as_used(slot);
 	mca_set_adapter_procfn(slot, (MCA_ProcFn) ps2esdi_getinfo, NULL);
 
 	/* Found the slot - read the POS register 2 to get the necessary
@@ -383,6 +426,9 @@ __initfunc(static void ps2esdi_geninit(struct gendisk *ignored))
 	}
 	for (i = 0; i < (MAX_HD << 6); i++)
 		ps2esdi_blocksizes[i] = 1024;
+
+	request_dma(dma_arb_level, "ed");
+	request_region(io_base, 4, "ed");
 	blksize_size[MAJOR_NR] = ps2esdi_blocksizes;
 }				/* ps2esdi_geninit */
 
@@ -511,7 +557,7 @@ static void reset_ctrl(void)
 		printk("%s: hard reset...\n", DEVICE_NAME);
 		outb_p(CTRL_HARD_RESET, ESDI_CONTROL);
 		expire = jiffies + 200;
-		while (jiffies < expire);
+		while (time_before(jiffies, expire));
 		outb_p(1, ESDI_CONTROL);
 	}			/* hard reset */
 
@@ -588,7 +634,7 @@ static int ps2esdi_out_cmd_blk(u_short * cmd_blk)
 	outb(CTRL_ENABLE_INTR, ESDI_CONTROL);
 
 	/* do not write to the controller, if it is busy */
-	for (i = jiffies + ESDI_STAT_TIMEOUT; (i > jiffies) && (inb(ESDI_STATUS) &
+	for (i = jiffies + ESDI_STAT_TIMEOUT; time_after(i, jiffies) && (inb(ESDI_STATUS) &
 							  STATUS_BUSY););
 
 #if 0
@@ -611,7 +657,7 @@ static int ps2esdi_out_cmd_blk(u_short * cmd_blk)
 	for (i = (((*cmd_blk) >> 14) + 1) << 1; i; i--) {
 		status = inb(ESDI_STATUS);
 		for (j = jiffies + ESDI_STAT_TIMEOUT;
-		     (j > jiffies) && (status & STATUS_BUSY) &&
+		     time_after(j, jiffies) && (status & STATUS_BUSY) &&
 		   (status & STATUS_CMD_INF); status = inb(ESDI_STATUS));
 		if ((status & (STATUS_BUSY | STATUS_CMD_INF)) == STATUS_BUSY) {
 #if 0

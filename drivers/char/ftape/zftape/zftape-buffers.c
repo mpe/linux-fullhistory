@@ -122,9 +122,8 @@ void *zft_kmalloc(size_t size)
 	void *new;
 
 	while ((new = kmalloc(size, GFP_KERNEL)) == NULL) {
-		current->timeout = HZ/10;
 		current->state   = TASK_INTERRUPTIBLE;
-		schedule();
+		schedule_timeout(HZ/10);
 	}
 	memset(new, 0, size);
 	used_memory += size;

@@ -228,8 +228,8 @@ int audio_write(int dev, struct file *file, const char *buf, int count)
 		if (l > buf_size)
 			l = buf_size;
 
-        returned = l;
-        used = l;
+		returned = l;
+		used = l;
 		if (!audio_devs[dev]->d->copy_user)
 		{
 			if ((dma_buf + l) >
@@ -246,13 +246,13 @@ int audio_write(int dev, struct file *file, const char *buf, int count)
 			if(copy_from_user(dma_buf, &(buf)[p], l))
 				return -EFAULT;
 		} 
-		else audio_devs[dev]->d->copy_user ( dev,
-                                             dma_buf, 0,
-                                             buf, p,
-                                             c, buf_size,
-                                             &used, &returned,
-                                             l);
-        l = returned;
+		else audio_devs[dev]->d->copy_user (dev,
+						dma_buf, 0,
+						buf, p,
+						c, buf_size,
+						&used, &returned,
+						l);
+		l = returned;
 
 		if (audio_devs[dev]->local_conversion & CNV_MU_LAW)
 		{

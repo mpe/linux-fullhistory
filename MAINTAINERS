@@ -204,7 +204,7 @@ M:	hpa@zytor.com
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
-DIGI INTL. EPCA DRIVER:
+DIGI INTL. EPCA DRIVER
 P:      Daniel Taylor
 M:      support@dgii.com
 M:      digilnux@dgii.com
@@ -277,7 +277,7 @@ M:	mike.mclagan@linux.org
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
-FTAPE/QIC-117:
+FTAPE/QIC-117
 P:	Claus-Justus Heine
 M:	claus@momo.math.rwth-aachen.de
 L:	linux-tape@vger.rutgers.edu
@@ -297,7 +297,7 @@ L:	linux-scsi@vger.rutgers.edu
 W:	http://www.icp-vortex.com/
 S:	Supported
 
-HAYES ESP SERIAL DRIVER:
+HAYES ESP SERIAL DRIVER
 P:	Andrew J. Robinson
 M:	arobinso@nyx.net
 L:	linux-kernel@vger.rutgers.edu
@@ -396,14 +396,14 @@ M:	paulus@cs.anu.edu.au
 L:	linux-pmac@samba.anu.edu.au
 S:	Maintained
 
-M68K:
+M68K
 P:	Jes Sorensen
 M:	Jes.Sorensen@cern.ch
 W:	http://www.clark.net/pub/lawrencc/linux/index.html
 L:	linux-m68k@lists.linux-m68k.org
 S:	Maintained
 
-M68K ON APPLE MACINTOSH:
+M68K ON APPLE MACINTOSH
 P:	Alan Cox
 M:	Alan.Cox@linux.org
 W:	http://www.mac.linux-m68k.org/home.html
@@ -416,17 +416,24 @@ M:	philb@gnu.org
 W:	http://www.tazenda.demon.co.uk/phil/linux-hp
 S:	Maintained
 
-MENUCONFIG:
+MENUCONFIG
 P:	Michael Elizabeth Chastain
 M:	mec@shout.net
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
-MIPS:
+MIPS
 P:	Ralf Baechle
 M:	ralf@gnu.ai.mit.edu
 W:	http://lena.fnet.fr/
 L:	linux-mips@fnet.fr
+S:	Maintained
+
+MISCELLANEOUS MCA-SUPPORT
+P:	David Weinehall
+M:	mcalinux@acc.umu.se (project MCA-team)
+M:	tao@acc.umu.se (personal)
+L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 MODULE SUPPORT [GENERAL], KERNELD
@@ -446,7 +453,7 @@ P:	Andrew Veliath
 M:	andrewtv@usa.net
 S:	Maintained
 
-NCP FILESYSTEM:
+NCP FILESYSTEM
 P:	Petr Vandrovec
 M:	vandrove@vc.cvut.cz
 P:	Volker Lendecke
@@ -465,14 +472,14 @@ P:	Pavel Machek
 M:	pavel@atrey.karlin.mff.cuni.cz
 S:	Maintained
 
-NETWORKING [GENERAL]:
+NETWORKING [GENERAL]
 P:	Networking Teak
 M:	netdev@nuclecu.unam.mx
 L:	linux-net@vger.rutgers.edu
 W:	http://www.uk.linux.org/NetNews.html (2.0 only)
 S:	Maintained
 
-NETWORKING [IPv4/IPv6]:
+NETWORKING [IPv4/IPv6]
 P:	David S. Miller
 M:	davem@caip.rutgers.edu
 P:	Eric Schenk
@@ -565,7 +572,7 @@ M:	frible@teaser.fr
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
-RISCOM8 DRIVER:
+RISCOM8 DRIVER
 P:	Dmitry Gorodchanin
 M:	pgmdsg@ibi.com
 L:	linux-kernel@vger.rutgers.edu
@@ -587,7 +594,7 @@ M:	Kai.Makisara@metla.fi
 L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
-SMB FILESYSTEM:
+SMB FILESYSTEM
 P:	Volker Lendecke
 M:	lendecke@Math.Uni-Goettingen.de
 L:	samba@listproc.anu.edu.au
@@ -642,7 +649,7 @@ M:	cheshire@cs.stanford.edu
 W:	http://mosquitonet.Stanford.EDU/strip.html
 S:	Maintained
 
-SVGA HANDLING:
+SVGA HANDLING
 P:	Martin Mares
 M:	mj@atrey.karlin.mff.cuni.cz
 L:	linux-video@atrey.karlin.mff.cuni.cz
@@ -661,7 +668,7 @@ S:	Maintained
 
 TOKEN-RING NETWORK DRIVER
 P:	Paul Norton
-M:	p.norton@computer.org
+M:	pnorton@ieee.org
 L:	linux-net@vger.rutgers.edu
 L:	linux-tr@emissary.aus-etc.com
 S:	Maintained
@@ -737,6 +744,6 @@ W:	http://qsl.net/dl1bke/
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
-REST:
+THE REST
 P:	Linus Torvalds
 S:	Buried alive in diapers

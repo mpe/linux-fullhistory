@@ -62,12 +62,6 @@ static const char *version =
 
 static struct ipddp_route *ipddp_route_list = NULL;
 
-/*
- *      The name of the card. Is used for messages and in the requests for
- *      io regions, irqs and dma channels
- */
-static const char *cardname = "ipddp";
-
 #ifdef CONFIG_IPDDP_ENCAP
 static int ipddp_mode = IPDDP_ENCAP;
 #else

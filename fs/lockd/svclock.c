@@ -615,6 +615,7 @@ nlmsvc_retry_blocked(void)
 	}
 
 	if ((block = nlm_blocked) && block->b_when != NLM_NEVER)
-		return block->b_when;
-	return 0;
+		return (block->b_when - jiffies);
+
+	return MAX_SCHEDULE_TIMEOUT;
 }

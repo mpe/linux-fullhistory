@@ -68,6 +68,9 @@ extern int fmi_init(struct video_init *);
 #ifdef CONFIG_RADIO_MIROPCM20
 extern int pcm20_init(struct video_init *);
 #endif
+#ifdef CONFIG_VIDEO_PMS
+extern int init_pms_cards(struct video_init *);
+#endif
 
 static struct video_init video_init_list[]={
 #ifdef CONFIG_VIDEO_BT848

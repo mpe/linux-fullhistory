@@ -589,7 +589,7 @@ __initfunc(void time_init(void))
  * still perfectly ordered.
  * Note that the TSC counter will be reset if APM suspends
  * to disk; this won't break the kernel, though, 'cuz we're
- * smart.  See devices/char/apm_bios.c.
+ * smart.  See arch/i386/kernel/apm.c.
  */
 	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC) {
 		do_gettimeoffset = do_fast_gettimeoffset;

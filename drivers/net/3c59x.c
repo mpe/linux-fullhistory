@@ -79,6 +79,8 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
 #include <linux/pci.h>
 #include <linux/bios32.h>
 #include <linux/timer.h>
+
+#include <asm/byteorder.h>
 #include <asm/irq.h>			/* For NR_IRQS only. */
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -332,10 +334,20 @@ enum Window3 {			/* Window 3: MAC/config bits. */
 union wn3_config {
 	int i;
 	struct w3_config_fields {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned int ram_size:3, ram_width:1, ram_speed:2, rom_size:2;
 		int pad8:8;
 		unsigned int ram_split:2, pad18:2, xcvr:4, autoselect:1;
 		int pad24:7;
+#elif defined(__BIG_ENDIAN_BITFIELD)
+		unsigned int rom_size:2, ram_speed:2, ram_width:1, ram_size:3;
+		int pad8:8;
+		unsigned int xcvr:4, pad18:2, ram_split:2;
+		int pad24:7;
+		unsigned int autoselect:1;
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	} u;
 };
 

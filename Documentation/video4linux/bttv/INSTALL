@@ -20,6 +20,7 @@
     5: Philips PAL tuner
     6: Temic NTSC tuner
     7: Temic PAL tuner
+    8: Temic 4036 FY5 NTSC tuner
 
     The number corresponds to the number (-1) given at the GPIO port of the
     Bt848 on Miro cards.
@@ -34,7 +35,12 @@
     4: Intel
     5: Diamond
     6: AVerMedia
-
+    7: Matrix Vision MV-Delta
+    8: Fly Video II
+    9: TurboTV
+   10: Newer Hauppage (Bt878)
+   11: Miro PCTV Pro
+   12: ADS Tech Channel Surfer TV (and maybe TV+FM)
 
   - You may have to adjust BTTV_MAJOR to a different number depending on your
     kernel version. The official number 81 does not work on some setups.

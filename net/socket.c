@@ -93,7 +93,7 @@
 #include <net/sock.h>
 #include <net/scm.h>
 
-
+static int sock_no_open(struct inode *irrelevant, struct file *dontcare);
 static long long sock_lseek(struct file *file, long long offset, int whence);
 static ssize_t sock_read(struct file *file, char *buf,
 			 size_t size, loff_t *ppos);
@@ -121,7 +121,7 @@ static struct file_operations socket_file_ops = {
 	sock_poll,
 	sock_ioctl,
 	NULL,			/* mmap */
-	NULL,			/* no special open code... */
+	sock_no_open,		/* special open code to disallow open via /proc */
 	NULL,			/* flush */
 	sock_close,
 	NULL,			/* no fsync */
@@ -303,6 +303,17 @@ struct socket *sock_alloc(void)
 
 	sockets_in_use++;
 	return sock;
+}
+
+/*
+ *	In theory you can't get an open on this inode, but /proc provides
+ *	a back door. Remember to keep it shut otherwise you'll let the
+ *	creepy crawlies in.
+ */
+  
+static int sock_no_open(struct inode *irrelevant, struct file *dontcare)
+{
+	return -ENXIO;
 }
 
 void sock_release(struct socket *sock)

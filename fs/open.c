@@ -626,7 +626,7 @@ out:
  * for the internal routines (ie open_namei()/follow_link() etc). 00 is
  * used by symlinks.
  */
-static int do_open(const char * filename, int flags, int mode, int fd)
+struct file *filp_open(const char * filename, int flags, int mode)
 {
 	struct inode * inode;
 	struct dentry * dentry;
@@ -667,8 +667,7 @@ static int do_open(const char * filename, int flags, int mode, int fd)
 	}
 	f->f_flags &= ~(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
 
-	fd_install(fd, f);
-	return 0;
+	return f;
 
 cleanup_all:
 	if (f->f_mode & FMODE_WRITE)
@@ -679,7 +678,19 @@ cleanup_dentry:
 cleanup_file:
 	put_filp(f);
 out:
-	return error;
+	return ERR_PTR(error);
+}
+
+/* should probably go into sys_open() */
+static int do_open(const char * filename, int flags, int mode, int fd)
+{
+	struct file * f;
+
+	f = filp_open(filename, flags, mode);
+	if (IS_ERR(f))
+		return PTR_ERR(f);
+	fd_install(fd, f);
+	return 0;
 }
 
 /*

@@ -1270,6 +1270,8 @@ static int get_status_info(char *buffer, char **start, off_t req_offset, int req
 }
 
 static const char proc_strip_status_name[] = "strip";
+
+#ifdef CONFIG_PROC_FS
 static struct proc_dir_entry proc_strip_get_status_info =
 {
     PROC_NET_STRIP_STATUS,		/* unsigned short low_ino */
@@ -1284,7 +1286,7 @@ static struct proc_dir_entry proc_strip_get_status_info =
     NULL, NULL, NULL,			/* struct proc_dir_entry *next, *parent, *subdir; */
     NULL				/* void *data; */
 };
-
+#endif /* CONFIG_PROC_FS */
 
 /************************************************************************/
 /* Sending routines							*/
@@ -2847,10 +2849,12 @@ int strip_init_ctrl_dev(struct device *dummy)
     /*
      * Register the status file with /proc
      */
+#ifdef CONFIG_PROC_FS 
     if (proc_net_register(&proc_strip_get_status_info) != 0)
     {
         printk(KERN_ERR "strip: status proc_net_register() failed.\n");
     }
+#endif
 
 #ifdef MODULE
      return status;
@@ -2881,7 +2885,9 @@ void cleanup_module(void)
         strip_free(struct_strip_list);
 
     /* Unregister with the /proc/net file here. */
+#ifdef CONFIG_PROC_FS
     proc_net_unregister(PROC_NET_STRIP_STATUS);
+#endif
 
     if ((i = tty_register_ldisc(N_STRIP, NULL)))
         printk(KERN_ERR "STRIP: can't unregister line discipline (err = %d)\n", i);

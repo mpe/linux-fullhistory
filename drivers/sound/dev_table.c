@@ -516,6 +516,7 @@ void sound_unload_audiodev(int dev)
 {
 	if (dev != -1)
 	{
+		DMAbuf_deinit(dev);
 		audio_devs[dev] = NULL;
 		unregister_sound_dsp((dev<<4)+3);
 	}

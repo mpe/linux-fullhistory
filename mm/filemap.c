@@ -1523,9 +1523,8 @@ generic_file_write(struct file *file, const char *buf,
 	unsigned long	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
 	struct page	*page, **hash;
 	unsigned long	page_cache = 0;
-	unsigned long	pgpos, offset;
-	unsigned long	bytes, written;
-	long		status, sync, didread;
+	unsigned long	written;
+	long		status, sync;
 
 	if (!inode->i_op || !inode->i_op->updatepage)
 		return -EIO;
@@ -1556,14 +1555,15 @@ generic_file_write(struct file *file, const char *buf,
 	}
 
 	while (count) {
+		unsigned long bytes, pgpos, offset;
 		/*
 		 * Try to find the page in the cache. If it isn't there,
 		 * allocate a free page.
 		 */
 		offset = (pos & ~PAGE_MASK);
 		pgpos = pos & PAGE_MASK;
-
-		if ((bytes = PAGE_SIZE - offset) > count)
+		bytes = PAGE_SIZE - offset;
+		if (bytes > count)
 			bytes = count;
 
 		hash = page_hash(inode, pgpos);
@@ -1580,50 +1580,20 @@ generic_file_write(struct file *file, const char *buf,
 			page_cache = 0;
 		}
 
-		/*
-		 * Note: setting of the PG_locked bit is handled
-		 * below the i_op->xxx interface.
-		 */
-		didread = 0;
-page_wait:
 		wait_on_page(page);
-		if (PageUptodate(page))
-			goto do_update_page;
+		set_bit(PG_locked, &page->flags);
 
-		/*
-		 * The page is not up-to-date ... if we're writing less
-		 * than a full page of data, we may have to read it first.
-		 * But if the page is past the current end of file, we must
-		 * clear it before updating.
-		 */
-		if (bytes < PAGE_SIZE) {
-			if (pgpos < inode->i_size) {
-				status = -EIO;
-				if (didread >= 2)
-					goto done_with_page;
-				status = inode->i_op->readpage(file, page);
-				if (status < 0)
-					goto done_with_page;
-				didread++;
-				goto page_wait;
-			} else {
-				/* Must clear for partial writes */
-				memset((void *) page_address(page), 0,
-					 PAGE_SIZE);
-			}
+		bytes -= copy_from_user((u8*)page_address(page) + offset, buf, bytes);
+		if (!bytes) {
+			status = -EFAULT;
+			clear_bit(PG_locked, &page->flags);
+			wake_up(&page->wait);
+			__free_page(page);
+			break;
 		}
-		/*
-		 * N.B. We should defer setting PG_uptodate at least until
-		 * the data is copied. A failure in i_op->updatepage() could
-		 * leave the page with garbage data.
-		 */
-		set_bit(PG_uptodate, &page->flags);
 
-do_update_page:
-		/* All right, the page is there.  Now update it. */
-		status = inode->i_op->updatepage(file, page, buf,
-							offset, bytes, sync);
-done_with_page:
+		status = inode->i_op->updatepage(file, page, offset, bytes, sync);
+
 		__free_page(page);
 		if (status < 0)
 			break;

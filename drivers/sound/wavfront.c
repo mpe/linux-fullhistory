@@ -2055,14 +2055,12 @@ wavefront_open (int dev, int mode)
 	return (0);
 }
 
-static void
-wavefront_close (int dev)
-
+static void wavefront_close (int dev)
 {
 	struct wf_config *hw = &wavefront_configuration;
-	int i;
 
 #ifdef WF_STATS
+	int i;
 	printk ("Status during loop: %ld\n", hw->status_found_during_loop);
 	for (i = 0; i < 4; i++) {
 		printk ("Status during sleep[%d]: %ld\n",
@@ -2075,42 +2073,36 @@ wavefront_close (int dev)
 	return;
 }
 
-static void
-wavefront_aftertouch (int dev, int channel, int pressure)
+static void wavefront_aftertouch (int dev, int channel, int pressure)
 {
 	midi_synth_aftertouch (wavefront_configuration.mididev,channel,pressure);
 };
 
-static void
-wavefront_bender (int dev, int chn, int value)
+static void wavefront_bender (int dev, int chn, int value)
 {
 	midi_synth_bender (wavefront_configuration.mididev, chn, value);
 };
 
-static void
-wavefront_controller (int dev, int channel, int ctrl_num, int value)
+static void wavefront_controller (int dev, int channel, int ctrl_num, int value)
 {
 	if(ctrl_num==CTRL_PITCH_BENDER) wavefront_bender(0,channel,value);
 	midi_synth_controller (wavefront_configuration.mididev,
 			       channel,ctrl_num,value);
 };
 
-static void
-wavefront_panning(int dev, int channel, int pressure)
+static void wavefront_panning(int dev, int channel, int pressure)
 {
 	midi_synth_controller (wavefront_configuration.mididev,
 			       channel,CTL_PAN,pressure);
 };
 
-static int
-wavefront_set_instr (int dev, int channel, int instr_no)
+static int wavefront_set_instr (int dev, int channel, int instr_no)
 {
 	return(midi_synth_set_instr (wavefront_configuration.mididev,
 				     channel,instr_no));
 };
 
-static int
-wavefront_kill_note (int dev, int channel, int note, int volume)
+static int wavefront_kill_note (int dev, int channel, int note, int volume)
 {
 	if (note==255)
 		return (midi_synth_start_note (wavefront_configuration.mididev,
@@ -2119,8 +2111,7 @@ wavefront_kill_note (int dev, int channel, int note, int volume)
 				     channel, note, volume));
 };
 
-static int
-wavefront_start_note (int dev, int channel, int note, int volume)
+static int wavefront_start_note (int dev, int channel, int note, int volume)
 {
 	if (note==255) {
 		midi_synth_aftertouch (wavefront_configuration.mididev,
@@ -2140,13 +2131,11 @@ wavefront_start_note (int dev, int channel, int note, int volume)
 	return(0);
 };
 
-static void
-wavefront_setup_voice (int dev, int voice, int chn)
+static void wavefront_setup_voice (int dev, int voice, int chn)
 {
 };
 
 static void wavefront_reset (int dev)
-
 {
 	int i;
 

@@ -62,7 +62,7 @@ struct inode_operations sysv_dir_inode_operations = {
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
-	sysv_truncate,		/* truncate */
+	NULL,			/* truncate */
 	NULL			/* permission */
 };
 

@@ -450,10 +450,10 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			else
 				child->flags &= ~PF_TRACESYS;
 			child->exit_code = data;
-			wake_up_process(child);
 			/* make sure the single step bit is not set. */
 			tmp = get_reg(child, PT_SR) & ~(TRACE_BITS << 16);
 			put_reg(child, PT_SR, tmp);
+			wake_up_process(child);
 			ret = 0;
 			goto out;
 		}
@@ -469,11 +469,11 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			ret = 0;
 			if (child->state == TASK_ZOMBIE) /* already dead */
 				goto out;
-			wake_up_process(child);
 			child->exit_code = SIGKILL;
 	/* make sure the single step bit is not set. */
 			tmp = get_reg(child, PT_SR) & ~(TRACE_BITS << 16);
 			put_reg(child, PT_SR, tmp);
+			wake_up_process(child);
 			goto out;
 		}
 
@@ -487,9 +487,9 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			tmp = get_reg(child, PT_SR) | (TRACE_BITS << 16);
 			put_reg(child, PT_SR, tmp);
 
-			wake_up_process(child);
 			child->exit_code = data;
 	/* give it a chance to run. */
+			wake_up_process(child);
 			ret = 0;
 			goto out;
 		}
@@ -502,7 +502,6 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			if ((unsigned long) data > _NSIG)
 				goto out;
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
-			wake_up_process(child);
 			child->exit_code = data;
 			write_lock_irqsave(&tasklist_lock, flags);
 			REMOVE_LINKS(child);
@@ -512,6 +511,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			/* make sure the single step bit is not set. */
 			tmp = get_reg(child, PT_SR) & ~(TRACE_BITS << 16);
 			put_reg(child, PT_SR, tmp);
+			wake_up_process(child);
 			ret = 0;
 			goto out;
 		}

@@ -15,6 +15,8 @@
  *                   integrated sound_switch.c
  * Stefan Reinauer : integrated /proc/sound (equals to /dev/sndstat,
  *                   which should disappear in the near future)
+ *
+ * Rob Riggs		Added persistent DMA buffers support (1998/10/17)
  */
 
 #include <linux/config.h>
@@ -63,6 +65,9 @@ static int      is_unloading = 0;
  */
 caddr_t         sound_mem_blocks[1024];
 int             sound_nblocks = 0;
+
+/* Persistent DMA buffers */
+int		sound_dmap_flag = 0;	/* Off by default */
 
 static int      soundcard_configured = 0;
 
@@ -848,7 +853,9 @@ static int      sound[20] = {
 #ifdef MODULE
 
 int traceinit = 0;
+static int dmabuf = 0;
 MODULE_PARM(traceinit, "i");
+MODULE_PARM(dmabuf, "i");
 
 int init_module(void)
 {
@@ -874,6 +881,10 @@ int init_module(void)
 		printk(KERN_ERR "sound: driver already loaded/included in kernel\n");
 		return err;
 	}
+
+	/* Protecting the innocent */
+	sound_dmap_flag = (dmabuf > 0 ? 1 : 0);
+
 	chrdev_registered = 1;
 	soundcard_init();
 

@@ -279,8 +279,8 @@ Slot 5: db 8f 1d 5e fd c0 00 00
 Slot 6: ff ff ff ff ff ff ff ff  
 Slot 7: 42 60 ff 08 ff ff ff ff  3Com 3c523 Etherlink/MC
 Slot 8: ff ff ff ff ff ff ff ff  
-Video: ff ff ff ff ff ff ff ff  
-SCSI: ff ff ff ff ff ff ff ff  
+Video : ff ff ff ff ff ff ff ff  
+SCSI  : ff ff ff ff ff ff ff ff  
 
 /proc/mca/slot1:
 Slot: 1

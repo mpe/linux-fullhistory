@@ -58,6 +58,10 @@ int proc_dol2crvec(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp);
 #endif
 
+#ifdef CONFIG_BSD_PROCESS_ACCT
+extern int acct_parm[];
+#endif
+
 extern int pgt_cache_water[];
 
 static int parse_table(int *, int, void *, size_t *, void *, size_t,
@@ -192,6 +196,10 @@ static ctl_table kern_table[] = {
 #ifdef CONFIG_CHR_DEV_SG
 	{KERN_SG_BIG_BUFF, "sg-big-buff", &sg_big_buff, sizeof (int),
 	 0444, NULL, &proc_dointvec},
+#endif
+#ifdef CONFIG_BSD_PROCESS_ACCT
+	{KERN_ACCT, "acct", &acct_parm, 3*sizeof(int),
+	0644, NULL, &proc_dointvec},
 #endif
 	{0}
 };

@@ -605,8 +605,7 @@ struct inode_operations {
 	void (*truncate) (struct inode *);
 	int (*permission) (struct inode *, int);
 	int (*smap) (struct inode *,int);
-	int (*updatepage) (struct file *, struct page *, const char *,
-				unsigned long, unsigned int, int);
+	int (*updatepage) (struct file *, struct page *, unsigned long, unsigned int, int);
 	int (*revalidate) (struct dentry *);
 };
 
@@ -687,6 +686,7 @@ extern int do_truncate(struct dentry *, unsigned long);
 extern int get_unused_fd(void);
 extern void put_unused_fd(unsigned int);
 extern int close_fp(struct file *, fl_owner_t id);
+extern struct file *filp_open(const char *, int, int);
 
 extern char * getname(const char * filename);
 extern void putname(char * name);

@@ -168,17 +168,27 @@ static void sbintr(int irq, void *dev_id, struct pt_regs *dummy)
 				/* printk(KERN_WARN "Sound Blaster: Unexpected interrupt\n"); */
 				;
 		}
-    } else if (devc->intr_active_2 && (src & 0x02)) {
-        switch (devc->irq_mode_2)
-        {
-            case IMODE_OUTPUT:
-                DMAbuf_outputintr (devc->dev, 1);
-                break;
-            case IMODE_INPUT:
-                DMAbuf_inputintr (devc->dev);
-                break;
-        }
-    }
+	}
+	else if (devc->intr_active_16 && (src & 0x02))
+	{
+		switch (devc->irq_mode_16)
+		{
+			case IMODE_OUTPUT:
+				DMAbuf_outputintr(devc->dev, 1);
+				break;
+
+			case IMODE_INPUT:
+				DMAbuf_inputintr(devc->dev);
+				break;
+
+			case IMODE_INIT:
+				break;
+
+			default:
+				/* printk(KERN_WARN "Sound Blaster: Unexpected interrupt\n"); */
+				;
+		}
+	}
 	/*
 	 * Acknowledge interrupts 
 	 */
@@ -605,6 +615,7 @@ int sb_dsp_detect(struct address_info *hw_config)
 	sb_devc sb_info;
 	sb_devc *devc = &sb_info;
 
+	memset((char *) &sb_info, 0, sizeof(sb_info));	/* Zero everything */
 	sb_info.my_mididev = -1;
 	sb_info.my_mixerdev = -1;
 	sb_info.my_dev = -1;
@@ -621,7 +632,6 @@ int sb_dsp_detect(struct address_info *hw_config)
 #endif
 		return 0;
 	}
-	memset((char *) &sb_info, 0, sizeof(sb_info));	/* Zero everything */
 
 	devc->type = hw_config->card_subtype;
 
@@ -971,7 +981,7 @@ void sb_dsp_unload(struct address_info *hw_config, int sbmpu)
 			/* We don't have to do this bit any more the UART401 is its own
 				master  -- Krzysztof Halasa */
 			/* But we have to do it, if UART401 is not detected */
-			if (!sbmpu && devc->my_mididev)
+			if (!sbmpu)
 				sound_unload_mididev(devc->my_mididev);
 			sound_unload_audiodev(devc->my_dev);
 		}

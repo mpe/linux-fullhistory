@@ -391,9 +391,12 @@ static void z8530_dma_rx(struct z8530_channel *chan)
 	if(chan->rxdma_on)
 	{
 		/* Special condition check only */
-		u8 r7=read_zsreg(chan, R7);
-		u8 r6=read_zsreg(chan, R6);
-		u8 status=read_zsreg(chan, R1);
+		u8 status;
+
+		read_zsreg(chan, R7);
+		read_zsreg(chan, R6);
+		
+		status=read_zsreg(chan, R1);
 		if(status&END_FR)
 		{
 			z8530_rx_done(chan);	/* Fire up the next one */

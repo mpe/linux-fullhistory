@@ -388,8 +388,9 @@ int fdc_interrupt_wait(unsigned int time)
 	struct wait_queue wait = {current, NULL};
 	sigset_t old_sigmask;	
 	static int resetting = 0;
-	TRACE_FUN(ft_t_fdc_dma);
 	long timeout;
+
+	TRACE_FUN(ft_t_fdc_dma);
 
 #if LINUX_VERSION_CODE >= KERNEL_VER(2,0,16)
  	if (waitqueue_active(&ftape_wait_intr)) {

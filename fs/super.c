@@ -33,6 +33,7 @@
 #include <linux/fd.h>
 #include <linux/init.h>
 #include <linux/quotaops.h>
+#include <linux/acct.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -663,10 +664,7 @@ static int do_umount(kdev_t dev, int unmount_root, int flags)
 	 * are no quotas running any more. Just turn them on again.
 	 */
 	DQUOT_OFF(dev);
-
-#ifdef CONFIG_BSD_PROCESS_ACCT
-	(void) acct_auto_close(dev);
-#endif
+	acct_auto_close(dev);
 
 	/*
 	 * If we may have to abort operations to get out of this
@@ -971,6 +969,8 @@ static int do_remount(const char *dir,int flags,char *data)
 			 */
 			shrink_dcache_sb(sb);
 			fsync_dev(sb->s_dev);
+			if (flags & MS_RDONLY)
+				acct_auto_close(sb->s_dev);
 			retval = do_remount_sb(sb, flags, data);
 		}
 		dput(dentry);

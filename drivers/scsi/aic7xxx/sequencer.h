@@ -36,8 +36,10 @@
  *      $Id: sequencer.h,v 1.3 1997/09/27 19:37:31 gibbs Exp $
  */
 
+#ifdef __LITTLE_ENDIAN_BITFIELD
 struct ins_format1 {
-	unsigned int	immediate	: 8,
+	unsigned int
+			immediate	: 8,
 			source		: 9,
 			destination	: 9,
 			ret		: 1,
@@ -46,7 +48,8 @@ struct ins_format1 {
 };
 
 struct ins_format2 {
-	unsigned int	shift_control	: 8,
+	unsigned int
+			shift_control	: 8,
 			source		: 9,
 			destination	: 9,
 			ret		: 1,
@@ -55,12 +58,43 @@ struct ins_format2 {
 };
 
 struct ins_format3 {
-	unsigned int	immediate	: 8,
+	unsigned int
+			immediate	: 8,
 			source		: 9,
 			address		: 10,
 			opcode		: 4,
 			parity		: 1;
 };
+#elif defined(__BIG_ENDIAN_BITFIELD)
+struct ins_format1 {
+	unsigned int
+			parity		: 1,
+			opcode		: 4,
+			ret		: 1,
+			destination	: 9,
+			source		: 9,
+			immediate	: 8;
+};
+
+struct ins_format2 {
+	unsigned int
+			parity		: 1,
+			opcode		: 4,
+			ret		: 1,
+			destination	: 9,
+			source		: 9,
+			shift_control	: 8;
+};
+
+struct ins_format3 {
+	unsigned int
+			parity		: 1,
+			opcode		: 4,
+			address		: 10,
+			source		: 9,
+			immediate	: 8;
+};
+#endif
 
 union ins_formats {
 		struct ins_format1 format1;

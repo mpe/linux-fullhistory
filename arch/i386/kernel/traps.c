@@ -21,6 +21,11 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 
+#ifdef CONFIG_MCA
+#include <linux/mca.h>
+#include <asm/processor.h>
+#endif
+
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -295,6 +300,14 @@ static void io_check_error(unsigned char reason, struct pt_regs * regs)
 
 static void unknown_nmi_error(unsigned char reason, struct pt_regs * regs)
 {
+#ifdef CONFIG_MCA
+	/* Might actually be able to figure out what the guilty party
+	* is. */
+	if( MCA_bus ) {
+		mca_handle_nmi();
+		return;
+	}
+#endif
 	printk("Uhhuh. NMI received for unknown reason %02x.\n", reason);
 	printk("Dazed and confused, but trying to continue\n");
 	printk("Do you have a strange power saving mode enabled?\n");

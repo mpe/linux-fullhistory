@@ -485,10 +485,11 @@ static inline void release_old_signals(struct signal_struct * oldsig)
  * These functions flushes out all traces of the currently running executable
  * so that a new one can be started
  */
-
 static inline void flush_old_signals(struct task_struct *t)
 {
+#if 0
 	flush_signals(t);
+#endif
 	flush_signal_handlers(t);
 }
 

@@ -87,14 +87,14 @@ typedef struct sb_devc {
 
 	/* State variables */
  	   int opened;
-    /* new audio fields for full duplex support */
-       int fullduplex;
-       int duplex;
+	/* new audio fields for full duplex support */
+	   int fullduplex;
+	   int duplex;
 	   int speed, bits, channels;
 	   volatile int irq_ok;
 	   volatile int intr_active, irq_mode;
-    /* duplicate audio fields for full duplex support */
-	   volatile int intr_active_2, irq_mode_2;
+	/* duplicate audio fields for full duplex support */
+	   volatile int intr_active_16, irq_mode_16;
 
 	/* Mixer fields */
 	   int *levels;
@@ -110,12 +110,12 @@ typedef struct sb_devc {
 	   int      trg_bytes;
 	   int      trg_intrflag;
 	   int      trg_restart;
-    /* duplicate audio fields for full duplex support */
-	   unsigned long trg_buf_2;
-	   int      trigger_bits_2;
-	   int      trg_bytes_2;
-	   int      trg_intrflag_2;
-	   int      trg_restart_2;
+	/* duplicate audio fields for full duplex support */
+	   unsigned long trg_buf_16;
+	   int      trigger_bits_16;
+	   int      trg_bytes_16;
+	   int      trg_intrflag_16;
+	   int      trg_restart_16;
 
 	   unsigned char tconst;
 	   int my_dev;

@@ -15,6 +15,7 @@ system, it is advisable to read both documentation and source
 before actually making adjustments.
 
 Currently, these files are in /proc/sys/kernel:
+- acct
 - ctrl-alt-del
 - dentry-state
 - domainname
@@ -33,6 +34,23 @@ Currently, these files are in /proc/sys/kernel:
 - reboot-cmd                  ==> SPARC specific
 - securelevel
 - version
+
+==============================================================
+
+acct:
+
+highwater lowwater frequency
+
+If BSD-style process accounting is enabled these values control
+its behaviour. If free space on filesystem where the log lives
+goes below <lowwater>% accounting suspends. If free space gets
+above <highwater>% accounting resumes. <Frequency> determines
+how often do we check the amount of free space (value is in
+seconds). Default:
+4 2 30
+That is, suspend accounting if there left <= 2% free; resume it
+if we got >=4%; consider information about amount of free space
+valid for 30 seconds.
 
 ==============================================================
 

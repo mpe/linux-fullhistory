@@ -330,8 +330,6 @@ static int econet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	{
 		/* Real hardware Econet.  We're not worthy etc. */
 #ifdef CONFIG_ECONET_NATIVE
-		unsigned char *p;
-
 		dev_lock_list();
 		
 		skb = sock_alloc_send_skb(sk, len+dev->hard_header_len+15, 0, 

@@ -55,7 +55,7 @@ struct inode_operations minix_dir_inode_operations = {
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
-	minix_truncate,		/* truncate */
+	NULL,			/* truncate */
 	NULL			/* permission */
 };
 

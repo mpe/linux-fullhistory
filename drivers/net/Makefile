@@ -482,6 +482,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_3C515),y)
+L_OBJS += 3c515.o
+else
+  ifeq ($(CONFIG_3C515),m)
+  M_OBJS += 3c515.o
+  endif
+endif
+
 ifeq ($(CONFIG_VORTEX),y)
 L_OBJS += 3c59x.o
 else

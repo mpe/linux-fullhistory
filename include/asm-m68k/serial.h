@@ -336,9 +336,21 @@ static __inline__ void rs_receive_char( struct m68k_async_struct *info,
 	if (tty->flip.count >= TTY_FLIPBUF_SIZE)
 		return;
 	tty->flip.count++;
-	if (err == TTY_BREAK) {
+	switch(err) {
+	case TTY_BREAK:
+		info->icount.brk++;
 		if (info->flags & ASYNC_SAK)
 			do_SAK(tty);
+		break;
+	case TTY_PARITY:
+		info->icount.parity++;
+		break;
+	case TTY_OVERRUN:
+		info->icount.overrun++;
+		break;
+	case TTY_FRAME:
+		info->icount.frame++;
+		break;
 	}
 	*tty->flip.flag_buf_ptr++ = err;
 	*tty->flip.char_buf_ptr++ = ch;

@@ -827,6 +827,7 @@ static int proc_root_lookup(struct inode * dir, struct dentry * dentry)
 		inode = proc_get_inode(dir->i_sb, ino, &proc_pid);
 		if (!inode)
 			return -EINVAL;
+		inode->i_flags|=S_IMMUTABLE;
 	}
 
 	dentry->d_op = &proc_dentry_operations;
@@ -943,6 +944,7 @@ static int proc_root_readdir(struct file * filp,
 
 	for (i = 0; i < nr_pids; i++) {
 		int pid = pid_array[i];
+		ino_t ino = (pid << 16) + PROC_PID_INO;
 		unsigned long j = PROC_NUMBUF;
 
 		do {
@@ -951,7 +953,7 @@ static int proc_root_readdir(struct file * filp,
 			pid /= 10;
 		} while (pid);
 
-		if (filldir(dirent, buf+j, PROC_NUMBUF-j, filp->f_pos, (pid << 16) + PROC_PID_INO) < 0)
+		if (filldir(dirent, buf+j, PROC_NUMBUF-j, filp->f_pos, ino) < 0)
 			break;
 		filp->f_pos++;
 	}

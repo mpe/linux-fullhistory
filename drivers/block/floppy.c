@@ -4183,6 +4183,9 @@ __initfunc(int floppy_init(void))
 			continue;
 		FDCS->rawcmd = 2;
 		if (user_reset_fdc(-1,FD_RESET_ALWAYS,0)){
+ 			/* free ioports reserved by floppy_grab_irq_and_dma() */
+ 			release_region(FDCS->address, 6);
+ 			release_region(FDCS->address+7, 1);
 			FDCS->address = -1;
 			FDCS->version = FDC_NONE;
 			continue;
@@ -4190,6 +4193,9 @@ __initfunc(int floppy_init(void))
 		/* Try to determine the floppy controller type */
 		FDCS->version = get_fdc_version();
 		if (FDCS->version == FDC_NONE){
+ 			/* free ioports reserved by floppy_grab_irq_and_dma() */
+ 			release_region(FDCS->address, 6);
+ 			release_region(FDCS->address+7, 1);
 			FDCS->address = -1;
 			continue;
 		}
@@ -4211,6 +4217,12 @@ __initfunc(int floppy_init(void))
 	if (have_no_fdc) 
 	{
 		DPRINT("no floppy controllers found\n");
+ 		floppy_tq.routine = (void *)(void *) empty;
+		mark_bh(IMMEDIATE_BH);
+		schedule();
+ 		if (usage_count)
+ 			floppy_release_irq_and_dma();
+ 		blk_dev[MAJOR_NR].request_fn = NULL;
 		unregister_blkdev(MAJOR_NR,"fd");		
 	}
 	return have_no_fdc;

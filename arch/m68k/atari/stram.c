@@ -19,6 +19,8 @@
 #include <linux/malloc.h>
 #include <linux/vmalloc.h>
 #include <linux/pagemap.h>
+#include <linux/shm.h>
+
 #include <asm/setup.h>
 #include <asm/machdep.h>
 #include <asm/page.h>
@@ -26,6 +28,7 @@
 #include <asm/atarihw.h>
 #include <asm/atari_stram.h>
 #include <asm/io.h>
+#include <asm/semaphore.h>
 
 
 #ifdef CONFIG_STRAM_SWAP
@@ -116,6 +119,10 @@
  * since the freeing algorithms are also blind to DMA capability of pages.
  */
 
+/* 1998-10-20: ++andreas
+   unswap_by_move disabled because it does not handle swapped shm pages.
+*/
+
 #ifdef CONFIG_STRAM_SWAP
 #define ALIGN_IF_SWAP(x)	PAGE_ALIGN(x)
 #else
@@ -192,6 +199,9 @@ static struct swap_info_struct *stram_swap_info;
 /* The ST-RAM's swap type */
 static int stram_swap_type;
 
+/* Semaphore for get_stram_region.  */
+static struct semaphore stram_swap_sem = MUTEX;
+
 /* major and minor device number of the ST-RAM device; for the major, we use
  * the same as Amiga z2ram, which is really similar and impossible on Atari,
  * and for the minor a relatively odd number to avoid the user creating and
@@ -215,25 +225,6 @@ static unsigned stat_swap_force = 0;
 
 #ifdef CONFIG_STRAM_SWAP
 static int swap_init( unsigned long start_mem, unsigned long swap_data );
-static inline int unswap_pte( struct vm_area_struct * vma, unsigned long
-			      address, pte_t *dir, unsigned long entry,
-			      unsigned long page, int isswap );
-static inline int unswap_pmd( struct vm_area_struct * vma, pmd_t *dir,
-			      unsigned long address, unsigned long size,
-			      unsigned long offset, unsigned long entry,
-			      unsigned long page, int isswap );
-static inline int unswap_pgd( struct vm_area_struct * vma, pgd_t *dir,
-			      unsigned long address, unsigned long size,
-			      unsigned long entry, unsigned long page, int
-			      isswap );
-static int unswap_vma( struct vm_area_struct * vma, pgd_t *pgdir, unsigned
-		       long entry, unsigned long page, int isswap );
-static int unswap_process( struct mm_struct * mm, unsigned long entry,
-			   unsigned long page, int isswap );
-static int unswap_by_move(unsigned short *, unsigned long, unsigned long,
-			  unsigned long);
-static int unswap_by_read(unsigned short *, unsigned long, unsigned long,
-			  unsigned long);
 static void *get_stram_region( unsigned long n_pages );
 static void free_stram_region( unsigned long offset, unsigned long n_pages
 			       );
@@ -263,7 +254,7 @@ static int remove_region( BLOCK *block );
  * This init function is called very early by atari/config.c
  * It initializes some internal variables needed for stram_alloc()
  */
-__initfunc(void atari_stram_init( void ))
+void __init atari_stram_init(void)
 {
 	int i;
 
@@ -294,7 +285,7 @@ __initfunc(void atari_stram_init( void ))
  * This function is called from mem_init() to reserve the pages needed for
  * ST-RAM management.
  */
-__initfunc(void atari_stram_reserve_pages( unsigned long start_mem ))
+void __init atari_stram_reserve_pages(unsigned long start_mem)
 {
 #ifdef CONFIG_STRAM_SWAP
 	/* if max_swap_size is negative (i.e. no stram_swap= option given),
@@ -573,8 +564,7 @@ void atari_stram_free( void *addr )
  * Initialize ST-RAM swap device
  * (lots copied and modified from sys_swapon() in mm/swapfile.c)
  */
-__initfunc(static int swap_init( unsigned long start_mem,
-								 unsigned long swap_data ))
+static int __init swap_init(unsigned long start_mem, unsigned long swap_data)
 {
 	static struct dentry fake_dentry[3];
 	struct swap_info_struct *p;
@@ -691,75 +681,64 @@ __initfunc(static int swap_init( unsigned long start_mem,
 /*
  * The swap entry has been read in advance, and we return 1 to indicate
  * that the page has been used or is no longer needed.
+ *
+ * Always set the resulting pte to be nowrite (the same as COW pages
+ * after one process has exited).  We don't know just how many PTEs will
+ * share this swap entry, so be cautious and let do_wp_page work out
+ * what to do if a write is requested later.
  */
-static inline int unswap_pte( struct vm_area_struct * vma, unsigned long
-							  address, pte_t *dir, unsigned long entry,
-							  unsigned long page, int isswap )
+static inline void unswap_pte(struct vm_area_struct * vma, unsigned long
+			      address, pte_t *dir, unsigned long entry,
+			      unsigned long page /*, int isswap */)
 {
 	pte_t pte = *dir;
 
 	if (pte_none(pte))
-		return 0;
+		return;
 	if (pte_present(pte)) {
-		struct page *pg;
-		unsigned long page_nr = MAP_NR(pte_page(pte));
-		unsigned long pg_swap_entry;
-
-		if (page_nr >= max_mapnr)
-			return 0;
-		pg = mem_map + page_nr;
-		if (!(pg_swap_entry = in_swap_cache(pg)))
-			return 0;
-		if (pg_swap_entry != entry)
-			return 0;
-		if (isswap) {
-			DPRINTK( "unswap_pte: page %08lx = entry %08lx was in swap cache; "
-					 "exchanging to %08lx\n",
-					 page_address(pg), entry, page );
-			pg->offset = page;
-			swap_free(entry);
-			return 1;
-		}
-		else {
-			DPRINTK( "unswap_pte: page %08lx = entry %08lx was in swap cache; "
-					 "deleted there\n", page_address(pg), entry );
-			delete_from_swap_cache(pg);
+		/* If this entry is swap-cached, then page must already
+                   hold the right address for any copies in physical
+                   memory */
+		if (pte_page(pte) != page)
+			return;
+		if (0 /* isswap */)
+			mem_map[MAP_NR(pte_page(pte))].offset = page;
+		else
+			/* We will be removing the swap cache in a moment, so... */
 			set_pte(dir, pte_mkdirty(pte));
-			free_page(page);
-			return 1;
-		}
+		return;
 	}
 	if (pte_val(pte) != entry)
-		return 0;
+		return;
 
-	if (isswap) {
+	if (0 /* isswap */) {
 		DPRINTK( "unswap_pte: replacing entry %08lx by %08lx", entry, page );
 		set_pte(dir, __pte(page));
 	}
 	else {
 		DPRINTK( "unswap_pte: replacing entry %08lx by new page %08lx",
 				 entry, page );
-		set_pte(dir, pte_mkwrite(pte_mkdirty(mk_pte(page,vma->vm_page_prot))));
+		set_pte(dir, pte_mkdirty(mk_pte(page,vma->vm_page_prot)));
+		atomic_inc(&mem_map[MAP_NR(page)].count);
 		++vma->vm_mm->rss;
 	}
 	swap_free(entry);
-	return 1;
 }
 
-static inline int unswap_pmd( struct vm_area_struct * vma, pmd_t *dir,
-							  unsigned long address, unsigned long size,
-							  unsigned long offset, unsigned long entry,
-							  unsigned long page, int isswap )
+static inline void unswap_pmd(struct vm_area_struct * vma, pmd_t *dir,
+			      unsigned long address, unsigned long size,
+			      unsigned long offset, unsigned long entry,
+			      unsigned long page /* , int isswap */)
 {
 	pte_t * pte;
 	unsigned long end;
 
 	if (pmd_none(*dir))
-		return 0;
+		return;
 	if (pmd_bad(*dir)) {
 		printk("unswap_pmd: bad pmd (%08lx)\n", pmd_val(*dir));
 		pmd_clear(dir);
-		return 0;
+		return;
 	}
 	pte = pte_offset(dir, address);
 	offset += address & PMD_MASK;
@@ -768,29 +747,27 @@ static inline int unswap_pmd( struct vm_area_struct * vma, pmd_t *dir,
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
 	do {
-		if (unswap_pte( vma, offset+address-vma->vm_start, pte, entry, 
-						page, isswap ))
-			return 1;
+		unswap_pte(vma, offset+address-vma->vm_start, pte, entry,
+			   page /* , isswap */);
 		address += PAGE_SIZE;
 		pte++;
 	} while (address < end);
-	return 0;
 }
 
-static inline int unswap_pgd( struct vm_area_struct * vma, pgd_t *dir,
-							  unsigned long address, unsigned long size,
-							  unsigned long entry, unsigned long page,
-							  int isswap )
+static inline void unswap_pgd(struct vm_area_struct * vma, pgd_t *dir,
+			      unsigned long address, unsigned long size,
+			      unsigned long entry, unsigned long page
+			      /* , int isswap */)
 {
 	pmd_t * pmd;
 	unsigned long offset, end;
 
 	if (pgd_none(*dir))
-		return 0;
+		return;
 	if (pgd_bad(*dir)) {
 		printk("unswap_pgd: bad pgd (%08lx)\n", pgd_val(*dir));
 		pgd_clear(dir);
-		return 0;
+		return;
 	}
 	pmd = pmd_offset(dir, address);
 	offset = address & PGDIR_MASK;
@@ -799,53 +776,45 @@ static inline int unswap_pgd( struct vm_area_struct * vma, pgd_t *dir,
 	if (end > PGDIR_SIZE)
 		end = PGDIR_SIZE;
 	do {
-		if (unswap_pmd( vma, pmd, address, end - address, offset, entry,
-						page, isswap ))
-			return 1;
+		unswap_pmd(vma, pmd, address, end - address, offset, entry,
+			   page /* , isswap */);
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
 	} while (address < end);
-	return 0;
 }
 
-static int unswap_vma( struct vm_area_struct * vma, pgd_t *pgdir,
-					   unsigned long entry, unsigned long page, int isswap )
+static void unswap_vma(struct vm_area_struct * vma, pgd_t *pgdir,
+		       unsigned long entry, unsigned long page
+		       /* , int isswap */)
 {
 	unsigned long start = vma->vm_start, end = vma->vm_end;
 
-	while( start < end ) {
-		if (unswap_pgd( vma, pgdir, start, end - start, entry, page, isswap ))
-			return 1;
+	while (start < end) {
+		unswap_pgd(vma, pgdir, start, end - start, entry, page
+			   /* , isswap */);
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
 		pgdir++;
 	}
-	return 0;
 }
 
-static int unswap_process( struct mm_struct * mm, unsigned long entry, 
-						   unsigned long page, int isswap )
+static void unswap_process(struct mm_struct * mm, unsigned long entry, 
+			   unsigned long page /* , int isswap */)
 {
 	struct vm_area_struct* vma;
-	int retval = 0;
 
 	/*
 	 * Go through process' page directory.
 	 */
 	if (!mm || mm == &init_mm)
-		return 0;
-	down(&mm->mmap_sem);
-	for( vma = mm->mmap; vma; vma = vma->vm_next ) {
+		return;
+	for (vma = mm->mmap; vma; vma = vma->vm_next) {
 		pgd_t * pgd = pgd_offset(mm, vma->vm_start);
-		if (unswap_vma( vma, pgd, entry, page, isswap )) {
-			retval = 1;
-			break;
-		}
+		unswap_vma(vma, pgd, entry, page /* , isswap */);
 	}
-	up(&mm->mmap_sem);
-	return retval;
 }
 
 
+#if 0
 static int unswap_by_move(unsigned short *map, unsigned long max,
 			  unsigned long start, unsigned long n_pages)
 {
@@ -899,14 +868,17 @@ static int unswap_by_move(unsigned short *map, unsigned long max,
 #endif
 
 		while( map[i] ) {
+			read_lock(&tasklist_lock);
 			for_each_task(p) {
 				if (unswap_process( p->mm, SWP_ENTRY( stram_swap_type, i ),
 									entry, 1 )) {
+					read_unlock(&tasklist_lock);
 					map[j]++;
 					goto repeat;
 				}
 			}
-			if (map[i] && map[i] != 127) {
+			read_unlock(&tasklist_lock);
+			if (map[i] && map[i] != SWAP_MAP_MAX) {
 				printk( KERN_ERR "get_stram_region: ST-RAM swap page %lu "
 						"not used by any process\n", i );
 				/* quit while loop and overwrite bad map entry */
@@ -932,13 +904,15 @@ static int unswap_by_move(unsigned short *map, unsigned long max,
 	}
 	return( 0 );
 }
+#endif
 
 static int unswap_by_read(unsigned short *map, unsigned long max,
 			  unsigned long start, unsigned long n_pages)
 {
 	struct task_struct *p;
-	unsigned long entry, page = 0;
+	unsigned long entry, page;
 	unsigned long i;
+	struct page *page_map;
 
 	DPRINTK( "unswapping %lu..%lu by reading in\n",
 			 start, start+n_pages-1 );
@@ -949,43 +923,35 @@ static int unswap_by_read(unsigned short *map, unsigned long max,
 					"reserved??\n", i );
 			continue;
 		}
-		entry = SWP_ENTRY( stram_swap_type, i );
-		DPRINTK( "unswap: map[i=%lu]=%u nr_swap=%u\n",
-				 i, map[i], nr_swap_pages );
 
-		while( map[i] ) {
-			if (!page && !(page = __get_free_page(GFP_KERNEL))) {
-				printk( KERN_NOTICE "get_stram_region: out of memory\n" );
-				return( -ENOMEM );
-			}
-			DPRINTK( "unswap: reading swap page %lu to %08lx\n", i, page );
-			rw_swap_page( READ, entry, (char *)page, 1 );
+		if (map[i]) {
+			entry = SWP_ENTRY(stram_swap_type, i);
+			DPRINTK("unswap: map[i=%lu]=%u nr_swap=%u\n",
+				i, map[i], nr_swap_pages);
 
-			for_each_task(p) {
-				if (unswap_process( p->mm, entry, page, 0 )) {
-					page = 0;
-#ifdef DO_PROC
-					stat_swap_force++;
-#endif
-					break;
-				}
+			/* Get a page for the entry, using the existing
+			   swap cache page if there is one.  Otherwise,
+			   get a clean page and read the swap into it. */
+			page_map = read_swap_cache(entry);
+			if (page_map) {
+				page = page_address(page_map);
+				read_lock(&tasklist_lock);
+				for_each_task(p)
+					unswap_process(p->mm, entry, page
+						       /* , 0 */);
+				read_unlock(&tasklist_lock);
+				shm_unuse(entry, page);
+				/* Now get rid of the extra reference to
+				   the temporary page we've been using. */
+				if (PageSwapCache(page_map))
+					delete_from_swap_cache(page_map);
+				__free_page(page_map);
+	#ifdef DO_PROC
+				stat_swap_force++;
+	#endif
 			}
-			if (page) {
-				/*
-				 * If we couldn't find an entry, there are several
-				 * possible reasons: someone else freed it first,
-				 * we freed the last reference to an overflowed entry,
-				 * or the system has lost track of the use counts.
-				 */
-				if (map[i] && map[i] != SWAP_MAP_MAX)
-					printk( KERN_ERR "get_stram_region: swap entry %08lx "
-							"not used by any process\n", entry );
-				/* quit while loop and overwrite bad map entry */
-				if (!map[i]) {
-					DPRINTK( "unswap: map[i] became 0\n" );
-				}
-				break;
-			}
+			else if (map[i])
+				return -ENOMEM;
 		}
 
 		DPRINTK( "unswap: map[i=%lu]=%u nr_swap=%u\n",
@@ -998,9 +964,7 @@ static int unswap_by_read(unsigned short *map, unsigned long max,
 		--nr_swap_pages;
 	}
 
-	if (page)
-		free_page(page);
-	return( 0 );
+	return 0;
 }
 
 /*
@@ -1015,7 +979,9 @@ static void *get_stram_region( unsigned long n_pages )
 	void *ret = NULL;
 	
 	DPRINTK( "get_stram_region(n_pages=%lu)\n", n_pages );
-	
+
+	down(&stram_swap_sem);
+
 	/* disallow writing to the swap device now */
 	stram_swap_info->flags = SWP_USED;
 
@@ -1026,9 +992,14 @@ static void *get_stram_region( unsigned long n_pages )
 	DPRINTK( "get_stram_region: region starts at %lu, has %lu free pages\n",
 			 start, region_free );
 
+#if 0
 	err = ((total_free-region_free >= n_pages-region_free) ?
 		   unswap_by_move( map, max, start, n_pages ) :
 		   unswap_by_read( map, max, start, n_pages ));
+#else
+	err = unswap_by_read(map, max, start, n_pages);
+#endif
+
 	if (err)
 		goto end;
 
@@ -1036,6 +1007,7 @@ static void *get_stram_region( unsigned long n_pages )
   end:
 	/* allow using swap device again */
 	stram_swap_info->flags = SWP_WRITEOK;
+	up(&stram_swap_sem);
 	DPRINTK( "get_stram_region: returning %p\n", ret );
 	return( ret );
 }
@@ -1110,7 +1082,7 @@ static unsigned long find_free_region(unsigned long n_pages,
   start_over:
 	/* increment tail until final window size reached, and count free pages */
 	nfree = 0;
-	for( tail = head; tail-head < n_pages && tail < max-n_pages; ++tail ) {
+	for( tail = head; tail-head < n_pages && tail < max; ++tail ) {
 		if (map[tail] == SWAP_MAP_BAD) {
 			head = tail+1;
 			goto start_over;
@@ -1165,7 +1137,7 @@ static unsigned long find_free_region(unsigned long n_pages,
 
 
 /* setup parameters from command line */
-__initfunc(void stram_swap_setup(char *str, int *ints))
+void __init stram_swap_setup(char *str, int *ints)
 {
 	if (ints[0] >= 1)
 		max_swap_size = ((ints[1] < 0 ? 0 : ints[1]) * 1024) & PAGE_MASK;
@@ -1262,7 +1234,7 @@ static struct file_operations stram_fops = {
 	block_fsync             /* fsync */
 };
 
-__initfunc(int stram_device_init(void))
+int __init stram_device_init(void)
 {
 
     if (!MACH_IS_ATARI)

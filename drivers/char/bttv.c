@@ -403,7 +403,8 @@ static struct i2c_bus bttv_i2c_bus_template =
 
 struct tvcard
 {
-        int inputs;
+        int video_inputs;
+        int audio_inputs;
         int tuner;
         int svhs;
         u32 gpiomask;
@@ -415,30 +416,37 @@ struct tvcard
 static struct tvcard tvcards[] = 
 {
         /* default */
-        { 3, 0, 2, 0, { 2, 3, 1, 1}, { 0, 0, 0, 0, 0}},
+        { 3, 1, 0, 2, 0, { 2, 3, 1, 1}, { 0, 0, 0, 0, 0}},
         /* MIRO */
-        { 4, 0, 2,15, { 2, 3, 1, 1}, { 2, 0, 0, 0,10}},
+        { 4, 1, 0, 2,15, { 2, 3, 1, 1}, { 2, 0, 0, 0,10}},
         /* Hauppauge */
-        { 3, 0, 2, 7, { 2, 3, 1, 1}, { 0, 1, 2, 3, 4}},
+        { 3, 1, 0, 2, 7, { 2, 3, 1, 1}, { 0, 1, 2, 3, 4}},
 	/* STB */
-        { 3, 0, 2, 7, { 2, 3, 1, 1}, { 4, 0, 2, 3, 1}},
+        { 3, 1, 0, 2, 7, { 2, 3, 1, 1}, { 4, 0, 2, 3, 1}},
 	/* Intel??? */
-        { 3, 0, 2, 7, { 2, 3, 1, 1}, { 0, 1, 2, 3, 4}},
+        { 3, 1, 0, 2, 7, { 2, 3, 1, 1}, { 0, 1, 2, 3, 4}},
 	/* Diamond DTV2000 */
-        { 3, 0, 2, 3, { 2, 3, 1, 1}, { 0, 1, 0, 1, 3}},
+        { 3, 1, 0, 2, 3, { 2, 3, 1, 1}, { 0, 1, 0, 1, 3}},
 	/* AVerMedia TVPhone */
-        { 3, 0, 3,15, { 2, 3, 1, 1}, {12, 0,11,11, 0}},
+        { 3, 1, 0, 3,15, { 2, 3, 1, 1}, {12, 0,11,11, 0}},
         /* Matrix Vision MV-Delta */
-        { 5,-1, 3, 0, { 2, 3, 1, 0, 0}},
+        { 5, 1, -1, 3, 0, { 2, 3, 1, 0, 0}},
         /* Fly Video II */
-        { 3, 0, 2, 0xc00, { 2, 3, 1, 1}, 
+        { 3, 1, 0, 2, 0xc00, { 2, 3, 1, 1}, 
         {0, 0xc00, 0x800, 0x400, 0xc00, 0}},
         /* TurboTV */
-        { 3, 0, 2, 3, { 2, 3, 1, 1}, { 1, 1, 2, 3, 0}},
+        { 3, 1, 0, 2, 3, { 2, 3, 1, 1}, { 1, 1, 2, 3, 0}},
 	/* Newer Hauppauge (bt878) */
-	{ 3, 0, 2, 7, { 2, 0, 1, 1}, { 0, 1, 2, 3, 4}},
+	{ 3, 1, 0, 2, 7, { 2, 0, 1, 1}, { 0, 1, 2, 3, 4}},
 	/* MIRO PCTV pro */
-	{ 3, 0, 2, 65551, { 2, 3, 1, 1}, {1,65537, 0, 0,10}},
+	{ 3, 1, 0, 2, 65551, { 2, 3, 1, 1}, {1,65537, 0, 0,10}},
+	/* ADS Technologies Channel Surfer TV (and maybe TV+FM) */
+	{
+	 3, 4, 0, 2, 0x0F,
+	 { 0x02, 0x03, 0x01, 0x01},
+	 { 0x0D, 0x0E, 0x0B, 0x07, 0x00, 0x00},
+	 0x00
+	},
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(tvcard))
 
@@ -612,7 +620,7 @@ static void bt848_muxsel(struct bttv *btv, unsigned int input)
 	btand(~(3<<5), BT848_IFORM);
 	mdelay(10); 
 
-       	input %= tvcards[btv->type].inputs;
+       	input %= tvcards[btv->type].video_inputs;
 	if (input==tvcards[btv->type].svhs) 
 	{
 		btor(BT848_CONTROL_COMP, BT848_E_CONTROL);
@@ -1304,7 +1312,7 @@ static void bttv_close(struct video_device *dev)
 	struct bttv *btv=(struct bttv *)dev;
   
 	btv->user--;
-	audio(btv, AUDIO_MUTE);
+	audio(btv, AUDIO_INTERN);
 	btv->cap&=~3;
 	bt848_set_risc_jmps(btv);
 
@@ -1383,8 +1391,8 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				VID_TYPE_CLIPPING|
 				VID_TYPE_FRAMERAM|
 				VID_TYPE_SCALES;
-			b.channels = tvcards[btv->type].inputs;
-			b.audios = tvcards[btv->type].inputs;
+			b.channels = tvcards[btv->type].video_inputs;
+			b.audios = tvcards[btv->type].audio_inputs;
 			b.maxwidth = 768;
 			b.maxheight = 576;
 			b.minwidth = 32;
@@ -1402,7 +1410,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.tuners=0;
 			v.type=VIDEO_TYPE_CAMERA;
 			v.norm = btv->win.norm;
-                        if (v.channel>=tvcards[btv->type].inputs)
+                        if (v.channel>=tvcards[btv->type].video_inputs)
                                 return -EINVAL;
                         if(v.channel==tvcards[btv->type].tuner) 
                         {
@@ -1429,7 +1437,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			if(copy_from_user(&v, arg,sizeof(v)))
 				return -EFAULT;
                         
-                        if (v.channel>tvcards[btv->type].inputs)
+                        if (v.channel>=tvcards[btv->type].video_inputs)
                                 return -EINVAL;
 			bt848_muxsel(btv, v.channel);
 			if(v.norm!=VIDEO_MODE_PAL&&v.norm!=VIDEO_MODE_NTSC
@@ -1710,7 +1718,10 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			if(v.flags&VIDEO_AUDIO_MUTE)
 				audio(btv, AUDIO_MUTE);
  			/* One audio source per tuner */
- 			if(v.audio!=0)
+ 			/* if(v.audio!=0) */
+ 			/* Nope... I have three on my ADSTech TV card. The*/
+ 			/* ADSTech TV+FM prolly has 4 <rriggs@tesser.com> */
+ 			if(v.audio<0 || v.audio >= tvcards[btv->type].audio_inputs)
 				return -EINVAL;
 			bt848_muxsel(btv,v.audio);
 			if(!(v.flags&VIDEO_AUDIO_MUTE))
@@ -2456,8 +2467,13 @@ static void idcard(int i)
 			printk("MATRIX-Vision\n");
 			strcat(btv->video_dev.name,"(MATRIX-Vision)");
 			break;
+		case BTTV_ADSTECH_TV:
+			printk("ADSTech Channel Surfer TV\n");
+			strcat(btv->video_dev.name,"(ADSTech Channel Surfer TV)");
+			btv->tuner_type=8;
+			break;
 	}
-	audio(btv, AUDIO_MUTE);
+	audio(btv, AUDIO_INTERN);
 }
 
 

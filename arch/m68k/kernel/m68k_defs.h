@@ -3,6 +3,6 @@
  */
 
 #define TS_MAGICKEY	0x5a5a5a5a
-#define TS_TSS 482
-#define TS_ESP0 502
-#define TS_FPU 506
+#define TS_TSS 478
+#define TS_ESP0 498
+#define TS_FPU 502

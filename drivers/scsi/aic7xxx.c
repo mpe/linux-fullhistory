@@ -304,13 +304,18 @@
  * #define AIC7XXX_VERBOSE_DEBUGGING
  */
  
-#ifdef MODULE
+#if defined(MODULE) || defined(PCMCIA)
 #include <linux/module.h>
+#endif
+
+#if defined(PCMCIA)
+#  undef MODULE
 #endif
 
 #include <stdarg.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/byteorder.h>
 #include <linux/version.h>
 #include <linux/string.h>
 #include <linux/errno.h>
@@ -349,7 +354,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.1.3"
+#define AIC7XXX_C_VERSION  "5.1.4"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -683,12 +688,14 @@ struct seeprom_config {
 #define CFDISC                0x0010      /* enable disconnection */
 #define CFWIDEB               0x0020      /* wide bus device (wide card) */
 #define CFSYNCHISULTRA        0x0040      /* CFSYNC is an ultra offset */
-/* UNUSED                0x0080 */
+#define CFNEWULTRAFORMAT      0x0080      /* Use the Ultra2 SEEPROM format */
 #define CFSTART               0x0100      /* send start unit SCSI command */
 #define CFINCBIOS             0x0200      /* include in BIOS scan */
 #define CFRNFOUND             0x0400      /* report even if not found */
 #define CFMULTILUN            0x0800      /* probe mult luns in BIOS scan */
-/* UNUSED                0xF000 */
+#define CFWBCACHEYES          0x4000      /* Enable W-Behind Cache on drive */
+#define CFWBCACHENC           0xc000      /* Don't change W-Behind Cache */
+/* UNUSED                0x3000 */
   unsigned short device_flags[16];        /* words 0-15 */
 
 /*
@@ -1481,8 +1488,8 @@ static int aic7xxx_verbose = VERBOSE_NORMAL | VERBOSE_NEGOTIATION |
 static void aic7xxx_panic_abort(struct aic7xxx_host *p, Scsi_Cmnd *cmd);
 static void aic7xxx_print_card(struct aic7xxx_host *p);
 static void aic7xxx_print_scratch_ram(struct aic7xxx_host *p);
-#ifdef AIC7XXX_VERBOSE_DEBUGGING
 static void aic7xxx_print_sequencer(struct aic7xxx_host *p, int downloaded);
+#ifdef AIC7XXX_VERBOSE_DEBUGGING
 static void aic7xxx_check_scbs(struct aic7xxx_host *p, char *buffer);
 #endif
 
@@ -1541,26 +1548,6 @@ aic_outb(struct aic7xxx_host *p, unsigned char val, long port)
   mb();
 #else
   outb(val, p->base + port);
-#endif
-}
-
-static void
-aic_outsb(struct aic7xxx_host *p, long port, unsigned char *valp, size_t size)
-{
-#ifdef MMAPIO
-  if(p->maddr)
-  {
-    int i;
-    for (i=0; i < size; i++)
-    {
-      p->maddr[port] = valp[i];
-    }
-    mb();
-  }
-  else
-    outsb(p->base + port, valp, size);
-#else
-  outsb(p->base + port, valp, size);
 #endif
 }
 
@@ -1752,7 +1739,9 @@ unpause_sequencer(struct aic7xxx_host *p, int unpause_always)
 static inline void
 restart_sequencer(struct aic7xxx_host *p)
 {
-  aic_outb(p, FASTMODE|SEQRESET, SEQCTL);
+  aic_outb(p, 0, SEQADDR0);
+  aic_outb(p, 0, SEQADDR1);
+  aic_outb(p, FASTMODE, SEQCTL);
 }
 
 /*
@@ -1831,6 +1820,8 @@ aic7xxx_download_instr(struct aic7xxx_host *p, int instrptr,
 
   instr = *(union ins_formats*) &seqprog[instrptr * 4];
 
+  instr.integer = le32_to_cpu(instr.integer);
+  
   fmt1_ins = &instr.format1;
   fmt3_ins = NULL;
 
@@ -1926,7 +1917,10 @@ aic7xxx_download_instr(struct aic7xxx_host *p, int instrptr,
                           (fmt1_ins->opcode << 25);
         }
       }
-      aic_outsb(p, SEQRAM, instr.bytes, 4);
+      aic_outb(p, (instr.integer & 0xff), SEQRAM);
+      aic_outb(p, ((instr.integer >> 8) & 0xff), SEQRAM);
+      aic_outb(p, ((instr.integer >> 16) & 0xff), SEQRAM);
+      aic_outb(p, ((instr.integer >> 24) & 0xff), SEQRAM);
       break;
 
     default:
@@ -1976,18 +1970,21 @@ aic7xxx_loadseq(struct aic7xxx_host *p)
     downloaded++;
   }
 
-  aic_outb(p, FASTMODE|SEQRESET, SEQCTL);
+  aic_outb(p, 0, SEQADDR0);
+  aic_outb(p, 0, SEQADDR1);
+  aic_outb(p, FASTMODE | FAILDIS, SEQCTL);
+  unpause_sequencer(p, TRUE);
+  mdelay(1);
+  pause_sequencer(p);
+  aic_outb(p, FASTMODE, SEQCTL);
   if (aic7xxx_verbose & VERBOSE_PROBE)
   {
     printk(" %d instructions downloaded\n", downloaded);
   }
-#ifdef AIC7XXX_VERBOSE_DEBUGGING
   if (aic7xxx_dump_sequencer)
     aic7xxx_print_sequencer(p, downloaded);
-#endif
 }
 
-#ifdef AIC7XXX_VERBOSE_DEBUGGING
 /*+F*************************************************************************
  * Function:
  *   aic7xxx_print_sequencer
@@ -2022,10 +2019,15 @@ aic7xxx_print_sequencer(struct aic7xxx_host *p, int downloaded)
     else
       printk(" ");
   }
-  aic_outb(p, FASTMODE|SEQRESET, SEQCTL);
+  aic_outb(p, 0, SEQADDR0);
+  aic_outb(p, 0, SEQADDR1);
+  aic_outb(p, FASTMODE | FAILDIS, SEQCTL);
+  unpause_sequencer(p, TRUE);
+  mdelay(1);
+  pause_sequencer(p);
+  aic_outb(p, FASTMODE, SEQCTL);
   printk("\n");
 }
-#endif
 
 /*+F*************************************************************************
  * Function:
@@ -4147,8 +4149,10 @@ aic7xxx_timer(struct aic7xxx_host *p)
 #endif
   for(i=0; i<MAX_TARGETS; i++)
   {
-    if ( del_timer(&p->dev_timer[i]) )
+    if ( timer_pending(&p->dev_timer[i]) && 
+         time_before_eq(p->dev_timer[i].expires, jiffies) )
     {
+      del_timer(&p->dev_timer[i]);
       p->dev_temp_queue_depth[i] =  p->dev_max_queue_depth[i];
       j = 0;
       while ( ((scb = scbq_remove_head(&p->delayed_scbs[i])) != NULL) &&
@@ -5498,7 +5502,7 @@ aic7xxx_handle_reqinit(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
 {
   unsigned char lastbyte;
   unsigned char phasemis;
-  int done;
+  int done = FALSE;
 
   switch(p->msg_type)
   {
@@ -7548,6 +7552,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
       p->host_no, p->mbase, (unsigned long)p->maddr);
   }
 
+#ifdef CONFIG_PCI
   /*
    * Now that we know our instance number, we can set the flags we need to
    * force termination if need be.
@@ -7587,6 +7592,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
 #endif
     }
   }
+#endif
 
   /*
    * That took care of devconfig and stpwlev, now for the actual termination
@@ -7636,19 +7642,6 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
       configure_termination(p);
     }
   }
-
-  /*
-   * Load the sequencer program, then re-enable the board -
-   * resetting the AIC-7770 disables it, leaving the lights
-   * on with nobody home.
-   */
-  aic7xxx_loadseq(p);
-
-  if ( (p->chip & AHC_CHIPID_MASK) == AHC_AIC7770 )
-  {
-    aic_outb(p, ENABLE, BCTL);  /* Enable the boards BUS drivers. */
-  }
-  aic_outb(p, aic_inb(p, SBLKCTL) & ~AUTOFLUSHDIS, SBLKCTL);
 
   /*
    * Clear out any possible pending interrupts.
@@ -7851,6 +7844,18 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
    * chunk of SCBs.
    */
   aic7xxx_allocate_scb(p);
+
+  /*
+   * Load the sequencer program, then re-enable the board -
+   * resetting the AIC-7770 disables it, leaving the lights
+   * on with nobody home.
+   */
+  aic7xxx_loadseq(p);
+
+  if ( (p->chip & AHC_CHIPID_MASK) == AHC_AIC7770 )
+  {
+    aic_outb(p, ENABLE, BCTL);  /* Enable the boards BUS drivers. */
+  }
 
   if ( !(aic7xxx_no_reset) )
   {
@@ -8254,9 +8259,10 @@ aic7xxx_load_seeprom(struct aic7xxx_host *p, unsigned char *sxfrctl1)
   {
     for (i = 0; i < max_targets; i++)
     {
-      if( (p->features & AHC_ULTRA) &&
-         !(sc->adapter_control & CFULTRAEN) &&
-          (sc->device_flags[i] & CFSYNCHISULTRA) )
+      if( ((p->features & AHC_ULTRA) &&
+          !(sc->adapter_control & CFULTRAEN) &&
+           (sc->device_flags[i] & CFSYNCHISULTRA)) ||
+          (sc->device_flags[i] & CFNEWULTRAFORMAT) )
       {
         p->flags |= AHC_NEWEEPROM_FMT;
         break;
@@ -8332,6 +8338,15 @@ aic7xxx_load_seeprom(struct aic7xxx_host *p, unsigned char *sxfrctl1)
       if (sc->device_flags[i] & CFSYNCHISULTRA)
       {
         p->ultraenb |= mask;
+      }
+      else if (sc->device_flags[i] & CFNEWULTRAFORMAT)
+      {
+        if ( (sc->device_flags[i] & (CFSYNCHISULTRA | CFXFER)) == 0x03 )
+        {
+          sc->device_flags[i] &= ~CFXFER;
+          sc->device_flags[i] |= CFSYNCHISULTRA;
+          p->ultraenb |= mask;
+        }
       }
     }
     else if (sc->adapter_control & CFULTRAEN)
@@ -8480,8 +8495,10 @@ aic7xxx_detect(Scsi_Host_Template *template)
   struct aic7xxx_host *current_p = NULL;
   struct aic7xxx_host *list_p = NULL;
   int found = 0;
+#if defined(__i386__) || defined(__alpha__)
   ahc_flag_type flags = 0;
   int type;
+#endif
   unsigned char sxfrctl1;
 #if defined(__i386__) || defined(__alpha__)
   unsigned char hcntrl, hostconf;

@@ -787,23 +787,13 @@ static void mcdx_delay(struct s_drive_stuff *stuff, long jifs)
  *	May be we could use a simple count loop w/ jumps to itself, but
  *	I wanna make this independent of cpu speed. [1 jiffy is 1/HZ] sec */
 {
-    unsigned long tout = jiffies + jifs;
-    if (jifs < 0) return;
+	if (jifs < 0) return;
 
-	/* If loaded during kernel boot no *_sleep_on is
-	 * allowed! */
-    if (current->pid == 0) {
-		while (jiffies < tout) {
-            schedule_timeout(0);
-        }
-    } else {
-        current->timeout = tout;
-		xtrace(SLEEP, "*** delay: sleepq\n");
-		interruptible_sleep_on(&stuff->sleepq);
-		xtrace(SLEEP, "delay awoken\n");
-		if (signal_pending(current)) {
-			xtrace(SLEEP, "got signal\n");
-		}
+	xtrace(SLEEP, "*** delay: sleepq\n");
+	interruptible_sleep_on_timeout(&stuff->sleepq, jifs);
+	xtrace(SLEEP, "delay awoken\n");
+	if (signal_pending(current)) {
+		xtrace(SLEEP, "got signal\n");
 	}
 }
 

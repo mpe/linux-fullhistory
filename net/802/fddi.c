@@ -98,17 +98,19 @@ int fddi_rebuild_header(struct sk_buff	*skb)
 {
 	struct fddihdr *fddi = (struct fddihdr *)skb->data;
 
-	if (fddi->hdr.llc_snap.ethertype != __constant_htons(ETH_P_IP))
+#ifdef CONFIG_INET
+	if (fddi->hdr.llc_snap.ethertype == __constant_htons(ETH_P_IP))
+		/* Try to get ARP to resolve the header and fill destination address */
+		return arp_find(fddi->daddr, skb);
+	else
+#endif	
 	{
 		printk("%s: Don't know how to resolve type %02X addresses.\n",
 		       skb->dev->name, htons(fddi->hdr.llc_snap.ethertype));
 		return(0);
 	}
-
-	/* Try to get ARP to resolve the header and fill destination address */
-
-	return arp_find(fddi->daddr, skb);
 }
+
 
 /*
  * Determine the packet's protocol ID and fill in skb fields.

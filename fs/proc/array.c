@@ -24,11 +24,11 @@
  *                      <Jeff_Tranter@Mitel.COM>
  *
  * Bruno Haible      :  remove 4K limit for the maps file
- * <haible@ma2s2.mathematik.uni-karlsruhe.de>
+ * 			<haible@ma2s2.mathematik.uni-karlsruhe.de>
  *
  * Yves Arrouye      :  remove removal of trailing spaces in get_array.
  *			<Yves.Arrouye@marin.fdn.fr>
-
+ *
  * Jerome Forissier  :  added per-CPU time information to /proc/stat
  *                      and /proc/<pid>/cpu extension
  *                      <forissier@isia.cma.fr>
@@ -37,6 +37,11 @@
  *			Hans Marcus <crowbar@concepts.nl>
  *
  * aeb@cwi.nl        :  /proc/partitions
+ *
+ *
+ * Alan Cox	     :  security fixes. 
+ *			<Alan.Cox@linux.org>
+ *
  */
 
 #include <linux/types.h>
@@ -1326,6 +1331,46 @@ static long get_root_array(char * page, int type, char **start,
 	return -EBADF;
 }
 
+static int process_unauthorized(int type, int pid)
+{
+	struct task_struct *p;
+	uid_t euid;	/* Save the euid keep the lock short */
+		
+	read_lock(&tasklist_lock);
+	
+	/*
+	 *	Grab the lock, find the task, save the uid and 
+	 *	check it has an mm still (ie its not dead)
+	 */
+	 
+	p = find_task_by_pid(pid);
+	if(p)
+	{
+		euid=p->euid;
+		if(!p->mm)	/* Scooby scooby doo where are you ? */
+			p=NULL;
+	}
+		
+	read_unlock(&tasklist_lock);
+
+	if (!p)
+		return 1;
+
+	switch(type)
+	{
+		case PROC_PID_STATUS:
+		case PROC_PID_STATM:
+		case PROC_PID_STAT:
+		case PROC_PID_MAPS:
+		case PROC_PID_CMDLINE:
+			return 0;	
+	}
+	if(capable(CAP_DAC_OVERRIDE) || current->fsuid == euid)
+		return 0;
+	return 1;
+}
+
+
 static int get_process_array(char * page, int pid, int type)
 {
 	switch (type) {
@@ -1377,6 +1422,13 @@ static ssize_t array_read(struct file * file, char * buf,
 	type &= 0x0000ffff;
 	start = NULL;
 	dp = (struct proc_dir_entry *) inode->u.generic_ip;
+	
+	if (pid && process_unauthorized(type, pid))
+	{
+		free_page(page);
+		return -EIO;
+	}
+	
 	if (dp->get_info)
 		length = dp->get_info((char *)page, &start, *ppos,
 				      count, 0);

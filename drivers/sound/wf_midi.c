@@ -375,24 +375,25 @@ wf_mpu_input_scanner (struct wf_mpu_config *devc, unsigned char midic)
 	return 1;
 }
 
-void
-wf_mpuintr (int irq, void *dev_id, struct pt_regs *dummy)
+void wf_mpuintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
 	struct wf_mpu_config *devc;
-	int             dev;
+	int dev;
 	static struct wf_mpu_config *isrc = 0;
-	int             n;
+	int n;
 	struct midi_input_info *mi;
-	static int cnt = 0;
 
-	if (irq < 0 || irq > 15) {
+	if (irq < 0 || irq > 15) 
+	{
 		printk (KERN_ERR "WF-MPU: bogus interrupt #%d", irq);
 		return;
 	}
 	dev = irq2dev[irq];
 	mi = &midi_devs[dev]->in_info;
-	if (mi->m_busy) return;
+	if (mi->m_busy)
+		return;
 	mi->m_busy = 1;
+	
 	sti (); 
 
 	n = 50;
@@ -445,8 +446,7 @@ wf_mpuintr (int irq, void *dev_id, struct pt_regs *dummy)
 	mi->m_busy = 0;
 }
 
-static int
-wf_mpu_open (int dev, int mode,
+static int wf_mpu_open (int dev, int mode,
 	     void            (*input) (int dev, unsigned char data),
 	     void            (*output) (int dev)
 	)

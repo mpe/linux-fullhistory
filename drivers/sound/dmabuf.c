@@ -18,7 +18,10 @@
  *                   determine if it was woken up by the expiring timeout or by
  *                   an explicit wake_up. The return value from schedule_timeout
  *		     can be used instead; if 0, the wakeup was due to the timeout.
+ *
+ * Rob Riggs		Added persistent DMA buffers (1998/10/17)
  */
+ 
 #include <linux/config.h>
 
 #define BE_CONSERVATIVE
@@ -28,6 +31,9 @@
 
 #if defined(CONFIG_AUDIO) || defined(CONFIG_GUS)
 
+#define DMAP_FREE_ON_CLOSE      0
+#define DMAP_KEEP_ON_CLOSE      1
+extern int sound_dmap_flag;
 
 static void dma_reset_output(int dev);
 static void dma_reset_input(int dev);
@@ -212,7 +218,8 @@ static void close_dmap(struct audio_operations *adev, struct dma_buffparms *dmap
 	disable_dma(dmap->dma);
 	release_dma_lock(flags);
 	
-	sound_free_dmap(dmap);
+	if (sound_dmap_flag == DMAP_FREE_ON_CLOSE)
+		sound_free_dmap(dmap);
 }
 
 
@@ -732,7 +739,7 @@ static int output_sleep(int dev, int dontblock)
 	 * Wait for free space
 	 */
 	if (signal_pending(current))
-		return -EIO;
+		return -EINTR;
 	timeout = (adev->go && !(dmap->flags & DMA_NOTIMEOUT));
 	if (timeout) 
 		timeout_value = dmabuf_timeout(dmap);
@@ -1009,8 +1016,8 @@ void DMAbuf_outputintr(int dev, int notify_only)
 		unsigned long f;
 		
 		f=claim_dma_lock();
-		clear_dma_ff(chan);
 		disable_dma(dmap->dma);
+		clear_dma_ff(chan);
 		pos = dmap->bytes_in_use - get_dma_residue(chan);
 		enable_dma(dmap->dma);
 		release_dma_lock(f);
@@ -1104,8 +1111,8 @@ void DMAbuf_inputintr(int dev)
 		unsigned long f;
 		
 		f=claim_dma_lock();
-		clear_dma_ff(chan);
 		disable_dma(dmap->dma);
+		clear_dma_ff(chan);
 		pos = dmap->bytes_in_use - get_dma_residue(chan);
 		enable_dma(dmap->dma);
 		release_dma_lock(f);
@@ -1181,6 +1188,13 @@ void DMAbuf_init(int dev, int dma1, int dma2)
 				adev->dmap_in->dma = dma2;
 			}
 		}
+		/* Persistent DMA buffers allocated here */
+		if (sound_dmap_flag == DMAP_KEEP_ON_CLOSE) {
+			if (adev->dmap_in->raw_buf == NULL)
+				sound_alloc_dmap(adev->dmap_in);
+			if (adev->dmap_out->raw_buf == NULL)
+				sound_alloc_dmap(adev->dmap_out);
+		}
 	}
 }
 
@@ -1251,12 +1265,13 @@ void DMAbuf_deinit(int dev)
 	/* This routine is called when driver is being unloaded */
 	if (!adev)
 		return;
-#ifdef RUNTIME_DMA_ALLOC
-	sound_free_dmap(adev->dmap_out);
 
-	if (adev->flags & DMA_DUPLEX)
-		sound_free_dmap(adev->dmap_in);
-#endif
+	/* Persistent DMA buffers deallocated here */
+	if (sound_dmap_flag == DMAP_KEEP_ON_CLOSE) {
+		sound_free_dmap(adev->dmap_out);
+		if (adev->flags & DMA_DUPLEX)
+			sound_free_dmap(adev->dmap_in);
+	}
 }
 
 #endif

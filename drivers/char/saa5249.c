@@ -666,6 +666,15 @@ static long saa5249_read(struct video_device *v, char *buf, unsigned long l, int
 	return -EINVAL;
 }
 
+int init_saa_5249(struct video_init *v)
+{
+	printk(KERN_INFO "SAA5249 driver (" IF_NAME " interface) for VideoText version %d.%d\n",
+			VTX_VER_MAJ, VTX_VER_MIN);
+	i2c_register_driver(&i2c_driver_videotext);
+
+	return 0;
+}
+
 static struct video_device saa_template=
 {
 	IF_NAME,
@@ -684,15 +693,15 @@ static struct video_device saa_template=
 	0
 };
 
+#ifdef MODULE
+
 /*
  *	Routines for loadable modules
  */
 
 int init_module(void) 
 {
-	printk(KERN_INFO "SAA5249 driver (" IF_NAME " interface) for VideoText version %d.%d\n",
-			VTX_VER_MAJ, VTX_VER_MIN);
-	i2c_register_driver(&i2c_driver_videotext);
+	init_saa_5249(NULL);
 	return 0;
 }
 
@@ -701,3 +710,5 @@ void cleanup_module(void)
 {
 	i2c_unregister_driver(&i2c_driver_videotext);
 }
+
+#endif

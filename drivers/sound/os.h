@@ -48,7 +48,6 @@ extern void sound_close_dma(int chn);
 
 extern void reprogram_timer(void);
 
-#define RUNTIME_DMA_ALLOC
 #define USE_AUTOINIT_DMA
 
 extern caddr_t sound_mem_blocks[1024];

@@ -56,6 +56,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       fi
     fi
     tristate '3c509/3c579 support' CONFIG_EL3
+    tristate '3c515 ISA Fast EtherLink' CONFIG_3C515
     tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
   fi
   bool 'AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE
@@ -84,7 +85,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   bool 'Other ISA cards' CONFIG_NET_ISA
   if [ "$CONFIG_NET_ISA" = "y" ]; then
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'AT1700 support (EXPERIMENTAL)' CONFIG_AT1700
+      tristate 'AT1700/1720 support (EXPERIMENTAL)' CONFIG_AT1700
     fi
     tristate 'Cabletron E21xx support' CONFIG_E2100
     tristate 'DEPCA, DE10x, DE200, DE201, DE202, DE422 support' CONFIG_DEPCA

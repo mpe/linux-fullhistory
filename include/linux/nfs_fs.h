@@ -220,8 +220,7 @@ extern int  nfs_check_error(struct inode *);
 extern int  nfs_flush_dirty_pages(struct inode *, pid_t, off_t, off_t);
 extern int  nfs_truncate_dirty_pages(struct inode *, unsigned long);
 extern void nfs_invalidate_pages(struct inode *);
-extern int  nfs_updatepage(struct file *, struct page *, const char *,
-			unsigned long, unsigned int, int);
+extern int  nfs_updatepage(struct file *, struct page *, unsigned long, unsigned int, int);
 
 /*
  * linux/fs/nfs/read.c

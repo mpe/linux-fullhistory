@@ -116,7 +116,7 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 #else
 	corefile[4] = '\0';
 #endif
-	dentry = open_namei(corefile,O_CREAT | 2 | O_TRUNC, 0600);
+	dentry = open_namei(corefile,O_CREAT | 2 | O_TRUNC | O_NOFOLLOW, 0600);
 	if (IS_ERR(dentry)) {
 		dentry = NULL;
 		goto end_coredump;

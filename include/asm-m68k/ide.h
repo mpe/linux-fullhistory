@@ -146,34 +146,36 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 	if (_nr & 15) {					\
 		_tmp = (_nr & 15) - 1;			\
 		asm volatile (				\
-			"1: movew %2@,%3@+; dbra %4,1b"	\
+			"1: movew %2@,%0@+; dbra %1,1b"	\
 			: "=a" (_buf), "=d" (_tmp)	\
 			: "a" (_port), "0" (_buf),	\
 			  "1" (_tmp));			\
 	}						\
-	_tmp = (_nr >> 4) - 1;				\
-	asm volatile (					\
-		"1: "					\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"movew %2@,%3@+; "			\
-		"dbra %4,1b"				\
-		: "=a" (_buf), "=d" (_tmp)		\
-		: "a" (_port), "0" (_buf),		\
-		  "1" (_tmp));				\
+	if (_nr >> 4) {					\
+		_tmp = (_nr >> 4) - 1;			\
+		asm volatile (				\
+			"1: "				\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"movew %2@,%0@+; "		\
+			"dbra %1,1b"			\
+			: "=a" (_buf), "=d" (_tmp)	\
+			: "a" (_port), "0" (_buf),	\
+			  "1" (_tmp));			\
+	}						\
 })
 
 #define outsw(port, buf, nr) ({				\
@@ -185,34 +187,36 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 	if (_nr & 15) {					\
 		_tmp = (_nr & 15) - 1;			\
 		asm volatile (				\
-			"1: movew %3@,%2@+; dbra %4,1b"	\
+			"1: movew %0@+,%2@; dbra %1,1b"	\
 			: "=a" (_buf), "=d" (_tmp)	\
 			: "a" (_port), "0" (_buf),	\
 			  "1" (_tmp));			\
 	}						\
-	_tmp = (_nr >> 4) - 1;				\
-	asm volatile (					\
-		"1: "					\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"movew %3@+,%2@; "			\
-		"dbra %4,1b"	   			\
-		: "=a" (_buf), "=d" (_tmp)		\
-		: "a" (_port), "0" (_buf),		\
-		  "1" (_tmp));				\
+	if (_nr >> 4) {					\
+		_tmp = (_nr >> 4) - 1;			\
+		asm volatile (				\
+			"1: "				\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"movew %0@+,%2@; "		\
+			"dbra %1,1b"	   		\
+			: "=a" (_buf), "=d" (_tmp)	\
+			: "a" (_port), "0" (_buf),	\
+			  "1" (_tmp));			\
+	}						\
 })
 
 #ifdef CONFIG_ATARI

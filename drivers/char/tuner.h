@@ -30,6 +30,7 @@
 #define TUNER_PHILIPS_PAL   5
 #define TUNER_TEMIC_NTSC    6
 #define TUNER_TEMIC_PAL_I   7
+#define TUNER_TEMIC_4036FY5_NTSC	8
 
 #define NOTUNER 0
 #define PAL     1

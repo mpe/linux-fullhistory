@@ -29,7 +29,7 @@
 static void sleep( unsigned howlong )
 {
 	current->state   = TASK_INTERRUPTIBLE;
-	schedule(howlong);
+	schedule_timeout(howlong);
 }
 
 #define DPORT 0x80
@@ -108,9 +108,7 @@ int probe_sgalaxy( struct address_info *ai )
 
 	sleep( HZ/10 );
 
-	if ( ad1848_detect( ai->io_base+4, NULL, ai->osp ) )
-		return 1;
-      	return 0;
+      	return probe_ms_sound(ai);
 }
 
 void attach_sgalaxy( struct address_info *ai )

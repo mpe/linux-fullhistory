@@ -51,7 +51,7 @@ static int sb_audio_open(int dev, int mode)
 		  restore_flags(flags);
 		  return -EBUSY;
 	}
-    if (devc->dma16 != -1 && devc->dma16 != devc->dma8 && !devc->duplex)
+	if (devc->dma16 != -1 && devc->dma16 != devc->dma8 && !devc->duplex)
 	{
 		if (sound_open_dma(devc->dma16, "Sound Blaster 16 bit"))
 		{
@@ -63,10 +63,9 @@ static int sb_audio_open(int dev, int mode)
 	restore_flags(flags);
 
 	devc->irq_mode = IMODE_NONE;
-    devc->irq_mode_2 = IMODE_NONE;
-    devc->intr_active_2 = 0;
-    devc->fullduplex = devc->duplex &&
-        ((mode & OPEN_READ) && (mode & OPEN_WRITE));
+	devc->irq_mode_16 = IMODE_NONE;
+	devc->fullduplex = devc->duplex &&
+		((mode & OPEN_READ) && (mode & OPEN_WRITE));
 	sb_dsp_reset(devc);
 
 	/* The ALS007 seems to require that the DSP be removed from the output */
@@ -92,11 +91,11 @@ static void sb_audio_close(int dev)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 
-    audio_devs[dev]->dmap_out->dma = devc->dma8;
-    audio_devs[dev]->dmap_in->dma = ( devc->duplex ) ?
-        devc->dma16 : devc->dma8;
+	audio_devs[dev]->dmap_out->dma = devc->dma8;
+	audio_devs[dev]->dmap_in->dma = ( devc->duplex ) ?
+		devc->dma16 : devc->dma8;
 
-    if (devc->dma16 != -1 && devc->dma16 != devc->dma8 && !devc->duplex)
+	if (devc->dma16 != -1 && devc->dma16 != devc->dma8 && !devc->duplex)
 		sound_close_dma(devc->dma16);
 
 	/* For ALS007, turn DSP output back on if closing the device for read */
@@ -114,34 +113,40 @@ static void sb_set_output_parms(int dev, unsigned long buf, int nr_bytes,
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 
-    if( !devc->fullduplex || devc->bits == AFMT_S16_LE) {
-        devc->trg_buf = buf;
-        devc->trg_bytes = nr_bytes;
-        devc->trg_intrflag = intrflag;
-        devc->irq_mode = IMODE_OUTPUT;
-    } else {
-        devc->trg_buf_2 = buf;
-        devc->trg_bytes_2 = nr_bytes;
-        devc->trg_intrflag_2 = intrflag;
-        devc->irq_mode_2 = IMODE_OUTPUT;
-    }
+	if (!devc->fullduplex || devc->bits == AFMT_S16_LE)
+	{
+		devc->trg_buf = buf;
+		devc->trg_bytes = nr_bytes;
+		devc->trg_intrflag = intrflag;
+		devc->irq_mode = IMODE_OUTPUT;
+	}
+	else
+	{
+		devc->trg_buf_16 = buf;
+		devc->trg_bytes_16 = nr_bytes;
+		devc->trg_intrflag_16 = intrflag;
+		devc->irq_mode_16 = IMODE_OUTPUT;
+	}
 }
 
 static void sb_set_input_parms(int dev, unsigned long buf, int count, int intrflag)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 
-    if( !devc->fullduplex || devc->bits != AFMT_S16_LE) {
-        devc->trg_buf = buf;
-        devc->trg_bytes = count;
-        devc->trg_intrflag = intrflag;
-        devc->irq_mode = IMODE_INPUT;
-    } else {
-        devc->trg_buf_2 = buf;
-        devc->trg_bytes_2 = count;
-        devc->trg_intrflag_2 = intrflag;
-        devc->irq_mode_2 = IMODE_INPUT;
-    }
+	if (!devc->fullduplex || devc->bits != AFMT_S16_LE)
+	{
+		devc->trg_buf = buf;
+		devc->trg_bytes = count;
+		devc->trg_intrflag = intrflag;
+		devc->irq_mode = IMODE_INPUT;
+	}
+	else
+	{
+		devc->trg_buf_16 = buf;
+		devc->trg_bytes_16 = count;
+		devc->trg_intrflag_16 = intrflag;
+		devc->irq_mode_16 = IMODE_INPUT;
+	}
 }
 
 /*
@@ -854,17 +859,23 @@ static int sb16_audio_prepare_for_input(int dev, int bsize, int bcount)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 
-    if( !devc->fullduplex) {
-        audio_devs[dev]->dmap_out->dma =
-            audio_devs[dev]->dmap_in->dma =
-            devc->bits == AFMT_S16_LE ? devc->dma16 : devc->dma8;
-    } else if( devc->bits == AFMT_S16_LE) {
-        audio_devs[dev]->dmap_out->dma = devc->dma8;
-        audio_devs[dev]->dmap_in->dma = devc->dma16;
-    } else {
-        audio_devs[dev]->dmap_out->dma = devc->dma16;
-        audio_devs[dev]->dmap_in->dma = devc->dma8;
-    }
+	if (!devc->fullduplex)
+	{
+		audio_devs[dev]->dmap_out->dma =
+			audio_devs[dev]->dmap_in->dma =
+				devc->bits == AFMT_S16_LE ?
+					devc->dma16 : devc->dma8;
+	}
+	else if (devc->bits == AFMT_S16_LE)
+	{
+		audio_devs[dev]->dmap_out->dma = devc->dma8;
+		audio_devs[dev]->dmap_in->dma = devc->dma16;
+	}
+	else
+	{
+		audio_devs[dev]->dmap_out->dma = devc->dma16;
+		audio_devs[dev]->dmap_in->dma = devc->dma8;
+	}
 
 	devc->trigger_bits = 0;
 	return 0;
@@ -874,17 +885,23 @@ static int sb16_audio_prepare_for_output(int dev, int bsize, int bcount)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 
-    if( !devc->fullduplex) {
-        audio_devs[dev]->dmap_out->dma =
-            audio_devs[dev]->dmap_in->dma =
-            devc->bits == AFMT_S16_LE ? devc->dma16 : devc->dma8;
-    } else if( devc->bits == AFMT_S16_LE) {
-        audio_devs[dev]->dmap_out->dma = devc->dma8;
-        audio_devs[dev]->dmap_in->dma = devc->dma16;
-    } else {
-        audio_devs[dev]->dmap_out->dma = devc->dma16;
-        audio_devs[dev]->dmap_in->dma = devc->dma8;
-    }
+	if (!devc->fullduplex)
+	{
+		audio_devs[dev]->dmap_out->dma =
+			audio_devs[dev]->dmap_in->dma =
+				devc->bits == AFMT_S16_LE ?
+					devc->dma16 : devc->dma8;
+	}
+	else if (devc->bits == AFMT_S16_LE)
+	{
+		audio_devs[dev]->dmap_out->dma = devc->dma8;
+		audio_devs[dev]->dmap_in->dma = devc->dma16;
+	}
+	else
+	{
+		audio_devs[dev]->dmap_out->dma = devc->dma16;
+		audio_devs[dev]->dmap_in->dma = devc->dma8;
+	}
 
 	devc->trigger_bits = 0;
 	return 0;
@@ -895,23 +912,27 @@ static void sb16_audio_output_block(int dev, unsigned long buf, int count,
 {
 	unsigned long   flags, cnt;
 	sb_devc        *devc = audio_devs[dev]->devc;
-    unsigned long   bits;
+	unsigned long   bits;
 
-    if( !devc->fullduplex || devc->bits == AFMT_S16_LE) {
-        devc->irq_mode = IMODE_OUTPUT;
-        devc->intr_active = 1;
-    } else {
-        devc->irq_mode_2 = IMODE_OUTPUT;
-        devc->intr_active_2 = 1;
-    }
+	if (!devc->fullduplex || devc->bits == AFMT_S16_LE)
+	{
+		devc->irq_mode = IMODE_OUTPUT;
+		devc->intr_active = 1;
+	}
+	else
+	{
+		devc->irq_mode_16 = IMODE_OUTPUT;
+		devc->intr_active_16 = 1;
+	}
 
-    /* save value */
-    save_flags (flags);
-    cli ();
-    bits = devc->bits;
-    if( devc->fullduplex)
-        devc->bits = (devc->bits == AFMT_S16_LE) ? AFMT_U8 : AFMT_S16_LE;
-    restore_flags (flags);
+	/* save value */
+	save_flags (flags);
+	cli ();
+	bits = devc->bits;
+	if (devc->fullduplex)
+		devc->bits = (devc->bits == AFMT_S16_LE) ?
+			AFMT_U8 : AFMT_S16_LE;
+	restore_flags (flags);
 
 	cnt = count;
 	if (devc->bits == AFMT_S16_LE)
@@ -933,8 +954,8 @@ static void sb16_audio_output_block(int dev, unsigned long buf, int count,
 	sb_dsp_command(devc, (unsigned char) (cnt & 0xff));
 	sb_dsp_command(devc, (unsigned char) (cnt >> 8));
 
-    /* restore real value after all programming */
-    devc->bits = bits;
+	/* restore real value after all programming */
+	devc->bits = bits;
 	restore_flags(flags);
 }
 
@@ -943,13 +964,16 @@ static void sb16_audio_start_input(int dev, unsigned long buf, int count, int in
 	unsigned long   flags, cnt;
 	sb_devc        *devc = audio_devs[dev]->devc;
 
-    if( !devc->fullduplex || devc->bits != AFMT_S16_LE) {
-        devc->irq_mode = IMODE_INPUT;
-        devc->intr_active = 1;
-    } else {
-        devc->irq_mode_2 = IMODE_INPUT;
-        devc->intr_active_2 = 1;
-    }
+	if (!devc->fullduplex || devc->bits != AFMT_S16_LE)
+	{
+		devc->irq_mode = IMODE_INPUT;
+		devc->intr_active = 1;
+	}
+	else
+	{
+		devc->irq_mode_16 = IMODE_INPUT;
+		devc->intr_active_16 = 1;
+	}
 
 	cnt = count;
 	if (devc->bits == AFMT_S16_LE)
@@ -978,122 +1002,138 @@ static void sb16_audio_trigger(int dev, int bits)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 
-    int bits_2 = bits & devc->irq_mode_2;
+	int bits_16 = bits & devc->irq_mode_16;
 	bits &= devc->irq_mode;
 
-	if (!bits)
+	if (!bits && !bits_16)
 		sb_dsp_command(devc, 0xd0);	/* Halt DMA */
 	else
 	{
-        if( bits) {
-            switch (devc->irq_mode)
-            {
-       			case IMODE_INPUT:
-                    sb16_audio_start_input(dev, devc->trg_buf,
-                                           devc->trg_bytes,
-                                           devc->trg_intrflag);
-                    break;
+		if (bits)
+		{
+			switch (devc->irq_mode)
+			{
+				case IMODE_INPUT:
+					sb16_audio_start_input(dev,
+							devc->trg_buf,
+							devc->trg_bytes,
+							devc->trg_intrflag);
+					break;
 
-			    case IMODE_OUTPUT:
-                    sb16_audio_output_block(dev, devc->trg_buf,
-                                            devc->trg_bytes,
-                                            devc->trg_intrflag);
-                    break;
-            }
-        }
-        if( bits_2) {
-            switch (devc->irq_mode_2)
-            {
-                case IMODE_INPUT:
-                    sb16_audio_start_input (dev, devc->trg_buf_2,
-                                            devc->trg_bytes_2,
-                                            devc->trg_intrflag_2);
-                    break;
-                case IMODE_OUTPUT:
-                    sb16_audio_output_block (dev, devc->trg_buf_2,
-                                             devc->trg_bytes_2,
-                                             devc->trg_intrflag_2);
-                    break;
-            }
-        }
+				case IMODE_OUTPUT:
+					sb16_audio_output_block(dev,
+							devc->trg_buf,
+							devc->trg_bytes,
+							devc->trg_intrflag);
+					break;
+			}
+		}
+		if (bits_16)
+		{
+			switch (devc->irq_mode_16)
+			{
+				case IMODE_INPUT:
+					sb16_audio_start_input(dev,
+							devc->trg_buf_16,
+							devc->trg_bytes_16,
+							devc->trg_intrflag_16);
+					break;
+
+				case IMODE_OUTPUT:
+					sb16_audio_output_block(dev,
+							devc->trg_buf_16,
+							devc->trg_bytes_16,
+							devc->trg_intrflag_16);
+					break;
+			}
+		}
 	}
 
-	devc->trigger_bits = bits | bits_2;
+	devc->trigger_bits = bits | bits_16;
 }
 
 static unsigned char lbuf8[2048];
 static signed short *lbuf16 = (signed short *)lbuf8;
 #define LBUFCOPYSIZE 1024
 static void
-sb16_copy_from_user( int dev,
-                     char *localbuf, int localoffs,
-                     const char *userbuf, int useroffs,
-                     int max_in, int max_out,
-                     int *used, int *returned,
-                     int len)
+sb16_copy_from_user(int dev,
+		char *localbuf, int localoffs,
+		const char *userbuf, int useroffs,
+		int max_in, int max_out,
+		int *used, int *returned,
+		int len)
 {
-  sb_devc        *devc = audio_devs[dev]->devc;
-  int i, c, p, locallen;
-  unsigned char *buf8;
-  signed short *buf16;
+	sb_devc       *devc = audio_devs[dev]->devc;
+	int           i, c, p, locallen;
+	unsigned char *buf8;
+	signed short  *buf16;
 
-  /* if not duplex no conversion */
-  if( !devc->fullduplex) {
-    copy_from_user( localbuf + localoffs, userbuf + useroffs, len);
-    *used = len;
-    *returned = len;
-  } else if( devc->bits == AFMT_S16_LE) {
-    /* 16 -> 8 */
-    /* max_in >> 1, max number of samples in ( 16 bits ) */
-    /* max_out, max number of samples out ( 8 bits ) */
-    /* len, number of samples that will be taken ( 16 bits )*/
-    /* c, count of samples remaining in buffer ( 16 bits )*/
-    /* p, count of samples already processed ( 16 bits )*/
-    len = ( (max_in >> 1) > max_out) ? max_out : (max_in >> 1);
-    c = len;
-    p = 0;
-    buf8 = (unsigned char *)(localbuf + localoffs);
-    while( c) {
-      locallen = (c >= LBUFCOPYSIZE ? LBUFCOPYSIZE : c);
-      /* << 1 in order to get 16 bit samples */
-      copy_from_user( lbuf16,
-                 userbuf+useroffs + (p << 1),
-                 locallen << 1);
-      for( i = 0; i < locallen; i++) {
-        buf8[p+i] = ~((lbuf16[i] >> 8) & 0xff) ^ 0x80;
-      }
-      c -= locallen; p += locallen;
-    }
-    /* used = ( samples * 16 bits size ) */
-    *used = len << 1;
-    /* returned = ( samples * 8 bits size ) */
-    *returned = len;
-  } else {
-    /* 8 -> 16 */
-    /* max_in, max number of samples in ( 8 bits ) */
-    /* max_out >> 1, max number of samples out ( 16 bits ) */
-    /* len, number of samples that will be taken ( 8 bits )*/
-    /* c, count of samples remaining in buffer ( 8 bits )*/
-    /* p, count of samples already processed ( 8 bits )*/
-    len = max_in > (max_out >> 1) ? (max_out >> 1) : max_in;
-    c = len;
-    p = 0;
-    buf16 = (signed short *)(localbuf + localoffs);
-    while( c) {
-      locallen = (c >= LBUFCOPYSIZE ? LBUFCOPYSIZE : c);
-      copy_from_user( lbuf8,
-                 userbuf+useroffs + p,
-                 locallen);
-      for( i = 0; i < locallen; i++) {
-        buf16[p+i] = (~lbuf8[i] ^ 0x80) << 8;
-      }
-      c -= locallen; p += locallen;
-    }
-    /* used = ( samples * 8 bits size ) */
-    *used = len;
-    /* returned = ( samples * 16 bits size ) */
-    *returned = len << 1;
-  }
+	/* if not duplex no conversion */
+	if (!devc->fullduplex)
+	{
+		copy_from_user (localbuf + localoffs, userbuf + useroffs, len);
+		*used = len;
+		*returned = len;
+	}
+	else if (devc->bits == AFMT_S16_LE)
+	{
+		/* 16 -> 8 */
+		/* max_in >> 1, max number of samples in ( 16 bits ) */
+		/* max_out, max number of samples out ( 8 bits ) */
+		/* len, number of samples that will be taken ( 16 bits )*/
+		/* c, count of samples remaining in buffer ( 16 bits )*/
+		/* p, count of samples already processed ( 16 bits )*/
+		len = ( (max_in >> 1) > max_out) ? max_out : (max_in >> 1);
+		c = len;
+		p = 0;
+		buf8 = (unsigned char *)(localbuf + localoffs);
+		while (c)
+		{
+			locallen = (c >= LBUFCOPYSIZE ? LBUFCOPYSIZE : c);
+			/* << 1 in order to get 16 bit samples */
+			copy_from_user (lbuf16,
+					userbuf+useroffs + (p << 1),
+					locallen << 1);
+			for (i = 0; i < locallen; i++)
+			{
+				buf8[p+i] = ~((lbuf16[i] >> 8) & 0xff) ^ 0x80;
+			}
+			c -= locallen; p += locallen;
+		}
+		/* used = ( samples * 16 bits size ) */
+		*used = len << 1;
+		/* returned = ( samples * 8 bits size ) */
+		*returned = len;
+	}
+	else
+	{
+		/* 8 -> 16 */
+		/* max_in, max number of samples in ( 8 bits ) */
+		/* max_out >> 1, max number of samples out ( 16 bits ) */
+		/* len, number of samples that will be taken ( 8 bits )*/
+		/* c, count of samples remaining in buffer ( 8 bits )*/
+		/* p, count of samples already processed ( 8 bits )*/
+		len = max_in > (max_out >> 1) ? (max_out >> 1) : max_in;
+		c = len;
+		p = 0;
+		buf16 = (signed short *)(localbuf + localoffs);
+		while (c)
+		{
+			locallen = (c >= LBUFCOPYSIZE ? LBUFCOPYSIZE : c);
+			copy_from_user (lbuf8,
+					userbuf+useroffs + p,
+					locallen);
+			for (i = 0; i < locallen; i++)
+			{
+				buf16[p+i] = (~lbuf8[i] ^ 0x80) << 8;
+			}
+	      		c -= locallen; p += locallen;
+		}
+		/* used = ( samples * 8 bits size ) */
+		*used = len;
+		/* returned = ( samples * 16 bits size ) */
+		*returned = len << 1;
+	}
 }
 
 
@@ -1208,7 +1248,7 @@ static struct audio_driver sb16_audio_driver =	/* SB16 */
 	sb16_audio_prepare_for_output,
 	sb1_audio_halt_xfer,
 	NULL,			/* local_qlen */
-	sb16_copy_from_user,			/* copy_from_user */
+	sb16_copy_from_user,	/* copy_from_user */
 	NULL,
 	NULL,
 	sb16_audio_trigger,
@@ -1244,7 +1284,6 @@ void sb_audio_init(sb_devc * devc, char *name)
 
 	struct audio_driver *driver = &sb1_audio_driver;
 
-    devc->duplex = 0;
 	switch (devc->model)
 	{
 		case MDL_SB1:	/* SB1.0 or SB 1.5 */
@@ -1283,10 +1322,11 @@ void sb_audio_init(sb_devc * devc, char *name)
 			DDB(printk("Will use SB16 driver\n"));
 			audio_flags = DMA_AUTOMODE;
 			format_mask |= AFMT_S16_LE;
-            if( devc->dma8 != devc->dma16 && devc->dma16 != -1) {
-                audio_flags |= DMA_DUPLEX;
-                devc->duplex = 1;
-            }
+			if (devc->dma8 != devc->dma16 && devc->dma16 != -1)
+			{
+				audio_flags |= DMA_DUPLEX;
+				devc->duplex = 1;
+			}
 			driver = &sb16_audio_driver;
 			break;
 
@@ -1300,8 +1340,7 @@ void sb_audio_init(sb_devc * devc, char *name)
 				name,driver, sizeof(struct audio_driver),
 				audio_flags, format_mask, devc,
 				devc->dma8,
-                (devc->dma8 != devc->dma16 && devc->dma16 != -1)
-                     ? devc->dma16 : devc->dma8)) < 0)
+				devc->duplex ? devc->dma16 : devc->dma8) < 0))
 	{
 		  printk(KERN_ERR "Sound Blaster:  unable to install audio.\n");
 		  return;

@@ -486,6 +486,11 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_FD_MCS),y)
+L_OBJS += fd_mcs.o
+endif
+
+
 ifeq ($(CONFIG_SCSI_T128),y)
 L_OBJS += t128.o
 else

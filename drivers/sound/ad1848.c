@@ -1814,7 +1814,7 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 			ad_write(devc, 16, tmp & ~0x40);	/* Disable timer */
 
 			if (devc->timer_ticks == 0)
-				printk(KERN_WARNING "ad1848: Interrupt test failed (IRQ%d)\n", devc->irq);
+				printk(KERN_WARNING "ad1848: Interrupt test failed (IRQ%d)\n", irq);
 			else
 			{
 				DDB(printk("Interrupt test OK\n"));
@@ -1935,7 +1935,7 @@ void ad1848_unload(int io_base, int irq, int dma_playback, int dma_capture, int 
 		if (!share_dma)
 		{
 			if (irq > 0)
-				free_irq(devc->irq, NULL);
+				free_irq(devc->irq, (void *)devc->dev_no);
 
 			sound_free_dma(audio_devs[dev]->dmap_out->dma);
 
@@ -1945,6 +1945,10 @@ void ad1848_unload(int io_base, int irq, int dma_playback, int dma_capture, int 
 		mixer = audio_devs[devc->dev_no]->mixer_dev;
 		if(mixer>=0)
 			sound_unload_mixerdev(mixer);
+
+		nr_ad1848_devs--;
+		for ( ; i < nr_ad1848_devs ; i++)
+			adev_info[i] = adev_info[i+1];
 	}
 	else
 		printk(KERN_ERR "ad1848: Can't find device to be unloaded. Base=%x\n", io_base);
