@@ -231,7 +231,7 @@ void write_inode_now(struct inode *inode)
 void clear_inode(struct inode *inode)
 {
 	if (inode->i_nrpages)
-		truncate_inode_pages(inode, 0);
+		BUG();
 	wait_on_inode(inode);
 	if (IS_QUOTAINIT(inode))
 		DQUOT_DROP(inode);
@@ -261,6 +261,8 @@ static void dispose_list(struct list_head * head)
 		if (tmp == head)
 			break;
 		inode = list_entry(tmp, struct inode, i_list);
+		if (inode->i_nrpages)
+			truncate_inode_pages(inode, 0);
 		clear_inode(inode);
 		count++;
 	}
@@ -735,6 +737,8 @@ void iput(struct inode *inode)
 				if (op && op->delete_inode) {
 					void (*delete)(struct inode *) = op->delete_inode;
 					spin_unlock(&inode_lock);
+					if (inode->i_nrpages)
+						truncate_inode_pages(inode, 0);
 					delete(inode);
 					spin_lock(&inode_lock);
 				}

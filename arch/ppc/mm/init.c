@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.169 1999/06/17 19:03:13 cort Exp $
+ *  $Id: init.c,v 1.170 1999/06/29 12:33:51 davem Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -254,7 +254,6 @@ void show_mem(void)
 	printk("%d pages shared\n",shared);
 	printk("%d pages swap cached\n",cached);
 	printk("%d pages in page table cache\n",(int)pgtable_cache_size);
-	show_buffers();
 #ifdef CONFIG_NET
 	show_net_buffers();
 #endif
@@ -312,7 +311,7 @@ void si_meminfo(struct sysinfo *val)
 	val->totalram = 0;
 	val->sharedram = 0;
 	val->freeram = nr_free_pages << PAGE_SHIFT;
-	val->bufferram = buffermem;
+	val->bufferram = atomic_read(&buffermem);
 	while (i-- > 0)  {
 		if (PageReserved(mem_map+i))
 			continue;

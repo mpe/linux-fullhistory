@@ -296,7 +296,7 @@ int shrink_mmap(int priority, int gfp_mask)
 			spin_unlock(&pagecache_lock);
 			if (!try_to_free_buffers(page))
 				goto unlock_continue;
-			buffermem -= mem;
+			atomic_sub(mem, &buffermem);
 			spin_lock(&pagecache_lock);
 		}
 
@@ -359,6 +359,7 @@ inside:
 		if (page->offset == offset)
 			break;
 	}
+	set_bit(PG_referenced, &page->flags);
 not_found:
 	return page;
 }

@@ -256,7 +256,7 @@ void coda_prepare_openfile(struct inode *i, struct file *coda_file,
         cont_file->f_pos = coda_file->f_pos;
         cont_file->f_mode = coda_file->f_mode;
         cont_file->f_flags = coda_file->f_flags;
-        cont_file->f_count  = coda_file->f_count;
+        atomic_set(&cont_file->f_count, atomic_read(&coda_file->f_count));
         cont_file->f_owner  = coda_file->f_owner;
 	cont_file->f_op = cont_inode->i_op->default_file_ops;
 	cont_file->f_dentry = cont_dentry;

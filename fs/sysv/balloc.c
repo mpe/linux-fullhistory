@@ -201,7 +201,7 @@ int sysv_new_block(struct super_block * sb)
 		unlock_super(sb);
 		return 0;
 	}
-	if (bh->b_count != 1) {
+	if (atomic_read(&bh->b_count) != 1) {
 		printk("sysv_new_block: block already in use\n");
 		unlock_super(sb);
 		return 0;

@@ -1073,13 +1073,13 @@ static void idetape_input_buffers (ide_drive_t *drive, idetape_pc_t *pc, unsigne
 			return;
 		}
 #endif /* IDETAPE_DEBUG_BUGS */
-		count = IDE_MIN (bh->b_size - bh->b_count, bcount);
-		atapi_input_bytes (drive, bh->b_data + bh->b_count, count);
-		bcount -= count; bh->b_count += count;
-		if (bh->b_count == bh->b_size) {
+		count = IDE_MIN (bh->b_size - atomic_read(&bh->b_count), bcount);
+		atapi_input_bytes (drive, bh->b_data + atomic_read(&bh->b_count), count);
+		bcount -= count; atomic_add(count, &bh->b_count);
+		if (atomic_read(&bh->b_count) == bh->b_size) {
 			bh = bh->b_reqnext;
 			if (bh)
-				bh->b_count = 0;
+				atomic_set(&bh->b_count, 0);
 		}
 	}
 	pc->bh = bh;
@@ -1104,7 +1104,7 @@ static void idetape_output_buffers (ide_drive_t *drive, idetape_pc_t *pc, unsign
 			pc->bh = bh = bh->b_reqnext;
 			if (bh) {
 				pc->b_data = bh->b_data;
-				pc->b_count = bh->b_count;
+				pc->b_count = atomic_read(&bh->b_count);
 			}
 		}
 	}
@@ -1126,8 +1126,8 @@ static void idetape_update_buffers (idetape_pc_t *pc)
 		}
 #endif /* IDETAPE_DEBUG_BUGS */
 		count = IDE_MIN (bh->b_size, bcount);
-		bh->b_count = count;
-		if (bh->b_count == bh->b_size)
+		atomic_set(&bh->b_count, count);
+		if (atomic_read(&bh->b_count) == bh->b_size)
 			bh = bh->b_reqnext;
 		bcount -= count;
 	}
@@ -1351,13 +1351,13 @@ static void idetape_copy_stage_from_user (idetape_tape_t *tape, idetape_stage_t 
 			return;
 		}
 #endif /* IDETAPE_DEBUG_BUGS */
-		count = IDE_MIN (bh->b_size - bh->b_count, n);
-		copy_from_user (bh->b_data + bh->b_count, buf, count);
-		n -= count; bh->b_count += count; buf += count;
-		if (bh->b_count == bh->b_size) {
+		count = IDE_MIN (bh->b_size - atomic_read(&bh->b_count), n);
+		copy_from_user (bh->b_data + atomic_read(&bh->b_count), buf, count);
+		n -= count; atomic_add(count, &bh->b_count); buf += count;
+		if (atomic_read(&bh->b_count) == bh->b_size) {
 			bh = bh->b_reqnext;
 			if (bh)
-				bh->b_count = 0;
+				atomic_set(&bh->b_count, 0);
 		}
 	}
 	tape->bh = bh;
@@ -1382,7 +1382,7 @@ static void idetape_copy_stage_to_user (idetape_tape_t *tape, char *buf, idetape
 			tape->bh = bh = bh->b_reqnext;
 			if (bh) {
 				tape->b_data = bh->b_data;
-				tape->b_count = bh->b_count;
+				tape->b_count = atomic_read(&bh->b_count);
 			}
 		}
 	}
@@ -1394,10 +1394,10 @@ static void idetape_init_merge_stage (idetape_tape_t *tape)
 	
 	tape->bh = bh;
 	if (tape->chrdev_direction == idetape_direction_write)
-		bh->b_count = 0;
+		atomic_set(&bh->b_count, 0);
 	else {
 		tape->b_data = bh->b_data;
-		tape->b_count = bh->b_count;
+		tape->b_count = atomic_read(&bh->b_count);
 	}
 }
 
@@ -2131,7 +2131,7 @@ static void idetape_create_read_cmd (idetape_tape_t *tape, idetape_pc_t *pc, uns
 	pc->c[1] = 1;
 	pc->callback = &idetape_rw_callback;
 	pc->bh = bh;
-	bh->b_count = 0;
+	atomic_set(&bh->b_count, 0);
 	pc->buffer = NULL;
 	pc->request_transfer = pc->buffer_size = length * tape->tape_block_size;
 	if (pc->request_transfer == tape->stage_size)
@@ -2158,7 +2158,7 @@ static void idetape_create_write_cmd (idetape_tape_t *tape, idetape_pc_t *pc, un
 	set_bit (PC_WRITING, &pc->flags);
 	pc->bh = bh;
 	pc->b_data = bh->b_data;
-	pc->b_count = bh->b_count;
+	pc->b_count = atomic_read(&bh->b_count);
 	pc->buffer = NULL;
 	pc->request_transfer = pc->buffer_size = length * tape->tape_block_size;
 	if (pc->request_transfer == tape->stage_size)
@@ -2587,9 +2587,9 @@ static void idetape_pad_zeros (ide_drive_t *drive, int bcount)
 		bcount -= count;
 		blocks = count / tape->tape_block_size;
 		while (count) {
-			bh->b_count = IDE_MIN (count, bh->b_size);
-			memset (bh->b_data, 0, bh->b_count);
-			count -= bh->b_count;
+			atomic_set(&bh->b_count, IDE_MIN (count, bh->b_size));
+			memset (bh->b_data, 0, atomic_read(&bh->b_count));
+			count -= atomic_read(&bh->b_count);
 			bh = bh->b_reqnext;
 		}
 		idetape_queue_rw_tail (drive, IDETAPE_WRITE_RQ, blocks, tape->merge_stage->bh);
@@ -2616,8 +2616,8 @@ static void idetape_empty_write_pipeline (ide_drive_t *drive)
 		if (tape->merge_stage_size % tape->tape_block_size) {
 			blocks++;
 			i = tape->tape_block_size - tape->merge_stage_size % tape->tape_block_size;
-			memset (tape->bh->b_data + tape->bh->b_count, 0, i);
-			tape->bh->b_count += i;
+			memset (tape->bh->b_data + atomic_read(&tape->bh->b_count), 0, i);
+			atomic_add(i, &tape->bh->b_count);
 		}
 		(void) idetape_add_chrdev_write_request (drive, blocks);
 		tape->merge_stage_size = 0;

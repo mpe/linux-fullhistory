@@ -409,7 +409,7 @@ static inline struct vm_area_struct * find_vma_intersection(struct mm_struct * m
 
 extern struct vm_area_struct *find_extend_vma(struct task_struct *tsk, unsigned long addr);
 
-#define buffer_under_min()	((buffermem >> PAGE_SHIFT) * 100 < \
+#define buffer_under_min()	((atomic_read(&buffermem) >> PAGE_SHIFT) * 100 < \
 				buffer_mem.min_percent * num_physpages)
 #define pgcache_under_min()	(atomic_read(&page_cache_size) * 100 < \
 				page_cache.min_percent * num_physpages)

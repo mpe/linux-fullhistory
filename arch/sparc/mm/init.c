@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.65 1999/04/09 16:28:03 davem Exp $
+/*  $Id: init.c,v 1.67 1999/06/29 12:33:59 davem Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -106,7 +106,6 @@ void show_mem(void)
 	printk("%ld page tables cached\n",pgtable_cache_size);
 	if (sparc_cpu_model == sun4m || sparc_cpu_model == sun4d)
 		printk("%ld page dirs cached\n", pgd_cache_size);
-	show_buffers();
 #ifdef CONFIG_NET
 	show_net_buffers();
 #endif
@@ -363,7 +362,7 @@ void si_meminfo(struct sysinfo *val)
 	val->totalram = 0;
 	val->sharedram = 0;
 	val->freeram = nr_free_pages << PAGE_SHIFT;
-	val->bufferram = buffermem;
+	val->bufferram = atomic_read(&buffermem);
 	for (page = mem_map, end = mem_map + max_mapnr;
 	     page < end; page++) {
 		if (PageSkip(page)) {

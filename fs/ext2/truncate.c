@@ -129,7 +129,7 @@ static int check_block_empty(struct inode *inode, struct buffer_head *bh,
 		if (*(ind++))
 			goto in_use;
 
-	if (bh->b_count == 1) {
+	if (atomic_read(&bh->b_count) == 1) {
 		int tmp;
 		tmp = le32_to_cpu(*p);
 		*p = 0;
@@ -158,7 +158,7 @@ out:
 }
 
 #define DATA_BUFFER_USED(bh) \
-	(bh->b_count || buffer_locked(bh))
+	(atomic_read(&bh->b_count) || buffer_locked(bh))
 
 static int trunc_direct (struct inode * inode)
 {

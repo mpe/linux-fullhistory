@@ -1456,7 +1456,7 @@ xprt_create(struct file *file, struct sockaddr_in *ap, struct rpc_timeout *to)
 	proto = (sock->type == SOCK_DGRAM)? IPPROTO_UDP : IPPROTO_TCP;
 	if ((xprt = xprt_setup(sock, proto, ap, to)) != NULL) {
 		xprt->file = file;
-		file->f_count++;
+		atomic_inc(&file->f_count);
 	}
 
 	return xprt;

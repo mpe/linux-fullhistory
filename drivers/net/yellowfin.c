@@ -76,6 +76,7 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 #include <linux/pci.h>
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
+#include <asm/unaligned.h>
 #include <asm/io.h>
 
 #include <linux/netdevice.h>
@@ -1054,7 +1055,7 @@ static int yellowfin_rx(struct device *dev)
 		u16 desc_status = desc->status;
 		int data_size = desc->request_cnt - desc->result_cnt;
 		u8 *buf_addr = bus_to_virt(desc->addr);
-		s16 frame_status = *(s16*)&(buf_addr[data_size - 2]); /* ?Alpha safe on 885? */
+		s16 frame_status = get_unaligned((s16*)(buf_addr+data_size-2));
 
 		if (yellowfin_debug > 4)
 			printk(KERN_DEBUG "  yellowfin_rx() status was %4.4x.\n",

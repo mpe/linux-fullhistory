@@ -271,6 +271,8 @@ static int ufs_parse_options (char * options, unsigned * mount_options)
 				ufs_set_opt (*mount_options, UFSTYPE_44BSD);
 			else if (!strcmp (value, "nextstep"))
 				ufs_set_opt (*mount_options, UFSTYPE_NEXTSTEP);
+			else if (!strcmp (value, "nextstep-cd"))
+				ufs_set_opt (*mount_options, UFSTYPE_NEXTSTEP_CD);
 			else if (!strcmp (value, "openstep"))
 				ufs_set_opt (*mount_options, UFSTYPE_OPENSTEP);
 			else if (!strcmp (value, "sunx86"))
@@ -465,7 +467,7 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 	}
 	if (!(sb->u.ufs_sb.s_mount_opt & UFS_MOUNT_UFSTYPE)) {
 		printk("You didn't specify the type of your ufs filesystem\n\n"
-		"       mount -t ufs -o ufstype=sun|sunx86|44bsd|old|nextstep|openstep ....\n\n"
+		"       mount -t ufs -o ufstype=sun|sunx86|44bsd|old|nextstep|netxstep-cd|openstep ...\n\n"
 		">>>WARNING<<< Wrong ufstype may corrupt your filesystem, "
 		"default is ufstype=old\n");
 		ufs_set_opt (sb->u.ufs_sb.s_mount_opt, UFSTYPE_OLD);
@@ -535,6 +537,20 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 		}
 		break;
 	
+	case UFS_MOUNT_UFSTYPE_NEXTSTEP_CD:
+		UFSD(("ufstype=nextstep-cd\n"))
+		uspi->s_fsize = block_size = 2048;
+		uspi->s_fmask = ~(2048 - 1);
+		uspi->s_fshift = 11;
+		uspi->s_sbsize = super_block_size = 2048;
+		uspi->s_sbbase = 0;
+		flags |= UFS_DE_OLD | UFS_UID_OLD | UFS_ST_OLD | UFS_CG_OLD;
+		if (!(sb->s_flags & MS_RDONLY)) {
+			printk(KERN_INFO "ufstype=nextstep-cd is supported read-only\n");
+			sb->s_flags |= MS_RDONLY;
+		}
+		break;
+	
 	case UFS_MOUNT_UFSTYPE_OPENSTEP:
 		UFSD(("ufstype=openstep\n"))
 		uspi->s_fsize = block_size = 1024;
@@ -592,6 +608,7 @@ again:
 #endif
 
 	if ((((sb->u.ufs_sb.s_mount_opt & UFS_MOUNT_UFSTYPE) == UFS_MOUNT_UFSTYPE_NEXTSTEP) 
+	  || ((sb->u.ufs_sb.s_mount_opt & UFS_MOUNT_UFSTYPE) == UFS_MOUNT_UFSTYPE_NEXTSTEP_CD) 
 	  || ((sb->u.ufs_sb.s_mount_opt & UFS_MOUNT_UFSTYPE) == UFS_MOUNT_UFSTYPE_OPENSTEP)) 
 	  && uspi->s_sbbase < 256) {
 		ubh_brelse_uspi(uspi);
@@ -616,8 +633,8 @@ magic_found:
 		printk("ufs_read_super: fs_bsize %u != {4096, 8192}\n", uspi->s_bsize);
 		goto failed;
 	}
-	if (uspi->s_fsize != 512 && uspi->s_fsize != 1024) {
-		printk("ufs_read_super: fs_fsize %u != {512, 1024}\n", uspi->s_fsize);
+	if (uspi->s_fsize != 512 && uspi->s_fsize != 1024 && uspi->s_fsize != 2048) {
+		printk("ufs_read_super: fs_fsize %u != {512, 1024, 2048}\n", uspi->s_fsize);
 		goto failed;
 	}
 	if (uspi->s_fsize != block_size || uspi->s_sbsize != super_block_size) {

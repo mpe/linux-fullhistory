@@ -945,7 +945,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 		printk("maxsg = %x, counted = %d this_count = %d\n",
 		       max_sg, counted, this_count);
 		while(bh){
-		    printk("[%p %lx] ", bh->b_data, bh->b_size);
+		    printk("[%p %x] ", bh->b_data, bh->b_size);
 		    bh = bh->b_reqnext;
 		}
 		if(SCpnt->use_sg < 16)

@@ -155,7 +155,7 @@ static void all_files_read_only(void)	    /* Kill write permissions of all files
 	struct file *file;
 
 	for (file = inuse_filps; file; file = file->f_next)
-		if (file->f_dentry && file->f_count && S_ISREG(file->f_dentry->d_inode->i_mode))
+		if (file->f_dentry && atomic_read(&file->f_count) && S_ISREG(file->f_dentry->d_inode->i_mode))
 			file->f_mode &= ~2;
 }
 

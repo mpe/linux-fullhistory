@@ -67,7 +67,7 @@ extern int nr_free_pages;
 extern atomic_t nr_async_pages;
 extern struct inode swapper_inode;
 extern atomic_t page_cache_size;
-extern int buffermem;
+extern atomic_t buffermem;
 
 /* Incomplete types for prototype declarations: */
 struct task_struct;

@@ -30,6 +30,10 @@ ufstype=type_of_ufs
 		used in NextStep
 		supported as read-only
 
+	nextstep-cd
+		used for NextStep CDROMs (block_size == 2048)
+		supported as read-only
+
 	openstep
 		used in OpenStep
 		supported as read-only

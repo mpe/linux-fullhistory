@@ -108,7 +108,6 @@ void show_mem(void)
     printk("%d pages shared\n",shared);
     printk("%d pages swap cached\n",cached);
     printk("%ld pages in page table cache\n",pgtable_cache_size);
-    show_buffers();
 #ifdef CONFIG_NET
     show_net_buffers();
 #endif
@@ -479,7 +478,7 @@ void si_meminfo(struct sysinfo *val)
     val->totalram = 0;
     val->sharedram = 0;
     val->freeram = nr_free_pages << PAGE_SHIFT;
-    val->bufferram = buffermem;
+    val->bufferram = atomic_read(&buffermem);
     while (i-- > 0) {
 	if (PageReserved(mem_map+i))
 	    continue;

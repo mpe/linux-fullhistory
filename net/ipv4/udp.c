@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.69 1999/06/09 11:15:31 davem Exp $
+ * Version:	$Id: udp.c,v 1.70 1999/06/13 05:55:16 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -654,9 +654,9 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		struct sockaddr_in * usin = (struct sockaddr_in*)msg->msg_name;
 		if (msg->msg_namelen < sizeof(*usin))
 			return(-EINVAL);
-		if (usin->sin_family != AF_INET) {
+		if (usin->sin_family != AF_INET)
 			return -EINVAL;
-		}
+
 		ufh.daddr = usin->sin_addr.s_addr;
 		ufh.uh.dest = usin->sin_port;
 		if (ufh.uh.dest == 0)

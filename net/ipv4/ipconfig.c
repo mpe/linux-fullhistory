@@ -1,5 +1,5 @@
 /*
- *  $Id: ipconfig.c,v 1.22 1999/06/09 10:10:57 davem Exp $
+ *  $Id: ipconfig.c,v 1.23 1999/06/28 11:35:07 davem Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.
@@ -666,7 +666,7 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct device *dev, struct 
 	    b->vendor_area[2] == 83 &&
 	    b->vendor_area[3] == 99) {
 		u8 *ext = &b->vendor_area[4];
-		u8 *end = (u8 *) b + len;
+                u8 *end = (u8 *) b + ntohs(b->iph.tot_len);
 		while (ext < end && *ext != 0xff) {
 			if (*ext == 0)		/* Padding */
 				ext++;

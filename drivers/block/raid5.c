@@ -1032,19 +1032,24 @@ static void handle_stripe(struct stripe_head *sh)
 				if (sh->bh_new[i])
 					continue;
 				block = (int) compute_blocknr(sh, i);
-				bh = find_buffer(MKDEV(MD_MAJOR, minor), block, sh->size);
-				if (bh && bh->b_count == 0 && buffer_dirty(bh) && !buffer_locked(bh)) {
-					PRINTK(("Whee.. sector %lu, index %d (%d) found in the buffer cache!\n", sh->sector, i, block));
-					add_stripe_bh(sh, bh, i, WRITE);
-					sh->new[i] = 0;
-					nr++; nr_write++;
-					if (sh->bh_old[i]) {
-						nr_cache_overwrite++;
-						nr_cache_other--;
-					} else if (!operational[i]) {
-						nr_failed_overwrite++;
-						nr_failed_other--;
+				bh = get_hash_table(MKDEV(MD_MAJOR, minor), block, sh->size);
+				if (bh) {
+					if (atomic_read(&bh->b_count) == 1 &&
+					    buffer_dirty(bh) &&
+					    !buffer_locked(bh)) {
+						PRINTK(("Whee.. sector %lu, index %d (%d) found in the buffer cache!\n", sh->sector, i, block));
+						add_stripe_bh(sh, bh, i, WRITE);
+						sh->new[i] = 0;
+						nr++; nr_write++;
+						if (sh->bh_old[i]) {
+							nr_cache_overwrite++;
+							nr_cache_other--;
+						} else if (!operational[i]) {
+							nr_failed_overwrite++;
+							nr_failed_other--;
+						}
 					}
+					atomic_dec(&bh->b_count);
 				}
 			}
 		}

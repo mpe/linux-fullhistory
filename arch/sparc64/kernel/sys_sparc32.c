@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.109 1999/06/03 07:11:31 davem Exp $
+/* $Id: sys_sparc32.c,v 1.112 1999/06/29 12:34:02 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -2328,7 +2328,7 @@ static void scm_detach_fds32(struct msghdr *kmsg, struct scm_cookie *scm)
 			break;
 		}
 		/* Bump the usage count and install the file. */
-		fp[i]->f_count++;
+		atomic_inc(&fp[i]->f_count);
 		current->files->fd[new_fd] = fp[i];
 	}
 

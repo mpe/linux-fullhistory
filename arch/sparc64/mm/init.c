@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.129 1999/06/25 10:32:08 davem Exp $
+/*  $Id: init.c,v 1.130 1999/06/29 12:34:06 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -147,7 +147,6 @@ void show_mem(void)
 #ifndef __SMP__
 	printk("%d entries in page dir cache\n",pgd_cache_size);
 #endif	
-	show_buffers();
 #ifdef CONFIG_NET
 	show_net_buffers();
 #endif
@@ -1456,7 +1455,7 @@ void si_meminfo(struct sysinfo *val)
 	val->totalram = 0;
 	val->sharedram = 0;
 	val->freeram = ((unsigned long)nr_free_pages) << PAGE_SHIFT;
-	val->bufferram = buffermem;
+	val->bufferram = atomic_read(&buffermem);
 	for (page = mem_map, end = mem_map + max_mapnr;
 	     page < end; page++) {
 		if (PageSkip(page)) {

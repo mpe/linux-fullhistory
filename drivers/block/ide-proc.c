@@ -724,16 +724,17 @@ static void destroy_proc_ide_interfaces(void)
 		ide_hwif_t *hwif = &ide_hwifs[h];
 		int exist = (hwif->proc != NULL);
 
-/*		if (!hwif->present)
-			continue;*/
-		if (!hwif->proc)
+#if 0
+		if (!hwif->present)
 			continue;
-		else {
+#endif
+		if (exist) {
 			destroy_proc_ide_drives(hwif);
 			ide_remove_proc_entries(hwif->proc, hwif_entries);
 			remove_proc_entry(hwif->name, proc_ide_root);
 			hwif->proc = NULL;
-		}
+		} else
+			continue;
 	}
 }
 

@@ -36,7 +36,7 @@
  */
 
 #define DATA_BUFFER_USED(bh) \
-	((bh->b_count > 1) || buffer_locked(bh))
+	(atomic_read(&bh->b_count) || buffer_locked(bh))
 
 /* We throw away any data beyond inode->i_size. */
 

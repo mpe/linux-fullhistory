@@ -53,7 +53,7 @@ static int V1_sync_block (struct inode * inode, unsigned short * block, int wait
 		return 0;
 	}
 	ll_rw_block(WRITE, 1, &bh);
-	bh->b_count--;
+	atomic_dec(&bh->b_count);
 	return 0;
 }
 
@@ -190,7 +190,7 @@ static int V2_sync_block (struct inode * inode, unsigned long * block, int wait)
 		return 0;
 	}
 	ll_rw_block(WRITE, 1, &bh);
-	bh->b_count--;
+	atomic_dec(&bh->b_count);
 	return 0;
 }
 

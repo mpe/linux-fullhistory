@@ -983,7 +983,7 @@ N: Niels Kristian Bech Jensen
 E: nkbj@image.dk
 W: http://www.image.dk/~nkbj
 D: 4.4BSD and NeXTstep filesystem support in the old ufs.
-D: Openstep filesystem support in the new ufs.
+D: Openstep filesystem and NeXTstep CDROM support in the new ufs.
 D: Danish HOWTO, Linux+FreeBSD mini-HOWTO.
 S: Dr. Holsts Vej 34, lejl. 164
 S: DK-8230 Åbyhøj

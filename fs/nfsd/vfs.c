@@ -342,7 +342,7 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 
 	memset(filp, 0, sizeof(*filp));
 	filp->f_op    = inode->i_op->default_file_ops;
-	filp->f_count = 1;
+	atomic_set(&filp->f_count, 1);
 	filp->f_flags = wflag? O_WRONLY : O_RDONLY;
 	filp->f_mode  = wflag? FMODE_WRITE : FMODE_READ;
 	filp->f_dentry = dentry;
@@ -360,7 +360,7 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 			/* I nearly added put_filp() call here, but this filp
 			 * is really on callers stack frame. -DaveM
 			 */
-			filp->f_count--;
+			atomic_dec(&filp->f_count);
 		}
 	}
 out_nfserr:

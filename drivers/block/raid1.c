@@ -310,7 +310,7 @@ raid1_make_request (struct md_dev *mddev, int rw, struct buffer_head * bh)
 		mirror_bh [i]->b_rdev 	    = raid_conf->mirrors [i].dev;
 		mirror_bh [i]->b_rsector    = bh->b_rsector;
 		mirror_bh [i]->b_state      = (1<<BH_Req) | (1<<BH_Dirty);
-		mirror_bh [i]->b_count      = 1;
+		atomic_set(&mirror_bh [i]->b_count, 1);
 		mirror_bh [i]->b_size       = bh->b_size;
 		mirror_bh [i]->b_data       = bh->b_data;
 		mirror_bh [i]->b_list       = BUF_LOCKED;

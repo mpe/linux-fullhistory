@@ -137,8 +137,8 @@ unsigned ubh_max_bcount (struct ufs_buffer_head * ubh)
 	if (!ubh)
 		return 0;
 	for ( i = 0; i < ubh->count; i++ ) 
-		if ( ubh->bh[i]->b_count > max )
-			max = ubh->bh[i]->b_count;
+		if ( atomic_read(&ubh->bh[i]->b_count) > max )
+			max = atomic_read(&ubh->bh[i]->b_count);
 	return max;
 }
 

@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.26 1999/06/09 08:23:54 davem Exp $
+/* $Id: sys_sunos32.c,v 1.28 1999/06/29 12:34:04 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -163,7 +163,7 @@ asmlinkage int sunos_brk(u32 baddr)
 	 * simple, it hopefully works in most obvious cases.. Easy to
 	 * fool it, but this should catch most mistakes.
 	 */
-	freepages = buffermem >> PAGE_SHIFT;
+	freepages = atomic_read(&buffermem) >> PAGE_SHIFT;
 	freepages += atomic_read(&page_cache_size);
 	freepages >>= 1;
 	freepages += nr_free_pages;

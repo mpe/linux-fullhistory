@@ -62,7 +62,7 @@ int vm_enough_memory(long pages)
 	if (sysctl_overcommit_memory)
 	    return 1;
 
-	free = buffermem >> PAGE_SHIFT;
+	free = atomic_read(&buffermem) >> PAGE_SHIFT;
 	free += atomic_read(&page_cache_size);
 	free += nr_free_pages;
 	free += nr_swap_pages;

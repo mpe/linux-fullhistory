@@ -63,7 +63,7 @@
 #define DIRECT_FRAGMENT howmany (inode->i_size, uspi->s_fsize)
 
 #define DATA_BUFFER_USED(bh) \
-	((bh->b_count > 1) || buffer_locked(bh))
+	(atomic_read(&bh->b_count) || buffer_locked(bh))
 
 static int ufs_trunc_direct (struct inode * inode)
 {

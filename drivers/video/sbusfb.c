@@ -364,9 +364,29 @@ static int sbusfb_get_var(struct fb_var_screeninfo *var, int con,
      */
 
 static int sbusfb_set_var(struct fb_var_screeninfo *var, int con,
-			struct fb_info *info)
+			  struct fb_info *info)
 {
-	return -EINVAL;
+       struct display *display;
+       int activate = var->activate;
+
+       if(con >= 0)
+               display = &fb_display[con];
+       else
+               display = info->disp;
+
+       /* simple check for equality until fully implemented -E */
+       if ((activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW) {
+               if (display->var.xres != var->xres ||
+                       display->var.yres != var->yres ||
+                       display->var.xres_virtual != var->xres_virtual ||
+                       display->var.yres_virtual != var->yres_virtual ||
+                       display->var.bits_per_pixel != var->bits_per_pixel ||
+                       display->var.accel_flags != var->accel_flags) {
+                       return -EINVAL;
+               }
+       }
+       return 0;
+
 }
 
     /*

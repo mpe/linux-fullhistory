@@ -198,40 +198,36 @@ typedef char buffer_block[BLOCK_SIZE];
  * particularly beneficial on 32-bit processors.
  * 
  * We use the first 16 bytes for the data which is used in searches
- * over the block hash lists (ie. getblk(), find_buffer() and
- * friends).
+ * over the block hash lists (ie. getblk() and friends).
  * 
  * The second 16 bytes we use for lru buffer scans, as used by
  * sync_buffers() and refill_freelist().  -- sct
  */
 struct buffer_head {
 	/* First cache line: */
-	struct buffer_head * b_next;	/* Hash queue list */
+	struct buffer_head *b_next;	/* Hash queue list */
 	unsigned long b_blocknr;	/* block number */
-	unsigned long b_size;		/* block size */
+	unsigned short b_size;		/* block size */
+	unsigned short b_list;		/* List that this buffer appears */
 	kdev_t b_dev;			/* device (B_FREE = free) */
+
+	atomic_t b_count;		/* users using this block */
 	kdev_t b_rdev;			/* Real device */
-	unsigned long b_rsector;	/* Real buffer location on disk */
-	struct buffer_head * b_this_page;	/* circular list of buffers in one page */
 	unsigned long b_state;		/* buffer state bitmap (see above) */
-	struct buffer_head * b_next_free;
-	unsigned int b_count;		/* users using this block */
+	unsigned long b_flushtime;	/* Time when (dirty) buffer should be written */
 
-	/* Non-performance-critical data follows. */
-	char * b_data;			/* pointer to data block (1024 bytes) */
-	unsigned int b_list;		/* List that this buffer appears */
-	unsigned long b_flushtime;	/* Time when this (dirty) buffer
-					 * should be written */
-	wait_queue_head_t b_wait;
-	struct buffer_head ** b_pprev;		/* doubly linked list of hash-queue */
-	struct buffer_head * b_prev_free;	/* doubly linked list of buffers */
-	struct buffer_head * b_reqnext;		/* request queue */
+	struct buffer_head *b_next_free;/* lru/free list linkage */
+	struct buffer_head *b_prev_free;/* doubly linked list of buffers */
+	struct buffer_head *b_this_page;/* circular list of buffers in one page */
+	struct buffer_head *b_reqnext;	/* request queue */
 
-	/*
-	 * I/O completion
-	 */
-	void (*b_end_io)(struct buffer_head *bh, int uptodate);
+	struct buffer_head **b_pprev;	/* doubly linked list of hash-queue */
+	char *b_data;			/* pointer to data block (1024 bytes) */
+	void (*b_end_io)(struct buffer_head *bh, int uptodate); /* I/O completion */
 	void *b_dev_id;
+
+	unsigned long b_rsector;	/* Real buffer location on disk */
+	wait_queue_head_t b_wait;
 };
 
 typedef void (bh_end_io_t)(struct buffer_head *bh, int uptodate);
@@ -753,7 +749,7 @@ extern struct file *inuse_filps;
 extern int try_to_free_buffers(struct page *);
 extern void refile_buffer(struct buffer_head * buf);
 
-extern int buffermem;
+extern atomic_t buffermem;
 
 #define BUF_CLEAN	0
 #define BUF_LOCKED	1	/* Buffers scheduled for write */
@@ -785,7 +781,6 @@ extern inline void mark_buffer_clean(struct buffer_head * bh)
 }
 
 extern void FASTCALL(__mark_buffer_dirty(struct buffer_head *bh, int flag));
-extern void FASTCALL(__atomic_mark_buffer_dirty(struct buffer_head *bh, int flag));
 
 #define atomic_set_buffer_dirty(bh) test_and_set_bit(BH_Dirty, &(bh)->b_state)
 
@@ -794,20 +789,6 @@ extern inline void mark_buffer_dirty(struct buffer_head * bh, int flag)
 	if (!atomic_set_buffer_dirty(bh))
 		__mark_buffer_dirty(bh, flag);
 }
-
-/*
- * SMP-safe version of the above - does synchronization with
- * other users of buffer-cache data structures.
- *
- * since we test-set the dirty bit in a CPU-atomic way we also
- * have optimized the common 'redirtying' case away completely.
- */
-extern inline void atomic_mark_buffer_dirty(struct buffer_head * bh, int flag)
-{
-	if (!atomic_set_buffer_dirty(bh))
-		__atomic_mark_buffer_dirty(bh, flag);
-}
-
 
 extern void balance_dirty(kdev_t);
 extern int check_disk_change(kdev_t);
@@ -875,7 +856,6 @@ extern void remove_inode_hash(struct inode *);
 extern struct file * get_empty_filp(void);
 extern struct buffer_head * get_hash_table(kdev_t, int, int);
 extern struct buffer_head * getblk(kdev_t, int, int);
-extern struct buffer_head * find_buffer(kdev_t, int, int);
 extern void ll_rw_block(int, int, struct buffer_head * bh[]);
 extern int is_read_only(kdev_t);
 extern void __brelse(struct buffer_head *);
@@ -916,7 +896,6 @@ unsigned long generate_cluster(kdev_t, int b[], int);
 unsigned long generate_cluster_swab32(kdev_t, int b[], int);
 extern kdev_t ROOT_DEV;
 
-extern void show_buffers(void);
 extern void mount_root(void);
 
 #ifdef CONFIG_BLK_DEV_INITRD

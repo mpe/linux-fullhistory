@@ -431,9 +431,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 		case WRITE:
 			if (!test_and_clear_bit(BH_Dirty, &bh->b_state))
 				goto end_io;	/* Hmmph! Nothing to write */
-			lock_kernel();
 			refile_buffer(bh);
-			unlock_kernel();
 			/*
 			 * We don't allow the write-requests to fill up the
 			 * queue completely:  we want some room for reads,
@@ -612,7 +610,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	for (i = 0; i < nr; i++) {
 		if (bh[i]->b_size != correct_size) {
 			printk(KERN_NOTICE "ll_rw_block: device %s: "
-			       "only %d-char blocks implemented (%lu)\n",
+			       "only %d-char blocks implemented (%u)\n",
 			       kdevname(bh[0]->b_dev),
 			       correct_size, bh[i]->b_size);
 			goto sorry;
