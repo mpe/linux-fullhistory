@@ -23,6 +23,7 @@ config PXA_SHARPSL
 	bool "SHARP SL-5600 and SL-C7xx Models"
 	select PXA25x
 	select SHARP_SCOOP
+	select SHARP_PARAM
 	help
 	  Say Y here if you intend to run this kernel on a
 	  Sharp SL-5600 (Poodle), Sharp SL-C700 (Corgi),

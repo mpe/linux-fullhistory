@@ -17,5 +17,8 @@ config TIMER_ACORN
 config SHARP_LOCOMO
 	bool
 
+config SHARP_PARAM
+	bool
+
 config SHARP_SCOOP
 	bool
