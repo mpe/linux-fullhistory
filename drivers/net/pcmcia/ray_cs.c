@@ -389,7 +389,7 @@ static dev_link_t *ray_attach(void)
     dev->init = &ray_dev_init;
     dev->open = &ray_open;
     dev->stop = &ray_dev_close;
-    dev->tbusy = 1;
+    netif_stop_queue(dev);
 
     /* Register with Card Services */
     link->next = dev_list;
@@ -926,7 +926,8 @@ static int ray_event(event_t event, int priority,
     switch (event) {
     case CS_EVENT_CARD_REMOVAL:
         link->state &= ~DEV_PRESENT;
-        dev->tbusy = 1; dev->start = 0;
+        netif_stop_queue(dev);
+        clear_bit(LINK_STATE_START, &dev->state);
         if (link->state & DEV_CONFIG) {
             link->release.expires = jiffies + HZ/20;
             add_timer(&link->release);
@@ -943,8 +944,8 @@ static int ray_event(event_t event, int priority,
     case CS_EVENT_RESET_PHYSICAL:
         if (link->state & DEV_CONFIG) {
             if (link->open) {
-                dev->tbusy = 1;
-                dev->start = 0;
+            	netif_stop_queue(dev);
+            	clear_bit(LINK_STATE_START, &dev->state);
             }
             pcmcia_release_configuration(link->handle);
         }
@@ -957,8 +958,8 @@ static int ray_event(event_t event, int priority,
             pcmcia_request_configuration(link->handle, &link->conf);
             if (link->open) {
                 ray_reset(dev);
-                dev->tbusy = 0;
-                dev->start = 1;
+		netif_start_queue(dev);
+		set_bit(LINK_STATE_START, &dev->state);
             }
         }
         break;
@@ -1019,16 +1020,11 @@ static int ray_dev_start_xmit(struct sk_buff *skb, struct net_device *dev)
         return -1;
     }
     DEBUG(3,"ray_dev_start_xmit(skb=%p, dev=%p)\n",skb,dev);
-    if (dev->tbusy)
-    {
-        printk(KERN_NOTICE "ray_dev_start_xmit busy\n");
-        return 1;
-    }
     if (local->authentication_state == NEED_TO_AUTH) {
         DEBUG(0,"ray_cs Sending authentication request.\n");
         if (!build_auth_frame (local, local->auth_id, OPEN_AUTH_REQUEST)) {
             local->authentication_state = AUTHENTICATED;
-            dev->tbusy = 1;
+            netif_stop_queue(dev);
             return 1;
         }
     }
@@ -1037,7 +1033,7 @@ static int ray_dev_start_xmit(struct sk_buff *skb, struct net_device *dev)
     switch (ray_hw_xmit( skb->data, length, dev, DATA_TYPE)) {
         case XMIT_NO_CCS:
         case XMIT_NEED_AUTH:
-            dev->tbusy = 1;
+	    netif_stop_queue(dev);
             return 1;
         case XMIT_NO_INTR:
         case XMIT_MSG_BAD:
@@ -1072,7 +1068,7 @@ static int ray_hw_xmit(unsigned char* data, int len, struct net_device* dev,
 	case ECCSFULL:
         DEBUG(2,"ray_hw_xmit No free tx ccs\n");
 	case ECARDGONE:
-        dev->tbusy = 1;
+	netif_stop_queue(dev);
         return XMIT_NO_CCS;
 	default:
 		break;
@@ -1175,7 +1171,7 @@ AP to AP        1    1        dest AP    src AP          dest     source
     {
         if (local->sparm.b4.a_acting_as_ap_status)
         {
-            writeb(FC2_FROM_DS, &ptx->mac.frame_ctl_2);;
+            writeb(FC2_FROM_DS, &ptx->mac.frame_ctl_2);
             memcpy_toio(ptx->mac.addr_1, ((struct ethhdr *)data)->h_dest, ADDRLEN);
             memcpy_toio(ptx->mac.addr_2, local->bss_id, 6);
             memcpy_toio(ptx->mac.addr_3, ((struct ethhdr *)data)->h_source, ADDRLEN);
@@ -1512,10 +1508,8 @@ static int ray_open(struct net_device *dev)
     link->open++;
     MOD_INC_USE_COUNT;
 
-    dev->interrupt = 0;
-    if (sniffer) dev->tbusy = 1;
-    else         dev->tbusy = 0;
-    dev->start = 1;
+    if (sniffer) netif_stop_queue(dev);
+    else         netif_start_queue(dev);
 
     DEBUG(2,"ray_open ending\n");
     return 0;
@@ -1532,7 +1526,8 @@ static int ray_dev_close(struct net_device *dev)
     if (link == NULL)
         return -ENODEV;
 
-    link->open--; dev->start = 0;
+    link->open--;
+    netif_stop_queue(dev);
     if (link->state & DEV_STALE_CONFIG) {
         link->release.expires = jiffies + HZ/20;
         link->state |= DEV_RELEASE_PENDING;
@@ -1848,11 +1843,6 @@ static void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
     DEBUG(4,"ray_cs: interrupt for *dev=%p\n",dev);
 
-    if (test_and_set_bit(0,&dev->interrupt)) {
-        printk("ray_cs Reentering interrupt handler not allowed\n");
-        return;
-    }
-
     local = (ray_dev_t *)dev->priv;
     link = (dev_link_t *)local->finder;
     if ( ! (link->state & DEV_PRESENT) || link->state & DEV_SUSPEND ) {
@@ -1865,7 +1855,6 @@ static void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
     {
         DEBUG(1,"ray_cs interrupt bad rcsindex = 0x%x\n",rcsindex);
         clear_interrupt(local);
-        dev->interrupt = 0;
         return;
     }
     if (rcsindex < NUMBER_OF_CCS) /* If it's a returned CCS */
@@ -1961,8 +1950,8 @@ static void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
             else {
                 DEBUG(1,"ray_cs interrupt tx request failed\n");
             }
-            if (!sniffer) dev->tbusy = 0;
-            mark_bh(NET_BH);
+            if (!sniffer) netif_start_queue(dev);
+            netif_wake_queue(dev);
             break;
         case CCS_TEST_MEMORY:
             DEBUG(1,"ray_cs interrupt mem test done\n");
@@ -1996,7 +1985,7 @@ static void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
             local->card_status = CARD_ACQ_COMPLETE;
             /* do we need to clear tx buffers CCS's? */
             if (local->sparm.b4.a_network_type == ADHOC) {
-                if (!sniffer) dev->tbusy = 0;
+                if (!sniffer) netif_start_queue(dev);
             }
             else {
                 memcpy_fromio(&local->bss_id, prcs->var.rejoin_net_complete.bssid, ADDRLEN);
@@ -2008,7 +1997,7 @@ static void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
             break;
         case ROAMING_INITIATED:
             DEBUG(1,"ray_cs interrupt roaming initiated\n"); 
-            dev->tbusy = 1;
+            netif_stop_queue(dev);
             local->card_status = CARD_DOING_ACQ;
             break;
         case JAPAN_CALL_SIGN_RXD:
@@ -2022,7 +2011,6 @@ static void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
         writeb(CCS_BUFFER_FREE, &prcs->buffer_status);
     }
     clear_interrupt(local);
-    dev->interrupt = 0;
 } /* ray_interrupt */
 /*===========================================================================*/
 static void ray_rx(struct net_device *dev, ray_dev_t *local, struct rcs *prcs)
@@ -2477,7 +2465,7 @@ static void associate(ray_dev_t *local)
         local->card_status = CARD_ASSOC_FAILED;
         return;
     }
-    if (!sniffer) dev->tbusy = 0;
+    if (!sniffer) netif_start_queue(dev);
 
 } /* end associate */
 /*===========================================================================*/

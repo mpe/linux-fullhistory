@@ -825,7 +825,7 @@ static int pcnet_event(event_t event, int priority,
 	if (link->state & DEV_CONFIG) {
 	    if (link->open) {
 		netif_stop_queue(&info->dev);
-		clear_bit(LINK_STATE_START, &info->dev);
+		clear_bit(LINK_STATE_START, &info->dev.state);
 	    }
 	    CardServices(ReleaseConfiguration, link->handle);
 	}
@@ -840,7 +840,7 @@ static int pcnet_event(event_t event, int priority,
 		pcnet_reset_8390(&info->dev);
 		NS8390_init(&info->dev, 1);
 		netif_start_queue(&info->dev);
-		set_bit(LINK_STATE_START, &info->dev);
+		set_bit(LINK_STATE_START, &info->dev.state);
 	    }
 	}
 	break;
