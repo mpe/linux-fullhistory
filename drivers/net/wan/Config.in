@@ -21,6 +21,12 @@ if [ "$CONFIG_WAN" = "y" ]; then
 	#
 
 	tristate 'MultiGate (COMX) synchronous serial boards support' CONFIG_COMX
+
+        #
+        # Lan Media's board. Currently 1000, 1200, 5200, 5245
+        #
+        tristate 'LanMedia Corp. SSI/V.35, T1/E1, HSSI, T3 boards' CONFIG_LANMEDIA
+ 
 	if [ "$CONFIG_COMX" != "n" ]; then
 		dep_tristate '  Support for COMX/CMX/HiCOMX boards' CONFIG_COMX_HW_COMX $CONFIG_COMX
 		dep_tristate '  Support for LoCOMX board' CONFIG_COMX_HW_LOCOMX $CONFIG_COMX

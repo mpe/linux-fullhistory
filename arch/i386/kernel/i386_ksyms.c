@@ -27,7 +27,7 @@ extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
 extern spinlock_t rtc_lock;
 
-#if defined(CONFIG_APM)
+#if defined(CONFIG_APM) || defined(CONFIG_APM_MODULE)
 extern void machine_real_restart(unsigned char *, int);
 EXPORT_SYMBOL(machine_real_restart);
 #endif

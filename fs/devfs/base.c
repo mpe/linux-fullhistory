@@ -432,6 +432,17 @@
 	       <devfs_readdir>.
 	       Work sponsored by SGI.
   v0.93
+    20000413   Richard Gooch <rgooch@atnf.csiro.au>
+	       Set inode->i_size to correct size for symlinks.
+    20000414   Richard Gooch <rgooch@atnf.csiro.au>
+	       Only give lookup() method to directories to comply with new VFS
+	       assumptions.
+	       Work sponsored by SGI.
+    20000415   Richard Gooch <rgooch@atnf.csiro.au>
+	       Remove unnecessary tests in symlink methods.
+	       Don't kill existing block ops in <devfs_read_inode>.
+	       Work sponsored by SGI.
+  v0.94
 */
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -466,7 +477,7 @@
 #include <asm/bitops.h>
 #include <asm/atomic.h>
 
-#define DEVFS_VERSION            "0.93 (20000306)"
+#define DEVFS_VERSION            "0.94 (20000415)"
 
 #ifndef DEVFS_NAME
 #  define DEVFS_NAME "devfs"
@@ -2192,6 +2203,7 @@ static int get_removable_partition (struct devfs_entry *dir, const char *name,
 /*  Superblock operations follow  */
 
 static struct inode_operations devfs_iops;
+static struct inode_operations devfs_dir_iops;
 static struct file_operations devfs_fops;
 static struct inode_operations devfs_symlink_iops;
 
@@ -2215,28 +2227,33 @@ static void devfs_read_inode (struct inode *inode)
     inode->i_blocks = 0;
     inode->i_blksize = 1024;
     inode->i_op = &devfs_iops;
+    inode->i_fop = &devfs_fops;
     inode->i_rdev = NODEV;
-    if ( S_ISCHR (di->mode) ) {
+    if ( S_ISCHR (di->mode) )
+    {
 	inode->i_rdev = MKDEV (di->de->u.fcb.u.device.major,
 			       di->de->u.fcb.u.device.minor);
-	inode->i_fop = &devfs_fops;
-    } else if ( S_ISBLK (di->mode) ) {
+    }
+    else if ( S_ISBLK (di->mode) )
+    {
 	inode->i_rdev = MKDEV (di->de->u.fcb.u.device.major,
 			       di->de->u.fcb.u.device.minor);
 	inode->i_bdev = bdget (inode->i_rdev);
-	if (inode->i_bdev) inode->i_bdev->bd_op = di->de->u.fcb.ops;
+	if (inode->i_bdev)
+	{
+	    if (!inode->i_bdev->bd_op && di->de->u.fcb.ops)
+		inode->i_bdev->bd_op = di->de->u.fcb.ops;
+	}
 	else printk ("%s: read_inode(%d): no block device from bdget()\n",
 		     DEVFS_NAME, (int) inode->i_ino);
-	inode->i_fop = &devfs_fops;
-    } else if ( S_ISFIFO (di->mode) ) {
-	inode->i_fop = &def_fifo_fops;
-    } else if ( S_ISREG (di->mode) ) {
-	inode->i_size = di->de->u.fcb.u.file.size;
-	inode->i_fop = &devfs_fops;
-    } else if (S_ISLNK(di->mode)) {
+    }
+    else if ( S_ISFIFO (di->mode) ) inode->i_fop = &def_fifo_fops;
+    else if ( S_ISREG (di->mode) ) inode->i_size = di->de->u.fcb.u.file.size;
+    else if ( S_ISDIR (di->mode) ) inode->i_op = &devfs_dir_iops;
+    else if ( S_ISLNK (di->mode) )
+    {
 	inode->i_op = &devfs_symlink_iops;
-    } else {
-	inode->i_fop = &devfs_fops;
+	inode->i_size = di->de->u.symlink.length;
     }
     inode->i_mode = di->mode;
     inode->i_uid = di->uid;
@@ -2754,7 +2771,7 @@ static struct dentry *devfs_lookup (struct inode *dir, struct dentry *dentry)
 	    de = search_for_entry_in_dir (parent, dentry->d_name.name,
 					  dentry->d_name.len, FALSE);
     }
-    if ( (de == NULL) || (!de->registered) )
+    if ( (de == NULL) || !de->registered )
     {
 	/*  Try with devfsd. For any kind of failure, leave a negative dentry
 	    so someone else can deal with it (in the case where the sysadmin
@@ -3090,41 +3107,46 @@ static int devfs_mknod (struct inode *dir, struct dentry *dentry, int mode,
 
 static int devfs_readlink (struct dentry *dentry, char *buffer, int buflen)
 {
-	struct devfs_inode *di=get_devfs_inode_from_vfs_inode(dentry->d_inode);
-	char *name = ERR_PTR(-ENOENT);
+    struct devfs_inode *di = get_devfs_inode_from_vfs_inode (dentry->d_inode);
 
-	if (di && di->de->registered)
-		name = di->de->u.symlink.linkname;
-	return vfs_readlink(dentry, buffer, buflen, name);
+    return vfs_readlink (dentry, buffer, buflen, di->de->u.symlink.linkname);
 }   /*  End Function devfs_readlink  */
 
 static int devfs_follow_link (struct dentry *dentry, struct nameidata *nd)
 {
-	struct devfs_inode *di=get_devfs_inode_from_vfs_inode(dentry->d_inode);
-	char *name = ERR_PTR(-ENOENT);
+    struct devfs_inode *di = get_devfs_inode_from_vfs_inode (dentry->d_inode);
 
-	if (di && di->de->registered)
-		name = di->de->u.symlink.linkname;
-	return vfs_follow_link(nd, name);
+    return vfs_follow_link (nd, di->de->u.symlink.linkname);
 }   /*  End Function devfs_follow_link  */
 
 static struct inode_operations devfs_iops =
 {
-	lookup:		devfs_lookup,
-	link:		devfs_link,
-	unlink:		devfs_unlink,
-	symlink:	devfs_symlink,
-	mkdir:		devfs_mkdir,
-	rmdir:		devfs_rmdir,
-	mknod:		devfs_mknod,
-	setattr:	devfs_notify_change,
+    link:           devfs_link,
+    unlink:         devfs_unlink,
+    symlink:        devfs_symlink,
+    mkdir:          devfs_mkdir,
+    rmdir:          devfs_rmdir,
+    mknod:          devfs_mknod,
+    setattr:        devfs_notify_change,
+};
+
+static struct inode_operations devfs_dir_iops =
+{
+    lookup:         devfs_lookup,
+    link:           devfs_link,
+    unlink:         devfs_unlink,
+    symlink:        devfs_symlink,
+    mkdir:          devfs_mkdir,
+    rmdir:          devfs_rmdir,
+    mknod:          devfs_mknod,
+    setattr:        devfs_notify_change,
 };
 
 static struct inode_operations devfs_symlink_iops =
 {
-	readlink:	devfs_readlink,
-	follow_link:	devfs_follow_link,
-	setattr:	devfs_notify_change,
+    readlink:       devfs_readlink,
+    follow_link:    devfs_follow_link,
+    setattr:        devfs_notify_change,
 };
 
 static struct super_block *devfs_read_super (struct super_block *sb,
@@ -3186,7 +3208,7 @@ out_no_root:
 }   /*  End Function devfs_read_super  */
 
 
-static DECLARE_FSTYPE(devfs_fs_type, DEVFS_NAME, devfs_read_super, 0);
+static DECLARE_FSTYPE (devfs_fs_type, DEVFS_NAME, devfs_read_super, 0);
 
 
 /*  File operations for devfsd follow  */
@@ -3315,7 +3337,7 @@ static int devfsd_ioctl (struct inode *inode, struct file *file,
 	    doesn't matter who gets in first, as long as only one gets it  */
 	if (fs_info->devfsd_task == NULL)
 	{
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	    /*  Looks like no-one has it: check again and grab, with interrupts
 		disabled  */
 	    __cli ();
@@ -3325,7 +3347,7 @@ static int devfsd_ioctl (struct inode *inode, struct file *file,
 		fs_info->devfsd_event_mask = 0;  /*  Temporary disable  */
 		fs_info->devfsd_task = current;
 	    }
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	    __sti ();
 #endif
 	}
@@ -3399,7 +3421,7 @@ void __init mount_devfs_fs (void)
 {
     int err;
     extern long do_sys_mount (char *dev_name, char *dir_name,
-				char * type, int flags, void * data);
+			      char *type, int flags, void *data);
 
     if ( (boot_options & OPTION_NOMOUNT) ) return;
     err = do_sys_mount ("none", "/dev", "devfs", 0, "");

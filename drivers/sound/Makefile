@@ -10,8 +10,7 @@
 SUB_DIRS	:= 
 MOD_SUB_DIRS	:=
 MOD_IN_SUB_DIRS	:=
-ALL_SUB_DIRS	:= $(SUB_DIRS)
-
+ALL_SUB_DIRS	:= $(SUB_DIRS) emu10k1
 
 # All of the (potential) objects that export symbols.
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
@@ -80,6 +79,15 @@ obj-$(CONFIG_SOUND_ES1371)	+= es1371.o ac97_codec.o
 obj-$(CONFIG_SOUND_ESSSOLO1)	+= esssolo1.o
 obj-$(CONFIG_SOUND_MAESTRO)	+= maestro.o
 obj-$(CONFIG_SOUND_TRIDENT)	+= trident.o ac97_codec.o
+
+ifeq ($(CONFIG_SOUND_EMU10K1),y)
+  SUB_DIRS          += emu10k1
+  obj-y += emu10k1/emu10k1.o
+else
+  ifeq ($(CONFIG_SOUND_EMU10K1),m)
+     MOD_SUB_DIRS   += emu10k1
+  endif
+endif
 
 ifeq ($(CONFIG_DMASOUND),y)
   SUB_DIRS += dmasound

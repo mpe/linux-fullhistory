@@ -57,7 +57,7 @@ rpc_unregister_sysctl(void)
 	}
 }
 
-int
+static int
 proc_dodebug(ctl_table *table, int write, struct file *file,
 				void *buffer, size_t *lenp)
 {

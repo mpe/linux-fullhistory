@@ -1480,3 +1480,19 @@ Work sponsored by SGI
   <devfs_readdir>
 
 - Only set auto-ownership for /dev/pty/s*
+===============================================================================
+Changes for patch v162
+
+Work sponsored by SGI
+
+- Set inode->i_size to correct size for symlinks
+  Thanks to Jeremy Fitzhardinge <jeremy@goop.org>
+
+- Only give lookup() method to directories to comply with new VFS
+  assumptions
+
+- Remove unnecessary tests in symlink methods
+
+- Don't kill existing block ops in <devfs_read_inode>
+
+- Restore auto-ownership for /dev/pty/m*

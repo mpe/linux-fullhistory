@@ -81,7 +81,7 @@ static inline void flush_cache(void)
 #endif
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 static atomic_t cpus_waiting;
 
 static void ipi_handler(void *null)
@@ -102,9 +102,9 @@ static void smp_flush_cache(void)
 		barrier();
 }
 #define global_cache_flush smp_flush_cache
-#else				/* __SMP__ */
+#else				/* CONFIG_SMP */
 #define global_cache_flush flush_cache
-#endif				/* __SMP__ */
+#endif				/* CONFIG_SMP */
 
 int agp_backend_acquire(void)
 {
@@ -1764,6 +1764,30 @@ static struct {
 #endif /* CONFIG_AGP_INTEL */
 
 #ifdef CONFIG_AGP_SIS
+	{ PCI_DEVICE_ID_SI_630,
+		PCI_VENDOR_ID_SI,
+		SIS_GENERIC,
+		"SiS",
+		"630",
+		sis_generic_setup },
+	{ PCI_DEVICE_ID_SI_540,
+		PCI_VENDOR_ID_SI,
+		SIS_GENERIC,
+		"SiS",
+		"540",
+		sis_generic_setup },
+	{ PCI_DEVICE_ID_SI_620,
+		PCI_VENDOR_ID_SI,
+		SIS_GENERIC,
+		"SiS",
+		"620",
+		sis_generic_setup },
+	{ PCI_DEVICE_ID_SI_530,
+		PCI_VENDOR_ID_SI,
+		SIS_GENERIC,
+		"SiS",
+		"530",
+		sis_generic_setup },
 	{ PCI_DEVICE_ID_SI_630,
 		PCI_VENDOR_ID_SI,
 		SIS_GENERIC,

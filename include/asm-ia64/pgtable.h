@@ -12,6 +12,8 @@
  * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
+#include <linux/config.h>
+
 #include <asm/mman.h>
 #include <asm/page.h>
 #include <asm/types.h>

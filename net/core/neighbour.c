@@ -54,7 +54,7 @@ static int pneigh_ifdown(struct neigh_table *tbl, struct net_device *dev);
 static int neigh_glbl_allocs;
 static struct neigh_table *neigh_tables;
 
-#if defined(__i386__) && defined(__SMP__)
+#if defined(__i386__) && defined(CONFIG_SMP)
 #define ASSERT_WL(n) if ((int)((n)->lock.lock) > 0) { printk("WL assertion failed at " __FILE__ "(%d):" __FUNCTION__ "\n", __LINE__); }
 #else
 #define ASSERT_WL(n) do { } while(0)
@@ -597,7 +597,7 @@ next_elt:
 	write_unlock(&tbl->lock);
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 static void neigh_periodic_timer(unsigned long arg)
 {
 	struct neigh_table *tbl = (struct neigh_table*)arg;
@@ -629,7 +629,7 @@ static void neigh_timer_handler(unsigned long arg)
 	state = neigh->nud_state;
 
 	if (!(state&NUD_IN_TIMER)) {
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 		printk("neigh: timer & !nud_in_timer\n");
 #endif
 		goto out;
@@ -1106,7 +1106,7 @@ void neigh_table_init(struct neigh_table *tbl)
 						     0, SLAB_HWCACHE_ALIGN,
 						     NULL, NULL);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	tasklet_init(&tbl->gc_task, SMP_TIMER_NAME(neigh_periodic_timer), (unsigned long)tbl);
 #endif
 	init_timer(&tbl->gc_timer);

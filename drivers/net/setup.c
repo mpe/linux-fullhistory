@@ -28,6 +28,7 @@ extern int lapbeth_init(void);
 extern int sdla_setup(void); 
 extern int sdla_c_setup(void); 
 extern int comx_init(void);
+extern int lmc_setup(void);
 
 extern int abyss_probe(void);
 extern int madgemc_probe(void);
@@ -81,6 +82,9 @@ struct net_probe pci_probes[] __initdata = {
 	 *	SLHC if present needs attaching so other people see it
 	 *	even if not opened.
 	 */
+#if defined(CONFIG_LANMEDIA)
+	{lmc_setup, 0},
+#endif
 	 
 #ifdef CONFIG_INET	 
 #if (defined(CONFIG_SLIP) && defined(CONFIG_SLIP_COMPRESSED)) \

@@ -2227,7 +2227,7 @@ static int ip_rt_acct_read(char *buffer, char **start, off_t offset,
 
 		memcpy(dst, src, length);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		if (smp_num_cpus > 1) {
 			int i;
 			int cnt = length/4;

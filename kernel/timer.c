@@ -15,6 +15,7 @@
  *  1999-03-10  Improved NTP compatibility by Ulrich Windl
  */
 
+#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/timex.h>
 #include <linux/delay.h>
@@ -211,7 +212,7 @@ int del_timer(struct timer_list * timer)
 	return ret;
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 /*
  * SMP specific function to delete periodic timer.
  * Caller must disable by some means restarting the timer
@@ -564,7 +565,7 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 /*
  * SMP does this on a per-CPU basis elsewhere
  */
-#ifndef  __SMP__
+#ifndef  CONFIG_SMP
 	struct task_struct * p = current;
 	unsigned long user = ticks - system;
 	if (p->pid) {
@@ -748,7 +749,7 @@ asmlinkage long sys_getppid(void)
 	parent = me->p_opptr;
 	for (;;) {
 		pid = parent->pid;
-#if __SMP__
+#if CONFIG_SMP
 {
 		struct task_struct *old = parent;
 		mb();

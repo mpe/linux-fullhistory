@@ -517,6 +517,7 @@ static int js_open(struct inode *inode, struct file *file)
 	MOD_INC_USE_COUNT;
 
 	if ((new = kmalloc(sizeof(struct js_list), GFP_KERNEL))) {
+		jd->close(jd);
 		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}

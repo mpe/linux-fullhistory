@@ -22,6 +22,7 @@
 * Aug 07, 1998	David Fong	Initial version.
 *****************************************************************************/
 
+#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/kernel.h>	/* printk(), and other useful stuff */
 #include <linux/stddef.h>	/* offsetof(), etc. */
@@ -2762,7 +2763,7 @@ static void port_set_state (sdla_t *card, int state)
 
 void s508_lock (sdla_t *card, unsigned long *smp_flags)
 {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
                 spin_lock_irqsave(&card->lock, *smp_flags);
                 if (card->next){
                         spin_lock(&card->next->lock);
@@ -2774,7 +2775,7 @@ void s508_lock (sdla_t *card, unsigned long *smp_flags)
 
 void s508_unlock (sdla_t *card, unsigned long *smp_flags)
 {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
                         if (card->next){
                                 spin_unlock(&card->next->lock);
                         }

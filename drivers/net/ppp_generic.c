@@ -19,7 +19,7 @@
  * PPP driver, written by Michael Callahan and Al Longyear, and
  * subsequently hacked by Paul Mackerras.
  *
- * ==FILEVERSION 20000412==
+ * ==FILEVERSION 20000417==
  */
 
 #include <linux/config.h>
@@ -2376,6 +2376,7 @@ ppp_disconnect_channel(struct channel *pch)
 {
 	struct ppp *ppp;
 	int err = -EINVAL;
+	int dead;
 
 	write_lock_bh(&pch->upl);
 	ppp = pch->ppp;
@@ -2385,12 +2386,12 @@ ppp_disconnect_channel(struct channel *pch)
 		ppp_lock(ppp);
 		list_del(&pch->clist);
 		--ppp->n_channels;
-		if (ppp->dev == 0 && ppp->n_channels == 0)
+		dead = ppp->dev == 0 && ppp->n_channels == 0;
+		ppp_unlock(ppp);
+		if (dead)
 			/* Last disconnect from a ppp unit
 			   that is already dead: free it. */
 			kfree(ppp);
-		else
-			ppp_unlock(ppp);
 		err = 0;
 	}
 	write_unlock_bh(&pch->upl);

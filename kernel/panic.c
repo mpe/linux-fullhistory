@@ -65,7 +65,7 @@ NORET_TYPE void panic(const char * fmt, ...)
 
 	unblank_console();
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	smp_send_stop();
 #endif
 

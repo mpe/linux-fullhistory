@@ -2150,7 +2150,6 @@ module_exit(vortex_cleanup);
 /*
  * Local variables:
  *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c575_cb.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
- *  SMP-compile-command: "gcc -D__SMP__ -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c575_cb.c"
  *  cardbus-compile-command: "gcc -DCONFIG_HOTPLUG -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c575_cb.c -o 3c575_cb.o -I/usr/src/linux/pcmcia-cs-3.0.9/include/"
  *  c-indent-level: 4
  *  c-basic-offset: 4

@@ -188,9 +188,10 @@ static int __devinit ne2k_pci_init_one (struct pci_dev *pdev,
 		return -ENODEV;
 	}
 	
-	if (pci_enable_device (pdev)) {
+	i = pci_enable_device (pdev);
+	if (i) {
 		printk (KERN_ERR "ne2k-pci: cannot enable device\n");
-		return -EIO;
+		return i;
 	}
 	
 	if (request_region (ioaddr, NE_IO_EXTENT, "ne2k-pci") == NULL) {
@@ -292,6 +293,7 @@ static int __devinit ne2k_pci_init_one (struct pci_dev *pdev,
 	/* Set up the rest of the parameters. */
 	dev->irq = irq;
 	dev->base_addr = ioaddr;
+	pdev->driver_data = dev;
 
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {

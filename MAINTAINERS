@@ -50,7 +50,7 @@ trivial patch so apply some common sense.
 Maintainers List (try to look for most precise areas first)
 
 Note: For the hard of thinking, this list is meant to remain in alphabetical
-order. If you could add yourselves to it in alphabetical order that would
+order. If you could add yourselves to it in alphabetical order that would be
 so much easier [Ed]
 
 P: Person
@@ -340,6 +340,13 @@ P:	Andrey V. Savochkin
 M:	saw@saw.sw.com.sg
 S:	Maintained
 
+EMU10K1 SOUND DRIVER
+P:	Rui Sousa	
+M:	rsousa@grad.physics.sunysb.edu	
+L:	emu10k1-devel@opensource.creative.com
+W:	http://opensource.creative.com/
+S:	Maintained
+
 ETHEREXPRESS-16 NETWORK DRIVER
 P:	Philip Blundell
 M:	Philip.Blundell@pobox.com
@@ -592,6 +599,12 @@ L:	nfs-devel@linux.kernel.org (Linux NFS)
 W:	http://csua.berkeley.edu/~gam3/knfsd
 S:	Maintained
 
+LANMEDIA WAN CARD DRIVER
+P:      Andrew Stanley-Jones
+M:      asj@lanmedia.com
+W:      http://www.lanmedia.com/
+S:      Supported
+ 
 LAPB module
 P:	Henner Eisen
 M:	eis@baty.hanse.de

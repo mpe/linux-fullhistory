@@ -1460,7 +1460,6 @@ module_exit(rtl8129_cleanup);
 /*
  * Local variables:
  *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c rtl8129.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
- *  SMP-compile-command: "gcc -D__SMP__ -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c rtl8129.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
  *  c-indent-level: 4
  *  c-basic-offset: 4
  *  tab-width: 4

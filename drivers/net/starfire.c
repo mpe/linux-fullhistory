@@ -1375,7 +1375,6 @@ module_exit(starfire_cleanup);
 /*
  * Local variables:
  *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c starfire.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
- *  SMP-compile-command: "gcc -D__SMP__ -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c starfire.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
  *  simple-compile-command: "gcc -DMODULE -D__KERNEL__ -O6 -c starfire.c"
  *  c-indent-level: 4
  *  c-basic-offset: 4

@@ -12,7 +12,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
+ALL_SUB_DIRS := $(SUB_DIRS) lmc
 
 L_TARGET := wan.a
 L_OBJS   :=
@@ -118,6 +118,19 @@ else
   M_OBJS += cosa.o
   endif
 endif
+
+ifeq ($(CONFIG_LANMEDIA),y)
+  SUB_DIRS += lmc
+  MOD_IN_SUB_DIRS += lmc
+  L_OBJS += lmc/lmc.o
+  CONFIG_SYNCPPP_BUILTIN = y
+else
+  ifeq ($(CONFIG_LANMEDIA),m)
+  CONFIG_SYNCPPP_MODULE = y
+  MOD_IN_SUB_DIRS += lmc
+  endif
+endif
+ 
 
 # If anything built-in uses syncppp, then build it into the kernel also.
 # If not, but a module uses it, build as a module.

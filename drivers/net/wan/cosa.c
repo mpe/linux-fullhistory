@@ -79,6 +79,7 @@
 
 /* ---------- Headers, macros, data structures ---------- */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
@@ -374,7 +375,7 @@ static int __init cosa_init(void)
 	int i;
 
 	printk(KERN_INFO "cosa v1.08 (c) 1997-2000 Jan Kasprzak <kas@fi.muni.cz>\n");
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	printk(KERN_INFO "cosa: SMP found. Please mail any success/failure reports to the author.\n");
 #endif
 	if (cosa_major > 0) {

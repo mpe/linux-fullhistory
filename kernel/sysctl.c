@@ -320,6 +320,7 @@ int do_sysctl(int *name, int nlen, void *oldval, size_t *oldlenp,
 			kfree(context);
 		if (error != -ENOTDIR)
 			return error;
+		tmp = tmp->next;
 	} while (tmp != &root_table_header.ctl_entry);
 	return -ENOTDIR;
 }
@@ -365,14 +366,13 @@ static int parse_table(int *name, int nlen,
 		       void *newval, size_t newlen,
 		       ctl_table *table, void **context)
 {
+	int n;
 repeat:
 	if (!nlen)
 		return -ENOTDIR;
-
+	if (get_user(n, name))
+		return -EFAULT;
 	for ( ; table->ctl_name; table++) {
-		int n;
-		if (get_user(n, name))
-			return -EFAULT;
 		if (n == table->ctl_name || table->ctl_name == CTL_ANY) {
 			int error;
 			if (table->child) {

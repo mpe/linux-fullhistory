@@ -285,14 +285,16 @@ static int kstat_read_proc(char *page, char **start, off_t off,
 				 int count, int *eof, void *data)
 {
 	int i, len;
-	unsigned sum = 0;
 	extern unsigned long total_forks;
 	unsigned long jif = jiffies;
+#if !defined(CONFIG_ARCH_S390)
+	unsigned sum = 0;
 
 	for (i = 0 ; i < NR_IRQS ; i++)
 		sum += kstat_irqs(i);
+#endif
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	len = sprintf(page,
 		"cpu  %u %u %u %lu\n",
 		kstat.cpu_user,
@@ -315,8 +317,12 @@ static int kstat_read_proc(char *page, char **start, off_t off,
 		"disk_rblk %u %u %u %u\n"
 		"disk_wblk %u %u %u %u\n"
 		"page %u %u\n"
-		"swap %u %u\n"
+#if !defined(CONFIG_ARCH_S390)
+                "swap %u %u\n"
 		"intr %u",
+#else
+                "swap %u %u\n",
+#endif
 #else
 	len = sprintf(page,
 		"cpu  %u %u %u %lu\n"
@@ -326,8 +332,12 @@ static int kstat_read_proc(char *page, char **start, off_t off,
 		"disk_rblk %u %u %u %u\n"
 		"disk_wblk %u %u %u %u\n"
 		"page %u %u\n"
-		"swap %u %u\n"
+#if !defined(CONFIG_ARCH_S390)
+                "swap %u %u\n"
 		"intr %u",
+#else
+                "swap %u %u\n",
+#endif
 		kstat.cpu_user,
 		kstat.cpu_nice,
 		kstat.cpu_system,
@@ -346,10 +356,14 @@ static int kstat_read_proc(char *page, char **start, off_t off,
 		kstat.pgpgin,
 		kstat.pgpgout,
 		kstat.pswpin,
+#if !defined(CONFIG_ARCH_S390)
 		kstat.pswpout,
 		sum);
-	for (i = 0 ; i < NR_IRQS ; i++)
-		len += sprintf(page + len, " %u", kstat_irqs(i));
+        for (i = 0 ; i < NR_IRQS ; i++)
+                len += sprintf(page + len, " %u", kstat_irqs(i));
+#else
+                kstat.pswpout);
+#endif
 	len += sprintf(page + len,
 		"\nctxt %u\n"
 		"btime %lu\n"
@@ -389,6 +403,7 @@ static int partitions_read_proc(char *page, char **start, off_t off,
 	return len;
 }
 
+#if !defined(CONFIG_ARCH_S390)
 static int interrupts_read_proc(char *page, char **start, off_t off,
 				 int count, int *eof, void *data)
 {
@@ -400,6 +415,7 @@ static int interrupts_read_proc(char *page, char **start, off_t off,
 	if (len<0) len = 0;
 	return len;
 }
+#endif
 
 static int filesystems_read_proc(char *page, char **start, off_t off,
 				 int count, int *eof, void *data)
@@ -578,7 +594,7 @@ static ssize_t read_profile(struct file *file, char *buf,
 static ssize_t write_profile(struct file * file, const char * buf,
 			     size_t count, loff_t *ppos)
 {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	extern int setup_profiling_timer (unsigned int multiplier);
 
 	if (count==sizeof(int)) {
@@ -631,7 +647,9 @@ void __init proc_misc_init(void)
 		{"stat",	kstat_read_proc},
 		{"devices",	devices_read_proc},
 		{"partitions",	partitions_read_proc},
+#if !defined(CONFIG_ARCH_S390)
 		{"interrupts",	interrupts_read_proc},
+#endif
 		{"filesystems",	filesystems_read_proc},
 		{"dma",		dma_read_proc},
 		{"ioports",	ioports_read_proc},

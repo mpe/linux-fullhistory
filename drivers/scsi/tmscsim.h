@@ -8,6 +8,8 @@
 #ifndef _TMSCSIM_H
 #define _TMSCSIM_H
 
+#include <linux/config.h>
+
 #define IRQ_NONE 255
 
 #define MAX_ADAPTER_NUM 	4
@@ -210,7 +212,7 @@ PSRB		pTmpSRB;
 UCHAR		msgin123[4];
 UCHAR		DCBmap[MAX_SCSI_ID];
 
-#if defined(USE_SPINLOCKS) && USE_SPINLOCKS > 1 && (defined(__SMP__) || DEBUG_SPINLOCKS > 0)
+#if defined(USE_SPINLOCKS) && USE_SPINLOCKS > 1 && (defined(CONFIG_SMP) || DEBUG_SPINLOCKS > 0)
 spinlock_t	lock;
 #endif
 UCHAR		sel_timeout;

@@ -25,7 +25,7 @@ int getrusage(struct task_struct *, int, struct rusage *);
 static void release(struct task_struct * p)
 {
 	if (p != current) {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		int has_cpu;
 
 		/*

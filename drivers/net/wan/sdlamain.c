@@ -391,7 +391,7 @@ static int setup (wan_device_t* wandev, wandev_conf_t* conf)
 
 	if (!card->configured){
 
-	#ifdef __SMP__
+	#ifdef CONFIG_SMP
 		/* Initialize the Spin lock */
 		printk(KERN_INFO "%s: Initializing SMP\n",wandev->name);
 		spin_lock_init(&card->lock);
@@ -825,13 +825,13 @@ STATIC void sdla_isr (int irq, void* dev_id, struct pt_regs *regs)
 
 		/* Use spin lock only for S508 */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		spin_lock(&card->lock);
 #endif
 		sdla_intack(&card->hw);
 		if (card->isr)
 			card->isr(card);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		spin_unlock(&card->lock);
 #endif
 

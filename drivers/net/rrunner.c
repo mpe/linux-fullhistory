@@ -25,6 +25,7 @@
 #define RX_DMA_SKBUFF 1
 #define PKT_COPY_THRESHOLD 512
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/types.h>
@@ -166,7 +167,7 @@ int __init rr_hippi_probe (struct net_device *dev)
 		rrpriv = (struct rr_private *)dev->priv;
 		memset(rrpriv, 0, sizeof(*rrpriv));
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		spin_lock_init(&rrpriv->lock);
 #endif
 		sprintf(rrpriv->name, "RoadRunner serial HIPPI");
@@ -1650,6 +1651,6 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 /*
  * Local variables:
- * compile-command: "gcc -D__SMP__ -D__KERNEL__ -I../../include -Wall -Wstrict-prototypes -O2 -pipe -fomit-frame-pointer -fno-strength-reduce -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DMODULE -DMODVERSIONS -include ../../include/linux/modversions.h -c rrunner.c"
+ * compile-command: "gcc -D__KERNEL__ -I../../include -Wall -Wstrict-prototypes -O2 -pipe -fomit-frame-pointer -fno-strength-reduce -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DMODULE -DMODVERSIONS -include ../../include/linux/modversions.h -c rrunner.c"
  * End:
  */

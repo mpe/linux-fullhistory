@@ -2017,6 +2017,8 @@ void tty_register_devfs (struct tty_driver *driver, unsigned int flags,
 			mode |= S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 			break;
 		default:
+			if (driver->major == PTY_MASTER_MAJOR)
+				flags |= DEVFS_FL_AUTO_OWNER;
 			break;
 	}
 	if ( (minor <  driver->minor_start) || 

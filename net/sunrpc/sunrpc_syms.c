@@ -105,7 +105,9 @@ EXPORT_SYMBOL(rpc_garbage_args);
 EXPORT_SYMBOL(rpc_system_err);
 
 /* Debugging symbols */
+#ifdef RPC_DEBUG
 EXPORT_SYMBOL(rpc_debug);
 EXPORT_SYMBOL(nfs_debug);
 EXPORT_SYMBOL(nfsd_debug);
 EXPORT_SYMBOL(nlm_debug);
+#endif

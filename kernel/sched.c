@@ -19,6 +19,7 @@
  * current-task
  */
 
+#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/smp_lock.h>
@@ -80,7 +81,7 @@ static union {
 
 struct kernel_stat kstat = { 0 };
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 #define idle_task(cpu) (init_tasks[cpu_number_map(cpu)])
 #define can_schedule(p)	(!(p)->has_cpu)
@@ -133,7 +134,7 @@ static inline int goodness(struct task_struct * p, int this_cpu, struct mm_struc
 	if (!weight)
 		goto out;
 			
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* Give a largish advantage to the same processor...   */
 	/* (this is equivalent to penalizing other processors) */
 	if (p->processor == this_cpu)
@@ -184,7 +185,7 @@ static inline int preemption_goodness(struct task_struct * prev, struct task_str
  */
 static inline void reschedule_idle(struct task_struct * p, unsigned long flags)
 {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	int this_cpu = smp_processor_id(), target_cpu;
 	struct task_struct *tsk;
 	int cpu, best_cpu, i;
@@ -406,7 +407,7 @@ signed long schedule_timeout(signed long timeout)
 static inline void __schedule_tail(struct task_struct *prev)
 {
 	current->need_resched |= prev->need_resched;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	if ((prev->state == TASK_RUNNING) &&
 			(prev != idle_task(smp_processor_id()))) {
 		unsigned long flags;
@@ -416,7 +417,7 @@ static inline void __schedule_tail(struct task_struct *prev)
 	}
 	wmb();
 	prev->has_cpu = 0;
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 }
 
 void schedule_tail(struct task_struct *prev)
@@ -516,7 +517,7 @@ still_running_back:
 	 * sched_data.
 	 */
 	sched_data->curr = next;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
  	next->has_cpu = 1;
 	next->processor = this_cpu;
 #endif
@@ -525,7 +526,7 @@ still_running_back:
 	if (prev == next)
 		goto same_process;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
  	/*
  	 * maintain the per-process 'average timeslice' value.
  	 * (this has to be recalculated even if we reschedule to
@@ -554,7 +555,7 @@ still_running_back:
 	 * rescheduled during switch_to().
 	 */
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 	kstat.context_swtch++;
 	/*

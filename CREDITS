@@ -2266,6 +2266,10 @@ D: Read only HPFS filesystem
 S: Richardson, Texas
 S: USA
 
+N: Christopher Smith
+E: x@xman.org
+D: Tulip net driver hacker
+
 N: Miquel van Smoorenburg
 E: miquels@cistron.nl
 D: Kernel and net hacker. Sysvinit, minicom. doing Debian stuff.
@@ -2297,6 +2301,13 @@ D: various bug fixes (mostly SMP code)
 S: Warburgring 67
 S: 66424 Homburg 
 S: Germany
+
+N: Andrew Stanley-Jones
+E: asj@lanmedia.com
+D: LanMedia Corp. Device WAN card device driver
+S: #102, 686 W. Maude Ave
+S: Sunyvale, CA 94086
+S: USA
 
 N: Henrik Storner
 E: storner@image.dk

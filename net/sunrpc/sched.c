@@ -1015,7 +1015,7 @@ rpciod(void *ptr)
 
 	current->session = 1;
 	current->pgrp = 1;
-	sprintf(current->comm, "rpciod");
+	strcpy(current->comm, "rpciod");
 
 	dprintk("RPC: rpciod starting (pid %d)\n", rpciod_pid);
 	while (rpciod_users) {

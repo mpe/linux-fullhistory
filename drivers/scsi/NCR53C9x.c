@@ -3542,7 +3542,7 @@ state_machine:
 		esp->dma_irq_exit(esp);
 }
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 {
 	struct NCR_ESP *esp;

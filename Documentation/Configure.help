@@ -7598,6 +7598,31 @@ CONFIG_COSA
   The module will be called cosa.o. For general information about
   modules read Documentation/modules.txt.
 
+Lan Media sync serial boards support
+CONFIG_LANMEDIA
+  This is a driver for the following Lan Media family of serial boards.
+ 
+  LMC 1000 board allows you to connect synchronous serial devices (for
+  example base-band modems, or any other device with the X.21, V.24,
+  V.35 or V.36 interface) to your Linux box.
+ 
+  LMC 1200 with on board DSU board allows you to connect your Linux
+  box dirrectly to a T1 or E1 circuit.
+ 
+  LMC 5200 board provides a HSSI interface capable of runnig up to
+  52 mbits per second.
+ 
+  LMC 5245 board connects directly to a T3 circuit saving the
+  additional external hardware.
+ 
+  To change setting such as syncPPP vs cisco HDLC or clock source you
+  will need lmcctl.  It it available at ftp.lanmedia.com.
+ 
+  This code is also available as a module called lmc.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
 Fibre Channel driver support
 CONFIG_NET_FC
   Fibre Channel is a high speed serial protocol mainly used to connect
@@ -13414,6 +13439,11 @@ CONFIG_AEDSP16_MPU401
   you have selected for "MPU-401 support". If you are using this
   driver as a module you have to specify the MPU I/O base address with
   the parameter 'mpu_base=0xNNN'.
+
+Creative EMU10K1 based PCI sound cards
+CONFIG_SOUND_EMU10K1
+  Say Y or M if you have a PCI sound card using the EMU10K1
+  chipset, such as the Creative SBLive! or SB PCI512.
 
 Ensoniq ES1370 based PCI sound cards
 CONFIG_SOUND_ES1370

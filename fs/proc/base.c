@@ -15,6 +15,7 @@
 
 #include <asm/uaccess.h>
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
@@ -474,7 +475,7 @@ static struct pid_entry base_stuff[] = {
   E(PROC_PID_CMDLINE,	"cmdline",	S_IFREG|S_IRUGO),
   E(PROC_PID_STAT,	"stat",		S_IFREG|S_IRUGO),
   E(PROC_PID_STATM,	"statm",	S_IFREG|S_IRUGO),
-#ifdef __SMP__
+#ifdef CONFIG_SMP
   E(PROC_PID_CPU,	"cpu",		S_IFREG|S_IRUGO),
 #endif
   E(PROC_PID_MAPS,	"maps",		S_IFREG|S_IRUGO),
@@ -800,7 +801,7 @@ static struct dentry *proc_base_lookup(struct inode *dir, struct dentry *dentry)
 		case PROC_PID_MAPS:
 			inode->i_fop = &proc_maps_operations;
 			break;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		case PROC_PID_CPU:
 			inode->i_fop = &proc_info_file_operations;
 			inode->u.proc_i.op.proc_read = proc_pid_cpu;

@@ -11,8 +11,6 @@
 
 # ifdef __KERNEL__
 
-#include <linux/config.h>
-
 #include <linux/irq.h>
 
 #define KEYBOARD_IRQ			isa_irq_to_vector(1)

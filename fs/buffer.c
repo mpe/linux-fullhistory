@@ -28,6 +28,7 @@
 
 /* async buffer flushing, 1999 Andrea Arcangeli <andrea@suse.de> */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/malloc.h>
@@ -2192,7 +2193,7 @@ busy_buffer_page:
 
 void show_buffers(void)
 {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	struct buffer_head * bh;
 	int found = 0, locked = 0, dirty = 0, used = 0, lastused = 0;
 	int protected = 0;
@@ -2203,7 +2204,7 @@ void show_buffers(void)
 	printk("Buffer memory:   %6dkB\n",
 			atomic_read(&buffermem_pages) << (PAGE_SHIFT-10));
 
-#ifdef __SMP__ /* trylock does nothing on UP and so we could deadlock */
+#ifdef CONFIG_SMP /* trylock does nothing on UP and so we could deadlock */
 	if (!spin_trylock(&lru_list_lock))
 		return;
 	for(nlist = 0; nlist < NR_LIST; nlist++) {

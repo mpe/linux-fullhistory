@@ -212,7 +212,7 @@
 
 # if USE_SPINLOCKS == 3 /* both */
 
-#  if defined (__SMP__) || DEBUG_SPINLOCKS > 0
+#  if defined (CONFIG_SMP) || DEBUG_SPINLOCKS > 0
 #   define DC390_LOCKA_INIT { spinlock_t __unlocked = SPIN_LOCK_UNLOCKED; pACB->lock = __unlocked; };
 #  else
 #   define DC390_LOCKA_INIT
@@ -241,7 +241,7 @@
 
 #  if USE_SPINLOCKS == 2 /* adapter specific locks */
 
-#   if defined (__SMP__) || DEBUG_SPINLOCKS > 0
+#   if defined (CONFIG_SMP) || DEBUG_SPINLOCKS > 0
 #    define DC390_LOCKA_INIT { spinlock_t __unlocked = SPIN_LOCK_UNLOCKED; pACB->lock = __unlocked; };
 #   else
 #    define DC390_LOCKA_INIT

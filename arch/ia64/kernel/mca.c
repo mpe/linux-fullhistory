@@ -17,6 +17,7 @@
 #include <linux/sched.h>
 #include <linux/irq.h>
 #include <linux/smp_lock.h>
+#include <linux/config.h>
 
 #include <asm/page.h>
 #include <asm/ptrace.h>

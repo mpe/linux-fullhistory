@@ -5923,9 +5923,7 @@ insert_device(struct net_device *dev, u_long iobase, int (*init)(struct net_devi
 
 /*
  * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/linux/include -Wall -Wstrict-prototypes -fomit-frame-pointer -fno-strength-reduce -malign-loops=2 -malign-jumps=2 -malign-functions=2 -O2 -m486 -c de4x5.c"
  *
- * Delete -D__SMP__ below if you didn't define this in your kernel
  * Delete -DMODVERSIONS below if you didn't define this in your kernel
  *
  *  compile-command: "gcc -D__KERNEL__ -DMODULE -I/linux/include -Wall -Wstrict-prototypes -fomit-frame-pointer -fno-strength-reduce -malign-loops=2 -malign-jumps=2 -malign-functions=2 -O2 -m486 -DMODVERSIONS -include /linux/include/linux/modversions.h -c de4x5.c"

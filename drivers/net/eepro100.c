@@ -1285,7 +1285,7 @@ static void speedo_tx_timeout(struct net_device *dev)
 		del_timer(&sp->timer);
 		end_bh_atomic();
 #else /* LINUX_VERSION_CODE */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		del_timer_sync(&sp->timer);
 #else /* SMP */
 		del_timer(&sp->timer);
@@ -2258,7 +2258,6 @@ module_exit(eepro100_cleanup_module);
 /*
  * Local variables:
  *  compile-command: "gcc -DMODULE -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -c eepro100.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
- *  SMP-compile-command: "gcc -D__SMP__ -DMODULE -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -c eepro100.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
  *  c-indent-level: 4
  *  c-basic-offset: 4
  *  tab-width: 4

@@ -11,6 +11,7 @@
  * management can be a bitch. See 'mm/mm.c': 'copy_page_tables()'
  */
 
+#include <linux/config.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
 #include <linux/unistd.h>
@@ -98,7 +99,7 @@ static inline struct user_struct *uid_hash_find(unsigned short uid, unsigned int
  * the common case (not freeing anything) without having
  * any locking.
  */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
   #define uid_hash_free(up)	(!atomic_read(&(up)->count))
 #else
   #define uid_hash_free(up)	(1)
@@ -695,7 +696,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->tty_old_pgrp = 0;
 	p->times.tms_utime = p->times.tms_stime = 0;
 	p->times.tms_cutime = p->times.tms_cstime = 0;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	{
 		int i;
 		p->has_cpu = 0;

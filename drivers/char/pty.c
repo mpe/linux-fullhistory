@@ -138,7 +138,7 @@ static int pty_write(struct tty_struct * tty, int from_user,
 		       const unsigned char *buf, int count)
 {
 	struct tty_struct *to = tty->link;
-	int	c=0, n;
+	int	c=0, n, room;
 	char	*temp_buffer;
 
 	if (!to || tty->stopped)
@@ -149,7 +149,9 @@ static int pty_write(struct tty_struct * tty, int from_user,
 		temp_buffer = &tty->flip.char_buf[0];
 		while (count > 0) {
 			/* check space so we don't copy needlessly */ 
-			n = MIN(count, to->ldisc.receive_room(to));
+			n = to->ldisc.receive_room(to);
+			if (n > count)
+				n = count;
 			if (!n) break;
 
 			n  = MIN(n, PTY_BUF_SIZE);
@@ -161,7 +163,9 @@ static int pty_write(struct tty_struct * tty, int from_user,
 			}
 
 			/* check again in case the buffer filled up */
-			n = MIN(n, to->ldisc.receive_room(to));
+			room = to->ldisc.receive_room(to);
+			if (n > room)
+				n = room;
 			if (!n) break;
 			buf   += n; 
 			c     += n;

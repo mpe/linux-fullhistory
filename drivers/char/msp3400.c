@@ -34,6 +34,7 @@
  *
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -46,7 +47,7 @@
 #include <linux/videodev.h>
 #include <asm/semaphore.h>
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #include <asm/pgtable.h>
 #include <linux/smp_lock.h>
 #endif
@@ -59,7 +60,6 @@
 #define WAIT_QUEUE                 wait_queue_head_t
 
 /* sound mixer stuff */ 
-#include <linux/config.h>
 #if defined(CONFIG_SOUND) || defined(CONFIG_SOUND_MODULE)
 # define REGISTER_MIXER 1
 #endif
@@ -678,7 +678,7 @@ static int msp3400c_thread(void *data)
 	struct CARRIER_DETECT *cd;
 	int                   count, max1,max2,val1,val2, val,this;
     
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	lock_kernel();
 #endif
     
@@ -691,7 +691,7 @@ static int msp3400c_thread(void *data)
 
 	msp->thread = current;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	unlock_kernel();
 #endif
 
@@ -933,7 +933,7 @@ static int msp3410d_thread(void *data)
 	struct msp3400c *msp = client->data;
 	int mode,val,i,std;
     
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	lock_kernel();
 #endif
     
@@ -946,7 +946,7 @@ static int msp3410d_thread(void *data)
 
 	msp->thread = current;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	unlock_kernel();
 #endif
 

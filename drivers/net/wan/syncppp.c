@@ -33,7 +33,7 @@
  *
  * Version 1.9, Wed Oct  4 18:58:15 MSK 1995
  *
- * $Id: if_spppsubr.c,v 1.12 1996/06/10 23:17:45 gpalmer Exp $
+ * $Id: syncppp.c,v 1.18 2000/04/11 05:25:31 asj Exp $
  */
 #undef DEBUG
 
@@ -395,7 +395,7 @@ static void sppp_keepalive (unsigned long dummy)
 
 		if (sp->pp_alivecnt == MAXALIVECNT) {
 			/* No keepalive packets got.  Stop the interface. */
-			printk (KERN_WARNING "%s: down\n", dev->name);
+			printk (KERN_WARNING "%s: protocol down\n", dev->name);
 			if_down (dev);
 			if (! (sp->pp_flags & PP_CISCO)) {
 				/* Shut down the PPP link. */
@@ -529,7 +529,6 @@ badreq:
 			sppp_ipcp_open (sp);
 			break;
 		case LCP_STATE_OPENED:
-#if 0		
 			/* Remote magic changed -- close session. */
 			sp->lcp.state = LCP_STATE_CLOSED;
 			sp->ipcp.state = IPCP_STATE_CLOSED;
@@ -537,7 +536,6 @@ badreq:
 			sppp_lcp_open (sp);
 			/* An ACK has already been sent. */
 			sp->lcp.state = LCP_STATE_ACK_SENT;
-#endif			
 			break;
 		}
 		break;
@@ -549,7 +547,7 @@ badreq:
 		    (dev->flags & IFF_UP)) {
 			/* Coming out of loopback mode. */
 			sp->pp_link_state=SPPP_LINK_UP;
-			printk (KERN_INFO "%s: up\n", dev->name);
+			printk (KERN_INFO "%s: protocol up\n", dev->name);
 		}
 		switch (sp->lcp.state) {
 		case LCP_STATE_CLOSED:
@@ -716,7 +714,7 @@ static void sppp_cisco_input (struct sppp *sp, struct sk_buff *skb)
 		if (sp->pp_link_state==SPPP_LINK_DOWN &&
 		    (dev->flags & IFF_UP)) {
 			sp->pp_link_state=SPPP_LINK_UP;
-			printk (KERN_INFO "%s: up\n", dev->name);
+			printk (KERN_INFO "%s: protocol up\n", dev->name);
 		}
 		break;
 	case CISCO_ADDR_REQ:

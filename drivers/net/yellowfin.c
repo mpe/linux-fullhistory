@@ -1418,7 +1418,6 @@ module_exit(yellowfin_cleanup);
  * Local variables:
  *  compile-command: "gcc -DMODULE -D__KERNEL__  -Wall -Wstrict-prototypes -O6 -c yellowfin.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
  *  compile-command-alphaLX: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O2 -c yellowfin.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`  -fomit-frame-pointer -fno-strength-reduce -mno-fp-regs -Wa,-m21164a -DBWX_USABLE -DBWIO_ENABLED"
- *  SMP-compile-command: "gcc -D__SMP__ -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c yellowfin.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
  *  c-indent-level: 4
  *  c-basic-offset: 4
  *  tab-width: 4

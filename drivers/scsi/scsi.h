@@ -105,7 +105,7 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
  */
 #define ASSERT_LOCK(_LOCK, _COUNT)
 
-#if defined(__SMP__) && defined(CONFIG_USER_DEBUG)
+#if defined(CONFIG_SMP) && defined(CONFIG_USER_DEBUG)
 #undef ASSERT_LOCK
 #define ASSERT_LOCK(_LOCK,_COUNT)       \
         { if( (_LOCK)->lock != _COUNT )   \
