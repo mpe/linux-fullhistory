@@ -507,7 +507,7 @@ static int slab_break_gfp_order = BREAK_GFP_ORDER_LO;
 struct cache_sizes malloc_sizes[] = {
 #define CACHE(x) { .cs_size = (x) },
 #include <linux/kmalloc_sizes.h>
-	{ 0, }
+	CACHE(ULONG_MAX)
 #undef CACHE
 };
 
@@ -584,20 +584,28 @@ static inline struct array_cache *ac_data(kmem_cache_t *cachep)
 	return cachep->array[smp_processor_id()];
 }
 
-static kmem_cache_t * kmem_find_general_cachep (size_t size, int gfpflags)
+static inline kmem_cache_t *kmem_find_general_cachep (size_t size, int gfpflags)
 {
 	struct cache_sizes *csizep = malloc_sizes;
 
-	/* This function could be moved to the header file, and
-	 * made inline so consumers can quickly determine what
-	 * cache pointer they require.
+#if DEBUG
+	/* This happens if someone tries to call
+ 	* kmem_cache_create(), or __kmalloc(), before
+ 	* the generic caches are initialized.
+ 	*/
+	BUG_ON(csizep->cs_cachep == NULL);
+#endif
+	while (size > csizep->cs_size)
+		csizep++;
+
+	/*
+	 * Really subtile: The last entry with cs->cs_size==ULONG_MAX
+	 * has cs_{dma,}cachep==NULL. Thus no special case
+	 * for large kmalloc calls required.
 	 */
-	for ( ; csizep->cs_size; csizep++) {
-		if (size > csizep->cs_size)
-			continue;
-		break;
-	}
-	return (gfpflags & GFP_DMA) ? csizep->cs_dmacachep : csizep->cs_cachep;
+	if (unlikely(gfpflags & GFP_DMA))
+		return csizep->cs_dmacachep;
+	return csizep->cs_cachep;
 }
 
 /* Cal the num objs, wastage, and bytes left over for a given slab size. */
@@ -796,7 +804,7 @@ void __init kmem_cache_init(void)
 	sizes = malloc_sizes;
 	names = cache_names;
 
-	while (sizes->cs_size) {
+	while (sizes->cs_size != ULONG_MAX) {
 		/* For performance, all the general caches are L1 aligned.
 		 * This should be particularly beneficial on SMP boxes, as it
 		 * eliminates "false sharing".
@@ -2455,22 +2463,12 @@ EXPORT_SYMBOL(kmem_cache_alloc_node);
  */
 void * __kmalloc (size_t size, int flags)
 {
-	struct cache_sizes *csizep = malloc_sizes;
+	kmem_cache_t *cachep;
 
-	for (; csizep->cs_size; csizep++) {
-		if (size > csizep->cs_size)
-			continue;
-#if DEBUG
-		/* This happens if someone tries to call
-		 * kmem_cache_create(), or kmalloc(), before
-		 * the generic caches are initialized.
-		 */
-		BUG_ON(csizep->cs_cachep == NULL);
-#endif
-		return __cache_alloc(flags & GFP_DMA ?
-			 csizep->cs_dmacachep : csizep->cs_cachep, flags);
-	}
-	return NULL;
+	cachep = kmem_find_general_cachep(size, flags);
+	if (unlikely(cachep == NULL))
+		return NULL;
+	return __cache_alloc(cachep, flags);
 }
 
 EXPORT_SYMBOL(__kmalloc);
