@@ -31,9 +31,10 @@
 #include <linux/suspend.h>
 #include <linux/writeback.h>
 #include <linux/buffer_head.h>		/* for fsync_bdev() */
-
+#include <linux/swap.h>
 #include <linux/spinlock.h>
 #include <linux/vt_kern.h>
+#include <linux/workqueue.h>
 
 #include <asm/ptrace.h>
 
@@ -209,6 +210,24 @@ static struct sysrq_key_op sysrq_term_op = {
 	.enable_mask	= SYSRQ_ENABLE_SIGNAL,
 };
 
+static void moom_callback(void *ignored)
+{
+	out_of_memory(GFP_KERNEL);
+}
+
+static DECLARE_WORK(moom_work, moom_callback, NULL);
+
+static void sysrq_handle_moom(int key, struct pt_regs *pt_regs,
+			      struct tty_struct *tty)
+{
+	schedule_work(&moom_work);
+}
+static struct sysrq_key_op sysrq_moom_op = {
+	.handler	= sysrq_handle_moom,
+	.help_msg	= "Full",
+	.action_msg	= "Manual OOM execution",
+};
+
 static void sysrq_handle_kill(int key, struct pt_regs *pt_regs,
 			      struct tty_struct *tty) 
 {
@@ -257,7 +276,7 @@ static struct sysrq_key_op *sysrq_key_table[SYSRQ_KEY_TABLE_LENGTH] = {
 /* c */ NULL,
 /* d */	NULL,
 /* e */	&sysrq_term_op,
-/* f */	NULL,
+/* f */	&sysrq_moom_op,
 /* g */	NULL,
 /* h */	NULL,
 /* i */	&sysrq_kill_op,
