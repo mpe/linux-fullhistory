@@ -19,7 +19,8 @@ int multipath_alg_register(struct ip_mp_alg_ops *ops, enum ip_mp_alg n)
 	struct ip_mp_alg_ops **slot;
 	int err;
 
-	if (n < IP_MP_ALG_NONE || n > IP_MP_ALG_MAX)
+	if (n < IP_MP_ALG_NONE || n > IP_MP_ALG_MAX ||
+	    !ops->mp_alg_select_route)
 		return -EINVAL;
 
 	spin_lock(&alg_table_lock);

@@ -36,8 +36,8 @@ static inline int multipath_select_route(const struct flowi *flp,
 #ifdef CONFIG_IP_ROUTE_MULTIPATH_CACHED
 	struct ip_mp_alg_ops *ops = ip_mp_alg_table[rth->rt_multipath_alg];
 
-	if (ops && ops->mp_alg_select_route &&
-	    (rth->u.dst.flags & DST_BALANCED)) {
+	/* mp_alg_select_route _MUST_ be implemented */
+	if (ops && (rth->u.dst.flags & DST_BALANCED)) {
 		ops->mp_alg_select_route(flp, rth, rp);
 		return 1;
 	}
