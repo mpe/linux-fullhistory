@@ -275,11 +275,11 @@ static void snd_emu10k1_pcm_init_voice(emu10k1_t *emu,
 				       int master, int extra,
 				       emu10k1_voice_t *evoice,
 				       unsigned int start_addr,
-				       unsigned int end_addr)
+				       unsigned int end_addr,
+				       emu10k1_pcm_mixer_t *mix)
 {
 	snd_pcm_substream_t *substream = evoice->epcm->substream;
 	snd_pcm_runtime_t *runtime = substream->runtime;
-	emu10k1_pcm_mixer_t *mix;
 	unsigned int silent_page, tmp;
 	int voice, stereo, w_16;
 	unsigned char attn, send_amount[8];
@@ -289,11 +289,6 @@ static void snd_emu10k1_pcm_init_voice(emu10k1_t *emu,
 	unsigned int ccis;
 
 	voice = evoice->number;
-	if (evoice->epcm->type == PLAYBACK_EFX) 
-		mix = &emu->efx_pcm_mixer[voice - evoice->epcm->voices[0]->number];
-	else
-		mix = &emu->pcm_mixer[substream->number];
-
 	stereo = runtime->channels == 2;
 	w_16 = snd_pcm_format_width(runtime->format) == 16;
 
@@ -497,14 +492,16 @@ static int snd_emu10k1_playback_prepare(snd_pcm_substream_t * substream)
 	}
 	end_addr += start_addr;
 	snd_emu10k1_pcm_init_voice(emu, 1, 1, epcm->extra,
-				   start_addr, end_addr);
+				   start_addr, end_addr, NULL);
 	start_addr = epcm->start_addr;
 	end_addr = epcm->start_addr + snd_pcm_lib_buffer_bytes(substream);
 	snd_emu10k1_pcm_init_voice(emu, 1, 0, epcm->voices[0],
-				   start_addr, end_addr);
+				   start_addr, end_addr,
+				   &emu->pcm_mixer[substream->number]);
 	if (epcm->voices[1])
 		snd_emu10k1_pcm_init_voice(emu, 0, 0, epcm->voices[1],
-					   start_addr, end_addr);
+					   start_addr, end_addr,
+					   &emu->pcm_mixer[substream->number]);
 	return 0;
 }
 
@@ -526,16 +523,18 @@ static int snd_emu10k1_efx_playback_prepare(snd_pcm_substream_t * substream)
 	channel_size = ( end_addr - start_addr ) / NUM_EFX_PLAYBACK;
 
 	snd_emu10k1_pcm_init_voice(emu, 1, 1, epcm->extra,
-				   start_addr, start_addr + (channel_size / 2));
+				   start_addr, start_addr + (channel_size / 2), NULL);
 
 	/* only difference with the master voice is we use it for the pointer */
 	snd_emu10k1_pcm_init_voice(emu, 1, 0, epcm->voices[0],
-				   start_addr, start_addr + channel_size);
+				   start_addr, start_addr + channel_size,
+				   &emu->efx_pcm_mixer[0]);
 
 	start_addr += channel_size;
 	for (i = 1; i < NUM_EFX_PLAYBACK; i++) {
 		snd_emu10k1_pcm_init_voice(emu, 0, 0, epcm->voices[i],
-					   start_addr, start_addr+channel_size);
+					   start_addr, start_addr + channel_size,
+					   &emu->efx_pcm_mixer[i]);
 		start_addr += channel_size;
 	}
 
@@ -654,12 +653,13 @@ static void snd_emu10k1_playback_invalidate_cache(emu10k1_t *emu, int extra, emu
 	}
 }
 
-static void snd_emu10k1_playback_prepare_voice(emu10k1_t *emu, emu10k1_voice_t *evoice, int master, int extra)
+static void snd_emu10k1_playback_prepare_voice(emu10k1_t *emu, emu10k1_voice_t *evoice,
+					       int master, int extra,
+					       emu10k1_pcm_mixer_t *mix)
 {
 	snd_pcm_substream_t *substream;
 	snd_pcm_runtime_t *runtime;
-	emu10k1_pcm_mixer_t *mix;
-	unsigned int attn;
+	unsigned int attn, vattn;
 	unsigned int voice, tmp;
 
 	if (evoice == NULL)	/* skip second voice for mono */
@@ -668,15 +668,12 @@ static void snd_emu10k1_playback_prepare_voice(emu10k1_t *emu, emu10k1_voice_t *
 	runtime = substream->runtime;
 	voice = evoice->number;
 
-	mix = evoice->epcm->type == PLAYBACK_EFX
-		? &emu->efx_pcm_mixer[voice - evoice->epcm->voices[0]->number]
-		: &emu->pcm_mixer[substream->number];
-
 	attn = extra ? 0 : 0x00ff;
 	tmp = runtime->channels == 2 ? (master ? 1 : 2) : 0;
+	vattn = mix != NULL ? (mix->attn[tmp] << 16) : 0;
 	snd_emu10k1_ptr_write(emu, IFATN, voice, attn);
-	snd_emu10k1_ptr_write(emu, VTFT, voice, (mix->attn[tmp] << 16) | 0xffff);
-	snd_emu10k1_ptr_write(emu, CVCF, voice, (mix->attn[tmp] << 16) | 0xffff);
+	snd_emu10k1_ptr_write(emu, VTFT, voice, vattn | 0xffff);
+	snd_emu10k1_ptr_write(emu, CVCF, voice, vattn | 0xffff);
 	snd_emu10k1_ptr_write(emu, DCYSUSV, voice, 0x7f7f);
 	snd_emu10k1_voice_clear_loop_stop(emu, voice);
 }	
@@ -725,7 +722,9 @@ static int snd_emu10k1_playback_trigger(snd_pcm_substream_t * substream,
 	emu10k1_t *emu = snd_pcm_substream_chip(substream);
 	snd_pcm_runtime_t *runtime = substream->runtime;
 	emu10k1_pcm_t *epcm = runtime->private_data;
+	emu10k1_pcm_mixer_t *mix;
 	int result = 0;
+
 	// printk("trigger - emu10k1 = 0x%x, cmd = %i, pointer = %i\n", (int)emu, cmd, substream->ops->pointer(substream));
 	spin_lock(&emu->reg_lock);
 	switch (cmd) {
@@ -734,9 +733,10 @@ static int snd_emu10k1_playback_trigger(snd_pcm_substream_t * substream,
 		snd_emu10k1_playback_invalidate_cache(emu, 0, epcm->voices[0]);
 		/* follow thru */
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		snd_emu10k1_playback_prepare_voice(emu, epcm->voices[0], 1, 0);
-		snd_emu10k1_playback_prepare_voice(emu, epcm->voices[1], 0, 0);
-		snd_emu10k1_playback_prepare_voice(emu, epcm->extra, 1, 1);
+		mix = &emu->pcm_mixer[substream->number];
+		snd_emu10k1_playback_prepare_voice(emu, epcm->voices[0], 1, 0, mix);
+		snd_emu10k1_playback_prepare_voice(emu, epcm->voices[1], 0, 0, mix);
+		snd_emu10k1_playback_prepare_voice(emu, epcm->extra, 1, 1, NULL);
 		snd_emu10k1_playback_trigger_voice(emu, epcm->voices[0], 1, 0);
 		snd_emu10k1_playback_trigger_voice(emu, epcm->voices[1], 0, 0);
 		snd_emu10k1_playback_trigger_voice(emu, epcm->extra, 1, 1);
@@ -851,7 +851,7 @@ static int snd_emu10k1_efx_playback_trigger(snd_pcm_substream_t * substream,
 	emu10k1_t *emu = snd_pcm_substream_chip(substream);
 	snd_pcm_runtime_t *runtime = substream->runtime;
 	emu10k1_pcm_t *epcm = runtime->private_data;
-	int i = 0;
+	int i;
 	int result = 0;
 
 	spin_lock(&emu->reg_lock);
@@ -865,16 +865,16 @@ static int snd_emu10k1_efx_playback_trigger(snd_pcm_substream_t * substream,
 
 		/* follow thru */
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		snd_emu10k1_playback_prepare_voice(emu, epcm->voices[0], 0, 0);
-		snd_emu10k1_playback_prepare_voice(emu, epcm->extra, 1, 1);
-		for (i = 1; i < NUM_EFX_PLAYBACK; i++) {	
-			snd_emu10k1_playback_prepare_voice(emu, epcm->voices[i], 0, 0);
-		}
+		snd_emu10k1_playback_prepare_voice(emu, epcm->extra, 1, 1, NULL);
+		snd_emu10k1_playback_prepare_voice(emu, epcm->voices[0], 0, 0,
+						   &emu->efx_pcm_mixer[0]);
+		for (i = 1; i < NUM_EFX_PLAYBACK; i++)
+			snd_emu10k1_playback_prepare_voice(emu, epcm->voices[i], 0, 0,
+							   &emu->efx_pcm_mixer[i]);
 		snd_emu10k1_playback_trigger_voice(emu, epcm->voices[0], 0, 0);
 		snd_emu10k1_playback_trigger_voice(emu, epcm->extra, 1, 1);
-		for (i = 1; i < NUM_EFX_PLAYBACK; i++) {	
+		for (i = 1; i < NUM_EFX_PLAYBACK; i++)
 			snd_emu10k1_playback_trigger_voice(emu, epcm->voices[i], 0, 0);
-		}
 		epcm->running = 1;
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
