@@ -157,7 +157,7 @@ xDenorm_done:
 	je	LRound_To_24
 
 #ifdef PARANOID
-	jmp	L_bugged	/* There is no bug, just a bad control word */
+	jmp	L_bugged_denorm	/* There is no bug, just a bad control word */
 #endif PARANOID
 
 
@@ -178,7 +178,7 @@ LRound_To_24:
 	je	LDown_24
 
 #ifdef PARANOID
-	jmp	L_bugged
+	jmp	L_bugged_round24
 #endif PARANOID
 
 LUp_24:
@@ -258,7 +258,7 @@ LRound_To_53:
 	je	LDown_53
 
 #ifdef PARANOID
-	jmp	L_bugged
+	jmp	L_bugged_round53
 #endif PARANOID
 
 LUp_53:
@@ -332,7 +332,7 @@ LRound_To_64:
 	je	LDown_64
 
 #ifdef PARANOID
-	jmp	L_bugged
+	jmp	L_bugged_round64
 #endif PARANOID
 
 LUp_64:
@@ -644,20 +644,38 @@ xDo_unmasked_underflow:
 
 #ifdef PARANOID
 /* If we ever get here then we have problems! */
-L_bugged:
-	pushl	EX_INTERNAL|0x201
+L_bugged_denorm:
+	pushl	EX_INTERNAL|0x230
+	call	EXCEPTION
+	popl	%ebx
+	jmp	L_exception_exit
+
+L_bugged_round24:
+	pushl	EX_INTERNAL|0x231
+	call	EXCEPTION
+	popl	%ebx
+	jmp	L_exception_exit
+
+L_bugged_round53:
+	pushl	EX_INTERNAL|0x232
+	call	EXCEPTION
+	popl	%ebx
+	jmp	L_exception_exit
+
+L_bugged_round64:
+	pushl	EX_INTERNAL|0x233
 	call	EXCEPTION
 	popl	%ebx
 	jmp	L_exception_exit
 
 L_norm_bugged:
-	pushl	EX_INTERNAL|0x216
+	pushl	EX_INTERNAL|0x234
 	call	EXCEPTION
 	popl	%ebx
 	jmp	L_exception_exit
 
 L_entry_bugged:
-	pushl	EX_INTERNAL|0x217
+	pushl	EX_INTERNAL|0x235
 	call	EXCEPTION
 	popl	%ebx
 L_exception_exit:

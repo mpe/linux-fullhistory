@@ -954,6 +954,24 @@ static int read_chan(struct tty_struct *tty, struct file *file,
 	int minimum, time;
 	int retval = 0;
 
+	/* Job control check -- must be done at start and after
+	   every sleep (POSIX.1 7.1.1.4). */
+	/* NOTE: not yet done after every sleep pending a thorough
+	   check of the logic of this change. -- jlc */
+	/* don't stop on /dev/console */
+	if (file->f_inode->i_rdev != CONSOLE_DEV &&
+	    current->tty == tty->line) {
+		if (tty->pgrp <= 0)
+			printk("read_chan: tty->pgrp <= 0!\n");
+		else if (current->pgrp != tty->pgrp) {
+			if (is_ignored(SIGTTIN) ||
+			    is_orphaned_pgrp(current->pgrp))
+				return -EIO;
+			kill_pg(current->pgrp, SIGTTIN, 1);
+			return -ERESTARTSYS;
+		}
+	}
+
 	if (L_ICANON(tty)) {
 		minimum = time = 0;
 		current->timeout = (unsigned long) -1;
@@ -974,24 +992,6 @@ static int read_chan(struct tty_struct *tty, struct file *file,
 
 	add_wait_queue(&tty->secondary.proc_list, &wait);
 	while (1) {
-		/* Job control check -- must be done at start and after
-		   every sleep (POSIX.1 7.1.1.4). */
-		/* don't stop on /dev/console */
-		if (file->f_inode->i_rdev != CONSOLE_DEV &&
-		    current->tty == tty->line) {
-			if (tty->pgrp <= 0)
-				printk("read_chan: tty->pgrp <= 0!\n");
-			else if (current->pgrp != tty->pgrp) {
-				if (is_ignored(SIGTTIN) ||
-				    is_orphaned_pgrp(current->pgrp)) {
-					retval = -EIO;
-					break;
-				}
-				kill_pg(current->pgrp, SIGTTIN, 1);
-				retval = -ERESTARTSYS;
-				break;
-			}
-		}
 		/* First test for status change. */
 		if (tty->packet && tty->link->ctrl_status) {
 			if (b != buf)

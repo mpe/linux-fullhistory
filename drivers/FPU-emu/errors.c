@@ -235,7 +235,7 @@ static struct {
 	      0x127  in poly_2xm1.c
 	      0x128  in fpu_entry.c
        0x2nn  in an *.S file:
-              0x201  in reg_u_add.S, reg_round.S
+              0x201  in reg_u_add.S
               0x202  in reg_u_div.S
               0x203  in reg_u_div.S
               0x204  in reg_u_div.S
@@ -250,11 +250,14 @@ static struct {
 	      0x213  in wm_sqrt.S
 	      0x214  in wm_sqrt.S
 	      0x215  in wm_sqrt.S
-	      0x216  in reg_round.S
-	      0x217  in reg_round.S
-	      0x218  in reg_round.S
 	      0x220  in reg_norm.S
 	      0x221  in reg_norm.S
+	      0x230  in reg_round.S
+	      0x231  in reg_round.S
+	      0x232  in reg_round.S
+	      0x233  in reg_round.S
+	      0x234  in reg_round.S
+	      0x235  in reg_round.S
  */
 
 void exception(int n)

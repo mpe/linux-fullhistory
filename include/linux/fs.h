@@ -392,6 +392,7 @@ extern struct buffer_head * breada(dev_t dev,int block,...);
 extern void put_super(dev_t dev);
 extern dev_t ROOT_DEV;
 
+extern void show_buffers(void);
 extern void mount_root(void);
 
 extern int char_read(struct inode *, struct file *, char *, int);

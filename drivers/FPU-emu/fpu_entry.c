@@ -577,10 +577,14 @@ static int valid_prefix(unsigned char *Byte, overrides *override)
 	case PREFIX_DS:   /* Redundant unless preceded by another override. */
 	  override->segment = PREFIX_DS;
 
+/* lock is not a valid prefix for FPU instructions,
+   let the cpu handle it to generate a SIGILL. */
+/*	case PREFIX_LOCK: */
+
 	  /* rep.. prefixes have no meaning for FPU instructions */
-	case PREFIX_LOCK:
 	case PREFIX_REPE:
 	case PREFIX_REPNE:
+
 	case OP_SIZE_PREFIX:  /* Used often by gcc, but has no effect. */
 	do_next_byte:
 	  FPU_EIP++;
@@ -600,6 +604,9 @@ static int valid_prefix(unsigned char *Byte, overrides *override)
 	    }
 	  else
 	    {
+	      /* Not a valid sequence of prefix bytes followed by
+		 an FPU instruction. */
+	      *Byte = byte;  /* Needed for error message. */
 	      FPU_EIP = ip;
 	      return 0;
 	    }
