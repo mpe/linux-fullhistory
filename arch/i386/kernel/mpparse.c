@@ -996,9 +996,9 @@ void __init mp_config_acpi_legacy_irqs (void)
 	Dprintk("Bus #%d is ISA\n", MP_ISA_BUS);
 
 	/*
-	 * ES7000 has no legacy identity mappings
+	 * Older generations of ES7000 have no legacy identity mappings
 	 */
-	if (es7000_plat)
+	if (es7000_plat == 1)
 		return;
 
 	/* 
