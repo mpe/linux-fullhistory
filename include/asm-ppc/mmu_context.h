@@ -68,7 +68,7 @@ do { 								\
 /*
  * We're finished using the context for an address space.
  */
-#define destroy_context(mm)     ((mm)->context = NO_CONTEXT)
+#define destroy_context(mm)     do { } while (0)
 
 /*
  * After we have set current->mm to a new value, this activates

@@ -41,7 +41,9 @@
 
 #include <asm/uaccess.h>
 
-#include "sbusfb.h"
+#include <video/sbusfb.h>
+
+#define DEFAULT_CURSOR_BLINK_RATE       (2*HZ/5)
 
     /*
      *  Interface used by the world
@@ -53,6 +55,7 @@ void sbusfb_setup(char *options, int *ints);
 static int currcon;
 static int defx_margin = -1, defy_margin = -1;
 static char fontname[40] __initdata = { 0 };
+static int curblink __initdata = 1;
 static struct {
 	int depth;
 	int xres, yres;
@@ -143,8 +146,10 @@ static int sbusfb_release(struct fb_info *info, int user)
 	if (user) {	
 		if (fb->vtconsole != -1) {
 			vt_cons[fb->vtconsole]->vc_mode = KD_TEXT;
-			if (fb->mmaped)
+			if (fb->mmaped) {
+				fb->graphmode--;
 				sbusfb_clear_margin(&fb_display[fb->vtconsole], 0);
+			}
 		}
 		if (fb->reset)
 			fb->reset(fb);
@@ -247,7 +252,9 @@ static int sbusfb_mmap(struct fb_info *info, struct file *file,
 		fb->mmaped = 1;
 		if (fb->consolecnt && fb_display[lastconsole].fb_info == info) {
 			fb->vtconsole = lastconsole;
+			fb->graphmode++;
 			vt_cons [lastconsole]->vc_mode = KD_GRAPHICS;
+			vc_cons[lastconsole].d->vc_sw->con_cursor(vc_cons[lastconsole].d,CM_ERASE);
 		} else if (fb->unblank && !fb->blanked)
 			(*fb->unblank)(fb);
 	}
@@ -258,6 +265,8 @@ static void sbusfb_clear_margin(struct display *p, int s)
 {
 	struct fb_info_sbusfb *fb = sbusfbinfod(p);
 
+	if (fb->switch_from_graph)
+		(*fb->switch_from_graph)(fb);
 	if (fb->fill) {
 		unsigned short rects [16];
 
@@ -289,13 +298,13 @@ static void sbusfb_clear_margin(struct display *p, int s)
 			fb_base -= (skip_bytes + fb->x_margin) / 8;
 			skip_bytes /= 8;
 			scr_size /= 8;
-			memset (fb_base, ~0, skip_bytes - fb->x_margin / 8);
-			memset (fb_base + scr_size - skip_bytes + fb->x_margin / 8, ~0, skip_bytes - fb->x_margin / 8);
+			mymemset (fb_base, skip_bytes - fb->x_margin / 8);
+			mymemset (fb_base + scr_size - skip_bytes + fb->x_margin / 8, skip_bytes - fb->x_margin / 8);
 			incr = fb->var.xres_virtual / 8;
 			size = fb->x_margin / 8 * 2;
 			for (q = fb_base + skip_bytes - fb->x_margin / 8, h = 0;
 			     h <= he; q += incr, h++)
-				memset (q, ~0, size);
+				mymemset (q, size);
 		} else {
 			fb_base -= (skip_bytes + fb->x_margin);
 			memset (fb_base, attr_bgcol(p,s), skip_bytes - fb->x_margin);
@@ -307,8 +316,6 @@ static void sbusfb_clear_margin(struct display *p, int s)
 				memset (q, attr_bgcol(p,s), size);
 		}
 	}
-	if (fb->switch_from_graph)
-		(*fb->switch_from_graph)(fb);
 }
 
 static void sbusfb_disp_setup(struct display *p)
@@ -443,42 +450,58 @@ static int sbus_hw_scursor (struct fbcursor *cursor, struct fb_info_sbusfb *fb)
 
 static unsigned char hw_cursor_cmap[2] = { 0, 0xff };
 
+static void
+sbusfb_cursor_timer_handler(unsigned long dev_addr)
+{
+	struct fb_info_sbusfb *fb = (struct fb_info_sbusfb *)dev_addr;
+        
+	if (!fb->setcursor) return;
+                                
+	if (fb->cursor.mode != 2) {
+		fb->cursor.enable ^= 1;
+		fb->setcursor(fb);
+	}
+	
+	fb->cursor.timer.expires = jiffies + fb->cursor.blink_rate;
+	add_timer(&fb->cursor.timer);
+}
+
 static void sbusfb_cursor(struct display *p, int mode, int x, int y)
 {
 	struct fb_info_sbusfb *fb = sbusfbinfod(p);
 	
 	switch (mode) {
 	case CM_ERASE:
+		fb->cursor.mode = 2;
 		fb->cursor.enable = 0;
 		(*fb->setcursor)(fb);
-		fb->hw_cursor_shown = 0;
 		break;
 				  
 	case CM_MOVE:
 	case CM_DRAW:
-		if (!fb->hw_cursor_shown) {
-			fb->cursor.size.fbx = p->fontwidth;
-			fb->cursor.size.fby = p->fontheight;
+		if (fb->cursor.mode) {
+			fb->cursor.size.fbx = fontwidth(p);
+			fb->cursor.size.fby = fontheight(p);
 			fb->cursor.chot.fbx = 0;
 			fb->cursor.chot.fby = 0;
 			fb->cursor.enable = 1;
 			memset (fb->cursor.bits, 0, sizeof (fb->cursor.bits));
-			fb->cursor.bits[0][p->fontheight - 2] = (0xffffffff << (32 - p->fontwidth));
-			fb->cursor.bits[1][p->fontheight - 2] = (0xffffffff << (32 - p->fontwidth));
-			fb->cursor.bits[0][p->fontheight - 1] = (0xffffffff << (32 - p->fontwidth));
-			fb->cursor.bits[1][p->fontheight - 1] = (0xffffffff << (32 - p->fontwidth));
+			fb->cursor.bits[0][fontheight(p) - 2] = (0xffffffff << (32 - fontwidth(p)));
+			fb->cursor.bits[1][fontheight(p) - 2] = (0xffffffff << (32 - fontwidth(p)));
+			fb->cursor.bits[0][fontheight(p) - 1] = (0xffffffff << (32 - fontwidth(p)));
+			fb->cursor.bits[1][fontheight(p) - 1] = (0xffffffff << (32 - fontwidth(p)));
 			(*fb->setcursormap) (fb, hw_cursor_cmap, hw_cursor_cmap, hw_cursor_cmap);
 			(*fb->setcurshape) (fb);
-			fb->hw_cursor_shown = 1;
+			fb->cursor.mode = 0;
 		}
-		if (p->fontwidthlog)
-			fb->cursor.cpos.fbx = (x << p->fontwidthlog) + fb->x_margin;
+		if (fontwidthlog(p))
+			fb->cursor.cpos.fbx = (x << fontwidthlog(p)) + fb->x_margin;
 		else
-			fb->cursor.cpos.fbx = (x * p->fontwidth) + fb->x_margin;
-		if (p->fontheightlog)
-			fb->cursor.cpos.fby = (y << p->fontheightlog) + fb->y_margin;
+			fb->cursor.cpos.fbx = (x * fontwidth(p)) + fb->x_margin;
+		if (fontheightlog(p))
+			fb->cursor.cpos.fby = (y << fontheightlog(p)) + fb->y_margin;
 		else
-			fb->cursor.cpos.fby = (y * p->fontheight) + fb->y_margin;
+			fb->cursor.cpos.fby = (y * fontheight(p)) + fb->y_margin;
 		(*fb->setcursor)(fb);
 		break;
 	}
@@ -492,7 +515,7 @@ static int sbusfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			 struct fb_info *info)
 {
 	if (con == currcon) /* current console? */
-		return fb_get_cmap(cmap, &fb_display[con].var, kspc, sbusfb_getcolreg, info);
+		return fb_get_cmap(cmap, kspc, sbusfb_getcolreg, info);
 	else if (fb_display[con].cmap.len) /* non default colormap? */
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
 	else
@@ -514,12 +537,12 @@ static int sbusfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			return err;
 	}
 	if (con == currcon) {			/* current console? */
-		err = fb_set_cmap(cmap, &fb_display[con].var, kspc, sbusfb_setcolreg, info);
+		err = fb_set_cmap(cmap, kspc, sbusfb_setcolreg, info);
 		if (!err) {
 			struct fb_info_sbusfb *fb = sbusfbinfo(info);
 			
 			if (fb->loadcmap)
-				(*fb->loadcmap)(fb, cmap->start, cmap->len);
+				(*fb->loadcmap)(fb, &fb_display[con], cmap->start, cmap->len);
 		}
 		return err;
 	} else
@@ -610,7 +633,7 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			__put_user_ret(fb->color_map CM(i,2), bp, -EFAULT);
 			rp++; gp++; bp++;
 		}
-		(*fb->loadcmap)(fb, index, count);
+		(*fb->loadcmap)(fb, NULL, index, count);
 		break;			
 	}
 	case FBIOPUTCMAP_SPARC: {	/* load color map entries */
@@ -643,7 +666,7 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			__get_user_ret(fb->color_map CM(i,2), bp, -EFAULT);
 			rp++; gp++; bp++;
 		}
-		(*fb->loadcmap)(fb, index, count);
+		(*fb->loadcmap)(fb, NULL, index, count);
 		break;			
 	}
 	case FBIOGCURMAX: {
@@ -661,7 +684,7 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
  			lastconsole = info->display_fg->vc_num; 
  			if (vt_cons[lastconsole]->vc_mode == KD_TEXT)
  				return -EINVAL; /* Don't let graphics programs hide our nice text cursor */
-			fb->hw_cursor_shown = 0; /* Forget state of our text cursor */
+			fb->cursor.mode = 2; /* Forget state of our text cursor */
 		}
 		return sbus_hw_scursor ((struct fbcursor *) arg, fb);
 
@@ -678,7 +701,8 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		(*fb->setcursor) (fb);
 		break;
 	default:
-		/* FIXME: Call here possible fb specific ioctl */
+		if (fb->ioctl)
+			return fb->ioctl(fb, cmd, arg);
 		return -EINVAL;
 	}		
 	return 0;
@@ -714,7 +738,8 @@ __initfunc(void sbusfb_setup(char *options, int *ints))
 					break;
 			memcpy(fontname, p+5, i);
 			fontname[i] = 0;
-		}
+		} else if (!strncmp(p, "noblink", 7))
+			curblink = 0;
 		while (*p && *p != ' ' && *p != ',') p++;
 		if (*p != ',') break;
 		p++;
@@ -729,18 +754,20 @@ static int sbusfbcon_switch(int con, struct fb_info *info)
     
 	/* Do we have to save the colormap? */
 	if (fb_display[currcon].cmap.len)
-		fb_get_cmap(&fb_display[currcon].cmap, &fb_display[currcon].var, 1, sbusfb_getcolreg, info);
+		fb_get_cmap(&fb_display[currcon].cmap, 1, sbusfb_getcolreg, info);
 
-	lastconsole = info->display_fg->vc_num;
-	if (lastconsole != con && 
-	    (fb_display[lastconsole].fontwidth != fb_display[con].fontwidth ||
-	     fb_display[lastconsole].fontheight != fb_display[con].fontheight))
-		fb->hw_cursor_shown = 0;
+	if (info->display_fg) {
+		lastconsole = info->display_fg->vc_num;
+		if (lastconsole != con && 
+		    (fontwidth(&fb_display[lastconsole]) != fontwidth(&fb_display[con]) ||
+		     fontheight(&fb_display[lastconsole]) != fontheight(&fb_display[con])))
+			fb->cursor.mode = 1;
+	}
 	x_margin = (fb_display[con].var.xres_virtual - fb_display[con].var.xres) / 2;
 	y_margin = (fb_display[con].var.yres_virtual - fb_display[con].var.yres) / 2;
 	if (fb->margins)
 		fb->margins(fb, &fb_display[con], x_margin, y_margin);
-	if (fb->x_margin != x_margin || fb->y_margin != y_margin) {
+	if (fb->graphmode || fb->x_margin != x_margin || fb->y_margin != y_margin) {
 		fb->x_margin = x_margin; fb->y_margin = y_margin;
 		sbusfb_clear_margin(&fb_display[con], 0);
 	}
@@ -786,9 +813,10 @@ static int sbusfb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 
 	if (!fb->color_map || regno > 255)
 		return 1;
-	*red = fb->color_map CM(regno, 0);
-	*green = fb->color_map CM(regno, 1);
-	*blue = fb->color_map CM(regno, 2);
+	*red = (fb->color_map CM(regno, 0)<<8) | fb->color_map CM(regno, 0);
+	*green = (fb->color_map CM(regno, 1)<<8) | fb->color_map CM(regno, 1);
+	*blue = (fb->color_map CM(regno, 2)<<8) | fb->color_map CM(regno, 2);
+	*transp = 0;
 	return 0;
 }
 
@@ -806,6 +834,9 @@ static int sbusfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 
 	if (!fb->color_map || regno > 255)
 		return 1;
+	red >>= 8;
+	green >>= 8;
+	blue >>= 8;
 	fb->color_map CM(regno, 0) = red;
 	fb->color_map CM(regno, 1) = green;
 	fb->color_map CM(regno, 2) = blue;
@@ -820,13 +851,12 @@ static void do_install_cmap(int con, struct fb_info *info)
 	if (con != currcon)
 		return;
 	if (fb_display[con].cmap.len)
-		fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-			    sbusfb_setcolreg, info);
+		fb_set_cmap(&fb_display[con].cmap, 1, sbusfb_setcolreg, info);
 	else
 		fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-			    &fb_display[con].var, 1, sbusfb_setcolreg, info);
+			    1, sbusfb_setcolreg, info);
 	if (fb->loadcmap)
-		(*fb->loadcmap)(fb, 0, 256);
+		(*fb->loadcmap)(fb, &fb_display[con], 0, 256);
 }
 
 static int sbusfb_set_font(struct display *p, int width, int height)
@@ -859,7 +889,7 @@ static int sbusfb_set_font(struct display *p, int width, int height)
 	p->var.xres = w - 2*x_margin;
 	p->var.yres = h - 2*y_margin;
 	
-	fb->hw_cursor_shown = 0;
+	fb->cursor.mode = 1;
 	
 	if (fb->margins)
 		fb->margins(fb, p, x_margin, y_margin);
@@ -1034,8 +1064,17 @@ sizechange:
 		goto sizechange;
 
 	disp->dispsw = &fb->dispsw;
-	if (fb->setcursor)
+	if (fb->setcursor) {
 		fb->dispsw.cursor = sbusfb_cursor;
+		if (curblink) {
+			fb->cursor.blink_rate = DEFAULT_CURSOR_BLINK_RATE;
+			init_timer(&fb->cursor.timer);
+			fb->cursor.timer.expires = jiffies + fb->cursor.blink_rate;
+			fb->cursor.timer.data = (unsigned long)fb;
+			fb->cursor.timer.function = sbusfb_cursor_timer_handler;
+			add_timer(&fb->cursor.timer);
+		}
+	}
 	fb->dispsw.set_font = sbusfb_set_font;
 	fb->setup = fb->dispsw.setup;
 	fb->dispsw.setup = sbusfb_disp_setup;

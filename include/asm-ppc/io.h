@@ -22,9 +22,6 @@
 
 #define PMAC_ISA_MEM_BASE 	0
 #define PMAC_PCI_DRAM_OFFSET 	0
-#define APUS_ISA_IO_BASE 	0
-#define APUS_ISA_MEM_BASE 	0
-#define APUS_PCI_DRAM_OFFSET 	0
 #define CHRP_ISA_IO_BASE 	0xf8000000
 #define CHRP_ISA_MEM_BASE 	0xf7000000
 #define CHRP_PCI_DRAM_OFFSET 	0
@@ -38,12 +35,18 @@
 #define _ISA_MEM_BASE   0
 #define PCI_DRAM_OFFSET 0x80000000
 #else /* CONFIG_MBX8xx */
+#ifdef CONFIG_APUS
+#define _IO_BASE 0
+#define _ISA_MEM_BASE 0
+#define PCI_DRAM_OFFSET 0
+#else
 extern unsigned long isa_io_base;
 extern unsigned long isa_mem_base;
 extern unsigned long pci_dram_offset;
 #define _IO_BASE	isa_io_base
 #define _ISA_MEM_BASE	isa_mem_base
 #define PCI_DRAM_OFFSET	pci_dram_offset
+#endif /* CONFIG_APUS */
 #endif /* CONFIG_MBX8xx */
 
 #define readb(addr) (*(volatile unsigned char *) (addr))
@@ -205,6 +208,24 @@ extern inline void eieio(void)
 	__asm__ __volatile__ ("eieio" : : : "memory" );
 }
 
+
+/*
+ * the constraint handling of gcc-2.7 is broken, fall back to
+ * the old optimizer unfriendly eieio()
+ */
+
+#if defined(__GNUC__) && __GNUC__ == 2 && __GNUC_MINOR__ <= 7
+#define __memory_clobber_pre \
+	do { } while(0)
+#define __memory_clobber_post \
+	eieio()
+#else
+#define __memory_clobber_pre \
+	__asm__ __volatile__ (" \t#%0,%1" : "=m" (*addr) : "0" (*addr) )
+#define __memory_clobber_post \
+	__asm__ __volatile__ ("eieio \t#%0,%1" : "=m" (*addr) : "0" (*addr) )
+#endif
+
 /*
  * 8, 16 and 32 bit, big and little endian I/O operations, with barrier.
  */
@@ -212,26 +233,26 @@ extern inline int in_8(volatile unsigned char *addr)
 {
 	int ret;
 
-	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_pre;
 	ret = *addr;
-	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_post;
 	return ret;
 }
 
 extern inline void out_8(volatile unsigned char *addr, int val)
 {
-	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_pre;
 	*addr = val;
-	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_post;
 }
 
 extern inline int in_le16(volatile unsigned short *addr)
 {
 	int ret;
 
-	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_pre;
 	ret = ld_le16(addr);
-	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_post;
 	return ret;
 }
 
@@ -239,33 +260,33 @@ extern inline int in_be16(volatile unsigned short *addr)
 {
 	int ret;
 
-	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_pre;
 	ret = *addr;
-	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_post;
 	return ret;
 }
 
 extern inline void out_le16(volatile unsigned short *addr, int val)
 {
-	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_pre;
 	st_le16(addr, val);
-	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_post;
 }
 
 extern inline void out_be16(volatile unsigned short *addr, int val)
 {
-	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_pre;
 	*addr = val;
-	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_post;
 }
 
 extern inline unsigned in_le32(volatile unsigned *addr)
 {
 	unsigned ret;
 
-	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_pre;
 	ret = ld_le32(addr);
-	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_post;
 	return ret;
 }
 
@@ -273,24 +294,24 @@ extern inline int in_be32(volatile unsigned *addr)
 {
 	int ret;
 
-	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_pre;
 	ret = *addr;
-	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_post;
 	return ret;
 }
 
 extern inline void out_le32(volatile unsigned *addr, int val)
 {
-	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_pre;
 	st_le32(addr, val);
-	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_post;
 }
 
 extern inline void out_be32(volatile unsigned *addr, int val)
 {
-	__asm__ __volatile__ ("" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_pre;
 	*addr = val;
-	__asm__ __volatile__ ("eieio" : "=m" (*addr) : "0" (*addr) );
+	__memory_clobber_post;
 }
 
 #endif

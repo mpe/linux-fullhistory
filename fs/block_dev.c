@@ -204,8 +204,11 @@ ssize_t block_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 			blocks = rblocks;
 		
 	}
-	if (block + blocks > size)
+	if (block + blocks > size) {
 		blocks = size - block;
+		if (blocks == 0)
+			return 0;
+	}
 
 	/* We do this in a two stage process.  We first try to request
 	   as many blocks as we can, then we wait for the first one to

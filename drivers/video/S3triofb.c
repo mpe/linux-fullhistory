@@ -45,9 +45,9 @@
 #include <asm/vc_ioctl.h>
 #endif
 
-#include "fbcon.h"
-#include "fbcon-cfb8.h"
-#include "s3blit.h"
+#include <video/fbcon.h>
+#include <video/fbcon-cfb8.h>
+#include <video/s3blit.h>
 
 
 #define mem_in8(addr)           in_8((void *)(addr))
@@ -250,8 +250,7 @@ static int s3trio_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			   struct fb_info *info)
 {
     if (con == currcon) /* current console? */
-	return fb_get_cmap(cmap, &fb_display[con].var, kspc, s3trio_getcolreg,
-			   info);
+	return fb_get_cmap(cmap, kspc, s3trio_getcolreg, info);
     else if (fb_display[con].cmap.len) /* non default colormap? */
 	fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
     else
@@ -276,8 +275,7 @@ static int s3trio_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	    return err;
     }
     if (con == currcon)			/* current console? */
-	return fb_set_cmap(cmap, &fb_display[con].var, kspc, s3trio_setcolreg,
-			   info);
+	return fb_set_cmap(cmap, kspc, s3trio_setcolreg, info);
     else
 	fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
     return 0;
@@ -624,8 +622,7 @@ static int s3triofbcon_switch(int con, struct fb_info *info)
 {
     /* Do we have to save the colormap? */
     if (fb_display[currcon].cmap.len)
-	fb_get_cmap(&fb_display[currcon].cmap, &fb_display[currcon].var, 1,
-		    s3trio_getcolreg, info);
+	fb_get_cmap(&fb_display[currcon].cmap, 1, s3trio_getcolreg, info);
 
     currcon = con;
     /* Install new colormap */
@@ -678,17 +675,16 @@ static int s3trio_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 {
     if (regno > 255)
 	return 1;
-    *red = palette[regno].red;
-    *green = palette[regno].green;
-    *blue = palette[regno].blue;
+    *red = (palette[regno].red << 8) | palette[regno].red;
+    *green = (palette[regno].green << 8) | palette[regno].green;
+    *blue = (palette[regno].blue << 8) | palette[regno].blue;
+    *transp = 0;
     return 0;
 }
 
 
     /*
-     *  Set a single color register. The values supplied are already
-     *  rounded down to the hardware's capabilities (according to the
-     *  entries in the var structure). Return != 0 for invalid regno.
+     *  Set a single color register. Return != 0 for invalid regno.
      */
 
 static int s3trio_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
@@ -696,6 +692,10 @@ static int s3trio_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 {
     if (regno > 255)
 	return 1;
+
+    red >>= 8;
+    green >>= 8;
+    blue >>= 8;
     palette[regno].red = red;
     palette[regno].green = green;
     palette[regno].blue = blue;
@@ -714,11 +714,10 @@ static void do_install_cmap(int con, struct fb_info *info)
     if (con != currcon)
 	return;
     if (fb_display[con].cmap.len)
-	fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-		    s3trio_setcolreg, &fb_info);
+	fb_set_cmap(&fb_display[con].cmap, 1, s3trio_setcolreg, &fb_info);
     else
-	fb_set_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
-		    &fb_display[con].var, 1, s3trio_setcolreg, &fb_info);
+	fb_set_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel), 1,
+		    s3trio_setcolreg, &fb_info);
 }
 
 void s3triofb_setup(char *options, int *ints) {
@@ -837,9 +836,9 @@ static void fbcon_trio8_bmove(struct display *p, int sy, int sx, int dy,
 			      int dx, int height, int width)
 {
     sx *= 8; dx *= 8; width *= 8;
-    Trio_BitBLT((u_short)sx, (u_short)(sy*p->fontheight), (u_short)dx,
-		 (u_short)(dy*p->fontheight), (u_short)width,
-		 (u_short)(height*p->fontheight), (u_short)S3_NEW);
+    Trio_BitBLT((u_short)sx, (u_short)(sy*fontheight(p)), (u_short)dx,
+		 (u_short)(dy*fontheight(p)), (u_short)width,
+		 (u_short)(height*fontheight(p)), (u_short)S3_NEW);
 }
 
 static void fbcon_trio8_clear(struct vc_data *conp, struct display *p, int sy,
@@ -850,9 +849,9 @@ static void fbcon_trio8_clear(struct vc_data *conp, struct display *p, int sy,
     sx *= 8; width *= 8;
     bg = attr_bgcol_ec(p,conp);
     Trio_RectFill((u_short)sx,
-		   (u_short)(sy*p->fontheight),
+		   (u_short)(sy*fontheight(p)),
 		   (u_short)width,
-		   (u_short)(height*p->fontheight),
+		   (u_short)(height*fontheight(p)),
 		   (u_short)S3_NEW,
 		   (u_short)bg);
 }

@@ -1,5 +1,5 @@
 /*
- * $Id: prep_pci.c,v 1.20 1998/06/19 16:48:45 cort Exp $
+ * $Id: prep_pci.c,v 1.22 1998/08/05 20:11:15 cort Exp $
  * PReP pci functions.
  * Originally by Gary Thomas
  * rewritten and updated by Cort Dougan (cort@cs.nmt.edu)
@@ -234,6 +234,44 @@ static char ibm8xx_pci_IRQ_routes[] __prepdata = {
         15,     /* Line 4 */
 };
 
+/*
+ * a 6015 ibm board
+ * -- Cort
+ */
+static char ibm6015_pci_IRQ_map[23] __prepdata = {
+        0, /* Slot 0  - unused */
+        0, /* Slot 1  - unused */
+        0, /* Slot 2  - unused */
+        0, /* Slot 3  - unused */
+        0, /* Slot 4  - unused */
+        0, /* Slot 5  - unused */
+        0, /* Slot 6  - unused */
+        0, /* Slot 7  - unused */
+        0, /* Slot 8  - unused */
+        0, /* Slot 9  - unused */
+        0, /* Slot 10 - unused */
+        0, /* Slot 11 -  */
+        1, /* Slot 12 - SCSI */
+        2, /* Slot 13 -  */
+        2, /* Slot 14 -  */
+        1, /* Slot 15 -  */
+        1, /* Slot 16 -  */
+        0, /* Slot 17 -  */
+        2, /* Slot 18 -  */
+        0, /* Slot 19 -  */
+        0, /* Slot 20 -  */
+        0, /* Slot 21 -  */
+        2, /* Slot 22 -  */
+};
+static char ibm6015_pci_IRQ_routes[] __prepdata = {
+        0,      /* Line 0 - unused */
+        13,     /* Line 1 */
+        10,     /* Line 2 */
+        15,     /* Line 3 */
+        15,     /* Line 4 */
+};
+
+
 /* IBM Nobis and 850 */
 static char Nobis_pci_IRQ_map[23] __prepdata ={
         0, /* Slot 0  - unused */
@@ -434,16 +472,31 @@ __initfunc(unsigned long route_pci_interrupts(void))
 	} else if ( _prep_type == _PREP_IBM )
 	{
 		unsigned char pl_id;
-		
-		if (inb(0x0852) == 0xFF) {
+		/*
+		 * my carolina is 0xf0
+		 * 6015 has 0xfc
+		 * -- Cort
+		 */
+		printk("IBM ID: %08x\n", inb(0x0852));
+		switch(inb(0x0852))
+		{
+		case 0xff:
 			Motherboard_map_name = "IBM 850/860 Portable\n";
 			Motherboard_map = Nobis_pci_IRQ_map;
 			Motherboard_routes = Nobis_pci_IRQ_routes;
-		} else {
+			break;
+		case 0xfc:
+			Motherboard_map_name = "IBM 6015";
+			Motherboard_map = ibm6015_pci_IRQ_map;
+			Motherboard_routes = ibm6015_pci_IRQ_routes;
+			break;			
+		default:
 			Motherboard_map_name = "IBM 8xx (Carolina)";
 			Motherboard_map = ibm8xx_pci_IRQ_map;
 			Motherboard_routes = ibm8xx_pci_IRQ_routes;
+			break;
 		}
+
 		/*printk("Changing IRQ mode\n");*/
 		pl_id=inb(0x04d0);
 		/*printk("Low mask is %#0x\n", pl_id);*/

@@ -311,8 +311,6 @@ static struct platinum_regvals platinum_reg_init_1 = {
 	{{ 94, 5 + DIV16 }, { 48, 7 + DIV8 }}
 };
 
-#define VMODE_MAX           20
-
 static struct platinum_regvals *platinum_reg_init[VMODE_MAX] = {
 	&platinum_reg_init_1,
 	&platinum_reg_init_2,
@@ -366,34 +364,3 @@ struct vmode_attr vmode_attrs[VMODE_MAX] = {
 	{1280, 1024, 75}
 };
 
-/* this stuff should probably be shared by the various vmode-based	*/
-/* drivers in a vmode.h header.										*/
-
-#define VMODE_NVRAM		0	/* use value stored in nvram */
-#define VMODE_512_384_60I	1	/* 512x384, 60Hz interlaced (NTSC) */
-#define VMODE_512_384_60	2	/* 512x384, 60Hz */
-#define VMODE_640_480_50I	3	/* 640x480, 50Hz interlaced (PAL) */
-#define VMODE_640_480_60I	4	/* 640x480, 60Hz interlaced (NTSC) */
-#define VMODE_640_480_60	5	/* 640x480, 60Hz (VGA) */
-#define VMODE_640_480_67	6	/* 640x480, 67Hz */
-#define VMODE_640_870_75P	7	/* 640x870, 75Hz (portrait) */
-#define VMODE_768_576_50I	8	/* 768x576, 50Hz (PAL full frame) */
-#define VMODE_800_600_56	9	/* 800x600, 56Hz */
-#define VMODE_800_600_60	10	/* 800x600, 60Hz */
-#define VMODE_800_600_72	11	/* 800x600, 72Hz */
-#define VMODE_800_600_75	12	/* 800x600, 75Hz */
-#define VMODE_832_624_75	13	/* 832x624, 75Hz */
-#define VMODE_1024_768_60	14	/* 1024x768, 60Hz */
-#define VMODE_1024_768_70	15	/* 1024x768, 70Hz (or 72Hz?) */
-#define VMODE_1024_768_75V	16	/* 1024x768, 75Hz (VESA) */
-#define VMODE_1024_768_75	17	/* 1024x768, 75Hz */
-#define VMODE_1152_870_75	18	/* 1152x870, 75Hz */
-#define VMODE_1280_960_75	19	/* 1280x960, 75Hz */
-#define VMODE_1280_1024_75	20	/* 1280x1024, 75Hz */
-#define VMODE_MAX		20
-#define VMODE_CHOOSE		99	/* choose based on monitor sense */
-
-#define CMODE_NVRAM		-1	/* use value stored in nvram */
-#define CMODE_8			0	/* 8 bits/pixel */
-#define CMODE_16		1	/* 16 (actually 15) bits/pixel */
-#define CMODE_32		2	/* 32 (actually 24) bits/pixel */

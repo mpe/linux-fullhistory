@@ -1,4 +1,4 @@
 #!/bin/bash
 
-OFFSET=`objdump -h $1  | grep $2 | grep -v zvmlinux | awk '{print $3}'`
+OFFSET=`$1 -h $2  | grep $3 | grep -v zvmlinux | awk '{print $3}'`
 echo "0x"$OFFSET

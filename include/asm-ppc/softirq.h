@@ -1,26 +1,12 @@
-/*
- * Software interrupts..
- */
-
 #ifndef __ASM_SOFTIRQ_H
 #define __ASM_SOFTIRQ_H
 
 #include <asm/atomic.h>
 #include <asm/hardirq.h>
 
-/*
- * The locking mechanism for base handlers, to prevent re-entrancy,
- * is entirely private to an implementation, it should not be
- * referenced at all outside of this file.
- */
+extern unsigned int local_bh_count[NR_CPUS];
+
 #define get_active_bhs()	(bh_mask & bh_active)
-
-#ifndef __SMP__
-
-extern int __ppc_bh_counter;
-
-#define synchronize_bh()	do { } while (0)
-
 #define clear_active_bhs(x)	atomic_clear_mask((x),&bh_active)
 
 extern inline void init_bh(int nr, void (*routine)(void))
@@ -41,6 +27,68 @@ extern inline void mark_bh(int nr)
 	set_bit(nr, &bh_active);
 }
 
+#ifdef __SMP__
+/*
+ * The locking mechanism for base handlers, to prevent re-entrancy,
+ * is entirely private to an implementation, it should not be
+ * referenced at all outside of this file.
+ */
+extern atomic_t global_bh_lock;
+extern atomic_t global_bh_count;
+
+extern void synchronize_bh(void);
+
+static inline void start_bh_atomic(void)
+{
+	atomic_inc(&global_bh_lock);
+	synchronize_bh();
+}
+
+static inline void end_bh_atomic(void)
+{
+	atomic_dec(&global_bh_lock);
+}
+
+/* These are for the IRQs testing the lock */
+static inline int softirq_trylock(int cpu)
+{
+	if (!test_and_set_bit(0,&global_bh_count)) {
+		if (atomic_read(&global_bh_lock) == 0) {
+			++local_bh_count[cpu];
+			return 1;
+		}
+		clear_bit(0,&global_bh_count);
+	}
+	return 0;
+}
+
+static inline void softirq_endlock(int cpu)
+{
+	local_bh_count[cpu]--;
+	clear_bit(0,&global_bh_count);
+}
+
+#else /* __SMP__ */
+
+extern inline void start_bh_atomic(void)
+{
+	local_bh_count[smp_processor_id()]++;
+	barrier();
+}
+
+extern inline void end_bh_atomic(void)
+{
+	barrier();
+	local_bh_count[smp_processor_id()]--;
+}
+
+/* These are for the irq's testing the lock */
+#define softirq_trylock(cpu)	(local_bh_count[cpu] ? 0 : (local_bh_count[cpu]=1))
+#define softirq_endlock(cpu)	(local_bh_count[cpu] = 0)
+#define synchronize_bh()	do { } while (0)
+
+#endif /* __SMP__ */
+
 /*
  * These use a mask count to correctly handle
  * nested disable/enable calls
@@ -49,6 +97,7 @@ extern inline void disable_bh(int nr)
 {
 	bh_mask &= ~(1 << nr);
 	bh_mask_count[nr]++;
+	synchronize_bh();
 }
 
 extern inline void enable_bh(int nr)
@@ -56,100 +105,5 @@ extern inline void enable_bh(int nr)
 	if (!--bh_mask_count[nr])
 		bh_mask |= 1 << nr;
 }
-
-
-extern inline void start_bh_atomic(void)
-{
-	__ppc_bh_counter++;
-	barrier();
-}
-
-extern inline void end_bh_atomic(void)
-{
-	barrier();
-	__ppc_bh_counter--;
-}
-
-/* These are for the irq's testing the lock */
-#define softirq_trylock(cpu)	(__ppc_bh_counter? 0: ((__ppc_bh_counter=1),1))
-#define softirq_endlock(cpu)	(__ppc_bh_counter = 0)
-
-#else /* __SMP__ */
-
-extern atomic_t __ppc_bh_counter;
-
-#define start_bh_atomic() \
-	do { atomic_inc(&__ppc_bh_counter); synchronize_irq(); } while(0)
-
-#define end_bh_atomic()		atomic_dec(&__ppc_bh_counter)
-
-#define synchronize_bh()	do { } while (0) /* XXX implement SMP version --Cort */
-
-#include <asm/spinlock.h>
-
-extern spinlock_t global_bh_lock;
-
-#define init_bh(nr, routine)				\
-do {	unsigned long flags;				\
-	int ent = nr;					\
-	spin_lock_irqsave(&global_bh_lock, flags);	\
-	bh_base[ent] = routine;				\
-	bh_mask_count[ent] = 0;				\
-	bh_mask |= 1 << ent;				\
-	spin_unlock_irqrestore(&global_bh_lock, flags);	\
-} while(0)
-
-#define remove_bh(nr)					\
-do {	unsigned long flags;				\
-	int ent = nr;					\
-	spin_lock_irqsave(&global_bh_lock, flags);	\
-	bh_base[ent] = NULL;				\
-	bh_mask &= ~(1 << ent);				\
-	spin_unlock_irqrestore(&global_bh_lock, flags);	\
-} while(0)
-
-#define mark_bh(nr)					\
-do {	unsigned long flags;				\
-	spin_lock_irqsave(&global_bh_lock, flags);	\
-	bh_active |= (1 << nr);				\
-	spin_unlock_irqrestore(&global_bh_lock, flags);	\
-} while(0)
-
-#define disable_bh(nr)					\
-do {	unsigned long flags;				\
-	int ent = nr;					\
-	spin_lock_irqsave(&global_bh_lock, flags);	\
-	bh_mask &= ~(1 << ent);				\
-	bh_mask_count[ent]++;				\
-	spin_unlock_irqrestore(&global_bh_lock, flags);	\
-} while(0)
-
-#define enable_bh(nr)					\
-do {	unsigned long flags;				\
-	int ent = nr;					\
-	spin_lock_irqsave(&global_bh_lock, flags);	\
-	if (!--bh_mask_count[ent])			\
-		bh_mask |= 1 << ent;			\
-	spin_unlock_irqrestore(&global_bh_lock, flags);	\
-} while(0)
-
-#define softirq_trylock(cpu)					\
-({								\
-	int ret = 1;						\
-	if(atomic_add_return(1, &__ppc_bh_counter) != 1) {	\
-		atomic_dec(&__ppc_bh_counter);		\
-		ret = 0;					\
-	}							\
-	ret;							\
-})
-#define softirq_endlock(cpu)	atomic_dec(&__ppc_bh_counter)
-#define clear_active_bhs(mask)				\
-do {	unsigned long flags;				\
-	spin_lock_irqsave(&global_bh_lock, flags);	\
-	bh_active &= ~(mask);				\
-	spin_unlock_irqrestore(&global_bh_lock, flags);	\
-} while(0)
-
-#endif /* __SMP__ */
 
 #endif

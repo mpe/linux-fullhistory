@@ -1,5 +1,5 @@
 /*
- * $Id: prom.c,v 1.32 1998/07/28 20:28:46 geert Exp $
+ * $Id: prom.c,v 1.39 1998/09/18 09:14:52 paulus Exp $
  *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
@@ -20,6 +20,8 @@
 #include <asm/processor.h>
 #include <asm/irq.h>
 #include <asm/io.h>
+#include <asm/smp.h>
+#include <asm/bootx.h>
 
 /*
  * Properties whose value is longer than this get excluded from our
@@ -67,8 +69,12 @@ static interpret_func interpret_isa_props;
 static interpret_func interpret_macio_props;
 static interpret_func interpret_root_props;
 
+#ifndef FB_MAX			/* avoid pulling in all of the fb stuff */
+#define FB_MAX	8
+#endif
 char *prom_display_paths[FB_MAX] __initdata = { 0, };
 unsigned int prom_num_displays = 0;
+char *of_stdout_device = 0;
 
 prom_entry prom = 0;
 ihandle prom_chosen = 0, prom_stdout = 0;
@@ -85,18 +91,21 @@ unsigned int old_rtas = 0;
 static struct device_node *allnodes = 0;
 
 static void *call_prom(const char *service, int nargs, int nret, ...);
- void prom_print(const char *msg);
 static void prom_exit(void);
 static unsigned long copy_device_tree(unsigned long, unsigned long);
 static unsigned long inspect_node(phandle, struct device_node *, unsigned long,
 				  unsigned long, struct device_node ***);
 static unsigned long finish_node(struct device_node *, unsigned long,
 				 interpret_func *);
+static void relocate_nodes(void);
 static unsigned long check_display(unsigned long);
 static int prom_next_node(phandle *);
 
 extern void enter_rtas(void *);
 extern unsigned long reloc_offset(void);
+
+extern char cmd_line[512];	/* XXX */
+boot_infos_t *boot_infos = 0;	/* init it so it's in data segment not bss */
 
 /*
  * prom_init() is called very early on, before the kernel text
@@ -208,13 +217,42 @@ prom_init(int r3, int r4, prom_entry pp)
 	unsigned long offset = reloc_offset();
 	int l;
 	char *p, *d;
+#ifdef __SMP__
+	if ( RELOC(first_cpu_booted) )
+		return;
+#endif /* __SMP__ */
+	
+	/* check if we're apus, return if we are */
+	if ( r3 == 0x61707573 )
+		return;
+
+	/* If we came here from BootX, clear the screen,
+	 * set up some pointers and return. */
+	if (r3 == 0x426f6f58 && pp == NULL) {
+		boot_infos_t *bi = (boot_infos_t *) r4;
+		unsigned int *screen;
+		int nw, ln;
+		unsigned long space;
+
+		/* first clear the screen */
+		for (ln = 0; ln < bi->dispDeviceRect[3]; ++ln) {
+			screen = (unsigned int *) (bi->dispDeviceBase
+					+ ln * bi->dispDeviceRowBytes);
+			nw = bi->dispDeviceRect[2] * bi->dispDeviceDepth / 32;
+			for (; nw > 0; --nw)
+				*screen++ = 0;
+		}
+
+		RELOC(boot_infos) = PTRUNRELOC(bi);
+		space = bi->deviceTreeOffset + bi->deviceTreeSize;
+		if (bi->ramDisk)
+			space = bi->ramDisk + bi->ramDiskSize;
+		RELOC(klimit) = PTRUNRELOC((char *) bi + space);
+		return;
+	}
 
 	/* check if we're prep, return if we are */
 	if ( *(unsigned long *)(0) == 0xdeadc0de )
-		return;
-
-	/* check if we're apus, return if we are */
-	if ( r3 == 0x61707573 )
 		return;
 
 	/* First get a handle for the stdout device */
@@ -228,8 +266,15 @@ prom_init(int r3, int r4, prom_entry pp)
 			    sizeof(prom_stdout)) <= 0)
 		prom_exit();
 
-	/* Get the boot device and translate it to a full OF pathname. */
+	/* Get the full OF pathname of the stdout device */
 	mem = (unsigned long) RELOC(klimit) + offset;
+	p = (char *) mem;
+	memset(p, 0, 256);
+	call_prom(RELOC("instance-to-path"), 3, 1, RELOC(prom_stdout), p, 255);
+	RELOC(of_stdout_device) = PTRUNRELOC(p);
+	mem += strlen(p) + 1;
+
+	/* Get the boot device and translate it to a full OF pathname. */
 	p = (char *) mem;
 	l = (int) call_prom(RELOC("getprop"), 4, 1, RELOC(prom_chosen),
 			    RELOC("bootpath"), p, 1<<20);
@@ -303,8 +348,9 @@ check_display(unsigned long mem)
 {
 	phandle node;
 	ihandle ih;
+	int i;
 	unsigned long offset = reloc_offset();
-	char type[16], name[16], *path;
+	char type[16], *path;
 
 	for (node = 0; prom_next_node(&node); ) {
 		type[0] = 0;
@@ -323,20 +369,23 @@ check_display(unsigned long mem)
 		ih = call_prom(RELOC("open"), 1, 1, path);
 		if (ih == 0 || ih == (ihandle) -1) {
 			prom_print(RELOC("... failed\n"));
-			/* platinum kludge. platinum is a valid display,
-			 * but not handled by OF. Make sure prom_num_display
-			 * is incremented anyway
-			 */
-			call_prom(RELOC("getprop"), 4, 1, node, RELOC("name"),
-				  name, sizeof(name));
-			if (strncmp(name, RELOC("platinum"), 8))
-			    continue;
-		} else {
-			prom_print(RELOC("... ok\n"));
+			continue;
 		}
+		prom_print(RELOC("... ok\n"));
+
+		/*
+		 * If this display is the device that OF is using for stdout,
+		 * move it to the front of the list.
+		 */
 		mem += strlen(path) + 1;
-		RELOC(prom_display_paths[RELOC(prom_num_displays)++])
-			= PTRUNRELOC(path);
+		i = RELOC(prom_num_displays)++;
+		if (RELOC(of_stdout_device) != 0 && i > 0
+		    && strcmp(PTRRELOC(RELOC(of_stdout_device)), path) == 0) {
+			for (; i > 0; --i)
+				RELOC(prom_display_paths[i])
+					= RELOC(prom_display_paths[i-1]);
+		}
+		RELOC(prom_display_paths[i]) = PTRUNRELOC(path);
 		if (RELOC(prom_num_displays) >= FB_MAX)
 			break;
 	}
@@ -478,6 +527,8 @@ finish_device_tree(void)
 {
 	unsigned long mem = (unsigned long) klimit;
 
+	if (boot_infos)
+		relocate_nodes();
 	mem = finish_node(allnodes, mem, NULL);
 	printk(KERN_INFO "device tree used %lu bytes\n",
 	       mem - (unsigned long) allnodes);
@@ -517,10 +568,56 @@ finish_node(struct device_node *np, unsigned long mem_start,
 	else
 		ifunc = NULL;
 
+	/* if we were booted from BootX, convert the full name */
+	if (boot_infos
+	    && strncmp(np->full_name, "Devices:device-tree", 19) == 0) {
+		if (np->full_name[19] == 0) {
+			strcpy(np->full_name, "/");
+		} else if (np->full_name[19] == ':') {
+			char *p = np->full_name + 19;
+			np->full_name = p;
+			for (; *p; ++p)
+				if (*p == ':')
+					*p = '/';
+		}
+	}
+
 	for (child = np->child; child != NULL; child = child->sibling)
 		mem_start = finish_node(child, mem_start, ifunc);
 
 	return mem_start;
+}
+
+/*
+ * When BootX makes a copy of the device tree from the MacOS
+ * Name Registry, it is in the format we use but all of the pointers
+ * are offsets from the start of the tree.
+ * This procedure updates the pointers.
+ */
+__openfirmware
+static void relocate_nodes(void)
+{
+	unsigned long base;
+	struct device_node *np;
+	struct property *pp;
+
+#define ADDBASE(x)	(x = (x)? ((typeof (x))((unsigned long)(x) + base)): 0)
+
+	base = (unsigned long) boot_infos + boot_infos->deviceTreeOffset;
+	allnodes = (struct device_node *)(base + 4);
+	for (np = allnodes; np != 0; np = np->allnext) {
+		ADDBASE(np->full_name);
+		ADDBASE(np->properties);
+		ADDBASE(np->parent);
+		ADDBASE(np->child);
+		ADDBASE(np->sibling);
+		ADDBASE(np->allnext);
+		for (pp = np->properties; pp != 0; pp = pp->next) {
+			ADDBASE(pp->name);
+			ADDBASE(pp->value);
+			ADDBASE(pp->next);
+		}
+	}
 }
 
 __openfirmware

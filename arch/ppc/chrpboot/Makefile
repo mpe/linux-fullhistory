@@ -20,7 +20,7 @@ CFLAGS	= -O -fno-builtin -DSTDC_HEADERS -I$(TOPDIR)/include
 LD_ARGS = -T ../vmlinux.lds -Ttext 0x00800000
 OBJCOPY = $(CROSS_COMPILE)objcopy
 
-OBJS = crt0.o start.o main.o misc.o string.o zlib.o image.o # initrd.o
+OBJS = crt0.o start.o main.o misc.o ../coffboot/string.o ../coffboot/zlib.o image.o # initrd.o
 LIBS = $(TOPDIR)/lib/lib.a
 
 

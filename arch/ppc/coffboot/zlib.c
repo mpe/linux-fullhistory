@@ -11,7 +11,7 @@
  * - added Z_PACKET_FLUSH (see zlib.h for details)
  * - added inflateIncomp
  *
- * $Id: zlib.c,v 1.1 1997/07/31 07:16:14 paulus Exp $
+ * $Id: zlib.c,v 1.2 1998/09/03 17:40:53 cort Exp $
  */
 
 /*+++++*/
@@ -80,7 +80,7 @@ extern char *z_errmsg[]; /* indexed by 1-zlib_error */
 
          /* functions */
 
-#include <string.h>
+#include <linux/string.h>
 #define zmemcpy memcpy
 #define zmemzero(dest, len)	memset(dest, 0, len)
 

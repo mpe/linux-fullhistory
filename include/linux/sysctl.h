@@ -83,6 +83,7 @@ enum
 	KERN_PPC_HTABRECLAIM,	/* turn htab reclaimation on/off on PPC */
 	KERN_PPC_ZEROPAGED,	/* turn idle page zeroing on/off on PPC */
 	KERN_PPC_POWERSAVE_NAP,	/* use nap mode for power saving */
+	KERN_PPC_L2CR,		/* l2cr register on PPC */
 	KERN_MODPROBE,
 /*29*/	KERN_SG_BIG_BUFF
 };

@@ -2,7 +2,7 @@
 #define _PPC_BYTEORDER_H
 
 /*
- *  $Id: byteorder.h,v 1.13 1998/08/03 19:05:11 geert Exp $
+ *  $Id: byteorder.h,v 1.14 1998/08/12 05:07:12 paulus Exp $
  */
 
 #include <asm/types.h>
@@ -13,7 +13,7 @@ extern __inline__ unsigned ld_le16(volatile unsigned short *addr)
 {
 	unsigned val;
 
-	__asm__ __volatile__ ("lhbrx %0,0,%1" : "=r" (val) : "r" (addr));
+	__asm__ __volatile__ ("lhbrx %0,0,%1" : "=r" (val) : "r" (addr), "m" (*addr));
 	return val;
 }
 
@@ -26,7 +26,7 @@ extern __inline__ unsigned ld_le32(volatile unsigned *addr)
 {
 	unsigned val;
 
-	__asm__ __volatile__ ("lwbrx %0,0,%1" : "=r" (val) : "r" (addr));
+	__asm__ __volatile__ ("lwbrx %0,0,%1" : "=r" (val) : "r" (addr), "m" (*addr));
 	return val;
 }
 

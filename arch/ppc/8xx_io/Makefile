@@ -8,6 +8,12 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := 8xx_io.a
-O_OBJS	= commproc.o uart.o enet.o
+O_OBJS	= commproc.o uart.o
+ifdef CONFIG_MBX
+O_OBJS += enet.o
+endif
+ifdef CONFIG_FADS
+O_OBJS += fec.o
+endif
 
 include $(TOPDIR)/Rules.make

@@ -114,8 +114,7 @@ int fbgen_get_cmap(struct fb_cmap *cmap, int kspc, int con,
     struct fbgen_hwswitch *fbhw = info2->fbhw;
 
     if (con == currcon)			/* current console ? */
-	return fb_get_cmap(cmap, &fb_display[con].var, kspc, fbhw->getcolreg,
-			   info);
+	return fb_get_cmap(cmap, kspc, fbhw->getcolreg, info);
     else
 	if (fb_display[con].cmap.len)	/* non default colormap ? */
 	    fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
@@ -144,8 +143,7 @@ int fbgen_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	    return err;
     }
     if (con == currcon)			/* current console ? */
-	return fb_set_cmap(cmap, &fb_display[con].var, kspc, fbhw->setcolreg,
-			   info);
+	return fb_set_cmap(cmap, kspc, fbhw->setcolreg, info);
     else
 	fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
     return 0;
@@ -257,7 +255,7 @@ void fbgen_set_disp(int con, struct fb_info_gen *info)
 	display->can_soft_blank = 1;
     else
 	display->can_soft_blank = 0;
-    display->dispsw = fbhw->get_dispsw(&par, info);
+    fbhw->set_dispsw(&par, display, info);
 #if 0 /* FIXME: generic inverse is not supported yet */
     display->inverse = (fix.visual == FB_VISUAL_MONO01 ? !inverse : inverse);
 #else
@@ -276,12 +274,10 @@ void fbgen_install_cmap(int con, struct fb_info_gen *info)
     if (con != currcon)
 	return;
     if (fb_display[con].cmap.len)
-	fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-		    fbhw->setcolreg, &info->info);
+	fb_set_cmap(&fb_display[con].cmap, 1, fbhw->setcolreg, &info->info);
     else {
 	int size = fb_display[con].var.bits_per_pixel == 16 ? 64 : 256;
-	fb_set_cmap(fb_default_cmap(size), &fb_display[con].var, 1,
-		    fbhw->setcolreg, &info->info);
+	fb_set_cmap(fb_default_cmap(size), 1, fbhw->setcolreg, &info->info);
     }
 }
 
@@ -315,8 +311,8 @@ int fbgen_switch(int con, struct fb_info *info)
 
     /* Do we have to save the colormap ? */
     if (fb_display[currcon].cmap.len)
-	fb_get_cmap(&fb_display[currcon].cmap, &fb_display[currcon].var, 1,
-		    fbhw->getcolreg, &info2->info);
+	fb_get_cmap(&fb_display[currcon].cmap, 1, fbhw->getcolreg,
+		    &info2->info);
     fbgen_do_set_var(&fb_display[con].var, 1, info2);
     currcon = con;
     /* Install new colormap */
@@ -346,7 +342,7 @@ void fbgen_blank(int blank, struct fb_info *info)
 	cmap.transp = NULL;
 	cmap.start = 0;
 	cmap.len = 16;
-	fb_set_cmap(&cmap, &fb_display[currcon].var, 1, fbhw->setcolreg, info);
+	fb_set_cmap(&cmap, 1, fbhw->setcolreg, info);
     } else
 	fbgen_install_cmap(currcon, info2);
 }

@@ -322,7 +322,7 @@ struct task_struct {
 #define PF_MEMALLOC	0x00000800	/* Allocating memory */
 
 #define PF_USEDFPU	0x00100000	/* task used FPU this quantum (SMP) */
-#define PF_DTRACE	0x00200000	/* delayed trace (used on m68k) */
+#define PF_DTRACE	0x00200000	/* delayed trace (used on m68k, i386) */
 
 /*
  * Limit the stack by to some sane default: root can always

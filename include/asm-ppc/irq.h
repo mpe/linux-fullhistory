@@ -8,7 +8,11 @@
 #ifndef CONFIG_8xx
 
 #ifdef CONFIG_APUS
+#define enable_irq m68k_enable_irq
+#define disable_irq m68k_disable_irq
 #include <asm-m68k/irq.h>
+#undef enable_irq
+#undef disable_irq
 #else /* CONFIG_APUS */
 
 /*
@@ -76,9 +80,10 @@ static __inline__ int irq_cannonicalize(int irq)
  * My personal preference is CPM at level 2, which puts it above the
  * MBX PCI/ISA/IDE interrupts.
  */
-#define PIT_INTERRUPT	SIU_LEVEL0
-#define CPM_INTERRUPT	SIU_LEVEL2
-#define DEC_INTERRUPT	SIU_LEVEL7
+#define PIT_INTERRUPT		SIU_LEVEL0
+#define CPM_INTERRUPT		SIU_LEVEL2
+#define PCMCIA_INTERRUPT	SIU_LEVEL6
+#define DEC_INTERRUPT		SIU_LEVEL7
 
 /* Some internal interrupt registers use an 8-bit mask for the interrupt
  * level instead of a number.
@@ -94,6 +99,10 @@ static __inline__ int irq_cannonicalize(int irq)
 #define COMM_L_INT	SIU_IRQ6	/* MBX Comm expansion connector pin */
 #define STOP_ABRT_INT	SIU_IRQ7	/* Stop/Abort header pin */
 #endif /* CONFIG_MBX */
+
+#ifdef CONFIG_FADS
+#define FEC_INTERRUPT	SIU_LEVEL1	/* FEC interrupt */
+#endif
 
 /* always the same on MBX -- Cort */
 static __inline__ int irq_cannonicalize(int irq)

@@ -675,7 +675,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	goto repeat;
     }
 
-    sd_devname(devm, nbuff);
+    sd_devname(devm >> 4, nbuff);
     SCSI_LOG_HLQUEUE(2,printk("%s : real dev = /dev/%d, block = %d\n",
 	   nbuff, dev, block));
 

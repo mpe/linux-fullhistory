@@ -1,4 +1,4 @@
-/* $Id: linux_logo.h,v 1.6 1998/07/07 13:34:56 jj Exp $
+/* $Id: linux_logo.h,v 1.8 1998/07/30 16:30:24 jj Exp $
  * include/asm-i386/linux_logo.h: This is a linux logo
  *                                to be displayed on boot.
  *
@@ -23,10 +23,11 @@
 
 #define linux_logo_banner "Linux/ia32 version " UTS_RELEASE
 
-#define LINUX_LOGO_COLORS 221
+#define LINUX_LOGO_COLORS 214
 
 #ifdef INCLUDE_LINUX_LOGO_DATA
 
+#define INCLUDE_LINUX_LOGOBW
 #define INCLUDE_LINUX_LOGO16
 
 #include <linux/linux_logo.h>

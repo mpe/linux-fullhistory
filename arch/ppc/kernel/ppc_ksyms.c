@@ -11,6 +11,7 @@
 #include <asm/semaphore.h>
 #include <asm/processor.h>
 #include <asm/uaccess.h>
+#include <asm/ide.h>
 #include <asm/io.h>
 #include <asm/atomic.h>
 #include <asm/bitops.h>
@@ -56,10 +57,10 @@ EXPORT_SYMBOL(SingleStepException);
 EXPORT_SYMBOL(sys_sigreturn);
 EXPORT_SYMBOL(n_lost_interrupts);
 EXPORT_SYMBOL(do_lost_interrupts);
-EXPORT_SYMBOL(__ppc_bh_counter);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(local_irq_count);
+EXPORT_SYMBOL(local_bh_count);
 
 EXPORT_SYMBOL(isa_io_base);
 EXPORT_SYMBOL(isa_mem_base);
@@ -99,6 +100,7 @@ EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strspn);
 EXPORT_SYMBOL(strcmp);
 EXPORT_SYMBOL(strncmp);
+EXPORT_SYMBOL(strnicmp);
 EXPORT_SYMBOL(memset);
 EXPORT_SYMBOL(memcpy);
 EXPORT_SYMBOL(memmove);
@@ -137,6 +139,9 @@ EXPORT_SYMBOL(_outsl_ns);
 EXPORT_SYMBOL(ioremap);
 EXPORT_SYMBOL(__ioremap);
 EXPORT_SYMBOL(iounmap);
+
+EXPORT_SYMBOL(ide_insw);
+EXPORT_SYMBOL(ide_outsw);
 
 EXPORT_SYMBOL(start_thread);
 EXPORT_SYMBOL(__kernel_thread);

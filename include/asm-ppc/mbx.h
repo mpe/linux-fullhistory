@@ -55,8 +55,8 @@ typedef struct bd_info {
 #define NVRAM_SIZE		((uint)(1 * 1024 * 1024))
 #define MBX_CSR_ADDR		((uint)0xfa100000)
 #define MBX_CSR_SIZE		((uint)(1 * 1024 * 1024))
-#define MBX_IMAP_ADDR		((uint)0xfa200000)
-#define MBX_IMAP_SIZE		((uint)(64 * 1024))
+#define IMAP_ADDR		((uint)0xfa200000)
+#define IMAP_SIZE		((uint)(64 * 1024))
 #define PCI_CSR_ADDR		((uint)0xfa210000)
 #define PCI_CSR_SIZE		((uint)(64 * 1024))
 #endif

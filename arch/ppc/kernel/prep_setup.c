@@ -76,26 +76,70 @@ prep_get_cpuinfo(char *buffer)
 #endif
   
 	len = sprintf(buffer,"machine\t\t: PReP %s\n",Motherboard_map_name);
-	
-	len += sprintf(buffer+len,"L2\t\t: ");
-	switch(*((unsigned char *)CACHECRBA) & L2CACHE_MASK)
-	{
-	case L2CACHE_512KB:
-		len += sprintf(buffer+len,"512Kb\n");
-		break;
-	case L2CACHE_256KB:
-		len += sprintf(buffer+len,"256Kb\n");
-		break;
-	case L2CACHE_1MB:
-		len += sprintf(buffer+len,"1MB\n");
-		break;
-	case L2CACHE_NONE:
-		len += sprintf(buffer+len,"none\n");
-		break;
-	default:
-		len += sprintf(buffer+len,"%x\n", *((unsigned char *)CACHECRBA));
-	}
 
+	
+	switch ( _prep_type )
+	{
+	case _PREP_IBM:
+		if ((*(unsigned char *)0x8000080c) & (1<<6))
+			len += sprintf(buffer+len,"Upgrade CPU\n");
+		len += sprintf(buffer+len,"L2\t\t: ");
+		if ((*(unsigned char *)0x8000080c) & (1<<7))
+		{
+			len += sprintf(buffer+len,"not present\n");
+			goto no_l2;
+		}
+		len += sprintf(buffer+len,"%sKb,",
+			       (((*(unsigned char *)0x8000080d)>>2)&1)?"512":"256");
+		len += sprintf(buffer+len,"%sync\n",
+			       ((*(unsigned char *)0x8000080d)>>7) ? "":"a");
+		break;
+	case _PREP_Motorola:
+		len += sprintf(buffer+len,"L2\t\t: ");
+		switch(*((unsigned char *)CACHECRBA) & L2CACHE_MASK)
+		{
+		case L2CACHE_512KB:
+			len += sprintf(buffer+len,"512Kb");
+			break;
+		case L2CACHE_256KB:
+			len += sprintf(buffer+len,"256Kb");
+			break;
+		case L2CACHE_1MB:
+			len += sprintf(buffer+len,"1MB");
+			break;
+		case L2CACHE_NONE:
+			len += sprintf(buffer+len,"none\n");
+			goto no_l2;
+			break;
+		default:
+			len += sprintf(buffer+len, "%x\n",
+				       *((unsigned char *)CACHECRBA));
+		}
+		
+		len += sprintf(buffer+len,",parity %s",
+			       (*((unsigned char *)CACHECRBA) & L2CACHE_PARITY) ?
+			       "enabled" : "disabled");
+		
+		len += sprintf(buffer+len, " SRAM:");
+		
+		switch ( ((*((unsigned char *)CACHECRBA) & 0xf0) >> 4) & ~(0x3) )
+		{
+		case 1: len += sprintf(buffer+len,
+				       "synchronous,parity,flow-through\n");
+			break;
+		case 2: len += sprintf(buffer+len,"asynchronous,no parity\n");
+			break;
+		case 3: len += sprintf(buffer+len,"asynchronous,parity\n");
+			break;
+		default:len += sprintf(buffer+len,
+				       "synchronous,pipelined,no parity\n");
+			break;
+		}
+		break;
+	}
+	
+	
+no_l2:	
 	if ( res->ResidualLength == 0 )
 		return len;
 	
@@ -110,20 +154,6 @@ prep_get_cpuinfo(char *buffer)
 				       res->Memories[i].SIMMSize);
 	}
 	len += sprintf(buffer+len,"\n");
-
-#if 0	
-	/* L2 */
-	if ( (inb(IBM_EQUIP_PRESENT) & 1) == 0) /* l2 present */
-	{
-		len += sprintf(buffer+len,"l2\t\t: %dkB %s\n",
-			       ((inb(IBM_L2_STATUS) >> 5) & 1) ? 512 : 256,
-			       (inb(IBM_SYS_CTL) & 64) ? "enabled" : "disabled");
-	}
-	else
-	{
-		len += sprintf(buffer+len,"l2\t\t: not present\n");
-	}
-#endif	
 
 	return len;
 }
@@ -155,6 +185,9 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 		ROOT_DEV = to_kdev_t(0x0801); /* sda1 */
 		break;
 	}
+
+	/* Enable L2.  Assume we don't need to flush -- Cort*/
+	*(unsigned char *)(0x8000081c) = *(unsigned char *)(0x8000081c)|3;
 	
 	/* make the serial port the console */
 	/* strcat(cmd_line,"console=ttyS0,9600n8"); */

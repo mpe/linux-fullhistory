@@ -1,4 +1,4 @@
-/* $Id: linux_logo.h,v 1.5 1998/07/30 16:30:40 jj Exp $
+/* $Id: linux_logo.h,v 1.6 1998/08/20 04:44:39 ecd Exp $
  * include/asm-sparc/linux_logo.h: This is a linux logo
  *                                 to be displayed on boot.
  *
@@ -1026,10 +1026,10 @@ unsigned char linux_logo_bw[] __initdata = {
   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 };
 
-unsigned char linux_logo16_red[0];
-unsigned char linux_logo16_green[0];
-unsigned char linux_logo16_blue[0];
-unsigned char linux_logo16[0];
+unsigned char linux_logo16_red[1];
+unsigned char linux_logo16_green[1];
+unsigned char linux_logo16_blue[1];
+unsigned char linux_logo16[1];
 
 #else
 

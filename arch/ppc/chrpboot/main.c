@@ -6,8 +6,8 @@
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  */
-#include "nonstdio.h"
-#include "zlib.h"
+#include "../coffboot/nonstdio.h"
+#include "../coffboot/zlib.h"
 
 extern void *finddevice(const char *);
 extern int getprop(void *, const char *, void *, int);

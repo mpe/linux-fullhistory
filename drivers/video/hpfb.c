@@ -22,10 +22,10 @@
 #include <asm/blinken.h>
 #include <asm/hwtest.h>
 
-#include "fbcon-mfb.h"
-#include "fbcon-cfb2.h"
-#include "fbcon-cfb4.h"
-#include "fbcon-cfb8.h"
+#include <video/fbcon-mfb.h>
+#include <video/fbcon-cfb2.h>
+#include <video/fbcon-cfb4.h>
+#include <video/fbcon-cfb8.h>
 
 #define arraysize(x)    (sizeof(x)/sizeof(*(x)))
 

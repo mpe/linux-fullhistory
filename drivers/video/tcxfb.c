@@ -1,4 +1,4 @@
-/* $Id: tcxfb.c,v 1.1 1998/07/21 14:50:44 jj Exp $
+/* $Id: tcxfb.c,v 1.6 1998/09/04 15:43:46 jj Exp $
  * tcxfb.c: TCX 24/8bit frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -21,10 +21,10 @@
 #include <linux/init.h>
 #include <linux/selection.h>
 
-#include "sbusfb.h"
+#include <video/sbusfb.h>
 #include <asm/io.h>
 
-#include "fbcon-cfb8.h"
+#include <video/fbcon-cfb8.h>
 
 /* THC definitions */
 #define TCX_THC_MISC_REV_SHIFT       16
@@ -102,7 +102,7 @@ static void tcx_switch_from_graph (struct fb_info_sbusfb *fb)
 		tcx_set_control_plane (fb);
 }
 
-static void tcx_loadcmap (struct fb_info_sbusfb *fb, int index, int count)
+static void tcx_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
 {
 	struct bt_regs *bt = fb->s.tcx.bt;
 	int i;
@@ -113,6 +113,7 @@ static void tcx_loadcmap (struct fb_info_sbusfb *fb, int index, int count)
 		bt->color_map = fb->color_map CM(i,1) << 24;
 		bt->color_map = fb->color_map CM(i,2) << 24;
 	}
+	bt->addr = 0;
 }
 
 static void tcx_restore_palette (struct fb_info_sbusfb *fb)
@@ -211,7 +212,7 @@ __initfunc(char *tcxfb_init(struct fb_info_sbusfb *fb))
 	struct display *disp = &fb->disp;
 	struct fbtype *type = &fb->type;
 	unsigned long phys = fb->sbdp->reg_addrs[0].phys_addr;
-	int lowdepth;
+	int lowdepth, i, j;
 
 #ifndef FBCON_HAS_CFB8
 	return NULL;
@@ -265,10 +266,22 @@ __initfunc(char *tcxfb_init(struct fb_info_sbusfb *fb))
 	fb->blank = tcx_blank;
 	fb->unblank = tcx_unblank;
 	fb->reset = tcx_reset;
-	
+
 	fb->physbase = 0;
+	for (i = 0; i < 13; i++) {
+		/* tcx_mmap_map has to be sorted by voff, while
+		   order of phys registers from PROM differs a little
+		   bit. Here is the correction */
+		switch (i) {
+		case 10: j = 12; break;
+		case 11:
+		case 12: j = i - 1; break;
+		default: j = i; break;
+		}
+		tcx_mmap_map[i].poff = fb->sbdp->reg_addrs[j].phys_addr;
+	}
 	fb->mmap_map = tcx_mmap_map;
-	
+
 	/* Initialize Brooktree DAC */
 	fb->s.tcx.bt->addr = 0x04 << 24;         /* color planes */
 	fb->s.tcx.bt->control = 0xff << 24;
@@ -278,13 +291,13 @@ __initfunc(char *tcxfb_init(struct fb_info_sbusfb *fb))
 	fb->s.tcx.bt->control = 0x73 << 24;
 	fb->s.tcx.bt->addr = 0x07 << 24;
 	fb->s.tcx.bt->control = 0x00 << 24;
-	
+
 	sprintf(idstring, "tcx at %x.%08lx Rev %d.%d %s", fb->iospace, phys,
 		    (fb->s.tcx.thc->thc_rev >> TCX_THC_REV_REV_SHIFT) & TCX_THC_REV_REV_MASK,
                     (fb->s.tcx.thc->thc_rev >> TCX_THC_REV_MINREV_SHIFT) & TCX_THC_REV_MINREV_MASK,
 		    lowdepth ? "8-bit only" : "24-bit depth");
 		    
 	tcx_reset(fb);
-		    
+
 	return idstring;
 }

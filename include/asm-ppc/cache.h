@@ -13,7 +13,7 @@
 #define        L1_CACHE_ALIGN(x)       (((x)+(L1_CACHE_BYTES-1))&~(L1_CACHE_BYTES-1))
 #define L1_CACHE_PAGES		8
 
-#ifndef __ASSEMBLY__
+#if defined(__KERNEL__) && !defined(__ASSEMBLY__)
 static inline unsigned long unlock_dcache(void)
 {
 #ifndef CONFIG_8xx	

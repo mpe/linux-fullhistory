@@ -38,10 +38,10 @@
 #include <asm/adb.h>
 #include <asm/pmu.h>
 
-#include "fbcon.h"
-#include "fbcon-cfb8.h"
-#include "fbcon-cfb16.h"
-#include "macmodes.h"
+#include <video/fbcon.h>
+#include <video/fbcon-cfb8.h>
+#include <video/fbcon-cfb16.h>
+#include <video/macmodes.h>
 
 static int currcon = 0;
 
@@ -61,6 +61,9 @@ struct fb_info_chips {
 	struct fb_info_chips *next;
 #ifdef CONFIG_PMAC_PBOOK
 	unsigned char *save_framebuffer;
+#endif
+#ifdef FBCON_HAS_CFB16
+	u16 fbcon_cfb16_cmap[16];
 #endif
 };
 
@@ -187,8 +190,7 @@ static int chips_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info)
 {
 	if (con == currcon)		/* current console? */
-		return fb_get_cmap(cmap, &fb_display[con].var, kspc,
-				   chipsfb_getcolreg, info);
+		return fb_get_cmap(cmap, kspc, chipsfb_getcolreg, info);
 	if (fb_display[con].cmap.len)	/* non default colormap? */
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc? 0: 2);
 	else
@@ -209,8 +211,7 @@ static int chips_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	}
 
 	if (con == currcon)
-		return fb_set_cmap(cmap, &disp->var, kspc, chipsfb_setcolreg,
-				   info);
+		return fb_set_cmap(cmap, kspc, chipsfb_setcolreg, info);
 	fb_copy_cmap(cmap, &disp->cmap, kspc==0);
 	return 0;
 }
@@ -229,9 +230,7 @@ static int chipsfb_switch(int con, struct fb_info *info)
 	int	bit_depth;
 
 	if (fb_display[currcon].cmap.len)
-		fb_get_cmap(&old_disp->cmap,
-			    &old_disp->var, 1, chipsfb_getcolreg,
-			    info);
+		fb_get_cmap(&old_disp->cmap, 1, chipsfb_getcolreg, info);
 
 	bit_depth = new_disp->var.bits_per_pixel;
 	if (old_disp->var.bits_per_pixel != bit_depth)
@@ -279,9 +278,10 @@ static int chipsfb_getcolreg(u_int regno, u_int *red, u_int *green,
 
 	if (regno > 255)
 		return 1;
-	*red = p->palette[regno].red;
-	*green = p->palette[regno].green;
-	*blue = p->palette[regno].blue;
+	*red = (p->palette[regno].red<<8) | p->palette[regno].red;
+	*green = (p->palette[regno].green<<8) | p->palette[regno].green;
+	*blue = (p->palette[regno].blue<<8) | p->palette[regno].blue;
+	*transp = 0;
 	return 0;
 }
 
@@ -292,6 +292,9 @@ static int chipsfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 
 	if (regno > 255)
 		return 1;
+	red >>= 8;
+	green >>= 8;
+	blue >>= 8;
 	p->palette[regno].red = red;
 	p->palette[regno].green = green;
 	p->palette[regno].blue = blue;
@@ -302,8 +305,8 @@ static int chipsfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	out_8(p->io_base + 0x3c9, blue);
 
 #ifdef FBCON_HAS_CFB16
-    if (regno < 16)
-		fbcon_cfb16_cmap[regno] = (red << 10) | (green << 5) | blue;		
+	if (regno < 16)
+		p->fbcon_cfb16_cmap[regno] = (red << 10) | (green << 5) | blue;
 #endif
 
     return 0;
@@ -314,17 +317,12 @@ static void do_install_cmap(int con, struct fb_info *info)
 	if (con != currcon)
 		return;
 	if (fb_display[con].cmap.len)
-		fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-			    chipsfb_setcolreg, info);
-	else
-		fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel), &fb_display[con].var, 1,
-			    chipsfb_setcolreg, info);
+		fb_set_cmap(&fb_display[con].cmap, 1, chipsfb_setcolreg, info);
+	else {
+		int size = fb_display[con].var.bits_per_pixel == 16 ? 32 : 256;
+		fb_set_cmap(fb_default_cmap(size), 1, chipsfb_setcolreg, info);
+	}
 }
-
-#ifdef CONFIG_FB_COMPAT_XPMAC
-/* from drivers/macintosh/pmac-cons.h */
-#define VMODE_800_600_60	10	/* 800x600, 60Hz */
-#endif /* CONFIG_FB_COMPAT_XPMAC */
 
 static void chips_set_bitdepth(struct fb_info_chips *p, struct display* disp, int con, int bpp)
 {
@@ -350,6 +348,7 @@ static void chips_set_bitdepth(struct fb_info_chips *p, struct display* disp, in
 		
 #ifdef FBCON_HAS_CFB16
 		disp->dispsw = &fbcon_cfb16;
+		disp->dispsw_data = p->fbcon_cfb16_cmap;
 #else
 		disp->dispsw = NULL;
 #endif
@@ -396,7 +395,6 @@ __initfunc(static void init_chips(struct fb_info_chips *p))
 {
 	int i;
 
-	memset(&p->fix, 0, sizeof(p->fix));
 	strcpy(p->fix.id, "C&T 65550");
 	p->fix.smem_start = (char *) p->chips_base_phys;
 	p->fix.smem_len = 800 * 600;
@@ -405,7 +403,6 @@ __initfunc(static void init_chips(struct fb_info_chips *p))
 	p->fix.visual = FB_VISUAL_PSEUDOCOLOR;
 	p->fix.line_length = 800;
 
-	memset(&p->var, 0, sizeof(p->var));
 	p->var.xres = 800;
 	p->var.yres = 600;
 	p->var.xres_virtual = 800;
@@ -419,7 +416,6 @@ __initfunc(static void init_chips(struct fb_info_chips *p))
 	p->var.upper_margin = p->var.lower_margin = 16;
 	p->var.hsync_len = p->var.vsync_len = 8;
 
-	memset(&p->disp, 0, sizeof(p->disp));
 	p->disp.var = p->var;
 	p->disp.cmap.red = NULL;
 	p->disp.cmap.green = NULL;
@@ -507,6 +503,7 @@ __initfunc(void chips_of_init(struct device_node *dp))
 	p = kmalloc(sizeof(*p), GFP_ATOMIC);
 	if (p == 0)
 		return;
+	memset(p, 0, sizeof(*p));
 	addr = dp->addrs[0].address;
 	p->chips_base_phys = addr;
 	p->frame_buffer = __ioremap(addr+0x800000, 0x100000, _PAGE_NO_CACHE);

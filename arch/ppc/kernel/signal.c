@@ -1,7 +1,7 @@
 /*
  *  linux/arch/ppc/kernel/signal.c
  *
- *  $Id: signal.c,v 1.16 1998/06/16 23:34:10 cort Exp $
+ *  $Id: signal.c,v 1.20 1998/09/28 16:47:09 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -126,6 +126,13 @@ asmlinkage int sys_rt_sigreturn(unsigned long __unused)
 	printk("sys_rt_sigreturn(): %s/%d not yet implemented.\n",
 	       current->comm,current->pid);
 	do_exit(SIGSEGV);
+}
+
+asmlinkage int
+sys_sigaltstack(const stack_t *uss, stack_t *uoss)
+{
+	struct pt_regs *regs = (struct pt_regs *) &uss;
+	return do_sigaltstack(uss, uoss, regs->gpr[1]);
 }
 
 int 
@@ -483,3 +490,4 @@ int do_signal(sigset_t *oldset, struct pt_regs *regs)
 	setup_frame(regs, (struct sigregs *) frame, newsp);
 	return 1;
 }
+

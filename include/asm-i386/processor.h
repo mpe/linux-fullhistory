@@ -283,12 +283,15 @@ extern void release_segments(struct mm_struct * mm);
 /*
  * FPU lazy state save handling..
  */
+#define save_fpu(tsk) do { \
+	asm volatile("fnsave %0\n\tfwait":"=m" (tsk->tss.i387)); \
+	tsk->flags &= ~PF_USEDFPU; \
+	stts(); \
+} while (0)
+
 #define unlazy_fpu(tsk) do { \
-	if (tsk->flags & PF_USEDFPU) { \
-		asm volatile("fnsave %0\n\tfwait":"=m" (tsk->tss.i387)); \
-		tsk->flags &= ~PF_USEDFPU; \
-		stts(); \
-	} \
+	if (tsk->flags & PF_USEDFPU) \
+		save_fpu(tsk); \
 } while (0)
 
 #define clear_fpu(tsk) do { \

@@ -85,7 +85,8 @@ static __inline__ int mtrr_add (unsigned long base, unsigned long size,
 {
     return -ENODEV;
 }
-static __inline__ mtrr_del (int reg, unsigned long base, unsigned long size)
+static __inline__ int mtrr_del (int reg, unsigned long base,
+				unsigned long size)
 {
     return -ENODEV;
 }

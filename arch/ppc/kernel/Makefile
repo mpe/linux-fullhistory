@@ -11,17 +11,20 @@
 	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c $< -o $*.o
 
 O_TARGET := kernel.o
-OX_OBJS := ppc_ksyms.o
+OX_OBJS := ppc_ksyms.o setup.o
 
 
 O_OBJS := traps.o irq.o idle.o time.o process.o signal.o syscalls.o misc.o \
-	  bitops.o setup.o ptrace.o align.o ppc_htab.o
+	  bitops.o ptrace.o align.o ppc_htab.o
 
 ifdef CONFIG_PCI
 O_OBJS += pci.o
 endif
 ifdef CONFIG_KGDB
 O_OBJS += ppc-stub.o
+endif
+ifdef CONFIG_TOTALMP
+O_OBJS += totalmp.o
 endif
 
 ifeq ($(CONFIG_MBX),y)
@@ -31,10 +34,10 @@ ifeq ($(CONFIG_APUS),y)
 O_OBJS += apus_setup.o prom.o openpic.o
 else
 O_OBJS += prep_time.o pmac_time.o chrp_time.o \
-	  pmac_setup.o pmac_support.o chrp_setup.o \
+	  pmac_setup.o pmac_support.o \
 	  prep_pci.o pmac_pci.o chrp_pci.o \
 	  residual.o prom.o openpic.o
-OX_OBJS += prep_setup.o
+OX_OBJS += chrp_setup.o prep_setup.o
 endif
 endif
 

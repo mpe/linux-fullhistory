@@ -370,15 +370,39 @@ _GLOBAL(_set_THRM1)
 _GLOBAL(_get_L2CR)
 	mfspr	r3,L2CR
 	blr
-	
+
+_GLOBAL(_set_L2CR)
+	mtspr	L2CR,r3
+	blr
+		
 _GLOBAL(_get_PVR)
 	mfspr	r3,PVR
 	blr
 
+/*
+ * These are used in the alignment trap handler when emulating
+ * single-precision loads and stores.
+ * We restore and save the fpscr so the task gets the same result
+ * and exceptions as if the cpu had performed the load or store.
+ */
 _GLOBAL(cvt_fd)
 cvt_fd:
+	lfd	0,-4(r5)	/* load up fpscr value */
+	mtfsf	0xff,0
 	lfs	0,0(r3)
 	stfd	0,0(r4)
+	mffs	0		/* save new fpscr value */
+	stfd	0,-4(r5)
+	blr
+
+_GLOBAL(cvt_df)
+cvt_df:
+	lfd	0,-4(r5)	/* load up fpscr value */
+	mtfsf	0xff,0
+	lfd	0,0(r3)
+	stfs	0,0(r4)
+	mffs	0		/* save new fpscr value */
+	stfd	0,-4(r5)
 	blr
 
 /*
@@ -388,12 +412,6 @@ cvt_fd:
 _GLOBAL(get_SR)
 	mfsrin	r4,r3
 	mr	r3,r4
-	blr
-
-_GLOBAL(cvt_df)
-cvt_df:
-	lfd	0,0(r3)
-	stfs	0,0(r4)
 	blr
 
 /*
@@ -455,7 +473,7 @@ SYSCALL(read)
 	.align 4
 	.globl	sys_call_table
 sys_call_table:
-	.long sys_setup		/* 0 */
+	.long sys_ni_syscall	/* 0  -  old "setup()" system call */
 	.long sys_exit
 	.long sys_fork
 	.long sys_read
@@ -638,4 +656,10 @@ sys_call_table:
 	.long sys_pwrite		/* 180 */
 	.long sys_chown
 	.long sys_getcwd
+	.long sys_capget
+	.long sys_capset
+	.long sys_sigaltstack		/* 185 */
+	.long sys_sendfile
+	.long sys_ni_syscall
+	.long sys_ni_syscall
 	.space (NR_syscalls-183)*4

@@ -133,7 +133,7 @@ static inline u_int openpic_readfield(volatile u_int *addr, u_int mask)
     return val & mask;
 }
 
-static inline void openpic_writefield(volatile u_int *addr, u_int mask,
+inline void openpic_writefield(volatile u_int *addr, u_int mask,
 				      u_int field)
 {
     u_int val = openpic_read(addr);
@@ -173,7 +173,7 @@ static void openpic_safe_writefield(volatile u_int *addr, u_int mask,
      *  Initialize the OpenPIC
      */
 
-__initfunc(void openpic_init(void))
+__initfunc(void openpic_init(int main_pic))
 {
     u_int t, i;
     u_int vendorid, devid, stepping, timerfreq;
@@ -233,41 +233,44 @@ __initfunc(void openpic_init(void))
     else
 	printk("not set\n");
 
-    /* Initialize timer interrupts */
-    for (i = 0; i < OPENPIC_NUM_TIMERS; i++) {
-	/* Disabled, Priority 0 */
-	openpic_inittimer(i, 0, OPENPIC_VEC_TIMER+i);
-	/* No processor */
-	openpic_maptimer(i, 0);
+    if ( main_pic )
+    {
+	    /* Initialize timer interrupts */
+	    for (i = 0; i < OPENPIC_NUM_TIMERS; i++) {
+		    /* Disabled, Priority 0 */
+		    openpic_inittimer(i, 0, OPENPIC_VEC_TIMER+i);
+		    /* No processor */
+		    openpic_maptimer(i, 0);
+	    }
+	    
+	    /* Initialize IPI interrupts */
+	    for (i = 0; i < OPENPIC_NUM_IPI; i++) {
+		    /* Disabled, Priority 0 */
+		    openpic_initipi(i, 0, OPENPIC_VEC_IPI+i);
+	    }
+	    
+	    /* Initialize external interrupts */
+	    /* SIOint (8259 cascade) is special */
+	    openpic_initirq(0, 8, OPENPIC_VEC_SOURCE, 1, 1);
+	    /* Processor 0 */
+	    openpic_mapirq(0, 1<<0);
+	    for (i = 1; i < NumSources; i++) {
+		    /* Enabled, Priority 8 */
+		    openpic_initirq(i, 8, OPENPIC_VEC_SOURCE+i, 0,
+				    i < OpenPIC_NumInitSenses ? OpenPIC_InitSenses[i] : 1);
+		    /* Processor 0 */
+		    openpic_mapirq(i, 1<<0);
+	    }
+	    
+	    /* Initialize the spurious interrupt */
+	    openpic_set_spurious(OPENPIC_VEC_SPURIOUS);
+	    
+	    if (request_irq(IRQ_8259_CASCADE, no_action, SA_INTERRUPT,
+			    "82c59 cascade", NULL))
+		    printk("Unable to get OpenPIC IRQ 0 for cascade\n");
+	    openpic_set_priority(0, 0);
+	    openpic_disable_8259_pass_through();
     }
-
-    /* Initialize IPI interrupts */
-    for (i = 0; i < OPENPIC_NUM_IPI; i++) {
-	/* Disabled, Priority 0 */
-	openpic_initipi(i, 0, OPENPIC_VEC_IPI+i);
-    }
-
-    /* Initialize external interrupts */
-    /* SIOint (8259 cascade) is special */
-    openpic_initirq(0, 8, OPENPIC_VEC_SOURCE, 1, 1);
-    /* Processor 0 */
-    openpic_mapirq(0, 1<<0);
-    for (i = 1; i < NumSources; i++) {
-	/* Enabled, Priority 8 */
-	openpic_initirq(i, 8, OPENPIC_VEC_SOURCE+i, 0,
-			i < OpenPIC_NumInitSenses ? OpenPIC_InitSenses[i] : 1);
-	/* Processor 0 */
-	openpic_mapirq(i, 1<<0);
-    }
-
-    /* Initialize the spurious interrupt */
-    openpic_set_spurious(OPENPIC_VEC_SPURIOUS);
-
-    if (request_irq(IRQ_8259_CASCADE, no_action, SA_INTERRUPT,
-		    "82c59 cascade", NULL))
-	printk("Unable to get OpenPIC IRQ 0 for cascade\n");
-    openpic_set_priority(0, 0);
-    openpic_disable_8259_pass_through();
 }
 
 
@@ -529,5 +532,3 @@ void openpic_set_sense(u_int irq, int sense)
     			    OPENPIC_SENSE_LEVEL,
 			    (sense ? OPENPIC_SENSE_LEVEL : 0));
 }
-
-

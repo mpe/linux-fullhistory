@@ -1,10 +1,10 @@
 /*
- * $Id: bitops.h,v 1.9 1998/07/26 03:05:28 davem Exp $
+ * $Id: bitops.h,v 1.10 1998/08/16 21:56:53 geert Exp $
  * bitops.h: Bit string operations on the ppc
  */
 
-#ifndef _ASM_PPC_BITOPS_H_
-#define _ASM_PPC_BITOPS_H_
+#ifndef _PPC_BITOPS_H
+#define _PPC_BITOPS_H
 
 #include <asm/system.h>
 #include <asm/byteorder.h>
@@ -267,4 +267,4 @@ found_middle:
 #define minix_test_bit(nr,addr) ext2_test_bit(nr,addr)
 #define minix_find_first_zero_bit(addr,size) ext2_find_first_zero_bit(addr,size)
 
-#endif /* _ASM_PPC_BITOPS_H */
+#endif /* _PPC_BITOPS_H */

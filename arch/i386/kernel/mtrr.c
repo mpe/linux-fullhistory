@@ -122,9 +122,16 @@
 	       Added sanity check for <mtrr_add>/<mtrr_del> before <mtrr_init>.
 	       Created addition queue for prior to SMP commence.
   v1.23
+    19980902   Richard Gooch <rgooch@atnf.csiro.au>
+	       Ported patch to kernel 2.1.120-pre3.
+  v1.24
     19980910   Richard Gooch <rgooch@atnf.csiro.au>
 	       Removed sanity checks and addition queue: Linus prefers an OOPS.
-  v1.24
+  v1.25
+    19981001   Richard Gooch <rgooch@atnf.csiro.au>
+	       Fixed harmless compiler warning in include/asm-i386/mtrr.h
+	       Fixed version numbering and history for v1.23 -> v1.24.
+  v1.26
 */
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -157,7 +164,7 @@
 #include <asm/bitops.h>
 #include <asm/atomic.h>
 
-#define MTRR_VERSION            "1.24 (19980910)"
+#define MTRR_VERSION            "1.26 (19981001)"
 
 #define TRUE  1
 #define FALSE 0

@@ -22,12 +22,11 @@
 #include <asm/macintosh.h>
 #include <linux/fb.h>
 
-
 /* conditionalize these ?? */
-#include "fbcon-mfb.h"
-#include "fbcon-cfb2.h"
-#include "fbcon-cfb4.h"
-#include "fbcon-cfb8.h"
+#include <video/fbcon-mfb.h>
+#include <video/fbcon-cfb2.h>
+#include <video/fbcon-cfb4.h>
+#include <video/fbcon-cfb8.h>
 
 #define arraysize(x)    (sizeof(x)/sizeof(*(x)))
 
@@ -237,7 +236,7 @@ static void macfb_set_disp(int con)
 		break;
 #endif
 	    default:
-		display->dispsw = NULL;
+		display->dispsw = &fbcon_dummy;
 		break;
 	}
 }
@@ -261,7 +260,7 @@ static int macfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 	if (console_loglevel < 7)
 		return -EINVAL;
 	if (con == currcon) /* current console? */
-		return fb_get_cmap(cmap, &fb_display[con].var, kspc, 0 /*offb_getcolreg*/, info);
+		return fb_get_cmap(cmap, kspc, 0 /*offb_getcolreg*/, info);
 	else if (fb_display[con].cmap.len) /* non default colormap? */
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
 	else
@@ -285,7 +284,7 @@ static int macfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 		return err;
 	}
 	if (con == currcon)			/* current console? */
-		return fb_set_cmap(cmap, &fb_display[con].var, kspc, 1 /*offb_setcolreg*/, info);
+		return fb_set_cmap(cmap, kspc, 1 /*offb_setcolreg*/, info);
 	else
 		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
 #endif

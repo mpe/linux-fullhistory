@@ -1,5 +1,5 @@
 /*
- * $Id: idle.c,v 1.48 1998/07/30 11:29:22 davem Exp $
+ * $Id: idle.c,v 1.50 1998/08/18 16:19:25 cort Exp $
  *
  * Idle daemon for PowerPC.  Idle daemon will handle any action
  * that needs to be taken when the system becomes idle.
@@ -53,8 +53,8 @@ int idled(void *unused)
 		__sti();
 		
 		/* endless loop with no priority at all */
-		current->priority = -100;
-		current->counter = -100;
+		current->priority = 0;
+		current->counter = 0;
 
 		check_pgt_cache();
 
@@ -69,6 +69,7 @@ int idled(void *unused)
 #ifndef __SMP__
 		if ( !current->need_resched ) power_save();
 #endif /* __SMP__ */
+		run_task_queue(&tq_scheduler);
 		schedule();
 	}
 	ret = 0;

@@ -455,6 +455,7 @@ static struct dev_name_struct {
 #endif
 #ifdef CONFIG_BLK_DEV_PS2
 	{ "eda",     0x2400 },
+	{ "edb",     0x2440 },
 #endif
 #ifdef CONFIG_PARIDE_PD
 	{ "pda",	0x2d00 },
@@ -666,7 +667,8 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "floppy=", floppy_setup },
 #endif
 #ifdef CONFIG_BLK_DEV_PS2
-	{ "ed=", ed_setup },
+	{ "eda=", ed_setup },
+	{ "edb=", ed_setup },
 	{ "tp720=", tp720_setup },
 #endif
 #ifdef CONFIG_CDU31A

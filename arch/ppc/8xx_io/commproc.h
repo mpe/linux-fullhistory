@@ -62,9 +62,9 @@
  * and dual port ram.
  */
 extern	cpm8xx_t	*cpmp;		/* Pointer to comm processor */
-uint		mbx_cpm_dpalloc(uint size);
-uint		mbx_cpm_hostalloc(uint size);
-void		mbx_cpm_setbrg(uint brg, uint rate);
+uint		m8xx_cpm_dpalloc(uint size);
+uint		m8xx_cpm_hostalloc(uint size);
+void		m8xx_cpm_setbrg(uint brg, uint rate);
 
 /* Buffer descriptors used by many of the CPM protocols.
 */
@@ -87,8 +87,16 @@ typedef struct cpm_buf_desc {
 #define BD_SC_OV	((ushort)0x0002)	/* Overrun */
 #define BD_SC_CD	((ushort)0x0001)	/* ?? */
 
-/* Define enough so I can at least use the MBX serial port as a UART.
- * The MBX uses SMC1 as the host serial port.
+/* Parameter RAM offsets.
+*/
+#define PROFF_SCC1	((uint)0x0000)
+#define PROFF_SCC2	((uint)0x0100)
+#define PROFF_SCC3	((uint)0x0200)
+#define PROFF_SMC1	((uint)0x0280)
+#define PROFF_SCC4	((uint)0x0300)
+#define PROFF_SMC2	((uint)0x0380)
+
+/* Define enough so I can at least use the serial port as a UART.
  */
 typedef struct smc_uart {
 	ushort	smc_rbase;	/* Rx Buffer descriptor base address */
@@ -114,9 +122,6 @@ typedef struct smc_uart {
 	ushort	smc_rmask;	/* Temporary bit mask */
 } smc_uart_t;
 
-#define PROFF_SMC1	((uint)0x0280)	/* Offset in Parameter RAM */
-#define PROFF_SMC2	((uint)0x0380)
-
 /* Function code bits.
 */
 #define SMC_EB	((u_char)0x10)	/* Set big endian byte order */
@@ -139,7 +144,7 @@ typedef struct smc_uart {
 /* SMC Event and Mask register.
 */
 #define	SMCM_TXE	((unsigned char)0x10)
-#define	SMCM_BSY	((unsigned char)0x14)
+#define	SMCM_BSY	((unsigned char)0x04)
 #define	SMCM_TX		((unsigned char)0x02)
 #define	SMCM_RX		((unsigned char)0x01)
 
@@ -238,6 +243,13 @@ typedef struct smc_uart {
 
 #define SCC_TODR_TOD		((ushort)0x8000)
 
+/* SCC Event and Mask register.
+*/
+#define	SCCM_TXE	((unsigned char)0x10)
+#define	SCCM_BSY	((unsigned char)0x04)
+#define	SCCM_TX		((unsigned char)0x02)
+#define	SCCM_RX		((unsigned char)0x01)
+
 typedef struct scc_param {
 	ushort	scc_rbase;	/* Rx Buffer descriptor base address */
 	ushort	scc_tbase;	/* Tx Buffer descriptor base address */
@@ -317,8 +329,6 @@ typedef struct scc_enet {
 	ushort	sen_taddrl;	/* temp address (LSB) */
 } scc_enet_t;
 
-#define PROFF_SCC1	((uint)0x0000)	/* Offset in Parameter RAM */
-
 /* Bits in parallel I/O port registers that have to be set/cleared
  * to configure the pins for SCC1 use.  The TCLK and RCLK seem unique
  * to the MBX860 board.  Any two of the four available clocks could be
@@ -397,6 +407,37 @@ typedef struct scc_enet {
 #define BD_ENET_TX_CSL		((ushort)0x0001)
 #define BD_ENET_TX_STATS	((ushort)0x03ff)	/* All status bits */
 
+/* SCC as UART
+*/
+typedef struct scc_uart {
+	sccp_t	scc_genscc;
+	uint	scc_res1;	/* Reserved */
+	uint	scc_res2;	/* Reserved */
+	ushort	scc_maxidl;	/* Maximum idle chars */
+	ushort	scc_idlc;	/* temp idle counter */
+	ushort	scc_brkcr;	/* Break count register */
+	ushort	scc_parec;	/* receive parity error counter */
+	ushort	scc_frmec;	/* receive framing error counter */
+	ushort	scc_nosec;	/* receive noise counter */
+	ushort	scc_brkec;	/* receive break condition counter */
+	ushort	scc_brkln;	/* last received break length */
+	ushort	scc_uaddr1;	/* UART address character 1 */
+	ushort	scc_uaddr2;	/* UART address character 2 */
+	ushort	scc_rtemp;	/* Temp storage */
+	ushort	scc_toseq;	/* Transmit out of sequence char */
+	ushort	scc_char1;	/* control character 1 */
+	ushort	scc_char2;	/* control character 2 */
+	ushort	scc_char3;	/* control character 3 */
+	ushort	scc_char4;	/* control character 4 */
+	ushort	scc_char5;	/* control character 5 */
+	ushort	scc_char6;	/* control character 6 */
+	ushort	scc_char7;	/* control character 7 */
+	ushort	scc_char8;	/* control character 8 */
+	ushort	scc_rccm;	/* receive control character mask */
+	ushort	scc_rccr;	/* receive control character register */
+	ushort	scc_rlbc;	/* receive last break character */
+} scc_uart_t;
+
 /* SCC Event and Mask registers when it is used as a UART.
 */
 #define UART_SCCM_GLR		((ushort)0x1000)
@@ -410,6 +451,30 @@ typedef struct scc_enet {
 #define UART_SCCM_BSY		((ushort)0x0004)
 #define UART_SCCM_TX		((ushort)0x0002)
 #define UART_SCCM_RX		((ushort)0x0001)
+
+/* The SCC PMSR when used as a UART.
+*/
+#define SCU_PMSR_FLC		((ushort)0x8000)
+#define SCU_PMSR_SL		((ushort)0x4000)
+#define SCU_PMSR_CL		((ushort)0x3000)
+#define SCU_PMSR_UM		((ushort)0x0c00)
+#define SCU_PMSR_FRZ		((ushort)0x0200)
+#define SCU_PMSR_RZS		((ushort)0x0100)
+#define SCU_PMSR_SYN		((ushort)0x0080)
+#define SCU_PMSR_DRT		((ushort)0x0040)
+#define SCU_PMSR_PEN		((ushort)0x0010)
+#define SCU_PMSR_RPM		((ushort)0x000c)
+#define SCU_PMSR_REVP		((ushort)0x0008)
+#define SCU_PMSR_TPM		((ushort)0x0003)
+#define SCU_PMSR_TEVP		((ushort)0x0003)
+
+/* CPM Transparent mode SCC.
+ */
+typedef struct scc_trans {
+	sccp_t	st_genscc;
+	uint	st_cpres;	/* Preset CRC */
+	uint	st_cmask;	/* Constant mask for CRC */
+} scc_trans_t;
 
 /* CPM interrupts.  There are nearly 32 interrupts generated by CPM
  * channels or devices.  All of these are presented to the PPC core

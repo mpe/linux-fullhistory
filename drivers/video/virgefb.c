@@ -33,10 +33,10 @@
 #include <asm/pgtable.h>
 #include <asm/amigahw.h>
 
-#include "s3blit.h"
-#include "fbcon.h"
-#include "fbcon-cfb8.h"
-#include "fbcon-cfb16.h"
+#include <video/s3blit.h>
+#include <video/fbcon.h>
+#include <video/fbcon-cfb8.h>
+#include <video/fbcon-cfb16.h>
 
 
 #ifdef VIRGEFBDEBUG
@@ -147,7 +147,7 @@ static char virgefb_name[16] = "Cybervision/3D";
 
 
 static unsigned int CyberKey = 0;
-static unsigned char Cyber_colour_table [256][4];
+static unsigned char Cyber_colour_table [256][3];
 static unsigned long CyberMem;
 static unsigned long CyberSize;
 static volatile char *CyberRegs;
@@ -323,7 +323,6 @@ static int Cyber_init(void)
 		Cyber_colour_table [i][0] = i;
 		Cyber_colour_table [i][1] = i;
 		Cyber_colour_table [i][2] = i;
-		Cyber_colour_table [i][3] = 0;
 	}
 
 	/*
@@ -382,7 +381,7 @@ static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
 	if (par->bpp == 8)
 		fix->visual = FB_VISUAL_PSEUDOCOLOR;
 	else
-		fix->visual = FB_VISUAL_DIRECTCOLOR;
+		fix->visual = FB_VISUAL_TRUECOLOR;
 
 	fix->xpanstep = 0;
 	fix->ypanstep = 0;
@@ -445,7 +444,7 @@ static int Cyber_encode_var(struct fb_var_screeninfo *var,
 
 	if (par->bpp == 8) {
 		var->red.offset = 0;
-		var->red.length = 8;
+		var->red.length = 6;
 		var->red.msb_right = 0;
 		var->blue = var->green = var->red;
 	} else {
@@ -511,14 +510,17 @@ static int Cyber_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	 */
 
 	vgawb_3d(0x3c8, (unsigned char) regno);
-	Cyber_colour_table [regno][0] = red & 0xff;
-	Cyber_colour_table [regno][1] = green & 0xff;
-	Cyber_colour_table [regno][2] = blue & 0xff;
-	Cyber_colour_table [regno][3] = transp;
+	red >>= 10;
+	green >>= 10;
+	blue >>= 10;
 
-	vgawb_3d(0x3c9, ((red & 0xff) >> 2));
-	vgawb_3d(0x3c9, ((green & 0xff) >> 2));
-	vgawb_3d(0x3c9, ((blue & 0xff) >> 2));
+	Cyber_colour_table [regno][0] = red;
+	Cyber_colour_table [regno][1] = green;
+	Cyber_colour_table [regno][2] = blue;
+
+	vgawb_3d(0x3c9, red);
+	vgawb_3d(0x3c9, green);
+	vgawb_3d(0x3c9, blue);
 
 	return (0);
 }
@@ -532,12 +534,17 @@ static int Cyber_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 static int Cyber_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 			   u_int *transp, struct fb_info *info)
 {
+	int t;
+
 	if (regno >= 256)
 		return (1);
-	*red	= Cyber_colour_table [regno][0];
-	*green	= Cyber_colour_table [regno][1];
-	*blue	= Cyber_colour_table [regno][2];
-	*transp = Cyber_colour_table [regno][3];
+	t       = Cyber_colour_table [regno][0];
+	*red    = (t<<10) | (t<<4) | (t>>2);
+	t       = Cyber_colour_table [regno][1];
+	*green  = (t<<10) | (t<<4) | (t>>2);
+	t       = Cyber_colour_table [regno][2];
+	*blue   = (t<<10) | (t<<4) | (t>>2);
+	*transp = 0;
 	return (0);
 }
 
@@ -565,9 +572,9 @@ void Cyber_blank(int blank)
 		for (i = 0; i < 256; i++)
 		{
 			vgawb_3d(0x3c8, (unsigned char) i);
-			vgawb_3d(0x3c9, Cyber_colour_table[i][0] >> 2);
-			vgawb_3d(0x3c9, Cyber_colour_table[i][1] >> 2);
-			vgawb_3d(0x3c9, Cyber_colour_table[i][2] >> 2);
+			vgawb_3d(0x3c9, Cyber_colour_table[i][0]);
+			vgawb_3d(0x3c9, Cyber_colour_table[i][1]);
+			vgawb_3d(0x3c9, Cyber_colour_table[i][2]);
 		}
 	}
 }
@@ -752,11 +759,10 @@ static void do_install_cmap(int con, struct fb_info *info)
 	if (con != currcon)
 		return;
 	if (fb_display[con].cmap.len)
-		fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-			    fbhw->setcolreg, info);
+		fb_set_cmap(&fb_display[con].cmap, 1, fbhw->setcolreg, info);
 	else
 		fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-			    &fb_display[con].var, 1, fbhw->setcolreg, info);
+			    1, fbhw->setcolreg, info);
 }
 
 
@@ -861,7 +867,7 @@ static void virgefb_set_disp(int con, struct fb_info *info)
 		break;
 #endif
 	    default:
-		display->dispsw = NULL;
+		display->dispsw = &fbcon_dummy;
 		break;
 	}
 }
@@ -910,8 +916,7 @@ static int virgefb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			    struct fb_info *info)
 {
 	if (con == currcon) /* current console? */
-		return(fb_get_cmap(cmap, &fb_display[con].var,
-				   kspc, fbhw->getcolreg, info));
+		return(fb_get_cmap(cmap, kspc, fbhw->getcolreg, info));
 	else if (fb_display[con].cmap.len) /* non default colormap? */
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
 	else
@@ -936,8 +941,7 @@ static int virgefb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			return(err);
 	}
 	if (con == currcon)		 /* current console? */
-		return(fb_set_cmap(cmap, &fb_display[con].var,
-				   kspc, fbhw->setcolreg, info));
+		return(fb_set_cmap(cmap, kspc, fbhw->setcolreg, info));
 	else
 		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
 	return(0);
@@ -1080,8 +1084,8 @@ static int Cyberfb_switch(int con, struct fb_info *info)
 {
 	/* Do we have to save the colormap? */
 	if (fb_display[currcon].cmap.len)
-		fb_get_cmap(&fb_display[currcon].cmap, &fb_display[currcon].var, 1,
-			    fbhw->getcolreg, info);
+		fb_get_cmap(&fb_display[currcon].cmap, 1, fbhw->getcolreg,
+			    info);
 
 	do_fb_set_var(&fb_display[con].var, 1);
 	currcon = con;
@@ -1143,9 +1147,9 @@ static void fbcon_virge8_bmove(struct display *p, int sy, int sx, int dy,
 			       int dx, int height, int width)
 {
         sx *= 8; dx *= 8; width *= 8;
-        Cyber3D_BitBLT((u_short)sx, (u_short)(sy*p->fontheight), (u_short)dx,
-                       (u_short)(dy*p->fontheight), (u_short)width,
-                       (u_short)(height*p->fontheight));
+        Cyber3D_BitBLT((u_short)sx, (u_short)(sy*fontheight(p)), (u_short)dx,
+                       (u_short)(dy*fontheight(p)), (u_short)width,
+                       (u_short)(height*fontheight(p)));
 }
 
 static void fbcon_virge8_clear(struct vc_data *conp, struct display *p, int sy,
@@ -1155,8 +1159,8 @@ static void fbcon_virge8_clear(struct vc_data *conp, struct display *p, int sy,
 
         sx *= 8; width *= 8;
         bg = attr_bgcol_ec(p,conp);
-        Cyber3D_RectFill((u_short)sx, (u_short)(sy*p->fontheight),
-                         (u_short)width, (u_short)(height*p->fontheight),
+        Cyber3D_RectFill((u_short)sx, (u_short)(sy*fontheight(p)),
+                         (u_short)width, (u_short)(height*fontheight(p)),
                          (u_short)bg);
 }
 

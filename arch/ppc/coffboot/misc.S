@@ -21,13 +21,16 @@ setup_bats:
 	bne	4f
 	ori	4,4,4			/* set up BAT registers for 601 */
 	li	5,0x7f
-	b	5f
-4:	ori	4,4,0xff		/* set up BAT registers for 604 */
-	li	5,2
-	mtdbatu	3,4
-	mtdbatl	3,5
-5:	mtibatu	3,4
+	mtibatu	3,4
 	mtibatl	3,5
+	isync
+	blr
+4:	ori	4,4,0xfe		/* set up BAT registers for 604 */
+	li	5,2
+	mtdbatl	3,5
+	mtdbatu	3,4
+	mtibatl	3,5
+	mtibatu	3,4
 	isync
 	blr
 

@@ -102,6 +102,10 @@
  * failures.
  */
 
+/*
+ * 1998/09/20 -- David Weinehall -- Added slow-down code for buggy PS/2-drives.
+ */
+
 #define FLOPPY_SANITY_CHECK
 #undef  FLOPPY_SILENT_DCL_CLEAR
 
@@ -148,6 +152,8 @@ static int irqdma_allocated = 0;
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/init.h>
+
+static int slow_floppy = 0;
 
 #include <asm/dma.h>
 #include <asm/irq.h>
@@ -1300,6 +1306,9 @@ static void fdc_specify(void)
 
 	/* Convert step rate from microseconds to milliseconds and 4 bits */
 	srt = 16 - (DP->srt*scale_dtr/1000 + NOMINAL_DTR - 1)/NOMINAL_DTR;
+	if( slow_floppy ) {
+		srt = srt / 4;
+	}
 	SUPBOUND(srt, 0xf);
 	INFBOUND(srt, 0);
 
@@ -4026,7 +4035,16 @@ __initfunc(void floppy_setup(char *str, int *ints))
 {
 	int i;
 	int param;
-	if (str)
+	if (str) {
+	/*
+	 * PS/2 floppies have much slower step rates than regular floppies.
+	 * It's been recommended that take about 1/4 of the default speed
+	 * in some more extreme cases.
+	 */
+	if( strcmp(str,"slow") == 0) {
+		slow_floppy = 1;
+		return;
+	}
 		for (i=0; i< ARRAY_SIZE(config_params); i++){
 			if (strcmp(str,config_params[i].name) == 0){
 				if (ints[0])
@@ -4044,6 +4062,7 @@ __initfunc(void floppy_setup(char *str, int *ints))
 				return;
 			}
 		}
+	}
 	if (str) {
 		DPRINT("unknown floppy option [%s]\n", str);
 		

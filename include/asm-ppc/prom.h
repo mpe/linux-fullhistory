@@ -8,10 +8,7 @@
 typedef void *phandle;
 typedef void *ihandle;
 
-#ifndef FB_MAX
-#define FB_MAX	8	/* I don't want to include the whole console stuff */
-#endif
-extern char *prom_display_paths[FB_MAX];
+extern char *prom_display_paths[];
 extern unsigned int prom_num_displays;
 
 struct address_range {
@@ -65,17 +62,18 @@ struct prom_args;
 typedef void (*prom_entry)(struct prom_args *);
 
 /* Prototypes */
-void abort(void);
-void prom_init(int, int, prom_entry);
-void finish_device_tree(void);
-struct device_node *find_devices(const char *name);
-struct device_node *find_type_devices(const char *type);
-struct device_node *find_path_device(const char *path);
-struct device_node *find_compatible_devices(const char *type,
-					    const char *compat);
-struct device_node *find_phandle(phandle);
-unsigned char *get_property(struct device_node *node, const char *name,
-	int *lenp);
-void print_properties(struct device_node *node);
-int call_rtas(const char *service, int nargs, int nret,
-	      unsigned long *outputs, ...);
+extern void abort(void);
+extern void prom_init(int, int, prom_entry);
+extern void prom_print(const char *msg);
+extern void finish_device_tree(void);
+extern struct device_node *find_devices(const char *name);
+extern struct device_node *find_type_devices(const char *type);
+extern struct device_node *find_path_device(const char *path);
+extern struct device_node *find_compatible_devices(const char *type,
+						   const char *compat);
+extern struct device_node *find_phandle(phandle);
+extern unsigned char *get_property(struct device_node *node, const char *name,
+				   int *lenp);
+extern void print_properties(struct device_node *node);
+extern int call_rtas(const char *service, int nargs, int nret,
+		     unsigned long *outputs, ...);

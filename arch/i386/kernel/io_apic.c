@@ -320,11 +320,15 @@ static int __init default_ISA_trigger(int idx)
 
 static int __init default_ISA_polarity(int idx)
 {
+#if 0
 	unsigned int irq = mp_irqs[idx].mpc_dstirq;
 
 	if (irq == 8)
 		return 1;
 	return ISA_ELCR(irq);
+#else
+	return 0;
+#endif
 }
 
 /*
@@ -455,6 +459,7 @@ static int __init MPBIOS_trigger(int idx)
 
 static int __init trigger_flag_broken(int idx)
 {
+#if 0
 	int bus = mp_irqs[idx].mpc_srcbus;
 	int polarity = MPBIOS_polarity(idx);
 	int trigger = MPBIOS_trigger(idx);
@@ -464,7 +469,7 @@ static int __init trigger_flag_broken(int idx)
 		(trigger == 1) /* level */ )
 
 		return 1; /* broken */
-
+#endif
 	return 0;
 }
 
@@ -883,7 +888,7 @@ static void __init construct_default_ISA_mptable(void)
 			continue;
 
 		mp_irqs[pos].mpc_irqtype = mp_INT;
-		mp_irqs[pos].mpc_irqflag = (1 << 2) | 1;	/* High-active edge */
+		mp_irqs[pos].mpc_irqflag = 0;		/* default */
 		mp_irqs[pos].mpc_srcbus = MP_BUS_ISA;
 		mp_irqs[pos].mpc_srcbusirq = i;
 		mp_irqs[pos].mpc_dstapic = 0;

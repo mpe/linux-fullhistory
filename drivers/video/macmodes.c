@@ -12,7 +12,7 @@
 #include <linux/fb.h>
 #include <linux/string.h>
 
-#include "macmodes.h"
+#include <video/macmodes.h>
 
 struct mac_mode {
     int number;
@@ -348,7 +348,7 @@ int mac_vmode_to_var(int vmode, int cmode, struct fb_var_screeninfo *var)
 int mac_var_to_vmode(const struct fb_var_screeninfo *var, int *vmode,
 		     int *cmode)
 {
-    int i = 0;
+    unsigned int i;
 
     if (var->bits_per_pixel <= 8)
 	*cmode = CMODE_8;
@@ -367,7 +367,7 @@ int mac_var_to_vmode(const struct fb_var_screeninfo *var, int *vmode,
 	    continue;
 	if (var->pixclock > mode->pixclock)
 	    continue;
-	if (var->vmode != mode->vmode)
+	if ((var->vmode & FB_VMODE_MASK) != mode->vmode)
 	    continue;
 	*vmode = mode->number;
 	return 0;

@@ -10,16 +10,18 @@
  * 3) -asm - strips elf header and writes out as asm data
  *      useful for generating data for a compressed image
  *                  -- Cort
+ *
+ * Modified for x86 hosted builds by Matt Porter <porter@neta.com>
  */
 
 #ifdef linux
 #include <linux/types.h>
-#include <asm/stat.h>
+/*#include <asm/stat.h>*/
 /*#include <asm/byteorder.h>*/ /* the byte swap funcs don't work here -- Cort */
 #else
 #include <unistd.h>
-#include <sys/stat.h>
 #endif
+#include <sys/stat.h>
 
 #include <stdio.h>
 #include <errno.h>
@@ -164,8 +166,13 @@ void write_prep_partition(int in, int out)
   bzero( block, sizeof block );
  
   /* set entry point and boot image size skipping over elf header */
+#ifdef __i386__
+  *entry = 0x400/*+65536*/;
+  *length = info.st_size+0x400;
+#else
   *entry = cpu_to_le32(0x400/*+65536*/);
   *length = cpu_to_le32(info.st_size+0x400);
+#endif /* __i386__ */
 
   /* sets magic number for msdos partition (used by linux) */
   block[510] = 0x55;
@@ -202,9 +209,18 @@ void write_prep_partition(int in, int out)
   pe->beginning_sector  = cpu_to_le32(1);
 #else
   /* This has to be 0 on the PowerStack? */   
+#ifdef __i386__
+  pe->beginning_sector  = 0;
+#else
   pe->beginning_sector  = cpu_to_le32(0);
+#endif /* __i386__ */
 #endif    
+
+#ifdef __i386__
+  pe->number_of_sectors = 2*18*80-1;
+#else
   pe->number_of_sectors = cpu_to_le32(2*18*80-1);
+#endif /* __i386__ */
 
   write( out, block, sizeof(block) );
   write( out, entry, sizeof(*entry) );

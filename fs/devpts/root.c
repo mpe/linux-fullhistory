@@ -155,10 +155,13 @@ static int devpts_root_lookup(struct inode * dir, struct dentry * dentry)
 		entry = *p++ - '0';
 
 		for ( i = dentry->d_name.len-1 ; i ; i-- ) {
-			if ( *p < '0' || *p > '9' )
+			unsigned int nentry = *p++ - '0';
+			if ( nentry > 9 )
 				return 0;
-			entry *= 10;
-			entry += (*p++ - '0');
+			nentry += entry * 10;
+			if (nentry < entry)
+				return 0;
+			entry = nentry;
 		}
 	}
 

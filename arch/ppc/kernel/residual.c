@@ -1,5 +1,5 @@
 /*
- * $Id: residual.c,v 1.10 1998/07/09 22:23:18 cort Exp $
+ * $Id: residual.c,v 1.12 1998/08/27 23:15:56 paulus Exp $
  *
  * Code to deal with the PReP residual data.
  *
@@ -18,12 +18,12 @@
  *
  */
 
+#include <linux/config.h>
 #include <linux/string.h>
 #include <asm/residual.h>
 #include <asm/pnp.h>
 #include <asm/byteorder.h>
 
-#if 0
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -464,8 +464,6 @@ static void printlargevendor(PnP_TAG_PACKET * pkt, int size) {
 }
 
 static void printlargepacket(PnP_TAG_PACKET * pkt, int size) {
-	int i;
-
 	switch (tag_large_item_name(pkt->S1_Pack.Tag)) {
 	case LargeVendorItem:
 	  printlargevendor(pkt, size);
@@ -477,7 +475,6 @@ static void printlargepacket(PnP_TAG_PACKET * pkt, int size) {
 	}
 }
 static void printpackets(PnP_TAG_PACKET * pkt, const char * cat) {
-	PnP_TAG_PACKET tmp;
 	if (pkt->S1_Pack.Tag== END_TAG) {
 		printk("  No packets describing %s resources.\n", cat);
 		return;
@@ -501,10 +498,8 @@ static void printpackets(PnP_TAG_PACKET * pkt, const char * cat) {
 void print_residual_device_info(void)
 {
 	int i;
-	union _PnP_TAG_PACKET *pkt;
 	PPC_DEVICE *dev;
 #define did dev->DeviceId
-return;
 	
 	/* make sure we have residual data first */
 	if ( res->ResidualLength == 0 )
@@ -552,12 +547,18 @@ return;
 		       PnP_BASE_TYPES[did.BaseType],
 		       PnP_SUB_TYPE_STR(did.BaseType,did.SubType),
 		       s);
-		printpackets( (union _PnP_TAG_PACKET *)
-		      &res->DevicePnPHeap[dev->AllocatedOffset], "allocated");
-		printpackets( (union _PnP_TAG_PACKET *)
-		      &res->DevicePnPHeap[dev->PossibleOffset], "possible");
-		printpackets( (union _PnP_TAG_PACKET *)
-		      &res->DevicePnPHeap[dev->CompatibleOffset], "compatible");
+		if ( dev->AllocatedOffset )
+			printpackets( (union _PnP_TAG_PACKET *)
+				      &res->DevicePnPHeap[dev->AllocatedOffset],
+				      "allocated");
+		if ( dev->PossibleOffset )
+			printpackets( (union _PnP_TAG_PACKET *)
+				      &res->DevicePnPHeap[dev->PossibleOffset],
+				      "possible");
+		if ( dev->CompatibleOffset )
+			printpackets( (union _PnP_TAG_PACKET *)
+				      &res->DevicePnPHeap[dev->CompatibleOffset],
+				      "compatible");
 	}
 }
 
@@ -728,7 +729,6 @@ void print_residual_device_info(void)
 }
 #endif	
 
-#endif /* 0 */
 /* Returns the device index in the residual data, 
    any of the search items may be set as -1 for wildcard,
    DevID number field (second halfword) is big endian ! 
@@ -804,6 +804,28 @@ PPC_DEVICE *residual_find_device(unsigned long BusMask,
 	return 0;
 }
 
+PPC_DEVICE *residual_find_device_id(unsigned long BusMask,
+			 unsigned short DevID,
+			 int BaseType,
+			 int SubType,
+			 int Interface,
+			 int n)
+{
+	int i;
+	if ( !res->ResidualLength ) return NULL;
+	for (i=0; i<res->ActualNumDevices; i++) {
+#define Dev res->Devices[i].DeviceId
+		if ( (Dev.BusId&BusMask)                                  &&
+		     (BaseType==-1 || Dev.BaseType==BaseType)             &&
+		     (SubType==-1 || Dev.SubType==SubType)                &&
+		     (Interface==-1 || Dev.Interface==Interface)          &&
+		     (DevID==0xffff || (Dev.DevId&0xffff) == DevID)	  &&
+		     !(n--) ) return res->Devices+i;
+#undef Dev
+	}
+	return 0;
+}
+
 PnP_TAG_PACKET *PnP_find_packet(unsigned char *p,
 				unsigned packet_tag,
 				int n)
@@ -850,4 +872,3 @@ PnP_TAG_PACKET *PnP_find_large_vendor_packet(unsigned char *p,
 	};
 	return 0; /* not found */
 }
-

@@ -29,7 +29,12 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <asm/irq.h>
+#ifdef CONFIG_MBX
 #include <asm/mbx.h>
+#endif
+#ifdef CONFIG_FADS
+#include <asm/fads.h>
+#endif
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/8xx_immap.h>
@@ -52,13 +57,13 @@ static	void	cpm_interrupt(int irq, void * dev, struct pt_regs * regs);
 static	void	cpm_error_interrupt(void *);
 
 void
-mbx_cpm_reset(uint host_page_addr)
+m8xx_cpm_reset(uint host_page_addr)
 {
 	volatile immap_t	 *imp;
 	volatile cpm8xx_t	*commproc;
 	pte_t			*pte;
 
-	imp = (immap_t *)MBX_IMAP_ADDR;
+	imp = (immap_t *)IMAP_ADDR;
 	commproc = (cpm8xx_t *)&imp->im_cpm;
 
 #ifdef notdef
@@ -78,6 +83,10 @@ mbx_cpm_reset(uint host_page_addr)
 #endif
 
 	/* Set SDMA Bus Request priority 5.
+	 * On 860T, this also enables FEC priority 6.  I am not sure
+	 * this is what we realy want for some applications, but the
+	 * manual recommends it.
+	 * Bit 25, FAM can also be set to use FEC aggressive mode (860T).
 	*/
 	imp->im_siu_conf.sc_sdcr = 1;
 
@@ -99,10 +108,10 @@ mbx_cpm_reset(uint host_page_addr)
 
 	/* Initialize the CPM interrupt controller.
 	*/
-	((immap_t *)MBX_IMAP_ADDR)->im_cpic.cpic_cicr =
+	((immap_t *)IMAP_ADDR)->im_cpic.cpic_cicr =
 	    (CICR_SCD_SCC4 | CICR_SCC_SCC3 | CICR_SCB_SCC2 | CICR_SCA_SCC1) |
 		((CPM_INTERRUPT/2) << 13) | CICR_HP_MASK;
-	((immap_t *)MBX_IMAP_ADDR)->im_cpic.cpic_cimr = 0;
+	((immap_t *)IMAP_ADDR)->im_cpic.cpic_cimr = 0;
 	/* Set our interrupt handler with the core CPU.
 	*/
 	if (request_irq(CPM_INTERRUPT, cpm_interrupt, 0, "cpm", NULL) != 0)
@@ -111,7 +120,7 @@ mbx_cpm_reset(uint host_page_addr)
 	/* Install our own error handler.
 	*/
 	cpm_install_handler(CPMVEC_ERROR, cpm_error_interrupt, NULL);
-	((immap_t *)MBX_IMAP_ADDR)->im_cpic.cpic_cicr |= CICR_IEN;
+	((immap_t *)IMAP_ADDR)->im_cpic.cpic_cicr |= CICR_IEN;
 }
 
 /* CPM interrupt controller interrupt.
@@ -124,19 +133,19 @@ cpm_interrupt(int irq, void * dev, struct pt_regs * regs)
 	/* Get the vector by setting the ACK bit and then reading
 	 * the register.
 	 */
-	((volatile immap_t *)MBX_IMAP_ADDR)->im_cpic.cpic_civr = 1;
-	vec = ((volatile immap_t *)MBX_IMAP_ADDR)->im_cpic.cpic_civr;
+	((volatile immap_t *)IMAP_ADDR)->im_cpic.cpic_civr = 1;
+	vec = ((volatile immap_t *)IMAP_ADDR)->im_cpic.cpic_civr;
 	vec >>= 11;
 
 	if (cpm_vecs[vec].handler != 0)
 		(*cpm_vecs[vec].handler)(cpm_vecs[vec].dev_id);
 	else
-		((immap_t *)MBX_IMAP_ADDR)->im_cpic.cpic_cimr &= ~(1 << vec);
+		((immap_t *)IMAP_ADDR)->im_cpic.cpic_cimr &= ~(1 << vec);
 
 	/* After servicing the interrupt, we have to remove the status
 	 * indicator.
 	 */
-	((immap_t *)MBX_IMAP_ADDR)->im_cpic.cpic_cisr |= (1 << vec);
+	((immap_t *)IMAP_ADDR)->im_cpic.cpic_cisr |= (1 << vec);
 	
 }
 
@@ -160,7 +169,7 @@ cpm_install_handler(int vec, void (*handler)(void *), void *dev_id)
 			(uint)handler, (uint)cpm_vecs[vec].handler);
 	cpm_vecs[vec].handler = handler;
 	cpm_vecs[vec].dev_id = dev_id;
-	((immap_t *)MBX_IMAP_ADDR)->im_cpic.cpic_cimr |= (1 << vec);
+	((immap_t *)IMAP_ADDR)->im_cpic.cpic_cimr |= (1 << vec);
 }
 
 /* Allocate some memory from the dual ported ram.  We may want to
@@ -168,7 +177,7 @@ cpm_install_handler(int vec, void (*handler)(void *), void *dev_id)
  * citizen.
  */
 uint
-mbx_cpm_dpalloc(uint size)
+m8xx_cpm_dpalloc(uint size)
 {
 	uint	retloc;
 
@@ -185,7 +194,7 @@ mbx_cpm_dpalloc(uint size)
  * UART "fifos" and the like.
  */
 uint
-mbx_cpm_hostalloc(uint size)
+m8xx_cpm_hostalloc(uint size)
 {
 	uint	retloc;
 
@@ -201,13 +210,13 @@ mbx_cpm_hostalloc(uint size)
 /* Set a baud rate generator.  This needs lots of work.  There are
  * four BRGs, any of which can be wired to any channel.
  * The internal baud rate clock is the system clock divided by 16.
- * I need to find a way to get this system clock frequency, which is
- * part of the VPD.......
+ * This assumes the baudrate is 16x oversampled by the uart.
  */
-#define BRG_INT_CLK	(40000000/16)
+#define BRG_INT_CLK	(((bd_t *)res)->bi_intfreq * 1000000)
+#define BRG_UART_CLK	(BRG_INT_CLK/16)
 
 void
-mbx_cpm_setbrg(uint brg, uint rate)
+m8xx_cpm_setbrg(uint brg, uint rate)
 {
 	volatile uint	*bp;
 
@@ -215,5 +224,6 @@ mbx_cpm_setbrg(uint brg, uint rate)
 	*/
 	bp = (uint *)&cpmp->cp_brgc1;
 	bp += brg;
-	*bp = ((BRG_INT_CLK / rate) << 1) | CPM_BRG_EN;
+	*bp = ((BRG_UART_CLK / rate) << 1) | CPM_BRG_EN;
 }
+

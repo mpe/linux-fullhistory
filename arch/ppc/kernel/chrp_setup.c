@@ -11,6 +11,7 @@
  */
 
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -29,6 +30,7 @@
 #include <linux/blk.h>
 #include <linux/ioport.h>
 #include <linux/console.h>
+#include <linux/pci.h>
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
@@ -220,3 +222,46 @@ chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 	conswitchp = &dummy_con;
 #endif
 }
+
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
+
+unsigned int chrp_ide_irq = 0;
+int chrp_ide_ports_known = 0;
+ide_ioreg_t chrp_ide_regbase[MAX_HWIFS];
+ide_ioreg_t chrp_idedma_regbase;
+
+void chrp_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
+{
+        ide_ioreg_t port = base;
+        int i = 8;
+
+        while (i--)
+                *p++ = port++;
+        *p++ = port;
+        if (irq != NULL)
+                *irq = chrp_ide_irq;
+}
+
+void chrp_ide_probe(void) {
+
+        struct pci_dev *pdev = pci_find_device(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105, NULL);
+
+        chrp_ide_ports_known = 1;
+
+        if(pdev) {
+                chrp_ide_regbase[0]=pdev->base_address[0] &
+                        PCI_BASE_ADDRESS_IO_MASK;
+                chrp_ide_regbase[1]=pdev->base_address[2] &
+                        PCI_BASE_ADDRESS_IO_MASK;
+                chrp_idedma_regbase=pdev->base_address[4] &
+                        PCI_BASE_ADDRESS_IO_MASK;
+                chrp_ide_irq=pdev->irq;
+        }
+}
+
+EXPORT_SYMBOL(chrp_ide_irq);
+EXPORT_SYMBOL(chrp_ide_ports_known);
+EXPORT_SYMBOL(chrp_ide_regbase);
+EXPORT_SYMBOL(chrp_ide_probe);
+
+#endif

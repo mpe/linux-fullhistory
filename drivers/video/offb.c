@@ -32,9 +32,9 @@
 #include <asm/io.h>
 #include <asm/prom.h>
 
-#include "fbcon.h"
-#include "fbcon-cfb8.h"
-#include "macmodes.h"
+#include <video/fbcon.h>
+#include <video/fbcon-cfb8.h>
+#include <video/macmodes.h>
 
 
 static int currcon = 0;
@@ -175,7 +175,8 @@ static int offb_set_var(struct fb_var_screeninfo *var, int con,
 			struct fb_info *info)
 {
     struct display *display;
-    int oldbpp = -1, err;
+    unsigned int oldbpp = 0;
+    int err;
     int activate = var->activate;
     struct fb_info_offb *info2 = (struct fb_info_offb *)info;
 
@@ -229,8 +230,7 @@ static int offb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			 struct fb_info *info)
 {
     if (con == currcon) /* current console? */
-	return fb_get_cmap(cmap, &fb_display[con].var, kspc, offb_getcolreg,
-			   info);
+	return fb_get_cmap(cmap, kspc, offb_getcolreg, info);
     else if (fb_display[con].cmap.len) /* non default colormap? */
 	fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
     else
@@ -258,8 +258,7 @@ static int offb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	    return err;
     }
     if (con == currcon)			/* current console? */
-	return fb_set_cmap(cmap, &fb_display[con].var, kspc, offb_setcolreg,
-			   info);
+	return fb_set_cmap(cmap, kspc, offb_setcolreg, info);
     else
 	fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
     return 0;
@@ -279,12 +278,18 @@ extern void atyfb_of_init(struct device_node *dp);
 #ifdef CONFIG_FB_S3TRIO
 extern void s3triofb_init_of(struct device_node *dp);
 #endif /* CONFIG_FB_S3TRIO */
+#ifdef CONFIG_FB_IMSTT
+extern void imsttfb_of_init(struct device_node *dp);
+#endif
 #ifdef CONFIG_FB_CT65550
 extern void chips_of_init(struct device_node *dp);
 #endif /* CONFIG_FB_CT65550 */
 #ifdef CONFIG_FB_CONTROL
 extern void control_of_init(struct device_node *dp);
 #endif /* CONFIG_FB_CONTROL */
+#ifdef CONFIG_FB_VALKYRIE
+extern void valkyrie_of_init(struct device_node *dp);
+#endif /* CONFIG_FB_VALKYRIE */
 #ifdef CONFIG_FB_PLATINUM
 extern void platinum_of_init(struct device_node *dp);
 #endif /* CONFIG_FB_PLATINUM */
@@ -297,7 +302,8 @@ extern void platinum_of_init(struct device_node *dp);
 __initfunc(void offb_init(void))
 {
     struct device_node *dp;
-    int dpy, i, *pp, len;
+    int i, *pp;
+    unsigned int dpy, len;
     unsigned *up, address;
     struct fb_fix_screeninfo *fix;
     struct fb_var_screeninfo *var;
@@ -319,6 +325,12 @@ __initfunc(void offb_init(void))
             if (s3triofb_init_of(dp))
                 continue;
 #endif /* CONFIG_FB_S3TRIO */
+#ifdef CONFIG_FB_IMSTT
+	    if (!strncmp(dp->name, "IMS,tt128mb", 11)) {
+		imsttfb_of_init(dp);
+		continue;
+	    }
+#endif
 #ifdef CONFIG_FB_CT65550
 	    if (!strcmp(dp->name, "chips65550")) {
 		chips_of_init(dp);
@@ -331,9 +343,14 @@ __initfunc(void offb_init(void))
 			continue;
 		}
 #endif /* CONFIG_FB_CONTROL */
+#ifdef CONFIG_FB_VALKYRIE
+		if(!strcmp(dp->name, "valkyrie")) {
+			valkyrie_of_init(dp);
+			continue;
+		}
+#endif /* CONFIG_FB_VALKYRIE */
 #ifdef CONFIG_FB_PLATINUM
 	    if (!strncmp(dp->name, "platinum",8)) {
-	    	printk("jonh: offb_init sees device node %s\n", dp->name);
 		platinum_of_init(dp);
 		continue;
 	    }
@@ -341,6 +358,10 @@ __initfunc(void offb_init(void))
 	}
 
 	info = kmalloc(sizeof(struct fb_info_offb), GFP_ATOMIC);
+	if (info == 0)
+	    continue;
+	memset(info, 0, sizeof(*info));
+
 	fix = &info->fix;
 	var = &info->var;
 	disp = &info->disp;
@@ -380,6 +401,11 @@ __initfunc(void offb_init(void))
 		continue;
 	    }
 	    address = (u_long)dp->addrs[i].address;
+
+		/* kludge for valkyrie */
+	    if (strcmp(dp->name, "valkyrie") == 0) 
+			address += 0x1000;
+
 	}
 	fix->smem_start = (char *)address;
 	fix->type = FB_TYPE_PACKED_PIXELS;
@@ -430,7 +456,7 @@ __initfunc(void offb_init(void))
 #ifdef FBCON_HAS_CFB8
 	disp->dispsw = &fbcon_cfb8;
 #else
-	disp->dispsw = NULL;
+	disp->dispsw = &fbcon_dummy;
 #endif
 	disp->scrollmode = SCROLL_YREDRAW;
 
@@ -505,8 +531,7 @@ static int offbcon_switch(int con, struct fb_info *info)
 {
     /* Do we have to save the colormap? */
     if (fb_display[currcon].cmap.len)
-	fb_get_cmap(&fb_display[currcon].cmap, &fb_display[currcon].var, 1,
-		    offb_getcolreg, info);
+	fb_get_cmap(&fb_display[currcon].cmap, 1, offb_getcolreg, info);
 
     currcon = con;
     /* Install new colormap */
@@ -561,9 +586,11 @@ static int offb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 
     if (!info2->cmap_adr || regno > 255)
 	return 1;
-    *red = info2->palette[regno].red;
-    *green = info2->palette[regno].green;
-    *blue = info2->palette[regno].blue;
+    
+    *red = (info2->palette[regno].red<<8) | info2->palette[regno].red;
+    *green = (info2->palette[regno].green<<8) | info2->palette[regno].green;
+    *blue = (info2->palette[regno].blue<<8) | info2->palette[regno].blue;
+    *transp = 0;
     return 0;
 }
 
@@ -581,6 +608,10 @@ static int offb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 
     if (!info2->cmap_adr || regno > 255)
 	return 1;
+    red >>= 8;
+    green >>= 8;
+    blue >>= 8;
+
     info2->palette[regno].red = red;
     info2->palette[regno].green = green;
     info2->palette[regno].blue = blue;
@@ -601,12 +632,10 @@ static void do_install_cmap(int con, struct fb_info *info)
     if (con != currcon)
 	return;
     if (fb_display[con].cmap.len)
-	fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-		    offb_setcolreg, info);
+	fb_set_cmap(&fb_display[con].cmap, 1, offb_setcolreg, info);
     else
 	fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-				    &fb_display[con].var, 1, offb_setcolreg,
-				    info);
+				    1, offb_setcolreg, info);
 }
 
 

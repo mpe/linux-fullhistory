@@ -1,7 +1,7 @@
 /*
  * misc.c
  *
- * $Id: misc.c,v 1.49 1998/07/26 21:29:15 geert Exp $
+ * $Id: misc.c,v 1.52 1998/09/19 01:21:24 cort Exp $
  * 
  * Adapted for PowerPC by Gary Thomas
  *
@@ -9,6 +9,7 @@
  * One day to be replaced by a single bootloader for chrp/prep/pmac. -- Cort
  */
 
+#include <linux/types.h>
 #include "../coffboot/zlib.h"
 #include "asm/residual.h"
 #include <elf.h>
@@ -18,7 +19,9 @@
 #include <asm/mmu.h>
 #ifdef CONFIG_MBX
 #include <asm/mbx.h>
-bd_t	hold_board_info;
+#endif
+#ifdef CONFIG_FADS
+#include <asm/fads.h>
 #endif
 
 /*
@@ -31,8 +34,30 @@ bd_t	hold_board_info;
 char *avail_ram;
 char *end_avail;
 
-char cmd_line[256];
-RESIDUAL hold_residual;
+/* Because of the limited amount of memory on the MBX, it presents
+ * loading problems.  The biggest is that we load this boot program
+ * into a relatively low memory address, and the Linux kernel Bss often
+ * extends into this space when it get loaded.  When the kernel starts
+ * and zeros the BSS space, it also writes over the information we
+ * save here and pass to the kernel (command line and board info).
+ * On the MBX we grab some known memory holes to hold this information.
+ */
+char	cmd_buf[256];
+char	*cmd_line = cmd_buf;
+
+#if defined(CONFIG_MBX) || defined(CONFIG_FADS)
+char	*root_string = "root=/dev/nfs";
+char	*nfsaddrs_string = "nfsaddrs=";
+char	*nfsroot_string = "nfsroot=";
+char	*defroot_string = "/sys/mbxroot";
+int	do_ipaddrs(char **cmd_cp, int echo);
+void	do_nfsroot(char **cmd_cp, char *dp);
+int	strncmp(const char * cs,const char * ct,size_t count);
+char	*strrchr(const char * s, int c);
+#endif
+
+RESIDUAL hold_resid_buf;
+RESIDUAL *hold_residual = &hold_resid_buf;
 unsigned long initrd_start = 0, initrd_end = 0;
 char *zimage_start;
 int zimage_size;
@@ -60,7 +85,7 @@ void exit()
 	while(1); 
 }
 
-#ifndef CONFIG_MBX
+#if !defined(CONFIG_MBX) && !defined(CONFIG_FADS)
 static void clear_screen()
 {
 	int i, j;
@@ -311,6 +336,9 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	unsigned long i;
 	BATU *u;
 	BATL *l;
+#if defined(CONFIG_MBX) || defined(CONFIG_KB)
+	char	*dp;
+#endif
 
 	lines = 25;
 	cols = 80;
@@ -318,7 +346,7 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	orig_y = 24;
 
 	
-#ifndef CONFIG_MBX
+#if !defined(CONFIG_MBX) && !defined(CONFIG_FADS)
 	/*
 	 * IBM's have the MMU on, so we have to disable it or
 	 * things get really unhappy in the kernel when
@@ -331,18 +359,30 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	vga_init(0xC0000000);
 
 	if (residual)
-		memcpy(&hold_residual,residual,sizeof(RESIDUAL));
+		memcpy(hold_residual,residual,sizeof(RESIDUAL));
 #else /* CONFIG_MBX */
+	
+	/* Grab some space for the command line and board info.  Since
+	 * we no longer use the ELF header, but it was loaded, grab
+	 * that space.
+	 */
+	cmd_line = (char *)(load_addr - 0x10000);
+	hold_residual = (RESIDUAL *)(cmd_line + sizeof(cmd_buf));
 	/* copy board data */
 	if (residual)
-		_bcopy((char *)residual, (char *)&hold_board_info,
-		       sizeof(hold_board_info));
+		memcpy(hold_residual,residual,sizeof(bd_t));
 #endif /* CONFIG_MBX */
 
 	/* MBX/prep sometimes put the residual/board info at the end of mem 
 	 * assume 16M for now  -- Cort
+	 * To boot on standard MBX boards with 4M, we can't use initrd,
+	 * and we have to assume less memory.  -- Dan
 	 */
-	end_avail = (char *)0x01000000;
+	if ( INITRD_OFFSET )
+		end_avail = (char *)0x01000000;
+	else
+		end_avail = (char *)0x00400000;
+
 	/* let residual data tell us it's higher */
 	if ( (unsigned long)residual > 0x00800000 )
 		end_avail = (char *)PAGE_ALIGN((unsigned long)residual);
@@ -361,23 +401,19 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	{
 		puts("board data at: "); puthex((unsigned long)residual);
 		puts(" ");
-#ifdef CONFIG_MBX	
+#if defined(CONFIG_MBX) || defined(CONFIG_FADS)
 		puthex((unsigned long)((unsigned long)residual + sizeof(bd_t)));
 #else
 		puthex((unsigned long)((unsigned long)residual + sizeof(RESIDUAL)));
 #endif	
 		puts("\n");
 		puts("relocated to:  ");
-#ifdef CONFIG_MBX
-		puthex((unsigned long)&hold_board_info);
-#else
-		puthex((unsigned long)&hold_residual);
-#endif
+		puthex((unsigned long)hold_residual);
 		puts(" ");
-#ifdef CONFIG_MBX
-		puthex((unsigned long)((unsigned long)&hold_board_info + sizeof(bd_t)));
+#if defined(CONFIG_MBX) || defined(CONFIG_FADS)
+		puthex((unsigned long)((unsigned long)hold_residual + sizeof(bd_t)));
 #else
-		puthex((unsigned long)((unsigned long)&hold_residual + sizeof(RESIDUAL)));
+		puthex((unsigned long)((unsigned long)hold_residual + sizeof(RESIDUAL)));
 #endif	
 		puts("\n");
 	}
@@ -411,8 +447,11 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	/*
 	 * don't relocate the zimage if it was loaded above 16M since
 	 * things get weird if we try to relocate -- Cort
+	 * We don't relocate zimage on a base MBX board because of
+	 * insufficient memory.  In this case we don't have initrd either,
+	 * so use that as an indicator.  -- Dan
 	 */
-	if ( (unsigned long)zimage_start <= 0x01000000 )
+	if (( (unsigned long)zimage_start <= 0x01000000 ) && initrd_start)
 	{
 		memcpy ((void *)PAGE_ALIGN(-PAGE_SIZE+(unsigned long)end_avail-zimage_size),
 			(void *)zimage_start, zimage_size );	
@@ -439,6 +478,7 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 		 * max ram is.
 		 * -- Cort
 		 */
+#if 0		
 		memcpy ((void *)PAGE_ALIGN(-PAGE_SIZE+(unsigned long)end_avail-INITRD_SIZE),
 			(void *)initrd_start,
 			INITRD_SIZE );
@@ -447,20 +487,26 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 		end_avail = (char *)initrd_start;
 		puts("relocated to:  "); puthex(initrd_start);
 		puts(" "); puthex(initrd_end); puts("\n");
+#endif		
 	}
 
+#ifndef CONFIG_MBX
 	/* this is safe, just use it */
+	/* I don't know why it didn't work for me on the MBX with 20 MB
+	 * memory.  I guess something was saved up there, but I can't
+	 * figure it out......we are running on luck.  -- Dan.
+	 */
 	avail_ram = (char *)0x00400000;
 	end_avail = (char *)0x00600000;
+#endif
 	puts("avail ram:     "); puthex((unsigned long)avail_ram); puts(" ");
 	puthex((unsigned long)end_avail); puts("\n");
 
 	
-#ifndef CONFIG_MBX
+#if !defined(CONFIG_MBX) && !defined(CONFIG_FADS)
 	CRT_tstc();  /* Forces keyboard to be initialized */
 #endif
-#ifdef CONFIG_PREP
-/* I need to fix this for mbx -- Cort */
+
 	puts("\nLinux/PPC load: ");
 	timer = 0;
 	cp = cmd_line;
@@ -472,6 +518,13 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 						cp--;
 						puts("\b \b");
 					}
+#ifdef CONFIG_MBX
+				  } else if (ch == '?') {
+					if (!do_ipaddrs(&cp, 1)) {
+						  *cp++ = ch;
+						  putc(ch);
+					}
+#endif
 				} else {
 					*cp++ = ch;
 					putc(ch);
@@ -482,12 +535,38 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 		udelay(1000);  /* 1 msec */
 	}
 	*cp = 0;
+#ifdef CONFIG_MBX
+	/* The MBX does not currently have any default boot strategy.
+	 * If the command line is not filled in, we will automatically
+	 * create the default network boot.
+	 */
+	if (cmd_line[0] == 0) {
+		dp = root_string;
+		while (*dp != 0)
+			*cp++ = *dp++;
+		*cp++ = ' ';
+
+		dp = nfsaddrs_string;
+		while (*dp != 0)
+			*cp++ = *dp++;
+		dp = cp;
+		do_ipaddrs(&cp, 0);
+		*cp++ = ' ';
+
+		/* Add the server address to the root file system path.
+		*/
+		dp = strrchr(dp, ':');
+		dp++;
+		do_nfsroot(&cp, dp);
+		*cp = 0;
+	}
+#endif
 	puts("\n");
-#endif /* CONFIG_PREP */
+
 	/* mappings on early boot can only handle 16M */
-	if ( (int)(&cmd_line[0]) > (16<<20))
+	if ( (int)(cmd_line[0]) > (16<<20))
 		puts("cmd_line located > 16M\n");
-	if ( (int)&hold_residual > (16<<20))
+	if ( (int)hold_residual > (16<<20))
 		puts("hold_residual located > 16M\n");
 	if ( initrd_start > (16<<20))
 		puts("initrd_start located > 16M\n");
@@ -497,12 +576,152 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	gunzip(0, 0x400000, zimage_start, &zimage_size);
 	puts("done.\n");
 	puts("Now booting the kernel\n");
-#ifndef CONFIG_MBX	
-	return (unsigned long)&hold_residual;
-#else
-	return (unsigned long)&hold_board_info;
-#endif	
+	return (unsigned long)hold_residual;
 }
+
+#ifdef CONFIG_MBX
+int
+do_ipaddrs(char **cmd_cp, int echo)
+{
+	char	*cp, *ip, ch;
+	unsigned char	ipd;
+	int	i, j, retval;
+
+	/* We need to create the string:
+	 *	<my_ip>:<serv_ip>
+	 */
+	cp = *cmd_cp;
+	retval = 0;
+
+	if ((cp - 9) >= cmd_line) {
+		if (strncmp(cp - 9, "nfsaddrs=", 9) == 0) {
+			ip = (char *)0xfa000060;
+			retval = 1;
+			for (j=0; j<2; j++) {
+				for (i=0; i<4; i++) {
+					ipd = *ip++;
+
+					ch = ipd/100;
+					if (ch) {
+						ch += '0';
+						if (echo)
+							putc(ch);
+						*cp++ = ch;
+						ipd -= 100 * (ch - '0');
+					}
+
+					ch = ipd/10;
+					if (ch) {
+						ch += '0';
+						if (echo)
+							putc(ch);
+						*cp++ = ch;
+						ipd -= 10 * (ch - '0');
+					}
+
+					ch = ipd + '0';
+					if (echo)
+						putc(ch);
+					*cp++ = ch;
+
+					ch = '.';
+					if (echo)
+						putc(ch);
+					*cp++ = ch;
+				}
+
+				/* At the end of the string, remove the
+				 * '.' and replace it with a ':'.
+				 */
+				*(cp - 1) = ':';
+				if (echo) {
+					putc('\b'); putc(':');
+				}
+			}
+
+			/* At the end of the second string, remove the
+			 * '.' from both the command line and the
+			 * screen.
+			 */
+			--cp;
+			putc('\b'); putc(' '); putc('\b');
+		}
+	}
+	*cmd_cp = cp;
+	return(retval);
+}
+
+void
+do_nfsroot(char **cmd_cp, char *dp)
+{
+	char	*cp, *rp, *ep;
+
+	/* The boot argument (i.e /sys/mbxroot/zImage) is stored
+	 * at offset 0x0078 in NVRAM.  We use this path name to
+	 * construct the root file system path.
+	 */
+	cp = *cmd_cp;
+
+	/* build command string.
+	*/
+	rp = nfsroot_string;
+	while (*rp != 0)
+		*cp++ = *rp++;
+
+	/* Add the server address to the path.
+	*/
+	while (*dp != ' ')
+		*cp++ = *dp++;
+	*cp++ = ':';
+
+	rp = (char *)0xfa000078;
+	ep = strrchr(rp, '/');
+
+	if (ep != 0) {
+		while (rp < ep)
+			*cp++ = *rp++;
+	}
+	else {
+		rp = defroot_string;
+		while (*rp != 0)
+			*cp++ = *rp++;
+	}
+
+	*cmd_cp = cp;
+}
+
+size_t strlen(const char * s)
+{
+	const char *sc;
+
+	for (sc = s; *sc != '\0'; ++sc)
+		/* nothing */;
+	return sc - s;
+}
+
+int strncmp(const char * cs,const char * ct,size_t count)
+{
+	register signed char __res = 0;
+
+	while (count) {
+		if ((__res = *cs - *ct++) != 0 || !*cs++)
+			break;
+		count--;
+	}
+
+	return __res;
+}
+
+char * strrchr(const char * s, int c)
+{
+       const char *p = s + strlen(s);
+       do {
+           if (*p == (char)c)
+               return (char *)p;
+       } while (--p >= s);
+       return NULL;
+}
+#endif
 
 void puthex(unsigned long val)
 {

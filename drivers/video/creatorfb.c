@@ -1,10 +1,9 @@
-/* $Id: creatorfb.c,v 1.10 1998/07/25 22:54:37 davem Exp $
+/* $Id: creatorfb.c,v 1.15 1998/09/04 15:43:40 jj Exp $
  * creatorfb.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@ultra.linux.cz)
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -20,7 +19,7 @@
 #include <linux/init.h>
 #include <linux/selection.h>
 
-#include "sbusfb.h"
+#include <video/sbusfb.h>
 
 #define	FFB_SFB8R_VOFF		0x00000000
 #define	FFB_SFB8G_VOFF		0x00400000
@@ -69,56 +68,141 @@
 #define	FFB_PROM_POFF		0x00000000
 #define	FFB_EXP_POFF		0x00200000
 
-#define FFB_Y_BYTE_ADDR_SHIFT          11
-#define FFB_Y_ADDR_SHIFT               13
+/* Draw operations */
+#define FFB_DRAWOP_DOT		0x00
+#define FFB_DRAWOP_AADOT	0x01
+#define FFB_DRAWOP_BRLINECAP	0x02
+#define FFB_DRAWOP_BRLINEOPEN	0x03
+#define FFB_DRAWOP_DDLINE	0x04
+#define FFB_DRAWOP_AALINE	0x05
+#define FFB_DRAWOP_TRIANGLE	0x06
+#define FFB_DRAWOP_POLYGON	0x07
+#define FFB_DRAWOP_RECTANGLE	0x08
+#define FFB_DRAWOP_FASTFILL	0x09
+#define FFB_DRAWOP_BCOPY	0x0a
+#define FFB_DRAWOP_VSCROLL	0x0b
 
-#define FFB_PPC_ACE_DISABLE             1
-#define FFB_PPC_ACE_AUX_ADD             3
-#define FFB_PPC_ACE_SHIFT              18
-#define FFB_PPC_DCE_DISABLE             2
-#define FFB_PPC_DCE_SHIFT              16
-#define FFB_PPC_ABE_DISABLE             2
-#define FFB_PPC_ABE_SHIFT              14
-#define FFB_PPC_VCE_DISABLE             1
-#define FFB_PPC_VCE_2D                  2
-#define FFB_PPC_VCE_SHIFT              12
-#define FFB_PPC_APE_DISABLE             2
-#define FFB_PPC_APE_SHIFT              10
-#define FFB_PPC_CS_VARIABLE             2
-#define FFB_PPC_CS_SHIFT                0
-
-#define FFB_FBC_WB_A                    1
-#define FFB_FBC_WB_SHIFT               29
-#define FFB_FBC_PGE_MASK                3
-#define FFB_FBC_BE_SHIFT                4
-#define FFB_FBC_GE_SHIFT                2
-#define FFB_FBC_RE_SHIFT                0
+/* Pixel processor control */
+/* Force WID */
+#define FFB_PPC_FW_DISABLE	0x800000
+#define FFB_PPC_FW_ENABLE	0xc00000
+/* Auxiliary clip */
+#define FFB_PPC_ACE_DISABLE	0x040000
+#define FFB_PPC_ACE_AUX_SUB	0x080000
+#define FFB_PPC_ACE_AUX_ADD	0x0c0000
+/* Depth cue */
+#define FFB_PPC_DCE_DISABLE	0x020000
+#define FFB_PPC_DCE_ENABLE	0x030000
+/* Alpha blend */
+#define FFB_PPC_ABE_DISABLE	0x008000
+#define FFB_PPC_ABE_ENABLE	0x00c000
+/* View clip */
+#define FFB_PPC_VCE_DISABLE	0x001000
+#define FFB_PPC_VCE_2D		0x002000
+#define FFB_PPC_VCE_3D		0x003000
+/* Area pattern */
+#define FFB_PPC_APE_DISABLE	0x000800
+#define FFB_PPC_APE_ENABLE	0x000c00
+/* Transparent background */
+#define FFB_PPC_TBE_OPAQUE	0x000200
+#define FFB_PPC_TBE_TRANSPARENT	0x000300
+/* Z source */
+#define FFB_PPC_ZS_VAR		0x000080
+#define FFB_PPC_ZS_CONST	0x0000c0
+/* Y source */
+#define FFB_PPC_YS_VAR		0x000020
+#define FFB_PPC_YS_CONST	0x000030
+/* X source */
+#define FFB_PPC_XS_WID		0x000004
+#define FFB_PPC_XS_VAR		0x000008
+#define FFB_PPC_XS_CONST	0x00000c
+/* Color (BGR) source */
+#define FFB_PPC_CS_VAR		0x000002
+#define FFB_PPC_CS_CONST	0x000003
 
 #define FFB_ROP_NEW                  0x83
-#define FFB_ROP_RGB_SHIFT               0
 
 #define FFB_UCSR_FIFO_MASK     0x00000fff
 #define FFB_UCSR_RP_BUSY       0x02000000
 
 struct ffb_fbc {
-	u8		xxx1[0x60];
+	/* Next vertex registers */
+	u32		xxx1[3];
+	volatile u32	alpha;
+	volatile u32	red;
+	volatile u32	green;
+	volatile u32	blue;
+	volatile u32	depth;
+	volatile u32	y;
+	volatile u32	x;
+	u32		xxx2[2];
+	volatile u32	ryf;
+	volatile u32	rxf;
+	u32		xxx3[2];
+	
+	volatile u32	dmyf;
+	volatile u32	dmxf;
+	u32		xxx4[2];
+	volatile u32	ebyi;
+	volatile u32	ebxi;
+	u32		xxx5[2];
 	volatile u32	by;
 	volatile u32	bx;
-	u32		xxx2;
-	u32		xxx3;
+	u32		dy;
+	u32		dx;
 	volatile u32	bh;
 	volatile u32	bw;
-	u8		xxx4[0x188];
+	u32		xxx6[2];
+	
+	u32		xxx7[32];
+	
+	/* Setup unit vertex state register */
+	volatile u32	suvtx;
+	u32		xxx8[63];
+	
+	/* Control registers */
 	volatile u32	ppc;
-	u32		xxx5;
+	volatile u32	wid;
 	volatile u32	fg;
 	volatile u32	bg;
-	u8		xxx6[0x44];
+	volatile u32	consty;
+	volatile u32	constz;
+	volatile u32	xclip;
+	volatile u32	dcss;
+	volatile u32	vclipmin;
+	volatile u32	vclipmax;
+	volatile u32	vclipzmin;
+	volatile u32	vclipzmax;
+	volatile u32	dcsf;
+	volatile u32	dcsb;
+	volatile u32	dczf;
+	volatile u32	dczb;
+	
+	u32		xxx9;
+	volatile u32	blendc;
+	volatile u32	blendc1;
+	volatile u32	blendc2;
+	volatile u32	fbramitc;
 	volatile u32	fbc;
 	volatile u32	rop;
-	u8		xxx7[0x34];
+	volatile u32	cmp;
+	volatile u32	matchab;
+	volatile u32	matchc;
+	volatile u32	magnab;
+	volatile u32	magnc;
+	volatile u32	fbcfg0;
+	volatile u32	fbcfg1;
+	volatile u32	fbcfg2;
+	volatile u32	fbcfg3;
+	
+	u32		ppcfg;
+	volatile u32	pick;
+	volatile u32	fillmode;
+	volatile u32	fbramwac;
 	volatile u32	pmask;
-	u8		xxx8[12];
+	volatile u32	xpmask;
+	volatile u32	ypmask;
+	volatile u32	zpmask;
 	volatile u32	clip0min;
 	volatile u32	clip0max;
 	volatile u32	clip1min;
@@ -127,18 +211,64 @@ struct ffb_fbc {
 	volatile u32	clip2max;
 	volatile u32	clip3min;
 	volatile u32	clip3max;
-	u8		xxx9[0x3c];
-	volatile u32	unk1;
-	volatile u32	unk2;
-	u8		xxx10[0x10];
+	
+	/* New 3dRAM III support regs */
+	volatile u32	rawblend2;
+	volatile u32	rawpreblend;
+	volatile u32	rawstencil;
+	volatile u32	rawstencilctl;
+	volatile u32	threedram1;
+	volatile u32	threedram2;
+	volatile u32	passin;
+	volatile u32	rawclrdepth;
+	volatile u32	rawpmask;
+	volatile u32	rawcsrc;
+	volatile u32	rawmatch;
+	volatile u32	rawmagn;
+	volatile u32	rawropblend;
+	volatile u32	rawcmp;
+	volatile u32	rawwac;
+	volatile u32	fbramid;
+	
+	volatile u32	drawop;
+	u32		xxx10[2];
+	volatile u32	fontlpat;
+	u32		xxx11;
 	volatile u32	fontxy;
 	volatile u32	fontw;
 	volatile u32	fontinc;
 	volatile u32	font;
-	u8		xxx11[0x4dc];
-	volatile u32	unk3;
-	u8		xxx12[0xfc];
+	u32		xxx12[3];
+	volatile u32	blend2;
+	volatile u32	preblend;
+	volatile u32	stencil;
+	volatile u32	stencilctl;
+
+	u32		xxx13[4];	
+	volatile u32	dcss1;
+	volatile u32	dcss2;
+	volatile u32	dcss3;
+	volatile u32	widpmask;
+	volatile u32	dcs2;
+	volatile u32	dcs3;
+	volatile u32	dcs4;
+	u32		xxx14;
+	volatile u32	dcd2;
+	volatile u32	dcd3;
+	volatile u32	dcd4;
+	u32		xxx15;
+	
+	volatile u32	pattern[32];
+	
+	u32		xxx16[256];
+	
+	volatile u32	devid;
+	u32		xxx17[63];
+	
 	volatile u32	ucsr;
+	u32		xxx18[31];
+	
+	volatile u32	mer;
 };
 
 struct ffb_dac {
@@ -170,8 +300,6 @@ static struct sbus_mmap_map ffb_mmap_map[] = {
 	{ 0,			0,			0	  }
 };
 
-static u32 ffb_cmap[16];
-
 static void ffb_setup(struct display *p)
 {
 	p->next_line = 8192;
@@ -185,22 +313,18 @@ static void ffb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	register struct ffb_fbc *fbc = fb->s.ffb.fbc;
 	int x, y, w, h;
 	
-	fbc->ppc = 0x1803;
-	fbc->fg = ffb_cmap[attr_bgcol_ec(p,conp)];
-	fbc->fbc = 0x2000707f;
-	fbc->rop = 0x83;
-	fbc->pmask = 0xffffffff;
-	fbc->unk2 = 8;
+	fbc->fg = ((u32 *)p->dispsw_data)[attr_bgcol_ec(p,conp)];
+	fbc->drawop = FFB_DRAWOP_RECTANGLE;
 
-	if (p->fontheightlog) {
-		y = sy << p->fontheightlog; h = height << p->fontheightlog;
+	if (fontheightlog(p)) {
+		y = sy << fontheightlog(p); h = height << fontheightlog(p);
 	} else {
-		y = sy * p->fontheight; h = height * p->fontheight;
+		y = sy * fontheight(p); h = height * fontheight(p);
 	}
-	if (p->fontwidthlog) {
-		x = sx << p->fontwidthlog; w = width << p->fontwidthlog;
+	if (fontwidthlog(p)) {
+		x = sx << fontwidthlog(p); w = width << fontwidthlog(p);
 	} else {
-		x = sx * p->fontwidth; w = width * p->fontwidth;
+		x = sx * fontwidth(p); w = width * fontwidth(p);
 	}
 	fbc->by = y + fb->y_margin;
 	fbc->bx = x + fb->x_margin;
@@ -213,12 +337,8 @@ static void ffb_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
 {
 	register struct ffb_fbc *fbc = fb->s.ffb.fbc;
 
-	fbc->ppc = 0x1803;
-	fbc->fg = ffb_cmap[attr_bgcol(p,s)];
-	fbc->fbc = 0x2000707f;
-	fbc->rop = 0x83;
-	fbc->pmask = 0xffffffff;
-	fbc->unk2 = 8;
+	fbc->fg = ((u32 *)p->dispsw_data)[attr_bgcol(p,s)];
+	fbc->drawop = FFB_DRAWOP_RECTANGLE;
 	while (count-- > 0) {
 		fbc->by = boxes[1];
 		fbc->bx = boxes[0];
@@ -235,48 +355,35 @@ static void ffb_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 	int i, xy;
 	u8 *fd;
 
-	if (p->fontheightlog) {
-		xy = (yy << (16 + p->fontheightlog));
-		i = ((c & p->charmask) << p->fontheightlog);
+	if (fontheightlog(p)) {
+		xy = (yy << (16 + fontheightlog(p)));
+		i = ((c & p->charmask) << fontheightlog(p));
 	} else {
-		xy = ((yy * p->fontheight) << 16);
-		i = (c & p->charmask) * p->fontheight;
+		xy = ((yy * fontheight(p)) << 16);
+		i = (c & p->charmask) * fontheight(p);
 	}
-#ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
-	fd = p->fontdata + i;
-	xy += (xx * 8) + fb->s.ffb.xy_margin;
-#else
-	if (p->fontwidth <= 8)
+	if (fontwidth(p) <= 8)
 		fd = p->fontdata + i;
 	else
 		fd = p->fontdata + (i << 1);
-	if (p->fontwidthlog)
-		xy += (xx << p->fontwidthlog) + fb->s.ffb.xy_margin;
+	if (fontwidthlog(p))
+		xy += (xx << fontwidthlog(p)) + fb->s.ffb.xy_margin;
 	else
-		xy += (xx * p->fontwidth) + fb->s.ffb.xy_margin;
-#endif
-	fbc->ppc = 0x203;
-	fbc->fg = ffb_cmap[attr_fgcol(p,c)];
-	fbc->fbc = 0x2000707f;
-	fbc->rop = 0x83;
-	fbc->pmask = 0xffffffff;
-	fbc->bg = ffb_cmap[attr_bgcol(p,c)];
-	fbc->fontw = p->fontwidth;
+		xy += (xx * fontwidth(p)) + fb->s.ffb.xy_margin;
+	fbc->fg = ((u32 *)p->dispsw_data)[attr_fgcol(p,c)];
+	fbc->bg = ((u32 *)p->dispsw_data)[attr_bgcol(p,c)];
+	fbc->fontw = fontwidth(p);
 	fbc->fontinc = 0x10000;
 	fbc->fontxy = xy;
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
-	if (p->fontwidth <= 8) {
-#endif
-		for (i = 0; i < p->fontheight; i++)
+	if (fontwidth(p) <= 8) {
+		for (i = 0; i < fontheight(p); i++)
 			fbc->font = *fd++ << 24;
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 	} else {
-		for (i = 0; i < p->fontheight; i++) {
+		for (i = 0; i < fontheight(p); i++) {
 			fbc->font = *(u16 *)fd << 16;
 			fd += 2;
 		}
 	}
-#endif
 }
 
 static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned short *s,
@@ -287,105 +394,87 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	int i, xy;
 	u8 *fd1, *fd2, *fd3, *fd4;
 
-	fbc->ppc = 0x203;
-	fbc->fg = ffb_cmap[attr_fgcol(p,*s)];
-	fbc->fbc = 0x2000707f;
-	fbc->rop = 0x83;
-	fbc->pmask = 0xffffffff;
-	fbc->bg = ffb_cmap[attr_bgcol(p,*s)];
+	fbc->fg = ((u32 *)p->dispsw_data)[attr_fgcol(p,*s)];
+	fbc->bg = ((u32 *)p->dispsw_data)[attr_bgcol(p,*s)];
 	xy = fb->s.ffb.xy_margin;
-#ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
-	xy += xx * 8;
-#else
-	if (p->fontwidthlog)
-		xy += (xx << p->fontwidthlog);
+	if (fontwidthlog(p))
+		xy += (xx << fontwidthlog(p));
 	else
-		xy += xx * p->fontwidth;
-#endif
-	if (p->fontheightlog)
-		xy += (yy << (16 + p->fontheightlog));
+		xy += xx * fontwidth(p);
+	if (fontheightlog(p))
+		xy += (yy << (16 + fontheightlog(p)));
 	else
-		xy += ((yy * p->fontheight) << 16);
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
-	if (p->fontwidth <= 8) {
-#endif
+		xy += ((yy * fontheight(p)) << 16);
+	if (fontwidth(p) <= 8) {
 		while (count >= 4) {
 			count -= 4;
-			fbc->fontw = 4 * p->fontwidth;
+			fbc->fontw = 4 * fontwidth(p);
 			fbc->fontinc = 0x10000;
 			fbc->fontxy = xy;
-			if (p->fontheightlog) {
-				fd1 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
-				fd2 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
-				fd3 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
-				fd4 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
+			if (fontheightlog(p)) {
+				fd1 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
+				fd2 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
+				fd3 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
+				fd4 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
 			} else {
-				fd1 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
-				fd2 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
-				fd3 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
-				fd4 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
+				fd1 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
+				fd2 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
+				fd3 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
+				fd4 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
 			}
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
-			if (p->fontwidth == 8) {
-#endif
-				for (i = 0; i < p->fontheight; i++)
+			if (fontwidth(p) == 8) {
+				for (i = 0; i < fontheight(p); i++)
 					fbc->font = ((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) 
 						<< 8)) << 8)) << 8);
 				xy += 32;
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 			} else {
-				for (i = 0; i < p->fontheight; i++)
+				for (i = 0; i < fontheight(p); i++)
 					fbc->font = (((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) 
-						<< p->fontwidth)) << p->fontwidth)) << p->fontwidth)) << (24 - 3 * p->fontwidth);
-				xy += 4 * p->fontwidth;
+						<< fontwidth(p))) << fontwidth(p))) << fontwidth(p))) << (24 - 3 * fontwidth(p));
+				xy += 4 * fontwidth(p);
 			}
 		}
 	} else {
 		while (count >= 2) {
 			count -= 2;
-			fbc->fontw = 2 * p->fontwidth;
+			fbc->fontw = 2 * fontwidth(p);
 			fbc->fontinc = 0x10000;
 			fbc->fontxy = xy;
-			if (p->fontheightlog) {
-				fd1 = p->fontdata + ((*s++ & p->charmask) << (p->fontheightlog + 1));
-				fd2 = p->fontdata + ((*s++ & p->charmask) << (p->fontheightlog + 1));
+			if (fontheightlog(p)) {
+				fd1 = p->fontdata + ((*s++ & p->charmask) << (fontheightlog(p) + 1));
+				fd2 = p->fontdata + ((*s++ & p->charmask) << (fontheightlog(p) + 1));
 			} else {
-				fd1 = p->fontdata + (((*s++ & p->charmask) * p->fontheight) << 1);
-				fd2 = p->fontdata + (((*s++ & p->charmask) * p->fontheight) << 1);
+				fd1 = p->fontdata + (((*s++ & p->charmask) * fontheight(p)) << 1);
+				fd2 = p->fontdata + (((*s++ & p->charmask) * fontheight(p)) << 1);
 			}
-			for (i = 0; i < p->fontheight; i++) {
-				fbc->font = ((((u32)*(u16 *)fd1) << p->fontwidth) | ((u32)*(u16 *)fd2)) << (16 - p->fontwidth);
+			for (i = 0; i < fontheight(p); i++) {
+				fbc->font = ((((u32)*(u16 *)fd1) << fontwidth(p)) | ((u32)*(u16 *)fd2)) << (16 - fontwidth(p));
 				fd1 += 2; fd2 += 2;
 			}
-			xy += 2 * p->fontwidth;
+			xy += 2 * fontwidth(p);
 		}
-#endif
 	}
 	while (count) {
 		count--;
-		fbc->fontw = p->fontwidth;
+		fbc->fontw = fontwidth(p);
 		fbc->fontinc = 0x10000;
 		fbc->fontxy = xy;
-		if (p->fontheightlog)
-			i = ((*s++ & p->charmask) << p->fontheightlog);
+		if (fontheightlog(p))
+			i = ((*s++ & p->charmask) << fontheightlog(p));
 		else
-			i = ((*s++ & p->charmask) * p->fontheight);
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
-		if (p->fontwidth <= 8) {
-#endif
+			i = ((*s++ & p->charmask) * fontheight(p));
+		if (fontwidth(p) <= 8) {
 			fd1 = p->fontdata + i;
-			for (i = 0; i < p->fontheight; i++)
+			for (i = 0; i < fontheight(p); i++)
 				fbc->font = *fd1++ << 24;
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 		} else {
 			fd1 = p->fontdata + (i << 1);
-			for (i = 0; i < p->fontheight; i++) {
+			for (i = 0; i < fontheight(p); i++) {
 				fbc->font = *(u16 *)fd1 << 16;
 				fd1 += 2;
 			}
 		}
-#endif
-		xy += p->fontwidth;
+		xy += fontwidth(p);
 	}
 }
 
@@ -394,7 +483,7 @@ static void ffb_revc(struct display *p, int xx, int yy)
 	/* Not used if hw cursor */
 }
 
-static void ffb_loadcmap (struct fb_info_sbusfb *fb, int index, int count)
+static void ffb_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
 {
 	struct ffb_dac *dac = fb->s.ffb.dac;
 	int i, j = count;
@@ -405,10 +494,12 @@ static void ffb_loadcmap (struct fb_info_sbusfb *fb, int index, int count)
 		dac->value = ((fb->color_map CM(i,0))) |
 			     ((fb->color_map CM(i,1)) << 8) |
 			     ((fb->color_map CM(i,2)) << 16);
+	if (!p)
+		return;
 	for (i = index, j = count; i < 16 && j--; i++)
-		ffb_cmap[i] = ((fb->color_map CM(i,0))) |
-			      ((fb->color_map CM(i,1)) << 8) |
-			      ((fb->color_map CM(i,2)) << 16);
+		((u32 *)p->dispsw_data)[i] = ((fb->color_map CM(i,0))) |
+			      		     ((fb->color_map CM(i,1)) << 8) |
+					     ((fb->color_map CM(i,2)) << 16);
 }
 
 static struct display_switch ffb_dispsw __initdata = {
@@ -478,6 +569,16 @@ static void ffb_setcursor (struct fb_info_sbusfb *fb)
 	ffb_curs_enable (fb, fb->cursor.enable);
 }
 
+static void ffb_switch_from_graph (struct fb_info_sbusfb *fb)
+{
+	register struct ffb_fbc *fbc = fb->s.ffb.fbc;
+
+	fbc->ppc = FFB_PPC_VCE_DISABLE|FFB_PPC_TBE_OPAQUE|FFB_PPC_APE_DISABLE|FFB_PPC_CS_CONST;
+	fbc->fbc = 0x2000707f;
+	fbc->rop = FFB_ROP_NEW;
+	fbc->pmask = 0xffffffff;
+}                                
+
 static char idstring[60] __initdata = { 0 };
 
 __initfunc(char *creatorfb_init(struct fb_info_sbusfb *fb))
@@ -492,10 +593,15 @@ __initfunc(char *creatorfb_init(struct fb_info_sbusfb *fb))
 	if (prom_getproperty(fb->prom_node, "reg", (void *) regs, sizeof(regs)) <= 0)
 		return NULL;
 		
+	disp->dispsw_data = (void *)kmalloc(16 * sizeof(u32), GFP_KERNEL);
+	if (!disp->dispsw_data)
+		return NULL;
+	memset(disp->dispsw_data, 0, 16 * sizeof(u32));
+		
 	strcpy(fb->info.modename, "Creator");
 		
 	strcpy(fix->id, "Creator");
-	fix->visual = FB_VISUAL_DIRECTCOLOR;
+	fix->visual = FB_VISUAL_TRUECOLOR;
 	fix->line_length = 8192;
 	fix->accel = FB_ACCEL_SUN_CREATOR;
 	
@@ -516,7 +622,10 @@ __initfunc(char *creatorfb_init(struct fb_info_sbusfb *fb))
 	fb->setcursor = ffb_setcursor;
 	fb->setcursormap = ffb_setcursormap;
 	fb->setcurshape = ffb_setcurshape;
+	fb->switch_from_graph = ffb_switch_from_graph;
 	fb->fill = ffb_fill;
+	
+	ffb_switch_from_graph(fb);
 	
 	fb->physbase = regs[0].phys_addr;
 	fb->mmap_map = ffb_mmap_map;

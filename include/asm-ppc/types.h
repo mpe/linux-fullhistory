@@ -1,8 +1,6 @@
 #ifndef _PPC_TYPES_H
 #define _PPC_TYPES_H
 
-typedef unsigned short umode_t;
-
 /*
  * __xx is ok: it doesn't pollute the POSIX namespace. Use these in the
  * header files exported to user space
@@ -26,6 +24,8 @@ typedef unsigned long long __u64;
  * These aren't exported outside the kernel to avoid name space clashes
  */
 #ifdef __KERNEL__
+
+typedef unsigned short umode_t;
 
 typedef signed char s8;
 typedef unsigned char u8;

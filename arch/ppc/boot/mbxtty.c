@@ -13,13 +13,20 @@
  * use SMC1, but gave up and decided to fix it here.
  */
 #include <linux/types.h>
+#ifdef CONFIG_MBX
 #include <asm/mbx.h>
+#endif
+#ifdef CONFIG_FADS
+#include <asm/fads.h>
+#endif
 #include "../8xx_io/commproc.h"
 
+#ifdef CONFIG_MBX
 #define MBX_CSR1	((volatile u_char *)0xfa100000)
 #define CSR1_COMEN	(u_char)0x02
+#endif
 
-static cpm8xx_t	*cpmp = (cpm8xx_t *)&(((immap_t *)MBX_IMAP_ADDR)->im_cpm);
+static cpm8xx_t	*cpmp = (cpm8xx_t *)&(((immap_t *)IMAP_ADDR)->im_cpm);
 
 void
 serial_init(bd_t *bd)
@@ -38,6 +45,7 @@ serial_init(bd_t *bd)
 	*/
 	sp->smc_smcmr &= ~(SMCMR_REN | SMCMR_TEN);
 
+#ifdef CONFIG_MBX
 	if (*MBX_CSR1 & CSR1_COMEN) {
 		/* COM1 is enabled.  Initialize SMC1 and use it for
 		 * the console port.
@@ -45,7 +53,7 @@ serial_init(bd_t *bd)
 
 		/* Enable SDMA.
 		*/
-		((immap_t *)MBX_IMAP_ADDR)->im_siu_conf.sc_sdcr = 1;
+		((immap_t *)IMAP_ADDR)->im_siu_conf.sc_sdcr = 1;
 
 		/* Use Port B for SMCs instead of other functions.
 		*/
@@ -103,6 +111,7 @@ serial_init(bd_t *bd)
 		*MBX_CSR1 &= ~CSR1_COMEN;
 	}
 	else {
+#endif
 		/* SMC1 is used as console port.
 		*/
 		tbdf = (cbd_t *)&cp->cp_dpmem[up->smc_tbase];
@@ -113,7 +122,9 @@ serial_init(bd_t *bd)
 		cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SMC1,
 					CPM_CR_STOP_TX) | CPM_CR_FLG;
 		while (cp->cp_cpcr & CPM_CR_FLG);
+#ifdef CONFIG_MBX
 	}
+#endif
 
 	/* Make the first buffer the only buffer.
 	*/

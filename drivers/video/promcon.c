@@ -1,4 +1,4 @@
-/* $Id: promcon.c,v 1.10 1998/07/24 15:31:53 jj Exp $
+/* $Id: promcon.c,v 1.12 1998/08/23 20:19:01 mj Exp $
  * Console driver utilizing PROM sun terminal emulation
  *
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
@@ -178,8 +178,6 @@ promcon_init(struct vc_data *conp, int init)
 	if (!init) {
 		if (conp->vc_cols != pw + 1 || conp->vc_rows != ph + 1)
 			vc_resize_con(ph + 1, pw + 1, conp->vc_num);
-		else if (conp->vc_num == fg_console)
-			update_screen(fg_console);
 	}
 }
 

@@ -16,14 +16,13 @@
 #include <asm/amigahw.h>
 #include <asm/pgtable.h>
 #include <asm/delay.h>
-#include "fbcon.h"
 
-#include "fbcon.h"
-#include "fbcon-mfb.h"
-#include "fbcon-cfb8.h"
-#include "fbcon-cfb16.h"
-#include "fbcon-cfb24.h"
-#include "fbcon-cfb32.h"
+#include <video/fbcon.h>
+#include <video/fbcon-mfb.h>
+#include <video/fbcon-cfb8.h>
+#include <video/fbcon-cfb16.h>
+#include <video/fbcon-cfb24.h>
+#include <video/fbcon-cfb32.h>
 
 #include "clgenfb.h"
 
@@ -32,17 +31,6 @@
 #define DEBUG if(0)
 
 #define arraysize(x)    (sizeof(x)/sizeof(*(x)))
-
-/* zorro IDs */
-#define ZORRO_PROD_HELFRICH_SD64_RAM				0x08930A00
-#define ZORRO_PROD_HELFRICH_SD64_REG				0x08930B00
-#define ZORRO_PROD_HELFRICH_PICCOLO_RAM				0x08930500
-#define ZORRO_PROD_HELFRICH_PICCOLO_REG				0x08930600
-#define ZORRO_PROD_VILLAGE_TRONIC_PICASSO_II_II_PLUS_RAM	0x08770B00
-#define ZORRO_PROD_VILLAGE_TRONIC_PICASSO_II_II_PLUS_REG	0x08770C00
-#define ZORRO_PROD_GVP_EGS_28_24_SPECTRUM_RAM			0x08910200
-#define ZORRO_PROD_GVP_EGS_28_24_SPECTRUM_REG			0x08910100
-#define ZORRO_PROD_VILLAGE_TRONIC_PICASSO_IV_Z3			0x08771800
 
 /* board types */
 #define BT_NONE     0
@@ -103,6 +91,17 @@ struct clgenfb_info
     unsigned char SFR; /* Shadow of special function register */
     
     struct clgenfb_par currentmode;
+    union {
+#ifdef FBCON_HAS_CFB16
+	u16 cfb16[16];
+#endif
+#ifdef FBCON_HAS_CFB24
+	u32 cfb24[16];
+#endif
+#ifdef FBCON_HAS_CFB32
+	u32 cfb32[16];
+#endif
+    } fbcon_cmap;
 };
 
 static struct display disp;
@@ -201,8 +200,8 @@ static int  clgen_pan_display(const struct fb_var_screeninfo *var,
 			      struct fb_info_gen *info);
 static int  clgen_blank(int blank_mode, struct fb_info_gen *info);
 
-static struct display_switch *clgen_get_dispsw(const void *par,
-					       struct fb_info_gen *info);
+static void clgen_set_dispsw(const void *par, struct display *disp,
+			     struct fb_info_gen *info);
 
 /* function table of the above functions */
 static struct fbgen_hwswitch clgen_hwswitch = 
@@ -217,7 +216,7 @@ static struct fbgen_hwswitch clgen_hwswitch =
     clgen_setcolreg,
     clgen_pan_display,
     clgen_blank,
-    clgen_get_dispsw
+    clgen_set_dispsw
 };
 
 /* Text console acceleration */
@@ -457,23 +456,54 @@ static int clgen_decode_var(const struct fb_var_screeninfo *var, void *par,
     case 8:
 	_par->line_length 	= _par->var.xres_virtual;
 	_par->visual		= FB_VISUAL_PSEUDOCOLOR;
+	_par->var.red.offset    = 0;
+	_par->var.red.length    = 6;
+	_par->var.green.offset  = 0;
+	_par->var.green.length  = 6;
+	_par->var.blue.offset   = 0;
+	_par->var.blue.length   = 6;
 	break;
 
     case 16:
 	_par->line_length	= _par->var.xres_virtual * 2;
 	_par->visual		= FB_VISUAL_DIRECTCOLOR;
+	_par->var.red.offset    = 10;
+	_par->var.red.length    = 5;
+	_par->var.green.offset  = 5;
+	_par->var.green.length  = 5;
+	_par->var.blue.offset   = 0;
+	_par->var.blue.length   = 5;
 	break;
 
     case 24:
 	_par->line_length	= _par->var.xres_virtual * 3;
 	_par->visual		= FB_VISUAL_DIRECTCOLOR;
+	_par->var.red.offset    = 16;
+	_par->var.red.length    = 8;
+	_par->var.green.offset  = 8;
+	_par->var.green.length  = 8;
+	_par->var.blue.offset   = 0;
+	_par->var.blue.length   = 8;
 	break;
 
     case 32:
 	_par->line_length	= _par->var.xres_virtual * 4;
 	_par->visual		= FB_VISUAL_DIRECTCOLOR;
+	_par->var.red.offset    = 16;
+	_par->var.red.length    = 8;
+	_par->var.green.offset  = 8;
+	_par->var.green.length  = 8;
+	_par->var.blue.offset   = 0;
+	_par->var.blue.length   = 8;
 	break;
     }
+    _par->var.red.msb_right = 0;
+    _par->var.green.msb_right = 0;
+    _par->var.blue.msb_right = 0;
+    _par->var.transp.offset = 0;
+    _par->var.transp.length = 0;
+    _par->var.transp.msb_right = 0;
+
     _par->type		= FB_TYPE_PACKED_PIXELS;
 
     /* convert from ps to kHz */
@@ -691,7 +721,7 @@ static void clgen_set_par(const void *par, struct fb_info_gen *info)
 #if 0
     	/* restore first 2 color registers for mono mode */
     	WClut( 0, 0x00, 0x00, 0x00);  /* background: black */
-	WClut( 1, 0xff, 0xff, 0xff);  /* foreground: white */
+	WClut( 1, 0x3f, 0x3f, 0x3f);  /* foreground: white */
 #endif
 	WGfx(GR5,     0);      /* mode register */
 	
@@ -955,16 +985,16 @@ static int clgen_getcolreg(unsigned regno, unsigned *red, unsigned *green,
 {
     unsigned char bred, bgreen, bblue;
 
-    if (regno > 255 || regno < 0)
+    if (regno > 255)
 	return (1);
 
     fb_info = (struct clgenfb_info *)info;
 
     RClut(regno, &bred, &bgreen, &bblue);
 
-    *red    = (u_int)bred;
-    *green  = (u_int)bgreen;
-    *blue   = (u_int)bblue;
+    *red = (bred<<10) | (bred<<4) | (bred>>2);
+    *green = (bgreen<<10) | (bgreen<<4) | (bgreen>>2);
+    *blue = (bblue<<10) | (bblue<<4) | (bblue>>2);
     *transp = 0;
     return (0);
 }
@@ -973,13 +1003,13 @@ static int clgen_setcolreg(unsigned regno, unsigned red, unsigned green,
 			   unsigned blue, unsigned transp, 
 			   struct fb_info *info)
 {
-    if (regno > 255 || regno < 0)
+    if (regno > 255)
 	return (1);
 
     fb_info = (struct clgenfb_info *)info;
     
     /* "transparent" stuff is completely ignored. */
-    WClut(regno, (red & 0xff), (green & 0xff), (blue & 0xff));
+    WClut(regno, red>>10, green>>10, blue>>10);
 
     return (0);
 }
@@ -1240,28 +1270,28 @@ static void init_vgachip(void)
 
     /* CLUT setup */
     WClut( 0, 0x00, 0x00, 0x00);  /* background: black */
-    WClut( 1, 0xff, 0xff, 0xff);  /* foreground: white */
-    WClut( 2, 0x00, 0x80, 0x00);
-    WClut( 3, 0x00, 0x80, 0x80);
-    WClut( 4, 0x80, 0x00, 0x00);
-    WClut( 5, 0x80, 0x00, 0x80);
-    WClut( 6, 0x80, 0x40, 0x00);
-    WClut( 7, 0x80, 0x80, 0x80);
-    WClut( 8, 0x40, 0x40, 0x40);
-    WClut( 9, 0x40, 0x40, 0xc0);
-    WClut(10, 0x40, 0xc0, 0x40);
-    WClut(11, 0x40, 0xc0, 0xc0);
-    WClut(12, 0xc0, 0x40, 0x40);
-    WClut(13, 0xc0, 0x40, 0xc0);
-    WClut(14, 0xc0, 0xc0, 0x40);
-    WClut(15, 0xc0, 0xc0, 0xc0);
+    WClut( 1, 0x3f, 0x3f, 0x3f);  /* foreground: white */
+    WClut( 2, 0x00, 0x20, 0x00);
+    WClut( 3, 0x00, 0x20, 0x20);
+    WClut( 4, 0x20, 0x00, 0x00);
+    WClut( 5, 0x20, 0x00, 0x20);
+    WClut( 6, 0x20, 0x10, 0x00);
+    WClut( 7, 0x20, 0x20, 0x20);
+    WClut( 8, 0x10, 0x10, 0x10);
+    WClut( 9, 0x10, 0x10, 0x30);
+    WClut(10, 0x10, 0x30, 0x10);
+    WClut(11, 0x10, 0x30, 0x30);
+    WClut(12, 0x30, 0x10, 0x10);
+    WClut(13, 0x30, 0x10, 0x30);
+    WClut(14, 0x30, 0x30, 0x10);
+    WClut(15, 0x30, 0x30, 0x30);
 
     /* the rest a grey ramp */
     {
 	int i;
 
 	for (i = 16; i < 256; i++)
-	    WClut(i, i, i, i);
+	    WClut(i, i>>2, i>>2, i>>2);
     }
 
 
@@ -1338,10 +1368,11 @@ static void switch_monitor(int on)
 	}
 }
 
-static struct display_switch *clgen_get_dispsw(const void *par,
-					     struct fb_info_gen *info)
+static void clgen_set_dispsw(const void *par, struct display *disp,
+			     struct fb_info_gen *info)
 {
     struct clgenfb_par *_par = (struct clgenfb_par*) par;
+    struct clgenfb_info *info2 = (struct clgenfb_info *)info;
 
     printk("clgen_get_dispsw(): ");
     switch (_par->var.bits_per_pixel)
@@ -1349,44 +1380,53 @@ static struct display_switch *clgen_get_dispsw(const void *par,
 #ifdef FBCON_HAS_MFB
     case 1:
 	printk("monochrome\n");
-	return &fbcon_mfb;
+	disp->dispsw = &fbcon_mfb;
+	break;
 #endif
 #ifdef FBCON_HAS_CFB8
     case 8:
 	printk("8 bit color depth\n");
-	return &fbcon_clgen_8;
+	disp->dispsw = &fbcon_clgen_8;
+	break;
 #endif
 #ifdef FBCON_HAS_CFB16
     case 16:
 	printk("16 bit color depth\n");
-	return &fbcon_cfb16;
+	disp->dispsw = &fbcon_cfb16;
+	disp->dispsw_data = info2->fbcon_cmap.cfb16;
+	break;
 #endif
 #ifdef FBCON_HAS_CFB24
     case 24:
 	printk("24 bit color depth\n");
-	return &fbcon_cfb24;
+	disp->dispsw = &fbcon_cfb24;
+	disp->dispsw_data = info2->fbcon_cmap.cfb24;
+	break;
 #endif
 #ifdef FBCON_HAS_CFB32
     case 32:
 	printk("32 bit color depth\n");
-	return &fbcon_cfb32;
+	disp->dispsw = &fbcon_cfb32;
+	disp->dispsw_data = info2->fbcon_cmap.cfb32;
+	break;
 #endif
 
     default:
 	printk("unsupported color depth\n");
-	return NULL;
+	disp->dispsw = NULL;
+	break;
     }
 }
 
 static void fbcon_clgen8_bmove(struct display *p, int sy, int sx, 
 				int dy, int dx, int height, int width)
 {
-    sx     *= p->fontwidth;
-    sy     *= p->fontheight;
-    dx     *= p->fontwidth;
-    dy     *= p->fontheight;
-    width  *= p->fontwidth;
-    height *= p->fontheight;
+    sx     *= fontwidth(p);
+    sy     *= fontheight(p);
+    dx     *= fontwidth(p);
+    dy     *= fontheight(p);
+    width  *= fontwidth(p);
+    height *= fontheight(p);
 
     fb_info = (struct clgenfb_info*)p->fb_info;
 
@@ -1404,10 +1444,10 @@ static void fbcon_clgen8_clear(struct vc_data *conp, struct display *p,
     
     fb_info = (struct clgenfb_info*)p->fb_info;
 
-    sx     *= p->fontwidth;
-    sy     *= p->fontheight;
-    width  *= p->fontwidth;
-    height *= p->fontheight;
+    sx     *= fontwidth(p);
+    sy     *= fontheight(p);
+    width  *= fontwidth(p);
+    height *= fontheight(p);
 
     col = attr_bgcol_ec(p, conp);
     col &= 0xff;
@@ -1835,7 +1875,7 @@ void WSFR2(unsigned char val)
 	fb_info->regs[0x9000] = val;
 }
 
-/*** WClut - set CLUT entry (range: 0..255 is automat. shifted to 0..63) ***/
+/*** WClut - set CLUT entry (range: 0..63) ***/
 void WClut(unsigned char regnum, unsigned char red, unsigned char green, unsigned char blue)
 {
 	unsigned int data = 0x3c9;
@@ -1848,19 +1888,19 @@ void WClut(unsigned char regnum, unsigned char red, unsigned char green, unsigne
 		/* but DAC data register IS, at least for Picasso II */
 		if(fb_info->btype == BT_PICASSO)
 			data += 0xfff;
-		fb_info->regs[data] = (red   >> 2);
-		fb_info->regs[data] = (green >> 2);
-		fb_info->regs[data] = (blue  >> 2);
+		fb_info->regs[data] = red;
+		fb_info->regs[data] = green;
+		fb_info->regs[data] = blue;
 	}
 	else
 	{
-		fb_info->regs[data] = (blue  >> 2);
-		fb_info->regs[data] = (green >> 2);
-		fb_info->regs[data] = (red   >> 2);
+		fb_info->regs[data] = blue;
+		fb_info->regs[data] = green;
+		fb_info->regs[data] = red;
 	}
 }
 
-/*** RClut - read CLUT entry and convert to 0..255 range ***/
+/*** RClut - read CLUT entry (range 0..63) ***/
 void RClut(unsigned char regnum, unsigned char *red, unsigned char *green, unsigned char *blue)
 {
 	unsigned int data = 0x3c9;
@@ -1871,15 +1911,15 @@ void RClut(unsigned char regnum, unsigned char *red, unsigned char *green, unsig
 	{
 		if(fb_info->btype == BT_PICASSO)
 			data += 0xfff;
-		*red   = fb_info->regs[data] << 2;
-		*green = fb_info->regs[data] << 2;
-		*blue  = fb_info->regs[data] << 2;
+		*red   = fb_info->regs[data];
+		*green = fb_info->regs[data];
+		*blue  = fb_info->regs[data];
 	}
 	else
 	{
-		*blue  = fb_info->regs[data] << 2;
-		*green = fb_info->regs[data] << 2;
-		*red   = fb_info->regs[data] << 2;
+		*blue  = fb_info->regs[data];
+		*green = fb_info->regs[data];
+		*red   = fb_info->regs[data];
 	}
 }
 

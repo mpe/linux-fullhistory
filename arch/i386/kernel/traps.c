@@ -339,7 +339,16 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 
 	/* Mask out spurious TF errors due to lazy TF clearing */
 	if (condition & DR_STEP) {
-		if ((tsk->flags & PF_PTRACED) == 0)
+		/*
+		 * The TF error should be masked out only if the current
+		 * process is not traced and if the TRAP flag has been set
+		 * previously by a tracing process (condition detected by
+		 * the PF_DTRACE flag); remember that the i386 TRAP flag
+		 * can be modified by the process itself in user mode,
+		 * allowing programs to debug themselves without the ptrace()
+		 * interface.
+		 */
+		if ((tsk->flags & (PF_DTRACE|PF_PTRACED)) == PF_DTRACE)
 			goto clear_TF;
 	}
 
@@ -390,7 +399,7 @@ void math_error(void)
 	 * (this will also clear the error)
 	 */
 	task = current;
-	unlazy_fpu(task);
+	save_fpu(task);
 	task->tss.trap_no = 16;
 	task->tss.error_code = 0;
 	force_sig(SIGFPE, task);

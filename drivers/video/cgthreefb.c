@@ -1,4 +1,4 @@
-/* $Id: cgthreefb.c,v 1.1 1998/07/21 14:50:47 jj Exp $
+/* $Id: cgthreefb.c,v 1.3 1998/09/04 15:43:43 jj Exp $
  * cgthreefb.c: CGthree frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -21,10 +21,10 @@
 #include <linux/init.h>
 #include <linux/selection.h>
 
-#include "sbusfb.h"
+#include <video/sbusfb.h>
 #include <asm/io.h>
 
-#include "fbcon-cfb8.h"
+#include <video/fbcon-cfb8.h>
 
 /* Control Register Constants */
 #define CG3_CR_ENABLE_INTS      0x80
@@ -85,7 +85,7 @@ static struct sbus_mmap_map cg3_mmap_map[] = {
 #define D4M3(x) ((((x)>>2)<<1) + ((x)>>2))      /* (x/4)*3 */
 #define D4M4(x) ((x)&~0x3)                      /* (x/4)*4 */
 
-static void cg3_loadcmap (struct fb_info_sbusfb *fb, int index, int count)
+static void cg3_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
 {
 	struct bt_regs *bt = &fb->s.cg3.regs->cmap;
 	u32 *i;

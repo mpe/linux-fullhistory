@@ -1,4 +1,4 @@
-/* $Id: cgsixfb.c,v 1.7 1998/07/22 12:44:59 jj Exp $
+/* $Id: cgsixfb.c,v 1.11 1998/09/04 15:43:42 jj Exp $
  * cgsixfb.c: CGsix (GX,GXplus) frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -6,7 +6,6 @@
  * Copyright (C) 1996 Eddie C. Dost (ecd@skynet.be)
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -22,7 +21,7 @@
 #include <linux/init.h>
 #include <linux/selection.h>
 
-#include "sbusfb.h"
+#include <video/sbusfb.h>
 #include <asm/io.h>
 
 /* Offset of interesting structures in the OBIO space */
@@ -246,15 +245,15 @@ static void cg6_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	fbc->clip = 0;
 	fbc->pm = ~(0);
 
-        if (p->fontheightlog) {
-		y = sy << p->fontheightlog; h = height << p->fontheightlog;
+        if (fontheightlog(p)) {
+		y = sy << fontheightlog(p); h = height << fontheightlog(p);
 	} else {
-		y = sy * p->fontheight; h = height * p->fontheight;
+		y = sy * fontheight(p); h = height * fontheight(p);
 	}
-	if (p->fontwidthlog) {
-		x = sx << p->fontwidthlog; w = width << p->fontwidthlog;
+	if (fontwidthlog(p)) {
+		x = sx << fontwidthlog(p); w = width << fontwidthlog(p);
 	} else {
-		x = sx * p->fontwidth; w = width * p->fontwidth;
+		x = sx * fontwidth(p); w = width * fontwidth(p);
 	}
 	fbc->arecty = y + fb->y_margin;
 	fbc->arectx = x + fb->x_margin;
@@ -300,26 +299,21 @@ static void cg6_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 	int i, x, y;
 	u8 *fd;
 
-	if (p->fontheightlog) {
-		y = fb->y_margin + (yy << p->fontheightlog);
-		i = ((c & p->charmask) << p->fontheightlog);
+	if (fontheightlog(p)) {
+		y = fb->y_margin + (yy << fontheightlog(p));
+		i = ((c & p->charmask) << fontheightlog(p));
 	} else {
-		y = fb->y_margin + (yy * p->fontheight);
-		i = (c & p->charmask) * p->fontheight;
+		y = fb->y_margin + (yy * fontheight(p));
+		i = (c & p->charmask) * fontheight(p);
 	}
-#ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
-	fd = p->fontdata + i;
-	x = fb->x_margin + xx * 8;
-#else
-	if (p->fontwidth <= 8)
+	if (fontwidth(p) <= 8)
 		fd = p->fontdata + i;
 	else
 		fd = p->fontdata + (i << 1);
-	if (p->fontwidthlog)
-		x = fb->x_margin + (xx << p->fontwidthlog);
+	if (fontwidthlog(p))
+		x = fb->x_margin + (xx << fontwidthlog(p));
 	else
-		x = fb->x_margin + (xx * p->fontwidth);
-#endif
+		x = fb->x_margin + (xx * fontwidth(p));
 	do {
 		i = fbc->s;
 	} while (i & 0x10000000);
@@ -334,21 +328,17 @@ static void cg6_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 	fbc->incx = 0;
 	fbc->incy = 1;
 	fbc->x0 = x;
-	fbc->x1 = x + p->fontwidth - 1;
+	fbc->x1 = x + fontwidth(p) - 1;
 	fbc->y0 = y;
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
-	if (p->fontwidth <= 8) {
-#endif
-		for (i = 0; i < p->fontheight; i++)
+	if (fontwidth(p) <= 8) {
+		for (i = 0; i < fontheight(p); i++)
 			fbc->font = *fd++ << 24;
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 	} else {
-		for (i = 0; i < p->fontheight; i++) {
+		for (i = 0; i < fontheight(p); i++) {
 			fbc->font = *(u16 *)fd << 16;
 			fd += 2;
 		}
 	}
-#endif
 }
 
 static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned short *s,
@@ -372,50 +362,41 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	fbc->pm = 0xff;
 	x = fb->x_margin;
 	y = fb->y_margin;
-#ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
-	x += xx * 8;
-#else
-	if (p->fontwidthlog)
-		x += (xx << p->fontwidthlog);
+	if (fontwidthlog(p))
+		x += (xx << fontwidthlog(p));
 	else
-		x += xx * p->fontwidth;
-#endif
-	if (p->fontheightlog)
-		y += (yy << p->fontheightlog);
+		x += xx * fontwidth(p);
+	if (fontheightlog(p))
+		y += (yy << fontheightlog(p));
 	else
-		y += (yy * p->fontheight);
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
-	if (p->fontwidth <= 8) {
-#endif
+		y += (yy * fontheight(p));
+	if (fontwidth(p) <= 8) {
 		while (count >= 4) {
 			count -= 4;
 			fbc->incx = 0;
 			fbc->incy = 1;
 			fbc->x0 = x;
-			fbc->x1 = (x += 4 * p->fontwidth) - 1;
+			fbc->x1 = (x += 4 * fontwidth(p)) - 1;
 			fbc->y0 = y;
-			if (p->fontheightlog) {
-				fd1 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
-				fd2 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
-				fd3 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
-				fd4 = p->fontdata + ((*s++ & p->charmask) << p->fontheightlog);
+			if (fontheightlog(p)) {
+				fd1 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
+				fd2 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
+				fd3 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
+				fd4 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
 			} else {
-				fd1 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
-				fd2 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
-				fd3 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
-				fd4 = p->fontdata + ((*s++ & p->charmask) * p->fontheight);
+				fd1 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
+				fd2 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
+				fd3 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
+				fd4 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
 			}
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
-			if (p->fontwidth == 8) {
-#endif
-				for (i = 0; i < p->fontheight; i++)
+			if (fontwidth(p) == 8) {
+				for (i = 0; i < fontheight(p); i++)
 					fbc->font = ((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) 
 						<< 8)) << 8)) << 8);
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 			} else {
-				for (i = 0; i < p->fontheight; i++)
+				for (i = 0; i < fontheight(p); i++)
 					fbc->font = (((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) 
-						<< p->fontwidth)) << p->fontwidth)) << p->fontwidth)) << (24 - 3 * p->fontwidth);
+						<< fontwidth(p))) << fontwidth(p))) << fontwidth(p))) << (24 - 3 * fontwidth(p));
 			}
 		}
 	} else {
@@ -424,48 +405,43 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 			fbc->incx = 0;
 			fbc->incy = 1;
 			fbc->x0 = x;
-			fbc->x1 = (x += 2 * p->fontwidth) - 1;
+			fbc->x1 = (x += 2 * fontwidth(p)) - 1;
 			fbc->y0 = y;
-			if (p->fontheightlog) {
-				fd1 = p->fontdata + ((*s++ & p->charmask) << (p->fontheightlog + 1));
-				fd2 = p->fontdata + ((*s++ & p->charmask) << (p->fontheightlog + 1));
+			if (fontheightlog(p)) {
+				fd1 = p->fontdata + ((*s++ & p->charmask) << (fontheightlog(p) + 1));
+				fd2 = p->fontdata + ((*s++ & p->charmask) << (fontheightlog(p) + 1));
 			} else {
-				fd1 = p->fontdata + (((*s++ & p->charmask) * p->fontheight) << 1);
-				fd2 = p->fontdata + (((*s++ & p->charmask) * p->fontheight) << 1);
+				fd1 = p->fontdata + (((*s++ & p->charmask) * fontheight(p)) << 1);
+				fd2 = p->fontdata + (((*s++ & p->charmask) * fontheight(p)) << 1);
 			}
-			for (i = 0; i < p->fontheight; i++) {
-				fbc->font = ((((u32)*(u16 *)fd1) << p->fontwidth) | ((u32)*(u16 *)fd2)) << (16 - p->fontwidth);
+			for (i = 0; i < fontheight(p); i++) {
+				fbc->font = ((((u32)*(u16 *)fd1) << fontwidth(p)) | ((u32)*(u16 *)fd2)) << (16 - fontwidth(p));
 				fd1 += 2; fd2 += 2;
 			}
 		}
-#endif
 	}
 	while (count) {
 		count--;
 		fbc->incx = 0;
 		fbc->incy = 1;
 		fbc->x0 = x;
-		fbc->x1 = (x += p->fontwidth) - 1;
+		fbc->x1 = (x += fontwidth(p)) - 1;
 		fbc->y0 = y;
-		if (p->fontheightlog)
-			i = ((*s++ & p->charmask) << p->fontheightlog);
+		if (fontheightlog(p))
+			i = ((*s++ & p->charmask) << fontheightlog(p));
 		else
-			i = ((*s++ & p->charmask) * p->fontheight);
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
-		if (p->fontwidth <= 8) {
-#endif
+			i = ((*s++ & p->charmask) * fontheight(p));
+		if (fontwidth(p) <= 8) {
 			fd1 = p->fontdata + i;
-			for (i = 0; i < p->fontheight; i++)
+			for (i = 0; i < fontheight(p); i++)
 				fbc->font = *fd1++ << 24;
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
 		} else {
 			fd1 = p->fontdata + (i << 1);
-			for (i = 0; i < p->fontheight; i++) {
+			for (i = 0; i < fontheight(p); i++) {
 				fbc->font = *(u16 *)fd1 << 16;
 				fd1 += 2;
 			}
 		}
-#endif
 	}
 }
 
@@ -474,7 +450,7 @@ static void cg6_revc(struct display *p, int xx, int yy)
 	/* Not used if hw cursor */
 }
 
-static void cg6_loadcmap (struct fb_info_sbusfb *fb, int index, int count)
+static void cg6_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
 {
 	struct bt_regs *bt = fb->s.cg6.bt;
 	int i;
@@ -556,11 +532,13 @@ static void cg6_unblank (struct fb_info_sbusfb *fb)
 static void cg6_reset (struct fb_info_sbusfb *fb)
 {
 	unsigned int rev, conf;
+	struct cg6_tec *tec = fb->s.cg6.tec;
+	struct cg6_fbc *fbc = fb->s.cg6.fbc;
 	
 	/* Turn off stuff in the Transform Engine. */
-	fb->s.cg6.tec->tec_matrix = 0;
-	fb->s.cg6.tec->tec_clip = 0;
-	fb->s.cg6.tec->tec_vdc = 0;
+	tec->tec_matrix = 0;
+	tec->tec_clip = 0;
+	tec->tec_vdc = 0;
 
 	/* Take care of bugs in old revisions. */
 	rev = (*(fb->s.cg6.fhc) >> CG6_FHC_REV_SHIFT) & CG6_FHC_REV_MASK;
@@ -575,21 +553,21 @@ static void cg6_reset (struct fb_info_sbusfb *fb)
 	}
 
 	/* Set things in the FBC. */
-	fb->s.cg6.fbc->mode &= ~(CG6_FBC_BLIT_MASK | CG6_FBC_MODE_MASK |
-			    CG6_FBC_DRAW_MASK | CG6_FBC_BWRITE0_MASK |
-			    CG6_FBC_BWRITE1_MASK | CG6_FBC_BREAD_MASK |
-			    CG6_FBC_BDISP_MASK);
-	fb->s.cg6.fbc->mode |= (CG6_FBC_BLIT_SRC | CG6_FBC_MODE_COLOR8 |
-			   CG6_FBC_DRAW_RENDER | CG6_FBC_BWRITE0_ENABLE |
-			   CG6_FBC_BWRITE1_DISABLE | CG6_FBC_BREAD_0 |
-			   CG6_FBC_BDISP_0);
-	fb->s.cg6.fbc->clip = 0;
-	fb->s.cg6.fbc->offx = 0;
-	fb->s.cg6.fbc->offy = 0;
-	fb->s.cg6.fbc->clipminx = 0;
-	fb->s.cg6.fbc->clipminy = 0;
-	fb->s.cg6.fbc->clipmaxx = fb->type.fb_width - 1;
-	fb->s.cg6.fbc->clipmaxy = fb->type.fb_height - 1;
+	fbc->mode &= ~(CG6_FBC_BLIT_MASK | CG6_FBC_MODE_MASK |
+		       CG6_FBC_DRAW_MASK | CG6_FBC_BWRITE0_MASK |
+		       CG6_FBC_BWRITE1_MASK | CG6_FBC_BREAD_MASK |
+		       CG6_FBC_BDISP_MASK);
+	fbc->mode |= (CG6_FBC_BLIT_SRC | CG6_FBC_MODE_COLOR8 |
+		      CG6_FBC_DRAW_RENDER | CG6_FBC_BWRITE0_ENABLE |
+		      CG6_FBC_BWRITE1_DISABLE | CG6_FBC_BREAD_0 |
+		      CG6_FBC_BDISP_0);
+	fbc->clip = 0;
+	fbc->offx = 0;
+	fbc->offy = 0;
+	fbc->clipminx = 0;
+	fbc->clipminy = 0;
+	fbc->clipmaxx = fb->type.fb_width - 1;
+	fbc->clipmaxy = fb->type.fb_height - 1;
 	/* Enable cursor in Brooktree DAC. */
 	fb->s.cg6.bt->addr = 0x06 << 24;
 	fb->s.cg6.bt->control |= 0x03 << 24;
@@ -611,6 +589,7 @@ __initfunc(char *cgsixfb_init(struct fb_info_sbusfb *fb))
 	unsigned long phys = fb->sbdp->reg_addrs[0].phys_addr;
 	u32 conf;
 	char *p;
+	struct bt_regs *bt;
 
 	strcpy(fb->info.modename, "CGsix");
 		
@@ -631,7 +610,7 @@ __initfunc(char *cgsixfb_init(struct fb_info_sbusfb *fb))
 			sizeof(struct cg6_tec), "cgsix_tec", fb->iospace, 0);
 	fb->s.cg6.thc = (struct cg6_thc *)sparc_alloc_io(phys + CG6_THC_OFFSET, 0, 
 				sizeof(struct cg6_thc), "cgsix_thc", fb->iospace, 0);
-	fb->s.cg6.bt = (struct bt_regs *)sparc_alloc_io(phys + CG6_BROOKTREE_OFFSET, 0, 
+	fb->s.cg6.bt = bt = (struct bt_regs *)sparc_alloc_io(phys + CG6_BROOKTREE_OFFSET, 0, 
 				sizeof(struct bt_regs), "cgsix_dac", fb->iospace, 0);
 	fb->s.cg6.fhc = (u32 *)sparc_alloc_io(phys + CG6_FHC_OFFSET, 0, 
 				sizeof(u32), "cgsix_fhc", fb->iospace, 0);
@@ -652,14 +631,14 @@ __initfunc(char *cgsixfb_init(struct fb_info_sbusfb *fb))
 	fb->mmap_map = cg6_mmap_map;
 	
 	/* Initialize Brooktree DAC */
-	fb->s.cg6.bt->addr = 0x04 << 24;         /* color planes */
-	fb->s.cg6.bt->control = 0xff << 24;
-	fb->s.cg6.bt->addr = 0x05 << 24;
-	fb->s.cg6.bt->control = 0x00 << 24;
-	fb->s.cg6.bt->addr = 0x06 << 24;         /* overlay plane */
-	fb->s.cg6.bt->control = 0x73 << 24;
-	fb->s.cg6.bt->addr = 0x07 << 24;
-	fb->s.cg6.bt->control = 0x00 << 24;
+	bt->addr = 0x04 << 24;         /* color planes */
+	bt->control = 0xff << 24;
+	bt->addr = 0x05 << 24;
+	bt->control = 0x00 << 24;
+	bt->addr = 0x06 << 24;         /* overlay plane */
+	bt->control = 0x73 << 24;
+	bt->addr = 0x07 << 24;
+	bt->control = 0x00 << 24;
 	
 	conf = *fb->s.cg6.fhc;
 	switch(conf & CG6_FHC_CPU_MASK) {

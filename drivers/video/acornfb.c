@@ -21,10 +21,10 @@
 #include <asm/irq.h>
 #include <asm/uaccess.h>
 
-#include "fbcon-mfb.h"
-#include "fbcon-cfb2.h"
-#include "fbcon-cfb4.h"
-#include "fbcon-cfb8.h"
+#include <video/fbcon-mfb.h>
+#include <video/fbcon-cfb2.h>
+#include <video/fbcon-cfb4.h>
+#include <video/fbcon-cfb8.h>
 
 #define MAX_VIDC20_PALETTE	256
 #define MAX_VIDC_PALETTE	16
@@ -228,12 +228,19 @@ acornfb_set_disp(int con)
 static int
 acornfb_vidc20_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue, u_int *trans, struct fb_info *info)
 {
+	int t;
+
 	if (regno >= current_par.palette_size)
 		return 1;
-	*red   = current_par.palette.vidc20[regno].d.red;
-	*green = current_par.palette.vidc20[regno].d.green;
-	*blue  = current_par.palette.vidc20[regno].d.blue;
-	*trans = current_par.palette.vidc20[regno].d.ext;
+	t = current_par.palette.vidc20[regno].d.red;
+	*red = (t << 8) | t;
+	t = current_par.palette.vidc20[regno].d.green;
+	*green = (t << 8) | t;
+	t = current_par.palette.vidc20[regno].d.blue;
+	*blue = (t << 8) | t;
+	t = current_par.palette.vidc20[regno].d.ext;
+	t |= t << 4;
+	*transp = (t << 8) | t;
 	return 0;
 }
 
@@ -243,6 +250,9 @@ acornfb_vidc20_setcolreg(u_int regno, u_int red, u_int green, u_int blue, u_int 
 	if (regno >= current_par.palette_size)
 		return 1;
 
+	red >>= 8;
+	green >>= 8;
+	blue >>= 8;
 	current_par.palette.vidc20[regno].p = 0;
 	current_par.palette.vidc20[regno].d.red   = red;
 	current_par.palette.vidc20[regno].d.green = green;
@@ -261,8 +271,7 @@ acornfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 	int err = 0;
 
 	if (con == currcon)
-		err = fb_get_cmap(cmap, &fb_display[con].var,
-			          kspc, acornfb_vidc20_getcolreg, info);
+		err = fb_get_cmap(cmap, kspc, acornfb_vidc20_getcolreg, info);
 	else if (fb_display[con].cmap.len)
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
 	else
@@ -282,8 +291,8 @@ acornfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 				    current_par.palette_size, 0);
 	if (!err) {
 		if (con == currcon)
-			err = fb_set_cmap(cmap, &fb_display[con].var,
-					  kspc, acornfb_vidc20_setcolreg, info);
+			err = fb_set_cmap(cmap, kspc, acornfb_vidc20_setcolreg,
+					  info);
 		else
 			fb_copy_cmap(cmap, &fb_display[con].cmap,
 				     kspc ? 0 : 1);
@@ -374,7 +383,7 @@ acornfb_init(unsigned long mem_start))
 	fb_info.blank		= acornfb_blank;
 
 	acornfb_set_disp(-1);
-	fb_set_cmap(fb_default_cmap(current_par.palette_size), &fb_display[0].var,
+	fb_set_cmap(fb_default_cmap(current_par.palette_size),
 		    1, acornfb_vidc20_setcolreg, &fb_info);
 	register_framebuffer(&fb_info);
 

@@ -635,6 +635,11 @@ extern unsigned long mm_ptov(unsigned long addr) __attribute__ ((const));
 extern unsigned long kernel_map(unsigned long paddr, unsigned long size,
 				int nocacheflag, unsigned long *memavailp );
 
+/*
+ * Set cache mode of (kernel space) address range. 
+ */
+extern void kernel_set_cachemode (unsigned long address, unsigned long size,
+                                 unsigned int cmode);
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
 #define PageSkip(page)		(0)

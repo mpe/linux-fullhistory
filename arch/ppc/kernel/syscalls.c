@@ -209,7 +209,7 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, size_t len,
 			goto out;
 	}
 	
-	/*flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);*/
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	ret = do_mmap(file, addr, len, prot, flags, offset);
 out:
 	unlock_kernel();

@@ -14,10 +14,7 @@
 
 KERNELLOAD	=0xc0000000
 
-# PowerPC (cross) tools
-ifneq ($(shell uname -m),ppc)
-CROSS_COMPILE 	= ppc-linux-elf-
-else
+ifeq ($(shell uname -m),ppc)
 CHECKS		= checks
 endif
 

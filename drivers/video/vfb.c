@@ -22,13 +22,14 @@
 #include <linux/fb.h>
 #include <linux/init.h>
 
-#include "fbcon-mfb.h"
-#include "fbcon-cfb2.h"
-#include "fbcon-cfb4.h"
-#include "fbcon-cfb8.h"
-#include "fbcon-cfb16.h"
-#include "fbcon-cfb24.h"
-#include "fbcon-cfb32.h"
+#include <video/fbcon.h>
+#include <video/fbcon-mfb.h>
+#include <video/fbcon-cfb2.h>
+#include <video/fbcon-cfb4.h>
+#include <video/fbcon-cfb8.h>
+#include <video/fbcon-cfb16.h>
+#include <video/fbcon-cfb24.h>
+#include <video/fbcon-cfb32.h>
 
 
 #define arraysize(x)	(sizeof(x)/sizeof(*(x)))
@@ -49,6 +50,17 @@ static int currcon = 0;
 static struct display disp;
 static struct fb_info fb_info;
 static struct { u_char red, green, blue, pad; } palette[256];
+static union {
+#ifdef FBCON_HAS_CFB16
+    u16 cfb16[16];
+#endif
+#ifdef FBCON_HAS_CFB24
+    u32 cfb24[16];
+#endif
+#ifdef FBCON_HAS_CFB32
+    u32 cfb32[16];
+#endif
+} fbcon_cmap;
 static char vfb_name[16] = "Virtual FB";
 
 static struct fb_var_screeninfo vfb_default = {
@@ -282,20 +294,23 @@ static int vfb_set_var(struct fb_var_screeninfo *var, int con,
 #ifdef FBCON_HAS_CFB16
 		case 16:
 		    display->dispsw = &fbcon_cfb16;
+		    display->dispsw_data = fbcon_cmap.cfb16;
 		    break;
 #endif
 #ifdef FBCON_HAS_CFB24
 		case 24:
 		    display->dispsw = &fbcon_cfb24;
+		    display->dispsw_data = fbcon_cmap.cfb24;
 		    break;
 #endif
 #ifdef FBCON_HAS_CFB32
 		case 32:
 		    display->dispsw = &fbcon_cfb32;
+		    display->dispsw_data = fbcon_cmap.cfb32;
 		    break;
 #endif
 		default:
-		    display->dispsw = NULL;
+		    display->dispsw = &fbcon_dummy;
 		    break;
 	    }
 	    if (fb_info.changevar)
@@ -349,8 +364,7 @@ static int vfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			struct fb_info *info)
 {
     if (con == currcon) /* current console? */
-	return fb_get_cmap(cmap, &fb_display[con].var, kspc, vfb_getcolreg,
-			   info);
+	return fb_get_cmap(cmap, kspc, vfb_getcolreg, info);
     else if (fb_display[con].cmap.len) /* non default colormap? */
 	fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
     else
@@ -374,8 +388,7 @@ static int vfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	    return err;
     }
     if (con == currcon)			/* current console? */
-	return fb_set_cmap(cmap, &fb_display[con].var, kspc, vfb_setcolreg,
-			   info);
+	return fb_set_cmap(cmap, kspc, vfb_setcolreg, info);
     else
 	fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
     return 0;
@@ -449,8 +462,7 @@ static int vfbcon_switch(int con, struct fb_info *info)
 {
     /* Do we have to save the colormap? */
     if (fb_display[currcon].cmap.len)
-	fb_get_cmap(&fb_display[currcon].cmap, &fb_display[currcon].var, 1,
-		    vfb_getcolreg, info);
+	fb_get_cmap(&fb_display[currcon].cmap, 1, vfb_getcolreg, info);
 
     currcon = con;
     /* Install new colormap */
@@ -579,9 +591,10 @@ static int vfb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 {
     if (regno > 255)
 	return 1;
-    *red = palette[regno].red;
-    *green = palette[regno].green;
-    *blue = palette[regno].blue;
+    *red = (palette[regno].red<<8) | palette[regno].red;
+    *green = (palette[regno].green<<8) | palette[regno].green;
+    *blue = (palette[regno].blue<<8) | palette[regno].blue;
+    *transp = 0;
     return 0;
 }
 
@@ -597,6 +610,9 @@ static int vfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 {
     if (regno > 255)
 	return 1;
+    red >>= 8;
+    green >>= 8;
+    blue >>= 8;
     palette[regno].red = red;
     palette[regno].green = green;
     palette[regno].blue = blue;
@@ -609,11 +625,10 @@ static void do_install_cmap(int con, struct fb_info *info)
     if (con != currcon)
 	return;
     if (fb_display[con].cmap.len)
-	fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-		    vfb_setcolreg, info);
+	fb_set_cmap(&fb_display[con].cmap, 1, vfb_setcolreg, info);
     else
-	fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-		    &fb_display[con].var, 1, vfb_setcolreg, info);
+	fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel), 1,
+		    vfb_setcolreg, info);
 }
 
 

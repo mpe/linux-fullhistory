@@ -47,6 +47,7 @@ extern enum adb_hw {
 
 extern int (*adb_send_request)(struct adb_request *req, int sync);
 extern int (*adb_autopoll)(int on);
+extern int (*adb_reset_bus)(void);
 
 /* Values for adb_request flags */
 #define ADBREQ_REPLY	1	/* expect reply */

@@ -35,9 +35,9 @@ if [ "$CONFIG_FB" = "y" ]; then
     if [ "$CONFIG_FB_OF" = "y" ]; then
       bool 'Apple "control" display support' CONFIG_FB_CONTROL
       bool 'Apple "platinum" display support' CONFIG_FB_PLATINUM
-#     bool 'Apple "valkyrie" display support' CONFIG_FB_VALKYRIE
+      bool 'Apple "valkyrie" display support' CONFIG_FB_VALKYRIE
       bool 'ATI Mach64 display support' CONFIG_FB_ATY
-#     bool 'IMS Twin Turbo display support' CONFIG_FB_IMSTT
+      bool 'IMS Twin Turbo display support' CONFIG_FB_IMSTT
       bool 'Chips 65550 display support' CONFIG_FB_CT65550
       bool 'S3 Trio display support' CONFIG_FB_S3TRIO
     fi
@@ -48,21 +48,12 @@ if [ "$CONFIG_FB" = "y" ]; then
   if [ "$CONFIG_HP300" = "y" ]; then
     define_bool CONFIG_FB_HP300 y
   fi
-  # I used CONFIG_ARM here because the ARCH construct doesn't seem to work
-  # with xconfig.  --pb
-  if [ "$ARCH" = "i386" -o "$ARCH" = "alpha" -o "$ARCH" = "ppc" -o \
-       "$CONFIG_ARM" = "y" ]; then
-    if [ "$CONFIG_ARM" != "y" -o "$CONFIG_ARCH_ACORN" != "y" ] ; then
-      tristate 'Deprecated almost-VGA support (text only - use normal VGA console instead)' CONFIG_FB_VGA
-    fi
-  fi
   if [ "$ARCH" = "alpha" ]; then
     tristate 'TGA framebuffer support' CONFIG_FB_TGA
   fi
   if [ "$ARCH" = "i386" ]; then
     bool 'VESA VGA graphics console' CONFIG_FB_VESA
     define_bool CONFIG_VIDEO_SELECT y
-    tristate 'MDA dual-headed support' CONFIG_FB_MDA
   fi
   if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
     bool 'SBUS and UPA framebuffers' CONFIG_FB_SBUS
@@ -75,7 +66,9 @@ if [ "$CONFIG_FB" = "y" ]; then
       bool '  CGthree support' CONFIG_FB_CGTHREE
       if [ "$ARCH" = "sparc" ]; then
         bool '  TCX (SS4/SS5 only) support' CONFIG_FB_TCX
+	bool '  CGfourteen (SX) support' CONFIG_FB_CGFOURTEEN
       fi
+      bool '  Leo (ZX) support' CONFIG_FB_LEO
     fi
   fi
   if [ "$ARCH" = "sparc64" ]; then
@@ -138,48 +131,56 @@ if [ "$CONFIG_FB" = "y" ]; then
 	 "$CONFIG_FB_OF" = "y" -o "$CONFIG_FB_TGA" = "y" -o \
 	 "$CONFIG_FB_VESA" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" -o \
 	 "$CONFIG_FB_TCX" = "y" -o "$CONFIG_FB_CGTHREE" = "y" -o \
-	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" ]; then
+	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" -o \
+	 "$CONFIG_FB_CGFOURTEEN" = "y" -o "$CONFIG_FB_G364" = "y" -o \
+	 "$CONFIG_FB_VALKYRIE" = "y" -o "$CONFIG_FB_PLATINUM" = "y" ]; then
       define_bool CONFIG_FBCON_CFB8 y
     else
       if [ "$CONFIG_FB_ACORN" = "m" -o "$CONFIG_FB_ATARI" = "m" -o \
-	   "$CONFIG_FB_ATY" = "y" -o "$CONFIG_FB_MAC" = "y" -o \
+	   "$CONFIG_FB_ATY" = "m" -o "$CONFIG_FB_MAC" = "m" -o \
 	   "$CONFIG_FB_OF" = "m" -o "$CONFIG_FB_TGA" = "m" -o \
 	   "$CONFIG_FB_VESA" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" -o \
 	   "$CONFIG_FB_TCX" = "m" -o "$CONFIG_FB_CGTHREE" = "m" -o \
-	   "$CONFIG_FB_CONTROL" = "m" ]; then
+	   "$CONFIG_FB_CONTROL" = "m" -o "$CONFIG_FB_CLGEN" = "m" -o \
+	   "$CONFIG_FB_CGFOURTEEN" = "m" -o "$CONFIG_FB_G364" = "m" -o \
+	   "$CONFIG_FB_VALKYRIE" = "m" -o "$CONFIG_FB_PLATINUM" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB8 m
       fi
     fi
     if [ "$CONFIG_FB_ATARI" = "y" -o "$CONFIG_FB_ATY" = "y" -o \
 	 "$CONFIG_FB_MAC" = "y" -o "$CONFIG_FB_VESA" = "y" -o \
 	 "$CONFIG_FB_VIRTUAL" = "y" -o "$CONFIG_FB_TBOX" = "y" -o \
-	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" ]; then
+	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" -o \
+	 "$CONFIG_FB_VALKYRIE" = "y" -o "$CONFIG_FB_PLATINUM" = "y" ]; then
       define_bool CONFIG_FBCON_CFB16 y
     else
       if [ "$CONFIG_FB_ATARI" = "m" -o "$CONFIG_FB_ATY" = "m" -o \
 	   "$CONFIG_FB_MAC" = "m" -o "$CONFIG_FB_VESA" = "m" -o \
 	   "$CONFIG_FB_VIRTUAL" = "m" -o "$CONFIG_FB_TBOX" = "m" -o \
-	   "$CONFIG_FB_CONTROL" = "m" -o "$CONFIG_FB_CLGEN" = "m" ]; then
+	   "$CONFIG_FB_CONTROL" = "m" -o "$CONFIG_FB_CLGEN" = "m" -o \
+ 	   "$CONFIG_FB_VALKYRIE" = "m" -o "$CONFIG_FB_PLATINUM" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB16 m
       fi
     fi
     if [ "$CONFIG_FB_ATY" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" -o \
-	 "$CONFIG_FB_CLGEN" = "y" ]; then
+	 "$CONFIG_FB_CLGEN" = "y" -o "$CONFIG_FB_VESA" = "y" ]; then
       define_bool CONFIG_FBCON_CFB24 y
     else
       if [ "$CONFIG_FB_ATY" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" -o \
-	   "$CONFIG_FB_CLGEN" = "m" ]; then
+	   "$CONFIG_FB_CLGEN" = "m" -o "$CONFIG_FB_VESA" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB24 m
       fi
     fi
     if [ "$CONFIG_FB_ATARI" = "y" -o "$CONFIG_FB_ATY" = "y" -o \
 	 "$CONFIG_FB_VESA" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" -o \
-	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" ]; then
+	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" -o \
+	 "$CONFIG_FB_TGA" = "y" -o "$CONFIG_FB_PLATINUM" = "y" ]; then
       define_bool CONFIG_FBCON_CFB32 y
     else
       if [ "$CONFIG_FB_ATARI" = "m" -o "$CONFIG_FB_ATY" = "m" -o \
 	   "$CONFIG_FB_VESA" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" -o \
-	   "$CONFIG_FB_CONTROL" = "m" -o "$CONFIG_FB_CLGEN" = "m" ]; then
+	   "$CONFIG_FB_CONTROL" = "m" -o "$CONFIG_FB_CLGEN" = "m" -o \
+	   "$CONFIG_FB_TGA" = "m" -o "$CONFIG_FB_PLATINUM" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB32 m
       fi
     fi

@@ -54,6 +54,8 @@ extern char reboot_command [];
 #endif
 #ifdef __powerpc__
 extern unsigned long htab_reclaim_on, zero_paged_on, powersave_nap;
+int proc_dol2crvec(ctl_table *table, int write, struct file *filp,
+		  void *buffer, size_t *lenp);
 #endif
 
 extern int pgt_cache_water[];
@@ -176,6 +178,8 @@ static ctl_table kern_table[] = {
 	 0644, NULL, &proc_dointvec},
 	{KERN_PPC_POWERSAVE_NAP, "powersave-nap", &powersave_nap, sizeof(int),
 	 0644, NULL, &proc_dointvec},
+	{KERN_PPC_L2CR, "l2cr", NULL, 0,
+	 0644, NULL, &proc_dol2crvec},
 #endif
 	{KERN_CTLALTDEL, "ctrl-alt-del", &C_A_D, sizeof(int),
 	 0644, NULL, &proc_dointvec},

@@ -16,7 +16,7 @@ int main(int argc, char **argv)
 	if ( argc < 2 )
 	{
 		fprintf(stderr, "Usage: %s <address>\n", argv[0]);
-		exit(-1);
+		return -1;
 	}
 
 	for ( i = 1 ; argv[i] ; i++ )
@@ -41,7 +41,7 @@ int main(int argc, char **argv)
 			strcpy( last, s);
 		}
 		
-		printf( "%s", last);
+		printf( "%s%s", last, s );
 	}		
 	fclose(f);
 	return 0;

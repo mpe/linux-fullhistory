@@ -1,5 +1,5 @@
 /*
- * $Id: ppc_htab.c,v 1.21 1998/05/13 22:34:55 cort Exp $
+ * $Id: ppc_htab.c,v 1.25 1998/08/26 10:28:26 davem Exp $
  *
  * PowerPC hash table management proc entry.  Will show information
  * about the current hash table and will allow changes to it.
@@ -17,6 +17,8 @@
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/sysctl.h>
+#include <linux/ctype.h>
 
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
@@ -31,6 +33,8 @@ static ssize_t ppc_htab_read(struct file * file, char * buf,
 static ssize_t ppc_htab_write(struct file * file, const char * buffer,
 			      size_t count, loff_t *ppos);
 static long long ppc_htab_lseek(struct file * file, loff_t offset, int orig);
+int proc_dol2crvec(ctl_table *table, int write, struct file *filp,
+		  void *buffer, size_t *lenp);
 
 extern PTE *Hash, *Hash_end;
 extern unsigned long Hash_size, Hash_mask;
@@ -518,4 +522,148 @@ ppc_htab_lseek(struct file * file, loff_t offset, int orig)
     default:
 	return(-EINVAL);
     }
+}
+
+int proc_dol2crvec(ctl_table *table, int write, struct file *filp,
+		  void *buffer, size_t *lenp)
+{
+	int vleft, first=1, len, left, val;
+	#define TMPBUFLEN 256
+	char buf[TMPBUFLEN], *p;
+	
+	if ( (_get_PVR() >> 16) != 8) return -EFAULT;
+	
+	if ( /*!table->maxlen ||*/ (filp->f_pos && !write)) {
+		*lenp = 0;
+		return 0;
+	}
+	
+	vleft = table->maxlen / sizeof(int);
+	left = *lenp;
+	
+	for (; left /*&& vleft--*/; first=0) {
+		if (write) {
+			while (left) {
+				char c;
+				if(get_user(c,(char *) buffer))
+					return -EFAULT;
+				if (!isspace(c))
+					break;
+				left--;
+				((char *) buffer)++;
+			}
+			if (!left)
+				break;
+			len = left;
+			if (len > TMPBUFLEN-1)
+				len = TMPBUFLEN-1;
+			if(copy_from_user(buf, buffer, len))
+				return -EFAULT;
+			buf[len] = 0;
+			p = buf;
+			if (*p < '0' || *p > '9')
+				break;
+			val = simple_strtoul(p, &p, 0);
+			len = p-buf;
+			if ((len < left) && *p && !isspace(*p))
+				break;
+			buffer += len;
+			left -= len;
+			_set_L2CR(val);
+			while ( _get_L2CR() & 0x1 )
+				/* wait for invalidate to finish */;
+			  
+		} else {
+			p = buf;
+			if (!first)
+				*p++ = '\t';
+			val = _get_L2CR();
+			p += sprintf(p, "%08x: ", val);
+			p += sprintf(p, " %s",
+				     (val&0x80000000)?"enabled":"disabled");
+			p += sprintf(p,",%sparity",(val&0x40000000)?"":"no ");
+			
+			switch( (val >> 28) & 0x3 )
+			{
+			case 1: p += sprintf(p,",256Kb");
+				break;
+			case 2: p += sprintf(p,",512Kb");
+				break;
+			case 3: p += sprintf(p,",1M");
+				break;
+			default: p += sprintf(p,",unknown size");
+				break;
+			}
+
+			
+			switch( (val >> 25) & 0x7 )
+			{
+			case 0: p += sprintf(p,",clock disabled");
+				break;
+			case 1: p += sprintf(p,",+1 clock");
+				break;
+			case 2: p += sprintf(p,",+1.5 clock");
+				break;
+			case 7:
+			case 3: p += sprintf(p,",reserved clock");
+				break;
+			case 4: p += sprintf(p,",+2 clock");
+				break;
+			case 5: p += sprintf(p,",+2.5 clock");
+				break;
+			case 6: p += sprintf(p,",+3 clock");
+				break;
+			}
+			
+			switch( (val >> 23) & 0x2 )
+			{
+			case 0: p += sprintf(p,",flow-through burst SRAM");
+				break;
+			case 1: p += sprintf(p,",reserved SRAM");
+				break;
+			case 2: p += sprintf(p,",pipelined burst SRAM");
+				break;
+			case 3: p += sprintf(p,",pipelined late-write SRAM");
+				break;
+			}
+			
+			p += sprintf(p,"%s",(val>>22)?"":",data only");
+			p += sprintf(p,"%s",(val>>20)?",ZZ enabled":"");
+			p += sprintf(p,",%s",(val>>19)?"write-through":"copy-back");
+			p += sprintf(p,",%sns hold",(val>>16)?"1.0":"0.5");
+			
+			p += sprintf(p,"\n");
+			
+			len = strlen(buf);
+			if (len > left)
+				len = left;
+			if(copy_to_user(buffer, buf, len))
+				return -EFAULT;
+			left -= len;
+			buffer += len;
+			break;
+		}
+	}
+
+	if (!write && !first && left) {
+		if(put_user('\n', (char *) buffer))
+			return -EFAULT;
+		left--, buffer++;
+	}
+	if (write) {
+		p = (char *) buffer;
+		while (left) {
+			char c;
+			if(get_user(c, p++))
+				return -EFAULT;
+			if (!isspace(c))
+				break;
+			left--;
+		}
+	}
+	if (write && first)
+		return -EINVAL;
+	*lenp -= left;
+	filp->f_pos += *lenp;
+	return 0;
 }

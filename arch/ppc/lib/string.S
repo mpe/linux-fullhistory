@@ -219,12 +219,12 @@ memchr:
 
 	.globl	__copy_tofrom_user
 __copy_tofrom_user:
-	rlwinm.	r7,r5,32-3,3,31		/* r0 = r5 >> 3 */
+	srwi.	r7,r5,3
 	addi	r6,r3,-4
 	addi	r4,r4,-4
-	li	r3,0			/* success return value */
-	beq	2f			/* if less than 8 bytes to do */
-	andi.	r0,r6,3			/* get dest word aligned */
+	li	r3,0		/* success return value */
+	beq	2f		/* if less than 8 bytes to do */
+	andi.	r0,r6,3		/* get dest word aligned */
 	mtctr	r7
 	bne	5f
 1:	lwz	r7,4(r4)
@@ -238,7 +238,7 @@ __copy_tofrom_user:
 14:	lwzu	r0,4(r4)
 	addi	r5,r5,-4
 15:	stwu	r0,4(r6)
-3:	cmpwi	0,r5,0
+3:	cmpwi	0,r5,0		/* do 1 byte at a time for the remainder */
 	beqlr
 	mtctr	r5
 	addi	r4,r4,3
@@ -247,32 +247,78 @@ __copy_tofrom_user:
 16:	stbu	r0,1(r6)
 	bdnz	4b
 	blr
-5:	subfic	r0,r0,4
-	mtctr	r0
+5:	subfic	r0,r0,4		/* copy bytes until we have the */
+	mtctr	r0		/* destination 4-byte aligned */
+	subf	r5,r0,r5
 6:	lbz	r7,4(r4)
 	addi	r4,r4,1
 17:	stb	r7,4(r6)
 	addi	r6,r6,1
 	bdnz	6b
-	subf	r5,r0,r5
-	rlwinm.	r7,r5,32-3,3,31
+	srwi.	r7,r5,3
 	beq	2b
 	mtctr	r7
 	b	1b
-99:	li	r3,-EFAULT
+/* we come here on a fault in the 8-byte-at-a-time loop */
+88:	subi	r4,r4,8		/* compensate for the lwzu */
+98:	mfctr	r0
+	rlwimi	r5,r0,3,0,28	/* use the byte-at-a-time loop to */
+	b	3b		/* copy up to the byte at fault */
+/* here on a write fault in the single-word copy */
+96:	subi	r4,r4,4
+	b	3b
+/* here on a read fault in the initial single-byte copy */
+90:	mfctr	r3
+	add	r3,r3,r5
+	b	70f
+/* here on a read fault in the final single-byte copy */
+99:	mfctr	r3
+	subi	r6,r6,3
+/* clear out the rest of the destination: r3 bytes starting at 4(r6) */
+70:	li	r0,0
+	mr.	r5,r3
+	beq	76f
+71:	andi.	r4,r6,3
+	beq	72f
+77:	stb	r0,4(r6)
+	addi	r6,r6,1
+	addic.	r5,r5,-1
+	bne	71b
+72:	srwi.	r7,r5,2
+	beq	73f
+	mtctr	r7
+74:	stwu	r0,4(r6)
+	bdnz	74b
+73:	andi.	r5,r5,3
+	beq	76f
+	mtctr	r5
+	addi	r6,r6,3
+75:	stbu	r0,1(r6)
+	bdnz	75b
+76:	blr
+/* here on a write fault in the initial single-byte copy */
+80:	mfctr	r3
+	add	r3,r3,r5
 	blr
+/* here on a write fault in the final single-byte copy */
+81:	mfctr	r3
+	blr
+
 .section __ex_table,"a"
 	.align	2
-	.long	1b,99b
-	.long	11b,99b
-	.long	12b,99b
-	.long	13b,99b
-	.long	14b,99b
-	.long	15b,99b
+	.long	1b,98b
+	.long	11b,98b
+	.long	12b,88b
+	.long	13b,88b
+	.long	14b,3b
+	.long	15b,96b
 	.long	4b,99b
-	.long	16b,99b
-	.long	6b,99b
-	.long	17b,99b
+	.long	16b,81b
+	.long	6b,90b
+	.long	17b,80b
+	.long	77b,76b
+	.long	74b,76b
+	.long	75b,76b
 .text
 
 #undef CLEAR_USE_DCBZ 1

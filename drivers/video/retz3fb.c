@@ -37,11 +37,11 @@
 #include <asm/irq.h>
 #include <asm/pgtable.h>
 
-#include "retz3fb.h"
-#include "fbcon.h"
-#include "fbcon-cfb8.h"
-#include "fbcon-cfb16.h"
+#include <video/fbcon.h>
+#include <video/fbcon-cfb8.h>
+#include <video/fbcon-cfb16.h>
 
+#include "retz3fb.h"
 
 /* #define DEBUG if(1) */
 #define DEBUG if(0)
@@ -139,7 +139,7 @@ static struct fb_hwswitch {
 static char retz3fb_name[16] = "RetinaZ3";
 
 
-static unsigned char retz3_color_table [256][4];
+static unsigned char retz3_color_table [256][3];
 static unsigned long z3_mem;
 static unsigned long z3_fbmem;
 static unsigned long z3_size;
@@ -794,7 +794,6 @@ static int retz3_init(void)
 			retz3_color_table [i][0] = i;
 			retz3_color_table [i][1] = i;
 			retz3_color_table [i][2] = i;
-			retz3_color_table [i][3] = 0;
 		}
 	}
 
@@ -819,7 +818,7 @@ static int retz3_init(void)
 	}
 #endif
 
-	retz3_setcolreg (255, 56, 100, 160, 0, NULL /* unused */);
+	retz3_setcolreg (255, 56<<8, 100<<8, 160<<8, 0, NULL /* unused */);
 	retz3_setcolreg (254, 0, 0, 0, 0, NULL /* unused */);
 
 	return 0;
@@ -846,7 +845,7 @@ static int retz3_encode_fix(struct fb_fix_screeninfo *fix,
 	if (par->bpp == 8)
 		fix->visual = FB_VISUAL_PSEUDOCOLOR;
 	else
-		fix->visual = FB_VISUAL_DIRECTCOLOR;
+		fix->visual = FB_VISUAL_TRUECOLOR;
 
 	fix->xpanstep = 0;
 	fix->ypanstep = 0;
@@ -944,9 +943,7 @@ static int retz3_encode_var(struct fb_var_screeninfo *var,
 
 
 /*
- *    Set a single color register. The values supplied are already
- *    rounded down to the hardware's capabilities (according to the
- *    entries in the var structure). Return != 0 for invalid regno.
+ *    Set a single color register. Return != 0 for invalid regno.
  */
 
 static int retz3_setcolreg(unsigned int regno, unsigned int red,
@@ -958,15 +955,18 @@ static int retz3_setcolreg(unsigned int regno, unsigned int red,
 	if (regno > 255)
 		return 1;
 
-	retz3_color_table [regno][0] = red & 0xff;
-	retz3_color_table [regno][1] = green & 0xff;
-	retz3_color_table [regno][2] = blue & 0xff;
-	retz3_color_table [regno][3] = transp;
+	red >>= 10;
+	green >>= 10;
+	blue >>= 10;
+
+	retz3_color_table [regno][0] = red;
+	retz3_color_table [regno][1] = green;
+	retz3_color_table [regno][2] = blue;
 
 	reg_w(VDAC_ADDRESS_W, regno);
-	reg_w(VDAC_DATA, (red & 0xff) >> 2);
-	reg_w(VDAC_DATA, (green & 0xff) >> 2);
-	reg_w(VDAC_DATA, (blue & 0xff) >> 2);
+	reg_w(VDAC_DATA, red);
+	reg_w(VDAC_DATA, green);
+	reg_w(VDAC_DATA, blue);
 
 	return 0;
 }
@@ -981,12 +981,17 @@ static int retz3_getcolreg(unsigned int regno, unsigned int *red,
 			   unsigned int *green, unsigned int *blue,
 			   unsigned int *transp, struct fb_info *info)
 {
+	int t;
+
 	if (regno > 255)
 		return 1;
-	*red    = retz3_color_table [regno][0];
-	*green  = retz3_color_table [regno][1];
-	*blue   = retz3_color_table [regno][2];
-	*transp = retz3_color_table [regno][3];
+	t       = retz3_color_table [regno][0];
+	*red    = (t<<10) | (t<<4) | (t>>2);
+	t       = retz3_color_table [regno][1];
+	*green  = (t<<10) | (t<<4) | (t>>2);
+	t       = retz3_color_table [regno][2];
+	*blue   = (t<<10) | (t<<4) | (t>>2);
+	*transp = 0;
 	return 0;
 }
 
@@ -1009,9 +1014,9 @@ void retz3_blank(int blank)
 	else
 		for (i = 0; i < 256; i++){
 			reg_w(VDAC_ADDRESS_W, i);
-			reg_w(VDAC_DATA, retz3_color_table [i][0] >> 2);
-			reg_w(VDAC_DATA, retz3_color_table [i][1] >> 2);
-			reg_w(VDAC_DATA, retz3_color_table [i][2] >> 2);
+			reg_w(VDAC_DATA, retz3_color_table [i][0]);
+			reg_w(VDAC_DATA, retz3_color_table [i][1]);
+			reg_w(VDAC_DATA, retz3_color_table [i][2]);
 		}
 }
 
@@ -1186,12 +1191,10 @@ static void do_install_cmap(int con, struct fb_info *info)
 	if (con != currcon)
 		return;
 	if (fb_display[con].cmap.len)
-		fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-			    fbhw->setcolreg, info);
+		fb_set_cmap(&fb_display[con].cmap, 1, fbhw->setcolreg, info);
 	else
 		fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-					    &fb_display[con].var, 1,
-					    fbhw->setcolreg, info);
+					    1, fbhw->setcolreg, info);
 }
 
 
@@ -1277,6 +1280,12 @@ static void retz3fb_set_disp(int con, struct fb_info *info)
 	display->ywrapstep = fix.ywrapstep;
 	display->can_soft_blank = 1;
 	display->inverse = z3fb_inverse;
+
+	/*
+	 * This seems to be about 20% faster.
+	 */
+	display->scrollmode = SCROLL_YREDRAW;
+
 	switch (display->var.bits_per_pixel) {
 #ifdef FBCON_HAS_CFB8
 	case 8:
@@ -1293,7 +1302,7 @@ static void retz3fb_set_disp(int con, struct fb_info *info)
 		break;
 #endif
 	default:
-		display->dispsw = NULL;
+		display->dispsw = &fbcon_dummy;
 		break;
 	}
 }
@@ -1364,7 +1373,7 @@ static int retz3fb_set_var(struct fb_var_screeninfo *var, int con,
 				break;
 #endif
 			default:
-				display->dispsw = NULL;
+				display->dispsw = &fbcon_dummy;
 				break;
 			}
 /*
@@ -1392,8 +1401,7 @@ static int retz3fb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			    struct fb_info *info)
 {
 	if (con == currcon) /* current console? */
-		return(fb_get_cmap(cmap, &fb_display[con].var, kspc,
-				   fbhw->getcolreg, info));
+		return(fb_get_cmap(cmap, kspc, fbhw->getcolreg, info));
 	else if (fb_display[con].cmap.len) /* non default colormap? */
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
 	else
@@ -1419,8 +1427,7 @@ static int retz3fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			return err;
 	}
 	if (con == currcon)              /* current console? */
-		return(fb_set_cmap(cmap, &fb_display[con].var, kspc,
-				   fbhw->setcolreg, info));
+		return(fb_set_cmap(cmap, kspc, fbhw->setcolreg, info));
 	else
 		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
 	return 0;
@@ -1552,8 +1559,7 @@ static int z3fb_switch(int con, struct fb_info *info)
 {
 	/* Do we have to save the colormap? */
 	if (fb_display[currcon].cmap.len)
-		fb_get_cmap(&fb_display[currcon].cmap,
-			    &fb_display[currcon].var, 1, fbhw->getcolreg,
+		fb_get_cmap(&fb_display[currcon].cmap, 1, fbhw->getcolreg,
 			    info);
 
 	do_fb_set_var(&fb_display[con].var, 1);
@@ -1631,7 +1637,7 @@ void cleanup_module(void)
 static void fbcon_retz3_8_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	                int height, int width)
 {
-	int fontwidth = p->fontwidth;
+	int fontwidth = fontwidth(p);
 
 	sx *= fontwidth;
 	dx *= fontwidth;
@@ -1639,11 +1645,11 @@ static void fbcon_retz3_8_bmove(struct display *p, int sy, int sx, int dy, int d
 
 	retz3_bitblt(&p->var,
 		     (unsigned short)sx,
-		     (unsigned short)(sy*p->fontheight),
+		     (unsigned short)(sy*fontheight(p)),
 		     (unsigned short)dx,
-		     (unsigned short)(dy*p->fontheight),
+		     (unsigned short)(dy*fontheight(p)),
 		     (unsigned short)width,
-		     (unsigned short)(height*p->fontheight),
+		     (unsigned short)(height*fontheight(p)),
 		     Z3BLTcopy,
 		     0xffff);
 }
@@ -1652,7 +1658,7 @@ static void fbcon_retz3_8_clear(struct vc_data *conp, struct display *p, int
 			sy, int sx, int height, int width)
 {
 	unsigned short col;
-	int fontwidth = p->fontwidth;
+	int fontwidth = fontwidth(p);
 
 	sx *= fontwidth;
 	width *= fontwidth;
@@ -1663,11 +1669,11 @@ static void fbcon_retz3_8_clear(struct vc_data *conp, struct display *p, int
 
 	retz3_bitblt(&p->var,
 		     (unsigned short)sx,
-		     (unsigned short)(sy*p->fontheight),
+		     (unsigned short)(sy*fontheight(p)),
 		     (unsigned short)sx,
-		     (unsigned short)(sy*p->fontheight),
+		     (unsigned short)(sy*fontheight(p)),
 		     (unsigned short)width,
-		     (unsigned short)(height*p->fontheight),
+		     (unsigned short)(height*fontheight(p)),
 		     Z3BLTset,
 		     col);
 }

@@ -25,9 +25,9 @@
 #define MSR_LE		(1<<0)		/* Little-Endian enable */
 
 #ifdef CONFIG_APUS
-#define MSR_		MSR_ME|MSR_FE0|MSR_FE1|MSR_IP|MSR_RI
+#define MSR_		MSR_ME|MSR_IP|MSR_RI
 #else
-#define MSR_		MSR_ME|MSR_FE0|MSR_FE1|MSR_RI
+#define MSR_		MSR_ME|MSR_RI
 #endif
 #define MSR_KERNEL      MSR_|MSR_IR|MSR_DR
 #define MSR_USER	MSR_KERNEL|MSR_PR|MSR_EE
@@ -64,6 +64,7 @@
 #define _MACH_chrp     4 /* chrp machine */
 #define _MACH_mbx      8 /* Motorola MBX board */
 #define _MACH_apus    16 /* amiga with phase5 powerup */
+#define _MACH_fads    32 /* Motorola FADS board */
 
 /* see residual.h for these */
 #define _PREP_Motorola 0x01  /* motorola prep */
@@ -192,6 +193,13 @@ n:
 #define is_chrp (0)
 #define have_of (0)
 #endif /* CONFIG_MBX */
+
+#ifdef CONFIG_FADS
+#define _machine (_MACH_fads)
+#define is_prep (0)
+#define is_chrp (0)
+#define have_of (0)
+#endif /* CONFIG_FADS */
 
 #ifdef CONFIG_APUS
 #define _machine (_MACH_apus)

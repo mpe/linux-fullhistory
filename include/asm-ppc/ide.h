@@ -14,11 +14,15 @@
 #include <linux/config.h>
 #ifdef CONFIG_APUS
 #include <linux/hdreg.h>
+
+#define ide_init_hwif_ports m68k_ide_init_hwif_ports 
 #include <asm-m68k/ide.h>
+#undef ide_init_hwif_ports
+#undef insw
+
 void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
 void ide_insw(ide_ioreg_t port, void *buf, int ns);
 void ide_outsw(ide_ioreg_t port, void *buf, int ns);
-#undef insw
 #define insw(port, buf, ns) 	do {			\
 	if ( _machine != _MACH_Pmac && _machine != _MACH_apus )	\
 		/* this must be the same as insw in io.h!! */	\

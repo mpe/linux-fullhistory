@@ -15,7 +15,7 @@
 
 /* KNOWN PROBLEMS/TO DO ===================================================== *
  *
- *	- How to set a single color register?
+ *	- How to set a single color register on 24-plane cards?
  *
  *	- Hardware cursor (useful for other graphics boards too)
  *
@@ -38,9 +38,9 @@
 #include <linux/selection.h>
 #include <asm/io.h>
 
-#include "fbcon.h"
-#include "fbcon-cfb8.h"
-#include "fbcon-cfb32.h"
+#include <video/fbcon.h>
+#include <video/fbcon-cfb8.h>
+#include <video/fbcon-cfb32.h>
 
 
 /* TGA hardware description (minimal) */
@@ -242,6 +242,7 @@ static int currcon = 0;
 static struct display disp;
 static struct fb_info fb_info;
 static struct { u_char red, green, blue, pad; } palette[256];
+static u32 fbcon_cfb32_cmap[16];
 
 static struct fb_fix_screeninfo fb_fix = { { "DEC TGA ", } };
 static struct fb_var_screeninfo fb_var = { 0, };
@@ -404,13 +405,11 @@ static int tgafb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info)
 {
     if (con == currcon) /* current console? */
-	return fb_get_cmap(cmap, &fb_display[con].var, kspc, tgafb_getcolreg,
-			   info);
+	return fb_get_cmap(cmap, kspc, tgafb_getcolreg, info);
     else if (fb_display[con].cmap.len) /* non default colormap? */
 	fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
     else
-	fb_copy_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-		     cmap, kspc ? 0 : 2);
+	fb_copy_cmap(fb_default_cmap(256), cmap, kspc ? 0 : 2);
     return 0;
 }
 
@@ -424,15 +423,14 @@ static int tgafb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
     int err;
 
     if (!fb_display[con].cmap.len) {	/* no colormap allocated? */
-	if ((err = fb_alloc_cmap(&fb_display[con].cmap,
-				 1<<fb_display[con].var.bits_per_pixel, 0)))
+	if ((err = fb_alloc_cmap(&fb_display[con].cmap, 256, 0)))
 	    return err;
     }
     if (con == currcon) {		/* current console? */
-	err = fb_set_cmap(cmap, &fb_display[con].var, kspc, tgafb_setcolreg,
-			  info);
+	err = fb_set_cmap(cmap, kspc, tgafb_setcolreg, info);
 #if 1
-	tga_update_palette();
+	if (tga_type != 0)
+		tga_update_palette();
 #endif
 	return err;
     } else
@@ -681,9 +679,9 @@ __initfunc(void tgafb_init(void))
 	TGA_WRITE_REG(temp & 0x000fffff, TGA_CURSOR_BASE_REG);
     }
 
-    /* finally, enable video scan & cursor
+    /* finally, enable video scan
        (and pray for the monitor... :-) */
-    TGA_WRITE_REG(0x05, TGA_VALID_REG); /* SCANNING and CURSOR */
+    TGA_WRITE_REG(0x01, TGA_VALID_REG); /* SCANNING */
 
     fb_var.xres = fb_var.xres_virtual = 640;
     fb_var.yres = fb_var.yres_virtual = 480;
@@ -748,10 +746,11 @@ __initfunc(void tgafb_init(void))
 	case 1: /* 24-plane */
 	case 3: /* 24plusZ */
 	    disp.dispsw = &fbcon_cfb32;
+	    disp.dispsw_data = &fbcon_cfb32_cmap;
 	    break;
 #endif
 	default:
-	    disp.dispsw = NULL;
+	    disp.dispsw = &fbcon_dummy;
     }
     disp.scrollmode = SCROLL_YREDRAW;
 
@@ -779,8 +778,7 @@ static int tgafbcon_switch(int con, struct fb_info *info)
 {
     /* Do we have to save the colormap? */
     if (fb_display[currcon].cmap.len)
-	fb_get_cmap(&fb_display[currcon].cmap, &fb_display[currcon].var, 1,
-		    tgafb_getcolreg, info);
+	fb_get_cmap(&fb_display[currcon].cmap, 1, tgafb_getcolreg, info);
 
     currcon = con;
     /* Install new colormap */
@@ -804,7 +802,13 @@ static int tgafbcon_updatevar(int con, struct fb_info *info)
 
 static void tgafbcon_blank(int blank, struct fb_info *info)
 {
-    /* Nothing */
+    /* Should also do stuff here for vesa blanking  -tor */
+
+    if (blank > 0) {
+	TGA_WRITE_REG(0x03, TGA_VALID_REG); /* SCANNING and BLANK */
+    } else {
+	TGA_WRITE_REG(0x01, TGA_VALID_REG); /* SCANNING */
+    }
 }
 
     /*
@@ -817,9 +821,10 @@ static int tgafb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 {
     if (regno > 255)
 	return 1;
-    *red = palette[regno].red;
-    *green = palette[regno].green;
-    *blue = palette[regno].blue;
+    *red = (palette[regno].red<<8) | palette[regno].red;
+    *green = (palette[regno].green<<8) | palette[regno].green;
+    *blue = (palette[regno].blue<<8) | palette[regno].blue;
+    *transp = 0;
     return 0;
 }
 
@@ -835,6 +840,9 @@ static int tgafb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 {
     if (regno > 255)
 	return 1;
+    red >>= 8;
+    green >>= 8;
+    blue >>= 8;
     palette[regno].red = red;
     palette[regno].green = green;
     palette[regno].blue = blue;
@@ -844,7 +852,14 @@ static int tgafb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	fbcon_cfb32_cmap[regno] = (red << 16) | (green << 8) | blue;
 #endif
 
-    /* How to set a single color register?? */
+    if (tga_type == 0) { /* 8-plane */
+        BT485_WRITE(regno, BT485_ADDR_PAL_WRITE);
+        TGA_WRITE_REG(BT485_DATA_PAL, TGA_RAMDAC_SETUP_REG);
+        TGA_WRITE_REG(red|(BT485_DATA_PAL<<8),TGA_RAMDAC_REG);
+        TGA_WRITE_REG(green|(BT485_DATA_PAL<<8),TGA_RAMDAC_REG);
+        TGA_WRITE_REG(blue|(BT485_DATA_PAL<<8),TGA_RAMDAC_REG);
+    }                                                    
+    /* How to set a single color register on 24-plane cards?? */
 
     return 0;
 }
@@ -852,31 +867,21 @@ static int tgafb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 
 #if 1
     /*
-     *	FIXME: since I don't know how to set a single arbitrary color register,
-     *  all color palette registers have to be updated
+     *	FIXME: since I don't know how to set a single arbitrary color register
+     *  on 24-plane cards, all color palette registers have to be updated
      */
 
 static void tga_update_palette(void)
 {
     int i;
 
-    if (tga_type == 0) { /* 8-plane */
-	BT485_WRITE(0x00, BT485_ADDR_PAL_WRITE);
-	TGA_WRITE_REG(BT485_DATA_PAL, TGA_RAMDAC_SETUP_REG);
-	for (i = 0; i < 256; i++) {
-	    TGA_WRITE_REG(palette[i].red|(BT485_DATA_PAL<<8),TGA_RAMDAC_REG);
-	    TGA_WRITE_REG(palette[i].green|(BT485_DATA_PAL<<8),TGA_RAMDAC_REG);
-	    TGA_WRITE_REG(palette[i].blue|(BT485_DATA_PAL<<8),TGA_RAMDAC_REG);
-	}
-    } else {
-	BT463_LOAD_ADDR(0x0000);
-	TGA_WRITE_REG((BT463_PALETTE<<2), TGA_RAMDAC_REG);
+    BT463_LOAD_ADDR(0x0000);
+    TGA_WRITE_REG((BT463_PALETTE<<2), TGA_RAMDAC_REG);
 
-	for (i = 0; i < 256; i++) {
-	    TGA_WRITE_REG(palette[i].red|(BT463_PALETTE<<10), TGA_RAMDAC_REG);
-	    TGA_WRITE_REG(palette[i].green|(BT463_PALETTE<<10), TGA_RAMDAC_REG);
-	    TGA_WRITE_REG(palette[i].blue|(BT463_PALETTE<<10), TGA_RAMDAC_REG);
-	}
+    for (i = 0; i < 256; i++) {
+	 TGA_WRITE_REG(palette[i].red|(BT463_PALETTE<<10), TGA_RAMDAC_REG);
+	 TGA_WRITE_REG(palette[i].green|(BT463_PALETTE<<10), TGA_RAMDAC_REG);
+	 TGA_WRITE_REG(palette[i].blue|(BT463_PALETTE<<10), TGA_RAMDAC_REG);
     }
 }
 #endif
@@ -886,14 +891,12 @@ static void do_install_cmap(int con, struct fb_info *info)
     if (con != currcon)
 	return;
     if (fb_display[con].cmap.len)
-	fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-		    tgafb_setcolreg, info);
+	fb_set_cmap(&fb_display[con].cmap, 1, tgafb_setcolreg, info);
     else
-	fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-				    &fb_display[con].var, 1, tgafb_setcolreg,
-				    info);
+	fb_set_cmap(fb_default_cmap(256), 1, tgafb_setcolreg, info);
 #if 1
-    tga_update_palette();
+    if (tga_type != 0)
+        tga_update_palette();
 #endif
 }
 

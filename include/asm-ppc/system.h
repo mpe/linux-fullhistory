@@ -53,14 +53,15 @@ extern void hard_reset_now(void);
 extern void poweroff_now(void);
 extern int _get_PVR(void);
 extern long _get_L2CR(void);
+extern void _set_L2CR(unsigned long);
 extern void via_cuda_init(void);
 extern void pmac_nvram_init(void);
 extern void read_rtc_time(void);
 extern void pmac_find_display(void);
 extern void giveup_fpu(void);
 extern void smp_giveup_fpu(struct task_struct *);
-extern void cvt_fd(float *from, double *to);
-extern void cvt_df(double *from, float *to);
+extern void cvt_fd(float *from, double *to, unsigned long *fpscr);
+extern void cvt_df(double *from, float *to, unsigned long *fpscr);
 
 struct device_node;
 extern void note_scsi_host(struct device_node *, void *);

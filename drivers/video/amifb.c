@@ -61,9 +61,9 @@
 #include <asm/amigaints.h>
 #include <asm/setup.h>
 
-#include "fbcon-afb.h"
-#include "fbcon-ilbm.h"
-#include "fbcon-mfb.h"
+#include <video/fbcon-afb.h>
+#include <video/fbcon-ilbm.h>
+#include <video/fbcon-mfb.h>
 
 
 #define DEBUG
@@ -756,8 +756,9 @@ extern volatile u_short amiga_audio_min_period;
 
 	/*
 	 * Since we can't read the palette on OCS/ECS, and since reading one
-	 * single color palette entry require 5 expensive custom chip bus accesses
+	 * single color palette entry requires 5 expensive custom chip bus accesses
 	 * on AGA, we keep a copy of the current palette.
+	 * Note that the entries are always 24 bit!
 	 */
 
 #if defined(CONFIG_FB_AMIGA_AGA)
@@ -1077,13 +1078,13 @@ static struct fb_var_screeninfo amifb_default;
 /* colour */
 
 #define rgb2hw8_high(red, green, blue) \
-	(((red)<<4 & 0xf00) | ((green) & 0x0f0) | ((blue)>>4 & 0x00f))
+	(((red & 0xf0)<<4) | (green & 0xf0) | ((blue & 0xf0)>>4))
 #define rgb2hw8_low(red, green, blue) \
-	(((red)<<8 & 0xf00) | ((green)<<4 & 0x0f0) | ((blue) & 0x00f))
+	(((red & 0x0f)<<8) | ((green & 0x0f)<<4) | (blue & 0x0f))
 #define rgb2hw4(red, green, blue) \
-	(((red)<<8 & 0xf00) | ((green)<<4 & 0x0f0) | ((blue) & 0x00f))
+	(((red & 0xf0)<<4) | (green & 0xf0) | ((blue & 0xf0)>>4))
 #define rgb2hw2(red, green, blue) \
-	(((red)<<10 & 0xc00) | ((green)<<6 & 0x0c0) | ((blue)<<2 & 0x00c))
+	(((red & 0xc0)<<4) | (green & 0xc0) | ((blue & 0xc0)>>4))
 
 /* sprpos/sprctl (sprite positioning) */
 
@@ -1558,8 +1559,7 @@ static int amifb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info)
 {
 	if (con == currcon) /* current console? */
-		return fb_get_cmap(cmap, &fb_display[con].var, kspc,
-				   ami_getcolreg, info);
+		return fb_get_cmap(cmap, kspc, ami_getcolreg, info);
 	else if (fb_display[con].cmap.len) /* non default colormap? */
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
 	else
@@ -1584,8 +1584,7 @@ static int amifb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			return err;
 	}
 	if (con == currcon)			/* current console? */
-		return fb_set_cmap(cmap, &fb_display[con].var, kspc,
-				   ami_setcolreg, info);
+		return fb_set_cmap(cmap, kspc, ami_setcolreg, info);
 	else
 		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
 	return 0;
@@ -1916,8 +1915,7 @@ static int amifbcon_switch(int con, struct fb_info *info)
 {
 	/* Do we have to save the colormap? */
 	if (fb_display[currcon].cmap.len)
-		fb_get_cmap(&fb_display[currcon].cmap,
-			    &fb_display[currcon].var, 1, ami_getcolreg, info);
+		fb_get_cmap(&fb_display[currcon].cmap, 1, ami_getcolreg, info);
 
 	currcon = con;
 	ami_set_var(&fb_display[con].var);
@@ -1954,12 +1952,10 @@ static void do_install_cmap(int con, struct fb_info *info)
 	if (con != currcon)
 		return;
 	if (fb_display[con].cmap.len)
-		fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-			    ami_setcolreg, info);
+		fb_set_cmap(&fb_display[con].cmap, 1, ami_setcolreg, info);
 	else
 		fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-					    &fb_display[con].var, 1,
-					    ami_setcolreg, info);
+					    1, ami_setcolreg, info);
 }
 
 static int flash_cursor(void)
@@ -2767,17 +2763,34 @@ static int ami_update_par(void)
 static int ami_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
                          u_int *transp, struct fb_info *info)
 {
+	int len, tr, tg, tb;
+
 	if (IS_AGA) {
 		if (regno > 255)
 			return 1;
+		len = 8;
+	} else if (currentpar.bplcon0 & BPC0_SHRES) {
+		if (regno > 3)
+			return 1;
+		len = 2;
 	} else {
 		if (regno > 31)
 			return 1;
+		len = 4;
 	}
-
-	*red = palette[regno].red;
-	*green = palette[regno].green;
-	*blue = palette[regno].blue;
+	tr = palette[regno].red>>(8-len);
+	tg = palette[regno].green>>(8-len);
+	tb = palette[regno].blue>>(8-len);
+	while (len < 16) {
+		tr |= tr<<len;
+		tg |= tg<<len;
+		tb |= tb<<len;
+		len <<= 1;
+	}
+	*red = tr;
+	*green = tg;
+	*blue = tb;
+	*transp = 0;
 	return 0;
 }
 
@@ -2791,16 +2804,22 @@ static int ami_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 static int ami_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
                          u_int transp, struct fb_info *info)
 {
-#if defined(CONFIG_FB_AMIGA_AGA)
-	u_short bplcon3 = currentpar.bplcon3;
-
 	if (IS_AGA) {
 		if (regno > 255)
 			return 1;
-	} else
-#endif
+	} else if (currentpar.bplcon0 & BPC0_SHRES) {
+		if (regno > 3)
+			return 1;
+	} else {
 		if (regno > 31)
 			return 1;
+	}
+	red >>= 8;
+	green >>= 8;
+	blue >>= 8;
+	palette[regno].red = red;
+	palette[regno].green = green;
+	palette[regno].blue = blue;
 
 	/*
 	 * Update the corresponding Hardware Color Register, unless it's Color
@@ -2810,13 +2829,10 @@ static int ami_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	 * being changed by ami_do_blank() during the VBlank.
 	 */
 
-	palette[regno].red = red;
-	palette[regno].green = green;
-	palette[regno].blue = blue;
-
 	if (regno || !is_blanked) {
 #if defined(CONFIG_FB_AMIGA_AGA)
 		if (IS_AGA) {
+			u_short bplcon3 = currentpar.bplcon3;
 			VBlankOff();
 			custom.bplcon3 = bplcon3 | (regno<<8 & 0xe000);
 			custom.color[regno&31] = rgb2hw8_high(red, green, blue);
@@ -2826,26 +2842,24 @@ static int ami_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			VBlankOn();
 		} else
 #endif
-		{
 #if defined(CONFIG_FB_AMIGA_ECS)
-			if (currentpar.bplcon0 & BPC0_SHRES) {
-				u_short color, mask;
-				int i;
+		if (currentpar.bplcon0 & BPC0_SHRES) {
+			u_short color, mask;
+			int i;
 
-				mask = 0x3333;
-				color = rgb2hw2(red, green, blue);
-				VBlankOff();
-				for (i = regno+12; i >= (int)regno; i -= 4)
-					custom.color[i] = ecs_palette[i] = (ecs_palette[i] & mask) | color;
-				mask <<=2; color >>= 2;
-				regno = down16(regno)+mul4(mod4(regno));
-				for (i = regno+3; i >= (int)regno; i--)
-					custom.color[i] = ecs_palette[i] = (ecs_palette[i] & mask) | color;
-				VBlankOn();
-			} else
+			mask = 0x3333;
+			color = rgb2hw2(red, green, blue);
+			VBlankOff();
+			for (i = regno+12; i >= (int)regno; i -= 4)
+				custom.color[i] = ecs_palette[i] = (ecs_palette[i] & mask) | color;
+			mask <<=2; color >>= 2;
+			regno = down16(regno)+mul4(mod4(regno));
+			for (i = regno+3; i >= (int)regno; i--)
+				custom.color[i] = ecs_palette[i] = (ecs_palette[i] & mask) | color;
+			VBlankOn();
+		} else
 #endif
-				custom.color[regno] = rgb2hw4(red, green, blue);
-		}
+			custom.color[regno] = rgb2hw4(red, green, blue);
 	}
 	return 0;
 }
@@ -2982,23 +2996,21 @@ static void ami_do_blank(void)
 		custom.bplcon3 = bplcon3;
 	} else
 #endif
-	{
 #if defined(CONFIG_FB_AMIGA_ECS)
-		if (par->bplcon0 & BPC0_SHRES) {
-			u_short color, mask;
-			int i;
+	if (par->bplcon0 & BPC0_SHRES) {
+		u_short color, mask;
+		int i;
 
-			mask = 0x3333;
-			color = rgb2hw2(red, green, blue);
-			for (i = 12; i >= 0; i -= 4)
-				custom.color[i] = ecs_palette[i] = (ecs_palette[i] & mask) | color;
-			mask <<=2; color >>= 2;
-			for (i = 3; i >= 0; i--)
-				custom.color[i] = ecs_palette[i] = (ecs_palette[i] & mask) | color;
-		} else
+		mask = 0x3333;
+		color = rgb2hw2(red, green, blue);
+		for (i = 12; i >= 0; i -= 4)
+			custom.color[i] = ecs_palette[i] = (ecs_palette[i] & mask) | color;
+		mask <<=2; color >>= 2;
+		for (i = 3; i >= 0; i--)
+			custom.color[i] = ecs_palette[i] = (ecs_palette[i] & mask) | color;
+	} else
 #endif
-			custom.color[0] = rgb2hw4(red, green, blue);
-	}
+		custom.color[0] = rgb2hw4(red, green, blue);
 	is_blanked = do_blank > 0 ? do_blank : 0;
 }
 

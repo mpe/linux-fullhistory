@@ -38,6 +38,7 @@
 #include <linux/delay.h>
 #include <linux/ioport.h>
 #include <linux/major.h>
+#include <linux/blk.h>
 #include <linux/vt_kern.h>
 #include <linux/console.h>
 #include <asm/prom.h>
@@ -53,9 +54,9 @@
 #include <asm/mediabay.h>
 #include "time.h"
 
-extern int root_mountflags;
-
 unsigned char drive_info;
+
+extern char saved_command_line[];
 
 #define DEFAULT_ROOT_DEVICE 0x0801	/* sda1 - slightly silly choice */
 
@@ -68,8 +69,70 @@ int
 pmac_get_cpuinfo(char *buffer)
 {
 	int len;
-	/* should find motherboard type here as well */
-	len = sprintf(buffer,"machine\t\t: PowerMac\n");
+	struct device_node *np;
+	char *pp;
+	int plen;
+
+	/* find motherboard type */
+	len = sprintf(buffer, "machine\t\t: ");
+	np = find_devices("device-tree");
+	if (np != NULL) {
+		pp = (char *) get_property(np, "model", NULL);
+		if (pp != NULL)
+			len += sprintf(buffer+len, "%s\n", pp);
+		else
+			len += sprintf(buffer+len, "PowerMac\n");
+		pp = (char *) get_property(np, "compatible", &plen);
+		if (pp != NULL) {
+			len += sprintf(buffer+len, "motherboard\t:");
+			while (plen > 0) {
+				int l = strlen(pp) + 1;
+				len += sprintf(buffer+len, " %s", pp);
+				plen -= l;
+				pp += l;
+			}
+			buffer[len++] = '\n';
+		}
+	} else
+		len += sprintf(buffer+len, "PowerMac\n");
+
+	/* find l2 cache info */
+	np = find_devices("l2-cache");
+	if (np == 0)
+		np = find_type_devices("cache");
+	if (np != 0) {
+		unsigned int *ic = (unsigned int *)
+			get_property(np, "i-cache-size", NULL);
+		unsigned int *dc = (unsigned int *)
+			get_property(np, "d-cache-size", NULL);
+		len += sprintf(buffer+len, "L2 cache\t:");
+		if (get_property(np, "cache-unified", NULL) != 0 && dc) {
+			len += sprintf(buffer+len, " %dK unified", *dc / 1024);
+		} else {
+			if (ic)
+				len += sprintf(buffer+len, " %dK instruction",
+					       *ic / 1024);
+			if (dc)
+				len += sprintf(buffer+len, "%s %dK data",
+					       (ic? " +": ""), *dc / 1024);
+		}
+		pp = get_property(np, "ram-type", NULL);
+		if (pp)
+			len += sprintf(buffer+len, " %s", pp);
+		buffer[len++] = '\n';
+	}
+
+	/* find ram info */
+	np = find_devices("memory");
+	if (np != 0) {
+		struct reg_property *reg = (struct reg_property *)
+			get_property(np, "reg", NULL);
+		if (reg != 0) {
+			len += sprintf(buffer+len, "memory\t\t: %dMB\n",
+				       reg->size >> 20);
+		}
+	}
+
 	return len;
 }
 
@@ -154,6 +217,13 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 #endif
 
 	kd_mksound = pmac_mksound;
+
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (initrd_start)
+		ROOT_DEV = MKDEV(RAMDISK_MAJOR, 0);
+	else
+#endif
+		ROOT_DEV = to_kdev_t(DEFAULT_ROOT_DEVICE);
 }
 
 __initfunc(static void ohare_init(void))
@@ -210,6 +280,7 @@ __initfunc(void powermac_init(void))
 	}
 }
 
+#ifdef CONFIG_SCSI
 __initfunc(void
 note_scsi_host(struct device_node *node, void *host))
 {
@@ -238,28 +309,65 @@ note_scsi_host(struct device_node *node, void *host))
 		}
 	}
 }
+#endif
+
+#ifdef CONFIG_BLK_DEV_IDE_PMAC
+extern int pmac_ide_count;
+extern struct device_node *pmac_ide_node[];
+static int ide_majors[] = { 3, 22, 33, 34, 56, 57 };
+
+__initfunc(kdev_t find_ide_boot(void))
+{
+	char *p;
+	int i, n;
+
+	if (bootdevice == NULL)
+		return 0;
+	p = strrchr(bootdevice, '/');
+	if (p == NULL)
+		return 0;
+	n = p - bootdevice;
+
+	/*
+	 * Look through the list of IDE interfaces for this one.
+	 */
+	for (i = 0; i < pmac_ide_count; ++i) {
+		char *name = pmac_ide_node[i]->full_name;
+		if (memcmp(name, bootdevice, n) == 0 && name[n] == 0) {
+			/* XXX should cope with the 2nd drive as well... */
+			return MKDEV(ide_majors[i], 0);
+		}
+	}
+
+	return 0;
+}
+#endif /* CONFIG_BLK_DEV_IDE_PMAC */
 
 __initfunc(void find_boot_device(void))
 {
-	kdev_t dev;
-
-	if (kdev_t_to_nr(ROOT_DEV) != 0)
-		return;
-	ROOT_DEV = to_kdev_t(DEFAULT_ROOT_DEVICE);
-	if (boot_host == NULL)
-		return;
 #ifdef CONFIG_SCSI
-	dev = sd_find_target(boot_host, boot_target);
-	if (dev == 0)
-		return;
-	boot_dev = MKDEV(MAJOR(dev), MINOR(dev) + boot_part);
+	if (boot_host != NULL) {
+		boot_dev = sd_find_target(boot_host, boot_target);
+		if (boot_dev != 0)
+			return;
+	}
 #endif
-	/* XXX should cope with booting from IDE also */
+#ifdef CONFIG_BLK_DEV_IDE_PMAC
+	boot_dev = find_ide_boot();
+#endif
 }
 
 __initfunc(void note_bootable_part(kdev_t dev, int part))
 {
 	static int found_boot = 0;
+	char *p;
+
+	/* Do nothing if the root has been set already. */
+	if (ROOT_DEV != to_kdev_t(DEFAULT_ROOT_DEVICE))
+		return;
+	p = strstr(saved_command_line, "root=");
+	if (p != NULL && (p == saved_command_line || p[-1] == ' '))
+		return;
 
 	if (!found_boot) {
 		find_boot_device();

@@ -7,7 +7,7 @@
 	.text
 
 /*
- * $Id: head.S,v 1.24 1998/07/21 02:43:50 cort Exp $
+ * $Id: head.S,v 1.26 1998/09/19 01:21:20 cort Exp $
  *	
  * This code is loaded by the ROM loader at some arbitrary location.
  * Move it to high memory so that it can load the kernel at 0x0000.
@@ -144,6 +144,11 @@ start_ldr:
 	mr	r3, r11
         mr      r21, r11
 	bl      serial_init		/* Init MBX serial port */
+
+	lis	r8, 0xfa200000@h	/* Disable Ethernet SCC */
+	li	r0, 0
+	stw	r0, 0x0a00(r8)
+
 	mr      r11, r21
 	lis	r8,start@h
 	ori	r8,r8,start@l
@@ -166,6 +171,7 @@ start_ldr:
 	   as ptr to residual -- Cort*/
 	lis	r6,cmd_line@h
 	ori	r6,r6,cmd_line@l
+	lwz	r6, 0(r6)
 	subi	r7,r6,1
 00:	lbzu	r2,1(r7)
 	cmpi	0,r2,0

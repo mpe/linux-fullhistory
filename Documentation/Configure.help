@@ -1189,7 +1189,8 @@ CONFIG_TGA_CONSOLE
   that implements the TGA interface (much like the VGA standard, but
   older TGA adapters are *not* VGA compatible).  On such systems, you
   should say Y here so that the TGA driver rather than the standard
-  VGA driver is used. 
+  VGA driver is used.  Note that, at this time, there is no X server
+  for these systems. If unsure, try N.
 
 PCI support
 CONFIG_PCI
@@ -1613,6 +1614,11 @@ CONFIG_FB_PLATINUM
   This driver supports a frame buffer for the "platinum" graphics adapter
   in some Power Macintoshes.
 
+PowerMac "valkyrie" frame buffer device support
+CONFIG_FB_VALKYRIE
+  This driver supports a frame buffer for the "valkyrie" graphics adapter
+  in some Power Macintoshes.
+
 Chips 65550 display support
 CONFIG_FB_CT65550
   This is the frame buffer device driver for the Chips & Technologies
@@ -1628,15 +1634,7 @@ CONFIG_FB_HP300
   This is the frame buffer device driver for the Topcat graphics
   hardware found in HP300 workstations.
 
-VGA chipset support (text only)
-CONFIG_FB_VGA
-  This is the frame buffer device driver for generic VGA chips. This
-  driver works only in text mode and is deprecated; it is preferable
-  to say Y to "VGA text console" instead. For a graphical frame buffer
-  device driver that works for VGA cards, say Y to "VESA VGA graphics
-  console" below.
-
-TGA frame buffer support' 
+TGA frame buffer support
 CONFIG_FB_TGA
   This is the frame buffer device driver for generic TGA graphic cards.
   Say Y if you have one of those.
@@ -1647,8 +1645,8 @@ CONFIG_FB_VESA
   cards. You will get a boot time penguin logo at no additional cost.
   Please read Documentation/fb/vesafb.txt. If unsure, say Y.
 
-MDA dual-headed support
-CONFIG_FB_MDA
+MDA text console (dual-headed)
+CONFIG_MDA_CONSOLE
   Say Y here if you have an old MDA or monochrome Hercules graphics
   adapter in your system acting as a second head ( = video card). You
   will then be able to use two monitors with your Linux system. Do not
@@ -1657,7 +1655,7 @@ CONFIG_FB_MDA
   
   This driver is also available as a module ( = code which can be
   inserted and removed from the running kernel whenever you want).
-  The module will be called mdafb.o.  If you want to compile it as
+  The module will be called mdacon.o.  If you want to compile it as
   a module, say M here and read Documentation/modules.txt.
   
   If unsure, say N.
@@ -9322,17 +9320,6 @@ CONFIG_PROC_DEVICETREE
   This option adds a device-tree directory under /proc which contains
   an image of the device tree that the kernel copies from Open
   Firmware.  If unsure, say Y here.
-
-Support for ATI Mach64 display cards
-CONFIG_ATY_VIDEO
-  Several of the newer Power Macintoshes and clones have a video
-  display interface based on the ATI Mach64 chipset.  Say N here if
-  you are sure you don't need this functionality, otherwise Y.
-
-Support for IMS Twin Turbo display card
-CONFIG_IMSTT_VIDEO
-  Some Power Macintosh clones have an IMS Twin Turbo video display
-  interface.  Say Y to include support for this.
 
 MESH (Power Mac internal SCSI) support
 CONFIG_SCSI_MESH

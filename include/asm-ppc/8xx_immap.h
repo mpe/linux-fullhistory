@@ -312,6 +312,43 @@ typedef struct smc {		/* Serial management channels */
 	char	res4[5];
 } smc_t;
 
+/* MPC860T Fast Ethernet Controller.  It isn't part of the CPM, but
+ * it fits within the address space.
+ */
+typedef struct fec {
+	uint	fec_addr_low;		/* LS 32 bits of station address */
+	ushort	fec_addr_high;		/* MS 16 bits of address */
+	ushort	res1;
+	uint	fec_hash_table_high;
+	uint	fec_hash_table_low;
+	uint	fec_r_des_start;
+	uint	fec_x_des_start;
+	uint	fec_r_buff_size;
+	uint	res2[9];
+	uint	fec_ecntrl;
+	uint	fec_ievent;
+	uint	fec_imask;
+	uint	fec_ivec;
+	uint	fec_r_des_active;
+	uint	fec_x_des_active;
+	uint	res3[10];
+	uint	fec_mii_data;
+	uint	fec_mii_speed;
+	uint	res4[17];
+	uint	fec_r_bound;
+	uint	fec_r_fstart;
+	uint	res5[6];
+	uint	fec_x_fstart;
+	uint	res6[17];
+	uint	fec_fun_code;
+	uint	res7[3];
+	uint	fec_r_cntrl;
+	uint	fec_r_hash;
+	uint	res8[14];
+	uint	fec_x_cntrl;
+	uint	res9[0x1e];
+} fec_t;
+
 typedef struct comm_proc {
 	/* General control and status registers.
 	*/
@@ -380,7 +417,11 @@ typedef struct comm_proc {
 	uint	cp_sirp;
 	char	res16[0x10c];
 	u_char	cp_siram[0x200];
-	char	res17[0x200];
+
+	/* The fast ethernet controller is not really part of the CPM,
+	 * but it resides in the address space.
+	 */
+	fec_t	cp_fec;
 	char	res18[0x1000];
 
 	/* Dual Ported RAM follows.

@@ -1,5 +1,5 @@
 /*
- * $Id: smp.c,v 1.28 1998/08/04 04:47:45 cort Exp $
+ * $Id: smp.c,v 1.33 1998/09/25 04:32:30 cort Exp $
  *
  * Smp support for ppc.
  *
@@ -48,6 +48,8 @@ spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
 unsigned int prof_multiplier[NR_CPUS];
 unsigned int prof_counter[NR_CPUS];
+
+int first_cpu_booted = 0;
 
 int start_secondary(void *);
 
@@ -119,7 +121,7 @@ void smp_message_recv(void)
 	
 	/* make sure msg is for us */
 	if ( msg == -1 ) return;
-printk("recv after msg check\n");	
+
 	switch( msg )
 	{
 	case MSG_STOP_CPU:
@@ -177,12 +179,14 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 
 __initfunc(void smp_boot_cpus(void))
 {
-	extern unsigned long secondary_entry[];
 	extern struct task_struct *current_set[NR_CPUS];
-	int i, timeout;
+	int i;
 	struct task_struct *p;
 	
         printk("Entering SMP Mode...\n");
+	
+	first_cpu_booted = 1;
+	dcbf(&first_cpu_booted);
 
 	for (i = 0; i < NR_CPUS; i++) {
 		cpu_number_map[i] = -1;
@@ -219,11 +223,12 @@ __initfunc(void smp_boot_cpus(void))
 	p->processor = 1;
 	current_set[1] = p;
 	/* need to flush here since secondary bat's aren't setup */
-	dcbf((volatile unsigned long *)&current_set[1]);
+	dcbf((void *)&current_set[1]);
 	
 	/* setup entry point of secondary processor */
-	*(volatile unsigned long *)(0xf2800000)
-		= (unsigned long)secondary_entry-KERNELBASE;
+	/*	*(volatile unsigned long *)(0xf2800000)
+		= (unsigned long)secondary_entry-KERNELBASE;*/
+	*(volatile unsigned long *)(0xf2800000) = 0x100;
 	eieio();
 	/* interrupt secondary to begin executing code */
 	*(volatile unsigned long *)(0xf80000c0) = 0L;
@@ -234,7 +239,9 @@ __initfunc(void smp_boot_cpus(void))
 	 * calibrate_delay() so use this value that I found through
 	 * experimentation.  -- Cort
 	 */
-	udelay(1);
+	for ( i = 1000; i && !cpu_callin_map[1] ; i-- )
+		udelay(100);
+	  
 	if(cpu_callin_map[1]) {
 		cpu_number_map[1] = 1;
 		__cpu_logical_map[i] = 1;
@@ -243,7 +250,7 @@ __initfunc(void smp_boot_cpus(void))
 #if 0 /* this sync's the decr's, but we don't want this now -- Cort */
 		set_dec(decrementer_count);
 #endif
-		/* interrupt secondary to start decr's again */
+		/* interrupt secondary to start decr's on both cpus */
 		smp_message_pass(1,0xf0f0, 0, 0);
 		/* interrupt secondary to begin executing code */
 		/**(volatile unsigned long *)(0xf80000c0) = 0L;

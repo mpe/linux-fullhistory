@@ -265,7 +265,7 @@ fix_alignment(struct pt_regs *regs)
 #else	
 		giveup_fpu();
 #endif		
-		cvt_fd(&data.f, &current->tss.fpr[reg]);
+		cvt_fd(&data.f, &current->tss.fpr[reg], &current->tss.fpscr);
 		/* current->tss.fpr[reg] = data.f; */
 		break;
 	case ST+F+S:
@@ -275,7 +275,7 @@ fix_alignment(struct pt_regs *regs)
 #else	
 		giveup_fpu();
 #endif		
-		cvt_df(&current->tss.fpr[reg], &data.f);
+		cvt_df(&current->tss.fpr[reg], &data.f, &current->tss.fpscr);
 		/* data.f = current->tss.fpr[reg]; */
 		break;
 	default:

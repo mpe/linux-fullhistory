@@ -20,7 +20,6 @@
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
 
-
 ZOFF = 0
 ZSZ = 0
 IOFF = 0
@@ -58,10 +57,10 @@ zvmlinux.initrd: zvmlinux
 		--add-section=initrd=ramdisk.image.gz \
 		--add-section=image=../coffboot/vmlinux.gz \
 		zvmlinux.initrd.tmp zvmlinux.initrd
-	$(CC) $(CFLAGS) -DINITRD_OFFSET=`sh offset zvmlinux.initrd initrd` \
-		-DINITRD_SIZE=`sh size zvmlinux.initrd initrd` \
-		-DZIMAGE_OFFSET=`sh offset zvmlinux.initrd image` \
-		-DZIMAGE_SIZE=`sh size zvmlinux.initrd image` \
+	$(CC) $(CFLAGS) -DINITRD_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd initrd` \
+		-DINITRD_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd initrd` \
+		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd image` \
+		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd image` \
 		-DKERNELBASE=$(KERNELBASE) -c -o misc.o misc.c
 	$(LD) $(ZLINKFLAGS) -o zvmlinux.initrd.tmp $(OBJECTS)
 	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment \
@@ -77,10 +76,10 @@ zvmlinux.initrd: zvmlinux
 		--add-section=initrd=ramdisk.image.gz \
 		--add-section=image=../coffboot/vmlinux.gz \
 		zvmlinux.initrd.tmp zvmlinux.initrd
-	$(CC) $(CFLAGS) -DINITRD_OFFSET=`sh offset zvmlinux.initrd initrd` \
-		-DINITRD_SIZE=`sh size zvmlinux.initrd initrd` \
-		-DZIMAGE_OFFSET=`sh offset zvmlinux.initrd image` \
-		-DZIMAGE_SIZE=`sh size zvmlinux.initrd image` \
+	$(CC) $(CFLAGS) -DINITRD_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd initrd` \
+		-DINITRD_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd initrd` \
+		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd image` \
+		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd image` \
 		-DKERNELBASE=$(KERNELBASE) -c -o misc.o misc.c
 	$(LD) $(ZLINKFLAGS) -o zvmlinux.initrd.tmp $(OBJECTS)
 	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment \
@@ -90,19 +89,26 @@ zvmlinux.initrd: zvmlinux
 	rm zvmlinux.initrd.tmp
 endif
 
-zImage: zvmlinux mkprep
 ifeq ($(CONFIG_PREP),y)
+zImage: zvmlinux mkprep
 	./mkprep -pbp zvmlinux zImage
-endif
+else
+
 ifeq ($(CONFIG_MBX),y)
+zImage: zvmlinux
 	ln -sf zvmlinux zImage
+else
+zImage:
 endif
 
-zImage.initrd: zvmlinux.initrd mkprep
+endif
+
 ifeq ($(CONFIG_PREP),y)
+zImage.initrd: zvmlinux.initrd mkprep
 	./mkprep -pbp zvmlinux.initrd zImage.initrd
 endif
 ifeq ($(CONFIG_MBX),y)
+zImage.initrd: zvmlinux.initrd
 	ln -sf zvmlinux.initrd zImage.initrd
 endif
 
@@ -118,8 +124,8 @@ zvmlinux: $(OBJECTS) ../coffboot/vmlinux.gz
 # then with the offset rebuild the bootloader so we know where the kernel is
 #
 	$(CC) $(CFLAGS) -DINITRD_OFFSET=0 -DINITRD_SIZE=0 \
-		-DZIMAGE_OFFSET=`sh offset zvmlinux image` \
-		-DZIMAGE_SIZE=`sh size zvmlinux image` -DKERNELBASE=$(KERNELBASE) \
+		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux image` \
+		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux image` -DKERNELBASE=$(KERNELBASE) \
 		-c -o misc.o misc.c
 	$(LD) $(ZLINKFLAGS) -o zvmlinux.tmp $(OBJECTS)
 	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment --add-section=image=../coffboot/vmlinux.gz \
@@ -131,17 +137,21 @@ ifeq ($(CONFIG_PREP),y)
 	dd if=zImage of=/dev/fd0H1440 bs=64b
 endif
 
-mkprep : mkprep.c
 ifeq ($(CONFIG_PREP),y)
+mkprep : mkprep.c
 	$(HOSTCC) -DKERNELBASE=$(KERNELBASE) -o mkprep mkprep.c
 endif
 
-znetboot : zImage
 ifeq ($(CONFIG_PREP),y)
+znetboot : zImage
 	cp zImage /tftpboot/zImage.prep
-endif
+else
 ifeq ($(CONFIG_MBX),y)
+znetboot : zImage
 	cp zImage /tftpboot/zImage.mbx
+else
+znetboot :
+endif
 endif
 
 znetboot.initrd : zImage.initrd

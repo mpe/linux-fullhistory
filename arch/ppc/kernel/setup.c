@@ -1,9 +1,10 @@
 /*
- * $Id: setup.c,v 1.95 1998/07/20 19:03:47 geert Exp $
+ * $Id: setup.c,v 1.103 1998/09/18 09:14:56 paulus Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/init.h>
@@ -26,12 +27,18 @@
 #ifdef CONFIG_MBX
 #include <asm/mbx.h>
 #endif
+#include <asm/bootx.h>
 
 /* APUS defs */
 extern unsigned long m68k_machtype;
-extern struct mem_info ramdisk;
 extern int parse_bootinfo(const struct bi_record *);
 extern char _end[];
+#ifdef CONFIG_APUS
+struct mem_info ramdisk;
+unsigned long isa_io_base;
+unsigned long isa_mem_base;
+unsigned long pci_dram_offset;
+#endif
 /* END APUS defs */
 
 extern char cmd_line[512];
@@ -51,6 +58,8 @@ unsigned char __res[sizeof(RESIDUAL)] __prepdata = {0,};
 RESIDUAL *res = (RESIDUAL *)&__res;
 
 int _prep_type;
+
+extern boot_infos_t *boot_infos;
 
 /*
  * Perhaps we can put the pmac screen_info[] here
@@ -239,7 +248,7 @@ void machine_halt(void)
 
 }
 
-#ifdef CONFIG_BLK_DEV_IDE
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
 void ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
 #if !defined(CONFIG_MBX) && !defined(CONFIG_APUS)
@@ -256,6 +265,7 @@ void ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 	}
 #endif
 }
+EXPORT_SYMBOL(ide_init_hwif_ports);
 #endif
 
 unsigned long cpu_temp(void)
@@ -333,7 +343,7 @@ int get_cpuinfo(char *buffer)
 	unsigned long len = 0;
 	unsigned long bogosum = 0;
 	unsigned long i;
-	unsigned long cr;
+	
 #ifdef __SMP__
 	extern unsigned long cpu_present_map;	
 	extern struct cpuinfo_PPC cpu_data[NR_CPUS];
@@ -374,14 +384,6 @@ int get_cpuinfo(char *buffer)
 			break;
 		case 8:
 			len += sprintf(len+buffer, "750\n");
-			cr = _get_L2CR();
-			if ( cr & (0x1<<28)) cr = 256;
-			else if ( cr & (0x2<<28)) cr = 512;
-			else if ( cr & (0x3<<28)) cr = 1024;
-			else cr = 0;
-			len += sprintf(len+buffer, "on-chip l2\t: "
-				       "%ld KB (%s)\n",
-				       cr,(_get_L2CR()&0x80000000) ? "on" : "off");
 			len += sprintf(len+buffer, "temperature \t: %lu C\n",
 				       cpu_temp());
 			break;
@@ -436,9 +438,9 @@ int get_cpuinfo(char *buffer)
 #else /* CONFIG_MBX */
 		{
 			bd_t	*bp;
-			extern	RESIDUAL res;
+			extern	RESIDUAL *res;
 			
-			bp = (bd_t *)&res;
+			bp = (bd_t *)res;
 			
 			len += sprintf(len+buffer,"clock\t\t: %dMHz\n"
 				      "bus clock\t: %dMHz\n",
@@ -513,20 +515,18 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 #ifndef CONFIG_MBX
 #ifndef CONFIG_MACH_SPECIFIC
 	char *model;
-	/* prep boot loader tells us if we're prep or not */
-	if ( *(unsigned long *)(KERNELBASE) == (0xdeadc0de) )
-	{
-		_machine = _MACH_prep;
-		have_of = 0;
-	}
 	/* boot loader will tell us if we're APUS */
-	else if ( r3 == 0x61707573 )
+	if ( r3 == 0x61707573 )
 	{
 		_machine = _MACH_apus;
 		have_of = 0;
 		r3 = 0;
-	} else
-	{
+	}
+	/* prep boot loader tells us if we're prep or not */
+	else if ( *(unsigned long *)(KERNELBASE) == (0xdeadc0de) ) {
+		_machine = _MACH_prep;
+		have_of = 0;
+	} else {
 		have_of = 1;
 		/* ask the OF info if we're a chrp or pmac */
 		model = get_property(find_path_device("/"), "type", NULL);
@@ -556,6 +556,20 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		if (r3 >= 0x4000 && r3 < 0x800000 && r4 == 0) {
 			strncpy(cmd_line, (char *)r3 + KERNELBASE,
 				sizeof(cmd_line));
+		} else if (boot_infos != 0) {
+			/* booted by BootX - check for ramdisk */
+			if (boot_infos->kernelParamsOffset != 0)
+				strncpy(cmd_line, (char *) boot_infos
+					+ boot_infos->kernelParamsOffset,
+					sizeof(cmd_line));
+#ifdef CONFIG_BLK_DEV_INITRD
+			if (boot_infos->ramDisk) {
+				initrd_start = (unsigned long) boot_infos
+					+ boot_infos->ramDisk;
+				initrd_end = initrd_start + boot_infos->ramDiskSize;
+				initrd_below_start_ok = 1;
+			}
+#endif
 		} else {
 			struct device_node *chosen;
 			char *p;
@@ -568,6 +582,7 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 				ROOT_DEV = MKDEV(RAMDISK_MAJOR, 0);
 			}
 #endif
+			cmd_line[0] = 0;
 			chosen = find_devices("chosen");
 			if (chosen != NULL) {
 				p = get_property(chosen, "bootargs", NULL);
@@ -652,7 +667,6 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		break;
 #ifdef CONFIG_APUS		
 	case _MACH_apus:
-		setup_pci_ptrs();
 		/* Parse bootinfo. The bootinfo is located right after
                    the kernel bss */
 		parse_bootinfo((const struct bi_record *)&_end);
@@ -677,6 +691,7 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 	default:
 		printk("Unknown machine type in identify_machine!\n");
 	}
+
 #else /* CONFIG_MBX */
 
 	if ( r3 )
@@ -722,6 +737,8 @@ __initfunc(void setup_arch(char **cmdline_p,
 #ifdef CONFIG_XMON
 	extern void xmon_map_scc(void);
 	xmon_map_scc();
+	if (strstr(cmd_line, "xmon"))
+		xmon(0);
 #endif /* CONFIG_XMON */
 
 	/* reboot on panic */	
@@ -771,7 +788,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 		m68k_machtype = MACH_AMIGA;
 		apus_setup_arch(memory_start_p,memory_end_p);
 		break;
-#endif		
+#endif
 	default:
 		printk("Unknown machine %d in setup_arch()\n", _machine);
 	}

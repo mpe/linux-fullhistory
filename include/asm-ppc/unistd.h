@@ -181,13 +181,20 @@
 #define __NR_rt_sigaction	173
 #define __NR_rt_sigprocmask	174
 #define __NR_rt_sigpending	175
-#define __NR_rt_sigtimedwait   176
-#define __NR_rt_sigqueueinfo   177
-#define __NR_rt_sigsuspend     178
-#define __NR_pread             179
-#define __NR_pwrite            180
-#define __NR_chown             181
-#define __NR_getcwd            182
+#define __NR_rt_sigtimedwait	176
+#define __NR_rt_sigqueueinfo	177
+#define __NR_rt_sigsuspend	178
+#define __NR_pread		179
+#define __NR_pwrite		180
+#define __NR_chown		181
+#define __NR_getcwd		182
+#define __NR_capget		183
+#define __NR_capset		184
+#define __NR_sigaltstack	185
+#define __NR_sendfile		186
+#define __NR_streams1		187	/* some people actually want it */
+#define __NR_streams2		188	/* some people actually want it */
+
 
 #define __NR(n)	#n
 

@@ -19,6 +19,7 @@
 #include <asm/amigahw.h>
 #include <asm/amigappc.h>
 #include <asm/pgtable.h>
+#include <asm/io.h>
 
 unsigned long m68k_machtype;
 char debug_device[6] = "";
@@ -99,6 +100,7 @@ void apus_calibrate_decr(void)
 {
 	int freq, divisor;
 	unsigned char c = *(unsigned char*)ZTWO_VADDR(0xf00011);
+	printk ("CPU speed ID ('%c') ", c);
 
 	switch (c)
 	{
@@ -122,7 +124,7 @@ void apus_calibrate_decr(void)
 		break;
 	default:
 		freq = 0;
-		printk (" *Unknown CPU speed ID ('%c')* ", c);
+		printk (" *Unknown* ");
 		break;
 	}
 
@@ -133,24 +135,27 @@ void apus_calibrate_decr(void)
 		case 0:
 			freq = 15000000;
 			speed = 60;
-			
-			/* Use status of left mouse button to select
-			   RAM speed. */
-			if (!(ciaa.pra & 0x40))
-			{
-				APUS_WRITE (APUS_REG_WAITSTATE, 
-					    REGWAITSTATE_SETRESET
-					    |REGWAITSTATE_PPCR
-					    |REGWAITSTATE_PPCW);
-				printk (" [RAM R/W waitstate removed. "
-					"(expecting 60ns RAM).] ");
-			}
 			break;
+
 		case 1:
 			freq = 16500000;
-			speed = 66;
+			speed =66;
 			break;
 		}
+	
+		/* Use status of left mouse button to select
+		   RAM speed. */
+		if (!(ciaa.pra & 0x40))
+		{
+			APUS_WRITE (APUS_REG_WAITSTATE, 
+				    REGWAITSTATE_SETRESET
+				    |REGWAITSTATE_PPCR
+				    |REGWAITSTATE_PPCW);
+			printk (" [RAM R/W waitstate removed. "
+				"(expecting 60ns RAM).] ");
+		}
+
+		
 		printk ("PowerUp Bus Speed: %dMHz\n", speed);
 	}
 
@@ -222,7 +227,72 @@ unsigned long kernel_map (unsigned long phys_addr, unsigned long size,
 	}
 	return v_ret;
 }
-		
+
+/* From pgtable.h */
+extern __inline__ pte_t *my_find_pte(struct mm_struct *mm,unsigned long va)
+{
+	pgd_t *dir = 0;
+	pmd_t *pmd = 0;
+	pte_t *pte = 0;
+
+	va &= PAGE_MASK;
+	
+	dir = pgd_offset( mm, va );
+	if (dir)
+	{
+		pmd = pmd_offset(dir, va & PAGE_MASK);
+		if (pmd && pmd_present(*pmd))
+		{
+			pte = pte_offset(pmd, va);
+		}
+	}
+	return pte;
+}
+
+
+/* Again simulating an m68k/mm/kmap.c function. */
+void kernel_set_cachemode( unsigned long address, unsigned long size,
+			   unsigned int cmode )
+{
+	int mask, flags;
+
+	switch (cmode)
+	{
+	case KERNELMAP_FULL_CACHING:
+		mask = ~(_PAGE_NO_CACHE | _PAGE_GUARDED);
+		flags = 0;
+		break;
+	case KERNELMAP_NOCACHE_SER:
+		mask = ~0;
+		flags = (_PAGE_NO_CACHE | _PAGE_GUARDED);
+		break;
+	default:
+		panic ("kernel_set_cachemode() doesn't support mode %d\n", 
+		       cmode);
+		break;
+	}
+	
+	size /= PAGE_SIZE;
+	address &= PAGE_MASK;
+	while (size--)
+	{
+		pte_t *pte;
+
+		pte = my_find_pte(init_task.mm, address);
+		if ( !pte )
+		{
+			printk("pte NULL in kernel_set_cachemode()\n");
+			return;
+		}
+
+                pte_val (*pte) &= mask;
+                pte_val (*pte) |= flags;
+                flush_tlb_page(find_vma(init_task.mm,address),address);
+
+		address += PAGE_SIZE;
+	}
+}
+
 unsigned long mm_ptov (unsigned long paddr)
 {
 	unsigned long ret;

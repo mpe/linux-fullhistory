@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.98 1998/07/26 21:28:48 geert Exp $
+ *  $Id: head.S,v 1.107 1998/09/25 19:48:52 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -93,15 +93,18 @@ LG_CACHE_LINE_SIZE = 5
 	bdnz	0b
 #endif
 
+/* 601 only have IBAT cr0.eq is set on 601 when using this macro */ 
 #define LOAD_BAT(n, offset, reg, RA, RB) \
 	lwz	RA,offset+0(reg); \
 	lwz	RB,offset+4(reg);	\
 	mtspr	IBAT##n##U,RA;	\
 	mtspr	IBAT##n##L,RB;	\
+	beq	1f;		\
 	lwz	RA,offset+8(reg);	\
 	lwz	RB,offset+12(reg);	\
 	mtspr	DBAT##n##U,RA;	\
-	mtspr	DBAT##n##L,RB
+	mtspr	DBAT##n##L,RB;	\
+1:	 
 
 #ifndef CONFIG_APUS
 #define tophys(rd,rs,rt)	addis	rd,rs,-KERNELBASE@h
@@ -138,6 +141,12 @@ _start:
  * managing the hash table.  Interrupts are disabled.  The stack
  * pointer (r1) points to just below the end of the half-meg region
  * from 0x380000 - 0x400000, which is mapped in already.
+ *
+ * If we are booted from MacOS via BootX, we enter with the kernel
+ * image loaded somewhere, and the following values in registers:
+ *  r3: 'BooX' (0x426f6f58)
+ *  r4: virtual address of boot_infos_t
+ *  r5: 0
  *
  * PREP
  * This is jumped to on prep systems right after the kernel is relocated
@@ -213,33 +222,45 @@ __start:
 	lis	r11,KERNELBASE@h
 	bne	4f
 	ori	r11,r11,4		/* set up BAT registers for 601 */
-	li	r8,0x7f
+	li	r8,0x7f			/* valid, block length = 8MB */
 	oris	r9,r11,0x800000@h	/* set up BAT reg for 2nd 8M */
 	oris	r10,r8,0x800000@h	/* set up BAT reg for 2nd 8M */
+	mtspr	IBAT0U,r11		/* N.B. 601 has valid bit in */
+	mtspr	IBAT0L,r8		/* lower BAT register */
 	mtspr	IBAT1U,r9
 	mtspr	IBAT1L,r10
 	b	5f
 4:
 #ifndef CONFIG_APUS
-	ori	r11,r11,0x1ff		/* set up BAT registers for 604 */
-	li	r8,2
+	ori	r11,r11,0x1fe		/* set up BAT registers for 604 */
+	li	r8,2			/* R/W access */
 #else
-	ori	r11,r11,0xff		/* set up an 8MB mapping */
+	ori	r11,r11,0xfe		/* set up an 8MB mapping */
 	lis	r8,CYBERBASEp@h
 	lwz	r8,0(r8)
 	addis	r8,r8,KERNELBASE@h
 	addi	r8,r8,2
 #endif
-5:	mtspr	DBAT0U,r11
-	mtspr	DBAT0L,r8
-	mtspr	IBAT0U,r11
+	mtspr	DBAT0L,r8		/* N.B. 6xx (not 601) have valid */
+	mtspr	DBAT0U,r11		/* bit in upper BAT register */
 	mtspr	IBAT0L,r8
-	isync
+	mtspr	IBAT0U,r11
+5:	isync
 
 #ifdef CONFIG_APUS
 	/* Unfortunately the APUS specific instructions bloat the
 	 * code so it cannot fit in the 0x100 bytes available. We have
 	 * to do it the crude way. */
+
+	/* Map 0xfff00000 so we can access VTOP/PTOV constant when
+	   MMU is enabled. */
+	lis	r8,0xfff0
+	ori	r11,r8,0x2		/* r/w */
+	ori	r8,r8,0x2		/* 128KB, supervisor */
+	mtspr	DBAT3U,r8
+	mtspr	DBAT3L,r11
+	
+	/* Copy exception code to exception vector base. */
 	lis	r3,KERNELBASE@h
 	tophys(r4,r3,r5)
 	lis	r3,0xfff0		/* Copy to 0xfff00000 on APUS */
@@ -263,23 +284,10 @@ __start:
 	li	r3,0
 	mfmsr	r0
 	andi.	r0,r0,MSR_DR		/* MMU enabled? */
-	beq	7f
+	beq	relocate_kernel
 	lis	r3,KERNELBASE@h		/* if so, are we */
 	cmpw	0,r4,r3			/* already running at KERNELBASE? */
-	beq	2f
-	rlwinm	r4,r4,0,8,31		/* translate source address */
-	add	r4,r4,r3		/* to region mapped with BATs */
-7:	addis	r9,r26,klimit@ha	/* fetch klimit */
-	lwz	r25,klimit@l(r9)
-	addis	r25,r25,-KERNELBASE@h
-	li	r6,0			/* Destination */
-	li	r5,0x4000		/* # bytes of memory to copy */
-	bl	copy_and_flush		/* copy the first 0x4000 bytes */
-	addi	r0,r3,4f@l		/* jump to the address of 4f */
-	mtctr	r0			/* in copy and do the rest. */
-	bctr				/* jump to the copy */
-4:	mr	r5,r25
-	bl	copy_and_flush		/* copy the rest */
+	bne	relocate_kernel
 2:
 #endif /* CONFIG_APUS */
 /*
@@ -356,6 +364,7 @@ __start:
  */
 #endif /* CONFIG_8xx */
 
+turn_on_mmu:
 	mfmsr	r0
 	ori	r0,r0,MSR_DR|MSR_IR
 	mtspr	SRR1,r0
@@ -364,7 +373,7 @@ __start:
 	mtspr	SRR0,r0
 	SYNC
 	rfi				/* enables MMU */
-		
+
 /*
  * GCC sometimes accesses words at negative offsets from the stack
  * pointer, although the SysV ABI says it shouldn't.  To cope with
@@ -506,7 +515,7 @@ HardwareInterrupt:
 
 	li	r20,(IPLEMU_SETRESET|IPLEMU_DISABLEINT)
 	stb	r20,APUS_IPL_EMU@l(r3)
-	sync
+	eieio
 
 	lbz	r3,APUS_IPL_EMU@l(r3)
 
@@ -1418,7 +1427,7 @@ load_up_fpu:
  * by a switch_to() call to smp_giveup_fpu() in SMP so 
  * last_task_used_math is not used.
  *
- * We should never be herre on SMP anyway, sinc ethe fpu should
+ * We should never be here on SMP anyway, since the fpu should
  * always be on.
  * -- Cort
  */
@@ -1432,11 +1441,11 @@ load_up_fpu:
 	lwz	r5,PT_REGS(r4)
 	add	r5,r5,r6
 	lwz	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
-	li	r20,MSR_FP
+	li	r20,MSR_FP|MSR_FE0|MSR_FE1
 	andc	r4,r4,r20		/* disable FP for previous task */
 	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
 
-1:	ori	r23,r23,MSR_FP		/* enable use of FP after return */
+1:	ori	r23,r23,MSR_FP|MSR_FE0|MSR_FE1	/* enable use of FP after return */
 	mfspr	r5,SPRG3		/* current task's TSS (phys) */
 	lfd	fr0,TSS_FPSCR-4(r5)
 	mtfsf	0xff,fr0
@@ -1514,7 +1523,7 @@ giveup_fpu:
 	stfd	fr0,TSS_FPSCR-4(r4)
 	lwz	r5,PT_REGS(r4)
 	lwz	r3,_MSR-STACK_FRAME_OVERHEAD(r5)
-	li	r4,MSR_FP
+	li	r4,MSR_FP|MSR_FE0|MSR_FE1
 	andc	r3,r3,r4		/* disable FP for previous task */
 	stw	r3,_MSR-STACK_FRAME_OVERHEAD(r5)
 #else  /* CONFIG_8xx */
@@ -1522,7 +1531,31 @@ giveup_fpu:
 giveup_fpu:
 #endif /* CONFIG_8xx */
 	blr
-	
+
+/*
+ * This code is jumped to from the startup code to copy
+ * the kernel image to physical address 0.
+ */
+relocate_kernel:
+	lis	r9,0x426f		/* if booted from BootX, don't */
+	addi	r9,r9,0x6f58		/* translate source addr */
+	cmpw	r31,r9			/* (we have to on chrp) */
+	beq	7f
+	rlwinm	r4,r4,0,8,31		/* translate source address */
+	add	r4,r4,r3		/* to region mapped with BATs */
+7:	addis	r9,r26,klimit@ha	/* fetch klimit */
+	lwz	r25,klimit@l(r9)
+	addis	r25,r25,-KERNELBASE@h
+	li	r6,0			/* Destination offset */
+	li	r5,0x4000		/* # bytes of memory to copy */
+	bl	copy_and_flush		/* copy the first 0x4000 bytes */
+	addi	r0,r3,4f@l		/* jump to the address of 4f */
+	mtctr	r0			/* in copy and do the rest. */
+	bctr				/* jump to the copy */
+4:	mr	r5,r25
+	bl	copy_and_flush		/* copy the rest */
+	b	turn_on_mmu
+
 /*
  * Copy routine used to copy the kernel to start at physical address 0
  * and flush and invalidate the caches as needed.
@@ -1577,11 +1610,6 @@ start_here:
 	bne	3f			/* don't invalidate the D-cache */
 	ori	r8,r8,HID0_DCI		/* unless it wasn't enabled */
 3:
-	/* turn on dpm for 603 */
-	cmpi	0,r9,3
-	bne	10f
-	oris	r11,r11,HID0_DPM@h
-10:
 	sync
 	mtspr	HID0,r8			/* enable and invalidate caches */
 	sync
@@ -1633,6 +1661,7 @@ start_here:
 	mr	r7,r27
 	bl	identify_machine
 	bl	MMU_init
+	
 /*
  * Go back to running unmapped so we can load up new values
  * for SDR1 (hash table pointer) and the segment registers
@@ -1674,9 +1703,11 @@ start_here:
 	addi	r3,r3,1		/* increment VSID */
 	addis	r4,r4,0x1000	/* address of next segment */
 	bdnz	3b
-	
 /* Load the BAT registers with the values set up by MMU_init.
    MMU_init takes care of whether we're on a 601 or not. */
+	mfpvr	r3
+	srwi	r3,r3,16
+	cmpwi	r3,1
 	lis	r3,BATS@ha
 	addi	r3,r3,BATS@l
 	tophys(r3,r3,r4)
@@ -1696,6 +1727,20 @@ start_here:
 	li	r4,MSR_KERNEL
 	lis	r3,start_kernel@h
 	ori	r3,r3,start_kernel@l
+#ifdef __SMP__
+	/* the second time through here we go to
+	 * start_secondary(). -- Cort
+	 */
+	lis	r5,first_cpu_booted@h
+	ori	r5,r5,first_cpu_booted@l
+	tophys(r5,r5,r3)
+	lwz	r5,0(r5)
+	cmpi	0,r5,0
+	beq	10f
+	lis	r3,start_secondary@h
+	ori	r3,r3,start_secondary@l
+10:	
+#endif /* __SMP__ */
 	mtspr	SRR0,r3
 	mtspr	SRR1,r4
 	rfi			/* enable MMU and jump to start_kernel */
@@ -2220,173 +2265,6 @@ _GLOBAL(flush_hash_page)
  */	
 _GLOBAL(__main)
 	blr
-
-#ifdef __SMP__
-/*
- * Secondary processor begins executing here.
- */
-	.globl	secondary_entry
-secondary_entry:
-	/* just like __start() with a few changes -- Cort */
-	mfspr	r9,PVR
-	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
-	cmpi	0,r9,1
-	lis	r11,KERNELBASE@h
-	bne	4f
-	ori	r11,r11,4		/* set up BAT registers for 601 */
-	li	r8,0x7f
-	oris	r9,r11,0x800000@h	/* set up BAT reg for 2nd 8M */
-	oris	r10,r8,0x800000@h	/* set up BAT reg for 2nd 8M */
-	mtspr	IBAT1U,r9
-	mtspr	IBAT1L,r10
-	b	5f
-4:	ori	r11,r11,0x1ff		/* set up BAT registers for 604 */
-	li	r8,2
-	mtspr	DBAT0U,r11
-	mtspr	DBAT0L,r8
-5:	mtspr	IBAT0U,r11
-	mtspr	IBAT0L,r8
-	isync
-/*
- * we now have the 1st 16M of ram mapped with the bats.
- * prep needs the mmu to be turned on here, but pmac already has it on.
- * this shouldn't bother the pmac since it just gets turned on again
- * as we jump to our code at KERNELBASE. -- Cort
- */
-	mfmsr	r0
-	ori	r0,r0,MSR_DR|MSR_IR
-	mtspr	SRR1,r0
-	lis	r0,100f@h
-	ori	r0,r0,100f@l
-	mtspr	SRR0,r0
-	SYNC
-	rfi				/* enables MMU */
-100:
-	/*
-	 * Enable caches and 604-specific features if necessary.
-	 */
-	mfspr	r9,PVR
-	rlwinm	r9,r9,16,16,31
-	cmpi	0,r9,1
-	beq	4f			/* not needed for 601 */
-	mfspr	r11,HID0
-	andi.	r0,r11,HID0_DCE
-	ori	r11,r11,HID0_ICE|HID0_DCE
-	ori	r8,r11,HID0_ICFI
-	bne	3f			/* don't invalidate the D-cache */
-	ori	r8,r8,HID0_DCI		/* unless it wasn't enabled */
-3:
-	/* turn on dpm for 603 */
-	cmpi	0,r9,3
-	bne	10f
-	oris	r11,r11,HID0_DPM@h
-10:
-	sync
-	mtspr	HID0,r8			/* enable and invalidate caches */
-	sync
-	mtspr	HID0,r11		/* enable caches */
-	sync
-	isync
-	cmpi	0,r9,4			/* check for 604 */
-	cmpi	1,r9,9			/* or 604e */
-	cmpi	2,r9,10			/* or mach5 */
-	cror	2,2,6
-	cror	2,2,10
-	bne	4f
-	ori	r11,r11,HID0_SIED|HID0_BHTE /* for 604[e], enable */
-	bne	2,5f
-	ori	r11,r11,HID0_BTCD
-5:	mtspr	HID0,r11		/* superscalar exec & br history tbl */
-4:
-/*
- * init_MMU on the first processor has setup the variables
- * for us - all we need to do is load them -- Cort 
- */
-	
-/*
- * Go back to running unmapped so we can load up new values
- * for SDR1 (hash table pointer) and the segment registers
- * and change to using our exception vectors.
- */
-	lis	r6,_SDR1@ha
-	lwz	r6,_SDR1@l(r6)
-	lis	r4,2f@h
-	ori	r4,r4,2f@l
-	tophys(r4,r4,r3)
-	li	r3,MSR_KERNEL & ~(MSR_IR|MSR_DR)
-	mtspr	SRR0,r4
-	mtspr	SRR1,r3
-	rfi
-/* Load up the kernel context */
-2:
-	/* get ptr to current */
-	lis	r2,current_set@h
-	ori	r2,r2,current_set@l
-	/* assume we're second processor for now */
-	tophys(r2,r2,r10)
-	lwz	r2,4(r2)
-	/* stack */
-	addi	r1,r2,TASK_UNION_SIZE
-	li	r0,0
-	tophys(r3,r1,r10)
-	stwu	r0,-STACK_FRAME_OVERHEAD(r3)
-	
-	SYNC			/* Force all PTE updates to finish */
-	tlbia			/* Clear all TLB entries */
-	mtspr	SDR1,r6
-	li	r0,16		/* load up segment register values */
-	mtctr	r0		/* for context 0 */
-	lis	r3,0x2000	/* Ku = 1, VSID = 0 */
-	li	r4,0
-3:	mtsrin	r3,r4
-	addi	r3,r3,1		/* increment VSID */
-	addis	r4,r4,0x1000	/* address of next segment */
-	bdnz	3b
-	
-/* Load the BAT registers with the values set up by MMU_init.
-   MMU_init takes care of whether we're on a 601 or not. */
-	lis	r3,BATS@ha
-	addi	r3,r3,BATS@l
-	tophys(r3,r3,r4)
-	LOAD_BAT(0,0,r3,r4,r5)
-	LOAD_BAT(1,16,r3,r4,r5)
-	LOAD_BAT(2,32,r3,r4,r5)
-	LOAD_BAT(3,48,r3,r4,r5)
-
-/* Set up for using our exception vectors */
-	/* ptr to phys current tss */
-	tophys(r4,r2,r4)
-	addi	r4,r4,TSS	/* init task's TSS */
-	mtspr	SPRG3,r4
-	li	r3,0
-	mtspr	SPRG2,r3	/* 0 => r1 has kernel sp */
-
-	/* need to flush/invalidate caches too */
-	li	r3,0x4000/CACHE_LINE_SIZE
-	li	r4,0
-	mtctr	r3
-73:	dcbst	0,r4
-	addi	r4,r4,CACHE_LINE_SIZE
-	bdnz	73b
-	sync
-	li	r4,0
-	mtctr	r3
-72:	icbi	0,r4
-	addi	r4,r4,CACHE_LINE_SIZE
-	bdnz	72b
-	sync
-	isync
-77:
-/* Now turn on the MMU for real! */
-	li	r4,MSR_KERNEL
-	lis	r3,start_secondary@h
-	ori	r3,r3,start_secondary@l
-	mtspr	SRR0,r3
-	mtspr	SRR1,r4
-	rfi			/* enable MMU and jump to start_kernel */
-/* should never return */
-	.long 0
-#endif /* __SMP__ */
 
 /*
  * PROM code for specific machines follows.  Put it 
