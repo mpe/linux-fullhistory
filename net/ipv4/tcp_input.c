@@ -919,7 +919,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 		 * the ACK handshake on an initial SYN packet as well.
 		 * Rather than introducing a new test here for this
 		 * special case, we just reset the initial values for
-		 * rtt immediatly after we move to the established state.
+		 * rtt immediately after we move to the established state.
 		 */
 		if (!(flag&2)) 	/* Not retransmitting */
 			tcp_rtt_estimator(sk,skb);

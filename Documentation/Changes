@@ -18,7 +18,7 @@ and was originally written and maintained by Alessandro Sigala
 Taylor.  Check out http://www.cviog.uga.edu/LinuxBleed.html if you
 prefer a HTML-ized shopping list.
 
-Last updated: June 5, 1996.
+Last updated: June 6, 1996.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
@@ -28,7 +28,7 @@ Current Releases
 - PPP daemon		 Stable: 2.2.0f
 - Dynamic linker (ld.so) 1.7.14
 - GNU CC		 2.7.2
-- Binutils		 2.6.0.12
+- Binutils		 2.6.0.14
 - Linux C Library	 Stable:  5.2.18, Beta:  5.3.12
 - Linux C++ Library	 2.7.1.4
 - Termcap		 2.0.8
@@ -205,11 +205,11 @@ File Locking (Sendmail)
 
    As of pre2.0.6 (aka 1.99.6), mixed-style file locking is no longer
 allowed.  For example, a file cannot be simultaneously locked with
-`flock' (BSD-style) and `lockf' (SYSV-style).  Among the programs this
-has impacted are older sendmails.  If you get a message that sendmail
-cannot lock aliases.dir (or other files), you'll need to upgrade to at
-least 8.7.x.  The latest sendmail is at
-ftp://ftp.cs.berkeley.edu/ucb/src/sendmail/sendmail.8.7.5.tar.gz.
+`flock' and `fcntl'.  See Documentation/locks.txt for all the gory
+details.  Among the programs this has impacted are older sendmails.  If
+you get a message that sendmail cannot lock aliases.dir (or other
+files), you'll need to upgrade to at least 8.7.x. The latest sendmail
+is at ftp://ftp.cs.berkeley.edu/ucb/src/sendmail/sendmail.8.7.5.tar.gz.
 
 Uugetty
 =======
@@ -262,36 +262,45 @@ direction (either incoming or outgoing).
 
    There also exists a possibility to match on device names and/or
 device addresses, so that only packets coming in/going out via that
-device (network interface) match with a rule.
-
-   You'll need to get ipfwadm from ftp://ftp.xos.nl/pub/linux/ipfwadm. 
-Use ipfwadm-2.1.tar.gz if your kernel is 1.3.66 or later.
+device (network interface) match with a rule.  You'll need to get
+ipfwadm from ftp://ftp.xos.nl/pub/linux/ipfwadm/ipfwadm-2.1.tar.gz to
+use this.
 
 IP Firewalls
 ============
 
    The IP firewall code has been changed drastically during 1.3.x.
 There are now 3 categories of firewall rules: one for incoming packets,
-one for outgoing packets, and one for packets being forwarded.
-
-   There also exists a possibility to match on device names and/or
-device addresses, so that only packets coming in/going out via that
-device (network interface) match with a rule.  This is especially
-useful to prevent spoofing.
-
-   You'll need to get ipfwadm from ftp://ftp.xos.nl/pub/linux/ipfwadm. 
-Use ipfwadm-2.1.tar.gz if your kernel is 1.3.66 or later.
+one for outgoing packets, and one for packets being forwarded.  There
+also exists a possibility to match on device names and/or device
+addresses, so that only packets coming in/going out via that device
+(network interface) match with a rule.  This is especially useful to
+prevent spoofing.  You'll need to get
+ftp://ftp.xos.nl/pub/linux/ipfwadm/ipfwadm-2.1.tar.gz to use this.
 
 IP Masquerading
 ===============
 
-   IP masquerading is now part of the standard kernel.  Note that you
-always need to load separate modules (ip_masq_ftp.o and/or ip_masq_irc.o)
-if you are going to use FTP or IRC in combination with masquerading.
-Use "make modules" to generated them.
+   IP masquerading is now part of the standard kernel.  However, you
+always need to load separate modules (ip_masq_ftp.o and/or
+ip_masq_irc.o) if you are going to use FTP or IRC in combination with
+masquerading.  You'll need to get
+ftp://ftp.xos.nl/pub/linux/ipfwadm/ipfwadm-2.1.tar.gz to use this.
 
-   You'll need to get ipfwadm from ftp://ftp.xos.nl/pub/linux/ipfwadm. 
-Use ipfwadm-2.1.tar.gz if your kernel is 1.3.66 or later.
+ISDN support
+============
+
+   The new kernels support ISDN.  You'll need ISDN utils available from
+ftp://ftp.franken.de/pub/isdn4linux/isdn4k-utils-1.3.97.tar.gz to try
+this.
+
+Term is broken
+==============
+
+   Term (a comm line multiplexer similar in purpose to slirp) does not
+work with kernels later than 1.3.60.  Since the author of term is
+apparently currently on vacation, there is no fix forthcoming.  I
+suggest that those of you who rely on term learn to use slirp.
 
 Networking
 ==========
@@ -428,22 +437,6 @@ ftp://sunsite.unc.edu/pub/Linux/system/Misc/fdutils-4.3.src.tar.gz.
    In the future, fdformat might disappear entirely, so get used to
 using superformat instead.
 
-Please send info about any other packages that 1.3.x "broke" or about
-any new features of 1.3.x that require extra or new packages for use to
-Chris Ricker (gt1355b@prism.gatech.edu).  I generate this from a
-modified texinfo setup, so you don't need to bother generating a diff
-against the current version before you send the additional information
-to me.
-
-nfsd daemon doesn't work anymore
-================================
-   The Red Hat distributions 2.x, 3.x and Caldera 1.0 have a bug where
-they do "route add -net 127.0.0.1" at startup.  That is wrong.  The
-correct command is "route add -net 127.0.0.0". 
-
-Workaround: Change in "/etc/sysconfig/network-scripts/ifup-lo" the
-"route add -net ${IPADDR}" into "route add -net 127.0.0.0".
-  
 How to know the version of the installed programs
 *************************************************
 
@@ -466,9 +459,9 @@ Where to get the files
 Binutils
 ========
 
-ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.6.0.12.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.6.0.14.bin.tar.gz
 Installation notes:
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.6.0.12
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.6.0.14
 
 GNU CC
 ======

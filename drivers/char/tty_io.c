@@ -431,9 +431,6 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 	tty->session = 0;
 	tty->pgrp = -1;
 	tty->ctrl_status = 0;
-	tty->packet = 0;
-	if (tty->link)
-		tty->link->packet = 0;
 	if (tty->driver.flags & TTY_DRIVER_RESET_TERMIOS)
 		*tty->termios = tty->driver.init_termios;
 	if (tty->driver.hangup)

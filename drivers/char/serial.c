@@ -90,13 +90,6 @@ static int serial_refcount;
 
 #define _INLINE_ inline
   
-#ifdef MODULE
-static int io[PORT_MAX] = { 0, };
-static int irq[PORT_MAX]  = { 0, };
-static int type[PORT_MAX]  = { 0, };
-static int flags[PORT_MAX]  = { 0, };
-#endif
-
 #if defined(MODULE) && defined(SERIAL_DEBUG_MCOUNT)
 #define DBG_CNT(s) printk("(%s): [%x] refc=%d, serc=%d, ttyc=%d -> %s\n", \
  kdevname(tty->device), (info->flags), serial_refcount,info->count,tty->count,s)
@@ -2825,16 +2818,6 @@ int rs_init(void)
 			info->icount.rng = info->icount.dcd = 0;
 		info->next_port = 0;
 		info->prev_port = 0;
-#ifdef MODULE
-		if(irq[i])
-			info->irq=irq[i];
-		if (io[i])
-			info->port=io[i];
-		if (type[i])
-			info->type = type[i];
-		if (flags[i])
-			info->flags = flags[i];
-#endif
 		if (info->irq == 2)
 			info->irq = 9;
 		if (info->type == PORT_UNKNOWN) {

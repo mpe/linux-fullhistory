@@ -29,7 +29,7 @@ Sun May 26 09:33:52 1996  Theodore Ts'o  <tytso@rsts-11.mit.edu>
 		nasty TCP hijacking attacks.
 	
 		(init_std_data): Initialize using gettimeofday() instead of
-		struct timveal xtime.
+		struct timeval xtime.
 
 		(fast_add_entropy_word, add_entropy_word): Rename the
 		inline function add_entropy_word() to

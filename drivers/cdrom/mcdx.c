@@ -38,9 +38,9 @@
  *  Jon Tombs, Bjorn Ekwall (module support)
  *  Daniel v. Mosnenck (he sent me the Technical and Programming Reference)
  *  Gerd Knorr (he lent me his PhotoCD)
- *  Nils Faerber and Roger E. Wolff (extensivly tested the LU portion)
+ *  Nils Faerber and Roger E. Wolff (extensively tested the LU portion)
  *  Andreas Kies (testing the mysterious hang up's)
- *  Heiko Eissfeld (VERIFY_READ/WRITE)
+ *  Heiko Eissfeldt (VERIFY_READ/WRITE)
  *  Marcin Dalecki (improved performance, shortened code)
  *  ... somebody forgotten?
  *  
@@ -89,7 +89,7 @@ static const char *mcdx_c_version
 #define xtrace(lvl, fmt, args...) \
 		{ if (lvl > 0) \
 			{ printk(KERN_DEBUG MCDX ":: " fmt, ## args); } }
-#define xdebug(fmt, args...) printk(KERN_DEBUG MCDX ":: " fmg, ## args)
+#define xdebug(fmt, args...) printk(KERN_DEBUG MCDX ":: " fmt, ## args)
 #else
 #define xtrace(lvl, fmt, args...) { ; }
 #define xdebug(fmt, args...) { ; }
@@ -100,7 +100,7 @@ static const char *mcdx_c_version
 /* Following are the number of sectors we _request_ from the drive
    every time an access outside the already requested range is done.
    The _direct_ size is the number of sectors we're allowed to skip
-   directly (perfoming a read instead of requesting the new sector
+   directly (performing a read instead of requesting the new sector
    needed */
 const int REQUEST_SIZE = 800;	/* should be less then 255 * 4 */
 const int DIRECT_SIZE = 400;	/* should be less then REQUEST_SIZE */
@@ -149,7 +149,7 @@ struct s_version {
 /* Per drive/controller stuff **************************************/
 
 struct s_drive_stuff {
-	/* waitquenes */
+	/* waitqueues */
     struct wait_queue *busyq;
     struct wait_queue *lockq;
     struct wait_queue *sleepq;
@@ -164,7 +164,7 @@ struct s_drive_stuff {
 	/* cd infos */
 	struct s_diskinfo di;
 	struct s_multi multi;
-	struct s_subqcode* toc;	/* first enty of the toc array */
+	struct s_subqcode* toc;	/* first entry of the toc array */
 	struct s_subqcode start;
     struct s_subqcode stop;
 	int xa;					/* 1 if xa disk */
@@ -683,7 +683,7 @@ mcdx_open(struct inode *ip, struct file *fp)
 	 *   autoclose wouldn't probably be what we want.
 	 * - If we didn't try to close the door yet, close it and go on.
 	 * - If we autoclosed the door and couldn't succeed in find a valid
-	 *   CD we shouln't try autoclose any longer (until a valid CD is
+	 *   CD we shouldn't try autoclose any longer (until a valid CD is
 	 *   in.) */
 
 	if (inb((unsigned int) stuffp->rreg_status) & MCDX_RBIT_DOOR) {
@@ -923,7 +923,7 @@ static void mcdx_delay(struct s_drive_stuff *stuff, long jifs)
  *                 run for other processes)
  *              >0 means at least sleep for that amount.
  *	May be we could use a simple count loop w/ jumps to itself, but 
- *	I wanna make this independend of cpu speed. [1 jiffie is 1/HZ] sec */
+ *	I wanna make this independent of cpu speed. [1 jiffy is 1/HZ] sec */
 {
     unsigned long tout = jiffies + jifs;
     if (jifs < 0) return;
@@ -981,7 +981,7 @@ mcdx_intr(int irq, void *dev_id, struct pt_regs* regs)
 			xinfo(  "intr() irq %d    status 0x%02x\n", 
 					irq, inb((unsigned int) stuffp->rreg_data));
 		} else {
-			xinfo(  "intr() irq %d ambigous hw status\n", irq);
+			xinfo(  "intr() irq %d ambiguous hw status\n", irq);
 		}
 	} else {
 		xtrace(IRQ, "irq() irq %d ok, status %02x\n", irq, b);
@@ -1327,7 +1327,7 @@ static int
 mcdx_transfer(struct s_drive_stuff *stuffp,
 		char *p, int sector, int nr_sectors)
 /*	This seems to do the actually transfer.  But it does more.  It
-	keeps track of errors ocurred and will (if possible) fall back
+	keeps track of errors occurred and will (if possible) fall back
 	to single speed on error. 
 	Return:	-1 on timeout or other error
 			else status byte (as in stuff->st) */
@@ -1341,7 +1341,7 @@ mcdx_transfer(struct s_drive_stuff *stuffp,
 	else return ans;
 
 	if (stuffp->readerrs && stuffp->readcmd == READ1X) {
-		xwarn("XXX Alrady reading 1x -- no chance\n");
+		xwarn("XXX Already reading 1x -- no chance\n");
 		return -1;
 	}
 
@@ -1385,7 +1385,7 @@ static int mcdx_xfer(struct s_drive_stuff *stuffp,
          * to be already requested, so we don't need to bother the
 		 * drive with new requests ...
 		 * Wait for the drive become idle, but first
-		 * check for possible occured errors --- the drive
+		 * check for possible occurred errors --- the drive
 		 * seems to report them asynchronously */
 
 

@@ -40,7 +40,7 @@
 #include "constants.h"
 
 #define MAX_RETRIES 3
-#define SR_TIMEOUT (15 * HZ)
+#define SR_TIMEOUT (30 * HZ)
 
 static int sr_init(void);
 static void sr_finish(void);

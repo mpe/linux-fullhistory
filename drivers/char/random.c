@@ -351,7 +351,7 @@ static void add_entropy_word(struct random_bucket *r,
 
 /*
  * Unfortunately, while the GCC optimizer for the i386 understands how
- * to opimize a static rotate left of x bits, it doesn't know how to
+ * to optimize a static rotate left of x bits, it doesn't know how to
  * deal with a variable rotate of x bits.  So we use a bit of asm magic.
  */
 #if (!defined (__i386__))

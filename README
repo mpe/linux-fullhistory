@@ -185,7 +185,7 @@ COMPILING the kernel:
 IF SOMETHING GOES WRONG:
 
  - if you have problems that seem to be due to kernel bugs, please check
-   the file MAINTAINERS to see if there is a particualr person associated
+   the file MAINTAINERS to see if there is a particular person associated
    with the part of the kernel that you are having trouble with. If there
    isn't anyone listed there, then the second best thing is to mail
    them to me (Linus.Torvalds@Helsinki.FI), and possibly to any other
