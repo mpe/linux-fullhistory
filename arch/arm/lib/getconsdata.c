@@ -32,11 +32,13 @@ unsigned long TSK_USED_MATH = OFF_TSK(used_math);
 unsigned long MM = OFF_TSK(mm);
 unsigned long PGD = OFF_MM(pgd);
 
-unsigned long TSS_MEMMAP = OFF_TSK(tss.memmap);
-unsigned long TSS_SAVE = OFF_TSK(tss.save);
-unsigned long TSS_FPESAVE = OFF_TSK(tss.fpstate.soft.save);
+unsigned long TSS_SAVE = OFF_TSK(thread.save);
+unsigned long TSS_FPESAVE = OFF_TSK(thread.fpstate.soft.save);
 #ifdef CONFIG_CPU_26
-unsigned long TSS_MEMCMAP = OFF_TSK(tss.memcmap);
+unsigned long TSS_MEMMAP = OFF_TSK(thread.memmap);
+unsigned long TSS_MEMCMAP = OFF_TSK(thread.memcmap);
+#elif defined(CONFIG_CPU_32)
+unsigned long TSS_DOMAIN = OFF_TSK(thread.domain);
 #endif
 
 #ifdef _PAGE_PRESENT

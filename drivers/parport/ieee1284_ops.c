@@ -373,9 +373,10 @@ int ecp_reverse_to_forward (struct parport *port)
 
 	/* Event 47: Set nInit high */
 	parport_frob_control (port,
-			      PARPORT_CONTROL_INIT,
-			      PARPORT_CONTROL_INIT);
-	parport_data_reverse (port);
+			      PARPORT_CONTROL_INIT
+			      | PARPORT_CONTROL_AUTOFD,
+			      PARPORT_CONTROL_INIT
+			      | PARPORT_CONTROL_AUTOFD);
 
 	/* Event 49: PError goes high */
 	retval = parport_wait_peripheral (port,
@@ -404,7 +405,6 @@ size_t parport_ieee1284_ecp_write_data (struct parport *port,
 #else
 	const unsigned char *buf = buffer;
 	size_t written;
-	int ctl = parport_read_control (port) & ~PARPORT_CONTROL_AUTOFD;
 	int retry;
 
 	port = port->physport;
@@ -416,7 +416,11 @@ size_t parport_ieee1284_ecp_write_data (struct parport *port,
 	port->ieee1284.phase = IEEE1284_PH_FWD_DATA;
 
 	/* HostAck high (data, not command) */
-	parport_write_control (port, ctl);
+	parport_frob_control (port,
+			      PARPORT_CONTROL_AUTOFD
+			      | PARPORT_CONTROL_STROBE
+			      | PARPORT_CONTROL_INIT,
+			      PARPORT_CONTROL_INIT);
 	for (written = 0; written < len; written++, buf++) {
 		long expire = jiffies + port->cad->timeout;
 		unsigned char byte;
@@ -424,7 +428,8 @@ size_t parport_ieee1284_ecp_write_data (struct parport *port,
 		byte = *buf;
 	try_again:
 		parport_write_data (port, byte);
-		parport_write_control (port, ctl | PARPORT_CONTROL_STROBE);
+		parport_frob_control (port, PARPORT_CONTROL_STROBE,
+				      PARPORT_CONTROL_STROBE);
 		udelay (5);
 		for (retry = 0; retry < 100; retry++) {
 			if (!parport_wait_peripheral (port,
@@ -432,7 +437,9 @@ size_t parport_ieee1284_ecp_write_data (struct parport *port,
 				goto success;
 
 			if (signal_pending (current)) {
-				parport_write_control (port, ctl);
+				parport_frob_control (port,
+						      PARPORT_CONTROL_STROBE,
+						      0);
 				break;
 			}
 		}
@@ -440,15 +447,16 @@ size_t parport_ieee1284_ecp_write_data (struct parport *port,
 		/* Time for Host Transfer Recovery (page 41 of IEEE1284) */
 		DPRINTK (KERN_DEBUG "%s: ECP transfer stalled!\n", port->name);
 
-		parport_write_control (port, ctl | PARPORT_CONTROL_INIT);
+		parport_frob_control (port, PARPORT_CONTROL_INIT,
+				      PARPORT_CONTROL_INIT);
 		udelay (50);
 		if (parport_read_status (port) & PARPORT_STATUS_PAPEROUT) {
 			/* It's buggered. */
-			parport_write_control (port, ctl);
+			parport_frob_control (port, PARPORT_CONTROL_INIT, 0);
 			break;
 		}
 
-		parport_write_control (port, ctl);
+		parport_frob_control (port, PARPORT_CONTROL_INIT, 0);
 		udelay (50);
 		if (!(parport_read_status (port) & PARPORT_STATUS_PAPEROUT))
 			break;
@@ -459,7 +467,7 @@ size_t parport_ieee1284_ecp_write_data (struct parport *port,
 		if (time_after_eq (jiffies, expire)) break;
 		goto try_again;
 	success:
-		parport_write_control (port, ctl);
+		parport_frob_control (port, PARPORT_CONTROL_STROBE, 0);
 		udelay (5);
 		if (parport_wait_peripheral (port,
 					     PARPORT_STATUS_BUSY,
@@ -496,7 +504,10 @@ size_t parport_ieee1284_ecp_read_data (struct parport *port,
 	port->ieee1284.phase = IEEE1284_PH_REV_DATA;
 
 	/* Set HostAck low to start accepting data. */
-	parport_frob_control (port, PARPORT_CONTROL_AUTOFD,
+	parport_frob_control (port,
+			      PARPORT_CONTROL_AUTOFD
+			      | PARPORT_CONTROL_STROBE
+			      | PARPORT_CONTROL_INIT,
 			      PARPORT_CONTROL_AUTOFD);
 	while (count < len) {
 		long expire = jiffies + dev->timeout;
@@ -505,9 +516,7 @@ size_t parport_ieee1284_ecp_read_data (struct parport *port,
 
 		/* Event 43: Peripheral sets nAck low. It can take as
                    long as it wants. */
-		while (parport_wait_peripheral (port,
-						PARPORT_STATUS_ACK,
-						PARPORT_STATUS_ACK)) {
+		while (parport_wait_peripheral (port, PARPORT_STATUS_ACK, 0)) {
 			/* The peripheral hasn't given us data in
 			   35ms.  If we have data to give back to the
 			   caller, do it now. */
@@ -578,7 +587,8 @@ size_t parport_ieee1284_ecp_read_data (struct parport *port,
 		parport_frob_control (port, PARPORT_CONTROL_AUTOFD, 0);
 
 		/* Event 45: The peripheral has 35ms to set nAck high. */
-		if (parport_wait_peripheral (port, PARPORT_STATUS_ACK, 0)) {
+		if (parport_wait_peripheral (port, PARPORT_STATUS_ACK,
+					     PARPORT_STATUS_ACK)) {
 			/* It's gone wrong.  Return what data we have
                            to the caller. */
 			DPRINTK (KERN_DEBUG "ECP read timed out at 45\n");
@@ -630,7 +640,6 @@ size_t parport_ieee1284_ecp_write_addr (struct parport *port,
 #else
 	const unsigned char *buf = buffer;
 	size_t written;
-	int ctl = parport_read_control (port) | PARPORT_CONTROL_AUTOFD;
 	int retry;
 
 	port = port->physport;
@@ -642,7 +651,12 @@ size_t parport_ieee1284_ecp_write_addr (struct parport *port,
 	port->ieee1284.phase = IEEE1284_PH_FWD_DATA;
 
 	/* HostAck low (command, not data) */
-	parport_write_control (port, ctl);
+	parport_frob_control (port,
+			      PARPORT_CONTROL_AUTOFD
+			      | PARPORT_CONTROL_STROBE
+			      | PARPORT_CONTROL_INIT,
+			      PARPORT_CONTROL_AUTOFD
+			      | PARPORT_CONTROL_INIT);
 	for (written = 0; written < len; written++, buf++) {
 		long expire = jiffies + port->cad->timeout;
 		unsigned char byte;
@@ -650,7 +664,8 @@ size_t parport_ieee1284_ecp_write_addr (struct parport *port,
 		byte = *buf;
 	try_again:
 		parport_write_data (port, byte);
-		parport_write_control (port, ctl | PARPORT_CONTROL_STROBE);
+		parport_frob_control (port, PARPORT_CONTROL_STROBE,
+				      PARPORT_CONTROL_STROBE);
 		udelay (5);
 		for (retry = 0; retry < 100; retry++) {
 			if (!parport_wait_peripheral (port,
@@ -658,7 +673,9 @@ size_t parport_ieee1284_ecp_write_addr (struct parport *port,
 				goto success;
 
 			if (signal_pending (current)) {
-				parport_write_control (port, ctl);
+				parport_frob_control (port,
+						      PARPORT_CONTROL_STROBE,
+						      0);
 				break;
 			}
 		}
@@ -666,15 +683,16 @@ size_t parport_ieee1284_ecp_write_addr (struct parport *port,
 		/* Time for Host Transfer Recovery (page 41 of IEEE1284) */
 		DPRINTK (KERN_DEBUG "%s: ECP transfer stalled!\n", port->name);
 
-		parport_write_control (port, ctl | PARPORT_CONTROL_INIT);
+		parport_frob_control (port, PARPORT_CONTROL_INIT,
+				      PARPORT_CONTROL_INIT);
 		udelay (50);
 		if (parport_read_status (port) & PARPORT_STATUS_PAPEROUT) {
 			/* It's buggered. */
-			parport_write_control (port, ctl);
+			parport_frob_control (port, PARPORT_CONTROL_INIT, 0);
 			break;
 		}
 
-		parport_write_control (port, ctl);
+		parport_frob_control (port, PARPORT_CONTROL_INIT, 0);
 		udelay (50);
 		if (!(parport_read_status (port) & PARPORT_STATUS_PAPEROUT))
 			break;
@@ -685,7 +703,7 @@ size_t parport_ieee1284_ecp_write_addr (struct parport *port,
 		if (time_after_eq (jiffies, expire)) break;
 		goto try_again;
 	success:
-		parport_write_control (port, ctl);
+		parport_frob_control (port, PARPORT_CONTROL_STROBE, 0);
 		udelay (5);
 		if (parport_wait_peripheral (port,
 					     PARPORT_STATUS_BUSY,

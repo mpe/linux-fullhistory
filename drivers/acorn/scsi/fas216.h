@@ -237,6 +237,8 @@ typedef struct {
 
 		unsigned int	async_stp;		/* Async transfer STP value		*/
 		unsigned char	msgin_fifo;		/* bytes in fifo at time of message in	*/
+		unsigned char	message[256];		/* last message received from device	*/
+		unsigned int	msglen;			/* length of last message received	*/
 
 		unsigned char	disconnectable:1;	/* this command can be disconnected	*/
 		unsigned char	aborting:1;		/* aborting command			*/

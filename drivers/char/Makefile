@@ -164,11 +164,11 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_BUSMOUSE),y)
-L_OBJS += busmouse.o
+ifeq ($(CONFIG_LOGIBUSMOUSE),y)
+L_OBJS += logibusmouse.o
 else
-  ifeq ($(CONFIG_BUSMOUSE),m)
-  M_OBJS += busmouse.o
+  ifeq ($(CONFIG_LOGIBUSMOUSE),m)
+  M_OBJS += logibusmouse.o
   endif
 endif
 
@@ -187,6 +187,16 @@ MOD_SUB_DIRS += joystick
 else
   ifeq ($(CONFIG_JOYSTICK),m)
   MOD_SUB_DIRS += joystick
+  endif
+endif
+
+ifeq ($(CONFIG_MOUSE),y)
+M = y
+LX_OBJS += busmouse.o
+else
+  ifeq ($(CONFIG_MOUSE),m)
+  MM = m
+  MX_OBJS += busmouse.o
   endif
 endif
 

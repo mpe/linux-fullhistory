@@ -540,6 +540,45 @@ static int apm_set_power_state(u_short state)
 	return set_power_state(0x0001, state);
 }
 
+/*
+ * If no process has been interested in this
+ * CPU for some time, we want to wake up the
+ * power management thread - we probably want
+ * to conserve power.
+ */
+#define HARD_IDLE_TIMEOUT (HZ/3)
+
+/*
+ * This is the idle thing.
+ */
+void apm_cpu_idle(void)
+{
+	unsigned int start_idle;
+
+	start_idle = jiffies;
+	while (1) {
+		if (!current->need_resched) {
+			if (jiffies - start_idle < HARD_IDLE_TIMEOUT) {
+				if (!current_cpu_data.hlt_works_ok)
+					continue;
+				if (hlt_counter)
+					continue;
+				asm volatile("sti ; hlt" : : : "memory");
+				continue;
+			}
+
+			/*
+			 * Ok, do some power management - we've been idle for too long
+			 */
+			powermanagement_idle();
+		}
+
+		schedule();
+		check_pgt_cache();
+		start_idle = jiffies;
+	}
+}
+
 void apm_power_off(void)
 {
 	/*

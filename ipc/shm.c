@@ -687,9 +687,9 @@ static unsigned long shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 		--current->maj_flt;  /* was incremented in do_no_page */
 
 done:	/* pte_val(pte) == shp->shm_pages[idx] */
+	get_page(mem_map + MAP_NR(pte_page(pte)));
 	unlock_kernel();
 	current->min_flt++;
-	get_page(mem_map + MAP_NR(pte_page(pte)));
 	return pte_page(pte);
 
 changed:

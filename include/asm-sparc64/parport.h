@@ -10,6 +10,16 @@
 #include <asm/ebus.h>
 #include <asm/ns87303.h>
 
+#ifdef CONFIG_PARPORT_PC_PCMCIA
+#define __maybe_init
+#define __maybe_initdata
+#else
+#define __maybe_init __init
+#define __maybe_initdata __initdata
+#endif
+
+#undef HAVE_SLOW_DEVICES
+
 static struct linux_ebus_dma *sparc_ebus_dmas[PARPORT_MAX];
 
 static __inline__ void
@@ -17,11 +27,10 @@ reset_dma(unsigned int dmanr)
 {
 	unsigned int dcsr;
 
-	dcsr = readl(&sparc_ebus_dmas[dmanr]->dcsr) & EBUS_DCSR_INT_EN;
 	writel(EBUS_DCSR_RESET, &sparc_ebus_dmas[dmanr]->dcsr);
-
-	dcsr |= EBUS_DCSR_BURST_SZ_16 | EBUS_DCSR_TCI_DIS |
-	        EBUS_DCSR_EN_CNT;
+	udelay(1);
+	dcsr = EBUS_DCSR_BURST_SZ_16 | EBUS_DCSR_TCI_DIS |
+	       EBUS_DCSR_EN_CNT;
 	writel(dcsr, &sparc_ebus_dmas[dmanr]->dcsr);
 }
 
@@ -41,14 +50,21 @@ disable_dma(unsigned int dmanr)
 	unsigned int dcsr;
 
 	dcsr = readl(&sparc_ebus_dmas[dmanr]->dcsr);
-	while (dcsr & EBUS_DCSR_DRAIN)
+	if (dcsr & EBUS_DCSR_EN_DMA) {
+		while (dcsr & EBUS_DCSR_DRAIN) {
+			udelay(1);
+			dcsr = readl(&sparc_ebus_dmas[dmanr]->dcsr);
+		}
+		dcsr &= ~(EBUS_DCSR_EN_DMA);
+		writel(dcsr, &sparc_ebus_dmas[dmanr]->dcsr);
+
 		dcsr = readl(&sparc_ebus_dmas[dmanr]->dcsr);
-	dcsr &= ~(EBUS_DCSR_EN_DMA);
-	if (dcsr & EBUS_DCSR_ERR_PEND) {
-		reset_dma(dmanr);
-		dcsr &= ~(EBUS_DCSR_ERR_PEND);
+		if (dcsr & EBUS_DCSR_ERR_PEND) {
+			reset_dma(dmanr);
+			dcsr &= ~(EBUS_DCSR_ERR_PEND);
+		}
+		writel(dcsr, &sparc_ebus_dmas[dmanr]->dcsr);
 	}
-	writel(dcsr, &sparc_ebus_dmas[dmanr]->dcsr);
 }
 
 static __inline__ void
@@ -86,13 +102,19 @@ set_dma_count(unsigned int dmanr, unsigned int count)
 static __inline__ int
 get_dma_residue(unsigned int dmanr)
 {
-	return readl(&sparc_ebus_dmas[dmanr]->dbcr);
+	unsigned int dcsr;
+	int res;
+
+	res = readl(&sparc_ebus_dmas[dmanr]->dbcr);
+	if (res != 0) {
+		dcsr = readl(&sparc_ebus_dmas[dmanr]->dcsr);
+		reset_dma(dmanr);
+		writel(dcsr, &sparc_ebus_dmas[dmanr]->dcsr);
+	}
+	return res;
 }
 
-static int __init probe_one_port(unsigned long int base,
-				 unsigned long int base_hi,
-				 int irq, int dma);
-static int __init parport_pc_init_pci(int irq, int dma);
+static int __maybe_init parport_pc_init_pci(int irq, int dma);
 
 int __init
 parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
@@ -114,6 +136,7 @@ parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 				sparc_ebus_dmas[count] =
 						(struct linux_ebus_dma *)
 							edev->base_address[2];
+				reset_dma(count);
 
 				/* Enable ECP, set bit 2 of the CTR first */
 				outb(0x04, base + 0x02);
@@ -139,8 +162,10 @@ parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 				ns87303_writeb(config, FCR, cfg);
 #endif
 
-				count += probe_one_port(base, base + 0x400,
-						        edev->irqs[0], count);
+				if (parport_pc_probe_port(base, base + 0x400,
+							  edev->irqs[0],
+							  count))
+					count++;
 			}
 		}
 	}

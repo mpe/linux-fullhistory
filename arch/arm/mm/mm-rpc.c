@@ -85,8 +85,6 @@ init_dram_banks(struct param_struct *params))
 
 	rambank[FIRST_VRAM_BANK].phys_offset = 0xd6000000;
 	rambank[FIRST_VRAM_BANK].virt_addr   = 0xd8000000;
-
-	current->tss.memmap = __virt_to_phys((unsigned long)swapper_pg_dir);
 }
 
 #define MAPPING \

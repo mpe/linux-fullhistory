@@ -100,9 +100,17 @@ typedef enum {
  * The SEEQ8005 doesn't like us writing to it's registers
  * too quickly.
  */
-#define ether3_outb(v,r)	{ outb((v),(r)); udelay(1); }
-#define ether3_outw(v,r)	{ outw((v),(r)); udelay(1); }
+static inline void ether3_outb(int v, const int r)
+{
+	outb(v, r);
+	udelay(1);
+}
 
+static inline void ether3_outw(int v, const int r)
+{
+	outw(v, r);
+	udelay(1);
+}
 #define ether3_inb(r)		({ unsigned int __v = inb((r)); udelay(1); __v; })
 #define ether3_inw(r)		({ unsigned int __v = inw((r)); udelay(1); __v; })
 

@@ -1,299 +1,484 @@
 /*
- * Logitech Bus Mouse Driver for Linux
- * by James Banks
+ * linux/drivers/char/mouse.c
  *
- * Mods by Matthew Dillon
- *   calls verify_area()
- *   tracks better when X is busy or paging
+ * Copyright (C) 1995 - 1998 Russell King
+ *  Protocol taken from busmouse.c
+ *  read() waiting taken from psaux.c
  *
- * Heavily modified by David Giller
- *   changed from queue- to counter- driven
- *   hacked out a (probably incorrect) mouse_select
+ * Medium-level interface for quadrature or bus mice.
  *
- * Modified again by Nathan Laredo to interface with
- *   0.96c-pl1 IRQ handling changes (13JUL92)
- *   didn't bother touching select code.
+ * Currently, the majority of kernel busmice drivers in the
+ * kernel common code to talk to userspace.  This driver
+ * attempts to rectify this situation by presenting a
+ * simple and safe interface to the mice and user.
  *
- * Modified the select() code blindly to conform to the VFS
- *   requirements. 92.07.14 - Linus. Somebody should test it out.
- *
- * Modified by Johan Myreen to make room for other mice (9AUG92)
- *   removed assignment chr_fops[10] = &mouse_fops; see mouse.c
- *   renamed mouse_fops => bus_mouse_fops, made bus_mouse_fops public.
- *   renamed this file mouse.c => busmouse.c
- *
- * Minor addition by Cliff Matthews
- *   added fasync support
- *
- * Modularised 6-Sep-95 Philip Blundell <pjb27@cam.ac.uk> 
- *
- * Replaced dumb busy loop with udelay()  16 Nov 95
- *   Nathan Laredo <laredo@gnu.ai.mit.edu>
- *
- * Track I/O ports with request_region().  12 Dec 95 Philip Blundell 
+ * This driver:
+ *  - is SMP safe
+ *  - handles multiple opens
+ *  - handles the wakeups and locking
+ *  - has optional blocking reads
  */
 
 #include <linux/module.h>
-
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
-#include <linux/busmouse.h>
 #include <linux/signal.h>
+#include <linux/malloc.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
 #include <linux/poll.h>
 #include <linux/miscdevice.h>
 #include <linux/random.h>
-#include <linux/delay.h>
-#include <linux/ioport.h>
 #include <linux/init.h>
 
-#include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
-#include <asm/irq.h>
+#include <asm/io.h>
 
-static struct mouse_status mouse;
-static int mouse_irq = MOUSE_IRQ;
+#include "busmouse.h"
 
-#ifdef MODULE
-MODULE_PARM(mouse_irq, "i");
-#endif
+/* Uncomment this if your mouse drivers expect the kernel to
+ * return with EAGAIN if the mouse does not have any events
+ * available, even if the mouse is opened in nonblocking mode.
+ *
+ * Should this be on a per-mouse basis?  If so, add an entry to
+ * the struct busmouse structure and add the relevent flag to
+ * the drivers.
+ */
+/*#define BROKEN_MOUSE*/
 
-void __init bmouse_setup(char *str, int *ints)
+extern int adb_mouse_init(void);
+extern int bus_mouse_init(void);
+extern int ms_bus_mouse_init(void);
+extern int atixl_busmouse_init(void);
+extern int amiga_mouse_init(void);
+extern int atari_mouse_init(void);
+extern int sun_mouse_init(void);
+extern void mouse_rpc_init (void);
+
+struct busmouse_data {
+	struct miscdevice	miscdev;
+	struct busmouse		*ops;
+	spinlock_t		lock;
+
+	wait_queue_head_t	wait;
+	struct fasync_struct	*fasyncptr;
+	char			active;
+	char			buttons;
+	char			latch_buttons;
+	char			ready;
+	int			dxpos;
+	int			dypos;
+};
+
+#define NR_MICE			15
+#define FIRST_MOUSE		0
+#define DEV_TO_MOUSE(dev)	MINOR_TO_MOUSE(MINOR(dev))
+#define MINOR_TO_MOUSE(minor)	((minor) - FIRST_MOUSE)
+
+static struct busmouse_data *busmouse_data[NR_MICE];
+
+/* a mouse driver just has to interface with these functions
+ *  These are !!!OLD!!!  Do not use!!!
+ */
+void add_mouse_movement(int dx, int dy)
 {
-	if (ints[0] > 0)
-		mouse_irq=ints[1];
+	struct busmouse_data *mse = busmouse_data[MINOR_TO_MOUSE(6)];
+
+	mse->dxpos += dx;
+	mse->dypos += dy;
+	mse->ready = 1;
+	wake_up(&mse->wait);
 }
 
-static void mouse_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+int add_mouse_buttonchange(int set, int value)
 {
-	char dx, dy;
-	unsigned char buttons;
+	struct busmouse_data *mse = busmouse_data[MINOR_TO_MOUSE(6)];
 
-	outb(MSE_READ_X_LOW, MSE_CONTROL_PORT);
-	dx = (inb(MSE_DATA_PORT) & 0xf);
-	outb(MSE_READ_X_HIGH, MSE_CONTROL_PORT);
-	dx |= (inb(MSE_DATA_PORT) & 0xf) << 4;
-	outb(MSE_READ_Y_LOW, MSE_CONTROL_PORT );
-	dy = (inb(MSE_DATA_PORT) & 0xf);
-	outb(MSE_READ_Y_HIGH, MSE_CONTROL_PORT);
-	buttons = inb(MSE_DATA_PORT);
-	dy |= (buttons & 0xf) << 4;
-	buttons = ((buttons >> 5) & 0x07);
-	if (dx != 0 || dy != 0 || buttons != mouse.buttons) {
-	  add_mouse_randomness((buttons << 16) + (dy << 8) + dx);
-	  mouse.buttons = buttons;
-	  mouse.dx += dx;
-	  mouse.dy -= dy;
-	  mouse.ready = 1;
-	  wake_up_interruptible(&mouse.wait);
+	mse->buttons = (mse->buttons & ~set) ^ value;
+	mse->ready = 1;
+	wake_up(&mse->wait);
+	return mse->buttons;
+}
 
-	  /*
-	   * keep dx/dy reasonable, but still able to track when X (or
-	   * whatever) must page or is busy (i.e. long waits between
-	   * reads)
-	   */
-	  if (mouse.dx < -2048)
-	      mouse.dx = -2048;
-	  if (mouse.dx >  2048)
-	      mouse.dx =  2048;
+/* New interface.  !!! Use this one !!!
+ * These routines will most probably be called from interrupt.
+ */
+void
+busmouse_add_movementbuttons(int mousedev, int dx, int dy, int buttons)
+{
+	struct busmouse_data *mse = busmouse_data[mousedev];
+	int changed;
 
-	  if (mouse.dy < -2048)
-	      mouse.dy = -2048;
-	  if (mouse.dy >  2048)
-	      mouse.dy =  2048;
+	spin_lock(&mse->lock);
+	changed = (dx != 0 || dy != 0 || mse->buttons != buttons);
 
-	  if (mouse.fasyncptr)
-	      kill_fasync(mouse.fasyncptr, SIGIO);
+	if (changed) {
+		add_mouse_randomness((buttons << 16) + (dy << 8) + dx);
+
+		mse->buttons = buttons;
+//		mse->latch_buttons |= buttons;
+		mse->dxpos += dx;
+		mse->dypos += dy;
+		mse->ready = 1;
+
+		/*
+		 * keep dx/dy reasonable, but still able to track when X (or
+		 * whatever) must page or is busy (i.e. long waits between
+		 * reads)
+		 */
+		if (mse->dxpos < -2048)
+			mse->dxpos = -2048;
+		if (mse->dxpos > 2048)
+			mse->dxpos = 2048;
+		if (mse->dypos < -2048)
+			mse->dypos = -2048;
+		if (mse->dypos > 2048)
+			mse->dypos = 2048;
 	}
-	MSE_INT_ON();
+
+	spin_unlock(&mse->lock);
+
+	if (changed) {
+		wake_up(&mse->wait);
+
+		if (mse->fasyncptr)
+			kill_fasync(mse->fasyncptr, SIGIO);
+	}
 }
 
-static int fasync_mouse(int fd, struct file *filp, int on)
+void
+busmouse_add_movement(int mousedev, int dx, int dy)
 {
+	struct busmouse_data *mse = busmouse_data[mousedev];
+
+	busmouse_add_movementbuttons(mousedev, dx, dy, mse->buttons);
+}
+
+void
+busmouse_add_buttons(int mousedev, int clear, int eor)
+{
+	struct busmouse_data *mse = busmouse_data[mousedev];
+
+	busmouse_add_movementbuttons(mousedev, 0, 0, (mse->buttons & ~clear) ^ eor);
+}
+
+static int
+busmouse_fasync(int fd, struct file *filp, int on)
+{
+	struct busmouse_data *mse = (struct busmouse_data *)filp->private_data;
 	int retval;
 
-	retval = fasync_helper(fd, filp, on, &mouse.fasyncptr);
+	retval = fasync_helper(fd, filp, on, &mse->fasyncptr);
 	if (retval < 0)
 		return retval;
 	return 0;
 }
 
-/*
- * close access to the mouse
- */
-
-static int close_mouse(struct inode * inode, struct file * file)
+static int
+busmouse_release(struct inode *inode, struct file *file)
 {
-	fasync_mouse(-1, file, 0);
-	if (--mouse.active)
-		return 0;
-	MSE_INT_OFF();
-	free_irq(mouse_irq, NULL);
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
+	struct busmouse_data *mse = (struct busmouse_data *)file->private_data;
+	int ret = 0;
 
-/*
- * open access to the mouse
- */
+	busmouse_fasync(-1, file, 0);
 
-static int open_mouse(struct inode * inode, struct file * file)
-{
-	if (!mouse.present)
-		return -EINVAL;
-	if (mouse.active++)
-		return 0;
-	if (request_irq(mouse_irq, mouse_interrupt, 0, "busmouse", NULL)) {
-		mouse.active--;
-		return -EBUSY;
+	if (--mse->active == 0) {
+		if (mse->ops &&
+		    mse->ops->release)
+			ret = mse->ops->release(inode, file);
+
+		mse->ready = 0;
+
+		MOD_DEC_USE_COUNT;
 	}
-	mouse.ready = 0;
-	mouse.dx = 0;
-	mouse.dy = 0;
-	mouse.buttons = 0x87;
+
+	return ret;
+}
+
+static int
+busmouse_open(struct inode *inode, struct file *file)
+{
+	struct busmouse_data *mse;
+	unsigned long flags;
+	unsigned int mousedev;
+	int ret = 0;
+
+	mousedev = DEV_TO_MOUSE(inode->i_rdev);
+	if (mousedev >= NR_MICE)
+		return -EINVAL;
+	mse = busmouse_data[mousedev];
+	if (!mse)
+		/* shouldn't happen, but... */
+		return -ENODEV;
+
+	if (mse->ops &&
+	    mse->ops->open)
+		ret = mse->ops->open(inode, file);
+
+	if (ret)
+		return ret;
+
+	file->private_data = mse;
+
+	if (mse->active++)
+		return 0;
+
 	MOD_INC_USE_COUNT;
-	MSE_INT_ON();
+
+	spin_lock_irqsave(&mse->lock, flags);
+
+	mse->ready   = 0;
+	mse->dxpos   = 0;
+	mse->dypos   = 0;
+	if (mse->ops)
+		mse->buttons = mse->ops->init_button_state;
+	else
+		mse->buttons = 7;
+
+	spin_unlock_irqrestore(&mse->lock, flags);
+
 	return 0;
 }
 
-/*
- * writes are disallowed
- */
-
-static ssize_t write_mouse(struct file * file,
-	const char * buffer, size_t count, loff_t *ppos)
+static ssize_t
+busmouse_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	return -EINVAL;
 }
 
-/*
- * read mouse data.  Currently never blocks.
- */
-
-static ssize_t read_mouse(struct file * file,
-	char * buffer, size_t count, loff_t *ppos)
+static ssize_t
+busmouse_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 {
-	int r;
-	int dx;
-	int dy;
-	unsigned char buttons; 
-	/* long flags; */
+	struct busmouse_data *mse = (struct busmouse_data *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
+	unsigned long flags;
+	int dxpos, dypos, buttons;
 
 	if (count < 3)
 		return -EINVAL;
-	if ((r = verify_area(VERIFY_WRITE, buffer, count)))
-		return r;
-	if (!mouse.ready)
+
+	spin_lock_irqsave(&mse->lock, flags);
+
+	if (!mse->ready) {
+#ifdef BROKEN_MOUSE
+		spin_unlock_irqrestore(&mse->lock, flags);
 		return -EAGAIN;
+#else
+		if (file->f_flags & O_NONBLOCK) {
+			spin_unlock_irqrestore(&mse->lock, flags);
+			return -EAGAIN;
+		}
 
-	/*
-	 * Obtain the current mouse parameters and limit as appropriate for
-	 * the return data format.  Interrupts are only disabled while 
-	 * obtaining the parameters, NOT during the puts_fs_byte() calls,
-	 * so paging in put_user() does not effect mouse tracking.
+		add_wait_queue(&mse->wait, &wait);
+repeat:
+		current->state = TASK_INTERRUPTIBLE;
+		if (!mse->ready && !signal_pending(current)) {
+			spin_unlock_irqrestore(&mse->lock, flags);
+			schedule();
+			spin_lock_irqsave(&mse->lock, flags);
+			goto repeat;
+		}
+
+		current->state = TASK_RUNNING;
+		remove_wait_queue(&mse->wait, &wait);
+
+		if (signal_pending(current)) {
+			spin_unlock_irqrestore(&mse->lock, flags);
+			return -ERESTARTSYS;
+		}
+#endif
+	}
+
+	dxpos = mse->dxpos;
+	dypos = mse->dypos;
+	buttons = mse->buttons;
+//	mse->latch_buttons = mse->buttons;
+
+	if (dxpos < -127)
+		dxpos =- 127;
+	if (dxpos > 127)
+		dxpos = 127;
+	if (dypos < -127)
+		dypos =- 127;
+	if (dypos > 127)
+		dypos = 127;
+
+	mse->dxpos -= dxpos;
+	mse->dypos -= dypos;
+
+	/* This is something that many drivers have apparantly
+	 * forgotten...  If the X and Y positions still contain
+	 * information, we still have some info ready for the
+	 * user program...
 	 */
+	mse->ready = mse->dxpos || mse->dypos;
 
-	/* save_flags(flags); cli(); */
-	disable_irq(mouse_irq);
-	dx = mouse.dx;
-	dy = mouse.dy;
-	if (dx < -127)
-	    dx = -127;
-	if (dx > 127)
-	    dx = 127;
-	if (dy < -127)
-	    dy = -127;
-	if (dy > 127)
-	    dy = 127;
-	buttons = mouse.buttons;
-	mouse.dx -= dx;
-	mouse.dy -= dy;
-	mouse.ready = 0;
-	enable_irq(mouse_irq);
-	/* restore_flags(flags); */
+	spin_unlock_irqrestore(&mse->lock, flags);
 
-	put_user(buttons | 0x80, buffer);
-	put_user((char)dx, buffer + 1);
-	put_user((char)dy, buffer + 2);
-	for (r = 3; r < count; r++)
-	    put_user(0x00, buffer + r);
-	return r;
+	/* Write out data to the user.  Format is:
+	 *   byte 0 - identifer (0x80) and (inverted) mouse buttons
+	 *   byte 1 - X delta position +/- 127
+	 *   byte 2 - Y delta position +/- 127
+	 */
+	if (put_user((char)buttons | 128, buffer) ||
+	    put_user((char)dxpos, buffer + 1) ||
+	    put_user((char)dypos, buffer + 2))
+		return -EFAULT;
+
+	if (count > 3 && clear_user(buffer + 3, count - 3))
+		return -EFAULT;
+
+	file->f_dentry->d_inode->i_atime = CURRENT_TIME;
+
+	return count;
 }
 
-/*
- * poll for mouse input
- */
-static unsigned int mouse_poll(struct file *file, poll_table * wait)
+static unsigned int
+busmouse_poll(struct file *file, poll_table *wait)
 {
-	poll_wait(file, &mouse.wait, wait);
-	if (mouse.ready)
+	struct busmouse_data *mse = (struct busmouse_data *)file->private_data;
+
+	poll_wait(file, &mse->wait, wait);
+
+	if (mse->ready)
 		return POLLIN | POLLRDNORM;
+
 	return 0;
 }
 
-struct file_operations bus_mouse_fops = {
-	NULL,		/* mouse_seek */
-	read_mouse,
-	write_mouse,
-	NULL, 		/* mouse_readdir */
-	mouse_poll, 	/* mouse_poll */
-	NULL, 		/* mouse_ioctl */
-	NULL,		/* mouse_mmap */
-	open_mouse,
-	NULL,		/* flush */
-	close_mouse,
-	NULL,
-	fasync_mouse,
-};
-
-static struct miscdevice bus_mouse = {
-	LOGITECH_BUSMOUSE, "busmouse", &bus_mouse_fops
-};
-
-int __init bus_mouse_init(void)
+struct file_operations busmouse_fops=
 {
-	if (check_region(LOGIBM_BASE, LOGIBM_EXTENT)) {
-	  mouse.present = 0;
-	  return -EIO;
+	NULL,			/* busmouse_seek */
+	busmouse_read,
+	busmouse_write,
+	NULL,			/* busmouse_readdir */
+	busmouse_poll,
+	NULL,			/* busmouse_ioctl */
+	NULL,			/* busmouse_mmap */
+	busmouse_open,
+	NULL,			/* busmouse_flush */
+	busmouse_release,
+	NULL,
+	busmouse_fasync,
+};
+
+int
+register_busmouse(struct busmouse *ops)
+{
+	unsigned int msedev = MINOR_TO_MOUSE(ops->minor);
+	struct busmouse_data *mse;
+	int ret;
+
+	if (msedev >= NR_MICE) {
+		printk(KERN_ERR "busmouse: trying to allocate mouse on minor %d\n",
+		       ops->minor);
+		return -EINVAL;
 	}
 
-	outb(MSE_CONFIG_BYTE, MSE_CONFIG_PORT);
-	outb(MSE_SIGNATURE_BYTE, MSE_SIGNATURE_PORT);
-	udelay(100L);	/* wait for reply from mouse */
-	if (inb(MSE_SIGNATURE_PORT) != MSE_SIGNATURE_BYTE) {
-		mouse.present = 0;
-		return -EIO;
-	}
-	outb(MSE_DEFAULT_MODE, MSE_CONFIG_PORT);
-	MSE_INT_OFF();
-	
-	request_region(LOGIBM_BASE, LOGIBM_EXTENT, "busmouse");
+	if (busmouse_data[msedev])
+		return -EBUSY;
 
-	mouse.present = 1;
-	mouse.active = 0;
-	mouse.ready = 0;
-	mouse.buttons = 0x87;
-	mouse.dx = 0;
-	mouse.dy = 0;
-	init_waitqueue_head(&mouse.wait);
-	printk(KERN_INFO "Logitech bus mouse detected, using IRQ %d.\n",
-	       mouse_irq);
-	misc_register(&bus_mouse);
+	mse = kmalloc(GFP_KERNEL, sizeof(*mse));
+	if (!mse)
+		return -ENOMEM;
+
+	memset(mse, 0, sizeof(*mse));
+
+	mse->miscdev.minor = ops->minor;
+	mse->miscdev.name = ops->name;
+	mse->miscdev.fops = &busmouse_fops;
+	mse->ops = ops;
+	mse->lock = (spinlock_t)SPIN_LOCK_UNLOCKED;
+	init_waitqueue_head(&mse->wait);
+
+	busmouse_data[msedev] = mse;
+
+	ret = misc_register(&mse->miscdev);
+	if (!ret)
+		ret = msedev;
+
+	return ret;
+}
+
+int
+unregister_busmouse(int mousedev)
+{
+	if (mousedev < 0)
+		return 0;
+	if (mousedev >= NR_MICE) {
+		printk(KERN_ERR "busmouse: trying to free mouse on"
+		       " mousedev %d\n", mousedev);
+		return -EINVAL;
+	}
+
+	if (!busmouse_data[mousedev]) {
+		printk(KERN_WARNING "busmouse: trying to free free mouse"
+		       " on mousedev %d\n", mousedev);
+		return -EINVAL;
+	}
+
+	if (busmouse_data[mousedev]->active) {
+		printk(KERN_ERR "busmouse: trying to free active mouse"
+		       " on mousedev %d\n", mousedev);
+		return -EINVAL;
+	}
+
+	misc_deregister(&busmouse_data[mousedev]->miscdev);
+
+	kfree(busmouse_data[mousedev]);
+	busmouse_data[mousedev] = NULL;
 	return 0;
 }
+
+__initfunc(int
+bus_mouse_init(void))
+{
+#ifdef CONFIG_BUSMOUSE
+	bus_mouse_init();
+#endif
+#ifdef CONFIG_MS_BUSMOUSE
+	ms_bus_mouse_init();
+#endif
+#ifdef CONFIG_ATIXL_BUSMOUSE
+ 	atixl_busmouse_init();
+#endif
+#ifdef CONFIG_AMIGAMOUSE
+	amiga_mouse_init();
+#endif
+#ifdef CONFIG_ATARIMOUSE
+	atari_mouse_init();
+#endif
+#ifdef CONFIG_MAC_MOUSE
+	mac_mouse_init();
+#endif
+#ifdef CONFIG_SUN_MOUSE
+	sun_mouse_init();
+#endif
+#ifdef CONFIG_ADBMOUSE
+	adb_mouse_init();
+#endif
+#ifdef CONFIG_RPCMOUSE
+	mouse_rpc_init();
+#endif
+	return 0;
+}
+
+EXPORT_SYMBOL(busmouse_add_movement);
+EXPORT_SYMBOL(busmouse_add_buttons);
+EXPORT_SYMBOL(register_busmouse);
+EXPORT_SYMBOL(unregister_busmouse);
 
 #ifdef MODULE
-
-int init_module(void)
+int
+init_module(void)
 {
 	return bus_mouse_init();
 }
 
-void cleanup_module(void)
+void
+cleanup_module(void)
 {
-	misc_deregister(&bus_mouse);
-	release_region(LOGIBM_BASE, LOGIBM_EXTENT);
 }
 #endif

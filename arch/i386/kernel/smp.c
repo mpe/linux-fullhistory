@@ -172,6 +172,26 @@ void __init smp_setup(char *str, int *ints)
 		max_cpus = 0;
 }
 
+static int __init nosmp(char *str)
+{
+	max_cpus = 0;
+	return 1;
+}
+
+__setup("nosmp", nosmp);
+
+static int __init maxcpus(char *str)
+{
+	int ints[11];
+
+	get_options(str, ints);
+	if (ints[0] > 0)
+		max_cpus = ints[1];
+	return 1;
+}
+
+__setup("maxcpus", maxcpus);
+
 void ack_APIC_irq(void)
 {
 	/* Clear the IPI */
@@ -875,7 +895,7 @@ void __init smp_callin(void)
 
 int cpucount = 0;
 
-extern int cpu_idle(void * unused);
+extern int cpu_idle(void);
 
 /*
  *	Activate a secondary processor.
@@ -891,7 +911,7 @@ int __init start_secondary(void *unused)
 	smp_callin();
 	while (!atomic_read(&smp_commenced))
 		/* nothing */ ;
-	return cpu_idle(NULL);
+	return cpu_idle();
 }
 
 /*

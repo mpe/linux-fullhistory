@@ -31,6 +31,10 @@ THANKS file in Inaky's driver):
         The following corporations have helped us in the development
         of Linux USB / UUSBD:
 
+	- 3Com GmbH for donating a ISDN Pro TA and supporting me
+	  in technical questions and with test equipment. I'd never 
+	  expect such a great help.
+
         - USAR Systems provided us with one of their excellent USB
           Evaluation Kits. It allows us to test the Linux-USB driver
           for compilance with the latest USB specification. USAR

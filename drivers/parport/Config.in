@@ -11,6 +11,11 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
   if [ "$CONFIG_PARPORT_PC" != "n" ]; then
     bool '   Use FIFO/DMA if available' CONFIG_PARPORT_PC_FIFO
   fi
+  if [ "$CONFIG_PARPORT_PC" = y ]; then
+    # Don't bother with this if parport_pc is a module; it only affects
+    # the presence or not of some __init's, which are no-ops for modules.
+    bool '   Support for PCMCIA management for PC-style ports' CONFIG_PARPORT_PC_PCMCIA
+  fi
   if [ "$CONFIG_ARM" = "y" ]; then
     dep_tristate '   Archimedes hardware' CONFIG_PARPORT_ARC $CONFIG_PARPORT
   fi

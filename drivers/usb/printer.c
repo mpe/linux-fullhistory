@@ -241,7 +241,7 @@ static ssize_t read_printer(struct file * file,
 			return -EIO;
 
 		if (this_read) {
-			if (copy_to_user(buffer, p->obuf, this_read))
+			if (copy_to_user(buffer, buf, this_read))
 				return -EFAULT;
 			count -= this_read;
 			read_count += this_read;

@@ -9,10 +9,24 @@
 #ifndef __ASM_ARM_MMU_CONTEXT_H
 #define __ASM_ARM_MMU_CONTEXT_H
 
-#define get_mmu_context(x) do { } while (0)
+#include <asm/bitops.h>
+#include <asm/pgtable.h>
+#include <asm/arch/memory.h>
 
-#define init_new_context(mm)	do { } while(0)
-#define destroy_context(mm)	do { } while(0)
-#define activate_context(tsk)	do { } while(0)
+#define destroy_context(mm)		do { } while(0)
+#define init_new_context(tsk,mm)	do { } while(0)
+
+/*
+ * This is the actual mm switch as far as the scheduler
+ * is concerned.  No registers are touched.
+ */
+static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next, unsigned int cpu)
+{
+	if (prev != next) {
+		processor.u.armv3v4._set_pgd(__virt_to_phys((unsigned long)next->pgd));
+		clear_bit(cpu, &prev->cpu_vm_mask);
+	}
+	set_bit(cpu, &next->cpu_vm_mask);
+}
 
 #endif

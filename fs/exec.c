@@ -50,36 +50,6 @@
 
 static struct linux_binfmt *formats = (struct linux_binfmt *) NULL;
 
-void __init binfmt_setup(void)
-{
-#ifdef CONFIG_BINFMT_MISC
-	init_misc_binfmt();
-#endif
-
-#ifdef CONFIG_BINFMT_ELF
-	init_elf_binfmt();
-#endif
-
-#ifdef CONFIG_BINFMT_ELF32
-	init_elf32_binfmt();
-#endif
-
-#ifdef CONFIG_BINFMT_AOUT
-	init_aout_binfmt();
-#endif
-
-#ifdef CONFIG_BINFMT_AOUT32
-	init_aout32_binfmt();
-#endif
-
-#ifdef CONFIG_BINFMT_EM86
-	init_em86_binfmt();
-#endif
-
-	/* This cannot be configured out of the kernel */
-	init_script_binfmt();
-}
-
 int register_binfmt(struct linux_binfmt * fmt)
 {
 	struct linux_binfmt ** tmp = &formats;

@@ -50,16 +50,18 @@ static int preferred_console = -1;
 /*
  *	Setup a list of consoles. Called from init/main.c
  */
-void __init console_setup(char *str, int *ints)
+static int __init console_setup(char *str)
 {
 	struct console_cmdline *c;
 	char name[sizeof(c->name)];
 	char *s, *options;
 	int i, idx;
+	int ints[11];
 
 	/*
 	 *	Decode str into name, index, options.
 	 */
+	str = get_options(str, ints);
 	if (str[0] >= '0' && str[0] <= '9') {
 		strcpy(name, "ttyS");
 		strncpy(name + 4, str, sizeof(name) - 5);
@@ -88,17 +90,19 @@ void __init console_setup(char *str, int *ints)
 		if (strcmp(console_cmdline[i].name, name) == 0 &&
 			  console_cmdline[i].index == idx) {
 				preferred_console = i;
-				return;
+				return 1;
 		}
 	if (i == MAX_CMDLINECONSOLES)
-		return;
+		return 1;
 	preferred_console = i;
 	c = &console_cmdline[i];
 	memcpy(c->name, name, sizeof(c->name));
 	c->options = options;
 	c->index = idx;
+	return 1;
 }
 
+__setup("console=", console_setup);
 
 /*
  * Commands to do_syslog:

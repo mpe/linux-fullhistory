@@ -18,7 +18,7 @@
 #include <asm/io.h>
 #include <asm/iomd.h>
 
-#include "../../char/mouse.h"
+#include "../../char/busmouse.h"
 
 static short old_x, old_y, old_b;
 static int mousedev;

@@ -33,7 +33,7 @@ ifeq ($(CONFIG_PARPORT),y)
     LX_OBJS += parport_pc.o
   else
     ifeq ($(CONFIG_PARPORT_PC),m)
-      M_OBJS += parport_pc.o
+      MX_OBJS += parport_pc.o
     endif
   endif
   ifeq ($(CONFIG_PARPORT_AMIGA),y)
@@ -71,10 +71,7 @@ else
     M_OBJS += parport.o
   endif
   ifeq ($(CONFIG_PARPORT_PC),m)
-    M_OBJS += parport_pc.o
-  endif
-  ifeq ($(CONFIG_PARPORT_AX),m)
-    M_OBJS += parport_ax.o
+    MX_OBJS += parport_pc.o
   endif
   ifeq ($(CONFIG_PARPORT_AMIGA),m)
     M_OBJS += parport_amiga.o

@@ -87,11 +87,11 @@ static int uhci_map_status(int status, int dir_out)
 static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned long *rval)
 {
 	unsigned int status;
-	struct uhci_td *tmp = td->first;
+	struct uhci_td *tmp= td->first;
 
 	if(rval)
 		*rval = 0;
-
+		
 	/* locate the first failing td, if any */
 
 	do {
@@ -111,7 +111,6 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 			break;
 		tmp = bus_to_virt(tmp->link & ~0xF);
 	} while (1);
-
 
 	if (!status)
     		return USB_ST_NOERROR;
@@ -300,6 +299,7 @@ static struct uhci_td *uhci_td_allocate(struct uhci_device *dev)
 
 	if (!inuse) {
     		td->inuse = 1;
+				td->dev=uhci_to_usb(dev);
 		return(td);
 	}
 
@@ -314,7 +314,6 @@ static struct uhci_td *uhci_td_allocate(struct uhci_device *dev)
 static void uhci_td_deallocate(struct uhci_td *td)
 {
 	td->link = 1;
-
 	clear_bit(0, &td->inuse);
 }
 
@@ -344,6 +343,39 @@ static void uhci_remove_irq_list(struct uhci_td *td)
 	spin_unlock_irqrestore(&irqlist_lock, flags);
 }
 
+
+/*
+ * This function removes and disallcoates all structures set up for an transfer.
+ * It takes the qh out of the skeleton, removes the tq and the td's.
+ * It only removes the associated interrupt handler if removeirq ist set.
+ * The *td argument is any td in the list of td's.
+ */
+static void uhci_remove_transfer(struct uhci_td *td, char removeirq) {
+	int maxcount = 100;
+	struct uhci_td *curtd = td->first;
+	unsigned int nextlink;
+
+/* Remove it from the skeleton */
+	uhci_remove_qh(td->qh->skel, td->qh);
+	uhci_qh_deallocate(td->qh);  
+	do {
+		nextlink = curtd->link;
+		/*IOC? => remove handler*/
+		if (removeirq && (td->status & (1 << 24))) {
+			uhci_remove_irq_list(td);
+		}
+		uhci_remove_td(curtd);
+		uhci_td_deallocate(curtd);
+		if (nextlink & 1)	/* Tail? */
+		break;
+
+		curtd = bus_to_virt(nextlink & ~0xF);
+		if (!--maxcount) {
+			printk("runaway td's!?\n");
+			break;
+		}
+	} while (1);
+}
 
 /*
  * Request a interrupt handler..
@@ -779,6 +811,7 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devre
 	int ret;
 	int maxsze = usb_maxpacket(usb_dev, pipe);
 
+
 	if (len > maxsze * 29)
 		printk("Warning, too much data for a control packet, crashing\n");
 
@@ -1030,7 +1063,7 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 		}
 
 		/* Alternate Data0/1 (start with Data0) */
-		usb_dotoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe));
+		usb_dotoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)); 
 	}
 	td->link = 1;				/* Terminate */
 	td->status |= (1 << 24);		/* IOC */
@@ -1059,8 +1092,92 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 			}
 		} while (1);
 	}
-
 	return ret;
+}
+
+static void * uhci_request_bulk(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, void *data, int len, void *dev_id)
+{
+	struct uhci_device *dev = usb_to_uhci(usb_dev);
+	struct uhci_device *root_hub=usb_to_uhci(dev->uhci->bus->root_hub);
+	struct uhci_td *first, *td, *prevtd;
+	struct uhci_qh *bulk_qh = uhci_qh_allocate(dev);
+	unsigned long destination, status;
+	int maxsze = usb_maxpacket(usb_dev, pipe);
+	
+	if (len > maxsze * 31)
+		printk("Warning, too much data for a bulk packet, crashing\n");
+
+	/* The "pipe" thing contains the destination in bits 8--18, 0x69 is IN */
+	destination = (pipe & 0x0007ff00) | usb_packetid(pipe);
+
+	/* Status:    slow/fast,       Active,    Short Packet Detect     Infinite Errors */
+	status = (pipe & (1 << 26)) | (1 << 23)   |   (1 << 29)       |    (0 << 27);
+
+
+	/*
+	 * Build the TDs for the bulk request
+	 */
+	first = td = uhci_td_allocate(dev);
+	prevtd=td;
+	while (len > 0) {
+		/* Build the TD for control status */
+		int pktsze = len;
+
+		if (pktsze > maxsze)
+			pktsze = maxsze;
+
+		td->status = status;					/* Status */
+		td->info = destination | ((pktsze-1) << 21) |
+			 (usb_gettoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) << 19); /* pktsze bytes of data */
+		td->buffer = virt_to_bus(data);
+		td->backptr = &prevtd->link;
+		td->first = first;
+		td->qh = bulk_qh;
+		td->dev=usb_dev;
+
+		data += pktsze;
+		len -= pktsze;
+
+		if (len > 0) {
+			prevtd = td;
+			td = uhci_td_allocate(dev);
+			prevtd->link = 4 | virt_to_bus(td);			/* Update previous TD */
+		}
+
+		/* Alternate Data0/1 */
+		usb_dotoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe));
+	}
+	
+	first->backptr=NULL;
+	td->link = 1;				/* Terminate */
+	td->status = status | (1 << 24);	/* IOC */
+	td->first = first;
+		
+	uhci_add_irq_list(dev->uhci, td, handler, dev_id);
+
+	uhci_insert_tds_in_qh(bulk_qh, first, td);
+
+	bulk_qh->skel=&root_hub->skel_bulk0_qh;
+	uhci_insert_qh(&root_hub->skel_bulk0_qh, bulk_qh);
+	
+	//Return last td for removal
+	return td;
+}
+
+/*
+ *Remove a handler from a pipe. This terminates the transfer.
+ *We have some assumptions here:
+ * There is only one queue using this pipe. (the one we remove)
+ * Any data that is in the queue is useless for us, we throw it away.
+ */
+static int uhci_terminate_bulk(struct usb_device *dev, void * first) 
+{
+	//none found? there is nothing to remove!
+	if (!first) return 0;
+
+	uhci_remove_transfer(first,1);
+	return 1;
+
 }
 
 static struct usb_device *uhci_usb_allocate(struct usb_device *parent)
@@ -1088,7 +1205,6 @@ static struct usb_device *uhci_usb_allocate(struct usb_device *parent)
 
 	usb_dev->hcpriv = dev;
 	dev->usb = usb_dev;
-
 	usb_dev->parent = parent;
 
 	if (parent) {
@@ -1154,6 +1270,8 @@ struct usb_operations uhci_device_operations = {
 	uhci_bulk_msg,
 	uhci_request_irq,
 	uhci_release_irq,
+	uhci_request_bulk,
+	uhci_terminate_bulk,
 	uhci_allocate_isochronous,
 	uhci_delete_isochronous,
 	uhci_schedule_isochronous,
@@ -1230,9 +1348,7 @@ static void uhci_connect_change(struct uhci *uhci, unsigned int port, unsigned i
 		return;
 	
 	dev = usb_dev->hcpriv;
-
 	dev->uhci = uhci;
-
 	usb_connect(usb_dev);
 
 	root_hub->usb->children[nr] = usb_dev;
@@ -1284,44 +1400,49 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 	while (tmp != head) {
 		struct uhci_td *td = list_entry(tmp, struct uhci_td, irq_list);
 		struct list_head *next;
-
+		
 		next = tmp->next;
 
 		if (!((status = td->status) & (1 << 23)) ||  /* No longer active? */
-		    (td->qh &&
 		    ((td->qh->element & ~15) && 
 		      !((status = uhci_link_to_td(td->qh->element)->status) & (1 <<23)) &&
-		      (status & 0x760000) /* is in error state (Stall, db, babble, timeout, bitstuff) */))) {	
-			/* remove from IRQ list */
-			__list_del(tmp->prev, next);
-			INIT_LIST_HEAD(tmp);
-			if (td->completed(uhci_map_status(status, 0), bus_to_virt(td->buffer), -1, td->dev_id)) {
-				list_add(&td->irq_list, &uhci->interrupt_list);
+		      (status & 0x760000) /* is in error state (Stall, db, babble, timeout, bitstuff) */)) {	
+				unsigned long rval;
+				int status;
 
-				if (!(td->status & (1 << 25))) {
+				status=uhci_td_result(usb_to_uhci(td->dev),td,&rval);
+ 				/* remove from IRQ list */
+ 				__list_del(tmp->prev, next);
+ 				INIT_LIST_HEAD(tmp);
+
+				if (td->completed(status, bus_to_virt(td->buffer), rval, td->dev_id)) {
+					list_add(&td->irq_list, &uhci->interrupt_list);
+	
+					if (!(td->status & (1 << 25))) {
+						struct uhci_qh *interrupt_qh = td->qh;
+
+						usb_dotoggle(td->dev, usb_pipeendpoint(td->info), usb_pipeout(td->info));
+						td->info &= ~(1 << 19); /* clear data toggle */
+						td->info |= usb_gettoggle(td->dev, usb_pipeendpoint(td->info), usb_pipeout(td->info)) << 19; /* toggle between data0 and data1 */
+						td->status = (td->status & 0x2f000000) | (1 << 23) | (1 << 24);	/* active */
+	
+						/* Remove then readd? Is that necessary */
+						uhci_remove_td(td);
+						uhci_insert_td_in_qh(interrupt_qh, td);
+					}
+				} else if (td->inuse & 2) {
 					struct uhci_qh *interrupt_qh = td->qh;
-
+					/* marked for removal */
+					td->inuse &= ~2;
 					usb_dotoggle(td->dev, usb_pipeendpoint(td->info), usb_pipeout(td->info));
-					td->info &= ~(1 << 19); /* clear data toggle */
-					td->info |= usb_gettoggle(td->dev, usb_pipeendpoint(td->info), usb_pipeout(td->info)) << 19; /* toggle between data0 and data1 */
-					td->status = (td->status & 0x2f000000) | (1 << 23) | (1 << 24);	/* active */
-
-					/* Remove then readd? Is that necessary */
-					uhci_remove_td(td);
-					uhci_insert_td_in_qh(interrupt_qh, td);
+					uhci_remove_qh(interrupt_qh->skel, interrupt_qh);
+					uhci_qh_deallocate(interrupt_qh);
+					uhci_td_deallocate(td);
 				}
-			} else if (td->inuse & 2) {
-				struct uhci_qh *interrupt_qh = td->qh;
-				/* marked for removal */
-				td->inuse &= ~2;
-				usb_dotoggle(td->dev, usb_pipeendpoint(td->info), usb_pipeout(td->info));
-				uhci_remove_qh(interrupt_qh->skel, interrupt_qh);
-				uhci_qh_deallocate(interrupt_qh);
-				uhci_td_deallocate(td);
-			}
-			/* If completed wants to not reactivate, then it's */
-			/* responsible for free'ing the TD's and QH's */
-			/* or another function (such as run_control) */
+				/* If completed wants to not reactivate, then it's */
+				/* responsible for free'ing the TD's and QH's */
+				/* or another function (such as run_control) */
+
 		} 
 		tmp = next;
 	}

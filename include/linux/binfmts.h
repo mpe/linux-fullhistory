@@ -50,15 +50,6 @@ extern int read_exec(struct dentry *, unsigned long offset,
 
 extern int open_dentry(struct dentry *, int mode);
 
-extern int init_elf_binfmt(void);
-extern int init_elf32_binfmt(void);
-extern int init_irix_binfmt(void);
-extern int init_aout_binfmt(void);
-extern int init_aout32_binfmt(void);
-extern int init_script_binfmt(void);
-extern int init_em86_binfmt(void);
-extern int init_misc_binfmt(void);
-
 extern int prepare_binprm(struct linux_binprm *);
 extern void remove_arg_zero(struct linux_binprm *);
 extern int search_binary_handler(struct linux_binprm *,struct pt_regs *);

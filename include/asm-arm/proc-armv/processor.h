@@ -1,16 +1,19 @@
 /*
  * linux/include/asm-arm/proc-armv/processor.h
  *
- * Copyright (c) 1996 Russell King.
+ * Copyright (c) 1996-1999 Russell King.
  *
  * Changelog:
  *  20-09-1996	RMK	Created
  *  26-09-1996	RMK	Added 'EXTRA_THREAD_STRUCT*'
  *  28-09-1996	RMK	Moved start_thread into the processor dependencies
  *  09-09-1998	PJB	Delete redundant `wp_works_ok'
+ *  31-07-1999	RMK	Added 'domain' stuff
  */
 #ifndef __ASM_PROC_PROCESSOR_H
 #define __ASM_PROC_PROCESSOR_H
+
+#include <asm/proc/domain.h>
 
 #define KERNEL_STACK_SIZE	PAGE_SIZE
 
@@ -28,8 +31,14 @@ struct context_save_struct {
 
 #define INIT_CSS (struct context_save_struct){ SVC_MODE, 0, 0, 0, 0, 0, 0, 0, 0 }
 
-#define EXTRA_THREAD_STRUCT
-#define EXTRA_THREAD_STRUCT_INIT
+#define EXTRA_THREAD_STRUCT						\
+	unsigned int	domain;
+
+#define EXTRA_THREAD_STRUCT_INIT					\
+	, domain_val(DOMAIN_USER, DOMAIN_CLIENT) |			\
+	  domain_val(DOMAIN_KERNEL, DOMAIN_MANAGER) |			\
+	  domain_val(DOMAIN_IO, DOMAIN_CLIENT)
+
 #define SWAPPER_PG_DIR	(((unsigned long)swapper_pg_dir) - PAGE_OFFSET)
 
 #define start_thread(regs,pc,sp)					\
@@ -52,6 +61,7 @@ struct context_save_struct {
 /*
  * NOTE! The task struct and the stack go together
  */
+#define THREAD_SIZE	(PAGE_SIZE * 2)
 #define ll_alloc_task_struct() ((struct task_struct *) __get_free_pages(GFP_KERNEL,1))
 #define ll_free_task_struct(p) free_pages((unsigned long)(p),1)
 

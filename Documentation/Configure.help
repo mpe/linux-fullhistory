@@ -11938,10 +11938,15 @@ CONFIG_USB_AUDIO
   This driver will eventually handle audio devices, such 
   as USB speakers.
 
-USB Abstract Control Model support (Preliminary)
+USB Communications Device Class (ACM) support (Preliminary)
 CONFIG_USB_ACM
-  This driver allows for devices which support the Abstract Control Model,
-  including many USB-based modems, ISDN adapters, and network adapters.
+  This driver handles devices which support the Abstract Control Model,
+  a subtype of the USB Communications Device Class. This includes many
+  USB-based modems and ISDN adapters. Add special files with:
+  mknod /dev/ttyACM0 c 166 0 
+  mknod /dev/ttyACM1 c 166 1
+  mknod /dev/ttyACM2 c 166 2
+  mknod /dev/ttyACM3 c 166 3
 
 USB /proc filesystem entry support (Preliminary)
 CONFIG_USB_PROC

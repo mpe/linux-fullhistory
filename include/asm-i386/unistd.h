@@ -287,7 +287,6 @@ __syscall_return(type,__res); \
  * some others too.
  */
 #define __NR__exit __NR_exit
-static inline _syscall0(int,idle)
 static inline _syscall0(int,pause)
 static inline _syscall0(int,sync)
 static inline _syscall0(pid_t,setsid)

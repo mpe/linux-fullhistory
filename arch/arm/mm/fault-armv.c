@@ -32,13 +32,14 @@
 
 #include "fault-common.c"
 
+/*
+ * need to get a 16k page for level 1
+ */
 pgd_t *get_pgd_slow(void)
 {
-	/*
-	 * need to get a 16k page for level 1
-	 */
 	pgd_t *pgd = (pgd_t *)__get_free_pages(GFP_KERNEL,2);
 	pgd_t *init;
+	pmd_t *new_pmd;
 
 	if (pgd) {
 		init = pgd_offset(&init_mm, 0);
@@ -46,8 +47,32 @@ pgd_t *get_pgd_slow(void)
 		memcpy(pgd + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
 			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * BYTES_PER_PTR);
 		clean_cache_area(pgd, PTRS_PER_PGD * BYTES_PER_PTR);
+
+		/*
+		 * On ARM, first page must always be allocated
+		 */
+		if (!pmd_alloc(pgd, 0))
+			goto nomem;
+		else {
+			pmd_t *old_pmd = pmd_offset(init, 0);
+			new_pmd = pmd_offset(pgd, 0);
+
+			if (!pte_alloc(new_pmd, 0))
+				goto nomem_pmd;
+			else {
+				pte_t *new_pte = pte_offset(new_pmd, 0);
+				pte_t *old_pte = pte_offset(old_pmd, 0);
+
+				set_pte (new_pte, *old_pte);
+			}
+		}
 	}
 	return pgd;
+
+nomem_pmd:
+	pmd_free(new_pmd);
+nomem:
+	return NULL;
 }
 
 pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)

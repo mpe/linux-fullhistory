@@ -28,7 +28,7 @@
  *  corrected by Alan Cox <alan@lxorguk.ukuu.org.uk>
  *
  * Changes for kmod (from kerneld):
- 	Cyrus Durgin <cider@speakeasy.org>
+ *	Cyrus Durgin <cider@speakeasy.org>
  */
 
 #include <linux/module.h>
@@ -48,6 +48,8 @@
 #include <linux/selection.h>
 #include <linux/kmod.h>
 
+#include "busmouse.h"
+
 /*
  * Head entry for the doubly linked miscdevice list
  */
@@ -59,14 +61,7 @@ static struct miscdevice misc_list = { 0, "head", NULL, &misc_list, &misc_list }
 #define DYNAMIC_MINORS 64 /* like dynamic majors */
 static unsigned char misc_minors[DYNAMIC_MINORS / 8];
 
-extern int bus_mouse_init(void);
-extern int qpmouse_init(void);
-extern int ms_bus_mouse_init(void);
-extern int atixl_busmouse_init(void);
-extern int amiga_mouse_init(void);
-extern int atari_mouse_init(void);
-extern int sun_mouse_init(void);
-extern int adb_mouse_init(void);
+extern int psaux_init(void);
 #ifdef CONFIG_SGI_NEWPORT_GFX
 extern void gfx_register(void);
 #endif
@@ -86,6 +81,10 @@ extern int radio_init(void);
 extern void hfmodem_init(void);
 extern int pc110pad_init(void);
 extern int pmu_device_init(void);
+extern int qpmouse_init(void);
+extern int ds1620_init(void);
+extern int nwbutton_init(void);
+extern int nwflash_init(void);
 
 static int misc_read_proc(char *buf, char **start, off_t offset,
 			  int len, int *eof, void *private)
@@ -182,36 +181,18 @@ int misc_deregister(struct miscdevice * misc)
 EXPORT_SYMBOL(misc_register);
 EXPORT_SYMBOL(misc_deregister);
 
-static struct proc_dir_entry *proc_misc;	
+static struct proc_dir_entry *proc_misc;
 
 int __init misc_init(void)
 {
 	proc_misc = create_proc_entry("misc", 0, 0);
 	if (proc_misc)
 		proc_misc->read_proc = misc_read_proc;
-#ifdef CONFIG_BUSMOUSE
+#ifdef CONFIG_MOUSE
 	bus_mouse_init();
 #endif
 #if defined CONFIG_82C710_MOUSE
 	qpmouse_init();
-#endif
-#ifdef CONFIG_MS_BUSMOUSE
-	ms_bus_mouse_init();
-#endif
-#ifdef CONFIG_ATIXL_BUSMOUSE
- 	atixl_busmouse_init();
-#endif
-#ifdef CONFIG_AMIGAMOUSE
-	amiga_mouse_init();
-#endif
-#ifdef CONFIG_ATARIMOUSE
-	atari_mouse_init();
-#endif
-#ifdef CONFIG_SUN_MOUSE
-	sun_mouse_init();
-#endif
-#ifdef CONFIG_ADBMOUSE
-	adb_mouse_init();
 #endif
 #ifdef CONFIG_PC110_PAD
 	pc110pad_init();
@@ -275,6 +256,15 @@ int __init misc_init(void)
 #endif
 #ifdef CONFIG_SGI
 	streamable_init ();
+#endif
+#ifdef CONFIG_DS1620
+	ds1620_init();
+#endif
+#ifdef CONFIG_NWBUTTON
+	nwbutton_init();
+#endif
+#ifdef CONFIG_NWFLASH
+	nwflash_init();
 #endif
 	if (register_chrdev(MISC_MAJOR,"misc",&misc_fops)) {
 		printk("unable to get major %d for misc devices\n",

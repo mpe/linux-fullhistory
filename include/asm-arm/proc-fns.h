@@ -19,11 +19,6 @@ struct task_struct;
 extern struct processor {
 	const char *name;
 	/* MISC
-	 *
-	 * flush caches for task switch
-	 */
-	struct task_struct *(*_switch_to)(struct task_struct *prev, struct task_struct *next);
-	/*
 	 * get data abort address/flags
 	 */
 	void (*_data_abort)(unsigned long pc);
@@ -75,6 +70,10 @@ extern struct processor {
 			 * flush a specific TLB
 			 */
 			void (*_flush_tlb_area)(unsigned long address, unsigned long end, int flags);
+			/*
+			 * Set the page table
+			 */
+			void (*_set_pgd)(unsigned long pgd_phys);
 			/*
 			 * Set a PMD (handling IMP bit 4)
 			 */

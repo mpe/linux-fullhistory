@@ -72,13 +72,22 @@ void enable_hlt(void)
 	hlt_counter--;
 }
 
-/*
- * If no process has been interested in this
- * CPU for some time, we want to wake up the
- * power management thread - we probably want
- * to conserve power.
- */
-#define HARD_IDLE_TIMEOUT (HZ/3)
+static void default_idle(void)
+{
+	while (1) {
+		while (!current->need_resched) {
+			if (!current_cpu_data.hlt_works_ok)
+				continue;
+			if (hlt_counter)
+				continue;
+			asm volatile("sti ; hlt" : : : "memory");
+		}
+		schedule();
+		check_pgt_cache();
+	}
+}	
+
+void (*idle)(void) = default_idle;
 
 /*
  * The idle thread. There's no useful work to be
@@ -86,37 +95,13 @@ void enable_hlt(void)
  * low exit latency (ie sit in a loop waiting for
  * somebody to say that they'd like to reschedule)
  */
-int cpu_idle(void *unused)
+void cpu_idle(void)
 {
-	unsigned int start_idle;
-
 	/* endless idle loop with no priority at all */
 	init_idle();
 	current->priority = 0;
 	current->counter = -100;
-
-	start_idle = jiffies;
-	while (1) {
-		if (!current->need_resched) {
-			if (jiffies - start_idle < HARD_IDLE_TIMEOUT) {
-				if (!current_cpu_data.hlt_works_ok)
-					continue;
-				if (hlt_counter)
-					continue;
-				asm volatile("sti ; hlt" : : : "memory");
-				continue;
-			}
-
-			/*
-			 * Ok, do some power management - we've been idle for too long
-			 */
-			powermanagement_idle();
-		}
-
-		schedule();
-		check_pgt_cache();
-		start_idle = jiffies;
-	}
+	idle();
 }
 
 /*
@@ -129,7 +114,7 @@ static long no_idt[2] = {0, 0};
 static int reboot_mode = 0;
 static int reboot_thru_bios = 0;
 
-__initfunc(void reboot_setup(char *str, int *ints))
+static int __init reboot_setup(char *str)
 {
 	while(1) {
 		switch (*str) {
@@ -151,8 +136,10 @@ __initfunc(void reboot_setup(char *str, int *ints))
 		else
 			break;
 	}
+	return 1;
 }
 
+__setup("reboot=", reboot_setup);
 
 /* The following code and data reboots the machine by switching to real
    mode and jumping to the BIOS reset entry point, as if the CPU has

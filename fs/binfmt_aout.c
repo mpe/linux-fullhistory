@@ -559,10 +559,12 @@ load_aout_library(int fd)
 }
 
 
-int __init init_aout_binfmt(void)
+static int __init init_aout_binfmt(void)
 {
 	return register_binfmt(&aout_format);
 }
+
+__initcall(init_aout_binfmt);
 
 #ifdef MODULE
 int init_module(void) {

@@ -146,10 +146,12 @@ extern asmlinkage void __backtrace(void);
  * `prev' will never be the same as `next'.
  * The `mb' is to tell GCC not to cache `current' across this call.
  */
-#define switch_to(prev,next,last)			\
-	do {			 			\
-		last = processor._switch_to(prev,next);	\
-		mb();					\
+extern struct task_struct *__switch_to(struct task_struct *prev, struct task_struct *next);
+
+#define switch_to(prev,next,last)		\
+	do {			 		\
+		last = __switch_to(prev,next);	\
+		mb();				\
 	} while (0)
 
 #endif

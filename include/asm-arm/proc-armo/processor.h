@@ -77,6 +77,8 @@ extern uaccess_t uaccess_user, uaccess_kernel;
 extern unsigned long get_page_8k(int priority);
 extern void free_page_8k(unsigned long page);
 
+#define THREAD_SIZE	(8192)
+
 #define ll_alloc_task_struct()	((struct task_struct *)get_page_8k(GFP_KERNEL))
 #define ll_free_task_struct(p)  free_page_8k((unsigned long)(p))
 

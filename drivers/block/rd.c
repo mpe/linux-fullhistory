@@ -116,6 +116,7 @@ static int rd_kbsize[NUM_RAMDISKS];		/* Size in blocks of 1024 bytes */
 int rd_size = 4096;		/* Size of the RAM disks */
 
 #ifndef MODULE
+
 int rd_doload = 0;		/* 1 = load RAM disk, 0 = don't load */
 int rd_prompt = 1;		/* 1 = prompt for RAM disk, 0 = don't prompt */
 int rd_image_start = 0;		/* starting block # of image */
@@ -123,7 +124,48 @@ int rd_image_start = 0;		/* starting block # of image */
 unsigned long initrd_start,initrd_end;
 int mount_initrd = 1;		/* zero if initrd should not be mounted */
 int initrd_below_start_ok = 0;
+
+static int __init no_initrd(char *str)
+{
+	mount_initrd = 0;
+	return 1;
+}
+
+__setup("noinitrd", no_initrd);
+
 #endif
+
+static int __init ramdisk_start_setup(char *str)
+{
+	rd_image_start = simple_strtol(str,NULL,0);
+	return 1;
+}
+
+static int __init load_ramdisk(char *str)
+{
+	rd_doload = simple_strtol(str,NULL,0) & 3;
+	return 1;
+}
+
+static int __init prompt_ramdisk(char *str)
+{
+	rd_prompt = simple_strtol(str,NULL,0) & 1;
+	return 1;
+}
+
+static int __init ramdisk_size(char *str)
+{
+	rd_size = simple_strtol(str,NULL,0);
+	return 1;
+}
+
+
+__setup("ramdisk_start=", ramdisk_start_setup);
+__setup("load_ramdisk=", load_ramdisk);
+__setup("prompt_ramdisk=", prompt_ramdisk);
+__setup("ramdisk=", ramdisk_size);
+__setup("ramdisk_size=", ramdisk_size);
+
 #endif
 
 /*

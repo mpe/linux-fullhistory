@@ -165,11 +165,14 @@ void __release_region(struct resource *parent, unsigned long start, unsigned lon
  * Called from init/main.c to reserve IO ports.
  */
 #define MAXRESERVE 4
-void __init reserve_setup(char *str, int *ints)
+static int __init reserve_setup(char *str)
 {
 	int i;
 	static int reserved = 0;
 	static struct resource reserve[MAXRESERVE];
+	int ints[11];
+
+	get_options(str, ints);
 
 	for (i = 1; i < ints[0]; i += 2) {
 		int x = reserved;
@@ -183,4 +186,7 @@ void __init reserve_setup(char *str, int *ints)
 				reserved = x+1;
 		}
 	}
+	return 1;
 }
+
+__setup("reserve=", reserve_setup);

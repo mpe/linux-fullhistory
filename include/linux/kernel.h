@@ -49,6 +49,7 @@ extern unsigned long simple_strtoul(const char *,char **,unsigned int);
 extern long simple_strtol(const char *,char **,unsigned int);
 extern int sprintf(char * buf, const char * fmt, ...);
 extern int vsprintf(char *buf, const char *, va_list);
+extern char *get_options(char *str, int *ints);
 
 extern int session_of_pgrp(int pgrp);
 

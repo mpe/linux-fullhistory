@@ -207,9 +207,7 @@ void exit_thread(void)
 
 void flush_thread(void)
 {
-	int i;
-
-	memset(&current->tss.debug, 0, sizeof(current->tss.debug));
+	memset(&current->thread.debug, 0, sizeof(current->thread.debug));
 	current->used_math = 0;
 	current->flags &= ~PF_USEDFPU;
 }
@@ -231,7 +229,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 
 	save = ((struct context_save_struct *)(childregs)) - 1;
 	init_thread_css(save);
-	p->tss.save = save;
+	p->thread.save = save;
 
 	return 0;
 }
@@ -244,7 +242,7 @@ int dump_fpu (struct pt_regs *regs, struct user_fp *fp)
 	int fpvalid = 0;
 
 	if (current->used_math)
-		memcpy (fp, &current->tss.fpstate.soft, sizeof (fp));
+		memcpy (fp, &current->thread.fpstate.soft, sizeof (fp));
 
 	return fpvalid;
 }
@@ -262,11 +260,11 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->u_dsize = (current->mm->brk - current->mm->start_data + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	dump->u_ssize = 0;
 
-	dump->u_debugreg[0] = current->tss.debug.bp[0].address;
-	dump->u_debugreg[1] = current->tss.debug.bp[1].address;
-	dump->u_debugreg[2] = current->tss.debug.bp[0].insn;
-	dump->u_debugreg[3] = current->tss.debug.bp[1].insn;
-	dump->u_debugreg[4] = current->tss.debug.nsaved;
+	dump->u_debugreg[0] = current->thread.debug.bp[0].address;
+	dump->u_debugreg[1] = current->thread.debug.bp[1].address;
+	dump->u_debugreg[2] = current->thread.debug.bp[0].insn;
+	dump->u_debugreg[3] = current->thread.debug.bp[1].insn;
+	dump->u_debugreg[4] = current->thread.debug.nsaved;
 
 	if (dump->start_stack < 0x04000000)
 		dump->u_ssize = (0x04000000 - dump->start_stack) >> PAGE_SHIFT;

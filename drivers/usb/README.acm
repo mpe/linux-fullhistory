@@ -1,0 +1,94 @@
+The ACM driver works with modems and ISDN TAs that use the USB Abstract
+Control Model standard. 
+
+****************************
+Test it:
+Watch out, the driver is not stable and tested. Sync often, make backups,
+most importand: don't blame me...
+
+Create device files:
+mknod /dev/ttyACM0 c 166 0
+mknod /dev/ttyACM1 c 166 1
+mknod /dev/ttyACM2 c 166 2
+mknod /dev/ttyACM3 c 166 3
+Compile a kernel with support for your host controller (uhci only for now!)
+and support for ACM. Boot this kernel. If you connect your device to the
+USB bus you should see messages like the following:
+
+Jul 19 20:14:29 office kernel: USB new device connect, assigned device number 1
+Jul 19 20:14:29 office kernel: Found 02:09
+Jul 19 20:14:29 office kernel: Found 04:09
+Jul 19 20:14:29 office kernel: Found 05:07
+Jul 19 20:14:29 office last message repeated 2 times
+Jul 19 20:14:29 office kernel: parsed = 39 len = 67
+Jul 19 20:14:29 office kernel: Expected descriptor 04/09, got 02/09 - skipping
+Jul 19 20:14:29 office kernel:    0 09
+Jul 19 20:14:29 office kernel:    1 02
+Jul 19 20:14:29 office kernel:    2 43
+Jul 19 20:14:29 office kernel:    3 00
+Jul 19 20:14:29 office kernel:    4 02
+Jul 19 20:14:29 office kernel:    5 02
+Jul 19 20:14:29 office kernel:    6 04
+Jul 19 20:14:29 office kernel:    7 60
+Jul 19 20:14:29 office kernel:    8 00
+Jul 19 20:14:29 office kernel: Found 04:09
+Jul 19 20:14:29 office kernel: Found 02:09
+Jul 19 20:14:29 office kernel: Found 04:09
+Jul 19 20:14:29 office kernel: Found 05:07
+Jul 19 20:14:29 office kernel: Found 04:09
+Jul 19 20:14:29 office kernel: Found 05:07
+Jul 19 20:14:29 office kernel: Found 05:07
+Jul 19 20:14:29 office kernel: parsed = 67 len = 0
+Jul 19 20:14:29 office kernel: getstringtable
+Jul 19 20:14:29 office kernel: acm_probe
+Jul 19 20:14:29 office kernel: USB ACM found
+
+Watch out for the line:
+Jul 19 20:14:29 office kernel: USB new device connect, assigned device number 1
+and the line:
+Jul 19 20:14:29 office kernel: USB ACM found
+These two lines show that the device was seen by the usb host controller and
+then recognized by the acm driver as a valid device.
+
+If you use a terminal emulation software like minicom with /dev/ttyACM0 you
+should be able to send AT commands to your device and get responses. I've 
+been able to do zmodem downloads to another pc. However downloads from one
+ISDN TA to another ISDN TA connected to the same PC didn't work. Don't
+know why. Flow control is not finised after all and i'd guess there might
+be problems on heavily loades PCs. I also did some tests with ppp but i'm
+not finised with this. There might be a chance to get it working. However
+i'd like to know if your device is recognized as an ACM device. I'm also
+interested if the thing is stable or if it crashes.
+(should i say how it crases?)
+
+You should be able to add and remove devices from the bus. The driver will
+always try to fill up unused ttys. This means if you hotplug devices their
+order may have changed after reboot. This is not the behaviour Linus liked
+to see but it's ok for now. (I hope ;-)
+
+Please report your experiences to me:
+fuerst@in.tum.de
+
+***************************
+I've tested it with:
+3Com ISDN Pro TA.
+
+It should work with (That means i know these devices conform to ACM):
+3Com Office Connect Modem
+3Com Sportster USB (I think that's what it's called)
+
+***************************
+Many thanks to 3Com which did not only support me with hardware but also
+with technical support in USB questions. They also allowed me to do tests in
+their lab. Great!
+
+***************************
+Known bugs:
+Flow control not tested (likely not to work)
+Some tty function calls not implemented (putchar, etc...)
+Huge amounts of debug output (compile in [*] Magic SysRq key and press ALT+PRTSCR+0 )
+Not all mem is freed at close (need terminate irq in hcd)
+
+***************************
+Have fun,
+	Armin Fuerst

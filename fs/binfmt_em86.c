@@ -114,10 +114,12 @@ struct linux_binfmt em86_format = {
 	load_em86, NULL, NULL, 0
 };
 
-int __init init_em86_binfmt(void)
+static int __init init_em86_binfmt(void)
 {
 	return register_binfmt(&em86_format);
 }
+
+__initcall(init_em86_binfmt);
 
 #ifdef MODULE
 int init_module(void)

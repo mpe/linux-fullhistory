@@ -23,21 +23,30 @@
 
 #define CONFIG_BUGi386
 
-__initfunc(static void no_halt(char *s, int *ints))
+static int __init no_halt(char *s)
 {
 	boot_cpu_data.hlt_works_ok = 0;
+	return 1;
 }
 
-__initfunc(static void mca_pentium(char *s, int *ints))
+__setup("no-hlt", no_halt);
+
+static int __init mca_pentium(char *s)
 {
 	mca_pentium_flag = 1;
+	return 1;
 }
 
-__initfunc(static void no_387(char *s, int *ints))
+__setup("mca-pentium", mca_pentium);
+
+static int __init no_387(char *s)
 {
 	boot_cpu_data.hard_math = 0;
 	write_cr0(0xE | read_cr0());
+	return 1;
 }
+
+__setup("no387", no_387);
 
 static char __initdata fpu_error = 0;
 

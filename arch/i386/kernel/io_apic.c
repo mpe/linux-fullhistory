@@ -242,40 +242,42 @@ static void clear_IO_APIC (void)
 int pirq_entries [MAX_PIRQS];
 int pirqs_enabled;
 
-void __init ioapic_setup(char *str, int *ints)
+static void __init ioapic_setup(char *str, int *ints)
 {
 	extern int skip_ioapic_setup;	/* defined in arch/i386/kernel/smp.c */
 
 	skip_ioapic_setup = 1;
+	return 1;
 }
 
-void __init ioapic_pirq_setup(char *str, int *ints)
+__setup("noapic", ioapic_setup);
+
+static void __init ioapic_pirq_setup(char *str)
 {
 	int i, max;
+	int ints[11];
+
+	get_options(str, ints);
 
 	for (i = 0; i < MAX_PIRQS; i++)
 		pirq_entries[i] = -1;
 
-	if (!ints) {
-		pirqs_enabled = 0;
-		printk("PIRQ redirection, trusting MP-BIOS.\n");
+	pirqs_enabled = 1;
+	printk("PIRQ redirection, working around broken MP-BIOS.\n");
+	max = MAX_PIRQS;
+	if (ints[0] < MAX_PIRQS)
+		max = ints[0];
 
-	} else {
-		pirqs_enabled = 1;
-		printk("PIRQ redirection, working around broken MP-BIOS.\n");
-		max = MAX_PIRQS;
-		if (ints[0] < MAX_PIRQS)
-			max = ints[0];
-
-		for (i = 0; i < max; i++) {
-			printk("... PIRQ%d -> IRQ %d\n", i, ints[i+1]);
-			/*
-			 * PIRQs are mapped upside down, usually.
-			 */
-			pirq_entries[MAX_PIRQS-i-1] = ints[i+1];
-		}
+	for (i = 0; i < max; i++) {
+		printk("... PIRQ%d -> IRQ %d\n", i, ints[i+1]);
+		/*
+		 * PIRQs are mapped upside down, usually.
+		 */
+		pirq_entries[MAX_PIRQS-i-1] = ints[i+1];
 	}
 }
+
+__setup("pirq=", ioapic_pirq_setup);
 
 /*
  * Find the IRQ entry number of a certain pin.

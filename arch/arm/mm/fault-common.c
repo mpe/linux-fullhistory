@@ -85,7 +85,10 @@ kernel_page_fault(unsigned long addr, int mode, struct pt_regs *regs,
 
 	printk(KERN_ALERT "Unable to handle kernel %s at virtual address %08lx\n",
 		reason, addr);
-	printk(KERN_ALERT "memmap = %08lX, pgd = %p\n", tsk->tss.memmap, mm->pgd);
+	if (!mm)
+		mm = &init_mm;
+
+	printk(KERN_ALERT "pgd = %p\n", mm->pgd);
 	show_pte(mm, addr);
 	die("Oops", regs, mode);
 
@@ -151,8 +154,8 @@ bad_area:
 
 	/* User mode accesses just cause a SIGSEGV */
 	if (mode & FAULT_CODE_USER) {
-		tsk->tss.error_code = mode;
-		tsk->tss.trap_no = 14;
+		tsk->thread.error_code = mode;
+		tsk->thread.trap_no = 14;
 #ifdef CONFIG_DEBUG_USER
 		printk("%s: memory violation at pc=0x%08lx, lr=0x%08lx (bad address=0x%08lx, code %d)\n",
 			tsk->comm, regs->ARM_pc, regs->ARM_lr, addr, mode);
@@ -186,8 +189,8 @@ do_sigbus:
 	 * Send a sigbus, regardless of whether we were in kernel
 	 * or user mode.
 	 */
-	tsk->tss.error_code = mode;
-	tsk->tss.trap_no = 14;
+	tsk->thread.error_code = mode;
+	tsk->thread.trap_no = 14;
 	force_sig(SIGBUS, tsk);
 
 	/* Kernel mode? Handle exceptions or die */

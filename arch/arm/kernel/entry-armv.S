@@ -455,7 +455,7 @@ __dabt_svc:	sub	sp, sp, #S_FRAME_SIZE
 		mov	r0, r2
 		ldr	r2, .LCprocfns
 		mov	lr, pc
-		ldr	pc, [r2, #8]			@ call processor specific code
+		ldr	pc, [r2, #4]			@ call processor specific code
 		mov	r3, sp
 		bl	SYMBOL_NAME(do_DataAbort)
 		ldr	r0, [sp, #S_PSR]
@@ -542,7 +542,7 @@ __dabt_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		msr	cpsr, r2
 		ldr	r2, .LCprocfns
 		mov	lr, pc
-		ldr	pc, [r2, #8]			@ call processor specific code
+		ldr	pc, [r2, #4]			@ call processor specific code
 		mov	r3, sp
 		adrsvc	al, lr, ret_from_sys_call
 		b	SYMBOL_NAME(do_DataAbort)
@@ -654,6 +654,23 @@ __pabt_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		add	sp, sp, #S_FRAME_SIZE
 		movs	pc, lr
 #endif
+
+/*
+ * Register switch for ARMv3 and ARMv4 processors
+ * r0 = previous, r1 = next, return previous.
+ * previous and next are guaranteed not to be the same.
+ */
+ENTRY(__switch_to)
+		stmfd	sp!, {r4 - r9, fp, lr}		@ Store most regs on stack
+		mrs	ip, cpsr
+		stmfd	sp!, {ip}			@ Save cpsr_SVC
+		ldr	r2, [r1, #TSS_DOMAIN]
+		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
+		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
+		mcr	p15, 0, r2, c3, c0		@ Set domain register
+		ldmfd	sp!, {ip}
+		msr	spsr, ip			@ Save tasks CPSR into SPSR for this return
+		ldmfd	sp!, {r4 - r9, fp, pc}^		@ Load all regs saved previously
 
 		.section ".text.init",#alloc,#execinstr
 /*

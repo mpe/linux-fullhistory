@@ -53,41 +53,6 @@ _arm6_7_flush_tlb_area:
 		mov	pc, lr
 
 /*
- * Function: arm6_7_switch_to (struct task_struct *prev, struct task_struct *next)
- *
- * Params  : prev	Old task structure
- *	   : next	New task structure for process to run
- *
- * Returns : prev
- *
- * Purpose : Perform a task switch, saving the old processes state, and restoring
- *	     the new.
- *
- * Notes   : We don't fiddle with the FP registers here - we postpone this until
- *	     the new task actually uses FP.  This way, we don't swap FP for tasks
- *	     that do not require it.
- */
-_arm6_7_switch_to:
-		stmfd	sp!, {r4 - r9, fp, lr}		@ Store most regs on stack
-		mrs	ip, cpsr
-		stmfd	sp!, {ip}			@ Save cpsr_SVC
-		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
-		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
-		ldr	r2, [r1, #TSK_ADDR_LIMIT]
-		ldr	r3, [r1, #TSS_MEMMAP]		@ Page table pointer
-		teq	r2, #0
-		moveq	r2, #DOM_KERNELDOMAIN
-		movne	r2, #DOM_USERDOMAIN
-		mcr	p15, 0, r2, c3, c0		@ Set domain reg
-		mov	r1, #0
-		mcr	p15, 0, r1, c7, c0, 0		@ flush cache
-		mcr	p15, 0, r3, c2, c0, 0		@ update page table ptr
-		mcr	p15, 0, r1, c5, c0, 0		@ flush TLBs
-		ldmfd	sp!, {ip}
-		msr	spsr, ip			@ Save tasks CPSR into SPSR for this return
-		ldmfd	sp!, {r4 - r9, fp, pc}^		@ Load all regs saved previously
-
-/*
  * Function: arm6_7_data_abort ()
  *
  * Params  : r0 = address of aborted instruction
@@ -341,6 +306,19 @@ _arm6_7_proc_fin:
 		mov	pc, lr
 
 /*
+ * Function: arm6_7_set_pgd(unsigned long pgd_phys)
+ * Params  : pgd_phys	Physical address of page table
+ * Purpose : Perform a task switch, saving the old processes state, and restoring
+ *	     the new.
+ */
+_arm6_7_set_pgd:
+		mov	r1, #0
+		mcr	p15, 0, r1, c7, c0, 0		@ flush cache
+		mcr	p15, 0, r0, c2, c0, 0		@ update page table ptr
+		mcr	p15, 0, r1, c5, c0, 0		@ flush TLBs
+		mov	pc, lr
+
+/*
  * Function: arm6_set_pmd ()
  *
  * Params  : r0 = Address to set
@@ -421,19 +399,19 @@ _arm6_name:	.ascii	"arm6\0"
 
 ENTRY(arm6_processor_functions)
 		.word	_arm6_name			@  0
-		.word	_arm6_7_switch_to		@  4
-		.word	_arm6_data_abort		@  8
-		.word	_arm6_7_check_bugs		@ 12
-		.word	_arm6_7_proc_init		@ 16
-		.word	_arm6_7_proc_fin		@ 20
+		.word	_arm6_data_abort		@  4
+		.word	_arm6_7_check_bugs		@  8
+		.word	_arm6_7_proc_init		@ 12
+		.word	_arm6_7_proc_fin		@ 16
 
+		.word	_arm6_7_flush_cache		@ 20
 		.word	_arm6_7_flush_cache		@ 24
 		.word	_arm6_7_flush_cache		@ 28
-		.word	_arm6_7_flush_cache		@ 32
-		.word	_arm6_7_null			@ 36
-		.word	_arm6_7_flush_cache		@ 40
-		.word	_arm6_7_flush_tlb_all		@ 44
-		.word	_arm6_7_flush_tlb_area		@ 48
+		.word	_arm6_7_null			@ 32
+		.word	_arm6_7_flush_cache		@ 36
+		.word	_arm6_7_flush_tlb_all		@ 40
+		.word	_arm6_7_flush_tlb_area		@ 44
+		.word	_arm6_7_set_pgd			@ 48
 		.word	_arm6_set_pmd			@ 52
 		.word	_arm6_7_set_pte			@ 56
 		.word	_arm6_7_reset			@ 60
@@ -451,19 +429,19 @@ _arm7_name:	.ascii	"arm7\0"
 
 ENTRY(arm7_processor_functions)
 		.word	_arm7_name			@  0
-		.word	_arm6_7_switch_to		@  4
-		.word	_arm7_data_abort		@  8
-		.word	_arm6_7_check_bugs		@ 12
-		.word	_arm6_7_proc_init		@ 16
-		.word	_arm6_7_proc_fin		@ 20
+		.word	_arm7_data_abort		@  4
+		.word	_arm6_7_check_bugs		@  8
+		.word	_arm6_7_proc_init		@ 12
+		.word	_arm6_7_proc_fin		@ 16
 
+		.word	_arm6_7_flush_cache		@ 20
 		.word	_arm6_7_flush_cache		@ 24
 		.word	_arm6_7_flush_cache		@ 28
-		.word	_arm6_7_flush_cache		@ 32
-		.word	_arm6_7_null			@ 36
-		.word	_arm6_7_flush_cache		@ 40
-		.word	_arm6_7_flush_tlb_all		@ 44
-		.word	_arm6_7_flush_tlb_area		@ 48
+		.word	_arm6_7_null			@ 32
+		.word	_arm6_7_flush_cache		@ 36
+		.word	_arm6_7_flush_tlb_all		@ 40
+		.word	_arm6_7_flush_tlb_area		@ 44
+		.word	_arm6_7_set_pgd			@ 48
 		.word	_arm7_set_pmd			@ 52
 		.word	_arm6_7_set_pte			@ 56
 		.word	_arm6_7_reset			@ 60

@@ -10,6 +10,9 @@
  * 1996/02/11 Andreas Schwab
  * Module support
  * Allow multiple open's
+ *
+ * Converted to use new generic busmouse code.  5 Apr 1998
+ *   Russell King <rmk@arm.uk.linux.org>
  */
 
 #include <linux/module.h>
@@ -21,13 +24,15 @@
 #include <linux/random.h>
 #include <linux/poll.h>
 #include <linux/init.h>
-#include <linux/busmouse.h>
+#include <linux/logibusmouse.h>
 
 #include <asm/setup.h>
 #include <asm/atarikb.h>
 #include <asm/uaccess.h>
 
-static struct mouse_status mouse;
+#include "busmouse.h"
+
+static int msedev;
 static int mouse_threshold[2] = {2,2};
 MODULE_PARM(mouse_threshold, "2i");
 extern int atari_mouse_buttons;
@@ -42,32 +47,13 @@ static void atari_mouse_interrupt(char *buf)
 	       | (buf[0] & 2 ? 4 : 0)
 	       | (atari_mouse_buttons & 2));
     atari_mouse_buttons = buttons;
-    add_mouse_randomness((buttons << 16) + (buf[2] << 8) + buf[1]);
-    mouse.buttons = ~buttons & 7;
-    mouse.dx += buf[1];
-    mouse.dy -= buf[2];
-    mouse.ready = 1;
-    wake_up_interruptible(&mouse.wait);
-    if (mouse.fasyncptr)
-	kill_fasync(mouse.fasyncptr, SIGIO);
 
+    busmouse_add_movementbuttons(msedev, buf[1], -buf[2], buttons);
 /*    ikbd_mouse_rel_pos(); */
-}
-
-static int fasync_mouse(int fd, struct file *filp, int on)
-{
-	int retval;
-	retval = fasync_helper(fd, filp, on, &mouse.fasyncptr);
-	if (retval < 0)
-		return retval;
-	return 0;
 }
 
 static int release_mouse(struct inode *inode, struct file *file)
 {
-    fasync_mouse(-1, file, 0);
-    if (--mouse.active)
-      return 0;
     ikbd_mouse_disable();
 
     atari_mouse_interrupt_hook = NULL;
@@ -77,10 +63,6 @@ static int release_mouse(struct inode *inode, struct file *file)
 
 static int open_mouse(struct inode *inode, struct file *file)
 {
-    if (mouse.active++)
-	return 0;
-    mouse.ready = 0;
-    mouse.dx = mouse.dy = 0;
     atari_mouse_buttons = 0;
     ikbd_mouse_y0_top ();
     ikbd_mouse_thresh (mouse_threshold[0], mouse_threshold[1]);
@@ -90,92 +72,20 @@ static int open_mouse(struct inode *inode, struct file *file)
     return 0;
 }
 
-static ssize_t write_mouse(struct file *file, const char *buffer,
-			  size_t count, loff_t *ppos)
-{
-    return -EINVAL;
-}
-
-static ssize_t read_mouse(struct file * file, char * buffer,
-			  size_t count, loff_t *ppos)
-{
-    int dx, dy, buttons;
-
-    if (count < 3)
-	return -EINVAL;
-    if (!mouse.ready)
-	return -EAGAIN;
-    /* ikbd_mouse_disable */
-    dx = mouse.dx;
-    dy = mouse.dy;
-    buttons = mouse.buttons;
-    if (dx > 127)
-      dx = 127;
-    else if (dx < -128)
-      dx = -128;
-    if (dy > 127)
-      dy = 127;
-    else if (dy < -128)
-      dy = -128;
-    mouse.dx -= dx;
-    mouse.dy -= dy;
-    if (mouse.dx == 0 && mouse.dy == 0)
-      mouse.ready = 0;
-    /* ikbd_mouse_rel_pos(); */
-    if (put_user(buttons | 0x80, buffer++) ||
-	put_user((char) dx, buffer++) ||
-	put_user((char) dy, buffer++))
-	return -EFAULT;
-    if (count > 3)
-	if (clear_user(buffer, count - 3))
-	    return -EFAULT;
-    return count;
-}
-
-static unsigned int mouse_poll(struct file *file, poll_table *wait)
-{
-	poll_wait(file, &mouse.wait, wait);
-	if (mouse.ready)
-		return POLLIN | POLLRDNORM;
-	return 0;
-}
-
-struct file_operations atari_mouse_fops = {
-    NULL,		/* mouse_seek */
-    read_mouse,
-    write_mouse,
-    NULL,		/* mouse_readdir */
-    mouse_poll,
-    NULL,		/* mouse_ioctl */
-    NULL,		/* mouse_mmap */
-    open_mouse,
-    NULL,		/* flush */
-    release_mouse,
-    NULL,
-    fasync_mouse,
-};
-
-static struct miscdevice atari_mouse = {
-    ATARIMOUSE_MINOR, "atarimouse", &atari_mouse_fops
+static struct busmouse atarimouse = {
+	ATARIMOUSE_MINOR, "atarimouse", open_mouse, release_mouse, 0
 };
 
 int __init atari_mouse_init(void)
 {
-	int r;
-
-	if (!MACH_IS_ATARI)
-		return -ENODEV;
-
-	mouse.active = 0;
-	mouse.ready = 0;
-	mouse.wait = NULL;
-
-	r = misc_register(&atari_mouse);
-	if (r)
-		return r;
-
-	printk(KERN_INFO "Atari mouse installed.\n");
-	return 0;
+    if (!MACH_IS_ATARI)
+	return -ENODEV;
+    msedev = register_busmouse(&atarimouse);
+    if (msedev < 0)
+    	printk(KERN_WARNING "Unable to register Atari mouse driver.\n");
+    else
+    	printk(KERN_INFO "Atari mouse installed.\n");
+    return msedev < 0 ? msedev : 0;
 }
 
 
@@ -215,6 +125,6 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-  misc_deregister(&atari_mouse);
+	unregister_busmouse(msedev);
 }
 #endif

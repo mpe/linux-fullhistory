@@ -116,6 +116,8 @@
  *     16/11/96 - Fiddled and frigged for 2.0.18
  *
  * DAG 30/01/99 - Started frobbing for 2.2.1
+ * DAG 20/06/99 - A little more frobbing:
+ *     Included include/asm/uaccess.h for get_user/put_user
  */
 
 #include <linux/sched.h>
@@ -142,6 +144,8 @@
 #include <asm/irq.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
+#include <asm/uaccess.h>
+
 
 #define MAJOR_NR FLOPPY_MAJOR
 #define FLOPPY_DMA 0
@@ -1600,7 +1604,7 @@ static struct file_operations floppy_fops =
 };
 
 
-int floppy_init(void)
+int fd1772_init(void)
 {
 	int i;
 

@@ -23,7 +23,6 @@ struct resource {
 extern struct resource ioport_resource;
 extern struct resource iomem_resource;
 
-extern void reserve_setup(char *str, int *ints);
 extern int get_resource_list(struct resource *, char *buf, int size);
 
 extern int request_resource(struct resource *root, struct resource *new);

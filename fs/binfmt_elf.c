@@ -1296,10 +1296,12 @@ static int elf_core_dump(long signr, struct pt_regs * regs, struct file * file)
 }
 #endif		/* USE_ELF_CORE_DUMP */
 
-int __init init_elf_binfmt(void)
+static int __init init_elf_binfmt(void)
 {
 	return register_binfmt(&elf_format);
 }
+
+__initcall(init_elf_binfmt);
 
 #ifdef MODULE
 

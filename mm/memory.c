@@ -986,7 +986,9 @@ static int do_swap_page(struct task_struct * tsk,
 
 	vma->vm_mm->rss++;
 	tsk->min_flt++;
+	lock_kernel();
 	swap_free(entry);
+	unlock_kernel();
 
 	pte = mk_pte(page_address(page), vma->vm_page_prot);
 

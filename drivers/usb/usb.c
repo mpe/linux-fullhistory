@@ -736,20 +736,17 @@ int usb_set_idle(struct usb_device *dev,  int duration, int report_id)
 static void usb_set_maxpacket(struct usb_device *dev)
 {
 	int i;
-	struct usb_endpoint_descriptor *ep;
 	int act_as = dev->actconfig->act_altsetting;
 	struct usb_alternate_setting *as = dev->actconfig->altsetting + act_as;
-	struct usb_interface_descriptor *ip = as->interface;
 
 	for (i=0; i<dev->actconfig->bNumInterfaces; i++) {
-		if (as->interface[i].bInterfaceNumber == dev->ifnum) {
-			ip = &as->interface[i];
-			break;
+		struct usb_interface_descriptor *ip = &as->interface[i];
+		struct usb_endpoint_descriptor *ep = ip->endpoint;
+		int e;
+		for (e=0; e<ip->bNumEndpoints; e++) {
+			dev->epmaxpacket[ep[e].bEndpointAddress & 0x0f] =
+				ep[e].wMaxPacketSize;
 		}
-	}
-	ep = ip->endpoint;
-	for (i=0; i<ip->bNumEndpoints; i++) {
-		dev->epmaxpacket[ep[i].bEndpointAddress & 0x0f] = ep[i].wMaxPacketSize;
 	}
 }
 
@@ -1037,6 +1034,7 @@ void usb_new_device(struct usb_device *dev)
 	}
 #endif
 
+
 #if 0
 	printk("maxpacketsize: %d\n", dev->descriptor.bMaxPacketSize0);
 #endif
@@ -1104,6 +1102,16 @@ void usb_new_device(struct usb_device *dev)
 void* usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
 {
 	return dev->bus->op->request_irq(dev, pipe, handler, period, dev_id);
+}
+
+void* usb_request_bulk(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, void * data, int len, void *dev_id)
+{
+	return dev->bus->op->request_bulk(dev, pipe, handler, data, len, dev_id);
+}
+
+int usb_terminate_bulk(struct usb_device *dev, void* first)
+{
+	return dev->bus->op->terminate_bulk(dev, first);
 }
 
 

@@ -147,4 +147,9 @@ extern void parport_pc_inc_use_count(void);
 
 extern void parport_pc_dec_use_count(void);
 
+/* PCMCIA code will want to get us to look at a port.  Provide a mechanism. */
+extern struct parport *parport_pc_probe_port (unsigned long base,
+					      unsigned long base_hi,
+					      int irq, int dma);
+
 #endif

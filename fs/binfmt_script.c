@@ -110,10 +110,12 @@ struct linux_binfmt script_format = {
 	load_script, NULL, NULL, 0
 };
 
-int __init init_script_binfmt(void)
+static int __init init_script_binfmt(void)
 {
 	return register_binfmt(&script_format);
 }
+
+__initcall(init_script_binfmt);
 
 #ifdef MODULE
 int init_module(void)

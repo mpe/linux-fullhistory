@@ -2,36 +2,8 @@
  * linux/include/asm-arm/proc-armv/uaccess.h
  */
 
-/*
- * The fs functions are implemented on the ARMV3 and V4 architectures
- * using the domain register.
- *
- *  DOMAIN_IO     - domain 2 includes all IO only
- *  DOMAIN_KERNEL - domain 1 includes all kernel memory only
- *  DOMAIN_USER   - domain 0 includes all user memory only
- */
-
 #include <asm/hardware.h>
-
-#define DOMAIN_CLIENT	1
-#define DOMAIN_MANAGER	3
- 
-#define DOMAIN_USER_CLIENT	((DOMAIN_CLIENT) << 0)
-#define DOMAIN_USER_MANAGER	((DOMAIN_MANAGER) << 0)
-
-#define DOMAIN_KERNEL_CLIENT	((DOMAIN_CLIENT) << 2)
-#define DOMAIN_KERNEL_MANAGER	((DOMAIN_MANAGER) << 2)
-
-#define DOMAIN_IO_CLIENT	((DOMAIN_CLIENT) << 4)
-#define DOMAIN_IO_MANAGER	((DOMAIN_MANAGER) << 4)
-
-/*
- * When we want to access kernel memory in the *_user functions,
- * we change the domain register to KERNEL_DS, thus allowing
- * unrestricted access
- */
-#define KERNEL_DOMAIN	(DOMAIN_USER_CLIENT | DOMAIN_KERNEL_MANAGER | DOMAIN_IO_CLIENT)
-#define USER_DOMAIN	(DOMAIN_USER_CLIENT | DOMAIN_KERNEL_CLIENT  | DOMAIN_IO_CLIENT)
+#include <asm/proc/domain.h>
 
 /*
  * Note that this is actually 0x1,0000,0000
@@ -48,8 +20,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 {
 	current->addr_limit = fs;
 
-	__asm__ __volatile__("mcr	p15, 0, %0, c3, c0" :
-		: "r" (fs ? USER_DOMAIN : KERNEL_DOMAIN));
+	modify_domain(DOMAIN_KERNEL, fs ? DOMAIN_CLIENT : DOMAIN_MANAGER);
 }
 
 /* We use 33-bit arithmetic here... */

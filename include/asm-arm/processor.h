@@ -49,27 +49,29 @@ struct debug_info {
 };
 
 struct thread_struct {
-	unsigned long			address;	  /* Address of fault	*/
-	unsigned long			trap_no;	  /* Trap number	*/
-	unsigned long			error_code;	  /* Error code of trap	*/
-	union fp_state			fpstate;	  /* FPE save state	*/
-	struct debug_info		debug;		  /* Debug/ptrace	*/
-	struct context_save_struct	*save;		  /* context save	*/
-	unsigned long			memmap;		  /* page tables	*/
+							/* fault info	  */
+	unsigned long			address;
+	unsigned long			trap_no;
+	unsigned long			error_code;
+							/* floating point */
+	union fp_state			fpstate;
+							/* debugging	  */
+	struct debug_info		debug;
+							/* context info	  */
+	struct context_save_struct	*save;
 	EXTRA_THREAD_STRUCT
 };
 
 #define INIT_MMAP \
 { &init_mm, 0, 0, NULL, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
 
-#define INIT_TSS  {				\
+#define INIT_THREAD  {				\
 	0,					\
 	0,					\
 	0,					\
 	{ { { 0, }, }, },			\
 	{ 0, },					\
-	(struct context_save_struct *)0,	\
-	SWAPPER_PG_DIR				\
+	(struct context_save_struct *)0	\
 	EXTRA_THREAD_STRUCT_INIT		\
 }
 
@@ -102,7 +104,7 @@ struct mm_struct;
 extern void release_thread(struct task_struct *);
 
 /* Copy and release all segment info associated with a VM */
-#define copy_segments(nr, tsk, mm)	do { } while (0)
+#define copy_segments(tsk, mm)		do { } while (0)
 #define release_segments(mm)		do { } while (0)
 #define forget_segments()		do { } while (0)
 

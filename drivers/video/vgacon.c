@@ -116,7 +116,7 @@ static int	       vga_video_font_height;
 static unsigned int    vga_rolled_over = 0;
 
 
-void no_scroll(char *str, int *ints)
+static int __init no_scroll(char *str)
 {
 	/*
 	 * Disabling scrollback is required for the Braillex ib80-piezo
@@ -124,7 +124,10 @@ void no_scroll(char *str, int *ints)
 	 * Use the "no-scroll" bootflag.
 	 */
 	vga_hardscroll_user_enable = vga_hardscroll_enabled = 0;
+	return 1;
 }
+
+__setup("no-scroll", no_scroll);
 
 /*
  * By replacing the four outb_p with two back to back outw, we can reduce

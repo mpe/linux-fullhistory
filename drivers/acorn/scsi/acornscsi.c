@@ -2982,7 +2982,7 @@ char *acornscsi_info(struct Scsi_Host *host)
 
     p = string;
     
-    p += sprintf(string, "%s at port %X irq %d v%d.%d.%d"
+    p += sprintf(string, "%s at port %08lX irq %d v%d.%d.%d"
 #ifdef CONFIG_SCSI_ACORNSCSI_SYNC
     " SYNC"
 #endif

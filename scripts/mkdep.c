@@ -66,7 +66,7 @@ void grow_config(int len)
 	while (len_config + len > size_config) {
 		str_config = realloc(str_config, size_config *= 2);
 		if (str_config == NULL)
-			{ perror("malloc"); exit(1); }
+			{ perror("malloc config"); exit(1); }
 	}
 }
 
@@ -122,6 +122,55 @@ void clear_config(void)
 {
 	len_config = 0;
 	define_config(0, "", 0);
+}
+
+
+
+/*
+ * This records all the precious .h filenames.  No need for a hash,
+ * it's a long string of values enclosed in tab and newline.
+ */
+char * str_precious  = NULL;
+int    size_precious = 0;
+int    len_precious  = 0;
+
+
+
+/*
+ * Grow the precious string to a desired length.
+ * Usually the first growth is plenty.
+ */
+void grow_precious(int len)
+{
+	if (str_precious == NULL) {
+		len_precious  = 0;
+		size_precious = 4096;
+		str_precious  = malloc(4096);
+		if (str_precious == NULL)
+			{ perror("malloc precious"); exit(1); }
+	}
+
+	while (len_precious + len > size_precious) {
+		str_precious = realloc(str_precious, size_precious *= 2);
+		if (str_precious == NULL)
+			{ perror("malloc"); exit(1); }
+	}
+}
+
+
+
+/*
+ * Add a new value to the precious string.
+ */
+void define_precious(const char * filename)
+{
+	int len = strlen(filename);
+	grow_precious(len + 4);
+	*(str_precious+len_precious++) = '\t';
+	memcpy(str_precious+len_precious, filename, len);
+	len_precious += len;
+	memcpy(str_precious+len_precious, " \\\n", 3);
+	len_precious += 3;
 }
 
 
@@ -458,8 +507,11 @@ void do_depend(const char * filename, const char * command)
 	hasdep = 0;
 	clear_config();
 	state_machine(map, map+st.st_size);
-	if (hasdep)
+	if (hasdep) {
 		puts(command);
+		if (*command)
+			define_precious(filename);
+	}
 
 	munmap(map, mapsize);
 	close(fd);
@@ -500,6 +552,10 @@ int main(int argc, char **argv)
 			}
 		}
 		do_depend(filename, command);
+	}
+	if (len_precious) {
+		*(str_precious+len_precious) = '\0';
+		printf(".PRECIOUS:%s\n", str_precious);
 	}
 	return 0;
 }

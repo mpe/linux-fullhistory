@@ -207,59 +207,6 @@ _sa110_flush_icache_area:
 		mcr	p15, 0, r0, c7, c10, 4		@ drain WB
 		mcr	p15, 0, r0, c7, c5, 0		@ flush I cache
 		mov	pc, lr
-/*
- * Function: sa110_switch_to (struct task_struct *prev, struct task_struct *next)
- * Params  : prev	Old task structure
- *	   : next	New task structure for process to run
- * Returns : prev
- * Purpose : Perform a task switch, saving the old processes state, and restoring
- *	     the new.
- * Notes   : We don't fiddle with the FP registers here - we postpone this until
- *	     the new task actually uses FP.  This way, we don't swap FP for tasks
- *	     that do not require it.
- */
-		.align	5
-_sa110_switch_to:
-		stmfd	sp!, {r4 - r9, fp, lr}		@ Store most regs on stack
-		mrs	ip, cpsr
-		stmfd	sp!, {ip}			@ Save cpsr_SVC
-		ldr	r2, [r0, #TSS_MEMMAP]		@ Get old page tables
-		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
-		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
-		ldr	r5, [r1, #TSK_ADDR_LIMIT]
-		ldr	r4, [r1, #TSS_MEMMAP]		@ Page table pointer
-		teq	r5, #0
-		moveq	r5, #DOM_KERNELDOMAIN
-		movne	r5, #DOM_USERDOMAIN
-		mcr	p15, 0, r5, c3, c0		@ Set segment
-/*
- * Flushing the cache is nightmarishly slow, so we take any excuse
- * to get out of it.  If the old page table is the same as the new,
- * this is a CLONE_VM relative of the old task and there is no need
- * to flush.  The overhead of the tests isn't even on the radar
- * compared to the cost of the flush itself.
- */
-		teq	r4, r2
-		beq	2f
-		ldr	r3, =Lclean_switch
-		ldr	r2, [r3]
-		ands	r2, r2, #1
-		eor	r2, r2, #1
-		str	r2, [r3]
-		ldr	r2, =FLUSH_BASE
-		addne	r2, r2, #32768
-		add	r1, r2, #16384			@ only necessary for 16k
-1:		ldr	r3, [r2], #32
-		teq	r1, r2
-		bne	1b
-		mov	r1, #0
-		mcr	p15, 0, r1, c7, c5, 0		@ flush I cache
-		mcr	p15, 0, r1, c7, c10, 4		@ drain WB
-		mcr	p15, 0, r4, c2, c0, 0		@ load page table pointer
-		mcr	p15, 0, r1, c8, c7, 0		@ flush TLBs
-2:		ldmfd	sp!, {ip}
-		msr	spsr, ip			@ Save tasks CPSR into SPSR for this return
-		ldmfd	sp!, {r4 - r9, fp, pc}^		@ Load all regs saved previously
 
 /*
  * Function: sa110_data_abort ()
@@ -278,6 +225,33 @@ _sa110_data_abort:
 		and	r2, r2, #2
 		mrc	p15, 0, r1, c5, c0, 0		@ get FSR
 		and	r1, r1, #255
+		mov	pc, lr
+
+		.align	5
+/*
+ * Function: sa110_set_pgd(unsigned long pgd_phys)
+ * Params  : pgd_phys	Physical address of page table
+ * Purpose : Perform a task switch, saving the old processes state, and restoring
+ *	     the new.
+ */
+		.align	5
+_sa110_set_pgd:
+		ldr	r3, =Lclean_switch
+		ldr	r2, [r3]
+		ands	r2, r2, #1
+		eor	r2, r2, #1
+		str	r2, [r3]
+		ldr	r2, =FLUSH_BASE
+		addne	r2, r2, #32768
+		add	r1, r2, #16384			@ only necessary for 16k
+1:		ldr	r3, [r2], #32
+		teq	r1, r2
+		bne	1b
+		mov	r1, #0
+		mcr	p15, 0, r1, c7, c5, 0		@ flush I cache
+		mcr	p15, 0, r1, c7, c10, 4		@ drain WB
+		mcr	p15, 0, r0, c2, c0, 0		@ load page table pointer
+		mcr	p15, 0, r1, c8, c7, 0		@ flush TLBs
 		mov	pc, lr
 
 /*
@@ -362,20 +336,20 @@ _sa110_name:	.ascii	"sa110\0"
 
 ENTRY(sa110_processor_functions)
 		.word	_sa110_name			@  0
-		.word	_sa110_switch_to		@  4
-		.word	_sa110_data_abort		@  8
-		.word	_sa110_check_bugs		@ 12
-		.word	_sa110_proc_init		@ 16
-		.word	_sa110_proc_fin			@ 20
+		.word	_sa110_data_abort		@  4
+		.word	_sa110_check_bugs		@  8
+		.word	_sa110_proc_init		@ 12
+		.word	_sa110_proc_fin			@ 16
 
-		.word	_sa110_flush_cache_all		@ 24
-		.word	_sa110_flush_cache_area		@ 28
-		.word	_sa110_flush_cache_entry	@ 32
-		.word	_sa110_clean_cache_area		@ 36
-		.word	_sa110_flush_ram_page		@ 40
-		.word	_sa110_flush_tlb_all		@ 44
-		.word	_sa110_flush_tlb_area		@ 48
+		.word	_sa110_flush_cache_all		@ 20
+		.word	_sa110_flush_cache_area		@ 24
+		.word	_sa110_flush_cache_entry	@ 28
+		.word	_sa110_clean_cache_area		@ 32
+		.word	_sa110_flush_ram_page		@ 36
+		.word	_sa110_flush_tlb_all		@ 40
+		.word	_sa110_flush_tlb_area		@ 44
 
+		.word	_sa110_set_pgd			@ 48
 		.word	_sa110_set_pmd			@ 52
 		.word	_sa110_set_pte			@ 56
 		.word	_sa110_reset			@ 60

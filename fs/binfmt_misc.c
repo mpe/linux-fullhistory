@@ -495,7 +495,7 @@ static void bm_modcount(struct inode *inode, int fill)
 }
 #endif
 
-int __init init_misc_binfmt(void)
+static int __init init_misc_binfmt(void)
 {
 	int error = -ENOENT;
 	struct proc_dir_entry *status = NULL, *reg;
@@ -529,6 +529,8 @@ cleanup_bm:
 	remove_proc_entry("sys/fs/binfmt_misc", NULL);
 	goto out;
 }
+
+__initcall(init_misc_binfmt);
 
 #ifdef MODULE
 EXPORT_NO_SYMBOLS;

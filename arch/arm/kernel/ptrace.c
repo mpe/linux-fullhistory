@@ -28,7 +28,7 @@
 
 /*
  * this routine will get a word off of the processes privileged stack.
- * the offset is how far from the base addr as stored in the TSS.
+ * the offset is how far from the base addr as stored in the THREAD.
  * this routine assumes that all the privileged stacks are in our
  * data space.
  */
@@ -43,7 +43,7 @@ static inline long get_stack_long(struct task_struct *task, int offset)
 
 /*
  * this routine will put a word on the processes privileged stack.
- * the offset is how far from the base addr as stored in the TSS.
+ * the offset is how far from the base addr as stored in the THREAD.
  * this routine assumes that all the privileged stacks are in our
  * data space.
  */
@@ -334,7 +334,7 @@ add_breakpoint(struct task_struct *child, struct debug_info *dbg, unsigned long 
 
 int ptrace_set_bpt (struct task_struct *child)
 {
-	struct debug_info *dbg = &child->tss.debug;
+	struct debug_info *dbg = &child->thread.debug;
 	unsigned long insn, pc, alt;
 	int res;
 
@@ -363,7 +363,7 @@ int ptrace_set_bpt (struct task_struct *child)
  */
 int ptrace_cancel_bpt (struct task_struct *child)
 {
-	struct debug_info *dbg = &child->tss.debug;
+	struct debug_info *dbg = &child->thread.debug;
 	unsigned long tmp;
 	int i, nsaved = dbg->nsaved;
 
@@ -514,7 +514,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			ret = -EIO;
 			if ((unsigned long) data > _NSIG)
 				goto out;
-			child->tss.debug.nsaved = -1;
+			child->thread.debug.nsaved = -1;
 			child->flags &= ~PF_TRACESYS;
 			wake_up_process(child);
 			child->exit_code = data;

@@ -206,6 +206,14 @@ ifeq ($(CONFIG_BLK_DEV_HPT34X),y)
 IDE_OBJS += hpt34x.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_IDE_ICSIDE),y)
+IDE_OBJS += icside.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_IDE_RAPIDE),y)
+IDE_OBJS += rapide.o
+endif
+
 ### if CONFIG_BLK_DEV_IDE is n, IDE_OBJS will be ignored
 
 ifeq ($(CONFIG_PROC_FS),y)

@@ -28,7 +28,7 @@
 	{ _STK_LIM, _STK_LIM },				\
 	{        0, LONG_MAX },				\
 	{ LONG_MAX, LONG_MAX },				\
-	{ MAX_TASKS_PER_USER, MAX_TASKS_PER_USER },	\
+	{        0,        0 },				\
 	{ INR_OPEN, INR_OPEN },				\
 	{ LONG_MAX, LONG_MAX },				\
 	{ LONG_MAX, LONG_MAX },				\

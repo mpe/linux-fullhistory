@@ -290,6 +290,8 @@ struct usb_operations {
 	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int,unsigned long *);
 	void* (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *);
 	int (*release_irq)(void* handle);
+	void* (*request_bulk)(struct usb_device *, unsigned int, usb_device_irq, void *, int, void *);
+	int (*terminate_bulk)(struct usb_device *, void*);
 	void *(*alloc_isoc)(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id);
 	void (*delete_isoc)(struct usb_device *dev, void *_isodesc);
 	int (*sched_isoc)(struct usb_device *usb_dev, void *_isodesc, void *_pisodesc);
@@ -351,6 +353,9 @@ extern void usb_deregister_bus(struct usb_bus *);
 
 extern void* usb_request_irq(struct usb_device *, unsigned int, usb_device_irq, int, void *);
 extern int usb_release_irq(struct usb_device *dev, void *handle);
+
+extern void* usb_request_bulk(struct usb_device *, unsigned int, usb_device_irq, void *, int, void *);
+extern int usb_terminate_bulk(struct usb_device *, void*);
 
 extern void usb_init_root_hub(struct usb_device *dev);
 extern void usb_connect(struct usb_device *dev);

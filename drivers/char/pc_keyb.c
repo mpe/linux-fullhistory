@@ -518,10 +518,13 @@ void pckbd_leds(unsigned char leds)
 #endif
 
 /* for "kbd-reset" cmdline param */
-void __init kbd_reset_setup(char *str, int *ints)
+static int __init kbd_reset_setup(char *str)
 {
 	kbd_startup_reset = 1;
+	return 1;
 }
+
+__setup("kbd-reset", kbd_reset_setup);
 
 #define KBD_NO_DATA	(-1)	/* No data */
 #define KBD_BAD_DATA	(-2)	/* Parity or other error */
