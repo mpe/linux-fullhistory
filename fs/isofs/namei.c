@@ -59,14 +59,13 @@ static int isofs_match(int len,const char * name, const char * compare, int dlen
  * entry - you'll have to do that yourself if you want to.
  */
 static struct buffer_head * isofs_find_entry(struct inode * dir,
-	const char * name, int namelen, unsigned long * ino, unsigned long * ino_back)
+	const char * name, int namelen, unsigned long * ino)
 {
 	unsigned long bufsize = ISOFS_BUFFER_SIZE(dir);
 	unsigned char bufbits = ISOFS_BUFFER_BITS(dir);
 	unsigned int block, i, f_pos, offset, inode_number;
 	struct buffer_head * bh;
 	unsigned int old_offset;
-	unsigned int backlink;
 	int dlen, rrflag, match;
 	char * dpnt;
 	struct iso_directory_record * de;
@@ -86,7 +85,6 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
   
 	while (f_pos < dir->i_size) {
 		de = (struct iso_directory_record *) (bh->b_data + offset);
-		backlink = dir->i_ino;
 		inode_number = (block << bufbits) + (offset & (bufsize - 1));
 
 		/* If byte is zero, this is the end of file, or time to move to
@@ -120,28 +118,6 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 	 		return 0;
 		}
 		
-		/* Handle the '.' case */
-		
-		if (de->name[0]==0 && de->name_len[0]==1) {
-			inode_number = dir->i_ino;
-			backlink = 0;
-		}
-		
-		/* Handle the '..' case */
-
-		if (de->name[0]==1 && de->name_len[0]==1) {
-#if 0
-			printk("Doing .. (%d %d)",
-			       dir->i_sb->s_firstdatazone,
-			       dir->i_ino);
-#endif
-			if((dir->i_sb->u.isofs_sb.s_firstdatazone) != dir->i_ino)
- 				inode_number = dir->u.isofs_i.i_backlink;
-			else
-				inode_number = dir->i_ino;
-			backlink = 0;
-		}
-    
 		dlen = de->name_len[0];
 		dpnt = de->name;
 		/* Now convert the filename in the buffer to lower case */
@@ -183,16 +159,8 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 				inode_number = 
 					isofs_lookup_grandparent(dir,
 					   find_rock_ridge_relocation(de,dir));
-				if(inode_number == -1){
-					/* Should never happen */
-					printk("Backlink not properly set %x %lx.\n",
-					       isonum_733(de->extent),
-					       dir->i_ino);
-					goto out;
-				}
 			}
 			*ino = inode_number;
-			*ino_back = backlink;
 			return bh;
 		}
 	}
@@ -201,16 +169,15 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 	return NULL;
 }
 
-int isofs_lookup(struct inode * dir, struct qstr *name,
-		 struct inode ** result)
+int isofs_lookup(struct inode * dir, struct dentry * dentry)
 {
-	unsigned long ino, ino_back;
+	unsigned long ino;
 	struct buffer_head * bh;
 	char *lcname;
 	struct inode *inode;
 
 #ifdef DEBUG
-	printk("lookup: %x %d\n",dir->i_ino, name->len);
+	printk("lookup: %x %d\n",dir->i_ino, dentry->d_name.len);
 #endif
 	if (!dir)
 		return -ENOENT;
@@ -222,39 +189,28 @@ int isofs_lookup(struct inode * dir, struct qstr *name,
 	 * then first convert this name to lower case.
 	 */
 	if (dir->i_sb->u.isofs_sb.s_name_check == 'r' &&
-	    (lcname = kmalloc(name->len, GFP_KERNEL)) != NULL) {
+	    (lcname = kmalloc(dentry->d_name.len, GFP_KERNEL)) != NULL) {
 		int i;
 		char c;
 
-		for (i=0; i<name->len; i++) {
-			c = name->name[i];
+		for (i=0; i<dentry->d_name.len; i++) {
+			c = dentry->d_name.name[i];
 			if (c >= 'A' && c <= 'Z') c |= 0x20;
 			lcname[i] = c;
 		}
-		bh = isofs_find_entry(dir, lcname, name->len,
-				      &ino, &ino_back);
+		bh = isofs_find_entry(dir, lcname, dentry->d_name.len, &ino);
 		kfree(lcname);
 	} else
-		bh = isofs_find_entry(dir, name->name,
-				      name->len, &ino, &ino_back);
+		bh = isofs_find_entry(dir, dentry->d_name.name, dentry->d_name.len, &ino);
 
-	if (!bh)
-		return -ENOENT;
-	brelse(bh);
+	inode = NULL;
+	if (bh) {
+		brelse(bh);
 
-	inode = iget(dir->i_sb,ino);
-	if (!inode)
-		return -EACCES;
-
-	/* We need this backlink for the ".." entry unless the name that we
-	 * are looking up traversed a mount point (in which case the inode
-	 * may not even be on an iso9660 filesystem, and writing to
-	 * u.isofs_i would only cause memory corruption).
-	 */
-	if (ino_back && !inode->i_pipe && inode->i_sb == dir->i_sb)
-		inode->u.isofs_i.i_backlink = ino_back;
-
-	*result = inode;
-	
+		inode = iget(dir->i_sb,ino);
+		if (!inode)
+			return -EACCES;
+	}
+	d_add(dentry, inode);
 	return 0;
 }

@@ -52,6 +52,7 @@ struct inode_operations fat_file_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	generic_readpage,	/* readpage */
 	NULL,			/* writepage */
 	fat_bmap,		/* bmap */
@@ -99,6 +100,7 @@ struct inode_operations fat_file_inode_operations_1024 = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -355,7 +357,7 @@ long fat_file_write(
 		filp->f_pos += written;
 		if (filp->f_pos > inode->i_size) {
 			inode->i_size = filp->f_pos;
-			inode->i_dirt = 1;
+			mark_inode_dirty(inode);
 		}
 		fat_set_uptodate(sb, bh, 1);
 		fat_mark_buffer_dirty(sb, bh, 0);
@@ -365,7 +367,7 @@ long fat_file_write(
 		return error;
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	MSDOS_I(inode)->i_attrs |= ATTR_ARCH;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	return buf-start;
 }
 
@@ -379,5 +381,5 @@ void fat_truncate(struct inode *inode)
 	cluster = SECTOR_SIZE*MSDOS_SB(inode->i_sb)->cluster_size;
 	(void) fat_free(inode,(inode->i_size+(cluster-1))/cluster);
 	MSDOS_I(inode)->i_attrs |= ATTR_ARCH;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 }

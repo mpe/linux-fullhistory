@@ -57,7 +57,7 @@ struct knfs_fh {
 typedef struct svc_fh {
 	struct knfs_fh		fh_handle;	/* FH data */
 	struct svc_export *	fh_export;	/* export pointer */
-	struct inode *		fh_inode;	/* inode */
+	struct dentry *		fh_dentry;	/* file */
 	size_t			fh_pre_size;	/* size before operation */
 	time_t			fh_pre_mtime;	/* mtime before oper */
 	time_t			fh_pre_ctime;	/* ctime before oper */
@@ -98,7 +98,7 @@ fh_init(struct svc_fh *fhp)
 static inline void
 fh_lock(struct svc_fh *fhp)
 {
-	struct inode	*inode = fhp->fh_inode;
+	struct inode	*inode = fhp->fh_dentry->d_inode;
 
 	/*
 	dfprintk(FILEOP, "nfsd: fh_lock(%x/%ld) locked = %d\n",
@@ -118,7 +118,7 @@ fh_lock(struct svc_fh *fhp)
 static inline void
 fh_unlock(struct svc_fh *fhp)
 {
-	struct inode	*inode = fhp->fh_inode;
+	struct inode	*inode = fhp->fh_dentry->d_inode;
 
 	if (fhp->fh_locked) {
 		if (!fhp->fh_post_version)
@@ -135,9 +135,9 @@ fh_unlock(struct svc_fh *fhp)
 static inline void
 fh_put(struct svc_fh *fhp)
 {
-	if (fhp->fh_inode) {
+	if (fhp->fh_dentry) {
 		fh_unlock(fhp);
-		iput(fhp->fh_inode);
+		dput(fhp->fh_dentry);
 	}
 }
 #else
@@ -146,19 +146,19 @@ fh_put(struct svc_fh *fhp)
 static inline void
 __fh_put(struct svc_fh *fhp, char *file, int line)
 {
-	struct inode	*inode;
+	struct dentry	*dentry;
 
-	if (!(inode = fhp->fh_inode))
+	if (!(dentry = fhp->fh_dentry))
 		return;
 
-	if (!atomic_read(&inode->i_count)) {
-		printk("nfsd: trying to free free inode in %s:%d\n"
-		       "      dev %04x ino %ld, mode %07o\n",
-		       file, line, inode->i_dev,
-		       inode->i_ino, inode->i_mode);
+	if (!dentry->d_count) {
+		printk("nfsd: trying to free free dentry in %s:%d\n"
+		       "      file %s/%s\n",
+		       file, line,
+		       dentry->d_parent->d_name.name, dentry->d_name.name);
 	} else {
 		fh_unlock(fhp);
-		iput(inode);
+		dput(dentry);
 	}
 }
 #endif

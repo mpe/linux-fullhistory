@@ -40,9 +40,7 @@ void fat_fs_panic(struct super_block *s,const char *msg)
 
 	not_ro = !(s->s_flags & MS_RDONLY);
 	if (not_ro) s->s_flags |= MS_RDONLY;
-	printk("Filesystem panic (dev %s, ", kdevname(s->s_dev));
-	printk("mounted on %s:%ld)\n  %s\n", /* note: kdevname returns & static char[] */
-	       kdevname(s->s_covered->i_dev), s->s_covered->i_ino, msg);
+	printk("Filesystem panic (dev %s).", kdevname(s->s_dev));
 	if (not_ro)
 		printk("  File system has been set read-only\n");
 }
@@ -180,7 +178,7 @@ printk("last = %d\n",last);
 	if (last) fat_access(sb,last,nr);
 	else {
 		MSDOS_I(inode)->i_start = nr;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 	}
 #ifdef DEBUG
 if (last) printk("next set to %d\n",fat_access(sb,last,-1));
@@ -217,7 +215,7 @@ if (last) printk("next set to %d\n",fat_access(sb,last,-1));
 #ifdef DEBUG
 printk("size is %d now (%x)\n",inode->i_size,inode);
 #endif
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 	}
 	return 0;
 }

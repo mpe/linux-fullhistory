@@ -215,7 +215,7 @@ extern void fat_put_super(struct super_block *sb);
 extern void fat_read_inode(struct inode *inode, struct inode_operations *dir_ops);
 extern struct super_block *fat_read_super(struct super_block *s, void *data, int silent);
 extern void msdos_put_super(struct super_block *sb);
-extern void fat_statfs(struct super_block *sb,struct statfs *buf, int);
+extern int fat_statfs(struct super_block *sb,struct statfs *buf, int);
 extern void fat_write_inode(struct inode *inode);
 
 /* dir.c */

@@ -544,7 +544,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	err = PTR_ERR(dentry);
 	if (!IS_ERR(dentry)) {
 		inode = dentry->d_inode;
-		atomic_inc(&inode->i_count);
+		inode->i_count++;	/* HATEFUL - we should use the dentry */
 		dput(dentry);
 		err = 0;
 	}
@@ -794,7 +794,7 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 	}
 	if (sk->protinfo.af_unix.inode)
 	{
-		atomic_inc(&sk->protinfo.af_unix.inode->i_count);
+		sk->protinfo.af_unix.inode->i_count++;	/* Should use dentry */
 		newsk->protinfo.af_unix.inode=sk->protinfo.af_unix.inode;
 	}
 		

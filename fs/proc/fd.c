@@ -14,7 +14,7 @@
 #include <linux/stat.h>
 
 static int proc_readfd(struct inode *, struct file *, void *, filldir_t);
-static int proc_lookupfd(struct inode *,struct qstr *,struct inode **);
+static int proc_lookupfd(struct inode *, struct dentry *);
 
 static struct file_operations proc_fd_operations = {
 	NULL,			/* lseek - default */
@@ -52,15 +52,24 @@ struct inode_operations proc_fd_inode_operations = {
 	NULL			/* permission */
 };
 
-static int proc_lookupfd(struct inode * dir, struct qstr *str, struct inode ** result)
+/*
+ * NOTE! Normally we'd indicate that a file does not
+ * exist by creating a negative dentry and returning
+ * a successful return code. However, for this case
+ * we do not want to create negative dentries, because
+ * the state of the world can change behind our backs.
+ *
+ * Thus just return -ENOENT instead.
+ */
+static int proc_lookupfd(struct inode * dir, struct dentry * dentry)
 {
 	unsigned int ino, pid, fd, c;
 	struct task_struct * p;
 	struct super_block * sb;
+	struct inode *inode;
 	const char *name;
 	int len;
 
-	*result = NULL;
 	ino = dir->i_ino;
 	pid = ino >> 16;
 	ino &= 0x0000ffff;
@@ -71,8 +80,8 @@ static int proc_lookupfd(struct inode * dir, struct qstr *str, struct inode ** r
 		return -ENOENT;
 
 	fd = 0;
-	len = str->len;
-	name = str->name;
+	len = dentry->d_name.len;
+	name = dentry->d_name.name;
 	while (len-- > 0) {
 		c = *name - '0';
 		name++;
@@ -105,8 +114,11 @@ static int proc_lookupfd(struct inode * dir, struct qstr *str, struct inode ** r
 
 	ino = (pid << 16) + (PROC_PID_FD_DIR << 8) + fd;
 
-	if (!(*result = proc_get_inode(sb, ino, NULL)))
+	inode = proc_get_inode(sb, ino, NULL);
+	if (!inode)
 		return -ENOENT;
+
+	d_add(dentry, inode);
 	return 0;
 }
 

@@ -48,8 +48,6 @@ static int cp_old_stat(struct inode * inode, struct __old_kernel_stat * statbuf)
 	tmp.st_gid = inode->i_gid;
 	tmp.st_rdev = kdev_t_to_nr(inode->i_rdev);
 	tmp.st_size = inode->i_size;
-	if (inode->i_pipe)
-		tmp.st_size = PIPE_SIZE(*inode);
 	tmp.st_atime = inode->i_atime;
 	tmp.st_mtime = inode->i_mtime;
 	tmp.st_ctime = inode->i_ctime;
@@ -72,8 +70,6 @@ static int cp_new_stat(struct inode * inode, struct stat * statbuf)
 	tmp.st_gid = inode->i_gid;
 	tmp.st_rdev = kdev_t_to_nr(inode->i_rdev);
 	tmp.st_size = inode->i_size;
-	if (inode->i_pipe)
-		tmp.st_size = PIPE_SIZE(*inode);
 	tmp.st_atime = inode->i_atime;
 	tmp.st_mtime = inode->i_mtime;
 	tmp.st_ctime = inode->i_ctime;

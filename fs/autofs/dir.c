@@ -37,9 +37,10 @@ static int autofs_dir_readdir(struct inode *inode, struct file *filp,
 /*
  * No entries except for "." and "..", both of which are handled by the VFS layer
  */
-static int autofs_dir_lookup(struct inode *dir, struct qstr *str, struct inode **result)
+static int autofs_dir_lookup(struct inode *dir, struct dentry * dentry)
 {
-	return -ENOENT;		/* No other entries */
+	d_add(dentry, NULL);
+	return 0;
 }
 
 static struct file_operations autofs_dir_operations = {

@@ -230,18 +230,26 @@ static unsigned int connect_poll(struct file * filp, poll_table * wait)
 	return POLLOUT | POLLWRNORM;
 }
 
+static int pipe_release(struct inode * inode)
+{
+	if (!PIPE_READERS(*inode) && !PIPE_READERS(*inode)) {
+		free_page((unsigned long) PIPE_BASE(*inode));
+		PIPE_BASE(*inode) = NULL;
+	}
+	wake_up_interruptible(&PIPE_WAIT(*inode));
+	return 0;
+}
+
 static int pipe_read_release(struct inode * inode, struct file * filp)
 {
 	PIPE_READERS(*inode)--;
-	wake_up_interruptible(&PIPE_WAIT(*inode));
-	return 0;
+	return pipe_release(inode);
 }
 
 static int pipe_write_release(struct inode * inode, struct file * filp)
 {
 	PIPE_WRITERS(*inode)--;
-	wake_up_interruptible(&PIPE_WAIT(*inode));
-	return 0;
+	return pipe_release(inode);
 }
 
 static int pipe_rdwr_release(struct inode * inode, struct file * filp)
@@ -250,8 +258,7 @@ static int pipe_rdwr_release(struct inode * inode, struct file * filp)
 		PIPE_READERS(*inode)--;
 	if (filp->f_mode & FMODE_WRITE)
 		PIPE_WRITERS(*inode)--;
-	wake_up_interruptible(&PIPE_WAIT(*inode));
-	return 0;
+	return pipe_release(inode);
 }
 
 static int pipe_read_open(struct inode * inode, struct file * filp)
@@ -369,6 +376,43 @@ struct file_operations rdwr_pipe_fops = {
 	pipe_rdwr_release,
 	NULL
 };
+
+static struct inode * get_pipe_inode(void)
+{
+	extern struct inode_operations pipe_inode_operations;
+	struct inode *inode = get_empty_inode();
+
+	if (inode) {
+		unsigned long page = __get_free_page(GFP_USER);
+
+		if (!page) {
+			iput(inode);
+			inode = NULL;
+		} else {
+			PIPE_BASE(*inode) = (char *) page;
+			inode->i_op = &pipe_inode_operations;
+			inode->i_count = 1;
+			PIPE_WAIT(*inode) = NULL;
+			PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
+			PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
+			PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
+			PIPE_LOCK(*inode) = 0;
+			/*
+			 * Mark the inode dirty from the very beginning,
+			 * that way it will never be moved to the dirty
+			 * list because "make_inode_dirty()" will think
+			 * that it already _is_ on the dirty list.
+			 */
+			inode->i_state = 1 << I_DIRTY;
+			inode->i_mode |= S_IFIFO | S_IRUSR | S_IWUSR;
+			inode->i_uid = current->fsuid;
+			inode->i_gid = current->fsgid;
+			inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+			inode->i_blksize = PAGE_SIZE;
+		}
+	}
+	return inode;
+}
 
 struct inode_operations pipe_inode_operations = {
 	&rdwr_pipe_fops,

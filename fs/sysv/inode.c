@@ -344,6 +344,7 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	struct buffer_head *bh;
 	const char *found;
 	kdev_t dev = sb->s_dev;
+	struct inode *root_inode;
 
 	if (1024 != sizeof (struct xenix_super_block))
 		panic("Xenix FS: bad super-block size");
@@ -483,9 +484,10 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	/* set up enough so that it can read an inode */
 	sb->s_dev = dev;
 	sb->s_op = &sysv_sops;
-	sb->s_mounted = iget(sb,SYSV_ROOT_INO);
+	root_inode = iget(sb,SYSV_ROOT_INO);
+	sb->s_root = d_alloc_root(root_inode, NULL);
 	unlock_super(sb);
-	if (!sb->s_mounted) {
+	if (!sb->s_root) {
 		printk("SysV FS: get root inode failed\n");
 		sysv_put_super(sb);
 		return NULL;
@@ -534,7 +536,7 @@ void sysv_put_super(struct super_block *sb)
 	MOD_DEC_USE_COUNT;
 }
 
-void sysv_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+int sysv_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
 	struct statfs tmp;
 
@@ -547,7 +549,7 @@ void sysv_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_ffree = sysv_count_free_inodes(sb);	/* free file nodes in fs */
 	tmp.f_namelen = SYSV_NAMELEN;
 	/* Don't know what value to put in tmp.f_fsid */ /* file system id */
-	copy_to_user(buf, &tmp, bufsiz);
+	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
 }
 
 
@@ -667,7 +669,7 @@ repeat:
 	}
 	*p = tmp;
 	inode->i_ctime = CURRENT_TIME;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	return result;
 }
 
@@ -900,13 +902,11 @@ static struct buffer_head * sysv_update_inode(struct inode * inode)
 		printk("Bad inode number on dev %s"
 		       ": %d is out of range\n",
 		       kdevname(inode->i_dev), ino);
-		inode->i_dirt = 0;
 		return 0;
 	}
 	block = sb->sv_firstinodezone + ((ino-1) >> sb->sv_inodes_per_block_bits);
 	if (!(bh = sv_bread(sb,inode->i_dev,block))) {
 		printk("unable to read i-node block\n");
-		inode->i_dirt = 0;
 		return 0;
 	}
 	raw_inode = (struct sysv_inode *) bh->b_data + ((ino-1) & sb->sv_inodes_per_block_1);
@@ -937,7 +937,6 @@ static struct buffer_head * sysv_update_inode(struct inode * inode)
 	else
 		for (block = 0; block < 10+1+1+1; block++)
 			write3byte(&raw_inode->i_a.i_addb[3*block],inode->u.sysv_i.i_data[block]);
-	inode->i_dirt=0;
 	mark_buffer_dirty(bh, 1);
 	return bh;
 }

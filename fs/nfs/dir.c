@@ -42,7 +42,7 @@ struct nfs_dirent {
 static int nfs_dir_open(struct inode * inode, struct file * file);
 static long nfs_dir_read(struct inode *, struct file *, char *, unsigned long);
 static int nfs_readdir(struct inode *, struct file *, void *, filldir_t);
-static int nfs_lookup(struct inode *, struct qstr *, struct inode **);
+static int nfs_lookup(struct inode *, struct dentry *);
 static int nfs_create(struct inode *, struct dentry *, int);
 static int nfs_mkdir(struct inode *, struct dentry *, int);
 static int nfs_rmdir(struct inode *, struct dentry *);
@@ -328,19 +328,17 @@ nfs_free_dircache(void)
 }
  
 
-static int nfs_lookup(struct inode *dir, struct qstr * __name,
-		      struct inode **result)
+static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 {
+	struct inode *inode;
 	struct nfs_fh fhandle;
 	struct nfs_fattr fattr;
-	int len = __name->len;
-	char name[len > NFS_MAXNAMLEN? 1 : len+1];
+	int len = dentry->d_name.len;
 	int error;
 
 	dfprintk(VFS, "NFS: lookup(%x/%ld, %.*s)\n",
-				dir->i_dev, dir->i_ino, len, __name->name);
+				dir->i_dev, dir->i_ino, len, dentry->d_name.name);
 
-	*result = NULL;
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		printk("nfs_lookup: inode is NULL or not a directory\n");
 		return -ENOENT;
@@ -349,17 +347,18 @@ static int nfs_lookup(struct inode *dir, struct qstr * __name,
 	if (len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
 
-	memcpy(name,__name->name,len);
-	name[len] = '\0';
+	error = nfs_proc_lookup(NFS_SERVER(dir), NFS_FH(dir), dentry->d_name.name, &fhandle, &fattr);
 
-	error = nfs_proc_lookup(NFS_SERVER(dir), NFS_FH(dir),
-		name, &fhandle, &fattr);
-	if (error)
+	inode = NULL;
+	if (!error) {
+		error = -ENOENT;
+		inode = nfs_fhget(dir->i_sb, &fhandle, &fattr);
+		if (!inode)
+			return -EACCES;
+	} else if (error != -ENOENT)
 		return error;
 
-	if (!(*result = nfs_fhget(dir->i_sb, &fhandle, &fattr)))
-		return -EACCES;
-
+	d_add(dentry, inode);
 	return 0;
 }
 
@@ -587,7 +586,7 @@ static int nfs_link(struct inode *inode, struct inode *dir, struct dentry *dentr
 	if (error)
 		return error;
 
-	atomic_inc(&inode->i_count);
+	inode->i_count++;
 	d_instantiate(dentry, inode);
 	return 0;
 }
@@ -647,8 +646,7 @@ void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 	int was_empty;
 
 	dfprintk(VFS, "NFS: refresh_inode(%x/%ld ct=%d)\n",
-		 inode->i_dev, inode->i_ino,
-		 atomic_read(&inode->i_count));
+		 inode->i_dev, inode->i_ino, inode->i_count);
 
 	if (!inode || !fattr) {
 		printk("nfs_refresh_inode: inode or fattr is NULL\n");

@@ -62,20 +62,6 @@ struct inode_operations isofs_dir_inode_operations =
 	NULL			/* permission */
 };
 
-static int parent_inode_number(struct inode * inode, struct iso_directory_record * de)
-{
-	int inode_number = inode->i_ino;
-
-	if ((inode->i_sb->u.isofs_sb.s_firstdatazone) != inode->i_ino)
-		inode_number = inode->u.isofs_i.i_backlink;
-
-	if (inode_number != -1)
-		return inode_number;
-
-	/* This should never happen, but who knows.  Try to be forgiving */
-	return isofs_lookup_grandparent(inode, find_rock_ridge_relocation(de, inode));
-}
-
 static int isofs_name_translate(char * old, int len, char * new)
 {
 	int i, c;
@@ -197,9 +183,7 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 
 		/* Handle the case of the '..' directory */
 		if (de->name_len[0] == 1 && de->name[0] == 1) {
-			inode_number = parent_inode_number(inode, de);
-			if (inode_number == -1)
-				break;
+			inode_number = filp->f_dentry->d_parent->d_inode->i_ino;
 			if (filldir(dirent, "..", 2, filp->f_pos, inode_number) < 0)
 				break;
 			filp->f_pos += de_len;

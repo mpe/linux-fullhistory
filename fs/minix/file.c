@@ -121,6 +121,6 @@ static long minix_file_write(struct inode * inode, struct file * filp,
 		inode->i_size = pos;
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	filp->f_pos = pos;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	return written;
 }

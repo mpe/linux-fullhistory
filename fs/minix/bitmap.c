@@ -256,7 +256,7 @@ struct inode * minix_new_inode(const struct inode * dir)
 	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->fsuid;
 	inode->i_gid = (dir->i_mode & S_ISGID) ? dir->i_gid : current->fsgid;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	inode->i_ino = j;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_op = NULL;

@@ -16,7 +16,7 @@
 #include "autofs_i.h"
 
 static int autofs_root_readdir(struct inode *,struct file *,void *,filldir_t);
-static int autofs_root_lookup(struct inode *,struct qstr *,struct inode **);
+static int autofs_root_lookup(struct inode *,struct dentry *);
 static int autofs_root_symlink(struct inode *,struct dentry *,const char *);
 static int autofs_root_unlink(struct inode *,struct dentry *);
 static int autofs_root_rmdir(struct inode *,struct dentry *);
@@ -93,64 +93,105 @@ static int autofs_root_readdir(struct inode *inode, struct file *filp,
 	return 0;
 }
 
-static int autofs_root_lookup(struct inode *dir, struct qstr *str, struct inode **result)
+static int try_to_fill_dentry(struct dentry * dentry, struct super_block * sb, struct autofs_sb_info *sbi)
+{
+	struct inode * inode;
+	struct autofs_dir_ent *ent;
+	
+	while (!(ent = autofs_hash_lookup(&sbi->dirhash, &dentry->d_name))) {
+		int status = autofs_wait(sbi, &dentry->d_name);
+
+		/* Turn this into a real negative dentry? */
+		if (status == -ENOENT) {
+			dentry->d_flags = 0;
+			return 0;
+		}
+		if (status)
+			return status;
+	}
+
+	if (!dentry->d_inode) {
+		inode = iget(sb, ent->ino);
+		if (!inode)
+			return -EACCES;
+
+		dentry->d_inode = inode;
+	}
+
+	if (S_ISDIR(dentry->d_inode->i_mode)) {
+		while (dentry == dentry->d_mounts)
+			schedule();
+	}
+	dentry->d_flags = 0;
+	return 0;
+}
+
+
+/*
+ * Revalidate is called on every cache lookup.  Some of those
+ * cache lookups may actually happen while the dentry is not
+ * yet completely filled in, and revalidate has to delay such
+ * lookups..
+ */
+static struct dentry * autofs_revalidate(struct dentry * dentry)
 {
 	struct autofs_sb_info *sbi;
-	struct autofs_dir_ent *ent;
+	struct inode * dir = dentry->d_parent->d_inode;
+
+	sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
+
+	/* Incomplete dentry? */
+	if (dentry->d_flags) {
+		if (autofs_oz_mode(sbi))
+			return dentry;
+
+		try_to_fill_dentry(dentry, dir->i_sb, sbi);
+		return dentry;
+	}
+
+	/* Negative dentry.. Should we time these out? */
+	if (!dentry->d_inode)
+		return dentry;
+
+	/* We should update the usage stuff here.. */
+	return dentry;
+}
+
+static int autofs_root_lookup(struct inode *dir, struct dentry * dentry)
+{
+	struct autofs_sb_info *sbi;
 	struct inode *res;
-	int status, oz_mode;
+	int oz_mode;
 
 	DPRINTK(("autofs_root_lookup: name = "));
-	autofs_say(str->name,str->len);
+	autofs_say(dentry->d_name.name,dentry->d_name.len);
 
-	*result = NULL;
-	if (!dir)
-		return -ENOENT;
 	if (!S_ISDIR(dir->i_mode))
 		return -ENOTDIR;
 
-	*result = res = NULL;
+	res = NULL;
 	sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
 
 	oz_mode = autofs_oz_mode(sbi);
 	DPRINTK(("autofs_lookup: pid = %u, pgrp = %u, catatonic = %d, oz_mode = %d\n", current->pid, current->pgrp, sbi->catatonic, oz_mode));
 
-	do {
-		while ( !(ent = autofs_hash_lookup(&sbi->dirhash,str)) ) {
-			DPRINTK(("lookup failed, pid = %u, pgrp = %u\n", current->pid, current->pgrp));
-			
-			if ( oz_mode )
-				return -ENOENT;
-			up(&dir->i_sem);
-			status = autofs_wait(sbi,str);
-			down(&dir->i_sem);
-			DPRINTK(("autofs_wait returned %d\n", status));
-			if ( status )
-				return status;
-		}
+	/*
+	 * Mark the dentry incomplete, but add it. This is needed so
+	 * that the VFS layer knows about the dentry, and we can count
+	 * on catching any lookups through the revalidate.
+	 *
+	 * Let all the hard work be done by the revalidate function that
+	 * needs to be able to do this anyway..
+	 *
+	 * We need to do this before we release the directory semaphore.
+	 */
+	dentry->d_revalidate = autofs_revalidate;
+	dentry->d_flags = 1;
+	d_add(dentry, NULL);
 
-		DPRINTK(("lookup successful, inode = %08x\n", (unsigned int)ent->ino));
-
-		if (!(res = iget(dir->i_sb,ent->ino))) {
-			printk("autofs: iget returned null!\n");
-			return -EACCES;
-		}
-		
-		if ( !oz_mode && S_ISDIR(res->i_mode) && i_dentry(res)->d_covers == i_dentry(res)) {
-			/* Not a mount point yet, call 1-800-DAEMON */
-			DPRINTK(("autofs: waiting on non-mountpoint dir, inode = %lu, pid = %u, pgrp = %u\n", res->i_ino, current->pid, current->pgrp));
-			iput(res);
-			res = NULL;
-			up(&dir->i_sem);
-			status = autofs_wait(sbi,str);
-			down(&dir->i_sem);
-			if ( status )
-				return status;
-		}
-	} while(!res);
-	autofs_update_usage(&sbi->dirhash,ent);
-	
-	*result = res;
+	up(&dir->i_sem);
+	autofs_revalidate(dentry);
+	down(&dir->i_sem);
 	return 0;
 }
 
@@ -164,7 +205,7 @@ static int autofs_root_symlink(struct inode *dir, struct dentry *dentry, const c
 	struct autofs_symlink *sl;
 
 	DPRINTK(("autofs_root_symlink: %s <- ", symname));
-	autofs_say(name,len);
+	autofs_say(dentry->d_name.name,dentry->d_name.len);
 
 	if ( !autofs_oz_mode(sbi) )
 		return -EPERM;

@@ -31,10 +31,20 @@
 
 static int ext2_update_inode(struct inode * inode, int do_sync);
 
+/*
+ * Called at each iput()
+ */
 void ext2_put_inode (struct inode * inode)
 {
 	ext2_discard_prealloc (inode);
-	if (inode->i_nlink || inode->i_ino == EXT2_ACL_IDX_INO ||
+}
+
+/*
+ * Called at the last iput() if i_nlink is zero.
+ */
+void ext2_delete_inode (struct inode * inode)
+{
+	if (inode->i_ino == EXT2_ACL_IDX_INO ||
 	    inode->i_ino == EXT2_ACL_DATA_INO)
 		return;
 	inode->u.ext2_i.i_dtime	= CURRENT_TIME;

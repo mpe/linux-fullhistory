@@ -877,7 +877,7 @@ static int vfat_find(struct inode *dir,const char *name,int len,
 
 		PRINTK(("vfat_find: create file 4\n"));
 		dir->i_ctime = dir->i_mtime = dir->i_atime = CURRENT_TIME;
-		dir->i_dirt = 1;
+		mark_inode_dirty(dir);
 
 		PRINTK(("vfat_find: create file 5\n"));
 
@@ -1010,7 +1010,7 @@ static int vfat_create_entry(struct inode *dir,const char *name,int len,
 		return -EIO;
 	(*result)->i_mtime = (*result)->i_atime = (*result)->i_ctime =
 	    CURRENT_TIME;
-	(*result)->i_dirt = 1;
+	mark_inode_dirty(*result);
 	(*result)->i_version = ++event;
 	dir->i_version = event;
 
@@ -1046,7 +1046,7 @@ static int vfat_create_a_dotdir(struct inode *dir,struct inode *parent,
 	 * XXX all times should be set by caller upon successful completion.
 	 */
 	dir->i_atime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
-	dir->i_dirt = 1;
+	mark_inode_dirty(dir);
 	memcpy(de->name,name,MSDOS_NAME);
 	memset(de->unused, 0, sizeof(de->unused));
 	de->lcase = 0;
@@ -1062,7 +1062,7 @@ static int vfat_create_a_dotdir(struct inode *dir,struct inode *parent,
 		vfat_read_inode(dot);
 	if (!dot) return -EIO;
 	dot->i_mtime = dot->i_atime = CURRENT_TIME;
-	dot->i_dirt = 1;
+	mark_inode_dirty(dot);
 	if (isdot) {
 		dot->i_size = dir->i_size;
 		MSDOS_I(dot)->i_start = MSDOS_I(dir)->i_start;
@@ -1173,7 +1173,8 @@ static int vfat_rmdir_free_ino(struct inode *dir,struct buffer_head *bh,
 	inode->i_mtime = dir->i_mtime = CURRENT_TIME;
 	inode->i_atime = dir->i_atime = CURRENT_TIME;
 	dir->i_nlink--;
-	inode->i_dirt = dir->i_dirt = 1;
+	mark_inode_dirty(dir);
+	mark_inode_dirty(inode);
 	de->name[0] = DELETED_FLAG;
 	fat_mark_buffer_dirty(sb, bh, 1);
 	iput(inode);
@@ -1196,7 +1197,8 @@ static int vfat_unlink_free_ino(struct inode *dir,struct buffer_head *bh,
 	inode->i_atime = dir->i_atime = CURRENT_TIME;
 	dir->i_version = ++event;
 	MSDOS_I(inode)->i_busy = 1;
-	inode->i_dirt = dir->i_dirt = 1;
+	mark_inode_dirty(dir);
+	mark_inode_dirty(inode);
 	de->name[0] = DELETED_FLAG;
 	fat_mark_buffer_dirty(sb, bh, 1);
 
@@ -1478,7 +1480,7 @@ int vfat_rename(struct inode *old_dir,const char *old_name,int old_len,
 	MSDOS_I(new_inode)->i_oldlink = old_inode;
 	fat_cache_inval_inode(old_inode);
 	PRINTK(("vfat_rename 15: old_slots=%d\n",old_slots));
-	old_inode->i_dirt = 1;
+	mark_inode_dirty(old_inode);
 	old_dir->i_version = ++event;
 
 	/* remove the old entry */
@@ -1511,7 +1513,7 @@ int vfat_rename(struct inode *old_dir,const char *old_name,int old_len,
 		}
 		dotdot_de->start = MSDOS_I(dotdot_inode)->i_start =
 		    MSDOS_I(new_dir)->i_start;
-		dotdot_inode->i_dirt = 1;
+		mark_inode_dirty(dotdot_inode);
 		fat_mark_buffer_dirty(sb, dotdot_bh, 1);
 		old_dir->i_nlink--;
 		new_dir->i_nlink++;

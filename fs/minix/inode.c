@@ -307,7 +307,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 	return s;
 }
 
-void minix_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+int minix_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
 	struct statfs tmp;
 
@@ -319,7 +319,7 @@ void minix_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_files = sb->u.minix_sb.s_ninodes;
 	tmp.f_ffree = minix_count_free_inodes(sb);
 	tmp.f_namelen = sb->u.minix_sb.s_namelen;
-	copy_to_user(buf, &tmp, bufsiz);
+	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
 }
 
 /*
@@ -472,7 +472,7 @@ repeat:
 	}
 	*p = tmp;
 	inode->i_ctime = CURRENT_TIME;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	return result;
 }
 
@@ -585,7 +585,7 @@ repeat:
 	}
 	*p = tmp;
 	inode->i_ctime = CURRENT_TIME;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	return result;
 }
 
@@ -833,14 +833,12 @@ static struct buffer_head * V1_minix_update_inode(struct inode * inode)
 		printk("Bad inode number on dev %s"
 		       ": %d is out of range\n",
 			kdevname(inode->i_dev), ino);
-		inode->i_dirt = 0;
 		return 0;
 	}
 	block = 2 + inode->i_sb->u.minix_sb.s_imap_blocks + inode->i_sb->u.minix_sb.s_zmap_blocks +
 		(ino-1)/MINIX_INODES_PER_BLOCK;
 	if (!(bh=bread(inode->i_dev, block, BLOCK_SIZE))) {
 		printk("unable to read i-node block\n");
-		inode->i_dirt = 0;
 		return 0;
 	}
 	raw_inode = ((struct minix_inode *)bh->b_data) +
@@ -855,7 +853,6 @@ static struct buffer_head * V1_minix_update_inode(struct inode * inode)
 		raw_inode->i_zone[0] = kdev_t_to_nr(inode->i_rdev);
 	else for (block = 0; block < 9; block++)
 		raw_inode->i_zone[block] = inode->u.minix_i.u.i1_data[block];
-	inode->i_dirt=0;
 	mark_buffer_dirty(bh, 1);
 	return bh;
 }
@@ -874,14 +871,12 @@ static struct buffer_head * V2_minix_update_inode(struct inode * inode)
 		printk("Bad inode number on dev %s"
 		       ": %d is out of range\n",
 			kdevname(inode->i_dev), ino);
-		inode->i_dirt = 0;
 		return 0;
 	}
 	block = 2 + inode->i_sb->u.minix_sb.s_imap_blocks + inode->i_sb->u.minix_sb.s_zmap_blocks +
 		(ino-1)/MINIX2_INODES_PER_BLOCK;
 	if (!(bh=bread(inode->i_dev, block, BLOCK_SIZE))) {
 		printk("unable to read i-node block\n");
-		inode->i_dirt = 0;
 		return 0;
 	}
 	raw_inode = ((struct minix2_inode *)bh->b_data) +
@@ -898,7 +893,6 @@ static struct buffer_head * V2_minix_update_inode(struct inode * inode)
 		raw_inode->i_zone[0] = kdev_t_to_nr(inode->i_rdev);
 	else for (block = 0; block < 10; block++)
 		raw_inode->i_zone[block] = inode->u.minix_i.u.i2_data[block];
-	inode->i_dirt=0;
 	mark_buffer_dirty(bh, 1);
 	return bh;
 }

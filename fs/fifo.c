@@ -153,7 +153,6 @@ struct inode_operations fifo_inode_operations = {
 void init_fifo(struct inode * inode)
 {
 	inode->i_op = &fifo_inode_operations;
-	inode->i_pipe = 1;
 	PIPE_LOCK(*inode) = 0;
 	PIPE_BASE(*inode) = NULL;
 	PIPE_START(*inode) = PIPE_LEN(*inode) = 0;

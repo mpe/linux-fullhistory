@@ -237,38 +237,23 @@ void put_write_access(struct inode * inode)
  */
 static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
 {
+	struct dentry * result;
 	struct inode *dir = parent->d_inode;
-	struct dentry *result;
-	struct inode *inode;
-	int error = -ENOTDIR;
 
-	down(&dir->i_sem);
-
-	error = -ENOTDIR;
-	if (dir->i_op && dir->i_op->lookup)
-		error = dir->i_op->lookup(dir, name, &inode);
-	result = ERR_PTR(error);
-
-	if (!error || error == -ENOENT) {
-		struct dentry *new;
-
-		if (error)
-			inode = NULL;
-
-		new = d_alloc(parent, name);
-
-		/*
-		 * Ok, now we can't sleep any more. Double-check that
-		 * nobody else added this in the meantime..
-		 */
+	result = ERR_PTR(-ENOTDIR);
+	if (dir->i_op && dir->i_op->lookup) {
+		down(&dir->i_sem);
 		result = d_lookup(parent, name);
-		if (result) {
-			d_free(new);
-			iput(inode);
-		} else {
-			d_add(new, inode);
-			result = new;
+		if (!result) {
+			int error;
+			result = d_alloc(parent, name);
+			error = dir->i_op->lookup(dir, result);
+			if (error) {
+				d_free(result);
+				result = ERR_PTR(error);
+			}
 		}
+		up(&dir->i_sem);
 	}
 	up(&dir->i_sem);
 	return result;
@@ -280,8 +265,11 @@ static struct dentry * cached_lookup(struct dentry * parent, struct qstr * name)
 	struct dentry * dentry = d_lookup(parent, name);
 
 	if (dentry) {
-		if (dentry->d_revalidate)
+		if (dentry->d_revalidate) {
+			/* spin_unlock(&dentry_lock); */
 			dentry = dentry->d_revalidate(dentry);
+			/* spin_lock(&dentry_lock); */
+		}
 
 		/*
 		 * The parent d_count _should_ be at least 2: one for the

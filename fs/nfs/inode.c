@@ -36,15 +36,17 @@
 
 static int nfs_notify_change(struct inode *, struct iattr *);
 static void nfs_put_inode(struct inode *);
+static void nfs_delete_inode(struct inode *);
 static void nfs_put_super(struct super_block *);
 static void nfs_read_inode(struct inode *);
 static int nfs_statfs(struct super_block *, struct statfs *, int bufsiz);
 
 static struct super_operations nfs_sops = { 
 	nfs_read_inode,		/* read inode */
-	nfs_notify_change,	/* notify change */
 	NULL,			/* write inode */
 	nfs_put_inode,		/* put inode */
+	nfs_delete_inode,	/* delete inode */
+	nfs_notify_change,	/* notify change */
 	nfs_put_super,		/* put superblock */
 	NULL,			/* write superblock */
 	nfs_statfs,		/* stat filesystem */
@@ -73,9 +75,16 @@ static void
 nfs_put_inode(struct inode * inode)
 {
 	dprintk("NFS: put_inode(%x/%ld)\n", inode->i_dev, inode->i_ino);
+}
 
-	if (inode->i_pipe)
-		clear_inode(inode);
+/*
+ * This should do any silly-rename cleanups once we
+ * get silly-renaming working again..
+ */
+static void
+nfs_delete_inode(struct inode * inode)
+{
+	dprintk("NFS: delete_inode(%x/%ld)\n", inode->i_dev, inode->i_ino);
 }
 
 void
@@ -316,7 +325,7 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
 	}
 	dprintk("NFS: fhget(%x/%ld ct=%d)\n",
 		inode->i_dev, inode->i_ino,
-		atomic_read(&inode->i_count));
+		inode->i_count);
 
 	return inode;
 }

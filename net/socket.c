@@ -206,6 +206,19 @@ static int get_fd(struct inode *inode)
 			return -ENFILE;
 		}
 
+		file->f_dentry = d_alloc_root(inode, NULL);
+		if (!file->f_dentry) {
+			put_filp(file);
+			put_unused_fd(fd);
+			return -ENOMEM;
+		}
+
+		/*
+		 * The socket maintains a reference to the inode, so we
+		 * have to increment the count.
+		 */
+		inode->i_count++;
+
 		current->files->fd[fd] = file;
 		file->f_op = &socket_file_ops;
 		file->f_mode = 3;

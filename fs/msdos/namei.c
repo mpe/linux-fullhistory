@@ -280,7 +280,7 @@ static int msdos_create_entry(struct inode *dir, const char *name,int len,
 	 * XXX all times should be set by caller upon successful completion.
 	 */
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
-	dir->i_dirt = 1;
+	mark_inode_dirty(dir);
 	memcpy(de->name,name,MSDOS_NAME);
 	memset(de->unused, 0, sizeof(de->unused));
 	de->attr = is_dir ? ATTR_DIR : ATTR_ARCH;
@@ -295,7 +295,7 @@ static int msdos_create_entry(struct inode *dir, const char *name,int len,
 	if (!*result) return -EIO;
 	(*result)->i_mtime = (*result)->i_atime = (*result)->i_ctime =
 	    CURRENT_TIME;
-	(*result)->i_dirt = 1;
+	mark_inode_dirty(*result);
 	return 0;
 }
 
@@ -415,7 +415,8 @@ int msdos_rmdir(struct inode *dir,const char *name,int len)
 	inode->i_nlink = 0;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_nlink--;
-	inode->i_dirt = dir->i_dirt = 1;
+	mark_inode_dirty(inode);
+	mark_inode_dirty(dir);
 	de->name[0] = DELETED_FLAG;
 	fat_mark_buffer_dirty(sb, bh, 1);
 	res = 0;
@@ -465,7 +466,7 @@ int msdos_mkdir(struct inode *dir,const char *name,int len,int mode)
 	dot->i_size = inode->i_size; /* doesn't grow in the 2nd create_entry */
 	MSDOS_I(dot)->i_start = MSDOS_I(inode)->i_start;
 	dot->i_nlink = inode->i_nlink;
-	dot->i_dirt = 1;
+	mark_inode_dirty(dot);
 	iput(dot);
 	if ((res = msdos_create_entry(inode,MSDOS_DOTDOT,2,1,0,&dot)) < 0)
 		goto mkdir_error;
@@ -473,7 +474,7 @@ int msdos_mkdir(struct inode *dir,const char *name,int len,int mode)
 	dot->i_size = dir->i_size;
 	MSDOS_I(dot)->i_start = MSDOS_I(dir)->i_start;
 	dot->i_nlink = dir->i_nlink;
-	dot->i_dirt = 1;
+	mark_inode_dirty(dot);
 	MSDOS_I(inode)->i_busy = 0;
 	iput(dot);
 	iput(inode);
@@ -519,7 +520,8 @@ static int msdos_unlinkx(
 	inode->i_nlink = 0;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	MSDOS_I(inode)->i_busy = 1;
-	inode->i_dirt = dir->i_dirt = 1;
+	mark_inode_dirty(inode);
+	mark_inode_dirty(dir);
 	de->name[0] = DELETED_FLAG;
 	fat_mark_buffer_dirty(sb, bh, 1);
 unlink_done:
@@ -580,11 +582,11 @@ static int rename_same_dir(struct inode *old_dir,char *old_name,int old_len,
 		}
 		if (S_ISDIR(new_inode->i_mode)) {
 			new_dir->i_nlink--;
-			new_dir->i_dirt = 1;
+			mark_inode_dirty(new_dir);
 		}
 		new_inode->i_nlink = 0;
 		MSDOS_I(new_inode)->i_busy = 1;
-		new_inode->i_dirt = 1;
+		mark_inode_dirty(new_inode);
 		new_de->name[0] = DELETED_FLAG;
 		fat_mark_buffer_dirty(sb, new_bh, 1);
 		iput(new_inode);
@@ -675,7 +677,7 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
 		}
 		new_inode->i_nlink = 0;
 		MSDOS_I(new_inode)->i_busy = 1;
-		new_inode->i_dirt = 1;
+		mark_inode_dirty(new_inode);
 		new_de->name[0] = DELETED_FLAG;
 		fat_mark_buffer_dirty(sb, new_bh, 1);
 	}
@@ -696,14 +698,14 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
 	}
 	if (exists && S_ISDIR(new_inode->i_mode)) {
 		new_dir->i_nlink--;
-		new_dir->i_dirt = 1;
+		mark_inode_dirty(new_dir);
 	}
 	msdos_read_inode(free_inode);
 	MSDOS_I(old_inode)->i_busy = 1;
 	MSDOS_I(old_inode)->i_linked = free_inode;
 	MSDOS_I(free_inode)->i_oldlink = old_inode;
 	fat_cache_inval_inode(old_inode);
-	old_inode->i_dirt = 1;
+	mark_inode_dirty(old_inode);
 	old_de->name[0] = DELETED_FLAG;
 	fat_mark_buffer_dirty(sb, old_bh, 1);
 	fat_mark_buffer_dirty(sb, free_bh, 1);
@@ -726,7 +728,7 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
 		}
 		dotdot_de->start = MSDOS_I(dotdot_inode)->i_start =
 		    MSDOS_I(new_dir)->i_start;
-		dotdot_inode->i_dirt = 1;
+		mark_inode_dirty(dotdot_inode);
 		fat_mark_buffer_dirty(sb, dotdot_bh, 1);
 		old_dir->i_nlink--;
 		new_dir->i_nlink++;
@@ -793,6 +795,7 @@ struct inode_operations msdos_dir_inode_operations = {
 	NULL,			/* mknod */
 	msdos_rename,		/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	fat_bmap,		/* bmap */

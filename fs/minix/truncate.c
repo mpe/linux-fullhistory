@@ -58,7 +58,7 @@ repeat:
 			continue;
 		}
 		*p = 0;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 		if (bh) {
 			mark_buffer_clean(bh);
 			brelse(bh);
@@ -167,7 +167,7 @@ repeat:
 		else {
 			tmp = *p;
 			*p = 0;
-			inode->i_dirt = 1;
+			mark_inode_dirty(inode);
 			minix_free_block(inode->i_sb,tmp);
 		}
 	brelse(dind_bh);
@@ -191,7 +191,7 @@ void V1_minix_truncate(struct inode * inode)
 		schedule();
 	}
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 }
 
 /*
@@ -220,7 +220,7 @@ repeat:
 			continue;
 		}
 		*p = 0;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 		if (bh) {
 			mark_buffer_clean(bh);
 			brelse(bh);
@@ -329,7 +329,7 @@ repeat:
 		else {
 			tmp = *p;
 			*p = 0;
-			inode->i_dirt = 1;
+			mark_inode_dirty(inode);
 			minix_free_block(inode->i_sb,tmp);
 		}
 	brelse(dind_bh);
@@ -374,7 +374,7 @@ repeat:
                 else {
                         tmp = *p;
                         *p = 0;
-                        inode->i_dirt = 1;
+                        mark_inode_dirty(inode);
                         minix_free_block(inode->i_sb,tmp);
 		}
         brelse(tind_bh);
@@ -402,7 +402,7 @@ static void V2_minix_truncate(struct inode * inode)
 		schedule();
 	}
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 }
 
 /*

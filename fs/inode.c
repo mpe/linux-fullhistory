@@ -104,6 +104,7 @@ static inline void init_once(struct inode * inode)
 	memset(inode, 0, sizeof(*inode));
 	init_waitqueue(&inode->i_wait);
 	INIT_LIST_HEAD(&inode->i_dentry);
+	INIT_LIST_HEAD(&inode->i_hash);
 	sema_init(&inode->i_sem, 1);
 }
 
@@ -192,18 +193,13 @@ void clear_inode(struct inode *inode)
 	if (IS_WRITABLE(inode) && inode->i_sb && inode->i_sb->dq_op)
 		inode->i_sb->dq_op->drop(inode);
 
-	spin_lock(&inode_lock);
 	inode->i_state = 0;
-	list_del(&inode->i_hash);
-	list_del(&inode->i_list);
-	list_add(&inode->i_list, &inode_unused);
-	spin_unlock(&inode_lock);
 }
 
 #define CAN_UNUSE(inode) \
-	((atomic_read(&(inode)->i_count) == 0) && \
+	(((inode)->i_count == 0) && \
 	 ((inode)->i_nrpages == 0) && \
-	 (!test_bit(I_LOCK, &(inode)->i_state)))
+	 (!(inode)->i_state))
 
 static void invalidate_list(struct list_head *head, kdev_t dev)
 {
@@ -223,6 +219,7 @@ static void invalidate_list(struct list_head *head, kdev_t dev)
 		if (!CAN_UNUSE(inode))
 			continue;
 		list_del(&inode->i_hash);
+		INIT_LIST_HEAD(&inode->i_hash);
 		list_del(&inode->i_list);
 		list_add(&inode->i_list, &inode_unused);
 	}
@@ -257,6 +254,7 @@ static void try_to_free_inodes(void)
 		inode = list_entry(tmp, struct inode, i_list);
 		if (CAN_UNUSE(inode)) {
 			list_del(&inode->i_hash);
+			INIT_LIST_HEAD(&inode->i_hash);
 			head = &inode_unused;
 		}
 		list_add(tmp, head);
@@ -280,7 +278,7 @@ static struct inode * find_inode(struct super_block * sb, unsigned long ino, str
 			continue;
 		if (inode->i_ino != ino)
 			continue;
-		atomic_inc(&inode->i_count);
+		inode->i_count++;
 		break;
 	}
 	return inode;
@@ -296,10 +294,9 @@ static struct inode * find_inode(struct super_block * sb, unsigned long ino, str
 void clean_inode(struct inode *inode)
 {
 	memset(&inode->u, 0, sizeof(inode->u));
-	inode->i_pipe = 0;
 	inode->i_sock = 0;
 	inode->i_op = NULL;
-	inode->i_nlink = 1;
+	inode->i_nlink = 0;
 	inode->i_writecount = 0;
 	memset(&inode->i_dquot, 0, sizeof(inode->i_dquot));
 	sema_init(&inode->i_sem, 1);
@@ -322,15 +319,15 @@ struct inode * get_empty_inode(void)
 	struct list_head * tmp;
 
 	spin_lock(&inode_lock);
+	try_to_free_inodes();
 	tmp = inode_unused.next;
 	if (tmp != &inode_unused) {
 		list_del(tmp);
 		inode = list_entry(tmp, struct inode, i_list);
 add_new_inode:
-		INIT_LIST_HEAD(&inode->i_hash);
 		inode->i_sb = NULL;
 		inode->i_ino = ++last_ino;
-		atomic_set(&inode->i_count, 1);
+		inode->i_count = 1;
 		list_add(&inode->i_list, &inode_in_use);
 		inode->i_state = 0;
 		spin_unlock(&inode_lock);
@@ -347,44 +344,6 @@ add_new_inode:
 	if (inode)
 		goto add_new_inode;
 
-	return inode;
-}
-
-struct inode * get_pipe_inode(void)
-{
-	extern struct inode_operations pipe_inode_operations;
-	struct inode *inode = get_empty_inode();
-
-	if (inode) {
-		unsigned long page = __get_free_page(GFP_USER);
-
-		if (!page) {
-			iput(inode);
-			inode = NULL;
-		} else {
-			PIPE_BASE(*inode) = (char *) page;
-			inode->i_op = &pipe_inode_operations;
-			atomic_set(&inode->i_count, 1);
-			PIPE_WAIT(*inode) = NULL;
-			PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
-			PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
-			PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
-			PIPE_LOCK(*inode) = 0;
-			/*
-			 * Mark the inode dirty from the very beginning,
-			 * that way it will never be moved to the dirty
-			 * list because "make_inode_dirty()" will think
-			 * that it already _is_ on the dirty list.
-			 */
-			inode->i_state = 1 << I_DIRTY;
-			inode->i_pipe = 1;
-			inode->i_mode |= S_IFIFO | S_IRUSR | S_IWUSR;
-			inode->i_uid = current->fsuid;
-			inode->i_gid = current->fsgid;
-			inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-			inode->i_blksize = PAGE_SIZE;
-		}
-	}
 	return inode;
 }
 
@@ -406,7 +365,7 @@ add_new_inode:
 		inode->i_dev = sb->s_dev;
 		inode->i_ino = ino;
 		inode->i_flags = sb->s_flags;
-		atomic_set(&inode->i_count, 1);
+		inode->i_count = 1;
 		inode->i_state = 1 << I_LOCK;
 		spin_unlock(&inode_lock);
 		clean_inode(inode);
@@ -466,27 +425,31 @@ void insert_inode_hash(struct inode *inode)
 void iput(struct inode *inode)
 {
 	if (inode) {
-		if (inode->i_pipe)
-			wake_up_interruptible(&PIPE_WAIT(*inode));
+		struct super_operations *op = NULL;
 
-		/*
-		 * Last user dropping the inode?
-		 */
-		if (atomic_read(&inode->i_count) == 1) {
-			void (*put)(struct inode *);
+		if (inode->i_sb && inode->i_sb->s_op)
+			op = inode->i_sb->s_op;
+		if (op && op->put_inode)
+			op->put_inode(inode);
 
-			if (inode->i_pipe) {
-				free_page((unsigned long)PIPE_BASE(*inode));
-				PIPE_BASE(*inode)= NULL;
+		spin_lock(&inode_lock);
+		if (!--inode->i_count) {
+			if (!inode->i_nlink) {
+				list_del(&inode->i_hash);
+				INIT_LIST_HEAD(&inode->i_hash);
+				if (op && op->delete_inode) {
+					void (*delete)(struct inode *) = op->delete_inode;
+					spin_unlock(&inode_lock);
+					delete(inode);
+					spin_lock(&inode_lock);
+				}
 			}
-
-			if (inode->i_sb && inode->i_sb->s_op) {
-				put = inode->i_sb->s_op->put_inode;
-				if (put)
-					put(inode);
+			if (list_empty(&inode->i_hash)) {
+				list_del(&inode->i_list);
+				list_add(&inode->i_list, &inode_unused);
 			}
 		}
-		atomic_dec(&inode->i_count);
+		spin_unlock(&inode_lock);
 	}
 }
 

@@ -155,31 +155,26 @@ failure:
 	return NULL;
 }
 
-int ext2_lookup(struct inode * dir, struct qstr *name, struct inode ** result)
+int ext2_lookup(struct inode * dir, struct dentry *dentry)
 {
-	unsigned long ino;
+	struct inode * inode;
 	struct ext2_dir_entry * de;
 	struct buffer_head * bh;
 
-	*result = NULL;
-	if (!dir)
-		return -ENOENT;
-
-	if (!S_ISDIR(dir->i_mode))
-		return -ENOTDIR;
-
-	if (name->len > EXT2_NAME_LEN)
+	if (dentry->d_name.len > EXT2_NAME_LEN)
 		return -ENAMETOOLONG;
 
-	ino = dir->i_version;
-	if (!(bh = ext2_find_entry (dir, name->name, name->len, &de)))
-		return -ENOENT;
+	bh = ext2_find_entry (dir, dentry->d_name.name, dentry->d_name.len, &de);
+	inode = NULL;
+	if (bh) {
+		unsigned long ino = le32_to_cpu(de->inode);
+		brelse (bh);
+		inode = iget(dir->i_sb, ino);
 
-	ino = le32_to_cpu(de->inode);
-	brelse (bh);
-	if (!(*result = iget (dir->i_sb, ino)))
-		return -EACCES;
-
+		if (!inode)
+			return -EACCES;
+	}
+	d_add(dentry, inode);
 	return 0;
 }
 
@@ -613,7 +608,7 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 	else if (le32_to_cpu(de->inode) != inode->i_ino)
 		retval = -ENOENT;
 	else {
-		if (atomic_read(&inode->i_count) > 1) {
+		if (inode->i_count > 1) {
 		/*
 		 * Are we deleting the last instance of a busy directory?
 		 * Better clean up if so.
@@ -809,42 +804,36 @@ int ext2_link (struct inode * inode, struct inode * dir, struct dentry *dentry)
 	inode->i_nlink++;
 	inode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(inode);
-	atomic_inc(&inode->i_count);
+	inode->i_count++;
 	d_instantiate(dentry, inode);
 	return 0;
 }
 
-static int subdir (struct inode * new_inode, struct inode * old_inode)
+/*
+ * Trivially implemented using the dcache structure
+ */
+static int subdir (struct dentry * new_dentry, struct dentry * old_dentry)
 {
-	int ino;
 	int result;
 
-	atomic_inc(&new_inode->i_count);
 	result = 0;
 	for (;;) {
-		if (new_inode == old_inode) {
-			result = 1;
-			break;
+		if (new_dentry != old_dentry) {
+			struct dentry * parent = new_dentry->d_parent;
+			if (parent == new_dentry)
+				break;
+			new_dentry = parent;
+			continue;
 		}
-		if (new_inode->i_dev != old_inode->i_dev)
-			break;
-		ino = new_inode->i_ino;
-		if (ext2_lookup (new_inode, &(struct qstr) { "..", 2, 0 }, &new_inode))
-			break;
-		if (new_inode->i_ino == ino)
-			break;
+		result = 1;
+		break;
 	}
-	iput (new_inode);
 	return result;
 }
 
 #define PARENT_INO(buffer) \
 	((struct ext2_dir_entry *) ((char *) buffer + \
 	le16_to_cpu(((struct ext2_dir_entry *) buffer)->rec_len)))->inode
-
-#define PARENT_NAME(buffer) \
-	((struct ext2_dir_entry *) ((char *) buffer + \
-	le16_to_cpu(((struct ext2_dir_entry *) buffer)->rec_len)))->name
 
 /*
  * rename uses retrying to avoid race-conditions: at least they should be
@@ -906,13 +895,13 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 		if (!S_ISDIR(old_inode->i_mode))
 			goto end_rename;
 		retval = -EINVAL;
-		if (subdir (new_dir, old_inode))
+		if (subdir(new_dentry, old_dentry))
 			goto end_rename;
 		retval = -ENOTEMPTY;
 		if (!empty_dir (new_inode))
 			goto end_rename;
 		retval = -EBUSY;
-		if (atomic_read(&new_inode->i_count) > 1)
+		if (new_inode->i_count > 1)
 			goto end_rename;
 	}
 	retval = -EPERM;
@@ -925,7 +914,7 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 		if (new_inode && !S_ISDIR(new_inode->i_mode))
 			goto end_rename;
 		retval = -EINVAL;
-		if (subdir (new_dir, old_inode))
+		if (subdir(new_dentry, old_dentry))
 			goto end_rename;
 		dir_bh = ext2_bread (old_inode, 0, 0, &retval);
 		if (!dir_bh)

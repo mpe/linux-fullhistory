@@ -416,6 +416,7 @@ asmlinkage int sys_chroot(const char * filename)
 	tmp = current->fs->root;
 	current->fs->root = dentry;
 	dentry = tmp;
+	error = 0;
 
 dput_and_out:
 	dput(dentry);

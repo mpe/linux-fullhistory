@@ -64,6 +64,7 @@ struct inode_operations sysv_file_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	generic_readpage,	/* readpage */
 	NULL,			/* writepage */
 	sysv_bmap,		/* bmap */
@@ -194,7 +195,7 @@ long sysv_file_read(struct inode * inode, struct file * filp,
 	filp->f_reada = 1;
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 	}
 	return read;
 }
@@ -255,7 +256,7 @@ static long sysv_file_write(struct inode * inode, struct file * filp,
 		pos += c;
 		if (pos > inode->i_size) {
 			inode->i_size = pos;
-			inode->i_dirt = 1;
+			mark_inode_dirty(inode);
 		}
 		written += c;
 		buf += c;
@@ -265,6 +266,6 @@ static long sysv_file_write(struct inode * inode, struct file * filp,
 	}
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	filp->f_pos = pos;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	return written;
 }

@@ -150,7 +150,6 @@ nfs_readpage_result(struct rpc_task *task)
 		fail++;
 		dprintk("NFS: %d successful reads, %d failures\n", succ, fail);
 	}
-	iput(req->ra_inode);
 	clear_bit(PG_locked, &page->flags);
 	wake_up(&page->wait);
 
@@ -188,7 +187,6 @@ nfs_readpage_async(struct inode *inode, struct page *page)
 				nfs_readpage_result, req);
 
 	if (result >= 0) {
-		atomic_inc(&inode->i_count);
 		atomic_inc(&page->count);
 		return 0;
 	}

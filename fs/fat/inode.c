@@ -196,6 +196,7 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 	int debug,error,fat;
 	int blksize = 512;
 	struct fat_mount_options opts;
+	struct inode *root_inode;
 
 	MOD_INC_USE_COUNT;
 	if (hardsect_size[MAJOR(sb->s_dev)] != NULL){
@@ -329,7 +330,10 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 	MSDOS_SB(sb)->fat_lock = 0;
 	MSDOS_SB(sb)->prev_free = 0;
 	memcpy(&(MSDOS_SB(sb)->options), &opts, sizeof(struct fat_mount_options));
-	if (!(sb->s_mounted = iget(sb,MSDOS_ROOT_INO))) {
+
+	root_inode = iget(sb,MSDOS_ROOT_INO);
+	sb->s_root = d_alloc_root(root_inode, NULL);
+	if (!sb->s_root) {
 		sb->s_dev = 0;
 		printk("get root inode failed\n");
 		MOD_DEC_USE_COUNT;
@@ -339,7 +343,7 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 }
 
 
-void fat_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
+int fat_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
 {
 	int free,nr;
 	struct statfs tmp;
@@ -362,7 +366,7 @@ void fat_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
 	tmp.f_files = 0;
 	tmp.f_ffree = 0;
 	tmp.f_namelen = 12;
-	copy_to_user(buf, &tmp, bufsiz);
+	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
 }
 
 
@@ -514,10 +518,9 @@ void fat_write_inode(struct inode *inode)
 		linked->i_blocks = inode->i_blocks;
 		linked->i_atime = inode->i_atime;
 		MSDOS_I(linked)->i_attrs = MSDOS_I(inode)->i_attrs;
-		linked->i_dirt = 1;
+		mark_inode_dirty(linked);
 	}
 
-	inode->i_dirt = 0;
 	if (inode->i_ino == MSDOS_ROOT_INO || !inode->i_nlink) return;
 	if (!(bh = fat_bread(sb, inode->i_ino >> MSDOS_DPB_BITS))) {
 		printk("dev = %s, ino = %ld\n",

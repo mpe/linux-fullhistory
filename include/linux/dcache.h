@@ -65,7 +65,7 @@ struct dentry {
  * to invalidate a dentry for some reason (NFS
  * timeouts or autofs deletes).
  */
-inline void d_drop(struct dentry * dentry)
+static inline void d_drop(struct dentry * dentry)
 {
 	list_del(&dentry->d_hash);
 	INIT_LIST_HEAD(&dentry->d_hash);

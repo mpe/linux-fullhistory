@@ -304,7 +304,7 @@ struct inode {
 
 	unsigned long		i_ino;
 	kdev_t			i_dev;
-	atomic_t		i_count;
+	unsigned short		i_count;
 	umode_t			i_mode;
 	nlink_t			i_nlink;
 	uid_t			i_uid;
@@ -358,6 +358,7 @@ struct inode {
 /* Inode state bits.. */
 #define I_DIRTY		0
 #define I_LOCK		1
+#define I_FREEING	2
 
 extern void __mark_inode_dirty(struct inode *);
 static inline void mark_inode_dirty(struct inode *inode)
@@ -542,7 +543,7 @@ struct file_operations {
 struct inode_operations {
 	struct file_operations * default_file_ops;
 	int (*create) (struct inode *,struct dentry *,int);
-	int (*lookup) (struct inode *,struct qstr *name,struct inode **);
+	int (*lookup) (struct inode *,struct dentry *);
 	int (*link) (struct inode *,struct inode *,struct dentry *);
 	int (*unlink) (struct inode *,struct dentry *);
 	int (*symlink) (struct inode *,struct dentry *,const char *);
@@ -565,9 +566,10 @@ struct inode_operations {
 
 struct super_operations {
 	void (*read_inode) (struct inode *);
-	int (*notify_change) (struct inode *, struct iattr *);
 	void (*write_inode) (struct inode *);
 	void (*put_inode) (struct inode *);
+	void (*delete_inode) (struct inode *);
+	int (*notify_change) (struct inode *, struct iattr *);
 	void (*put_super) (struct super_block *);
 	void (*write_super) (struct super_block *);
 	int (*statfs) (struct super_block *, struct statfs *, int);
@@ -744,7 +746,6 @@ extern struct inode * get_empty_inode(void);
 extern struct inode * get_empty_inode_hashed(dev_t i_dev, unsigned long i_ino);
 
 extern void insert_inode_hash(struct inode *);
-extern struct inode * get_pipe_inode(void);
 extern int get_unused_fd(void);
 extern void put_unused_fd(int);
 extern struct file * get_empty_filp(void);

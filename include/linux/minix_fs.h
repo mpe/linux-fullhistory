@@ -121,7 +121,7 @@ extern int minix_remount (struct super_block * sb, int * flags, char * data);
 extern void minix_read_inode(struct inode *);
 extern void minix_write_inode(struct inode *);
 extern void minix_put_inode(struct inode *);
-extern void minix_statfs(struct super_block *, struct statfs *, int);
+extern int minix_statfs(struct super_block *, struct statfs *, int);
 extern int minix_sync_inode(struct inode *);
 extern int minix_sync_file(struct inode *, struct file *);
 

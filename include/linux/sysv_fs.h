@@ -372,8 +372,8 @@ extern int sysv_symlink(struct inode * inode, const char * name, int len,
 	const char * symname);
 extern int sysv_link(struct inode * oldinode, struct inode * dir, const char * name, int len);
 extern int sysv_mknod(struct inode * dir, const char * name, int len, int mode, int rdev);
-extern int sysv_rename(struct inode * old_dir, const char * old_name, int old_len,
-		       struct inode * new_dir, const char * new_name, int new_len);
+extern int sysv_rename(struct inode * old_dir, struct dentry * old_dentry,
+		       struct inode * new_dir, struct dentry * new_dentry);
 extern struct inode * sysv_new_inode(const struct inode * dir);
 extern void sysv_free_inode(struct inode * inode);
 extern unsigned long sysv_count_free_inodes(struct super_block *sb);
@@ -396,7 +396,7 @@ extern void sysv_read_inode(struct inode *);
 extern int sysv_notify_change(struct inode *, struct iattr *);
 extern void sysv_write_inode(struct inode *);
 extern void sysv_put_inode(struct inode *);
-extern void sysv_statfs(struct super_block *, struct statfs *, int);
+extern int sysv_statfs(struct super_block *, struct statfs *, int);
 extern int sysv_sync_inode(struct inode *);
 extern int sysv_sync_file(struct inode *, struct file *);
 extern int sysv_mmap(struct inode *, struct file *, struct vm_area_struct *);

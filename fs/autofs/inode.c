@@ -19,10 +19,16 @@
 #define __NO_VERSION__
 #include <linux/module.h>
 
+/*
+ * Dummy functions - do we ever actually want to do
+ * something here?
+ */
 static void autofs_put_inode(struct inode *inode)
 {
-	if (inode->i_nlink)
-		return;
+}
+
+static void autofs_delete_inode(struct inode *inode)
+{
 	inode->i_size = 0;
 }
 
@@ -59,11 +65,12 @@ static void autofs_write_inode(struct inode *inode);
 
 static struct super_operations autofs_sops = {
 	autofs_read_inode,
-	NULL,
 	autofs_write_inode,
 	autofs_put_inode,
+	autofs_delete_inode,
+	NULL,			/* notify_change */
 	autofs_put_super,
-	NULL,
+	NULL,			/* write_super */
 	autofs_statfs,
 	NULL
 };

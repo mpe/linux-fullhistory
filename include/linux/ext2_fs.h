@@ -483,6 +483,7 @@ extern int ext2_getcluster (struct inode * inode, long block);
 extern void ext2_read_inode (struct inode *);
 extern void ext2_write_inode (struct inode *);
 extern void ext2_put_inode (struct inode *);
+extern void ext2_delete_inode (struct inode *);
 extern int ext2_sync_inode (struct inode *);
 extern void ext2_discard_prealloc (struct inode *);
 
@@ -492,7 +493,7 @@ extern int ext2_ioctl (struct inode *, struct file *, unsigned int,
 
 /* namei.c */
 extern void ext2_release (struct inode *, struct file *);
-extern int ext2_lookup (struct inode *,struct qstr *, struct inode **);
+extern int ext2_lookup (struct inode *, struct dentry *);
 extern int ext2_create (struct inode *,struct dentry *,int);
 extern int ext2_mkdir (struct inode *,struct dentry *,int);
 extern int ext2_rmdir (struct inode *,struct dentry *);

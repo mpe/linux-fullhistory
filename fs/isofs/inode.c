@@ -54,9 +54,10 @@ void isofs_put_super(struct super_block *sb)
 
 static struct super_operations isofs_sops = {
 	isofs_read_inode,
-	NULL,			/* notify_change */
 	NULL,			/* write_inode */
 	NULL,			/* put_inode */
+	NULL,			/* delete_inode */
+	NULL,			/* notify_change */
 	isofs_put_super,
 	NULL,			/* write_super */
 	isofs_statfs,
@@ -663,7 +664,6 @@ void isofs_read_inode(struct inode * inode)
 					   isonum_711 (raw_inode->ext_attr_length))
 	  << inode -> i_sb -> u.isofs_sb.s_log_zone_size;
 
-	inode->u.isofs_i.i_backlink = 0xffffffff; /* Will be used for previous directory */
 	switch (inode->i_sb->u.isofs_sb.s_conversion){
 	case 'a':
 	  inode->u.isofs_i.i_file_format = ISOFS_FILE_UNKNOWN; /* File type */
@@ -735,7 +735,6 @@ void isofs_read_inode(struct inode * inode)
 	/* With a data error we return this information */
 	inode->i_mtime = inode->i_atime = inode->i_ctime = 0;
 	inode->u.isofs_i.i_first_extent = 0;
-	inode->u.isofs_i.i_backlink = 0xffffffff;
 	inode->i_size = 0;
 	inode->i_nlink = 1;
 	inode->i_uid = inode->i_gid = 0;

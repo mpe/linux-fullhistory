@@ -280,7 +280,7 @@ int fat_free(struct inode *inode,int skip)
 		    12 ? EOF_FAT12 : EOF_FAT16);
 	else {
 		MSDOS_I(inode)->i_start = 0;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 	}
 	lock_fat(inode->i_sb);
 	while (nr != -1) {

@@ -24,7 +24,7 @@
 #define FIRST_PROCESS_ENTRY 256
 
 static int proc_root_readdir(struct inode *, struct file *, void *, filldir_t);
-static int proc_root_lookup(struct inode *,struct qstr *,struct inode **);
+static int proc_root_lookup(struct inode *,struct dentry *);
 
 static unsigned char proc_alloc_map[PROC_NDYNAMIC / 8] = {0};
 
@@ -227,7 +227,6 @@ proc_openprom_deflookup(struct inode * dir, struct qstr *str, struct inode ** re
 	    proc_openprom_deflookup)
 		return proc_openprom_inode_operations.lookup 
 				(dir, str, result);
-	iput(dir);
 	return -ENOENT;
 }
 #endif
@@ -622,44 +621,49 @@ void proc_root_init(void)
 	proc_tty_init();
 }
 
-
-int proc_lookup(struct inode * dir, struct qstr * str, struct inode ** result)
+/*
+ * Don't create negative dentries here, return -ENOENT by hand
+ * instead.
+ */
+int proc_lookup(struct inode * dir, struct dentry *dentry)
 {
+	struct inode *inode;
 	struct proc_dir_entry * de;
 
-	*result = NULL;
 	if (!dir || !S_ISDIR(dir->i_mode))
 		return -ENOTDIR;
 
 	de = (struct proc_dir_entry *) dir->u.generic_ip;
-	if (!de)
-		return -EINVAL;
-
-	*result = NULL;
-	for (de = de->subdir; de ; de = de->next) {
-		if (!de || !de->low_ino)
-			continue;
-		if (de->namelen != str->len)
-			continue;
-		if (!memcmp(str->name, de->name, str->len)) {
-			int ino = de->low_ino | (dir->i_ino & ~(0xffff));
-			if (!(*result = proc_get_inode(dir->i_sb, ino, de)))
-				return -EINVAL;
-			return 0;
+	inode = NULL;
+	if (de) {
+		for (de = de->subdir; de ; de = de->next) {
+			if (!de || !de->low_ino)
+				continue;
+			if (de->namelen != dentry->d_name.len)
+				continue;
+			if (!memcmp(dentry->d_name.name, de->name, de->namelen)) {
+				int ino = de->low_ino | (dir->i_ino & ~(0xffff));
+				inode = proc_get_inode(dir->i_sb, ino, de);
+				if (!inode)
+					return -EINVAL;
+				break;
+			}
 		}
 	}
-	return -ENOENT;
+	if (!inode)
+		return -ENOENT;
+
+	d_add(dentry, inode);
+	return 0;
 }
 
-static int proc_root_lookup(struct inode * dir,struct qstr *str, struct inode ** result)
+static int proc_root_lookup(struct inode * dir, struct dentry * dentry)
 {
 	unsigned int pid, c;
-	int ino, retval;
 	struct task_struct *p;
 	const char *name;
+	struct inode *inode;
 	int len;
-
-	atomic_inc(&dir->i_count);
 
 	if (dir->i_ino == PROC_ROOT_INO) { /* check for safety... */
 		dir->i_nlink = proc_root.nlink;
@@ -672,13 +676,12 @@ static int proc_root_lookup(struct inode * dir,struct qstr *str, struct inode **
 		read_unlock(&tasklist_lock);
 	}
 
-	retval = proc_lookup(dir, str, result);
-	if (retval != -ENOENT)
-		return retval;
+	if (!proc_lookup(dir, dentry))
+		return 0;
 	
 	pid = 0;
-	name = str->name;
-	len = str->len;
+	name = dentry->d_name.name;
+	len = dentry->d_name.len;
 	while (len-- > 0) {
 		c = *name - '0';
 		name++;
@@ -694,12 +697,14 @@ static int proc_root_lookup(struct inode * dir,struct qstr *str, struct inode **
 		}
 	}
 	p = find_task_by_pid(pid);
-	if (!pid || !p)
-		return -ENOENT;
-
-	ino = (pid << 16) + PROC_PID_INO;
-	if (!(*result = proc_get_inode(dir->i_sb, ino, &proc_pid)))
-		return -EINVAL;
+	inode = NULL;
+	if (pid && p) {
+		unsigned long ino = (pid << 16) + PROC_PID_INO;
+		inode = proc_get_inode(dir->i_sb, ino, &proc_pid);
+		if (!inode)
+			return -EINVAL;
+	}
+	d_add(dentry, inode);
 	return 0;
 }
 
