@@ -166,7 +166,7 @@ xics_get_irq(struct pt_regs *regs)
 void xics_ipi_action(int irq, void *dev_id, struct pt_regs *regs)
 {
 	qirr_info(smp_processor_id()) = 0xff;
-	smp_message_recv(MSG_RESCHEDULE);
+	smp_message_recv(MSG_RESCHEDULE, regs);
 }
 
 void xics_cause_IPI(int cpu)

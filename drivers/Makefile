@@ -63,7 +63,7 @@ SUB_DIRS += macintosh
 MOD_SUB_DIRS += macintosh
 endif
 
-ifdef CONFIG_PPC
+ifdef CONFIG_ALL_PPC
 SUB_DIRS += macintosh
 MOD_SUB_DIRS += macintosh
 endif

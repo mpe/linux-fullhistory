@@ -15,6 +15,7 @@
  *	History
  *	X.25 001	Jonathan Naylor	Started coding.
  *	X.25 002	Jonathan Naylor	New timer architecture.
+ *      2000-09-04	Henner Eisen    Prevented x25_output() skb leakage.
  */
 
 #include <linux/config.h>
@@ -56,7 +57,7 @@ static int x25_pacsize_to_bytes(unsigned int pacsize)
 /*
  *	This is where all X.25 information frames pass;
  */
-void x25_output(struct sock *sk, struct sk_buff *skb)
+int x25_output(struct sock *sk, struct sk_buff *skb)
 {
 	struct sk_buff *skbn;
 	unsigned char header[X25_EXT_MIN_LEN];
@@ -73,9 +74,12 @@ void x25_output(struct sock *sk, struct sk_buff *skb)
 		frontlen = skb_headroom(skb);
 
 		while (skb->len > 0) {
-			if ((skbn = sock_alloc_send_skb(sk, frontlen + max_len, 0, 0, &err)) == NULL)
-				return;
-
+			if ((skbn = sock_alloc_send_skb(sk, frontlen + max_len, 0, 0, &err)) == NULL){
+				int unsent = skb->len - header_len;
+				SOCK_DEBUG(sk, "x25_output: framgent allocation failed, err=%d, %d bytes unsent\n", err, unsent); 
+				return err;
+				}
+				
 			skb_reserve(skbn, frontlen);
 
 			len = (max_len > skb->len) ? skb->len : max_len;
@@ -102,6 +106,7 @@ void x25_output(struct sock *sk, struct sk_buff *skb)
 	} else {
 		skb_queue_tail(&sk->write_queue, skb);
 	}
+	return 0;
 }
 
 /* 

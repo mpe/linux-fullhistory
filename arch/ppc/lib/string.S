@@ -12,10 +12,70 @@
 #include <asm/processor.h>
 #include <asm/errno.h>
 
-CACHELINE_BYTES = 32
-LG_CACHELINE_BYTES = 5
-CACHELINE_MASK = 0x1f
-CACHELINE_WORDS = 8
+#if defined(CONFIG_4xx) || defined(CONFIG_8xx)
+#define CACHE_LINE_SIZE		16
+#define LG_CACHE_LINE_SIZE	4
+#define MAX_COPY_PREFETCH	1
+#elif !defined(CONFIG_PPC64BRIDGE)
+#define CACHE_LINE_SIZE		32
+#define LG_CACHE_LINE_SIZE	5
+#define MAX_COPY_PREFETCH	4
+#else
+#define CACHE_LINE_SIZE		128
+#define LG_CACHE_LINE_SIZE	7
+#define MAX_COPY_PREFETCH	1
+#endif /* CONFIG_4xx || CONFIG_8xx */
+
+#define COPY_16_BYTES		\
+	lwz	r7,4(r4);	\
+	lwz	r8,8(r4);	\
+	lwz	r9,12(r4);	\
+	lwzu	r10,16(r4);	\
+	stw	r7,4(r6);	\
+	stw	r8,8(r6);	\
+	stw	r9,12(r6);	\
+	stwu	r10,16(r6)
+
+#define COPY_16_BYTES_WITHEX(n)	\
+8 ## n ## 0:			\
+	lwz	r7,4(r4);	\
+8 ## n ## 1:			\
+	lwz	r8,8(r4);	\
+8 ## n ## 2:			\
+	lwz	r9,12(r4);	\
+8 ## n ## 3:			\
+	lwzu	r10,16(r4);	\
+8 ## n ## 4:			\
+	stw	r7,4(r6);	\
+8 ## n ## 5:			\
+	stw	r8,8(r6);	\
+8 ## n ## 6:			\
+	stw	r9,12(r6);	\
+8 ## n ## 7:			\
+	stwu	r10,16(r6)
+
+#define COPY_16_BYTES_EXCODE(n)			\
+9 ## n ## 0:					\
+	addi	r5,r5,-(16 * n);		\
+	b	104f;				\
+9 ## n ## 1:					\
+	addi	r5,r5,-(16 * n);		\
+	b	105f;				\
+.section __ex_table,"a";			\
+	.align	2;				\
+	.long	8 ## n ## 0b,9 ## n ## 0b;	\
+	.long	8 ## n ## 1b,9 ## n ## 0b;	\
+	.long	8 ## n ## 2b,9 ## n ## 0b;	\
+	.long	8 ## n ## 3b,9 ## n ## 0b;	\
+	.long	8 ## n ## 4b,9 ## n ## 1b;	\
+	.long	8 ## n ## 5b,9 ## n ## 1b;	\
+	.long	8 ## n ## 6b,9 ## n ## 1b;	\
+	.long	8 ## n ## 7b,9 ## n ## 1b;	\
+.text
+
+CACHELINE_BYTES = CACHE_LINE_SIZE
+LG_CACHELINE_BYTES = LG_CACHE_LINE_SIZE
+CACHELINE_MASK = (CACHE_LINE_SIZE-1)
 
 	.globl	strcpy
 strcpy:
@@ -105,7 +165,14 @@ cacheable_memzero:
 	bdnz	4b
 3:	mtctr	r9
 	li	r7,4
+#if !defined(CONFIG_8xx)
 10:	dcbz	r7,r6
+#else
+10:	stw	r4, 4(r6)
+	stw	r4, 8(r6)
+	stw	r4, 12(r6)
+	stw	r4, 16(r6)
+#endif
 	addi	r6,r6,CACHELINE_BYTES
 	bdnz	10b
 	clrlwi	r5,r8,32-LG_CACHELINE_BYTES
@@ -202,23 +269,24 @@ cacheable_memcpy:
 	li	r11,4
 	mtctr	r0
 	beq	63f
-53:	dcbz	r11,r6
-	lwz	r7,4(r4)
-	lwz	r8,8(r4)
-	lwz	r9,12(r4)
-	lwzu	r10,16(r4)
-	stw	r7,4(r6)
-	stw	r8,8(r6)
-	stw	r9,12(r6)
-	stwu	r10,16(r6)
-	lwz	r7,4(r4)
-	lwz	r8,8(r4)
-	lwz	r9,12(r4)
-	lwzu	r10,16(r4)
-	stw	r7,4(r6)
-	stw	r8,8(r6)
-	stw	r9,12(r6)
-	stwu	r10,16(r6)
+53:
+#if !defined(CONFIG_8xx)
+	dcbz	r11,r6
+#endif
+	COPY_16_BYTES
+#if CACHE_LINE_SIZE >= 32
+	COPY_16_BYTES
+#if CACHE_LINE_SIZE >= 64
+	COPY_16_BYTES
+	COPY_16_BYTES
+#if CACHE_LINE_SIZE >= 128
+	COPY_16_BYTES
+	COPY_16_BYTES
+	COPY_16_BYTES
+	COPY_16_BYTES
+#endif
+#endif
+#endif
 	bdnz	53b
 
 63:	srwi.	r0,r5,2
@@ -380,25 +448,59 @@ __copy_tofrom_user:
 58:	srwi.	r0,r5,LG_CACHELINE_BYTES /* # complete cachelines */
 	clrlwi	r5,r5,32-LG_CACHELINE_BYTES
 	li	r11,4
-	mtctr	r0
 	beq	63f
-53:	dcbz	r11,r6
-10:	lwz	r7,4(r4)
-11:	lwz	r8,8(r4)
-12:	lwz	r9,12(r4)
-13:	lwzu	r10,16(r4)
-14:	stw	r7,4(r6)
-15:	stw	r8,8(r6)
-16:	stw	r9,12(r6)
-17:	stwu	r10,16(r6)
-20:	lwz	r7,4(r4)
-21:	lwz	r8,8(r4)
-22:	lwz	r9,12(r4)
-23:	lwzu	r10,16(r4)
-24:	stw	r7,4(r6)
-25:	stw	r8,8(r6)
-26:	stw	r9,12(r6)
-27:	stwu	r10,16(r6)
+
+#if !defined(CONFIG_8xx)
+	/* Here we decide how far ahead to prefetch the source */
+#if MAX_COPY_PREFETCH > 1
+	/* Heuristically, for large transfers we prefetch
+	   MAX_COPY_PREFETCH cachelines ahead.  For small transfers
+	   we prefetch 1 cacheline ahead. */
+	cmpwi	r0,MAX_COPY_PREFETCH
+	li	r7,1
+	li	r3,4
+	ble	111f
+	li	r7,MAX_COPY_PREFETCH
+111:	mtctr	r7
+112:	dcbt	r3,r4
+	addi	r3,r3,CACHELINE_BYTES
+	bdnz	112b
+#else /* MAX_COPY_PREFETCH == 1 */
+	li	r3,CACHELINE_BYTES + 4
+	dcbt	r11,r4
+#endif /* MAX_COPY_PREFETCH */
+#endif /* CONFIG_8xx */
+
+	mtctr	r0
+53:
+#if !defined(CONFIG_8xx)
+	dcbt	r3,r4
+	dcbz	r11,r6
+#endif
+/* had to move these to keep extable in order */
+	.section __ex_table,"a"
+	.align	2
+	.long	70b,100f
+	.long	71b,101f
+	.long	72b,102f
+	.long	73b,103f
+	.long	53b,105f
+	.text
+/* the main body of the cacheline loop */
+	COPY_16_BYTES_WITHEX(0)
+#if CACHE_LINE_SIZE >= 32
+	COPY_16_BYTES_WITHEX(1)
+#if CACHE_LINE_SIZE >= 64
+	COPY_16_BYTES_WITHEX(2)
+	COPY_16_BYTES_WITHEX(3)
+#if CACHE_LINE_SIZE >= 128
+	COPY_16_BYTES_WITHEX(4)
+	COPY_16_BYTES_WITHEX(5)
+	COPY_16_BYTES_WITHEX(6)
+	COPY_16_BYTES_WITHEX(7)
+#endif
+#endif
+#endif
 	bdnz	53b
 
 63:	srwi.	r0,r5,2
@@ -434,15 +536,31 @@ __copy_tofrom_user:
 103:	li	r4,1
 91:	li	r3,2
 	b	99f
-/* read fault in 2nd half of cacheline loop */
-106:	addi	r5,r5,-16
-/* read fault in 1st half of cacheline loop */
+
+/*
+ * this stuff handles faults in the cacheline loop and branches to either
+ * 104f (if in read part) or 105f (if in write part), after updating r5
+ */
+	COPY_16_BYTES_EXCODE(0)
+#if CACHE_LINE_SIZE >= 32
+	COPY_16_BYTES_EXCODE(1)
+#if CACHE_LINE_SIZE >= 64
+	COPY_16_BYTES_EXCODE(2)
+	COPY_16_BYTES_EXCODE(3)
+#if CACHE_LINE_SIZE >= 128
+	COPY_16_BYTES_EXCODE(4)
+	COPY_16_BYTES_EXCODE(5)
+	COPY_16_BYTES_EXCODE(6)
+	COPY_16_BYTES_EXCODE(7)
+#endif
+#endif
+#endif
+
+/* read fault in cacheline loop */
 104:	li	r4,0
 	b	92f
-/* write fault in 2nd half of cacheline loop */
-107:	addi	r5,r5,-16
 /* fault on dcbz (effectively a write fault) */
-/* or write fault in 1st half of cacheline loop */
+/* or write fault in cacheline loop */
 105:	li	r4,1
 92:	li	r3,LG_CACHELINE_BYTES
 	b	99f
@@ -485,36 +603,15 @@ __copy_tofrom_user:
 	bdnz	114b
 120:	blr
 
-.section __ex_table,"a"
+	.section __ex_table,"a"
 	.align	2
-	.long	70b,100b
-	.long	71b,101b
-	.long	72b,102b
-	.long	73b,103b
-	.long	53b,105b
-	.long	10b,104b
-	.long	11b,104b
-	.long	12b,104b
-	.long	13b,104b
-	.long	14b,105b
-	.long	15b,105b
-	.long	16b,105b
-	.long	17b,105b
-	.long	20b,106b
-	.long	21b,106b
-	.long	22b,106b
-	.long	23b,106b
-	.long	24b,107b
-	.long	25b,107b
-	.long	26b,107b
-	.long	27b,107b
 	.long	30b,108b
 	.long	31b,109b
 	.long	40b,110b
 	.long	41b,111b
 	.long	112b,120b
 	.long	114b,120b
-.text
+	.text
 
 	.globl	__clear_user
 __clear_user:
@@ -546,12 +643,13 @@ __clear_user:
 	blr
 99:	li	r3,-EFAULT
 	blr
-.section __ex_table,"a"
+
+	.section __ex_table,"a"
 	.align	2
 	.long	11b,99b
 	.long	1b,99b
 	.long	8b,99b
-.text
+	.text
 
 	.globl	__strncpy_from_user
 __strncpy_from_user:
@@ -570,10 +668,11 @@ __strncpy_from_user:
 	blr
 99:	li	r3,-EFAULT
 	blr
-.section __ex_table,"a"
+
+	.section __ex_table,"a"
 	.align	2
 	.long	1b,99b
-.text
+	.text
 
 /* r3 = str, r4 = len (> 0), r5 = top (highest addr) */
 	.globl	__strnlen_user
@@ -596,6 +695,7 @@ __strnlen_user:
 	blr
 99:	li	r3,0		/* bad address, return 0 */
 	blr
-.section __ex_table,"a"
+
+	.section __ex_table,"a"
 	.align	2
 	.long	1b,99b

@@ -35,6 +35,8 @@
 #include <asm/bootx.h>
 #include <asm/machdep.h>
 #include <asm/feature.h>
+#include <asm/uaccess.h>
+
 #ifdef CONFIG_OAK
 #include "oak_setup.h"
 #endif /* CONFIG_OAK */
@@ -655,16 +657,18 @@ int parse_bootinfo(void)
 }
 
 /* Checks "l2cr=xxxx" command-line option */
-void ppc_setup_l2cr(char *str, int *ints)
+int ppc_setup_l2cr(char *str)
 {
 	if ( ((_get_PVR() >> 16) == 8) || ((_get_PVR() >> 16) == 12) )
 	{
 		unsigned long val = simple_strtoul(str, NULL, 0);
 		printk(KERN_INFO "l2cr set to %lx\n", val);
-		_set_L2CR(0);
-		_set_L2CR(val);
+                _set_L2CR(0);           /* force invalidate by disable cache */
+                _set_L2CR(val);         /* and enable it */
 	}
+	return 1;
 }
+__setup("l2cr=", ppc_setup_l2cr);
 
 void __init ppc_init(void)
 {
@@ -682,6 +686,9 @@ void __init setup_arch(char **cmdline_p)
 	extern char _etext[], _edata[];
 	extern char *klimit;
 	extern void do_init_bootmem(void);
+
+	/* so udelay does something sensible, assume <= 1000 bogomips */
+	loops_per_sec = 500000000;
 
 #ifdef CONFIG_ALL_PPC
 	feature_init();
@@ -737,6 +744,7 @@ void __init setup_arch(char **cmdline_p)
 	if ( ppc_md.progress ) ppc_md.progress("arch: exit", 0x3eab);
 
 	paging_init();
+	sort_exception_table();
 }
 
 void ppc_generic_ide_fix_driveid(struct hd_driveid *id)

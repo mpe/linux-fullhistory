@@ -284,13 +284,38 @@ hydra_init(void)
 	return 1;
 }
 
+#ifdef CONFIG_POWER4
+static void
+power4_fixup_dev(struct pci_dev *dev)
+{
+	int i;
+	unsigned long offset;
+
+	for (i = 0; i < 6; ++i) {
+		if (dev->resource[i].start == 0)
+			continue;
+		offset = pci_address_offset(dev->bus->number,
+					    dev->resource[i].flags);
+		if (offset) {
+			dev->resource[i].start += offset;
+			dev->resource[i].end += offset;
+			printk("device %x.%x[%d] now [%lx..%lx]\n",
+			       dev->bus->number, dev->devfn, i,
+			       dev->resource[i].start,
+			       dev->resource[i].end);
+		}
+		/* zap the 2nd function of the winbond chip */
+		if (dev->resource[i].flags & IORESOURCE_IO
+		    && dev->bus->number == 0 && dev->devfn == 0x81)
+			dev->resource[i].flags &= ~IORESOURCE_IO;
+	}
+}
+#endif /* CONFIG_POWER4 */
+
 void __init
 chrp_pcibios_fixup(void)
 {
 	struct pci_dev *dev;
-#ifdef CONFIG_POWER4
-	int i;
-#endif
 	int *brp;
 	struct device_node *np;
 	extern struct pci_ops generic_pci_ops;
@@ -316,10 +341,8 @@ chrp_pcibios_fixup(void)
 	/* PCI interrupts are controlled by the OpenPIC */
 	pci_for_each_dev(dev) {
 		np = find_pci_device_OFnode(dev->bus->number, dev->devfn);
-		if ( (np != 0) && (np->n_intrs > 0) && (np->intrs[0].line != 0))
+		if ((np != 0) && (np->n_intrs > 0) && (np->intrs[0].line != 0))
 			dev->irq = np->intrs[0].line;
-		if ( dev->irq )
-			dev->irq = openpic_to_irq( dev->irq );
 		/* these need to be absolute addrs for OF and Matrox FB -- Cort */
 		if ( dev->vendor == PCI_VENDOR_ID_MATROX )
 		{
@@ -337,30 +360,46 @@ chrp_pcibios_fixup(void)
 			  dev->devfn, PCI_VENDOR_ID, PCI_VENDOR_ID_AMD);
 		}
 #ifdef CONFIG_POWER4
-		for (i = 0; i < 6; ++i) {
-			unsigned long offset;
-			if (dev->resource[i].start == 0)
-				continue;
-			offset = pci_address_offset(dev->bus->number,
-						    dev->resource[i].flags);
-			if (offset) {
-				dev->resource[i].start += offset;
-				dev->resource[i].end += offset;
-				printk("device %x.%x[%d] now [%lx..%lx]\n",
-				       dev->bus->number, dev->devfn, i,
-				       dev->resource[i].start,
-				       dev->resource[i].end);
-			}
-			/* zap the 2nd function of the winbond chip */
-			if (dev->resource[i].flags & IORESOURCE_IO
-			    && dev->bus->number == 0 && dev->devfn == 0x81)
-				dev->resource[i].flags &= ~IORESOURCE_IO;
-		}
+		power4_fixup_dev(dev);
 #else
 		if (dev->bus->number > 0 && python_busnr > 0)
 			dev->resource[0].start += dev->bus->number*0x01000000;
 #endif
 	}
+}
+
+static struct {
+    /* parent is iomem */
+    struct resource ram, pci_mem, isa_mem, pci_io, pci_cfg, rom_exp, flash;
+    /* parent is isa_mem */
+    struct resource nvram;
+} gg2_resources = {
+    ram:	{ "RAM", 0x00000000, 0xbfffffff, IORESOURCE_MEM },
+    pci_mem:	{ "GG2 PCI mem", 0xc0000000, 0xf6ffffff, IORESOURCE_MEM },
+    isa_mem:	{ "GG2 ISA mem", 0xf7000000, 0xf7ffffff },
+    pci_io:	{ "GG2 PCI I/O", 0xf8000000, 0xf8ffffff },
+    pci_cfg:	{ "GG2 PCI cfg", 0xfec00000, 0xfec7ffff },
+    rom_exp:	{ "ROM exp", 0xff000000, 0xff7fffff, },
+    flash:	{ "Flash ROM", 0xfff80000, 0xffffffff },
+    nvram:	{ "NVRAM", 0xf70e0000, 0xf70e7fff },
+};
+
+static void __init gg2_pcibios_fixup(void)
+{
+	int i;
+	extern unsigned long *end_of_DRAM;
+
+	chrp_pcibios_fixup();
+	gg2_resources.ram.end = (unsigned long)end_of_DRAM-PAGE_OFFSET;
+	for (i = 0; i < 7; i++)
+	    request_resource(&iomem_resource,
+		    	     &((struct resource *)&gg2_resources)[i]);
+	request_resource(&gg2_resources.isa_mem, &gg2_resources.nvram);
+}
+
+static void __init gg2_pcibios_fixup_bus(struct pci_bus *bus)
+{
+    	bus->resource[1] = &gg2_resources.pci_mem;
 }
 
 decl_config_access_method(grackle);
@@ -372,6 +411,7 @@ chrp_setup_pci_ptrs(void)
 {
 	struct device_node *py;
 
+	ppc_md.pcibios_fixup = chrp_pcibios_fixup;
 #ifdef CONFIG_POWER4
 	set_config_access_method(rtas);
 	pci_dram_offset = 0;
@@ -428,16 +468,17 @@ chrp_setup_pci_ptrs(void)
 			}
 			else
 			{
+				/* LongTrail */
 				pci_dram_offset = 0;
 				isa_mem_base = 0xf7000000;
 				isa_io_base = 0xf8000000;
 				set_config_access_method(gg2);
+				ppc_md.pcibios_fixup = gg2_pcibios_fixup;
+				ppc_md.pcibios_fixup_bus = gg2_pcibios_fixup_bus;
 			}
                 }
         }
 #endif /* CONFIG_POWER4 */
-	
-	ppc_md.pcibios_fixup = chrp_pcibios_fixup;
 }
 
 #ifdef CONFIG_PPC64BRIDGE

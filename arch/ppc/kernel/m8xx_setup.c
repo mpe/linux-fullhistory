@@ -135,6 +135,13 @@ abort(void)
 	machine_restart(NULL);
 }
 
+/* A place holder for time base interrupts, if they are ever enabled.
+*/
+void timebase_interrupt(int irq, void * dev, struct pt_regs * regs)
+{
+	printk("timebase_interrupt()\n");
+}
+
 /* The decrementer counts at the system (internal) clock frequency divided by
  * sixteen, or external oscillator divided by four.  We force the processor
  * to use system clock divided by sixteen.
@@ -160,35 +167,14 @@ void __init m8xx_calibrate_decr(void)
 	freq = fp*60;	/* try to make freq/1e6 an integer */
         divisor = 60;
         printk("time_init: decrementer frequency = %d/%d\n", freq, divisor);
-        decrementer_count = freq / HZ / divisor;
-        count_period_num = divisor;
-        count_period_den = freq / 1000000;
-}
+        tb_ticks_per_jiffy = freq / HZ / divisor;
+	tb_to_us = mulhwu_scale_factor(freq / divisor, 1000000);
 
-/* A place holder for time base interrupts, if they are ever enabled.
-*/
-void timebase_interrupt(int irq, void * dev, struct pt_regs * regs)
-{
-	printk("timebase_interrupt()\n");
-}
-
-/* The RTC on the MPC8xx is an internal register.
- * We want to protect this during power down, so we need to unlock,
- * modify, and re-lock.
- */
-static int
-m8xx_set_rtc_time(unsigned long time)
-{
-	((volatile immap_t *)IMAP_ADDR)->im_sitk.sitk_rtck = KAPWR_KEY;
-	((volatile immap_t *)IMAP_ADDR)->im_sit.sit_rtc = time;
-	((volatile immap_t *)IMAP_ADDR)->im_sitk.sitk_rtck = ~KAPWR_KEY;
-	return(0);
-}
-
-unsigned long __init
-m8xx_get_rtc_time(void)
-{
-	/* First, unlock all of the registers we are going to modify.
+	/* Perform some more timer/timebase initialization.  This used
+	 * to be done elsewhere, but other changes caused it to get
+	 * called more than once....that is a bad thing.
+	 *
+	 * First, unlock all of the registers we are going to modify.
 	 * To protect them from corruption during power down, registers
 	 * that are maintained by keep alive power are "locked".  To
 	 * modify these registers we have to write the key value to
@@ -219,9 +205,27 @@ m8xx_get_rtc_time(void)
 	((volatile immap_t *)IMAP_ADDR)->im_sit.sit_tbscr =
 				((mk_int_int_mask(DEC_INTERRUPT) << 8) |
 					 (TBSCR_TBF | TBSCR_TBE));
+
 	if (request_8xxirq(DEC_INTERRUPT, timebase_interrupt, 0, "tbint", NULL) != 0)
 		panic("Could not allocate timer IRQ!");
+}
 
+/* The RTC on the MPC8xx is an internal register.
+ * We want to protect this during power down, so we need to unlock,
+ * modify, and re-lock.
+ */
+static int
+m8xx_set_rtc_time(unsigned long time)
+{
+	((volatile immap_t *)IMAP_ADDR)->im_sitk.sitk_rtck = KAPWR_KEY;
+	((volatile immap_t *)IMAP_ADDR)->im_sit.sit_rtc = time;
+	((volatile immap_t *)IMAP_ADDR)->im_sitk.sitk_rtck = ~KAPWR_KEY;
+	return(0);
+}
+
+unsigned long __init
+m8xx_get_rtc_time(void)
+{
 	/* Get time from the RTC.
 	*/
 	return((unsigned long)(((immap_t *)IMAP_ADDR)->im_sit.sit_rtc));

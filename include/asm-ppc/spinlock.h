@@ -41,6 +41,7 @@ typedef struct {
 } rwlock_t;
 
 #define RW_LOCK_UNLOCKED (rwlock_t) { 0, 0 }
+#define rwlock_init(lp) do { *(lp) = RW_LOCK_UNLOCKED; } while(0)
 
 extern void _read_lock(rwlock_t *rw);
 extern void _read_unlock(rwlock_t *rw);

@@ -27,8 +27,7 @@ struct vfsmount
 	struct list_head mnt_child;	/* and going through their mnt_child */
 	atomic_t mnt_count;
 	int mnt_flags;
-
-  char *mnt_devname;			/* Name of device e.g. /dev/dsk/hda1 */
+	char *mnt_devname;		/* Name of device e.g. /dev/dsk/hda1 */
 	struct list_head mnt_list;
 	uid_t mnt_owner;
 };

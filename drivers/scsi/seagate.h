@@ -20,16 +20,12 @@ int seagate_st0x_abort(Scsi_Cmnd *);
 const char *seagate_st0x_info(struct Scsi_Host *);
 int seagate_st0x_reset(Scsi_Cmnd *, unsigned int); 
 
-#include <linux/kdev_t.h>
-int seagate_st0x_biosparam(Disk *, kdev_t, int*);
-
 #define SEAGATE_ST0X  {  detect:         seagate_st0x_detect,		\
 			 info:           seagate_st0x_info,		\
 			 command:        seagate_st0x_command,		\
 			 queuecommand:   seagate_st0x_queue_command,	\
 			 abort:          seagate_st0x_abort,		\
 			 reset:          seagate_st0x_reset,		\
-			 bios_param:     seagate_st0x_biosparam,	\
 			 can_queue:      1,				\
 			 this_id:        7,				\
 			 sg_tablesize:   SG_ALL,			\

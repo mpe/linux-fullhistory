@@ -131,6 +131,8 @@ James Fidell, Taso Hatzi, Peter K - intrepid test team
 
 And thanks to every supporter free software.
 
+(see top of 8139too.c for further credits and kudos)
+
 
 
 Submitting Bug Reports
@@ -157,38 +159,42 @@ the list, please report it.  That's why we do beta releases, after all...
 
 1) Work with Donald to merge fixes and updates into his driver.
 
-2) 2.2.x COMPATIBILITY SUPPORT IS BROKEN.  DO NOT USE IT.
-It is included only for enterprising hackers willing to help fix it.
+2) ethtool support
 
-3) PPC platform has stability problems.
+3) PPC platform has stability problems. (XXX: verify this is still true)
 
 4) Sparc64 platform not tested at all.
-
-5) Identify and fix "rx wedge" when ping flooded. (WIP)
-
-7) N-Way auto-negotiation is known to fail in some cases.  This problem
-also occurs in the rtl8139 driver in kernels 2.2.x/2.3.x.  Solution:
-Following technique in sunhme and sunbmac, use a kernel timer to
-manually perform autonegotiation in case the network or card cannot do
-it automatically.  (patches welcome)
 
 8) Much improved command line / module parameter setup.  (patches and
 suggestions welcome)  (WIP)
 
 9) Better documentation.  (patches welcome)
 
-10) (rtl8139-diag modified from Becker version, DONE)
-User-mode (or maybe optional /proc) diagnostics program.
-
 11) RTL8139C support untested.
 
-12) 10base-T support flaky or slow
+12) 10base-T support flaky or slow (todo: verify this is still true)
 
 
 
 
 Change History
 --------------
+
+Version 0.9.10 - September 12, 2000
+
+* Never wrap an Rx packet (faster Rx interrupt handling)
+* Clear all TxAborted conditions (bug fix)
+* Correct copyright
+* More credits
+* Update NWay doc URL
+* Clean up commonly used ifdef switches
+* Reorg info displayed at bootup/modprobe time
+* Remove some unneeded spinlocks
+* Misc cosmetic code cleanup
+* Always print interrupt status for abnormal interrupts
+* Use RealTek-recommended FIFO and DMA burst settings (1024 bytes)
+
+
 Version 0.9.9 - September 9, 2000
 
 * Fix oops-able bug in Rx ring wrap calculation (David Ford)

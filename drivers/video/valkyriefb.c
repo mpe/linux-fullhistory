@@ -425,12 +425,14 @@ static void set_valkyrie_clock(unsigned char *params)
 	struct adb_request req;
 	int i;
 
+#ifdef CONFIG_ADB_CUDA
 	for (i = 0; i < 3; ++i) {
 		cuda_request(&req, NULL, 5, CUDA_PACKET, CUDA_GET_SET_IIC,
 			     0x50, i + 1, params[i]);
 		while (!req.complete)
 			cuda_poll();
 	}
+#endif
 }
 
 static void __init init_valkyrie(struct fb_info_valkyrie *p)

@@ -188,6 +188,11 @@ pci_find_capability()		Find specified capability in device's capability
 				list.
 pci_module_init()		Inline helper function for ensuring correct
 				pci_driver initialization and error handling.
+pci_resource_start()		Returns bus start address for a given PCI region
+pci_resource_end()		Returns bus end address for a given PCI region
+pci_resource_len()		Returns the byte length of a PCI region
+pci_set_drvdata()		Set private driver data pointer for a pci_dev
+pci_get_drvdata()		Return private driver data pointer for a pci_dev
 
 
 7. Miscellaneous hints

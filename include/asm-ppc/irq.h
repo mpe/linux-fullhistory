@@ -184,6 +184,9 @@ extern irq_node_t *new_irq_node(void);
 */
 #define	SIU_INT_SMC1		((uint)0x04)
 #define	SIU_INT_SMC2		((uint)0x05)
+#define	SIU_INT_FCC1		((uint)0x20)
+#define	SIU_INT_FCC2		((uint)0x21)
+#define	SIU_INT_FCC3		((uint)0x22)
 #define	SIU_INT_SCC1		((uint)0x28)
 #define	SIU_INT_SCC2		((uint)0x29)
 #define	SIU_INT_SCC3		((uint)0x2a)

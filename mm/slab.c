@@ -1772,14 +1772,6 @@ void kmem_cache_reap (int gfp_mask)
 		/* It's safe to test this without holding the cache-lock. */
 		if (searchp->flags & SLAB_NO_REAP)
 			goto next;
-		/* FIXME: is this really a good idea? */
-		if (gfp_mask & GFP_DMA) {
-			if (!(searchp->gfpflags & GFP_DMA))
-				goto next;
-		} else {
-			if (searchp->gfpflags & GFP_DMA)
-				goto next;
-		}
 		spin_lock_irq(&searchp->spinlock);
 		if (searchp->growing)
 			goto next_unlock;

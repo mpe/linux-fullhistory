@@ -1303,20 +1303,21 @@ static int copy_mount_options (const void *data, unsigned long *where)
  * information (or be NULL).
  *
  * NOTE! As pre-0.97 versions of mount() didn't use this setup, the
- * flags have to have a special 16-bit magic number in the high word:
- * 0xC0ED. If this magic word isn't present, the flags and data info
- * aren't used, as the syscall assumes we are talking to an older
- * version that didn't understand them.
+ * flags used to have a special 16-bit magic number in the high word:
+ * 0xC0ED. If this magic number is present, the high word is discarded.
  */
 long do_mount(char * dev_name, char * dir_name, char *type_page,
-		  unsigned long new_flags, void *data_page)
+		  unsigned long flags, void *data_page)
 {
 	struct file_system_type * fstype;
 	struct nameidata nd;
 	struct vfsmount *mnt = NULL;
 	struct super_block *sb;
 	int retval = 0;
-	unsigned long flags = 0;
+
+	/* Discard magic */
+	if ((flags & MS_MGC_MSK) == MS_MGC_VAL)
+		flags &= ~MS_MGC_MSK;
  
 	/* Basic sanity checks */
 
@@ -1328,21 +1329,25 @@ long do_mount(char * dev_name, char * dir_name, char *type_page,
 	/* OK, looks good, now let's see what do they want */
 
 	/* just change the flags? - capabilities are checked in do_remount() */
-	if ((new_flags & (MS_MGC_MSK|MS_REMOUNT)) == (MS_MGC_VAL|MS_REMOUNT))
-		return do_remount(dir_name, new_flags&~(MS_MGC_MSK|MS_REMOUNT),
-				    (char *) data_page);
+	if (flags & MS_REMOUNT)
+		return do_remount(dir_name, flags & ~MS_REMOUNT,
+				  (char *) data_page);
 
-	if ((new_flags & MS_MGC_MSK) == MS_MGC_VAL)
-		flags = new_flags & ~MS_MGC_MSK;
+	/* "mount --bind"? Equivalent to older "mount -t bind" */
+	/* No capabilities? What if users do thousands of these? */
+	if (flags & MS_BIND)
+		return do_loopback(dev_name, dir_name);
 
 	/* For the rest we need the type */
 
 	if (!type_page || !memchr(type_page, 0, PAGE_SIZE))
 		return -EINVAL;
 
+#if 0	/* Can be deleted again. Introduced in patch-2.3.99-pre6 */
 	/* loopback mount? This is special - requires fewer capabilities */
 	if (strcmp(type_page, "bind")==0)
 		return do_loopback(dev_name, dir_name);
+#endif
 
 	/* for the rest we _really_ need capabilities... */
 	if (!capable(CAP_SYS_ADMIN))
@@ -1354,7 +1359,8 @@ long do_mount(char * dev_name, char * dir_name, char *type_page,
 		return -ENODEV;
 
 	/* ... and mountpoint. Do the lookup first to force automounting. */
-	if (path_init(dir_name, LOOKUP_FOLLOW|LOOKUP_POSITIVE|LOOKUP_DIRECTORY, &nd))
+	if (path_init(dir_name,
+		      LOOKUP_FOLLOW|LOOKUP_POSITIVE|LOOKUP_DIRECTORY, &nd))
 		retval = path_walk(dir_name, &nd);
 	if (retval)
 		goto fs_out;
@@ -1363,7 +1369,7 @@ long do_mount(char * dev_name, char * dir_name, char *type_page,
 	if (fstype->fs_flags & FS_NOMOUNT)
 		sb = ERR_PTR(-EINVAL);
 	else if (fstype->fs_flags & FS_REQUIRES_DEV)
-		sb = get_sb_bdev(fstype, dev_name,flags, data_page);
+		sb = get_sb_bdev(fstype, dev_name, flags, data_page);
 	else if (fstype->fs_flags & FS_SINGLE)
 		sb = get_sb_single(fstype, flags, data_page);
 	else
@@ -1376,6 +1382,13 @@ long do_mount(char * dev_name, char * dir_name, char *type_page,
 	/* Something was mounted here while we slept */
 	while(d_mountpoint(nd.dentry) && follow_down(&nd.mnt, &nd.dentry))
 		;
+
+	/* Refuse the same filesystem on the same mount point */
+	retval = -EBUSY;
+	if (nd.mnt && nd.mnt->mnt_sb == sb
+	    	   && nd.mnt->mnt_root == nd.dentry)
+		goto fail;
+
 	retval = -ENOENT;
 	if (!nd.dentry->d_inode)
 		goto fail;
@@ -1403,7 +1416,7 @@ fail:
 }
 
 asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
-			  unsigned long new_flags, void * data)
+			  unsigned long flags, void * data)
 {
 	int retval;
 	unsigned long data_page;
@@ -1423,14 +1436,18 @@ asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
 	retval = copy_mount_options (dev_name, &dev_page);
 	if (retval < 0)
 		goto out2;
+
 	retval = copy_mount_options (data, &data_page);
-	if (retval >= 0) {
-		lock_kernel();
-		retval = do_mount((char*)dev_page,dir_page,(char*)type_page,
-				      new_flags, (void*)data_page);
-		unlock_kernel();
-		free_page(data_page);
-	}
+	if (retval < 0)
+		goto out3;
+
+	lock_kernel();
+	retval = do_mount((char*)dev_page, dir_page, (char*)type_page,
+			  flags, (void*)data_page);
+	unlock_kernel();
+	free_page(data_page);
+
+out3:
 	free_page(dev_page);
 out2:
 	putname(dir_page);

@@ -121,7 +121,7 @@ struct inode *ramfs_get_inode(struct super_block *sb, int mode, int dev)
 		inode->i_size = 0;
 		inode->i_blksize = PAGE_CACHE_SIZE;
 		inode->i_blocks = 0;
-		inode->i_rdev = dev;
+		inode->i_rdev = to_kdev_t(dev);
 		inode->i_nlink = 1;
 		inode->i_op = NULL;
 		inode->i_fop = NULL;

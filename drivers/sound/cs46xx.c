@@ -100,12 +100,6 @@ struct cs_channel
 /* maxinum number of AC97 codecs connected, AC97 2.0 defined 4 */
 #define NR_AC97		2
 
-/* minor number of /dev/dspW */
-#define SND_DEV_DSP8	1
-
-/* minor number of /dev/dspW */
-#define SND_DEV_DSP16	1 
-
 static const unsigned sample_size[] = { 1, 2, 2, 4 };
 static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 

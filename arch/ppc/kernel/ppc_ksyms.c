@@ -37,6 +37,7 @@
 #include <asm/hw_irq.h>
 #include <asm/nvram.h>
 #include <asm/mmu_context.h>
+#include <asm/backlight.h>
 #ifdef CONFIG_SMP
 #include <asm/smplock.h>
 #endif /* CONFIG_SMP */
@@ -184,6 +185,10 @@ EXPORT_SYMBOL(giveup_fpu);
 EXPORT_SYMBOL(enable_kernel_fp);
 EXPORT_SYMBOL(flush_icache_range);
 EXPORT_SYMBOL(xchg_u32);
+#ifdef CONFIG_ALTIVEC
+EXPORT_SYMBOL(last_task_used_altivec);
+EXPORT_SYMBOL(giveup_altivec);
+#endif /* CONFIG_ALTIVEC */
 #ifdef CONFIG_SMP
 EXPORT_SYMBOL(__global_cli);
 EXPORT_SYMBOL(__global_sti);
@@ -204,26 +209,34 @@ EXPORT_SYMBOL(_machine);
 EXPORT_SYMBOL(ppc_md);
 
 #ifdef CONFIG_ADB
-/*
- * This could be more fine-grained, but for now assume if we have
- * ADB we have it all -- Cort
- */
 EXPORT_SYMBOL(adb_request);
 EXPORT_SYMBOL(adb_register);
+EXPORT_SYMBOL(adb_unregister);
+EXPORT_SYMBOL(adb_poll);
+EXPORT_SYMBOL(adb_try_handler_change);
+#endif /* CONFIG_ADB */
+#ifdef CONFIG_ADB_CUDA
 EXPORT_SYMBOL(cuda_request);
 EXPORT_SYMBOL(cuda_poll);
+#endif /* CONFIG_ADB_CUDA */
 #ifdef CONFIG_ADB_PMU
 EXPORT_SYMBOL(pmu_request);
 EXPORT_SYMBOL(pmu_poll);
 #endif /* CONFIG_ADB_PMU */
-#endif /* CONFIG_ADB */
 #ifdef CONFIG_PMAC_PBOOK
 EXPORT_SYMBOL(pmu_register_sleep_notifier);
 EXPORT_SYMBOL(pmu_unregister_sleep_notifier);
 EXPORT_SYMBOL(pmu_enable_irled);
-#endif CONFIG_PMAC_PBOOK
+#endif /* CONFIG_PMAC_PBOOK */
+#ifdef CONFIG_PMAC_BACKLIGHT
+EXPORT_SYMBOL(get_backlight_level);
+EXPORT_SYMBOL(set_backlight_level);
+#endif /* CONFIG_PMAC_BACKLIGHT */
 #if defined(CONFIG_ALL_PPC)
 EXPORT_SYMBOL_NOVERS(sys_ctrler);
+#ifndef CONFIG_MACH_SPECIFIC
+EXPORT_SYMBOL_NOVERS(have_of);
+#endif /* CONFIG_MACH_SPECIFIC */
 EXPORT_SYMBOL(find_devices);
 EXPORT_SYMBOL(find_type_devices);
 EXPORT_SYMBOL(find_compatible_devices);
@@ -253,9 +266,7 @@ EXPORT_SYMBOL(nvram_write_byte);
 EXPORT_SYMBOL(pmac_xpram_read);
 EXPORT_SYMBOL(pmac_xpram_write);
 #endif /* CONFIG_NVRAM */
-#ifdef CONFIG_PPC_RTC
 EXPORT_SYMBOL(to_tm);
-#endif
 
 EXPORT_SYMBOL_NOVERS(__ashrdi3);
 EXPORT_SYMBOL_NOVERS(__ashldi3);
@@ -279,7 +290,7 @@ EXPORT_SYMBOL(do_IRQ_intercept);
 EXPORT_SYMBOL(irq_desc);
 void ppc_irq_dispatch_handler(struct pt_regs *, int);
 EXPORT_SYMBOL(ppc_irq_dispatch_handler);
-EXPORT_SYMBOL(decrementer_count);
+EXPORT_SYMBOL(tb_ticks_per_jiffy);
 EXPORT_SYMBOL(get_wchan);
 EXPORT_SYMBOL(console_drivers);
 EXPORT_SYMBOL(console_lock);
@@ -309,3 +320,17 @@ EXPORT_SYMBOL(do_softirq);
 EXPORT_SYMBOL(next_mmu_context);
 EXPORT_SYMBOL(set_context);
 EXPORT_SYMBOL(mmu_context_overflow);
+
+#ifdef CONFIG_MOL
+extern ulong mol_interface[];
+extern PTE *Hash;
+extern unsigned long Hash_mask;
+extern void (*ret_from_except)(void);
+extern struct task_struct *last_task_used_altivec;
+EXPORT_SYMBOL_NOVERS(mol_interface);
+EXPORT_SYMBOL(Hash);
+EXPORT_SYMBOL(Hash_mask);
+EXPORT_SYMBOL(handle_mm_fault);
+EXPORT_SYMBOL(last_task_used_math);
+EXPORT_SYMBOL(ret_from_except);
+#endif /* CONFIG_MOL */

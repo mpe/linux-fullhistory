@@ -69,17 +69,27 @@ m8260_cpm_reset(void)
 	cpmp = (cpm8260_t *)commproc;
 }
 
-/* Allocate some memory from the dual ported ram.  We may want to
- * enforce alignment restrictions, but right now everyone is a good
- * citizen.
+/* Allocate some memory from the dual ported ram.
+ * To help protocols with object alignment restrictions, we do that
+ * if they ask.
  */
 uint
-m8260_cpm_dpalloc(uint size)
+m8260_cpm_dpalloc(uint size, uint align)
 {
 	uint	retloc;
+	uint	align_mask, off;
+	uint	savebase;
 
-	if ((dp_alloc_base + size) >= dp_alloc_top)
+	align_mask = align - 1;
+	savebase = dp_alloc_base;
+
+	if ((off = (dp_alloc_base & align_mask)) != 0)
+		dp_alloc_base += (align - off);
+
+	if ((dp_alloc_base + size) >= dp_alloc_top) {
+		dp_alloc_base = savebase;
 		return(CPM_DP_NOSPACE);
+	}
 
 	retloc = dp_alloc_base;
 	dp_alloc_base += size;
@@ -91,12 +101,22 @@ m8260_cpm_dpalloc(uint size)
  * UART "fifos" and the like.
  */
 uint
-m8260_cpm_hostalloc(uint size)
+m8260_cpm_hostalloc(uint size, uint align)
 {
 	uint	retloc;
+	uint	align_mask, off;
+	uint	savebase;
 
-	if ((host_buffer + size) >= host_end)
+	align_mask = align - 1;
+	savebase = host_buffer;
+
+	if ((off = (host_buffer & align_mask)) != 0)
+		host_buffer += (align - off);
+
+	if ((host_buffer + size) >= host_end) {
+		host_buffer = savebase;
 		return(0);
+	}
 
 	retloc = host_buffer;
 	host_buffer += size;

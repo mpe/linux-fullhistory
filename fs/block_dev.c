@@ -311,6 +311,39 @@ ssize_t block_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 }
 
 /*
+ * private llseek:
+ * for a block special file file->f_dentry->d_inode->i_size is zero
+ * so we compute the size by hand (just as in block_read/write above)
+ */
+static loff_t block_llseek(struct file *file, loff_t offset, int origin)
+{
+	long long retval;
+	kdev_t dev;
+
+	switch (origin) {
+		case 2:
+			dev = file->f_dentry->d_inode->i_rdev;
+			if (blk_size[MAJOR(dev)])
+				offset += (loff_t) blk_size[MAJOR(dev)][MINOR(dev)] << BLOCK_SIZE_BITS;
+			/* else?  return -EINVAL? */
+			break;
+		case 1:
+			offset += file->f_pos;
+	}
+	retval = -EINVAL;
+	if (offset >= 0) {
+		if (offset != file->f_pos) {
+			file->f_pos = offset;
+			file->f_reada = 0;
+			file->f_version = ++event;
+		}
+		retval = offset;
+	}
+	return retval;
+}
+	
+
+/*
  *	Filp may be NULL when we are called by an msync of a vma
  *	since the vma has no handle.
  */
@@ -612,7 +645,7 @@ int blkdev_get(struct block_device *bdev, mode_t mode, unsigned flags, int kind)
 
 int blkdev_open(struct inode * inode, struct file * filp)
 {
-	int ret = -ENODEV;
+	int ret = -ENXIO;
 	struct block_device *bdev = inode->i_bdev;
 	down(&bdev->bd_sem);
 	lock_kernel();
@@ -678,6 +711,7 @@ static int blkdev_ioctl(struct inode *inode, struct file *file, unsigned cmd,
 struct file_operations def_blk_fops = {
 	open:		blkdev_open,
 	release:	blkdev_close,
+	llseek:		block_llseek,
 	read:		block_read,
 	write:		block_write,
 	fsync:		block_fsync,

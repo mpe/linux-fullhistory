@@ -17,8 +17,12 @@
 #include <linux/adb.h>
 #include <linux/nvram.h>
 #include <linux/vt_kern.h>
+#ifdef CONFIG_ADB_CUDA
 #include <linux/cuda.h>
+#endif
+#ifdef CONFIG_ADB_PMU
 #include <linux/pmu.h>
+#endif
 
 #include <asm/uaccess.h>
 #include <asm/prom.h>
@@ -45,6 +49,9 @@ static struct device_node* awacs_node;
 
 static char awacs_name[64];
 static int awacs_revision;
+int awacs_is_screamer = 0;
+int awacs_device_id = 0;
+int awacs_has_iic = 0;
 #define AWACS_BURGUNDY	100		/* fake revision # for burgundy */
 
 /*
@@ -60,7 +67,7 @@ static volatile struct dbdma_cmd *awacs_rx_cmds;
  * Cached values of AWACS registers (we can't read them).
  * Except on the burgundy. XXX
  */
-int awacs_reg[5];
+int awacs_reg[8];
 
 #define HAS_16BIT_TABLES
 #undef HAS_8BIT_TABLES
@@ -1303,6 +1310,11 @@ static int awacs_sleep_notify(struct pmu_sleep_notifier *self, int when)
 		awacs_write(awacs_reg[1] | MASK_ADDR1);
 		awacs_write(awacs_reg[2] | MASK_ADDR2);
 		awacs_write(awacs_reg[4] | MASK_ADDR4);
+		if (awacs_is_screamer) {
+			awacs_write(awacs_reg[5] + MASK_ADDR5);
+			awacs_write(awacs_reg[6] + MASK_ADDR6);
+			awacs_write(awacs_reg[7] + MASK_ADDR7);
+		}
 		out_le32(&awacs->byteswap, dmasound.hard.format != AFMT_S16_BE);
 		enable_irq(awacs_irq);
 		enable_irq(awacs_tx_irq);
@@ -1551,6 +1563,7 @@ awacs_enable_amp(int spkr_vol)
 	if (sys_ctrler != SYS_CTRLER_CUDA)
 		return;
 
+#ifdef CONFIG_ADB_CUDA
 	/* turn on headphones */
 	cuda_request(&req, NULL, 5, CUDA_PACKET, CUDA_GET_SET_IIC,
 		     0x8a, 4, 0);
@@ -1570,6 +1583,7 @@ awacs_enable_amp(int spkr_vol)
 	cuda_request(&req, NULL, 5, CUDA_PACKET,
 		     CUDA_GET_SET_IIC, 0x8a, 1, 0x29);
 	while (!req.complete) cuda_poll();
+#endif /* CONFIG_ADB_CUDA */
 }
 
 
@@ -1974,6 +1988,13 @@ int __init dmasound_awacs_init(void)
 				awacs_subframe = *prop;
 			if (device_is_compatible(sound, "burgundy"))
 				awacs_revision = AWACS_BURGUNDY;
+			/* This should be verified on older screamers */
+			if (device_is_compatible(sound, "screamer"))
+				awacs_is_screamer = 1;
+			prop = (unsigned int *)get_property(sound, "device-id", 0);
+			if (prop != 0)
+				awacs_device_id = *prop;
+			awacs_has_iic = (find_devices("perch") != NULL);
 
 			/* look for a property saying what sample rates
 			   are available */
@@ -2029,10 +2050,12 @@ int __init dmasound_awacs_init(void)
 #ifdef CONFIG_PMAC_PBOOK
 		if (machine_is_compatible("PowerBook1,1")
 		    || machine_is_compatible("AAPL,PowerBook1998")) {
+			pmu_suspend();
 			feature_set(np, FEATURE_Sound_CLK_enable);
 			feature_set(np, FEATURE_Sound_power);
 			/* Shorter delay will not work */
 			mdelay(1000);
+			pmu_resume();
 		}
 #endif
 		awacs_tx_cmds = (volatile struct dbdma_cmd *)
@@ -2050,16 +2073,28 @@ int __init dmasound_awacs_init(void)
 
 
 		awacs_reg[0] = MASK_MUX_CD;
-		awacs_reg[1] = MASK_LOOPTHRU | MASK_PAROUT;
+		/* FIXME: Only machines with external SRS module need MASK_PAROUT */
+		awacs_reg[1] = MASK_LOOPTHRU;
+		if (awacs_has_iic || awacs_device_id == 0x5 || /*awacs_device_id == 0x8
+			|| */awacs_device_id == 0xb)
+			awacs_reg[1] |= MASK_PAROUT;
 		/* get default volume from nvram */
 		vol = (~nvram_read_byte(0x1308) & 7) << 1;
 		awacs_reg[2] = vol + (vol << 6);
 		awacs_reg[4] = vol + (vol << 6);
+		awacs_reg[5] = 0;
+		awacs_reg[6] = 0;
+		awacs_reg[7] = 0;
 		out_le32(&awacs->control, 0x11);
 		awacs_write(awacs_reg[0] + MASK_ADDR0);
 		awacs_write(awacs_reg[1] + MASK_ADDR1);
 		awacs_write(awacs_reg[2] + MASK_ADDR2);
 		awacs_write(awacs_reg[4] + MASK_ADDR4);
+		if (awacs_is_screamer) {
+			awacs_write(awacs_reg[5] + MASK_ADDR5);
+			awacs_write(awacs_reg[6] + MASK_ADDR6);
+			awacs_write(awacs_reg[7] + MASK_ADDR7);
+		}
 
 		/* Initialize recent versions of the awacs */
 		if (awacs_revision == 0) {
@@ -2118,7 +2153,15 @@ int __init dmasound_awacs_init(void)
 					break;
 				}
 			}
-			/* enable CD sound input */
+			/*
+			 * Enable CD sound input.
+			 * The relevant bits for writing to this byte are 0x8f.
+			 * I haven't found out what the 0x80 bit does.
+			 * For the 0xf bits, writing 3 or 7 enables the CD
+			 * input, any other value disables it.  Values
+			 * 1, 3, 5, 7 enable the microphone.  Values 0, 2,
+			 * 4, 6, 8 - f enable the input from the modem.
+			 */
 			if (macio_base)
 				out_8(macio_base + 0x37, 3);
 		}

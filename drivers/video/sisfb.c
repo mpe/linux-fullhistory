@@ -356,8 +356,6 @@ u16 VGA_DAC[] = {
 	0x0B, 0x0C, 0x0D, 0x0F, 0x10
 };
 
-#ifdef CONFIG_FB_SIS_LINUXBIOS
-
 #define Monitor1Sense 0x20
 
 unsigned char SRegsInit[] = { 
@@ -370,6 +368,8 @@ unsigned char SRegsInit[] = {
  	0x80, 0x00, 0x01, 0xff, 0x00, 0x00, 0x00, 0xff,
 	0x8e, 0x40, 0x00, 0x00, 0x08, 0x00, 0xff, 0xff
 };
+
+#ifdef CONFIG_FB_SIS_LINUXBIOS
 
 unsigned char SRegs[] = { 
  	0x03, 0x01, 0x0F, 0x00, 0x0E, 0xA1, 0x02, 0x13,
@@ -1440,7 +1440,6 @@ static u32 get_reg3(u16 port)
 
 static u16 get_modeID_length(unsigned long ROMAddr, u16 ModeNo)
 {
-	unsigned char ModeID;
 	u16 modeidlength;
 	u16 usModeIDOffset;
 	unsigned short PreviousWord,CurrentWord;

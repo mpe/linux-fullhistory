@@ -57,7 +57,7 @@ struct exception_table_entry
 
 /* Returns 0 if exception not found and fixup otherwise.  */
 extern unsigned long search_exception_table(unsigned long);
-
+extern void sort_exception_table(void);
 
 /*
  * These are the main single-value transfer routines.  They automatically
@@ -131,10 +131,11 @@ struct __large_struct { unsigned long buf[100]; };
 		".section .fixup,\"ax\"\n"			\
 		"3:	li %0,%3\n"				\
 		"	b 2b\n"					\
+		".previous\n"					\
 		".section __ex_table,\"a\"\n"			\
 		"	.align 2\n"				\
 		"	.long 1b,3b\n"				\
-		".text"						\
+		".previous"					\
 		: "=r"(err)					\
 		: "r"(x), "b"(addr), "i"(-EFAULT), "0"(err))
 
@@ -178,10 +179,11 @@ do {								\
 		"3:	li %0,%3\n"			\
 		"	li %1,0\n"			\
 		"	b 2b\n"				\
+		".previous\n"				\
 		".section __ex_table,\"a\"\n"		\
 		"	.align 2\n"			\
 		"	.long 1b,3b\n"			\
-		".text"					\
+		".previous"				\
 		: "=r"(err), "=r"(x)			\
 		: "b"(addr), "i"(-EFAULT), "0"(err))
 

@@ -466,8 +466,11 @@ for (;;) {
 		cep->stats.rx_bytes += pkt_len;
 
 		/* This does 16 byte alignment, much more than we need.
-		*/
-		skb = dev_alloc_skb(pkt_len);
+		 * The packet length includes FCS, but we don't want to
+		 * include that when passing upstream as it messes up
+		 * bridging applications.
+		 */
+		skb = dev_alloc_skb(pkt_len-4);
 
 		if (skb == NULL) {
 			printk("%s: Memory squeeze, dropping packet.\n", dev->name);
@@ -475,10 +478,10 @@ for (;;) {
 		}
 		else {
 			skb->dev = dev;
-			skb_put(skb,pkt_len);	/* Make room */
+			skb_put(skb,pkt_len-4);	/* Make room */
 			eth_copy_and_sum(skb,
 				(unsigned char *)__va(bdp->cbd_bufaddr),
-				pkt_len, 0);
+				pkt_len-4, 0);
 			skb->protocol=eth_type_trans(skb,dev);
 			netif_rx(skb);
 		}
@@ -549,10 +552,10 @@ static void set_multicast_list(struct net_device *dev)
 	  
 		/* Log any net taps. */
 		printk("%s: Promiscuous mode enabled.\n", dev->name);
-		cep->sccp->scc_pmsr |= SCC_PMSR_PRO;
+		cep->sccp->scc_pmsr |= SCC_PSMR_PRO;
 	} else {
 
-		cep->sccp->scc_pmsr &= ~SCC_PMSR_PRO;
+		cep->sccp->scc_pmsr &= ~SCC_PSMR_PRO;
 
 		if (dev->flags & IFF_ALLMULTI) {
 			/* Catch all multicast addresses, so set the
@@ -678,11 +681,11 @@ int __init scc_enet_init(void)
 	 * These are relative offsets in the DP ram address space.
 	 * Initialize base addresses for the buffer descriptors.
 	 */
-	i = m8260_cpm_dpalloc(sizeof(cbd_t) * RX_RING_SIZE);
+	i = m8260_cpm_dpalloc(sizeof(cbd_t) * RX_RING_SIZE, 8);
 	ep->sen_genscc.scc_rbase = i;
 	cep->rx_bd_base = (cbd_t *)&immap->im_dprambase[i];
 
-	i = m8260_cpm_dpalloc(sizeof(cbd_t) * TX_RING_SIZE);
+	i = m8260_cpm_dpalloc(sizeof(cbd_t) * TX_RING_SIZE, 8);
 	ep->sen_genscc.scc_tbase = i;
 	cep->tx_bd_base = (cbd_t *)&immap->im_dprambase[i];
 
@@ -816,7 +819,7 @@ int __init scc_enet_init(void)
 	/* Set processing mode.  Use Ethernet CRC, catch broadcast, and
 	 * start frame search 22 bit times after RENA.
 	 */
-	sccp->scc_pmsr = (SCC_PMSR_ENCRC | SCC_PMSR_NIB22);
+	sccp->scc_pmsr = (SCC_PSMR_ENCRC | SCC_PSMR_NIB22);
 
 	/* It is now OK to enable the Ethernet transmitter.
 	 * Unfortunately, there are board implementation differences here.

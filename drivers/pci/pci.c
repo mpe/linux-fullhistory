@@ -657,134 +657,82 @@ static struct pci_bus * __init pci_add_new_bus(struct pci_bus *parent, struct pc
 	return child;
 }
 
-/*
- * A CardBus bridge is basically the same as a regular PCI bridge,
- * except we don't scan behind it because it will be changing.
- */
-static int __init pci_scan_cardbus(struct pci_bus *bus, struct pci_dev *dev, int busnr)
-{
-	int i;
-	unsigned short cr;
-	unsigned int buses;
-	struct pci_bus *child;
-
-	/*
-	 * Insert it into the tree of buses.
-	 */
-	DBG("Scanning CardBus bridge %s\n", dev->slot_name);
-	child = pci_add_new_bus(bus, dev, ++busnr);
-
-	for (i = 0; i < 4; i++)
-		child->resource[i] = &dev->resource[PCI_BRIDGE_RESOURCES+i];
-
-	/*
-	 * Maybe we'll have another bus behind this one?
-	 */
-	child->subordinate = ++busnr;
-	sprintf(child->name, "PCI CardBus #%02x", child->number);
-
-	/*
-	 * Clear all status bits and turn off memory,
-	 * I/O and master enables.
-	 */
-	pci_read_config_word(dev, PCI_COMMAND, &cr);
-	pci_write_config_word(dev, PCI_COMMAND, 0x0000);
-	pci_write_config_word(dev, PCI_STATUS, 0xffff);
-
-	/*
-	 * Read the existing primary/secondary/subordinate bus
-	 * number configuration to determine if the bridge
-	 * has already been configured by the system.  If so,
-	 * do not modify the configuration, merely note it.
-	 */
-	pci_read_config_dword(dev, PCI_PRIMARY_BUS, &buses);
-	if ((buses & 0xFFFFFF) != 0 && ! pcibios_assign_all_busses()) {
-		child->primary = buses & 0xFF;
-		child->secondary = (buses >> 8) & 0xFF;
-		child->subordinate = (buses >> 16) & 0xFF;
-		child->number = child->secondary;
-		if (child->subordinate > busnr)
-			busnr = child->subordinate;
-	} else {
-		/*
-		 * Configure the bus numbers for this bridge:
-		 */
-		buses &= 0xff000000;
-		buses |=
-		      (((unsigned int)(child->primary)     <<  0) |
-		       ((unsigned int)(child->secondary)   <<  8) |
-		       ((unsigned int)(child->subordinate) << 16));
-		pci_write_config_dword(dev, PCI_PRIMARY_BUS, buses);
-	}
-	pci_write_config_word(dev, PCI_COMMAND, cr);
-	return busnr;
-}
-
 static unsigned int __init pci_do_scan_bus(struct pci_bus *bus);
 
 /*
- * If it's a bridge, scan the bus behind it.
+ * If it's a bridge, configure it and scan the bus behind it.
+ * For CardBus bridges, we don't scan behind as the devices will
+ * be handled by the bridge driver itself.
+ *
+ * We need to process bridges in two passes -- first we scan those
+ * already configured by the BIOS and after we are done with all of
+ * them, we proceed to assigning numbers to the remaining buses in
+ * order to avoid overlaps between old and new bus numbers.
  */
-static int __init pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int max)
+static int __init pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int max, int pass)
 {
 	unsigned int buses;
 	unsigned short cr;
 	struct pci_bus *child;
+	int is_cardbus = (dev->hdr_type == PCI_HEADER_TYPE_CARDBUS);
 
-	/*
-	 * Insert it into the tree of buses.
-	 */
-	DBG("Scanning behind PCI bridge %s\n", dev->slot_name);
-	child = pci_add_new_bus(bus, dev, ++max);
-	sprintf(child->name, "PCI Bus #%02x", child->number);
-
-	/*
-	 * Clear all status bits and turn off memory,
-	 * I/O and master enables.
-	 */
-	pci_read_config_word(dev, PCI_COMMAND, &cr);
-	pci_write_config_word(dev, PCI_COMMAND, 0x0000);
-	pci_write_config_word(dev, PCI_STATUS, 0xffff);
-
-	/*
-	 * Read the existing primary/secondary/subordinate bus
-	 * number configuration to determine if the PCI bridge
-	 * has already been configured by the system.  If so,
-	 * do not modify the configuration, merely note it.
-	 */
 	pci_read_config_dword(dev, PCI_PRIMARY_BUS, &buses);
-	if ((buses & 0xFFFFFF) != 0 && ! pcibios_assign_all_busses()) {
-		unsigned int cmax;
+	DBG("Scanning behind PCI bridge %s, config %06x, pass %d\n", dev->slot_name, buses & 0xffffff, pass);
+	if ((buses & 0xffffff) && !pcibios_assign_all_busses()) {
+		/*
+		 * Bus already configured by firmware, process it in the first
+		 * pass and just note the configuration.
+		 */
+		if (pass)
+			return max;
+		child = pci_add_new_bus(bus, dev, 0);
 		child->primary = buses & 0xFF;
 		child->secondary = (buses >> 8) & 0xFF;
 		child->subordinate = (buses >> 16) & 0xFF;
 		child->number = child->secondary;
-		cmax = pci_do_scan_bus(child);
-		if (cmax > max) max = cmax;
+		if (!is_cardbus) {
+			unsigned int cmax = pci_do_scan_bus(child);
+			if (cmax > max) max = cmax;
+		}
 	} else {
 		/*
-		 * Configure the bus numbers for this bridge:
+		 * We need to assign a number to this bus which we always
+		 * do in the second pass. We also keep all address decoders
+		 * on the bridge disabled during scanning.  FIXME: Why?
 		 */
-		buses &= 0xff000000;
-		buses |=
-		      (((unsigned int)(child->primary)     <<  0) |
-		       ((unsigned int)(child->secondary)   <<  8) |
-		       ((unsigned int)(child->subordinate) << 16));
+		if (!pass)
+			return max;
+		pci_read_config_word(dev, PCI_COMMAND, &cr);
+		pci_write_config_word(dev, PCI_COMMAND, 0x0000);
+		pci_write_config_word(dev, PCI_STATUS, 0xffff);
+		child = pci_add_new_bus(bus, dev, ++max);
+		buses = (buses & 0xff000000)
+		      | ((unsigned int)(child->primary)     <<  0)
+		      | ((unsigned int)(child->secondary)   <<  8)
+		      | ((unsigned int)(child->subordinate) << 16);
+		/*
+		 * We need to blast all three values with a single write.
+		 */
 		pci_write_config_dword(dev, PCI_PRIMARY_BUS, buses);
+		if (!is_cardbus) {
+			/* Now we can scan all subordinate buses... */
+			max = pci_do_scan_bus(child);
+		} else {
+			/*
+			 * For CardBus bridges, we leave 4 bus numbers
+			 * as cards with a PCI-to-PCI bridge can be
+			 * inserted later.
+			 */
+			max += 3;
+		}
 		/*
-		 * Now we can scan all subordinate buses:
-		 */
-		max = pci_do_scan_bus(child);
-		/*
-		 * Set the subordinate bus number to its real
-		 * value:
+		 * Set the subordinate bus number to its real value.
 		 */
 		child->subordinate = max;
-		buses = (buses & 0xff00ffff)
-			| ((unsigned int)(child->subordinate) << 16);
-		pci_write_config_dword(dev, PCI_PRIMARY_BUS, buses);
+		pci_write_config_byte(dev, PCI_SUBORDINATE_BUS, max);
+		pci_write_config_word(dev, PCI_COMMAND, cr);
 	}
-	pci_write_config_word(dev, PCI_COMMAND, cr);
+	sprintf(child->name, (is_cardbus ? "PCI CardBus #%02x" : "PCI Bus #%02x"), child->number);
 	return max;
 }
 
@@ -933,7 +881,7 @@ struct pci_dev * __init pci_scan_slot(struct pci_dev *temp)
 
 static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 {
-	unsigned int devfn, max;
+	unsigned int devfn, max, pass;
 	struct list_head *ln;
 	struct pci_dev *dev, dev0;
 
@@ -957,17 +905,12 @@ static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 	 */
 	DBG("Fixups for bus %02x\n", bus->number);
 	pcibios_fixup_bus(bus);
-	for (ln=bus->devices.next; ln != &bus->devices; ln=ln->next) {
-		dev = pci_dev_b(ln);
-		switch (dev->class >> 8) {
-		case PCI_CLASS_BRIDGE_PCI:
-			max = pci_scan_bridge(bus, dev, max);
-			break;
-		case PCI_CLASS_BRIDGE_CARDBUS:
-			max = pci_scan_cardbus(bus, dev, max);
-			break;
+	for (pass=0; pass < 2; pass++)
+		for (ln=bus->devices.next; ln != &bus->devices; ln=ln->next) {
+			dev = pci_dev_b(ln);
+			if (dev->hdr_type == PCI_HEADER_TYPE_BRIDGE || dev->hdr_type == PCI_HEADER_TYPE_CARDBUS)
+				max = pci_scan_bridge(bus, dev, max, pass);
 		}
-	}
 
 	/*
 	 * We've scanned the bus and so we know all about what's on

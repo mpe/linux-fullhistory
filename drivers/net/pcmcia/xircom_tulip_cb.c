@@ -3034,10 +3034,7 @@ static void set_rx_mode(struct net_device *dev)
 			if (entry == TX_RING_SIZE-1)
 				tx_flags |= DESC_RING_WRAP;		/* Wrap ring. */
 			tp->tx_ring[entry].length = tx_flags;
-			if(tp->chip_id == X3201_3)
-				tp->tx_ring[entry].buffer1 = (virt_to_bus(tp->setup_frame) + 4);
-			else
-				tp->tx_ring[entry].buffer1 = virt_to_bus(tp->setup_frame);
+			tp->tx_ring[entry].buffer1 = virt_to_bus(tp->setup_frame);
 			tp->tx_ring[entry].status = DescOwned;
 			if (tp->cur_tx - tp->dirty_tx >= TX_RING_SIZE - 2) {
 				tp->tx_full = 1;

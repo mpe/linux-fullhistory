@@ -3027,11 +3027,11 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
  *	Scan for a Bt848 card, request the irq and map the io memory 
  */
 
-static void __devinit bttv_remove(struct pci_dev *pci_dev)
+static void __devexit bttv_remove(struct pci_dev *pci_dev)
 {
         u8 command;
         int j;
-        struct bttv *btv = PCI_GET_DRIVER_DATA(pci_dev);
+        struct bttv *btv = pci_get_drvdata(pci_dev);
 
         /* unregister i2c_bus */
 	if (0 == btv->i2c_ok)
@@ -3092,6 +3092,8 @@ static void __devinit bttv_remove(struct pci_dev *pci_dev)
         */
         btv->shutdown=1;
         wake_up(&btv->gpioq);
+
+	pci_set_drvdata(pci_dev, NULL);
 
         return;
 }
@@ -3198,7 +3200,7 @@ static int __devinit bttv_probe(struct pci_dev *dev, const struct pci_device_id 
                 }
         }
 
-	PCI_SET_DRIVER_DATA(dev,btv);
+	pci_set_drvdata(dev,btv);
 
 	if(init_bt848(btv) < 0) {
 		bttv_remove(dev);

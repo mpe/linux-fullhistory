@@ -286,6 +286,7 @@ void power_save(void)
 	case 6:			/* 603e */
 	case 7:			/* 603ev */
 	case 8:			/* 750 */
+	case 12:		/* 7400 */
 		save_flags(msr);
 		__cli();
 		if (!current->need_resched) {

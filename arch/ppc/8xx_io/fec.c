@@ -669,18 +669,21 @@ while (!(bdp->cbd_sc & BD_ENET_RX_EMPTY)) {
 #endif
 
 	/* This does 16 byte alignment, exactly what we need.
+	 * The packet length includes FCS, but we don't want to
+	 * include that when passing upstream as it messes up
+	 * bridging applications.
 	 */
-	skb = dev_alloc_skb(pkt_len);
+	skb = dev_alloc_skb(pkt_len-4);
 
 	if (skb == NULL) {
 		printk("%s: Memory squeeze, dropping packet.\n", dev->name);
 		fep->stats.rx_dropped++;
 	} else {
 		skb->dev = dev;
-		skb_put(skb,pkt_len);	/* Make room */
+		skb_put(skb,pkt_len-4);	/* Make room */
 		eth_copy_and_sum(skb,
 				 (unsigned char *)__va(bdp->cbd_bufaddr),
-				 pkt_len, 0);
+				 pkt_len-4, 0);
 		skb->protocol=eth_type_trans(skb,dev);
 		netif_rx(skb);
 	}

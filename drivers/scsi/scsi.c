@@ -384,7 +384,7 @@ Scsi_Cmnd *scsi_allocate_device(Scsi_Device * device, int wait,
 					 * return NULL.
 					 */
 					SCpnt = NULL;
-					break;
+					goto busy;
 				}
 			}
 			/*
@@ -402,6 +402,7 @@ Scsi_Cmnd *scsi_allocate_device(Scsi_Device * device, int wait,
 		if (SCpnt) {
 			break;
 		}
+      busy:
 		/*
 		 * If we have been asked to wait for a free block, then
 		 * wait here.
@@ -495,30 +496,7 @@ Scsi_Cmnd *scsi_allocate_device(Scsi_Device * device, int wait,
 	return SCpnt;
 }
 
-/*
- * Function:    scsi_release_command
- *
- * Purpose:     Release a command block.
- *
- * Arguments:   SCpnt - command block we are releasing.
- *
- * Notes:       The command block can no longer be used by the caller once
- *              this funciton is called.  This is in effect the inverse
- *              of scsi_allocate_device.  Note that we also must perform
- *              a couple of additional tasks.  We must first wake up any
- *              processes that might have blocked waiting for a command
- *              block, and secondly we must hit the queue handler function
- *              to make sure that the device is busy.
- *
- *              The idea is that a lot of the mid-level internals gunk
- *              gets hidden in this function.  Upper level drivers don't
- *              have any chickens to wave in the air to get things to
- *              work reliably.
- *
- *              This function is deprecated, and drivers should be
- *              rewritten to use Scsi_Request instead of Scsi_Cmnd.
- */
-void scsi_release_command(Scsi_Cmnd * SCpnt)
+inline void __scsi_release_command(Scsi_Cmnd * SCpnt)
 {
 	unsigned long flags;
         Scsi_Device * SDpnt;
@@ -562,6 +540,43 @@ void scsi_release_command(Scsi_Cmnd * SCpnt)
          * they wake up.  
          */
 	wake_up(&SDpnt->scpnt_wait);
+}
+
+/*
+ * Function:    scsi_release_command
+ *
+ * Purpose:     Release a command block.
+ *
+ * Arguments:   SCpnt - command block we are releasing.
+ *
+ * Notes:       The command block can no longer be used by the caller once
+ *              this funciton is called.  This is in effect the inverse
+ *              of scsi_allocate_device.  Note that we also must perform
+ *              a couple of additional tasks.  We must first wake up any
+ *              processes that might have blocked waiting for a command
+ *              block, and secondly we must hit the queue handler function
+ *              to make sure that the device is busy.  Note - there is an
+ *              option to not do this - there were instances where we could
+ *              recurse too deeply and blow the stack if this happened
+ *              when we were indirectly called from the request function
+ *              itself.
+ *
+ *              The idea is that a lot of the mid-level internals gunk
+ *              gets hidden in this function.  Upper level drivers don't
+ *              have any chickens to wave in the air to get things to
+ *              work reliably.
+ *
+ *              This function is deprecated, and drivers should be
+ *              rewritten to use Scsi_Request instead of Scsi_Cmnd.
+ */
+void scsi_release_command(Scsi_Cmnd * SCpnt)
+{
+        request_queue_t *q;
+        Scsi_Device * SDpnt;
+
+        SDpnt = SCpnt->device;
+
+        __scsi_release_command(SCpnt);
 
         /*
          * Finally, hit the queue request function to make sure that
@@ -569,12 +584,8 @@ void scsi_release_command(Scsi_Cmnd * SCpnt)
          * This won't block - if the device cannot take any more, life
          * will go on.  
          */
-        {
-                request_queue_t *q;
-
-                q = &SDpnt->request_queue;
-                scsi_queue_next_request(q, NULL);                
-        }
+        q = &SDpnt->request_queue;
+        scsi_queue_next_request(q, NULL);                
 }
 
 /*

@@ -226,10 +226,11 @@ walnut_halt(void)
 /*
  * Document me.
  */
-void __init
+long __init
 walnut_time_init(void)
 {
 	/* XXX - Implement me */
+	return 0;
 }
 
 /*

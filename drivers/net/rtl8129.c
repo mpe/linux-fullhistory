@@ -406,6 +406,8 @@ static struct net_device *rtl8129_probe1(struct pci_dev *pdev, int pci_bus,
 		printk(KERN_INFO "%s", version);
 
 	dev = init_etherdev(NULL, 0);
+	if (dev == NULL)
+		goto out;
 
 	printk(KERN_INFO "%s: %s at %#lx, IRQ %d, ",
 		   dev->name, pci_tbl[chip_idx].name, ioaddr, irq);
@@ -427,13 +429,17 @@ static struct net_device *rtl8129_probe1(struct pci_dev *pdev, int pci_bus,
 	printk("%2.2x.\n", dev->dev_addr[i]);
 
 	/* We do a request_region() to register /proc/ioports info. */
-	request_region(ioaddr, pci_tbl[chip_idx].io_size, dev->name);
+	if (!request_region(ioaddr, pci_tbl[chip_idx].io_size, dev->name))
+		goto out_free_dev;
 
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 
 	/* Some data structures must be quadword aligned. */
 	tp = kmalloc(sizeof(*tp), GFP_KERNEL | GFP_DMA);
+	if (tp == NULL)
+		goto out_release_region;
+
 	memset(tp, 0, sizeof(*tp));
 	dev->priv = tp;
 
@@ -499,8 +505,15 @@ static struct net_device *rtl8129_probe1(struct pci_dev *pdev, int pci_bus,
 	dev->get_stats = &rtl8129_get_stats;
 	dev->set_multicast_list = &set_rx_mode;
 	dev->do_ioctl = &mii_ioctl;
-
 	return dev;
+
+out_release_region:
+	release_region(ioaddr, pci_tbl[chip_idx].io_size);
+out_free_dev:
+	unregister_netdev(dev);
+	kfree(dev);
+out:
+	return NULL;
 }
 
 /* Serial EEPROM section. */
@@ -660,16 +673,17 @@ rtl8129_open(struct net_device *dev)
 {
 	struct rtl8129_private *tp = (struct rtl8129_private *)dev->priv;
 	long ioaddr = dev->base_addr;
-	int i;
+	int i, retval;
+
+	MOD_INC_USE_COUNT;
 
 	/* Soft reset the chip. */
 	outb(CmdReset, ioaddr + ChipCmd);
 
-	if (request_irq(dev->irq, &rtl8129_interrupt, SA_SHIRQ, dev->name, dev)) {
-		return -EAGAIN;
+	if ((retval = request_irq(dev->irq, &rtl8129_interrupt, SA_SHIRQ, dev->name, dev))) {
+		MOD_DEC_USE_COUNT;
+		return retval;
 	}
-
-	MOD_INC_USE_COUNT;
 
 	tp->tx_bufs = pci_alloc_consistent(tp->pdev,
 									   TX_BUF_SIZE * NUM_TX_DESC,
@@ -690,6 +704,7 @@ rtl8129_open(struct net_device *dev)
 		if (rtl8129_debug > 0)
 			printk(KERN_ERR "%s: Couldn't allocate a %d byte receive ring.\n",
 				   dev->name, RX_BUF_LEN);
+		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 	rtl8129_init_ring(dev);
@@ -1226,8 +1241,9 @@ static int rtl8129_rx(struct net_device *dev)
 			/* Malloc up new buffer, compatible with net-2e. */
 			/* Omit the four octet CRC from the length. */
 			struct sk_buff *skb;
+			int pkt_size = rx_size - 4;
 
-			skb = dev_alloc_skb(rx_size + 2);
+			skb = dev_alloc_skb(pkt_size + 2);
 			if (skb == NULL) {
 				printk(KERN_WARNING"%s: Memory squeeze, deferring packet.\n",
 					   dev->name);
@@ -1238,12 +1254,12 @@ static int rtl8129_rx(struct net_device *dev)
 			}
 			skb->dev = dev;
 			skb_reserve(skb, 2);	/* 16 byte align the IP fields. */
-			if (ring_offset+rx_size+4 > RX_BUF_LEN) {
+			if (ring_offset+rx_size > RX_BUF_LEN) {
 				int semi_count = RX_BUF_LEN - ring_offset - 4;
 				memcpy(skb_put(skb, semi_count), &rx_ring[ring_offset + 4],
 					   semi_count);
-				memcpy(skb_put(skb, rx_size-semi_count), rx_ring,
-					   rx_size-semi_count);
+				memcpy(skb_put(skb, pkt_size-semi_count), rx_ring,
+					   pkt_size-semi_count);
 				if (rtl8129_debug > 4) {
 					int i;
 					printk(KERN_DEBUG"%s:  Frame wrap @%d",
@@ -1256,17 +1272,17 @@ static int rtl8129_rx(struct net_device *dev)
 			} else {
 #if 1  /* USE_IP_COPYSUM */
 				eth_copy_and_sum(skb, &rx_ring[ring_offset + 4],
-								 rx_size, 0);
-				skb_put(skb, rx_size);
+								 pkt_size, 0);
+				skb_put(skb, pkt_size);
 #else
-				memcpy(skb_put(skb, rx_size), &rx_ring[ring_offset + 4],
-					   rx_size);
+				memcpy(skb_put(skb, pkt_size), &rx_ring[ring_offset + 4],
+					   pkt_size);
 #endif
 			}
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);
 #if LINUX_VERSION_CODE > 0x20119
-			tp->stats.rx_bytes += rx_size;
+			tp->stats.rx_bytes += pkt_size;
 #endif
 			tp->stats.rx_packets++;
 		}
@@ -1292,6 +1308,8 @@ rtl8129_close(struct net_device *dev)
 
 	netif_stop_queue(dev);
 
+	del_timer_sync(&tp->timer);
+
 	if (rtl8129_debug > 1)
 		printk(KERN_DEBUG"%s: Shutting down ethercard, status was 0x%4.4x.\n",
 			   dev->name, inw(ioaddr + IntrStatus));
@@ -1305,8 +1323,6 @@ rtl8129_close(struct net_device *dev)
 	/* Update the error counts. */
 	tp->stats.rx_missed_errors += inl(ioaddr + RxMissed);
 	outl(0, ioaddr + RxMissed);
-
-	del_timer(&tp->timer);
 
 	free_irq(dev->irq, dev);
 

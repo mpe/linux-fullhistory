@@ -197,7 +197,7 @@ static int bfs_statfs(struct super_block *s, struct statfs *buf)
 	buf->f_bfree = buf->f_bavail = s->su_freeb;
 	buf->f_files = s->su_lasti + 1 - BFS_ROOT_INO;
 	buf->f_ffree = s->su_freei;
-	buf->f_fsid.val[0] = s->s_dev;
+	buf->f_fsid.val[0] = kdev_t_to_nr(s->s_dev);
 	buf->f_namelen = BFS_NAMELEN;
 	return 0;
 }

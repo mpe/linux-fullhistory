@@ -112,11 +112,10 @@ void __init m8260_calibrate_decr(void)
 	bd_t	*binfo = (bd_t *)__res;
 	int freq, divisor;
 
-	freq = (binfo->bi_intfreq * 1000000);
-        divisor = 16;
-        decrementer_count = freq / HZ / divisor;
-        count_period_num = divisor;
-        count_period_den = freq / 1000000;
+	freq = (binfo->bi_busfreq * 1000000);
+        divisor = 4;
+        tb_ticks_per_jiffy = freq / HZ / divisor;
+	tb_to_us = mulhwu_scale_factor(freq / divisor, 1000000);
 }
 
 /* The 8260 has an internal 1-second timer update register that
@@ -143,8 +142,20 @@ void
 m8260_restart(char *cmd)
 {
 	extern void m8260_gorom(bd_t *bi, uint addr);
+	uint	startaddr;
 
-	m8260_gorom(NULL, 0xff000100);
+	/* Most boot roms have a warmstart as the second instruction
+	 * of the reset vector.  If that doesn't work for you, change this
+	 * or the reboot program to send a proper address.
+	 */
+	startaddr = 0xff000104;
+
+	if (cmd != NULL) {
+		if (!strncmp(cmd, "startaddr=", 10))
+			startaddr = simple_strtoul(&cmd[10], NULL, 0);
+	}
+
+	m8260_gorom((uint)__pa(__res), startaddr);
 }
 
 void

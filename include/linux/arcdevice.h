@@ -340,7 +340,6 @@ void arcnet_rfc1051_init(void);
 void arcnet_raw_init(void);
 
 int com90xx_probe(struct net_device *dev);
-void com20020pci_probe_all(void);
 
 #endif				/* __KERNEL__ */
 

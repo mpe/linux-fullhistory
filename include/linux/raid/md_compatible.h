@@ -77,11 +77,7 @@ extern inline void md_init_signals (void)
 /* 011 */
 #define md_signal_pending signal_pending
 
-/* 012 */
-extern inline void md_set_global_readahead(int * table)
-{
-	max_readahead[MD_MAJOR] = table;
-}
+/* 012 - md_set_global_readahead - nowhere used */
 
 /* 013 */
 #define md_mdelay(x) mdelay(x)

@@ -24,10 +24,11 @@ extern struct cpuinfo_PPC cpu_data[NR_CPUS];
 
 extern unsigned long smp_proc_in_lock[NR_CPUS];
 
-extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
 extern void smp_store_cpu_info(int id);
-extern void smp_message_recv(int);
-void smp_send_tlb_invalidate(int);
+extern void smp_send_tlb_invalidate(int);
+extern void smp_send_xmon_break(int cpu);
+struct pt_regs;
+extern void smp_message_recv(int, struct pt_regs *);
 
 #define NO_PROC_ID		0xFF            /* No processor magic marker */
 #define PROC_CHANGE_PENALTY	20

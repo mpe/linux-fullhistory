@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fib.c,v 1.21 2000/05/03 06:37:07 davem Exp $
+ *	$Id: ip6_fib.c,v 1.22 2000/09/12 00:38:34 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -638,10 +638,8 @@ static struct fib6_node * fib6_lookup_1(struct fib6_node *root,
 			if (narg->addr) {
 				st = fib6_lookup_1(fn->subtree, narg);
 
-				if (!(st->fn_flags & RTN_ROOT))
-				{
+				if (st && !(st->fn_flags & RTN_ROOT))
 					return st;
-				}
 			}
 		}
 #endif

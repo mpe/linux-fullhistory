@@ -269,6 +269,11 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, b
 	 */
 #ifdef CONFIG_MBX
 	cmd_line = (char *)(load_addr - 0x10000);
+
+	/* To be like everyone else, we need one too, although this
+	 * board information is passed from the boot rom.
+	 */
+	bp->bi_baudrate = 9600;
 #else
 	cmd_line = (char *)(0x200000);
 #endif

@@ -62,11 +62,13 @@ extern volatile unsigned char *chrp_int_ack_special;
 unsigned long chrp_get_rtc_time(void);
 int chrp_set_rtc_time(unsigned long nowtime);
 void chrp_calibrate_decr(void);
-void chrp_time_init(void);
+long chrp_time_init(void);
 
 void chrp_setup_pci_ptrs(void);
-extern void chrp_progress(char *, unsigned short);
 void chrp_event_scan(void);
+void rtas_display_progress(char *, unsigned short);
+void rtas_indicator_progress(char *, unsigned short);
+void bootx_text_progress(char *, unsigned short);
 
 extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int pckbd_getkeycode(unsigned int scancode);
@@ -91,6 +93,8 @@ extern PTE *Hash, *Hash_end;
 extern unsigned long Hash_size, Hash_mask;
 extern int probingmem;
 extern unsigned long loops_per_sec;
+extern int bootx_text_mapped;
+static int max_width;
 
 unsigned long empty_zero_page[1024];
 
@@ -252,13 +256,6 @@ chrp_setup_arch(void)
 #endif
 		ROOT_DEV = to_kdev_t(0x0802); /* sda2 (sda1 is for the kernel) */
 	printk("Boot arguments: %s\n", cmd_line);
-	
-	request_region(0x20,0x20,"pic1");
-	request_region(0xa0,0x20,"pic2");
-	request_region(0x00,0x20,"dma1");
-	request_region(0x40,0x20,"timer");
-	request_region(0x80,0x10,"dma page reg");
-	request_region(0xc0,0x20,"dma2");
 
 #ifndef CONFIG_PPC64BRIDGE
 	/* PCI bridge config space access area -
@@ -446,11 +443,43 @@ void __init chrp_init_IRQ(void)
 void __init
 chrp_init2(void)
 {
+#if defined(CONFIG_VT) && defined(CONFIG_ADB_KEYBOARD)
+	struct device_node *kbd;
+#endif
 #ifdef CONFIG_NVRAM  
 	pmac_nvram_init();
 #endif
+
+	request_region(0x20,0x20,"pic1");
+	request_region(0xa0,0x20,"pic2");
+	request_region(0x00,0x20,"dma1");
+	request_region(0x40,0x20,"timer");
+	request_region(0x80,0x10,"dma page reg");
+	request_region(0xc0,0x20,"dma2");
+
 	if (ppc_md.progress)
 		ppc_md.progress("  Have fun!    ", 0x7777);
+
+#if defined(CONFIG_VT) && defined(CONFIG_ADB_KEYBOARD)
+	/* see if there is a keyboard in the device tree
+	   with a parent of type "adb" */
+	for (kbd = find_devices("keyboard"); kbd; kbd = kbd->next)
+		if (kbd->parent && kbd->parent->type
+		    && strcmp(kbd->parent->type, "adb") == 0)
+			break;
+	if (kbd) {
+		ppc_md.kbd_setkeycode    = mackbd_setkeycode;
+		ppc_md.kbd_getkeycode    = mackbd_getkeycode;
+		ppc_md.kbd_translate     = mackbd_translate;
+		ppc_md.kbd_unexpected_up = mackbd_unexpected_up;
+		ppc_md.kbd_leds          = mackbd_leds;
+		ppc_md.kbd_init_hw       = mackbd_init_hw;
+#ifdef CONFIG_MAGIC_SYSRQ
+		ppc_md.ppc_kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
+		SYSRQ_KEY = 0x69;
+#endif /* CONFIG_MAGIC_SYSRQ */
+	}
+#endif /* CONFIG_VT && CONFIG_ADB_KEYBOARD */
 }
 
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
@@ -598,40 +627,40 @@ void __init
 	ppc_md.calibrate_decr = chrp_calibrate_decr;
 
 #ifdef CONFIG_VT
-#ifdef CONFIG_MAC_KEYBOARD
-	if (adb_driver == NULL)
-	{
-#endif /* CONFIG_MAC_KEYBOAD */
-		ppc_md.kbd_setkeycode    = pckbd_setkeycode;
-		ppc_md.kbd_getkeycode    = pckbd_getkeycode;
-		ppc_md.kbd_translate     = pckbd_translate;
-		ppc_md.kbd_unexpected_up = pckbd_unexpected_up;
-		ppc_md.kbd_leds          = pckbd_leds;
-		ppc_md.kbd_init_hw       = pckbd_init_hw;
+	/* these are adjusted in chrp_init2 if we have an ADB keyboard */
+	ppc_md.kbd_setkeycode    = pckbd_setkeycode;
+	ppc_md.kbd_getkeycode    = pckbd_getkeycode;
+	ppc_md.kbd_translate     = pckbd_translate;
+	ppc_md.kbd_unexpected_up = pckbd_unexpected_up;
+	ppc_md.kbd_leds          = pckbd_leds;
+	ppc_md.kbd_init_hw       = pckbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
-		ppc_md.ppc_kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
-		SYSRQ_KEY = 0x54;
+	ppc_md.ppc_kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
+	SYSRQ_KEY = 0x54;
 #endif /* CONFIG_MAGIC_SYSRQ */
-#ifdef CONFIG_MAC_KEYBOARD
-	}
-	else
-	{
-		ppc_md.kbd_setkeycode    = mackbd_setkeycode;
-		ppc_md.kbd_getkeycode    = mackbd_getkeycode;
-		ppc_md.kbd_translate     = mackbd_translate;
-		ppc_md.kbd_unexpected_up = mackbd_unexpected_up;
-		ppc_md.kbd_leds          = mackbd_leds;
-		ppc_md.kbd_init_hw       = mackbd_init_hw;
-#ifdef CONFIG_MAGIC_SYSRQ
-		ppc_md.ppc_kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
-		SYSRQ_KEY = 0x69;
-#endif /* CONFIG_MAGIC_SYSRQ */
-	}
-#endif /* CONFIG_MAC_KEYBOARD */
 #endif /* CONFIG_VT */
-	if ( rtas_data )
-		ppc_md.progress = chrp_progress;
-	
+
+	if (rtas_data) {
+		struct device_node *rtas;
+		unsigned int *p;
+
+		rtas = find_devices("rtas");
+		if (rtas != NULL) {
+			if (get_property(rtas, "display-character", NULL)) {
+				ppc_md.progress = rtas_display_progress;
+				p = (unsigned int *) get_property
+				       (rtas, "ibm,display-line-length", NULL);
+				if (p)
+					max_width = *p;
+			} else if (get_property(rtas, "set-indicator", NULL))
+				ppc_md.progress = rtas_indicator_progress;
+		}
+	}
+#ifdef CONFIG_BOOTX_TEXT
+	if (ppc_md.progress == NULL && bootx_text_mapped)
+		ppc_md.progress = bootx_text_progress;
+#endif
+
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
         ppc_ide_md.insw = chrp_ide_insw;
         ppc_ide_md.outsw = chrp_ide_outsw;
@@ -653,30 +682,13 @@ void __init
 }
 
 void __chrp
-chrp_progress(char *s, unsigned short hex)
+rtas_display_progress(char *s, unsigned short hex)
 {
-	extern unsigned int rtas_data;
-	int max_width, width;
-	struct device_node *root;
+	int width;
 	char *os = s;
-	unsigned long *p;
 
-	if ( (root = find_path_device("/rtas")) &&
-	     (p = (unsigned long *)get_property(root,
-						"ibm,display-line-length",
-						NULL)) )
-		max_width = *p;
-	else
-		max_width = 0x10;
-
-	if ( (_machine != _MACH_chrp) || !rtas_data )
-		return;
 	if ( call_rtas( "display-character", 1, 1, NULL, '\r' ) )
-	{
-		/* assume no display-character RTAS method - use hex display */
-		call_rtas("set-indicator", 3, 1, NULL, 6, 0, hex);
 		return;
-	}
 
 	width = max_width;
 	while ( *os )
@@ -696,3 +708,17 @@ chrp_progress(char *s, unsigned short hex)
 	call_rtas( "display-character", 1, 1, NULL, ' ' );
 }
 
+void __chrp
+rtas_indicator_progress(char *s, unsigned short hex)
+{
+	call_rtas("set-indicator", 3, 1, NULL, 6, 0, hex);
+}
+
+#ifdef CONFIG_BOOTX_TEXT
+void
+bootx_text_progress(char *s, unsigned short hex)
+{
+	prom_print(s);
+	prom_print("\n");
+}
+#endif /* CONFIG_BOOTX_TEXT */

@@ -9,10 +9,15 @@
  * Changes:
  * Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 08/06/2000
  * - check init_etherdev return in gmac_probe1
+ * BenH <bh40@calva.net> - 03/09/2000
+ * - Add support for new PHYs
+ * - Add some PowerBook sleep code
  * 
  */
 
 #include <linux/module.h>
+
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -29,13 +34,19 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/feature.h>
+#include <asm/keylargo.h>
+#ifdef CONFIG_PMAC_PBOOK
+#include <linux/adb.h>
+#include <linux/pmu.h>
+#include <asm/irq.h>
+#endif
 
 #include "gmac.h"
 
 #define DEBUG_PHY
 
-/* Driver version 1.1, kernel 2.4.x */
-#define GMAC_VERSION	"v1.1k4"
+/* Driver version 1.2, kernel 2.4.x */
+#define GMAC_VERSION	"v1.2k4"
 
 static unsigned char dummy_buf[RX_BUF_ALLOC_SIZE + RX_OFFSET + GMAC_BUFFER_ALIGN];
 static struct net_device *gmacs = NULL;
@@ -48,9 +59,12 @@ static void mii_poll_stop(struct gmac *gm);
 static void mii_interrupt(struct gmac *gm);
 static int mii_lookup_and_reset(struct gmac *gm);
 static void mii_setup_phy(struct gmac *gm);
+static int mii_do_reset_phy(struct gmac *gm, int phy_addr);
+static void mii_init_BCM5400(struct gmac *gm);
 
 static void gmac_set_power(struct gmac *gm, int power_up);
 static int gmac_powerup_and_reset(struct net_device *dev);
+static void gmac_set_gigabit_mode(struct gmac *gm, int gigabit);
 static void gmac_set_duplex_mode(struct gmac *gm, int full_duplex);
 static void gmac_mac_init(struct gmac *gm, unsigned char *mac_addr);
 static void gmac_init_rings(struct gmac *gm, int from_irq);
@@ -70,6 +84,13 @@ static void gmac_probe1(struct device_node *gmac);
 
 extern int pci_device_loc(struct device_node *dev, unsigned char *bus_ptr,
 		   unsigned char *devfn_ptr);
+
+#ifdef CONFIG_PMAC_PBOOK
+int gmac_sleep_notify(struct pmu_sleep_notifier *self, int when);
+static struct pmu_sleep_notifier gmac_sleep_notifier = {
+	gmac_sleep_notify, SLEEP_LEVEL_NET,
+};
+#endif
 
 /*
  * Read via the mii interface from a PHY register
@@ -161,6 +182,19 @@ mii_poll_stop(struct gmac *gm)
  * a timer and control the autoneg. process more closely. Also, we may
  * want to stop rx and tx side when the link is down.
  */
+
+/* Link modes of the BCM5400 PHY */
+static int phy_BCM5400_link_table[8][3] = {
+	{ 0, 0, 0 },	/* No link */
+	{ 0, 0, 0 },	/* 10BT Half Duplex */
+	{ 1, 0, 0 },	/* 10BT Full Duplex */
+	{ 0, 1, 0 },	/* 100BT Half Duplex */
+	{ 0, 1, 0 },	/* 100BT Half Duplex */
+	{ 1, 1, 0 },	/* 100BT Full Duplex*/
+	{ 1, 0, 1 },	/* 1000BT */
+	{ 1, 0, 1 },	/* 1000BT */
+};
+
 static void
 mii_interrupt(struct gmac *gm)
 {
@@ -175,8 +209,9 @@ mii_interrupt(struct gmac *gm)
 	/* We read the Auxilliary Status Summary register */
 	phy_status = mii_read(gm, gm->phy_addr, MII_SR);
 	if ((phy_status ^ gm->phy_status) & (MII_SR_ASSC | MII_SR_LKS)) {
-		int		full_duplex;
-		int		link_100;
+		int		full_duplex = 0;
+		int		link_100 = 0;
+		int		gigabit = 0;
 #ifdef DEBUG_PHY
 		printk("Link state change, phy_status: 0x%04x\n", phy_status);
 #endif
@@ -188,8 +223,9 @@ mii_interrupt(struct gmac *gm)
 		else
 			GM_BIC(GM_MAC_CTRL_CONFIG, GM_MAC_CTRL_CONF_SND_PAUSE_EN);
 
-		/* Link ? For now we handle only the 5201 PHY */
+		/* Link ? Check for speed and duplex */
 		if ((phy_status & MII_SR_LKS) && (phy_status & MII_SR_ASSC)) {
+		    int restart = 0;
 		    if (gm->phy_type == PHY_B5201) {
 		    	int aux_stat = mii_read(gm, gm->phy_addr, MII_BCM5201_AUXCTLSTATUS);
 #ifdef DEBUG_PHY
@@ -197,19 +233,41 @@ mii_interrupt(struct gmac *gm)
 #endif
 		    	full_duplex = ((aux_stat & MII_BCM5201_AUXCTLSTATUS_DUPLEX) != 0);
 		    	link_100 = ((aux_stat & MII_BCM5201_AUXCTLSTATUS_SPEED) != 0);
-		    } else {
-		    	full_duplex = 1;
-		    	link_100 = 1;
+		    } else if (gm->phy_type == PHY_B5400) {
+		    	int aux_stat = mii_read(gm, gm->phy_addr, MII_BCM5400_AUXSTATUS);
+		    	int link = (aux_stat & MII_BCM5400_AUXSTATUS_LINKMODE_MASK) >>
+		    			MII_BCM5400_AUXSTATUS_LINKMODE_SHIFT;
+#ifdef DEBUG_PHY
+			printk("    Link up ! BCM5400 aux_stat: 0x%04x (link mode: %d)\n",
+				aux_stat, link);
+#endif
+		    	full_duplex = phy_BCM5400_link_table[link][0];
+		    	link_100 = phy_BCM5400_link_table[link][1];
+		    	gigabit = phy_BCM5400_link_table[link][2];
+		    } else if (gm->phy_type == PHY_LXT971) {
+		    	int stat2 = mii_read(gm, gm->phy_addr, MII_LXT971_STATUS2);
+#ifdef DEBUG_PHY
+			printk("    Link up ! LXT971 stat2: 0x%04x\n", stat2);
+#endif
+		    	full_duplex = ((stat2 & MII_LXT971_STATUS2_FULLDUPLEX) != 0);
+		    	link_100 = ((stat2 & MII_LXT971_STATUS2_SPEED) != 0);
 		    }
 #ifdef DEBUG_PHY
 		    printk("    full_duplex: %d, speed: %s\n", full_duplex,
-		    	link_100 ? "100" : "10");
+		    	gigabit ? "1000" : (link_100 ? "100" : "10"));
 #endif
+                    if (gigabit != gm->gigabit) {
+                    	gm->gigabit = gigabit;
+                    	gmac_set_gigabit_mode(gm, gm->gigabit);
+                    	restart = 1;
+                    }
 		    if (full_duplex != gm->full_duplex) {
 			gm->full_duplex = full_duplex;
 			gmac_set_duplex_mode(gm, gm->full_duplex);
-			gmac_start_dma(gm);
+			restart = 1;
 		    }
+		    if (restart)
+			gmac_start_dma(gm);
 		} else if (!(phy_status & MII_SR_LKS)) {
 #ifdef DEBUG_PHY
 		    printk("    Link down !\n");
@@ -218,19 +276,73 @@ mii_interrupt(struct gmac *gm)
 	}
 }
 
-/*
- * Lookup for a PHY on the mii interface and reset it
- */
+static int
+mii_do_reset_phy(struct gmac *gm, int phy_addr)
+{
+	int mii_control, timeout;
+	
+	mii_control = mii_read(gm, phy_addr, MII_CR);
+	mii_write(gm, phy_addr, MII_CR, mii_control | MII_CR_RST);
+	mdelay(10);
+	for (timeout = 100; timeout > 0; --timeout) {
+		mii_control = mii_read(gm, phy_addr, MII_CR);
+		if (mii_control == -1) {
+			printk(KERN_ERR "%s PHY died after reset !\n",
+				gm->dev->name);
+			return 1;
+		}
+		if ((mii_control & MII_CR_RST) == 0)
+			break;
+		mdelay(10);
+	}
+	if (mii_control & MII_CR_RST) {
+		printk(KERN_ERR "%s PHY reset timeout !\n", gm->dev->name);
+		return 1;
+	}
+	mii_write(gm, phy_addr, MII_CR, mii_control & ~MII_CR_ISOL);
+	return 0;
+}
+
+static void
+mii_init_BCM5400(struct gmac *gm)
+{
+	int data;
+
+	data = mii_read(gm, gm->phy_addr, MII_BCM5400_AUXCONTROL);
+	data |= MII_BCM5400_AUXCONTROL_PWR10BASET;
+	mii_write(gm, gm->phy_addr, MII_BCM5400_AUXCONTROL, data);
+	
+	data = mii_read(gm, gm->phy_addr, MII_BCM5400_GB_CONTROL);
+	data |= MII_BCM5400_GB_CONTROL_FULLDUPLEXCAP;
+	mii_write(gm, gm->phy_addr, MII_BCM5400_GB_CONTROL, data);
+	
+	mdelay(10);
+	mii_do_reset_phy(gm, 0x1f);
+	
+	data = mii_read(gm, 0x1f, MII_BCM5201_MULTIPHY);
+	data |= MII_BCM5201_MULTIPHY_SERIALMODE;
+	mii_write(gm, 0x1f, MII_BCM5201_MULTIPHY, data);
+
+	data = mii_read(gm, gm->phy_addr, MII_BCM5400_AUXCONTROL);
+	data &= ~MII_BCM5400_AUXCONTROL_PWR10BASET;
+	mii_write(gm, gm->phy_addr, MII_BCM5400_AUXCONTROL, data);
+}
+
 static int
 mii_lookup_and_reset(struct gmac *gm)
 {
-	int	i, timeout;
-	int	mii_status, mii_control;
+	int	i, mii_status, mii_control;
 
-	/* Find the PHY */
 	gm->phy_addr = -1;
 	gm->phy_type = PHY_UNKNOWN;
+
+	/* Hard reset the PHY */
+	feature_set_gmac_phy_reset(gm->of_node, KL_GPIO_ETH_PHY_RESET_ASSERT);
+	mdelay(10);
+	feature_set_gmac_phy_reset(gm->of_node, KL_GPIO_ETH_PHY_RESET_RELEASE);
+	mdelay(10);
 	
+	/* Find the PHY */
 	for(i=31; i>0; --i) {
 		mii_control = mii_read(gm, i, MII_CR);
 		mii_status = mii_read(gm, i, MII_SR);
@@ -243,25 +355,9 @@ mii_lookup_and_reset(struct gmac *gm)
 		return 0;
 
 	/* Reset it */
-	mii_write(gm, gm->phy_addr, MII_CR, mii_control | MII_CR_RST);
-	mdelay(10);
-	for (timeout = 100; timeout > 0; --timeout) {
-		mii_control = mii_read(gm, gm->phy_addr, MII_CR);
-		if (mii_control == -1) {
-			printk(KERN_ERR "%s PHY died after reset !\n",
-				gm->dev->name);
-			goto fail;
-		}
-		if ((mii_control & MII_CR_RST) == 0)
-			break;
-		mdelay(10);
-	}
-	if (mii_control & MII_CR_RST) {
-		printk(KERN_ERR "%s PHY reset timeout !\n", gm->dev->name);
+	if (mii_do_reset_phy(gm, gm->phy_addr))
 		goto fail;
-	}
-	mii_write(gm, gm->phy_addr, MII_CR, mii_control & ~MII_CR_ISOL);
-
+	
 	/* Read the PHY ID */
 	gm->phy_id = (mii_read(gm, gm->phy_addr, MII_ID0) << 16) |
 		mii_read(gm, gm->phy_addr, MII_ID1);
@@ -270,10 +366,15 @@ mii_lookup_and_reset(struct gmac *gm)
 #endif
 	if ((gm->phy_id & MII_BCM5400_MASK) == MII_BCM5400_ID) {
 		gm->phy_type = PHY_B5400;
-		printk(KERN_ERR "%s Warning ! Unsupported BCM5400 PHY !\n",
+		printk(KERN_ERR "%s Found Broadcom BCM5400 PHY (Gigabit)\n",
 			gm->dev->name);
+		mii_init_BCM5400(gm);		
 	} else if ((gm->phy_id & MII_BCM5201_MASK) == MII_BCM5201_ID) {
 		gm->phy_type = PHY_B5201;
+		printk(KERN_INFO "%s Found Broadcom BCM5201 PHY\n", gm->dev->name);
+	} else if ((gm->phy_id & MII_LXT971_MASK) == MII_LXT971_ID) {
+		gm->phy_type = PHY_LXT971;
+		printk(KERN_INFO "%s Found LevelOne LX971 PHY\n", gm->dev->name);
 	} else {
 		printk(KERN_ERR "%s: Warning ! Unknown PHY ID 0x%08x !\n",
 			gm->dev->name, gm->phy_id);
@@ -402,6 +503,22 @@ gmac_set_duplex_mode(struct gmac *gm, int full_duplex)
 		GM_BIC(GM_MAC_TX_CONFIG, GM_MAC_TX_CONF_IGNORE_CARRIER
 			| GM_MAC_TX_CONF_IGNORE_COLL);
 		GM_BIS(GM_MAC_XIF_CONFIG, GM_MAC_XIF_CONF_DISABLE_ECHO);
+	}
+}
+
+/* Set the MAC gigabit mode. Side effect: stops Tx MAC */
+static void
+gmac_set_gigabit_mode(struct gmac *gm, int gigabit)
+{
+	/* Stop Tx MAC */
+	GM_BIC(GM_MAC_TX_CONFIG, GM_MAC_TX_CONF_ENABLE);
+	while(GM_IN(GM_MAC_TX_CONFIG) & GM_MAC_TX_CONF_ENABLE)
+		;
+	
+	if (gigabit) {
+		GM_BIS(GM_MAC_XIF_CONFIG, GM_MAC_XIF_CONF_GMII_MODE);
+	} else {
+		GM_BIC(GM_MAC_XIF_CONFIG, GM_MAC_XIF_CONF_GMII_MODE);
 	}
 }
 
@@ -787,6 +904,65 @@ gmac_close(struct net_device *dev)
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
+
+#ifdef CONFIG_PMAC_PBOOK
+int
+gmac_sleep_notify(struct pmu_sleep_notifier *self, int when)
+{
+	struct gmac *gm;
+	int i;
+	
+	/* XXX should handle more than one */
+	if (gmacs == NULL)
+		return PBOOK_SLEEP_OK;
+
+	gm = (struct gmac *) gmacs->priv;
+	if (!gm->opened)
+		return PBOOK_SLEEP_OK;
+		
+	switch (when) {
+	case PBOOK_SLEEP_REQUEST:
+		break;
+	case PBOOK_SLEEP_REJECT:
+		break;
+	case PBOOK_SLEEP_NOW:
+		disable_irq(gm->dev->irq);
+		netif_stop_queue(gm->dev);
+		gmac_stop_dma(gm);
+		mii_poll_stop(gm);
+		gmac_set_power(gm, 0);
+		for (i = 0; i < NRX; ++i) {
+			if (gm->rx_buff[i] != 0) {
+				dev_kfree_skb(gm->rx_buff[i]);
+				gm->rx_buff[i] = 0;
+			}
+		}
+		for (i = 0; i < NTX; ++i) {
+			if (gm->tx_buff[i] != 0) {
+				dev_kfree_skb(gm->tx_buff[i]);
+				gm->tx_buff[i] = 0;
+			}
+		}
+		break;
+	case PBOOK_WAKE:
+		/* see if this is enough */
+		gmac_powerup_and_reset(gm->dev);
+		gm->full_duplex = 0;
+		gm->phy_status = 0;
+		mii_lookup_and_reset(gm);
+		mii_setup_phy(gm);
+		gmac_init_rings(gm, 0);
+		gmac_mac_init(gm, gm->dev->dev_addr);
+		gmac_set_multicast(gm->dev);
+		mii_interrupt(gm);
+		gmac_start_dma(gm);
+		netif_start_queue(gm->dev);
+		enable_irq(gm->dev->irq);
+		break;
+	}
+	return PBOOK_SLEEP_OK;
+}
+#endif /* CONFIG_PMAC_PBOOK */
 
 /*
  * Handle a transmit timeout
@@ -1196,7 +1372,8 @@ gmac_probe1(struct device_node *gmac)
 		ioremap(gmac->addrs[0].address, 0x10000);
 	dev->irq = gmac->intrs[0].line;
 	gm->dev = dev;
-
+	gm->of_node = gmac;
+	
 	if (pci_device_loc(gmac, &gm->pci_bus, &gm->pci_devfn)) {
 		gm->pci_bus = gm->pci_devfn = 0xff;
 		printk(KERN_ERR "Can't locate GMAC PCI entry\n");
@@ -1229,6 +1406,10 @@ gmac_probe1(struct device_node *gmac)
 	
 	gm->next_gmac = gmacs;
 	gmacs = dev;
+
+#ifdef CONFIG_PMAC_PBOOK
+	pmu_register_sleep_notifier(&gmac_sleep_notifier);
+#endif
 }
 
 MODULE_AUTHOR("Paul Mackerras/Ben Herrenschmidt");

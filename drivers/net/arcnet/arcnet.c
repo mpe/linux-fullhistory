@@ -155,9 +155,6 @@ void __init arcnet_init(void)
 #ifdef CONFIG_ARCNET_COM90xx
 	com90xx_probe(NULL);
 #endif
-#ifdef CONFIG_ARCNET_COM20020_PCI
-	com20020pci_probe_all();
-#endif
 #endif
 }
 

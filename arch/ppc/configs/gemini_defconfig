@@ -14,14 +14,12 @@ CONFIG_EXPERIMENTAL=y
 CONFIG_PPC=y
 CONFIG_6xx=y
 # CONFIG_4xx is not set
-# CONFIG_PPC64BRIDGE is not set
-# CONFIG_82xx is not set
+# CONFIG_PPC64 is not set
+# CONFIG_8260 is not set
 # CONFIG_8xx is not set
-# CONFIG_PMAC is not set
-# CONFIG_PREP is not set
-# CONFIG_CHRP is not set
 # CONFIG_ALL_PPC is not set
 CONFIG_GEMINI=y
+# CONFIG_EST8260 is not set
 # CONFIG_APUS is not set
 # CONFIG_SMP is not set
 CONFIG_ALTIVEC=y
@@ -37,7 +35,8 @@ CONFIG_KMOD=y
 #
 # General setup
 #
-# CONFIG_PCI is not set
+# CONFIG_ISA is not set
+# CONFIG_SBUS is not set
 CONFIG_PCI=y
 CONFIG_NET=y
 CONFIG_SYSCTL=y
@@ -47,8 +46,12 @@ CONFIG_KCORE_ELF=y
 CONFIG_BINFMT_ELF=y
 CONFIG_KERNEL_ELF=y
 # CONFIG_BINFMT_MISC is not set
-# CONFIG_PCI_NAMES is not set
 # CONFIG_HOTPLUG is not set
+# CONFIG_PCMCIA is not set
+
+#
+# Parallel port support
+#
 # CONFIG_PARPORT is not set
 # CONFIG_VGA_CONSOLE is not set
 # CONFIG_FB is not set
@@ -57,7 +60,6 @@ CONFIG_KERNEL_ELF=y
 # CONFIG_MAC_SERIAL is not set
 # CONFIG_ADB is not set
 # CONFIG_PROC_DEVICETREE is not set
-# CONFIG_TOTALMP is not set
 # CONFIG_BOOTX_TEXT is not set
 # CONFIG_MOTOROLA_HOTSWAP is not set
 
@@ -70,22 +72,16 @@ CONFIG_KERNEL_ELF=y
 # Block devices
 #
 # CONFIG_BLK_DEV_FD is not set
-# CONFIG_BLK_DEV_IDE is not set
 
 #
-# Please see Documentation/ide.txt for help/info on IDE drives
+# Additional Block Devices
 #
-# CONFIG_BLK_DEV_HD_ONLY is not set
-# CONFIG_BLK_CPQ_DA is not set
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
+# CONFIG_BLK_DEV_LVM is not set
 # CONFIG_BLK_DEV_MD is not set
+# CONFIG_RAID15_DANGEROUS is not set
 # CONFIG_BLK_DEV_RAM is not set
-# CONFIG_BLK_DEV_XD is not set
-# CONFIG_BLK_DEV_DAC960 is not set
-# CONFIG_PARIDE is not set
-# CONFIG_BLK_DEV_IDE_MODES is not set
-# CONFIG_BLK_DEV_HD is not set
 
 #
 # Networking options
@@ -138,6 +134,13 @@ CONFIG_SKB_LARGE=y
 # CONFIG_NET_SCHED is not set
 
 #
+# ATA/IDE/MFM/RLL support
+#
+# CONFIG_IDE is not set
+# CONFIG_BLK_DEV_IDE_MODES is not set
+# CONFIG_BLK_DEV_HD is not set
+
+#
 # SCSI support
 #
 CONFIG_SCSI=y
@@ -148,7 +151,6 @@ CONFIG_SCSI=y
 CONFIG_BLK_DEV_SD=y
 CONFIG_SD_EXTRA_DEVS=40
 # CONFIG_CHR_DEV_ST is not set
-CONFIG_ST_EXTRA_DEVS=2
 CONFIG_BLK_DEV_SR=y
 CONFIG_BLK_DEV_SR_VENDOR=y
 CONFIG_SR_EXTRA_DEVS=2
@@ -171,7 +173,6 @@ CONFIG_SCSI_CONSTANTS=y
 # CONFIG_SCSI_AHA1542 is not set
 # CONFIG_SCSI_AHA1740 is not set
 # CONFIG_SCSI_AIC7XXX is not set
-# CONFIG_SCSI_IPS is not set
 # CONFIG_SCSI_ADVANSYS is not set
 # CONFIG_SCSI_IN2000 is not set
 # CONFIG_SCSI_AM53C974 is not set
@@ -184,43 +185,22 @@ CONFIG_SCSI_CONSTANTS=y
 # CONFIG_SCSI_FUTURE_DOMAIN is not set
 # CONFIG_SCSI_GDTH is not set
 # CONFIG_SCSI_GENERIC_NCR5380 is not set
-# CONFIG_SCSI_INITIO is not set
-# CONFIG_SCSI_INIA100 is not set
 # CONFIG_SCSI_NCR53C406A is not set
 # CONFIG_SCSI_SYM53C416 is not set
 # CONFIG_SCSI_SIM710 is not set
-# CONFIG_SCSI_NCR53C7xx is not set
-# CONFIG_SCSI_NCR53C8XX is not set
-CONFIG_SCSI_SYM53C8XX=y
-CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS=8
-CONFIG_SCSI_NCR53C8XX_MAX_TAGS=32
-CONFIG_SCSI_NCR53C8XX_SYNC=20
-# CONFIG_SCSI_NCR53C8XX_PROFILE is not set
-# CONFIG_SCSI_NCR53C8XX_IOMAPPED is not set
-# CONFIG_SCSI_NCR53C8XX_PQS_PDS is not set
-# CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT is not set
+# CONFIG_SCSI_NCR53C7xx_sync is not set
+# CONFIG_SCSI_NCR53C7xx_FAST is not set
+# CONFIG_SCSI_NCR53C7xx_DISCONNECT is not set
 # CONFIG_SCSI_PAS16 is not set
 # CONFIG_SCSI_PCI2000 is not set
 # CONFIG_SCSI_PCI2220I is not set
 # CONFIG_SCSI_PSI240I is not set
 # CONFIG_SCSI_QLOGIC_FAS is not set
-# CONFIG_SCSI_QLOGIC_ISP is not set
-# CONFIG_SCSI_QLOGIC_FC is not set
-# CONFIG_SCSI_QLOGIC_1280 is not set
-# CONFIG_SCSI_SEAGATE is not set
-# CONFIG_SCSI_DC390T is not set
 # CONFIG_SCSI_T128 is not set
 # CONFIG_SCSI_U14_34F is not set
-# CONFIG_SCSI_ULTRASTOR is not set
 # CONFIG_SCSI_DEBUG is not set
 # CONFIG_SCSI_MESH is not set
 # CONFIG_SCSI_MAC53C94 is not set
-# CONFIG_BLK_DEV_3W_XXXX_RAID is not set
-
-#
-# IEEE 1394 (FireWire) support
-#
-# CONFIG_IEEE1394 is not set
 
 #
 # Network device support
@@ -232,6 +212,7 @@ CONFIG_NETDEVICES=y
 #
 # CONFIG_ARCNET is not set
 # CONFIG_DUMMY is not set
+# CONFIG_BONDING is not set
 # CONFIG_EQUALIZER is not set
 # CONFIG_ETHERTAP is not set
 # CONFIG_NET_SB1000 is not set
@@ -249,12 +230,10 @@ CONFIG_NCR885E=y
 # CONFIG_LANCE is not set
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_NET_VENDOR_RACAL is not set
-# CONFIG_RTL8139 is not set
-# CONFIG_DM9102 is not set
 # CONFIG_AT1700 is not set
 # CONFIG_DEPCA is not set
 # CONFIG_NET_ISA is not set
-# CONFIG_NET_EISA is not set
+# CONFIG_NET_PCI is not set
 # CONFIG_NET_POCKET is not set
 
 #
@@ -274,7 +253,7 @@ CONFIG_NCR885E=y
 # CONFIG_NET_RADIO is not set
 
 #
-# Token Ring driver support
+# Token Ring devices
 #
 # CONFIG_TR is not set
 # CONFIG_NET_FC is not set
@@ -290,6 +269,11 @@ CONFIG_NCR885E=y
 # Amateur Radio support
 #
 # CONFIG_HAMRADIO is not set
+
+#
+# IrDA (infrared) support
+#
+# CONFIG_IRDA is not set
 
 #
 # ISDN subsystem
@@ -361,12 +345,7 @@ CONFIG_UNIX98_PTY_COUNT=256
 # CONFIG_AGP is not set
 
 #
-# USB support
-#
-# CONFIG_USB is not set
-
-#
-# Filesystems
+# File systems
 #
 # CONFIG_QUOTA is not set
 # CONFIG_AUTOFS_FS is not set
@@ -378,12 +357,14 @@ CONFIG_UNIX98_PTY_COUNT=256
 # CONFIG_FAT_FS is not set
 # CONFIG_EFS_FS is not set
 # CONFIG_CRAMFS is not set
+# CONFIG_RAMFS is not set
 CONFIG_ISO9660_FS=y
 # CONFIG_JOLIET is not set
 # CONFIG_MINIX_FS is not set
 # CONFIG_NTFS_FS is not set
 # CONFIG_HPFS_FS is not set
 CONFIG_PROC_FS=y
+# CONFIG_DEVFS_FS is not set
 CONFIG_DEVPTS_FS=y
 # CONFIG_QNX4FS_FS is not set
 # CONFIG_ROMFS_FS is not set
@@ -397,6 +378,7 @@ CONFIG_EXT2_FS=y
 #
 # CONFIG_CODA_FS is not set
 CONFIG_NFS_FS=y
+# CONFIG_NFS_V3 is not set
 # CONFIG_NFSD is not set
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
@@ -414,6 +396,11 @@ CONFIG_MSDOS_PARTITION=y
 # Sound
 #
 # CONFIG_SOUND is not set
+
+#
+# USB support
+#
+# CONFIG_USB is not set
 
 #
 # Kernel hacking

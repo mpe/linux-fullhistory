@@ -7,10 +7,11 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.56 2000/04/25 04:13:34 davem Exp $
+ *	$Id: af_inet6.c,v 1.57 2000/09/11 23:35:29 davem Exp $
  *
  * 	Fixes:
  * 	Hideaki YOSHIFUJI	:	sin6_scope_id support
+ * 	Arnaldo Melo		: 	check proc_net_create return, cleanups
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -189,7 +190,7 @@ static int inet6_create(struct socket *sock, int protocol)
 	if (sk->prot->init) {
 		int err = sk->prot->init(sk);
 		if (err != 0) {
-			sk->dead = 1;
+			MOD_DEC_USE_COUNT;
 			inet_sock_release(sk);
 			return(err);
 		}
@@ -395,10 +396,8 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	{
 	case FIOSETOWN:
 	case SIOCSPGRP:
-		err = get_user(pid, (int *) arg);
-		if(err)
-			return err;
-
+		if (get_user(pid, (int *) arg))
+			return -EFAULT;
 		/* see sock_no_fcntl */
 		if (current->pid != pid && current->pgrp != -pid && 
 		    !capable(CAP_NET_ADMIN))
@@ -407,10 +406,7 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		return(0);
 	case FIOGETOWN:
 	case SIOCGPGRP:
-		err = put_user(sk->proc,(int *)arg);
-		if(err)
-			return err;
-		return(0);
+		return put_user(sk->proc,(int *)arg);
 	case SIOCGSTAMP:
 		if(sk->stamp.tv_sec==0)
 			return -ENOENT;
@@ -550,6 +546,20 @@ void __init inet6_proto_init(struct net_proto *pro)
 	err = igmp6_init(&inet6_family_ops);
 	if (err)
 		goto igmp_fail;
+	/* Create /proc/foo6 entries. */
+#ifdef CONFIG_PROC_FS
+	err = -ENOMEM;
+	if (!proc_net_create("raw6", 0, raw6_get_info))
+		goto proc_raw6_fail;
+	if (!proc_net_create("tcp6", 0, tcp6_get_info))
+		goto proc_tcp6_fail;
+	if (!proc_net_create("udp6", 0, udp6_get_info))
+		goto proc_udp6_fail;
+	if (!proc_net_create("sockstat6", 0, afinet6_get_info))
+		goto proc_sockstat6_fail;
+	if (!proc_net_create("snmp6", 0, afinet6_get_snmp))
+		goto proc_snmp6_fail;
+#endif
 	ipv6_netdev_notif_init();
 	ipv6_packet_init();
 	ip6_route_init();
@@ -561,15 +571,6 @@ void __init inet6_proto_init(struct net_proto *pro)
 	udpv6_init();
 	tcpv6_init();
 
-	/* Create /proc/foo6 entries. */
-#ifdef CONFIG_PROC_FS
-	proc_net_create("raw6", 0, raw6_get_info);
-	proc_net_create("tcp6", 0, tcp6_get_info);
-	proc_net_create("udp6", 0, udp6_get_info);
-	proc_net_create("sockstat6", 0, afinet6_get_info);
-	proc_net_create("snmp6", 0, afinet6_get_snmp);
-#endif
-
 	/* Now the userspace is allowed to create INET6 sockets. */
 	(void) sock_register(&inet6_family_ops);
 	
@@ -579,6 +580,18 @@ void __init inet6_proto_init(struct net_proto *pro)
 	return;
 #endif
 
+#ifdef CONFIG_PROC_FS
+proc_snmp6_fail:
+	proc_net_remove("sockstat6");
+proc_sockstat6_fail:
+	proc_net_remove("udp6");
+proc_udp6_fail:
+	proc_net_remove("tcp6");
+proc_tcp6_fail:
+        proc_net_remove("raw6");
+proc_raw6_fail:
+	igmp6_cleanup();
+#endif
 igmp_fail:
 	ndisc_cleanup();
 ndisc_fail:

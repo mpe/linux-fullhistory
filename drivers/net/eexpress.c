@@ -1084,6 +1084,7 @@ static int __init eexp_hw_probe(struct net_device *dev, unsigned short ioaddr)
 		return -ENOMEM;
 
 	memset(dev->priv, 0, sizeof(struct net_local));
+	spin_lock_init(&lp->lock);
 
  	printk("(IRQ %d, %s connector, %d-bit bus", dev->irq, 
  	       eexp_ifmap[dev->if_port], buswidth?8:16);

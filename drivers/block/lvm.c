@@ -250,7 +250,7 @@ static int lvm_do_pv_change(vg_t*, void*);
 static int lvm_do_pv_status(vg_t *, void *);
 static void lvm_geninit(struct gendisk *);
 #ifdef LVM_GET_INODE
-static struct inode *lvm_get_inode(int);
+static struct inode *lvm_get_inode(kdev_t);
 void lvm_clear_inode(struct inode *);
 #endif
 /* END Internal function prototypes */
@@ -486,9 +486,8 @@ void __init lvm_init_vars(void)
 	loadtime = CURRENT_TIME;
 
 	pe_lock_req.lock = UNLOCK_PE;
-	pe_lock_req.data.lv_dev = \
-	    pe_lock_req.data.pv_dev = \
-	    pe_lock_req.data.pv_offset = 0;
+	pe_lock_req.data.lv_dev = pe_lock_req.data.pv_dev = 0;
+	pe_lock_req.data.pv_offset = 0;
 
 	/* Initialize VG pointers */
 	for (v = 0; v < ABS_MAX_VG; v++) vg[v] = NULL;
@@ -1561,8 +1560,7 @@ static int lvm_do_pe_lock_unlock(vg_t *vg_ptr, void *arg)
 
 	case UNLOCK_PE:
 		pe_lock_req.lock = UNLOCK_PE;
-		pe_lock_req.data.lv_dev = \
-		pe_lock_req.data.pv_dev = \
+		pe_lock_req.data.lv_dev = pe_lock_req.data.pv_dev = 0;
 		pe_lock_req.data.pv_offset = 0;
 		wake_up(&lvm_map_wait);
 		break;
@@ -2542,7 +2540,7 @@ void __init
  * If you can convince Linus that it's worth changing - fine, then you'll need
  * to do blkdev_get()/blkdev_put(). Until then...
  */
-struct inode *lvm_get_inode(int dev)
+struct inode *lvm_get_inode(kdev_t dev)
 {
 	struct inode *inode_this = NULL;
 

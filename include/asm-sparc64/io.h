@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.35 2000/04/13 04:45:59 davem Exp $ */
+/* $Id: io.h,v 1.36 2000/09/17 05:12:00 davem Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -363,6 +363,8 @@ out:
 	return retval;
 }
 
+#ifdef __KERNEL__
+
 /* On sparc64 we have the whole physical IO address space accessible
  * using physically addressed loads and stores, so this does nothing.
  */
@@ -388,5 +390,7 @@ out:
 #define dma_cache_inv(_start,_size)		do { } while (0)
 #define dma_cache_wback(_start,_size)		do { } while (0)
 #define dma_cache_wback_inv(_start,_size)	do { } while (0)
+
+#endif
 
 #endif /* !(__SPARC64_IO_H) */

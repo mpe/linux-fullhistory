@@ -874,6 +874,13 @@ start_here:
 	lis	r6, swapper_pg_dir@h
 	tophys(r6,r6)
 	ori	r6, r6, swapper_pg_dir@l
+#ifdef CONFIG_8xx_CPU6
+	lis	r4, cpu6_errata_word@h
+	ori	r4, r4, cpu6_errata_word@l
+	li	r3, 0x3980
+	stw	r3, 12(r4)
+	lwz	r3, 12(r4)
+#endif
 	mtspr	M_TWB, r6
 	lis	r4,2f@h
 	ori	r4,r4,2f@l
@@ -940,9 +947,23 @@ start_here:
  * ASID compare register with the new "context".
  */
 _GLOBAL(set_context)
+#ifdef CONFIG_8xx_CPU6
+	lis	r6, cpu6_errata_word@h
+	ori	r6, r6, cpu6_errata_word@l
+	tophys	(r4, r4)
+	li	r7, 0x3980
+	stw	r7, 12(r6)
+	lwz	r7, 12(r6)
+        mtspr   M_TWB, r4               /* Update MMU base address */
+	li	r7, 0x3380
+	stw	r7, 12(r6)
+	lwz	r7, 12(r6)
+        mtspr   M_CASID, r3             /* Update context */
+#else
         mtspr   M_CASID,r3		/* Update context */
 	tophys	(r4, r4)
 	mtspr	M_TWB, r4		/* and pgd */
+#endif
         tlbia
 	SYNC
 	blr
@@ -966,6 +987,24 @@ m8xx_gorom:
 2:
        mtlr    r4
        blr
+
+#ifdef CONFIG_8xx_CPU6
+/* It's here because it is unique to the 8xx.
+ * It is important we get called with interrupts disabled.  I used to
+ * do that, but it appears that all code that calls this already had
+ * interrupt disabled.
+ */
+	.globl	set_dec_cpu6
+set_dec_cpu6:
+	lis	r7, cpu6_errata_word@h
+	ori	r7, r7, cpu6_errata_word@l
+	li	r4, 0x2c00
+	stw	r4, 8(r7)
+	lwz	r4, 8(r7)
+        mtspr   22, r3		/* Update Decrementer */
+	SYNC
+	blr
+#endif
 	
 /*
  * We put a few things here that have to be page-aligned.
@@ -990,4 +1029,10 @@ swapper_pg_dir:
 	.globl	cmd_line
 cmd_line:
 	.space	512
+
+#ifdef CONFIG_8xx_CPU6
+	.globl	cpu6_errata_word
+cpu6_errata_word:
+	.space	16
+#endif
 

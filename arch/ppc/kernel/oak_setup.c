@@ -231,10 +231,11 @@ oak_halt(void)
 /*
  * Document me.
  */
-void __init
+long __init
 oak_time_init(void)
 {
 	/* XXX - Implement me */
+	return 0;
 }
 
 /*

@@ -24,12 +24,15 @@
 #if defined(CONFIG_4xx) || defined(CONFIG_8xx)
 #define CACHE_LINE_SIZE		16
 #define LG_CACHE_LINE_SIZE	4
+#define MAX_COPY_PREFETCH	1
 #elif !defined(CONFIG_PPC64BRIDGE)
 #define CACHE_LINE_SIZE		32
 #define LG_CACHE_LINE_SIZE	5
+#define MAX_COPY_PREFETCH	4
 #else
 #define CACHE_LINE_SIZE		128
 #define LG_CACHE_LINE_SIZE	7
+#define MAX_COPY_PREFETCH	1
 #endif /* CONFIG_4xx || CONFIG_8xx */
 
 	.text
@@ -339,7 +342,15 @@ _GLOBAL(__flush_icache_page)
 _GLOBAL(clear_page)
 	li	r0,4096/CACHE_LINE_SIZE
 	mtctr	r0
+#ifdef CONFIG_8xx
+	li	r4, 0
+1:	stw	r4, 0(r3)
+	stw	r4, 4(r3)
+	stw	r4, 8(r3)
+	stw	r4, 12(r3)
+#else
 1:	dcbz	0,r3
+#endif
 	addi	r3,r3,CACHE_LINE_SIZE
 	bdnz	1b
 	blr
@@ -361,12 +372,31 @@ _GLOBAL(clear_page)
 	stwu	r9,16(r3)
 
 _GLOBAL(copy_page)
-	li	r0,4096/CACHE_LINE_SIZE
-	mtctr	r0
 	addi	r3,r3,-4
 	addi	r4,r4,-4
 	li	r5,4
-1:	dcbz	r5,r3
+
+#ifndef CONFIG_8xx
+#if MAX_COPY_PREFETCH > 1
+	li	r0,MAX_COPY_PREFETCH
+	li	r11,4
+	mtctr	r0
+11:	dcbt	r11,r4
+	addi	r11,r11,CACHE_LINE_SIZE
+	bdnz	11b
+#else /* MAX_COPY_PREFETCH == 1 */
+	dcbt	r5,r4
+	li	r11,CACHE_LINE_SIZE+4
+#endif /* MAX_COPY_PREFETCH */
+#endif /* CONFIG_8xx */
+
+	li	r0,4096/CACHE_LINE_SIZE
+	mtctr	r0
+1:
+#ifndef CONFIG_8xx
+	dcbt	r11,r4
+	dcbz	r5,r3
+#endif
 	COPY_16_BYTES
 #if CACHE_LINE_SIZE >= 32
 	COPY_16_BYTES
@@ -484,7 +514,7 @@ _GLOBAL(atomic_dec_and_test)
 	stwcx.	r5,0,r3		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
 	cntlzw	r3,r5
-	srwi	r3,r3,5		
+	srwi	r3,r3,5
 	blr
 #endif /* 0 */
 _GLOBAL(atomic_clear_mask)
@@ -629,48 +659,59 @@ _GLOBAL(_outsl_ns)
 	blr	
 
 /*
- * Extended precision shifts
+ * Extended precision shifts.
+ * 
+ * Updated to be valid for shift counts from 0 to 63 inclusive.
+ * -- Gabriel
  *
  * R3/R4 has 64 bit value
  * R5    has shift count
  * result in R3/R4
  *
- *  ashrdi3:     XXXYYY/ZZZAAA -> SSSXXX/YYYZZZ
- *  ashldi3:     XXXYYY/ZZZAAA -> YYYZZZ/AAA000
- *  lshrdi3:     XXXYYY/ZZZAAA -> 000XXX/YYYZZZ
+ *  ashrdi3: arithmetic right shift (sign propagation)	    
+ *  lshrdi3: logical right shift	
+ *  ashldi3: left shift
  */
 _GLOBAL(__ashrdi3)
-	li	r6,32
-	sub	r6,r6,r5
-	slw	r7,r3,r6	/* isolate YYY */
-	srw	r4,r4,r5	/* isolate ZZZ */
-	or	r4,r4,r7	/* YYYZZZ */
-	sraw	r3,r3,r5	/* SSSXXX */
+	subfic	r6,r5,32	
+	srw	r4,r4,r5	# LSW = count > 31 ? 0 : LSW >> count
+	addi	r7,r5,32	# could be xori, or addi with -32
+	slw	r6,r3,r6	# t1 = count > 31 ? 0 : MSW << (32-count)
+	rlwinm	r8,r7,0,32	# t3 = (count < 32) ? 32 : 0
+	sraw	r7,r3,r7	# t2 = MSW >> (count-32)
+	or	r4,r4,r6	# LSW |= t1
+	slw	r7,r7,r8	# t2 = (count < 32) ? 0 : t2
+	sraw	r3,r3,r5	# MSW = MSW >> count
+	or	r4,r4,r7	# LSW |= t2
 	blr
 
 _GLOBAL(__ashldi3)
-	li	r6,32
-	sub	r6,r6,r5
-	srw	r7,r4,r6	/* isolate ZZZ */
-	slw	r4,r4,r5	/* AAA000 */
-	slw	r3,r3,r5	/* YYY--- */
-	or	r3,r3,r7	/* YYYZZZ */
+	subfic	r6,r5,32	
+	slw	r3,r3,r5	# MSW = count > 31 ? 0 : MSW << count
+	addi	r7,r5,32	# could be xori, or addi with -32
+	srw	r6,r4,r6	# t1 = count > 31 ? 0 : LSW >> (32-count)
+	slw	r7,r4,r7	# t2 = count < 32 ? 0 : LSW << (count-32)
+	or	r3,r3,r6	# MSW |= t1
+	slw	r4,r4,r5	# LSW = LSW << count
+	or	r3,r3,r7	# MSW |= t2
 	blr
 
 _GLOBAL(__lshrdi3)
-	li	r6,32
-	sub	r6,r6,r5
-	slw	r7,r3,r6        /* isolate YYY */
-	srw	r4,r4,r5        /* isolate ZZZ */
-	or	r4,r4,r7        /* YYYZZZ */
-	srw	r3,r3,r5        /* 000XXX */
+	subfic	r6,r5,32	
+	srw	r4,r4,r5	# LSW = count > 31 ? 0 : LSW >> count
+	addi	r7,r5,32	# could be xori, or addi with -32
+	slw	r6,r3,r6	# t1 = count > 31 ? 0 : MSW << (32-count)
+	srw	r7,r3,r7	# t2 = count < 32 ? 0 : MSW >> (count-32)
+	or	r4,r4,r6	# LSW |= t1
+	srw	r3,r3,r5	# MSW = MSW >> count
+	or	r4,r4,r7	# LSW |= t2 
 	blr
 
 _GLOBAL(abs)
-	cmpi	0,r3,0
-	bge	10f
-	neg	r3,r3
-10:	blr
+	srawi	r4,r3,31
+	xor	r3,r3,r4
+	sub	r3,r3,r4
+	blr
 
 _GLOBAL(_get_SP)
 	mr	r3,r1		/* Close enough */
@@ -1217,6 +1258,6 @@ _GLOBAL(sys_call_table)
 	.long sys_pciconfig_iobase 	/* 200 */
 	.long sys_ni_syscall		/* 201 - reserved - MacOnLinux - new */
 	.long sys_getdents64		/* 202 */
-	.rept NR_syscalls-201
+	.rept NR_syscalls-(.-sys_call_table)/4
 		.long sys_ni_syscall
 	.endr

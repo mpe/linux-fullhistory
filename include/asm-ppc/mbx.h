@@ -25,6 +25,7 @@ typedef struct bd_info {
 	unsigned int	bi_busfreq;	/* Bus Freq, in Hz */
 	unsigned int	bi_clun;	/* Boot device controller */
 	unsigned int	bi_dlun;	/* Boot device logical dev */
+	unsigned int	bi_baudrate;	/* ...to be like everyone else */
 } bd_t;
 
 /* Memory map for the MBX as configured by EPPC-Bug.  We could reprogram

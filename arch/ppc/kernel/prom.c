@@ -140,8 +140,7 @@ static long				g_loc_Y = 0;
 static long				g_max_loc_X = 0;
 static long				g_max_loc_Y = 0;
 
-unsigned long disp_BATL = 0;
-unsigned long disp_BATU = 0;
+unsigned long disp_BAT[2] = {0, 0};
 
 #define cmapsz	(16*256)
 
@@ -276,8 +275,7 @@ prom_print(const char *msg)
 			prom_drawstring(msg);
 #endif
 		return;
-	}		
-		
+	}
 
 	for (p = msg; *p != 0; p = q) {
 		for (q = p; *q != 0 && *q != '\n'; ++q)
@@ -362,7 +360,7 @@ prom_hold_cpus(unsigned long mem)
 	/* copy the holding pattern code to someplace safe (0) */
 	/* the holding pattern is now within the first 0x100
 	   bytes of the kernel image -- paulus */
-	memcpy((void *)0, KERNELBASE + offset, 0x100);
+	memcpy((void *)0, (void *)(KERNELBASE + offset), 0x100);
 	flush_icache_range(0, 0x100);
 
 	/* look for cpus */
@@ -556,6 +554,54 @@ prom_alloc_htab(void)
 }
 #endif /* CONFIG_PPC64BRIDGE */
 
+static __init void
+prom_instantiate_rtas(void)
+{
+	ihandle prom_rtas;
+	unsigned int i;
+	struct prom_args prom_args;
+	unsigned long offset = reloc_offset();
+
+	prom_rtas = call_prom(RELOC("finddevice"), 1, 1, RELOC("/rtas"));
+	if (prom_rtas == (void *) -1)
+		return;
+
+	RELOC(rtas_size) = 0;
+	call_prom(RELOC("getprop"), 4, 1, prom_rtas,
+		  RELOC("rtas-size"), &RELOC(rtas_size), sizeof(rtas_size));
+	prom_print(RELOC("instantiating rtas"));
+	if (RELOC(rtas_size) == 0) {
+		RELOC(rtas_data) = 0;
+	} else {
+		/*
+		 * Ask OF for some space for RTAS.
+		 * Actually OF has bugs so we just arbitrarily
+		 * use memory at the 6MB point.
+		 */
+		RELOC(rtas_data) = 6 << 20;
+		prom_print(RELOC(" at "));
+		prom_print_hex(RELOC(rtas_data));
+	}
+
+	prom_rtas = call_prom(RELOC("open"), 1, 1, RELOC("/rtas"));
+	prom_print(RELOC("..."));
+	prom_args.service = RELOC("call-method");
+	prom_args.nargs = 3;
+	prom_args.nret = 2;
+	prom_args.args[0] = RELOC("instantiate-rtas");
+	prom_args.args[1] = prom_rtas;
+	prom_args.args[2] = (void *) RELOC(rtas_data);
+	RELOC(prom)(&prom_args);
+	i = 0;
+	if (prom_args.args[3] == 0)
+		i = (unsigned int)prom_args.args[4];
+	RELOC(rtas_entry) = i;
+	if ((RELOC(rtas_entry) == -1) || (RELOC(rtas_entry) == 0))
+		prom_print(RELOC(" failed\n"));
+	else
+		prom_print(RELOC(" done\n"));
+}
+
 /*
  * We enter here early on, when the Open Firmware prom is still
  * handling exceptions and the MMU hash table for us.
@@ -566,7 +612,7 @@ prom_init(int r3, int r4, prom_entry pp)
 {
 	int chrp = 0;
 	unsigned long mem;
-	ihandle prom_rtas, prom_mmu, prom_op;
+	ihandle prom_mmu, prom_op;
 	unsigned long offset = reloc_offset();
 	int l;
 	char *p, *d;
@@ -650,47 +696,7 @@ prom_init(int r3, int r4, prom_entry pp)
 		mem = ALIGN(mem + strlen(d) + 1);
 	}
 
-	prom_rtas = call_prom(RELOC("finddevice"), 1, 1, RELOC("/rtas"));
-	if (prom_rtas != (void *) -1) {
-		int i, nargs;
-		struct prom_args prom_args;
-
-		RELOC(rtas_size) = 0;
-		call_prom(RELOC("getprop"), 4, 1, prom_rtas,
-			  RELOC("rtas-size"), &RELOC(rtas_size), sizeof(rtas_size));
-		prom_print(RELOC("instantiating rtas"));
-		if (RELOC(rtas_size) == 0) {
-			RELOC(rtas_data) = 0;
-		} else {
-			/*
-			 * Ask OF for some space for RTAS.
-			 * Actually OF has bugs so we just arbitrarily
-			 * use memory at the 6MB point.
-			 */
-			RELOC(rtas_data) = 6 << 20;
-			prom_print(RELOC(" at "));
-			prom_print_hex(RELOC(rtas_data));
-		}
-		prom_rtas = call_prom(RELOC("open"), 1, 1, RELOC("/rtas"));
-		prom_print(RELOC("..."));
-		nargs = 3;
-		prom_args.service = RELOC("call-method");
-		prom_args.nargs = nargs;
-		prom_args.nret = 2;
-		prom_args.args[0] = RELOC("instantiate-rtas");
-		prom_args.args[1] = prom_rtas;
-		prom_args.args[2] = (void *) RELOC(rtas_data);
-		RELOC(prom)(&prom_args);
-		if (prom_args.args[nargs] != 0)
-			i = 0;
-		else
-			i = (int)prom_args.args[nargs+1];
-		RELOC(rtas_entry) = i;
-		if ((RELOC(rtas_entry) == -1) || (RELOC(rtas_entry) == 0))
-			prom_print(RELOC(" failed\n"));
-		else
-			prom_print(RELOC(" done\n"));
-	}
+	prom_instantiate_rtas();
 
 #ifdef CONFIG_PPC64BRIDGE
 	/*
@@ -737,7 +743,7 @@ prom_init(int r3, int r4, prom_entry pp)
 
 		/* We assume the phys. address size is 3 cells */
 		if (prom_args.args[nargs] != 0)
-			prom_print(RELOC(" (translate failed) "));
+			prom_print(RELOC(" (translate failed)\n"));
 		else
 			phys = (unsigned long)prom_args.args[nargs+3];
 	    }
@@ -752,8 +758,6 @@ prom_init(int r3, int r4, prom_entry pp)
 	if (prom_version >= 3) {
 		prom_print(RELOC("Calling quiesce ...\n"));
 		call_prom(RELOC("quiesce"), 0, 0);
-		offset = reloc_offset();
-		phys = offset + KERNELBASE;
 	}
 
 #ifdef CONFIG_BOOTX_TEXT
@@ -769,7 +773,9 @@ prom_init(int r3, int r4, prom_entry pp)
 	}
 #endif
 
-	prom_print(RELOC("returning from prom_init\n"));
+	prom_print(RELOC("returning "));
+	prom_print_hex(phys);
+	prom_print(RELOC(" from prom_init\n"));
 	RELOC(prom_stdout) = 0;
 	return phys;
 }
@@ -836,9 +842,8 @@ prom_welcome(boot_infos_t* bi, unsigned long phys)
 }
 
 /* Calc BAT values for mapping the display and store them
- * in disp_BATH and disp_BATL. Those values are then used
- * from head.S to map the display during identify_machine()
- * and MMU_Init()
+ * in disp_BAT.  Those values are then used from head.S to map
+ * the display during identify_machine() and MMU_Init()
  * 
  * For now, the display is mapped in place (1:1). This should
  * be changed if the display physical address overlaps
@@ -862,13 +867,13 @@ prepare_disp_BAT(void)
 	if ((_get_PVR() >> 16) != 1) {
 		/* 603, 604, G3, G4, ... */
 		addr &= 0xFF000000UL;
-		RELOC(disp_BATU) = addr | (BL_16M<<2) | 2;
-		RELOC(disp_BATL) = addr | (_PAGE_NO_CACHE | _PAGE_GUARDED | BPP_RW);		
+		RELOC(disp_BAT[0]) = addr | (BL_16M<<2) | 2;
+		RELOC(disp_BAT[1]) = addr | (_PAGE_NO_CACHE | _PAGE_GUARDED | BPP_RW);		
 	} else {
 		/* 601 */
 		addr &= 0xFF800000UL;
-		RELOC(disp_BATU) = addr | (_PAGE_NO_CACHE | PP_RWXX) | 4;
-		RELOC(disp_BATL) = addr | BL_8M | 0x40;
+		RELOC(disp_BAT[0]) = addr | (_PAGE_NO_CACHE | PP_RWXX) | 4;
+		RELOC(disp_BAT[1]) = addr | BL_8M | 0x40;
 	}
 	bi->logicalDisplayBase = bi->dispDeviceBase;
 }
@@ -1003,34 +1008,52 @@ setup_disp_fake_bi(ihandle dp)
 	unsigned address;
 	boot_infos_t* bi;
 	unsigned long offset = reloc_offset();
-	
-	prom_print(RELOC("Initializing fake screen\n"));
+	struct pci_reg_property addrs[8];
+	int i, naddrs;
+	char name[32];
+	char *getprop = RELOC("getprop");
 
-	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("width"),
-		  &width, sizeof(width));
-	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("height"),
-		  &height, sizeof(height));
-	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("depth"),
-		  &depth, sizeof(depth));
+	prom_print(RELOC("Initializing fake screen: "));
+
+	memset(name, 0, sizeof(name));
+	call_prom(getprop, 4, 1, dp, RELOC("name"), name, sizeof(name));
+	name[sizeof(name)-1] = 0;
+	prom_print(name);
+	prom_print(RELOC("\n"));
+	call_prom(getprop, 4, 1, dp, RELOC("width"), &width, sizeof(width));
+	call_prom(getprop, 4, 1, dp, RELOC("height"), &height, sizeof(height));
+	call_prom(getprop, 4, 1, dp, RELOC("depth"), &depth, sizeof(depth));
 	pitch = width * ((depth + 7) / 8);
-	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("linebytes"),
+	call_prom(getprop, 4, 1, dp, RELOC("linebytes"),
 		  &pitch, sizeof(pitch));
-	address = 0;
-	if (pitch == 1) {
-		address = 0xfa000000;
+	if (pitch == 1)
 		pitch = 0x1000;		/* for strange IBM display */
-	}
-	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("address"),
+	address = 0;
+	call_prom(getprop, 4, 1, dp, RELOC("address"),
 		  &address, sizeof(address));
 	if (address == 0) {
-		prom_print(RELOC("Failed to get address\n"));
-		return;
+		/* look for an assigned address with a size of >= 1MB */
+		naddrs = (int) call_prom(getprop, 4, 1, dp,
+				RELOC("assigned-addresses"),
+				addrs, sizeof(addrs));
+		naddrs /= sizeof(struct pci_reg_property);
+		for (i = 0; i < naddrs; ++i) {
+			if (addrs[i].size_lo >= (1 << 20)) {
+				address = addrs[i].addr.a_lo;
+				/* use the BE aperture if possible */
+				if (addrs[i].size_lo >= (16 << 20))
+					address += (8 << 20);
+				break;
+			}
+		}
+		if (address == 0) {
+			prom_print(RELOC("Failed to get address\n"));
+			return;
+		}
 	}
-#if 0
 	/* kludge for valkyrie */
-	if (strcmp(dp->name, "valkyrie") == 0) 
-	    address += 0x1000;
-#endif
+	if (strcmp(name, RELOC("valkyrie")) == 0) 
+		address += 0x1000;
  
 	RELOC(disp_bi) = &fake_bi;
 	bi = PTRRELOC((&fake_bi));
@@ -1334,11 +1357,19 @@ finish_node_interrupts(struct device_node *np, unsigned long mem_start)
 	     */
 	    if (get_property(node, "interrupt-controller", &l)) {
 	    	int i,j;
+		int cvt_irq;
+
+		/* XXX on chrp, offset interrupt numbers for the
+		   8259 by 0, those for the openpic by 16 */
+		cvt_irq = _machine == _MACH_chrp
+			&& get_property(node, "interrupt-parent", NULL) == 0;
 	    	np->intrs = (struct interrupt_info *) mem_start;
 		np->n_intrs = ipsize / isize;
 		mem_start += np->n_intrs * sizeof(struct interrupt_info);
 		for (i = 0; i < np->n_intrs; ++i) {
 		    np->intrs[i].line = *interrupts++;
+		    if (cvt_irq)
+			np->intrs[i].line = openpic_to_irq(np->intrs[i].line);
 		    np->intrs[i].sense = 0;
 		    if (isize > 1)
 		        np->intrs[i].sense = *interrupts++;
@@ -2072,7 +2103,6 @@ abort()
  *    changes.
  */
 
-__init
 void
 map_bootx_text(void)
 {
@@ -2083,7 +2113,10 @@ map_bootx_text(void)
 	offset = ((unsigned long) disp_bi->dispDeviceBase) - base;
 	size = disp_bi->dispDeviceRowBytes * disp_bi->dispDeviceRect[3] + offset
 		+ disp_bi->dispDeviceRect[0];
-	disp_bi->logicalDisplayBase = ioremap(base, size) + offset;
+	disp_bi->logicalDisplayBase = ioremap(base, size);
+	if (disp_bi->logicalDisplayBase == 0)
+		return;
+	disp_bi->logicalDisplayBase += offset;
 	bootx_text_mapped = 1;
 }
 
@@ -2100,6 +2133,35 @@ calc_base(boot_infos_t *bi, int x, int y)
 	base += (x + bi->dispDeviceRect[0]) * (bi->dispDeviceDepth >> 3);
 	base += (y + bi->dispDeviceRect[1]) * bi->dispDeviceRowBytes;
 	return base;
+}
+
+/* Adjust the display to a new resolution */
+void
+bootx_update_display(unsigned long phys, int width, int height,
+		     int depth, int pitch)
+{
+	if (disp_bi == 0)
+		return;
+	/* check it's the same frame buffer (within 16MB) */
+	if ((phys ^ (unsigned long)disp_bi->dispDeviceBase) & 0xff000000)
+		return;
+
+	disp_bi->dispDeviceBase = (__u8 *) phys;
+	disp_bi->dispDeviceRect[0] = 0;
+	disp_bi->dispDeviceRect[1] = 0;
+	disp_bi->dispDeviceRect[2] = width;
+	disp_bi->dispDeviceRect[3] = height;
+	disp_bi->dispDeviceDepth = depth;
+	disp_bi->dispDeviceRowBytes = pitch;
+	if (bootx_text_mapped) {
+		iounmap(disp_bi->logicalDisplayBase);
+		bootx_text_mapped = 0;
+	}
+	map_bootx_text();
+	g_loc_X = 0;
+	g_loc_Y = 0;
+	g_max_loc_X = width / 8;
+	g_max_loc_Y = height / 16;
 }
 
 __pmac
@@ -2162,6 +2224,9 @@ scrollscreen(void)
 						(bi->dispDeviceDepth >> 3)) >> 2;
 	int i,j;
 	
+#ifdef CONFIG_ADB_PMU
+	pmu_suspend();	/* PMU will not shut us down ! */
+#endif
 	for (i=0; i<(bi->dispDeviceRect[3] - bi->dispDeviceRect[1] - 16); i++)
 	{
 		unsigned long *src_ptr = src;
@@ -2178,6 +2243,9 @@ scrollscreen(void)
 			*(dst_ptr++) = 0;
 		dst += (bi->dispDeviceRowBytes >> 2);
 	}
+#ifdef CONFIG_ADB_PMU
+	pmu_resume();	/* PMU will not shut us down ! */
+#endif
 }
 #endif /* ndef NO_SCROLL */
 

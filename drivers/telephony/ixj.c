@@ -4493,8 +4493,8 @@ static DWORD PCIEE_GetSerialNumber(WORD wAddress)
 	return (((DWORD) wHi << 16) | wLo);
 }
 
-static int dspio[IXJMAX + 1] = {0,};
-static int xio[IXJMAX + 1] = {0,};
+static int dspio[IXJMAX + 1];
+static int xio[IXJMAX + 1];
 
 MODULE_DESCRIPTION("Internet PhoneJACK/Internet LineJACK module - www.quicknet.net");
 MODULE_AUTHOR("Ed Okerson <eokerson@quicknet.net>");
@@ -4502,27 +4502,24 @@ MODULE_AUTHOR("Ed Okerson <eokerson@quicknet.net>");
 MODULE_PARM(dspio, "1-" __MODULE_STRING(IXJMAX) "i");
 MODULE_PARM(xio, "1-" __MODULE_STRING(IXJMAX) "i");
 
-#ifdef MODULE
-
-void cleanup_module(void)
+static void __exit ixj_exit(void)
 {
 	cleanup();
 }
 
-int init_module(void)
-#else
-int __init ixj_init(void)
-#endif
+static int __init ixj_init(void)
 {
 	int result;
 
-	int func = 0x110, i = 0;
+	int i = 0;
 	int cnt = 0;
 	int probe = 0;
-	struct pci_dev *dev = NULL, *old_dev = NULL;
 	struct pci_dev *pci = NULL;
 
 #ifdef CONFIG_ISAPNP
+	struct pci_dev *dev = NULL, *old_dev = NULL;
+	int func = 0x110;
+
 	while (1) {
 		do {
 			old_dev = dev;
@@ -4636,6 +4633,10 @@ int __init ixj_init(void)
 	ixj_add_timer();	
 	return probe;
 }
+
+module_init(ixj_init);
+module_exit(ixj_exit);
+
 
 static void DAA_Coeff_US(int board)
 {

@@ -93,7 +93,7 @@ extern int max_super_blocks, nr_super_blocks;
 				  * as nfs_rename() will be cleaned up
 				  */
 /*
- * These are the fs-independent mount-flags: up to 16 flags are supported
+ * These are the fs-independent mount-flags: up to 32 flags are supported
  */
 #define MS_RDONLY	 1	/* Mount read-only */
 #define MS_NOSUID	 2	/* Ignore suid and sgid bits */
@@ -104,6 +104,7 @@ extern int max_super_blocks, nr_super_blocks;
 #define MS_MANDLOCK	64	/* Allow mandatory locks on an FS */
 #define MS_NOATIME	1024	/* Do not update access times. */
 #define MS_NODIRATIME	2048	/* Do not update directory access times */
+#define MS_BIND		4096
 
 /*
  * Flags that can be altered by MS_REMOUNT

@@ -781,8 +781,7 @@ virtual_midi_disable (void)
 	return 0;
 }
 
-static int __init detect_wf_mpu (int irq, int io_base)
-
+int __init detect_wf_mpu (int irq, int io_base)
 {
 	if (check_region (io_base, 2)) {
 		printk (KERN_WARNING "WF-MPU: I/O port %x already in use.\n",

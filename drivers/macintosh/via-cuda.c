@@ -94,39 +94,48 @@ static struct device_node *vias;
 #endif
 static int cuda_fully_inited = 0;
 
+#ifdef CONFIG_ADB
 static int cuda_probe(void);
 static int cuda_init(void);
+static int cuda_send_request(struct adb_request *req, int sync);
+static int cuda_adb_autopoll(int devs);
+static int cuda_reset_adb_bus(void);
+#endif /* CONFIG_ADB */
+
 static int cuda_init_via(void);
 static void cuda_start(void);
 static void cuda_interrupt(int irq, void *arg, struct pt_regs *regs);
 static void cuda_input(unsigned char *buf, int nb, struct pt_regs *regs);
-static int cuda_send_request(struct adb_request *req, int sync);
-static int cuda_adb_autopoll(int devs);
 void cuda_poll(void);
-static int cuda_reset_adb_bus(void);
 static int cuda_write(struct adb_request *req);
 
 int cuda_request(struct adb_request *req,
 		 void (*done)(struct adb_request *), int nbytes, ...);
 
+#ifdef CONFIG_ADB
 struct adb_driver via_cuda_driver = {
 	"CUDA",
 	cuda_probe,
 	cuda_init,
 	cuda_send_request,
-	/*cuda_write,*/
 	cuda_adb_autopoll,
 	cuda_poll,
 	cuda_reset_adb_bus
 };
+#endif /* CONFIG_ADB */
 
 #ifdef CONFIG_PPC
-void
-find_via_cuda()
+int
+find_via_cuda(void)
 {
+    int err;
+    struct adb_request req;
+
+    if (vias != 0)
+	return 1;
     vias = find_devices("via-cuda");
     if (vias == 0)
-	return;
+	return 0;
     if (vias->next != 0)
 	printk(KERN_WARNING "Warning: only using 1st via-cuda\n");
 
@@ -146,15 +155,54 @@ find_via_cuda()
 	printk(KERN_ERR "via-cuda: expecting 1 address (%d) and 1 interrupt (%d)\n",
 	       vias->n_addrs, vias->n_intrs);
 	if (vias->n_addrs < 1 || vias->n_intrs < 1)
-	    return;
+	    return 0;
     }
     via = (volatile unsigned char *) ioremap(vias->addrs->address, 0x2000);
 
     cuda_state = idle;
     sys_ctrler = SYS_CTRLER_CUDA;
+
+    err = cuda_init_via();
+    if (err) {
+	printk(KERN_ERR "cuda_init_via() failed\n");
+	via = NULL;
+	return 0;
+    }
+
+    /* Clear and enable interrupts, but only on PPC. On 68K it's done  */
+    /* for us by the the main VIA driver in arch/m68k/mac/via.c        */
+
+#ifndef CONFIG_MAC
+    via[IFR] = 0x7f; eieio();	/* clear interrupts by writing 1s */
+    via[IER] = IER_SET|SR_INT; eieio();	/* enable interrupt from SR */
+#endif
+
+    /* enable autopoll */
+    cuda_request(&req, NULL, 3, CUDA_PACKET, CUDA_AUTOPOLL, 1);
+    while (!req.complete)
+	cuda_poll();
+
+    return 1;
 }
 #endif /* CONFIG_PPC */
 
+int via_cuda_start(void)
+{
+    if (via == NULL)
+	return -ENODEV;
+
+    if (request_irq(CUDA_IRQ, cuda_interrupt, 0, "ADB", cuda_interrupt)) {
+	printk(KERN_ERR "cuda_init: can't get irq %d\n", CUDA_IRQ);
+	return -EAGAIN;
+    }
+
+    printk("Macintosh CUDA driver v0.5 for Unified ADB.\n");
+
+    cuda_fully_inited = 1;
+    return 0;
+}
+
+#ifdef CONFIG_ADB
 static int
 cuda_probe()
 {
@@ -172,46 +220,24 @@ cuda_probe()
 static int
 cuda_init(void)
 {
-    int err;
-
     if (via == NULL)
 	return -ENODEV;
-
-    err = cuda_init_via();
-    if (err) {
-	printk(KERN_ERR "cuda_probe: init_via() failed\n");
-	via = NULL;
-	return err;
-    }
-
-    /* Clear and enable interrupts, but only on PPC. On 68K it's done  */
-    /* for us by the the main VIA driver in arch/m68k/mac/via.c        */
-
-#ifndef CONFIG_MAC
-    via[IFR] = 0x7f; eieio();	/* clear interrupts by writing 1s */
-    via[IER] = IER_SET|SR_INT; eieio();	/* enable interrupt from SR */
+#ifndef CONFIG_PPC
+    return via_cuda_start();
 #endif
-
-    if (request_irq(CUDA_IRQ, cuda_interrupt, 0, "ADB", cuda_interrupt)) {
-	printk(KERN_ERR "cuda_init: can't get irq %d\n", CUDA_IRQ);
-	return -EAGAIN;
-    }
-
-    printk("adb: CUDA driver v0.5 for Unified ADB.\n");
-
-    cuda_fully_inited = 1;
     return 0;
 }
+#endif /* CONFIG_ADB */
 
-#define WAIT_FOR(cond, what)				\
-    do {						\
-	for (x = 1000; !(cond); --x) {			\
-	    if (x == 0) {				\
-		printk("Timeout waiting for " what);	\
-		return -ENXIO;				\
-	    }						\
+#define WAIT_FOR(cond, what)					\
+    do {							\
+	for (x = 1000; !(cond); --x) {				\
+	    if (x == 0) {					\
+		printk("Timeout waiting for " what "\n");	\
+		return -ENXIO;					\
+	    }							\
 	    udelay(100);					\
-	}						\
+	}							\
     } while (0)
 
 static int
@@ -255,6 +281,7 @@ cuda_init_via()
     return 0;
 }
 
+#ifdef CONFIG_ADB
 /* Send an ADB command */
 static int
 cuda_send_request(struct adb_request *req, int sync)
@@ -309,7 +336,7 @@ cuda_reset_adb_bus(void)
 	cuda_poll();
     return 0;
 }
-
+#endif /* CONFIG_ADB */
 /* Construct and send a cuda request */
 int
 cuda_request(struct adb_request *req, void (*done)(struct adb_request *),
@@ -534,7 +561,18 @@ cuda_input(unsigned char *buf, int nb, struct pt_regs *regs)
 
     switch (buf[0]) {
     case ADB_PACKET:
+#ifdef CONFIG_XMON
+	if (nb == 5 && buf[2] == 0x2c) {
+	    extern int xmon_wants_key, xmon_adb_keycode;
+	    if (xmon_wants_key) {
+		xmon_adb_keycode = buf[3];
+		return;
+	    }
+	}
+#endif /* CONFIG_XMON */
+#ifdef CONFIG_ADB
 	adb_input(buf+2, nb-2, regs, buf[1] & 0x40);
+#endif /* CONFIG_ADB */
 	break;
 
     default:

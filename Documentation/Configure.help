@@ -1088,22 +1088,25 @@ CONFIG_BLK_DEV_IDEDOUBLER
 
 Support for PowerMac IDE devices (must also enable IDE)
 CONFIG_BLK_DEV_IDE_PMAC
-  No help for CONFIG_BLK_DEV_IDE_PMAC
+  This driver provides support for the built-in IDE controller on most
+  of the recent Apple Power Macintoshes and PowerBooks.
+  If unsure, say Y.
 
 PowerMac IDE DMA support
 CONFIG_BLK_DEV_IDEDMA_PMAC
-  No help for CONFIG_BLK_DEV_IDEDMA_PMAC
+  This option allows the driver for the built-in IDE controller on
+  Power Macintoshes and PowerBooks to use DMA (direct memory access)
+  to transfer data to and from memory.  Saying Y is safe and improves
+  performance.
 
 Use DMA by default
-CONFIG_IDEDMA_PMAC_AUTO
-  Prior to kernel version 2.1.112, Linux used to automatically use
-  DMA for IDE drives and chipsets which support it. Due to concerns
-  about a couple of cases where buggy hardware may have caused damage,
-  the default is now to NOT use DMA automatically. To revert to the
-  previous behaviour, say Y to this question.
-
-  If you suspect your hardware is at all flakey, say N here.
-  Do NOT email the IDE kernel people regarding this issue!
+CONFIG_BLK_DEV_IDEDMA_PMAC_AUTO
+  This option allows the driver for the built-in IDE controller on
+  Power Macintoshes and PowerBooks to use DMA automatically, without
+  it having to be explicitly enabled.  This option is provided because
+  of concerns about a couple of cases where using DMA on buggy PC
+  hardware may have caused damage.  Saying Y should be safe on all
+  Apple machines.
 
 Macintosh Quadra/Powerbook IDE interface support
 CONFIG_BLK_DEV_MAC_IDE
@@ -9984,10 +9987,24 @@ CONFIG_USB_WMFORCE
   The module will be called wmforce.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
+Use input layer for ADB devices
+CONFIG_INPUT_ADBHID
+  Say Y here if you want to have ADB (Apple Desktop Bus) HID devices
+  such as keyboards, mice, joysticks, or graphic tablets handled by the
+  input layer.  If you say Y here, make sure to say Y to the
+  corresponding drivers "Keyboard support" (CONFIG_INPUT_KEYBDEV),
+  "Mouse Support" (CONFIG_INPUT_MOUSEDEV) and "Event interface support"
+  (CONFIG_INPUT_EVDEV) as well.
+
+  If you say N here, you still have the option of using the old ADB
+  keyboard and mouse drivers.
+
+  If unsure, say Y.
+
 Keyboard support
 CONFIG_INPUT_KEYBDEV
-  Say Y here if you want your USB HID keyboard to be able to serve as
-  a system keyboard.
+  Say Y here if you want your USB HID keyboard (or an ADB keyboard
+  handled by the input layer) to be able to serve as a system keyboard.
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -9996,10 +10013,11 @@ CONFIG_INPUT_KEYBDEV
 
 Mouse support
 CONFIG_INPUT_MOUSEDEV
-  Say Y here if you want your USB HID mouse to be accessible as
-  char devices 13:32+ - /dev/input/mouseX and 13:63 - /dev/input/mice
-  as an emulated PS/2 mouse.  That way, all user space programs will
-  be able to use your mouse.
+  Say Y here if you want your USB HID mouse (or ADB mouse handled by
+  the input layer) to be accessible as char devices 13:32+ -
+  /dev/input/mouseX and 13:63 - /dev/input/mice as an emulated ImPS/2
+  mouse.  That way, all user space programs will be able to use your
+  mouse.
   
   If unsure, say Y.
 
@@ -10034,8 +10052,8 @@ CONFIG_INPUT_JOYDEV
 
 Event interface support
 CONFIG_INPUT_EVDEV
-  Say Y here if you want your USB HID device events be accessible
-  under char device 13:64+ - /dev/inputX in a generic way.
+  Say Y here if you want your USB or ADB HID device events be accessible
+  under char device 13:64+ - /dev/input/eventX in a generic way.
   This is the future ...
 
 USB Scanner support
@@ -15429,6 +15447,42 @@ CONFIG_PMAC_PBOOK
   You may also want to compile the dma sound driver as a module and
   have it autoloaded. The act of removing the module shuts down the
   sound hardware for more power savings.
+
+Mac-on-Linux support
+CONFIG_MOL
+  This option enables low-level support for Mac-on-Linux.
+  MOL lets you run MacOS and Linux simultaneously. Please
+  visit <http://www.maconlinux.org> for more information.
+  If unsure, say Y.
+
+ADB raw keycode support
+CONFIG_MAC_ADBKEYCODES
+  This provides support for sending raw ADB keycodes to console
+  devices.  This is the default up to 2.4.0, but in future this may be
+  phased out in favor of generic Linux keycodes. If you say Y here, you
+  can dynamically switch via the
+      /proc/sys/dev/mac_hid/keyboard_sends_linux_keycodes
+  sysctl and with the "keyboard_sends_linux_keycodes=" kernel argument.
+  
+  If unsure, say Y here.
+
+Mouse button 2+3 emulation support
+CONFIG_MAC_EMUMOUSEBTN
+  This provides generic support for emulating the 2nd and 3rd mouse
+  button with keypresses. If you say Y here, the emulation is still
+  disabled by default. The emulation is controlled by these sysctl entries:
+      /proc/sys/dev/mac_hid/mouse_button_emulation
+      /proc/sys/dev/mac_hid/mouse_button2_keycode
+      /proc/sys/dev/mac_hid/mouse_button3_keycode
+
+Enhanced Real Time Clock Support
+CONFIG_PPC_RTC
+  If you say Y here and create a character special file /dev/rtc with
+  major number 10 and minor number 135 using mknod ("man mknod"), you
+  will get access to the real time clock (or hardware clock) built 
+  into your computer.
+  
+  If unsure, say Y here.
 
 Support for Open Firmware device tree in /proc
 CONFIG_PROC_DEVICETREE

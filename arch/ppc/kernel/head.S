@@ -31,6 +31,7 @@
 #include <asm/page.h>
 #include <linux/config.h>
 #include <asm/mmu.h>
+#include "mol.h"
 
 #ifdef CONFIG_APUS
 #include <asm/amigappc.h>
@@ -78,7 +79,7 @@ CACHELINE_WORDS = 32
 	mtspr	DBAT##n##L,RB;		\
 1:	
 #endif /* CONFIG_PPC64BRIDGE */	 
-	
+
 	.text
 	.globl	_stext
 _stext:
@@ -162,8 +163,8 @@ __start:
 /* Switch MMU off, clear BATs and flush TLB. At this point, r3 contains
  * the physical address we are running at, returned by prom_init()
  */
-__after_prom_start:
  	bl	mmu_off
+__after_mmu_off:
 	bl	clear_bats
 	bl	flush_tlbs
 #endif
@@ -202,15 +203,7 @@ __after_prom_start:
 	mr	r26,r3
 	addis	r4,r3,KERNELBASE@h	/* current address of _start */
 	cmpwi	0,r4,0			/* are we already running at 0? */
-	beq	2f			/* assume it's OK if so */
-	li	r3,0
-	mfmsr	r0
-	andi.	r0,r0,MSR_DR		/* MMU enabled? */
-	beq	relocate_kernel
-	lis	r3,KERNELBASE@h		/* if so, are we */
-	cmpw	0,r4,r3			/* already running at KERNELBASE? */
 	bne	relocate_kernel
-2:
 #endif /* CONFIG_APUS */
 /*
  * we now have the 1st 16M of ram mapped with the bats.
@@ -300,6 +293,17 @@ label:						\
 	.long	hdlr;				\
 	.long	ret_from_except
 
+#define STD_MOL_EXCEPTION(n, label, hdlr, hook)	\
+	. = n;					\
+label:						\
+	EXCEPTION_PROLOG;			\
+	MOL_HOOK(hook); 			\
+	addi	r3,r1,STACK_FRAME_OVERHEAD;	\
+	li	r20,MSR_KERNEL;			\
+	bl	transfer_to_handler; 		\
+	.long	hdlr;				\
+	.long	ret_from_except
+
 /* System reset */
 #ifdef CONFIG_SMP /* MVME/MTX and gemini start the secondary here */
 #ifdef CONFIG_GEMINI
@@ -324,6 +328,7 @@ DataAccessCont:
 DataAccess:
 	EXCEPTION_PROLOG
 #endif /* CONFIG_PPC64BRIDGE */
+	MOL_HOOK(0)
 	mfspr	r20,DSISR
 	andis.	r0,r20,0xa470		/* weird error? */
 	bne	1f			/* if not, try to put a PTE */
@@ -366,6 +371,7 @@ InstructionAccessCont:
 InstructionAccess:
 	EXCEPTION_PROLOG
 #endif /* CONFIG_PPC64BRIDGE */
+	MOL_HOOK(1)
 	andis.	r0,r23,0x4000		/* no pte found? */
 	beq	1f			/* if so, try to put a PTE */
 	mr	r3,r22			/* into the hash table */
@@ -430,6 +436,7 @@ Alignment:
 	. = 0x700
 ProgramCheck:
 	EXCEPTION_PROLOG
+	MOL_HOOK(2)
 	addi	r3,r1,STACK_FRAME_OVERHEAD
 	li	r20,MSR_KERNEL
 	rlwimi	r20,r23,0,16,16		/* copy EE bit from saved MSR */
@@ -441,6 +448,7 @@ ProgramCheck:
 	. = 0x800
 FPUnavailable:
 	EXCEPTION_PROLOG
+	MOL_HOOK_RESTORE(3)
 	bne	load_up_fpu		/* if from user, just load it up */
 	li	r20,MSR_KERNEL
 	bl	transfer_to_handler	/* if from kernel, take a trap */
@@ -450,6 +458,7 @@ FPUnavailable:
 	. = 0x900
 Decrementer:
 	EXCEPTION_PROLOG
+	MOL_HOOK(4)	
 	addi	r3,r1,STACK_FRAME_OVERHEAD
 	li	r20,MSR_KERNEL
 	bl	transfer_to_handler
@@ -473,12 +482,9 @@ SystemCall:
 	.long	ret_from_except
 
 /* Single step - not used on 601 */
-	STD_EXCEPTION(0xd00, SingleStep, SingleStepException)
-
+	STD_MOL_EXCEPTION(0xd00, SingleStep, SingleStepException, 5)
 	STD_EXCEPTION(0xe00, Trap_0e, UnknownException)
-#ifndef CONFIG_ALTIVEC
-	STD_EXCEPTION(0xf00, Trap_0f, UnknownException)
-#else	
+
 /*
  * The Altivec unavailable trap is at 0x0f20.  Foo.
  * We effectively remap it to 0x3000.
@@ -493,15 +499,20 @@ trap_0f_cont:
 	.long	ret_from_except
 
 	. = 0xf20
+#ifdef CONFIG_ALTIVEC
 	b	AltiVecUnavailable
-#endif /* CONFIG_ALTIVEC */
-
+#endif
+Trap_0f:
+	EXCEPTION_PROLOG
+	b	trap_0f_cont
+	
 /*
  * Handle TLB miss for instruction on 603/603e.
  * Note: we get an alternate set of r0 - r3 to use automatically.
  */
 	. = 0x1000
 InstructionTLBMiss:
+	MOL_HOOK_TLBMISS( 14 )
 /*
  * r0:	stored ctr
  * r1:	linux style pte ( later becomes ppc hardware pte )
@@ -568,6 +579,7 @@ InstructionAddressInvalid:
  */
 	. = 0x1100
 DataLoadTLBMiss:
+	MOL_HOOK_TLBMISS( 15 )
 /*
  * r0:	stored ctr
  * r1:	linux style pte ( later becomes ppc hardware pte )
@@ -633,6 +645,7 @@ DataAddressInvalid:
  */
 	. = 0x1200
 DataStoreTLBMiss:
+	MOL_HOOK_TLBMISS( 16 )
 /*
  * r0:	stored ctr
  * r1:	linux style pte ( later becomes ppc hardware pte )
@@ -674,7 +687,7 @@ DataStoreTLBMiss:
 	mtcrf	0x80,r3
 	rfi
 
-	STD_EXCEPTION(0x1300, Trap_13, InstructionBreakpoint)
+	STD_MOL_EXCEPTION(0x1300, Trap_13, InstructionBreakpoint, 11)
 	STD_EXCEPTION(0x1400, SMI, SMIException)
 	STD_EXCEPTION(0x1500, Trap_15, UnknownException)
 	STD_EXCEPTION(0x1600, Trap_16, UnknownException)
@@ -687,7 +700,7 @@ DataStoreTLBMiss:
 	STD_EXCEPTION(0x1d00, Trap_1d, UnknownException)
 	STD_EXCEPTION(0x1e00, Trap_1e, UnknownException)
 	STD_EXCEPTION(0x1f00, Trap_1f, UnknownException)
-	STD_EXCEPTION(0x2000, RunMode, RunModeException)
+	STD_MOL_EXCEPTION(0x2000, RunMode, RunModeException, 5)
 	STD_EXCEPTION(0x2100, Trap_21, UnknownException)
 	STD_EXCEPTION(0x2200, Trap_22, UnknownException)
 	STD_EXCEPTION(0x2300, Trap_23, UnknownException)
@@ -709,16 +722,12 @@ DataStoreTLBMiss:
 #ifdef CONFIG_ALTIVEC
 AltiVecUnavailable:
 	EXCEPTION_PROLOG
+	MOL_HOOK_RESTORE(12)
 	bne	load_up_altivec		/* if from user, just load it up */
 	li	r20,MSR_KERNEL
 	bl	transfer_to_handler	/* if from kernel, take a trap */
 	.long	KernelAltiVec
 	.long	ret_from_except
-
-/* here are the bits of trap 0xf00 which got displaced */
-Trap_0f:
-	EXCEPTION_PROLOG
-	b	trap_0f_cont
 #endif /* CONFIG_ALTIVEC */
 
 #ifdef CONFIG_PPC64BRIDGE
@@ -753,6 +762,14 @@ transfer_to_handler:
 	beq	2f
 	addi	r24,r1,STACK_FRAME_OVERHEAD
 	stw	r24,PT_REGS(r23)
+#ifdef CONFIG_ALTIVEC
+	mfpvr	r24			/* check if we are on a G4 */
+	srwi	r24,r24,16
+	cmpwi	r24,PVR_7400@h
+	bne	2f
+	mfspr	r22,SPRN_VRSAVE		/* if so, save vrsave register value */
+	stw	r22,THREAD_VRSAVE(r23)
+#endif /* CONFIG_ALTIVEC */
 2:	addi	r2,r23,-THREAD		/* set r2 to current */
 	tovirt(r2,r2)
 	mflr	r23
@@ -771,6 +788,7 @@ transfer_to_handler:
 	lwz	r24,0(r23)		/* virtual address of handler */
 	lwz	r23,4(r23)		/* where to go when done */
 	FIX_SRR1(r20,r22)
+	MOL_HOOK(6)
 	mtspr	SRR0,r24
 	mtspr	SRR1,r20
 	mtlr	r23
@@ -981,6 +999,11 @@ KernelAltiVec:
 
 	.globl	giveup_altivec
 giveup_altivec:
+#ifdef CONFIG_MOL
+	mflr	r4
+	MOL_HOOK_MMU(13, r5)
+	mtlr	r4
+#endif
 	mfmsr	r5
 	oris	r5,r5,MSR_VEC@h
 	SYNC
@@ -1017,6 +1040,11 @@ giveup_altivec:
  */
 	.globl	giveup_fpu
 giveup_fpu:
+#ifdef CONFIG_MOL
+	mflr	r4
+	MOL_HOOK_MMU(7, r5)
+	mtlr	r4
+#endif		
 	mfmsr	r5
 	ori	r5,r5,MSR_FP
 	SYNC
@@ -1048,19 +1076,10 @@ giveup_fpu:
  * the kernel image to physical address 0.
  */
 relocate_kernel:
-#if 0 /* Is this still needed ? I don't think so. It breaks new
-       *  boot-with-mmu-off stuff
-       */
-	lis	r9,0x426f		/* if booted from BootX, don't */
-	addi	r9,r9,0x6f58		/* translate source addr */
-	cmpw	r31,r9			/* (we have to on chrp) */
-	beq	7f
-	rlwinm	r4,r4,0,8,31		/* translate source address */
-	add	r4,r4,r3		/* to region mapped with BATs */
-#endif	
-7:	addis	r9,r26,klimit@ha	/* fetch klimit */
+	addis	r9,r26,klimit@ha	/* fetch klimit */
 	lwz	r25,klimit@l(r9)
 	addis	r25,r25,-KERNELBASE@h
+	li	r3,0			/* Destination base address */
 	li	r6,0			/* Destination offset */
 	li	r5,0x4000		/* # bytes of memory to copy */
 	bl	copy_and_flush		/* copy the first 0x4000 bytes */
@@ -1307,7 +1326,7 @@ enable_caches:
 	mfspr	r9,PVR
 	rlwinm	r9,r9,16,16,31
 	cmpi	0,r9,1
-	beq	4f			/* not needed for 601 */
+	beq	6f			/* not needed for 601 */
 	mfspr	r11,HID0
 	andi.	r0,r11,HID0_DCE
 	ori	r11,r11,HID0_ICE|HID0_DCE
@@ -1323,26 +1342,33 @@ enable_caches:
 	isync
 	cmpi	0,r9,4			/* check for 604 */
 	cmpi	1,r9,9			/* or 604e */
-	cmpi	2,r9,10			/* or mach5 */
+	cmpi	2,r9,10			/* or mach5 / 604r */
 	cmpi	3,r9,8			/* check for 750 (G3) */
 	cmpi	4,r9,12			/* or 7400 (G4) */
 	cror	2,2,6
 	cror	2,2,10
 	bne	4f
-	ori	r11,r11,HID0_SIED|HID0_BHTE /* for 604[e], enable */
+	ori	r11,r11,HID0_SIED|HID0_BHTE /* for 604[e|r], enable */
 	bne	2,5f
-	ori	r11,r11,HID0_BTCD
+	ori	r11,r11,HID0_BTCD	/* superscalar exec & br history tbl */
 	b	5f
 4:
 	cror	14,14,18
 	bne	3,6f
-	/* We should add ABE here if we want to use Store Gathering
-	 * and other nifty bridge features
+	/* for G3/G4:
+	 * enable Store Gathering (SGE), Address Brodcast (ABE),
+	 * Branch History Table (BHTE), Branch Target ICache (BTIC)
 	 */
-	ori	r11,r11,HID0_SGE|HID0_BHTE|HID0_BTIC /* for g3/g4, enable */
+	ori	r11,r11,HID0_SGE | HID0_ABE | HID0_BHTE | HID0_BTIC
+	oris	r11,r11,HID0_DPM@h	/* enable dynamic power mgmt */
+	li	r3,HID0_SPD
+	andc	r11,r11,r3		/* clear SPD: enable speculative */
  	li	r3,0
- 	mtspr	ICTC,r3
-5:	mtspr	HID0,r11		/* superscalar exec & br history tbl */
+ 	mtspr	ICTC,r3			/* Instruction Cache Throttling off */
+5:	isync
+	mtspr	HID0,r11
+	sync
+	isync
 6:	blr
 
 /*
@@ -1548,12 +1574,11 @@ flush_tlbs:
 	blr
 
 mmu_off:
- 	addi	r4, r3, __after_prom_start - _start
+ 	addi	r4, r3, __after_mmu_off - _start
 	mfmsr	r3
 	andi.	r0,r3,MSR_DR|MSR_IR		/* MMU enabled? */
 	beqlr
-	ori	r3,r3,MSR_DR|MSR_IR
-	xori	r3,r3,MSR_DR|MSR_IR
+	andc	r3,r3,r0
 	mtspr	SRR0,r4
 	mtspr	SRR1,r3
 	sync
@@ -1617,23 +1642,19 @@ setup_disp_bat:
 	mflr	r8
 	bl	reloc_offset
 	mtlr	r8
-	lis	r8, disp_BATL@h
-	ori	r8, r8, disp_BATL@l
-	add	r8, r3, r8
-	lwz	r8, 0(r8)
-	lis	r11, disp_BATU@h
-	ori	r11, r11, disp_BATU@l
-	add	r11, r3, r11
-	lwz	r11, 0(r11)
-	mtspr	IBAT3L,r8
-	mtspr	IBAT3U,r11
+	addis	r8,r3,disp_BAT@ha
+	addi	r8,r8,disp_BAT@l
+	lwz	r11,0(r8)
+	lwz	r8,4(r8)
 	mfspr	r9,PVR
 	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
 	cmpi	0,r9,1
 	beq	1f
 	mtspr	DBAT3L,r8
 	mtspr	DBAT3U,r11
-1:		
+	blr
+1:	mtspr	IBAT3L,r8
+	mtspr	IBAT3U,r11
 	blr
 
 #endif /* !defined(CONFIG_APUS) && defined(CONFIG_BOOTX_TEXT) */
@@ -1649,17 +1670,42 @@ setup_disp_bat:
  */
        .globl  m8260_gorom
 m8260_gorom:
-       li      r5,MSR_KERNEL & ~(MSR_IR|MSR_DR)
-       lis     r6,2f@h
-       addis   r6,r6,-KERNELBASE@h
-       ori     r6,r6,2f@l
-       mtspr   SRR0,r6
-       mtspr   SRR1,r5
-       rfi
+	mfmsr	r0
+	rlwinm	r0,r0,0,17,15	/* clear MSR_EE in r0 */
+	sync
+	mtmsr	r0
+	sync
+	mfspr	r11, HID0
+	lis	r10, 0
+	ori	r10,r10,HID0_ICE|HID0_DCE
+	andc	r11, r11, r10
+	mtspr	HID0, r11
+	isync
+	li	r5, MSR_
+	lis	r6,2f@h
+	addis	r6,r6,-KERNELBASE@h
+	ori	r6,r6,2f@l
+	mtspr	SRR0,r6
+	mtspr	SRR1,r5
+	isync
+	sync
+	rfi
 2:
-       mtlr    r4
-       blr
+	mtlr	r4
+	blr
 #endif
+
+#ifdef CONFIG_MOL
+/*
+ * Mac-on-linux hook_table. Don't put this in the data section -
+ * the base address must be within the first 32KB of RAM.
+ */
+	.globl mol_interface
+mol_interface:
+	.long   MOL_INTERFACE_VERSION
+	.fill	24,4,0		/* space for 24 hooks */
+#endif
+
 
 /*
  * We put a few things here that have to be page-aligned.

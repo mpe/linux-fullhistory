@@ -15,6 +15,8 @@
  *	Thomas Sailer   	ioctl code reworked (vmalloc/vfree removed)
  *	Alan Cox		modularisation, fixed sound_mem allocs.
  *	Christoph Hellwig	Adapted to module_init/module_exit
+ *	Arnaldo C. de Melo	get rid of check_region, use request_region for
+ *				OPL4, release it on exit, some cleanups.
  *
  * Status
  *	Believed to work. Badly needs rewriting a bit to support multiple
@@ -172,6 +174,15 @@ int opl3_detect(int ioaddr, int *osp)
 			"structure \n ");
 		return 0;
 	}
+
+	memset(devc, 0, sizeof(*devc));
+	strcpy(devc->fm_info.name, "OPL2");
+
+	if (!request_region(ioaddr, 4, devc->fm_info.name)) {
+		printk(KERN_WARNING "opl3: I/O port 0x%x already in use\n", ioaddr);
+		goto cleanup_devc;
+	}
+
 	devc->osp = osp;
 	devc->base = ioaddr;
 
@@ -187,7 +198,7 @@ int opl3_detect(int ioaddr, int *osp)
 		signature != 0x0f)
 	{
 		MDB(printk(KERN_INFO "OPL3 not detected %x\n", signature));
-		return 0;
+		goto cleanup_region;
 	}
 
 	if (signature == 0x06)		/* OPL2 */
@@ -214,7 +225,7 @@ int opl3_detect(int ioaddr, int *osp)
 			detected_model = 4;
 		}
 
-		if (!check_region(ioaddr - 8, 2))	/* OPL4 port is free */
+		if (request_region(ioaddr - 8, 2, "OPL4"))	/* OPL4 port was free */
 		{
 			int tmp;
 
@@ -232,7 +243,10 @@ int opl3_detect(int ioaddr, int *osp)
 				udelay(10);
 			}
 			else
+			{ /* release OPL4 port */
+				release_region(ioaddr - 8, 2);
 				detected_model = 3;
+			}
 		}
 		opl3_command(ioaddr + 2, OPL3_MODE_REGISTER, 0);
 	}
@@ -246,6 +260,12 @@ int opl3_detect(int ioaddr, int *osp)
 								 * Melodic mode.
 								 */
 	return 1;
+cleanup_region:
+	release_region(ioaddr, 4);
+cleanup_devc:
+	kfree(devc);
+	devc = NULL;
+	return 0;
 }
 
 static int opl3_kill_note  (int devno, int voice, int note, int velocity)
@@ -1099,12 +1119,7 @@ int opl3_init(int ioaddr, int *osp, struct module *owner)
 		return -1;
 	}
 
-	memset((char *) devc, 0x00, sizeof(*devc));
-	devc->osp = osp;
-	devc->base = ioaddr;
-
 	devc->nr_voice = 9;
-	strcpy(devc->fm_info.name, "OPL2");
 
 	devc->fm_info.device = 0;
 	devc->fm_info.synth_type = SYNTH_TYPE_FM;
@@ -1191,18 +1206,12 @@ static int __init init_opl3 (void)
 
 	if (io != -1)	/* User loading pure OPL3 module */
 	{
-    		if (check_region(io, 4))
-    		{
-			printk(KERN_WARNING "opl3: I/O port 0x%x already in use\n", io);
-			return 0;
-    		}
 		if (!opl3_detect(io, NULL))
 		{
 			return -ENODEV;
 		}
-		me = opl3_init(io, NULL, THIS_MODULE);
-		request_region(io, 4, devc->fm_info.name);
 
+		me = opl3_init(io, NULL, THIS_MODULE);
 	}
 
 	return 0;
@@ -1212,8 +1221,11 @@ static void __exit cleanup_opl3(void)
 {
 	if (devc && io != -1)
 	{
-		if(devc->base)
+		if (devc->base) {
 			release_region(devc->base,4);
+			if (devc->is_opl4)
+				release_region(devc->base - 8, 2);
+		}
 		kfree(devc);
 		devc = NULL;
 		sound_unload_synthdev(me);

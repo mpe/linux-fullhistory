@@ -43,6 +43,15 @@
 
 static int currcon = 0;
 
+/* Supported palette hacks */
+enum {
+	cmap_unknown,
+	cmap_m64,	/* ATI Mach64 */
+	cmap_r128,	/* ATI Rage128 */
+	cmap_M3A,	/* ATI Rage Mobility M3 Head A */
+	cmap_M3B	/* ATI Rage Mobility M3 Head B */
+};
+
 struct fb_info_offb {
     struct fb_info info;
     struct fb_fix_screeninfo fix;
@@ -51,7 +60,7 @@ struct fb_info_offb {
     struct { u_char red, green, blue, pad; } palette[256];
     volatile unsigned char *cmap_adr;
     volatile unsigned char *cmap_data;
-    int is_rage_128;
+    int cmap_type;
     union {
 #ifdef FBCON_HAS_CFB16
 	u16 cfb16[16];
@@ -408,21 +417,27 @@ static void offb_init_fb(const char *name, const char *full_name,
     fix->type = FB_TYPE_PACKED_PIXELS;
     fix->type_aux = 0;
 
-    info->is_rage_128 = 0;
+    info->cmap_type = cmap_unknown;
     if (depth == 8)
     {
     	/* XXX kludge for ati */
-	if (strncmp(name, "ATY,Rage128", 11) == 0) {
-	    if (dp) {
+	if (dp && !strncmp(name, "ATY,Rage128", 11)) {
 		unsigned long regbase = dp->addrs[2].address;
-		info->cmap_adr = ioremap(regbase, 0x1FFF) + 0x00b0;
-		info->cmap_data = info->cmap_adr + 4;
-		info->is_rage_128 = 1;
-	    }
-	} else if (strncmp(name, "ATY,", 4) == 0) {
+		info->cmap_adr = ioremap(regbase, 0x1FFF);
+		info->cmap_type = cmap_r128;
+	} else if (dp && !strncmp(name, "ATY,RageM3pA", 12)) {
+		unsigned long regbase = dp->parent->addrs[2].address;
+		info->cmap_adr = ioremap(regbase, 0x1FFF);
+		info->cmap_type = cmap_M3A;
+	} else if (dp && !strncmp(name, "ATY,RageM3pB", 12)) {
+		unsigned long regbase = dp->parent->addrs[2].address;
+		info->cmap_adr = ioremap(regbase, 0x1FFF);
+		info->cmap_type = cmap_M3B;
+	} else if (!strncmp(name, "ATY,", 4)) {
 		unsigned long base = address & 0xff000000UL;
 		info->cmap_adr = ioremap(base + 0x7ff000, 0x1000) + 0xcc0;
 		info->cmap_data = info->cmap_adr + 1;
+		info->cmap_type = cmap_m64;
 	}
         fix->visual = info->cmap_adr ? FB_VISUAL_PSEUDOCOLOR
 				     : FB_VISUAL_STATIC_PSEUDOCOLOR;
@@ -580,7 +595,7 @@ static void offb_init_fb(const char *name, const char *full_name,
 	display_info.cmap_data_address = 0;
 	display_info.disp_reg_address = 0;
 	/* XXX kludge for ati */
-	if (strncmp(name, "ATY,", 4) == 0) {
+	if (info->cmap_type == cmap_m64) {
 	    unsigned long base = address & 0xff000000UL;
 	    display_info.disp_reg_address = base + 0x7ffc00;
 	    display_info.cmap_adr_address = base + 0x7ffcc0;
@@ -628,11 +643,32 @@ static void offbcon_blank(int blank, struct fb_info *info)
 
     if (blank)
 	for (i = 0; i < 256; i++) {
-	    *info2->cmap_adr = i;
-	    mach_eieio();
-	    for (j = 0; j < 3; j++) {
-		*info2->cmap_data = 0;
-		mach_eieio();
+	    switch(info2->cmap_type) {
+	    case cmap_m64:
+	        *info2->cmap_adr = i;
+	  	mach_eieio();
+	  	for (j = 0; j < 3; j++) {
+		    *info2->cmap_data = 0;
+		    mach_eieio();
+	    	}
+	    	break;
+	    case cmap_M3A:
+	        /* Clear PALETTE_ACCESS_CNTL in DAC_CNTL */
+	    	out_le32((unsigned *)(info2->cmap_adr + 0x58),
+	    		in_le32((unsigned *)(info2->cmap_adr + 0x58)) & ~0x20);
+	    case cmap_r128:
+	    	/* Set palette index & data */
+    	        out_8(info2->cmap_adr + 0xb0, i);
+	    	out_le32((unsigned *)(info2->cmap_adr + 0xb4), 0);
+	    	break;
+	    case cmap_M3B:
+	        /* Set PALETTE_ACCESS_CNTL in DAC_CNTL */
+	    	out_le32((unsigned *)(info2->cmap_adr + 0x58),
+	    		in_le32((unsigned *)(info2->cmap_adr + 0x58)) | 0x20);
+	    	/* Set palette index & data */
+	    	out_8(info2->cmap_adr + 0xb0, i);
+	    	out_le32((unsigned *)(info2->cmap_adr + 0xb4), 0);
+	    	break;
 	    }
 	}
     else
@@ -682,18 +718,36 @@ static int offb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     info2->palette[regno].green = green;
     info2->palette[regno].blue = blue;
 
-    *info2->cmap_adr = regno;/* On some chipsets, add << 3 in 15 bits */
-    mach_eieio();
-    if (info2->is_rage_128) {
-    	out_le32((unsigned int *)info2->cmap_data,
-    		(red << 16 | green << 8 | blue));
-    } else {
+    switch(info2->cmap_type) {
+    case cmap_m64:
+        *info2->cmap_adr = regno;
+	mach_eieio();
 	*info2->cmap_data = red;
-    	mach_eieio();
-    	*info2->cmap_data = green;
-    	mach_eieio();
-    	*info2->cmap_data = blue;
-    	mach_eieio();
+	mach_eieio();
+	*info2->cmap_data = green;
+	mach_eieio();
+	*info2->cmap_data = blue;
+	mach_eieio();
+	break;
+    case cmap_M3A:
+	/* Clear PALETTE_ACCESS_CNTL in DAC_CNTL */
+	out_le32((unsigned *)(info2->cmap_adr + 0x58),
+		in_le32((unsigned *)(info2->cmap_adr + 0x58)) & ~0x20);
+    case cmap_r128:
+	/* Set palette index & data */
+	out_8(info2->cmap_adr + 0xb0, regno);
+	out_le32((unsigned *)(info2->cmap_adr + 0xb4),
+		(red << 16 | green << 8 | blue));
+	break;
+    case cmap_M3B:
+        /* Set PALETTE_ACCESS_CNTL in DAC_CNTL */
+    	out_le32((unsigned *)(info2->cmap_adr + 0x58),
+    		in_le32((unsigned *)(info2->cmap_adr + 0x58)) | 0x20);
+    	/* Set palette index & data */
+    	out_8(info2->cmap_adr + 0xb0, regno);
+  	out_le32((unsigned *)(info2->cmap_adr + 0xb4),
+    		(red << 16 | green << 8 | blue));
+    	break;
     }
 
     if (regno < 16)

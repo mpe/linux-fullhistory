@@ -553,14 +553,14 @@ const struct pci_device_id *pci_match_device(const struct pci_device_id *ids, co
  */
 
 #ifndef CONFIG_PCI
-extern inline int pcibios_present(void) { return 0; }
-extern inline int pcibios_find_class (unsigned int class_code, unsigned short index, unsigned char *bus, unsigned char *dev_fn) 
+static inline int pcibios_present(void) { return 0; }
+static inline int pcibios_find_class (unsigned int class_code, unsigned short index, unsigned char *bus, unsigned char *dev_fn) 
 { 	return PCIBIOS_DEVICE_NOT_FOUND; }
 
 #define _PCI_NOP(o,s,t) \
-	extern inline int pcibios_##o##_config_##s## (u8 bus, u8 dfn, u8 where, t val) \
+	static inline int pcibios_##o##_config_##s## (u8 bus, u8 dfn, u8 where, t val) \
 		{ return PCIBIOS_FUNC_NOT_SUPPORTED; } \
-	extern inline int pci_##o##_config_##s## (struct pci_dev *dev, int where, t val) \
+	static inline int pci_##o##_config_##s## (struct pci_dev *dev, int where, t val) \
 		{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
 #define _PCI_NOP_ALL(o,x)	_PCI_NOP(o,byte,u8 x) \
 				_PCI_NOP(o,word,u16 x) \
@@ -568,27 +568,27 @@ extern inline int pcibios_find_class (unsigned int class_code, unsigned short in
 _PCI_NOP_ALL(read, *)
 _PCI_NOP_ALL(write,)
 
-extern inline struct pci_dev *pci_find_device(unsigned int vendor, unsigned int device, const struct pci_dev *from)
+static inline struct pci_dev *pci_find_device(unsigned int vendor, unsigned int device, const struct pci_dev *from)
 { return NULL; }
 
-extern inline struct pci_dev *pci_find_class(unsigned int class, const struct pci_dev *from)
+static inline struct pci_dev *pci_find_class(unsigned int class, const struct pci_dev *from)
 { return NULL; }
 
-extern inline struct pci_dev *pci_find_slot(unsigned int bus, unsigned int devfn)
+static inline struct pci_dev *pci_find_slot(unsigned int bus, unsigned int devfn)
 { return NULL; }
 
-extern inline struct pci_dev *pci_find_subsys(unsigned int vendor, unsigned int device,
+static inline struct pci_dev *pci_find_subsys(unsigned int vendor, unsigned int device,
 unsigned int ss_vendor, unsigned int ss_device, const struct pci_dev *from)
 { return NULL; }
 
-extern inline void pci_set_master(struct pci_dev *dev) { }
-extern inline int pci_enable_device(struct pci_dev *dev) { return -EIO; }
-extern inline int pci_module_init(struct pci_driver *drv) { return -ENODEV; }
-extern inline int pci_assign_resource(struct pci_dev *dev, int i) { return -EBUSY;}
-extern inline int pci_register_driver(struct pci_driver *drv) { return 0;}
-extern inline void pci_unregister_driver(struct pci_driver *drv) { }
-extern inline int scsi_to_pci_dma_dir(unsigned char scsi_dir) { return scsi_dir; }
-extern inline int pci_find_capability (struct pci_dev *dev, int cap) {return 0; }
+static inline void pci_set_master(struct pci_dev *dev) { }
+static inline int pci_enable_device(struct pci_dev *dev) { return -EIO; }
+static inline int pci_module_init(struct pci_driver *drv) { return -ENODEV; }
+static inline int pci_assign_resource(struct pci_dev *dev, int i) { return -EBUSY;}
+static inline int pci_register_driver(struct pci_driver *drv) { return 0;}
+static inline void pci_unregister_driver(struct pci_driver *drv) { }
+static inline int scsi_to_pci_dma_dir(unsigned char scsi_dir) { return scsi_dir; }
+static inline int pci_find_capability (struct pci_dev *dev, int cap) {return 0; }
 
 #else
 
@@ -598,7 +598,7 @@ extern inline int pci_find_capability (struct pci_dev *dev, int cap) {return 0; 
  *
  * This MUST stay in a header, as it checks for -DMODULE
  */
-extern inline int pci_module_init(struct pci_driver *drv)
+static inline int pci_module_init(struct pci_driver *drv)
 {
 	int rc = pci_register_driver (drv);
 
@@ -635,6 +635,20 @@ extern inline int pci_module_init(struct pci_driver *drv)
 	  						\
 	 (pci_resource_end((dev),(bar)) -		\
 	  pci_resource_start((dev),(bar)) + 1))
+
+/* Similar to the helpers above, these manipulate per-pci_dev
+ * driver-specific data.  Currently stored as pci_dev::driver_data,
+ * a void pointer, but it is not present on older kernels.
+ */
+static inline void *pci_get_drvdata (struct pci_dev *pdev)
+{
+	return pdev->driver_data;
+}
+
+static inline void pci_set_drvdata (struct pci_dev *pdev, void *data)
+{
+	pdev->driver_data = data;
+}
 
 /*
  *  The world is not perfect and supplies us with broken PCI devices.

@@ -198,7 +198,9 @@ static void __exit unload_gus_db16(struct address_info *hw_config)
 }
 #endif
 
+#ifdef CONFIG_SOUND_GUS16
 static int gus16 = 0;
+#endif
 #ifdef CONFIG_SOUND_GUSMAX
 static int no_wave_dma = 0;/* Set if no dma is to be used for the
                                    wave table (GF1 chip) */
@@ -223,12 +225,12 @@ MODULE_PARM(irq, "i");
 MODULE_PARM(dma, "i");
 MODULE_PARM(dma16, "i");
 MODULE_PARM(type, "i");
-MODULE_PARM(gus16, "i");
 #ifdef CONFIG_SOUND_GUSMAX
 MODULE_PARM(no_wave_dma, "i");
 #endif
 #ifdef CONFIG_SOUND_GUS16
 MODULE_PARM(db16, "i");
+MODULE_PARM(gus16, "i");
 #endif
 
 static int __init init_gus(void)

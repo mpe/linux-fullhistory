@@ -161,7 +161,7 @@ DRIVERS-$(CONFIG_DIO) += drivers/dio/dio.a
 DRIVERS-$(CONFIG_SBUS) += drivers/sbus/sbus.a
 DRIVERS-$(CONFIG_ZORRO) += drivers/zorro/zorro.a
 DRIVERS-$(CONFIG_FC4) += drivers/fc4/fc4.a
-DRIVERS-$(CONFIG_PPC) += drivers/macintosh/macintosh.o
+DRIVERS-$(CONFIG_ALL_PPC) += drivers/macintosh/macintosh.o
 DRIVERS-$(CONFIG_MAC) += drivers/macintosh/macintosh.o
 DRIVERS-$(CONFIG_ISAPNP) += drivers/pnp/pnp.o
 DRIVERS-$(CONFIG_SGI_IP22) += drivers/sgi/sgi.a
@@ -174,7 +174,7 @@ DRIVERS-$(CONFIG_INPUT) += drivers/input/inputdrv.o
 DRIVERS-$(CONFIG_I2O) += drivers/i2o/i2o.o
 DRIVERS-$(CONFIG_IRDA) += drivers/net/irda/irda.o
 DRIVERS-$(CONFIG_I2C) += drivers/i2c/i2c.o
-DRIVERS-$(CONFIG_PHONE) += drivers/telephony/telephony.a
+DRIVERS-$(CONFIG_PHONE) += drivers/telephony/telephony.o
 DRIVERS-$(CONFIG_ACPI_INTERPRETER) += drivers/acpi/acpi.o
 
 DRIVERS += $(DRIVERS-y)

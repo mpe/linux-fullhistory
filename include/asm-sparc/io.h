@@ -1,5 +1,5 @@
 /*
- * $Id: io.h,v 1.27 2000/04/13 04:45:59 davem Exp $
+ * $Id: io.h,v 1.28 2000/09/17 05:12:00 davem Exp $
  */
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
@@ -164,6 +164,8 @@ static inline void *sbus_memset_io(void *__dst, int c, __kernel_size_t n)
 	return (void *) dst;
 }
 
+#ifdef __KERNEL__
+
 /*
  * Bus number may be embedded in the higher bits of the physical address.
  * This is why we have no bus number argument to ioremap().
@@ -199,5 +201,7 @@ extern void sbus_iounmap(unsigned long vaddr, unsigned long size);
 #define dma_cache_inv(_start,_size)		do { } while (0)
 #define dma_cache_wback(_start,_size)		do { } while (0)
 #define dma_cache_wback_inv(_start,_size)	do { } while (0)
+
+#endif
 
 #endif /* !(__SPARC_IO_H) */

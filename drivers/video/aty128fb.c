@@ -55,6 +55,15 @@
 #endif
 #endif
 
+#ifdef CONFIG_ADB_PMU
+#include <linux/adb.h>
+#include <linux/pmu.h>
+#endif
+
+#ifdef CONFIG_PMAC_BACKLIGHT
+#include <asm/backlight.h>
+#endif
+
 #ifdef CONFIG_FB_COMPAT_XPMAC
 #include <asm/vc_ioctl.h>
 #endif
@@ -211,13 +220,8 @@ static const char *mode_option __initdata = NULL;
 #endif
 
 #ifdef CONFIG_PPC
-#ifdef CONFIG_NVRAM_NOT_DEFINED
-static int default_vmode __initdata = VMODE_640_480_60;
+static int default_vmode __initdata = VMODE_1024_768_60;
 static int default_cmode __initdata = CMODE_8;
-#else
-static int default_vmode __initdata = VMODE_NVRAM;
-static int default_cmode __initdata = CMODE_NVRAM;
-#endif
 #endif
 
 #ifdef CONFIG_MTRR
@@ -419,6 +423,15 @@ static struct fb_ops aty128fb_ops = {
 	fb_rasterimg:	aty128fb_rasterimg,
 };
 
+#ifdef CONFIG_PMAC_BACKLIGHT
+static int aty128_set_backlight_enable(int on, int level, void* data);
+static int aty128_set_backlight_level(int level, void* data);
+
+static struct backlight_controller aty128_backlight_controller = {
+	aty128_set_backlight_enable,
+	aty128_set_backlight_level
+};
+#endif /* CONFIG_PMAC_BACKLIGHT */
 
     /*
      * Functions to read from/write to the mmio registers
@@ -1712,15 +1725,8 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
             if (!mac_find_mode(&var, &info->fb_info, mode_option, 8))
                 var = default_var;
         } else {
-#ifdef CONFIG_NVRAM
-            if (default_vmode == VMODE_NVRAM)
-                default_vmode = nvram_read_byte(NV_VMODE);
-
-            if (default_cmode == CMODE_NVRAM)
-                default_cmode = nvram_read_byte(NV_CMODE);
-#endif
             if (default_vmode <= 0 || default_vmode > VMODE_MAX)
-                default_vmode = VMODE_640_480_60;
+                default_vmode = VMODE_1024_768_60;
 
             if (default_cmode < CMODE_8 || default_cmode > CMODE_32)
                 default_cmode = CMODE_8;
@@ -1771,6 +1777,12 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
 
     if (register_framebuffer(&info->fb_info) < 0)
 	return 0;
+
+#ifdef CONFIG_PMAC_BACKLIGHT
+    /* Could be extended to Rage128Pro LVDS output too */
+    if (info->chip_gen == rage_M3)
+    	register_backlight_controller(&aty128_backlight_controller, info, "ati");
+#endif /* CONFIG_PMAC_BACKLIGHT */
 
     printk(KERN_INFO "fb%d: %s frame buffer device on %s\n",
 	   GET_FB_IDX(info->fb_info.node), aty128fb_name, name);
@@ -1915,6 +1927,11 @@ aty128_pci_register(struct pci_dev *pdev,
 		printk(KERN_INFO "aty128fb: Rage128 MTRR set to ON\n");
 	}
 #endif /* CONFIG_MTRR */
+
+#ifdef CONFIG_FB_COMPAT_XPMAC
+    if (!console_fb_info)
+	console_fb_info = &info->fb_info;
+#endif
 
 	return 0;
 
@@ -2136,6 +2153,11 @@ aty128fbcon_blank(int blank, struct fb_info *fb)
     struct fb_info_aty128 *info = (struct fb_info_aty128 *)fb;
     u8 state = 0;
 
+#ifdef CONFIG_PMAC_BACKLIGHT
+    if ((_machine == _MACH_Pmac) && blank)
+    	set_backlight_enable(0);
+#endif /* CONFIG_PMAC_BACKLIGHT */
+
     if (blank & VESA_VSYNC_SUSPEND)
 	state |= 2;
     if (blank & VESA_HSYNC_SUSPEND)
@@ -2144,6 +2166,11 @@ aty128fbcon_blank(int blank, struct fb_info *fb)
 	state |= 4;
 
     aty_st_8(CRTC_EXT_CNTL+1, state);
+
+#ifdef CONFIG_PMAC_BACKLIGHT
+    if ((_machine == _MACH_Pmac) && !blank)
+    	set_backlight_enable(1);
+#endif /* CONFIG_PMAC_BACKLIGHT */
 }
 
 
@@ -2199,7 +2226,7 @@ aty128_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
         int i;
 
         if (info->chip_gen == rage_M3)
-            aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) & ~PALETTE_ACCESS_CNTL);
+            aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) & ~DAC_PALETTE_ACCESS_CNTL);
 
         for (i=16; i<256; i++) {
             aty_st_8(PALETTE_INDEX, i);
@@ -2208,7 +2235,7 @@ aty128_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
         }
 
         if (info->chip_gen == rage_M3) {
-            aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) | PALETTE_ACCESS_CNTL);
+            aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) | DAC_PALETTE_ACCESS_CNTL);
 
             for (i=16; i<256; i++) {
                 aty_st_8(PALETTE_INDEX, i);
@@ -2221,7 +2248,7 @@ aty128_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     /* initialize palette */
 
     if (info->chip_gen == rage_M3)
-        aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) & ~PALETTE_ACCESS_CNTL);
+        aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) & ~DAC_PALETTE_ACCESS_CNTL);
 
     if (info->current_par.crtc.bpp == 16)
         aty_st_8(PALETTE_INDEX, (regno << 3));
@@ -2230,7 +2257,7 @@ aty128_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     col = (red << 16) | (green << 8) | blue;
     aty_st_le32(PALETTE_DATA, col);
     if (info->chip_gen == rage_M3) {
-    	aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) | PALETTE_ACCESS_CNTL);
+    	aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) | DAC_PALETTE_ACCESS_CNTL);
         if (info->current_par.crtc.bpp == 16)
             aty_st_8(PALETTE_INDEX, (regno << 3));
         else
@@ -2282,6 +2309,38 @@ do_install_cmap(int con, struct fb_info *info)
     }
 }
 
+
+#ifdef CONFIG_PMAC_BACKLIGHT
+static int backlight_conv[] = {
+	0xff, 0xc0, 0xb5, 0xaa, 0x9f, 0x94, 0x89, 0x7e,
+	0x73, 0x68, 0x5d, 0x52, 0x47, 0x3c, 0x31, 0x24
+};
+
+static int
+aty128_set_backlight_enable(int on, int level, void* data)
+{
+	struct fb_info_aty128 *info = (struct fb_info_aty128 *)data;
+	unsigned int reg = aty_ld_le32(LVDS_GEN_CNTL);
+	
+	reg |= LVDS_BL_MOD_EN | LVDS_BLON;
+	if (on && level > BACKLIGHT_OFF) {
+		reg &= ~LVDS_BL_MOD_LEVEL_MASK;
+		reg |= (backlight_conv[level] << LVDS_BL_MOD_LEVEL_SHIFT);
+	} else {
+		reg &= ~LVDS_BL_MOD_LEVEL_MASK;
+		reg |= (backlight_conv[0] << LVDS_BL_MOD_LEVEL_SHIFT);
+	}
+	aty_st_le32(LVDS_GEN_CNTL, reg);
+
+	return 0;
+}
+
+static int
+aty128_set_backlight_level(int level, void* data)
+{
+	return aty128_set_backlight_enable(1, level, data);
+}
+#endif /* CONFIG_PMAC_BACKLIGHT */
 
     /*
      *  Accelerated functions

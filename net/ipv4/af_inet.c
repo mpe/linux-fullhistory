@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.112 2000/08/16 16:20:56 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.113 2000/09/11 23:35:29 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -390,7 +390,6 @@ static int inet_create(struct socket *sock, int protocol)
 	if (sk->prot->init) {
 		int err = sk->prot->init(sk);
 		if (err != 0) {
-			sk->dead = 1;
 			inet_sock_release(sk);
 			return(err);
 		}

@@ -69,7 +69,7 @@ extern inline void flush_tlb_pgtables(struct mm_struct *mm,
 
 extern void flush_icache_range(unsigned long, unsigned long);
 extern void __flush_page_to_ram(unsigned long page_va);
-#define flush_page_to_ram(page)	__flush_page_to_ram((unsigned long) page_address(page))
+extern void flush_page_to_ram(struct page *page);
 
 #define flush_dcache_page(page)			do { } while (0)
 

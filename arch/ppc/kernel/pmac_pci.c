@@ -35,6 +35,7 @@ struct uninorth_data {
 	volatile unsigned int*	cfg_addr;
 	volatile unsigned int*	cfg_data;
 	void*			iobase;
+	unsigned long		iobase_phys;
 };
 
 static struct uninorth_data uninorth_bridges[3];
@@ -133,15 +134,20 @@ pmac_pci_dev_root_bridge(unsigned char bus, unsigned char dev_fn)
 
 __pmac
 void *
-pmac_pci_dev_io_base(unsigned char bus, unsigned char devfn)
+pmac_pci_dev_io_base(unsigned char bus, unsigned char devfn, int physical)
 {
-	int bridge;
-	if (uninorth_count == 0)
-		return pci_io_base(bus);
-	bridge = pmac_pci_dev_root_bridge(bus, devfn);
-	if (bridge == -1)
-		return pci_io_base(bus);
-	return uninorth_bridges[bridge].iobase;
+	int bridge = -1;
+	if (uninorth_count != 0)
+		bridge = pmac_pci_dev_root_bridge(bus, devfn);
+	if (bridge == -1) {
+		struct bridge_data *bp;
+
+		if (bus > max_bus || (bp = bridges[bus]) == 0)
+			return 0;
+		return physical ? (void *) bp->io_base_phys : bp->io_base;
+	}
+	return physical ? (void *) uninorth_bridges[bridge].iobase_phys
+		: uninorth_bridges[bridge].iobase;
 }
 
 __pmac
@@ -649,7 +655,9 @@ static void __init add_bridges(struct device_node *dev)
 			uninorth_bridges[i].cfg_addr = ioremap(addr->address + 0x800000, 0x1000);
 			uninorth_bridges[i].cfg_data = ioremap(addr->address + 0xc00000, 0x1000);
 			uninorth_bridges[i].node = dev;
-			uninorth_bridges[i].iobase = (void *)addr->address;
+			uninorth_bridges[i].iobase_phys = addr->address;
+			/* is 0x10000 enough for io space ? */
+			uninorth_bridges[i].iobase = (void *)ioremap(addr->address, 0x10000);
 			/* XXX This is the bridge with the PCI expansion bus. This is also the
 			 * address of the bus that will receive type 1 config accesses and io
 			 * accesses. Appears to be correct for iMac DV and G4 Sawtooth too.
@@ -667,14 +675,15 @@ static void __init add_bridges(struct device_node *dev)
 		if (device_is_compatible(dev, "uni-north")) {
 			bp->cfg_addr = 0;
 			bp->cfg_data = 0;
-			/* is 0x10000 enough for io space ? */
-			bp->io_base = (void *)ioremap(addr->address, 0x10000);
+			bp->io_base = uninorth_bridges[uninorth_count-1].iobase;
+			bp->io_base_phys = uninorth_bridges[uninorth_count-1].iobase_phys;
 		} else if (strcmp(dev->name, "pci") == 0) {
 			/* XXX assume this is a mpc106 (grackle) */
 			bp->cfg_addr = (volatile unsigned int *)
 				ioremap(0xfec00000, 0x1000);
 			bp->cfg_data = (volatile unsigned char *)
 				ioremap(0xfee00000, 0x1000);
+			bp->io_base_phys = 0xfe000000;
                         bp->io_base = (void *) ioremap(0xfe000000, 0x20000);
                         if (machine_is_compatible("AAPL,PowerBook1998"))
                         	grackle_set_loop_snoop(bp, 1);
@@ -687,6 +696,7 @@ static void __init add_bridges(struct device_node *dev)
 				ioremap(addr->address + 0x800000, 0x1000);
 			bp->cfg_data = (volatile unsigned char *)
 				ioremap(addr->address + 0xc00000, 0x1000);
+			bp->io_base_phys = addr->address;
 			bp->io_base = (void *) ioremap(addr->address, 0x10000);
 		}
 		if (isa_io_base == 0)

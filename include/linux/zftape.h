@@ -56,7 +56,7 @@ struct mtblksz {
 
 extern int zft_init(void);
 
-extern inline __s64 zft_div_blksz(__s64 value, __u32 blk_sz)
+static inline __s64 zft_div_blksz(__s64 value, __u32 blk_sz)
 {
 	if (blk_sz == 1) {
 		return value;
@@ -66,7 +66,7 @@ extern inline __s64 zft_div_blksz(__s64 value, __u32 blk_sz)
 	} 
 }
 
-extern inline __s64 zft_mul_blksz(__s64 value, __u32 blk_sz)
+static inline __s64 zft_mul_blksz(__s64 value, __u32 blk_sz)
 {
 	if (blk_sz == 1) {
 		return value;

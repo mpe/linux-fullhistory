@@ -161,14 +161,19 @@ void deactivate_page_nolock(struct page * page)
 	 * Don't touch it if it's not on the active list.
 	 * (some pages aren't on any list at all)
 	 */
-	if (PageActive(page) && (page_count(page) == 1 || page->buffers) &&
+	if (PageActive(page) && (page_count(page) <= 2 || page->buffers) &&
 			!page_ramdisk(page)) {
 
 		/*
 		 * We can move the page to the inactive_dirty list
 		 * if we know there is backing store available.
+		 *
+		 * We also move pages here that we cannot free yet,
+		 * but may be able to free later - because most likely
+		 * we're holding an extra reference on the page which
+		 * will be dropped right after deactivate_page().
 		 */
-		if (page->buffers) {
+		if (page->buffers || page_count(page) == 2) {
 			del_page_from_active_list(page);
 			add_page_to_inactive_dirty_list(page);
 		/*
@@ -181,8 +186,7 @@ void deactivate_page_nolock(struct page * page)
 			add_page_to_inactive_clean_list(page);
 		}
 		/*
-		 * ELSE: no backing store available, leave it on
-		 * the active list.
+		 * OK, we cannot free the page. Leave it alone.
 		 */
 	}
 }	

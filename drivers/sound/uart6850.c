@@ -13,8 +13,11 @@
  * Alan Cox:		Updated for new modular code. Removed snd_* irq handling. Now
  *			uses native linux resources
  * Christoph Hellwig:	Adapted to module_init/module_exit
+ * Jeff Garzik:		Made it work again, in theory
+ *			FIXME: If the request_irq() succeeds, the probe succeeds. Ug.
  *
- *	Status: Testing required
+ *	Status: Testing required (no shit -jgarzik)
+ *
  *
  */
 
@@ -64,12 +67,11 @@ static void uart6850_write(unsigned char byte)
 #define	UART_RESET	0x95
 #define	UART_MODE_ON	0x03
 
-static int uart6850_opened = 0;
+static int uart6850_opened;
 static int uart6850_irq;
-static int uart6850_detected = 0;
+static int uart6850_detected;
 static int my_dev;
 
-static int reset_uart6850(void);
 static void (*midi_input_intr) (int dev, unsigned char data);
 static void poll_uart6850(unsigned long dummy);
 
@@ -251,6 +253,9 @@ static void __init attach_uart6850(struct address_info *hw_config)
 	int ok, timeout;
 	unsigned long   flags;
 
+	if (!uart6850_detected)
+		return;
+
 	if ((my_dev = sound_alloc_mididev()) == -1)
 	{
 		printk(KERN_INFO "uart6850: Too many midi devices detected\n");
@@ -260,11 +265,6 @@ static void __init attach_uart6850(struct address_info *hw_config)
 	uart6850_osp = hw_config->osp;
 	uart6850_irq = hw_config->irq;
 
-	if (!uart6850_detected)
-	{
-		sound_unload_mididev(my_dev);
-		return;
-	}
 	save_flags(flags);
 	cli();
 
@@ -283,7 +283,7 @@ static void __init attach_uart6850(struct address_info *hw_config)
 	sequencer_init();
 }
 
-static int reset_uart6850(void)
+static inline int reset_uart6850(void)
 {
 	uart6850_read();
 	return 1;		/*
@@ -291,10 +291,9 @@ static int reset_uart6850(void)
 				 */
 }
 
-
 static int __init probe_uart6850(struct address_info *hw_config)
 {
-	int ok = 0;
+	int ok;
 
 	uart6850_osp = hw_config->osp;
 	uart6850_base = hw_config->io_base;
@@ -334,6 +333,7 @@ static int __init init_uart6850(void)
 
 	if (probe_uart6850(&cfg_mpu))
 		return -ENODEV;
+	attach_uart6850(&cfg_mpu);
 
 	return 0;
 }

@@ -64,7 +64,7 @@ struct semaphore {
 #define DECLARE_MUTEX(name) __DECLARE_SEMAPHORE_GENERIC(name,1)
 #define DECLARE_MUTEX_LOCKED(name) __DECLARE_SEMAPHORE_GENERIC(name,0)
 
-extern inline void sema_init (struct semaphore *sem, int val)
+static inline void sema_init (struct semaphore *sem, int val)
 {
 /*
  *	*sem = (struct semaphore)__SEMAPHORE_INITIALIZER((*sem),val);
@@ -105,7 +105,7 @@ asmlinkage void __up(struct semaphore * sem);
  * "__down_failed" is a special asm handler that calls the C
  * routine that actually waits. See arch/i386/kernel/semaphore.c
  */
-extern inline void down(struct semaphore * sem)
+static inline void down(struct semaphore * sem)
 {
 #if WAITQUEUE_DEBUG
 	CHECK_MAGIC(sem->__magic);
@@ -125,7 +125,7 @@ extern inline void down(struct semaphore * sem)
 		:"memory");
 }
 
-extern inline int down_interruptible(struct semaphore * sem)
+static inline int down_interruptible(struct semaphore * sem)
 {
 	int result;
 
@@ -149,7 +149,7 @@ extern inline int down_interruptible(struct semaphore * sem)
 	return result;
 }
 
-extern inline int down_trylock(struct semaphore * sem)
+static inline int down_trylock(struct semaphore * sem)
 {
 	int result;
 
@@ -179,7 +179,7 @@ extern inline int down_trylock(struct semaphore * sem)
  * The default case (no contention) will result in NO
  * jumps for both down() and up().
  */
-extern inline void up(struct semaphore * sem)
+static inline void up(struct semaphore * sem)
 {
 #if WAITQUEUE_DEBUG
 	CHECK_MAGIC(sem->__magic);
@@ -252,7 +252,7 @@ struct rw_semaphore {
 #define DECLARE_RWSEM_READ_LOCKED(name) __DECLARE_RWSEM_GENERIC(name,RW_LOCK_BIAS-1)
 #define DECLARE_RWSEM_WRITE_LOCKED(name) __DECLARE_RWSEM_GENERIC(name,0)
 
-extern inline void init_rwsem(struct rw_semaphore *sem)
+static inline void init_rwsem(struct rw_semaphore *sem)
 {
 	atomic_set(&sem->count, RW_LOCK_BIAS);
 	sem->read_bias_granted = 0;
@@ -271,7 +271,7 @@ extern struct rw_semaphore *FASTCALL(__down_read_failed(struct rw_semaphore *sem
 extern struct rw_semaphore *FASTCALL(__down_write_failed(struct rw_semaphore *sem));
 extern struct rw_semaphore *FASTCALL(__rwsem_wake(struct rw_semaphore *sem));
 
-extern inline void down_read(struct rw_semaphore *sem)
+static inline void down_read(struct rw_semaphore *sem)
 {
 #if WAITQUEUE_DEBUG
 	if (sem->__magic != (long)&sem->__magic)
@@ -287,7 +287,7 @@ extern inline void down_read(struct rw_semaphore *sem)
 #endif
 }
 
-extern inline void down_write(struct rw_semaphore *sem)
+static inline void down_write(struct rw_semaphore *sem)
 {
 #if WAITQUEUE_DEBUG
 	if (sem->__magic != (long)&sem->__magic)
@@ -311,7 +311,7 @@ extern inline void down_write(struct rw_semaphore *sem)
  * case is when there was a writer waiting, and we've
  * bumped the count to 0: we must wake the writer up.
  */
-extern inline void __up_read(struct rw_semaphore *sem)
+static inline void __up_read(struct rw_semaphore *sem)
 {
 	__asm__ __volatile__(
 		"# up_read\n\t"
@@ -330,7 +330,7 @@ extern inline void __up_read(struct rw_semaphore *sem)
 /* releasing the writer is easy -- just release it and
  * wake up any sleepers.
  */
-extern inline void __up_write(struct rw_semaphore *sem)
+static inline void __up_write(struct rw_semaphore *sem)
 {
 	__asm__ __volatile__(
 		"# up_write\n\t"
@@ -346,7 +346,7 @@ extern inline void __up_write(struct rw_semaphore *sem)
 		);
 }
 
-extern inline void up_read(struct rw_semaphore *sem)
+static inline void up_read(struct rw_semaphore *sem)
 {
 #if WAITQUEUE_DEBUG
 	if (sem->write_bias_granted)
@@ -358,7 +358,7 @@ extern inline void up_read(struct rw_semaphore *sem)
 	__up_read(sem);
 }
 
-extern inline void up_write(struct rw_semaphore *sem)
+static inline void up_write(struct rw_semaphore *sem)
 {
 #if WAITQUEUE_DEBUG
 	if (sem->read_bias_granted)

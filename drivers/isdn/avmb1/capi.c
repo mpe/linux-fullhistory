@@ -212,6 +212,7 @@
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
 #include <linux/devfs_fs_kernel.h>
+#include <linux/init.h>
 #include "capiutil.h"
 #include "capicmd.h"
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
@@ -1930,7 +1931,7 @@ static struct procfsentries {
    { "capi/capi20ncci",   0	 , proc_capincci_read_proc },
 };
 
-static void proc_init(void)
+static void __init proc_init(void)
 {
     int nelem = sizeof(procfsentries)/sizeof(procfsentries[0]);
     int i;
@@ -1942,7 +1943,7 @@ static void proc_init(void)
     }
 }
 
-static void proc_exit(void)
+static void __exit proc_exit(void)
 {
     int nelem = sizeof(procfsentries)/sizeof(procfsentries[0]);
     int i;
@@ -1981,7 +1982,7 @@ static void alloc_exit(void)
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
 }
 
-static int alloc_init(void)
+static int __init alloc_init(void)
 {
 	capidev_cachep = kmem_cache_create("capi20_dev",
 					 sizeof(struct capidev),
@@ -2052,10 +2053,6 @@ static void lower_callback(unsigned int cmd, __u32 contr, void *data)
 	}
 }
 
-#ifdef MODULE
-#define	 capi_init	init_module
-#endif
-
 static struct capi_interface_user cuser = {
 	"capi20",
 	lower_callback,
@@ -2063,7 +2060,7 @@ static struct capi_interface_user cuser = {
 
 static char rev[10];
 
-int capi_init(void)
+int __init capi_init(void)
 {
 	char *p;
 
@@ -2152,8 +2149,7 @@ int capi_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit capi_exit(void)
 {
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
 	unsigned int j;
@@ -2177,4 +2173,8 @@ void cleanup_module(void)
 	printk(KERN_NOTICE "capi: Rev%s: unloaded\n", rev);
 }
 
+#ifdef MODULE
+module_init(capi_init);
 #endif
+module_exit(capi_exit);
+

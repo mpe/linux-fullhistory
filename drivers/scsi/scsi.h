@@ -492,6 +492,7 @@ extern void scsi_done(Scsi_Cmnd * SCpnt);
 extern void scsi_finish_command(Scsi_Cmnd *);
 extern int scsi_retry_command(Scsi_Cmnd *);
 extern Scsi_Cmnd *scsi_allocate_device(Scsi_Device *, int, int);
+extern void __scsi_release_command(Scsi_Cmnd *);
 extern void scsi_release_command(Scsi_Cmnd *);
 extern void scsi_do_cmd(Scsi_Cmnd *, const void *cmnd,
 			void *buffer, unsigned bufflen,

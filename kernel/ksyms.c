@@ -361,8 +361,6 @@ EXPORT_SYMBOL(remove_wait_queue);
 #if !defined(CONFIG_ARCH_S390)
 EXPORT_SYMBOL(probe_irq_on);
 EXPORT_SYMBOL(probe_irq_off);
-EXPORT_SYMBOL(autoirq_setup);
-EXPORT_SYMBOL(autoirq_report);
 #endif
 
 #ifdef CONFIG_SMP

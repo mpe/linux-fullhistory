@@ -275,7 +275,7 @@ static int mcd_media_changed(struct cdrom_device_info * cdi, int disc_nr)
 static int
 statusCmd(void)
 {
-	int st, retry;
+	int st = -1, retry;
 
 	for (retry = 0; retry < MCD_RETRY_ATTEMPTS; retry++)
 	{
@@ -297,7 +297,7 @@ statusCmd(void)
 static int
 mcdPlay(struct mcd_Play_msf *arg)
 {
-	int retry, st;
+	int retry, st = -1;
 
 	for (retry = 0; retry < MCD_RETRY_ATTEMPTS; retry++)
 	{

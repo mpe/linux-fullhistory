@@ -336,14 +336,14 @@ static int kstat_read_proc(char *page, char **start, off_t off,
 
 	for (major = 0; major < DK_MAX_MAJOR; major++) {
 		for (disk = 0; disk < DK_MAX_DISK; disk++) {
-			int active = kstat.dk_drive_rio[major][disk] +
+			int active = kstat.dk_drive[major][disk] +
 				kstat.dk_drive_rblk[major][disk] +
-				kstat.dk_drive_wio[major][disk] +
 				kstat.dk_drive_wblk[major][disk];
 			if (active)
 				len += sprintf(page + len,
-					"(%u,%u):(%u,%u,%u,%u) ",
+					"(%u,%u):(%u,%u,%u,%u,%u) ",
 					major, disk,
+					kstat.dk_drive[major][disk],
 					kstat.dk_drive_rio[major][disk],
 					kstat.dk_drive_rblk[major][disk],
 					kstat.dk_drive_wio[major][disk],

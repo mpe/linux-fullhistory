@@ -62,6 +62,11 @@ struct awacs_regs {
 #define MASK_ADDR_VOLC	MASK_ADDR4	/* Volume Control C -- Speaker */
 #define MASK_ADDR_VOLSPK MASK_ADDR4
 
+/* additional registers of screamer */
+#define MASK_ADDR5	(0x5 << 12)	/* Expanded Data Mode Address 5 */
+#define MASK_ADDR6	(0x6 << 12)	/* Expanded Data Mode Address 6 */
+#define MASK_ADDR7	(0x7 << 12)	/* Expanded Data Mode Address 7 */
+
 /* Address 0 Bit Masks & Macros */
 /* ------- - --- ----- - ------ */
 #define MASK_GAINRIGHT	(0xf)		/* Gain Right Mask */

@@ -14,6 +14,7 @@
 #include <linux/nvram.h>
 #include <linux/init.h>
 #include <asm/uaccess.h>
+#include <asm/nvram.h>
 
 #define NVRAM_SIZE	8192
 
@@ -70,11 +71,36 @@ static ssize_t write_nvram(struct file *file, const char *buf,
 	return p - buf;
 }
 
+static int nvram_ioctl(struct inode *inode, struct file *file,
+	unsigned int cmd, unsigned long arg)
+{
+	switch(cmd) {
+		case PMAC_NVRAM_GET_OFFSET:
+		{
+			int part, offset;
+			if (copy_from_user(&part,(void*)arg,sizeof(part))!=0)
+				return -EFAULT;
+			if (part < pmac_nvram_OF || part > pmac_nvram_NR)
+				return -EINVAL;
+			offset = pmac_get_partition(part);
+			if (copy_to_user((void*)arg,&offset,sizeof(offset))!=0)
+				return -EFAULT;
+			break;
+		}
+
+		default:
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
 struct file_operations nvram_fops = {
 	owner:		THIS_MODULE,
 	llseek:		nvram_llseek,
 	read:		read_nvram,
 	write:		write_nvram,
+	ioctl:		nvram_ioctl,
 };
 
 static struct miscdevice nvram_dev = {

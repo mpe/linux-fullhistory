@@ -43,6 +43,7 @@
  * 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <linux/config.h>
 #include "usb.h"
 #include "scsiglue.h"
 #include "transport.h"
@@ -62,7 +63,6 @@
 #include "freecom.h"
 #endif
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/errno.h>

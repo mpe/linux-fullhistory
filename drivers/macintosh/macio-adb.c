@@ -122,6 +122,8 @@ int macio_init(void)
 	out_8(&adb->autopoll.r, APE);
 	out_8(&adb->intr_enb.r, DFB | TAG);
 
+	printk("adb: mac-io driver 1.0 for unified ADB\n");
+
 	return 0;
 }
 

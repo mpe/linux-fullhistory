@@ -1,3 +1,8 @@
+2000-09-16  Cesar Eduardo Barros  <cesarb@nitnet.com.br>
+
+	* parport_pc.c (sio_via_686a_probe): Handle case
+	where hardware returns 255 for IRQ or DMA.
+
 2000-07-20  Eddie C. Dost  <ecd@skynet.be>
 
 	* share.c (attach_driver_chain): attach[i](port) needs to be

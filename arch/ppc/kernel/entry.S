@@ -30,6 +30,7 @@
 #include <linux/errno.h>
 #include <linux/sys.h>
 #include <linux/config.h>
+#include "mol.h"
 
 #undef SHOW_SYSCALLS
 #undef SHOW_SYSCALLS_TASK
@@ -85,7 +86,7 @@ _GLOBAL(DoSyscall)
 	beq-	10f
 	cmpi    0,r0,0x6666     /* Special case for 'sys_rt_sigreturn' */
 	beq-    16f
-	lwz	r10,TASK_FLAGS(r2)
+	lwz	r10,TASK_PTRACE(r2)
 	andi.	r10,r10,PT_TRACESYS
 	bne-	50f
 	cmpli	0,r0,NR_syscalls
@@ -241,6 +242,13 @@ _GLOBAL(_switch)
 	/* XXX it would be nice to find a SPRGx for this on 6xx,7xx too */
 	lwz	r9,PGDIR(r4)	/* cache the page table root */
         tophys(r9,r9)		/* convert to phys addr */
+#ifdef CONFIG_8xx_CPU6
+	lis	r6, cpu6_errata_word@h
+	ori	r6, r6, cpu6_errata_word@l
+	li	r5, 0x3980
+	stw	r5, 8(r6)
+	lwz	r5, 8(r6)
+#endif
         mtspr   M_TWB,r9	/* Update MMU base address */
 	tlbia
 	SYNC
@@ -349,21 +357,18 @@ ret_to_user_hook:
 	beq+	restore
 	li	r3,0
 	addi	r4,r1,STACK_FRAME_OVERHEAD
+	MOL_HOOK_MMU(8,r8)
 	bl	do_signal
 	.globl	do_signal_ret
 do_signal_ret:
-restore:	
-	lwz	r3,_CTR(r1)
-	lwz	r0,_LINK(r1)
-	mtctr	r3
-	mtlr	r0
+restore:
 	lwz	r3,_XER(r1)
 	mtspr	XER,r3
-	REST_10GPRS(3, r1)
-	REST_10GPRS(13, r1)
-	REST_8GPRS(23, r1)
-	REST_GPR(31, r1)
-	
+	REST_10GPRS(9,r1)
+	REST_10GPRS(19,r1)
+	REST_2GPRS(29,r1)
+	REST_GPR(31,r1)
+
 	/* make sure we hard disable here, even if rtl is active, to protect
 	 * SRR[01] and SPRG2 -- Cort 
 	 */
@@ -376,12 +381,28 @@ restore:
 	lwz	r0,_MSR(r1)
 	andi.	r0,r0,MSR_PR
 	beq+	1f
+#ifdef CONFIG_ALTIVEC
+	mfpvr	r8			/* check if we are on a G4 */
+	srwi	r8,r8,16
+	cmpwi	r8,PVR_7400@h
+	bne	2f
+	lwz	r0,THREAD+THREAD_VRSAVE(r2)
+	mtspr	SPRN_VRSAVE,r0		/* if so, restore VRSAVE reg */
+2:
+#endif /* CONFIG_ALTIVEC */
 	addi	r0,r1,INT_FRAME_SIZE	/* size of frame */
 	stw	r0,THREAD+KSP(r2)	/* save kernel stack pointer */
-	tophys(r2,r1)
-	CLR_TOP32(r2)
-	mtspr	SPRG2,r2	/* phys exception stack pointer */
+	tophys(r8,r1)
+	CLR_TOP32(r8)
+	MOL_HOOK_MMU(9, r4)		/* mod. r0,r2-r7, lr, ctr */
+	mtspr	SPRG2,r8		/* phys exception stack pointer */	
 1:
+	lwz	r3,_CTR(r1)
+	lwz	r0,_LINK(r1)
+	mtctr	r3
+	mtlr	r0
+	REST_4GPRS(3, r1)
+	REST_2GPRS(7, r1)
 	lwz	r0,_MSR(r1)
 	FIX_SRR1(r0,r2)
 	mtspr	SRR1,r0

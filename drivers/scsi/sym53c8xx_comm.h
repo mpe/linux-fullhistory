@@ -498,7 +498,7 @@ spinlock_t DRIVER_SMP_LOCK = SPIN_LOCK_UNLOCKED;
 #  define memcpy_to_pci(a, b, c)	memcpy_toio((a), (b), (c))
 #endif
 
-#ifndef SCSI_NCR_PCI_MEM_NOT_SUPPORTED
+#if defined(__i386__) && !defined(SCSI_NCR_PCI_MEM_NOT_SUPPORTED)
 static u_long __init remap_pci_mem(u_long base, u_long size)
 {
 	u_long page_base	= ((u_long) base) & PAGE_MASK;

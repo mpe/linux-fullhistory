@@ -17,6 +17,7 @@
  *	X.25 002	Jonathan Naylor	  New timer architecture.
  *	mar/20/00	Daniela Squassoni Disabling/enabling of facilities 
  *					  negotiation.
+ *	2000-09-04	Henner Eisen	  dev_hold() / dev_put() for x25_neigh.
  */
 
 #include <linux/config.h>
@@ -292,6 +293,7 @@ void x25_link_device_up(struct net_device *dev)
 
 	init_timer(&x25_neigh->t20timer);
 
+	dev_hold(dev);
 	x25_neigh->dev      = dev;
 	x25_neigh->state    = X25_LINK_STATE_0;
 	x25_neigh->extended = 0;
@@ -349,8 +351,10 @@ void x25_link_device_down(struct net_device *dev)
 		neigh     = x25_neigh;
 		x25_neigh = x25_neigh->next;
 
-		if (neigh->dev == dev)
+		if (neigh->dev == dev){
 			x25_remove_neigh(neigh);
+			dev_put(dev);
+		}
 	}
 }
 

@@ -137,17 +137,21 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	if (!handler)
 	{
 		/* Free */
-		for (p = &irq_desc[irq].action; (action = *p) != NULL; p = &action->next)
-		{
-			/* Found it - now free it */
-			save_flags(flags);
-			cli();
-			*p = action->next;
-			restore_flags(flags);
-			irq_kfree(action);
-			return 0;
-		}
-		return -ENOENT;
+		p = &irq_desc[irq].action;
+		while ((action = *p) != NULL && action->dev_id != dev_id)
+			p = &action->next;
+		if (action == NULL)
+			return -ENOENT;
+
+		/* Found it - now free it */
+		save_flags(flags);
+		cli();
+		*p = action->next;
+		if (irq_desc[irq].action == NULL)
+			disable_irq(irq);
+		restore_flags(flags);
+		irq_kfree(action);
+		return 0;
 	}
 	
 	action = (struct irqaction *)
@@ -300,7 +304,7 @@ void ppc_irq_dispatch_handler(struct pt_regs *regs, int irq)
 	}
 }
 
-asmlinkage int do_IRQ(struct pt_regs *regs, int isfake)
+int do_IRQ(struct pt_regs *regs, int isfake)
 {
 	int cpu = smp_processor_id();
 	int irq;

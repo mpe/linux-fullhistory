@@ -304,7 +304,7 @@ __apus
 void apus_calibrate_decr(void)
 {
 #ifdef CONFIG_APUS
-	int freq, divisor;
+	unsigned long freq;
 
 	/* This algorithm for determining the bus speed was
            contributed by Ralph Schmidt. */
@@ -335,8 +335,8 @@ void apus_calibrate_decr(void)
 		bus_speed = 60;
 		freq = 15000000;
 	} else if ((bus_speed >= 63) && (bus_speed < 69)) {
-		bus_speed = 66;
-		freq = 16500000;
+		bus_speed = 67;
+		freq = 16666667;
 	} else {
 		printk ("APUS: Unable to determine bus speed (%d). "
 			"Defaulting to 50MHz", bus_speed);
@@ -375,12 +375,10 @@ void apus_calibrate_decr(void)
 
 	}
 
-	freq *= 60;	/* try to make freq/1e6 an integer */
-        divisor = 60;
-        printk("time_init: decrementer frequency = %d/%d\n", freq, divisor);
-        decrementer_count = freq / HZ / divisor;
-        count_period_num = divisor;
-        count_period_den = freq / 1000000;
+        printk("time_init: decrementer frequency = %lu.%.6lu MHz\n",
+	       freq/1000000, freq%1000000);
+	tb_ticks_per_jiffy = freq / HZ;
+	tb_to_us = mulhwu_scale_factor(freq, 1000000);
 
 	__bus_speed = bus_speed;
 	__speed_test_failed = speed_test_failed;

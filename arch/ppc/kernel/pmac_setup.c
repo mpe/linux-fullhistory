@@ -68,7 +68,7 @@
 
 #undef SHOW_GATWICK_IRQS
 
-extern void pmac_time_init(void);
+extern long pmac_time_init(void);
 extern unsigned long pmac_get_rtc_time(void);
 extern int pmac_set_rtc_time(unsigned long nowtime);
 extern void pmac_read_rtc_time(void);
@@ -77,24 +77,29 @@ extern void pmac_setup_pci_ptrs(void);
 
 extern int mackbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int mackbd_getkeycode(unsigned int scancode);
-extern int mackbd_translate(unsigned char scancode, unsigned char *keycode,
-			   char raw_mode);
-extern char mackbd_unexpected_up(unsigned char keycode);
+extern int mackbd_translate(unsigned char keycode, unsigned char *keycodep,
+		     char raw_mode);
+extern int mackbd_unexpected_up(unsigned char keycode);
 extern void mackbd_leds(unsigned char leds);
-extern void mackbd_init_hw(void);
+extern void __init mackbd_init_hw(void);
+extern int mac_hid_kbd_translate(unsigned char scancode, unsigned char *keycode,
+				 char raw_mode);
+extern char mac_hid_kbd_unexpected_up(unsigned char keycode);
+extern void mac_hid_init_hw(void);
 #ifdef CONFIG_MAGIC_SYSRQ
-unsigned char mackbd_sysrq_xlate[128];
+extern unsigned char mac_hid_kbd_sysrq_xlate[128];
+extern unsigned char pckbd_sysrq_xlate[128];
+extern unsigned char mackbd_sysrq_xlate[128];
 #endif /* CONFIG_MAGIC_SYSRQ */
 extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int pckbd_getkeycode(unsigned int scancode);
 extern int pckbd_translate(unsigned char scancode, unsigned char *keycode,
 			   char raw_mode);
 extern char pckbd_unexpected_up(unsigned char keycode);
-extern void pckbd_leds(unsigned char leds);
-extern void pckbd_init_hw(void);
+extern int keyboard_sends_linux_keycodes;
 extern void pmac_nvram_update(void);
 
-extern void *pmac_pci_dev_io_base(unsigned char bus, unsigned char devfn);
+extern void *pmac_pci_dev_io_base(unsigned char bus, unsigned char devfn, int physical);
 extern void *pmac_pci_dev_mem_base(unsigned char bus, unsigned char devfn);
 extern int pmac_pci_dev_root_bridge(unsigned char bus, unsigned char devfn);
 
@@ -115,7 +120,6 @@ extern int pmac_newworld;
 extern void zs_kgdb_hook(int tty_num);
 static void ohare_init(void);
 static void init_p2pbridge(void);
-static void init_uninorth(void);
 #ifdef CONFIG_BOOTX_TEXT
 void pmac_progress(char *s, unsigned short hex);
 #endif
@@ -276,7 +280,6 @@ pmac_setup_arch(void)
 
 	pmac_find_bridges();
 	init_p2pbridge();
-	init_uninorth();
 	
 	/* Checks "l2cr-value" property in the registry */
 	if ( (_get_PVR() >> 16) == 8 || (_get_PVR() >> 16) == 12 ) {
@@ -372,31 +375,6 @@ static void __init ohare_init(void)
 	}
 }
 
-static void __init
-init_uninorth(void)
-{
-	/* 
-	 * Turns OFF the gmac clock. The gmac driver will turn
-	 * it back ON when the interface is enabled. This save
-	 * power on portables.
-	 * 
-	 * Note: We could also try to turn OFF the PHY. Since this
-	 * has to be done by both the gmac driver and this code,
-	 * I'll probably end-up moving some of this out of the
-	 * modular gmac driver into a non-modular stub containing
-	 * some basic PHY management and power management stuffs
-	 */
-	struct device_node* gmac = find_devices("ethernet");
-
-	while(gmac) {
-		if (device_is_compatible(gmac, "gmac"))
-			break;
-		gmac = gmac->next;
-	}
-	if (gmac)
-		feature_set_gmac_power(gmac, 0);
-}
-
 extern char *bootpath;
 extern char *bootdevice;
 void *boot_host;
@@ -404,13 +382,14 @@ int boot_target;
 int boot_part;
 kdev_t boot_dev;
 
-extern void via_pmu_start(void);
-
 void __init
 pmac_init2(void)
 {
 #ifdef CONFIG_ADB_PMU
 	via_pmu_start();
+#endif
+#ifdef CONFIG_ADB_CUDA
+	via_cuda_start();
 #endif
 #ifdef CONFIG_PMAC_PBOOK
 	media_bay_init();
@@ -683,7 +662,26 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.pci_dev_mem_base         = pmac_pci_dev_mem_base;
 	ppc_md.pci_dev_root_bridge      = pmac_pci_dev_root_bridge;
 
-#if defined(CONFIG_VT) && defined(CONFIG_ADB_KEYBOARD)
+#ifdef CONFIG_VT
+#ifdef CONFIG_INPUT_ADBHID
+	ppc_md.kbd_init_hw       = mac_hid_init_hw;
+	ppc_md.kbd_translate     = mac_hid_kbd_translate;
+	ppc_md.kbd_unexpected_up = mac_hid_kbd_unexpected_up;
+	ppc_md.kbd_setkeycode    = 0;
+	ppc_md.kbd_getkeycode    = 0;
+#ifdef CONFIG_MAGIC_SYSRQ
+#ifdef CONFIG_MAC_ADBKEYCODES
+	if (!keyboard_sends_linux_keycodes) {
+		ppc_md.ppc_kbd_sysrq_xlate = mac_hid_kbd_sysrq_xlate;
+		SYSRQ_KEY = 0x69;
+	} else
+#endif /* CONFIG_MAC_ADBKEYCODES */
+	{
+		ppc_md.ppc_kbd_sysrq_xlate = pckbd_sysrq_xlate;
+		SYSRQ_KEY = 0x54;
+	}
+#endif /* CONFIG_MAGIC_SYSRQ */
+#elif defined(CONFIG_ADB_KEYBOARD)
 	ppc_md.kbd_setkeycode    = mackbd_setkeycode;
 	ppc_md.kbd_getkeycode    = mackbd_getkeycode;
 	ppc_md.kbd_translate     = mackbd_translate;
@@ -691,10 +689,11 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.kbd_leds          = mackbd_leds;
 	ppc_md.kbd_init_hw       = mackbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
-	ppc_md.ppc_kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
+	ppc_md.ppc_kbd_sysrq_xlate       = mackbd_sysrq_xlate;
 	SYSRQ_KEY = 0x69;
-#endif
-#endif
+#endif /* CONFIG_MAGIC_SYSRQ */
+#endif /* CONFIG_INPUT_ADBHID/CONFIG_ADB_KEYBOARD */
+#endif /* CONFIG_VT */
 
 #if defined(CONFIG_BLK_DEV_IDE) && defined(CONFIG_BLK_DEV_IDE_PMAC)
         ppc_ide_md.insw = pmac_ide_insw;

@@ -103,8 +103,8 @@ drop_pte:
 		UnlockPage(page);
 		vma->vm_mm->rss--;
 		flush_tlb_page(vma, address);
-		page_cache_release(page);
 		deactivate_page(page);
+		page_cache_release(page);
 		goto out_failed;
 	}
 
@@ -572,6 +572,9 @@ int page_launder(int gfp_mask, int sync)
 	maxlaunder = 0;
 	cleaned_pages = 0;
 
+	if (!(gfp_mask & __GFP_IO))
+		return 0;
+
 dirty_page_rescan:
 	spin_lock(&pagemap_lru_lock);
 	maxscan = nr_inactive_dirty_pages;
@@ -681,19 +684,26 @@ dirty_page_rescan:
 			if (freed_page && !free_shortage())
 				break;
 			continue;
+		} else if (page->mapping && !PageDirty(page)) {
+			/*
+			 * If a page had an extra reference in
+			 * deactivate_page(), we will find it here.
+			 * Now the page is really freeable, so we
+			 * move it to the inactive_clean list.
+			 */
+			UnlockPage(page);
+			del_page_from_inactive_dirty_list(page);
+			add_page_to_inactive_clean_list(page);
+			cleaned_pages++;
 		} else {
 			/*
-			 * Somebody else freed the bufferheads for us?
-			 * This really shouldn't happen, but we check
-			 * for it anyway.
+			 * OK, we don't know what to do with the page.
+			 * It's no use keeping it here, so we move it to
+			 * the active list.
 			 */
-			printk("VM: page_launder, found pre-cleaned page ?!\n");
 			UnlockPage(page);
-			if (page->mapping && !PageDirty(page)) {
-				del_page_from_inactive_dirty_list(page);
-				add_page_to_inactive_clean_list(page);
-				cleaned_pages++;
-			}
+			del_page_from_inactive_dirty_list(page);
+			add_page_to_active_list(page);
 		}
 	}
 	spin_unlock(&pagemap_lru_lock);
@@ -717,8 +727,6 @@ dirty_page_rescan:
 		maxlaunder = MAX_LAUNDER;
 		/* Kflushd takes care of the rest. */
 		wakeup_bdflush(0);
-		current->policy |= SCHED_YIELD;
-		schedule();
 		goto dirty_page_rescan;
 	}
 
@@ -738,7 +746,7 @@ int refill_inactive_scan(unsigned int priority, int oneshot)
 {
 	struct list_head * page_lru;
 	struct page * page;
-	int maxscan;
+	int maxscan, page_active = 0;
 	int ret = 0;
 
 	/* Take the lock while messing with the list... */
@@ -758,17 +766,17 @@ int refill_inactive_scan(unsigned int priority, int oneshot)
 		/* Do aging on the pages. */
 		if (PageTestandClearReferenced(page)) {
 			age_page_up_nolock(page);
-			goto must_be_active;
+			page_active = 1;
 		} else {
 			age_page_down_nolock(page);
+			page_active = 0;
 		}
 		/*
 		 * If the page is still on the active list, move it
 		 * to the other end of the list. Otherwise it was
 		 * deactivated by age_page_down and we exit successfully.
 		 */
-		if (PageActive(page)) {
-must_be_active:
+		if (page_active || PageActive(page)) {
 			list_del(page_lru);
 			list_add(page_lru, &active_list);
 		} else {
@@ -865,10 +873,8 @@ static int refill_inactive(unsigned int gfp_mask, int user)
 	do {
 		made_progress = 0;
 
-		if (!inactive_shortage() && !free_shortage())
-			goto done;
-
 		if (current->need_resched) {
+			__set_current_state(TASK_RUNNING);
 			schedule();
 		}
 
@@ -912,6 +918,14 @@ static int refill_inactive(unsigned int gfp_mask, int user)
 			if (!--count)
 				goto done;
 		}
+
+		/*
+		 * If we either have enough free memory, or if
+		 * page_launder() will be able to make enough
+		 * free memory, then stop.
+		 */
+		if (!inactive_shortage() || !free_shortage())
+			goto done;
 
 		/*
 		 * Only switch to a lower "priority" if we
@@ -958,10 +972,14 @@ static int do_try_to_free_pages(unsigned int gfp_mask, int user)
 	 * the inode and dentry cache whenever we do this.
 	 */
 	if (free_shortage() || inactive_shortage()) {
-		ret += shrink_dcache_memory(6, gfp_mask);
-		ret += shrink_icache_memory(6, gfp_mask);
+		if (gfp_mask & __GFP_IO) {
+			ret += shrink_dcache_memory(6, gfp_mask);
+			ret += shrink_icache_memory(6, gfp_mask);
+		}
 
 		ret += refill_inactive(gfp_mask, user);
+	} else {
+		ret = 1;
 	}
 
 	return ret;
@@ -1059,8 +1077,7 @@ int kswapd(void *unused)
 		 * We go to sleep for one second, but if it's needed
 		 * we'll be woken up earlier...
 		 */
-		if (!free_shortage() ||
-				inactive_shortage() <= inactive_target / 3)
+		if (!free_shortage() || !inactive_shortage())
 			interruptible_sleep_on_timeout(&kswapd_wait, HZ);
 	}
 }
@@ -1073,7 +1090,8 @@ void wakeup_kswapd(int block)
 		return;
 
 	if (!block) {
-		wake_up(&kswapd_wait);
+		if (waitqueue_active(&kswapd_wait))
+			wake_up(&kswapd_wait);
 		return;
 	}
 
@@ -1110,12 +1128,13 @@ void wakeup_kswapd(int block)
  */
 int try_to_free_pages(unsigned int gfp_mask)
 {
+	int ret = 1;
+
 	if (gfp_mask & __GFP_WAIT) {
-		balance_dirty(NODEV);
-		wakeup_kswapd(1);
+		ret = do_try_to_free_pages(gfp_mask, 1);
 	}
 
-	return 1;
+	return ret;
 }
 
 DECLARE_WAIT_QUEUE_HEAD(kreclaimd_wait);

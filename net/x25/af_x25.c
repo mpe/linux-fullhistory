@@ -21,6 +21,8 @@
  *					  facilities negotiation and increased 
  *					  the throughput upper limit.
  *	2000-27-08	Arnaldo C. Melo s/suser/capable/ + micro cleanups
+ *	2000-04-09	Henner Eisen	Set sock->state in x25_accept(). 
+ *					Fixed x25_output() related skb leakage.
  */
 
 #include <linux/config.h>
@@ -721,6 +723,7 @@ static int x25_accept(struct socket *sock, struct socket *newsock, int flags)
 	kfree_skb(skb);
 	sk->ack_backlog--;
 	newsock->sk = newsk;
+	newsock->state = SS_CONNECTED;
 
 	return 0;
 }
@@ -971,7 +974,11 @@ static int x25_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct 
 	if (msg->msg_flags & MSG_OOB) {
 		skb_queue_tail(&sk->protinfo.x25->interrupt_out_queue, skb);
 	} else {
-		x25_output(sk, skb);
+		err = x25_output(sk, skb);
+		if(err){
+			len = err;
+			kfree_skb(skb);
+		}
 	}
 
 	x25_kick(sk);

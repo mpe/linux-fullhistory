@@ -410,8 +410,9 @@ out:
  */
 #define _hashfn(dev,block)	\
 	((((dev)<<(bh_hash_shift - 6)) ^ ((dev)<<(bh_hash_shift - 9))) ^ \
-	 (((block)<<(bh_hash_shift - 6)) ^ ((block) >> 13) ^ ((block) << (bh_hash_shift - 12))))
-#define hash(dev,block) hash_table[(_hashfn(dev,block) & bh_hash_mask)]
+	 (((block)<<(bh_hash_shift - 6)) ^ ((block) >> 13) ^ \
+	  ((block) << (bh_hash_shift - 12))))
+#define hash(dev,block) hash_table[(_hashfn(HASHDEV(dev),block) & bh_hash_mask)]
 
 static __inline__ void __hash_link(struct buffer_head *bh, struct buffer_head **head)
 {
@@ -705,9 +706,9 @@ void set_blocksize(kdev_t dev, int size)
 static void refill_freelist(int size)
 {
 	if (!grow_buffers(size)) {
-		//wakeup_bdflush(1);
 		balance_dirty(NODEV);
-		wakeup_kswapd(1);
+		wakeup_kswapd(0); /* We can't wait because of __GFP_IO */
+		schedule();
 	}
 }
 
@@ -863,15 +864,14 @@ int balance_dirty_state(kdev_t dev)
 
 	dirty = size_buffers_type[BUF_DIRTY] >> PAGE_SHIFT;
 	tot = nr_free_buffer_pages();
-//	tot -= size_buffers_type[BUF_PROTECTED] >> PAGE_SHIFT;
 
 	dirty *= 200;
 	soft_dirty_limit = tot * bdf_prm.b_un.nfract;
 	hard_dirty_limit = soft_dirty_limit * 2;
 
 	/* First, check for the "real" dirty limit. */
-	if (dirty > soft_dirty_limit || inactive_shortage()) {
-		if (dirty > hard_dirty_limit)
+	if (dirty > soft_dirty_limit) {
+		if (dirty > hard_dirty_limit || inactive_shortage())
 			return 1;
 		return 0;
 	}
@@ -2279,7 +2279,9 @@ int try_to_free_buffers(struct page * page, int wait)
 {
 	struct buffer_head * tmp, * bh = page->buffers;
 	int index = BUFSIZE_INDEX(bh->b_size);
+	int loop = 0;
 
+cleaned_buffers_try_again:
 	spin_lock(&lru_list_lock);
 	write_lock(&hash_table_lock);
 	spin_lock(&free_list[index].lock);
@@ -2325,8 +2327,14 @@ busy_buffer_page:
 	spin_unlock(&free_list[index].lock);
 	write_unlock(&hash_table_lock);
 	spin_unlock(&lru_list_lock);
-	if (wait)
+	if (wait) {
 		sync_page_buffers(bh, wait);
+		/* We waited synchronously, so we can free the buffers. */
+		if (wait > 1 && !loop) {
+			loop = 1;
+			goto cleaned_buffers_try_again;
+		}
+	}
 	return 0;
 }
 

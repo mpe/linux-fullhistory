@@ -158,7 +158,7 @@ static inline int waitqueue_active(wait_queue_head_t *q)
 	return !list_empty(&q->task_list);
 }
 
-extern inline void __add_wait_queue(wait_queue_head_t *head, wait_queue_t *new)
+static inline void __add_wait_queue(wait_queue_head_t *head, wait_queue_t *new)
 {
 #if WAITQUEUE_DEBUG
 	if (!head || !new)
@@ -174,7 +174,7 @@ extern inline void __add_wait_queue(wait_queue_head_t *head, wait_queue_t *new)
 /*
  * Used for wake-one threads:
  */
-extern inline void __add_wait_queue_tail(wait_queue_head_t *head,
+static inline void __add_wait_queue_tail(wait_queue_head_t *head,
 						wait_queue_t *new)
 {
 #if WAITQUEUE_DEBUG
@@ -188,7 +188,7 @@ extern inline void __add_wait_queue_tail(wait_queue_head_t *head,
 	list_add_tail(&new->task_list, &head->task_list);
 }
 
-extern inline void __remove_wait_queue(wait_queue_head_t *head,
+static inline void __remove_wait_queue(wait_queue_head_t *head,
 							wait_queue_t *old)
 {
 #if WAITQUEUE_DEBUG

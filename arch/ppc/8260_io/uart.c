@@ -977,8 +977,7 @@ static int rs_8xx_write(struct tty_struct * tty, int from_user,
 		}
 
 		if (from_user) {
-			if (c !=
-			    copy_from_user(__va(bdp->cbd_bufaddr), buf, c)) {
+			if (copy_from_user(__va(bdp->cbd_bufaddr), buf, c)) {
 				if (!ret)
 					ret = -EFAULT;
 				break;
@@ -2396,10 +2395,10 @@ int __init rs_8xx_init(void)
 	io->iop_pdird &= ~0x00800000;
 	io->iop_psord &= ~0x00c00000;
 #if USE_SMC2
-	io->iop_ppara |= 0x01800000;
-	io->iop_pdira |= 0x00800000;
-	io->iop_pdira &= ~0x01000000;
-	io->iop_psora &= ~0x01800000;
+	io->iop_ppara |= 0x00c00000;
+	io->iop_pdira |= 0x00400000;
+	io->iop_pdira &= ~0x00800000;
+	io->iop_psora &= ~0x00c00000;
 #endif
 
 	/* Configure SCC2 and SCC3.  Be careful about the fine print.
@@ -2473,11 +2472,11 @@ int __init rs_8xx_init(void)
 			 * descriptors from dual port ram, and a character
 			 * buffer area from host mem.
 			 */
-			dp_addr = m8260_cpm_dpalloc(sizeof(cbd_t) * RX_NUM_FIFO);
+			dp_addr = m8260_cpm_dpalloc(sizeof(cbd_t) * RX_NUM_FIFO, 8);
 
 			/* Allocate space for FIFOs in the host memory.
 			*/
-			mem_addr = m8260_cpm_hostalloc(RX_NUM_FIFO * RX_BUF_SIZE);
+			mem_addr = m8260_cpm_hostalloc(RX_NUM_FIFO * RX_BUF_SIZE, 1);
 
 			/* Set the physical address of the host memory
 			 * buffers in the buffer descriptors, and the
@@ -2506,11 +2505,11 @@ int __init rs_8xx_init(void)
 				sup->scc_genscc.scc_rbase = dp_addr;
 			}
 
-			dp_addr = m8260_cpm_dpalloc(sizeof(cbd_t) * TX_NUM_FIFO);
+			dp_addr = m8260_cpm_dpalloc(sizeof(cbd_t) * TX_NUM_FIFO, 8);
 
 			/* Allocate space for FIFOs in the host memory.
 			*/
-			mem_addr = m8260_cpm_hostalloc(TX_NUM_FIFO * TX_BUF_SIZE);
+			mem_addr = m8260_cpm_hostalloc(TX_NUM_FIFO * TX_BUF_SIZE, 1);
 
 			/* Set the physical address of the host memory
 			 * buffers in the buffer descriptors, and the
@@ -2716,11 +2715,11 @@ static int __init serial_console_setup(struct console *co, char *options)
 
 	/* Allocate space for two buffer descriptors in the DP ram.
 	*/
-	dp_addr = m8260_cpm_dpalloc(sizeof(cbd_t) * 2);
+	dp_addr = m8260_cpm_dpalloc(sizeof(cbd_t) * 2, 8);
 
 	/* Allocate space for two 2 byte FIFOs in the host memory.
 	*/
-	mem_addr = m8260_cpm_hostalloc(4);
+	mem_addr = m8260_cpm_hostalloc(4, 1);
 
 	/* Set the physical address of the host memory buffers in
 	 * the buffer descriptors.

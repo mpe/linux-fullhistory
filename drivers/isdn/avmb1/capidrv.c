@@ -200,6 +200,7 @@
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
 #include <linux/ctype.h>
+#include <linux/init.h>
 #include <asm/segment.h>
 
 #include "capiutil.h"
@@ -2436,7 +2437,7 @@ static struct procfsentries {
    { "capi/capidrv", 	  0	 , proc_capidrv_read_proc },
 };
 
-static void proc_init(void)
+static void __init proc_init(void)
 {
     int nelem = sizeof(procfsentries)/sizeof(procfsentries[0]);
     int i;
@@ -2448,7 +2449,7 @@ static void proc_init(void)
     }
 }
 
-static void proc_exit(void)
+static void __exit proc_exit(void)
 {
     int nelem = sizeof(procfsentries)/sizeof(procfsentries[0]);
     int i;
@@ -2467,11 +2468,7 @@ static struct capi_interface_user cuser = {
 	lower_callback
 };
 
-#ifdef MODULE
-#define capidrv_init init_module
-#endif
-
-int capidrv_init(void)
+int __init capidrv_init(void)
 {
 	struct capi_register_params rparam;
 	capi_profile profile;
@@ -2531,8 +2528,7 @@ int capidrv_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit capidrv_exit(void)
 {
 	char rev[10];
 	char *p;
@@ -2554,4 +2550,8 @@ void cleanup_module(void)
 	printk(KERN_NOTICE "capidrv: Rev%s: unloaded\n", rev);
 }
 
+#ifdef MODULE
+module_init(capidrv_init);
 #endif
+module_exit(capidrv_exit);
+

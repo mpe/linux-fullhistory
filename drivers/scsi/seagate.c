@@ -5,7 +5,8 @@
  *
  *      Note : TMC-880 boards don't work because they have two bits in
  *              the status register flipped, I'll fix this "RSN"
- *	[why do I have strong feeling that above message is from 1993? :-) pavel@ucw.cz]
+ *	[why do I have strong feeling that above message is from 1993? :-)
+ *	        pavel@ucw.cz]
  *
  *      This card does all the I/O via memory mapped I/O, so there is no need
  *      to check or allocate a region of the I/O address space.
@@ -18,6 +19,13 @@
  *
  * 1998-jul-29 - created DPRINTK macros and made it work under 
  * linux 2.1.112, simplified some #defines etc. <pavel@ucw.cz>
+ *
+ * Aug 2000 - aeb - deleted seagate_st0x_biosparam(). It would try to
+ * read the physical disk geometry, a bad mistake. Of course it doesnt
+ * matter much what geometry one invents, but on large disks it
+ * returned 256 (or more) heads, causing all kind of failures.
+ * Of course this means that people might see a different geometry now,
+ * so boot parameters may be necessary in some cases.
  */
 
 /*
@@ -1701,124 +1709,6 @@ int seagate_st0x_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
   return SCSI_RESET_WAKEUP;
 }
 
-
-int seagate_st0x_biosparam (Disk * disk, kdev_t dev, int *ip)
-{
-  unsigned char buf[256 + sizeof (Scsi_Ioctl_Command)], 
-                cmd[6], *data, *page;
-  Scsi_Ioctl_Command *sic = (Scsi_Ioctl_Command *) buf;
-  int result, formatted_sectors, total_sectors;
-  int cylinders, heads, sectors;
-  int capacity;
-
-/*
- * Only SCSI-I CCS drives and later implement the necessary mode sense
- * pages.
- */
-
-  if (disk->device->scsi_level < 2)
-    return -1;
-
-  data = sic->data;
-
-  cmd[0] = MODE_SENSE;
-  cmd[1] = (disk->device->lun << 5) & 0xe5;
-  cmd[2] = 0x04;                        /* Read page 4, rigid disk geometry
-                                           page current values */
-  cmd[3] = 0;
-  cmd[4] = 255;
-  cmd[5] = 0;
-
-/*
- * We are transferring 0 bytes in the out direction, and expect to get back
- * 24 bytes for each mode page.
- */
-  sic->inlen = 0;
-  sic->outlen = 256;
-
-  memcpy (data, cmd, 6);
-
-  if (!(result = kernel_scsi_ioctl (disk->device, SCSI_IOCTL_SEND_COMMAND,
-                                    sic)))
-  {
-/*
- * The mode page lies beyond the MODE SENSE header, with length 4, and
- * the BLOCK DESCRIPTOR, with length header[3].
- */
-    page = data + 4 + data[3];
-    heads = (int) page[5];
-    cylinders = (page[2] << 16) | (page[3] << 8) | page[4];
-
-    cmd[2] = 0x03;                      /* Read page 3, format page current
-                                           values */
-    memcpy (data, cmd, 6);
-
-    if (!(result = kernel_scsi_ioctl (disk->device, SCSI_IOCTL_SEND_COMMAND,
-                                      sic)))
-    {
-      page = data + 4 + data[3];
-      sectors = (page[10] << 8) | page[11];
-/*
- * Get the total number of formatted sectors from the block descriptor,
- * so we can tell how many are being used for alternates.
- */
-      formatted_sectors = (data[4 + 1] << 16) | (data[4 + 2] << 8) 
-                          | data[4 + 3];
-
-      total_sectors = (heads * cylinders * sectors);
-
-/*
- * Adjust the real geometry by subtracting
- * (spare sectors / (heads * tracks)) cylinders from the number of cylinders.
- *
- * It appears that the CE cylinder CAN be a partial cylinder.
- */
-
-      printk ("scsi%d : heads = %d cylinders = %d sectors = %d total = %d formatted = %d\n",
-              hostno, heads, cylinders, sectors, total_sectors,
-              formatted_sectors);
-
-      if (!heads || !sectors || !cylinders)
-        result = -1;
-      else
-        cylinders -= ((total_sectors - formatted_sectors) / (heads * sectors));
-
-/*
- * Now, we need to do a sanity check on the geometry to see if it is
- * BIOS compatible.  The maximum BIOS geometry is 1024 cylinders *
- * 256 heads * 64 sectors.
- */
-
-      if ((cylinders > 1024) || (sectors > 64))
-      {
-        /* The Seagate's seem to have some mapping.  Multiply
-           heads*sectors*cyl to get capacity.  Then start rounding down.
-         */
-        capacity = heads * sectors * cylinders;         
-      
-        /* Old MFM Drives use this, so does the Seagate */
-        sectors = 17;
-        heads = 2;
-        capacity = capacity / sectors;
-        while (cylinders > 1024)
-        {
-          heads *= 2;                   /* For some reason, they go in
-                                           multiples */
-          cylinders = capacity / heads;
-        }
-      }
-      ip[0] = heads;
-      ip[1] = sectors;
-      ip[2] = cylinders;
-/*
- * There should be an alternate mapping for things the seagate doesn't
- * understand, but I couldn't say what it is with reasonable certainty.
- */
-    }
-  }
-
-  return result;
-}
 
 #ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */

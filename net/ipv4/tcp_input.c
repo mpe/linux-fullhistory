@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.199 2000/09/06 23:30:29 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.200 2000/09/16 16:39:16 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -58,6 +58,7 @@
  *		J Hadi Salim:		ECN support
  */
 
+#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/sysctl.h>
 #include <net/tcp.h>
@@ -1952,7 +1953,7 @@ void tcp_parse_options(struct sk_buff *skb, struct tcp_opt *tp)
 				if (opsize < 2) /* "silly options" */
 					return;
 				if (opsize > length)
-					break;	/* don't parse partial options */
+					return;	/* don't parse partial options */
 	  			switch(opcode) {
 				case TCPOPT_MSS:
 					if(opsize==TCPOLEN_MSS && th->syn) {

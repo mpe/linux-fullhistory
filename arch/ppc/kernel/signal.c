@@ -154,7 +154,7 @@ sys_rt_sigsuspend(sigset_t *unewset, size_t sigsetsize, int p3, int p4, int p6,
 }
 
 
-asmlinkage int
+int
 sys_sigaltstack(const stack_t *uss, stack_t *uoss)
 {
 	struct pt_regs *regs = (struct pt_regs *) &uss;
@@ -232,7 +232,7 @@ struct rt_sigframe
  *  Each of these things must be a multiple of 16 bytes in size.
  *
  */
-asmlinkage int sys_rt_sigreturn(struct pt_regs *regs)
+int sys_rt_sigreturn(struct pt_regs *regs)
 {
 	struct rt_sigframe *rt_sf;
 	struct sigcontext_struct sigctx;
@@ -301,7 +301,6 @@ asmlinkage int sys_rt_sigreturn(struct pt_regs *regs)
 	return ret;
 
 badframe:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -351,7 +350,6 @@ badframe:
 	printk("badframe in setup_rt_frame, regs=%p frame=%p newsp=%lx\n",
 	       regs, frame, newsp);
 #endif
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -418,7 +416,6 @@ int sys_sigreturn(struct pt_regs *regs)
 	return ret;
 
 badframe:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }	
 
@@ -460,7 +457,6 @@ badframe:
 	printk("badframe in setup_frame, regs=%p frame=%p newsp=%lx\n",
 	       regs, frame, newsp);
 #endif
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -541,7 +537,6 @@ badframe:
 	       regs, frame, *newspp);
 	printk("sc=%p sig=%d ka=%p info=%p oldset=%p\n", sc, sig, ka, info, oldset);
 #endif
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -645,7 +640,6 @@ int do_signal(sigset_t *oldset, struct pt_regs *regs)
 				/* FALLTHRU */
 
 			default:
-				lock_kernel();
 				sigaddset(&current->pending.signal, signr);
 				recalc_sigpending(current);
 				current->flags |= PF_SIGNALED;
@@ -663,6 +657,7 @@ int do_signal(sigset_t *oldset, struct pt_regs *regs)
 
 		/* Whee!  Actually deliver the signal.  */
 		handle_signal(signr, ka, &info, oldset, regs, &newsp, frame);
+		break;
 	}
 
 	if (regs->trap == 0x0C00 /* System Call! */ &&

@@ -32,6 +32,7 @@ static const char *version=
 "auto_irq.c:v1.11 Donald Becker (becker@cesdis.gsfc.nasa.gov)";
 #endif
 
+#include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <asm/bitops.h>
@@ -53,6 +54,10 @@ int autoirq_report(int waittime)
 	BUSY_LOOP_UNTIL(delay)
 	return probe_irq_off(irqs);
 }
+
+EXPORT_SYMBOL(autoirq_setup);
+EXPORT_SYMBOL(autoirq_report);
+
 
 /*
  * Local variables:

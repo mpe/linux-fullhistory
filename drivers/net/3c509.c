@@ -193,6 +193,7 @@ static int nopnp = 0;
 
 int el3_probe(struct net_device *dev)
 {
+	struct el3_private *lp;
 	short lrs_state = 0xff, i;
 	int ioaddr, irq, if_port;
 	u16 phys_addr[3];
@@ -200,7 +201,7 @@ int el3_probe(struct net_device *dev)
 	int mca_slot = -1;
 #ifdef __ISAPNP__
 	static int pnp_cards = 0;
-#endif
+#endif /* __ISAPNP__ */
 
 	/* First check all slots of the EISA bus.  The next slot address to
 	   probe is kept in 'eisa_addr' to support multiple probe() calls. */
@@ -292,7 +293,7 @@ int el3_probe(struct net_device *dev)
 		/* if we get here, we didn't find an MCA adapter */
 		return -ENODEV;
 	}
-#endif
+#endif /* CONFIG_MCA */
 
 #ifdef __ISAPNP__
 	if (nopnp == 1)
@@ -330,7 +331,7 @@ int el3_probe(struct net_device *dev)
 		}
 	}
 no_pnp:
-#endif
+#endif /* __ISAPNP__ */
 
 	/* Select an open I/O location at 0x1*0 to do contention select. */
 	for ( ; id_port < 0x200; id_port += 0x10) {
@@ -396,7 +397,7 @@ no_pnp:
 			}
 		}
 	}
-#endif
+#endif /* __ISAPNP__ */
 
 	{
 		unsigned int iobase = id_read_eeprom(8);
@@ -466,9 +467,10 @@ no_pnp:
 		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct el3_private));
 	
-	((struct el3_private *)dev->priv)->mca_slot = mca_slot;
-	((struct el3_private *)dev->priv)->next_dev = el3_root_dev;
-	((struct el3_private *)dev->priv)->lock = (spinlock_t) SPIN_LOCK_UNLOCKED;
+	lp = dev->priv;
+	lp->mca_slot = mca_slot;
+	lp->next_dev = el3_root_dev;
+	spin_lock_init(&lp->lock);
 	el3_root_dev = dev;
 
 	if (el3_debug > 0)

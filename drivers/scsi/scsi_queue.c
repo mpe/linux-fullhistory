@@ -118,7 +118,7 @@ int scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason)
 		 * If a host is inactive and cannot queue any commands, I don't see
 		 * how things could possibly work anyways.
 		 */
-		if (cmd->device->device_blocked == 0) {
+		if (cmd->device->device_busy == 0) {
 			if (scsi_retry_command(cmd) == 0) {
 				return 0;
 			}

@@ -5,16 +5,23 @@
 #include <asm/smp.h>
 
 /* entry.S is sensitive to the offsets of these fields */
+/* The __last_jiffy_stamp field is needed to ensure that no decrementer 
+ * interrupt is lost on SMP machines. Since on most CPUs it is in the same 
+ * cache line as local_irq_count, it is cheap to access and is also used on UP 
+ * for uniformity.
+ */
 typedef struct {
 	unsigned int __softirq_active;
 	unsigned int __softirq_mask;
 	unsigned int __local_irq_count;
 	unsigned int __local_bh_count;
 	unsigned int __syscall_count;
+	unsigned int __last_jiffy_stamp;
 } ____cacheline_aligned irq_cpustat_t;
 
 #include <linux/irq_cpustat.h>	/* Standard mappings for irq_cpustat_t above */
 
+#define last_jiffy_stamp(cpu) __IRQ_STAT((cpu), __last_jiffy_stamp)
 /*
  * Are we in an interrupt context? Either doing bottom half
  * or hardware interrupt processing?

@@ -26,10 +26,13 @@
 	You can try <http://www.mylex.com> if you want more info, as I've
 	never even seen one of these cards.  :)
 
+	Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 2000/09/01
+	- get rid of check_region
+	- no need to check if dev == NULL in lne390_probe1
 */
 
 static const char *version =
-	"lne390.c: Driver revision v0.99, 12/05/98\n";
+	"lne390.c: Driver revision v0.99.1, 01/09/2000\n";
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -103,9 +106,16 @@ static unsigned int shmem_mapB[] __initdata = {0xff, 0xfe, 0x0e, 0xfff, 0xffe, 0
 int __init lne390_probe(struct net_device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
+	int ret;
 
-	if (ioaddr > 0x1ff)		/* Check a single specified location. */
-		return lne390_probe1(dev, ioaddr);
+	if (ioaddr > 0x1ff) {		/* Check a single specified location. */
+		if (!request_region(ioaddr, LNE390_IO_EXTENT, "lne390"))
+			return -EBUSY;
+		ret = lne390_probe1(dev, ioaddr);
+		if (ret)
+			release_region(ioaddr, LNE390_IO_EXTENT);
+		return ret;
+	}
 	else if (ioaddr > 0)		/* Don't probe at all. */
 		return -ENXIO;
 
@@ -118,10 +128,11 @@ int __init lne390_probe(struct net_device *dev)
 
 	/* EISA spec allows for up to 16 slots, but 8 is typical. */
 	for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000) {
-		if (check_region(ioaddr , LNE390_IO_EXTENT))
+		if (!request_region(ioaddr, LNE390_IO_EXTENT, "lne390"))
 			continue;
 		if (lne390_probe1(dev, ioaddr) == 0)
 			return 0;
+		release_region(ioaddr, LNE390_IO_EXTENT);
 	}
 
 	return -ENODEV;
@@ -129,7 +140,7 @@ int __init lne390_probe(struct net_device *dev)
 
 int __init lne390_probe1(struct net_device *dev, int ioaddr)
 {
-	int i, revision;
+	int i, revision, ret;
 	unsigned long eisa_id;
 
 	if (inb_p(ioaddr + LNE390_ID_PORT) == 0xff) return -ENODEV;
@@ -161,13 +172,6 @@ int __init lne390_probe1(struct net_device *dev, int ioaddr)
 		return -ENODEV;
 	}
 #endif
-
-	/* We should have a "dev" from Space.c or the static module table. */
-	if (dev == NULL) {
-		printk("lne390.c: Passed a NULL device.\n");
-		dev = init_etherdev(0, 0);
-	}
-
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk ("lne390.c: unable to allocate memory for dev->priv!\n");
@@ -225,20 +229,16 @@ int __init lne390_probe1(struct net_device *dev, int ioaddr)
 			printk(KERN_CRIT "lne390.c: Use EISA SCU to set card memory below 1MB,\n");
 			printk(KERN_CRIT "lne390.c: or to an address above 0x%lx.\n", virt_to_bus(high_memory));
 			printk(KERN_CRIT "lne390.c: Driver NOT installed.\n");
-			free_irq(dev->irq, dev);
-			kfree(dev->priv);
-			dev->priv = NULL;
-			return -EINVAL;
+			ret = -EINVAL;
+			goto cleanup;
 		}
 		dev->mem_start = (unsigned long)ioremap(dev->mem_start, LNE390_STOP_PG*0x100);
 		if (dev->mem_start == 0) {
 			printk(KERN_ERR "lne390.c: Unable to remap card memory above 1MB !!\n");
 			printk(KERN_ERR "lne390.c: Try using EISA SCU to set memory below 1MB.\n");
 			printk(KERN_ERR "lne390.c: Driver NOT installed.\n");
-			free_irq(dev->irq, dev);
-			kfree(dev->priv);
-			dev->priv = NULL;
-			return -EAGAIN;
+			ret = -EAGAIN;
+			goto cleanup;
 		}
 		ei_status.reg0 = 1;	/* Use as remap flag */
 		printk("lne390.c: remapped %dkB card memory to virtual address %#lx\n",
@@ -251,7 +251,6 @@ int __init lne390_probe1(struct net_device *dev, int ioaddr)
 
 	/* The 8390 offset is zero for the LNE390 */
 	dev->base_addr = ioaddr;
-	request_region(dev->base_addr, LNE390_IO_EXTENT, "lne390");
 
 	ei_status.name = "LNE390";
 	ei_status.tx_start_page = LNE390_START_PG;
@@ -271,6 +270,11 @@ int __init lne390_probe1(struct net_device *dev, int ioaddr)
 	dev->stop = &lne390_close;
 	NS8390_init(dev, 0);
 	return 0;
+cleanup:
+	free_irq(dev->irq, dev);
+	kfree(dev->priv);
+	dev->priv = NULL;
+	return ret;
 }
 
 /*

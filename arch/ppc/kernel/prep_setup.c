@@ -365,14 +365,13 @@ prep_setup_arch(void)
  */
 void __init prep_res_calibrate_decr(void)
 {
-	int freq, divisor;
+	unsigned long freq, divisor=4;
 
 	freq = res->VitalProductData.ProcessorBusHz;
-	divisor = 4;
-	printk("time_init: decrementer frequency = %d/%d\n", freq, divisor);
-	decrementer_count = freq / HZ / divisor;
-	count_period_num = divisor;
-	count_period_den = freq / 1000000;
+	printk("time_init: decrementer frequency = %lu.%.6lu MHz\n",
+	       (freq/divisor)/1000000, (freq/divisor)%1000000);
+	tb_ticks_per_jiffy = freq / HZ / divisor;
+	tb_to_us = mulhwu_scale_factor(freq/divisor, 1000000);
 }
 
 /*
@@ -381,32 +380,30 @@ void __init prep_res_calibrate_decr(void)
  * but on prep we have to figure it out.
  * -- Cort
  */
-int calibrate_done = 0;
-volatile int *done_ptr = &calibrate_done;
+/* Done with 3 interrupts: the first one primes the cache and the
+ * 2 following ones measure the interval. The precision of the method
+ * is still doubtful due to the short interval sampled.
+ */
+static __initdata volatile int calibrate_steps = 3;
+static __initdata unsigned tbstamp;
 
 void __init
 prep_calibrate_decr_handler(int            irq,
 			    void           *dev,
 			    struct pt_regs *regs)
 {
-	unsigned long freq, divisor;
-	static unsigned long t1 = 0, t2 = 0;
-	
-	if ( !t1 )
-		t1 = get_dec();
-	else if (!t2)
-	{
-		t2 = get_dec();
-		t2 = t1-t2;  /* decr's in 1/HZ */
-		t2 = t2*HZ;  /* # decrs in 1s - thus in Hz */
-		freq = t2 * 60;	/* try to make freq/1e6 an integer */
-		divisor = 60;
-		printk("time_init: decrementer frequency = %lu/%lu (%luMHz)\n",
-		       freq, divisor,t2>>20);
-		decrementer_count = freq / HZ / divisor;
-		count_period_num = divisor;
-		count_period_den = freq / 1000000;
-		*done_ptr = 1;
+	unsigned long t, freq;
+	int step=--calibrate_steps;
+
+	t = get_tbl();
+	if (step > 0) {
+		tbstamp = t;
+	} else {
+		freq = (t - tbstamp)*HZ;
+		printk("time_init: decrementer frequency = %lu.%.6lu MHz\n",
+		       freq/1000000, freq%1000000);
+		tb_ticks_per_jiffy = freq / HZ;
+		tb_to_us = mulhwu_scale_factor(freq, 1000000);
 	}
 }
 
@@ -428,17 +425,43 @@ void __init prep_calibrate_decr(void)
 	if (request_irq(0, prep_calibrate_decr_handler, 0, "timer", NULL) != 0)
 		panic("Could not allocate timer IRQ!");
 	__sti();
-	while ( ! *done_ptr ) /* nothing */; /* wait for calibrate */
+	while ( calibrate_steps ) /* nothing */; /* wait for calibrate */
         restore_flags(flags);
 	free_irq( 0, NULL);
 }
 
 
-/* We use the NVRAM RTC to time a second to calibrate the decrementer. */
+static long __init mk48t59_init(void) {
+	unsigned char tmp;
+
+	tmp = ppc_md.nvram_read_val(MK48T59_RTC_CONTROLB);
+	if (tmp & MK48T59_RTC_CB_STOP) {
+		printk("Warning: RTC was stopped, date will be wrong.\n");
+		ppc_md.nvram_write_val(MK48T59_RTC_CONTROLB, 
+				       tmp & ~MK48T59_RTC_CB_STOP);
+		/* Low frequency crystal oscillators may take a very long
+		 * time to startup and stabilize. For now just ignore the
+		 * the issue, but attempting to calibrate the decrementer
+		 * from the RTC just after this wakeup is likely to be very 
+		 * inaccurate. Firmware should not allow to load
+		 * the OS with the clock stopped anyway...
+		 */
+	}
+	/* Ensure that the clock registers are updated */
+	tmp = ppc_md.nvram_read_val(MK48T59_RTC_CONTROLA);
+	tmp &= ~(MK48T59_RTC_CA_READ | MK48T59_RTC_CA_WRITE);
+	ppc_md.nvram_write_val(MK48T59_RTC_CONTROLA, tmp);
+	return 0;
+}
+
+/* We use the NVRAM RTC to time a second to calibrate the decrementer,
+ * the RTC registers have just been set up in the right state by the
+ * preceding routine.
+ */
 void __init mk48t59_calibrate_decr(void)
 {
-	unsigned long freq, divisor;
-	unsigned long t1, t2;
+	unsigned long freq;
+	unsigned long t1;
         unsigned char save_control;
         long i;
 	unsigned char sec;
@@ -458,29 +481,31 @@ void __init mk48t59_calibrate_decr(void)
 
 	/* Read the seconds value to see when it changes. */
 	sec = ppc_md.nvram_read_val(MK48T59_RTC_SECONDS);
+	/* Actually this is bad for precision, we should have a loop in
+	 * which we only read the seconds counter. nvram_read_val writes
+	 * the address bytes on every call and this takes a lot of time.
+	 * Perhaps an nvram_wait_change method returning a time
+	 * stamp with a loop count as parameter would be the  solution.
+	 */
 	for (i = 0 ; i < 1000000 ; i++)	{ /* may take up to 1 second... */
+	   t1 = get_tbl();
 	   if (ppc_md.nvram_read_val(MK48T59_RTC_SECONDS) != sec) {
 	      break;
 	   }
 	}
-	t1 = get_dec();
 
 	sec = ppc_md.nvram_read_val(MK48T59_RTC_SECONDS);
 	for (i = 0 ; i < 1000000 ; i++)	{ /* Should take up 1 second... */
+	   freq = get_tbl()-t1;
 	   if (ppc_md.nvram_read_val(MK48T59_RTC_SECONDS) != sec) {
 	      break;
 	   }
 	}
 
-	t2 = t1 - get_dec();
-
-	freq = t2 * 60;	/* try to make freq/1e6 an integer */
-	divisor = 60;
-	printk("time_init: decrementer frequency = %lu/%lu (%luMHz)\n",
-	       freq, divisor,t2>>20);
-	decrementer_count = freq / HZ / divisor;
-	count_period_num = divisor;
-	count_period_den = freq / 1000000;
+	printk("time_init: decrementer frequency = %lu.%.6lu MHz\n",
+	       freq/1000000, freq%1000000);
+	tb_ticks_per_jiffy = freq / HZ;
+	tb_to_us = mulhwu_scale_factor(freq, 1000000);
 }
 
 void __prep
@@ -788,6 +813,7 @@ prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
 		{
 			ppc_md.set_rtc_time   = mk48t59_set_rtc_time;
 			ppc_md.get_rtc_time   = mk48t59_get_rtc_time;
+			ppc_md.time_init      = mk48t59_init;
 		}
 		else
 		{
@@ -808,6 +834,7 @@ prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
 		ppc_md.set_rtc_time   = mk48t59_set_rtc_time;
 		ppc_md.get_rtc_time   = mk48t59_get_rtc_time;
 		ppc_md.calibrate_decr = mk48t59_calibrate_decr;
+		ppc_md.time_init      = mk48t59_init;
 	}
 
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)

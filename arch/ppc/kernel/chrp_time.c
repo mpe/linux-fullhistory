@@ -33,18 +33,20 @@ static int nvram_as1 = NVRAM_AS1;
 static int nvram_as0 = NVRAM_AS0;
 static int nvram_data = NVRAM_DATA;
 
-void __init chrp_time_init(void)
+long __init chrp_time_init(void)
 {
 	struct device_node *rtcs;
 	int base;
 
 	rtcs = find_compatible_devices("rtc", "pnpPNP,b00");
 	if (rtcs == NULL || rtcs->addrs == NULL)
-		return;
+		return 0;
 	base = rtcs->addrs[0].address;
 	nvram_as1 = 0;
 	nvram_as0 = base;
 	nvram_data = base + 1;
+	
+	return 0;
 }
 
 int __chrp chrp_cmos_clock_read(int addr)
@@ -116,28 +118,34 @@ int __chrp chrp_set_rtc_time(unsigned long nowtime)
 unsigned long __chrp chrp_get_rtc_time(void)
 {
 	unsigned int year, mon, day, hour, min, sec;
-	int i;
+	int uip, i;
 
 	/* The Linux interpretation of the CMOS clock register contents:
 	 * When the Update-In-Progress (UIP) flag goes from 1 to 0, the
 	 * RTC registers show the second which has precisely just started.
 	 * Let's hope other operating systems interpret the RTC the same way.
 	 */
-	/* read RTC exactly on falling edge of update flag */
-	for (i = 0 ; i < 1000000 ; i++)	/* may take up to 1 second... */
-		if (chrp_cmos_clock_read(RTC_FREQ_SELECT) & RTC_UIP)
-			break;
-	for (i = 0 ; i < 1000000 ; i++)	/* must try at least 2.228 ms */
-		if (!(chrp_cmos_clock_read(RTC_FREQ_SELECT) & RTC_UIP))
-			break;
-	do { /* Isn't this overkill ? UIP above should guarantee consistency */
+
+	/* Since the UIP flag is set for about 2.2 ms and the clock
+	 * is typically written with a precision of 1 jiffy, trying
+	 * to obtain a precision better than a few milliseconds is 
+	 * an illusion. Only consistency is interesting, this also
+	 * allows to use the routine for /dev/rtc without a potential
+	 * 1 second kernel busy loop triggered by any reader of /dev/rtc. 
+	 */
+
+	for ( i = 0; i<1000000; i++) {
+		uip = chrp_cmos_clock_read(RTC_FREQ_SELECT);
 		sec = chrp_cmos_clock_read(RTC_SECONDS);
 		min = chrp_cmos_clock_read(RTC_MINUTES);
 		hour = chrp_cmos_clock_read(RTC_HOURS);
 		day = chrp_cmos_clock_read(RTC_DAY_OF_MONTH);
 		mon = chrp_cmos_clock_read(RTC_MONTH);
 		year = chrp_cmos_clock_read(RTC_YEAR);
-	} while (sec != chrp_cmos_clock_read(RTC_SECONDS));
+		uip |= chrp_cmos_clock_read(RTC_FREQ_SELECT);
+		if ((uip & RTC_UIP)==0) break;
+	}
+
 	if (!(chrp_cmos_clock_read(RTC_CONTROL) & RTC_DM_BINARY) || RTC_ALWAYS_BCD)
 	  {
 	    BCD_TO_BIN(sec);
@@ -156,8 +164,7 @@ unsigned long __chrp chrp_get_rtc_time(void)
 void __init chrp_calibrate_decr(void)
 {
 	struct device_node *cpu;
-	int *fp, divisor;
-	unsigned long freq;
+	unsigned int freq, *fp;
 
 	if (via_calibrate_decr())
 		return;
@@ -169,15 +176,13 @@ void __init chrp_calibrate_decr(void)
 	freq = 16666000;		/* hardcoded default */
 	cpu = find_type_devices("cpu");
 	if (cpu != 0) {
-		fp = (int *) get_property(cpu, "timebase-frequency", NULL);
+		fp = (unsigned int *)
+			get_property(cpu, "timebase-frequency", NULL);
 		if (fp != 0)
 			freq = *fp;
 	}
-	freq *= 30;
-	divisor = 30; 
-        printk("time_init: decrementer frequency = %lu/%d (%ld MHz)\n", freq,
-	       divisor, (freq/divisor)>>20);
-        decrementer_count = freq / HZ / divisor;
-        count_period_num = divisor;
-        count_period_den = freq / 1000000;
+	printk("time_init: decrementer frequency = %u.%.6u MHz\n",
+ 	       freq/1000000, freq%1000000);
+	tb_ticks_per_jiffy = freq / HZ;
+	tb_to_us = mulhwu_scale_factor(freq, 1000000);
 }

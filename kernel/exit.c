@@ -229,6 +229,7 @@ void exit_files(struct task_struct *tsk)
 {
 	__exit_files(tsk);
 }
+
 static inline void __put_fs_struct(struct fs_struct *fs)
 {
 	/* No need to hold fs->lock if we are killing it */

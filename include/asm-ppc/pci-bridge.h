@@ -15,8 +15,12 @@ void *pci_io_base(unsigned int bus);
 /* This version handles the new Uni-N host bridge, the iobase is now
  * a per-device thing. I also added the memory base so PReP can
  * be fixed to return 0xc0000000 (I didn't actually implement it)
+ *
+ * pci_dev_io_base() returns either a virtual (ioremap'ed) address or
+ * a physical address. In-kernel clients will use logical while the
+ * sys_pciconfig_iobase syscall returns a physical one to userland.
  */
-void *pci_dev_io_base(unsigned char bus, unsigned char devfn);
+void *pci_dev_io_base(unsigned char bus, unsigned char devfn, int physical);
 void *pci_dev_mem_base(unsigned char bus, unsigned char devfn);
 
 /* Returns the root-bridge number (Uni-N number) of a device */
@@ -33,7 +37,8 @@ int pci_device_loc(struct device_node *dev, unsigned char *bus_ptr,
 struct bridge_data {
 	volatile unsigned int *cfg_addr;
 	volatile unsigned char *cfg_data;
-	void *io_base;
+	void *io_base;		/* virtual */
+	unsigned long io_base_phys;
 	int bus_number;
 	int max_bus;
 	struct bridge_data *next;

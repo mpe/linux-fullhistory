@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.51 2000/08/09 11:59:04 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.52 2000/09/09 08:26:04 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -380,31 +380,39 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 {
 	int val=0,err;
 
-	if(optlen>=sizeof(int)) {
-		if(get_user(val, (int *) optval))
-			return -EFAULT;
-	} else if(optlen>=sizeof(char)) {
-		unsigned char ucval;
-		if(get_user(ucval, (unsigned char *) optval))
-			return -EFAULT;
-		val = (int)ucval;
+	if (optname == IP_PKTINFO || optname == IP_RECVTTL ||
+	    optname == IP_RECVTOS || optname == IP_RECVOPTS ||
+	    optname == IP_RETOPTS || optname == IP_TOS ||
+	    optname == IP_TTL || optname == IP_HDRINCL ||
+	    optname == IP_MTU_DISCOVER || optname == IP_RECVERR ||
+	    optname == IP_MULTICAST_TTL || optname == IP_MULTICAST_LOOP ||
+	    optname == IP_ROUTER_ALERT) {
+		if (optlen >= sizeof(int)) {
+			if (get_user(val, (int *) optval))
+				return -EFAULT;
+		} else if (optlen >= sizeof(char)) {
+			unsigned char ucval;
+
+			if (get_user(ucval, (unsigned char *) optval))
+				return -EFAULT;
+			val = (int) ucval;
+		}
 	}
+
 	/* If optlen==0, it is equivalent to val == 0 */
 	
-	if(level!=SOL_IP)
+	if (level != SOL_IP)
 		return -ENOPROTOOPT;
+
 #ifdef CONFIG_IP_MROUTE
-	if(optname>=MRT_BASE && optname <=MRT_BASE+10)
-	{
+	if (optname >= MRT_BASE && optname <= (MRT_BASE + 10))
 		return ip_mroute_setsockopt(sk,optname,optval,optlen);
-	}
 #endif
 
 	err = 0;
 	lock_sock(sk);
 
-	switch(optname)
-	{
+	switch (optname) {
 		case IP_OPTIONS:
 		{
 			struct ip_options * opt = NULL;

@@ -730,8 +730,9 @@
  */
 
 /* Supported PHYs (phy_type field ) */
-#define PHY_B5400	5400
-#define PHY_B5201	5201
+#define PHY_B5400	0x5400
+#define PHY_B5201	0x5201
+#define PHY_LXT971	0x0971
 #define PHY_UNKNOWN	0
 
 /* Identification (for multi-PHY) */
@@ -745,6 +746,11 @@
 #define MII_BCM5400_REV                         0x01
 #define MII_BCM5400_ID                          ((MII_BCM5400_OUI << 10) | (MII_BCM5400_MODEL << 4))
 #define MII_BCM5400_MASK                        0xfffffff0
+#define MII_LXT971_OUI                          0x0004de
+#define MII_LXT971_MODEL                        0x0e
+#define MII_LXT971_REV                          0x00
+#define MII_LXT971_ID                           ((MII_LXT971_OUI << 10) | (MII_LXT971_MODEL << 4))
+#define MII_LXT971_MASK                         0xfffffff0
 
 /* BCM5201 AUX STATUS register */
 #define MII_BCM5201_AUXCTLSTATUS		0x18
@@ -763,6 +769,26 @@
 /* MII BCM5201 MULTIPHY register bits */
 #define MII_BCM5201_MULTIPHY_SERIALMODE         0x0002
 #define MII_BCM5201_MULTIPHY_SUPERISOLATE       0x0008
+
+/* MII BCM5400 1000-BASET Control register */
+#define MII_BCM5400_GB_CONTROL			0x09
+#define MII_BCM5400_GB_CONTROL_FULLDUPLEXCAP	0x0200
+
+/* MII BCM5400 AUXCONTROL register */
+#define MII_BCM5400_AUXCONTROL                  0x18
+#define MII_BCM5400_AUXCONTROL_PWR10BASET       0x0004
+
+/* MII BCM5400 AUXSTATUS register */
+#define MII_BCM5400_AUXSTATUS                   0x19
+#define MII_BCM5400_AUXSTATUS_LINKMODE_MASK     0x0700
+#define MII_BCM5400_AUXSTATUS_LINKMODE_SHIFT    8  
+
+/* MII LXT971 STATUS2 register */
+#define MII_LXT971_STATUS2			0x11
+#define MII_LXT971_STATUS2_SPEED		0x4000
+#define MII_LXT971_STATUS2_LINK			0x0400
+#define MII_LXT971_STATUS2_FULLDUPLEX		0x0200
+#define MII_LXT971_STATUS2_AUTONEG_COMPLETE	0x0080
 
 
 
@@ -845,6 +871,7 @@ struct gmac {
 	int				phy_type;
 	int				phy_status;	/* Cached PHY status */
 	int				full_duplex;	/* Current set to full duplex */
+	int				gigabit;	/* Current set to 1000BT */
 	struct net_device_stats		stats;
 	u8				pci_bus;
 	u8				pci_devfn;

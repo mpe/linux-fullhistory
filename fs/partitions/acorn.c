@@ -7,6 +7,7 @@
  */
 #include <linux/config.h>
 #include <linux/kernel.h>
+#include <linux/types.h>
 #include <linux/kdev_t.h>
 #include <linux/major.h>
 #include <linux/string.h>

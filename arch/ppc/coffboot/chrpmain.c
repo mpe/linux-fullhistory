@@ -22,13 +22,18 @@ void stop_imac_usb(void);
 #define get_16be(x)	(*(unsigned short *)(x))
 #define get_32be(x)	(*(unsigned *)(x))
 
-#define RAM_START	0x00000000
-#define RAM_END		(8<<20)
+#define RAM_END		(16 << 20)
 
 #define PROG_START	0x00010000
+#define PROG_SIZE	0x003f0000
+
+#define SCRATCH_SIZE	(128 << 10)
 
 char *avail_ram;
-char *end_avail;
+char *begin_avail, *end_avail;
+char *avail_high;
+unsigned int heap_use;
+unsigned int heap_max;
 
 extern char _end[];
 extern char image_data[];
@@ -60,29 +65,30 @@ boot(int a1, int a2, void *prom)
     im = image_data;
     len = image_len;
     /* claim 3MB starting at PROG_START */
-    claim(PROG_START, 3 << 20, 0);
+    claim(PROG_START, PROG_SIZE, 0);
     dst = (void *) PROG_START;
     if (im[0] == 0x1f && im[1] == 0x8b) {
-	/* claim 512kB for scratch space */
-	avail_ram = (char *) claim(0, 512 << 10, 0x10);
-	end_avail = avail_ram + (512 << 10);
-	printf("avail_ram = %x\n", avail_ram);
+	/* claim some memory for scratch space */
+	avail_ram = (char *) claim(0, SCRATCH_SIZE, 0x10);
+	begin_avail = avail_high = avail_ram;
+	end_avail = avail_ram + SCRATCH_SIZE;
+	printf("heap at 0x%x\n", avail_ram);
 	printf("gunzipping (0x%x <- 0x%x:0x%0x)...", dst, im, im+len);
-	gunzip(dst, 3 << 20, im, &len);
+	gunzip(dst, PROG_SIZE, im, &len);
 	printf("done %u bytes\n", len);
+	printf("%u bytes of heap consumed, max in use %u\n",
+	       avail_high - begin_avail, heap_max);
     } else {
 	memmove(dst, im, len);
     }
 
     flush_cache(dst, len);
-    stop_imac_ethernet();
-    stop_imac_usb();
     make_bi_recs((unsigned long) dst + len);
 
     sa = (unsigned long)PROG_START;
     printf("start address = 0x%x\n", sa);
 
-    (*(void (*)())sa)(0, 0, prom, a1, a2);
+    (*(void (*)())sa)(a1, a2, prom);
 
     printf("returned?\n");
 
@@ -122,6 +128,7 @@ void make_bi_recs(unsigned long addr)
 	rec = (struct bi_record *)((unsigned long)rec + rec->size);
 }
 
+#if 0
 #define eieio()	asm volatile("eieio");
 
 void stop_imac_ethernet(void)
@@ -172,14 +179,35 @@ void stop_imac_usb(void)
     *usb_ctrl = 0x01000000;	/* cpu_to_le32(1) */
     eieio();
 }
+#endif
+
+struct memchunk {
+    unsigned int size;
+    struct memchunk *next;
+};
+
+static struct memchunk *freechunks;
 
 void *zalloc(void *x, unsigned items, unsigned size)
 {
-    void *p = avail_ram;
+    void *p;
+    struct memchunk **mpp, *mp;
 
     size *= items;
     size = (size + 7) & -8;
+    heap_use += size;
+    if (heap_use > heap_max)
+	heap_max = heap_use;
+    for (mpp = &freechunks; (mp = *mpp) != 0; mpp = &mp->next) {
+	if (mp->size == size) {
+	    *mpp = mp->next;
+	    return mp;
+	}
+    }
+    p = avail_ram;
     avail_ram += size;
+    if (avail_ram > avail_high)
+	avail_high = avail_ram;
     if (avail_ram > end_avail) {
 	printf("oops... out of memory\n");
 	pause();
@@ -189,6 +217,17 @@ void *zalloc(void *x, unsigned items, unsigned size)
 
 void zfree(void *x, void *addr, unsigned nb)
 {
+    struct memchunk *mp = addr;
+
+    nb = (nb + 7) & -8;
+    heap_use -= nb;
+    if (avail_ram == addr + nb) {
+	avail_ram = addr;
+	return;
+    }
+    mp->size = nb;
+    mp->next = freechunks;
+    freechunks = mp;
 }
 
 #define HEAD_CRC	2

@@ -100,7 +100,7 @@ struct hw_interrupt_type open_pic = {
 #ifdef CONFIG_SMP
 void openpic_ipi_action(int cpl, void *dev_id, struct pt_regs *regs)
 {
-	smp_message_recv(cpl-OPENPIC_VEC_IPI);
+	smp_message_recv(cpl-OPENPIC_VEC_IPI, regs);
 }
 #endif /* CONFIG_SMP */
 
@@ -262,11 +262,11 @@ void __init openpic_init(int main_pic)
 					int j, pri;
 					pri = strcmp(np->name, "programmer-switch") ? 2 : 7;
 					for (j=0;j<np->n_intrs;j++) {
-						openpic_initirq(	np->intrs[j].line,
-									pri,
-									np->intrs[j].line,
-									0,
-									np->intrs[j].sense);
+						openpic_initirq(np->intrs[j].line,
+								pri,
+								np->intrs[j].line,
+								0,
+								np->intrs[j].sense);
 						if (np->intrs[j].sense)
 							irq_desc[np->intrs[j].line].status =  IRQ_LEVEL;
 					}

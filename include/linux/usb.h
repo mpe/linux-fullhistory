@@ -775,13 +775,13 @@ extern void usbdevfs_cleanup(void);
 
 #else /* CONFIG_USB_DEVICEFS */
 
-extern inline void usbdevfs_add_bus(struct usb_bus *bus) {}
-extern inline void usbdevfs_remove_bus(struct usb_bus *bus) {}
-extern inline void usbdevfs_add_device(struct usb_device *dev) {}
-extern inline void usbdevfs_remove_device(struct usb_device *dev) {}
+static inline void usbdevfs_add_bus(struct usb_bus *bus) {}
+static inline void usbdevfs_remove_bus(struct usb_bus *bus) {}
+static inline void usbdevfs_add_device(struct usb_device *dev) {}
+static inline void usbdevfs_remove_device(struct usb_device *dev) {}
 
-extern inline int usbdevfs_init(void) { return 0; }
-extern inline void usbdevfs_cleanup(void) { }
+static inline int usbdevfs_init(void) { return 0; }
+static inline void usbdevfs_cleanup(void) { }
 
 #endif /* CONFIG_USB_DEVICEFS */
 

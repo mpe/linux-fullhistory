@@ -20,15 +20,10 @@
 static void __init attach_adlib_card(struct address_info *hw_config)
 {
 	hw_config->slots[0] = opl3_init(hw_config->io_base, hw_config->osp, THIS_MODULE);
-	request_region(hw_config->io_base, 4, "OPL3/OPL2");
 }
 
 static int __init probe_adlib(struct address_info *hw_config)
 {
-	if (check_region(hw_config->io_base, 4)) {
-		DDB(printk("opl3.c: I/O port %x already in use\n", hw_config->io_base));
-		return 0;
-	}
 	return opl3_detect(hw_config->io_base, hw_config->osp);
 }
 
@@ -55,7 +50,6 @@ static int __init init_adlib(void)
 
 static void __exit cleanup_adlib(void)
 {
-	release_region(cfg.io_base, 4);
 	sound_unload_synthdev(cfg.slots[0]);
 	
 }

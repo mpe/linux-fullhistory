@@ -30,7 +30,7 @@ CFLAGS_seagate.o =   -DARBITRATE -DPARITY -DSEAGATE_USE_ASM
 
 obj-$(CONFIG_SCSI)		+= scsi_mod.o
 obj-$(CONFIG_CHR_DEV_ST)	+= st.o
-obj-$(CONFIG_BLK_DEV_SD)	+= sd.o
+obj-$(CONFIG_BLK_DEV_SD)	+= sd_mod.o
 obj-$(CONFIG_BLK_DEV_SR)	+= sr_mod.o
 obj-$(CONFIG_CHR_DEV_SG)	+= sg.o
 
@@ -151,6 +151,9 @@ include $(TOPDIR)/Rules.make
 
 scsi_mod.o: $(scsi_mod-objs)
 	$(LD) -r -o $@ $(scsi_mod-objs)
+
+sd_mod.o: sd.o
+	$(LD) -r -o $@ sd.o
 
 sr_mod.o: $(sr_mod-objs)
 	$(LD) -r -o $@ $(sr_mod-objs)

@@ -46,7 +46,10 @@ obj-$(CONFIG_FONT_ACORN_8x8)      += font_acorn_8x8.o
 
 # Add fbmon.o back into obj-$(CONFIG_FB) in 2.5.x
 obj-$(CONFIG_FB)                  += fbmem.o fbcmap.o modedb.o fbcon.o fonts.o
+# Only include macmodes.o if we have FB support and are PPC
+ifeq ($(CONFIG_FB),y)
 obj-$(CONFIG_PPC)                 += macmodes.o
+endif
 
 obj-$(CONFIG_FB_ACORN)            += acornfb.o
 obj-$(CONFIG_FB_AMIGA)            += amifb.o

@@ -7,7 +7,9 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1998 Paul Mackerras.
+ * Copyright (C) 1998 Paul Mackerras &
+ *                    Ben. Herrenschmidt.
+ *
  * 
  */
 #ifndef __ASM_PPC_FEATURE_H
@@ -75,6 +77,9 @@ extern void	feature_init(void);
  * Additional functions related to Core99 machines
  */
 extern void	feature_set_gmac_power(struct device_node* device, int power);
+
+	/* use constants in KeyLargo.h for the reset parameter */
+extern void	feature_set_gmac_phy_reset(struct device_node* device, int reset);
 
 extern void	feature_set_usb_power(struct device_node* device, int power);
 

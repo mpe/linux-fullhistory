@@ -31,7 +31,7 @@ struct machdep_calls {
 	void		(*power_off)(void);
 	void		(*halt)(void);
 
-	void		(*time_init)(void); /* Optional, may be NULL */
+	long		(*time_init)(void); /* Optional, may be NULL */
 	int		(*set_rtc_time)(unsigned long nowtime);
 	unsigned long	(*get_rtc_time)(void);
 	void		(*calibrate_decr)(void);
@@ -75,7 +75,7 @@ struct machdep_calls {
 	void (*pcibios_fixup)(void);
 	void (*pcibios_fixup_bus)(struct pci_bus *);
 
-	void* (*pci_dev_io_base)(unsigned char bus, unsigned char devfn);
+	void* (*pci_dev_io_base)(unsigned char bus, unsigned char devfn, int physical);
 	void* (*pci_dev_mem_base)(unsigned char bus, unsigned char devfn);
 	int (*pci_dev_root_bridge)(unsigned char bus, unsigned char devfn);
 

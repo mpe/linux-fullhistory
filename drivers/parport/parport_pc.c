@@ -2239,11 +2239,13 @@ static int __devinit sio_via_686a_probe (struct pci_dev *pdev)
 	irq = ((irq >> 4) & 0x0F);
 
 	/* filter bogus IRQs */
+	/* 255 means NONE, and is bogus as well */
 	switch (irq) {
 	case 0:
 	case 2:
 	case 8:
 	case 13:
+	case 255:
 		irq = PARPORT_IRQ_NONE;
 		break;
 
@@ -2252,7 +2254,9 @@ static int __devinit sio_via_686a_probe (struct pci_dev *pdev)
 	}
 
 	/* if ECP not enabled, DMA is not enabled, assumed bogus 'dma' value */
-	if (!have_eppecp)
+	/* 255 means NONE. Looks like some BIOS don't set the DMA correctly
+	 * even on ECP mode */
+	if (!have_eppecp || dma == 255)
 		dma = PARPORT_DMA_NONE;
 
 	/* finally, do the probe with values obtained */

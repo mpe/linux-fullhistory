@@ -58,7 +58,6 @@ struct adb_driver {
 	int (*probe)(void);
 	int (*init)(void);
 	int (*send_request)(struct adb_request *req, int sync);
-	/*int (*write)(struct adb_request *req);*/
 	int (*autopoll)(int devs);
 	void (*poll)(void);
 	int (*reset_bus)(void);
@@ -83,6 +82,7 @@ int adb_request(struct adb_request *req, void (*done)(struct adb_request *),
 		int flags, int nbytes, ...);
 int adb_register(int default_id,int handler_id,struct adb_ids *ids,
 		 void (*handler)(unsigned char *, int, struct pt_regs *, int));
+int adb_unregister(int index);
 void adb_poll(void);
 void adb_input(unsigned char *, int, struct pt_regs *, int);
 int adb_reset_bus(void);

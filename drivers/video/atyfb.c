@@ -20,6 +20,8 @@
  *  This file is subject to the terms and conditions of the GNU General Public
  *  License. See the file COPYING in the main directory of this archive for
  *  more details.
+ *  
+ *  Many thanks to Nitya from ATI devrel for support and patience !
  */
 
 /******************************************************************************
@@ -73,6 +75,10 @@
 #ifdef CONFIG_NVRAM
 #include <linux/nvram.h>
 #endif
+#ifdef CONFIG_PMAC_BACKLIGHT
+#include <asm/backlight.h>
+#endif
+
 #ifdef __sparc__
 #include <asm/pbm.h>
 #include <asm/fbio.h>
@@ -286,6 +292,15 @@ struct fb_info_aty {
   static struct fb_info_aty* first_display = NULL;
 #endif
 
+#ifdef CONFIG_PMAC_BACKLIGHT
+static int aty_set_backlight_enable(int on, int level, void* data);
+static int aty_set_backlight_level(int level, void* data);
+
+static struct backlight_controller aty_backlight_controller = {
+	aty_set_backlight_enable,
+	aty_set_backlight_level
+};
+#endif /* CONFIG_PMAC_BACKLIGHT */
 
     /*
      *  Frame buffer device API
@@ -556,6 +571,8 @@ static struct aty_features {
     { 0x4749, 0x4749, "3D RAGE PRO (BGA, PCI)" },
     { 0x4750, 0x4750, "3D RAGE PRO (PQFP, PCI)" },
     { 0x4751, 0x4751, "3D RAGE PRO (PQFP, PCI, limited 3D)" },
+    { 0x4c4d, 0x4c4d, "3D RAGE Mobility (PCI)" },
+    { 0x4c4e, 0x4c4e, "3D RAGE Mobility (AGP)" },
 };
 
 static const char *aty_gx_ram[8] __initdata = {
@@ -567,48 +584,51 @@ static const char *aty_ct_ram[8] __initdata = {
 };
 
 
-static inline u32 aty_ld_le32(unsigned int regindex,
+static inline u32 aty_ld_le32(int regindex,
 			      const struct fb_info_aty *info)
 {
-#if defined(__powerpc__)
-    unsigned long temp;
-    u32 val;
+    /* Hack for bloc 1, should be cleanly optimized by compiler */
+    if (regindex >= 0x400)
+    	regindex -= 0x800;
 
-    temp = info->ati_regbase;
-    asm volatile("lwbrx %0,%1,%2;eieio" : "=r"(val) : "b" (regindex), "r" (temp));
-    return val;
-#elif defined(__mc68000__)
+#if defined(__mc68000__)
     return le32_to_cpu(*((volatile u32 *)(info->ati_regbase+regindex)));
 #else
     return readl (info->ati_regbase + regindex);
 #endif
 }
 
-static inline void aty_st_le32(unsigned int regindex, u32 val,
+static inline void aty_st_le32(int regindex, u32 val,
 			       const struct fb_info_aty *info)
 {
-#if defined(__powerpc__)
-    unsigned long temp;
+    /* Hack for bloc 1, should be cleanly optimized by compiler */
+    if (regindex >= 0x400)
+    	regindex -= 0x800;
 
-    temp = info->ati_regbase;
-    asm volatile("stwbrx %0,%1,%2;eieio" : : "r" (val), "b" (regindex), "r" (temp) :
-	"memory");
-#elif defined(__mc68000__)
+#if defined(__mc68000__)
     *((volatile u32 *)(info->ati_regbase+regindex)) = cpu_to_le32(val);
 #else
     writel (val, info->ati_regbase + regindex);
 #endif
 }
 
-static inline u8 aty_ld_8(unsigned int regindex,
+static inline u8 aty_ld_8(int regindex,
 			  const struct fb_info_aty *info)
 {
+    /* Hack for bloc 1, should be cleanly optimized by compiler */
+    if (regindex >= 0x400)
+    	regindex -= 0x800;
+
     return readb (info->ati_regbase + regindex);
 }
 
-static inline void aty_st_8(unsigned int regindex, u8 val,
+static inline void aty_st_8(int regindex, u8 val,
 			    const struct fb_info_aty *info)
 {
+    /* Hack for bloc 1, should be cleanly optimized by compiler */
+    if (regindex >= 0x400)
+    	regindex -= 0x800;
+
     writeb (val, info->ati_regbase + regindex);
 }
 
@@ -675,6 +695,16 @@ static void reset_engine(const struct fb_info_aty *info)
 			  BUS_FIFO_ERR_ACK, info);
 }
 
+static void reset_GTC_3D_engine(const struct fb_info_aty *info)
+{
+	aty_st_le32(SCALE_3D_CNTL, 0xc0, info);
+	mdelay(GTC_3D_RESET_DELAY);
+	aty_st_le32(SETUP_CNTL, 0x00, info);
+	mdelay(GTC_3D_RESET_DELAY);
+	aty_st_le32(SCALE_3D_CNTL, 0x00, info);
+	mdelay(GTC_3D_RESET_DELAY);
+}
+
 static void init_engine(const struct atyfb_par *par, struct fb_info_aty *info)
 {
     u32 pitch_value;
@@ -687,6 +717,13 @@ static void init_engine(const struct atyfb_par *par, struct fb_info_aty *info)
 	/* horizontal coordinates and widths must be adjusted */
 	pitch_value = pitch_value * 3;
     }
+
+    /* On GTC (RagePro), we need to reset the 3D engine before */
+    if (Gx == LB_CHIP_ID || Gx == LD_CHIP_ID || Gx == LI_CHIP_ID ||
+    	Gx == LP_CHIP_ID || Gx == GB_CHIP_ID || Gx == GD_CHIP_ID ||
+    	Gx == GI_CHIP_ID || Gx == GP_CHIP_ID || Gx == GQ_CHIP_ID ||
+    	Gx == LM_CHIP_ID || Gx == LN_CHIP_ID)
+    	reset_GTC_3D_engine(info);
 
     /* Reset engine, enable, and clear any engine errors */
     reset_engine(info);
@@ -2494,6 +2531,9 @@ static void atyfb_set_par(const struct atyfb_par *par,
 	} else if ((Gx == VT_CHIP_ID) || (Gx == VU_CHIP_ID)) {
 	    aty_st_le32(DAC_CNTL, 0x87010184, info);
 	    aty_st_le32(BUS_CNTL, 0x680000f9, info);
+	}  else if ((Gx == LN_CHIP_ID) || (Gx == LM_CHIP_ID)) {
+	    aty_st_le32(DAC_CNTL, 0x80010102, info);
+	    aty_st_le32(BUS_CNTL, 0x7b33a040, info);
 	} else {
 	    /* GT */
 	    aty_st_le32(DAC_CNTL, 0x86010102, info);
@@ -3375,6 +3415,10 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
 		/* Rage LT */
 		pll = 230;
 		mclk = 63;
+	    } else if ((Gx == LN_CHIP_ID) || (Gx == LM_CHIP_ID)) {
+	    	/* Rage mobility M1 */
+	    	pll = 230;
+	    	mclk = 50;
 	    } else {
 		/* other RAGE */
 		pll = 135;
@@ -3545,13 +3589,15 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
     info->fb_info.blank = &atyfbcon_blank;
     info->fb_info.flags = FBINFO_FLAG_DEFAULT;
 
-#ifdef CONFIG_PPC
+#ifdef CONFIG_PMAC_BACKLIGHT
     if (Gx == LI_CHIP_ID && machine_is_compatible("PowerBook1,1")) {
 	/* these bits let the 101 powerbook wake up from sleep -- paulus */
 	aty_st_lcd(LCD_POWER_MANAGEMENT, aty_ld_lcd(LCD_POWER_MANAGEMENT, info)
 		| (USE_F32KHZ | TRISTATE_MEM_EN), info);
     }
-#endif /* CONFIG_PPC */
+    if ((Gx == LN_CHIP_ID) || (Gx == LM_CHIP_ID))
+	register_backlight_controller(&aty_backlight_controller, info, "ati");
+#endif /* CONFIG_PMAC_BACKLIGHT */
 
 #ifdef MODULE
     var = default_var;
@@ -3580,6 +3626,9 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
 			default_vmode = VMODE_1024_768_60;
 		    else if (machine_is_compatible("iMac"))
 			default_vmode = VMODE_1024_768_75;
+		    else if (machine_is_compatible("PowerBook2,1"))
+			/* iBook with 800x600 LCD */
+			default_vmode = VMODE_800_600_60;
 		    else
 			default_vmode = VMODE_640_480_67;
 		    sense = read_aty_sense(info);
@@ -4216,10 +4265,10 @@ static void atyfbcon_blank(int blank, struct fb_info *fb)
     struct fb_info_aty *info = (struct fb_info_aty *)fb;
     u8 gen_cntl;
 
-#ifdef CONFIG_ADB_PMU
+#ifdef CONFIG_PMAC_BACKLIGHT
     if ((_machine == _MACH_Pmac) && blank)
-    	pmu_enable_backlight(0);
-#endif
+    	set_backlight_enable(0);
+#endif /* CONFIG_PMAC_BACKLIGHT */
 
     gen_cntl = aty_ld_8(CRTC_GEN_CNTL, info);
     if (blank > 0)
@@ -4241,10 +4290,10 @@ static void atyfbcon_blank(int blank, struct fb_info *fb)
 	gen_cntl &= ~(0x4c);
     aty_st_8(CRTC_GEN_CNTL, gen_cntl, info);
 
-#ifdef CONFIG_ADB_PMU
+#ifdef CONFIG_PMAC_BACKLIGHT
     if ((_machine == _MACH_Pmac) && !blank)
-    	pmu_enable_backlight(1);
-#endif
+    	set_backlight_enable(1);
+#endif /* CONFIG_PMAC_BACKLIGHT */
 }
 
 
@@ -4954,6 +5003,40 @@ aty_sleep_notify(struct pmu_sleep_notifier *self, int when)
 	return result;
 }
 #endif /* CONFIG_PMAC_PBOOK */
+
+#ifdef CONFIG_PMAC_BACKLIGHT
+static int backlight_conv[] = {
+	0x00, 0x3f, 0x4c, 0x59, 0x66, 0x73, 0x80, 0x8d,
+	0x9a, 0xa7, 0xb4, 0xc1, 0xcf, 0xdc, 0xe9, 0xff
+};
+
+static int
+aty_set_backlight_enable(int on, int level, void* data)
+{
+	struct fb_info_aty *info = (struct fb_info_aty *)data;
+	unsigned int reg = aty_ld_lcd(LCD_MISC_CNTL, info);
+	
+	reg |= (BLMOD_EN | BIASMOD_EN);
+	if (on && level > BACKLIGHT_OFF) {
+		reg &= ~BIAS_MOD_LEVEL_MASK;
+		reg |= (backlight_conv[level] << BIAS_MOD_LEVEL_SHIFT);
+	} else {
+		reg &= ~BIAS_MOD_LEVEL_MASK;
+		reg |= (backlight_conv[0] << BIAS_MOD_LEVEL_SHIFT);
+	}
+	aty_st_lcd(LCD_MISC_CNTL, reg, info);
+
+	return 0;
+}
+
+static int
+aty_set_backlight_level(int level, void* data)
+{
+	return aty_set_backlight_enable(1, level, data);
+}
+
+#endif /* CONFIG_PMAC_BACKLIGHT */
+
 
 #ifdef MODULE
 int __init init_module(void)

@@ -393,6 +393,15 @@ adb_register(int default_id, int handler_id, struct adb_ids *ids,
 	return ids->nids;
 }
 
+int
+adb_unregister(int index)
+{
+	if (!adb_handler[index].handler)
+		return -ENODEV;
+	adb_handler[index].handler = 0;
+	return 0;
+}
+
 void
 adb_input(unsigned char *buf, int nb, struct pt_regs *regs, int autopoll)
 {

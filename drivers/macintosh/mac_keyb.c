@@ -51,6 +51,10 @@
 #include <linux/kbd_kern.h>
 #include <linux/kbd_ll.h>
 
+#ifdef CONFIG_PMAC_BACKLIGHT
+#include <asm/backlight.h>
+#endif
+
 #define KEYB_KEYREG	0	/* register # for key up/down data */
 #define KEYB_LEDREG	2	/* register # for leds on ADB keyboard */
 #define MOUSE_DATAREG	0	/* reg# for movement/button codes from mouse */
@@ -585,68 +589,50 @@ mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 }
 #endif /* CONFIG_ADBMOUSE */
 
-/* XXX Needs to get rid of this, see comments in pmu.c */
-extern int backlight_level;
-
 static void
 buttons_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 {
-#ifdef CONFIG_ADB_PMU
+#ifdef CONFIG_PMAC_BACKLIGHT
+	int backlight = get_backlight_level();
+
 	/*
 	 * XXX: Where is the contrast control for the passive?
 	 *  -- Cort
 	 */
 
 	/* Ignore data from register other than 0 */
-#if 0
-	if ((adb_hardware != ADB_VIAPMU) || (data[0] & 0x3) || (nb < 2))
-#else
 	if ((data[0] & 0x3) || (nb < 2))
-#endif
 		return;
 
-	switch (data[1]&0xf )
-	{
-		/* mute */
-		case 0x8:
-			/* down event */
-			if ( data[1] == (data[1]&0xf) ) {
-			}
+	switch (data[1]) {
+	case 0x8:		/* mute */
+		break;
+
+	case 0x7:		/* contrast decrease */
+		break;
+
+	case 0x6:		/* contrast increase */
+		break;
+
+	case 0xa:		/* brightness decrease */
+		if (backlight < 0)
 			break;
-		/* contrast decrease */
-		case 0x7:
-			/* down event */
-			if ( data[1] == (data[1]&0xf) ) {
-			}
+		if (backlight > BACKLIGHT_OFF)
+			set_backlight_level(backlight-1);
+		else
+			set_backlight_level(BACKLIGHT_OFF);
+		break;
+
+	case 0x9:		/* brightness increase */
+		if (backlight < 0)
 			break;
-		/* contrast increase */
-		case 0x6:
-			/* down event */
-			if ( data[1] == (data[1]&0xf) ) {
-			}
-			break;
-		/* brightness decrease */
-		case 0xa:
-			/* down event */
-			if ( data[1] == (data[1]&0xf) ) {
-				if (backlight_level > 2)
-					pmu_set_brightness(backlight_level-2);
-				else
-					pmu_set_brightness(0);
-			}
-			break;
-		/* brightness increase */
-		case 0x9:
-			/* down event */
-			if ( data[1] == (data[1]&0xf) ) {
-				if (backlight_level < 0x1e)
-					pmu_set_brightness(backlight_level+2);
-				else
-					pmu_set_brightness(0x1f);
-			}
-			break;
+		if (backlight < BACKLIGHT_MAX)
+			set_backlight_level(backlight+1);
+		else 
+			set_backlight_level(BACKLIGHT_MAX);
+		break;
 	}
-#endif /* CONFIG_ADB_PMU */
+#endif /* CONFIG_PMAC_BACKLIGHT */
 }
 
 /* Map led flags as defined in kbd_kern.h to bits for Apple keyboard. */

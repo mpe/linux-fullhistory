@@ -188,7 +188,7 @@ extern struct x25_neigh *x25_get_neigh(struct net_device *);
 extern void x25_link_free(void);
 
 /* x25_out.c */
-extern void x25_output(struct sock *, struct sk_buff *);
+extern  int x25_output(struct sock *, struct sk_buff *);
 extern void x25_kick(struct sock *);
 extern void x25_enquiry_response(struct sock *);
 

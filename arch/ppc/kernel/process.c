@@ -234,7 +234,6 @@ _switch_to(struct task_struct *prev, struct task_struct *new,
 	     prev->thread.vrsave )
 		giveup_altivec(prev);
 #endif /* CONFIG_ALTIVEC */	
-	prev->last_processor = prev->processor;
 	current_set[smp_processor_id()] = new;
 #endif /* CONFIG_SMP */
 	/* Avoid the trap.  On smp this this never happens since
@@ -266,7 +265,7 @@ void show_regs(struct pt_regs * regs)
 	       last_task_used_altivec);
 	
 #ifdef CONFIG_SMP
-	printk(" CPU: %d last CPU: %d", current->processor,current->last_processor);
+	printk(" CPU: %d", current->processor);
 #endif /* CONFIG_SMP */
 	
 	printk("\n");
@@ -379,9 +378,6 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	childregs->msr &= ~MSR_VEC;
 #endif /* CONFIG_ALTIVEC */
 
-#ifdef CONFIG_SMP
-	p->last_processor = NO_PROC_ID;
-#endif /* CONFIG_SMP */
 	return 0;
 }
 
@@ -441,8 +437,8 @@ void start_thread(struct pt_regs *regs, unsigned long nip, unsigned long sp)
 	current->thread.fpscr = 0;
 }
 
-asmlinkage int sys_clone(int p1, int p2, int p3, int p4, int p5, int p6,
-			 struct pt_regs *regs)
+int sys_clone(int p1, int p2, int p3, int p4, int p5, int p6,
+	      struct pt_regs *regs)
 {
 	unsigned long clone_flags = p1;
 	int res;
@@ -460,8 +456,8 @@ asmlinkage int sys_clone(int p1, int p2, int p3, int p4, int p5, int p6,
 	return res;
 }
 
-asmlinkage int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6,
-			struct pt_regs *regs)
+int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6,
+	     struct pt_regs *regs)
 {
 
 	int res;
@@ -478,15 +474,15 @@ asmlinkage int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6,
 	return res;
 }
 
-asmlinkage int sys_vfork(int p1, int p2, int p3, int p4, int p5, int p6,
-			 struct pt_regs *regs)
+int sys_vfork(int p1, int p2, int p3, int p4, int p5, int p6,
+	      struct pt_regs *regs)
 {
 	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs->gpr[1], regs, 0);
 }
 
-asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
-			  unsigned long a3, unsigned long a4, unsigned long a5,
-			  struct pt_regs *regs)
+int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
+	       unsigned long a3, unsigned long a4, unsigned long a5,
+	       struct pt_regs *regs)
 {
 	int error;
 	char * filename;

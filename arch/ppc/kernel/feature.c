@@ -24,6 +24,8 @@
 #include <asm/errno.h>
 #include <asm/ohare.h>
 #include <asm/heathrow.h>
+#include <asm/keylargo.h>
+#include <asm/uninorth.h>
 #include <asm/io.h>
 #include <asm/prom.h>
 #include <asm/feature.h>
@@ -33,6 +35,20 @@
 #define MAX_FEATURE_CONTROLLERS		2
 #define MAX_FEATURE_OFFSET		0x100
 #define FREG(c,r)			(&(((c)->reg)[(r)>>2]))
+
+/* Keylargo reg. access. */
+#define KL_FCR(r)	(keylargo_base + ((r) >> 2))
+#define KL_IN(r)	(in_le32(KL_FCR(r)))
+#define KL_OUT(r,v)	(out_le32(KL_FCR(r), (v)))
+#define KL_BIS(r,v)	(KL_OUT((r), KL_IN(r) | (v)))
+#define KL_BIC(r,v)	(KL_OUT((r), KL_IN(r) & ~(v)))
+
+/* Uni-N reg. access. Note that Uni-N regs are big endian */
+#define UN_REG(r)	(uninorth_base + ((r) >> 2))
+#define UN_IN(r)	(in_be32(UN_REG(r)))
+#define UN_OUT(r,v)	(out_be32(UN_REG(r), (v)))
+#define UN_BIS(r,v)	(UN_OUT((r), UN_IN(r) | (v)))
+#define UN_BIC(r,v)	(UN_OUT((r), UN_IN(r) & ~(v)))
 
 typedef struct feature_bit {
 	int		reg;		/* reg. offset from mac-io base */
@@ -74,10 +90,44 @@ static fbit feature_bits_ohare_pbook[] = {
 	{0x38,0,0},			/* FEATURE_Airport_reset */
 };
 
-/* Those bits are from a PowerBook. It's possible that desktop machines
- * based on heathrow need a different definition or some bits removed
+/* Those bits concern heathrow-based desktop machines (Beige G3s). We have removed
+ * the SCC related bits and init them once. They have proven to occasionally cause
+ * problems with the desktop units.
  */
 static fbit feature_bits_heathrow[] = {
+	{0x38,0,0},			/* FEATURE_null */
+	{0x38,0,0},			/* FEATURE_Serial_reset */
+	{0x38,0,0},			/* FEATURE_Serial_enable */
+	{0x38,0,0},			/* FEATURE_Serial_IO_A */
+	{0x38,0,0},			/* FEATURE_Serial_IO_B */
+	{0x38,0,HRW_SWIM_ENABLE},	/* FEATURE_SWIM3_enable */
+	{0x38,0,HRW_MESH_ENABLE},	/* FEATURE_MESH_enable */
+	{0x38,0,HRW_IDE0_ENABLE},	/* FEATURE_IDE0_enable */
+	{0x38,1,HRW_IDE0_RESET_N},	/* FEATURE_IDE0_reset */
+	{0x38,0,HRW_IOBUS_ENABLE},	/* FEATURE_IOBUS_enable */
+	{0x38,1,0},			/* FEATURE_Mediabay_reset */
+	{0x38,1,0},			/* FEATURE_Mediabay_power */
+	{0x38,0,0},			/* FEATURE_Mediabay_PCI_enable */
+	{0x38,0,HRW_BAY_IDE_ENABLE},	/* FEATURE_IDE1_enable */
+	{0x38,1,HRW_IDE1_RESET_N},	/* FEATURE_IDE1_reset */
+	{0x38,0,0},			/* FEATURE_Mediabay_floppy_enable */
+	{0x38,0,HRW_BMAC_RESET},	/* FEATURE_BMac_reset */
+	{0x38,0,HRW_BMAC_IO_ENABLE},	/* FEATURE_BMac_IO_enable */
+	{0x38,1,0},			/* FEATURE_Modem_power */
+	{0x38,0,HRW_SLOW_SCC_PCLK},	/* FEATURE_Slow_SCC_PCLK */
+	{0x38,1,0},			/* FEATURE_Sound_Power */
+	{0x38,0,0},			/* FEATURE_Sound_CLK_Enable */
+	{0x38,0,0},			/* FEATURE_IDE2_enable */
+	{0x38,0,0},			/* FEATURE_IDE2_reset */
+	{0x38,0,0},			/* FEATURE_Mediabay_IDE_switch */
+	{0x38,0,0},			/* FEATURE_Mediabay_content */
+	{0x38,0,0},			/* FEATURE_Airport_reset */
+};
+
+/* Those bits concern heathrow-based PowerBooks (wallstreet/mainstreet).
+ * Heathrow-based desktop macs (Beige G3s) are _not_ handled here
+ */
+static fbit feature_bits_wallstreet[] = {
 	{0x38,0,0},			/* FEATURE_null */
 	{0x38,0,HRW_RESET_SCC},		/* FEATURE_Serial_reset */
 	{0x38,0,HRW_SCC_ENABLE},	/* FEATURE_Serial_enable */
@@ -145,32 +195,32 @@ static fbit feature_bits_paddington[] = {
  */
 static fbit feature_bits_keylargo[] = {
 	{0x38,0,0},			/* FEATURE_null */
-	{0x38,0,0},			/* FEATURE_Serial_reset */
-	{0x38,0,0x00000054},		/* FEATURE_Serial_enable */
-	{0x38,0,0},			/* FEATURE_Serial_IO_A */
-	{0x38,0,0},			/* FEATURE_Serial_IO_B */
+	{0x38,0,KL0_SCC_RESET},		/* FEATURE_Serial_reset */
+	{0x38,0,KL0_SERIAL_ENABLE},	/* FEATURE_Serial_enable */
+	{0x38,0,KL0_SCC_A_INTF_ENABLE},	/* FEATURE_Serial_IO_A */
+	{0x38,0,KL0_SCC_B_INTF_ENABLE},	/* FEATURE_Serial_IO_B */
 	{0x38,0,0},			/* FEATURE_SWIM3_enable */
 	{0x38,0,0},			/* FEATURE_MESH_enable */
 	{0x3c,0,0},			/* FEATURE_IDE0_enable */
- 	{0x3c,1,0x01000000},		/* FEATURE_IDE0_reset */
+ 	{0x3c,1,KL1_EIDE0_RESET_N},	/* FEATURE_IDE0_reset */
 	{0x38,0,0},			/* FEATURE_IOBUS_enable */
 	{0x34,1,0x00000200},		/* FEATURE_Mediabay_reset */
 	{0x34,1,0x00000400},		/* FEATURE_Mediabay_power */
 	{0x38,0,0},			/* FEATURE_Mediabay_PCI_enable */
 	{0x3c,0,0x0},			/* FEATURE_IDE1_enable */
-	{0x3c,1,0x08000000},		/* FEATURE_IDE1_reset */
+	{0x3c,1,KL1_EIDE1_RESET_N},	/* FEATURE_IDE1_reset */
 	{0x38,0,0},			/* FEATURE_Mediabay_floppy_enable */
 	{0x38,0,0},			/* FEATURE_BMac_reset */
 	{0x38,0,0},			/* FEATURE_BMac_IO_enable */
-	{0x40,1,0x02000000},		/* FEATURE_Modem_power */
+	{0x40,1,KL2_MODEM_POWER_N},	/* FEATURE_Modem_power */
 	{0x38,0,0},			/* FEATURE_Slow_SCC_PCLK */
 	{0x38,0,0},			/* FEATURE_Sound_Power */
 	{0x38,0,0},			/* FEATURE_Sound_CLK_Enable */
 	{0x38,0,0},			/* FEATURE_IDE2_enable */
-	{0x3c,1,0x40000000},		/* FEATURE_IDE2_reset */
-	{0x34,0,0x00001000},		/* FEATURE_Mediabay_IDE_switch */
+	{0x3c,1,KL1_UIDE_RESET_N},	/* FEATURE_IDE2_reset */
+	{0x34,0,KL_MBCR_MBDEV_ENABLE},	/* FEATURE_Mediabay_IDE_switch */
 	{0x34,0,0x00000100},		/* FEATURE_Mediabay_content */
-	{0x40,1,0x08000000},		/* FEATURE_Airport_reset */
+	{0x40,1,KL2_AIRPORT_RESET_N},	/* FEATURE_Airport_reset */
 };
 
 /* definition of a feature controller object */
@@ -190,6 +240,8 @@ feature_lookup_controller(struct device_node *device);
 
 static void heathrow_prepare_for_sleep(struct feature_controller* ctrler);
 static void heathrow_wakeup(struct feature_controller* ctrler);
+static void keylargo_init(void);
+static void uninorth_init(void);
 static void core99_prepare_for_sleep(struct feature_controller* ctrler);
 static void core99_wake_up(struct feature_controller* ctrler);
 
@@ -228,8 +280,15 @@ feature_init(void)
 			}
 		} else if (device_is_compatible(np, "paddington")) {
 			feature_add_controller(np, feature_bits_paddington);
+		} else if (machine_is_compatible("AAPL,PowerBook1998")) {
+			feature_add_controller(np, feature_bits_wallstreet);
 		} else {
-			feature_add_controller(np, feature_bits_heathrow);
+			struct feature_controller* ctrler =
+				feature_add_controller(np, feature_bits_heathrow);
+			if (ctrler)
+				out_le32(FREG(ctrler,HEATHROW_FEATURE_REG),
+					in_le32(FREG(ctrler,HEATHROW_FEATURE_REG)) | HRW_DEFAULTS);
+			
 		}
 		np = np->next;
 	}
@@ -249,13 +308,16 @@ feature_init(void)
 	np = find_devices("uni-n");
 	if (np && np->n_addrs > 0) {
 		uninorth_base = ioremap(np->addrs[0].address, 0x1000);
-		rev = (u32 *)get_property(np, "device-rev", NULL);
-		if (rev)
-			uninorth_rev = *rev;
+		uninorth_rev = in_be32(UN_REG(UNI_N_VERSION));
 	}
 	if (uninorth_base && keylargo_base)
 		printk("Uni-N revision: %d, KeyLargo revision: %d\n",
 			uninorth_rev, keylargo_rev);
+
+	if (uninorth_base)
+		uninorth_init();
+	if (keylargo_base)
+		keylargo_init();
 
 	if (controller_count)
 		printk(KERN_INFO "Registered %d feature controller(s)\n", controller_count);
@@ -440,12 +502,19 @@ feature_set_gmac_power(struct device_node* device, int power)
 	if (!uninorth_base)
 		return;
 	if (power)
-		out_le32(uninorth_base + 0x20/4,
-			in_le32(uninorth_base + 0x20/4) | 0x02000000);
+		UN_BIS(UNI_N_CLOCK_CNTL, UNI_N_CLOCK_CNTL_GMAC);
 	else
-		out_le32(uninorth_base + 0x20/4,
-			in_le32(uninorth_base + 0x20/4) & ~0x02000000);
+		UN_BIC(UNI_N_CLOCK_CNTL, UNI_N_CLOCK_CNTL_GMAC);
 	udelay(20);
+}
+
+void
+feature_set_gmac_phy_reset(struct device_node* device, int reset)
+{
+	if (!keylargo_base)
+		return;
+	out_8((volatile u8 *)KL_FCR(KL_GPIO_ETH_PHY_RESET), reset);
+	(void)in_8((volatile u8 *)KL_FCR(KL_GPIO_ETH_PHY_RESET));
 }
 
 /* Pass the node of the correct controller, please */
@@ -460,6 +529,53 @@ feature_set_firewire_power(struct device_node* device, int power)
 {
 }
 
+/* Initialize the Core99 UniNorth host bridge and memory controller
+ */
+static void
+uninorth_init(void)
+{
+	struct device_node* gmac;
+	unsigned long actrl;
+	
+	/* Set the arbitrer QAck delay according to what Apple does
+	 */
+	actrl = in_be32(UN_REG(UNI_N_ARB_CTRL)) & ~UNI_N_ARB_CTRL_QACK_DELAY_MASK;
+	actrl |= ((uninorth_rev < 3) ? UNI_N_ARB_CTRL_QACK_DELAY105 : UNI_N_ARB_CTRL_QACK_DELAY)
+		<< UNI_N_ARB_CTRL_QACK_DELAY_SHIFT;
+	UN_OUT(UNI_N_ARB_CTRL, actrl);
+	
+	/* 
+	 * Turns OFF the gmac clock. The gmac driver will turn
+	 * it back ON when the interface is enabled. This save
+	 * power on portables.
+	 * 
+	 * Note: We could also try to turn OFF the PHY. Since this
+	 * has to be done by both the gmac driver and this code,
+	 * I'll probably end-up moving some of this out of the
+	 * modular gmac driver into a non-modular stub containing
+	 * some basic PHY management and power management stuffs
+	 */
+	gmac = find_devices("ethernet");
+
+	while(gmac) {
+		if (device_is_compatible(gmac, "gmac"))
+			break;
+		gmac = gmac->next;
+	}
+	if (gmac)
+		feature_set_gmac_power(gmac, 0);
+}
+
+/* Initialize the Core99 KeyLargo ASIC. Currently, we just make sure
+ * OpenPIC is enabled
+ */
+static void
+keylargo_init(void)
+{
+	KL_BIS(KEYLARGO_FCR2, KL2_MPIC_ENABLE);
+}
+
+#ifdef CONFIG_PMAC_PBOOK
 void
 feature_prepare_for_sleep(void)
 {
@@ -506,27 +622,28 @@ feature_wake_up(void)
 	}
 }
 
-static u32 save_fcr0;
-//static u32 save_fcr1;
-//static u32 save_fcr2;
+static u32 save_fcr[5];
 static u32 save_mbcr;
 
 static void
 heathrow_prepare_for_sleep(struct feature_controller* ctrler)
 {
 	save_mbcr = in_le32(FREG(ctrler, 0x34));
-	save_fcr0 = in_le32(FREG(ctrler, 0x38));
+	save_fcr[0] = in_le32(FREG(ctrler, 0x38));
+	save_fcr[1] = in_le32(FREG(ctrler, 0x3c));
 
-	out_le32(FREG(ctrler, 0x38), save_fcr0 & ~HRW_IOBUS_ENABLE);
+	out_le32(FREG(ctrler, 0x38), save_fcr[0] & ~HRW_IOBUS_ENABLE);
 }
 
 static void
 heathrow_wakeup(struct feature_controller* ctrler)
 {
-	out_le32(FREG(ctrler, 0x38), save_fcr0);
+	out_le32(FREG(ctrler, 0x38), save_fcr[0]);
+	out_le32(FREG(ctrler, 0x3c), save_fcr[1]);
 	out_le32(FREG(ctrler, 0x34), save_mbcr);
-
-	out_le32(FREG(ctrler, 0x38), save_fcr0 | HRW_IOBUS_ENABLE);
+	mdelay(1);
+	out_le32(FREG(ctrler, 0x38), save_fcr[0] | HRW_IOBUS_ENABLE);
+	mdelay(1);
 }
 
 static void
@@ -540,4 +657,4 @@ core99_wake_up(struct feature_controller* ctrler)
 {
 	/* Not yet implemented */
 }
-
+#endif /* CONFIG_PMAC_PBOOK */

@@ -2509,7 +2509,7 @@ VOID SetupFinish (PADAPTER2220I padapter, char *str, int irq)
 	init_timer (&padapter->reconTimer);
 	padapter->reconTimer.function = ReconTimerExpiry;
 	padapter->reconTimer.data = (unsigned long)padapter;
-	printk("\nPCI-%sI EIDE CONTROLLER: at I/O = %lX/%lX  IRQ = %ld\n", str, padapter->basePort, padapter->regBase, irq);
+	printk("\nPCI-%sI EIDE CONTROLLER: at I/O = %lX/%lX  IRQ = %d\n", str, padapter->basePort, padapter->regBase, irq);
 	printk("Version %s, Compiled %s %s\n\n", PCI2220I_VERSION, __DATE__, __TIME__);
 	}	
 /****************************************************************

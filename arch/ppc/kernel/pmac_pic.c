@@ -204,17 +204,12 @@ pmac_get_irq(struct pt_regs *regs)
 	unsigned long bits = 0;
 
 #ifdef CONFIG_SMP
-	void pmac_smp_message_recv(void);
+	void pmac_smp_message_recv(struct pt_regs *);
 	
         /* IPI's are a hack on the powersurge -- Cort */
         if ( smp_processor_id() != 0 )
         {
-#ifdef CONFIG_XMON
-		static int xmon_2nd;
-		if (xmon_2nd)
-			xmon(regs);
-#endif
-		pmac_smp_message_recv();
+		pmac_smp_message_recv(regs);
 		return -2;	/* ignore, already handled */
         }
 #endif /* CONFIG_SMP */

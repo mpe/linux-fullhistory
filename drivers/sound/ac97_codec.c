@@ -48,6 +48,7 @@ static int ac97_mixer_ioctl(struct ac97_codec *codec, unsigned int cmd, unsigned
 static int ac97_init_mixer(struct ac97_codec *codec);
 
 static int sigmatel_init(struct ac97_codec *codec);
+static int enable_eapd(struct ac97_codec *codec);
 
 #define arraysize(x)   (sizeof(x)/sizeof((x)[0]))
 
@@ -58,11 +59,14 @@ static struct {
 } ac97_codec_ids[] = {
 	{0x414B4D00, "Asahi Kasei AK4540"     , NULL},
 	{0x41445340, "Analog Devices AD1881"  , NULL},
+	{0x41445360, "Analog Devices AD1885"  , enable_eapd},
 	{0x43525900, "Cirrus Logic CS4297"    , NULL},
 	{0x43525903, "Cirrus Logic CS4297"  ,	NULL},
 	{0x43525913, "Cirrus Logic CS4297A"   , NULL},
 	{0x43525923, "Cirrus Logic CS4298"    , NULL},
+	{0x4352592B, "Cirrus Logic CS4294"    , NULL},
 	{0x43525931, "Cirrus Logic CS4299"    , NULL},
+	{0x43525934, "Cirrus Logic CS4299"    , NULL},
 	{0x4e534331, "National Semiconductor LM4549" ,	NULL},
 	{0x53494c22, "Silicon Laboratory Si3036"     ,	NULL},
 	{0x53494c23, "Silicon Laboratory Si3038"     ,  NULL},
@@ -562,8 +566,10 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	/* also according to spec, we wait for codec-ready state */	
 	if (codec->codec_wait)
 		codec->codec_wait(codec);
-	else
+	else {
+		current->state = TASK_UNINTERRUPTIBLE;
 		schedule_timeout(5);
+	}
 
 	if ((audio = codec->codec_read(codec, AC97_RESET)) & 0x8000) {
 		printk(KERN_ERR "ac97_codec: %s ac97 codec not present\n",
@@ -582,6 +588,7 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	id2 = codec->codec_read(codec, AC97_VENDOR_ID2);
 	for (i = 0; i < arraysize(ac97_codec_ids); i++) {
 		if (ac97_codec_ids[i].id == ((id1 << 16) | id2)) {
+			codec->id = ac97_codec_ids[i].id;
 			codec->name = ac97_codec_ids[i].name;
 			codec->codec_init = ac97_codec_ids[i].init;
 			break;
@@ -659,6 +666,18 @@ static int sigmatel_init(struct ac97_codec * codec)
 
 	return 1;
 }
+
+/*
+ *	Bring up an AD1885
+ */
+ 
+static int enable_eapd(struct ac97_codec * codec)
+{
+	codec->codec_write(codec, AC97_POWER_CONTROL,
+		codec->codec_read(codec, AC97_POWER_CONTROL)|0x8000);
+	return 0;
+}
+	
 
 EXPORT_SYMBOL(ac97_read_proc);
 EXPORT_SYMBOL(ac97_probe_codec);

@@ -372,8 +372,9 @@ static unsigned int help(struct ip_conntrack *ct,
 		newseq = ntohl(tcph->seq) + ftp[dir].syn_offset_before;
 	newseq = htonl(newseq);
 
-	/* Ack adjust */
-	if (after(ntohl(tcph->ack_seq), ftp[!dir].syn_correction_pos))
+	/* Ack adjust: other dir sees offset seq numbers */
+	if (after(ntohl(tcph->ack_seq) - ftp[!dir].syn_offset_before, 
+		  ftp[!dir].syn_correction_pos))
 		newack = ntohl(tcph->ack_seq) - ftp[!dir].syn_offset_after;
 	else
 		newack = ntohl(tcph->ack_seq) - ftp[!dir].syn_offset_before;

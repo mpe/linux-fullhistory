@@ -1030,6 +1030,7 @@ static int __init dec_lance_init(struct net_device *dev, const int type)
 	/* Make certain the data structures used by the LANCE are aligned. */
 	dev->priv = (void *) (((unsigned long) dev->priv + 7) & ~7);
 	lp = (struct lance_private *) dev->priv;
+	spin_lock_init(&lp->lock);
 
 	switch (type) {
 #ifdef CONFIG_TC
@@ -1193,9 +1194,9 @@ static int __init dec_lance_init(struct net_device *dev, const int type)
 	lp->multicast_timer.function = &lance_set_multicast_retry;
 
 #ifdef MODULE
-   dev->ifindex = dev_new_index();
-   lp->next_module = root_lance_dev;
-   root_lance_dev = lp;
+	dev->ifindex = dev_new_index();
+	lp->next_module = root_lance_dev;
+	root_lance_dev = lp;
 #endif
 	return 0;
 }

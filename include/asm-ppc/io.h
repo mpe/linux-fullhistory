@@ -25,12 +25,12 @@
 #include <asm/mpc8xx.h>
 #elif defined(CONFIG_8260)
 #include <asm/mpc8260.h>
-#else
+#else /* 4xx/8xx/8260 */
 #ifdef CONFIG_APUS
 #define _IO_BASE 0
 #define _ISA_MEM_BASE 0
 #define PCI_DRAM_OFFSET 0
-#else
+#else /* CONFIG_APUS */
 extern unsigned long isa_io_base;
 extern unsigned long isa_mem_base;
 extern unsigned long pci_dram_offset;
@@ -54,6 +54,14 @@ extern unsigned long pci_dram_offset;
 #define writel(b,addr) out_le32((volatile u32 *)(addr),(b))
 #endif
 
+
+#define __raw_readb(addr)	(*(volatile unsigned char *)(addr))
+#define __raw_readw(addr)	(*(volatile unsigned short *)(addr))
+#define __raw_readl(addr)	(*(volatile unsigned int *)(addr))
+#define __raw_writeb(v, addr)	(*(volatile unsigned char *)(addr) = (v))
+#define __raw_writew(v, addr)	(*(volatile unsigned short *)(addr) = (v))
+#define __raw_writel(v, addr)	(*(volatile unsigned int *)(addr) = (v))
+
 /*
  * The insw/outsw/insl/outsl macros don't do byte-swapping.
  * They are only used in practice for transferring buffers which
@@ -67,26 +75,76 @@ extern unsigned long pci_dram_offset;
 #define insl(port, buf, nl)	_insl_ns((u32 *)((port)+_IO_BASE), (buf), (nl))
 #define outsl(port, buf, nl)	_outsl_ns((u32 *)((port)+_IO_BASE), (buf), (nl))
 
+#ifdef CONFIG_ALL_PPC
+/*
+ * We have to handle possible machine checks here on powermacs
+ * and potentially some CHRPs -- paulus.
+ */
+#define __do_in_asm(name, op)				\
+extern __inline__ unsigned int name(unsigned int port)	\
+{							\
+	unsigned int x;					\
+	__asm__ __volatile__(				\
+		op " %0,0,%1\n"				\
+		"1:	sync\n"				\
+		"2:\n"					\
+		".section .fixup,\"ax\"\n"		\
+		"3:	li	%0,-1\n"		\
+		"	b	2b\n"			\
+		".previous\n"				\
+		".section __ex_table,\"ax\"\n"		\
+		"	.align	2\n"			\
+		"	.long	1b,3b\n"		\
+		".previous"				\
+		: "=&r" (x)				\
+		: "r" (port + _IO_BASE));		\
+	return x;					\
+}
+
+#define __do_out_asm(name, op)				\
+extern __inline__ void name(unsigned int val, unsigned int port) \
+{							\
+	__asm__ __volatile__(				\
+		op " %0,0,%1\n"				\
+		"1:	sync\n"				\
+		"2:\n"					\
+		".section __ex_table,\"ax\"\n"		\
+		"	.align	2\n"			\
+		"	.long	1b,2b\n"		\
+		".previous"				\
+		: : "r" (val), "r" (port + _IO_BASE));	\
+}
+
+__do_in_asm(inb, "lbzx")
+__do_in_asm(inw, "lhbrx")
+__do_in_asm(inl, "lwbrx")
+__do_out_asm(outb, "stbx")
+__do_out_asm(outw, "sthbrx")
+__do_out_asm(outl, "stwbrx")
+
+#elif defined(CONFIG_APUS)
 #define inb(port)		in_8((u8 *)((port)+_IO_BASE))
 #define outb(val, port)		out_8((u8 *)((port)+_IO_BASE), (val))
-#if defined(CONFIG_APUS)
 #define inw(port)		in_be16((u16 *)((port)+_IO_BASE))
 #define outw(val, port)		out_be16((u16 *)((port)+_IO_BASE), (val))
 #define inl(port)		in_be32((u32 *)((port)+_IO_BASE))
 #define outl(val, port)		out_be32((u32 *)((port)+_IO_BASE), (val))
-#else
+
+#else /* not APUS or ALL_PPC */
+#define inb(port)		in_8((u8 *)((port)+_IO_BASE))
+#define outb(val, port)		out_8((u8 *)((port)+_IO_BASE), (val))
 #define inw(port)		in_le16((u16 *)((port)+_IO_BASE))
 #define outw(val, port)		out_le16((u16 *)((port)+_IO_BASE), (val))
 #define inl(port)		in_le32((u32 *)((port)+_IO_BASE))
 #define outl(val, port)		out_le32((u32 *)((port)+_IO_BASE), (val))
 #endif
 
-#define inb_p(port)		in_8((u8 *)((port)+_IO_BASE))
-#define outb_p(val, port)	out_8((u8 *)((port)+_IO_BASE), (val))
-#define inw_p(port)		in_le16((u16 *)((port)+_IO_BASE))
-#define outw_p(val, port)	out_le16((u16 *)((port)+_IO_BASE), (val))
-#define inl_p(port)		in_le32((u32 *)((port)+_IO_BASE))
-#define outl_p(val, port)	out_le32((u32 *)((port)+_IO_BASE), (val))
+#define inb_p(port)		inb((port))
+#define outb_p(val, port)	outb((val), (port))
+#define inw_p(port)		inw((port))
+#define outw_p(val, port)	outw((val), (port))
+#define inl_p(port)		inl((port))
+#define outl_p(val, port)	outl((val), (port))
 
 extern void _insb(volatile u8 *port, void *buf, int ns);
 extern void _outsb(volatile u8 *port, const void *buf, int ns);
@@ -123,6 +181,8 @@ extern void _outsl_ns(volatile u32 *port, const void *buf, int nl);
  */
 extern void *__ioremap(unsigned long address, unsigned long size,
 		       unsigned long flags);
+extern void *__ioremap_at(unsigned long phys, unsigned long size,
+			  unsigned long flags);
 extern void *ioremap(unsigned long address, unsigned long size);
 #define ioremap_nocache(addr, size)	ioremap((addr), (size))
 extern void iounmap(void *addr);

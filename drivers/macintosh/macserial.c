@@ -2291,7 +2291,7 @@ chan_init(struct mac_serial *zss, struct mac_zschannel *zs_chan,
 	zss->irq = ch->intrs[0].line;
 	zss->has_dma = 0;
 #if !defined(CONFIG_KGDB) && defined(SUPPORT_SERIAL_DMA)
-	if (ch->n_addrs == 3 && ch->n_intrs == 3)
+	if (ch->n_addrs >= 3 && ch->n_intrs == 3)
 		zss->has_dma = 1;
 #endif
 	zss->dma_initted = 0;
@@ -2643,9 +2643,6 @@ void unregister_serial(int line)
  * ------------------------------------------------------------
  */
 #ifdef CONFIG_SERIAL_CONSOLE
-#ifdef CONFIG_SERIAL
-#error Cannot build serial console with macserial and serial drivers
-#endif
 
 /*
  *	Print a string to the serial port trying not to disturb
@@ -2719,7 +2716,7 @@ static kdev_t serial_console_device(struct console *c)
  */
 static int __init serial_console_setup(struct console *co, char *options)
 {
-	struct mac_serial *info = zs_soft + co->index;
+	struct mac_serial *info;
 	int	baud = 38400;
 	int	bits = 8;
 	int	parity = 'n';
@@ -2734,6 +2731,11 @@ static int __init serial_console_setup(struct console *co, char *options)
 
 	if (zs_chain == 0)
 		return -1;
+
+	/* Do we have the device asked for? */
+	if (co->index >= zs_channels_found)
+		return -1;
+	info = zs_soft + co->index;
 
 	set_scc_power(info, 1);
 
@@ -2904,7 +2906,7 @@ static struct console sercons = {
 /*
  *	Register console.
  */
-void __init serial_console_init(void)
+void __init mac_scc_console_init(void)
 {
 	register_console(&sercons);
 }

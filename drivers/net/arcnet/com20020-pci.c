@@ -148,7 +148,7 @@ static struct pci_driver com20020pci_driver = {
 	remove:		com20020pci_remove
 };
 
-int com20020pci_init(void)
+static int __init com20020pci_init(void)
 {
 	BUGLVL(D_NORMAL) printk(VERSION);
 #ifndef MODULE
@@ -157,7 +157,7 @@ int com20020pci_init(void)
 	return pci_module_init(&com20020pci_driver);
 }
 
-void com20020pci_cleanup(void)
+static void __exit com20020pci_cleanup(void)
 {
 	pci_unregister_driver(&com20020pci_driver);
 }

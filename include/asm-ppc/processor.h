@@ -287,6 +287,7 @@
 #define	SPRN_UPMC3	0x3AD	/* User Performance Counter Register 3 */
 #define	SPRN_UPMC4	0x3AE	/* User Performance Counter Register 4 */
 #define	SPRN_USIA	0x3AB	/* User Sampled Instruction Address Register */
+#define SPRN_VRSAVE	0x100	/* Vector Register Save Register */
 #define	SPRN_XER	0x001	/* Fixed Point Exception Register */
 #define	SPRN_ZPR	0x3B0	/* Zone Protection Register */
 

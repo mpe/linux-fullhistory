@@ -35,6 +35,9 @@
 #include <asm/io.h>
 #include <asm/prom.h>
 #include <asm/pci-bridge.h>
+#ifdef CONFIG_PMAC_BACKLIGHT
+#include <asm/backlight.h>
+#endif
 #include <linux/adb.h>
 #include <linux/pmu.h>
 
@@ -245,7 +248,9 @@ static void chipsfb_blank(int blank, struct fb_info *info)
 	// used to disable backlight only for blank > 1, but it seems
 	// useful at blank = 1 too (saves battery, extends backlight life)
 	if (blank) {
-		pmu_enable_backlight(0);
+#ifdef CONFIG_PMAC_BACKLIGHT
+		set_backlight_enable(0);
+#endif /* CONFIG_PMAC_BACKLIGHT */
 		/* get the palette from the chip */
 		for (i = 0; i < 256; ++i) {
 			out_8(p->io_base + 0x3c7, i);
@@ -262,7 +267,9 @@ static void chipsfb_blank(int blank, struct fb_info *info)
 			out_8(p->io_base + 0x3c9, 0);
 		}
 	} else {
-		pmu_enable_backlight(1);
+#ifdef CONFIG_PMAC_BACKLIGHT
+		set_backlight_enable(1);
+#endif /* CONFIG_PMAC_BACKLIGHT */
 		for (i = 0; i < 256; ++i) {
 			out_8(p->io_base + 0x3c8, i);
 			udelay(1);
@@ -673,8 +680,10 @@ static void __init chips_of_init(struct device_node *dp)
 	/* Clear the entire framebuffer */
 	memset(p->frame_buffer, 0, 0x100000);
 
+#ifdef CONFIG_PMAC_BACKLIGHT
 	/* turn on the backlight */
-	pmu_enable_backlight(1);
+	set_backlight_enable(1);
+#endif /* CONFIG_PMAC_BACKLIGHT */
 
 	init_chips(p);
 }

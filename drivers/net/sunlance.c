@@ -1332,6 +1332,7 @@ static int __init sparc_lance_init(struct net_device *dev,
 	/* Make certain the data structures used by the LANCE are aligned. */
 	dev->priv = (void *)(((unsigned long)dev->priv + 7) & ~7);
 	lp = (struct lance_private *) dev->priv;
+	spin_lock_init(&lp->lock);
 
 	/* Copy the IDPROM ethernet address to the device structure, later we
 	 * will copy the address in the device structure to the lance

@@ -25,7 +25,7 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/machdep.h>
-
+#include <asm/hardirq.h>
 #include <asm/time.h>
 #include <asm/nvram.h>
 
@@ -58,7 +58,7 @@ extern rwlock_t xtime_lock;
 extern struct timezone sys_tz;
 
 __init
-void pmac_time_init(void)
+long pmac_time_init(void)
 {
 #ifdef CONFIG_NVRAM
 	s32 delta = 0;
@@ -72,17 +72,18 @@ void pmac_time_init(void)
 	dst = ((pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 0x8) & 0x80) != 0);
 	printk("GMT Delta read from XPRAM: %d minutes, DST: %s\n", delta/60,
 		dst ? "on" : "off");
-	sys_tz.tz_minuteswest = -delta/60;
-	/* I _suppose_ this is 0:off, 1:on */
-	sys_tz.tz_dsttime = dst;
+	return delta;
+#else
+	return 0;
 #endif
 }
 
 __pmac
 unsigned long pmac_get_rtc_time(void)
 {
-#ifdef CONFIG_ADB
+#if defined(CONFIG_ADB_CUDA) || defined(CONFIG_ADB_PMU)
 	struct adb_request req;
+	unsigned long now;
 #endif
 
 	/* Get the time from the RTC */
@@ -96,8 +97,9 @@ unsigned long pmac_get_rtc_time(void)
 		if (req.reply_len != 7)
 			printk(KERN_ERR "pmac_get_rtc_time: got %d byte reply\n",
 			       req.reply_len);
-		return (req.reply[3] << 24) + (req.reply[4] << 16)
-			+ (req.reply[5] << 8) + req.reply[6] - RTC_OFFSET;
+		now = (req.reply[3] << 24) + (req.reply[4] << 16)
+			+ (req.reply[5] << 8) + req.reply[6];
+		return now - RTC_OFFSET;
 #endif /* CONFIG_ADB_CUDA */
 #ifdef CONFIG_ADB_PMU
 	case SYS_CTRLER_PMU:
@@ -108,21 +110,25 @@ unsigned long pmac_get_rtc_time(void)
 		if (req.reply_len != 5)
 			printk(KERN_ERR "pmac_get_rtc_time: got %d byte reply\n",
 			       req.reply_len);
-		return (req.reply[1] << 24) + (req.reply[2] << 16)
-			+ (req.reply[3] << 8) + req.reply[4] - RTC_OFFSET;
+		now = (req.reply[1] << 24) + (req.reply[2] << 16)
+			+ (req.reply[3] << 8) + req.reply[4];
+		return now - RTC_OFFSET;
 #endif /* CONFIG_ADB_PMU */
 	default:
-		return 0;
 	}
+	return 0;
 }
 
 int pmac_set_rtc_time(unsigned long nowtime)
 {
+#if defined(CONFIG_ADB_CUDA) || defined(CONFIG_ADB_PMU)
 	struct adb_request req;
+#endif
 
-	nowtime += RTC_OFFSET - sys_tz.tz_minuteswest * 60;
+	nowtime += RTC_OFFSET;
 
 	switch (sys_ctrler) {
+#ifdef CONFIG_ADB_CUDA
 	case SYS_CTRLER_CUDA:
 		if (cuda_request(&req, NULL, 6, CUDA_PACKET, CUDA_SET_TIME,
 				 nowtime >> 24, nowtime >> 16, nowtime >> 8, nowtime) < 0)
@@ -133,16 +139,19 @@ int pmac_set_rtc_time(unsigned long nowtime)
 			printk(KERN_ERR "pmac_set_rtc_time: got %d byte reply\n",
 			       req.reply_len);
 		return 1;
+#endif /* CONFIG_ADB_CUDA */
+#ifdef CONFIG_ADB_PMU
 	case SYS_CTRLER_PMU:
 		if (pmu_request(&req, NULL, 5, PMU_SET_RTC,
 				nowtime >> 24, nowtime >> 16, nowtime >> 8, nowtime) < 0)
 			return 0;
 		while (!req.complete)
 			pmu_poll();
-		if (req.reply_len != 5)
+		if (req.reply_len != 0)
 			printk(KERN_ERR "pmac_set_rtc_time: got %d byte reply\n",
 			       req.reply_len);
 		return 1;
+#endif /* CONFIG_ADB_PMU */
 	default:
 		return 0;
 	}
@@ -186,12 +195,11 @@ int __init via_calibrate_decr(void)
 		;
 	dend = get_dec();
 
-	decrementer_count = (dstart - dend) / 6;
-	count_period_num = 60;
-	count_period_den = decrementer_count * 6 * HZ / 100000;
+	tb_ticks_per_jiffy = (dstart - dend) / 6;
+	tb_to_us = mulhwu_scale_factor(dstart - dend, 60000);
 
-	printk(KERN_INFO "via_calibrate_decr: decrementer_count = %u (%u ticks)\n",
-	       decrementer_count, dstart - dend);
+	printk(KERN_INFO "via_calibrate_decr: ticks per jiffy = %u (%u ticks)\n",
+	       tb_ticks_per_jiffy, dstart - dend);
 
 	return 1;
 }
@@ -214,8 +222,11 @@ static int time_sleep_notify(struct pmu_sleep_notifier *self, int when)
 	case PBOOK_WAKE:
 		write_lock_irqsave(&xtime_lock, flags);
 		xtime.tv_sec = pmac_get_rtc_time() + time_diff;
+		set_dec(tb_ticks_per_jiffy);
+		/* No currently-supported powerbook has a 601,
+		   so use get_tbl, not native  */
+		last_jiffy_stamp(0) = tb_last_stamp = get_tbl();
 		xtime.tv_usec = 0;
-		set_dec(decrementer_count);
 		last_rtc_update = xtime.tv_sec;
 		write_unlock_irqrestore(&xtime_lock, flags);
 		break;
@@ -236,7 +247,7 @@ static struct pmu_sleep_notifier time_sleep_notifier = {
 void __init pmac_calibrate_decr(void)
 {
 	struct device_node *cpu;
-	int freq, *fp, divisor;
+	unsigned int freq, *fp;
 
 #ifdef CONFIG_PMAC_PBOOK
 	pmu_register_sleep_notifier(&time_sleep_notifier);
@@ -252,15 +263,13 @@ void __init pmac_calibrate_decr(void)
 	cpu = find_type_devices("cpu");
 	if (cpu == 0)
 		panic("can't find cpu node in time_init");
-	fp = (int *) get_property(cpu, "timebase-frequency", NULL);
+	fp = (unsigned int *) get_property(cpu, "timebase-frequency", NULL);
 	if (fp == 0)
 		panic("can't get cpu timebase frequency");
-	freq = *fp * 60;	/* try to make freq/1e6 an integer */
-	divisor = 60;
-	printk("time_init: decrementer frequency = %d/%d\n",
-	       freq, divisor);
-	decrementer_count = freq / HZ / divisor;
-	count_period_num = divisor;
-	count_period_den = freq / 1000000;
+	freq = *fp;
+	printk("time_init: decrementer frequency = %u.%.6u MHz\n",
+	       freq/1000000, freq%1000000);
+	tb_ticks_per_jiffy = freq / HZ;
+	tb_to_us = mulhwu_scale_factor(freq, 1000000);
 }
 

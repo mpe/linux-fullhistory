@@ -308,7 +308,7 @@ static void floppy_off(unsigned int nr);
 #elif (MAJOR_NR == I2O_MAJOR)
 
 #define DEVICE_NAME "I2O block"
-#define DEVICE_REQUEST do_i2ob_request
+#define DEVICE_REQUEST i2ob_request
 #define DEVICE_NR(device) (MINOR(device)>>4)
 
 #elif (MAJOR_NR == COMPAQ_SMART2_MAJOR)

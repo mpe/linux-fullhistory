@@ -35,6 +35,7 @@ obj-$(CONFIG_COMX_PROTO_LAPB)	+=				comx-proto-lapb.o
 obj-$(CONFIG_COMX_PROTO_FR)	+=				comx-proto-fr.o
 obj-$(CONFIG_COSA)		+=		syncppp.o	cosa.o
 obj-$(CONFIG_LANMEDIA)		+=		syncppp.o
+obj-$(CONFIG_X25_ASY)		+= x25_asy.o
 
 ifeq ($(CONFIG_LANMEDIA),y)
   SUB_DIRS += lmc

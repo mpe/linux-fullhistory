@@ -246,6 +246,13 @@ static int floppy_revalidate(kdev_t dev);
 static int swim3_add_device(struct device_node *swims);
 int swim3_init(void);
 
+#ifndef CONFIG_PMAC_PBOOK
+static inline int check_media_bay(struct device_node *which_bay, int what)
+{
+	return 1;
+}
+#endif
+
 static void swim3_select(struct floppy_state *fs, int sel)
 {
 	volatile struct swim3 *sw = fs->swim3;

@@ -67,7 +67,7 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 #if defined(CONFIG_4xx)
 	int is_write = error_code & ESR_DST;
 #else
-	int is_write = error_code & 0x02000000;
+	int is_write = 0;
 
 	/*
 	 * Fortunately the bit assignments in SRR1 for an instruction
@@ -77,6 +77,8 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 	 */
 	if (regs->trap == 0x400)
 		error_code &= 0x48200000;
+	else
+		is_write = error_code & 0x02000000;
 #endif /* CONFIG_4xx */
 
 #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)

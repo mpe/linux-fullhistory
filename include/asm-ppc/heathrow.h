@@ -44,4 +44,9 @@
 #define HRW_BMAC_IO_ENABLE	0x60000000	/* two bits, not documented in OF */
 #define HRW_BMAC_RESET		0x80000000	/* not documented in OF */
 
+/* We OR those features at boot on desktop G3s */
+#define HRW_DEFAULTS		(HRW_SCCA_IO | HRW_SCCB_IO | HRW_SCC_ENABLE)
+
+/* Those seem to be different on paddington */
 #define PADD_MODEM_POWER_N	0x00000001	/* modem power on paddington */
+#define PADD_RESET_SCC		0x02000000	/* check this please */

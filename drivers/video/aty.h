@@ -461,6 +461,7 @@
 #define VERTEX_2_SECONDARY_T	0x0738	/* Dword offset 1_CE */
 #define VERTEX_2_SECONDARY_W	0x073C	/* Dword offset 1_CF */
 
+#define GTC_3D_RESET_DELAY	3	/* 3D engine reset delay in ms */
 
 /* CRTC control values (mostly CRTC_GEN_CNTL) */
 
@@ -747,7 +748,8 @@
 #define GI_CHIP_ID	0x4749	/* RAGE PRO, BGA, PCI33 only */
 #define GP_CHIP_ID	0x4750	/* RAGE PRO, PQFP, PCI33, full 3D */
 #define GQ_CHIP_ID	0x4751	/* RAGE PRO, PQFP, PCI33, limited 3D */
-#define LN_CHIP_ID	0x4c4d	/* RAGE Mobility AGP */
+#define LM_CHIP_ID	0x4c4d	/* RAGE Mobility PCI */
+#define LN_CHIP_ID	0x4c4e	/* RAGE Mobility AGP */
 
 
 /* Mach64 major ASIC revisions */
@@ -998,5 +1000,12 @@
 #define LCD_LT_GIO		0x07
 #define LCD_POWER_MANAGEMENT	0x08
 #define LCD_ZVGPIO		0x09
+#define LCD_MISC_CNTL		0x14
+
+/* Values in LCD_MISC_CNTL */
+#define BIAS_MOD_LEVEL_MASK	0x0000ff00
+#define BIAS_MOD_LEVEL_SHIFT	8
+#define BLMOD_EN		0x00010000
+#define BIASMOD_EN		0x00020000
 
 #endif /* REGMACH64_H */

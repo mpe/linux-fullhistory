@@ -205,7 +205,7 @@ static int __init com20020isa_setup(char *s)
 	case 6:		/* Timeout */
 		lp->timeout = ints[6];
 	case 5:		/* CKP value */
-		lp->clock = ints[5];
+		lp->clockp = ints[5];
 	case 4:		/* Backplane flag */
 		lp->backplane = ints[4];
 	case 3:		/* Node ID */

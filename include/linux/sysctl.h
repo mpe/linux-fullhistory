@@ -522,7 +522,8 @@ enum {
 	DEV_CDROM=1,
 	DEV_HWMON=2,
 	DEV_PARPORT=3,
-	DEV_RAID=4
+	DEV_RAID=4,
+	DEV_MAC_HID=5
 };
 
 /* /proc/sys/dev/cdrom */
@@ -571,6 +572,16 @@ enum {
 /* /proc/sys/dev/parport/parport n/devices/device n */
 enum {
 	DEV_PARPORT_DEVICE_TIMESLICE=1,
+};
+
+/* /proc/sys/dev/mac_hid */
+enum {
+	DEV_MAC_HID_KEYBOARD_SENDS_LINUX_KEYCODES=1,
+	DEV_MAC_HID_KEYBOARD_LOCK_KEYCODES=2,
+	DEV_MAC_HID_MOUSE_BUTTON_EMULATION=3,
+	DEV_MAC_HID_MOUSE_BUTTON2_KEYCODE=4,
+	DEV_MAC_HID_MOUSE_BUTTON3_KEYCODE=5,
+	DEV_MAC_HID_ADB_MOUSE_SENDS_KEYCODES=6
 };
 
 #ifdef __KERNEL__

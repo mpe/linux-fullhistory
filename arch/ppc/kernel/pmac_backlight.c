@@ -41,16 +41,16 @@ register_backlight_controller(struct backlight_controller *ctrler, void *data, c
 	
 #ifdef CONFIG_ADB_PMU
 	/* Special case for the old PowerBook since I can't test on it */
-	if ((machine_is_compatible("AAPL,3400/2400") || machine_is_compatible("AAPL,3500")
-		|| machine_is_compatible("AAPL,PowerBook1998")
-		|| machine_is_compatible("AAPL,PowerBook1999"))
-		&& !strcmp(type, "pmu"))
+	backlight_autosave = machine_is_compatible("AAPL,3400/2400")
+		|| machine_is_compatible("AAPL,3500");
+	if ((backlight_autosave
+	     || machine_is_compatible("AAPL,PowerBook1998")
+	     || machine_is_compatible("PowerBook1,1"))
+	    && !strcmp(type, "pmu"))
 		valid = 1;
-	else
 #endif
-	{
-		if (bk_node)
-			prop = get_property(bk_node, "backlight-control", NULL);
+	if (bk_node) {
+		prop = get_property(bk_node, "backlight-control", NULL);
 		if (prop && !strncmp(prop, type, strlen(type)))
 			valid = 1;
 	}
@@ -70,8 +70,6 @@ register_backlight_controller(struct backlight_controller *ctrler, void *data, c
 	}
 	
 #ifdef CONFIG_ADB_PMU
-	backlight_autosave = machine_is_compatible("AAPL,3400/2400")
-		|| machine_is_compatible("AAPL,3500");
 	if (backlight_autosave) {
 		struct adb_request req;
 		pmu_request(&req, NULL, 2, 0xd9, 0);

@@ -22,12 +22,23 @@ char arch[] = "PowerPC";
 
 #define N_DESCR	6
 unsigned int descr[N_DESCR] = {
+#if 1
+	/* values for IBM RS/6000 machines */
 	0xffffffff,		/* real-mode = true */
 	0x00c00000,		/* real-base, i.e. where we expect OF to be */
 	0xffffffff,		/* real-size */
 	0xffffffff,		/* virt-base */
 	0xffffffff,		/* virt-size */
 	0x4000,			/* load-base */
+#else
+	/* values for longtrail CHRP */
+	0,			/* real-mode = false */
+	0xffffffff,		/* real-base */
+	0xffffffff,		/* real-size */
+	0xffffffff,		/* virt-base */
+	0xffffffff,		/* virt-size */
+	0x00600000,		/* load-base */
+#endif
 };
 
 unsigned char buf[512];
@@ -63,7 +74,7 @@ unsigned char buf[512];
 
 unsigned char elf_magic[4] = { 0x7f, 'E', 'L', 'F' };
 
-main(int ac, char **av)
+int main(int ac, char **av)
 {
 	int fd, n, i;
 	int ph, ps, np;

@@ -21,6 +21,12 @@
 /*
  * See http://www.geocities.com/SiliconValley/Hardware/3165/
  * for the user-level ACPI stuff
+ *
+ * Changes:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 2000/08/31
+ * - check copy*user return
+ * - get rid of check_region
+ * - get rid of verify_area
  */
 
 #include <linux/config.h>
@@ -135,8 +141,7 @@ static int acpi_do_stat(ctl_table *ctl,
 		*len = 0;
 		return 0;
 	}
-	copy_to_user(buffer, str, size);
-	return 0;
+	return copy_to_user(buffer, str, size) ? -EFAULT : 0;
 }
 
 static void cx_statistics(unsigned int x, unsigned long time)
@@ -1283,11 +1288,9 @@ static void acpi_power_off(void)
  */
 static int acpi_claim(unsigned long start, unsigned long size)
 {
-	if (start && size) {
-		if (check_region(start, size))
+	if (start && size)
+		if (!request_region(start, size, "acpi"))
 			return -EBUSY;
-		request_region(start, size, "acpi");
-	}
 	return 0;
 }
 
@@ -1391,7 +1394,8 @@ static int acpi_do_ulong(ctl_table *ctl,
 		val = *(unsigned long*) ctl->data;
 		size = sprintf(str, "0x%08lx\n", val);
 		if (*len >= size) {
-			copy_to_user(buffer, str, size);
+			if (copy_to_user(buffer, str, size))
+				return -EFAULT;
 			*len = size;
 		}
 		else
@@ -1404,7 +1408,8 @@ static int acpi_do_ulong(ctl_table *ctl,
 		size = sizeof(str) - 1;
 		if (size > *len)
 			size = *len;
-		copy_from_user(str, buffer, size);
+		if (copy_from_user(str, buffer, size))
+			return -EFAULT;
 		str[size] = '\0';
 		val = simple_strtoul(str, &strend, 0);
 		if (strend == str)
@@ -1423,22 +1428,22 @@ static int acpi_verify_table(void *buffer,
 			     size_t size,
 			     struct acpi_table_info *info)
 {
+	struct acpi_table hdr;
+	size_t table_size;
+
 	if (size < sizeof(struct acpi_table))
 		return -EINVAL;
-	else if (verify_area(VERIFY_READ, buffer, size))
-		return -EFAULT;
-	else {
-		struct acpi_table hdr;
-		size_t table_size;
 
-		copy_from_user(&hdr, buffer, sizeof(hdr));
-		table_size = (size_t) hdr.length;
-		if (hdr.signature != info->expected_signature
-		    || table_size < size
-		    || (info->expected_size
-			&& table_size != info->expected_size))
-			return -EINVAL;
-	}
+	if (copy_from_user(&hdr, buffer, sizeof(hdr)))
+		return -EFAULT;
+
+	table_size = (size_t) hdr.length;
+	if (hdr.signature != info->expected_signature
+	    || table_size < size
+	    || (info->expected_size
+		&& table_size != info->expected_size))
+		return -EINVAL;
+
 	return 0;
 }
 
@@ -1496,7 +1501,8 @@ static int acpi_do_table(ctl_table *ctl,
 		error = acpi_verify_table(buffer, *len, info);
 		if (error)
 			return error;
-		copy_from_user(&hdr, buffer, sizeof(hdr));
+		if (copy_from_user(&hdr, buffer, sizeof(hdr)))
+			return -EFAULT;
 		table_size = (size_t) hdr.length;
 		
 		write_lock(&acpi_do_table_lock);
@@ -1517,7 +1523,8 @@ static int acpi_do_table(ctl_table *ctl,
 				error = -ENOMEM;
 		}
 		if (data)
-			copy_from_user(data, buffer, size);
+			if (copy_from_user(data, buffer, size))
+				error = -EFAULT;
 		
 		write_unlock(&acpi_do_table_lock);
 	}
@@ -1565,7 +1572,8 @@ static int acpi_do_event_reg(ctl_table *ctl,
 		
 		size = sprintf(str, "0x%08x\n", val);
 		if (*len >= size) {
-			copy_to_user(buffer, str, size);
+			if (copy_to_user(buffer, str, size))
+				return -EFAULT;
 			*len = size;
 		}
 		else
@@ -1580,7 +1588,8 @@ static int acpi_do_event_reg(ctl_table *ctl,
 		size = sizeof(str) - 1;
 		if (size > *len)
 			size = *len;
-		copy_from_user(str, buffer, size);
+		if (copy_from_user(str, buffer, size))
+			return -EFAULT;
 		str[size] = '\0';
 		val = (u32) simple_strtoul(str, &strend, 0);
 		if (strend == str)
@@ -1682,7 +1691,8 @@ static int acpi_do_event(ctl_table *ctl,
 		       pm1_status,
 		       gpe_status,
 		       event_state);
-	copy_to_user(buffer, str, size);
+	if (copy_to_user(buffer, str, size))
+		return -EFAULT;
 	*len = size;
 	file->f_pos += size;
 

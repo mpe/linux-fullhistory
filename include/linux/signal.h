@@ -28,7 +28,7 @@ struct sigpending {
 
 /* We don't use <asm/bitops.h> for these because there is no need to
    be atomic.  */
-extern inline void sigaddset(sigset_t *set, int _sig)
+static inline void sigaddset(sigset_t *set, int _sig)
 {
 	unsigned long sig = _sig - 1;
 	if (_NSIG_WORDS == 1)
@@ -37,7 +37,7 @@ extern inline void sigaddset(sigset_t *set, int _sig)
 		set->sig[sig / _NSIG_BPW] |= 1UL << (sig % _NSIG_BPW);
 }
 
-extern inline void sigdelset(sigset_t *set, int _sig)
+static inline void sigdelset(sigset_t *set, int _sig)
 {
 	unsigned long sig = _sig - 1;
 	if (_NSIG_WORDS == 1)
@@ -46,7 +46,7 @@ extern inline void sigdelset(sigset_t *set, int _sig)
 		set->sig[sig / _NSIG_BPW] &= ~(1UL << (sig % _NSIG_BPW));
 }
 
-extern inline int sigismember(sigset_t *set, int _sig)
+static inline int sigismember(sigset_t *set, int _sig)
 {
 	unsigned long sig = _sig - 1;
 	if (_NSIG_WORDS == 1)
@@ -55,7 +55,7 @@ extern inline int sigismember(sigset_t *set, int _sig)
 		return 1 & (set->sig[sig / _NSIG_BPW] >> (sig % _NSIG_BPW));
 }
 
-extern inline int sigfindinword(unsigned long word)
+static inline int sigfindinword(unsigned long word)
 {
 	return ffz(~word);
 }
@@ -68,7 +68,7 @@ extern inline int sigfindinword(unsigned long word)
 #include <linux/string.h>
 
 #define _SIG_SET_BINOP(name, op)					\
-extern inline void name(sigset_t *r, const sigset_t *a, const sigset_t *b) \
+static inline void name(sigset_t *r, const sigset_t *a, const sigset_t *b) \
 {									\
 	unsigned long a0, a1, a2, a3, b0, b1, b2, b3;			\
 	unsigned long i;						\
@@ -119,7 +119,7 @@ _SIG_SET_BINOP(signandsets, _sig_nand)
 #undef _sig_nand
 
 #define _SIG_SET_OP(name, op)						\
-extern inline void name(sigset_t *set)					\
+static inline void name(sigset_t *set)					\
 {									\
 	unsigned long i;						\
 									\
@@ -142,7 +142,7 @@ _SIG_SET_OP(signotset, _sig_not)
 #undef _SIG_SET_OP
 #undef _sig_not
 
-extern inline void sigemptyset(sigset_t *set)
+static inline void sigemptyset(sigset_t *set)
 {
 	switch (_NSIG_WORDS) {
 	default:
@@ -154,7 +154,7 @@ extern inline void sigemptyset(sigset_t *set)
 	}
 }
 
-extern inline void sigfillset(sigset_t *set)
+static inline void sigfillset(sigset_t *set)
 {
 	switch (_NSIG_WORDS) {
 	default:
@@ -170,22 +170,22 @@ extern char * render_sigset_t(sigset_t *set, char *buffer);
 
 /* Some extensions for manipulating the low 32 signals in particular.  */
 
-extern inline void sigaddsetmask(sigset_t *set, unsigned long mask)
+static inline void sigaddsetmask(sigset_t *set, unsigned long mask)
 {
 	set->sig[0] |= mask;
 }
 
-extern inline void sigdelsetmask(sigset_t *set, unsigned long mask)
+static inline void sigdelsetmask(sigset_t *set, unsigned long mask)
 {
 	set->sig[0] &= ~mask;
 }
 
-extern inline int sigtestsetmask(sigset_t *set, unsigned long mask)
+static inline int sigtestsetmask(sigset_t *set, unsigned long mask)
 {
 	return (set->sig[0] & mask) != 0;
 }
 
-extern inline void siginitset(sigset_t *set, unsigned long mask)
+static inline void siginitset(sigset_t *set, unsigned long mask)
 {
 	set->sig[0] = mask;
 	switch (_NSIG_WORDS) {
@@ -197,7 +197,7 @@ extern inline void siginitset(sigset_t *set, unsigned long mask)
 	}
 }
 
-extern inline void siginitsetinv(sigset_t *set, unsigned long mask)
+static inline void siginitsetinv(sigset_t *set, unsigned long mask)
 {
 	set->sig[0] = ~mask;
 	switch (_NSIG_WORDS) {

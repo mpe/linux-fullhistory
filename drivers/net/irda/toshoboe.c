@@ -900,7 +900,6 @@ toshoboe_gotosleep (struct toshoboe_cb *self)
 static void 
 toshoboe_wakeup (struct toshoboe_cb *self)
 {
-  struct net_device *dev = self->netdev;
   unsigned long flags;
 
   if (!self->stopped)

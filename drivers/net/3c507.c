@@ -332,6 +332,7 @@ static int __init el16_probe1(struct net_device *dev, int ioaddr)
 {
 	static unsigned char init_ID_done = 0, version_printed = 0;
 	int i, irq, irqval;
+	struct net_local *lp;
 
 	if (init_ID_done == 0) {
 		ushort lrs_state = 0xff;
@@ -355,7 +356,7 @@ static int __init el16_probe1(struct net_device *dev, int ioaddr)
 
 	/* Allocate a new 'dev' if needed. */
 	if (dev == NULL)
-		dev = init_etherdev(0, sizeof(struct net_local));
+		dev = init_etherdev(0, 0);
 
 	if (net_debug  &&  version_printed++ == 0)
 		printk(version);
@@ -417,10 +418,11 @@ static int __init el16_probe1(struct net_device *dev, int ioaddr)
 		printk(version);
 
 	/* Initialize the device structure. */
-	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+	lp = dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
 	if (dev->priv == NULL)
 		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct net_local));
+	spin_lock_init(&lp->lock);
 
 	dev->open		= el16_open;
 	dev->stop		= el16_close;

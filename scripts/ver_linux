@@ -10,6 +10,8 @@ echo '-- unusual then possibly you have very old versions)'
 uname -a
 insmod -V  2>&1 | awk 'NR==1 {print "Kernel modules        ",$NF}'
 echo "Gnu C                 " `gcc --version`
+make --version 2>&1 | awk -F, '{print $1}' | awk \
+      '/GNU Make/{print "Gnu Make              ",$NF}'
 ld -v 2>&1 | awk -F\) '{print $1}' | awk \
       '/BFD/{print "Binutils              ",$NF}'
 ls -l `ldd /bin/sh | awk '/libc/{print $3}'` | sed -e 's/\.so$//' \

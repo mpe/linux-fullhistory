@@ -312,17 +312,18 @@ pmac_nvram_update(void)
 __openfirmware
 unsigned char nvram_read_byte(int addr)
 {
-	struct adb_request req;
-
 	switch (nvram_naddrs) {
 #ifdef CONFIG_ADB_PMU
-	case -1:
+	case -1: {
+		struct adb_request req;
+
 		if (pmu_request(&req, NULL, 3, PMU_READ_NVRAM,
 				(addr >> 8) & 0xff, addr & 0xff))
 			break;
 		while (!req.complete)
 			pmu_poll();
 		return req.reply[1];
+	}
 #endif
 	case 1:
 		if (is_core_99)
@@ -339,17 +340,18 @@ unsigned char nvram_read_byte(int addr)
 __openfirmware
 void nvram_write_byte(unsigned char val, int addr)
 {
-	struct adb_request req;
-
 	switch (nvram_naddrs) {
 #ifdef CONFIG_ADB_PMU
-	case -1:
+	case -1: {
+		struct adb_request req;
+
 		if (pmu_request(&req, NULL, 4, PMU_WRITE_NVRAM,
 				(addr >> 8) & 0xff, addr & 0xff, val))
 			break;
 		while (!req.complete)
 			pmu_poll();
 		break;
+	}
 #endif
 	case 1:
 		if (is_core_99) {

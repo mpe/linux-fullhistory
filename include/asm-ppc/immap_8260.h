@@ -241,10 +241,12 @@ typedef struct fcc {
 	char	res1[2];
 	ushort	fcc_fdsr;
 	char	res2[2];
-	uint	fcc_fcce;
-	uint	fcc_fccm;
+	ushort	fcc_fcce;
+	char	res3[2];
+	ushort	fcc_fccm;
+	char	res4[2];
 	u_char	fcc_fccs;
-	char	res3[3];
+	char	res5[3];
 	u_char	fcc_ftirr_phy[4];
 } fcc_t;
 

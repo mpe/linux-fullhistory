@@ -23,11 +23,6 @@
 
 #define BTTV_VERSION_CODE KERNEL_VERSION(0,7,38)
 
-#ifndef PCI_GET_DRIVER_DATA
-# define PCI_GET_DRIVER_DATA(pdev)         ((pdev)->driver_data)
-# define PCI_SET_DRIVER_DATA(pdev,data)    (((pdev)->driver_data) = (data))
-#endif /* PCI_GET_DRIVER_DATA */
-
 #include <linux/types.h>
 #include <linux/wait.h>
 #include <linux/videodev.h>

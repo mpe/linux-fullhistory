@@ -85,6 +85,7 @@
 #define CPM_DATAONLY_BASE	((uint)128)
 #define CPM_DATAONLY_SIZE	((uint)(16 * 1024) - CPM_DATAONLY_BASE)
 #define CPM_DP_NOSPACE		((uint)0x7fffffff)
+#define CPM_FCC_SPECIAL_BASE	((uint)0x0000b000)
 
 /* The number of pages of host memory we allocate for CPM.  This is
  * done early in kernel initialization to get physically contiguous
@@ -97,8 +98,8 @@
  * and dual port ram.
  */
 extern	cpm8260_t	*cpmp;		/* Pointer to comm processor */
-uint		m8260_cpm_dpalloc(uint size);
-uint		m8260_cpm_hostalloc(uint size);
+uint		m8260_cpm_dpalloc(uint size, uint align);
+uint		m8260_cpm_hostalloc(uint size, uint align);
 void		m8260_cpm_setbrg(uint brg, uint rate);
 void		m8260_cpm_fastbrg(uint brg, uint rate, int div16);
 
@@ -153,7 +154,7 @@ typedef struct cpm_buf_desc {
 #define PROFF_REVNUM		((uint)0x8af0)
 #define PROFF_RAND		((uint)0x8af8)
 #define PROFF_I2C_BASE		((uint)0x8afc)
-#define PROFF_IDMA4_BASE	((uint)0x89fe)
+#define PROFF_IDMA4_BASE	((uint)0x8afe)
 
 /* The SMCs are relocated to any of the first eight DPRAM pages.
  * We will fix these at the first locations of DPRAM, until we
@@ -403,40 +404,44 @@ typedef struct scc_enet {
 #define SCCE_ENET_TXB	((ushort)0x0002)	/* A buffer was transmitted */
 #define SCCE_ENET_RXB	((ushort)0x0001)	/* A buffer was received */
 
-/* SCC Mode Register (PMSR) as used by Ethernet.
+/* SCC Mode Register (PSMR) as used by Ethernet.
 */
-#define SCC_PMSR_HBC	((ushort)0x8000)	/* Enable heartbeat */
-#define SCC_PMSR_FC	((ushort)0x4000)	/* Force collision */
-#define SCC_PMSR_RSH	((ushort)0x2000)	/* Receive short frames */
-#define SCC_PMSR_IAM	((ushort)0x1000)	/* Check individual hash */
-#define SCC_PMSR_ENCRC	((ushort)0x0800)	/* Ethernet CRC mode */
-#define SCC_PMSR_PRO	((ushort)0x0200)	/* Promiscuous mode */
-#define SCC_PMSR_BRO	((ushort)0x0100)	/* Catch broadcast pkts */
-#define SCC_PMSR_SBT	((ushort)0x0080)	/* Special backoff timer */
-#define SCC_PMSR_LPB	((ushort)0x0040)	/* Set Loopback mode */
-#define SCC_PMSR_SIP	((ushort)0x0020)	/* Sample Input Pins */
-#define SCC_PMSR_LCW	((ushort)0x0010)	/* Late collision window */
-#define SCC_PMSR_NIB22	((ushort)0x000a)	/* Start frame search */
-#define SCC_PMSR_FDE	((ushort)0x0001)	/* Full duplex enable */
+#define SCC_PSMR_HBC	((ushort)0x8000)	/* Enable heartbeat */
+#define SCC_PSMR_FC	((ushort)0x4000)	/* Force collision */
+#define SCC_PSMR_RSH	((ushort)0x2000)	/* Receive short frames */
+#define SCC_PSMR_IAM	((ushort)0x1000)	/* Check individual hash */
+#define SCC_PSMR_ENCRC	((ushort)0x0800)	/* Ethernet CRC mode */
+#define SCC_PSMR_PRO	((ushort)0x0200)	/* Promiscuous mode */
+#define SCC_PSMR_BRO	((ushort)0x0100)	/* Catch broadcast pkts */
+#define SCC_PSMR_SBT	((ushort)0x0080)	/* Special backoff timer */
+#define SCC_PSMR_LPB	((ushort)0x0040)	/* Set Loopback mode */
+#define SCC_PSMR_SIP	((ushort)0x0020)	/* Sample Input Pins */
+#define SCC_PSMR_LCW	((ushort)0x0010)	/* Late collision window */
+#define SCC_PSMR_NIB22	((ushort)0x000a)	/* Start frame search */
+#define SCC_PSMR_FDE	((ushort)0x0001)	/* Full duplex enable */
 
 /* Buffer descriptor control/status used by Ethernet receive.
-*/
+ * Common to SCC and FCC.
+ */
 #define BD_ENET_RX_EMPTY	((ushort)0x8000)
 #define BD_ENET_RX_WRAP		((ushort)0x2000)
 #define BD_ENET_RX_INTR		((ushort)0x1000)
 #define BD_ENET_RX_LAST		((ushort)0x0800)
 #define BD_ENET_RX_FIRST	((ushort)0x0400)
 #define BD_ENET_RX_MISS		((ushort)0x0100)
+#define BD_ENET_RX_BC		((ushort)0x0080)	/* FCC Only */
+#define BD_ENET_RX_MC		((ushort)0x0040)	/* FCC Only */
 #define BD_ENET_RX_LG		((ushort)0x0020)
 #define BD_ENET_RX_NO		((ushort)0x0010)
 #define BD_ENET_RX_SH		((ushort)0x0008)
 #define BD_ENET_RX_CR		((ushort)0x0004)
 #define BD_ENET_RX_OV		((ushort)0x0002)
 #define BD_ENET_RX_CL		((ushort)0x0001)
-#define BD_ENET_RX_STATS	((ushort)0x013f)	/* All status bits */
+#define BD_ENET_RX_STATS	((ushort)0x01ff)	/* All status bits */
 
 /* Buffer descriptor control/status used by Ethernet transmit.
-*/
+ * Common to SCC and FCC.
+ */
 #define BD_ENET_TX_READY	((ushort)0x8000)
 #define BD_ENET_TX_PAD		((ushort)0x4000)
 #define BD_ENET_TX_WRAP		((ushort)0x2000)
@@ -522,6 +527,152 @@ typedef struct scc_trans {
 } scc_trans_t;
 
 #define BD_SCC_TX_LAST		((ushort)0x0800)
+
+/* How about some FCCs.....
+*/
+#define FCC_GFMR_DIAG_NORM	((uint)0x00000000)
+#define FCC_GFMR_DIAG_LE	((uint)0x40000000)
+#define FCC_GFMR_DIAG_AE	((uint)0x80000000)
+#define FCC_GFMR_DIAG_ALE	((uint)0xc0000000)
+#define FCC_GFMR_TCI		((uint)0x20000000)
+#define FCC_GFMR_TRX		((uint)0x10000000)
+#define FCC_GFMR_TTX		((uint)0x08000000)
+#define FCC_GFMR_TTX		((uint)0x08000000)
+#define FCC_GFMR_CDP		((uint)0x04000000)
+#define FCC_GFMR_CTSP		((uint)0x02000000)
+#define FCC_GFMR_CDS		((uint)0x01000000)
+#define FCC_GFMR_CTSS		((uint)0x00800000)
+#define FCC_GFMR_SYNL_NONE	((uint)0x00000000)
+#define FCC_GFMR_SYNL_AUTO	((uint)0x00004000)
+#define FCC_GFMR_SYNL_8		((uint)0x00008000)
+#define FCC_GFMR_SYNL_16	((uint)0x0000c000)
+#define FCC_GFMR_RTSM		((uint)0x00002000)
+#define FCC_GFMR_RENC_NRZ	((uint)0x00000000)
+#define FCC_GFMR_RENC_NRZI	((uint)0x00000800)
+#define FCC_GFMR_REVD		((uint)0x00000400)
+#define FCC_GFMR_TENC_NRZ	((uint)0x00000000)
+#define FCC_GFMR_TENC_NRZI	((uint)0x00000100)
+#define FCC_GFMR_TCRC_16	((uint)0x00000000)
+#define FCC_GFMR_TCRC_32	((uint)0x00000080)
+#define FCC_GFMR_ENR		((uint)0x00000020)
+#define FCC_GFMR_ENT		((uint)0x00000010)
+#define FCC_GFMR_MODE_ENET	((uint)0x0000000c)
+#define FCC_GFMR_MODE_ATM	((uint)0x0000000a)
+#define FCC_GFMR_MODE_HDLC	((uint)0x00000000)
+
+/* Generic FCC parameter ram.
+*/
+typedef struct fcc_param {
+	ushort	fcc_riptr;	/* Rx Internal temp pointer */
+	ushort	fcc_tiptr;	/* Tx Internal temp pointer */
+	ushort	fcc_res1;
+	ushort	fcc_mrblr;	/* Max receive buffer length, mod 32 bytes */
+	uint	fcc_rstate;	/* Upper byte is Func code, must be set */
+	uint	fcc_rbase;	/* Receive BD base */
+	ushort	fcc_rbdstat;	/* RxBD status */
+	ushort	fcc_rbdlen;	/* RxBD down counter */
+	uint	fcc_rdptr;	/* RxBD internal data pointer */
+	uint	fcc_tstate;	/* Upper byte is Func code, must be set */
+	uint	fcc_tbase;	/* Transmit BD base */
+	ushort	fcc_tbdstat;	/* TxBD status */
+	ushort	fcc_tbdlen;	/* TxBD down counter */
+	uint	fcc_tdptr;	/* TxBD internal data pointer */
+	uint	fcc_rbptr;	/* Rx BD Internal buf pointer */
+	uint	fcc_tbptr;	/* Tx BD Internal buf pointer */
+	uint	fcc_rcrc;	/* Rx temp CRC */
+	uint	fcc_res2;
+	uint	fcc_tcrc;	/* Tx temp CRC */
+} fccp_t;
+
+
+/* Ethernet controller through FCC.
+*/
+typedef struct fcc_enet {
+	fccp_t	fen_genfcc;
+	uint	fen_statbuf;	/* Internal status buffer */
+	uint	fen_camptr;	/* CAM address */
+	uint	fen_cmask;	/* Constant mask for CRC */
+	uint	fen_cpres;	/* Preset CRC */
+	uint	fen_crcec;	/* CRC Error counter */
+	uint	fen_alec;	/* alignment error counter */
+	uint	fen_disfc;	/* discard frame counter */
+	ushort	fen_retlim;	/* Retry limit */
+	ushort	fen_retcnt;	/* Retry counter */
+	ushort	fen_pper;	/* Persistence */
+	ushort	fen_boffcnt;	/* backoff counter */
+	uint	fen_gaddrh;	/* Group address filter, high 32-bits */
+	uint	fen_gaddrl;	/* Group address filter, low 32-bits */
+	ushort	fen_tfcstat;	/* out of sequence TxBD */
+	ushort	fen_tfclen;
+	uint	fen_tfcptr;
+	ushort	fen_mflr;	/* Maximum frame length (1518) */
+	ushort	fen_paddrh;	/* MAC address */
+	ushort	fen_paddrm;
+	ushort	fen_paddrl;
+	ushort	fen_ibdcount;	/* Internal BD counter */
+	ushort	fen_idbstart;	/* Internal BD start pointer */
+	ushort	fen_ibdend;	/* Internal BD end pointer */
+	ushort	fen_txlen;	/* Internal Tx frame length counter */
+	uint	fen_ibdbase[8]; /* Internal use */
+	uint	fen_iaddrh;	/* Individual address filter */
+	uint	fen_iaddrl;
+	ushort	fen_minflr;	/* Minimum frame length (64) */
+	ushort	fen_taddrh;	/* Filter transfer MAC address */
+	ushort	fen_taddrm;
+	ushort	fen_taddrl;
+	ushort	fen_padptr;	/* Pointer to pad byte buffer */
+	ushort	fen_cftype;	/* control frame type */
+	ushort	fen_cfrange;	/* control frame range */
+	ushort	fen_maxb;	/* maximum BD count */
+	ushort	fen_maxd1;	/* Max DMA1 length (1520) */
+	ushort	fen_maxd2;	/* Max DMA2 length (1520) */
+	ushort	fen_maxd;	/* internal max DMA count */
+	ushort	fen_dmacnt;	/* internal DMA counter */
+	uint	fen_octc;	/* Total octect counter */
+	uint	fen_colc;	/* Total collision counter */
+	uint	fen_broc;	/* Total broadcast packet counter */
+	uint	fen_mulc;	/* Total multicast packet count */
+	uint	fen_uspc;	/* Total packets < 64 bytes */
+	uint	fen_frgc;	/* Total packets < 64 bytes with errors */
+	uint	fen_ospc;	/* Total packets > 1518 */
+	uint	fen_jbrc;	/* Total packets > 1518 with errors */
+	uint	fen_p64c;	/* Total packets == 64 bytes */
+	uint	fen_p65c;	/* Total packets 64 < bytes <= 127 */
+	uint	fen_p128c;	/* Total packets 127 < bytes <= 255 */
+	uint	fen_p256c;	/* Total packets 256 < bytes <= 511 */
+	uint	fen_p512c;	/* Total packets 512 < bytes <= 1023 */
+	uint	fen_p1024c;	/* Total packets 1024 < bytes <= 1518 */
+	uint	fen_cambuf;	/* Internal CAM buffer poiner */
+	ushort	fen_rfthr;	/* Received frames threshold */
+	ushort	fen_rfcnt;	/* Received frames count */
+} fcc_enet_t;
+
+/* FCC Event/Mask register as used by Ethernet.
+*/
+#define FCC_ENET_GRA	((ushort)0x0080)	/* Graceful stop complete */
+#define FCC_ENET_RXC	((ushort)0x0040)	/* Control Frame Received */
+#define FCC_ENET_TXC	((ushort)0x0020)	/* Out of seq. Tx sent */
+#define FCC_ENET_TXE	((ushort)0x0010)	/* Transmit Error */
+#define FCC_ENET_RXF	((ushort)0x0008)	/* Full frame received */
+#define FCC_ENET_BSY	((ushort)0x0004)	/* Busy.  Rx Frame dropped */
+#define FCC_ENET_TXB	((ushort)0x0002)	/* A buffer was transmitted */
+#define FCC_ENET_RXB	((ushort)0x0001)	/* A buffer was received */
+
+/* FCC Mode Register (FPSMR) as used by Ethernet.
+*/
+#define FCC_PSMR_HBC	((uint)0x80000000)	/* Enable heartbeat */
+#define FCC_PSMR_FC	((uint)0x40000000)	/* Force Collision */
+#define FCC_PSMR_SBT	((uint)0x20000000)	/* Stop backoff timer */
+#define FCC_PSMR_LPB	((uint)0x10000000)	/* Local protect. 1 = FDX */
+#define FCC_PSMR_LCW	((uint)0x08000000)	/* Late collision select */
+#define FCC_PSMR_FDE	((uint)0x04000000)	/* Full Duplex Enable */
+#define FCC_PSMR_MON	((uint)0x02000000)	/* RMON Enable */
+#define FCC_PSMR_PRO	((uint)0x00400000)	/* Promiscuous Enable */
+#define FCC_PSMR_FCE	((uint)0x00200000)	/* Flow Control Enable */
+#define FCC_PSMR_RSH	((uint)0x00100000)	/* Receive Short Frames */
+#define FCC_PSMR_CAM	((uint)0x00000400)	/* CAM enable */
+#define FCC_PSMR_BRO	((uint)0x00000200)	/* Broadcast pkt discard */
+#define FCC_PSMR_ENCRC	((uint)0x00000080)	/* Use 32-bit CRC */
 
 /* IIC parameter RAM.
 */

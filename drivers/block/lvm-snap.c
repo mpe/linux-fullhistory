@@ -118,7 +118,8 @@ static void lvm_drop_snapshot(lv_t * lv_snap, const char * reason)
 	   or error on this snapshot --> release it */
 	invalidate_buffers(lv_snap->lv_dev);
 
-	for (i = last_dev = 0; i < lv_snap->lv_remap_ptr; i++) {
+	last_dev = 0;
+	for (i = 0; i < lv_snap->lv_remap_ptr; i++) {
 		if ( lv_snap->lv_block_exception[i].rdev_new != last_dev) {
 			last_dev = lv_snap->lv_block_exception[i].rdev_new;
 			invalidate_buffers(last_dev);
@@ -199,8 +200,9 @@ int lvm_snapshot_COW(kdev_t org_phys_dev,
 		     lv_t * lv_snap)
 {
 	const char * reason;
-	unsigned long org_start, snap_start, snap_phys_dev, virt_start, pe_off;
+	unsigned long org_start, snap_start, virt_start, pe_off;
 	int idx = lv_snap->lv_remap_ptr, chunk_size = lv_snap->lv_chunk_size;
+	kdev_t snap_phys_dev;
 	struct kiobuf * iobuf;
 	unsigned long blocks[KIO_MAX_SECTORS];
 	int blksize_snap, blksize_org, min_blksize, max_blksize;

@@ -122,6 +122,8 @@ static int control_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info);
 static int control_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info);
+static int control_mmap(struct fb_info *info, struct file *file,
+                         struct vm_area_struct *vma);
 
 
 static int controlfb_getcolreg(u_int regno, u_int *red, u_int *green,
@@ -171,6 +173,7 @@ static struct fb_ops controlfb_ops = {
 	fb_get_cmap:	control_get_cmap,
 	fb_set_cmap:	control_set_cmap,
 	fb_pan_display:	control_pan_display,
+	fb_mmap:	control_mmap,
 };
 
 
@@ -327,6 +330,48 @@ static int control_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	return 0;
 }
 
+/* Private mmap since we want to have a different caching on the framebuffer
+ * for controlfb.
+ * Note there's no locking in here; it's done in fb_mmap() in fbmem.c.
+ */
+static int control_mmap(struct fb_info *info, struct file *file,
+                       struct vm_area_struct *vma)
+{
+       struct fb_ops *fb = info->fbops;
+       struct fb_fix_screeninfo fix;
+       struct fb_var_screeninfo var;
+       unsigned long off, start;
+       u32 len;
+
+       fb->fb_get_fix(&fix, PROC_CONSOLE(info), info);
+       off = vma->vm_pgoff << PAGE_SHIFT;
+
+       /* frame buffer memory */
+       start = fix.smem_start;
+       len = PAGE_ALIGN((start & ~PAGE_MASK)+fix.smem_len);
+       if (off >= len) {
+               /* memory mapped io */
+               off -= len;
+               fb->fb_get_var(&var, PROC_CONSOLE(info), info);
+               if (var.accel_flags)
+                       return -EINVAL;
+               start = fix.mmio_start;
+               len = PAGE_ALIGN((start & ~PAGE_MASK)+fix.mmio_len);
+               pgprot_val(vma->vm_page_prot) |= _PAGE_NO_CACHE|_PAGE_GUARDED;
+       } else {
+               /* framebuffer */
+               pgprot_val(vma->vm_page_prot) |= _PAGE_WRITETHRU;
+       }
+       start &= PAGE_MASK;
+       vma->vm_pgoff = off >> PAGE_SHIFT;
+       if (io_remap_page_range(vma->vm_start, off,
+           vma->vm_end - vma->vm_start, vma->vm_page_prot))
+               return -EAGAIN;
+
+       return 0;
+}
+
+
 /********************  End of controlfb_ops implementation  ********************/
 /* (new one that is) */
 
@@ -466,11 +511,6 @@ static void do_install_cmap(int con, struct fb_info *info)
 	}
 }
 
-#ifdef CONFIG_FB_COMPAT_XPMAC
-extern struct vc_mode display_info;
-extern struct fb_info *console_fb_info;
-#endif /* CONFIG_FB_COMPAT_XPMAC */
-
 static inline int control_vram_reqd(int video_mode, int color_mode)
 {
 	return (control_reg_init[video_mode-1]->vres
@@ -483,12 +523,14 @@ static void set_control_clock(unsigned char *params)
 	struct adb_request req;
 	int i;
 
+#ifdef CONFIG_ADB_CUDA
 	for (i = 0; i < 3; ++i) {
 		cuda_request(&req, NULL, 5, CUDA_PACKET, CUDA_GET_SET_IIC,
 			     0x50, i + 1, params[i]);
 		while (!req.complete)
 			cuda_poll();
 	}
+#endif	
 }
 
 

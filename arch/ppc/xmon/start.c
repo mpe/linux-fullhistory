@@ -8,6 +8,7 @@
 #include <asm/page.h>
 #include <linux/adb.h>
 #include <linux/pmu.h>
+#include <linux/cuda.h>
 #include <linux/kernel.h>
 #include <asm/prom.h>
 #include <asm/bootx.h>
@@ -67,6 +68,12 @@ xmon_map_scc(void)
 			use_screen = 1;
 		}
 #endif
+#ifdef CONFIG_ADB_CUDA
+		if (!via_modem && disp_bi ) {
+			prom_drawstring("xmon uses screen and keyboard\n");
+			use_screen = 1;
+		}
+#endif
 #endif
 
 #ifdef CHRP_ESCC
@@ -100,6 +107,10 @@ xmon_map_scc(void)
 		/* should already be mapped by the kernel boot */
 		sccc = (volatile unsigned char *) (isa_io_base + 0x3fd);
 		sccd = (volatile unsigned char *) (isa_io_base + 0x3f8);
+		if (xmon_use_sccb) {
+			sccc -= 0x100;
+			sccd -= 0x100;
+		}
 		TXRDY = 0x20;
 		RXRDY = 1;
 	}
@@ -109,6 +120,19 @@ static int scc_initialized = 0;
 
 void xmon_init_scc(void);
 extern void pmu_poll(void);
+extern void cuda_poll(void);
+
+static inline void do_poll_adb(void)
+{
+#ifdef CONFIG_ADB_PMU
+	if (sys_ctrler == SYS_CTRLER_PMU)
+		pmu_poll();
+#endif /* CONFIG_ADB_PMU */
+#ifdef CONFIG_ADB_CUDA
+	if (sys_ctrler == SYS_CTRLER_CUDA)
+		cuda_poll();
+#endif /* CONFIG_ADB_CUDA */
+}
 
 int
 xmon_write(void *handle, void *ptr, int nb)
@@ -128,12 +152,8 @@ xmon_write(void *handle, void *ptr, int nb)
 		xmon_init_scc();
 	ct = 0;
 	for (i = 0; i < nb; ++i) {
-		while ((*sccc & TXRDY) == 0) {
-#ifdef CONFIG_ADB_PMU
-			if (sys_ctrler == SYS_CTRLER_PMU)
-				pmu_poll();
-#endif /* CONFIG_ADB_PMU */
-		}
+		while ((*sccc & TXRDY) == 0)
+			do_poll_adb();
 		c = p[i];
 		if (c == '\n' && !ct) {
 			c = '\r';
@@ -189,9 +209,7 @@ xmon_get_adb_key(void)
 				prom_drawchar('\b');
 				t = 200000;
 			}
-#ifdef CONFIG_ADB_PMU
-			pmu_poll();
-#endif /* CONFIG_ADB_PMU */
+			do_poll_adb();
 		} while (xmon_adb_keycode == -1);
 		k = xmon_adb_keycode;
 		if (on)
@@ -230,14 +248,9 @@ xmon_read(void *handle, void *ptr, int nb)
 	xmon_init_scc();
     for (i = 0; i < nb; ++i) {
 	while ((*sccc & RXRDY) == 0)
-#ifdef CONFIG_ADB_PMU
-	    if (sys_ctrler == SYS_CTRLER_PMU)
-		pmu_poll();
-#else
-		;
-#endif /* CONFIG_ADB_PMU */
+	    do_poll_adb();
 	buf_access();
-		*p++ = *sccd;
+	*p++ = *sccd;
     }
     return i;
 }
@@ -246,10 +259,7 @@ int
 xmon_read_poll(void)
 {
 	if ((*sccc & RXRDY) == 0) {
-#ifdef CONFIG_ADB_PMU
-		if (sys_ctrler == SYS_CTRLER_PMU)
-			pmu_poll();
-#endif /* CONFIG_ADB_PMU */
+		do_poll_adb();
 		return -1;
 	}
 	buf_access();
@@ -490,4 +500,20 @@ xmon_fgets(char *str, int nb, void *f)
     }
     *p = 0;
     return str;
+}
+
+void
+xmon_enter(void)
+{
+#ifdef CONFIG_ADB_PMU
+	pmu_suspend();
+#endif
+}
+
+void
+xmon_leave(void)
+{
+#ifdef CONFIG_ADB_PMU
+	pmu_resume();
+#endif
 }

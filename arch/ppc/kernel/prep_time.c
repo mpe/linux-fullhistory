@@ -100,28 +100,34 @@ __prep
 unsigned long mc146818_get_rtc_time(void)
 {
 	unsigned int year, mon, day, hour, min, sec;
-	int i;
+	int uip, i;
 
 	/* The Linux interpretation of the CMOS clock register contents:
 	 * When the Update-In-Progress (UIP) flag goes from 1 to 0, the
 	 * RTC registers show the second which has precisely just started.
 	 * Let's hope other operating systems interpret the RTC the same way.
 	 */
-	/* read RTC exactly on falling edge of update flag */
-	for (i = 0 ; i < 1000000 ; i++)	/* may take up to 1 second... */
-		if (CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP)
-			break;
-	for (i = 0 ; i < 1000000 ; i++)	/* must try at least 2.228 ms */
-		if (!(CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP))
-			break;
-	do { /* Isn't this overkill ? UIP above should guarantee consistency */
+
+	/* Since the UIP flag is set for about 2.2 ms and the clock
+	 * is typically written with a precision of 1 jiffy, trying
+	 * to obtain a precision better than a few milliseconds is 
+	 * an illusion. Only consistency is interesting, this also
+	 * allows to use the routine for /dev/rtc without a potential
+	 * 1 second kernel busy loop triggered by any reader of /dev/rtc. 
+	 */
+
+	for ( i = 0; i<1000000; i++) {
+		uip = CMOS_READ(RTC_FREQ_SELECT);
 		sec = CMOS_READ(RTC_SECONDS);
 		min = CMOS_READ(RTC_MINUTES);
 		hour = CMOS_READ(RTC_HOURS);
 		day = CMOS_READ(RTC_DAY_OF_MONTH);
 		mon = CMOS_READ(RTC_MONTH);
 		year = CMOS_READ(RTC_YEAR);
-	} while (sec != CMOS_READ(RTC_SECONDS));
+		uip |= CMOS_READ(RTC_FREQ_SELECT);
+		if ((uip & RTC_UIP)==0) break;
+	}
+
 	if (!(CMOS_READ(RTC_CONTROL) & RTC_DM_BINARY)
 	    || RTC_ALWAYS_BCD)
 	{
@@ -178,28 +184,11 @@ unsigned long mk48t59_get_rtc_time(void)
 {
 	unsigned char save_control;
 	unsigned int year, mon, day, hour, min, sec;
-	int i;
 
-	/* Make sure the time is not stopped. */
-	save_control = ppc_md.nvram_read_val(MK48T59_RTC_CONTROLB);
-	
-	ppc_md.nvram_write_val(MK48T59_RTC_CONTROLA,
-			     (save_control & (~MK48T59_RTC_CB_STOP)));
-
-	/* Now make sure the read bit is off so the value will change. */
+	/* Simple: freeze the clock, read it and allow updates again */
 	save_control = ppc_md.nvram_read_val(MK48T59_RTC_CONTROLA);
 	save_control &= ~MK48T59_RTC_CA_READ;
 	ppc_md.nvram_write_val(MK48T59_RTC_CONTROLA, save_control);
-
-	/* Read the seconds value to see when it changes. */
-	sec = ppc_md.nvram_read_val(MK48T59_RTC_SECONDS);
-		
-	/* Wait until the seconds value changes, then read the value. */
-	for (i = 0 ; i < 1000000 ; i++)	{ /* may take up to 1 second... */
-	   if (ppc_md.nvram_read_val(MK48T59_RTC_SECONDS) != sec) {
-	      break;
-	   }
-	}
 
 	/* Set the register to read the value. */
 	ppc_md.nvram_write_val(MK48T59_RTC_CONTROLA,

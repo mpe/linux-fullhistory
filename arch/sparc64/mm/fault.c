@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.50 2000/08/11 03:00:13 davem Exp $
+/* $Id: fault.c,v 1.51 2000/09/14 06:22:32 anton Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -145,7 +145,7 @@ static void do_kernel_fault(struct pt_regs *regs, int si_code, int fault_code,
 		
 	if (!insn) {
 		if (regs->tstate & TSTATE_PRIV) {
-			if (regs->tpc & 0x3)
+			if (!regs->tpc || (regs->tpc & 0x3))
 				goto cannot_handle;
 			insn = *(unsigned int *)regs->tpc;
 		} else {

@@ -3319,7 +3319,7 @@ static int create_i2o_procfs(void)
 	return 0;
 }
 
-static int destroy_i2o_procfs(void)
+static int __exit destroy_i2o_procfs(void)
 {
 	struct i2o_controller *pctrl = NULL;
 	int i;
@@ -3342,10 +3342,6 @@ static int destroy_i2o_procfs(void)
 	return 0;
 }
 
-#ifdef MODULE
-#define i2o_proc_init init_module
-#endif
-
 int __init i2o_proc_init(void)
 {
 	if (i2o_install_handler(&i2o_proc_handler) < 0)
@@ -3360,14 +3356,17 @@ int __init i2o_proc_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-
 MODULE_AUTHOR("Deepak Saxena");
 MODULE_DESCRIPTION("I2O procfs Handler");
 
-void cleanup_module(void)
+static void __exit i2o_proc_exit(void)
 {
 	destroy_i2o_procfs();
 	i2o_remove_handler(&i2o_proc_handler);
 }
+
+#ifdef MODULE
+module_init(i2o_proc_init);
 #endif
+module_exit(i2o_proc_exit);
+

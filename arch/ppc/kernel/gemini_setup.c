@@ -336,7 +336,7 @@ void __init gemini_init_IRQ(void)
 #define gemini_rtc_write(val,x)  (writeb((val),(GEMINI_RTC+(x))))
 
 /* ensure that the RTC is up and running */
-void __init gemini_time_init(void)
+long __init gemini_time_init(void)
 {
 	unsigned char reg;
 
@@ -347,6 +347,7 @@ void __init gemini_time_init(void)
 		gemini_rtc_write((reg & ~(M48T35_RTC_STOPPED)), M48T35_RTC_CONTROL);
 		gemini_rtc_write((reg | M48T35_RTC_SET), M48T35_RTC_CONTROL);
 	}
+	return 0;
 }
 
 #undef DEBUG_RTC

@@ -107,7 +107,7 @@
 static inline int do_getname(const char *filename, char *page)
 {
 	int retval;
-	unsigned long len = PAGE_SIZE;
+	unsigned long len = PATH_MAX + 1;
 
 	if ((unsigned long) filename >= TASK_SIZE) {
 		if (!segment_eq(get_fs(), KERNEL_DS))
@@ -683,7 +683,7 @@ walk_init_root(const char *name, struct nameidata *nd)
 }
 
 /* SMP-safe */
-int path_init(const char *name,unsigned int flags,struct nameidata *nd)
+int path_init(const char *name, unsigned int flags, struct nameidata *nd)
 {
 	nd->last_type = LAST_ROOT; /* if there are only slashes... */
 	nd->flags = flags;

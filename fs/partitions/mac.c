@@ -21,7 +21,7 @@
 #include "mac.h"
 
 #ifdef CONFIG_PPC
-extern void note_bootable_part(kdev_t dev, int part);
+extern void note_bootable_part(kdev_t dev, int part, int goodness);
 #endif
 
 /*
@@ -67,7 +67,7 @@ int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec, int first_
 		brelse(bh);
 		dev_pos = secsize;
 		if ((bh = bread(dev, secsize/dev_bsize, dev_bsize)) == 0) {
-			printk("%s: error reading partition table\n",
+			printk("%s: error reading Mac partition table\n",
 			       kdevname(dev));
 			return -1;
 		}
@@ -77,6 +77,7 @@ int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec, int first_
 		brelse(bh);
 		return 0;		/* not a MacOS disk */
 	}
+	printk(" [mac]");
 	blocks_in_map = be32_to_cpu(part->map_count);
 	for (blk = 1; blk <= blocks_in_map; ++blk) {
 		pos = blk * secsize;
@@ -114,7 +115,8 @@ int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec, int first_
 				goodness++;
 
 			if (strcasecmp(part->type, "Apple_UNIX_SVR2") == 0
-			    || strcasecmp(part->type, "Linux_PPC") == 0) {
+			    || (strnicmp(part->type, "Linux", 5) == 0
+			        && strcasecmp(part->type, "Linux_swap") != 0)) {
 				int i, l;
 
 				goodness++;
@@ -143,7 +145,7 @@ int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec, int first_
 	}
 #ifdef CONFIG_PPC
 	if (found_root_goodness)
-		note_bootable_part(dev, found_root);
+		note_bootable_part(dev, found_root, found_root_goodness);
 #endif
 	brelse(bh);
 	printk("\n");

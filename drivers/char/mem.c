@@ -55,9 +55,6 @@ extern void mda_console_init(void);
 #if defined(CONFIG_ADB)
 extern void adbdev_init(void);
 #endif
-#ifdef CONFIG_PHONE
-extern void telephony_init(void);
-#endif
      
 static ssize_t do_write_mem(struct file * file, void *p, unsigned long realp,
 			    const char * buf, size_t count, loff_t *ppos)
@@ -668,8 +665,5 @@ int __init chr_dev_init(void)
 #ifdef CONFIG_VIDEO_DEV
 	videodev_init();
 #endif
-#ifdef CONFIG_PHONE
-	telephony_init();
-#endif	
 	return 0;
 }

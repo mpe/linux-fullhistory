@@ -6,14 +6,22 @@
 #include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
+#include <linux/smp.h>
 #include <asm/ptrace.h>
 #include <asm/string.h>
 #include <asm/prom.h>
+#include <asm/bitops.h>
 #include "nonstdio.h"
 #include "privinst.h"
 
 #define scanhex	xmon_scanhex
 #define skipbl	xmon_skipbl
+
+#ifdef CONFIG_SMP
+static unsigned long cpus_in_xmon = 0;
+static unsigned long got_xmon = 0;
+static volatile int take_xmon = -1;
+#endif /* CONFIG_SMP */
 
 static unsigned adrs;
 static int size = 1;
@@ -84,6 +92,9 @@ static void insert_bpts(void);
 static struct bpt *at_breakpoint(unsigned pc);
 static void bpt_cmds(void);
 static void cacheflush(void);
+#ifdef CONFIG_SMP
+static void cpu_cmd(void);
+#endif /* CONFIG_SMP */
 #if 0 /* Makes compile with -Wall */
 static char *pretty_print_addr(unsigned long addr);
 static char *lookup_name(unsigned long addr);
@@ -96,7 +107,17 @@ extern int putchar(int ch);
 extern int setjmp(u_int *);
 extern void longjmp(u_int *, int);
 
+extern void xmon_enter(void);
+extern void xmon_leave(void);
+
 #define GETWORD(v)	(((v)[0] << 24) + ((v)[1] << 16) + ((v)[2] << 8) + (v)[3])
+
+#define isxdigit(c)	(('0' <= (c) && (c) <= '9') \
+			 || ('a' <= (c) && (c) <= 'f') \
+			 || ('A' <= (c) && (c) <= 'F'))
+#define isalnum(c)	(('0' <= (c) && (c) <= '9') \
+			 || ('a' <= (c) && (c) <= 'z') \
+			 || ('A' <= (c) && (c) <= 'Z'))
 
 static char *help_string = "\
 Commands:\n\
@@ -117,9 +138,11 @@ Commands:\n\
   x	exit monitor\n\
 ";
 
-static int xmon_trace;
+static int xmon_trace[NR_CPUS];
 #define SSTEP	1		/* stepping because of 's' command */
 #define BRSTEP	2		/* stepping over breakpoint */
+
+static struct pt_regs *xmon_regs[NR_CPUS];
 
 void
 xmon(struct pt_regs *excp)
@@ -143,27 +166,52 @@ xmon(struct pt_regs *excp)
 
 	msr = get_msr();
 	set_msr(msr & ~0x8000);	/* disable interrupts */
-	remove_bpts();
+	xmon_regs[smp_processor_id()] = excp;
+	xmon_enter();
 	excprint(excp);
+#ifdef CONFIG_SMP
+	if (test_and_set_bit(smp_processor_id(), &cpus_in_xmon))
+		for (;;)
+			;
+	while (test_and_set_bit(0, &got_xmon)) {
+		if (take_xmon == smp_processor_id()) {
+			take_xmon = -1;
+			break;
+		}
+	}
+	/*
+	 * XXX: breakpoints are removed while any cpu is in xmon
+	 */
+#endif /* CONFIG_SMP */
+	remove_bpts();
 	cmd = cmds(excp);
 	if (cmd == 's') {
-		xmon_trace = SSTEP;
+		xmon_trace[smp_processor_id()] = SSTEP;
 		excp->msr |= 0x400;
 	} else if (at_breakpoint(excp->nip)) {
-		xmon_trace = BRSTEP;
+		xmon_trace[smp_processor_id()] = BRSTEP;
 		excp->msr |= 0x400;
 	} else {
-		xmon_trace = 0;
+		xmon_trace[smp_processor_id()] = 0;
 		insert_bpts();
 	}
+	xmon_leave();
+	xmon_regs[smp_processor_id()] = 0;
+#ifdef CONFIG_SMP
+	clear_bit(0, &got_xmon);
+	clear_bit(smp_processor_id(), &cpus_in_xmon);
+#endif /* CONFIG_SMP */
 	set_msr(msr);		/* restore interrupt enable */
 }
 
 void
 xmon_irq(int irq, void *d, struct pt_regs *regs)
 {
+	unsigned long flags;
+	save_flags(flags);cli();
 	printf("Keyboard interrupt\n");
 	xmon(regs);
+	restore_flags(flags);
 }
 
 int
@@ -178,7 +226,7 @@ xmon_bpt(struct pt_regs *regs)
 		--bp->count;
 		remove_bpts();
 		excprint(regs);
-		xmon_trace = BRSTEP;
+		xmon_trace[smp_processor_id()] = BRSTEP;
 		regs->msr |= 0x400;
 	} else {
 		xmon(regs);
@@ -189,10 +237,10 @@ xmon_bpt(struct pt_regs *regs)
 int
 xmon_sstep(struct pt_regs *regs)
 {
-	if (!xmon_trace)
+	if (!xmon_trace[smp_processor_id()])
 		return 0;
-	if (xmon_trace == BRSTEP) {
-		xmon_trace = 0;
+	if (xmon_trace[smp_processor_id()] == BRSTEP) {
+		xmon_trace[smp_processor_id()] = 0;
 		insert_bpts();
 	} else {
 		xmon(regs);
@@ -207,7 +255,7 @@ xmon_dabr_match(struct pt_regs *regs)
 		--dabr.count;
 		remove_bpts();
 		excprint(regs);
-		xmon_trace = BRSTEP;
+		xmon_trace[smp_processor_id()] = BRSTEP;
 		regs->msr |= 0x400;
 	} else {
 		dabr.instr = regs->nip;
@@ -223,7 +271,7 @@ xmon_iabr_match(struct pt_regs *regs)
 		--iabr.count;
 		remove_bpts();
 		excprint(regs);
-		xmon_trace = BRSTEP;
+		xmon_trace[smp_processor_id()] = BRSTEP;
 		regs->msr |= 0x400;
 	} else {
 		xmon(regs);
@@ -264,6 +312,7 @@ insert_bpts()
 			       bp->address);
 			bp->enabled = 0;
 		}
+		store_inst((void *) bp->address);
 	}
 #if !defined(CONFIG_8xx) && !defined(CONFIG_POWER4)
 	if (dabr.enabled)
@@ -293,6 +342,7 @@ remove_bpts()
 		    && mwrite(bp->address, &bp->instr, 4) != 4)
 			printf("Couldn't remove breakpoint at %x\n",
 			       bp->address);
+		store_inst((void *) bp->address);
 	}
 }
 
@@ -306,6 +356,9 @@ cmds(struct pt_regs *excp)
 
 	last_cmd = NULL;
 	for(;;) {
+#ifdef CONFIG_SMP
+		printf("%d:", smp_processor_id());
+#endif /* CONFIG_SMP */
 		printf("mon> ");
 		fflush(stdout);
 		flush_input();
@@ -383,12 +436,67 @@ cmds(struct pt_regs *excp)
 		case 'b':
 			bpt_cmds();
 			break;
-		case 'c':
+		case 'C':
 			csum();
+			break;
+#ifdef CONFIG_SMP
+		case 'c':
+			cpu_cmd();
+			break;
+#endif /* CONFIG_SMP */
+		}
+	}
+}
+
+#ifdef CONFIG_SMP
+static void cpu_cmd(void)
+{
+	unsigned cpu;
+	int timeout;
+	int cmd;
+
+	cmd = inchar();
+	if (cmd == 'i') {
+		/* interrupt other cpu(s) */
+		cpu = MSG_ALL_BUT_SELF;
+		scanhex(&cpu);
+		smp_send_xmon_break(cpu);
+		return;
+	}
+	termch = cmd;
+	if (!scanhex(&cpu)) {
+		/* print cpus waiting or in xmon */
+		printf("cpus stopped:");
+		for (cpu = 0; cpu < NR_CPUS; ++cpu) {
+			if (test_bit(cpu, &cpus_in_xmon)) {
+				printf(" %d", cpu);
+				if (cpu == smp_processor_id())
+					printf("*", cpu);
+			}
+		}
+		printf("\n");
+		return;
+	}
+	/* try to switch to cpu specified */
+	take_xmon = cpu;
+	timeout = 10000000;
+	while (take_xmon >= 0) {
+		if (--timeout == 0) {
+			/* yes there's a race here */
+			take_xmon = -1;
+			printf("cpu %u didn't take control\n", cpu);
+			return;
+		}
+	}
+	/* now have to wait to be given control back */
+	while (test_and_set_bit(0, &got_xmon)) {
+		if (take_xmon == smp_processor_id()) {
+			take_xmon = -1;
 			break;
 		}
 	}
 }
+#endif /* CONFIG_SMP */
 
 static unsigned short fcstab[256] = {
 	0x0000, 0x1189, 0x2312, 0x329b, 0x4624, 0x57ad, 0x6536, 0x74bf,
@@ -551,6 +659,8 @@ backtrace(struct pt_regs *excp)
 	extern char lost_irq_ret, do_bottom_half_ret, do_signal_ret;
 	extern char ret_from_except;
 
+	printf("backtrace:\n");
+	
 	if (excp != NULL)
 		sp = excp->gpr[1];
 	else
@@ -592,6 +702,9 @@ getsp()
 void
 excprint(struct pt_regs *fp)
 {
+#ifdef CONFIG_SMP
+	printf("cpu %d: ", smp_processor_id());
+#endif /* CONFIG_SMP */
 	printf("vector: %x at pc = %x",
 	       fp->trap, fp->nip);
 	printf(", lr = %x, msr = %x, sp = %x [%x]\n",
@@ -1163,9 +1276,6 @@ bsesc()
 	return c;
 }
 
-#define isxdigit(c)	(('0' <= (c) && (c) <= '9') \
-			 || ('a' <= (c) && (c) <= 'f') \
-			 || ('A' <= (c) && (c) <= 'F'))
 void
 dump()
 {
@@ -1402,6 +1512,16 @@ skipbl()
 	return c;
 }
 
+#define N_PTREGS	44
+static char *regnames[N_PTREGS] = {
+	"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
+	"r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
+	"r16", "r17", "r18", "r19", "r20", "r21", "r22", "r23",
+	"r24", "r25", "r26", "r27", "r28", "r29", "r30", "r31",
+	"pc", "msr", "or3", "ctr", "lr", "xer", "ccr", "mq",
+	"trap", "dar", "dsisr", "res"
+};
+
 int
 scanhex(vp)
 unsigned *vp;
@@ -1410,6 +1530,36 @@ unsigned *vp;
 	unsigned v;
 
 	c = skipbl();
+	if (c == '%') {
+		/* parse register name */
+		char regname[8];
+		int i;
+
+		for (i = 0; i < sizeof(regname) - 1; ++i) {
+			c = inchar();
+			if (!isalnum(c)) {
+				termch = c;
+				break;
+			}
+			regname[i] = c;
+		}
+		regname[i] = 0;
+		for (i = 0; i < N_PTREGS; ++i) {
+			if (strcmp(regnames[i], regname) == 0) {
+				unsigned *rp = (unsigned *)
+					xmon_regs[smp_processor_id()];
+				if (rp == NULL) {
+					printf("regs not available\n");
+					return 0;
+				}
+				*vp = rp[i];
+				return 1;
+			}
+		}
+		printf("invalid register name '%%%s'\n", regname);
+		return 0;
+	}
+
 	d = hexdigit(c);
 	if( d == EOF ){
 		termch = c;

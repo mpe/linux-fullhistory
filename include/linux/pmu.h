@@ -10,6 +10,7 @@
 /*
  * PMU commands
  */
+#define PMU_POWER_CTRL0		0x10	/* control power of some devices */
 #define PMU_POWER_CTRL		0x11	/* control power of some devices */
 #define PMU_ADB_CMD		0x20	/* send ADB packet */
 #define PMU_ADB_POLL_OFF	0x21	/* disable ADB auto-poll */
@@ -26,15 +27,25 @@
 #define PMU_INT_ACK		0x78	/* read interrupt bits */
 #define PMU_SHUTDOWN		0x7e	/* turn power off */
 #define PMU_SLEEP		0x7f	/* put CPU to sleep */
+#define PMU_POWER_EVENTS	0x8f	/* Send power-event commands to PMU */
 #define PMU_RESET		0xd0	/* reset CPU */
 #define PMU_GET_BRIGHTBUTTON	0xd9	/* report brightness up/down pos */
 #define PMU_GET_COVER		0xdc	/* report cover open/closed */
+#define PMU_SYSTEM_READY	0xdf	/* tell PMU we are awake */
+
+/* Bits to use with the PMU_POWER_CTRL0 command */
+#define PMU_POW0_ON		0x80	/* OR this to power ON the device */
+#define PMU_POW0_OFF		0x00	/* leave bit 7 to 0 to power it OFF */
+#define PMU_POW0_HARD_DRIVE	0x04	/* Hard drive power (on wallstreet/lombard ?) */
 
 /* Bits to use with the PMU_POWER_CTRL command */
 #define PMU_POW_ON		0x80	/* OR this to power ON the device */
 #define PMU_POW_OFF		0x00	/* leave bit 7 to 0 to power it OFF */
 #define PMU_POW_BACKLIGHT	0x01	/* backlight power */
+#define PMU_POW_CHARGER		0x02	/* battery charger power */
 #define PMU_POW_IRLED		0x04	/* IR led power (on wallstreet) */
+#define PMU_POW_MEDIABAY	0x08	/* media bay power (wallstreet/lombard ?) */
+
 
 /* Bits in PMU interrupt and interrupt mask bytes */
 #define PMU_INT_ADB_AUTO	0x04	/* ADB autopoll, when PMU_INT_ADB */
@@ -54,6 +65,25 @@ enum {
 	PMU_KEYLARGO_BASED,	/* Core99 motherboard (PMU99) */
 };
 
+/* PMU PMU_POWER_EVENTS commands */
+enum {
+	PMU_PWR_GET_POWERUP_EVENTS	= 0x00,
+	PMU_PWR_SET_POWERUP_EVENTS	= 0x01,
+	PMU_PWR_CLR_POWERUP_EVENTS	= 0x02,
+	PMU_PWR_GET_WAKEUP_EVENTS	= 0x03,
+	PMU_PWR_SET_WAKEUP_EVENTS	= 0x04,
+	PMU_PWR_CLR_WAKEUP_EVENTS	= 0x05,
+};
+
+/* Power events wakeup bits */
+enum {
+	PMU_PWR_WAKEUP_KEY		= 0x01,	/* Wake on key press */
+	PMU_PWR_WAKEUP_AC_INSERT	= 0x02, /* Wake on AC adapter plug */
+	PMU_PWR_WAKEUP_AC_CHANGE	= 0x04,
+	PMU_PWR_WAKEUP_LID_OPEN		= 0x08,
+	PMU_PWR_WAKEUP_RING		= 0x10,
+};
+	
 /*
  * Ioctl commands for the /dev/pmu device
  */
@@ -61,34 +91,38 @@ enum {
 
 /* no param */
 #define PMU_IOC_SLEEP		_IO('B', 0)
-/* out param: u32*	backlight value: 0 to 31 */
+/* out param: u32*	backlight value: 0 to 15 */
 #define PMU_IOC_GET_BACKLIGHT	_IOR('B', 1, sizeof(__u32*))
-/* in param: u32	backlight value: 0 to 31 */
+/* in param: u32	backlight value: 0 to 15 */
 #define PMU_IOC_SET_BACKLIGHT	_IOW('B', 2, sizeof(__u32))
-/* out param: u32*	backlight value: 0 to 31 */
+/* out param: u32*	PMU model */
 #define PMU_IOC_GET_MODEL	_IOR('B', 3, sizeof(__u32*))
 /* out param: u32*	has_adb: 0 or 1 */
 #define PMU_IOC_HAS_ADB		_IOR('B', 4, sizeof(__u32*)) 
 
 #ifdef __KERNEL__
 
-int find_via_pmu(void);
-int via_pmu_init(void);
+extern int find_via_pmu(void);
+extern int via_pmu_start(void);
 
-int pmu_request(struct adb_request *req,
+extern int pmu_request(struct adb_request *req,
 		void (*done)(struct adb_request *), int nbytes, ...);
-void pmu_poll(void);
 
-void pmu_enable_backlight(int on);
-void pmu_set_brightness(int level);
+extern void pmu_poll(void);
 
-void pmu_enable_irled(int on);
+/* For use before switching interrupts off for a long time;
+ * warning: not stackable
+ */
+extern void pmu_suspend(void);
+extern void pmu_resume(void);
 
-void pmu_restart(void);
-void pmu_shutdown(void);
+extern void pmu_enable_irled(int on);
 
-int pmu_present(void);
-int pmu_get_model(void);
+extern void pmu_restart(void);
+extern void pmu_shutdown(void);
+
+extern int pmu_present(void);
+extern int pmu_get_model(void);
 
 #ifdef CONFIG_PMAC_PBOOK
 /*
@@ -135,4 +169,4 @@ int pmu_unregister_sleep_notifier(struct pmu_sleep_notifier* notifier);
 #endif /* CONFIG_PMAC_PBOOK */
 
 
-#endif	/* __KERNEL */
+#endif	/* __KERNEL__ */

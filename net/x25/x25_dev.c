@@ -14,6 +14,7 @@
  *
  *	History
  *	X.25 001	Jonathan Naylor	Started coding.
+ *      2000-09-04	Henner Eisen	Prevent freeing a dangling skb.
  */
 
 #include <linux/config.h>
@@ -78,12 +79,13 @@ static int x25_receive_data(struct sk_buff *skb, struct x25_neigh *neigh)
 		return x25_rx_call_request(skb, neigh, lci);
 
 	/*
-	 *	Its not a Call Request, nor is it a control frame, throw it awa
+	 *	Its not a Call Request, nor is it a control frame.
+	 *      Let caller throw it away.
 	 */
 /*
 	x25_transmit_clear_request(neigh, lci, 0x0D);
 */
-	kfree_skb(skb);
+	printk(KERN_DEBUG "x25_receive_data(): unknown frame type %2x\n",frametype);
 
 	return 0;
 }

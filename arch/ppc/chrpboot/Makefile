@@ -67,11 +67,13 @@ initrd.o: ramdisk.image.gz piggyback
 
 zImage: $(OBJS) no_initrd.o addnote
 	$(LD) $(LD_ARGS) -o $@ $(OBJS) no_initrd.o $(LIBS)
-	./addnote $@
+	cp $@ $@.rs6k
+	./addnote $@.rs6k
 
 zImage.initrd: $(OBJS) initrd.o addnote
 	$(LD) $(LD_ARGS) -o $@ $(OBJS) initrd.o $(LIBS)
-	./addnote $@
+	cp $@ $@.rs6k
+	./addnote $@.rs6k
 
 else
 znetboot:

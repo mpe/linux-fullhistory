@@ -10,8 +10,8 @@
 O_TARGET := 8260_io.a
 O_OBJS	= commproc.o uart.o
 
-ifdef CONFIG_FCC_ENET
-O_OBJS += fcc.o
+ifdef CONFIG_FEC_ENET
+O_OBJS += fcc_enet.o
 endif
 ifdef CONFIG_SCC_ENET
 O_OBJS += enet.o

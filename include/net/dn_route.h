@@ -91,12 +91,12 @@ extern void dn_route_cleanup(void);
 #include <net/sock.h>
 #include <linux/if_arp.h>
 
-extern __inline__ void dn_rt_send(struct sk_buff *skb)
+static inline void dn_rt_send(struct sk_buff *skb)
 {
 	dev_queue_xmit(skb);
 }
 
-extern __inline__ void dn_rt_finish_output(struct sk_buff *skb, char *dst)
+static inline void dn_rt_finish_output(struct sk_buff *skb, char *dst)
 {
 	struct net_device *dev = skb->dev;
 
@@ -110,7 +110,7 @@ extern __inline__ void dn_rt_finish_output(struct sk_buff *skb, char *dst)
 		kfree_skb(skb);
 }
 
-extern __inline__ void dn_nsp_send(struct sk_buff *skb)
+static inline void dn_nsp_send(struct sk_buff *skb)
 {
 	struct sock *sk = skb->sk;
 	struct dn_scp *scp = &sk->protinfo.dn;
