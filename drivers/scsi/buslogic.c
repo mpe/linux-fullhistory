@@ -1178,7 +1178,7 @@ int buslogic_reset(Scsi_Cmnd *SCpnt)
 #if BUSLOGIC_DEBUG
     buslogic_printk("buslogic_reset\n");
 #endif
-    return SCSI_RESET_SNOOZE;
+    return SCSI_RESET_PUNT;
 }
 
 int buslogic_biosparam(int size, int dev, int *ip)

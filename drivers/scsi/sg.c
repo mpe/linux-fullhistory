@@ -173,7 +173,9 @@ static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
     buf+=sizeof(struct sg_header);
     if (count>device->header.pack_len)
      count=device->header.pack_len;
-    memcpy_tofs(buf,device->buff,count-sizeof(struct sg_header));
+    if (count > sizeof(struct sg_header)) {
+       memcpy_tofs(buf,device->buff,count-sizeof(struct sg_header));
+    }
    }
   else
    count=0;
@@ -193,6 +195,7 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
     SCpnt->request.dev=-1;
     return;
    }
+  memcpy(device->header.sense_buffer, SCpnt->sense_buffer, sizeof(SCpnt->sense_buffer));
   if (SCpnt->sense_buffer[0])
    {
     device->header.result=EIO;
@@ -211,6 +214,7 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
   int bsize,size,amt,i;
   unsigned char cmnd[MAX_COMMAND_SIZE];
   struct scsi_generic *device=&scsi_generics[dev];
+
   if ((i=verify_area(VERIFY_READ,buf,count)))
    return i;
   if (count<sizeof(struct sg_header))

@@ -351,27 +351,34 @@ struct scatterlist {
 
 /* We do not know how to reset the bus, or we do not want to.  Bummer.
    Anyway, just wait a little more for the command in question, and hope that
-   it eventually finishes */
+   it eventually finishes.  If it never finishes, the SCSI device could
+   hang, so use this with caution. */
 #define SCSI_RESET_SNOOZE 0
+
+/* We do not know how to reset the bus, or we do not want to.  Bummer.
+   We have given up on this ever completing.  The mid-level code will
+   request sense information to decide how to proceed from here. */
+#define SCSI_RESET_PUNT 1
 
 /* This means that we were able to reset the bus.  We have restarted all of
    the commands that should be restarted, and we should be able to continue
    on normally from here.  We do not expect any interrupts that will return
-   DID_RESET to any of the other commands in the host_queue. */
-#define SCSI_RESET_SUCCESS 1
+   DID_RESET to any of the other commands in the host_queue, and the mid-level
+   code does not need to do anything special to keep the commands alive. */
+#define SCSI_RESET_SUCCESS 2
 
 /* We called for an reset of this bus, and we should get an interrupt 
    when this succeeds.  Each command should get it's own status
    passed up to scsi_done, but this has not happened yet. */
-#define SCSI_RESET_PENDING 2
+#define SCSI_RESET_PENDING 3
 
 /* We did a reset, but do not expect an interrupt to signal DID_RESET.
    This tells the upper level code to request the sense info, and this
    should keep the command alive. */
-#define SCSI_RESET_WAKEUP 3
+#define SCSI_RESET_WAKEUP 4
 
 /* Something went wrong, and we do not know how to fix it. */
-#define SCSI_RESET_ERROR 4
+#define SCSI_RESET_ERROR 5
 
 void *   scsi_malloc(unsigned int);
 int      scsi_free(void *, unsigned int);

@@ -656,6 +656,10 @@ sl_close(struct device *dev)
   return(0);
 }
 
+static int slip_receive_room(struct tty_struct *tty)
+{
+	return 65536;  /* We can handle an infinite amount of data. :-) */
+}
 
 /*
  * Handle the 'receiver data ready' interrupt.
@@ -680,7 +684,7 @@ static void slip_receive_buf(struct tty_struct *tty, unsigned char *cp,
   	
 	/* Read the characters out of the buffer */
 	while (count--) {
-		if (*fp++) {
+		if (fp && *fp++) {
 			sl->flags |= SLF_ERROR;
 			cp++;
 			continue;
@@ -1048,6 +1052,7 @@ slip_init(struct device *dev)
 				   unsigned int, unsigned long)) slip_ioctl;
 	sl_ldisc.select = NULL;
 	sl_ldisc.receive_buf = slip_receive_buf;
+	sl_ldisc.receive_room = slip_receive_room;
 	sl_ldisc.write_wakeup = slip_write_wakeup;
 	if ((i = tty_register_ldisc(N_SLIP, &sl_ldisc)) != 0)
 		printk("ERROR: %d\n", i);

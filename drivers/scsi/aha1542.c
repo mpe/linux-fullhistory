@@ -460,7 +460,6 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 #ifndef DEBUG
       if (bufflen != sizeof(SCpnt->sense_buffer)) {
 	printk("Wrong buffer length supplied for request sense (%d)\n",bufflen);
-	panic("aha1542.c");
       };
 #endif
       SCpnt->result = 0;
@@ -1058,7 +1057,10 @@ int aha1542_reset(Scsi_Cmnd * SCpnt)
 	}
 
 #endif
-    return SCSI_RESET_PENDING;
+    /* No active command at this time, so this means that each time we got
+       some kind of response the last time through.  Tell the mid-level code
+       to request sense information in order to decide what to do next. */
+    return SCSI_RESET_PUNT;
 }
 
 #ifdef CONFIG_BLK_DEV_SD

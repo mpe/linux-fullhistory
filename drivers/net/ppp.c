@@ -146,6 +146,7 @@ static int ppp_open(struct tty_struct *);
 static void ppp_close(struct tty_struct *);
 
 #ifdef NEW_TTY_DRIVERS
+static int ppp_receive_room(struct tty_struct *tty);
 static void ppp_receive_buf(struct tty_struct *tty, unsigned char *cp,
 			    char *fp, int count);
 static void ppp_write_wakeup(struct tty_struct *tty);
@@ -239,6 +240,7 @@ ppp_init(struct device *dev)
 
 #ifdef NEW_TTY_DRIVERS
     ppp_ldisc.magic       = TTY_LDISC_MAGIC;
+    ppp_ldisc.receive_room = ppp_receive_room;
     ppp_ldisc.receive_buf = ppp_receive_buf;
     ppp_ldisc.write_wakeup = ppp_write_wakeup;
 #else
@@ -891,6 +893,12 @@ ppp_unesc(struct ppp *ppp, unsigned char *c, int n)
 }
 
 #else
+static int ppp_receive_room(struct tty_struct *tty)
+{
+	return 65536;  /* We can handle an infinite amount of data. :-) */
+}
+
+
 static void ppp_receive_buf(struct tty_struct *tty, unsigned char *cp,
 			    char *fp, int count)
 {

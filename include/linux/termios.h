@@ -51,6 +51,7 @@
 #define TIOCSERSWILD	0x5455
 #define TIOCGLCKTRMIOS	0x5456
 #define TIOCSLCKTRMIOS	0x5457
+#define TIOCSERGSTRUCT	0x5458 /* For debugging only */
 
 /* Used for packet mode */
 #define TIOCPKT_DATA		 0

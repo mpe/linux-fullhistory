@@ -110,6 +110,9 @@ static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/hos
 
 Scsi_Host_Template scsi_hosts[] =
 	{
+#ifdef CONFIG_SCSI_ULTRASTOR
+	ULTRASTOR_14F,
+#endif
 #ifdef CONFIG_SCSI_AHA152X
 	AHA152X,
 #endif
@@ -140,9 +143,6 @@ Scsi_Host_Template scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_T128
         TRANTOR_T128,
-#endif
-#ifdef CONFIG_SCSI_ULTRASTOR
-	ULTRASTOR_14F,
 #endif
 #ifdef CONFIG_SCSI_7000FASST
 	WD7000,

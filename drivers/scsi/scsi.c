@@ -192,6 +192,20 @@ static void scan_scsis_done (Scsi_Cmnd * SCpnt)
 #endif	
 	SCpnt->request.dev = 0xfffe;
 	}
+
+#ifdef NO_MULTI_LUN
+static int max_scsi_luns = 1;
+#else
+static int max_scsi_luns = 8;
+#endif
+
+void scsi_luns_setup(char *str, int *ints) {
+    if (ints[0] != 1) 
+	printk("scsi_luns_setup : usage max_scsi_luns=n (n should be between 1 and 8)\n");
+    else
+        max_scsi_luns = ints[1];
+}
+
 /*
  *	Detecting SCSI devices :	
  *	We scan all present host adapter's busses,  from ID 0 to ID 6.  
@@ -223,11 +237,7 @@ static void scan_scsis (void)
  * We need the for so our continue, etc. work fine.
  */
 
-#ifdef NO_MULTI_LUN
-	    for (lun = 0; lun < 1; ++lun)
-#else
-	    for (lun = 0; lun < 8; ++lun)
-#endif
+	    for (lun = 0; lun < max_scsi_luns; ++lun)
 	      {
 		scsi_devices[NR_SCSI_DEVICES].host = shpnt;
 		scsi_devices[NR_SCSI_DEVICES].id = dev;
@@ -1491,6 +1501,7 @@ int scsi_reset (Scsi_Cmnd * SCpnt)
 			  return 0;
 			case SCSI_RESET_PENDING:
 			  return 0;
+			case SCSI_RESET_PUNT:
 			case SCSI_RESET_WAKEUP:
 			  SCpnt->internal_timeout &= ~IN_RESET;
 			  scsi_request_sense (SCpnt);

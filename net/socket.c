@@ -938,10 +938,11 @@ sock_init(void)
   /* Initialize the protocols module. */
   proto_init();
 
+#ifdef CONFIG_NET
   /* Initialize the DEV module. */
   dev_init();
   
   /* And the bottom half handler */
   bh_base[NET_BH].routine= net_bh;
-  
+#endif
 }

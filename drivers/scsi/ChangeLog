@@ -1,4 +1,40 @@
+Wed Jun  1 21:12:13 1994  Eric Youngdale  (eric@esp22)
+
+	* scsi.h: Add new return code for reset() function:
+	SCSI_RESET_PUNT.
+
+	* scsi.c: Make SCSI_RESET_PUNT the same as SCSI_RESET_WAKEUP for
+	now.
+
+	* aha1542.c: If the command responsible for the reset is not
+	pending, return SCSI_RESET_PUNT.
+
+	* aha1740.c, buslogic.c, wd7000.c, ultrastor.c: Return
+	SCSI_RESET_PUNT instead of SCSI_RESET_SNOOZE.
+
+Tue May 31 19:36:01 1994  Eric Youngdale  (eric@esp22)
+
+	* buslogic.c: Do not print out message about "must be Adaptec"
+	if we have detected a buslogic card.  Print out a warning message
+	if we are configuring for >16Mb, since the 445S at board level
+	D or earlier does not work right.  The "D" level board can be made
+	to work by flipping an undocumented switch, but this is too subtle.
+
+    Changes based upon patches in Yggdrasil distribution.
+
+	* sg.c, sg.h: Return sense data to user.
+
+	* aha1542.c, aha1740.c, buslogic.c: Do not panic if
+	sense buffer is wrong size.
+
+	* hosts.c: Test for ultrastor card before any of the others.
+
+	* scsi.c: Allow boot-time option for max_scsi_luns=? so that
+	buggy firmware has an easy work-around.
+
 Sun May 15 20:24:34 1994  Eric Youngdale  (eric@esp22)
+
+	* Linux 1.1.15 released.
 
 	Post-codefreeze thaw...
 

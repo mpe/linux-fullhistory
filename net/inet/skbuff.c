@@ -476,6 +476,7 @@ void kfree_skb(struct sk_buff *skb, int rw)
 	skb->link3 = NULL;
 	skb->sk = NULL;
 	skb->stamp.tv_sec=0;	/* No idea about time */
+	skb->localroute = 0;
  	net_memory += size;
  	net_skbcount++;
 #if CONFIG_SKB_CHECK

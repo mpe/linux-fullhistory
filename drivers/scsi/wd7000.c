@@ -1204,7 +1204,7 @@ int wd7000_abort(Scsi_Cmnd * SCpnt)
  */
 int wd7000_reset(Scsi_Cmnd * SCpnt)
 {
-    return SCSI_RESET_SNOOZE;
+    return SCSI_RESET_PUNT;
 }
 
 

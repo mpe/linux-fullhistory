@@ -927,7 +927,7 @@ int ultrastor_reset(Scsi_Cmnd * SCpnt)
 #endif
 
     if(config.slot)
-      return SCSI_RESET_SNOOZE;  /* Do not attempt a reset for the 24f */
+      return SCSI_RESET_PUNT;  /* Do not attempt a reset for the 24f */
 
     save_flags(flags);
     cli();

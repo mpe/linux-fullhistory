@@ -20,6 +20,7 @@
 #include <linux/fcntl.h>
 #include <linux/string.h>
 #include <linux/major.h>
+#include <linux/mm.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -32,9 +33,19 @@ struct pty_struct {
 
 #define PTY_MAGIC 0x5001
 
-#define PTY_BUF_SIZE 1024
+#define PTY_BUF_SIZE PAGE_SIZE/2
 
-static unsigned char tmp_buf[PTY_BUF_SIZE];
+/*
+ * tmp_buf is used as a temporary buffer by pty_write.  We need to
+ * lock it in case the memcpy_fromfs blocks while swapping in a page,
+ * and some other program tries to do a pty write at the same time.
+ * Since the lock will only come under contention when the system is
+ * swapping and available memory is low, it makes sense to share one
+ * buffer across all the PTY's, since it significantly saves memory if
+ * large numbers of PTY's are open.
+ */
+static unsigned char *tmp_buf;
+static struct semaphore tmp_buf_sem = MUTEX;
 
 struct tty_driver pty_driver, pty_slave_driver;
 static int pty_refcount;
@@ -78,24 +89,34 @@ static int pty_write(struct tty_struct * tty, int from_user,
 		       unsigned char *buf, int count)
 {
 	struct tty_struct *to = tty->link;
-	int	c, n;
+	int	c=0, n, r;
+	char	*temp_buffer;
 
 	if (!to || tty->stopped)
 		return 0;
 	
-	count = MIN(count, to->ldisc.receive_room(to));
-
 	if (from_user) {
-		for (c = count; c > 0; c -= n) {
-			n = MIN(c, PTY_BUF_SIZE);
-			memcpy_fromfs(tmp_buf, buf, n);
-			to->ldisc.receive_buf(to, tmp_buf, 0, n);
-			buf += n;
+		down(&tmp_buf_sem);
+		temp_buffer = tmp_buf +
+			((tty->driver.subtype-1) * PTY_BUF_SIZE);
+		while (count > 0) {
+			n = MIN(count, PTY_BUF_SIZE);
+			memcpy_fromfs(temp_buffer, buf, n);
+			r = to->ldisc.receive_room(to);
+			if (r <= 0)
+				break;
+			n = MIN(n, r);
+			to->ldisc.receive_buf(to, temp_buffer, 0, n);
+			buf += n;  c+= n;
+			count -= n;
 		}
-	} else
-		to->ldisc.receive_buf(to, buf, 0, count);
+		up(&tmp_buf_sem);
+	} else {
+		c = MIN(count, to->ldisc.receive_room(to));
+		to->ldisc.receive_buf(to, buf, 0, c);
+	}
 	
-	return count;
+	return c;
 }
 
 static int pty_write_room(struct tty_struct *tty)
@@ -146,7 +167,13 @@ int pty_open(struct tty_struct *tty, struct file * filp)
 		return -ENODEV;
 	pty = pty_state + line;
 	tty->driver_data = pty;
-	
+
+	if (!tmp_buf) {
+		tmp_buf = (unsigned char *) get_free_page(GFP_KERNEL);
+		if (!tmp_buf)
+			return -ENOMEM;
+	}
+
 	if (tty->driver.subtype == PTY_TYPE_SLAVE)
 		clear_bit(TTY_SLAVE_CLOSED, &tty->link->flags);
 	wake_up_interruptible(&pty->open_wait);
@@ -199,12 +226,12 @@ long pty_init(long kmem_start)
 	pty_slave_driver.termios_locked = ttyp_termios_locked;
 	pty_slave_driver.other = &pty_driver;
 
+	tmp_buf = 0;
+
 	if (tty_register_driver(&pty_driver))
-		panic("Couldn't register pty driver\n");
+		panic("Couldn't register pty driver");
 	if (tty_register_driver(&pty_slave_driver))
-		panic("Couldn't register pty slave driver\n");
+		panic("Couldn't register pty slave driver");
 	
 	return kmem_start;
 }
-
-	

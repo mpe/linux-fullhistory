@@ -468,7 +468,7 @@ static void lastcons(void)
 
 static void send_intr(void)
 {
-	if (tty->termios && I_IGNBRK(tty))
+	if (!tty || (tty->termios && I_IGNBRK(tty)))
 		return;
 	tty_insert_flip_char(tty, 0, TTY_BREAK);
 }

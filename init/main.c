@@ -90,6 +90,7 @@ extern void tmc8xx_setup(char *str, int *ints);
 extern void t128_setup(char *str, int *ints);
 extern void generic_NCR5380_setup(char *str, int *intr);
 extern void aha152x_setup(char *str, int *ints);
+extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
 #ifdef CONFIG_SBPCD
 extern void sbpcd_setup(char *str, int *ints);
@@ -173,6 +174,9 @@ struct {
 	{ "reserve=", reserve_setup },
 #ifdef CONFIG_INET
 	{ "ether=", eth_setup },
+#endif
+#ifdef CONFIG_SCSI
+	{ "max_scsi_luns=", scsi_luns_setup },
 #endif
 #ifdef CONFIG_BLK_DEV_HD
 	{ "hd=", hd_setup },

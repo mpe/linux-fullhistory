@@ -251,7 +251,6 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
         if (bufflen != sizeof(SCpnt->sense_buffer))
 	{
 	    printk("Wrong buffer length supplied for request sense (%d)\n",bufflen);
-	    panic("aha1740.c");
         }
         SCpnt->result = 0;
         done(SCpnt); 
@@ -487,7 +486,7 @@ int aha1740_abort(Scsi_Cmnd * SCpnt)
 int aha1740_reset(Scsi_Cmnd * SCpnt)
 {
     DEB(printk("aha1740_reset called\n"));
-    return SCSI_RESET_SNOOZE;
+    return SCSI_RESET_PUNT;
 }
 
 int aha1740_biosparam(int size, int dev, int* ip)
