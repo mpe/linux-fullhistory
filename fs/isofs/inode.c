@@ -1009,7 +1009,7 @@ abort_negative:
 
 abort_beyond_end:
 	printk("_isofs_bmap: block >= EOF (%ld, %ld)\n",
-	       iblock, inode->i_size);
+	       iblock, (unsigned long) inode->i_size);
 	goto abort;
 
 abort_too_many_sections:

@@ -50,8 +50,7 @@ static int ext2_secrm_seed = 152;	/* Random generator base */
  * there's no need to test for changes during the operation.
  */
 #define DIRECT_BLOCK(inode) \
-	((inode->i_size + inode->i_sb->s_blocksize - 1) / \
-			  inode->i_sb->s_blocksize)
+	((unsigned long) ((inode->i_size + inode->i_sb->s_blocksize - 1) >> inode->i_sb->s_blocksize_bits))
 #define INDIRECT_BLOCK(inode,offset) ((int)DIRECT_BLOCK(inode) - offset)
 #define DINDIRECT_BLOCK(inode,offset) \
 	(INDIRECT_BLOCK(inode,offset) / addr_per_block)

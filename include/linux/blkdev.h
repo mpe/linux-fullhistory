@@ -83,12 +83,9 @@ extern int * max_segments[MAX_BLKDEV];
 #define MAX_SEGMENTS MAX_SECTORS
 
 #define PageAlignSize(size) (((size) + PAGE_SIZE -1) & PAGE_MASK)
-#if 0  /* small readahead */
-#define MAX_READAHEAD PageAlignSize(4096*7)
-#define MIN_READAHEAD PageAlignSize(4096*2)
-#else /* large readahead */
-#define MAX_READAHEAD PageAlignSize(4096*31)
-#define MIN_READAHEAD PageAlignSize(4096*3)
-#endif
+
+/* read-ahead in pages.. */
+#define MAX_READAHEAD	31
+#define MIN_READAHEAD	3
 
 #endif

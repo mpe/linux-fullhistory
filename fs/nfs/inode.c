@@ -680,7 +680,7 @@ printk("nfs_notify_change: revalidate failed, error=%d\n", error);
 	 */
 	if (attr->ia_valid & ATTR_SIZE) {
 		if (attr->ia_size != fattr.size)
-			printk("nfs_notify_change: attr=%ld, fattr=%d??\n",
+			printk("nfs_notify_change: attr=%Ld, fattr=%d??\n",
 				attr->ia_size, fattr.size);
 		inode->i_size  = attr->ia_size;
 		inode->i_mtime = fattr.mtime.seconds;

@@ -208,14 +208,12 @@ static int newseg (key_t key, int shmflg, size_t size)
 	int id, err;
 	unsigned int shmall, shmmni;
 
-	lock_kernel();
 	shmall = shm_prm[1];
 	shmmni = shm_prm[2];
 	if (shmmni > IPCMNI) {
 		printk ("shmmni reset to max of %u\n", IPCMNI);
 		shmmni = shm_prm[2] = IPCMNI;
 	}
-	unlock_kernel();
 
 	if (shmmni < used_segs)
 		return -ENOSPC;
@@ -282,10 +280,7 @@ asmlinkage long sys_shmget (key_t key, size_t size, int shmflg)
 	int err, id = 0;
 	size_t shmmax;
 
-	lock_kernel();
 	shmmax = shm_prm[0];
-	unlock_kernel();
-
 	if (size > shmmax)
 		return -EINVAL;
 
@@ -387,11 +382,11 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		err = -EFAULT;
 		if (!buf)
 			goto out;
-		lock_kernel();
+
 		shminfo.shmmni = shminfo.shmseg = shm_prm[2];
 		shminfo.shmmax = shm_prm[0];
 		shminfo.shmall = shm_prm[1];
-		unlock_kernel();
+
 		shminfo.shmmin = SHMMIN;
 		if(copy_to_user (buf, &shminfo, sizeof(struct shminfo)))
 			goto out_unlocked;
